@@ -1,0 +1,319 @@
+
+
+ wsh(1)                                                               wsh(1)
+
+
+
+
+ NAME
+      wsh - a restricted shell with unix-type security
+
+ SYNOPSIS
+      wsh [-il] [-c string]
+
+ DESCRIPTION
+      wsh is part of the WizPort package.  The wsh offers a unix shell
+      with a different root and file securities than the account it runs
+      on.  It has its own set of bin/ commands and its own set of
+      accounts that can login to it.  The read and write access are
+      in a tree-path form, with excluded nodes.
+
+    Command Options
+      Command options are interpreted as follows:
+
+           -i        Interactive mode.  Will cause the wsh to source
+                     the /.login.global and $HOME/.login, as well as
+		     respond interactively to user requests.
+
+           -l        Login.  The wsh will start up with login and
+		     password prompts.  This is unnecessary if the user
+		     is already logged into the wsh, or if the
+		     administrator needs to login without a password
+		     (set the WSHLOGIN environment variable first)
+
+           -c        Read commands from the (single) following argument
+		     which must be present.  Usually for shell escapes.
+
+      If there is an argument left after processing the command options,
+      the argument will be used as the name of a file from which commands
+      will be executed.
+
+    COMMANDS
+      Each line of input is a command to the shell.  The first word in
+      the line is taken to be the command to execute.  If this word matches
+      one of the built-in commands, then the built-in command will be used.
+      Otherwise, if the command is the name of a file in the bin/ directory,
+      then that command will be executed.  All following words are considered
+      to be either flags, arguments or filenames.  If the word starts
+      with a dash (-) and is a legal flag, then it will be passed as a
+      normal argument to the executable.  If the word is a legal non-filename
+      (determined by the 'etc/exceptions' file), then the word is passed
+      unaltered to the executable.  Otherwise, the word is considered to
+      be a filename and is path-completed and access checked (see Security)
+      and then passed to the executable.
+
+    Parsing
+      The wsh parser initially tries to do substitutions.  The following
+      substitions are possible and will be explained below:
+	history, alias, and environment
+      After substitutions, the line is broken up into 'tokens,' or words.
+      The wsh checks to see if the first word is a built-in command (see
+      below).  If so, that command will be interpreted.  If not, the
+      parser will take all the following tokens and convert them to full-path
+      form as explained above.  The following rules apply to parsing:
+
+    Whitespace
+      Whitespace is ignored unless in a string.
+
+    Comments
+      Anything following a '#' (pound sign) will be ignored as a comment.
+
+    Quoting
+      If the ' (half-quote), " (double-quote) or '(' (left parenthesis) are
+      encountered in the input line following whitespace, the following text
+      will be considered a string and kept together as one argument, with
+      whitespace.  The string will end when the parser encounters the
+      matching end, a half-quote, double-quote or right parenthesis.
+
+    History Substitutions
+      All commands that the user has previously entered are saved in the
+      history buffer (except for failed history and environment
+      substitutions).  The buffer has an initial default size, but can
+      be changed with the 'history' command (see 'history' in Built-In
+      Commands).  Using history substitution, the user is able to
+      repeat these commands without retyping them.  The possible forms are:
+
+	   !<num>       Re-do the <num> line in history
+	   !<str>       Re-do the first line in history (moving up the
+			history list) that starts with the substring <str>.
+           !!           Re-do the last command
+
+      Any time a '!' is followed by non-whitespace, a history expansion
+      will be attempted, and the command will fail if the expansion fails.
+      In order to use an '!' (exclamation point) in a command without doing
+      a history expansion, the user can use the '\' (backslash).  If a
+      '\!' is found following whitespace, the parser will replace it with
+      just a '!' and then will not attempt the history expansion.
+      Also, the form '\\' following whitespace will be converted to '\'
+
+    Alias Substitution
+      The wsh keeps a list of aliases that can be used to refer to other
+      commands.  The alias list can be modified and displayed (see the
+      'alias' and 'unalias' commands in Built-In Commands)
+      Before checking for built-in commands, the parser will check to
+      see if the first word of the line matches the name of an alias.
+      If so, then the alias name is replaced by the string that the alias
+      is set to.  Then, the new line is run through the parser again,
+      to check for history expansion, aliases, etc...  If the parser
+      gets the same alias as was expanded last time, then it will not
+      expand the alias again.  This allows aliases of the form:
+
+			 alias ls ls -sF
+
+      In this case, 'ls' will only be expanded once.  To avoid more complex
+      alias loops, the parser will stop after a certain maximum number of
+      aliases have been expanded.  On most systems the maximum is 40, and
+      this should be enough for even the most complex aliases.  If you
+      need a higher maximum, contact your administrator and they might be
+      able to change it for you.
+
+    Environment Substitution
+      Environment variables can be accessed and changed by the 'setenv'
+      command.  To use environment variables inside of commands, prepend
+      them with the '$' (dollar sign).  The following characters will be
+      the variable name to use, until one of the following characters:
+	 /   \   "   [   ]   :   <whitespace or newline>
+
+      Special Variables:
+	The following variables have special meaning to the wsh:
+
+	debug      You can set this variable to either 'on' or 'off'
+		   If it is on, you will get lots of ugly debug messages
+		   that won't mean anything to you.
+
+	EDITOR     The default editor to use.
+		   This variable cannot be altered for security reasons.
+
+	HOME       You can set this to change your home directory.
+		   You must supply it with an absolute path (it must
+		   start with a '/')
+
+	LOGNAME    This is your login name.
+		   This variable cannot be altered for security reasons.
+
+
+	MAIL       This isn't used by the 'wsh' but is changed at login
+		   from the administrators mail path.
+		   This variable cannot be altered for security reasons.
+
+	NETHOST    This is set at login to your host name (or number if
+		   the name can't be resolved)
+		   This variable cannot be altered for security reasons.
+
+	PATH       This is set at login to the wsh 'bin/' path
+		   This variable cannot be altered for security reasons.
+
+	prompt     This is the prompt that you see for each 'wsh' command.
+		   If a %/ is found in the prompt, it will be expanded to
+		   your current working directory.  For example, the prompt
+		   I use is:
+                     set prompt "[$USER] %/ wsh> "
+		   which becomes:
+		     [jubal] /players/jubal wsh> 
+
+	SHELL      Default shell to use.  Set to the 'wsh'
+		   This variable cannot be altered for security reasons.
+
+        TERM       This isn't actually a 'wsh' variable, but it is very
+		   likely that you will need to change it if you have
+                   any terminal problems.
+
+    Built-In Commands
+      The following are commands that the shell will interpret and evaluate
+      instead of running an executable.
+
+	   acc
+		   Prints out the access tree in a crude format (see Security)
+
+           alias
+	   alias <name>
+	   alias <name> string>
+		   The first form will print out all available aliases
+		   The second form will print out the string set to <name>
+		   The third form will set <name> to <string>
+		   See aliases
+
+           cd <path>
+                   Change the current working directory to the path specified.
+		   The path can be absolute or local, and can use normal
+		   substition (environment variables and history)
+
+           chat <string>
+		   Tell the <string> to everyone on the chat line.
+		   Make sure to be careful with the string, because normal
+		   evaluation of the line will take place (for example,
+		   using "!!" will result in a history expansion)
+
+           exit
+		   Exit this shell.  If the shell is a login shell, then
+		   $HOME/.logout will be executed.
+
+           history
+	   history <num>
+		   The first form will print out all the commands saved in
+		   the history buffer.  (see History)
+		   The second form will resize the history buffer to <num>
+
+           logout
+		   Same as exit
+
+           pwd
+		   Print out the current working directory
+		   It is important for programmers to realize that this is
+		   not the same as the directory that is set by the chdir()
+		   system call.
+
+           setenv
+	   setenv <name>
+	   setenv <name> <string>
+                   The first form prints out all environment variables
+		   The second form shows the value of the variable <name>
+		   The third form sets the variable <name> to <string>
+                   * As of version 1.45c, 'set' is no longer the same as setenv
+		   See Environment Substitution
+
+	   source <file>
+		   Read commands from <file> until an end-of-file or an exit
+		   These commands will be added to the history buffer
+
+	   . <file>
+		   The period is a shorthand for 'source'
+
+	   tell <who> <string>
+		   Tell <string> to the user <who> if logged in
+
+	   unalias <name>
+		   Remove <name> from alias list
+
+           version
+                   Print out some version information
+
+           whoami
+		   Show the name of the user logged in
+
+           who
+		   Show all users logged in with some pertinent information
+
+
+    Non-Built-In Command Execution
+      When a command is not a built-in command, then the bin/ directory
+      is checked for an executable with the same name as the command.
+      If one is found, that executable will be spawned off as a new process,
+      and will return to the shell upon completion.  Otherwise, a "Command
+      not found" error will be given.
+
+      Security
+
+ EXTERNAL INFLUENCES
+    Environment Variables
+      A number of environment variables are used by the wsh.
+      See Environment Substitution
+
+    Term settings
+      When the wsh is used with the tcpserv server, it will have whatever
+      term settings that the administrator has upon booting the server
+
+    Unix read-write permissions
+      The wsh does not get around normal unix file security.  It is
+      assumed (for correct operation) that the files in the wsh root
+      are all readable and writable by the administrator.
+
+ WARNINGS
+    To administrators:
+      Please take note!  The 'wsh' is a very complicated system, and can be
+      made unsecure by putting the wrong executables in the bin/ directory.
+
+      ** PLEASE READ THE SECURITY FILE BEFORE INSTALLING **
+
+ KNOWN BUGS
+      Because links are resolved to their 'actual' path, if you try to
+      remove a link from inside the wsh, it will attempt to remove the
+      actual file itself, and if you have permission, then it will succeed.
+
+      Versions before 1.45 would source the .logout file of whatever
+      directory the user was in.  This is not a security problem, however.
+
+      When you type the 'who' command, your idle time is not updated until
+      after the command is executed.  I actually find this amusing, since
+      it lets you know how long you were idle for, so I don't plan to fix it.
+
+      It is possible for someone to login without ending up on the 'who'
+      list.  This is a semaphore problem, and there is no easy way to fix this.
+
+      !! seems to be off by one if done right after the .login
+
+      Some machines don't fgets() properly.  Consequently, you can't backspace
+      over a space.  I haven't the slightest idea why, but hopefully readline()
+      will fix this.
+
+ AUTHOR
+      wsh was written by David Ljung (ljung@cae.wisc.edu)
+
+ FILES
+    The following files/directories are defined in the source
+
+      ROOT_DIR         root of the wsh filesystem
+      WSH_DIR          main directory for the wsh files
+      BIN_DIR          directory where wsh executables are kept
+      PASSWD_FILE      file of users and user info (including passwords)
+		       It is possible to use mud files instead - see the docs
+      WRITE_ACC_FILE   file of write access types
+      READ_ACC_FILE    file of read access types
+      EXCEPTIONS_FILE  file of defined exceptions
+      UTMP_FILE        used by the 'who' command
+      WTMP_FILE        log of all logins -- erase this file on occasion
+      WSH_FNAME        actual path of the wsh executable
+      HELP_DIR         where documents and helpfiles can be found
+
+ SEE ALSO
+      tcpserv(1), csh(1)

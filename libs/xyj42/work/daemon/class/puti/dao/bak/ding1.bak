@@ -1,0 +1,122 @@
+// dingshen.c 定身法
+#include <ansi.h>
+#include <combat.h>
+
+inherit SSERVER;
+
+void free(object target);
+
+int cast(object me, object target)
+{
+	string msg;
+	int success, ap, dp, howlong;
+	int eff_level, mana_cost, busy_time;
+
+	if( !target ) target = offensive_target(me);
+
+	if((int)me->query_skill("spells") < 100)
+		return notify_fail("你还没学会定身法。。。\n");
+
+	if( !target
+	||      !target->is_character()
+	||      target->is_corpse()
+	||      target==me)
+		return notify_fail("你想把谁定住？\n");
+
+	if((int)me->query("mana") < 500 )
+		return notify_fail("你的法力不够！\n");
+
+	if((int)me->query("sen") < 10 )
+		return notify_fail("你无法集中精力！\n");
+
+	eff_level = me->query_skill("spells");
+	eff_level = me->eff_skill_level( eff_level, SKILL_USAGE_SPELL );
+	if( eff_level > 330 )  {
+	   mana_cost = 100;
+	   busy_time = 1;
+	}
+	else if( eff_level >= 300 ) {
+	   mana_cost = 200;
+	   busy_time = 2;
+	}
+	else if( eff_level > 270 ) {
+	   mana_cost = 300;
+	   busy_time = 3;
+	}
+	else if( eff_level > 220 ) {
+	   mana_cost = 400;
+	   busy_time = 4;
+	}
+	else if( eff_level > 160 ) {
+	   mana_cost = 500;
+	   busy_time = 5;
+	}
+	else if( eff_level > 100 ) {
+	   mana_cost = 600;
+	   busy_time = 6;
+	}
+	else { 
+	   mana_cost = 700;
+	   busy_time = 7;
+	}
+
+	me->add("mana", -mana_cost);
+	me->receive_damage("sen", 10);
+
+	msg = HIC
+"$N口中念了句咒文，朝$n一指，大喝一声：定！\n" 
+NOR;
+
+	success = 1;
+	ap = eff_level;
+	ap = ap * ap * ap /10 ;
+	ap += (int)me->query("combat_exp");
+	dp = target->query("combat_exp");
+	if( random(ap + dp) < dp ) success = 0;
+//here we compared exp and spells level. 
+//note: has nothing to do with target's spells level.
+
+	ap = (int)me->query("max_mana");
+	dp = (int)target->query("max_mana");
+	if( random(ap + dp) < dp ) success = 0;
+//here we compared max_mana.
+
+	ap = (int)me->query("mana");
+	dp = (int)target->query("mana");
+	if( random(ap + dp) < dp ) success = 0;
+//here we compare current mana. this is important. you need recover to try again.
+
+	howlong = 0;        
+	if(success == 1 ){
+		msg +=  HIR "结果$n手足僵硬，果然动弹不得！\n" NOR;
+		target->set_temp("no_move", 1);
+	
+		howlong = 15 + random((eff_level -100));
+//a typical level is 100+100 ->enabled 150, so will "ding" about 1 minute in the best case.
+	}	    
+	else {
+		msg +=  HIR "结果$n被吓了一跳！\n" NOR;	
+	} 
+
+	message_vision(msg, me, target);
+
+//he'll try kill you...
+	if( living(target) ) target->kill_ob(me);
+
+if (success == 0) {
+me->start_busy(1);
+return 1;
+}
+
+	me->start_busy(busy_time);        
+	if( howlong>0 ) call_out("free", howlong, target);
+        
+	return 1;
+}
+
+void free(object target)
+{
+	target->delete_temp("no_move");      
+	return;
+}
+
