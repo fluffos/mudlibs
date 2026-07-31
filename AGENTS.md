@@ -2412,6 +2412,45 @@ call sites in the same file. Seen independently in two unrelated
 lineages (`nt1`, `wxddym`), so check for it on sight in any new lib
 rather than waiting to hit the compile error.
 
+### 7.51 NTOS-specific driver extensions with no FluffOS equivalent: `query_heartbeat_interval()`/`set_heartbeat_interval()`
+
+Some NT/nitan-lineage libs call `query_heartbeat_interval()`/
+`set_heartbeat_interval()` (a CPU-adaptive heartbeat-throttling feature
+specific to the NTOS MudOS fork these libs originally ran on) to slow
+down the global driver heartbeat under load. Neither function exists on
+this driver — `Undefined function`, a compile error wherever called
+(`adm/daemons/timed.lpc`'s periodic CPU check, `adm/daemons/systemd.lpc`'s
+pre/post-save heartbeat pause). No FluffOS equivalent exists (heartbeat
+interval isn't configurable this way). Fix: delete the calls entirely
+(they're pure side-effect statements, safe to drop) — the feature is
+unavailable, not replaceable. Grep `heartbeat_interval` across the whole
+lib, not just the file that failed first. (`nt6`/`nt6nitan6win`.)
+
+### 7.52 A `mudlistd`-style intermud daemon uses `sockets` package efuns unconditionally, breaking its own compile
+
+Distinct from §1.3c's "daemon absent, guard with find_object()" pattern:
+here the daemon's OWN source directly calls `socket_create()`/
+`socket_connect()`/`socket_close()`/`socket_write()` with no availability
+check, so the FILE ITSELF fails to compile (`Undefined function
+socket_create` etc) the moment anything tries to load it — no
+`find_object()` guard at the call site helps, since the callee can't
+even compile far enough to be found absent. If something in the boot/
+login chain references this daemon (directly or transitively — the
+trigger can be hard to pin down exactly), the whole chain can fail.
+Fix: since the underlying feature (dialing out to other muds) is
+categorically unavailable without the sockets package, gut the
+sockets-dependent function bodies to no-ops (delete the `socket_*`
+calls; a function that only ever set up a callback chain for a socket
+that will never open should just do nothing) rather than trying to
+preserve partial behavior. Non-socket parts of the same daemon (local
+data storage, HTML/MRTG stats generation) can stay untouched. While
+doing this, watch for genuinely pre-existing unrelated bugs uncovered
+in the same dead code path — e.g. a bare `array x = allocate(3);`
+declaration (no element type; `array` alone isn't a valid type on this
+driver, see §6.3) — fix those too since the function still needs to
+compile even though it'll never usefully run. (`nt6`/`nt6nitan6win`'s
+`mudlistd.lpc`.)
+
 ---
 
 ## 8. Login and registration flow bugs
