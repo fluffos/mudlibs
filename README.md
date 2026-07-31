@@ -329,6 +329,9 @@ classes it's found.
 | 148 | `nt1` | 泥潭1 | `泥潭1.gz` | 40185 | native-boot verified, WASM pending |
 | 149 | `wdxtym` | 武动仙途 | `武动仙途源码.rar` | 40188 | native-boot verified, WASM pending |
 | 150 | `xkm` | 侠客梦 | `侠客梦.rar` | 40191 | native-boot verified, WASM pending |
+| 151 | `fqyy2` | 风起云涌2 | `风起云涌2修正版.rar` | 40197 | native-boot verified, WASM pending |
+| 152 | `fy2mg` | 风云II（美国版本） | `风云II(美国版本）.rar` | 40198 | native-boot verified, WASM pending |
+| 153 | `fy330` | 风云III (3.0) | `风云III(3.0).rar` | 40199 | native-boot verified, WASM pending |
 | 901 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | — | deprioritized |
 | 901-1 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | — | deprioritized |
 | 901-2 | `dw_fluffos_v3` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | — | deprioritized |

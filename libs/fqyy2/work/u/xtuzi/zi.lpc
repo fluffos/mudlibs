@@ -1,0 +1,362 @@
+//公平子
+//rewrite by rabbit at 2000 /10 /3
+inherit NPC;
+#include <ansi.h>;
+string clear_title(string arg);
+void delete_title(object who);
+void add_title(object me,string arg);
+int do_bihua(string arg);
+void do_titles(object obj,int rank);
+int do_halt();
+
+string *list,tmp;
+void create()
+{
+        set_name("金庸", ({ "jin yong"}) )
+;
+        set("gender", "男性");
+        set("age", 75);
+        set("nickname", HIR"天下公平"NOR);
+        set("title", HIY"武侠宗主"NOR);
+	set("long",
+            "这是一位显得略胖的教书匠风度的慈祥老者，早年笔耕不惰，如今早已功成名就。\n");
+
+	set("combat_exp",60000);
+        set("shen_type", 1);
+	set("attitude", "friendly");
+	
+	set("apply/attack", 50);
+	set("apply/defense", 50);
+
+	set("max_qi", 800);
+	set("max_jing", 800);
+	set("max_neili", 800);
+
+	set_skill("force", 80);
+	set_skill("unarmed", 80);
+	set_skill("sword",80);
+	set_skill("parry",80);
+	set_skill("dodge", 80);
+
+
+
+	setup();
+
+        carry_object("/clone/misc/cloth")->wear();
+        carry_object("/d/city/obj/changjian")->wield();
+}
+
+
+void init()
+{
+        ::init();	
+        add_action("do_bihua", "bihua");
+add_action("do_kill","kill");
+add_action("do_kill","hit");
+add_action("do_kill","touxi");
+add_action("do_kill","ansuan");
+add_action("do_fight","perform");
+        add_action("do_bihua", "bihua");
+        add_action("do_kill", "fight");
+        add_action("do_halt", "halt");
+        add_action("do_halt", "h");
+}
+
+int do_fight(string arg)
+{
+if(arg=="cimu") return notify_fail("由于[刺目]会影响别人行动能力，这里不能使用。\n");
+return 0;
+}
+
+int do_bihua(string arg)
+{     
+	object ob1, ob2;
+        object old_target;
+
+	ob1 = this_player();
+        
+	if( !arg || arg=="" ) return 0;  
+
+	if ( arg == "gongping zi" || arg == "zi" || arg == "referee" )
+           {
+             command("say " + "你不能跟我比划！\n");
+             return 1;
+            }
+
+	if ( this_object()->query_temp("busy") ) 
+		return notify_fail("每次只能有两人参加比武。\n");
+
+        if (!ob2 = present(arg,environment(ob1)) ) 
+		return notify_fail("你想跟谁比划？\n");
+        if (ob1 == ob2)    return notify_fail("你不能攻击自己。\n");
+
+
+	if( userp(ob2) && (object)ob2->query_temp("pending/fight") !=ob1 ) {
+		message_vision("\n$N对着$n说道" 
+			+ RANK_D->query_self(ob1) 
+			+ ob1->name() + "领教"
+			+ RANK_D->query_respect(ob2) + "的高招！\n\n", ob1, ob2);
+		if( objectp(old_target = ob1->query_temp("pending/fight")) )
+			tell_object(old_target, YEL + ob1->name() + "取消了和你比试的念头。\n" NOR);
+		ob1->set_temp("pending/fight", ob2);
+		tell_object(ob2, YEL "如果你愿意和对方进行比试请你也对" + ob1->name() + "("+(string)ob1->query("id")+")"+ "下一次 bihua 指令。\n" NOR);
+
+		write(YEL "由於对方是由玩家控制的人物你必须等对方同意才能进行比试。\n" NOR);
+		return 1;
+	}
+	    
+        ob1->delete_temp("halted");
+        ob2->delete_temp("halted");
+
+	remove_call_out("check");
+	call_out("check",2, ob1, ob2);
+
+//	ob1->set("qi",(int)ob1->query("max_qi"));
+//	ob2->set("qi",(int)ob2->query("max_qi"));
+
+	remove_call_out("fighting");
+	call_out("fighting",2, ob1, ob2);
+
+	return 1;
+}
+
+void fighting(object ob1, object ob2)
+{
+	ob1->fight_ob(ob2);
+	ob2->fight_ob(ob1);
+}
+
+void check(object ob1, object ob2)
+{
+	this_object()->set_temp("busy",1);
+
+
+        message("channel:chat",HIC"【闲聊】金庸(Jin Yong)："+ob1->query("name") +"("+ob1->query("id")+")"
+		+ "与" + ob2->query("name") +"("+ob2->query("id")+")"+ "现在"+WHT "比武台"NOR +HIC"上开始比武论剑！\n"NOR, users());
+	call_out("observe",1,ob1,ob2);
+}
+
+int observe(object ob1,object ob2)
+{       
+        
+	object ob;
+	int i,j,k;
+
+
+	int lost,win;
+	if(ob1->is_fighting()) 
+	{
+		call_out("observe",1,ob1,ob2);
+		return 1;
+	}
+
+	this_object()->delete_temp("busy");
+        ob1->delete_temp("pending/fight");
+        ob2->delete_temp("pending/fight");
+
+	if ( !present(ob1, environment()) ) 
+	{
+		command("chat " + ob1->query("name") + "落荒而逃了！\n");
+		return 1;
+	}
+
+	if ( !present(ob2, environment()) ) 
+	{
+		command("chat " + ob2->query("name") + "落荒而逃了！\n");
+		return 1;
+	}
+           
+        if (ob1->query_temp("halted"))
+         {
+	       ob1->delete_temp("halted");
+               command("chat " + ob1->query("name") + 
+                       "中途放弃比武！\n");
+                return 1;
+         }
+        if (ob2->query_temp("halted"))
+         {
+               ob2->delete_temp("halted");
+               command("chat " + ob2->query("name") + 
+                       "中途放弃比武！\n");
+                return 1;
+         }
+
+	if ( ob1->query("qi")*2 > ob1->query("max_qi")) 
+	{
+		if  (ob2->query("qi")*2 > ob2->query("max_qi")) {
+			command("chat " + ob1->query("name") 
+				+ "与" + ob2->query("name") + "比武不分胜负！\n");
+			return 1;
+		}
+		command("chat " + ob1->query("name") 
+			+ "比武战胜" + ob2->query("name") + "！\n");
+
+		ob1->set_temp("marks/win", 1);
+		  call_out("log_positions",1,ob1,ob2);
+	}
+	else
+	{
+		command("chat " + ob2->query("name") 
+			+ "比武战胜" + ob1->query("name") + "！\n");
+
+		ob2->set_temp("marks/win", 1);
+		call_out("log_positions",1,ob1,ob2);
+         }
+	return 1;
+
+}
+
+void log_positions (object ob1,object ob2)
+{ 	string winname,lostname,winid,lostid;
+	int i,win,lost;
+	object obj;
+	if(ob2->query_temp("marks/win"))
+		{obj=ob2;
+		winid=ob2->query("id");
+		winname=ob2->query("name");
+		lostid=ob1->query("id");
+		lostname=ob1->query("name");
+               }
+	if(ob1->query_temp("marks/win"))
+		{obj=ob1;	
+		winid=ob1->query("id");
+		winname=ob1->query("name");
+		lostid=ob2->query("id");
+		lostname=ob2->query("name");
+               }	
+	list = explode(read_file("/data/ladder.txt"), "\n");
+	lost=member_array(lostid, list);
+	win=member_array(winid, list);
+	tmp="";
+	
+	
+	if(lost < win && lost!= -1) 
+	{
+	 list[lost]=winid;
+	 list[lost+1]=winname+"\n"+lostid+"\n"+lostname;
+	 
+		for(i=0; i<sizeof(list); i++) 
+		if ((i==win) || (i==win+1)) tmp+="";
+		
+		else	tmp+=list[i]+"\n";
+	}	
+	else if(lost == -1 && win== -1) 
+	{
+		for( i=0; i<sizeof(list); i++) tmp+=list[i]+"\n";
+		tmp+=winid+"\n"+winname+"\n"+lostid+"\n"+lostname+"\n";
+
+	}
+	else if(lost != -1 && win== -1)
+	{list[lost]=winid;
+	 list[lost+1]=winname+"\n"+lostid+"\n"+lostname;
+
+		for(i=0; i<sizeof(list); i++) 
+
+		tmp+=list[i]+"\n";
+
+	}else{ 	for( i=0; i<sizeof(list); i++) 
+
+		tmp+=list[i]+"\n";
+	     	}
+
+	rm("/data/ladder.txt");
+	write_file("/data/ladder.txt",tmp);
+	list = explode(read_file("/data/ladder.txt"), "\n");
+	win=member_array(winid, list);
+        message("channel:chat",HIC"【闲聊】金庸(Jin Yong)：恭喜"+winname+"("+winid+")"+"荣获"+HIY"「侠客英雄谱」"NOR+HIC"第"+chinese_number((win+1)/2+1)+"名！\n"NOR, users());
+
+delete_title(ob1);
+delete_title(ob2);
+
+ if(((win+1)/2+1)==1) 
+ {
+ do_titles(find_player(winid),1);
+ message("channel:chat",HIC"【闲聊】金庸(Jin Yong)：封"+winname+"("+winid+")"+"为"+BGRN HIY"【天下第一】\n"NOR, users());
+  }
+else if(((win+1)/2+1)==2) 
+ {
+do_titles(find_player(winid),2);
+message("channel:chat",HIC"【闲聊】金庸(Jin Yong)：封"+winname+"("+winid+")"+"为"+BGRN HIY"【天下第二】\n"NOR, users());
+  }
+else if(((win+1)/2+1)==3) 
+ {
+do_titles(find_player(winid),3);
+message("channel:chat",HIC"【闲聊】金庸(Jin Yong)：封"+winname+"("+winid+")"+"为"+BGRN HIY"【天下第三】\n"NOR, users());
+  }
+else
+ delete_title(find_player(winid));
+ob1->delete_temp("leitai_allow");
+ob2->delete_temp("leitai_allow");
+	ob1->delete_temp("marks/win");
+	ob2->delete_temp("marks/win");
+        ob1->delete_temp("block_msg");
+    ob2->delete_temp("block_msg");
+ob1->enable_player();
+ob2->enable_player();
+	message_vision (CYN"几名壮汉欢呼着簇拥着$N走下比武台。\n"NOR,find_player(winid));
+ob2->move("/d/city/wudao4");
+ob1->move("/d/city/wudao4");
+	message_vision (CYN"$N被几名壮汉簇拥着走了过来。\n"NOR,find_player(winid));
+}
+
+int do_halt()
+{
+ object me = this_player();
+if (me->is_fighting())
+ me->set_temp("halted",1);
+return 0;
+}
+
+int do_kill(string arg)
+{
+write("你只能用bihua <id>进行比划，用halt放弃。\n");
+return 1;
+}
+void add_title(object me,string arg)
+{
+        string title;
+        title=arg+clear_title((string)me->query("title"));
+        me->set("title",title);
+}
+void do_titles(object obj,int rank)
+{
+ switch (rank)
+{
+ case 1: add_title(obj, NOR"【"BRED HIY"天下第一"NOR"】"); break;
+ case 2: add_title(obj, NOR"【"BRED HIY"天下第二"NOR"】"); break;
+ case 3: add_title(obj, NOR"【"BRED HIY"天下第三"NOR"】"); break;
+ default: break;
+}
+}
+
+string clear_title(string arg)
+{
+        if( (strsrch(arg, NOR"【"BRED HIY"天下第一"NOR"】")>= 0) ||
+            (strsrch(arg, NOR"【"BRED HIY"天下第二"NOR"】")>= 0)||
+            (strsrch(arg, NOR"【"BRED HIY"天下第三"NOR"】")>= 0))
+                  {
+                arg = replace_string(arg, NOR"【"BRED HIY"天下第一"NOR"】","");
+                arg = replace_string(arg, NOR"【"BRED HIY"天下第二"NOR"】","");
+                arg = replace_string(arg, NOR"【"BRED HIY"天下第三"NOR"】","");
+                       }
+
+        return arg;
+}
+
+
+void delete_title(object who)
+{
+ string arg;
+ arg=who->query("title");
+        if( (strsrch(arg, NOR"【"BRED HIY"天下第一"NOR"】")>= 0) ||
+            (strsrch(arg, NOR"【"BRED HIY"天下第二"NOR"】")>= 0)||
+            (strsrch(arg, NOR"【"BRED HIY"天下第三"NOR"】")>= 0))
+                  {
+                arg = replace_string(arg, NOR"【"BRED HIY"天下第一"NOR"】","");
+                arg = replace_string(arg, NOR"【"BRED HIY"天下第二"NOR"】","");
+                arg = replace_string(arg, NOR"【"BRED HIY"天下第三"NOR"】","");
+                       }
+
+who->set("title",arg);
+return;
+}
