@@ -2615,7 +2615,21 @@ directory is gitignored before assuming "well it existed when the
 archive was captured, so it's fine." Fix: guard with
 `if (!content) return 0;` (or an equivalent sane default) before the
 `sscanf`. (`hy`'s `howmany_visitor()`/`howmany_card()`, reading
-`/log/mud/MUDVISITOR`/`GIFTCARD`.)
+`/log/mud/MUDVISITOR`/`GIFTCARD`; same two functions recur near-
+verbatim in sibling lineage `hy2000`.)
+
+Same root cause, different call: `write(read_file(missing_file))` —
+e.g. `cmds/usr/uptime.lpc` printing "上次当机原因" (last crash reason)
+from `/log/nosave/LASTCRASH` — fails as `*Bad argument 1 to receive()
+Expected: string or buffer Got: 0`, since `write()` internally calls
+`receive()` on the (int 0) argument. This one is easy to miss because
+the crashing call is buried inside an innocuous-looking status/banner
+command (`uptime`), often invoked from deep in the login flow (here,
+from `logind.lpc`'s post-BIG5-answer banner display) — the actual
+symptom is the id prompt never appearing at all, with no error visible
+in a casual read of the transcript unless the full boot log is
+inspected. Fix the same way: guard with `if (content) write(content);`
+before printing. (`hy2000`.)
 
 ### 7.55 A security/status daemon crashes on a REENTRANT call to itself, mid-`create()`, before its own later-declared variables initialize
 
@@ -2880,6 +2894,34 @@ Any `while (len--)` (or `for`) loop meant to validate every character
 of a string has this same empty-string blind spot — check for it
 whenever a validator's rejection message can be bypassed by sending
 nothing at all. (`hell`.)
+
+### 7.63 One caller of `new(X)` is missing the defensive `if (ob = new(X))` guard that every sibling call site already has
+
+`quit.lpc` called `ob=new("/clone/topten/magic-rice"); ob->movein(me);
+ob->savetopten(me); destruct(ob);` with no null check, crashing every
+quit with `*Bad argument 1 to EFUN call_other() Expected: object,
+string, array, Got: int(0)` when `new()` returned 0. Deep investigation
+(tracing `create()` with `write()` debug statements, comparing against
+a known-good `new()` target, confirming the file lexes cleanly via the
+formatter's own driver-backed lexer) never pinned down WHY `new()`
+silently fails for this particular file under this driver — `create()`
+never even starts executing, with no compile error, no catchable
+exception, nothing. The decisive shortcut: grep the rest of the
+codebase for other `new("/clone/topten/magic-rice")` call sites FIRST,
+before spending time on driver-internals archaeology. Every other
+caller (`top10.lpc`, `topboard.lpc`, `topten.lpc`, `topdel.lpc`) already
+wraps the call in `if (ob = new(...)) { ... }`, and `topdel.lpc` even
+has a comment acknowledging it: `"topten的magic-rice出问题了"`
+("topten's magic-rice has a problem") in its `else` branch. The
+original authors already knew this exact `new()` call is fragile and
+defended every site except this one. Fix: match the sibling pattern
+instead of chasing the root cause — wrap in `if (ob = new(...)) { ...
+}` and skip the topten update silently on failure, exactly like the
+other three call sites already do. General lesson: when one call site
+of `new(X)`/`clone_object(X)` lacks a guard that ALL other call sites
+of the same X already have, that asymmetry is itself the diagnostic —
+check sibling call sites (and their comments) before deep-diving into
+driver internals. (`hy2000`.)
 
 ---
 
