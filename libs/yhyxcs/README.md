@@ -31,7 +31,7 @@ https://mudlibs.fluffos.info/yinhexiongxiongchuanshuo/
 ## 本地运行
 
 ```
-cd libs/yinhexiongxiongchuanshuo
+cd libs/yhyxcs
 ~/src/fluffos/build-debug/src/driver config.fluffos
 ```
 

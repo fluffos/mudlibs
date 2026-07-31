@@ -31,7 +31,7 @@ https://mudlibs.fluffos.info/honghuangshijie/
 ## 本地运行
 
 ```
-cd libs/honghuangshijie
+cd libs/hhsj
 ~/src/fluffos/build-debug/src/driver config.fluffos
 ```
 

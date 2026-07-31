@@ -229,10 +229,10 @@ the bug classes it's found.
 | 061 | `zuizhonghuanjing` | 最终幻境 | `最终幻境.zip` | 40099 | WASM playable |
 | 062 | `niaoren` | 鳥人世界 (The Bird-Man World) | `最新鳥人世界.zip` | 40100 | WASM playable |
 | 063 | `aoxiangtianji` | 翱翔天际 | `翱翔天际utf8.7z` | 40101 | WASM playable |
-| 064 | `yinhexiongxiongchuanshuo` | 银河英雄传说 | `银河英雄传说.zip` | 40104 | native-boot verified, WASM pending |
-| 065 | `ludingtianxia` | 鹿鼎天下 (in-game: 雄霸天下) | `鹿鼎天下.rar` | 40105 | native-boot verified, WASM pending |
-| 014-1 | `honghuangshijie` | 洪荒世界 | `洪荒世界.rar` | 40106 | native-boot verified, WASM pending |
-| 066 | `hongchen` | 红尘 (in-game: 红尘录) | `红尘.rar` | 40107 | native-boot verified, WASM pending |
+| 064 | `yhyxcs` | 银河英雄传说 | `银河英雄传说.zip` | 40104 | native-boot verified, WASM pending |
+| 065 | `ldtx` | 鹿鼎天下 (in-game: 雄霸天下) | `鹿鼎天下.rar` | 40105 | native-boot verified, WASM pending |
+| 014-1 | `hhsj` | 洪荒世界 | `洪荒世界.rar` | 40106 | native-boot verified, WASM pending |
+| 066 | `hc` | 红尘 (in-game: 红尘录) | `红尘.rar` | 40107 | native-boot verified, WASM pending |
 | 901 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | — | deprioritized |
 | 901-1 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | — | deprioritized |
 | 901-2 | `dw_fluffos_v3` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | — | deprioritized |

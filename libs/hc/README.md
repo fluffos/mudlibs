@@ -28,7 +28,7 @@ https://mudlibs.fluffos.info/hongchen/
 ## 本地运行
 
 ```
-cd libs/hongchen
+cd libs/hc
 ~/src/fluffos/build-debug/src/driver config.fluffos
 ```
 

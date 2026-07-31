@@ -32,7 +32,7 @@ https://mudlibs.fluffos.info/ludingtianxia/
 ## 本地运行
 
 ```
-cd libs/ludingtianxia
+cd libs/ldtx
 ~/src/fluffos/build-debug/src/driver config.fluffos
 ```
 
