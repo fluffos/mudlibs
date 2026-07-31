@@ -1,14 +1,14 @@
-½²¹ÊÊÂ²¢·¢½±ÀøÏµÍ³ËµÃ÷£º
+è®²æ•…äº‹å¹¶å‘å¥–åŠ±ç³»ç»Ÿè¯´æ˜ï¼š
   
-     COPYÎÄ¼şstoryd.cµ½/adm/daemons/ÏÂ£¬
-ÔÚ/adm/etc/perloadÖĞ¼ÓÈë/adm/daemons/storyd.cÓï¾ä£¬
-°ÑgiftÎÄ¼ş¼Ücopyµ½/clone/ÏÂ¡£¼´¿É×Ô¶¯ÔËĞĞ£¬ÈçÃ»×Ô¶¯ÔËĞĞ£¬
-¿ÉÒÔupdate /adm/daemons/storyd.c£¬Ê¹ÆäÔËĞĞ¡£ÈçÓĞÎÊÌâ¿ÉÀ´ĞÅÑ¯ÎÊ¡£
-±ğµÄÎÄ¼ş·ÅÈëclone/gift
-ÔÚinclude/globals.h
+     COPYæ–‡ä»¶storyd.cåˆ°/adm/daemons/ä¸‹ï¼Œ
+åœ¨/adm/etc/perloadä¸­åŠ å…¥/adm/daemons/storyd.cè¯­å¥ï¼Œ
+æŠŠgiftæ–‡ä»¶æ¶copyåˆ°/clone/ä¸‹ã€‚å³å¯è‡ªåŠ¨è¿è¡Œï¼Œå¦‚æ²¡è‡ªåŠ¨è¿è¡Œï¼Œ
+å¯ä»¥update /adm/daemons/storyd.cï¼Œä½¿å…¶è¿è¡Œã€‚å¦‚æœ‰é—®é¢˜å¯æ¥ä¿¡è¯¢é—®ã€‚
+åˆ«çš„æ–‡ä»¶æ”¾å…¥clone/gift
+åœ¨include/globals.h
      #define STORY_DIR	        "/clone/gift/"
      #define STORY_D	        "/adm/daemons/storyd"
 
 
-´Ë³ÌĞòÓÉº£ÑóIIÉÏº£Õ¾Î×Ê¦hxsdÌá¹©
-»¶Ó­À´ĞÇÔÂ´«Ææ£¨www.lywin.com£©ÏÂÔØmud×ÊÔ´
+æ­¤ç¨‹åºç”±æµ·æ´‹IIä¸Šæµ·ç«™å·«å¸ˆhxsdæä¾›
+æ¬¢è¿æ¥æ˜Ÿæœˆä¼ å¥‡ï¼ˆwww.lywin.comï¼‰ä¸‹è½½mudèµ„æº

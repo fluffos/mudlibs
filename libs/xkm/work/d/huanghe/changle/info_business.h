@@ -3,7 +3,7 @@
 // by aln 2 / 98
 
 mapping info_business = ([
-/*YEL"³¤°×É½ÈË²Î" NOR: 
+/*YEL"é•¿ç™½å±±äººå‚" NOR: 
        ([   "changbai"  :  40 + random(120),
             "city"      :  50 + random(180),
             "dali"      :  40 + random(150),
@@ -25,7 +25,7 @@ mapping info_business = ([
             "xueshan"   :  40 + random(120),
       ]),
  */
-CYN"³ñ¶Ğ"NOR : 
+CYN"ç»¸ç¼"NOR : 
       ([    "changbai"  :  50 +  random(180),
             "city"      :  40 +  random(100),
             "dali"      :  45 +  random(120),
@@ -46,7 +46,7 @@ CYN"³ñ¶Ğ"NOR :
             "xixia"     :  50 +  random(240),
             "xueshan"   :  40 +  random(180),
       ]),
-HIY"Ê×ÊÎ"NOR :
+HIY"é¦–é¥°"NOR :
        ([   "changbai"  :  40 +  random(80),
             "city"      :  40 +  random(80),
             "dali"      :  40 +  random(80),
@@ -67,7 +67,7 @@ HIY"Ê×ÊÎ"NOR :
             "xixia"     :  70 +  random(80),
             "xueshan"   :  40 +  random(80),
       ]),  
-HIG"×Ö»­"NOR : 
+HIG"å­—ç”»"NOR : 
       ([    "changbai"  :  50 + random(80),
             "city"      :  60 + random(80),
             "dali"      :  45 + random(80),
@@ -88,7 +88,7 @@ HIG"×Ö»­"NOR :
             "xixia"     :  50 + random(80),
             "xueshan"   :  40 + random(80),
       ]),
-HIW"´ÉÆ÷"NOR : 
+HIW"ç“·å™¨"NOR : 
       ([    "changbai"  :  50 + random(80),
             "city"      :  40 + random(80),
             "dali"      :  45 + random(80),

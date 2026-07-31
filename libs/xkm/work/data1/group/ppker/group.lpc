@@ -1,0 +1,40 @@
+// Room: /data/group/ppker/group.c / ppker
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+	set("short", "杀手楼 [1;32m总舵[37;0m");
+	set("long", @LONG
+总舵是帮派最重要的地方，也是帮派的精神象徵，平时帮主与长老们谈论
+帮派重要政策的最佳场所，总舵的存在与否关系着帮派能不能存在，所谓舵在
+帮在，舵亡帮亡，希望属下能好好保护这里。 
+LONG
+	);
+	set("exits", ([ /* sizeof() == 6 */
+  "east" : "/data/group/ppker/3",
+  "south" : "/data/group/ppker/6",
+  "north" : "/data/group/ppker/4",
+  "down" : "/data/group/ppker/1",
+  "up" : "/data/group/ppker/5",
+  "west" : "/data/group/ppker/2",
+]));
+	set("people", 1);
+	set("gold", 402);
+	set("room_num", 6);
+	set("valid_startroom", 1);
+	set("tax", 5);
+	set("group", "ppker");
+	set("group_name", "杀手楼");
+	set("no_change", 1);
+	set("master", "program");
+	set("item_max", 40);
+	set("room_max", 80);
+	set("no_delete", 1);
+	set("room", 6);
+	set("npc_max", 40);
+	set("no_clean_up", 0);
+
+	setup();
+	replace_program(ROOM);
+}

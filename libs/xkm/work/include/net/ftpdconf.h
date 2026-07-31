@@ -6,9 +6,9 @@
 
 // The following defines are in <globals.h> which is included automatically.
 // #include <uid.h>        /* gets define for ROOT_UID on tmi-2 */
-// #include <config.h>
+// #include "config.h"
 
-#include <net/socket.h> /* various socket defines from tmi-2 */
+#include "net/socket.h" /* various socket defines from tmi-2 */
 
 /*
 -----------------------------------------------
@@ -42,7 +42,7 @@
 #define LOGIN_MSG       "/adm/etc/ftpd_welcome"
 
 /* the name of the MUD */
-#define THE_MUD_NAME    "œ¿øÕ√Œ"
+#define THE_MUD_NAME    "‰æ†ÂÆ¢Ê¢¶"
 
 /* Maximum number of simultaneous ftp users. */
 #define FTPD_MAX_USERS 4
@@ -203,8 +203,8 @@
 
 // The following defines are in <globals.h> which is included automatically.
 // #include <uid.h>        /* gets define for ROOT_UID on tmi-2 */
-// #include <config.h>
+// #include "config.h"
 
-#include <net/socket.h> /* various socket defines from tmi-2 */
+#include "net/socket.h" /* various socket defines from tmi-2 */
 
 #endif /* _FTPDCONF_H */

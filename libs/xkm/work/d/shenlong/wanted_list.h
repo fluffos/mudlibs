@@ -2,22 +2,22 @@
 // /d/shenlong/wanted_list.h
 
 mapping wanted_list = ([
-        "½µÄ§èÆ" : "/clone/weapon/xiangmo-chu.c",
-        "ÒĞÌì½£" : "/clone/weapon/yitian-jian.c",
-        "Óñóï" : "/clone/unique/yuxiao.c",
-        "·üÄ§µ¶" : "/clone/unique/fumo-dao.c",
-        "½ğÉß½£" : "/clone/unique/jinshe-jian.c",
-        "öù×ì¼ô" : "/clone/unique/eyujian.c",
-        "öùÎ²±Ş" : "/clone/unique/eweibian.c",
-        "ĞşÌúÖØ½£" : "/clone/unique/xuantie-jian.c",
- //     "½ğÉß×¶" : "/d/huashan/obj/jinshe-zhui.c",
-        "ÓñÖñÕÈ" : "/clone/unique/yuzhu-zhang.c",
-        "Æß¾øÕë" : "/clone/weapon/qijue.c",
-        "Óã³¦½£" : "/clone/unique/yuchang-jian.c",
+        "é™é­”æµ" : "/clone/weapon/xiangmo-chu.lpc",
+        "å€šå¤©å‰‘" : "/clone/weapon/yitian-jian.lpc",
+        "ç‰ç®«" : "/clone/unique/yuxiao.lpc",
+        "ä¼é­”åˆ€" : "/clone/unique/fumo-dao.lpc",
+        "é‡‘è›‡å‰‘" : "/clone/unique/jinshe-jian.lpc",
+        "é³„å˜´å‰ª" : "/clone/unique/eyujian.lpc",
+        "é³„å°¾é­" : "/clone/unique/eweibian.lpc",
+        "ç„é“é‡å‰‘" : "/clone/unique/xuantie-jian.lpc",
+ //     "é‡‘è›‡é”¥" : "/d/huashan/obj/jinshe-zhui.lpc",
+        "ç‰ç«¹æ–" : "/clone/unique/yuzhu-zhang.lpc",
+        "ä¸ƒç»é’ˆ" : "/clone/weapon/qijue.lpc",
+        "é±¼è‚ å‰‘" : "/clone/unique/yuchang-jian.lpc",
 
-        "½ğ¸ÕÕÖ" : "/d/shaolin/obj/jingang-zhao.c",
-        "ÎÚ²ÏÒÂ" : "/d/xueshan/obj/wucan-yi.c",
-        "Èíâ¬¼×" : "/d/taohua/obj/ruanwei-jia.c",
+        "é‡‘åˆšç½©" : "/d/shaolin/obj/jingang-zhao.lpc",
+        "ä¹Œèš•è¡£" : "/d/xueshan/obj/wucan-yi.lpc",
+        "è½¯çŒ¬ç”²" : "/d/taohua/obj/ruanwei-jia.lpc",
 
-        "ÉñÕÕ¾­" : "/d/city/npc/obj/shenzhao.c",
+        "ç¥ç…§ç»" : "/d/city/npc/obj/shenzhao.lpc",
 ]);

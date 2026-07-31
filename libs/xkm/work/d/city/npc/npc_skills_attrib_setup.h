@@ -64,7 +64,7 @@ void skills_setup_none(int skill,int r_s,string family)
 	mapping S_skills= ([ ]);
 	switch(family)
 	{
-		case "Îäµ±ÅÉ":
+		case "æ­¦å½“æ´¾":
 		{
 			S_skills["dodge"]="tiyunzong";
 			S_skills["parry"]="taiji-quan";
@@ -81,7 +81,7 @@ void skills_setup_none(int skill,int r_s,string family)
 			carry_object("/d/wudang/obj/greyrobe")->wear();
 			break;
 		}
-		case "ĞÇËŞÅÉ":
+		case "æ˜Ÿå®¿æ´¾":
 		{
 			S_skills["dodge"]="feixing-shu";
 			S_skills["parry"]="chousui-zhang";
@@ -99,7 +99,7 @@ void skills_setup_none(int skill,int r_s,string family)
 			carry_object("/d/xingxiu/obj/yellow-cloth")->wear();
 			break;
 			}
-		case "»ªÉ½ÅÉ":
+		case "åå±±æ´¾":
 		{
 			S_skills["dodge"]="huashan-shenfa";
 			S_skills["parry"]="pishi-poyu";
@@ -119,7 +119,7 @@ void skills_setup_none(int skill,int r_s,string family)
 		break;
 
 			}
-		case "ÌÒ»¨µº":
+		case "æ¡ƒèŠ±å²›":
 		{
 		S_skills["dodge"]="luoying-shenfa";
 			S_skills["parry"]="luoying-shenjian";
@@ -138,7 +138,7 @@ void skills_setup_none(int skill,int r_s,string family)
 		break;
 
 			}
-		case "Ø¤°ï":
+		case "ä¸å¸®":
 		{
 		S_skills["dodge"]="xiaoyaoyou";
 		S_skills["parry"]="xianglong-zhang";
@@ -154,7 +154,7 @@ void skills_setup_none(int skill,int r_s,string family)
 		carry_object("/d/gaibang/obj/budai")->wear();
 		break;
 			}
-		case "¶ëáÒÅÉ":
+		case "å³¨åµ‹æ´¾":
 		{
 			S_skills["dodge"]="zhutian-bu";
 			S_skills["parry"]="tiangang-zhi";
@@ -174,7 +174,7 @@ void skills_setup_none(int skill,int r_s,string family)
 		break;
 
 			}
-		case "°×ÍÕÉ½":
+		case "ç™½é©¼å±±":
 		{
 		S_skills["dodge"]="chanchubu";
 		S_skills["parry"]="hamagong";
@@ -195,7 +195,7 @@ void skills_setup_none(int skill,int r_s,string family)
 
 			}
 
-		case "È«Õæ½Ì":
+		case "å…¨çœŸæ•™":
 		{
 			S_skills["dodge"]="jinyangong";
 			S_skills["parry"]="sanhua-juding";
@@ -218,7 +218,7 @@ void skills_setup_none(int skill,int r_s,string family)
 			break;
 
 			}
-		case "Ñ©É½ÅÉ":
+		case "é›ªå±±æ´¾":
 		{
 			S_skills["dodge"]="shenkongxing";
 		S_skills["parry"]="huoyan-dao";
@@ -238,7 +238,7 @@ void skills_setup_none(int skill,int r_s,string family)
 		break;
 
 			}
-		case "´óÀí¶Î¼Ò":
+		case "å¤§ç†æ®µå®¶":
 		{
 			S_skills["dodge"]="duanshi-shenfa";
 			S_skills["parry"]="yiyang-zhi";
@@ -257,7 +257,7 @@ void skills_setup_none(int skill,int r_s,string family)
 			carry_object("/d/wudang/obj/greyrobe")->wear();
 			break;
 			}
-			case "ÉÙÁÖÅÉ":
+			case "å°‘æ—æ´¾":
 		{
 			S_skills["dodge"]="shaolin-shenfa";
 			S_skills["parry"]="yizhi-chan";
@@ -291,7 +291,7 @@ void skills_setup_weapon(int skill,int r_s,string family)
 
 	switch(family)
 	{
-		case "Îäµ±ÅÉ":
+		case "æ­¦å½“æ´¾":
 		{
 			S_skills["dodge"]="tiyunzong";
 			S_skills["parry"]="taiji-quan";
@@ -307,7 +307,7 @@ void skills_setup_weapon(int skill,int r_s,string family)
 			carry_object("/d/wudang/obj/greyrobe")->wear();
 			break;
 		}
-		case "ĞÇËŞÅÉ":
+		case "æ˜Ÿå®¿æ´¾":
 		{
 			S_skills["dodge"]="feixing-shu";
 			S_skills["parry"]="chousui-zhang";
@@ -326,7 +326,7 @@ void skills_setup_weapon(int skill,int r_s,string family)
 			carry_object("/d/xingxiu/obj/yellow-cloth")->wear();
 			break;
 			}
-		case "»ªÉ½ÅÉ":
+		case "åå±±æ´¾":
 		{
 			S_skills["dodge"]="huashan-shenfa";
 			S_skills["parry"]="pishi-poyu";
@@ -346,7 +346,7 @@ void skills_setup_weapon(int skill,int r_s,string family)
 		break;
 
 			}
-		case "ÌÒ»¨µº":
+		case "æ¡ƒèŠ±å²›":
 		{
 		S_skills["dodge"]="luoying-shenfa";
 			S_skills["parry"]="luoying-shenjian";
@@ -369,7 +369,7 @@ void skills_setup_weapon(int skill,int r_s,string family)
 		break;
 
 			}
-		case "Ø¤°ï":
+		case "ä¸å¸®":
 		{
 		S_skills["dodge"]="xiaoyaoyou";
 		S_skills["parry"]="xianglong-zhang";
@@ -391,7 +391,7 @@ void skills_setup_weapon(int skill,int r_s,string family)
 		carry_object("/d/gaibang/obj/budai")->wear();
 		break;
 			}
-		case "¶ëáÒÅÉ":
+		case "å³¨åµ‹æ´¾":
 		{
 			S_skills["dodge"]="zhutian-bu";
 			S_skills["parry"]="tiangang-zhi";
@@ -413,7 +413,7 @@ void skills_setup_weapon(int skill,int r_s,string family)
 		break;
 
 			}
-		case "°×ÍÕÉ½":
+		case "ç™½é©¼å±±":
 		{
 		S_skills["dodge"]="chanchubu";
 		S_skills["parry"]="hamagong";
@@ -436,7 +436,7 @@ void skills_setup_weapon(int skill,int r_s,string family)
 
 			}
 
-		case "È«Õæ½Ì":
+		case "å…¨çœŸæ•™":
 		{
 			S_skills["dodge"]="jinyangong";
 			S_skills["parry"]="sanhua-juding";
@@ -459,7 +459,7 @@ void skills_setup_weapon(int skill,int r_s,string family)
 			break;
 
 			}
-		case "Ñ©É½ÅÉ":
+		case "é›ªå±±æ´¾":
 		{
 			S_skills["dodge"]="shenkongxing";
 		S_skills["parry"]="huoyan-dao";
@@ -481,7 +481,7 @@ void skills_setup_weapon(int skill,int r_s,string family)
 		break;
 
 			}
-		case "´óÀí¶Î¼Ò":
+		case "å¤§ç†æ®µå®¶":
 		{
 			S_skills["dodge"]="duanshi-shenfa";
 			S_skills["parry"]="yiyang-zhi";
@@ -500,7 +500,7 @@ void skills_setup_weapon(int skill,int r_s,string family)
 			carry_object("/d/wudang/obj/greyrobe")->wear();
 			break;
 			}
-			case "ÉÙÁÖÅÉ":
+			case "å°‘æ—æ´¾":
 		{
 			S_skills["dodge"]="shaolin-shenfa";
 			S_skills["parry"]="yizhi-chan";

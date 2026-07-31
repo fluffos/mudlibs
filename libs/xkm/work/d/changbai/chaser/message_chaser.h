@@ -31,7 +31,7 @@ void message_chaser()
 			if( !(owner = environment(ob)) ) continue;
 			 if( !living(owner) )
 			{ ob->move(this_object()); continue;}
-			 if( (string)owner->query("race") != "ÈËÀà" )
+			 if( (string)owner->query("race") != "äººç±»" )
 			{ ob->move(this_object()); continue;}
 
 			 if( owner->query("combat_exp") < 100000  )
@@ -45,13 +45,13 @@ void message_chaser()
 
 			if( !userp(owner) ) {
 				CHANNEL_D->do_channel(rum_ob, "rumor",
-				sprintf("ÌıËµ%s"+HIM+"ºÃÏóÂäÔÚ%sµÄ%sÊÖÀïÁË£¡"NOR,
+				sprintf("å¬è¯´%s"+HIM+"å¥½è±¡è½åœ¨%sçš„%sæ‰‹é‡Œäº†ï¼"NOR,
 			        ob->name(),
 				region_names[explode(base_name(environment(owner)), "/")[1]],
 					  owner->name()));
 				  } else {
 					CHANNEL_D->do_channel(rum_ob, "rumor",
-					sprintf("ÌıËµ%s"+HIM+"ºÃÏóÂäÔÚ%sÊÖÀïÁË£¡"NOR,
+					sprintf("å¬è¯´%s"+HIM+"å¥½è±¡è½åœ¨%sæ‰‹é‡Œäº†ï¼"NOR,
 				        ob->name(),
 					owner->query("name")));
 					}
@@ -88,13 +88,13 @@ void message_chaser()
 			  return;
 		if( dest == room ) return;
 			message("vision",
-		        thief_ob->name() + "¼±¼±Ã¦Ã¦µØÀë¿ªÁË¡£\n",
+		        thief_ob->name() + "æ€¥æ€¥å¿™å¿™åœ°ç¦»å¼€äº†ã€‚\n",
 			room, ({thief_ob}));
 					 }
 
 			 thief_ob->move(dest);
                 message("vision",
-                        thief_ob->name() + "×ßÁË¹ıÀ´¡£\n",
+                        thief_ob->name() + "èµ°äº†è¿‡æ¥ã€‚\n",
                         dest, ({thief_ob}));
                 return;
         }
@@ -104,7 +104,7 @@ void message_chaser()
         for( i = 0; i < sizeof(levels); i++ )
                 if( v_exp < atoi(levels[i]) ) break;
 
-        chaser_file = CHASER + (3 - i) + ".c";
+        chaser_file = CHASER + (3 - i) + ".lpc";
         obj = filter_array(children(chaser_file), (: clonep :));
         if( (temp = sizeof(obj)) ) {
                 if( temp > 1 ) {
@@ -112,14 +112,14 @@ void message_chaser()
                 } 
                 if( obj[0]->is_fighting() && obj[0]->is_busy() ) return;
                 message("vision",
-                        obj[0]->name() + "¼±¼±Ã¦Ã¦µØÀë¿ªÁË¡£\n",
+                        obj[0]->name() + "æ€¥æ€¥å¿™å¿™åœ°ç¦»å¼€äº†ã€‚\n",
                         environment(obj[0]), ({obj[0]}));
                 destruct(obj[0]);        
         }
 
         chaser_ob = new(chaser_file);
         chaser_ob->move(dest);
-        message_vision("\n$N×ßÁË¹ıÀ´¡£\n", chaser_ob);
+        message_vision("\n$Nèµ°äº†è¿‡æ¥ã€‚\n", chaser_ob);
         "/cmds/std/look"->main(chaser_ob, victim->query("id"));
         chaser_ob->set_leader(victim);
         chaser_ob->set("stuff", ob);
@@ -145,7 +145,7 @@ private int is_keeper(object ob, object obj)
         });
 
         if( !clonep(ob) || userp(ob)
-        ||   ob->query("race") != "ÈËÀà" ) return 0;
+        ||   ob->query("race") != "äººç±»" ) return 0;
         if( !(env = environment(ob)) ) return 0;
         if( !env->query("exits") || env->query("no_fight") ) return 0;
 

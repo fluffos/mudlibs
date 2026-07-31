@@ -1,5 +1,5 @@
 //Cracked by Roath
-// snake_room.h Éß¹ÈÖÐÓÐÉßµÄ·¿¼ä
+// snake_room.h è›‡è°·ä¸­æœ‰è›‡çš„æˆ¿é—´
 
 void python_attack(object);
 
@@ -11,9 +11,9 @@ void init()
 
 	string *msg = 
 	({
-		HIR"Äã×ßµ½ÕâÀï£¬Í»È»¾õµÃÓÐ¹ÉÐÈ³ôµÄÆøÎ¶¡­¡­\n"NOR,
-		HIR"Äã¶ú±ßÌýµ½Ò»Õó¡uÉ³É³¡vµÄÏ¸ËéÉùÏì£¬ÐÄÀïÌá¸ßÁË¾¯¾õ¡£\n"NOR,
-		HIR"ÄãÒ»×ßµ½ÕâµØ·½£¬Í»È»ÓÐµãÐÄÉñ²»Äþ¡­¡­\n"NOR,
+		HIR"ä½ èµ°åˆ°è¿™é‡Œï¼Œçªç„¶è§‰å¾—æœ‰è‚¡è…¥è‡­çš„æ°”å‘³â€¦â€¦\n"NOR,
+		HIR"ä½ è€³è¾¹å¬åˆ°ä¸€é˜µî“»æ²™æ²™î“¼çš„ç»†ç¢Žå£°å“ï¼Œå¿ƒé‡Œæé«˜äº†è­¦è§‰ã€‚\n"NOR,
+		HIR"ä½ ä¸€èµ°åˆ°è¿™åœ°æ–¹ï¼Œçªç„¶æœ‰ç‚¹å¿ƒç¥žä¸å®â€¦â€¦\n"NOR,
 	});
 
 	me = this_player();
@@ -26,10 +26,10 @@ void init()
 		here->set("hide_python", 1 );
 
 
-	if( random(query("hide_python") + 1 ) != 0 && me->query("race") != "ÉßÀà") {
+	if( random(query("hide_python") + 1 ) != 0 && me->query("race") != "è›‡ç±»") {
 		remove_call_out("python_attack");
 		call_out("python_attack", 6+random(3), me); 
-		if( me->query("family/family_name") == "°×ÍÕÉ½" ) 
+		if( me->query("family/family_name") == "ç™½é©¼å±±" ) 
 		tell_object(me, msg[random(sizeof(msg))]);
 	}
 }
@@ -48,8 +48,8 @@ void python_attack(object me)
 	python->move(here);
 	set("last_comeout", time() );
 
-	message("vision", HIR"ÄãºöÈ»ÎÅµÃÒ»ÕóÐÈ·ç£¬ÃÍ¼ûÒ»Ìõ"+python->name()+HIR"´ÜÁË³öÀ´£¬Â¶³öâ²ÑÀ£¬¼²Ïò"+me->name()+"Ò§È¥£¡\n"NOR, environment(me), me);
-	tell_object(me, HIR"Äã¶úÖÐºöÎÅË»Ë»ÉùÏì£¬Ò»³ÙÒÉ¼ä£¬ÝëµØÐÈ³ôÓ­Ãæ£¬Ò»Ìõ"+python->name()+HIR"´ÓÅÔ´Ü³ö£¬ÃÍÈ»ÏòÄãÕÅ¿ÚÆËÀ´£¡\n"NOR);
+	message("vision", HIR"ä½ å¿½ç„¶é—»å¾—ä¸€é˜µè…¥é£Žï¼ŒçŒ›è§ä¸€æ¡"+python->name()+HIR"çªœäº†å‡ºæ¥ï¼Œéœ²å‡ºç ç‰™ï¼Œç–¾å‘"+me->name()+"å’¬åŽ»ï¼\n"NOR, environment(me), me);
+	tell_object(me, HIR"ä½ è€³ä¸­å¿½é—»å˜¶å˜¶å£°å“ï¼Œä¸€è¿Ÿç–‘é—´ï¼Œè“¦åœ°è…¥è‡­è¿Žé¢ï¼Œä¸€æ¡"+python->name()+HIR"ä»Žæ—çªœå‡ºï¼ŒçŒ›ç„¶å‘ä½ å¼ å£æ‰‘æ¥ï¼\n"NOR);
 
 	python->kill_ob(me);
 

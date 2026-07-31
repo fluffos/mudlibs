@@ -6,19 +6,19 @@
 
 int to_cliff(object me)
 {
-        tell_room(environment(me),"\nÑÂÏÂ´«À´Ò»Éù´ó½Ð£º¡º°¡¡§¡§¡§¡»\n", me);
-        tell_object(me,RED"\nÏÂÃæÊ²Ã´¶¼Ã»ÓÐ£¬°¡¡§¡§¡§£¬ÄãÏÅµÃ»èÁË¹ýÈ¥¡£\n\n"NOR);
+        tell_room(environment(me),"\nå´–ä¸‹ä¼ æ¥ä¸€å£°å¤§å«ï¼šã€Žå•ŠÂ¨Â¨Â¨ã€\n", me);
+        tell_object(me,RED"\nä¸‹é¢ä»€ä¹ˆéƒ½æ²¡æœ‰ï¼Œå•ŠÂ¨Â¨Â¨ï¼Œä½ å“å¾—æ˜äº†è¿‡åŽ»ã€‚\n\n"NOR);
         me->move(__DIR__"cliff");
-	me->receive_wound("qi", me->query("max_qi")+100, "µôµ½ÉáÉíÑÂË¤µÃ·ÛÉíËé¹ÇÁË");
+	me->receive_wound("qi", me->query("max_qi")+100, "æŽ‰åˆ°èˆèº«å´–æ‘”å¾—ç²‰èº«ç¢Žéª¨äº†");
 	call_out("destroy_corpse", 1);
         return 1;
 }
 
 int to_branch1(object me)
 {
-        tell_object(me,RED"\nÏÂÃæÊ²Ã´¶¼Ã»ÓÐ£¬°¡¡§¡§¡§£¬ÄãÏÅµÃ»èÁË¹ýÈ¥¡£\n\n"NOR);
+        tell_object(me,RED"\nä¸‹é¢ä»€ä¹ˆéƒ½æ²¡æœ‰ï¼Œå•ŠÂ¨Â¨Â¨ï¼Œä½ å“å¾—æ˜äº†è¿‡åŽ»ã€‚\n\n"NOR);
         me->move(__DIR__"clifftree1");
-        tell_room(environment(me),(string)me->query("name")+"´ÓÐüÑÂÉÏË¤ÁËÏÂÀ´¡£\n", me);
+        tell_room(environment(me),(string)me->query("name")+"ä»Žæ‚¬å´–ä¸Šæ‘”äº†ä¸‹æ¥ã€‚\n", me);
 	me->add("quest_exp", 2+random(1));
         me->unconcious();
 	call_out("wakeup", random(3), me);
@@ -27,9 +27,9 @@ int to_branch1(object me)
 
 int to_branch2(object me)
 {
-        tell_object(me,RED"\nÏÂÃæÊ²Ã´¶¼Ã»ÓÐ£¬°¡¡§¡§¡§£¬ÄãÏÅµÃ»èÁË¹ýÈ¥¡£\n\n"NOR);
+        tell_object(me,RED"\nä¸‹é¢ä»€ä¹ˆéƒ½æ²¡æœ‰ï¼Œå•ŠÂ¨Â¨Â¨ï¼Œä½ å“å¾—æ˜äº†è¿‡åŽ»ã€‚\n\n"NOR);
         me->move(__DIR__"clifftree2");
-        tell_room(environment(me),"$N´ÓÐüÑÂÉÏË¤ÁËÏÂÀ´¡£\n", me);
+        tell_room(environment(me),"$Nä»Žæ‚¬å´–ä¸Šæ‘”äº†ä¸‹æ¥ã€‚\n", me);
 	me->add("quest_exp", 5+random(5));	
         me->unconcious();
 	call_out("wakeup", 2+random(3), me);
@@ -38,9 +38,9 @@ int to_branch2(object me)
 
 int to_pool(object me)
 {
-        tell_object(me,RED"\n°¡¡§¡§¡§£¬ÄãÏÅµÃ»èÁË¹ýÈ¥¡£\n\n"NOR);
+        tell_object(me,RED"\nå•ŠÂ¨Â¨Â¨ï¼Œä½ å“å¾—æ˜äº†è¿‡åŽ»ã€‚\n\n"NOR);
         me->move(__DIR__"cliffpool");
-        tell_room(environment(me),(string)me->query("name")+"´ÓÐüÑÂÉÏË¤ÁËÏÂÀ´£¬µôµ½Ë®Ì¶Àï¡£\n", me);
+        tell_room(environment(me),(string)me->query("name")+"ä»Žæ‚¬å´–ä¸Šæ‘”äº†ä¸‹æ¥ï¼ŒæŽ‰åˆ°æ°´æ½­é‡Œã€‚\n", me);
 	me->add("quest_exp", 2);
         me->unconcious();
 	call_out("wakeup", 2+random(2), me);

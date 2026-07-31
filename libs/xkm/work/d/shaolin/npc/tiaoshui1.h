@@ -13,25 +13,25 @@ string ask_tiaoshui()
 	event = NATURE_D->outdoor_room_event();
 	fam = me->query("family/family_name");
 	my_fam = me->query("family");
-	if (!fam || fam != "ÉÙÁÖÅÉ")
-		return "°¢ÃÖÍÓ·ğ,ÕâÎ»Ê©Ö÷²»ÊÇÉÙÁÖËÂµÄ£¬Æ¶É®¿É²»¸ÒÀÍ¶¯´ó¼İ¡£";
+	if (!fam || fam != "å°‘æ—æ´¾")
+		return "é˜¿å¼¥é™€ä½›,è¿™ä½æ–½ä¸»ä¸æ˜¯å°‘æ—å¯ºçš„ï¼Œè´«åƒ§å¯ä¸æ•¢åŠ³åŠ¨å¤§é©¾ã€‚";
 	if (me->query("combat_exp") > 500000)
-		return "ÕâÎ»"+RANK_D->query_respect(ob)+"ÒÑ¾­ÊÇ¸ßÊÖÁË£¬²»ÓÃÔÚ×öÕâÖÖ´Ö»°ÁË! ";
+		return "è¿™ä½"+RANK_D->query_respect(ob)+"å·²ç»æ˜¯é«˜æ‰‹äº†ï¼Œä¸ç”¨åœ¨åšè¿™ç§ç²—è¯äº†! ";
 	
 	/*if (event == "event_night" || event == "event_midnight")
-		return "°¢ÃÖÍÓ·ğ,±¾ËÂµÄÉ½ÃÅÒ¹Íí²»¿ª,"+RANK_D->query_respect(me)+ "»¹ÊÇµÈÌìÁÁÔÚÀ´°É¡£";*/
+		return "é˜¿å¼¥é™€ä½›,æœ¬å¯ºçš„å±±é—¨å¤œæ™šä¸å¼€,"+RANK_D->query_respect(me)+ "è¿˜æ˜¯ç­‰å¤©äº®åœ¨æ¥å§ã€‚";*/
 	if (me->query("shaolin/job_asked"))
-		return RANK_D->query_respect(me)+ "²»ÊÇÎÊ¹ıÁËÂğ£¬ÔõÃ´»¹ÔÚÕâÀïÍµÀÁ? ";
+		return RANK_D->query_respect(me)+ "ä¸æ˜¯é—®è¿‡äº†å—ï¼Œæ€ä¹ˆè¿˜åœ¨è¿™é‡Œå·æ‡’? ";
 	if(me->query_condition("ts_pending"))
-		return "Ä¿Ç°»¹ÕÒ²»µ½Ê²Ã´»î¶ù¸øÄã¸É£¬ÄãµÈµÈÔÙÀ´°É¡£";
+		return "ç›®å‰è¿˜æ‰¾ä¸åˆ°ä»€ä¹ˆæ´»å„¿ç»™ä½ å¹²ï¼Œä½ ç­‰ç­‰å†æ¥å§ã€‚";
 	
 	command("nod");
-	command("say ÄãÀ´µÄÕıºÃ£¬Õâ¼¸Ìì³ø·¿ÀïÕıÈ±Ë®ÄØ£¬ÄãÈ¥É½ÏÂÌôĞ©Ë®°É! \n");
-	command("say ÏÈÈ¥ÕÒÉÕ·¹É®ÒªÉÏÌôË®µÄ¹¤¾ß°É¡£\n");
+	command("say ä½ æ¥çš„æ­£å¥½ï¼Œè¿™å‡ å¤©å¨æˆ¿é‡Œæ­£ç¼ºæ°´å‘¢ï¼Œä½ å»å±±ä¸‹æŒ‘äº›æ°´å§! \n");
+	command("say å…ˆå»æ‰¾çƒ§é¥­åƒ§è¦ä¸ŠæŒ‘æ°´çš„å·¥å…·å§ã€‚\n");
 	me->set("shaolin/job_asked",1);
 	time = 30 + random(10);
 	me->apply_condition( "tiaoshui", time );
-	return "ÔçÈ¥Ôç»Ø£¬³ø·¿Àï»¹µÈ×ÅÓÃË®ÄØ¡£";
+	return "æ—©å»æ—©å›ï¼Œå¨æˆ¿é‡Œè¿˜ç­‰ç€ç”¨æ°´å‘¢ã€‚";
 
 }
 string ask_abandon()
@@ -44,9 +44,9 @@ string ask_abandon()
 	me = this_object();
 	inv = all_inventory(me);
 	if (!ob->query("shaolin/job_asked"))
-		return "ÄãÏÖÔÚ²¢Ã»ÓĞÈÎÎñÔÚÉíÑ½¡£";
+		return "ä½ ç°åœ¨å¹¶æ²¡æœ‰ä»»åŠ¡åœ¨èº«å‘€ã€‚";
 	command("disapp "+ob->query("id"));
-	command("say Á¬ÕâÃ´µãĞ¡ÊÂ¶¼°ì²»ÁË£¬½«À´ÔõÃ´ÎªÉÙÁÖËÂ³öÁ¦Ñ½? \n");
+	command("say è¿è¿™ä¹ˆç‚¹å°äº‹éƒ½åŠä¸äº†ï¼Œå°†æ¥æ€ä¹ˆä¸ºå°‘æ—å¯ºå‡ºåŠ›å‘€? \n");
 	ob->delete("shaolin/job_asked");
 	ob->delete("shaolin/tool_assigned");
 	if(ob->query_condition("tiaoshui"))
@@ -57,6 +57,6 @@ string ask_abandon()
 	}
     busy = 20+random(8);
 	ob->apply_condition("ts_pending", busy );
-	return "ÏÂÈ¥ºÃºÃ·´Ë¼Ò»ÏÂ°É¡£";
+	return "ä¸‹å»å¥½å¥½åæ€ä¸€ä¸‹å§ã€‚";
 }
 

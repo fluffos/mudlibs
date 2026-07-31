@@ -10,31 +10,31 @@ int do_kill()
 	{	return 0;
 	}
 	if ((int)helpee->query("xkd/find") == 1 ) 
-	{	command("say ÎÒÒÑ¾­°ï¹ıÄãÁË£¬²»ÄÜÔÙ°ïÄãÁË¡£");
+	{	command("say æˆ‘å·²ç»å¸®è¿‡ä½ äº†ï¼Œä¸èƒ½å†å¸®ä½ äº†ã€‚");
 		destruct(ling);
 		return 1;
 	}
 
 	if (query_temp("xkd/busy"))
-	{	command("say ÎÒÕıÃ¦×ÅÄØ£¬´ı»á°É¡£");
+	{	command("say æˆ‘æ­£å¿™ç€å‘¢ï¼Œå¾…ä¼šå§ã€‚");
 		return 1;
 	}
 	killer = helpee->query_temp("my_killer");
 	if (! killer )
-	{	command("say ÄãÓÖÃ»ÊÂ£¬±¨Ê²÷á³ğ¡£");
+	{	command("say ä½ åˆæ²¡äº‹ï¼ŒæŠ¥ä»€éº½ä»‡ã€‚");
 		call_out("do_return", 0, ling, helpee);
 		helpee->delete_temp("xkd/give2");
 		return 1;
 	}
 	dest = find_player(helpee->query_temp("my_killer"));
 	if( !dest )
-	{	command("say ËûÏÖÔÚ²»ÔÚÓÎÏ·ÖĞ£¬¹ı»áÔÙÀ´°É¡£");
+	{	command("say ä»–ç°åœ¨ä¸åœ¨æ¸¸æˆä¸­ï¼Œè¿‡ä¼šå†æ¥å§ã€‚");
 		call_out("do_return", 0, ling, helpee);
 		helpee->delete_temp("xkd/give2");
 		return 1;
 	}
 	if (dest->is_ghost())
-	{	command("say ÀÏÌìÓĞÑÛ£¬ËûÒÑ¾­ÊÜµ½±¨Ó¦ËÀÁË¡£");
+	{	command("say è€å¤©æœ‰çœ¼ï¼Œä»–å·²ç»å—åˆ°æŠ¥åº”æ­»äº†ã€‚");
 		call_out("do_return", 0, ling, helpee);
 		helpee->delete_temp("xkd/give2");
 		return 1;
@@ -48,9 +48,9 @@ int do_kill()
                         this_player()->query("name"), getuid(this_player()),
                         dest->query("name"), dest->query("id")) );
 	home = environment(me);
-	command("say ÄãÏÈÔÚÕâÀïµÈµÈ£¬ÎÒÈ¥È¥¾ÍÀ´£¡");
+	command("say ä½ å…ˆåœ¨è¿™é‡Œç­‰ç­‰ï¼Œæˆ‘å»å»å°±æ¥ï¼");
 
-	message_vision("$N×ßÁË³öÈ¥¡£\n", me);
+	message_vision("$Nèµ°äº†å‡ºå»ã€‚\n", me);
 
 	call_out("do_chase", 1, me);
 
@@ -69,7 +69,7 @@ int do_chase(object me)
         }
 
         me->move(environment(dest));
-        message_vision("$N×ßÁË¹ıÀ´¡£\n", me);
+        message_vision("$Nèµ°äº†è¿‡æ¥ã€‚\n", me);
         me->set_leader(dest);
         command("look " + dest->query("id"));
 
@@ -92,7 +92,7 @@ int do_killing(object me, object dest)
         if( objectp(dest) && present(dest, environment(me))
                  && !environment(me)->query("no_fight"))
         {
-                message_vision(HIR "$N¶Ô$nËµµÀ£º´óµ¨¿ñÍ½£¬¾¹¸ÒÀÄÉ±ÎŞ¹¼£¡\n" NOR, me, dest);
+                message_vision(HIR "$Nå¯¹$nè¯´é“ï¼šå¤§èƒ†ç‹‚å¾’ï¼Œç«Ÿæ•¢æ»¥æ€æ— è¾œï¼\n" NOR, me, dest);
                 me->set_leader(dest);
                 me->kill_ob(dest);
                 dest->fight_ob(me);
@@ -167,7 +167,7 @@ int do_back(object me)
 {
 
 	me->move(home);
-	message("vision", me->query("name") + "×ßÁË½øÀ´£¬²ÁÁË²ÁÉíÉÏµÄÑª£¬ËµµÀ£ºÄãµÄ³ğÎÒÌæÄã±¨ÁË¡£\n", 
+	message("vision", me->query("name") + "èµ°äº†è¿›æ¥ï¼Œæ“¦äº†æ“¦èº«ä¸Šçš„è¡€ï¼Œè¯´é“ï¼šä½ çš„ä»‡æˆ‘æ›¿ä½ æŠ¥äº†ã€‚\n", 
                 environment(), me );
 	me->set_leader(0);
 

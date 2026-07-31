@@ -1,0 +1,116 @@
+// mpkcheck.c
+// By Seashore, 2002/03/15.
+
+#include <ansi.h>
+#include <mudlib.h>
+#define PK_LIST "/log/PKILL_DATA.lpc"
+
+private int time_conv(string);
+
+int main(object me, string arg)
+{
+	string file, *tmp, pker, victim, *spker;
+	mapping log;
+	object ob;
+	int permit, cnt, tmpcnt, pks, i, total_day, theday, found;
+	
+	if (!arg) permit = 5;
+	else 
+	{
+		if (sscanf(arg,"%d",permit) != 1) 
+			return notify_fail("指令格式：mpkcheck <人数>，不指定则默认是五人。\n");
+		if (permit < 2) 
+			return notify_fail("还是自己用more来查吧：）\n");
+	}
+	
+	file = read_file(PK_LIST);
+	if (!file) 
+		return notify_fail("没有PK玩家的记录！\n");
+	
+	tmp = explode(file, "\n");
+	for( cnt = 0; cnt < sizeof(tmp); cnt++ )																											
+		tmp[cnt] = replace_string(tmp[cnt],"。","");
+
+	log = ([]);
+
+	write(HIC+INTERMUD_MUD_CNAME + "此次运行的服务器启动时间是："+ ctime(time()-uptime())+"\n");
+	write ("LOG里一共有" + sizeof(tmp) + "条PK的记录，现在开始检查Massive PK的记录……\n"NOR);
+	for(cnt = 0; time() - time_conv(tmp[cnt]) > uptime() && cnt < sizeof(tmp)-1; cnt++ ) {}
+	if (cnt == sizeof(tmp)-1) 
+		return notify_fail("已经检查完档案， 未发现恶性PK记录。\n");
+	
+	total_day = uptime()/86400 + 1;
+	for( theday=1; theday <= total_day; theday++ )
+	{
+		found = 0;
+		write(HIY + "在此次运行期间的第"+ chinese_number(theday) +"天内恶性pk的人有："NOR+"\n");
+		write ("Cheching from record "+ (cnt+1) +"\n");
+		tmpcnt = cnt;
+		for( cnt = tmpcnt; time_conv(tmp[cnt]) + uptime() - time() < theday*86400 && cnt < sizeof(tmp)-1; cnt++ )
+		{
+			sscanf(tmp[cnt], "%s 被 %s 杀死了(PlayerKill)", victim, pker);
+			if (!log[pker]) log[pker] = 1;
+			else log[pker]++;
+		}
+	
+		spker = sort_array( keys(log), (: strcmp :) );
+		for(i=0; i<sizeof(log); i++) 
+		{
+			if (log[spker[i]] >= permit) 
+			{
+				write (HIR+spker[i]+"  ，一共ｐｋ了"+log[spker[i]]+"人次，具体记录如下：\n"+NOR);
+				for(cnt = tmpcnt; time_conv(tmp[cnt]) + uptime() - time() < theday*86400 && cnt < sizeof(tmp)-1; cnt++ )
+				{
+					if (strsrch(tmp[cnt],"被 "+spker[i]+" 杀死了") >= 0)
+					{
+						write (tmp[cnt]+"\n");
+						found = 1;
+					}
+				}
+			}
+		}
+		if (!found) write(HIM"今天没有玩家恶性PK的记录。"NOR+"\n");
+		log = ([]);
+	}
+	write(HIW"检查完毕。\n"NOR);
+	return 1;
+}
+
+private int time_conv(string str_time)
+{//For example:on Sun Mar 10 08:23:54 2002
+string month, week;
+int day, hr, min, sec, year, lp_year, time_convert;
+str_time = replace_string(str_time,":"," ");
+sscanf(str_time, "%*s on %s %s %d %d %d %d %d", week, month, day, hr, min, sec, year);
+time_convert = sec + min*60 + hr*3600 + (day -1)*86400;
+if (month == "Jan") time_convert += 0;
+else if (month == "Feb") time_convert += 86400*31;
+else if (month == "Mar") time_convert += 86400*59;
+else if (month == "Apr") time_convert += 86400*90;
+else if (month == "May") time_convert += 86400*120;
+else if (month == "Jun") time_convert += 86400*151;
+else if (month == "Jul") time_convert += 86400*181;
+else if (month == "Aug") time_convert += 86400*212;
+else if (month == "Sep") time_convert += 86400*243;
+else if (month == "Oct") time_convert += 86400*273;
+else if (month == "Nov") time_convert += 86400*304;
+else time_convert += 86400*334;
+
+time_convert += (year - 1970)*31536000;
+if (year % 4 == 0 && month !="Jan" && month != "Feb") 
+	lp_year = (year - 1968)/4;	//for checking leap year
+else lp_year = (year - 1968)/4;   	//for checking leap year
+time_convert += lp_year*86400;
+time_convert -= 28800;  //to convert GMT to Beijing time.maybe It can be realized by a better way  
+return time_convert;
+}
+
+int help(object me)
+{
+	write(@HELP
+这条命令用来检查侠客行此次运行期间是否有人恶性PK。
+指令格式：mpkcheck <人数>，若不指定人数则默认为是五人。
+HELP
+	);
+	return 1;
+}

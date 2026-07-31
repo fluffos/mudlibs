@@ -4,14 +4,14 @@
 
 int accept_fight(object player)
 {
-    command("say ¾©³ÇÀïÔõÃ´ºÃËæ±ã¶¯´Ö£¿\n");
+    command("say äº¬åŸé‡Œæ€ä¹ˆå¥½éšä¾¿åŠ¨ç²—ï¼Ÿ\n");
     return 0;
 }
 
 int accept_kill(object player)
 {
     object me=this_object();
-    command("say ÄãÎÒÎŞÔ¹ÎŞ³ğ£¬¼ÈÈ»Èç´ËÏà±Æ£¬ÎÒ¾Í¸úÄãÆ´ÁË¡£\n");
+    command("say ä½ æˆ‘æ— æ€¨æ— ä»‡ï¼Œæ—¢ç„¶å¦‚æ­¤ç›¸é€¼ï¼Œæˆ‘å°±è·Ÿä½ æ‹¼äº†ã€‚\n");
     player->apply_condition("bjkiller", 100);
     me->kill_ob(player);
     return 1;

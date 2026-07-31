@@ -11,8 +11,8 @@ void reward_shiwei(int rank, object player);
 
 string look_gaoshi()
 {
-    return "¾ÅÃÅÌá¶½ÚÍ£º³öÈëÄÚ³Ç°ÙĞÕÒ»¸ÅÑéÃ÷Éí·İ£¬\n" + 
-	"ĞÎ¼£¿ÉÒÉÕßËÍÓĞË¾ÉóÀí£¬¾Ü²¶¸ñÉ±ÎğÂÛ¡£\n";
+    return "ä¹é—¨æç£è°•ï¼šå‡ºå…¥å†…åŸç™¾å§“ä¸€æ¦‚éªŒæ˜èº«ä»½ï¼Œ\n" + 
+	"å½¢è¿¹å¯ç–‘è€…é€æœ‰å¸å®¡ç†ï¼Œæ‹’æ•æ ¼æ€å‹¿è®ºã€‚\n";
 }
 
 void create()
@@ -59,7 +59,7 @@ void reward_shiwei(int rank, object player)
     int kill_num = player->query_temp("kill_num");
     int fail_num = player->query_temp("fail_num");
 
-    message_vision("³ÇÃÅµÄÖÓÇÃÁËÁ½ÏÂ£¬$NµÄ»»°àÊ±¼äµ½ÁË¡£\n", player);
+    message_vision("åŸé—¨çš„é’Ÿæ•²äº†ä¸¤ä¸‹ï¼Œ$Nçš„æ¢ç­æ—¶é—´åˆ°äº†ã€‚\n", player);
     player->delete_temp("start_job_time");
     player->delete_temp("can_pancha");
     player->delete_temp("fail_num");
@@ -77,7 +77,7 @@ void gen_killer()
     remove_call_out("gen_killer");
     call_out("gen_killer", 10);
 
-    killers = HELPER->obj_in_env("/d/beijing/npc/killer2.c", env);
+    killers = HELPER->obj_in_env("/d/beijing/npc/killer2.lpc", env);
     inv = all_inventory(env);
     for (i=sizeof(inv)-1; i>=0; i--) {
         if (userp(inv[i]) && living(inv[i]) && 
@@ -102,15 +102,15 @@ void gen_killer()
 
     if (HELPER->is_night_shift()) {
 	if (killers) return;
-	killer = new("/d/beijing/npc/killer2.c");
+	killer = new("/d/beijing/npc/killer2.lpc");
 	killer->move(env);
 	killer->upgrade(3);
-	message_vision("$N¿ì²½×ßÁË¹ıÀ´¡£\n", killer);
+	message_vision("$Nå¿«æ­¥èµ°äº†è¿‡æ¥ã€‚\n", killer);
     }else {
 	if (killers) return;
-	killer = new("/d/beijing/npc/killer2.c");
+	killer = new("/d/beijing/npc/killer2.lpc");
 	killer->move(env);
-	message_vision("$N¿ì²½×ßÁË¹ıÀ´¡£\n", killer);
+	message_vision("$Nå¿«æ­¥èµ°äº†è¿‡æ¥ã€‚\n", killer);
     }
     return;
 }
@@ -121,23 +121,23 @@ int do_guard()
     if (! IS_SHIWEI(player)) return 0;
 
     if (SHIWEI_LEVEL(player) > 3)
-        return notify_fail("ÄãÒÑ¾­²»ÓÃÊØ³ÇÃÅÀ²¡£\n");
+        return notify_fail("ä½ å·²ç»ä¸ç”¨å®ˆåŸé—¨å•¦ã€‚\n");
     if (player->query_temp("can_pancha"))
-	return notify_fail("ÄãÒÑ¾­ÔÚÊØÃÅÁË¡£\n");
+	return notify_fail("ä½ å·²ç»åœ¨å®ˆé—¨äº†ã€‚\n");
 
     if (!player->query_temp("current_job"))
-	return notify_fail("ÄãµÃÏÈÈ¥ÎÊÎÊ¶à´óÈË£¬Äã½ñÌìÖµ°àµÄµØ·½ÊÇÄÇ¶ù£¿\n");
+	return notify_fail("ä½ å¾—å…ˆå»é—®é—®å¤šå¤§äººï¼Œä½ ä»Šå¤©å€¼ç­çš„åœ°æ–¹æ˜¯é‚£å„¿ï¼Ÿ\n");
     if (player->query_temp("current_job") != query("gate_name"))
- 	return notify_fail("ÕâÀï²»ÊÇÄãÒªÊØµÄµØ·½¡£¿ìÈ¥"+
-	    player->query_temp("current_job")+"°É¡£\n");
+ 	return notify_fail("è¿™é‡Œä¸æ˜¯ä½ è¦å®ˆçš„åœ°æ–¹ã€‚å¿«å»"+
+	    player->query_temp("current_job")+"å§ã€‚\n");
     if (SHIWEI_LEVEL(player) == 2 && HELPER->is_sunrise() != 0) {
 	player->delete_temp("current_job");
-	return notify_fail("³½Ê±ÒÑ¹ıÄã²ÅÀ´³ÇÃÅ£¬½ñÌì¾Í²»ÓÃÄãÊØÁË£¡\n");
+	return notify_fail("è¾°æ—¶å·²è¿‡ä½ æ‰æ¥åŸé—¨ï¼Œä»Šå¤©å°±ä¸ç”¨ä½ å®ˆäº†ï¼\n");
     }
 
     if (SHIWEI_LEVEL(player) == 3 && HELPER->is_sunset() != 0) {
 	player->delete_temp("current_job");
-	return notify_fail("ĞçÊ±ÒÑ¹ıÄã²ÅÀ´³ÇÃÅ£¬½ñÌì¾Í²»ÓÃÄãÊØÁË£¡\n");
+	return notify_fail("æˆŒæ—¶å·²è¿‡ä½ æ‰æ¥åŸé—¨ï¼Œä»Šå¤©å°±ä¸ç”¨ä½ å®ˆäº†ï¼\n");
     }
 
     player->delete_temp("current_job");
@@ -146,9 +146,9 @@ int do_guard()
     player->set_temp("fail_num", 0);
     player->set_temp("kill_num", 0);
     message_vision(
-	"$NÒ»²æÑü£¬¶ÔÉíÅÔµÄ¹Ù±øµÀ£º½ñÌì¿´±¾¹ÙÈçºÎ²éÎÊ¹ıÍùÏĞÈË¡£\n", 
+	"$Nä¸€å‰è…°ï¼Œå¯¹èº«æ—çš„å®˜å…µé“ï¼šä»Šå¤©çœ‹æœ¬å®˜å¦‚ä½•æŸ¥é—®è¿‡å¾€é—²äººã€‚\n", 
 	player);
-    tell_object(player, "Äã¿ÉÒÔÅÌ²é (pancha) ¹ıÍùĞĞÈË¡£\n");
+    tell_object(player, "ä½ å¯ä»¥ç›˜æŸ¥ (pancha) è¿‡å¾€è¡Œäººã€‚\n");
     return 1;
 }
 
@@ -162,22 +162,22 @@ void reply_pancha(object obj, object shiwei)
     if (random(exp) > min_exp) obj->set_temp("pancha_stage", 4);
 
     if (exp < 50000 && obj->query_temp("pancha_stage")==4){
-	message_vision("$NµÍÉù´ğµÀ£ºĞ¡ÈË½ø³Ç¹Û¹â£¬Çë´óÈË¸ßÌ§¹óÊÖ¡£\n", obj);
-	message_vision("$NĞ¦µÀ£ººÃ°É£¬ÂıÂı¹ä°É¡£\n", shiwei);
+	message_vision("$Nä½å£°ç­”é“ï¼šå°äººè¿›åŸè§‚å…‰ï¼Œè¯·å¤§äººé«˜æŠ¬è´µæ‰‹ã€‚\n", obj);
+	message_vision("$Nç¬‘é“ï¼šå¥½å§ï¼Œæ…¢æ…¢é€›å§ã€‚\n", shiwei);
 	return;
     }
     if (obj->query_temp("pancha_stage")==4){
-	message_vision("$N´ğµÀ£ºÔÚÏÂÓĞ¹«¸ÉÔÚÉí£¬Çë´óÈË·ÅĞĞ¡£\n", obj);
-	message_vision("$NµÀ£º²»¸Ò£¬Çë¡£\n", shiwei);
+	message_vision("$Nç­”é“ï¼šåœ¨ä¸‹æœ‰å…¬å¹²åœ¨èº«ï¼Œè¯·å¤§äººæ”¾è¡Œã€‚\n", obj);
+	message_vision("$Né“ï¼šä¸æ•¢ï¼Œè¯·ã€‚\n", shiwei);
 	return;
     }
 
     if (exp < 400000) {
-	message_vision("$NºÙºÙºÙĞ¦ÁËÁ½Éù£¬µÀ£ºĞ¡ÈËÏë½ø³Ç¸Éµã¹´µ±¡£\n", obj);
-	message_vision("$NÒ»ÑÔ²»·¢£¬¶¸È»Ïò$n·¢ÄÑ¡£\n", obj, shiwei);
+	message_vision("$Nå˜¿å˜¿å˜¿ç¬‘äº†ä¸¤å£°ï¼Œé“ï¼šå°äººæƒ³è¿›åŸå¹²ç‚¹å‹¾å½“ã€‚\n", obj);
+	message_vision("$Nä¸€è¨€ä¸å‘ï¼Œé™¡ç„¶å‘$nå‘éš¾ã€‚\n", obj, shiwei);
     } else  {
-	message_vision("$NÀäĞ¦ÁËÁ½Éù£¬µÀ£ºÄã¹ÜµÄ×ÅÃ´£¿\n", obj);
-	message_vision("$N´óºÈÒ»Éù£¬¹·Ôô¸øÎÒÈÃµÀ£¡\n", obj);
+	message_vision("$Nå†·ç¬‘äº†ä¸¤å£°ï¼Œé“ï¼šä½ ç®¡çš„ç€ä¹ˆï¼Ÿ\n", obj);
+	message_vision("$Nå¤§å–ä¸€å£°ï¼Œç‹—è´¼ç»™æˆ‘è®©é“ï¼\n", obj);
     }
     obj->set_temp("pancha_stage", 3);
     obj->kill_ob(shiwei);
@@ -192,18 +192,18 @@ int do_pancha(string name)
 	return 0;
 
     if (! name || name=="" )
-        return notify_fail("ÄãÏëÅÌ²éË­£¿\n");
+        return notify_fail("ä½ æƒ³ç›˜æŸ¥è°ï¼Ÿ\n");
     
     if (!objectp(obj = present(name, environment(me))))
-         return notify_fail("ÕâÀïÃ»ÓĞÕâ¸öÈË¡£\n");
+         return notify_fail("è¿™é‡Œæ²¡æœ‰è¿™ä¸ªäººã€‚\n");
 
     if (!obj->is_character() || obj->is_corpse())
-         return notify_fail("¿´Çå³şµã£¬Õâ²»ÊÇ»îÈË¡£\n");
+         return notify_fail("çœ‹æ¸…æ¥šç‚¹ï¼Œè¿™ä¸æ˜¯æ´»äººã€‚\n");
 
     if (!living(obj))
-	return notify_fail("µÈËûĞÑÁËÔÙËµ°É¡£\n");
+	return notify_fail("ç­‰ä»–é†’äº†å†è¯´å§ã€‚\n");
 
-    message_vision("$N¶Ô×Å$n¿´ÁËÁ½ÑÛ£¬ÂıÍÌÍÌµÄËµµÀ£º¸ÉÊ²Ã´µÄÑ½£¿\n",
+    message_vision("$Nå¯¹ç€$nçœ‹äº†ä¸¤çœ¼ï¼Œæ…¢ååçš„è¯´é“ï¼šå¹²ä»€ä¹ˆçš„å‘€ï¼Ÿ\n",
         me, obj);
     obj->set_temp("pancha_stage", 2);
     remove_call_out("reply_pancha");
@@ -217,12 +217,12 @@ int valid_leave(object me, string dir)
     int i, stage, fail_num, shiwei_present=0;
     
     if (IS_SHIWEI(me) && me->query_temp("can_pancha"))
-	return notify_fail("Äã»¹Ã»Íê³ÉÊØÃÅµÄÈÎÎñÄØ£¬ÔõÃ´ÄÜÀë¿ª£¿\n");
+	return notify_fail("ä½ è¿˜æ²¡å®Œæˆå®ˆé—¨çš„ä»»åŠ¡å‘¢ï¼Œæ€ä¹ˆèƒ½ç¦»å¼€ï¼Ÿ\n");
 
     stage=query_temp("pancha_stage");
     switch (stage) {
     case 2:	// shiwei is pancha me, waiting for me to reply
-	return notify_fail("ÊØÃÅÊÌÎÀÕıÔÚÅÌ²éÄãÄØ¡£\n");
+	return notify_fail("å®ˆé—¨ä¾å«æ­£åœ¨ç›˜æŸ¥ä½ å‘¢ã€‚\n");
 
     case 1: 	// we need to wait for shiwei to pancha us
     case 3:     // we are killing shiwei
@@ -234,14 +234,14 @@ int valid_leave(object me, string dir)
 		IS_SHIWEI(inv[i]) ) {	// found a shiwei
 		if (stage==1){  	// can't leave yet
 		    return notify_fail(inv[i]->query("name")+
-			    "Ö¸ÁËÖ¸ÄãµÀ£¬ÄãµÈ»á¶ù£¬ÎÒ»¹µÃ²é²éÄãÄØ¡£\n");
+			    "æŒ‡äº†æŒ‡ä½ é“ï¼Œä½ ç­‰ä¼šå„¿ï¼Œæˆ‘è¿˜å¾—æŸ¥æŸ¥ä½ å‘¢ã€‚\n");
 		}
 		fail_num = inv[i]->query_temp("fail_num");
 		inv[i]->set_temp("fail_num", fail_num+1);
 	    }
 	}
 	if (stage == 3) { // escaped
-	    message_vision("$N³Ã×ÅÊÌÎÀÃÇ²»×¢Òâ£¬ÁïÁË£¡\n", me);
+	    message_vision("$Nè¶ç€ä¾å«ä»¬ä¸æ³¨æ„ï¼Œæºœäº†ï¼\n", me);
 	}
 	me->delete_temp("pancha_stage");
 	return ::valid_leave(me, dir);

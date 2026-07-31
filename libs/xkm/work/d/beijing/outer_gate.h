@@ -13,10 +13,10 @@ string look_gaoshi()
 {
     object me = this_object();
     if (me->query("night")) {
-	return "Ò¹¼ä²»µÃ³öÈë³ÇÃÅ¡£ÅÀÇ½Õß¸ñÉ±ÎğÂÛ¡£\n";
+	return "å¤œé—´ä¸å¾—å‡ºå…¥åŸé—¨ã€‚çˆ¬å¢™è€…æ ¼æ€å‹¿è®ºã€‚\n";
     }else{
-	return "¾ÅÃÅÌá¶½ÚÍ£º½üÌìµØ»á·Ë²şâ±£¬" + 
-	    "°ÙĞÕ·²Ğ¯ÌúÆ÷ÕßÒ»¸Å²»ĞíÈë¾©£¬Î¥Õß¸ñÉ±ÎğÂÛ¡£\n";
+	return "ä¹é—¨æç£è°•ï¼šè¿‘å¤©åœ°ä¼šåŒªçŒ–ç—ï¼Œ" + 
+	    "ç™¾å§“å‡¡æºé“å™¨è€…ä¸€æ¦‚ä¸è®¸å…¥äº¬ï¼Œè¿è€…æ ¼æ€å‹¿è®ºã€‚\n";
     }
 }
 
@@ -74,12 +74,12 @@ void fix_inside()
     }
 
     if (me->query("night"))  {
-	message("info", "ÌìºÚÁË£¬¹Ù±øÉÏÇ°°Ñ³ÇÃÅ¹ØÉÏ¡£\n", 
+	message("info", "å¤©é»‘äº†ï¼Œå®˜å…µä¸Šå‰æŠŠåŸé—¨å…³ä¸Šã€‚\n", 
 		inner_side, 0);
 	inner_side->fix_exits_for_night(1);
     } else {
 	inner_side->fix_exits_for_night(0);
-	message("info", "ÌìÁÁÀ²£¬¹Ù±ø°Ñ³ÇÃÅ´ò¿ª£¬·¢³öÖ¨µÄÒ»ÉùÏì¡£\n", 
+	message("info", "å¤©äº®å•¦ï¼Œå®˜å…µæŠŠåŸé—¨æ‰“å¼€ï¼Œå‘å‡ºå±çš„ä¸€å£°å“ã€‚\n", 
 		inner_side, 0);
     }
 }
@@ -94,7 +94,7 @@ int gen_killer()
     remove_call_out("gen_killer");
     call_out("gen_killer", 10);
 
-    killers = HELPER->obj_in_env("/d/beijing/npc/killer1.c", env);
+    killers = HELPER->obj_in_env("/d/beijing/npc/killer1.lpc", env);
     inv = all_inventory(env);
     for (i=sizeof(inv)-1; i>=0; i--) {
         if (userp(inv[i]) && living(inv[i]) && 
@@ -117,7 +117,7 @@ int gen_killer()
 
     if (HELPER->is_dark_time()) {
 	if (! env->query("night")) {
-	    message("info", "ÌìºÚÁË£¬¹Ù±øÉÏÇ°°Ñ³ÇÃÅ¹ØÉÏ¡£\n", env, 0);
+	    message("info", "å¤©é»‘äº†ï¼Œå®˜å…µä¸Šå‰æŠŠåŸé—¨å…³ä¸Šã€‚\n", env, 0);
 	    env->set("night", 1);
 	    set("exits", env->query("night_exits"));
 	    fix_inside();
@@ -127,7 +127,7 @@ int gen_killer()
 	    env->set("night", 0);
 	    set("exits", GATE_EXITS);
 	    message("info", 
-		"ÌìÁÁÀ²£¬¹Ù±ø°Ñ³ÇÃÅ´ò¿ª£¬·¢³öÖ¨µÄÒ»ÉùÏì¡£\n", env, 0);
+		"å¤©äº®å•¦ï¼Œå®˜å…µæŠŠåŸé—¨æ‰“å¼€ï¼Œå‘å‡ºå±çš„ä¸€å£°å“ã€‚\n", env, 0);
 	    fix_inside();
 	}
     }
@@ -136,15 +136,15 @@ int gen_killer()
 
     if (HELPER->is_night_shift()) {	// day time
 	if (killers) return;
-	killer = new("/d/beijing/npc/killer1.c");
+	killer = new("/d/beijing/npc/killer1.lpc");
 	killer->move(env);
 	killer->upgrade(1);
-	message_vision("$N¿ì²½×ßÁË¹ıÀ´¡£\n", killer);
+	message_vision("$Nå¿«æ­¥èµ°äº†è¿‡æ¥ã€‚\n", killer);
     }else {
 	if (killers) return;
-	killer = new("/d/beijing/npc/killer1.c");
+	killer = new("/d/beijing/npc/killer1.lpc");
 	killer->move(env);
-	message_vision("$N¿ì²½×ßÁË¹ıÀ´¡£\n", killer);
+	message_vision("$Nå¿«æ­¥èµ°äº†è¿‡æ¥ã€‚\n", killer);
     }
     return 2;
 }
@@ -154,7 +154,7 @@ void reward_shiwei(int rank, object player)
     int kill_num = player->query_temp("kill_num");
     int allow_num = player->query_temp("allow_num");
 
-    message_vision("³ÇÃÅµÄÖÓÇÃÁËÁ½ÏÂ£¬$NµÄ»»°àÊ±¼äµ½ÁË¡£\n", player);
+    message_vision("åŸé—¨çš„é’Ÿæ•²äº†ä¸¤ä¸‹ï¼Œ$Nçš„æ¢ç­æ—¶é—´åˆ°äº†ã€‚\n", player);
     player->delete_temp("start_job_time");
     player->delete_temp("can_allow");
     player->delete_temp("allow_num");
@@ -168,23 +168,23 @@ int do_guard(string arg)
     if (! IS_SHIWEI(player)) return 0;
 
     if (SHIWEI_LEVEL(player) > 1)
-        return notify_fail("ÄãÎŞÁÄµÃ½ô£¬»¹ÒªÀ´ÊØ³ÇÃÅ£¿\n");
+        return notify_fail("ä½ æ— èŠå¾—ç´§ï¼Œè¿˜è¦æ¥å®ˆåŸé—¨ï¼Ÿ\n");
     if (player->query_temp("can_allow"))
-	return notify_fail("ÄãÒÑ¾­ÔÚÊØÃÅÁË¡£\n");
+	return notify_fail("ä½ å·²ç»åœ¨å®ˆé—¨äº†ã€‚\n");
 
     if (!player->query_temp("current_job"))
-	return notify_fail("ÄãµÃÏÈÈ¥ÎÊÎÊ¶à´óÈË£¬Äã½ñÌìÖµ°àµÄµØ·½ÊÇÄÇ¶ù£¿\n");
+	return notify_fail("ä½ å¾—å…ˆå»é—®é—®å¤šå¤§äººï¼Œä½ ä»Šå¤©å€¼ç­çš„åœ°æ–¹æ˜¯é‚£å„¿ï¼Ÿ\n");
     if (player->query_temp("current_job") != query("gate_name"))
- 	return notify_fail("ÕâÀï²»ÊÇÄãÒªÊØµÄµØ·½¡£¿ìÈ¥"+
-	    player->query_temp("current_job")+"°É¡£\n");
+ 	return notify_fail("è¿™é‡Œä¸æ˜¯ä½ è¦å®ˆçš„åœ°æ–¹ã€‚å¿«å»"+
+	    player->query_temp("current_job")+"å§ã€‚\n");
     if (SHIWEI_LEVEL(player) == 0 && HELPER->is_sunrise() != 0) {
 	player->delete_temp("current_job");
-	return notify_fail("³½Ê±ÒÑ¹ıÄã²ÅÀ´³ÇÃÅ£¬½ñÌì¾Í²»ÓÃÄãÊØÁË£¡\n");
+	return notify_fail("è¾°æ—¶å·²è¿‡ä½ æ‰æ¥åŸé—¨ï¼Œä»Šå¤©å°±ä¸ç”¨ä½ å®ˆäº†ï¼\n");
     }
 
     if (SHIWEI_LEVEL(player) == 1 && HELPER->is_sunset() != 0) {
 	player->delete_temp("current_job");
-	return notify_fail("ĞçÊ±ÒÑ¹ıÄã²ÅÀ´³ÇÃÅ£¬½ñÌì¾Í²»ÓÃÄãÊØÁË£¡\n");
+	return notify_fail("æˆŒæ—¶å·²è¿‡ä½ æ‰æ¥åŸé—¨ï¼Œä»Šå¤©å°±ä¸ç”¨ä½ å®ˆäº†ï¼\n");
     }
 
     player->delete_temp("current_job");
@@ -193,9 +193,9 @@ int do_guard(string arg)
     player->set_temp("allow_num", 0);
     player->set_temp("kill_num", 0);
     message_vision(
-	"$NÒ»²æÑü£¬¶ÔÉíÅÔµÄ¹Ù±øµÀ£º½ñÌìÓĞÎÒÔÚ£¬¿´Ë­¸Ò´ø¼Ò»ï½ø³Ç¡£\n", 
+	"$Nä¸€å‰è…°ï¼Œå¯¹èº«æ—çš„å®˜å…µé“ï¼šä»Šå¤©æœ‰æˆ‘åœ¨ï¼Œçœ‹è°æ•¢å¸¦å®¶ä¼™è¿›åŸã€‚\n", 
 	player);
-    tell_object(player, "ÄãÒ²¿ÉÒÔË½·Å (allow) ´ø±øÆ÷µÄÈË½ø³Ç¡£\n");
+    tell_object(player, "ä½ ä¹Ÿå¯ä»¥ç§æ”¾ (allow) å¸¦å…µå™¨çš„äººè¿›åŸã€‚\n");
     return 1;
 }
 
@@ -205,11 +205,11 @@ void check_auto_kill(object me, object bing, object shiwei)
 	if (me->query_temp("attempt_outer_gate")){
 	    me->delete_temp("attempt_outer_gate");
 	    if (bing){
-		message_vision("$N¶Ô×Å$n´óºÈµÀ£ºµ²ÎÒÕßËÀ£¡\n", me, bing);
+		message_vision("$Nå¯¹ç€$nå¤§å–é“ï¼šæŒ¡æˆ‘è€…æ­»ï¼\n", me, bing);
 		me->kill_ob(bing);
 		bing->kill_ob(bing);
 	    } else if (shiwei) {
-		message_vision("$N¶Ô×Å$n´óºÈµÀ£ºµ²ÎÒÕßËÀ£¡\n", me, shiwei);
+		message_vision("$Nå¯¹ç€$nå¤§å–é“ï¼šæŒ¡æˆ‘è€…æ­»ï¼\n", me, shiwei);
 		me->kill_ob(shiwei);
 		shiwei->kill_ob(me);
 	    }
@@ -227,19 +227,19 @@ int do_allow(string name)
 	return 0;
 
     if (! name || name=="" )
-        return notify_fail("ÄãÏëÈÃË­½ø³Ç£¿\n");
+        return notify_fail("ä½ æƒ³è®©è°è¿›åŸï¼Ÿ\n");
     
     if (!objectp(obj = present(name, environment(me))))
-         return notify_fail("ÕâÀïÃ»ÓĞÕâ¸öÈË¡£\n");
+         return notify_fail("è¿™é‡Œæ²¡æœ‰è¿™ä¸ªäººã€‚\n");
 
     if (!obj->is_character() || obj->is_corpse())
-         return notify_fail("¿´Çå³şµã£¬Õâ²»ÊÇ»îÈË¡£\n");
+         return notify_fail("çœ‹æ¸…æ¥šç‚¹ï¼Œè¿™ä¸æ˜¯æ´»äººã€‚\n");
 
     if (!living(obj))
-	return notify_fail("µÈĞÑÁËÔÙËµ°É¡£\n");
+	return notify_fail("ç­‰é†’äº†å†è¯´å§ã€‚\n");
 
-    message_vision("$N¶Ô×Å$n´ó´óßÖßÖµØËµµÀ£º"
-        "½ñÌì¹ÙÒ¯ĞÄÇéºÃ£¬¾ÍÆÆÀıÈÃÄã½ø³Ç°É¡£\n", me, obj);
+    message_vision("$Nå¯¹ç€$nå¤§å¤§å’§å’§åœ°è¯´é“ï¼š"
+        "ä»Šå¤©å®˜çˆ·å¿ƒæƒ…å¥½ï¼Œå°±ç ´ä¾‹è®©ä½ è¿›åŸå§ã€‚\n", me, obj);
     obj->set_temp("outer_gate_allowed", 1);
     me->set_temp("allow_num", me->query_temp("allow_num")+1);
     return 1;
@@ -254,7 +254,7 @@ int valid_leave(object me, string dir)
     myfam = (mapping)me->query("family");
     
     if (IS_SHIWEI(me) && me->query_temp("can_allow"))
-	return notify_fail("Äã»¹Ã»Íê³ÉÊØÃÅµÄÈÎÎñÄØ£¬ÔõÃ´ÄÜÀë¿ª£¿\n");
+	return notify_fail("ä½ è¿˜æ²¡å®Œæˆå®ˆé—¨çš„ä»»åŠ¡å‘¢ï¼Œæ€ä¹ˆèƒ½ç¦»å¼€ï¼Ÿ\n");
 
     if (!IS_SHIWEI(me) && dir == GATE_ENTER_DIR) {
         inv = all_inventory(me);
@@ -281,23 +281,23 @@ int valid_leave(object me, string dir)
         for(i=sizeof(inv)-1; i>=0; i--) {
             if (inv[i]->query("weapon_prop")){
                 if(bing_present && shiwei_present) {
-                    message_vision("¹Ù±øÀ¹×¡$NËµµÀ£º¿´¸æÊ¾ÁËÃ»ÓĞ£¿" +
-                        "ÄúÏë½ø´ø×Å"+
-			inv[i]->query("name")+"½ø³ÇÄÅ£¿ÏÈÎÊÎÊ"+
-			shiwei->query("name")+"´óÈË°É£¡\n", me);
+                    message_vision("å®˜å…µæ‹¦ä½$Nè¯´é“ï¼šçœ‹å‘Šç¤ºäº†æ²¡æœ‰ï¼Ÿ" +
+                        "æ‚¨æƒ³è¿›å¸¦ç€"+
+			inv[i]->query("name")+"è¿›åŸå‘ï¼Ÿå…ˆé—®é—®"+
+			shiwei->query("name")+"å¤§äººå§ï¼\n", me);
 		    check_auto_kill(me, bing, shiwei);
-                    return notify_fail("¹Ù±øÀ¹×¡ÁËÄã¡£\n");
+                    return notify_fail("å®˜å…µæ‹¦ä½äº†ä½ ã€‚\n");
 		}else if (bing_present) {
-		    message_vision("¹Ù±øÀ¹×¡$NËµµÀ£ºÕ¾×¡£¬°Ñ" +
-			inv[i]->query("name")+"ÁôÏÂÔÙËµ£¡\n", me);
+		    message_vision("å®˜å…µæ‹¦ä½$Nè¯´é“ï¼šç«™ä½ï¼ŒæŠŠ" +
+			inv[i]->query("name")+"ç•™ä¸‹å†è¯´ï¼\n", me);
 		    check_auto_kill(me, bing, shiwei);
-                    return notify_fail("¹Ù±øÀ¹×¡ÁËÄã¡£\n");
+                    return notify_fail("å®˜å…µæ‹¦ä½äº†ä½ ã€‚\n");
 		}else{  // only shiwei present
-		    message_vision("$NÀ¹×¡$nËµµÀ£ºÏë½ø³ÇÏÈµÃ¹ıÎÒÕâ¹Ø°É£¿\n"+
-			"ÇÆÇÆ£¬´ø×Å" +
-			inv[i]->query("name")+"¾ÍÏëÍùÀï´³£¿\n", shiwei, me);
+		    message_vision("$Næ‹¦ä½$nè¯´é“ï¼šæƒ³è¿›åŸå…ˆå¾—è¿‡æˆ‘è¿™å…³å§ï¼Ÿ\n"+
+			"ç§ç§ï¼Œå¸¦ç€" +
+			inv[i]->query("name")+"å°±æƒ³å¾€é‡Œé—¯ï¼Ÿ\n", shiwei, me);
 		    check_auto_kill(me, bing, shiwei);
-                    return notify_fail("¹Ù±øÀ¹×¡ÁËÄã¡£\n");
+                    return notify_fail("å®˜å…µæ‹¦ä½äº†ä½ ã€‚\n");
 		}
             }
         }
@@ -315,7 +315,7 @@ void finish_climb(object player)
     dodge =  player->query_skill("dodge");
 
     if (dodge < 50) {
-	message_vision("$NÅÀÁË¼¸³ß£¬ÊÖÉÏÒ»¸ö²»ÎÈµøÁËÏÂÀ´£¬Ë¤µÃ±ÇÇàÁ³Ö×¡£\n", 
+	message_vision("$Nçˆ¬äº†å‡ å°ºï¼Œæ‰‹ä¸Šä¸€ä¸ªä¸ç¨³è·Œäº†ä¸‹æ¥ï¼Œæ‘”å¾—é¼»é’è„¸è‚¿ã€‚\n", 
 	player);
 	player->receive_damage("max_qi", 50);
 	player->receive_damage("qi", 100);
@@ -323,19 +323,19 @@ void finish_climb(object player)
 	return;
     }
     if (dodge < 100) {
-	message_vision("$N·ÑÁË°ëÌìµÄ¾¢£¬È´Ã»ÅÀµ½Ç½Í·¾ÍµøÁËÏÂÀ´¡£\n", player);
+	message_vision("$Nè´¹äº†åŠå¤©çš„åŠ²ï¼Œå´æ²¡çˆ¬åˆ°å¢™å¤´å°±è·Œäº†ä¸‹æ¥ã€‚\n", player);
 	player->receive_damage("qi", 100);
 	player->receive_damage("jingli", 100);
 	return;
     }
     if (dodge < 150) {
-	message_vision("$N×óÖ§ÓÒ³Å£¬ºôßêºôßêµÄÅÀÉÏÁË³ÇÇ½¡£\n", player);
+	message_vision("$Nå·¦æ”¯å³æ’‘ï¼Œå‘¼å“§å‘¼å“§çš„çˆ¬ä¸Šäº†åŸå¢™ã€‚\n", player);
 	player->receive_damage("jingli", 200);
     }else if (dodge < 250) {
-	message_vision("$NÊ©Õ¹Çá¹¦£¬¼¸ÏÂ¾ÍÅÀÉÏÁË³ÇÇ½¡£\n", player);
+	message_vision("$Næ–½å±•è½»åŠŸï¼Œå‡ ä¸‹å°±çˆ¬ä¸Šäº†åŸå¢™ã€‚\n", player);
 	player->receive_damage("jingli", 100);
     }else {
-	message_vision("$NÖÜÉíÕæÆøÁ÷×ª£¬ÌáÁËÒ»¿ÚÆø£¬×ªÑÛ¾ÍÉÏÁË³ÇÍ·¡£\n", 
+	message_vision("$Nå‘¨èº«çœŸæ°”æµè½¬ï¼Œæäº†ä¸€å£æ°”ï¼Œè½¬çœ¼å°±ä¸Šäº†åŸå¤´ã€‚\n", 
 	player);
 	player->receive_damage("jingli", 50);
     }
@@ -350,7 +350,7 @@ void finish_climb(object player)
 	}
     }
     player->move(inner_side);
-    message_vision("\n$NÒ»×İÉí£¬´Ó³ÇÇ½ÉÏÌøÁËÏÂÀ´¡£\n", player);
+    message_vision("\n$Nä¸€çºµèº«ï¼Œä»åŸå¢™ä¸Šè·³äº†ä¸‹æ¥ã€‚\n", player);
 }
 
 int do_climb(string arg)
@@ -359,10 +359,10 @@ int do_climb(string arg)
     object *inv, shiwei, bing;
     int    i, bing_present, shiwei_present;
 
-    if (player->is_busy()) return notify_fail("ÄãÕıÃ¦×ÅÄØ¡£\n");
-    if (! arg || arg!="wall") return notify_fail("ÄãÒªÍùÄÄ¶ùÅÀ£¿\n");
+    if (player->is_busy()) return notify_fail("ä½ æ­£å¿™ç€å‘¢ã€‚\n");
+    if (! arg || arg!="wall") return notify_fail("ä½ è¦å¾€å“ªå„¿çˆ¬ï¼Ÿ\n");
     if (! me->query("night")) 
-	return notify_fail("´ó°×ÌìµÄÕâÃ´¶àÈË£¬ÄãÒ²ºÃÒâË¼ÅÀÇ½£¿\n");
+	return notify_fail("å¤§ç™½å¤©çš„è¿™ä¹ˆå¤šäººï¼Œä½ ä¹Ÿå¥½æ„æ€çˆ¬å¢™ï¼Ÿ\n");
 
     bing_present = objectp(bing = present("bing", environment(player)));
     shiwei_present = 0;
@@ -378,7 +378,7 @@ int do_climb(string arg)
 
     if (! bing_present && !shiwei_present) {
         player->start_busy(6);
-	message_vision("\n$NÊÖ½Å²¢ÓÃ£¬¿ªÊ¼Íù³ÇÇ½ÉÏÅÀÉÏÈ¥¡£\n", player);
+	message_vision("\n$Næ‰‹è„šå¹¶ç”¨ï¼Œå¼€å§‹å¾€åŸå¢™ä¸Šçˆ¬ä¸Šå»ã€‚\n", player);
 	call_out("finish_climb", 4, player);
     }
 }

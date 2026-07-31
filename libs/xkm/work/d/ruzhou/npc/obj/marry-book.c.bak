@@ -1,4 +1,4 @@
-// Obj: /d/ruzhou/npc/obj/marry-book.c ½á»éÐëÖª
+// Obj: /d/ruzhou/npc/obj/marry-book.c ç»“å©šé¡»çŸ¥
 #include <ansi.h>
 
 inherit ITEM;
@@ -10,15 +10,15 @@ void init()
 
 void create()
 {
-	set_name("¡¶½á»éÐëÖª¡·", ({ "jiehun xuzhi", "xuzhi"}));
+	set_name("ã€Šç»“å©šé¡»çŸ¥ã€‹", ({ "jiehun xuzhi", "xuzhi"}));
 	set("weight", 600);
 	if (clonep())
 		set_default_object(__FILE__);
 	else {
-		set("unit", "±¾");
+		set("unit", "æœ¬");
 		set("value", 500);
 		set("material", "paper");
-		set("long", "Õâ±¾ÊéÉÏÐ´×Å±¾MUD½á»éµÄ³ÌÐò£¬Äã¿ÉÒÔ·­ÔÄ(fan)Ëü¡£\n");
+		set("long", "è¿™æœ¬ä¹¦ä¸Šå†™ç€æœ¬MUDç»“å©šçš„ç¨‹åºï¼Œä½ å¯ä»¥ç¿»é˜…(fan)å®ƒã€‚\n");
 	}
 	setup();
 }
@@ -26,7 +26,7 @@ void create()
 int do_read(string arg)
 {
     if (!arg||(arg!="jiehun xuzhi"&&arg!="xuzhi"))
-        return notify_fail("ÄãÃ»ÓÐÕâ±¾Êé£¬ÂÒ·­¿Ú´ü¸ÉÊ²Ã´£¿\n");
+        return notify_fail("ä½ æ²¡æœ‰è¿™æœ¬ä¹¦ï¼Œä¹±ç¿»å£è¢‹å¹²ä»€ä¹ˆï¼Ÿ\n");
     this_player()->start_more(read_file("/doc/help/marry"));
     return 1;
 }

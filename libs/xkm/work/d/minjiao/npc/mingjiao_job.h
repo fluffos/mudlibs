@@ -13,22 +13,22 @@ string judge_jobmsg(object player,int flg)
 	switch (s_msg)
 	{
 		case "jin_caikuang":
-			job_flg="²É¼¯Ìú¿ó";break;
+			job_flg="é‡‡é›†é“çŸ¿";break;
 
 		case "huo_zaoqiang":
-			job_flg="´òÔì»ğÇ¹";break;
+			job_flg="æ‰“é€ ç«æª";break;
 
 		case "shui_tiaoshui":
-			job_flg="ÌôË®";break;
+			job_flg="æŒ‘æ°´";break;
 
 		case "mu_kanshu":
-			job_flg="¿³Ê÷";	break;
+			job_flg="ç æ ‘";	break;
 
 		case "tu_didao":
-			job_flg="ÍÚµØµÀ"; break;
+			job_flg="æŒ–åœ°é“"; break;
 
 //		default:
-//			job_msg="ÕâÎ»"+RANK_D->query_respect(player)+"ÏÖÔÚºÃÏóÃ»ÓĞÈÎÎñÔÚÉí¡£";
+//			job_msg="è¿™ä½"+RANK_D->query_respect(player)+"ç°åœ¨å¥½è±¡æ²¡æœ‰ä»»åŠ¡åœ¨èº«ã€‚";
 //			return job_msg;
 //			write("judge_jobmsg reached default! please report.\n");
 	}
@@ -36,7 +36,7 @@ string judge_jobmsg(object player,int flg)
 	if(flg)
 	return job_flg;
 
-	job_msg="ÕâÎ»"+RANK_D->query_respect(player)+"ÏÖÔÚ²»ÊÇ"+job_flg+"Âğ£¿µÈÍê³ÉÁËÔÙÀ´ÁìÈ¡ÆäËüÈÎÎñ°É¡£";
+	job_msg="è¿™ä½"+RANK_D->query_respect(player)+"ç°åœ¨ä¸æ˜¯"+job_flg+"å—ï¼Ÿç­‰å®Œæˆäº†å†æ¥é¢†å–å…¶å®ƒä»»åŠ¡å§ã€‚";
 	return job_msg;
 }
 
@@ -47,26 +47,26 @@ int cut_abandon_jl(string job_kind)
 	
 	switch (job_kind)
 	{
-		case "²É¼¯Ìú¿ó":
+		case "é‡‡é›†é“çŸ¿":
 			cut_cc=BASE+random(BASE*2)/2; break;
-		case "´òÔì»ğÇ¹":
+		case "æ‰“é€ ç«æª":
 			cut_cc=BASE+random(BASE*3)/2; break;
-		case "ÌôË®":
+		case "æŒ‘æ°´":
 			cut_cc=BASE+random(BASE*3)/2; break;
-		case "¿³Ê÷":
+		case "ç æ ‘":
 			cut_cc=BASE+random(BASE*2)/2; break;
-		case "ÍÚµØµÀ":
+		case "æŒ–åœ°é“":
 			cut_cc=BASE+random(BASE*2)/2; break;
 	}
 
 	if(cut_cc<old_cc)		
 	{
 		this_player()->add("mingjiao/cc",-cut_cc);
-		tell_object(this_player(),RED"ÄãµÄÃ÷½ÌÖÒ³Ï¶ÈÏÂ½µÁË"+cut_cc+"µã¡£\n"NOR);
+		tell_object(this_player(),RED"ä½ çš„æ˜æ•™å¿ è¯šåº¦ä¸‹é™äº†"+cut_cc+"ç‚¹ã€‚\n"NOR);
 	}
 	else
 	{
-		tell_object(this_player(),HIB"ÄãµÄÃ÷½ÌÖÒ³Ï¶ÈÌ«µÍ£¬²»ÄÜÔÙ·ÅÆú"+job_kind+"µÄÈÎÎñÁË¡£\n"NOR);
+		tell_object(this_player(),HIB"ä½ çš„æ˜æ•™å¿ è¯šåº¦å¤ªä½ï¼Œä¸èƒ½å†æ”¾å¼ƒ"+job_kind+"çš„ä»»åŠ¡äº†ã€‚\n"NOR);
 		return 0;
 	}
 
@@ -85,34 +85,34 @@ string ask_abandon()
 	player=this_player();
 	
 	if(!player->query("mingjiao/job"))
-		return "ÕâÎ»"+RANK_D->query_respect(player)+"ÏÖÔÚºÃÏñÃ»ÓĞÈÎÎñÔÚÉí¡£";
+		return "è¿™ä½"+RANK_D->query_respect(player)+"ç°åœ¨å¥½åƒæ²¡æœ‰ä»»åŠ¡åœ¨èº«ã€‚";
 
 	job_flg=judge_jobmsg(player,1);
 
 	switch (job_flg)
 	{
-		case "²É¼¯Ìú¿ó":
-			id = "zhuang zheng"; name = "×¯ï£"; break;
-		case "´òÔì»ğÇ¹":
-			id = "xin ran"; name = "ĞÁÈ»"; break;
-		case "ÌôË®":
-			id = "tang yang"; name = "ÌÆÑó"; break;
-		case "¿³Ê÷":
-			id = "wen cangsong"; name = "ÎÅ²ÔËÉ"; break;
-		case "ÍÚµØµÀ":
+		case "é‡‡é›†é“çŸ¿":
+			id = "zhuang zheng"; name = "åº„é“®"; break;
+		case "æ‰“é€ ç«æª":
+			id = "xin ran"; name = "è¾›ç„¶"; break;
+		case "æŒ‘æ°´":
+			id = "tang yang"; name = "å”æ´‹"; break;
+		case "ç æ ‘":
+			id = "wen cangsong"; name = "é—»è‹æ¾"; break;
+		case "æŒ–åœ°é“":
 			player->delete_temp("didao_done");
-			id = "yan yuan"; name = "ÑÕÔ«"; break;
+			id = "yan yuan"; name = "é¢œå£"; break;
 	}
 
 	if(query("id")==id && query("name")==name)
 	{
 		if(cut_abandon_jl(job_flg))
-			return "¸óÏÂÁ¬ÕâÖÖÊÂÇé¶¼°ì²»ºÃ£¬½«À´ÈçºÎ¹â´óÎÒ¹âÃ÷Ê¥»ğ½Ì¡£";				
+			return "é˜ä¸‹è¿è¿™ç§äº‹æƒ…éƒ½åŠä¸å¥½ï¼Œå°†æ¥å¦‚ä½•å…‰å¤§æˆ‘å…‰æ˜åœ£ç«æ•™ã€‚";				
 		else				
-			return "¸óÏÂ¾¡Á¦Íê³ÉÕâ´ÎÈÎÎñ°É¡£";
+			return "é˜ä¸‹å°½åŠ›å®Œæˆè¿™æ¬¡ä»»åŠ¡å§ã€‚";
 	}
 	else
-		return "¼ÈÈ»ÕâÎ»"+RANK_D->query_respect(player)+"Ïë·ÅÆú"+job_flg+"µÄÈÎÎñ£¬ÇëÈ¥¸ú"+name+"ÆìÖ÷ËµÒ»Éù¡£";
+		return "æ—¢ç„¶è¿™ä½"+RANK_D->query_respect(player)+"æƒ³æ”¾å¼ƒ"+job_flg+"çš„ä»»åŠ¡ï¼Œè¯·å»è·Ÿ"+name+"æ——ä¸»è¯´ä¸€å£°ã€‚";
 
 	return "ask_abandon() has error!";
 }
@@ -128,27 +128,27 @@ void reward(object me, string job_flg)
 
 	switch(job_flg)
 	{
-		case "²É¼¯Ìú¿ó":
+		case "é‡‡é›†é“çŸ¿":
 			add_cc=BASE+random(BASE*2)/2;		// BASE = 100
 			add_exp=BASE+random(add_cc);
 			add_pot=40+random(add_exp/4);
 			break;
-		case "´òÔì»ğÇ¹":
+		case "æ‰“é€ ç«æª":
 			add_cc=BASE+random(BASE*3)/2;
 			add_exp=BASE+random(add_cc);
 			add_pot=40+random(add_exp/4);
 			break;
-		case "ÌôË®":
+		case "æŒ‘æ°´":
 			add_cc=BASE+random(BASE*3)/2;
 			add_exp=BASE+random(add_cc);
 			add_pot=40+random(add_exp/4);
 			break;
-		case "¿³Ê÷":
+		case "ç æ ‘":
 			add_cc=BASE+random(BASE*2)/2;
 			add_exp=BASE+random(add_cc);
 			add_pot=40+random(add_exp/4);
 			break;
-		case "ÍÚµØµÀ":
+		case "æŒ–åœ°é“":
 			add_cc=BASE+random(BASE*2)/2;
 			add_exp=BASE+random(add_cc);
 			add_pot=40+random(add_exp/4);
@@ -162,8 +162,8 @@ void reward(object me, string job_flg)
 	me->add("potential",add_pot);
 	if (me->query("potential") > (max_pot = me->query("max_potential")) )
 		me->set("potential",max_pot);
-	tell_object(me,HIG"¹§Ï²£¡ÄãµÄÃ÷½ÌÖÒ³Ï¶ÈÉÏÉıÁË"+add_cc+"µã¡£\n"NOR);
-	tell_object(me,HIG"ÄãµÄ¾­ÑéÉÏÉıÁË"+add_exp+"µã¡£\n"NOR);
-	tell_object(me,HIG"ÄãµÄÇ±ÄÜÉÏÉıÁË"+(me->query("potential")-old_pot)+"µã¡£\n"NOR);
+	tell_object(me,HIG"æ­å–œï¼ä½ çš„æ˜æ•™å¿ è¯šåº¦ä¸Šå‡äº†"+add_cc+"ç‚¹ã€‚\n"NOR);
+	tell_object(me,HIG"ä½ çš„ç»éªŒä¸Šå‡äº†"+add_exp+"ç‚¹ã€‚\n"NOR);
+	tell_object(me,HIG"ä½ çš„æ½œèƒ½ä¸Šå‡äº†"+(me->query("potential")-old_pot)+"ç‚¹ã€‚\n"NOR);
 
 }

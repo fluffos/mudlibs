@@ -8,19 +8,19 @@ int accept_fight()
         ob = this_player();
 
         if( ob->query_temp(me->query("mz/set"))) {
-		command("say ¸óÏÂÎä¹¦³öÖÚ£¬ÔÚÏÂºÜÊÇÅå·þ¡£ÄãÎÒ²»±ØÔÙ¶¯ÊÖÁË¡£");
+		command("say é˜ä¸‹æ­¦åŠŸå‡ºä¼—ï¼Œåœ¨ä¸‹å¾ˆæ˜¯ä½©æœã€‚ä½ æˆ‘ä¸å¿…å†åŠ¨æ‰‹äº†ã€‚");
 		return 0;
 	}
 	if (!ob->query_temp(me->query("id")+"toy")) {
-		command("say ÔÚÏÂÒ°¾Ó¶àÄê£¬ÀÁÉ¢¹ßÁË£¬²»ÏëºÍÈË¶¯ÊÖ¡£");
+		command("say åœ¨ä¸‹é‡Žå±…å¤šå¹´ï¼Œæ‡’æ•£æƒ¯äº†ï¼Œä¸æƒ³å’ŒäººåŠ¨æ‰‹ã€‚");
 		return 0;
 	}
 	if (!ob->query_temp(me->query("mz/need"))) {
-		command("say Çë¸óÏÂÏÈÍ¬"+me->query("mz/needname")+"½ÏÁ¿Ö®áá"
-			"ÔÚÏÂÔÙÏÖ³ó¡£");	
+		command("say è¯·é˜ä¸‹å…ˆåŒ"+me->query("mz/needname")+"è¾ƒé‡ä¹‹å¾Œ"
+			"åœ¨ä¸‹å†çŽ°ä¸‘ã€‚");	
 		return 0;
 	}
-	command("say ºÃ°É£¬ÄãÎÒ¾Í±È»®±È»®£¬µãµ½ÎªÖ¹¡£");
+	command("say å¥½å§ï¼Œä½ æˆ‘å°±æ¯”åˆ’æ¯”åˆ’ï¼Œç‚¹åˆ°ä¸ºæ­¢ã€‚");
 	me->set_temp("challenger", ob);
 	return 1;
 }
@@ -44,7 +44,7 @@ int chat()
 
         if (( (int)me->query("qi")*100 / my_max_qi) <= 50 )
         {
-		command("say ¸óÏÂ¹ûÈ»¸ßÃ÷£¬ÎÒÈÏÊäÁË¡£");
+		command("say é˜ä¸‹æžœç„¶é«˜æ˜Žï¼Œæˆ‘è®¤è¾“äº†ã€‚");
 		ob->set_temp(me->query("mz/set"),1);
 		ob->set_temp(me->query("id")+"toy",0);
 		call_out("fightwin",1,ob);
@@ -53,7 +53,7 @@ int chat()
 
 	if (( (int)ob->query("qi")*100 / his_max_qi) < 50 )
         {
-                command("say ¿´À´Õâ"+me->query("mz/toy")+"Òª¹éÎÒÁË¡£");
+                command("say çœ‹æ¥è¿™"+me->query("mz/toy")+"è¦å½’æˆ‘äº†ã€‚");
 		command("jump");
 		return ::chat();
 	}
@@ -62,11 +62,11 @@ int chat()
 int accept_object(object me, object obj)
 {
 	if ((string)obj->query("name")!=this_object()->query("mz/toy")){
-		command("say ¾ý×Ó²»¶áÈËÖ®ÃÀ£¬Çë¸óÏÂÊÕ»Ø¡£");
+		command("say å›å­ä¸å¤ºäººä¹‹ç¾Žï¼Œè¯·é˜ä¸‹æ”¶å›žã€‚");
 		return 0;
 	}
 	command("bow "+me->query("id"));
-	command("say °¡£¬ÕâÊÇÕæµÄÂð£¬ÔÚÏÂÔ¸Îª´Ë±¦Æ¾Î¢Ä©Ö®¼¼ºÍ¸óÏÂ¶ÄÉÏÒ»¶Ä¡£");
+	command("say å•Šï¼Œè¿™æ˜¯çœŸçš„å—ï¼Œåœ¨ä¸‹æ„¿ä¸ºæ­¤å®å‡­å¾®æœ«ä¹‹æŠ€å’Œé˜ä¸‹èµŒä¸Šä¸€èµŒã€‚");
 	me->set_temp(this_object()->query("id")+"toy",1);
 	return 1;
 }

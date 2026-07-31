@@ -5,7 +5,7 @@ void init()
 
 	if ( interactive(me) && living(me)) {	
 		   if (random(10) == 3) {
-			message_vision("突然头顶上一阵劲风，一个蒙面大汉由树上跳了下来！\n", me);
+			message_vision("绐佺劧澶撮《涓婁竴闃靛姴椋庯紝涓�涓挋闈㈠ぇ姹夌敱鏍戜笂璺充簡涓嬫潵锛乗n", me);
 			maskman = new(__DIR__"npc/maskman");
 			maskman->move(environment(me));
 		   }
@@ -15,7 +15,7 @@ void init()
 int valid_leave(object me, string dir)
 {
 	if ( present("mengmian ren", environment(me)) )
-		return notify_fail("蒙面人拦身说：想走？可没那麽容易！\n");
+		return notify_fail("钂欓潰浜烘嫤韬锛氭兂璧帮紵鍙病閭ｉ航瀹规槗锛乗n");
 
 	return ::valid_leave(me, dir);
 }

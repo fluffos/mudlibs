@@ -45,7 +45,7 @@ string short()
 
 	notes = query("notes");
 	if( !pointerp(notes) || !sizeof(notes) )
-		return ::short() + " [ Ã»ÓĞÈÎºÎÁôÑÔ ]";
+		return ::short() + " [ æ²¡æœ‰ä»»ä½•ç•™è¨€ ]";
 
 	if( this_player() ) {
 		last_read_time = (int)this_player()->query("board_last_read/" + (string)query("board_id"));
@@ -53,9 +53,9 @@ string short()
 			if( notes[i]["time"] <= last_read_time ) break;
 	}
 	if( unread )
-		return sprintf("%s [ %d ÕÅÁôÑÔ£¬%d ÕÅÎ´¶Á ]", ::short(), sizeof(notes), unread);
+		return sprintf("%s [ %d å¼ ç•™è¨€ï¼Œ%d å¼ æœªè¯» ]", ::short(), sizeof(notes), unread);
 	else
-		return sprintf("%s [ %d ÕÅÁôÑÔ ]", ::short(), sizeof(notes));
+		return sprintf("%s [ %d å¼ ç•™è¨€ ]", ::short(), sizeof(notes));
 }
 
 string long()
@@ -66,7 +66,7 @@ string long()
 
 	notes = query("notes");
 	msg = query("long");
-	msg = msg + query("name") +"µÄÊ¹ÓÃ·½·¨Çë¼û help board¡£\n";
+	msg = msg + query("name") +"çš„ä½¿ç”¨æ–¹æ³•è¯·è§ help boardã€‚\n";
 	return msg;
 }
 
@@ -80,8 +80,8 @@ int do_list()
         msg = query("long");
 
 	if( !pointerp(notes) || !sizeof(notes) ) 
-                return notify_fail(msg+query("name")+"ÉÏÄ¿Ç°Ã»ÓĞÈÎºÎÁôÑÔ¡£\n");
-	msg += query("name")+"ÉÏÏÖÓĞÏÂÁĞÁôÑÔ£º\n¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª\n";
+                return notify_fail(msg+query("name")+"ä¸Šç›®å‰æ²¡æœ‰ä»»ä½•ç•™è¨€ã€‚\n");
+	msg += query("name")+"ä¸Šç°æœ‰ä¸‹åˆ—ç•™è¨€ï¼š\nâ€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”\n";
 	last_time_read = this_player()->query("board_last_read/" + (string)query("board_id"));
 	for(i=0; i<sizeof(notes); i++)
 		msg += sprintf("%s[%2d]" NOR "  %-40s %12s (%s)\n",
@@ -111,7 +111,7 @@ void done_post(object me, mapping note, string text)
 		notes = notes[BOARD_CAPACITY / 4 .. BOARD_CAPACITY];
 
 	set("notes", notes);
-	tell_object(me, "ÁôÑÔÍê±Ï¡£\n");
+	tell_object(me, "ç•™è¨€å®Œæ¯•ã€‚\n");
 
 	open_channels();
 	save();
@@ -136,12 +136,12 @@ int do_post(string arg)
 		if (the_player->name()+"("+the_player->query("id")+")" == query("notes")[i]["author"]) 
 		j++;}
 
-	if(j>=10 && !wizardp(the_player)) return notify_fail("¶Ô²»Æğ£¬ÄãµÄÁôÑÔÒÑ³¬¹ıÊ®Æª£¬ÇëÉ¾µôÇ°ÃæµÄÔÙPOSTĞÂµÄ¡£\n");
+	if(j>=10 && !wizardp(the_player)) return notify_fail("å¯¹ä¸èµ·ï¼Œä½ çš„ç•™è¨€å·²è¶…è¿‡åç¯‡ï¼Œè¯·åˆ æ‰å‰é¢çš„å†POSTæ–°çš„ã€‚\n");
 
 //	write("Board Restricted to " + poster_lvl + " and above.\n");
 
 	if ( (int)SECURITY_D->cmp_wiz_level(the_player, poster_lvl ) < 0 )
-		return notify_fail("±¾°å²»½ÓÊÜÄãµÄÍ¶¸å¡£\n");
+		return notify_fail("æœ¬æ¿ä¸æ¥å—ä½ çš„æŠ•ç¨¿ã€‚\n");
 
 	family = query("poster_family");
 	fam = the_player->query("family");
@@ -151,9 +151,9 @@ int do_post(string arg)
 	if ( stringp(family)
 		&& (int)SECURITY_D->cmp_wiz_level(the_player, "(immortal)" ) < 0
 		&& ( !mapp( fam ) || fam["family_name"] != family ) )
-		return notify_fail("·Ç±¾ÅÉµÜ×Ó²»µÃÏò±¾°åÂÒÍ¿ÂÒĞ´¡£\n");
+		return notify_fail("éæœ¬æ´¾å¼Ÿå­ä¸å¾—å‘æœ¬æ¿ä¹±æ¶‚ä¹±å†™ã€‚\n");
 
-	if(!arg) return notify_fail("ÁôÑÔÇëÖ¸¶¨Ò»¸ö±êÌâ¡£\n");
+	if(!arg) return notify_fail("ç•™è¨€è¯·æŒ‡å®šä¸€ä¸ªæ ‡é¢˜ã€‚\n");
 	
 	note = allocate_mapping(4);
 	note["title"] = arg;
@@ -181,10 +181,10 @@ int do_read(string arg)
 	arc = query("wizard_only");
 	if ( arc
 		&& (int)SECURITY_D->cmp_wiz_level(the_player, "(immortal)" ) < 0)
-		return notify_fail("ÄÚ²¿Í¨Ñ¶²»µÃ¿úÊÓ¡£\n");
+		return notify_fail("å†…éƒ¨é€šè®¯ä¸å¾—çª¥è§†ã€‚\n");
 
 	if( !pointerp(notes) || !sizeof(notes) )
-		return notify_fail("ÁôÑÔ°åÉÏÄ¿Ç°Ã»ÓĞÈÎºÎÁôÑÔ¡£\n");
+		return notify_fail("ç•™è¨€æ¿ä¸Šç›®å‰æ²¡æœ‰ä»»ä½•ç•™è¨€ã€‚\n");
 
 	family = query("poster_family");
 	fam = the_player->query("family");
@@ -194,9 +194,9 @@ int do_read(string arg)
 	if ( stringp(family)
 		&& (int)SECURITY_D->cmp_wiz_level(the_player, "(immortal)" ) < 0
 		&& ( !mapp( fam ) || fam["family_name"] != family ) )
-		return notify_fail("·Ç±¾ÅÉµÜ×Ó²»µÃ¿úÊÓ±¾ÅÉÄÚ²¿Í¨Ñ¶¡£\n");
+		return notify_fail("éæœ¬æ´¾å¼Ÿå­ä¸å¾—çª¥è§†æœ¬æ´¾å†…éƒ¨é€šè®¯ã€‚\n");
 
-	if( !arg ) return notify_fail("Ö¸Áî¸ñÊ½£ºread <ÁôÑÔ±àºÅ>|new|next\n");
+	if( !arg ) return notify_fail("æŒ‡ä»¤æ ¼å¼ï¼šread <ç•™è¨€ç¼–å·>|new|next\n");
 	if( arg=="new" || arg=="next" ) {
 		if( !mapp(last_read_time) || undefinedp(last_read_time[myid]) )
 			num = 1;
@@ -206,10 +206,10 @@ int do_read(string arg)
 		}
 			
 	} else if( !sscanf(arg, "%d", num) )
-		return notify_fail("ÄãÒª¶ÁµÚ¼¸ÕÅÁôÑÔ£¿\n");
+		return notify_fail("ä½ è¦è¯»ç¬¬å‡ å¼ ç•™è¨€ï¼Ÿ\n");
 
 	if( num < 1 || num > sizeof(notes) )
-		return notify_fail("Ã»ÓĞÕâÕÅÁôÑÔ¡£\n");
+		return notify_fail("æ²¡æœ‰è¿™å¼ ç•™è¨€ã€‚\n");
 	num--;
 	tune_channels();
 	the_player->start_more( sprintf(
@@ -235,19 +235,19 @@ int do_discard(string arg)
 	int num;
 
 	if( !arg || sscanf(arg, "%d", num)!=1 )
-		return notify_fail("Ö¸Áî¸ñÊ½£ºdiscard <ÁôÑÔ±àºÅ>\n");
+		return notify_fail("æŒ‡ä»¤æ ¼å¼ï¼šdiscard <ç•™è¨€ç¼–å·>\n");
 	notes = query("notes");
 	if( !arrayp(notes) || num < 1 || num > sizeof(notes) )
-		return notify_fail("Ã»ÓĞÕâÕÅÁôÑÔ¡£\n");
+		return notify_fail("æ²¡æœ‰è¿™å¼ ç•™è¨€ã€‚\n");
 	num--;
 	if( notes[num]["author"] != (string)this_player(1)->name()+"("+this_player(1)->query("id")+")"
 	&&  ( (int)SECURITY_D->cmp_wiz_level(this_player(), "(caretaker)") < 0 ) )
-		return notify_fail("Õâ¸öÁôÑÔ²»ÊÇÄãĞ´µÄ¡£\n");
+		return notify_fail("è¿™ä¸ªç•™è¨€ä¸æ˜¯ä½ å†™çš„ã€‚\n");
 
 	notes = notes[0..num-1] + notes[num+1..sizeof(notes)-1];
 	set("notes", notes);
 	save();
-	write("É¾³ıµÚ " + (num+1) + " ºÅÁôÑÔ....Ok¡£\n");
+	write("åˆ é™¤ç¬¬ " + (num+1) + " å·ç•™è¨€....Okã€‚\n");
 	return 1;
 }
 
@@ -291,23 +291,23 @@ int do_store(string arg)
 	notes = query("notes");
 
 	if( !pointerp(notes) || !sizeof(notes) )
-		return notify_fail("ÁôÑÔ°åÉÏÄ¿Ç°Ã»ÓĞÈÎºÎÁôÑÔ¡£\n");
+		return notify_fail("ç•™è¨€æ¿ä¸Šç›®å‰æ²¡æœ‰ä»»ä½•ç•™è¨€ã€‚\n");
 
 //	if( (string)SECURITY_D->get_status(this_player(1)) != "(admin)" 
 //	&&      (string)SECURITY_D->get_status(this_player(1)) != "(arch)"
 //	&&      (string)SECURITY_D->get_status(this_player(1)) != "(wizard)")
-//		return notify_fail("Äã²»ÄÜÊÕ±à¡°ÏÀ¿ÍĞĞ¡±ÎÄÕª¡£\n");
+//		return notify_fail("ä½ ä¸èƒ½æ”¶ç¼–â€œä¾ å®¢è¡Œâ€æ–‡æ‘˜ã€‚\n");
 
-	if( !arg ) return notify_fail("Ö¸Áî¸ñÊ½£ºstore <ÁôÑÔ±àºÅ>\n");
+	if( !arg ) return notify_fail("æŒ‡ä»¤æ ¼å¼ï¼šstore <ç•™è¨€ç¼–å·>\n");
 
 	if( !sscanf(arg, "%d", num) )
-		return notify_fail("ÄãÒªÊÕ±àµÚ¼¸ÕÅÁôÑÔ£¿\n");
+		return notify_fail("ä½ è¦æ”¶ç¼–ç¬¬å‡ å¼ ç•™è¨€ï¼Ÿ\n");
 
 	if( num < 1 || num > sizeof(notes) )
-		return notify_fail("Ã»ÓĞÕâÕÅÁôÑÔ¡£\n");
+		return notify_fail("æ²¡æœ‰è¿™å¼ ç•™è¨€ã€‚\n");
 	num--;
 	if( notes[num]["stored"] ) 
-		return notify_fail("ÕâÕÅÁôÑÔÒÑ¾­±»ÊÕÂ¼ÁË¡£\n¼ÇÂ¼ÏÔÊ¾£º"+notes[num]["stored"]+"\n");
+		return notify_fail("è¿™å¼ ç•™è¨€å·²ç»è¢«æ”¶å½•äº†ã€‚\nè®°å½•æ˜¾ç¤ºï¼š"+notes[num]["stored"]+"\n");
 
 	fyear  = ctime(notes[num]["time"])[20..23];
 	fmonth = ctime(notes[num]["time"])[4..6];
@@ -323,14 +323,14 @@ int do_store(string arg)
 	else
 	write( "WEN: writing ..." + filename + "\n" );
 	
-	EDITOR_D->add(arc, "¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡¾¡°ÏÀ¿ÍĞĞ¡±ÎÄÑ¡¡¿"+
-		"¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù", filename);
-	EDITOR_D->add(arc, sprintf("¡í%03d  %-40s  %12s(%s)",
+	EDITOR_D->add(arc, "â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»ã€â€œä¾ å®¢è¡Œâ€æ–‡é€‰ã€‘"+
+		"â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»", filename);
+	EDITOR_D->add(arc, sprintf("â„–%03d  %-40s  %12s(%s)",
 		numb, notes[num]["title"],
 		notes[num]["author"],
 		ctime(notes[num]["time"])[0..9]), filename );
 	EDITOR_D->add(arc, notes[num]["msg"], filename);
-	EDITOR_D->add(arc, "¡¼±¾ÆªÍê¡½", filename);
+	EDITOR_D->add(arc, "ã€–æœ¬ç¯‡å®Œã€—", filename);
 
 /* index */
 	filename = sprintf("%s/wenxuan.%s", fyear, fmonth);	
@@ -343,24 +343,24 @@ int do_store(string arg)
 	if ( numb == 1)
 	{
 EDITOR_D->add(arc,
-"¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù\n" +
-"                    ¡¾ÏÀ¿ÍĞĞÎÄÑ¡" + fyear +"ÄêµÚ " + fmonth + " ¾íÄ¿Â¼¡¿\n" +
-"±àºÅ   ÌâÄ¿                                              ×÷Õß(·¢¸åÈÕÆÚ)\n"+
-"¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù¡ù",
+"â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»\n" +
+"                    ã€ä¾ å®¢è¡Œæ–‡é€‰" + fyear +"å¹´ç¬¬ " + fmonth + " å·ç›®å½•ã€‘\n" +
+"ç¼–å·   é¢˜ç›®                                              ä½œè€…(å‘ç¨¿æ—¥æœŸ)\n"+
+"â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»â€»",
 	filename);
 	}
 
-	if (EDITOR_D->add(arc, sprintf("¡í%03d  %-40s  %12s(%s)",
+	if (EDITOR_D->add(arc, sprintf("â„–%03d  %-40s  %12s(%s)",
 		numb, notes[num]["title"],
 		notes[num]["author"],
 		ctime(notes[num]["time"])[0..9]), filename )) {
-		write( notes[num]["stored"] = sprintf("¡¾¡°ÏÀ¿ÍĞĞ¡±ÎÄÑ¡¡¿µÚ %d ÆªÊÕÈë %s ¾í£¬µÚ %03d Æª¡£\n",
+		write( notes[num]["stored"] = sprintf("ã€â€œä¾ å®¢è¡Œâ€æ–‡é€‰ã€‘ç¬¬ %d ç¯‡æ”¶å…¥ %s å·ï¼Œç¬¬ %03d ç¯‡ã€‚\n",
 			num+1, fmonth, numb) );
-		log_file("wenxuan",sprintf("%s%s(%s)ÊÕÈë¡¾¡°ÏÀ¿ÍĞĞ¡±ÎÄÑ¡¡¿µÚ %d ÆªÊÕÈë %s ¾í£¬µÚ %03d Æª¡£\n",
+		log_file("wenxuan",sprintf("%s%s(%s)æ”¶å…¥ã€â€œä¾ å®¢è¡Œâ€æ–‡é€‰ã€‘ç¬¬ %d ç¯‡æ”¶å…¥ %s å·ï¼Œç¬¬ %03d ç¯‡ã€‚\n",
                         ctime(time()),me->query("name"),me->query("id"),num+1, fmonth, numb) );
 		set("notes", notes);
 	} else
-		write( sprintf("¡¾¡°ÏÀ¿ÍĞĞ¡±ÎÄÑ¡¡¿µÚ %d ÆªÊÕ±àÊ§°Ü¡£\n", num+1) );
+		write( sprintf("ã€â€œä¾ å®¢è¡Œâ€æ–‡é€‰ã€‘ç¬¬ %d ç¯‡æ”¶ç¼–å¤±è´¥ã€‚\n", num+1) );
 
 	return 1;
 }

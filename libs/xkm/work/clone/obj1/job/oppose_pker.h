@@ -14,14 +14,14 @@ void oppose_pker(object master,object player,mapping job)
 	room_name=get_room(area);
 	if(!room_name)
 		{
-		//printf("·¿¼äÃ»ÓÐÕÒµ½£¬ÇëÁªÏµwiz.\n");
+		//printf("æˆ¿é—´æ²¡æœ‰æ‰¾åˆ°ï¼Œè¯·è”ç³»wiz.\n");
 		return;
 		}
 	if(!room=find_object(room_name))
 		room=load_object(room_name);
 	if(!objectp(room))
 		{
-		//printf("·¿¼ä%s´´½¨´íÎó£¬ÇëÁªÏµwiz.\n",room_name);
+		//printf("æˆ¿é—´%såˆ›å»ºé”™è¯¯ï¼Œè¯·è”ç³»wiz.\n",room_name);
 		return;
 		}
 	//confirm room area by region.
@@ -69,15 +69,15 @@ void out_killer(object player,object place)
 	if(!killer->move(environment(player)))
 		return;
 	
-	message("vision", HIR"Í»È»¼äÒ»¸ö"+killer->name(1)+"²»Öª´ÓÄÄÀïÌøÁË³öÀ´¡£\n"
-		"¡°ÊÜËÀ°É£¬"+player->query("name")+"£¡¡±"+killer->name(1)+"´óÉùºðµÀ¡£\n"NOR, environment(player), killer);
+	message("vision", HIR"çªç„¶é—´ä¸€ä¸ª"+killer->name(1)+"ä¸çŸ¥ä»Žå“ªé‡Œè·³äº†å‡ºæ¥ã€‚\n"
+		"â€œå—æ­»å§ï¼Œ"+player->query("name")+"ï¼â€"+killer->name(1)+"å¤§å£°å¼é“ã€‚\n"NOR, environment(player), killer);
 	killer->kill_ob(player);
 	player->kill_ob(killer);
 	player->set_temp("job_system/kill_killer",1);
 
 	}
 	else
-		tell_object(player,HIB"Äã¾õµÃËÄÖÜµÄÆø·Õ»Ö¸´ÁËÕý³£¡£\n"NOR);
+		tell_object(player,HIB"ä½ è§‰å¾—å››å‘¨çš„æ°”æ°›æ¢å¤äº†æ­£å¸¸ã€‚\n"NOR);
 }
 
 //start oppose job.
@@ -87,7 +87,7 @@ void job_oppsse_pker_start(object player)
 	{
 		return;
 	}
-	tell_object(player,HIB"Äã²ì¾õËÄÖÜºÃÏñÓÐÐ©²»¶Ô¾¢......\n"NOR);
+	tell_object(player,HIB"ä½ å¯Ÿè§‰å››å‘¨å¥½åƒæœ‰äº›ä¸å¯¹åŠ²......\n"NOR);
 	player->set_temp("job_system/start_prompt",1);
 //	remove_call_out("out_killer");
 //	call_out( "out_killer",5+random(5),player,environment(player)); 

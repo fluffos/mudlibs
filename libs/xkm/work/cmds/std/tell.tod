@@ -19,26 +19,26 @@ int main(object me, string arg)
 
 	if( sscanf(target, "%s@%s", target, mud)==2 ) {
 		GTELL->send_gtell(mud, target, me, msg);
-		write("ÍøÂ·Ñ¶Ï¢ÒÑËÍ³ö£¬¿ÉÄÜÒªÉÔºò²ÅÄÜµÃµ½»ØÓ¦¡£\n");
+		write("ç½‘è·¯è®¯æ¯å·²é€å‡ºï¼Œå¯èƒ½è¦ç¨å€™æ‰èƒ½å¾—åˆ°å›åº”ã€‚\n");
 		return 1;
 	}
 
 	obj = find_player(target);
-	if(!obj || !me->visible(obj)) return notify_fail("Ã»ÓĞÕâ¸öÈË....¡£\n");
+	if(!obj || !me->visible(obj)) return notify_fail("æ²¡æœ‰è¿™ä¸ªäºº....ã€‚\n");
 	if (!wizardp(me) && obj->query_temp("pigging_seat"))
-		return notify_fail("ÕıÔÚ¹°ÖíµÄÈËÌı²»µ½ÇÄÇÄ»°¡­¡­¡£\n");
+		return notify_fail("æ­£åœ¨æ‹±çŒªçš„äººå¬ä¸åˆ°æ‚„æ‚„è¯â€¦â€¦ã€‚\n");
 	if (!wizardp(me) && wizardp(obj) && obj->query("env/block")=="YES" && obj->query("env/no_block") != (string)me->query("id"))
-	return notify_fail(obj->name()+"ºÜÃ¦£¬ÓĞÊ²Ã´ÊÂ´ı»á¶ùÔÙËµ°É¡£\n");
+	return notify_fail(obj->name()+"å¾ˆå¿™ï¼Œæœ‰ä»€ä¹ˆäº‹å¾…ä¼šå„¿å†è¯´å§ã€‚\n");
 	if (!wizardp(me) && obj->query("env/block") == (string)me->query("id"))
-		return notify_fail(obj->name()+"²»ÏëÌıÄãÂŞËô¡£\n");
+		return notify_fail(obj->name()+"ä¸æƒ³å¬ä½ ç½—å”†ã€‚\n");
 	if (!wizardp(me) && obj->query("env/block")=="ALL" && obj->query("env/no_block") != (string)me->query("id"))     
-        return notify_fail(obj->name()+"ÏÖÔÚ²»ÏëºÍÈËËµ»°¡£\n");
+        return notify_fail(obj->name()+"ç°åœ¨ä¸æƒ³å’Œäººè¯´è¯ã€‚\n");
 
 	if (obj==me)
-		return notify_fail("×Ô¼ºËµ¸ø×Ô¼ºÌı£¿\n");
+		return notify_fail("è‡ªå·±è¯´ç»™è‡ªå·±å¬ï¼Ÿ\n");
 
-	write(GRN "Äã¸æËß" + obj->name(1) + "£º" + msg + "\n" NOR);
-	tell_object(obj, sprintf( GRN "%s¸æËßÄã£º%s\n" NOR,
+	write(GRN "ä½ å‘Šè¯‰" + obj->name(1) + "ï¼š" + msg + "\n" NOR);
+	tell_object(obj, sprintf( GRN "%så‘Šè¯‰ä½ ï¼š%s\n" NOR,
 		me->name(1)+"("+me->query("id")+")", msg));
 
 	obj->set_temp("reply", me->query("id"));
@@ -54,13 +54,13 @@ int remote_tell(string cname, string from, string mud, string to, string msg)
 			return 0;
 			
 		if( ob->query("env/block")=="ALL" )
-    		    return notify_fail(ob->name()+"ÏÖÔÚ²»ÏëºÍÈËËµ»°¡£\n");
+    		    return notify_fail(ob->name()+"ç°åœ¨ä¸æƒ³å’Œäººè¯´è¯ã€‚\n");
 
 		if( cname )
-			tell_object(ob, sprintf(HIG "%s(%s@%s)Ç§Àï´«Òô¸æËßÄã£º%s\n" NOR,
+			tell_object(ob, sprintf(HIG "%s(%s@%s)åƒé‡Œä¼ éŸ³å‘Šè¯‰ä½ ï¼š%s\n" NOR,
 				cname, capitalize(from), mud, msg ));
 		else
-			tell_object(ob, sprintf(HIG "%s@%s ¸æËßÄã£º%s\n" NOR,
+			tell_object(ob, sprintf(HIG "%s@%s å‘Šè¯‰ä½ ï¼š%s\n" NOR,
 				capitalize(from), mud, msg ));
 		ob->set_temp("reply", from + "@" + mud);
 		return 1;
@@ -71,11 +71,11 @@ int remote_tell(string cname, string from, string mud, string to, string msg)
 int help(object me)
 {
 	write(@HELP
-Ö¸Áî¸ñÊ½£ºtell <Ä³ÈË> <Ñ¶Ï¢>
+æŒ‡ä»¤æ ¼å¼ï¼štell <æŸäºº> <è®¯æ¯>
 
-Äã¿ÉÒÔÓÃÕâ¸öÖ¸ÁîºÍÆäËûµØ·½»òÆäËûÕ¾µãµÄÊ¹ÓÃÕßËµ»°¡£
+ä½ å¯ä»¥ç”¨è¿™ä¸ªæŒ‡ä»¤å’Œå…¶ä»–åœ°æ–¹æˆ–å…¶ä»–ç«™ç‚¹çš„ä½¿ç”¨è€…è¯´è¯ã€‚
 
-ÆäËûÏà¹ØÖ¸Áî£ºreply, mudlist
+å…¶ä»–ç›¸å…³æŒ‡ä»¤ï¼šreply, mudlist
 HELP
 	);
 	return 1;

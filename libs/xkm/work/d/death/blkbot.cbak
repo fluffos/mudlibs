@@ -4,8 +4,8 @@ inherit ROOM;
 
 void create()
 {
-	set("short","¿Õ·¿¼ä");
-	set("long","×ÔÊ×°É...\n");
+	set("short","ç©ºæˆ¿é—´");
+	set("long","è‡ªé¦–å§...\n");
 	set("exits", ([
 		"east" :   __DIR__"noteroom" ]));
 
@@ -45,12 +45,12 @@ void init()
 
 int do_practice()
 {
-	write("Ğª»á¶ù°É£®£®\n");
+	write("æ­‡ä¼šå„¿å§ï¼ï¼\n");
 	return 1;
 }
 int valid_leave(object me, string dir)
 {
         if( dir=="east" && !wizardp(me) )
-                return notify_fail("ÄÇÀïÖ»ÓĞÎ×Ê¦²ÅÄÜ½øÈ¥¡£\n");
+                return notify_fail("é‚£é‡Œåªæœ‰å·«å¸ˆæ‰èƒ½è¿›å»ã€‚\n");
         return ::valid_leave(me, dir);
 }

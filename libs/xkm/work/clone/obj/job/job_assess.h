@@ -1,7 +1,7 @@
 //Cracked by Kafei
 //job assess.h
 //wzfeng@xkx 2000 7
-//»ñµÃ»î×ÅµÄmaster
+//è·å¾—æ´»ç€çš„master
 object master_living(string master_name,string id)
 {
 	object master,*ob_list;
@@ -104,7 +104,7 @@ mapping make_pubish(object player,object master,string family)
 	//printf("luck=%d",menpai_ob->query_luck(family));
 	if(!luck=menpai_ob->query_luck(family))
 		luck=random(5);
-	//printf("ĞÒÔËµãÊıÎª%d\n",luck);
+	//printf("å¹¸è¿ç‚¹æ•°ä¸º%d\n",luck);
 
 	exp=player->query("combat_exp")/150;
 	if(exp>100000)
@@ -187,12 +187,12 @@ void family_assess_award(object player,object master,string family)
 	award_assess_best=make_assess_award(player,master,family);
 	skills_name=award_assess_best["skills_name"];
 	player->add("combat_exp",award_assess_best["exp"]);
-	msg+="ÄãµÄ¾­ÑéÌá¸ßÁË"+award_assess_best["exp"]+"µã\n";
+	msg+="ä½ çš„ç»éªŒæé«˜äº†"+award_assess_best["exp"]+"ç‚¹\n";
 	player->add("max_neili",award_assess_best["max_neili"]);
-	msg+="ÄãµÄ×î´óÄÚÁ¦Ìá¸ßÁË"+award_assess_best["max_neili"]+"µã\n";
+	msg+="ä½ çš„æœ€å¤§å†…åŠ›æé«˜äº†"+award_assess_best["max_neili"]+"ç‚¹\n";
 	player->add("eff_jingli",award_assess_best["max_jingli"]);
 	player->add("max_jingli",award_assess_best["max_jingli"]);
-	msg+="ÄãµÄ×î´ó¾«Á¦Ìá¸ßÁË"+award_assess_best["max_jingli"]+"µã\n";
+	msg+="ä½ çš„æœ€å¤§ç²¾åŠ›æé«˜äº†"+award_assess_best["max_jingli"]+"ç‚¹\n";
 	//add skills
 	for(i=0;i<sizeof(skills_name);i++)
 	{
@@ -202,10 +202,10 @@ void family_assess_award(object player,object master,string family)
 		if(skills_lvl*skills_lvl*skills_lvl/10>exp)
 			continue;
 		player->set_skill(skills_name[i],skills_lvl);
-		msg+="ÄãµÄ"+to_chinese(skills_name[i])+"Ìá¸ßÁË"+award_assess_best["skills_lvl"]+"¼¶\n";
+		msg+="ä½ çš„"+to_chinese(skills_name[i])+"æé«˜äº†"+award_assess_best["skills_lvl"]+"çº§\n";
 	}
 	
-	msg+="ÍûÄãÔÙ½ÓÔÙÀ÷£¬¼ÓÓÍ£¡\n"NOR;
+	msg+="æœ›ä½ å†æ¥å†å‰ï¼ŒåŠ æ²¹ï¼\n"NOR;
 	tell_object(player,msg);
 	
 
@@ -219,7 +219,7 @@ void family_assess_common(object player,object master,string family)
 	msg=HIC"";
 	exp=1000+random(1000);
 	player->add("combat_exp",exp);
-	msg+="ÄãµÄ¾­ÑéÌá¸ßÁË"+exp+"µã\n"NOR;
+	msg+="ä½ çš„ç»éªŒæé«˜äº†"+exp+"ç‚¹\n"NOR;
 	tell_object(player,msg);
 	return;
 }
@@ -242,13 +242,13 @@ void family_assess_punish(object player,object master,string family)
 	if(exp<punish_assess["exp"])
 		punish_assess["exp"]=exp;
 	player->add("combat_exp",-punish_assess["exp"]);
-	msg+="ÄãµÄ¾­Ñé½µµÍÁË"+punish_assess["exp"]+"µã\n";
+	msg+="ä½ çš„ç»éªŒé™ä½äº†"+punish_assess["exp"]+"ç‚¹\n";
 	if(player->query("max_neili")<punish_assess["max_neili"])
 		punish_assess["max_neili"]=player->query("max_neili");
 	
 	player->add("max_neili",-punish_assess["max_neili"]);
 	
-	msg+="ÄãµÄ×î´óÄÚÁ¦½µµÍÁË"+punish_assess["max_neili"]+"µã\n";
+	msg+="ä½ çš„æœ€å¤§å†…åŠ›é™ä½äº†"+punish_assess["max_neili"]+"ç‚¹\n";
 	
 	if(player->query("max_jingli")<punish_assess["max_jingli"])
 		punish_assess["max_jingli"]=player->query("max_jingli");
@@ -256,7 +256,7 @@ void family_assess_punish(object player,object master,string family)
 
 	player->add("eff_jingli",-punish_assess["max_jingli"]);
 	player->add("max_jingli",-punish_assess["max_jingli"]);
-	msg+="ÄãµÄ×î´ó¾«Á¦½µµÍÁË"+punish_assess["max_jingli"]+"µã\n";
+	msg+="ä½ çš„æœ€å¤§ç²¾åŠ›é™ä½äº†"+punish_assess["max_jingli"]+"ç‚¹\n";
 
 	for(i=0;i<sizeof(skills_name);i++)
 	{
@@ -266,10 +266,10 @@ void family_assess_punish(object player,object master,string family)
 			punish_assess["skills_lvl"]=skills_lvl;
 		skills_lvl-=punish_assess["skills_lvl"];
 		player->set_skill(skills_name[i],skills_lvl);
-		msg+="ÄãµÄ"+to_chinese(skills_name[i])+"½µµÍÁË"+punish_assess["skills_lvl"]+"¼¶\n";
+		msg+="ä½ çš„"+to_chinese(skills_name[i])+"é™ä½äº†"+punish_assess["skills_lvl"]+"çº§\n";
 	}
 */
-	msg+="ÏÂ´ÎÔÙÒªÈç´Ë£¬±Øµ±ÖØ·££¡\n"NOR;
+	msg+="ä¸‹æ¬¡å†è¦å¦‚æ­¤ï¼Œå¿…å½“é‡ç½šï¼\n"NOR;
 	tell_object(player,msg);
 	
 	return;
@@ -301,7 +301,7 @@ void set_family_assess_data(object master,string family)
 	family_assess=job_data->query_family_assess_data();
 	if(is_attr_mapping(family,"family",family_assess))
 		return;		
-	//write(HIC"ÉèÖÃassess_data\n"NOR);
+	//write(HIC"è®¾ç½®assess_data\n"NOR);
 	assess["family"]=family;
 	assess["master"]=base_name(master);
 	assess["master_id"]=master->query("id");
@@ -349,7 +349,7 @@ int filter_player(object ob,string family)
 		 //||ob->query("family/family_name")!=family
 		 )
 	 {
-		 //printf("ÃÅÅÉÑ¡ÔñÁË%s\tplayer\t%sµÄÃÅÅÉÊÇ%s\n",menpai_name,ob->query("name"),ob->query("family/family_name"));
+		 //printf("é—¨æ´¾é€‰æ‹©äº†%s\tplayer\t%sçš„é—¨æ´¾æ˜¯%s\n",menpai_name,ob->query("name"),ob->query("family/family_name"));
 		 return 0;
 	 }
 	return 1;
@@ -381,7 +381,7 @@ void do_assess_1(mapping family)
 		//write(master->query("name"));
 		if(!objectp(master))
 		{
-			//write("masterÃ»ÓĞÕÒµ½\n");
+			//write("masteræ²¡æœ‰æ‰¾åˆ°\n");
 			master=new(family["master"]);
 			//write("new master\n");
 		}
@@ -390,9 +390,9 @@ void do_assess_1(mapping family)
 			write("new master error\n");
 			return;
 		}
-		tell_room(environment(master),master->query("name")+"¼±¼±Ã¦Ã¦Àë¿ªÁË¡£\n");
+		tell_room(environment(master),master->query("name")+"æ€¥æ€¥å¿™å¿™ç¦»å¼€äº†ã€‚\n");
 		master->move(place);
-		tell_room(place,master->query("name")+"×ßÁË¹ıÀ´¡£\n");
+		tell_room(place,master->query("name")+"èµ°äº†è¿‡æ¥ã€‚\n");
 	}
 	//write("maseter must be here\n");
 
@@ -400,8 +400,8 @@ void do_assess_1(mapping family)
 	place->set("no_sleep",1);
 	place->set("no_steal",1);
 	place->set("long1",place->query("long"));
-	place->set("long",place->query("long")+HIY"\t\tÏÖÔÚÕıÔÚ½øĞĞ"
-				+family["family"]+"ÖØÒª»áÒé\n"NOR);
+	place->set("long",place->query("long")+HIY"\t\tç°åœ¨æ­£åœ¨è¿›è¡Œ"
+				+family["family"]+"é‡è¦ä¼šè®®\n"NOR);
 	if(!place->query("exit_temp"))
 	{
 	place->set("exit_temp",place->query("exits"));
@@ -434,7 +434,7 @@ void do_assess_2(mapping family)
 		//write(master->query("name"));
 		if(!objectp(master))
 		{
-			//write("masterÃ»ÓĞÕÒµ½\n");
+			//write("masteræ²¡æœ‰æ‰¾åˆ°\n");
 			master=new(family["master"]);
 			//write("new master\n");
 		}
@@ -443,9 +443,9 @@ void do_assess_2(mapping family)
 			//write("new master error\n");
 			return;
 		}
-		tell_room(environment(master),master->query("name")+"¼±¼±Ã¦Ã¦Àë¿ªÁË¡£\n");
+		tell_room(environment(master),master->query("name")+"æ€¥æ€¥å¿™å¿™ç¦»å¼€äº†ã€‚\n");
 		master->move(place);
-		tell_room(place,master->query("name")+"×ßÁË¹ıÀ´¡£\n");
+		tell_room(place,master->query("name")+"èµ°äº†è¿‡æ¥ã€‚\n");
 	}
 	assess_msg(master,master,"assess_start","assess",family["family"],place);
 	assess_msg(master,master,"family","assess",family["family"],place);
@@ -472,7 +472,7 @@ void do_assess_2(mapping family)
 					player_list[i]->move(VOID_OB);
 				else
 					player_list[i]->move(kickout_place);
-				//tell_room(place,player_list[i]->query("name")+"Àë¿ªÁËÕâÀï¡£\n");
+				//tell_room(place,player_list[i]->query("name")+"ç¦»å¼€äº†è¿™é‡Œã€‚\n");
 				assess_msg(master,player_list[i],"kick_out_player","assess",family["family"],place);
 				continue;
 			}
@@ -520,7 +520,7 @@ void do_assess_3(mapping family)
 		//write(master->query("name"));
 		if(!objectp(master))
 		{
-			//write("masterÃ»ÓĞÕÒµ½\n");
+			//write("masteræ²¡æœ‰æ‰¾åˆ°\n");
 			master=new(family["master"]);
 			//write("new master\n");
 		}
@@ -529,9 +529,9 @@ void do_assess_3(mapping family)
 			//write("new master error\n");
 			return;
 		}
-		tell_room(environment(master),master->query("name")+"¼±¼±Ã¦Ã¦Àë¿ªÁË¡£\n");
+		tell_room(environment(master),master->query("name")+"æ€¥æ€¥å¿™å¿™ç¦»å¼€äº†ã€‚\n");
 		master->move(place);
-		tell_room(place,master->query("name")+"×ßÁË¹ıÀ´¡£\n");
+		tell_room(place,master->query("name")+"èµ°äº†è¿‡æ¥ã€‚\n");
 	}
 	player_list=all_inventory(place);
 	player_list=filter_array(player_list,"filter_player",this_object(),family["family"]);
@@ -555,7 +555,7 @@ void do_assess_3(mapping family)
 					player_list[i]->move(VOID_OB);
 				else
 					player_list[i]->move(kickout_place);
-				//tell_room(place,player_list[i]->query("name")+"Àë¿ªÁËÕâÀï¡£\n");
+				//tell_room(place,player_list[i]->query("name")+"ç¦»å¼€äº†è¿™é‡Œã€‚\n");
 				assess_msg(master,player_list[i],"kick_out_player","assess",family["family"],place);
 				continue;
 			}
@@ -624,7 +624,7 @@ void do_assess_4(mapping family)
 		//write(master->query("name"));
 		if(!objectp(master))
 		{
-			//write("masterÃ»ÓĞÕÒµ½\n");
+			//write("masteræ²¡æœ‰æ‰¾åˆ°\n");
 			master=new(family["master"]);
 			//write("new master\n");
 		}
@@ -633,9 +633,9 @@ void do_assess_4(mapping family)
 			//write("new master error\n");
 			return;
 		}
-		tell_room(environment(master),master->query("name")+"¼±¼±Ã¦Ã¦Àë¿ªÁË¡£\n");
+		tell_room(environment(master),master->query("name")+"æ€¥æ€¥å¿™å¿™ç¦»å¼€äº†ã€‚\n");
 		master->move(place);
-		tell_room(place,master->query("name")+"×ßÁË¹ıÀ´¡£\n");
+		tell_room(place,master->query("name")+"èµ°äº†è¿‡æ¥ã€‚\n");
 	}
 
 	player_list=all_inventory(place);
@@ -660,7 +660,7 @@ void do_assess_4(mapping family)
 					player_list[i]->move(VOID_OB);
 				else
 					player_list[i]->move(kickout_place);
-				//tell_room(place,player_list[i]->query("name")+"Àë¿ªÁËÕâÀï¡£\n");
+				//tell_room(place,player_list[i]->query("name")+"ç¦»å¼€äº†è¿™é‡Œã€‚\n");
 				assess_msg(master,player_list[i],"kick_out_player","assess",family["family"],place);
 				continue;
 			}
@@ -731,7 +731,7 @@ void do_assess_5(mapping family)
 		//write(master->query("name"));
 		if(!objectp(master))
 		{
-			//write("masterÃ»ÓĞÕÒµ½\n");
+			//write("masteræ²¡æœ‰æ‰¾åˆ°\n");
 			master=new(family["master"]);
 			//write("new master\n");
 		}
@@ -740,9 +740,9 @@ void do_assess_5(mapping family)
 			//write("new master error\n");
 			return;
 		}
-		tell_room(environment(master),master->query("name")+"¼±¼±Ã¦Ã¦Àë¿ªÁË¡£\n");
+		tell_room(environment(master),master->query("name")+"æ€¥æ€¥å¿™å¿™ç¦»å¼€äº†ã€‚\n");
 		master->move(place);
-		tell_room(place,master->query("name")+"×ßÁË¹ıÀ´¡£\n");
+		tell_room(place,master->query("name")+"èµ°äº†è¿‡æ¥ã€‚\n");
 	}
 	player_list=all_inventory(place);
 	player_list=filter_array(player_list,"filter_player",this_object(),family["family"]);
@@ -766,7 +766,7 @@ void do_assess_5(mapping family)
 					player_list[i]->move(VOID_OB);
 				else
 					player_list[i]->move(kickout_place);
-				//tell_room(place,player_list[i]->query("name")+"Àë¿ªÁËÕâÀï¡£\n");
+				//tell_room(place,player_list[i]->query("name")+"ç¦»å¼€äº†è¿™é‡Œã€‚\n");
 				assess_msg(master,player_list[i],"kick_out_player","assess",family["family"],place);
 				continue;
 			}
@@ -802,12 +802,12 @@ void do_assess_5(mapping family)
 	job_data->remove_family_assess(family["family"]);
 	job_data->reset_family_data(family["family"]);
 	if(!frist_place=find_object(family_master_place[family["family"]]))
-	{	//write(family_master_place[family["family"]]+"Ã»ÓĞ±»±àÒë¡£\n");
+	{	//write(family_master_place[family["family"]]+"æ²¡æœ‰è¢«ç¼–è¯‘ã€‚\n");
 		frist_place=load_object(family_master_place[family["family"]]);
 	}
 	if(!objectp(frist_place))
 	{
-		//write("·¿¼ä»Ö¸´´íÎó,masterÉ¾³ı\n");
+		//write("æˆ¿é—´æ¢å¤é”™è¯¯,masteråˆ é™¤\n");
 		destruct(master);
 	}
 	else
@@ -815,24 +815,24 @@ void do_assess_5(mapping family)
 		
 		if(present(master->query("id"), frist_place))
 		{
-			//write("ÒÔÇ°µÄµØ·½"+frist_place->query("short")+"ÒÑ¾­ÓĞmaster,master del\n");
+			//write("ä»¥å‰çš„åœ°æ–¹"+frist_place->query("short")+"å·²ç»æœ‰master,master del\n");
 //			if(!destruct(master))
-//				write("É¾³ıÊ§°Ü\n");
+//				write("åˆ é™¤å¤±è´¥\n");
 			if(base_name(place)!=base_name(frist_place))
 			{
-			tell_room(place,master->query("name")+"×ßÁË³öÈ¥¡£\n");
+			tell_room(place,master->query("name")+"èµ°äº†å‡ºå»ã€‚\n");
 			//write(
 			if(!destruct(master))
-				write("É¾³ıÊ§°Ü\n");
+				write("åˆ é™¤å¤±è´¥\n");
 			}
 
 		}
 		else
 		{
-			tell_room(place,master->query("name")+"×ßÁË³öÈ¥¡£\n");
+			tell_room(place,master->query("name")+"èµ°äº†å‡ºå»ã€‚\n");
 
 		if(master->move(frist_place))
-			tell_room(frist_place,master->query("name")+"×ßÁË¹ıÀ´¡£\n");
+			tell_room(frist_place,master->query("name")+"èµ°äº†è¿‡æ¥ã€‚\n");
 		else
 			write("move error\n");
 		}

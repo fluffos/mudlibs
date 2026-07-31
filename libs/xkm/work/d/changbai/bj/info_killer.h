@@ -2,9 +2,9 @@
 // /d/changbai/bj/info_killer.h
 
 mapping info_killer = ([
-        "ÈÕÔÂÉñ½Ì×óÊ¹" : "riyue shizhe",
-        "ÉñÁú½Ì³¤ÀÏ" : "shenlong zhanglao",
-        "Îå¶¾½Ì»¤·¨" : "wudu hufa",
-        "ÌìÓ¥½Ì·¨Íõ" : "tianying fawang",
-        "½õÒÂÎÀ" : "jinyiwei",
+        "æ—¥æœˆç¥æ•™å·¦ä½¿" : "riyue shizhe",
+        "ç¥é¾™æ•™é•¿è€" : "shenlong zhanglao",
+        "äº”æ¯’æ•™æŠ¤æ³•" : "wudu hufa",
+        "å¤©é¹°æ•™æ³•ç‹" : "tianying fawang",
+        "é”¦è¡£å«" : "jinyiwei",
 ]);

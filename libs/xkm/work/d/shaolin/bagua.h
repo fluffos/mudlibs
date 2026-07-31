@@ -5,8 +5,8 @@
 #include <ansi.h>
 
 string* dirs = ({
-	"¿²", "À¤", "Àë", "Ç¬",
-	"ôÞ", "Õð", "Ùã", "¶Ò"
+	"åŽ", "å¤", "ç¦»", "ä¹¾",
+	"è‰®", "éœ‡", "å·½", "å…‘"
 	});
 
 int check_dirs(object me, string dir)
@@ -18,67 +18,67 @@ int check_dirs(object me, string dir)
 
 		switch (dir)
 		{
-		case "¿²":
+		case "åŽ":
 			if (bc == 0 || bc == 13 || bc == 17)
 				me->set_temp("bagua/count",  bc + 1);
 			else    me->delete_temp("bagua/count");
 			
-			tell_object(me, HIR "\nËÄÖÜëüëÊÒ»Æ¬£¬ËÆºõÌìµØ¶¼µ¹×ªÁË¹ýÀ´£¬ÄãÖ»¾õµÃÍ·ÄÔÖÐÒ²ÊÇÒ»ÕóÔÎÑ£....\n\n" NOR);
+			tell_object(me, HIR "\nå››å‘¨æœ¦èƒ§ä¸€ç‰‡ï¼Œä¼¼ä¹Žå¤©åœ°éƒ½å€’è½¬äº†è¿‡æ¥ï¼Œä½ åªè§‰å¾—å¤´è„‘ä¸­ä¹Ÿæ˜¯ä¸€é˜µæ™•çœ©....\n\n" NOR);
 			me->receive_damage("jing",50);
 			break;
-		case "À¤":
+		case "å¤":
 			me->delete_temp("bagua/count");
 			break;
-		case "Àë":
+		case "ç¦»":
 			if (bc == 1 || bc == 12 )
 				me->set_temp("bagua/count",  bc + 1);
 			else    me->delete_temp("bagua/count");
 
-			tell_object(me, HIR "\n±¡Îí´ÓÊ¯·ìÖÐÉýÆð£¬½ô½ôµØ°ÑÄã¹üÁËÆðÀ´£¬ÄãÖ»¾õÈ«ÉíÄÚÁ¦´ç´çÏûÉ¢£¡\n\n" NOR);
+			tell_object(me, HIR "\nè–„é›¾ä»ŽçŸ³ç¼ä¸­å‡èµ·ï¼Œç´§ç´§åœ°æŠŠä½ è£¹äº†èµ·æ¥ï¼Œä½ åªè§‰å…¨èº«å†…åŠ›å¯¸å¯¸æ¶ˆæ•£ï¼\n\n" NOR);
 			if ((int)me->query("neili") >= 50)
 				me->add("neili", -50);
 			else 	me->set("neili", 0);	
 			break;
-		case "Ç¬":
+		case "ä¹¾":
 			if (bc == 8 )
 				me->set_temp("bagua/count",  bc + 1);
 			else    me->delete_temp("bagua/count");
 
-			tell_object(me, HIR "\nÆËÍ¨Ò»Éù£¬ÄãÒ»ÏÂÏÝÈëÆëÑüÉîµÄÎÛÄàÀï£¬ÀïÃæ·Â·ðÓÐÎÞÊýÐ¡³æ×Ó³éÎü×Å×ÅÄãµÄÕæÆø£¡\n\n" NOR);
+			tell_object(me, HIR "\næ‰‘é€šä¸€å£°ï¼Œä½ ä¸€ä¸‹é™·å…¥é½è…°æ·±çš„æ±¡æ³¥é‡Œï¼Œé‡Œé¢ä»¿ä½›æœ‰æ— æ•°å°è™«å­æŠ½å¸ç€ç€ä½ çš„çœŸæ°”ï¼\n\n" NOR);
 			me->receive_damage("qi", 50);
 			break;
-		case "ôÞ":
+		case "è‰®":
 			if (bc == 3 || bc == 4 || bc == 15)
 				me->set_temp("bagua/count",  bc + 1);
 			else    me->delete_temp("bagua/count");
 
-			tell_object(me, HIR "\nÄãÖ»¾õÍ·ÄÔ¿Õµ´µ´µÄ£¬ËÆºõÓÐÊ²Ã´¶«Î÷ÀëÄã¶øÈ¥£¬È´ÓÖËµ²»ÇåÊÇÊ²Ã´¶«Î÷....\n\n" NOR);
+			tell_object(me, HIR "\nä½ åªè§‰å¤´è„‘ç©ºè¡è¡çš„ï¼Œä¼¼ä¹Žæœ‰ä»€ä¹ˆä¸œè¥¿ç¦»ä½ è€ŒåŽ»ï¼Œå´åˆè¯´ä¸æ¸…æ˜¯ä»€ä¹ˆä¸œè¥¿....\n\n" NOR);
 			if ((int)me->query("combat_exp") >= 50)
 				me->add("combat_exp", -50);
 			else	me->set("combat_exp", 6);	
 			break;
-		case "Õð":
+		case "éœ‡":
 			if (bc == 2 || bc == 7 || bc == 9 )
 				me->set_temp("bagua/count",  bc + 1);
 			else    me->delete_temp("bagua/count");
 
-			tell_object(me, HIR "\nÑÒ±Ú¼ä´«³öÒ»ÕóÕóÃÆÀ×£¬Í»È»°ë¿ÕÖÐ´Ü³öÒ»µÀÉÁµç£¬ÕýÖÐÄãµÄÍ·¶¥£¡\n\n" NOR);
+			tell_object(me, HIR "\nå²©å£é—´ä¼ å‡ºä¸€é˜µé˜µé—·é›·ï¼Œçªç„¶åŠç©ºä¸­çªœå‡ºä¸€é“é—ªç”µï¼Œæ­£ä¸­ä½ çš„å¤´é¡¶ï¼\n\n" NOR);
 			me->unconcious();
 			break;
-		case "Ùã":
+		case "å·½":
 			if (bc == 6 || bc == 11 )
 				me->set_temp("bagua/count",  bc + 1);
 			else	me->delete_temp("bagua/count");
 
-			tell_object(me, HIR "\nºöÈ»¼äÑÛÇ°ºÚÓ°ÉÁ¶¯£¬¼¸Ê®°Ñ·Éµ¶Ð±Ð±Éä¹ý£¬ÔÚÄãÉíÉÏÁôÏÂÁË³¤³¤µÄÑªºÛ£¡\n\n" NOR);
+			tell_object(me, HIR "\nå¿½ç„¶é—´çœ¼å‰é»‘å½±é—ªåŠ¨ï¼Œå‡ åæŠŠé£žåˆ€æ–œæ–œå°„è¿‡ï¼Œåœ¨ä½ èº«ä¸Šç•™ä¸‹äº†é•¿é•¿çš„è¡€ç—•ï¼\n\n" NOR);
 			me->receive_wound("qi", 50);
 			break;
-		case "¶Ò":
+		case "å…‘":
 			if (bc == 5 || bc == 10 || bc == 14 || bc == 16)
 				me->set_temp("bagua/count",  bc + 1);
 			else	me->delete_temp("bagua/count");
 
-			tell_object(me, HIR "\nÖ»ÌýÆ¹µÄÒ»Éù£¬Ò»Ö»¾Þ´óµÄÄ¾´¸´ÓÌì¶ø½µ£¬´òµÃÄãÑÛÇ°¶ÙÊ±½ðÐÇÂÒÃ°£¡\n\n" NOR);
+			tell_object(me, HIR "\nåªå¬ä¹’çš„ä¸€å£°ï¼Œä¸€åªå·¨å¤§çš„æœ¨é”¤ä»Žå¤©è€Œé™ï¼Œæ‰“å¾—ä½ çœ¼å‰é¡¿æ—¶é‡‘æ˜Ÿä¹±å†’ï¼\n\n" NOR);
 			me->receive_wound("jing", 50);
 			break;
 		default:
@@ -86,7 +86,7 @@ int check_dirs(object me, string dir)
 			break;
 		}
 
-		if (dir == "À¤")
+		if (dir == "å¤")
 		{
 			me->delete_temp("bagua");
 		}

@@ -37,21 +37,21 @@ void message_zhong(object *spys)
         if( sizeof(leaver = filter_array(spys, "is_leaving", this_object())) < 1)
                 return;
 
-        obj = filter_array(children(SGNPCS + "zhong.c"), (: clonep :));
+        obj = filter_array(children(SGNPCS + "zhong.lpc"), (: clonep :));
         if( sizeof(obj) ) {
                 zhong_ob = obj[0];
                 if( !living(zhong_ob) || zhong_ob->query("sgwork/persuaded")
                 ||  zhong_ob->is_busy() || zhong_ob->is_fighting() )
                        return;
-        }  else zhong_ob = new(SGNPCS + "zhong.c");
+        }  else zhong_ob = new(SGNPCS + "zhong.lpc");
 
         ob = leaver[random(sizeof(leaver))];
 
         message("vision",
-                zhong_ob->name() + "¼±¼±Ã¦Ã¦µØÀë¿ªÁË¡£\n",
+                zhong_ob->name() + "æ€¥æ€¥å¿™å¿™åœ°ç¦»å¼€äº†ã€‚\n",
                 environment(zhong_ob), ({zhong_ob}));
         zhong_ob->move(environment(ob));
-        message_vision("\n$N×ßÁË¹ýÀ´¡£\n", zhong_ob);
+        message_vision("\n$Nèµ°äº†è¿‡æ¥ã€‚\n", zhong_ob);
         zhong_ob->set_leader(ob);
         zhong_ob->set("sgwork/persuaded", 1);
 
@@ -81,10 +81,10 @@ void persuade_leave(object zhong_ob, object ob)
         if( !zhong_ob->query_temp("yield") )
                 zhong_ob->set_temp("yield", 1);
 
-        message_vision("\n$N¶Ô$n¿à¿à¹æÈ°µÀ£º¼ÈÈ»½ÌÖ÷²»ÔÙÐÅÈÎÄã£¬Äã»¹ÊÇ¾¡¿ìÀë¿ªÉñÁú½Ì°É¡£\n", zhong_ob, ob);
+        message_vision("\n$Nå¯¹$nè‹¦è‹¦è§„åŠé“ï¼šæ—¢ç„¶æ•™ä¸»ä¸å†ä¿¡ä»»ä½ ï¼Œä½ è¿˜æ˜¯å°½å¿«ç¦»å¼€ç¥žé¾™æ•™å§ã€‚\n", zhong_ob, ob);
         if( !ob->query_temp("zhong/nod") )
                 ob->set_temp("zhong/nod", 1);
-        tell_object(ob, "ÄãÖ»Òª´òÒ»¸öÖ¸Áî£ºleave shenlong£¬¾ÍËãÀë¿ªÉñÁúÁË¡£\n");
+        tell_object(ob, "ä½ åªè¦æ‰“ä¸€ä¸ªæŒ‡ä»¤ï¼šleave shenlongï¼Œå°±ç®—ç¦»å¼€ç¥žé¾™äº†ã€‚\n");
         ob->add_temp("sg/zhong_persuade", 1);
 
         if( ob->query_temp("sg/zhong_persuade") > 3 ) {
@@ -104,7 +104,7 @@ void message_hong(object *spys)
         if( sizeof(discarder = filter_array(spys, "is_discarding", this_object())) < 1 )
                 return;
 
-        obj = filter_array(children(SGNPCS + "hong.c"), (: clonep :));
+        obj = filter_array(children(SGNPCS + "hong.lpc"), (: clonep :));
         if( !sizeof(obj) ) return;
 
         hong_ob = obj[0];
@@ -127,10 +127,10 @@ void message_hong(object *spys)
         ||  strsrch(file, "/d/xiakedao/") == 0 )  return;
 
         message("vision",
-                hong_ob->name() + "¼±¼±Ã¦Ã¦µØÀë¿ªÁË¡£\n",
+                hong_ob->name() + "æ€¥æ€¥å¿™å¿™åœ°ç¦»å¼€äº†ã€‚\n",
                 environment(hong_ob), ({hong_ob}));
         hong_ob->move(dest);
-        message_vision("\n$N×ßÁË¹ýÀ´¡£\n", hong_ob);
+        message_vision("\n$Nèµ°äº†è¿‡æ¥ã€‚\n", hong_ob);
         hong_ob->set_leader(ob);
         "/cmds/std/look"->main(hong_ob, ob->query("id"));
         hong_ob->set("sgwork/chased", 1);
@@ -169,7 +169,7 @@ void do_killing(object hong_ob, object ob)
                 return;
         }
 
-        message_vision(RED"\n$N¶Ô$n´óÉùºÈµÀ£º" + RANK_D->query_rude(ob) + "£¡ÔÚÌÖÐÕâÃ´¶àÄê¾ÓÈ»ºÁÎÞ½¨Ê÷£¬ÎÒ·ÏÁËÄã°É£¡£¡£¡\n\n"NOR, hong_ob, ob);
+        message_vision(RED"\n$Nå¯¹$nå¤§å£°å–é“ï¼š" + RANK_D->query_rude(ob) + "ï¼åœ¨è®¨å§“é¥·ç‚Šå—„æ˜ƒå°¤ç¼“å»–è—¿ã„Šé³Žîƒ©æ›³ç‹­å››æƒ†æ¡‘ã€‚ã€‚î“¢n\n"NOR, hong_ob, ob);
         hong_ob->kill_ob(ob);
         call_out("check_killing", 1, hong_ob, ob);
 }

@@ -14,14 +14,14 @@ int	protect_job(object master,object player,mapping job)
 	room_name=get_room(area);
 	if(!room_name)
 		{
-//		printf("·¿¼äÃ»ÓÐÕÒµ½£¬ÇëÁªÏµwiz.\n");
+//		printf("æˆ¿é—´æ²¡æœ‰æ‰¾åˆ°ï¼Œè¯·è”ç³»wiz.\n");
 		return 0;
 		}
 	if(!room=find_object(room_name))
 		room=load_object(room_name);
 	if(!objectp(room))
 		{
-//		printf("·¿¼ä%s´´½¨´íÎó£¬ÇëÁªÏµwiz.\n",room_name);
+//		printf("æˆ¿é—´%såˆ›å»ºé”™è¯¯ï¼Œè¯·è”ç³»wiz.\n",room_name);
 		return 0;
 		}
 	//confirm room area by region.
@@ -68,15 +68,15 @@ void out_protecter(object player,object place)
 	//killer->set_status(player);
 	protect->move(environment(player));
 	
-	message("vision", HIW"Ò»¸ö"+protect->name(1)+"×ßÁË¹ýÀ´¡£¶ÔÄã±§È­µÀ£º¡°"+player->name(1)+"£¬ÓÐÀÍÄúÁË¡£\n"
-		"½øÀ´½­ºþÐ°ÅÉÊÆÁ¦²þâ±£¬ÓÐÐÒµÃÄú»¤ËÍ£¬ÔÚÏÂÎÞÊ¤ÈÙÐÒ¡£	¡±\n"NOR, environment(player), protect);
+	message("vision", HIW"ä¸€ä¸ª"+protect->name(1)+"èµ°äº†è¿‡æ¥ã€‚å¯¹ä½ æŠ±æ‹³é“ï¼šâ€œ"+player->name(1)+"ï¼Œæœ‰åŠ³æ‚¨äº†ã€‚\n"
+		"è¿›æ¥æ±Ÿæ¹–é‚ªæ´¾åŠ¿åŠ›çŒ–ç—ï¼Œæœ‰å¹¸å¾—æ‚¨æŠ¤é€ï¼Œåœ¨ä¸‹æ— èƒœè£å¹¸ã€‚	â€\n"NOR, environment(player), protect);
 	player->set("job_system/protect",1);
 	protect->set("player_name",player->query("id");
 
 
 	}
 	else
-		tell_object(player,HIW"Ô½×ßÔ½Ô¶ÁË£¬Äã¶Ô×Ô¼º°µ°µµÄËµµÀ......\n"NOR);
+		tell_object(player,HIW"è¶Šèµ°è¶Šè¿œäº†ï¼Œä½ å¯¹è‡ªå·±æš—æš—çš„è¯´é“......\n"NOR);
 
 	return ;
 
@@ -88,7 +88,7 @@ int job_protect_start(object player)
 	
 	if(player->query_temp("job_system/start_prompt"))
 		return 1;
-	tell_object(player,HIW"¡°Ó¦¸Ã¾ÍÊÇÕâÀïÁË¡£¡±ÄãÐÄÏÂ×ÁÄ¥×Å......\n"NOR);
+	tell_object(player,HIW"â€œåº”è¯¥å°±æ˜¯è¿™é‡Œäº†ã€‚â€ä½ å¿ƒä¸‹ç¢ç£¨ç€......\n"NOR);
 	player->set_temp("job_system/start_prompt",1);
 	remove_call_out("out_protecter");
 	call_out( "out_protecter",10,player,environment(player)); 

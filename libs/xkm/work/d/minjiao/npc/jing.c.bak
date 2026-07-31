@@ -1,5 +1,5 @@
 //Cracked by Roath
-// jing.c Èñ½ğÆì½ÌÍ½
+// jing.c é”é‡‘æ——æ•™å¾’
 
 #include <ansi.h>
 inherit NPC;
@@ -7,12 +7,12 @@ string check();
 
 void create()
 {
-	set_name("Èñ½ğÆì½ÌÍ½", ({"jing jiaotu","jiaotu"}));
+	set_name("é”é‡‘æ——æ•™å¾’", ({"jing jiaotu","jiaotu"}));
 	set("long", 
 		"\n"
 		"\n");
 	set("age",  random(20)+25);
-	set("gender", "ÄĞĞÔ");
+	set("gender", "ç”·æ€§");
 	set("long", "\n");
 	set("attitude", "heroism");
 
@@ -31,8 +31,8 @@ void create()
 	set_temp("apply/damage", 20);
 	set_temp("apply/armor", 40);
         set("inquiry", ([
-                "°ÚÕó" : (: check :),
-                "·É¸«Õó" : (: check :),
+                "æ‘†é˜µ" : (: check :),
+                "é£æ–§é˜µ" : (: check :),
         ]) );
 
         set("chat_chance_combat", 10);
@@ -47,22 +47,22 @@ string check()
 	object me = this_object();
         mapping fam;
         if (mapp(fam = ob->query("family")) 
-		&& fam["family_name"] != "Ã÷½Ì" )
+		&& fam["family_name"] != "æ˜æ•™" )
         {
-		return RANK_D->query_respect(ob) + "²¢·ÇÎÒ½ÌÖĞÈË£¬Ôõ¿ÉÒÔÑ§ÎÒµÈ°ÚÕó¡£";
+		return RANK_D->query_respect(ob) + "å¹¶éæˆ‘æ•™ä¸­äººï¼Œæ€å¯ä»¥å­¦æˆ‘ç­‰æ‘†é˜µã€‚";
         }
 	if (ob->query_skill("feifu-zhen") < 50)
 	{	
-		return RANK_D->query_respect(ob) + "µÄ·É¸«Õó»¹Ñ§µÄ²»¾«£¬»¹Ã»·¨²¼ÕóÄØ£¬¿ì»ØÈ¥¶àÑ§Ñ§°É£¡\n";
+		return RANK_D->query_respect(ob) + "çš„é£æ–§é˜µè¿˜å­¦çš„ä¸ç²¾ï¼Œè¿˜æ²¡æ³•å¸ƒé˜µå‘¢ï¼Œå¿«å›å»å¤šå­¦å­¦å§ï¼\n";
 	}
 	if (!(present("bai qi", ob)))
 	{	
-		return RANK_D->query_respect(ob) + "Ã»ÓĞÁîÆìÔõÄÜ°ÚÕóÉ±µĞÄØ£¬¿ìÈ¥ÄÃ°É£¡\n";
+		return RANK_D->query_respect(ob) + "æ²¡æœ‰ä»¤æ——æ€èƒ½æ‘†é˜µæ€æ•Œå‘¢ï¼Œå¿«å»æ‹¿å§ï¼\n";
 	}
 	//ob->command("team invite jing");
         ob->add_team_member(me);
      	command("follow " + ob->query("id"));
-        return "ÎÒÃÇ×ß°Õ£¡\n";
+        return "æˆ‘ä»¬èµ°ç½¢ï¼\n";
 }
 void destroy_it(object obj)
 {

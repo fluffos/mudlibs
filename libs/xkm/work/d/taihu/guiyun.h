@@ -22,8 +22,8 @@ void init()
 	
 	remove_call_out("recruit_ob");
 	call_out("recruit_ob", 150, me);
-	tell_object(me, CYN"Äã¾õµÃÉíºóÓÐµã¹Å¹Ö£¬ËÆºõÓÐÈË¸úËæ£¿\n"NOR);
-	log_file("Taohua", sprintf("%s(%s)ÓÚ%s triggered Huang to recruit¡£\n",
+	tell_object(me, CYN"ä½ è§‰å¾—èº«åŽæœ‰ç‚¹å¤æ€ªï¼Œä¼¼ä¹Žæœ‰äººè·Ÿéšï¼Ÿ\n"NOR);
+	log_file("Taohua", sprintf("%s(%s)äºŽ%s triggered Huang to recruitã€‚\n",
                 me->query("name"), getuid(me), ctime(time())));
 	add_action("check_score", "check_score");
 }
@@ -36,7 +36,7 @@ void recruit_ob(object me)
 	obj = all_inventory(environment(me));
         for(i=0; i<sizeof(obj); i++)
         {
-                if ((string)obj[i]->query("race") == "ÈËÀà")
+                if ((string)obj[i]->query("race") == "äººç±»")
 		j++;
 	}
 	if (j > 1) return;
@@ -47,26 +47,26 @@ void recruit_ob(object me)
 	me->start_busy(1);
 	ob->move(environment(me));
 
-	message_vision("$NÇ°ÃæÍ»È»³öÏÖÁËÒ»ÈË£¬Éí²Ä¸ßÊÝ£¬Éí´©ÇàÉ«²¼ÅÛ£¬Á³É«¹Å¹ÖÖ®¼«£¬Á½¿ÅÑÛÖéËÆºõÉÐÄÜ
-Î¢Î¢×ª¶¯£¬³ý´ËÖ®Íâ£¬¼¡Èâ¿Ú±Ç£¬¾¡½Ô½©Ó²ÈçÄ¾Ê¯£¬Ö±ÊÇÒ»¸öËÀÈËÍ·×°ÔÚ»îÈËµÄÇûÌåÉÏ¡£\n\n", me);
-	message_vision("$NÒ»¼ûÖ®ÏÂ£¬µÇÊ±Ò»ÕóÁ¹Æø´Ó±³¼¹ÉÏÖ±ÀäÏÂÀ´£¬Ä¿¹âÓëÕâÕÅÁ³¿×Ïà´¥£¬±ã¶¼²»¸ÒÔÙ¿´£¬Á¢Ê±½«
-Í·×ª¿ª£¬ÐÄÖÐâñÈ»¶ø¶¯£ºÄª·ÇÕâ¾ÍÊÇ×æÊ¦Ò¯Ò¯£¬½­ºþÖÐ´«ÎÅµÄÌÒ»¨µºÖ÷£¿ Ã¦ÉÏÇ°¹§¹§¾´¾´
-µÄ¿ÄÁËËÄ¸öÍ·£¬ËµµÀ£º¡°Ëï¶ùßµ¼ûÊ¦×æ¡£¡±»ÆÒ©Ê¦µÀ£º¡°°ÕÁË£¡¡±²¢²»¸©ÉíÏà·ö£¬È´Éì×óÊÖ
-×¥×¡$NºóÐÄÒ»Ìá£¬ÓÒÕÆ±ãÏò$N¼çÍ·ÅÄÏÂ¡£¡£¡£\n", me);
-	message_vision("$NÒ»¼û²»Ãî£¬À´²»¼°Ï¸Ïë£¬¸Ï½ôÉíÐÎ¼²ÉÁ£¬Ê¹³öÒ»ÕÐ¡°º£ÑàÌÚ¿Õ¡±£¬ÉíÌåÈçÍ¬Îªº£·çËù¼¤£¬ÏòºóÆ®¿ªÒ»ÕÉÓÐÓà¡£\n\n", me);
-	message_vision("»ÆÒ©Ê¦Î¢Ò»ã¶£¬ºßÁËÒ»ÉùµÀ£º"+RANK_D->query_rude(me)+"È´ÓÐ¼¸·Ö×ÊÖÊ£¬ÎÒ¾Í³ÉÈ«Äã°É¡£\n", me);
+	message_vision("$Nå‰é¢çªç„¶å‡ºçŽ°äº†ä¸€äººï¼Œèº«æé«˜ç˜¦ï¼Œèº«ç©¿é’è‰²å¸ƒè¢ï¼Œè„¸è‰²å¤æ€ªä¹‹æžï¼Œä¸¤é¢—çœ¼ç ä¼¼ä¹Žå°šèƒ½
+å¾®å¾®è½¬åŠ¨ï¼Œé™¤æ­¤ä¹‹å¤–ï¼Œè‚Œè‚‰å£é¼»ï¼Œå°½çš†åƒµç¡¬å¦‚æœ¨çŸ³ï¼Œç›´æ˜¯ä¸€ä¸ªæ­»äººå¤´è£…åœ¨æ´»äººçš„èº¯ä½“ä¸Šã€‚\n\n", me);
+	message_vision("$Nä¸€è§ä¹‹ä¸‹ï¼Œç™»æ—¶ä¸€é˜µå‡‰æ°”ä»ŽèƒŒè„Šä¸Šç›´å†·ä¸‹æ¥ï¼Œç›®å…‰ä¸Žè¿™å¼ è„¸å­”ç›¸è§¦ï¼Œä¾¿éƒ½ä¸æ•¢å†çœ‹ï¼Œç«‹æ—¶å°†
+å¤´è½¬å¼€ï¼Œå¿ƒä¸­æ€¦ç„¶è€ŒåŠ¨ï¼šèŽ«éžè¿™å°±æ˜¯ç¥–å¸ˆçˆ·çˆ·ï¼Œæ±Ÿæ¹–ä¸­ä¼ é—»çš„æ¡ƒèŠ±å²›ä¸»ï¼Ÿ å¿™ä¸Šå‰æ­æ­æ•¬æ•¬
+çš„ç£•äº†å››ä¸ªå¤´ï¼Œè¯´é“ï¼šâ€œå­™å„¿å©è§å¸ˆç¥–ã€‚â€é»„è¯å¸ˆé“ï¼šâ€œç½¢äº†ï¼â€å¹¶ä¸ä¿¯èº«ç›¸æ‰¶ï¼Œå´ä¼¸å·¦æ‰‹
+æŠ“ä½$NåŽå¿ƒä¸€æï¼Œå³æŽŒä¾¿å‘$Nè‚©å¤´æ‹ä¸‹ã€‚ã€‚ã€‚\n", me);
+	message_vision("$Nä¸€è§ä¸å¦™ï¼Œæ¥ä¸åŠç»†æƒ³ï¼Œèµ¶ç´§èº«å½¢ç–¾é—ªï¼Œä½¿å‡ºä¸€æ‹›â€œæµ·ç‡•è…¾ç©ºâ€ï¼Œèº«ä½“å¦‚åŒä¸ºæµ·é£Žæ‰€æ¿€ï¼Œå‘åŽé£˜å¼€ä¸€ä¸ˆæœ‰ä½™ã€‚\n\n", me);
+	message_vision("é»„è¯å¸ˆå¾®ä¸€æ„£ï¼Œå“¼äº†ä¸€å£°é“ï¼š"+RANK_D->query_rude(me)+"å´æœ‰å‡ åˆ†èµ„è´¨ï¼Œæˆ‘å°±æˆå…¨ä½ å§ã€‚\n", me);
 	
-	message_vision("\n$NÏëÒªÊÕ$nÎªµÜ×Ó¡£\n", ob, me);
-        tell_object(me, YEL "Èç¹ûÄãÔ¸Òâ°Ý" + me->name() + "ÎªÊ¦¸¸£¬ÓÃ apprentice Ö¸Áî¡£\n" NOR);
+	message_vision("\n$Næƒ³è¦æ”¶$nä¸ºå¼Ÿå­ã€‚\n", ob, me);
+        tell_object(me, YEL "å¦‚æžœä½ æ„¿æ„æ‹œ" + me->name() + "ä¸ºå¸ˆçˆ¶ï¼Œç”¨ apprentice æŒ‡ä»¤ã€‚\n" NOR);
 	me->set_temp("huang_recr", 1);
-	log_file("Taohua", sprintf("%s(%s)ÓÚ%s be attempted to recruit by Huang¡£\n",
+	log_file("Taohua", sprintf("%s(%s)äºŽ%s be attempted to recruit by Huangã€‚\n",
                 me->query("name"), getuid(me), ctime(time())));
 	call_out("finish_recr", 30, me, ob);
 }
 void finish_recr(object me, object ob)
 {
 	if (me->query("family/master_id") != "huang yaoshi"){
-	message_vision("$NÀäÐ¦Ò»Éù£º"+RANK_D->query_rude(me)+"¾ÓÈ»ÓÐ¼¸·Ö³ô¼Ü×Ó¡£ËµÍêÆ®È»¶øÈ¥¡£\n", ob);
+	message_vision("$Nå†·ç¬‘ä¸€å£°ï¼š"+RANK_D->query_rude(me)+"å±…ç„¶æœ‰å‡ åˆ†è‡­æž¶å­ã€‚è¯´å®Œé£˜ç„¶è€ŒåŽ»ã€‚\n", ob);
 	me->delete_temp("huang_recr");
 	destruct(ob);
 	}
@@ -80,7 +80,7 @@ int check_score(string who)
 
 	player = this_player();
 	if (!wizardp(player))
-		return notify_fail("Ê²Ã´£¿\n");
+		return notify_fail("ä»€ä¹ˆï¼Ÿ\n");
 	me = find_player(who);
 
 	if (!me) return 0;

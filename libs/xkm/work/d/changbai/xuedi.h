@@ -10,8 +10,8 @@ void init()
         int myforce = (int)me->query_skill("force", 1);
 
         if( !present("pi qiu", me) && myforce < 100 ) { 
-                message_vision(HIR"\nÒ»¹É´Ì¹ÇµÄº®·ç´µ¹ý£¬$NÖ»¾õµÃ»ëÉíµÄÑªÒº¶¼¿ì±»¶³×¡ÁË£¡\n"NOR, me);
-//              write("¿´À´²»´©Ò»¼þ±£Å¯µÄÍâÒÂ£¬Ò»¶¨»á±»¶³ËÀµÄ£¡\n");
+                message_vision(HIR"\nä¸€è‚¡åˆºéª¨çš„å¯’é£Žå¹è¿‡ï¼Œ$Nåªè§‰å¾—æµ‘èº«çš„è¡€æ¶²éƒ½å¿«è¢«å†»ä½äº†ï¼\n"NOR, me);
+//              write("çœ‹æ¥ä¸ç©¿ä¸€ä»¶ä¿æš–çš„å¤–è¡£ï¼Œä¸€å®šä¼šè¢«å†»æ­»çš„ï¼\n");
                 if( (int)me->query("neili") > 3 ) {
                         if( myforce >= 30 )
                                 me->improve_skill("force", random(10));

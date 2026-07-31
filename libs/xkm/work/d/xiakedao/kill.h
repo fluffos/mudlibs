@@ -8,15 +8,15 @@ int do_kill(string arg)
 	object killer;
 	object me = this_player();
 	if( !arg )
-		return notify_fail("你想杀谁？\n");
+		return notify_fail("浣犳兂鏉�璋侊紵\n");
       if( environment(me)->query("no_fight") )
-		return notify_fail("这里不能打架。\n");
+		return notify_fail("杩欓噷涓嶈兘鎵撴灦銆俓n");
 	if(!objectp(target = present(arg, environment(me))))
-		return notify_fail("这里没有这个人。\n");
+		return notify_fail("杩欓噷娌℃湁杩欎釜浜恒�俓n");
 	if(me == target)
 		return 0;
 	if( !target->is_character() || target->is_corpse() )
-		return notify_fail("看清楚一点，那并不是活物。\n");
+		return notify_fail("鐪嬫竻妤氫竴鐐癸紝閭ｅ苟涓嶆槸娲荤墿銆俓n");
 
 	if( !userp(target) )
 	{	return 0;
@@ -25,7 +25,7 @@ int do_kill(string arg)
 	killer=new(__DIR__"npc/dizi");
 	killer->set("xkd/killer", me->query("id"));
 	killer->move(environment(target));
-	message_vision("$N走了过来。\n" NOR, killer);
+	message_vision("$N璧颁簡杩囨潵銆俓n" NOR, killer);
 	*/
 	return 0;
 }

@@ -1,8 +1,8 @@
 //Cracked by Kafei
 //author wzfeng@xkx 2000 6
-//job_system µÄÒ»Ğ©¸½¼Óº¯Êı
+//job_system çš„ä¸€äº›é™„åŠ å‡½æ•°
 
-static string *cleanup_filename=({"job_data","job_menpai",});
+nosave string *cleanup_filename=({"job_data","job_menpai",});
 
 void clean_up_job_object()
 {
@@ -13,7 +13,7 @@ void clean_up_job_object()
 	ob_list=children(JOB_DIR+cleanup_filename[j]);
 	i=sizeof(ob_list);
 //	if( wizardp(this_player()) && (string)this_player()->query("env/job_system")=="open" )
-	//printf("ÎÄ¼ş%sµÄcloneÒ»¹²ÓĞ%d¸ö\n",JOB_DIR+cleanup_filename[j],i);
+	//printf("æ–‡ä»¶%sçš„cloneä¸€å…±æœ‰%dä¸ª\n",JOB_DIR+cleanup_filename[j],i);
 	if(i>1)
 	{
 		i=i-1;
@@ -22,7 +22,7 @@ void clean_up_job_object()
  {
       reset_eval_cost();
 //	if( wizardp(this_player()) && (string)this_player()->query("env/job_system")=="open" )
-//printf("É¾³ı%O\n",JOB_DIR+cleanup_filename[j],ob_list[i]);
+//printf("åˆ é™¤%O\n",JOB_DIR+cleanup_filename[j],ob_list[i]);
       
       destruct(ob_list[i]);
     }
@@ -39,16 +39,16 @@ void job_tell_player(object player)
 	mapping job_data_message;
 	int i;
 	object room_master;
-	state="´«»°";
+	state="ä¼ è¯";
 	msg="";
 	area_name=explode(file_name(environment(player)), "/")[1];
 	menpai_name=player->query("family/family_name");
 	if(undefinedp(family_master_place[menpai_name]))
 	{
-		write("ÃÅÅÉ"+menpai_name+"Ã»ÓĞ¶¨Òå\n");
+		write("é—¨æ´¾"+menpai_name+"æ²¡æœ‰å®šä¹‰\n");
 		return;
 	}
-	//µÃµ½ÏàÓ¦ÃÅÅÉËùÔÚµÄÄ¿Â¼Ãû³Æ
+	//å¾—åˆ°ç›¸åº”é—¨æ´¾æ‰€åœ¨çš„ç›®å½•åç§°
 	menpai_place=explode(family_master_place[menpai_name], "/")[1];
 	master_place_full=family_master_place[menpai_name];
 	master_name=explode(family_master[menpai_name], "/")[0];
@@ -93,14 +93,14 @@ void job_tell_player(object player)
 	//if master not in that place, return.
 	if(!objectp(master = present(master_id,room_master)))
 		return;
-	msg=HIW"\nÒ»¸ö"+menpai_name+"µÜ×Ó×ßÁË¹ıÀ´,¶Ô$N±¨È­µÀ£º¡°";
+	msg=HIW"\nä¸€ä¸ª"+menpai_name+"å¼Ÿå­èµ°äº†è¿‡æ¥,å¯¹$NæŠ¥æ‹³é“ï¼šâ€œ";
 	
 	if(area_name==menpai_place)
-		msg += master_name+"ÓĞÊÂÕÙ¼û£¬ÇëÄãËÙÈ¥"+room_master->query("short")+"¡±¡£\n";
+		msg += master_name+"æœ‰äº‹å¬è§ï¼Œè¯·ä½ é€Ÿå»"+room_master->query("short")+"â€ã€‚\n";
 	else
-		msg += "ÔÚÏÂ·î"+master_name+"Ö®Ãü£¬ÇëÄãËÙ»Ø"+menpai_c_place+"½ø¼û¡±¡£\n";
-	msg+=menpai_name+"µÜ×ÓËµµÀ:"+"¡°"+explode(family_master[menpai_name], "/")[1]+"¿ÚÑµÎÒÒÑ´«µ½£¬¸æ´ÇÁË!¡±\n"+
-		menpai_name+"µÜ×Ó×ßÁË³öÈ¥\n"NOR;
+		msg += "åœ¨ä¸‹å¥‰"+master_name+"ä¹‹å‘½ï¼Œè¯·ä½ é€Ÿå›"+menpai_c_place+"è¿›è§â€ã€‚\n";
+	msg+=menpai_name+"å¼Ÿå­è¯´é“:"+"â€œ"+explode(family_master[menpai_name], "/")[1]+"å£è®­æˆ‘å·²ä¼ åˆ°ï¼Œå‘Šè¾äº†!â€\n"+
+		menpai_name+"å¼Ÿå­èµ°äº†å‡ºå»\n"NOR;
 	message_vision(msg, player);
 
 	//set_player_var(job_player,strategy_produce,master_id,family_master_place[menpai_name],state,master_name);
@@ -222,7 +222,7 @@ void master_tell_player(object player)
 	//printf("%s\t%s\n",job_map["job_player"],job_map["job_master"]);
 	return;
 }
-//ÃÅÅÉÈÎÎñÍê³ÉÊı¾İµ÷Õû¡£
+//é—¨æ´¾ä»»åŠ¡å®Œæˆæ•°æ®è°ƒæ•´ã€‚
 void adjust_menpai_job_data(object player,string kind)
 {
 	string menpai_name;
@@ -266,19 +266,19 @@ void award_job(int exp_lim,int pot_lim,int time1,int time2,int luck,
 			if((pot_lim+pot)>max_pot)
 			{
 				player->set("potential",player->query("max_potential"));
-				tell_object(player,"ÄãµÄÇ±ÄÜÉÏÏŞÂúÁË¡£"+pot_lim+"µã\n");
+				tell_object(player,"ä½ çš„æ½œèƒ½ä¸Šé™æ»¡äº†ã€‚"+pot_lim+"ç‚¹\n");
 			}
 			else
 			{
 				player->add("potential",pot_lim);
-				tell_object(player,"ÄãµÄÇ±ÄÜÉÏÉıÁË"+pot_lim+"µã\n");
+				tell_object(player,"ä½ çš„æ½œèƒ½ä¸Šå‡äº†"+pot_lim+"ç‚¹\n");
 			}
 			player->add("combat_exp",exp_lim);
-			tell_object(player,"ÄãµÄ¾­ÑéÉÏÉıÁË"+exp_lim+"µã\n");
+			tell_object(player,"ä½ çš„ç»éªŒä¸Šå‡äº†"+exp_lim+"ç‚¹\n");
 			if(random(30)==1&&time<300)
 			{
 				player->add("max_neili",1);
-				tell_object(player,"ÄãµÄ×î´óÄÚÁ¦ÉÏÉıÁË1µã\n");
+				tell_object(player,"ä½ çš„æœ€å¤§å†…åŠ›ä¸Šå‡äº†1ç‚¹\n");
 				neili=1;
 			}
 			else
@@ -286,14 +286,14 @@ void award_job(int exp_lim,int pot_lim,int time1,int time2,int luck,
 					{
 					player->add("eff_jingli", 1);
                     player->add("max_jingli", 1);
-					tell_object(player,"ÄãµÄ×î´ó¾«Á¦ÉÏÉıÁË1µã\n");
+					tell_object(player,"ä½ çš„æœ€å¤§ç²¾åŠ›ä¸Šå‡äº†1ç‚¹\n");
 					jingli=1;
 					}
 			log_file( "test/jobsystem_award",
 		player->query("name")+
-		"("+player->query("id")+")ÔÚ"+time+"ÃëÄÚÍê³ÉÈÎÎñ»ñµÃexp " +exp_lim+"Ç±ÄÜ "+pot_lim+"×î´óÄÚÁ¦"+neili+"µã"+
-		"×î´ó¾«Á¦"+jingli+
-		" on " 	+ ctime(time()) + "¡£\n" );
+		"("+player->query("id")+")åœ¨"+time+"ç§’å†…å®Œæˆä»»åŠ¡è·å¾—exp " +exp_lim+"æ½œèƒ½ "+pot_lim+"æœ€å¤§å†…åŠ›"+neili+"ç‚¹"+
+		"æœ€å¤§ç²¾åŠ›"+jingli+
+		" on " 	+ ctime(time()) + "ã€‚\n" );
 			adjust_menpai_job_data(player,"oppose_pker");
 			
 			}
@@ -310,12 +310,12 @@ void job_punish(object player,string job_kind)
 	switch(job_kind)
 	{
 	case "oppose_pker":
-		tell_object(player,HIB"°¦£¡Äãµ¢ÎóµÄÊ±¼äÌ«¾ÃÁË£¬Õâ´ÎÈÎÎñÈ¡ÏûÁË¡£\n"NOR);
+		tell_object(player,HIB"å”‰ï¼ä½ è€½è¯¯çš„æ—¶é—´å¤ªä¹…äº†ï¼Œè¿™æ¬¡ä»»åŠ¡å–æ¶ˆäº†ã€‚\n"NOR);
 		if(player->query("job_system_fail/oppose_pker")>2)
 		{
-//			tell_object(player,"ÄãµÄ¾­ÑéÏÂ½µÁË"+OPPOSE_DROP_EXP+"µã¡£\n");
+//			tell_object(player,"ä½ çš„ç»éªŒä¸‹é™äº†"+OPPOSE_DROP_EXP+"ç‚¹ã€‚\n");
 			player->delete("job_system_fail/oppose_pker");
-			tell_object(player,"ÄãµÄÃÅÅÉĞÅÈÎ¶ÈÏÂ½µÁË"+OPPOSE_DROP_CON+"µã¡£\n");
+			tell_object(player,"ä½ çš„é—¨æ´¾ä¿¡ä»»åº¦ä¸‹é™äº†"+OPPOSE_DROP_CON+"ç‚¹ã€‚\n");
 //			player->add("combat_exp",-OPPOSE_DROP_EXP);
 			adjust_menpai_job_data(player,"OPPOSE_DROP_CON");
 
@@ -329,9 +329,9 @@ void job_punish(object player,string job_kind)
 		
 		if(player->query("job_system_fail/mastercall_in")!=1002)
 		{
-//			tell_object(player,"ÄãµÄ¾­ÑéÏÂ½µÁË"+MASTER_CALL_IN_EXP+"µã¡£\n");
+//			tell_object(player,"ä½ çš„ç»éªŒä¸‹é™äº†"+MASTER_CALL_IN_EXP+"ç‚¹ã€‚\n");
 			player->delete("job_system_fail/mastercall_in");
-			tell_object(player,"ÄãµÄÃÅÅÉĞÅÈÎ¶ÈÏÂ½µÁË"+MASTER_CALL_IN_CON+"µã¡£\n");
+			tell_object(player,"ä½ çš„é—¨æ´¾ä¿¡ä»»åº¦ä¸‹é™äº†"+MASTER_CALL_IN_CON+"ç‚¹ã€‚\n");
 //			player->add("combat_exp",-MASTER_CALL_IN_EXP);
 			adjust_menpai_job_data(player,"MASTER_CALL_IN_CON");
 
@@ -342,12 +342,12 @@ void job_punish(object player,string job_kind)
 		}
 		break;
 	case "finish_job":
-		tell_object(player,HIB"°¦£¡Äãµ¢ÎóµÄÊ±¼äÌ«¾ÃÁË£¬Õâ´ÎÈÎÎñÈ¡ÏûÁË¡£\n"NOR);
+		tell_object(player,HIB"å”‰ï¼ä½ è€½è¯¯çš„æ—¶é—´å¤ªä¹…äº†ï¼Œè¿™æ¬¡ä»»åŠ¡å–æ¶ˆäº†ã€‚\n"NOR);
 		if(player->query("job_system_fail/finish_job")>2)
 		{
-//			tell_object(player,"ÄãµÄ¾­ÑéÏÂ½µÁË"+FINISH_JOB_EXP+"µã¡£\n");
+//			tell_object(player,"ä½ çš„ç»éªŒä¸‹é™äº†"+FINISH_JOB_EXP+"ç‚¹ã€‚\n");
 			player->delete("job_system_fail/mastercall_in");
-			tell_object(player,"ÄãµÄÃÅÅÉĞÅÈÎ¶ÈÏÂ½µÁË"+FINISH_JOB_CON+"µã¡£\n");
+			tell_object(player,"ä½ çš„é—¨æ´¾ä¿¡ä»»åº¦ä¸‹é™äº†"+FINISH_JOB_CON+"ç‚¹ã€‚\n");
 //			player->add("combat_exp",-FINISH_JOB_EXP);
 			adjust_menpai_job_data(player,"FINISH_JOB_CON");
 

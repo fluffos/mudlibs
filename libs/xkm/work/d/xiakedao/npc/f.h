@@ -12,12 +12,12 @@ int do_find(string item)
         if (!temp->query_temp("xkd/give"))
         {       return 0;       }
         if ((int)temp->query("combat_exp") < 10000)
-        {       command("say Ð¡º¢×ÓÕÒÄÇ÷á¹óÖØµÄ¶«Î÷¸ÉÂï£¬Äã´óÒ»µãÔÙÀ´°É¡£");
+        {       command("say å°å­©å­æ‰¾é‚£éº½è´µé‡çš„ä¸œè¥¿å¹²å˜›ï¼Œä½ å¤§ä¸€ç‚¹å†æ¥å§ã€‚");
                 call_out("do_return", 0, ling, temp);
                 return 1;
         }
         if ((int)temp->query("xkd/find") == 1 ) 
-        {       command("say ÎÒÒÑ¾­°ï¹ýÄãÁË£¬²»ÄÜÔÙ°ïÄãÁË¡£");
+        {       command("say æˆ‘å·²ç»å¸®è¿‡ä½ äº†ï¼Œä¸èƒ½å†å¸®ä½ äº†ã€‚");
 	          this_object()->delete_temp("xkd/busy");
   		    destruct(ling);
                 return 1;
@@ -26,21 +26,21 @@ int do_find(string item)
         helpee = temp;
         iNum = item_num(item);
         if (iNum == -1)
-        {       command("say ÄãÒªÕÒµÄ¶«Î÷£¬ºÃÏñ²»´æÔÚ¡£");
+        {       command("say ä½ è¦æ‰¾çš„ä¸œè¥¿ï¼Œå¥½åƒä¸å­˜åœ¨ã€‚");
                 call_out("do_return", 0, ling, helpee);
                 helpee->delete_temp("xkd/give");
                 return 1;
         }
         list = children(items[iNum]);
         if (sizeof(list) == 0)
-        {       command("say ÄãÒªÕÒ¶«Î÷£¬ºÃÏñÃ»ÓÐ¡£");
+        {       command("say ä½ è¦æ‰¾ä¸œè¥¿ï¼Œå¥½åƒæ²¡æœ‰ã€‚");
                 call_out("do_return", 0, ling, helpee);
                 helpee->delete_temp("xkd/give");
                 return 1;
         }
         it = list[0];
         if (!holder = environment(it)) 
-        {       command("say ÄãÒªÕÒ¶«Î÷£¬ºÃÏñÃ»ÓÐ¡£");
+        {       command("say ä½ è¦æ‰¾ä¸œè¥¿ï¼Œå¥½åƒæ²¡æœ‰ã€‚");
                 call_out("do_return", 0, ling, helpee);
                 helpee->delete_temp("xkd/give");
                 return 1;
@@ -52,25 +52,25 @@ int do_find(string item)
         {       holdee = holder;
         }
         if (!userp(holdee) && !holdee->is_trainee())
-        {       command("say " + item + "Îï¹éÔ­Ö÷£¬ÎÒÔõÄÜ°ïÄãÈ¥°ÑËü¸ãÀ´¡£");
+        {       command("say " + item + "ç‰©å½’åŽŸä¸»ï¼Œæˆ‘æ€Žèƒ½å¸®ä½ åŽ»æŠŠå®ƒæžæ¥ã€‚");
                 call_out("do_return", 0, ling, helpee);
                 helpee->delete_temp("xkd/give");
                 return 1;
         }
         if (helpee == holdee)
-        {       command("say ÔÚÄãÉíÉÏÁË»¹ÒªÎÒÈ¥ÕÒÊ²÷áÕÒ¡£");
+        {       command("say åœ¨ä½ èº«ä¸Šäº†è¿˜è¦æˆ‘åŽ»æ‰¾ä»€éº½æ‰¾ã€‚");
                 call_out("do_return", 0, ling, helpee);
                 helpee->delete_temp("xkd/give");
                 return 1;
         }
         set_temp("xkd/busy", 1);
-        command("whisper " + helpee->query("id") + " " + item + "ÔÚ" + holdee->query("name")+"("+holder->query("id") + ")ÄÇ¡£");
+        command("whisper " + helpee->query("id") + " " + item + "åœ¨" + holdee->query("name")+"("+holder->query("id") + ")é‚£ã€‚");
         //command("say home is " + home->query("short") + " helpee is " + helpee->query("id"));
-        command("say ÄãÔÚÕâÉÔµÈ£¬ÎÒÈ¥È¥¾ÍÀ´¡£");
-	  message_vision("$N×ßÁË³öÈ¥¡£\n", helper);
+        command("say ä½ åœ¨è¿™ç¨ç­‰ï¼Œæˆ‘åŽ»åŽ»å°±æ¥ã€‚");
+	  message_vision("$Nèµ°äº†å‡ºåŽ»ã€‚\n", helper);
 
         helper->move(environment(holdee));
-	  message_vision("$N×ßÁË¹ýÀ´¡£\n", helper);
+	  message_vision("$Nèµ°äº†è¿‡æ¥ã€‚\n", helper);
         if (holder->query("id") == holdee->query("id"))
         {       command("steal " + it->query("id") + " from " + holdee->query("id"));
                 remove_call_out("do_steal");
@@ -128,11 +128,11 @@ int do_steal(object item, object whom, int count)
 }
 int do_finished(object item)
 {       object me = this_object();
-	  message_vision("$N×ßÁË³öÈ¥¡£\n", me);
+	  message_vision("$Nèµ°äº†å‡ºåŽ»ã€‚\n", me);
         me->move(environment(helpee));
-	  message_vision("$N×ßÁË¹ýÀ´¡£\n", me);
+	  message_vision("$Nèµ°äº†è¿‡æ¥ã€‚\n", me);
         if (environment(item) == me)
-        {       command("tell " + helpee->query("id") + " ×ÜËãÕÒµ½ÁË¡£");
+        {       command("tell " + helpee->query("id") + " æ€»ç®—æ‰¾åˆ°äº†ã€‚");
                 call_out("do_return", 0, item, helpee);
              command("give " + helpee->query("id") + " " + item->query("id"));
 //              command("give " + helpee->query("id") + " " + item->query("id"));
@@ -140,7 +140,7 @@ int do_finished(object item)
                 destruct(ling);
         }
         else
-        {       command("tell " + helpee->query("id") + " ¶Ô²»ÆðÃ»·¨°ïÄãÅªµ½" + item->query("name") +"¡£");
+        {       command("tell " + helpee->query("id") + " å¯¹ä¸èµ·æ²¡æ³•å¸®ä½ å¼„åˆ°" + item->query("name") +"ã€‚");
                 call_out("do_return", 0, ling, helpee);
         }
         helpee->delete_temp("xkd/give");

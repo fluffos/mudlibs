@@ -12,11 +12,11 @@ void setup_ob(object me,object victim);
 
 void create()
 {
-		  set("short","±ù¶´");
+		  set("short","å†°æ´");
 
 		  set("long",@LONG
-Õâ¸ö´ó¶´ÓÖ¸ßÓÖ¿í£¬¶´±ÚÊÇÌìÈ»»¨¸ÚÑÒµÄ£¬¶´ÄÚº®Æø±ÆÈË£¬µØÉÏ½á×ÅºñºñµÄ¼á±ù¡£
-ÄãÀäµÄ¶¼ÓĞĞ©·¢¶¶¡£
+è¿™ä¸ªå¤§æ´åˆé«˜åˆå®½ï¼Œæ´å£æ˜¯å¤©ç„¶èŠ±å²—å²©çš„ï¼Œæ´å†…å¯’æ°”é€¼äººï¼Œåœ°ä¸Šç»“ç€åšåšçš„åšå†°ã€‚
+ä½ å†·çš„éƒ½æœ‰äº›å‘æŠ–ã€‚
 LONG);
 
 		  set("exits",([
@@ -50,11 +50,11 @@ int blow()
 	if( !this_player() || !environment(this_player()) )  return 1;
 	if( base_name(environment(this_player())) != "/d/zhongnan/bingdong") return 1;
 
-	message_vision( HIW"\nÄã¾õµÃÒ»ÕóÀäÆø±ÆÀ´£¬È«ÉíµÄÑªÒº¶¼¿ì¶³½©ÁË£¡\n"NOR, this_player() );
+	message_vision( HIW"\nä½ è§‰å¾—ä¸€é˜µå†·æ°”é€¼æ¥ï¼Œå…¨èº«çš„è¡€æ¶²éƒ½å¿«å†»åƒµäº†ï¼\n"NOR, this_player() );
 
 	for ( i=0 ; i < sizeof(inv); i++)
 	{
-		if ( (string)inv[i]->query("race") == "ÈËÀà" )
+		if ( (string)inv[i]->query("race") == "äººç±»" )
 		{
 			blow_result(inv[i]);
 		}
@@ -74,7 +74,7 @@ private int blow_result(object victim)
 	{
 		ob2=new("/d/zhongnan/npc/bigtiger");
 		ob2->move(environment(victim));
-		message_vision(HIR"Í»È»´Ó¶´¿ÚÖĞ×ß½øÒ»Ö»$N£¬Ëü¿´µ½ÓĞÈË£¬Å­ºğÒ»Éù£¬·¢·èËÆµØÏò$n·¢Æğ½ø¹¥£¡\n"NOR, ob2,victim);
+		message_vision(HIR"çªç„¶ä»æ´å£ä¸­èµ°è¿›ä¸€åª$Nï¼Œå®ƒçœ‹åˆ°æœ‰äººï¼Œæ€’å¼ä¸€å£°ï¼Œå‘ç–¯ä¼¼åœ°å‘$nå‘èµ·è¿›æ”»ï¼\n"NOR, ob2,victim);
 		setup_ob(ob2,victim);
 		ob2->kill_ob(victim);
 		ob2->add_temp("offenders/"+victim->query("id"), 1);
@@ -84,16 +84,16 @@ private int blow_result(object victim)
 
 	if( random( victim->query_skill("force") ) > 45 && victim->query("neili") > 20 )
 	{
-		message_vision( HIG"\n$N¸Ï½ôÔË¹¦µÖÓù£¡\n"NOR, victim );
+		message_vision( HIG"\n$Nèµ¶ç´§è¿åŠŸæŠµå¾¡ï¼\n"NOR, victim );
 		if( victim->query_skill("force",1) < 300 )
 			victim->improve_skill( "force",victim->query("con")*2 );
 		victim->add("neili",-random(40));
 	}
 	else
 	{
-		message_vision( RED"\n$N´òÁË¸öÀä²ü£¡\n"NOR, victim );
-		victim->receive_wound("qi", random(30), "±»¶³ËÀÁË£¡");
-		victim->receive_damage("qi", random(50), "±»¶³ËÀÁË£¡");
+		message_vision( RED"\n$Næ‰“äº†ä¸ªå†·é¢¤ï¼\n"NOR, victim );
+		victim->receive_wound("qi", random(30), "è¢«å†»æ­»äº†ï¼");
+		victim->receive_damage("qi", random(50), "è¢«å†»æ­»äº†ï¼");
 		if( victim->query_skill("force",1) < 300 )
 			victim->improve_skill( "force",victim->query("con") );
 	}

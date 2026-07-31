@@ -16,7 +16,7 @@ void greeting(object me)
 			set_temp("xkd/guest", me->query("id"));
 			me->set_temp("greeted", 1);
 			command("bow " + me->query("id"));
-			command("say ÏÀ¿Íµº" + query("nickname")+"£¬·îµºÖ÷Ö®Ãü£¬¹§Ó­" + me->query("name") + "£¬Çë¸úÎÒÀ´¡£\n"+
+			command("say ä¾ å®¢å²›" + query("nickname")+"ï¼Œå¥‰å²›ä¸»ä¹‹å‘½ï¼Œæ­è¿" + me->query("name") + "ï¼Œè¯·è·Ÿæˆ‘æ¥ã€‚\n"+
 			"    "+HBRED+HIW"(follow " + query("id") +")"NOR);
 			remove_call_out("check_follow");
 			call_out("check_follow", 5, me, 0);
@@ -26,7 +26,7 @@ void greeting(object me)
 	{	if (me->query_temp("greeted") == 0)
 		{	me->set_temp("greeted", -1);
 			command("sorry " + me->query("id"));
-			command("say ÏÖÔÚ±ö¿ÍÌ«¶à£¬ÇëµÈÒ»ÏÂ¡£");
+			command("say ç°åœ¨å®¾å®¢å¤ªå¤šï¼Œè¯·ç­‰ä¸€ä¸‹ã€‚");
 		}
 		remove_call_out("greeting");
 		call_out("greeting", 1, me);
@@ -44,20 +44,20 @@ int check_follow(object me, int count)
 		return 1;
 	}
 	if ((me->query_leader() == this_object()) || (count > 0))
-	{	command("tell " + me->query("id") + " ÇëÕâ±ßÀ´");
-		message_vision("$NÀ­Æğ$nµÄÊÖ£¬ÉíĞÎÒ»ÉÁ¾Í²»ÖªÈ¥ÏòÁË¡£\n", this_object(), me);
+	{	command("tell " + me->query("id") + " è¯·è¿™è¾¹æ¥");
+		message_vision("$Næ‹‰èµ·$nçš„æ‰‹ï¼Œèº«å½¢ä¸€é—ªå°±ä¸çŸ¥å»å‘äº†ã€‚\n", this_object(), me);
 		move("/d/xiakedao/register");
 		me->move("/d/xiakedao/register");
-		message_vision("$NÀ­×Å$nµÄÊÖÉÁÁË½øÀ´¡£\n", this_object(), me);
-		command("say " + RANK_D->query_respect(me) + "ÄãÏÈÒªÔÚÕâµÇ¼ÇÏÂ¡£");
+		message_vision("$Næ‹‰ç€$nçš„æ‰‹é—ªäº†è¿›æ¥ã€‚\n", this_object(), me);
+		command("say " + RANK_D->query_respect(me) + "ä½ å…ˆè¦åœ¨è¿™ç™»è®°ä¸‹ã€‚");
 		command("bye " + me->query("id"));
-		message_vision("$NËµÍæ×ªÉí×ßÁË³öÈ¥¡£\n", this_object());
+		message_vision("$Nè¯´ç©è½¬èº«èµ°äº†å‡ºå»ã€‚\n", this_object());
 		me->set_leader("");
 		move("/d/xiakedao/shatan1");
 		set_temp("met", 0);
 	}
 	else
-	{	command("tell " + me->query("id") + " Çë¿ì¸úÎÒÀ´¡£(Çë¼üÈë"+HBRED+HIW"follow " + query("id") + NOR")");
+	{	command("tell " + me->query("id") + " è¯·å¿«è·Ÿæˆ‘æ¥ã€‚(è¯·é”®å…¥"+HBRED+HIW"follow " + query("id") + NOR")");
 		call_out("check_follow", 10, me, 1);
 	}
 	return 1;

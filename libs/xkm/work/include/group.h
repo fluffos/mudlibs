@@ -5,50 +5,50 @@
 
 #define __GROUP_H
 
-// ´æ·Å°ïÅÉÎÄ¼şµÄÄ¿Â¼£¬ÒªÇóËùÓĞÓÃ»§¿ÉÒÔr/w£¬ËùÒÔÒªĞŞ¸Äsecurityd.c
-// ÖĞµÄvalid_writeº¯Êı»òtrusted_writeÊı×é£¬Ôö¼Ó¸ÃÄ¿Â¼
+// å­˜æ”¾å¸®æ´¾æ–‡ä»¶çš„ç›®å½•ï¼Œè¦æ±‚æ‰€æœ‰ç”¨æˆ·å¯ä»¥r/wï¼Œæ‰€ä»¥è¦ä¿®æ”¹securityd.c
+// ä¸­çš„valid_writeå‡½æ•°æˆ–trusted_writeæ•°ç»„ï¼Œå¢åŠ è¯¥ç›®å½•
 #define GROUP_DIR	"/data/group/"
 
-// °ïÅÉÖĞµÄ¼¶±ğµÄ¸öÊı
+// å¸®æ´¾ä¸­çš„çº§åˆ«çš„ä¸ªæ•°
 #define GROUP_TYPE_NUM		( sizeof( group_type ) )
 
-// ¸÷ÖÖ¼¶±ğ
-#define GROUP_MASTER		5		// °ïÖ÷
-#define GROUP_VICE_MASTER	4		// ¸±°ïÖ÷
-#define GROUP_MINISTER		3		// ³¤ÀÏ
-#define GROUP_ENVOYS		2		// Ê¹Õß
-#define GROUP_FUGLE		1		// ÏãÖ÷
-#define GROUP_DISCIPLE		0		// µÜ×Ó
+// å„ç§çº§åˆ«
+#define GROUP_MASTER		5		// å¸®ä¸»
+#define GROUP_VICE_MASTER	4		// å‰¯å¸®ä¸»
+#define GROUP_MINISTER		3		// é•¿è€
+#define GROUP_ENVOYS		2		// ä½¿è€…
+#define GROUP_FUGLE		1		// é¦™ä¸»
+#define GROUP_DISCIPLE		0		// å¼Ÿå­
 
-//Ã¿¸ö¼¶±ğĞèÒªµÄexp
-#define EXP_GROUP_MASTER		1000000		// °ïÖ÷
-#define EXP_GROUP_VICE_MASTER	        800000		// ¸±°ïÖ÷
-#define EXP_GROUP_MINISTER		600000		// ³¤ÀÏ
-#define EXP_GROUP_ENVOYS		400000		// Ê¹Õß
-#define EXP_GROUP_FUGLE			200000		// ÏãÖ÷
-#define EXP_GROUP_DISCIPLE		50000		// µÜ×Ó
+//æ¯ä¸ªçº§åˆ«éœ€è¦çš„exp
+#define EXP_GROUP_MASTER		1000000		// å¸®ä¸»
+#define EXP_GROUP_VICE_MASTER	        800000		// å‰¯å¸®ä¸»
+#define EXP_GROUP_MINISTER		600000		// é•¿è€
+#define EXP_GROUP_ENVOYS		400000		// ä½¿è€…
+#define EXP_GROUP_FUGLE			200000		// é¦™ä¸»
+#define EXP_GROUP_DISCIPLE		50000		// å¼Ÿå­
 
-// Ã¿¸ö°ïÅÉ¿ÉÒÔ½¨Á¢µÄ¶«Î÷µÄ¶àÉÙ
+// æ¯ä¸ªå¸®æ´¾å¯ä»¥å»ºç«‹çš„ä¸œè¥¿çš„å¤šå°‘
 #define ITEM_MAX	40
 #define NPC_MAX		40
 #define ROOM_MAX	80
 
-// °ïÅÉÎïÆ·ĞèÒªÏûºÄµÄ»Æ½ğ
+// å¸®æ´¾ç‰©å“éœ€è¦æ¶ˆè€—çš„é»„é‡‘
 #define ROOM_COST		100
 #define BOARD_COST		1000
 #define NPC_COST		200
 
-// Íæ¼Ò°ïÅÉ×ÊÁÏ
+// ç©å®¶å¸®æ´¾èµ„æ–™
 /*
 struct group {
-group,		// °ïÅÉÓ¢ÎÄÃû³Æ
-level,		// Ö°Î»¼¶±ğ
-title,		// Í·ÏÎ
-old_title,	// ±£ÁôÒÔÇ°µÄtitle
+group,		// å¸®æ´¾è‹±æ–‡åç§°
+level,		// èŒä½çº§åˆ«
+title,		// å¤´è¡”
+old_title,	// ä¿ç•™ä»¥å‰çš„title
 };
 */
 
-// °ïÅÉ×Ü¶æ×ÊÁÏ
+// å¸®æ´¾æ€»èˆµèµ„æ–™
 /*
 */
 

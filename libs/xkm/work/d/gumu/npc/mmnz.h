@@ -19,7 +19,7 @@ void init()
                 me->set_temp("apply/attack",  random(30));
                 me->set_temp("apply/dodge",  random(50)); 
                 if (!me->query_temp("skillset")) {
-                        command("say " +"¼ÈÈ»±»Äã·¢ÏÖÐ¡Å®×ÓµÄ×Ù¼££¬ÄÃÃüÀ´°É£¡");        
+                        command("say " +"æ—¢ç„¶è¢«ä½ å‘çŽ°å°å¥³å­çš„è¸ªè¿¹ï¼Œæ‹¿å‘½æ¥å§ï¼");        
                         ob->start_busy(4);
                         remove_call_out("dest");
                         call_out("dest",360);
@@ -28,7 +28,7 @@ void init()
                         call_out("do_clone", 0, me, ob);
                 }
                 else {
-                        command("say ÏëÅÜ£¿¼ÈÈ»±»Äã·¢ÏÖÐ¡Å®×ÓµÄ×Ù¼££¬ÄÃÃüÀ´°É£¡");  
+                        command("say æƒ³è·‘ï¼Ÿæ—¢ç„¶è¢«ä½ å‘çŽ°å°å¥³å­çš„è¸ªè¿¹ï¼Œæ‹¿å‘½æ¥å§ï¼");  
                         ob->start_busy(1);
                         me->set_leader(ob);
                         remove_call_out("dest");
@@ -106,8 +106,8 @@ void dest()
         ob = this_player();
         me = this_object();
 
-        write(me->query("name")+"ÁøÃ¼Ò»õ¾µÀ£ºÏÂ´Î²»ÒªÔÙÈÃÎÒÓö¼ûÄã¡£\n",me);  
-        write(me->query("name")+"Ò»¸ö×ªÉí£¬Æ®ÉíÀëÈ¥¡£\n",me);  
+        write(me->query("name")+"æŸ³çœ‰ä¸€è¹™é“ï¼šä¸‹æ¬¡ä¸è¦å†è®©æˆ‘é‡è§ä½ ã€‚\n",me);  
+        write(me->query("name")+"ä¸€ä¸ªè½¬èº«ï¼Œé£˜èº«ç¦»åŽ»ã€‚\n",me);  
 
         destruct(this_object());
 }

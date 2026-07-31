@@ -15,31 +15,31 @@ int main(object me, string arg)
         object obj, dest, *inv, obj2;
         int i, amount;
 	//write("new");
-        if(!arg) return notify_fail("ÄãÒª½«Ê²Ã´¶«Î÷·Å½øÄÄÀï£¿\n");
+        if(!arg) return notify_fail("ä½ è¦å°†ä»€ä¹ˆä¸œè¥¿æ”¾è¿›å“ªé‡Œï¼Ÿ\n");
 
         if( sscanf(arg, "%s in %s", item, target)!=2 )
-                return notify_fail("ÄãÒª¸øË­Ê²Ã´¶«Î÷£¿\n");
+                return notify_fail("ä½ è¦ç»™è°ä»€ä¹ˆä¸œè¥¿ï¼Ÿ\n");
 
 
 
         dest = present(target, me);
   if( !dest || living(dest) ) dest = present(target, environment(me));
         if( !dest || living(dest) && !dest->query("ridable"))
-                return notify_fail("ÕâÀïÃ»ÓĞÕâÑù¶«Î÷¡£\n");
+                return notify_fail("è¿™é‡Œæ²¡æœ‰è¿™æ ·ä¸œè¥¿ã€‚\n");
 
         if( dest->is_character() && !userp(dest) && !dest->query("ridable")
                  || !dest->is_character()&&!dest->is_container() && !dest->query("ridable"))
-                return notify_fail("ÄãÖ»ÄÜ°Ñ¶«Î÷·ÅÔÚÈİÆ÷Àï¡£\n");
+                return notify_fail("ä½ åªèƒ½æŠŠä¸œè¥¿æ”¾åœ¨å®¹å™¨é‡Œã€‚\n");
 
         if(sscanf(item, "%d %s", amount, item)==2) {
                 if( !objectp(obj = present(item, me)) )
-                        return notify_fail("ÄãÉíÉÏÃ»ÓĞÕâÑù¶«Î÷¡£\n");
+                        return notify_fail("ä½ èº«ä¸Šæ²¡æœ‰è¿™æ ·ä¸œè¥¿ã€‚\n");
                 if( !obj->query_amount() )
-                        return notify_fail( obj->name() + "²»ÄÜ±»·Ö¿ª¡£\n");
+                        return notify_fail( obj->name() + "ä¸èƒ½è¢«åˆ†å¼€ã€‚\n");
                 if( amount < 1 )
-                        return notify_fail("¶«Î÷µÄÊıÁ¿ÖÁÉÙÊÇÒ»¸ö¡£\n");
+                        return notify_fail("ä¸œè¥¿çš„æ•°é‡è‡³å°‘æ˜¯ä¸€ä¸ªã€‚\n");
                 if( amount > obj->query_amount() )
-                        return notify_fail("ÄãÃ»ÓĞÄÇÃ´¶àµÄ" + obj->name() + "¡£\n");
+                        return notify_fail("ä½ æ²¡æœ‰é‚£ä¹ˆå¤šçš„" + obj->name() + "ã€‚\n");
                 else if( amount == (int)obj->query_amount() )
                         return do_put(me, obj, dest);
                 else {
@@ -57,15 +57,15 @@ int main(object me, string arg)
                 inv = all_inventory(me);
                 for(i=0; i<sizeof(inv); i++)
                         if( inv[i] != dest ) do_put(me, inv[i], dest);
-                write("·ÅºÃÁË¡£\n");
+                write("æ”¾å¥½äº†ã€‚\n");
                 return 1;
         }
 
         if(!objectp(obj = present(item, me)))
-                return notify_fail("ÄãÉíÉÏÃ»ÓĞÕâÑù¶«Î÷¡£\n");
+                return notify_fail("ä½ èº«ä¸Šæ²¡æœ‰è¿™æ ·ä¸œè¥¿ã€‚\n");
 		if(obj->is_character())
 			if(obj->query("id")!="corpse")
-               return notify_fail("²»ÄÜ½«»îÎï·Å½øÄÇÀï¡£\n");
+               return notify_fail("ä¸èƒ½å°†æ´»ç‰©æ”¾è¿›é‚£é‡Œã€‚\n");
 
         if (obj != dest) return do_put(me, obj, dest);
         return 0;
@@ -75,18 +75,18 @@ int main(object me, string arg)
 int do_put(object me, object obj, object dest)
 {
                   if( obj->query("no_drop") )
-                                         return notify_fail(obj->query("name")+ "±ØĞëÌùÉí·Å¡£\n");
+                                         return notify_fail(obj->query("name")+ "å¿…é¡»è´´èº«æ”¾ã€‚\n");
         if( stringp( me->query_condition("perform") ) && obj->query("equipped")  )
-                return notify_fail("ÄãÕıÃ¦×ÅÄØ¡£\n");
+                return notify_fail("ä½ æ­£å¿™ç€å‘¢ã€‚\n");
 
         if( dest->reject(obj) ) return 0;
 
         if( obj->move(dest) ) {
-                message_vision( sprintf("$N½«Ò»%s%s%s%s%s\n",
+                message_vision( sprintf("$Nå°†ä¸€%s%s%s%s%s\n",
                         obj->query("unit"), obj->name(), 
-                        dest->query("ridable") ? "·ÅÔÚ" : "·Å½ø",
+                        dest->query("ridable") ? "æ”¾åœ¨" : "æ”¾è¿›",
                         dest->name(),
-                        !dest->query("ridable") ? "¡£" : obj->query_weight()>=5000 ? "ÉÏ¡£" : "µÄÂí°°Àï¡£"),
+                        !dest->query("ridable") ? "ã€‚" : obj->query_weight()>=5000 ? "ä¸Šã€‚" : "çš„é©¬éé‡Œã€‚"),
                         me );
                 return 1;
         }
@@ -96,9 +96,9 @@ int do_put(object me, object obj, object dest)
 int help(object me)
 {
 write(@HELP
-Ö¸Áî¸ñÊ½ : put <ÎïÆ·Ãû³Æ> in <Ä³ÈİÆ÷>
+æŒ‡ä»¤æ ¼å¼ : put <ç‰©å“åç§°> in <æŸå®¹å™¨>
  
-Õâ¸öÖ¸Áî¿ÉÒÔÈÃÄã½«Ä³ÑùÎïÆ··Å½øÒ»¸öÈİÆ÷£¬µ±È»£¬Ê×ÏÈÄãÒªÓµÓĞÕâÑùÎïÆ·¡£
+è¿™ä¸ªæŒ‡ä»¤å¯ä»¥è®©ä½ å°†æŸæ ·ç‰©å“æ”¾è¿›ä¸€ä¸ªå®¹å™¨ï¼Œå½“ç„¶ï¼Œé¦–å…ˆä½ è¦æ‹¥æœ‰è¿™æ ·ç‰©å“ã€‚
  
 HELP
     );

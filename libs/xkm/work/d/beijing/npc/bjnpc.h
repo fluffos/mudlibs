@@ -16,10 +16,10 @@ int random_walk()
         object here = environment();
 
         if( strsrch(base_name(here), "/d/beijing/") != 0 ) {
-                message("vision", name() + "急急忙忙地离开了。\n",
+                message("vision", name() + "鎬ユ�ュ繖蹇欏湴绂诲紑浜嗐�俓n",
                 environment(), this_object());
                 move(startroom);
-                message("vision", name() + "走了过来。\n",
+                message("vision", name() + "璧颁簡杩囨潵銆俓n",
                 environment(), this_object());
         }
 

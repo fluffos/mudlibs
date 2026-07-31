@@ -17,12 +17,12 @@ void init()
 	     {
 		case 0:
 			command( "grin" );
-			command( "say Äã×²ÆÆÁËÎÒµÄĞĞ²Ø£¬Ö»ºÃËÍÄãÈ¥¼ûÑÖÂŞÍõÁË£¡" );
+			command( "say ä½ æ’ç ´äº†æˆ‘çš„è¡Œè—ï¼Œåªå¥½é€ä½ å»è§é˜ç½—ç‹äº†ï¼" );
 			me->set_temp("kill_rob", 1);
 			break;
 		case 1:
 			command( "hehe" );
-			command( "say ´óÒ¯ÎÒÕı³îÎŞ·¨Á¢¹¦£¬ÏÖÔÚÄã×Ô¸ö¶ùËÍÉÏÃÅÀ´£¬ËãÄãµ¹Ã¹°É£¡" );
+			command( "say å¤§çˆ·æˆ‘æ­£æ„æ— æ³•ç«‹åŠŸï¼Œç°åœ¨ä½ è‡ªä¸ªå„¿é€ä¸Šé—¨æ¥ï¼Œç®—ä½ å€’éœ‰å§ï¼" );
 			me->set_temp("kill_rob", 0);
 			break;
 	     }
@@ -177,7 +177,7 @@ void rob_kill(object me, object victim)
 	if( !objectp(me) || !objectp(victim) ) return;
 	
 	me->set_temp("fought", 1);
-	message_vision( "$n¶Ô×Å$N´óºğ£ºÄÉÃüÀ´°É£¡\n", victim, me );
+	message_vision( "$nå¯¹ç€$Nå¤§å¼ï¼šçº³å‘½æ¥å§ï¼\n", victim, me );
 	
 	if ( me->query_temp("kill_rob") == 1 ) {
 		me->kill_ob(victim);
@@ -224,7 +224,7 @@ int accept_fight(object victim)
 {
 	object me = this_object();
 
-	command( "say Äã³ÔÁËÀÇĞÄ±ª×Óµ¨À²£¬¾¹¸Ò·´¿¹£¡" );
+	command( "say ä½ åƒäº†ç‹¼å¿ƒè±¹å­èƒ†å•¦ï¼Œç«Ÿæ•¢åæŠ—ï¼" );
 	me->set_temp("fought", 1);
 	me->kill_ob(victim);
 	remove_call_out("checking");
@@ -236,7 +236,7 @@ int accept_kill(object victim)
 {
 	object me = this_object();
 
-	command( "say ²»ÖªËÀ»îµÄ¶«Î÷£¬ÈÃ´óÒ¯ÎÒ³¬¶ÉÄã°É£¡" );
+	command( "say ä¸çŸ¥æ­»æ´»çš„ä¸œè¥¿ï¼Œè®©å¤§çˆ·æˆ‘è¶…æ¸¡ä½ å§ï¼" );
 	me->kill_ob(victim);
 	remove_call_out("checking");
 	call_out("checking", 1, me, victim);
@@ -245,12 +245,12 @@ int accept_kill(object victim)
 
 void unconcious()
 {
-	message_vision("\n$NÍ»È»ÂôÒ»ÆÆÕÀ£¬Ìø³öÕ½È¦£¬ÌÓÁË£¡\n", this_object());
+	message_vision("\n$Nçªç„¶å–ä¸€ç ´ç»½ï¼Œè·³å‡ºæˆ˜åœˆï¼Œé€ƒäº†ï¼\n", this_object());
 	destruct(this_object());
 }
 
 void die()
 {
-	message_vision("\n$NËÀÁË£¡\n", this_object());
+	message_vision("\n$Næ­»äº†ï¼\n", this_object());
 	destruct(this_object());
 }

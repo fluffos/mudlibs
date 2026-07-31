@@ -90,7 +90,7 @@ string ask_me_1()
 
 int accept_object(object who, object obj)
 {
-	object room=find_object("/d/dali/wuhua2.c");
+	object room=find_object("/d/dali/wuhua2.lpc");
 
 	if ((obj->query("id")!="xin xin" && obj->query("id")!="xie lian") || obj->is_character() || !present(obj,who) || userp(obj))
 	{

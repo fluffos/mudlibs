@@ -4,8 +4,8 @@ int do_watch(string arg);
 
 string look_desk() {
     string msg;
-    msg = "±»Œ‰¥Ûª·µƒ◊È÷Ø’ﬂŒ™¡À¥Ûº“æ°–À£¨Ã·π©¡À¥Û¡øæ∆»‚°£\n";
-    msg = msg + "…œ√Ê∑≈◊≈¥Û∫£ÕÎ(wan)∫Õøæ»‚(bbq)°£\n";
+    msg = "ÊØîÊ≠¶Â§ß‰ºöÁöÑÁªÑÁªáËÄÖ‰∏∫‰∫ÜÂ§ßÂÆ∂Â∞ΩÂÖ¥ÔºåÊèê‰æõ‰∫ÜÂ§ßÈáèÈÖíËÇâ„ÄÇ\n";
+    msg = msg + "‰∏äÈù¢ÊîæÁùÄÂ§ßÊµ∑Á¢ó(wan)ÂíåÁÉ§ËÇâ(bbq)„ÄÇ\n";
     return msg;
 }
 
@@ -21,11 +21,11 @@ int do_get(string arg) {
 							break;
 		  case "bbq" : food = new(__DIR__"obj/bbq");
 							break;
-		  default: write("ƒ„’“≤ªµΩ " + type + " °£\n");
+		  default: write("‰Ω†Êâæ‰∏çÂà∞ " + type + " „ÄÇ\n");
 					  return 1;
 	 }
 	 if( food->move(me) )
-		  message_vision("$N¥”º‹◊”…œ»°œ¬“ª"+food->query("unit")+food->name()+"°£\n", me);
+		  message_vision("$N‰ªéÊû∂Â≠ê‰∏äÂèñ‰∏ã‰∏Ä"+food->query("unit")+food->name()+"„ÄÇ\n", me);
 	 else
 		  destruct(food);
 	 return 1;
@@ -40,10 +40,10 @@ int do_watch(string arg)
 
 	 ob = find_player(arg);
 	 if(!ob)
-		return notify_fail("’“≤ªµΩ’‚∏ˆ»À“Æ£°\n");
+		return notify_fail("Êâæ‰∏çÂà∞Ëøô‰∏™‰∫∫ËÄ∂ÔºÅ\n");
 
 	 if( !ob->query("sjsz/red") && !ob->query("sjsz/white") )
-		return notify_fail("’‚∏ˆ»À≤ª‘⁄…Ω◊Ø¿Ô“Æ£°\n");
+		return notify_fail("Ëøô‰∏™‰∫∫‰∏çÂú®Â±±Â∫ÑÈáåËÄ∂ÔºÅ\n");
 
 	 camera = query("camera");
 
@@ -60,7 +60,7 @@ int do_watch(string arg)
 
 	 set("camera",camera);
 
-	 message_vision("$N∂‘ƒß ı ¶Àµµ¿£∫Œ““™ø¥"+ob->query("name")+"£°\n",me);
+	 message_vision("$NÂØπÈ≠îÊúØÂ∏àËØ¥ÈÅìÔºöÊàëË¶ÅÁúã"+ob->query("name")+"ÔºÅ\n",me);
 
 	 return 1;
 }

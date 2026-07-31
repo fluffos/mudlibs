@@ -110,11 +110,11 @@ int auto_check()
         switch((string)ob->query("id")) {
         case "dalama": 
                 partner = "erlama";
-                partner_name = "ÃÜ×Ú¶şÀÏ";
+                partner_name = "å¯†å®—äºŒè€";
                 break;
         case "erlama":
                 partner = "dalama";
-                partner_name = "ÃÜ×Ú´óÀÏ";
+                partner_name = "å¯†å®—å¤§è€";
                 break;
         }
 
@@ -158,7 +158,7 @@ void destroy(object ob)
         if( !living(ob) ) return;
 
         message("vision",
-                ob->name() + "¼±¼±Ã¦Ã¦µØÀë¿ªÁË¡£\n",
+                ob->name() + "æ€¥æ€¥å¿™å¿™åœ°ç¦»å¼€äº†ã€‚\n",
                 environment(ob), ({ob}));
         destruct(ob);
 }
@@ -205,7 +205,7 @@ int accept_fight(object me)
 {
         if( !living(this_object()) ) return 1;
 
-        command("say " + "¹ö£¡£¡£¡ÄãÃ»¼û´óÀ®ÂïÎÒÓĞÒªÊÂ²øÉí£¿£¡");
+        command("say " + "æ»šï¼ï¼ï¼ä½ æ²¡è§å¤§å–‡å˜›æˆ‘æœ‰è¦äº‹ç¼ èº«ï¼Ÿï¼");
         command("consider " + me->query("id"));
         return 0;
 }

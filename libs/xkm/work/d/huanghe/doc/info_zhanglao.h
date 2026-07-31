@@ -2,10 +2,10 @@
 // /d/changbai/bj/info_zhanglao.h
 
 mapping zl_ids = ([
-        "∑∂À…" : ({ "fan song", "fan" }),
-        "’‘∫◊" : ({ "zhao he", "zhao" }),
-        "’≈≥À‘∆" : ({ "zhang chengyun", "zhang" }),
-	"’≈≥À∑Á" : ({ "zhang chenfeng", "zhang" }),
+        "ËåÉÊùæ" : ({ "fan song", "fan" }),
+        "ËµµÈπ§" : ({ "zhao he", "zhao" }),
+        "Âº†‰πò‰∫ë" : ({ "zhang chengyun", "zhang" }),
+	"Âº†‰πòÈ£é" : ({ "zhang chenfeng", "zhang" }),
 ]);
 
 string *zl_weapons = ({
@@ -15,8 +15,8 @@ string *zl_weapons = ({
 });
 
 mapping zl_places = ([
-        "/d/wudang/pine_road" : "Œ‰µ±",
-        "/d/shaolin/shijie6" : "…Ÿ¡÷",
-        "/d/huashan/shaluo" : "ª™…Ω",
-        "/d/emei/shijie1" : "∂Î·“",
+        "/d/wudang/pine_road" : "Ê≠¶ÂΩì",
+        "/d/shaolin/shijie6" : "Â∞ëÊûó",
+        "/d/huashan/shaluo" : "ÂçéÂ±±",
+        "/d/emei/shijie1" : "Â≥®Âµã",
 ]);

@@ -32,9 +32,9 @@ void fox_showup()
         fox = new("/d/changbai/npc/cb_fox");
         fox->move(this_object());
 
-        message_vision(HIR"\n$N�����۵糸��ر��˹�����\n"NOR, fox);
+        message_vision(HIR"\n$N犹如风驰电掣般地奔了过来。\n"NOR, fox);
         food = foods[random(sizeof(foods))];
-        message_vision("$NѸ�ٵ�ץ��" + food->name() + "��ת�������뿪��\n", fox);
+        message_vision("$N迅速地抓起" + food->name() + "，转身便想离开。\n", fox);
         destruct(food);
 
         call_out("fox_disappear", 1 + random(3), fox);
@@ -70,7 +70,7 @@ void fox_disappear(object fox)
 	        }
         }
 
-        message_vision("\n$Nһת�۱���ʧ�ˡ�\n", fox);
+        message_vision("\n$N一转眼便消失了。\n", fox);
         destruct(fox);
 }
 			

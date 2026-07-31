@@ -3,7 +3,7 @@
 
 void create()
 {
-        set("short", "маб╥");
+        set("short", "Е°÷Х╥╞");
         set("long", TULU_DESC_LONG);
         
         set("outdoors", "beijing");

@@ -9,13 +9,13 @@ void init()
              switch( random(2) )
              {
                 case 0:
-                        command( "say ÁôÏÂºìïÚ£¬ÀÏ×Ó±ãÈÄÄã¹·Ãü£¡" );
+                        command( "say ç•™ä¸‹çº¢é•–ï¼Œè€å­ä¾¿é¥¶ä½ ç‹—å‘½ï¼" );
                         break;
                 case 1:
-                        command( "say ÏàºÃµÄ£¬ÁôÏÂºìïÚ¹ö°É£¡" );
+                        command( "say ç›¸å¥½çš„ï¼Œç•™ä¸‹çº¢é•–æ»šå§ï¼" );
                         break;
                 case 2:
-                        command( "say ´óÒ¯½ñÌìÒªÇë¿Í£¬ÁôÏëÏòÄã½èÐ©Ç®²Æ»¨ÓÃ£¬ÁôÏÂºìïÚ¹ö°É£¡" );
+                        command( "say å¤§çˆ·ä»Šå¤©è¦è¯·å®¢ï¼Œç•™æƒ³å‘ä½ å€Ÿäº›é’±è´¢èŠ±ç”¨ï¼Œç•™ä¸‹çº¢é•–æ»šå§ï¼" );
 			break;
 	     }
              me->set_temp("said", 1);
@@ -34,16 +34,16 @@ int accept_object(object who, object ob)
 
         if ( me->is_fighting() ) {
                 command( "grin" );
-                command( "say ÏÖÔÚ²Å¸øÒÑÌ«³ÙÁË£¬ÄÉÃüÀ´°É£¡" );
+                command( "say çŽ°åœ¨æ‰ç»™å·²å¤ªè¿Ÿäº†ï¼Œçº³å‘½æ¥å§ï¼" );
                 return 0;
         }
 
-	if ( ob->name()=="ºìïÚ" ) {
+	if ( ob->name()=="çº¢é•–" ) {
                 remove_call_out("rob_kill");
-		message_vision( "$n·ÉÆðÒ»½ÅÌßÔÚ$NµÄÆ¨¹ÉÉÏ£¬²»Ð¼µØºßÁËÒ»Éù¡£\n", who, me);
-		command( "say ËãÄãÊ¶Ê±Îñ£¬ÀÏ×Ó½ñÌì·ÅÄãÒ»Âí£¬¿ì¹ö°É£¡" );
-                message_vision( "$NËµÍê±ãÑï³¤¶øÈ¥¡£\n", me );
-		if (environment(me)->query("short") == "É½Â·") who->delete_temp("biao/ma");
+		message_vision( "$né£žèµ·ä¸€è„šè¸¢åœ¨$Nçš„å±è‚¡ä¸Šï¼Œä¸å±‘åœ°å“¼äº†ä¸€å£°ã€‚\n", who, me);
+		command( "say ç®—ä½ è¯†æ—¶åŠ¡ï¼Œè€å­ä»Šå¤©æ”¾ä½ ä¸€é©¬ï¼Œå¿«æ»šå§ï¼" );
+                message_vision( "$Nè¯´å®Œä¾¿æ‰¬é•¿è€ŒåŽ»ã€‚\n", me );
+		if (environment(me)->query("short") == "å±±è·¯") who->delete_temp("biao/ma");
 		who->delete_temp("apply/short");
                 who->set_temp("biao/fail", 1);
                 remove_call_out("destroy_me");
@@ -51,14 +51,14 @@ int accept_object(object who, object ob)
                 return 1;
         }
         else {
-                command( "say ´óÒ¯ÒªµÄÊÇºìïÚ£¬ÄãÕâ¹ê¶ù×Ó¿ÉÊÇË£ÀÏ×ÓÀ´×Å£¿" );
+                command( "say å¤§çˆ·è¦çš„æ˜¯çº¢é•–ï¼Œä½ è¿™é¾Ÿå„¿å­å¯æ˜¯è€è€å­æ¥ç€ï¼Ÿ" );
                 return 0;
         }
 }
 
 void rob_kill(object me, object victim)
 {
-        message_vision( "$n¶Ô×Å$N´óºð£ºÄã¾¹¸Ò²»½»£¡ÀÏ×ÓÔ×ÁËÄã£¡\n", victim, me );
+        message_vision( "$nå¯¹ç€$Nå¤§å¼ï¼šä½ ç«Ÿæ•¢ä¸äº¤ï¼è€å­å®°äº†ä½ ï¼\n", victim, me );
         me->kill_ob(victim);
         remove_call_out("checking");
         call_out("checking", 1, me, victim);

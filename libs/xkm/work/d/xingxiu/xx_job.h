@@ -37,25 +37,25 @@ int do_search(string arg) {
 	if( arg=="bug" || arg=="chong"){
 
 		if (!present("wa guan", me) && me->query("id")!="wsky")
-                        return notify_fail("ÄãÕÒµ½³æ×ÓÓÃÊ²Ã´À´Ê¢ÄØ£¿\n\n");
+                        return notify_fail("ä½ æ‰¾åˆ°è™«å­ç”¨ä»€ä¹ˆæ¥ç››å‘¢ï¼Ÿ\n\n");
                         
                 if (me->query("jingli")<me->query("max_jingli")/5)
-                        return notify_fail("ÄãÏÈÐÝÏ¢Ò»ÏÂ°É¡£\n\n");
+                        return notify_fail("ä½ å…ˆä¼‘æ¯ä¸€ä¸‹å§ã€‚\n\n");
                         
 		if (me->is_busy()) return
-                        notify_fail("ÄãÉÏÒ»¸ö¶¯×÷»¹Ã»ÓÐÍê³É¡£\n"); 
+                        notify_fail("ä½ ä¸Šä¸€ä¸ªåŠ¨ä½œè¿˜æ²¡æœ‰å®Œæˆã€‚\n"); 
                         
 		if (me->is_fighting()) return
-                        notify_fail("ÄúÏÈ°ÉµÐÈËÁÏÀíÁËÔÚËµ°É¡£:)\n");
+                        notify_fail("æ‚¨å…ˆå§æ•Œäººæ–™ç†äº†åœ¨è¯´å§ã€‚:)\n");
                         
 		if (me->query_temp("found")==1) return
-                        notify_fail("Äã×îºÃÏÈ»ØÈ¥¸´Ãü£¬±ðÈÃÀÏÏÉµÈ¼±ÁË¡£\n");
+                        notify_fail("ä½ æœ€å¥½å…ˆå›žåŽ»å¤å‘½ï¼Œåˆ«è®©è€ä»™ç­‰æ€¥äº†ã€‚\n");
                                        
                 //if (me->query_temp("bug_out")==1)
-                //        return notify_fail("¶¾³æÒÑ¾­³öÀ´ÁË£¬¸Ï¿ì×¥°É£¡\n");
+                //        return notify_fail("æ¯’è™«å·²ç»å‡ºæ¥äº†ï¼Œèµ¶å¿«æŠ“å§ï¼\n");
                 
                 if (me->query_temp("xx_job")!=1)
-                        return notify_fail("ÕÒÀ´ÓÐÊ²Ã´ÓÃ£¿\n");
+                        return notify_fail("æ‰¾æ¥æœ‰ä»€ä¹ˆç”¨ï¼Ÿ\n");
                 
 		me->add("jingli",-10);
 		me->add("jing",-10);
@@ -64,7 +64,7 @@ int do_search(string arg) {
 		me->add("find_bug",1);
 		me->add_temp("xx/find",1);
 
-                message_vision("$NÍäÏÂÁËÑü£¬ÉìÊÖ½«²ÐÖ¦°ÜÒ¶²¦¿ª£¬×ÐÏ¸Ñ°ÕÒ¶¾³æµÄ×Ù¼£¡£\n",me);
+                message_vision("$Nå¼¯ä¸‹äº†è…°ï¼Œä¼¸æ‰‹å°†æ®‹æžè´¥å¶æ‹¨å¼€ï¼Œä»”ç»†å¯»æ‰¾æ¯’è™«çš„è¸ªè¿¹ã€‚\n",me);
 		
 		kar2=(me->query("int")+me->query("con")+me->query("str"))*(random(2)+1);
 		kar1=me->query_kar();		
@@ -74,10 +74,10 @@ int do_search(string arg) {
                                 
 			room = load_object(n[random(sizeof(n))]);
                         
-                        message_vision("$NÓÖÕÒÁËÕÒ£¬·¢ÏÖÃ»ÓÐË¿ºÁ¶¾³æµÄ×Ù¼££¬Ö»ºÃÀë¿ªÕâÀï£¬µ½±ðµÄµØ·½Ñ°ÕÒ¡£\n",me);
-			message_vision("$N¼±¼±Ã¦Ã¦µØÀë¿ªÁË¡£\n",me);
+                        message_vision("$Nåˆæ‰¾äº†æ‰¾ï¼Œå‘çŽ°æ²¡æœ‰ä¸æ¯«æ¯’è™«çš„è¸ªè¿¹ï¼Œåªå¥½ç¦»å¼€è¿™é‡Œï¼Œåˆ°åˆ«çš„åœ°æ–¹å¯»æ‰¾ã€‚\n",me);
+			message_vision("$Næ€¥æ€¥å¿™å¿™åœ°ç¦»å¼€äº†ã€‚\n",me);
 			me->move(room);
-			message_vision("$N×ßÁË¹ýÀ´¡£\n",me);			
+			message_vision("$Nèµ°äº†è¿‡æ¥ã€‚\n",me);			
 			return 1;
 		}
 		
@@ -90,7 +90,7 @@ int do_search(string arg) {
 		
 		if ((kar3>kar2 && find>10) || (find>=30)) {
 
-                        message_vision(HIG"Í»È»¼äÒ»Ö»Ð¡³æ×Ó×êÁË³öÀ´£¬Ñ¸ËÙµØÅÀ¶¯×Å¡£\n"NOR, me);
+                        message_vision(HIG"çªç„¶é—´ä¸€åªå°è™«å­é’»äº†å‡ºæ¥ï¼Œè¿…é€Ÿåœ°çˆ¬åŠ¨ç€ã€‚\n"NOR, me);
                         bug=new("/d/xingxiu/npc/duchong");
 			bug->move(environment(me));
 			bug->set("playerid",me->query("id"));
@@ -107,7 +107,7 @@ int do_search(string arg) {
 		
 		if (random(50)<=3 && (me->query("combat_exp")>=150000)) {
 
-                        message_vision(HIR"Í»È»¼ä´ÓÊ÷ºóÔ½³öÒ»¸öÈË£¬¸ßº°Ò»Éù£º¡°ÐÇËÞ¼éÈË£¬ÄÃÃüÀ´£¡¡±\n"NOR,me);
+                        message_vision(HIR"çªç„¶é—´ä»Žæ ‘åŽè¶Šå‡ºä¸€ä¸ªäººï¼Œé«˜å–Šä¸€å£°ï¼šâ€œæ˜Ÿå®¿å¥¸äººï¼Œæ‹¿å‘½æ¥ï¼â€\n"NOR,me);
 			fighter=new("/d/xingxiu/npc/xxnpc");
 			setup_npc(me, fighter);
 			fighter->set("player",me->query("id"));
@@ -119,22 +119,22 @@ int do_search(string arg) {
 		
 		
 		if (random(kar1*3)<1){
-			message_vision(HIW"$NÑÛÇ°Òø¹âÒ»ÉÁ£¬ÍÛ£¬Òø×Ó£¡\n"NOR,me);
+			message_vision(HIW"$Nçœ¼å‰é“¶å…‰ä¸€é—ªï¼Œå“‡ï¼Œé“¶å­ï¼\n"NOR,me);
 			gold=new("/clone/money/silver");
 			gold->move(environment(me));
 			return 1;
 		}
 		
 		if (random(kar1*2)<1){
-			message_vision(YEL"$NÑÛÇ°Í­¹âÒ»ÉÁ£¬ÍÛ£¬Í­Ç® :(\n"NOR,me);
+			message_vision(YEL"$Nçœ¼å‰é“œå…‰ä¸€é—ªï¼Œå“‡ï¼Œé“œé’± :(\n"NOR,me);
 			gold=new("/clone/money/coin");
 			gold->move(environment(me));
 			return 1;
 		}
 		
 		if (random(kar1*4)<1){
-			message_vision(HIY"$NÑÛÇ°½ð¹âÒ»ÉÁ£¬ÍÛ£¬½ð×Ó£¡\n"NOR,me);
-			message_vision(HIR"$N¿´¼û½ð×Ó£¬ÐÄÖÐÒ»µÃÒâ£¬ÊÖÖÐÍß¹Þµôµ½µØÉÏ´òµÄ·ÛËé¡£\n"NOR,me);
+			message_vision(HIY"$Nçœ¼å‰é‡‘å…‰ä¸€é—ªï¼Œå“‡ï¼Œé‡‘å­ï¼\n"NOR,me);
+			message_vision(HIR"$Nçœ‹è§é‡‘å­ï¼Œå¿ƒä¸­ä¸€å¾—æ„ï¼Œæ‰‹ä¸­ç“¦ç½æŽ‰åˆ°åœ°ä¸Šæ‰“çš„ç²‰ç¢Žã€‚\n"NOR,me);
 			gold=new("/clone/money/gold");
 			gold->move(environment(me));
 			ob = present("wa guan", me);
@@ -143,10 +143,10 @@ int do_search(string arg) {
 		}
 		
 		if (random(20)<1){
-			message_vision(MAG"\n$N°¥Ñ½Ò»Éù£¬±»µØÉÏµÄÊ¯Í·°íÁËÒ»½»¡£\n"NOR,me);
+			message_vision(MAG"\n$Nå“Žå‘€ä¸€å£°ï¼Œè¢«åœ°ä¸Šçš„çŸ³å¤´ç»Šäº†ä¸€äº¤ã€‚\n"NOR,me);
                         me->start_busy(random(2)+1);
 			damage=me->query_skill("force",1);
-			me->receive_wound("qi", random(damage/10),"±»Ê¯Í·°íÁËÒ»½»£¬Ë¤ËÀÁË");
+			me->receive_wound("qi", random(damage/10),"è¢«çŸ³å¤´ç»Šäº†ä¸€äº¤ï¼Œæ‘”æ­»äº†");
 		}
 
                 
@@ -155,17 +155,17 @@ int do_search(string arg) {
 	} else if(arg=="dochong"){
 		
 		me->set_temp("fresh",1);
-		message_vision("$NÍäÏÂÁËÑü£¬ÉìÊÖ½«²ÐÖ¦°ÜÒ¶²¦¿ª£¬×ÐÏ¸Ñ°ÕÒ¶¾³æµÄ×Ù¼£¡£\n",me);
+		message_vision("$Nå¼¯ä¸‹äº†è…°ï¼Œä¼¸æ‰‹å°†æ®‹æžè´¥å¶æ‹¨å¼€ï¼Œä»”ç»†å¯»æ‰¾æ¯’è™«çš„è¸ªè¿¹ã€‚\n",me);
 		
 		if (me->query("find_bug")>random(20)) {
 			me->set("find_bug",0);
                                 
 			room = load_object(n[random(sizeof(n))]);
                         
-                        message_vision("$NÓÖÕÒÁËÕÒ£¬·¢ÏÖÃ»ÓÐË¿ºÁ¶¾³æµÄ×Ù¼££¬Ö»ºÃÀë¿ªÕâÀï£¬µ½±ðµÄµØ·½Ñ°ÕÒ¡£\n",me);
-			message_vision("$N¼±¼±Ã¦Ã¦µØÀë¿ªÁË¡£\n",me);
+                        message_vision("$Nåˆæ‰¾äº†æ‰¾ï¼Œå‘çŽ°æ²¡æœ‰ä¸æ¯«æ¯’è™«çš„è¸ªè¿¹ï¼Œåªå¥½ç¦»å¼€è¿™é‡Œï¼Œåˆ°åˆ«çš„åœ°æ–¹å¯»æ‰¾ã€‚\n",me);
+			message_vision("$Næ€¥æ€¥å¿™å¿™åœ°ç¦»å¼€äº†ã€‚\n",me);
 			me->move(room);
-			message_vision("$N×ßÁË¹ýÀ´¡£\n",me);			
+			message_vision("$Nèµ°äº†è¿‡æ¥ã€‚\n",me);			
 			return 1;
 		}
 		
@@ -293,7 +293,7 @@ void setup_npc(object me, object ob){
                 	ob->prepare_skill("strike", "sanhua-juding");
                 
 
-			ob->carry_object("/d/jiaxing/obj/fuchen.c")->wield();
+			ob->carry_object("/d/jiaxing/obj/fuchen.lpc")->wield();
 		}	else if(ob->query("menpai")=="emei"){
                 	ob->set_skill("force", skill);
 	                ob->set_skill("linji-zhuang", skill);
@@ -320,7 +320,7 @@ void setup_npc(object me, object ob){
                 	ob->prepare_skill("strike", "jinding-zhang");
                 
 
-			ob->carry_object("/clone/weapon/gangjian.c")->wield();
+			ob->carry_object("/clone/weapon/gangjian.lpc")->wield();
 		} else if (ob->query("menpai")=="wudang"){
 			ob->set_skill("force", skill);
 	                ob->set_skill("taiji-shengong", skill);
@@ -339,7 +339,7 @@ void setup_npc(object me, object ob){
 			ob->map_skill("cuff", "taiji-quan");
 	                	
         	        ob->prepare_skill("cuff", "taiji-quan");
-                	//ob->carry_object("/clone/weapon/gangjian.c")->wield();
+                	//ob->carry_object("/clone/weapon/gangjian.lpc")->wield();
                 } else {
                 	ob->set_skill("force", skill);
 	                ob->set_skill("shenghuo-xuanming", skill);
@@ -360,6 +360,6 @@ void setup_npc(object me, object ob){
 			
 			ob->prepare_skill("strike", "hanbing-mianzhang");
 			
-	                ob->carry_object("/clone/weapon/gangjian.c")->wield();
+	                ob->carry_object("/clone/weapon/gangjian.lpc")->wield();
 		}
 }

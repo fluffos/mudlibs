@@ -125,7 +125,7 @@ void dest()
 
 
 
-       write(me->query("name")+"拍拍翅膀，转身飞走了。\n",me);
+       write(me->query("name")+"鎷嶆媿缈呰唨锛岃浆韬璧颁簡銆俓n",me);
 
        destruct(this_object());
 

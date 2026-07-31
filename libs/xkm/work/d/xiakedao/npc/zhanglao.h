@@ -34,7 +34,7 @@ void greeting(object me)
                 	{	obj->set("jingli", maxjingli);
 				obj->set("eff_qi", maxqi);
 				obj->set("qi", maxqi);
-				command("say ÈÃÎÒÃÇĞÖµÜÁ©Áì½ÏÉÙÁÖÈıÉ®µÄ½ğ¸Õ·şÄ§È¦°É¡£");
+				command("say è®©æˆ‘ä»¬å…„å¼Ÿä¿©é¢†è¾ƒå°‘æ—ä¸‰åƒ§çš„é‡‘åˆšæœé­”åœˆå§ã€‚");
 				obj->fight_ob(sl1);
 				obj->fight_ob(sl2);
 				obj->fight_ob(sl3);
@@ -99,7 +99,7 @@ int perform_sanshen()
 	return 1;
 }
 void attempt_apprentice(object me)
-{	command("say ±ğÀ´·³ÎÒÀ²");
+{	command("say åˆ«æ¥çƒ¦æˆ‘å•¦");
 }
 int accept_fight()
 {	command("say OK");

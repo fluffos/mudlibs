@@ -1,5 +1,5 @@
 //Cracked by Roath
-// caishen.h  ²É²Î
+// caishen.h  é‡‡å‚
 
 #include <ansi.h>
 
@@ -17,40 +17,40 @@ int do_search(string arg)
         object me;
         int power;
 
-        if( !arg || !(arg == "²Î" || arg == "ÈË²Î") )
+        if( !arg || !(arg == "å‚" || arg == "äººå‚") )
                 return 0;
 
         me = this_player();
 
         if( me->is_fighting() || me->is_busy() )
-                return notify_fail("ÄãÕıÃ¦×Å¡£\n");
+                return notify_fail("ä½ æ­£å¿™ç€ã€‚\n");
 
-        if( me->query_temp("cbshen/²Î1") )
-                return notify_fail("Äã²»ÊÇÒÑ¾­ÕÒµ½ÈË²ÎÁËÂğ£¿\n");
+        if( me->query_temp("cbshen/å‚1") )
+                return notify_fail("ä½ ä¸æ˜¯å·²ç»æ‰¾åˆ°äººå‚äº†å—ï¼Ÿ\n");
 
         if( !present("suobo gun", me) )
-                return notify_fail("ÄãÃ»ÓĞË÷²¦¹÷£¬ÎŞ·¨²¦¿ª¹àÄ¾É½²İÑ°ÕÒÈË²Î£¡\n");
+                return notify_fail("ä½ æ²¡æœ‰ç´¢æ‹¨æ£ï¼Œæ— æ³•æ‹¨å¼€çŒæœ¨å±±è‰å¯»æ‰¾äººå‚ï¼\n");
 
         if( (int)me->query("jingli") < 80 )
-                return notify_fail("ÄãÌ«ÀÛÁË£¬ÏÈĞªÏ¢Ò»»á¶ù°É¡£\n");
+                return notify_fail("ä½ å¤ªç´¯äº†ï¼Œå…ˆæ­‡æ¯ä¸€ä¼šå„¿å§ã€‚\n");
 
         me->add_temp("cbshen/times", 1);
         me->add("jingli", -40);
         me->start_busy(1);   
 
         if( query("count") < 1 && (int)me->query_temp("cbshen/times") > 30 )
-		return notify_fail("ÄãÓÃË÷²¦¹÷²¦´ò×ÅËÄÖÜµÄ¹àÄ¾ÔÓ²İ£¬¿ÉÊÇÃ»·¢ÏÖÓĞÈË²ÎµÄ×Ù¼££¡\n");
+		return notify_fail("ä½ ç”¨ç´¢æ‹¨æ£æ‹¨æ‰“ç€å››å‘¨çš„çŒæœ¨æ‚è‰ï¼Œå¯æ˜¯æ²¡å‘ç°æœ‰äººå‚çš„è¸ªè¿¹ï¼\n");
 
-        message_vision("$NÓÃË÷²¦¹÷²¦´ò×ÅËÄÖÜµÄ¹àÄ¾ÔÓ²İ£¬Ï£ÍûÄÜ´ÓÖĞ·¢ÏÖÈË²ÎµÄ×Ù¼££¡\n", me);
+        message_vision("$Nç”¨ç´¢æ‹¨æ£æ‹¨æ‰“ç€å››å‘¨çš„çŒæœ¨æ‚è‰ï¼Œå¸Œæœ›èƒ½ä»ä¸­å‘ç°äººå‚çš„è¸ªè¿¹ï¼\n", me);
 
         power = (int)me->query_temp("cbshen/times") * (int)me->query("kar");
         power *= query("count");
 
         if( random(power) > 100 ) {
-                me->set_temp("cbshen/²Î1", 1);
-                message_vision(HIG"\n$NÓÃ¹÷×Ó²»¶ÏµÄ²¦´ò×ÅËÄÖÜµÄÉ½²İ£¬ºöÈ»·¢ÏÖÔÓ²İÖ®ÖĞÓĞÒ»ÖêÈË²Î£¡\n"NOR, me);
-                write("Äã²»½û¸ßĞËµÄÌøÁËÆğÀ´£¬¸ßÉùº°µÀ£º°ô¡ª¡ªé³¡ª¡ª£¡" +
-                       "ÉùÒôÔ¶Ô¶´«ÁË¿ªÈ¥£¬ÔÚ´óÉ½ÖĞ»Øµ´£¬¾Ã¾Ã²»É¢£¡\n");
+                me->set_temp("cbshen/å‚1", 1);
+                message_vision(HIG"\n$Nç”¨æ£å­ä¸æ–­çš„æ‹¨æ‰“ç€å››å‘¨çš„å±±è‰ï¼Œå¿½ç„¶å‘ç°æ‚è‰ä¹‹ä¸­æœ‰ä¸€æ ªäººå‚ï¼\n"NOR, me);
+                write("ä½ ä¸ç¦é«˜å…´çš„è·³äº†èµ·æ¥ï¼Œé«˜å£°å–Šé“ï¼šæ£’â€”â€”æ§Œâ€”â€”ï¼" +
+                       "å£°éŸ³è¿œè¿œä¼ äº†å¼€å»ï¼Œåœ¨å¤§å±±ä¸­å›è¡ï¼Œä¹…ä¹…ä¸æ•£ï¼\n");
 	}
 
         return 1;
@@ -60,25 +60,25 @@ int do_dig(string arg)
 {
         object me, ob;
 
-        if( !arg || !(arg == "²Î" || arg == "ÈË²Î") )
+        if( !arg || !(arg == "å‚" || arg == "äººå‚") )
                 return 0;
 
         me = this_player();
 
         if( me->is_fighting() || me->is_busy() )
-                return notify_fail("ÄãÕıÃ¦×Å¡£\n");
+                return notify_fail("ä½ æ­£å¿™ç€ã€‚\n");
 
         if( !(ob = present("lugu qianzi", me)) )
-		return notify_fail("ÄãÃ»ÓĞÂ¹¹ÇÇ¥×Ó£¬ÎŞ·¨½«ÈË²Î´ÓÍÁÖĞÆğ³ö£¡\n");
+		return notify_fail("ä½ æ²¡æœ‰é¹¿éª¨é’å­ï¼Œæ— æ³•å°†äººå‚ä»åœŸä¸­èµ·å‡ºï¼\n");
 
         if( (int)me->query("jingli") < 80 )
-                return notify_fail("ÄãÌ«ÀÛÁË£¬ÏÈĞªÏ¢Ò»»á¶ù°É¡£\n");
+                return notify_fail("ä½ å¤ªç´¯äº†ï¼Œå…ˆæ­‡æ¯ä¸€ä¼šå„¿å§ã€‚\n");
 
         me->add("jingli", -60);
         me->start_busy(1);
 
-        if( !me->query_temp("cbshen/²Î1") ) {
-                message_vision("$NÄÃ×ÅÂ¹¹ÇÇ¥×ÓÊ¹¾¢µÄÍÚ×ÅÍÁ£¬ºöÌı¸Â°ÍÒ»Éù£¬Ç¥×Ó¶ÏÎªÁ½½Ø£¡\n", me);
+        if( !me->query_temp("cbshen/å‚1") ) {
+                message_vision("$Næ‹¿ç€é¹¿éª¨é’å­ä½¿åŠ²çš„æŒ–ç€åœŸï¼Œå¿½å¬å˜å·´ä¸€å£°ï¼Œé’å­æ–­ä¸ºä¸¤æˆªï¼\n", me);
                 destruct(ob);
                 return 1;
         }
@@ -87,7 +87,7 @@ int do_dig(string arg)
         ob = new(DRUG_D("cb_renshen"));
 	ob->move(me);
  
-        message_vision(HIY"$N´Ó»³ÖĞÌÍ³öÒ»°ÑÂ¹¹ÇÇ¥×Ó£¬Ğ¡ĞÄÒíÒíµÄ°ÑÈË²Î´ÓÍÁÖĞÆğ³ö£¡\n"NOR, me);
+        message_vision(HIY"$Nä»æ€€ä¸­æå‡ºä¸€æŠŠé¹¿éª¨é’å­ï¼Œå°å¿ƒç¿¼ç¿¼çš„æŠŠäººå‚ä»åœŸä¸­èµ·å‡ºï¼\n"NOR, me);
         me->delete_temp("cbshen");
 
         return 1;

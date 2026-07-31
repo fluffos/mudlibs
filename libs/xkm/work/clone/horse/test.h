@@ -12,12 +12,12 @@ condition_check()
 	addjing = (my_mj - my_jingli)/2;
 
 	if(my_jingli <= my_mj/3){
-	say(me->name() +"��ڴ�ڵش��Ŵ�����\n");
+	say(me->name() +"大口大口地喘着粗气。\n");
 	return;
 	}
 
         if(my_jingli <=30 && my_jingli > 20){
-        say(me->name() +"ֻ�ڴ����������ؿ��ܲ����ˣ�\n");
+        say(me->name() +"只在喘气，渐渐地快跑不动了！\n");
 	return;
         }
 
@@ -45,7 +45,7 @@ void init()
 	me->query("food") < (me->max_food_capacity()*2/3)){
 	me->set("food", (int)me->max_food_capacity());
 	me->add("jingli", addjing);
-	say(me->name() +"����ͷ�ڲݵ��ϳ��������\n");
+	say(me->name() +"低下头在草地上吃起草来。\n");
 	return;
 	}	
 
@@ -70,7 +70,7 @@ int do_look(string arg)
 	
 	printf(this_object()->query("long") + 
 	COMBAT_D->eff_status_msg((int)this_object()->query("eff_qi")* 100 / (int)this_object()->query("max_qi")) + "\n" 
-	+ "���������ţ�\n");
+	+ "它身上驮着：\n");
         for (i = 0; i < sizeof(inv); i++)
                 printf("%s \n", inv[i]->short());
         return 1;

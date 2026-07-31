@@ -21,7 +21,7 @@ int accept_fight(object player)
 {
 	object me=this_object();
 
-        command("say ´óÒ¯ÎÒÕýÏëÕÒÈËÉ±ÄÅ£¬½ñÌìËãÄãµ¹Ã¹¡£\n");
+        command("say å¤§çˆ·æˆ‘æ­£æƒ³æ‰¾äººæ€å‘ï¼Œä»Šå¤©ç®—ä½ å€’éœ‰ã€‚\n");
         player->apply_condition("bjkiller", 100);
         me->kill_ob(player);
         return 1;
@@ -30,7 +30,7 @@ int accept_fight(object player)
 int accept_kill(object player)
 {
 	object me=this_object();
-        command("say ´óÒ¯ÎÒÕýÏëÕÒÈËÉ±ÄÅ£¬½ñÌìËãÄãµ¹Ã¹¡£\n");
+        command("say å¤§çˆ·æˆ‘æ­£æƒ³æ‰¾äººæ€å‘ï¼Œä»Šå¤©ç®—ä½ å€’éœ‰ã€‚\n");
         player->apply_condition("bjkiller", 100);
         me->kill_ob(player);
         return 1;
@@ -41,7 +41,7 @@ void set_shiwei_status(int lvl)
 	int exp;
 	object me=this_object();
 
-	me->set("gender", "ÄÐÐÔ");
+	me->set("gender", "ç”·æ€§");
 	me->set("attitude", "heroism");
 	me->set("shen_type",0);
 	me->set("score", 100);

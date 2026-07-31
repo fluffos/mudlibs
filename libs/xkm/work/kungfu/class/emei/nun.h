@@ -48,7 +48,7 @@ int do_jueding()
 	message_vision("$N恭恭敬敬跪了下来，低声说道：“请恕徒儿不肖。”\n\n",me);
 	message_vision("$N对$n叹了口气，扶了$N起来，又给了$N一件布衣。\n\n",ob,me);
 	command("say 阿弥陀佛！施主保重。");
-	ob=new("clone/misc/cloth.c");
+	ob=new("clone/misc/cloth.lpc");
 	ob->move(me);
 	command("expell "+me->query("id"));
 	me->delete("class", "bonze");

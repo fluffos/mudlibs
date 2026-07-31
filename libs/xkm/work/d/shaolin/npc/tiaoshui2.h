@@ -9,20 +9,20 @@ string ask_piao()
 	ob = this_object();
 	obj = present("shui piao", me);
 	if(obj && obj->query("onwer") == me->query("id"))
-		return "ÄãÉíÉÏ²»ÊÇÓÐË®Æ°Âð, ÒªÄÇÃ´¶à¸ÉÂð? ";
+		return "ä½ èº«ä¸Šä¸æ˜¯æœ‰æ°´ç“¢å—, è¦é‚£ä¹ˆå¤šå¹²å—? ";
 	if (!me->query("shaolin/job_asked") && !me->query_condition("tiaoshui"))
-		return "ÄãÒªÆ°À´¸ÉÊ²Ã´? ";
+		return "ä½ è¦ç“¢æ¥å¹²ä»€ä¹ˆ? ";
 	if (me->query_temp("piao_asked"))
-		return "Äã²»ÊÇ¸Õ¸ÕÒª¹ýÆ°Âð£¬ÔõÃ´ÓÖÀ´ÒªÁË? ";
+		return "ä½ ä¸æ˜¯åˆšåˆšè¦è¿‡ç“¢å—ï¼Œæ€Žä¹ˆåˆæ¥è¦äº†? ";
 
-	command("say ÓÖ¶ªÁËË®Æ°? ÏÂ´ÎÐ¡ÐÄµã! ");
+	command("say åˆä¸¢äº†æ°´ç“¢? ä¸‹æ¬¡å°å¿ƒç‚¹! ");
 	obj = new("/d/shaolin/obj/piao");
 	obj->set("owner/id",me->query("id"));
 	obj->set("owner/name",me->query("name"));
 	obj->move(me);
-	message_vision("$n¸ø$NÒ»¸öË®Æ°¡£\n",me, ob);
+	message_vision("$nç»™$Nä¸€ä¸ªæ°´ç“¢ã€‚\n",me, ob);
 	me->set_temp("piao_asked",1);
-	return "¼ÇµÃÓÃÍêºó»¹»ØÀ´°¡¡£";
+	return "è®°å¾—ç”¨å®ŒåŽè¿˜å›žæ¥å•Šã€‚";
 	
 	
 }
@@ -34,23 +34,23 @@ string ask_tong()
 	ob = this_object();
 	obj = present("shui tong", me);
 	if (obj) 
-		return "ÄãÉíÉÏ²»ÊÇÓÐË®Í°Âð? ";
+		return "ä½ èº«ä¸Šä¸æ˜¯æœ‰æ°´æ¡¶å—? ";
 	obj = present("shui tong", environment(me));
 	if (obj && obj->query("onwer") == me->query("id"))
-		return "µØÉÏ²»ÊÇÓÐÄãµÄË®Í°Âð£¬ÔõÃ´»¹²»¸É»îÈ¥? ";
+		return "åœ°ä¸Šä¸æ˜¯æœ‰ä½ çš„æ°´æ¡¶å—ï¼Œæ€Žä¹ˆè¿˜ä¸å¹²æ´»åŽ»? ";
 	if (me->query("shaolin/tool_assigned"))
-		return "Äã²»ÊÇÒÑ¾­Áìµ½¹¤¾ßÁËÂð£¬ÔõÃ´ÓÖÀ´ÒªÁË? ";
+		return "ä½ ä¸æ˜¯å·²ç»é¢†åˆ°å·¥å…·äº†å—ï¼Œæ€Žä¹ˆåˆæ¥è¦äº†? ";
 	if (!me->query("shaolin/job_asked"))
-		return "ÄãÏÖÔÚÃ»ÓÐÁìÈÎÎñ£¬ÒªÊ²Ã´¹¤¾ß? ";
+		return "ä½ çŽ°åœ¨æ²¡æœ‰é¢†ä»»åŠ¡ï¼Œè¦ä»€ä¹ˆå·¥å…·? ";
 	command("nod");
-	command("say ÄÑµÃÄãÔ¸ÒâÎª±¾ËÂ½â¾öÀ§ÄÑ£¬ÕâÌ«ºÃÁË! ");
-	command("say ÕâÊÇÌôË®ÓÃµÄË®Í°£¬ÄãÄÃÈ¥ÓÃ°É¡£");
+	command("say éš¾å¾—ä½ æ„¿æ„ä¸ºæœ¬å¯ºè§£å†³å›°éš¾ï¼Œè¿™å¤ªå¥½äº†! ");
+	command("say è¿™æ˜¯æŒ‘æ°´ç”¨çš„æ°´æ¡¶ï¼Œä½ æ‹¿åŽ»ç”¨å§ã€‚");
 	obj = new("/d/shaolin/obj/tong");
 	obj->set("owner", me->query("id"));
 	obj->move(me);
-	message_vision("$N½»¸ø$nÒ»¸öË®Í°¡£\n", ob, me);
+	message_vision("$Näº¤ç»™$nä¸€ä¸ªæ°´æ¡¶ã€‚\n", ob, me);
 	me->set("shaolin/tool_assigned", 1);
-	return "ÔçÈ¥Ôç»Ø£¬ÎÒ»¹µÈ×ÅË®ÓÃÄØ¡£";
+	return "æ—©åŽ»æ—©å›žï¼Œæˆ‘è¿˜ç­‰ç€æ°´ç”¨å‘¢ã€‚";
 }
 
 int accept_object(object ob, object obj)
@@ -65,7 +65,7 @@ int accept_object(object ob, object obj)
 		if(obj->query("full")){
 			if(me->query("shaolin/job_asked")&& me->query_condition("tiaoshui")){
 				if (obj->query("owner") != me->query("id"))
-					return notify_fail("Õâ²»ÊÇÄãµÄË®Í°Ñ½¡£\n");
+					return notify_fail("è¿™ä¸æ˜¯ä½ çš„æ°´æ¡¶å‘€ã€‚\n");
 				else {
 				call_out("reward_dest",1,me,obj);
 				return 1;
@@ -73,7 +73,7 @@ int accept_object(object ob, object obj)
 			}
 			else{
 			command("faint "+me->query("id"));
-			command("say ÄãÔõÃ´ÏÖÔÚ²Å»ØÀ´? ÒÑ¾­ÓÐ±ðÈËÇÀÏÈÌôºÃÁËË®¡£\n");
+			command("say ä½ æ€Žä¹ˆçŽ°åœ¨æ‰å›žæ¥? å·²ç»æœ‰åˆ«äººæŠ¢å…ˆæŒ‘å¥½äº†æ°´ã€‚\n");
 			me->delete("shaolin/job_asked");
 			me->delete("shaolin/tool_assigned");
 			if (me->query_condition("tiaoshui"))
@@ -85,19 +85,19 @@ int accept_object(object ob, object obj)
 		}
 		else{
 				command("hmm "+me->query("id"));
-				command("say Í°»¹Ã»ÂúÄØ£¬ÔõÃ´¾ÍÄÃÀ´¸øÎÒ£¿\n");
+				command("say æ¡¶è¿˜æ²¡æ»¡å‘¢ï¼Œæ€Žä¹ˆå°±æ‹¿æ¥ç»™æˆ‘ï¼Ÿ\n");
 				return 0;
 				}
 		}
 
         command( "hmm" );
-        command( "say Äã¸øÎÒÕâ¶«Î÷×öÊ²÷á£¿\n" );
+        command( "say ä½ ç»™æˆ‘è¿™ä¸œè¥¿åšä»€éº½ï¼Ÿ\n" );
         return 0;
 }
 void destroy_dest(object me, object obj)
 {
 	command("nod");
-	command("say ÐÁ¿àÁË! \n");
+	command("say è¾›è‹¦äº†! \n");
 	me->delete_temp("piao_asked");
 	destruct(obj);
 	return;
@@ -110,7 +110,7 @@ void dest_tool(object me, object obj)
 void reward_dest(object me, object obj)
 {
 	command("thank "+me->query("id"));
-	command("say ÐÁ¿àÄãÁË£¬ÏÂÈ¥ÐÝÏ¢Ò»ÏÂ°É¡£\n");
+	command("say è¾›è‹¦ä½ äº†ï¼Œä¸‹åŽ»ä¼‘æ¯ä¸€ä¸‹å§ã€‚\n");
 	destruct(obj);
 	me->delete("shaolin/job_asked");
 	me->delete("shaolin/tool_assigned");

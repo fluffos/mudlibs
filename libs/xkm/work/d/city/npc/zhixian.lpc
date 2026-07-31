@@ -1,0 +1,124 @@
+//pro creat
+
+#include <ansi.h>
+inherit NPC;
+int do_unmarry(string arg);
+
+ void create()
+ {
+    set_name("老知县", ({ "lao zhixian", "zhixian" }));
+     set("title", HIY"办理旧结婚玩家离婚首席执行"NOR);
+    set("gender", "男性");
+    set("age", 83);
+    set("str", 20);
+    set("dex", 20);
+    set("long", "以前在他的管辖范围内结婚的玩家，可以找他来解除婚约。\n");
+    set("combat_exp", 30000);
+    set("shen_type", 0);
+    set("attitude", "heroism");
+
+    set_skill("force", 50);
+    set("neili", 500);
+    set("max_neili", 500);
+
+    setup();
+    carry_object("/clone/misc/cloth")->wear();
+ }
+
+ void init()
+ {
+    ::init();
+    add_action("do_unmarry","unmarry");
+ }
+ int accept_object(object me, object ob)
+ {
+    if (!ob->query("money_id"))
+            return notify_fail("老知县说：老玩家离婚要交10gold？！”\n");
+    if(ob->value() < 100000)
+          return notify_fail("老知县笑笑说：离婚要繁琐的手续，10 gold不能少了！”\n");
+    message_vision("老知县接过钱点点说：“好吧！我们来办理吧！”\n",me);
+    this_object()->set_temp("money",me->name());
+    return 1;
+ }
+
+ int do_unmarry(string arg)
+ {
+   object me, obj,ob;
+   me = this_player();
+
+   if (me->is_busy())
+           return notify_fail("老知县笑笑说：等阁下忙完再说吧！”\n");
+
+   if( me->is_fighting() )
+   {
+           if( !this_object()->is_killing(me) )
+                   this_object()->kill_ob(me);
+           return notify_fail("老知县无奈的说：我看这案子也别办了！”\n");
+   }
+
+   if( this_object()->is_fighting() )
+           return notify_fail("老知县说：没看到有人在捣乱吗？！”\n");
+
+   if( !living(this_object()) )
+           return notify_fail("也许老知县年事过高啦！。\n");
+
+/*
+   if( !environment()||base_name(environment()) != query("startroom") )
+           return notify_fail("老知县说：这里不是办案地点！”\n");
+*/
+
+    if(me->query_temp("unmarry"))
+           return notify_fail("老知县笑眯眯的说：你的离婚手续不是办完了吗？”\n");
+
+   if( !me->query("spouse") )
+   {
+           if ((string)me->query("gender") == "女性")
+                   say("老知县皱眉道：“你这女人，你并没有丈夫啊！”\n");
+           else
+                   say("老知县皱眉道：“你并没有妻室啊！”\n");
+       return 1;
+   }
+
+    if(!arg||arg!=(string)me->query("spouse/id"))
+           return notify_fail("老知县皱了皱眉头：你要和谁离婚？\n");
+
+   seteuid(getuid());
+   if( file_size(DATA_DIR + "login/" + arg[0..0] + "/" + arg + ".o")<0 )
+    {
+        message_vision("老知县听了$N的陈述，仔细查看了案卷，点点头道：“既然你的爱人已经不在人世，我就给你\n"
+        "单独办理离婚手续，钱也不必要交了！”然后在案卷上作了记录后。\n",me);
+          CHANNEL_D->do_channel(this_object(), "mudnews",
+          sprintf( "经本府明查：由于%s的配偶已经去世，他们的婚姻关系自然解除！\n", me->name()));
+           me->delete("spouse");
+       return 1;
+    }
+   else if( !objectp(obj = present((string)me->query("spouse/id"), environment(me)))
+                  || !find_player(me->query("spouse/id")) )
+           return notify_fail("老知县懒懒地看了看你道：“你的爱人现在不在场，要两人一起来才能办离婚。”\n");
+
+    if(query_temp("money")!=me->name()
+           &&query_temp("money")!=obj->name())
+           return notify_fail("老知县无奈的说：“离婚的手续费10 gold你还没交，没钱就回去凑合着过日子，不要来烦本官！\n");
+
+    if( (object)obj->query_temp("pending/unmarry")!=me )
+    {
+            me->set_temp("pending/unmarry", obj);
+           message_vision(MAG "\n$N看了看$n长叹一口气道：“罢罢罢……我们还是好聚好散吧！?”\n"
+                    "老知县问$n：“你愿不愿意离婚呢？说出来，老朽为你作主！”\n"NOR,me,obj);
+       tell_object(obj,"如果你同意离婚，请你也对"+me->name()+ "("+(string)me->query("id")+
+                           ")"+ "下一次 unmarry "+(string)me->query("id")+"  的指令。\n");
+           write(MAG "现在你正等待着你的伴侣的回答...\n" NOR);
+           return 1;
+   }
+   message_vision(MAG "\n$N对著$n悠悠的道：“事已至今，既然无缘，咱们就各走各的路吧。”\n\n"NOR, me,obj);
+    me->set_temp("unmarry",1);
+    obj->set_temp("unmarry",1);
+   message_vision(HIY "老知县看了看点点头说道：“$N和$n，既然你们都同意离婚，那老朽也就给你们办了！”\n"
+           "说完，在姻缘簿上重重地划去了两个名字。\n" NOR, obj, me);
+   CHANNEL_D->do_channel(this_object(), "chat",
+   sprintf( "从今天起，%s和%s的婚姻关系解除！\n", me->name(), obj->name()));
+
+   me->delete("spouse");
+   obj->delete("spouse");
+   return 1;
+ }

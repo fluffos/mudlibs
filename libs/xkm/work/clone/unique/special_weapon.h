@@ -9,10 +9,10 @@ mixed hit_ob(object me, object victim, int damage_bonus, int factor)
 	return 0;
 
 	if ( this_object()->query("weapon_prop/damage")*3/4 > obj->query("weapon_prop/damage")){
-	message_vision(HIW"¡¸ï£¡¹µØÒ»ÉùÇáÏì£¬$NÊÖÖÐµÄ$n"+HIW+"ÒÑ±»"+this_object()->query("name")+HIW"Ï÷³ÉÁ½½Ø¡£\n"NOR, victim, obj);
+	message_vision(HIW"ã€Œé“®ã€åœ°ä¸€å£°è½»å“ï¼Œ$Næ‰‹ä¸­çš„$n"+HIW+"å·²è¢«"+this_object()->query("name")+HIW"å‰Šæˆä¸¤æˆªã€‚\n"NOR, victim, obj);
 		obj->unequip();
         	obj->move(environment(victim));
-        	obj->set("name", "¶ÏµôµÄ" + obj->query("name"));
+        	obj->set("name", "æ–­æŽ‰çš„" + obj->query("name"));
 		obj->set("value", 0);
         	obj->set("weapon_prop", 0);
         	victim->reset_action();

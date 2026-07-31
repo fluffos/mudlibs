@@ -15,11 +15,11 @@ int auto_perform_duwu()
 
 	if(me->query("jingli") < poison ) return 0;
 	
-	message_vision(HIR"ìó¼û$NÑªºìµÄÉàÍ·Ò»ÉìÒ»Ëõ£¬ĞÎ×´¿É²À£¬ºöÈ»ÕÅ¿Ú£¬¿ÚÖĞÅç³öÒ»ÕóºìÎí¡£\n\n"NOR,me);
+	message_vision(HIR"ç¥—è§$Nè¡€çº¢çš„èˆŒå¤´ä¸€ä¼¸ä¸€ç¼©ï¼Œå½¢çŠ¶å¯æ€–ï¼Œå¿½ç„¶å¼ å£ï¼Œå£ä¸­å–·å‡ºä¸€é˜µçº¢é›¾ã€‚\n\n"NOR,me);
 
 	for(i=0; i<sizeof(target); i++) {
 
-		if( !living(target[i]) || target[i]==me || target[i]->query("race") == "ÉßÀà" ) continue;
+		if( !living(target[i]) || target[i]==me || target[i]->query("race") == "è›‡ç±»" ) continue;
 
 		if( random(poison) > target[i]->query_skill("force") || !living(target[i]) )
 	{
@@ -33,11 +33,11 @@ int auto_perform_duwu()
 			target[i]->receive_damage("qi", damage,  me);
 			target[i]->receive_wound("qi", random(damage), me);
 			target[i]->start_busy(1+random(2));
-			message("vision", target[i]->name() + "µÄÉí×ÓÎ¢Î¢Ò»»Î£¬ÓĞµãÁ¢×ã²»¶¨¡£\n", environment(me), target[i]);
-			tell_object(target[i], RED"ÄãÍ»È»¸Ğµ½Ò»ÕóÍ·ÔÎ£¬Ô­À´"+me->name()+"Åç³öÀ´µÄºìÎíÊÇ¾ç¶¾Ö®Îï£¬ÔÚ¿ÕÖĞÃÖÉ¢¿ªÀ´£¬ÒÔÖÂÖĞÁËÉß¶¾£¡\n"NOR);
+			message("vision", target[i]->name() + "çš„èº«å­å¾®å¾®ä¸€æ™ƒï¼Œæœ‰ç‚¹ç«‹è¶³ä¸å®šã€‚\n", environment(me), target[i]);
+			tell_object(target[i], RED"ä½ çªç„¶æ„Ÿåˆ°ä¸€é˜µå¤´æ™•ï¼ŒåŸæ¥"+me->name()+"å–·å‡ºæ¥çš„çº¢é›¾æ˜¯å‰§æ¯’ä¹‹ç‰©ï¼Œåœ¨ç©ºä¸­å¼¥æ•£å¼€æ¥ï¼Œä»¥è‡´ä¸­äº†è›‡æ¯’ï¼\n"NOR);
 		}
 		else {
-			tell_object(target[i], WHT"ÄãÁ¢¿ÌÆÁ×¡ºôÎü£¬ÒÔÃâÎüÈëÉß¶¾¡£\n"NOR);
+			tell_object(target[i], WHT"ä½ ç«‹åˆ»å±ä½å‘¼å¸ï¼Œä»¥å…å¸å…¥è›‡æ¯’ã€‚\n"NOR);
 		}
 	}
 	me->start_busy(1);
@@ -56,13 +56,13 @@ int auto_perform_chan()
 
 	if( me->query("jingli") < 500 ) return 0;
 
-	if(target->query("race") == "À¥³æ") return 0;
+	if(target->query("race") == "æ˜†è™«") return 0;
 	if( me->is_busy() || target->query_temp("snake_chan") ) return 0;
 
 	me->set_temp("try_chan",1);
 	me->set("default_actions", (: call_other, __FILE__, "query_action" :));
 	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
-	me->set("default_actions", (: call_other, "/adm/daemons/race/snake.c", "query_action" :));
+	me->set("default_actions", (: call_other, "/adm/daemons/race/snake.lpc", "query_action" :));
 	me->delete_temp("try_chan",1);
 	return 1;
 }
@@ -80,7 +80,7 @@ int auto_perform_double()
 	me->set_temp("double_hit",2);
 	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
 	me->delete_temp("double_hit");
-	me->set("default_actions", (: call_other, "/adm/daemons/race/snake.c", "query_action" :));
+	me->set("default_actions", (: call_other, "/adm/daemons/race/snake.lpc", "query_action" :));
 
 	return 1;
 }
@@ -88,8 +88,8 @@ int auto_perform_double()
 mapping query_action(object me)
 {
 	string msg1, msg2;
-	msg1 = HIR"ìóÌıóùóùÉùÏì£¬$NòêÑÑ´ÜÇ°£¬"+(random(2)?"ÓÒ":"×ó")+"±ßµÄÉßÍ·Ë»Ë»ÍÂĞÅ£¬ÃÍÈ»Ò§Ïò$nµÄ$l"NOR;
-	msg2 = RED"Ò»¿Ú²Å¸ÕÒ§¹ı£¬È´¼û$NÁíÒ»¸öÍ·Ò²×ª¹ıÁËÀ´£¬½ô¸ú×ÅÒ§Ïò$n$l"NOR;
+	msg1 = HIR"ç¥—å¬ç°Œç°Œå£°å“ï¼Œ$Nèœ¿èœ’çªœå‰ï¼Œ"+(random(2)?"å³":"å·¦")+"è¾¹çš„è›‡å¤´å˜¶å˜¶åä¿¡ï¼ŒçŒ›ç„¶å’¬å‘$nçš„$l"NOR;
+	msg2 = RED"ä¸€å£æ‰åˆšå’¬è¿‡ï¼Œå´è§$Nå¦ä¸€ä¸ªå¤´ä¹Ÿè½¬è¿‡äº†æ¥ï¼Œç´§è·Ÿç€å’¬å‘$n$l"NOR;
 
 	if( me->query_temp("double_hit") )
 	return ([
@@ -98,15 +98,15 @@ mapping query_action(object me)
 	"dodge" : 10,
 	"parry" : 10,
 	"damage" : 400,
-	"weapon" :"¶¾ÑÀ",
-	"damage_type":"Ò§ÉË"]);
+	"weapon" :"æ¯’ç‰™",
+	"damage_type":"å’¬ä¼¤"]);
 
 	else return ([
-	"action": HIR"ìó¼û$NÁ½ÕÉ¶à³¤µÄÉí×ÓÒ»ÆË£¬ÃÍÈ»³¯$nÉíÉÏ¾íµ½£¡"NOR,
+	"action": HIR"ç¥—è§$Nä¸¤ä¸ˆå¤šé•¿çš„èº«å­ä¸€æ‰‘ï¼ŒçŒ›ç„¶æœ$nèº«ä¸Šå·åˆ°ï¼"NOR,
 	"force" : 400,
 	"dodge" : 0,
 	"parry" : 0,
 	"damage" : 400,
-	"weapon" :"ÉßÉí",
-	"damage_type":"ÄÚÉË"]);
+	"weapon" :"è›‡èº«",
+	"damage_type":"å†…ä¼¤"]);
 }

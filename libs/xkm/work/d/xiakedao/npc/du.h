@@ -46,7 +46,7 @@ void greeting(object me)
                 	{	obj->set("jingli", maxjingli);
 				obj->set("eff_qi", maxqi);
 				obj->set("qi", maxqi);
-				command("say ÈÃÎÒÃÇÈıÉ®Áì½ÏÒ»ÏÂ»ªÉ½µÄÁ½ÒÇµ¶·¨°É¡£");
+				command("say è®©æˆ‘ä»¬ä¸‰åƒ§é¢†è¾ƒä¸€ä¸‹åå±±çš„ä¸¤ä»ªåˆ€æ³•å§ã€‚");
 				obj->fight_ob(hs1);
 				obj->fight_ob(hs2);
 				if (!sl1->is_fighting())
@@ -108,5 +108,5 @@ int perform_chanrao()
 	return 1;
 }
 void attempt_apprentice(object me)
-{	command("say ±ğÀ´·³ÎÒÀ²");
+{	command("say åˆ«æ¥çƒ¦æˆ‘å•¦");
 }

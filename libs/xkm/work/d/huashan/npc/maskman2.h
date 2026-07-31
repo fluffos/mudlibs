@@ -13,8 +13,8 @@ void init()
 		|| (me->query("qi") * 100 / me->query("max_qi")) < 20
 		|| (me->query("eff_jing") * 100 / me->query("max_jing")) < 20
 		|| (me->query("jing") * 100 / me->query("max_jing")) < 20 )) {
-		message_vision("$N„¨»ªÀµµ¿£∫À„ƒ„πª∫›£°¿œ◊”≤ª∑Ó≈„¡À£°\n", me);
-		message_vision("Ω”◊≈$N◊›…Ìº∏∏ˆ∆¬‰£¨“ªœ¬◊”±„≤ªº˚¡À◊Ÿ”∞°£\n\n", me);
+		message_vision("$NÊÇªÁÑ∂ËØ¥ÈÅìÔºöÁÆó‰Ω†Â§üÁã†ÔºÅËÄÅÂ≠ê‰∏çÂ•âÈô™‰∫ÜÔºÅ\n", me);
+		message_vision("Êé•ÁùÄ$NÁ∫µË∫´Âá†‰∏™Ëµ∑ËêΩÔºå‰∏Ä‰∏ãÂ≠ê‰æø‰∏çËßÅ‰∫ÜË∏™ÂΩ±„ÄÇ\n\n", me);
 		destruct(me);
 		return;
 		}
@@ -22,8 +22,8 @@ void init()
 		remove_call_out("checking");
 		remove_call_out("checking2");
 		remove_call_out("destruct_me");
-		message_vision("$N„¨„¨Àµµ¿£∫À„ƒ„≈‹µ√øÏ£¨¿œ◊”’Êµπ√π£°\n", me);
-		message_vision("Ω”◊≈$N◊›…Ìº∏∏ˆ∆¬‰£¨“ªœ¬◊”±„≤ªº˚¡À◊Ÿ”∞°£\n\n", me);
+		message_vision("$NÊÇªÊÇªËØ¥ÈÅìÔºöÁÆó‰Ω†Ë∑ëÂæóÂø´ÔºåËÄÅÂ≠êÁúüÂÄíÈúâÔºÅ\n", me);
+		message_vision("Êé•ÁùÄ$NÁ∫µË∫´Âá†‰∏™Ëµ∑ËêΩÔºå‰∏Ä‰∏ãÂ≠ê‰æø‰∏çËßÅ‰∫ÜË∏™ÂΩ±„ÄÇ\n\n", me);
 		destruct(me);
 		return;
 		}
@@ -31,7 +31,7 @@ void init()
 	if ( me->query("kill_player") == victim->query("id") && present(victim, environment(me))) {
 		me->kill_ob(victim);
 		victim->kill_ob(me);
-		message_vision( "$n∂‘◊≈$N¥Û∫£∫ªπœÎ≈‹£øƒ…√¸¿¥∞…£°\n", victim, me );
+		message_vision( "$nÂØπÁùÄ$NÂ§ßÂêºÔºöËøòÊÉ≥Ë∑ëÔºüÁ∫≥ÂëΩÊù•ÂêßÔºÅ\n", victim, me );
 		me->set_leader(victim);
 		remove_call_out("checking");
 		call_out("checking", 1, me, victim);
@@ -54,11 +54,11 @@ void init()
 	     {
 		case 0:
 			command( "grin" );
-			command( "say ƒ„◊≤∆∆¡ÀŒ“µƒ––≤ÿ£¨÷ª∫√ÀÕƒ„»•º˚—÷¬ﬁÕı¡À£°" );
+			command( "say ‰Ω†ÊíûÁ†¥‰∫ÜÊàëÁöÑË°åËóèÔºåÂè™Â•ΩÈÄÅ‰Ω†ÂéªËßÅÈòéÁΩóÁéã‰∫ÜÔºÅ" );
 			break;
 		case 1:
 			command( "hehe" );
-			command( "say ¥Û“ØŒ“’˝≥ÓŒﬁ∑®¡¢π¶£¨œ÷‘⁄ƒ„◊‘∏ˆ∂˘ÀÕ…œ√≈¿¥£¨À„ƒ„µπ√π∞…£°" );
+			command( "say Â§ßÁà∑ÊàëÊ≠£ÊÑÅÊó†Ê≥ïÁ´ãÂäüÔºåÁé∞Âú®‰Ω†Ëá™‰∏™ÂÑøÈÄÅ‰∏äÈó®Êù•ÔºåÁÆó‰Ω†ÂÄíÈúâÂêßÔºÅ" );
 			break;
 	     }
 	     me->set_temp("said", 1);
@@ -202,7 +202,7 @@ void init()
         	me->set("vendetta/authority", 1);
         	me->set("bellicosity", 10000);
 		me->set_temp("fought", 1);
-		message_vision( "$n∂‘◊≈$N¥Û∫£∫ƒ…√¸¿¥∞…£°\n", victim, me );
+		message_vision( "$nÂØπÁùÄ$NÂ§ßÂêºÔºöÁ∫≥ÂëΩÊù•ÂêßÔºÅ\n", victim, me );
 		me->kill_ob(victim);
 		victim->kill_ob(me);
 		remove_call_out("checking");
@@ -212,7 +212,7 @@ void init()
 	&& !me->is_fighting() && me->query_temp("copied") ) {
 		me->kill_ob(victim);
 		victim->kill_ob(me);
-		message_vision( "$n∂‘◊≈$N¥Û∫£∫ªπœÎ≈‹£øƒ…√¸¿¥∞…£°\n", victim, me );
+		message_vision( "$nÂØπÁùÄ$NÂ§ßÂêºÔºöËøòÊÉ≥Ë∑ëÔºüÁ∫≥ÂëΩÊù•ÂêßÔºÅ\n", victim, me );
 		me->set_leader(victim);
 		remove_call_out("checking");
 		call_out("checking", 1, me, victim);
@@ -220,7 +220,7 @@ void init()
 	else if( me->query("kill_player") == victim->query("id") ) {
 		me->kill_ob(victim);
 		victim->kill_ob(me);
-		message_vision( "$n∂‘◊≈$N¥Û∫£∫ªπœÎ≈‹£øƒ…√¸¿¥∞…£°\n", victim, me );
+		message_vision( "$nÂØπÁùÄ$NÂ§ßÂêºÔºöËøòÊÉ≥Ë∑ëÔºüÁ∫≥ÂëΩÊù•ÂêßÔºÅ\n", victim, me );
 		me->set_leader(victim);
 		remove_call_out("checking");
 		call_out("checking", 1, me, victim);
@@ -245,12 +245,12 @@ void destruct_me(object me, object victim)
 		|| (me->query("qi") * 100 / me->query("max_qi")) < 20
 		|| (me->query("eff_jing") * 100 / me->query("max_jing")) < 20
 		|| (me->query("jing") * 100 / me->query("max_jing")) < 20 ) {
-			message_vision("$N„¨»ªÀµµ¿£∫À„ƒ„πª∫›£°¿œ◊”≤ª∑Ó≈„¡À£°\n", me);
+			message_vision("$NÊÇªÁÑ∂ËØ¥ÈÅìÔºöÁÆó‰Ω†Â§üÁã†ÔºÅËÄÅÂ≠ê‰∏çÂ•âÈô™‰∫ÜÔºÅ\n", me);
 		}
 		else {
-			message_vision("$N„¨„¨Àµµ¿£∫À„ƒ„≈‹µ√øÏ£¨¿œ◊”’Êµπ√π£°\n", me);
+			message_vision("$NÊÇªÊÇªËØ¥ÈÅìÔºöÁÆó‰Ω†Ë∑ëÂæóÂø´ÔºåËÄÅÂ≠êÁúüÂÄíÈúâÔºÅ\n", me);
 		}
-		message_vision("Ω”◊≈$N◊›…Ìº∏∏ˆ∆¬‰£¨√ª»Î…≠¡÷¿Ô°£\n\n", me);
+		message_vision("Êé•ÁùÄ$NÁ∫µË∫´Âá†‰∏™Ëµ∑ËêΩÔºåÊ≤°ÂÖ•Ê£ÆÊûóÈáå„ÄÇ\n\n", me);
 		destruct(me);
 	}
 	else return 0;
@@ -274,7 +274,7 @@ int checking(object me, object victim)
 	if ( me->query("kill_player") == victim->query("id")  && !me->is_fighting() && present(victim, environment(me))) {
 		me->kill_ob(victim);
 		victim->kill_ob(me);
-		message_vision( "$n∂‘◊≈$N¥Û∫£∫ªπœÎ≈‹£øƒ…√¸¿¥∞…£°\n", victim, me );
+		message_vision( "$nÂØπÁùÄ$NÂ§ßÂêºÔºöËøòÊÉ≥Ë∑ëÔºüÁ∫≥ÂëΩÊù•ÂêßÔºÅ\n", victim, me );
 		me->set_leader(victim);
 		remove_call_out("checking");
 		call_out("checking", 1, me, victim);
@@ -295,8 +295,8 @@ int checking(object me, object victim)
 	}
 	
 	if ( victim->is_ghost() ) {
-		command("say ◊‹À„¥Ûπ¶∏Ê≥…¡À£°π˛π˛π˛£°");
-		message_vision("Ω”◊≈$N◊›…Ìº∏∏ˆ∆¬‰£¨√ª»Î…≠¡÷¿Ô°£\n\n", me);
+		command("say ÊÄªÁÆóÂ§ßÂäüÂëäÊàê‰∫ÜÔºÅÂìàÂìàÂìàÔºÅ");
+		message_vision("Êé•ÁùÄ$NÁ∫µË∫´Âá†‰∏™Ëµ∑ËêΩÔºåÊ≤°ÂÖ•Ê£ÆÊûóÈáå„ÄÇ\n\n", me);
 		destruct(me);
 		return 1; 
 	}
@@ -315,7 +315,7 @@ int checking(object me, object victim)
 	if ( !me->is_fighting() && present(victim, environment(me)) ) {
 		me->kill_ob(victim);
 		victim->kill_ob(me);
-		message_vision( "$n∂‘◊≈$N¥Û∫£∫ªπœÎ≈‹£øƒ…√¸¿¥∞…£°\n", victim, me );
+		message_vision( "$nÂØπÁùÄ$NÂ§ßÂêºÔºöËøòÊÉ≥Ë∑ëÔºüÁ∫≥ÂëΩÊù•ÂêßÔºÅ\n", victim, me );
 		me->set_leader(victim);
 		remove_call_out("checking");
 		call_out("checking", 1, me, victim);
@@ -339,7 +339,7 @@ int checking2(object me, object victim)
 	room = environment(victim);
 	
 	if(wizardp(victim)) 
-		command("tell maco ƒ„‘⁄"+room->query("short")+"£¨Œ“‘⁄"+environment(me)->query("short")+"°£");
+		command("tell maco ‰Ω†Âú®"+room->query("short")+"ÔºåÊàëÂú®"+environment(me)->query("short")+"„ÄÇ");
 
 	if (me->is_busy() || me->is_fighting() || !living(me)) {
 		remove_call_out("checking2");
@@ -349,10 +349,10 @@ int checking2(object me, object victim)
 	else if ( room != environment(me) && me->query("kill_player") == victim->query("id") 
 	&& !victim->is_ghost() ) {
 		if(wizardp(victim))
-			command("tell maco ∏√«∞Õ˘"+room->query("short")+"°£");
-		message_vision(me->name() + "º±º±√¶√¶µÿ¿Îø™¡À°£\n", me );
+			command("tell maco ËØ•ÂâçÂæÄ"+room->query("short")+"„ÄÇ");
+		message_vision(me->name() + "ÊÄ•ÊÄ•ÂøôÂøôÂú∞Á¶ªÂºÄ‰∫Ü„ÄÇ\n", me );
 		me->move(room);
-		message_vision(me->name() + "øÏ≤Ω◊ﬂ¡Àπ˝¿¥°£\n", me);
+		message_vision(me->name() + "Âø´Ê≠•Ëµ∞‰∫ÜËøáÊù•„ÄÇ\n", me);
 		call_out("checking2", 1, me, victim);
 
 		return 1;
@@ -366,12 +366,12 @@ int accept_fight(object victim)
 {
 	object me = this_object();
 	if ( me->query_temp("victim") && victim->query("combat_exp") > me->query("combat_exp") ) {
-		 command( "say πˆø™£°¥Û“Ø√ªπ¶∑Ú∫Õƒ„œπƒ÷£°" );
+		 command( "say ÊªöÂºÄÔºÅÂ§ßÁà∑Ê≤°ÂäüÂ§´Âíå‰Ω†ÁûéÈóπÔºÅ" );
 		 return 0;
 	}
 	else {
-		command( "say ƒ„≥‘¡À¿«–ƒ±™◊”µ®¿≤£¨æπ∏“∑¥øπ£°" );
-		if (victim->query("family/family_name") != "ª™…Ω≈…") {
+		command( "say ‰Ω†ÂêÉ‰∫ÜÁãºÂøÉË±πÂ≠êËÉÜÂï¶ÔºåÁ´üÊï¢ÂèçÊäóÔºÅ" );
+		if (victim->query("family/family_name") != "ÂçéÂ±±Ê¥æ") {
 			me->set("kill_player",victim->query("id"));
 			call_out("checking2", 1, me, victim);
 			}
@@ -389,15 +389,15 @@ int accept_kill(object victim)
 	object me = this_object();
 
 	if ( me->query_temp("victim") && victim->query("combat_exp") > me->query("combat_exp") ) {
-		 command( "say ∫√∫∫≤ª≥‘—€«∞ø˜£¨º¥»ªƒ„”–∞Ô ÷£¨¥Û“ØŒ“±„»√ƒ„∂‡ªÓº∏ÃÏ°£" );
-		 message_vision("\n$NÕª»ª¬Ù“ª∆∆’¿£¨Ã¯≥ˆ’Ω»¶£¨Ã”¡À£°\n", me);
+		 command( "say Â•ΩÊ±â‰∏çÂêÉÁúºÂâç‰∫èÔºåÂç≥ÁÑ∂‰Ω†ÊúâÂ∏ÆÊâãÔºåÂ§ßÁà∑Êàë‰æøËÆ©‰Ω†Â§öÊ¥ªÂá†Â§©„ÄÇ" );
+		 message_vision("\n$NÁ™ÅÁÑ∂Âçñ‰∏ÄÁ†¥ÁªΩÔºåË∑≥Âá∫ÊàòÂúàÔºåÈÄÉ‰∫ÜÔºÅ\n", me);
 		 remove_call_out("checking");
 		 me->remove_all_enemy();
 		 destruct(me);
 	}
 	else {
-		command( "say ≤ª÷™À¿ªÓµƒ∂´Œ˜£¨»√¥Û“ØŒ“≥¨∂…ƒ„∞…£°" );
-		if (victim->query("family/family_name") != "ª™…Ω≈…") {
+		command( "say ‰∏çÁü•Ê≠ªÊ¥ªÁöÑ‰∏úË•øÔºåËÆ©Â§ßÁà∑ÊàëË∂ÖÊ∏°‰Ω†ÂêßÔºÅ" );
+		if (victim->query("family/family_name") != "ÂçéÂ±±Ê¥æ") {
 			me->set("kill_player",victim->query("id"));
 			call_out("checking2", 1, me, victim);
 			}
@@ -411,13 +411,13 @@ int accept_kill(object victim)
 
 void unconcious()
 {
-//      message_vision("\n$NÕª»ª¬Ù“ª∆∆’¿£¨Ã¯≥ˆ’Ω»¶£¨Ã”¡À£°\n", this_object());
+//      message_vision("\n$NÁ™ÅÁÑ∂Âçñ‰∏ÄÁ†¥ÁªΩÔºåË∑≥Âá∫ÊàòÂúàÔºåÈÄÉ‰∫ÜÔºÅ\n", this_object());
 //      destruct(this_object());
 
 	object me = this_object();
 
 	remove_call_out("checking");
-	me->disable_player(" <ªË√‘≤ª–—>");
+	me->disable_player(" <ÊòèËø∑‰∏çÈÜí>");
 	me->set("jing", 0);
 	me->set("qi", 0);
 	COMBAT_D->announce(me, "unconcious");
@@ -460,6 +460,6 @@ void die()
 	
 	destruct(this_object());
 
-//      message_vision("\n$NÀ¿¡À£°\n", this_object());
+//      message_vision("\n$NÊ≠ª‰∫ÜÔºÅ\n", this_object());
 //      destruct(this_object());
 }

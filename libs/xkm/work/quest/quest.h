@@ -18,29 +18,29 @@ int give_quest()
         string pai ;
         int score;
         string *menpai = ({
-                "ÈÕÔÂÉñ½Ì",
-                "ä½»¨½£ÅÉ",
-                "É±ÊÖÂ¥",
-                "Ñ©É½ËÂ",
-                "ºì»¨»á",
-                "ÔÆÁúÃÅ",
-                "¹ÃËÕÄ½ÈÝ",
-                "åÐÒ£ÅÉ",
-                "¶ëáÒÅÉ",
-                "À¥ÂØÅÉ",
-                "ÉÙÁÖÅÉ",
-                "Îäµ±ÅÉ",
-                "Ø¤°ï",
-                "»ªÉ½ÅÉ",
-                "Ã÷½Ì",
-                "ÐÇËÞÅÉ",
-                "ÌÒ»¨µº",
-                "È«Õæ½Ì",
-                "°×ÍÕÉ½ÅÉ",
-                "ÌìÁúËÂ",
-                "¹ÅÄ¹ÅÉ",
-                "ÁéðÕ¹¬", 
-                "ÕòÄÏÍõ¸®",        });
+                "æ—¥æœˆç¥žæ•™",
+                "æµ£èŠ±å‰‘æ´¾",
+                "æ€æ‰‹æ¥¼",
+                "é›ªå±±å¯º",
+                "çº¢èŠ±ä¼š",
+                "äº‘é¾™é—¨",
+                "å§‘è‹æ…•å®¹",
+                "é€é¥æ´¾",
+                "å³¨åµ‹æ´¾",
+                "æ˜†ä»‘æ´¾",
+                "å°‘æž—æ´¾",
+                "æ­¦å½“æ´¾",
+                "ä¸å¸®",
+                "åŽå±±æ´¾",
+                "æ˜Žæ•™",
+                "æ˜Ÿå®¿æ´¾",
+                "æ¡ƒèŠ±å²›",
+                "å…¨çœŸæ•™",
+                "ç™½é©¼å±±æ´¾",
+                "å¤©é¾™å¯º",
+                "å¤å¢“æ´¾",
+                "çµé¹«å®«", 
+                "é•‡å—çŽ‹åºœ",        });
         string *dirfile = ({
                 "riyue",
                 "huanhua",
@@ -79,7 +79,7 @@ int give_quest()
         if(me->query("family/family_name")!=obj->query("family/family_name"))
         {
                 command("? "+me->query("id"));
-                command("say "+RANK_D->query_respect(me)+"Óë±¾ÅÉËØÎÞÀ´Íù£¬´Ë»°´ÓºÎËµÆð£¿");
+                command("say "+RANK_D->query_respect(me)+"ä¸Žæœ¬æ´¾ç´ æ— æ¥å¾€ï¼Œæ­¤è¯ä»Žä½•è¯´èµ·ï¼Ÿ");
                 return 1;
         }
 
@@ -87,7 +87,7 @@ int give_quest()
         {
                 if (((int) me->query("task_time")) < time() )
                 {
-                        tell_object(me,obj->query("name")+"ËµµÀ£ºÕæ¿ÉÏ§£¡ÄãÃ»ÓÐÔÚÖ¸¶¨µÄÊ±¼äÄÚÍê³É£¡\n");
+                        tell_object(me,obj->query("name")+"è¯´é“ï¼šçœŸå¯æƒœï¼ä½ æ²¡æœ‰åœ¨æŒ‡å®šçš„æ—¶é—´å†…å®Œæˆï¼\n");
                         me->delete_temp("mpquest_finish");
                         return 1;
                 }
@@ -96,12 +96,12 @@ int give_quest()
         else if ( mapp(quest = me->query("mpquest")) )
         {
                 if( ((int) me->query("task_time")) > time() )
-                        return notify_fail("»¹ÊÇÏÈ°ÑÄãµÄÈÎÎñÍê³É°É¡£\n");
+                        return notify_fail("è¿˜æ˜¯å…ˆæŠŠä½ çš„ä»»åŠ¡å®Œæˆå§ã€‚\n");
                 else
                 {
-                        message_vision(obj->query("name")+"Ïò$NÌ¾ÁË¿ÚÆø£¬ËµµÀ£ºËãÁË£¬¿´À´ÎÒ²»Ó¦¸ÃÈÃÄãÈ¥×öÕâ¼þÊÂ¡£\n", me);
+                        message_vision(obj->query("name")+"å‘$Nå¹äº†å£æ°”ï¼Œè¯´é“ï¼šç®—äº†ï¼Œçœ‹æ¥æˆ‘ä¸åº”è¯¥è®©ä½ åŽ»åšè¿™ä»¶äº‹ã€‚\n", me);
                         score=1+random(quest["score"]/2);
-                        tell_object(me,"Äã¶Ô"+me->query("family/family_name")+"µÄÖÒ³Ï¶È½µµÍÁË"+chinese_number(score)+"µã¡£\n");
+                        tell_object(me,"ä½ å¯¹"+me->query("family/family_name")+"çš„å¿ è¯šåº¦é™ä½Žäº†"+chinese_number(score)+"ç‚¹ã€‚\n");
                         if(!me->query("score"))
                         me->set("score",0);
                         me->add("score",-score);
@@ -112,7 +112,7 @@ int give_quest()
 
         if( ((int) me->query("task_time")) > time() )
         {
-                message_vision(obj->query("name")+"Ïò$N»ÓÁË»ÓÊÖ£¬ËµµÀ£ºÔÝÊ±Ã»ÓÐÊ²Ã´ÊÂÒª×öÁË£¬ÄãÏÈÏÂÈ¥°É¡£\n", me);
+                message_vision(obj->query("name")+"å‘$NæŒ¥äº†æŒ¥æ‰‹ï¼Œè¯´é“ï¼šæš‚æ—¶æ²¡æœ‰ä»€ä¹ˆäº‹è¦åšäº†ï¼Œä½ å…ˆä¸‹åŽ»å§ã€‚\n", me);
                 return 1;
         }
 
@@ -135,25 +135,25 @@ int give_quest()
         tag=levels[num];
         quest = ((string)"/quest/"+pai+"/qlist"+num)->query_quest();
         timep = quest["time"];
-      tell_object(me,HIW" "+obj->query("name")+"³ÁË¼ÁËÒ»»á¶ù£¬ËµµÀ£º\n");
+      tell_object(me,HIW" "+obj->query("name")+"æ²‰æ€äº†ä¸€ä¼šå„¿ï¼Œè¯´é“ï¼š\n");
         if (!undefinedp(quest["reason"]))
                 tell_object(me ,HIW" "+quest["reason"]);
         time_period(timep, me , obj);
-        if (quest["quest_type"] == "Ñ°")
+        if (quest["quest_type"] == "å¯»")
         {
-        tell_object(me,"ÕÒ»Ø¡º"+quest["quest"]+"¡»¸øÎÒ¡£\n" NOR);
+        tell_object(me,"æ‰¾å›žã€Ž"+quest["quest"]+"ã€ç»™æˆ‘ã€‚\n" NOR);
         }
-        else if (quest["quest_type"] == "É±")
+        else if (quest["quest_type"] == "æ€")
         {
-        tell_object(me,"ÌæÎÒÉ±ÁË¡º"+quest["quest"]+"¡»¡£\n" NOR);
+        tell_object(me,"æ›¿æˆ‘æ€äº†ã€Ž"+quest["quest"]+"ã€ã€‚\n" NOR);
         }
-        else if (quest["quest_type"] == "É¨")
+        else if (quest["quest_type"] == "æ‰«")
         {
-        tell_object(me,"È¥°Ñ¡º"+quest["quest"]+"¡»´òÉ¨Ò»ÏÂ°É¡£\n" NOR);
+        tell_object(me,"åŽ»æŠŠã€Ž"+quest["quest"]+"ã€æ‰“æ‰«ä¸€ä¸‹å§ã€‚\n" NOR);
         }
-        else if (quest["quest_type"] == "ËÍ")
+        else if (quest["quest_type"] == "é€")
         {
-        tell_object(me,"°ÑÕâ·âÐÅËÍ¸ø¡º"+quest["quest"]+"¡»°É¡£\n" NOR);
+        tell_object(me,"æŠŠè¿™å°ä¿¡é€ç»™ã€Ž"+quest["quest"]+"ã€å§ã€‚\n" NOR);
         xin=new("/u/ronger/xin");
         xin->move(me);
         }
@@ -174,14 +174,14 @@ int time_period(int timep, object me,object obj)
         h = t % 24;             t /= 24;
         d = t;
 
-        if(d) time = chinese_number(d) + "Ìì";
+        if(d) time = chinese_number(d) + "å¤©";
         else time = "";
 
-        if(h) time += chinese_number(h) + "Ð¡Ê±";
-        if(m) time += chinese_number(m) + "·Ö";
-        time += chinese_number(s) + "Ãë";
+        if(h) time += chinese_number(h) + "å°æ—¶";
+        if(m) time += chinese_number(m) + "åˆ†";
+        time += chinese_number(s) + "ç§’";
 
-        tell_object(me,HIW" "+"ÇëÔÚ" + time + "ÄÚ");
+        tell_object(me,HIW" "+"è¯·åœ¨" + time + "å†…");
 
         return 1;
 }
@@ -194,17 +194,17 @@ int accept_object(object who, object ob)
 
         if( ob->is_character())
         {
-        tell_object(who,obj->query("name")+"ËµµÀ£ºÕâ²»ÊÇÎÒÏëÒªµÄ¡£\n");
+        tell_object(who,obj->query("name")+"è¯´é“ï¼šè¿™ä¸æ˜¯æˆ‘æƒ³è¦çš„ã€‚\n");
         return 0;
         }
         if(userp(ob) || !(quest =  who->query("mpquest")))
         {
-        tell_object(who,obj->query("name")+"ËµµÀ£ºÕâ²»ÊÇÎÒÏëÒªµÄ¡£\n");
+        tell_object(who,obj->query("name")+"è¯´é“ï¼šè¿™ä¸æ˜¯æˆ‘æƒ³è¦çš„ã€‚\n");
         return 0;
         }
         if( ob->name(1) != quest["quest"])
         {
-        tell_object(who,obj->query("name")+"ËµµÀ£ºÕâ²»ÊÇÎÒÏëÒªµÄ¡£\n");
+        tell_object(who,obj->query("name")+"è¯´é“ï¼šè¿™ä¸æ˜¯æˆ‘æƒ³è¦çš„ã€‚\n");
         return 0;
         }
         remove_call_out("dest");
@@ -213,14 +213,14 @@ int accept_object(object who, object ob)
         who->set_temp("mpquest_finish",1);
         if ((int) who->query("task_time") < time() )
         {
-                tell_object(who,obj->query("name")+"ËµµÀ£ºÕæ¿ÉÏ§£¡ÄãÃ»ÓÐÔÚÖ¸¶¨µÄÊ±¼äÄÚÍê³É£¡\n");
+                tell_object(who,obj->query("name")+"è¯´é“ï¼šçœŸå¯æƒœï¼ä½ æ²¡æœ‰åœ¨æŒ‡å®šçš„æ—¶é—´å†…å®Œæˆï¼\n");
                 return 1;
         }
         else
         {
-                tell_object(who,obj->query("name")+"ËµµÀ£º¹§Ï²Äã£¡ÄãÓÖÍê³ÉÁËÒ»ÏîÈÎÎñ£¡\n");
+                tell_object(who,obj->query("name")+"è¯´é“ï¼šæ­å–œä½ ï¼ä½ åˆå®Œæˆäº†ä¸€é¡¹ä»»åŠ¡ï¼\n");
                 score=quest["score"]+random(quest["score"]);
-                tell_object(who,"Äã¶Ô"+who->query("family/family_name")+"µÄÖÒ³Ï¶ÈÌá¸ßÁË"+chinese_number(score)+"µã¡£\n");
+                tell_object(who,"ä½ å¯¹"+who->query("family/family_name")+"çš„å¿ è¯šåº¦æé«˜äº†"+chinese_number(score)+"ç‚¹ã€‚\n");
                 if(!who->query("score"))
                 who->set("score",0);
                 who->add("score",score);

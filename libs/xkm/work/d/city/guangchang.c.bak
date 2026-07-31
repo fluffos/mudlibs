@@ -5,72 +5,72 @@
 inherit ROOM;
 
 string* locations = ({
-	"/d/shaolin/bamboo1",	//ÖñÁÖ
-	"/d/shaolin/damodong",	//´ïÄ¦¶´
-	"/d/shaolin/beilin3",	//µØÏÂÊÒ
-	"/d/shaolin/dzdian",	//Ä¾ÈË
-	"/d/shaolin/bydian",	//Ä¾ÈË
-	"/d/shaolin/wuchang1",	//Ä¾ÈË
-	"/d/shaolin/wuchang2",	//Ä¾ÈË
-	"/d/shaolin/wuchang3",	//Ä¾ÈË
-	"/d/shaolin/dmyuan2",	//´ïÄ¦Ôº
-	"/d/shaolin/cjlou1",	//²Ø¾­¸ó
-	"/d/wudang/donglang2",	//¶«Ïá×ßÀÈ
-	"/d/wudang/liangongfang",	//Á·¹¦·¿
-	"/d/wudang/shanmen",	//É½ÃÅ
-	"/d/emei/leidong",	//À×¶´Æº
-	"/d/emei/chanfang_fs",	//ìø·¿
-	"/d/emei/chanfang_qf",	//ìø·¿
-	"/d/emei/chanfang_wn",	//ìø·¿
-	"/d/emei/hz_chanfang",	//ìø·¿
-	"/d/zhongnan/c_dlang",	//É³´ü
-	"/d/zhongnan/c_xilang",	//Ä¾×®
-	"/d/zhongnan/yangxin",	//ÑøĞÄµî
-	"/d/zhongnan/bingdong",	//±ù¶´
-	"/d/zhongnan/fengdong",	//·ç¶´
-	"/d/zhongnan/xuanya1",	//ĞüÑÂ
-	"/d/zhongnan/xuanya2",	//ĞüÑÂ
-	"/d/zhongnan/xuanya3",	//ĞüÑÂ
-	"/d/zhongnan/xuanya4",	//ĞüÑÂ
-	"/d/huashan/midong",	//ÃÜ¶´
-	"/d/dali/wangfu7",	//³Ğ¹â±Ú
-	"/d/dali/diziarea",	//Ğ¡Ôº
-	"/d/dali/chufang",	//»ï·¿
-	"/d/dali/yideng12",	//Ò»µÆ
-	"/d/xueshan/houyuan",	//ºóÔº
-	"/d/xueshan/wangyou",	//ÍüÓÇ¹È
-	"/d/xueshan/luyeyuan",	//Â¹Ò°Ô·
-	"/d/taohua/guanchao",	//¹Û³±Ì¨
-	"/d/taohua/shijian",	//ÊÔ½£Í¤
-	"/d/taishan/nantian",	//ÄÏÌìÃÅ
-	"/d/taishan/fengchan",	//·âìøÌ¨
-	"/d/taishan/zhengqi",	//ÕıÆøÌü
-	"/d/taishan/xiayi",	//ÏÀÒåÌü
-	"/d/xixia/wangling",	//Ê¯ÈËÎäÊ¿
-	"/d/xixia/deling",	//Ê¯ÈËÎäÊ¿
-	"/d/xixia/huilang",	//ÊÌÎÀ
-	"/d/xixia/square",	//ÊÌÎÀ
-	"/d/xixia/piandian2",	//ÊÌÎÀ
-	"/d/xixia/jytang",	//Ò»Æ·ÌÃÎäÊ¿
-	"/d/xixia/ypgate",	//Ò»Æ·ÌÃÎäÊ¿
-	"/d/xixia/gate",	//»Ê¹¬ÎÀÊ¿
+	"/d/shaolin/bamboo1",	//ç«¹æ—
+	"/d/shaolin/damodong",	//è¾¾æ‘©æ´
+	"/d/shaolin/beilin3",	//åœ°ä¸‹å®¤
+	"/d/shaolin/dzdian",	//æœ¨äºº
+	"/d/shaolin/bydian",	//æœ¨äºº
+	"/d/shaolin/wuchang1",	//æœ¨äºº
+	"/d/shaolin/wuchang2",	//æœ¨äºº
+	"/d/shaolin/wuchang3",	//æœ¨äºº
+	"/d/shaolin/dmyuan2",	//è¾¾æ‘©é™¢
+	"/d/shaolin/cjlou1",	//è—ç»é˜
+	"/d/wudang/donglang2",	//ä¸œå¢èµ°å»Š
+	"/d/wudang/liangongfang",	//ç»ƒåŠŸæˆ¿
+	"/d/wudang/shanmen",	//å±±é—¨
+	"/d/emei/leidong",	//é›·æ´åª
+	"/d/emei/chanfang_fs",	//ç¦…æˆ¿
+	"/d/emei/chanfang_qf",	//ç¦…æˆ¿
+	"/d/emei/chanfang_wn",	//ç¦…æˆ¿
+	"/d/emei/hz_chanfang",	//ç¦…æˆ¿
+	"/d/zhongnan/c_dlang",	//æ²™è¢‹
+	"/d/zhongnan/c_xilang",	//æœ¨æ¡©
+	"/d/zhongnan/yangxin",	//å…»å¿ƒæ®¿
+	"/d/zhongnan/bingdong",	//å†°æ´
+	"/d/zhongnan/fengdong",	//é£æ´
+	"/d/zhongnan/xuanya1",	//æ‚¬å´–
+	"/d/zhongnan/xuanya2",	//æ‚¬å´–
+	"/d/zhongnan/xuanya3",	//æ‚¬å´–
+	"/d/zhongnan/xuanya4",	//æ‚¬å´–
+	"/d/huashan/midong",	//å¯†æ´
+	"/d/dali/wangfu7",	//æ‰¿å…‰å£
+	"/d/dali/diziarea",	//å°é™¢
+	"/d/dali/chufang",	//ä¼™æˆ¿
+	"/d/dali/yideng12",	//ä¸€ç¯
+	"/d/xueshan/houyuan",	//åé™¢
+	"/d/xueshan/wangyou",	//å¿˜å¿§è°·
+	"/d/xueshan/luyeyuan",	//é¹¿é‡è‹‘
+	"/d/taohua/guanchao",	//è§‚æ½®å°
+	"/d/taohua/shijian",	//è¯•å‰‘äº­
+	"/d/taishan/nantian",	//å—å¤©é—¨
+	"/d/taishan/fengchan",	//å°ç¦…å°
+	"/d/taishan/zhengqi",	//æ­£æ°”å…
+	"/d/taishan/xiayi",	//ä¾ ä¹‰å…
+	"/d/xixia/wangling",	//çŸ³äººæ­¦å£«
+	"/d/xixia/deling",	//çŸ³äººæ­¦å£«
+	"/d/xixia/huilang",	//ä¾å«
+	"/d/xixia/square",	//ä¾å«
+	"/d/xixia/piandian2",	//ä¾å«
+	"/d/xixia/jytang",	//ä¸€å“å ‚æ­¦å£«
+	"/d/xixia/ypgate",	//ä¸€å“å ‚æ­¦å£«
+	"/d/xixia/gate",	//çš‡å®«å«å£«
 });
 void create()
 {
-	set("short", "ÖĞÑë¹ã³¡");
+	set("short", "ä¸­å¤®å¹¿åœº");
 	set("long", @LONG
-³ÇÊĞµÄÕıÖĞĞÄÊÇÒ»¸öºÜ¿íÀ«µÄ¹ã³¡£¬µØÃæÉÏÆÌ×ÅÇàÊ¯£¬¾­³£ÓĞÒÕÈËÔÚÕâÀï±í
-Ñİ¡£Ò»Ğ©ÓÎÊÖºÃÏĞµÄÈËÔÚÕâÀïÁïÁï´ï´ï¡£ÖĞÑëÓĞÒ»¿Ã´ó»±Ê÷£¬ÅÌ¸ù´í½Ú£¬¾İ´«ÒÑ
-ÓĞÇ§ÄêµÄÊ÷Áä£¬ÊÇÕâ×ù³ÇÊĞµÄÀúÊ·¼ûÖ¤¡£Ê÷¸Éµ×²¿ÓĞÒ»¸öºÜ´óµÄ¶´(dong)¡£Äã¿É
-ÒÔ¿´µ½±±±ßÓĞÀ´×Ô¸÷µØµÄĞĞÈËÀ´À´ÍùÍù£¬ÄÏÃæÈËÉù¶¦·Ğ£¬Ò»ÅÉ·±»ª¾°Ïó£¬¶«±ß²»
-Ê±µØ´«À´ÀÊÀÊµÄ¶ÁÊéÉù£¬Î÷±ßÔò¼û²»µ½¼¸¸öĞĞÈË£¬Ò»Æ¬Ëà¾²¡£
+åŸå¸‚çš„æ­£ä¸­å¿ƒæ˜¯ä¸€ä¸ªå¾ˆå®½é˜”çš„å¹¿åœºï¼Œåœ°é¢ä¸Šé“ºç€é’çŸ³ï¼Œç»å¸¸æœ‰è‰ºäººåœ¨è¿™é‡Œè¡¨
+æ¼”ã€‚ä¸€äº›æ¸¸æ‰‹å¥½é—²çš„äººåœ¨è¿™é‡Œæºœæºœè¾¾è¾¾ã€‚ä¸­å¤®æœ‰ä¸€æ£µå¤§æ§æ ‘ï¼Œç›˜æ ¹é”™èŠ‚ï¼Œæ®ä¼ å·²
+æœ‰åƒå¹´çš„æ ‘é¾„ï¼Œæ˜¯è¿™åº§åŸå¸‚çš„å†å²è§è¯ã€‚æ ‘å¹²åº•éƒ¨æœ‰ä¸€ä¸ªå¾ˆå¤§çš„æ´(dong)ã€‚ä½ å¯
+ä»¥çœ‹åˆ°åŒ—è¾¹æœ‰æ¥è‡ªå„åœ°çš„è¡Œäººæ¥æ¥å¾€å¾€ï¼Œå—é¢äººå£°é¼æ²¸ï¼Œä¸€æ´¾ç¹åæ™¯è±¡ï¼Œä¸œè¾¹ä¸
+æ—¶åœ°ä¼ æ¥æœ—æœ—çš„è¯»ä¹¦å£°ï¼Œè¥¿è¾¹åˆ™è§ä¸åˆ°å‡ ä¸ªè¡Œäººï¼Œä¸€ç‰‡è‚ƒé™ã€‚
 LONG
 	);
         set("no_sleep_room",1);
         set("outdoors", "city");
 
 	set("item_desc", ([
-		"dong" : "ÕâÊÇÒ»¸öºÚ²»ÁïäĞµÄ´ó¶´£¬ÀïÃæ²»ÖªµÀÓĞĞ©Ê²Ã´¹Å¹Ö¡£\n",
+		"dong" : "è¿™æ˜¯ä¸€ä¸ªé»‘ä¸æºœæ¹«çš„å¤§æ´ï¼Œé‡Œé¢ä¸çŸ¥é“æœ‰äº›ä»€ä¹ˆå¤æ€ªã€‚\n",
 	]));
 
 	set("exits", ([
@@ -103,16 +103,16 @@ void init()
 
 	if ( interactive(ob=this_player()) ) {
 		if ( ob->query_temp("biao/zhu") && present("hong biao", ob) && random(3)==1 ) {
-		   message_vision("$NÔÚÈË³±ÖĞ±»ÈË×²ÁËÒ»ÏÂ¡£\n", ob);
+		   message_vision("$Nåœ¨äººæ½®ä¸­è¢«äººæ’äº†ä¸€ä¸‹ã€‚\n", ob);
 		   if ( random(ob->query("combat_exp")) <= ob->query("combat_exp")/2 ) {
-			tell_object( ob, "ÄãµÄºìïÚ±»°Ç×ßÁË£¡\n" );	
+			tell_object( ob, "ä½ çš„çº¢é•–è¢«æ‰’èµ°äº†ï¼\n" );	
 			ob->delete_temp("biao/zhu");
 			ob->delete_temp("apply/short");
 			ob->set_temp("biao/fail", 1);
 			obj1 = present("hong biao", ob);
 			destruct(obj1);
 		   }
-		   else message_vision("$N·¢ÏÖÔ­À´ÄÇÈËÊÇ¸ö°ÇÊÖ£¬ÄÇÈË¼ûÊ±»ú°ÜÂ¶£¬±ãÂä»Ä¶øÌÓÁË£¡\n", ob);
+		   else message_vision("$Nå‘ç°åŸæ¥é‚£äººæ˜¯ä¸ªæ‰’æ‰‹ï¼Œé‚£äººè§æ—¶æœºè´¥éœ²ï¼Œä¾¿è½è’è€Œé€ƒäº†ï¼\n", ob);
 		}
 
 		if ( query("target_found") == 1 ) {
@@ -135,10 +135,10 @@ private int is_suitable(object target)
 {
         if ( target->query("combat_exp") < 100000  || wizardp(target) 
 	|| target->is_ghost() || environment(target)->query("no_fight")
-	|| environment(target)->query("short") == "¼àÓü" 
-	|| environment(target)->query("short") == "µØÀÎ" 
-	|| environment(target)->query("short") == "ÀÎ·¿"
-	|| environment(target)->query("short") == "ÌúÀÎ"
+	|| environment(target)->query("short") == "ç›‘ç‹±" 
+	|| environment(target)->query("short") == "åœ°ç‰¢" 
+	|| environment(target)->query("short") == "ç‰¢æˆ¿"
+	|| environment(target)->query("short") == "é“ç‰¢"
 	|| ( target->is_busy() && ( !target->query_temp("pending/excercise") 
 	&& !target->query_temp("pending/respirate") ) )
 	|| target->is_fighting() || !living(target) ) {
@@ -391,20 +391,20 @@ int do_enter(string arg)
         if( arg=="dong" ) 
         {
                 if ( me->query_temp("exit_blocked") )
-                        return notify_fail("ÄãÕıÃ¦×Åµ²×¡±ğÈËµÄ³öÂ·ÄØ£¡\n");
+                        return notify_fail("ä½ æ­£å¿™ç€æŒ¡ä½åˆ«äººçš„å‡ºè·¯å‘¢ï¼\n");
                 if ( me->query("rided") ) 
-                        return notify_fail("Æï×Å¶«Î÷×ê¶´£¿£¡\n");
+                        return notify_fail("éª‘ç€ä¸œè¥¿é’»æ´ï¼Ÿï¼\n");
 
                 if ( me->is_busy() || me->is_fighting() )
-                        return notify_fail("ÄãÕıÃ¦×ÅÄØ£¡\n");
+                        return notify_fail("ä½ æ­£å¿™ç€å‘¢ï¼\n");
 
                message("vision",
-                        me->name() + "Ò»ÍäÑüÍù¶´Àï×ßÁË½øÈ¥¡£\n",
+                        me->name() + "ä¸€å¼¯è…°å¾€æ´é‡Œèµ°äº†è¿›å»ã€‚\n",
                         environment(me), ({me}) );
 
                 me->move("/d/gaibang/inhole");
                 message("vision",
-                        me->name() + "´Ó¶´Àï×ßÁË½øÀ´¡£\n",
+                        me->name() + "ä»æ´é‡Œèµ°äº†è¿›æ¥ã€‚\n",
                         environment(me), ({me}) );
 
                 return 1;

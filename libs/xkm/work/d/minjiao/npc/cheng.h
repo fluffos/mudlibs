@@ -24,7 +24,7 @@ int accept_object(object ob, object obj)
 	&& !ob->query_temp("have_letter") ) 
 	{
 		ob->set_temp("fight_ok",1);
-	        command("say ºÃ£¬¼ÈÈ»ÒÑµÃµ½·½ÕÉĞí¿É£¬ÎÒÃÇ¾ÍÀ´ÑéÖ¤Ò»ÏÂÎä¹¦¡£");
+	        command("say å¥½ï¼Œæ—¢ç„¶å·²å¾—åˆ°æ–¹ä¸ˆè®¸å¯ï¼Œæˆ‘ä»¬å°±æ¥éªŒè¯ä¸€ä¸‹æ­¦åŠŸã€‚");
 		remove_call_out("destroying");
 		call_out("destroying", 1, me, obj);
 		return 1;
@@ -34,14 +34,14 @@ int accept_object(object ob, object obj)
 	&& ob->query_temp("have_letter") )
 	{
 		ob->set_temp("apprentice_ok",1);
-	        command("say ºÃ£¬" + ob->query("name") + "£¬ÄãÔ¸Òâ°İÎÒÎªÊ¦Âğ£¿");
+	        command("say å¥½ï¼Œ" + ob->query("name") + "ï¼Œä½ æ„¿æ„æ‹œæˆ‘ä¸ºå¸ˆå—ï¼Ÿ");
 		remove_call_out("destroying");
 		call_out("destroying", 1, me, obj);
 		return 1;
 	}
 
         command("smile");
-        command("say Õâ¶«Î÷¸øÎÒ¿ÉÃ»ÓĞÊ²÷áÓÃ¡£");
+        command("say è¿™ä¸œè¥¿ç»™æˆ‘å¯æ²¡æœ‰ä»€éº½ç”¨ã€‚");
         command("give " + obj->query("id") + " to " + me->query("id"));
 	return 0;
 

@@ -1,12 +1,12 @@
 //Cracked by Kafei
 //author wzfeng@xkx 2000 6
 //xkx_area.h
-//µØÓò»®·Ö
-//ÖÐÔ­£ºÉÙÁÖ£¬Îäµ±£¬ÖÕÄÏÉ½£¬Ì©É½£¬»ÆºÓ£¬»ªÉ½
-//½­ÄÏ£ºÑïÖÝ£¬º¼ÖÝ£¬Ì«ºþ£¬ÈªÖÝ£¬¼ÎÐË¡£
-//ÄÏ½®£º´óÀí£¬¶ëáÒ£¬·ðÉ½¡£
-//Î÷Óò£ºÐÇËÞ£¬Î÷ÏÄ£¬Ñ©É½£¬ÆîÁ¬É½¡£
-//¶«±±£º³¤°×É½¡£
+//åœ°åŸŸåˆ’åˆ†
+//ä¸­åŽŸï¼šå°‘æž—ï¼Œæ­¦å½“ï¼Œç»ˆå—å±±ï¼Œæ³°å±±ï¼Œé»„æ²³ï¼ŒåŽå±±
+//æ±Ÿå—ï¼šæ‰¬å·žï¼Œæ­å·žï¼Œå¤ªæ¹–ï¼Œæ³‰å·žï¼Œå˜‰å…´ã€‚
+//å—ç–†ï¼šå¤§ç†ï¼Œå³¨åµ‹ï¼Œä½›å±±ã€‚
+//è¥¿åŸŸï¼šæ˜Ÿå®¿ï¼Œè¥¿å¤ï¼Œé›ªå±±ï¼Œç¥è¿žå±±ã€‚
+//ä¸œåŒ—ï¼šé•¿ç™½å±±ã€‚
 
 
 //#include "/d/regions.h"
@@ -40,27 +40,27 @@ string *get_arearoom(string area)
 		return 0;
 	switch(area)
 	{
-	case "ÖÐÔ­"   :  
+	case "ä¸­åŽŸ"   :  
 		i=sizeof(zhongyuan);
 		are_name=zhongyuan[random(i)];
 		
 		break;
-	case "½­ÄÏ"   :  
+	case "æ±Ÿå—"   :  
 		i=sizeof(jiangnan);
 		are_name=jiangnan[random(i)];
 		
 		break;
-	case "ÄÏ½®"   :  
+	case "å—ç–†"   :  
 		i=sizeof(nanjiang);
 		are_name=nanjiang[random(i)];
 		
 		break;
-	case "Î÷Óò"   :  
+	case "è¥¿åŸŸ"   :  
 		i=sizeof(xiyu);
 		are_name=xiyu[random(i)];
 		
 		break;
-	case "¶«±±"   :  
+	case "ä¸œåŒ—"   :  
 		i=sizeof(dongbei);
 		are_name=dongbei[random(i)];
 		
@@ -72,13 +72,13 @@ string *get_arearoom(string area)
 			return 0;
 	}
 	
-	//printf("±»Ñ¡È¡ÇøÓòÎª\t%s\n",are_name);
+	//printf("è¢«é€‰å–åŒºåŸŸä¸º\t%s\n",are_name);
 	//Get all room map.
 	room=mapdb->query_map();
 	area_list=keys(room);
 	if(!area_list)
 		return 0;
-	//printf("Ò»¹²ÓÐ%d¸ö·¿¼ä",sizeof(area_list));
+	//printf("ä¸€å…±æœ‰%dä¸ªæˆ¿é—´",sizeof(area_list));
 	for(i=0;i<sizeof(area_list);i++)
 	{
 		//we judge which directory matching with area.
@@ -86,7 +86,7 @@ string *get_arearoom(string area)
 		if(temp==are_name)
 		{
 			filtrate_name=add_string(area_list[i],filtrate_name);
-//			printf("filtrate_name¼ÓÉÏÁË\t%s\n",area_list[i]);
+//			printf("filtrate_nameåŠ ä¸Šäº†\t%s\n",area_list[i]);
 		}
 	}
 	if(!i=sizeof(filtrate_name))
@@ -98,9 +98,9 @@ string *get_arearoom(string area)
 	{
 		//printf("\t%s\n",filtrate_name[i]);
 	}
-//	printf("Õâ¸öÇøÓò¹²ÓÐ%d¸ö·¿¼ä\n",sizeof(filtrate_name));
+//	printf("è¿™ä¸ªåŒºåŸŸå…±æœ‰%dä¸ªæˆ¿é—´\n",sizeof(filtrate_name));
 //	filtrate_name=filter_array(filtrate_name, (:filter_room:));
-//	printf("Õâ¸öÇøÓò¹ýÂËºó¹²ÓÐ%d¸ö·¿¼ä\n",sizeof(filtrate_name));
+//	printf("è¿™ä¸ªåŒºåŸŸè¿‡æ»¤åŽå…±æœ‰%dä¸ªæˆ¿é—´\n",sizeof(filtrate_name));
 	        
 
 	if(!are_name=filtrate_name[random(i)])
@@ -112,7 +112,7 @@ string *get_arearoom(string area)
 	//return are_name;
 	return filtrate_name;
 }
-//¼ø¶¨ËùÑ¡È¡µÄ·¿¼äÊÇ·ñºÏºõÌõ¼þ¡£
+//é‰´å®šæ‰€é€‰å–çš„æˆ¿é—´æ˜¯å¦åˆä¹Žæ¡ä»¶ã€‚
 int judge_room(string room_name)
 {
 	string area;
@@ -165,7 +165,7 @@ string get_room(string area)
 
 	while ( ret < 10 && !judge_room(are_name)) {
    	ret++;
-	//write(are_name+"·¿¼ä²»·ûºÏÌõ¼þ\n");
+	//write(are_name+"æˆ¿é—´ä¸ç¬¦åˆæ¡ä»¶\n");
 	are_name=area_roomname[random(sizeof(area_roomname))];
     }
 	if(!judge_room(are_name))

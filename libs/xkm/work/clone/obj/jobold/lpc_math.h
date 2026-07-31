@@ -1,7 +1,7 @@
 //Cracked by Kafei
 //wzfeng@xkx 2000 6
-//job_system µÄÒ»Ğ©¸½¼Óº¯Êı
-//ÅĞ¶ÏÒ»¸östringÊı·ñÔÚÒ»¸ögroupÖĞ
+//job_system çš„ä¸€äº›é™„åŠ å‡½æ•°
+//åˆ¤æ–­ä¸€ä¸ªstringæ•°å¦åœ¨ä¸€ä¸ªgroupä¸­
 int is_attribute(string element,string *group)
 {
 	int i;
@@ -14,7 +14,7 @@ int is_attribute(string element,string *group)
 	}
 	return 0;
 }
-//ÔÚÒ»¸ö×Ö´®ÕóÁĞÖĞÌí¼ÓÒ»¸ö×Ö´®
+//åœ¨ä¸€ä¸ªå­—ä¸²é˜µåˆ—ä¸­æ·»åŠ ä¸€ä¸ªå­—ä¸²
 mixed *add_string(mixed element,mixed *group)
 {
 	if( !pointerp(group) )
@@ -34,7 +34,7 @@ mixed add_mapping(mixed keys,mixed mapping,mapping map)
 	return map;
 }
 */
-//ÔÚÒ»¸ö×Ö´®ÕóÁĞÖĞ¼õÈ¥Ò»¸ö×Ö´®
+//åœ¨ä¸€ä¸ªå­—ä¸²é˜µåˆ—ä¸­å‡å»ä¸€ä¸ªå­—ä¸²
 mixed *decrease_string(mixed element,mixed *group)
 {
 	if( !pointerp(group) )
@@ -46,7 +46,7 @@ mixed *decrease_string(mixed element,mixed *group)
 }
 
 
-//ÅĞ¶ÏÒ»¸östringÊı·ñÔÚÒ»¸ö*mapµÄÒ»¸ö±ê¼ÇtagÖĞ
+//åˆ¤æ–­ä¸€ä¸ªstringæ•°å¦åœ¨ä¸€ä¸ª*mapçš„ä¸€ä¸ªæ ‡è®°tagä¸­
 int is_attr_mapping(string element,string tag,mapping *map)
 {
 	int i;
@@ -63,7 +63,7 @@ int is_attr_mapping(string element,string tag,mapping *map)
 	}
 	return 0;
 }
-//·µ»ØÒ»¸ö*mappingÖĞµÄÒ»¸öÖ¸¶¨mapping,Õâ¸ömappingÖĞµÄtagÖĞ°üº¬ÓĞ¹Ì¶¨µÄ×Ö´®str
+//è¿”å›ä¸€ä¸ª*mappingä¸­çš„ä¸€ä¸ªæŒ‡å®šmapping,è¿™ä¸ªmappingä¸­çš„tagä¸­åŒ…å«æœ‰å›ºå®šçš„å­—ä¸²str
 mixed get_mapping(mixed element,mixed tag,mapping *map)
 {
 	int i;
@@ -83,7 +83,7 @@ mixed get_mapping(mixed element,mixed tag,mapping *map)
 }
 
 
-//»ñÈ¡Ò»¸ö*mappingÖĞÖ¸¶¨mappingÖĞtag±ê¼ÇµÄÄÚÈİ
+//è·å–ä¸€ä¸ª*mappingä¸­æŒ‡å®šmappingä¸­tagæ ‡è®°çš„å†…å®¹
 mixed get_msg_map(string tag1,string tag1_str,string tag2,mapping *map)
 {
 	int i;
@@ -101,7 +101,7 @@ mixed get_msg_map(string tag1,string tag1_str,string tag2,mapping *map)
 	return 0;
 }
 
-//»ñµÃÒ»¸ö*mappingÖĞÄ³ÖÖ³ÉÔ±µÄËùÓĞÊıÖµµÄÕóÁĞ
+//è·å¾—ä¸€ä¸ª*mappingä¸­æŸç§æˆå‘˜çš„æ‰€æœ‰æ•°å€¼çš„é˜µåˆ—
 mixed *get_array_map(string tag1,mapping *map)
 {
 	int i,j;
@@ -119,7 +119,7 @@ mixed *get_array_map(string tag1,mapping *map)
 	return str;
 
 }
-//ÅĞ¶ÏÒ»¸ökeyÊÇ·ñÔÚmapÖĞ
+//åˆ¤æ–­ä¸€ä¸ªkeyæ˜¯å¦åœ¨mapä¸­
 int judge_map_element(string element,mapping map)
 {
 	string *keys;
@@ -166,14 +166,14 @@ string p_map(mapping map)
 	
 	if(!sizeof(map))
 	{
-		return ("mapÎª¿Õ\n");
+		return ("mapä¸ºç©º\n");
 
 	}
 		
 	keys=keys(map);
 	if(!sizeof(keys))
 	{
-		return ("keysÎª¿Õ\n");
+		return ("keysä¸ºç©º\n");
 
 	}
 	for(i=0;i<sizeof(keys);i++)
@@ -206,7 +206,7 @@ mapping *modify_map(string element,string fag,mapping map,mapping *maps)
 	return 0;
 
 }
-//»ñÈ¡Ò»¸ömapÖĞµÄ×î´óÊıµÄ³ÉÔ±£¬Èç¹ûÓĞÏàµÈµÄ¡£·µ»ØÒ»¸öÊıÁĞ
+//è·å–ä¸€ä¸ªmapä¸­çš„æœ€å¤§æ•°çš„æˆå‘˜ï¼Œå¦‚æœæœ‰ç›¸ç­‰çš„ã€‚è¿”å›ä¸€ä¸ªæ•°åˆ—
 string *get_maxnum_inmap(mapping map)
 {
 	int i,map_num,temp_num;
@@ -216,7 +216,7 @@ string *get_maxnum_inmap(mapping map)
 	keys=keys(map);
 	if(map_num==1)
 	{
-		//write("Ö»ÓĞÒ»¸ö³ÉÔ±");
+		//write("åªæœ‰ä¸€ä¸ªæˆå‘˜");
 		return keys;
 	}
 	temp_num=map[keys[0]];
@@ -252,7 +252,7 @@ string *get_minnum_inmap(mapping map)
 	keys=keys(map);
 	if(map_num==1)
 	{
-		write("Ö»ÓĞÒ»¸ö³ÉÔ±");
+		write("åªæœ‰ä¸€ä¸ªæˆå‘˜");
 		return keys;
 	}
 	temp_num=map[keys[0]];

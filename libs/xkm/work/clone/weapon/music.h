@@ -1,5 +1,5 @@
 //Cracked by Roath
-//music.h ÀÖÆ÷
+//music.h ä¹å™¨
 #include <ansi.h>
 
 void init()
@@ -14,52 +14,52 @@ int do_lianxi(string arg)
 	int cost;
 
 	string* zither_msg = ({
-	"ÂÖÖ¸","Ëö","¹ö·÷","²¦´Ì","½øÍË","Ò÷â®","´Â×¢",
-	"Á½ÒıÉÏ","î»","´øÆğ","´éÖ¸","´òÔ²","Ä¨Ìô","¹´ÌŞ",
+	"è½®æŒ‡","ç","æ»šæ‹‚","æ‹¨åˆº","è¿›é€€","åŸçŒ±","ç»°æ³¨",
+	"ä¸¤å¼•ä¸Š","ç½¨","å¸¦èµ·","æ’®æŒ‡","æ‰“åœ†","æŠ¹æŒ‘","å‹¾å‰”",
 	});
 
 	string* flute_msg = ({
-	"²üÖ¸", "ÍÂÒô", "ÀúÒô"," »¨ÉàÒô", "·ÉÖ¸²üÒô",
+	"é¢¤æŒ‡", "åéŸ³", "å†éŸ³"," èŠ±èˆŒéŸ³", "é£æŒ‡é¢¤éŸ³",
 	});
 
 	me = this_player();
 	where = environment(me);
 	weapon = me->query_temp("weapon");
         if (where->query("pigging"))
-                return notify_fail("Äã»¹ÊÇ×¨ĞÄ¹°Öí°É£¡\n");
+                return notify_fail("ä½ è¿˜æ˜¯ä¸“å¿ƒæ‹±çŒªå§ï¼\n");
 
         if (where->query("sleep_room"))
-                return notify_fail("ÔÚË¯·¿Àï²»ÄÜÁ·Ï°Ñİ×àÀÖÆ÷£¬Õâ»áÓ°ÏìËûÈË¡£\n");
+                return notify_fail("åœ¨ç¡æˆ¿é‡Œä¸èƒ½ç»ƒä¹ æ¼”å¥ä¹å™¨ï¼Œè¿™ä¼šå½±å“ä»–äººã€‚\n");
 
 	if (where->query("no_fight"))
-		return notify_fail("ÕâÀï²»ÊÊºÏÁ·Ï°Ñİ×àÀÖÆ÷¡£\n");
+		return notify_fail("è¿™é‡Œä¸é€‚åˆç»ƒä¹ æ¼”å¥ä¹å™¨ã€‚\n");
 
         if (me->is_busy())
-                return notify_fail("ÄãÏÖÔÚÕıÃ¦×ÅÄØ¡£\n");
+                return notify_fail("ä½ ç°åœ¨æ­£å¿™ç€å‘¢ã€‚\n");
 
 	if( me->is_fighting() )
-		return notify_fail("ÄãÎŞ·¨ÔÚÕ½¶·ÖĞ×¨ĞÄÏÂÀ´Á·Ï°Ñİ×à£¡\n");
+		return notify_fail("ä½ æ— æ³•åœ¨æˆ˜æ–—ä¸­ä¸“å¿ƒä¸‹æ¥ç»ƒä¹ æ¼”å¥ï¼\n");
 
 	if(!arg || !objectp(ob = present(arg, me)) )
-		return notify_fail("ÄãÒªÁ·Ï°Ñİ×àÊ²Ã´£¿\n");
+		return notify_fail("ä½ è¦ç»ƒä¹ æ¼”å¥ä»€ä¹ˆï¼Ÿ\n");
 
 	if( !ob->query("shape") || 
 	(ob->query("shape") !="flute" && ob->query("shape") !="zither"))
-		return notify_fail("Äã²»ÄÜÁ·Ï°Ñİ×à"+ob->name()+"¡£\n");
+		return notify_fail("ä½ ä¸èƒ½ç»ƒä¹ æ¼”å¥"+ob->name()+"ã€‚\n");
 
 	if( ob != weapon )
-		return notify_fail("Äã±ØĞèÏÈ×°±¸"+ob->name()+"¡£\n");
+		return notify_fail("ä½ å¿…éœ€å…ˆè£…å¤‡"+ob->name()+"ã€‚\n");
 
 	if( !me->query_skill("music", 1) ) {
 		if(ob->query("shape") =="zither")
-		message_vision("$NÊÖ¸§$n£¬µ¯ÁË¼¸ÏÂ£¬Ëù³Éµ÷×ÓÑÏÖØ×ßÒô¡£\n"NOR, me, ob);
+		message_vision("$Næ‰‹æŠš$nï¼Œå¼¹äº†å‡ ä¸‹ï¼Œæ‰€æˆè°ƒå­ä¸¥é‡èµ°éŸ³ã€‚\n"NOR, me, ob);
 		if(ob->query("shape") =="flute")
-		message_vision("$N½«$n·ÅÔÚ´½±ßÒ»´µ£¬½á¹û·¢³öÒ»ÕóÎåÒô²»È«µÄÉùÏì¡£\n"NOR, me, ob);
+		message_vision("$Nå°†$næ”¾åœ¨å”‡è¾¹ä¸€å¹ï¼Œç»“æœå‘å‡ºä¸€é˜µäº”éŸ³ä¸å…¨çš„å£°å“ã€‚\n"NOR, me, ob);
 		return 1;
 	}
 
 	if( (int)me->query("potential") < 1 )
-                return notify_fail("ÄãµÄÇ±ÄÜÒÑ´ï¼«ÏŞ£¬Ã»ÓĞ°ì·¨ÁìÎò¸ü¾«ÃîµÄÀÖÀí¡£\n");
+                return notify_fail("ä½ çš„æ½œèƒ½å·²è¾¾æé™ï¼Œæ²¡æœ‰åŠæ³•é¢†æ‚Ÿæ›´ç²¾å¦™çš„ä¹ç†ã€‚\n");
 
 
 	cost = 50 + random(40) * (40 - (int)me->query("int"))/20;
@@ -68,23 +68,23 @@ int do_lianxi(string arg)
 	if( (int)me->query("jing") > cost ) {
 		if(ob->query("shape") =="zither") {
 		msg = zither_msg[random(sizeof(zither_msg))] ;
-		message_vision("$NÊÖ¸§$n£¬·´¸²Á·Ï°Öø¡¸"+msg+"¡¹µÄ¼¼ÇÉ¡£\n"NOR, me, ob);
+		message_vision("$Næ‰‹æŠš$nï¼Œåè¦†ç»ƒä¹ è‘—ã€Œ"+msg+"ã€çš„æŠ€å·§ã€‚\n"NOR, me, ob);
 
 			me->improve_skill("music", me->query_int()*2 + 1);
 		}
 		else if(ob->query("shape") =="flute") {
 		msg = flute_msg[random(sizeof(flute_msg))] ;
-		message_vision("$NÊÖ°´$n£¬ĞìĞì´µ×à£¬×¨ĞÄÁ·Ï°Öø¡¸"+msg+"¡¹µÄ¼¼ÇÉ¡£\n"NOR, me, ob);
+		message_vision("$Næ‰‹æŒ‰$nï¼Œå¾å¾å¹å¥ï¼Œä¸“å¿ƒç»ƒä¹ è‘—ã€Œ"+msg+"ã€çš„æŠ€å·§ã€‚\n"NOR, me, ob);
 		}
-		else return notify_fail("Äã×ó¿´¿´£¬ÓÒ¿´¿´£¬ÊµÔÚ²»ÖªµÀ¸ÃÔõ÷áÑİ×à"+ob->name()+"¡£\n");
+		else return notify_fail("ä½ å·¦çœ‹çœ‹ï¼Œå³çœ‹çœ‹ï¼Œå®åœ¨ä¸çŸ¥é“è¯¥æ€éº½æ¼”å¥"+ob->name()+"ã€‚\n");
 		}
 	else {
 		cost = me->query("jing");
 		if (cost < 0) cost = 0;
-		write("ÄãÏÖÔÚ¹ıÓÚÆ£¾ë£¬ÎŞ·¨×¨ĞÄÏÂÀ´Á·Ï°Ñİ×àÀÖÆ÷¡£\n");
+		write("ä½ ç°åœ¨è¿‡äºç–²å€¦ï¼Œæ— æ³•ä¸“å¿ƒä¸‹æ¥ç»ƒä¹ æ¼”å¥ä¹å™¨ã€‚\n");
 	}
 
-	me->receive_damage("jing", cost/2, "ĞÄÁ¦½Ê´áËÀÁË");
+	me->receive_damage("jing", cost/2, "å¿ƒåŠ›ç»ç˜æ­»äº†");
 	me->add("jingli", -cost/3);
 	me->add("potential", -random(1));
 	return 1;

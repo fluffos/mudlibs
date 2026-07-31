@@ -11,7 +11,7 @@ int ask_menpai (string* message)
 void attempt_apprentice(object ob)
 {
 	command("shake");
-	command("say Òª°İÊ¦£¬ÄãµÃÈ¥°İÎÒÊ¦¸¸¡£");
+	command("say è¦æ‹œå¸ˆï¼Œä½ å¾—å»æ‹œæˆ‘å¸ˆçˆ¶ã€‚");
 	return;
 }
 

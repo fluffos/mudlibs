@@ -1,5 +1,5 @@
 //Cracked by Roath
-// shiye.c Öª¸®Ê¦Ò¯
+// shiye.c çŸ¥åºœå¸ˆçˆ·
 
 #include <ansi.h>
 
@@ -19,15 +19,15 @@ string new_name;
 
 void create()
 {
-        set_name("Ì·ÓÑ¼Í", ({ "tan youji", "tan" }));
-        set("title", "Öª¸®Ê¦Ò¯");
-        set("gender", "ÄĞĞÔ");
+        set_name("è°­å‹çºª", ({ "tan youji", "tan" }));
+        set("title", "çŸ¥åºœå¸ˆçˆ·");
+        set("gender", "ç”·æ€§");
         set("age", 57);
 
 	set("long", 
-		"Ëû¾ÍÊÇÑïÖİÖª¸®µÄÊ¦Ò¯£¬ÃĞ×ÅÒ»Ë«Ğ¡ÑÛ¾¦£¬\n"
-		"×øÔÚÒ»ÕÅÄ¾°¸Ç°¡£ÌıËµ´ËÈË¼«Ì°£¬ÏëÕÒËû\n"
-		"°ìÊÂ£¬Ç®²ÆÊÇÃâ²»ÁËµÄ¡£\n");
+		"ä»–å°±æ˜¯æ‰¬å·çŸ¥åºœçš„å¸ˆçˆ·ï¼Œçœ¯ç€ä¸€åŒå°çœ¼ç›ï¼Œ\n"
+		"ååœ¨ä¸€å¼ æœ¨æ¡ˆå‰ã€‚å¬è¯´æ­¤äººæè´ªï¼Œæƒ³æ‰¾ä»–\n"
+		"åŠäº‹ï¼Œé’±è´¢æ˜¯å…ä¸äº†çš„ã€‚\n");
  	set("attitude", "peaceful");
 	
         set("combat_exp", 30000);
@@ -39,9 +39,9 @@ void create()
         set("shen_type", 0);
  
 	set("inquiry", ([
-		"¸üÃû" : (: do_ask :),
-		"¸ÄÃû" : (: do_ask :),
-		"»»Ãû" : (: do_ask :),
+		"æ›´å" : (: do_ask :),
+		"æ”¹å" : (: do_ask :),
+		"æ¢å" : (: do_ask :),
 	]));
 	
 	setup();
@@ -61,7 +61,7 @@ void init()
 
 int accept_kill(object me)
 {
-        command("say Ò²²»¿´¿´ÕâÊÇÊ²Ã´µØ·½£¬¾¹¸ÒÔÚ´ËĞĞĞ×É±ÈË£¡\n");
+        command("say ä¹Ÿä¸çœ‹çœ‹è¿™æ˜¯ä»€ä¹ˆåœ°æ–¹ï¼Œç«Ÿæ•¢åœ¨æ­¤è¡Œå‡¶æ€äººï¼\n");
         me->apply_condition("killer", 100);
         kill_ob(me);
         return 1;
@@ -71,14 +71,14 @@ string do_ask(object me)
 {
 	me = this_player();
 	if ( me->query("name_changed") && !wizardp(me) )
-		return "ÄãÒÑ¾­»»¹ıÒ»´ÎÃû×ÖÁË£¬ÔÙ»»Ò»´ÎÎåÍòÁ½½ğ×Ó£¡\n";
+		return "ä½ å·²ç»æ¢è¿‡ä¸€æ¬¡åå­—äº†ï¼Œå†æ¢ä¸€æ¬¡äº”ä¸‡ä¸¤é‡‘å­ï¼\n";
 	
 	if ( me->query_temp("processing") )
-		return "ÎÒÕıÔÚ°ïÄã°ì¡£\n";
+		return "æˆ‘æ­£åœ¨å¸®ä½ åŠã€‚\n";
 
 	add_action("do_da", "da");
 	me->set_temp("processing", 1);
-	return "Õâ»»Ãû×ÖÂğ£¬ºÙºÙ£¬¿´ÄãÒ²Í¦¿ÉÁ¯µÄ£¬¾ÍÊÕÄã"+chinese_number(PRICE/10000)+"Á½½ğ×Ó°É¡£ÄãÔ¸ÒâÂğ£¿(da Ô¸Òâ)\n";
+	return "è¿™æ¢åå­—å—ï¼Œå˜¿å˜¿ï¼Œçœ‹ä½ ä¹ŸæŒºå¯æ€œçš„ï¼Œå°±æ”¶ä½ "+chinese_number(PRICE/10000)+"ä¸¤é‡‘å­å§ã€‚ä½ æ„¿æ„å—ï¼Ÿ(da æ„¿æ„)\n";
 }
 
 int do_da(string arg)
@@ -89,12 +89,12 @@ int do_da(string arg)
 
 	remove_action("do_da", "da");
 	
-	if (arg == "Ô¸Òâ") {
-		tell_object(me, CYN"Ì·ÓÑ¼ÍËµµÀ£º¡°ÄãÏë»»³ÉÊ²Ã´Ãû×Ö£¿¡± (change Ãû×Ö)\n"NOR);
+	if (arg == "æ„¿æ„") {
+		tell_object(me, CYN"è°­å‹çºªè¯´é“ï¼šâ€œä½ æƒ³æ¢æˆä»€ä¹ˆåå­—ï¼Ÿâ€ (change åå­—)\n"NOR);
 		add_action("do_namecheck", "change");
 	}
 	else {
-		say(CYN "Ì·ÓÑ¼ÍËµµÀ£º¡°²»Ô¸Òâ¾ÍËãÁË£¡¡±\n"NOR);
+		say(CYN "è°­å‹çºªè¯´é“ï¼šâ€œä¸æ„¿æ„å°±ç®—äº†ï¼â€\n"NOR);
 		me->delete_temp("processing");
 	}
 
@@ -115,39 +115,39 @@ int do_namecheck(string name)
 	f_gen = me->query("family/generation", 1);
 
 	if (name == old_name) {
-		tell_object(me, CYN "Ì·ÓÑ¼ÍËµµÀ£º¡°Ãû×ÖÒ»Ñù£¬»¹»»Ê²Ã´£¿¡±\n"NOR);
+		tell_object(me, CYN "è°­å‹çºªè¯´é“ï¼šâ€œåå­—ä¸€æ ·ï¼Œè¿˜æ¢ä»€ä¹ˆï¼Ÿâ€\n"NOR);
 		add_action("do_namecheck", "change");
 		return 1;
 	}
 	
 	if (!is_chinese(name)) {
-		tell_object(me, CYN "Ì·ÓÑ¼ÍËµµÀ£º¡°Õâ²»ÊÇÖĞÎÄÃû×Ö£¡´ÓÏëÒ»¸ö°É¡£¡±\n"NOR);
+		tell_object(me, CYN "è°­å‹çºªè¯´é“ï¼šâ€œè¿™ä¸æ˜¯ä¸­æ–‡åå­—ï¼ä»æƒ³ä¸€ä¸ªå§ã€‚â€\n"NOR);
 		add_action("do_namecheck", "change");
 		return 1;
 	}
 	
 	if (strlen(name) > 8) {
-		tell_object(me, CYN "Ì·ÓÑ¼ÍËµµÀ£º¡°ÕâÃû×ÖÌ«³¤£¬×î¶àËÄ¸ö×Ö£¡¡±\n"NOR);
+		tell_object(me, CYN "è°­å‹çºªè¯´é“ï¼šâ€œè¿™åå­—å¤ªé•¿ï¼Œæœ€å¤šå››ä¸ªå­—ï¼â€\n"NOR);
 		add_action("do_namecheck", "change");
 		return 1;
 	}
 	
-	if (f_name == "ĞÇËŞÅÉ" && f_gen == 2) 
-		name = name[0..3] + "×Ó";
+	if (f_name == "æ˜Ÿå®¿æ´¾" && f_gen == 2) 
+		name = name[0..3] + "å­";
 
-	if (f_name == "ÌÒ»¨µº" && f_gen == 2) 
-		name = name[0..3] + "·ç";
+	if (f_name == "æ¡ƒèŠ±å²›" && f_gen == 2) 
+		name = name[0..3] + "é£";
 
-	if (f_name == "ÉÙÁÖÅÉ" && (string)me->query("class")=="bonze" ) 
+	if (f_name == "å°‘æ—æ´¾" && (string)me->query("class")=="bonze" ) 
 		name = old_name[0..1] + name[0..1];
 
-	if (f_name == "¶ëÃ¼ÅÉ" && (string)me->query("class")=="bonze" )
+	if (f_name == "å³¨çœ‰æ´¾" && (string)me->query("class")=="bonze" )
 		name = old_name[0..1] + name[0..1];
 
-	if (f_name == "È«Õæ½Ì" && (string)me->query("class")=="taoist")
+	if (f_name == "å…¨çœŸæ•™" && (string)me->query("class")=="taoist")
 		name = name[0..1] + old_name[2..3] + name[4..5];
 		
-	tell_object(me, CYN "Ì·ÓÑ¼ÍµãÁËµãÍ·£¬Ëµ£º¡°Äã¸Ä½Ğ" + name + "£¬ĞĞÂğ£¿¡±(da ĞĞ)\n"NOR);
+	tell_object(me, CYN "è°­å‹çºªç‚¹äº†ç‚¹å¤´ï¼Œè¯´ï¼šâ€œä½ æ”¹å«" + name + "ï¼Œè¡Œå—ï¼Ÿâ€(da è¡Œ)\n"NOR);
 	new_name = name;
 	add_action("do_payment", "da");
 
@@ -162,12 +162,12 @@ int do_payment(string arg)
 
 	remove_action("do_payment", "da");
 
-	if (arg != "ĞĞ") {
-		say(CYN "Ì·ÓÑ¼ÍËµµÀ£º¡°»Ø¼ÒÔÙÏëÒ»¸ö°É£¡¡±\n"NOR);
+	if (arg != "è¡Œ") {
+		say(CYN "è°­å‹çºªè¯´é“ï¼šâ€œå›å®¶å†æƒ³ä¸€ä¸ªå§ï¼â€\n"NOR);
 	}
 
 	else {
-		say(CYN "Ì·ÓÑ¼ÍËµµÀ£º¡°ÄãÊÇ¸¶ÏÖÇ®»¹ÊÇ´ÓÕÊÀï×ª£¿(da ÏÖÇ® »ò ×ªÕÊ)¡±\n"NOR);
+		say(CYN "è°­å‹çºªè¯´é“ï¼šâ€œä½ æ˜¯ä»˜ç°é’±è¿˜æ˜¯ä»å¸é‡Œè½¬ï¼Ÿ(da ç°é’± æˆ– è½¬å¸)â€\n"NOR);
 		add_action("do_rebalance", "da");
 	}
 
@@ -176,12 +176,12 @@ int do_payment(string arg)
 
 int do_confirm(object me)
 {
-	tell_object(me, CYN "Ì·ÓÑ¼Í°ÑÄãµÄ»§¿Ú±¾ÄÃ³öÀ´£¬ÔÚÉÏÃæÓÃÃ«±Ê»­ÁË¼¸¸ö×Ö£¬ËµµÀ£º¡°ĞĞÁË£¬´Ó´ËÒÔºóÄã¾Í½Ğ"+new_name+"¡£¡±\n"NOR);
-	message("vision", CYN "Ì·ÓÑ¼Í°Ñ" + me->name() + "µÄ»§¿Ú±¾ÄÃ³öÀ´£¬ÔÚÉÏÃæÓÃÃ«±Ê»­ÁË¼¸¸ö×Ö£¬ËµµÀ£º¡°ĞĞÁË£¬´Ó´ËÒÔºóÄã¾Í½Ğ"+new_name+"¡£¡±\n"NOR,
+	tell_object(me, CYN "è°­å‹çºªæŠŠä½ çš„æˆ·å£æœ¬æ‹¿å‡ºæ¥ï¼Œåœ¨ä¸Šé¢ç”¨æ¯›ç¬”ç”»äº†å‡ ä¸ªå­—ï¼Œè¯´é“ï¼šâ€œè¡Œäº†ï¼Œä»æ­¤ä»¥åä½ å°±å«"+new_name+"ã€‚â€\n"NOR);
+	message("vision", CYN "è°­å‹çºªæŠŠ" + me->name() + "çš„æˆ·å£æœ¬æ‹¿å‡ºæ¥ï¼Œåœ¨ä¸Šé¢ç”¨æ¯›ç¬”ç”»äº†å‡ ä¸ªå­—ï¼Œè¯´é“ï¼šâ€œè¡Œäº†ï¼Œä»æ­¤ä»¥åä½ å°±å«"+new_name+"ã€‚â€\n"NOR,
 		environment(me), me);
 
-	command("chat ×Ô½ñÈÕÆğ£¬" + me->query("name") + "(" + me->query("id") + ")"
-		+ "¸ÄÃûÎª" + new_name + "£¬¸÷Î»±ğÈÏ´íÈËÁË¡£");
+	command("chat è‡ªä»Šæ—¥èµ·ï¼Œ" + me->query("name") + "(" + me->query("id") + ")"
+		+ "æ”¹åä¸º" + new_name + "ï¼Œå„ä½åˆ«è®¤é”™äººäº†ã€‚");
 	log_file("Name_changer",sprintf("%s(%s) changed name to %s on %s.\n", 
 		me->name(), geteuid(me), new_name, ctime(time()) ) );
 
@@ -201,18 +201,18 @@ int do_rebalance(string arg)
 	
 	remove_action("do_rebalance", "da");
 
-	if (arg == "ÏÖÇ®") {
+	if (arg == "ç°é’±") {
 		me->set_temp("paycash", 1);
-		say(CYN "Ì·ÓÑ¼ÍËµµÀ£º¡°ÄÇ¾Í¸øÇ®°É£¿¡±\n"NOR);
+		say(CYN "è°­å‹çºªè¯´é“ï¼šâ€œé‚£å°±ç»™é’±å§ï¼Ÿâ€\n"NOR);
 		return 1;
 	}
 
-	else if (arg == "×ªÕÊ") {
+	else if (arg == "è½¬å¸") {
 		balance = me->query("balance");
 	
 		if (balance < PRICE) {
-			tell_object(me, CYN"Ì·ÓÑ¼ÍËµµÀ£º¡°ÄãÕÊÀïµÄÇ®²»¹»£¬µÈ´æ¹»ÁËÔÚÀ´°É¡£¡±\n"NOR);
-			message("vision", CYN"Ì·ÓÑ¼Í¶Ô" + me->name() + "ËµµÀ£º¡°ÄãÕÊÀïµÄÇ®²»¹»£¬µÈ´æ¹»ÁËÔÚÀ´°É¡£¡±\n"NOR, 
+			tell_object(me, CYN"è°­å‹çºªè¯´é“ï¼šâ€œä½ å¸é‡Œçš„é’±ä¸å¤Ÿï¼Œç­‰å­˜å¤Ÿäº†åœ¨æ¥å§ã€‚â€\n"NOR);
+			message("vision", CYN"è°­å‹çºªå¯¹" + me->name() + "è¯´é“ï¼šâ€œä½ å¸é‡Œçš„é’±ä¸å¤Ÿï¼Œç­‰å­˜å¤Ÿäº†åœ¨æ¥å§ã€‚â€\n"NOR, 
 				environment(me), me);
 			return 1;
 		}
@@ -223,7 +223,7 @@ int do_rebalance(string arg)
 		}
 	}
 
-	say(CYN "Ì·ÓÑ¼Í²»ÄÍ·³µÀ£º¡°Äãµ½µ×ÊÇ¸¶ÏÖÇ®»¹ÊÇ´ÓÕÊÀï×ª£¿¡±\n"NOR);
+	say(CYN "è°­å‹çºªä¸è€çƒ¦é“ï¼šâ€œä½ åˆ°åº•æ˜¯ä»˜ç°é’±è¿˜æ˜¯ä»å¸é‡Œè½¬ï¼Ÿâ€\n"NOR);
 	add_action("do_rebalance", "da");
 
 	return 1;
@@ -235,19 +235,19 @@ int accept_object(object me, object money)
 
         if( me->query_temp("paycash")) {
 		if( money->value() >= PRICE ) {
-                        say(CYN"Ì·ÓÑ¼ÍÃ¦Ëµ£º¡°¹»ÁË¹»ÁË£¬ÎÒÕâ¾Í¸øÄú»»¡£¡±\n"NOR);
+                        say(CYN"è°­å‹çºªå¿™è¯´ï¼šâ€œå¤Ÿäº†å¤Ÿäº†ï¼Œæˆ‘è¿™å°±ç»™æ‚¨æ¢ã€‚â€\n"NOR);
 			me->delete_temp("paycash");
 			do_confirm(me);
                         return 1;
 
                 } 
 		else {
-                        say(CYN"Ì·ÓÑ¼ÍÒ¡Í·µÀ£º¡°ÄãµÄÇ®²»¹»£¡¡±\n"NOR);
+                        say(CYN"è°­å‹çºªæ‘‡å¤´é“ï¼šâ€œä½ çš„é’±ä¸å¤Ÿï¼â€\n"NOR);
                         return 0;
                 }
         } 
 	else {
-                say(CYN"Ì·ÓÑ¼ÍµãÍ·Ğ¦µÀ£º¡°Õâ£¬Õâ¶à²»ºÃÒâË¼£¬Òª°ìÊ²Ã´ÊÂÄú¾Í·Ô¸À°É¡£¡±£¬Ëµ×Å¾Í°ÑÇ®´§½ø¿Ú´ü¡£\n"NOR);
+                say(CYN"è°­å‹çºªç‚¹å¤´ç¬‘é“ï¼šâ€œè¿™ï¼Œè¿™å¤šä¸å¥½æ„æ€ï¼Œè¦åŠä»€ä¹ˆäº‹æ‚¨å°±å©å’å§ã€‚â€ï¼Œè¯´ç€å°±æŠŠé’±æ£è¿›å£è¢‹ã€‚\n"NOR);
                 return 1;
         }
 }

@@ -1,7 +1,7 @@
 //Cracked by Kafei
 //job_message.h
-//´¦Àí¸÷ÖÖÐÅÏ¢µÄº¯Êý
-//¸ù¾ÝÈÎÎñµÄÊÆÁ¦ÇøÓò£¬²úÉúÒ»¸öÉ±ÈËµÄÈÎÎñ¡£
+//å¤„ç†å„ç§ä¿¡æ¯çš„å‡½æ•°
+//æ ¹æ®ä»»åŠ¡çš„åŠ¿åŠ›åŒºåŸŸï¼Œäº§ç”Ÿä¸€ä¸ªæ€äººçš„ä»»åŠ¡ã€‚
 //#include "job_family_master.h"
 
 void get_job_palce_msg(object master,object player,string place,string state,string command_mode)
@@ -19,7 +19,7 @@ void get_job_palce_msg(object master,object player,string place,string state,str
 
 
 	pmsg=replace_string(master_msg,"$N",master->query("name"));
-	pmsg=replace_string(pmsg,"$n","Äã");
+	pmsg=replace_string(pmsg,"$n","ä½ ");
 	pmsg=replace_string(pmsg,"$P",player->query("name"));
 	pmsg=replace_string(pmsg,"$ROOM",place);
 
@@ -28,9 +28,9 @@ void get_job_palce_msg(object master,object player,string place,string state,str
 	tell_object(player,pmsg);
 }
 
-//ÈÎÎñµÄÏÂ´ïÕß¶ÔÈÎÎñÖ´ÐÐÕß¸æËßµÄÐÅÏ¢
+//ä»»åŠ¡çš„ä¸‹è¾¾è€…å¯¹ä»»åŠ¡æ‰§è¡Œè€…å‘Šè¯‰çš„ä¿¡æ¯
 //The message that job master command to job executant
-//Èç¹ûÎ»ÖÃ²»ÔÚmasterÎ»ÖÃ£¬³öÏÖµÄÌáÊ¾ÐÅÏ¢¡£
+//å¦‚æžœä½ç½®ä¸åœ¨masterä½ç½®ï¼Œå‡ºçŽ°çš„æç¤ºä¿¡æ¯ã€‚
 //show the message taht job executant not in master room
 string get_family_master_massage(string command_mode,string menpai,string state)
 {
@@ -39,50 +39,50 @@ string get_family_master_massage(string command_mode,string menpai,string state)
 	switch(menpai)
 				{
 
-				case "Îäµ±ÅÉ" :
+				case "æ­¦å½“æ´¾" :
 					talk_msg+=(string)get_msg_map("job_tell_mode",command_mode,state,wudang_message);
 					break;
-				case "ÐÇËÞÅÉ" :
+				case "æ˜Ÿå®¿æ´¾" :
 					talk_msg+=(string)get_msg_map("job_tell_mode",command_mode,state,xingxiu_message);
 					break;
-				case "»ªÉ½ÅÉ" :
+				case "åŽå±±æ´¾" :
 					talk_msg+=(string)get_msg_map("job_tell_mode",command_mode,state,huashan_message);
 					break;
-				case "ÌÒ»¨µº" :
+				case "æ¡ƒèŠ±å²›" :
 					talk_msg+=(string)get_msg_map("job_tell_mode",command_mode,state,taohua_message);
 					break;
-				case "Ø¤°ï" :
+				case "ä¸å¸®" :
 					talk_msg+=(string)get_msg_map("job_tell_mode",command_mode,state,gaibang_message);
 					break;
-				case "¶ëáÒÅÉ" :
+				case "å³¨åµ‹æ´¾" :
 					talk_msg+=(string)get_msg_map("job_tell_mode",command_mode,state,emei_message);
 					break;
-				case "°×ÍÕÉ½" :
+				case "ç™½é©¼å±±" :
 					talk_msg+=(string)get_msg_map("job_tell_mode",command_mode,state,baituo_message);
 					break;
-				case "È«Õæ½Ì" :
+				case "å…¨çœŸæ•™" :
 					talk_msg+=(string)get_msg_map("job_tell_mode",command_mode,state,quanzhen_message);
 					break;
-				case "Ñ©É½ÅÉ" :
+				case "é›ªå±±æ´¾" :
 					talk_msg+=(string)get_msg_map("job_tell_mode",command_mode,state,xueshan_message);
 					break;
-				case "´óÀí¶Î¼Ò" :
+				case "å¤§ç†æ®µå®¶" :
 					talk_msg+=(string)get_msg_map("job_tell_mode",command_mode,state,dali_message);
 					break;
-				case "ÉÙÁÖÅÉ" :
+				case "å°‘æž—æ´¾" :
 					talk_msg+=(string)get_msg_map("job_tell_mode",command_mode,state,shaolin_message);
 					break;
-				case "¹ÅÄ¹ÅÉ" :
+				case "å¤å¢“æ´¾" :
 					talk_msg+=(string)get_msg_map("job_tell_mode",command_mode,state,shaolin_message);
 					break;
-				case "ÁéðÕ¹¬" :
+				case "çµé¹«å®«" :
 					talk_msg+=(string)get_msg_map("job_tell_mode",command_mode,state,shaolin_message);
 					break;
-				case "¹ÃËÕÄ½ÈÝ" :
+				case "å§‘è‹æ…•å®¹" :
 					talk_msg+=(string)get_msg_map("job_tell_mode",command_mode,state,shaolin_message);
 					break;
 				default :
-					talk_msg+="$N¶Ô$nµãÁËµãÍ·,ËµµÀ£º¡°$P£¬ÄãÀ´µÄÕýºÃ¡£¡±\n";
+					talk_msg+="$Nå¯¹$nç‚¹äº†ç‚¹å¤´,è¯´é“ï¼šâ€œ$Pï¼Œä½ æ¥çš„æ­£å¥½ã€‚â€\n";
 				}
 	return talk_msg;
 }
@@ -98,12 +98,12 @@ int job_class_prompt(object player)
 	
 	switch(job_map["job_command_mode"])
 		{
-		case "´«»°"   :  
-			state+=job_map["job_master_cname"]+"ÒÑ´«ÁîÒªÕÙ¼ûÄã£¬Äã»¹ÊÇ¿ìµãÈ¥°É¡£\n";
+		case "ä¼ è¯"   :  
+			state+=job_map["job_master_cname"]+"å·²ä¼ ä»¤è¦å¬è§ä½ ï¼Œä½ è¿˜æ˜¯å¿«ç‚¹åŽ»å§ã€‚\n";
 			
 			break;
 			default  : 
-				state="ÈÎÎñÀàÐÍ´íÎó¡£\n";
+				state="ä»»åŠ¡ç±»åž‹é”™è¯¯ã€‚\n";
 				//break;
 				return 0;
 		}
@@ -123,22 +123,22 @@ int job_start_prompt(object player)
 		
 		case "npc":  
 			
-			state+=job_map["job_master_cname"]+"ÒÑÅÉÄãÈ¥"+job_map["job_oppose_pker_place_chinses"]+"¸½½üÍê³ÉÖØÒªÈÎÎñ£¬¸Ï¿ìÈ¥Ö´ÐÐ°É¡£\n";
+			state+=job_map["job_master_cname"]+"å·²æ´¾ä½ åŽ»"+job_map["job_oppose_pker_place_chinses"]+"é™„è¿‘å®Œæˆé‡è¦ä»»åŠ¡ï¼Œèµ¶å¿«åŽ»æ‰§è¡Œå§ã€‚\n";
 			
 			break;
 			default  : 
-				state="job_oppose_pker_mode error¡£\n";
+				state="job_oppose_pker_mode errorã€‚\n";
 				//break;
 				return 0;
 		}
 /*		switch(job_map["job_protect_mode"])
 		{
 		case "npc":  
-			state+=job_map["job_master_cname"]+"ÒÑÅÉÄãÈ¥"+job_map["job_oppose_pker_place_chinses"]+"¸½½üÈ¥µÈÈË£¬¸Ï¿ìÈ¥ÄÇÀï°É¡£\n";
+			state+=job_map["job_master_cname"]+"å·²æ´¾ä½ åŽ»"+job_map["job_oppose_pker_place_chinses"]+"é™„è¿‘åŽ»ç­‰äººï¼Œèµ¶å¿«åŽ»é‚£é‡Œå§ã€‚\n";
 			
 			break;
 			default  : 
-				state="job_oppose_pker_mode error¡£\n";
+				state="job_oppose_pker_mode errorã€‚\n";
 				//break;
 				return 0;
 		}
@@ -166,7 +166,7 @@ int master_msg(object master,object player,string state,string command_mode)
 	rmsg=replace_string(rmsg,"$P",player->query("name"));
 
 	pmsg=replace_string(master_msg,"$N",master->query("name"));
-	pmsg=replace_string(pmsg,"$n","Äã");
+	pmsg=replace_string(pmsg,"$n","ä½ ");
 	pmsg=replace_string(pmsg,"$P",player->query("name"));
 	
 	tell_room(environment(master),rmsg,({master,player}));
@@ -190,7 +190,7 @@ int assess_msg(object master,object player,string state,string command_mode,stri
 	rmsg=replace_string(rmsg,"$P",player->query("name"));
 
 	pmsg=replace_string(master_msg,"$N",master->query("name"));
-	pmsg=replace_string(pmsg,"$n","Äã");
+	pmsg=replace_string(pmsg,"$n","ä½ ");
 	pmsg=replace_string(pmsg,"$P",player->query("name"));
 	tell_room(place,rmsg,({player}));
 	tell_object(player,pmsg);

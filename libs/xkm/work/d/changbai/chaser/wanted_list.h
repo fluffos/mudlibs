@@ -7,35 +7,35 @@
 // how long the period is for chasers to take actions
 
 mapping wanted_list = ([
-	"/clone/weapon/xiangmo-chu.c"  : 1,  // ½µÄ§èÆ
-	"/clone/weapon/yitian-jian.c"  : 1,  // ÒĞÌì½£
-	"/clone/unique/yuxiao.c"       : 1,  // Óñóï
-	"/clone/unique/fumo-dao.c"     : 1,  // ·üÄ§µ¶
-	"/clone/unique/jinshe-jian.c"  : 1,  // ½ğÉß½£
-	"/clone/unique/eyujian.c"      : 1,  // öù×ì¼ô
-	"/clone/unique/eweibian.c"     : 1,  // öùÎ²±Ş
-	"/clone/unique/xuantie-jian.c" : 1,  // ĞşÌúÖØ½£
-	"/d/huashan/obj/jinshe-zhui.c" : 1,  // ½ğÉß×¶
-	"/clone/unique/yuzhu-zhang.c"  : 1,  // ÓñÖñÕÈ
-	"/clone/weapon/qijue.c"        : 1,  // Æß¾øÕë
-	"/clone/unique/yuchang-jian.c" : 1,  // Óã³¦½£
-	"/clone/unique/zhenwu.c"       : 1,  // ÕæÎä½£
-	"/clone/unique/cy-jian.c"      : 1,  // ÖØÑô½£
-	"/d/shaolin/obj/jingang-zhao.c": 1,  // ½ğ¸ÕÕÖ
-	"/d/xueshan/obj/wucan-yi.c"    : 1,  // ÎÚ²ÏÒÂ
-	"/d/taohua/obj/ruanwei-jia.c"  : 1,  // Èíâ¬¼×
-	"/d/taohua/obj/taomu-jian.c"   : 1,  // ÌÒÄ¾½£
-	"/clone/unique/xuedao.c"       : 1,  // Ñªµ¶
-	"/d/city/npc/obj/shenzhao.c"   : 3,  // ÉñÕÕ¾­
-	"/kungfu/class/wudang/obj/canpian.c" : 3, //¾ÅÑô²ĞÆª
-	"/clone/unique/jiuyin_force_book.c" : 3, //¾ÅÒõÕæ¾­
-	"/clone/unique/kusang-bang.c"	: 1,	// ¿ŞÉ¥°ô
-	"/clone/drug/renshen_guo.c"    : 1,
-	"/clone/drug/xuelian.c"        : 1,
-	"/clone/drug/xueteng.c"        : 1,
-	"/clone/drug/shouwu.c"         : 1,
-	"/clone/drug/puti-zi.c"        : 1,
-	"/clone/drug/sheli-zi.c"       : 1,
-	"/clone/drug/cb_renshen.c"     : 1,
-	"/clone/drug/danggui.c"        : 1,
+	"/clone/weapon/xiangmo-chu.lpc"  : 1,  // é™é­”æµ
+	"/clone/weapon/yitian-jian.lpc"  : 1,  // å€šå¤©å‰‘
+	"/clone/unique/yuxiao.lpc"       : 1,  // ç‰ç®«
+	"/clone/unique/fumo-dao.lpc"     : 1,  // ä¼é­”åˆ€
+	"/clone/unique/jinshe-jian.lpc"  : 1,  // é‡‘è›‡å‰‘
+	"/clone/unique/eyujian.lpc"      : 1,  // é³„å˜´å‰ª
+	"/clone/unique/eweibian.lpc"     : 1,  // é³„å°¾é­
+	"/clone/unique/xuantie-jian.lpc" : 1,  // ç„é“é‡å‰‘
+	"/d/huashan/obj/jinshe-zhui.lpc" : 1,  // é‡‘è›‡é”¥
+	"/clone/unique/yuzhu-zhang.lpc"  : 1,  // ç‰ç«¹æ–
+	"/clone/weapon/qijue.lpc"        : 1,  // ä¸ƒç»é’ˆ
+	"/clone/unique/yuchang-jian.lpc" : 1,  // é±¼è‚ å‰‘
+	"/clone/unique/zhenwu.lpc"       : 1,  // çœŸæ­¦å‰‘
+	"/clone/unique/cy-jian.lpc"      : 1,  // é‡é˜³å‰‘
+	"/d/shaolin/obj/jingang-zhao.lpc": 1,  // é‡‘åˆšç½©
+	"/d/xueshan/obj/wucan-yi.lpc"    : 1,  // ä¹Œèš•è¡£
+	"/d/taohua/obj/ruanwei-jia.lpc"  : 1,  // è½¯çŒ¬ç”²
+	"/d/taohua/obj/taomu-jian.lpc"   : 1,  // æ¡ƒæœ¨å‰‘
+	"/clone/unique/xuedao.lpc"       : 1,  // è¡€åˆ€
+	"/d/city/npc/obj/shenzhao.lpc"   : 3,  // ç¥ç…§ç»
+	"/kungfu/class/wudang/obj/canpian.lpc" : 3, //ä¹é˜³æ®‹ç¯‡
+	"/clone/unique/jiuyin_force_book.lpc" : 3, //ä¹é˜´çœŸç»
+	"/clone/unique/kusang-bang.lpc"	: 1,	// å“­ä¸§æ£’
+	"/clone/drug/renshen_guo.lpc"    : 1,
+	"/clone/drug/xuelian.lpc"        : 1,
+	"/clone/drug/xueteng.lpc"        : 1,
+	"/clone/drug/shouwu.lpc"         : 1,
+	"/clone/drug/puti-zi.lpc"        : 1,
+	"/clone/drug/sheli-zi.lpc"       : 1,
+	"/clone/drug/cb_renshen.lpc"     : 1,
+	"/clone/drug/danggui.lpc"        : 1,
 ]);

@@ -4,11 +4,11 @@ void unconcious()
        object ob = this_object();
        object cake;
 
-        message_vision("\nÍ»È»£¬Ö»¼û$NÌÍ³öÒ»ÕÅÉÕ±ýÍÌ½ø¶ÇÀï£¡\n",
+        message_vision("\nçªç„¶ï¼Œåªè§$NæŽå‡ºä¸€å¼ çƒ§é¥¼åžè¿›è‚šé‡Œï¼\n",
                 ob);
        if (cake = present("shaobing",ob)) destruct(cake);
 //     ob->die();
-       ob->disable_player(" <»èÃÔ²»ÐÑ>");
+       ob->disable_player(" <æ˜è¿·ä¸é†’>");
         ob->set("jing", 0);
         ob->set("qi", 0);
         COMBAT_D->announce(ob, "unconcious");

@@ -4,11 +4,11 @@ inherit NPC;
 
 void create()
 {
-        set_name("Â½ÍòÍ¨",({"lu wantong","lu",}));
-        set("gender", "ÄĞĞÔ");
+        set_name("é™†ä¸‡é€š",({"lu wantong","lu",}));
+        set("gender", "ç”·æ€§");
         set("age", 20);
         set("long", 
-               "ËûÊÇÁèÏö³ÇµÚÁù´úµÜ×ÓÂ½ÍòÍ¨¡£\n");
+               "ä»–æ˜¯å‡Œéœ„åŸç¬¬å…­ä»£å¼Ÿå­é™†ä¸‡é€šã€‚\n");
         set("attitude", "peaceful");
 
         set("str", 25);
@@ -50,7 +50,7 @@ void create()
         map_skill("unarmed", "snow-zhang");
         map_skill("dodge", "snowstep");
 
-        create_family("ÁèÏö³Ç", 6, "µÜ×Ó");
+        create_family("å‡Œéœ„åŸ", 6, "å¼Ÿå­");
         setup();
 
         

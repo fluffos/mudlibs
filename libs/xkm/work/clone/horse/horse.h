@@ -18,8 +18,8 @@ condition_check()
 	if(my_jingli <=10){
 	if (ob = me->query("rider")){
         ob->delete("rided");
-        message_vision("$NÒ»Í·´Ó$nÉÏÔÔÏÂÀ´£¬µøµôÁ½¿ÅÃÅÑÀ¡£\n", ob, me);
-        ob->receive_wound("qi", 150, "´Ó"+me->name()+"ÉÏµøÏÂÀ´Ë¤ËÀÁË");
+        message_vision("$Nä¸€å¤´ä»$nä¸Šæ ½ä¸‹æ¥ï¼Œè·Œæ‰ä¸¤é¢—é—¨ç‰™ã€‚\n", ob, me);
+        ob->receive_wound("qi", 150, "ä»"+me->name()+"ä¸Šè·Œä¸‹æ¥æ‘”æ­»äº†");
         }
         me->delete("rider");
 
@@ -30,12 +30,12 @@ condition_check()
         }
 
         if(my_jingli <=30 && my_jingli > 20){
-        say(me->name() +"Ö»ÔÚ´­Æø£¬½¥½¥µØ¿ìÅÜ²»¶¯ÁË£¡\n");
+        say(me->name() +"åªåœ¨å–˜æ°”ï¼Œæ¸æ¸åœ°å¿«è·‘ä¸åŠ¨äº†ï¼\n");
 	return;
         }
 
 	if(my_jingli <= my_mj/3){
-        say(me->name() +"´ó¿Ú´ó¿ÚµØ´­×Å´ÖÆø¡£\n");
+        say(me->name() +"å¤§å£å¤§å£åœ°å–˜ç€ç²—æ°”ã€‚\n");
         return;
         }
 }
@@ -52,7 +52,7 @@ void init()
         addjing = (my_mj - my_jingli)/2;
 	me->add("food", (int)me->max_food_capacity()/4);
 	me->add("jingli", addjing);
-	say(me->name() +"µÍÏÂÍ·ÔÚ²İµØÉÏ³ÔÆğ²İÀ´¡£\n");
+	say(me->name() +"ä½ä¸‹å¤´åœ¨è‰åœ°ä¸Šåƒèµ·è‰æ¥ã€‚\n");
 	}	
 
 	add_action("do_look", "look");
@@ -76,7 +76,7 @@ int do_look(string arg)
 	
 	printf(this_object()->query("long") + 
 	COMBAT_D->eff_status_msg((int)this_object()->query("eff_qi")* 100 / (int)this_object()->query("max_qi")) + "\n" 
-	+ "ËüÉíÉÏÍÔ×Å£º\n");
+	+ "å®ƒèº«ä¸Šé©®ç€ï¼š\n");
         for (i = 0; i < sizeof(inv); i++)
                 printf("%s \n", inv[i]->short());
         return 1;

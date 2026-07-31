@@ -28,7 +28,7 @@ int valid_leave(object me, string dir)
         }
      	    me->set_temp("new_valid_dest", "/d/xingxiu/huyang1");
             me->delete_temp("mark/steps");
-             tell_object(me, "ÄãÀÛµÃ°ëËÀ£¬ÖÕì¶×ß³öÁËÉ³Ä®¡£\n");
+             tell_object(me, "ä½ ç´¯å¾—åŠæ­»ï¼Œç»ˆæ–¼èµ°å‡ºäº†æ²™æ¼ ã€‚\n");
 	    return 1;
          }  
 
@@ -41,7 +41,7 @@ int valid_leave(object me, string dir)
         }
 	       me->set_temp("new_valid_dest", "/d/xingxiu/silk4");
            me->delete_temp("mark/steps");
-             tell_object(me, "ÄãÀÛµÃ°ëËÀ£¬ÖÕì¶×ß³öÁËÉ³Ä®¡£\n");
+             tell_object(me, "ä½ ç´¯å¾—åŠæ­»ï¼Œç»ˆæ–¼èµ°å‡ºäº†æ²™æ¼ ã€‚\n");
 	     return 1;
      	}
            

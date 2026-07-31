@@ -15,8 +15,8 @@ int do_pick(string arg)
 
 	if ( !arg || arg == "") return 0;
 
-	if ( arg == "zhu sun" || arg == "bamboo shoot" || "ÖñËñ"){
-               	message_vision("$NÕÛÏÂÒ»°ÑÖñËñ£¬´§ÔÚ»³Àï¡£\n", me);
+	if ( arg == "zhu sun" || arg == "bamboo shoot" || "ç«¹ç¬‹"){
+               	message_vision("$NæŠ˜ä¸‹ä¸€æŠŠç«¹ç¬‹ï¼Œæ£åœ¨æ€€é‡Œã€‚\n", me);
 		ob->move(me);
 	        return 1;
 	}

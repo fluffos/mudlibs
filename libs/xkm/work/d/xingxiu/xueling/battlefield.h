@@ -24,7 +24,7 @@ void initRoom() {
 
 int do_disable()
 {
-  tell_object(this_player(), "�㲻��������������\n");
+  tell_object(this_player(), "你不能在这里干这个。\n");
   return 1;
 }
 
@@ -45,16 +45,16 @@ int do_kickout(string arg)
     return 0;
 
   if (! arg || arg=="")
-    return notify_fail("��Ҫ��˭���ߣ�\n");
+    return notify_fail("你要把谁赶走？\n");
 
   target = present(arg, room);
   if (!target) 
-    return notify_fail("����û������ˣ�\n");
+    return notify_fail("这里没有这个人．\n");
 
   if (! userp(target))
-    return notify_fail("��ֻ�ܸ�����ҡ�\n");
+    return notify_fail("你只能赶走玩家。\n");
 
-  message_vision("$N���˼����˸��ߡ�\n", target);
+  message_vision("$N被此间主人赶走。\n", target);
   finish(target);
   
   return 1;
@@ -68,24 +68,24 @@ int do_finish(string arg)
   object target;
 
   if (! arg || arg=="")
-    return notify_fail("��Ҫ���˭��\n");
+    return notify_fail("你要结果谁？\n");
 
   target = present(arg, room);
   if (!target) 
-    return notify_fail("����û������ˣ�\n");
+    return notify_fail("这里没有这个人．\n");
 
   if (! userp(target))
-    return notify_fail("�������Ǹ���ң�\n");
+    return notify_fail("你想结果那个玩家？\n");
 
   if (!living(target) || target->query("qi")<0 || 
 	target->query("jing")<0 || target->query("jingli") < 0) {
-      message_vision("$N��ݺݵ�һ�Ű�$n�߳����䳡��\n", player, target);
+      message_vision("$N恶狠狠地一脚把$n踢出比武场。\n", player, target);
   }else {
       if (target->query("qi") > 1 || target->query("jing") > 1 || 
           target->query("jingli") > 1) 
-      return notify_fail("�˼һ�û���أ��ȴ�һ�ܰɣ�\n");
+      return notify_fail("人家还没死呢，先打一架吧．\n");
 
-      message_vision("$N��ݺݵ�һ�Ű�$n��ʬ���߳����䳡��\n", player, target);
+      message_vision("$N恶狠狠地一脚把$n的尸体踢出比武场。\n", player, target);
   }
   finish(target);
   

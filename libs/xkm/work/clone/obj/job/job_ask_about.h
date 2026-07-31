@@ -1,7 +1,7 @@
 //Cracked by Kafei
 //wzfeng@xkx 2000 7
 //ask somethig about master
-//ask master about "¹±Ï×¶È"
+//ask master about "è´¡çŒ®åº¦"
 
 #define JOB_DIR "/clone/obj/job/"
 //#include JOB_DIR+"lpc_math.h"
@@ -19,8 +19,8 @@ void tell_player_family_job_contribute(object player,object master)
 	if(!family_name||
 		family_name!=master->query("family/family_name"))
 	{
-		message_vision(CYN "$n¶Ô$NËµµÀ£ºÕâÎ»"+RANK_D->query_respect(player)+"ÎÊ´íÈËÁË°É£¿"
-		+RANK_D->query_self(master)+"ÔõÃ´ÖªµÀÄÇÖÖÊÂÇéÄØ¡£\n" NOR, player, master);
+		message_vision(CYN "$nå¯¹$Nè¯´é“ï¼šè¿™ä½"+RANK_D->query_respect(player)+"é—®é”™äººäº†å§ï¼Ÿ"
+		+RANK_D->query_self(master)+"æ€ä¹ˆçŸ¥é“é‚£ç§äº‹æƒ…å‘¢ã€‚\n" NOR, player, master);
 		return;
 		
 	}
@@ -28,7 +28,7 @@ void tell_player_family_job_contribute(object player,object master)
 	master_call=explode(family_master[family_name], "/")[0];
 	if(master->query("id")!=master_name)
 	{
-		message_vision(CYN "$n¶Ô$NËµµÀ£ºÄãÈ¥ÎÊ"+master_call+"°É¡£\n" NOR, player, master);
+		message_vision(CYN "$nå¯¹$Nè¯´é“ï¼šä½ å»é—®"+master_call+"å§ã€‚\n" NOR, player, master);
 		return;
 	}
 
@@ -40,19 +40,19 @@ void tell_player_family_job_contribute(object player,object master)
 	if(!mapp(family_map)
 		||family_map["job_contribute"]<=0)
 	{
-		message_vision(CYN "$n¶Ô$NÒ¡Ò¡Í·ËµµÀ£º"+family_name+"µÜ×Ó²»ÕùÆø£¬»¹Ã»Îª"+family_name+"×ö³öÈÎºÎ¹±Ï×ÄØ¡£\n" NOR, player, master);
+		message_vision(CYN "$nå¯¹$Næ‘‡æ‘‡å¤´è¯´é“ï¼š"+family_name+"å¼Ÿå­ä¸äº‰æ°”ï¼Œè¿˜æ²¡ä¸º"+family_name+"åšå‡ºä»»ä½•è´¡çŒ®å‘¢ã€‚\n" NOR, player, master);
 		return;
 	}
-	message_vision(CYN "$n¶Ô$NËµµÀ£ºÄ¿Ç°ÎÒ"+family_name+"µÄ¹±Ï×¶ÈÎª"+chinese_number(family_map["job_contribute"])+"µã¡£\n"NOR, player, master);
+	message_vision(CYN "$nå¯¹$Nè¯´é“ï¼šç›®å‰æˆ‘"+family_name+"çš„è´¡çŒ®åº¦ä¸º"+chinese_number(family_map["job_contribute"])+"ç‚¹ã€‚\n"NOR, player, master);
 	if(!family_map[player->query("id")])
 		point=0;
 	else
 		point=family_map[player->query("id")];
 	if(point<0)
-		msg="ÄãÌ«Áî"+family_name+"Ê§ÍûÁË£¬ÕÕ´ËÏÂÈ¥£¬ÄãÔÚÏÂ´Î"+family_name+"´ó»áÉÏ±ØÊÜÖØ·£¡£";
+		msg="ä½ å¤ªä»¤"+family_name+"å¤±æœ›äº†ï¼Œç…§æ­¤ä¸‹å»ï¼Œä½ åœ¨ä¸‹æ¬¡"+family_name+"å¤§ä¼šä¸Šå¿…å—é‡ç½šã€‚";
 	else
-		msg="ÄãÒª¼ÌĞøÅ¬Á¦£¬ÕùÈ¡ÔÚÏÂ´Î"+family_name+"´ó»áÉÏµÃµ½×î¼ÑÆÀ¶¨¡£";
-	message_vision(CYN "$n¶Ô$NËµµÀ£ºÄãÎª"+family_name+"Ëù×öµÄ¹±Ï×Îª"+chinese_number(point)+"µã¡£"+msg+"\n"NOR, player, master);
+		msg="ä½ è¦ç»§ç»­åŠªåŠ›ï¼Œäº‰å–åœ¨ä¸‹æ¬¡"+family_name+"å¤§ä¼šä¸Šå¾—åˆ°æœ€ä½³è¯„å®šã€‚";
+	message_vision(CYN "$nå¯¹$Nè¯´é“ï¼šä½ ä¸º"+family_name+"æ‰€åšçš„è´¡çŒ®ä¸º"+chinese_number(point)+"ç‚¹ã€‚"+msg+"\n"NOR, player, master);
 	if(!menpai_ob=find_object(JOB_DIR+"job_menpai"))
 		menpai_ob=new(JOB_DIR+"job_menpai");
 	//write("here");
@@ -63,8 +63,8 @@ void tell_player_family_job_contribute(object player,object master)
 	if(!undefinedp(family_map["family_assess_num"]))
 	{
 		point=family_map["family_assess_num"];
-		message_vision(CYN "$nËµµÀ£ºµ±"+family_name+"¹±Ï×¶È´ïµ½"
-		+chinese_number(point)+"Ê±£¬¾ÍÕÙ¿ªÏÂ´ÎµÄ"+family_name+"´ó»á¡£\n"NOR, player, master);
+		message_vision(CYN "$nè¯´é“ï¼šå½“"+family_name+"è´¡çŒ®åº¦è¾¾åˆ°"
+		+chinese_number(point)+"æ—¶ï¼Œå°±å¬å¼€ä¸‹æ¬¡çš„"+family_name+"å¤§ä¼šã€‚\n"NOR, player, master);
 	}
 	if(objectp(menpai_ob))
 		destruct(menpai_ob);

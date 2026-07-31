@@ -18,7 +18,7 @@ int shine() {
 	if (player->query_skill("linji-zhuang", 1) < 150) continue;
 	if (player->query_temp("lenshan/canlingwu") == 1) continue;
 
-	tell_object(player, "Äã¿´¼ûÁÖÖÐÈÕ¹âÈôÒþÈôÏÖ, Ö¦Ò¶ËÆËÀÊµÉú, ÐÄÖÐ²»½ûÒ»¶¯.\n");
+	tell_object(player, "ä½ çœ‹è§æž—ä¸­æ—¥å…‰è‹¥éšè‹¥çŽ°, æžå¶ä¼¼æ­»å®žç”Ÿ, å¿ƒä¸­ä¸ç¦ä¸€åŠ¨.\n");
 	player->set_temp("lenshan/canlingwu", 1);
     }
     return 1;
@@ -30,22 +30,22 @@ int do_lingwu() {
 
     if (player->query_temp("lenshan/canlingwu")!=1) return 0;
     if ((ljz=player->query_skill("linji-zhuang", 1)) < 180) {
-	return notify_fail("ÄãµÄÁÙ¼Ã×¯»ðºò²»µ½, ÎÞ·¨ÁìÎò.\n");
+	return notify_fail("ä½ çš„ä¸´æµŽåº„ç«å€™ä¸åˆ°, æ— æ³•é¢†æ‚Ÿ.\n");
     }
     if ((force=player->query_skill("force", 1)) < ljz*2/3) {
-	return notify_fail("ÄãµÄ»ù±¾ÄÚ¹¦»ðºò²»µ½, ÎÞ·¨ÁìÎò.\n");
+	return notify_fail("ä½ çš„åŸºæœ¬å†…åŠŸç«å€™ä¸åˆ°, æ— æ³•é¢†æ‚Ÿ.\n");
     }
     if (player->query("jingli") < 100 ||
 	player->query("qi") < 100 ||
 	player->query("neili") < 200 ||
 	player->query("jing") < 200) {
-	return notify_fail("Äã×ÔÉí×´Ì¬²»¼Ñ, ÎÞ·¨ÁìÎò.\n");
+	return notify_fail("ä½ è‡ªèº«çŠ¶æ€ä¸ä½³, æ— æ³•é¢†æ‚Ÿ.\n");
     }
     if (! SKILL_D("linji-zhuang")->valid_learn(player)) {
-	return notify_fail("ÄãÌåÄÚ¼¸ÖÖÕæÆø»¥Ïà³å×², ÔïÈÈÄÑµ±.\n");
+	return notify_fail("ä½ ä½“å†…å‡ ç§çœŸæ°”äº’ç›¸å†²æ’ž, ç‡¥çƒ­éš¾å½“.\n");
     }
 
-    message_vision("$NÅÌÍÈ×øÏÂ, Ä¬ÏëÖÜÌì°áÔËÇ¬À¤Å²ÒÆµÄÒªÖ¼, ËÆÓÐËùÎò.\n",
+    message_vision("$Nç›˜è…¿åä¸‹, é»˜æƒ³å‘¨å¤©æ¬è¿ä¹¾å¤æŒªç§»çš„è¦æ—¨, ä¼¼æœ‰æ‰€æ‚Ÿ.\n",
 	player, 0);
     neili=player->query("neili");
     player->set("neili", 100);

@@ -2,7 +2,7 @@
 
 mapping *drug_list = ({
 	([
-		"name": "ÑøĞÄÍè",
+		"name": "å…»å¿ƒä¸¸",
 		"file": "yangxin",
 		"time": 5,
 		"s": 15,
@@ -10,7 +10,7 @@ mapping *drug_list = ({
 		"n": 0,
 	]),
 	([
-		"name": "½ğ´´Ò©",
+		"name": "é‡‘åˆ›è¯",
 		"file": "jinchuang",
 		"time": 10,
 		"s": 20,
@@ -18,7 +18,7 @@ mapping *drug_list = ({
 		"n": 15,
 	]),
 	([
-		"name": "°Ù²İµ¤",
+		"name": "ç™¾è‰ä¸¹",
 		"file": "baicao-dan",
 		"time": 15,
 		"s": 30,
@@ -26,7 +26,7 @@ mapping *drug_list = ({
 		"n": 30,
 	]),
 	([
-		"name": "¾Å»¨ÓñÂ¶Íè",
+		"name": "ä¹èŠ±ç‰éœ²ä¸¸",
 		"file": "yulu-wan",
 		"time": 30,
 		"s": 50,
@@ -34,7 +34,7 @@ mapping *drug_list = ({
 		"n": 40,
 	]),
 	([
-		"name": "ÌïÆßöèµ¨É¢",
+		"name": "ç”°ä¸ƒé²¨èƒ†æ•£",
 		"file": "tianqi-san",
 		"time": 45,
 		"s": 5,
@@ -42,7 +42,7 @@ mapping *drug_list = ({
 		"n": 10,
 	]),
 	([
-		"name": "ÇåĞÄÉ¢",
+		"name": "æ¸…å¿ƒæ•£",
 		"file": "xxqingxin-san",
 		"time": 15,
 		"s": -1,
@@ -50,7 +50,7 @@ mapping *drug_list = ({
 		"n": 0,
 	]),
 	([
-		"name": "Ñø¾«µ¤",
+		"name": "å…»ç²¾ä¸¹",
 		"file": "yangjing",
 		"time": 5,
 		"s": 0,
@@ -58,7 +58,7 @@ mapping *drug_list = ({
 		"n": 0,
 	]),
 	([
-		"name": "ÉßÒ©",
+		"name": "è›‡è¯",
 		"file": "sheyao",
 		"time": 10,
 		"s": 0,
@@ -66,7 +66,7 @@ mapping *drug_list = ({
 		"n": 0,
 	]),
 	([
-		"name": "ĞøÃü°Ëµ¤",
+		"name": "ç»­å‘½å…«ä¸¹",
 		"file": "badan",
 		"time": 60,
 		"s": 125,
@@ -74,7 +74,7 @@ mapping *drug_list = ({
 		"n": 63,
 	]),
 	([
-		"name": "Í¨Ï¬µØÁúÍè",
+		"name": "é€šçŠ€åœ°é¾™ä¸¸",
 		"file": "dilong-wan",
 		"time": 100,
 		"s": 20,
@@ -82,7 +82,7 @@ mapping *drug_list = ({
 		"n": 80,
 	]),
 	([
-		"name": "ÓñÕæÉ¢",
+		"name": "ç‰çœŸæ•£",
 		"file": "yuzhen-san",
 		"time": 65,
 		"s": 40,
@@ -90,7 +90,7 @@ mapping *drug_list = ({
 		"n": 98,
 	]),
 	([
-		"name": "ºÚÊ¯Óñ¶´µ¤",
+		"name": "é»‘çŸ³ç‰æ´ä¸¹",
 		"file": "heishi-dan",
 		"time": 80,
 		"s": 80,
@@ -98,7 +98,7 @@ mapping *drug_list = ({
 		"n": 167,
 	]),
 	([
-		"name": "Èı»Æ±¦À¯Íè",
+		"name": "ä¸‰é»„å®èœ¡ä¸¸",
 		"file": "sanhuang-wan",
 		"time": 60,
 		"s": 30,
@@ -106,7 +106,7 @@ mapping *drug_list = ({
 		"n": 0,
 	]),
 	([
-		"name": "´óÁ¦Íè",
+		"name": "å¤§åŠ›ä¸¸",
 		"file": "dali-wan",
 		"time": 50,
 		"s": 90,

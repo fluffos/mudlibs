@@ -1,5 +1,5 @@
 //Cracked by Roath
-//lingshe Î÷Óò¹ÖÉß
+//lingshe è¥¿åŸŸæ€ªè›‡
 //sdong, 11/19/98
 
 #include <ansi.h>
@@ -7,26 +7,26 @@
 inherit NPC;
 
 mapping default_dirs = ([
-	"north":	"±±",
-	"south":	"ÄÏ",
-	"east":		"¶«",
-	"west":		"Î÷",
-	"northup":      "±±±ß",
-	"southup":      "ÄÏ±ß",
-	"eastup":       "¶«±ß",
-	"westup":       "Î÷±ß",
-	"northdown":    "±±±ß",
-	"southdown":    "ÄÏ±ß",
-	"eastdown":     "¶«±ß",
-	"westdown":     "Î÷±ß",
-	"northeast":    "¶«±±",
-	"northwest":    "Î÷±±",
-	"southeast":    "¶«ÄÏ",
-	"southwest":    "Î÷ÄÏ",
-	"up":		"ÉÏ",
-	"down":		"ÏÂ",
-	"out":		"Íâ",
-	"enter":	"Àï",
+	"north":	"åŒ—",
+	"south":	"å—",
+	"east":		"ä¸œ",
+	"west":		"è¥¿",
+	"northup":      "åŒ—è¾¹",
+	"southup":      "å—è¾¹",
+	"eastup":       "ä¸œè¾¹",
+	"westup":       "è¥¿è¾¹",
+	"northdown":    "åŒ—è¾¹",
+	"southdown":    "å—è¾¹",
+	"eastdown":     "ä¸œè¾¹",
+	"westdown":     "è¥¿è¾¹",
+	"northeast":    "ä¸œåŒ—",
+	"northwest":    "è¥¿åŒ—",
+	"southeast":    "ä¸œå—",
+	"southwest":    "è¥¿å—",
+	"up":		"ä¸Š",
+	"down":		"ä¸‹",
+	"out":		"å¤–",
+	"enter":	"é‡Œ",
 ]);
 
 void set_owner(object owner);
@@ -46,10 +46,10 @@ void create()
 {
 	int max,max1;
 
-		set_name("¹ÖÉß", ({ "guai she", "she", "snake" }) );
+		set_name("æ€ªè›‡", ({ "guai she", "she", "snake" }) );
 		set_color("$HIW$");
-		set("race", "ÉßÀà");
-		set("unit", "Ìõ");
+		set("race", "è›‡ç±»");
+		set("unit", "æ¡");
 		set("age", 29);
 		set("long", (: long_desc :));
 		set("attitude", "peaceful");
@@ -89,18 +89,18 @@ string long_desc()
 		string desc ;
 		object snake = this_object();
 
-		desc = HIW"Ò»ÌõÈ«ÉíÒøÁÛµÄĞ¡Éß£¬ÊÇÎ÷ÓòÅ·Ñô·åÓÃ¼¸Ê®ÖÖ×î¶¾µÄÉßÔÓ½»ÅàÓı³öÀ´µÄ£¬Ææ¶¾ÎŞ±È£¬ËüÕıÉì³öÑªºìµÄ¶¾Éà¶¢×¡Äã¡£\n"NOR;
+		desc = HIW"ä¸€æ¡å…¨èº«é“¶é³çš„å°è›‡ï¼Œæ˜¯è¥¿åŸŸæ¬§é˜³å³°ç”¨å‡ åç§æœ€æ¯’çš„è›‡æ‚äº¤åŸ¹è‚²å‡ºæ¥çš„ï¼Œå¥‡æ¯’æ— æ¯”ï¼Œå®ƒæ­£ä¼¸å‡ºè¡€çº¢çš„æ¯’èˆŒç›¯ä½ä½ ã€‚\n"NOR;
 
 		if( snake->query("food") < 50 )
-			 desc += RED"Ëü¿´ÆğÀ´Î¸±ñ±ñµÄ£¬¿ÖÅÂ¶öµÃÕı»Å¡£\n"NOR;
+			 desc += RED"å®ƒçœ‹èµ·æ¥èƒƒç˜ªç˜ªçš„ï¼Œææ€•é¥¿å¾—æ­£æ…Œã€‚\n"NOR;
 		else if( snake->query("food") < 100 )
-			 desc += "Ëü¿´ÆğÀ´²»ÊÇºÜÓĞ¾«Éñ£¬¿ÖÅÂÓĞµã¶ö¡£\n";
+			 desc += "å®ƒçœ‹èµ·æ¥ä¸æ˜¯å¾ˆæœ‰ç²¾ç¥ï¼Œææ€•æœ‰ç‚¹é¥¿ã€‚\n";
 		else if( snake->query("food") < 150 )
-			 desc += "Ëü¿´ÆğÀ´Âú»îÆÃµÄ£¬¿´À´ÊÇ°ë±¥ÁË¡£\n";
+			 desc += "å®ƒçœ‹èµ·æ¥æ»¡æ´»æ³¼çš„ï¼Œçœ‹æ¥æ˜¯åŠé¥±äº†ã€‚\n";
 		else if( snake->query("food") < 200 )
-			 desc += "Ëü¿´ÆğÀ´Î¸¹Ä¹ÄµÄ£¬¿´À´ÊÇ¿ì±¥ÁË¡£\n";
+			 desc += "å®ƒçœ‹èµ·æ¥èƒƒé¼“é¼“çš„ï¼Œçœ‹æ¥æ˜¯å¿«é¥±äº†ã€‚\n";
 		else
-			 desc += HIY"Ëü¿´ÆğÀ´Î¸¹Ä¹ÄµÄ£¬ËÆºõ³ÔµÄÌ«±¥³ÅµÃ¼òÖ±¿ìÒª±¬Õ¨ÁË¡£\n"NOR;
+			 desc += HIY"å®ƒçœ‹èµ·æ¥èƒƒé¼“é¼“çš„ï¼Œä¼¼ä¹åƒçš„å¤ªé¥±æ’‘å¾—ç®€ç›´å¿«è¦çˆ†ç‚¸äº†ã€‚\n"NOR;
 
 		return desc;
 }
@@ -145,7 +145,7 @@ void init()
 
 
 		if( interactive(ob = this_player()) &&
-				ob->query("family/family_name") != "°×ÍÕÉ½" &&
+				ob->query("family/family_name") != "ç™½é©¼å±±" &&
 				random(ob->query_kar() + ob->query_per()) < 30 &&
 				ob->query("combat_exp") > me->query("combat_exp") * 9/10 )
 		{
@@ -224,13 +224,13 @@ void do_leave(object ob)
 		{
 			if( ob->is_busy() || ob->is_fighting())
 			{
-				message_vision("$NÏòºóÒ»Ìø£¬Ìø³öÕ½È¦£¡\n",ob);
+				message_vision("$Nå‘åä¸€è·³ï¼Œè·³å‡ºæˆ˜åœˆï¼\n",ob);
 				if(present("guai she",environment(ob)))
-				message_vision("$NËµµÀ£ºÃ»Ïëµ½ÀÏ¶¾ÎïµÄ±¦±´ÍæÒâ»¹ÕæÓĞÁ½ÏÂ×Ó¡£"+RANK_D->query_self(ob)+"¸ÄÈÕÔÙÀ´·îÅã£¡\n",ob);
-				else message_vision("$NËµµÀ£º¹ş¸ò£¬ÀÏ¶¾ÎïµÄ±¦±´ÍæÒâµ½µ×²»ÊÇ"+RANK_D->query_self(ob)+"µÄ¶ÔÊÖ£¡\n",ob);
+				message_vision("$Nè¯´é“ï¼šæ²¡æƒ³åˆ°è€æ¯’ç‰©çš„å®è´ç©æ„è¿˜çœŸæœ‰ä¸¤ä¸‹å­ã€‚"+RANK_D->query_self(ob)+"æ”¹æ—¥å†æ¥å¥‰é™ªï¼\n",ob);
+				else message_vision("$Nè¯´é“ï¼šå“ˆè›¤ï¼Œè€æ¯’ç‰©çš„å®è´ç©æ„åˆ°åº•ä¸æ˜¯"+RANK_D->query_self(ob)+"çš„å¯¹æ‰‹ï¼\n",ob);
 			}
 			if(!living(ob))ob->revive(0);
-			message_vision("$N¼±¼±Ã¦Ã¦Àë¿ªÁË¡£\n",ob);
+			message_vision("$Næ€¥æ€¥å¿™å¿™ç¦»å¼€äº†ã€‚\n",ob);
 			destruct(ob);
 		}
 }
@@ -252,24 +252,24 @@ void action(object me, object ob)
 
 	if( random(8) == 0 )
 	{
-		message_vision("\n$N"+HIR"Í»È»Ò»¿ÚÏò$nÒ§È¥!\n"NOR, me,ob);
+		message_vision("\n$N"+HIR"çªç„¶ä¸€å£å‘$nå’¬å»!\n"NOR, me,ob);
 		me->kill_ob(ob);
 	}
 	else if( random(6) !=0 && (owner = present(me->query("owner"),here) )  )
 	{
 
-		message_vision(HIR"\n$N"+HIR"ºÈµÀ£ºÀÏ¶¾ÎïµÄµÜ×ÓÇıÉßÉËÈËÎŞÊı£¬½ñÌì"+RANK_D->query_self(ob)+"ÌØÀ´ËÍÄãÃÇÉÏÎ÷Ìì£¡\n"NOR, ob);
+		message_vision(HIR"\n$N"+HIR"å–é“ï¼šè€æ¯’ç‰©çš„å¼Ÿå­é©±è›‡ä¼¤äººæ— æ•°ï¼Œä»Šå¤©"+RANK_D->query_self(ob)+"ç‰¹æ¥é€ä½ ä»¬ä¸Šè¥¿å¤©ï¼\n"NOR, ob);
 		ob->kill_ob(me);
 		ob->kill_ob(owner);
 	}
 	else if( random(2)==0 )
 	{
-		message_vision(HIR"\n$N"+HIR"Í»È»Ïò$n"+HIR"·¢¶¯½ø¹¥!\n"NOR, ob,me);
+		message_vision(HIR"\n$N"+HIR"çªç„¶å‘$n"+HIR"å‘åŠ¨è¿›æ”»!\n"NOR, ob,me);
 		ob->kill_ob(me);
 	}
 	else
 	{
-		message_vision(HIR"\n$N"+HIR"ºÈµÀ£ºÀÏ¶¾ÎïµÄ¹ÖÉßº¦ÈËÎŞÊı£¬½ñÌì"+RANK_D->query_self(ob)+"ÊÄÎªÃñ³ıº¦£¡\n"NOR, ob);
+		message_vision(HIR"\n$N"+HIR"å–é“ï¼šè€æ¯’ç‰©çš„æ€ªè›‡å®³äººæ— æ•°ï¼Œä»Šå¤©"+RANK_D->query_self(ob)+"èª“ä¸ºæ°‘é™¤å®³ï¼\n"NOR, ob);
 		ob->kill_ob(me);
 	}
 
@@ -307,7 +307,7 @@ private int is_suitable(object victim, object killer)
 		});
 
 		if(  !clonep(victim) || userp(victim)
-			|| victim->query("race") != "ÈËÀà"
+			|| victim->query("race") != "äººç±»"
 			|| victim->query("shen") < 0
 			|| victim->query("winner")
 			|| strsrch(base_name(victim), "/kungfu/skill/") != -1
@@ -409,7 +409,7 @@ void killer_show(object me)
 	ob->move(here);
 	ob->set("snake_killer", 1);
 	setup_skill(me,ob);
-	message_vision("\n$N¿ì²½×ßÁË¹ıÀ´£¡\n", ob);
+	message_vision("\n$Nå¿«æ­¥èµ°äº†è¿‡æ¥ï¼\n", ob);
 
 	call_out("action",random(10),me,ob);
 
@@ -426,35 +426,35 @@ int do_drive(string arg)
 	string target_dir, dir, dest, victim;
 	mapping exit;
 
-	if (!arg) return notify_fail("ÄãÒªÇı¸ÏÊ²Ã´£¿\n");
+	if (!arg) return notify_fail("ä½ è¦é©±èµ¶ä»€ä¹ˆï¼Ÿ\n");
 
 	if( sscanf(arg, "%s %s", victim, dir) != 2 )
-		return notify_fail("Ö¸Áî´íÎó£¡\n");
+		return notify_fail("æŒ‡ä»¤é”™è¯¯ï¼\n");
 
 	if ( victim == me->query("id") )
-		return notify_fail("ºÎ±Ø¶à´ËÒ»¾Ù£¿\n");
+		return notify_fail("ä½•å¿…å¤šæ­¤ä¸€ä¸¾ï¼Ÿ\n");
 
 	if ( victim != "snake" && victim != "guai she" && victim != "she" )
-		return notify_fail("ÄãÒªÇı¸ÏÊ²Ã´£¿\n");
+		return notify_fail("ä½ è¦é©±èµ¶ä»€ä¹ˆï¼Ÿ\n");
 
 	ob = present(victim, environment(me));
 
-	if (!ob) return notify_fail("ÕâÀï²¢ÎŞ´ËÈË£¡\n");
-	if (!living(ob)) return notify_fail("Õâ²»ÊÇ»îÎï£¡\n");
+	if (!ob) return notify_fail("è¿™é‡Œå¹¶æ— æ­¤äººï¼\n");
+	if (!living(ob)) return notify_fail("è¿™ä¸æ˜¯æ´»ç‰©ï¼\n");
 
 
 	env = environment(me);
 	if( !mapp(exit = env->query("exits")) || undefinedp(exit[dir]) )
-		return notify_fail("ÎŞ´Ë·½Ïò¿ÉÈ¥£¡\n");
+		return notify_fail("æ— æ­¤æ–¹å‘å¯å»ï¼\n");
 
 	dest = exit[dir];
 
 	if( !(obj = find_object(dest)) )
 					 call_other(dest, "???");
 		if( !(obj = find_object(dest)) )
-					 return notify_fail("ÎŞ·¨×ß£¡\n");
-	if( !wizardp(ob) && obj->query("short") == "Î×Ê¦ĞİÏ¢ÊÒ" )
-		return notify_fail("ÎŞ·¨×ß£¡\n");
+					 return notify_fail("æ— æ³•èµ°ï¼\n");
+	if( !wizardp(ob) && obj->query("short") == "å·«å¸ˆä¼‘æ¯å®¤" )
+		return notify_fail("æ— æ³•èµ°ï¼\n");
 
 	if( !undefinedp(default_dirs[dir]) )
 					 target_dir = default_dirs[dir];
@@ -462,28 +462,28 @@ int do_drive(string arg)
 					 target_dir = dir;
 
 	if ( present("shezhang",me) || present("guai shezhang",me))
-		message_vision(HIR "$NÓÃÉßÕÈÇı¸Ï$n³¯"+target_dir+"×ßÈ¥¡£\n" NOR, me, ob);
+		message_vision(HIR "$Nç”¨è›‡æ–é©±èµ¶$næœ"+target_dir+"èµ°å»ã€‚\n" NOR, me, ob);
 	else
-		message_vision( "$NÓÃÊÖÊÆÇı¸Ï$n³¯"+target_dir+"×ßÈ¥¡£\n" , me, ob);
+		message_vision( "$Nç”¨æ‰‹åŠ¿é©±èµ¶$næœ"+target_dir+"èµ°å»ã€‚\n" , me, ob);
 
 
 	if ( ob->query("owner") != me->query("id")  )
 	{
-		message_vision( "¿ÉÊÇ$NÀí¶¼²»Àí¡£\n" NOR, ob);
+		message_vision( "å¯æ˜¯$Nç†éƒ½ä¸ç†ã€‚\n" NOR, ob);
 		return 1;
 	}
 
 	if( random(20) != 0)
 	{
-		message("vision", HIR "Ö»¼û"+ob->name()+"¹Ô¹ÔµÄÏò"+target_dir+"ÓÎ¹ıÈ¥¡£\n" NOR, environment(ob), ({ob}));
+		message("vision", HIR "åªè§"+ob->name()+"ä¹–ä¹–çš„å‘"+target_dir+"æ¸¸è¿‡å»ã€‚\n" NOR, environment(ob), ({ob}));
 
 		if( ob->move(obj) ) {
-			message( "vision", HIR "Ö»¼û"+ob->name()+"ÓÎÁË¹ıÀ´¡£\n" NOR, environment(ob), ({ob}));
+			message( "vision", HIR "åªè§"+ob->name()+"æ¸¸äº†è¿‡æ¥ã€‚\n" NOR, environment(ob), ({ob}));
 			return 1;
 		}
 	}
 	else
-		message_vision( "¿ÉÊÇ$NÀí¶¼²»Àí¡£\n" NOR, ob);
+		message_vision( "å¯æ˜¯$Nç†éƒ½ä¸ç†ã€‚\n" NOR, ob);
 
 	return 1;
 }
@@ -494,57 +494,57 @@ int do_yao(string arg)
 	string target_dir, dir, dest, victim;
 	mapping exit;
 
-	if (!arg) return notify_fail("ÄãÒªÇı¸ÏÊ²Ã´£¿\n");
+	if (!arg) return notify_fail("ä½ è¦é©±èµ¶ä»€ä¹ˆï¼Ÿ\n");
 
 	victim = arg;
 
-	if ( victim == me->query("id") ) return notify_fail("¹ÖÉßÒÉ»óµØ¿´×ÅÄã¡£\n");
+	if ( victim == me->query("id") ) return notify_fail("æ€ªè›‡ç–‘æƒ‘åœ°çœ‹ç€ä½ ã€‚\n");
 
 	ob = present(victim, environment(me));
 	snake = present("guai she",environment(me));
 
-	if (!ob) return notify_fail("ÕâÀï²¢ÎŞ´ËÈË£¡\n");
+	if (!ob) return notify_fail("è¿™é‡Œå¹¶æ— æ­¤äººï¼\n");
 
 
 
 	if ( present("shezhang",me) || present("guai shezhang",me))
-		message_vision(HIR "$NÓÃÉßÕÈÇı¸ÏÉß³¯$nÒ§È¥¡£\n" NOR, me, ob);
+		message_vision(HIR "$Nç”¨è›‡æ–é©±èµ¶è›‡æœ$nå’¬å»ã€‚\n" NOR, me, ob);
 	else
-		message_vision( "$NÓÃÊÖÖ¸ÁËÖ¸Éß£¬ÓÖ³¯$nÖ¸È¥¡£\n" , me, ob);
+		message_vision( "$Nç”¨æ‰‹æŒ‡äº†æŒ‡è›‡ï¼Œåˆæœ$næŒ‡å»ã€‚\n" , me, ob);
 
-//	if (!living(ob)) return notify_fail("Õâ²»ÊÇ»îÎï£¡\n");
+//	if (!living(ob)) return notify_fail("è¿™ä¸æ˜¯æ´»ç‰©ï¼\n");
 
 
 
-	if ( query("owner") != me->query("id") || ob->query("race") != "ÈËÀà" || ob->query("id")=="guai she" )
+	if ( query("owner") != me->query("id") || ob->query("race") != "äººç±»" || ob->query("id")=="guai she" )
 	{
-		message_vision( "¿ÉÊÇ$NÀí¶¼²»Àí¡£\n" NOR, snake );
+		message_vision( "å¯æ˜¯$Nç†éƒ½ä¸ç†ã€‚\n" NOR, snake );
 		return 1;
 	}
 
 	if ( query("food") >= 200 )
 	{
-		message_vision( "¿ÉÊÇ$N³ÔµÃÌ«±¥ÁË£¬Àí¶¼²»Àí¡£\n" NOR, snake );
+		message_vision( "å¯æ˜¯$Nåƒå¾—å¤ªé¥±äº†ï¼Œç†éƒ½ä¸ç†ã€‚\n" NOR, snake );
 		return 1;
 	}
 
 	if( ob->query("combat_exp") < me->query("combat_exp")*4/5 )
-		return notify_fail("¹ÖÉßÖ»¶ÔÎä¹¦¸ßÊÖ¸ĞĞËÈ¤£¡\n");
+		return notify_fail("æ€ªè›‡åªå¯¹æ­¦åŠŸé«˜æ‰‹æ„Ÿå…´è¶£ï¼\n");
 
 
 
 	if( random(20) != 0)
 	{
-		message_vision( HIR "Ö»¼û$N"+HIW"ÉÁµç°ãµÄÏò$nÆË»÷¹ıÈ¥¡£\n" NOR, snake, ob );
+		message_vision( HIR "åªè§$N"+HIW"é—ªç”µèˆ¬çš„å‘$næ‰‘å‡»è¿‡å»ã€‚\n" NOR, snake, ob );
 		snake->kill_ob(ob);
 		if(random(4)!=0 && living(ob) )
 		{
-			message_vision( HIR "$N¶Ô×Å$n"+HIR"ÀäĞ¦Ò»Éù£º"+RANK_D->query_rude(me)+HIR"¾ÓÈ»¸Ò×İÉßÉËÎÒ£¬¿´ÕĞ£¡\n" NOR, ob,me );
+			message_vision( HIR "$Nå¯¹ç€$n"+HIR"å†·ç¬‘ä¸€å£°ï¼š"+RANK_D->query_rude(me)+HIR"å±…ç„¶æ•¢çºµè›‡ä¼¤æˆ‘ï¼Œçœ‹æ‹›ï¼\n" NOR, ob,me );
 			ob->kill_ob(me);
 		}
 	}
 	else
-		message_vision( "¿ÉÊÇ$NÀí¶¼²»Àí¡£\n" NOR, snake);
+		message_vision( "å¯æ˜¯$Nç†éƒ½ä¸ç†ã€‚\n" NOR, snake);
 
 	return 1;
 }
@@ -555,34 +555,34 @@ int do_stop(string arg)
 	string target_dir, dir, dest, victim;
 	mapping exit;
 
-	if (!arg) return notify_fail("ÄãÒªÇı¸ÏÊ²Ã´£¿\n");
+	if (!arg) return notify_fail("ä½ è¦é©±èµ¶ä»€ä¹ˆï¼Ÿ\n");
 
 	victim = arg;
 
 
 	ob = present(victim, environment(me));
 
-	if (!ob) return notify_fail("ÕâÀï²¢ÎŞ´ËÎï£¡\n");
+	if (!ob) return notify_fail("è¿™é‡Œå¹¶æ— æ­¤ç‰©ï¼\n");
 
 	if ( present("shezhang",me) || present("guai shezhang",me))
-		message_vision(HIR "$NÓÃÉßÕÈÊ¾Òâ$nÍ£ÏÂÀ´¡£\n" NOR, me,ob);
+		message_vision(HIR "$Nç”¨è›‡æ–ç¤ºæ„$nåœä¸‹æ¥ã€‚\n" NOR, me,ob);
 	else
-		message_vision( "$NÓÃÊÖÖ¸Ê¾Òâ$nÍ£ÏÂÀ´¡£\n" , me, ob);
+		message_vision( "$Nç”¨æ‰‹æŒ‡ç¤ºæ„$nåœä¸‹æ¥ã€‚\n" , me, ob);
 
 	if ( ob->query("owner") != me->query("id") )
 	{
-		message_vision( "¿ÉÊÇ$NÀí¶¼²»Àí¡£\n" NOR, ob);
+		message_vision( "å¯æ˜¯$Nç†éƒ½ä¸ç†ã€‚\n" NOR, ob);
 		return 1;
 	}
 
 
 	if( random(20) != 0)
 	{
-		message("vision", HIR "Ö»¼û$N¹Ô¹ÔµØËõ»ØÀ´£¬²»Ò§ÁË¡£\n" NOR, ob );
+		message("vision", HIR "åªè§$Nä¹–ä¹–åœ°ç¼©å›æ¥ï¼Œä¸å’¬äº†ã€‚\n" NOR, ob );
 		ob->remove_all_killer();
 	}
 	else
-		message_vision( "¿ÉÊÇ$NÀí¶¼²»Àí¡£\n" NOR, ob);
+		message_vision( "å¯æ˜¯$Nç†éƒ½ä¸ç†ã€‚\n" NOR, ob);
 
 	return 1;
 }
@@ -594,24 +594,24 @@ int convert(string arg)
 	object ob,snake = present("guai she",environment(me));
 
 	if (arg != "guai she" && arg != "she" && arg != "snake" || !snake ) return 0;
-	if (me->query("family/family_name") != "°×ÍÕÉ½")
-		return notify_fail("Äã²»ÄÜ»¯ÉßÎªÕÈ¡£\n");
+	if (me->query("family/family_name") != "ç™½é©¼å±±")
+		return notify_fail("ä½ ä¸èƒ½åŒ–è›‡ä¸ºæ–ã€‚\n");
 
-	if( !(ob=present("guai shezhang",me)) ) return notify_fail("ÉßÕÈÔÚÄÄ¶ù£¿\n");
+	if( !(ob=present("guai shezhang",me)) ) return notify_fail("è›‡æ–åœ¨å“ªå„¿ï¼Ÿ\n");
 
-	if(me->query("jingli")<50)return notify_fail("ÄãÊµÔÚÌ«ÀÛÁË¡£\n");
+	if(me->query("jingli")<50)return notify_fail("ä½ å®åœ¨å¤ªç´¯äº†ã€‚\n");
 
-	message_vision("$N×óÊÖ³Ö¹ÖÉßÕÈÉìµ½$nÃæÇ°£¬ÓÒÊÖ¶Ô×Å$n×ö×ÅÆæ¹ÖµÄÊÖÊÆ£¬¿ÚÖĞÄîÄîÓĞ´Ê¡£\n",
+	message_vision("$Nå·¦æ‰‹æŒæ€ªè›‡æ–ä¼¸åˆ°$né¢å‰ï¼Œå³æ‰‹å¯¹ç€$nåšç€å¥‡æ€ªçš„æ‰‹åŠ¿ï¼Œå£ä¸­å¿µå¿µæœ‰è¯ã€‚\n",
 		me,snake);
 
 	me->add("jingli",-20);
 
 	if( snake->query("food") < 200 )
-		return notify_fail("¹ÖÉß»¹Ã»Î¹±¥£¬²»¿Ï½øÉßÕÈ¡£\n");
+		return notify_fail("æ€ªè›‡è¿˜æ²¡å–‚é¥±ï¼Œä¸è‚¯è¿›è›‡æ–ã€‚\n");
 
-	if( ob->query("snake") >=2 )return notify_fail("ÉßÕÈÉÏÒÑÓĞÁ½ÌõÉßÁË£¬¹ÖÉß¼·²»ÉÏÈ¥£¡\n");
+	if( ob->query("snake") >=2 )return notify_fail("è›‡æ–ä¸Šå·²æœ‰ä¸¤æ¡è›‡äº†ï¼Œæ€ªè›‡æŒ¤ä¸ä¸Šå»ï¼\n");
 
-	message_vision(HIW"$N¿´ÁË¿´$n£¬Í»È»ËÆ¼ıÒ»°ãÔ¾Æğ£¬×¼È·µØÂäÔÚÉßÕÈÉÏ£¬ÅÌÁËÆğÀ´¡£\n"NOR,
+	message_vision(HIW"$Nçœ‹äº†çœ‹$nï¼Œçªç„¶ä¼¼ç®­ä¸€èˆ¬è·ƒèµ·ï¼Œå‡†ç¡®åœ°è½åœ¨è›‡æ–ä¸Šï¼Œç›˜äº†èµ·æ¥ã€‚\n"NOR,
 		snake,me);
 
 	ob->add("poison_applied", me->query_skill("poison",1)/2);
@@ -639,7 +639,7 @@ int random_walk()
 			if(snake)
 			{
 				if(!living(snake))snake->revive(0);
-					message_vision("$NÔÚµØÉÏÕÒÁËÒ»¸ö·ì×êÁË½øÈ¥£¬²»¼ûÁË¡£\n",snake);
+					message_vision("$Nåœ¨åœ°ä¸Šæ‰¾äº†ä¸€ä¸ªç¼é’»äº†è¿›å»ï¼Œä¸è§äº†ã€‚\n",snake);
 					destruct(snake);
 			}
 			return 0;
@@ -658,7 +658,7 @@ int random_walk()
 			if(snake)
 			{
 				if(!living(snake))snake->revive(0);
-					message_vision("$NÔÚµØÉÏÕÒÁËÒ»¸ö·ì×êÁË½øÈ¥£¬²»¼ûÁË¡£\n",snake);
+					message_vision("$Nåœ¨åœ°ä¸Šæ‰¾äº†ä¸€ä¸ªç¼é’»äº†è¿›å»ï¼Œä¸è§äº†ã€‚\n",snake);
 					destruct(snake);
 			}
 			return 0;
@@ -679,15 +679,15 @@ int random_walk()
 
 
 	if( !mapp(exit = here->query("exits")) || undefinedp(exit[dir]) )
-		return notify_fail("ÎŞ´Ë·½Ïò¿ÉÈ¥£¡\n");
+		return notify_fail("æ— æ­¤æ–¹å‘å¯å»ï¼\n");
 
 
 		there = find_object( exit[dir] );
 		if( there )
 			{
-				message_vision("$NòêÑÑµØÏò"+default_dirs[dir]+"ÓÎÁË¹ıÈ¥¡£\n",snake);
+				message_vision("$Nèœ¿èœ’åœ°å‘"+default_dirs[dir]+"æ¸¸äº†è¿‡å»ã€‚\n",snake);
 				this_object()->move(there);
-				message_vision("$NòêÑÑµØÓÎÁË¹ıÀ´¡£\n",snake);
+				message_vision("$Nèœ¿èœ’åœ°æ¸¸äº†è¿‡æ¥ã€‚\n",snake);
 				all_inventory(here)->follow_me(this_object(), dir);
 			}
 		else return 0;
@@ -764,11 +764,11 @@ int auto_perform()
 		return random_walk();
 	}
 
-	message_vision(HIW"\n$NÍ»È»ÉÁµç°ãµØÔ¾Æğ£¬ÏóÒ»Ìõ°×¼ıËÆµÄÉäÏò$n"+HIW"µÄÑÊºí¡£\n"NOR,me,target);
+	message_vision(HIW"\n$Nçªç„¶é—ªç”µèˆ¬åœ°è·ƒèµ·ï¼Œè±¡ä¸€æ¡ç™½ç®­ä¼¼çš„å°„å‘$n"+HIW"çš„å’½å–‰ã€‚\n"NOR,me,target);
 
 	if( random( me->query("combat_exp") ) > random( target->query("combat_exp") ) || !living(target) )
 	{
-			message_vision(HIR"½á¹û$N"+HIR"Ò»¿ÚÒ§×¡$n"+HIR"µÄÑÊºí£¬ÃÍÃÍµØÎüÆğÑªÀ´¡£\n\n"NOR,me,target);
+			message_vision(HIR"ç»“æœ$N"+HIR"ä¸€å£å’¬ä½$n"+HIR"çš„å’½å–‰ï¼ŒçŒ›çŒ›åœ°å¸èµ·è¡€æ¥ã€‚\n\n"NOR,me,target);
 			damage = random(  me->query_skill("force") + me->query_skill("hamagong") + me->query("jiali") )*( 1 + random(3) ) ;
 			if(damage > 1000) damage = 1000;
 			if(damage < 100) damage = 100;
@@ -802,7 +802,7 @@ int auto_perform()
 			COMBAT_D->report_status(target);
 	}
 	else
-		message_vision(HIG"$N"+HIG"»ÅÃ¦Ò»ÉÁÉí£¬ÕıºÃ¶ã¹ı$n"+HIG"ÕâÒ»Ò§£¬²»¹ıÒ²±»ÏÅµÃÀäº¹Ö±Á÷¡£\n"NOR,target,me);
+		message_vision(HIG"$N"+HIG"æ…Œå¿™ä¸€é—ªèº«ï¼Œæ­£å¥½èº²è¿‡$n"+HIG"è¿™ä¸€å’¬ï¼Œä¸è¿‡ä¹Ÿè¢«å“å¾—å†·æ±—ç›´æµã€‚\n"NOR,target,me);
 
 	return 1;
 }

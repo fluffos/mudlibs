@@ -46,9 +46,9 @@ int do_study(string arg)
 	int check;
 
 	if ( !arg )
-		return notify_fail( "ÄãÏëÑ§Ê²÷á?\n");
+		return notify_fail( "ä½ æƒ³å­¦ä»€éº½?\n");
 	if ( arg != "wall" )
-		return notify_fail( "ÀÏÀÏÊµÊµ study wall °É¡£\n");
+		return notify_fail( "è€è€å®å® study wall å§ã€‚\n");
 	call_out("do_learn", 0, me, flag);
 	return 1;
 }
@@ -59,78 +59,78 @@ int do_learn(object me, int flag)
 	int check;
 	string bskill = bskills[flag-1];
 	string askill = askills[flag-1];
-	// Èç¹ûÄã¾­Ñé²»µ½250£¬»ò»ù±¾¹¦²»µ½10£¬¾ÍÎŞ·¨Ñ§ÏÀ¿ÍĞĞ¹¦·ò¡£
+	// å¦‚æœä½ ç»éªŒä¸åˆ°250ï¼Œæˆ–åŸºæœ¬åŠŸä¸åˆ°10ï¼Œå°±æ— æ³•å­¦ä¾ å®¢è¡ŒåŠŸå¤«ã€‚
 	if (bskill == "")
-	{	write("Äã¿´ÁËÒ»»áÍ¼Æ×£¬·¢¾õÎŞ·¨´ÓÖĞÔÙÁìÎòÊ²÷áÁË¡£\n");
+	{	write("ä½ çœ‹äº†ä¸€ä¼šå›¾è°±ï¼Œå‘è§‰æ— æ³•ä»ä¸­å†é¢†æ‚Ÿä»€éº½äº†ã€‚\n");
 		return 1;
 	}
 	
 	if (askill == "")
-	{	write("Äã¿´ÁËÒ»»áÍ¼Æ×£¬·¢¾õÎŞ·¨´ÓÖĞÔÙÁìÎòÊ²÷áÁË¡£\n");
+	{	write("ä½ çœ‹äº†ä¸€ä¼šå›¾è°±ï¼Œå‘è§‰æ— æ³•ä»ä¸­å†é¢†æ‚Ÿä»€éº½äº†ã€‚\n");
 		return 1;
 	}
 
 	if (((int)me->query("combat_exp") < 250) || ((int)me->query_skill(bskill, 1) < 10))
 	{	if ((int)me->query_skill(bskill, 1) > 20)
-		{	write("Äã¿´ÁËÒ»»áÍ¼Æ×£¬·¢¾õÒÑ¾­ÎŞ·¨´ÓÖĞÔÙÁìÎòÊ²÷áÁË¡£\n");
+		{	write("ä½ çœ‹äº†ä¸€ä¼šå›¾è°±ï¼Œå‘è§‰å·²ç»æ— æ³•ä»ä¸­å†é¢†æ‚Ÿä»€éº½äº†ã€‚\n");
 			return 1;
 		}
 		check = (int)me->query_skill(bskill,1)*(int)me->query_skill(bskill,1)*(int)me->query_skill(bskill,1);       
 		if (check > (int)me->query("combat_exp") * 10)
-		{	write ("ÄãÊµÕ½¾­Ñé²»×ã£¬ÎŞ·¨ÁìÎò¡£\n");
+		{	write ("ä½ å®æˆ˜ç»éªŒä¸è¶³ï¼Œæ— æ³•é¢†æ‚Ÿã€‚\n");
 			return 1;
 		}
 		if ((int)me->query("jing") < 30 ) 
-		{	write("Äã¾«ÉñÎŞ·¨¼¯ÖĞ¡£\n");
+		{	write("ä½ ç²¾ç¥æ— æ³•é›†ä¸­ã€‚\n");
 			return 1;
 		}
-		write("ÄãÁìÎòÁË" + to_chinese(bskill) + "·½ÃæµÄ¼¸¸öÒÉÄÑ¡£\n");
+		write("ä½ é¢†æ‚Ÿäº†" + to_chinese(bskill) + "æ–¹é¢çš„å‡ ä¸ªç–‘éš¾ã€‚\n");
 		me->improve_skill(bskill, me->query("int"));
-		me->receive_damage("jing", 20, "ĞÄÁ¦½»´áËÀÁË");
+		me->receive_damage("jing", 20, "å¿ƒåŠ›äº¤ç˜æ­»äº†");
 		
 	}
 	else
 	{	if ((int)me->query_skill("literate", 1) == 0)
-		{	write("ÄãÒ»×Ö²»Ê¶£¬¿´²»¶®Ç½ÉÏµÄ×¢½â¡£\n");
+		{	write("ä½ ä¸€å­—ä¸è¯†ï¼Œçœ‹ä¸æ‡‚å¢™ä¸Šçš„æ³¨è§£ã€‚\n");
 			return 1;
 		} 
 		//if (((int)me->query("learned") > 0) && ((int)me->query("learned") != flag))
-		//{	write("ÄãÒÑÑ§ÏÀ¿ÍĞĞÖĞÆäËûÒ»ÃÅ¹¦·ò£¬¾Í²»ÄÜÔÙÑ§±ğµÄÁË¡£\n");
+		//{	write("ä½ å·²å­¦ä¾ å®¢è¡Œä¸­å…¶ä»–ä¸€é—¨åŠŸå¤«ï¼Œå°±ä¸èƒ½å†å­¦åˆ«çš„äº†ã€‚\n");
 		//	return 1;
 		//}
 
 		if ((int)me->query_skill(askill, 1) > 20 || askill == "")
-		{	write("Äã¿´ÁËÒ»»áÍ¼Æ×£¬·¢¾õÒÑ¾­ÎŞ·¨´ÓÖĞÔÙÁìÎòÊ²÷áÁË¡£\n");
+		{	write("ä½ çœ‹äº†ä¸€ä¼šå›¾è°±ï¼Œå‘è§‰å·²ç»æ— æ³•ä»ä¸­å†é¢†æ‚Ÿä»€éº½äº†ã€‚\n");
 			return 1;
 		}
 		check = (int)me->query_skill(askill,1)*(int)me->query_skill(askill,1)*(int)me->query_skill(askill,1);
 		if (check > (int)me->query("combat_exp") * 10)
-		{	write ("ÄãÊµÕ½¾­Ñé²»×ã£¬ÎŞ·¨ÁìÎò¡£\n");
+		{	write ("ä½ å®æˆ˜ç»éªŒä¸è¶³ï¼Œæ— æ³•é¢†æ‚Ÿã€‚\n");
 			return 1;
 		}
 		if ((int)me->query("jing") < 30 ) 
-		{	write("Äã¾«ÉñÎŞ·¨¼¯ÖĞ¡£\n");
+		{	write("ä½ ç²¾ç¥æ— æ³•é›†ä¸­ã€‚\n");
 			return 1;
 		}
 		
 		//if ((int)me->query_temp(here) == 0)
-		//{	write("ÄãÒ»×Ö²»Ê¶Ö»ºÃ¿´×ÅÊ¯±ÚÉÏµÄ»­Æ×·¢´ô¡£\n");
+		//{	write("ä½ ä¸€å­—ä¸è¯†åªå¥½çœ‹ç€çŸ³å£ä¸Šçš„ç”»è°±å‘å‘†ã€‚\n");
 		//	me->set_temp(here, 1);
 		//}
-		write("ÄãÁìÎòÁË" + to_chinese(askill) + "ÖĞµÄ¼¸¸öÒÉÄÑ¡£\n");
+		write("ä½ é¢†æ‚Ÿäº†" + to_chinese(askill) + "ä¸­çš„å‡ ä¸ªç–‘éš¾ã€‚\n");
 		me->set("learned", flag);
 		me->improve_skill(askill, me->query("int"));
 		if (me->query_skill(askill, 1) == 1)
-		{	write("Äã¿ÉÒÔÓÃenable "+bskill + " " +askill+"À´¼¤·¢ÕâÖÖÌØÊâ¼¼ÄÜ¡£\n");
+		{	write("ä½ å¯ä»¥ç”¨enable "+bskill + " " +askill+"æ¥æ¿€å‘è¿™ç§ç‰¹æ®ŠæŠ€èƒ½ã€‚\n");
 			if (flag == 1)
-			{	write("ÄãµÄÌ«Ğş¹¦Ñ§µ½µÚÊ®¼¶¶øÇÒÄÚÁ¦³¬¹ıÊ®µãÊ±¾Í¿ÉÔËÆøÁÆÉË(yun heal)¡£\n");
-				write("µÈµ½ÁËµÚÊ®Îå¼¶ÄÚÁ¦ÓĞ¶şÊ®µãÊ±¾Í¿ÉÒÔÎªËûÈËÁÆÉË(yun heal xxx)¡£\n");
-				write("È»¶øÆäËûÃÅÅÉµÄÄÚ¹¦È´ĞèÒª½Ï¸ßµÈ¼¶²ÅÓĞÒÔÉÏµÄ¹¦ÄÜ¡£\n");
-				write("ÔÚÄãµÄÄÚÁ¦³¬¹ı¶şÊ®µãÊ±Äã»¹¿ÉÒÔexert regenerate À´»Ö¸´×Ô¼ºµÄ¾«\n");
-				write("exert recover »Ö¸´×Ô¼ºµÄÆø£¬exert refresh »Ö¸´×Ô¼ºµÄ¾«Á¦¡£\n");
+			{	write("ä½ çš„å¤ªç„åŠŸå­¦åˆ°ç¬¬åçº§è€Œä¸”å†…åŠ›è¶…è¿‡åç‚¹æ—¶å°±å¯è¿æ°”ç–—ä¼¤(yun heal)ã€‚\n");
+				write("ç­‰åˆ°äº†ç¬¬åäº”çº§å†…åŠ›æœ‰äºŒåç‚¹æ—¶å°±å¯ä»¥ä¸ºä»–äººç–—ä¼¤(yun heal xxx)ã€‚\n");
+				write("ç„¶è€Œå…¶ä»–é—¨æ´¾çš„å†…åŠŸå´éœ€è¦è¾ƒé«˜ç­‰çº§æ‰æœ‰ä»¥ä¸Šçš„åŠŸèƒ½ã€‚\n");
+				write("åœ¨ä½ çš„å†…åŠ›è¶…è¿‡äºŒåç‚¹æ—¶ä½ è¿˜å¯ä»¥exert regenerate æ¥æ¢å¤è‡ªå·±çš„ç²¾\n");
+				write("exert recover æ¢å¤è‡ªå·±çš„æ°”ï¼Œexert refresh æ¢å¤è‡ªå·±çš„ç²¾åŠ›ã€‚\n");
 			}
 		}
-		me->receive_damage("jing", 20, "ĞÄÁ¦½»´áËÀÁË");
+		me->receive_damage("jing", 20, "å¿ƒåŠ›äº¤ç˜æ­»äº†");
 	}
 
 	return 1;

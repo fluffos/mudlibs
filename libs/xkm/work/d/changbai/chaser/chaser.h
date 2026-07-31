@@ -95,13 +95,13 @@ void chaser_check()
 	 // then chaser goes to catch it
 		  if( dest != room ) {
 					 message("vision",
-					 chaser_ob->name() + "¼±¼±Ã¦Ã¦µØÀë¿ªÁË¡£\n",
+					 chaser_ob->name() + "æ€¥æ€¥å¿™å¿™åœ°ç¦»å¼€äº†ã€‚\n",
 					 environment(chaser_ob), ({chaser_ob}));
 					 chaser_ob->move(dest);
 					 message("vision",
-					chaser_ob->name() + "×ßÁË¹ýÀ´¡£\n",
+					chaser_ob->name() + "èµ°äº†è¿‡æ¥ã€‚\n",
 					environment(chaser_ob), ({chaser_ob}));
-					 message_vision(HIR"$N¶Ô$n´óÉùºÈµÀ£º" + RANK_D->query_rude(victim) + "ÎÒ¿´ÄãÕâ´Î»¹ÍùÄÄÀïÅÜ£¿£¡\n\n"NOR, chaser_ob, victim);
+					 message_vision(HIR"$Nå¯¹$nå¤§å£°å–é“ï¼š" + RANK_D->query_rude(victim) + "æˆ‘çœ‹ä½ è¿™æ¬¡è¿˜å¾€å“ªé‡Œè·‘ï¼Ÿï¼\n\n"NOR, chaser_ob, victim);
 					 ob->set_leader(victim);
 					 ob->kill_ob(victim);
 					 return;
@@ -153,7 +153,7 @@ void do_chaser_ask(object chaser_ob)
 		  if( !victim || !living(victim)
 		  ||   environment(chaser_ob) != environment(victim) ) return;
 
-		  message_vision(HIR"\n$N¶Ô$n´óÉùºÈµÀ£º" + RANK_D->query_rude(victim) + "£¡Æ¾ÄãÒ²ÅäÕâÖÖÎäÁÖ±¦Îï£¡»¹²»¸Ï¿ìÐ¢¾´ÀÏ×Ó£¡£¡£¡\n"NOR, chaser_ob, victim);
+		  message_vision(HIR"\n$Nå¯¹$nå¤§å£°å–é“ï¼š" + RANK_D->query_rude(victim) + "ï¼å‡­ä½ ä¹Ÿé…è¿™ç§æ­¦æž—å®ç‰©ï¼è¿˜ä¸èµ¶å¿«å­æ•¬è€å­ï¼ï¼ï¼\n"NOR, chaser_ob, victim);
 		  chaser_ob->set("asked", 1);
 		  setup_skill(chaser_ob,victim);
 }
@@ -171,7 +171,7 @@ void do_chaser_kill(object chaser_ob)
 		  if( !victim || !living(victim)
 		  ||   environment(chaser_ob) != environment(victim) ) return;
 
-		  message_vision(HIR"\n$N¶Ô$n´óÉùºÈµÀ£º" + RANK_D->query_rude(victim) + "£¡¾¹¸Ò²»Ê¶ºÃ´õ£¡£¡£¡\n"NOR, chaser_ob, victim);
+		  message_vision(HIR"\n$Nå¯¹$nå¤§å£°å–é“ï¼š" + RANK_D->query_rude(victim) + "ï¼ç«Ÿæ•¢ä¸è¯†å¥½æ­¹ï¼ï¼ï¼\n"NOR, chaser_ob, victim);
 		  chaser_ob->set("angry", 1);
 }
 
@@ -181,7 +181,7 @@ void chaser_flee(object chaser_ob)
 
 		  if( room = environment(chaser_ob) ) {
 		  message("vision",
-					 chaser_ob->name() + "¼±¼±Ã¦Ã¦µØÀë¿ªÁË¡£\n",
+					 chaser_ob->name() + "æ€¥æ€¥å¿™å¿™åœ°ç¦»å¼€äº†ã€‚\n",
 					 room, ({chaser_ob}));
 		  }
 		  chaser_ob->move("/d/shenlong/cangku");
@@ -194,7 +194,7 @@ void destroy_chaser(object chaser_ob)
 		  if( chaser_ob->is_busy() || !living(chaser_ob) ) return;
 
 		  message("vision",
-					 chaser_ob->name() + "¼±¼±Ã¦Ã¦µØÀë¿ªÁË¡£\n",
+					 chaser_ob->name() + "æ€¥æ€¥å¿™å¿™åœ°ç¦»å¼€äº†ã€‚\n",
 					 environment(chaser_ob), ({chaser_ob}));
 		  destruct(chaser_ob);
 }
@@ -206,11 +206,11 @@ int accept_object(object who, object ob)
 		  object obj = chaser_ob->query("stuff");
 
 		  if( environment(obj) != ob && obj != ob )
-					 return notify_fail("¹ö£¡£¡£¡ÀÏ×ÓÒªµÄÊÇ"+obj->name()+"£¡£¡£¡\n");
+					 return notify_fail("æ»šï¼ï¼ï¼è€å­è¦çš„æ˜¯"+obj->name()+"ï¼ï¼ï¼\n");
 
 		  command("nod " + who->query("id"));
 
-		  command("say Äã»¹ËãÊ¶Ê±Îñ£¬¾Í·ÅÄãÒ»Âí°É¡£");
+		  command("say ä½ è¿˜ç®—è¯†æ—¶åŠ¡ï¼Œå°±æ”¾ä½ ä¸€é©¬å§ã€‚");
 		  if( chaser_ob->is_fighting() || chaser_ob->is_busy() )
 					 COMMAND_DIR"std/halt"->main(chaser_ob);
 		  call_out("chaser_flee", 1, chaser_ob);

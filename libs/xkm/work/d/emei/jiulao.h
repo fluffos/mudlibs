@@ -1,10 +1,10 @@
 //Cracked by Roath
-// jiulao3.c ¾ÅÀÏ¶´
+// jiulao3.c ä¹è€æ´
 // Shan: 96/06/22
 
 int valid_leave(object me, string dir)
 {
-	me->receive_damage("jingli", 5, "×ê¶´ÀÛËÀÁË");
+	me->receive_damage("jingli", 5, "é’»æ´ç´¯æ­»äº†");
         return ::valid_leave(me, dir);
 }
 
@@ -13,16 +13,16 @@ int do_zuan(string arg)
       object me = this_player();
 
       message_vision(
-      		"$NÏñÃ»Í·²ÔÓ¬Ò»ÑùÔÚ¶´ÀïÏ¹×ê£¬½á¹ûÒ»Í·×²ÔÚ¶´±ÚÉÏ¡£\n", this_player());
+      		"$Nåƒæ²¡å¤´è‹è‡ä¸€æ ·åœ¨æ´é‡Œçé’»ï¼Œç»“æœä¸€å¤´æ’åœ¨æ´å£ä¸Šã€‚\n", this_player());
       if (random(2)==1) {
-         	write("Äã¾õµÃÄãÔÎºõºõµÄ£¬ËÆºõ×²ÉµÁË¡£\n"); 
+         	write("ä½ è§‰å¾—ä½ æ™•ä¹ä¹çš„ï¼Œä¼¼ä¹æ’å‚»äº†ã€‚\n"); 
 		// hehe, I am nice, no permanent literate decrease now:)
 		// xixi, you are so nice.  I didn't realize that -1 means 1 level :)
              	me->add_temp("apply/intelligence", -1);
       }
       else {
-         	me->receive_damage("jingli", 10+random(10), "×ê¶´ÀÛËÀÁË");
-      		write("Äã×ªÀ´×ªÈ¥£¬ÖÕÓÚ×ªµ½ÁË¶´¿Ú¡£\n");
+         	me->receive_damage("jingli", 10+random(10), "é’»æ´ç´¯æ­»äº†");
+      		write("ä½ è½¬æ¥è½¬å»ï¼Œç»ˆäºè½¬åˆ°äº†æ´å£ã€‚\n");
 		me->move(__DIR__"jiulao2");
       }
       return 1;
@@ -36,7 +36,7 @@ void fire_out(object me, object ob)
 		if (inv[i]->is_character()) continue;
 		destruct(inv[i]);
 	}
-	message("vision", "¹ıÁËÒ»»á¶ù£¬ÊÖÖĞµÄ»ğÕÛ×ÓÃğÁË£¬Ê²Ã´Ò²¿´²»¼ûÁË£¬Ö»Ìıµ½òùòğµÄÖ¨Ö¨Éù¡£\n", environment(me) );
+	message("vision", "è¿‡äº†ä¸€ä¼šå„¿ï¼Œæ‰‹ä¸­çš„ç«æŠ˜å­ç­äº†ï¼Œä»€ä¹ˆä¹Ÿçœ‹ä¸è§äº†ï¼Œåªå¬åˆ°è™è çš„å±å±å£°ã€‚\n", environment(me) );
 	if (ob=present("fire", me))
 		destruct(ob);
 	delete("exits");

@@ -26,18 +26,18 @@ string ask_job()
 
         myfam = (string)query("fam");
         if( (string)me->query_temp("bangs/fam") != myfam )
-                return RANK_D->query_rude(me) + "Äª·ÇÊÇÏë´òÌıÎÒ°ïµÄÃØÃÜ°É¡£";  
+                return RANK_D->query_rude(me) + "è«éæ˜¯æƒ³æ‰“å¬æˆ‘å¸®çš„ç§˜å¯†å§ã€‚";  
 
 	if(present("silk", this_player())|| present("shoushi",this_player()) || present("ciqi", this_player()) || present("renshen",this_player()) || present("zihua",this_player()))
-              return RANK_D->query_rude(me) + "²»ÊÇ¸ÕÎÊ¹ıÎÒÂğ£¿»¹²»¿ìÈ¥¡£";	      
+              return RANK_D->query_rude(me) + "ä¸æ˜¯åˆšé—®è¿‡æˆ‘å—ï¼Ÿè¿˜ä¸å¿«å»ã€‚";	      
 
        if( time() < (int)me->query("bangs/asktime") + 25 ||query("job"))
-             return RANK_D->query_rude(me) + "²»ÊÇ¸ÕÎÊ¹ıÎÒÂğ£¿";
+             return RANK_D->query_rude(me) + "ä¸æ˜¯åˆšé—®è¿‡æˆ‘å—ï¼Ÿ";
        
        
         if( objectp(leader = me->query_leader()) ) {
                 if( leader != this_object() )
-                         return RANK_D->query_rude(me) + "£¡ÈëÁË°ï»¹ÈıĞÄ¶şÒâ¸ú±ğÈË£¿£¡";
+                         return RANK_D->query_rude(me) + "ï¼å…¥äº†å¸®è¿˜ä¸‰å¿ƒäºŒæ„è·Ÿåˆ«äººï¼Ÿï¼";
         }
 
         me->set("bangs/asktime", time());
@@ -48,7 +48,7 @@ string ask_job()
                 ling->set("fam", myfam);
                 ling->set("combat_exp", query("combat_exp"));
                 ling->move(me);
-                message_vision("$N°ÑÒ»" + ling->query("unit") + ling->name() + "ÈÓ¸ø$n¡£\n", this_object(), me);
+                message_vision("$NæŠŠä¸€" + ling->query("unit") + ling->name() + "æ‰”ç»™$nã€‚\n", this_object(), me);
         }
 
         myexp = (int)me->query("combat_exp");
@@ -59,7 +59,7 @@ string ask_job()
                 if( myexp < atoi(levels[i]) ) break;
 
         if( i >= temp )
-                return "×î½üÃ»ÓĞÊÊºÏÄãµÄ°ïÎñ¡£";
+                return "æœ€è¿‘æ²¡æœ‰é€‚åˆä½ çš„å¸®åŠ¡ã€‚";
 
         job = (BANGJOB + levels[i])->query_job();
 
@@ -72,29 +72,29 @@ string ask_job()
                 destruct(ob);
 
         switch(job["type"]) {
-        case "Ñ°":
+        case "å¯»":
                 command("nod");
                 ling->set("job/max", atoi(levels[i]));
-                return "ÄãÈ¥°Ñ" + job["name"] + "ÕÒÀ´¡£";
+                return "ä½ å»æŠŠ" + job["name"] + "æ‰¾æ¥ã€‚";
                 break;
 
-        case "É±":
+        case "æ€":
                 command("nod");
                 ling->set("job/max", atoi(levels[i]));
-                return "ÄãÈ¥°Ñ" + job["area"] + "µÄ" + job["name"] + "É±ÁË¡£";
+                return "ä½ å»æŠŠ" + job["area"] + "çš„" + job["name"] + "æ€äº†ã€‚";
                 break;
 
-        case "Ì¯·Ñ":
+        case "æ‘Šè´¹":
                 command("nod");
                // command("update"job["place"]);
                 job = info_store[random(sizeof(info_store))];
                 ling->set("job/name", job["name"]);
                 ling->set("job/boss", job["boss"]);
                 ling->set("job/place", job["place"]);
-                return  job["name"] + "Õâ¸öÔÂ»¹Ã»ÓĞ½»Ì¯·Ñ£¬¿ìÈ¥ÒªÀ´£¡";
+                return  job["name"] + "è¿™ä¸ªæœˆè¿˜æ²¡æœ‰äº¤æ‘Šè´¹ï¼Œå¿«å»è¦æ¥ï¼";
                 break;
 
-        case "½ØïÚ":
+        case "æˆªé•–":
                 obj = filter_array(children(BIAOTOU), (: clonep :));
                 if( sizeof(obj) < 10 ) {
                         ob = new(BIAOTOU);
@@ -102,14 +102,14 @@ string ask_job()
                         ob->move(file);
                         dest = environment(ob);            
                         message("vision",
-                        ob->name() + "Ñº×ÅïÚ³µ×ßÁË¹ıÀ´¡£\n",
+                        ob->name() + "æŠ¼ç€é•–è½¦èµ°äº†è¿‡æ¥ã€‚\n",
                         dest, ({ob}));
                         region = explode(file, "/")[1];
                         ling->set("job/name", ob->query("nickname"));
-                        return "È¥²ÈÅÌµÄµÜĞÖÃÇ»ØÀ´½²£¬" + 
+                        return "å»è¸©ç›˜çš„å¼Ÿå…„ä»¬å›æ¥è®²ï¼Œ" + 
                         ob->query("nickname") + 
-                        "µÄïÚ³µ½«¾­¹ı" + 
-                        region_names[region] + dest->query("short") + "¡£";
+                        "çš„é•–è½¦å°†ç»è¿‡" + 
+                        region_names[region] + dest->query("short") + "ã€‚";
                 } else {
                         ob = obj[random(sizeof(obj))];
                         dest = environment(ob);
@@ -118,7 +118,7 @@ string ask_job()
                         if( !dest || !biaoju ) {
                                 destruct(ob);
                                 command("shake");
-                                return "ÄãĞª×Å°É£¬×î½üÃ»ÓĞÒª½ôµÄ°ïÎñ¡£";
+                                return "ä½ æ­‡ç€å§ï¼Œæœ€è¿‘æ²¡æœ‰è¦ç´§çš„å¸®åŠ¡ã€‚";
                         }
 
                         file = base_name(dest);
@@ -126,19 +126,19 @@ string ask_job()
                         || !mapp(dest->query("exits")) ) {
                                 destruct(ob);
                                 command("shake");
-                                return "ÄãĞª×Å°É£¬×î½üÃ»ÓĞÒª½ôµÄ°ïÎñ¡£";
+                                return "ä½ æ­‡ç€å§ï¼Œæœ€è¿‘æ²¡æœ‰è¦ç´§çš„å¸®åŠ¡ã€‚";
                         }
 
                         command("nod");
                         region = explode(file, "/")[1];
                         ling->set("job/name", biaoju);
-                        return "È¥²ÈÅÌµÄµÜĞÖÃÇ»ØÀ´½²£¬" + biaoju + 
-                        "µÄïÚ³µ½«¾­¹ı" + 
-                        region_names[region] + dest->query("short") + "¡£";
+                        return "å»è¸©ç›˜çš„å¼Ÿå…„ä»¬å›æ¥è®²ï¼Œ" + biaoju + 
+                        "çš„é•–è½¦å°†ç»è¿‡" + 
+                        region_names[region] + dest->query("short") + "ã€‚";
                 }
                 break;
 
-        case "Ê¾Íş":
+        case "ç¤ºå¨":
                 obj = filter_array(children(BANGZHONG), (: clonep :));
                 if( sizeof(obj) ) {
                 obj = filter_array(obj, "is_victim", this_object(), myfam);
@@ -148,12 +148,12 @@ string ask_job()
                         ob_bang = (string)ob->query("title");
                         me->set_temp("bangs/victim", ob_bang);
                         ling->set("job/name", ob_bang);
-                        return "×î½ü" + ob_bang + "¾­³£¸úÎÒÃÇ¹ı²»È¥£¬ÄãÈ¥É±Ò»¸öÊ¾Ê¾Íş£¡";
+                        return "æœ€è¿‘" + ob_bang + "ç»å¸¸è·Ÿæˆ‘ä»¬è¿‡ä¸å»ï¼Œä½ å»æ€ä¸€ä¸ªç¤ºç¤ºå¨ï¼";
                 }
                 }
                 break;
 
-        case "ËÍÀñ":
+        case "é€ç¤¼":
                 command("nod");
 
                 job = info_guest[random(sizeof(info_guest))];
@@ -165,38 +165,38 @@ string ask_job()
                 ling->set("job/title", job["title"]);
                 ling->set("job/area", job["area"]);
                 ob->set("long",
-"ÕâÊÇÒ»·İ" + myfam + "°ïÖ÷ËÍ¸ø" + "¡¸" + job["title"] + "¡¹" + "µÄ²ÊÀñ¡£\n");
+"è¿™æ˜¯ä¸€ä»½" + myfam + "å¸®ä¸»é€ç»™" + "ã€Œ" + job["title"] + "ã€" + "çš„å½©ç¤¼ã€‚\n");
                 ob->move(me);
-                message_vision("$N½«Ò»" + ob->query("unit") + ob->name() + "½»¸ø$n¡£\n", this_object(), me);
-                return "Äã°ÑÕâ·İ²ÊÀñËÍ¸ø" + job["area"] + "µÄ" + "¡¸" + job["title"] + "¡¹" + "¡£";
+                message_vision("$Nå°†ä¸€" + ob->query("unit") + ob->name() + "äº¤ç»™$nã€‚\n", this_object(), me);
+                return "ä½ æŠŠè¿™ä»½å½©ç¤¼é€ç»™" + job["area"] + "çš„" + "ã€Œ" + job["title"] + "ã€" + "ã€‚";
                 break;
 
-        case "ÂòÂô":
+        case "ä¹°å–":
                 command("nod");
                 files = get_dir(BANGGOOD);
                 if( !sizeof(files) ) {
                          command("shake");
-                         return "ÄãĞª×Å°É£¬×î½üÃ»ÓĞÒª½ôµÄ°ïÎñ¡£";
+                         return "ä½ æ­‡ç€å§ï¼Œæœ€è¿‘æ²¡æœ‰è¦ç´§çš„å¸®åŠ¡ã€‚";
                 }
                 file = BANGGOOD + files[random(sizeof(files))];
                 ob = new(file);
                 ob->move(me);
-                message_vision("$N½«Ò»" + ob->query("unit") + ob->name() + "½»¸ø$n¡£\n", this_object(), me);
+                message_vision("$Nå°†ä¸€" + ob->query("unit") + ob->name() + "äº¤ç»™$nã€‚\n", this_object(), me);
                 ling->set("job/name", ob->name());
                 ling->set("job/good", ob->query("id"));
                 ling->set("job/prices", info_business[ob->name()]);
-                return "Äã°ÑÕâ" + ob->query("unit") + ob->name() + "ÄÃÈ¥Âô¸öºÃ¼ÛÇ®¡£";
+                return "ä½ æŠŠè¿™" + ob->query("unit") + ob->name() + "æ‹¿å»å–ä¸ªå¥½ä»·é’±ã€‚";
                 break;
 
-     		case "»ï¼Æ":
+     		case "ä¼™è®¡":
                 command("nod");
-                ling->set("job/name", "»ï¼Æ");
-                return "ÄãÈ¥Ìì±¦¸óµ±²î°É¡£";
+                ling->set("job/name", "ä¼™è®¡");
+                return "ä½ å»å¤©å®é˜å½“å·®å§ã€‚";
                 break;
         	}
 
         command("shake");
-        return "ÄãĞª×Å°É£¬×î½üÃ»ÓĞÒª½ôµÄ°ïÎñ¡£";
+        return "ä½ æ­‡ç€å§ï¼Œæœ€è¿‘æ²¡æœ‰è¦ç´§çš„å¸®åŠ¡ã€‚";
 }
 
 void do_start(object me, object ob)
@@ -213,37 +213,37 @@ int accept_object(object who, object ob)
         mapping job;
 
         if( who->query_temp("bangs/fam") != query("fam") ) 
-                return notify_fail(name() + "´óÅ­µÀ£º´óµ¨£¡ÏëÄ±º¦±¾×Ü¹Ü£¡£¡£¡\n");
+                return notify_fail(name() + "å¤§æ€’é“ï¼šå¤§èƒ†ï¼æƒ³è°‹å®³æœ¬æ€»ç®¡ï¼ï¼ï¼\n");
 
         if( !(obj = present("bang ling", who)) )
-                return notify_fail(name() + "´óÅ­µÀ£ºÃ»ÓĞÓÃµÄ¶«Î÷£¬Á¬°ïÁî¶¼»á¸ã¶ª£¿£¡\n");
+                return notify_fail(name() + "å¤§æ€’é“ï¼šæ²¡æœ‰ç”¨çš„ä¸œè¥¿ï¼Œè¿å¸®ä»¤éƒ½ä¼šæä¸¢ï¼Ÿï¼\n");
 
         if( !mapp(job = obj->query("job")) )
-                return notify_fail(name() + "´óÅ­µÀ£ºÃ»ÓĞÓÃµÄ¶«Î÷£¬Á¬×Ô¼ºµÄ°ïÎñ¶¼¼Ç²»×¡£¿£¡\n");
+                return notify_fail(name() + "å¤§æ€’é“ï¼šæ²¡æœ‰ç”¨çš„ä¸œè¥¿ï¼Œè¿è‡ªå·±çš„å¸®åŠ¡éƒ½è®°ä¸ä½ï¼Ÿï¼\n");
 
         switch(job["type"]) {
-        case "Ñ°":
+        case "å¯»":
                 name = ob->name();
                 for(int i = 0; i < strlen(name); i++)
                         if(name[i] > 160 && name[i] < 255) 
                                 chname += name[i..i];
                 if( chname != job["name"] )
-                        return notify_fail(name() + "´óÅ­µÀ£ºÃ»ÓĞÓÃµÄ¶«Î÷£¬Á¬×Ô¼ºµÄ°ïÎñ¶¼¼Ç²»×¡£¿£¡\n");
+                        return notify_fail(name() + "å¤§æ€’é“ï¼šæ²¡æœ‰ç”¨çš„ä¸œè¥¿ï¼Œè¿è‡ªå·±çš„å¸®åŠ¡éƒ½è®°ä¸ä½ï¼Ÿï¼\n");
                 bonus = job["bonus"] * job["max"] / ((int)who->query("combat_exp") + 500);
                 record = bonus / 2 + random(bonus);
-                log_file("BangJob", sprintf("%sÓÚ%sÊ±ÕÒµ½%sµÃ%s¾­Ñéµã\n", who->query("name"), ctime(time()), chname, chinese_number(record)));
+                log_file("BangJob", sprintf("%säº%sæ—¶æ‰¾åˆ°%så¾—%sç»éªŒç‚¹\n", who->query("name"), ctime(time()), chname, chinese_number(record)));
                 bonus = job["score"];
                 break;
 
-        case "½ØïÚ":
+        case "æˆªé•–":
                 if( base_name(ob) != BIAOHUO )
-                        return notify_fail(name() + "´óÅ­µÀ£ºÃ»ÓĞÓÃµÄ¶«Î÷£¬Á¬Ò»Ö¦ïÚ¶¼¸ã²»¶¨£¡\n");
+                        return notify_fail(name() + "å¤§æ€’é“ï¼šæ²¡æœ‰ç”¨çš„ä¸œè¥¿ï¼Œè¿ä¸€æé•–éƒ½æä¸å®šï¼\n");
                 if( ob->query("my_killer") != who->query("id") )
-                        return notify_fail(name() + "´óÅ­µÀ£º½­ºşÖĞ×î½²¾¿µÄ¾ÍÊÇĞÅÓÃ£¬ÔÙÆÛÊÀµÁÃû¾ÍÔ×ÁËÄã£¡\n");
+                        return notify_fail(name() + "å¤§æ€’é“ï¼šæ±Ÿæ¹–ä¸­æœ€è®²ç©¶çš„å°±æ˜¯ä¿¡ç”¨ï¼Œå†æ¬ºä¸–ç›—åå°±å®°äº†ä½ ï¼\n");
                 record =100+(int)ob->query("combat_exp")/200+random(240);
                // record = 100 + (int)who->query("combat_exp")/1000+random(240));
                 //record = bonus + random(bonus);
-                log_file("test/BangJob", sprintf("%sÓÚ%sÊ±Òò½ØïÚµÃ%s¾­Ñéµã\n", who->query("name"), ctime(time()), chinese_number(record)));
+                log_file("test/BangJob", sprintf("%säº%sæ—¶å› æˆªé•–å¾—%sç»éªŒç‚¹\n", who->query("name"), ctime(time()), chinese_number(record)));
                 bonus=record/5;
                 break;  
         }
@@ -255,7 +255,7 @@ int accept_object(object who, object ob)
         who->add("shen", -bonus);
         who->add("clbscore",bonus);
        // obj->add("score", bonus);
-        message_vision(HIY"ÄãÕâ´Î¹¤×÷¹²µÃµ½ "+(int)bonus +" µã¹¦ÀÍµã£¬"+(int)record +" µã¾­ÑéÖµ¡£\n"NOR, who);
+        message_vision(HIY"ä½ è¿™æ¬¡å·¥ä½œå…±å¾—åˆ° "+(int)bonus +" ç‚¹åŠŸåŠ³ç‚¹ï¼Œ"+(int)record +" ç‚¹ç»éªŒå€¼ã€‚\n"NOR, who);
 
         remove_call_out("store");
         call_out("store", 1, ob);

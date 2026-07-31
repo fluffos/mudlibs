@@ -21,8 +21,8 @@ int check_count(object me, int count)
         if (tmp == count) {
 	if (me->query_temp("taohua/count")==2080) {
 		 tell_object(me,HIR"
-ËÄÖÜ¾°ÎïÍ»È»±äµÃÄ£ºýÆðÀ´£¬Äã¾õµÃÍ·ÄÔÒ»ÕóÔÎÑ£......
-ÄãÔÚÒ»ÕóÑÌÎíÖÐÏûÊ§ÁË¡£
+å››å‘¨æ™¯ç‰©çªç„¶å˜å¾—æ¨¡ç³Šèµ·æ¥ï¼Œä½ è§‰å¾—å¤´è„‘ä¸€é˜µæ™•çœ©......
+ä½ åœ¨ä¸€é˜µçƒŸé›¾ä¸­æ¶ˆå¤±äº†ã€‚
 \n\n"NOR);
 	if (!me->query("taohua_maze")){
 //		if ( qmdj < 100) me->add("combat_exp",10000);
@@ -44,8 +44,8 @@ int check_count(object me, int count)
 	}
 	else {
 		tell_object(me,HIW"
-Äã½ÅÏÂÒ»Ðé£¬²»ÓÉ×ÔÖ÷µÄÏòÏÂ·É×¹......
-ÄãµÄÒâÊ¶½¥½¥Ä£ºýÆðÀ´......
+ä½ è„šä¸‹ä¸€è™šï¼Œä¸ç”±è‡ªä¸»çš„å‘ä¸‹é£žå ......
+ä½ çš„æ„è¯†æ¸æ¸æ¨¡ç³Šèµ·æ¥......
 \n\n"NOR);
 	    		me->unconcious();
 			me->delete_temp("taohua/count");
@@ -54,8 +54,8 @@ int check_count(object me, int count)
 	} 
 	else if (me->query_temp("/taohua/count/") > 2100) {
 			tell_object(me, HIW"
-ºö¼ûµÃÒ»Õó¿ñ·ç¹ÒÀ´£¬Ìì¿ÕÖÐÎÚÔÆÃÜ²¼£¬
-Ò»ÕóÒõÀäµÄÅ¨ÎíË²¼ä°ÑÄã¹ü×¡......
+å¿½è§å¾—ä¸€é˜µç‹‚é£ŽæŒ‚æ¥ï¼Œå¤©ç©ºä¸­ä¹Œäº‘å¯†å¸ƒï¼Œ
+ä¸€é˜µé˜´å†·çš„æµ“é›¾çž¬é—´æŠŠä½ è£¹ä½......
 \n\n"NOR);
 			me->unconcious();
 			me->delete_temp("taohua/count");
@@ -67,5 +67,5 @@ int check_count(object me, int count)
 void remove_effect(object me, int level)
 {
         me->add_temp("apply/intelligence", -level);
-        tell_object(me, HIB"ÄãÐÄÖÐÒ»¶¯£¬ÄÔº£ÖÐ¿Õ¿Õµ´µ´£¬ËÆºõÓÐÊ²÷á¶«Î÷ÕýÀëÄã¶øÈ¥¡£\n"NOR); 
+        tell_object(me, HIB"ä½ å¿ƒä¸­ä¸€åŠ¨ï¼Œè„‘æµ·ä¸­ç©ºç©ºè¡è¡ï¼Œä¼¼ä¹Žæœ‰ä»€éº½ä¸œè¥¿æ­£ç¦»ä½ è€ŒåŽ»ã€‚\n"NOR); 
 }

@@ -21,14 +21,14 @@ int do_climb(string arg)
     all = all_inventory(here);
 
     if (me->is_busy())
-        return notify_fail("ÄãÏÖÔÚÕýÃ¦×ÅÄØ£¡¡£\n");
+        return notify_fail("ä½ çŽ°åœ¨æ­£å¿™ç€å‘¢ï¼ã€‚\n");
     
     switch (arg) {
     case "up":
     case "shang":
         if ((string) destination = here->query("climbup")) {
-          write("ÄãÏòÉÏÅÀÈ¥¡£\n");
-          message("vision", me->name() + "ÅÀµ½ÉÏÃæÈ¥ÁË¡£\n",
+          write("ä½ å‘ä¸Šçˆ¬åŽ»ã€‚\n");
+          message("vision", me->name() + "çˆ¬åˆ°ä¸Šé¢åŽ»äº†ã€‚\n",
                   environment(me),({me}));
           me->move(destination);
 
@@ -41,16 +41,16 @@ int do_climb(string arg)
                 ob->move(here);
           }
 
-          message("vision", me->name() + "´ÓÊ÷ÏÂÅÀÁËÉÏÀ´¡£\n",
+          message("vision", me->name() + "ä»Žæ ‘ä¸‹çˆ¬äº†ä¸Šæ¥ã€‚\n",
                   environment(me), ({me}));
         }  
-        else write("ÕâÀï²»ÄÜÏòÉÏÅÀ¡£\n");
+        else write("è¿™é‡Œä¸èƒ½å‘ä¸Šçˆ¬ã€‚\n");
         break;
     case "down":
     case "xia":
         if ((string) destination = here->query("climbdown")) {
-          write("ÄãÏòÏÂÅÀÈ¥¡£\n");
-          message("vision", me->name() + "ÅÀµ½ÏÂÃæÈ¥ÁË¡£\n",
+          write("ä½ å‘ä¸‹çˆ¬åŽ»ã€‚\n");
+          message("vision", me->name() + "çˆ¬åˆ°ä¸‹é¢åŽ»äº†ã€‚\n",
                   environment(me),({me}));
           me->move(destination);
           if (random(5) == sizeof(all)) {
@@ -62,16 +62,16 @@ int do_climb(string arg)
                 ob->move(here);
           }
 
-          message("vision", me->name() + "´ÓÊ÷ÉÏÅÀÁËÏÂÀ´¡£\n",
+          message("vision", me->name() + "ä»Žæ ‘ä¸Šçˆ¬äº†ä¸‹æ¥ã€‚\n",
                   environment(me), ({me}));
         }
-        else write("ÕâÀï²»ÄÜÏòÏÂÅÀ¡£\n");
+        else write("è¿™é‡Œä¸èƒ½å‘ä¸‹çˆ¬ã€‚\n");
         break;
     case "left":
     case "zuo":
         if ((string) destination = here->query("climbleft")) {
-          write("ÄãÏò×ó±ßÅÀÈ¥¡£\n");
-          message("vision", me->name() + "ÅÊ×ÅÊ÷Ö¦µ´µ½×óÃæÈ¥ÁË¡£\n",
+          write("ä½ å‘å·¦è¾¹çˆ¬åŽ»ã€‚\n");
+          message("vision", me->name() + "æ”€ç€æ ‘æžè¡åˆ°å·¦é¢åŽ»äº†ã€‚\n",
                   environment(me),({me}));
           me->move(destination);
           if (random(5) == sizeof(all)) {
@@ -83,16 +83,16 @@ int do_climb(string arg)
                 ob->move(here);
           }
 
-          message("vision", me->name() + "´ÓÓÒ±ßµ´ÁË¹ýÀ´¡£\n",
+          message("vision", me->name() + "ä»Žå³è¾¹è¡äº†è¿‡æ¥ã€‚\n",
                   environment(me), ({me}));
         }
-        else write("ÕâÀï²»ÄÜÏò×óÅÀ¡£\n");
+        else write("è¿™é‡Œä¸èƒ½å‘å·¦çˆ¬ã€‚\n");
         break;
     case "right":
     case "you":
         if ((string) destination = here->query("climbright")) {
-        write("ÄãÏòÓÒ±ßÅÀÈ¥¡£\n");
-          message("vision", me->name() + "ÅÊ×ÅÊ÷Ö¦µ´µ½ÓÒÃæÈ¥ÁË¡£\n",
+        write("ä½ å‘å³è¾¹çˆ¬åŽ»ã€‚\n");
+          message("vision", me->name() + "æ”€ç€æ ‘æžè¡åˆ°å³é¢åŽ»äº†ã€‚\n",
                   environment(me),({me}));
           me->move(destination);
           if (random(5) == sizeof(all)) {
@@ -104,10 +104,10 @@ int do_climb(string arg)
                 ob->move(here);
           }
 
-          message("vision", me->name() + "´Ó×ó±ßµ´ÁË¹ýÀ´¡£\n",
+          message("vision", me->name() + "ä»Žå·¦è¾¹è¡äº†è¿‡æ¥ã€‚\n",
                   environment(me), ({me}));
         }
-        else write("ÕâÀï²»ÄÜÏòÓÒÅÀ¡£\n");
+        else write("è¿™é‡Œä¸èƒ½å‘å³çˆ¬ã€‚\n");
         break;
     default:
         return 0;
