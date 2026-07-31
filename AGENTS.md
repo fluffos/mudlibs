@@ -2211,6 +2211,79 @@ inside a `call_out`, so simply removing the broken `ob->command(...)`
 call without ALSO auditing what it was trying to reach just moves the
 silent-failure point one level deeper.
 
+### 7.38 `destruct()` cannot be overridden as a simul_efun on this driver
+
+`error: Invalid simulated efunction override` — some libs' `adm/simul_efun/
+object.lpc` defines its own `void destruct(object ob)` (pre-cleanup like
+`ob->remove(euid)` before calling `efun::destruct(ob)`) as a simul_efun
+wrapper. This driver hard-rejects overriding `destruct` specifically, unlike
+`set`/`query`/`message`/etc. Minimal fix: delete the override; every bare
+`destruct(...)` call site now hits the real efun directly. The pre-cleanup
+step is lost — if that cleanup was load-bearing (e.g. an inventory-tracking
+invariant), audit callers rather than assuming this is free. (Whole `haiyang`
+family — `hy2002`/`hy2000`/`hyiishzdscbb` — and `xkx100`, all independently.)
+
+### 7.39 Mudlib's own `#define MUD_NAME` collides with the driver's predefine
+
+`error: Illegal to redefine a predefined value` on a `globals.h` line like
+`#define MUD_NAME "..."`. This driver auto-predefines `MUD_NAME` (and a
+handful of other config-derived macros) from the config file's own `name`
+setting (`lexer_utils.cc`'s `add_quoted_predefine`) — the mudlib redefining
+it is a hard compile error, not a silent shadow. Fix: delete/comment the
+mudlib's own `#define MUD_NAME` line; the driver's version (from
+`config.fluffos`'s `name :` field) takes over transparently. (`dfgsiiv13b`,
+an ES2-lineage `globals.h`.)
+
+### 7.40 A textually-`#include`d daemon file duplicates `create()` inside `simul_efun.lpc`
+
+`error: Redeclaration of function 'create'` at the LAST line of
+`simul_efun.lpc`'s own (correct-looking) `create()`. Root cause is earlier:
+`simul_efun.lpc` does `#include "/adm/daemons/ftpd.lpc"` (textual inline, not
+`inherit`) alongside its normal simul_efun fragment includes, and `ftpd.lpc`
+—being a full daemon object in its own right — has its own `create()`.
+Textually inlining a daemon file into the simul_efun composition duplicates
+every top-level function it defines, `create()` just happens to be the one
+that collides loudly. Consistent with the standing no-sockets-package policy
+(§1.3c) — delete the stray `#include`, don't try to reconcile the two
+`create()` bodies. Grep `#include ".*daemons/(ftpd|dns_master)` inside any
+`simul_efun.lpc`-shaped file whenever `Redeclaration of function 'create'`
+shows up with no visible duplicate in the file itself. (`haiyang` family:
+`hy2002`, `hy2000`, `hyiishzdscbb`.)
+
+### 7.41 Corrupted shipped save data: a literal `\r` byte where `/` belongs in a mapping key
+
+`restore_object(): Invalid utf8 string while restoring dbase` or `...Illegal
+mapping format...`, thrown from a daemon's own `create()`→`restore()` (e.g.
+`securd.lpc`) on a completely ordinary-looking `.o` save file. Inspecting the
+raw bytes shows a path-shaped mapping key like `"d\rnpc"` where `"d/npc"` is
+obviously intended — a single `0x0d` (CR) byte sitting where `/` (0x2f)
+should be. This is pre-existing corruption in the shipped save data itself
+(confirmed: `convert_lib.sh`'s own CR-handling only touches `.lpc`/`.h`
+files, never `.o` saves), not something introduced by conversion. Since this
+is cached runtime ACL/permission state, not authored content, the safe fix
+is to move the corrupted file aside (`mv foo.o foo.o.corrupt-bak`) rather
+than hand-repair it — the daemon regenerates a fresh, empty dbase on next
+save. (`hy2002`, `hy2000` — both `adm/daemons/securd.o` and the `network/`
+copy.)
+
+### 7.42 A content NPC/quest object that happens to also be named `master.c` can be misdetected as the real master object
+
+When identifying the master file automatically (§2, or any tooling doing
+the same) by searching for a file literally named `master.c`/`master.lpc`
+anywhere under `adm/`, a lib can ship a completely unrelated object at a
+path like `adm/daemons/story/master.c` — a boss/quest NPC (here: "master"
+as in kungfu grandmaster, part of a "五大宗师" storyline), not the master_ob.
+Using it as `config.fluffos`'s `master file` compiles "successfully" but
+then fails at boot with `No function get_root_uid() in master object` (or
+similar) — a confusing symptom that looks like a missing-applies bug (§7.2)
+rather than a wrong-file bug. The real master (`adm/single/master.lpc` in
+every case seen) sat right there the whole time. Detection: the real
+master_ob always defines `object connect(...)` — grep `^object connect(`
+across the whole tree and prefer THAT file over any bare filename match
+before writing a config. (Century/`adm-single` family: `zjdywzb`,
+`zjdy2008wzb`, `hell`, `xkxc98sj`, `ntii`, `nte` — all from one bulk-convert
+pass whose automated config generator wasn't yet doing this check.)
+
 ---
 
 ## 8. Login and registration flow bugs
