@@ -115,6 +115,28 @@ harness):
   "blocked under WASM" verdicts turned out to be this harness gap;
   suspect the harness before the mudlib when a WASM-only failure involves
   a `log/` path.
+- **A file/directory name with invalid UTF-8 bytes crashes the harness's
+  `copyDir()` outright** (`ENOENT: no such file or directory, scandir
+  '...'`, with garbled `�` characters in the printed path) before the
+  driver even boots — Node's `fs.readdirSync`/`fs.readFileSync` require
+  valid UTF-8 paths, while `git`/Python tolerate arbitrary bytes fine.
+  This is a real archive-content defect (usually a GBK-as-UTF-8
+  mojibake from an old CJK-locale zip/rar extraction), not a harness
+  bug — the file/directory legitimately has garbage bytes in its name.
+  Detect with a quick Python walk: `name.encode('utf-8')` raises
+  `UnicodeEncodeError` on the offending entries (surrogateescape-decode
+  first if you need to read the raw bytes: `os.listdir()` already
+  returns `str` with lone surrogates for undecodable bytes on Linux).
+  Fix: rename to a sanitized ASCII placeholder, preserving file
+  content — these are never real LPC source (real `.lpc` files must
+  already have valid, compilable identifiers/paths), typically stray
+  `.txt` notes or a duplicate NPC/room file the original archiver
+  double-saved with a corrupted name. Check for a redundant full-tree
+  backup copy nested inside `work/` (e.g. a stray `work/version/`
+  mirroring `work/adm`, `work/d`, etc.) — if the corrupted name exists
+  in the real tree it's often duplicated there too, and the harness
+  walks that copy as well. (`nt1`: 20 corrupted entries, 10 in the real
+  tree and 10 duplicated under an unreferenced `work/version/` backup.)
 
 ### 1.3 Known WASM-mode gaps, and the current policy for each
 
@@ -378,6 +400,18 @@ seed the rank itself. Always verify step 3 (`update <path>` actually
 succeeds) rather than trusting a `(admin)` banner as proof of working
 admin access — the two are enforced by genuinely different code paths
 in libs with this shape.
+
+**Bug class: `wiz_status` (or equivalent) declared `nosave`.** A few
+lineages declare the wizard-status mapping `private nosave mapping
+wiz_status = ([]);` — it is NEVER written to a save file, always starts
+empty on every boot, and is populated only via a hardcoded default in
+`create()` (sometimes alongside a hardcoded backdoor like `if (euid ==
+"lonely" || euid == "ken") return "(admin)";`). There is no data file
+to edit here — check the variable's declaration for `nosave` before
+reaching for a save-file edit; if present, add the seed as a plain
+assignment in `create()` instead (e.g. `wiz_status["fluffos"] =
+"(admin)";`, placed after any `restore()` call so it isn't overwritten).
+(`nt1`'s `adm/daemons/securityd.lpc`.)
 
 ---
 
@@ -2458,6 +2492,36 @@ declaration (no element type; `array` alone isn't a valid type on this
 driver, see §6.3) — fix those too since the function still needs to
 compile even though it'll never usefully run. (`nt6`/`nt6nitan6win`'s
 `mudlistd.lpc`.)
+
+**Default to disabling the whole file, not patching call sites one at
+a time.** When a file's entire PURPOSE is a socket server/client (a
+pure intermud daemon like `mudlistd.lpc`/`dns_master.lpc`), the fastest
+correct fix is usually to neuter the couple of top-level ENTRY POINTS
+that kick off the socket lifecycle (`create()`, `startup_udp()`,
+`connect_server()`, an `in_server()`-style listener setup) down to
+no-ops/early-returns, rather than hunting down and patching every
+individual `socket_*` call across dozens of helper functions. Once the
+entry points never fire, the helper functions (read/write/close
+callbacks, command parsers) are dead code at runtime — but LPC still
+type-checks unreachable code (per §6.x), so each helper that itself
+contains a `socket_*` call still needs its OWN body gutted to compile,
+even though nothing will ever invoke it. For a FILE WHOSE ENTIRE
+PURPOSE is sockets (no other functionality anything else depends on),
+gutting every socket-touching function this way effectively disables
+the whole file with minimal risk. The one case where this default is
+WRONG: a large multi-purpose daemon where socket-based sync is only
+ONE of several bundled features and many OTHER non-socket functions in
+the same file are called broadly elsewhere in the codebase (e.g. a
+`versiond.lpc` that also tracks release-server status, checksums, and
+version metadata used by dozens of unrelated NPCs/commands) — there,
+actually disabling the whole file (excluding it from load, or making
+its `create()` a no-op) would break all those unrelated callers too;
+keep the file loadable and only gut the specific socket-touching
+functions, leaving the rest of its public interface intact. (`nt1`'s
+`versiond.lpc` — a ~2300-line file with 13 separate functions
+containing `socket_*` calls, but whose `is_version_ok()`/
+`is_release_server()`/`append_sn()` etc. are called from dozens of
+unrelated files throughout the mudlib.)
 
 ### 7.53 A daemon's own defensive `seteuid(getuid())` silently resets a euid that `create()` deliberately set
 
