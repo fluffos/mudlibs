@@ -15,31 +15,31 @@
 #ifndef __MUDLIB_H
 #define __MUDLIB_H
 
-/* 硂琌 mudlib 嘿埃獶紉高筁種玥ぃ莱赣э硂
- * 嘿硂嘿埃ノㄓ醚 mudlib ╰参ぇノ intermud ﹚い
- *  es 繵笵 MUD 丁肪硄癟ぇノ
+/* 這個是 mudlib 的名稱，除非你徵詢過原作者的同意，否則你不應該修改這個
+ * 名稱。這個名稱除了用來識別 mudlib 的系統之外，也用在 intermud 協定中
+ * 的 es 頻道，作為各 MUD 間溝通訊息之用。
  */
 #define MUDLIB_NAME		"Eastern Stories"
 
-/* 硂琌 mudlib セ腹絏ES2 mudlib 睦穝穦矗狜ㄤセ腹絏
- * い计场だ计钡ダㄤ種竡
- *	p:  (prototype)龟喷ノ
- *	a: ず场代刚 (alpha)睦ㄑΤ琜竒喷代刚ノ
- *	b: そ秨代刚 (beta)睦ㄑㄏノ代刚ノ
- *	(礚): タΑ mudlib ㄧ计弧のざ砏
+/* 這個是 mudlib 的版本號碼，ES2 mudlib 在釋出新版的時候會提昇其版本號碼
+ * 中的數字部分，數字後面接的字母其意義如下：
+ *	p: 原型版 (prototype)，實驗用。
+ *	a: 內部測試版 (alpha)，釋出供有架站經驗者測試用。
+ *	b: 公開測試版 (beta)，釋出供一般使用者測試用。
+ *	(無): 正式版，含 mudlib 函數說明及介面規格。
  */
 #define MUDLIB_VERSION_NUMBER	"2.1.3a"
 
 #define MUDLIB_VERSION		(MUDLIB_NAME + " " + MUDLIB_VERSION_NUMBER)
 
-/* 硂琌 MUD ㄏノいゅ絪絏╰参箇砞芖跋盽ノ BIG5嘲跋硄
- * 盽ㄏノ GB 絏ES2 mudlib 睦 BIG5 絏狦Τ腀種锣絏Θ GB 
- * 舧㎝и羛蹈
+/* 這是你的 MUD 使用的中文編碼系統，預設為台灣地區常用的 BIG5，大陸地區通
+ * 常使用 GB 碼，ES2 mudlib 釋出時以 BIG5 碼為主，如果有人願意轉碼成 GB 版
+ * 歡迎和我聯絡。
  */
 #define MUDLIB_LOCALE		"BIG5"
 
-/* 硂嘿琌 intermud  mud 嘿パ intermud 穦㎝瓣悔ㄤ mud
- * 硄硈┮叫づㄏノ ASCII じ(いゅ絏)
+/* 這個名稱是在 intermud 上的 mud 名稱，由於 intermud 會和國際上的其他 mud
+ * 相通連，所以請勿使用 ASCII 以外的字元(中文碼)。
  */
 #define INTERMUD_MUD_NAME	"Celestial Empire"
 

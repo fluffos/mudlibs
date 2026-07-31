@@ -17,77 +17,64 @@
 
 nosave mixed busy, intr;
 
-varargs void
-start_busy(mixed new_busy, mixed new_intr)
-{
-    if( !new_busy ) return;
+varargs void start_busy(mixed new_busy, mixed new_intr) {
+  if (!new_busy) return;
 
-    if( !intp(new_busy) && !functionp(new_busy) )
-        error("action: Invalid busy action type.\n");
+  if (!intp(new_busy) && !functionp(new_busy))
+    error("action: Invalid busy action type.\n");
 
-    busy = new_busy;
-    if( !intp(new_intr) && !functionp(new_intr) )
-        error("action: Invalid busy action interrupt handler type.\n");
+  busy = new_busy;
+  if (!intp(new_intr) && !functionp(new_intr))
+    error("action: Invalid busy action interrupt handler type.\n");
 
-    intr = new_intr;
-    set_heart_beat(1);
+  intr = new_intr;
+  set_heart_beat(1);
 }
 
 nomask mixed query_busy() { return busy; }
 
-nomask int
-is_busy()
-{
-    return busy!=0;
+nomask int is_busy() {
+  return busy != 0;
 }
 
 // This is called by heart_beat() instead of attack() when a ppl is busy
 // doing something else.
-nosave void
-continue_action()
-{
-    if( intp(busy) && (busy > 0) ) {
-        busy--;
-        return;
+nosave void continue_action() {
+  if (intp(busy) && (busy > 0)) {
+    busy--;
+    return;
+  } else if (functionp(busy)) {
+    if (functionp(busy) & FP_OWNER_DESTED) {
+      busy = 0;
+      intr = 0;
+      tell_object(this_object(), "因為某種原因，你正在做的事被停止了。\n");
+    } else if (!evaluate(busy, this_object())) {
+      busy = 0;
+      intr = 0;
     }
-    else if( functionp(busy) ) {
-        if( functionp(busy) & FP_OWNER_DESTED ) {
-            busy = 0;
-            intr = 0;
-            tell_object(this_object(), "琘贺タ暗ㄆ砆氨ゎ\n");
-        }
-        else if(    !evaluate(busy, this_object()) ) {
-            busy = 0;
-            intr = 0;
-        }
-    }
-    else {
-        busy = 0;
-        intr = 0;
-    }
+  } else {
+    busy = 0;
+    intr = 0;
+  }
 }
 
-void
-interrupt(object who, string how)
-{
-    if( !busy ) return;
+void interrupt(object who, string how) {
+  if (!busy) return;
 
-    if( intp(busy) && intp(intr) )
-    {
-	if( busy < intr || how[0]=='*' ) {
-	    busy = 0;
-	    intr = 0;
-	}
+  if (intp(busy) && intp(intr)) {
+    if (busy < intr || how[0] == '*') {
+      busy = 0;
+      intr = 0;
     }
-    else if( functionp(intr) ) {
-	/*  ㄧ计篈 interrupt
-	 *  evaluate ぇ璝肚 != 0 ┪ how 琌眏 interrupt玥
-	 *  い耞笆
+  } else if (functionp(intr)) {
+    /*  函數型態的 interrupt：
+	 *  evaluate 之後，若傳回值 != 0 或者 how 是強制 interrupt，則
+	 *  中斷動作。
 	 */
-	if( evaluate(intr, this_object(), who, how)
-	||  how[0]=='*' ) {
-	    busy = 0;
-	    intr = 0;
-	}
+    if (evaluate(intr, this_object(), who, how)
+      || how[0] == '*') {
+      busy = 0;
+      intr = 0;
     }
+  }
 }

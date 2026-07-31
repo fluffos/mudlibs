@@ -42,24 +42,24 @@
 #define	SECURED_COMMAND	\
 	if( (this_player() != this_player(1)) \
 	||  (previous_object() != this_player(1)) ) \
-	    return notify_fail("⊿Τ舦ㄏノ硂\n")
+	    return notify_fail("你沒有權力使用這個指令。\n")
 
 #define	SECURED_WIZARD_COMMAND	\
 	if( (this_player() != this_player(1)) \
 	||  (previous_object() != this_player(1)) \
 	||  (! wizardp(this_player(1)) ) \
-	)   return notify_fail("⊿Τ舦ㄏノ硂\n")
+	)   return notify_fail("你沒有權力使用這個指令。\n")
 
 #define	SECURED_ARCH_COMMAND	\
 	if( (this_player() != this_player(1)) \
 	||  (previous_object() != this_player(1)) \
 	||  (wiz_level(this_player(1)) < wiz_level("(arch)")) \
-	)   return notify_fail("⊿Τ舦ㄏノ硂\n")
+	)   return notify_fail("你沒有權力使用這個指令。\n")
 
 #define	SECURED_ADMIN_COMMAND	\
 	if( (this_player() != this_player(1)) \
 	||  (previous_object() != this_player(1)) \
 	||  (wiz_level(this_player(1)) < wiz_level("(admin)")) \
-	)   return notify_fail("⊿Τ舦ㄏノ硂\n")
+	)   return notify_fail("你沒有權力使用這個指令。\n")
 
 #endif	/* COMMAND_H */

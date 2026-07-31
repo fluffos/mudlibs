@@ -17,7 +17,7 @@
 
 #define ENABLE_ANTISPAM
 
-// socket 篈盽计
+// socket 型態常數
 
 #define MUD			0
 #define STREAM			1
@@ -43,11 +43,11 @@
 	if( geteuid(previous_object()) != ROOT_UID ) \
 	    error("Permission denied.\n")
 
-/*  ﹚竡硂才腹穦琵 i2d 盢╰参Μ栋 mudlist 郎
+/*  定義這個符號會讓 i2d 將系統收集到的 mudlist 存檔。
  */
 #define SAVE_MUDLIST
 
-/*  ﹚竡硂才腹穦琵 i2d ︑笆玻ネ虏祏腹, ノㄓ﹚疭﹚ mud
+/*  定義這個符號會讓 i2d 自動產生一個簡短的代號, 用來指定特定 mud。
  */
 #define AUTO_ALIAS
 

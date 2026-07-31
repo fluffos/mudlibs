@@ -12,7 +12,7 @@
     primary author of ES2 mudlib: Annihilator <annihilator@muds.net>
 */
 
-#define MUD_NAME	"ぱ绰瓣"
+#define MUD_NAME	"天朝帝國"
 #define MUD_PORT	5000
 #define HTTP_PORT	5015
 
