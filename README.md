@@ -6,7 +6,7 @@
 
 This repository preserves and restores the golden age of the Chinese MUD
 scene (mid-1990s to ~2015): **200 restored LPC mudlibs across 158 unique
-game codebases** (79 fully verified playable in the browser, 116 more
+game codebases** (79 fully verified playable in the browser, 117 more
 native-boot verified with the WASM packaging pass still pending, 1
 native-only by policy, 4 confirmed non-bootable — see below) — 侠客行, 笑傲江湖,
 金庸群侠传, 西游记, 风云, 大唐双龙, 书剑天下, 东方故事, and dozens of
@@ -208,6 +208,7 @@ classes it's found.
 | 033-1 | `yanlongfengyin_xiaoao3` | 炎龙封印（笑傲江湖·阿飞站） | `炎龙封印-笑傲江湖3阿飞站.rar` | 40062 | WASM limited |
 | 033-2 | `longyunmeng` | 龙云梦·炎龙封印（源码版） | `龙云梦-炎龙封印源码版.rar` | 40094 | WASM limited |
 | 033-3 | `longyunmeng_binary` | 龙云梦·炎龙封印（二进制版） | `龙云梦-炎龙封印-二进制版.rar` | — | not-convertible |
+| 033-4 | `xyzxiiidup` | 夕阳再现III (dup) | `夕阳再现III.rar` | — | not-mudlib |
 | 034 | `tianxia` | 天下 Beta | `天下.tar.gz` | 40044 | WASM limited |
 | 035 | `tianxiawuxue` | 天下无雪 | `天下无雪.rar` | 40045 | WASM limited |
 | 036 | `xinkuangxiangkongjian2` | 狂想空间 | `新狂想空间II.rar` | 40047 | WASM playable |
@@ -339,6 +340,7 @@ classes it's found.
 | 154 | `xbtxiii` | 雄霸天下III | `雄霸天下III.rar` | 40201 | native-boot verified, WASM pending |
 | 155 | `xkxlb` | 侠客行（老版/金庸群侠传） | `侠客行老版(金庸群侠传）.rar` | 40202 | native-boot verified, WASM pending |
 | 156 | `xyj42` | 西游记 4.2 | `西游记4.2.gz` | 40203 | native-boot verified, WASM pending |
+| 156-1 | `xyj42dup` | 西游记4.2 (dup) | `西游记4.2.rar` | — | not-mudlib |
 | 157 | `shujian3` | 书剑3 | `最新独立安卓客户端和书剑源码一键架站.zip` | 40200 | native-boot verified, WASM pending |
 | 158 | `zjmudhell` | 指尖MUD | `指尖后端.7z` | 40204 | native-boot verified, WASM pending |
 | 901 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | — | deprioritized |
@@ -375,6 +377,18 @@ classes it's found.
 | 925 | `zjhd` | 指尖后端 | `指尖后端.7z` | — | not-mudlib |
 | 926 | `zjwygjb` | 指尖网页改进版 | `指尖网页改进版（需要v2019驱动）.rar` | — | not-mudlib |
 | 927 | `zxmudkhd` | 最新mud客户端 | `最新mud客户端.rar` | — | not-mudlib |
+| 928 | `duobao` | duobao | `duobao.7z` | — | password-protected |
+| 929 | `nitanpw` | nitan (加密版) | `nitan.7z` | — | password-protected |
+| 930 | `dtxyzjb` | 大唐西游指间版 | `大唐西游指间版.rar` | — | password-protected |
+| 931 | `wlqxcmudlib` | 武林群侠传 MUDLIB | `武林群侠传MUDLIB.7z` | — | password-protected |
+| 932 | `swzf` | 谁与争锋 | `谁与争锋.7z` | — | password-protected |
+| 933 | `xyzxwww0707` | 夕阳再现 WWW安装客户端 (20100707) | `夕阳再现WWW安装客户端Setup20100707.rar` | — | not-mudlib |
+| 934 | `xyzxwww0718` | 夕阳再现 WWW安装客户端 (20100718) | `夕阳再现WWW安装客户端Setup20100718.rar` | — | not-mudlib |
+| 935 | `zjmudv13` | 指间MUD V1.3 | `指间MUDV1.3.rar` | — | not-mudlib |
+| 936 | `ptjnbxq` | 普通技能编写器 | `普通技能编写器.rar` | — | not-mudlib |
+| 937 | `xlwebmud` | 西陆WEBMUD 仗剑江湖 | `西陆WEBMUD仗剑江湖.rar` | — | not-mudlib |
+| 938 | `njhhdxfhzxth` | es2/xkx（南京河海大学，含纵横天下） | `南京河海大学的es2和xkx《包含纵横天下》.gz` | — | not-convertible |
+| 939 | `zjmudouter` | zjmud (outer container) | `zjmud.7z` | — | not-mudlib |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout
