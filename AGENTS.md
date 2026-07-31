@@ -2284,6 +2284,58 @@ before writing a config. (Century/`adm-single` family: `zjdywzb`,
 `zjdy2008wzb`, `hell`, `xkxc98sj`, `ntii`, `nte` — all from one bulk-convert
 pass whose automated config generator wasn't yet doing this check.)
 
+### 7.43 `master.lpc`'s `creator_file`/`domain_file`/`author_file()` recurses into a simul_efun object that isn't loaded yet
+
+A common master.lpc pattern forwards these three applies straight to
+the simul_efun object (`call_other(SIMUL_EFUN_OB, "author_file", str)`),
+used by the driver's own warning/stat-reporting machinery. If ANY
+compiler warning fires while `simul_efun.lpc` itself is still being
+compiled (e.g. an "Expression has no side effects" or "Unused local
+variable" warning inside one of its `#include`d fragments), the driver
+tries to attribute it via master's `author_file()`, which calls back
+into the not-yet-loaded simul_efun object — `*Object cannot be loaded
+during compilation`, then `*No program in object '<simul_efun path>'`,
+and the whole boot aborts (`The simul_efun ... and master ... objects
+must be loadable`). Looks like a warning, is actually fatal. Fix: guard
+each of the three applies with `if (!find_object(SIMUL_EFUN_OB)) return
+"";` before the `call_other`. (`hy`, `hy5` — haiyang family.)
+
+### 7.44 A lib assumes `/log` (or a specific subdirectory under it) already exists
+
+`master.lpc`'s `preload()`/`log_error()` or a daemon's `log_file()` call
+does an unconditional `write_file`/`->" append` into a path like `/log/log`
+or `/log/nosave/quest` with no directory-existence check — the original
+archive shipped that directory pre-created (or the original host's
+mudlib-setup script made it), but a fresh `work/` tree from this
+project's conversion pipeline doesn't have it. Symptom: `*Wrong
+permissions for opening file ... for append. "No such file or
+directory"` at boot or on first use of the affected daemon. Fix:
+`mkdir -p work/log` (and any subdirectory the specific error names) —
+check every such error for its exact path, don't assume `/log` alone is
+enough. (`njhhdxdes2hx`, `qhxajh`, `zjmudhell`.)
+
+### 7.45 `global include file` config directive references a filename that doesn't exist in this archive's `include/`
+
+`config.fluffos`'s auto-generated `global include file : <globals.h>`
+default doesn't verify the file actually exists — some archives name it
+`global.h` (singular) instead. Compile fails immediately with `error:
+Cannot #include globals.h` from every file, cascading into `Undefined
+function` errors for anything the (never-loaded) global include would
+have defined. Fix: `find work/ -iname "global*.h"` and point the config
+line at whatever's actually there. (`sgzmudsgz`.)
+
+### 7.46 A mudlib built on the LIMA codebase demands driver compile flags this project's shared build doesn't have
+
+LIMA-derived mudlibs ship their own `check_config.lpc` self-test that
+refuses to boot unless the driver was compiled with a specific flag set
+(`NO_LIGHT`, `NO_ADD_ACTION`, `NO_WIZARDS`, `ARRAY_RESERVED_WORD`,
+`undef OLD_ED`, `undef PACKAGE_UIDS`) — incompatible with every other
+mudlib in this collection, which need the opposite. Not fixable at the
+mudlib-source level; would require a second, separately-compiled driver
+binary just for LIMA libs. Out of scope for now — file as `noboot` with
+the specific flag list from the error message (useful if this is ever
+revisited). (`sgzmudsgz`, 三国志MUD.)
+
 ---
 
 ## 8. Login and registration flow bugs
