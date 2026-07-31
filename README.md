@@ -1,14 +1,14 @@
-# mudlibs — 176 restored classic Chinese LPC mudlibs (139 unique games), runnable natively and most in the browser
+# mudlibs — 200 restored classic Chinese LPC mudlibs (158 unique games), runnable natively and most in the browser
 
 **▶ Play now, no install: https://mudlibs.fluffos.info/**
 
 ![Screenshot of the mudlibs.fluffos.info game gallery](docs/site-preview.png)
 
 This repository preserves and restores the golden age of the Chinese MUD
-scene (mid-1990s to ~2015): **176 restored LPC mudlibs across 139 unique
-game codebases** (79 fully verified playable in the browser, 94 more
+scene (mid-1990s to ~2015): **200 restored LPC mudlibs across 158 unique
+game codebases** (79 fully verified playable in the browser, 116 more
 native-boot verified with the WASM packaging pass still pending, 1
-native-only by policy — see below) — 侠客行, 笑傲江湖,
+native-only by policy, 4 confirmed non-bootable — see below) — 侠客行, 笑傲江湖,
 金庸群侠传, 西游记, 风云, 大唐双龙, 书剑天下, 东方故事, and dozens of
 derivatives and forks — recovered from community archive dumps, transcoded
 to UTF-8, and fixed to boot and play on the modern
@@ -92,13 +92,13 @@ without archaeology into each lineage's wizard-registration mechanism:
   「管理员账号 / Admin account」.
 
 **If you host any of these games on a real network, change this password
-first** — it is a published default, deliberately identical across all 98
+first** — it is a published default, deliberately identical across all
 libs for local convenience, and grants full in-game wizard/admin power
 (including file read/write inside the mudlib).
 
 ## The collection — numbering, lineage, and status
 
-Each **unique game/codebase** has a sequential number (`001`–`139`, still
+Each **unique game/codebase** has a sequential number (`001`–`158`, still
 growing as new archives get dropped in). Confirmed derivatives — later
 snapshots, rebrands, site builds, and close forks of the *same* codebase —
 share the base number with a `-1`/`-2`/`-3` suffix (e.g. `031`
@@ -127,7 +127,11 @@ English-language lib deliberately deprioritized per project policy (see
 verified, WASM pending** = boots and plays cleanly on the native FluffOS
 driver but hasn't been through the WASM packaging pass yet — this covers
 a large batch of archives added in the most recent bulk-conversion pass
-and is next in line for that pass. Every lib that has been through the
+and is next in line for that pass; **noboot** = a genuine LPC mudlib
+that fails to boot for a structural reason unrelated to this project's
+own conversion (a missing master object in the archive itself, a
+different mudlib codebase family the driver isn't built for) — not a
+pending-work item, filed for provenance. Every lib that has been through the
 WASM pass also gets a periodic long-sit WASM boot-log sweep — not just a
 quick login check — watching the driver's own output for several minutes
 to catch lazily-triggered daemon/heartbeat failures that a fast smoke
