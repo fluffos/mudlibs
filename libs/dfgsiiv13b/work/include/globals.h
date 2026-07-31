@@ -12,7 +12,7 @@
     primary author of ES2 mudlib: Annihilator <annihilator@muds.net>
 */
 
-#define MUD_NAME		"ぱ绰瓣"
+// MUD_NAME removed: this driver auto-predefines it from config's "name" setting, redefining collides ("Illegal to redefine a predefined value")
 #define MUD_NAME_INTERMUD	"Celestial Empire"
 #define MUD_NAME_ABBR		"es2"
 #define MUD_HOSTNAME		"es2.muds.net"
