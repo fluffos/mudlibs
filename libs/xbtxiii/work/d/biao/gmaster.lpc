@@ -3,241 +3,215 @@
 inherit NPC;
 #include <ansi.h>
 
-nosave int start_point,end_point;
+nosave int start_point, end_point;
 
 int give_mission();
 int do_join();
-int set_yunbiao_mark(object me,int start,int end);
-void create()
-{
-        set_name("查猛", ({ "meng", "cha meng" }) );
-        set("title", HIY "金狮掌" NOR);
-        set("gender", "男性" );
-        set("age", 42);
-        set("skill_public",1);
-        set("inquiry",  ([
-                "mission" : (: give_mission :),
-        ]) );
-        set("int", 30);
-        create_family("少林派", 21, "弟子");
-        set("mission", 50);
-        set("long",
-                "金狮掌查猛是少林俗家弟子，人不但性情豪爽，且广交朋友．
+int set_yunbiao_mark(object me, int start, int end);
+void create() {
+  set_name("查猛", ({ "meng", "cha meng" }));
+  set("title", HIY "金狮掌" NOR);
+  set("gender", "男性");
+  set("age", 42);
+  set("skill_public", 1);
+  set("inquiry", ([
+    "mission": (: give_mission :),
+  ]));
+  set("int", 30);
+  create_family("少林派", 21, "弟子");
+  set("mission", 50);
+  set("long",
+    "金狮掌查猛是少林俗家弟子，人不但性情豪爽，且广交朋友．
                  凡是想向他求教的，只要为镖局出点力，他就肯教．\n"
-                );
-        set("attitude", "peaceful");
-        set_skill("unarmed", 30);
-        set_skill("luohan-quan", 30);
-        set_skill("literate", 30);
-        set_skill("force", 30);
-        set_skill("dodge",30);
-        set_skill("parry",30);
-        map_skill("unarmed", "luohan-quan");
-        set("combat_exp", 90000);
- 	start_point=random(8)+1;//随机获取开始地点
- 	end_point=random(8)+1;
-        setup();
+  );
+  set("attitude", "peaceful");
+  set_skill("unarmed", 30);
+  set_skill("luohan-quan", 30);
+  set_skill("literate", 30);
+  set_skill("force", 30);
+  set_skill("dodge", 30);
+  set_skill("parry", 30);
+  map_skill("unarmed", "luohan-quan");
+  set("combat_exp", 90000);
+  start_point = random(8) + 1;  //随机获取开始地点
+  end_point = random(8) + 1;
+  setup();
 }
-void init()
-{
-        ::init();
-        add_action("do_accept", "accept");
-        add_action("do_join","join");
-        add_action("give_mission","yunbiao");
+void init() {
+  ::init();
+  add_action("do_accept", "accept");
+  add_action("do_join", "join");
+  add_action("give_mission", "yunbiao");
 }
 
-int recognize_apprentice(object ob)
-{
-        if((time() - ob->query("marks/金狮") ) > 1800  ){
-                say("查猛说道：你．．你好象很久没为镖局出过力了....\n");
-                return 0;
+int recognize_apprentice(object ob) {
+  if ((time() - ob->query("marks/金狮")) > 1800) {
+    say("查猛说道：你．．你好象很久没为镖局出过力了....\n");
+    return 0;
+  }
+
+  return 1;
+}
+int do_join() {
+  object me, gold_yaopai, *ob;
+  int s;
+  me = this_player();
+  if (me->query("combat_exp") < 2000000) {
+    say("查猛说道：你．．运镖是件非常危险的事情,你还是练强点再来吧....\n");
+    return 1;
+  }
+  ob = all_inventory(me);
+  s = sizeof(ob);
+  while (s--) {
+    if (!stringp(ob[s]->query("id"))) continue;
+    if (ob[s]->query("id") == "gold_yaopai") {
+      say("查猛说道：你已经是镖局的人了....\n");
+      return 1;
+    }
+  }
+  if (!me->can_afford(100000)) {
+    say("查猛说道：要想加入镖局,必须缴纳10两黄金的加盟费用....\n");
+    return notify_fail("你的钱似乎不够\n");
+  }
+  me->pay_money(100000);
+
+  gold_yaopai = new(__DIR__ "obj/gold_yaopai.lpc");
+  gold_yaopai->set("master_id", me->query("id"));
+  gold_yaopai->move(me);
+  say("查猛说道：好,从今以后,你就跟着我干,肯定有你的好处....\n");
+  tell_object(me, "你现在成为一名职业镖师了,输入yunbiao指令就可以接镖了\n");
+  tell_room(this_object(), "查猛把金腰牌递给" + me->query("name") + ".\n", me);
+  return 1;
+}
+
+int give_mission() {
+  object me, *ob, *member;
+  int s, i, j, x;
+
+  me = this_player();
+  ob = all_inventory(me);
+  s = sizeof(ob);
+
+  if (!query("mission")) {
+    command("say 现在没接到镖，迟点再来吧！");
+    return 1;
+  }
+  if (!stringp(query("startroom")) || !base_name(environment()) == query("startroom")) {
+    command("say 现在没接到镖，迟点再来吧！");
+    return 1;
+  }
+  if (me->query_team() && !me->is_team_leader())
+    return notify_fail("只有队长才有资格申请运镖任务\n");
+
+
+  while (s--) {
+    if (!stringp(ob[s]->query("id"))) continue;
+    if (ob[s]->query("id") == "gold_yaopai") {
+      if (me->query("combat_exp") < 2000000) {
+        command("say 你现在变的太差劲了，没有资格再做镖师了，等强了再来吧！");
+        command("say 那块金腰牌还放在你那里，作纪念也好。");
+        return 1;
+      }
+      if (me->query("yunbiao/mission_gived") == 1) {
+        say("查猛说:我已经给你任务了啦，还不去干...\n");
+        return 1;
+      } else {
+        add("mission", -1);
+
+        start_point = random(8) + 1;  //随机获取开始地点
+        end_point = random(8) + 1;
+        for (x = 0; x < 1000; x++) {
+          if (end_point == start_point)
+            end_point = random(8) + 1;
+          else break;
+        }
+        //防止起点和终点一样
+        set_yunbiao_mark(me, start_point, end_point);
+        command("say 有一趟镖需从" + me->query("yunbiao/start_point") + "运至" + me->query("yunbiao/end_point") + ".\n");
+        //先确定me地运镖起始地点,其他队员地起始地点应该和me一样
+        if (pointerp(member = me->query_team()))  //队伍运镖
+        {
+          for (i = 0; i < sizeof(member); i++) {
+
+            if (member[i]->query("yunbiao/mission_gived")) continue;
+            ob = all_inventory(member[i]);
+            for (j = 0; j < sizeof(ob); j++) {
+              if (ob[j]->query("id") == "gold_yaopai") {  //确定此人是不是镖师
+                set_yunbiao_mark(member[i], start_point, end_point);
+              } else continue;
+            }
+          }
+          command("say 这趟镖非常重要,但是你们这么多人一起运这趟镖,我很放心.成功之后人人有重赏\n");
+          return 1;
         }
 
         return 1;
-}
-int do_join()
-{
-	object me,gold_yaopai,*ob;
-	int s;
-	me=this_player();
-    if(me->query("combat_exp")<2000000)
-    {
-                say("查猛说道：你．．运镖是件非常危险的事情,你还是练强点再来吧....\n");
-                return 1;
+
+      }
     }
-	ob=all_inventory(me);
-	s=sizeof(ob);
-	while(s--)
-        {
-        	if (!stringp(ob[s]->query("id"))) continue;
-        	if (ob[s]->query("id")=="gold_yaopai")
-                {
-                	say("查猛说道：你已经是镖局的人了....\n");
-                	return 1;
-                }
-        }
-    if(!me->can_afford(100000))
-    {
-    	say("查猛说道：要想加入镖局,必须缴纳10两黄金的加盟费用....\n");
-    	return notify_fail("你的钱似乎不够\n");
-    }
-    me->pay_money(100000);
-
-	gold_yaopai=new(__DIR__"obj/gold_yaopai.lpc");
-	gold_yaopai->set("master_id",me->query("id"));
-	gold_yaopai->move(me);
-	say("查猛说道：好,从今以后,你就跟着我干,肯定有你的好处....\n");
-	tell_object(me,"你现在成为一名职业镖师了,输入yunbiao指令就可以接镖了\n");
-	tell_room(this_object(),"查猛把金腰牌递给"+me->query("name")+".\n",me);
-	return 1;
+  }
+  command("say 你不是镖师，不能保镖！\n");
+  return 1;
 }
 
-int give_mission()
-{	
-	object me,*ob,*member;
-        int s,i,j,x;
-	
-	me=this_player();
-	ob=all_inventory(me);
-	s=sizeof(ob);
-        
-        if(!query("mission")) 
-        {
-            	command("say 现在没接到镖，迟点再来吧！");
-            	return 1;
-        }
-        if(!stringp(query("startroom"))||!base_name(environment())==query("startroom")) 
-        {
-            	command("say 现在没接到镖，迟点再来吧！");
-            	return 1;
-        }
-	if(me->query_team()&&!me->is_team_leader())
-		return notify_fail("只有队长才有资格申请运镖任务\n");
-	
-	
-	while(s--)
-        {
-        	if (!stringp(ob[s]->query("id"))) continue;
-        	if (ob[s]->query("id")=="gold_yaopai")
-                {
-         		if(me->query("combat_exp")<2000000)
-         		{
-         			command("say 你现在变的太差劲了，没有资格再做镖师了，等强了再来吧！");
-         			command("say 那块金腰牌还放在你那里，作纪念也好。");
-         			return 1;
-         		}
- 			if (me->query("yunbiao/mission_gived")==1)
-    			{
-    				say("查猛说:我已经给你任务了啦，还不去干...\n");
-     				return 1;
-    			}
- 			else
-    			{
-            			add("mission",-1);
+int set_yunbiao_mark(object me, int start, int end) {
 
-			 	start_point=random(8)+1;//随机获取开始地点
- 				end_point=random(8)+1;
- 				for(x=0;x<1000;x++)
- 				{
- 					if(end_point==start_point) 
- 					end_point=random(8)+1;
- 					else break;
- 				}
- 				//防止起点和终点一样
-     				set_yunbiao_mark(me,start_point,end_point);
-				command ("say 有一趟镖需从"+me->query("yunbiao/start_point")+"运至"+me->query("yunbiao/end_point")+".\n");
-				//先确定me地运镖起始地点,其他队员地起始地点应该和me一样
-    			        if(pointerp(member=me->query_team()))//队伍运镖
-     			        {
-     			                for(i=0;i<sizeof(member);i++)
-     			                {
-     			                	
-     			 			if(member[i]->query("yunbiao/mission_gived")) continue;
-     			 			ob=all_inventory(member[i]);
-     			 			for(j=0;j<sizeof(ob);j++)
-     			 			{
-     			 				if(ob[j]->query("id")=="gold_yaopai")
-     			 				{//确定此人是不是镖师
-     			 					set_yunbiao_mark(member[i],start_point,end_point);
-     			 				}
-     			 				else    continue;
-     			 			}
-     			                }
-     			                command ("say 这趟镖非常重要,但是你们这么多人一起运这趟镖,我很放心.成功之后人人有重赏\n");
-     			        	return 1;
-     			        }
+  me->set("yunbiao/mission_gived", 1);
+  switch (start) {
+    case 1:
+      me->set("yunbiao/start_point", "风云城");
+      break;
+    case 2:
+      me->set("yunbiao/start_point", "扬州城");
+      break;
+    case 3:
+      me->set("yunbiao/start_point", "金陵城");
+      break;
+    case 4:
+      me->set("yunbiao/start_point", "京城");
+      break;
+    case 5:
+      me->set("yunbiao/start_point", "泉州城");
+      break;
+    case 6:
+      me->set("yunbiao/start_point", "宁远城");
+      break;
+    case 7:
+      me->set("yunbiao/start_point", "绮云镇");
+      break;
+    case 8:
+      me->set("yunbiao/start_point", "襄阳城");
+      break;
+  }
+  switch (end) {
+    case 1:
+      me->set("yunbiao/end_point", "风云城");
+      break;
+    case 2:
+      me->set("yunbiao/end_point", "扬州城");
+      break;
+    case 3:
+      me->set("yunbiao/end_point", "金陵城");
+      break;
+    case 4:
+      me->set("yunbiao/end_point", "京城");
+      break;
+    case 5:
+      me->set("yunbiao/end_point", "泉州城");
+      break;
+    case 6:
+      me->set("yunbiao/end_point", "宁远城");
+      break;
+    case 7:
+      me->set("yunbiao/end_point", "绮云镇");
+      break;
+    case 8:
+      me->set("yunbiao/end_point", "襄阳城");
+      break;
+  }
 
-     				return 1;
-    	
-    			}       
-		}
-	}
-	command("say 你不是镖师，不能保镖！\n");
-	return 1;
 }
 
-int set_yunbiao_mark(object me,int start,int end)
-{
-
-        me->set("yunbiao/mission_gived",1);
-     	switch(start)
-        {
-        	case 1:
-                me->set("yunbiao/start_point","风云城");
-                break;
-		case 2:
-        	me->set("yunbiao/start_point","扬州城");
-                break;
-                case 3:
-                me->set("yunbiao/start_point","金陵城");
-                break;
-           	case 4:
-                me->set("yunbiao/start_point","京城");
-                break;
-                case 5:
-                me->set("yunbiao/start_point","泉州城");
-                break;
-                case 6:
-                me->set("yunbiao/start_point","宁远城");
-                break;
-                case 7:
-                me->set("yunbiao/start_point","绮云镇");
-                break;
-           	case 8:
-                me->set("yunbiao/start_point","襄阳城");
-                break;
-	}
-     	switch(end)
-        {
-                case 1:
-                me->set("yunbiao/end_point","风云城");
-                break;
-                case 2:
-                me->set("yunbiao/end_point","扬州城");
-                break;
-                case 3:
-                me->set("yunbiao/end_point","金陵城");
-                break;
-                case 4:
-                me->set("yunbiao/end_point","京城");
-                break;
-                case 5:
-                me->set("yunbiao/end_point","泉州城");
-                break;
-                case 6:
-                me->set("yunbiao/end_point","宁远城");
-                break;
-                case 7:
-                me->set("yunbiao/end_point","绮云镇");
-                break;
-                case 8:
-                me->set("yunbiao/end_point","襄阳城");
-                break;
-        }
-	
-}
-
-void reset()
-{
-    set("mission",50);
+void reset() {
+  set("mission", 50);
 }
