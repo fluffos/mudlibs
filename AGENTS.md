@@ -2806,6 +2806,48 @@ Do not chase this by adding narrow per-file `trusted_read` exemptions
 argument; only the func-based fix covers all of them at once).
 (`shujian3`.)
 
+**Variant: the clobber lives in `master.lpc`'s own `valid_read`/
+`valid_write` wrapper, using `previous_object()` instead of
+`this_player()`.** Same bug, different clobbering source:
+
+```lpc
+// BEFORE (always overwrites user, regardless of func):
+int valid_read( string file, mixed user, string func )
+{
+    object ob;
+    if (!undefinedp(user))
+        if (!objectp(user=previous_object()))
+        return 1;
+    if( ob = find_object(SECURITY_D) )
+        return (int)SECURITY_D->valid_read(file, user, func);
+    return 1;
+}
+// AFTER:
+    if (!undefinedp(user) && func != "load_object" && func != "include")
+        if (!objectp(user=previous_object()))
+        return 1;
+```
+
+Symptom was unusually hard to pin down here because the game's OWN
+`securityd.lpc` had no `this_player()` call anywhere (a plain grep for
+that turned up nothing) — the actual clobber was one layer up, in
+`master.lpc`'s wrapper, before `securityd.lpc` ever saw the request.
+Detection took adding temporary `write()` calls at every `deny`
+`return 0` inside `securityd.lpc`'s `valid_read()` to print `file`/
+`user`/`func`, which showed `func=="load_object"` paired with
+`user=="/clone/user/user"` (the player's own body class) — a dead
+giveaway once visible, since only `master_ob` should ever appear there.
+Also confirms the general debugging move for this whole bug class:
+when `*Read access denied` fires deep inside an ordinary-looking
+`setup()`/`create()` chain during registration, wrap the suspected
+call in `catch()` first to surface the actual error text (the crash
+otherwise propagates silently, truncating the rest of the enclosing
+function with zero visible symptom beyond "the player has no
+environment" or similar downstream fallout) — then bisect with
+`write()`/`tell_object()` calls (not `log_file()`, which doesn't
+persist across separate WASM sandbox invocations) to find exactly
+which statement stops executing. (`hy3`.)
+
 ### 7.60 `master.lpc`'s `log_error()` calls `CHANNEL_D->do_channel(...)`, triggering the same load-mid-compile crash as §7.1 — but from a completely ordinary compile WARNING, not an error
 
 Same underlying driver rule as §7.1 (`load_object()`/an implicit compile
