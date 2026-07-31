@@ -38,15 +38,14 @@ inherit F_TEAM;
 inherit F_LINEUP;
 
 // Use a tick with longer period than heart beat to save cpu's work
-nosave int tick,x;
+nosave int tick, x;
 nosave int save = 15 + random(15);
 // nosave int exp_tick = 1;
 // nosave int exp = 0;
 
 
-void create()
-{
-	seteuid(0); // so LOGIN_D can export uid to us
+void create() {
+  seteuid(0);  // so LOGIN_D can export uid to us
 }
 
 // Use this function to identify if an object is a character.
@@ -54,311 +53,283 @@ int is_character() { return 1; }
 
 // setup: used to configure attributes that aren't known by this_object()
 // at create() time such as living_name (and so can't be done in create()).
-void setup()
-{
-	if (!clonep()) return;
-	seteuid(getuid());
+void setup() {
+  if (!clonep()) return;
+  seteuid(getuid());
 
-	set_heart_beat(1);
-	tick = 9 + random(3);
-	enable_player();
+  set_heart_beat(1);
+  tick = 9 + random(3);
+  enable_player();
 
-	CHAR_D->setup_char(this_object());
+  CHAR_D->setup_char(this_object());
 }
 
-void heart_beat()
-{
-	int wimpy_ratio, cnd_flag;
-	mapping my;
-	object ob;
+void heart_beat() {
+  int wimpy_ratio, cnd_flag;
+  mapping my;
+  object ob;
 
-	if (!environment()) return;
-	if ((ob = query_temp("link_ob")) && !ob->is_character() && --save == 0) {
-		save = 285 + random(30);
-		ob->save();
-		this_object()->save();
-		write(HIG "您的资料已经自动保存好了。"NOR"\n");
-	}
+  if (!environment()) return;
+  if ((ob = query_temp("link_ob")) && !ob->is_character() && --save == 0) {
+    save = 285 + random(30);
+    ob->save();
+    this_object()->save();
+    write(HIG "您的资料已经自动保存好了。" NOR "\n");
+  }
 
-	ob = this_object();
-	my = query_entire_dbase();
-	
-	// check user's client type
-	if( userp(ob) ) CLIENT_D->CheckStateChange(ob);
+  ob = this_object();
+  my = query_entire_dbase();
 
-	if (my["neili"] < 0) my["neili"] = 0;
-	if (my["max_neili"] < 0) my["max_neili"] = 0;
-	if (my["combat_exp"] < 0) my["combat_exp"] = 0;
-	if (my["potential"] < 0) my["potential"] = 0;
-	
-	// here is the change.
-	if (my["eff_qi"] > my["max_qi"])
-		my["eff_qi"] = my["max_qi"];
-	if (my["qi"] > my["eff_qi"] + query_temp("apply/qi")) 
-		my["qi"] = my["eff_qi"] + query_temp("apply/qi");
+  // check user's client type
+  if (userp(ob)) CLIENT_D->CheckStateChange(ob);
 
-	// If we are dying because of mortal wounds?
-	if(ob->query_temp("zjlog"))
-		"/cmds/usr/hp1"->main(ob);
-	// and here
-	if( (my["eff_qi"] + query_temp("apply/qi")) < 0
-	|| (my["eff_jing"] + query_temp("apply/jing")) < 0 ) {
-		remove_all_enemy();
-		die();
-		return;
-	}
+  if (my["neili"] < 0) my["neili"] = 0;
+  if (my["max_neili"] < 0) my["max_neili"] = 0;
+  if (my["combat_exp"] < 0) my["combat_exp"] = 0;
+  if (my["potential"] < 0) my["potential"] = 0;
 
-	// If we're dying or falling unconcious?
-	if( my["qi"] < 0 || my["jing"] < 0 || my["jingli"] < 0) {
-		remove_all_enemy();
-		if( !living(ob) ) die();
-		else unconcious();
-		return;
-	}
+  // here is the change.
+  if (my["eff_qi"] > my["max_qi"])
+    my["eff_qi"] = my["max_qi"];
+  if (my["qi"] > my["eff_qi"] + query_temp("apply/qi"))
+    my["qi"] = my["eff_qi"] + query_temp("apply/qi");
 
-	continue_action();
+  // If we are dying because of mortal wounds?
+  if (ob->query_temp("zjlog"))
+    "/cmds/usr/hp1"->main(ob);
+  // and here
+  if ((my["eff_qi"] + query_temp("apply/qi")) < 0
+    || (my["eff_jing"] + query_temp("apply/jing")) < 0) {
+    remove_all_enemy();
+    die();
+    return;
+  }
 
-	if (is_busy()) {
-		// halt from dazuo, tune, heal ... etc.
-		if (query_temp("pending") && is_fighting() && !userp(ob))
-			interrupt_me();
+  // If we're dying or falling unconcious?
+  if (my["qi"] < 0 || my["jing"] < 0 || my["jingli"] < 0) {
+    remove_all_enemy();
+    if (!living(ob)) die();
+    else unconcious();
+    return;
+  }
 
-		// We don't want heart beat be halt eventually, so return here.
-		//	      return; // 这里如果返回会造成 condition 无法更新，所以屏蔽掉。
-	} 
-	else 
-	{
-		// Is it time to flee?
-		if (is_fighting()
-		&& intp(wimpy_ratio = (int)query("env/wimpy"))
-		&& wimpy_ratio > 0
-		&& (my["qi"] * 100 / (my["max_qi"]+query_temp("apply/qi")) <= wimpy_ratio
-		|| my["jing"] * 100 / (my["max_jing"]+query_temp("apply/jing")) <= wimpy_ratio
-		|| (my["jingli"]+1) * 100 / (my["eff_jingli"]+query_temp("apply/jingli")+1) <= wimpy_ratio) )
-		// Modified by mxzhao 2004/04/28
-		{
-			int success = 0;
-			
-			string wimpycmd = query("env/wimpycmd");
+  continue_action();
 
-			if (stringp(wimpycmd))
-			{
-				int count = 0;
-				foreach (string cmd in explode(wimpycmd, "\\"))
-				{
-					if (count++ > 4)
-					{
-						break;
-					}
+  if (is_busy()) {
+    // halt from dazuo, tune, heal ... etc.
+    if (query_temp("pending") && is_fighting() && !userp(ob))
+      interrupt_me();
 
-					if (command(process_input(cmd)))
-					{
-						success++;
-					}
-				}
-			}
-			
-			if (success == 0)
-			{
-				GO_CMD->do_flee(ob);
-			}
-		}
-		// End
+    // We don't want heart beat be halt eventually, so return here.
+    //	      return; // 这里如果返回会造成 condition 无法更新，所以屏蔽掉。
+  } else {
+    // Is it time to flee?
+    if (is_fighting()
+      && intp(wimpy_ratio = (int)query("env/wimpy"))
+      && wimpy_ratio > 0
+      && (my["qi"] * 100 / (my["max_qi"] + query_temp("apply/qi")) <= wimpy_ratio
+        || my["jing"] * 100 / (my["max_jing"] + query_temp("apply/jing")) <= wimpy_ratio
+        || (my["jingli"] + 1) * 100 / (my["eff_jingli"] + query_temp("apply/jingli") + 1) <= wimpy_ratio))  // Modified by mxzhao 2004/04/28
+    {
+      int success = 0;
 
-		// Do attack or clean up enemy if we have fleed.
-		attack();
-	}
+      string wimpycmd = query("env/wimpycmd");
 
-	if( !ob ) return;
-	if( !userp(ob) ) {
-		ob->chat();
-		// chat() may do anything -- include destruct(this_object())
-		if (!ob) return;
-	}
+      if (stringp(wimpycmd)) {
+        int count = 0;
+        foreach (string cmd in explode(wimpycmd, "\\")) {
+          if (count++ > 4) {
+            break;
+          }
 
-	if( tick-- ) return;
-	tick = 7 + random(5);
-	if( userp(ob) ) UPDATE_D->check_inventory(ob);
+          if (command(process_input(cmd))) {
+            success++;
+          }
+        }
+      }
 
-	if (!is_ghost()) {
-		cnd_flag = update_condition();
-		if( !ob ) return;
-	}
+      if (success == 0) {
+        GO_CMD->do_flee(ob);
+      }
+    }
+    // End
 
-	// heal_up() must be called prior to other two to make sure it is called
-	// because the && operator is lazy :P
-	if( (cnd_flag & CND_NO_HEAL_UP) || !heal_up());
+    // Do attack or clean up enemy if we have fleed.
+    attack();
+  }
 
-	if (!interactive(ob)) {
-		if (!query_condition("killer") && !is_fighting()
-		&& !sizeof(filter_array(all_inventory(environment()), (: interactive :))))
-			set_heart_beat(0);
-		return;
-	}
+  if (!ob) return;
+  if (!userp(ob)) {
+    ob->chat();
+    // chat() may do anything -- include destruct(this_object())
+    if (!ob) return;
+  }
 
-	// Make us a bit older. Only player's update_age is defined.
-	// Note: update_age() is no need to be called every heart_beat, it
-	//       remember how much time has passed since last call.
-	ob->update_age();
-	
-	if (query_idle(ob) > IDLE_TIMEOUT)
-	//if (query_idle(ob) > 10)
-	{
-		//ob->user_dump(DUMP_IDLE);
-		call_out("eval_function", 1,(:call_other,ob,"user_dump",DUMP_IDLE:));
-	}
+  if (tick--) return;
+  tick = 7 + random(5);
+  if (userp(ob)) UPDATE_D->check_inventory(ob);
+
+  if (!is_ghost()) {
+    cnd_flag = update_condition();
+    if (!ob) return;
+  }
+
+  // heal_up() must be called prior to other two to make sure it is called
+  // because the && operator is lazy :P
+  if ((cnd_flag & CND_NO_HEAL_UP) || !heal_up());
+
+  if (!interactive(ob)) {
+    if (!query_condition("killer") && !is_fighting()
+      && !sizeof(filter_array(all_inventory(environment()), (: interactive :))))
+      set_heart_beat(0);
+    return;
+  }
+
+  // Make us a bit older. Only player's update_age is defined.
+  // Note: update_age() is no need to be called every heart_beat, it
+  //       remember how much time has passed since last call.
+  ob->update_age();
+
+  if (query_idle(ob) > IDLE_TIMEOUT)  //if (query_idle(ob) > 10)
+  {
+    //ob->user_dump(DUMP_IDLE);
+    call_out("eval_function", 1, (: call_other, ob, "user_dump", DUMP_IDLE :));
+  }
 }
 
-int visible(object ob)
-{
-	int lvl, invis;
+int visible(object ob) {
+  int lvl, invis;
 
-	if (geteuid() == "spiderii" || geteuid() == "server")
-	{
-		return 1;
-	}
+  if (geteuid() == "spiderii" || geteuid() == "server") {
+    return 1;
+  }
 
-	lvl = wiz_level(this_object());
+  lvl = wiz_level(this_object());
 
-	if( lvl > wiz_level(ob) ) return 1;
-	invis = wizardp(ob)?(int)ob->query("env/invisibility"):!userp(ob)?(int)ob->query("env/invisibility"):0;
-	if( intp(invis) && (invis > lvl) ) return 0;
+  if (lvl > wiz_level(ob)) return 1;
+  invis = wizardp(ob) ? (int)ob->query("env/invisibility") : !userp(ob) ? (int)ob->query("env/invisibility") : 0;
+  if (intp(invis) && (invis > lvl)) return 0;
 
-	if ( ob->is_ghost() && !userp(ob) ) return 0;
-	return 1;
+  if (ob->is_ghost() && !userp(ob)) return 0;
+  return 1;
 }
 
-int is_vip()
-{
-	return query("registered")>=3;
+int is_vip() {
+  return query("registered") >= 3;
 }
 
-int is_robot(int unset)
-{
-	if(unset)
-	{
-		delete("iamrobot");
-		return 0;
-	}
-	else
-	{
-		return (int)query("iamrobot");
-	}
+int is_robot(int unset) {
+  if (unset) {
+    delete("iamrobot");
+    return 0;
+  } else {
+    return (int)query("iamrobot");
+  }
 }
 
-int add_exp_combat(int iexp,mixed giver,string reason,int no_job,int gift_flag)
-{
-	int gift_mul,oexp;
-	int k,l,m;
-	int extra_exp;//额外奖励
-	int extra_t;
-	int end_time = 1112803200; //7 April 2005
-	string site;
+int add_exp_combat(int iexp, mixed giver, string reason, int no_job, int gift_flag) {
+  int gift_mul, oexp;
+  int k, l, m;
+  int extra_exp;  //额外奖励
+  int extra_t;
+  int end_time = 1112803200;  //7 April 2005
+  string site;
 
-	int job_flag = 0;//判断手动任务的标记
+  int job_flag = 0;  //判断手动任务的标记
 
-	if(!clonep()) return 0;
+  if (!clonep()) return 0;
 
-	
-	if(reason) gift_mul = JOB_GIFT_MUL[reason];
-	if(!gift_mul) 
-	{
-		gift_mul = 100;
-		log_file("job/DEBUG",
-		sprintf("%s任务统一奖励设置有误\n",
-		reason)
-		);
 
-	}
-	
-	if (is_vip())
-	{
-		oexp = iexp * gift_mul * VIP_MUL /10000;
-	}
-	else
-	{
-		oexp = iexp * gift_mul /100;
-	}
-	
-	extra_t = end_time - time();
-	if (extra_t > 0 && (site=="sh" || site=="sh2"))
-	{
-	extra_exp = iexp * (15+random(5))/100;
-	add("combat_exp",extra_exp);	
-	write(sprintf(HIY"你额外获得了%s点经验值，此时离新站特殊奖励结束还有%s。\n",chinese_number(extra_exp),CHINESE_D->chinese_time(extra_t)));
-			log_file("nosave/REDEEM",
-				sprintf("%s 获得额外经验：%d reason:%s。\n",query("id"),extra_exp,reason?reason:""));
-	}
+  if (reason) gift_mul = JOB_GIFT_MUL[reason];
+  if (!gift_mul) {
+    gift_mul = 100;
+    log_file("job/DEBUG",
+      sprintf("%s任务统一奖励设置有误\n",
+        reason)
+    );
 
-	/*奖励控制函数*/
-	k = uptime()-query_temp("time");
-	if(reason=="长乐帮" || reason=="武当" || reason=="官府" || reason=="传记" || reason=="丢失的信"||
-		 reason=="颂摩崖" || reason=="七窍玲珑")
-		job_flag = 1;
-		
-	if (!job_flag && k>0 && (query("combat_exp") > 8000000))
-	{
-	l = query("combat_exp") - query_temp("combat_exp");
-	m = l*3600/k;
-	//如果速度,并且是否为机器人
-		
-	  	if (is_robot(0))
-		{
-			if(m<4000) oexp = oexp;
-			else if(m<5000) oexp = oexp * 60/100;
-			else if(m<6000) oexp = oexp * 55/100;
-			else if(m<7000) oexp = oexp * 50/100;
-			else if(m<8000) oexp = oexp * 40/100;
-			else oexp =  oexp * 30/100;	
-		}
-		else
-		{
-			if(m<6000) oexp = oexp;
-			else if(m<7000) oexp = oexp * 85/100;
-			else if(m<8000) oexp = oexp * 75/100;
-			else if(m<9000) oexp = oexp * 65/100;
-			else if(m<10000) oexp = oexp * 55/100;
-			else oexp =  oexp * 50/100;	
-		}
-	}
-	if(query("combat_exp")>50000000){
-		oexp = oexp * 5/100;
-		write("你觉得自己最近心神不宁，对武学的研究已经进入了举步惟艰的程度，似乎就是江湖传说的『"+HIG+"武学障"+NOR+"』。\n");
-	}
-	/*奖励控制函数结束*/
-	//runner reward
-	if(is_robot(0))
-	{
-		oexp = oexp * 80 / 100;
-	}
-	//int reward
-	
-	if(!no_job)
-	{
-		add("job_time/"+reason,1);
-		GIFT_D->check_count(this_object(),giver,reason,gift_flag);
-	}
-	if (query_condition("db_exp")>0)
-	{
-		add("combat_exp", oexp);	
-		write(HBGRN+HIG+"你感觉到精英之技发挥特殊作用，额外的得到了"+chinese_number(oexp)+"点经验值。"NOR"\n");
-	}
+  }
 
-	add("combat_exp", oexp);	
-	return oexp;
+  if (is_vip()) {
+    oexp = iexp * gift_mul * VIP_MUL / 10000;
+  } else {
+    oexp = iexp * gift_mul / 100;
+  }
+
+  extra_t = end_time - time();
+  if (extra_t > 0 && (site == "sh" || site == "sh2")) {
+    extra_exp = iexp * (15 + random(5)) / 100;
+    add("combat_exp", extra_exp);
+    write(sprintf(
+      HIY "你额外获得了%s点经验值，此时离新站特殊奖励结束还有%s。\n",
+      chinese_number(extra_exp),
+      CHINESE_D->chinese_time(extra_t)
+    ));
+    log_file("nosave/REDEEM",
+      sprintf("%s 获得额外经验：%d reason:%s。\n", query("id"), extra_exp, reason ? reason : ""));
+  }
+
+  /*奖励控制函数*/
+  k = uptime() - query_temp("time");
+  if (reason == "长乐帮" || reason == "武当" || reason == "官府" || reason == "传记" || reason == "丢失的信" ||
+    reason == "颂摩崖" || reason == "七窍玲珑")
+    job_flag = 1;
+
+  if (!job_flag && k > 0 && (query("combat_exp") > 8000000)) {
+    l = query("combat_exp") - query_temp("combat_exp");
+    m = l * 3600 / k;
+    //如果速度,并且是否为机器人
+
+    if (is_robot(0)) {
+      if (m < 4000) oexp = oexp;
+      else if (m < 5000) oexp = oexp * 60 / 100;
+      else if (m < 6000) oexp = oexp * 55 / 100;
+      else if (m < 7000) oexp = oexp * 50 / 100;
+      else if (m < 8000) oexp = oexp * 40 / 100;
+      else oexp = oexp * 30 / 100;
+    } else {
+      if (m < 6000) oexp = oexp;
+      else if (m < 7000) oexp = oexp * 85 / 100;
+      else if (m < 8000) oexp = oexp * 75 / 100;
+      else if (m < 9000) oexp = oexp * 65 / 100;
+      else if (m < 10000) oexp = oexp * 55 / 100;
+      else oexp = oexp * 50 / 100;
+    }
+  }
+  if (query("combat_exp") > 50000000) {
+    oexp = oexp * 5 / 100;
+    write("你觉得自己最近心神不宁，对武学的研究已经进入了举步惟艰的程度，似乎就是江湖传说的『" + HIG + "武学障" + NOR + "』。\n");
+  }
+  /*奖励控制函数结束*/
+  //runner reward
+  if (is_robot(0)) {
+    oexp = oexp * 80 / 100;
+  }
+  //int reward
+
+  if (!no_job) {
+    add("job_time/" + reason, 1);
+    GIFT_D->check_count(this_object(), giver, reason, gift_flag);
+  }
+  if (query_condition("db_exp") > 0) {
+    add("combat_exp", oexp);
+    write(HBGRN + HIG + "你感觉到精英之技发挥特殊作用，额外的得到了" + chinese_number(oexp) + "点经验值。" NOR "\n");
+  }
+
+  add("combat_exp", oexp);
+  return oexp;
 }
 /*
 this function get the party's status,and return 3 status
 garrison 
 */
-string party_status()
-{
-	string family;
-	family = query("family/family_name");
-	if (family=="武当派"||family=="古墓派"||family=="少林派"||family=="华山派"||family=="天龙寺"||family=="峨嵋派")
-		return "正派";
-	else if (family=="铁掌帮"||family=="星宿派"||family=="大轮寺"||family=="神龙岛"||family=="嵩山派")	
-		return "邪派";
-	else
-		return "中立派";	
+string party_status() {
+  string family;
+  family = query("family/family_name");
+  if (family == "武当派" || family == "古墓派" || family == "少林派" || family == "华山派" || family == "天龙寺" || family == "峨嵋派")
+    return "正派";
+  else if (family == "铁掌帮" || family == "星宿派" || family == "大轮寺" || family == "神龙岛" || family == "嵩山派")
+    return "邪派";
+  else
+    return "中立派";
 }
