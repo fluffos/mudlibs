@@ -2356,6 +2356,24 @@ directory"` at boot or on first use of the affected daemon. Fix:
 check every such error for its exact path, don't assume `/log` alone is
 enough. (`njhhdxdes2hx`, `qhxajh`, `zjmudhell`.)
 
+Same pattern, different directory: `toptend.lpc`'s leaderboard save can
+target `/topten/<file>` (or `/data/topten/`), both gitignored project-
+wide (`.gitignore` lines for `libs/*/work/topten/` and
+`libs/*/work/data/topten/`) alongside `toptend.o`. Unlike `log/` — which
+usually DOES exist on local disk with real shipped content, just
+untracked by git — `topten/` sometimes never existed in the original
+archive at all (nobody ever triggered a leaderboard save in the
+snapshot that got captured), so there's no local directory for
+`scripts/wasm_client.js`'s shape-copying trick to find and recreate
+either. The harness now special-cases `topten/` the same way it does
+`log/` (so libs where the directory DOES exist locally get it shaped
+into MEMFS automatically), but if `ls work/topten` shows nothing at all
+on local disk, you still need a real `mkdir -p work/topten` — this is a
+genuine first-deployment gap (whoever eventually hosts the lib for real
+would hit the identical crash on the very first player to place on the
+leaderboard), not just a WASM-sandbox quirk, and won't be fixed by a
+git commit since the directory is gitignored either way. (`xbtxiii`.)
+
 ### 7.45 `global include file` config directive references a filename that doesn't exist in this archive's `include/`
 
 `config.fluffos`'s auto-generated `global include file : <globals.h>`

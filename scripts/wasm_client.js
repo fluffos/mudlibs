@@ -78,6 +78,13 @@ function copyDir(Module, src, dst) {
       mkdirsOnly(Module, path.join(src, e.name), dst + '/log');
       continue;
     }
+    // Same treatment for topten/ and data/topten/ (both gitignored
+    // project-wide, per-lib toptend.lpc save data) -- a missing dir here
+    // throws on the first save the same way a missing log/ subdir does.
+    if (e.name === 'topten' && e.isDirectory()) {
+      mkdirsOnly(Module, path.join(src, e.name), dst + '/topten');
+      continue;
+    }
     const s = path.join(src, e.name);
     const d = dst + '/' + e.name;
     if (e.isDirectory()) copyDir(Module, s, d);
