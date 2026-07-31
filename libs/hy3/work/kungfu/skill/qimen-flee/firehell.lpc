@@ -2,104 +2,93 @@
 inherit F_SSERVER;
 
 void remove_effect(object me);
-void fire_wind(object me,int num);
+void fire_wind(object me, int num);
 
-int conjure(object me, object target)
-{
-    int skill,time;
+int conjure(object me, object target) {
+  int skill, time;
 
-    skill = me->query("spells/fire")+me->query("spells/wind");
+  skill = me->query("spells/fire") + me->query("spells/wind");
 
-    if( me->query("spells/fire")<4 || me->query("spells/wind")<4 )
-      return notify_fail(RED"地狱之炎"NOR"需要同时具备四级的"
-             +"风之精灵和火之精灵魔法才能施用！\n");
+  if (me->query("spells/fire") < 4 || me->query("spells/wind") < 4)
+    return notify_fail(RED "地狱之炎" NOR "需要同时具备四级的"
+      + "风之精灵和火之精灵魔法才能施用！\n");
 
-    if( me->query_skill("qimen-flee",1) < 400 )
-      return notify_fail("你的奇门五行法术修为不够！\n");
+  if (me->query_skill("qimen-flee", 1) < 400)
+    return notify_fail("你的奇门五行法术修为不够！\n");
 
-    if( me->query("jingli") < 1000 )
-      return notify_fail("你现在的法力不够使用"RED"地狱之焱"NOR"！\n");
+  if (me->query("jingli") < 1000)
+    return notify_fail("你现在的法力不够使用" RED "地狱之焱" NOR "！\n");
 
-    if( me->query_temp("spells/conjure") )
-      return notify_fail("你刚使用完法术，正在聚集法力！\n");
+  if (me->query_temp("spells/conjure"))
+    return notify_fail("你刚使用完法术，正在聚集法力！\n");
 
-    message_vision(MAG"$N神情肃穆，满脸专注：“万物之精灵啊，请将你的力量借给你"
-    +"忠实的信使吧，\n"+"将邪恶和黑暗扫除，还万物以光明吧！——"NOR+BLINK
-    +RED"地狱之焱"NOR+MAG+"！$N全身开始发出阵阵\n紫红色光芒....\n"NOR,me);
+  message_vision(MAG "$N神情肃穆，满脸专注：“万物之精灵啊，请将你的力量借给你"
+    + "忠实的信使吧，\n" + "将邪恶和黑暗扫除，还万物以光明吧！——" NOR + BLINK
+    +RED "地狱之焱" NOR + MAG + "！$N全身开始发出阵阵\n紫红色光芒....\n" NOR, me);
 
-    me->set_temp("spells/conjure","fire-wind");
-    me->start_busy(5);
+  me->set_temp("spells/conjure", "fire-wind");
+  me->start_busy(5);
 
-    time = 80 / skill;
-    if(time <8 ) time = 8;
-    me->start_call_out((:call_other,__FILE__,"fire_wind",me,skill/2:),time/2);
-    me->start_call_out((:call_other,__FILE__,"remove_effect",me:),time);
-    me->add("jingli",-1000);
-    return 1;
+  time = 80 / skill;
+  if (time < 8) time = 8;
+  me->start_call_out((: call_other, __FILE__, "fire_wind", me, skill / 2 :), time / 2);
+  me->start_call_out((: call_other, __FILE__, "remove_effect", me :), time);
+  me->add("jingli", -1000);
+  return 1;
 }
 
-void remove_effect(object me)
-{
-   if(objectp(me) && me->query_temp("spells/conjure")=="fire-wind")
-   {
+void remove_effect(object me) {
+  if (objectp(me) && me->query_temp("spells/conjure") == "fire-wind") {
     me->delete_temp("spells/conjure");
-    tell_object(me,MAG"你的魔力渐渐恢复了！\n"NOR);
-   }
-   return;
+    tell_object(me, MAG "你的魔力渐渐恢复了！\n" NOR);
+  }
+  return;
 }
 
-void fire_wind(object me,int num)
-{
-    int damage,skill,time,shield,i;
-    object *env;
+void fire_wind(object me, int num) {
+  int damage, skill, time, shield, i;
+  object *env;
 
-    skill = me->query("spells/fire")+me->query("spells/wind");
-    if( num<=0 || !living(me) || environment(me)->query("no_fight"))
-    {
-     remove_call_out("fire_wind");
-     return; 
+  skill = me->query("spells/fire") + me->query("spells/wind");
+  if (num <= 0 || !living(me) || environment(me)->query("no_fight")) {
+    remove_call_out("fire_wind");
+    return;
+  }
+
+  env = all_inventory(environment(me));
+  for (i = 0; i < sizeof(env); i++) {
+    if (!env[i]->is_character()) continue;
+    if (env[i]->query("is_quest") && !me->is_fighting(env[i])) continue;
+    if (userp(env[i]) && env[i]->query("age") < 20) continue;
+
+    damage = me->query_skill("qimen-flee", 1) * skill;
+    damage = damage / 5 + random(damage / 5);
+    shield = env[i]->query_temp("spells/shield");
+
+    if (shield == 0) {
+      tell_object(env[i], HIR "一道热焰扑面而来，你觉得四周酷热无比，"
+        + "周身痛楚万分，\n如陷修罗地狱！\n" NOR);
+      env[i]->receive_damage("qi", damage, me);
+      env[i]->receive_wound("qi", damage / 2, me);
+    } else if (damage > shield) {
+      message_vision(MAG "“忽啦”一声，$N的魔法护盾无力再抵挡承受烈焰，"
+        + "登时被烧得荡然无存！\n" NOR, env[i]);
+      damage = damage - shield;
+      env[i]->receive_damage("qi", damage, me);
+      env[i]->receive_wound("qi", damage / 2, me);
+      env[i]->set_temp("spells/shield", 0);
+    } else {
+      tell_object(env[i], HIC "阵阵烈焰扑面而来，你的魔法护盾立刻发挥作用，"
+        + "将炽热挡在身外！\n" NOR);
+      if (env[i] == me)
+        env[i]->set_temp("spells/shield", shield - damage / 2);
+      else env[i]->set_temp("spells/shield", shield - damage);
     }
-
-    env=all_inventory(environment(me));
-    for(i=0;i<sizeof(env);i++)
-    {
-     if( !env[i]->is_character() ) continue;
-     if( env[i]->query("is_quest") && !me->is_fighting(env[i])) continue;
-     if( userp(env[i]) && env[i]->query("age")<20 ) continue;
-
-     damage = me->query_skill("qimen-flee",1) * skill;
-     damage = damage/5 +random(damage/5);
-     shield = env[i]->query_temp("spells/shield");
-
-     if( shield == 0 )
-     {
-      tell_object(env[i],HIR"一道热焰扑面而来，你觉得四周酷热无比，"
-      +"周身痛楚万分，\n如陷修罗地狱！\n"NOR);
-      env[i]->receive_damage("qi", damage,me);
-      env[i]->receive_wound("qi", damage/2,me);
-     } else
-     if( damage > shield )
-     {
-      message_vision(MAG"“忽啦”一声，$N的魔法护盾无力再抵挡承受烈焰，"
-      +"登时被烧得荡然无存！\n"NOR,env[i]);
-      damage=damage-shield;
-      env[i]->receive_damage("qi", damage,me);
-      env[i]->receive_wound("qi", damage/2,me);
-      env[i]->set_temp("spells/shield",0);
-    } else
-    {
-      tell_object(env[i],HIC"阵阵烈焰扑面而来，你的魔法护盾立刻发挥作用，"
-     +"将炽热挡在身外！\n"NOR);
-      if(env[i]==me)
-      env[i]->set_temp("spells/shield",shield-damage/2);
-      else env[i]->set_temp("spells/shield",shield-damage);
-    }
-   if ( !env[i]->is_killing(me) ) env[i]->kill_ob(me);
-   }
-   num--;
-   time = 80 / skill;
-   if(time < 8) time = 8;
-   call_out("fire_wind",time/2,me,num);
-   return;
+    if (!env[i]->is_killing(me)) env[i]->kill_ob(me);
+  }
+  num--;
+  time = 80 / skill;
+  if (time < 8) time = 8;
+  call_out("fire_wind", time / 2, me, num);
+  return;
 }
-

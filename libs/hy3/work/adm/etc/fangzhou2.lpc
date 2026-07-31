@@ -11,165 +11,151 @@ inherit NPC;
 inherit F_SAVE;
 
 nosave int telnet_socket;
-nosave mapping con_to=([ ]);
+nosave mapping con_to = ([]);
 nosave int in_putting = 0;
 nosave string id;
 
 void close_callback(int s);
 string process_input(string str);
 void read_callback(int s, mixed message);
-void write_callback(int s,string message);
+void write_callback(int s, string message);
 void close_callback(int s);
 void select_connect(string arg);
 void begin();
 
-void create()
-{
-    set_name("方舟", ({ "space" }) );
-    set("gender", "男性" );
-    set("long","。\n");
-        set("title","星际浪子");
-    set("age", 29);
-    set("attitude", "heroism");
-    set("generation", 0);
-    set("no_die",1);
-    set("no_clean_up",1);
-    setup();
+void create() {
+  set_name("方舟", ({ "space" }));
+  set("gender", "男性");
+  set("long", "。\n");
+  set("title", "星际浪子");
+  set("age", 29);
+  set("attitude", "heroism");
+  set("generation", 0);
+  set("no_die", 1);
+  set("no_clean_up", 1);
+  setup();
 
 }
 
-string query_save_file()
-{
-        if( !stringp(id) ) return 0;
-        return sprintf(DATA_DIR "user/%c/%s", id[0], id);
+string query_save_file() {
+  if (!stringp(id)) return 0;
+  return sprintf(DATA_DIR "user/%c/%s", id[0], id);
 }
 
-int new_possess(string arg)
-{
-    string uid;
-    object me=this_player();
-    uid=geteuid(me);
-    if( this_object()->query_temp("possessed") || me->query_temp("possessed") ){
-        write("什么？\n");
-        return 1;
-    }
-    me->save();
-    message_vision("$N化成一道光芒，被$n吸进体内。\n", me, this_object());
-    set_name(me->query("name"),({ uid }) );
-    if (SECURITY_D->get_wiz_level(me)>3){
-    seteuid(uid);
-    id=arg;
-    this_object()->restore();
-    }
-    exec(this_object(), me);
-    destruct(me);
-    this_object()->set_temp("possessed",1);
-    this_object()->enable_player();
-    call_out("begin",1);
+int new_possess(string arg) {
+  string uid;
+  object me = this_player();
+  uid = geteuid(me);
+  if (this_object()->query_temp("possessed") || me->query_temp("possessed")) {
+    write("什么？\n");
     return 1;
+  }
+  me->save();
+  message_vision("$N化成一道光芒，被$n吸进体内。\n", me, this_object());
+  set_name(me->query("name"), ({ uid }));
+  if (SECURITY_D->get_wiz_level(me) > 3) {
+    seteuid(uid);
+    id = arg;
+    this_object()->restore();
+  }
+  exec(this_object(), me);
+  destruct(me);
+  this_object()->set_temp("possessed", 1);
+  this_object()->enable_player();
+  call_out("begin", 1);
+  return 1;
 }
-void init()
-{
-   add_action("new_possess","possess");
+void init() {
+  add_action("new_possess", "possess");
 }
 
-void remove()
-{
+void remove() {
+  close_callback(telnet_socket);
+}
+
+string process_input(string str) {
+  if (!in_putting) return ::process_input(str);
+  if (sscanf(str, ":%s", str) == 1) return ::process_input(str);
+  switch (str) {
+    case "E": str = ESC; break;
+    case "X": str = ""; close_callback(telnet_socket); break;
+  }
+  if (stringp(str)) {
+    if (interactive(this_object())) {
+      if (con_to["language"] != "GB")
+        str = (string)LANGUAGE_D->GB2Big5(str);
+    }
+  }
+  write_callback(telnet_socket, str);
+  return "";
+}
+
+void read_callback(int s, mixed message) {
+  if (con_to["language"] != "GB")
+    message = (string)LANGUAGE_D->Big52GB(message);
+  write(NOR + BOLD + ">>" + NOR + message);
+}
+
+void write_callback(int s, string message) {
+  int error;
+  error = socket_write(telnet_socket, message + "\n");
+  if (error < 0) {
+    write("socket_write: " + socket_error(error) + "\n");
     close_callback(telnet_socket);
+    call_out("begin", 1);
+    return;
+  }
 }
 
-string process_input(string str)
-{
-    if (!in_putting) return ::process_input(str);
-    if (sscanf(str,":%s",str)==1) return ::process_input(str);
-    switch (str){
-    case "E": str=ESC;  break;
-    case "X": str="";   close_callback(telnet_socket);  break;
+void close_callback(int s) {
+  write("第" + s + "条时光隧道已经关闭。\n");
+  socket_close(s);
+  in_putting = 0;
+  call_out("begin", 1);
+}
+void begin() {
+  write("\n\t 请输入ip port language:\n\t例如: 140.113.5.151 7777 Big5\n\t172.23.16.98 5555\n\n\tx . 退出 \n");
+  input_to("select_connect");
+}
+void select_connect(string arg) {
+  int error;
+  string addr, port, language;
+
+  if (!arg) {
+    begin();
+    return;
+  }
+  if (arg == "x") {
+    command("quit");
+    return;
+  }
+  if (sscanf(arg, "%s %s %s", addr, port, language) != 3) {
+    if (sscanf(arg, "%s %s", addr, port) != 2) {
+      begin();
+      return;
     }
-    if( stringp(str) ) {
-         if( interactive(this_object()) ) {
-             if (con_to["language"]!="GB")
-                 str = (string)LANGUAGE_D->GB2Big5(str);
-         }
-     }
-     write_callback(telnet_socket,str);
-         return "";
+    language = "GB";
+  }
+  if (upper_case(language) != "BIG5")
+    language = "GB";
+
+  con_to = ([ "addr": addr + " " + port,
+    "language": language,
+  ]);
+  telnet_socket = socket_create(STREAM, "read_callback", "close_callback");
+  if (telnet_socket < 0) {
+    write("进入时光隧道遇到麻烦: " + socket_error(telnet_socket) + "\n");
+    begin();
+    return;
+  }
+  write("你正奔向第" + telnet_socket + "条时光隧道....\n\nX : 强制关闭时光隧道，：命令: 向地球大本营发命令。\n");
+
+  error = socket_connect(telnet_socket, con_to["addr"], "read_callback", "write_callback");
+  if (error < 0) {
+    write(RED + "一个无形的旋涡: " + socket_error(error) + ",把你扯了回来...\n" + NOR);
+    close_callback(telnet_socket);
+    begin();
+    return;
+  }
+  in_putting = 1;
 }
-
-void read_callback(int s, mixed message)
-{
-     if (con_to["language"]!="GB")
-          message=(string)LANGUAGE_D->Big52GB(message);
-     write(NOR+BOLD+">>"+NOR+message);
-}
-
-void write_callback(int s,string message)
-{
-    int error;
-    error = socket_write(telnet_socket, message+"\n");
-    if (error < 0) {
-        write("socket_write: " + socket_error(error) + "\n");
-        close_callback(telnet_socket);
-        call_out("begin",1);
-        return;
-    }
-}
-
-void close_callback(int s)
-{
-    write("第" + s + "条时光隧道已经关闭。\n");
-    socket_close(s);
-    in_putting=0;
-    call_out("begin",1);
-}
-void begin()
-{
-    write("\n\t 请输入ip port language:\n\t例如: 140.113.5.151 7777 Big5\n\t172.23.16.98 5555\n\n\tx . 退出 \n");
-    input_to("select_connect");
-}
-void select_connect(string arg)
-{
-    int error;
-    string addr,port,language;
-    
-    if (!arg ){
-       begin();
-       return;
-    }
-    if (arg=="x"){
-            command("quit");
-            return;
-       }
-    if (sscanf(arg,"%s %s %s",addr,port,language)!=3){
-        if (sscanf(arg,"%s %s",addr,port)!=2){
-            begin();
-            return;
-        }
-        language="GB";
-    }
-    if (upper_case(language)!="BIG5") 
-        language="GB";
-
-    con_to=([ "addr"    :   addr+" "+port,
-              "language":   language,
-    ]);
-    telnet_socket = socket_create(STREAM, "read_callback", "close_callback");
-    if (telnet_socket < 0) {
-       write("进入时光隧道遇到麻烦: " + socket_error(telnet_socket) + "\n");
-       begin();
-       return;
-    }
-    write("你正奔向第" + telnet_socket + "条时光隧道....\n\nX : 强制关闭时光隧道，：命令: 向地球大本营发命令。\n");
-
-    error = socket_connect(telnet_socket, con_to["addr"], "read_callback", "write_callback");
-    if (error < 0 ) {
-        write(RED+"一个无形的旋涡: " + socket_error(error) + ",把你扯了回来...\n"+NOR);
-        close_callback(telnet_socket);
-        begin();
-        return;
-    }
-    in_putting=1;    
-}
-
-
-
