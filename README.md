@@ -313,18 +313,41 @@ classes it's found.
 | 137 | `zjdywzb` | 终极地狱完整版 | `终极地狱完整版.rar` | 40109 | native-boot verified, WASM pending |
 | 138 | `zxty` | 再现天涯 | `再现天涯.rar` | 40166 | native-boot verified, WASM pending |
 | 139 | `zzfy3` | 郑州风云3 | `郑州风云3.rar` | 40120 | native-boot verified, WASM pending |
+| 140 | `hellxg` | hell（修改版） | `hell - 修改.7z` | 40181 | noboot |
 | 901 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | — | deprioritized |
 | 901-1 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | — | deprioritized |
 | 901-2 | `dw_fluffos_v3` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | — | deprioritized |
 | 902 | `tomud_vc` | TOMud VC++ 客户端源码 | `TOMud_VC源代码.rar` | — | not-mudlib |
 | 903 | `sanguowaizhuan` | 三国歪传 (Diku/Merc) | `三国歪传.rar` | — | not-mudlib |
+| 903-1 | `sgwcxz` | 三国歪传 (下载版) | `三国歪传下载.rar` | — | not-mudlib |
 | 904 | `atlantis` | 消失的亞特蘭提斯MUD破解版 | `消失的亞特蘭提斯MUD破解版 (2).zip` | — | pending |
 | 905 | `chongchujianghu` | 重出江湖 (C++ engine) | `重出江湖.rar` | — | not-mudlib |
 | 905-1 | `chongchujianghu_win` | 重出江湖 WIN完全版 | `重出江湖WIN完全版.rar` | — | not-mudlib |
 | 905-2 | `chongchujianghu_linux_src` | 重出江湖 Linux 源码 v2.71 | `重出江湖完整源码linunx_2.71原版.rar` | — | not-mudlib |
+| 905-3 | `zcjh` | 重出江湖 | `重出江湖.rar` | — | not-mudlib |
+| 905-4 | `zcjh271yb` | 重出江湖 2.71原版 | `重出江湖_2.71原版.rar` | — | not-mudlib |
 | 906 | `mofaleidemuba` | 魔法类的泥巴 (EmberMUD) | `魔法类的泥巴.rar` | — | not-mudlib |
 | 907 | `tianlongbabu` | 天龙八部 (incomplete archive) | `天龙八部.tgz` | — | not-convertible |
 | 908 | `xianwukungfu` | 仙武kungfu (content module, not a mudlib) | `仙武kungfu.rar` | — | not-mudlib |
+| 909 | `fsxy13` | 浮世侠影1.3 | `浮世侠影1.3.rar` | — | not-mudlib |
+| 910 | `glhj` | 攻略合集 | `攻略合集.rar` | — | not-mudlib |
+| 911 | `jyqs` | 金庸全索 | `金庸全索.rar` | — | not-mudlib |
+| 912 | `kxkjii` | 狂想空間II (WWW版, PHP) | `狂想空間Ⅱ(www版).tgz` | — | not-mudlib |
+| 913 | `lordstar40` | LordStar 4.0 | `LordStar4.0.7z` | — | not-mudlib |
+| 914 | `mhjh10203` | 梦回江湖 1.02.03 | `梦回江湖1.02.03.rar` | — | not-mudlib |
+| 915 | `sgqycoljc` | 三国群英传OL私服架设教程 | `三国群英传OL教程.rar` | — | not-mudlib |
+| 916 | `szkf` | 神州开发 | `神州开发.rar` | — | not-mudlib |
+| 917 | `wintin` | WinTin++ | `WinTin++.7z` | — | not-mudlib |
+| 918 | `wlfymudsqyx` | 网路风云MUD社区游戏 | `网路风云MUD社区游戏.rar` | — | not-mudlib |
+| 919 | `xjmhmudyx` | 星际迷航MUD游戏 | `星际迷航MUD游戏.rar` | — | not-mudlib |
+| 920 | `xky2` | 侠客游2 | `侠客游2.rar` | — | not-mudlib |
+| 921 | `xyj` | 西游记(三国群英传2mod) | `西游记(三国群英传2mod).rar` | — | not-mudlib |
+| 922 | `xyjjqzl` | 西游记机器资料 | `西游记机器资料.rar` | — | not-mudlib |
+| 923 | `yhwhckdm` | 炎黄武魂参考代码 | `炎黄武魂参考代码（d,kungfu,clone）.rar` | — | not-convertible |
+| 924 | `yy` | 异域 | `异域.rar` | — | not-mudlib |
+| 925 | `zjhd` | 指尖后端 | `指尖后端.7z` | — | not-mudlib |
+| 926 | `zjwygjb` | 指尖网页改进版 | `指尖网页改进版（需要v2019驱动）.rar` | — | not-mudlib |
+| 927 | `zxmudkhd` | 最新mud客户端 | `最新mud客户端.rar` | — | not-mudlib |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout
