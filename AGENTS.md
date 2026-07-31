@@ -2336,6 +2336,68 @@ binary just for LIMA libs. Out of scope for now — file as `noboot` with
 the specific flag list from the error message (useful if this is ever
 revisited). (`sgzmudsgz`, 三国志MUD.)
 
+### 7.47 `origin()` returns a STRING on this driver, not the old int bitmask
+
+Old-MudOS code compares `origin()` against `ORIGIN_LOCAL`/`ORIGIN_CALL_OUT`/
+etc (int bitmask constants from `origin.h`, e.g. `0x2`, `0x10`). This
+driver's `origin()` returns the STRING name instead (`f_origin()` calls
+`push_constant_string(origin_name(caller_type))` in
+`src/packages/core/efuns_main.cc`) — the comparison is `always false
+because of incompatible types (string vs int)`, a compile error, not a
+runtime surprise. Mapping (`origin_name()`'s table, index by
+`ffs(orig)-1`): `0x1`→`"driver"`, `0x2`→`"local"`, `0x4`→`"call_other"`,
+`0x8`→`"simul"`, `0x10`→`"internal"` (yes, `ORIGIN_CALL_OUT` maps to the
+string `"internal"`, not `"call_out"`), `0x20`→`"efun"`,
+`0x40`→`"function pointer"`, `0x80`→`"functional"`. Fix: replace
+`origin()==ORIGIN_X` with `origin()=="<string>"` per this table; grep
+`origin()\s*==\s*ORIGIN_` across the whole lib, not just the file that
+happened to fail first. (`njhhdxdes2hx`'s `feature/team.lpc`.)
+
+### 7.48 `private` function/variable declared in one file, called from a program that inherits it — illegal on this driver
+
+Old-MudOS's `private` was effectively today's `protected` (blocks
+external `->` calls, but still reachable through the inheritance
+chain). This driver enforces `private` strictly: a function/variable is
+only visible within the SAME file it's declared in, full stop — calling
+it from ANY inheriting program (even one that legitimately inherits the
+declaring file) is `Illegal to call inherited private function 'X'`, a
+compile error on the INHERITING file, not the declaring one. Common
+shape: a `feature/dbase.lpc`-style file `inherit`s a treemap/storage
+helper (`F_TREEMAP`) and calls its `_query`/`_set`/`_delete` directly;
+or a `std/char.lpc` composed from a dozen `feature/*.lpc` files calls a
+sibling feature's helper (`continue_action()`, `attack()`) that's meant
+to be feature-internal-but-inheritable. Fix: change `private` to
+`protected` on the specific declaration the error names — safe to do
+blanket across a lib's `feature/`-style helper files, since `protected`
+is strictly less restrictive than a working `private` and can't
+introduce a NEW bug, only fix an existing illegal-call error. Leave
+alone anything not actually erroring (e.g. `command_hook()` declared
+`private nomask` is often a deliberate anti-override security measure,
+§8.3's checklist item — don't loosen it preemptively).
+(`njhhdxdes2hx`'s `feature/treemap.lpc`, `feature/action.lpc`,
+`feature/attack.lpc`.)
+
+### 7.49 A `valid_write()` save-file allowlist check forgets the driver appends the save extension
+
+A common security-daemon idiom lets a player save their OWN file by
+comparing the literal `file` argument `save_object()`'s security
+callback receives against `object->query_save_file()`'s return value —
+but `query_save_file()` conventionally returns the BARE path (no
+extension; callers append `__SAVE_EXTENSION__` themselves before
+calling `assure_file()`), while the driver's own `save_object()` efun
+passes the FULL final filename, extension included, to `valid_write()`.
+The two never match, `save_object()` denies write access, and `quit`
+(or anything triggering a save) throws `*Denied write permission in
+save_object()` — reachable only once a REAL save actually fires, so it
+survives a "boots clean, look/score work" check and only shows up when
+you actually run `quit` to completion (§7.16's cousin: verify the FULL
+flow, not just the parts before the bug). Fix: compare against `file ==
+qsf || file == qsf + ".o"` (or whatever `__SAVE_EXTENSION__` is) instead
+of a bare equality. Diagnosed by temporarily logging both sides of the
+comparison in `valid_write()` — faster than guessing when the mismatch
+isn't obvious from reading the two functions in isolation.
+(`njhhdxdes2hx`'s `securityd.lpc`.)
+
 ---
 
 ## 8. Login and registration flow bugs

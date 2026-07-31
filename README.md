@@ -325,8 +325,8 @@ classes it's found.
 | 141 | `wxddym` | 武学大道 | `武学大道源码.7z` | 40189 | native-boot verified, WASM pending |
 | 142 | `nt6` | 泥潭6 | `泥潭6.zip` | 40186 | native-boot verified, WASM pending |
 | 142-1 | `nt6nitan6win` | 泥潭6 (win_nodb版) | `泥潭6nitan6-win_nodb.rar` | 40187 | native-boot verified, WASM pending |
-| 143 | `yszz` | 妖神之争 | `妖神之争.rar` | 40192 | native-boot verified, WASM pending |
-| 144 | `njhhdxdes2hx` | es2/侠客行（南京河海大学校内版1.01） | `南京河海大学的es2和xkx《校内_1.01版》.tar.gz` | 40194 | native-boot verified, WASM pending |
+| 143 | `yszz` | 妖神之争 | `妖神之争.rar` | 40192 | WASM playable |
+| 144 | `njhhdxdes2hx` | es2/侠客行（南京河海大学校内版1.01） | `南京河海大学的es2和xkx《校内_1.01版》.tar.gz` | 40194 | WASM playable |
 | 145 | `sgzmudsgz` | 三国志MUD (sgz) | `三国志MUDsgz.tar.gz` | 40196 | noboot |
 | 146 | `hy` | 海洋（基础版） | `海洋（由千堆雪上传）.rar` | 40182 | native-boot verified, WASM pending |
 | 146-1 | `hy5` | 海洋5 | `海洋5.7z` | 40183 | native-boot verified, WASM pending |
