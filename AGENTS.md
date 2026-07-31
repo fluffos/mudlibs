@@ -2468,9 +2468,9 @@ every OTHER call site in the same lib correctly passes
 (string vs object)`, blocking the whole `clone/user/user` compile (and
 therefore character creation, since `make_body()` needs it). Fix:
 `is_killing(ob)` → `is_killing(ob->query("id"))`, matching the other
-call sites in the same file. Seen independently in two unrelated
-lineages (`nt1`, `wxddym`), so check for it on sight in any new lib
-rather than waiting to hit the compile error.
+call sites in the same file. Seen independently in three unrelated
+lineages (`nt1`, `wxddym`, `zjmudhell`), so check for it on sight in any
+new lib rather than waiting to hit the compile error.
 
 ### 7.51 NTOS-specific driver extensions with no FluffOS equivalent: `query_heartbeat_interval()`/`set_heartbeat_interval()`
 
