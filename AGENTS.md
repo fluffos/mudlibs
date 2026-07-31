@@ -562,6 +562,28 @@ if `raw/` ends up empty. Known traps:
   back to `-f BIG5` when GB18030 errors (`chongshengdeshijie` is fully
   BIG5/CP950). Some files are already UTF-8 (mixed-era edits) — detect
   with a UTF-8 round-trip before converting.
+- **The "fall back to BIG5 when GB18030 errors" rule doesn't actually
+  fire for a WHOLE archive that's pure BIG5** — GB18030 is such a broad
+  superset that it essentially never hard-errors on real BIG5 bytes; it
+  just silently produces valid-looking-but-wrong UTF-8 (mojibake landing
+  in odd Unicode ranges, notably Bopomofo phonetic symbols U+3105–312F,
+  since GBK/BIG5 double-byte sequences decode differently). `convert_lib.sh`
+  logs zero errors and zero lossy conversions in this case — it looks
+  like a clean run. Caught on `dfgsiiv13b` (a Taiwan ES2-lineage archive)
+  only because the login banner and a compile warning
+  (`Unknown escape sequence`) both showed obvious garbage after boot —
+  a lib that never gets far enough to print user-facing text could sail
+  through undetected. Detect proactively: pick 2-3 raw source files,
+  trial-decode with `python3 -c "open(f,'rb').read().decode('X')"` across
+  `big5`/`gbk`/`gb18030`/`cp950`, and eyeball which one produces
+  grammatical Chinese (both GBK and BIG5 decode without raising on most
+  real text, so "didn't error" proves nothing — only reading the result
+  does). Fix: re-run the WHOLE `convert_lib.sh` pass with BIG5 substituted
+  for GB18030 (`sed 's/GB18030/BIG5/g'` on a throwaway copy of the
+  script) rather than patching individual files — check git history for
+  any native-pass fixes already committed to the mis-decoded `work/`
+  first, since regenerating it from `raw/` wipes them and they need
+  reapplying afterward.
 - **Convert EVERY text file, not just source**: extensionless banners
   (`adm/etc/welcome`, `motd`), help text, and plain-text `.o` save data
   are all GBK. Never iconv real binaries (`.exe`, compiled `.o`, images).
@@ -731,8 +753,10 @@ silently get no `debug.log` at all.
 A `MUD_PORT`/`PORTNO` constant in `globals.h` used by `master.lpc`'s
 `connect(port)` dispatch silently rejects EVERY connection when it
 doesn't match the assigned port — clean boot log, dead server
-(`huoying`, hardcoded 8000). Grep for hardcoded port constants during
-the standard pass. Related but distinct: a hardcoded `TOMUD_PORT`-style
+(`huoying`, hardcoded 8000; `dfgsiiv13b`, hardcoded 4000, an ES2-lineage
+default — driver log shows `Can not accept connection ... due to error
+in connect()`). Grep for hardcoded port constants during the standard
+pass. Related but distinct: a hardcoded `TOMUD_PORT`-style
 constant that only sets a cosmetic flag is harmless (`bixiecanyang`) —
 read what the constant actually gates before "fixing" it.
 
@@ -969,7 +993,10 @@ int valid_read(string file, mixed user, string func) {
 ```
 
 Grep `load_object` inside master before first boot. (Widespread; first
-on `shanhaizhanshen`.)
+on `shanhaizhanshen`; also `dfgsiiv13b`, whose variant used
+`catch(load_object(SECURITY_D))` directly in `valid_read`/`valid_write`
+with no guard at all — same fix applies regardless of the exact
+`load_object`/`find_object` shape.)
 
 ### 7.2 Missing `get_root_uid()`/`get_bb_uid()` applies
 
@@ -2764,6 +2791,23 @@ silently wrong — no error, just always-false / wrong-width:
   // AFTER:
   if (str[i] < 0x4e00 || str[i] > 0x9fff) return 0;   // CJK Unified
   ```
+
+- A length-gate variant of the same bug: `is_chinese(str) { if
+  (strlen(str) >= 2 && str[0] > 160) return 1; return 0; }` — the
+  `strlen(str) >= 2` was meant to require "a full 2-byte GBK pair", but
+  under this driver's character-counted `strlen()` it instead rejects
+  every single-character string outright, and callers that slice a name
+  into variable-length tail substrings (checking `name[i..<0]`-style
+  "from i to the end") end up calling `is_chinese()` on a 1-character
+  slice at the LAST character position — silently rejecting any name
+  whose length makes that final slice length 1, e.g. an odd total
+  character count. Symptom: some Chinese names of a given length are
+  accepted and others of a different length aren't, with no pattern
+  obvious from a single test name (§8.1's own "test with a real Chinese
+  name" rule can pass by luck if the one name tried happens to have a
+  length that survives). Fix: drop the length requirement, check only
+  the codepoint range of the first character: `return str[0] >= 0x4e00
+  && str[0] <= 0x9fff;` (guard `!strlen(str)` first). (`dfgsiiv13b`.)
 
 - `strlen(name) < 4` meaning "at least 2 hanzi" — halve every
   byte-calibrated bound (the Chinese error message almost always states
