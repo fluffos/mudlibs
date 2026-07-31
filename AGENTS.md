@@ -2693,6 +2693,52 @@ path that calls `destruct()` on a fresh object) throws this exact
 SAME path — don't stop at "the macro exists and looks right." Fix:
 point the macro at the file `config.fluffos` actually loads. (`xkxlb`.)
 
+### 7.59 A custom `valid_read()` unconditionally substitutes `this_player()` for the driver's `user` argument, denying code compiles while a low-privilege player is connected
+
+The driver calls `master->valid_read(file, user, func)` for more than
+just player-triggered file reads — critically, for `func ==
+"load_object"` (compiling the main file of an object) and `func ==
+"include"` (resolving a `#include`), the `user` argument the driver
+passes is `master_ob` itself (root), not whoever happens to be
+connected. Some hand-written `securityd.lpc` implementations open with
+`if (this_player()) user = this_player();` before doing anything else —
+a defensive-looking line meant to make ACL checks reflect "the player
+this read is really on behalf of." Applied unconditionally, it also
+clobbers the `load_object`/`include` case: the correctly-root `user`
+gets replaced with the low-privilege object connected at that moment,
+and every subsequent ACL check (e.g. a directory-level `exclude_read`
+list that denies `(player)` status from `/clone` or similar) now runs
+against a player, denying the compile outright. Since compiling a
+player's own body class (`new(USER_OB)`) and its `#include`s happens
+during registration — precisely when the connection is a fresh,
+unprivileged player — this silently breaks registration for EVERY new
+account, not just under WASM. Symptom: `*Read access denied.` (or
+`*Object cannot be loaded during compilation.`) thrown synchronously
+from a `new(...)` or `#include` line, with the error trace's "对象"
+(command_giver/this_player()) showing the connecting object, not a
+privileged daemon. Detection: trace which `func` value the failing
+`valid_read()` call received (add temporary logging, or reason from the
+driver source: `check_valid_path(..., master_ob, "load_object", 0)` in
+`vm/internal/simulate.cc`, `check_valid_path(..., master_ob, "include",
+0)` in `compiler/internal/lexer_utils.cc`) — if it's `"load_object"` or
+`"include"` and `user` was overridden anyway, this is it. Fix: exclude
+those two funcs from the override —
+
+```lpc
+// BEFORE:
+if (this_player())
+    user = this_player();
+// AFTER:
+if (this_player() && func != "load_object" && func != "include")
+    user = this_player();
+```
+
+Do not chase this by adding narrow per-file `trusted_read` exemptions
+(tried first, insufficient — a compile touches its own file AND every
+`#include`, each a separate `valid_read()` call with a different `file`
+argument; only the func-based fix covers all of them at once).
+(`shujian3`.)
+
 ---
 
 ## 8. Login and registration flow bugs
@@ -2844,7 +2890,10 @@ directory listings with `sscanf(f + "$", "%s.c$", f)` — matches nothing
 after the `.lpc` rename, table stays empty forever, invisible to every
 standard `.c`-reference fixer (it's a live runtime pattern, not a
 string-literal path). Fix the pattern to `"%s.lpc$"`. Grep all daemons:
-`grep -rn 'sscanf.*\.c[$"]' adm/ secure/`.
+`grep -rn 'sscanf.*\.c[$"]' adm/ secure/`. Confirmed again on
+`shujian3` (XKX/ES2-derived `commandd.lpc`) — every player command
+(`look`/`score`/`quit`/anything) silently fell through to the driver's
+default "什么？" fail message until fixed.
 
 ### 8.4 Test `score`, not just `look`
 
