@@ -2660,6 +2660,39 @@ verifying the CR/LF counts are unchanged except for your intended
 insertion. (`hy`'s `adm/daemons/securd.o`, seeding the `fluffos` admin
 account into its saved `wiz_status` mapping.)
 
+### 7.58 A stale `SIMUL_EFUN_OB` (or similar "obviously canonical" path macro) silently breaks EVERY `destruct()`, most visibly as `quit` failing for every new player
+
+§7.56's "two files, wrong macro" trap isn't limited to security daemons
+— it can hit `SIMUL_EFUN_OB` itself. A lib can ship an unused, stale
+`adm/single/simul_efun.lpc` (a dead-code leftover from an earlier
+directory reorg) alongside the real, actively-loaded
+`adm/obj/simul_efun.lpc` (confirm which is real via
+`config.fluffos`'s `simulated efun file :` line, not by guessing from
+the macro name) — with `include/globals.h`'s `#define SIMUL_EFUN_OB`
+still pointing at the stale path. Since `SIMUL_EFUN_OB` is a
+foundational-feeling macro (the kind you'd assume is always correct
+without checking), this is easy to miss entirely. Symptom: any
+`remove(string euid)` hook that gate-checks `base_name(previous_object())
+== SIMUL_EFUN_OB` (the standard idiom for "only the driver's own
+`destruct()` may call this") starts rejecting EVERY legitimate call,
+because the real simul_efun override's `destruct()` calls
+`ob->remove(...)` from the REAL file's path, which no longer matches
+the stale macro. This throws a caught-but-real runtime error
+(`*move: remove() can only be called by destruct() simul efun.`) on
+every `destruct()` of an object with that hook — concretely, this
+breaks `quit` for essentially every new player, since a fresh
+character's auto-drop-inventory logic destructs any worthless dropped
+starting item. The failure mode is deceptive: the connection prints
+the caught error and appears to disconnect, but the character object
+is never actually destructed — the player is still logged in and the
+world-side session never really closes, even though the client sees
+what looks like a normal disconnect. Detection: `quit` (or any other
+path that calls `destruct()` on a fresh object) throws this exact
+`remove()` permission error; grep `SIMUL_EFUN_OB`'s definition against
+`config.fluffos`'s `simulated efun file` line and confirm they name the
+SAME path — don't stop at "the macro exists and looks right." Fix:
+point the macro at the file `config.fluffos` actually loads. (`xkxlb`.)
+
 ---
 
 ## 8. Login and registration flow bugs
