@@ -2,7 +2,7 @@
 #ifndef _NPC_SETUP_H_
 #define _NPC_SETUP_H_
 
-static mixed lastnamelist=({
+nosave mixed lastnamelist=({
 ({"赵", "zhao"}), ({"钱", "qian"}),  ({"孙", "sun"}),   ({"李", "li"}),
 ({"周", "zhou"}), ({"吴", "wu"}),    ({"诸", "chu"}), ({"卫", "wei"}),
 ({"冯", "feng"}), ({"陈", "chen"}),  ({"卫", "wei"}),   ({"高", "gao"}),
@@ -17,7 +17,7 @@ static mixed lastnamelist=({
 ({"田", "tian"}),  ({"上官", "shangguan"}), ({"诸葛", "zhuge"}),   ({"秦", "qin"}),
 });
 
-static mixed firstnamelist=({
+nosave mixed firstnamelist=({
 ({"金鳌", "jinao"}),   ({"吼", "hou"}), ({"克", "ke"}),
 ({"国梁", "guoliang"}), ({"光杰", "guangjie"}), ({"领军", "lingjun"}),
 ({"玄", "xuan"}),    ({"望海", "wanghai"}),  ({"千灵", "qianling"}),

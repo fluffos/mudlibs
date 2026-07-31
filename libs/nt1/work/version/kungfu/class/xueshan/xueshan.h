@@ -3,22 +3,22 @@
 
 int permit_recruit(object ob)
 {
-        if (ob->query("detach/Ñ©É½ËÂ") || ob->query("betrayer/Ñ©É½ËÂ"))
+        if (ob->query("detach/é›ªå±±å¯º") || ob->query("betrayer/é›ªå±±å¯º"))
         {
-                command("say ÄãÀë¿ªÁËÑ©É½ËÂÃÇ£¬Ñ©É½ËÂÒÑ¾­²»ÈÏÄãÁË£¡");
+                command("say ä½ ç¦»å¼€äº†é›ªå±±å¯ºä»¬ï¼Œé›ªå±±å¯ºå·²ç»ä¸è®¤ä½ äº†ï¼");
                 return 0;
         }
 
         if (ob->query("betrayer/times"))
         {
-                command("say ÎÒÃÇÑ©É½ËÂ×îºŞÅĞÊ¦Ö®Í½£¬Äã»¹²»¿ì¹ö£¿");
+                command("say æˆ‘ä»¬é›ªå±±å¯ºæœ€æ¨åˆ¤å¸ˆä¹‹å¾’ï¼Œä½ è¿˜ä¸å¿«æ»šï¼Ÿ");
                 return 0;
         }
 
         if (ob->query("family/family_name") &&
-            ob->query("family/family_name") != "Ñ©É½ËÂ")
+            ob->query("family/family_name") != "é›ªå±±å¯º")
         {
-                command("say ÄãÓĞÊ¦¸µÖ¸µã£¬µ±Ñ­Ğò½¥½ø£¬Ôõ¿ÉÃ³È»ÅĞÊ¦£¿");
+                command("say ä½ æœ‰å¸ˆå‚…æŒ‡ç‚¹ï¼Œå½“å¾ªåºæ¸è¿›ï¼Œæ€å¯è´¸ç„¶åˆ¤å¸ˆï¼Ÿ");
                 return 0;
         }
 

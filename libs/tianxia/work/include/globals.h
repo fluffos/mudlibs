@@ -5,7 +5,6 @@
 // for v22.1.b22 driver.
 #ifdef __SENSIBLE_MODIFIERS__
 #define private protected
-#define nosave nosave
 #endif
 
 // This is for encode.If you undef this lable,

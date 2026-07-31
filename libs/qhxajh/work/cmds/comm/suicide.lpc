@@ -1,0 +1,130 @@
+// suicide.c
+
+#include <ansi.h>
+#include <command.h>
+
+inherit F_CLEAN_UP;
+
+int laosi(object);
+
+int main(object me, string arg)
+{
+	if ( me->is_busy() )
+		return notify_fail("你上一个动作还没完成，不能自杀。\n");
+
+	if ( !arg )
+	{
+		write("You commit suicide.\n");
+		return 1;
+	}
+    if ( arg == "-p" ) 
+    {
+        laosi( me );
+        return 1;
+	}
+    if ( arg != "-f" ) 
+		return notify_fail("自杀有两种，您是要永远死掉还是重新投胎？\n");
+
+	write(
+		"如果您选择永远死掉的自杀方式，这个人物的资料就永远删除了，请务必\n"
+		"考虑清楚，确定的话请输入您的密码：");
+	input_to("check_password", 1, me, 1);
+	return 1;
+}
+
+private void check_password(string passwd, object me, int forever)
+{
+	object link_ob;
+	string old_pass;
+
+	link_ob = me->query_temp("link_ob");
+	old_pass = link_ob->query("password");
+	if( crypt(passwd, old_pass)!=old_pass ) {
+		write("密码错误！\n");
+		return;
+	}
+
+	if (forever) 
+	{   
+        if( !link_ob ) return 0;
+	    log_file("nosave/SUICIDE",
+            sprintf( "%s commits a suicide on %s\n", geteuid(me), ctime(time())) );
+        seteuid(getuid());
+        rm( link_ob->query_save_file() + __SAVE_EXTENSION__ );
+        rm( me->query_save_file() + __SAVE_EXTENSION__ );
+        rm( LOG_DIR + me->query_log_file() );
+        write("好吧，永别了:)。\n");
+        tell_room(environment(me), me->name() +
+            "自杀了，以後你再也看不到这个人了。\n", ({me}));
+        UNIQUE_D->check_unique_for_delete(me);
+        FAMILY_D->clear_all_family_relation( me->query("id") );
+        MARRY_D->divorce( me );
+        destruct(me);
+	}
+}
+
+int laosi( object me )
+{
+    object link_ob;
+    string file, title, end;
+
+    title = @TEXT
+◎ 笑傲江湖记录系统 ◎
+=============================================================
+TEXT
+;
+    end = @TEXT
+=============================================================
+
+                                            ＸＯ  ＴＥＡＭ
+
+TEXT
+;
+
+
+    file = LOG_D->query_log_file( me->query("id") );
+    log_file( "nosave/DIE_PLAYER",
+        sprintf( "%s(%s)永远的离开的笑傲江湖，终年%s岁。\n", me->name(), geteuid( me ), chinese_number( me->query( "age" ) ) ) );
+    seteuid( getuid() );
+    link_ob = me->query_temp("link_ob");
+    me->delete( "last_read_log" );
+    write( sprintf( "你经过%s年的闯荡江湖，这是你这些年的经历。\n" , chinese_number( me->query( "age" ) - 13 ) ) );
+    write( title + read_file( file ) + end );    
+    write( "你的江湖历程在此刻终于结束了。\n" );
+    tell_room( environment( me ), me->name() +
+        "永远的离开笑傲江湖，以後你只能听到这个人的一些过去的传奇了。\n", ({ me }));
+    call_out( "dest", 1 , me );
+    return 1;
+}
+
+void dest( object me )
+{
+    object link_ob = me->query_temp( "link_ob" );
+
+    rm( LOG_D->query_log_file( me->query( "id" ) ) );
+    rm( link_ob->query_save_file() + __SAVE_EXTENSION__ );
+    rm( me->query_save_file() + __SAVE_EXTENSION__ );
+    UNIQUE_D->check_unique_for_delete( me );
+    FAMILY_D->clear_all_family_relation( me->query("id") );
+    destruct(me);
+    return;
+}
+
+int help (object me)
+{
+    write(@HELP
+指令格式: suicide [-f]
+ 
+如果因为某种原因你不想活了, 你可以选择自杀.
+自杀分两种:
+ 
+suicide    : 重新投胎
+suicide -f : 永远的除去玩家资料, 系统会要求你
+             输入密码以确认身份.
+ 
+请慎重选择 :)
+ps.重新投胎没有任何作用。。:)
+HELP
+);
+        return 1;
+}

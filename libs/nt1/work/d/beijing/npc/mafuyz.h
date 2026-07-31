@@ -4,60 +4,60 @@ int do_rideyz()
 	object ob = this_player();
 	int i;
 	string *bj_yz = ({
-                HIC"ÄñÊĞ"NOR,
-                HIC"Î÷µ¥"NOR,
-                HIC"Î÷µ¥"NOR,
-                HIC"Î÷³¤°²½Ö"NOR,
-                HIC"Î÷³¤°²¹ã³¡"NOR,
-                HIC"Ìì°²ÃÅ¹ã³¡"NOR,
-                HIC"³¤°²½Ö¹ã³¡"NOR,
-                HIC"·²±İÇÅ"NOR,
-                HIC"ÌìÌ³±±ÃÅ"NOR,
-                HIC"ÌìÌ³"NOR,
-                HIC"´óµÀ"NOR,
-                HIC"ÓÀ¶¨ÃÅ"NOR,
-                HIC"´óæäµÀ"NOR,
-                HIC"´óæäµÀ"NOR,
-                HIC"´óæäµÀ"NOR,
-                HIC"´óæäµÀ"NOR,
-                HIC"´óæäµÀ"NOR,
-                HIC"´óæäµÀ"NOR,
-                HIC"Ğ¡µÀ"NOR,
-                HIC"ÈêÖİ³Ç"NOR,
-                HIC"´óæäµÀ"NOR,
-                HIC"ÄÏÑô³Ç"NOR,
-                HIC"ººË®±±°¶"NOR,
-                HIC"ººË®ÄÏ°¶"NOR,
-                HIC"´óæäµÀ"NOR,
-                HIC"´óæäµÀ"NOR,
-                HIC"±±ÃÅ"NOR,
-                HIC"±±´ó½Ö"NOR,
-                HIC"±±´ó½Ö"NOR,
-                HIC"¿Íµê"NOR,
+                HIC"é¸Ÿå¸‚"NOR,
+                HIC"è¥¿å•"NOR,
+                HIC"è¥¿å•"NOR,
+                HIC"è¥¿é•¿å®‰è¡—"NOR,
+                HIC"è¥¿é•¿å®‰å¹¿åœº"NOR,
+                HIC"å¤©å®‰é—¨å¹¿åœº"NOR,
+                HIC"é•¿å®‰è¡—å¹¿åœº"NOR,
+                HIC"å‡¡é™›æ¡¥"NOR,
+                HIC"å¤©å›åŒ—é—¨"NOR,
+                HIC"å¤©å›"NOR,
+                HIC"å¤§é“"NOR,
+                HIC"æ°¸å®šé—¨"NOR,
+                HIC"å¤§é©¿é“"NOR,
+                HIC"å¤§é©¿é“"NOR,
+                HIC"å¤§é©¿é“"NOR,
+                HIC"å¤§é©¿é“"NOR,
+                HIC"å¤§é©¿é“"NOR,
+                HIC"å¤§é©¿é“"NOR,
+                HIC"å°é“"NOR,
+                HIC"æ±å·åŸ"NOR,
+                HIC"å¤§é©¿é“"NOR,
+                HIC"å—é˜³åŸ"NOR,
+                HIC"æ±‰æ°´åŒ—å²¸"NOR,
+                HIC"æ±‰æ°´å—å²¸"NOR,
+                HIC"å¤§é©¿é“"NOR,
+                HIC"å¤§é©¿é“"NOR,
+                HIC"åŒ—é—¨"NOR,
+                HIC"åŒ—å¤§è¡—"NOR,
+                HIC"åŒ—å¤§è¡—"NOR,
+                HIC"å®¢åº—"NOR,
 	});
 	if (ob->query_temp("marks/horserent")!=1 && ob->query("age")>14)
-                return notify_fail("Ğ¡º¢×Ó²Å¿ÉÒÔÃâ·Ñ×øÂí£¡ÄãÒª½»Ç®£¡\n");
+                return notify_fail("å°å­©å­æ‰å¯ä»¥å…è´¹åé©¬ï¼ä½ è¦äº¤é’±ï¼\n");
 	switch (random(3))
 	{
 		case 1:
-			hname=MAG"×ÏæòÂí"NOR;
+			hname=MAG"ç´«éªé©¬"NOR;
 			break;
 		case 2:
-			hname=RED"ÔæºìÂí"NOR;
+			hname=RED"æ£çº¢é©¬"NOR;
 			break;
 		default:
-			hname=HIY"»ÆæôÂí"NOR;
+			hname=HIY"é»„éª é©¬"NOR;
 			break;
 	}
 	message_vision(
-"Âí·òËæÊÖ¸ø$NÇ£À´Ò»Æ¥"+hname+"¡£$N·­ÉíÔ¾ÉÏÂí±³¡£¶¯×÷äìÈ÷ÀûË÷¡£Â·±ßĞĞÈËÒ»Õó
-Æğºå: à¸àŞà¸àŞ¡£\n"NOR , ob );
-	message_vision("\nÖ»¼û$NÆïÁ½ÍÈÒ»¼Ğ£¬"+hname+"´©¹ı¿Íµê¶øÈ¥¡£\n",ob);
+"é©¬å¤«éšæ‰‹ç»™$Nç‰µæ¥ä¸€åŒ¹"+hname+"ã€‚$Nç¿»èº«è·ƒä¸Šé©¬èƒŒã€‚åŠ¨ä½œæ½‡æ´’åˆ©ç´¢ã€‚è·¯è¾¹è¡Œäººä¸€é˜µ
+èµ·å“„: å–”å™¢å–”å™¢ã€‚\n"NOR , ob );
+	message_vision("\nåªè§$Néª‘ä¸¤è…¿ä¸€å¤¹ï¼Œ"+hname+"ç©¿è¿‡å®¢åº—è€Œå»ã€‚\n",ob);
 	for (i = 0; i < sizeof(bj_yz);i++)
 		tell_object(ob,bj_yz[i] + "\n");
 	ob->move("/d/city/majiu");
-	tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·Ë³Àûµ½´ïÑïÖİ¡£\n");
-	message_vision("\n$NÉíĞÎÒ»×ª£¬Ô¾ÏÂÂíÀ´£¬×ËÌ¬Ê®·ÖÓÅÃÀ¡£ÏĞÈËÒ²¸ø$NÒ»´óºå !\n" ,ob);
+	tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯é¡ºåˆ©åˆ°è¾¾æ‰¬å·ã€‚\n");
+	message_vision("\n$Nèº«å½¢ä¸€è½¬ï¼Œè·ƒä¸‹é©¬æ¥ï¼Œå§¿æ€ååˆ†ä¼˜ç¾ã€‚é—²äººä¹Ÿç»™$Nä¸€å¤§å“„ !\n" ,ob);
 	ob->delete_temp("marks/horserent");
 	return 1;
 }

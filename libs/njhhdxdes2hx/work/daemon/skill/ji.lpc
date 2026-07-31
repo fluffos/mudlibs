@@ -1,0 +1,4 @@
+// ji.c
+
+inherit SKILL;
+

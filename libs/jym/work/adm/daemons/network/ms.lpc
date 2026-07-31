@@ -26,9 +26,9 @@
 #define EOF		"%EOF%"
 #define EOT		"%EOT%"
  
-static mapping	sockets;
-static mixed	mqi, outgoing;
-static string	mname;
+nosave mapping	sockets;
+nosave mixed	mqi, outgoing;
+nosave string	mname;
  
 mixed mail_queue;
 int date_last_flushed;

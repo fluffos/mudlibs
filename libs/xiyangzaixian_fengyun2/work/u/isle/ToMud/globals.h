@@ -4,8 +4,6 @@
 #pragma save_binary
 
 #ifndef __SENSIBLE_MODIFIERS__
-#define nosave nosave
-#define protected nosave
 #endif
 
 // Important directories

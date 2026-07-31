@@ -1,5 +1,5 @@
 #include <ansi.h>
-#include "/quest/givegift.c"
+#include "/quest/givegift.lpc"
 int ask_job()
 {
         object me;

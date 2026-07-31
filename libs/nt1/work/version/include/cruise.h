@@ -4,17 +4,17 @@
 #ifndef _CRUISE_H_
 #define _CRUISE_H_
 
-// хож╓пео╒
+// Х╝╓Х╞│Д©║Ф│╞
 #define USER_ID                 0
 #define USER_OB                 1
 #define USER_PASSWD             2
 #define USER_SITE               3
 #define USER_MAGIC_NUMBER       4
 
-// ц©╢нм╗Ёёс╕╢П╥╣╩ь╣дЁ╓╤х
-#define NORMAL_RESULT_LEN       80              // 80╦Жвж╫з
+// Ф╞▐Ф╛║И─ Е╦╦Е╨■Г╜■Х©■Е⌡·Г └И∙©Е╨╕
+#define NORMAL_RESULT_LEN       80              // 80Д╦╙Е╜≈Х┼┌
 
-// ц©╢н╥╒км╣днд╪Ч©И╢Сп║
-#define FILE_BLOCK              1460            // ц©╢н╥╒км1460
+// Ф╞▐Ф╛║Е▐▒И─│Г └Ф√┤Д╩╤Е²≈Е╓╖Е╟▐
+#define FILE_BLOCK              1460            // Ф╞▐Ф╛║Е▐▒И─│1460
 
 #endif

@@ -1,22 +1,22 @@
-//ÄÏº£ÈÎÎñ·½Î»
+//å—æµ·ä»»åŠ¡æ–¹ä½
 
 #include <ansi.h>
 #define MAP_NUM 11
 
 mapping place = ([
-         1 : ({"xihu6", "xihu5", "xihu4", "xihu3", "xihu2", "xihu1", "xihu7", "/d/kaifeng/","¿ª·â³ÇÎ÷",}),
-         2 : ({"donghu1", "donghu2", "donghu3", "donghu4", "donghu5", "donghu6", "donghu7", "donghu8", "/d/kaifeng/", "¿ª·â³Ç¶«",}),
-         3 : ({"east1", "east2", "east3", "east4", "east5", "/d/kaifeng/", "³¤°²³Ç¶«",}),
-         4 : ({"west1", "west2", "west3", "jincheng", "/d/westway/", "³¤°²³ÇÎ÷",}),
-         5 : ({"nbridge", "bridge", "sbridge", "broadway1", "zhongnan", "broadway2", "nanyue", "/d/changan/", "³¤°²³ÇÄÏ",}),
-         6 : ({"guanjiang1", "guanjiang2", "guanjiang3", "denglong1", "denglong2", "denglong3", "/d/meishan/", "¹à½­",}),
-         7 : ({"lu1", "lu2", "lu3", "gate", "road1", "road2", "road3", "road4", "/d/gao/", "¸ß¼Ò×¯",}),
-         8 : ({"hill", "uphill1", "uphill2", "uphill3", "forrest", "lantao1", "lantao", "baxi2", "baixi", "uphill4", "/d/lingtai/", "·½´çÉ½",}),
-         9 : ({"binggu", "wroad1", "eroad1", "eroad2", "eroad3", "/d/xueshan/", "´óÑ©É½"}),
-         10: ({"neartop", "yunu1", "yunu2", "yunu3", "yunu4", "yunu5", "/d/moon/", "ÓñÅ®·å"}),
-         11: ({"island", "tingjing", "shanglu2", "shanglu", "/d/xiyou/nanhai/", "ÆÕÍÓÉ½",}),
+         1 : ({"xihu6", "xihu5", "xihu4", "xihu3", "xihu2", "xihu1", "xihu7", "/d/kaifeng/","å¼€å°åŸè¥¿",}),
+         2 : ({"donghu1", "donghu2", "donghu3", "donghu4", "donghu5", "donghu6", "donghu7", "donghu8", "/d/kaifeng/", "å¼€å°åŸä¸œ",}),
+         3 : ({"east1", "east2", "east3", "east4", "east5", "/d/kaifeng/", "é•¿å®‰åŸä¸œ",}),
+         4 : ({"west1", "west2", "west3", "jincheng", "/d/westway/", "é•¿å®‰åŸè¥¿",}),
+         5 : ({"nbridge", "bridge", "sbridge", "broadway1", "zhongnan", "broadway2", "nanyue", "/d/changan/", "é•¿å®‰åŸå—",}),
+         6 : ({"guanjiang1", "guanjiang2", "guanjiang3", "denglong1", "denglong2", "denglong3", "/d/meishan/", "çŒæ±Ÿ",}),
+         7 : ({"lu1", "lu2", "lu3", "gate", "road1", "road2", "road3", "road4", "/d/gao/", "é«˜å®¶åº„",}),
+         8 : ({"hill", "uphill1", "uphill2", "uphill3", "forrest", "lantao1", "lantao", "baxi2", "baixi", "uphill4", "/d/lingtai/", "æ–¹å¯¸å±±",}),
+         9 : ({"binggu", "wroad1", "eroad1", "eroad2", "eroad3", "/d/xueshan/", "å¤§é›ªå±±"}),
+         10: ({"neartop", "yunu1", "yunu2", "yunu3", "yunu4", "yunu5", "/d/moon/", "ç‰å¥³å³°"}),
+         11: ({"island", "tingjing", "shanglu2", "shanglu", "/d/xiyou/nanhai/", "æ™®é™€å±±",}),
          ]);
 
 string *yao = ({
-         "Ò°Ã¨¹Ö", "Ò°¼¦¹Ö", "Ò°¹·¹Ö", "Ò°ÍÃ¹Ö", "Ò°ĞÜ¹Ö", "Ò°Öí¹Ö", "Ò°Ïó¹Ö", "Ò°Å£¹Ö",
+         "é‡çŒ«æ€ª", "é‡é¸¡æ€ª", "é‡ç‹—æ€ª", "é‡å…”æ€ª", "é‡ç†Šæ€ª", "é‡çŒªæ€ª", "é‡è±¡æ€ª", "é‡ç‰›æ€ª",
          });                   

@@ -5,10 +5,10 @@ inherit ROOM;
 
 void create()
 {
-	set("short", HIY"é��"NOR);
+	set("short", HIY"茅屋"NOR);
 	set("long", @LONG
-ֻ�����г����ª�����ྻ�쳣������ֻһ��һ������
-����ޱ�����Ĺʯ���е�����һģһ����
+只见屋中陈设简陋，但洁净异常，堂上只一桌一几，此
+外便无别物，与古墓石室中的桌椅一模一样。
 LONG
 	);
         set("exits", ([

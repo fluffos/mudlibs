@@ -1,6 +1,6 @@
 //Cracked by Kafei
 // /d/bwdh/kantai2.h
-// ¿´Ì¨
+// çœ‹å°
 // by sdong 09/25/98
 
 #include <ansi.h>
@@ -21,7 +21,7 @@ void full_all(object me);
 
 void create()
 {
-	set("short", "¿´Ì¨");
+	set("short", "çœ‹å°");
 	set("long", (: long_desc :));
 	set("valid_startroom", 1);
 
@@ -51,7 +51,7 @@ void init()
     for (i=0; i<sizeof(inv); i++) {
     	if (! inv[i]->query_autoload()) 
 	{
-	        message_vision("$N°Ñ´ÓÀŞÌ¨È¡µÄ"+inv[i]->query("name")+"»¹¸øÖ÷³ÖÈË¡£\n", player);
+	        message_vision("$NæŠŠä»æ“‚å°å–çš„"+inv[i]->query("name")+"è¿˜ç»™ä¸»æŒäººã€‚\n", player);
 	        destruct(inv[i]);
 	}
     }
@@ -60,7 +60,7 @@ void init()
   if (! objectp(cangku)) {
     cangku = load_object(CANGKU);
     if (!objectp(cangku)) {
-      message_vision("$NÇë¸æËß wiz: cangku not found\n", player);
+      message_vision("$Nè¯·å‘Šè¯‰ wiz: cangku not found\n", player);
       return 0;
     }
   }
@@ -74,9 +74,9 @@ void init()
     for (i=0; i<sizeof(basket); i++) {
       if (objectp(basket[i])) {
         basket[i]->move(player);
-        message_vision("$N´ÓÖ÷³ÖÈËÊÖÀïÄÃ»ØÒ»"+
+        message_vision("$Nä»ä¸»æŒäººæ‰‹é‡Œæ‹¿å›ä¸€"+
                 basket[i]->query("unit")+ 
-                basket[i]->query("name")+"¡£\n", player);
+                basket[i]->query("name")+"ã€‚\n", player);
       }
     }
     cangku->delete("basket/"+player->query("id"));
@@ -96,14 +96,14 @@ void init()
 int do_practice(string arg)
 {
 		  object me = this_player();
-		  tell_object(me, "ÕâÀï²»×¼Á·¹¦!\n");
+		  tell_object(me, "è¿™é‡Œä¸å‡†ç»ƒåŠŸ!\n");
 		  return 1;
 }
 
 int do_study(string arg)
 {
 		  object me = this_player();
-		  tell_object(me, "ÕâÀï²»×¼¶ÁÊé!\n");
+		  tell_object(me, "è¿™é‡Œä¸å‡†è¯»ä¹¦!\n");
         return 1;
 }
 
@@ -117,9 +117,9 @@ string long_desc()
   	desc  = HIY"
 
 		           /I______________I\\               "+HIC"|"+HIR"=====|"+HIY"
-		         //||||||||||||||||||\\\\             "+HIC"|"+HIR" Îä   |"+HIY"
+		         //||||||||||||||||||\\\\             "+HIC"|"+HIR" æ­¦   |"+HIY"
 		     T\\//IIIIIIIIIIIIIIIIIIIIII\\\\/T         "+HIC"|"+HIR"=====|"+HIY"
-	             ^^^^"+HIG"||"NOR+HIY"^^^"+HIR"¡¾±ÈÎäÀŞÌ¨¡¿"NOR+HIY"^^^"+HIG"||"+HIY"^^^^         "+HIC"|"+HIY"
+	             ^^^^"+HIG"||"NOR+HIY"^^^"+HIR"ã€æ¯”æ­¦æ“‚å°ã€‘"NOR+HIY"^^^"+HIG"||"+HIY"^^^^         "+HIC"|"+HIY"
 		         "+HIG"||"NOR+HIY"__________________"+HIG"||"NOR+HIY"             "+HIC"|"+HIY"
 			/||||||||||||||||||||||\\            "+HIC"|"+HIY"
 		    T\\//IIIIIIIIIIIIIIIIIIIIIIII\\\\/T        "+HIC"|"+HIY"
@@ -128,14 +128,14 @@ string long_desc()
 	  []___[]___[]__|[]___[]___||___[]___[]|__[]___[]___[]
 	  |__________________|_|________|_|__________________|"+HIG"
              ||                                          ||
-             ||  ________       Áú »¢ °å       ________  ||
+             ||  ________       é¾™ è™ æ¿       ________  ||
              ||  |                                    |  ||\n";
 
 		
 
 	if(query("age"))
 	{
-		desc += "     	     ||  |          "+query("age")+"ËêÒÔÏÂ×é±ÈÎä´óÈü        |  ||\n";
+		desc += "     	     ||  |          "+query("age")+"å²ä»¥ä¸‹ç»„æ¯”æ­¦å¤§èµ›        |  ||\n";
 		desc += "     	     ||  |                                    |  ||\n";
 	}
 
@@ -147,8 +147,8 @@ string long_desc()
 
 		temp = kantai->query("rank/"+i+"/name") + "("; 
 		temp += kantai->query("rank/"+i+"/id") + ") "; 
-		temp += "Ê¤£º"+kantai->query("rank/"+i+"/win") + " "; 
-		temp += "¸º£º"+kantai->query("rank/"+i+"/loss");
+		temp += "èƒœï¼š"+kantai->query("rank/"+i+"/win") + " "; 
+		temp += "è´Ÿï¼š"+kantai->query("rank/"+i+"/loss");
 		
 		desc += temp; 
 		for(j=strlen(temp);j<=31;j++)
@@ -174,7 +174,7 @@ int valid_leave(object me, string dir)
 {
 	if( dir=="southup" ) {
 		if(  wizardp(me)  ) return 1;
-		else return notify_fail("Äã²»ÄÜ×Ô¼ºÉÏÈ¥¡£\n");
+		else return notify_fail("ä½ ä¸èƒ½è‡ªå·±ä¸Šå»ã€‚\n");
 	}
 
 

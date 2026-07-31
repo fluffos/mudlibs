@@ -6,8 +6,8 @@ int help();
 int do_grep(string,string,int);
 string resolvePath(string,int);
 
-static string pattern;
-static string result;
+nosave string pattern;
+nosave string result;
 
 int main(object me, string arg)
 {

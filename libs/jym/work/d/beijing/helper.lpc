@@ -7,15 +7,15 @@
 
 #define START_ROOM "/d/beijing/tianqiao"
 
-static int *kill_base_a = ({5, 5, 5, 5, 5, 5, 5});
-static int *job_upgrade_a = ({100, 200, 400, 800, 1000, 1200, 200});
+nosave int *kill_base_a = ({5, 5, 5, 5, 5, 5, 5});
+nosave int *job_upgrade_a = ({100, 200, 400, 800, 1000, 1200, 200});
 int job_upgrade_num(int rank) {return job_upgrade_a[rank];}
 
-static int *speed_base_a = ({500, 800, 1000, 1500, 1800, 2200, 2500});
+nosave int *speed_base_a = ({500, 800, 1000, 1500, 1800, 2200, 2500});
 int speed_base(int rank) { return speed_base_a[rank]; }
-static int *exp_base_a = ({20000, 50000, 100000, 200000, 
+nosave int *exp_base_a = ({20000, 50000, 100000, 200000, 
 	    400000, 700000, 1000000});
-static string *RANK_NAME = ({
+nosave string *RANK_NAME = ({
     "城门千总",
     "城门守备",
     "骁骑营佐领",
@@ -24,7 +24,7 @@ static string *RANK_NAME = ({
     "副都统",
     "都统",
 });
-static string *DEPT_NAME = ({
+nosave string *DEPT_NAME = ({
 	"骁骑营",
 	"侍卫营",
 });
@@ -39,7 +39,7 @@ string player_title(object player) {
     }
 }
 
-static string *JUEWEI_NAME = ({
+nosave string *JUEWEI_NAME = ({
     "云骑尉",
     "骑都尉",
     "三等轻车都尉", "二等轻车都尉", "一等轻车都尉",
@@ -56,12 +56,12 @@ string juewei_name(int job_total) {
     return JUEWEI_NAME[job_total/50]; 
 }
 
-static int *SUICONG_MAX = ({
+nosave int *SUICONG_MAX = ({
     0, 0, 0, 1, 2, 3, 4,
 });
 int suicong_max(int rank) {return SUICONG_MAX[rank]; }
 
-static int *RANK_POSITION_NUM = ({36, 24, 18, 12, 8, 4, 2});
+nosave int *RANK_POSITION_NUM = ({36, 24, 18, 12, 8, 4, 2});
 int rank_position_num(int rank) { return RANK_POSITION_NUM[rank];}
 int rank_upgrade_num(int rank) {return job_upgrade_a[rank];}
 int pending_time() {return 1296000; }

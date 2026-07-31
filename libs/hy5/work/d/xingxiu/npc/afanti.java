@@ -7,12 +7,12 @@ inherit NPC;
 
 void create()
 {
-        set_name("°¢·²Ìá", ({ "afanti" }) );
-        set("gender", "ÄĞĞÔ" );
+        set_name("é˜¿å‡¡æ", ({ "afanti" }) );
+        set("gender", "ç”·æ€§" );
         set("age", 48);
         set("long", 
-            "ËûÍ·ÉÏ°ü×ÅÍ·½í£¬³¤×ÅÏòÉÏÇÌµÄ°Ë×Öºú£¬×îÏ²»¶×½Åª°ÍÒÀ¡¢°ïÖúÇîÈË¡£Ëû³£"
-            "¸ø±ğÈË³öÃÕÓï¡£\n");
+            "ä»–å¤´ä¸ŠåŒ…ç€å¤´å·¾ï¼Œé•¿ç€å‘ä¸Šç¿˜çš„å…«å­—èƒ¡ï¼Œæœ€å–œæ¬¢æ‰å¼„å·´ä¾ã€å¸®åŠ©ç©·äººã€‚ä»–å¸¸"
+            "ç»™åˆ«äººå‡ºè°œè¯­ã€‚\n");
         set("str", 25);
         set("dex", 20);
         set("con", 17);
@@ -27,23 +27,23 @@ void create()
 
         set("attitude", "peaceful");
         set("inquiry", ([
-            "name" : "ÎÒ¾ÍÊÇÄÉËÕ¶ûµÄ°¢·²Ìá¡£",
-            "here" : "ÕâÀï¿ÉÕæÊÇ¸öºÃµØ·½¡£",
-            "ÄÉËÕ¶û" : "ÊÇÎÒ³öÉúµÄµØ·½¡£",
-            "ÃÕÓï" : "Äã°ïÎÒÕÒµ½Ğ¡Ã«Â¿£¬ÎÒ¾Í¸øÄã³öÃÕÓï¡£",
-            "°ÍÒÀ" : "Ëû°ÑÎÒ¹ØÔÚÕâÀï£¬ÓĞ³ÔÓĞºÈ£¬ÎÒ¾Í²»×ßÁË¡£°ÍÒÀÊÇ¸ö»µµ°£¬Ô¸ºú´ó³Í·£Ëû¡£",
-            "Ã«Â¿" : "ÎÒµÄĞ¡Ã«Â¿ÔÚÎÒµ½É³Ä®ÀïÆ­°ÍÒÀÖÖ½ğ×ÓÊ±×ß¶ªÁË¡£",
-            "Â¿" : "ÎÒµÄĞ¡Ã«Â¿ÔÚÎÒµ½É³Ä®ÀïÆ­°ÍÒÀÖÖ½ğ×ÓÊ±×ß¶ªÁË¡£",
-            "Ğ¡Ã«Â¿" : "ÎÒµÄĞ¡Ã«Â¿ÔÚÎÒµ½É³Ä®ÀïÆ­°ÍÒÀÖÖ½ğ×ÓÊ±×ß¶ªÁË¡£",
-            "¾íÁ±¸ñ" : "¾íÁ±¸ñÖ¸ÃÕµ×¸÷×ÖË³Ğòµßµ¹¹ıÀ´ºÍÃÕÃæÏà¿Û¡£",
-            "ºú´ó" : "¾ÍÊÇÕæÖ÷¡£ÓÖÃû°²À­»ò°¢À­¡£",
-            "ÕæÖ÷" : "ÕæÖ÷ÖÁ´ó£¬ÍòÎï·ÇÖ÷£¬Î¨ÓĞÕæÖ÷¡£ÄÂº±Ä¬µÂÊÇÕæÖ÷µÄÊ¹Õß¡£",
+            "name" : "æˆ‘å°±æ˜¯çº³è‹å°”çš„é˜¿å‡¡æã€‚",
+            "here" : "è¿™é‡Œå¯çœŸæ˜¯ä¸ªå¥½åœ°æ–¹ã€‚",
+            "çº³è‹å°”" : "æ˜¯æˆ‘å‡ºç”Ÿçš„åœ°æ–¹ã€‚",
+            "è°œè¯­" : "ä½ å¸®æˆ‘æ‰¾åˆ°å°æ¯›é©´ï¼Œæˆ‘å°±ç»™ä½ å‡ºè°œè¯­ã€‚",
+            "å·´ä¾" : "ä»–æŠŠæˆ‘å…³åœ¨è¿™é‡Œï¼Œæœ‰åƒæœ‰å–ï¼Œæˆ‘å°±ä¸èµ°äº†ã€‚å·´ä¾æ˜¯ä¸ªåè›‹ï¼Œæ„¿èƒ¡å¤§æƒ©ç½šä»–ã€‚",
+            "æ¯›é©´" : "æˆ‘çš„å°æ¯›é©´åœ¨æˆ‘åˆ°æ²™æ¼ é‡Œéª—å·´ä¾ç§é‡‘å­æ—¶èµ°ä¸¢äº†ã€‚",
+            "é©´" : "æˆ‘çš„å°æ¯›é©´åœ¨æˆ‘åˆ°æ²™æ¼ é‡Œéª—å·´ä¾ç§é‡‘å­æ—¶èµ°ä¸¢äº†ã€‚",
+            "å°æ¯›é©´" : "æˆ‘çš„å°æ¯›é©´åœ¨æˆ‘åˆ°æ²™æ¼ é‡Œéª—å·´ä¾ç§é‡‘å­æ—¶èµ°ä¸¢äº†ã€‚",
+            "å·å¸˜æ ¼" : "å·å¸˜æ ¼æŒ‡è°œåº•å„å­—é¡ºåºé¢ å€’è¿‡æ¥å’Œè°œé¢ç›¸æ‰£ã€‚",
+            "èƒ¡å¤§" : "å°±æ˜¯çœŸä¸»ã€‚åˆåå®‰æ‹‰æˆ–é˜¿æ‹‰ã€‚",
+            "çœŸä¸»" : "çœŸä¸»è‡³å¤§ï¼Œä¸‡ç‰©éä¸»ï¼Œå”¯æœ‰çœŸä¸»ã€‚ç©†ç½•é»˜å¾·æ˜¯çœŸä¸»çš„ä½¿è€…ã€‚",
        ]) );
 
         setup();
         set("chat_chance", 10);
         set("chat_msg", ({
-             "°¢·²ÌáÌ¾ÁË¿ÚÆø£ºàË£¬¿ÉÏ§ÎÒµÄÂ¿¡£\n",
+             "é˜¿å‡¡æå¹äº†å£æ°”ï¼šå—¨ï¼Œå¯æƒœæˆ‘çš„é©´ã€‚\n",
         }) );
         carry_object(__DIR__"obj/wcloth")->wear();
         carry_object(__DIR__"obj/dongbula");
@@ -57,115 +57,115 @@ void init()
 
 int accept_object(object who, object ob)
 {
-//     if((string)ob->query("name")=="Ğ¡Ã«Â¿") {
+//     if((string)ob->query("name")=="å°æ¯›é©´") {
      if((string)ob->query("id")=="mao lv") {
            remove_call_out("destroying");
            call_out("destroying", 1, this_object(), ob);
 
-           if( who->query_temp("marks/ÃÕ") ) {
-                 write("°¢·²ÌáĞ¦ÁËĞ¦£¬Ëµ£ºÄãÏÈ°ÑÉÏ¸öÃÕ²Â³öÀ´ÔÙËµ¡£\n");
+           if( who->query_temp("marks/è°œ") ) {
+                 write("é˜¿å‡¡æç¬‘äº†ç¬‘ï¼Œè¯´ï¼šä½ å…ˆæŠŠä¸Šä¸ªè°œçŒœå‡ºæ¥å†è¯´ã€‚\n");
 //               destruct(ob);
                  return 1;
            }
            else {
-                 write("°¢·²ÌáĞ¦µÃ×ì¶¼ºÏ²»ÉÏÁË£¬Ëµ£º¶àĞ»ÕâÎ»" + 
+                 write("é˜¿å‡¡æç¬‘å¾—å˜´éƒ½åˆä¸ä¸Šäº†ï¼Œè¯´ï¼šå¤šè°¢è¿™ä½" + 
                        RANK_D->query_respect(who) +
-                       "µÄ°ïÖú£¬ÔÛÃÇ²Â¸öÃÕÓï°É£º\n");
+                       "çš„å¸®åŠ©ï¼Œå’±ä»¬çŒœä¸ªè°œè¯­å§ï¼š\n");
                  switch(random(20)) {
                    case 0:
-                       write("¸¾Å®¶ÁÎï¡£(´òÒ»±¾ÄàÌ¶Íæ¼ÒÃû)\n");
-                       who->set_temp("marks/ÃÕ", 1);
+                       write("å¦‡å¥³è¯»ç‰©ã€‚(æ‰“ä¸€æœ¬æ³¥æ½­ç©å®¶å)\n");
+                       who->set_temp("marks/è°œ", 1);
                        break;
                    case 1:
-                       write("Ñ©ÔÚÉÕ£¬Ñ©ÔÚÉÕ¡£(´òÒ»±¾ÄàÌ¶Íæ¼ÒÃû)\n");
-                       who->set_temp("marks/ÃÕ", 2);
+                       write("é›ªåœ¨çƒ§ï¼Œé›ªåœ¨çƒ§ã€‚(æ‰“ä¸€æœ¬æ³¥æ½­ç©å®¶å)\n");
+                       who->set_temp("marks/è°œ", 2);
                        break;
                    case 2:
-                       write("µËĞ¡Æ½Ö®ºó¡£(´òÒ»±¾ÄàÌ¶NPCÃû)\n");
-                       who->set_temp("marks/ÃÕ", 3);
+                       write("é‚“å°å¹³ä¹‹åã€‚(æ‰“ä¸€æœ¬æ³¥æ½­NPCå)\n");
+                       who->set_temp("marks/è°œ", 3);
                        break;
                    case 3:
-                       write("ÓùÓÃ¾­µä¡£(´òÒ»±¾ÄàÌ¶Íæ¼ÒÃû)\n");
-                       who->set_temp("marks/ÃÕ", 4);
+                       write("å¾¡ç”¨ç»å…¸ã€‚(æ‰“ä¸€æœ¬æ³¥æ½­ç©å®¶å)\n");
+                       who->set_temp("marks/è°œ", 4);
                        break;
                    case 4:
-                       write("´ò¹È³¡ÉÏµÄNPC¡£(´òÒ»±¾ÄàÌ¶Íæ¼ÒÃû)\n");
-                       who->set_temp("marks/ÃÕ", 5);
+                       write("æ‰“è°·åœºä¸Šçš„NPCã€‚(æ‰“ä¸€æœ¬æ³¥æ½­ç©å®¶å)\n");
+                       who->set_temp("marks/è°œ", 5);
                        break;
                    case 5:
-		       write("°ÍÀèÏ°Óï¡£(´òÒ»±¾ÄàÌ¶¼¼ÄÜÃû£¬¾íÁ±¸ñ)\n");
-                       who->set_temp("marks/ÃÕ", 6);
+		       write("å·´é»ä¹ è¯­ã€‚(æ‰“ä¸€æœ¬æ³¥æ½­æŠ€èƒ½åï¼Œå·å¸˜æ ¼)\n");
+                       who->set_temp("marks/è°œ", 6);
                        break;
                    case 6:
-                       write("¹°ÖíÈëÃÅ¡£(´òÒ»×Ö)\n");
-                    // this riddle made by ÀÏ¹ş£¨ÃÀ¹ú¡¡Ã÷ÄáËÕ´ï´óÑ§£©
-                       who->set_temp("marks/ÃÕ", 7);
+                       write("æ‹±çŒªå…¥é—¨ã€‚(æ‰“ä¸€å­—)\n");
+                    // this riddle made by è€å“ˆï¼ˆç¾å›½ã€€æ˜å°¼è‹è¾¾å¤§å­¦ï¼‰
+                       who->set_temp("marks/è°œ", 7);
                        break;
                    case 7:
-                       write("¹°ÖíÍõÃÆÃÆ²»ÀÖ¡£(´òÒ»×Ö)\n");
-                    // this riddle modified from one made by ÂÌÌï¡¡£¨ÃÀ¹ú¡¡ÃÜÖ´°²Öİ£©
-                       who->set_temp("marks/ÃÕ", 8);
+                       write("æ‹±çŒªç‹é—·é—·ä¸ä¹ã€‚(æ‰“ä¸€å­—)\n");
+                    // this riddle modified from one made by ç»¿ç”°ã€€ï¼ˆç¾å›½ã€€å¯†æ‰§å®‰å·ï¼‰
+                       who->set_temp("marks/è°œ", 8);
                        break;
                    case 8:
-                       write("½õ·«²Å¶É¶ùÀÉÈ¥¡£(´òÒ»±¾ÄàÌ¶Î×Ê¦ÍøÃû)\n");
-                    // this riddle made by ÔÀº­¡¡£¨ÃÀ¹ú¡¡ÃÜÖ´°²Öİ£©
-                       who->set_temp("marks/ÃÕ", 9);
+                       write("é”¦å¸†æ‰æ¸¡å„¿éƒå»ã€‚(æ‰“ä¸€æœ¬æ³¥æ½­å·«å¸ˆç½‘å)\n");
+                    // this riddle made by å²³æ¶µã€€ï¼ˆç¾å›½ã€€å¯†æ‰§å®‰å·ï¼‰
+                       who->set_temp("marks/è°œ", 9);
                        break;
                    case 9:
-                       write("µÂÒâÈÕÕ½°Ü¡£(´òÒ»±¾ÄàÌ¶NPCÃû)\n");
-                    // this riddle modified from one made by Å£¡¡£¨ÃÀ¹ú£©
-                       who->set_temp("marks/ÃÕ", 10);
+                       write("å¾·æ„æ—¥æˆ˜è´¥ã€‚(æ‰“ä¸€æœ¬æ³¥æ½­NPCå)\n");
+                    // this riddle modified from one made by ç‰›ã€€ï¼ˆç¾å›½ï¼‰
+                       who->set_temp("marks/è°œ", 10);
                        break;
                    case 10:
-                       write("ÕûÄêµ±±ø¡£(´òÒ»±¾ÄàÌ¶NPCÃû)\n");
-                    // this riddle made by ËÄÔÂ¡¡£¨ÃÀ¹ú£©
-                       who->set_temp("marks/ÃÕ", 11);
+                       write("æ•´å¹´å½“å…µã€‚(æ‰“ä¸€æœ¬æ³¥æ½­NPCå)\n");
+                    // this riddle made by å››æœˆã€€ï¼ˆç¾å›½ï¼‰
+                       who->set_temp("marks/è°œ", 11);
                        break;
                    case 11:
-                       write("Å·Ñô·æÁ·¹¦¡£(´òÒ»³ÉÓï)\n");
-                    // this riddle made by Ä§¡¡£¨ÃÀ¹ú£©
-                       who->set_temp("marks/ÃÕ", 12);
+                       write("æ¬§é˜³é”‹ç»ƒåŠŸã€‚(æ‰“ä¸€æˆè¯­)\n");
+                    // this riddle made by é­”ã€€ï¼ˆç¾å›½ï¼‰
+                       who->set_temp("marks/è°œ", 12);
                        break;
                    case 12:
-                       write("ºúÌßÂÒõß¡£(´òÒ»±¾ÄàÌ¶NPCÃû)\n");
-                    // this riddle made by ¾ÓÊ¿¡¡£¨ÃÀ¹ú£©
-                       who->set_temp("marks/ÃÕ", 13);
+                       write("èƒ¡è¸¢ä¹±è¸¹ã€‚(æ‰“ä¸€æœ¬æ³¥æ½­NPCå)\n");
+                    // this riddle made by å±…å£«ã€€ï¼ˆç¾å›½ï¼‰
+                       who->set_temp("marks/è°œ", 13);
                        break;
                    case 13:
-                       write("Âó¿Ë½Ü¿ËÑ·¡£(´ò¶ş±¾ÄàÌ¶NPCÃû)----»Ø´ğÊ±¶şÃûÒ»Æğ»Ø´ğ£¬ÖĞ¼ä²»¼ÓÈÎºÎ±êµã¡£\n");
-                       who->set_temp("marks/ÃÕ", 14);
+                       write("éº¦å…‹æ°å…‹é€Šã€‚(æ‰“äºŒæœ¬æ³¥æ½­NPCå)----å›ç­”æ—¶äºŒåä¸€èµ·å›ç­”ï¼Œä¸­é—´ä¸åŠ ä»»ä½•æ ‡ç‚¹ã€‚\n");
+                       who->set_temp("marks/è°œ", 14);
                        break;
                    case 14:
-                       write("ÕÙ¡££(´ò¶ş±¾ÄàÌ¶NPCÃû)----»Ø´ğÊ±¶şÃûÒ»Æğ»Ø´ğ£¬ÖĞ¼ä²»¼ÓÈÎºÎ±êµã¡£\n");
-                    // this riddle made by ÀÏ¹ş¡¡£¨ÃÀ¹ú£©
-                       who->set_temp("marks/ÃÕ", 15);
+                       write("å¬ã€‚æ‰“äºŒæœ¬æ³¥æ½­NPCå)----å›ç­”æ—¶äºŒåä¸€èµ·å›ç­”ï¼Œä¸­é—´ä¸åŠ ä»»ä½•æ ‡ç‚¹ã€‚\n");
+                    // this riddle made by è€å“ˆã€€ï¼ˆç¾å›½ï¼‰
+                       who->set_temp("marks/è°œ", 15);
                        break;
                    case 15:
-                       write("Ê¥Ö¼¡£(´òÒ»±¾ÄàÌ¶Íæ¼ÒÃû)\n");
-                       who->set_temp("marks/ÃÕ", 16);
+                       write("åœ£æ—¨ã€‚(æ‰“ä¸€æœ¬æ³¥æ½­ç©å®¶å)\n");
+                       who->set_temp("marks/è°œ", 16);
                        break;
                    case 16:
-                       write("ÔµºÎÒ»Ï¦ÃÎÎ´³É¡£(´òÒ»±¾ÄàÌ¶ÃÅÅÉÃû)\n");
-                    // this riddle made by ÀÏ¹ş¡¡£¨ÃÀ¹ú£© hanxx002@maroon.tc.umn.edu
-                       who->set_temp("marks/ÃÕ", 17);
+                       write("ç¼˜ä½•ä¸€å¤•æ¢¦æœªæˆã€‚(æ‰“ä¸€æœ¬æ³¥æ½­é—¨æ´¾å)\n");
+                    // this riddle made by è€å“ˆã€€ï¼ˆç¾å›½ï¼‰ hanxx002@maroon.tc.umn.edu
+                       who->set_temp("marks/è°œ", 17);
                        break;
                    case 17:
-                       write("ÌÆÀÖ¡£(´òÒ»±¾ÄàÌ¶NPCÃû)\n");
-                    // this riddle made by ¡ïÄ§¡¡£¨ÃÀ¹ú£© ning@phish.ecii.org
-                       who->set_temp("marks/ÃÕ", 18);
+                       write("å”ä¹ã€‚(æ‰“ä¸€æœ¬æ³¥æ½­NPCå)\n");
+                    // this riddle made by â˜…é­”ã€€ï¼ˆç¾å›½ï¼‰ ning@phish.ecii.org
+                       who->set_temp("marks/è°œ", 18);
                        break;
                    case 18:
-                       write("Ò»ÑùµÄ²»Ö¹Ò»µãÁ½µã¡£(´òÒ»±¾ÄàÌ¶µØÃû¼°Ò»¼¼ÄÜÃû)\n");
-                       who->set_temp("marks/ÃÕ", 19);
+                       write("ä¸€æ ·çš„ä¸æ­¢ä¸€ç‚¹ä¸¤ç‚¹ã€‚(æ‰“ä¸€æœ¬æ³¥æ½­åœ°ååŠä¸€æŠ€èƒ½å)\n");
+                       who->set_temp("marks/è°œ", 19);
 		       break;
                    case 19:
-                       write("»Ø¿Û¡£(´òÒ»±¾ÄàÌ¶NPCÃû)\n");
-                       who->set_temp("marks/ÃÕ", 20);
+                       write("å›æ‰£ã€‚(æ‰“ä¸€æœ¬æ³¥æ½­NPCå)\n");
+                       who->set_temp("marks/è°œ", 20);
                        break;
 
                   }
-                  write("ÏëºÃÁË»Ø´ğ (answer) ÎÒ¡£¼Ç×¡£¬²»¿ÉĞ¹Â¶ÃÕÓï»òÃÕµ×¡£\n");
-                  message("vision", "°¢·²Ìá¶Ô×Å"+who->name()+"àÖ¹¾ÁË¼¸¾ä»°¡£\n",
+                  write("æƒ³å¥½äº†å›ç­” (answer) æˆ‘ã€‚è®°ä½ï¼Œä¸å¯æ³„éœ²è°œè¯­æˆ–è°œåº•ã€‚\n");
+                  message("vision", "é˜¿å‡¡æå¯¹ç€"+who->name()+"å˜€å’•äº†å‡ å¥è¯ã€‚\n",
                           environment(who), ({who}) );
                   remove_call_out("destroying");
                   call_out("destroying", 1, this_object(), ob);
@@ -184,60 +184,60 @@ int do_answer(string arg)
         object me,gold;
         int soln,riddle;
         me = this_player();
-        riddle = this_player()->query_temp("marks/ÃÕ");
+        riddle = this_player()->query_temp("marks/è°œ");
 
         if (!riddle) {
-           write("ÎÒÓÖ²»ÊÇÄãÊ¦¸µ£¬ÄãÓÃ²»×Å»Ø´ğÎÒ¡£\n");
+           write("æˆ‘åˆä¸æ˜¯ä½ å¸ˆå‚…ï¼Œä½ ç”¨ä¸ç€å›ç­”æˆ‘ã€‚\n");
            return 1;
         }
 
         if( !arg || arg=="" ) {
-           write("ÏëºÃÃÕµ×ÔÙ»Ø´ğ¡£\n");
+           write("æƒ³å¥½è°œåº•å†å›ç­”ã€‚\n");
            return 1;
         }
-        message("vision", me->name() + "°Ñ×ì´Õµ½°¢·²ÌáµÄ¶ú±ßàÖàÖ¹¾¹¾¡£\n",
+        message("vision", me->name() + "æŠŠå˜´å‡‘åˆ°é˜¿å‡¡æçš„è€³è¾¹å˜€å˜€å’•å’•ã€‚\n",
                  environment(me), ({me}) );
 
         switch (arg) {
-          case "æ©": soln=1; break;
-          case "ÁéÁé" : soln=2; break;
-          case "½­°ÙÊ¤" : soln=3; break;
-          case "Ãµ" : soln=4; break;
-          case "¶şÍŞ" : soln=5; break;
-          case "µÀÑ§ĞÄ·¨" : soln=6; break;
-          case "ºÒ" : soln=7; break;
-          case "º¤" : soln=8; break;
-          case "·½ÖÛ×Ó" : soln=9; break;
-          case "Å·Ñô¿Ë" : soln=10; break;
-          case "¶¡´ºÇï" : soln=11; break;
-          case "µ¹ĞĞÄæÊ©" : soln=12; break;
-          case "Â³ÓĞ½Å" : soln=13; break;
-          case "ºÚÎŞ³£°×ÎŞ³£":
-          case "°×ÎŞ³£ºÚÎŞ³£": soln=14; break;
-          case "Å·Ñô·æÅ·Ñô¿Ë": soln=15; break;
-          case "ÁúÔÆ": soln=16; break;
-	  case "ÉÙÁÖ": soln=17; break;
-	  case "ÀîÄª³î" : soln=18; break;
-	  case "åĞÒ£¶´åĞÒ£ÓÎ" : soln=19; break;
-          case "ÂòÂôÌá" : soln=20; break;
+          case "å§—": soln=1; break;
+          case "çµçµ" : soln=2; break;
+          case "æ±Ÿç™¾èƒœ" : soln=3; break;
+          case "ç«" : soln=4; break;
+          case "äºŒå¨ƒ" : soln=5; break;
+          case "é“å­¦å¿ƒæ³•" : soln=6; break;
+          case "é˜‚" : soln=7; break;
+          case "æ°¦" : soln=8; break;
+          case "æ–¹èˆŸå­" : soln=9; break;
+          case "æ¬§é˜³å…‹" : soln=10; break;
+          case "ä¸æ˜¥ç§‹" : soln=11; break;
+          case "å€’è¡Œé€†æ–½" : soln=12; break;
+          case "é²æœ‰è„š" : soln=13; break;
+          case "é»‘æ— å¸¸ç™½æ— å¸¸":
+          case "ç™½æ— å¸¸é»‘æ— å¸¸": soln=14; break;
+          case "æ¬§é˜³é”‹æ¬§é˜³å…‹": soln=15; break;
+          case "é¾™äº‘": soln=16; break;
+	  case "å°‘æ—": soln=17; break;
+	  case "æè«æ„" : soln=18; break;
+	  case "é€é¥æ´é€é¥æ¸¸" : soln=19; break;
+          case "ä¹°å–æ" : soln=20; break;
           default :
-              say("°¢·²Ìá´óĞ¦ÆğÀ´£¬ËµµÀ£ºÄãËµÊ²Ã´Ñ½£¬Å£Í·²»¶ÔÂí×ì¡£\n"
-                  + me->name() + "µÄÁ³±»ëıµÃÍ¨ºì¡£\n");
+              say("é˜¿å‡¡æå¤§ç¬‘èµ·æ¥ï¼Œè¯´é“ï¼šä½ è¯´ä»€ä¹ˆå‘€ï¼Œç‰›å¤´ä¸å¯¹é©¬å˜´ã€‚\n"
+                  + me->name() + "çš„è„¸è¢«è‡Šå¾—é€šçº¢ã€‚\n");
               return 1;
         }
 
         if (riddle==soln) {
           gold = new("clone/money/gold");
           gold->move(this_player());
-          say("°¢·²Ìá¸øÁË" + me->name() + "Ò»Á½»Æ½ğ¡£\n");
-          this_player()->set_temp("marks/ÃÕ", 0);
-          say ("°¢·²Ìá¶Ô" + me->name() + "ÊúÆğ´óÄ·Ö¸£º¾ÓÈ»ÈÃÄã²Â×ÅÁË¡£»Æ½ğÊÇ°ÍÒÀµÄ²»ÒåÖ®²Æ£¬ÄãÄÃÈ¥·Ö¸øÇîÈË°É¡£\n");
+          say("é˜¿å‡¡æç»™äº†" + me->name() + "ä¸€ä¸¤é»„é‡‘ã€‚\n");
+          this_player()->set_temp("marks/è°œ", 0);
+          say ("é˜¿å‡¡æå¯¹" + me->name() + "ç«–èµ·å¤§å§†æŒ‡ï¼šå±…ç„¶è®©ä½ çŒœç€äº†ã€‚é»„é‡‘æ˜¯å·´ä¾çš„ä¸ä¹‰ä¹‹è´¢ï¼Œä½ æ‹¿å»åˆ†ç»™ç©·äººå§ã€‚\n");
           this_player()->set("combat_exp",this_player()->query("combat_exp")+80);
-          write ("ÄãµÄ¾­ÑéÔö¼ÓÁË£¡\n");
+          write ("ä½ çš„ç»éªŒå¢åŠ äº†ï¼\n");
 
         }
         else
-          write ("Ë­°ÑÃÕµ×¸æËßÄãµÄ? ²»¶Ô!!\n");
+          write ("è°æŠŠè°œåº•å‘Šè¯‰ä½ çš„? ä¸å¯¹!!\n");
         return 1;
 } 
  

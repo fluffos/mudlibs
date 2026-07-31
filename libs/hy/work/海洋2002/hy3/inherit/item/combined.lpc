@@ -10,7 +10,7 @@ inherit F_DBASE;
 inherit F_MOVE;
 inherit F_NAME;
 
-static int amount;
+nosave int amount;
 
 void setup()
 {

@@ -22,7 +22,7 @@ void init_room() {
 }
 
 int do_disable() {
-	 tell_object(this_player(), "你不能在这里干这个。\n");
+	 tell_object(this_player(), "浣犱笉鑳藉湪杩欓噷骞茶繖涓�俓n");
 	 return 1;
 }
 

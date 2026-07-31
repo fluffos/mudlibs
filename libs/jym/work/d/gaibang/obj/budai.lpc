@@ -5,7 +5,7 @@
 
 inherit SHIELD;
 
-static int amount;
+nosave int amount;
 
 void set_amount(int v)
 {

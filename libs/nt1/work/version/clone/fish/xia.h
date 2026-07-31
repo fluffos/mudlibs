@@ -25,9 +25,9 @@ void die()
                 return;
         }
 
-        message("vision", name() + "ÍäÁËÍäÉí×Ó£¬ËÀÁË¡£\n", environment());
-        set("long", "ÕâÊÇÒ»Ö»" + name() + "£¬ËüÒÑ¾­ËÀÁË¡£\n");
-        set_name("ËÀ" + name(), ({ "si xia", "sixia" }));
+        message("vision", name() + "å¼¯äº†å¼¯èº«å­ï¼Œæ­»äº†ã€‚\n", environment());
+        set("long", "è¿™æ˜¯ä¸€åª" + name() + "ï¼Œå®ƒå·²ç»æ­»äº†ã€‚\n");
+        set_name("æ­»" + name(), ({ "si xia", "sixia" }));
         has_died = 1;
         call_out("decay", 30 + random(30));
         set("value", query("value") / 2);
@@ -43,9 +43,9 @@ void decay()
                 return;
         }
 
-        message("vision", name() + "¸¯ÀÃÁË£¬·¢³öÒ»ÕóÕó³ôÎ¶¡£\n", environment());
-        set("long", "ÕâÊÇÒ»Ö»" + name() + "£¬ËüÒÑ¾­¿ªÊ¼¸¯ÀÃÁË¡£\n");
-        set_name("ÀÃÏº", ({ "lan xia", "lanxa" }));
+        message("vision", name() + "è…çƒ‚äº†ï¼Œå‘å‡ºä¸€é˜µé˜µè‡­å‘³ã€‚\n", environment());
+        set("long", "è¿™æ˜¯ä¸€åª" + name() + "ï¼Œå®ƒå·²ç»å¼€å§‹è…çƒ‚äº†ã€‚\n");
+        set_name("çƒ‚è™¾", ({ "lan xia", "lanxa" }));
         set("value", 0);
         call_out("vanish", 20 + random(20));
 }
@@ -54,8 +54,8 @@ void vanish()
 {
         if (environment())
         {
-                message("vision", "Ò»Õó·ç´µ¹ý£¬°Ñ" + name() +
-                        "¸ø´µÉ¢ÁË¡£\n", environment());
+                message("vision", "ä¸€é˜µé£Žå¹è¿‡ï¼ŒæŠŠ" + name() +
+                        "ç»™å¹æ•£äº†ã€‚\n", environment());
         }
 
         destruct(this_object());
@@ -72,22 +72,22 @@ int broil(object me, object ob)
 
         if (query("value") == 0)
         {
-                write("ÕâÃ´Ò»ÌõÀÃÏº»¹¿¾Ê²Ã´£¡\n");
+                write("è¿™ä¹ˆä¸€æ¡çƒ‚è™¾è¿˜çƒ¤ä»€ä¹ˆï¼\n");
                 return 1;
         }
 
         me = this_player();
 	if (me->is_busy())
 	{
-		write("ÄãÏÖÔÚÃ¦×ÅÄØ£¬¹ý»á¶ùÔÙ¿¾°É¡£\n");
+		write("ä½ çŽ°åœ¨å¿™ç€å‘¢ï¼Œè¿‡ä¼šå„¿å†çƒ¤å§ã€‚\n");
 		return 1;
 	}
 
-        message_vision("$N°Ñ" + name() + "·ÅÔÚ" + ob->name() +
-                       "ÉÏÏ¸Ï¸µÄ¿¾×Å£¬Ö»Ìý±Ïà£±Ïà£µÄÉùÒô£¬" + name() +
-                       "ÂýÂýµÄ±ä³ÉÁËºìÉ«£¬É¢·¢³öÕóÕóÓÕÈËµÄÏãÎ¶¡£\n", me);
+        message_vision("$NæŠŠ" + name() + "æ”¾åœ¨" + ob->name() +
+                       "ä¸Šç»†ç»†çš„çƒ¤ç€ï¼Œåªå¬æ¯•å•µæ¯•å•µçš„å£°éŸ³ï¼Œ" + name() +
+                       "æ…¢æ…¢çš„å˜æˆäº†çº¢è‰²ï¼Œæ•£å‘å‡ºé˜µé˜µè¯±äººçš„é¦™å‘³ã€‚\n", me);
 
-        write(HIY "Äã°ÑÏº¿¾ºÃÁË£¡\n" NOR);
+        write(HIY "ä½ æŠŠè™¾çƒ¤å¥½äº†ï¼\n" NOR);
         fob = new("/clone/food/xia");
         fob->move(me, 1);
         destruct(this_object());

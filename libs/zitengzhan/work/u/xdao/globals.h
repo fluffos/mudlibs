@@ -4,8 +4,6 @@
 // This file is #included in all objects automatically by the driver.
 // (See config file of driver)
 #ifndef __SENSIBLE_MODIFIERS__
-#define nosave nosave
-#define protected nosave
 #endif
 #pragma save_binary
 #define JOB_OB(x)		("/job/"+x+"/job")

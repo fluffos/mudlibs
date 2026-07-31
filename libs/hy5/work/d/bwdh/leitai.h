@@ -1,5 +1,5 @@
 //Cracked by Kafei
-// ÀŞÌ¨
+// æ“‚å°
 // sdong 09/28/98
 
 #include <ansi.h>
@@ -13,13 +13,13 @@ int do_get(string arg);
 
 void create()
 {
-	set("short",HIG"ÀŞÌ¨"NOR);
+	set("short",HIG"æ“‚å°"NOR);
 	set("long", HIY"
 
      		      /I______________I\\               "+HIC"|"+HIR"=====|"+HIY"
-		    //||||||||||||||||||\\\\             "+HIC"|"+HIR" Îä   |"+HIY"
+		    //||||||||||||||||||\\\\             "+HIC"|"+HIR" æ­¦   |"+HIY"
 	        T\\//IIIIIIIIIIIIIIIIIIIIII\\\\/T         "+HIC"|"+HIR"=====|"+HIY"
- 		^^^^"+HIG"||"NOR+HIY"^^^"+HIR"¡¾±ÈÎäÀŞÌ¨¡¿"NOR+HIY"^^^"+HIG"||"+HIY"^^^^         "+HIC"|"+HIY"
+ 		^^^^"+HIG"||"NOR+HIY"^^^"+HIR"ã€æ¯”æ­¦æ“‚å°ã€‘"NOR+HIY"^^^"+HIG"||"+HIY"^^^^         "+HIC"|"+HIY"
                     "+HIG"||"NOR+HIY"__________________"+HIG"||"NOR+HIY"             "+HIC"|"+HIY"
                    /||||||||||||||||||||||\\            "+HIC"|"+HIY"
                T\\//IIIIIIIIIIIIIIIIIIIIIIII\\\\/T        "+HIC"|"+HIY"
@@ -35,7 +35,7 @@ void create()
 	       ||                            ||
 	       ||                            ||
 
-"+HIC"ÕıÇ°·½Êú×ÅÒ»ÅÅ±øÆ÷¼Ü(jia)£¬Ì¨ÏÂÎ§ÂúÁË¿´ÈÈÄÖµÄÈË¡£\n"NOR
+"+HIC"æ­£å‰æ–¹ç«–ç€ä¸€æ’å…µå™¨æ¶(jia)ï¼Œå°ä¸‹å›´æ»¡äº†çœ‹çƒ­é—¹çš„äººã€‚\n"NOR
 	);
 	set("invalid_startroom", 1);
 	set("no_death", 1);
@@ -59,8 +59,8 @@ void create()
 
 int do_disable(string arg)
 {
-	tell_object(this_player(), "²»ÄÜÔÚÀŞÌ¨ÉÏÕâÑù¡£\n");
-	return 1;//notify_fail("²»ÔÊĞíÔÚÀŞÌ¨ÉÏÕâÑù£¡\n");;
+	tell_object(this_player(), "ä¸èƒ½åœ¨æ“‚å°ä¸Šè¿™æ ·ã€‚\n");
+	return 1;//notify_fail("ä¸å…è®¸åœ¨æ“‚å°ä¸Šè¿™æ ·ï¼\n");;
 }
 
 
@@ -88,7 +88,7 @@ int do_kickout(string arg)
 	string id;
 	
 	if (!wizardp(me)) {
-					 tell_object(me,"Äã²»ÊÇÎ×Ê¦£¬²»ÄÜ¸ÏÈË¼ÒÏÂÈ¥£¡\n");
+					 tell_object(me,"ä½ ä¸æ˜¯å·«å¸ˆï¼Œä¸èƒ½èµ¶äººå®¶ä¸‹å»ï¼\n");
 					 return 1;
 		  }
 
@@ -101,12 +101,12 @@ int do_kickout(string arg)
 	ob = present(arg);
 	if( !ob )
 		{
-					 tell_object(me,"Õâ¸öÈË²»ÔÚÕâ¶ù¡£\n");
+					 tell_object(me,"è¿™ä¸ªäººä¸åœ¨è¿™å„¿ã€‚\n");
 					 return 1;
 		 }
 
 
-	message_vision("$N°Ñ$nÌß³öÀŞÌ¨£¡\n",me,ob);
+	message_vision("$NæŠŠ$nè¸¢å‡ºæ“‚å°ï¼\n",me,ob);
 	ob->move(KANTAI);
 
 	return 1;
@@ -122,7 +122,7 @@ int do_get(string arg)
 	if(me->is_busy()) return 0;
 	if (sscanf(arg, "%s from jia", type) != 1) return 0;
 	switch (type) {
-	case "sword":	if(this_player()->query("gender") == "ÎŞĞÔ")
+	case "sword":	if(this_player()->query("gender") == "æ— æ€§")
 				weapon = new("/clone/test/xiuhua");
 			else    weapon = new("/clone/weapon/gangjian");
 			break;
@@ -140,10 +140,10 @@ int do_get(string arg)
 			break;
 	case "armor":	weapon = new("/clone/armor/tiejia");
 			break;
-	default:	return notify_fail("ÕÒ²»µ½"+type+"\n");
+	default:	return notify_fail("æ‰¾ä¸åˆ°"+type+"\n");
 	}
 	if(weapon->move(me)) {
-		message_vision("$N´Ó±øÆ÷¼ÜÉÏÈ¡ÏÂÒ»"+weapon->query("unit")+weapon->name()+"¡£\n", me);
+		message_vision("$Nä»å…µå™¨æ¶ä¸Šå–ä¸‹ä¸€"+weapon->query("unit")+weapon->name()+"ã€‚\n", me);
 		if (me->is_fighting()) me->start_busy(2);
 	} else {
 		destruct(weapon);
@@ -155,15 +155,15 @@ int do_get(string arg)
 string look_jia()
 {
 	string msg;
-	msg = "ÕâÊÇÒ»¸ö±øÆ÷¼Ü£¬Ê®°Ë°ãÎäÆ÷ÊÇÓ¦ÓĞ¾¡ÓĞ¡£\n";
-	msg+= "Ä¿Ç°´æ·ÅÓĞ½£(sword)£¬µ¶(blade)£¬°ô(stick)£¬ÕÈ(staff)£¬ÂÖ(falun)£¬\n±Ş(whip)£¬Ïô(xiao)¡£»¹ÓĞÒ»Ğ©Ìú¼×(armor)¡£\n";
-	msg+= "ÇëÓÃÖ¸Áî¡°get ÖÖÀà from jia¡±ÄÃÈ¡Äã³ÆÊÖµÄ±øÆ÷»ò¼×ëĞ¡£\n";
+	msg = "è¿™æ˜¯ä¸€ä¸ªå…µå™¨æ¶ï¼Œåå…«èˆ¬æ­¦å™¨æ˜¯åº”æœ‰å°½æœ‰ã€‚\n";
+	msg+= "ç›®å‰å­˜æ”¾æœ‰å‰‘(sword)ï¼Œåˆ€(blade)ï¼Œæ£’(stick)ï¼Œæ–(staff)ï¼Œè½®(falun)ï¼Œ\né­(whip)ï¼Œè§(xiao)ã€‚è¿˜æœ‰ä¸€äº›é“ç”²(armor)ã€‚\n";
+	msg+= "è¯·ç”¨æŒ‡ä»¤â€œget ç§ç±» from jiaâ€æ‹¿å–ä½ ç§°æ‰‹çš„å…µå™¨æˆ–ç”²èƒ„ã€‚\n";
 	return msg;
 }
 
 
 int valid_leave(object me, string dir)
 {
-	if( !wizardp(me) ) return notify_fail("²»×¼Áï£¡\n");
+	if( !wizardp(me) ) return notify_fail("ä¸å‡†æºœï¼\n");
 	return ::valid_leave(me, dir);
 }

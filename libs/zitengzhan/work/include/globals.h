@@ -13,8 +13,6 @@
 // neutralized entirely, no translation needed.
 #if 0
 #ifndef __SENSIBLE_MODIFIERS__
-#define nosave nosave
-#define protected nosave
 #endif
 #endif
 #pragma save_binary

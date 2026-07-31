@@ -8,9 +8,9 @@ inherit ROOM;
 
 void create()
 {
-	set("short", "Ê±¿Õ");
+	set("short", "æ—¶ç©º");
 	set("long", @LONG
-Ê±¿ÕÃÎ¾³¡£
+æ—¶ç©ºæ¢¦å¢ƒã€‚
 LONG
 	);
 
@@ -37,13 +37,13 @@ int do_pick(string arg)
 	object me;
 
 	me = this_player();
-	if ( !arg || ( arg != "flower" ) ) return notify_fail("ÄãÒªÕªÊ²÷á£¿\n");
+	if ( !arg || ( arg != "flower" ) ) return notify_fail("ä½ è¦æ‘˜ä»€éº½ï¼Ÿ\n");
 
 	else if ( random((int)me->query("kar")) < 7 )
-		message_vision("$N½«»¨ÕªÁËÏÂÀ´£¬µ«Ò»²»Ğ¡ĞÄ±»´ÌÁËÒ»ÏÂ¡£\n", me);
+		message_vision("$Nå°†èŠ±æ‘˜äº†ä¸‹æ¥ï¼Œä½†ä¸€ä¸å°å¿ƒè¢«åˆºäº†ä¸€ä¸‹ã€‚\n", me);
 
 	else
-		message_vision("$NÕªÏÂÒ»¶äÃÀÀöµÄÑªºìÉ«ÏÊ»¨¡£\n", me);
+		message_vision("$Næ‘˜ä¸‹ä¸€æœµç¾ä¸½çš„è¡€çº¢è‰²é²œèŠ±ã€‚\n", me);
 
 	return 1;
 }
@@ -54,7 +54,7 @@ int do_dream(string arg)
 
 	if ( !arg )
 	{
-		return notify_fail("Äã×öÁËÒ»¸öÃÀÃÎ£¬¾õµÃÓĞµãÆ®Æ®È»ÁË¡£\n");
+		return notify_fail("ä½ åšäº†ä¸€ä¸ªç¾æ¢¦ï¼Œè§‰å¾—æœ‰ç‚¹é£˜é£˜ç„¶äº†ã€‚\n");
 	}
 
 	me = this_player();
@@ -63,7 +63,7 @@ int do_dream(string arg)
 		mapping mine;
 		
 		mine = me->query_entire_dbase();
-		write("ÄãÔÚÃÎÖĞºÍÊ±¿Õ´óÕ½Èı°Ù»ØºÏ£¬ÁìÎò²»ÉÙ¡£\n");
+		write("ä½ åœ¨æ¢¦ä¸­å’Œæ—¶ç©ºå¤§æˆ˜ä¸‰ç™¾å›åˆï¼Œé¢†æ‚Ÿä¸å°‘ã€‚\n");
 		mine["combat_exp"] += 100;
 
 		return 1;
@@ -99,12 +99,12 @@ int do_dream(string arg)
 		arg == "sword"
 		)
 	{
-		write("ÄãÃÎ¼ûÊ±¿Õ¸øÄã½²½â" + to_chinese(arg) + "µÄ¾÷ÇÏ£¬»ñÒæ·ÇÇ³¡£\n");
+		write("ä½ æ¢¦è§æ—¶ç©ºç»™ä½ è®²è§£" + to_chinese(arg) + "çš„è¯€çªï¼Œè·ç›Šéæµ…ã€‚\n");
 		me->improve_skill(arg, random(10*me->query("int")));
 
 		return 1;
 	}
 	
-	return notify_fail("Äã×öÁËÒ»¸öÃÀÃÎ£¬ÃÎÖĞ¼ûµ½ÁË" + arg + "¡£\n");
+	return notify_fail("ä½ åšäº†ä¸€ä¸ªç¾æ¢¦ï¼Œæ¢¦ä¸­è§åˆ°äº†" + arg + "ã€‚\n");
 }
 

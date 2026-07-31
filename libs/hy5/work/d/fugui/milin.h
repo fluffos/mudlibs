@@ -1,6 +1,6 @@
- //¡¾ÎåĞĞÏàÉú¡¿£ºÄ¾Éú»ğ¡¢»ğÉúÍÁ¡¢ÍÁÉú½ğ¡¢½ğÉúË®¡¢Ë®ÉúÄ¾¡£
-//¡¾ÎåĞĞÏà¿Ë¡¿£ºÄ¾¿ËÍÁ¡¢ÍÁ¿ËË®¡¢Ë®¿Ë»ğ¡¢»ğ¿Ë½ğ¡¢½ğ¿ËÄ¾
-//  s w e s w from »ğ   
+ //ã€äº”è¡Œç›¸ç”Ÿã€‘ï¼šæœ¨ç”Ÿç«ã€ç«ç”ŸåœŸã€åœŸç”Ÿé‡‘ã€é‡‘ç”Ÿæ°´ã€æ°´ç”Ÿæœ¨ã€‚
+//ã€äº”è¡Œç›¸å…‹ã€‘ï¼šæœ¨å…‹åœŸã€åœŸå…‹æ°´ã€æ°´å…‹ç«ã€ç«å…‹é‡‘ã€é‡‘å…‹æœ¨
+//  s w e s w from ç«   
 int check_dirs(object me, string dir);
 int valid_leave(object me, string dir)
 {
@@ -16,13 +16,13 @@ int valid_leave(object me, string dir)
         {
                 room=find_object(__DIR__"tomb");
                 if(!room) room=load_object(__DIR__"tomb");
-                mout="ÈËÓ°Æ®¶¯Ö®¼ä£¬$NÒÑ¾­´ÓÃÜÁÖ´©ÁË³öÈ¥£¡\n";
+                mout="äººå½±é£˜åŠ¨ä¹‹é—´ï¼Œ$Nå·²ç»ä»å¯†æ—ç©¿äº†å‡ºå»ï¼\n";
         }
         else if( lsteps< -15 && (random(tsteps)>=20 && random(4)))
         {
                 room=find_object(__DIR__"shandao3");
                 if(!room) room=load_object(__DIR__"shandao3");
-                mout="ÈËÓ°Æ®¶¯Ö®¼ä£¬$NÒÑ¾­´ÓÃÜÁÖ´©ÁË³öÈ¥£¡\n";
+                mout="äººå½±é£˜åŠ¨ä¹‹é—´ï¼Œ$Nå·²ç»ä»å¯†æ—ç©¿äº†å‡ºå»ï¼\n";
                 
         }
         if(room)

@@ -22,10 +22,10 @@ void announce_success (object who)
   who->add("combat_exp",i+33000);
    who->add("potential",i*8);
    who->add("mpgx",10);who->add("expmax",2);
-  command("chat "+who->query("name")+"¾£¼¬Áë¶·ÖÇ¶·Îä£¬Á¦´ìÖÚÏÉ£¡");
-  command("chat "+who->query("name")+"Ë³Àû´³¹ıÎ÷ĞĞÓÖÒ»¹Ø£¡");
-  tell_object (who,"ÄãÓ®µÃÁË"+chinese_number(i+33000)+"µã¾­Ñé"+
-               chinese_number(i*8)+"µãÇ±ÄÜ"+" Ê®µãÃÅÅÉ¹±Ï× ¶şµã³É³¤ÉÏÏŞ£¡£¡\n");
+  command("chat "+who->query("name")+"è†æ£˜å²­æ–—æ™ºæ–—æ­¦ï¼ŒåŠ›æŒ«ä¼—ä»™ï¼");
+  command("chat "+who->query("name")+"é¡ºåˆ©é—¯è¿‡è¥¿è¡Œåˆä¸€å…³ï¼");
+  tell_object (who,"ä½ èµ¢å¾—äº†"+chinese_number(i+33000)+"ç‚¹ç»éªŒ"+
+               chinese_number(i*8)+"ç‚¹æ½œèƒ½"+" åç‚¹é—¨æ´¾è´¡çŒ® äºŒç‚¹æˆé•¿ä¸Šé™ï¼ï¼\n");
   who->save();
 }
 
@@ -34,13 +34,13 @@ void player_win (object me, object who)
   object obj;
   
   who->set_temp("obstacle/jingjiling/"+me->query("id"),1);
-  message_vision("$N¶Ô$nÒ»¾Ï¹ª£º²»´í£¬²»´í£¡\n",me,who);  
+  message_vision("$Nå¯¹$nä¸€é èº¬ï¼šä¸é”™ï¼Œä¸é”™ï¼\n",me,who);  
   me->announce_success(who);
 }
 
 void player_lose (object me, object who)
 {
-  message_vision("$N¶Ô$nÒ»»ÓÊÖ£ºÈ¥°É£¬È¥°É£¡\n",me,who);
+  message_vision("$Nå¯¹$nä¸€æŒ¥æ‰‹ï¼šå»å§ï¼Œå»å§ï¼\n",me,who);
 }
 
 void check_fight (object who)

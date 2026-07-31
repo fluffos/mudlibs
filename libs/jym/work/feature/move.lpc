@@ -5,8 +5,8 @@
 
 #include <dbase.h>
 
-static int weight = 0;
-static int encumb = 0, max_encumb = 0;
+nosave int weight = 0;
+nosave int encumb = 0, max_encumb = 0;
 
 nomask int query_encumbrance() { return encumb; }
 nomask int over_encumbranced() { return encumb > max_encumb; }

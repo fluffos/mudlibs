@@ -1,0 +1,4 @@
+// qian.c
+
+inherit SKILL;
+

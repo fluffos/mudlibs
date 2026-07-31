@@ -34,7 +34,7 @@ inherit F_SKILL;
 inherit F_TEAM;
 
 // Use a tick with longer period than heart beat to save cpu's work
-static int tick;
+nosave int tick;
 
 void create()
 {

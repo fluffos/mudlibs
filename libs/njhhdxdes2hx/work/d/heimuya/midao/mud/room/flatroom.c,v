@@ -1,0 +1,245 @@
+head	1.1;
+access;
+symbols;
+locks; strict;
+comment	@ * @;
+
+
+1.1
+date	95.12.28.09.35.26;	author root;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@/* flatroom.c */
+/* making rooms of LP Mud, i.e.,
+/* up & down &nw,ne,sw,se are not supported yet. */
+/* because I cant thought a good idea to deal with the problem */
+/* 
+/* writed by dfbb ( fangh@@bepc3.ihep.ac.cn )*/
+
+
+#include <stdio.h>
+#include <string.h>
+
+#define MAX_WIDTH 160           /* max width of a line in data file */
+#define MAX_HEIGHT 100          /* max height of a line in data file */
+
+#define IS_ROOM(i,j) (map[i][j]>=0)
+
+#define N_DIRECTION 4
+		  /*  North   East   South  West */
+int dx[N_DIRECTION]= { 0,      1,      0,    -1};
+int dy[N_DIRECTION]= {-1,      0,      1,     0};
+/* CAUTION: north is the -y direction,  and south is the y direction */
+char *Direction[4]= {"north", "east", "south", "west"};
+
+#define START_SYMBOL1  'S'
+#define START_SYMBOL2  's'
+#define CONNECT_SYMBOL1 '|'
+#define CONNECT_SYMBOL2 '-'
+#define ROOM_SYMBOL '*'
+
+enum {CONNECT=-3, ROOM=-2, EMPTY=-1, START=0};
+
+char buffer[MAX_WIDTH];
+int map[MAX_HEIGHT][MAX_WIDTH];
+int w,h;
+
+void usage();
+void ReadMap();
+void ProcessMap();
+int FindNextRoom();
+
+#ifndef __readline__
+#define __readline__
+
+void readline();
+
+void readline(f, buffer, buffer_size)
+FILE *f;
+char *buffer;
+int buffer_size;
+{
+        int i,ch;
+
+        for (i=0;i<buffer_size;i++) {
+                ch = getc(f);
+                if (feof(f)) break;
+                if (ch=='\n') {buffer[i]=0; break;}
+                else buffer[i]=ch;
+        }
+        if (i==buffer_size) {printf ("buffer_size too small.\n"); exit();}
+}
+
+#endif
+
+void usage(argc,argv)
+int argc;
+char **argv;
+{
+	if (argc==4) return;
+	printf ("%s: making planer rooms of LP Mud.\n",argv[0]);
+	printf ("usage: %s <room_file> <area_name> <start_num>\n",argv[0]);
+	printf ("area_name: name of this area\n");
+	printf ("start_num: starting of virtual number\n");
+	exit();
+}
+
+void ReadMap(f)
+FILE *f;
+{
+	int i,j;
+
+	for (i=0;i<MAX_HEIGHT;i++) {
+	for (j=0;j<MAX_WIDTH;j++) {
+		map[i][j]=EMPTY;        /* CAUTION: EMPTY!=0 */
+	}}
+
+	w=0;  h=0;
+	while(1) {
+		/* read a line to buffer */
+		readline(f, buffer, MAX_WIDTH);
+		if (feof(f)) break;
+
+		/* skip the comments */
+		if (buffer[0]=='%') continue;
+
+		/* take the maximum width of lines to be the width */
+		if (strlen(buffer)>w) w=strlen(buffer);
+
+
+		for (i=0;i<strlen(buffer);i++) {
+			switch (buffer[i]) {
+			  case CONNECT_SYMBOL1:
+			  case CONNECT_SYMBOL2:
+				map[h][i]= CONNECT; break;
+			  case START_SYMBOL1:
+			  case START_SYMBOL2:
+				map[h][i]= START; break;
+                          case ROOM_SYMBOL:
+                                map[h][i]= ROOM; break;
+                          default:
+                                map[h][i]= EMPTY; break;
+                        }
+		}
+		h++;
+	}
+}
+
+void ProcessMap(area_name,start_num)
+char *area_name;
+int start_num;
+ {
+	FILE *out;
+	int i,j,dir;
+	int room_id,temp;
+	char *room_filename;
+
+	/* assign virtual numbers of the rooms */
+	room_id=start_num+1;
+	for (i=0;i<h;i++) {
+	for (j=0;j<w;j++) {
+		if (map[i][j]==ROOM) map[i][j]=room_id++;
+		else if (map[i][j]==START) map[i][j]=start_num;
+	}}
+
+
+	/* create room data to output file */
+	for (i=0;i<h;i++) {
+	for (j=0;j<w;j++) {
+		if (!IS_ROOM(i,j)) continue;
+		sprintf(room_filename,"%s%d.c",area_name,map[i][j]);
+		out = fopen(room_filename, "wt");
+		if (out==NULL) {printf ("fopen (write file) fail\n"); exit();}
+
+		fprintf (out,"//Room: %s/%s%d.c \n\n",area_name,area_name,map[i][j]);
+		fprintf (out,"inherit ROOM;\n\n");
+		fprintf (out,"void create()\n {\n");
+		fprintf (out,"        set(\"short\", \"普通房间\");\n");
+		fprintf (out,"        set(\"long\", @@LONG \n        LONG );\n");
+		fprintf (out,"        set(\"exits\", ([\n");
+		/* for all directions do */
+		for (dir=0;dir<N_DIRECTION;dir++) {
+			if (i+dy[dir]<0 || i+dy[dir]>=h ||
+				j+dx[dir]<0 || j+dx[dir]>=w)
+				continue;
+			temp = map[i+dy[dir]][j+dx[dir]];
+			switch (temp) {
+			   case EMPTY: continue;
+			   case CONNECT: temp = FindNextRoom(i,j,dir); break;
+			   default: break;
+			}
+			fprintf (out, "          \"%s\" : __DIR__\"%s%d\",\n ", Direction[dir],area_name,temp);
+		}
+		fprintf (out,"        ]));\n");
+		fprintf (out,"#       set(\"valid_startroom\", 1);\n");
+		fprintf (out,"#       set(\"outdoors\",\"_DIR\");\n");
+		fprintf (out,"        setup();\n");
+		fprintf (out,"        replace_program(ROOM); \n}\n");
+		fprintf (out, "// the end of the file \n\n");
+		fclose(out);
+	}}
+	printf ("Total room # = %d\n", room_id-start_num);
+}
+
+int FindNextRoom(row,col,dir)
+int row,col,dir;
+{
+        row += dy[dir];   col += dx[dir];
+        for (;row<h && col<w;  row+=dy[dir],col+=dx[dir]) {
+                switch (map[row][col]) {
+                  case CONNECT: continue;
+		  case EMPTY:
+                        printf("Error at position (row,col)=(%d,%d)\n",
+                                row, col
+                        );
+                        /* this is a psudo return, one should check his
+                           input room data file at the error positions */
+                        return -1;
+		  default:
+			return map[row][col];
+                }
+        }
+        printf ("%s (row,col)=(%d,%d)\n",
+                "Link to a room out of map error at position",
+                row, col
+	);
+        /* this is a psudo return, one should check his
+           input room data file at the error positions */
+        return -1;
+}
+
+
+void main(argc,argv)
+int argc;
+char **argv;
+{
+	FILE *in, *out;
+	int ch,i,start_num;
+	char *area_name="def";
+
+	usage(argc,argv);
+
+	in = fopen(argv[1],"rt");
+	if (in==NULL) {printf ("fopen (read file) fail\n"); exit();}
+	start_num = atoi(argv[3]);
+	area_name = argv[2];
+	/* read data file to map[][] */
+	ReadMap(in);
+	fclose(in);
+
+	/* create rooms and write to output file */
+	ProcessMap(area_name,start_num);
+}
+
+@

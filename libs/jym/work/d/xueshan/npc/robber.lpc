@@ -13,7 +13,7 @@ void clear_dumudian();
 void self_destruct();
 
 
-static string *menpai_names1 = ({
+nosave string *menpai_names1 = ({
     "华山派",
     "峨嵋派",
     "武当派",
@@ -21,7 +21,7 @@ static string *menpai_names1 = ({
     "丐帮",
 });
 
-static string *menpai_names2 = ({
+nosave string *menpai_names2 = ({
     "华山",
     "峨嵋",
     "武当",
@@ -29,7 +29,7 @@ static string *menpai_names2 = ({
     "丐帮",
 });
 
-static int random_id;
+nosave int random_id;
 
 void create()
 {

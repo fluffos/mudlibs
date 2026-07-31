@@ -1,0 +1,4 @@
+// fork.c
+
+inherit SKILL;
+

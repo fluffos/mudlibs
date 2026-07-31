@@ -1,0 +1,645 @@
+// filename : /std/room/shop.c
+/*  
+    每个玩家当的东西，在一年（玩家时间）内可以赎回，价格和当的时候是一样
+的，都降为value的30%。一年后将不能再赎，当铺将这些东西公开以高价出售    因为考虑到不应该在一个当铺里当的东西哪儿都能赎，所以在当铺ROOM中加了个
+参数set("dangpu_location",string) 。这个参数是必须的，否则就通当通赎了
+    铁铺如果inherit SMITHSHOP， 则有收购铁器的功能(sell)，按重量收。 
+*/
+// edit by Lin on March 7,1997
+#include <ansi.h>   
+inherit ROOM;       
+inherit F_FINANCE;
+
+void init()
+{   
+    seteuid(getuid());
+    //以下是当铺的。
+	add_action( "do_value", "value" );
+	add_action( "do_pawn", "pawn" );
+	add_action( "do_pawnlist","pawnlist");
+	add_action( "do_redeem","redeem"); 
+	add_action( "do_list","list" );                     
+	add_action( "do_sell", "sell" ); 
+	//以下是钱庄的。
+	add_action( "do_convert", "convert" );
+	add_action( "do_save", "cun" );
+    add_action( "do_load", "qu");
+    add_action( "do_check", "check");
+}
+
+string price_string(int v)
+{
+	int gold_v, silver_v;
+	string msg;
+
+	if ( !v ) return "";
+	gold_v = v / 10000;
+	v -= gold_v*10000;
+	silver_v = v / 1000;
+	v -= silver_v*1000;
+	if ( gold_v ) 
+		msg= chinese_number( gold_v) + "两"+YEL "黄金" NOR;
+	if ( silver_v ) {
+		if ( msg  ) msg = msg + chinese_number( silver_v ) + "两"+HIY "银子" NOR;
+		else msg = chinese_number( silver_v ) + "两"+HIY "银子" NOR;
+	}
+	if ( v ) {
+		if ( msg ) 	msg = msg + chinese_number(v)+"文"+YEL "铜钱" NOR;
+		else msg = chinese_number(v)+"文"+YEL "铜钱" NOR;
+	}
+ 	return msg;
+}
+string value_string(int value)
+{
+	if ( value < 1 )
+		value = 1;
+	else if ( value < 1000 )
+		return chinese_number( value ) + "文钱";
+	else
+		return chinese_number( value / 1000 ) + "两"
+			+ (value % 1000 ? "又" + chinese_number( value % 1000) + "文钱":"");
+}
+
+void pay_player(object who, int amount)
+{
+	object ob;
+
+	if ( amount < 1 )
+		amount = 1;
+    if ( amount /1000000 )
+    {      
+        ob = new( MONEY_DIR "thousand-cash" );
+        ob->set_amount( amount / 1000000);
+        ob->move(who);
+        amount %=1000000;
+    }
+    if ( amount / 10000 )
+    {
+        ob = new( MONEY_DIR "gold" );
+        ob->set_amount( amount / 10000);
+        ob->move(who);
+        amount %= 10000;
+    }
+	if ( amount / 1000 )
+	{
+		ob = new( MONEY_DIR "silver" );
+		ob->set_amount( amount / 1000 );
+		ob->move( who );
+		amount %= 1000;
+	}
+	if ( amount )
+	{
+		ob = new( MONEY_DIR "coin" );
+		ob->set_amount( amount );
+		ob->move( who );
+	}
+}
+
+int do_value(string arg)
+{
+	object ob;
+	int value,value1,value2;   
+	
+    if ( query_temp("busy") )
+        return notify_fail("伙计生气地说：“着什么急，我正忙呢！”\n");
+
+	if ( !arg || !( ob = present( arg, this_player() ) ) )
+		return notify_fail( "你要拿什么物品给当铺估价？\n" );
+
+	if ( ob->query( "money_id" ) )
+		return notify_fail( "这是「钱」，你没见过吗？\n" );
+
+    if ( ob->is_food() )
+        return notify_fail( "食物不便估价。\n" );
+	value = ob->query( "value" );
+    if ( value > 10000000 )
+    {
+        value1 = (value / 100 ) * 30;
+        value2 = (value / 100 ) * 80;
+    }
+    else
+    {
+        value1 = value * 30 / 100;
+        value2 = value * 80 / 100;
+    }            
+	if ( !value )
+		printf( "%s一文不值。\n", ob->query( "name" ) );
+	else  
+	    printf( "%s价值%s。\n",ob->query("name"),price_string(value));
+	    /*
+		printf( "%s价值%s。\n如果你要典当(pawn)，可以拿到%s。\n如果卖断(sell)，可以拿到%s。\n",
+			ob->query( "name" ), price_string( value ),
+			price_string( value1),
+			price_string( value2) );
+        */
+	return 1;
+}
+
+int do_pawn(string arg)
+{   
+    mapping goods;                 
+	object ob,who,this;
+	int value,value1,value2,size,*num,i;
+	string location,name; 
+	who = this_player();
+	this = this_object();                                              
+	
+    if ( query_temp("busy") )
+        return notify_fail("伙计生气地说：“着什么急，我正忙呢！”\n");
+	
+	if ( !arg || !( ob = present( arg, who ) ) )
+		return notify_fail( "你要典当什么物品？\n" );
+
+	if ( ob->query( "money_id" ) )
+		return notify_fail( "你要当「钱」？\n" );
+
+    if ( ob->is_food() )
+        return notify_fail( "食物不便保存，不予典当。\n" );
+
+	value = ob->query( "value" );
+    if ( value > 10000000 )
+    {
+        value1 = (value/100)*30;
+        value2 = (value/100)*80;
+    }
+    else
+    {
+        value1 = value*30/100;
+        value2 = value*80/100;
+    }            
+	if ( !value )
+		return notify_fail( "这样东西不值钱。\n" );   
+    if ( value1 < 5 )
+        return notify_fail( "这样东西价值太低，小店不收。\n");
+    if (ob->query("cant_sell"))
+        return notify_fail( (string)ob->query("cant_sell") );
+	location = this->query("dangpu_location");
+	if( !location )
+	    location = "hockshop"; 
+    goods = who->query("pawn/"+location);
+    if( goods )
+	{
+	    num = keys(goods); 
+	    size = sizeof(num);
+        //判断当的东西是否过多了。  
+        /*
+        if( size > 500 )
+        {
+            tell_object(who,"您当的东西太多了，是否先赎一些呢？\n");
+            return 1; 
+        }
+        */
+	    for( i=0 ; i< sizeof(num); i++ ) 
+	    {    
+	        if( size < to_int(num[i]) )
+	            size = to_int(num[i]); 
+	    }
+	}
+	else
+	    size = 0; 
+    size = size+1; 
+    //complete pawn. 
+    name = base_name(ob);
+    if( objectp(ob) ) 
+    {   
+  	    message_vision( "$N把身上的" + ob->query( "name" ) + "拿出来典当了"
+		    + value_string( value1 ) + "。\n", who );
+        destruct(ob);
+	    pay_player( who, value1 ); 
+	    who->set("pawn/"+location+"/"+size,name);
+	    who->set("pawntime/"+location+"/"+size,who->query("mud_age"));
+	}  
+    set_temp("busy", 1);
+    //who->start_busy(1);
+    remove_call_out("dest");
+    call_out("dest",1,who);
+	return 1;
+}
+
+int do_pawnlist(object who)
+{   
+    mapping goods,time;
+    object this;
+    string location,name,list;
+    int size,i,age,value,*num,numm,ltime,ratio;
+    
+    this = this_object();
+    who = this_player(); 
+    
+    if( !who->can_act() ) 
+        return 1; 
+    if ( query_temp("busy") )
+        return notify_fail("伙计生气地说：“着什么急，我正忙呢！”\n");
+    location = this->query("dangpu_location");
+    if( !location )
+        location = "hockshop";
+    goods = who->query("pawn/"+location);
+    if( !goods )
+    {
+        tell_object(who,"您好象没有在敝店当过东西耶.\n");
+        return 1;
+    }  
+    num = keys(goods);
+    size = sizeof(num);  
+    time = who->query("pawntime/"+location);
+    list = "你可以赎回以下这些东西：\n";
+    list += "--序号------名称------------------------赎银--------------------------\n";
+    for( i = 0; i < size; i++ )
+    {
+         //是否过期了呢？（以玩家的一年为限）
+         age = time[num[i]];
+         ltime = who->query("mud_age") - age;
+         if( ltime  > 43200 )
+         {   //那么就删除这个记号  
+             //同时加入当铺本身的数组中。     
+            // this->add_goods(goods[num[i]]);
+             who->delete("pawn/"+location+"/"+num[i]);
+             who->delete("pawntime/"+location+"/"+num[i]); 
+         }
+         else
+         {   //那么就显示这个记号             ratio = ltime / 360 + 60;
+             value = goods[num[i]]->query("value");
+             if( value > 100000 )
+                 value = value / 100 * ratio;
+             else  
+                 value = value * ratio / 100;
+             numm = to_int(num[i]);  
+             list += sprintf("%s%-10d%-25s%s\n", 
+             "  ",numm,goods[num[i]]->query("name"),price_string(value));
+         }
+    }
+    tell_object(who,list);
+    return 1;
+}
+
+int do_redeem(int number)
+{   
+    mapping goods,time;
+    string location;
+    object this,ob,who;
+    int value,ratio,ltime;
+    
+    who = this_player();
+    this = this_object();
+    
+    if( !who->can_act() ) 
+        return 0;
+    if( this->query_temp("busy") )
+        return notify_fail("伙计生气地说：“着什么急，我正忙呢！”\n");
+    if( !number  )
+    {
+        tell_object(who,"格式： redeem < 序号 > \n");
+        return 1;
+    }
+    
+    location = this->query("dangpu_location");
+    if( !location )
+        location = "hockshop";
+    goods = who->query("pawn/"+location);
+    time = who->query("pawntime/"+location);
+    //有吗？
+    if( !time[number] )
+    {
+        tell_object(who,"你没有当过这样东西\n");
+        return 1;
+    }
+    //过期吗？
+    ltime = who->query("mud_age") - time[number];
+    if( ltime > 43200 )
+    {                                          
+        //save in dangpu
+       // this->add_goods(goods[number]);
+        who->delete("pawn/"+location+"/"+number);
+        who->delete("pawntime/"+location+"/"+number); 
+        tell_object(who,"这样东西的赎期已过，小店已经上架出售，不能再赎了。\n");
+        return 1;
+    }
+    //那就赎吧。    
+    value = goods[number]->query("value");
+    ratio = ltime / 360 + 60;   
+    if( value < 100000 )
+        value = value * ratio / 100;
+    else
+        value = value / 100 * ratio;
+    if( who->can_afford(value) != 1 )   
+    {
+        message_vision("伙计狠狠地瞪了$N一眼，道：“没钱赎那门子的当头？！”\n",who);
+        return 1;
+    }
+    who->pay_money(value);
+    message_vision("伙计从库中将$N当的"+goods[number]->query("name")+"取了出来，交给$N\n"
+"一面摇头嘟哝着：“既然有钱，还当它作什么？真是有病。”\n",who);
+    ob = new(goods[number]);  
+    who->delete("pawn/"+location+"/"+number);
+    who->delete("pawntime/"+location+"/"+number);
+    ob->move(who); 
+    set_temp("busy", 1);
+    //who->start_busy(1);
+    remove_call_out("dest");
+    call_out("dest",1,who);
+    
+    return 1;
+}
+
+void add_goods(string ob)
+{
+    object this;
+    this = this_object();
+    if( !this->query("pawn/"+ob) )
+        this->set("pawn/"+ob,1);
+    else
+        this->add("pawn/"+ob,1);
+    return;
+}           
+/*
+int do_list()
+{   
+    mapping goods;
+    object who,this,ob;
+    string list,*obj;
+    int i;
+    
+    who = this_player();
+    this = this_object();
+    
+    if( !who->can_act() )
+        return 0;
+    if ( query_temp("busy") )
+        return notify_fail("伙计生气地说：“着什么急，我正忙呢！”\n");
+        
+    goods = this->query("pawn");
+    if( !goods )
+    {
+        tell_object(who,"很抱歉，本店还没有过期的当品可以出售。\n");         
+        return 1;
+    }
+    obj = keys(goods);
+    list = "你可以在当铺购买以下这些过了赎期的当品：\n";
+    list += "--名称------------------------件数--价格------------------------\n";
+    for( i=0 ; i<sizeof(obj) ; i++ )
+    {   
+        ob = new(obj[i]);
+        list += sprintf("%s-25%s%4d%s\n","  ",ob->query("name"),
+                goods[obj[i]],price_string(ob->query("value")*2));  
+        destruct(ob);
+    }
+    tell_object(who,list);
+    return 1;
+}
+*/
+int do_sell(string arg)
+{
+	object ob,who;
+	int value,value1,value2;
+	who = this_player();
+    
+    if ( query_temp("busy") )
+        return notify_fail("伙计生气地说：“着什么急，我正忙呢！”\n");
+        
+	if ( !arg || !( ob = present( arg, who ) ) )
+		return notify_fail( "你要卖断什麽物品？\n" );
+
+	if ( ob->query( "money_id" ) )
+		return notify_fail( "你要卖「钱」？\n" );
+
+    if ( ob->is_food() )
+        return notify_fail( "食物不便保存，不予收购。\n" );
+
+	value = ob->query( "value" );
+    if ( value > 10000000 )
+    {
+        value1 = (value/100)*60;
+        value2 = (value/100)*80;
+    }
+    else
+    {
+        value1 = value*60/100;
+        value2 = value*80/100;
+    }            
+	if ( !value ) 
+		return notify_fail( "这样东西不值钱。\n" );
+      
+    if ( ob->query( "cant_sell"))
+        return notify_fail( (string)ob->query("cant_sell"));
+
+	message_vision( "$N把身上的" + ob->query( "name" ) + "卖了"+price_string(value2)+"。\n",
+		who );
+
+	destruct( ob );                      
+	pay_player( who, value2 );
+	
+    set_temp("busy", 1);
+    //who->start_busy(1);
+    remove_call_out("dest");
+    call_out("dest",1,who);
+
+	return 1;
+}
+
+int do_convert(string arg)
+{
+	string from, to,name,unit;
+	int amount, bv1, bv2;
+	object from_ob, to_ob,who;
+	who = this_player();
+
+    if ( query_temp("busy") )
+        return notify_fail("伙计生气地说：“着什么急，我正忙呢！”\n");
+	if ( !arg || sscanf( arg, "%d %s to %s", amount, from, to ) != 3 )
+		return notify_fail( "指令格式：convert <数量> <货币种类> to <货币种类>\n");
+
+	from_ob = present( from + "_money", who );
+	to_ob = present( to + "_money", who );
+	if ( file_size( MONEY_DIR + to + ".lpc" ) < 0 )
+		return notify_fail( "你想兑换哪一种钱？\n" );
+
+	if ( !from_ob )
+		return notify_fail( "你身上没有这种货币。\n" );
+	if ( amount < 1 )
+		return notify_fail( "兑换货币一次至少要兑换一个。\n" );
+		
+	if ( (int)from_ob->query_amount() < amount )
+		return notify_fail( "你身上没有那麽多" +
+					from_ob->query( "name" ) + "。\n" );
+
+	bv1 = from_ob->query( "base_value" );
+	if ( !bv1 )
+		return notify_fail( "这种东西不值钱。\n" );
+
+	bv2 = to_ob ? to_ob->query( "base_value" ) :
+			call_other( MONEY_DIR + to, "query", "base_value" );
+
+	if ( bv1 < bv2 ) amount -= amount % ( bv2 / bv1 );
+	if ( amount==0 )
+		return notify_fail( "这些" + from_ob->query( "name" ) +
+					"的价值太低了，换不起。\n" );
+    //destruct from_ob first.     
+    name = from_ob->query("name");
+    unit = from_ob->query("base_unit"); 
+	if ( from_ob->query_amount() == amount )
+	    destruct(from_ob);                 
+	else
+	    from_ob->add_amount( -amount );
+	if ( !to_ob )
+	{
+		to_ob = new( MONEY_DIR + to );
+		to_ob->move( who );
+		to_ob->set_amount( amount * bv1 / bv2 );
+	}
+	else
+		to_ob->add_amount( amount * bv1 / bv2 );
+
+    set_temp("busy", 1);
+    //who->start_busy(1);
+    remove_call_out("dest");
+    call_out("dest",1,who);
+	message_vision( sprintf( "$N从身上取出%s%s%s，换成%s%s%s。\n",
+		chinese_number( amount ), unit,name, chinese_number( amount * bv1 / bv2 ),
+		to_ob->query( "base_unit" ), to_ob->query( "name" ) ),
+		who );
+
+	return 1;
+}
+
+int do_save(string arg)
+{
+    string money,name;
+    int amount,value;
+    object from_ob,who, mon;
+
+    who = this_player();
+ 
+    if ( query_temp("busy") )
+        return notify_fail("伙计生气地说：“着什么急，我正忙呢！”\n");
+
+	if ( !arg || sscanf( arg, "%d %s", amount, money ) != 2 )
+		return notify_fail( "指令格式：cun <数量> <货币种类> \n");
+        
+	if ( file_size( MONEY_DIR + money + ".lpc" ) < 0 )
+		return notify_fail( "这不是钱，不能存。\n" );
+
+	from_ob = present( money + "_money", who );
+
+	if ( !from_ob )
+		return notify_fail( "你身上没有这种货币。\n" );
+	if ( amount < 1 )
+		return notify_fail( "一次至少要存一个。\n" );
+		
+	if ( (int)from_ob->query_amount() < amount )
+		return notify_fail( "你身上没有那麽多" +
+					from_ob->query( "name" ) + "。\n" );      
+					
+	name = from_ob->query("name");
+    value = from_ob->query("base_value") * amount; 
+    if( value > 10000000 )
+        value = value  / 100 * 93;
+    else
+        value = value * 93 / 100;    
+    if( value < 1 )
+    {
+        tell_object(who,"客官的钱实在太多了，小店不敢收，抱歉抱歉。\n");
+        return 1;
+    } 
+    //dec from_ob first.
+    if ( (int)from_ob->query_amount() == amount )
+        destruct(from_ob);   
+    else
+        from_ob->add_amount(-amount); 
+    if ( !who->query("savemoney") )
+    {  
+        who->set("savemoney",value);
+    }
+    else
+    {
+        who->add("savemoney",value);
+    }
+    if ( mon = new( MONEY_DIR + "money.lpc" ) )
+    {
+        mon->restore();
+        mon->set( who->query( "id" ), who->query( "savemoney" ) );
+        mon->save();
+        destruct( mon );
+    }    
+    set_temp("busy", 1);
+    //who->start_busy(1);
+    remove_call_out("dest");
+    call_out("dest",1,who);
+	message_vision( sprintf( "$N从身上取出一些%s，交给伙计存了起来。\n",name),who );
+    return 1;
+}
+
+int do_load(string arg)
+{
+    string money;
+    int amount,value,basevalue;
+    object to_ob,who, mon;
+    who = this_player();
+ 
+    if ( query_temp("busy") )
+        return notify_fail("伙计生气地说：“着什么急，我正忙呢！”\n");
+
+	if ( !arg || sscanf( arg, "%d %s", amount, money ) != 2 )
+		return notify_fail( "指令格式：qu <数量> <货币种类> \n");
+        
+	if ( file_size( MONEY_DIR + money + ".lpc" ) < 0 )
+		return notify_fail( "这不是钱，不能取。\n" );
+	if ( amount < 1 )
+		return notify_fail( "一次至少要取一个。\n" );
+    value = who->query("savemoney");
+	to_ob = present( money + "_money", who );
+	
+	basevalue = to_ob ? to_ob->query( "base_value" ) :
+			call_other( MONEY_DIR + money, "query", "base_value" );   
+    if ( amount * basevalue < 1 )
+        return notify_fail( "抱歉，您取的太多了，小店一时拿不出来。\n");
+	
+	if ( value < (amount*basevalue) )
+		return notify_fail( "你没有存那么多钱.\n" );     
+    set_temp( "busy", 1 );
+    //who->start_busy(1);
+    remove_call_out("dest");
+    call_out("dest",1,who);
+	message_vision( "伙计交给$N一些钱，说：“您收好！”。\n",who );    
+    pay_player(who,amount*basevalue);
+    who->add("savemoney",-amount*basevalue);  
+    if( who->query("savemoney") < 0 )
+        who->set("savemoney",0);
+    if ( mon = new( MONEY_DIR + "money.lpc" ) )
+    {
+        mon->restore();
+        mon->set( who->query( "id" ), who->query( "savemoney" ) );
+        mon->save();
+        destruct( mon );
+    }
+    return 1;
+}
+
+int do_check()
+{
+    int value;
+    object who, mon;
+
+    who = this_player();
+    value = who->query("savemoney");
+    if ( value < 0 )            
+    {
+        who->delete("savemoney");
+        value = 0;
+    } 
+    if ( !value || value == 0 )
+        return notify_fail("你根本就没存过钱，查什么帐？！\n");
+    printf("你在钱庄里共存有%s.\n",value_string(value));
+    if ( mon = new( MONEY_DIR + "money.lpc" ) )
+    {
+        mon->restore();
+        mon->set( who->query( "id" ), who->query( "savemoney" ) );
+        mon->save();
+        destruct( mon );
+    }
+    return 1;
+}
+
+int dest(object ob)
+{
+    delete_temp("busy");
+}

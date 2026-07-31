@@ -165,6 +165,7 @@ classes it's found.
 | 013 | `xiakexing2017` | 侠客行 (MUD侠客行2017完整版) | `MUD侠客行2017完整版.zip` | 40017 | WASM playable |
 | 014 | `nitan170911` | 仙剑奇侠传 (nitan170911) | `nitan170911.7z` | 40018 | WASM limited |
 | 014-1 | `hhsj` | 洪荒世界 | `洪荒世界.rar` | 40106 | native-boot verified, WASM pending |
+| 014-2 | `xfbhh` | 洪荒世界（修复版） | `修复版洪荒.rar` | 40190 | native-boot verified, WASM pending |
 | 015 | `nitan6` | 笑傲江湖 (nitan6) | `nitan6.zip` | 40019 | WASM limited |
 | 016 | `rzrmud` | 大唐西游 YWX人造人 (rzrmud) | `rzrmud.20130220.tar.gz` | 40020 | WASM playable |
 | 017 | `xkx2001` | 侠客行 Ⅰ (The Quest of Oriental Chivalry) | `xkx2001测试用老lib.zip` | 40021 | WASM playable |
@@ -174,6 +175,7 @@ classes it's found.
 | 018-2 | `xianlvqingyuanzheda` | 仙侣情缘·浙大版 | `仙侣情缘浙大版.rar` | 40033 | WASM limited |
 | 019 | `xo` | 笑傲江湖（迷你版） | `xo.zip` | 40023 | WASM limited |
 | 019-1 | `xo_final` | 笑傲江湖（最终版） | `xo最终版1.2.rar` | 40024 | WASM playable |
+| 019-2 | `qhxajh` | 清华笑傲江湖 | `清华笑傲江湖）.tgz` | 40195 | native-boot verified, WASM pending |
 | 019-2 | `xiaoaojianghu2` | 笑傲江湖 II | `笑傲江湖II.rar` | 40068 | WASM playable |
 | 019-3 | `xiaoaojianghu_xo` | 笑傲江湖 XO | `笑傲江湖XO .rar` | 40069 | WASM limited |
 | 020 | `zzfy` | 郑州风云3 | `zzfy (full).rar` | 40025 | WASM playable |
@@ -314,6 +316,16 @@ classes it's found.
 | 138 | `zxty` | 再现天涯 | `再现天涯.rar` | 40166 | native-boot verified, WASM pending |
 | 139 | `zzfy3` | 郑州风云3 | `郑州风云3.rar` | 40120 | native-boot verified, WASM pending |
 | 140 | `hellxg` | hell（修改版） | `hell - 修改.7z` | 40181 | noboot |
+| 141 | `wxddym` | 武学大道 | `武学大道源码.7z` | 40189 | native-boot verified, WASM pending |
+| 142 | `nt6` | 泥潭6 | `泥潭6.zip` | 40186 | native-boot verified, WASM pending |
+| 142-1 | `nt6nitan6win` | 泥潭6 (win_nodb版) | `泥潭6nitan6-win_nodb.rar` | 40187 | native-boot verified, WASM pending |
+| 143 | `yszz` | 妖神之争 | `妖神之争.rar` | 40192 | native-boot verified, WASM pending |
+| 144 | `njhhdxdes2hx` | es2/侠客行（南京河海大学校内版1.01） | `南京河海大学的es2和xkx《校内_1.01版》.tar.gz` | 40194 | native-boot verified, WASM pending |
+| 145 | `sgzmudsgz` | 三国志MUD (sgz) | `三国志MUDsgz.tar.gz` | 40196 | noboot |
+| 146 | `hy` | 海洋（基础版） | `海洋（由千堆雪上传）.rar` | 40182 | native-boot verified, WASM pending |
+| 146-1 | `hy5` | 海洋5 | `海洋5.7z` | 40183 | native-boot verified, WASM pending |
+| 147 | `jym` | 金庸梦 | `金庸梦.rar` | 40184 | native-boot verified, WASM pending |
+| 148 | `nt1` | 泥潭1 | `泥潭1.gz` | 40185 | native-boot verified, WASM pending |
 | 901 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | — | deprioritized |
 | 901-1 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | — | deprioritized |
 | 901-2 | `dw_fluffos_v3` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | — | deprioritized |

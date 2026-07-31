@@ -9,12 +9,12 @@
 #define I2D_MUD_SERVER          ({"59.37.59.254", 5004})
 #define MUDLIST_UPDATE_INTERVAL 600
 #define REFRESH_INCOMING_TIME   3*60*60
-//----------------------н╩т╙тккЦсц-------------------------
-#define GB_CODE                 1       // gbу╬╣Ц
-#define ANTI_AD                 2       // спю╛╩Ь╧Ц╦Ф╣ду╬╣Ц
-#define IGNORED                 4       // ╠╩╠╬у╬фа╠нпео╒у╬╣Ц
-#define SHUTDOWN                8       // ╧ь╠у╣ду╬╣Ц
-#define ONLINE                  16      // ©иа╛╫су╬╣Ц
-#define DISCONNECT              32      // й╖х╔а╙о╣╣ду╬╣Ц
-#define ENCODE_CONFIRM          64      // о╣мЁвт╤╞еп╤╗gb/big5бК╣ду╬╣Ц
+//----------------------Д╫█Е┘┐Х©░Г╝≈Г■╗-------------------------
+#define GB_CODE                 1       // gbГ╚≥Г┌╧
+#define ANTI_AD                 2       // Ф°┴Е·┐Е°╬Е╧©Е▒┼Г └Г╚≥Г┌╧
+#define IGNORED                 4       // Х╒╚Ф°╛Г╚≥Е╠▐Х■╫Д©║Ф│╞Г╚≥Г┌╧
+#define SHUTDOWN                8       // Е┘ЁИ≈╜Г └Г╚≥Г┌╧
+#define ONLINE                  16      // Е▐╞Х©·Ф▌╔Г╚≥Г┌╧
+#define DISCONNECT              32      // Е╓╠Е▌╩Х│■ГЁ╩Г └Г╚≥Г┌╧
+#define ENCODE_CONFIRM          64      // ГЁ╩Г╩÷Х┤╙Е┼╗Е┬╓Е╝ gb/big5Г═│Г └Г╚≥Г┌╧
 

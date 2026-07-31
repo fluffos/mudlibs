@@ -5,7 +5,7 @@ object fang;
 
 
 	if ( objectp(present("qi wushi", environment(me))) )
-		return notify_fail("ÆåÎäÊ¿À¹×¡ÁËÄãµÄÈ¥Â·¡£\n");
+		return notify_fail("æ£‹æ­¦å£«æ‹¦ä½äº†ä½ çš„åŽ»è·¯ã€‚\n");
 
 
 
@@ -16,7 +16,7 @@ object fang;
             me->delete_temp("marks/steps");
             me->delete_temp("marks/step");
             me->set_temp("qijuok",1);
-             return notify_fail("ÄãÕýÔÚ¾øÍûÊ±,×ß×Å×ß×Å£¬ÆÆÁËÕâ¸öÁáççÆå¾Ö¡£\n");
+             return notify_fail("ä½ æ­£åœ¨ç»æœ›æ—¶,èµ°ç€èµ°ç€ï¼Œç ´äº†è¿™ä¸ªçŽ²ç‘æ£‹å±€ã€‚\n");
          }  
 
         if ((int)me->query_temp("marks/steps") == -11 && (int)me->query_temp("marks/step") == 17)
@@ -25,7 +25,7 @@ object fang;
             me->delete_temp("marks/steps");
             me->delete_temp("marks/step");
             me->set_temp("qijuok",1);
-             return notify_fail("ÄãÕýÔÚ¾øÍûÊ±,×ß×Å×ß×Å£¬ÆÆÁËÕâ¸öÁáççÆå¾Ö¡£\n");
+             return notify_fail("ä½ æ­£åœ¨ç»æœ›æ—¶,èµ°ç€èµ°ç€ï¼Œç ´äº†è¿™ä¸ªçŽ²ç‘æ£‹å±€ã€‚\n");
          }  
 
         if ((int)me->query_temp("marks/steps") == 10 && (int)me->query_temp("marks/step") == -16)
@@ -34,7 +34,7 @@ object fang;
             me->delete_temp("marks/steps");
             me->delete_temp("marks/step");
             me->set_temp("qijuok",1);
-             return notify_fail("ÄãÕýÔÚ¾øÍûÊ±,×ß×Å×ß×Å£¬ÆÆÁËÕâ¸öÁáççÆå¾Ö¡£\n");
+             return notify_fail("ä½ æ­£åœ¨ç»æœ›æ—¶,èµ°ç€èµ°ç€ï¼Œç ´äº†è¿™ä¸ªçŽ²ç‘æ£‹å±€ã€‚\n");
          }  
 
         if ((int)me->query_temp("marks/steps") == 11 && (int)me->query_temp("marks/step") == -17)
@@ -43,7 +43,7 @@ object fang;
             me->delete_temp("marks/steps");
             me->delete_temp("marks/step");
             me->set_temp("qijuok",1);
-             return notify_fail("ÄãÕýÔÚ¾øÍûÊ±,×ß×Å×ß×Å£¬ÆÆÁËÕâ¸öÁáççÆå¾Ö¡£\n");
+             return notify_fail("ä½ æ­£åœ¨ç»æœ›æ—¶,èµ°ç€èµ°ç€ï¼Œç ´äº†è¿™ä¸ªçŽ²ç‘æ£‹å±€ã€‚\n");
          }  
 
 
@@ -53,7 +53,7 @@ object fang;
             me->delete_temp("marks/steps");
             me->delete_temp("marks/step");
             me->set_temp("qijuok",1);
-             return notify_fail("ÄãÕýÔÚ¾øÍûÊ±,×ß×Å×ß×Å£¬ÆÆÁËÕâ¸öÁáççÆå¾Ö¡£\n");
+             return notify_fail("ä½ æ­£åœ¨ç»æœ›æ—¶,èµ°ç€èµ°ç€ï¼Œç ´äº†è¿™ä¸ªçŽ²ç‘æ£‹å±€ã€‚\n");
          } 
          
          
@@ -65,7 +65,7 @@ object fang;
             me->delete_temp("marks/steps");
             me->delete_temp("marks/step");
             me->set_temp("qijuok",1);
-             return notify_fail("ÄãÕýÔÚ¾øÍûÊ±,×ß×Å×ß×Å£¬ÆÆÁËÕâ¸öÁáççÆå¾Ö¡£\n");
+             return notify_fail("ä½ æ­£åœ¨ç»æœ›æ—¶,èµ°ç€èµ°ç€ï¼Œç ´äº†è¿™ä¸ªçŽ²ç‘æ£‹å±€ã€‚\n");
          }          
 
 
@@ -75,7 +75,7 @@ object fang;
             me->delete_temp("marks/steps");
             me->delete_temp("marks/step");
             me->set_temp("qijuok",1);
-             return notify_fail("ÄãÕýÔÚ¾øÍûÊ±,×ß×Å×ß×Å£¬ÆÆÁËÕâ¸öÁáççÆå¾Ö¡£\n");
+             return notify_fail("ä½ æ­£åœ¨ç»æœ›æ—¶,èµ°ç€èµ°ç€ï¼Œç ´äº†è¿™ä¸ªçŽ²ç‘æ£‹å±€ã€‚\n");
          }   
 
 if (userp(me) && random(5)==0)
@@ -83,38 +83,38 @@ if (userp(me) && random(5)==0)
      	fang = load_object(__DIR__"npc/qiwushi");
 	fang->move(environment(me));	
 	fang->kill_ob(me);
-		return notify_fail("Í»È»³öÏÖÒ»¸öÆåÎäÊ¿À¹×¡ÁËÄãµÄÈ¥Â·¡£\n");	
+		return notify_fail("çªç„¶å‡ºçŽ°ä¸€ä¸ªæ£‹æ­¦å£«æ‹¦ä½äº†ä½ çš„åŽ»è·¯ã€‚\n");	
 	
 }
  if ( (int)me->query_temp("marks/steps")> 11 )
- tell_object(me, "¿´À´ÄãÏòÄÏ×ßµÄ³¬³ö·¶Î§ÁË¡£\n");
+ tell_object(me, "çœ‹æ¥ä½ å‘å—èµ°çš„è¶…å‡ºèŒƒå›´äº†ã€‚\n");
  
  if ( (int)me->query_temp("marks/steps")< -11 )
- tell_object(me, "¿´À´ÄãÏò±±×ßµÄ³¬³ö·¶Î§ÁË¡£\n");
+ tell_object(me, "çœ‹æ¥ä½ å‘åŒ—èµ°çš„è¶…å‡ºèŒƒå›´äº†ã€‚\n");
                   
  if ((int)me->query_temp("marks/step")>17 )
- tell_object(me, "¿´À´ÄãÏò¶«×ßµÄ³¬³ö·¶Î§ÁË¡£\n");
+ tell_object(me, "çœ‹æ¥ä½ å‘ä¸œèµ°çš„è¶…å‡ºèŒƒå›´äº†ã€‚\n");
 
  if ((int)me->query_temp("marks/step")<-17 )
- tell_object(me, "¿´À´ÄãÏòÎ÷×ßµÄ³¬³ö·¶Î§ÁË¡£\n");
+ tell_object(me, "çœ‹æ¥ä½ å‘è¥¿èµ°çš„è¶…å‡ºèŒƒå›´äº†ã€‚\n");
 
  if ( (int)me->query_temp("marks/steps")> 0 && (int)me->query_temp("marks/step")>0 )
- tell_object(me, "¿´À´ÄãÏò¶«×ßÌ«¶àÁË¡£\n");
+ tell_object(me, "çœ‹æ¥ä½ å‘ä¸œèµ°å¤ªå¤šäº†ã€‚\n");
 
 if ( (int)me->query_temp("marks/steps")< 0 && (int)me->query_temp("marks/step")<0 )
- tell_object(me, "¿´À´ÄãÏòÎ÷×ßÌ«¶àÁË¡£\n");
+ tell_object(me, "çœ‹æ¥ä½ å‘è¥¿èµ°å¤ªå¤šäº†ã€‚\n");
 
  if ( (int)me->query_temp("marks/steps")> 0 && (int)me->query_temp("marks/step")>0 )
- tell_object(me, "¿´À´ÄãÏòÄÏ×ßÌ«¶àÁË¡£\n");
+ tell_object(me, "çœ‹æ¥ä½ å‘å—èµ°å¤ªå¤šäº†ã€‚\n");
 
 if ( (int)me->query_temp("marks/steps")< 0 && (int)me->query_temp("marks/step")<0 )
- tell_object(me, "¿´À´ÄãÏò±±×ßÌ«¶àÁË¡£\n"); 
+ tell_object(me, "çœ‹æ¥ä½ å‘åŒ—èµ°å¤ªå¤šäº†ã€‚\n"); 
 
 
 
  
- //tell_object(me, "w" + me->query_temp("marks/step") + "¡£\n");
- //tell_object(me, "s" + me->query_temp("marks/steps") + "¡£\n");
+ //tell_object(me, "w" + me->query_temp("marks/step") + "ã€‚\n");
+ //tell_object(me, "s" + me->query_temp("marks/steps") + "ã€‚\n");
 
                    if (dir == "west")
          me->add_temp("marks/step",1);

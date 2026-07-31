@@ -1,0 +1,413 @@
+// look.c
+// phoebus modify 1997
+ //qyz deleted the description of beasts
+ //Lin add zuzhilooking.
+
+#include <room.h>
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+mixed look_room(object me, object env);
+int look_item(object me, object obj);
+int look_living(object me, object obj);
+int look_room_item(object me, string arg);
+string per_status_msg(int per, string gender, string race, int age);
+
+string *per_msg_male0 = ({
+        CYN "是一个少年，身量未足，形容尚小。\n" NOR,
+});
+string *per_msg_male1 = ({
+        CYN "英俊潇洒,风度翩翩。\n" NOR,
+        CYN "相貌出众,面目俊朗。\n" NOR,
+});
+
+string *per_msg_male2 = ({
+        CYN "英俊潇洒,颇有气质。\n" NOR,
+//        CYN "相貌出众,宛如潘安再世。\n" NOR,
+});
+string *per_msg_male3 = ({
+        CYN "相貌平平，一般一般。\n" NOR,
+        CYN "一副蔫蔫的样子，有气无力。 \n" NOR, 
+        CYN "相貌凶狠，阴险狡诈。\n" NOR
+});
+string *per_msg_male61 = ({
+        CYN "慈眉善目，让人可亲可敬。\n" NOR,
+});
+string *per_msg_male62 = ({
+        CYN "目光呆滞，让人敬而远之。\n" NOR,
+});
+
+string *per_msg_female0 = ({
+        CYN  "是一个小姑娘，身量未足，形容尚小。\n" NOR,
+});
+string *per_msg_female1 = ({
+        CYN "长发如云，肌肤胜雪，不知倾倒了多少英雄豪杰。 \n" NOR,
+        CYN "俏脸生春，妙目含情，轻轻一笑，不觉让人怦然心动。 \n" NOR,
+        CYN "风情万种，楚楚动人，当真是我见犹怜。 \n" NOR,
+//        CYN "容色秀丽，风姿绰约。 \n" NOR,
+//        CYN "秀发如云，肌肤白净。 \n" NOR,
+//        CYN "风情俏丽，美丽动人。 \n" NOR, 
+});
+
+string *per_msg_female2 = ({
+        CYN "容色秀丽，风姿绰约。 \n" NOR,
+        CYN "秀发如丝，肌肤如雪。 \n" NOR,
+        CYN "俏脸生春，妙目含情。 \n" NOR,
+        CYN "风情万种，楚楚动人。 \n" NOR,
+});
+
+string *per_msg_female3 = ({
+        CYN "虽算不上绝世佳人，也颇有几份姿色。 \n" NOR,
+        CYN "长得还欠丽质，确颇有几份动人姿色。  \n" NOR,
+});
+string *per_msg_female61 = ({
+        CYN "慈眉善目，让人可亲可敬。\n" NOR,
+});
+string *per_msg_female62 = ({
+        CYN "目光呆滞，让人敬而远之。\n" NOR,
+});
+
+string *per_msg_beast1 = ({
+        CYN "看起来流理流气。 \n" NOR,
+        CYN "一副凶巴巴的样子。  \n" NOR,
+});
+                
+string *per_msg_beast2 = ({
+        CYN "看上去有气无力的，象是几天没吃饭的样子。 \n" NOR,
+        CYN "一副恶狠狠的样子。  \n" NOR,
+});
+
+string *per_msg_beast3 = ({
+        CYN "长的极其丑陋，非常吓人的。 \n" NOR,
+        CYN "相貌凶恶，满脸横肉，让人一见就惧怕三分。\n" NOR
+});
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+	object obj;
+	int result;
+
+	if ( !arg )
+		result = look_room(me, environment(me));
+	else if ( (obj = present(arg, me)) ||
+			  (obj = present(arg, environment(me))))
+	{
+		if ( obj->is_character() )
+			result = look_living(me, obj);
+		else
+			result = look_item(me, obj);
+	}
+	else
+		result = look_room_item(me, arg);
+
+	return result;
+}
+
+mixed look_room(object me, object env)
+{
+	int i;
+	object *inv;
+	mapping exits;
+	string str, *dirs;
+
+	if ( !env )
+	{
+		write("你的四周灰蒙蒙地一片，什么也没有。\n");
+		return 1;
+	}
+	str = sprintf( "%s - %s\n    %s%s",
+		env->query("short"),
+		wizardp(me) ? file_name(env): "",
+		env->query("long"),
+		env->query("outdoors") ? NATURE_D->outdoor_room_description() : "" );
+
+	exits = env->query("exits");
+	if ( mapp(exits) )
+	{
+		dirs = keys(exits);
+		for ( i = 0; i < sizeof(dirs); i++ )
+			if ( (int)env->query_door(dirs[i], "status") & DOOR_CLOSED )
+				dirs[i] = 0;
+		dirs -= ({ 0 });
+		if ( sizeof(dirs) == 0 )
+			str += "    这里没有任何明显的出路。\n";
+		else if ( sizeof(dirs) == 1 )
+			str += "    这里唯一的出口是 " + BOLD + dirs[0] + NOR + "。\n";
+		else
+			str += sprintf("    这里明显的出口是 " + BOLD + "%s" + NOR + " 和 " + BOLD + "%s" + NOR + "。\n",
+				implode(dirs[0..sizeof(dirs)-2], "、"), dirs[sizeof(dirs)-1]);
+	}
+//	str += env->door_description();
+
+	inv = all_inventory(env);
+	for ( i = 0; i < sizeof(inv); i++ )
+	{
+		if (( inv[i] == me ) || ( !me->visible(inv[i]) ) || inv[i]->unshow( me ) )
+			continue;
+		str += "  " + inv[i]->short() + "\n";
+	}
+
+	write(str);
+	return str;
+}
+
+int look_item(object me, object obj)
+{
+	mixed *inv;
+
+	this_player()->start_more(obj->long());
+	inv = all_inventory(obj);
+	if ( sizeof(inv) )
+	{
+		inv = map_array(inv, "inventory_look", this_object() );
+		message("vision", sprintf("里面有：\n  %s\n",
+			implode(inv, "\n  ") ), me);
+	}
+	return 1;
+}
+
+string per_status_msg(int per, string gender, string race, int age)
+{
+	if ( race == "人类" )
+	{
+        if ( gender == "男性" )
+		{
+            if ( age > 60 ) 
+                if ( per > 20 )
+                    return ( per_msg_male61[random(sizeof(per_msg_male61))] );
+                else 
+                    return ( per_msg_male62[random(sizeof(per_msg_male62))] );        
+            if ( age < 16 )
+                return ( per_msg_male0[random(sizeof(per_msg_male0))] );
+        	if ( per >= 25 )
+                return ( per_msg_male1[random(sizeof(per_msg_male1))] );
+            else if ( per >= 20 )
+                return ( per_msg_male2[random(sizeof(per_msg_male2))] );
+            else if ( per < 20 )
+                return ( per_msg_male3[random(sizeof(per_msg_male3))] );
+        }
+    	if ( gender == "女性" )
+	    {
+            if ( age > 60 ) 
+                if ( per > 20 )
+                    return ( per_msg_female61[random(sizeof(per_msg_female61))] );
+                else 
+                    return ( per_msg_female62[random(sizeof(per_msg_female62))] );        
+            if ( age < 16 )
+                return ( per_msg_female0[random(sizeof(per_msg_female0))] );
+            if ( per >= 25 )
+                return ( per_msg_female1[random(sizeof(per_msg_female1))] );
+            else if ( per >= 20 )
+                return ( per_msg_female2[random(sizeof(per_msg_female2))] );
+            else if ( per < 20 )
+                return ( per_msg_female3[random(sizeof(per_msg_female3))] );
+        }
+    }
+	else if ( race == "野兽" )
+	{
+		if ( per >= 25 )
+            return ( per_msg_beast1[random(sizeof(per_msg_beast1))] );
+        else if ( per >= 20 )
+            return ( per_msg_beast2[random(sizeof(per_msg_beast2))] );
+        else if ( per < 20 )
+            return ( per_msg_beast3[random(sizeof(per_msg_beast3))] );
+	}
+}
+
+int look_living(object me, object obj)
+{
+	string str, limb_status, pro, gender;
+	string * zuzhi_id;
+	int i;
+	mixed *inv;
+	mapping my_fam, fam;
+
+	if ( me != obj )
+		message("vision", me->name() +
+			"正盯著你看，不知道打些什么主意。\n", obj);
+
+	str = obj->long();
+	gender = obj->query( "gender" );
+	pro = (obj == me) ? gender_self(gender) : gender_pronoun(gender);
+
+	if ( (string)obj->query("race") == "人类" &&
+		 intp(obj->query("age")) )
+	{
+		str += sprintf("%s看起来约%s多岁。\n", pro,
+					chinese_number(obj->query_age() / 10 * 10));
+	}
+
+	// If we both has family, check if we have any relations.
+	if ( obj != me &&
+		 mapp(fam = obj->query("family")) &&
+		 mapp(my_fam = me->query("family")) &&
+		 fam["family_name"] == my_fam["family_name"] )
+	{
+		if ( fam["generation"] == my_fam["generation"] )
+		{
+			if ( (string)obj->query("gender") == "男性" ||
+				 (string)obj->query("gender") == "无性")
+			{
+				str += sprintf( pro + "是你的%s%s。\n",
+					my_fam["master_id"] == fam["master_id"] ? "": "同门",
+					( my_fam["enter_time"] > fam["enter_time"] || !userp(obj) )? "师兄": "师弟");
+			}
+			else
+				str += sprintf( pro + "是你的%s%s。\n",
+					my_fam["master_id"] == fam["master_id"] ? "": "同门",
+					( my_fam["enter_time"] > fam["enter_time"] || !userp(obj) )? "师姐": "师妹");
+		}
+		else if ( fam["generation"] < my_fam["generation"] )
+		{
+			if ( my_fam["master_id"] == obj->query("id") )
+				str += pro + "是你的师父。\n";
+			else if ( my_fam["generation"] - fam["generation"] > 1 )
+				str += pro + "是你的同门长辈。\n";
+			else if ( fam["enter_time"] < my_fam["enter_time"] )
+				str += pro + "是你的师伯。\n";
+			else
+				str += pro + "是你的师叔。\n";
+		}
+		else
+		{
+			if ( fam["generation"] - my_fam["generation"] > 1 )
+				str += pro + "是你的同门晚辈。\n";
+			else if ( fam["master_id"] == me->query("id") )
+				str += pro + "是你的弟子。\n";
+			else
+				str += pro + "是你的师侄。\n";
+		}
+	}
+	// Lin add zuzhilook.
+	if ( obj != me && obj->JoinedZuzhiNumber() && me->JoinedZuzhiNumber() )
+	{
+	    zuzhi_id = obj->GetZuzhiId();
+	    for ( i=0; i < sizeof( zuzhi_id ); i++ )
+	        if ( me->IsBossOf( obj, zuzhi_id[ i ] ) )
+	            str += pro + "是你的下级，现在是" + obj->ZuzhiName( zuzhi_id[ i ] ) + 
+	              obj->ZuzhiTouxian( zuzhi_id[ i ] ) + "\n";
+	}
+
+	if ( obj->query("max_kee") )
+	{
+		int eff_kee, max_kee;
+		eff_kee = obj->query( "eff_kee" );
+		max_kee = obj->query( "max_kee" );
+		str += pro + COMBAT_D->eff_status_msg(eff_kee * 100 / max_kee) + "\n";
+	}
+
+    // 如果是野兽，就没有相貌。 尸体也没有相貌的啦.     
+    if (( obj->query("race") != "野兽" ) && !obj->is_corpse() )
+        str += pro + per_status_msg((int)obj->query_per(),
+                obj->query("gender"), obj->query("race"), 
+                    obj->query_age() );
+
+	inv = all_inventory(obj);
+	if ( sizeof(inv) )
+	{
+		inv = map_array(inv, "inventory_look", this_object(),
+				obj->is_corpse() ? 0 : 1 );
+		inv -= ({ 0 });
+		if ( sizeof(inv) )
+			str += sprintf( obj->is_corpse() ?
+						"%s的遗物有：\n%s\n" : "%s身上带著：\n%s\n",
+						pro, implode(inv, "\n") );
+	}
+
+	message("vision", str, me);
+
+	if ( obj != me &&
+		 living(obj) &&
+		 random((int)obj->query("bellicosity")/10) > (int)me->query("per") )
+	{
+		write( obj->name() + "突然转过头来瞪你一眼。\n");
+		COMBAT_D->auto_fight(obj, me, "berserk");
+	}
+
+	return 1;
+}
+
+string inventory_look(object obj, int flag)
+{
+	string str;
+
+	str = obj->short();
+	if ( obj->query("equipped") )
+		str = HIC "  ☆" NOR + str;
+	else if ( !flag )
+		str = "    " + str;
+	else
+		return 0;
+
+	return str;
+}
+
+int look_room_item(object me, string arg)
+{
+	object env;
+	mapping item, exits;
+
+	if ( !objectp(env = environment(me)) )
+		return notify_fail("这里只有灰蒙蒙地一片，什么也没有。\n");
+	item = env->query("item_desc");
+	if ( mapp(item) && !undefinedp(item[arg]) )
+	{
+		if ( stringp(item[arg]) )
+			write(item[arg]);
+		else if ( functionp(item[arg]) )
+        {
+			write((string)(*item[arg])(me));
+        }
+        return 1;
+	}
+	exits = env->query("exits");
+	if ( mapp(exits) && !undefinedp(exits[arg]) )
+	{
+		if ( objectp(env = find_object(exits[arg])) )
+			look_room(me, env);
+		else
+		{
+			call_other(exits[arg], "???");
+			look_room(me, find_object(exits[arg]));
+		}
+		return 1;
+	}
+	// Look specific object in the room
+	if ( arg )
+	{
+		string detail;
+		detail = env->query( "detail/" + arg, 1 );
+		if ( stringp( detail ) )	
+		{
+			write( detail );
+			return 1;
+		}
+		else if ( functionp ( detail ) )
+        {
+            mixed result;
+			result = evaluate( detail , me );
+            if (stringp(result))
+                write( result );
+            return result;
+        }
+		if ( strsrch( env->query( "long" ), arg ) >= 0 )
+			return notify_fail("你看不出这里的" + arg + "有什么特别之处\n");
+	}
+	return notify_fail("你要看什么？\n");
+}
+
+int help (object me)
+{
+	write(@HELP
+指令格式: look [<物品>|<生物>|<方向>]
+ 
+这个指令让你查看你所在的环境、某件物品、生物、或是方向。
+ 
+HELP
+);
+	return 1;
+}
+

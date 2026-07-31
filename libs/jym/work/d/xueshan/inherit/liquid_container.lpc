@@ -10,9 +10,9 @@
 // liquid/unique : set to 1 if there is only one kind of liquid can be inside
 // liquid/uniqueid : set to the id of that kind	liquid
 
-static int max_liquid;
-static int current_liquid;
-static string liquid_name;
+nosave int max_liquid;
+nosave int current_liquid;
+nosave string liquid_name;
 
 // couple of statics
 // max_liquid is the max amout of liquid this container can hold

@@ -1,7 +1,7 @@
 // 神话世界·西游记·版本４．５０
 /* <SecCrypt CPL V3R05> */
  
-#include <net/socket_errors.h>
+#include "net/socket_errors.h"
 #define MUD 0
 #define STREAM 1
 #define DATAGRAM 2

@@ -3,7 +3,7 @@
 #define TIME_TICK (time()*60)
 
 
-static int current_ads_phase;
+nosave int current_ads_phase;
 mapping *ads_phase;
 
 mapping *read_table(string file);

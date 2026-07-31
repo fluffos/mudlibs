@@ -1,4 +1,4 @@
-// xiejian.c Ğ°½£ÀîËÄ
+// xiejian.c é‚ªå‰‘æå››
 
 #include <ansi.h>
 
@@ -12,9 +12,9 @@ string ask_me();
 
 void create()
 {
-	set_name("ÀîËÄ", ({ "li si", "li" }) );
-	set("title", "Ğ¡µêÀÏ°å");
-	set("gender", "ÄĞĞÔ" );
+	set_name("æå››", ({ "li si", "li" }) );
+	set("title", "å°åº—è€æ¿");
+	set("gender", "ç”·æ€§" );
 	set("shen_type", -1);
 	set("age", 40);
 	set("str", 30);
@@ -25,18 +25,18 @@ void create()
 	set("no_clean_up",1);
 
 	set("long",
-		"ÕâÊÇÕûÌìĞ¦ßäßäµÄĞ¡µêÀÏ°å£¬ËäÈ»²»ÂôÊ²÷á¶«Î÷£¬È´Ò²¹ıµÃ×ÔÔÚ¡£\n" );
+		"è¿™æ˜¯æ•´å¤©ç¬‘å’ªå’ªçš„å°åº—è€æ¿ï¼Œè™½ç„¶ä¸å–ä»€éº½ä¸œè¥¿ï¼Œå´ä¹Ÿè¿‡å¾—è‡ªåœ¨ã€‚\n" );
 
 	set("combat_exp", 50000);
 	set("attitude", "peaceful");
 	set("chat_chance", 1);
 	set("chat_msg", ({
-		"ÀîËÄËµµÀ: ÕâÎ»¿Í¹Ù£¬ÄúÏëÂòĞ©Ê²÷á¶«Î÷Âğ ?\n",
+		"æå››è¯´é“: è¿™ä½å®¢å®˜ï¼Œæ‚¨æƒ³ä¹°äº›ä»€éº½ä¸œè¥¿å— ?\n",
 	}) );
 
 	set("inquiry", ([
-	        "Ğ°½£"   : (: ask_me :),
-	        "É±ÈË"   : (: ask_me :),
+	        "é‚ªå‰‘"   : (: ask_me :),
+	        "æ€äºº"   : (: ask_me :),
 	]) );
 
 	set("max_qi", 700);
@@ -71,13 +71,13 @@ void init()
 	if( !me->query("waiting_target") && ob->query_temp("fee_paid") ) 
 		ob->delete_temp("fee_paid");
 
-        add_action("do_name","É±");
+        add_action("do_name","æ€");
 	
 }
 
 string ask_me()
 {
-	return "ÎÒ¾ÍÊÇĞ°½£ÀîËÄ£¬ÄãÀ´ÕÒÎÒÓĞÊ²÷áÊÂÂğ£¿\n";
+	return "æˆ‘å°±æ˜¯é‚ªå‰‘æå››ï¼Œä½ æ¥æ‰¾æˆ‘æœ‰ä»€éº½äº‹å—ï¼Ÿ\n";
 }
 
 int do_name(string target)
@@ -89,13 +89,13 @@ int do_name(string target)
 	all = users();
 
 	if(me->query("waiting_target"))
-		return notify_fail("ÀîËÄºÙºÙÒ»Ğ¦£ºÎÒÏÖÔÚÕıÃ¦×ÅÄÄ£¬Äú´ô»á¶ùÔÚÀ´°É£¡\n");
+		return notify_fail("æå››å˜¿å˜¿ä¸€ç¬‘ï¼šæˆ‘ç°åœ¨æ­£å¿™ç€å“ªï¼Œæ‚¨å‘†ä¼šå„¿åœ¨æ¥å§ï¼\n");
 	
 	if( !this_player()->query_temp("fee_paid") ) 
-		return notify_fail("ÀîËÄËµµÀ£º²»¹Ü½ĞÎÒ×öÊ²÷á£¬Äú¿ÉµÃÏÈ¸¶Ç®ÄÄ£¡\n");
+		return notify_fail("æå››è¯´é“ï¼šä¸ç®¡å«æˆ‘åšä»€éº½ï¼Œæ‚¨å¯å¾—å…ˆä»˜é’±å“ªï¼\n");
 
 	if( !target || target==" ") 
-		return notify_fail("ÀîËÄ¶ñºİºİµØËµµÀ£º¿ì¸æËßÎÒÄÇ¼Ò»ïµÄÃû×Ö£¬ÎÒ¿ÉÃ»¹¦·òÌıÄãÏĞÁÄ£¡\n");
+		return notify_fail("æå››æ¶ç‹ ç‹ åœ°è¯´é“ï¼šå¿«å‘Šè¯‰æˆ‘é‚£å®¶ä¼™çš„åå­—ï¼Œæˆ‘å¯æ²¡åŠŸå¤«å¬ä½ é—²èŠï¼\n");
 
 	for(i=0; i<sizeof(all); i++) 
 	{
@@ -104,10 +104,10 @@ int do_name(string target)
 	}
 	
 	if( !dest )
-		return notify_fail("ÀîËÄÒ»ÉùÀäĞ¦£ºËûÏÖÔÚ²»ÔÚÓÎÏ·ÖĞ£¬¹ı»áÔÙÀ´°É¡£\n");
+		return notify_fail("æå››ä¸€å£°å†·ç¬‘ï¼šä»–ç°åœ¨ä¸åœ¨æ¸¸æˆä¸­ï¼Œè¿‡ä¼šå†æ¥å§ã€‚\n");
 		
 	if (dest->is_ghost())
-		return notify_fail("ÀîËÄºÜ²»¸ßĞË£ºËûÒÑ¾­ÊÇ¸öËÀ¹íÁË£¬Äã»¹À´ÕÒÎÒ¸ÉÊ²Ã´£¡\n");
+		return notify_fail("æå››å¾ˆä¸é«˜å…´ï¼šä»–å·²ç»æ˜¯ä¸ªæ­»é¬¼äº†ï¼Œä½ è¿˜æ¥æ‰¾æˆ‘å¹²ä»€ä¹ˆï¼\n");
 
 	me->set("waiting_target", dest->query("id"));
 	me->set("target_name", target);
@@ -116,15 +116,15 @@ int do_name(string target)
 	me->set_temp("apply/defense", 50);
 	me->set_temp("apply/damage",  20);
 
-	me->set("title", HIB "Ğ°½£" NOR);
+	me->set("title", HIB "é‚ªå‰‘" NOR);
 	me->set("long",
-		"Ğ°½£ÀîËÄ£¬É±ÊÖ°ïÊ®´ó¸ß¼¶½£Ê¿Ö®Ò»£¬ÓĞ½£²»È¾Ñª²»¹éÇÊÖ®Ãû¡£\n" );
+		"é‚ªå‰‘æå››ï¼Œæ€æ‰‹å¸®åå¤§é«˜çº§å‰‘å£«ä¹‹ä¸€ï¼Œæœ‰å‰‘ä¸æŸ“è¡€ä¸å½’é˜ä¹‹åã€‚\n" );
 
 	me->delete("chat_chance");
 	me->delete("chat_msg");
 
 	message("vision",
-		HIY "ÀîËÄºÙºÙºÙµØ¸ÉĞ¦ÁË¼¸Éù£¬ËµµÀ£ºÄú¾ÍÔÚÕâ¶ù¾²ºîºÃÒô°É!\n"NOR,
+		HIY "æå››å˜¿å˜¿å˜¿åœ°å¹²ç¬‘äº†å‡ å£°ï¼Œè¯´é“ï¼šæ‚¨å°±åœ¨è¿™å„¿é™ä¾¯å¥½éŸ³å§!\n"NOR,
 		environment(), me );
 
 	me->set("pursuer", 1);
@@ -132,7 +132,7 @@ int do_name(string target)
 	me->set("bellicosity", 10000);
 	me->set("combat_exp", 50000);
 
-	message_vision("$N×ßÁË³öÈ¥¡£\n" NOR, me);
+	message_vision("$Nèµ°äº†å‡ºå»ã€‚\n" NOR, me);
 
 	call_out("do_chase", 1, me);
 	
@@ -145,14 +145,14 @@ int accept_object(object who, object ob)
 	if (ob->query("money_id") && ob->value() >= 1000000 
 		&& !this_object()->query("waiting_target")) 
 	{
-		tell_object(who, "ÀîËÄ³ÁÏÂÁ³À´£ººÃ£¬Ë¬¿ìËµ°É£¬ÄãÒªÎÒ°ïÄãÉ±Ë­£¿\n");
-		tell_object(who, "Çë¼üÈë£ºÉ± Ä¿±êÖĞÎÄÃû×Ö\n");
+		tell_object(who, "æå››æ²‰ä¸‹è„¸æ¥ï¼šå¥½ï¼Œçˆ½å¿«è¯´å§ï¼Œä½ è¦æˆ‘å¸®ä½ æ€è°ï¼Ÿ\n");
+		tell_object(who, "è¯·é”®å…¥ï¼šæ€ ç›®æ ‡ä¸­æ–‡åå­—\n");
 		who->set_temp("fee_paid",1);
 		return 1;
 	}
 	else if (ob->query("money_id") && ob->value() < 1000000) 
 	{
-		tell_object(who, "ÀîËÄºÙºÙÒ»Ğ¦£¬ËµµÀ£º¸øÎÒÕâ÷á¶àÇ®£¿ ½«À´ÎÒ¿ÉÃ»·¨»¹Äã°¡¡£\n");
+		tell_object(who, "æå››å˜¿å˜¿ä¸€ç¬‘ï¼Œè¯´é“ï¼šç»™æˆ‘è¿™éº½å¤šé’±ï¼Ÿ å°†æ¥æˆ‘å¯æ²¡æ³•è¿˜ä½ å•Šã€‚\n");
 		return 1;
 	}
 
@@ -172,7 +172,7 @@ int do_chase(object me)
 	}
 	
 	me->move(environment(dest));
-	message_vision("$N×ßÁË¹ıÀ´¡£\n" NOR, me);
+	message_vision("$Nèµ°äº†è¿‡æ¥ã€‚\n" NOR, me);
 	me->set_leader(dest);
 	command("look " + dest->query("id"));
 	
@@ -196,8 +196,8 @@ int do_kill(object me, object dest)
 	if( objectp(dest) && present(dest, environment(me))
 		 && !environment(me)->query("no_fight"))
 	{
-		message_vision(HIR "$N¶Ô$nËµµÀ£ºÒõË¾¹íÍõ²îÎÒÀ´£¬ÇëÄãÈ¥ËûÄÇ¶ù×ö¿Í£¬"
-			+RANK_D->query_rude(dest)+"£¬ÄãÈÏÃü°É£¡\n" NOR, me, dest);
+		message_vision(HIR "$Nå¯¹$nè¯´é“ï¼šé˜´å¸é¬¼ç‹å·®æˆ‘æ¥ï¼Œè¯·ä½ å»ä»–é‚£å„¿åšå®¢ï¼Œ"
+			+RANK_D->query_rude(dest)+"ï¼Œä½ è®¤å‘½å§ï¼\n" NOR, me, dest);
 		me->set_leader(dest);
 		me->kill_ob(dest);
 		dest->fight_ob(me);
@@ -264,18 +264,18 @@ int do_back(object me)
 {
 
 	me->move("/d/village/shop");
-	message("vision", "ÀîËÄ×ßÁË½øÀ´£¬ÅÄÁËÅÄÉíÉÏµÄ³¾ÍÁ£¬°Ñ½£ÉÏµÄÑª¼£Ä¨ÊÃ¸É¾»£¬\n"
-		"Ëû½Ó×ÅÒ»Ğ¦ËµµÀ£ºÀÏÌìÒ¯±£ÓÓ£¬»î¶ù¸ÉµÃ¸É¾»ÀûÂä£¬ÄúÀÏÒÔááÓĞÊ²÷áÊÂ»¹¿ÉÒÔÕÒÎÒ¡£\n", 
+	message("vision", "æå››èµ°äº†è¿›æ¥ï¼Œæ‹äº†æ‹èº«ä¸Šçš„å°˜åœŸï¼ŒæŠŠå‰‘ä¸Šçš„è¡€è¿¹æŠ¹æ‹­å¹²å‡€ï¼Œ\n"
+		"ä»–æ¥ç€ä¸€ç¬‘è¯´é“ï¼šè€å¤©çˆ·ä¿ä½‘ï¼Œæ´»å„¿å¹²å¾—å¹²å‡€åˆ©è½ï¼Œæ‚¨è€ä»¥å¾Œæœ‰ä»€éº½äº‹è¿˜å¯ä»¥æ‰¾æˆ‘ã€‚\n", 
 		environment(), me );
 
-	me->set("title", "Ğ¡µêÀÏ°å");
+	me->set("title", "å°åº—è€æ¿");
 	me->set("long",
-		"ÕâÊÇÕûÌìĞ¦ßäßäµÄĞ¡µêÀÏ°å£¬ËäÈ»²»ÂôÊ²÷á¶«Î÷£¬È´Ò²¹ıµÃ×ÔÔÚ¡£\n" );
+		"è¿™æ˜¯æ•´å¤©ç¬‘å’ªå’ªçš„å°åº—è€æ¿ï¼Œè™½ç„¶ä¸å–ä»€éº½ä¸œè¥¿ï¼Œå´ä¹Ÿè¿‡å¾—è‡ªåœ¨ã€‚\n" );
 	
 	me->set_leader(0);
 	me->set("chat_chance", 1);
 	me->set("chat_msg", ({
-		"ÀîËÄËµµÀ: ÕâÎ»¿Í¹Ù£¬ÄúÏëÂòĞ©Ê²÷á¶«Î÷Âğ ?\n",
+		"æå››è¯´é“: è¿™ä½å®¢å®˜ï¼Œæ‚¨æƒ³ä¹°äº›ä»€éº½ä¸œè¥¿å— ?\n",
 	}) );
 
 	return 1;

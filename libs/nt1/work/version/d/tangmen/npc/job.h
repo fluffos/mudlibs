@@ -10,23 +10,23 @@ int ask_job()
         myfam = (mapping)me->query("family");
         
 
-        if (! myfam || myfam["family_name"] != "ÌÆÃÅÊÀ¼Ò")
+        if (! myfam || myfam["family_name"] != "å”é—¨ä¸–å®¶")
         {
-                command("say ÄãÊÇÎÒÃÇµÄÈËÂğ£¿ÔÙËµÎÒµÄÈÎÎñÄã²»Ò»¶¨¿Ï×ö°¡£¬»ØÈ¥°É£¡");
+                command("say ä½ æ˜¯æˆ‘ä»¬çš„äººå—ï¼Ÿå†è¯´æˆ‘çš„ä»»åŠ¡ä½ ä¸ä¸€å®šè‚¯åšå•Šï¼Œå›å»å§ï¼");
                 return 1;
         }
 
         if (me->query("tangmen/yanli") >= 100)
         {       
                 command("gongxi");
-                command("say ¿´Äã³¤µÄÒ»±íÈË²Å£¬¾ÍÖªµÀÄãÊÇÒ»¿éÁÏ£¬ÉÏÉ½È¥°É£¡");
+                command("say çœ‹ä½ é•¿çš„ä¸€è¡¨äººæ‰ï¼Œå°±çŸ¥é“ä½ æ˜¯ä¸€å—æ–™ï¼Œä¸Šå±±å»å§ï¼");
                 me->set("tangmen/upshan", 1);
                 return 1;
         }
 
         if (me->query_temp("started", 1))
         {
-                command("say ÄãÓĞÈÎÎñ£¬ÎªÊ²Ã´²»È¥×ö£¿");
+                command("say ä½ æœ‰ä»»åŠ¡ï¼Œä¸ºä»€ä¹ˆä¸å»åšï¼Ÿ");
                 return 1;
         }
         
@@ -35,19 +35,19 @@ int ask_job()
                 me->delete_temp("tmjob_failed");
                 me->apply_condition("tmagain", 10);
                 command("hmm");
-                command("ÄãÏÈÏÂÈ¥ĞªĞª°É£¬¹ı»áÔÙÀ´£¡\n");
+                command("ä½ å…ˆä¸‹å»æ­‡æ­‡å§ï¼Œè¿‡ä¼šå†æ¥ï¼\n");
                 return 1;
         }               
         
         if (me->query_condition("tmagain") > 0)
         {       command("heng");
-                command("say ×ö²»ÁËËµÒ»ÏÂ£¬ÄãµÈµÈ°É£¡");
+                command("say åšä¸äº†è¯´ä¸€ä¸‹ï¼Œä½ ç­‰ç­‰å§ï¼");
                 return 1;
         }        
 
         if (me->query_temp("jobok") == 1)
         {
-                command("say ºÃºÃ£¬¸ÉµÄºÃ£¬ÄãÏÂÈ¥ĞªĞª°É¡£");
+                command("say å¥½å¥½ï¼Œå¹²çš„å¥½ï¼Œä½ ä¸‹å»æ­‡æ­‡å§ã€‚");
                 me->add("combat_exp", 3000);
                 me->delete_temp("started");
                 me->delete_temp("find_wz");
@@ -58,9 +58,9 @@ int ask_job()
         }
         
 
-        command("say ÄãÈ¥¸øÎÒ×¥Ò»Ö»ÎÃ×Ó»ØÀ´°É¡£");
-        command("say ´ËÊÂ²»¿ÉÂí»¢£¬¹ØÏµµ½ÄãµÄÇ°³Ì£¬Ò»¶¨ÒªÈ«Á¦È¥×ö¡£");
-        command("say ÕÒ²»µ½µÄ»°¾ÍÎÊÎÊ±ğÈË£¬Ëµ²»¶¨ÓĞÊÕ»ñ°¡");
+        command("say ä½ å»ç»™æˆ‘æŠ“ä¸€åªèšŠå­å›æ¥å§ã€‚");
+        command("say æ­¤äº‹ä¸å¯é©¬è™ï¼Œå…³ç³»åˆ°ä½ çš„å‰ç¨‹ï¼Œä¸€å®šè¦å…¨åŠ›å»åšã€‚");
+        command("say æ‰¾ä¸åˆ°çš„è¯å°±é—®é—®åˆ«äººï¼Œè¯´ä¸å®šæœ‰æ”¶è·å•Š");
 
         me->set_temp("started", 1);
         remove_call_out("putting");
@@ -82,8 +82,8 @@ int putting(object me)
                        });
         wh1 = str[random(sizeof(str))];
         wh2 = str[random(sizeof(str))];
-        ob1 =new("/d/tangmen/npc/askdizi1.c");
-        ob2 =new("/d/tangmen/npc/askdizi2.c");
+        ob1 =new("/d/tangmen/npc/askdizi1.lpc");
+        ob2 =new("/d/tangmen/npc/askdizi2.lpc");
         ob2->set("dname", me->query("id"));
         ob1->set("dname", me->query("id"));
         ob1->apply_condition("tmjob1", 10);
@@ -91,7 +91,7 @@ int putting(object me)
         me->apply_condition("tmjob", 20);
         ob1->move(wh1);
         ob2->move(wh2);        
-        tell_object(me, HIC "Òª¿ìÈ¥¿ì»Ø°¡£¡\n" NOR);
+        tell_object(me, HIC "è¦å¿«å»å¿«å›å•Šï¼\n" NOR);
         return 1;
 }       
         

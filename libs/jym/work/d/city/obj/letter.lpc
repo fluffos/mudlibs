@@ -6,7 +6,7 @@
 #include <localtime.h>
 
 inherit ITEM;
-static string *sym_di = ({ "子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥" });
+nosave string *sym_di = ({ "子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥" });
 string chinese_time(int date)
 {
     mixed *local;

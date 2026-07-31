@@ -6,8 +6,8 @@
 
 inherit ROOM;
 
-static string current_id = "";
-static int current_job = 0;
+nosave string current_id = "";
+nosave int current_job = 0;
 
 int introduce_robber(object current_player);
 int reset_to_normal();

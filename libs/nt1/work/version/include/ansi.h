@@ -2,7 +2,7 @@
 // Copyright (C) 2003-2004, by Lonely. All rights reserved.
 // This software can not be used, copied, or modified 
 // in any form without the written permission from authors.
-// ĞŞ¸ÄÄÚÈİ£ºÌí¼ÓÁËĞÂµÄansi¿ØÖÆ·ûºÅ¶¨Òå
+// ä¿®æ”¹å†…å®¹ï¼šæ·»åŠ äº†æ–°çš„ansiæ§åˆ¶ç¬¦å·å®šä¹‰
 //	File	:  /include/ansi.h
 //
 //	The standard set of ANSI codes for mudlib use.
@@ -72,8 +72,8 @@
 #define FRTOP ESC+"[2;25r"      /* Freeze top line */
 #define FRBOT ESC+"[1;24r"      /* Freeze bottom line */
 #define FRELINE(x,y)  (ESC+"["+x+";"+y+"r")
-// ¶³½áÆÁÄ»Ö¸¶¨ĞĞ£¬x ÊÇĞĞºÅ£¬´ÓÉÏÍùÏÂÊı£¬·Ö±æÂÊÎª 800 x 600£¬y = 35£¬
-// ·Ö±æÂÊÎª 1024 x 768£¬y = 40£¬Ôö¼ÓÕâ¸ö¶«Î÷ÊÇÎªÁËÄàÌ¶µÄÕ½¶·ÏÔÊ¾¡£
+// å†»ç»“å±å¹•æŒ‡å®šè¡Œï¼Œx æ˜¯è¡Œå·ï¼Œä»ä¸Šå¾€ä¸‹æ•°ï¼Œåˆ†è¾¨ç‡ä¸º 800 x 600ï¼Œy = 35ï¼Œ
+// åˆ†è¾¨ç‡ä¸º 1024 x 768ï¼Œy = 40ï¼Œå¢åŠ è¿™ä¸ªä¸œè¥¿æ˜¯ä¸ºäº†æ³¥æ½­çš„æˆ˜æ–—æ˜¾ç¤ºã€‚
 
 #define UNFR ESC+"[r"           /* Unfreeze top and bottom lines */
 #define BLINK ESC+"[5m"         /* Initialize blink mode */
@@ -82,19 +82,19 @@
 #define HIREV ESC+"[1,7m"       /* Hi intensity reverse video  */
  
 #define FLASH ESC+"[5m"         // flash
-/*¹ØÓÚĞĞ¿ØÖÆ
-1.ÒÆ¶¯ */
-#define TOTOP(x)  (ESC+"["+x+"A")           /*ÏòÉÏÌø×ªxĞĞ */
-#define TOBOT(x)  (ESC+"["+x+"B")           /*ÏòÏÂÌø×ªxĞĞ*/
-                                            /*µ± ÓÎ±êÒÑ¾­ÔÚÓ©Ä»µÄ×îÏÂÒ»ÁĞÊ±, ´ËÒ»ÃüÁîÃ»ÓĞ×÷ÓÃ*/
-#define TORIGHT(x) (ESC+"["+x+"C")          /*ÏòÓÒÒÆ¶¯xĞĞ*/
-                                            /*µ±ÓÎ±êÒÑ¾­ÔÚÓ©Ä»µÄ×îÓÒÒ»À¸Ê±, ´ËÒ»ÃüÁîÃ»ÓĞ×÷ÓÃ¡£*/
-#define TOLEFT(x)  (ESC+"["+x+"D")          /*Ïò×óÒÆ¶¯xĞĞ*/
-                                            /*µ±ÓÎ±êÒÑ¾­ÔÚÓ©Ä»µÄ×î×óÒ»À¸Ê±, ´ËÒ»ÃüÁîÃ»ÓĞ×÷ÓÃ¡£*/
-#define TOPOINT(x,y) (ESC+"["+x+";"+y+"f")  /*ÒÆ¶¯µ½µã×ø±êÎª(x,y) x:ĞĞ£¬y:ÁĞ*/
+/*å…³äºè¡Œæ§åˆ¶
+1.ç§»åŠ¨ */
+#define TOTOP(x)  (ESC+"["+x+"A")           /*å‘ä¸Šè·³è½¬xè¡Œ */
+#define TOBOT(x)  (ESC+"["+x+"B")           /*å‘ä¸‹è·³è½¬xè¡Œ*/
+                                            /*å½“ æ¸¸æ ‡å·²ç»åœ¨è¤å¹•çš„æœ€ä¸‹ä¸€åˆ—æ—¶, æ­¤ä¸€å‘½ä»¤æ²¡æœ‰ä½œç”¨*/
+#define TORIGHT(x) (ESC+"["+x+"C")          /*å‘å³ç§»åŠ¨xè¡Œ*/
+                                            /*å½“æ¸¸æ ‡å·²ç»åœ¨è¤å¹•çš„æœ€å³ä¸€æ æ—¶, æ­¤ä¸€å‘½ä»¤æ²¡æœ‰ä½œç”¨ã€‚*/
+#define TOLEFT(x)  (ESC+"["+x+"D")          /*å‘å·¦ç§»åŠ¨xè¡Œ*/
+                                            /*å½“æ¸¸æ ‡å·²ç»åœ¨è¤å¹•çš„æœ€å·¦ä¸€æ æ—¶, æ­¤ä¸€å‘½ä»¤æ²¡æœ‰ä½œç”¨ã€‚*/
+#define TOPOINT(x,y) (ESC+"["+x+";"+y+"f")  /*ç§»åŠ¨åˆ°ç‚¹åæ ‡ä¸º(x,y) x:è¡Œï¼Œy:åˆ—*/
 #define TOPOINTA(x,y) (ESC+"["+x+";"+y+"H")
-/*2.Çå³ıÆÁÄ»*/
-#define CLR_LINE    ESC+"[K"                /*Çå³ıµ½ĞĞÎ²*/
+/*2.æ¸…é™¤å±å¹•*/
+#define CLR_LINE    ESC+"[K"                /*æ¸…é™¤åˆ°è¡Œå°¾*/
 #define SETDISPLAY(x,y)  (ESC+"["+x+";"+y+"f") 
 #define DELLINE ESC+"[K" 
 

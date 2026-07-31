@@ -1,0 +1,143 @@
+// filename : /system/feature/equip.c
+
+#include <dbase.h>
+#include <weapon.h>
+
+int wear()
+{
+	object owner;
+	mapping armor_prop, applied_prop;
+	string *apply, type;
+
+	owner = environment();
+	if ( !( owner )->is_character() ) return 0;
+	if ( query( "equipped" ) ) return 1;
+
+	armor_prop = query( "armor_prop" );
+	if ( !mapp( armor_prop ) )
+    	return notify_fail( "你只能穿戴可当作护具的东西。\n" );
+
+	type = query("armor_type");
+	if ( owner->query_temp( "armor/" + type ) )
+    	return notify_fail( "你已经穿戴了同类型的护具了。\n" );
+
+	owner->set_temp( "armor/" + type, this_object() );
+	apply = keys( armor_prop );
+	applied_prop = owner->query_temp( "apply" );
+	if ( !mapp( applied_prop ) ) 
+    	applied_prop = ([]);
+	for ( int i = 0; i < sizeof( apply ); i++ )
+    	if ( undefinedp( applied_prop[ apply[ i ] ] ) )
+        	applied_prop[ apply[ i ] ] = armor_prop[ apply[ i ] ];
+    	else
+        	applied_prop[ apply[ i ] ] += armor_prop[ apply[ i ] ];
+	owner->set_temp( "apply", applied_prop );
+	set( "equipped", "worn" );
+	return 1;
+}
+
+int wield()
+{
+	object owner, old_weapon;
+	mapping weapon_prop;
+	string *apply, type;
+	int flag;
+
+    owner = environment();
+    if ( !( owner )->is_character() )
+    	return 0;
+
+    if ( query( "equipped" ) ) 
+        return 1;
+
+	weapon_prop = query( "weapon_prop" );
+	if ( !mapp( weapon_prop ) )
+    	return notify_fail( "你只能装备可当作武器的东西。\n" );
+
+	flag = query( "flag" );
+
+	if ( flag & TWO_HANDED ) 
+    {
+    	if ( owner->query_temp( "weapon" ) ||
+             owner->query_temp( "secondary_weapon" ) ||
+             owner->query_temp( "armor/shield" ) )
+        {
+        	return notify_fail( "你必须空出双手才能装备双手武器。\n" );
+        }
+    	owner->set_temp( "weapon", this_object() );
+    } 
+	else 
+    {
+    	old_weapon = owner->query_temp( "weapon" );
+    	if ( !old_weapon )
+        	owner->set_temp( "weapon", this_object() );
+        
+    	else if ( !owner->query_temp( "secondary_weapon" ) &&
+                   !owner->query_temp( "armor/shield" ) ) 
+        {
+        	if ( flag & SECONDARY )
+            {
+            	owner->set_temp("secondary_weapon", this_object());
+            }
+        	else if ( (int)old_weapon->query( "flag" ) & SECONDARY ) 
+            {
+            	old_weapon->unequip();
+            	owner->set_temp( "weapon", this_object() );
+            	old_weapon->wield();
+            }
+        	else
+            	return notify_fail( "你必须先放下你目前使用着的武器。\n" );
+        }
+    	else
+        	return notify_fail( "你必须空出一只手来使用武器。\n" );
+    }
+
+	apply = keys( weapon_prop );
+	for ( int i = 0; i < sizeof( apply ); i++ )
+    {
+    	owner->add_temp( "apply/" + apply[ i ],
+            weapon_prop[ apply[ i ] ] );
+    }
+
+	set( "equipped", "wielded" );
+	return 1;
+}
+
+int unequip()
+{
+	object owner, weapon, second_weapon, armor;
+	mapping prop, applied_prop;
+	string *apply, equipped;
+
+	owner = environment();
+	if ( !owner->is_character() )
+    	return 0;
+
+	equipped = query( "equipped" );
+	if ( !stringp( equipped ) )
+    	return notify_fail( "你目前并没有装备这样东西。\n" );
+
+	if ( equipped == "wielded" ) 
+    {
+    	weapon = owner->query_temp( "weapon" );
+    	second_weapon = owner->query_temp( "secondary_weapon" );
+    	if ( weapon == this_object() )
+        	owner->delete_temp( "weapon" );
+    	else if ( second_weapon == this_object() )
+        	owner->delete_temp( "secondary_weapon" );
+    	prop = query( "weapon_prop" );
+    } 
+	else if ( equipped == "worn" ) 
+    {
+    	owner->delete_temp( "armor/" + query( "armor_type" ) );
+    	prop = query( "armor_prop" );
+    }
+
+	apply = keys(prop);
+	applied_prop = owner->query_temp( "apply" );
+	for ( int i = 0; i < sizeof( apply ); i++ )
+    	applied_prop[ apply[ i ] ] -= prop[ apply[ i ] ];
+
+	delete( "equipped" );
+	return 1;
+}

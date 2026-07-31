@@ -1,14 +1,14 @@
-//      shanlu1.c É½Â·
-//      Designed by secret (ÃØÃÜ)
+//      shanlu1.c å±±è·¯
+//      Designed by secret (ç§˜å¯†)
 //      97/04/09
 
 inherit ROOM;
 
 void create()
 {
-        set("short","É½Â·");
+        set("short","å±±è·¯");
         set("long",@LONG
-ÕâÊÇÒ»ÌõÉÏÉ½µÄĞ¡Â·¡£É½µÀÆéá«²»Æ½¡£¿ÉÊÇÉÏÈ¥²ÅÄÜµ½Ñ©É½ËÂ°¡¡£
+è¿™æ˜¯ä¸€æ¡ä¸Šå±±çš„å°è·¯ã€‚å±±é“å´å²–ä¸å¹³ã€‚å¯æ˜¯ä¸Šå»æ‰èƒ½åˆ°é›ªå±±å¯ºå•Šã€‚
 LONG );
         set("outdoors","xueshan");
         set("exits",([

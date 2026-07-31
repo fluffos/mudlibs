@@ -21,7 +21,7 @@ inherit DAEMON;
 #define addr(xx)       (string)DNS_MASTER->get_host_name( xx ) + " " + \
                        (int)DNS_MASTER->get_mudresource( xx , "inetd" )
 
-static int strip_callout(int num);
+nosave int strip_callout(int num);
 int notify_player( int s, string msg );
 int time_data( int s );
 void close_socket( int s );
@@ -107,7 +107,7 @@ void close_socket( int fd ) {
    return;
 }
 
-static int strip_callout(int num) {
+nosave int strip_callout(int num) {
    mixed *info;
    int loop;
 

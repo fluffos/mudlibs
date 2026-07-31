@@ -75,7 +75,7 @@ void get_jiguo(string arg,object me,int total)
       {
           
               where=environment(me);
-              ob = new("/d/tangmen/npc/wenzi.c");
+              ob = new("/d/tangmen/npc/wenzi.lpc");
               ob->set("d3name",me->query("id") );
               ob->apply_condition("tmjob2",3);
               me->apply_condition("tmjob",5);

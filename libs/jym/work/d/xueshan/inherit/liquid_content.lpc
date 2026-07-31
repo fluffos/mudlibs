@@ -14,8 +14,8 @@ inherit F_NAME;
 // liquid/status set to 1 if it's a liquid type
 // must inherit this
 
-static int amount;
-static string chinese_amount;
+nosave int amount;
+nosave string chinese_amount;
 
 void setup()
 {

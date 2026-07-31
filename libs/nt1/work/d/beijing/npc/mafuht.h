@@ -4,61 +4,61 @@ int do_rideht()
 	object ob = this_player();
 	int i;
 	string *bj_gw=({
-                HIC"ÄñÊĞ"NOR,
-                HIC"Î÷µ¥"NOR,
-                HIC"Î÷µ¥"NOR,
-                HIC"Î÷³¤°²½Ö"NOR,
-                HIC"Î÷³¤°²¹ã³¡"NOR,
-                HIC"Ìì°²ÃÅ¹ã³¡"NOR,
-                HIC"¶«³¤°²¹ã³¡"NOR,
-                HIC"¶«³¤°²½Ö"NOR,
-                HIC"Íõ¸®¾®´ó½Ö"NOR,
-                HIC"Íõ¸®¾®´ó½Ö"NOR,
-                HIC"Íõ¸®¾®´ó½Ö"NOR,
-                HIC"³¯ÑôµÀ"NOR,
-                HIC"³¯ÑôµÀ"NOR,
-                HIC"³¯ÑôÃÅ"NOR,
-                HIC"´óæäµÀ"NOR,
-                HIC"´óæäµÀ"NOR,
-                HIC"´óæäµÀ"NOR,
-                HIC"ÀÏÁúÍ·"NOR,
-                HIC"É½º£¹Ø"NOR,
-                HIC"¹ÙµÀ"NOR,
-                HIC"¹ÙµÀ"NOR,
-                HIC"¹ÙµÀ"NOR,
-                HIC"ÄşÔ¶"NOR,
-                HIC"´óµÀ"NOR,
-                HIC"´óµÀ"NOR,
-                HIC"´óµÀ"NOR,
-                HIC"´óµÀ"NOR,
-                HIC"´óµÀ"NOR,
-                HIC"Ä¾ÇÅ"NOR,
-                HIC"ÄÏ³Ç"NOR,
-                HIC"¼¯ÊĞ"NOR,
+                HIC"é¸Ÿå¸‚"NOR,
+                HIC"è¥¿å•"NOR,
+                HIC"è¥¿å•"NOR,
+                HIC"è¥¿é•¿å®‰è¡—"NOR,
+                HIC"è¥¿é•¿å®‰å¹¿åœº"NOR,
+                HIC"å¤©å®‰é—¨å¹¿åœº"NOR,
+                HIC"ä¸œé•¿å®‰å¹¿åœº"NOR,
+                HIC"ä¸œé•¿å®‰è¡—"NOR,
+                HIC"ç‹åºœäº•å¤§è¡—"NOR,
+                HIC"ç‹åºœäº•å¤§è¡—"NOR,
+                HIC"ç‹åºœäº•å¤§è¡—"NOR,
+                HIC"æœé˜³é“"NOR,
+                HIC"æœé˜³é“"NOR,
+                HIC"æœé˜³é—¨"NOR,
+                HIC"å¤§é©¿é“"NOR,
+                HIC"å¤§é©¿é“"NOR,
+                HIC"å¤§é©¿é“"NOR,
+                HIC"è€é¾™å¤´"NOR,
+                HIC"å±±æµ·å…³"NOR,
+                HIC"å®˜é“"NOR,
+                HIC"å®˜é“"NOR,
+                HIC"å®˜é“"NOR,
+                HIC"å®è¿œ"NOR,
+                HIC"å¤§é“"NOR,
+                HIC"å¤§é“"NOR,
+                HIC"å¤§é“"NOR,
+                HIC"å¤§é“"NOR,
+                HIC"å¤§é“"NOR,
+                HIC"æœ¨æ¡¥"NOR,
+                HIC"å—åŸ"NOR,
+                HIC"é›†å¸‚"NOR,
 	});
 	if (ob->query_temp("marks/horserent")!=1 && ob->query("age")>14)
-                return notify_fail("Ğ¡º¢×Ó²Å¿ÉÒÔÃâ·Ñ×øÂí£¡ÄãÒª½»Ç®£¡\n");
+                return notify_fail("å°å­©å­æ‰å¯ä»¥å…è´¹åé©¬ï¼ä½ è¦äº¤é’±ï¼\n");
 	switch (random(3))
 	{
 		case 1:
-			hname=MAG"×ÏæòÂí"NOR;
+			hname=MAG"ç´«éªé©¬"NOR;
 			break;
 		case 2:
-			hname=RED"ÔæºìÂí"NOR;
+			hname=RED"æ£çº¢é©¬"NOR;
 			break;
 		default:
-			hname=HIY"»ÆæôÂí"NOR;
+			hname=HIY"é»„éª é©¬"NOR;
 			break;
 	}
 	message_vision(
-"Âí·òËæÊÖ¸ø$NÇ£À´Ò»Æ¥"+hname+"¡£$N·­ÉíÔ¾ÉÏÂí±³¡£¶¯×÷äìÈ÷ÀûË÷¡£Â·±ßĞĞÈËÒ»Õó
-Æğºå: à¸àŞà¸àŞ¡£\n"NOR , ob );
-	message_vision("\nÖ»¼û$NÆïÁ½ÍÈÒ»¼Ğ£¬"+hname+"´©¹ı¿Íµê¶øÈ¥¡£\n",ob);
+"é©¬å¤«éšæ‰‹ç»™$Nç‰µæ¥ä¸€åŒ¹"+hname+"ã€‚$Nç¿»èº«è·ƒä¸Šé©¬èƒŒã€‚åŠ¨ä½œæ½‡æ´’åˆ©ç´¢ã€‚è·¯è¾¹è¡Œäººä¸€é˜µ
+èµ·å“„: å–”å™¢å–”å™¢ã€‚\n"NOR , ob );
+	message_vision("\nåªè§$Néª‘ä¸¤è…¿ä¸€å¤¹ï¼Œ"+hname+"ç©¿è¿‡å®¢åº—è€Œå»ã€‚\n",ob);
 	for (i = 0; i < sizeof(bj_gw);i++)
 		tell_object(ob,bj_gw[i] + "\n");
 	ob->move("/d/guanwai/majiu");
-	tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·Ë³Àûµ½´ïºÕÍ¼°¢À­¡£\n");
-	message_vision("\n$NÉíĞÎÒ»×ª£¬Ô¾ÏÂÂíÀ´£¬×ËÌ¬Ê®·ÖÓÅÃÀ¡£ÏĞÈËÒ²¸ø$NÒ»´óºå !\n" ,ob);
+	tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯é¡ºåˆ©åˆ°è¾¾èµ«å›¾é˜¿æ‹‰ã€‚\n");
+	message_vision("\n$Nèº«å½¢ä¸€è½¬ï¼Œè·ƒä¸‹é©¬æ¥ï¼Œå§¿æ€ååˆ†ä¼˜ç¾ã€‚é—²äººä¹Ÿç»™$Nä¸€å¤§å“„ !\n" ,ob);
 	ob->delete_temp("marks/horserent");
 	return 1;
 }

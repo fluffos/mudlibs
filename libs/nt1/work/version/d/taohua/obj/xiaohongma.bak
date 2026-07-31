@@ -8,17 +8,17 @@ inherit NPC_TRAINEE;
 int return_home(object home);
 void create()
 {
-	set_name(HIR"Ğ¡ºìÂí"NOR, ({ "xiaohong ma", "ma", "horse" }) );
-        set("race", "¼ÒĞó");
+	set_name(HIR"å°çº¢é©¬"NOR, ({ "xiaohong ma", "ma", "horse" }) );
+        set("race", "å®¶ç•œ");
         set("age", 10);
 	set("long", 
-"ÕâÊÇÒ»Æ¥Éñ¿¥·Ç·²µÄº¹Ñª±¦Âí£¬´«ËµÊÇÌìÂíÏÂ·²£¬µ«Êµ¼ÊÉÏÊÇ´óÍğÉ½ÖĞÒ°Âí\n"
-"ÓëÎåÉ«Ä¸Âí½»ÅäµÄºó´ú¡£\n"
-"ººÎäµÛÔøÎª´ËÖÖÁ¼Âí´ó·¢±ø×ä£¬ÀÍÊ¦Ô¶Õ÷Î÷Óò¡£\n");
+"è¿™æ˜¯ä¸€åŒ¹ç¥éªéå‡¡çš„æ±—è¡€å®é©¬ï¼Œä¼ è¯´æ˜¯å¤©é©¬ä¸‹å‡¡ï¼Œä½†å®é™…ä¸Šæ˜¯å¤§å®›å±±ä¸­é‡é©¬\n"
+"ä¸äº”è‰²æ¯é©¬äº¤é…çš„åä»£ã€‚\n"
+"æ±‰æ­¦å¸æ›¾ä¸ºæ­¤ç§è‰¯é©¬å¤§å‘å…µå’ï¼ŒåŠ³å¸ˆè¿œå¾è¥¿åŸŸã€‚\n");
 
-/*	set("msg_fail", "$n³å×Å$NÅ­Ë»Ò»Éù£¬ÊúÁ¢ÆğÀ´£¡");
-        set("msg_succ", "$nÒ¡×ÅÍ·´ò×ª£¬Ìã×Ó»÷´ò×ÅµØÃæ£¬ËÆºõ´ò²»¶¨Ö÷Òâ");
-        set("msg_trained","$nµÍË»Ò»Éù£¬×ßµ½$NÉí±ß°¤°¤²Á²Á£¬ÏÔµÃÊ®·Ö¸ßĞË£¡");
+/*	set("msg_fail", "$nå†²ç€$Næ€’å˜¶ä¸€å£°ï¼Œç«–ç«‹èµ·æ¥ï¼");
+        set("msg_succ", "$næ‘‡ç€å¤´æ‰“è½¬ï¼Œè¹„å­å‡»æ‰“ç€åœ°é¢ï¼Œä¼¼ä¹æ‰“ä¸å®šä¸»æ„");
+        set("msg_trained","$nä½å˜¶ä¸€å£°ï¼Œèµ°åˆ°$Nèº«è¾¹æŒ¨æŒ¨æ“¦æ“¦ï¼Œæ˜¾å¾—ååˆ†é«˜å…´ï¼");
  */
        set("attitude", "peaceful");
 	set("wildness", 20000);
@@ -50,11 +50,11 @@ void init()
         my_mj = (int)me->query("max_jingli");
         addjing = (my_mj - my_jingli)/2;
         if(my_jingli <= my_mj/3){
-        say(me->name() +"´ó¿Ú´ó¿ÚµØ´­×Å´ÖÆø¡£\n");
+        say(me->name() +"å¤§å£å¤§å£åœ°å–˜ç€ç²—æ°”ã€‚\n");
         return;
         }
         if(my_jingli <=30 && my_jingli > 20){
-        say(me->name() +"Ö»ÔÚ´­Æø£¬½¥½¥µØ¿ìÅÜ²»¶¯ÁË£¡\n");
+        say(me->name() +"åªåœ¨å–˜æ°”ï¼Œæ¸æ¸åœ°å¿«è·‘ä¸åŠ¨äº†ï¼\n");
         return;
         }
         if(my_jingli <=10){
@@ -71,13 +71,13 @@ void init()
         me->query("food") < (me->max_food_capacity()*2/3)){
         me->set("food", (int)me->max_food_capacity());
         me->add("jingli", addjing);
-        say(me->name() +"µÍÏÂÍ·ÔÚ²İµØÉÏ³ÔÆğ²İÀ´¡£\n");
+        say(me->name() +"ä½ä¸‹å¤´åœ¨è‰åœ°ä¸Šåƒèµ·è‰æ¥ã€‚\n");
         return;
         }
         if( objectp(lord = me->query_lord())
         && environment(lord) == environment(me) 
 	&& (lord->query("qi") < lord->query("max_qi")/10)) {
-	message_vision(HIW"Ğ¡ºìÂí°Ñ$NµğÆğÀ´Íù×Ô¼º±³ÉÏÒ»ÈÓ£¬·ÅÌã¿ñ±¼¾ø³¾¶øÈ¥£¡£¡£¡\n"NOR,lord);
+	message_vision(HIW"å°çº¢é©¬æŠŠ$Nå¼èµ·æ¥å¾€è‡ªå·±èƒŒä¸Šä¸€æ‰”ï¼Œæ”¾è¹„ç‹‚å¥”ç»å°˜è€Œå»ï¼ï¼ï¼\n"NOR,lord);
 	lord->move("/d/taihu/matou");
 	me->move("/d/taihu/matou");
 	}
@@ -98,7 +98,7 @@ int return_home(object home) {
 
 int do_tame()
 {
-        return notify_fail("Ğ¡ºìÂíÒÑÍÑÊŞ¼®£¬²»ÔÙÊÜÔ¦ÊŞÊõ¿ØÖÆÁË¡£\n");
+        return notify_fail("å°çº¢é©¬å·²è„±å…½ç±ï¼Œä¸å†å—é©­å…½æœ¯æ§åˆ¶äº†ã€‚\n");
 }
 
 int do_duhe()
@@ -108,39 +108,39 @@ int do_duhe()
 	string dest;
 	if (me->query("rider") != who) return 0;
 	switch ((string)environment(who)->query("short")) {
-	case "ººË®ÄÏ°¶":
+	case "æ±‰æ°´å—å²¸":
 		dest = "/d/shaolin/hanshui2";
 		break;
-	case "ººË®±±°¶":
+	case "æ±‰æ°´åŒ—å²¸":
                 dest = "/d/shaolin/hanshui1";
                 break;
-        case "¹Å³¤³Ç":
+        case "å¤é•¿åŸ":
                 dest = "/d/xixia/xhbao";
                 break;
-        case "ĞûºÍ±¤":
+        case "å®£å’Œå ¡":
                 dest = "/d/xixia/oldwall";
                 break;
-	case "½âÍÑÆÂ":
+	case "è§£è„±å¡":
                 dest = "/d/emei/baoguoxi";
                 break;
-        case "±¨¹úËÂÎ÷Ç½":
+        case "æŠ¥å›½å¯ºè¥¿å¢™":
                 dest = "/d/emei/jietuo";
                 break;
-	case "Ì«ºş":
+	case "å¤ªæ¹–":
 		dest = "/d/taihu/matou";
 		break;
-	case "ÂëÍ·":
+	case "ç å¤´":
 		dest = "/d/taihu/taihu";
 		break;
 	default:
-		return notify_fail("ÕâÀïÃ»ÓĞĞ¡ºìÂí¿ÉÒÔ¶ÉµÄºÓ¡£\n");
+		return notify_fail("è¿™é‡Œæ²¡æœ‰å°çº¢é©¬å¯ä»¥æ¸¡çš„æ²³ã€‚\n");
 	}
-	message_vision("\n$NË«ÍÈÒ»¼ĞĞ¡ºìÂí£¬Ğ¡ºìÂí³¤Ë»Ò»Éù£¬Ô¾ÈëË®ÖĞ½«$N´øµ½¶Ô°¶¡£\n",who);
-	message("vision", who->name() +"×İÂí¹ıºÓÈ¥ÁË¡£\n",
+	message_vision("\n$NåŒè…¿ä¸€å¤¹å°çº¢é©¬ï¼Œå°çº¢é©¬é•¿å˜¶ä¸€å£°ï¼Œè·ƒå…¥æ°´ä¸­å°†$Nå¸¦åˆ°å¯¹å²¸ã€‚\n",who);
+	message("vision", who->name() +"çºµé©¬è¿‡æ²³å»äº†ã€‚\n",
                 environment(who), ({who}));
 	me->move(dest);
 	who->move(dest);
-	message("vision", who->name() +"×İÂí´ÓºÓ¶Ô°¶¹ıÀ´ÁË¡£\n",
+	message("vision", who->name() +"çºµé©¬ä»æ²³å¯¹å²¸è¿‡æ¥äº†ã€‚\n",
                 environment(who), ({who}));
 	return 1;
 }	

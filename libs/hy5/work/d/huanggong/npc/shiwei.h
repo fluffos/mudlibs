@@ -10,16 +10,16 @@ void init()
 void greeting(object ob)
 {
  if (!ob||environment(ob)!=environment()) return;
- if (!ob->query_temp("huanggon/enter")&&ob->query("gender")!="ÖÐÐÔ")
+ if (!ob->query_temp("huanggon/enter")&&ob->query("gender")!="ä¸­æ€§")
     {
 if (ob->query("xxy/lvl")<4) {
-    command("say ´óµ¨¿ñÍ½,¾¹¸ÒÉÃ´³»Ê¹¬.\n");
+    command("say å¤§èƒ†ç‹‚å¾’,ç«Ÿæ•¢æ“…é—¯çš‡å®«.\n");
     kill_ob(ob);
 }
     return;
   }
- if (ob->query("gender")=="ÖÐÐÔ"&&ob->query("combat_exp")>500000)  {
- 	command("say "+name()+"¼û¹ý"+ob->query("name")+"¹«¹«.\n");
+ if (ob->query("gender")=="ä¸­æ€§"&&ob->query("combat_exp")>500000)  {
+ 	command("say "+name()+"è§è¿‡"+ob->query("name")+"å…¬å…¬.\n");
     } 
   return;
  }

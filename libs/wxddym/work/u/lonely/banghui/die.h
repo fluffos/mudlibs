@@ -4,7 +4,7 @@ void die()
         int kf;
         string banghui;
         object area;
-        if(base_name(environment())+".c"!=query("area_file"))
+        if(base_name(environment())+".lpc"!=query("area_file"))
                 return ::die();
         if(! stringp(banghui=query("banghui")))
                 return ::die();

@@ -6,24 +6,24 @@ int permit_recruit(object ob)
     object me;
 
     me = this_object();
-    if (ob->query("name") == "Ä½Èİ²©" ||
-        ob->query("name") == "Ä½Èİ¸´")
+    if (ob->query("name") == "æ…•å®¹åš" ||
+        ob->query("name") == "æ…•å®¹å¤")
     {
-        message_vision("$N´óÅ­£ººß£¡ÄãÆğÕâ¸öÃû×ÖËãÊÇÊ²Ã´ÒâË¼£¿\n");
+        message_vision("$Nå¤§æ€’ï¼šå“¼ï¼ä½ èµ·è¿™ä¸ªåå­—ç®—æ˜¯ä»€ä¹ˆæ„æ€ï¼Ÿ\n");
         return 0;
     }
 
-    if (ob->query("born_family") != "Ä½ÈİÊÀ¼Ò" && ! ob->query("zhuanshi"))
+    if (ob->query("born_family") != "æ…•å®¹ä¸–å®¶" && ! ob->query("zhuanshi"))
     {
-        message_vision("$N¶Ô$nµÀ£ºÄã²»ÊÇÎÒÃÇÄ½Èİ¼ÒµÄÈË£¬Ê¦Í½¾ÍÃâÁË°É£¡\n",
+        message_vision("$Nå¯¹$né“ï¼šä½ ä¸æ˜¯æˆ‘ä»¬æ…•å®¹å®¶çš„äººï¼Œå¸ˆå¾’å°±å…äº†å§ï¼\n",
                        me, ob);
         return 0;
     }
 
-    if (ob->query("detach/Ä½ÈİÊÀ¼Ò") ||
+    if (ob->query("detach/æ…•å®¹ä¸–å®¶") ||
         ob->query("betrayer/times"))
     {
-        message_vision("$NÒ¡Ò¡Í·¶Ô$nËµ£ºÄã·´¸´ÎŞ³££¬ÎÒÄ½Èİ¼Ò²»ÁôÕâÖÖÈË£¡\n",
+        message_vision("$Næ‘‡æ‘‡å¤´å¯¹$nè¯´ï¼šä½ åå¤æ— å¸¸ï¼Œæˆ‘æ…•å®¹å®¶ä¸ç•™è¿™ç§äººï¼\n",
                        me, ob);
         return 0;
     }
@@ -31,7 +31,7 @@ int permit_recruit(object ob)
     if (ob->query("family/family_name") &&
         ob->query("family/family_name") != me->query("family/family_name"))
     {
-        message_vision("$N¶Ô$nµÀ£ºÄã¼ÈÈ»ÊÇÄ½Èİ¼ÒµÄÈË£¬È´ÈëÁËÆäËûÃÅÅÉ£¬ÊµÔÚÊÇ´óÄæ²»µÀ£¡\n",
+        message_vision("$Nå¯¹$né“ï¼šä½ æ—¢ç„¶æ˜¯æ…•å®¹å®¶çš„äººï¼Œå´å…¥äº†å…¶ä»–é—¨æ´¾ï¼Œå®åœ¨æ˜¯å¤§é€†ä¸é“ï¼\n",
                        me, ob);
         return 0;
     }

@@ -2,9 +2,9 @@
 string look_jia() {
     string msg;
     msg = "
-¿ÉÒÔÄÃµÄ±øÆ÷ÓÐ½£(sword)£¬µ¶(blade)£¬°ô(stick)£¬ÕÈ(staff)£¬ÂÖ(falun)£¬
-±Þ(whip)£¬¹÷(club)¡£»¹ÓÐÌú¼×(armor)£¬Ê¯¿é(stone)£¬õ®õ­Ïã(xiang)£¬Â­²§
-(lubo)£¬ÈËÍ·Á´(lian)£¬÷¼÷Ã¹Ú(guan)£¬¶Ô½²»ú(walkie-talkie)£¬óï(xiao)¡£\n\n";
+å¯ä»¥æ‹¿çš„å…µå™¨æœ‰å‰‘(sword)ï¼Œåˆ€(blade)ï¼Œæ£’(stick)ï¼Œæ–(staff)ï¼Œè½®(falun)ï¼Œ
+éž­(whip)ï¼Œæ£(club)ã€‚è¿˜æœ‰é“ç”²(armor)ï¼ŒçŸ³å—(stone)ï¼Œé†é†é¦™(xiang)ï¼Œé¢…é’µ
+(lubo)ï¼Œäººå¤´é“¾(lian)ï¼Œéª·é«…å† (guan)ï¼Œå¯¹è®²æœº(walkie-talkie)ï¼Œç®«(xiao)ã€‚\n\n";
     return msg;
 }
 
@@ -18,7 +18,7 @@ int do_get(string arg) {
     if (sscanf(arg, "%s from jia", type) != 1) return 0;
 
     switch (type) {
-    case "sword":   if(this_player()->query("gender") == "ÎÞÐÔ")
+    case "sword":   if(this_player()->query("gender") == "æ— æ€§")
                         weapon = new("/clone/test/xiuhua");
                     else
                         weapon = new("/clone/weapon/gangjian");
@@ -53,23 +53,23 @@ int do_get(string arg) {
                     temp = all_inventory(me);
                     for (i = 0; i < sizeof(temp); i++) {
                         if (temp[i]->query("id") == "walkie-talkie") {
-                            write("ÄãÒÑ¾­ÄÃÁË¶Ô½²»úÁË¡£\n");
+                            write("ä½ å·²ç»æ‹¿äº†å¯¹è®²æœºäº†ã€‚\n");
                             return 1;
                         }
                     }
                     weapon = new(__DIR__"obj/walkie-talkie");
                     env = environment(me);
-                    if ( env->query("short") == "¶«Ïá·¿" )
+                    if ( env->query("short") == "ä¸œåŽ¢æˆ¿" )
                         weapon->set("channel", 1);
-                    else if (env->query("short") == "Î÷Ïá·¿" )
+                    else if (env->query("short") == "è¥¿åŽ¢æˆ¿" )
                         weapon->set("channel", 2);
                     break;
-    default:        write("ÕÒ²»µ½"+type+"¡£\n");
+    default:        write("æ‰¾ä¸åˆ°"+type+"ã€‚\n");
                     return 1;
     }
 
     if(weapon->move(me)) {
-        message_vision("$N´Ó±øÆ÷¼ÜÉÏÈ¡ÏÂÒ»"+weapon->query("unit")+weapon->name()+"¡£\n", me);
+        message_vision("$Nä»Žå…µå™¨æž¶ä¸Šå–ä¸‹ä¸€"+weapon->query("unit")+weapon->name()+"ã€‚\n", me);
     } else {
         destruct(weapon);
     }

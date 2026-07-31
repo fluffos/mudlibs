@@ -18,14 +18,14 @@ int accept_object(object ob, object obj)
 	    ob->query_temp("have_letter"))
 	{
 		ob->set_temp("apprentice_ok",1);
-	        command("say �ã�" + ob->query("name") +
-			"����Ը�����Ϊʦ��");
+	        command("say 好，" + ob->query("name") +
+			"，你愿意拜我为师吗？");
 		destruct(obj);
 		return 1;
 	}
 
         command("smile");
-        command("say �ⶫ�����ҿ�û��ʲ���á�");
+        command("say 这东西给我可没有什麽用。");
         command("give " + obj->query("id") + " to " + me->query("id"));
 	return 0;
 }
@@ -42,32 +42,32 @@ void attempt_apprentice(object ob)
                 return;
 
 	if (! (ob_fam = ob->query("family")) ||
-	    ob_fam["family_name"] != "������")
+	    ob_fam["family_name"] != "少林派")
 	{
 		command("say " + RANK_D->query_respect(ob) +
-			"�뱾��������������֪�˻��Ӻ�̸��");
+			"与本派素无来往，不知此话从何谈起？");
 		return;
 	}
 
 	if ((string)ob->query("class") != "bonze" &&
-	    ob_fam["family_name"] == "������") 
+	    ob_fam["family_name"] == "少林派") 
 	{
 		command("say " + RANK_D->query_respect(ob) +
-			"���׼ҵ��ӣ�����������ѧ�ա�");
+			"是俗家弟子，不能在寺内学艺。");
 		return;
 	}
 
 	if (ob_fam["generation"] <= my_fam["generation"])
 	{
 		command("say " + RANK_D->query_respect(ob) +
-			"��ƶɮ����ҵ� !");
+			"，贫僧哪里敢当 !");
 		return;
 	}
 
 	if (ob_fam["generation"] == (my_fam["generation"] + 1))
 	{
 		command("say " + ob_fam["master_name"] +
-			"��ͽ�������ܵ���������ˣ������� !");
+			"的徒弟怎麽跑到我这儿来了，哈哈哈 !");
 		command("recruit " + ob->query("id"));
 	}
 
@@ -79,22 +79,22 @@ void attempt_apprentice(object ob)
 			ob->delete_temp("have_letter");
 			ob->delete_temp("apprentice_ok");
 	
-			command("say ��" + ob_fam["master_name"] +
-				"���������ҵİɣ���������");
-			command("say ƶɮ�ֵ�һ����֮�ţ����ǿ�ϲ�ɺأ�");
+			command("say 是" + ob_fam["master_name"] +
+				"叫你来找我的吧，哈哈哈！");
+			command("say 贫僧又得一可塑之才，真是可喜可贺！");
 
 			name = ob->query("name");
-			new_name = "��" + name[2..3];
+			new_name = "澄" + name[2..3];
 			ob->set("name", new_name);
 
-			command("say �ӽ��Ժ���ķ�������" + new_name +
-				"����ϲ������Ϊ�����ɳ��ֱ����ӣ�");
+			command("say 从今以后你的法名叫做" + new_name +
+				"，恭喜你荣升为少林派澄字辈弟子！");
 			command("recruit " + ob->query("id"));
 		} else
 		{
 			command("say " + RANK_D->query_respect(ob) +
-				"���㼴û���Ƽ��ţ�Ҳû�й��޺���"
-				"����Խ����ʦ��");
+				"，你即没有推荐信，也没有过罗汉阵，"
+				"不能越级拜师。");
 			return;
 		}
 	}

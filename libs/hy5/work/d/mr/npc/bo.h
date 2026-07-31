@@ -4,25 +4,25 @@ void attempt_apprentice(object ob)
         object me;
         me=this_player();
          string *prename =
-	 ({ "Èİ","Ä½" });
+	 ({ "å®¹","æ…•" });
         string name, new_name;
 //	name = ob->query("name");
  
         if (present("jiaxin", me))
          {  destruct(present("jiaxin",me));
 
-           command("say ºÃ°É£¬¼ÈÈ»" + RANK_D->query_respect(ob) + "ÓĞÎÒ¶ùµÄĞÅ¼ş£¬ÄÑÎªÄã" +
-		"Èç´ËĞÁ¿àÅÜÀ´£¬ÎÒ¾ÍÊÕÏÂÄã°É¡£");
+           command("say å¥½å§ï¼Œæ—¢ç„¶" + RANK_D->query_respect(ob) + "æœ‰æˆ‘å„¿çš„ä¿¡ä»¶ï¼Œéš¾ä¸ºä½ " +
+		"å¦‚æ­¤è¾›è‹¦è·‘æ¥ï¼Œæˆ‘å°±æ”¶ä¸‹ä½ å§ã€‚");
            name = ob->query("name");
            new_name = prename[random(sizeof(prename))] + name[0..1];
 	   ob->set("name", new_name);
-           command("say ´Ó½ñÒÔºóÄã¾Í½Ğ×ö" + new_name + "£¬Ï£ÍûÄãÄÜ°ÑÄ½Èİ¹¦·ò·¢Ñï¹â´ó£¡");
+           command("say ä»ä»Šä»¥åä½ å°±å«åš" + new_name + "ï¼Œå¸Œæœ›ä½ èƒ½æŠŠæ…•å®¹åŠŸå¤«å‘æ‰¬å…‰å¤§ï¼");
            command("recruit " + ob->query("id"));
-           command("chat* µ­µ­Ò»Ğ¦£¬Ë­ÑÔ ÒÔ±ËÖ®µÀ »¹Ê©±ËÉí ¾ø¼£½­ºş£¡");
+           command("chat* æ·¡æ·¡ä¸€ç¬‘ï¼Œè°è¨€ ä»¥å½¼ä¹‹é“ è¿˜æ–½å½¼èº« ç»è¿¹æ±Ÿæ¹–ï¼");
            command("chat* haha"); 
          }
         else
-          command("say ÎÒÄ½Èİ²©ÆñÄÜËæ±ãÊÕÍ½!");
+          command("say æˆ‘æ…•å®¹åšå²‚èƒ½éšä¾¿æ”¶å¾’!");
         return;
            
 }

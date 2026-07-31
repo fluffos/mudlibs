@@ -99,11 +99,11 @@ int main(object me, string arg)
 }
  
  
-static int sort_keys(string one, string two) {
+nosave int sort_keys(string one, string two) {
    return strcmp(one, two);  }
  
  
-static int filter_props(string prop, object target) {
+nosave int filter_props(string prop, object target) {
  
 return 1; }
 

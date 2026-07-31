@@ -5,10 +5,10 @@ inherit ROOM;
 
 void create()
 {
-       set("short",HIC"С��"NOR);
+       set("short",HIC"小室"NOR);
        set("long", @LONG
-��ٲ�����һ��С�ң�ֻ������������������������һ�Ѳ������֮
-��������м������Ƶ���޺�һ����ľ���Ƶĵ��ӡ�
+你举步走入一间小室，只见屋中两侧堆满了杂物，左面是一堆柴草引火之
+物，右面则有几个陶制的碗罐和一个粗木搭制的凳子。
 LONG
         );
        set("exits", ([

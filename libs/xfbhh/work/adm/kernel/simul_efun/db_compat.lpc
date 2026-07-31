@@ -1,0 +1,61 @@
+// db_compat.c
+//
+// databased.lpc calls db_affected(db) after every db_exec() to get the
+// affected-row count of the last query -- a real efun on the original
+// server binary this mudlib targeted. This fluffos build's DB package
+// (src/packages/db/db.spec) only exposes db_close/db_commit/db_connect/
+// db_exec/db_fetch/db_rollback/db_status; db_exec() itself returns 0 for
+// INSERT/UPDATE/DELETE (no result set), so there's no real affected-row
+// count available through this driver's API at all. Every call site
+// already checks db_exec()'s own return for the real success/failure
+// signal (an error string vs. an int); by the time db_affected() runs,
+// the query is known to have succeeded, so this just reports "at least
+// one row" rather than the real count.
+int db_affected(int db) {
+  return 1;
+}
+
+// mudlistd.lpc/mudlist.lpc call B2G(str) as a Big5-to-GBK charset
+// converter, expecting a real global function -- but the only actual
+// `B2G` in the mudlib is `#define B2G 0` in languaged.lpc (an unrelated
+// mode-flag constant for its own Fetch() helper). Every other call site
+// of a text-converting B2G is commented out, so this was seemingly
+// dropped/replaced everywhere except these 3 leftover call sites. The
+// whole mudlib runs in UTF-8 now (see AGENTS.md), so there is no Big5 vs.
+// GBK distinction left to convert between; passthrough is correct here,
+// not just a stopgap.
+string B2G(string str) {
+  return str;
+}
+
+// emote_d.lpc/serial_numberd.lpc call a bare count(n1, op, n2) expecting a
+// real MudOS-fork arbitrary-precision bignum arithmetic efun (the same one
+// adm/kernel/simul_efun/ntefun.lpc's count_add()/count_mul()/etc. family
+// wraps -- see AGENTS.md's LONELY_IMPROVED writeup). This driver has no
+// such efun at all ("Undefined function count" at the very first lazy
+// compile of emote_d.lpc, which broke every emote and hence "score"-family
+// output on the sibling lib nitan6, where this fix originates). Restored
+// here as ordinary 64-bit int arithmetic (not a bare (int) cast -- that's
+// a type-assertion on this driver, not a string-to-int parse, and would
+// crash on any call site passing a numeric string): arithmetic ops
+// ("+","-","*","/") return a string (matching every real call site's own
+// string-typed storage field), comparison ops return an int (0/1).
+mixed count(mixed n1, string op, mixed n2) {
+  int a, b;
+
+  a = intp(n1) ? n1 : atoi(n1);
+  b = intp(n2) ? n2 : atoi(n2);
+
+  switch (op) {
+    case "+": return "" + (a + b);
+    case "-": return "" + (a - b);
+    case "*": return "" + (a * b);
+    case "/": return "" + (b ? a / b : 0);
+    case "<": return a < b;
+    case ">": return a > b;
+    case "<=": return a <= b;
+    case ">=": return a >= b;
+    case "==": return a == b;
+  }
+  return "0";
+}

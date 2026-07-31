@@ -1,22 +1,22 @@
-// rukou.c taskÈë¿Ú
+// rukou.c taskå…¥å£
 
 #include <ansi.h>
 
 inherit ROOM;
 void create()
 {
-        set("short", "·ãÁÖ¶É");
+        set("short", "æ«æ—æ¸¡");
         set("long",
-"  ÕâÀïÊÇÇ°Íù»ğÔÆÉ½×¯µÄ±Ø¾­Ö®Â·£¬Ò»¸öÅÆ(paizi)×ÓÁ¢ÔÚÂ·±ß,Ò»µÀĞ¡ºÓºáÔÚÄãµÄÃæÇ°£¬ÉÏ\n"
-"Ãæ½áÁË±¡±¡µÄÒ»²ã±ù¡£¶É¿ÚÅÔ±ßÒ»ÌõÆÆÀÃµÄ²¼·ù¶©ÔÚÊ÷ÉÏ£¬°×²¼ÔÚ±±·çÖĞ·ÉÎè£¬Äã¶¨¾¦Ò»¿´£¬\n"
-"ÉÏÃæĞ´×Å¼¸¸öÑª×Ö£º\n"
-RED"                       Ò»Èë´Ë¾³£¬±ãÎŞ¹éÂ·£¡\n\n\n"NOR
+"  è¿™é‡Œæ˜¯å‰å¾€ç«äº‘å±±åº„çš„å¿…ç»ä¹‹è·¯ï¼Œä¸€ä¸ªç‰Œ(paizi)å­ç«‹åœ¨è·¯è¾¹,ä¸€é“å°æ²³æ¨ªåœ¨ä½ çš„é¢å‰ï¼Œä¸Š\n"
+"é¢ç»“äº†è–„è–„çš„ä¸€å±‚å†°ã€‚æ¸¡å£æ—è¾¹ä¸€æ¡ç ´çƒ‚çš„å¸ƒå¹…è®¢åœ¨æ ‘ä¸Šï¼Œç™½å¸ƒåœ¨åŒ—é£ä¸­é£èˆï¼Œä½ å®šç›ä¸€çœ‹ï¼Œ\n"
+"ä¸Šé¢å†™ç€å‡ ä¸ªè¡€å­—ï¼š\n"
+RED"                       ä¸€å…¥æ­¤å¢ƒï¼Œä¾¿æ— å½’è·¯ï¼\n\n\n"NOR
         );
         set("exits", ([
           "south" : "/d/llzhuang/inn",
         ]));
         set("item_desc", ([
-            "paizi": HIY "\n¿àº£ÎŞ±ß»ØÍ·ÊÇ°¶,ÄãÕæµÄÒª¹ıÈ¥Âğ?ÄÇ¾ÍÀ´°É(decided go)\n" NOR,
+            "paizi": HIY "\nè‹¦æµ·æ— è¾¹å›å¤´æ˜¯å²¸,ä½ çœŸçš„è¦è¿‡å»å—?é‚£å°±æ¥å§(decided go)\n" NOR,
     ]));
         set("no_fight",1);
         setup();
@@ -36,19 +36,19 @@ int do_decided(string arg)
         inv = all_inventory(me);
 
     if (me->is_busy() || me->is_fighting())
-        return notify_fail("ÄãÕıÃ¦×ÅÄÄ£¡\n");
+        return notify_fail("ä½ æ­£å¿™ç€å“ªï¼\n");
     if ( !arg || arg !="go" )
-        return notify_fail("Äã¾ö¶¨¸ÉÊ²Ã´? \n");
+        return notify_fail("ä½ å†³å®šå¹²ä»€ä¹ˆ? \n");
 
         if( me->query("combat_exp")<1000000 ) {
-           return notify_fail("Ç°Í¾¼èÏÕ,»¹ÊÇ²»ÒªÈ¥ÁË°É!\n");
+           return notify_fail("å‰é€”è‰°é™©,è¿˜æ˜¯ä¸è¦å»äº†å§!\n");
 }
         for( i=0;i<sizeof(inv);i++)
 {
                 if( inv[i]->is_character() )
-                   return notify_fail("Äã²»ÄÜ±³×ÅÈË½øÈ¥!\n");
+                   return notify_fail("ä½ ä¸èƒ½èƒŒç€äººè¿›å»!\n");
 }
-       write(YEL"Äã¹Ä×ãÓÂÆø£¬¶É¹ıºÓÈ¥£¬Ì¤ÉÏÁËÏÕ¶ñµÄÕ÷³Ì¡£\n"NOR);
+       write(YEL"ä½ é¼“è¶³å‹‡æ°”ï¼Œæ¸¡è¿‡æ²³å»ï¼Œè¸ä¸Šäº†é™©æ¶çš„å¾ç¨‹ã€‚\n"NOR);
         me->move("/d/llzhuang/xueyuan");
         return 1;
 }

@@ -1,4 +1,4 @@
-//allow  ×ø×¯£¬ÏÂ×¢µÈ¡£
+//allow  ååº„ï¼Œä¸‹æ³¨ç­‰ã€‚
 inherit  ROOM;
 int  round  =  0;  //this  indicates  how  many  games  processed.
 int  ask_for_zhuang  =  0;
@@ -27,34 +27,34 @@ void  check_start(int  previous_round);
 
 void  create  ()
 {
-        set  ("short",  "÷»×Ó·¿");
+        set  ("short",  "éª°å­æˆ¿");
         set  ("long",  @LONG
-ÎİÖĞ¼ä°Ú×ÅÒ»ÕÅ¿´ÆğÀ´Ïàµ±½áÊµµÄ´ó³¤Ìõ×À(table)£¬ËÄÖÜÎ§ÁË
-Ê®¼¸°Ñ¿¿±³Ä¾ÒÎ¡£±±ÃæÇ½ÉÏÓĞÒ»¿éÅÆ×Ó(paizi)¡£
+å±‹ä¸­é—´æ‘†ç€ä¸€å¼ çœ‹èµ·æ¥ç›¸å½“ç»“å®çš„å¤§é•¿æ¡æ¡Œ(table)ï¼Œå››å‘¨å›´äº†
+åå‡ æŠŠé èƒŒæœ¨æ¤…ã€‚åŒ—é¢å¢™ä¸Šæœ‰ä¸€å—ç‰Œå­(paizi)ã€‚
 LONG);
 
         set("item_desc",  (["paizi"  :  "
 
-¶Ä÷»×Ó¹æÔò£º
-Ã¿Ò»ÂÖÓĞ¸ö×¯¼Ò£¬ÊäÓ®Ö»¸ú×¯¼Ò±È¡£Á½Á£÷»×Ó£¬³É¶ÔÎª´ó¡£Ê®µã×îĞ¡¡£
-¿ª¶ÄË³Ğò£º
-Ò»£¬È·¶¨×¯¼Ò(ÓÃzz»òzuozhuang×ø×¯£¬retire»òrz,  rangzhuangÈÃ×¯)¡£
-¶ş£¬×¯¼ÒĞû²¼¿ªÅÌ(start  <¶Ä×¢ÉÏÏŞ>)¡£
-Èı£¬Íæ¼ÒÏÂ×¢(bet»òxz,  xiazhu)¡£
-ËÄ£¬×¯¼ÒÏÂ×¢(bet»òxz,  xiazhu)£¬ÖÁÉÙÒªÑº±ğµÄÍæ¼ÒµÄ×ÜºÍ¡£
-Îå£¬×¯¼ÒÏÂ×¢¾Í¿ª¶ÄÁË¡£
+èµŒéª°å­è§„åˆ™ï¼š
+æ¯ä¸€è½®æœ‰ä¸ªåº„å®¶ï¼Œè¾“èµ¢åªè·Ÿåº„å®¶æ¯”ã€‚ä¸¤ç²’éª°å­ï¼Œæˆå¯¹ä¸ºå¤§ã€‚åç‚¹æœ€å°ã€‚
+å¼€èµŒé¡ºåºï¼š
+ä¸€ï¼Œç¡®å®šåº„å®¶(ç”¨zzæˆ–zuozhuangååº„ï¼Œretireæˆ–rz,  rangzhuangè®©åº„)ã€‚
+äºŒï¼Œåº„å®¶å®£å¸ƒå¼€ç›˜(start  <èµŒæ³¨ä¸Šé™>)ã€‚
+ä¸‰ï¼Œç©å®¶ä¸‹æ³¨(betæˆ–xz,  xiazhu)ã€‚
+å››ï¼Œåº„å®¶ä¸‹æ³¨(betæˆ–xz,  xiazhu)ï¼Œè‡³å°‘è¦æŠ¼åˆ«çš„ç©å®¶çš„æ€»å’Œã€‚
+äº”ï¼Œåº„å®¶ä¸‹æ³¨å°±å¼€èµŒäº†ã€‚
 
-×¢ÒâÊÂÏî£º
-Ò»£¬¶ÄÖĞ²»ÒªÀë¿ª¶Ä³¡£¬·ñÔòÒ»ÇĞËğÊ§¸Å²»¸ºÔğ¡£
-¶ş£¬×ø×¯Ê±ÒªÏÈÄÃ³öÎåÁ½½ğ×ÓµÄ±£Ö¤½ğ£¬ÈÃ×¯Ê±ÍË»¹¡£·ÇÕı³£¶ª×¯(Èç
-¡¡¡¡ÖĞÍ¾Àë¿ªµÈ)±£Ö¤½ğ×Ô¶¯Ê§È¥¡£
-Èı£¬Ã¿Ò»ÂÖ´Ó×¯¼ÒĞû²¼¿ªÅÌÆğÊ®·ÖÖÓÖ®ÄÚ±ØĞëÍê³É£¬·ñÔòÈ¡ÏûÖØÀ´¡£
-¡¡¡¡·Ç×¯¼ÒËùÏÂÖ®×¢¿É±»ÍË»Ø£¬¶ø×¯¼ÒÔò¿ÉÄÜ»áÓĞËğÊ§¡£
-ËÄ£¬Èç¹û×¯¼Ò³Ù³Ù²»Ğû²¼¿ªÅÌ£¬Íæ¼Ò¿ÉÓÃ×ø×¯(zz)Ö¸ÁîÒªÇó»»×¯¡£
-¡¡¡¡ÒªÇó»»×¯ºóÁ½·ÖÖÓÄÚ×¯¼Ò±ÈĞëĞû²¼¿ªÅÌ£¬·ñÔò¶ª×¯¡£
-Îå£¬ÔÚÏÂ×¢¹ı³ÌÖĞ¿ÉÓÃÈ¡Ïû(cancel)Ö¸Áî¡£×¯¼ÒÓÃ´ËÖ¸ÁîÔòĞû²¼´Ë¾ÖÎŞĞ§£¬
-¡¡¡¡´ó¼Ò½«¶Ä×¢È¡»Ø£¬×¯¼Ò·ÇÕı³£¶ª×¯¡£·Ç×¯¼ÒÓÃ´ËÖ¸ÁîÔò±íÊ¾ÍË³ö´Ë
-¡¡¡¡¾Ö£¬¶Ä×¢¿ÉÈ¡»Ø¡£
+æ³¨æ„äº‹é¡¹ï¼š
+ä¸€ï¼ŒèµŒä¸­ä¸è¦ç¦»å¼€èµŒåœºï¼Œå¦åˆ™ä¸€åˆ‡æŸå¤±æ¦‚ä¸è´Ÿè´£ã€‚
+äºŒï¼Œååº„æ—¶è¦å…ˆæ‹¿å‡ºäº”ä¸¤é‡‘å­çš„ä¿è¯é‡‘ï¼Œè®©åº„æ—¶é€€è¿˜ã€‚éæ­£å¸¸ä¸¢åº„(å¦‚
+ã€€ã€€ä¸­é€”ç¦»å¼€ç­‰)ä¿è¯é‡‘è‡ªåŠ¨å¤±å»ã€‚
+ä¸‰ï¼Œæ¯ä¸€è½®ä»åº„å®¶å®£å¸ƒå¼€ç›˜èµ·ååˆ†é’Ÿä¹‹å†…å¿…é¡»å®Œæˆï¼Œå¦åˆ™å–æ¶ˆé‡æ¥ã€‚
+ã€€ã€€éåº„å®¶æ‰€ä¸‹ä¹‹æ³¨å¯è¢«é€€å›ï¼Œè€Œåº„å®¶åˆ™å¯èƒ½ä¼šæœ‰æŸå¤±ã€‚
+å››ï¼Œå¦‚æœåº„å®¶è¿Ÿè¿Ÿä¸å®£å¸ƒå¼€ç›˜ï¼Œç©å®¶å¯ç”¨ååº„(zz)æŒ‡ä»¤è¦æ±‚æ¢åº„ã€‚
+ã€€ã€€è¦æ±‚æ¢åº„åä¸¤åˆ†é’Ÿå†…åº„å®¶æ¯”é¡»å®£å¸ƒå¼€ç›˜ï¼Œå¦åˆ™ä¸¢åº„ã€‚
+äº”ï¼Œåœ¨ä¸‹æ³¨è¿‡ç¨‹ä¸­å¯ç”¨å–æ¶ˆ(cancel)æŒ‡ä»¤ã€‚åº„å®¶ç”¨æ­¤æŒ‡ä»¤åˆ™å®£å¸ƒæ­¤å±€æ— æ•ˆï¼Œ
+ã€€ã€€å¤§å®¶å°†èµŒæ³¨å–å›ï¼Œåº„å®¶éæ­£å¸¸ä¸¢åº„ã€‚éåº„å®¶ç”¨æ­¤æŒ‡ä»¤åˆ™è¡¨ç¤ºé€€å‡ºæ­¤
+ã€€ã€€å±€ï¼ŒèµŒæ³¨å¯å–å›ã€‚
                 \n"  ]));
         //for  look  something.
 
@@ -121,29 +121,29 @@ int  do_bet(string  arg)
         me=this_player();
 
         if(!arg || sscanf(arg,"%d %s",  amount,  money)  !=  2)
-                return  notify_fail("ÇëÊ¹ÓÃ£ºbet(»òxiazhu, xz) <ÊıÄ¿> <»õ±Ò>\n");
+                return  notify_fail("è¯·ä½¿ç”¨ï¼šbet(æˆ–xiazhu, xz) <æ•°ç›®> <è´§å¸>\n");
 
         //check  valid  money  first.
         ob  =  present  (money+"_money",  me);
-        if(!  ob)  return  notify_fail("ÄãÉíÉÏÃ»ÓĞÕâÖÖÇ®¡£\n");
-        if(amount  <  1)  return  notify_fail("ÏëĞĞÆ­£¿\n");
-        if(amount  >  ob->query_amount())  return  notify_fail("ÄãÃ»ÕâÃ´¶àÇ®¡£\n");
-        if(money=="coin")  return  notify_fail("Í­°å£¿»¹ÊÇµ½´ó½ÖÉÏÈ¥¶Ä°É¡£\n");
+        if(!  ob)  return  notify_fail("ä½ èº«ä¸Šæ²¡æœ‰è¿™ç§é’±ã€‚\n");
+        if(amount  <  1)  return  notify_fail("æƒ³è¡Œéª—ï¼Ÿ\n");
+        if(amount  >  ob->query_amount())  return  notify_fail("ä½ æ²¡è¿™ä¹ˆå¤šé’±ã€‚\n");
+        if(money=="coin")  return  notify_fail("é“œæ¿ï¼Ÿè¿˜æ˜¯åˆ°å¤§è¡—ä¸Šå»èµŒå§ã€‚\n");
 
         if(zhuang_id  !=  me->query("id"))
         {//I  am  not  zhuang-jia.
                 if(game_status  !=  2)
-                        return  notify_fail("»¹Ã»µ½ÏÂ×¢µÄÊ±ºò£¬Ìı×¯¼Ò·Ô¸À¡£\n");
+                        return  notify_fail("è¿˜æ²¡åˆ°ä¸‹æ³¨çš„æ—¶å€™ï¼Œå¬åº„å®¶å©å’ã€‚\n");
 
                 //now  let's  bet.
                 this_bet  =  amount*ob->query("base_value")/100;
                 if(  (this_bet  +  (int)me->query_temp("shaizi/bet_amount"))  >  max_bet  )
-                        return  notify_fail("×¯¼ÒÌ«ÇîÁË£¬¶Ä²»Æğ¡£»»×¯¼Ò°É¡£\n");
+                        return  notify_fail("åº„å®¶å¤ªç©·äº†ï¼ŒèµŒä¸èµ·ã€‚æ¢åº„å®¶å§ã€‚\n");
 
                 total_bet  +=  this_bet;
         
                 me->set_temp("shaizi/bet_amount",  this_bet  +  (int)me->query_temp("shaizi/bet_amount"));
-                message_vision  (sprintf("$NÄÃ³ö%s%s%s£¬ÑºÔÚ×À×ÓÉÏ¡£\n",
+                message_vision  (sprintf("$Næ‹¿å‡º%s%s%sï¼ŒæŠ¼åœ¨æ¡Œå­ä¸Šã€‚\n",
                         chinese_number(amount),
                         ob->query("base_unit"),
                         ob->query("name")),
@@ -155,18 +155,18 @@ int  do_bet(string  arg)
         else
         {//I  am  zhuang-jia.
                 if(game_status  !=  2)
-                        return  notify_fail("ÄãÏÖÔÚÍ·ÄÔ²»ÇåĞÑ£¬»¹ÊÇ±ğ×ø×¯ÁË¡£\n");
+                        return  notify_fail("ä½ ç°åœ¨å¤´è„‘ä¸æ¸…é†’ï¼Œè¿˜æ˜¯åˆ«ååº„äº†ã€‚\n");
                 if(total_bet  ==  0)
-                        return  notify_fail("»¹Ã»ÈËÏÂ×¢ÄØ¡£µÈ´ó¼Ò¶¼ÏÂÍêÁËÄãÔÙÏÂ°É¡£\n");
+                        return  notify_fail("è¿˜æ²¡äººä¸‹æ³¨å‘¢ã€‚ç­‰å¤§å®¶éƒ½ä¸‹å®Œäº†ä½ å†ä¸‹å§ã€‚\n");
 
                 //now  let's  bet.
                 this_bet  =  amount*ob->query("base_value")/100;
                 if(this_bet  <  total_bet)
-                        return  notify_fail("ÕâÒ»ÂÖ¹²ÏÂ×¢"+total_bet+"Á½Òø×Ó£¬×¯¼ÒËùÑº²»ÄÜÉÙÓÚÕâ¸öÊıÄ¿¡£\n");           
+                        return  notify_fail("è¿™ä¸€è½®å…±ä¸‹æ³¨"+total_bet+"ä¸¤é“¶å­ï¼Œåº„å®¶æ‰€æŠ¼ä¸èƒ½å°‘äºè¿™ä¸ªæ•°ç›®ã€‚\n");           
 
                 total_bet  +=  this_bet;        
                 me->set_temp("shaizi/bet_amount",  this_bet  +  (int)me->query_temp("shaizi/bet_amount"));
-                message_vision  (sprintf("$NÄÃ³ö%s%s%s£¬ÑºÔÚ×À×ÓÉÏ¡£\n",
+                message_vision  (sprintf("$Næ‹¿å‡º%s%s%sï¼ŒæŠ¼åœ¨æ¡Œå­ä¸Šã€‚\n",
                         chinese_number(amount),
                         ob->query("base_unit"),
                         ob->query("name")),
@@ -175,7 +175,7 @@ int  do_bet(string  arg)
                 if  (amount  ==  ob->query_amount())  destruct  (ob);
                 else  ob->add_amount(-amount);
 
-                message_vision("$NÊÖÒ»Ñ¹£ººÃ£¡ÏÖÔÚ¿ªÖÀ£¬´ó¼ÒÒ»¸öÒ»¸öÀ´¡£\n",  me);
+                message_vision("$Næ‰‹ä¸€å‹ï¼šå¥½ï¼ç°åœ¨å¼€æ·ï¼Œå¤§å®¶ä¸€ä¸ªä¸€ä¸ªæ¥ã€‚\n",  me);
                 game_status  =  3;
                                 
                 call_out("game_process",  1);   
@@ -194,14 +194,14 @@ int  do_cancel()
         object  *inv  =  all_inventory(this_object());
         me  =  this_player();
 
-        if(game_status  !=  2)  return  notify_fail("ÏÖÔÚÃ»ÓĞÊ²Ã´ĞèÒªÈ¡ÏûµÄ¡£\n");  
+        if(game_status  !=  2)  return  notify_fail("ç°åœ¨æ²¡æœ‰ä»€ä¹ˆéœ€è¦å–æ¶ˆçš„ã€‚\n");  
 
         if(  me->query_temp("shaizi_cancel_count")  >  5  )
-                return  notify_fail("Äã×î½ü·´»ÚµÄ´ÎÊıÌ«¶àÁË£¬¶ÄĞÅÒÑ¾­Ì«²î¡£\n");  
+                return  notify_fail("ä½ æœ€è¿‘åæ‚”çš„æ¬¡æ•°å¤ªå¤šäº†ï¼ŒèµŒä¿¡å·²ç»å¤ªå·®ã€‚\n");  
 
         if(  me->query("id")  ==  zhuang_id  )
         {//I  am  zhuang-jia.
-                message_vision("$NÆğÉíËµµÀ£ºÕâÒ»°ÑÎÒ¶Ä²»ÏÂÈ¥ÁË£¬ÄãÃÇ°ÑÇ®ÄÃ»ØÈ¥ÁíÕÒÈË×ø×¯°É£¡\n",  me);          
+                message_vision("$Nèµ·èº«è¯´é“ï¼šè¿™ä¸€æŠŠæˆ‘èµŒä¸ä¸‹å»äº†ï¼Œä½ ä»¬æŠŠé’±æ‹¿å›å»å¦æ‰¾äººååº„å§ï¼\n",  me);          
                 zhuang_id  =  "no  zhuang";
                 me->delete_temp("shaizi");
 
@@ -216,11 +216,11 @@ int  do_cancel()
                                 if(total_bet  >=  0)
                                 {
                                         pay_player(inv[i],  inv[i]->query_temp("shaizi/bet_amount"));
-                                        message_vision("$NÆğÉí°Ñ·ÅÔÚ×À×ÓÉÏµÄ¶Ä×¢ÄÃÁË»ØÀ´¡£\n",  inv[i]);
+                                        message_vision("$Nèµ·èº«æŠŠæ”¾åœ¨æ¡Œå­ä¸Šçš„èµŒæ³¨æ‹¿äº†å›æ¥ã€‚\n",  inv[i]);
                                 }
                                 else
                                 {
-                                        message_vision("Ôã¸â£¡ÓĞÈËÔÚÕâÀïÍµÇ®£¡$NµÄÇ®Ã»ÁË¡£\n",  inv[i]);
+                                        message_vision("ç³Ÿç³•ï¼æœ‰äººåœ¨è¿™é‡Œå·é’±ï¼$Nçš„é’±æ²¡äº†ã€‚\n",  inv[i]);
                                 }
                         }
                         if(  inv[i]->query_temp("shaizi")  )  inv[i]->delete_temp("shaizi");
@@ -233,19 +233,19 @@ int  do_cancel()
         else
         {//if  I  am  not  zhuang-jia.
                 if(  me->query_temp("shaizi/bet_amount")  <=  0  )  
-                        return  notify_fail("ÄãÓÖÃ»ÏÂ×¢£¬ÔÚÕâÀïÆğÊ²Ã´ºå£¿\n");  
+                        return  notify_fail("ä½ åˆæ²¡ä¸‹æ³¨ï¼Œåœ¨è¿™é‡Œèµ·ä»€ä¹ˆå“„ï¼Ÿ\n");  
                         
                 total_bet  -=    me->query_temp("shaizi/bet_amount");
                 if(  total_bet  >=0  )
                 {               
-                        message_vision("$NÆğÉí°Ñ·ÅÔÚ×À×ÓÉÏµÄ¶Ä×¢ÄÃÁË»ØÀ´¡£\n",  me);
+                        message_vision("$Nèµ·èº«æŠŠæ”¾åœ¨æ¡Œå­ä¸Šçš„èµŒæ³¨æ‹¿äº†å›æ¥ã€‚\n",  me);
                         pay_player(me,  me->query_temp("shaizi/bet_amount"));
                         me->delete_temp("shaizi");
                         me->set_temp("shaizi_cancel_count",  1+me->query_temp("shaizi_cancel_count"));
                 }
                 else
                 {
-                        message_vision("Ôã¸â£¡ÓĞÈËÔÚÕâÀïÍµÇ®£¡$NµÄÇ®Ã»ÁË¡£\n",  me);
+                        message_vision("ç³Ÿç³•ï¼æœ‰äººåœ¨è¿™é‡Œå·é’±ï¼$Nçš„é’±æ²¡äº†ã€‚\n",  me);
                 }
         }
         return  1;
@@ -261,11 +261,11 @@ int  do_zuozhuang()
 
         if  (zhuang_id  ==  me->query("id"))
         {
-                return  notify_fail("ÄãÒÑ¾­ÊÇ×¯¼ÒÁË¡£\n");
+                return  notify_fail("ä½ å·²ç»æ˜¯åº„å®¶äº†ã€‚\n");
         }
         
         if(game_status  ==  1  ||  game_status  ==  0  )
-        {//only  in  this  two  case  can  »»×¯
+        {//only  in  this  two  case  can  æ¢åº„
                 if(objectp(zhuang=present(zhuang_id,  this_object()))  )
                 {//if  the  previous  zhuang-jia  is  here.
                         //if  the  zhuang-jia  does  not  "start"...cancel  his  zhuang.
@@ -273,26 +273,26 @@ int  do_zuozhuang()
                         {
                                 ask_for_zhuang  =  1;
                                 call_out("check_start",  120,  round);
-                                tell_room(this_object(),  me->query("name")+"Ò²Ïë×ø×¯¡£Èç¹û×¯¼ÒÁ½·ÖÖÓÄÚ²»ÄÜ¿ªÅÌ(start)£¬¾ÍµÃÈÃ×¯ÁË¡£\n");
+                                tell_room(this_object(),  me->query("name")+"ä¹Ÿæƒ³ååº„ã€‚å¦‚æœåº„å®¶ä¸¤åˆ†é’Ÿå†…ä¸èƒ½å¼€ç›˜(start)ï¼Œå°±å¾—è®©åº„äº†ã€‚\n");
                         }  
-                        return  notify_fail("ÒÑ¾­ÓĞ×¯¼ÒÁË£¬½Ğ"+zhuang->query("name")+"("+zhuang->query("id")+")ÈÃ×¯°É¡£\n");    
+                        return  notify_fail("å·²ç»æœ‰åº„å®¶äº†ï¼Œå«"+zhuang->query("name")+"("+zhuang->query("id")+")è®©åº„å§ã€‚\n");    
                 }
                 else
                 {
                         if(  !pay_out(me,  zhuang_deposit)  )
-                                return  notify_fail("ÄãÃ»ÓĞ×ã¹»µÄÇ®½»×ø×¯±£Ö¤½ğ¡£\n");
+                                return  notify_fail("ä½ æ²¡æœ‰è¶³å¤Ÿçš„é’±äº¤ååº„ä¿è¯é‡‘ã€‚\n");
 
                         me->set_temp("shaizi_zhuang_deposit",  500);
                         //note  this  parameter  is  not  in  "shaizi"  array.
                 
-                        message_vision("$NÄÃ³öÒ»¶§½ğ×ÓÍù×ÀÉÏÒ»ÅÄ£¬ÔÚ×¯¼ÒµÄÎ»×ÓÉÏ×øÁËÏÂÀ´¡£\n",  me);
+                        message_vision("$Næ‹¿å‡ºä¸€é”­é‡‘å­å¾€æ¡Œä¸Šä¸€æ‹ï¼Œåœ¨åº„å®¶çš„ä½å­ä¸Šåäº†ä¸‹æ¥ã€‚\n",  me);
                         zhuang_id  =  (string)me->query("id");
                         game_status  =  1;  //zhuang-jia  changed.
                         return  1;
                 }
         }
         else
-                return  notify_fail("ÏÖÔÚ»¹²»ÄÜ»»×¯¡£\n");
+                return  notify_fail("ç°åœ¨è¿˜ä¸èƒ½æ¢åº„ã€‚\n");
 }
 
 int  do_retire()
@@ -302,11 +302,11 @@ int  do_retire()
         me=this_player();
 
         if(zhuang_id  !=  me->query("id"))
-                return  notify_fail("ÄãÓÖ²»ÊÇ×¯¼Ò£¬ÈÃÊ²Ã´ÈÃ£¿\n");
+                return  notify_fail("ä½ åˆä¸æ˜¯åº„å®¶ï¼Œè®©ä»€ä¹ˆè®©ï¼Ÿ\n");
 
         if(game_status  ==  1  ||  game_status  ==  0  )
         {
-                message_vision("$NÕ¾ÆğÀ´ÈÂµÀ£ºÕâ¸öÃ¹×¯ÎÒ¿É²»×øÁË£¡Ëµ°ÕË³ÊÖ½«×ÀÉÏµÄ±£Ö¤½ğ´§ÔÚ»³Àï¡£\n",  me);
+                message_vision("$Nç«™èµ·æ¥åš·é“ï¼šè¿™ä¸ªéœ‰åº„æˆ‘å¯ä¸åäº†ï¼è¯´ç½¢é¡ºæ‰‹å°†æ¡Œä¸Šçš„ä¿è¯é‡‘æ£åœ¨æ€€é‡Œã€‚\n",  me);
                 zhuang_id  =  "no  zhuang";
                 game_status  =  0;
                 pay_player(me,  me->query_temp("shaizi_zhuang_deposit"));
@@ -314,8 +314,8 @@ int  do_retire()
                 return  1;
         }
         else
-        {//not  the  time  to  ÈÃ×¯.
-                return  notify_fail("ÏëÌÓ£¿ºÃ´õµÃ¶ÄÍêÕâÒ»°Ñ¡£\n");
+        {//not  the  time  to  è®©åº„.
+                return  notify_fail("æƒ³é€ƒï¼Ÿå¥½æ­¹å¾—èµŒå®Œè¿™ä¸€æŠŠã€‚\n");
         }
 }
 
@@ -330,21 +330,21 @@ int  do_start(string  arg)
         me=this_player();
 
         if(zhuang_id  !=  me->query("id"))
-                return  notify_fail("Ö»ÓĞ×¯¼Ò²ÅÄÜ¿ªÅÌ¡£\n");
+                return  notify_fail("åªæœ‰åº„å®¶æ‰èƒ½å¼€ç›˜ã€‚\n");
 
         if(game_status  ==  1  ||  game_status  ==  0  )
         {
                 if(!  arg  ||  sscanf  (arg,"%d",  current_limit)  !=  1)
-                        return  notify_fail("ÇëÊ¹ÓÃ£ºstart  <¶Ä×¢ÉÏÏŞ£¬µ¥Î»£º»Æ½ğ>\n");
+                        return  notify_fail("è¯·ä½¿ç”¨ï¼šstart  <èµŒæ³¨ä¸Šé™ï¼Œå•ä½ï¼šé»„é‡‘>\n");
 
                 if(current_limit  <  min_limit)
-                        return  notify_fail("ÄãÒ²Ì«ÇîÁË°É£¿»¹ÊÇ±ğ×ø×¯ÁË¡£¶Ä×¢ÉÏÏŞ±ğÉÙÓÚ"+chinese_number(min_limit)+"Á½»Æ½ğ¡£\n");
+                        return  notify_fail("ä½ ä¹Ÿå¤ªç©·äº†å§ï¼Ÿè¿˜æ˜¯åˆ«ååº„äº†ã€‚èµŒæ³¨ä¸Šé™åˆ«å°‘äº"+chinese_number(min_limit)+"ä¸¤é»„é‡‘ã€‚\n");
                 if(current_limit  >  max_limit)
-                        return  notify_fail("ÄãÒ²Ì«¸»ÁË°É£¿±ğ³¬¹ı"+chinese_number(max_limit)+"Á½»Æ½ğ¡£\n");
+                        return  notify_fail("ä½ ä¹Ÿå¤ªå¯Œäº†å§ï¼Ÿåˆ«è¶…è¿‡"+chinese_number(max_limit)+"ä¸¤é»„é‡‘ã€‚\n");
 
                 max_bet  =  100*current_limit;  //max_bet  in  silver.
-                message_vision("$NÊÖÒ»»Ó´óÉù½ĞµÀ£º¿ªÅÌ£¡ÏÖÔÚ¿ªÊ¼ÏÂ×¢£¡\n",  me);
-                message_vision("$N¶ÙÁËÒ»ÏÂ£º¶Ä×¢±ğ³¬¹ı"+chinese_number(current_limit)+"Á½»Æ½ğ¡£\n",  me);
+                message_vision("$Næ‰‹ä¸€æŒ¥å¤§å£°å«é“ï¼šå¼€ç›˜ï¼ç°åœ¨å¼€å§‹ä¸‹æ³¨ï¼\n",  me);
+                message_vision("$Né¡¿äº†ä¸€ä¸‹ï¼šèµŒæ³¨åˆ«è¶…è¿‡"+chinese_number(current_limit)+"ä¸¤é»„é‡‘ã€‚\n",  me);
 
                 total_bet  =  0;
                 game_status  =  2;  //enter  the  bet  process.
@@ -355,8 +355,8 @@ int  do_start(string  arg)
                 return  1;
         }
         else
-        {//not  the  time  to  ¿ªÅÌ.
-                return  notify_fail("ÏÖÔÚ»¹²»ÄÜ¿ªÅÌ¡£\n");
+        {//not  the  time  to  å¼€ç›˜.
+                return  notify_fail("ç°åœ¨è¿˜ä¸èƒ½å¼€ç›˜ã€‚\n");
         }
 }
 
@@ -369,7 +369,7 @@ void  check_start(int  previous_round)
         //now  if  still  in  this  round.
         if(  game_status  ==  3)  return;  //game  in  processing,  can  do  nothing  here.
 
-        tell_room(this_object(),  "×¯¼Ò³Ù³Ù²»¿ªÅÌ£¬Ö»ºÃ»»×¯ÁË¡£\n");
+        tell_room(this_object(),  "åº„å®¶è¿Ÿè¿Ÿä¸å¼€ç›˜ï¼Œåªå¥½æ¢åº„äº†ã€‚\n");
         zhuang_id  =  "no  zhuang";
         game_status  =  0;
         total_bet  =  0;
@@ -387,7 +387,7 @@ void  check_finish(int  previous_round)
 
         //here  we  need  cancel  the  game.
         //give  money  back  to  all  players  except  zhuang-jia,  cuz  this  is  his/her  fault.
-        tell_room(this_object(),  "ÕâÒ»¾Ö³Ù³ÙÎ´ÄÜÍê³É£¬Ö»ºÃÈ¡ÏûÖØÀ´ÁË¡£\n");
+        tell_room(this_object(),  "è¿™ä¸€å±€è¿Ÿè¿Ÿæœªèƒ½å®Œæˆï¼Œåªå¥½å–æ¶ˆé‡æ¥äº†ã€‚\n");
         for(i=0;  i<sizeof(inv);  i++)
         {
                 if(  inv[i]->query_temp("shaizi/bet_amount")  >  0  &&  inv[i]->query("id")  !=  zhuang_id  )
@@ -396,11 +396,11 @@ void  check_finish(int  previous_round)
                         if(total_bet  >=  0)
                         {
                                 pay_player(inv[i],  inv[i]->query_temp("shaizi/bet_amount"));
-                                message_vision("$NÆğÉí°Ñ·ÅÔÚ×À×ÓÉÏµÄ¶Ä×¢ÄÃÁË»ØÀ´¡£\n",  inv[i]);
+                                message_vision("$Nèµ·èº«æŠŠæ”¾åœ¨æ¡Œå­ä¸Šçš„èµŒæ³¨æ‹¿äº†å›æ¥ã€‚\n",  inv[i]);
                         }
                         else
                         {
-                                message_vision("Ôã¸â£¡ÓĞÈËÔÚÕâÀïÍµÇ®£¡$NµÄÇ®Ã»ÁË¡£\n",  inv[i]);
+                                message_vision("ç³Ÿç³•ï¼æœ‰äººåœ¨è¿™é‡Œå·é’±ï¼$Nçš„é’±æ²¡äº†ã€‚\n",  inv[i]);
                         }
                 }
                 if(  inv[i]->query_temp("shaizi")  )  inv[i]->delete_temp("shaizi");
@@ -433,53 +433,53 @@ void  show_shaizi(object  me)
 {
         string  point_msg;
         string  *sha_msg  =  ({
-                "µÉ×ÅÒ»¶ÔºìÑÛ£¬´óºÈÒ»Éù£ºÉ±£¡ÊÖÖĞµÄÁ½Á£÷»×ÓÍù×À×ÓÉÏÒ»Ë¤£¡\n",
-                "ÍùÊÖÉÏ´µÁË¿ÚÆø£¬Á½Á£÷»×ÓÇáÇáÒ»Å×£®£®£®\n",
-                "Î¢Î¢Ò»Ğ¦£¬Á½Á£÷»×ÓÍù×À×ÓÉÏÒ»¹ö£®£®£®\n",
-                "Íû¿Õ×÷ÁË¸öÒ¾£ºÆĞÈø±£ÓÓ£¡Á½Á£÷»×ÓÕ½Õ½àäàäµØ×ÀÉÏÒ»Í¶£®£®£®\n",
-                "ÄÃ×ÅÁ½Á£÷»×Ó£¬¶¶×ã¾«Éñ£ºÈ¢ÀÏÆÅÉúº¢×ÓÔÚ´ËÒ»¾Ù£¡\n",
-                "ÒÂĞäÒ»¾í£¬´óÉù½ĞµÀ£º¿´ÎÒµÄ£¡\n",
-                "Ò§ÑÀÇĞ³İ£¬Á½Á£÷»×ÓÍù×À×ÓÉÏºİºİµØÒ»ÔÒ£®£®£®\n",
-                "ÂúÍ·´óº¹£¬×ÔÑÔ×ÔÓïµÀ£ºÁù¶Ô£¬Áù¶Ô£¬¸ÃÉÏÎÒ¼ÒÁË°É£®£®£®\n",
-                "äìÈ÷µØ×÷ÁË¸öËÄ·½Ò¾£ºÕâ°Ñ¸ÃÎÒÓ®£¬¿´ºÃÁË£®£®£®\n",
+                "çªç€ä¸€å¯¹çº¢çœ¼ï¼Œå¤§å–ä¸€å£°ï¼šæ€ï¼æ‰‹ä¸­çš„ä¸¤ç²’éª°å­å¾€æ¡Œå­ä¸Šä¸€æ‘”ï¼\n",
+                "å¾€æ‰‹ä¸Šå¹äº†å£æ°”ï¼Œä¸¤ç²’éª°å­è½»è½»ä¸€æŠ›ï¼ï¼ï¼\n",
+                "å¾®å¾®ä¸€ç¬‘ï¼Œä¸¤ç²’éª°å­å¾€æ¡Œå­ä¸Šä¸€æ»šï¼ï¼ï¼\n",
+                "æœ›ç©ºä½œäº†ä¸ªæ–ï¼šè©è¨ä¿ä½‘ï¼ä¸¤ç²’éª°å­æˆ˜æˆ˜å™¤å™¤åœ°æ¡Œä¸Šä¸€æŠ•ï¼ï¼ï¼\n",
+                "æ‹¿ç€ä¸¤ç²’éª°å­ï¼ŒæŠ–è¶³ç²¾ç¥ï¼šå¨¶è€å©†ç”Ÿå­©å­åœ¨æ­¤ä¸€ä¸¾ï¼\n",
+                "è¡£è¢–ä¸€å·ï¼Œå¤§å£°å«é“ï¼šçœ‹æˆ‘çš„ï¼\n",
+                "å’¬ç‰™åˆ‡é½¿ï¼Œä¸¤ç²’éª°å­å¾€æ¡Œå­ä¸Šç‹ ç‹ åœ°ä¸€ç ¸ï¼ï¼ï¼\n",
+                "æ»¡å¤´å¤§æ±—ï¼Œè‡ªè¨€è‡ªè¯­é“ï¼šå…­å¯¹ï¼Œå…­å¯¹ï¼Œè¯¥ä¸Šæˆ‘å®¶äº†å§ï¼ï¼ï¼\n",
+                "æ½‡æ´’åœ°ä½œäº†ä¸ªå››æ–¹æ–ï¼šè¿™æŠŠè¯¥æˆ‘èµ¢ï¼Œçœ‹å¥½äº†ï¼ï¼ï¼\n",
                 });
 
         string  *shaizi_msg  =  ({
-"©°©¤©¤©¤©´\n"+
-"©¦¡¡¡¡¡¡©¦\n"+
-"©¦¡¡¡¡¡¡©¦\n"+
-"©¦¡¡¡¡¡¡©¦\n"+
-"©¸©¤©¤©¤©¼\n",  
-"©°©¤©¤©¤©´\n"+
-"©¦¡¡¡¡¡¡©¦\n"+
-"©¦¡¡¡ñ¡¡©¦\n"+
-"©¦¡¡¡¡¡¡©¦\n"+
-"©¸©¤©¤©¤©¼\n",  
-"©°©¤©¤©¤©´\n"+
-"©¦¡¡¡¡¡¡©¦\n"+
-"©¦¡ñ¡¡¡ñ©¦\n"+
-"©¦¡¡¡¡¡¡©¦\n"+
-"©¸©¤©¤©¤©¼\n",  
-"©°©¤©¤©¤©´\n"+
-"©¦¡ñ¡¡¡¡©¦\n"+
-"©¦¡¡¡ñ¡¡©¦\n"+
-"©¦¡¡¡¡¡ñ©¦\n"+
-"©¸©¤©¤©¤©¼\n",  
-"©°©¤©¤©¤©´\n"+
-"©¦¡ñ¡¡¡ñ©¦\n"+
-"©¦¡¡¡¡¡¡©¦\n"+
-"©¦¡ñ¡¡¡ñ©¦\n"+
-"©¸©¤©¤©¤©¼\n",  
-"©°©¤©¤©¤©´\n"+
-"©¦¡ñ¡¡¡ñ©¦\n"+
-"©¦¡¡¡ñ¡¡©¦\n"+
-"©¦¡ñ¡¡¡ñ©¦\n"+
-"©¸©¤©¤©¤©¼\n",  
-"©°©¤©¤©¤©´\n"+
-"©¦¡ñ¡¡¡ñ©¦\n"+
-"©¦¡ñ¡¡¡ñ©¦\n"+
-"©¦¡ñ¡¡¡ñ©¦\n"+
-"©¸©¤©¤©¤©¼\n",
+"â”Œâ”€â”€â”€â”\n"+
+"â”‚ã€€ã€€ã€€â”‚\n"+
+"â”‚ã€€ã€€ã€€â”‚\n"+
+"â”‚ã€€ã€€ã€€â”‚\n"+
+"â””â”€â”€â”€â”˜\n",  
+"â”Œâ”€â”€â”€â”\n"+
+"â”‚ã€€ã€€ã€€â”‚\n"+
+"â”‚ã€€â—ã€€â”‚\n"+
+"â”‚ã€€ã€€ã€€â”‚\n"+
+"â””â”€â”€â”€â”˜\n",  
+"â”Œâ”€â”€â”€â”\n"+
+"â”‚ã€€ã€€ã€€â”‚\n"+
+"â”‚â—ã€€â—â”‚\n"+
+"â”‚ã€€ã€€ã€€â”‚\n"+
+"â””â”€â”€â”€â”˜\n",  
+"â”Œâ”€â”€â”€â”\n"+
+"â”‚â—ã€€ã€€â”‚\n"+
+"â”‚ã€€â—ã€€â”‚\n"+
+"â”‚ã€€ã€€â—â”‚\n"+
+"â””â”€â”€â”€â”˜\n",  
+"â”Œâ”€â”€â”€â”\n"+
+"â”‚â—ã€€â—â”‚\n"+
+"â”‚ã€€ã€€ã€€â”‚\n"+
+"â”‚â—ã€€â—â”‚\n"+
+"â””â”€â”€â”€â”˜\n",  
+"â”Œâ”€â”€â”€â”\n"+
+"â”‚â—ã€€â—â”‚\n"+
+"â”‚ã€€â—ã€€â”‚\n"+
+"â”‚â—ã€€â—â”‚\n"+
+"â””â”€â”€â”€â”˜\n",  
+"â”Œâ”€â”€â”€â”\n"+
+"â”‚â—ã€€â—â”‚\n"+
+"â”‚â—ã€€â—â”‚\n"+
+"â”‚â—ã€€â—â”‚\n"+
+"â””â”€â”€â”€â”˜\n",
                 });
 
         if(environment(me)  ==  this_object()  ||  me->query_temp("shaizi/bet_amount")  >  0)
@@ -489,20 +489,20 @@ void  show_shaizi(object  me)
                 if(  me->query_temp("shaizi/point1")  ==  me->query_temp("shaizi/point2")  &&  me->query_temp("shaizi/point2")  !=  0  )
                 {
                         me->set_temp("shaizi/point",    100+me->query_temp("shaizi/point2"));
-                        point_msg  =  chinese_number(me->query_temp("shaizi/point2"))+"¶Ô";
+                        point_msg  =  chinese_number(me->query_temp("shaizi/point2"))+"å¯¹";
                 }
                 else
                 {
                         me->set_temp("shaizi/point",    (me->query_temp("shaizi/point1")  +me->query_temp("shaizi/point2")  )%10);
-                        point_msg  =  chinese_number(me->query_temp("shaizi/point"))+"µã";
+                        point_msg  =  chinese_number(me->query_temp("shaizi/point"))+"ç‚¹";
                         if(me->query_temp("shaizi/point")  ==  0)
-                                point_msg  =  "õ¿Ê®";
+                                point_msg  =  "è¹©å";
                 }               
 
                 tell_room  (this_object(),  me->query("name")+sha_msg[random(sizeof(sha_msg))]);
                 tell_room  (this_object(),  shaizi_msg[(int)me->query_temp("shaizi/point1")]);
                 tell_room  (this_object(),  shaizi_msg[(int)me->query_temp("shaizi/point2")]);
-                tell_room  (this_object(),  "ÖÚÈËÆëÉù½ĞµÀ£º"+point_msg+"£¡\n");
+                tell_room  (this_object(),  "ä¼—äººé½å£°å«é“ï¼š"+point_msg+"ï¼\n");
         }
         
 }
@@ -515,12 +515,12 @@ void  game_result()
 
         if(objectp(zhuang=present(zhuang_id,  this_object()))  &&  living(zhuang)  )
         {//if  the  zhuang-jia  is  here.
-                tell_room(this_object(),  zhuang->query("name")+"´óÉùĞû²¼£º½áÕÊ£¡\n");  
+                tell_room(this_object(),  zhuang->query("name")+"å¤§å£°å®£å¸ƒï¼šç»“å¸ï¼\n");  
                 zhuang_point  =  zhuang->query_temp("shaizi/point");
         }
         else  
         {
-                tell_room(this_object(),  "×¯¼Ò²»ÖªµÀÅÜµ½ÄÄÀïÈ¥ÁË¡£´ó¼Ò¶¼Ó®ÁË£¡\n");    
+                tell_room(this_object(),  "åº„å®¶ä¸çŸ¥é“è·‘åˆ°å“ªé‡Œå»äº†ã€‚å¤§å®¶éƒ½èµ¢äº†ï¼\n");    
                 zhuang_point  =  -1;
                 zhuang_id  =  "no  zhuang";
         }       
@@ -531,7 +531,7 @@ void  game_result()
                 {
                         if(  (int)inv[i]->query_temp("shaizi/point")  >  zhuang_point  )
                         {//this  player  won.
-                                tell_room(this_object(),  inv[i]->query("name")+"Ó®ÁË"+chinese_number(inv[i]->query_temp("shaizi/bet_amount"))+"Á½Òø×Ó¡£\n");
+                                tell_room(this_object(),  inv[i]->query("name")+"èµ¢äº†"+chinese_number(inv[i]->query_temp("shaizi/bet_amount"))+"ä¸¤é“¶å­ã€‚\n");
                                 total_bet  -=  2*inv[i]->query_temp("shaizi/bet_amount");
                                 if(total_bet  >=  0)
                                 {  
@@ -539,12 +539,12 @@ void  game_result()
                                 }
                                 else
                                 {
-                                        tell_room(this_object(),  "Ôã¸â£¡ÓĞÈËÔÚÕâÀïÍµÇ®£¡"+inv[i]->query("name")+"Ó®µÄÇ®ÄÃ²»µ½ÁË¡£\n");
+                                        tell_room(this_object(),  "ç³Ÿç³•ï¼æœ‰äººåœ¨è¿™é‡Œå·é’±ï¼"+inv[i]->query("name")+"èµ¢çš„é’±æ‹¿ä¸åˆ°äº†ã€‚\n");
                                 }
                         }
                         else
                         {//this  player  lost.
-                                tell_room(this_object(),  inv[i]->query("name")+"ÊäÁË"+chinese_number(inv[i]->query_temp("shaizi/bet_amount"))+"Á½Òø×Ó¡£\n");
+                                tell_room(this_object(),  inv[i]->query("name")+"è¾“äº†"+chinese_number(inv[i]->query_temp("shaizi/bet_amount"))+"ä¸¤é“¶å­ã€‚\n");
                         }
                 }
         }
@@ -552,7 +552,7 @@ void  game_result()
         //now  consider  the  zhuang-jia.
         if(zhuang  &&  total_bet  >  0)
         {
-                tell_room(this_object(),  "Ê£ÏÂµÄ"+chinese_number(total_bet)+"Á½Òø×Ó¶¼ÊÇ×¯¼Ò"+zhuang->query("name")+"µÄÁË¡£\n");
+                tell_room(this_object(),  "å‰©ä¸‹çš„"+chinese_number(total_bet)+"ä¸¤é“¶å­éƒ½æ˜¯åº„å®¶"+zhuang->query("name")+"çš„äº†ã€‚\n");
                 pay_player(zhuang,  total_bet);
                 total_bet  =  0;
         }
@@ -656,27 +656,27 @@ int  do_look(string  arg)
         {
                 if(total_bet  >  0)
                 {
-                        write("ÏÖÔÚµÄ¶Ä×¢×Ü¹²ÊÇ"+total_bet+"Á½Òø×Ó¡£\n");
+                        write("ç°åœ¨çš„èµŒæ³¨æ€»å…±æ˜¯"+total_bet+"ä¸¤é“¶å­ã€‚\n");
                         for(i=0;  i<sizeof(inv);  i++)
                         {
                                 if(  inv[i]->query_temp("shaizi/bet_amount")  >  0  )
-                                        write(inv[i]->query("name")+"£º"+inv[i]->query_temp("shaizi/bet_amount")+"Á½¡£\n");
+                                        write(inv[i]->query("name")+"ï¼š"+inv[i]->query_temp("shaizi/bet_amount")+"ä¸¤ã€‚\n");
                         }
 
                 }
-                else  write("ÏÖÔÚ»¹Ã»ÓĞÈËÏÂ×¢¡£\n");
+                else  write("ç°åœ¨è¿˜æ²¡æœ‰äººä¸‹æ³¨ã€‚\n");
 
                 if(zhuang_id  ==  "no  zhuang")
-                        write("Ä¿Ç°»¹Ã»ÓĞ×¯¼Ò¡£\n");
+                        write("ç›®å‰è¿˜æ²¡æœ‰åº„å®¶ã€‚\n");
                 else
                 {
                         if(objectp(zhuang=present(zhuang_id,  this_object()))  &&  living(zhuang)  )
                         {//if  the  zhuang-jia  is  here.
-                                write("Ä¿Ç°µÄ×¯¼ÒÊÇ"+zhuang->query("name")+"("+zhuang->query("id")+")¡£\n");    
+                                write("ç›®å‰çš„åº„å®¶æ˜¯"+zhuang->query("name")+"("+zhuang->query("id")+")ã€‚\n");    
                         }
                         else  
                         {
-                                write("×¯¼Ò²»ÖªµÀÅÜµ½ÄÄÀïÈ¥ÁË¡£\n");
+                                write("åº„å®¶ä¸çŸ¥é“è·‘åˆ°å“ªé‡Œå»äº†ã€‚\n");
                                 zhuang_id  =  "no  zhuang";
                         }               
                 }

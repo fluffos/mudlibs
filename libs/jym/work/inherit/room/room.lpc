@@ -12,7 +12,7 @@
 inherit F_DBASE;
 inherit F_CLEAN_UP;
 
-static mapping doors;
+nosave mapping doors;
 
 int query_max_encumbrance() { return 100000000000; }
 

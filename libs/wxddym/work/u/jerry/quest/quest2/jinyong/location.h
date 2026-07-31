@@ -71,10 +71,10 @@ mapping allloca=([
                 "yuntai","yunupath1","yunu","yunuci","yunupath1",
                 "yunupath2","yuquan","zhandao","zhenyue","ziqitai",
                  }),
-"逍遥派邻近":({"/d/xiaoyao/","bingqif.c","damen.c","fangjian1.c","fangjian2.c","gudi","hubian",
-               "liangong","midao1","midao2","midao3","mubanlu","muwu1","muwu2","muwu3.c","pubu",
+"逍遥派邻近":({"/d/xiaoyao/","bingqif.lpc","damen.lpc","fangjian1.lpc","fangjian2.lpc","gudi","hubian",
+               "liangong","midao1","midao2","midao3","mubanlu","muwu1","muwu2","muwu3.lpc","pubu",
                "qingcaop","shantang","shidong","shiji1","shiji2","shiji3","shishi1","shishi2",
-               "shishi3.c","shishi4.c","shishi5.c","shulin1.c","shulin2.c","shulin3.c","tongmen","xiaodao1",
+               "shishi3.lpc","shishi4.lpc","shishi5.lpc","shulin1.lpc","shulin2.lpc","shulin3.lpc","tongmen","xiaodao1",
                "xiaodao2","xiaodao3","xiaodao4","xiaodao5","xiuxis","yandong","yanfeng",}),
 
 
@@ -89,7 +89,7 @@ mapping allloca=([
               
      "华山村":({"/d/village/","alley1","alley2","bighouse1","bighouse2","eexit","ehouse1","ehouse2",
                  "eroad1","eroad2","eroad3","hsroad1","hsroad2","hsroad3","nwhouse","nwroad1",
-                 "nwroad2","sexit.c","shack","shop","shouse","smithy1","smithy2","square","sroad1",
+                 "nwroad2","sexit.lpc","shack","shop","shouse","smithy1","smithy2","square","sroad1",
            "sroad2","sroad3","sroad4","temple1","temple2","wexit",}),
         
     "北京城外":({"/d/city2/","road10","road9","road8","road7","road6","road5",

@@ -1,28 +1,28 @@
 // Last Modified by winder on May. 29 2001
-// tian.h Ìì×Ö±²ÊÕÍ½
+// tian.h å¤©å­—è¾ˆæ”¶å¾’
 
 int do_nod();
 void attempt_apprentice(object ob)
 {
         mapping fam;
 
-	if(!mapp(fam = ob->query("family")) || fam["family_name"]!="ÄÏÉÙÁÖÅÉ")
+	if(!mapp(fam = ob->query("family")) || fam["family_name"]!="å—å°‘æ—æ´¾")
 	{
-		command("say ÎÒÖ»ÊÕ±¾ÅÉµÜ×ÓÎªÍ½¡£\n");
+		command("say æˆ‘åªæ”¶æœ¬æ´¾å¼Ÿå­ä¸ºå¾’ã€‚\n");
 		return;
 	}
 	if(fam["generation"] < 18)
 	{
-		command("say °¢ÃÖÍÓ·ğ¡£ÎÒ·ğ´È±¯¡£\n");
+		command("say é˜¿å¼¥é™€ä½›ã€‚æˆ‘ä½›æ…ˆæ‚²ã€‚\n");
 		return;
 	}
 	if(fam["generation"] > 19)
 	{
-		command("say Æ¶É®²»ÊÕµÍ±²µÜ×Ó¡£°¢ÃÖÍÓ·ğ¡£\n");
+		command("say è´«åƒ§ä¸æ”¶ä½è¾ˆå¼Ÿå­ã€‚é˜¿å¼¥é™€ä½›ã€‚\n");
 		return;
 	}
 	ob->set_temp("wait_nod", 1);
-	command("say ÒÀÕÕÄÏÉÙÁÖËÂÀú´ú¹æ¾Ø£¬"+RANK_D->query_respect(ob)+"Äã±ØĞë½ÓÏÂÎÒÊ®¶şÕĞ£¬ÎÒ²ÅÄÜÊÕÄãÎªÍ½¡£ÄãÔ¸ÒâÃ´£¿ÄÇ¾Íµã¸öÍ·°É(nod)¡£");
+	command("say ä¾ç…§å—å°‘æ—å¯ºå†ä»£è§„çŸ©ï¼Œ"+RANK_D->query_respect(ob)+"ä½ å¿…é¡»æ¥ä¸‹æˆ‘åäºŒæ‹›ï¼Œæˆ‘æ‰èƒ½æ”¶ä½ ä¸ºå¾’ã€‚ä½ æ„¿æ„ä¹ˆï¼Ÿé‚£å°±ç‚¹ä¸ªå¤´å§(nod)ã€‚");
 }
 int do_nod()
 {
@@ -67,11 +67,11 @@ void check(object ob)
 		if( ob->query("class") == "bonze")
 		{
 			new_name=ob->query("name");
-			new_name[0..1] = "Ìì";
+			new_name[0..1] = "å¤©";
 			ob->set("name", new_name);
-			command("say ´Ó½ñÒÔºóÄãµÄ·¨Ãû½Ğ×ö"+new_name+ "£¬¹§Ï²ÄãÈÙÉıÎªÎÒÄÏÉÙÁÖÅÉÌì×Ö±²Ê¥É®£¡\n");
+			command("say ä»ä»Šä»¥åä½ çš„æ³•åå«åš"+new_name+ "ï¼Œæ­å–œä½ è£å‡ä¸ºæˆ‘å—å°‘æ—æ´¾å¤©å­—è¾ˆåœ£åƒ§ï¼\n");
 		}
-		else ob->set("title", "ÄÏÉÙÁÖË×¼ÒµÚÊ®°ËµÜ×Ó");
+		else ob->set("title", "å—å°‘æ—ä¿—å®¶ç¬¬åå…«å¼Ÿå­");
 	}
 	return;
 }

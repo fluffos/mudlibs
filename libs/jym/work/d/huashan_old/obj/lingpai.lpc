@@ -1,7 +1,7 @@
 //Cracked by Roath
 // lingpai.c 邪派弟子令牌
 inherit ITEM;
-static int amount;
+nosave int amount;
 
 void set_amount(int v)
 {

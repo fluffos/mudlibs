@@ -1,5 +1,5 @@
 #include <ansi.h>
-#include "/quest/givegift.c"
+#include "/quest/givegift.lpc"
 void init()
 {
         call_out("dest", 1800);

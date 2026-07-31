@@ -1,0 +1,212 @@
+
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// 守卫任务 NPC。
+
+#include <ansi.h>
+
+inherit CLASS_D("generate") + "/chinese"; 
+
+int  is_stay_in_room()  { return 1; }
+void random_move();
+
+void create()
+{
+        mapping my;
+        int lvl;
+
+        ::create();
+        set("gender", "男性" );
+        set("age", 30 + random(30));
+        set("long", "这人是前来攻打" + query("is_attacking") ? query("is_attacking") : "别的门派" +
+                    "的一名" + query("family/family_name") ? query("family/family_name") : "未知门派" + "弟子。\n");
+        set("attitude", "friendly");
+        set("chat_chance", 30);
+        set("chat_msg", ({ (: random_move :) }));
+        set("scale", 150);
+        set_temp("apply/armor", 100);
+        set_temp("apply/damage", 50);
+        set_temp("born_time", time());
+        set_temp("dest_time", 1500 + time());
+
+        lvl = 1 + random(2);
+        NPC_D->init_npc_skill(this_object(), lvl);
+
+        // 初始化NPC的能力
+        my = query_entire_dbase();
+        my["max_qi"] = 1000 + lvl * 300 + random(500);
+        my["max_jing"] = my["max_qi"] / 2;
+        my["max_neili"] = 1000 + lvl * 500 + random(500);
+        my["eff_jing"] = my["max_jing"];
+        my["jing"] = my["max_jing"];
+        my["eff_qi"] = my["max_qi"];
+        my["qi"] = my["max_qi"];
+        my["neili"] = my["max_neili"] * 2;
+        
+        if (clonep()) keep_heart_beat();
+}
+
+void init()
+{
+        object me = this_player();
+
+        ::init();
+
+        if( interactive(me) && visible(me) && !is_fighting() ) {
+                remove_call_out("greeting");
+                call_out("greeting", 1, me);
+        }
+        add_action("do_nod", "nod"); 
+}
+
+void greeting(object me)
+{
+        if (! me || ! present(me, environment())) 
+                return;
+
+        if (interactive(me) && me->query_temp("swjob/allow") && 
+            ! me->query_temp("swjob/finish") && 
+            me->query("family/family_name") == query("is_attacking"))
+        {
+                // 这里的描写似乎需要调整（正派说这种话不合身份）
+                command("grin");
+                message_sort(HIW "只见$N" HIW "狞笑着对$n" HIW "道：“嘿嘿，不知死活的" +
+                        RANK_D->query_rude(me) +"，竟然敢和我们" + query("family/family_name") +"做对？！"
+                        "看我来教训教训你！”\n", this_object(), me );
+                kill_ob(me);
+                return;
+        }
+        message_vision(HIW "$N" HIW "冷冷地扫了$n" HIW "一眼。\n", this_object(), me );
+}
+
+// 如果接受了贿赂
+int do_nod(string arg)
+{
+        object me = this_player();
+        object ob = this_object();
+        int amount;
+
+        if (! me->query_temp("swjob/waiting") || me->query_temp("swjob/finish")
+        || ! arg || arg != ob->query("id"))
+                return 0;
+
+        else 
+        {
+                me->command("nod");
+                if (intp(me->query_temp("swjob/waiting")))
+                {
+                        amount = me->query_temp("swjob/waiting");
+
+                        message_sort(HIW "只见$N" HIW "长笑三声：“哈哈哈，识时务者为俊杰，" +
+                                     RANK_D->query_respect(me) + "果然是明白人，嘿嘿，这区区" +
+                                     chinese_number(amount) + "两白银就归你了，哈哈。”\n\n" NOR,
+                                     ob, me);
+                        // 因为是“两”为单位，所以要 * 100。
+                        MONEY_D->pay_player(me, amount * 100);
+                        me->set_temp("swjob/accepted", 1);
+                        tell_object(me, HIR + ob->name() + "递给了你" + chinese_number(amount) + 
+                                        "两白银以后，吐出一口鲜血，扬长而去。\n" NOR );
+                        return 1;
+                }
+                else return  0;
+        }
+}
+/*
+void remove()
+{
+        if (! environment() || query_temp("die"))
+        {
+                ::remove();
+                return;
+        }
+        
+        if (! living(this_object()))
+        {
+                message_vision("路过两个人，看到昏迷不醒的$N"
+                               "，叹口气，把$P架走了。\n",
+                               this_object());
+                return;
+        }
+
+        message_vision("$N看了看四周，急急忙忙的走了。\n",
+                       this_object());
+                       
+        ::remove();
+}
+*/
+void die(object killer)
+{
+        object ob;
+
+        if (objectp(ob = killer)
+           || objectp(ob = query_last_damage_from()))
+        {
+                if (ob->query("family/family_name") == query("is_attacking"))
+                        ob->add_temp("swjob/killed", 1);
+        }
+        
+        set_temp("die", 1);
+        ::die(killer);
+}
+
+void unconcious()
+{
+        object me, ob = this_object();
+        int amount = 100 + random(100);
+        string *condition = ({
+                "气喘吁吁，就要不支", "头重脚轻，马上就倒", 
+                "呕血成升，眼冒金星", "伤痕累累，无力招架", 
+        });
+
+        if (objectp(me = query_last_damage_from()) 
+        &&  environment() == environment(me) 
+        &&  ! me->query_temp("swjob/waiting"))
+        {
+                switch (random(15)) 
+                {
+                        case 1: 
+                        case 2:
+                        {
+                                message_vision(HIR "眼见$N" HIR + condition[random(sizeof(condition))]
+                                                +"，突然$N大喝一声，急退几步，\n“扑通”给$n跪了下来。"
+                                                "\n" NOR, ob, me);
+                                tell_object(me, HIW + ob->name() + "突然从怀里掏出一堆白花花的银子，小声"
+                                                "对你道：“这位" + RANK_D->query_respect(me) + "，\n你"
+                                                "就网开一面（nod）如何，这" + chinese_number(amount) +
+                                                "两白银就归你了！”\n" NOR);
+                                remove_all_enemy(0); 
+                                ob->set("qi", 1);
+                                ob->set("jing", 1);
+                                ob->set_temp("swjob/waiting", amount);
+                                return;
+                        }
+                        default: 
+                        {
+                                // 奖励
+                                ::unconcious();
+                                return;
+                        }
+                }
+        }
+        ::unconcious();
+}
+
+void random_move()
+{
+        if (time() > query_temp("dest_time"))
+        {
+                message_vision("$N急急忙忙的走了。\n", this_object());
+                CHANNEL_D->do_channel(this_object(), "rumor",
+                                      sprintf("听说%s隐居到了深山老泽，从此不再出没在世间。", name()));
+                log_file("nosave/killed_die", sprintf("%s %s(%s) vanished because timeout(%d:%d).\n",
+                                                      log_time(), name(), query("id"),
+                                                      time() - query_temp("born_time"),
+                                                      query_temp("dest_time") - query_temp("born_time")));
+                destruct(this_object());
+                return;
+        }
+        NPC_D->random_move(this_object());
+}
+
+

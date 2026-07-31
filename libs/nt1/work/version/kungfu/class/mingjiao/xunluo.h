@@ -8,25 +8,25 @@ string ask_xunluo()
         ob = this_object();
         i = ob->query("xl");
 
-        if(!(fam = me->query("family")) || fam["family_name"] != "Ã÷½Ì")
-                return RANK_D->query_respect(me)+"ÄãÔÚËµĞ´Ê²Ã´°¡£¿";    
+        if(!(fam = me->query("family")) || fam["family_name"] != "æ˜æ•™")
+                return RANK_D->query_respect(me)+"ä½ åœ¨è¯´å†™ä»€ä¹ˆå•Šï¼Ÿ";    
         if(ob->query_temp("xl_waiting"))
-                return "µÈµÈ£¬ÎÒÕıÔÚ¼ì²éÄØ¡£";    
+                return "ç­‰ç­‰ï¼Œæˆ‘æ­£åœ¨æ£€æŸ¥å‘¢ã€‚";    
         if(!me->query_temp("mj/xunluo"))
-                return "ÄãÓÖÃ»ÔÚÑ²Âß£¬ÒªÎÒ»­Ó¡¸ÉÂï£¿";                  
+                return "ä½ åˆæ²¡åœ¨å·¡é€»ï¼Œè¦æˆ‘ç”»å°å¹²å˜›ï¼Ÿ";                  
         if(me->query_temp("mj/xunluo") < (i-1))
-                return "ÏÈÈ¥±ğµÄµØ·½¿´¿´£¬µÈ»á¶ùÔÙÀ´Ñ²ÂßÕâ¶ù¡£"; 
+                return "å…ˆå»åˆ«çš„åœ°æ–¹çœ‹çœ‹ï¼Œç­‰ä¼šå„¿å†æ¥å·¡é€»è¿™å„¿ã€‚"; 
         if(me->query_temp("mj/xunluo") == 9)
-                return "ºÃ£¬ÄãÒÑ¾­Ñ²ÂßÍêÁË¡£";    
+                return "å¥½ï¼Œä½ å·²ç»å·¡é€»å®Œäº†ã€‚";    
         if(me->query_temp("mj/xunluo") >= i)
-                return "Õâ±ßÄãÒÑ¾­Ñ²ÂßÍêÁË£¬ÔÙÈ¥±ğµÄµØ·½¿´¿´°É¡£";        
+                return "è¿™è¾¹ä½ å·²ç»å·¡é€»å®Œäº†ï¼Œå†å»åˆ«çš„åœ°æ–¹çœ‹çœ‹å§ã€‚";        
         if(me->query_temp("mj/attacker") && me->query_temp("mj/attacker") < 2)
-                return "ß×£¬²»ÊÇ½ĞÄãÈ¥¿´¿´ÓĞÃ»ÓĞ¿ÉÒÉµÄÈËÂğ£¿ÔõÃ´»¹Ã»È¥£¿";          
+                return "å’¦ï¼Œä¸æ˜¯å«ä½ å»çœ‹çœ‹æœ‰æ²¡æœ‰å¯ç–‘çš„äººå—ï¼Ÿæ€ä¹ˆè¿˜æ²¡å»ï¼Ÿ";          
 
         command("nod "+me->query("id"));
         ob->set_temp("xl_waiting", 1);  
         call_out("restart", 15+random(30), me, ob);
-        return " µÈµÈ£¬ÈÃÎÒ¿´¿´ÄãÑ²ÂßµÃÔõÃ´ÑùÁË¡£\n";    
+        return " ç­‰ç­‰ï¼Œè®©æˆ‘çœ‹çœ‹ä½ å·¡é€»å¾—æ€ä¹ˆæ ·äº†ã€‚\n";    
 }
 
 void restart(object me, object ob)
@@ -36,7 +36,7 @@ void restart(object me, object ob)
         arg = ob->query("xl2");
         ob->delete_temp("xl_waiting");
         if(!me || !objectp(present(me, environment(ob)))){
-               command("say Ò®£¿ÄÇ¼Ò»ïÔõÃ´²»¼ûÁË£¿");
+               command("say è€¶ï¼Ÿé‚£å®¶ä¼™æ€ä¹ˆä¸è§äº†ï¼Ÿ");
                command("pat");
                return;
         }
@@ -46,11 +46,11 @@ void restart(object me, object ob)
         }
         if(!me->query_temp(arg)){
                command("shake "+me->query("id")); 
-               command("say Äã»¹ÓĞĞ©µØ·½Ã»ÓĞÑ²Âßµ½°É£¿ÏÈ²»Ã¦»­Ó¡¡£"); 
+               command("say ä½ è¿˜æœ‰äº›åœ°æ–¹æ²¡æœ‰å·¡é€»åˆ°å§ï¼Ÿå…ˆä¸å¿™ç”»å°ã€‚"); 
                return;
         }
         if(random(3) == 1 && !me->query_temp("mj/attacker")){
-               command("say àÅ£¬¸Õ¸ÕÓĞµÜ×ÓÀ´±¨¸æËµºÃÏó¿´¼ûÁË²»Ã÷Éí·İµÄÈË£¬Äã×îºÃÔÙÈ¥¿´¿´¡£");          
+               command("say å—¯ï¼Œåˆšåˆšæœ‰å¼Ÿå­æ¥æŠ¥å‘Šè¯´å¥½è±¡çœ‹è§äº†ä¸æ˜èº«ä»½çš„äººï¼Œä½ æœ€å¥½å†å»çœ‹çœ‹ã€‚");          
                command("addoil "+me->query("id")); 
                me->set_temp("mj/attacker", 1);
                return;
@@ -59,6 +59,6 @@ void restart(object me, object ob)
         me->delete_temp("mj/attacker");
         me->add_temp("mj/xunluo", 1);
         command("thumb "+me->query("id")); 
-        command("say ºÃ£¬ÕâÀïÄãÒÑ¾­Ñ²ÂßÍê±ÏÁË£¬ÎÒ¸øÄã»­Ó¡°É¡£");
+        command("say å¥½ï¼Œè¿™é‡Œä½ å·²ç»å·¡é€»å®Œæ¯•äº†ï¼Œæˆ‘ç»™ä½ ç”»å°å§ã€‚");
         return;
 }     

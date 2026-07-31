@@ -7,11 +7,11 @@
 #define MAPDB "/clone/obj/mapdb"
 #define QUEUE "/clone/obj/queue"
 
-static int total, current_total;
-static object queue;
-static int traverse_done;
-static mapping visited;
-static object mapdb;
+nosave int total, current_total;
+nosave object queue;
+nosave int traverse_done;
+nosave mapping visited;
+nosave object mapdb;
 int visit(string room, mapping info, mixed args);
 
 #define DEBUG 

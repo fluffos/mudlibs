@@ -2,7 +2,7 @@
 
 #include <ansi.h>
 
-static mapping essence = ([
+nosave mapping essence = ([
 "weapon":({
 ([
 	"name":                     HIW"岫玉",

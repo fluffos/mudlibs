@@ -13,10 +13,10 @@ inherit ITEM;
 
 #define ROUTER "/clone/obj/traverser"
 
-static object route_finder;
-static object target_room;
+nosave object route_finder;
+nosave object target_room;
 // 0: idle, 1: searching
-static int status;
+nosave int status;
 
 int do_route(string, object);
 int do_printroute(object);

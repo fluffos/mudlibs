@@ -3,8 +3,6 @@
 
 #define SAVE_EXTENSION __SAVE_EXTENSION__
 #ifndef __SENSIBLE_MODIFIERS__
-#define protected nosave
-#define nosave nosave
 #endif
 
 //email daemon

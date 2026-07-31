@@ -46,8 +46,8 @@ string *master2=({
 "黄药师",   
 });
 
-private static string fam1;
-private static string fam2;
+private nosave string fam1;
+private nosave string fam2;
 
 int chousha_begin()
 {

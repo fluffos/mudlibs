@@ -4,7 +4,7 @@
 //产生任务发布人名单
 
 #include <ansi.h>
-static mapping family_skills_award=([
+nosave mapping family_skills_award=([
 					  "武当派" :({"taiji-shengong","taiji-quan","taiji-jian","taoism"}),
 					  "星宿派"	:({"huagong-dafa","poison","chousui-zhang","sanyin-zhua"}),
 					  "华山派"	:({"zhengqi-jue","zixia-gong","ziyin-yin","hunyuan-zhang"}),
@@ -19,7 +19,7 @@ static mapping family_skills_award=([
 					  ]);
 
 
-static mapping family_master=([
+nosave mapping family_master=([
 					   "武当派" :"掌门人张真人/张真人/zhang sanfeng/湖北武当山/张三丰",
 					  "星宿派"	:"星宿老仙/老仙/ding chunqiu/星宿海/丁春秋",
 					  "华山派"	:"岳掌门/掌门/yue buqun/华山/岳不群",
@@ -32,7 +32,7 @@ static mapping family_master=([
 					  "大理段家"	:"段王爷/王爷/duan zhengchun/云南大理/段正淳",
 					  "少林派"	:"玄慈方丈/方丈/xuanci dashi/嵩山少林寺/玄慈大师",
 					  ]);
-static mapping family_master_place=([
+nosave mapping family_master_place=([
 					   "武当派" :"/d/wudang/xiaoyuan",
 					  "星宿派"	:"/d/xingxiu/riyuedong",
 					  "华山派"	:"/d/huashan/buwei1",
@@ -46,7 +46,7 @@ static mapping family_master_place=([
 					  "少林派"	:"/d/shaolin/fzlou2",
 					  ]);
 
-static mapping assess_place=([
+nosave mapping assess_place=([
 					   "武当派" :"/d/wudang/sanqingdian",
 					  "星宿派"	:"/d/xingxiu/riyuedong",
 					  "华山派"	:"/d/huashan/buwei1",
@@ -60,7 +60,7 @@ static mapping assess_place=([
 					  "少林派"	:"/d/shaolin/dxbdian",
 					  ]);
 
-static mapping family_master_basefile=([
+nosave mapping family_master_basefile=([
 					   "武当派" :"/kungfu/class/wudang/zhang",
 					  "星宿派"	:"/kungfu/class/xingxiu/ding",
 					  "华山派"	:"/kungfu/class/huashan/buqun",
@@ -75,7 +75,7 @@ static mapping family_master_basefile=([
 					  ]);
 
 
-static mapping *wudang_message = ({
+nosave mapping *wudang_message = ({
 	([
 		"job_tell_mode":"传话",
 		"time_noover" : "$N拍了拍$n的头,说道：“$P，你来的正好。”\n",
@@ -113,7 +113,7 @@ static mapping *wudang_message = ({
 		
 		]),
 		});
-static mapping *xingxiu_message = ({
+nosave mapping *xingxiu_message = ({
 	([
 		"job_tell_mode":"传话",
 		"time_noover" : "$N对$n「嘿嘿嘿」奸笑了几声，说道：“$P，本尊正有事找你呢。”\n",
@@ -156,7 +156,7 @@ static mapping *xingxiu_message = ({
 
 
 		});
-static mapping *huashan_message = ({
+nosave mapping *huashan_message = ({
 	([
 		"job_tell_mode":"传话",
 		"time_noover" : "$N对$n点了点头,说道：“$P，你来的正好，我正有事要让你去办。”\n",
@@ -202,7 +202,7 @@ static mapping *huashan_message = ({
 
 		});
 
-static mapping *taohua_message = ({
+nosave mapping *taohua_message = ({
 	([
 		"job_tell_mode":"传话",
 		"time_noover" : "$N对$n点了点头,说道：“$P，你来的正好。”\n",
@@ -245,7 +245,7 @@ static mapping *taohua_message = ({
 
 		});
 
-static mapping *gaibang_message = ({
+nosave mapping *gaibang_message = ({
 	([
 		"job_tell_mode":"传话",
 		"time_noover" : "$N拍拍$n的肩，说道：“$P，来，老叫化给你份差事。”\n",
@@ -286,7 +286,7 @@ static mapping *gaibang_message = ({
 
 
 		});
-static mapping *emei_message = ({
+nosave mapping *emei_message = ({
 	([
 		"job_tell_mode":"传话",
 		"time_noover" : "$N对$n点了点头,说道：“$P，你来的正好。”\n",
@@ -328,7 +328,7 @@ static mapping *emei_message = ({
 
 
 		});
-static mapping *baituo_message = ({
+nosave mapping *baituo_message = ({
 	([
 		"job_tell_mode":"传话",
 		"time_noover" : "$N回过头看了$n一眼，说道：“$P，我现在差你去办件事。”\n",
@@ -368,7 +368,7 @@ static mapping *baituo_message = ({
 
 
 		});
-static mapping *quanzhen_message = ({
+nosave mapping *quanzhen_message = ({
 	([
 		"job_tell_mode":"传话",
 		"time_noover" : "$N对$n点了点头,说道：“$P，你来的正好。”\n",
@@ -410,7 +410,7 @@ static mapping *quanzhen_message = ({
 
 
 		});
-static mapping *xueshan_message = ({
+nosave mapping *xueshan_message = ({
 	([
 		"job_tell_mode":"传话",
 		"time_noover" : "$N对$n点了点头,说道：“$P，你来的正好，本尊差你去办件事。”\n",
@@ -450,7 +450,7 @@ static mapping *xueshan_message = ({
 
 
 		});
-static mapping *dali_message = ({
+nosave mapping *dali_message = ({
 	([
 		"job_tell_mode":"传话",
 		"time_noover" : "$N对$n点了点头,说道：“$P，你来的正好。”\n",
@@ -490,7 +490,7 @@ static mapping *dali_message = ({
 
 
 		});
-static mapping *shaolin_message = ({
+nosave mapping *shaolin_message = ({
 	([
 		"job_tell_mode":"传话",
 		"time_noover" : "$N对$n点了点头,说道：“$P，你来的正好，老纳正有事找你。”\n",

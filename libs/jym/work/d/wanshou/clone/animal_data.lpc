@@ -22,27 +22,27 @@ int SetupAnimalData (object obj, int i);  // setup the data after retrieval
 // data2 => 家畜
 // data3 => 野兽
 //********************************************************
-static mixed animal_data1 = ({
+nosave mixed animal_data1 = ({
 /*   0      1        2        3      4      5      6   7   8    9  10*/
 /* Index  Name      name1   name2   Race   age    str int con dex  exp */
   ({ 0,   "麻雀", "ma que", "bird", "飞禽", 3   ,  5,  5,  5, 20,  500,}),
 });
 
-static mixed animal_long1 = ({ 
+nosave mixed animal_long1 = ({ 
     "一只叽叽喳喳，飞来飞去的小麻雀。\n",
 });
 //********************************************************
-static mixed animal_data2 = ({
+nosave mixed animal_data2 = ({
 /*   0      1        2        3          4      5     6   7    8   9   10*/
 /* Index   Name    name1   name2        Race    age  str int  con dex  exp */
   ({ 0,   "黄羊", "lamb", "huang yang", "家畜", 11  , 20, 10, 20, 20,  2000, }),
 });
 
-static mixed animal_long2 = ({ 
+nosave mixed animal_long2 = ({ 
     "一只野黄羊，正低头认真地吃着草。\n",
 });
 //********************************************************
-static mixed animal_data3 = ({
+nosave mixed animal_data3 = ({
 /*   0      1        2        3        4      5     6   7   8   9   10*/
 /* Index   Name    name1   name2     Race    age   str int con dex  exp */
   ({ 0,   "母狼", "mu lang","wolf",  "野兽", 15  , 30, 10, 20, 20,  5000, }),
@@ -51,7 +51,7 @@ static mixed animal_data3 = ({
   ({ 3,   "狮子", "shi zi", "lion",  "野兽", 15   ,50, 15, 30, 50,  500000, }),
 });
 
-static mixed animal_long3 = ({ 
+nosave mixed animal_long3 = ({ 
     "这是一头灰色的母狼，正用红色的眼睛盯着你，不时发出令人胆战的嗥声！\n",  
     "这是一只吊睛白额猛虎，色彩斑斓，时不时用利爪挠挠地，长啸一声。\n",
     "这是一头金钱豹子，颈上虬筋凸腱，敏捷雄健，不安分地踱来走去。\n",

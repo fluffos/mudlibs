@@ -3,20 +3,20 @@
 
 int permit_recruit(object ob)
 {
-        if( ob->query("detach/ÔÆÁúÃÅ") || ob->query("betrayer/ÔÆÁúÃÅ") )
+        if( ob->query("detach/äº‘é¾™é—¨") || ob->query("betrayer/äº‘é¾™é—¨") )
         {
-                command("say Äãµ±Äê¼ÈÈ»Àë¿ªÔÆÁúÃÅÃÇ£¬¾Í²»±Ø»ØÀ´ÁË£¡");
+                command("say ä½ å½“å¹´æ—¢ç„¶ç¦»å¼€äº‘é¾™é—¨ä»¬ï¼Œå°±ä¸å¿…å›žæ¥äº†ï¼");
                 return 0;
         }
 
         if( ob->query("betrayer/times") )
         {
-                command("say ÎÒÃÇÔÆÁúÃÅ·´Çå¸´Ã÷£¬×î½²ÐÅÒå£¬Äã×ß°É£¡");
+                command("say æˆ‘ä»¬äº‘é¾™é—¨åæ¸…å¤æ˜Žï¼Œæœ€è®²ä¿¡ä¹‰ï¼Œä½ èµ°å§ï¼");
                 return 0;
         }
 
         if( ob->query("family/family_name") &&
-            ob->query("family/family_name") != "ÔÆÁúÃÅ" )
+            ob->query("family/family_name") != "äº‘é¾™é—¨" )
         {
                 command("sigh");
                 command("shake");

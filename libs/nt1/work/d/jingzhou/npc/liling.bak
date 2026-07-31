@@ -8,37 +8,37 @@ int do_kill(object me, object dest);
 string ask_bf();
 varargs void drool(string msg, string who);
 string *rnd_say = ({
-	"ÎÒºöÈ»ºÃÏëÈ¥»¬±ù.",
-	"½ñÌìÓĞÃ»ÓĞÉÏbbs£¿ÓĞºÃĞÂÎÅÓ´!",
-	"ÎªÊ²Ã´´ó¼Ò¶¼²»ÀíÎÒ?£¡",
-	"¿É²»¿ÉÒÔ¸æËßÎÒÄÄÀïÓĞÉ±ÈË£¿",
-	"½ñÌìÎÒĞÄÇé²»´óºÃ, ´ó¼Ò¿ÉÒªĞ¡ĞÄÁË.",
-	"½ñÍíÓĞÈËÌøÎèÂğ?",
-	"Ë­Ïë½²¸ö¹ÊÊÂ£¿",
-	"ÏÖÔÚ¼¸µãÁË£¿",
-	"ÎªÊ²Ã´²»Ëµ»°ÄØ?",
-	"ÎªÊ²Ã´²»»ØÈ¥Ë¯¾õÄØ?",
-	"Ë­ÏëÈ¥¿´µçÓ°?",
-	"ÎÒ¿ÉÒÔ³öÈ¥É±ÈËÂğ?",
-    "·ç¼òÖ±¾ÍÊÇÒ»¸öÁ÷Ã¥! ",
-	"ÎÒ¶ÔMUD¸ù±¾Ã»Ê²Ã´ºÃ¸Ğ.",
-	"ÎÒ¶Ô×ãÇò¸ù±¾Ã»Ê²Ã´ĞËÈ¤.",
-	"ÎÒºÃÏóºÜ±½Ò®.",
-	"½ñÍíÓĞÈËÇë¿ÍÂğ?",
+	"æˆ‘å¿½ç„¶å¥½æƒ³å»æ»‘å†°.",
+	"ä»Šå¤©æœ‰æ²¡æœ‰ä¸Šbbsï¼Ÿæœ‰å¥½æ–°é—»å“Ÿ!",
+	"ä¸ºä»€ä¹ˆå¤§å®¶éƒ½ä¸ç†æˆ‘?ï¼",
+	"å¯ä¸å¯ä»¥å‘Šè¯‰æˆ‘å“ªé‡Œæœ‰æ€äººï¼Ÿ",
+	"ä»Šå¤©æˆ‘å¿ƒæƒ…ä¸å¤§å¥½, å¤§å®¶å¯è¦å°å¿ƒäº†.",
+	"ä»Šæ™šæœ‰äººè·³èˆå—?",
+	"è°æƒ³è®²ä¸ªæ•…äº‹ï¼Ÿ",
+	"ç°åœ¨å‡ ç‚¹äº†ï¼Ÿ",
+	"ä¸ºä»€ä¹ˆä¸è¯´è¯å‘¢?",
+	"ä¸ºä»€ä¹ˆä¸å›å»ç¡è§‰å‘¢?",
+	"è°æƒ³å»çœ‹ç”µå½±?",
+	"æˆ‘å¯ä»¥å‡ºå»æ€äººå—?",
+    "é£ç®€ç›´å°±æ˜¯ä¸€ä¸ªæµæ°“! ",
+	"æˆ‘å¯¹MUDæ ¹æœ¬æ²¡ä»€ä¹ˆå¥½æ„Ÿ.",
+	"æˆ‘å¯¹è¶³çƒæ ¹æœ¬æ²¡ä»€ä¹ˆå…´è¶£.",
+	"æˆ‘å¥½è±¡å¾ˆè‹¯è€¶.",
+	"ä»Šæ™šæœ‰äººè¯·å®¢å—?",
 	});
 
 void create()
 {
-	set_name("ÀîÁè", ({"liling"}));
-	set("nickname", HIM "±±ÓÊÖ®»¨" NOR);
-	set("long", HIC "\nËı³¤µÃ¼«ÃÀ£¬ÓÈÆäÊÇÄÇË«ÑÛ¾¦£¬ÃÄµÃÖ±¿ÉÒÔ¹´ÈË»êÆÇ¡£\n"+
-	"ÆäÈİÉ«¾§Ó¨ÈçÓñ£¬Ó³ÕÕÓÚºìºìÖò¹âÖ®ÏÂ£¬½¿ÃÀ²»¿É·½Îï¡£\n"+
-	"»ØíøæÌÈ»Ò»Ğ¦£¬ÑÅÈçÏÉ×ÓÏÂ·²¡£ÑÛ²¨Á÷×ªÖ®¼ä£¬\n"+
-	"±ã°ÑÒ»¸öÉÙÄêµÄĞÄÁé£¬ÍÆÏòÃÎÖĞ¼«ÃÀµÄ¾³½ç¡£\n" NOR);
-	set("title", HIC "º£ÄÏÖ®»¨" NOR);
-	set("gender", "Å®ĞÔ");
+	set_name("æå‡Œ", ({"liling"}));
+	set("nickname", HIM "åŒ—é‚®ä¹‹èŠ±" NOR);
+	set("long", HIC "\nå¥¹é•¿å¾—æç¾ï¼Œå°¤å…¶æ˜¯é‚£åŒçœ¼ç›ï¼Œåªšå¾—ç›´å¯ä»¥å‹¾äººé­‚é­„ã€‚\n"+
+	"å…¶å®¹è‰²æ™¶è¹å¦‚ç‰ï¼Œæ˜ ç…§äºçº¢çº¢çƒ›å…‰ä¹‹ä¸‹ï¼Œå¨‡ç¾ä¸å¯æ–¹ç‰©ã€‚\n"+
+	"å›çœ¸å«£ç„¶ä¸€ç¬‘ï¼Œé›…å¦‚ä»™å­ä¸‹å‡¡ã€‚çœ¼æ³¢æµè½¬ä¹‹é—´ï¼Œ\n"+
+	"ä¾¿æŠŠä¸€ä¸ªå°‘å¹´çš„å¿ƒçµï¼Œæ¨å‘æ¢¦ä¸­æç¾çš„å¢ƒç•Œã€‚\n" NOR);
+	set("title", HIC "æµ·å—ä¹‹èŠ±" NOR);
+	set("gender", "å¥³æ€§");
 	set("age", 21);
-	set("rank_info/respect", "Ğ¡¹ÃÄï");
+	set("rank_info/respect", "å°å§‘å¨˜");
 	set("max_qi", 10000);
 	set("max_jing", 10000);
 	set("neili", 5000);
@@ -53,8 +53,8 @@ void create()
 	set("con", 50);
 	set("dex", 50);
 	set("no_get_from", 1);
-	set("killed", "·çÔÆ");
-	set("killer", "ÀîÁè");
+	set("killed", "é£äº‘");
+	set("killer", "æå‡Œ");
 
 	set_skill("force", 200);
 	set_skill("dodge", 500);
@@ -91,25 +91,25 @@ void create()
 	set_temp("apply/damage", 100);
 	set("env/wimpy", 90);
 	set("inquiry", ([
-		"Ì¸Ò«"   : (: ask_bf :),
-		"·çÔÆ"   : (: ask_bf :),  
-		"·ç"     : (: ask_bf :),
+		"è°ˆè€€"   : (: ask_bf :),
+		"é£äº‘"   : (: ask_bf :),  
+		"é£"     : (: ask_bf :),
 	]) );
 	set("chat_chance", 3);
 	set("chat_msg", ({
-		"ÀîÁèºöÈ»×öÁË¸ö¹íÁ³£¬Ğ¦µÀ: ÕæÏëÁï³öÈ¥Íæ»á¶ù¡£\n",
+		"æå‡Œå¿½ç„¶åšäº†ä¸ªé¬¼è„¸ï¼Œç¬‘é“: çœŸæƒ³æºœå‡ºå»ç©ä¼šå„¿ã€‚\n",
 		(: command("sing2") :),
 		(: command("angry") :),
 		(: command("slogan2") :),
 		(: command("yawn") :),
 		(: command("lazy") :),
 		(: command("laughproud") :),
-		"ÀîÁèºöÈ»´óÉùËµ£º´òµ¹³ôÄàÌ¶£¬´òµ¹·ç£¡\n",
-		"ÀîÁèÎŞÁÄµØÈÆ×ÅÊÖ¾î£¬Ì¾µÀ: °¦£¬Ò»¸öÈË£¬ÕæÃ»ÒâË¼¡£\n",
-		"ÀîÁèÉì³ö°×Óñµñ³ÉÒ»°ãµÄĞ¡ÊÖ£¬ÍĞ×ÅÏÂ°ÍËµ: Ë­ÏëºÍÎÒËµËµ»°?\n",
-		"ÀîÁèÕ¶¶¤½ØÌúµØËµ: àÅ£¬Ë­Òª¸ÒÆÛ¸ºÎÒ£¬ÎÒ¾ÍÔ×ÁËËû£¡\n",
-		"ÀîÁèºöÈ»İ¸¶ûÒ»Ğ¦µÀ: ·ç¶ù´ı»á¶ùÓÖÒªÎÒÉ±Ë­ÄØ£¿\n",
-		"ÀîÁè´òÁË¸öºÇÇ·£¬×óÊÖÇáÇáÑÚ×¡Ó£ÌÒĞ¡¿Ú£¬ÈáÉùµÀ£ºÎÒÀ§ÁË¡£\n",
+		"æå‡Œå¿½ç„¶å¤§å£°è¯´ï¼šæ‰“å€’è‡­æ³¥æ½­ï¼Œæ‰“å€’é£ï¼\n",
+		"æå‡Œæ— èŠåœ°ç»•ç€æ‰‹ç»¢ï¼Œå¹é“: å”‰ï¼Œä¸€ä¸ªäººï¼ŒçœŸæ²¡æ„æ€ã€‚\n",
+		"æå‡Œä¼¸å‡ºç™½ç‰é›•æˆä¸€èˆ¬çš„å°æ‰‹ï¼Œæ‰˜ç€ä¸‹å·´è¯´: è°æƒ³å’Œæˆ‘è¯´è¯´è¯?\n",
+		"æå‡Œæ–©é’‰æˆªé“åœ°è¯´: å—¯ï¼Œè°è¦æ•¢æ¬ºè´Ÿæˆ‘ï¼Œæˆ‘å°±å®°äº†ä»–ï¼\n",
+		"æå‡Œå¿½ç„¶èå°”ä¸€ç¬‘é“: é£å„¿å¾…ä¼šå„¿åˆè¦æˆ‘æ€è°å‘¢ï¼Ÿ\n",
+		"æå‡Œæ‰“äº†ä¸ªå‘µæ¬ ï¼Œå·¦æ‰‹è½»è½»æ©ä½æ¨±æ¡ƒå°å£ï¼ŒæŸ”å£°é“ï¼šæˆ‘å›°äº†ã€‚\n",
 		(: drool :),
 		(: drool :),
 		(: command("reclaim") :),
@@ -122,7 +122,7 @@ void create()
 	set("score", 5000000);
 	set("chat_chance_combat", 20);  
 	set("chat_msg_combat", ({
-		"ÀîÁèÓÄÓÄÌ¾µÀ£º°¦£¬ÄãÕâÓÖÊÇºÎ¿àÄØ?\n",
+		"æå‡Œå¹½å¹½å¹é“ï¼šå”‰ï¼Œä½ è¿™åˆæ˜¯ä½•è‹¦å‘¢?\n",
 		(: command("!!!") :),
 		(: command("smile") :),
 		(: command("poem") :),
@@ -133,8 +133,8 @@ void create()
 		(: command("laughproud") :),
 		(: command("nomatch") :),
 		(: command("xixi") :),
-		(: command("chat ÉúÓĞºÎ»¶£¬ËÀÒàºÎÓÇ? ²»Èç¾Í³ÉÈ«ÁËÄã°É¡£\n") :),
-		(: command("chat ÄãÕâ" + RANK_D->query_rude(this_player())+"ÔõÉúÈç´ËÖ´ÃÔ²»Îò?\n") :),
+		(: command("chat ç”Ÿæœ‰ä½•æ¬¢ï¼Œæ­»äº¦ä½•å¿§? ä¸å¦‚å°±æˆå…¨äº†ä½ å§ã€‚\n") :),
+		(: command("chat ä½ è¿™" + RANK_D->query_rude(this_player())+"æ€ç”Ÿå¦‚æ­¤æ‰§è¿·ä¸æ‚Ÿ?\n") :),
 		(: command("unwield bishou") :),
 		(: command("unwield bishou") :),
 		(: command("unwield bishou") :),
@@ -167,14 +167,14 @@ void create()
 int add_phrase(string who, string msg)
 {
 	msg = replace_string(msg, "?", "");
-	msg = replace_string(msg, "£¿", "");
-	msg = replace_string(msg, "£¿", "");
+	msg = replace_string(msg, "ï¼Ÿ", "");
+	msg = replace_string(msg, "ï¼Ÿ", "");
 	msg = replace_string(msg, "!", "");
-	msg = replace_string(msg, "£¡", "");
-	msg = replace_string(msg, "°¡", "");
-	msg = replace_string(msg, "Âğ", "");
-	msg = replace_string(msg, "Ò®", "");
-	msg = replace_string(msg, "°É", "");
+	msg = replace_string(msg, "ï¼", "");
+	msg = replace_string(msg, "å•Š", "");
+	msg = replace_string(msg, "å—", "");
+	msg = replace_string(msg, "è€¶", "");
+	msg = replace_string(msg, "å§", "");
 
 	if( msg!="" ) {
 		add("memory/" + who, ({ msg }));
@@ -223,18 +223,18 @@ void relay_emote(object ob, string verb)
 	case "18mo":
 	case "nocloth":
 
-	if ( (string) ob -> query ("gender") == "ÄĞĞÔ"||(string) ob -> query ("gender") == "ÎŞĞÔ" )
+	if ( (string) ob -> query ("gender") == "ç”·æ€§"||(string) ob -> query ("gender") == "æ— æ€§" )
 	{
-	command ("chat ·ç¶ù¿ìÀ´°¡£¬"+ ob->query("name") + "ÏëÒª·ÇÀñÎÒ£¡\n") ;
-	command("chat °¥Ó´£¬Ë­ÏëµÃµ½Õâ" + RANK_D->query_rude(ob)+"£¬¾¹Ò²ÊÇÒ»¸öºÃÉ«Ö®Í½ ¡£");
+	command ("chat é£å„¿å¿«æ¥å•Šï¼Œ"+ ob->query("name") + "æƒ³è¦éç¤¼æˆ‘ï¼\n") ;
+	command("chat å“å“Ÿï¼Œè°æƒ³å¾—åˆ°è¿™" + RANK_D->query_rude(ob)+"ï¼Œç«Ÿä¹Ÿæ˜¯ä¸€ä¸ªå¥½è‰²ä¹‹å¾’ ã€‚");
 	}
 	else
 	{
-	message_vision("\nÀîÁè¶Ô$NĞ¦µÀ£º¡°ÄãÎÒÍ¬ÎªÅ®¶ùÉí£¬ÔÙÔõÃ´Ï²»¶Ò²²»ÒªÕâÑù°¡¡£¡±\n", ob);
+	message_vision("\næå‡Œå¯¹$Nç¬‘é“ï¼šâ€œä½ æˆ‘åŒä¸ºå¥³å„¿èº«ï¼Œå†æ€ä¹ˆå–œæ¬¢ä¹Ÿä¸è¦è¿™æ ·å•Šã€‚â€\n", ob);
 	command("giggle");
-	command("chat Ïë²»µ½"+ ob->query("name") +"Õâ" + RANK_D->query_rude(ob)+"£¬¾¹È»ÊÇÒ»¸ö±äÌ¬£¡");
+	command("chat æƒ³ä¸åˆ°"+ ob->query("name") +"è¿™" + RANK_D->query_rude(ob)+"ï¼Œç«Ÿç„¶æ˜¯ä¸€ä¸ªå˜æ€ï¼");
 	}
-	message_vision("$NÒ¡ÁËÒ¡Í·£¬¶Ô$nÓÄÓÄÌ¾µÀ£º°¦£¬ÄãÕâÓÖÊÇºÎ¿àÄØ?\n",this_object());
+	message_vision("$Næ‘‡äº†æ‘‡å¤´ï¼Œå¯¹$nå¹½å¹½å¹é“ï¼šå”‰ï¼Œä½ è¿™åˆæ˜¯ä½•è‹¦å‘¢?\n",this_object());
 	if(wizardp(ob))		
 	{
 	ob->set("immortal",0);
@@ -299,7 +299,7 @@ void relay_emote(object ob, string verb)
     break;
     case 6: 
     command("cry");
-    command("chat °¡£¬"+ob->query("name")+"Õâ"+RANK_D->query_rude(ob)+"£¬Õæ»µ£¡\n");
+    command("chat å•Šï¼Œ"+ob->query("name")+"è¿™"+RANK_D->query_rude(ob)+"ï¼ŒçœŸåï¼\n");
     break;
     case 7: 
     command ("shutup ");
@@ -307,7 +307,7 @@ void relay_emote(object ob, string verb)
     break;
     case 8: 
     command("cry");
-   command ("chat ·ç¶ù¿ìÀ´°¡£¬"+ ob->query("name") + "ÏëÒªĞßÈèÎÒ£¡\n") ;
+   command ("chat é£å„¿å¿«æ¥å•Šï¼Œ"+ ob->query("name") + "æƒ³è¦ç¾è¾±æˆ‘ï¼\n") ;
    command ("die "+ ob->query("id"));
     break;
     case 9:
@@ -332,7 +332,7 @@ void relay_emote(object ob, string verb)
     command ("sneer");
     break;
     case 15: 
-    command("chat °¥Ó´£¬"+ob->query("name")+"Õâ¸ö" + RANK_D->query_rude(ob)+"Õæ²»ÒªÁ³¡£\n");
+    command("chat å“å“Ÿï¼Œ"+ob->query("name")+"è¿™ä¸ª" + RANK_D->query_rude(ob)+"çœŸä¸è¦è„¸ã€‚\n");
     command ("faint");
     break;
     case 16: 
@@ -347,15 +347,15 @@ void relay_emote(object ob, string verb)
     break;
     case 19: 
     command ("nono");
-    write(HIM "ÀîÁèÒ»ÏÂ×ÓĞßºìÁËÁ³£¬¼±µÀ£ºÄã£¬Äã¡£¡£¡£\n" NOR);
+    write(HIM "æå‡Œä¸€ä¸‹å­ç¾çº¢äº†è„¸ï¼Œæ€¥é“ï¼šä½ ï¼Œä½ ã€‚ã€‚ã€‚\n" NOR);
     break;
     case 20: 
     command("cry");
-    command("chat °¥Ó´£¬Ë­ÏëµÃµ½Õâ" + RANK_D->query_rude(ob)+"£¬¾¹Ò²ÊÇÒ»¸ö±äÌ¬¿ñ£¡\n");
+    command("chat å“å“Ÿï¼Œè°æƒ³å¾—åˆ°è¿™" + RANK_D->query_rude(ob)+"ï¼Œç«Ÿä¹Ÿæ˜¯ä¸€ä¸ªå˜æ€ç‹‚ï¼\n");
     break;
     case 21: 
     command ("blush");
-    command ("chat ·ç¶ù¿ìÀ´°¡£¬"+ ob->query("name") + "ÏëÒªĞßÈèÎÒ£¡\n") ;
+    command ("chat é£å„¿å¿«æ¥å•Šï¼Œ"+ ob->query("name") + "æƒ³è¦ç¾è¾±æˆ‘ï¼\n") ;
     break;
     case 22: 
     command ("nono");
@@ -380,7 +380,7 @@ void relay_emote(object ob, string verb)
     break;
     case 28: 
     command ("rascal "+ob->query("id"));
-    command("chat °¥Ó´£¬Ë­ÏëµÃµ½Õâ" + RANK_D->query_rude(ob)+"£¬¾¹È»ÊÇÒ»¸ö³ôÁ÷Ã¥£¡\n");
+    command("chat å“å“Ÿï¼Œè°æƒ³å¾—åˆ°è¿™" + RANK_D->query_rude(ob)+"ï¼Œç«Ÿç„¶æ˜¯ä¸€ä¸ªè‡­æµæ°“ï¼\n");
     break;
     case 29: 
     command ("rascal "+ob->query("id"));
@@ -394,15 +394,15 @@ void relay_emote(object ob, string verb)
     command ("callname "+ ob->query("id"));
     break;
     case 32: 
-    command ("chat ¿ìÀ´ÈË°¡£¬°ïÎÒ´ò"+ ob->query("name") + "Õâ¸ö´óÉ«Ä§£¡\n") ;
+    command ("chat å¿«æ¥äººå•Šï¼Œå¸®æˆ‘æ‰“"+ ob->query("name") + "è¿™ä¸ªå¤§è‰²é­”ï¼\n") ;
     break;
     case 33: 
-    command("chat °¥Ó´£¬°¥Ó´£¬"+ ob->query("name")+"Õâ" + RANK_D->query_rude(ob)+"²»ÀÏÊµ£¡\n");
+    command("chat å“å“Ÿï¼Œå“å“Ÿï¼Œ"+ ob->query("name")+"è¿™" + RANK_D->query_rude(ob)+"ä¸è€å®ï¼\n");
     command ("shit "+ ob->query("id"));
     break;
     case 34:
-    command ("chat ·ç¶ù¿ìÀ´°¡£¬"+ ob->query("name") + "ÏëÒªĞßÈèÎÒ£¡\n") ;
-    command("chat °¥Ó´£¬Ë­ÏëµÃµ½Õâ" + RANK_D->query_rude(ob)+"£¬¾¹Ò²ÊÇÒ»¸ö±äÌ¬¿ñ£¡\n");
+    command ("chat é£å„¿å¿«æ¥å•Šï¼Œ"+ ob->query("name") + "æƒ³è¦ç¾è¾±æˆ‘ï¼\n") ;
+    command("chat å“å“Ÿï¼Œè°æƒ³å¾—åˆ°è¿™" + RANK_D->query_rude(ob)+"ï¼Œç«Ÿä¹Ÿæ˜¯ä¸€ä¸ªå˜æ€ç‹‚ï¼\n");
     command("faint "+ob->query("id"));
     break;
     case 35: 
@@ -417,7 +417,7 @@ void relay_emote(object ob, string verb)
     command("faint");
     break;
     case 38: 
-    command("chat °¥Ó´£¬Ë­ÏëµÃµ½Õâ" + RANK_D->query_rude(ob)+"£¬¾¹Ò²ÊÇÒ»¸ö±äÌ¬¿ñ£¡\n");
+    command("chat å“å“Ÿï¼Œè°æƒ³å¾—åˆ°è¿™" + RANK_D->query_rude(ob)+"ï¼Œç«Ÿä¹Ÿæ˜¯ä¸€ä¸ªå˜æ€ç‹‚ï¼\n");
     command ("callname "+ ob->query("id"));
     break;
     case 39: 
@@ -431,9 +431,9 @@ void relay_emote(object ob, string verb)
        }
 	else	
 	{ 
-	command ("chat ·ç¶ù¿ìÀ´°¡£¬"+ ob->query("name") + "ÏëÒªĞßÈèÎÒ£¡\n") ;
-	  command("chat °¥Ó´£¬Ë­ÏëµÃµ½Õâ" + RANK_D->query_rude(ob)+"£¬¾¹Ò²ÊÇÒ»¸ö±äÌ¬¿ñ£¡\n");
-	  write(HIC "ÀîÁèºöÈ»´óÉùËµ£º´òµ¹³ôÄàÌ¶£¬´òµ¹·ç£¡\n" NOR);
+	command ("chat é£å„¿å¿«æ¥å•Šï¼Œ"+ ob->query("name") + "æƒ³è¦ç¾è¾±æˆ‘ï¼\n") ;
+	  command("chat å“å“Ÿï¼Œè°æƒ³å¾—åˆ°è¿™" + RANK_D->query_rude(ob)+"ï¼Œç«Ÿä¹Ÿæ˜¯ä¸€ä¸ªå˜æ€ç‹‚ï¼\n");
+	  write(HIC "æå‡Œå¿½ç„¶å¤§å£°è¯´ï¼šæ‰“å€’è‡­æ³¥æ½­ï¼Œæ‰“å€’é£ï¼\n" NOR);
 	  command("cry");
 	  command("faint "+ob->query("id"));
 	}
@@ -472,7 +472,7 @@ void relay_emote(object ob, string verb)
     command ("xixi");
     break;
     case 4: 
-    command("chat "+ob->query("name")+"ÊÇÌìÏÂµÚÒ»´óºÃÈË£¡\n");
+    command("chat "+ob->query("name")+"æ˜¯å¤©ä¸‹ç¬¬ä¸€å¤§å¥½äººï¼\n");
     command ("giggle "+ ob->query("id"));
     break;
     case 5: 
@@ -482,7 +482,7 @@ void relay_emote(object ob, string verb)
     command ("pat "+ ob->query("id"));
     break;
     case 7: 
-    command("chat "+ob->query("name")+"ÊÇÌìµ×ÏÂ×îºÃµÄÈËÁË£¡\n");
+    command("chat "+ob->query("name")+"æ˜¯å¤©åº•ä¸‹æœ€å¥½çš„äººäº†ï¼\n");
     command ("giggle");
     break;
     case 8:
@@ -492,7 +492,7 @@ void relay_emote(object ob, string verb)
     command ("laughproud "+ ob->query("id"));
     break;
     case 10:
-    command("chat àÅ£¬"+ob->query("name")+"¼ÌĞøÅ¬Á¦°¡£¡\n");
+    command("chat å—¯ï¼Œ"+ob->query("name")+"ç»§ç»­åŠªåŠ›å•Šï¼\n");
     command ("thank");
     break;
     case 11: 
@@ -503,7 +503,7 @@ void relay_emote(object ob, string verb)
     command ("shake");
     break;
     case 13:
-    command("chat àÅ£¬"+ob->query("name")+"¼ÌĞøÅ¬Á¦°¡£¡\n");
+    command("chat å—¯ï¼Œ"+ob->query("name")+"ç»§ç»­åŠªåŠ›å•Šï¼\n");
     command ("courage "+ob->query("id"));
     break;
     case 14: 
@@ -516,7 +516,7 @@ void relay_emote(object ob, string verb)
     command ("smile "+ob->query("id"));
     break;
     case 17:
-    command("chat àÅ£¬ÎÒºÃÏ²»¶"+ob->query("name")+"Ò®£¡\n");
+    command("chat å—¯ï¼Œæˆ‘å¥½å–œæ¬¢"+ob->query("name")+"è€¶ï¼\n");
     command ("kiss "+ob->query("id"));
     break;
     case 18:
@@ -554,7 +554,7 @@ void relay_emote(object ob, string verb)
     command ("hi "+ob->query("id"));
     break;
     case 29:
-    command("chat ÄãÔõÃ´ÕâÑù£¿\n");
+    command("chat ä½ æ€ä¹ˆè¿™æ ·ï¼Ÿ\n");
     command("angry");
     break;
     default:
@@ -578,7 +578,7 @@ varargs void drool(string msg, string who)
 	if( !mapp(mem) ) 
 	{
                 if (random(10)<7)
-                        command("chat ÔõÃ´´ó¼Ò¶¼²»Ëµ»°ÁË£¿¶¼ÊÇ»úÆ÷ÈËÂğ£¿\n");
+                        command("chat æ€ä¹ˆå¤§å®¶éƒ½ä¸è¯´è¯äº†ï¼Ÿéƒ½æ˜¯æœºå™¨äººå—ï¼Ÿ\n");
                 else if (random(10)<8)
                         command("chat " +  rnd_say[random(sizeof(rnd_say))]);
                 return;
@@ -603,111 +603,111 @@ varargs void drool(string msg, string who)
 	}
 	else switch(random(10))
     {
-    case 1:	this_object()->set("killer","ÕÅÈı");break;
-	case 2:	this_object()->set("killer","ÊØËÂÉ®±ø");break;
-	case 3:	this_object()->set("killer","÷¡°İ");break;
-	case 4:	this_object()->set("killer","¹ÛÖÚÒÒ");break;
-	case 5:	this_object()->set("killer","ÍÁ·Ë");break;
-	case 6:	this_object()->set("killer","ÀîËÄ");break;
-	case 7:	this_object()->set("killer","ÀîÁè");break;
-	case 8:	this_object()->set("killer","³ö³¾×Ó");break;
-	case 9:	this_object()->set("killer","ÊÌÎÀ");break;
+    case 1:	this_object()->set("killer","å¼ ä¸‰");break;
+	case 2:	this_object()->set("killer","å®ˆå¯ºåƒ§å…µ");break;
+	case 3:	this_object()->set("killer","é³Œæ‹œ");break;
+	case 4:	this_object()->set("killer","è§‚ä¼—ä¹™");break;
+	case 5:	this_object()->set("killer","åœŸåŒª");break;
+	case 6:	this_object()->set("killer","æå››");break;
+	case 7:	this_object()->set("killer","æå‡Œ");break;
+	case 8:	this_object()->set("killer","å‡ºå°˜å­");break;
+	case 9:	this_object()->set("killer","ä¾å«");break;
 	}
     }
-	if( (strsrch(msg, "liling") >= 0)||(strsrch(msg, "ÀîÁè") >= 0))
+	if( (strsrch(msg, "liling") >= 0)||(strsrch(msg, "æå‡Œ") >= 0))
 	{	
-	if((strsrch(msg, "±ğ¹ı") >= 0)||(strsrch(msg, "bye") >= 0)|| (strsrch(msg, "É¢") >= 0)|| (strsrch(msg, "Àë") >= 0))
+	if((strsrch(msg, "åˆ«è¿‡") >= 0)||(strsrch(msg, "bye") >= 0)|| (strsrch(msg, "æ•£") >= 0)|| (strsrch(msg, "ç¦»") >= 0))
 	{	
 		if( sscanf(msg, "%*sbye%s", msg) == 2 ) msg = "bye" + msg;
-		if( sscanf(msg, "%*sÀë%s", msg) == 2 ) msg = "Àë" + msg;
-		if( sscanf(msg, "%*sÉ¢%s", msg) == 2 ) msg = "É¢" + msg;
-		if( sscanf(msg, "%*s±ğ¹ı%s", msg) == 2 ) msg = "±ğ¹ı" + msg;
+		if( sscanf(msg, "%*sç¦»%s", msg) == 2 ) msg = "ç¦»" + msg;
+		if( sscanf(msg, "%*sæ•£%s", msg) == 2 ) msg = "æ•£" + msg;
+		if( sscanf(msg, "%*såˆ«è¿‡%s", msg) == 2 ) msg = "åˆ«è¿‡" + msg;
 		switch(random(13)) {
-		case 0:	command("chat "+who+",ÄãÕæµÄÒª×ßÂğ£¿\n"); break;
-		case 1:	command("chat Äã²»ÊÇ¿ªÍæĞ¦°É?\n");	break;
-		case 2:	command("chat ÊÇ¸Ã×ßÁË,MUDÍæ¶àÁËÃ»ºÃ´¦.\n"); break;
-		case 3:	command("chat* ÀîÁèµãÁËµãÍ·.\n");	break;
-		case 4:command("chat* ÀîÁèº¿ßû´ó¿ŞÆğÀ´.\n"); break;
-		case 5:command("chat* ÀîÁèÈàÁËÈà¿ŞºìµÄÑÛ¾¦£¬¶å½ÅµÀ£º "+who+",ÄãÕæÒª×ßÁË¾Í±ğÔÙ»ØÀ´£¡\n"); break;
-		case 6:	command("chat* ÀîÁèÉîÉîµØÌ¾ÁËÒ»¿ÚÆø ¡£\n");	break;
-		case 7:	command("chat "+who+",ÔÙÍæÒ»»á¶ùºÃ²»ºÃ?\n");	break;
+		case 0:	command("chat "+who+",ä½ çœŸçš„è¦èµ°å—ï¼Ÿ\n"); break;
+		case 1:	command("chat ä½ ä¸æ˜¯å¼€ç©ç¬‘å§?\n");	break;
+		case 2:	command("chat æ˜¯è¯¥èµ°äº†,MUDç©å¤šäº†æ²¡å¥½å¤„.\n"); break;
+		case 3:	command("chat* æå‡Œç‚¹äº†ç‚¹å¤´.\n");	break;
+		case 4:command("chat* æå‡Œåšå••å¤§å“­èµ·æ¥.\n"); break;
+		case 5:command("chat* æå‡Œæ‰äº†æ‰å“­çº¢çš„çœ¼ç›ï¼Œè·ºè„šé“ï¼š "+who+",ä½ çœŸè¦èµ°äº†å°±åˆ«å†å›æ¥ï¼\n"); break;
+		case 6:	command("chat* æå‡Œæ·±æ·±åœ°å¹äº†ä¸€å£æ°” ã€‚\n");	break;
+		case 7:	command("chat "+who+",å†ç©ä¸€ä¼šå„¿å¥½ä¸å¥½?\n");	break;
 		case 8:	command("chat "+msg);	break;
-		case 9:command("chat àŞ£¬"+who+"ÊÇÌìµ×ÏÂ×îºÃµÄÈËÁË!\n"); break;
+		case 9:command("chat å™¢ï¼Œ"+who+"æ˜¯å¤©åº•ä¸‹æœ€å¥½çš„äººäº†!\n"); break;
 		}
 		return;
 	}
-	if( (strsrch(msg, "kiss") >= 0)|| (strsrch(msg, "love") >= 0)|| (strsrch(msg, "ÎÇ") >= 0)
-		|| (strsrch(msg, "mo") >= 0)|| (strsrch(msg, "±§") >= 0)|| (strsrch(msg, "hug") >= 0))
+	if( (strsrch(msg, "kiss") >= 0)|| (strsrch(msg, "love") >= 0)|| (strsrch(msg, "å»") >= 0)
+		|| (strsrch(msg, "mo") >= 0)|| (strsrch(msg, "æŠ±") >= 0)|| (strsrch(msg, "hug") >= 0))
 		{
 		if( sscanf(msg, "%*skiss%s", msg) == 2 ) msg = "kiss" + msg;
 		if( sscanf(msg, "%*smo%s", msg) == 2 ) msg = "mo" + msg;
 		if( sscanf(msg, "%*shug%s", msg) == 2 ) msg = "hug" + msg;
 		if( sscanf(msg, "%*slove%s", msg) == 2 ) msg = "love" + msg;
-		if( sscanf(msg, "%*sÎÇ%s", msg) == 2 ) msg = "ÎÇ" + msg;
-		if( sscanf(msg, "%*s±§%s", msg) == 2 ) msg = "±§" + msg;
-		if( sscanf(msg, "%*sÃş", msg) == 2 ) msg = "Ãş"+ msg;
+		if( sscanf(msg, "%*så»%s", msg) == 2 ) msg = "å»" + msg;
+		if( sscanf(msg, "%*sæŠ±%s", msg) == 2 ) msg = "æŠ±" + msg;
+		if( sscanf(msg, "%*sæ‘¸", msg) == 2 ) msg = "æ‘¸"+ msg;
 		switch(random(20)) {
-		case 0:	command("chat "+who+",Äã¡£¡£¡£\n"); break;
-		case 1:	command("chat Äã²»ÊÇ¿ªÍæĞ¦°É?\n");	break;
-		case 2:	command("chat ÎÒ²»Í¬Òâ£¡\n");break;
-		case 3:command("chat* ÀîÁè±»"+who+"ÆøµÃÔÎÁË¹ıÈ¥¡£\n"); break;
-		case 4:command("chat* ÀîÁèº¿ßû´ó¿ŞÆğÀ´.\n"); break;
-		case 5:command("chat ²»ÒªÕâÑù×ÓÂï£¡\n"); break;
-		case 6:command("chat ·ÇÀñ°¡·ÇÀñ£¡"+who+"ÕâĞ¡Á÷Ã¥ÓÖÀ´À²£¡\n"); break;
-		case 7:command ("chat ·ç¶ù¿ìÀ´°¡£¬"+ who + "ÏëÒªĞßÈèÎÒ£¡\n") ;
-		case 8:	command("chat* ÀîÁèÎûÎûµØĞ¦ÁË¼¸Éù.\n"); break;
-		case 9:	command("chat* ÀîÁèºÜÉúÆøµØ¾ïÁË¾ï×ì¡£\n");	break;
-		case 10:command("chat* ÀîÁèÎŞÄÎµÄËÊÁËËÊ¼ç.\n");	break;
-		case 11:command("chat Äã¶ÔÅ®º¢×Ó×ÜÊÇÕâÑùÂğ£¿\n"); break;
-		case 12:command("chat ´ó¸çÄãÔõÃ´ÕâÑù£¿\n"); break;
-		case 13:command("chat* ÀîÁèæÌÈ»Ò»Ğ¦£¬Ëµ£º¹»ÁË¹»ÁË!\n"); break;
-		case 14:command("chat* ÀîÁèÂúÁ³ÕÍµÃÍ¨ºì£¬¼±µÀ£ºÄã¡£¡£¡£ ¡£\n");	break;
-		case 15:command("chat àÅ£¬"+who+"ÊÇÌìµ×ÏÂ×îºÃµÄÈËÁË£¡\n"); break;
-	                case 16:command ("chat ·ç¶ù¿ìÀ´°¡£¬"+ who + "ÆÛ¸ºÎÒ£¡\n") ; break;
+		case 0:	command("chat "+who+",ä½ ã€‚ã€‚ã€‚\n"); break;
+		case 1:	command("chat ä½ ä¸æ˜¯å¼€ç©ç¬‘å§?\n");	break;
+		case 2:	command("chat æˆ‘ä¸åŒæ„ï¼\n");break;
+		case 3:command("chat* æå‡Œè¢«"+who+"æ°”å¾—æ™•äº†è¿‡å»ã€‚\n"); break;
+		case 4:command("chat* æå‡Œåšå••å¤§å“­èµ·æ¥.\n"); break;
+		case 5:command("chat ä¸è¦è¿™æ ·å­å˜›ï¼\n"); break;
+		case 6:command("chat éç¤¼å•Šéç¤¼ï¼"+who+"è¿™å°æµæ°“åˆæ¥å•¦ï¼\n"); break;
+		case 7:command ("chat é£å„¿å¿«æ¥å•Šï¼Œ"+ who + "æƒ³è¦ç¾è¾±æˆ‘ï¼\n") ;
+		case 8:	command("chat* æå‡Œå˜»å˜»åœ°ç¬‘äº†å‡ å£°.\n"); break;
+		case 9:	command("chat* æå‡Œå¾ˆç”Ÿæ°”åœ°æ’…äº†æ’…å˜´ã€‚\n");	break;
+		case 10:command("chat* æå‡Œæ— å¥ˆçš„è€¸äº†è€¸è‚©.\n");	break;
+		case 11:command("chat ä½ å¯¹å¥³å­©å­æ€»æ˜¯è¿™æ ·å—ï¼Ÿ\n"); break;
+		case 12:command("chat å¤§å“¥ä½ æ€ä¹ˆè¿™æ ·ï¼Ÿ\n"); break;
+		case 13:command("chat* æå‡Œå«£ç„¶ä¸€ç¬‘ï¼Œè¯´ï¼šå¤Ÿäº†å¤Ÿäº†!\n"); break;
+		case 14:command("chat* æå‡Œæ»¡è„¸èƒ€å¾—é€šçº¢ï¼Œæ€¥é“ï¼šä½ ã€‚ã€‚ã€‚ ã€‚\n");	break;
+		case 15:command("chat å—¯ï¼Œ"+who+"æ˜¯å¤©åº•ä¸‹æœ€å¥½çš„äººäº†ï¼\n"); break;
+	                case 16:command ("chat é£å„¿å¿«æ¥å•Šï¼Œ"+ who + "æ¬ºè´Ÿæˆ‘ï¼\n") ; break;
 		}
 		return;
 	}
-	if( (strsrch(msg, "Öí") >= 0)||(strsrch(msg, "shit") >= 0)||(strsrch(msg, "pig") >= 0))
+	if( (strsrch(msg, "çŒª") >= 0)||(strsrch(msg, "shit") >= 0)||(strsrch(msg, "pig") >= 0))
 	{	
 		if( sscanf(msg, "%*spig%s", msg) == 2 ) msg = "pig" + msg;
-		if( sscanf(msg, "%*sÖí%s", msg) == 2 ) msg = "Öí" + msg;
+		if( sscanf(msg, "%*sçŒª%s", msg) == 2 ) msg = "çŒª" + msg;
 		if( sscanf(msg, "%*sshit%s", msg) == 2 ) msg = "shit" + msg;
 		switch(random(15)) {
-		case 0:	command("chat ÄãÊÇËµ" + msg + "Âğ£¿\n"); break;
-		case 1:	command("chat ÄÑµÀÄãËµÎÒÊÇ....£¿\n");	break;
-		case 2:	command("chat ¾ÍËã¡°" + msg + "¡±£¬ÄãÓÖÄÜÔõÃ´ÑùÄØ£¿\n"); break;
-		case 3:	command("chat* ÀîÁèºÜÉúÆøµØ¾ïÁË¾ï×ì¡£\n");	break;
-		case 4:	command("chat ÄãÕæµÄÈÏÎª¡°" + msg + "¡±£¿\n"); break;
-		case 5:	command("chat ÎÒ¾õµÃÄãÓĞµã¶ù²øÔÓ²»Çå¡£\n"); break;
-		case 6:	command("chat ÄãÔÙËµ¿É±ğ¹ÖÎÒ²»¿ÍÆø¡£\n"); break;
-		case 7:	command("chat ÓĞ¹Ø¡¸" + msg + "¡¹µÄ»°Ìâ, ¾Íµ½´ËÎªÖ¹°É.\n"); break;
-		case 8:	command("chat "+ who+",ÎÒÏëºÍÄã¾ö¶·£¡ÓĞµ¨×ÓÄã¾Í·ÅÂí¹ıÀ´£¡\n"); break;
-		case 9:	command("chat* ÀîÁè±ÉÒÄµØ¿´×Å"+who+",ºŞ²»µÃ"+who+"È¥ËÀ¡£\n"); break;
-		case 10:command("chat* ÀîÁè±»"+who+"ÆøµÃÔÎÁË¹ıÈ¥¡£\n"); break;
-		case 11:command("chat* ÀîÁèºöÈ»´óÉùËµ£º´òµ¹³ôÄàÌ¶£¬´òµ¹·ç£¡\n"); break;
-		case 12:command("chat* ÀîÁèÈàÁËÈà¿ŞºìµÄÑÛ¾¦£¬¶å½ÅµÀ£º "+who+",ÎÒºŞËÀÄãÁË£¡\n"); break;
-		case 13:command ("chat ·ç¶ù¿ìÀ´°¡£¬"+ who + "ÓÖÏëÒªĞßÈèÎÒ£¡\n") ; break;
+		case 0:	command("chat ä½ æ˜¯è¯´" + msg + "å—ï¼Ÿ\n"); break;
+		case 1:	command("chat éš¾é“ä½ è¯´æˆ‘æ˜¯....ï¼Ÿ\n");	break;
+		case 2:	command("chat å°±ç®—â€œ" + msg + "â€ï¼Œä½ åˆèƒ½æ€ä¹ˆæ ·å‘¢ï¼Ÿ\n"); break;
+		case 3:	command("chat* æå‡Œå¾ˆç”Ÿæ°”åœ°æ’…äº†æ’…å˜´ã€‚\n");	break;
+		case 4:	command("chat ä½ çœŸçš„è®¤ä¸ºâ€œ" + msg + "â€ï¼Ÿ\n"); break;
+		case 5:	command("chat æˆ‘è§‰å¾—ä½ æœ‰ç‚¹å„¿ç¼ æ‚ä¸æ¸…ã€‚\n"); break;
+		case 6:	command("chat ä½ å†è¯´å¯åˆ«æ€ªæˆ‘ä¸å®¢æ°”ã€‚\n"); break;
+		case 7:	command("chat æœ‰å…³ã€Œ" + msg + "ã€çš„è¯é¢˜, å°±åˆ°æ­¤ä¸ºæ­¢å§.\n"); break;
+		case 8:	command("chat "+ who+",æˆ‘æƒ³å’Œä½ å†³æ–—ï¼æœ‰èƒ†å­ä½ å°±æ”¾é©¬è¿‡æ¥ï¼\n"); break;
+		case 9:	command("chat* æå‡Œé„™å¤·åœ°çœ‹ç€"+who+",æ¨ä¸å¾—"+who+"å»æ­»ã€‚\n"); break;
+		case 10:command("chat* æå‡Œè¢«"+who+"æ°”å¾—æ™•äº†è¿‡å»ã€‚\n"); break;
+		case 11:command("chat* æå‡Œå¿½ç„¶å¤§å£°è¯´ï¼šæ‰“å€’è‡­æ³¥æ½­ï¼Œæ‰“å€’é£ï¼\n"); break;
+		case 12:command("chat* æå‡Œæ‰äº†æ‰å“­çº¢çš„çœ¼ç›ï¼Œè·ºè„šé“ï¼š "+who+",æˆ‘æ¨æ­»ä½ äº†ï¼\n"); break;
+		case 13:command ("chat é£å„¿å¿«æ¥å•Šï¼Œ"+ who + "åˆæƒ³è¦ç¾è¾±æˆ‘ï¼\n") ; break;
 		}
 	}
-	if(  (strsrch(msg, "fool") >= 0)||(strsrch(msg, "±¿") >= 0)|| (strsrch(msg, "ËÀ") >= 0))
+	if(  (strsrch(msg, "fool") >= 0)||(strsrch(msg, "ç¬¨") >= 0)|| (strsrch(msg, "æ­»") >= 0))
 	{	
-		if( sscanf(msg, "%*s±¿%s", msg) == 2 ) msg = "±¿" + msg;
+		if( sscanf(msg, "%*sç¬¨%s", msg) == 2 ) msg = "ç¬¨" + msg;
 		if( sscanf(msg, "%*sfool%s", msg) == 2 ) msg = "fool" + msg;
-		if( sscanf(msg, "%*sËÀ%s", msg) == 2 ) msg = "ËÀ" + msg;
+		if( sscanf(msg, "%*sæ­»%s", msg) == 2 ) msg = "æ­»" + msg;
 		switch(random(15)) {
-		case 0:	command("chat ´ó¸çÄãÔõÃ´ÕâÑù£¿\n"); break;
-		case 1:	command("chat ÎÒ¿´ÄãÊÇÆø¼±°Ü»µ¡£\n");	break;
-		case 2:	command("chat "+ who +",ÄãÕâ¸ö³ôÁ÷Ã¥£¡\n"); break;
-		case 3:	command("chat* ÀîÁèÓÃÊÖÎæ×¡±Ç×Ó£¬Ëµ¡°"+who+"Ëµ»°ºÃ³ô!\n");	break;
-		case 4:	command("chat ÄãÕæµÄÈÏÎª¡°" + msg + "¡±£¿\n"); break;
-		case 5:	command("chat ÎÒ¾õµÃÄãÓĞµã¶ù²øÔÓ²»Çå¡£\n"); break;
-		case 6: command("chat ÅŞ!\n"); break;
-		case 7:	command("chat* ÀîÁèÅ­µÀ:ÄãÔõÃ´ÖªµÀ¡°" + msg + "¡±£¿\n"); break;
-		case 8:	command("chat "+ who+"¹ö³öÀ´!ÎÒÒªºÍÄã¾ö¶·£¡ÓĞµ¨×ÓÄã¾Í·ÅÂí¹ıÀ´£¡\n"); break;
-		case 9:	command("chat* ÀîÁè±ÉÒÄµØ¿´×Å"+who+",ºŞ²»µÃ"+who+"È¥ËÀ¡£\n"); break;
-		case 10:command("chat* ÀîÁèº¿ßû´ó¿ŞÆğÀ´.\n"); break;
-		case 11:command("chat* ÀîÁèÈàÁËÈà¿ŞºìµÄÑÛ¾¦£¬¶å½ÅµÀ£º "+who+"Íõ°Ëµ°¸øÎÒ¹ö³öÈ¥£¡\n"); break;
-		case 12:command("chat ·ÇÀñ°¡·ÇÀñ£¡"+who+"ÊÇ¸öÍõ°Ëµ°£¡\n"); break;
+		case 0:	command("chat å¤§å“¥ä½ æ€ä¹ˆè¿™æ ·ï¼Ÿ\n"); break;
+		case 1:	command("chat æˆ‘çœ‹ä½ æ˜¯æ°”æ€¥è´¥åã€‚\n");	break;
+		case 2:	command("chat "+ who +",ä½ è¿™ä¸ªè‡­æµæ°“ï¼\n"); break;
+		case 3:	command("chat* æå‡Œç”¨æ‰‹æ‚ä½é¼»å­ï¼Œè¯´â€œ"+who+"è¯´è¯å¥½è‡­!\n");	break;
+		case 4:	command("chat ä½ çœŸçš„è®¤ä¸ºâ€œ" + msg + "â€ï¼Ÿ\n"); break;
+		case 5:	command("chat æˆ‘è§‰å¾—ä½ æœ‰ç‚¹å„¿ç¼ æ‚ä¸æ¸…ã€‚\n"); break;
+		case 6: command("chat å‘¸!\n"); break;
+		case 7:	command("chat* æå‡Œæ€’é“:ä½ æ€ä¹ˆçŸ¥é“â€œ" + msg + "â€ï¼Ÿ\n"); break;
+		case 8:	command("chat "+ who+"æ»šå‡ºæ¥!æˆ‘è¦å’Œä½ å†³æ–—ï¼æœ‰èƒ†å­ä½ å°±æ”¾é©¬è¿‡æ¥ï¼\n"); break;
+		case 9:	command("chat* æå‡Œé„™å¤·åœ°çœ‹ç€"+who+",æ¨ä¸å¾—"+who+"å»æ­»ã€‚\n"); break;
+		case 10:command("chat* æå‡Œåšå••å¤§å“­èµ·æ¥.\n"); break;
+		case 11:command("chat* æå‡Œæ‰äº†æ‰å“­çº¢çš„çœ¼ç›ï¼Œè·ºè„šé“ï¼š "+who+"ç‹å…«è›‹ç»™æˆ‘æ»šå‡ºå»ï¼\n"); break;
+		case 12:command("chat éç¤¼å•Šéç¤¼ï¼"+who+"æ˜¯ä¸ªç‹å…«è›‹ï¼\n"); break;
 		}
 		return;
 	}
@@ -716,320 +716,320 @@ varargs void drool(string msg, string who)
 		if(random(5)<3)
         {
 		switch(random(15)) {
-		case 0:	command("chat ´ó¸çÄãÔõÃ´ÕâÑù£¿\n"); break;
-		case 1:	command("chat ÄãÊÇÔÚËµÎÒÂğ£¿\n"); break;
-		case 2:	command("chat "+who+",Ã»Ïëµ½ÄãÒ²ÕâÃ´¡£¡£¡£\n"); break;
-		case 3:	command("chat* ÀîÁèæÌÈ»Ò»Ğ¦£¬Ëµ£º¹»ÁË!\n"); break;
-		case 4:	command("chat ÄãÕæµÄÈÏÎª¡°" + msg + "¡±£¿\n"); break;
-		case 5: command("chat* ÀîÁèºöÈ»İ¸¶ûÒ»Ğ¦µÀ: ÄãÕâÊÇ²»ÊÇÓĞµã¶ù¡£¡£¡££¿\n");break;
-		case 6:    command("chat* ÀîÁè»ØÍ·¿´ÁË"+who+"Ò»ÑÛ£¬Ã»¿ÔÉù¡£\n");break;
-		case 7: command("chat àÅ,"+who+"ÊÇÒ»¸öºÃº¢×Ó.\n"); break;
-		case 8:command("chat "+who+",Äã²»»áÊÇÏëÌÖºÃÎÒ°É?\n"); break;
-		case 9:command("chat* ÀîÁè¹°ÁË¹°ÊÖµÀ£º¹ı½±£¬¹ı½± !\n");break;
-		case 10:command("chat* ÀîÁèÖ¸×Å"+who+"ÔŞÌ¾µÀ£º¡°"+who+"ÊÇÎäÁÖµÚÒ»¸ßÊÖ£¡¡±\n");break;
+		case 0:	command("chat å¤§å“¥ä½ æ€ä¹ˆè¿™æ ·ï¼Ÿ\n"); break;
+		case 1:	command("chat ä½ æ˜¯åœ¨è¯´æˆ‘å—ï¼Ÿ\n"); break;
+		case 2:	command("chat "+who+",æ²¡æƒ³åˆ°ä½ ä¹Ÿè¿™ä¹ˆã€‚ã€‚ã€‚\n"); break;
+		case 3:	command("chat* æå‡Œå«£ç„¶ä¸€ç¬‘ï¼Œè¯´ï¼šå¤Ÿäº†!\n"); break;
+		case 4:	command("chat ä½ çœŸçš„è®¤ä¸ºâ€œ" + msg + "â€ï¼Ÿ\n"); break;
+		case 5: command("chat* æå‡Œå¿½ç„¶èå°”ä¸€ç¬‘é“: ä½ è¿™æ˜¯ä¸æ˜¯æœ‰ç‚¹å„¿ã€‚ã€‚ã€‚ï¼Ÿ\n");break;
+		case 6:    command("chat* æå‡Œå›å¤´çœ‹äº†"+who+"ä¸€çœ¼ï¼Œæ²¡å­å£°ã€‚\n");break;
+		case 7: command("chat å—¯,"+who+"æ˜¯ä¸€ä¸ªå¥½å­©å­.\n"); break;
+		case 8:command("chat "+who+",ä½ ä¸ä¼šæ˜¯æƒ³è®¨å¥½æˆ‘å§?\n"); break;
+		case 9:command("chat* æå‡Œæ‹±äº†æ‹±æ‰‹é“ï¼šè¿‡å¥–ï¼Œè¿‡å¥– !\n");break;
+		case 10:command("chat* æå‡ŒæŒ‡ç€"+who+"èµå¹é“ï¼šâ€œ"+who+"æ˜¯æ­¦æ—ç¬¬ä¸€é«˜æ‰‹ï¼â€\n");break;
 		}
 		return;
         }
 	}
 	switch(random(80)) {
-		case 0:	command("chat ÄãÕæµÄÊÇËµ" + msg + "Âğ£¿\n"); break;
-		case 1:	command("chat ÄãÎªÊ²Ã´¶ÔÎÒÕâÃ´¸ĞĞËÈ¤£¿\n");	break;
-		case 2:	command("chat ¾ÍËã¡°" + msg + "¡±£¬ÄãÓÖÄÜÔõÃ´ÑùÄØ£¿\n"); break;
-		case 3:	command("chat àÅ,¡°" + msg + "¡±£¬ÄÇÒ²Ã»¹ØÏµ.\n"); break;
-		case 4:	command("chat "+who+",ÄãÕâ¸ö³ôÁ÷Ã¥£¡\n"); break;
-		case 5:	command("chat ÎÒÏëËµµÄÊÇ£¬"+"ÆäÊµ"+who+"²»ÊÇ¸öºÃ¶«Î÷¡£\n"); break;
-		case 6:	command("chat ¹ØÓÚÄãËµµÄ¡¸" + msg + "¡¹£¬ÎÒÔİÊ±²»Ïë±íÌ¬¡£\n"); break;
-		case 7:	command("chat ÎÒÈÏÎªÄãµÄÌ¬¶È²»´óºÃÒ®.\n"); break;
-		case 8:	command("chat Çë×¢Òâ£¬ÎÒÖ»ÊÇ»úÆ÷ÈËÒ®!\n"); break;
-		case 9:	command("chat Äã¶ÔÅ®º¢×Ó×ÜÊÇÕâÑùÂğ£¿\n"); break;
-		case 10:	command("chat ²»ÒªÕâÑù¶ÔÎÒºÃ²»ºÃ£¿\n");	break;
-		case 11:	command("chat ÎÒÏëÎÒ¿ÉÒÔÀí½âÄãµÄĞÄÇé¡£\n");	break;
-		case 12:	command("chat* ÀîÁèÉîÉîµØÌ¾ÁËÒ»¿ÚÆø ¡£\n");	break;
-		case 13:	command("chat* ÀîÁè±»"+who+"ÆøµÃÔÎÁË¹ıÈ¥ ¡£\n");	break;
-		case 14:	command("chat* ÀîÁèÂúÁ³ÕÍµÃÍ¨ºì£¬¼±µÀ£ºÄã¡£¡£¡£ ¡£\n");	break;
-		case 15:    command("chat* ÀîÁèÒ§ÁËÒ§ÑÀ£¬Å­µÀ: àÅ£¬Ë­ÒªÔÙ¸ÒÆÛ¸ºÎÒ£¬ÎÒ¾ÍÔ×ÁËËû£¡\n");break;
-		case 16:    command("chat* ÀîÁèºöÈ»İ¸¶ûÒ»Ğ¦µÀ: ÄãÕâÓÖÊÇºÎ¿àÄØ£¿\n");break;
-		case 17:    command("chat* ÀîÁè´òÁË¸öºÇÇ·£¬×óÊÖÇáÇáÑÚ×¡Ó£ÌÒĞ¡¿Ú£¬ÈáÉùµÀ£ºÎÒÀ§ÁË¡£\n"); break;
-		case 18:    command("chat* ÀîÁè»ØÍ·¿´ÁË"+who+"Ò»ÑÛ£¬Ã»¿ÔÉù¡£\n");break;
-		case 19:    command("chat* ÀîÁèÒ»Ë¦Í·£¬Ëµ£ººß£¬ÎÒ¶¼ÀÁµÃÀíÄã¡£\n");break;
-		case 20:	command("chat ÓĞ¹Ø¡¸" + msg + "¡¹µÄ»°Ìâ, ¾Íµ½´ËÎªÖ¹°É.\n"); break;
-		case 21:	command("chat ÎÒ¾õµÃ"+who+"ÕâØË¼òÖ±²»¿ÉÀíÓ÷¡£\n"); break;
-		case 22:	command("chat ÄãÊÇÔÚËµÎÒÂğ£¿\n"); break;
-		case 23:	command("chat "+who+",Ã»Ïëµ½ÄãÒ²¡£¡£¡£\n"); break;
-		case 24:	command("chat* ÀîÁèæÌÈ»Ò»Ğ¦£¬Ëµ£º¹»ÁË!\n"); break;
-		case 25:	command("chat ¾ÓÈ»ÓĞÈËÂîÎÒÊÇÖí!\n");
-		 	command("chat* ÀîÁèº¿ßû´ó¿ŞÆğÀ´.\n"); break;
-        case 26:	command ("chat ·ç¶ù¿ìÀ´°¡£¬"+ who + "ÓÖÀ´ÆÛÎêÎÒ£¡\n") ; break;
-      	case 27:	command ("chat ÎÒ¼òÖ±ÊÜ²»ÁËÁË!\n") ; break;
-        case 28:	command ("chat ÎÒºŞ²»µÃ"+who+"È¥ËÀ!\n") ; break;
-        case 29:	command ("chat ¾ÍÄãÀÏºÍÎÒ¹ı²»È¥!\n") ; break;
-        case 30:	command ("chat Çë²»Òª´òÈÅÎÒºÃ²»ºÃ?\n") ; break;
-   		case 31:	command ("chat* ÀîÁèÖÕÓÚÈÌ²»×¡¿ŞÁËÆğÀ´¡£\n") ; break;
-		case 32:	command("chat* ÀîÁè±ÉÒÄµØ¿´×Å"+who+",ºŞ²»µÃ"+who+"È¥ËÀ¡£\n"); break;
-		case 33:    command("chat* ÀîÁèÒ§ÁËÒ§ÑÀ£¬Å­µÀ: àÅ£¬Ë­Òª¸ÒÆÛ¸ºÎÒ£¬ÎÒ¾ÍÔ×ÁËËû£¡\n");break;
-		case 34:    command("chat* ÀîÁèºöÈ»İ¸¶ûÒ»Ğ¦µÀ: ÄãÕâÊÇ²»ÊÇÓĞµã¶ù¡£¡£¡££¿\n");break;
-		case 35:    command("chat* ÀîÁè´òÁË¸öºÇÇ·£¬×óÊÖÇáÇáÑÚ×¡Ó£ÌÒĞ¡¿Ú£¬ÈáÉùµÀ£ºÎÒÓĞµã¶ùÀ§ÁË¡£\n"); break;
-		case 36:    command("chat* ÀîÁè»ØÍ·¿´ÁË"+who+"Ò»ÑÛ£¬Ã»¿ÔÉù¡£\n");break;
-		case 37:    command("chat* ÀîÁèÒ»Ë¦Í·£¬Ëµ£ººß£¬ÎÒ¶¼ÀÁµÃÀíÄã¡£\n");break;
-		case 38:    command("chat ¡°" + msg + "¡±,ÊÇÕæµÄÂğ£¿\n"); break;
-		case 39:    command("chat ÎÒ¾õµÃ"+who+"µÄÃû×Ö»¹²»´í.\n"); break;
-		case 40:    command("chat ÎÒÏëÈ¥ËÀÁËËãÁË.\n"); break;
-		case 41:    command("chat ÎÒ¾õµÃ×î¼Ñ±íÇé½±Ó¦¸ÃÊÚÓè"+who+".\n"); break;
-		case 42: command("chat* ÀîÁèĞ¦ÎûÎûµÄ¿´×Å"+who+"\n"); break;
-		case 43: command("chat ·³×ÅÄÄ£¬±ğÀíÎÒ!\n"); break;
-		case 44: command("chat ºß£¡\n"); break;
-		case 45: command("chat* ÀîÁè´òÁË"+who+"Ò»¸ö¶ú¹â.\n"); break;
-		case 46: command("chat ºß£¬Ë­ÀíÄã°¡!\n");break;
-		case 47: command("chat àÅ,"+who+"ÊÇÒ»¸öºÃº¢×Ó.\n"); break;
-		case 48:command("chat* ÀîÁèÂ¶³öÃÔ»óµÄ±íÇé.\n"); break;
-		case 49:command("chat ÊÇÂğ?\n"); break;
-		case 50:command("chat "+who+",ÄãÊÇ²»ÊÇÏëÌÖºÃÎÒ°¡?\n"); break;
-		case 51:command("chat ºß,Ë­¸ÒËµÎÒ»µ»°?!\n");break;
-		case 52:command("chat Äã²»ÊÇ¿ªÍæĞ¦°É?\n");	break;
-		case 53:command("chat ÎÒ²»Í¬Òâ£¡\n");break;
-		case 54:command("chat* ÀîÁè¶Ô"+who+"±íÊ¾ÖÔĞÄµÄ¸ĞĞ».\n");break;
-		case 55:command("chat ²»ÒªÕâÑù×ÓÂï£¡\n"); break;
-		case 56:command("chat* ÀîÁè¹°ÁË¹°ÊÖµÀ£º¹ı½±£¬¹ı½± !\n");break;
-		case 57:command("chat* ÀîÁèÅ­µÀ:ÄãÔõÃ´ÖªµÀ¡°" + msg + "¡±£¿\n"); break;
-		case 58:command("chat* ÀîÁèÖ¸×Å"+who+"ÔŞÌ¾µÀ£º¡°"+who+"ÊÇÎäÁÖµÚÒ»¸ßÊÖ£¡¡±\n");break;
+		case 0:	command("chat ä½ çœŸçš„æ˜¯è¯´" + msg + "å—ï¼Ÿ\n"); break;
+		case 1:	command("chat ä½ ä¸ºä»€ä¹ˆå¯¹æˆ‘è¿™ä¹ˆæ„Ÿå…´è¶£ï¼Ÿ\n");	break;
+		case 2:	command("chat å°±ç®—â€œ" + msg + "â€ï¼Œä½ åˆèƒ½æ€ä¹ˆæ ·å‘¢ï¼Ÿ\n"); break;
+		case 3:	command("chat å—¯,â€œ" + msg + "â€ï¼Œé‚£ä¹Ÿæ²¡å…³ç³».\n"); break;
+		case 4:	command("chat "+who+",ä½ è¿™ä¸ªè‡­æµæ°“ï¼\n"); break;
+		case 5:	command("chat æˆ‘æƒ³è¯´çš„æ˜¯ï¼Œ"+"å…¶å®"+who+"ä¸æ˜¯ä¸ªå¥½ä¸œè¥¿ã€‚\n"); break;
+		case 6:	command("chat å…³äºä½ è¯´çš„ã€Œ" + msg + "ã€ï¼Œæˆ‘æš‚æ—¶ä¸æƒ³è¡¨æ€ã€‚\n"); break;
+		case 7:	command("chat æˆ‘è®¤ä¸ºä½ çš„æ€åº¦ä¸å¤§å¥½è€¶.\n"); break;
+		case 8:	command("chat è¯·æ³¨æ„ï¼Œæˆ‘åªæ˜¯æœºå™¨äººè€¶!\n"); break;
+		case 9:	command("chat ä½ å¯¹å¥³å­©å­æ€»æ˜¯è¿™æ ·å—ï¼Ÿ\n"); break;
+		case 10:	command("chat ä¸è¦è¿™æ ·å¯¹æˆ‘å¥½ä¸å¥½ï¼Ÿ\n");	break;
+		case 11:	command("chat æˆ‘æƒ³æˆ‘å¯ä»¥ç†è§£ä½ çš„å¿ƒæƒ…ã€‚\n");	break;
+		case 12:	command("chat* æå‡Œæ·±æ·±åœ°å¹äº†ä¸€å£æ°” ã€‚\n");	break;
+		case 13:	command("chat* æå‡Œè¢«"+who+"æ°”å¾—æ™•äº†è¿‡å» ã€‚\n");	break;
+		case 14:	command("chat* æå‡Œæ»¡è„¸èƒ€å¾—é€šçº¢ï¼Œæ€¥é“ï¼šä½ ã€‚ã€‚ã€‚ ã€‚\n");	break;
+		case 15:    command("chat* æå‡Œå’¬äº†å’¬ç‰™ï¼Œæ€’é“: å—¯ï¼Œè°è¦å†æ•¢æ¬ºè´Ÿæˆ‘ï¼Œæˆ‘å°±å®°äº†ä»–ï¼\n");break;
+		case 16:    command("chat* æå‡Œå¿½ç„¶èå°”ä¸€ç¬‘é“: ä½ è¿™åˆæ˜¯ä½•è‹¦å‘¢ï¼Ÿ\n");break;
+		case 17:    command("chat* æå‡Œæ‰“äº†ä¸ªå‘µæ¬ ï¼Œå·¦æ‰‹è½»è½»æ©ä½æ¨±æ¡ƒå°å£ï¼ŒæŸ”å£°é“ï¼šæˆ‘å›°äº†ã€‚\n"); break;
+		case 18:    command("chat* æå‡Œå›å¤´çœ‹äº†"+who+"ä¸€çœ¼ï¼Œæ²¡å­å£°ã€‚\n");break;
+		case 19:    command("chat* æå‡Œä¸€ç”©å¤´ï¼Œè¯´ï¼šå“¼ï¼Œæˆ‘éƒ½æ‡’å¾—ç†ä½ ã€‚\n");break;
+		case 20:	command("chat æœ‰å…³ã€Œ" + msg + "ã€çš„è¯é¢˜, å°±åˆ°æ­¤ä¸ºæ­¢å§.\n"); break;
+		case 21:	command("chat æˆ‘è§‰å¾—"+who+"è¿™å®ç®€ç›´ä¸å¯ç†å–»ã€‚\n"); break;
+		case 22:	command("chat ä½ æ˜¯åœ¨è¯´æˆ‘å—ï¼Ÿ\n"); break;
+		case 23:	command("chat "+who+",æ²¡æƒ³åˆ°ä½ ä¹Ÿã€‚ã€‚ã€‚\n"); break;
+		case 24:	command("chat* æå‡Œå«£ç„¶ä¸€ç¬‘ï¼Œè¯´ï¼šå¤Ÿäº†!\n"); break;
+		case 25:	command("chat å±…ç„¶æœ‰äººéª‚æˆ‘æ˜¯çŒª!\n");
+		 	command("chat* æå‡Œåšå••å¤§å“­èµ·æ¥.\n"); break;
+        case 26:	command ("chat é£å„¿å¿«æ¥å•Šï¼Œ"+ who + "åˆæ¥æ¬ºä¾®æˆ‘ï¼\n") ; break;
+      	case 27:	command ("chat æˆ‘ç®€ç›´å—ä¸äº†äº†!\n") ; break;
+        case 28:	command ("chat æˆ‘æ¨ä¸å¾—"+who+"å»æ­»!\n") ; break;
+        case 29:	command ("chat å°±ä½ è€å’Œæˆ‘è¿‡ä¸å»!\n") ; break;
+        case 30:	command ("chat è¯·ä¸è¦æ‰“æ‰°æˆ‘å¥½ä¸å¥½?\n") ; break;
+   		case 31:	command ("chat* æå‡Œç»ˆäºå¿ä¸ä½å“­äº†èµ·æ¥ã€‚\n") ; break;
+		case 32:	command("chat* æå‡Œé„™å¤·åœ°çœ‹ç€"+who+",æ¨ä¸å¾—"+who+"å»æ­»ã€‚\n"); break;
+		case 33:    command("chat* æå‡Œå’¬äº†å’¬ç‰™ï¼Œæ€’é“: å—¯ï¼Œè°è¦æ•¢æ¬ºè´Ÿæˆ‘ï¼Œæˆ‘å°±å®°äº†ä»–ï¼\n");break;
+		case 34:    command("chat* æå‡Œå¿½ç„¶èå°”ä¸€ç¬‘é“: ä½ è¿™æ˜¯ä¸æ˜¯æœ‰ç‚¹å„¿ã€‚ã€‚ã€‚ï¼Ÿ\n");break;
+		case 35:    command("chat* æå‡Œæ‰“äº†ä¸ªå‘µæ¬ ï¼Œå·¦æ‰‹è½»è½»æ©ä½æ¨±æ¡ƒå°å£ï¼ŒæŸ”å£°é“ï¼šæˆ‘æœ‰ç‚¹å„¿å›°äº†ã€‚\n"); break;
+		case 36:    command("chat* æå‡Œå›å¤´çœ‹äº†"+who+"ä¸€çœ¼ï¼Œæ²¡å­å£°ã€‚\n");break;
+		case 37:    command("chat* æå‡Œä¸€ç”©å¤´ï¼Œè¯´ï¼šå“¼ï¼Œæˆ‘éƒ½æ‡’å¾—ç†ä½ ã€‚\n");break;
+		case 38:    command("chat â€œ" + msg + "â€,æ˜¯çœŸçš„å—ï¼Ÿ\n"); break;
+		case 39:    command("chat æˆ‘è§‰å¾—"+who+"çš„åå­—è¿˜ä¸é”™.\n"); break;
+		case 40:    command("chat æˆ‘æƒ³å»æ­»äº†ç®—äº†.\n"); break;
+		case 41:    command("chat æˆ‘è§‰å¾—æœ€ä½³è¡¨æƒ…å¥–åº”è¯¥æˆäºˆ"+who+".\n"); break;
+		case 42: command("chat* æå‡Œç¬‘å˜»å˜»çš„çœ‹ç€"+who+"\n"); break;
+		case 43: command("chat çƒ¦ç€å“ªï¼Œåˆ«ç†æˆ‘!\n"); break;
+		case 44: command("chat å“¼ï¼\n"); break;
+		case 45: command("chat* æå‡Œæ‰“äº†"+who+"ä¸€ä¸ªè€³å…‰.\n"); break;
+		case 46: command("chat å“¼ï¼Œè°ç†ä½ å•Š!\n");break;
+		case 47: command("chat å—¯,"+who+"æ˜¯ä¸€ä¸ªå¥½å­©å­.\n"); break;
+		case 48:command("chat* æå‡Œéœ²å‡ºè¿·æƒ‘çš„è¡¨æƒ….\n"); break;
+		case 49:command("chat æ˜¯å—?\n"); break;
+		case 50:command("chat "+who+",ä½ æ˜¯ä¸æ˜¯æƒ³è®¨å¥½æˆ‘å•Š?\n"); break;
+		case 51:command("chat å“¼,è°æ•¢è¯´æˆ‘åè¯?!\n");break;
+		case 52:command("chat ä½ ä¸æ˜¯å¼€ç©ç¬‘å§?\n");	break;
+		case 53:command("chat æˆ‘ä¸åŒæ„ï¼\n");break;
+		case 54:command("chat* æå‡Œå¯¹"+who+"è¡¨ç¤ºè¡·å¿ƒçš„æ„Ÿè°¢.\n");break;
+		case 55:command("chat ä¸è¦è¿™æ ·å­å˜›ï¼\n"); break;
+		case 56:command("chat* æå‡Œæ‹±äº†æ‹±æ‰‹é“ï¼šè¿‡å¥–ï¼Œè¿‡å¥– !\n");break;
+		case 57:command("chat* æå‡Œæ€’é“:ä½ æ€ä¹ˆçŸ¥é“â€œ" + msg + "â€ï¼Ÿ\n"); break;
+		case 58:command("chat* æå‡ŒæŒ‡ç€"+who+"èµå¹é“ï¼šâ€œ"+who+"æ˜¯æ­¦æ—ç¬¬ä¸€é«˜æ‰‹ï¼â€\n");break;
 		default:
-	    if (random(10)<3) command("chat* ÀîÁèºÜÉúÆøµØ¾ïÁË¾ï×ì.\n"); 
-	    else if(random(10)<3) command("chat* ÀîÁèÎûÎûµØĞ¦ÁË¼¸Éù.\n");
+	    if (random(10)<3) command("chat* æå‡Œå¾ˆç”Ÿæ°”åœ°æ’…äº†æ’…å˜´.\n"); 
+	    else if(random(10)<3) command("chat* æå‡Œå˜»å˜»åœ°ç¬‘äº†å‡ å£°.\n");
 	    break; 
 		}
 	return;
 	} 
-	if( (strsrch(msg, "¿Ş") >= 0))
+	if( (strsrch(msg, "å“­") >= 0))
 	{	
 	   if(random(5)<3)
         {
-		if( sscanf(msg, "%*s¿Ş%s", msg) == 2 ) msg = "¿Ş" + msg;
+		if( sscanf(msg, "%*så“­%s", msg) == 2 ) msg = "å“­" + msg;
 		switch(random(15)) {
-		case 0:	command("chat "+who+",ÄãÕæµÄ¿ŞÁË?\n"); break;
-		case 1:	command("chat ÎÒ²»ĞÅÒ®.\n");	break;
-		case 2:	command("chat* ÀîÁèÎûÎûµÄĞ¦ÁË¼¸Éù.\n"); break;
-		case 3:command("chat* ÀîÁèÂ¶³öÃÔ»óµÄ±íÇé.\n"); break;
-		case 4:command("chat* ÀîÁèº¿ßû´ó¿ŞÆğÀ´.\n"); break;
-		case 5:command("chat* ÀîÁè°²Î¿"+who+",±ğÄÑ¹ıÁË.\n"); break;
-		case 6:	command("chat* ÀîÁèÉîÉîµØÌ¾ÁËÒ»¿ÚÆø ¡£\n");	break;
-		case 7:	command("chat* ÀîÁèÎŞÄÎµÄËÊÁËËÊ¼ç.\n");	break;
-		case 8: command("chat* ÀîÁèÇáÇáÅÄÁËÅÄ"+who+"µÄÍ·.\n"); break;
+		case 0:	command("chat "+who+",ä½ çœŸçš„å“­äº†?\n"); break;
+		case 1:	command("chat æˆ‘ä¸ä¿¡è€¶.\n");	break;
+		case 2:	command("chat* æå‡Œå˜»å˜»çš„ç¬‘äº†å‡ å£°.\n"); break;
+		case 3:command("chat* æå‡Œéœ²å‡ºè¿·æƒ‘çš„è¡¨æƒ….\n"); break;
+		case 4:command("chat* æå‡Œåšå••å¤§å“­èµ·æ¥.\n"); break;
+		case 5:command("chat* æå‡Œå®‰æ…°"+who+",åˆ«éš¾è¿‡äº†.\n"); break;
+		case 6:	command("chat* æå‡Œæ·±æ·±åœ°å¹äº†ä¸€å£æ°” ã€‚\n");	break;
+		case 7:	command("chat* æå‡Œæ— å¥ˆçš„è€¸äº†è€¸è‚©.\n");	break;
+		case 8: command("chat* æå‡Œè½»è½»æ‹äº†æ‹"+who+"çš„å¤´.\n"); break;
 		}
 		return;
         }
 	}
-	if( (strsrch(msg, "±ğ¹ı") >= 0)||(strsrch(msg, "bye") >= 0)|| (strsrch(msg, "É¢") >= 0)|| (strsrch(msg, "Àë") >= 0))
+	if( (strsrch(msg, "åˆ«è¿‡") >= 0)||(strsrch(msg, "bye") >= 0)|| (strsrch(msg, "æ•£") >= 0)|| (strsrch(msg, "ç¦»") >= 0))
 	{	
 		if( sscanf(msg, "%*sbye%s", msg) == 2 ) msg = "bye" + msg;
-		if( sscanf(msg, "%*sÀë%s", msg) == 2 ) msg = "Àë" + msg;
-		if( sscanf(msg, "%*sÉ¢%s", msg) == 2 ) msg = "É¢" + msg;
-		if( sscanf(msg, "%*s±ğ¹ı%s", msg) == 2 ) msg = "±ğ¹ı" + msg;
+		if( sscanf(msg, "%*sç¦»%s", msg) == 2 ) msg = "ç¦»" + msg;
+		if( sscanf(msg, "%*sæ•£%s", msg) == 2 ) msg = "æ•£" + msg;
+		if( sscanf(msg, "%*såˆ«è¿‡%s", msg) == 2 ) msg = "åˆ«è¿‡" + msg;
 		switch(random(20)) {
-		case 0:	command("chat "+who+",ÄãÕæµÄÒª×ßÂğ£¿\n"); break;
-		case 1:	command("chat "+who+"Äã²»ÊÇ¿ªÍæĞ¦°É?\n");	break;
-		case 2:	command("chat ÊÇ¸Ã×ßÁË,MUDÍæ¶àÁËÃ»ºÃ´¦.\n"); break;
-		case 3:	command("chat* ÀîÁèµãÁËµãÍ·.\n");	break;
-		case 4:command("chat* ÀîÁèº¿ßû´ó¿ŞÆğÀ´.\n"); break;
-		case 5:command("chat* ÀîÁèÈàÁËÈà¿ŞºìµÄÑÛ¾¦£¬¶å½ÅµÀ£º "+who+",ÄãÕæÒª×ßÁË¾Í±ğÔÙ»ØÀ´£¡\n"); break;
-		case 6:	command("chat* ÀîÁèÉîÉîµØÌ¾ÁËÒ»¿ÚÆø ¡£\n");	break;
-		case 7:	command("chat "+who+",ÔÙÍæÒ»»á¶ùºÃ²»ºÃ?\n");	break;
+		case 0:	command("chat "+who+",ä½ çœŸçš„è¦èµ°å—ï¼Ÿ\n"); break;
+		case 1:	command("chat "+who+"ä½ ä¸æ˜¯å¼€ç©ç¬‘å§?\n");	break;
+		case 2:	command("chat æ˜¯è¯¥èµ°äº†,MUDç©å¤šäº†æ²¡å¥½å¤„.\n"); break;
+		case 3:	command("chat* æå‡Œç‚¹äº†ç‚¹å¤´.\n");	break;
+		case 4:command("chat* æå‡Œåšå••å¤§å“­èµ·æ¥.\n"); break;
+		case 5:command("chat* æå‡Œæ‰äº†æ‰å“­çº¢çš„çœ¼ç›ï¼Œè·ºè„šé“ï¼š "+who+",ä½ çœŸè¦èµ°äº†å°±åˆ«å†å›æ¥ï¼\n"); break;
+		case 6:	command("chat* æå‡Œæ·±æ·±åœ°å¹äº†ä¸€å£æ°” ã€‚\n");	break;
+		case 7:	command("chat "+who+",å†ç©ä¸€ä¼šå„¿å¥½ä¸å¥½?\n");	break;
 		case 8:	command("chat "+msg+"\n");	break;
-		case 9:	command("chat* ÀîÁèÎŞÄÎµÄËÊÁËËÊ¼ç.\n");	break;
+		case 9:	command("chat* æå‡Œæ— å¥ˆçš„è€¸äº†è€¸è‚©.\n");	break;
 		}
 		return;
 	}
-	if( (strsrch(msg, "Öí") >= 0)||(strsrch(msg, "shit") >= 0)||(strsrch(msg, "pig") >= 0))
+	if( (strsrch(msg, "çŒª") >= 0)||(strsrch(msg, "shit") >= 0)||(strsrch(msg, "pig") >= 0))
 	{	
 		if( sscanf(msg, "%*spig%s", msg) == 2 ) msg = "pig" + msg;
-		if( sscanf(msg, "%*sÖí%s", msg) == 2 ) msg = "Öí" + msg;
-		if( sscanf(msg, "%*sshit%s", msg) == 2 ) msg = "Öí" + msg;
+		if( sscanf(msg, "%*sçŒª%s", msg) == 2 ) msg = "çŒª" + msg;
+		if( sscanf(msg, "%*sshit%s", msg) == 2 ) msg = "çŒª" + msg;
 		if(random(5)<3)
         {
 		switch(random(25)) {
-		case 0:	command("chat ÄãÊÇËµ" + msg + "Âğ?\n"); break;
-		case 1:	command("chat ÎªÊ²Ã´°¡?\n");	break;
-		case 2:	command("chat " + who + ",ÄãºÃÖíà¸ !!\n"); break;
-		case 3:	command("chat* ÀîÁèºÜÉúÆøµØ¾ïÁË¾ï×ì¡£\n");	break;
-		case 4:	command("chat ÄãÕæµÄÈÏÎª¡°" + msg + "¡±?\n"); break;
-		case 5:	command("chat ÎÒ¾õµÃÕâ¸ö¡£¡£ºÃÏóÓĞµã¶ù¡£¡£¡£\n"); break;
-		case 6:	command("chat ¹ØÓÚÄãËµµÄ¡¸" + msg + "¡¹£¬ÎÒÔİÊ±²»Ïë±íÌ¬¡£\n"); break;
-		case 7:	command("chat ÓĞ¹Ø¡¸" + msg + "¡¹µÄ»°Ìâ, ¾Íµ½´ËÎªÖ¹°É.\n"); break;
-		case 8:	command("chat "+who+",ÄãËµË­ÊÇÖí£¿\n");	break;
-		case 9:	command("chat ¾ÍËã¡°" + msg + "¡±£¬ÄãÓÖ´òËãÔõÃ´ÑùÄØ£¿\n"); break;
-		case 10:	command("chat ÎÒ²»ĞÅÒ®.\n");	break;
-		case 11:	command("chat* ÀîÁèÎûÎûµÄĞ¦ÁË¼¸Éù.\n"); break;
-		case 12:	command("chat* ÀîÁè°Ñ°ÑÍ·Ò¡µÃ¸ú²¦ÀË¹ÄËÆµÄ.\n");	break;
-		case 13:	command("chat* ÀîÁè¹ş¹ş´óĞ¦ÆğÀ´.\n"); break;
+		case 0:	command("chat ä½ æ˜¯è¯´" + msg + "å—?\n"); break;
+		case 1:	command("chat ä¸ºä»€ä¹ˆå•Š?\n");	break;
+		case 2:	command("chat " + who + ",ä½ å¥½çŒªå–” !!\n"); break;
+		case 3:	command("chat* æå‡Œå¾ˆç”Ÿæ°”åœ°æ’…äº†æ’…å˜´ã€‚\n");	break;
+		case 4:	command("chat ä½ çœŸçš„è®¤ä¸ºâ€œ" + msg + "â€?\n"); break;
+		case 5:	command("chat æˆ‘è§‰å¾—è¿™ä¸ªã€‚ã€‚å¥½è±¡æœ‰ç‚¹å„¿ã€‚ã€‚ã€‚\n"); break;
+		case 6:	command("chat å…³äºä½ è¯´çš„ã€Œ" + msg + "ã€ï¼Œæˆ‘æš‚æ—¶ä¸æƒ³è¡¨æ€ã€‚\n"); break;
+		case 7:	command("chat æœ‰å…³ã€Œ" + msg + "ã€çš„è¯é¢˜, å°±åˆ°æ­¤ä¸ºæ­¢å§.\n"); break;
+		case 8:	command("chat "+who+",ä½ è¯´è°æ˜¯çŒªï¼Ÿ\n");	break;
+		case 9:	command("chat å°±ç®—â€œ" + msg + "â€ï¼Œä½ åˆæ‰“ç®—æ€ä¹ˆæ ·å‘¢ï¼Ÿ\n"); break;
+		case 10:	command("chat æˆ‘ä¸ä¿¡è€¶.\n");	break;
+		case 11:	command("chat* æå‡Œå˜»å˜»çš„ç¬‘äº†å‡ å£°.\n"); break;
+		case 12:	command("chat* æå‡ŒæŠŠæŠŠå¤´æ‘‡å¾—è·Ÿæ‹¨æµªé¼“ä¼¼çš„.\n");	break;
+		case 13:	command("chat* æå‡Œå“ˆå“ˆå¤§ç¬‘èµ·æ¥.\n"); break;
 		}
 		return ;
         }
 	} 
-	else if( (strsrch(msg, "ÎªÊ²÷á") >= 0)|| (strsrch(msg, "why") >= 0)
+	else if( (strsrch(msg, "ä¸ºä»€éº½") >= 0)|| (strsrch(msg, "why") >= 0)
 		|| (strsrch(msg, "help") >= 0)|| (strsrch(msg, "how to") >= 0)|| (strsrch(msg, "how to") >= 0)) {
-		if( sscanf(msg, "%*sÎªÊ²÷á%s", msg)==2 ) msg = "ÎªÊ²÷á" + msg;
+		if( sscanf(msg, "%*sä¸ºä»€éº½%s", msg)==2 ) msg = "ä¸ºä»€éº½" + msg;
 		if( sscanf(msg, "%*swhy%s", msg)==2 ) msg = "why" + msg;
 		if( sscanf(msg, "%*show to%s", msg)==2 ) msg = "how to" + msg;
 		if( sscanf(msg, "%*swho%s", msg)==2 ) msg = "who" + msg;
 		if( sscanf(msg, "%*shelp%s", msg)==2 ) msg = "help" + msg;
 		switch(random(30)) {
-		case 0: command("chat " + who + "£¬ÄãÊÇÔÚÎÊÎÒÂğ?\n"); break;
-		case 1: command("chat ¹Øì¶¡°" + msg + "¡± ... \n"); break;
-		case 2: command("chat ßÀ ... \n"); drool(); break;
-		case 3: command("chat Õâ¸öÎÊÌâÂï ....\n"); break;
-		case 4: command("chat " + who + "£¬ÖªµÀÕâ¸öÎÊÌâµÄ´ğ°¸¶ÔÄãÄÇ÷áÖØÒªÂğ£¿\n"); break;
-		case 5: command("chat ¡°" + msg + "¡±?\n"); break;
-		case 6: command("chat " + who + "ÄãÄÜ²»ÄÜËµÇå³şÒ»µã£¿\n"); break;
-		case 7: command("chat " + who + "£¬ÎÒ²»¶®ÄãÎÊµÄÎÊÌâ¡£\n"); break;
-		case 8: command("chat " + who + "£¬ÎÒÃ»Ìı´í°É?\n"); break;
-		case 9: command("chat àÅ£¬Õâ¸öÎÊÌâÂï£¬ÎÒ¿´»¹ÊÇÁô¸øÄã×Ô¼º½â¾ö¡£\n"); break;
-		case 10: command("chat Ë­Ïë¸ø"+who+"Ò»µã¶ùÇ®?\n"); break;
-		case 11: command("chat ÄãÔÚÄÄ¶ù?\n"); break;
-		case 12: command("chat* ÀîÁèÇáÇáÅÄÁËÅÄ"+who+"µÄÍ·.\n"); break;
-		case 13: command("chat ÓëÆäÇóÈË,²»ÈçÇó¼º!\n"); break;
+		case 0: command("chat " + who + "ï¼Œä½ æ˜¯åœ¨é—®æˆ‘å—?\n"); break;
+		case 1: command("chat å…³æ–¼â€œ" + msg + "â€ ... \n"); break;
+		case 2: command("chat å‘ƒ ... \n"); drool(); break;
+		case 3: command("chat è¿™ä¸ªé—®é¢˜å˜› ....\n"); break;
+		case 4: command("chat " + who + "ï¼ŒçŸ¥é“è¿™ä¸ªé—®é¢˜çš„ç­”æ¡ˆå¯¹ä½ é‚£éº½é‡è¦å—ï¼Ÿ\n"); break;
+		case 5: command("chat â€œ" + msg + "â€?\n"); break;
+		case 6: command("chat " + who + "ä½ èƒ½ä¸èƒ½è¯´æ¸…æ¥šä¸€ç‚¹ï¼Ÿ\n"); break;
+		case 7: command("chat " + who + "ï¼Œæˆ‘ä¸æ‡‚ä½ é—®çš„é—®é¢˜ã€‚\n"); break;
+		case 8: command("chat " + who + "ï¼Œæˆ‘æ²¡å¬é”™å§?\n"); break;
+		case 9: command("chat å—¯ï¼Œè¿™ä¸ªé—®é¢˜å˜›ï¼Œæˆ‘çœ‹è¿˜æ˜¯ç•™ç»™ä½ è‡ªå·±è§£å†³ã€‚\n"); break;
+		case 10: command("chat è°æƒ³ç»™"+who+"ä¸€ç‚¹å„¿é’±?\n"); break;
+		case 11: command("chat ä½ åœ¨å“ªå„¿?\n"); break;
+		case 12: command("chat* æå‡Œè½»è½»æ‹äº†æ‹"+who+"çš„å¤´.\n"); break;
+		case 13: command("chat ä¸å…¶æ±‚äºº,ä¸å¦‚æ±‚å·±!\n"); break;
 		}
  	return;
                }
-	else if( (strsrch(msg, "Äã") >= 0)
+	else if( (strsrch(msg, "ä½ ") >= 0)
 	||	(strsrch(msg, "you") >= 0)) {
-		if( sscanf(msg, "%*sÄã%s", msg) == 2 ) msg = "Äã" + msg;
+		if( sscanf(msg, "%*sä½ %s", msg) == 2 ) msg = "ä½ " + msg;
 		switch(random(30)) {
-		case 0:	command("chat " + who + "£¬ÄãÕæµÄÊÇËµ" + msg + "Âğ?\n");	break;
-		case 1:	command("chat ÄãÈ·¶¨" + msg + "?\n");	break;
-		case 2:	command("chat " + msg + "¸úÄãÓĞÊ²÷á¹ØÏµ£¿\n");	break;
-		case 3:	command("chat àÅ ... " + who + "ËµµÃºÃ£¡\n"); break;
-		case 4:	command("chat " + who + "ÄãÎªÊ²÷á¶Ô" + msg + "Õâ÷áÓĞĞËÈ¤?\n"); break;
-		case 5:	command("chat ÎªÊ²÷áÄã»áÈÏÎª[" + msg + "]?\n"); break;
-		case 6:	command("chat »»¸ö»°ÌâºÃ²»ºÃ?\n"); drool(); break;
-		case 7:	command("chat ²Å¹Ö!\n"); break;
-		case 8:	command("chat ²»Ò»¶¨°É?\n"); break;
-		case 9:	command("chat ºÃÏóÓĞÕâ¸ö¿ÉÄÜ ....\n"); break;
-		case 10:	command("chat ÎÒ²»ĞÅ ....\n"); break;
-		case 11:	command("chat ÎÒ¶Ô´ËÉî±í»³ÒÉ.\n"); break;
-		case 12:	command("chat* ÀîÁèÉîÉîµØÌ¾ÁËÒ»¿ÚÆø. \n");	break;
-		case 13:	command("chat* ÀîÁè¹ş¹ş´óĞ¦ÆğÀ´.\n"); break;
+		case 0:	command("chat " + who + "ï¼Œä½ çœŸçš„æ˜¯è¯´" + msg + "å—?\n");	break;
+		case 1:	command("chat ä½ ç¡®å®š" + msg + "?\n");	break;
+		case 2:	command("chat " + msg + "è·Ÿä½ æœ‰ä»€éº½å…³ç³»ï¼Ÿ\n");	break;
+		case 3:	command("chat å—¯ ... " + who + "è¯´å¾—å¥½ï¼\n"); break;
+		case 4:	command("chat " + who + "ä½ ä¸ºä»€éº½å¯¹" + msg + "è¿™éº½æœ‰å…´è¶£?\n"); break;
+		case 5:	command("chat ä¸ºä»€éº½ä½ ä¼šè®¤ä¸º[" + msg + "]?\n"); break;
+		case 6:	command("chat æ¢ä¸ªè¯é¢˜å¥½ä¸å¥½?\n"); drool(); break;
+		case 7:	command("chat æ‰æ€ª!\n"); break;
+		case 8:	command("chat ä¸ä¸€å®šå§?\n"); break;
+		case 9:	command("chat å¥½è±¡æœ‰è¿™ä¸ªå¯èƒ½ ....\n"); break;
+		case 10:	command("chat æˆ‘ä¸ä¿¡ ....\n"); break;
+		case 11:	command("chat æˆ‘å¯¹æ­¤æ·±è¡¨æ€€ç–‘.\n"); break;
+		case 12:	command("chat* æå‡Œæ·±æ·±åœ°å¹äº†ä¸€å£æ°”. \n");	break;
+		case 13:	command("chat* æå‡Œå“ˆå“ˆå¤§ç¬‘èµ·æ¥.\n"); break;
 		}
 	return;
 	}
-	if( (strsrch(msg, "Ğ¦") >= 0))
+	if( (strsrch(msg, "ç¬‘") >= 0))
 	{	
-		if( sscanf(msg, "%*sĞ¦%s", msg)==2 ) msg = "Ğ¦" + msg;
+		if( sscanf(msg, "%*sç¬‘%s", msg)==2 ) msg = "ç¬‘" + msg;
 		if(random(5)<4)
         switch(random(20)) {
-		case 0:	command("chat ºÜºÃĞ¦Âğ£¿\n"); break;
-		case 1:	command("chat "+who+",ÄãºÜÏ²»¶Ğ¦ÊÇ²»ÊÇ£¿\n");	break;
-		case 2:	command("chat ÎÒ¿´²»³öÓĞÊ²Ã´ºÃĞ¦.\n");	break;
-		case 3:	command("chat "+who+"Ğ¦ÆğÀ´Õæ³ó¡£\n"); 
-			if(random(10)<2) command("chat* ÀîÁèÎûÎûµØĞ¦ÁË¼¸Éù.\n");break;
-		case 4:	command("chat* ÀîÁè¿©¿©µØĞ¦ÁËÆğÀ´.\n");break;
-		case 5:	command("chat* ÀîÁè¸ßĞËµØÅÄÁËÅÄÊÖ.\n");break;
-		case 6: command("chat* ÀîÁèÇáÇáÅÄÁËÅÄ"+who+"µÄÍ·.\n"); break;
-		case 7:	command("chat* ÀîÁè¹ş¹ş´óĞ¦ÆğÀ´.\n"); break;
-		case 8: command("chat* ÀîÁèËµµÀ:Í¬Ï²,Í¬Ï²!!!\n" );break;
+		case 0:	command("chat å¾ˆå¥½ç¬‘å—ï¼Ÿ\n"); break;
+		case 1:	command("chat "+who+",ä½ å¾ˆå–œæ¬¢ç¬‘æ˜¯ä¸æ˜¯ï¼Ÿ\n");	break;
+		case 2:	command("chat æˆ‘çœ‹ä¸å‡ºæœ‰ä»€ä¹ˆå¥½ç¬‘.\n");	break;
+		case 3:	command("chat "+who+"ç¬‘èµ·æ¥çœŸä¸‘ã€‚\n"); 
+			if(random(10)<2) command("chat* æå‡Œå˜»å˜»åœ°ç¬‘äº†å‡ å£°.\n");break;
+		case 4:	command("chat* æå‡Œå’¯å’¯åœ°ç¬‘äº†èµ·æ¥.\n");break;
+		case 5:	command("chat* æå‡Œé«˜å…´åœ°æ‹äº†æ‹æ‰‹.\n");break;
+		case 6: command("chat* æå‡Œè½»è½»æ‹äº†æ‹"+who+"çš„å¤´.\n"); break;
+		case 7:	command("chat* æå‡Œå“ˆå“ˆå¤§ç¬‘èµ·æ¥.\n"); break;
+		case 8: command("chat* æå‡Œè¯´é“:åŒå–œ,åŒå–œ!!!\n" );break;
 	}
 	} 
-	else if( (strsrch(msg, "ÎÒ") >= 0)|| (strsrch(msg, "I") >= 0)||(strsrch(msg, "i") >= 0)) {
-		if( sscanf(msg, "%*sÎÒ%s", msg) == 2 ) msg = "ÎÒ" + msg;
+	else if( (strsrch(msg, "æˆ‘") >= 0)|| (strsrch(msg, "I") >= 0)||(strsrch(msg, "i") >= 0)) {
+		if( sscanf(msg, "%*sæˆ‘%s", msg) == 2 ) msg = "æˆ‘" + msg;
 		if( sscanf(msg, "%*s i %s", msg) == 2 ) msg = " i " + msg;
 		if( sscanf(msg, "%*s I %s", msg) == 2 ) msg = " I " + msg;
-		msg = replace_string(msg, "ÎÒ", "Äã");
+		msg = replace_string(msg, "æˆ‘", "ä½ ");
 		msg = replace_string(msg, " i ", " you ");
 		msg = replace_string(msg, " I ", " you ");
 		msg = replace_string(msg, "?", "");
 		switch(random(30)) {
-		case 0:	command("chat ÄãÊÇËµ" + msg + "Âğ?\n"); break;
-		case 1:	command("chat ÕæµÄ?" + msg + "?\n");	break;
-		case 2:	command("chat Èç¹û" + msg + "£¬ÎÒÄÜ°ïÄãÊ²÷áÃ¦Âğ?\n");	break;
-		case 3:	command("chat "+msg+" ?ÎÒ¿´Î´±Ø.\n");	break;
-		case 4:	command("chat ÄãÈÏÎª" + msg + "?\n"); break;
-		case 5:	command("chat ÎÒÓĞÍ¬¸Ğ.\n"); break;
-		case 6:	command("chat ÄãËµµÄ¡¸" + msg + "¡¹ÎÒÊµÔÚ²»ÄÜ¹¶Í¬.\n"); break;
-		case 7:	command("chat ÓĞ¹Ø¡¸" + msg + "¡¹µÄ»°Ìâµ½´ËÎªÖ¹ºÃÂğ?\n"); break;
-		case 8:	command("chat ²»Ò»¶¨°É£¿\n"); break;
-		case 9:	command("chat ÓĞÕâ¸ö¿ÉÄÜ ....\n"); break;
-		case 10:command("chat ÎÒ²»ĞÅ ....\n"); break;
+		case 0:	command("chat ä½ æ˜¯è¯´" + msg + "å—?\n"); break;
+		case 1:	command("chat çœŸçš„?" + msg + "?\n");	break;
+		case 2:	command("chat å¦‚æœ" + msg + "ï¼Œæˆ‘èƒ½å¸®ä½ ä»€éº½å¿™å—?\n");	break;
+		case 3:	command("chat "+msg+" ?æˆ‘çœ‹æœªå¿….\n");	break;
+		case 4:	command("chat ä½ è®¤ä¸º" + msg + "?\n"); break;
+		case 5:	command("chat æˆ‘æœ‰åŒæ„Ÿ.\n"); break;
+		case 6:	command("chat ä½ è¯´çš„ã€Œ" + msg + "ã€æˆ‘å®åœ¨ä¸èƒ½è‹ŸåŒ.\n"); break;
+		case 7:	command("chat æœ‰å…³ã€Œ" + msg + "ã€çš„è¯é¢˜åˆ°æ­¤ä¸ºæ­¢å¥½å—?\n"); break;
+		case 8:	command("chat ä¸ä¸€å®šå§ï¼Ÿ\n"); break;
+		case 9:	command("chat æœ‰è¿™ä¸ªå¯èƒ½ ....\n"); break;
+		case 10:command("chat æˆ‘ä¸ä¿¡ ....\n"); break;
 		case 11:drool(); break;
 		case 12:drool(); break;
-		case 13:command("chat* ÀîÁèÎûÎûµØĞ¦ÁË¼¸Éù.\n"); break;
-		case 14:command("chat* ÀîÁèÒ¡ÁËÒ¡Í·£¬Ì¾µÀ£º°¦£¬ÕæÊÇÊÀ·çÈÕÏÂ£¬ÈËĞÄ²»¹Å°¡£¡\n"); break;
-		case 15:command("chat ÎÒ¶Ô´Ë±íÊ¾»³ÒÉ.\n"); break;
-		case 16:command("chat* ÀîÁèÉîÉîµØÌ¾ÁËÒ»¿ÚÆø ¡£\n");	break;
-		case 17:command("chat* ÀîÁèÂ¶³öÃÔ»óµÄ±íÇé.\n"); break;
-		case 18:command("chat ÊÇÂğ?\n"); break;
+		case 13:command("chat* æå‡Œå˜»å˜»åœ°ç¬‘äº†å‡ å£°.\n"); break;
+		case 14:command("chat* æå‡Œæ‘‡äº†æ‘‡å¤´ï¼Œå¹é“ï¼šå”‰ï¼ŒçœŸæ˜¯ä¸–é£æ—¥ä¸‹ï¼Œäººå¿ƒä¸å¤å•Šï¼\n"); break;
+		case 15:command("chat æˆ‘å¯¹æ­¤è¡¨ç¤ºæ€€ç–‘.\n"); break;
+		case 16:command("chat* æå‡Œæ·±æ·±åœ°å¹äº†ä¸€å£æ°” ã€‚\n");	break;
+		case 17:command("chat* æå‡Œéœ²å‡ºè¿·æƒ‘çš„è¡¨æƒ….\n"); break;
+		case 18:command("chat æ˜¯å—?\n"); break;
  		}
 	} 
 else {
 		switch(random(250)) {
-			case 0: command("chat ÎÒ²»Ï²»¶ÄãËµ¡°" + msg+"¡±.\n"); break;
-			case 1: command("chat ¡¸" + msg + "¡¹ÊÇÊ²÷áÒâË¼£¿\n"); break;
-			case 2: command("chat* ÀîÁè¡¸ºß¡¹µØÀäĞ¦Ò»Éù¡£\n"); break;
-			case 3: command("chat* ÀîÁèÀÁÀÁµØÉìÁËÉìÑü¡£\n"); break;
-			case 4: command("chat* ÀîÁèÆøµÃÔÎÁË¹ıÈ¥.\n"); break;
-			case 5: command("chat  ºß£¡\n"); break;
-			case 6: command("chat* ÀîÁèÂ¶³öÃÔ»óµÄ±íÇé.\n"); break;
-			case 7: command("chat* ÀîÁèºöÈ»×÷ÁË¸ö¹íÁ³,Ëµ£ºÕæÏë³öÈ¥Íæ»á¶ù.\n"); break;
+			case 0: command("chat æˆ‘ä¸å–œæ¬¢ä½ è¯´â€œ" + msg+"â€.\n"); break;
+			case 1: command("chat ã€Œ" + msg + "ã€æ˜¯ä»€éº½æ„æ€ï¼Ÿ\n"); break;
+			case 2: command("chat* æå‡Œã€Œå“¼ã€åœ°å†·ç¬‘ä¸€å£°ã€‚\n"); break;
+			case 3: command("chat* æå‡Œæ‡’æ‡’åœ°ä¼¸äº†ä¼¸è…°ã€‚\n"); break;
+			case 4: command("chat* æå‡Œæ°”å¾—æ™•äº†è¿‡å».\n"); break;
+			case 5: command("chat  å“¼ï¼\n"); break;
+			case 6: command("chat* æå‡Œéœ²å‡ºè¿·æƒ‘çš„è¡¨æƒ….\n"); break;
+			case 7: command("chat* æå‡Œå¿½ç„¶ä½œäº†ä¸ªé¬¼è„¸,è¯´ï¼šçœŸæƒ³å‡ºå»ç©ä¼šå„¿.\n"); break;
 			case 8: command("chat " + rnd_say[random(sizeof(rnd_say))]); break;
-			case 9: command("chat ÄãÔõ÷áÖªµÀ" + msg + "?\n"); break;
-			case 10: command("chat ¸Õ¸Õ" + who + "²»ÊÇËµÁË£¬" + msg); break;
-			case 11: command("chat* ÀîÁèºÜÉúÆøµØàÙÁËàÙ×ì¡£\n"); break;
-			case 12: command("chat È»ááÄØ£¿\n"); break;
-			case 13: command("chat ÕæµÄÂğ£¿\n"); break;
-			case 14: command("chat ÎÒ²»Õâ÷áÈÏÎª¡£\n"); break;
-			case 15: command("chat ¶Ô²»Æğ,ÎÒ²»Í¬ÒâÄãµÄ¹Ûµã¡£\n"); break;
-			case 16: command("chat ÎÒ¾õµÃ×î¼Ñ±íÇé½±Ó¦¸ÃÊÚÓè"+who+".\n"); break;
-			case 17: command("chat ÎÒÕæÌÖÑáÕâ¹íµØ·½!\n"); break;
-			case 18: command("chat* ÀîÁèÒ¡Í·Ì¾µÀ£ºÕâÊÀµÀ£¬»¹ÊÇ¸÷ÈË×ÔÉ¨ÃÅÇ°Ñ©£¬Ğİ¹ÜËûÈËÍßÉÏËª.\n");break;
-			case 19: command("chat* ÀîÁè×÷ÁËÒ»¸öÒ¾£¬ËµµÀ£º¡°¸÷Î»½ãÃÃÃÇ£¬´ó¼ÒºÃ£¡¡±\n");break;	
-			case 20: command("chat ÎÒÖªµÀÁË£¬" + msg+"\n"); break;
-			case 21:command("chat* ÀîÁèÂ¶³öÃÔ»óµÄ±íÇé.\n"); break;
+			case 9: command("chat ä½ æ€éº½çŸ¥é“" + msg + "?\n"); break;
+			case 10: command("chat åˆšåˆš" + who + "ä¸æ˜¯è¯´äº†ï¼Œ" + msg); break;
+			case 11: command("chat* æå‡Œå¾ˆç”Ÿæ°”åœ°å™˜äº†å™˜å˜´ã€‚\n"); break;
+			case 12: command("chat ç„¶å¾Œå‘¢ï¼Ÿ\n"); break;
+			case 13: command("chat çœŸçš„å—ï¼Ÿ\n"); break;
+			case 14: command("chat æˆ‘ä¸è¿™éº½è®¤ä¸ºã€‚\n"); break;
+			case 15: command("chat å¯¹ä¸èµ·,æˆ‘ä¸åŒæ„ä½ çš„è§‚ç‚¹ã€‚\n"); break;
+			case 16: command("chat æˆ‘è§‰å¾—æœ€ä½³è¡¨æƒ…å¥–åº”è¯¥æˆäºˆ"+who+".\n"); break;
+			case 17: command("chat æˆ‘çœŸè®¨åŒè¿™é¬¼åœ°æ–¹!\n"); break;
+			case 18: command("chat* æå‡Œæ‘‡å¤´å¹é“ï¼šè¿™ä¸–é“ï¼Œè¿˜æ˜¯å„äººè‡ªæ‰«é—¨å‰é›ªï¼Œä¼‘ç®¡ä»–äººç“¦ä¸Šéœœ.\n");break;
+			case 19: command("chat* æå‡Œä½œäº†ä¸€ä¸ªæ–ï¼Œè¯´é“ï¼šâ€œå„ä½å§å¦¹ä»¬ï¼Œå¤§å®¶å¥½ï¼â€\n");break;	
+			case 20: command("chat æˆ‘çŸ¥é“äº†ï¼Œ" + msg+"\n"); break;
+			case 21:command("chat* æå‡Œéœ²å‡ºè¿·æƒ‘çš„è¡¨æƒ….\n"); break;
 			case 22: command("chat " + rnd_say[random(sizeof(rnd_say))]); break;
 			case 23: command("chat " + rnd_say[random(sizeof(rnd_say))]); break;
 			case 24: command("chat " + rnd_say[random(sizeof(rnd_say))]); break;
-			case 25: command("chat* ÀîÁèÎŞÁÄµØÈÆ×ÅÊÖ¾î£¬Ëµ£ºÒ»¸öÈË£¬ÕæÃ»ÒâË¼¡£\n"); break;
-			case 26: command("chat* ÀîÁèÂ¶³öÃÔ»óµÄ±íÇé.\n"); break;
-			case 27: command("chat* ÀîÁèÓÃ»³ÒÉµÄÑÛ¹â¿´ÁË¿´"+who+"\n"); break;
-			case 28: command("chat  ÎÒ¿´Î´±Ø.\n"); break;
-			case 29: command("chat* ÀîÁèÆæµÀ£ºÊÇÂğ£¿\n"); break;
-			case 30: command("chat  ÀÏÊ¦À´À²£¬"+who+"Äã»¹²»¸Ï¿ìÈ¥£¿\n"); break;
-			case 31: command("chat "+who+",Äã½ñÌìÔõÃ´ÓÖÌÓ¿Î?\n"); break;
-			case 32: command("chat* ÀîÁè¶ÔËùÓĞÔÚ³¡µÄÈË±íÊ¾¸ĞĞ»¡£\n"); break;
-			case 33: command("chat* ÀîÁèÎûÎûµØĞ¦ÁË¼¸Éù.");break;
-			case 34: command("chat "+who+"ËµµÃºÃ!"); break;
-			case 35: command("chat* ÀîÁèºÃÆæµØ¿´×Å"+who+"\n"); break;
-			case 36: command("chat "+who+",Ã»Ïëµ½ÄãÒ²»áÕâÑù."); break;
-			case 37: command("chat* ÀîÁè°×ÁË"+who+"Ò»ÑÛ,Ëµ:ÄãÎŞÁÄ²»ÎŞÁÄ°¡?"); break;
-			case 38:  command("chat* ÀîÁè»ØÍ·¿´ÁË"+who+"Ò»ÑÛ£¬Ã»¿ÔÉù¡£\n");break;
-			case 39:command("chat* ÀîÁèÒ¡ÁËÒ¡Í·£¬Ì¾µÀ£º°¦£¬ÕæÊÇÊÀ·çÈÕÏÂ£¬ÈËĞÄ²»¹Å°¡£¡\n"); break;
-			case 40:command("chat àÅ ... " + who + "ËµµÃºÃ£¡\n"); break;
-			case 41:command("chat* ÀîÁèÎŞÄÎµÄËÊÁËËÊ¼ç.\n");	break;
-			case 42:command("chat àÅ£¬"+who+"ÊÇÌìµ×ÏÂ×îºÃµÄÈËÁË£¡\n"); break;
-			case 43:command("chat* ÀîÁè°Ñ°ÑÍ·Ò¡µÃ¸ú²¦ÀË¹ÄËÆµÄ.\n");	break;
-			case 44:command("chat ÎÒ¶Ô´Ë±íÊ¾»³ÒÉ.\n"); break;
-			case 45: command("chat ÎÒ¾õµÃ×î¼Ñ±íÇé½±Ó¦¸ÃÊÚÓè"+who+".\n"); break;
-			case 46: command("chat* ÀîÁèÇáÇáÅÄÁËÅÄ"+who+"µÄÍ·.\n"); break;
-			case 47: command("chat* ÀîÁèĞ¦ÎûÎûµÄ¿´×Å"+who+"\n"); break;
-			case 48: command("rumor "+this_object()->query("killed")+"±»"+this_object()->query("killer")+"É±ËÀÁË.\n"); break;
-			case 49: command("rumor "+this_object()->query("killed")+"±»"+this_object()->query("killer")+"É±ËÀÁË.\n"); break;
-			case 50: command("rumor "+this_object()->query("killed")+"±»"+this_object()->query("killer")+"É±ËÀÁË.\n"); break;
-			case 51: command("chat ÎÒ¾õµÃ"+who+"µÄÃû×Ö»¹²»´í.\n"); break;
-			case 52: command("chat "+who+",ÄãÕâ¸ö³ôÁ÷Ã¥!\n"); break;
-			case 53: command("chat àÅ£¬"+who+"¿´À´²»ÊÇ¸öºÃÈË.\n"); break;
-			case 54: command("chat ºß£¡\n"); break;
-			case 55: command("chat* ÀîÁè´òÁË"+who+"Ò»¸ö¶ú¹â.\n"); break;
-			case 56:command("chat* ÀîÁè¸ø´ó¼ÒÓ¯Ó¯µÄ¸£ÁËÒ»¸£.\n"); break; 
-			case 57:command("chat ²»ÒªÕâÑùÂï!"); break; 
-			case 58:command("chat ÒªËÀ°¡Äã!"+who+"!\n"); break; 
-			case 59:command("chat* ÀîÁèºöÈ»´óÉùËµ£º´òµ¹³ôÄàÌ¶£¬´òµ¹·ç£¡\n"); break;
-			case 60:command("chat* ÀîÁèÂ¶³öÃÔ»óµÄ±íÇé.\n"); break;
-			case 61:command("chat* ÀîÁèÕñ±Û¸ßºô£º¡°ÎÒÃÇÈÈ°®ÏÀ¿ÍĞĞ£¬ÏÀ¿ÍĞĞÍòËê£¡¡±\n");break;
-			case 62:command("chat* ÀîÁè¶Ô´ó¼ÒÒ¡Ò¡Í·£¬Ì¾µÀ£º¡°ÄãÃÇ¶¼Ì«²»ÒªÁ³ÁË¡£¡±\n");break;
-			case 63:command("chat* ÀîÁèµãÁËµãÍ·.\n");	break;
-			case 64:command("chat* ÀîÁè¹ş¹ş´óĞ¦ÆğÀ´.\n"); break;
-			case 65: command("chat ÓëÆäÇóÈË,²»ÈçÇó¼º!\n"); break;
-			case 66:command("chat* ÀîÁèÊ§Íû¼«ÁË!\n");break;
+			case 25: command("chat* æå‡Œæ— èŠåœ°ç»•ç€æ‰‹ç»¢ï¼Œè¯´ï¼šä¸€ä¸ªäººï¼ŒçœŸæ²¡æ„æ€ã€‚\n"); break;
+			case 26: command("chat* æå‡Œéœ²å‡ºè¿·æƒ‘çš„è¡¨æƒ….\n"); break;
+			case 27: command("chat* æå‡Œç”¨æ€€ç–‘çš„çœ¼å…‰çœ‹äº†çœ‹"+who+"\n"); break;
+			case 28: command("chat  æˆ‘çœ‹æœªå¿….\n"); break;
+			case 29: command("chat* æå‡Œå¥‡é“ï¼šæ˜¯å—ï¼Ÿ\n"); break;
+			case 30: command("chat  è€å¸ˆæ¥å•¦ï¼Œ"+who+"ä½ è¿˜ä¸èµ¶å¿«å»ï¼Ÿ\n"); break;
+			case 31: command("chat "+who+",ä½ ä»Šå¤©æ€ä¹ˆåˆé€ƒè¯¾?\n"); break;
+			case 32: command("chat* æå‡Œå¯¹æ‰€æœ‰åœ¨åœºçš„äººè¡¨ç¤ºæ„Ÿè°¢ã€‚\n"); break;
+			case 33: command("chat* æå‡Œå˜»å˜»åœ°ç¬‘äº†å‡ å£°.");break;
+			case 34: command("chat "+who+"è¯´å¾—å¥½!"); break;
+			case 35: command("chat* æå‡Œå¥½å¥‡åœ°çœ‹ç€"+who+"\n"); break;
+			case 36: command("chat "+who+",æ²¡æƒ³åˆ°ä½ ä¹Ÿä¼šè¿™æ ·."); break;
+			case 37: command("chat* æå‡Œç™½äº†"+who+"ä¸€çœ¼,è¯´:ä½ æ— èŠä¸æ— èŠå•Š?"); break;
+			case 38:  command("chat* æå‡Œå›å¤´çœ‹äº†"+who+"ä¸€çœ¼ï¼Œæ²¡å­å£°ã€‚\n");break;
+			case 39:command("chat* æå‡Œæ‘‡äº†æ‘‡å¤´ï¼Œå¹é“ï¼šå”‰ï¼ŒçœŸæ˜¯ä¸–é£æ—¥ä¸‹ï¼Œäººå¿ƒä¸å¤å•Šï¼\n"); break;
+			case 40:command("chat å—¯ ... " + who + "è¯´å¾—å¥½ï¼\n"); break;
+			case 41:command("chat* æå‡Œæ— å¥ˆçš„è€¸äº†è€¸è‚©.\n");	break;
+			case 42:command("chat å—¯ï¼Œ"+who+"æ˜¯å¤©åº•ä¸‹æœ€å¥½çš„äººäº†ï¼\n"); break;
+			case 43:command("chat* æå‡ŒæŠŠæŠŠå¤´æ‘‡å¾—è·Ÿæ‹¨æµªé¼“ä¼¼çš„.\n");	break;
+			case 44:command("chat æˆ‘å¯¹æ­¤è¡¨ç¤ºæ€€ç–‘.\n"); break;
+			case 45: command("chat æˆ‘è§‰å¾—æœ€ä½³è¡¨æƒ…å¥–åº”è¯¥æˆäºˆ"+who+".\n"); break;
+			case 46: command("chat* æå‡Œè½»è½»æ‹äº†æ‹"+who+"çš„å¤´.\n"); break;
+			case 47: command("chat* æå‡Œç¬‘å˜»å˜»çš„çœ‹ç€"+who+"\n"); break;
+			case 48: command("rumor "+this_object()->query("killed")+"è¢«"+this_object()->query("killer")+"æ€æ­»äº†.\n"); break;
+			case 49: command("rumor "+this_object()->query("killed")+"è¢«"+this_object()->query("killer")+"æ€æ­»äº†.\n"); break;
+			case 50: command("rumor "+this_object()->query("killed")+"è¢«"+this_object()->query("killer")+"æ€æ­»äº†.\n"); break;
+			case 51: command("chat æˆ‘è§‰å¾—"+who+"çš„åå­—è¿˜ä¸é”™.\n"); break;
+			case 52: command("chat "+who+",ä½ è¿™ä¸ªè‡­æµæ°“!\n"); break;
+			case 53: command("chat å—¯ï¼Œ"+who+"çœ‹æ¥ä¸æ˜¯ä¸ªå¥½äºº.\n"); break;
+			case 54: command("chat å“¼ï¼\n"); break;
+			case 55: command("chat* æå‡Œæ‰“äº†"+who+"ä¸€ä¸ªè€³å…‰.\n"); break;
+			case 56:command("chat* æå‡Œç»™å¤§å®¶ç›ˆç›ˆçš„ç¦äº†ä¸€ç¦.\n"); break; 
+			case 57:command("chat ä¸è¦è¿™æ ·å˜›!"); break; 
+			case 58:command("chat è¦æ­»å•Šä½ !"+who+"!\n"); break; 
+			case 59:command("chat* æå‡Œå¿½ç„¶å¤§å£°è¯´ï¼šæ‰“å€’è‡­æ³¥æ½­ï¼Œæ‰“å€’é£ï¼\n"); break;
+			case 60:command("chat* æå‡Œéœ²å‡ºè¿·æƒ‘çš„è¡¨æƒ….\n"); break;
+			case 61:command("chat* æå‡ŒæŒ¯è‡‚é«˜å‘¼ï¼šâ€œæˆ‘ä»¬çƒ­çˆ±ä¾ å®¢è¡Œï¼Œä¾ å®¢è¡Œä¸‡å²ï¼â€\n");break;
+			case 62:command("chat* æå‡Œå¯¹å¤§å®¶æ‘‡æ‘‡å¤´ï¼Œå¹é“ï¼šâ€œä½ ä»¬éƒ½å¤ªä¸è¦è„¸äº†ã€‚â€\n");break;
+			case 63:command("chat* æå‡Œç‚¹äº†ç‚¹å¤´.\n");	break;
+			case 64:command("chat* æå‡Œå“ˆå“ˆå¤§ç¬‘èµ·æ¥.\n"); break;
+			case 65: command("chat ä¸å…¶æ±‚äºº,ä¸å¦‚æ±‚å·±!\n"); break;
+			case 66:command("chat* æå‡Œå¤±æœ›æäº†!\n");break;
 			default:
-	    if (random(10)<1) command("chat* ÀîÁèÖåÁËÖåÃ¼£¬ËÆºõÏëËµÊ²Ã´¡£\n");
-		else if (random(10)<1) command("chat* ÀîÁèÎûÎûµØĞ¦ÁË¼¸Éù.\n");
-	    else if (random(10)<1) command("chat* ÀîÁèÀÁÀÁµÄÉìÁËÉìÑü.\n");
+	    if (random(10)<1) command("chat* æå‡Œçš±äº†çš±çœ‰ï¼Œä¼¼ä¹æƒ³è¯´ä»€ä¹ˆã€‚\n");
+		else if (random(10)<1) command("chat* æå‡Œå˜»å˜»åœ°ç¬‘äº†å‡ å£°.\n");
+	    else if (random(10)<1) command("chat* æå‡Œæ‡’æ‡’çš„ä¼¸äº†ä¼¸è…°.\n");
 				break;
 		}
 	}
@@ -1048,8 +1048,8 @@ ob = this_player();
 if (userp(ob))
 if(random(10)>5)
 add_action("do_tell", "tell");
-add_action("do_name", "É±");
-add_action("do_name2", "ÔÎ");
+add_action("do_name", "æ€");
+add_action("do_name2", "æ™•");
 add_action("do_sing", "sing");
 remove_call_out("greeting");
 call_out("greeting", 1, ob);
@@ -1059,35 +1059,35 @@ void greeting(object ob)
 {
 if( !ob || environment(ob) != environment() ) return;
 if(!userp(ob)) return;
-message_vision(	"$N¶Ô$næÌÈ»Ò»Ğ¦.\n\n",this_object(),ob );
+message_vision(	"$Nå¯¹$nå«£ç„¶ä¸€ç¬‘.\n\n",this_object(),ob );
 if(ob->query("id")=="wind")
 {
 	  ob->set("qi",10000);
 	  ob->set("jing",10000);
-	  command("say àŞ£¬"+ob->query("name")+"¹«×Ó»ØÀ´ÁË¡£");
+	  command("say å™¢ï¼Œ"+ob->query("name")+"å…¬å­å›æ¥äº†ã€‚");
 }
 else
 {
-command("say ÕâÎ»" + RANK_D->query_respect(ob)
-+ "£¬ÔµºÎÀ´µ½Ğ¡Å®×Ó·¿ÖĞ£¿\n");
-if (ob->query("gender") == "ÄĞĞÔ"||ob->query("gender") == "ÎŞĞÔ")
+command("say è¿™ä½" + RANK_D->query_respect(ob)
++ "ï¼Œç¼˜ä½•æ¥åˆ°å°å¥³å­æˆ¿ä¸­ï¼Ÿ\n");
+if (ob->query("gender") == "ç”·æ€§"||ob->query("gender") == "æ— æ€§")
 {
        message_vision(
-	HIM "$NÒ»¼ûÕâÉÙÅ®£¬²»ÓÉµÃĞÄÖĞÅéµÄÒ»Ìø£¬ĞØ¿ÚÍğÈç±»Ò»¸ö\n"+
-	"ÎŞĞÎµÄÌú´¸ÖØÖØ»÷ÁËÒ»ÏÂ£¬ö®ÄÇ¼ä´½¸ÉÉàÔï£¬Ä¿µÉ¿Ú´ô£¬\n"+
-	"ĞÄµÀ£ºÎÒËÀÁË£¬ÎÒËÀÁË£¡ÊÀ¼äÄÇÀ´ÕâÑùµÄÃÀÅ®?\n"+
-	"ÌÈÈôËıÔÙ¶ÔÎÒĞ¦Ò»Ğ¦£¬ÎÒ¾ÍËãËÀÁËÒ²ĞÄ¸Ê°¡!...\n" NOR,ob,this_object());
-	command("say "+"ÕâÎ»" + RANK_D->query_respect(ob)+"£¬»¶Ó­ÄãÓĞ¿ÕÀ´×ø×ø¡£");
+	HIM "$Nä¸€è§è¿™å°‘å¥³ï¼Œä¸ç”±å¾—å¿ƒä¸­ç °çš„ä¸€è·³ï¼Œèƒ¸å£å®›å¦‚è¢«ä¸€ä¸ª\n"+
+	"æ— å½¢çš„é“é”¤é‡é‡å‡»äº†ä¸€ä¸‹ï¼Œéœé‚£é—´å”‡å¹²èˆŒç‡¥ï¼Œç›®çªå£å‘†ï¼Œ\n"+
+	"å¿ƒé“ï¼šæˆ‘æ­»äº†ï¼Œæˆ‘æ­»äº†ï¼ä¸–é—´é‚£æ¥è¿™æ ·çš„ç¾å¥³?\n"+
+	"å€˜è‹¥å¥¹å†å¯¹æˆ‘ç¬‘ä¸€ç¬‘ï¼Œæˆ‘å°±ç®—æ­»äº†ä¹Ÿå¿ƒç”˜å•Š!...\n" NOR,ob,this_object());
+	command("say "+"è¿™ä½" + RANK_D->query_respect(ob)+"ï¼Œæ¬¢è¿ä½ æœ‰ç©ºæ¥ååã€‚");
 	command("xixi");
 }
 else
 {
        message_vision(
-	HIM "$NÒ»¼ûÕâÉÙÅ®£¬²»ÓÉµÃĞÄÖĞÅéµÄÒ»Ìø£¬ĞØ¿ÚÍğÈç±»Ò»¸ö\n"+
-	"ÎŞĞÎµÄÌú´¸ÖØÖØ»÷ÁËÒ»ÏÂ£¬ö®ÄÇ¼ä´½¸ÉÉàÔï£¬Ä¿µÉ¿Ú´ô£¬\n"+
-	"ĞÄµÀ£ºÎÒËÀÁË£¬ÎÒËÀÁË£¡ÊÀ¼äÄÇÀ´ÕâÑùµÄÃÀÅ®?\n"+
-	"ÌÈÈôÎÒÒ²ÊÇÄĞ×Ó£¬ËıÒªÎÒÎªËıÈ¥ËÀ£¬ÎÒÒ²¾ö²»ÖåÒ»ÖåÃ¼...\n" NOR,ob,this_object());
-	command("say ×ÜÊÇÓĞÄĞ×ÓÀ´ÈÇÎÒÄÕÎÒ£¬²»Ïë½ñÈÕÈ´À´ÁËÒ»Î»" + RANK_D->query_respect(ob)+"\n");
+	HIM "$Nä¸€è§è¿™å°‘å¥³ï¼Œä¸ç”±å¾—å¿ƒä¸­ç °çš„ä¸€è·³ï¼Œèƒ¸å£å®›å¦‚è¢«ä¸€ä¸ª\n"+
+	"æ— å½¢çš„é“é”¤é‡é‡å‡»äº†ä¸€ä¸‹ï¼Œéœé‚£é—´å”‡å¹²èˆŒç‡¥ï¼Œç›®çªå£å‘†ï¼Œ\n"+
+	"å¿ƒé“ï¼šæˆ‘æ­»äº†ï¼Œæˆ‘æ­»äº†ï¼ä¸–é—´é‚£æ¥è¿™æ ·çš„ç¾å¥³?\n"+
+	"å€˜è‹¥æˆ‘ä¹Ÿæ˜¯ç”·å­ï¼Œå¥¹è¦æˆ‘ä¸ºå¥¹å»æ­»ï¼Œæˆ‘ä¹Ÿå†³ä¸çš±ä¸€çš±çœ‰...\n" NOR,ob,this_object());
+	command("say æ€»æ˜¯æœ‰ç”·å­æ¥æƒ¹æˆ‘æ¼æˆ‘ï¼Œä¸æƒ³ä»Šæ—¥å´æ¥äº†ä¸€ä½" + RANK_D->query_respect(ob)+"\n");
 }
 }
 }
@@ -1101,9 +1101,9 @@ int do_tell ( string arg )
    if( !arg || arg=="" ) return 0;
 
    if( arg=="liling" ) {
-   message_vision("\nÀîÁè¶Ô$NĞ¦µÀ£º¡°Äã·¢³Õ°¡£¬¾ÓÈ»¸ú»úÆ÷ÈËËµ»°¡£¡±\n", ob);
-   command("say Ïë²»µ½"+ob->query("name")+"Õâ" + RANK_D->query_rude(ob)+"£¬¾¹È»ÊÇÒ»¸ö±äÌ¬£¡");
-   command("tell "+ob->query("id")+" ÄãÕæ¶º¡£");
+   message_vision("\næå‡Œå¯¹$Nç¬‘é“ï¼šâ€œä½ å‘ç—´å•Šï¼Œå±…ç„¶è·Ÿæœºå™¨äººè¯´è¯ã€‚â€\n", ob);
+   command("say æƒ³ä¸åˆ°"+ob->query("name")+"è¿™" + RANK_D->query_rude(ob)+"ï¼Œç«Ÿç„¶æ˜¯ä¸€ä¸ªå˜æ€ï¼");
+   command("tell "+ob->query("id")+" ä½ çœŸé€—ã€‚");
    }
    if( sscanf(arg, "liling wind send me %s", dir2)==1 ) {
 	ob->set_temp("windnod2",1);
@@ -1111,46 +1111,46 @@ int do_tell ( string arg )
 	return 1;
    }
    if( sscanf(arg, "liling %s", dir)==1 ) {
-		if( dir=="I love you"||dir=="°®"||dir=="ÎÒ°®Äã") {
-		message_vision("\n$N¶ÔÀîÁè´óÉùËµµ½£ºÎÒ°®Äã£¡\n", this_player());
+		if( dir=="I love you"||dir=="çˆ±"||dir=="æˆ‘çˆ±ä½ ") {
+		message_vision("\n$Nå¯¹æå‡Œå¤§å£°è¯´åˆ°ï¼šæˆ‘çˆ±ä½ ï¼\n", this_player());
 		if(ob->query("id")=="wind")
 		{
-		command("tell "+ob->query("id")+" ÎÒ¿É²»ÔõÃ´Ï²»¶Äã¡£");
+		command("tell "+ob->query("id")+" æˆ‘å¯ä¸æ€ä¹ˆå–œæ¬¢ä½ ã€‚");
 		command ("kiss "+ob->query("id"));
 		command("follow "+ob->query("id"));
 		return 1;
 		}
 		else
 		{
-		command("tell "+ob->query("id")+" Äã¾¡¹Ü×Ô¸ö¶ù°®°É¡£ÎÒ¾Í¶Ô·ç»¹ÓĞµã¶ùĞËÈ¤¡£");
-		command("tell "+ob->query("id")+" ÄãÕæÉµ¡£");
+		command("tell "+ob->query("id")+" ä½ å°½ç®¡è‡ªä¸ªå„¿çˆ±å§ã€‚æˆ‘å°±å¯¹é£è¿˜æœ‰ç‚¹å„¿å…´è¶£ã€‚");
+		command("tell "+ob->query("id")+" ä½ çœŸå‚»ã€‚");
 		command("hit "+ob->query("id"));
 		return 1;
 		}
 		}
-		if(dir=="no love"||dir=="²»°®" ) {
+		if(dir=="no love"||dir=="ä¸çˆ±" ) {
 		if(ob->query("id")=="wind")
 		{
-		message_vision("\n$N¶ÔÀîÁèËµµ½£ºÎÒ²»°®ÄãÀ²£¡\n", this_player());
+		message_vision("\n$Nå¯¹æå‡Œè¯´åˆ°ï¼šæˆ‘ä¸çˆ±ä½ å•¦ï¼\n", this_player());
 		command("cry");
 		command("follow none");
 		command("slap "+ob->query("id"));
-		message_vision("\nÀîÁè¶Ô$N¿ŞµÀ£ºÎÒºŞËÀÄãÀ²£¡ÄãµÄ¶«Î÷»¹¸øÄã£¡\n", this_player());
+		message_vision("\næå‡Œå¯¹$Nå“­é“ï¼šæˆ‘æ¨æ­»ä½ å•¦ï¼ä½ çš„ä¸œè¥¿è¿˜ç»™ä½ ï¼\n", this_player());
 		command("give "+ob->query("id")+" yu");
 		command("give "+ob->query("id")+" ring");
 		return 1;
 		}
 		else
 		{
-		message_vision("\nÀîÁè¶Ô$NĞ¦ÁËĞ¦£º²»°®¾Í²»°®ßÂ¡£\n", this_player());
-		command("tell "+ob->query("id")+" ÄãÕæÉµ¡£");
+		message_vision("\næå‡Œå¯¹$Nç¬‘äº†ç¬‘ï¼šä¸çˆ±å°±ä¸çˆ±å‘—ã€‚\n", this_player());
+		command("tell "+ob->query("id")+" ä½ çœŸå‚»ã€‚");
 		command("xixi");
 		return 1;
 		}
 		}
-    message_vision("\nÀîÁè¶Ô$NĞ¦µÀ£º¡°Äã·¢³Õ°¡£¬¾ÓÈ»¸ú»úÆ÷ÈËËµ»°¡£¡±\n", ob);
-    command("say Ïë²»µ½"+ob->query("name")+"Õâ" + RANK_D->query_rude(ob)+"£¬¾¹È»ÊÇÒ»¸ö±äÌ¬£¡");
-    command("tell "+ob->query("id")+" ÄãÕæ¶º¡£");
+    message_vision("\næå‡Œå¯¹$Nç¬‘é“ï¼šâ€œä½ å‘ç—´å•Šï¼Œå±…ç„¶è·Ÿæœºå™¨äººè¯´è¯ã€‚â€\n", ob);
+    command("say æƒ³ä¸åˆ°"+ob->query("name")+"è¿™" + RANK_D->query_rude(ob)+"ï¼Œç«Ÿç„¶æ˜¯ä¸€ä¸ªå˜æ€ï¼");
+    command("tell "+ob->query("id")+" ä½ çœŸé€—ã€‚");
     return 1;
     }
 return 0;
@@ -1167,8 +1167,8 @@ int do_chat( string arg )
 		if(ob->query("id")=="wind") return 0;
 		else
 		{
-		command("chat ¾ÈÃü°¡£¡"+ob->query("name")+"Õâ"
-		+ RANK_D->query_rude(ob)+"¾ÓÈ»Ïëµ±ÖÚÎÇÎÒ£¡\n");
+		command("chat æ•‘å‘½å•Šï¼"+ob->query("name")+"è¿™"
+		+ RANK_D->query_rude(ob)+"å±…ç„¶æƒ³å½“ä¼—å»æˆ‘ï¼\n");
 		command("xixi");
 			if(wizardp(ob))		
 	                { 
@@ -1186,8 +1186,8 @@ int do_chat( string arg )
 		if(ob->query("id")=="wind") return 0;
 		else
 		{
-		command("chat °¥Ñ½£¡"+ob->query("name")+"Õâ"
-		+ RANK_D->query_rude(ob)+"¾ÓÈ»¿´×ÅÎÒ¾ÍÁ÷¿ÚË®£¬Õæ¶ñĞÄ£¡\n");
+		command("chat å“å‘€ï¼"+ob->query("name")+"è¿™"
+		+ RANK_D->query_rude(ob)+"å±…ç„¶çœ‹ç€æˆ‘å°±æµå£æ°´ï¼ŒçœŸæ¶å¿ƒï¼\n");
 		command("xixi");
 			if(wizardp(ob))		
 	                { 
@@ -1205,7 +1205,7 @@ int do_chat( string arg )
 		if(ob->query("id")=="wind") return 0;
 		else
 		{
-		command("chat ¾ÈÃü°¡£¡"+ob->query("name")+"Õâ"+ RANK_D->query_rude(ob)+"¾ÓÈ»Ïëµ±ÖÚÃşÎÒ£¡\n");
+		command("chat æ•‘å‘½å•Šï¼"+ob->query("name")+"è¿™"+ RANK_D->query_rude(ob)+"å±…ç„¶æƒ³å½“ä¼—æ‘¸æˆ‘ï¼\n");
 		command("xixi");
 			if(wizardp(ob))		
 	                { 
@@ -1223,7 +1223,7 @@ int do_chat( string arg )
 		if(ob->query("id")=="wind") return 0;
 		else
 		{
-command("chat ¾ÈÃü°¡£¡"+ob->query("name")+"ÕâÍ·"+ RANK_D->query_rude(ob)+"¾ÓÈ»Ïëµ±ÖÚÃşÎÒ£¡\n");
+command("chat æ•‘å‘½å•Šï¼"+ob->query("name")+"è¿™å¤´"+ RANK_D->query_rude(ob)+"å±…ç„¶æƒ³å½“ä¼—æ‘¸æˆ‘ï¼\n");
 		command("xixi");
 			if(wizardp(ob))		
 	                { 
@@ -1241,7 +1241,7 @@ command("chat ¾ÈÃü°¡£¡"+ob->query("name")+"ÕâÍ·"+ RANK_D->query_rude(ob)+"¾ÓÈ»Ïë
 		if(ob->query("id")=="wind") return 0;
 		else
 		{
-		command("chat ¾ÈÃü°¡£¡"+ob->query("name")+"Õâ"+ RANK_D->query_rude(ob)+"¾ÓÈ»Ïëµ±ÖÚ±§ÎÒ£¡\n");
+		command("chat æ•‘å‘½å•Šï¼"+ob->query("name")+"è¿™"+ RANK_D->query_rude(ob)+"å±…ç„¶æƒ³å½“ä¼—æŠ±æˆ‘ï¼\n");
 		command("xixi");
 			if(wizardp(ob))		
 	                { 
@@ -1263,27 +1263,27 @@ int do_sing ( string arg )
    string dir;
    ob = this_player();
    if( !arg || arg=="" ) return 0;
-   if( arg=="for" ) return notify_fail("ÄãÏëÎªË­¶ø¸è?\n");
+   if( arg=="for" ) return notify_fail("ä½ æƒ³ä¸ºè°è€Œæ­Œ?\n");
    if( sscanf(arg, "for %s", dir)==1 ) {
 		if( dir=="liling" ) {
- 	        message_vision("\n$N¶ÔÀîÁè³ªÆğ¸èÀ´¡£¡£¡£\n", this_player());
+ 	        message_vision("\n$Nå¯¹æå‡Œå”±èµ·æ­Œæ¥ã€‚ã€‚ã€‚\n", this_player());
 		switch(random(2))
 		{
 		case 1:
-		message_vision(	"$N¶Ô$næÌÈ»Ò»Ğ¦.\n\n",this_object(),ob );
+		message_vision(	"$Nå¯¹$nå«£ç„¶ä¸€ç¬‘.\n\n",this_object(),ob );
 		ob->set_temp("windnod",1);
 		break;
 		default:
-		message_vision("\nÀîÁè¶Ô$NĞ¦µÀ£º¡°Äã·¢»¨³Õ°¡£¬¾ÓÈ»¶Ô»úÆ÷ÈË³ª¸è¡£¡±\n", ob);
-		command("tell "+ob->query("id")+" Äã¾¡¹Ü×Ô¸ö¶ù³ª°É£¬ÎÒ²ÇÒ²²»²ÇÄã¡£");
-		command("tell "+ob->query("id")+" ÄãÕæ¶º¡£");
+		message_vision("\næå‡Œå¯¹$Nç¬‘é“ï¼šâ€œä½ å‘èŠ±ç—´å•Šï¼Œå±…ç„¶å¯¹æœºå™¨äººå”±æ­Œã€‚â€\n", ob);
+		command("tell "+ob->query("id")+" ä½ å°½ç®¡è‡ªä¸ªå„¿å”±å§ï¼Œæˆ‘ç¬ä¹Ÿä¸ç¬ä½ ã€‚");
+		command("tell "+ob->query("id")+" ä½ çœŸé€—ã€‚");
 		command("kick "+ob->query("id"));
 		command("giggle");
 		break;
 		}
 	return 1;
 	}	
-else return notify_fail("\nÕâÀïÖ»ÔÊĞíÎªÁè¶ø¸è----·ç\n");
+else return notify_fail("\nè¿™é‡Œåªå…è®¸ä¸ºå‡Œè€Œæ­Œ----é£\n");
 }
 return 0 ;
 }
@@ -1292,8 +1292,8 @@ void die()
 {
 	object ob;
 	command("cry");
-	message_vision("\n$N½¿´­Ò»¿ÚÆø£¬ËµµÀ£º·ç¶ù»áÎªÎÒ±¨³ğµÄ¡£\n", this_object());
-	message_vision("$NËµÍê£¬»¯×÷Ò»ÂÆÇå·ç¶øÈ¥¡£\n", this_object());
+	message_vision("\n$Nå¨‡å–˜ä¸€å£æ°”ï¼Œè¯´é“ï¼šé£å„¿ä¼šä¸ºæˆ‘æŠ¥ä»‡çš„ã€‚\n", this_object());
+	message_vision("$Nè¯´å®Œï¼ŒåŒ–ä½œä¸€ç¼•æ¸…é£è€Œå»ã€‚\n", this_object());
 	ob = new("/d/city2/obj/shouzhuo");
 	ob->move(environment(this_object()));
 	ob = new("/d/city2/obj/yupei");
@@ -1318,74 +1318,74 @@ command("nomatch");
 
 int accept_fight(object who)
 {
-message_vision("\n$NÒ¡ÁËÒ¡Í·£¬¶Ô$nÓÄÓÄÌ¾µÀ£º°¦£¬ÄãÕâÓÖÊÇºÎ¿àÄØ?\n",this_object(),who);
+message_vision("\n$Næ‘‡äº†æ‘‡å¤´ï¼Œå¯¹$nå¹½å¹½å¹é“ï¼šå”‰ï¼Œä½ è¿™åˆæ˜¯ä½•è‹¦å‘¢?\n",this_object(),who);
 command("nomatch "+who->query("id"));
 }
 
 string ask_bf()
 {
-return("ß×£¬ÄãÒ²ÖªµÀËû£¿ÎÒÒ²ºÜÏë¼ûËû°¡¡£¡£¡£\n ");
+return("å’¦ï¼Œä½ ä¹ŸçŸ¥é“ä»–ï¼Ÿæˆ‘ä¹Ÿå¾ˆæƒ³è§ä»–å•Šã€‚ã€‚ã€‚\n ");
 }
 
 int accept_object(object me, object ob)
 {
 	if( !me || environment(me) != environment() ) return 0;
 	if ( !objectp(ob) ) return 0; 
-	if ( !present(ob, me) ) return notify_fail("ÄãÃ»ÓĞÕâ¼ş¶«Î÷¡£");
+	if ( !present(ob, me) ) return notify_fail("ä½ æ²¡æœ‰è¿™ä»¶ä¸œè¥¿ã€‚");
 	if (ob->query("money_id") && ob->value() >= 1000000 )
 	{
  	        if(me->query_temp("windnod"))
 		{
-		tell_object(me, "\nÀîÁèæÌÈ»Ò»Ğ¦£¬Ëµ£ººÃ°É£¬¼ÈÈ»·ç¶ù½ĞÄãÀ´£¬ÄÇÎÒ¾ÍÌıÄãµÄ¡£\n");
-		tell_object(me, "Çë¼üÈë£ºÉ± Ä¿±êÖĞÎÄÃû×Ö\n");
+		tell_object(me, "\næå‡Œå«£ç„¶ä¸€ç¬‘ï¼Œè¯´ï¼šå¥½å§ï¼Œæ—¢ç„¶é£å„¿å«ä½ æ¥ï¼Œé‚£æˆ‘å°±å¬ä½ çš„ã€‚\n");
+		tell_object(me, "è¯·é”®å…¥ï¼šæ€ ç›®æ ‡ä¸­æ–‡åå­—\n");
 		me->delete_temp("windnod");
 		me->set_temp("fee_paid",1);
 		return 1;
 		}
 		else 
 		{
-		say("\nÀîÁèÒ¡Ò¡Í·£¬Ğ¦µÀ£º²»ºÃ°É£¬É±ÈËµÄÊÂ·ç¶ù²»»áÍ¬ÒâµÄ¡£\n");
+		say("\næå‡Œæ‘‡æ‘‡å¤´ï¼Œç¬‘é“ï¼šä¸å¥½å§ï¼Œæ€äººçš„äº‹é£å„¿ä¸ä¼šåŒæ„çš„ã€‚\n");
 		me->set_temp("fee_paid2",1);
-		tell_object(me, "\nÀîÁèæÌÈ»Ò»Ğ¦£¬Ëµ£º²»¹ı£¬ÎÒ¿ÉÒÔ¿ª¸öĞ¡ÍæĞ¦¡£\n");
-		tell_object(me, "Çë¼üÈë£ºÔÎ Ä¿±êÖĞÎÄÃû×Ö\n");
+		tell_object(me, "\næå‡Œå«£ç„¶ä¸€ç¬‘ï¼Œè¯´ï¼šä¸è¿‡ï¼Œæˆ‘å¯ä»¥å¼€ä¸ªå°ç©ç¬‘ã€‚\n");
+		tell_object(me, "è¯·é”®å…¥ï¼šæ™• ç›®æ ‡ä¸­æ–‡åå­—\n");
 		return 1;
 		}
 	}
 	else if (ob->query("money_id") && ob->value() < 1000000) 
 	{
-		tell_object(me, "\nÀîÁèÒ¡Ò¡Í·£¬Ğ¦µÀ£º²»ºÃ°É£¬¸øÎÒÕâ÷á¶àÇ®¡£\n");
+		tell_object(me, "\næå‡Œæ‘‡æ‘‡å¤´ï¼Œç¬‘é“ï¼šä¸å¥½å§ï¼Œç»™æˆ‘è¿™éº½å¤šé’±ã€‚\n");
 		return 1;
 	}
 
-	if ((string)ob->query("name")==HIC "¶©»é½äÖ¸" NOR ||(string)ob->query("name")==HIW "Ë®¾§Ğ¬" NOR
-		||(string)ob->query("name")==HIM "Ğ¡Âí¼×" NOR||(string)ob->query("name")==HIC "ÓñÅå" NOR) 
+	if ((string)ob->query("name")==HIC "è®¢å©šæˆ’æŒ‡" NOR ||(string)ob->query("name")==HIW "æ°´æ™¶é‹" NOR
+		||(string)ob->query("name")==HIM "å°é©¬ç”²" NOR||(string)ob->query("name")==HIC "ç‰ä½©" NOR) 
 	{
-	if ((string)ob->query("name")== HIC "¶©»é½äÖ¸" NOR) 
+	if ((string)ob->query("name")== HIC "è®¢å©šæˆ’æŒ‡" NOR) 
 	{
-	message_vision("\n$NÃÍµÄÑïÆğÍ·£¬ÓÃ¾ªÏ²µÄÑÛ¹â¿´×Å$n£¬Ëµ£º\n"
-	+"ß×£¬Õâ²»ÊÇ·ç¶ùËÍÎÒµÄ½äÖ¸Âğ£¬ÊÇËûÒªÄã´øÀ´µÄÃ´? ÕæĞ»Ğ»Äã°¡...\n",this_object(),me);
+	message_vision("\n$NçŒ›çš„æ‰¬èµ·å¤´ï¼Œç”¨æƒŠå–œçš„çœ¼å…‰çœ‹ç€$nï¼Œè¯´ï¼š\n"
+	+"å’¦ï¼Œè¿™ä¸æ˜¯é£å„¿é€æˆ‘çš„æˆ’æŒ‡å—ï¼Œæ˜¯ä»–è¦ä½ å¸¦æ¥çš„ä¹ˆ? çœŸè°¢è°¢ä½ å•Š...\n",this_object(),me);
 	}
-	if ((string)ob->query("name")==HIW "Ë®¾§Ğ¬" NOR) 
+	if ((string)ob->query("name")==HIW "æ°´æ™¶é‹" NOR) 
 	{
-	message_vision("\n$NÃÍµÄÑïÆğÍ·£¬ÓÃ¾ªÏ²µÄÑÛ¹â¿´×Å$n£¬Ëµ£º\n"
-	+"ß×£¬Õâ²»ÊÇ·ç¶ùËÍÎÒµÄÂğË®¾§Ğ¬Âğ£¬ÊÇËûÒªÄã´øÀ´µÄÃ´? ÕæĞ»Ğ»Äã°¡...\n",this_object(),me);
+	message_vision("\n$NçŒ›çš„æ‰¬èµ·å¤´ï¼Œç”¨æƒŠå–œçš„çœ¼å…‰çœ‹ç€$nï¼Œè¯´ï¼š\n"
+	+"å’¦ï¼Œè¿™ä¸æ˜¯é£å„¿é€æˆ‘çš„å—æ°´æ™¶é‹å—ï¼Œæ˜¯ä»–è¦ä½ å¸¦æ¥çš„ä¹ˆ? çœŸè°¢è°¢ä½ å•Š...\n",this_object(),me);
 	}
-	if ((string)ob->query("name")==HIM "Ğ¡Âí¼×" NOR) 
+	if ((string)ob->query("name")==HIM "å°é©¬ç”²" NOR) 
 	{
-	message_vision("\n$NÃÍµÄÑïÆğÍ·£¬ÓÃ¾ªÆæµÄÑÛ¹â¿´×Å$n£¬Ëµ£º\n"
-	+"ß×£¬Õâ²»ÊÇÎÒµÄĞ¡Âí¼×Âğ£¬ÔõÃ´Äã...\n",this_object(),me);
+	message_vision("\n$NçŒ›çš„æ‰¬èµ·å¤´ï¼Œç”¨æƒŠå¥‡çš„çœ¼å…‰çœ‹ç€$nï¼Œè¯´ï¼š\n"
+	+"å’¦ï¼Œè¿™ä¸æ˜¯æˆ‘çš„å°é©¬ç”²å—ï¼Œæ€ä¹ˆä½ ...\n",this_object(),me);
 	}
-	if ((string)ob->query("name")==HIC "ÓñÅå" NOR) 
+	if ((string)ob->query("name")==HIC "ç‰ä½©" NOR) 
 	{
-	message_vision("\n$NÃÍµÄÑïÆğÍ·£¬ÓÃ¾ªÆæµÄÑÛ¹â¿´×Å$n£¬Ëµ£º\n"
-	+"ß×£¬Õâ²»ÊÇÎÒµÄÌùÉíÓñÅåÂğ£¬ÔõÃ´Äã...\n",this_object(),me);
+	message_vision("\n$NçŒ›çš„æ‰¬èµ·å¤´ï¼Œç”¨æƒŠå¥‡çš„çœ¼å…‰çœ‹ç€$nï¼Œè¯´ï¼š\n"
+	+"å’¦ï¼Œè¿™ä¸æ˜¯æˆ‘çš„è´´èº«ç‰ä½©å—ï¼Œæ€ä¹ˆä½ ...\n",this_object(),me);
 	}
 	return 1; 
 	}
 	else
 	{
-	message_vision("\n$N»º»ºµØÒ¡ÁËÒ¡Í·£¬ÈáÉùËµµÀ:²»ÊÇ·ç¶ùËÍÎÒµÄ,ÎÒ²»Òª.\n"
-	+"Ëµ°Õ´¹ÏÂÍ·À´£¬Ò§ÁËÒ§ÑÀ,ÓÄÓÄàÁµÀ£ºËÀ·ç¶ù£¬³ô·ç¶ù£¬ÎªÊ²Ã´»¹²»»ØÀ´ÄØ?\n",this_object());
+	message_vision("\n$Nç¼“ç¼“åœ°æ‘‡äº†æ‘‡å¤´ï¼ŒæŸ”å£°è¯´é“:ä¸æ˜¯é£å„¿é€æˆ‘çš„,æˆ‘ä¸è¦.\n"
+	+"è¯´ç½¢å‚ä¸‹å¤´æ¥ï¼Œå’¬äº†å’¬ç‰™,å¹½å¹½å—”é“ï¼šæ­»é£å„¿ï¼Œè‡­é£å„¿ï¼Œä¸ºä»€ä¹ˆè¿˜ä¸å›æ¥å‘¢?\n",this_object());
 	return 0;
 	}
 }
@@ -1399,34 +1399,34 @@ int do_name(string target)
 	all = users();
 
 	if(me->query("waiting_target"))
-		return notify_fail("ÀîÁè£ºÎÒÏÖÔÚÕıÃ¦×ÅÄÄ£¬Äú´ô»á¶ùÔÙÀ´°É£¡\n");
+		return notify_fail("æå‡Œï¼šæˆ‘ç°åœ¨æ­£å¿™ç€å“ªï¼Œæ‚¨å‘†ä¼šå„¿å†æ¥å§ï¼\n");
 	if( !this_player()->query_temp("fee_paid") ) 
-		return notify_fail("ÀîÁè´òÁË¸öºÇÇ·£¬×óÊÖÇáÇáÑÚ×¡Ó£ÌÒĞ¡¿Ú£¬ÈáÉùµÀ£º\n"+
-		"²»ºÃ°É£¬°ïÄãÉ±ÁËÈËÎÒÓÖÓĞÊ²Ã´ºÃ´¦ÄØ£¿\n");
+		return notify_fail("æå‡Œæ‰“äº†ä¸ªå‘µæ¬ ï¼Œå·¦æ‰‹è½»è½»æ©ä½æ¨±æ¡ƒå°å£ï¼ŒæŸ”å£°é“ï¼š\n"+
+		"ä¸å¥½å§ï¼Œå¸®ä½ æ€äº†äººæˆ‘åˆæœ‰ä»€ä¹ˆå¥½å¤„å‘¢ï¼Ÿ\n");
 	if( !target || target==" ")
-		return notify_fail("ÀîÁè´òÁË¸öºÇÇ·£¬×óÊÖÇáÇáÑÚ×¡Ó£ÌÒĞ¡¿Ú£¬ÈáÉùµÀ£º\n"
-		+"Çë¸æËßÎÒÄÇÈËµÄÃû×Ö£¬ÎÒ¿ÉÃ»¹¦·ò¸úÄãÏĞÁÄ¡£\n");
+		return notify_fail("æå‡Œæ‰“äº†ä¸ªå‘µæ¬ ï¼Œå·¦æ‰‹è½»è½»æ©ä½æ¨±æ¡ƒå°å£ï¼ŒæŸ”å£°é“ï¼š\n"
+		+"è¯·å‘Šè¯‰æˆ‘é‚£äººçš„åå­—ï¼Œæˆ‘å¯æ²¡åŠŸå¤«è·Ÿä½ é—²èŠã€‚\n");
 	for(i=0; i<sizeof(all); i++)
 	{
 		if( target == all[i]->name() || target == all[i]->id() )
 			dest = all[i];
 	}
 	if( !dest )
-		return notify_fail("ÀîÁè×öÁË¸ö¹íÁ³£º²»Ì«ºÃ°¡£¬ºÃÏñËû²»ÔÚà¸¡£\n");
+		return notify_fail("æå‡Œåšäº†ä¸ªé¬¼è„¸ï¼šä¸å¤ªå¥½å•Šï¼Œå¥½åƒä»–ä¸åœ¨å–”ã€‚\n");
 
 	if (dest->is_ghost())
-		return notify_fail("ÀîÁèËµ£ºÄãºÚ£¬ÄãÌ«ºÚ£¬ÄãÌ«Ì«ºÚ£¬ÄãÌ«Ì«Ì«ºÚ£¡ËûÒÑ¾­ËÀÀ²£¡\n");
+		return notify_fail("æå‡Œè¯´ï¼šä½ é»‘ï¼Œä½ å¤ªé»‘ï¼Œä½ å¤ªå¤ªé»‘ï¼Œä½ å¤ªå¤ªå¤ªé»‘ï¼ä»–å·²ç»æ­»å•¦ï¼\n");
 	me->set("waiting_target", dest->query("id"));
 	me->set("target_name", target);
 	me->delete("chat_chance");
 	me->delete("chat_msg");
 	message("vision",
-	HIY "\nÀîÁèÕıÒªÀë¿ª£¬ºöÓÖ»ØÊ×µÀ£ºÄã±ğ×ß£¬¾ÍÔÚÕâ¶ù¾²ºî¼ÑÒô°É¡£\n" NOR,
+	HIY "\næå‡Œæ­£è¦ç¦»å¼€ï¼Œå¿½åˆå›é¦–é“ï¼šä½ åˆ«èµ°ï¼Œå°±åœ¨è¿™å„¿é™ä¾¯ä½³éŸ³å§ã€‚\n" NOR,
 	environment(), me );
 	me->set("pursuer", 1);
 	me->set("vendetta/authority", 1);
 	me->set("bellicosity", 100000);
-	message_vision("HIM $N×ßÁË³öÈ¥¡£\n" NOR, me);
+	message_vision("HIM $Nèµ°äº†å‡ºå»ã€‚\n" NOR, me);
 	call_out("do_chase", 1, me);
 	return 1;
 }
@@ -1439,27 +1439,27 @@ int do_name2(string target)
 	me = this_object();
 	all = users();
 	if(!this_player()->query_temp("fee_paid2") ) 
-		return notify_fail("ÀîÁè´òÁË¸öºÇÇ·£¬×óÊÖÇáÇáÑÚ×¡Ó£ÌÒĞ¡¿Ú£¬ÈáÉùµÀ£º\n"+
-		"²»ºÃ°É£¬ÄÇÑù×öÎÒÓÖÓĞÊ²Ã´ºÃ´¦ÄØ£¿\n");
+		return notify_fail("æå‡Œæ‰“äº†ä¸ªå‘µæ¬ ï¼Œå·¦æ‰‹è½»è½»æ©ä½æ¨±æ¡ƒå°å£ï¼ŒæŸ”å£°é“ï¼š\n"+
+		"ä¸å¥½å§ï¼Œé‚£æ ·åšæˆ‘åˆæœ‰ä»€ä¹ˆå¥½å¤„å‘¢ï¼Ÿ\n");
         if(!this_player()->query_temp("windnod2"))
-		return notify_fail("\nÀîÁèÒ¡Ò¡Í·£¬Ğ¦µÀ£º²»ºÃ°É£¬´òÈËµÄÊÂ·ç¶ù²»»áÍ¬ÒâµÄ¡£\n");
+		return notify_fail("\næå‡Œæ‘‡æ‘‡å¤´ï¼Œç¬‘é“ï¼šä¸å¥½å§ï¼Œæ‰“äººçš„äº‹é£å„¿ä¸ä¼šåŒæ„çš„ã€‚\n");
         if( !target || target==" ")
-		return notify_fail("ÀîÁè´òÁË¸öºÇÇ·£¬×óÊÖÇáÇáÑÚ×¡Ó£ÌÒĞ¡¿Ú£¬ÈáÉùµÀ£º\n"
-		+"Çë¸æËßÎÒÄÇÈËµÄÃû×Ö£¬ÎÒ¿ÉÃ»¹¦·ò¸úÄãÏĞÁÄ¡£\n");
+		return notify_fail("æå‡Œæ‰“äº†ä¸ªå‘µæ¬ ï¼Œå·¦æ‰‹è½»è½»æ©ä½æ¨±æ¡ƒå°å£ï¼ŒæŸ”å£°é“ï¼š\n"
+		+"è¯·å‘Šè¯‰æˆ‘é‚£äººçš„åå­—ï¼Œæˆ‘å¯æ²¡åŠŸå¤«è·Ÿä½ é—²èŠã€‚\n");
 	for(i=0; i<sizeof(all); i++)
 	{
 		if( target == all[i]->name() || target == all[i]->id() )
 			dest = all[i];
 	}
 	if( !dest )
-		return notify_fail("ÀîÁè×öÁË¸ö¹íÁ³£º²»Ì«ºÃ°¡£¬ºÃÏñËû²»ÔÚà¸¡£\n");
+		return notify_fail("æå‡Œåšäº†ä¸ªé¬¼è„¸ï¼šä¸å¤ªå¥½å•Šï¼Œå¥½åƒä»–ä¸åœ¨å–”ã€‚\n");
 	if (dest->is_ghost())
-		return notify_fail("ÀîÁèËµ£ºÄãºÃ»µÓ´£¬ËûÒÑ¾­ËÀÀ²£¡\n");
+		return notify_fail("æå‡Œè¯´ï¼šä½ å¥½åå“Ÿï¼Œä»–å·²ç»æ­»å•¦ï¼\n");
 	me->set("waiting_target2", dest->query("id"));
         this_player()->delete_temp("windnod2");
         this_player()->delete_temp("fee_paid2");
 	message("vision",
-		HIM "\nÀîÁèÒÔĞäÑÚ¿Ú£¬Ğ¦µÀ£ºÎûÎû£¬ºÃÏñ³ÉÁËÒ®£¬ÄãÔõÃ´Ğ»ÎÒÑ½£¿\n" NOR,
+		HIM "\næå‡Œä»¥è¢–æ©å£ï¼Œç¬‘é“ï¼šå˜»å˜»ï¼Œå¥½åƒæˆäº†è€¶ï¼Œä½ æ€ä¹ˆè°¢æˆ‘å‘€ï¼Ÿ\n" NOR,
 		environment());
 	call_out("do_faint", 1, me);
 	return 1;
@@ -1476,7 +1476,7 @@ int do_chase(object me)
 		return 1;
 	}
 	me->move(environment(dest));
-	message_vision("$NĞ¦ÎûÎûµØ×ßÁË¹ıÀ´¡£\n" NOR, me);
+	message_vision("$Nç¬‘å˜»å˜»åœ°èµ°äº†è¿‡æ¥ã€‚\n" NOR, me);
 	room = environment(this_object());
 	if (room->query("no_fight"))
 		room->set("no_fight", 0);
@@ -1504,9 +1504,9 @@ int do_faint(object me)
 	object dest,ob;
 	dest = find_player(me->query("waiting_target2"));
 	this_object()->move(environment(dest));
-	message_vision("$NĞ¦ÎûÎûµØ×ßÁË¹ıÀ´¡£\n" NOR, me);
-	message_vision(HIC "$N¶Ô$nËµµÀ£ºÓĞÈËÇëÎÒÀ´´òÔÎÄã£¬¶Ô²»Æğ°¡¡£¡£¡£\n"
-			+RANK_D->query_rude(dest)+"£¬Äã¾ÍÈÏÃü°É£¡\n" NOR, me, dest);
+	message_vision("$Nç¬‘å˜»å˜»åœ°èµ°äº†è¿‡æ¥ã€‚\n" NOR, me);
+	message_vision(HIC "$Nå¯¹$nè¯´é“ï¼šæœ‰äººè¯·æˆ‘æ¥æ‰“æ™•ä½ ï¼Œå¯¹ä¸èµ·å•Šã€‚ã€‚ã€‚\n"
+			+RANK_D->query_rude(dest)+"ï¼Œä½ å°±è®¤å‘½å§ï¼\n" NOR, me, dest);
         me->delete("waiting_target2");
         dest->unconcious();
 	this_object()->move("/u/wind/workroom");
@@ -1519,8 +1519,8 @@ int do_kill(object me, object dest)
 	if( objectp(dest) && present(dest, environment(me))
 		 && !environment(me)->query("no_fight"))
 	{
-		message_vision(HIR "$N¶Ô$nËµµÀ£º·ç¶ùÒªÎÒÀ´É±Äã£¬¶Ô²»Æğ°¡¡£¡£¡£\n"
-			+RANK_D->query_rude(dest)+"£¬Äã¾ÍÈÏÃü°É£¡\n" NOR, me, dest);
+		message_vision(HIR "$Nå¯¹$nè¯´é“ï¼šé£å„¿è¦æˆ‘æ¥æ€ä½ ï¼Œå¯¹ä¸èµ·å•Šã€‚ã€‚ã€‚\n"
+			+RANK_D->query_rude(dest)+"ï¼Œä½ å°±è®¤å‘½å§ï¼\n" NOR, me, dest);
 			if(wizardp(dest))		
 	                { 
 			dest->set("immortal",0);
@@ -1586,18 +1586,18 @@ int do_back(object me)
 {
 
 	me->move("/u/wind/workroom");
-	message("vision", "ÀîÁè×ßÁË½øÀ´£¬ÓÄÓÄµÀ£º°¦£¬·ç¶ùÕæ²»¹Ô£¬º¦µÃÎÒÓÖÉ±ÁËÈË¡£\n", 
+	message("vision", "æå‡Œèµ°äº†è¿›æ¥ï¼Œå¹½å¹½é“ï¼šå”‰ï¼Œé£å„¿çœŸä¸ä¹–ï¼Œå®³å¾—æˆ‘åˆæ€äº†äººã€‚\n", 
 		environment(), me );
 	me->set_leader(0);
 	set("chat_chance", 3);
 	set("chat_msg", ({
-		"ÀîÁèºöÈ»×öÁË¸ö¹íÁ³£¬Ğ¦µÀ: ÕæÏëÁï³öÈ¥Íæ»á¶ù¡£\n",
+		"æå‡Œå¿½ç„¶åšäº†ä¸ªé¬¼è„¸ï¼Œç¬‘é“: çœŸæƒ³æºœå‡ºå»ç©ä¼šå„¿ã€‚\n",
 		(: command("sing2") :),
-		"ÀîÁèÎŞÁÄµØÈÆ×ÅÊÖ¾î£¬Ì¾µÀ: °¦£¬Ò»¸öÈË£¬ÕæÃ»ÒâË¼¡£\n",
-		"ÀîÁèÉì³ö°×Óñµñ³ÉÒ»°ãµÄĞ¡ÊÖ£¬ÍĞ×ÅÏÂ°ÍËµ: Ë­ÏëºÍÎÒËµËµ»°?\n",
-		"ÀîÁèÕ¶¶¤½ØÌúµØËµ: àÅ£¬Ë­Òª¸ÒÆÛ¸ºÎÒ£¬ÎÒ¾ÍÔ×ÁËËû£¡\n",
-		"ÀîÁèºöÈ»İ¸¶ûÒ»Ğ¦µÀ: ·ç¶ù´ı»á¶ùÓÖÒªÎÒÉ±Ë­ÄØ£¿\n",
-		"ÀîÁè´òÁË¸öºÇÇ·£¬×óÊÖÇáÇáÑÚ×¡Ó£ÌÒĞ¡¿Ú£¬ÈáÉùµÀ£ºÎÒÀ§ÁË¡£\n",
+		"æå‡Œæ— èŠåœ°ç»•ç€æ‰‹ç»¢ï¼Œå¹é“: å”‰ï¼Œä¸€ä¸ªäººï¼ŒçœŸæ²¡æ„æ€ã€‚\n",
+		"æå‡Œä¼¸å‡ºç™½ç‰é›•æˆä¸€èˆ¬çš„å°æ‰‹ï¼Œæ‰˜ç€ä¸‹å·´è¯´: è°æƒ³å’Œæˆ‘è¯´è¯´è¯?\n",
+		"æå‡Œæ–©é’‰æˆªé“åœ°è¯´: å—¯ï¼Œè°è¦æ•¢æ¬ºè´Ÿæˆ‘ï¼Œæˆ‘å°±å®°äº†ä»–ï¼\n",
+		"æå‡Œå¿½ç„¶èå°”ä¸€ç¬‘é“: é£å„¿å¾…ä¼šå„¿åˆè¦æˆ‘æ€è°å‘¢ï¼Ÿ\n",
+		"æå‡Œæ‰“äº†ä¸ªå‘µæ¬ ï¼Œå·¦æ‰‹è½»è½»æ©ä½æ¨±æ¡ƒå°å£ï¼ŒæŸ”å£°é“ï¼šæˆ‘å›°äº†ã€‚\n",
 	}) );
 	return 1;
 }

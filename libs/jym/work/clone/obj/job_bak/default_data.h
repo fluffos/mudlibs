@@ -1,19 +1,19 @@
 //Cracked by Kafei
 //default data set
 
-static int OPPOSE_DROP_EXP=200;//200;
+nosave int OPPOSE_DROP_EXP=200;//200;
 
 
 
-static int MASTER_CALL_IN_EXP=300;
-static int FINISH_JOB_EXP=100;//100;
+nosave int MASTER_CALL_IN_EXP=300;
+nosave int FINISH_JOB_EXP=100;//100;
 
-static int MASTER_CALL_IN_CON=10;
-static int OPPOSE_DROP_CON=5;
-static int FINISH_JOB_CON=2;
+nosave int MASTER_CALL_IN_CON=10;
+nosave int OPPOSE_DROP_CON=5;
+nosave int FINISH_JOB_CON=2;
 
 //When assess meeting start, will dealy ASSESS_DELAY time do it.
-static int ASSESS_DELAY=300;
+nosave int ASSESS_DELAY=300;
 int ASSESS_NUM=10000;
 //门派评定的基数
 //

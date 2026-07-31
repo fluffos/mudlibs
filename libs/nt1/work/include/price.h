@@ -1,4 +1,4 @@
-private static string PRICES = @PRICE
+private nosave string PRICES = @PRICE
 ############
 谷物
 ############

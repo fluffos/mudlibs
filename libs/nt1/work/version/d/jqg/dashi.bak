@@ -5,10 +5,10 @@ inherit ROOM;
 
 void create()
 {
-      set("short", HIC"´óÊÒ"NOR);
+      set("short", HIC"å¤§å®¤"NOR);
       set("long", @LONG
-Äã¾Ù²½×ßÈëÒ»¼ä´óÊÒ£¬Ö»¼ûÎİÓÒÓĞËú£¬ÊÒÖĞÁè¿ÕÀ­×ÅÒ»Ìõ³¤Éş¡£´°Ç°Ğ¡Ğ¡
-Ò»¼¸£¬ÊÒ×óÁ¢×ÅÒ»¸ö´Ö²ÚÄ¾³÷¡£ÊÒÄÚ×ÀÒÎÓÃ¾ß¶¼ÓÃ´ÖÄ¾´î³É¡£
+ä½ ä¸¾æ­¥èµ°å…¥ä¸€é—´å¤§å®¤ï¼Œåªè§å±‹å³æœ‰å¡Œï¼Œå®¤ä¸­å‡Œç©ºæ‹‰ç€ä¸€æ¡é•¿ç»³ã€‚çª—å‰å°å°
+ä¸€å‡ ï¼Œå®¤å·¦ç«‹ç€ä¸€ä¸ªç²—ç³™æœ¨æ©±ã€‚å®¤å†…æ¡Œæ¤…ç”¨å…·éƒ½ç”¨ç²—æœ¨æ­æˆã€‚
 LONG
         );
 
@@ -34,21 +34,21 @@ int do_open(string arg)
       object me,ob;
       me=this_player();
       if (me->is_busy() || me->is_fighting())
-           return notify_fail("ÄãÕıÃ¦×ÅÄÄ£¡\n");
-//      if (!me->query_temp("marks/ÒøË÷")) return 0;
+           return notify_fail("ä½ æ­£å¿™ç€å“ªï¼\n");
+//      if (!me->query_temp("marks/é“¶ç´¢")) return 0;
       if ( arg=="chu"){
 //       if(!objectp(present("gold key", me)))        
-//           return notify_fail("ÄãÃ»ÓĞÔ¿³×£¬ÓÃÊ²Ã´¿ª°¡£¿\n");
+//           return notify_fail("ä½ æ²¡æœ‰é’¥åŒ™ï¼Œç”¨ä»€ä¹ˆå¼€å•Šï¼Ÿ\n");
        if(present("da tiehe", environment(me)))
-           return notify_fail("ÄãÒÑ¾­´ò¿ª³÷ÃÅÁË¡£\n");
-       message_vision("$NÂıÂıÓÃÔ¿³×´ò¿ªÁË³÷ÃÅ¡£\n",me);  
-       me->delete_temp("marks/ÒøË÷");
+           return notify_fail("ä½ å·²ç»æ‰“å¼€æ©±é—¨äº†ã€‚\n");
+       message_vision("$Næ…¢æ…¢ç”¨é’¥åŒ™æ‰“å¼€äº†æ©±é—¨ã€‚\n",me);  
+       me->delete_temp("marks/é“¶ç´¢");
        me->start_busy(1);
-       me->set_temp("marks/ÌúºĞ", 1);
+       me->set_temp("marks/é“ç›’", 1);
        ob=new(__DIR__"obj/box");
        ob->move(environment(me));
-       write("Äã·¢ÏÖ³÷ÄÚ·Å×Å¸ö³¤·½ĞÎµÄÌúºĞ×Ó¡£\n");
+       write("ä½ å‘ç°æ©±å†…æ”¾ç€ä¸ªé•¿æ–¹å½¢çš„é“ç›’å­ã€‚\n");
        return 1;
        }
-   return notify_fail("ÄãÒª¿ªÊ²Ã´£¿\n");
+   return notify_fail("ä½ è¦å¼€ä»€ä¹ˆï¼Ÿ\n");
 }

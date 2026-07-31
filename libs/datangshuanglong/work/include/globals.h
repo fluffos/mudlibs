@@ -6,7 +6,6 @@
 
 // Directories
 #include "tomud.h"
-#define nosave nosave
 #define COMMAND_DIR             "/cmds/"
 #define CONFIG_DIR              "/adm/etc/"
 #define DATA_DIR                "/data/"

@@ -1,0 +1,109 @@
+//  groupd.c (?) or orgd.c or zuzhid.c 
+//  first edit at 97-08-14 00:41
+//  by Lin
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+inherit F_SAVE;
+
+mixed SetupZuzhi( object who, string zuzhiname, string touxian, string zhiwu, mixed group );
+mixed DeleteZuzhi( object who, string zuzhiname, mixed group );
+int SetZuzhi( string title, object who, string zuzhiname, mixed what );
+int Save( object saveobj );
+mixed GetDbase( object saveobj );
+string *GetSameZuzhi( object ob1, object ob2 );
+  
+////////////////////////////////////////////////////////////////////////////////
+mapping ToId = ([
+    "一品堂"       : "yipin",
+    "一品堂「玄阳堂」" : "yipin",
+    "一品堂「玄才堂」" : "yipin",
+    "大宋禁军"     : "jinjun",
+    "丐帮"         : "gaibang",
+    "禁军"         : "jinjun",
+    "西夏一品堂"   : "yipin",
+]);
+
+void create()
+{
+    seteuid( ROOT_UID );
+    set("name", "组织精灵");
+    set("id", "groupd");
+}
+ 
+mixed SetupZuzhi( object who, string zuzhiname, string touxian, string zhiwu, mixed data )
+{
+    mapping zuzhi;
+    string *all_touxian, *all_zhiwu, f_zuzhi, id;
+   
+    tell_object( who, "daemon ok1\n");
+    if ( ToId[ zuzhiname ] )
+        id = ToId[ zuzhiname ];
+    else
+        id = zuzhiname;
+    f_zuzhi = ZUZHI_DIR + id;
+    tell_object( who,"daemon ok2\n");
+    if ( file_size( f_zuzhi + ".lpc" ) < 0 )
+        return notify_fail( "<<Error>>: zuzhiname wrong!\n" );
+    tell_object( who,"daemon ok3\n");
+    if ( !mapp( data ) )
+        data = ([]);
+    zuzhi = ([]);
+    if ( zuzhiname != id )
+        zuzhi[ "name" ] = zuzhiname;
+    else
+        zuzhi[ "name" ] = f_zuzhi->QueryName( who );
+    tell_object( who,"daemon report: name " + zuzhi["name"] + "\n");
+    zuzhi[ "id" ] = f_zuzhi->QueryId( who );
+    all_touxian = f_zuzhi->QueryTouxian( who );
+    all_zhiwu = f_zuzhi->QueryZhiwu( who );
+    zuzhi[ "entertime" ] = who->query( "mud_age" );
+    if ( !zuzhi[ "touxian" ] = touxian ) 
+        zuzhi[ "touxian" ] = all_touxian[ 0 ];
+    if ( !zuzhi[ "zhiwu" ] = zhiwu )
+        zuzhi[ "zhiwu" ] = all_zhiwu[ 0 ];
+    zuzhi[ "lastcontacttime" ] = who->query( "mud_age" );
+    zuzhi[ "score" ] = 0;
+    //  组织信任度清零。
+    data[ zuzhiname ] = zuzhi;
+    tell_object( who,"daemon ok4\n");
+    LOG_D->do_log( who, sprintf( "你加入%s，成为一名%s。", zuzhi[ "name" ],
+      zuzhi[ "touxian" ] ) );
+    f_zuzhi->RecruitMember( who, touxian, zhiwu, zuzhi[ "entertime" ] );
+    return data;
+}
+mixed DeleteZuzhi( object who ,string zuzhiname, mixed data )
+{
+    string f_zuzhi;
+    if ( ToId[ zuzhiname ] )
+        zuzhiname = ToId[ zuzhiname ];
+    f_zuzhi = ZUZHI_DIR + zuzhiname;
+    if ( !who->GetZuzhi( zuzhiname ) )
+        return notify_fail("wrong: no such zuzhi in this account!!\n" );
+    LOG_D->do_log( who, sprintf( "你退出了%s.", who->ZuzhiName( zuzhiname ) ) );
+    if ( !f_zuzhi->FireMember( who ) )
+        map_delete( data, zuzhiname );
+    if ( who->IsMemberOf( zuzhiname ) )
+        data[ zuzhiname ][ "deleted" ] = 1;
+    return data;
+}
+
+string *GetSameZuzhi( object ob1, object ob2 )
+{
+    string *ob1_id;
+    int i;
+    mapping zuzhi = ([]);
+    
+    ob1_id = ob1->GetZuzhiId();
+    if ( !sizeof( ob1_id ) ) 
+        return 0;
+    for ( i = 0; i < sizeof( ob1_id ); i++ )
+    {
+        tell_object( ob1, "daemon say: " + ob1_id[ i ] + "\n" );
+        if ( ob2->IsMemberOf( ob1_id [ i ] ) )
+            zuzhi[ ob1_id[ i ] ] = 1;
+    }
+    if ( !sizeof( keys( zuzhi ) ) )
+        return 0;
+    return keys( zuzhi );
+}
+        

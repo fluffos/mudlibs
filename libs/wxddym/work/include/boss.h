@@ -9,7 +9,7 @@ mapping all_reward = ([
 		"RA&SERIAL2"					:	10000,	
 		"RA&SERIAL3"					:	2500,	
 		"SE&A7001"					:	50000,	
-		"FI&/clone/book/jifa-water.c"			:	1000,	
+		"FI&/clone/book/jifa-water.lpc"			:	1000,	
 		"SE&A7007"					:	400,	
 		"SE&A7008"					:	400,	
 		"SE&A7009"					:	400,	
@@ -25,7 +25,7 @@ mapping all_reward = ([
 		"RA&SERIAL2"					:	10000,	// 
 		"RA&SERIAL3"					:	2500,	// 
 		"SE&W7000"					:	50000,	// 
-		"FI&/clone/book/jifa-wood.c"			:	1000,	// 
+		"FI&/clone/book/jifa-wood.lpc"			:	1000,	// 
 		"SE&A7007"					:	400,	//
 		"SE&A7008"					:	400,	//
 		"SE&A7009"					:	400,	//
@@ -41,7 +41,7 @@ mapping all_reward = ([
 		"RA&SERIAL2"					:	10000,	// 中级普通装备
 		"RA&SERIAL3"					:	2500,	// 高级普通装备
 		"SE&W7000"					:	50000,	// 
-		"FI&/clone/book/jifa-earth.c"			:	1000,	// 
+		"FI&/clone/book/jifa-earth.lpc"			:	1000,	// 
 		"SE&A7007"					:	400,	//
 		"SE&A7008"					:	400,	//
 		"SE&A7009"					:	400,	//
@@ -57,7 +57,7 @@ mapping all_reward = ([
 		"RA&SERIAL2"					:	10000,	// 中级普通装备
 		"RA&SERIAL3"					:	2500,	// 高级普通装备
 //		"SE&G7000"					:	50000,	// 
-		"FI&/clone/book/jifa-gold.c"			:	1000,	// 
+		"FI&/clone/book/jifa-gold.lpc"			:	1000,	// 
 		"SE&A7007"					:	400,	//
 		"SE&A7008"					:	400,	//
 		"SE&A7009"					:	400,	//
@@ -73,7 +73,7 @@ mapping all_reward = ([
 		"RA&SERIAL2"					:	10000,	// 中级普通装备
 		"RA&SERIAL3"					:	2500,	// 高级普通装备
 		"SE&G7000"					:	50000,	// 
-		"FI&/clone/book/jifa-fire.c"			:	1000,	// 
+		"FI&/clone/book/jifa-fire.lpc"			:	1000,	// 
 		"SE&A7007"					:	400,	//
 		"SE&A7008"					:	400,	//
 		"SE&A7009"					:	400,	//
@@ -89,7 +89,7 @@ mapping all_reward = ([
 		"RA&SERIAL2"					:	10000,	// 中级普通装备
 		"RA&SERIAL3"					:	2500,	// 高级普通装备
 		"SE&GO001"					:	50000,	// 
-		"FI&/clone/book/jifa-kurong.c"			:	400,	// 
+		"FI&/clone/book/jifa-kurong.lpc"			:	400,	// 
 		"SE&A7000"					:	400,	//
 		"SE&W7003"					:	400,	//
 		"SE&A7010"					:	400,	//
@@ -102,8 +102,8 @@ mapping all_reward = ([
 		"RA&SERIAL1"					:	130000,	// 低级普通装备
 		"RA&SERIAL2"					:	10000,	// 中级普通装备
 		"RA&SERIAL3"					:	2500,	// 高级普通装备
-		"FI&/clone/book/jifa-siji.c"			:	300,	// 
-		"FI&/clone/book/jifa-yumei.c"			:	200,	// 
+		"FI&/clone/book/jifa-siji.lpc"			:	300,	// 
+		"FI&/clone/book/jifa-yumei.lpc"			:	200,	// 
 		"SE&W7001"					:	400,	//
 		"SE&A7011"					:	400,	//
 		"SE&A7012"					:	400,	//
@@ -117,9 +117,9 @@ mapping all_reward = ([
 		"RA&SERIAL1"					:	130000,	// 低级普通装备
 		"RA&SERIAL2"					:	10000,	// 中级普通装备
 		"RA&SERIAL3"					:	2500,	// 高级普通装备
-		"FI&/clone/book/jifa-leiting.c"			:	250,	// 
-		"FI&/clone/book/jifa-leiqi.c"			:	150,	// 
-		"FI&/clone/book/skill-wulei-1.c"		:	150,	// 
+		"FI&/clone/book/jifa-leiting.lpc"			:	250,	// 
+		"FI&/clone/book/jifa-leiqi.lpc"			:	150,	// 
+		"FI&/clone/book/skill-wulei-1.lpc"		:	150,	// 
 		"SE&A7001"					:	400,	//
 		"SE&A7014"					:	400,	//
 		"SE&A7015"					:	400,	//
@@ -132,9 +132,9 @@ mapping all_reward = ([
 		"RA&SERIAL1"					:	130000,	// 低级普通装备
 		"RA&SERIAL2"					:	10000,	// 中级普通装备
 		"RA&SERIAL3"					:	2500,	// 高级普通装备
-		"FI&/clone/book/jifa-tianlei.c"			:	250,	// 
-		"FI&/clone/book/jifa-tianxin.c"			:	150,	// 
-		"FI&/clone/book/skill-wulei-2.c"		:	150,	// 
+		"FI&/clone/book/jifa-tianlei.lpc"			:	250,	// 
+		"FI&/clone/book/jifa-tianxin.lpc"			:	150,	// 
+		"FI&/clone/book/skill-wulei-2.lpc"		:	150,	// 
 		"SE&A7003"					:	400,	//
 		"SE&A7016"					:	400,	//
 		"SE&A7017"					:	400,	//
@@ -149,11 +149,11 @@ mapping all_reward = ([
 		"RA&SERIAL1"					:	130000,	// 低级普通装备
 		"RA&SERIAL2"					:	700,	// 中级普通装备
 		"RA&SERIAL3"					:	2000,	// 高级普通装备
-		"FI&/clone/book/jifa-gold.c"			:	150,	// 
-		"FI&/clone/book/jifa-wood.c"			:	150,	// 
-		"FI&/clone/book/jifa-water.c"			:	150,	// 
-		"FI&/clone/book/jifa-fire.c"			:	150,	// 
-		"FI&/clone/book/jifa-earth.c"			:	150,	// 
+		"FI&/clone/book/jifa-gold.lpc"			:	150,	// 
+		"FI&/clone/book/jifa-wood.lpc"			:	150,	// 
+		"FI&/clone/book/jifa-water.lpc"			:	150,	// 
+		"FI&/clone/book/jifa-fire.lpc"			:	150,	// 
+		"FI&/clone/book/jifa-earth.lpc"			:	150,	// 
 		"SE&W7000"					:	400,	//
 		"SE&A7007"					:	400,	//
 		"SE&A7008"					:	400,	//
@@ -168,11 +168,11 @@ mapping all_reward = ([
 		"RA&SERIAL2"					:	700,	// 中级普通装备
 		"RA&SERIAL3"					:	2000,	// 高级普通装备
 		"SE&GO002"					:	30000,	// 
-		"FI&/clone/book/jifa-gold.c"			:	150,	// 
-		"FI&/clone/book/jifa-wood.c"			:	150,	// 
-		"FI&/clone/book/jifa-water.c"			:	150,	// 
-		"FI&/clone/book/jifa-fire.c"			:	150,	// 
-		"FI&/clone/book/jifa-earth.c"			:	150,	// 
+		"FI&/clone/book/jifa-gold.lpc"			:	150,	// 
+		"FI&/clone/book/jifa-wood.lpc"			:	150,	// 
+		"FI&/clone/book/jifa-water.lpc"			:	150,	// 
+		"FI&/clone/book/jifa-fire.lpc"			:	150,	// 
+		"FI&/clone/book/jifa-earth.lpc"			:	150,	// 
 		"SE&A7002"					:	400,	//
 		"SE&A7004"					:	400,	//
 		"SE&A7005"					:	400,	//

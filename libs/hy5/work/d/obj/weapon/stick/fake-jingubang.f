@@ -11,12 +11,12 @@ inherit CLUB;
 
 void create()
 {
-	set_name( HIY "½ğ¹¿°ô" NOR, ({ "jingu bang", "jingubang", "bang" }) );
+	set_name( HIY "é‡‘ç®æ£’" NOR, ({ "jingu bang", "jingubang", "bang" }) );
 	set_weight(100000);
 	if( clonep() )
 		set_default_object(__FILE__);
 	else {
-		set("unit", "Ìõ");
+		set("unit", "æ¡");
 		set("Can_avoid_find", 1);
 		set("no_sell", 1);
 		set("no_give", 1);
@@ -24,9 +24,9 @@ void create()
 		set("value", 5000);
 		set("material", "gold");
         //set("replace_file", "/d/obj/weapon/stick/bintiegun");
-		set("long", "´Ë°ôÁ½Í·ÒÔ½ğÎª¹¿£¬ÖĞ¼äÄËÒ»¶ÎÎÚÌú¡£ÉÏÖıÒ»ĞĞĞ¡×Ö£º¡°ÈçÒâ½ğ¹¿°ô£¬¶«º£°½¹ã¼àÖÆ¡±¡£\n");
-		set("wield_msg", "$NÒ»ÉìÊÖ£¬Á¬ºÈ¼¸Éù£º´ó£¡´ó£¡´ó£¡ÕÆÖĞºöÈ»¶àÁËÒ»Ìõ$n¡£\n");
-		set("unwield_msg", "$NÒ»´µÆø£¬¼¸ÉùÇáºÈ£ºĞ¡£¡Ğ¡£¡Ğ¡£¡$nÔÚ$NÕÆÖĞ×ªÁË¼¸×ª£¬ºöÈ»²»¼ûÁË¡£\n");
+		set("long", "æ­¤æ£’ä¸¤å¤´ä»¥é‡‘ä¸ºç®ï¼Œä¸­é—´ä¹ƒä¸€æ®µä¹Œé“ã€‚ä¸Šé“¸ä¸€è¡Œå°å­—ï¼šâ€œå¦‚æ„é‡‘ç®æ£’ï¼Œä¸œæµ·æ•–å¹¿ç›‘åˆ¶â€ã€‚\n");
+		set("wield_msg", "$Nä¸€ä¼¸æ‰‹ï¼Œè¿å–å‡ å£°ï¼šå¤§ï¼å¤§ï¼å¤§ï¼æŒä¸­å¿½ç„¶å¤šäº†ä¸€æ¡$nã€‚\n");
+		set("unwield_msg", "$Nä¸€å¹æ°”ï¼Œå‡ å£°è½»å–ï¼šå°ï¼å°ï¼å°ï¼$nåœ¨$NæŒä¸­è½¬äº†å‡ è½¬ï¼Œå¿½ç„¶ä¸è§äº†ã€‚\n");
 	}
 	init_club100);
 	setup();

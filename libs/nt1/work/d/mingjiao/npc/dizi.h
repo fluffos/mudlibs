@@ -8,15 +8,15 @@ void init()
         if (interactive(ob) && userp(ob)
         && !environment(ob)->query("no_fight")
         && !present("tieyan ling", ob) 
-        && ((fam = ob->query("family")) && fam["family_name"] != "Ã÷½Ì")){
+        && ((fam = ob->query("family")) && fam["family_name"] != "æ˜Žæ•™")){
              if( !ob->query_temp("warned") ) {
-                   command("say ÄãÊÇË­£¿  ÔõÃ´´³µ½¹âÃ÷¶¥ÀïÀ´ÁË£¿£¡");
-                   command("say ¿ì¸øÎÒËÙËÙÀë¿ª£¬ÏÂ´Î¿´µ½¾ö²»ÇáÈÄ£¡");
+                   command("say ä½ æ˜¯è°ï¼Ÿ  æ€Žä¹ˆé—¯åˆ°å…‰æ˜Žé¡¶é‡Œæ¥äº†ï¼Ÿï¼");
+                   command("say å¿«ç»™æˆ‘é€Ÿé€Ÿç¦»å¼€ï¼Œä¸‹æ¬¡çœ‹åˆ°å†³ä¸è½»é¥¶ï¼");
                    ob->set_temp("warned", 1);
                    }
               else if( ob->query_temp("stay") < 3) ob->add_temp("stay", 1);
               else {
-                   command("say ´óµ¨¿ñÍ½£¬¾¹¸Ò´³µ½Ã÷½ÌÀ´ÈöÒ°£¡£¡£¡\n");
+                   command("say å¤§èƒ†ç‹‚å¾’ï¼Œç«Ÿæ•¢é—¯åˆ°æ˜Žæ•™æ¥æ’’é‡Žï¼ï¼ï¼\n");
 	           remove_call_out("hiting_ob");
                    call_out("hiting_ob", 1, ob);
 		   }
@@ -43,8 +43,8 @@ void moving_ob(object ob)
 	if (!ob) return;
      if (!living(ob)){
         switch( random(3) ) {
-	   case 0: command("say ºß£¬¿´ÄãÒÔºó»¹¸Ò²»¸ÒÂÒ´³¹âÃ÷¶¥£¡£¡£¡"); break;
-	   case 1: command("say ½»¸øÀä´óÈË´¦Àí°É£¬¹ØËûÒ»Äê°ëÔÂµÄ¡£"); break;
+	   case 0: command("say å“¼ï¼Œçœ‹ä½ ä»¥åŽè¿˜æ•¢ä¸æ•¢ä¹±é—¯å…‰æ˜Žé¡¶ï¼ï¼ï¼"); break;
+	   case 1: command("say äº¤ç»™å†·å¤§äººå¤„ç†å§ï¼Œå…³ä»–ä¸€å¹´åŠæœˆçš„ã€‚"); break;
 	   case 2: command("nod"); break;
 	   }
         ob->move("/d/mingjiao/jianyu");

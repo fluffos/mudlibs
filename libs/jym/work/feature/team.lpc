@@ -5,7 +5,7 @@
 #include <dbase.h>
 #include <origin.h>
 
-static object leader, lord, *team;
+nosave object leader, lord, *team;
 
 int set_leader(object ob)
 {

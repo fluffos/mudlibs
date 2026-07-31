@@ -6,7 +6,7 @@ object weapon;
 string msg1;
 sharpness=query("sharpness");
 msg1="";
-//message_vision(HIW"É±ÉËÖµ:"+damage+HIW"£¡\n"NOR, me,ob);
+//message_vision(HIW"æ€ä¼¤å€¼:"+damage+HIW"ï¼\n"NOR, me,ob);
 if (!sharpness) sharpness=0;
 if (random(sharpness) > 1 && random(8)==0)
 {
@@ -17,7 +17,7 @@ if( (int)me->query("eff_qi") < (int)me->query("max_qi")  )
 if( (int)me->query("qi") < (int)me->query("max_qi")  )
                 me->add("qi", sharpness * 10);
 if (damage <0) damage=0;
-message_vision(CYN"$NÉíÉÏµÄ"+query("name")+CYN"Ò»²ü£¬ÑúÆğ²ã²ã½ğ¹â£¬¶ÙÊ±½«$n" CYN "µÄ¹¥»÷¼õÈõÁËºÜ¶à£¡\n"NOR, me,ob);
+message_vision(CYN"$Nèº«ä¸Šçš„"+query("name")+CYN"ä¸€é¢¤ï¼Œæ¼¾èµ·å±‚å±‚é‡‘å…‰ï¼Œé¡¿æ—¶å°†$n" CYN "çš„æ”»å‡»å‡å¼±äº†å¾ˆå¤šï¼\n"NOR, me,ob);
  return damage;
 }
 else if (random(2)==0)
@@ -32,14 +32,14 @@ if( (int)me->query("eff_qi") < (int)me->query("max_qi")  )
 {
 me->add("eff_qi", query("wtypeA") * 20);
 }
-message_vision(HIY"$NÉíÉÏµÄ"+query("name")+HIY"½ğ¹âÒ»ÉÁ£¬$N" HIY "±»×èÈûµÄÑ¨µÀÒ»¹á¶øÍ¨£¡\n"NOR, me,ob);
+message_vision(HIY"$Nèº«ä¸Šçš„"+query("name")+HIY"é‡‘å…‰ä¸€é—ªï¼Œ$N" HIY "è¢«é˜»å¡çš„ç©´é“ä¸€è´¯è€Œé€šï¼\n"NOR, me,ob);
  return damage;
 }
         case 1:
                 if (query("wtypeB") >0)
 {
 if(!ob->is_busy()) ob->start_busy(query("wtypeB")+2);
-message_vision(CYN"$NÉíÉÏµÄ"+query("name")+CYN"ÂÌ¹âÒ»ÉÁ£¬$n" CYN "±»¸½½üµÄÊ÷Ä¾·¢³öµÄ¹²ÃùÒ»¾ª£¬ĞĞ¶¯Ò»¶Ù£¡\n"NOR, me,ob);
+message_vision(CYN"$Nèº«ä¸Šçš„"+query("name")+CYN"ç»¿å…‰ä¸€é—ªï¼Œ$n" CYN "è¢«é™„è¿‘çš„æ ‘æœ¨å‘å‡ºçš„å…±é¸£ä¸€æƒŠï¼Œè¡ŒåŠ¨ä¸€é¡¿ï¼\n"NOR, me,ob);
  return damage;
 }
         case 2:
@@ -49,7 +49,7 @@ if( (int)me->query("eff_qi") < (int)me->query("max_qi")  )
                 me->add("eff_qi", query("wtypeC") * 50);
 if( (int)me->query("qi") < (int)me->query("max_qi")  )
                 me->add("qi", query("wtypeC") * 50);
-message_vision(GRN"$NÉíÉÏµÄ"+query("name")+GRN"Ë®¹âÒ»ÉÁ£¬$N" GRN "µÄÌåÁ¦µÃµ½ÁË»ÖµÃ£¡\n"NOR, me,ob);
+message_vision(GRN"$Nèº«ä¸Šçš„"+query("name")+GRN"æ°´å…‰ä¸€é—ªï¼Œ$N" GRN "çš„ä½“åŠ›å¾—åˆ°äº†æ¢å¾—ï¼\n"NOR, me,ob);
  return damage;
 }
         case 3:
@@ -57,7 +57,7 @@ message_vision(GRN"$NÉíÉÏµÄ"+query("name")+GRN"Ë®¹âÒ»ÉÁ£¬$N" GRN "µÄÌåÁ¦µÃµ½ÁË»Ö
 {
                 ob->receive_damage("qi", query("wtypeD") * 50);
                 ob->receive_wound("qi", query("wtypeD") * 50);
-message_vision(RED"$NÉíÉÏµÄ"+query("name")+RED"»ğ¹âÒ»ÉÁ£¬$n" RED "´ó½ĞÒ»Éù ²»ºÃ$n»ëÉÏÉÕ×ÅÁË£¡\n"NOR, me,ob);
+message_vision(RED"$Nèº«ä¸Šçš„"+query("name")+RED"ç«å…‰ä¸€é—ªï¼Œ$n" RED "å¤§å«ä¸€å£° ä¸å¥½$næµ‘ä¸Šçƒ§ç€äº†ï¼\n"NOR, me,ob);
  return damage;
 }
         case 4:
@@ -65,7 +65,7 @@ message_vision(RED"$NÉíÉÏµÄ"+query("name")+RED"»ğ¹âÒ»ÉÁ£¬$n" RED "´ó½ĞÒ»Éù ²»ºÃ$
 {
                 ob->add("neili",-(query("wtypeE")*80));
                 if(!ob->is_busy()) ob->start_busy(2);
-message_vision(YEL"$NÉíÉÏµÄ"+query("name")+YEL"ÍÁ¹âÒ»ÉÁ£¬$n" RED "´ó½ĞÒ»Éù »ëÉíÌá²»ÆğÁ¦ÁË¡£\n"NOR, me,ob);
+message_vision(YEL"$Nèº«ä¸Šçš„"+query("name")+YEL"åœŸå…‰ä¸€é—ªï¼Œ$n" RED "å¤§å«ä¸€å£° æµ‘èº«æä¸èµ·åŠ›äº†ã€‚\n"NOR, me,ob);
  return damage;
 }
         case 5:
@@ -74,7 +74,7 @@ message_vision(YEL"$NÉíÉÏµÄ"+query("name")+YEL"ÍÁ¹âÒ»ÉÁ£¬$n" RED "´ó½ĞÒ»Éù »ëÉíÌ
 damage=damage/query("wtypeF");
 if (damage <0) damage=0;
 me->add("neili",(query("wtypeF")*50));
-message_vision(HIM"$NÉíÉÏµÄ"+query("name")+HIM"ÕĞÀ´Ò»Õó·ç£¬$N" HIM "±»ÎŞÊıÈ¦·ç±£»¤ÆğÀ´¡£\n"NOR, me,ob);
+message_vision(HIM"$Nèº«ä¸Šçš„"+query("name")+HIM"æ‹›æ¥ä¸€é˜µé£ï¼Œ$N" HIM "è¢«æ— æ•°åœˆé£ä¿æŠ¤èµ·æ¥ã€‚\n"NOR, me,ob);
  return damage;
 }
 
@@ -90,7 +90,7 @@ if (ob->query_temp("apply/defense",1) >= 0)
 //if (ob->query_temp("apply/defense",1) < 0) ob->set_temp("apply/defense",0);
 		
 		ob->start_busy(random(query("wtypeG")) + 2);
-message_vision(HIW"$NÉíÉÏµÄ"+query("name")+HIW"À×¹âÒ»ÉÁ£¬$n" HIW "Ö»¾õµÃÉíĞÎÒ»É¬£¡\n"NOR, me,ob);
+message_vision(HIW"$Nèº«ä¸Šçš„"+query("name")+HIW"é›·å…‰ä¸€é—ªï¼Œ$n" HIW "åªè§‰å¾—èº«å½¢ä¸€æ¶©ï¼\n"NOR, me,ob);
  return damage;
 }
         case 7:
@@ -100,7 +100,7 @@ if (me->query_temp("apply/dodge",1) <= (query("wtypeH")*6))
 		me->add_temp("apply/dodge", (6 * query("wtypeH")));
 if (me->query_temp("apply/defense",1) <= (query("wtypeH")*6))
 		me->add_temp("apply/defense", (6 * query("wtypeH")));
-message_vision(HIB"$NÉíÉÏµÄ"+query("name")+HIB"µç¹âÒ»ÏÖ£¬$N" HIB "µÄ·ÀÓùËÙ¶È¿ìÁËºÜ¶à£¡\n"NOR, me,ob);
+message_vision(HIB"$Nèº«ä¸Šçš„"+query("name")+HIB"ç”µå…‰ä¸€ç°ï¼Œ$N" HIB "çš„é˜²å¾¡é€Ÿåº¦å¿«äº†å¾ˆå¤šï¼\n"NOR, me,ob);
  return damage;
 }
 
@@ -111,7 +111,7 @@ if (me->query_temp("apply/attack",1) <= (query("wtypeI")*6))
 		me->add_temp("apply/attack", (6 * query("wtypeI")));
 if (me->query_temp("apply/damage",1) <= (query("wtypeI")*6))
 		me->add_temp("apply/damage", (6 * query("wtypeI")));
-message_vision(WHT"$NÉíÉÏµÄ"+query("name")+WHT"ÉÁ¹ıÌì¿ÕµÄ¹âÔó£¬$N" WHT "µÄ¹¥»÷ËÙ¶È¿ìÁËºÜ¶à£¡\n"NOR, me,ob);
+message_vision(WHT"$Nèº«ä¸Šçš„"+query("name")+WHT"é—ªè¿‡å¤©ç©ºçš„å…‰æ³½ï¼Œ$N" WHT "çš„æ”»å‡»é€Ÿåº¦å¿«äº†å¾ˆå¤šï¼\n"NOR, me,ob);
  return damage;
 }
 
@@ -125,7 +125,7 @@ ob->apply_condition(du[random(sizeof(du))], query("wtypeJ")*3);
 ob->apply_condition(du[random(sizeof(du))], query("wtypeJ")*3);
 ob->apply_condition(du[random(sizeof(du))], query("wtypeJ")*3);
 ob->apply_condition(du[random(sizeof(du))], query("wtypeJ")*3);
-message_vision(YEL"$NÉíÉÏµÄ"+query("name")+YEL"ÉÁ¹ı´óµØµÄ¹âÔó£¬·¢³öÒ»Õó»ÆÉ«µÄÑÌÎí£¬$n" YEL "Ö»¾õÆøÑªÒ»ÕóÄæÁ÷£¡\n"NOR, me,ob);
+message_vision(YEL"$Nèº«ä¸Šçš„"+query("name")+YEL"é—ªè¿‡å¤§åœ°çš„å…‰æ³½ï¼Œå‘å‡ºä¸€é˜µé»„è‰²çš„çƒŸé›¾ï¼Œ$n" YEL "åªè§‰æ°”è¡€ä¸€é˜µé€†æµï¼\n"NOR, me,ob);
  return damage;
 }
         case 10:
@@ -136,7 +136,7 @@ message_vision(YEL"$NÉíÉÏµÄ"+query("name")+YEL"ÉÁ¹ı´óµØµÄ¹âÔó£¬·¢³öÒ»Õó»ÆÉ«µÄÑÌÎ
 //               ob->add("neili", -query("wtypeK") * 60);
 if( (int)me->query("neili") < (int)me->query("max_neili")*3  )
                 me->add("neili", query("wtypeK") * 60);
-message_vision(HIC"$NÉíÉÏµÄ"+query("name")+HIC"ÉÁ¹ıÈËÀàµÄÍõÕßÖ®Æø¡£ÄÚÁ¦µÃµ½ÁË»Ö¸´£¡\n"NOR, me,ob);
+message_vision(HIC"$Nèº«ä¸Šçš„"+query("name")+HIC"é—ªè¿‡äººç±»çš„ç‹è€…ä¹‹æ°”ã€‚å†…åŠ›å¾—åˆ°äº†æ¢å¤ï¼\n"NOR, me,ob);
  return damage;
 }
 
@@ -158,7 +158,7 @@ if( (int)me->query("eff_jing") < (int)me->query("max_jing")*3  )
                 me->add("eff_jing", query("wtypeL") * 30);
 if( (int)me->query("jing") < (int)me->query("max_jing")*3  )
                 me->add("jing", query("wtypeL") * 30);                
-message_vision(HIR"$NÉíÉÏµÄ"+query("name")+HIR"Ä§¹âÒ»ÏÖ£¬ÌåÁ¦¾«Á¦µÃµ½ÁË»Ö¸´£¡£¡\n"NOR, me,ob);
+message_vision(HIR"$Nèº«ä¸Šçš„"+query("name")+HIR"é­”å…‰ä¸€ç°ï¼Œä½“åŠ›ç²¾åŠ›å¾—åˆ°äº†æ¢å¤ï¼ï¼\n"NOR, me,ob);
  return damage;
                                                                                                                          
 }
@@ -170,17 +170,17 @@ message_vision(HIR"$NÉíÉÏµÄ"+query("name")+HIR"Ä§¹âÒ»ÏÖ£¬ÌåÁ¦¾«Á¦µÃµ½ÁË»Ö¸´£¡£¡\
 if (random(3)==0)
 {
 	me->add("combat_exp", random(query("wtypeA",1))+1);
-msg1=query("name") + HIG"Áé¹âÒ»ÉÁ£¡"+me->query("name")+"µÄÊµÕ½¾­ÑéµÃµ½ÁËÔö¼Ó "NOR;
+msg1=query("name") + HIG"çµå…‰ä¸€é—ªï¼"+me->query("name")+"çš„å®æˆ˜ç»éªŒå¾—åˆ°äº†å¢åŠ  "NOR;
 }
 if (query("wtypeC") >0 && ((int)ob->query("combat_exp",1) >= (int)me->query("combat_exp",1)))
 {
 //ob->start_busy(query("wtypeC") + 2);
 //ob->apply_condition(du[random(sizeof(du))], query("wtypeC")*3);
-//msg1=msg1+ob->query("name")+HIY"ÉíÉÏÉÁ³öÒ»µÀÃÔÂÒµÄ»ÆÉ«Ñá¶ñ£¡"NOR;
+//msg1=msg1+ob->query("name")+HIY"èº«ä¸Šé—ªå‡ºä¸€é“è¿·ä¹±çš„é»„è‰²åŒæ¶ï¼"NOR;
 if( (int)me->query("neili") < (int)me->query("max_neili")*2  )  me->add("neili", query("wtypeC") * 80);
-msg1=msg1+me->query("name")+HIY"ÉíÉÏÉÁ³öÒ»µÀË®É«µÄ¹âÃ¢£¡"NOR;
+msg1=msg1+me->query("name")+HIY"èº«ä¸Šé—ªå‡ºä¸€é“æ°´è‰²çš„å…‰èŠ’ï¼"NOR;
 }         
-message_vision(query("name")+ HIY "Í¨ÌåÒ»ÕóÉÁÁÁ£¬ÉÁ³öÎåÉ«¹âÃ¢£¡£¡½á¹û:\n"+msg1+"\n"+NOR, me,ob);
+message_vision(query("name")+ HIY "é€šä½“ä¸€é˜µé—ªäº®ï¼Œé—ªå‡ºäº”è‰²å…‰èŠ’ï¼ï¼ç»“æœ:\n"+msg1+"\n"+NOR, me,ob);
 
 return damage;
 }
@@ -192,7 +192,7 @@ return damage;
 if (random(3)==0)
 {
 me->add("potential", random(query("wtypeB",1))+1);
-msg1=query("name") + HIG"Áé¹âÒ»ÉÁ£¡"+me->query("name")+"µÄÇ±ÄÜµÃµ½ÁËÔö¼Ó "NOR;
+msg1=query("name") + HIG"çµå…‰ä¸€é—ªï¼"+me->query("name")+"çš„æ½œèƒ½å¾—åˆ°äº†å¢åŠ  "NOR;
 }
 if (query("wtypeD") >0 && ((int)ob->query("combat_exp",1) <= (int)me->query("combat_exp",1)))
 {
@@ -205,15 +205,15 @@ if( (int)me->query("eff_jing") < (int)me->query("max_jing")*2  )
                 me->add("eff_jing", query("wtypeD") * 50);
 if( (int)me->query("jing") < (int)me->query("max_jing")*2  )
                 me->add("jing", query("wtypeD") * 50);         
-msg1=msg1+me->query("name")+RED"ÉíÉÏÉÁ³öÒ»µÀ»ğºìÉ«µÄÖØÉúµÄ¹âÃ¢£¡"NOR;
+msg1=msg1+me->query("name")+RED"èº«ä¸Šé—ªå‡ºä¸€é“ç«çº¢è‰²çš„é‡ç”Ÿçš„å…‰èŠ’ï¼"NOR;
 
 
 //ob->start_busy(query("wtypeD") + 2);
 //ob->apply_condition(du[random(sizeof(du))], query("wtypeD")*3);
-//msg1=msg1+ob->query("name")+RED"ÉíÉÏÉÁ³öÒ»µÀÃÔÂÒµÄ»ğºìÉ«Ñá¶ñ£¡"NOR;
+//msg1=msg1+ob->query("name")+RED"èº«ä¸Šé—ªå‡ºä¸€é“è¿·ä¹±çš„ç«çº¢è‰²åŒæ¶ï¼"NOR;
 
 }         
-message_vision(query("name")+ CYN "Í¨ÌåÒ»ÕóÉÁÁÁ£¬ÉÁ³öÎåÉ«¹âÃ¢£¡£¡½á¹û:\n"+msg1+"\n"+NOR, me,ob);
+message_vision(query("name")+ CYN "é€šä½“ä¸€é˜µé—ªäº®ï¼Œé—ªå‡ºäº”è‰²å…‰èŠ’ï¼ï¼ç»“æœ:\n"+msg1+"\n"+NOR, me,ob);
 
 return damage;
 }
@@ -230,15 +230,15 @@ if( (int)me->query("eff_jing") < (int)me->query("max_jing")*2  )
                 me->add("eff_jing", query("wtypeE") * 50);
 if( (int)me->query("jing") < (int)me->query("max_jing")*2  )
                 me->add("jing", query("wtypeE") * 50);         
-msg1=msg1+me->query("name")+YEL"ÉíÉÏÉÁ³öÒ»µÀ´óµØµÄÖØÉúµÄ¹âÃ¢£¡"NOR;
+msg1=msg1+me->query("name")+YEL"èº«ä¸Šé—ªå‡ºä¸€é“å¤§åœ°çš„é‡ç”Ÿçš„å…‰èŠ’ï¼"NOR;
 if (query("wtypeI") >0  && (int)ob->query("shen") < 0)
 {
 ob->start_busy(query("wtypeI") + 2);
 ob->apply_condition(du[random(sizeof(du))], query("wtypeI")*3);
-msg1=msg1+ob->query("name")+WHT"ÉíÉÏÉÁ³öÒ»µÀÌìÊôĞÔÑÌÎí£¡"NOR;
+msg1=msg1+ob->query("name")+WHT"èº«ä¸Šé—ªå‡ºä¸€é“å¤©å±æ€§çƒŸé›¾ï¼"NOR;
 
 }         
-message_vision(query("name")+ YEL "Í¨ÌåÒ»ÕóÉÁÁÁ£¬ÉÁ³öÎåÉ«¹âÃ¢£¡£¡½á¹û:\n"+msg1+"\n"+NOR, me,ob);
+message_vision(query("name")+ YEL "é€šä½“ä¸€é˜µé—ªäº®ï¼Œé—ªå‡ºäº”è‰²å…‰èŠ’ï¼ï¼ç»“æœ:\n"+msg1+"\n"+NOR, me,ob);
 
 return damage;
 }
@@ -254,21 +254,21 @@ if( (int)me->query("eff_jing") < (int)me->query("max_jing")*2  )
                 me->add("eff_jing", query("wtypeF") * 50);
 if( (int)me->query("jing") < (int)me->query("max_jing")*2  )
                 me->add("jing", query("wtypeF") * 50);         
-msg1=msg1+me->query("name")+HIM"ÉíÉÏÉÁ³öÒ»µÀÇåË¬µÄÎ¢·ç£¡"NOR;
+msg1=msg1+me->query("name")+HIM"èº«ä¸Šé—ªå‡ºä¸€é“æ¸…çˆ½çš„å¾®é£ï¼"NOR;
 
 if (query("wtypeJ") >0  && (int)ob->query("shen") > 0)
 {
 ob->start_busy(query("wtypeJ") + 2);
 ob->apply_condition(du[random(sizeof(du))], query("wtypeJ")*3);
-msg1=msg1+ob->query("name")+HIY"ÉíÉÏÉÁ³öÒ»µÀµØÊôĞÔÑÌÎí£¡"NOR;
+msg1=msg1+ob->query("name")+HIY"èº«ä¸Šé—ªå‡ºä¸€é“åœ°å±æ€§çƒŸé›¾ï¼"NOR;
 
 }         
-message_vision(query("name")+ HIM "Í¨ÌåÒ»ÕóÉÁÁÁ£¬ÉÁ³öÎåÉ«¹âÃ¢£¡£¡½á¹û:\n"+msg1+"\n"+NOR, me,ob);
+message_vision(query("name")+ HIM "é€šä½“ä¸€é˜µé—ªäº®ï¼Œé—ªå‡ºäº”è‰²å…‰èŠ’ï¼ï¼ç»“æœ:\n"+msg1+"\n"+NOR, me,ob);
 return damage;
 }
 
       case 16:
-                if (query("wtypeG") >0 && (query("armor_prop/damage") >0 && query("armor_prop/jingli") >0) && (string)me->query("gender") != "Å®ĞÔ")
+                if (query("wtypeG") >0 && (query("armor_prop/damage") >0 && query("armor_prop/jingli") >0) && (string)me->query("gender") != "å¥³æ€§")
 {
 if( (int)me->query("eff_qi") < (int)me->query("max_qi")*2  )
                 me->add("eff_qi", query("wtypeG") * 50);
@@ -278,21 +278,21 @@ if( (int)me->query("eff_jing") < (int)me->query("max_jing")*2  )
                 me->add("eff_jing", query("wtypeG") * 50);
 if( (int)me->query("jing") < (int)me->query("max_jing")*2  )
                 me->add("jing", query("wtypeG") * 50);         
-msg1=msg1+me->query("name")+HIW"ÉíÉÏÉÁ³öÒ»µÀÌìÀ×µÄ¹âÃ¢£¡"NOR;
-if (query("wtypeK") >0 && (string)ob->query("gender") != "ÄĞĞÔ")
+msg1=msg1+me->query("name")+HIW"èº«ä¸Šé—ªå‡ºä¸€é“å¤©é›·çš„å…‰èŠ’ï¼"NOR;
+if (query("wtypeK") >0 && (string)ob->query("gender") != "ç”·æ€§")
 {
 ob->start_busy(query("wtypeK") + 2);
 ob->apply_condition(du[random(sizeof(du))], query("wtypeK")*3);
-msg1=msg1+ob->query("name")+RED"ÉíÉÏÉÁ³öÒ»µÀÈËÊôĞÔÑÌÎí£¡"NOR;
+msg1=msg1+ob->query("name")+RED"èº«ä¸Šé—ªå‡ºä¸€é“äººå±æ€§çƒŸé›¾ï¼"NOR;
 
 }         
-message_vision(query("name")+ HIC "Í¨ÌåÒ»ÕóÉÁÁÁ£¬ÉÁ³öÎåÉ«¹âÃ¢£¡£¡½á¹û:\n"+msg1+"\n"+NOR, me,ob);
+message_vision(query("name")+ HIC "é€šä½“ä¸€é˜µé—ªäº®ï¼Œé—ªå‡ºäº”è‰²å…‰èŠ’ï¼ï¼ç»“æœ:\n"+msg1+"\n"+NOR, me,ob);
 
 return damage;
 }
 
       case 17:
-                if (query("wtypeH") >0 && (query("armor_prop/armor") >0 && query("armor_prop/defense") >0) && (string)me->query("gender") != "ÄĞĞÔ")
+                if (query("wtypeH") >0 && (query("armor_prop/armor") >0 && query("armor_prop/defense") >0) && (string)me->query("gender") != "ç”·æ€§")
 {
 
 if( (int)me->query("eff_qi") < (int)me->query("max_qi")*2  )
@@ -303,15 +303,15 @@ if( (int)me->query("eff_jing") < (int)me->query("max_jing")*2  )
                 me->add("eff_jing", query("wtypeH") * 50);
 if( (int)me->query("jing") < (int)me->query("max_jing")*2  )
                 me->add("jing", query("wtypeH") * 50);   
-msg1=msg1+me->query("name")+HIB"ÉíÉÏÉÁ³öÒ»µÀÉÁµçµÄ¹âÃ¢£¡"NOR;
-if (query("wtypeL") >0  && (string)ob->query("gender") != "Å®ĞÔ")
+msg1=msg1+me->query("name")+HIB"èº«ä¸Šé—ªå‡ºä¸€é“é—ªç”µçš„å…‰èŠ’ï¼"NOR;
+if (query("wtypeL") >0  && (string)ob->query("gender") != "å¥³æ€§")
 {
 ob->start_busy(query("wtypeL") + 2);
 ob->apply_condition(du[random(sizeof(du))], query("wtypeL")*3);
-msg1=msg1+ob->query("name")+HIR"ÉíÉÏÉÁ³öÒ»µÀÄ§ÊôĞÔÑÌÎí£¡"NOR;
+msg1=msg1+ob->query("name")+HIR"èº«ä¸Šé—ªå‡ºä¸€é“é­”å±æ€§çƒŸé›¾ï¼"NOR;
 
 }         
-message_vision(query("name")+ HIB "Í¨ÌåÒ»ÕóÉÁÁÁ£¬ÉÁ³öÎåÉ«¹âÃ¢£¡£¡½á¹û:\n"+msg1+"\n"+NOR, me,ob);
+message_vision(query("name")+ HIB "é€šä½“ä¸€é˜µé—ªäº®ï¼Œé—ªå‡ºäº”è‰²å…‰èŠ’ï¼ï¼ç»“æœ:\n"+msg1+"\n"+NOR, me,ob);
 
 return damage;
 }

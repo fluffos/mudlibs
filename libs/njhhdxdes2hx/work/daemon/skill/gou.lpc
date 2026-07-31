@@ -1,0 +1,4 @@
+// gou.c
+
+inherit SKILL;
+

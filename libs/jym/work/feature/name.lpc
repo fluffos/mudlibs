@@ -6,7 +6,7 @@
 #include <dbase.h>
 #include <condition.h>
 
-static string *my_id;
+nosave string *my_id;
 
 void set_name(string name, string *id)
 {

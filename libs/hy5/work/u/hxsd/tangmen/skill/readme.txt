@@ -1,8 +1,8 @@
-chinese biye-wu==±ÌÒ¶Ëæ·çÎè
-chinese zimu-zhen==×ÓÄ¸Õë·¨
-chinese liuxing-biao==Á÷ĞÇ¸ÏÔÂïÚ
-chinese pili-biao==Åùö¨ïÚ
-chinese qiulinshiye==ÇïÁÖÊ°Ò¶
-chinese wuzhan-mei==ÎåÕ¹Ã·
-chinese zhuihun-biao==×·»ê¶áÃüïÚ
-chinese biyun-xinfa==±ÌÔÆĞÄ·¨
+chinese biye-wu==ç¢§å¶éšé£èˆ
+chinese zimu-zhen==å­æ¯é’ˆæ³•
+chinese liuxing-biao==æµæ˜Ÿèµ¶æœˆé•–
+chinese pili-biao==éœ¹é›³é•–
+chinese qiulinshiye==ç§‹æ—æ‹¾å¶
+chinese wuzhan-mei==äº”å±•æ¢…
+chinese zhuihun-biao==è¿½é­‚å¤ºå‘½é•–
+chinese biyun-xinfa==ç¢§äº‘å¿ƒæ³•

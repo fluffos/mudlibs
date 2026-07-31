@@ -6,7 +6,7 @@
 	dim connstr
 	dim db
 	startime=timer()
-	'¸ü¸ÄÊı¾İ¿âÃû×Ö
+	'æ›´æ”¹æ•°æ®åº“åå­—
 	db="data/dvBBS5.MDB"
 	Set conn = Server.CreateObject("ADODB.Connection")
     connstr="driver={Microsoft Access Driver (*.mdb)};dbq=" & Server.MapPath(db)

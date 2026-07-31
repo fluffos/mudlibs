@@ -18,7 +18,6 @@
 // and `protected` are real, fully-supported keywords on this driver
 // (verified empirically), so just let them pass through unchanged.
 #ifndef __SENSIBLE_MODIFIERS__
-#define nosave nosave
 #define protected protected
 #endif
 

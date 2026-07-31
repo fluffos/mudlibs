@@ -20,7 +20,7 @@ int checking(object me, object ob)
 {
         if((int)me->query("qi") < 1)
         {
-                  message_vision("\n$NÆËÔÚµØÉÏÕõÔúÁË¼¸ÏÂ£¬¿ÚÖÐÅç³ö¼¸¿Ú"HIR"ÏÊÑª"NOR"£¬ËÀÁË£¡\n"NOR,me);
+                  message_vision("\n$Næ‰‘åœ¨åœ°ä¸ŠæŒ£æ‰Žäº†å‡ ä¸‹ï¼Œå£ä¸­å–·å‡ºå‡ å£"HIR"é²œè¡€"NOR"ï¼Œæ­»äº†ï¼\n"NOR,me);
                   if(ob->query_temp("start_job")==1)
                   {
                   	ob->add_temp("killed_mgb",1);
@@ -30,7 +30,7 @@ int checking(object me, object ob)
                   call_out("destroying",1,me);                  
                   if(ob->query_condition("jobshadi_limit")==0)
                   {
-                  	message_vision(CYN"\nÒ»¸öÊØ³ÇËÎ±øÅÜ¹ýÀ´ËµµÀ£ºÃÉ¹Å÷°×ÓÔÝÊ±±»»÷ÍËÁË£¬$N¿ÉÒÔ»ØÈ¥¸´ÃüÁË£¡\n"NOR,ob);
+                  	message_vision(CYN"\nä¸€ä¸ªå®ˆåŸŽå®‹å…µè·‘è¿‡æ¥è¯´é“ï¼šè’™å¤é¼å­æš‚æ—¶è¢«å‡»é€€äº†ï¼Œ$Nå¯ä»¥å›žåŽ»å¤å‘½äº†ï¼\n"NOR,ob);
                   	ob->set_temp("job_over",1);
                   	ob->delete_temp("start_job");
                   }
@@ -57,7 +57,7 @@ int do_kill(string arg)
         object me = this_object();
         if (me->is_fighting()) 
         {
-		message_vision(CYN"\n¼ÓÓÍ£¡¼ÓÓÍ£¡\n"NOR,who);
+		message_vision(CYN"\nåŠ æ²¹ï¼åŠ æ²¹ï¼\n"NOR,who);
                 return 1;
         }
         if(!arg || present(arg,environment(me))!=me) return 0;
@@ -74,14 +74,14 @@ void clone_rob(object ob)
   	room = environment(this_player());
         switch( random(2) ) {
                 case 0:
-			message_vision(HIR"³ÇÏÂÓÖÅÀÉÏÀ´Ò»¸öÃÉ¹Å±øÊ¿¡£\n" NOR,this_player()); 
+			message_vision(HIR"åŸŽä¸‹åˆçˆ¬ä¸Šæ¥ä¸€ä¸ªè’™å¤å…µå£«ã€‚\n" NOR,this_player()); 
            robber=new(__DIR__"robber1");
 			robber->move(room);
 			robber->kill_ob(this_player());
 			robber->checking(robber,this_player());
                         break;
                 case 1:
-			message_vision(HIR"³ÇÏÂÓÖÅÀÉÏÀ´Ò»¸öÃÉ¹Å½«Áì¡£\n" NOR,this_player()); 
+			message_vision(HIR"åŸŽä¸‹åˆçˆ¬ä¸Šæ¥ä¸€ä¸ªè’™å¤å°†é¢†ã€‚\n" NOR,this_player()); 
            robber=new(__DIR__"robber2");
 			robber->move(room);
 			robber->kill_ob(this_player());

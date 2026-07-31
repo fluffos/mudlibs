@@ -1,0 +1,173 @@
+// worknpc.c
+// a npc for standard workman(not walkman :P)
+// by nerd 97-7-30 11:05下午
+#include "worknpc.h"
+
+inherit NPC;
+
+private nosave int count,time;
+private mapping * DefaultWorkList =
+({
+    ([  "begin_msg" : "$n对$N说道：既然如此，你就在这里干活吧。\n",
+        "working_msg" : "$N拼命的忙着，累的满头大汗。\n",
+        "end_msg" : "$n看着你辛苦的样子，给了你一些钱。\n",
+        "fail_msg" : "$N一不小心，把一个东西给打坏了。\n$n很生气的看着$N，"
+                    "说：“你还是老老实点，赔钱来吧。”\n",
+        "salary" : 10 ,
+        "s_exp" : 0,
+        "age" : 14,
+        "difficulty" : 0,
+     ])
+});
+
+void setup()
+{
+    mapping mydb;
+    mydb = query_entire_dbase();
+    if(undefinedp(mydb["work_list"]))
+        mydb["work_list"] = DefaultWorkList;
+/*    else if(!arrayp(mydb["work_list"] && mapp(mydb["work_list"] ))
+        mydb["work_list"] = ({ mydb["work_list"] });*/
+    ::setup();
+}
+
+void init()
+{
+    ::init();
+    if(this_player(1)->can_act())
+        add_action("do_work","work");
+}
+
+int do_work()
+{
+    mixed worklist,refuse;
+    object worker = this_player(1);
+    
+    if(!arrayp( worklist = query("work_list") ))
+        return 0;
+    
+    if( refuse = this_object() -> refuse_work( worker ) )
+    {
+        if(stringp(refuse))
+            return notify_fail(refuse);
+        else
+            return notify_fail(name() + "说道：现在我们不需要帮工，你还是请回吧。\n");
+    }
+    
+    foreach(mapping work in worklist)
+    {
+        int age,exp;
+        age = worker->query_age();
+        exp = worker->query("social_exp");
+        if( (age > work["age"] ) && (exp >= work["s_exp"]) )
+//            && !random(sizeof(worklist) / 2 ) )
+        {
+            string begin_msg = work["begin_msg"];
+            if(!begin_msg)
+                begin_msg = name() + "对$N说到：”那好，你就先在这里帮工吧。\n";
+            message_vision(begin_msg,worker,this_object());
+            if(work["busy_msg"])
+                worker->disable_command("verb",work[busy_msg]);
+            else
+                worker->disable_command("verb","你忙着呢，小心老板看见了。");
+            time =  work["salary"] * 60 / 500
+                - ( worker->query("social_exp") - work["s_exp"] ) / 100;
+            time = time > -10 ? time : -10;
+            time = (time + 30)/5;
+            count = 0;
+            call_out( "continue_work",time,worker,work); //question:multi worker???
+            return 1;
+        }
+    }
+    message("vision",name() + "说道：现在我们不需要你这样的帮工，你还是请回吧。\n",worker);
+    return 1;
+}
+
+void continue_work(object worker,mapping work)
+{
+    mixed msg;
+    int difficulty;
+    
+    worker -> receive_damage("sen",30);
+    count ++;
+    if(count > 2 && random(2) )
+    {
+        pay_salary(worker,work);
+        return;
+    }
+    
+    if(!undefinedp(work["difficulty"]) )
+    {   difficulty = work["difficulty"];
+//    if( random( (worker->query("social_exp") - work["s_exp"])/100 
+        if( random( worker->query("gin") ) < difficulty )
+        {
+            work_fail(worker,work);
+            return;
+        }
+    }
+
+    msg = work["working_msg"];
+    if(stringp(msg) && random(10) > 2)
+    {
+        message_vision(msg,worker,this_object());
+        remove_call_out("continue_work");
+        call_out("continue_work",time,worker,work);
+    }
+    else if(arrayp(msg))
+    {
+        message_vision(msg[random(sizeof(msg))],worker,this_object());
+        remove_call_out("continue_work");
+        call_out("continue_work",time,worker,work);
+    }
+    else
+        call_out("continue_work",time,worker,work);
+}
+
+void pay_salary(object worker,mapping work)
+{
+    object coin,silver;
+    int sal = work["salary"] ;
+    if( !newbiep( worker ) )
+        sal *= (100 + worker->query("kar")) / 100;
+    message_vision(work["end_msg"],worker,this_object());
+    coin = new(COIN_OB);
+    coin -> set_amount(sal % 1000);
+    silver = new(SILVER_OB);
+    if ( sal / 1000 )
+        silver ->ste_amount(sal / 1000);
+    else
+        destruct(silver);
+    coin -> move(worker);
+    if(silver)
+        silver -> move(worker);
+    worker->enable_path();
+}
+
+void work_fail(object worker,mapping work)
+{
+    int pnl;
+    mixed exits;
+    message_vision(work["fail_msg"],worker,this_object());
+    pnl = ( work["salary"] / worker->query("kar") ) * 10;
+    if(!pnl)
+        message_vision(name() + "对$N说道：不过看在你可怜的份上，就算了吧，你走吧。\n",worker);
+    else if(!worker->can_afford(pnl))
+    {
+        message_vision(name() + "说道：哼，没钱？不行，来人啦，把这个" 
+            + RANK_D->query_rude(worker) + "给我扔出去！",worker,this_object());
+        worker->unconcious();
+        exits = query("exits");
+        if(sizeof(exits))
+        {
+            exits = exits[keys(exits)[random(sizeof(exits))]];
+            worker -> move(exits);
+        }
+    }
+    else
+    {
+        worker -> pay_money(pnl);
+        message_vision(name() + "说到：这次就饶了你，下次再这样，哼！\n",worker,this_object());
+    }
+    worker->enable_path();
+}
+ 

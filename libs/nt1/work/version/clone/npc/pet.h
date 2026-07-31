@@ -2,7 +2,7 @@
 // Copyright (C) 2003, by Lonely. All rights reserved.
 // This software can not be used, copied, or modified 
 // in any form without the written permission from authors.
-// ³èÎï
+// å® ç‰©
 
 #include <ansi.h>
 #include <command.h>
@@ -21,11 +21,11 @@ int is_stay_in_room() { return 1; }
 
 void create()
 {
-        set_name("³èÎï", ({ "pet" }) );
-        set("race", "Ò°ÊŞ");
-        set("gender", "ĞÛĞÔ");
+        set_name("å® ç‰©", ({ "pet" }) );
+        set("race", "é‡å…½");
+        set("gender", "é›„æ€§");
         set("age", 2 + random(3));
-        set("long", "Íæ¼Ò¿ÉÒÔÆïÉÏËüÈ¥Ö¸¶¨µÄµØ·½(rideto)¡£\n");	
+        set("long", "ç©å®¶å¯ä»¥éª‘ä¸Šå®ƒå»æŒ‡å®šçš„åœ°æ–¹(rideto)ã€‚\n");	
         set("ridable", 1);
         set("no_sell", 1);
         set("no_put", 1);
@@ -38,7 +38,7 @@ void create()
         set("shen_type", 0);
         set("combat_exp",50000);
         set("attitude", "peaceful");        
-        set("limbs", ({ "Í·²¿", "¸¹²¿", "Î²°Í","ºóÍÈ","Ç°ÍÈ" }) );
+        set("limbs", ({ "å¤´éƒ¨", "è…¹éƒ¨", "å°¾å·´","åè…¿","å‰è…¿" }) );
         set("verbs", ({ "bite", "hoof" }) );
 
         set_temp("apply/attack", 100);
@@ -63,7 +63,7 @@ void heart_beat()
         if (this_object()->query_temp("stay_in_room") >= 2)
         {
                 tell_object(environment(this_object()), HIM + name() + 
-                             HIM "ºöÈ»³¯Ô¶´¦±¼È¥£¬Ò»¿Ì¾ÍÃ»ÁË×ÙÓ°¡£\n" NOR);
+                             HIM "å¿½ç„¶æœè¿œå¤„å¥”å»ï¼Œä¸€åˆ»å°±æ²¡äº†è¸ªå½±ã€‚\n" NOR);
                 destruct(this_object());
         }
 }
@@ -74,7 +74,7 @@ int receive_whistle(object me)
 
         if ((env = environment()) && env == me)
         {
-                write(name() + "Äã²»ÊÇÕıÆï×ÅÂğ£¿ÄãÕÙ»½¸öÊ²Ã´¾¢£¿\n");
+                write(name() + "ä½ ä¸æ˜¯æ­£éª‘ç€å—ï¼Ÿä½ å¬å”¤ä¸ªä»€ä¹ˆåŠ²ï¼Ÿ\n");
                 return 1;
         }
 
@@ -87,19 +87,19 @@ int receive_whistle(object me)
                         if (env->is_character() && environment(env))
                                         env = environment(env);
 
-                        message("vision", HIG "Í»È»" + name() + HIG "¿ñ±¼"
-                                HIG "¶øÈ¥£¬Ë²¼äÏûÊ§ÁË£¡\n\n" NOR, env);
+                        message("vision", HIG "çªç„¶" + name() + HIG "ç‹‚å¥”"
+                                HIG "è€Œå»ï¼Œç¬é—´æ¶ˆå¤±äº†ï¼\n\n" NOR, env);
 
                         if (interactive(env = environment()))
                         {
                                 env->delete_temp("is_riding"); 
                                 this_object()->delele_temp("is_rided_by");
                                 tell_object(env, HIM + name() +
-                                                 HIM "ºöÈ»ÀëÄã¶øÈ¥ÁË£¡\n" NOR);
+                                                 HIM "å¿½ç„¶ç¦»ä½ è€Œå»äº†ï¼\n" NOR);
                         }
                 }
 
-                message_vision(HIG "$n" HIG "²»Öª´ÓÄÄÀï´Üµ½$N" HIG "ÃæÇ°£¡\n\n" NOR,
+                message_vision(HIG "$n" HIG "ä¸çŸ¥ä»å“ªé‡Œçªœåˆ°$N" HIG "é¢å‰ï¼\n\n" NOR,
                                me, this_object());
         }
 
@@ -115,7 +115,7 @@ int receive_whistle(object me)
         return 1;
 }
 
-// ½ÓÊÜ´æÅÌÊı¾İµÄ½Ó¿Úº¯Êı
+// æ¥å—å­˜ç›˜æ•°æ®çš„æ¥å£å‡½æ•°
 int receive_dbase_data(mixed data)
 {
         if (! mapp(data))
@@ -127,7 +127,7 @@ int receive_dbase_data(mixed data)
         return 1;
 }
 
-// ½øĞĞ±£´æÊı¾İµÄ½Ó¿Úº¯Êı
+// è¿›è¡Œä¿å­˜æ•°æ®çš„æ¥å£å‡½æ•°
 mixed save_dbase_data()
 {
         mapping data;
@@ -145,12 +145,12 @@ mixed save_dbase_data()
 }
 
 /*
-// ¶ÁÈ¡´æÅÌµÄÊı¾İ
+// è¯»å–å­˜ç›˜çš„æ•°æ®
 int restore()
 {
         int r;
 
-        if (base_name(this_object()) + ".c" == __FILE__)
+        if (base_name(this_object()) + ".lpc" == __FILE__)
                 return 0;
 
         r = ::restore();
@@ -158,12 +158,12 @@ int restore()
         return r;
 }
 
-// ±£´æÊı¾İ
+// ä¿å­˜æ•°æ®
 int save()
 {
 	int res;
 
-        if (base_name(this_object()) + ".c" == __FILE__)
+        if (base_name(this_object()) + ".lpc" == __FILE__)
                 return 0;
 
 	return ::save();

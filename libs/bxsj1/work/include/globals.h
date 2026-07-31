@@ -8,7 +8,6 @@
 
 //这里是修改mudlib达到兼容性
 #define crypt oldcrypt 
-#define nosave nosave
 #define private protected
 
 #define TIME_TICK (time()*60)

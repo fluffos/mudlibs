@@ -26,7 +26,7 @@ void init_room() {
 }
 
 int do_disable() {
-	 tell_object(this_player(), "Äã²»ÄÜÔÚÕâÀï¸ÉÕâ¸ö¡£\n");
+	 tell_object(this_player(), "ä½ ä¸èƒ½åœ¨è¿™é‡Œå¹²è¿™ä¸ªã€‚\n");
 	 return 1;
 }
 
@@ -76,7 +76,7 @@ void my_destruct(object obj)
 								{
 										  if( inv[i] && objectp(inv[i]) && userp(inv[i]) )
 										  {
-											 call_out("move_me",1+random(4),inv[i],"/d/bwdh/sjsz/kantai_w1.c");
+											 call_out("move_me",1+random(4),inv[i],"/d/bwdh/sjsz/kantai_w1.lpc");
 											 if( !living(inv[i]) ) inv[i]->revive(1);
 											 full_all(inv[i]);
 											 nude(inv[i]);
@@ -91,7 +91,7 @@ void my_destruct(object obj)
 								}
 					 if( userp(obj) )
 					 {
-						 call_out("move_me",1+random(4),obj,"/d/bwdh/sjsz/kantai_w1.c");
+						 call_out("move_me",1+random(4),obj,"/d/bwdh/sjsz/kantai_w1.lpc");
 						 if( !living(obj) )obj->revive(1);
 						 full_all(obj);
 						 nude(obj);
@@ -112,7 +112,7 @@ void nude(object obj)
 								{
 										  if( inv[i] && objectp(inv[i]) && userp(inv[i]) )
 										  {
-											 call_out("move_me",1+random(4),inv[i],"/d/bwdh/sjsz/kantai_w1.c");
+											 call_out("move_me",1+random(4),inv[i],"/d/bwdh/sjsz/kantai_w1.lpc");
 											 if( !living(inv[i]) ) inv[i]->revive(1);
 											 full_all(inv[i]);
 											 nude(inv[i]);
@@ -221,16 +221,16 @@ int do_kickout(string arg) {
 		  return 0;
 
 	 if (!arg)
-		  return notify_fail("ÄãÒª°ÑË­¸Ï×ß£¿\n");
+		  return notify_fail("ä½ è¦æŠŠè°èµ¶èµ°ï¼Ÿ\n");
 
 	 target = present(arg, room);
 	 if (!target)
-		  return notify_fail("ÕâÀïÃ»ÓĞÕâ¸öÈË£®\n");
+		  return notify_fail("è¿™é‡Œæ²¡æœ‰è¿™ä¸ªäººï¼\n");
 
 	 if (!userp(target))
-		  return notify_fail("ÄãÖ»ÄÜ¸Ï×ßÍæ¼Ò¡£\n");
+		  return notify_fail("ä½ åªèƒ½èµ¶èµ°ç©å®¶ã€‚\n");
 
-	 message_vision("$N±»ÊÔ½£É½×¯Ö÷ÈËÌß³ö¡£\n", target);
+	 message_vision("$Nè¢«è¯•å‰‘å±±åº„ä¸»äººè¸¢å‡ºã€‚\n", target);
 
 	 finish(target);
 
@@ -244,28 +244,28 @@ int do_finish(string arg) {
 	 object target;
 
 	 if (! arg || arg=="")
-		  return notify_fail("ÄãÒª½á¹ûË­£¿\n");
+		  return notify_fail("ä½ è¦ç»“æœè°ï¼Ÿ\n");
 
 	 target = present(arg, room);
 	 if ( !target || !objectp(target)  )
-		  return notify_fail("ÕâÀïÃ»ÓĞÕâ¸öÈË£®\n");
+		  return notify_fail("è¿™é‡Œæ²¡æœ‰è¿™ä¸ªäººï¼\n");
 
 	 if ( ! userp(target) )
-		  return notify_fail("ÄãÏë½á¹ûÄÇ¸öÍæ¼Ò£¿\n");
+		  return notify_fail("ä½ æƒ³ç»“æœé‚£ä¸ªç©å®¶ï¼Ÿ\n");
 
-	 if ( arg == player->query("id") ) return notify_fail("Äã·¢·èÀ²£¿\n");
+	 if ( arg == player->query("id") ) return notify_fail("ä½ å‘ç–¯å•¦ï¼Ÿ\n");
 
-	 if( target->query_temp("finished") )return notify_fail("ÕâÀïÃ»ÓĞÕâ¸öÈË£®\n");
+	 if( target->query_temp("finished") )return notify_fail("è¿™é‡Œæ²¡æœ‰è¿™ä¸ªäººï¼\n");
 
 	 if ( target->query("qi")<0 || target->query("eff_qi")<0 ||
 		  target->query("jing")<0 || target->query("eff_jing")<0 || 
 		  target->query("jingli") < 0 ||
 		  !living(target) 
 		  ) {
-		  message_vision("$N¶ñºİºİµØÒ»½Å°Ñ$nÌß³ö±ÈÎä³¡¡£\n", player, target);
+		  message_vision("$Næ¶ç‹ ç‹ åœ°ä¸€è„šæŠŠ$nè¸¢å‡ºæ¯”æ­¦åœºã€‚\n", player, target);
 	 }
 	 else {
-		return notify_fail("ÈË¼Ò»¹Ã»ËÀÄØ£¬ÏÈ´òÒ»¼Ü°É£®\n");
+		return notify_fail("äººå®¶è¿˜æ²¡æ­»å‘¢ï¼Œå…ˆæ‰“ä¸€æ¶å§ï¼\n");
 	 }
 	 
 
@@ -280,23 +280,23 @@ int do_attack(string arg)
 	string victim;
 	int i;
 
-	if (!arg) return notify_fail("ÄãÒª¹¥»÷Ë­£¿\n");
+	if (!arg) return notify_fail("ä½ è¦æ”»å‡»è°ï¼Ÿ\n");
 
 	victim = arg;
-	if ( victim == me->query("id") ) return notify_fail("Äã·¢·èÀ²£¿\n");
+	if ( victim == me->query("id") ) return notify_fail("ä½ å‘ç–¯å•¦ï¼Ÿ\n");
 	here = environment(me);
 
 	target = present(victim, here);
-	if (!target || !objectp(target) ) return notify_fail("ÕâÀï²¢ÎŞ´ËÈË£¡\n");
+	if (!target || !objectp(target) ) return notify_fail("è¿™é‡Œå¹¶æ— æ­¤äººï¼\n");
 
-	if ( target->query("race") != "ÈËÀà" || target->query("sjsz/team_name") == me->query("sjsz/team_name"))
+	if ( target->query("race") != "äººç±»" || target->query("sjsz/team_name") == me->query("sjsz/team_name"))
 	{
-		return notify_fail("Äã·¢·èÀ²£¿\n");
+		return notify_fail("ä½ å‘ç–¯å•¦ï¼Ÿ\n");
 	}
 
 	obj = all_inventory(here);
 
-	message_vision(HIR "$N¶Ô×Å$n"+HIR"ºÈµÀ£º"+RANK_D->query_rude(target)+HIR"£¬½ñÈÕ²»ÊÇÄãËÀ¾ÍÊÇÎÒ»î£¡µÜĞÖÃÇ£¬¸øÎÒºİºİµØ½ÌÑµ$p£¡\n\n" NOR, me, target);
+	message_vision(HIR "$Nå¯¹ç€$n"+HIR"å–é“ï¼š"+RANK_D->query_rude(target)+HIR"ï¼Œä»Šæ—¥ä¸æ˜¯ä½ æ­»å°±æ˜¯æˆ‘æ´»ï¼å¼Ÿå…„ä»¬ï¼Œç»™æˆ‘ç‹ ç‹ åœ°æ•™è®­$pï¼\n\n" NOR, me, target);
 	me->kill_ob(target);
 
 	if( me->query("sjsz/fighting") )
@@ -307,7 +307,7 @@ int do_attack(string arg)
 				 obj[i]->query("sjsz/team_name") == me->query("sjsz/team_name") && obj[i] != me
 				 && obj[i]->query("env/invisibility") < 1 )
 			{
-					//message_vision(HIY "Ö»¼û$NÓ¦Éù³å×Å$nÆËÁË¹ıÈ¥£¡ºÈµÀ£º"+RANK_D->query_rude(target)+HIY"ÄÃÃüÀ´°É£¡\n" NOR, obj[i], target);
+					//message_vision(HIY "åªè§$Nåº”å£°å†²ç€$næ‰‘äº†è¿‡å»ï¼å–é“ï¼š"+RANK_D->query_rude(target)+HIY"æ‹¿å‘½æ¥å§ï¼\n" NOR, obj[i], target);
 					obj[i]->kill_ob(target);
 			}
 		}
@@ -315,7 +315,7 @@ int do_attack(string arg)
 
 	if( living(target) )
 	{
-		//message_vision( HIR "\n$N¶Ô×Å$n"+HIR"ÀäĞ¦Ò»Éù£ºÏëÒĞ¶àÎªÊ¤£¿¿´ÕĞ£¡\n\n" NOR, target,me );
+		//message_vision( HIR "\n$Nå¯¹ç€$n"+HIR"å†·ç¬‘ä¸€å£°ï¼šæƒ³å€šå¤šä¸ºèƒœï¼Ÿçœ‹æ‹›ï¼\n\n" NOR, target,me );
 		target->kill_ob(me);
 	}
 
@@ -335,23 +335,23 @@ int do_stop(string arg)
 	{
 	  victim = arg;
 
-	  if ( victim == me->query("id") ) return notify_fail("Äã·¢·èÀ²£¿\n");
+	  if ( victim == me->query("id") ) return notify_fail("ä½ å‘ç–¯å•¦ï¼Ÿ\n");
 
 	  target = present(victim, here);
-	  if( !objectp(target) ) return notify_fail("Ã»ÓĞÕâ¸öÈË¡£\n");
+	  if( !objectp(target) ) return notify_fail("æ²¡æœ‰è¿™ä¸ªäººã€‚\n");
 
-	 if ( target->query("race") != "ÈËÀà" || target->query("sjsz/team_name") != me->query("sjsz/team_name"))
+	 if ( target->query("race") != "äººç±»" || target->query("sjsz/team_name") != me->query("sjsz/team_name"))
 	 {
-		return notify_fail("ÈË¼ÒÀíÒ²²»ÀíÄã¡£\n");
+		return notify_fail("äººå®¶ç†ä¹Ÿä¸ç†ä½ ã€‚\n");
 	 }
-		message_vision(HIY "$N¶Ô×Å$n"+HIY"È°µÀ£º"+RANK_D->query_respect(target)+HIY"Çë×¡ÊÖ£¬ÔİÇÒÈÄÈËÒ»Ãü£¡\n" NOR, me, target);
-		message_vision(HIY "$N¿´ÁË¿´$n"+HIY"£¬Í´¿ìµØËµµÀ£ººÃ°É£¬²»´òÁË£¬ÔİÇÒ½«¹·ÍÈ×ÓÄÔ´ü¼ÄÔÚÆä²±×ÓÉÏ£¡\n" NOR, target, me);
+		message_vision(HIY "$Nå¯¹ç€$n"+HIY"åŠé“ï¼š"+RANK_D->query_respect(target)+HIY"è¯·ä½æ‰‹ï¼Œæš‚ä¸”é¥¶äººä¸€å‘½ï¼\n" NOR, me, target);
+		message_vision(HIY "$Nçœ‹äº†çœ‹$n"+HIY"ï¼Œç—›å¿«åœ°è¯´é“ï¼šå¥½å§ï¼Œä¸æ‰“äº†ï¼Œæš‚ä¸”å°†ç‹—è…¿å­è„‘è¢‹å¯„åœ¨å…¶è„–å­ä¸Šï¼\n" NOR, target, me);
 		target->remove_all_killer();
 
 	}
 	else
 	{
-		message_vision(HIY "$N¸ßÉùº°×Å£ºµÜĞÖÃÇÇë×¡ÊÖ£¬¿´¿´ÈË¼ÒÓĞºÎ»°Ëµ£¡\n" NOR, me);
+		message_vision(HIY "$Né«˜å£°å–Šç€ï¼šå¼Ÿå…„ä»¬è¯·ä½æ‰‹ï¼Œçœ‹çœ‹äººå®¶æœ‰ä½•è¯è¯´ï¼\n" NOR, me);
 
 		for(i=0;i<sizeof(obj);i++)
 		{
@@ -359,7 +359,7 @@ int do_stop(string arg)
 				 obj[i]->query("sjsz/team_name") == me->query("sjsz/team_name") && obj[i] != me
 				 && obj[i]->query("env/invisibility") < 1 )
 			{
-					message_vision(HIG "Ö»¼û$NÓ¦ÉùÏòºóÒ»Ìø£¬²»´òÁË¡£\n" NOR, obj[i]);
+					message_vision(HIG "åªè§$Nåº”å£°å‘åä¸€è·³ï¼Œä¸æ‰“äº†ã€‚\n" NOR, obj[i]);
 					obj[i]->remove_all_killer();
 			}
 		}

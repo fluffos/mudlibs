@@ -1,11 +1,11 @@
 // SN:4<>PLgjNR]6XG2?@
-// harbor.h  ËùÓĞ¸Û¿Ú×ÊÁÏ
+// harbor.h  æ‰€æœ‰æ¸¯å£èµ„æ–™
 // by ALN@XKX
 
 // locx indicates positions of easts-wests, + means east, - means west
 // locy indicates positions of south-norths, + means north, - means south
 
-// all ´óÂ½¸Û¿Ú
+// all å¤§é™†æ¸¯å£
 mapping harbors = ([
         "/d/beijing/tanggu"    :    0,
         "/d/jiaxing/zhoushan"   : -200,
@@ -13,16 +13,16 @@ mapping harbors = ([
         "/d/quanzhou/anhai"    : -300,
 ]);
 
-// all º£µº¸Û¿Ú
+// all æµ·å²›æ¸¯å£
 mapping islands = ([
         "/d/shenlong/beach"    : ({ 30,   20}), 
         "/d/island/icefire1"   : ({100,  600}),
         "/d/taohua/haitan"     : ({ 20, -210}),
 ]);
 
-// »Äµº
-// Èç¹û´¬Í£ÔÚ»Äµº£¬Íæ¼Ò¿ÉÒÔÅÉÒ»¸öÈËÊØ´¬
-// ÒòÎªÔÚ»Äµº£¬Íæ¼ÒÎŞ·¨»½´¬
+// è’å²›
+// å¦‚æœèˆ¹åœåœ¨è’å²›ï¼Œç©å®¶å¯ä»¥æ´¾ä¸€ä¸ªäººå®ˆèˆ¹
+// å› ä¸ºåœ¨è’å²›ï¼Œç©å®¶æ— æ³•å”¤èˆ¹
 string *wildharbors = ({
         "/d/island/icefire1",
 });

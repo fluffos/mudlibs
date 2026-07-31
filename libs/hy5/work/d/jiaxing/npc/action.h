@@ -1,4 +1,4 @@
-// цееи╬Ьупап╠М (by xbd)
+// И≈╗Ф╢╬Г╩²Ф▀⌡Е┬≈Х║╗ (by xbd)
 
 mapping *pfm = ({
 	([	"party": "wudang",

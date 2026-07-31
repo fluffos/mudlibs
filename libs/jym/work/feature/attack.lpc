@@ -12,8 +12,8 @@
 #define MAX_OPPONENT	4
 #define S_COMBAT_D 	"/adm/daemons/s_combatd"
 
-static object *enemy = ({});
-static string *killer = ({});
+nosave object *enemy = ({});
+nosave string *killer = ({});
 
 // prototypes
 

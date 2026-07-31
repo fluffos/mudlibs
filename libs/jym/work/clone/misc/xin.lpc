@@ -11,7 +11,7 @@ inherit ITEM;
 inherit F_SAVE;
 mapping *letters;
 mapping letter;
-static string *sym_di = ({ "子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥" });
+nosave string *sym_di = ({ "子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥" });
 int set_owner(string id)
 {
         set("owner_id", id);

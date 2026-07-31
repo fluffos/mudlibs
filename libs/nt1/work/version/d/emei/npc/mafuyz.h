@@ -5,76 +5,76 @@ int do_rideyz()
         object ob = this_player();
         if (ob->query_temp("marks/horserent")!=1 && ob->query("age")>14)
         {
-                command("chat À´ÈËÀ²£¡"+ob->query("name")+
-                "Õâ¸ö"+RANK_D->query_rude(ob)+"ÏëÍµÂí£¡\n");
+                command("chat æ¥äººå•¦ï¼"+ob->query("name")+
+                "è¿™ä¸ª"+RANK_D->query_rude(ob)+"æƒ³å·é©¬ï¼\n");
                 return 1;
         }
         switch (random(4))
         {
                 case 1:
-                        hname=MAG"×ÏæòÂí"NOR;
+                        hname=MAG"ç´«éªé©¬"NOR;
                         break;
                 case 2:
-                        hname=RED"ÔæºìÂí"NOR;
+                        hname=RED"æ£çº¢é©¬"NOR;
                         break;
                 case 3:
-                        hname=HIW"°×ÂæÍÕ"NOR;
+                        hname=HIW"ç™½éª†é©¼"NOR;
                         break;
                 default:
-                        hname=HIY"»ÆæôÂí"NOR;
+                        hname=HIY"é»„éª é©¬"NOR;
                         break;
         }
         message_vision(
-"Âí·òËæÊÖ¸ø$NÇ£À´Ò»Æ¥"+hname+"¡£$N·­ÉíÔ¾ÉÏ"+hname+"±³¡£¶¯×÷äìÈ÷ÀûË÷¡£Â·±ßĞĞÈËÒ»Õó
-Æğºå: à¸àŞà¸àŞ¡£\n"NOR , ob );
-        message_vision("\nÖ»¼û$NÁ½ÍÈÒ»¼Ğ£¬"+hname+"´©¹ı²İÅï¶øÈ¥¡£\n",ob);
+"é©¬å¤«éšæ‰‹ç»™$Nç‰µæ¥ä¸€åŒ¹"+hname+"ã€‚$Nç¿»èº«è·ƒä¸Š"+hname+"èƒŒã€‚åŠ¨ä½œæ½‡æ´’åˆ©ç´¢ã€‚è·¯è¾¹è¡Œäººä¸€é˜µ
+èµ·å“„: å–”å™¢å–”å™¢ã€‚\n"NOR , ob );
+        message_vision("\nåªè§$Nä¸¤è…¿ä¸€å¤¹ï¼Œ"+hname+"ç©¿è¿‡è‰æ£šè€Œå»ã€‚\n",ob);
         ob->move("/d/emei/caopeng");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/emei/qsjie2");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/emei/qsjie1");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/emei/xiaolu2");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/emei/xiaolu1");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/emei/wdroad");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/wudang/sanbuguan");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/wudang/wdroad9");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/wudang/wdroad8");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/wudang/wdroad7");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/wudang/wdroad6");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/wudang/wdroad5");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/wudang/wdroad4");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/wudang/wdroad3");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/wudang/wdroad2");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/wudang/wdroad1");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/city/nanmen");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/city/nandajie2");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/city/nandajie1");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/city/guangchang");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/city/beidajie1");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/city/kedian");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·ÕĞÒ¡¼²³Û¶ø¹ı¡£\n", ({ob}));
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯æ‹›æ‘‡ç–¾é©°è€Œè¿‡ã€‚\n", ({ob}));
         ob->move("/d/city/majiu");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·Ë³Àûµ½´ïÑïÖİ³Ç¡£\n");
-        message_vision("\n$NÉíĞÎÒ»×ª£¬ÇáËÉÂäµØ£¬×ËÌ¬Ê®·ÖÓÅÃÀ¡£ÏĞÈËÒ²¸ø$NÒ»´óºå¡£\n",ob);
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯é¡ºåˆ©åˆ°è¾¾æ‰¬å·åŸã€‚\n");
+        message_vision("\n$Nèº«å½¢ä¸€è½¬ï¼Œè½»æ¾è½åœ°ï¼Œå§¿æ€ååˆ†ä¼˜ç¾ã€‚é—²äººä¹Ÿç»™$Nä¸€å¤§å“„ã€‚\n",ob);
         ob->delete_temp("marks/horserent");
         return 1;
 }

@@ -5,11 +5,11 @@
 inherit F_TREEMAP;
 
 mapping dbase;
-static mapping tmp_dbase;
+nosave mapping tmp_dbase;
 
 //	The default_ob provides the default values of the dbase. It is set to
 //	be master copy of an object.
-static mixed default_ob;
+nosave mixed default_ob;
 
 mixed query_default_object() { return default_ob; }
 void set_default_object(mixed ob)

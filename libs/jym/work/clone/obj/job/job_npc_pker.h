@@ -1,5 +1,5 @@
 //Cracked by Kafei
-static int luck;
+nosave int luck;
 void set_killer_name(string kind)
 {
 	switch(kind){

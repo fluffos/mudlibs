@@ -15,14 +15,14 @@ int valid_leave(object me, string dir)
         me->move(__DIR__"lsy");
             me->delete_temp("mark/steps");
             me->delete_temp("mark/step");
-             return notify_fail("ÄãÕı×ß×Å£¬Í¸¹ıÊ÷Ö¦£¬ÒşÔ¼·¢ÏÖÇ°ÃæÓĞÆ¬¿ÕµØ£¬Äã²¦¿ªÊ÷Ö¦×êÁË¹ıÈ¥¡£\n");
+             return notify_fail("ä½ æ­£èµ°ç€ï¼Œé€è¿‡æ ‘æï¼Œéšçº¦å‘ç°å‰é¢æœ‰ç‰‡ç©ºåœ°ï¼Œä½ æ‹¨å¼€æ ‘æé’»äº†è¿‡å»ã€‚\n");
          }  
         if (me->query_temp("mark/steps") == -5&&me->query_temp("mark/step") == 6)
          {
             me->move(__DIR__"lsy");
             me->delete_temp("mark/steps");
             me->delete_temp("mark/step");
-             return notify_fail("ÄãÕı×ß×Å£¬Í»È»·¢ÏÖÇ°ÃæÓĞÒ»¼äĞ¡Ä¾Îİ,Äã²»ÓÉµÄ×ßÁË¹ıÈ¥¡£\n");
+             return notify_fail("ä½ æ­£èµ°ç€ï¼Œçªç„¶å‘ç°å‰é¢æœ‰ä¸€é—´å°æœ¨å±‹,ä½ ä¸ç”±çš„èµ°äº†è¿‡å»ã€‚\n");
          }  
 
         if (me->query_temp("mark/steps") == -10&&me->query_temp("mark/step") == 13)
@@ -30,14 +30,14 @@ int valid_leave(object me, string dir)
             me->move(__DIR__"lsy");
             me->delete_temp("mark/steps");
             me->delete_temp("mark/step");
-             return notify_fail("ÄãÕı×ß×Å£¬Í»È»·¢ÏÖÇ°ÃæÓĞÒ»¼äĞ¡Ä¾Îİ,Äã²»ÓÉµÄ×ßÁË¹ıÈ¥¡£\n");
+             return notify_fail("ä½ æ­£èµ°ç€ï¼Œçªç„¶å‘ç°å‰é¢æœ‰ä¸€é—´å°æœ¨å±‹,ä½ ä¸ç”±çš„èµ°äº†è¿‡å»ã€‚\n");
          }  
      if (me->query_temp("mark/steps") > 10)
             {  
            me->move(__DIR__"road7");
            me->delete_temp("mark/steps");
            me->delete_temp("mark/step");
- return notify_fail("Äã½îÆ£Á¦¾¡,ÖÕÓÚ×ß³öÁËËÉÁÖ¡£\n");
+ return notify_fail("ä½ ç­‹ç–²åŠ›å°½,ç»ˆäºèµ°å‡ºäº†æ¾æ—ã€‚\n");
 
         }
            

@@ -4,8 +4,6 @@
 #include "ansi.h"
 #include "tomud.h"
 #ifndef __SENSIBLE_MODIFIERS__
-#define nosave nosave
-#define protected nosave
 #endif
 
 

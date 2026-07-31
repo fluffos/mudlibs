@@ -1,4 +1,4 @@
-// zhu.c Öììä
+// zhu.c æœ±ç†¹
 
 inherit NPC;
 inherit F_DEALER;
@@ -6,10 +6,10 @@ inherit F_DEALER;
 string ask_buy();
 void create()
 {
-        set_name("Öììä", ({ "zhu xi", "zhu" }));
+        set_name("æœ±ç†¹", ({ "zhu xi", "zhu" }));
         set("long",
-"ÖìÏÈÉú±»³ÆÎªµ±ÊÀµÚÒ»´óÎÄÑ§¼Ò£¬¶Ç×ÓÀïµÄÄ«Ë®±Èº£»¹ÒªÉî¡£\n");
-        set("gender", "ÄÐÐÔ");
+"æœ±å…ˆç”Ÿè¢«ç§°ä¸ºå½“ä¸–ç¬¬ä¸€å¤§æ–‡å­¦å®¶ï¼Œè‚šå­é‡Œçš„å¢¨æ°´æ¯”æµ·è¿˜è¦æ·±ã€‚\n");
+        set("gender", "ç”·æ€§");
         set("age", 65);
         set_skill("literate", 300);
 
@@ -23,9 +23,9 @@ void create()
         set("combat_exp", 400000);
         set("shen_type", 1);
         set("inquiry", ([
-        "ÂòÊé": (:ask_buy:),
-        "Êé" : "°¦!Êéµ½ÓÃÊ±·½ºÞÉÙ¡£",
-        "½èÊé":"½è£¿Äã²»»¹ÎÒµ½ÄÄÀïÕÒÄã£¿ºß!",
+        "ä¹°ä¹¦": (:ask_buy:),
+        "ä¹¦" : "å”‰!ä¹¦åˆ°ç”¨æ—¶æ–¹æ¨å°‘ã€‚",
+        "å€Ÿä¹¦":"å€Ÿï¼Ÿä½ ä¸è¿˜æˆ‘åˆ°å“ªé‡Œæ‰¾ä½ ï¼Ÿå“¼!",
         ]));
         set("vendor_goods", ({
                 __DIR__"obj/lbook1",
@@ -36,32 +36,32 @@ void create()
 
         set("chat_chance", 3);
         set("chat_msg", ({
-                "ÖììäËµµÀ£ºÆÕÌìÖ®ÏÂ£¬Äª·ÇÍõÍÁ£»ÂÊÍÁÖ®±õ£¬Äª·ÇÍõ³¼¡£\n",
-                "ÖììäËµµÀ£º³ö¼ÒÈË£¬Ð¡¹ýËðÒæÑÉ£»ÎÞÍý´ó¹ý£¬Î´¼ÃÏÌÀ§Ö®¡£\n",
-                "ÖììäËµµÀ£º´óÑ§Ö®µÀ£¬ÔÚÃ÷Ã÷µÂ¡£ÔÚÇ×Ãñ£¬ÔÚÖ¹ÓÚÖÁÉÆ¡£ \n",
-                "ÖììäËµµÀ£º¸ñÎïÖÂÖª£¬³ÏÒâÕýÐÄ£¬ÐÞÉíÆë¼Ò£¬ÖÎ¹úÆ½ÌìÏÂ¡£\n",
+                "æœ±ç†¹è¯´é“ï¼šæ™®å¤©ä¹‹ä¸‹ï¼ŒèŽ«éžçŽ‹åœŸï¼›çŽ‡åœŸä¹‹æ»¨ï¼ŒèŽ«éžçŽ‹è‡£ã€‚\n",
+                "æœ±ç†¹è¯´é“ï¼šå‡ºå®¶äººï¼Œå°è¿‡æŸç›Šç„‰ï¼›æ— å¦„å¤§è¿‡ï¼ŒæœªæµŽå’¸å›°ä¹‹ã€‚\n",
+                "æœ±ç†¹è¯´é“ï¼šå¤§å­¦ä¹‹é“ï¼Œåœ¨æ˜Žæ˜Žå¾·ã€‚åœ¨äº²æ°‘ï¼Œåœ¨æ­¢äºŽè‡³å–„ã€‚ \n",
+                "æœ±ç†¹è¯´é“ï¼šæ ¼ç‰©è‡´çŸ¥ï¼Œè¯šæ„æ­£å¿ƒï¼Œä¿®èº«é½å®¶ï¼Œæ²»å›½å¹³å¤©ä¸‹ã€‚\n",
         }) );
 }
 
 int recognize_apprentice(object ob)
 {
-        if (!(int)ob->query_temp("mark/Öì"))
+        if (!(int)ob->query_temp("mark/æœ±"))
                 return 0;
-        ob->add_temp("mark/Öì", -1);
+        ob->add_temp("mark/æœ±", -1);
         return 1;
 }
 
 int accept_object(object who, object ob)
 {
         object me = this_player();
-        if (!(int)who->query_temp("mark/Öì"))
-                who->set_temp("mark/Öì", 0);
+        if (!(int)who->query_temp("mark/æœ±"))
+                who->set_temp("mark/æœ±", 0);
         if (ob->query("money_id") && ob->value() >= 1000) {
-                message_vision("ÖììäÍ¬ÒâÖ¸µã$NÒ»Ð©¶ÁÊéÐ´×ÖµÄÎÊÌâ¡£\n", who);
-                who->add_temp("mark/Öì", ob->value() / 50);
+                message_vision("æœ±ç†¹åŒæ„æŒ‡ç‚¹$Nä¸€äº›è¯»ä¹¦å†™å­—çš„é—®é¢˜ã€‚\n", who);
+                who->add_temp("mark/æœ±", ob->value() / 50);
         if( me->query_skill("literate", 1) > 21){
         tell_object(me,
-"ÄãÏÖÔÚÒÑÓÐÒ»¶¨µÄÎÄ»¯ÖªÊ¶,Ò²¿ÉÒÔ×Ô¼º¶ÁÊéÉîÔìÁË¡£\n");
+"ä½ çŽ°åœ¨å·²æœ‰ä¸€å®šçš„æ–‡åŒ–çŸ¥è¯†,ä¹Ÿå¯ä»¥è‡ªå·±è¯»ä¹¦æ·±é€ äº†ã€‚\n");
         return 1;}
                 return 1;
          }
@@ -70,7 +70,7 @@ int accept_object(object who, object ob)
 string ask_buy()
 {
 //      int i;
-        return "ÎÒÕâ¿ÉÓÐ²»ÉÙ¶ÁÊéÈË±Ø¶ÁµÄÊéÓ´!\n";
+        return "æˆ‘è¿™å¯æœ‰ä¸å°‘è¯»ä¹¦äººå¿…è¯»çš„ä¹¦å“Ÿ!\n";
 //        i = (int)me->query_temp("ask_book");
 }
 

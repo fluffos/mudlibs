@@ -5,13 +5,13 @@ inherit F_FOOD;
 
 void create()
 {
-	set_name("ÆÏÌÑ", ({"putao"}));
+	set_name("è‘¡è„", ({"putao"}));
 	set_weight(1);
 	if (clonep())
 		set_default_object(__FILE__);
 	else {
-		set("long", "Ò»¿ÅË®ÁéÁéµÄÆÏÌÑ¡£\n");
-		set("unit", "¿Å");
+		set("long", "ä¸€é¢—æ°´çµçµçš„è‘¡è„ã€‚\n");
+		set("unit", "é¢—");
 		set("food_remaining", 1);
 		set("food_supplay", 5);
 	}
@@ -30,21 +30,21 @@ int do_dream(string arg)
 
 	if ( !arg )
 	{
-		return notify_fail("Ê²Ã´£¿\n");
+		return notify_fail("ä»€ä¹ˆï¼Ÿ\n");
 	}
 
 	me = this_player();
 
 	if ( arg == "neili" )
 	{
-		write("ÄãÔÚÃÎÖÐºÍÆÏÌÑÌÖÂÛÁ·¹¦·½·¨£¬ÄÚÁ¦ÓÐËùÌá¸ß¡£\n");
+		write("ä½ åœ¨æ¢¦ä¸­å’Œè‘¡è„è®¨è®ºç»ƒåŠŸæ–¹æ³•ï¼Œå†…åŠ›æœ‰æ‰€æé«˜ã€‚\n");
 		me->add("neili", 10);
 		me->add("max_neili", 10);
 	}
 
 	else if ( arg == "jingli" )
 	{
-		write("ÄãÔÚÃÎÖÐºÍÆÏÌÑÌÖÂÛ·¨Êõ£¬¾«Á¦¸ü¼ÓÍúÊ¢ÁË¡£\n");
+		write("ä½ åœ¨æ¢¦ä¸­å’Œè‘¡è„è®¨è®ºæ³•æœ¯ï¼Œç²¾åŠ›æ›´åŠ æ—ºç››äº†ã€‚\n");
 		me->add("jingli", 10);
 		me->add("max_jingli", 10);
 	}
@@ -54,7 +54,7 @@ int do_dream(string arg)
 		mapping mine;
 		
 		mine = me->query_entire_dbase();
-		write("ÄãÔÚÃÎÖÐºÍÆÏÌÑ´óÕ½Èý°Ù»ØºÏ£¬¾­Ñé´óÔö¡£\n");
+		write("ä½ åœ¨æ¢¦ä¸­å’Œè‘¡è„å¤§æˆ˜ä¸‰ç™¾å›žåˆï¼Œç»éªŒå¤§å¢žã€‚\n");
 		mine["combat_exp"] += 100;
 	}
 
@@ -63,7 +63,7 @@ int do_dream(string arg)
 		mapping mine;
 		
 		mine = me->query_entire_dbase();
-		write("ÄãÔÚÃÎÖÐºÍÆÏÌÑ´óÕ½Èý°Ù»ØºÏ£¬Ç³ÄÜÔö¼Ó²»ÉÙ¡£\n");
+		write("ä½ åœ¨æ¢¦ä¸­å’Œè‘¡è„å¤§æˆ˜ä¸‰ç™¾å›žåˆï¼Œæµ…èƒ½å¢žåŠ ä¸å°‘ã€‚\n");
 		mine["potential"] = 100;
 	}
 
@@ -100,11 +100,11 @@ int do_dream(string arg)
 		arg == "sword"
 		)
 	{
-		write("ÄãÃÎ¼ûÆÏÌÑ¸øÄã½²½â" + to_chinese(arg) + "µÄ¾÷ÇÏ£¬»ñÒæ·ÇÇ³¡£\n");
+		write("ä½ æ¢¦è§è‘¡è„ç»™ä½ è®²è§£" + to_chinese(arg) + "çš„è¯€çªï¼ŒèŽ·ç›Šéžæµ…ã€‚\n");
 		me->improve_skill(arg, random(10*me->query("int")));
 	}
 	else
-		return notify_fail("Ê²Ã´£¿\n");
+		return notify_fail("ä»€ä¹ˆï¼Ÿ\n");
 
 	destruct(this_object());
 

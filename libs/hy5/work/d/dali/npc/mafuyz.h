@@ -4,29 +4,29 @@ int do_rideyz()
         object ob = this_player();
         if (ob->query_temp("marks/horserent")!=1 && ob->query("age")>14)
         {
-                command("chat À´ÈËÀ²£¡"+ob->query("name")+
-                "Õâ¸ö"+RANK_D->query_rude(ob)+"ÏëÍµÂí£¡\n");
+                command("chat æ¥äººå•¦ï¼"+ob->query("name")+
+                "è¿™ä¸ª"+RANK_D->query_rude(ob)+"æƒ³å·é©¬ï¼\n");
                 return 1;
         }
         switch (random(4))
         {
                 case 1:
-                        hname=MAG"×ÏæòÂí"NOR;
+                        hname=MAG"ç´«éªé©¬"NOR;
                         break;
                 case 2:
-                        hname=RED"ÔæºìÂí"NOR;
+                        hname=RED"æ£çº¢é©¬"NOR;
                         break;
                 case 3:
-                        hname=HIW"°×ÂæÍÕ"NOR;
+                        hname=HIW"ç™½éª†é©¼"NOR;
                         break;
                 default:
-                        hname=HIY"»ÆæôÂí"NOR;
+                        hname=HIY"é»„éª é©¬"NOR;
                         break;
         }
         message_vision(
-"Âí·òËæÊÖ¸ø$NÇ£À´Ò»Æ¥"+hname+"¡£$N·­ÉíÔ¾ÉÏ"+hname+"±³¡£¶¯×÷äìÈ÷ÀûË÷¡£Â·±ßĞĞÈËÒ»Õó
-Æğºå: à¸àŞà¸àŞ¡£\n"NOR , ob );
-        message_vision("\nÖ»¼û$NÁ½ÍÈÒ»¼Ğ£¬"+hname+"´©¹ı¾üÓª¶øÈ¥¡£\n",ob);
+"é©¬å¤«éšæ‰‹ç»™$Nç‰µæ¥ä¸€åŒ¹"+hname+"ã€‚$Nç¿»èº«è·ƒä¸Š"+hname+"èƒŒã€‚åŠ¨ä½œæ½‡æ´’åˆ©ç´¢ã€‚è·¯è¾¹è¡Œäººä¸€é˜µ
+èµ·å“„: å–”å™¢å–”å™¢ã€‚\n"NOR , ob );
+        message_vision("\nåªè§$Nä¸¤è…¿ä¸€å¤¹ï¼Œ"+hname+"ç©¿è¿‡å†›è¥è€Œå»ã€‚\n",ob);
         if (ob->query("jing") > 1000) {
             ob->receive_damage("jing", 100);
         }
@@ -35,8 +35,8 @@ int do_rideyz()
         }
         ob->receive_damage("jing", 30);
         ob->move("/d/city/majiu");
-        tell_room(environment(ob),ob->query("name")+"Æï×Å"+hname+"Ò»Â·Ë³Àûµ½´ïÑïÖİ³Ç¡£\n");
-        message_vision("\n$NÉíĞÎÒ»×ª£¬ÇáËÉÂäµØ£¬×ËÌ¬Ê®·ÖÓÅÃÀ¡£ÏĞÈËÒ²¸ø$NÒ»´óºå¡£\n",ob);
+        tell_room(environment(ob),ob->query("name")+"éª‘ç€"+hname+"ä¸€è·¯é¡ºåˆ©åˆ°è¾¾æ‰¬å·åŸã€‚\n");
+        message_vision("\n$Nèº«å½¢ä¸€è½¬ï¼Œè½»æ¾è½åœ°ï¼Œå§¿æ€ååˆ†ä¼˜ç¾ã€‚é—²äººä¹Ÿç»™$Nä¸€å¤§å“„ã€‚\n",ob);
         ob->delete_temp("marks/horserent");
         return 1;
 }

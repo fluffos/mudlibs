@@ -33,7 +33,7 @@ void init()
 		command("expell " + ob->query("id"));
 		command("say 滚吧！");
 		ob->delete("pxj_warning");
-		write_file("/kungfu/class/emei/zhou_log.c",
+		write_file("/kungfu/class/emei/zhou_log.lpc",
 		sprintf("%s(%s) was expelled by zhou due to pxj %d(%d).\n", this_player()->query("id"), ctime(time()) ) ); 
 		}
 	}

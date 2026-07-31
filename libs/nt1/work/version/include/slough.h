@@ -4,7 +4,7 @@
 // in any form without the written permission from authors.
 
 mapping place = ([
-        "±±¾©¶«³Ç": ({
+        "åŒ—äº¬ä¸œåŸ": ({
                         "/d/beijing/cagc_e","/d/beijing/caroad_e1",
                         "/d/beijing/caroad_e2","/d/beijing/zahuo",
                         "/d/beijing/yancao","/d/beijing/xingchang",
@@ -25,7 +25,7 @@ mapping place = ([
                         "/d/beijing/dong_2","/d/beijing/guozijian",
                         "/d/beijing/wang_2",
                      }),
-        "±±¾©Î÷³Ç" : ({
+        "åŒ—äº¬è¥¿åŸ" : ({
                         "/d/beijing/niaoshi","/d/beijing/xi_1",
                         "/d/beijing/caroad_w1","/d/beijing/yangliu1",
                         "/d/beijing/yangliu2","/d/beijing/yangliu3",
@@ -68,7 +68,7 @@ mapping place = ([
                         "/d/beijing/di_dajie2","/d/beijing/di_anmen",
                         "/d/beijing/qingmu_dating",
                      }),
-        "ÑïÖİ³Ç"   : ({ 
+        "æ‰¬å·åŸ"   : ({ 
                         "/d/city/zuixianlou2","/d/city/zuixianlou3",
                         "/d/city/zuixianlou","/d/city/beidajie2",
                         "/d/city/beimen","/d/city/beidajie1",
@@ -80,7 +80,7 @@ mapping place = ([
                         "/d/city/yaopu","/d/city/datiepu",
                         "/d/city/dongmen",
                      }),
-	 "³¤°²³Ç"   : ({
+	 "é•¿å®‰åŸ"   : ({
                         "/d/changan/huanggong","/d/changan/bridge1",
                         "/d/changan/baihu2","/d/changan/beian-dadao",
                         "/d/changan/beian-daokou","/d/changan/bingying1",
@@ -128,7 +128,7 @@ mapping place = ([
                         "/d/changan/dongan-dadao","/d/changan/fengxu1",
                         "/d/changan/baihu3","/d/changan/guozijian",
                      }),
-        "³É¶¼³Ç"   : ({
+        "æˆéƒ½åŸ"   : ({
                         "/d/city3/guangchang","/d/city3/tidugate",
                         "/d/city3/shuduroad2","/d/city3/shuduroad1",
                         "/d/city3/eastroad2","/d/city3/eastroad1",
@@ -146,7 +146,7 @@ mapping place = ([
                         "/d/city3/eastroad1","/d/city3/jiudian",
                         "/d/city3/wuguan",
                      }),
-        "ËÕÖİ³Ç"   : ({
+        "è‹å·åŸ"   : ({
                         "/d/suzhou/beimen","/d/suzhou/beidajie2",
                         "/d/suzhou/zijinan","/d/suzhou/jiudian",
                         "/d/suzhou/beidajie1","/d/suzhou/xiyuan",
@@ -169,7 +169,7 @@ mapping place = ([
                         "/d/suzhou/xuanmiao","/d/suzhou/shuchang",
                         "/d/suzhou/ximen",
                      }),
-        "º¼Öİ³Ç"   : ({
+        "æ­å·åŸ"   : ({
                         "/d/hangzhou/suti2", "/d/hangzhou/jujingyuan",
                         "/d/hangzhou/liuzhuang", "/d/hangzhou/road19",
                         "/d/hangzhou/huangniling", "/d/hangzhou/qinglindong",
@@ -217,7 +217,7 @@ mapping place = ([
                         "/d/hangzhou/maojiabu","/d/hangzhou/huangniling",
                         "/d/hangzhou/shuiledong","/d/hangzhou/manjuelong",
                      }),
-        "ÏåÑô³Ç"   : ({
+        "è¥„é˜³åŸ"   : ({
                         "/d/xiangyang/westjie2", "/d/xiangyang/southjie2",
                         "/d/xiangyang/xiaorong1", "/d/xiangyang/zhonglie",
                         "/d/xiangyang/guangchang", "/d/xiangyang/dingzi",
@@ -274,7 +274,7 @@ mapping place = ([
                         "/d/xiangyang/walln6","/d/xiangyang/walln7",
                         "/d/xiangyang/walln8",
                      }),
-        "´óÀíÒ»´ø" : ({
+        "å¤§ç†ä¸€å¸¦" : ({
                         "/d/dali/northgate", "/d/dali/southgate",
                         "/d/dali/shanlu2", "/d/dali/buxiongbu",
                         "/d/dali/jinzhihe", "/d/dali/xiaodao1",
@@ -333,5 +333,5 @@ void place_npc(object ob, object who)
         ob->set("startroom", startroom);
         ob->set_temp("quester", who->query("id"));
         ob->set_temp("moved", ({ }));
-        message_vision("$N×ßÁË¹ıÀ´¡£\n", ob);
+        message_vision("$Nèµ°äº†è¿‡æ¥ã€‚\n", ob);
 }

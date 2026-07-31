@@ -2,7 +2,7 @@
 //author wzfeng@xkx 2000 6
 //job_system 的一些附加函数
 
-static string *cleanup_filename=({"job_data","job_menpai",});
+nosave string *cleanup_filename=({"job_data","job_menpai",});
 
 void clean_up_job_object()
 {

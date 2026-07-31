@@ -1,4 +1,4 @@
-// #include <ansi.h>
+// #include "ansi.h"
 string g_place(object ob);
 string g_time()
 {

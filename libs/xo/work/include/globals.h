@@ -12,7 +12,6 @@
 #define FALSE       0
 // Directories
 #define private protected
-#define nosave nosave
 #define this thisa
 
 #define COMMAND_DIR         "/cmds/"

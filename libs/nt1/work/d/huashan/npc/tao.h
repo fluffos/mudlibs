@@ -18,7 +18,7 @@ int accept_fight(object ob)
             || query("jing") < query("eff_jing") * 2 / 3
             || query("neili") < query("max_neili") * 2 / 3)
         {
-                // command("say ÎÒÏÖÔÚÓĞµãÆ£¾ë£¬´ıÎÒĞª»á¶ùÔÙËµ¡£");
+                // command("say æˆ‘ç°åœ¨æœ‰ç‚¹ç–²å€¦ï¼Œå¾…æˆ‘æ­‡ä¼šå„¿å†è¯´ã€‚");
                 return 0;
         }
         
@@ -29,14 +29,14 @@ int accept_fight(object ob)
 	ob5 = present("tao huaxian", environment(me));
 	ob6 = present("tao shixian", environment(me));
 
-	msg1 = "ÌÒ¸ùÏÉÍ»È»±Æ½ü$N£¬Ò»°ÑÏò$NµÄ×óÊÖ×½È¥¡£\n";
-	msg2 = "ÌÒ¸ÉÏÉÍ»È»±Æ½ü$N£¬Ò»°ÑÏò$NµÄÓÒÊÖ×½È¥¡£\n";
-	msg3 = "ÌÒÖ¦ÏÉÍ»È»±Æ½ü$N£¬Ò»°ÑÏò$NµÄ×ó½Å×½È¥¡£\n";
-	msg4 = "ÌÒÒ¶ÏÉÍ»È»±Æ½ü$N£¬Ò»°ÑÏò$NµÄÓÒ½Å×½È¥¡£\n";
-	msg5 = "ÌÒ»¨ÏÉÍ»È»±Æ½ü$N£¬Ò»°ÑÏò$NµÄ×óÊÖ×½È¥¡£\n";
-	msg6 = "ÌÒÊµÏÉÍ»È»±Æ½ü$N£¬Ò»°ÑÏò$NµÄÓÒ½Å×½È¥¡£\n";
+	msg1 = "æ¡ƒæ ¹ä»™çªç„¶é€¼è¿‘$Nï¼Œä¸€æŠŠå‘$Nçš„å·¦æ‰‹æ‰å»ã€‚\n";
+	msg2 = "æ¡ƒå¹²ä»™çªç„¶é€¼è¿‘$Nï¼Œä¸€æŠŠå‘$Nçš„å³æ‰‹æ‰å»ã€‚\n";
+	msg3 = "æ¡ƒæä»™çªç„¶é€¼è¿‘$Nï¼Œä¸€æŠŠå‘$Nçš„å·¦è„šæ‰å»ã€‚\n";
+	msg4 = "æ¡ƒå¶ä»™çªç„¶é€¼è¿‘$Nï¼Œä¸€æŠŠå‘$Nçš„å³è„šæ‰å»ã€‚\n";
+	msg5 = "æ¡ƒèŠ±ä»™çªç„¶é€¼è¿‘$Nï¼Œä¸€æŠŠå‘$Nçš„å·¦æ‰‹æ‰å»ã€‚\n";
+	msg6 = "æ¡ƒå®ä»™çªç„¶é€¼è¿‘$Nï¼Œä¸€æŠŠå‘$Nçš„å³è„šæ‰å»ã€‚\n";
 
-	command( "say ´óâ·¶ù×¼±¸¡£" );
+	command( "say å¤§å¤¥å„¿å‡†å¤‡ã€‚" );
 	competition_with(ob);
 
         if (objectp(ob1) && ob1 != me) call_out("tear_and_kill", random(5), ob1, ob, msg1);
@@ -51,7 +51,7 @@ int accept_fight(object ob)
 
 string ask_me()
 {
-	return "Äã´òµÃ¹ıÔÛÃÇÁùĞÖµÜ£¬ÎÒ×ÔÈ»»á´øÄãÈ¥¼ûËû¡£";
+	return "ä½ æ‰“å¾—è¿‡å’±ä»¬å…­å…„å¼Ÿï¼Œæˆ‘è‡ªç„¶ä¼šå¸¦ä½ å»è§ä»–ã€‚";
 }
 
 int accept_kill(object ob)
@@ -60,7 +60,7 @@ int accept_kill(object ob)
 	object ob1, ob2, ob3, ob4, ob5, ob6;
 
 	ob->delete_temp("win");
-	command( "say ÄãÏëÄ±²Äº¦Ãü²»³É£¬ÊÇ²»ÊÇ¶Ê¼ÉÔÛÃÇÁùĞÖµÜÃûÂú½­ºş£¿\n");
+	command( "say ä½ æƒ³è°‹æå®³å‘½ä¸æˆï¼Œæ˜¯ä¸æ˜¯å¦’å¿Œå’±ä»¬å…­å…„å¼Ÿåæ»¡æ±Ÿæ¹–ï¼Ÿ\n");
 
 	if (objectp(ob1 = present("tao genxian", environment(me)))) ob1->kill_ob(ob);
 	if (objectp(ob2 = present("tao ganxian", environment(me)))) ob2->kill_ob(ob);
@@ -85,21 +85,21 @@ int tear_and_kill(object me, object ob, string msg)
 	if (random(me->query("combat_exp")) > (int)ob->query("combat_exp") / 2) 
 	{
 		ob->add_temp("caught", 1);
-		message_combatd("½á¹û$N±»" + me->name() + "×½¸öÕı×Å£¡\n", ob);
+		message_combatd("ç»“æœ$Nè¢«" + me->name() + "æ‰ä¸ªæ­£ç€ï¼\n", ob);
 		if (ob->query_temp("caught") == 4)
 		{
-		        message_combatd("\nÌÒ¹ÈÁùÏÉ×½×Å$NËÄÖ«ÃÍÈ»Ò»³¶£¬$NÖ»¾õµÃÒ»Õó¾çÍ´£¬±ãÊ§È¥Öª¾õÁË¡£\n", ob);
+		        message_combatd("\næ¡ƒè°·å…­ä»™æ‰ç€$Nå››è‚¢çŒ›ç„¶ä¸€æ‰¯ï¼Œ$Nåªè§‰å¾—ä¸€é˜µå‰§ç—›ï¼Œä¾¿å¤±å»çŸ¥è§‰äº†ã€‚\n", ob);
 		        ob->delete_temp("caught");
 		        ob->unconcious();
-		        ob->set_temp("die_reason", "±»ÌÒ¹ÈÁùÏÉËº³ÉËÄ¿éÁË");
+		        ob->set_temp("die_reason", "è¢«æ¡ƒè°·å…­ä»™æ’•æˆå››å—äº†");
 		        ob->remove_all_enemy(0);
 		        me->remove_all_enemy(0);
 		        ob->die();
-		        CHANNEL_D->do_channel(me,"chat",sprintf("%s±»ÌÒ¹ÈÁùÏÉËº³ÉËÄ¿éÁË£¡",ob->name()));
+		        CHANNEL_D->do_channel(me,"chat",sprintf("%sè¢«æ¡ƒè°·å…­ä»™æ’•æˆå››å—äº†ï¼",ob->name()));
 		}
 	} else 
 	{
-		message_combatd("$N³É¹¦µØÉÁ¿ªÁË¡£\n", ob);
+		message_combatd("$NæˆåŠŸåœ°é—ªå¼€äº†ã€‚\n", ob);
 	}
 
 	return 1;
@@ -111,14 +111,14 @@ void lost()
         
         ob = this_object();
         me = query_competitor();
-        command( "say " + RANK_D->query_respect(ob) + "¹ûÈ»ÓĞ¼¸ÊÖ£¬ÎÒ»¹ÊÇÈÃÄãĞª»á¶ù°É£¬¿É²»ÊÇÎÒ´ò²»¹ıÄãà¸¡£");
+        command( "say " + RANK_D->query_respect(ob) + "æœç„¶æœ‰å‡ æ‰‹ï¼Œæˆ‘è¿˜æ˜¯è®©ä½ æ­‡ä¼šå„¿å§ï¼Œå¯ä¸æ˜¯æˆ‘æ‰“ä¸è¿‡ä½ å–”ã€‚");
         
-	if (ob->name() == "ÌÒ¸ùÏÉ") me->set_temp("win/tao1", 1);
-	if (ob->name() == "ÌÒ¸ÉÏÉ") me->set_temp("win/tao2", 1);
-	if (ob->name() == "ÌÒÖ¦ÏÉ") me->set_temp("win/tao3", 1);
-        if (ob->name() == "ÌÒÒ¶ÏÉ") me->set_temp("win/tao4", 1);
-        if (ob->name() == "ÌÒ»¨ÏÉ") me->set_temp("win/tao5", 1);
-        if (ob->name() == "ÌÒÊµÏÉ") me->set_temp("win/tao6", 1);
+	if (ob->name() == "æ¡ƒæ ¹ä»™") me->set_temp("win/tao1", 1);
+	if (ob->name() == "æ¡ƒå¹²ä»™") me->set_temp("win/tao2", 1);
+	if (ob->name() == "æ¡ƒæä»™") me->set_temp("win/tao3", 1);
+        if (ob->name() == "æ¡ƒå¶ä»™") me->set_temp("win/tao4", 1);
+        if (ob->name() == "æ¡ƒèŠ±ä»™") me->set_temp("win/tao5", 1);
+        if (ob->name() == "æ¡ƒå®ä»™") me->set_temp("win/tao6", 1);
         me->delete_temp("caught");
         ::lost();
 }
@@ -133,6 +133,6 @@ void win()
                 return;
         }
         me->delete_temp("caught");
-        command("say ¾ÍÄãÕâµãË®Æ½Ò²Ïë¹ıÎÒµÄ¹Ø£¿ÏÂÈ¥Á·Á·ÔÙÀ´°É¡£");
+        command("say å°±ä½ è¿™ç‚¹æ°´å¹³ä¹Ÿæƒ³è¿‡æˆ‘çš„å…³ï¼Ÿä¸‹å»ç»ƒç»ƒå†æ¥å§ã€‚");
         ::win();
 }

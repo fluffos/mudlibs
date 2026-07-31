@@ -2,8 +2,6 @@
 // this file will be automatically included by the driver
 
 #ifndef __SENSIBLE_MODIFIERS__
-#define protected nosave
-#define nosave nosave
 #endif
 
 //added by JackyBoy @ CCTX for TOPTEN

@@ -15,9 +15,9 @@ int do_chat()
    object ob;
    ob=this_player(1);
   
-   say(HIW "Öª¸®Á³É«Ò»³Á£¬ºÈµÀ£º¡°´óÌÃÖ®ÉÏ£¬¾¹¸ÒĞú»©£¡¡±\n" NOR);
-   tell_object(ob, HIR "Á½±ßÑÃÒÛ³åÉÏÇ°À´£¬²»ÓÉ·ÖËµ£¬Ò»Õó´ó°å´òµÃÄã"
-                  +"Æ¤¿ªÈâÕÀ,»èÁË¹ıÈ¥¡£\n" NOR);
+   say(HIW "çŸ¥åºœè„¸è‰²ä¸€æ²‰ï¼Œå–é“ï¼šâ€œå¤§å ‚ä¹‹ä¸Šï¼Œç«Ÿæ•¢å–§å“—ï¼â€\n" NOR);
+   tell_object(ob, HIR "ä¸¤è¾¹è¡™å½¹å†²ä¸Šå‰æ¥ï¼Œä¸ç”±åˆ†è¯´ï¼Œä¸€é˜µå¤§æ¿æ‰“å¾—ä½ "
+                  +"çš®å¼€è‚‰ç»½,æ˜äº†è¿‡å»ã€‚\n" NOR);
    ob->unconcious();
    return 0;
 }
@@ -35,41 +35,41 @@ int i;
 me=this_player(1);
 
 if(!arg)   {
-             tell_object(me,"ÄãÒªºÍË­Àë»é°¡£¿\n");
+             tell_object(me,"ä½ è¦å’Œè°ç¦»å©šå•Šï¼Ÿ\n");
              return 1;
             }
 
 if( !objectp(ob = find_player(arg)))
          {
-            tell_object(me,"´ËÈËÕâ»á²»ÔÚ¡£\n");
+            tell_object(me,"æ­¤äººè¿™ä¼šä¸åœ¨ã€‚\n");
             return 1;
          }
 
 
- say(me->query("name")+"ÏëÒªºÍ"+ob->query("name")+"Àë»é.\n");
+ say(me->query("name")+"æƒ³è¦å’Œ"+ob->query("name")+"ç¦»å©š.\n");
 
       if( me->query("couple/couple_id") !=arg )
         {
-          say("Öª¸®ÒÉ»óµÄ¿´ÁË¿´"+me->query("name")+
-                "Ëµ£º¡°ÓĞÃ»¸ã´í°¡£¿¡±\n");
+          say("çŸ¥åºœç–‘æƒ‘çš„çœ‹äº†çœ‹"+me->query("name")+
+                "è¯´ï¼šâ€œæœ‰æ²¡æé”™å•Šï¼Ÿâ€\n");
           return 1;
         }
 
       if(!me->query("couple/have_couple"))
         {
-         say("Öª¸®¾ªÑÈµÀ£º"+me->query("name")+
-             "¡°ÄãÃ»ÓĞ°éÂÂ£¬ÈçºÎÀë»é?¡±\n");
+         say("çŸ¥åºœæƒŠè®¶é“ï¼š"+me->query("name")+
+             "â€œä½ æ²¡æœ‰ä¼´ä¾£ï¼Œå¦‚ä½•ç¦»å©š?â€\n");
          return 1;
         }
 
       if(!present(arg,environment()))
         {
-         say("Öª¸®Ò¡Ò¡Í·Ëµ:¡°"+ob->query("name")+"ÏÖÔÚ²»ÔÚÕâÀï¡£¡±\n");
+         say("çŸ¥åºœæ‘‡æ‘‡å¤´è¯´:â€œ"+ob->query("name")+"ç°åœ¨ä¸åœ¨è¿™é‡Œã€‚â€\n");
          return 1;
         }
       if( ob->query("want_lihun")==me->query("id") )
         {
-         say("Öª¸®Ì¾Ï¢µÀ£º¡°ÄãÃÇÕæÈÃ±¾¸®Ê§Íû¡£¡±\n");
+         say("çŸ¥åºœå¹æ¯é“ï¼šâ€œä½ ä»¬çœŸè®©æœ¬åºœå¤±æœ›ã€‚â€\n");
 
 //         inv=all_inventory(me);
 //         for(i=0;i<sizeof(inv);i++)      
@@ -97,17 +97,17 @@ if( !objectp(ob = find_player(arg)))
          ob->delete("want_marry");
          ob->delete("want_lihun");
          ob->delete("marry_ok");
-         tell_object(me,"ÄãµÄ»éÒö¹ØÏµ±»½â³ıÁË\n");
-         tell_object(ob,"ÄãµÄ»éÒö¹ØÏµ±»½â³ıÁË\n");
-//        diary_write(me,"ºÍ"+ob->query("name")+"»éÒö¹ØÏµ±»½â³ıÁË");
-//        diary_write(ob,"ºÍ"+me->query("name")+"»éÒö¹ØÏµ±»½â³ıÁË"); 
-        message("shout", HIC "¡¾¹Ù¸®Í¨¸æ¡¿£º" + HIB + "ÏÖ½ñ" + me->query("name") + "ºÍ" 
-         +ob->query("name") + "»éÒö¹ØÏµ½â³ı£¡\n" NOR,users());        
+         tell_object(me,"ä½ çš„å©šå§»å…³ç³»è¢«è§£é™¤äº†\n");
+         tell_object(ob,"ä½ çš„å©šå§»å…³ç³»è¢«è§£é™¤äº†\n");
+//        diary_write(me,"å’Œ"+ob->query("name")+"å©šå§»å…³ç³»è¢«è§£é™¤äº†");
+//        diary_write(ob,"å’Œ"+me->query("name")+"å©šå§»å…³ç³»è¢«è§£é™¤äº†"); 
+        message("shout", HIC "ã€å®˜åºœé€šå‘Šã€‘ï¼š" + HIB + "ç°ä»Š" + me->query("name") + "å’Œ" 
+         +ob->query("name") + "å©šå§»å…³ç³»è§£é™¤ï¼\n" NOR,users());        
       }
       else
         {
-         say("Öª¸®µÀ:¡°"+me->query("name")+"ÄãµÄÏë·¨ÎÒÖªµÀÁË"+
-             ",²»¹ı»¹ÒªÎÊÎÊ"+ob->query("name")+"µÄÒâË¼¡£¡±\n");
+         say("çŸ¥åºœé“:â€œ"+me->query("name")+"ä½ çš„æƒ³æ³•æˆ‘çŸ¥é“äº†"+
+             ",ä¸è¿‡è¿˜è¦é—®é—®"+ob->query("name")+"çš„æ„æ€ã€‚â€\n");
          me->set("want_lihun",arg);
          return 1;
         }
@@ -125,110 +125,110 @@ object card;
 string mes1;
 me=this_player(1);
 
-if ( me->query("gender")=="ÎŞĞÔ") 
+if ( me->query("gender")=="æ— æ€§") 
            
-           { tell_object(me,"ÄãÄËÎŞ¸ùÖ®ÈËÈçºÎ½á»é£¿\n");
+           { tell_object(me,"ä½ ä¹ƒæ— æ ¹ä¹‹äººå¦‚ä½•ç»“å©šï¼Ÿ\n");
              return 1;}
 if(!arg)   {
-             tell_object(me,"Äã×Ô¼ººÍ×Ô¼º½á»é°¡£¿\n");
+             tell_object(me,"ä½ è‡ªå·±å’Œè‡ªå·±ç»“å©šå•Šï¼Ÿ\n");
              return 1;
             }
 
 if( (string)me->query("class")=="bonze" ) 
             {
-             tell_object(me,"¹ş¹ş£¡ÔõÃ´£¬ºÍÉĞÒ²Ïë¿ªÉ«½äÁËÂğ?\n");
+             tell_object(me,"å“ˆå“ˆï¼æ€ä¹ˆï¼Œå’Œå°šä¹Ÿæƒ³å¼€è‰²æˆ’äº†å—?\n");
              return 1;
             }
 
 if( !objectp(ob = find_player(arg)))
          {
-            tell_object(me,"ÄãÌáµÄÈËÄ¿Ç°²»ÔÚÕâÊÀ½ç°É£¿\n");
+            tell_object(me,"ä½ æçš„äººç›®å‰ä¸åœ¨è¿™ä¸–ç•Œå§ï¼Ÿ\n");
             return 1;
          }
 
 
-      say(me->query("name")+"ÏëÒªºÍ"+ob->query("name")+"½á»é.\n");
+      say(me->query("name")+"æƒ³è¦å’Œ"+ob->query("name")+"ç»“å©š.\n");
       
       if(me->query("age") <16)
         {
-         say("Öª¸®Ò¡Ò¡Í·£¬ÏÔÈ»ÄãÃ»´ïµ½½á»éÄêÁä¡£\n");
+         say("çŸ¥åºœæ‘‡æ‘‡å¤´ï¼Œæ˜¾ç„¶ä½ æ²¡è¾¾åˆ°ç»“å©šå¹´é¾„ã€‚\n");
          return 1;
         }
 
       if(me->query("couple/couple_id")== arg )
         {
-          say("Öª¸®ÒÉ»óµÄ¿´ÁË¿´"+me->query("name")+
-                "Ëµ£º¡°ÄãÁ©Ïë¶ş»é£¿¡±\n");
+          say("çŸ¥åºœç–‘æƒ‘çš„çœ‹äº†çœ‹"+me->query("name")+
+                "è¯´ï¼šâ€œä½ ä¿©æƒ³äºŒå©šï¼Ÿâ€\n");
           return 1;
         }
       if(me->query("id")== arg )
         {
-          say("Öª¸®ÒÉ»óµÄ¿´ÁË¿´"+me->query("name")+
-                "Ëµ:¡°ÄãÊÇ×ÔÁµ¿ñ°¡£¿¡±\n");
+          say("çŸ¥åºœç–‘æƒ‘çš„çœ‹äº†çœ‹"+me->query("name")+
+                "è¯´:â€œä½ æ˜¯è‡ªæ‹ç‹‚å•Šï¼Ÿâ€\n");
           return 1;
         }
       if(me->query("couple/have_couple")) 
         {
-         say(HIW "Öª¸®´óÅ­£¬Ò»ÅÄ×À×ÓºÈµÀ£º¡°"+me->query("name")+
-             "ÄãÒÑÓĞ°éÂÂ£¬µ¨¸ÒÖØ»é£¡¡±\n" NOR);
-         say("Á½±ßÑÃÒÛ³åÉÏÇ°À´£¬²»ÓÉ·ÖËµ£¬Ò»Õó´ó°å´òµÃ"+
-               me->query("name")+"Æ¤¿ªÈâÕÀ,»èÁË¹ıÈ¥¡£\n");
+         say(HIW "çŸ¥åºœå¤§æ€’ï¼Œä¸€æ‹æ¡Œå­å–é“ï¼šâ€œ"+me->query("name")+
+             "ä½ å·²æœ‰ä¼´ä¾£ï¼Œèƒ†æ•¢é‡å©šï¼â€\n" NOR);
+         say("ä¸¤è¾¹è¡™å½¹å†²ä¸Šå‰æ¥ï¼Œä¸ç”±åˆ†è¯´ï¼Œä¸€é˜µå¤§æ¿æ‰“å¾—"+
+               me->query("name")+"çš®å¼€è‚‰ç»½,æ˜äº†è¿‡å»ã€‚\n");
          me->unconcious();
          return 1;
         }
       
 if(!present(arg,environment()))
         {
-         say("Öª¸®Ò¡Ò¡Í·Ëµ:¡°"+ob->query("name")+"ÏÖÔÚ²»ÔÚÕâÀï¡£¡±\n");
+         say("çŸ¥åºœæ‘‡æ‘‡å¤´è¯´:â€œ"+ob->query("name")+"ç°åœ¨ä¸åœ¨è¿™é‡Œã€‚â€\n");
          return 1;
         }
       if( ob->query("want_marry")== me->query("id") )
         {
-         say("Öª¸®Î¢Ğ¦µÀ£º¡°×£ÄãÃÇÁ©°×Í·Ğ³ÀÏ£¬ÓÀÎŞ¶şĞÄ¡£¡±\n");   
+         say("çŸ¥åºœå¾®ç¬‘é“ï¼šâ€œç¥ä½ ä»¬ä¿©ç™½å¤´è°è€ï¼Œæ°¸æ— äºŒå¿ƒã€‚â€\n");   
          
          ob->set("couple/have_couple",1);
          ob->set("couple/couple_id", me->query("id"));
          ob->set("couple/couple_name", me->query("name"));
-         if (me->query("gender")=="ÄĞĞÔ")
-          { ob->set("couple/couple_gender","ÀÏ¹«");}
+         if (me->query("gender")=="ç”·æ€§")
+          { ob->set("couple/couple_gender","è€å…¬");}
          else
-           { ob->set("couple/couple_gender","ÀÏÆÅ");}
+           { ob->set("couple/couple_gender","è€å©†");}
          
          me->set("couple/have_couple",1);
          me->set("couple/couple_id",ob->query("id"));
          me->set("couple/couple_name",ob->query("name"));
-         if (ob->query("gender")=="ÄĞĞÔ")
-          { me->set("couple/couple_gender","ÀÏ¹«");}
+         if (ob->query("gender")=="ç”·æ€§")
+          { me->set("couple/couple_gender","è€å…¬");}
          else
-           {me->set("couple/couple_gender","ÀÏÆÅ");}
+           {me->set("couple/couple_gender","è€å©†");}
 
 //         card= clone_object(__DIR__"obj/marry_card");
-//         card->set("name","ÄãºÍ"+arg+"µÄ½á»éÖ¤");
+//         card->set("name","ä½ å’Œ"+arg+"çš„ç»“å©šè¯");
 //         card->move(me);
 //         card= clone_object(__DIR__"obj/marry_card");
-//         card->set("name","ÄãºÍ"+me->query("id")+"µÄ½á»éÖ¤");
+//         card->set("name","ä½ å’Œ"+me->query("id")+"çš„ç»“å©šè¯");
 //         card->move(ob);
-//         say("Öª¸®µİ¸ø"+ob->query("name")+"ºÍ"+me->query("name")
-//                  +"Ò»ÈËÒ»ÕÅ½á»éÖ¤Êé.\n");
-//         diary_write(me,"ºÍ"+ob->query("name")+"Ï²½áÁ¬Àí");
-//         diary_write(ob,"ºÍ"+me->query("name")+"Ï²½áÁ¬Àí");
+//         say("çŸ¥åºœé€’ç»™"+ob->query("name")+"å’Œ"+me->query("name")
+//                  +"ä¸€äººä¸€å¼ ç»“å©šè¯ä¹¦.\n");
+//         diary_write(me,"å’Œ"+ob->query("name")+"å–œç»“è¿ç†");
+//         diary_write(ob,"å’Œ"+me->query("name")+"å–œç»“è¿ç†");
          me->delete("want_marry");
          ob->delete("want_marry");
-         message("shout", HIC "¡¾¹Ù¸®Í¨¸æ¡¿£º" + HIR + "¹§Ï²" + me->query("name") + "ºÍ" 
-         +ob->query("name") + "Ï²½áÁ¬Àí£¡\n"+"\n"+
+         message("shout", HIC "ã€å®˜åºœé€šå‘Šã€‘ï¼š" + HIR + "æ­å–œ" + me->query("name") + "å’Œ" 
+         +ob->query("name") + "å–œç»“è¿ç†ï¼\n"+"\n"+
          " 
-         ¡ö        ¡ö 
-    ¡ö¡ö¡ö¡ö¡ö¡ö¡ö¡ö¡ö¡ö¡ö
-         ¡ö        ¡ö
-     ¡ö¡ö¡ö¡ö¡ö¡ö¡ö¡ö¡ö¡ö
-       ¡ö¡ö¡ö    ¡ö¡ö¡ö
-       ¡ö  ¡ö    ¡ö  ¡ö
-       ¡ö¡ö¡ö    ¡ö¡ö¡ö
-        ¡ô¡ô      ¡ô¡ô
-     ¡ö¡ö¡ö¡ö¡ö¡ö¡ö¡ö¡ö¡ö
-       ¡ö¡ö¡ö    ¡ö¡ö¡ö
-       ¡ö  ¡ö    ¡ö  ¡ö
-       ¡ö¡ö¡ö    ¡ö¡ö¡ö\n"             
+         â–         â–  
+    â– â– â– â– â– â– â– â– â– â– â– 
+         â–         â– 
+     â– â– â– â– â– â– â– â– â– â– 
+       â– â– â–     â– â– â– 
+       â–   â–     â–   â– 
+       â– â– â–     â– â– â– 
+        â—†â—†      â—†â—†
+     â– â– â– â– â– â– â– â– â– â– 
+       â– â– â–     â– â– â– 
+       â–   â–     â–   â– 
+       â– â– â–     â– â– â– \n"             
           NOR,users());
          return 1 ;
        } 
@@ -236,12 +236,12 @@ if(!present(arg,environment()))
         {
          if( me->query("gender") == ob->query("gender") )
           {
-           say ("Öª¸®±»"+me->query("name")+
-                  "ÆøµÃ¿ÚÍÂ°×Ä­»èÁË¹ıÈ¥¡£ºÈµÀ£º¡°Äª·ÇÄãÓĞ¶ÏĞäÖ®ñ±£¿¡±\n");
+           say ("çŸ¥åºœè¢«"+me->query("name")+
+                  "æ°”å¾—å£åç™½æ²«æ˜äº†è¿‡å»ã€‚å–é“ï¼šâ€œè«éä½ æœ‰æ–­è¢–ä¹‹ç™–ï¼Ÿâ€\n");
            return 1;
           }
-         say("Öª¸®Î¢Ğ¦µÀ:¡°"+me->query("name")+",ÄãµÄĞÄÒâÎÒÖªµÀÁË"+
-             ",²»¹ı»¹ÒªÎÊÎÊ"+ob->query("name")+"µÄÒâË¼¡£¡±\n");
+         say("çŸ¥åºœå¾®ç¬‘é“:â€œ"+me->query("name")+",ä½ çš„å¿ƒæ„æˆ‘çŸ¥é“äº†"+
+             ",ä¸è¿‡è¿˜è¦é—®é—®"+ob->query("name")+"çš„æ„æ€ã€‚â€\n");
          me->set("want_marry",arg);
          return 1;
         }

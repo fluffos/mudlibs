@@ -1,0 +1,22 @@
+// yangrou.c 羊肉
+
+#include <weapon.h>
+inherit ITEM;
+inherit F_FOOD;
+
+void create()
+{
+	set_name("马肉", ({ "ma rou", "rou" }) );
+	set_weight(200);
+	if( clonep() )
+		set_default_object(__FILE__);
+	else {
+		set("long", "一块香喷喷的马肉。\n");
+		set("unit", "块");
+		set("value", 130);
+		set("food_remaining", 5);
+		set("food_supply", 50);
+		}
+	setup();
+}
+

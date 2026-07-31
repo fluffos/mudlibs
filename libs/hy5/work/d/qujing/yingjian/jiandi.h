@@ -12,22 +12,22 @@ int do_feel(string arg)
         object yao;
 
         if ( me->is_busy() )
-                return notify_fail("ÄãÕıÃ¦×ÅÄØ£¡\n");
+                return notify_fail("ä½ æ­£å¿™ç€å‘¢ï¼\n");
 
         if( ! arg || arg != "stone" )
-                return notify_fail("ÄãÒªÌÊÊ²Ã´?\n");
+                return notify_fail("ä½ è¦æ·Œä»€ä¹ˆ?\n");
         if( me->query("obstacle/yj") == "done" )
-                return notify_fail("ÄãÊ²Ã´Ò²Ã»ÓĞÌÊµ½¡£\n");
+                return notify_fail("ä½ ä»€ä¹ˆä¹Ÿæ²¡æœ‰æ·Œåˆ°ã€‚\n");
 
         if( me->query_temp("find") )
-                return notify_fail("ÄãÒÑ¾­·¢ÏÖÄ³¸öµØ·½ÓĞÈë¿ÚÁË£¬»¹²»¿ìÈ¥ÕÒ£¿\n");       
+                return notify_fail("ä½ å·²ç»å‘ç°æŸä¸ªåœ°æ–¹æœ‰å…¥å£äº†ï¼Œè¿˜ä¸å¿«å»æ‰¾ï¼Ÿ\n");       
 
         if( random(5) < 2 )
         {
         place = "/d/qujing/yingjian/jiandi1";
         place[strlen(place)-1] = '0'+random(10);
-        message_vision("$N×ĞÏ¸ÌÊÁËÌÊ½ÅÏÂµÄÊ¯Í·,·¢ÏÖÖÜÎ§µÄÉºº÷ºÃÏó¶¯ÁËÒ»ÏÂ£¡\n",me);
-message_vision("¿ìµãÈ¥ÕÒ£¬²»È»Ò»»á¶ù³ö¿ÚÓÖ·âÆğÀ´ÁË£¡\n",me);
+        message_vision("$Nä»”ç»†æ·Œäº†æ·Œè„šä¸‹çš„çŸ³å¤´,å‘ç°å‘¨å›´çš„çŠç‘šå¥½è±¡åŠ¨äº†ä¸€ä¸‹ï¼\n",me);
+message_vision("å¿«ç‚¹å»æ‰¾ï¼Œä¸ç„¶ä¸€ä¼šå„¿å‡ºå£åˆå°èµ·æ¥äº†ï¼\n",me);
         place->set("exits/down", __DIR__"shanhu");
         me->start_busy(1);     
         me->set_temp("find",1);
@@ -36,7 +36,7 @@ call_out("delete", 30, place);
         return 1;
         }
 
-        tell_object(me,"ÔãÁË£¬Äã¾ªĞÑÁËË®¹Ö£¡\n");
+        tell_object(me,"ç³Ÿäº†ï¼Œä½ æƒŠé†’äº†æ°´æ€ªï¼\n");
         yao=new(__DIR__"npc/yao");
         yao->move(environment(me));
         yao->set_leader(me);

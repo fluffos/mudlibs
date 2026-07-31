@@ -14,9 +14,9 @@
 
 mapping alias;
 
-static string *history, last_input;
-static int last_cmd, repeat_cnt = 0;
-static int cnt = 0;
+nosave string *history, last_input;
+nosave int last_cmd, repeat_cnt = 0;
+nosave int cnt = 0;
 
 string process_input(string str)
 {

@@ -1,4 +1,4 @@
-// ownsword.c ±¦½£
+// ownsword.c å®å‰‘
 #include <weapon.h>
 #include <ansi.h>
 
@@ -12,19 +12,19 @@ void create()
         i=me->query_skill("sword", 1)/2+20;
         if (i>=120)
         i=120;
-        set_name("½£", ({ "ownsword" }));
+        set_name("å‰‘", ({ "ownsword" }));
         set_weight(5000);
-        set("no_drop","½£ÔÚÈËÔÚ,½£ÍöÈËÍö£¡\n\n");
+        set("no_drop","å‰‘åœ¨äººåœ¨,å‰‘äº¡äººäº¡ï¼\n\n");
         set("no_get",1);
         if (clonep())
                 set_default_object(__FILE__);
         else {
-                set("unit", "¿Ú");
-                set("long", "Ò»´úÃûÖı½£Ê¦Å·Ò±×ÓÇ×ÊÖÎªÄã¶ÍÖıµÄ±¦½£¡£\n");
+                set("unit", "å£");
+                set("long", "ä¸€ä»£åé“¸å‰‘å¸ˆæ¬§å†¶å­äº²æ‰‹ä¸ºä½ é”»é“¸çš„å®å‰‘ã€‚\n");
                 set("value", 1000);
                 set("material", "steel");
-                set("wield_msg", "$N¡¸à§¡¹µÄÒ»Éù³é³öÒ»¿Ú$nÎÕÔÚÊÖÖĞ¡£\n");
-                set("unwield_msg", "$N½«ÊÖÖĞµÄ$n²å»Ø½£ÇÊ¡£\n");
+                set("wield_msg", "$Nã€Œå”°ã€çš„ä¸€å£°æŠ½å‡ºä¸€å£$næ¡åœ¨æ‰‹ä¸­ã€‚\n");
+                set("unwield_msg", "$Nå°†æ‰‹ä¸­çš„$næ’å›å‰‘é˜ã€‚\n");
         }
         init_sword(i);
         setup();
@@ -42,15 +42,15 @@ int do_put(string arg)
         return 0;
         else
         {
-            tell_object(me,"½£ÔÚÈËÔÚ,½£ÍöÈËÍö£¡Äã²»Ïë»îÁË£¿\n");
+            tell_object(me,"å‰‘åœ¨äººåœ¨,å‰‘äº¡äººäº¡ï¼ä½ ä¸æƒ³æ´»äº†ï¼Ÿ\n");
        }
 }
 
 void owner_is_killed()
 {
         object me = this_player();
-        write(HIY"Ö»¼ûÑÛÇ°½ğ¹âÒ»ÉÁ...ºÃÏóÊÇ.....\n"NOR);
-        write("ÈËÔÚ½£ÔÚ,ÈËÍö½£Íö¡£\n");
+        write(HIY"åªè§çœ¼å‰é‡‘å…‰ä¸€é—ª...å¥½è±¡æ˜¯.....\n"NOR);
+        write("äººåœ¨å‰‘åœ¨,äººäº¡å‰‘äº¡ã€‚\n");
         (int)me->query_temp("done_s");
         me->delete_temp("done_s");
         destruct(this_object());
