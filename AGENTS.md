@@ -2659,7 +2659,15 @@ project keeps its path macros) and confirm the path matches the file
 you're about to edit — do this BEFORE spending time reading/patching
 it, not after the fix mysteriously doesn't take effect. (`hy` ships
 both `securityd.lpc` — dead code, never referenced — and `securd.lpc`
-— the real one `SECURITY_D` resolves to.)
+— the real one `SECURITY_D` resolves to.) Not limited to
+`SECURITY_D`/`securityd.lpc` specifically — `dtxywzxzb` had the exact
+same trap on `LOGIN_D`: a `/daemons/logind.lpc` dead-code duplicate
+(shorter registration flow, no macro anywhere pointing at it) alongside
+the real `/adm/daemons/logind.lpc` that `LOGIN_D` actually resolves to
+(a longer flow with an extra "super password" step and a post-gender
+attribute-reroll menu the dead copy lacks) — tracing the wrong one
+produced a plausible-looking but entirely wrong registration sequence
+to test against.
 
 ### 7.57 Editing an LPC save file (`.o`) with a text-mode file open corrupts it if the lineage encodes structural characters as raw control bytes
 
