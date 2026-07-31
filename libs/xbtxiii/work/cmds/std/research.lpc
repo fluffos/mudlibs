@@ -1,0 +1,128 @@
+#pragma save_binary
+// research.c
+// modify by junhot@xbtxIII 2000.10.07
+// 限制武功的熟练级数为(exp/100w)(exp/100w)+int*3+江湖阅历*2,超过熟练级数难度加大5倍。
+
+#include <skill.h>
+
+inherit F_CLEAN_UP;
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+	object partner;
+	string skill;
+	int level, gin_cost,point,explore;
+	int hard_factor;
+
+	explore = (100*me->query_explore_points()/EXPLORE_D->query_total_explore());
+
+//hard_factor难度系数:
+//自己和伴侣的相加:(2+叛师次数)/2+(悔婚次数+1)=(4+叛师次数+2*悔婚次数)/2
+//如两人都未叛过师，都未悔过婚，则hard_factor = 1
+        partner = new("/obj/usertest");
+	partner->set("id", me->query("MarrY"));
+	if(!me->query("betrayer")&&!me->query("DivorceD")&&
+	   !partner->query("betrayer")&&!partner->query("DivorceD"))
+		hard_factor = 1;
+	else
+	{
+		hard_factor = (2+me->query("betrayer")/2+me->query("DivorceD"));
+		if( !partner->restore() )
+		{
+			destruct(partner);
+		}	
+		else
+		hard_factor += (2+partner->query("betrayer")/2+partner->query("DivorceD"));
+	}
+        if(partner) destruct(partner);
+
+	if(!arg)
+		return notify_fail("指令格式：selflearn <技能> with <潜能点数> \n");
+	if (sscanf(arg, "%s with %d", skill,point)!=2)
+		return notify_fail("指令格式：selflearn <技能> with <潜能点数> \n");
+	if(point<1)
+		return notify_fail("至少要花费1点潜能\n");	
+	if( point>((int)me->query("potential")-(int)me->query("learned_points")) )
+		return notify_fail("你没有这么多潜能\n");
+	if( me->is_busy())
+		return notify_fail("你正忙着呢！\n");
+	if( me->is_fighting() )
+		return notify_fail("临阵磨枪？来不及啦。\n");
+	if ( (int)me->query_skill(skill,1) < 10  ) 
+	{
+		printf("你得有「%s」的入门知识才行。",to_chinese(skill));
+		return notify_fail("\n");
+	}
+
+	gin_cost = point*300 / (int)me->query_int();
+	printf("你开始钻研有关「%s」的问题。\n", to_chinese(skill));
+	level = (int)me->query_skill(skill,1);
+
+	if((int)me->query("gin")<=300/(int)me->query_int())
+	{
+		gin_cost = me->query("gin");
+		write("你今天太累了，结果什麽也没有学到。\n");
+	}
+	else    
+	{
+		if((int)me->query("gin")<gin_cost)
+		{
+			point=me->query("gin")/300*(int)me->query_int(); //自动转换可以用掉的潜能。
+			gin_cost = point*300 / (int)me->query_int();//转换耗费的精力。
+		}
+//   tell_object(me,"point is "+point+" gin_cost is "+gin_cost+"\n");
+		if(point<1) return notify_fail("你今天太累了。什么也没有学到。\n");
+		{
+			if( level * level * level / 10 > (int)me->query("combat_exp") )
+			printf("也许是缺乏实战经验，结果是一无所获。\n" );
+			else
+			{
+				printf("你苦思冥想，似乎有些心得。\n");
+				me->add("learned_points", point);
+				if(SKILL_D(skill)->query_rate(me)<10)
+					point= point*random(me->query_int()+to_int(pow(1.0*me->query("combat_exp"),0.4))/2)+10;
+				else if(SKILL_D(skill)->query_rate(me)<20)
+					point=point*random(me->query_int()+to_int(pow(1.0*me->query("combat_exp"),0.4))/2)+1;
+				else
+					point= point*random(me->query_int()+to_int(pow(1.0*me->query("combat_exp"),0.4))/3)+1;
+				point=point*(100+explore)/200;
+
+				if (me->query_skill(skill,1)>=
+			    	    ((me->query("combat_exp")/1000000)*(me->query("combat_exp")/1000000)+me->query_int()*3+explore*2))
+					me->improve_skill(skill, point/(5*hard_factor),2);
+				else
+					me->improve_skill(skill, point/hard_factor,2);
+			}
+		}
+	}
+
+	if(me->query("gin")<gin_cost)
+	{
+		me->set("gin",0);
+		return 1;
+	}
+	me->receive_damage("gin", gin_cost );
+	return 1;
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式 : selflearn <技能> with <潜能点数>
+ 
+这个指令可以让你向自行研究有关某一种技能的疑难问题，当然，你在这项技能上的
+必须有所了解，而你经由这种方式学习得来的技能也必然比其他方式要缓慢，但在没
+有明师指点时是唯一提升技能的方法。而且你如果有足够的时间和潜能可以无限提升
+你的技能。而提升的速度和你的悟性、经验、江湖阅历都有直接的关系。
+
+
+此外自学也需要消耗一些精力，而消耗的精力跟你自己悟性有关。
+
+
+其他相关指令 : practice,  study,  learn
+HELP
+        );
+        return 1;
+}

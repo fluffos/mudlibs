@@ -1,0 +1,171 @@
+inherit ROOM;
+void create()
+{
+        set("coor",({0,10,100}));
+        set("short", "机密室");
+        set("long",
+"这里放着一张茶几，还有几张沙发，专门供闲的无聊的人在这里侃大山。在这里面呆着是不\n"
+"会长岁数的。\n"
+);
+    set("exits", ([ /* sizeof() == 4 */
+                        "out":"/d/fy/chatroom",
+	]));
+	set("no_death_penalty",1);
+    set("no_fight",1);
+    set("no_magic",1);
+    set("no_die",1);
+    set("no_arrest",1);
+    set("chat_room",1);
+    set_temp("light",1);
+    setup();
+}
+int do_command()
+{
+	string *limit=({
+		"study","pratice","read","selflearn","research","kill",
+                "exert","cast","beg","perform","du","conj","steal",
+		"follow","give","get","drop","do","to",
+		"use","check","","selflearn","research","kill",
+		});
+	if(member_array(query_verb(),limit)!=-1)
+	    return !wizardp(this_player());
+	return 0;
+}
+
+int init()
+{
+	object me;
+	string op_id;
+	me=this_player();
+	op_id=query("op_id");
+
+	add_action("do_command", ""); 
+	add_action("do_kickout","kickout");
+        add_action("do_invite","invite");
+
+        if(!op_id||!find_player(op_id)||environment(find_player(op_id))!=this_object())
+		this_object()->delete("op_id");
+	if(op_id)
+		{
+		if(!me->query_temp(op_id+me->query("id"))
+		   &&me->query("id")!=op_id)
+			{
+			tell_object(me,"房间的主人没有邀请你。你就不要进去了。\n");
+                        me->move("/d/fy/chatroom");
+			return 1;
+			}
+		}
+	return 1;
+}
+
+int do_kickout(string arg)
+{
+	object me,ob;
+	string op_id;
+	me=this_player();
+	op_id=query("op_id");
+if(!op_id||op_id!=me->query("id"))
+	{
+	tell_object(me,"你没有权利使用这个命令。\n");	
+	return 1;
+	}
+if(!arg)
+	{
+	tell_object(me,"你要把谁踢出机密室？\n");
+	return 1;	
+	}
+		
+    ob=present(arg,this_object());
+if(!ob)
+	{
+	tell_object(me,"没有这个人。\n");	
+	return 1;
+	}
+if(ob==me)
+	{
+	tell_object(me,"你发疯了？没事干干吗要踢自己啊？\n");	
+	return 1;
+	}
+	ob->delete_temp(op_id+me->query("id"));
+        ob->move("/d/fy/chatroom");
+	tell_object(me,"你把"+ob->name()+"踢了出去。\n");
+	tell_object(ob,""+me->name()+"把你踢了出来。\n");
+	return 1;
+}
+
+int die_in_here(object me)
+{
+	if( userp(me) ) me->revive(1);
+    CHANNEL_D->do_channel( this_object(), "rumor",
+            sprintf("%s被口水淹死了。", me->name()) );
+	message( "vision", me->name()+"脚下一个不稳，当场给气昏了。\n", environment(me), ({me}) );
+	me->remove_all_killer();
+	all_inventory(this_object())->remove_killer(me);
+	me->dismiss_team();
+	me->reincarnate();
+    me->unconcious();
+	return 1;
+}
+int valid_leave(object me, string dir)
+{
+		string op_id;
+		int i;
+		object *players;
+        if(me->is_fighting()) return 0;
+		op_id=query("op_id");
+		if(op_id&&me->query("id")==op_id)
+			{
+			this_object()->delete(op_id);
+			tell_object(me,"你决定离开机密室了。\n");
+			players=all_inventory(this_object());
+			for(i=0;i<sizeof(players);i++)
+				{
+				if(userp(players[i])&&players[i]!=me)
+					{
+					players[i]->move("/d/fy/fysquare");	
+					tell_object(players[i],"因为这间房间现在的主人"+me->name()+"离开了。\n"
+								"所以会议结束了。呵呵。\n");
+					players[i]->delete_temp(op_id+me->query("id"));
+					players[i]->move("/d/fy/chatroom");
+					}
+				else continue;
+				}
+			}
+		else if(op_id&&me->query("id")!=op_id)
+		    me->delete_temp(op_id+me->query("id"));
+        return 1;
+}
+int do_invite(string arg)
+{
+        object me,ob;
+        string op_id;
+        me=this_player();
+        op_id=query("op_id");
+if(!op_id||op_id!=me->query("id"))
+        {
+        tell_object(me,"你没有权利使用这个命令。\n");   
+        return 1;
+        }
+if(!arg)
+        {
+        tell_object(me,"你要邀请谁?n");
+        return 1;       
+        }
+                
+    ob=find_player(arg);
+if(!ob)
+        {
+        tell_object(me,"没有这个人。\n");       
+        return 1;
+        }
+if(ob==me)
+        {
+        tell_object(me,"你发疯了？没事干干吗要踢自己啊？\n");   
+        return 1;
+        }
+        ob->set_temp(op_id+ob->query("id"),1);
+        tell_object(me,"你邀请"+ob->name()+"进你的聊天室。\n");
+        tell_object(ob,""+me->name()+"邀请你进他在的聊天室。\n");
+        return 1;
+}
+

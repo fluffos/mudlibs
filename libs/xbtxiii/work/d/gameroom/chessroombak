@@ -1,0 +1,1153 @@
+//By rongg@szutx 210.39.3.47 or 172.21.24.100 port 5000
+//1999.5.4.
+#pragma save_binary
+#include <ansi.h>
+#define R_JU 1    //红车
+#define R_MA 2    //红马
+#define R_XIANG 3 //红象
+#define R_SHI 4   //红士
+#define R_SHUAI 5 //红帅
+#define R_PAO 6   //红炮
+#define R_BING 7  //红兵
+//采取这样的定义也有助与方便判断所要移动的棋子是属于那一方的。
+//大于10属于绿方小于10则属于红方
+#define G_JU 11      //绿车
+#define G_MA 22      //绿马
+#define G_XIANG 33   //绿象
+#define G_SHI 44     //绿士
+#define G_SHUAI 55   //绿帅
+#define G_PAO 66     //绿炮
+#define G_BING 77    //绿兵
+inherit ROOM;
+int refresh_two_board(string color);//因为有两个棋盘，所以要进行一些处理
+string look_sign();//观看看牌子
+string board_message(string color,object me,int y_end,int x_end,string returnmsg);
+//显示.int (x_end,y_end) 是提醒将军
+string translate_recorde();//把记录的步子翻译成象棋术语
+int recorde(int y_start,int x_start,int y_end,int x_end,string color);//记录
+string replace_chess_string(int i);//替换棋盘上面的符号
+string can_chess_move(int y_start,int x_start,int y_end,int x_end,string color);
+//判断棋子是否可行。
+int move_chess(int y_start,int x_start,int y_end,int x_end,string color);
+//移动棋子同时整理
+int eat_chessman();//判断是否可以吃掉对方的一个棋子
+string check_win(int y_end,int x_end,string color);//判断是否将军
+int do_you_win();//判断是否获得了胜利
+int reset_chess();//回复最初的状态 
+int refresh_chessman();//悔棋
+int recorde_chess();//记录两步棋子。悔棋的时候使用
+string check_player(object me);//查找玩家是否在象棋室
+//返回值意义如下:no-players:下棋双方都不在场(包括不在线等等)。red-player:红方
+//在场但是绿方不在场 green-player:绿方在场。但是红方不在场。two-players;表示
+//双方都在场。error:程序出错。
+string whomove;
+//最初的棋盘
+mixed redboard,greenboard;//红方棋盘和绿方棋盘
+mixed initial_board= 
+    ({
+     ({ R_JU, R_MA, R_XIANG,R_SHI,R_SHUAI,R_SHI,R_XIANG,R_MA, R_JU,   }), 
+     ({ 0,     0,    0,      0,    0,      0,    0,      0,    0,     }), 
+     ({ 0,     R_PAO,0,      0,    0,      0,    0,      R_PAO,0,     }),
+     ({ R_BING,0,    R_BING, 0,    R_BING, 0,    R_BING, 0,    R_BING,}),
+     ({ 0,     0,    0,      0,    0,      0,    0,      0,    0,     }),      
+     ({ 0,     0,    0,      0,    0,      0,    0,      0,    0,     }),      
+     ({ G_BING,0,    G_BING, 0,    G_BING, 0,    G_BING, 0,    G_BING,}),
+     ({ 0,     G_PAO,0,      0,    0,      0,    0,      G_PAO,0,     }),
+     ({ 0,     0,    0,      0,    0,      0,    0,      0,    0,     }),
+     ({ G_JU, G_MA, G_XIANG,G_SHI,G_SHUAI,G_SHI,G_XIANG,G_MA, G_JU,   }),
+    });
+//象棋的最初分布状况。一个[9][10]二维数组
+
+//走动时所用的棋盘.因为考虑到人们的习惯问题-----人们下棋的时候比较喜欢
+//自己的棋子放置在靠近自己的一方。所以暂时定义了两个棋盘。双方都有一个。
+//暂时想不到别的解决办法。
+void create()
+{
+
+	set("short", "象棋室");
+        set("long", "象棋室.象棋爱好者可以在此下象棋.旁边放了个牌子(sign)\n"
+        	    "上面写着具体的注意事项.\n");
+        set("exits", ([
+//        "west" : __DIR__"qishi",
+//        "east" : __DIR__"piggy",
+//        "down" : "/d/yangzhou/guangchang",
+//        "up" :   __DIR__"center2",
+        ]));
+        set("chat_room",1);
+        add_light(this_object(),1);
+        set("objects", ([ /* sizeof() == 4 */
+             __DIR__"obj/table" : 1,
+             __DIR__"obj/seat" : 2,
+        ]));
+        set("item_desc", ([ 
+             "sign": (:look_sign:),
+             "牌子": (:look_sign:),
+  	]));
+	reset_chess();
+        setup();
+}
+
+int init()
+{
+	add_action("do_start","start");//开始新的游戏
+	add_action("do_move","move");//移动棋子
+	add_action("do_undo","undo");//悔棋
+	add_action("do_surrender","surrender");//投降
+	add_action("do_sue","sue");//求和
+	add_action("do_choose","choose");//选择花色。
+	add_action("do_leave","leave");//不玩了。
+	add_action("do_refresh","refresh");//刷新。观看棋盘。
+}
+
+string chess_rule(int y_start,int x_start,int y_end,int x_end,string color)
+{
+//要用到的全程变量redboard,greenboard,initial_board
+//whomove那一放走棋。
+        int i,king;
+	int x_temp,y_temp,chess;
+	string msg;
+        mixed temp_board;
+        float temp2;
+        
+        if(color=="red")        {temp_board=redboard;king=G_SHUAI;}
+        else if(color=="green") {temp_board=greenboard;king=R_SHUAI;}
+ 
+        chess=temp_board[x_start][y_start];
+        x_temp=x_end-x_start;
+        y_temp=y_end-y_start;
+	if(x_temp==0&&y_temp==0){
+	   msg="走原来的位置？规则里面可以吗？我不懂耶！\n";	
+	   return msg;
+	}
+
+//判断双方老帅见面的问题
+        if(y_start>=3||y_start<=5&&y_temp!=0
+           &&temp_board[x_start][y_start]!=R_SHUAI
+           &&temp_board[x_start][y_start]!=G_SHUAI){
+            for(i=x_start-1;i>=0;i--){//往y轴正方向搜索这个y轴是显示出来的y轴
+                if(temp_board[i][y_start]==0) continue;
+                if(temp_board[i][y_start]!=G_SHUAI
+                 &&temp_board[i][y_start]!=R_SHUAI) break;
+                //中间有棋子当着
+                //如果执行到了下面这个循环。表示自己要走的棋子
+                //前方有敌方的老帅。                    	
+                if(color=="red"){
+                    if(temp_board[i][y_start]==G_SHUAI){
+                        for(i=x_start+1;i<=9;i++){//往y轴负方向搜索。
+	                   if(temp_board[i][y_start]==0) continue;
+                           if(temp_board[i][y_start]!=R_SHUAI) break;
+      		           else{//说明有棋子当住自己的老帅
+                               msg="根据象棋规则。双方的老帅是不能见面的。\n";
+                               return msg;
+                           }
+                        }
+                    }
+
+  		}
+  
+                if(color=="green"){
+                    if(temp_board[i][y_start]==R_SHUAI){
+                        for(i=x_start+1;i<=9;i++){//往y轴负方向搜索。
+	                   if(temp_board[i][y_start]==0) continue;
+                           if(temp_board[i][y_start]!=G_SHUAI) break;
+      		           else{//说明有棋子当住自己的老帅
+                               msg="根据象棋规则。双方的老帅是不能见面的。\n";
+                               return msg;
+                           }
+                        } 
+                    }
+                }
+
+            }	
+        }
+
+        switch (chess)
+            {
+            case R_JU://要走的棋子是车
+            case G_JU:	
+                 if(x_temp!=0&&y_temp!=0){//x,y都有变化。说明走的不是直线
+                     msg="车不能走斜线。\n";
+                     return msg;
+                 }
+                 //下面是判断是否有棋子挡住了车的去路。
+		 //实在是找不到其它的算法。只好这样了                 
+                 if(x_temp>=2){//是在x列正方向移动的。并且移动了2格以上。
+                        for(i=x_start+1;i<x_end;i++){
+	                   if(temp_board[i][y_start]==0) continue;
+                           if(temp_board[i][y_start]!=0){
+                               msg=replace_chess_string(temp_board[i][y_start]);
+                               msg="你要移动的车被棋子"+msg+"挡住了。\n";
+                               return msg;
+                           }
+                        }
+
+                 }
+                 if(x_temp<=-2){//是在x列的负方向移动的。并且移动了2格以上。
+                        for(i=x_start-1;i>x_end;i--){
+	                   if(temp_board[i][y_start]==0) continue;
+                           if(temp_board[i][y_start]!=0){
+                               msg=replace_chess_string(temp_board[i][y_start]);
+                               msg="你要移动的车被棋子"+msg+"挡住了。\n";
+                               return msg;
+                           }
+                        }
+
+                 }
+                 if(y_temp>=2){//是在y轴正方向移动的。并且移动了2格以上。
+                        for(i=y_start+1;i<y_end;i++){
+	                   if(temp_board[x_start][i]==0) continue;
+                           if(temp_board[x_start][i]!=0){
+                               msg=replace_chess_string(temp_board[x_start][i]);
+                               msg="你要移动的车被棋子挡住了。\n";
+                               return msg;
+                           }
+                        }
+
+                 }
+                 if(y_temp<=-2){//是在y轴的负方向移动的。并且移动了2格以上。
+                        for(i=y_start-1;i>y_end;i--){
+	                   if(temp_board[x_start][i]==0) continue;
+                           if(temp_board[x_start][i]!=0){
+                               msg=replace_chess_string(temp_board[x_start][i]);
+                               msg="你要移动的车被棋子挡住了。\n";
+                               return msg;
+                           }
+                        }
+
+                 }
+
+                 return "can-move";
+            case R_MA://要走的棋子是马
+            case G_MA:
+		 temp2=sqrt(x_temp*x_temp+y_temp*y_temp);
+                 if(temp2<2.2||temp2>2.5){
+                     msg="马似乎应该走日，是吗？\n";
+                     return msg;
+                 }
+                 if(x_temp==2){
+                     x_start++;
+                 
+                 }
+ 		 if(x_temp==-2){
+ 		     x_start--;
+ 		 }
+		 if(x_temp==1) {
+		     if(y_temp>0) y_start++;
+		     else         y_start--;
+		 }   //x_start不变
+                 if(x_temp==-1){
+                     if(y_temp>0) y_start++;
+                     else         y_start--;
+                 }
+                 if(temp_board[x_start][y_start]!=0){//马脚的位置有棋子
+		    msg="你的马在这个方向被压住马脚了。\n";
+                    return msg;
+                 }
+                 return "can-move";
+            case R_PAO://要走的棋子是炮
+            case G_PAO:
+                 if((x_temp!=0&&y_temp!=0)){//x,y都有变化。说明走的不是直线
+                     msg="炮不能走斜线\n";
+                     return msg;
+                 }
+                 //炮的规则比较复杂。必须仔细考虑。
+                 //看看是不是只走了一格
+                 if((x_temp==0&&(y_temp==1||y_temp==-1))
+                   ||(y_temp==0&&(x_temp==1||x_temp==-1))){
+		     if(temp_board[x_end][y_end]!=0){
+		         msg=replace_chess_string(temp_board[x_end][y_end]);	
+		         msg="您要走动的位置上面已经有了棋子"+msg+"了\n";
+		         return msg;
+		     }
+                     return "can-move";
+                 }
+                 //下面都是走了2格以上的情况。
+                 if(temp_board[x_end][y_end]==0){
+                 //棋子的终点是没有棋子的。所以要看看是不是打的空炮。
+		    if(x_temp>0){
+		    	for(i=x_start+1;i<x_end;i++){
+		            if(temp_board[i][y_end]==0) continue;
+			    else{
+			        msg="打空炮？中国象棋似乎不允许吧。\n";
+			        return msg;
+			    }
+		        }
+		    }
+		    if(x_temp<0){
+		    	for(i=x_start-1;i>x_end;i--){
+		            if(temp_board[i][y_end]==0) continue;
+			    else{
+			        msg="打空炮？中国象棋似乎不允许吧。\n";
+			        return msg;
+			    }
+		        }
+		    }
+		    if(y_temp>0){
+		    	for(i=y_start+1;i<y_end;i++){
+		            if(temp_board[x_start][i]==0) continue;
+			    else{
+			        msg="打空炮？中国象棋似乎不允许吧。\n";
+			        return msg;
+			    }
+		        }
+		    }
+		    if(y_temp<0){
+		    	for(i=y_start-1;i>y_end;i--){
+		            if(temp_board[x_start][i]==0) continue;
+			    else{
+			        msg="打空炮？中国象棋似乎不允许吧。\n";
+			        return msg;
+			    }
+		        }
+		    }
+
+                 }else{
+                 //棋子的终点有棋子。所以要检查有没有炮架
+		 //同时还要考虑是不是有两个以上的炮架。这个是不允许的。
+		    temp2=0;
+		    if(x_temp>0){
+		    	for(i=x_start+1;i<x_end;i++){
+		            if(temp_board[i][y_end]==0) continue;
+			    else temp2++;
+		        }
+		    }
+		    if(x_temp<0){
+		    	for(i=x_start-1;i>x_end;i--){
+		            if(temp_board[i][y_end]==0) continue;
+			    else temp2++;
+		        }
+		    }
+		    if(y_temp>0){
+		    	for(i=y_start+1;i<y_end;i++){
+		            if(temp_board[x_start][i]==0) continue;
+			    else temp2++;
+		        }
+		    }
+		    if(y_temp<0){
+		    	for(i=y_start-1;i>y_end;i--){
+		            if(temp_board[x_start][i]==0) continue;
+			    else temp2++;
+		        }
+		    }
+	         if(temp2==0) return"没有炮架子怎么能够吃掉对方的棋子呢？\n";
+	         if(temp2!=1) return"炮架子似乎太多了吧。呵呵。\n";
+                 }
+	         return "can-move";
+            case R_XIANG://要走的棋子是像
+            case G_XIANG:
+                 if(x_end<5){
+                     msg="象不能过河\n";	
+                     return msg;
+                 }
+  		 if(x_temp<0) x_temp=-x_temp;
+		 if(y_temp<0) y_temp=-y_temp;
+                 if(x_temp!=2||y_temp!=2){
+                     msg="象走田，你该不是不知道吧？\n";
+                     return msg;
+                 }
+		 x_start=(x_start+x_end)/2;
+		 y_start=(y_start+y_end)/2;
+		 if(temp_board[x_start][y_start]!=0){
+		     msg="象被压住象脚了。无法移动\n";	
+		     return msg;
+		 }
+                 return "can-move";
+            case R_SHI://要走的棋子是士
+            case G_SHI:
+                 if(x_end<7||y_end>5||y_end<3){
+		     msg="士不能出皇宫，你该不是不知道吧。\n";	
+		     return msg;
+		 }
+                 if(x_temp==0||y_temp==0||x_temp>1||x_temp<-1
+                    ||y_temp>1||y_temp<-1){
+		     msg="士只能斜线移动一格，你该不是不知道吧？\n";	
+		     return msg;
+                 }
+                 return "can-move";
+            case R_SHUAI://要走的棋子是帅
+            case G_SHUAI:
+                 if((x_temp!=0&&y_temp!=0)||x_temp>1||x_temp<-1
+                    ||y_temp>1||y_temp<-1){
+                     msg="您的走法似乎违反了中国象棋规则。不必我告诉您规则了吧。\n";	
+                     return msg;
+                 }
+                 if(x_end<7||y_end>5||y_end<3){
+                     msg="恩～～～中国象棋的老帅似乎不允许出皇宫。\n"
+                         "恩～～～国际象棋似乎也不允许吧。呵呵。\n";	
+                     return msg;
+                 }
+                 if(x_temp==0){//这种情况有可能和对方的老帅见面了。
+                     for(i=x_end-1;i>=0;i--){
+                         if(temp_board[i][y_end]==0) continue;	
+                         if(temp_board[i][y_end]!=king) return "can-move";
+                         //有个棋子挡住了
+                         if(temp_board[i][y_end]==king){
+                             msg="中国象棋的规则是，如果双方的老帅见面的话会被认为自动认输\n";	
+                             return msg;
+                         }
+                     }
+                 }
+
+                 return "can-move";
+            case R_BING://要走的棋子是兵
+            case G_BING:
+                 if(x_start>=5){//还没有过河呢。
+                     if(y_temp!=0||x_temp!=-1){
+                         msg="如果我没有记错的话,小兵在过河之前只能够前进哦。\n";
+                     return msg;
+                     }
+                 }
+                 if(x_start<5){
+		     if(y_temp<0) y_temp=-y_temp;
+                     if(y_temp!=1&&y_temp!=0){
+                         msg="小兵过了河之后只能够横移一格呀。\n";
+                         return msg;
+                     }
+                     if(!(x_temp!=0||x_temp!=-1)){
+                         msg="小兵任何时候都只能够前进。\n";	
+                         return msg;
+                     }
+                 }
+                 return "can-move";
+
+            }
+	    return "can-move";//其它的情况当作移动成功。
+}
+
+string can_chess_move(int y_start,int x_start,int y_end,int x_end,string color)
+{//要用到的全程变量redboard,greenboard,initial_board
+//whomove那一放走棋。
+	string msg;
+        mixed temp_board;
+//x_start:x的初坐标.y_start:y的初坐标.其余类似
+        if(color=="red") temp_board=redboard;
+        else if(color=="green") temp_board=greenboard;
+        if( y_start>8||y_start<0||x_start>9||x_start<0
+          ||y_end>8||y_end<0||x_end>9||x_end<0){
+            msg="很抱歉。我想要不是您要选择的棋子不在棋盘上面.\n"
+                "要不就是您把棋子走到棋盘外面去了。\n";
+            return msg;
+        }
+
+              if(temp_board[x_start][y_start]==0){
+                  msg="您选择的位置没有棋子y_end is "+y_end+",x_end is "+x_end+"\n";
+                  return msg;
+              }
+        //红方的棋子都小于10.绿方的棋子都大于10
+        if(color=="red"){
+            if(temp_board[x_start][y_start]>10){
+                msg="您所想走动的棋子不是你自己的棋子\n";
+                return msg;
+            }
+            if(temp_board[x_end][y_end]!=0
+               &&temp_board[x_end][y_end]<10){
+		msg="您要放置棋子的位置上面已经有了自己的棋子了。\n";
+                msg+=replace_chess_string(temp_board[x_end][y_end]);
+                return msg;
+            }
+        }
+	if(color=="green"){
+            if(temp_board[x_start][y_start]<10){
+                msg="您所想走动的棋子不是你自己的棋子\n";
+                return msg;
+            }
+            if(temp_board[x_end][y_end]!=0
+               &&temp_board[x_end][y_end]>10){
+		msg="您要放置棋子的位置上面已经有了自己的棋子了。\n";
+                msg+=replace_chess_string(temp_board[x_end][y_end]);
+                return msg;
+            }
+        }
+        return "can-move";
+
+}
+int move_chess(int y_start,int x_start,int y_end, int x_end,string color )
+{
+//要用到的全程变量redboard,greenboard,initial_board
+//whomove那一放走棋。
+	if(color=="red"){
+	    redboard[x_end][y_end]=redboard[x_start][y_start];
+	    redboard[x_start][y_start]=0;//去掉棋子。
+	}
+        else if(color=="green") {
+	    greenboard[x_end][y_end]=greenboard[x_start][y_start];
+	    greenboard[x_start][y_start]=0;//去掉棋子。
+        }
+        
+       refresh_two_board(color);
+
+}
+//因为棋盘是有两个的，所以必须将它们进行一个交换。
+
+int refresh_two_board(string color)
+{
+
+	int x,y;
+	if(color=="red"){
+        	for(x=0;x<10;x++){
+            	for(y=0;y<9;y++)
+                	greenboard[x][y]=redboard[9-x][8-y];	
+        	}
+        } else {
+        	for(x=0;x<10;x++){
+            	for(y=0;y<9;y++)
+                	redboard[x][y]=greenboard[9-x][8-y];	
+        	}
+        }
+        
+        return 1;
+}
+string check_win(int y_end,int x_end,string color)
+{
+	return "将军";
+}
+
+string can_me_move(object me)
+{
+	string color;//我的棋子的颜色。
+	object redman,greenman;
+	redman=query("chess-player/red-player");
+	greenman=query("chess-player/green-player");
+	if(!greenman||!redman)//下棋的人不够
+	    return "can-not-move";
+	if(greenman&&redman&&me!=greenman&&me!=redman)//此人不是下棋的人。
+	    return "not-chess-player";
+	if(greenman==me) color="green";
+	if(redman==me)   color="red";
+	if(color!=whomove) return "can-not-move";
+	return "you-can-move";
+}
+string check_player(object me)
+{//可能用set("chess-player/red-id",id)会好一些。就是标记做成字符。
+ //这样查找的时候使用present(id,this_object())恐怕更简单一些。
+ //不过等我想到这个问题的时候程序已经写好了。遂不愿意再做改动。
+	object redman,greenman,room1,room2;
+	int i;
+if(!query("chess-player"))
+	return "no-players";//没有人在下棋。
+	i=sizeof(query("chess-player"));
+
+        redman=query("chess-players/red-player");
+        greenman=query("chess-player/green_player");
+
+if(i==1){//只有一个玩家
+        if(objectp(redman)){
+            room1=environment(redman);
+            if(!room1) return"no-player";
+            if(room1&&room1!=this_object()) return "no-player";
+            //下棋的人走了。
+        return "red-player";//红方玩家在此。
+        }
+        if(objectp(greenman)){
+            room2=environment(greenman);
+            if(!room2) return "no-player";
+            if(room2&&room2!=this_object()) return "no-player";
+            //下棋的人走了。
+        return "green-player";//绿方玩家在
+        }
+	return"no-player";//非指针情况。
+}
+if(i==2){//两个玩家
+	if(objectp(redman)&&objectp(greenman)){
+	    room1=environment(redman);
+	    room2=environment(greenman);
+            if(!room1||!room2)
+                { this_object()->delete("chess-players");return "no-players";}
+            //这种情况极为少见。故删除从来。
+            if(room1==room2&&room1=this_object()){
+	 	if(me!=redman&&me!=greenman)
+	 	    return"two-players";//双方都在场
+                else return "you_are_playing";
+            }
+            else if(room1==this_object())
+  	        return "red-player";//红方在场
+  	    else if(room2==this_object())
+  	        return "green-player";//绿方在场
+            else if(room1!=this_object()&&room2!=this_object())
+                return "no-player";//没有人在场
+	}else if(objectp(redman)&&!objectp(greenman)){
+	    room1=environment(redman);
+	    if(!room1) return "no-player";//没有人在场
+      	    if(room1&&room1==this_object())
+		return "red-player";//红方在场
+	    return "no-player";//没有人在场	    
+	}else if(objectp(greenman)&&!objectp(redman)){
+	    room2=environment(greenman);
+	    if(!room2) return "no-player";//没有人在场
+      	    if(room2&&room2==this_object())
+		return "green-player";//绿方在场
+	    return "no-player";//没有人在场
+	}else    return "no-player";//没有人在场
+}else   return "error";
+}
+
+
+int do_choose(string arg)
+{
+	string msg,returnmsg;//定义红方和绿方
+	object me,man,id;
+	me=this_player();
+	id=me->query("id");
+//有人已经在玩了。但是这两个人未必在场
+if(!arg||!(arg=="red"||arg=="green")){
+	returnmsg=check_player(me);//查看玩家是否在场。
+	if(returnmsg=="no-player"){
+	    msg="请您找到另外一个人才能开始下中国象棋。具体情况请look sign\n";
+	    tell_object(me,msg);
+	    return 1;
+	}
+	if(returnmsg=="two-players"){
+	    msg="已经有两个人在下棋了。您还是等等吧。\n";	
+	    tell_object(me,msg);
+	    return 1;
+	}
+	if(returnmsg=="your_are_playing"){
+	    msg="您不正在玩着吗，等下完了在选择吧。\n";	
+	    tell_object(me,msg);
+	    return 1;
+	}
+
+	if(returnmsg=="green-player"){
+	    msg="$N走到红方的位置坐了下来。开始接手红方的残棋。\n";
+	    message_vision(msg,me);
+            msg=board_message("green",me,1000,1000,"no_win");//显示棋盘
+	    msg+="如果你是第一次玩。请您输入look sign来查看具体事项\n";
+	    tell_object(me,msg);
+	    set("chess-player/red-player",me);
+	    return 1;
+	}
+	if(returnmsg=="red-player"){
+	    msg="$N走到绿方的位置坐了下来。开始接手绿方的残棋。\n";
+	    message_vision(msg,me);
+            msg=board_message("red",me,1000,1000,"no_win");//显示棋盘
+	    msg+="如果你是第一次玩。请您输入look sign来查看具体事项\n";
+	    tell_object(me,msg);
+	    set("chess-player/green-player",me);
+	    return 1;
+	}
+        if(returnmsg=="error"){
+            msg="程序出错了。请通知巫师。谢谢。\n";
+            tell_object(me,msg);
+            return 1;
+        }  
+      
+}else{
+        man=query("chess-player/"+arg+"-player");
+        switch(arg)
+            {
+            case "red":
+                 msg="红方";
+                 break;
+            case "gree":
+                 msg="绿方";
+                 break;
+            default:
+                 msg="";
+                 break;
+            }
+	returnmsg=check_player(me);//查看玩家是否在场。
+	if(returnmsg=="error"){
+            msg="程序出错了。请通知巫师。谢谢。\n";
+            tell_object(me,msg);
+            return 1;
+        }  
+	if(returnmsg=="no-player"){
+	    msg="$N选择了"+msg+"这一方，然后坐了下来。\n";
+	    message_vision(msg,me);
+	    msg=board_message(arg,me,1000,1000,"no_win");
+	    msg+="请您找到另外一个人才能开始下中国象棋。具体情况请look sign\n";
+	    tell_object(me,msg);
+	    set("chess-player/"+arg+"-player",me);
+	    return 1;
+	}
+	if(returnmsg==(arg+"-player")){
+	    msg="这一方已经有人了，请您选择另外一方。\n";
+	    tell_object(me,msg);
+	    return 1;
+	}
+	msg="$N走到"+msg+"的位置坐了下来。\n";
+	message_vision(msg,me);
+        msg=board_message(arg,me,1000,1000,"no_win");//显示棋盘
+	msg+="如果你是第一次玩。请您输入look sign来查看具体事项\n";
+	tell_object(me,msg);
+	set("chess-player/"+arg+"-player",me);
+	return 1;
+	}
+        return 1;
+}
+
+int do_start(string arg)
+{
+	object me,redman,greenman;
+	string msg;
+	int temp;
+	me=this_player();
+	redman=query("chess-player/red-player");
+	greenman=query("chess-player/green-player");
+	temp=query("reset-players");
+if(!arg||arg!="a new game")
+        return notify_fail("如果是在双方都同意的情况下请输入start a new game重新开始。\n");
+if(!query("chess-player")){
+	msg="如果您想玩的话请找个凳子坐下来。然后选择花色。具体情况请look sign\n";
+	tell_object(me,msg);
+	return 1;
+	}
+if(objectp(redman)&&objectp(greenman)){//如果下棋的双方都在
+	if(redman==me||greenman==me){//如果我也是下棋的人
+	    if(query("who-want-start")
+	     &&query("who-want-start")!=me->query("id")){
+	        reset_chess();//重置棋盘
+		msg=board_message("red",me,1000,1000,"no_win");
+		tell_room(msg,({"green"}));
+		msg=board_message("green",me,1000,1000,"no_win");
+		tell_object(greenman,msg);
+	        msg="重新开始新的一局\n";
+	        message_vision(msg,me);
+	        this_object()->delete("who-want-start");
+	        return 1;
+	    }else{
+	        msg="如果要开始新的一局。必须双方都同意方可。请您等待\n"
+	            "对方的回应\n";
+		tell_object(me,msg);
+	        set("who-want-start",me->query("id"));
+	        return 1;
+	    }
+	}else if(redman!=me&&greenman!=me){
+	    msg="旁观者请不要乱动。\n";	
+	    tell_object(me,msg);
+	    return 1;
+	}
+        }
+        msg="现在只是提供人和人下棋。由于人数不够，无法开始新的一局\n";
+        tell_object(me,msg);
+	return 1;
+}
+
+int do_move(string arg)//移动棋子
+{
+	object me,redman,greenman,man;
+	string msg,can_me_move,can_chess_move,yourcolor,winmsg;
+	int start,end,x_start,x_end,y_start,y_end;
+	me=this_player();
+
+	redman=query("chess-player/red-player");
+	greenman=query("chess-player/green-player");
+//	if(!arg||sscanf(arg, "%d to %d",y_start,x_start,y_end,x_end)!=4 ){
+	if(!arg||sscanf(arg, "%d to %d",start,end)!=2
+	   ||!intp(start)||!intp(end)){
+	    msg="命令格式 move <出发点坐标> to <目的地坐标>\n"
+	        "例如move 10 to 11 则移动放置在(1,0)地方的车到(1,1)点\n";
+	    tell_object(me,msg);
+	    return 1;
+	}
+	y_start=start/10;x_start=start%10;
+	y_end=end/10;x_end=end%10;
+	if(!intp(x_start)||!intp(y_start)||!intp(x_end)||!intp(y_end))
+	    return notify_fail("move <横坐标> <纵坐标> to <横坐标> <纵坐标>\n");
+	can_me_move=can_me_move(me);//检测可否走棋
+	if(can_me_move=="can-not-move"){
+	    msg="没有到你走棋\n";
+	    tell_object(me,msg);
+	    return 1;
+	}
+	if(can_me_move=="not-chess-player"){
+	    msg="局外人请不要插手。\n";
+	    tell_object(me,msg);
+	    return 1;
+	}
+	if(can_me_move=="you-can-move"){//开始检测所走的棋子是否正确。
+				        //例如走出棋盘外面。等等。
+	    can_chess_move=can_chess_move(y_start,x_start,y_end,x_end,whomove);
+	    if(can_chess_move!="can-move"){
+                msg=can_chess_move;
+	        tell_object(me,msg);
+	        return 1;
+	    }
+            can_chess_move=chess_rule(y_start,x_start,y_end,x_end,whomove);
+            //棋子的检查。主要是检查每个棋子的移动时候都符合象棋规则
+	    if(can_chess_move!="can-move"){
+	        msg=can_chess_move;
+	        tell_object(me,msg);	
+	        return 1;
+	    }
+             //此处已经进行了棋盘的交换
+	    move_chess(y_start,x_start,y_end,x_end,whomove);//移动棋子。
+
+	    if(greenman&&greenman==me) man=redman;
+	    if(redman&&redman==me)   man=greenman;
+	    if(whomove=="green") yourcolor="red";
+	    if(whomove=="red")   yourcolor="green";
+
+	    winmsg=check_win(y_end,x_end,whomove);
+
+	    if(winmsg!="no_win"){
+	        msg=board_message(whomove,me,x_end,y_end,"will_win");//暂时这个样子	    	
+	        msg+=winmsg;
+	        tell_object(me,msg);
+ 	        if(man&&environment(man)&&environment(man)==this_object()){
+	            msg=board_message(yourcolor,man,8-y_end,9-x_end,"will_win");
+	            msg+=winmsg;
+	            tell_object(man,msg);
+	        }
+	    }else{
+	        msg=board_message(whomove,me,x_end,y_end,"no_win");
+	        tell_object(me,msg);
+	        if(man&&environment(man)&&environment(man)==this_object()){
+	            msg=board_message(yourcolor,man,8-y_end,9-x_end,"no_win");
+	            tell_object(man,msg);
+	        }
+	    }//轮到下一方走棋了。
+
+           if(whomove=="green") whomove="red";
+           else whomove ="green";
+
+	    return 1;
+	}
+}
+
+int do_refresh(string arg)
+{
+        object redman,greenman,me;
+	string board_str;
+	
+	me=this_player();
+	redman=query("chess-player/red-player");
+	greenman=query("chess-player/green-player");
+	if(objectp(redman)){
+	    if(me==redman)
+	        board_str=board_message("red",me,1000,1000,"no_win");
+	}
+        if(objectp(greenman)){
+	    if(me==greenman)
+	        board_str=board_message("green",me,1000,1000,"no_win");	
+        }
+        if(!objectp(greenman)&&!objectp(redman)||
+           objectp(greenman)&&objectp(redman)&&me!=redman&&me!=greenman)
+              board_str=board_message("red",me,1000,1000,"no_win");
+	tell_object(me,board_str);
+	return 1;
+}
+/*
+int do_surrender(string arg)
+{
+	object redman,greenman;
+	string msg;
+	redman=query("chess-player/redman");
+	greenman=query("chess-player/greenman");
+	if(!objectp(redman)&&!objectp(greenman))
+	if(redman=)
+}
+int do_leave(string arg)
+{
+	
+}
+*/
+string replace_chess_string(int i)
+{
+    string msg;
+    switch (i)
+        {
+        case R_JU:     msg=HIR"车"NOR;break;
+        case R_MA:     msg=HIR"马"NOR;break;
+        case R_XIANG:  msg=HIR"象"NOR;break;
+        case R_SHI:    msg=HIR"士"NOR;break;
+        case R_SHUAI:  msg=HIR"帅"NOR;break;
+        case R_PAO:    msg=HIR"炮"NOR;break;
+        case R_BING:   msg=HIR"兵"NOR;break;
+
+        case G_JU:     msg=HIG"车"NOR;break;
+        case G_MA:     msg=HIG"马"NOR;break;
+        case G_XIANG:  msg=HIG"像"NOR;break;
+        case G_SHI:    msg=HIG"仕"NOR;break;
+        case G_SHUAI:  msg=HIG"将"NOR;break;
+        case G_PAO:    msg=HIG"炮"NOR;break;
+        case G_BING:   msg=HIG"卒"NOR;break;
+        default: msg=HIC"XX"NOR;break;
+        }
+	
+	return msg;
+}
+
+string board_message(string color,object me,int y_end,int x_end,string returnmsg)
+{
+	int x,y,font;
+	mixed temp_board;
+	string board_str,chess_str;
+        if(!color) temp_board=redboard;//局外人看的棋盘
+        if(color=="red")        temp_board=redboard;
+        else if(color=="green") temp_board=greenboard;
+	font=me->query_temp("font");
+	me=this_player();
+	font=me->query_temp("font");
+if(!y_end||!x_end) {x_end=1000;y_end=1000;}
+if(y_end!=1000||x_end!=1000)
+tell_object(find_player("rongg"),"这个棋子是"+replace_chess_string(temp_board[y/2][x/2])+"\n");
+//没有发出将军的警告
+if(!font){
+	board_str="\t 0    1    2    3    4    5    6    7    8\n";	
+	for(y=1;y<20;y++){//纵向
+	           if(y==2||y==16) {
+	              board_str+="\t |    |    |    |  \\ | /  |    |    |    |\n";
+  	              continue;
+	           }
+	           if(y==4||y==18){
+                    board_str+="\t |    |    |    |  / | \\  |    |    |    |\n";
+	           continue;
+	           }
+	    board_str+="\t";
+	    if(y%2==1) board_str+=""+(y/2);
+	    if(y==10) {board_str+="   ～～～～楚河～～～～    ～～～～汉界～～～～\n";continue;}
+	    for(x=1;x<18;x++){
+		if(y%2==1){//基数边
+	           if(x==1) {
+		       if(temp_board[y/2][x/2]!=0){
+		           if(y/2==x_end&&x/2==y_end){//警告要将军了
+  		               tell_object(find_player("rongg"),"这个棋子是"+replace_chess_string(temp_board[y/2][x/2])+"\n");
+  		               chess_str=FLASH+replace_chess_string(temp_board[y/2][x/2])+NOR;
+		               board_str+=chess_str;
+		           }else board_str+=replace_chess_string(temp_board[y/2][x/2]);		           
+		       }
+	               else
+	                   board_str+="+-"; continue;
+	          }
+	           if(x%2==0) board_str+="---";
+		   else {
+		       if(temp_board[y/2][x/2]!=0){
+   			   if(y/2==x_end&&x/2==y_end){//警告要将军了
+  		               chess_str=FLASH+replace_chess_string(temp_board[y/2][x/2])+NOR;
+		               board_str+=chess_str;
+		           }else board_str+=replace_chess_string(temp_board[y/2][x/2]);
+		       }
+		       else board_str+="+-";
+		   }
+	           if(x==17&&y==1) board_str+="----->"+HIC+"X"+NOR;
+	           if(x==17) board_str+="\n";
+		}else{//偶数边
+	           if(x%2==1)board_str+=" |   ";
+	           if(x==17) board_str+="\n";
+	        }
+	    }	
+	}
+
+}
+else{
+        board_str="\t 0     1     2     3     4     5     6     7     8\n";
+	for(y=1;y<29;y++){//纵向
+	    if(y==15) continue;
+	           if(y==2||y==23) {
+	           board_str+="\t |     |     |     | \\   |    /|     |     |     |\n";
+                   board_str+="\t |     |     |     |   \\ |  /  |     |     |     |\n";
+	           y++;
+	           continue;
+	           }
+	           if(y==5||y==26){
+                   board_str+="\t |     |     |     |   / | \\   |     |     |     |\n";
+                   board_str+="\t |     |     |     | /   |   \\ |     |     |     |\n";
+	           y++;
+	           continue;
+	           }
+	    board_str+="\t";
+	    if((y-1)%3==0) board_str+=""+((y-1)/3);
+	    if(y==14) {board_str+="   ～～～～楚河～～～～    ～～～～汉界～～～～\n";continue;}
+	    for(x=1;x<18;x++){
+		if((y-1)%3==0){//基数边
+	           if(x==1) {
+		       if(temp_board[(y-1)/3][x/2]!=0){
+   			   if((y-1)/3==x_end&&x/2==y_end){//警告要将军了
+  		               chess_str=FLASH+replace_chess_string(temp_board[(y-1)/3][x/2])+NOR;
+		               board_str+=chess_str;
+		           }else board_str+=replace_chess_string(temp_board[(y-1)/3][x/2]);
+	               }else
+	                   board_str+="+-"; continue;
+	          };
+	           if(x%2==0) board_str+="----";
+		   else {
+		       if(temp_board[(y-1)/3][x/2]!=0){
+   			   if((y-1)/3==x_end&&x/2==y_end){//警告要将军了
+  		               chess_str=FLASH+replace_chess_string(temp_board[(y-1)/3][x/2])+NOR;
+		               board_str+=chess_str;
+		           }else board_str+=replace_chess_string(temp_board[(y-1)/3][x/2]);
+		       }
+		       else board_str+="+-";
+		   }
+	           if(x==17) board_str+="\n";
+		}else{//偶数边
+	           if(x%2==1)board_str+=" |    ";
+	           if(x==17) board_str+="\n";
+	        }
+	    }	
+	}
+}
+	return board_str;
+}
+
+int reset_chess()//回复最初的状态 
+{
+	initial_board = 
+    //y y y y 
+    //x
+    //x
+    //x
+    ({
+     ({ R_JU, R_MA, R_XIANG,R_SHI,R_SHUAI,R_SHI,R_XIANG,R_MA, R_JU,   }), 
+     ({ 0,     0,    0,      0,    0,      0,    0,      0,    0,     }), 
+     ({ 0,     R_PAO,0,      0,    0,      0,    0,      R_PAO,0,     }),
+     ({ R_BING,0,    R_BING, 0,    R_BING, 0,    R_BING, 0,    R_BING,}),
+     ({ 0,     0,    0,      0,    0,      0,    0,      0,    0,     }),      
+     ({ 0,     0,    0,      0,    0,      0,    0,      0,    0,     }),      
+     ({ G_BING,0,    G_BING, 0,    G_BING, 0,    G_BING, 0,    G_BING,}),
+     ({ 0,     G_PAO,0,      0,    0,      0,    0,      G_PAO,0,     }),
+     ({ 0,     0,    0,      0,    0,      0,    0,      0,    0,     }),
+     ({ G_JU, G_MA, G_XIANG,G_SHI,G_SHUAI,G_SHI,G_XIANG,G_MA, G_JU,   }),
+    });
+	redboard = 
+    ({
+     ({ G_JU, G_MA, G_XIANG,G_SHI,G_SHUAI,G_SHI,G_XIANG,G_MA, G_JU,   }), 
+     ({ 0,     0,    0,      0,    0,      0,    0,      0,    0,     }), 
+     ({ 0,     G_PAO,0,      0,    0,      0,    0,      G_PAO,0,     }),
+     ({ G_BING,0,    G_BING, 0,    G_BING, 0,    G_BING, 0,    G_BING,}),
+     ({ 0,     0,    0,      0,    0,      0,    0,      0,    0,     }),      
+     ({ 0,     0,    0,      0,    0,      0,    0,      0,    0,     }),      
+     ({ R_BING,0,    R_BING, 0,    R_BING, 0,    R_BING, 0,    R_BING,}),
+     ({ 0,     R_PAO,0,      0,    0,      0,    0,      R_PAO,0,     }),
+     ({ 0,     0,    0,      0,    0,      0,    0,      0,    0,     }),
+     ({ R_JU, R_MA, R_XIANG,R_SHI,R_SHUAI,R_SHI,R_XIANG,R_MA, R_JU,   }),
+    });
+
+        greenboard=initial_board;
+	whomove="red";//红方先走
+}
+/*
+int recorde_color(int y_start,int x_start,int y_end,int x_end,string color)
+{
+	mixed temp_board;
+	int temp;
+	if(color=="red")  temp_board=redboard;
+	if(color="green") temp_board=greenboard;
+	if()
+}
+*/
+string get_recorde_color(int y_start,int x_start,int y_end,int x_end,string color)
+{
+	
+}
+int recorde(int y_start,int x_start,int y_end,int x_end,string color)
+{
+	mixed temp_board;
+	int chess;
+
+	if(color=="red")  temp_board=redboard;
+	if(color="green") temp_board=greenboard;
+	if(temp_board[x_end][y_end]!=0){//被吃掉的棋子
+	    //永远是要走棋子的那一方可以悔棋。
+	    chess=temp_board[x_end][y_end];
+	    if(!query("dieaway_chess1"))
+	         set("dieaway_chess1",({x_start,y_start,x_end,y_end,chess}));
+	    else {
+	         set("dieaway_chess2",query("dieaway_chess1"));
+	         set("dieaway_chess1",({x_start,y_start,x_end,y_end,chess}));
+	    }
+	}else{
+	    chess=0;//上一步棋没有棋子的损失。
+	    if(!query("dieaway_chess1"))
+	         set("dieaway_chess1",({x_start,y_start,x_end,y_end,chess}));
+	    else {
+	         set("dieaway_chess2",query("dieaway_chess1"));
+	         set("dieaway_chess1",({x_start,y_start,x_end,y_end,chess}));
+	    }
+	
+	}
+        return 1;
+}
+/*
+string check_win(int y_end,int x_end,string color)//判断是否将军
+{
+        mixed temp_board;
+        int chess,i,j,temp1,temp2,king;
+        string msg;
+        if(color=="red")      {temp_board=redboard;king=G_SHUAI;}
+        else                  temp_board=greenboard;king=R_SHUAI;}	
+	chess=temp_board[x_end][y_end];
+        switch(chess)
+            {
+            case R_JU:
+            case G_JU:
+                 if(x_end=1,y_end=4){
+                     if( temp_board[x_end+1][y_end]==king
+                       ||temp_board[x_end-1][y_end]==king
+                       ||temp_board[x_end][y_end+1]==king
+                       ||temp_board[x_end][y_end-1]==king){
+                         msg=replace_chess_string(chess)+"将军\n";
+                         return msg;
+                     }
+                 }
+                 if(x_end<=2){
+		    if(y_end<4){
+		        for(i=y_end+1;i<=5;i++){
+		            chess=temp_board[x_end][i];
+		            if(chess==0) continue;
+		            if(chess!=R_SHUAI||chess!=G_SHUAI){//有棋子挡住
+                                return "no_win";
+                            msg=replace_chess_string(temp_board[x_end][y_end])+"将军\n";
+		            return msg;
+		            }
+		        }	
+		    }
+                    if(y_end>4){
+		        for(i=y_end-1;i>=3;i--){
+		            chess=temp_board[x_end][i];
+		            if(chess==0) continue;
+		            if(chess!=R_SHUAI||chess!=G_SHUAI){//有棋子挡住
+                                return "no_win";
+                            msg=replace_chess_string(temp_board[x_end][y_end])+"将军\n";
+		            return msg;
+		            }
+		        }
+                    }
+                 }
+                 if(y_end>=3&&y_end,=5){
+                     for(i=0;i<=2;i++){//查看老帅是否和走动的棋子在一条线上
+                     	chess=temp_board[i][y_end];
+                     	if(chess==king)
+                     }
+                     for(i=x_end-1;i>=3;i--)
+                         chess=temp_board[i][y_end];
+		         
+                 }
+                 return
+
+            case R_PAO:
+            case G_PAO:
+                 return
+
+            case R_MA:
+            case G_MA:
+                 return
+
+            case R_BING:
+            case G_BING:
+                 return
+	    default: return"no_win";
+            }
+
+}
+
+*/
+string look_sign()
+{
+	string msg;
+	msg="\n\t\t象棋室\n"
+	    "一：必须找两个人，在座位上面做好.规则是红方先走.红方可以使用\n"
+	    "    命令(start new)开始新的游戏.如果是在游戏进行当中.则必须双\n"
+	    "    都同意方可重新开始新的一局.\n"
+	    "二：功能列表：move refresh undo surrender start sue\n"
+	    "三：命令解释：\n"
+	    "\t move:移动棋子的位置,命令格式:move k9 to j9或者move k9 j9\n"
+	    "\t      那么放置在k11位置的车就会被移动到k9的位置.\n"
+	    "\t undo:悔棋：需双方都同意，然后都输入一次undo命令可回到上一步.\n"
+	    "\t surrender:认输.无须对方同意.\n"
+	    "\t start:开始新的一局.需要双方同意.命令格式start a new game\n"
+	    "\t sue:求和.提出和棋.如果对方同意，那么和棋.命令格式sue for peace "
+	    "\t refresh:观看棋盘.\n";
+	return msg;
+}

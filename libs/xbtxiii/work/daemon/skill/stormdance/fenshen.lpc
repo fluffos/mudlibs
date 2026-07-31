@@ -1,0 +1,199 @@
+#include <ansi.h>
+inherit SSERVER;
+        
+int perform(object me, object target)
+{
+        object shadow,player_weapon,shadow_weapon;
+        mapping   skill_status, map_status, prepare_status;
+        string *sname, *mname, *pname;
+        int i,j,temp,skill,shadow_numbers;
+
+        seteuid(getuid());
+
+        skill=me->query_skill("stormdance",1);
+
+if( !target ) target = offensive_target(me);
+
+if( !target
+  ||!target->is_character()
+  ||!me->is_fighting(target) )
+        return notify_fail("分身化影只能对战斗中的对手使用。\n");
+
+if((int)me->query_temp("fenshenhuaying"))
+        return notify_fail("你现在已经分身了。\n");
+
+if(skill<50)
+        {
+        message_vision(YEL"$N突然围着$n快速旋转，想使出分身化影。\n"
+               "无奈$N的轻功还不到家，转了几圈，却转的晕头转向。\n"NOR,me,target);
+        return 1 ;
+        }
+
+else if(skill<60)
+        shadow_numbers=1;
+else if(skill<70)
+        shadow_numbers=2;
+else if(skill<80)
+        shadow_numbers=3; 
+else if(skill<100)
+        shadow_numbers=4;
+else if(skill<120)
+        shadow_numbers=5;  
+else 
+        shadow_numbers=6;
+        message_vision(YEL"$N突然围着$n快速旋转，使出分身化影。$N的动作非常迅速。\n"
+                "竟然化出几个和$N一模一样的人影来。$n被$N的人影包围了。\n"NOR,me,target);
+
+// clone shadows 
+
+for(j=0;j<shadow_numbers;++j)
+  {
+        shadow=new("/obj/npc/shadow");
+
+// copy skills 
+
+  if ( mapp(skill_status = me->query_skills()) )
+        {
+        skill_status = me->query_skills();
+        sname  = keys(skill_status);
+
+        for(i=0; i<sizeof(skill_status); i++) 
+                {
+                shadow->set_skill(sname[i], skill_status[sname[i]]);
+                }
+        }
+        
+// copy skill maps 
+
+  if ( mapp(map_status = shadow->query_skill_map()) ) 
+        {
+        mname  = keys(map_status);
+        temp = sizeof(map_status);
+
+        for(i=0; i<temp; i++) 
+                {
+                shadow->map_skill(mname[i]);
+                }
+        }
+
+  if ( mapp(map_status = me->query_skill_map()) ) 
+        {
+        mname  = keys(map_status);
+
+        for(i=0; i<sizeof(map_status); i++) 
+                {
+                shadow->map_skill(mname[i], map_status[mname[i]]);
+                }
+        }
+        
+// copy skill prepares 
+
+  if ( mapp(prepare_status = shadow->query_skill_prepare()) ) 
+        {
+        pname  = keys(prepare_status);
+
+        temp = sizeof(prepare_status);
+        for(i=0; i<temp; i++) 
+                {
+                shadow->prepare_skill(pname[i]);
+                }
+        }
+
+  if ( mapp(prepare_status = me->query_skill_prepare()) ) 
+        {
+        pname  = keys(prepare_status);
+
+        for(i=0; i<sizeof(prepare_status); i++) 
+                {
+                shadow->prepare_skill(pname[i], prepare_status[pname[i]]);
+                }
+        }
+
+// copy others 
+        shadow->set_name(me->name(),({me->query("id")}));
+        shadow->set("gender",me->query("gender"));
+        shadow->set("age",me->query("age"));  
+        shadow->set("long",me->query("long"));
+        shadow->set("title",me->query("title"));
+        shadow->set("nickname",me->query("nickname")); 
+        shadow->set("per",me->query("per")); 
+        shadow->set("str",me->query("str")); 
+if(me->query_skill_mapped("force") // 使用意寒神功影子更加厉害
+      &&me->query_skill_mapped("force")=="iceforce")
+        shadow->set("force_factor",me->query("force_factor")); 
+        shadow->set("combat_exp",me->query("combat_exp")); 
+        
+
+// copy the weapon in the player
+  if( objectp(player_weapon = me->query_temp("weapon")) )
+        {
+         shadow_weapon=new("/obj/weapon/"+player_weapon->query("skill_type"));
+         shadow_weapon->set_name(player_weapon->name(),({player_weapon->query("id")}));
+         shadow_weapon->move(shadow);
+         shadow_weapon->wield();
+        }
+        
+        shadow->move(environment(me));
+        shadow->set("possessed",me);
+        shadow->reset_action();
+        shadow->kill_ob(target);
+        target->kill_ob(shadow);
+// 这里本想加上衣服，但是技术上有些困难
+
+  }
+        me->set_temp("fenshenhuaying",1);
+        me->add_temp("apply/dodge",skill);
+        
+        me->start_busy(bind((:call_other,__FILE__,"check_me",me,skill:),me),
+                bind((: call_other, __FILE__, "remove_effect" ,me,skill:), me) );
+          
+        return 1;
+}
+int check_me(object me,int skill)
+{
+        int i;
+        object *shadow;
+        shadow = all_inventory(environment(me));        
+if(!me->is_fighting()) me->interrupt_me(me);
+        i=sizeof(shadow);
+        while(i--)
+                if(shadow[i]&&!userp(shadow[i])&&shadow[i]->query("id")==me->query("id")
+                    &&shadow[i]->is_character())  
+                return 1;
+
+if(me->query_temp("fenshenhuaying"))	
+		{
+        me->delete_temp("fenshenhuaying");
+        me->add_temp("apply/dodge",-skill);
+		}
+;
+        return 0;
+}
+
+int remove_effect(object me,int skill)
+{
+        int i,j;
+        object *shadow;
+        j=0;
+        shadow = all_inventory(environment(me));        
+if(me->query_temp("fenshenhuaying"))	
+		{
+        me->delete_temp("fenshenhuaying");
+        me->add_temp("apply/dodge",-skill);
+		}
+for(i=0;i<sizeof(shadow);++i)
+        {
+        if((shadow[i]!=me)
+           &&shadow[i]->query("id")==me->query("id")
+           &&shadow[i]->is_character())
+                {
+                if(j==0)
+                message_vision("$N慢了下来，影子立刻消失了。\n",me);
+                destruct(shadow[i]);
+                j++;
+                }
+        } 
+me->start_busy(1,0);        
+return 1;
+}
+

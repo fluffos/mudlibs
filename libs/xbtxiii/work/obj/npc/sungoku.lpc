@@ -1,0 +1,197 @@
+#pragma save_binary
+
+
+#include <ansi.h>
+
+inherit NPC;
+#ifndef NPCDATA
+#define NPCDATA "/data/npc/"
+#endif
+#define SUNGOKU NPCDATA + "sungoku"
+inherit F_MASTER;
+inherit F_UNIQUE;
+inherit F_SAVE;
+
+void reset();
+int random_move();
+varargs void improve_skill(string skill, int amount, int raw)
+{
+        // Thus we can gain skill levels from direct fighting.
+        int spi;
+        mapping learned,skills;
+        skills=query_skills();
+        learned=query_learned();
+        if( !find_object(SKILL_D(skill))
+        &&      file_size(SKILL_D(skill)+".lpc") < 0 )
+                error("F_SKILL: No such skill (" + skill + ")\n");
+
+        if( !mapp(skills) ) skills = ([]);
+        if( undefinedp(skills[skill]) ) skills[skill] = 0;
+
+        // Give learning penalty to those learning too much skills.
+        spi = query_spi();
+        if( sizeof(learned) > spi )
+                amount /= sizeof(learned) - spi;
+
+        if( !amount ) amount = 1;
+
+        if( !mapp(learned) ) learned = ([ skill : amount ]);
+        else (int)learned[skill] += amount;
+
+        if( learned[skill] > (skills[skill] + 1) * (skills[skill] + 1) ) {
+                        skills[skill]++;
+                        learned[skill] = 0;
+                        command("say "HIC "我的「" + to_chinese(skill) + "」进步了！" NOR);
+                        command("ya");
+                        SKILL_D(skill)->skill_improved(this_object());
+        }
+
+}
+
+string do_learn()
+{
+        // Improve sungoku's natural ability if there's potential available.
+        if( (int)query("potential") > (int)query("learned_points") ) {
+                add("learned_points", 1 );
+                improve_skill("move",10);
+                improve_skill("dodge",45);
+                improve_skill("parry",50);
+                improve_skill("unarmed",55);
+                improve_skill("force",40);
+                improve_skill("magic",20);
+                improve_skill("spells",30);
+        }
+        if((int)query("max_force") < (int)query_skill("force",1)*10)
+                command("exercise 20");
+        save();
+}
+
+string query_save_file()
+{
+  return SUNGOKU;
+}
+void create()
+{
+        seteuid(getuid());
+        set_name( "孙悟空", ({ "sun goku", "sun", "goku" }) );
+        if( !restore() ) {
+                set("short", "来自「七龙珠」的" HIC "孙悟空" NOR "(Sun goku)");
+                set("long",
+                        "孙悟空是来自鸟山明的漫画「七龙珠」，你别小看他现在一付傻头傻脑的样子\n"
+                        "，他可是 ESII 第一个自我成长型的 NPC，从他被创造出来以后，他所获得的\n"
+                        "战斗经验都会储存下来。\n" );
+                set("gender", "男性" );
+                set("race", "赛亚人");
+                set("chat_chance", 15);
+                set("chat_msg", ({
+                        (: random_move :),
+                        (: do_learn :),
+                        CYN "孙悟空说道：哈罗！来比武吧？\n" NOR,
+                        CYN "孙悟空翻了个跟斗，用一只手指撑在地下，说道：这招你会不会啊？\n" NOR,
+                }) );
+                set("chat_msg_coombat", ({
+                        CYN "\n孙悟空扮个鬼脸，说道：来呀！再来呀！\n" NOR,
+                        CYN "\n孙悟空说道：这一招是爷爷教我的，厉害吧！\n" NOR,
+                }) );
+
+                set("no_clean_up",1);
+                // We have 7 pills per reset.
+                set("pills", 7);
+
+                // This is the initial apply for his race.                
+
+                set("age", 9);
+                set("str", 20);
+                set("cor", 24);
+                set("cps", 18);
+                set("per", 24);
+                set("int", 5);
+
+                set_skill("unarmed", 50);
+                set_skill("dodge", 40);
+                set_skill("force", 30);
+                set_skill("parry", 20);
+        }
+
+        set("pills", 7);
+        setup();
+        carry_object("/d/obj/kame_suit")->wear();
+}
+
+void reset()
+{
+
+        // Restore the pills.
+        seteuid( getuid(this_object()) );
+
+        // Improve sungoku's natural ability if there's potential available.
+        command("meditate 100");
+        do_learn();
+
+        save();
+}
+
+int accept_fight(object who)
+{
+        if( is_fighting() ) {
+                if( random(query("eff_kee")) > (int)query("kee") ) {
+                        say( CYN "孙悟空大叫：这么多人我打一个？不行不行，等我打败这些人再跟你打！\n" NOR);
+                        return 0;
+                } else {
+                        say( CYN "孙悟空大叫：这么多人我打一个？没关系，我一定让你们好看！\n" NOR);
+                        return 1;
+                }
+        }
+        say( CYN "孙悟空很高兴地说道：好啊，好啊，我要出招了...\n" NOR);
+        return 1;
+}
+
+int receive_damage(string type, int damage, object who)
+{
+
+        if( (type=="kee") && (damage > (int)query("max_kee") / 5) ) {
+                say( CYN "孙悟空捂著受伤的地方，说道：好痛啊...真有你的....\n" NOR);
+                if( random(query("kee")) < damage)
+                        random_move();
+        }
+
+        if( (int)query("pills")
+        &&        (((int)query("kee")) < 20 
+                || ((int)query("gin") < 20) 
+                || ((int)query("sen") < 20) )) {
+                say( HIY "孙悟空从口袋摸出一粒花梨塔猫仙人给他的仙豆吞了下去。\n" NOR);
+                set("gin", query("eff_gin"));
+                set("kee", query("eff_kee"));
+                set("sen", query("eff_sen"));
+                add("pills", -1);
+        }
+        return damage;
+}
+
+
+void revive()
+{
+    ::revive();
+        // This is a feature of sungoku's race. See the comic :P.
+        add("combat_exp", (int)query("potential") +10);
+        add("potential",20);
+        reset();
+}
+
+void kill_ob(object ob)
+{
+        fight_ob(ob);
+}
+
+void defeated_enemy(object ob)
+{
+        say(CYN "孙悟空作出一个 V 字型的手势，说道：我赢了！" NOR);
+        remove_killer(ob);
+}
+void die()
+{
+        add("eff_kee",100);
+        reset();
+        ::die();
+}
+

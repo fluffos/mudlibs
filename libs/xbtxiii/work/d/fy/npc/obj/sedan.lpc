@@ -1,0 +1,410 @@
+#pragma save_binary
+#include <ansi.h>
+#include <action.h>
+#include <command.h>
+#include <condition.h>
+#include <dbase.h>
+#include <move.h>
+#include <name.h>
+#include <skill.h>
+#include <team.h>
+#include <user.h>
+
+inherit F_ACTION;
+inherit F_ALIAS;
+inherit F_COMMAND;
+inherit F_CONDITION;
+inherit F_DBASE;
+inherit F_EDIT;
+inherit F_FINANCE;
+inherit F_MESSAGE;
+inherit F_MORE;
+inherit F_MOVE;
+inherit F_NAME;
+inherit F_TEAM;
+inherit F_CLEAN_UP;
+
+// Use a tick with longer period than heart beat to save cpu's work
+ int tick;
+
+// Use this function to identify if an object is a character.
+//int is_character() { return 1; }
+
+// setup: used to configure attributes that aren't known by this_object()
+// at create() time such as living_name (and so can't be done in create()).
+void setup()
+{
+	seteuid(getuid(this_object()));
+
+	set_heart_beat(1);
+	tick = 5 + random(10);
+	enable_player();
+
+}
+mapping default_dirs = ([
+	"north":		"北",
+	"south":		"南",
+	"east":			"东",
+	"west":			"西",
+	"northup":		"北边",
+	"southup":		"南边",
+	"eastup":		"东边",
+	"westup":		"西边",
+	"northdown":	"北边",
+	"southdown":	"南边",
+	"eastdown":		"东边",
+	"westdown":		"西边",
+	"northeast":	"东北",
+	"northwest":	"西北",
+	"southeast":	"东南",
+	"southwest":	"西南",
+	"up":			"上",
+	"down":			"下",
+	"out":			"外",
+	"enter":		"里面",
+]);
+
+void create()
+{
+    set_name(MAG"花轿"NOR, ({ "sedan" }) );
+	set("long","一顶迎亲的大花轿。\n");
+	set_max_encumbrance(1000000);
+	set_weight(1000000);
+    set("no_get",1);
+    set("unit","顶");
+    set("value",100000);
+	setup();
+}
+int init()
+{
+	object ob;
+	if(objectp(ob=this_player())&&ob->query("id")==query("bride"))
+	{
+	tell_room(environment(ob),HIM"终于到了，快让新娘上花轿吧。\n"NOR);
+	tell_object(ob,"花轿来了，快上轿吧(enter_sedan)！");
+	}
+	add_action("do_look","look");
+	add_action("do_go","go");
+	add_action("do_enter","enter_sedan");
+	add_action("do_out","out_sedan");
+	add_action("do_carry","carry_sedan");
+	add_action("do_invite","invite");
+	add_action("do_nod",({"yes","no"}));
+	if(environment(ob)==this_object()) add_action("do_say","say");
+}
+
+int accept_fight(object who) {return 0;}
+int return_home(object home) {return 0;}
+void relay_message(string msgclass, string msg)
+{
+	object * list;
+	int i;
+	if(msgclass=="emote")return;
+	list=all_inventory();
+	for(i=0;i<sizeof(list);i++)
+	tell_object(list[i],msg);
+}
+
+int do_invite(string arg)
+{
+		object me,who;
+		me=this_player();
+if(me->query("id")!=query("bridegroom"))
+		return notify_fail("你又不是新郎，胡闹什么？\n");
+if(!arg)
+		return notify_fail("你想邀请谁帮忙抬轿子？\n");
+		who=present(arg,environment(me));
+if(who==me)
+		return notify_fail("邀请自己？没听说过！\n");
+if(who->query_temp("Invite_you"))
+		return notify_fail("他已经接受了你的邀请了。\n");
+
+		message_vision(CYN"$N决定邀请"+who->name()+"抬轿子\n"NOR,me);
+		tell_object(who,MAG"你接受邀请吗:(yes/no)\n"NOR);
+		who->set_temp("i_want_to_invite_you",1);
+		return 1;
+}
+
+int do_nod()  // 玩家接受邀请
+{
+		object me;
+		me=this_player();
+if(!me->query_temp("i_want_to_invite_you"))
+			return 0;
+if(query_verb()=="yes")
+		{
+		me->set_temp("Invite_you",1);
+		me->delete_temp("i_want_to_invite_you");
+		message_vision("\n$N决定接受邀请，帮忙抬轿子!\n",me);
+		tell_object(me,"请你用carry_sedan sedan抬起轿子\n");
+		
+		}
+else if(query_verb()=="no")
+		{
+		me->delete_temp("i_want_to_invite_you");
+		message_vision(YEL"$N婉言拒绝了新郎的邀请。\n",me);
+		}
+		return 1;
+
+
+}
+
+
+int do_carry(string arg) //抬轿子
+{
+	object me;
+	me=this_player();
+if(!arg||arg!="sedan")
+	return notify_fail("你想抬什么？\n");
+if(me->query("id")==query("bridegroom"))
+	return notify_fail("新郎官亲自抬轿子？没听说过。\n");
+if(!me->query_temp("Invite_you"))
+	return notify_fail("人家新郎都没有邀请你帮忙抬花轿。你就不要自做多情了！\n");
+if(me->query_temp("carry_sedan"))
+	return notify_fail("你已经站在花轿旁边准备抬轿子了！\n");
+    message_vision(HIM"$N应新郎的邀请。走到花轿面前准备抬起花轿。\n"NOR,me);
+	me->set_temp("carry_sedan",1);
+	this_object()->add("carry_sedan_numbers",1);
+if(query("carry_sedan_numbers")>=query("max_numbers"))
+    message_vision(HIM"抬轿子的人数已经够了。可以起轿迎亲啦！\n"NOR,me);
+    return 1;
+}
+
+int do_say(string arg)
+{
+	object me;
+	if (!arg) {
+		write("你自言自语不知道在说些什麽。\n");
+		return 1;
+	}
+	me=this_player();
+	if( (int)me->query("kee") < (int)me->query("max_kee") / 5 ) {
+		arg = replace_string(arg, " ", " ... ") + " ...";
+	}
+
+	write( CYN "你说道：" + arg + "\n" NOR);
+	message("sound", CYN + me->name() + "在轿子里对外说道：" +  arg + "\n" NOR,
+		environment(this_object()), this_object());
+
+	// The mudlib interface of say
+	all_inventory(environment(this_object()))->relay_say(me, arg);
+
+	return 1;
+}
+int do_look(string arg)
+{
+	object me;
+	me=this_player();
+	if(!arg&&environment(me)==this_object())
+	{
+	tell_object(me,"\n这是一顶迎亲的大花轿。\n里面装饰的富丽堂皇。\n"
+					"唯一的出口是(out_sedan)\n");
+	return 1;
+	}
+	else if(stringp(arg)&&present(arg,environment(me))==this_object())
+	{
+	tell_object(me,HIM"\n这是一顶迎亲的大花轿。轿子帘子放了下来，看不清里面有没人。\n"
+                    "如果你受到新郎官的邀请(invite)，你可以帮忙抬轿子(carry_sedan)\n"
+					"如果你是新娘，可以进入花轿(enter_sedan)\n"NOR);
+	tell_object(this_object(),me->name()+"往轿子里窥视，不知打些什么主意。\n");
+	return 1;
+	}
+	return 0;
+
+}
+int do_out(object me,string arg)
+{
+	me=this_player();
+	if(environment(me)==this_object())
+	{
+	tell_object(me,"你从花轿里走出来了。\n");
+	me->move(environment(this_object()));
+	tell_room(environment(this_object()),me->name()+"从花轿里走了出来。\n",me);
+	return 1;
+	}
+	return 0;	
+}
+
+int do_enter(object me,string arg)
+{
+	me=this_player();
+	if(environment(me)==this_object())
+		return 0;
+	if(me->query("gender")=="女性")
+	{
+	if(query("bride")==me->query("id"))
+		{
+		tell_room(environment(me),me->name()+"坐进花轿里去了.\n",me);
+		tell_object(me,"你跨进花轿坐了进去。\n");
+		me->move(this_object());
+		}
+	else tell_object(me,"你那么恨嫁吗？\n往别人的轿子里钻干什么？\n");
+	return 1;
+	}
+	return 0;
+}
+int drop_things(object me)
+{
+	int i,max;
+	object *inv;
+	object env;
+	env = environment(me);
+	max = me->query_max_encumbrance();
+	inv = all_inventory(me);
+	for(i=0;i<sizeof(inv);i++){
+		if(inv[i]->query("equipped")) continue;
+		if(random(max) < inv[i]->weight())
+		{
+			tell_object(env,"在慌乱中，");
+			me->ccommand("drop "+inv[i]->query("id"));
+		}
+		
+	}				
+
+}
+int check_flee(object me, string arg) 
+{
+   mapping 	my, your;
+   object 	*enemy;
+   int		fp, bp, i;
+
+   i = me->query("combat_exp");
+   if ( (random(i) < 300) && userp(me) ) return 1;
+   enemy = me->query_enemy();
+   for(i=0; i<sizeof(enemy); i++) {
+      if( objectp(enemy[i]) && environment(enemy[i])== environment(me) && living(enemy[i])) { 
+         fp = COMBAT_D->skill_power(me, "move", 3);
+         if(fp<1) fp = 1;
+         bp = COMBAT_D->skill_power(enemy[i], "move", 3);
+         if(bp<1) bp = 1;
+         if(random(fp*2+bp) > fp*2) {
+            message_vision(YEL "$N向" + arg + "逃去！\n" NOR, me);
+            message_vision(RED "$N身影一闪，挡在了$n的面前！\n" NOR, enemy[i], me);
+            return 0;
+         }
+      }
+   }
+   return 1;
+}
+
+
+int do_go(string arg)
+{
+	string dest, mout, min, dir, blk;
+        object *inv;
+	object env, obj, blocker,me;
+	mapping exit;
+	mapping block;
+        int i;
+	me=this_player();
+	if( !arg )
+			{		 
+			tell_object(me,"你要往哪个方向走？\n");
+			return 1;
+			}
+
+	if( me->over_encumbranced() )
+			{
+		    tell_object(me,"你的负荷过重，动弹不得。\n");
+			return 1;
+			}
+
+	if( me->is_busy() )
+			{
+		    tell_object(me,"你现在忙得很，不能移动。\n");
+			return 1;
+			}
+
+	env = environment(me);
+	if(!env) { tell_object(me,"你哪里也去不了。\n"); return 1;}
+
+	if( !mapp(exit = env->query("exits")) || undefinedp(exit[arg]) ) {
+		if( query_verb()=="go")
+			{
+			tell_object(me,"这个方向没有出路。\n");
+			return 1;
+			}
+        else { tell_object(me,"什么?\n"); return 1;}
+
+	}
+        if( mapp(block = env->query("blocks"))&& blk=block[arg]) {
+		if( objectp(blocker = present(blk, env)) &&  living(blocker))	
+			{
+			tell_object(me,"这个方向的路被"+ blocker->name() + "挡住了 。\n");	
+			return 1;
+			}
+        }
+
+	dest = exit[arg];
+
+	if( !(obj = find_object(dest)) )
+		call_other(dest, "???");
+	if( !(obj = find_object(dest)) )
+		{
+		tell_object(me,"无法移动。\n");
+		return 1;
+		}
+
+    if( !env->valid_leave(me, arg) ) { tell_object(me,"什么？\n"); return 1;}
+
+	if( !undefinedp(default_dirs[arg]) )
+		dir = default_dirs[arg];
+	else
+		dir = arg;
+
+	if(me->query_temp("carry_sedan"))
+		{
+		tell_object(me,"你正抬着轿子，不能擅自移动!!!\n");
+		return 1;
+		}
+	if(me->query("id")==query("bridegroom")
+	   &&query("carry_sedan_numbers")<query("max_numbers"))
+		{
+		tell_object(me,"抬轿子的人数还不够，你不能移动。\n");
+		return 1;
+		}
+		
+	if( me->is_fighting() ) {
+		if(check_flee(me, dir) == 0) 
+			{
+			tell_object(me,"你被挡了回来。\n");
+			return 1;
+			} 
+		drop_things(me);
+		mout = "往" + dir + "落荒而逃了。\n";
+		min = "跌跌撞撞地跑了过来，模样有些狼狈。\n";
+               
+	} else if(me->query("id")==query("bridegroom")){
+	mout=CYN"带着大家向"+dir+"走去。\n"NOR;
+	min =CYN"带着迎亲队伍走了过来。\n"NOR;
+	obj->add("no_fight",1);
+	} else {
+// Let's add this messages here to make go and come more interesting...
+		if( mout = me->query("leave_msg"))
+		mout = "往" + dir + mout +" 。\n";
+		else mout = "往" + dir + "离开。\n";
+		if( min = me->query("arrive_msg"))
+		min = min + " 。\n";
+		else
+		min = "走了过来。\n";
+	}
+	message( "vision", me->name() + mout, environment(me), ({me}) );
+	if( me->move(obj) ) {
+		me->remove_all_enemy();
+		message( "vision", me->name() + min, environment(me), ({me}) );
+		me->set_temp("pending", 0);
+		inv=all_inventory(env);
+		inv->follow_me(me, arg);
+		if(me->query("id")==query("bridegroom"))
+		{  for(i=0;i<sizeof(inv);i++)
+        		if(userp(inv[i])) inv[i]->move(obj);
+        	   env->add("no_fight",1);
+            this_object()->move(obj);
+		}
+		return 1;
+	}
+    tell_object(me,"什么？\n");
+
+	return 1;
+}
+

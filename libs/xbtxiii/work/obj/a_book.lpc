@@ -1,0 +1,270 @@
+#pragma save_binary
+// account_book.c
+#include <ansi.h>
+inherit ITEM;
+inherit F_SAVE;
+inherit F_AUTOLOAD;
+
+void delete_waste();
+void restore_waste();
+int do_save(string);
+int dp_load(string);
+int save();
+
+void create()
+{
+	restore_waste();
+	if( clonep() )
+		{
+		set("master_id",this_player()->query("id"));
+		set_default_object(__FILE__);
+		}
+	set("no_get",1);
+	set("no_drop",1);
+	seteuid(getuid());
+}
+
+
+void init()
+{
+	if( !environment()->is_character())
+		{
+		destruct(this_object());
+		return;
+		}
+	if (environment()->query("id")!=query("master_id"))
+		{
+		destruct(this_object());
+		return;
+		}
+	else {
+		add_action("do_save", "deposit");
+		add_action("do_load", "draw");
+		add_action("do_info","bankinfo");
+		}
+}
+
+string query_save_file() 
+	{ 
+	return DATA_DIR + "bank/" +
+				query("master_id")[0..0]+"/"+query("master_id"); }
+
+string query_autoload() { return query("master_id"); }
+
+void autoload(string name) 
+	{
+	set("master_id",name);
+	restore();
+	}
+		
+
+int do_save(string arg)
+{
+   	int amount,bv;
+	string money;
+	object money_ob,me,coin,silver,gold;
+    	object cash;
+	if (!arg) return 0;
+	me=this_player();
+        if(strsrch(environment(me)->query("short"),"钱庄")<0)
+            return notify_fail("你必须到钱庄才能存钱。\n");
+        if (me->is_busy())
+              return notify_fail("哼！想蒙我啊!\n");	
+        if ( (int)query("trigger")==2){
+               delete("trigger");
+               return notify_fail("急什么，到后面排队去！\n");
+}
+//By apollo,这个限制是控制玩家得到“黑钱”。
+   if( query("rich",1) >= 20000000 )
+         return notify_fail("钱庄存款总额不能超过二千两黄金。\n");
+	if (arg=="all")
+		{
+                me->start_busy(1);
+		coin=present("coin_money",me);
+		silver=present("silver_money",me);
+		gold=present("gold_money",me);
+        	cash=present("thousand-cash_money",me);
+		amount=0;
+		if (coin) {
+			amount+=coin->query_amount()*coin->query("base_value");
+			destruct(coin);
+			}
+		if (silver) {
+			amount+=silver->query_amount()*silver->query("base_value");
+			destruct(silver);
+			}
+		if (gold) {
+			amount+=gold->query_amount()*gold->query("base_value");
+			destruct(gold);
+			}
+        if (cash) {
+            amount+=cash->query_amount()*cash->query("base_value");
+            destruct(cash);
+            }
+		add("rich",amount);
+		}
+else
+	{
+	if (sscanf(arg,"%d %s",amount,money)!=2)
+		{
+		amount=-1;
+		money=arg;
+		}
+	else if ( amount < 1 ) 
+		return notify_fail("货币使用至少要一个/每次。\n");
+	money_ob=present(money+"_money",me);
+	if (!money_ob) return notify_fail("你身上没有这种货币。\n");
+	if (amount==-1) 
+		{
+		amount=money_ob->query_amount();
+		if (!amount)
+			return notify_fail("You haven't this type of money!!\n");
+		}
+	else if( money_ob->query_amount() < amount )
+		return notify_fail("你身上没有那多" + money_ob->query("name") + "。\n");
+	bv = money_ob->query("base_value");
+	if( !bv ) return notify_fail("这种东西不值钱。\n");
+	add("rich",bv*amount);
+	money_ob->add_amount(-amount);
+	if (!money_ob->query_amount()) destruct(money_ob);
+	}
+  	me->start_busy(1);
+        add("trigger",1);
+	save();
+//Add for saveing after deposit  by cocacola on 1997-3-24
+	{
+	object link_ob;
+	seteuid(getuid());
+	if(objectp(link_ob = me->query_temp("link_ob")) ){
+		link_ob->save();
+		me->save();
+	}
+	}
+	write("行了.\n");
+	return 1;
+}
+
+int do_load(string arg)
+{
+	int amount,bv,rich;
+	string money,a1,a2;
+	object money_ob,me;
+	
+	if (!arg) return 0;
+	me=this_player();
+        if(me->is_busy())
+         return notify_fail("急什么，到后面排队去！\n");
+// by apollo, 控制“黑钱”。
+     	if( query("rich",1) >=20000000 )
+        	set("rich",20000000);
+	if (sscanf(arg,"%d %s",amount,money)!=2)
+		{
+		amount=-1;
+		money=arg;
+		}
+	else if ( amount < 1 ) 
+		return notify_fail("你真的想取钱吗?\n");
+	rich=query("rich");
+        if (sscanf(arg,"%s %s",a1,a2) == 2)
+           {
+              if(strlen(a1) >= 9)
+          return notify_fail("想赚银行的钱,小心小月杀你档案.\n"); 
+           }
+        if(amount >= 1000)
+          	return notify_fail("银行没没这么多的钱!.\n"); 
+	if (!rich)
+		return notify_fail("你在银行一个子都没有!!\n");
+        me->start_busy(1);
+	if (file_size("/obj/money/"+money+".lpc")<0)
+		return notify_fail("没有这种货币!\n");
+	money_ob=new("/obj/money/"+money);
+	bv = money_ob->query("base_value");
+	if( rich < amount*bv )
+	{
+		destruct(money_ob);
+		return notify_fail("你的帐户上没有那多钱！\n");
+	}
+	money_ob->set_amount(amount);
+	if(money_ob->move(me))
+		add("rich",-amount*bv);
+	else {
+		destruct(money_ob);
+		return notify_fail("你拿不动这么多钱！\n");
+		}
+	save();
+	write("OK.\n");
+	return 1;
+}
+
+int do_info(string arg)
+{
+int rich;
+// by apollo, 控制“黑钱”。
+if ( query("rich",1) >= 20000000 )
+      set("rich",20000000);
+rich=query("rich");
+if (!rich)
+	write("你在银行一个子都没有!!\n");
+else 
+	{
+	write("目前, 你在银行里有:\n");
+	if (rich/10000)
+		write( chinese_number(rich/10000) +"两黄金");
+	rich=rich%10000;
+	if (rich/100)
+		write(chinese_number(rich/100)+"两银子");
+	rich=rich%100;
+	if (rich)
+		write(chinese_number(rich) + "文钱");
+	write("\n");
+	}
+	return 1;
+}
+
+void delete_waste()
+{
+delete("name");
+delete("unit");
+delete("id");
+delete("long");
+}
+
+int save()
+{
+int i;
+delete_waste();
+if(this_object()->query("master_id")&&this_object()->query("master_id")=="guest")
+                      this_object()->set("rich",0);//防止guest利用这里
+i=::save();
+restore_waste();
+return i;
+}
+void restore_waste()
+{
+	set_name(GRN "金龙卡" NOR, ({ "account card","account","card" }) );
+	set("unit", "张");
+	set("long",@LONG
+    这是东方世界中的信用卡, 上面记录着你的存款.
+    可别弄丢了.
+	deposit <amount> <money_type>  存钱
+	deposit all		       全存
+	draw    <amount> <money_type>  取钱
+	bankinfo		       查账
+LONG
+	);
+}
+
+
+void owner_is_killed(object killer)
+{
+	if( !killer ) killer = environment();
+	tell_room(environment(killer),
+		"\n唉，人去财空啊！一阵狂风吹来，尸体中的金龙卡不见了\n" );
+    if(killer!=environment()){
+        killer->add("wanted/money",query("rich")/10);
+        add("rich",-query("rich")/10);
+        save();
+    }
+	destruct( this_object() );
+	return;
+}

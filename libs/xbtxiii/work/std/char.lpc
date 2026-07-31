@@ -1,0 +1,316 @@
+#pragma save_binary
+// char.c
+#include <action.h>
+#include <ansi.h>
+#include <command.h>
+#include <condition.h>
+#include <dbase.h>
+#include <move.h>
+#include <name.h>
+#include <skill.h>
+#include <team.h>
+#include <user.h>
+
+inherit F_ATTRIBUTE;
+inherit F_ACTION;
+inherit F_ALIAS;
+inherit F_APPRENTICE;
+inherit F_ATTACK;
+inherit F_COMMAND;
+inherit F_CONDITION;
+inherit F_DAMAGE;
+inherit F_DBASE;
+inherit F_EDIT;
+inherit F_FINANCE;
+inherit F_MESSAGE;
+inherit F_MORE;
+inherit F_MOVE;
+inherit F_NAME;
+inherit F_SKILL;
+inherit F_TEAM;
+inherit "/feature/npcai.lpc";
+// Use a tick with longer period than heart beat to save cpu's work
+//nosave int tick;
+nosave int tick;
+
+string look_fight(object me,object env,object * inv,mapping exits);
+int clear_line(int x,int y);
+//返回战斗画面
+int abs(int x);
+int display_map();
+void create()
+{
+	seteuid(0); // so LOGIN_D can export uid to us
+}
+
+// Use this function to identify if an object is a character.
+int is_character() { return 1; }
+
+// setup: used to configure attributes that aren't known by this_object()
+// at create() time such as living_name (and so can't be done in create()).
+void setup()
+{
+	seteuid(getuid(this_object()));
+
+	set_heart_beat(1);
+	tick = 5 + random(10);
+    enable_player();
+
+    if(!userp(this_object()))  
+        if(stringp(this_object()->query_skill_mapped("dodge")))
+            map_skill("move",this_object()->query_skill_mapped("dodge"));
+	CHAR_D->setup_char( this_object() );
+}
+
+void heart_beat()
+{
+	int wimpy_ratio, cnd_flag;
+	mapping my;
+	object ob;
+
+	my = query_entire_dbase();
+
+	if(userp(this_object())&&!query("env/olddisplay")) display_map();
+    //只有没有设置使用原来战斗显示的玩家才会显示现在的战斗地图
+
+	// If we are dying because of mortal wounds?
+	if( my["eff_kee"] < 0 || my["eff_sen"] < 0 || my["eff_gin"] < 0) {
+		remove_all_enemy();
+		die();
+		return;
+	}
+
+	// If we're dying or falling unconcious?
+	if( my["kee"] < 0 || my["sen"] < 0 || my["gin"] < 0) {
+		remove_all_enemy();
+        if( !living(this_object())||query_temp("disable_command") ) die();
+		else unconcious();
+		return;
+	}
+
+	// Do attack if we are fighting.
+	if( is_busy() ) {
+		continue_action();
+		// We don't want heart beat be halt eventually, so return here.
+		return;
+	} else {
+		// Is it time to flee?
+		if( is_fighting()
+		&&	intp(wimpy_ratio = (int)query("env/wimpy"))
+		&&	wimpy_ratio > 0
+		&&	(	my["kee"] * 100 / my["max_kee"] <= wimpy_ratio
+			||	my["sen"] * 100 / my["max_sen"] <= wimpy_ratio
+			||	my["gin"] * 100 / my["max_gin"] <= wimpy_ratio) )
+			GO_CMD->do_flee(this_object());
+		// Do attack or clean up enemy if we have fleed.
+		attack();
+	}
+
+	if( !userp(this_object()) &&living(this_object())) {
+		this_object()->chat();
+		// chat() may do anything -- include destruct(this_object())
+		if( !this_object() ) return;	
+	}
+
+	if( tick--  ) return;
+	else tick = 5 + random(10);
+
+	cnd_flag = update_condition();
+
+	// If we are compeletely in peace, turn off heart beat.
+	// heal_up() must be called prior to other two to make sure it is called
+	// because the && operator is lazy :P
+	if( ((cnd_flag & CND_NO_HEAL_UP) || !heal_up())
+	&&	!is_fighting() 
+        &&this_object()&&      !interactive(this_object())) {
+		if( environment() ) {
+			ob = first_inventory(environment());
+			while(ob && !interactive(ob))
+				ob = next_inventory(ob);
+		}
+		if( !ob ) set_heart_beat(0);
+	}
+
+        if(!objectp(this_object()) ) return;
+        if(!interactive(this_object()) ) return;
+
+	// Make us a bit older. Only player's update_age is defined.
+	// Note: update_age() is no need to be called every heart_beat, it
+	//       remember how much time has passed since last call.
+	this_object()->update_age();
+
+	if(query_idle(this_object()) > IDLE_TIMEOUT)
+		this_object()->user_dump(DUMP_IDLE);
+}
+
+int visible(object ob)
+{
+	int lvl, invis;
+//        if( !ob->is_living() ) return 1;
+if( !ob->is_character() ) return 1;
+//is_living()是定义在那里的？是不是错了？
+//隐身现在失效了。应该是和这一句有关
+	lvl = wiz_level(this_object());
+	if( lvl >= wiz_level(ob) ) return 1;
+	invis = ob->query("env/invisibility");
+	if( intp(invis) && (invis > (lvl+1)) ) return 0;
+
+	if( ob->is_ghost()||invis==1 ) {
+		if( is_ghost() ) return 1;
+		if( query_temp("apply/astral_vision") ) return 1;
+		return 0;
+	}
+	return 1;
+}
+
+
+
+string look_fight(object me,object env,object * inv,mapping exits)
+{
+    object ot;
+    int i,j;
+    string str;
+    str="";
+    if (me->is_fighting())
+    {
+        mixed map;
+        int mx,my;
+        mx=env->get_matrix_x();
+        my=env->get_matrix_y();
+        map=allocate(mx*my);
+        foreach(ot in inv)
+        {
+            if (ot->query_temp("map"))
+            {
+                if (ot->query_temp("map/x")<=mx
+                &&ot->query_temp("map/x")>=1
+                &&ot->query_temp("map/y")<=my
+                &&ot->query_temp("map/y")>=1)
+               map[ot->query_temp("map/x")-1+(ot->query_temp("map/y")-1)*mx]=ot->query("id");
+            }
+        }
+        for(i=0;i<my;i++)
+        {
+        for(j=0;j<mx;j++)
+        {
+            if (map[i*mx+j])
+            str+=sprintf(HIY"%|10.8s"NOR,map[i*mx+j]);
+            else
+            if (mapp(exits) && ( stringp(exits["west"]) && j==0 && abs((i+1)*2-my-1)<=1
+              ||stringp(exits["east"]) && j==mx-1 && abs((i+1)*2-my-1)<=1
+              ||stringp(exits["north"]) && i==0 && abs((j+1)*2-mx-1)<=1
+              ||stringp(exits["south"]) && i==my-1 && abs((j+1)*2-mx-1)<=1
+              ||stringp(exits["southeast"]) && i==my-1 && j==mx-1
+              ||stringp(exits["southwest"]) && i==my-1 && j==0
+              ||stringp(exits["northeast"]) && i==0 && j==mx-1
+              ||stringp(exits["northwest"]) && i==0 && j==0
+              ))
+                str+=sprintf(HIG"%|10s"NOR,"出口");
+            else
+            str+=sprintf("%|10s","--");
+        }
+        str+="\n";
+        }
+    }
+    return str;
+}
+
+
+int abs(int x)
+{
+    if (x>=0) return x;
+    else return -x;
+}
+
+int clear_line(int x,int y)
+{
+	int i,line;
+	return 1;
+	for(i=x,line=y;i<=line;i++)
+	{
+	    write(TOPOINT(i,1));
+	    write(CLR_LINE);
+	
+	}
+}
+
+int display_map()
+{
+
+	int flag;
+	mapping my,exits;
+	object user,*inv,env;
+	string fight_msg;
+
+	/*add by junhot@xbtxIII 2001/2/9号
+	change by rongg@xbtxIII 2001/2/10
+	判断该user有没有处于战斗状态,如果是处于战斗状态,将屏幕得第9行冻结.(从上往下)
+	这样,战斗地图就显示在1..8行内.
+	*/
+	//write(UNFR);
+	//write(NOR);//如果不在战斗状态,立刻恢复正常.
+
+	
+	user=this_object();
+	my=user->query_entire_temp_dbase();
+	flag=0;
+	if(interactive(user)&&user->is_fighting()==1)//只有没有断线的玩家才能够显示战斗信息
+	{
+	    env=environment(user);//user的环境
+	    inv=all_inventory(env);//env里面的所有物件
+	    exits=env->query("exits");//出口
+	    fight_msg=look_fight(user,env,inv,exits);
+        
+            if(my["FRELINE"]==0)
+	    {
+	        
+	        write("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+	        if(user->query("env/fenbianlv")==1024)
+	        {
+		            write(FRELINE(25,40));//设定显示范围1..32
+					//clear_line(1,25);
+	                fight_msg=TOPOINT(18,0)+fight_msg+TOPOINT(40,0);
+	                
+	        }
+	        else 
+	        {
+	       	    write(FRELINE(17,35));
+	       	    //clear_line(1,18);
+		        fight_msg=TOPOINT(10,0)+fight_msg+TOPOINT(35,0);                
+	         }
+
+	         my["FRELINE"]=1;
+	         flag=1;//
+	    }
+	    else
+	    {
+            write(TOPOINT(3,0));
+			"/cmds/usr/hp"->main(user);
+	        if(user->query("env/fenbianlv")==1024)
+	        {
+			     
+			        //clear_line(1,25);
+	                fight_msg=TOPOINT(10,0)+fight_msg+TOPOINT(40,0);
+	        }
+                else
+                {
+	            	    
+			        //clear_line(1,18);
+		           fight_msg=TOPOINT(10,0)+fight_msg+TOPOINT(35,0);
+		        }
+
+
+	    	    
+	      }
+	      
+	      write(fight_msg+TOBOT(50));
+	}
+	else if(my["FRELINE"]==1) 
+	{
+		my["FRELINE"]=0;
+	    write(ESC+"[r"+TOBOT(50));
+	    
+	    
+	}
+	return 1;
+}

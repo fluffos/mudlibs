@@ -1,0 +1,378 @@
+#pragma save_binary
+//judge_man.c
+
+#include <ansi.h>
+#include <command.h>
+#define THIEF 3
+#define ROBBER 5
+inherit NPC;
+
+void settle_lawsuit(object);
+void do_it(object);
+void test_crime();
+int do_charge(string);
+int do_quit(string);
+
+void create()
+{
+	set_name("安邦国", ({ "county magistrate","magistrate" }) );
+	set("title", "雪亭镇县官");
+	set("gender", "男性" );
+	set("age", 32);
+	set("str", 22);
+	set("cor", 25);
+	set("cps", 20);
+	set("int", 30);
+	set("per", 23);
+	set("con", 24);
+	set("spi", 15);
+	set("kar", 25);
+
+	set("long",
+
+"你看到的可是新东方最新兴起的大镇---徽城镇的父母官。\n"
+"他虽然出身贫困，但攻读刻苦，榜中探花，如今已是才高八斗，满腹\n"
+"经纶，还略通佛理。为官数年清贫廉正，人人敬仰。\n"
+);
+	set("combat_exp", 200000);
+	set("attitude", "friendly");
+
+	set("max_atman", 1000);
+	set("atman", 1000);     set("atman_factor", 3);
+	set("max_force", 1000);
+	set("force", 1000);     set("force_factor", 10);
+	set("max_mana", 1000);
+	set("mana", 1000);      set("mana_factor", 3);
+
+	set_skill("buddhism",40);
+	set_skill("unarmed", 100);
+	set_skill("literate",100);
+	set_skill("parry", 100);
+	set_skill("dodge", 100);
+	set_skill("pyrobat-steps",100);
+	set_skill("force", 100);
+	set_skill("spells", 100);
+
+	map_skill("dodge","pyrobat-steps");
+
+///	set("chat_chance",90);
+//	set("chat_msg",({
+//			(: call_out,"test_crime",1 :),
+//			}));
+	setup();
+
+	carry_object("/obj/cloth")->wear();
+	add_money("gold", 3);
+	add_money("silver",10);
+}
+
+int init()
+{
+add_action("do_charge","charge");
+add_action("do_kill","kill");
+add_action("do_quit","quit");
+}
+
+int accept_fight(object me)
+{
+	command("scowl");
+	command("say 这是衙门，不是练功房！快回去吧。");
+	return 0;
+}
+
+int settle_lawsuit(object crime)
+{
+call_out("do_it",2,crime);
+return 1;
+}
+
+void do_it(object crime)
+{
+int level,i;
+int gin,kee,sen,condition;
+if (level=crime->query("crime_lv"))
+	{
+command("chat "+"案犯"+crime->query("name")+"("+crime->query("id")+")"
+	+"已被捉拿归案，\n罪定"+chinese_number(level*10)+"大板!"
+	+"以警世人！！");
+tell_object(crime,NOR "来人哪！把"+crime->query("name")+"拖下去打"+
+			chinese_number(level*10)+"大板！\n");
+	gin=10-random(crime->query("max_atman"))/100;
+	kee=10-random(crime->query("max_force"))/100;
+	sen=10-random(crime->query("max_mana"))/100;
+	if (gin<0) gin=1;
+	if (kee<0) kee=1;
+	if (sen<0) sen=1;
+	for (i=1;i<=level;i++)
+		{
+tell_object(crime,chinese_number(i*10)+"\n");
+		condition=0;
+		if (crime->query("eff_gin")<gin)
+			{
+			crime->set("eff_gin",1);
+			crime->set("gin",1);
+			condition++;
+			}
+		else
+			{
+			crime->receive_damage("gin",gin);
+			crime->receive_wound("gin",gin);
+			}
+		if (crime->query("eff_kee")<kee)
+			{
+			crime->set("eff_kee",1);
+			crime->set("kee",1);
+			condition++;
+			}
+		else
+			{
+			crime->receive_damage("kee",kee);
+			crime->receive_wound("kee",kee);
+			}
+		if (crime->query("eff_sen")<sen)
+			{
+			crime->set("eff_sen",1);
+			crime->set("sen",1);
+			condition++;
+			}
+		else
+			{
+			crime->receive_damage("sen",sen);
+			crime->receive_wound("sen",sen);
+			}
+		if (condition==3)
+			{
+			crime->move("/d/snow/yamen_gate.lpc");
+			tell_object(crime,HIR "哎, 早知今日,何必当初?\n" NOR+
+			"来人呀, 把"+crime->query("name")+"给我抬出去!\n"+
+			"...退...堂...!\n");
+			crime->unconcious();
+			break;
+			}
+		crime->add("crime_lv",-1);
+		}
+	message_vision(HIR "$N对$n说道: 再敢犯案, 定斩不饶!\n" NOR,this_object(),crime);
+	if (!crime->query("crime_lv"))
+			crime->delete("crime_lv");
+	crime->delete_temp("being_caught");
+	crime->move("/d/snow/yamen_gate.lpc");
+	}
+else
+	{
+	tell_object(crime,"真是对不起, 手下办事不利, 让您受委屈了.\n");
+	crime->delete_temp("being_caught");
+	start_call_out(
+		(:call_other,crime,"move","/d/snow/yamen_gate.lpc":),2);
+	}
+return ;
+}
+
+void test_crime()
+{
+object *players,bk;
+int i,lv;
+players=users();
+i=sizeof(players);
+while(i--)
+	{
+	if (!players[i]->query_temp("being_caught"))
+		{
+		if (lv=players[i]->query("marks/thief"))
+			{
+			players[i]->add("crime_lv",lv*3);
+			players[i]->delete("marks/thief");
+			}
+		else if (lv=players[i]->query("marks/强盗"))
+			{
+			players[i]->add("crime_lv",lv*5);
+			players[i]->delete("marks/强盗");
+			}
+		else continue;
+			if (random(100)<20) break;
+			seteuid(getuid());
+		    bk=new("/d/snow/npc/yamen_police.lpc");
+			bk->set("CatchWho",players[i]);
+			bk->set("status","catching");
+			bk->set("callout",1);
+			bk->move(environment(players[i]));
+			break;
+		}
+	}
+return;
+}
+
+
+int do_charge(string arg)
+{
+string who,why;
+int permit,i;
+object police,crimer;
+if (!arg) return 0;
+if (sscanf(arg,"%s with %s",who,why)!=2)
+	return notify_fail("正确用法是: charge sb. with <reason>\n");
+crimer=find_player(who);
+if (!crimer)
+		return notify_fail("对不起，你要告的人不在线上！\n");
+if( crimer->is_ghost() )
+        return notify_fail( crimer->name(1)+"已经死了，放他一马吧。\n");
+switch (why)
+	{
+	case "steal":
+		if (i=crimer->query("marks/thief"))
+			{
+			crimer->delete("marks/thief");
+			crimer->add("crimer_lv",3*i);
+			permit=1;
+			}
+		else permit=0;
+		break;
+	case "kill":
+		if (i=crimer->query("marks/强盗"))
+			{
+			crimer->delete("marks/强盗");
+			crimer->add("crimer_lv",4*i);
+			permit=1;
+			}
+		else permit=0;
+		break;
+/*	case "MKS":
+		if
+((crimer->query("MKS")-crimer->query("combat_exp")/10)>random(600)+500)
+			{
+			crimer->add("crime_lv",3);
+			crimer->add("MKS",-100);
+			permit=1;
+			}
+		else permit=0;
+		break;*/
+	case "PKS":
+		if (random(crimer->query("PKS")))
+			{
+			crimer->add("crime_lv",8);
+			crimer->add("PKS",-1);
+			permit=1;
+			}
+		else permit=0;
+		break;
+/*	case "杀气":
+		if
+(random(crimer->query("bellicosity"))>random(600)+400)
+			{
+			if (crimer->query("class")=="fighter"
+				&&random(crimer->query("bellicosity"))<1000)
+				{
+				permit=0;break;
+				}
+			crimer->add("crime_lv",2);
+			crimer->add("bellicosity",-200);
+			permit=1;
+			}
+		else permit=0;
+		break;*/
+	case "crime":
+		if (crimer->query("crime_lv"))
+			permit=1;
+		else permit=0;
+		break;
+	default:
+		return notify_fail("对不起，此类案件本县不受理。\n");
+	}
+if (permit)
+	{
+	if (crimer->query_temp("being_caught"))
+		{
+		say(crimer->query("name")+"已被抓住了,"+
+		"等案子结了你再来吧.\n");
+		}
+	else
+	if (environment(crimer)==find_object("/d/snow/yamen_yard.lpc")
+	||environment(crimer)==find_object("/d/snow/yamen.lpc"))
+			{
+			crimer->move(environment());
+			settle_lawsuit(crimer);
+			say(crimer->query("name")+"就在衙门里.\n");
+			}
+	else
+	    {
+	seteuid(getuid());
+	police=new("/d/snow/npc/yamen_police.lpc");
+	police->set("status","catching");
+	police->set("CatchWho",crimer);
+	police->move(environment(crimer));
+	say("嗯......的确如此!\n好吧, 我派人去抓"+
+		(crimer->query("gender")=="女性"?"她":"他")+
+		"来.\n"+"你下去吧。\n");
+	start_call_out(
+		(:call_other,this_player(),"move",find_object("/d/snow/yamen_gate.lpc"):)
+			,2);
+	    }
+	}
+else
+	{
+	say(crimer->query("name")+"好象没犯罪呀?\n");
+	add("bad_man/"+who,1);
+	if (query("bad_man/"+who)>3)
+		{
+		this_player()->add("crime_lv",2);
+		tell_object(this_player(),"你竟敢诬告？！\n");
+		call_out("do_it",2,this_player());
+		add("bad_man/"+who,-3);
+		}
+	}
+if (objectp(police=present("magistrate waiter",environment())))
+				police->delete_temp("pending/beat");
+return 1;
+}
+
+int do_quit(string arg)
+{
+write(HIR "这里不允许退出!!\n" NOR);
+return 1;
+}
+int do_kill(string arg)
+{
+write(HIR "Can't kill here!\n" NOR);
+return 1;
+}
+
+void heart_beat()
+{
+	int wimpy_ratio, cnd_flag;
+	mapping my;
+	object ob;
+
+	my = query_entire_dbase();
+
+	if( my["eff_kee"] < 0 || my["eff_sen"] < 0 || my["eff_gin"] < 0) {
+		remove_all_enemy();
+		die();
+		return;
+	}
+
+	if( my["kee"] < 0 || my["sen"] < 0 || my["gin"] < 0) {
+		remove_all_enemy();
+		if( !living(this_object()) ) die();
+		else unconcious();
+		return;
+	}
+
+	if( is_busy() ) {
+		continue_action();
+		return;
+	} else {
+		if( is_fighting()
+		&&      intp(wimpy_ratio = (int)query("env/wimpy"))
+		&&      wimpy_ratio > 0
+		&&      (       my["kee"] * 100 / my["max_kee"] <= wimpy_ratio
+			||      my["sen"] * 100 / my["max_sen"] <= wimpy_ratio
+			||      my["gin"] * 100 / my["max_gin"] <= wimpy_ratio) )
+			GO_CMD->do_flee(this_object());
+		attack();
+	}
+		this_object()->chat();
+		if( !this_object() ) return;
+
+	if( tick--  ) return;
+	else tick = 5 + random(10);
+	if( !interactive(this_object()) ) return;
+}

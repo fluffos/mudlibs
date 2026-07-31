@@ -1,0 +1,68 @@
+#pragma save_binary
+//alert.c 
+ 
+#include <ansi.h>
+inherit SSERVER;
+
+int main(object me, object target)
+{
+        object gaoshou;
+        int  rank,number;
+		
+        if( !me->is_fighting() )
+                return notify_fail("只有战斗中才能示警！\n");
+        if( me->is_busy() )
+        return notify_fail("( 你上一个动作还没有完成，不能示警。)\n");
+
+        
+
+        if( (string)me->query("family/family_name") !="朝廷" )
+                return notify_fail("你不是朝廷命官，没有大内高手保护你！\n");
+	
+
+/*
+		if(rank>=4)
+				return notify_fail("就凭你那卑微的职位也招的动 [大内高手]\n");
+*/
+        if(me->query_skill("strategy",1)>=180&&me->query_skill("leadership",1)>=180)
+
+			number=4;
+		else
+			{
+			rank=me->query("rank");
+            number=3-rank/3;
+			}	
+        if( (number) <= me->query_temp("havecalled")  )
+                return notify_fail("你只有这么多的大内高手可以召唤！\n");
+
+        if( (int)me->query("sen") < 80 )
+                return notify_fail("你的神不足了！\n");
+
+        if( (int)me->query_skill("leadership",1) < 20 )
+                return notify_fail("你的用人之技太低了！\n");
+
+        message_vision(HIB"$N纵声长啸,呼叫援兵。\n"NOR, me);
+
+        me->receive_damage("sen", 80);
+        me->add_temp("havecalled",1);  
+
+        seteuid(getuid());
+        gaoshou = new("/obj/npc/gaoshou");
+        gaoshou->move(environment(me));
+        gaoshou->invocation(me);
+        me->remove_all_killer();
+
+        return 1;
+}
+
+int help(object me)
+{
+  write(@HELP
+指令格式 : alert
+朝廷命官可以示警，以召唤暗中保护他的大内高手现身。
+能否招呼出高手，呼出高手水平的高低就要看官员;官职的大小了。;
+HELP
+    );
+    return 1;
+}
+

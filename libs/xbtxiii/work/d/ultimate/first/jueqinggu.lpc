@@ -1,0 +1,211 @@
+// Room: /d/ultimate/jueqinggu.c
+
+inherit ROOM;
+#include <ansi.h>
+string look_stone(object me);
+string look_tree(object me);
+string look_vine(object me);
+void create()
+{
+        set("coor",({-20,5040,20}));
+        set("short", "绝情谷");
+        set("long",CYN"四下里小鸟啾鸣，花香浮动，春意正浓。悬崖旁边长满\n"
+                    "了百年蔓藤。\n"NOR);
+        set("exits", ([ /* sizeof() == 2 */
+  	    "southdown" : "/d/ny/droad2",
+		]));
+        set("item_desc",([
+        		"stone": (:look_stone:),
+        		"石头" : (:look_stone:),
+        		"tree" : (:look_tree:),
+        		"大树" : (:look_tree:),
+        		"树"   : (:look_tree:),
+        		"蔓藤" : (:look_vine:),
+        		"vine" : (:look_vine:),
+        		"cane" : (:look_vine:),
+        ]));
+		set("objects",([
+            __DIR__"npc/bee": 2,]));
+        set("outdoors", "snow");
+        setup();
+}
+
+int init()
+{
+    object yangguo,roc,ob;
+if( interactive(ob = this_player()) && !ob->is_fighting() 
+    &&ob->query_temp("标记/杨过")) // 一个特殊的任务。
+    {
+    roc=new(__DIR__"npc/roc");
+    roc->move(this_object());
+    yangguo=new(__DIR__"npc/yangguo");
+    yangguo->move(this_object());
+    remove_call_out("start_story");
+    call_out("start_story", 2, ob);
+    }
+	add_action("do_climb","climb");	
+	add_action("do_bind",({"bind","bang","绑"}));
+	add_action("do_jump",({"jump","跳"}));
+	add_action("do_connect","connect");
+//        add_action("do_cut",({"砍","cut","kan","hack","hag"}));
+}
+
+int do_cut(string arg)
+{
+	object me,weapon,vine;
+	
+	me=this_player();
+	
+	
+if(!arg)
+	return notify_fail("你要砍什么东西？\n");
+if(arg=="vine"||arg=="蔓藤")
+	{
+	weapon=me->query_temp("weapon");
+	if(!weapon)
+		return notify_fail("空手？佩服！佩服！实在是佩服！\n");	
+    if(weapon->query("weapon_prop/damage")<=80)
+		return notify_fail("用这么一把破"+weapon->name()+"?佩服！佩服！实在是佩服！\n");
+	message_vision("$N举起"+weapon->name()+"，奋力朝蔓藤砍去！\n",me);
+    if(random(5)==1)
+		{
+        message_vision("只听啪的一声。$N砍了一条长长的百年蔓藤！\n",me);
+		vine=new(__DIR__"obj/long_vine");
+		vine->set("length",1); // 蔓藤的长度。
+		vine->move(me);
+		}
+	else
+		message_vision("结果只在蔓藤上面留下了一条淡淡的刀痕。\n",me);
+	weapon->add("weapon_prop/damage",-2);
+	}
+	return 1;	
+}
+
+int do_connect(string arg) // 连接蔓藤
+{
+	object me;
+	object *long_vine;
+    object rope;
+    int temp,length,sum_length,i;
+	// length 蔓藤的长度 sum_lenfth 蔓藤的总长
+	temp=0;
+	length=0;
+	sum_length=0;
+	me=this_player();
+
+if(!arg)
+	return notify_fail("你想把什么连接在一起？\n");
+if(arg=="long vine"||arg=="蔓藤")
+	{
+	long_vine=all_inventory(me);
+    message_vision("$N要把手中的蔓藤连接到一起。\n",me);
+	for(i=0;i<sizeof(long_vine);i++)
+		{
+		if(long_vine[i]->query("id")=="long vine")
+            temp++;
+		if(temp>=10) // 最多循环十次就够了。
+			break;
+		}	
+	if(temp<2)
+		return notify_fail("你只有一条长藤。怎么连？\n");
+	else
+        for(i=0;i<sizeof(all_inventory(me));i++)
+			{
+			if(long_vine[i]->query("id")=="long vine")
+				{
+				length=long_vine[i]->query("length");
+				destruct(long_vine[i]);
+				sum_length=length+sum_length;
+				}
+			}
+	rope=new(__DIR__"obj/long_vine");
+	rope->set("length",sum_length); // 蔓藤的总长度
+	rope->move(me);
+    tell_object(me,"连接好了\n");
+    rope->set("long","一条长长的蔓藤。大约有"+chinese_number(sum_length*100)+"米长。\n");
+	}
+else
+	return notify_fail("这东西好象不能够连接起来吧？\n");
+}
+
+
+int do_jump()
+{
+    tell_object(this_player(),"想死吗？从这么高的地方跳下去？\n"); 
+    return 1;
+}
+
+int do_bind(string arg)
+{
+	object me,rope;
+    me=this_player();
+if(!arg)
+	return notify_fail("你要绑什么？\n");
+if(arg=="tree"||arg=="树"||arg=="大树")
+	{
+	rope=present("long vine",me);
+	if(!rope)
+		return notify_fail("没有绳子之类的东西。你拿什么绑在树上？\n");
+    message_vision("$N把手中的"+rope->name()+"牢牢的绑在了悬崖边上的大树上.\n",me);
+	set("rope",1);
+	set("length",rope->query("length")); // 蔓藤的长度
+	destruct(rope);
+	set("bind_the_tree",1);
+	return 1;
+	}
+else
+	return notify_fail("你要绑住什么东西？\n");
+}
+
+int do_climb(string arg)
+{
+        object me;
+	me=this_player();
+if(!arg)
+	return notify_fail("你要向下爬吗(down)？\n");
+if(arg!="down")
+	return notify_fail("这里只有向下(down)爬了。\n");	
+if(!query("bind_the_tree"))
+	return notify_fail("这么高你不怕摔死吗？找根绳子吧\n");
+    message_vision("$N拉着绳子慢慢的爬了下去。\n",me);
+if(query("length")<=5)
+	{
+    me->move(__DIR__"yao"); // 蔓藤太短。
+	tell_object(me,"由于蔓藤太短了。不能够再往下爬了。\n"
+				   "还是上去接一条长一些的蔓藤吧。\n");
+	}
+else
+    me->move(__DIR__"shuitan");
+	return 1;
+	
+}
+
+int start_story(object me)
+{
+        object yangguo;
+if(me->query_temp("标记/杨过"))
+	{
+	yangguo=present("yangguo",environment(me));
+	if(yangguo)
+       yangguo->start_speek1(me);
+	else
+	   return 1; 
+	}
+}
+
+string look_stone(object me)
+{
+	return "!!!!!!!!!十六年后。在此相见!!!!!!!!!!\n";
+}
+string look_tree(object me)
+{
+	if(!query("bind_the_tree"))
+		return "一棵参天大树。长在悬崖边上。\n";
+	else
+        return "一棵参天大树。长在悬崖边上。上面绑了一条长长的蔓藤。\n";
+}
+
+string look_vine(object me)
+{
+	return "一片百年蔓藤，又粗又韧。\n";
+}

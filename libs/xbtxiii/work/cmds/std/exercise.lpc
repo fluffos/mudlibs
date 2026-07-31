@@ -1,0 +1,128 @@
+#pragma save_binary
+// exercise.c
+ 
+
+#include <ansi.h>
+#include <skill.h>
+
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+        int kee_cost;
+
+        seteuid(getuid());
+        
+        if( me->is_fighting() )
+                return notify_fail("战斗中不能练内功，会走火入魔。\n");
+
+        if( me->is_busy() )
+                return notify_fail("你正忙著做其他事！\n");
+//	if(environment(me)->query("no_fight"))
+//                return notify_fail("这里可不是练功的地方！\n");
+//      if( !stringp(me->query_skill_mapped("force")) )
+//              return notify_fail("你必须先用 enable 选择你要用的内功\心法。\n");
+
+        if(!me->query_skill("force"))
+                return notify_fail("你不会练内功的方法, 先去学吧.\n");
+
+        if( !arg
+        ||      !sscanf(arg, "%d", kee_cost) )
+                return notify_fail("你要花多少气练功？\n");
+
+        if( kee_cost < 10 ) return notify_fail("你最少要花 10 点「气」才能练功。\n");
+
+        if( (int)me->query("kee") < kee_cost+20 )
+                return notify_fail("你现在的气太少了，无法产生内息运行全身经脉。\n");
+
+        if( (int)me->query("sen") * 100 / (int)me->query("max_sen") < 70 )
+                return notify_fail("你现在精神状况太差了，无法凝神专一！\n");
+
+        if( (int)me->query("gin") * 100 / (int)me->query("max_gin") < 70 )
+                return notify_fail("你现在精力不够，无法控制内息的流动！\n");
+
+        message_vision("$N盘膝坐了下来，开始运气修炼内功。\n", me);
+        me->start_busy(
+                bind((: call_other, __FILE__, "do_exercise", me, me->query("kee") - kee_cost :), me),
+                bind((: call_other, __FILE__, "interrupt_exercise" :), me) );
+        me->add_temp("apply/short", ({ me->name() + "正盘膝坐在地下修炼内功 ...." }) );
+        return 1;
+}
+
+int do_exercise(object me, int low_kee)
+{
+        int cycle;
+
+
+                if( (int)me->query("force") > (int)me->query("max_force") * 2) {
+                        if( (int)me->query("max_force") >= 
+                                ((int)me->query_skill("force", 1) + me->query_skill("force")/5) * 10 ) {
+                                tell_object(me, "当你的内息遍布全身经脉时却没有功力提升的迹象，似乎内力修为已经遇到了瓶颈。\n");
+                        } else {
+                                tell_object(me, "你的内力增强了！\n");
+                                me->add("max_force", 1);
+                        }
+                        me->set("force", me->query("max_force"));
+                }       
+        if( (int)me->query("kee") < low_kee ) {
+                string *short;
+                message_vision("$N行功完毕，深深地吸了口气，站了起来。\n", me);
+                short = me->query_temp("apply/short");
+                short -= ({ me->name() + "正盘膝坐在地下修炼内功 ...." });
+                me->set_temp("apply/short", short);
+                return 0;
+        }
+
+        cycle = (int)me->query("max_kee") / 50 + 1;
+        if(me->query("kee") < cycle) 
+                cycle = me->query("kee");
+        me->receive_damage("kee", cycle);
+        cycle = cycle * ((int)me->query_skill("force", 1)
+                + (int)me->query_con() ) / 100+1;
+//安全区也能练功，但是效果较差。
+        if(environment(me)->query("no_fight"))
+        	me->add("force",cycle/(20+random(20)));
+        else
+        	me->add("force", cycle);
+        return 1;
+}
+
+int interrupt_exercise(object me, object who, string reason)
+{
+        string *short;
+
+        switch(reason) {
+        case "halt":
+                if( (int)me->query("force") > (int)me->query("max_force") * 2 )
+                        me->set("force", me->query("max_force") * 2 );
+                message_vision("$N将周身运行的气收回丹田，站了起来。\n", me);
+                break;
+        case "hit":
+                tell_object(me, HIR "\n你觉得小腹一阵绞痛，有如千百只蚂蚁在乱钻乱咬！\n\n" NOR);
+                message_vision(HIR "$N「哇」地一声喷出一大口鲜血，摇摇晃晃地站了起来。\n" NOR, me);
+                me->set("max_force", (int)me->query("max_force") * 9 / 10 );
+                break;
+        }
+        short = me->query_temp("apply/short");
+        short -= ({ me->name() + "正盘膝坐在地下修炼内功 ...." });
+        me->set_temp("apply/short", short);
+        return 1;
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : exercise [<耗费「气」的量>]
+
+运气练功，控制体内的气在各经脉间流动，藉以训练人体肌肉骨骼的耐
+力、爆发力，并且用内力的形式将能量储备下来。
+当一位武者运气遍布全身经络时, 也是这位武者防御最弱的时候, 如果
+此时受到攻击受伤, 则会造成走火入魔。
+
+请参考 help stats
+HELP
+        );
+        return 1;
+}
+

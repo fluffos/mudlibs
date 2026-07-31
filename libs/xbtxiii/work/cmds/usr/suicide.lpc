@@ -1,0 +1,146 @@
+#pragma save_binary
+// change by alvins 10-08-99 
+// suicide.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	if( me->is_busy() )
+		return notify_fail("你上一个动作还没完成。\n");
+
+	if( !arg ) {
+		write("You commit suicide.\n");
+		return 1;
+	}
+
+	if( arg!="-f" ) 
+		return notify_fail("如果你要永远死掉的话请输入suicide -f\n");
+	
+	if(wizardp(me)) return notify_fail("巫师不能自杀，若要自杀请通知天神\n");
+	if(this_player(1)!=me) return 0;
+	write(
+		"如果您选择永远死掉的自杀方式，这个人物的资料就永远删除了，请务必\n"
+		"考虑清楚，确定的话请输入您的密码：");
+	input_to("check_password", 1, me, 1);
+	return 1;
+}
+
+protected void check_password(string passwd, object me, int forever)
+{
+	object link_ob;
+	string id;
+
+        link_ob=me->query_temp("link_ob");
+	if(!link_ob) return ;
+        id=link_ob->query("id");
+	
+
+	if(!PASSWORD_D->main(id,"check",passwd)) {
+		write("密码错误！\n");
+		return;
+	}
+
+	if (forever) {
+		tell_object( me,
+			HIR "\n\n你决定要自杀了，如果三分钟内不後悔，就真的永别了。\n\n\n" NOR);
+        me->set_temp("suicide_countdown", 180);
+        me->start_busy( (:call_other,this_object(), "slow_suicide" :) );
+	}
+}
+
+protected int slow_suicide(object me)
+{
+	object link_ob,marry,marry_link;
+	string bankfile,namefile,marry_name,petfile;
+	int stage;
+	string * name;
+
+	stage = me->query_temp("suicide_countdown");
+	me->add_temp("suicide_countdown", -1);
+	if( stage > 1 ) 
+	{
+		if( stage%5 == 0 )
+			tell_object(me, HIR "你还有 " + stage + " 秒的时间可以後悔。\n" NOR);
+		return 1;
+	}
+
+	link_ob = me->query_temp("link_ob");
+	if( !link_ob ) return 0;
+	marry_name=me->query("MarrY");
+    if(marry_name)
+    {
+            marry=find_player(marry_name);
+            if(!marry)
+            {
+                marry_link=new("/obj/usertest");
+                marry_link->set("id",marry_name);
+                if(marry_link->restore())
+                {
+                    marry_link->delete("MarrY");	
+                    marry_link->save();
+                    destruct(marry_link);
+                }
+            }
+            else
+            {
+                marry->delete("MarrY");
+                marry->save();
+                tell_object(marry,"你的爱人"+me->name()+"自杀了。你和他解除了夫妻关系。\n");
+            }
+    }
+	log_file("nosave/SUICIDE",
+		sprintf("%s commits a suicide on %s\n", geteuid(me), ctime(time())) );
+	LOGIN_D->delete_chinese_name(me->query("name"));
+	LOGIN_D->delete_chinese_name(link_ob->query("name"));
+	namefile=read_file("/data/chinese_names");
+	name=explode(namefile,"\n");
+	name-=({link_ob->query("name")});
+	namefile=implode(name,"\n");
+	write_file("/data/chinese_names",namefile,1);
+	bankfile=DATA_DIR"bank/"+me->query("id")[0..0]+"/"+
+			me->query("id")+".o";
+	write(bankfile);
+	seteuid(getuid());
+	if ( file_size(bankfile)>0 ) 
+		rm( bankfile );
+	petfile=DATA_DIR"pet/"+me->query("id")[0..0]+"/"+
+			me->query("id")+".o";
+	if ( file_size(petfile)>0 ) 
+		rm(petfile);
+	rm( link_ob->query_save_file() + ".o" );
+	rm( me->query_save_file() + ".o" );
+	rm(DATA_DIR + "bag/" + me->query("id")[0..0] + "/" + me->query("id") + ".o");
+        //rm(DATA_DIR + "password/" + me->query("id")[0..0] + "/" + me->query("id") + ".pas");
+	PASSWORD_D->main(me->query("id"),"delete");
+		write("永别了 :( , 也好, 死了就一了百了了!\n");
+	tell_room(environment(me), me->name() +
+		"自杀了，以後你再也看不到这个人了。\n", ({me}));
+        if(me->query("combat_exp")>=200000)//测试id自杀让人看了心里不舒服.
+        message("channel:rumor", 
+           HIR"我们敬爱的"+me->name()+"("+me->query("id")+")"+"永远离开了我们，回到真实世界去了.\n"NOR ,users());
+ 	
+ 	destruct(me);
+	return 0;
+}
+
+int help (object me)
+{
+	write(@HELP
+指令格式: suicide [-f]
+ 
+如果因为某种原因你不想活了, 你可以选择自杀.
+自杀分两种:
+ 
+suicide    : 重新投胎
+suicide -f : 永远的除去玩家资料, 系统会要求你
+	     输入密码以确认身份.
+ 
+请慎重选择 :)
+ 
+HELP
+);
+	return 1;
+}

@@ -1,0 +1,107 @@
+#pragma save_binary
+ 
+// write.c
+
+// #include <skill.h>
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int do_haunt(string target, object who);
+
+int main(object me, string arg)
+{
+	string spells, name, ob_name;
+	object ob,userzombie,sheet;
+
+	// We might need to load new objects.
+	seteuid(getuid());
+
+	if( me->is_fighting() )	return notify_fail("战斗时不能画符！\n");
+	if( (int)me->query("sen") < 30 )
+		return notify_fail("你的精神太差了，无法画符。\n");
+
+	if( !arg
+	||	sscanf(arg, "%s on %s", name, ob_name)!= 2 )
+		return notify_fail("指令格式：write <人名> on <物品>\n");
+	
+	userzombie=present("zombie",environment(me));
+    if(!objectp(userzombie)) return notify_fail("你没有僵尸。\n");
+	if( !objectp(ob = present(ob_name, me)) )
+		return notify_fail("你身上没有这样东西。\n");
+	if( stringp(spells = me->query_skill_mapped("spells")) ) {
+		notify_fail("你所学的法术没有这种符。\n");
+		sheet=present("haunting sheet",me);
+        if(!objectp(sheet)) return notify_fail("你没有僵尸符了。\n");
+        if(sheet->query_amount()>1){ sheet->add_amount(-1);}
+        else destruct(sheet);
+		if( (int)random(100) < me->query_skill("scratching"))
+		{
+			if( do_haunt(name,userzombie) ) {
+				me->receive_wound("kee", 1);
+				me->receive_damage("sen", 30);
+				return 1;
+				}
+		}
+		else 	return notify_fail("你失败了\n");
+	} else 
+		return notify_fail("你请先用 enable 指令选择你要使用的咒文系。\n");
+
+	return 1;
+}
+
+int do_haunt(string target, object who)
+{
+        object dest,env;
+        if( !who->is_zombie() )
+                return notify_fail(YEL "僵尸追魂符" NOR 
+"只能用在僵尸身上。\n");
+
+        if( !who->query("possessed") )
+                return notify_fail("你必须先用法力镇住" + who->name() + 
+"才能使用这道符。\n");
+	env=environment(this_player());
+        dest = present(target, environment(who));
+        if( !dest ) dest = find_player(target);
+        if( !dest ) dest = find_living(target);
+        if( objectp(dest) ) {
+		message("vission", HIR+ this_player()->name()+
+	"口中念念有词，将一张追魂符往僵尸身上一贴，喝声“去！！！” \n"
+	NOR, env);
+                who->kill_ob(dest);
+                who->set_leader(dest);
+                message_vision("$N眼睛忽然睁开，喃喃地说道：" RED 
+"杀....死....$n....\n" NOR,
+                        who, dest);
+                if( environment(dest)==environment(who) ) {
+                        dest->fight_ob(who);
+                }
+        } else {
+                message_vision("$N眼睛忽然睁开，喃喃地说道：" RED 
+"杀....杀....杀....\n" NOR,
+                        who);
+                if( this_player() ) {
+                        who->kill_ob(this_player());
+                        who->set_leader(this_player());
+                        this_player()->fight_ob(who);
+                }
+        }
+        return 1;
+}
+ 
+int help (object me)
+{
+        write(@HELP
+指令格式： write <人名> on <物品名称>
+
+在画符用的桃符纸(paper seal)或其他物品上画符，即使是相同的符咒，画在不
+同的物品上也有可能有不同的效果。
+
+在你画符之前，你必须先用 enable 指令来指定你要使用的咒文系。
+
+By Liu Fei, 05/01/1996
+ 
+HELP
+        );
+        return 1;
+}
