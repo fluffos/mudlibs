@@ -2610,9 +2610,9 @@ every OTHER call site in the same lib correctly passes
 (string vs object)`, blocking the whole `clone/user/user` compile (and
 therefore character creation, since `make_body()` needs it). Fix:
 `is_killing(ob)` → `is_killing(ob->query("id"))`, matching the other
-call sites in the same file. Seen independently in four unrelated
-lineages (`nt1`, `wxddym`, `zjmudhell`, `hell`), so check for it on
-sight in any new lib rather than waiting to hit the compile error.
+call sites in the same file. Seen independently in five unrelated
+lineages (`nt1`, `wxddym`, `zjmudhell`, `hell`, `nte`), so check for it
+on sight in any new lib rather than waiting to hit the compile error.
 
 ### 7.51 NTOS-specific driver extensions with no FluffOS equivalent: `query_heartbeat_interval()`/`set_heartbeat_interval()`
 
@@ -2682,6 +2682,14 @@ functions, leaving the rest of its public interface intact. (`nt1`'s
 containing `socket_*` calls, but whose `is_version_ok()`/
 `is_release_server()`/`append_sn()` etc. are called from dozens of
 unrelated files throughout the mudlib.)
+
+Independently confirmed on `nte`'s own (unrelated codebase, different
+lineage) `versiond.lpc` — same shape almost exactly: also 13 socket-
+touching functions/callbacks, also `is_version_ok()`/`query()` etc.
+called from 32 other files. `grep -rl "VERSION_D->" work --include=
+'*.lpc' | grep -v adm/daemons/versiond.lpc | wc -l` before deciding
+whole-file-vs-selective is a fast, repeatable way to make this call —
+don't eyeball it.
 
 Also confirmed on the Century/adm-single family's own `dns_master.lpc`
 (`ldtx`, `ldtxii`) — `startup_udp()`/`send_udp()`/the `socket_close()`
