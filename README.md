@@ -297,7 +297,7 @@ classes it's found.
 | 114 | `xkxyb` | 侠客行一百 | `侠客行一百 (1).rar` | 40152 | WASM playable |
 | 115 | `xkyxciii` | 侠客英雄传III | `侠客英雄传III.rar` | 40118 | WASM playable |
 | 116 | `xsfyssjb` | 心声风云四升级版 | `心声风云四升级版.rar` | 40149 | WASM playable |
-| 117 | `xxcq` | 小雪初晴 | `小雪初晴.rar` | 40135 | native-boot verified, WASM pending |
+| 117 | `xxcq` | 小雪初晴 | `小雪初晴.rar` | 40135 | WASM playable |
 | 118 | `xxcqii` | 小雪初晴II | `小雪初晴II.rar` | 40131 | native-boot verified, WASM pending |
 | 119 | `xxcqii2` | 小雪初晴II | `小雪初晴II  .zip` | 40138 | native-boot verified, WASM pending |
 | 120 | `xyj2000` | 西游记2000 | `西游记2000.rar` | 40155 | native-boot verified, WASM pending |
