@@ -332,7 +332,7 @@ classes it's found.
 | 146-1 | `hy5` | 海洋5 | `海洋5.7z` | 40183 | native-boot verified, WASM pending |
 | 147 | `jym` | 金庸梦 | `金庸梦.rar` | 40184 | native-boot verified, WASM pending |
 | 148 | `nt1` | 泥潭1 | `泥潭1.gz` | 40185 | native-boot verified, WASM pending |
-| 149 | `wdxtym` | 武动仙途 | `武动仙途源码.rar` | 40188 | native-boot verified, WASM pending |
+| 149 | `wdxtym` | 武动仙途 | `武动仙途源码.rar` | 40188 | WASM playable |
 | 150 | `xkm` | 侠客梦 | `侠客梦.rar` | 40191 | native-boot verified, WASM pending |
 | 151 | `fqyy2` | 风起云涌2 | `风起云涌2修正版.rar` | 40197 | native-boot verified, WASM pending |
 | 152 | `fy2mg` | 风云II（美国版本） | `风云II(美国版本）.rar` | 40198 | native-boot verified, WASM pending |
