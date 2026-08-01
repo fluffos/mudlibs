@@ -3161,6 +3161,51 @@ no braces) is always a bug in LPC same as in C — grep
 on a suspiciously named daemon (`temp`, `test`, `debug`, `tmp`) that a
 `find -iname` can't locate anywhere in the tree. (`kxkjii2`.)
 
+### 7.65 An uncaught `create()` error (e.g. the §7.41 corrupted-save class) leaves a daemon permanently non-resident, and a later IMPLICIT `->` call on it silently no-ops instead of auto-compiling
+
+A meaner consequence of §7.41-style corrupted save data than the visible
+compile-error noise it usually gets filed under: if the corrupted-`.o`
+daemon's `create()` is never guarded, the uncaught `restore()` error
+leaves the object **permanently non-resident** on this driver
+(`find_object()` returns 0 for it forever, even though preload printed
+no visible error — preload errors are silent, see §1.2/§7.9) — NOT
+crashed loudly, NOT auto-recovered. The trap: a later **implicit**
+call-string invocation on that still-unloaded object (`SOME_D->foo(...)`,
+as opposed to an explicit `catch(load_object(SOME_D))`) does **nothing
+at all** — no error, no retry, the call just silently never completes —
+instead of auto-compiling the object the way you'd expect from a normal
+`->` call on a cold path. Confirmed by bisection: swapping the same
+implicit call for `catch(load_object(SOME_D))` immediately BEFORE it
+made the daemon load successfully (with the restore error now visibly
+caught) and the following implicit call then worked fine.
+
+This matters most when the failing call sits in the middle of a
+synchronous setup chain with no error path of its own — e.g. a
+`named.lpc`-style "check this new player's name isn't taken" daemon
+called from character creation (`get_char()`) BEFORE `make_body()`/
+`enter_world()` ever run. The whole character-creation `input_to` chain
+just silently dies at that one call: no crash, no visible error, the
+connection is left wedged with no player body and no command path ever
+set, so literally EVERY subsequent command (not just ones touching the
+broken daemon) falls through to the driver's generic fail message
+forever. This looks exactly like a command-dispatch/permission-search-
+path bug (all commands "not found") and is easy to misdiagnose as one —
+the actual defect is entirely upstream, in a completely unrelated
+daemon's unguarded `restore()`.
+
+Diagnosis technique: `log_file()` output does not persist across
+separate WASM test invocations (see §1.2), so bisect with `write()`
+statements instead, placed in a genuinely-interactive call chain
+(`input_to` callbacks triggered by real typed input write fine; preload/
+`call_out`-triggered code does not, see §7.60/§1.2) — walk the suspect
+function step by step until the last visible marker pinpoints the exact
+call that goes silent. Fix is the same as §7.41: guard the daemon's own
+`restore()` with `catch()` so a corrupted save degrades to an empty
+dbase instead of leaving the object stuck non-resident. (`hhsj`
+— `adm/daemons/named.lpc`'s `create()` restoring a genuinely corrupted
+~168KB save file, discovered because `NAME_D->invalid_new_name()` is an
+unavoidable step of every new character's `get_char()`.)
+
 ---
 
 ## 8. Login and registration flow bugs
