@@ -1,684 +1,628 @@
- //
+//
 #include <login.h>
 #include <ansi.h>
 #define CONTROL_MASTER "/cmds/arch/secure"
 #define SECURE_LOG    "secure_log"
 inherit F_SAVE;
 
- private mapping wizards;
- private mapping write_access;
- private mapping read_access;
- private mapping write_protect;
- private mapping read_protect;
- private string *wiz_levels = ({
-       "(player)",
-       "(elder)",
-       "(immortal)",
-       "(wizard)",
-       "(arch)",
-       "(admin)"
- });
+private mapping wizards;
+private mapping write_access;
+private mapping read_access;
+private mapping write_protect;
+private mapping read_protect;
+private string *wiz_levels = ({
+  "(player)",
+  "(elder)",
+  "(immortal)",
+  "(wizard)",
+  "(arch)",
+  "(admin)"
+});
 
 
- string query_save_file()
- {
-       return DATA_DIR + "daemons/secured";
- }
-
- private int check_master()
- {
-       object ob, who;
-       ob=previous_object();
-       if(base_name(ob)==CONTROL_MASTER)
-               return 1;
-
-       who=previous_object(-1)[sizeof(previous_object(-1))-1];
-       write("Access Denied!\n");
-       log_file(SECURE_LOG, sprintf("[%s] %s(%s) exceed secure authority.\n",
-               ctime(time()), geteuid(who), wizhood(who)));
-       return 0;
- }
-
- nosave int sort_keys(string one, string two)
- {
-       return strcmp(one, two);
-
- }
-
-
-
- private int save_data()
- {
-       if(geteuid(previous_object(0))!=ROOT_UID
-          && !check_master())
-               return 0;
-       save();
-       return 1;
- }
- void reset_privileges()
- {
-       write_access=([
-       "/"             :       ({ ROOT_UID, "(admin)" }),
-       "d"             :       ({ "(arch)" }),
-       "obj"           :       ({ "(arch)" }),
-       "daemon"        :       ({ "(arch)" }),
-       "doc"           :       ({ "(arch)", "(wizard)" }),
-       ]);
-
-       /* 可写就必定可读 */
-       read_access=([
-       "include"       :       ({ "(arch)" }),
-       "cmds"          :       ({ "(arch)" }),
-       "feature"       :       ({ "(arch)" }),
-       "inherit"       :       ({ "(arch)" }),
-       "d"             :       ({ "(wizard)", "(immortal)", "Domain" }),
-       "obj"           :       ({ "(wizard)", "(immortal)", "Domain" }),
-       "deamon"        :       ({ "(wizard)" }),
-       ]);
-
-       wizards=([
-       "meokey"  :       "(admin)",
-       "bluewww"  :       "(arch)",
-       "xlwang"   :       "(arch)",
-	"fly"     :	 "(wizard)",
-	"driftpho":	 "(wizard)",
-	"grief"	  :	 "(wizard)",
-	"shenxian":	 "(wizard)",
-	"smart"	  : 	 "(apprentice)",
-	"cici"	  :	 "(apprentice)",
-	"owen"	  :	 "(elder)",
-	"chuhen"  : 	 "(elder)",
-
-       ]);
-       write_protect=([]);
-       read_protect=([]);
-       save_data();
- }
- void create()
- {
-       if(clonep(this_object()))
-               return;
-       if(!restore())
-               reset_privileges();
- }
-
- string *query_wizlist()
- {
-       return keys(wizards);
- }
-
- string get_status(mixed ob)
- {
-       string euid;
-
-       if( objectp(ob) ) {
-               euid = geteuid(ob);
-               if( !euid ) euid = getuid(ob);
-       }
-       else if( stringp(ob) ) euid = ob;
-       if( !undefinedp(wizards[euid]) ) return wizards[euid];
-       else if( member_array(euid, wiz_levels)!=-1 ) return euid;
-       else return "(player)";
-
- }
-
- int get_wiz_level(mixed ob)
- {
-       return member_array(get_status(ob), wiz_levels);
- }
-
- int valid_read(string file, mixed user, string func)
- {
-       string euid, status, *path, dir, temp;
-       object adjuster;
-       int i;
-        
-        if( !objectp(user) )
-         error("TRUST_D-valid_read: Invalid argument type of user.\n");
-
-       if( sscanf(file, "/bin%s", temp)==1 )
-               file=temp;
-
-       if( func=="file_size" )
-               return 1;
-
-       if( func=="restore_object" )
-       {
-               if( file==query_save_file()+".o" )
-                       if(user==this_object())
-                               return 1;
-                       else return 0;
-
-               if( (sscanf(base_name(user), "/d/%*s") ||
-                    sscanf(base_name(user), "/obj/%*s") ||
-                    sscanf(base_name(user), "/std/%*s") ||
-                    sscanf(base_name(user), "/u/tools/obj/%*s"))
-                 && sscanf(file, "/data/%*s")
-                 && (file == (string)user->query_save_file() ||
-                     file == (string)user->query_save_file()+".o" ||
-                     file == (string)user->query_save_file()+".oo.o" ||
-                     file == (string)user->query_save_file()+".oo") )
-                       return 1;
-              if( sscanf(file, "/data/board/%*s") )
-                      return 1;
-      }
-       euid=geteuid(user);
-
-       if(!euid)
-               return 0;
-       if(euid==ROOT_UID || euid=="NONAME")
-               return 1;
-       status=get_status(user);
-       path=explode(file, "/");
-       for(i=sizeof(path)-1;i>=0;i--)
-       {
-               dir=implode(path[0..i], "/");
-               if(undefinedp(read_protect[dir]))
-                       continue;
-               if(member_array(euid, read_protect[dir])!=-1)
-               {
-
-                       log_file("read_fail", sprintf("[%s] %s(%s) read attempt on %s failed[func].\n", ctime(time()), geteuid(user), wizhood(user),file, func));
-                       return 0;
-               }
-               if(member_array(status, read_protect[dir])!=-1)
-               {
-                       log_file("read_fail", sprintf("[%s] %s(%s) read attempton %s failed[func].\n",
-                               ctime(time()), geteuid(user), wizhood(user),file, func));
-                       return 0;
-               }
-       }
-       if(sscanf(file, "/u/"+euid+"/%*s")
-          && get_wiz_level(status)>=get_wiz_level("(immortal)"))
-               return 1;
-       if(sscanf(file, "/u/PUBLIC/%*s")
-          && get_wiz_level(status)>=get_wiz_level("(immortal)"))
-               return 1;
-       // 可写必定可读
-       if(!undefinedp(write_access["/"]) &&
-          ( member_array(euid, write_access["/"])!=-1 ||
-            member_array(status, write_access["/"])!=-1))
-               return 1;
-       if(!undefinedp(read_access["/"]) &&
-          ( member_array(euid, read_access["/"])!=-1 ||
-            member_array(status, read_access["/"])!=-1))
-               return 1;
-       for(i=sizeof(path)-1;i>=0;i--)
-       {
-               dir=implode(path[0..i], "/");
-               if(undefinedp(write_access[dir]))
-                       continue;
-               if(member_array(euid, write_access[dir])!=-1)
-                       return 1;
-               if(member_array(status, write_access[dir])!=-1)
-                       return 1;
-       }
-       for(i=sizeof(path)-1;i>=0;i--)
-       {
-               dir=implode(path[0..i], "/");
-               if(undefinedp(read_access[dir]))
-                       continue;
-               if(member_array(euid, read_access[dir])!=-1)
-                       return 1;
-               if(member_array(status, read_access[dir])!=-1)
-                       return 1;
-       }
-       log_file("read_fail", sprintf("[%s] %s(%s) read attempt on %sfailed[func].\n",
-               ctime(time()), geteuid(user), wizhood(user), file, func));
-       return 0;
- }
- int valid_write(string file, mixed user, string func)
- {
-       string euid, status, *path, dir, temp;
-       int i;
-       if( !objectp(user) )
-               error("TRUST_D->valid_write: Invalid argument type ofuser.\n");
-       if( sscanf(file, "/bin%s", temp)==1 )
-               file=temp;
-       if( sscanf(file, LOG_DIR + "%*s") && func=="write_file" ) return 1;
-       if( func=="save_object" )
-       {
-               if( file==query_save_file()+".o" )
-                       if(user==this_object())
-                               return 1;
-                       else return 0;
-               if( (sscanf(base_name(user), "/d/%*s") ||
-                    sscanf(base_name(user), "/obj/%*s") ||
-                    sscanf(base_name(user), "/std/%*s") ||
-                    sscanf(base_name(user), "/u/tools/obj/%*s"))
-                 && sscanf(file, "/data/%*s")
-                 && (file == (string)user->query_save_file() ||
-                     file == (string)user->query_save_file()+".o" ||
-                     file == (string)user->query_save_file()+".oo.o") )
-                       return 1;
-       }
-       euid=geteuid(user);
-       if(!euid)
-               return 0;
-       if(euid==ROOT_UID)
-               return 1;
-       status=get_status(user);
-       path=explode(file, "/");
-       for(i=sizeof(path)-1;i>=0;i--)
-       {
-               dir=implode(path[0..i], "/");
-               if(undefinedp(write_protect[dir]))
-                       continue;
-               if(member_array(euid, write_protect[dir])!=-1)
-                       return 0;
-               if(member_array(status, write_protect[dir])!=-1)
-                       return 0;
-       }
-       if(sscanf(file, "/u/"+euid+"/%*s")
-          && get_wiz_level(status)>=get_wiz_level("(immortal)"))
-       {
-               log_file("FILES", sprintf("[%s] %s(%s) %ss %s.\n",
-                       ctime(time()),euid,status,func,file));
-               return 1;
-       }
-
-       if(sscanf(file, "/u/PUBLIC/%*s")
-          && get_wiz_level(status)>=get_wiz_level("(immortal)"))
-       {
-               log_file("FILES", sprintf("[%s] %s(%s) %ss %s.\n",
-                       ctime(time()),euid,status,func,file));
-              return 1;
-       }
-       if(!undefinedp(write_access["/"]) &&
-          ( member_array(euid, write_access["/"])!=-1 ||
-            member_array(status, write_access["/"])!=-1))
-       {
-               log_file("FILES", sprintf("[%s] %s(%s) %ss %s.\n",
-                       ctime(time()),euid,status,func,file));
-               return 1;
-       }
-       for(i=sizeof(path)-1;i>=0;i--)
-       {
-               dir=implode(path[0..i], "/");
-               if(undefinedp(write_access[dir]))
-                       continue;
-               if(member_array(euid, write_access[dir])!=-1)
-               {
-                       log_file("FILES", sprintf("[%s] %s(%s) %ss %s.\n",
-                               ctime(time()),euid,status,func,file));
-                       return 1;
-
-               }
-       }
-       log_file("write_fail", sprintf("[%s] %s(%s) write attempt on %sfailed[%s].\n",
-               ctime(time()), geteuid(user), wizhood(user), file, func));
-       return 0;
- }
- int valid_seteuid( object ob, string uid )
- {
-       if( uid==0 ) return 1;
-       if( uid==getuid(ob) ) return 1;
-       if( getuid(ob)==ROOT_UID ) return 1;
-       if( sscanf(file_name(ob), "/adm/%*s") ) return 1;
-       if( wizards[uid] != "(admin)"
-       &&      wizards[getuid(ob)] == "(admin)" )
-               return 1;
-       return 0;
- }
- private void show_help()
- {
-       write("安全指令SECURE使用：\n");
-       write("1. secure wiz <who> <level>\n");
-       write("   用来提升巫师，不加后两参数显示现在巫师状态。\n");
-       write("2. secure as <flag> <file> <who>\n");
-       write("   用来修改巫师的读写权限。\n");
-       write("   flag 可以为: <+/->r  赋予/剥夺 某人对某文件的读权限\n");
-       write("                 <+/->w  赋予/剥夺 某人对某文件的写权限\n");
-       write("2. secure pr <flag> <file> <who>\n");
-       write("   用来保护某写文件对特殊人的限制访问。\n");
-       write("   flag 可以为: <+/->r  限制/取消限制 某人对某文件的读权限\n");
-       write("                 <+/->w  限制/取消限制 某人对某文件的写权限\n");
-       return;
- }
- private int change_wizard(object who, string arg)
- {
-       string target, level, *lists;
-       object ob;
-       int i;
-       if(!check_master())
-               return 1;
-       if(!arg || sscanf(arg, "%s %s", target, level)!=2)
-       {
-		lists=keys(wizards);
-               lists=sort_array(lists, "sort_keys", this_object());
-               printf("Wizard Status:\n");
-               printf("%-20s%s\n","ID", "LEVEL");
-               for(i=0;i<sizeof(lists);i++)
-                       printf("%-20s%s\n", capitalize(lists[i]),
-                               wizards[lists[i]]);
-               return 1;
-       }
-       if(!objectp(ob=find_player(target)))
-       {
-               write("这位玩家现在不在线上。\n");
-               return 1;
-       }
-       if(ob==who)
-       {
-               write("提升自己？\n");
-               return 1;
-       }
-       target=getuid(ob);
-       if(!target)
-       {
-               write("这位玩家现在不在线上。\n");
-               return 1;
-       }
-       if(member_array(level, wiz_levels)==-1)
-       {
-               write("并没有这种等级。\n");
-               return 1;
-       }
-       if(get_wiz_level(who)<=get_wiz_level(target))
-       {
-               write("以你的权限不能修改对方的权限。\n");
-               return 1;
-       }
-       if(get_wiz_level(who)<get_wiz_level(level))
-       {
-              write("以你的权限提升不到这个等级。\n");
-               return 1;
-       }
-       if(!save_data())
-       {
-               write("提升失败！\n");
-               return 1;
-       }
-       wizards[target]=level;
-       if(level=="(player)")
-               map_delete(wizards, target);
-       save_data();
-       message_vision("$N将$n的权限修改为"+level+"。\n", who, ob);
-       "/cmds/wiz/update"->update_player(ob);
-       log_file( "nosave/promotion", sprintf("[%s] %s promoted %s to %s.\n",
-               ctime(time()), capitalize(getuid(who)),
-               capitalize(target), level));
-       return 1;
-
- }
-
- private int change_access(object who, string arg)
- {
-       string target, file, flag, *lists, msg="";
-       int i, j;
-       if(!check_master())
-               return 1;
-       if(!arg||sscanf(arg, "%s %s %s", flag, file, target)!=3)
-       {
-               lists=keys(read_access);
-               lists=sort_array(lists, "sort_keys", this_object());
-               msg+=sprintf(HIG"Read Access Status:\n"NOR);
-               msg+=sprintf("%-30s%s\n", "FILE", "USER");
-               for(i=0;i<sizeof(lists);i++)
-               {
-                       msg+=sprintf("%-30s", lists[i]);
-                       for(j=0;j<sizeof(read_access[lists[i]]);j++)
-                       {
-                               msg+=sprintf("%-10s%s",
-                                 sscanf(read_access[lists[i]][j], "(%*s)")?  read_access[lists[i]][j]:capitalize(read_access[lists[i]][j]), HIY","NOR);
-                               if(j%4==3)
-                                       msg+=sprintf("\n");
-                       }
-	msg+=sprintf("\n");
-               }
-               lists=keys(write_access);
-               lists=sort_array(lists, "sort_keys", this_object());
-               msg+=sprintf(HIR"Write Access Status:\n"NOR);
-               msg+=sprintf("%-30s%s\n", "FILE", "USER");
-               for(i=0;i<sizeof(lists);i++)
-               {
-                       msg+=sprintf("%-30s", lists[i]);
-                       for(j=0;j<sizeof(write_access[lists[i]]);j++)
-                       {
-                               msg+=sprintf("%-10s%s",
-                                 sscanf(write_access[lists[i]][j], "(%*s)")?  write_access[lists[i]][j]:capitalize(write_access[lists[i]][j]), HIY","NOR);
-                               if(j%4==3)
-                                       msg+=sprintf("\n");
-                       }
-   msg+=sprintf("\n");
-               }
-               who->start_more(msg);
-               return 1;
-       }
-       if(file_size(file)==-1)
-       {
-               write("此目录或文件不存在。\n");
-               return 1;
-       }
-       if(file=="/")
-       {
-               write("你不能把根目录的权限赋予其他人。\n");
-               return 1;
-       }
-       if(getuid(who)==target || target==get_status(who))
-       {
-               write("你不能修改自己或自己等级的权限。\n");
-               return 1;
-       }
-       if(get_wiz_level(who)<=get_wiz_level(target))
-       {
-               write("以你的权限不能修改对方的权限。\n");
-               return 1;
-       }
-       if(!save_data())
-       {
-               write("Access Denied on save file!\n");
-               return 1;
-       }
-       switch(flag)
-       {
-               case "+r":
-               if(!valid_read(file, who, "read"))
-               {
-                       write("Access Denied!\n");
-                       return 1;
-               }
-               if(!undefinedp(read_access[file]))
-                       read_access[file]+=({target});
-               else read_access[file]=({target});
-               break;
-               case "+w":
-               if(!valid_read(file, who, "write"))
-               {
-                       write("Access Denied!\n");
-                       return 1;
-               }
-               if(!undefinedp(write_access[file]))
-                       write_access[file]+=({target});
-               else write_access[file]=({target});
-               break;
-               case "-r":
-               if(!valid_read(file, who, "read"))
-               {
-                       write("Access Denied!\n");
-                       return 1;
-               }
-               if(!undefinedp(read_access[file]))
-                       read_access[file]-=({target});
-               if(!sizeof(read_access[file]))
-                       map_delete(read_access, file);
-               break;
-               case "-w":
-               if(!valid_read(file, who, "write"))
-               {
-                       write("Access Denied!\n");
-                       return 1;
-               }
-               if(!undefinedp(write_access[file]))
-                       write_access[file]-=({target});
-               if(!sizeof(write_access[file]))
-                       map_delete(write_access, file);
-               break;
-               default:
-               show_help();
-               return 1;
-               break;
-       }
-       save_data();
-       write("修改读写权限成功！\n");
-       return 1;
- }
-
- private int change_protect(object who, string arg)
- {
-       string target, file, flag, *lists, msg="";
-       int i, j;
-       if(!check_master())
-               return 1;
-       if(!arg||sscanf(arg, "%s %s %s", flag, file, target)!=3)
-       {
-               lists=keys(read_protect);
-               lists=sort_array(lists, "sort_keys", this_object());
-               msg+=sprintf(HIG"Read Protect Status:\n"NOR);
-               msg+=sprintf("%-30s%s\n", "FILE", "USER");
-               for(i=0;i<sizeof(lists);i++)
-               {
-                       msg+=sprintf("%-30s", lists[i]);
-                       for(j=0;j<sizeof(read_protect[lists[i]]);j++)
-                       {
-                               msg+=sprintf("%-10s%s",
-                                 sscanf(read_protect[lists[i]][j], "(%*s)")?  read_protect[lists[i]][j]:capitalize(read_protect[lists[i]][j]), HIY","NOR);
-                               if(j%4==3)
-
-                                       msg+=sprintf("\n");
-                       }
-                       msg+=sprintf("\n");
-               }
-               lists=keys(write_protect);
-               lists=sort_array(lists, "sort_keys", this_object());
-               msg+=sprintf(HIR"Write Protect Status:\n"NOR);
-               msg+=sprintf("%-30s%s\n", "FILE", "USER");
-               for(i=0;i<sizeof(lists);i++)
-               {
-                       msg+=sprintf("%-30s", lists[i]);
-                       for(j=0;j<sizeof(write_protect[lists[i]]);j++)
-                       {
-                               msg+=sprintf("%-10s%s",
-                                 sscanf(write_protect[lists[i]][j], "(%*s)")?  write_protect[lists[i]][j]:capitalize(write_protect[lists[i]][j]), HIY","NOR);
-                               if(j%4==3)
-                                       msg+=sprintf("\n");
-                       }
-                       msg+=sprintf("\n");
-               }
-               who->start_more(msg);
-               return 1;
-       }
-       if(file_size(file)==-1)
-       {
-               write("此目录或文件不存在。\n");
-               return 1;
-       }
-       if(file=="/")
-       {
-               write("你不能把根目录的权限赋予其他人。\n");
-               return 1;
-       }
-       if(getuid(who)==target || target==get_status(who))
-       {
-               write("你不能修改自己或自己等级的权限。\n");
-               return 1;
-       }
-       if(get_wiz_level(who)<=get_wiz_level(target))
-       {
-               write("以你的权限不能修改对方的权限。\n");
-               return 1;
-       }
-       if(!save_data())
-       {
-               write("Access Denied on save file!\n");
-               return 1;
-       }
-       switch(flag)
-       {
-               case "+r":
-               if(!valid_read(file, who, "read"))
-               {
-                       write("Access Denied!\n");
-                       return 1;
-               }
-               if(!undefinedp(read_protect[file]))
-                       read_protect[file]+=({target});
-               else read_protect[file]=({target});
-               break;
-               case "+w":
-               if(!valid_read(file, who, "write"))
-               {
-                       write("Access Denied!\n");
-                       return 1;
-               }
-               if(!undefinedp(write_protect[file]))
-                       write_protect[file]+=({target});
-               else write_protect[file]=({target});
-               break;
-               case "-r":
-               if(!valid_read(file, who, "read"))
-               {
-                       write("Access Denied!\n");
-                       return 1;
-		}
-               if(!undefinedp(read_protect[file]))
-                       read_protect[file]-=({target});
-               if(!sizeof(read_protect[file]))
-                       map_delete(read_protect, file);
-               break;
-               case "-w":
-               if(!valid_read(file, who, "write"))
-               {
-                       write("Access Denied!\n");
-                       return 1;
-               }
-               if(!undefinedp(write_protect[file]))
-                       write_protect[file]-=({target});
-               if(!sizeof(write_protect[file]))
-                       map_delete(write_protect, file);
-               break;
-               default:
-               show_help();
-               return 1;
-               break;
-       }
-       save_data();
-       write("修改读写保护成功！\n");
-      return 1;
+string query_save_file() {
+  return DATA_DIR + "daemons/secured";
 }
 
- void parse_commands(object who, string arg)
- {
-       string cmd;
-       if(!arg)
-       {
-               show_help();
-               return;
-       }
-       if(sscanf(arg, "%s %s", cmd, arg)!=2)
-               cmd=arg;
-       switch(cmd)
-       {
-               case "wiz":
-               change_wizard(who, arg);
-               break;
-               case "as":
-               change_access(who, arg);
-               break;
-               case "pr":
-               change_protect(who, arg);
-               break;
-               default:
-               show_help();
-               break;
+private int check_master() {
+  object ob, who;
+  ob = previous_object();
+  if (base_name(ob) == CONTROL_MASTER)
+    return 1;
+
+  who = previous_object(-1)[sizeof(previous_object(-1)) - 1];
+  write("Access Denied!\n");
+  log_file(SECURE_LOG, sprintf("[%s] %s(%s) exceed secure authority.\n",
+    ctime(time()), geteuid(who), wizhood(who)));
+  return 0;
+}
+
+nosave int sort_keys(string one, string two) {
+  return strcmp(one, two);
+
+}
+
+
+
+private int save_data() {
+  if (geteuid(previous_object(0)) != ROOT_UID
+    && !check_master())
+    return 0;
+  save();
+  return 1;
+}
+void reset_privileges() {
+  write_access = ([
+    "/": ({ ROOT_UID, "(admin)" }),
+    "d": ({ "(arch)" }),
+    "obj": ({ "(arch)" }),
+    "daemon": ({ "(arch)" }),
+    "doc": ({ "(arch)", "(wizard)" }),
+  ]);
+
+  /* 可写就必定可读 */
+  read_access = ([
+    "include": ({ "(arch)" }),
+    "cmds": ({ "(arch)" }),
+    "feature": ({ "(arch)" }),
+    "inherit": ({ "(arch)" }),
+    "d": ({ "(wizard)", "(immortal)", "Domain" }),
+    "obj": ({ "(wizard)", "(immortal)", "Domain" }),
+    "deamon": ({ "(wizard)" }),
+  ]);
+
+  wizards = ([
+    "meokey": "(admin)",
+    "bluewww": "(arch)",
+    "xlwang": "(arch)",
+    "fly": "(wizard)",
+    "driftpho": "(wizard)",
+    "grief": "(wizard)",
+    "shenxian": "(wizard)",
+    "smart": "(apprentice)",
+    "cici": "(apprentice)",
+    "owen": "(elder)",
+    "chuhen": "(elder)",
+
+  ]);
+  write_protect = ([]);
+  read_protect = ([]);
+  save_data();
+}
+void create() {
+  if (clonep(this_object()))
+    return;
+  if (!restore())
+    reset_privileges();
+}
+
+string *query_wizlist() {
+  return keys(wizards);
+}
+
+string get_status(mixed ob) {
+  string euid;
+
+  if (objectp(ob)) {
+    euid = geteuid(ob);
+    if (!euid) euid = getuid(ob);
+  } else if (stringp(ob)) euid = ob;
+  if (!undefinedp(wizards[euid])) return wizards[euid];
+  else if (member_array(euid, wiz_levels) != -1) return euid;
+  else return "(player)";
+
+}
+
+int get_wiz_level(mixed ob) {
+  return member_array(get_status(ob), wiz_levels);
+}
+
+int valid_read(string file, mixed user, string func) {
+  string euid, status, *path, dir, temp;
+  object adjuster;
+  int i;
+
+  if (!objectp(user))
+    error("TRUST_D-valid_read: Invalid argument type of user.\n");
+
+  if (sscanf(file, "/bin%s", temp) == 1)
+    file = temp;
+
+  if (func == "file_size")
+    return 1;
+
+  if (func == "restore_object") {
+    if (file == query_save_file() + ".o")
+      if (user == this_object())
+        return 1;
+      else return 0;
+
+    if ((sscanf(base_name(user), "/d/%*s") ||
+      sscanf(base_name(user), "/obj/%*s") ||
+      sscanf(base_name(user), "/std/%*s") ||
+      sscanf(base_name(user), "/u/tools/obj/%*s"))
+      && sscanf(file, "/data/%*s")
+      && (file == (string)user->query_save_file() ||
+        file == (string)user->query_save_file() + ".o" ||
+        file == (string)user->query_save_file() + ".oo.o" ||
+        file == (string)user->query_save_file() + ".oo"))
+      return 1;
+    if (sscanf(file, "/data/board/%*s"))
+      return 1;
+  }
+  euid = geteuid(user);
+
+  if (!euid)
+    return 0;
+  if (euid == ROOT_UID || euid == "NONAME")
+    return 1;
+  status = get_status(user);
+  path = explode(file, "/");
+  for (i = sizeof(path) - 1; i >= 0; i--) {
+    dir = implode(path[0..i], "/");
+    if (undefinedp(read_protect[dir]))
+      continue;
+    if (member_array(euid, read_protect[dir]) != -1) {
+
+      log_file(
+        "read_fail",
+        sprintf(
+          "[%s] %s(%s) read attempt on %s failed[func].\n",
+          ctime(time()),
+          geteuid(user),
+          wizhood(user),
+          file,
+          func
+        )
+      );
+      return 0;
+    }
+    if (member_array(status, read_protect[dir]) != -1) {
+      log_file("read_fail", sprintf("[%s] %s(%s) read attempton %s failed[func].\n",
+        ctime(time()), geteuid(user), wizhood(user), file, func));
+      return 0;
+    }
+  }
+  if (sscanf(file, "/u/" + euid + "/%*s")
+    && get_wiz_level(status) >= get_wiz_level("(immortal)"))
+    return 1;
+  if (sscanf(file, "/u/PUBLIC/%*s")
+    && get_wiz_level(status) >= get_wiz_level("(immortal)"))
+    return 1;
+  // 可写必定可读
+  if (!undefinedp(write_access["/"]) &&
+    (member_array(euid, write_access["/"]) != -1 ||
+      member_array(status, write_access["/"]) != -1))
+    return 1;
+  if (!undefinedp(read_access["/"]) &&
+    (member_array(euid, read_access["/"]) != -1 ||
+      member_array(status, read_access["/"]) != -1))
+    return 1;
+  for (i = sizeof(path) - 1; i >= 0; i--) {
+    dir = implode(path[0..i], "/");
+    if (undefinedp(write_access[dir]))
+      continue;
+    if (member_array(euid, write_access[dir]) != -1)
+      return 1;
+    if (member_array(status, write_access[dir]) != -1)
+      return 1;
+  }
+  for (i = sizeof(path) - 1; i >= 0; i--) {
+    dir = implode(path[0..i], "/");
+    if (undefinedp(read_access[dir]))
+      continue;
+    if (member_array(euid, read_access[dir]) != -1)
+      return 1;
+    if (member_array(status, read_access[dir]) != -1)
+      return 1;
+  }
+  log_file("read_fail", sprintf("[%s] %s(%s) read attempt on %sfailed[func].\n",
+    ctime(time()), geteuid(user), wizhood(user), file, func));
+  return 0;
+}
+int valid_write(string file, mixed user, string func) {
+  string euid, status, *path, dir, temp;
+  int i;
+  if (!objectp(user))
+    error("TRUST_D->valid_write: Invalid argument type ofuser.\n");
+  if (sscanf(file, "/bin%s", temp) == 1)
+    file = temp;
+  if (sscanf(file, LOG_DIR + "%*s") && func == "write_file") return 1;
+  if (func == "save_object") {
+    if (file == query_save_file() + ".o")
+      if (user == this_object())
+        return 1;
+      else return 0;
+    if ((sscanf(base_name(user), "/d/%*s") ||
+      sscanf(base_name(user), "/obj/%*s") ||
+      sscanf(base_name(user), "/std/%*s") ||
+      sscanf(base_name(user), "/u/tools/obj/%*s"))
+      && sscanf(file, "/data/%*s")
+      && (file == (string)user->query_save_file() ||
+        file == (string)user->query_save_file() + ".o" ||
+        file == (string)user->query_save_file() + ".oo.o"))
+      return 1;
+  }
+  euid = geteuid(user);
+  if (!euid)
+    return 0;
+  if (euid == ROOT_UID)
+    return 1;
+  status = get_status(user);
+  path = explode(file, "/");
+  for (i = sizeof(path) - 1; i >= 0; i--) {
+    dir = implode(path[0..i], "/");
+    if (undefinedp(write_protect[dir]))
+      continue;
+    if (member_array(euid, write_protect[dir]) != -1)
+      return 0;
+    if (member_array(status, write_protect[dir]) != -1)
+      return 0;
+  }
+  if (sscanf(file, "/u/" + euid + "/%*s")
+    && get_wiz_level(status) >= get_wiz_level("(immortal)")) {
+    log_file("FILES", sprintf("[%s] %s(%s) %ss %s.\n",
+      ctime(time()), euid, status, func, file));
+    return 1;
+  }
+
+  if (sscanf(file, "/u/PUBLIC/%*s")
+    && get_wiz_level(status) >= get_wiz_level("(immortal)")) {
+    log_file("FILES", sprintf("[%s] %s(%s) %ss %s.\n",
+      ctime(time()), euid, status, func, file));
+    return 1;
+  }
+  if (!undefinedp(write_access["/"]) &&
+    (member_array(euid, write_access["/"]) != -1 ||
+      member_array(status, write_access["/"]) != -1)) {
+    log_file("FILES", sprintf("[%s] %s(%s) %ss %s.\n",
+      ctime(time()), euid, status, func, file));
+    return 1;
+  }
+  for (i = sizeof(path) - 1; i >= 0; i--) {
+    dir = implode(path[0..i], "/");
+    if (undefinedp(write_access[dir]))
+      continue;
+    if (member_array(euid, write_access[dir]) != -1) {
+      log_file("FILES", sprintf("[%s] %s(%s) %ss %s.\n",
+        ctime(time()), euid, status, func, file));
+      return 1;
+
+    }
+  }
+  log_file("write_fail", sprintf("[%s] %s(%s) write attempt on %sfailed[%s].\n",
+    ctime(time()), geteuid(user), wizhood(user), file, func));
+  return 0;
+}
+int valid_seteuid(object ob, string uid) {
+  if (uid == 0) return 1;
+  if (uid == getuid(ob)) return 1;
+  if (getuid(ob) == ROOT_UID) return 1;
+  if (sscanf(file_name(ob), "/adm/%*s")) return 1;
+  if (wizards[uid] != "(admin)"
+    && wizards[getuid(ob)] == "(admin)")
+    return 1;
+  return 0;
+}
+private void show_help() {
+  write("安全指令SECURE使用：\n");
+  write("1. secure wiz <who> <level>\n");
+  write("   用来提升巫师，不加后两参数显示现在巫师状态。\n");
+  write("2. secure as <flag> <file> <who>\n");
+  write("   用来修改巫师的读写权限。\n");
+  write("   flag 可以为: <+/->r  赋予/剥夺 某人对某文件的读权限\n");
+  write("                 <+/->w  赋予/剥夺 某人对某文件的写权限\n");
+  write("2. secure pr <flag> <file> <who>\n");
+  write("   用来保护某写文件对特殊人的限制访问。\n");
+  write("   flag 可以为: <+/->r  限制/取消限制 某人对某文件的读权限\n");
+  write("                 <+/->w  限制/取消限制 某人对某文件的写权限\n");
+  return;
+}
+private int change_wizard(object who, string arg) {
+  string target, level, *lists;
+  object ob;
+  int i;
+  if (!check_master())
+    return 1;
+  if (!arg || sscanf(arg, "%s %s", target, level) != 2) {
+    lists = keys(wizards);
+    lists = sort_array(lists, "sort_keys", this_object());
+    printf("Wizard Status:\n");
+    printf("%-20s%s\n", "ID", "LEVEL");
+    for (i = 0; i < sizeof(lists); i++)
+      printf("%-20s%s\n", capitalize(lists[i]),
+        wizards[lists[i]]);
+    return 1;
+  }
+  if (!objectp(ob = find_player(target))) {
+    write("这位玩家现在不在线上。\n");
+    return 1;
+  }
+  if (ob == who) {
+    write("提升自己？\n");
+    return 1;
+  }
+  target = getuid(ob);
+  if (!target) {
+    write("这位玩家现在不在线上。\n");
+    return 1;
+  }
+  if (member_array(level, wiz_levels) == -1) {
+    write("并没有这种等级。\n");
+    return 1;
+  }
+  if (get_wiz_level(who) <= get_wiz_level(target)) {
+    write("以你的权限不能修改对方的权限。\n");
+    return 1;
+  }
+  if (get_wiz_level(who) < get_wiz_level(level)) {
+    write("以你的权限提升不到这个等级。\n");
+    return 1;
+  }
+  if (!save_data()) {
+    write("提升失败！\n");
+    return 1;
+  }
+  wizards[target] = level;
+  if (level == "(player)")
+    map_delete(wizards, target);
+  save_data();
+  message_vision("$N将$n的权限修改为" + level + "。\n", who, ob);
+  "/cmds/wiz/update"->update_player(ob);
+  log_file("nosave/promotion", sprintf("[%s] %s promoted %s to %s.\n",
+    ctime(time()), capitalize(getuid(who)),
+    capitalize(target), level));
+  return 1;
+
+}
+
+private int change_access(object who, string arg) {
+  string target, file, flag, *lists, msg = "";
+  int i, j;
+  if (!check_master())
+    return 1;
+  if (!arg || sscanf(arg, "%s %s %s", flag, file, target) != 3) {
+    lists = keys(read_access);
+    lists = sort_array(lists, "sort_keys", this_object());
+    msg += sprintf(HIG "Read Access Status:\n" NOR);
+    msg += sprintf("%-30s%s\n", "FILE", "USER");
+    for (i = 0; i < sizeof(lists); i++) {
+      msg += sprintf("%-30s", lists[i]);
+      for (j = 0; j < sizeof(read_access[lists[i]]); j++) {
+        msg += sprintf("%-10s%s",
+          sscanf(
+            read_access[lists[i]][j],
+            "(%*s)"
+          ) ? read_access[lists[i]][j] : capitalize(read_access[lists[i]][j]), HIY "," NOR);
+        if (j % 4 == 3)
+          msg += sprintf("\n");
       }
+      msg += sprintf("\n");
+    }
+    lists = keys(write_access);
+    lists = sort_array(lists, "sort_keys", this_object());
+    msg += sprintf(HIR "Write Access Status:\n" NOR);
+    msg += sprintf("%-30s%s\n", "FILE", "USER");
+    for (i = 0; i < sizeof(lists); i++) {
+      msg += sprintf("%-30s", lists[i]);
+      for (j = 0; j < sizeof(write_access[lists[i]]); j++) {
+        msg += sprintf("%-10s%s",
+          sscanf(
+            write_access[lists[i]][j],
+            "(%*s)"
+          ) ? write_access[lists[i]][j] : capitalize(write_access[lists[i]][j]), HIY "," NOR);
+        if (j % 4 == 3)
+          msg += sprintf("\n");
+      }
+      msg += sprintf("\n");
+    }
+    who->start_more(msg);
+    return 1;
+  }
+  if (file_size(file) == -1) {
+    write("此目录或文件不存在。\n");
+    return 1;
+  }
+  if (file == "/") {
+    write("你不能把根目录的权限赋予其他人。\n");
+    return 1;
+  }
+  if (getuid(who) == target || target == get_status(who)) {
+    write("你不能修改自己或自己等级的权限。\n");
+    return 1;
+  }
+  if (get_wiz_level(who) <= get_wiz_level(target)) {
+    write("以你的权限不能修改对方的权限。\n");
+    return 1;
+  }
+  if (!save_data()) {
+    write("Access Denied on save file!\n");
+    return 1;
+  }
+  switch (flag) {
+    case "+r":
+      if (!valid_read(file, who, "read")) {
+        write("Access Denied!\n");
+        return 1;
+      }
+      if (!undefinedp(read_access[file]))
+        read_access[file] += ({ target });
+      else read_access[file] = ({ target });
+      break;
+    case "+w":
+      if (!valid_read(file, who, "write")) {
+        write("Access Denied!\n");
+        return 1;
+      }
+      if (!undefinedp(write_access[file]))
+        write_access[file] += ({ target });
+      else write_access[file] = ({ target });
+      break;
+    case "-r":
+      if (!valid_read(file, who, "read")) {
+        write("Access Denied!\n");
+        return 1;
+      }
+      if (!undefinedp(read_access[file]))
+        read_access[file] -= ({ target });
+      if (!sizeof(read_access[file]))
+        map_delete(read_access, file);
+      break;
+    case "-w":
+      if (!valid_read(file, who, "write")) {
+        write("Access Denied!\n");
+        return 1;
+      }
+      if (!undefinedp(write_access[file]))
+        write_access[file] -= ({ target });
+      if (!sizeof(write_access[file]))
+        map_delete(write_access, file);
+      break;
+    default:
+      show_help();
+      return 1;
+      break;
+  }
+  save_data();
+  write("修改读写权限成功！\n");
+  return 1;
+}
 
-       return;
- }
+private int change_protect(object who, string arg) {
+  string target, file, flag, *lists, msg = "";
+  int i, j;
+  if (!check_master())
+    return 1;
+  if (!arg || sscanf(arg, "%s %s %s", flag, file, target) != 3) {
+    lists = keys(read_protect);
+    lists = sort_array(lists, "sort_keys", this_object());
+    msg += sprintf(HIG "Read Protect Status:\n" NOR);
+    msg += sprintf("%-30s%s\n", "FILE", "USER");
+    for (i = 0; i < sizeof(lists); i++) {
+      msg += sprintf("%-30s", lists[i]);
+      for (j = 0; j < sizeof(read_protect[lists[i]]); j++) {
+        msg += sprintf("%-10s%s",
+          sscanf(
+            read_protect[lists[i]][j],
+            "(%*s)"
+          ) ? read_protect[lists[i]][j] : capitalize(read_protect[lists[i]][j]), HIY "," NOR);
+        if (j % 4 == 3)
 
+          msg += sprintf("\n");
+      }
+      msg += sprintf("\n");
+    }
+    lists = keys(write_protect);
+    lists = sort_array(lists, "sort_keys", this_object());
+    msg += sprintf(HIR "Write Protect Status:\n" NOR);
+    msg += sprintf("%-30s%s\n", "FILE", "USER");
+    for (i = 0; i < sizeof(lists); i++) {
+      msg += sprintf("%-30s", lists[i]);
+      for (j = 0; j < sizeof(write_protect[lists[i]]); j++) {
+        msg += sprintf("%-10s%s",
+          sscanf(
+            write_protect[lists[i]][j],
+            "(%*s)"
+          ) ? write_protect[lists[i]][j] : capitalize(write_protect[lists[i]][j]), HIY "," NOR);
+        if (j % 4 == 3)
+          msg += sprintf("\n");
+      }
+      msg += sprintf("\n");
+    }
+    who->start_more(msg);
+    return 1;
+  }
+  if (file_size(file) == -1) {
+    write("此目录或文件不存在。\n");
+    return 1;
+  }
+  if (file == "/") {
+    write("你不能把根目录的权限赋予其他人。\n");
+    return 1;
+  }
+  if (getuid(who) == target || target == get_status(who)) {
+    write("你不能修改自己或自己等级的权限。\n");
+    return 1;
+  }
+  if (get_wiz_level(who) <= get_wiz_level(target)) {
+    write("以你的权限不能修改对方的权限。\n");
+    return 1;
+  }
+  if (!save_data()) {
+    write("Access Denied on save file!\n");
+    return 1;
+  }
+  switch (flag) {
+    case "+r":
+      if (!valid_read(file, who, "read")) {
+        write("Access Denied!\n");
+        return 1;
+      }
+      if (!undefinedp(read_protect[file]))
+        read_protect[file] += ({ target });
+      else read_protect[file] = ({ target });
+      break;
+    case "+w":
+      if (!valid_read(file, who, "write")) {
+        write("Access Denied!\n");
+        return 1;
+      }
+      if (!undefinedp(write_protect[file]))
+        write_protect[file] += ({ target });
+      else write_protect[file] = ({ target });
+      break;
+    case "-r":
+      if (!valid_read(file, who, "read")) {
+        write("Access Denied!\n");
+        return 1;
+      }
+      if (!undefinedp(read_protect[file]))
+        read_protect[file] -= ({ target });
+      if (!sizeof(read_protect[file]))
+        map_delete(read_protect, file);
+      break;
+    case "-w":
+      if (!valid_read(file, who, "write")) {
+        write("Access Denied!\n");
+        return 1;
+      }
+      if (!undefinedp(write_protect[file]))
+        write_protect[file] -= ({ target });
+      if (!sizeof(write_protect[file]))
+        map_delete(write_protect, file);
+      break;
+    default:
+      show_help();
+      return 1;
+      break;
+  }
+  save_data();
+  write("修改读写保护成功！\n");
+  return 1;
+}
 
+void parse_commands(object who, string arg) {
+  string cmd;
+  if (!arg) {
+    show_help();
+    return;
+  }
+  if (sscanf(arg, "%s %s", cmd, arg) != 2)
+    cmd = arg;
+  switch (cmd) {
+    case "wiz":
+      change_wizard(who, arg);
+      break;
+    case "as":
+      change_access(who, arg);
+      break;
+    case "pr":
+      change_protect(who, arg);
+      break;
+    default:
+      show_help();
+      break;
+  }
 
-
-
-
-
+  return;
+}
