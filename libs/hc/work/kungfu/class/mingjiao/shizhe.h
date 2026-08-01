@@ -94,5 +94,5 @@ void attempt_apprentice(object ob)
 
 	return;
 }
-*/
+*/
 #include "mingjiao.h"

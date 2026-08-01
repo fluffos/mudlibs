@@ -22,16 +22,12 @@ int valid_public(object me)
 
     if (sk[i] != skl_name && SKILL_D(sk[i])->valid_enable("force"))
 
-      return notify_fail("你不散掉"+to_chinese(sk[i])
+      return notify_fail("你不散掉" + to_chinese(sk[i])
 
-        +"，如何能修习"+to_chinese(skl_name)+"。\n");
+        + "，如何能修习" + to_chinese(skl_name) + "。\n");
 
   }
 
   return 1;
 
 }
-
-
-
-

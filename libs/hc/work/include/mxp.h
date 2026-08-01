@@ -15,7 +15,7 @@
 /* SINGAL "No,Don't Do it!" */
 #define DONT_MXP_STR    IAC + DONT + TELOPT_MXP
 
-/* Start MXP string */ 
+/* Start MXP string */
 #define START_MXP_STR   IAC + SB + TELOPT_MXP + IAC +SE
 
 /* Esc character */
@@ -34,7 +34,7 @@
 /* no MXP or HTML commands are allowed in the line.  The 
  * line is not parsed for any tags at all.  This is useful for
  * "verbatim" text output from the MUD.  When a newline is 
- * received from the MUD, the mode reverts back to Open mode.*/ 
+ * received from the MUD, the mode reverts back to Open mode.*/
 #define MXP_MODE_LOCKED_LINE     MXPMODE("2")
 
 /* close all open tags.  Set mode to Open.  Set text color and 

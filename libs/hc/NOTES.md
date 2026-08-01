@@ -54,6 +54,44 @@ gender selection, attribute roll+confirm, email, into the game world at
 bars, combat exp) both work correctly. `quit` drops starting items and
 prints a clean farewell message with no errors.
 
-## Not yet done (out of scope for this pass)
+## WASM pass (follow-up)
 
-WASM export / GitHub Pages packaging — deferred to a later batch pass.
+Native boot above was already clean; the WASM sandbox surfaced two gaps
+the native driver doesn't hit:
+
+1. `include/restart.h` is genuinely empty (0 bytes) in both the raw
+   archive and the converted source -- a pre-existing incomplete-source
+   bug in the original codebase, not something the conversion lost.
+   `adm/daemons/restartd.lpc`'s `SHUTDOWN`/`REBOOT`/`HALT`/
+   `CALLOUT_INTERVAL`/`RESTART_INTERVAL` were all undefined as a result
+   (previously masked because `restartd.lpc` fails to compile silently
+   at preload and isn't load-bearing for boot). Reconstructed all six
+   constants from the daemon's own usage.
+2. `adm/daemons/logind.lpc`'s very first per-connection banner line used
+   `socket_address(ob)` (sockets package efun, undefined on this driver)
+   to extract the connecting port -- broke EVERY connection attempt
+   under WASM. Switched to `query_ip_port(ob)`, already used elsewhere
+   in this same codebase.
+
+Also upgraded the admin wizlist entry from `fluffos (admin)` (seeded in
+the native pass above) to `fluffos (boss)` -- this lineage's
+`wiz_levels` ranks `(boss)` above `(admin)` as the actual top tier, and
+`securityd.lpc`'s `trusted_read`/`trusted_write["/"]` both include
+`(boss)`. Verified: `update /adm/daemons/securityd.lpc` succeeds as
+`fluffos` ("重新编译 ... ：成功！").
+
+LPC formatter run across all 10328 `.lpc`/`.h` files (10141 written).
+Blind-spot check found 2 files with the classic stray-`\ n`/unquoted-
+string corruption (`cmds/adm/hbless.lpc`, `d/city/diaoyuchi1.h`) and,
+via a same-text-despaced-matches-old-file scan across all 112
+formatter-touched files containing CJK-space-CJK sequences, 1 file with
+confirmed genuine re-spacing corruption (`d/player/fyue_room.lpc`); all
+3 reverted. The other 109 flagged files were pre-existing author
+spacing, unchanged by the diff. Post-formatter: clean boot, zero compile
+errors, registration and `(boss)` permission display both re-verified.
+
+## Status: WASM playable
+
+GitHub Pages packaging for this lib specifically is still deferred to a
+later batch pass; the WASM boot/gameplay/admin verification above is
+now complete.

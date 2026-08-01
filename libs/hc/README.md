@@ -16,12 +16,27 @@
 
 https://mudlibs.fluffos.info/hongchen/
 
+## WASM pass修复的 bug
+
+1. `include/restart.h` 在原始压缩包和转换后的源码里都是**真正的空文
+   件**（0 字节）——这是原始代码本身就缺失的内容，不是转换过程弄丢
+   的——导致 `adm/daemons/restartd.lpc` 用到的 `SHUTDOWN`/`REBOOT`/
+   `HALT`/`CALLOUT_INTERVAL`/`RESTART_INTERVAL` 全部未定义。已根据
+   `restartd.lpc` 自身的使用方式补全这六个常量的合理取值。
+2. `adm/daemons/logind.lpc` 每次连线最开头打印欢迎信息时用
+   `socket_address(ob)` 取连接端口——这是 sockets 包的 efun，这个驱
+   动没有实现——已改成这个驱动真正支持、代码库其他地方也在用的
+   `query_ip_port(ob)`。
+
 ## 管理员账号 / Admin account
 
 - **ID**: `fluffos`
 - **密码 / Password**: `Mud@2026`
 - **中文名 / Display name**: 浮浮
-- **权限 / Level**: `(admin)`，通过 `/adm/etc/wizlist` 授予。
+- **权限 / Level**: `(boss)`，通过 `/adm/etc/wizlist` 授予——这份档案
+  的 `wiz_levels` 把 `(boss)` 排在 `(admin)` 之上作为真正的最高权
+  限，且 `securityd.lpc` 的 `trusted_read`/`trusted_write["/"]` 都包
+  含 `(boss)`。
 
 > 警告：对外公开架设前请务必修改此密码。
 

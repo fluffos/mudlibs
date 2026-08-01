@@ -1,51 +1,50 @@
-string *k_force =({ 
+string *k_force = ({
 
-                        "linji-zhuang",
+  "linji-zhuang",
 
-                        "yunu-xinjing",
+  "yunu-xinjing",
 
-                        "xuantian-wuji",
+  "xuantian-wuji",
 
-                        "taiji-shengong",
+  "taiji-shengong",
 
-                        "yinyun-ziqi",
+  "yinyun-ziqi",
 });
-string *k_dodge =({ 
+string *k_dodge = ({
 
-                        "tiyunzong",
+  "tiyunzong",
 
-                        "shaolin-shenfa",
+  "shaolin-shenfa",
 
-                        "yunu-shenfa",
+  "yunu-shenfa",
 
-                        "kunlun-shenfa", 
-                        "xiaoyaoyou",
+  "kunlun-shenfa",
+  "xiaoyaoyou",
 
-                        "anying-fuxiang",
-});
-
-mapping *skill1=({
-
-/*cuff*/
-
-       (["t_skill" :              "meinu-quanfa",
-
-         "b_skill" :              "cuff",]),  
-/*strike*/
-
-        (["t_skill" :              "anran-xiaohunzhang",
-
-         "b_skill" :              "strike",]),          
-
-        (["t_skill" :              "kunlun-zhang",
-
-         "b_skill" :              "strike",]), 
-
-/*finger*/      
-
-        (["t_skill" :              "yizhi-chan",
-
-         "b_skill" :              "finger",]),
-  
+  "anying-fuxiang",
 });
 
+mapping *skill1 = ({
+
+  /*cuff*/
+
+  ([ "t_skill": "meinu-quanfa",
+
+    "b_skill": "cuff", ]),
+  /*strike*/
+
+  ([ "t_skill": "anran-xiaohunzhang",
+
+    "b_skill": "strike", ]),
+
+  ([ "t_skill": "kunlun-zhang",
+
+    "b_skill": "strike", ]),
+
+  /*finger*/
+
+  ([ "t_skill": "yizhi-chan",
+
+    "b_skill": "finger", ]),
+
+});

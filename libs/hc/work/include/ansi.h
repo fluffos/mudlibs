@@ -1,18 +1,17 @@
- 
 //  File    :  /include/ansi.h
 //  Creator :  Gothic@TMI-2  
 //
 //  The standard set of ANSI codes for mudlib use.
- 
+
 
 //added by ahxia, for redeclaration's sake.
 #ifndef ESC
 
 #define ESC ""
 #define CSI ESC + "["
- 
-                /*  Foreground Colors  */
- 
+
+/*  Foreground Colors  */
+
 #define BLK ESC+"[30m"          /* Black    */
 #define RED ESC+"[31m"          /* Red      */
 #define GRN ESC+"[32m"          /* Green    */
@@ -21,9 +20,9 @@
 #define MAG ESC+"[35m"          /* Magenta  */
 #define CYN ESC+"[36m"          /* Cyan     */
 #define WHT ESC+"[37m"          /* White    */
- 
-                /*   Hi Intensity Foreground Colors   */
- 
+
+/*   Hi Intensity Foreground Colors   */
+
 #define HIR ESC+"[1;31m"        /* Red      */
 #define HIG ESC+"[1;32m"        /* Green    */
 #define HIY ESC+"[1;33m"        /* Yellow   */
@@ -32,7 +31,7 @@
 #define HIC ESC+"[1;36m"        /* Cyan     */
 #define HIW ESC+"[1;37m"        /* White    */
 #define HBK ESC+"[1;30m"        /* Gray     */
-                /* High Intensity Background Colors  */
+/* High Intensity Background Colors  */
 #define HBRED ESC+"[41;1m"       /* Red      */
 #define HBGRN ESC+"[42;1m"       /* Green    */
 #define HBYEL ESC+"[43;1m"       /* Yellow   */
@@ -40,9 +39,9 @@
 #define HBMAG ESC+"[45;1m"       /* Magenta  */
 #define HBCYN ESC+"[46;1m"       /* Cyan     */
 #define HBWHT ESC+"[47;1m"       /* White    */
- 
-                /*  Background Colors  */
- 
+
+/*  Background Colors  */
+
 #define BBLK ESC+"[40m"          /* Black    */
 #define BRED ESC+"[41m"          /* Red      */
 #define BGRN ESC+"[42m"          /* Green    */
@@ -52,11 +51,11 @@
 #define BCYN ESC+"[46m"          /* Cyan     */
 // #define BWHT ESC+"[47m"          /* White    */
 #define NOR ESC+"[2;37;0m"      /* Puts everything back to normal */
- 
+
 /*  Additional ansi Esc codes added to ansi.h by Gothic  april 23,1993 */
 /* Note, these are Esc codes for VT100 terminals, and emmulators */
 /*       and they may not all work within the mud               */
- 
+
 #define BOLD ESC+"[1m"          /* Turn on bold mode */
 #define CLR ESC+"[2J"           /* Clear the screen  */
 #define HOME ESC+"[H"           /* Send cursor to home position */
@@ -75,54 +74,52 @@
 #define U ESC+"[4m"             /* Initialize underscore mode */
 #define REV ESC+"[7m"           /* Turns reverse video mode on */
 #define HIREV ESC+"[1,7m"       /* Hi intensity reverse video  */
- 
+
 //two ansi vs string convert functions
 //added by ahxia, Feb. 25, 2k1
 //convert string with color macro to ansi-string
-string str2ansi(string arg)
-{
-    if ( !arg ) return 0;
-    arg = replace_string(arg, "$BLK$", BLK);
-    arg = replace_string(arg, "$RED$", RED);
-    arg = replace_string(arg, "$GRN$", GRN);
-    arg = replace_string(arg, "$YEL$", YEL);
-    arg = replace_string(arg, "$BLU$", BLU);
-    arg = replace_string(arg, "$MAG$", MAG);
-    arg = replace_string(arg, "$CYN$", CYN);
-    arg = replace_string(arg, "$WHT$", WHT);
-    arg = replace_string(arg, "$HIR$", HIR);
-    arg = replace_string(arg, "$HIG$", HIG);
-    arg = replace_string(arg, "$HIY$", HIY);
-    arg = replace_string(arg, "$HIB$", HIB);
-    arg = replace_string(arg, "$HIM$", HIM);
-    arg = replace_string(arg, "$HIC$", HIC);
-    arg = replace_string(arg, "$HIW$", HIW);
-    arg = replace_string(arg, "$BLINK$", BLINK);
-    arg = replace_string(arg, "$NOR$", NOR);
-    return arg;
+string str2ansi(string arg) {
+  if (!arg) return 0;
+  arg = replace_string(arg, "$BLK$", BLK);
+  arg = replace_string(arg, "$RED$", RED);
+  arg = replace_string(arg, "$GRN$", GRN);
+  arg = replace_string(arg, "$YEL$", YEL);
+  arg = replace_string(arg, "$BLU$", BLU);
+  arg = replace_string(arg, "$MAG$", MAG);
+  arg = replace_string(arg, "$CYN$", CYN);
+  arg = replace_string(arg, "$WHT$", WHT);
+  arg = replace_string(arg, "$HIR$", HIR);
+  arg = replace_string(arg, "$HIG$", HIG);
+  arg = replace_string(arg, "$HIY$", HIY);
+  arg = replace_string(arg, "$HIB$", HIB);
+  arg = replace_string(arg, "$HIM$", HIM);
+  arg = replace_string(arg, "$HIC$", HIC);
+  arg = replace_string(arg, "$HIW$", HIW);
+  arg = replace_string(arg, "$BLINK$", BLINK);
+  arg = replace_string(arg, "$NOR$", NOR);
+  return arg;
 }
 //convert ansi-string to non-ansi-string
-string ansi2str(string arg)
-{
-    if ( !arg ) return 0;
-    arg = replace_string(arg, BLK, "");
-    arg = replace_string(arg, RED, "");
-    arg = replace_string(arg, GRN, "");
-    arg = replace_string(arg, YEL, "");
-    arg = replace_string(arg, BLU, "");
-    arg = replace_string(arg, MAG, "");
-    arg = replace_string(arg, CYN, "");
-    arg = replace_string(arg, WHT, "");
-    arg = replace_string(arg, HIR, "");
-    arg = replace_string(arg, HIG, "");
-    arg = replace_string(arg, HIY, "");
-    arg = replace_string(arg, HIB, "");
-    arg = replace_string(arg, HIM, "");
-    arg = replace_string(arg, HIC, "");
-    arg = replace_string(arg, HIW, "");
-    arg = replace_string(arg, BLINK, "");
-    arg = replace_string(arg, NOR, "");
-    return arg;
+string ansi2str(string arg) {
+  if (!arg) return 0;
+  arg = replace_string(arg, BLK, "");
+  arg = replace_string(arg, RED, "");
+  arg = replace_string(arg, GRN, "");
+  arg = replace_string(arg, YEL, "");
+  arg = replace_string(arg, BLU, "");
+  arg = replace_string(arg, MAG, "");
+  arg = replace_string(arg, CYN, "");
+  arg = replace_string(arg, WHT, "");
+  arg = replace_string(arg, HIR, "");
+  arg = replace_string(arg, HIG, "");
+  arg = replace_string(arg, HIY, "");
+  arg = replace_string(arg, HIB, "");
+  arg = replace_string(arg, HIM, "");
+  arg = replace_string(arg, HIC, "");
+  arg = replace_string(arg, HIW, "");
+  arg = replace_string(arg, BLINK, "");
+  arg = replace_string(arg, NOR, "");
+  return arg;
 }
 
 #endif

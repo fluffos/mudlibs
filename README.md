@@ -246,7 +246,7 @@ classes it's found.
 | 063 | `aoxiangtianji` | 翱翔天际 | `翱翔天际utf8.7z` | 40101 | native-boot verified, WASM pending |
 | 064 | `yhyxcs` | 银河英雄传说 | `银河英雄传说.zip` | 40104 | native-boot verified, WASM pending |
 | 065 | `ldtx` | 鹿鼎天下 (in-game: 雄霸天下『西安站』) | `鹿鼎天下.rar` | 40105 | native-boot verified, WASM pending |
-| 066 | `hc` | 红尘 (in-game: 红尘录) | `红尘.rar` | 40107 | native-boot verified, WASM pending |
+| 066 | `hc` | 红尘 (in-game: 红尘录) | `红尘.rar` | 40107 | WASM playable |
 | 067 | `cctx` | 驰骋天下 | `驰骋天下.rar` | 40161 | native-boot verified, WASM pending |
 | 068 | `dfgsiiv13b` | 东方故事IIv1.3b | `东方故事IIv1.3b.tar.gz` | 40144 | native-boot verified, WASM pending |
 | 069 | `dfgsitlzjwin` | 东方故事I屠龙战记WIN98版 | `东方故事I屠龙战记WIN98版.rar` | 40111 | native-boot verified, WASM pending |

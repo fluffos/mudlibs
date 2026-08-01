@@ -1,4 +1,3 @@
-
 #define V_FAIL 0
 // minimum votes
 #define V_MIN 3
