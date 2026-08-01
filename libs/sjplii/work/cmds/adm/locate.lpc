@@ -2,49 +2,46 @@
 // overview.c
 #include <ansi.h>
 inherit F_CLEAN_UP;
-int main(object me, string arg)
-{
-        object *ob_list,ob,room;
-        int i;
-        string msg ="",where = " 在 ";
-        ob_list = children(TASK_OB);
-        if (!arg){
-                for(i=0; i< sizeof(ob_list); i++){
-                        msg += sprintf("%s(%s)",ob_list[i]->query("name"),ob_list[i]->query("id"));
-                        if (environment(ob_list[i])){
-                                if (!stringp(where = environment(ob_list[i])->query("short")))
-                                        where = environment(ob_list[i])->query("name");
-                                where += file_name(environment(ob_list[i]));
-                        }else where += "无\n";
-                        msg += "   " + where + "\n";
-                }
-                me->start_more(msg);
-                return 1;
+int main(object me, string arg) {
+  object *ob_list, ob, room;
+  int i;
+  string msg = "", where = " 在 ";
+  ob_list = children(TASK_OB);
+  if (!arg) {
+    for (i = 0; i < sizeof(ob_list); i++) {
+      msg += sprintf("%s(%s)", ob_list[i]->query("name"), ob_list[i]->query("id"));
+      if (environment(ob_list[i])) {
+        if (!stringp(where = environment(ob_list[i])->query("short")))
+          where = environment(ob_list[i])->query("name");
+        where += file_name(environment(ob_list[i]));
+      } else where += "无\n";
+      msg += "   " + where + "\n";
+    }
+    me->start_more(msg);
+    return 1;
+  } else {
+    for (i = 0; i < sizeof(ob_list); i++) {
+      if (ob_list[i]->query("id") == arg) {
+        ob = ob_list[i];
+        if (!ob->query("has_refresh"))
+          return notify_fail("你凝气聚神，捻指一算，结果脑子一片混乱，什么也没算出来。\n");
+        room = environment(ob);
+        while (room) {
+          if (function_exists("create_door", room))
+            break;
+          else room = environment(room);
         }
-        else {
-        for(i=0; i<sizeof(ob_list); i++) {
-                if (ob_list[i]->query("id")==arg){
-                        ob = ob_list[i];
-                        if (!ob->query("has_refresh"))
-                                return notify_fail("你凝气聚神，捻指一算，结果脑子一片混乱，什么也没算出来。\n");
-                        room = environment(ob);
-                        while(room)
-                        {
-                                if ( function_exists("create_door",room) )
-                                        break;
-                                else room = environment(room);
-                        }
-                        if (!room) return notify_fail("你凝气聚神，捻指一算，结果脑子一片混乱，什么也没算出来。\n");
-                        
-                        msg = "结果：" + ob_list[i]->query("id") + " 在" + room->query("short") + " " + file_name(room);
-                        write(msg + "\n");
-                        return 1;
-                }
-        }
-}
+        if (!room) return notify_fail("你凝气聚神，捻指一算，结果脑子一片混乱，什么也没算出来。\n");
 
-        write("结果：无\n");
+        msg = "结果：" + ob_list[i]->query("id") + " 在" + room->query("short") + " " + file_name(room);
+        write(msg + "\n");
         return 1;
+      }
+    }
+  }
+
+  write("结果：无\n");
+  return 1;
 }
 
 
@@ -197,220 +194,259 @@ inherit F_CLEAN_UP;
 string display_attr(int gift, int value);
 string date_string(int date);
 string tribar_graph(int val, int eff, int max, string color);
-varargs string get_status(string id,string sname);
+varargs string get_status(string id, string sname);
 
 void create() { seteuid(ROOT_UID); }
 
-int main(object me, string arg)
-{
-        object ob;
-        mapping my,*children;
-        string status,class_name;
-        string line, str, skill_type, parry_type;
-        object weapon;
-        int attack_points, dodge_points, parry_points;
-        int i;
+int main(object me, string arg) {
+  object ob;
+  mapping my, *children;
+  string status, class_name;
+  string line, str, skill_type, parry_type;
+  object weapon;
+  int attack_points, dodge_points, parry_points;
+  int i;
 
-        seteuid(getuid(me));
+  seteuid(getuid(me));
 
-        if(!arg)
-                ob = me;
-        else if (wizardp(me)) {
-                ob = present(arg, environment(me));
-                if (!ob) ob = find_player(arg);
-                if (!ob) ob = find_living(arg);
-                if (!ob) return notify_fail("你要察看谁的状态？\n");
-        } else
-                return notify_fail("只有管理员能察看别人的状态。\n");
+  if (!arg)
+    ob = me;
+  else if (wizardp(me)) {
+    ob = present(arg, environment(me));
+    if (!ob) ob = find_player(arg);
+    if (!ob) ob = find_living(arg);
+    if (!ob) return notify_fail("你要察看谁的状态？\n");
+  } else
+    return notify_fail("只有管理员能察看别人的状态。\n");
 
-        my = ob->query_entire_dbase();
-        line = HIR"\n≡"HIY"──"HIC" 个人资料 "HIY"───────────────────────"HIR"≡\n"NOR;
-        line += sprintf(HIY"\n　%s(%s) \n"NOR,ob->name(1),  capitalize(ob->query("id")));
-        
-        line += sprintf("　你是一%s%s岁的%s%s，出生于%s。\n",
-                ob->query("unit"),
-                chinese_number(ob->query("age")), 
-                ob->query("gender"),
-                ob->query("race"),
-                CHINESE_D->chinese_date(((int)ob->query("birthday") - 14*365*24*60) * 60) );
-        
-        if (ob->query("race") == "人类")
-        line += "　你出生在一个"+ LOGIN_D->family_level(ob->query("parents/gifts")) + "的" + replace_string(ob->query("national"),"出生于","") +"家庭中，\n";
-        
-        if (mapp(my["parents"])){
-                if (my["parents"]["f_player"])
-                        status = get_status(my["parents"]["f_id"],my["parents"]["f_name"]);
-                else status = HIW" 非玩家"NOR;
-                if (my["parents"]["f_id"] && my["parents"]["f_name"])
-                        line += sprintf("　你的父亲是：%s(%s) － %s。\n",my["parents"]["f_name"],capitalize(my["parents"]["f_id"]),status);
-                
-                if (my["parents"]["m_player"])
-                        status = get_status(my["parents"]["m_id"],my["parents"]["m_name"]);
-                else status = HIW" 非玩家"NOR;
-                if (my["parents"]["m_id"] && my["parents"]["m_name"])
-                        line += sprintf("　你的母亲是：%s(%s) － %s。\n",my["parents"]["m_name"],capitalize(my["parents"]["m_id"]),status);
-                        
-        }else line += "　你的父母是一般的普通百姓。\n";
-        
-        if (mapp(my["marry"])){
-                if (my["marry"]["player"])
-                        status = get_status(my["marry"]["id"],my["marry"]["name"]);
-                else status = HIW" 非玩家"NOR;
-                if (my["marry"]["id"] && my["marry"]["name"])
-                        (ob->query("gender")=="男性")?line += sprintf("　你的妻子是：%s(%s) － %s。\n",my["marry"]["name"],capitalize(my["marry"]["id"]),status)
-                        :line += sprintf("　你的夫君是：%s(%s) － %s。\n",my["marry"]["name"],capitalize(my["marry"]["id"]),status);
-        }else line += "　你目前尚未婚配。\n";
-        
-        if (arrayp(children = my["child"]) && sizeof(children)){
-                for(i=0; i< sizeof(children); i++ ){
-                        if (children[i]["player"])
-                                status = get_status(children[i]["id"],children[i]["name"]);
-                        else status = HIW" 非玩家"NOR;
-                        if (children[i]["id"] && children[i]["name"])
-                                i?line += sprintf("　　　　　　：%s(%s) － %s。\n",children[i]["name"],capitalize(children[i]["id"]),status)
-                                :line += sprintf("　你的子女是：%s(%s) － %s。\n",children[i]["name"],capitalize(children[i]["id"]),status);
-                }
-        }else line += "　你目前尚无子女。\n";
-        
-        line += sprintf("　你目前拥有"HIR" %d "NOR"所私人房间，",ob->query("created_room"));
-        if (mapp( ob->query("pet")))
-                line += sprintf("你的宠物名叫%s。\n", ob->query("pet/name"));
-        else line += "你还没有领养宠物。\n";
-        
-        line += sprintf(
-                     CYN"\n　才智：%s　　　体质：%s　　　灵性：%s\n"
-                        "  力量：%s　　　韧性：%s　　　耐力：%s\n"
-                        "　勇气：%s　　　速度：%s　　　定力：%s\n"
-                        "　运气：%s　　　气量：%s　　　魅力：%s\n"NOR
-                        "　参数点："HIM"%d\n\n"NOR,
-                        display_attr(my["int"], ob->query_int()),
-                        display_attr(my["con"], ob->query_con()),
-                        display_attr(my["spi"], ob->query_spi()),
-                        display_attr(my["str"], ob->query_str()),
-                        display_attr(my["fle"], ob->query_fle()),
-                        display_attr(my["dur"], ob->query_dur()),
-                        display_attr(my["cor"], ob->query_cor()),
-                        display_attr(my["agi"], ob->query_agi()),
-                        display_attr(my["cps"], ob->query_cps()),
-                        display_attr(my["kar"], ob->query_kar()),
-                        display_attr(my["tol"], ob->query_tol()),
-                        display_attr(my["per"], ob->query_per()),
-                        ob->query("gift_points") - ob->query("used_gift_points")
-                        );      
-        
-        if( mapp(my["family"]) ) {
-                if( my["family"]["family_name"] )
-                        line += sprintf("　你的门派是：%s。\n",my["family"]["family_name"] );
-                if (my["family"]["player"])
-                        status = get_status(my["family"]["master_id"],my["family"]["master_name"]);
-                else status = HIW" 非玩家"NOR;
-                if (my["family"]["master_id"] && my["family"]["master_name"])
-                        line += sprintf("　你的师父是：%s(%s) － %s。\n",my["family"]["master_name"],capitalize(my["family"]["master_id"]),status,);
-        }else line += "　你目前尚未拜师。\n";
-        
-        switch(ob->query("class")){
-        case "captor":
-                class_name = "朝廷邢部";
-                break;
-        case "soldiers":
-                class_name = "朝廷兵部";
-                break;
-        case "official":
-                class_name = "朝廷吏部";
-                break;
-        case "union":
-                class_name = "五派联盟";
-                break;
-        case "mojiao":
-                class_name = "魔教";
-                break;
-        case "youming":
-                class_name = "幽明教";
-                break;
-        case "egui" :
-                class_name = "恶鬼帮";
-                break;
-        case "summoner" :
-                class_name = "百兽门";
-                break;
-        case "lama" :
-                class_name = "喇嘛教";
-                break;
-        case "taoist":
-                class_name = "茅山派";
-                break;
-        default : 
-                class_name = "普通百姓";
-                break;
-        }
-                
-        line += "　你目前的帮派或者职业是： "HIR + class_name + NOR" 。\n";
-        line += "　你目前共完成了"HIY + chinese_number(ob->query("class_quest")) +NOR"件帮派任务，"HIY+ chinese_number(ob->query("common_quest")) +NOR"件公共任务。\n\n";
-        
-        line += "　目前你的帮派信赖度是： "HIY + ob->query("trust") + NOR" 。\n";
-        line += "　目前你的银行存款共有： "HIY + ob->query("deposit")/100 + NOR" 两白银。\n";
-        
-        if( objectp(weapon = ob->query_temp("weapon")) )
-        {
-                skill_type = weapon->query("skill_type");
-                parry_type = "parry";
-        }       
-        else
-        {
-                skill_type = "unarmed";
-                parry_type = "unarmed";
-        }
-        attack_points = COMBAT_D->skill_power(ob, skill_type, SKILL_USAGE_ATTACK);
-        parry_points = COMBAT_D->skill_power(ob, parry_type, SKILL_USAGE_DEFENSE);
-        dodge_points = COMBAT_D->skill_power(ob, "dodge", SKILL_USAGE_DEFENSE);
-        
-        line +="\n　你目前的战斗能力：\n";
-        line += sprintf(HIR"　攻击力： %-13d" HIG "　　　防御力： %-13d\n" NOR,
-                attack_points + 1, (dodge_points/2 + (weapon? parry_points: (parry_points/2))) + 1);
-        line += sprintf(HIR"　杀伤力： %-13d" HIG "　　　保护力： %-13d\n" NOR,
-                ob->query_temp("apply/damage"),ob->query_temp("apply/armor"));
-                
-        if (mapp(my["spec_skill"]) && my["spec_skill"]["show"])
-                line += sprintf(YEL"　先天绝技： %s(%s)\n　效果：%s。\n"NOR,to_chinese(my["spec_skill"]["name"]),capitalize(my["spec_skill"]["name"]),my["spec_skill"]["effect"]);
-                
-        else 
-                line += YEL"　先天绝技：无。\n"NOR;
-                
-        line += sprintf("\n　你到目前为止总共杀了"HIY" %d "NOR"个人，其中有"HIR" %d "NOR"个是其他玩家。\n",my["MKS"] + my["PKS"], my["PKS"]);
-        
-        line += HIR"≡"HIY"──────────────────────────────"HIR"≡\n\n"NOR;
-        write(line);
-        return 1;
+  my = ob->query_entire_dbase();
+  line = HIR "\n≡" HIY "──" HIC " 个人资料 " HIY "───────────────────────" HIR "≡\n" NOR;
+  line += sprintf(HIY "\n　%s(%s) \n" NOR, ob->name(1), capitalize(ob->query("id")));
+
+  line += sprintf("　你是一%s%s岁的%s%s，出生于%s。\n",
+    ob->query("unit"),
+    chinese_number(ob->query("age")),
+    ob->query("gender"),
+    ob->query("race"),
+    CHINESE_D->chinese_date(((int)ob->query("birthday") - 14 * 365 * 24 * 60) * 60));
+
+  if (ob->query("race") == "人类")
+    line += "　你出生在一个" + LOGIN_D->family_level(ob->query("parents/gifts")) + "的" + replace_string(
+      ob->query("national"),
+      "出生于",
+      ""
+    ) + "家庭中，\n";
+
+  if (mapp(my["parents"])) {
+    if (my["parents"]["f_player"])
+      status = get_status(my["parents"]["f_id"], my["parents"]["f_name"]);
+    else status = HIW " 非玩家" NOR;
+    if (my["parents"]["f_id"] && my["parents"]["f_name"])
+      line += sprintf(
+        "　你的父亲是：%s(%s) － %s。\n",
+        my["parents"]["f_name"],
+        capitalize(my["parents"]["f_id"]),
+        status
+      );
+
+    if (my["parents"]["m_player"])
+      status = get_status(my["parents"]["m_id"], my["parents"]["m_name"]);
+    else status = HIW " 非玩家" NOR;
+    if (my["parents"]["m_id"] && my["parents"]["m_name"])
+      line += sprintf(
+        "　你的母亲是：%s(%s) － %s。\n",
+        my["parents"]["m_name"],
+        capitalize(my["parents"]["m_id"]),
+        status
+      );
+
+  } else line += "　你的父母是一般的普通百姓。\n";
+
+  if (mapp(my["marry"])) {
+    if (my["marry"]["player"])
+      status = get_status(my["marry"]["id"], my["marry"]["name"]);
+    else status = HIW " 非玩家" NOR;
+    if (my["marry"]["id"] && my["marry"]["name"])
+      (ob->query("gender") == "男性") ? line += sprintf(
+        "　你的妻子是：%s(%s) － %s。\n",
+        my["marry"]["name"],
+        capitalize(my["marry"]["id"]),
+        status
+      ) : line += sprintf(
+        "　你的夫君是：%s(%s) － %s。\n",
+        my["marry"]["name"],
+        capitalize(my["marry"]["id"]),
+        status
+      );
+  } else line += "　你目前尚未婚配。\n";
+
+  if (arrayp(children = my["child"]) && sizeof(children)) {
+    for (i = 0; i < sizeof(children); i++) {
+      if (children[i]["player"])
+        status = get_status(children[i]["id"], children[i]["name"]);
+      else status = HIW " 非玩家" NOR;
+      if (children[i]["id"] && children[i]["name"])
+        i ? line += sprintf(
+          "　　　　　　：%s(%s) － %s。\n",
+          children[i]["name"],
+          capitalize(children[i]["id"]),
+          status
+        ) : line += sprintf(
+          "　你的子女是：%s(%s) － %s。\n",
+          children[i]["name"],
+          capitalize(children[i]["id"]),
+          status
+        );
+    }
+  } else line += "　你目前尚无子女。\n";
+
+  line += sprintf("　你目前拥有" HIR " %d " NOR "所私人房间，", ob->query("created_room"));
+  if (mapp(ob->query("pet")))
+    line += sprintf("你的宠物名叫%s。\n", ob->query("pet/name"));
+  else line += "你还没有领养宠物。\n";
+
+  line += sprintf(
+    CYN "\n　才智：%s　　　体质：%s　　　灵性：%s\n"
+    "  力量：%s　　　韧性：%s　　　耐力：%s\n"
+    "　勇气：%s　　　速度：%s　　　定力：%s\n"
+    "　运气：%s　　　气量：%s　　　魅力：%s\n" NOR
+    "　参数点：" HIM "%d\n\n" NOR,
+    display_attr(my["int"], ob->query_int()),
+    display_attr(my["con"], ob->query_con()),
+    display_attr(my["spi"], ob->query_spi()),
+    display_attr(my["str"], ob->query_str()),
+    display_attr(my["fle"], ob->query_fle()),
+    display_attr(my["dur"], ob->query_dur()),
+    display_attr(my["cor"], ob->query_cor()),
+    display_attr(my["agi"], ob->query_agi()),
+    display_attr(my["cps"], ob->query_cps()),
+    display_attr(my["kar"], ob->query_kar()),
+    display_attr(my["tol"], ob->query_tol()),
+    display_attr(my["per"], ob->query_per()),
+    ob->query("gift_points") - ob->query("used_gift_points")
+  );
+
+  if (mapp(my["family"])) {
+    if (my["family"]["family_name"])
+      line += sprintf("　你的门派是：%s。\n", my["family"]["family_name"]);
+    if (my["family"]["player"])
+      status = get_status(my["family"]["master_id"], my["family"]["master_name"]);
+    else status = HIW " 非玩家" NOR;
+    if (my["family"]["master_id"] && my["family"]["master_name"])
+      line += sprintf(
+        "　你的师父是：%s(%s) － %s。\n",
+        my["family"]["master_name"],
+        capitalize(my["family"]["master_id"]),
+        status,
+      );
+  } else line += "　你目前尚未拜师。\n";
+
+  switch (ob->query("class")) {
+    case "captor":
+      class_name = "朝廷邢部";
+      break;
+    case "soldiers":
+      class_name = "朝廷兵部";
+      break;
+    case "official":
+      class_name = "朝廷吏部";
+      break;
+    case "union":
+      class_name = "五派联盟";
+      break;
+    case "mojiao":
+      class_name = "魔教";
+      break;
+    case "youming":
+      class_name = "幽明教";
+      break;
+    case "egui":
+      class_name = "恶鬼帮";
+      break;
+    case "summoner":
+      class_name = "百兽门";
+      break;
+    case "lama":
+      class_name = "喇嘛教";
+      break;
+    case "taoist":
+      class_name = "茅山派";
+      break;
+    default:
+      class_name = "普通百姓";
+      break;
+  }
+
+  line += "　你目前的帮派或者职业是： " HIR + class_name + NOR " 。\n";
+  line += "　你目前共完成了" HIY + chinese_number(ob->query("class_quest")) + NOR "件帮派任务，" HIY + chinese_number(ob->query("common_quest")) + NOR "件公共任务。\n\n";
+
+  line += "　目前你的帮派信赖度是： " HIY + ob->query("trust") + NOR " 。\n";
+  line += "　目前你的银行存款共有： " HIY + ob->query("deposit") / 100 + NOR " 两白银。\n";
+
+  if (objectp(weapon = ob->query_temp("weapon"))) {
+    skill_type = weapon->query("skill_type");
+    parry_type = "parry";
+  } else {
+    skill_type = "unarmed";
+    parry_type = "unarmed";
+  }
+  attack_points = COMBAT_D->skill_power(ob, skill_type, SKILL_USAGE_ATTACK);
+  parry_points = COMBAT_D->skill_power(ob, parry_type, SKILL_USAGE_DEFENSE);
+  dodge_points = COMBAT_D->skill_power(ob, "dodge", SKILL_USAGE_DEFENSE);
+
+  line += "\n　你目前的战斗能力：\n";
+  line += sprintf(HIR "　攻击力： %-13d" HIG "　　　防御力： %-13d\n" NOR,
+    attack_points + 1, (dodge_points / 2 + (weapon ? parry_points : (parry_points / 2))) + 1);
+  line += sprintf(HIR "　杀伤力： %-13d" HIG "　　　保护力： %-13d\n" NOR,
+    ob->query_temp("apply/damage"), ob->query_temp("apply/armor"));
+
+  if (mapp(my["spec_skill"]) && my["spec_skill"]["show"])
+    line += sprintf(
+      YEL "　先天绝技： %s(%s)\n　效果：%s。\n" NOR,
+      to_chinese(my["spec_skill"]["name"]),
+      capitalize(my["spec_skill"]["name"]),
+      my["spec_skill"]["effect"]
+    );
+
+  else
+    line += YEL "　先天绝技：无。\n" NOR;
+
+  line += sprintf(
+    "\n　你到目前为止总共杀了" HIY " %d " NOR "个人，其中有" HIR " %d " NOR "个是其他玩家。\n",
+    my["MKS"] + my["PKS"],
+    my["PKS"]
+  );
+
+  line += HIR "≡" HIY "──────────────────────────────" HIR "≡\n\n" NOR;
+  write(line);
+  return 1;
 }
 
-string display_attr(int gift, int value)
-{
-        if( value > gift ) return sprintf( HIY "%3d /%3d" NOR + CYN, value,gift );
-        else if( value < gift ) return sprintf( HIR "%3d /%3d" NOR + CYN, value,gift );
-        else return sprintf("%3d /%3d", value,gift);
+string display_attr(int gift, int value) {
+  if (value > gift) return sprintf(HIY "%3d /%3d" NOR + CYN, value, gift);
+  else if (value < gift) return sprintf(HIR "%3d /%3d" NOR + CYN, value, gift);
+  else return sprintf("%3d /%3d", value, gift);
 }
 
 
 //used for player
-varargs string get_status(string id,string sname)
-{
-        object obj,body;
-        string online;
-        if (!id || !sname ) return "未知";
-        if (!objectp(obj = FINGER_D->acquire_login_ob(id)) )
-                online = HIW" 已故去"NOR;
-        else if( objectp(body = find_player(id)) && geteuid(body)== id)
-                online = HIY" 在线中"NOR;
-        else    {
-                online = HIR" 离线中"NOR;
-                destruct(obj);
-        }
-        return online;
+varargs string get_status(string id, string sname) {
+  object obj, body;
+  string online;
+  if (!id || !sname) return "未知";
+  if (!objectp(obj = FINGER_D->acquire_login_ob(id)))
+    online = HIW " 已故去" NOR;
+  else if (objectp(body = find_player(id)) && geteuid(body) == id)
+    online = HIY " 在线中" NOR;
+  else {
+    online = HIR " 离线中" NOR;
+    destruct(obj);
+  }
+  return online;
 }
 
-int help(object me)
-{
-        write(@HELP
+int help(object me) {
+  write(@HELP
 指令格式 : score
 
 这个指令可以显示你的基本资料：
@@ -447,7 +483,7 @@ int help(object me)
 
 see also : hp
 HELP
-    );
-    return 1;
+  );
+  return 1;
 }
-> 
+>

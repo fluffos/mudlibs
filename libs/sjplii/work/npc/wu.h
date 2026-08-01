@@ -14,13 +14,13 @@ string *categories = ({
   "天下第三",
   "天下第四",
   "天下第五",
- });
+});
 
 string *positions = ({
   "大宗师",
   "大英雄",
   "大高手",
- });
+});
 
 int *limits = ({
   5000000,
@@ -28,36 +28,31 @@ int *limits = ({
   1000000,
   800000,
   600000,
- });
+});
 
 string *rooms = ({
   "b",
   "a",
   "c",
- });
+});
 
-int get_category_int ();
-int get_position_int ();
+int get_category_int();
+int get_position_int();
 
-string get_position_str ()
-{
-  return chinese_number(get_position_int ());
+string get_position_str() {
+  return chinese_number(get_position_int());
 }
 
-string get_honor_str ()
-{
-  return categories[get_category_int()-1]+
-         positions[get_position_int()-1];
+string get_honor_str() {
+  return categories[get_category_int() - 1] + positions[get_position_int() - 1];
 }
 
-string get_respect_str ()
-{
-  return get_honor_str ();
+string get_respect_str() {
+  return get_honor_str();
 }
 
-void reset_me (object me)
-{
-/*
+void reset_me(object me) {
+  /*
   int i;
   object *inv;
   mapping skill_status, map_status;
@@ -136,8 +131,7 @@ void reset_me (object me)
 */
 }
 
-int save_record(object me, object ob)
-{
+int save_record(object me, object ob) {
   object *inv;
   mapping hp_status, skill_status, map_status;
   string *skillnames, *mapnames;
@@ -151,87 +145,83 @@ int save_record(object me, object ob)
   me->set("int", hp_status["int"]);
   me->set("age", hp_status["age"]);
 
-  me->set("max_gin",     hp_status["max_gin"]);
-  me->set("eff_gin",     hp_status["eff_gin"]);
-  me->set("gin",         hp_status["gin"]);
-  me->set("max_kee",     hp_status["max_kee"]);
-  me->set("eff_kee",     hp_status["eff_kee"]);
-  me->set("kee",         hp_status["kee"]);
-  me->set("max_sen",     hp_status["max_sen"]);
-  me->set("eff_sen",     hp_status["eff_sen"]);
-  me->set("sen",         hp_status["sen"]);
-  me->set("max_force",   hp_status["max_force"]);
-  me->set("force",       hp_status["force"]);
-  me->set("max_mana",    hp_status["max_mana"]);
-  me->set("mana",        hp_status["mana"]);
+  me->set("max_gin", hp_status["max_gin"]);
+  me->set("eff_gin", hp_status["eff_gin"]);
+  me->set("gin", hp_status["gin"]);
+  me->set("max_kee", hp_status["max_kee"]);
+  me->set("eff_kee", hp_status["eff_kee"]);
+  me->set("kee", hp_status["kee"]);
+  me->set("max_sen", hp_status["max_sen"]);
+  me->set("eff_sen", hp_status["eff_sen"]);
+  me->set("sen", hp_status["sen"]);
+  me->set("max_force", hp_status["max_force"]);
+  me->set("force", hp_status["force"]);
+  me->set("max_mana", hp_status["max_mana"]);
+  me->set("mana", hp_status["mana"]);
   //me->set("force_factor",hp_status["force_factor"]);
-  me->set("gender",      hp_status["gender"]);
-  me->set("combat_exp",  hp_status["combat_exp"]);
+  me->set("gender", hp_status["gender"]);
+  me->set("combat_exp", hp_status["combat_exp"]);
 
   me->set("eff_gin", me->query("max_gin"));
-  me->set("gin",     me->query("max_gin"));
+  me->set("gin", me->query("max_gin"));
   me->set("eff_kee", me->query("max_kee"));
-  me->set("kee",     me->query("max_kee"));
+  me->set("kee", me->query("max_kee"));
   me->set("eff_sen", me->query("max_sen"));
-  me->set("sen",     me->query("max_sen"));
-  me->set("force",   me->query("max_force")*2);
-  me->set("mana",    me->query("max_mana")*2);
+  me->set("sen", me->query("max_sen"));
+  me->set("force", me->query("max_force") * 2);
+  me->set("mana", me->query("max_mana") * 2);
 
   skill_status = me->query_skills();
-  if ( mapp(skill_status) )
-  {
-    skillnames  = keys(skill_status);
+  if (mapp(skill_status)) {
+    skillnames = keys(skill_status);
 
-    for(i=0; i<sizeof(skillnames); i++) {
+    for (i = 0; i < sizeof(skillnames); i++) {
       me->delete_skill(skillnames[i]);
     }
   }
 
   skill_status = ob->query_skills();
-  if ( mapp(skill_status) )
-  {
-    skillnames  = keys(skill_status);
+  if (mapp(skill_status)) {
+    skillnames = keys(skill_status);
 
-    for(i=0; i<sizeof(skillnames); i++) {
+    for (i = 0; i < sizeof(skillnames); i++) {
       me->set_skill(skillnames[i], skill_status[skillnames[i]]);
     }
   }
-  
+
   // increase npc's enforce by 50%, as players have more options, e.g.
   // powerup, etc.
-  me->set("force_factor",ob->query_skill("force")*3/4);
+  me->set("force_factor", ob->query_skill("force") * 3 / 4);
 
   reset_eval_cost();
-  if (! me->query("new_player"))
-  {
+  if (!me->query("new_player")) {
     me->save();
     reset_eval_cost();
     return 1;
   }
 
-  me->set("new_player",0);
+  me->set("new_player", 0);
 
-  if ( mapp(map_status = me->query_skill_map()) ) {
+  if (mapp(map_status = me->query_skill_map())) {
     mapnames = keys(map_status);
 
-    for(i=0; i<sizeof(mapnames); i++) {
+    for (i = 0; i < sizeof(mapnames); i++) {
       me->map_skill(mapnames[i]);
     }
   }
 
   map_status = ob->query_skill_map();
-  if ( mapp(map_status) ) 
-  {
-    mapnames  = keys(map_status);
+  if (mapp(map_status)) {
+    mapnames = keys(map_status);
 
-    for(i=0; i<sizeof(mapnames); i++) {
+    for (i = 0; i < sizeof(mapnames); i++) {
       me->map_skill(mapnames[i], map_status[mapnames[i]]);
     }
   }
-  
+
   inv = all_inventory(me);
-  for(i=0; i<sizeof(inv); i++) {
-	 destruct(inv[i]);
+  for (i = 0; i < sizeof(inv); i++) {
+    destruct(inv[i]);
   }
 
   // save once here, an external bug might stop the following
@@ -242,31 +232,27 @@ int save_record(object me, object ob)
   weapon_cnt = 0;
   armor_cnt = 0;
   inv = all_inventory(ob);
-  for(i=0; i<sizeof(inv); i++) {
-    if ( !inv[i]->query_unique() && inv[i]->query("skill_type") &&
-        inv[i]->query("equipped") && !weapon_cnt ) {
+  for (i = 0; i < sizeof(inv); i++) {
+    if (!inv[i]->query_unique() && inv[i]->query("skill_type") &&
+      inv[i]->query("equipped") && !weapon_cnt) {
       object obj = new(base_name(inv[i]));
-      if (obj)
-      {
-        if(obj->move(me)) // mon 8/13/97
+      if (obj) {
+        if (obj->move(me))  // mon 8/13/97
           obj->wield();
       }
       me->set("weapon", base_name(inv[i]));
       weapon_cnt = 1;
-    }
-    else if ( !inv[i]->query_unique() && !inv[i]->query("skill_type") && 
-        inv[i]->query("equipped") && !armor_cnt ) {
+    } else if (!inv[i]->query_unique() && !inv[i]->query("skill_type") &&
+      inv[i]->query("equipped") && !armor_cnt) {
       object obj = new(base_name(inv[i]));
-      if (obj)
-      {
-        if(obj->move(me))
+      if (obj) {
+        if (obj->move(me))
           obj->wear();   //mon 8/13/97
       }
       me->set("armor", base_name(inv[i]));
       armor_cnt = 1;
-    }
-	else if( weapon_cnt && armor_cnt )
-                 break;
+    } else if (weapon_cnt && armor_cnt)
+      break;
   }
 
   me->setup();
@@ -276,40 +262,33 @@ int save_record(object me, object ob)
   return 1;
 }
 
-int convert_identity (object me, object ob)
-{
+int convert_identity(object me, object ob) {
   reset_eval_cost();
   me->reset_me(me);
-  if (ob->query("id") == "wulin renshi")
-  {
+  if (ob->query("id") == "wulin renshi") {
     string current_player = ob->query("current_player");
 
-    me->set("current_player",current_player);
-    if (! current_player ||
-        current_player == "none of us")
-    {
+    me->set("current_player", current_player);
+    if (!current_player ||
+      current_player == "none of us") {
       //me->set("short",me->get_honor_str()+"("+capitalize(me->query("id"))+")");
       me->save();
       return 1;
+    } else {
+      me->set("name", ob->query("name"));
+      me->set("gender", ob->query("gender"));
+      me->set("nickname", ob->query("nickname"));
+      me->set("short", me->query("name") + "(" + capitalize(me->query("id")) + ")");
     }
-    else
-    {
-      me->set("name", ob->query("name") );
-      me->set("gender", ob->query("gender") );
-      me->set("nickname", ob->query("nickname") );
-      me->set("short",me->query("name")+"("+capitalize(me->query("id"))+")");
-    }
-  }
-  else
-  {
-    me->set("name", ob->query("name") );
-    me->set("gender", ob->query("gender") );
-      me->set("nickname", ob->query("nickname") );
-    me->set("current_player",ob->query("id"));
-    me->set("short",me->query("name")+"("+capitalize(me->query("id"))+")");
+  } else {
+    me->set("name", ob->query("name"));
+    me->set("gender", ob->query("gender"));
+    me->set("nickname", ob->query("nickname"));
+    me->set("current_player", ob->query("id"));
+    me->set("short", me->query("name") + "(" + capitalize(me->query("id")) + ")");
 
-    ob->set_temp("apply/short", ({ob->query("title")+" "+me->get_respect_str()+
-                 " "+ob->query("name")+"("+capitalize(ob->query("id"))+")"}));
+    ob->set_temp("apply/short", ({ ob->query("title") + " " + me->get_respect_str() +
+      " " + ob->query("name") + "(" + capitalize(ob->query("id")) + ")" }));
   }
 
   save_record(me, ob);
@@ -317,48 +296,42 @@ int convert_identity (object me, object ob)
   return 1;
 }
 
-int do_save()
-{
-//  write("储存档案...\n");
+int do_save() {
+  //  write("储存档案...\n");
   return this_object()->save();
 }
 
-object find_and_restore (string name)
-{
+object find_and_restore(string name) {
   object me = find_object(name);
 
-  if (! me ||
-      ! me->restore())
-    me = new (name);
+  if (!me ||
+    !me->restore())
+    me = new(name);
   me->setup();
   return me;
 }
 
-object find_in_room (int i, int j)
-{
-  string name = DIRNAME+"ywc"+sprintf("%d%s",i,rooms[j-1]);
+object find_in_room(int i, int j) {
+  string name = DIRNAME + "ywc" + sprintf("%d%s", i, rooms[j - 1]);
   object room;
 
   call_other(name, "???");
   room = find_object(name);
   if (room)
-    return present ("wulin renshi",room);
-  else
-  {
-    name = DIRNAME+"npc/wu"+sprintf("%d%d",i,j);
-    return find_and_restore (name);
+    return present("wulin renshi", room);
+  else {
+    name = DIRNAME + "npc/wu" + sprintf("%d%d", i, j);
+    return find_and_restore(name);
   }
 }
 
-int check_player_position (object who)
-{
-  int i,j;
+int check_player_position(object who) {
+  int i, j;
 
   i = get_category_int();
-  for (j = 1; j < get_position_int(); j++)
-  {
+  for (j = 1; j < get_position_int(); j++) {
     //object ob = find_and_restore(npc);
-    object ob = find_in_room(i,j);
+    object ob = find_in_room(i, j);
     reset_eval_cost();
     if (ob->query("current_player") == who->query("id"))
       return 0;
@@ -366,50 +339,41 @@ int check_player_position (object who)
   return 1;
 }
 
-void log_positions ()
-{
-  int i,j;
+void log_positions() {
+  int i, j;
   string file_name = "huangshan.results";
 
-  log_file (file_name,"\n "+ctime(time())+":\n");
-  for (i = 1; i <= MAXCATEGORY; i++)
-  {
-    for (j = 1; j <= MAXPOSITION; j++)
-    {
-      object ob = find_in_room(i,j);
+  log_file(file_name, "\n " + ctime(time()) + ":\n");
+  for (i = 1; i <= MAXCATEGORY; i++) {
+    for (j = 1; j <= MAXPOSITION; j++) {
+      object ob = find_in_room(i, j);
       string name = ob->query("name");
       string id = ob->query("id");
-      log_file (file_name,sprintf("  %d.%d: %s %s\n",i,j,name,id));
+      log_file(file_name, sprintf("  %d.%d: %s %s\n", i, j, name, id));
     }
   }
 }
 
-int remove_previous_position (object who, int position)
-{
+int remove_previous_position(object who, int position) {
   int i, j;
 
-  for (i = get_category_int()+1; i <= MAXCATEGORY; i++)
-  {
-    for (j = 1; j <= MAXPOSITION; j++)
-    {
-      object ob = find_in_room(i,j);
+  for (i = get_category_int() + 1; i <= MAXCATEGORY; i++) {
+    for (j = 1; j <= MAXPOSITION; j++) {
+      object ob = find_in_room(i, j);
       reset_eval_cost();
       if (ob &&
-          ob->query("current_player") == who->query("id"))
-      {
+        ob->query("current_player") == who->query("id")) {
         ob->reset_me(ob);
         ob->save();
         ob->restore();
       }
     }
   }
-  for (j = position+1; j <= MAXPOSITION; j++)
-  {
-    object ob = find_in_room(get_category_int(),j);
+  for (j = position + 1; j <= MAXPOSITION; j++) {
+    object ob = find_in_room(get_category_int(), j);
     reset_eval_cost();
     if (ob &&
-        ob->query("current_player") == who->query("id"))
-    {
+      ob->query("current_player") == who->query("id")) {
       ob->reset_me(ob);
       ob->save();
       ob->restore();
@@ -419,29 +383,25 @@ int remove_previous_position (object who, int position)
   return MAXPOSITION;
 }
 
-int push_other_positions (object me, int position, int previous_position)
-{
+int push_other_positions(object me, int position, int previous_position) {
   int j;
   string src, dst;
   object who;
   object ob;
 
-  for (j = previous_position-1; j >= position; j--)
-  {
+  for (j = previous_position - 1; j >= position; j--) {
     reset_eval_cost();
-    who = find_in_room(get_category_int(),j);
-    ob = find_in_room(get_category_int(),j+1);
-    if (ob)
-    {
-      ob->set("new_player",1);
-      convert_identity(ob,who);
+    who = find_in_room(get_category_int(), j);
+    ob = find_in_room(get_category_int(), j + 1);
+    if (ob) {
+      ob->set("new_player", 1);
+      convert_identity(ob, who);
     }
   }
   return 1;
 }
 
-int fully_recover (object me)
-{
+int fully_recover(object me) {
   object *inv;
   object ob;
   string player_name;
@@ -450,16 +410,16 @@ int fully_recover (object me)
   reset_eval_cost();
 
   me->set("eff_gin", me->query("max_gin"));
-  me->set("gin",     me->query("max_gin"));
+  me->set("gin", me->query("max_gin"));
   me->set("eff_kee", me->query("max_kee"));
-  me->set("kee",     me->query("max_kee"));
+  me->set("kee", me->query("max_kee"));
   me->set("eff_sen", me->query("max_sen"));
-  me->set("sen",     me->query("max_sen"));
-  me->set("force",   me->query("max_force")*2);
-  me->set("mana",    me->query("max_mana")*2);
+  me->set("sen", me->query("max_sen"));
+  me->set("force", me->query("max_force") * 2);
+  me->set("mana", me->query("max_mana") * 2);
 
-// disable autocopy feature
-/*
+  // disable autocopy feature
+  /*
   player_name = me->query("current_player");
   if (! player_name ||
       player_name == "none of us")
@@ -487,270 +447,236 @@ int fully_recover (object me)
 */
 
   inv = all_inventory(me);
-  while (inv && sizeof(inv))
-  {
-    destruct (inv[0]);
+  while (inv && sizeof(inv)) {
+    destruct(inv[0]);
     inv = all_inventory(me);
   }
 
-  if (me->query("weapon"))
-  {
+  if (me->query("weapon")) {
     ob = new(me->query("weapon"));
-    if(ob) if(ob->move(me))
-      ob->wield();  
+    if (ob) if (ob->move(me))
+      ob->wield();
   }
 
-  if (me->query("armor"))
-  {
+  if (me->query("armor")) {
     ob = new(me->query("armor"));
-    if(ob) if(ob->move(me))
-      ob->wear(); 
+    if (ob) if (ob->move(me))
+      ob->wear();
   }
 
   reset_eval_cost();
   return 1;
 }
 
-int accept_fight(object ob)
-{
+int accept_fight(object ob) {
   int i;
-  object* inv;
+  object *inv;
 
   object me = this_object();
   object who = this_player();
 
-  object peng = present("peng fei",environment(me));
+  object peng = present("peng fei", environment(me));
 
-  if (! peng)
-  {
-    command ("say 大会主持不在，如何比武也？\n");
+  if (!peng) {
+    command("say 大会主持不在，如何比武也？\n");
     return notify_fail("还是请大会主持彭大侠来吧。\n");
   }
 
-  if (check_player_position (ob) == 0)
-  {
-    command ("say 在下不敢！\n");
+  if (check_player_position(ob) == 0) {
+    command("say 在下不敢！\n");
     return notify_fail("你的江湖地位已经比这位武林人士高了。\n");
   }
-  if (me->query("current_player") == ob->query("id")) 
-  {
-    command ("say 英雄不可与己较量！\n");
+  if (me->query("current_player") == ob->query("id")) {
+    command("say 英雄不可与己较量！\n");
     return notify_fail("你就是这位武林人士。\n");
   }
-  if (me->is_fighting())
-  {
-    command ("say 英雄失陪了！\n");
+  if (me->is_fighting()) {
+    command("say 英雄失陪了！\n");
     return notify_fail("这位武林人士尚在比武之中，请稍候。\n");
   }
-  if (! interactive(ob))
-  {
-    command ("say 英雄失陪了！\n");
+  if (!interactive(ob)) {
+    command("say 英雄失陪了！\n");
     return notify_fail("You are a NPC.\n");
   }
-  if (! peng->execute_approve_fight(who,me,get_position_int(),get_category_int()))
-  {
+  if (!peng->execute_approve_fight(who, me, get_position_int(), get_category_int())) {
     return notify_fail("看来大会主持不允许你比武。\n");
   }
 
-  fully_recover (me);
+  fully_recover(me);
   inv = all_inventory(who);
-  for(i=0; i<sizeof(inv); i++)  {
-     if( inv[i]->query_unique() ) {
-       message_vision("突然间，$n化一道白光飞去，无影无踪！\n",me,inv[i]);
-       destruct(inv[i]);
-     }
+  for (i = 0; i < sizeof(inv); i++) {
+    if (inv[i]->query_unique()) {
+      message_vision("突然间，$n化一道白光飞去，无影无踪！\n", me, inv[i]);
+      destruct(inv[i]);
+    }
   }
 
-//  remove_call_out("check_result");
-//  call_out("check_result", 1, me, ob);
-	remove_call_out("checking");
-	call_out("checking", 1, me, ob);
-  
+  //  remove_call_out("check_result");
+  //  call_out("check_result", 1, me, ob);
+  remove_call_out("checking");
+  call_out("checking", 1, me, ob);
+
   return 1;
 }
 
-void peng_execute_fight_result (object peng, object me, object ob, int i)
-{
+void peng_execute_fight_result(object peng, object me, object ob, int i) {
   peng->execute_fight_result(me, ob, i);
 }
 
-int check_result(object me, object ob)
-{
-  object peng = present("peng fei",environment(me));
+int check_result(object me, object ob) {
+  object peng = present("peng fei", environment(me));
   int my_max_kee, his_max_kee;
 
-  my_max_kee  = me->query("max_kee");
+  my_max_kee = me->query("max_kee");
   his_max_kee = ob->query("max_kee");
 
-  if (me->is_fighting())
-  {
-    call_out("check_result",1, me, ob);
+  if (me->is_fighting()) {
+    call_out("check_result", 1, me, ob);
     return 1;
   }
 
   if (peng == 0)
-    peng = find_living ("peng fei");
-  if (!present(ob, environment()))
-  {
-    remove_call_out ("peng_execute_fight_result");
-    call_out("peng_execute_fight_result",1,peng,me,ob,0);
-    return 1; 
-  }
-
-  if (((int)me->query("kee")*100/(1+my_max_kee)) <= 50 )
-  {
-    int previous_position;
-    message_vision ("$N翻身下拜，连声佩服！\n",me);
-    previous_position = remove_previous_position (ob,get_position_int());
-    push_other_positions (me,get_position_int(),previous_position);
-    me->set("new_player",1);
-    peng_execute_fight_result (peng,me,ob,1);
-    convert_identity (me, ob);
-    call_out("log_positions",1);
+    peng = find_living("peng fei");
+  if (!present(ob, environment())) {
+    remove_call_out("peng_execute_fight_result");
+    call_out("peng_execute_fight_result", 1, peng, me, ob, 0);
     return 1;
   }
 
-  if (( (int)ob->query("kee")*100/his_max_kee)<=50)
-  {
-    message_vision ("$N将$n扶起。\n",me,ob);
+  if (((int)me->query("kee") * 100 / (1 + my_max_kee)) <= 50) {
+    int previous_position;
+    message_vision("$N翻身下拜，连声佩服！\n", me);
+    previous_position = remove_previous_position(ob, get_position_int());
+    push_other_positions(me, get_position_int(), previous_position);
+    me->set("new_player", 1);
+    peng_execute_fight_result(peng, me, ob, 1);
+    convert_identity(me, ob);
+    call_out("log_positions", 1);
+    return 1;
   }
 
-  call_out("peng_execute_fight_result",1,peng,me,ob,0);
-  return 1;  
-}
+  if (((int)ob->query("kee") * 100 / his_max_kee) <= 50) {
+    message_vision("$N将$n扶起。\n", me, ob);
+  }
 
-string query_save_file()
-{
-  return DATA_DIR+"huangshan/wu"+sprintf("%d%d",get_category_int(),get_position_int());
-}
-
-int do_bandage(string arg)
-{
-  object who = this_player();
-  object me = present("wulin renshi",environment(who));
-
-  if (! arg || me != present(arg, environment(me)))
-    return 0;
-
-  message_vision ("$N别有用心地要给$n包扎伤口。\n",who,me);
-  call_out("no_bandage",2,who,me);
+  call_out("peng_execute_fight_result", 1, peng, me, ob, 0);
   return 1;
 }
 
-void no_bandage(object who, object me)
-{
-  message_vision ("$N向$n摇了摇头。\n",me,who);
+string query_save_file() {
+  return DATA_DIR + "huangshan/wu" + sprintf("%d%d", get_category_int(), get_position_int());
 }
 
-int do_ji(string arg)
-{
+int do_bandage(string arg) {
+  object who = this_player();
+  object me = present("wulin renshi", environment(who));
+
+  if (!arg || me != present(arg, environment(me)))
+    return 0;
+
+  message_vision("$N别有用心地要给$n包扎伤口。\n", who, me);
+  call_out("no_bandage", 2, who, me);
+  return 1;
+}
+
+void no_bandage(object who, object me) {
+  message_vision("$N向$n摇了摇头。\n", me, who);
+}
+
+int do_ji(string arg) {
   object who = this_player();
   object me = this_object();
 
-  message_vision ("$N摸摸索索地掏出什么法宝想祭一祭。\n",who);
-  call_out("no_ji",2,who,me);
+  message_vision("$N摸摸索索地掏出什么法宝想祭一祭。\n", who);
+  call_out("no_ji", 2, who, me);
   return 1;
 }
 
-void no_ji(object who, object me)
-{
-  message_vision ("$N向$n摇了摇头。\n",me,who);
+void no_ji(object who, object me) {
+  message_vision("$N向$n摇了摇头。\n", me, who);
 }
 
-int do_cast(string arg)
-{
+int do_cast(string arg) {
   object who = this_player();
   object me = this_object();
 
   if (arg == "transfer")
     return 0;
 
-  message_vision ("$N张开嘴，结结吧吧地念了几声咒语。\n",who);
-  call_out("no_cast",2,who,me);
+  message_vision("$N张开嘴，结结吧吧地念了几声咒语。\n", who);
+  call_out("no_cast", 2, who, me);
   return 1;
 }
 
-void no_cast(object who, object me)
-{
-  message_vision ("$N向$n摇了摇头。\n",me,who);
+void no_cast(object who, object me) {
+  message_vision("$N向$n摇了摇头。\n", me, who);
 }
 
-int do_exert(string arg)
-{
+int do_exert(string arg) {
   object who = this_player();
   object me = this_object();
 
   if (arg != "bloodsun wulin renshi" &&
-      arg != "bloodsun wulin" &&
-      arg != "bloodsun renshi" &&
-      arg != "zhenqi")
+    arg != "bloodsun wulin" &&
+    arg != "bloodsun renshi" &&
+    arg != "zhenqi")
     return 0;
 
-  message_vision ("$N鬼鬼祟祟地一运气。\n",who);
-  call_out("no_exert",2,who,me);
+  message_vision("$N鬼鬼祟祟地一运气。\n", who);
+  call_out("no_exert", 2, who, me);
   return 1;
 }
 
-void no_exert(object who, object me)
-{
-  message_vision ("$N向$n摇了摇头。\n",me,who);
+void no_exert(object who, object me) {
+  message_vision("$N向$n摇了摇头。\n", me, who);
 }
 
-int do_perform(string arg)
-{
+int do_perform(string arg) {
   object who = this_player();
   object me = this_object();
 
-  message_vision ("$N鬼鬼祟祟地一施外功。\n",who);
-  call_out("no_perform",2,who,me);
+  message_vision("$N鬼鬼祟祟地一施外功。\n", who);
+  call_out("no_perform", 2, who, me);
   return 1;
 }
 
-void no_perform(object who, object me)
-{
-  message_vision ("$N向$n摇了摇头。\n",me,who);
+void no_perform(object who, object me) {
+  message_vision("$N向$n摇了摇头。\n", me, who);
 }
 
-int do_steal(string arg)
-{
+int do_steal(string arg) {
   object who = this_player();
   object me = this_object();
 
-  message_vision ("$N伸出手，鬼鬼祟祟地想偷什么东西。\n",who);
-  call_out("no_steal",2,who,me);
+  message_vision("$N伸出手，鬼鬼祟祟地想偷什么东西。\n", who);
+  call_out("no_steal", 2, who, me);
   return 1;
 }
 
-void no_steal(object who, object me)
-{
-  message_vision ("$N向$n摇了摇头。\n",me,who);
+void no_steal(object who, object me) {
+  message_vision("$N向$n摇了摇头。\n", me, who);
 }
 
-int do_kill(string arg)
-{
+int do_kill(string arg) {
   object who = this_player();
   object me = this_object();
 
-  if(!arg || present(arg,environment(me))!=me) return 0;
+  if (!arg || present(arg, environment(me)) != me) return 0;
   //allow kill others. mon 2/16/98
 
-  message_vision ("$N眼露凶光，看样子动了杀机！\n",who);
-  call_out("no_kill",2,who,me);
+  message_vision("$N眼露凶光，看样子动了杀机！\n", who);
+  call_out("no_kill", 2, who, me);
   return 1;
 }
 
-void no_kill(object who, object me)
-{
-  message_vision ("$N向$n摇了摇头。\n",me,who);
+void no_kill(object who, object me) {
+  message_vision("$N向$n摇了摇头。\n", me, who);
 }
 
-void die()
-{
+void die() {
   //fully_recover (this_object());
 }
 
-void unconcious()
-{
+void unconcious() {
   //fully_recover (this_object());
 }
-

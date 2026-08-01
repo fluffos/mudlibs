@@ -2,217 +2,207 @@
 #include <combat.h>
 inherit ROOM;
 int doo_drop(object me, object obj);
-void create()
-{
-	set("short", "半空中");
-        set("long",@LONG
+void create() {
+  set("short", "半空中");
+  set("long", @LONG
 你飘飘然的浮在空中．．．．
 LONG
-        );
-	set("outdoors", "tianzhu");
-        set("NONPC",1);
-        set("no_fight",1);
-        set("no_sleep",1);
-        set("no_magic",1);
-        set("no_steal",1);
-        set("owner","none");
-        setup();
+  );
+  set("outdoors", "tianzhu");
+  set("NONPC", 1);
+  set("no_fight", 1);
+  set("no_sleep", 1);
+  set("no_magic", 1);
+  set("no_steal", 1);
+  set("owner", "none");
+  setup();
 }
 
-void init()
-{
-	add_action("do_drop","drop");
+void init() {
+  add_action("do_drop", "drop");
 }
 
-void reset()
-{
-	string owner = this_object()->query("owner");
-	::reset();
-	set("owner",owner);
+void reset() {
+  string owner = this_object()->query("owner");
+  ::reset();
+  set("owner", owner);
 }
 
-int do_drop(string arg)
-{
-	object obj, *inv, obj2;
-	int i, amount;
-	string item;
-	object me = this_player();
-	if(!arg) {
-		write("你要丢弃什麽东西？\n");
-		return 1;
-	}
-	if(sscanf(arg, "%d %s", amount, item)==2) {
-		if( !objectp(obj = present(item, me)) ){
-			write("你身上没有这样东西。\n");
-			return 1;
-		}
-		if( stringp(obj->query("no_drop")) ){
-			write( (string)obj->query("no_drop") );
-			return 1;
-		}
-		if( !obj->query_amount() ){
-			write( obj->name() + "不能被分开丢弃。\n");
-			return 1;
-		}
-		if( amount < 1 ){
-			write("东西的数量至少是一个。\n");
-			return 1;
-		}
-		if( amount > obj->query_amount() ){
-			write("你没有那麽多的" + obj->name() + "。\n");
-			return 1;
-		}
-		else if( amount == (int)obj->query_amount() )
-			return doo_drop(me, obj);
-		else {
-			obj->set_amount( (int)obj->query_amount() - amount );
-			obj2 = new(base_name(obj));
-			obj2->set_amount(amount);
-			return doo_drop(me, obj2);
-		}
-	}
+int do_drop(string arg) {
+  object obj, *inv, obj2;
+  int i, amount;
+  string item;
+  object me = this_player();
+  if (!arg) {
+    write("你要丢弃什麽东西？\n");
+    return 1;
+  }
+  if (sscanf(arg, "%d %s", amount, item) == 2) {
+    if (!objectp(obj = present(item, me))) {
+      write("你身上没有这样东西。\n");
+      return 1;
+    }
+    if (stringp(obj->query("no_drop"))) {
+      write((string)obj->query("no_drop"));
+      return 1;
+    }
+    if (!obj->query_amount()) {
+      write(obj->name() + "不能被分开丢弃。\n");
+      return 1;
+    }
+    if (amount < 1) {
+      write("东西的数量至少是一个。\n");
+      return 1;
+    }
+    if (amount > obj->query_amount()) {
+      write("你没有那麽多的" + obj->name() + "。\n");
+      return 1;
+    } else if (amount == (int)obj->query_amount())
+      return doo_drop(me, obj);
+    else {
+      obj->set_amount((int)obj->query_amount() - amount);
+      obj2 = new(base_name(obj));
+      obj2->set_amount(amount);
+      return doo_drop(me, obj2);
+    }
+  }
 
-	if(arg=="all") {
-		inv = all_inventory(me);
-		for(i=0; i<sizeof(inv); i++) {
-			doo_drop(me, inv[i]);
-		}
-		write("Ok.\n");
-		return 1;
-	}
+  if (arg == "all") {
+    inv = all_inventory(me);
+    for (i = 0; i < sizeof(inv); i++) {
+      doo_drop(me, inv[i]);
+    }
+    write("Ok.\n");
+    return 1;
+  }
 
-	if(!objectp(obj = present(arg, me)))
-		write("你身上没有这样东西。\n");
-	return doo_drop(me, obj);
+  if (!objectp(obj = present(arg, me)))
+    write("你身上没有这样东西。\n");
+  return doo_drop(me, obj);
 }
 
-int doo_drop(object me, object obj)
-{
-	mixed no_drop;
-	object room,*inv;
-	mapping exits;
-	int i;
-	if( !me || !obj ) return 1;
-	if( no_drop = obj->query("no_drop") ){
-		write( stringp(no_drop) ? no_drop : "这样东西不能随意丢弃。\n");
-		return 1;
-	}
-	if (mapp(exits = this_object()->query("exits"))){
-		room = load_object(exits["down"]);
-		if (obj->move(room)) {
-			if( obj->is_character() ){
-				message_vision("$N将$n从背上放下，扔了下去。\n", me, obj);
-				message("vision",obj->name()+"被从空中扔了下来。\n", room ,obj);
-				obj->revive();
-			}
-			else {
-				message_vision( sprintf("$N丢下一%s$n。\n",obj->query("unit")),me, obj );
-				message("vision","一" + obj->query("unit") + obj->name()+"从空中扔了下来。\n",room);
-				me->save();
-				if( (int) obj->query("value") < 4 && !obj->value()) {
-					write("因为这样东西并不值钱，所以人们并不会注意到它的存在。\n");
-					destruct(obj);
-				}
-			}
-			inv = all_inventory(room);
-			i = random(sizeof(inv));
-			if(!wizardp(inv[i]) && living(inv[i])){
-				if (inv[i]->query_kar() < random(300) && obj->weight() > 100000){
-					message("vision",inv[i]->name()+"大叫一声，当场被砸晕了。\n", room);
-					inv[i]->unconcious();
-				}
-			}
-			return 1;
-		}
-	}
-	else {
-		room = this_object();
-		if (obj->move(room)) {
-			if( obj->is_character() )
-				message_vision("$N将$n从背上放了下来，躺在地上。\n", me, obj);
-			else {
-				message_vision( sprintf("$N丢下一%s$n。\n",obj->query("unit")),me, obj );
-				me->save();
-				if( (int) obj->query("value") < 4 && !obj->value()){ 
-					write("因为这样东西并不值钱，所以人们并不会注意到它的存在。\n");
-					destruct(obj);
-				}
-			}
-			return 1;
-		}
-	}
-	return 1;
+int doo_drop(object me, object obj) {
+  mixed no_drop;
+  object room, *inv;
+  mapping exits;
+  int i;
+  if (!me || !obj) return 1;
+  if (no_drop = obj->query("no_drop")) {
+    write(stringp(no_drop) ? no_drop : "这样东西不能随意丢弃。\n");
+    return 1;
+  }
+  if (mapp(exits = this_object()->query("exits"))) {
+    room = load_object(exits["down"]);
+    if (obj->move(room)) {
+      if (obj->is_character()) {
+        message_vision("$N将$n从背上放下，扔了下去。\n", me, obj);
+        message("vision", obj->name() + "被从空中扔了下来。\n", room, obj);
+        obj->revive();
+      } else {
+        message_vision(sprintf("$N丢下一%s$n。\n", obj->query("unit")), me, obj);
+        message("vision", "一" + obj->query("unit") + obj->name() + "从空中扔了下来。\n", room);
+        me->save();
+        if ((int)obj->query("value") < 4 && !obj->value()) {
+          write("因为这样东西并不值钱，所以人们并不会注意到它的存在。\n");
+          destruct(obj);
+        }
+      }
+      inv = all_inventory(room);
+      i = random(sizeof(inv));
+      if (!wizardp(inv[i]) && living(inv[i])) {
+        if (inv[i]->query_kar() < random(300) && obj->weight() > 100000) {
+          message("vision", inv[i]->name() + "大叫一声，当场被砸晕了。\n", room);
+          inv[i]->unconcious();
+        }
+      }
+      return 1;
+    }
+  } else {
+    room = this_object();
+    if (obj->move(room)) {
+      if (obj->is_character())
+        message_vision("$N将$n从背上放了下来，躺在地上。\n", me, obj);
+      else {
+        message_vision(sprintf("$N丢下一%s$n。\n", obj->query("unit")), me, obj);
+        me->save();
+        if ((int)obj->query("value") < 4 && !obj->value()) {
+          write("因为这样东西并不值钱，所以人们并不会注意到它的存在。\n");
+          destruct(obj);
+        }
+      }
+      return 1;
+    }
+  }
+  return 1;
 }
 
-int valid_leave(object me, string dir)
-{
-	mapping exits;
-	object croom,nextroom,downroom,uproom,*allroom;
-	string str,*dirs,*thisdir;
-	int i;
-	object room = this_object();
-	if( mapp(exits = room->query("exits")) ) {
-		if (!objectp( croom = find_object(exits[dir]) ))
- 			croom = load_object(exits[dir]);
- 	}
- 	if (!objectp(downroom = find_object(exits["down"]) ))
- 		downroom = load_object(exits["down"]);
- 	if( dir == "down" ){
- 		tell_object(me,"你往"+downroom->query("short")+"落了下去．．．\n");
-		message("vision",me->name()+"从云头跳了下来．．．\n",downroom);
-		me->move(downroom);
- 		return notify_fail("\n");
- 	}
- 	if (!croom->query("outdoors") ||(!wizardp(me)&&file_name(croom)=="/d/wiz/hall"))
- 		return notify_fail("那里飞不过去！\n");
- 	//取出出口(  down 除外)
- 	if( mapp(exits = croom->query("exits")) ) {
- 		dirs = keys(exits);
- 		for (i=0 ; i<sizeof(dirs) ;i++)
- 		if (dirs[i]!="down")
- 			if (sizeof(thisdir)==0)
-				thisdir = ({dirs[i]});
-			else 
-				thisdir+=({dirs[i]});
-	}
-	//取出player的空间
-	allroom = children(__DIR__"null");
-	if (sizeof(allroom)){	
-		for (i= 0;i<sizeof(allroom);i++)
-			if (allroom[i]->query("owner")==me->query("id")){
-				room = allroom[i];
-				break;
-			}else continue;
-	}
-	if (!room){
-		room = new(__DIR__"null");
-		room->set("owner",me->query("id"));
-	}
-	room->set("short",croom->query("short")+"的上空");
-	//空间出口的设定
-	for (i=0 ; i<sizeof(thisdir) ;i++){
- 		if (!objectp( nextroom = find_object(exits[thisdir[i]]) ))
- 			nextroom = load_object(exits[thisdir[i]]);
- 		if (i==0){
-			str = "   往 "CYN+to_chinese(thisdir[i])+NOR" 是"+ nextroom->query("short") +"\n";
-			room->set("exits",([
-				thisdir[i] : file_name(nextroom),
-				]));
-		}
-		else {
-			str += "   往 "CYN+to_chinese(thisdir[i])+NOR" 是"+ nextroom->query("short")+"\n";
-			room->add("exits",([
-				thisdir[i] : file_name(nextroom),
-				]));
-		}
-	}
-	room->add("exits",([
-		"down" : file_name(croom),
-	]));
-	room->set("long","你飘飘然的浮在空中．．．．\n\n"+str);
-	tell_object(me,"你向"+to_chinese(dir)+"飘了过去．．．\n");
-	message("vision","一朵浮云托着"+me->name()+"向"+to_chinese(dir)+"飘了过去．．．\n",downroom);
-	"/cmds/std/look"->look_room(me,room);
-	message("vision","一朵浮云托着"+me->name()+"轻飘飘得飞了过来．．．\n",croom);
-	return notify_fail("\n");
+int valid_leave(object me, string dir) {
+  mapping exits;
+  object croom, nextroom, downroom, uproom, *allroom;
+  string str, *dirs, *thisdir;
+  int i;
+  object room = this_object();
+  if (mapp(exits = room->query("exits"))) {
+    if (!objectp(croom = find_object(exits[dir])))
+      croom = load_object(exits[dir]);
+  }
+  if (!objectp(downroom = find_object(exits["down"])))
+    downroom = load_object(exits["down"]);
+  if (dir == "down") {
+    tell_object(me, "你往" + downroom->query("short") + "落了下去．．．\n");
+    message("vision", me->name() + "从云头跳了下来．．．\n", downroom);
+    me->move(downroom);
+    return notify_fail("\n");
+  }
+  if (!croom->query("outdoors") || (!wizardp(me) && file_name(croom) == "/d/wiz/hall"))
+    return notify_fail("那里飞不过去！\n");
+  //取出出口(  down 除外)
+  if (mapp(exits = croom->query("exits"))) {
+    dirs = keys(exits);
+    for (i = 0; i < sizeof(dirs); i++)
+      if (dirs[i] != "down")
+        if (sizeof(thisdir) == 0)
+          thisdir = ({ dirs[i] });
+        else
+          thisdir += ({ dirs[i] });
+  }
+  //取出player的空间
+  allroom = children(__DIR__ "null");
+  if (sizeof(allroom)) {
+    for (i = 0; i < sizeof(allroom); i++)
+      if (allroom[i]->query("owner") == me->query("id")) {
+        room = allroom[i];
+        break;
+      } else continue;
+  }
+  if (!room) {
+    room = new(__DIR__ "null");
+    room->set("owner", me->query("id"));
+  }
+  room->set("short", croom->query("short") + "的上空");
+  //空间出口的设定
+  for (i = 0; i < sizeof(thisdir); i++) {
+    if (!objectp(nextroom = find_object(exits[thisdir[i]])))
+      nextroom = load_object(exits[thisdir[i]]);
+    if (i == 0) {
+      str = "   往 " CYN + to_chinese(thisdir[i]) + NOR " 是" + nextroom->query("short") + "\n";
+      room->set("exits", ([
+        thisdir[i]: file_name(nextroom),
+      ]));
+    } else {
+      str += "   往 " CYN + to_chinese(thisdir[i]) + NOR " 是" + nextroom->query("short") + "\n";
+      room->add("exits", ([
+        thisdir[i]: file_name(nextroom),
+      ]));
+    }
+  }
+  room->add("exits", ([
+    "down": file_name(croom),
+  ]));
+  room->set("long", "你飘飘然的浮在空中．．．．\n\n" + str);
+  tell_object(me, "你向" + to_chinese(dir) + "飘了过去．．．\n");
+  message("vision", "一朵浮云托着" + me->name() + "向" + to_chinese(dir) + "飘了过去．．．\n", downroom);
+  "/cmds/std/look"->look_room(me, room);
+  message("vision", "一朵浮云托着" + me->name() + "轻飘飘得飞了过来．．．\n", croom);
+  return notify_fail("\n");
 }
