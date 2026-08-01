@@ -295,7 +295,7 @@ classes it's found.
 | 112 | `xkx2017` | 侠客行2017 | `侠客行2017（MUD）.rar` | 40145 | WASM playable |
 | 113 | `xkxc98sj` | 侠客新传98书剑 | `侠客新传98书剑.rar` | 40126 | WASM playable |
 | 114 | `xkxyb` | 侠客行一百 | `侠客行一百 (1).rar` | 40152 | WASM playable |
-| 115 | `xkyxciii` | 侠客英雄传III | `侠客英雄传III.rar` | 40118 | native-boot verified, WASM pending |
+| 115 | `xkyxciii` | 侠客英雄传III | `侠客英雄传III.rar` | 40118 | WASM playable |
 | 116 | `xsfyssjb` | 心声风云四升级版 | `心声风云四升级版.rar` | 40149 | native-boot verified, WASM pending |
 | 117 | `xxcq` | 小雪初晴 | `小雪初晴.rar` | 40135 | native-boot verified, WASM pending |
 | 118 | `xxcqii` | 小雪初晴II | `小雪初晴II.rar` | 40131 | native-boot verified, WASM pending |

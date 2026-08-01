@@ -17,20 +17,19 @@ int have_type(object me, int type);
 void pai_ming(object p1, object p2, object p3, object p4, int s1, int s2, int s3, int s4);
 void clear(object ob);
 
-void create()
-{
-	set("short", "拱猪室");
-	set("long", @LONG
+void create() {
+  set("short", "拱猪室");
+  set("long", @LONG
 
     专供玩家赌博用的拱猪室，房间中央有一张桌子(table )，分别在东、
 南、西、北四个方向摆放着四个座位。桌子旁边一个小本上写着拱猪的规
 则(rules )。
 LONG
-);
+  );
 
-        set("item_desc", ([
-		"table" : (: look_table :),
-                "rules": @TEXT
+  set("item_desc", ([
+    "table": (: look_table :),
+    "rules": @TEXT
 拱猪规则：
 [36m
 一、拱猪必须同时有四名玩家方可进行。玩家们应当自觉分东、南、西、
@@ -49,459 +48,447 @@ LONG
     第二名加潜能150点，第三名减潜能50点，第四名减潜能100点。
 [2;37;0m
 TEXT
-        ]) );
+  ]));
 
-	set("exits", ([
-		"down" : __DIR__"duchang",
-	]));
+  set("exits", ([
+    "down": __DIR__ "duchang",
+  ]));
 
-	set("no_fight", 1);
-	set("no_magic", 1);
-	set("no_steal", 1);
+  set("no_fight", 1);
+  set("no_magic", 1);
+  set("no_steal", 1);
 
-	setup();
-
-}
-
-void init()
-{
-	add_action("do_sit", "sit");
-	add_action("do_deal", "deal");
-	add_action("do_list", "list");
-	add_action("do_show", "show");
-	add_action("do_pass", "pass");
-	add_action("do_play", ({"play", "p"}) );
-	add_action("do_cancel", "cancel");
-	add_action("do_check", "check");
-	add_action("do_quit", "quit");
-	add_action("do_shutup_tell", ({"tell", "whisper"}) );
-	add_action("do_shutup_reply", "reply");
-}
-
-void clear(object ob)
-{
-	if(!ob)	return;
-
-	ob->delete_temp("cards");
-	ob->delete_temp("cards_score");
-	ob->delete_temp("pig");
-	ob->delete_temp("goat");
-	ob->delete_temp("double");
-	ob->delete_temp("tiny_hearts");
-	ob->delete_temp("cancel_times");
-	ob->delete_temp("droped");
-}
-
-int do_sit(string arg)
-{
-	object obj, me;
-
-	if(this_player()->query_temp("sit_down") )
-		return notify_fail("你已经坐下了。\n");
-
-	if(sizeof(query("sits"))==4)
-		return notify_fail("已经没有空位了，你等下再来吧。\n");
-
-	if(!arg || (arg!="n" && arg!="north" && arg!="s" && arg!="south"
-	&&  	arg!="e" && arg!="east"  && arg!="w" && arg!="west") )
-		return notify_fail("你要坐到哪一个座位上？\n");
-	if(arg=="e")	arg="east";
-	if(arg=="w")	arg="west";
-	if(arg=="s")	arg="south";
-	if(arg=="n")	arg="north";
-
-	// 禁止同IP的人打牌
-	me = this_player();
-	if( query("sits/east") ) {
-		obj = present(query("sits/east"), this_object());
-		if( query_ip_name(me) == query_ip_name(obj) ) 
-			return notify_fail("你想做弊吗？这样是很不公平的。\n");
-	}
-	if( query("sits/south") ) {
-		obj = present(query("sits/south"), this_object());
-		if( query_ip_name(me) == query_ip_name(obj) ) 
-			return notify_fail("你想做弊吗？这样是很不公平的。\n");
-	}
-	if( query("sits/west") ) {
-		obj = present(query("sits/west"), this_object());
-		if( query_ip_name(me) == query_ip_name(obj) ) 
-			return notify_fail("你想做弊吗？这样是很不公平的。\n");
-	}
-	if( query("sits/north") ) {
-		obj = present(query("sits/north"), this_object());
-		if( query_ip_name(me) == query_ip_name(obj) ) 
-			return notify_fail("你想做弊吗？这样是很不公平的。\n");
-	}
-
-	if(query("sits/"+arg) )
-		return notify_fail("这个座位已经有人坐上了，你换另一个位吧。\n");
-	
-	message_vision("$N坐到了" + to_chinese(arg) + "面的空位上。\n", this_player());
-
-	this_player()->set_temp("sit_down", 1);
-	set("sits/" + arg, this_player()->query("id") );
-	return 1;
-}
-
-int do_quit(string arg)
-{
-	object me;
-
-	me = this_player();
-
-	if( me->query("id") == query("sits/north") )
-		delete("sits/north");
-	if( me->query("id") == query("sits/south") )
-		delete("sits/south");
-	if( me->query("id") == query("sits/east") )
-		delete("sits/east");
-	if( me->query("id") == query("sits/west") )
-		delete("sits/west");
-
-	return 0;
-}
-
-int valid_leave(object me, string dir)
-{
-	if(!me->query_temp("sit_down"))	return ::valid_leave(me, dir);
-
-	if(query("playing"))
-		return notify_fail("你还是先打完这局牌再离开这里吧。\n");
-
-	if( me->query("id") == query("sits/north") )
-		delete("sits/north");
-	if( me->query("id") == query("sits/south") )
-		delete("sits/south");
-	if( me->query("id") == query("sits/east") )
-		delete("sits/east");
-	if( me->query("id") == query("sits/west") )
-		delete("sits/west");
-
-	me->delete_temp("sit_down");
-
-	return ::valid_leave(me, dir);
-}
-
-string look_table()
-{
-	int i, num = 0;
-	object n, s, w, e;
-
-	if(query("sits/north") ) {
-		n = present(query("sits/north"), this_object());
-		if(!n)	delete("sits/north");
-		else num++;
-	}
-	if(query("sits/south") ) {
-		s = present(query("sits/south"), this_object());
-		if(!s)	delete("sits/south");
-		else num++;
-	}
-	if(query("sits/east") ) {
-		e = present(query("sits/east"), this_object());
-		if(!e)	delete("sits/east");
-		else num++;
-	}
-	if(query("sits/west") ) {
-		w = present(query("sits/west"), this_object());
-		if(!w)	delete("sits/west");
-		else num++;
-	}
-
-	if(num < 1 )
-		return "这张桌子还没有坐人。\n";
-
-	write("这张桌子坐了这几个人：\n");
-
-	if(e)	write("东家：  " + e->query("name") + "(" + e->query("id") + ")。\n");
-	if(s)	write("南家：  " + s->query("name") + "(" + s->query("id") + ")。\n");
-	if(w)	write("西家：  " + w->query("name") + "(" + w->query("id") + ")。\n");
-	if(n)	write("北家：  " + n->query("name") + "(" + n->query("id") + ")。\n");
-
-	return "\n";
-}
-
-int do_deal(string arg)
-{
-	object me;
-
-	me = this_player();
-
-	if(me->query("id") != query("sits/east") )
-		return notify_fail("发牌只能由东家执行。\n");
-
-	if(query("playing"))
-		return notify_fail("这轮牌局还没有结束，如果你想中止，请输入取消命令。\n");
-
-	if( !deal() )
-		return notify_fail("人都还没有到齐呢，现在不能发牌。\n");
-
-	return 1;
-}
-
-int deal()
-{
-	int i, num=0;
-	object n, s, e, w, obj;
-
-	if(query("sits/north") ) {
-		n = present(query("sits/north"), this_object());
-		if(!n)	delete("sits/north");
-		else {
-			num++;
-			clear(n);
-		}
-	}
-	if(query("sits/south") ) {
-		s = present(query("sits/south"), this_object());
-		if(!s)	delete("sits/south");
-		else {
-			num++;
-			clear(s);
-		}
-	}
-	if(query("sits/east") ) {
-		e = present(query("sits/east"), this_object());
-		if(!e)	delete("sits/east");
-		else {
-			num++;
-			clear(e);
-		}
-	}
-	if(query("sits/west") ) {
-		w = present(query("sits/west"), this_object());
-		if(!w)	delete("sits/west");
-		else {
-			num++;
-			clear(w);
-		}
-	}
-	
-	if(num < 4)	return 0;
-
-	message_vision("$N拿起桌上的牌，极其熟练的发给了东南西北四家。\n", e);
-
-	for(i=0; i < 52; i++) {
-		switch(random(4)) {
-			case 0 : obj = e;break;
-			case 1 : obj = s;break;
-			case 2 : obj = w;break;
-			case 3 : obj = n;break;
-		}
-		while(sizeof(obj->query_temp("cards")) >= 13) {
-			switch(random(4)) {
-				case 0 : obj = e;break;
-				case 1 : obj = s;break;
-				case 2 : obj = w;break;
-				case 3 : obj = n;break;
-			}
-		}
-		obj->set_temp("cards/"+sizeof(obj->query_temp("cards")), i+1);
-		if(i==10) {
-			set("turn", obj->query("id") );
-			tell_room(this_object(), WHT "现在由" + obj->query("name") + "开始出牌。\n" NOR);
-		}
-	}
-
-	set("playing", 1);
-	delete_temp("cancel_times");
-	delete_temp("pig_showed");
-	delete_temp("heart_showed");
-	delete_temp("double_showed");
-	delete_temp("goat_showed");
-	delete_temp("cards_droped");
-	delete("drop_times");
-
-	delete("pass");				// 重新发牌时，要删除Pass标志
-
-	return 1;
-}
-
-int do_list(string arg)
-{
-	object me;
-	string card, str1, str2, str3, str4;
-	int num, i;
-
-	me = this_player();
-
-	if(!me->query_temp("cards") )
-		return notify_fail("你目前手上没有牌。\n");
-
-	write("你手上有这些牌：\n");
-
-	str1 = sprintf(HIW"黑桃：  "NOR);
-	str2 = sprintf(HIR"红桃：  "NOR);
-	str3 = sprintf(HIW"草花：  "NOR);
-	str4 = sprintf(HIR"方块：  "NOR);
-
-	for(i=0;i<13;i++) {
-		num = (int)me->query_temp("cards/"+i);
-		if(num==0)	continue;
-
-		switch( (num%13) ) {
-			case 1  : card = "A";break;
-			case 11 : card = "J";break;
-			case 12 : card = "Q";break;
-			case 0  : card = "K";break;
-			default : card = sprintf("%d", (num%13) );
-		}
-		card += "  ";
-		switch( (num-1)/13 ) {
-			case 0 : str1 += HIW + "S" + card + NOR; break;
-			case 1 : str2 += HIR + "H" + card + NOR; break;
-			case 2 : str3 += HIW + "C" + card + NOR; break;
-			case 3 : str4 += HIR + "D" + card + NOR; break;
-		}
-	}
-
-	printf("%s\n%s\n%s\n%s\n", str1, str2, str3, str4);
-
-	return 1;
-}
-
-int do_show(string arg)
-{
-	object me;
-	int card, i, num;
-
-	me = this_player();
-
-	if( query_temp("cards_droped") )
-		return notify_fail("已经开始出牌，不能再亮牌了。\n");
-
-	if(!arg)  return notify_fail("你要亮哪一张牌？\n");
-
-	num = 0;
-	if(arg[1] == 'A' || arg[1] == 'a')  num = 1;
-	if(arg[1] == 'J' || arg[1] == 'j')  num = 11;
-	if(arg[1] == 'Q' || arg[1] == 'q')  num = 12;
-	if(arg[1] == 'K' || arg[1] == 'k')  num = 13;
-	if(arg[1] == '1')  num = 10;
-	if(arg[1] == '2')  num = 2;
-	if(arg[1] == '3')  num = 3;
-	if(arg[1] == '4')  num = 4;
-	if(arg[1] == '5')  num = 5;
-	if(arg[1] == '6')  num = 6;
-	if(arg[1] == '7')  num = 7;
-	if(arg[1] == '8')  num = 8;
-	if(arg[1] == '9')  num = 9;
-	if( num > 0 ) {
-		if(arg[0] == 'S' || arg[0] == 's')  num += 0 ;
-		if(arg[0] == 'H' || arg[0] == 'h')  num += 13;
-		if(arg[0] == 'C' || arg[0] == 'c')  num += 26;
-		if(arg[0] == 'D' || arg[0] == 'd')  num += 39;
-	}
-	arg = "0";
-	for(i = 0; i < 13; i++) {
-		if(num == (int)me->query_temp("cards/"+i)) arg = sprintf("%d", i);
-	}
-
-	if(!(card = (int)me->query_temp("cards/" + arg)) )
-		return notify_fail("你要亮哪一张牌？\n");
-
-	if(card == 12) {
-		if(query_temp("pig_showed") )
-			return notify_fail("你已经亮过猪了。\n");
-		set_temp("pig_showed", 1);
-		message_vision( HIR "$N亮了猪，猪现在是-200分。\n" NOR, me);
-		return 1;
-	}
-	if(card == 14) {
-		if(query_temp("heart_showed") )
-			return notify_fail("你已经亮过红桃了。\n");
-		set_temp("heart_showed", 1);
-		message_vision( HIR "$N亮了红桃Ａ，红桃的分数现在加倍。\n" NOR, me);
-		return 1;
-	}
-	if(card == 36) {
-		if(query_temp("double_showed") )
-			return notify_fail("你已经亮过变压器了。\n");
-		set_temp("double_showed", 1);
-		message_vision( HIR "$N亮了变压器，变压器现在翻了四倍。\n" NOR, me);
-		return 1;
-	}
-	if(card == 50) {
-		if(query_temp("goat_showed") )
-			return notify_fail("你已经亮过羊了。\n");
-		set_temp("goat_showed", 1);
-		message_vision( HIR "$N亮了羊，羊现在是200分。\n" NOR, me);
-		return 1;
-	}
-
-	if(card != 12 && card != 14 && card != 36 && card != 50 )
-		return notify_fail("你只能亮" + HIW + "黑桃Ｑ、" + HIR + "红桃Ａ、" 
-			+ HIW + "草花10" NOR + "和" + HIR + "方块Ｊ" NOR + "。\n" );
+  setup();
 
 }
 
-int do_pass()
-{
-	object me, ob;
-
-	me = this_player();
-
-   	if( me->query("id") != query("sits/east") 
-	&&	me->query("id") != query("sits/south") 
-	&&	me->query("id") != query("sits/west") 
-	&&   	me->query("id") != query("sits/north") )
-		return notify_fail("你没有加入牌局，不能使用请求出牌命令。\n");
-
-	if(me->query("id") == query("sits/east")) set( "pass/east", 1 );  
-	if(me->query("id") == query("sits/south")) set( "pass/south", 1 );  
-	if(me->query("id") == query("sits/west")) set( "pass/west", 1 ); 
-	if(me->query("id") == query("sits/north")) set( "pass/north", 1 );  
-
-	message_vision( "$N准备好了，请求出牌。\n" NOR, me);
-
-	return 1;
+void init() {
+  add_action("do_sit", "sit");
+  add_action("do_deal", "deal");
+  add_action("do_list", "list");
+  add_action("do_show", "show");
+  add_action("do_pass", "pass");
+  add_action("do_play", ({ "play", "p" }));
+  add_action("do_cancel", "cancel");
+  add_action("do_check", "check");
+  add_action("do_quit", "quit");
+  add_action("do_shutup_tell", ({ "tell", "whisper" }));
+  add_action("do_shutup_reply", "reply");
 }
 
-int do_play(string arg)
-{
-	object me, obj;
-	int type, card, i, j, num;
+void clear(object ob) {
+  if (!ob) return;
 
-	me = this_player();
+  ob->delete_temp("cards");
+  ob->delete_temp("cards_score");
+  ob->delete_temp("pig");
+  ob->delete_temp("goat");
+  ob->delete_temp("double");
+  ob->delete_temp("tiny_hearts");
+  ob->delete_temp("cancel_times");
+  ob->delete_temp("droped");
+}
 
-	if(me->query("id") != query("sits/east")  &&
-	   me->query("id") != query("sits/west")  &&
-	   me->query("id") != query("sits/south") &&
-	   me->query("id") != query("sits/north") && !query("playing") )
-		return notify_fail("你好象没有在打牌？\n");
+int do_sit(string arg) {
+  object obj, me;
 
-	// 使用P命令，则相当于自动使用Pass命令。
-	if(me->query("id") == query("sits/east") && !query("pass/east") ) { 
-		set( "pass/east", 1 );  
-		message_vision( "$N准备好了，请求出牌。\n" NOR, me);
-	}
-	if(me->query("id") == query("sits/south") && !query("pass/south") ) {
-		set( "pass/south", 1 );  
-		message_vision( "$N准备好了，请求出牌。\n" NOR, me);
-	}
-	if(me->query("id") == query("sits/west") && !query("pass/west") ) {
-		set( "pass/west", 1 ); 
-		message_vision( "$N准备好了，请求出牌。\n" NOR, me);
-	}
-	if(me->query("id") == query("sits/north") && !query("pass/north") ) {
-		set( "pass/north", 1 );  
-		message_vision( "$N准备好了，请求出牌。\n" NOR, me);
-	}
-	// 当大家没有使用Pass命令时，不能出牌。
-	num = 0;
-	if( query("pass/east") ) num ++;
-	if( query("pass/south") ) num ++;
-	if( query("pass/west") ) num ++;
-	if( query("pass/north") ) num ++;
-	if( num < 4 ) return notify_fail("别人还没有准备好呢！\n");
+  if (this_player()->query_temp("sit_down"))
+    return notify_fail("你已经坐下了。\n");
 
-	// 这是第一种方法
-	if(me->query("id") != query("turn") ) {
-		obj = present(query("turn"), this_object());
-		if( obj ) return notify_fail("现在轮到" + obj->query("name") + "出牌！\n");
-		else return notify_fail("出牌的人到哪里去啦？");
-	}
-/*   	// 这是第二种方法
+  if (sizeof(query("sits")) == 4)
+    return notify_fail("已经没有空位了，你等下再来吧。\n");
+
+  if (!arg || (arg != "n" && arg != "north" && arg != "s" && arg != "south"
+    && arg != "e" && arg != "east" && arg != "w" && arg != "west"))
+    return notify_fail("你要坐到哪一个座位上？\n");
+  if (arg == "e") arg = "east";
+  if (arg == "w") arg = "west";
+  if (arg == "s") arg = "south";
+  if (arg == "n") arg = "north";
+
+  // 禁止同IP的人打牌
+  me = this_player();
+  if (query("sits/east")) {
+    obj = present(query("sits/east"), this_object());
+    if (query_ip_name(me) == query_ip_name(obj))
+      return notify_fail("你想做弊吗？这样是很不公平的。\n");
+  }
+  if (query("sits/south")) {
+    obj = present(query("sits/south"), this_object());
+    if (query_ip_name(me) == query_ip_name(obj))
+      return notify_fail("你想做弊吗？这样是很不公平的。\n");
+  }
+  if (query("sits/west")) {
+    obj = present(query("sits/west"), this_object());
+    if (query_ip_name(me) == query_ip_name(obj))
+      return notify_fail("你想做弊吗？这样是很不公平的。\n");
+  }
+  if (query("sits/north")) {
+    obj = present(query("sits/north"), this_object());
+    if (query_ip_name(me) == query_ip_name(obj))
+      return notify_fail("你想做弊吗？这样是很不公平的。\n");
+  }
+
+  if (query("sits/" + arg))
+    return notify_fail("这个座位已经有人坐上了，你换另一个位吧。\n");
+
+  message_vision("$N坐到了" + to_chinese(arg) + "面的空位上。\n", this_player());
+
+  this_player()->set_temp("sit_down", 1);
+  set("sits/" + arg, this_player()->query("id"));
+  return 1;
+}
+
+int do_quit(string arg) {
+  object me;
+
+  me = this_player();
+
+  if (me->query("id") == query("sits/north"))
+    delete("sits/north");
+  if (me->query("id") == query("sits/south"))
+    delete("sits/south");
+  if (me->query("id") == query("sits/east"))
+    delete("sits/east");
+  if (me->query("id") == query("sits/west"))
+    delete("sits/west");
+
+  return 0;
+}
+
+int valid_leave(object me, string dir) {
+  if (!me->query_temp("sit_down")) return ::valid_leave(me, dir);
+
+  if (query("playing"))
+    return notify_fail("你还是先打完这局牌再离开这里吧。\n");
+
+  if (me->query("id") == query("sits/north"))
+    delete("sits/north");
+  if (me->query("id") == query("sits/south"))
+    delete("sits/south");
+  if (me->query("id") == query("sits/east"))
+    delete("sits/east");
+  if (me->query("id") == query("sits/west"))
+    delete("sits/west");
+
+  me->delete_temp("sit_down");
+
+  return ::valid_leave(me, dir);
+}
+
+string look_table() {
+  int i, num = 0;
+  object n, s, w, e;
+
+  if (query("sits/north")) {
+    n = present(query("sits/north"), this_object());
+    if (!n) delete("sits/north");
+    else num++;
+  }
+  if (query("sits/south")) {
+    s = present(query("sits/south"), this_object());
+    if (!s) delete("sits/south");
+    else num++;
+  }
+  if (query("sits/east")) {
+    e = present(query("sits/east"), this_object());
+    if (!e) delete("sits/east");
+    else num++;
+  }
+  if (query("sits/west")) {
+    w = present(query("sits/west"), this_object());
+    if (!w) delete("sits/west");
+    else num++;
+  }
+
+  if (num < 1)
+    return "这张桌子还没有坐人。\n";
+
+  write("这张桌子坐了这几个人：\n");
+
+  if (e) write("东家：  " + e->query("name") + "(" + e->query("id") + ")。\n");
+  if (s) write("南家：  " + s->query("name") + "(" + s->query("id") + ")。\n");
+  if (w) write("西家：  " + w->query("name") + "(" + w->query("id") + ")。\n");
+  if (n) write("北家：  " + n->query("name") + "(" + n->query("id") + ")。\n");
+
+  return "\n";
+}
+
+int do_deal(string arg) {
+  object me;
+
+  me = this_player();
+
+  if (me->query("id") != query("sits/east"))
+    return notify_fail("发牌只能由东家执行。\n");
+
+  if (query("playing"))
+    return notify_fail("这轮牌局还没有结束，如果你想中止，请输入取消命令。\n");
+
+  if (!deal())
+    return notify_fail("人都还没有到齐呢，现在不能发牌。\n");
+
+  return 1;
+}
+
+int deal() {
+  int i, num = 0;
+  object n, s, e, w, obj;
+
+  if (query("sits/north")) {
+    n = present(query("sits/north"), this_object());
+    if (!n) delete("sits/north");
+    else {
+      num++;
+      clear(n);
+    }
+  }
+  if (query("sits/south")) {
+    s = present(query("sits/south"), this_object());
+    if (!s) delete("sits/south");
+    else {
+      num++;
+      clear(s);
+    }
+  }
+  if (query("sits/east")) {
+    e = present(query("sits/east"), this_object());
+    if (!e) delete("sits/east");
+    else {
+      num++;
+      clear(e);
+    }
+  }
+  if (query("sits/west")) {
+    w = present(query("sits/west"), this_object());
+    if (!w) delete("sits/west");
+    else {
+      num++;
+      clear(w);
+    }
+  }
+
+  if (num < 4) return 0;
+
+  message_vision("$N拿起桌上的牌，极其熟练的发给了东南西北四家。\n", e);
+
+  for (i = 0; i < 52; i++) {
+    switch (random(4)) {
+      case 0: obj = e; break;
+      case 1: obj = s; break;
+      case 2: obj = w; break;
+      case 3: obj = n; break;
+    }
+    while (sizeof(obj->query_temp("cards")) >= 13) {
+      switch (random(4)) {
+        case 0: obj = e; break;
+        case 1: obj = s; break;
+        case 2: obj = w; break;
+        case 3: obj = n; break;
+      }
+    }
+    obj->set_temp("cards/" + sizeof(obj->query_temp("cards")), i + 1);
+    if (i == 10) {
+      set("turn", obj->query("id"));
+      tell_room(this_object(), WHT "现在由" + obj->query("name") + "开始出牌。\n" NOR);
+    }
+  }
+
+  set("playing", 1);
+  delete_temp("cancel_times");
+  delete_temp("pig_showed");
+  delete_temp("heart_showed");
+  delete_temp("double_showed");
+  delete_temp("goat_showed");
+  delete_temp("cards_droped");
+  delete("drop_times");
+
+  delete("pass");    // 重新发牌时，要删除Pass标志
+
+  return 1;
+}
+
+int do_list(string arg) {
+  object me;
+  string card, str1, str2, str3, str4;
+  int num, i;
+
+  me = this_player();
+
+  if (!me->query_temp("cards"))
+    return notify_fail("你目前手上没有牌。\n");
+
+  write("你手上有这些牌：\n");
+
+  str1 = sprintf(HIW "黑桃：  " NOR);
+  str2 = sprintf(HIR "红桃：  " NOR);
+  str3 = sprintf(HIW "草花：  " NOR);
+  str4 = sprintf(HIR "方块：  " NOR);
+
+  for (i = 0; i < 13; i++) {
+    num = (int)me->query_temp("cards/" + i);
+    if (num == 0) continue;
+
+    switch ((num % 13)) {
+      case 1: card = "A"; break;
+      case 11: card = "J"; break;
+      case 12: card = "Q"; break;
+      case 0: card = "K"; break;
+      default: card = sprintf("%d", (num % 13));
+    }
+    card += "  ";
+    switch ((num - 1) / 13) {
+      case 0: str1 += HIW + "S" + card + NOR; break;
+      case 1: str2 += HIR + "H" + card + NOR; break;
+      case 2: str3 += HIW + "C" + card + NOR; break;
+      case 3: str4 += HIR + "D" + card + NOR; break;
+    }
+  }
+
+  printf("%s\n%s\n%s\n%s\n", str1, str2, str3, str4);
+
+  return 1;
+}
+
+int do_show(string arg) {
+  object me;
+  int card, i, num;
+
+  me = this_player();
+
+  if (query_temp("cards_droped"))
+    return notify_fail("已经开始出牌，不能再亮牌了。\n");
+
+  if (!arg) return notify_fail("你要亮哪一张牌？\n");
+
+  num = 0;
+  if (arg[1] == 'A' || arg[1] == 'a') num = 1;
+  if (arg[1] == 'J' || arg[1] == 'j') num = 11;
+  if (arg[1] == 'Q' || arg[1] == 'q') num = 12;
+  if (arg[1] == 'K' || arg[1] == 'k') num = 13;
+  if (arg[1] == '1') num = 10;
+  if (arg[1] == '2') num = 2;
+  if (arg[1] == '3') num = 3;
+  if (arg[1] == '4') num = 4;
+  if (arg[1] == '5') num = 5;
+  if (arg[1] == '6') num = 6;
+  if (arg[1] == '7') num = 7;
+  if (arg[1] == '8') num = 8;
+  if (arg[1] == '9') num = 9;
+  if (num > 0) {
+    if (arg[0] == 'S' || arg[0] == 's') num += 0;
+    if (arg[0] == 'H' || arg[0] == 'h') num += 13;
+    if (arg[0] == 'C' || arg[0] == 'c') num += 26;
+    if (arg[0] == 'D' || arg[0] == 'd') num += 39;
+  }
+  arg = "0";
+  for (i = 0; i < 13; i++) {
+    if (num == (int)me->query_temp("cards/" + i)) arg = sprintf("%d", i);
+  }
+
+  if (!(card = (int)me->query_temp("cards/" + arg)))
+    return notify_fail("你要亮哪一张牌？\n");
+
+  if (card == 12) {
+    if (query_temp("pig_showed"))
+      return notify_fail("你已经亮过猪了。\n");
+    set_temp("pig_showed", 1);
+    message_vision(HIR "$N亮了猪，猪现在是-200分。\n" NOR, me);
+    return 1;
+  }
+  if (card == 14) {
+    if (query_temp("heart_showed"))
+      return notify_fail("你已经亮过红桃了。\n");
+    set_temp("heart_showed", 1);
+    message_vision(HIR "$N亮了红桃Ａ，红桃的分数现在加倍。\n" NOR, me);
+    return 1;
+  }
+  if (card == 36) {
+    if (query_temp("double_showed"))
+      return notify_fail("你已经亮过变压器了。\n");
+    set_temp("double_showed", 1);
+    message_vision(HIR "$N亮了变压器，变压器现在翻了四倍。\n" NOR, me);
+    return 1;
+  }
+  if (card == 50) {
+    if (query_temp("goat_showed"))
+      return notify_fail("你已经亮过羊了。\n");
+    set_temp("goat_showed", 1);
+    message_vision(HIR "$N亮了羊，羊现在是200分。\n" NOR, me);
+    return 1;
+  }
+
+  if (card != 12 && card != 14 && card != 36 && card != 50)
+    return notify_fail("你只能亮" + HIW + "黑桃Ｑ、" + HIR + "红桃Ａ、"
+      +HIW + "草花10" NOR + "和" + HIR + "方块Ｊ" NOR + "。\n");
+
+}
+
+int do_pass() {
+  object me, ob;
+
+  me = this_player();
+
+  if (me->query("id") != query("sits/east")
+    && me->query("id") != query("sits/south")
+    && me->query("id") != query("sits/west")
+    && me->query("id") != query("sits/north"))
+    return notify_fail("你没有加入牌局，不能使用请求出牌命令。\n");
+
+  if (me->query("id") == query("sits/east")) set("pass/east", 1);
+  if (me->query("id") == query("sits/south")) set("pass/south", 1);
+  if (me->query("id") == query("sits/west")) set("pass/west", 1);
+  if (me->query("id") == query("sits/north")) set("pass/north", 1);
+
+  message_vision("$N准备好了，请求出牌。\n" NOR, me);
+
+  return 1;
+}
+
+int do_play(string arg) {
+  object me, obj;
+  int type, card, i, j, num;
+
+  me = this_player();
+
+  if (me->query("id") != query("sits/east") &&
+    me->query("id") != query("sits/west") &&
+    me->query("id") != query("sits/south") &&
+    me->query("id") != query("sits/north") && !query("playing"))
+    return notify_fail("你好象没有在打牌？\n");
+
+  // 使用P命令，则相当于自动使用Pass命令。
+  if (me->query("id") == query("sits/east") && !query("pass/east")) {
+    set("pass/east", 1);
+    message_vision("$N准备好了，请求出牌。\n" NOR, me);
+  }
+  if (me->query("id") == query("sits/south") && !query("pass/south")) {
+    set("pass/south", 1);
+    message_vision("$N准备好了，请求出牌。\n" NOR, me);
+  }
+  if (me->query("id") == query("sits/west") && !query("pass/west")) {
+    set("pass/west", 1);
+    message_vision("$N准备好了，请求出牌。\n" NOR, me);
+  }
+  if (me->query("id") == query("sits/north") && !query("pass/north")) {
+    set("pass/north", 1);
+    message_vision("$N准备好了，请求出牌。\n" NOR, me);
+  }
+  // 当大家没有使用Pass命令时，不能出牌。
+  num = 0;
+  if (query("pass/east")) num++;
+  if (query("pass/south")) num++;
+  if (query("pass/west")) num++;
+  if (query("pass/north")) num++;
+  if (num < 4) return notify_fail("别人还没有准备好呢！\n");
+
+  // 这是第一种方法
+  if (me->query("id") != query("turn")) {
+    obj = present(query("turn"), this_object());
+    if (obj) return notify_fail("现在轮到" + obj->query("name") + "出牌！\n");
+    else return notify_fail("出牌的人到哪里去啦？");
+  }
+  /*   	// 这是第二种方法
 	if(me->query("id") != query("turn") ) {
 	        env = environment(me);
         	inv = all_inventory(env);
@@ -514,585 +501,573 @@ int do_play(string arg)
 		} 
 	}
 */
-	if(me->query("id") != query("turn") )
-		return notify_fail("还没轮到你出牌。\n");
+  if (me->query("id") != query("turn"))
+    return notify_fail("还没轮到你出牌。\n");
 
-	if(!arg)
-		return notify_fail("你要出哪一张牌？\n");
+  if (!arg)
+    return notify_fail("你要出哪一张牌？\n");
 
-	num = 0;
-	if(arg[1] == 'A' || arg[1] == 'a')  num = 1;
-	if(arg[1] == 'J' || arg[1] == 'j')  num = 11;
-	if(arg[1] == 'Q' || arg[1] == 'q')  num = 12;
-	if(arg[1] == 'K' || arg[1] == 'k')  num = 13;
-	if(arg[1] == '1')  num = 10;
-	if(arg[1] == '2')  num = 2;
-	if(arg[1] == '3')  num = 3;
-	if(arg[1] == '4')  num = 4;
-	if(arg[1] == '5')  num = 5;
-	if(arg[1] == '6')  num = 6;
-	if(arg[1] == '7')  num = 7;
-	if(arg[1] == '8')  num = 8;
-	if(arg[1] == '9')  num = 9;
-	if( num > 0 ) {
-		if(arg[0] == 'S' || arg[0] == 's')  num += 0 ;
-		if(arg[0] == 'H' || arg[0] == 'h')  num += 13;
-		if(arg[0] == 'C' || arg[0] == 'c')  num += 26;
-		if(arg[0] == 'D' || arg[0] == 'd')  num += 39;
-	}
-	arg = "0";
-	for(i=0;i<13;i++) {
-		if(num == (int)me->query_temp("cards/"+i)) arg = sprintf("%d", i);
-	}
+  num = 0;
+  if (arg[1] == 'A' || arg[1] == 'a') num = 1;
+  if (arg[1] == 'J' || arg[1] == 'j') num = 11;
+  if (arg[1] == 'Q' || arg[1] == 'q') num = 12;
+  if (arg[1] == 'K' || arg[1] == 'k') num = 13;
+  if (arg[1] == '1') num = 10;
+  if (arg[1] == '2') num = 2;
+  if (arg[1] == '3') num = 3;
+  if (arg[1] == '4') num = 4;
+  if (arg[1] == '5') num = 5;
+  if (arg[1] == '6') num = 6;
+  if (arg[1] == '7') num = 7;
+  if (arg[1] == '8') num = 8;
+  if (arg[1] == '9') num = 9;
+  if (num > 0) {
+    if (arg[0] == 'S' || arg[0] == 's') num += 0;
+    if (arg[0] == 'H' || arg[0] == 'h') num += 13;
+    if (arg[0] == 'C' || arg[0] == 'c') num += 26;
+    if (arg[0] == 'D' || arg[0] == 'd') num += 39;
+  }
+  arg = "0";
+  for (i = 0; i < 13; i++) {
+    if (num == (int)me->query_temp("cards/" + i)) arg = sprintf("%d", i);
+  }
 
-	if(!(card = (int)me->query_temp("cards/" + arg)) )
-		return notify_fail("你要出哪一张牌？\n");
+  if (!(card = (int)me->query_temp("cards/" + arg)))
+    return notify_fail("你要出哪一张牌？\n");
 
-	if(!query("drop_times") && sizeof(me->query_temp("cards"))==13
-		&& !query_temp("pig_showed") && card != 11 )
-		return notify_fail("第一张牌必须出"+WHT+"黑桃Ｊ"+NOR+"拱猪。\n");
+  if (!query("drop_times") && sizeof(me->query_temp("cards")) == 13
+    && !query_temp("pig_showed") && card != 11)
+    return notify_fail("第一张牌必须出" + WHT + "黑桃Ｊ" + NOR + "拱猪。\n");
 
-	if(!query("drop_times") && sizeof(me->query_temp("cards"))==13
-		&& query_temp("pig_showed") && card > 13 )
-		return notify_fail("第一张牌必须出"+WHT+"黑桃Ｊ"+NOR+"拱猪。\n");
+  if (!query("drop_times") && sizeof(me->query_temp("cards")) == 13
+    && query_temp("pig_showed") && card > 13)
+    return notify_fail("第一张牌必须出" + WHT + "黑桃Ｊ" + NOR + "拱猪。\n");
 
-	if(query("card_type")) {
-		type = query("card_type");
-		if( ((card+12)/13) != type && have_type(me, type-1) )
-			return notify_fail("你必须和首家出同样花色的牌！\n");
-	}
-	else 	set("card_type", ((int)me->query_temp("cards/"+arg)+12)/13);
+  if (query("card_type")) {
+    type = query("card_type");
+    if (((card + 12) / 13) != type && have_type(me, type - 1))
+      return notify_fail("你必须和首家出同样花色的牌！\n");
+  } else set("card_type", ((int)me->query_temp("cards/" + arg) + 12) / 13);
 
-	if( card == 12 && query_temp("pig_showed") && !me->query_temp("droped/1") ) {
-		for(i=0, j=0;i<13;i++) {
-			if(me->query_temp("cards/"+i)>=1 && me->query_temp("cards/"+i)<=13)
-				j++;
-		}
-		if(j>1 && ((card+12)/13) == type)	
-			return notify_fail("卖过的牌第一次不可以出。\n");
-	}
-	  
-	if( card == 14 && query_temp("heart_showed") && !me->query_temp("droped/2") ) {
-		for(i=0, j=0;i<13;i++) {
-			if(me->query_temp("cards/"+i)>=14 && me->query_temp("cards/"+i)<=26)
-				j++;
-		}
-		if(j>1 && ((card+12)/13) == type)	
-			return notify_fail("卖过的牌第一次不可以出。\n");
-	}
-	if( card == 36 && query_temp("double_showed") && !me->query_temp("droped/3") ) {
-		for(i=0, j=0;i<13;i++) {
-			if(me->query_temp("cards/"+i)>=27 && me->query_temp("cards/"+i)<=39)
-				j++;
-		}
-		if(j>1 && ((card+12)/13) == type)	
-			return notify_fail("卖过的牌第一次不可以出。\n");
-	}
-	if( card == 50 && query_temp("goat_showed") && !me->query_temp("droped/4") ) {
-		for(i=0, j=0;i<13;i++) {
-			if(me->query_temp("cards/"+i)>=40 && me->query_temp("cards/"+i)<=52)
-				j++;
-		}
-		if(j>1 && ((card+12)/13) == type)	
-			return notify_fail("卖过的牌第一次不可以出。\n");
-	}
+  if (card == 12 && query_temp("pig_showed") && !me->query_temp("droped/1")) {
+    for (i = 0, j = 0; i < 13; i++) {
+      if (me->query_temp("cards/" + i) >= 1 && me->query_temp("cards/" + i) <= 13)
+        j++;
+    }
+    if (j > 1 && ((card + 12) / 13) == type)
+      return notify_fail("卖过的牌第一次不可以出。\n");
+  }
 
-	set_temp("last_drop/"+query("drop_times"), me->query_temp("cards/"+arg));
-	set_temp("last_player/"+query("drop_times"), me);
-	if(!query_temp("cards_droped") ) 	set_temp("cards_droped", 1);
+  if (card == 14 && query_temp("heart_showed") && !me->query_temp("droped/2")) {
+    for (i = 0, j = 0; i < 13; i++) {
+      if (me->query_temp("cards/" + i) >= 14 && me->query_temp("cards/" + i) <= 26)
+        j++;
+    }
+    if (j > 1 && ((card + 12) / 13) == type)
+      return notify_fail("卖过的牌第一次不可以出。\n");
+  }
+  if (card == 36 && query_temp("double_showed") && !me->query_temp("droped/3")) {
+    for (i = 0, j = 0; i < 13; i++) {
+      if (me->query_temp("cards/" + i) >= 27 && me->query_temp("cards/" + i) <= 39)
+        j++;
+    }
+    if (j > 1 && ((card + 12) / 13) == type)
+      return notify_fail("卖过的牌第一次不可以出。\n");
+  }
+  if (card == 50 && query_temp("goat_showed") && !me->query_temp("droped/4")) {
+    for (i = 0, j = 0; i < 13; i++) {
+      if (me->query_temp("cards/" + i) >= 40 && me->query_temp("cards/" + i) <= 52)
+        j++;
+    }
+    if (j > 1 && ((card + 12) / 13) == type)
+      return notify_fail("卖过的牌第一次不可以出。\n");
+  }
 
-	message_vision("$N打出一张"+card_name((int)me->query_temp("cards/"+arg))+NOR"。\n", me);
+  set_temp("last_drop/" + query("drop_times"), me->query_temp("cards/" + arg));
+  set_temp("last_player/" + query("drop_times"), me);
+  if (!query_temp("cards_droped")) set_temp("cards_droped", 1);
 
-	if( ((card+12)/13) == type) me->set_temp("droped/"+(card+12)/13, 1);
+  message_vision("$N打出一张" + card_name((int)me->query_temp("cards/" + arg)) + NOR "。\n", me);
 
-	me->delete_temp("cards/"+arg);
-	add("drop_times", 1);
+  if (((card + 12) / 13) == type) me->set_temp("droped/" + (card + 12) / 13, 1);
 
-	if(query("drop_times") == 4) {		// 第四个出牌
-		message_vision(WHT "这一轮出牌完毕，$N伸手把桌面上的牌翻了过去。\n" NOR, me);
-		if(sizeof(me->query_temp("cards")) ==0)
-			me->delete_temp("cards");
-		delete("card_type");
-		delete("drop_times");
-		add_score();
-		if(!me->query_temp("cards") ) {	// 本局结束
-			delete("turn");
-			delete("playing");
-			delete("card_type");
-			declare_result(this_object());
-		}
-		return 1;
-	}
+  me->delete_temp("cards/" + arg);
+  add("drop_times", 1);
 
-	if(me->query("id") == query("sits/east") )
-		set("turn", query("sits/north") );
-	if(me->query("id") == query("sits/north") )
-		set("turn", query("sits/west") );
-	if(me->query("id") == query("sits/west") )
-		set("turn", query("sits/south") );
-	if(me->query("id") == query("sits/south") )
-		set("turn", query("sits/east") );
+  if (query("drop_times") == 4) {  // 第四个出牌
+    message_vision(WHT "这一轮出牌完毕，$N伸手把桌面上的牌翻了过去。\n" NOR, me);
+    if (sizeof(me->query_temp("cards")) == 0)
+      me->delete_temp("cards");
+    delete("card_type");
+    delete("drop_times");
+    add_score();
+    if (!me->query_temp("cards")) {  // 本局结束
+      delete("turn");
+      delete("playing");
+      delete("card_type");
+      declare_result(this_object());
+    }
+    return 1;
+  }
 
-	if(obj = present(query("turn"), this_object()) )
-		tell_room(this_object(), WHT "现在轮到"+obj->query("name")+"出牌。\n" NOR);
-	
-	return 1;
+  if (me->query("id") == query("sits/east"))
+    set("turn", query("sits/north"));
+  if (me->query("id") == query("sits/north"))
+    set("turn", query("sits/west"));
+  if (me->query("id") == query("sits/west"))
+    set("turn", query("sits/south"));
+  if (me->query("id") == query("sits/south"))
+    set("turn", query("sits/east"));
+
+  if (obj = present(query("turn"), this_object()))
+    tell_room(this_object(), WHT "现在轮到" + obj->query("name") + "出牌。\n" NOR);
+
+  return 1;
 }
 
-int do_cancel(string arg)
-{
-	object *list;
-	int i;
+int do_cancel(string arg) {
+  object *list;
+  int i;
 
-	if(this_player()->query("id") != query("sits/east")
-	&& this_player()->query("id") != query("sits/west")
-	&& this_player()->query("id") != query("sits/north")
-	&& this_player()->query("id") != query("sits/south") )
-		return notify_fail("你没有加入牌局，不能取消这一局牌。\n");
+  if (this_player()->query("id") != query("sits/east")
+    && this_player()->query("id") != query("sits/west")
+    && this_player()->query("id") != query("sits/north")
+    && this_player()->query("id") != query("sits/south"))
+    return notify_fail("你没有加入牌局，不能取消这一局牌。\n");
 
-	if(!query("playing") )
-		return notify_fail("牌局并没有开始，不必取消。\n");
+  if (!query("playing"))
+    return notify_fail("牌局并没有开始，不必取消。\n");
 
-	if(this_player()->query_temp("cancel_times"))
-		return notify_fail("你已经发过一次取消命令了。\n");
+  if (this_player()->query_temp("cancel_times"))
+    return notify_fail("你已经发过一次取消命令了。\n");
 
-	if(query_temp("cancel_times") < 2) {
-		this_player()->set_temp("cancel_times", 1);
-		add_temp("cancel_times", 1);
-		message_vision("$N发出了一次取消命令。\n", this_player());
-		return 1;
-	}		
+  if (query_temp("cancel_times") < 2) {
+    this_player()->set_temp("cancel_times", 1);
+    add_temp("cancel_times", 1);
+    message_vision("$N发出了一次取消命令。\n", this_player());
+    return 1;
+  }
 
-	delete("playing");
-	delete("turn");
-	delete("card_type");
-	delete("drop_times");
-	delete_temp("cancel_times");
+  delete("playing");
+  delete("turn");
+  delete("card_type");
+  delete("drop_times");
+  delete_temp("cancel_times");
 
-	list = all_inventory(this_object());
-	for(i=0;i<sizeof(list);i++)
-		clear(list[i]);
+  list = all_inventory(this_object());
+  for (i = 0; i < sizeof(list); i++)
+    clear(list[i]);
 
-	message_vision("$N取消了这局牌！\n", this_player());
-	return 1;
+  message_vision("$N取消了这局牌！\n", this_player());
+  return 1;
 }
 
-int do_check(string arg)
-{
-	object me, ob, n, s, w, e;
+int do_check(string arg) {
+  object me, ob, n, s, w, e;
 
-	me = this_player();
+  me = this_player();
 
-	if(me->query("id") != query("sits/east") &&
-	   me->query("id") != query("sits/north") &&
-	   me->query("id") != query("sits/west") &&
-	   me->query("id") != query("sits/south") )
-		return notify_fail("你没有加入牌局，不能检查得分。\n");
+  if (me->query("id") != query("sits/east") &&
+    me->query("id") != query("sits/north") &&
+    me->query("id") != query("sits/west") &&
+    me->query("id") != query("sits/south"))
+    return notify_fail("你没有加入牌局，不能检查得分。\n");
 
-	if(query("sits/east") ) {
-		e = present(query("sits/east"), this_object());
-		if(!e)	delete("sits/east");
-		tell_object(me, sprintf("东家：  " + e->query("name") + 
-			"目前的得分是%d分。\n", e->query_temp("cards_score")) );
-	}
-	if(query("sits/south") ) {
-		s = present(query("sits/south"), this_object());
-		if(!s)	delete("sits/south");
-		tell_object(me, sprintf("南家：  " + s->query("name") + 
-			"目前的得分是%d分。\n", s->query_temp("cards_score")) );
-	}
-	if(query("sits/west") ) {
-		w = present(query("sits/west"), this_object());
-		if(!w)	delete("sits/west");
-		tell_object(me, sprintf("西家：  " + w->query("name") + 
-			"目前的得分是%d分。\n", w->query_temp("cards_score")) );
-	}
-	if(query("sits/north") ) {
-		n = present(query("sits/north"), this_object());
-		if(!n)	delete("sits/north");
-		tell_object(me, sprintf("北家：  " + n->query("name") + 
-			"目前的得分是%d分。\n", n->query_temp("cards_score")) );
-	}
-	return 1;
+  if (query("sits/east")) {
+    e = present(query("sits/east"), this_object());
+    if (!e) delete("sits/east");
+    tell_object(me, sprintf("东家：  " + e->query("name") +
+      "目前的得分是%d分。\n", e->query_temp("cards_score")));
+  }
+  if (query("sits/south")) {
+    s = present(query("sits/south"), this_object());
+    if (!s) delete("sits/south");
+    tell_object(me, sprintf("南家：  " + s->query("name") +
+      "目前的得分是%d分。\n", s->query_temp("cards_score")));
+  }
+  if (query("sits/west")) {
+    w = present(query("sits/west"), this_object());
+    if (!w) delete("sits/west");
+    tell_object(me, sprintf("西家：  " + w->query("name") +
+      "目前的得分是%d分。\n", w->query_temp("cards_score")));
+  }
+  if (query("sits/north")) {
+    n = present(query("sits/north"), this_object());
+    if (!n) delete("sits/north");
+    tell_object(me, sprintf("北家：  " + n->query("name") +
+      "目前的得分是%d分。\n", n->query_temp("cards_score")));
+  }
+  return 1;
 }
 
-void add_score()
-{
-	int c1, c2, c3, c4, c, amount;
-	object p1, p2, p3, p4, obj;
+void add_score() {
+  int c1, c2, c3, c4, c, amount;
+  object p1, p2, p3, p4, obj;
 
-	c1 = query_temp("last_drop/0");
-	c2 = query_temp("last_drop/1");
-	c3 = query_temp("last_drop/2");
-	c4 = query_temp("last_drop/3");
+  c1 = query_temp("last_drop/0");
+  c2 = query_temp("last_drop/1");
+  c3 = query_temp("last_drop/2");
+  c4 = query_temp("last_drop/3");
 
-	p1 = (object) query_temp("last_player/0");
-	p2 = (object) query_temp("last_player/1");
-	p3 = (object) query_temp("last_player/2");
-	p4 = (object) query_temp("last_player/3");
+  p1 = (object)query_temp("last_player/0");
+  p2 = (object)query_temp("last_player/1");
+  p3 = (object)query_temp("last_player/2");
+  p4 = (object)query_temp("last_player/3");
 
-	c = c1;
-	obj=p1;
-	if(compare(c, c2)) {
-		c = c2;
-		obj=p2;
-	}
+  c = c1;
+  obj = p1;
+  if (compare(c, c2)) {
+    c = c2;
+    obj = p2;
+  }
 
-	if(compare(c, c3)) {
-		c = c3;
-		obj=p3;
-	}
-	if(compare(c, c4)) {
-		c = c4;
-		obj=p4;
-	}
+  if (compare(c, c3)) {
+    c = c3;
+    obj = p3;
+  }
+  if (compare(c, c4)) {
+    c = c4;
+    obj = p4;
+  }
 
-	amount = card_score(c1)+card_score(c2)+card_score(c3)+card_score(c4);
-	obj->add_temp("cards_score", amount);
+  amount = card_score(c1) + card_score(c2) + card_score(c3) + card_score(c4);
+  obj->add_temp("cards_score", amount);
 
-	if(c1 == 12 || c2 == 12 || c3 == 12 || c4 == 12)
-		obj->set_temp("pig", 1);
-	if(c1 == 50 || c2 == 50 || c3 == 50 || c4 == 50)
-		obj->set_temp("goat", 1);
-	if(c1 == 36 || c2 == 36 || c3 == 36 || c4 == 36)
-		obj->set_temp("doubled", 1);
+  if (c1 == 12 || c2 == 12 || c3 == 12 || c4 == 12)
+    obj->set_temp("pig", 1);
+  if (c1 == 50 || c2 == 50 || c3 == 50 || c4 == 50)
+    obj->set_temp("goat", 1);
+  if (c1 == 36 || c2 == 36 || c3 == 36 || c4 == 36)
+    obj->set_temp("doubled", 1);
 
-	if(c1 == 15 || c1 == 16 || c1 == 17)		// hearts 2, 3, 4
-		obj->add_temp("tiny_hearts", c1-13);
-	if(c2 == 15 || c2 == 16 || c2 == 17)
-		obj->add_temp("tiny_hearts", c2-13);
-	if(c3 == 15 || c3 == 16 || c3 == 17)
-		obj->add_temp("tiny_hearts", c3-13);
-	if(c4 == 15 || c4 == 16 || c4 == 17)
-		obj->add_temp("tiny_hearts", c4-13);
+  if (c1 == 15 || c1 == 16 || c1 == 17)  // hearts 2, 3, 4
+    obj->add_temp("tiny_hearts", c1 - 13);
+  if (c2 == 15 || c2 == 16 || c2 == 17)
+    obj->add_temp("tiny_hearts", c2 - 13);
+  if (c3 == 15 || c3 == 16 || c3 == 17)
+    obj->add_temp("tiny_hearts", c3 - 13);
+  if (c4 == 15 || c4 == 16 || c4 == 17)
+    obj->add_temp("tiny_hearts", c4 - 13);
 
-	if( (c1>13 && c1<27) || (c2>13 && c2<27) ||
-	    (c3>13 && c3<27) || (c4>13 && c4<27) ) {	//collect red hearts
-		if(!query_temp("last_hearts_collector") )
-			set_temp("last_hearts_collector", obj->query("id"));
-		if(!query_temp("hearts_devided") 
-		&&	obj->query("id") != query_temp("last_hearts_collector") ) 
-			set_temp("hearts_devided", 1);
-	}
+  if ((c1 > 13 && c1 < 27) || (c2 > 13 && c2 < 27) ||
+    (c3 > 13 && c3 < 27) || (c4 > 13 && c4 < 27)) {  //collect red hearts
+    if (!query_temp("last_hearts_collector"))
+      set_temp("last_hearts_collector", obj->query("id"));
+    if (!query_temp("hearts_devided")
+      && obj->query("id") != query_temp("last_hearts_collector"))
+      set_temp("hearts_devided", 1);
+  }
 
-	set("turn", obj->query("id"));
-	tell_room(this_object(), WHT"现在轮到"+obj->query("name")+"出牌。\n"NOR);
+  set("turn", obj->query("id"));
+  tell_room(this_object(), WHT "现在轮到" + obj->query("name") + "出牌。\n" NOR);
 }
 
-void declare_result(object room)
-{
-	object p1, p2, p3, p4, obj;
-	int s1, s2, s3, s4, num, factor=1;
-	string result;
+void declare_result(object room) {
+  object p1, p2, p3, p4, obj;
+  int s1, s2, s3, s4, num, factor = 1;
+  string result;
 
-	p1 = (object) query_temp("last_player/0");
-	p2 = (object) query_temp("last_player/1");
-	p3 = (object) query_temp("last_player/2");
-	p4 = (object) query_temp("last_player/3");
+  p1 = (object)query_temp("last_player/0");
+  p2 = (object)query_temp("last_player/1");
+  p3 = (object)query_temp("last_player/2");
+  p4 = (object)query_temp("last_player/3");
 
-	if(!query_temp("hearts_devided") ) {	//collected all red hearts
-		if(p1->query("id") == query_temp("last_hearts_collector") )
-			obj=p1;
-		if(p2->query("id") == query_temp("last_hearts_collector") )
-			obj=p2;
-		if(p3->query("id") == query_temp("last_hearts_collector") )
-			obj=p3;
-		if(p4->query("id") == query_temp("last_hearts_collector") )
-			obj=p4;
-		
-		if(obj->query_temp("doubled") && obj->query_temp("goat") && obj->query_temp("pig") )
-			obj->set_temp("cards_score", 5000);
-		else	obj->set_temp("cards_score", 3500);
+  if (!query_temp("hearts_devided")) {  //collected all red hearts
+    if (p1->query("id") == query_temp("last_hearts_collector"))
+      obj = p1;
+    if (p2->query("id") == query_temp("last_hearts_collector"))
+      obj = p2;
+    if (p3->query("id") == query_temp("last_hearts_collector"))
+      obj = p3;
+    if (p4->query("id") == query_temp("last_hearts_collector"))
+      obj = p4;
 
-		obj->delete_temp("doubled");
-	}
+    if (obj->query_temp("doubled") && obj->query_temp("goat") && obj->query_temp("pig"))
+      obj->set_temp("cards_score", 5000);
+    else obj->set_temp("cards_score", 3500);
 
-	delete_temp("last_hearts_collector");
-	delete_temp("hearts_devided");
+    obj->delete_temp("doubled");
+  }
 
-	if(query_temp("double_showed") )	factor = 2;
+  delete_temp("last_hearts_collector");
+  delete_temp("hearts_devided");
 
-	s1 = (int)p1->query_temp("cards_score");
-	if(p1->query_temp("doubled") ) {
-		if(s1 == 0 && !p1->query_temp("tiny_hearts") && !p1->query_temp("goat") )
-			s1 = 50*factor;
-		else	s1 = s1*2*factor;
-		p1->delete_temp("doubled");
-		p1->delete_temp("pig");
-		p1->delete_temp("goat");
-		p1->delete_temp("cards_score");
-	}
-	s2 = (int)p2->query_temp("cards_score");
-	if(p2->query_temp("doubled") ) {
-		if(s2 == 0 && !p2->query_temp("tiny_hearts") && !p2->query_temp("goat") )
-			s2 = 50*factor;
-		else	s2 = s2*2*factor;
-		p2->delete_temp("doubled");
-		p2->delete_temp("pig");
-		p2->delete_temp("goat");
-		p2->delete_temp("cards_score");
-	}
-	s3 = (int)p3->query_temp("cards_score");
-	if(p3->query_temp("doubled") ) {
-		if(s3 == 0 && !p3->query_temp("tiny_hearts") && !p3->query_temp("goat") )
-			s3 = 50*factor;
-		else	s3 = s3*2*factor;
-		p3->delete_temp("doubled");
-		p2->delete_temp("pig");
-		p3->delete_temp("goat");
-		p3->delete_temp("cards_score");
-	}
-	s4 = (int)p4->query_temp("cards_score");
-	if(p4->query_temp("doubled") ) {
-		if(s4 == 0 && !p4->query_temp("tiny_hearts") && !p4->query_temp("goat") )
-			s4 = 50*factor;
-		else	s4 = s4*2*factor;
-		p4->delete_temp("doubled");
-		p4->delete_temp("pig");
-		p4->delete_temp("goat");
-		p4->delete_temp("cards_score");
-	}
+  if (query_temp("double_showed")) factor = 2;
 
-	pai_ming(p1, p2, p3, p4, s1, s2, s3, s4);
+  s1 = (int)p1->query_temp("cards_score");
+  if (p1->query_temp("doubled")) {
+    if (s1 == 0 && !p1->query_temp("tiny_hearts") && !p1->query_temp("goat"))
+      s1 = 50 * factor;
+    else s1 = s1 * 2 * factor;
+    p1->delete_temp("doubled");
+    p1->delete_temp("pig");
+    p1->delete_temp("goat");
+    p1->delete_temp("cards_score");
+  }
+  s2 = (int)p2->query_temp("cards_score");
+  if (p2->query_temp("doubled")) {
+    if (s2 == 0 && !p2->query_temp("tiny_hearts") && !p2->query_temp("goat"))
+      s2 = 50 * factor;
+    else s2 = s2 * 2 * factor;
+    p2->delete_temp("doubled");
+    p2->delete_temp("pig");
+    p2->delete_temp("goat");
+    p2->delete_temp("cards_score");
+  }
+  s3 = (int)p3->query_temp("cards_score");
+  if (p3->query_temp("doubled")) {
+    if (s3 == 0 && !p3->query_temp("tiny_hearts") && !p3->query_temp("goat"))
+      s3 = 50 * factor;
+    else s3 = s3 * 2 * factor;
+    p3->delete_temp("doubled");
+    p2->delete_temp("pig");
+    p3->delete_temp("goat");
+    p3->delete_temp("cards_score");
+  }
+  s4 = (int)p4->query_temp("cards_score");
+  if (p4->query_temp("doubled")) {
+    if (s4 == 0 && !p4->query_temp("tiny_hearts") && !p4->query_temp("goat"))
+      s4 = 50 * factor;
+    else s4 = s4 * 2 * factor;
+    p4->delete_temp("doubled");
+    p4->delete_temp("pig");
+    p4->delete_temp("goat");
+    p4->delete_temp("cards_score");
+  }
+
+  pai_ming(p1, p2, p3, p4, s1, s2, s3, s4);
 }
 
-void pai_ming(object p1, object p2, object p3, object p4, int s1, int s2, int s3, int s4)
-{
-	object ob1, ob2, ob3, ob4;
-	int i1, i2, i3, i4, no, i;
-	string msg = MAG"本局的最后排名是：\n";
+void pai_ming(object p1, object p2, object p3, object p4, int s1, int s2, int s3, int s4) {
+  object ob1, ob2, ob3, ob4;
+  int i1, i2, i3, i4, no, i;
+  string msg = MAG "本局的最后排名是：\n";
 
-	no = 0;
-	if(s1 < s2)	no += 1;
-	if(s1 ==s2 && p1->query_temp("tiny_hearts") > p2->query_temp("tiny_hearts") )
-		no += 1;
-	if(s1 ==s2 && p1->query_temp("tiny_hearts") == p2->query_temp("tiny_hearts") 
-		    && p1->query("mud_age") > p2->query("mud_age") )
-		no += 1;
-	if(s1 < s3)	no += 1;
-	if(s1 ==s3 && p1->query_temp("tiny_hearts") > p3->query_temp("tiny_hearts") )
-		no += 1;
-	if(s1 ==s3 && p1->query_temp("tiny_hearts") == p3->query_temp("tiny_hearts") 
-		    && p1->query("mud_age") > p3->query("mud_age") )
-		no += 1;
-	if(s1 < s4)	no += 1;
-	if(s1 ==s4 && p1->query_temp("tiny_hearts") > p4->query_temp("tiny_hearts") )
-		no += 1;
-	if(s1 ==s4 && p1->query_temp("tiny_hearts") == p4->query_temp("tiny_hearts") 
-		    && p1->query("mud_age") > p4->query("mud_age") )
-		no += 1;
+  no = 0;
+  if (s1 < s2) no += 1;
+  if (s1 == s2 && p1->query_temp("tiny_hearts") > p2->query_temp("tiny_hearts"))
+    no += 1;
+  if (s1 == s2 && p1->query_temp("tiny_hearts") == p2->query_temp("tiny_hearts")
+    && p1->query("mud_age") > p2->query("mud_age"))
+    no += 1;
+  if (s1 < s3) no += 1;
+  if (s1 == s3 && p1->query_temp("tiny_hearts") > p3->query_temp("tiny_hearts"))
+    no += 1;
+  if (s1 == s3 && p1->query_temp("tiny_hearts") == p3->query_temp("tiny_hearts")
+    && p1->query("mud_age") > p3->query("mud_age"))
+    no += 1;
+  if (s1 < s4) no += 1;
+  if (s1 == s4 && p1->query_temp("tiny_hearts") > p4->query_temp("tiny_hearts"))
+    no += 1;
+  if (s1 == s4 && p1->query_temp("tiny_hearts") == p4->query_temp("tiny_hearts")
+    && p1->query("mud_age") > p4->query("mud_age"))
+    no += 1;
 
-	if(no==0)	{ob1=p1; i1=s1;}
-	if(no==1)	{ob2=p1; i2=s1;}
-	if(no==2)	{ob3=p1; i3=s1;}
-	if(no==3)	{ob4=p1; i4=s1;}
+  if (no == 0) { ob1 = p1; i1 = s1; }
+  if (no == 1) { ob2 = p1; i2 = s1; }
+  if (no == 2) { ob3 = p1; i3 = s1; }
+  if (no == 3) { ob4 = p1; i4 = s1; }
 
-	no = 0;
-	if(s2 < s1)	no += 1;
-	if(s2 ==s1 && p2->query_temp("tiny_hearts") > p1->query_temp("tiny_hearts") )
-		no += 1;
-	if(s2 ==s1 && p2->query_temp("tiny_hearts") == p1->query_temp("tiny_hearts") 
-		    && p2->query("mud_age") > p1->query("mud_age") )
-		no += 1;
-	if(s2 < s3)	no += 1;
-	if(s2 ==s3 && p2->query_temp("tiny_hearts") > p3->query_temp("tiny_hearts") )
-		no += 1;
-	if(s2 ==s3 && p2->query_temp("tiny_hearts") == p3->query_temp("tiny_hearts") 
-		    && p2->query("mud_age") > p3->query("mud_age") )
-		no += 1;
-	if(s2 < s4)	no += 1;
-	if(s2 ==s4 && p2->query_temp("tiny_hearts") > p4->query_temp("tiny_hearts") )
-		no += 1;
-	if(s2 ==s4 && p2->query_temp("tiny_hearts") == p4->query_temp("tiny_hearts") 
-		    && p2->query("mud_age") > p4->query("mud_age") )
-		no += 1;
+  no = 0;
+  if (s2 < s1) no += 1;
+  if (s2 == s1 && p2->query_temp("tiny_hearts") > p1->query_temp("tiny_hearts"))
+    no += 1;
+  if (s2 == s1 && p2->query_temp("tiny_hearts") == p1->query_temp("tiny_hearts")
+    && p2->query("mud_age") > p1->query("mud_age"))
+    no += 1;
+  if (s2 < s3) no += 1;
+  if (s2 == s3 && p2->query_temp("tiny_hearts") > p3->query_temp("tiny_hearts"))
+    no += 1;
+  if (s2 == s3 && p2->query_temp("tiny_hearts") == p3->query_temp("tiny_hearts")
+    && p2->query("mud_age") > p3->query("mud_age"))
+    no += 1;
+  if (s2 < s4) no += 1;
+  if (s2 == s4 && p2->query_temp("tiny_hearts") > p4->query_temp("tiny_hearts"))
+    no += 1;
+  if (s2 == s4 && p2->query_temp("tiny_hearts") == p4->query_temp("tiny_hearts")
+    && p2->query("mud_age") > p4->query("mud_age"))
+    no += 1;
 
-	if(no==0)	{ob1=p2; i1=s2;}
-	if(no==1)	{ob2=p2; i2=s2;}
-	if(no==2)	{ob3=p2; i3=s2;}
-	if(no==3)	{ob4=p2; i4=s2;}
-	no = 0;
-	if(s3 < s2)	no += 1;
-	if(s3 ==s2 && p3->query_temp("tiny_hearts") > p2->query_temp("tiny_hearts") )
-		no += 1;
-	if(s3 ==s2 && p3->query_temp("tiny_hearts") == p2->query_temp("tiny_hearts") 
-		    && p3->query("mud_age") > p2->query("mud_age") )
-		no += 1;
-	if(s3 < s1)	no += 1;
-	if(s3 ==s1 && p3->query_temp("tiny_hearts") > p1->query_temp("tiny_hearts") )
-		no += 1;
-	if(s3 ==s1 && p3->query_temp("tiny_hearts") == p1->query_temp("tiny_hearts") 
-		    && p3->query("mud_age") > p1->query("mud_age") )
-		no += 1;
-	if(s3 < s4)	no += 1;
-	if(s3 ==s4 && p3->query_temp("tiny_hearts") > p4->query_temp("tiny_hearts") )
-		no += 1;
-	if(s3 ==s4 && p3->query_temp("tiny_hearts") == p4->query_temp("tiny_hearts") 
-		    && p3->query("mud_age") > p4->query("mud_age") )
-		no += 1;
+  if (no == 0) { ob1 = p2; i1 = s2; }
+  if (no == 1) { ob2 = p2; i2 = s2; }
+  if (no == 2) { ob3 = p2; i3 = s2; }
+  if (no == 3) { ob4 = p2; i4 = s2; }
+  no = 0;
+  if (s3 < s2) no += 1;
+  if (s3 == s2 && p3->query_temp("tiny_hearts") > p2->query_temp("tiny_hearts"))
+    no += 1;
+  if (s3 == s2 && p3->query_temp("tiny_hearts") == p2->query_temp("tiny_hearts")
+    && p3->query("mud_age") > p2->query("mud_age"))
+    no += 1;
+  if (s3 < s1) no += 1;
+  if (s3 == s1 && p3->query_temp("tiny_hearts") > p1->query_temp("tiny_hearts"))
+    no += 1;
+  if (s3 == s1 && p3->query_temp("tiny_hearts") == p1->query_temp("tiny_hearts")
+    && p3->query("mud_age") > p1->query("mud_age"))
+    no += 1;
+  if (s3 < s4) no += 1;
+  if (s3 == s4 && p3->query_temp("tiny_hearts") > p4->query_temp("tiny_hearts"))
+    no += 1;
+  if (s3 == s4 && p3->query_temp("tiny_hearts") == p4->query_temp("tiny_hearts")
+    && p3->query("mud_age") > p4->query("mud_age"))
+    no += 1;
 
-	if(no==0)	{ob1=p3; i1=s3;}
-	if(no==1)	{ob2=p3; i2=s3;}
-	if(no==2)	{ob3=p3; i3=s3;}
-	if(no==3)	{ob4=p3; i4=s3;}
-	no = 0;
-	if(s4 < s2)	no += 1;
-	if(s4 ==s2 && p4->query_temp("tiny_hearts") > p2->query_temp("tiny_hearts") )
-		no += 1;
-	if(s4 ==s2 && p4->query_temp("tiny_hearts") == p2->query_temp("tiny_hearts") 
-		    && p4->query("mud_age") > p2->query("mud_age") )
-		no += 1;
-	if(s4 < s3)	no += 1;
-	if(s4 ==s3 && p4->query_temp("tiny_hearts") > p3->query_temp("tiny_hearts") )
-		no += 1;
-	if(s4 ==s3 && p4->query_temp("tiny_hearts") == p3->query_temp("tiny_hearts") 
-		    && p4->query("mud_age") > p3->query("mud_age") )
-		no += 1;
-	if(s4 < s1)	no += 1;
-	if(s4 ==s1 && p4->query_temp("tiny_hearts") > p1->query_temp("tiny_hearts") )
-		no += 1;
-	if(s4 ==s1 && p4->query_temp("tiny_hearts") == p1->query_temp("tiny_hearts") 
-		    && p4->query("mud_age") > p1->query("mud_age") )
-		no += 1;
+  if (no == 0) { ob1 = p3; i1 = s3; }
+  if (no == 1) { ob2 = p3; i2 = s3; }
+  if (no == 2) { ob3 = p3; i3 = s3; }
+  if (no == 3) { ob4 = p3; i4 = s3; }
+  no = 0;
+  if (s4 < s2) no += 1;
+  if (s4 == s2 && p4->query_temp("tiny_hearts") > p2->query_temp("tiny_hearts"))
+    no += 1;
+  if (s4 == s2 && p4->query_temp("tiny_hearts") == p2->query_temp("tiny_hearts")
+    && p4->query("mud_age") > p2->query("mud_age"))
+    no += 1;
+  if (s4 < s3) no += 1;
+  if (s4 == s3 && p4->query_temp("tiny_hearts") > p3->query_temp("tiny_hearts"))
+    no += 1;
+  if (s4 == s3 && p4->query_temp("tiny_hearts") == p3->query_temp("tiny_hearts")
+    && p4->query("mud_age") > p3->query("mud_age"))
+    no += 1;
+  if (s4 < s1) no += 1;
+  if (s4 == s1 && p4->query_temp("tiny_hearts") > p1->query_temp("tiny_hearts"))
+    no += 1;
+  if (s4 == s1 && p4->query_temp("tiny_hearts") == p1->query_temp("tiny_hearts")
+    && p4->query("mud_age") > p1->query("mud_age"))
+    no += 1;
 
-	if(no==0)	{ob1=p4; i1=s4;}
-	if(no==1)	{ob2=p4; i2=s4;}
-	if(no==2)	{ob3=p4; i3=s4;}
-	if(no==3)	{ob4=p4; i4=s4;}
+  if (no == 0) { ob1 = p4; i1 = s4; }
+  if (no == 1) { ob2 = p4; i2 = s4; }
+  if (no == 2) { ob3 = p4; i3 = s4; }
+  if (no == 3) { ob4 = p4; i4 = s4; }
 
-	msg += "第一名：  "+sprintf("%-12s  最后得分是：  %d\n", ob1->query("name"), i1);
-	msg += "第二名：  "+sprintf("%-12s  最后得分是：  %d\n", ob2->query("name"), i2);
-	msg += "第三名：  "+sprintf("%-12s  最后得分是：  %d\n", ob3->query("name"), i3);
-	msg += "第四名：  "+sprintf("%-12s  最后得分是：  %d\n", ob4->query("name"), i4);
-	msg += NOR "\n";
-	tell_room(this_object(), msg);
+  msg += "第一名：  " + sprintf("%-12s  最后得分是：  %d\n", ob1->query("name"), i1);
+  msg += "第二名：  " + sprintf("%-12s  最后得分是：  %d\n", ob2->query("name"), i2);
+  msg += "第三名：  " + sprintf("%-12s  最后得分是：  %d\n", ob3->query("name"), i3);
+  msg += "第四名：  " + sprintf("%-12s  最后得分是：  %d\n", ob4->query("name"), i4);
+  msg += NOR "\n";
+  tell_room(this_object(), msg);
 
-	// 第一名
-	if(i1 == 5000) {			// 全收齐
-		tell_object(ob1, sprintf("你获得了%d点潜能。\n", 400));
-		ob1->add("potential", 400);
-	}
-	if(i1 == 3500) {			// 收全红
-		tell_object(ob1, sprintf("你获得了%d点潜能。\n", 350));
-		ob1->add("potential", 350);
-	}
-	if(i1 < 3500) {				// 第一名
-		tell_object(ob1, sprintf("你获得了%d点潜能。\n", 300));
-		ob1->add("potential", 300);
-	}
-	ob1->add("cards_no1_times", 1);		// 记录得到第一名次数
-	ob1->add("cards_times", 1);		// 记录打牌次数
+  // 第一名
+  if (i1 == 5000) {   // 全收齐
+    tell_object(ob1, sprintf("你获得了%d点潜能。\n", 400));
+    ob1->add("potential", 400);
+  }
+  if (i1 == 3500) {   // 收全红
+    tell_object(ob1, sprintf("你获得了%d点潜能。\n", 350));
+    ob1->add("potential", 350);
+  }
+  if (i1 < 3500) {    // 第一名
+    tell_object(ob1, sprintf("你获得了%d点潜能。\n", 300));
+    ob1->add("potential", 300);
+  }
+  ob1->add("cards_no1_times", 1);  // 记录得到第一名次数
+  ob1->add("cards_times", 1);  // 记录打牌次数
 
-	// 第二名
-	tell_object(ob2, sprintf("你获得了%d点潜能。\n", 150));
-	ob2->add("potential", 150);
-	ob2->add("cards_times", 1);		// 记录打牌次数
+  // 第二名
+  tell_object(ob2, sprintf("你获得了%d点潜能。\n", 150));
+  ob2->add("potential", 150);
+  ob2->add("cards_times", 1);  // 记录打牌次数
 
-	// 第三名
-	tell_object(ob3, sprintf("你获得了%d点潜能。\n", -50));
-	ob2->add("potential", -50);
-	ob3->add("cards_times", 1);		// 记录打牌次数
+  // 第三名
+  tell_object(ob3, sprintf("你获得了%d点潜能。\n", -50));
+  ob2->add("potential", -50);
+  ob3->add("cards_times", 1);  // 记录打牌次数
 
-	// 第四名
-	tell_object(ob4, sprintf("你获得了%d点潜能。\n", -100));
-	ob4->add("potential", -100);
-	ob4->add("cards_times", 1);		// 记录打牌次数
+  // 第四名
+  tell_object(ob4, sprintf("你获得了%d点潜能。\n", -100));
+  ob4->add("potential", -100);
+  ob4->add("cards_times", 1);  // 记录打牌次数
 
-	p1->delete_temp("tiny_hearts");
-	p2->delete_temp("tiny_hearts");
-	p3->delete_temp("tiny_hearts");
-	p4->delete_temp("tiny_hearts");
+  p1->delete_temp("tiny_hearts");
+  p2->delete_temp("tiny_hearts");
+  p3->delete_temp("tiny_hearts");
+  p4->delete_temp("tiny_hearts");
 }
 
-string card_name(int num)
-{
-	string str, card, *str1 = ({
-		HIW"黑桃", HIR"红桃", HIW"草花", HIR"方块",
-	});
-		switch( (num%13) ) {
-			case 1  : card = "A";break;
-			case 11 : card = "J";break;
-			case 12 : card = "Q";break;
-			case 0  : card = "K";break;
-			default : card = sprintf("%d", (num%13) );
-		}
-		switch( (num-1)/13 ) {
-			case 0 : str = str1[0]+card; break;
-			case 1 : str = str1[1]+card; break;
-			case 2 : str = str1[2]+card; break;
-			case 3 : str = str1[3]+card; break;
-		}
-	return str;
+string card_name(int num) {
+  string str, card, *str1 = ({
+    HIW "黑桃", HIR "红桃", HIW "草花", HIR "方块",
+  });
+  switch ((num % 13)) {
+    case 1: card = "A"; break;
+    case 11: card = "J"; break;
+    case 12: card = "Q"; break;
+    case 0: card = "K"; break;
+    default: card = sprintf("%d", (num % 13));
+  }
+  switch ((num - 1) / 13) {
+    case 0: str = str1[0] + card; break;
+    case 1: str = str1[1] + card; break;
+    case 2: str = str1[2] + card; break;
+    case 3: str = str1[3] + card; break;
+  }
+  return str;
 }
 
-int card_score(int num)
-{
-	if(num>=18 && num<=23)	return query_temp("heart_showed")?-20:-10;
-	if(num == 24)	return query_temp("heart_showed")?-40 :-20;
-	if(num == 25)	return query_temp("heart_showed")?-60 :-30;
-	if(num == 26)	return query_temp("heart_showed")?-80 :-40;
-	if(num == 14)	return query_temp("heart_showed")?-100:-50;
-	if(num == 12)	return query_temp("pig_showed")?-200:-100;
-	if(num == 50)	return query_temp("goat_showed")?200 : 100;
+int card_score(int num) {
+  if (num >= 18 && num <= 23) return query_temp("heart_showed") ? -20 : -10;
+  if (num == 24) return query_temp("heart_showed") ? -40 : -20;
+  if (num == 25) return query_temp("heart_showed") ? -60 : -30;
+  if (num == 26) return query_temp("heart_showed") ? -80 : -40;
+  if (num == 14) return query_temp("heart_showed") ? -100 : -50;
+  if (num == 12) return query_temp("pig_showed") ? -200 : -100;
+  if (num == 50) return query_temp("goat_showed") ? 200 : 100;
 
-	return 0;
+  return 0;
 }
 
-int compare(int c1, int c2)
-{
-	if( (c1-1)/13 != (c2-1)/13 )	return 0;
+int compare(int c1, int c2) {
+  if ((c1 - 1) / 13 != (c2 - 1) / 13) return 0;
 
-	if( (c2%13) == 1 )	return 1;
-	if( (c1%13) == 1 )	return 0;
+  if ((c2 % 13) == 1) return 1;
+  if ((c1 % 13) == 1) return 0;
 
-	if( c2 > c1 )	return 1;
+  if (c2 > c1) return 1;
 
-	return 0;
+  return 0;
 }
 
-int have_type(object me, int type)
-{
-	int i;
+int have_type(object me, int type) {
+  int i;
 
-	if(!me)	return 0;
+  if (!me) return 0;
 
-	for(i=0;i<13;i++) {
-		if((int)me->query_temp("cards/"+i) >= type*13+1
-		&& (int)me->query_temp("cards/"+i) <= type*13+13 )
-			return 1;
-	}
-	return 0;
+  for (i = 0; i < 13; i++) {
+    if ((int)me->query_temp("cards/" + i) >= type * 13 + 1
+      && (int)me->query_temp("cards/" + i) <= type * 13 + 13)
+      return 1;
+  }
+  return 0;
 }
 
-int do_shutup_tell(string arg)
-{
-	object me;
-	string arg1, arg2;
+int do_shutup_tell(string arg) {
+  object me;
+  string arg1, arg2;
 
-	me = this_player();
+  me = this_player();
 
-	if(!arg || sscanf(arg, "%s %s", arg1, arg2) != 2) return 0;
+  if (!arg || sscanf(arg, "%s %s", arg1, arg2) != 2) return 0;
 
-	if(arg1 == query("sits/east") || arg1 == query("sits/west")
-	|| 	arg1 == query("sits/north") || arg1 == query("sits/south") ) {
-		tell_object(me, "怎么？还想传递情报啊？\n");
-		return 1;
-	}
+  if (arg1 == query("sits/east") || arg1 == query("sits/west")
+    || arg1 == query("sits/north") || arg1 == query("sits/south")) {
+    tell_object(me, "怎么？还想传递情报啊？\n");
+    return 1;
+  }
 
-	return 0;
+  return 0;
 }
 
-int do_shutup_reply(string arg)
-{
-	string tar;
+int do_shutup_reply(string arg) {
+  string tar;
 
-	if(!tar = this_player()->query_temp("reply") || !arg )	return 0;
+  if (!tar = this_player()->query_temp("reply") || !arg) return 0;
 
-	if(tar == query("sits/east") || tar == query("sits/west")
-	|| 	tar == query("sits/north") || tar == query("sits/south") ) {
-		tell_object(this_player(), "怎么？还想传递情报啊？\n");
-		return 1;
-	}
-		
-	return 0;	
+  if (tar == query("sits/east") || tar == query("sits/west")
+    || tar == query("sits/north") || tar == query("sits/south")) {
+    tell_object(this_player(), "怎么？还想传递情报啊？\n");
+    return 1;
+  }
+
+  return 0;
 }
