@@ -137,6 +137,21 @@ harness):
   in the real tree it's often duplicated there too, and the harness
   walks that copy as well. (`nt1`: 20 corrupted entries, 10 in the real
   tree and 10 duplicated under an unreferenced `work/version/` backup.)
+- **A lib that intentionally destructs the login connection and tells
+  the player to reconnect** (a distributed/staggered preload gate that
+  polls readiness via a self-rescheduling `input_to()` — `"载入中，请
+  稍后..."` — then kicks every waiting connection with a "启动完毕，
+  重新连线中" message once done, rather than just gating `input_to()`
+  until ready) looks like a hang or crash to the harness by default: a
+  disconnect with unsent `--send` lines remaining ends the run early.
+  This is legitimate design, not a bug — pass `--reconnect-on-
+  disconnect` to have the harness open a fresh `fluffos_connect()` and
+  keep going. Leave the flag off by default (most disconnects mid-
+  script ARE a genuine crash/ban and should end the run, not be
+  silently retried). (`nt6`'s `SYSTEM_D->valid_login()` gate — solving
+  this made an EARLIER "boots clean but registration times out"
+  verdict on `nt6` actually testable; the real remaining blockers
+  turned out to be architectural, see §7.15.)
 
 ### 1.3 Known WASM-mode gaps, and the current policy for each
 
@@ -1361,6 +1376,46 @@ lib — `nitan_ceshi`/`nitan_san` predate the bug (real local dbase
 already present), `rzrmud`/`suiyuanxijianlu`/`xiaoaojianghu2`/
 `yuxuechongsheng` have real per-object storage. Check whether the
 simul_efun actually defines global set/query before assuming.
+
+**A port of this fix can carry the explanatory comment without the
+actual fix.** On `nt6` (a distinct-but-related lineage, ported from
+`nitan170911` in an earlier pass), `feature/dbase.lpc` had this
+section's exact reasoning copied in as a comment — "the real fix:
+define set/query/delete directly HERE... nearly everything" — sitting
+directly above `set`/`query`/`delete` function bodies that were simply
+never copied over; only `add()`/`query_entire_dbase()`/`set_dbase()`
+etc. existed. The lib still booted clean (no compile error — a missing
+function isn't a syntax error) and got marked as having this fix
+"applied" on that basis, but registration failed immediately
+(`set("id", arg, ob) != arg` → "Failed setting user name.") because
+bare `set()` calls were still hitting the simul_efun's shared fallback.
+**Never trust a fix-claiming comment without grepping the file for the
+function signature it claims to define** — `grep -c
+"^varargs mixed set(string prop"` the target file directly, don't just
+read the prose above it. (Confirmed identically on `nt6nitan6win`, same
+lineage/master hash — diffed byte-identical to `nt6`'s pre-fix state
+before copying the corrected files across.)
+
+**A downstream consequence worth checking once `set`/`query`/`delete`
+are real local (inherited) functions**: any file that locally overrides
+one of them and tries to call "the un-overridden version" via
+`efun::set(...)`/`efun::query(...)`/`efun::delete(...)` will now fail
+to compile — `set`/`query`/`delete` were never genuine driver efuns
+here (`error: Unknown efun: set`), only simul_efuns/inherited
+functions, and `efun::` only resolves true built-ins. Grep
+`efun::(set|query|delete|addn|set_temp|query_temp)\(` across the whole
+lib once §7.15's fix is in place; fix by switching to `::set(...)` etc.
+(parent-scope, now resolves through the completed F_DBASE). `addn` is a
+special case — it's simul_efun-ONLY (never inherited, see this
+section's own `addn()`/`addn_temp()` in `wizard.lpc`), so `::addn(...)`
+has no valid target; replace with either a direct
+`(ob||this_object())->add(prop, data)` call, or `::add(...)` when the
+surrounding override is itself named `add()` and the `addn` was
+actually just a typo for `add` (both shapes seen on `nt6`: `user.lpc`
+and `giftd.lpc` had the typo inside an `add()` override, `baby.lpc` had
+a genuinely-named `addn()` override needing the `ob->add()` replacement).
+(`nt6`: 5 files — `user.lpc`, `baby.lpc`, `giftd.lpc`, `examined.lpc`,
+`room.lpc`.)
 
 ### 7.16 Stale shipped real-timestamps feeding an unbounded catch-up loop
 
