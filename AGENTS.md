@@ -2621,6 +2621,17 @@ containing `socket_*` calls, but whose `is_version_ok()`/
 `is_release_server()`/`append_sn()` etc. are called from dozens of
 unrelated files throughout the mudlib.)
 
+Also confirmed on the Century/adm-single family's own `dns_master.lpc`
+(`ldtx`, `ldtxii`) — `startup_udp()`/`send_udp()`/the `socket_close()`
+in `send_shutdown()` gutted per this section's default. Notably here
+the trigger was in the registration flow itself, not preload:
+`logind.lpc`'s `encoding_to_mudlist()` (the very first prompt after
+connect, before the id prompt) calls `DNS_MASTER->query_muds()`, so the
+failed compile hung EVERY connection immediately after encoding
+selection — a stronger symptom than the usual "some daemon-adjacent
+feature is broken," worth checking first whenever a lib hangs right
+after its first prompt with no further output.
+
 ### 7.53 A daemon's own defensive `seteuid(getuid())` silently resets a euid that `create()` deliberately set
 
 If a daemon's real uid never resolves (e.g. `master.lpc`'s
