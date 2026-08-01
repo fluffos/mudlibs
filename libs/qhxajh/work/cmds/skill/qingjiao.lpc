@@ -7,292 +7,264 @@
 inherit F_CLEAN_UP;
 
 string *refuse_msg = ({
-    "看了看你，说：你。。。先下去自己练吧。\n",
-    "沉吟了一下，说：你先跟师兄们学点功夫吧。\n",
-    "笑着说：你想学什么功夫呀？\n",
-    "问你：你知道本门有些什么功夫吗？\n",
+  "看了看你，说：你。。。先下去自己练吧。\n",
+  "沉吟了一下，说：你先跟师兄们学点功夫吧。\n",
+  "笑着说：你想学什么功夫呀？\n",
+  "问你：你知道本门有些什么功夫吗？\n",
 });
 
-int get_gain_xiuwei( object me, object master, string type );
-int zhongcheng( object me, string skill );
+int get_gain_xiuwei(object me, object master, string type);
+int zhongcheng(object me, string skill);
 //////////////////////////////////////////////////////////////////////////////
 
 void create() { seteuid(getuid()); }
 
-string get_refuse_msg()
-{
-	return refuse_msg[ random( sizeof( refuse_msg ) ) ];
+string get_refuse_msg() {
+  return refuse_msg[random(sizeof(refuse_msg))];
 }
 
-int main(object me, string arg)
-{
-	string msg, skill, master, xiuwei_type;
-	object ob;
-    int master_dengji, my_dengji;
-    int master_int, my_int;
-	int master_jibie, my_jibie, gin_cost;
-    int my_lingwu;
-    int gain_xiuwei, gain_jibie;
-    int dengji, skill_dengji, dengji_cha;
-    int format_correct = 0;
-        
-    if ( environment(me)->query("wiz"))
-        return notify_fail(HIR "这是属于神的房间，不能用来练功。\n" NOR);
+int main(object me, string arg) {
+  string msg, skill, master, xiuwei_type;
+  object ob;
+  int master_dengji, my_dengji;
+  int master_int, my_int;
+  int master_jibie, my_jibie, gin_cost;
+  int my_lingwu;
+  int gain_xiuwei, gain_jibie;
+  int dengji, skill_dengji, dengji_cha;
+  int format_correct = 0;
 
-    if ( me->is_busy() )
-        return notify_fail("你现在无法静下心来求教。\n");
+  if (environment(me)->query("wiz"))
+    return notify_fail(HIR "这是属于神的房间，不能用来练功。\n" NOR);
 
-    if ( !arg ) 
-        return notify_fail( "你想向谁请教什么？\n" );
-    if ( arg )
-    {
-        if (( sscanf(arg, "%s from %s", skill, master) == 2 ) ||
-            ( sscanf(arg, "%s %s", master, skill) == 2 ))
-        {
-            format_correct = 1;
-        }
+  if (me->is_busy())
+    return notify_fail("你现在无法静下心来求教。\n");
+
+  if (!arg)
+    return notify_fail("你想向谁请教什么？\n");
+  if (arg) {
+    if ((sscanf(arg, "%s from %s", skill, master) == 2) ||
+      (sscanf(arg, "%s %s", master, skill) == 2)) {
+      format_correct = 1;
     }
-    if ( !format_correct )
-    {
-		return notify_fail("指令格式：qingjiao <某人> <技能> 或 qingjiao <"
-                            "技能> from <某人> \n");
+  }
+  if (!format_correct) {
+    return notify_fail("指令格式：qingjiao <某人> <技能> 或 qingjiao <"
+      "技能> from <某人> \n");
+  }
+
+  if (me->is_fighting() || me->is_duilianing())
+    return notify_fail("临阵磨枪？来不及啦。\n");
+
+  if (!me->can_act())
+    return notify_fail("你现在无法请教！\n");
+
+  if (!(ob = present(master, environment(me))) || !ob->is_character())
+    return notify_fail("你要向谁求教？\n");
+
+  if (file_size(SKILL_D(skill) + ".lpc") == -1)
+    return notify_fail("没有这门武功。\n");
+
+  if (!SKILL_D(skill)->valid_learn(me)) return 0;  //哪个白痴把这行去掉的？！
+
+  printf("你向%s请教有关「%s」的疑问。\n", ob->name(),
+    to_chinese(skill));
+
+  tell_object(ob, sprintf("%s向你请教有关「%s」的问题。\n",
+    me->name(), to_chinese(skill)));
+
+  if (!living(ob))
+    return notify_fail("但是" + ob->name() + "现在无法指点你什么了。\n");
+
+  // 为了能更加灵活一些, 我们让你请教的人来决定是否教你
+
+  if (!ob->valid_teach(me, skill)) {
+    return notify_fail("但是看来" + ob->name() +
+      "并不想指点你。\n");
+  }
+
+  master_jibie = ob->query_jibie(skill);
+  my_jibie = me->query_jibie(skill);
+  my_lingwu = me->query_lingwu(skill);
+
+  if (!master_jibie)
+    return notify_fail(ob->name() + "对你耸耸肩膀说：惭愧惭愧，这门功夫你\n"
+      "还是去找别人请教吧。\n");
+
+  // 判断是否对师门够忠诚.
+  if (!ob->zhongcheng(me, skill) && !ob->query("trainer"))
+    if (!zhongcheng(me, skill)) {
+      if (msg = ob->query("no_enough_msg")) {
+        if (stringp(msg)) {
+          message_vision(msg, ob, me);
+          return 1;
+        }
+      }
+      message_vision("$N看看$n，缓缓的说道：你且自问一下，是否对师门"
+        "尽你应尽的力了？\n$N一幅对$n不是很信任的样子。\n", ob, me);
+      return 1;
+    }
+  // 先考虑请教技能的情况
+  if (!SKILL_D(skill)->is_knowledge()) {
+    gain_jibie = random(3) + 1;  //是不是random(5)更好些？
+    if (gain_jibie + my_jibie > master_jibie)
+      gain_jibie = master_jibie - my_jibie;
+
+    if (!gain_jibie) {
+      write(ob->name() + "摇了摇头说：你的这门功夫已经练到"
+        "这个地步，我\n也无法再教你什么了。\n");
+      return 1;
     }
 
-	if ( me->is_fighting() || me->is_duilianing() )
-		return notify_fail("临阵磨枪？来不及啦。\n");
+    gin_cost = 10 + 2 * gain_jibie;
 
-    if ( !me->can_act() )
-        return notify_fail("你现在无法请教！\n");
-
-	if (!(ob = present(master, environment(me))) || !ob->is_character())
-		return notify_fail("你要向谁求教？\n");
-
-    if ( file_size( SKILL_D(skill) + ".lpc" ) == -1 )
-        return notify_fail("没有这门武功。\n");
-
-    if ( !SKILL_D( skill )->valid_learn( me ) ) return 0; //哪个白痴把这行去掉的？！
-
-    printf("你向%s请教有关「%s」的疑问。\n", ob->name(),
-        to_chinese(skill));
-
-	tell_object(ob, sprintf("%s向你请教有关「%s」的问题。\n",
-		me->name(), to_chinese(skill)));
-    
-	if ( !living(ob) )
-		return notify_fail( "但是" + ob->name() + "现在无法指点你什么了。\n");
-
-    // 为了能更加灵活一些, 我们让你请教的人来决定是否教你
-
-    if ( !ob->valid_teach( me, skill ) )
-    {
-        return notify_fail("但是看来" + ob->name() + 
-                "并不想指点你。\n");
+    //Qyz 这是为了避免gin_cost为负的情况
+    if (gin_cost < 0)
+      gin_cost *= -1;
+    // 这是避免在请教后晕倒的情况
+    if (gin_cost > 100)
+      gin_cost = 100;
+    if (!my_jibie) gin_cost *= 2;
+    if (ob->query("gin") < gin_cost / 5 + 1) {
+      write("但是" + ob->name() + "显然太累了，没有办法教你什么。\n");
+      tell_object(ob, "但是你太累了，没有办法教" + me->name() + "。\n");
+      return 1;
     }
-
-    master_jibie = ob->query_jibie(skill);
-    my_jibie = me->query_jibie(skill);
-    my_lingwu = me->query_lingwu(skill);
-
-    if ( !master_jibie )
-        return notify_fail( ob->name() + "对你耸耸肩膀说：惭愧惭愧，这门功夫你\n"
-                            "还是去找别人请教吧。\n");
-
-    // 判断是否对师门够忠诚.
-    if ( !ob->zhongcheng( me, skill ) && !ob->query("trainer") )
-        if ( !zhongcheng( me, skill ) )
-        {
-            if ( msg = ob->query( "no_enough_msg") )
-            {
-                if ( stringp(msg) ) 
-                {
-                    message_vision( msg, ob, me );
-                    return 1;
-                }
-            }       
-            message_vision( "$N看看$n，缓缓的说道：你且自问一下，是否对师门"
-                        "尽你应尽的力了？\n$N一幅对$n不是很信任的样子。\n", ob, me );
-            return 1;
-        }
-    // 先考虑请教技能的情况
-    if ( !SKILL_D( skill )->is_knowledge() )
-    {
-	    gain_jibie = random( 3 ) + 1; //是不是random(5)更好些？
-        if ( gain_jibie + my_jibie > master_jibie )
-            gain_jibie = master_jibie - my_jibie;
-
-        if ( !gain_jibie )
-        {
-            write( ob->name() + "摇了摇头说：你的这门功夫已经练到"
-                   "这个地步，我\n也无法再教你什么了。\n");
-            return 1;
-        }
-
-	    gin_cost = 10 + 2 * gain_jibie;
-
-        //Qyz 这是为了避免gin_cost为负的情况
-        if( gin_cost < 0 )
-            gin_cost *= -1;
-        // 这是避免在请教后晕倒的情况
-        if( gin_cost > 100 )
-            gin_cost = 100;
-	    if ( !my_jibie ) gin_cost *= 2;
-	    if ( ob->query( "gin" ) < gin_cost / 5 + 1 )
-	    {
-		    write("但是" + ob->name() + "显然太累了，没有办法教你什么。\n");
-		    tell_object(ob, "但是你太累了，没有办法教" + me->name() + "。\n");
-		    return 1;
-	    }
-		if ( me->query("gin") < gin_cost )
-	    {
-		    gin_cost = me->query( "gin" );
-		    printf( "你今天太累了，结果没有领会到什么。\n" );
-            return 1;
-   	    }
-        xiuwei_type = SKILL_D( skill )->query_xiuwei_type();
-        my_dengji = me->query_xiuwei_dengji( xiuwei_type );
-        master_dengji = ob->query_xiuwei_dengji( xiuwei_type );
-        
-        // 这里我们要千万注意, 不能让相互增长的地方出现问题!!!
-        // 我的级别低于师父的, 这是正常情况
-        if ( my_jibie <= master_jibie )
-        {
-            string zhaoshi;
-        
-	        if ( my_jibie && me->query_lingwu_ratio( skill ) < 90 )
-            {
-    	        return notify_fail( ob->name() + "摇了摇头：贪多嚼不烂，"
-			                "你且下去多多练习吧。\n" );
-            }
-            if ( zhaoshi = SKILL_D(skill)->query_zhaoshi(my_jibie) )
-			    printf( "你听了%s的指导，对%s这招似乎有了些心得。\n",
-       			    ob->name(), zhaoshi );
-            else
-                printf( "你听了%s的指导，对%s有了更深的理解。\n",
-    			    ob->name(), to_chinese(skill) );
-            // qyz 这样的话，假如两人武功一样，就可以不断请教了。
-            // tita的情况就是这样出现的。
-			me->improve_jibie( skill, gain_jibie );
-
-            gain_xiuwei = get_gain_xiuwei( me, ob, xiuwei_type );
-            if ( gain_xiuwei && gain_jibie && 
-                 me->query_xiuwei( skill ) < ob->query_xiuwei( skill ) )
-            {
-                skill_dengji = SKILL_D( skill )->query_dengji();
-                dengji_cha = my_dengji - skill_dengji + 1;
-                if ( (gain_xiuwei >> dengji_cha) > 0)
-  	                me->improve_xiuwei( xiuwei_type, ( gain_xiuwei >> dengji_cha ));
-                else if ( random ( 1 << dengji_cha ) < gain_xiuwei )
-                    me->improve_xiuwei( xiuwei_type, 1);
-            }
-        }
-        else
-        {
-	        if ( me->query_lingwu_ratio( skill ) < 100 )
-                return notify_fail( ob->name() + "说道：武学需精益求精，"
-			            "方能有所突破，你且自问是否如此努力了呢？\n" );
-            // 使师父增长的这种情况, 每次增长 1 级吧
-            ob->improve_jibie( skill, my_jibie - master_jibie );
-            ob->improve_lingwu( skill, my_jibie - master_jibie );
-            gain_xiuwei = get_gain_xiuwei( me, ob, xiuwei_type );
-            if ( gain_xiuwei && 
-                me->query_xiuwei( skill ) < ob->query_xiuwei( skill ) )
-                me->improve_xiuwei( xiuwei_type, gain_xiuwei );
-            message_vision( "$N和$N的师父$n相互探讨" + to_chinese( skill ) + 
-                "的奥秘，双方都有所获。\n", me, ob );   
-        }
-        ob->receive_damage( "gin", gin_cost / 5 + 1 );
-        me->receive_damage( "gin", gin_cost );
-        return 1;
+    if (me->query("gin") < gin_cost) {
+      gin_cost = me->query("gin");
+      printf("你今天太累了，结果没有领会到什么。\n");
+      return 1;
     }
-    // 请教文化类的东西是不会有修为的啦. :-)
-    gain_jibie = random( 3 ) + 1;
-	gin_cost = 10 + 2 * gain_jibie;
-	if ( !my_jibie ) gin_cost *= 2;
-	if ( (int)ob->query("gin") < gin_cost / 5 + 1 )
-	{
-	    write("但是" + ob->name() + "显然太累了，没有办法教你什么。\n");
-	    tell_object(ob, "但是你太累了，没有办法教" + me->name() + "。\n");
-	    return 1;
-    }
-    if ( !my_jibie || me->query_lingwu_ratio( skill ) >= 90 )
-    {
-	    if ( (int)me->query("gin") > gin_cost )
-	    {
-            printf( "你听了%s关于%s的讲解阐释，似乎学到些什么。\n",
-					    ob->name(), to_chinese(skill) );
-			me->improve_jibie( skill, gain_jibie );
-        }
-		else
-		{
-		    gin_cost = me->query( "gin" ) - 1;
-		    printf( "你实在是太疲惫了，对%s的讲解根本就没有听进去。\n",
-                ob->name() );
-    	}
-        ob->receive_damage( "gin", gin_cost / 5 + 1 );
- 		me->receive_damage( "gin", gin_cost );
-        return 1;
-    }
-    else 
-        return notify_fail( ob->name() + "摇了摇头：贪多不化，于求学无益。"
-			    "你还是先熟读典籍后再来问我吧。\n" );
+    xiuwei_type = SKILL_D(skill)->query_xiuwei_type();
+    my_dengji = me->query_xiuwei_dengji(xiuwei_type);
+    master_dengji = ob->query_xiuwei_dengji(xiuwei_type);
 
-	// TODO : should random message here
+    // 这里我们要千万注意, 不能让相互增长的地方出现问题!!!
+    // 我的级别低于师父的, 这是正常情况
+    if (my_jibie <= master_jibie) {
+      string zhaoshi;
+
+      if (my_jibie && me->query_lingwu_ratio(skill) < 90) {
+        return notify_fail(ob->name() + "摇了摇头：贪多嚼不烂，"
+          "你且下去多多练习吧。\n");
+      }
+      if (zhaoshi = SKILL_D(skill)->query_zhaoshi(my_jibie))
+        printf("你听了%s的指导，对%s这招似乎有了些心得。\n",
+          ob->name(), zhaoshi);
+      else
+        printf("你听了%s的指导，对%s有了更深的理解。\n",
+          ob->name(), to_chinese(skill));
+      // qyz 这样的话，假如两人武功一样，就可以不断请教了。
+      // tita的情况就是这样出现的。
+      me->improve_jibie(skill, gain_jibie);
+
+      gain_xiuwei = get_gain_xiuwei(me, ob, xiuwei_type);
+      if (gain_xiuwei && gain_jibie &&
+        me->query_xiuwei(skill) < ob->query_xiuwei(skill)) {
+        skill_dengji = SKILL_D(skill)->query_dengji();
+        dengji_cha = my_dengji - skill_dengji + 1;
+        if ((gain_xiuwei >> dengji_cha) > 0)
+          me->improve_xiuwei(xiuwei_type, (gain_xiuwei >> dengji_cha));
+        else if (random(1 << dengji_cha) < gain_xiuwei)
+          me->improve_xiuwei(xiuwei_type, 1);
+      }
+    } else {
+      if (me->query_lingwu_ratio(skill) < 100)
+        return notify_fail(ob->name() + "说道：武学需精益求精，"
+          "方能有所突破，你且自问是否如此努力了呢？\n");
+      // 使师父增长的这种情况, 每次增长 1 级吧
+      ob->improve_jibie(skill, my_jibie - master_jibie);
+      ob->improve_lingwu(skill, my_jibie - master_jibie);
+      gain_xiuwei = get_gain_xiuwei(me, ob, xiuwei_type);
+      if (gain_xiuwei &&
+        me->query_xiuwei(skill) < ob->query_xiuwei(skill))
+        me->improve_xiuwei(xiuwei_type, gain_xiuwei);
+      message_vision("$N和$N的师父$n相互探讨" + to_chinese(skill) +
+        "的奥秘，双方都有所获。\n", me, ob);
+    }
+    ob->receive_damage("gin", gin_cost / 5 + 1);
+    me->receive_damage("gin", gin_cost);
+    return 1;
+  }
+  // 请教文化类的东西是不会有修为的啦. :-)
+  gain_jibie = random(3) + 1;
+  gin_cost = 10 + 2 * gain_jibie;
+  if (!my_jibie) gin_cost *= 2;
+  if ((int)ob->query("gin") < gin_cost / 5 + 1) {
+    write("但是" + ob->name() + "显然太累了，没有办法教你什么。\n");
+    tell_object(ob, "但是你太累了，没有办法教" + me->name() + "。\n");
+    return 1;
+  }
+  if (!my_jibie || me->query_lingwu_ratio(skill) >= 90) {
+    if ((int)me->query("gin") > gin_cost) {
+      printf("你听了%s关于%s的讲解阐释，似乎学到些什么。\n",
+        ob->name(), to_chinese(skill));
+      me->improve_jibie(skill, gain_jibie);
+    } else {
+      gin_cost = me->query("gin") - 1;
+      printf("你实在是太疲惫了，对%s的讲解根本就没有听进去。\n",
+        ob->name());
+    }
+    ob->receive_damage("gin", gin_cost / 5 + 1);
+    me->receive_damage("gin", gin_cost);
+    return 1;
+  } else
+    return notify_fail(ob->name() + "摇了摇头：贪多不化，于求学无益。"
+      "你还是先熟读典籍后再来问我吧。\n");
+
+  // TODO : should random message here
 }
 
-int get_gain_xiuwei( object me, object master, string type )
-{
-    int my_int, master_int, my_dengji, master_dengji;
-    int temp, diff;
+int get_gain_xiuwei(object me, object master, string type) {
+  int my_int, master_int, my_dengji, master_dengji;
+  int temp, diff;
 
-    my_int = me->query_int();
-    master_int = master->query_int();
-    my_dengji = me->query_xiuwei_dengji( type );
-    master_dengji = master->query_xiuwei_dengji( type );
-    if ( my_dengji > master_dengji )
-        return 0;
-    else if ( my_dengji < master_dengji )
-        diff = ( master_dengji - my_dengji + 1 ) / 2;
-    else
-        diff = 2;
-    temp = master_dengji * my_dengji/2 + master_int /10 * (my_int + 5) / 10; 
-    
-    return random( temp / diff + 3 );
-}
-   
-int zhongcheng( object me, string skill )
-{
-    int dengji, jibie, zhongchen;
+  my_int = me->query_int();
+  master_int = master->query_int();
+  my_dengji = me->query_xiuwei_dengji(type);
+  master_dengji = master->query_xiuwei_dengji(type);
+  if (my_dengji > master_dengji)
+    return 0;
+  else if (my_dengji < master_dengji)
+    diff = (master_dengji - my_dengji + 1) / 2;
+  else
+    diff = 2;
+  temp = master_dengji * my_dengji / 2 + master_int / 10 * (my_int + 5) / 10;
 
-    if ( skill == "literate" ) return 1;
-    dengji = SKILL_D( skill )->query_dengji();
-    if ( !dengji ) dengji = 1;
-    jibie = me->query_jibie( skill );
-    if ( SKILL_D( skill )->query_level() );
-        dengji = SKILL_D( skill )->query_level();
-        
-    switch ( dengji )
-    {
-        case 1 : zhongchen = jibie * 10 / 6;        break;
-        case 2 : zhongchen = 100 + jibie * 10 / 6;  break;
-        case 3 : zhongchen = 200 + jibie * 10 / 6;  break;
-        case 4 : zhongchen = 300 + jibie * 20 / 6;  break;
-        case 5 : zhongchen = 500 + jibie * 30 / 6;  break;
-        case 6 : zhongchen = 800 + jibie * 50 / 6;  break;
-        case 7 : zhongchen = 1300 + jibie * 80 / 6; break;
-        case 8 : zhongchen = 2100 + jibie * 130 / 6; break;
-        case 9 : zhongchen = 3400 + jibie * 210 / 6; break;
-        case 10: zhongchen = 5500 + jibie * 340 /6 ; break;
-        default : zhongchen = jibie * 20 / 6; break;
-    }
-    if ( zhongchen <= me->query( "class_score/" + me->query( "family/family_name" ) ) )
-        return 1;
-    else
-        return 0;
+  return random(temp / diff + 3);
 }
- 
-int help(object me)
-{
-    write(@HELP
+
+int zhongcheng(object me, string skill) {
+  int dengji, jibie, zhongchen;
+
+  if (skill == "literate") return 1;
+  dengji = SKILL_D(skill)->query_dengji();
+  if (!dengji) dengji = 1;
+  jibie = me->query_jibie(skill);
+  if (SKILL_D(skill)->query_level());
+  dengji = SKILL_D(skill)->query_level();
+
+  switch (dengji) {
+    case 1: zhongchen = jibie * 10 / 6; break;
+    case 2: zhongchen = 100 + jibie * 10 / 6; break;
+    case 3: zhongchen = 200 + jibie * 10 / 6; break;
+    case 4: zhongchen = 300 + jibie * 20 / 6; break;
+    case 5: zhongchen = 500 + jibie * 30 / 6; break;
+    case 6: zhongchen = 800 + jibie * 50 / 6; break;
+    case 7: zhongchen = 1300 + jibie * 80 / 6; break;
+    case 8: zhongchen = 2100 + jibie * 130 / 6; break;
+    case 9: zhongchen = 3400 + jibie * 210 / 6; break;
+    case 10: zhongchen = 5500 + jibie * 340 / 6; break;
+    default: zhongchen = jibie * 20 / 6; break;
+  }
+  if (zhongchen <= me->query("class_score/" + me->query("family/family_name")))
+    return 1;
+  else
+    return 0;
+}
+
+int help(object me) {
+  write(@HELP
 指令格式：  qingjiao <某人> <技能> 或 qingjiao <技能> from <某人>
 
 这个指令可以让你向别人请教有关某一种技能的疑难问题，当然，你请教的对象在这
@@ -305,6 +277,6 @@ int help(object me)
 
 相关指令 : apprentice, lian, skills, study
 HELP
-    );
-    return 1;
+  );
+  return 1;
 }

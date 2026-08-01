@@ -3,7 +3,7 @@
 //  Mudlib Network Daemon Macro defines
 #ifndef __NET_DAEMONS_H
 #define __NET_DAEMONS_H
- 
+
 #define CMWHO_D			"/system/daemon/network/cmwhod"
 #define MAIL_SERVER             "/system/daemon/network/ms"
 #define NAME_SERVER		"/system/daemon/network/name_server"

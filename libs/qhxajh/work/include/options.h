@@ -11,14 +11,14 @@
 #define DISABLE_TIME            10
 
 // 测试开放的时间限制, 指的是小时
-#define TEST_START_TIME         9 
+#define TEST_START_TIME         9
 #define TEST_END_TIME           22
 
 // 必须玩够此时间限制才能够存盘, 单位是秒, 但测试期间设置无效
 #define CAN_SAVE_LIMIT_TIME     1800
 
 // 交谈频道中允许重复相同信息的次数
-#define CHAT_REPEAT_LIMIT       2 
+#define CHAT_REPEAT_LIMIT       2
 
 // 多少岁之前死亡不减 skill
 #define SKILL_PENALTY_LIMIT     16

@@ -26,4 +26,3 @@
 #define HP_CMD      "/cmds/comm/hp"
 
 #endif
-

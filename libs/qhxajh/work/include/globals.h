@@ -118,7 +118,7 @@
 #define REGISTER_D          DAEMON_DIR "register"
 
 #define CLASS_D(x)          ("/system/menpai/" + x)
-#define SKILL_D(x)          (call_other(DAEMON_DIR "skilld","find_skill",x)) 
+#define SKILL_D(x)          (call_other(DAEMON_DIR "skilld","find_skill",x))
 #define CONDITION_D(x)      ("/system/condition/" + x)
 #define APPLY_D	            DAEMON_DIR "applyd"
 #define MARRY_D             DAEMON_DIR "marryd"

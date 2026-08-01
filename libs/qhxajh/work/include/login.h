@@ -26,6 +26,6 @@
 
 // This defines the minimum wiz_level of users that are allowed to 
 // enter the mud. Note players has wiz_level 0.
-#define WIZ_LOCK_LEVEL		            0 
+#define WIZ_LOCK_LEVEL		            0
 
 #endif // __LOGIN_H__

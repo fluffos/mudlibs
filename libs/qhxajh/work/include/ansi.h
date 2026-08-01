@@ -1,14 +1,13 @@
- 
 //	File	:  /include/ansi.h
 //	Creator	:  Gothic@TMI-2  
 //
 //	The standard set of ANSI codes for mudlib use.
- 
+
 #define ESC	""
 #define CSI	ESC + "["
- 
-                /*  Foreground Colors  */
- 
+
+/*  Foreground Colors  */
+
 #define BLK ESC+"[30m"          /* Black    */
 #define RED ESC+"[31m"          /* Red      */
 #define GRN ESC+"[32m"          /* Green    */
@@ -17,8 +16,8 @@
 #define MAG ESC+"[35m"          /* Magenta  */
 #define CYN ESC+"[36m"          /* Cyan     */
 #define WHT ESC+"[37m"          /* White    */
- 
-                /*   Hi Intensity Foreground Colors   */
+
+/*   Hi Intensity Foreground Colors   */
 
 #define HIK ESC+"[1;30m"		/* Black	*/
 #define HIR ESC+"[1;31m"        /* Red      */
@@ -29,7 +28,7 @@
 #define HIC ESC+"[1;36m"        /* Cyan     */
 #define HIW ESC+"[1;37m"        /* White    */
 
-                /* High Intensity Background Colors  */
+/* High Intensity Background Colors  */
 
 #define HBBLK ESC+"[40;1m"       /* Black    */
 #define HBRED ESC+"[41;1m"       /* Red      */
@@ -39,9 +38,9 @@
 #define HBMAG ESC+"[45;1m"       /* Magenta  */
 #define HBCYN ESC+"[46;1m"       /* Cyan     */
 #define HBWHT ESC+"[47;1m"       /* White    */
- 
-                /*  Background Colors  */
- 
+
+/*  Background Colors  */
+
 #define BBLK ESC+"[40m"          /* Black    */
 #define BRED ESC+"[41m"          /* Red      */
 #define BGRN ESC+"[42m"          /* Green    */
@@ -52,11 +51,11 @@
 #define BWHT ESC+"[47m"          /* White    */
 
 #define NOR ESC+"[2;37;0m"      /* Puts everything back to normal */
- 
+
 /*  Additional ansi Esc codes added to ansi.h by Gothic  april 23,1993 */
 /* Note, these are Esc codes for VT100 terminals, and emmulators */
 /*       and they may not all work within the mud               */
- 
+
 #define BOLD ESC+"[1m"          /* Turn on bold mode */
 #define CLR ESC+"[2J"           /* Clear the screen  */
 #define HOME ESC+"[H"           /* Send cursor to home position */
@@ -75,4 +74,3 @@
 #define U ESC+"[4m"             /* Initialize underscore mode */
 #define REV ESC+"[7m"           /* Turns reverse video mode on */
 #define HIREV ESC+"[1,7m"       /* Hi intensity reverse video  */
- 

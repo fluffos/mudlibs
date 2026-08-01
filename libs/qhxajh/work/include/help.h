@@ -16,4 +16,4 @@
     "/help/wizard/skill/",\
     "/help/wizard/efuns/",\
     "/help/wizard/night/",\
-})        
+})

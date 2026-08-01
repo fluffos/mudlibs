@@ -1,15 +1,14 @@
 #ifndef __TASK_H
 #define __TASK_H
 
-class task
-{
-    int need_save;
-    string name;
-    string verb;
-    string target;
-    mixed * event;
-    int begin_time;
-    int task_end;
+class task {
+  int need_save;
+  string name;
+  string verb;
+  string target;
+  mixed *event;
+  int begin_time;
+  int task_end;
 }
 
 #define TASK_VERB           0

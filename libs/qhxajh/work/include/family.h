@@ -17,7 +17,7 @@
 
 #define ALL_FAMILYS ({ EAST, WEST, KONGDONG, PENGLAI, DUANSHI, \
                        FUNIU, SHAOLIN, XINGXIU, MURONG, GAIBANG, })
-                
+
 
 #define FAMILY_ENEMY    2
 #define FAMILY_FRIEND   1
