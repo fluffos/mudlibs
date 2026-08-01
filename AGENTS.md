@@ -307,7 +307,11 @@ WASM instance or local play, and per user direction should be
   fires deterministically every run. Known affected:
   `unknownlib20150716`, `xiaoyuxiyou`, `bixiecanyang`,
   `xiyangzaixian_fengyun2`, `fy2005` (5 min), `nitan_ceshi`,
-  `nitan_san`, `xiaoaojianghu_client` (uptime()<10), `tianxia`.
+  `nitan_san`, `xiaoaojianghu_client` (uptime()<10), `tianxia`,
+  `jhfy3` (uptime()<30, fired deterministically every WASM run since the
+  harness connects instantly after boot — no amount of real-wall-clock
+  waiting via filler `--send` traffic satisfies it, because the WASM
+  event backend is host-tick-driven, not wall-clock-driven).
 - **Per-IP anti-flood / registration throttles** — "one new registration
   per N minutes per IP" mappings (`xo_final`'s `BAN_D` 3-minute
   throttle, `xiaoaojianghu2`'s per-IP throttle) whose rejection path is
