@@ -54,7 +54,7 @@
 #define COLOR_D                  "/adm/daemons/colord"
 #define NEWS_D                  "/cmds/usr/news"
 #define NAME_D                  "/adm/daemons/named"
-#define USER_WEAPOND                  "/adm/daemons/user_weapond" 
+#define USER_WEAPOND                  "/adm/daemons/user_weapond"
 
 #define CLASS_D(x)		("/daemon/class/" + x)
 #define SKILL_D(x)		("/daemon/skill/" + x)
@@ -96,10 +96,10 @@
 #define SKILL                   "/std/skill/skill"
 #define SSERVER                 "/std/skill/sserver"
 #define YUEQI                 "/std/item/yueqi"
-#define HOCKSHOP1                "/std/room/hockshop1" 
+#define HOCKSHOP1                "/std/room/hockshop1"
 
 #define HELL_ROOM             "/u/helpler/room/hellroom"
-#define MAGIC_ROOM             "/u/kuku/room/magicroom" 
+#define MAGIC_ROOM             "/u/kuku/room/magicroom"
 // User IDs
 
 #define ROOT_UID		"Root"
@@ -139,7 +139,7 @@
 #define F_UNIQUE		"/feature/unique.lpc"
 #define F_VENDOR		"/feature/vendor.lpc"
 #define F_VENDOR_SALE		"/feature/vendor_sale.lpc"
-#define F_DEALER                "/feature/dealer.lpc" 
+#define F_DEALER                "/feature/dealer.lpc"
 #define STORY_DIR	        "/clone/gift/"
 #define STORY_D	        "/adm/daemons/storyd.lpc"
 // Profiling switches

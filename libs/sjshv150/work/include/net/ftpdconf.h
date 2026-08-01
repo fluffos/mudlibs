@@ -1,5 +1,3 @@
-
-
 #ifndef _FTPDCONF_H
 #define _FTPDCONF_H
 
@@ -31,7 +29,7 @@
  * FTPD_TIMEOUT and may manually adjust it up to the limit of MAX_FTPD_IDLE
  */
 #define MAX_FTPD_IDLE 7200
- 
+
 /* HOME_DIR: given a username give the home directory path */
 /*#define HOME_DIR(name)  user_cwd(name) on TMI-2 */
 #define HOME_DIR(name)  user_path(name) /* added by none */
@@ -45,7 +43,7 @@
 #define THE_MUD_NAME    "三界神话"
 
 /* Maximum number of simultaneous ftp users. */
-#define FTPD_MAX_USERS 4 
+#define FTPD_MAX_USERS 4
 
 /* the version # of the driver (__VERSION__ on MudOS muds) */
 #define THE_VERSION __VERSION__

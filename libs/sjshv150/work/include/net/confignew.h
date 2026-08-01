@@ -1,5 +1,5 @@
 /* <SecCrypt CPL V3R05> */
- 
+
 #ifndef __NET__CONFIG_H
 #define __NET__CONFIG_H
 
@@ -32,7 +32,7 @@
  * udp packet size.  Probably best kept at 512
  */
 #define MAIL_PACKET_SIZE        512
- 
+
 /* These macros are for the name service.  They determine how often the
  * database is refreshed, how often other muds are checked, how often
  * the sequence list is checked for timed out services, and how long a
@@ -74,4 +74,3 @@
 #define MUD_SERVICES    "/adm/etc/mud_services"
 
 #endif //__NET__CONFIG_H
-

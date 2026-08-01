@@ -1,7 +1,6 @@
-
 // 神话世界·西游记·版本４．５０
 /* <SecCrypt CPL V3R05> */
- 
+
 // create by snowcat.c 2/8/1997
 
 #include <ansi.h>
@@ -54,4 +53,3 @@ string *families = ({
   "陷空山无底洞",
   "大雪山",
 });
-
