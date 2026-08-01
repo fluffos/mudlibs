@@ -1048,6 +1048,26 @@ on `shanhaizhanshen`; also `dfgsiiv13b`, whose variant used
 with no guard at all — same fix applies regardless of the exact
 `load_object`/`find_object` shape.)
 
+A subtler symptom of the exact same bug: no crash at all, just
+`securityd`'s own `wiz_status` mapping ending up permanently empty (every
+id, including ones already listed in the wizlist file, resolves to
+`(player)`). This happens when the missing guard only manifests as
+`load_object(SECURITY_D)` failing with "Object cannot be loaded during
+compilation" — caught, degrading to a default `return` — rather than a
+segfault: `securityd.lpc`'s own `create()` calling `read_file(WIZLIST)`
+triggers `valid_read`, which (lacking the flag) calls
+`load_object(SECURITY_D)` again while `securityd.lpc` is still mid
+compile; every nested read the compiler needs (its own source, its
+`#include`s, its inherited files) recurses the same way, none of them
+ever completing successfully, so `securityd` never finishes loading and
+`wiz_status` is never populated. A `previous_object() == find_object(
+SECURITY_D)`-style check does NOT fix this variant — during those nested
+compile-triggered reads `previous_object()` reports as master itself
+(whoever called `load_object()`), never securityd, no matter how the
+comparison is phrased. Only the reentrancy flag above breaks it. (`qhxajh`
+— confirmed via a debug trace showing `read_file(WIZLIST)` returning `0`
+inside `securityd`'s own `create()`, with zero visible compile error.)
+
 ### 7.2 Missing `get_root_uid()`/`get_bb_uid()` applies
 
 With `PACKAGE_UIDS` on, `set_master()` requires both (the apply name is
