@@ -1112,6 +1112,24 @@ After the exclusion, always boot AND connect before considering it done.
   restore_object(FILE);          // wipes globals missing from FILE
   if (!pointerp(top_list)) top_list = allocate(10);   // rebuild defaults
   ```
+- **Whole-directory legacy binary save format, not a single corrupt
+  file.** `jyqxc`'s `data/board/*.o` (all ~49 bulletin-board saves)
+  start with magic bytes `#inh`/`?inh` — a compact binary encoding this
+  driver's `restore_object()` cannot parse at all (`*restore_object():
+  Illegal file format`). Since these objects store properties in one
+  `mapping dbase` variable (a `set()`/`query()` feature, not raw
+  globals), the zeroing-on-failed-parse wipes the *entire* property
+  table, including values `set()` moments earlier in the same
+  `create()` (e.g. `set_name()`'s `"id"`). The crash then surfaces in
+  wholly unrelated shared code far from any board file:
+  `feature/name.lpc`'s `short()` did `capitalize(query("id"))`
+  unguarded, so *any* room containing a board crashed `look` for every
+  player. Reformatting dozens of legacy binary saves is out of scope
+  (content restoration, not a code fix, with no guarantee of getting
+  the original encoding right) — fix the shared crash site instead:
+  guard the `capitalize()`/similar call on `stringp()`, matching the
+  general "restore() can legitimately fail, code downstream must
+  tolerate it" lesson above.
 
   or pass flag 1 where preserving unmentioned globals is the intent.
 
