@@ -9,70 +9,66 @@
 
 mapping requests;
 
-void create()
-{
-	seteuid(getuid(this_object()));
-	requests = ([ ]);
+void create() {
+  seteuid(getuid(this_object()));
+  requests = ([]);
 }
 
-void query_userid()
-{
-	string socket, address;
-	int port, line, tmp;
+void query_userid() {
+  string socket, address;
+  int port, line, tmp;
 
-// 检测以确定我们已经从 MUD 的名称服务器中获得了本地端口。
-// 从需求用户处获得数据来源信息。
-	socket = socket_address( previous_object() );
+  // 检测以确定我们已经从 MUD 的名称服务器中获得了本地端口。
+  // 从需求用户处获得数据来源信息。
+  socket = socket_address(previous_object());
 
-	if(!socket)  return;
+  if (!socket) return;
 
-// 从源数据中分析 IP 地址和端口
-	if(sscanf(socket, "%s %d", address, port) != 2)  return;
+  // 从源数据中分析 IP 地址和端口
+  if (sscanf(socket, "%s %d", address, port) != 2) return;
 
-	line = socket_create(STREAM, "socket_shutdown");
+  line = socket_create(STREAM, "socket_shutdown");
 
-	if(line < 0)  return;
- 
-	if(socket_connect(line, address + " 113","receive_data","write_data") < 0) {
-	previous_object()->query_link()->set("userid", 0);
-		socket_close(line);
-		return;
-	}
-	requests[line] = ({ previous_object(), port });
+  if (line < 0) return;
+
+  if (socket_connect(line, address + " 113", "receive_data", "write_data") < 0) {
+    previous_object()->query_link()->set("userid", 0);
+    socket_close(line);
+    return;
+  }
+  requests[line] = ({ previous_object(), port });
 }
- 
-void write_data(int line)
-{
-	int ret;
 
-// 好的，发送请求协议
-	ret = socket_write(line, requests[line][1] + "," +mud_port()+ "\n");
+void write_data(int line) {
+  int ret;
 
-// 是否有 IDENT 服务器正在收听？
-	if(ret < 0) {
-		socket_close(line);
-		requests[line][0]->query_link()->set("userid", 0);
-		map_delete(requests, line);
-	}
+  // 好的，发送请求协议
+  ret = socket_write(line, requests[line][1] + "," + mud_port() + "\n");
+
+  // 是否有 IDENT 服务器正在收听？
+  if (ret < 0) {
+    socket_close(line);
+    requests[line][0]->query_link()->set("userid", 0);
+    map_delete(requests, line);
+  }
 }
- 
-void receive_data(int line, string info)
-{
-	string tmp, machine, name, userid;
 
-// 好的，现在我们收到了返回信息，我们能否确定这就是从 driver 来的
-// 以及这些信息就是我们需要的呢？
-	if(previous_object() || !requests[line] || !requests[line][0] || !info ||
-	sscanf(info, "%s : USERID : %s : %s\r\n", tmp, machine, name) != 3) {
-		socket_close(line);
-		map_delete(requests, line);
-		return;
-	}
+void receive_data(int line, string info) {
+  string tmp, machine, name, userid;
 
-	userid = name + "@" + query_ip_name(requests[line][0]);
- 	requests[line][0]->query_link()->set("userid", userid);
-	socket_close(line);
-	map_delete(requests, line);
+  // 好的，现在我们收到了返回信息，我们能否确定这就是从 driver 来的
+  // 以及这些信息就是我们需要的呢？
+  if (previous_object() || !requests[line] || !requests[line][0] || !info ||
+    sscanf(info, "%s : USERID : %s : %s\r\n", tmp, machine, name) != 3) {
+    socket_close(line);
+    map_delete(requests, line);
+    return;
+  }
+
+  userid = name + "@" + query_ip_name(requests[line][0]);
+  requests[line][0]->query_link()->set("userid", userid);
+  socket_close(line);
+  map_delete(requests, line);
 }
 
 mapping query_requests() { return requests; }
