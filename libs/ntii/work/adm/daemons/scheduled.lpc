@@ -12,92 +12,77 @@ nosave int last_update_time;
 nosave int handle_id;
 nosave mapping events = allocate_mapping(0);
 
-int evaluate_event(int id)
-{
-        mixed event;
-        
-        if( undefinedp(event = events[id]) ) return 0;
-        if( !event[EVENT_OBJECT] ) return 0;
-        if( !event[EVENT_EUID] ) return 0;
-        
-        seteuid(event[EVENT_EUID]);
+int evaluate_event(int id) {
+  mixed event;
 
-        if( functionp(event[EVENT_OBJECT]) )
-        {
-                evaluate(event[EVENT_OBJECT]);
-        }
-        else
-        {
-                mixed args = ({ event[EVENT_FUNCTION] }) + event[EVENT_ARGUMENT..sizeof(event)-1];
-                call_other(event[EVENT_OBJECT], args);
-        }
+  if (undefinedp(event = events[id])) return 0;
+  if (!event[EVENT_OBJECT]) return 0;
+  if (!event[EVENT_EUID]) return 0;
 
-        seteuid(getuid());
-        return 1;
+  seteuid(event[EVENT_EUID]);
+
+  if (functionp(event[EVENT_OBJECT])) {
+    evaluate(event[EVENT_OBJECT]);
+  } else {
+    mixed args = ({ event[EVENT_FUNCTION] }) + event[EVENT_ARGUMENT..sizeof(event) - 1];
+    call_other(event[EVENT_OBJECT], args);
+  }
+
+  seteuid(getuid());
+  return 1;
 }
 
-mixed query_events()
-{
-        return events;
+mixed query_events() {
+  return events;
 }
 
-varargs int set_event(mixed time, int loop, mixed ob, mixed func, mixed args...)
-{
-        mixed event;
+varargs int set_event(mixed time, int loop, mixed ob, mixed func, mixed args...) {
+  mixed event;
 
-        if( !ob ) error("参数过少");
-        if( functionp(ob) )
-                event = ({ loop, geteuid(previous_object()), 0, time, ob });
-        else
-                event = ({ loop, geteuid(previous_object()), 0, time, ob, func }) + args;
+  if (!ob) error("参数过少");
+  if (functionp(ob))
+    event = ({ loop, geteuid(previous_object()), 0, time, ob });
+  else
+    event = ({ loop, geteuid(previous_object()), 0, time, ob, func }) + args;
 
-        events[handle_id] = event;
+  events[handle_id] = event;
 
-        if( event[EVENT_LOOP] == 2 ) evaluate_event(handle_id);
-        return handle_id++;
+  if (event[EVENT_LOOP] == 2) evaluate_event(handle_id);
+  return handle_id++;
 }
 
-void delete_event(int handle)
-{
-        if( !undefinedp(events[handle]) )
-                map_delete(events, handle);
+void delete_event(int handle) {
+  if (!undefinedp(events[handle]))
+    map_delete(events, handle);
 }
 
-mixed query_event(int handle)
-{
-        return events[handle];
+mixed query_event(int handle) {
+  return events[handle];
 }
 
-void heart_beat()
-{
-        int i;
+void heart_beat() {
+  int i;
 
-        if( !last_update_time ) last_update_time = time();
-        i = time() - last_update_time;  // 记算每次心跳之时间差
-        last_update_time = time();      // 记录最后一次心跳时间
+  if (!last_update_time) last_update_time = time();
+  i = time() - last_update_time;  // 记算每次心跳之时间差
+  last_update_time = time();      // 记录最后一次心跳时间
 
-        if( !sizeof(events) ) return;
-        foreach(int id, mixed event in events)
-        {
-                if( !event[EVENT_OBJECT] )
-                {       // 删除以遗失物件或函式指标的事件
-                        map_delete(events, id);
-                        continue;
-                }
-                if( event[EVENT_CUR_TIME] < event[EVENT_MAX_TIME] ) 
-                {       // 未超过事件循环时间
-                        event[EVENT_CUR_TIME] += i;
-                }
-                else 
-                {       // 已超过事件循环时间
-                        evaluate_event(id);
-                        event[EVENT_CUR_TIME] = 0;
-                        if( !event[EVENT_LOOP] ) map_delete(events, id); // 执行后删除
-                }
-        }
+  if (!sizeof(events)) return;
+  foreach (int id, mixed event in events) {
+    if (!event[EVENT_OBJECT]) {       // 删除以遗失物件或函式指标的事件
+      map_delete(events, id);
+      continue;
+    }
+    if (event[EVENT_CUR_TIME] < event[EVENT_MAX_TIME]) {       // 未超过事件循环时间
+      event[EVENT_CUR_TIME] += i;
+    } else {       // 已超过事件循环时间
+      evaluate_event(id);
+      event[EVENT_CUR_TIME] = 0;
+      if (!event[EVENT_LOOP]) map_delete(events, id);  // 执行后删除
+    }
+  }
 }
 
-void create()
-{
-        set_heart_beat(1);
+void create() {
+  set_heart_beat(1);
 }
