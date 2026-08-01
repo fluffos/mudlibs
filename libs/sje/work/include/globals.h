@@ -19,6 +19,7 @@
 #define COMMAND_DIR     "/cmds/"
 #define CONFIG_DIR      "/adm/etc/"
 #define DATA_DIR        "/data/"
+#define BACKUP_DIR      "/backup/"
 #define HELP_DIR        "/help/"
 #define LOG_DIR         "/log/"
 #define TASK_DIR        "/task/"

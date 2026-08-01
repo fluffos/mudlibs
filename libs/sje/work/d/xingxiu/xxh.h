@@ -1,51 +1,46 @@
+int valid_leave(object me, string dir) {
+  if (dir == "north")
+    me->add_temp("mark/steps", 1);
+  if (dir == "south")
+    me->add_temp("mark/steps", -1);
+  if (dir == "west")
+    me->add_temp("mark/step", 1);
+  if (dir == "east")
+    me->add_temp("mark/step", -1);
 
-int valid_leave(object me, string dir)
-{
-        if ( dir == "north")
-            me->add_temp("mark/steps",1);
-        if ( dir == "south")
-            me->add_temp("mark/steps",-1);
-        if ( dir == "west")
-            me->add_temp("mark/step",1);
-        if ( dir == "east")
-            me->add_temp("mark/step",-1);
+  if (me->query_temp("mark/steps") == 6) {
+    me->move(__DIR__ "xx1");
+    me->delete_temp("mark/steps");
+    me->delete_temp("mark/step");
+    tell_room(environment(me), me->name() + "从南边的星宿海走了过来。\n", ({ me }));
+    return notify_fail("你累得半死，终於走出了星宿海。\n");
+  }
 
-        if (me->query_temp("mark/steps") == 6)
-         {
-            me->move(__DIR__"xx1");
-            me->delete_temp("mark/steps");
-            me->delete_temp("mark/step");
-            tell_room(environment(me), me->name()+"从南边的星宿海走了过来。\n", ({ me }));
-            return notify_fail("你累得半死，终於走出了星宿海。\n");
-          }
+  if (me->query_temp("mark/steps") == -6)
 
-        if (me->query_temp("mark/steps") == -6)
+  {
+    me->move(__DIR__ "xxh");
+    me->delete_temp("mark/steps");
+    me->delete_temp("mark/step");
+    tell_room(environment(me), me->name() + "从北边的星宿海走了过来。\n", ({ me }));
+    return notify_fail("你累得半死，终於走出了星宿海。\n");
+  }
 
-         {
-            me->move(__DIR__"xxh");
-            me->delete_temp("mark/steps");
-            me->delete_temp("mark/step");
-            tell_room(environment(me), me->name()+"从北边的星宿海走了过来。\n", ({ me }));
-            return notify_fail("你累得半死，终於走出了星宿海。\n");
-          }
+  if (me->query_temp("mark/step") == -3) {
+    me->move(__DIR__ "xx4");
+    me->delete_temp("mark/steps");
+    me->delete_temp("mark/step");
+    tell_room(environment(me), me->name() + "从西边的星宿海走了过来。\n", ({ me }));
+    return notify_fail("你累得半死，终於走出了星宿海。\n");
+  }
 
-        if (me->query_temp("mark/step") == -3)
-         {
-            me->move(__DIR__"xx4");
-            me->delete_temp("mark/steps");
-            me->delete_temp("mark/step");
-            tell_room(environment(me), me->name()+"从西边的星宿海走了过来。\n", ({ me }));
-            return notify_fail("你累得半死，终於走出了星宿海。\n");
-          }
+  if (me->query_temp("mark/step") == 3) {
+    me->move(__DIR__ "xx6");
+    me->delete_temp("mark/steps");
+    me->delete_temp("mark/step");
+    tell_room(environment(me), me->name() + "从东边的星宿海走了过来。\n", ({ me }));
+    return notify_fail("你累得半死，终於走出了星宿海。\n");
+  }
 
-        if (me->query_temp("mark/step") == 3)
-         {
-            me->move(__DIR__"xx6");
-            me->delete_temp("mark/steps");
-            me->delete_temp("mark/step");
-            tell_room(environment(me), me->name()+"从东边的星宿海走了过来。\n", ({ me }));
-            return notify_fail("你累得半死，终於走出了星宿海。\n");
-          }
-
-        return ::valid_leave(me,dir);
+  return ::valid_leave(me, dir);
 }

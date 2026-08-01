@@ -5,4 +5,3 @@
 	"/doc/help/",\
 	"/doc/skill/",\
 	})
-

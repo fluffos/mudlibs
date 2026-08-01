@@ -1,5 +1,4 @@
-int valid_public(object me)
-{
+int valid_public(object me) {
   mapping skl = me->query_skills();
   string *sk;
   int i;
@@ -10,9 +9,8 @@ int valid_public(object me)
   i = sizeof(sk);
   while (i--) {
     if (sk[i] != skl_name && SKILL_D(sk[i])->valid_enable("force"))
-      return notify_fail("你不散掉"+to_chinese(sk[i])
-        +"，如何能修习"+to_chinese(skl_name)+"。\n");
+      return notify_fail("你不散掉" + to_chinese(sk[i])
+        + "，如何能修习" + to_chinese(skl_name) + "。\n");
   }
   return 1;
 }
-
