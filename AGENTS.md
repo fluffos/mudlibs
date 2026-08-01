@@ -1181,7 +1181,14 @@ pass — the gitignored counter file happened to already exist on that
 session's own disk from earlier testing, masking the crash locally;
 only a genuinely fresh checkout/CI pack reproduces it); also the
 `uptime.lpc` `write(read_file(LASTCRASH))` variant (`xianjianchuanqi`,
-`moniHuafu`, `suiyuanxijianlu` — see also §7.11 for the receiving side).
+`moniHuafu`, `suiyuanxijianlu`, `mnhf` — see also §7.11 for the
+receiving side). On `mnhf` this crash fired on the FIRST connection
+attempt, since `logind.lpc`'s `logon()` calls `UPTIME_CMD->main()`
+before the id prompt on every connection — the driver auto-retried and
+a second attempt showed a normal-looking banner, so a shallow test
+that only looks at the final transcript can miss this entirely; check
+for a `new_conn_handler: logon() ... has failed, the user is
+disconnected` line earlier in the log.
 Grep: `grep -rn "sscanf(read_file\|write(read_file" work/`.
 
 ### 7.10 `log_error()` receives WARNINGS too — and must not touch the ACL
@@ -2631,6 +2638,20 @@ failed compile hung EVERY connection immediately after encoding
 selection — a stronger symptom than the usual "some daemon-adjacent
 feature is broken," worth checking first whenever a lib hangs right
 after its first prompt with no further output.
+
+Also confirmed on an `httpd.lpc` (`mnhf`) — a from-scratch HTTP
+World-Wide-Web server daemon (Truilkan/Jacques' classic Interstice-
+derived `httpd.c`, ported to several ES II-family libs), gutted
+`setup()`/`write_data_retry()`/`store_client_info()`/
+`listen_callback()`/`close_connection()`/`remove()`. Distinct from the
+`dns_master.lpc` cases: the compile failure here happened during
+PRELOAD (not on the registration path), so it surfaced as a boot-time
+`No program in object '/adm/daemons/httpd'!` rather than a hang after a
+specific prompt — worth grepping `socket_create\|socket_bind\|
+socket_accept\|socket_write\|socket_close` across EVERY preloaded
+daemon on a new lib, not just the ones with "dns"/"mudlist" in the
+name; any from-scratch network-server daemon (HTTP, FTP, telnet proxy)
+is equally likely to hit this.
 
 ### 7.53 A daemon's own defensive `seteuid(getuid())` silently resets a euid that `create()` deliberately set
 
