@@ -1,4 +1,3 @@
-
 #include <ansi.h>
 #include <skill.h>
 #include <weapon.h>
@@ -8,103 +7,101 @@
 
 inherit F_SSERVER;
 
-int perform(object me, object target)
-{
-	string msg;
-	int ap, dp, skill, damage,busy_time;
+int perform(object me, object target) {
+  string msg;
+  int ap, dp, skill, damage, busy_time;
 
-	if (!target ) target = offensive_target(me);
-	if (!target || !target->is_character() || !me->is_fighting(target) )
-		return notify_fail(CHANG "只能对战斗中的对手使用。\n");
-	if (objectp(me->query_temp("weapon")))
-		return notify_fail("只有空手才能施展" CHANG "。\n");
-	if (target && target->query_temp("apply/shade_vision")) 
-		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 		
-	if ((int)me->query_skill("tianchang-zhang", 1) < 300)
-		return notify_fail("你天偿掌不够娴熟，难以施展" CHANG "。\n");
-	if ((int)me->query_skill("lengyue-shengong") < 300 )
-		return notify_fail("你的冷月神功火候不够，难以施展" CHANG "。\n");
-// 	if (me->query_skill_mapped("force")!="lengyue-shengong") 
-//		return notify_fail("你没有使用冷月神功吧！。\n");
-	if ((int)me->query("jingli") < 1000)
-		return notify_fail("你的精力不够，难以施展" CHANG "。\n");
-	if ((int)me->query("neili") < 1000)
-		return notify_fail("你现在真气不够，难以施展" CHANG "。\n");
-//	if (me->query_skill_mapped("unarmed") != "tianchang-zhang")
-//		return notify_fail("你没有激发天偿掌，难以施展" CHANG "。\n");
-	if (me->is_busy()) 
-		return notify_fail("你现在正忙着呢！\n");
-	if (target && target->is_busy())
-		return notify_fail(target->name() + "目前正自顾不暇，放胆攻击吧。\n");
-	if ( target && target->query_temp("busy_mianyi") )	//冲穴成功后免疫busy，2017.9.29阿飞添加
-		return notify_fail(target->name() + "奇经八脉浑然一体，真气浩浩荡荡，点穴似乎没什么作用。\n");
-	if (target && !living(target))
-		return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
-	if (me->query_temp("autolian"))
-		return notify_fail("你正在发动自动连招！\n"); 	
-	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
-		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
-		
-        msg = HIM "$N" HIM "凝聚内力，深深吸入一口气，掌劲吞吐，对准$n"
-              HIM "平平拍出。\n" NOR;
-		message_vision(msg, me, target);
-	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
-	call_out("del_cooldown", 3, me);	//CD写法1
-	ap = me->query("xyzx_sys/level") + me->query_skill("tianchang-zhang", 1) + me->query_skill("unarmed") + me->query_skill("force");
-	dp = target->query("xyzx_sys/level") + target->query_skill("dodge") + target->query_skill("parry");
-	ap = ap*((int)me->query("breakup")+(int)me->query("breakup")*(int)me->query("breakup")+100)/100;
-	dp = dp*((int)target->query("breakup")+(int)target->query("breakup")*(int)target->query("breakup")+100)/100;
-	skill = me->query_skill("tianchang-zhang",1);
-	damage = me->query_skill("unarmed") + me->query_skill("force") + me->query_skill("tianchang-zhang", 1)*3;
-	damage = damage/2 + random(damage/2);
-	damage = damage*(100-target->query_meridian())/100;
-	busy_time = (30*skill)/(skill+2000);
-	if( stringp(target->query("inborn")) && (string)target->query("inborn")==YEL"冷静"NOR) busy_time = (30*skill)/(skill+2000)*7/10;
-	if (random(ap) > dp/3)
-	{
-		msg = HIR "$n" HIR "见状连忙格挡，力拼一掌，登时只觉全身一冷，已是被寒气侵入，浑身动弹不得。\n" NOR;
-		message_vision(msg, me, target);
-		target->start_busy(5 + busy_time);	
-		tell_object(target, HIY"你陷入忙乱之中，一时无法动弹。\n"NOR);
-		me->add("neili", -100);		
-	}
-	else
-	{
-		me->add("neili", -200);
-		msg = CYN "可是" CYN "$n" CYN "一声冷笑，飞身一跃而起，避开了" CYN "$N" CYN "这一掌。\n"NOR;
-		message_vision(msg, me, target);
-	}
-	
-	msg = HIR "$N" HIR "“嚯”的一声震喝，提起掌来，只见掌心一片血红，倏的凌空拍出，"
-	      HIR "一股热风登时袭向$n" HIR "的胸前大穴。\n" NOR;
-	message_vision(msg, me, target);
-	if (random(ap) > dp/3)
-	{	
-		target->receive_damage("qi",damage,me);
-		target->receive_wound("qi",damage/2,me);
-		me->add("neili", -150);
-		msg = HIR "$n" HIR "一时间只觉得气血上涌，浑身如遭火焚，气息大乱，不由得吐了一口鲜血。\n" NOR;
-		message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
-//		if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
-	}
-	else
-	{
-		me->add("neili",-100);
-		msg = HIC "然而$n" HIC "内功深湛，丝毫不为$N"
-		       HIC "的掌风所动，若无其事" NOR;
-		message_vision(msg, me, target);
-	}
-	
-	me->start_busy(1);
-	return 1;
+  if (!target) target = offensive_target(me);
+  if (!target || !target->is_character() || !me->is_fighting(target))
+    return notify_fail(CHANG "只能对战斗中的对手使用。\n");
+  if (objectp(me->query_temp("weapon")))
+    return notify_fail("只有空手才能施展" CHANG "。\n");
+  if (target && target->query_temp("apply/shade_vision"))
+    return notify_fail("对方隐身了，你看不到" + target->query("name") + "。\n");
+  if ((int)me->query_skill("tianchang-zhang", 1) < 300)
+    return notify_fail("你天偿掌不够娴熟，难以施展" CHANG "。\n");
+  if ((int)me->query_skill("lengyue-shengong") < 300)
+    return notify_fail("你的冷月神功火候不够，难以施展" CHANG "。\n");
+  // 	if (me->query_skill_mapped("force")!="lengyue-shengong") 
+  //		return notify_fail("你没有使用冷月神功吧！。\n");
+  if ((int)me->query("jingli") < 1000)
+    return notify_fail("你的精力不够，难以施展" CHANG "。\n");
+  if ((int)me->query("neili") < 1000)
+    return notify_fail("你现在真气不够，难以施展" CHANG "。\n");
+  //	if (me->query_skill_mapped("unarmed") != "tianchang-zhang")
+  //		return notify_fail("你没有激发天偿掌，难以施展" CHANG "。\n");
+  if (me->is_busy())
+    return notify_fail("你现在正忙着呢！\n");
+  if (target && target->is_busy())
+    return notify_fail(target->name() + "目前正自顾不暇，放胆攻击吧。\n");
+  if (target && target->query_temp("busy_mianyi"))  //冲穴成功后免疫busy，2017.9.29阿飞添加
+    return notify_fail(target->name() + "奇经八脉浑然一体，真气浩浩荡荡，点穴似乎没什么作用。\n");
+  if (target && !living(target))
+    return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+  if (me->query_temp("autolian"))
+    return notify_fail("你正在发动自动连招！\n");
+  if (me->query_temp("cooldown"))  //CD写法	2017.9.7添加
+    return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+
+  msg = HIM "$N" HIM "凝聚内力，深深吸入一口气，掌劲吞吐，对准$n"
+    HIM "平平拍出。\n" NOR;
+  message_vision(msg, me, target);
+  me->set_temp("cooldown", 1);  //CD写法	2017.9.7添加
+  call_out("del_cooldown", 3, me);  //CD写法1
+  ap = me->query("xyzx_sys/level") + me->query_skill(
+    "tianchang-zhang",
+    1
+  ) + me->query_skill("unarmed") + me->query_skill("force");
+  dp = target->query("xyzx_sys/level") + target->query_skill("dodge") + target->query_skill("parry");
+  ap = ap * ((int)me->query("breakup") + (int)me->query("breakup") * (int)me->query("breakup") + 100) / 100;
+  dp = dp * ((int)target->query("breakup") + (int)target->query("breakup") * (int)target->query("breakup") + 100) / 100;
+  skill = me->query_skill("tianchang-zhang", 1);
+  damage = me->query_skill("unarmed") + me->query_skill("force") + me->query_skill(
+    "tianchang-zhang",
+    1
+  ) * 3;
+  damage = damage / 2 + random(damage / 2);
+  damage = damage * (100 - target->query_meridian()) / 100;
+  busy_time = (30 * skill) / (skill + 2000);
+  if (stringp(target->query("inborn")) && (string)target->query("inborn") == YEL "冷静" NOR) busy_time = (30 * skill) / (skill + 2000) * 7 / 10;
+  if (random(ap) > dp / 3) {
+    msg = HIR "$n" HIR "见状连忙格挡，力拼一掌，登时只觉全身一冷，已是被寒气侵入，浑身动弹不得。\n" NOR;
+    message_vision(msg, me, target);
+    target->start_busy(5 + busy_time);
+    tell_object(target, HIY "你陷入忙乱之中，一时无法动弹。\n" NOR);
+    me->add("neili", -100);
+  } else {
+    me->add("neili", -200);
+    msg = CYN "可是" CYN "$n" CYN "一声冷笑，飞身一跃而起，避开了" CYN "$N" CYN "这一掌。\n" NOR;
+    message_vision(msg, me, target);
+  }
+
+  msg = HIR "$N" HIR "“嚯”的一声震喝，提起掌来，只见掌心一片血红，倏的凌空拍出，"
+    HIR "一股热风登时袭向$n" HIR "的胸前大穴。\n" NOR;
+  message_vision(msg, me, target);
+  if (random(ap) > dp / 3) {
+    target->receive_damage("qi", damage, me);
+    target->receive_wound("qi", damage / 2, me);
+    me->add("neili", -150);
+    msg = HIR "$n" HIR "一时间只觉得气血上涌，浑身如遭火焚，气息大乱，不由得吐了一口鲜血。\n" NOR;
+    message_vision(msg, me, target, damage, HBWHT + HIM "气血伤害" NOR);  //2018.10.2阿飞改，优化化学伤害显示的写法
+    //		if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+  } else {
+    me->add("neili", -100);
+    msg = HIC "然而$n" HIC "内功深湛，丝毫不为$N"
+      HIC "的掌风所动，若无其事" NOR;
+    message_vision(msg, me, target);
+  }
+
+  me->start_busy(1);
+  return 1;
 }
 
-void del_cooldown(object me)	//CD写法1
-{ 
-	if ( !objectp(me) ) return;
-	if ( me->query_temp("cooldown") )	
-	{
-		me->delete_temp("cooldown");
-		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
-	}	
+void del_cooldown(object me)  //CD写法1
+{
+  if (!objectp(me)) return;
+  if (me->query_temp("cooldown")) {
+    me->delete_temp("cooldown");
+    tell_object(me, HIM "你呼出一口气，缓缓的将内力收回丹田。\n" NOR);
+  }
 }
