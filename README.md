@@ -299,7 +299,7 @@ classes it's found.
 | 116 | `xsfyssjb` | 心声风云四升级版 | `心声风云四升级版.rar` | 40149 | WASM playable |
 | 117 | `xxcq` | 小雪初晴 | `小雪初晴.rar` | 40135 | WASM playable |
 | 118 | `xxcqii` | 小雪初晴II | `小雪初晴II.rar` | 40131 | WASM playable |
-| 119 | `xxcqii2` | 小雪初晴II | `小雪初晴II  .zip` | 40138 | native-boot verified, WASM pending |
+| 119 | `xxcqii2` | 小雪初晴II | `小雪初晴II  .zip` | — | pending |
 | 120 | `xyj2000` | 西游记2000 | `西游记2000.rar` | 40155 | native-boot verified, WASM pending |
 | 121 | `xyj20032` | 西游记2003-2 | `西游记2003-2.rar` | 40119 | native-boot verified, WASM pending |
 | 122 | `xyj2006n` | 西游记2006年 | `西游记2006年.rar` | 40157 | native-boot verified, WASM pending |
