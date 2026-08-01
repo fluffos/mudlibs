@@ -12,259 +12,236 @@ nosave mapping tmp_dbase;
 nosave mixed default_ob;
 
 mixed query_default_object() { return default_ob; }
-void set_default_object(mixed ob)
-{
-//	if( geteuid(previous_object()) != ROOT_UID )
-//		error("dbase: Only this_object() or object with root euid can set default_ob.\n");
-	if( !geteuid() ) seteuid(getuid());
-	default_ob = ob;
-	ob->add("no_clean_up", 1);
+void set_default_object(mixed ob) {
+  //	if( geteuid(previous_object()) != ROOT_UID )
+  //		error("dbase: Only this_object() or object with root euid can set default_ob.\n");
+  if (!geteuid()) seteuid(getuid());
+  default_ob = ob;
+  ob->add("no_clean_up", 1);
 }
 
-mixed set(string prop, mixed data)
-{
-//记录可疑的set调用
-//add by jackyboy 98/12/10
-/*避免负荷太大，暂时只记录exp
+mixed set(string prop, mixed data) {
+  //记录可疑的set调用
+  //add by jackyboy 98/12/10
+  /*避免负荷太大，暂时只记录exp
 	string *proplist;
 	proplist=({"int","str","jing","per","kar","dex","con","max_neili",
 			"shen","score","neili","max_jing","qi","jingli"});
 */
-	int i;
-	string str;
-	object ob,me,obj,*inv;
-	if(prop=="combat_exp"&& data>=1000)
-	{
-		if(userp(ob=this_object()))
-		{
-			obj=previous_object();
-			me=this_player();
-			str="This Player: "+me->query("name")+"("+me->query("id")+")\n"+
-				"This Object: "+ob->query("name")+"("+ob->query("id")+")\n"+
-				"Previous Object: "+base_name(obj)+"\n"+
-				"This Object's ROOM: "+base_name(environment(ob))+"\n"+
-				"Set Combat_exp: "+data+"\n"+
-				"--------------------\n";
-			inv=all_inventory(me);//如果不想获取玩家身上的物品，去掉下面几句！
-			if(!inv)
-				str+=me->query("name")+"身上什么也没有。\n";
-			else
-			{
-				str+=me->query("name")+"身上有：\n";
-				for(i=0;i<sizeof(inv);i++)
-					str+=base_name(inv[i])+"\n";
-			}
-			str+="**********************\n";
-			log_file("trace/set_combat_exp",str);
-		}
-	}
-//以上为jackyboy所加
+  int i;
+  string str;
+  object ob, me, obj, *inv;
+  if (prop == "combat_exp" && data >= 1000) {
+    if (userp(ob = this_object())) {
+      obj = previous_object();
+      me = this_player();
+      str = "This Player: " + me->query("name") + "(" + me->query("id") + ")\n" +
+        "This Object: " + ob->query("name") + "(" + ob->query("id") + ")\n" +
+        "Previous Object: " + base_name(obj) + "\n" +
+        "This Object's ROOM: " + base_name(environment(ob)) + "\n" +
+        "Set Combat_exp: " + data + "\n" +
+        "--------------------\n";
+      inv = all_inventory(me);  //如果不想获取玩家身上的物品，去掉下面几句！
+      if (!inv)
+        str += me->query("name") + "身上什么也没有。\n";
+      else {
+        str += me->query("name") + "身上有：\n";
+        for (i = 0; i < sizeof(inv); i++)
+          str += base_name(inv[i]) + "\n";
+      }
+      str += "**********************\n";
+      log_file("trace/set_combat_exp", str);
+    }
+  }
+  //以上为jackyboy所加
 
-	if( !mapp(dbase) ) dbase = ([]);
+  if (!mapp(dbase)) dbase = ([]);
 
-	if( strsrch(prop, '/')!=-1 )
-		return _set( dbase, explode(prop, "/"), data );
-	
-	return dbase[prop] = data;
+  if (strsrch(prop, '/') != -1)
+    return _set(dbase, explode(prop, "/"), data);
+
+  return dbase[prop] = data;
 }
 
-varargs mixed query(string prop, int raw)
-{
-	mixed data;
+varargs mixed query(string prop, int raw) {
+  mixed data;
 
-	if( !mapp(dbase) ) return 0;
+  if (!mapp(dbase)) return 0;
 
-	if( undefinedp(dbase[prop]) && (strsrch(prop, '/')!=-1) )
-		data = _query(dbase, explode(prop, "/"));
-	else
-		data = dbase[prop];
+  if (undefinedp(dbase[prop]) && (strsrch(prop, '/') != -1))
+    data = _query(dbase, explode(prop, "/"));
+  else
+    data = dbase[prop];
 
-	if( undefinedp(data) && default_ob )
-		data = default_ob->query(prop, 1);
+  if (undefinedp(data) && default_ob)
+    data = default_ob->query(prop, 1);
 
-	if( raw ) return data;
+  if (raw) return data;
 
-	return evaluate( data, this_object() );
+  return evaluate(data, this_object());
 }
 
-int delete(string prop)
-{
-	if( !mapp(dbase) ) return 0;
+int delete(string prop) {
+  if (!mapp(dbase)) return 0;
 
-	if( strsrch(prop, '/')!=-1 )
-		return _delete(dbase, explode(prop, "/"));
-	else {
-		map_delete(dbase, prop);
-		return 1;
-	}
+  if (strsrch(prop, '/') != -1)
+    return _delete(dbase, explode(prop, "/"));
+  else {
+    map_delete(dbase, prop);
+    return 1;
+  }
 }
 
-mixed add(string prop, mixed data)
-{
-	mixed old;
-	string str;
-	int i;
-	string *proplist;
-	object me,*inv,rm,ob,obj;
+mixed add(string prop, mixed data) {
+  mixed old;
+  string str;
+  int i;
+  string *proplist;
+  object me, *inv, rm, ob, obj;
 
-//由 jackyboy 增加下面的程序用来跟踪！ 98/12/10
-//FUN: 找出在什么地方用了非法技巧获取高等级经验
-//没有解决使用set的情况！但是我想可能就是用add,如果还找不出来，就只好再改set了
-//如果用set则建议只对一定经验以上的玩家进行跟踪！并且在1.1清除档案后才可能比较轻松些
-	proplist=({"int","str","max_jing","per","kar","dex","con","max_neili",
-			"shen","score","max_jing","max_qi","max_jingli","potential"});
-//proplist 是要跟踪的属性列表，在每次增加的值大于3时将被记录下来。
-//列表并未全部列出来，请根据具体情况增加。
-	me=this_player();
-	rm=environment(me);
-	ob=previous_object();
-	obj=this_object();
-	if(prop=="combat_exp"&&userp(obj))
-	{
-		if(data>10)
-		{
-			str="THIS OBJECT: "+obj->query("name")+"("+obj->query("id")+")\n";
-			str+="THIS PLAYER: "+me->query("name")+"("+me->query("id")+")\n";
-			str+=obj->query("name")+" 得到 (combat_exp):"+data+"\n";
-			str+="房间:"+base_name(rm)+"\n";
-			if(userp(ob))
-				str+="PRE PLAYER: "+ob->query("name")+"("+ob->query("id")+")\n";
-			else
-				str+="PRE OBJECT: "+base_name(ob)+"\n";
-			inv=all_inventory(rm);
-			str+="该房间中的物件(包括该玩家):\n";
-			for(i=0;i<sizeof(inv);i++)
-				if(userp(inv[i]))
-					str+="\t玩家:"+inv[i]->query("name")+"("+
-						inv[i]->query("id")+")\n";
-				else
-					str+="\t房间物件: "+base_name(inv[i])+"\n";
-			str+="----------------------\n";
-			inv=all_inventory(me);
-			if(!sizeof(inv))
-				str+="该玩家身上没有东西\n************************\n";
-			else
-			{
-				str+="玩家身上的东西:\n";
-				for(i=0;i<sizeof(inv);i++)
-					str+="P OBJ: "+base_name(inv[i])+"\n";
-				str+="\n****************************\n";
-			}
-			log_file("trace/add_combat_exp",str);
-		}
-	}
-	if(member_array(prop,proplist)!=-1)
-	{
-		if(data>3)
-		{
-			str="THIS OBJECT: "+obj->query("name")+"("+obj->query("id")+")\n";
-			str+="THIS PLAYER: "+me->query("name")+"("+me->query("id")+")\n";
-			str+=obj->query("name")+" 得到 ("+prop+"):"+data+"\n";
-			str+="房间:"+base_name(rm)+"\n";
-			if(userp(ob))
-				str+="PRE PLAYER: "+ob->query("name")+"("+ob->query("id")+")\n";
-			else
-				str+="PRE OBJECT: "+base_name(ob)+"\n";
-			inv=all_inventory(rm);
-			str+="该房间中的物件(包括该玩家):\n";
-			for(i=0;i<sizeof(inv);i++)
-				if(userp(inv[i]))
-					str+="玩家:"+inv[i]->query("name")+"("+
-						inv[i]->query("id")+")\n";
-				else
-					str+="房间物件: "+base_name(inv[i])+"\n";
-			str+="----------------------\n";
-			inv=all_inventory(me);
-			if(!sizeof(inv))
-				str+="该玩家身上没有东西\n************************\n";
-			else
-			{
-				str+="玩家身上的物件:\n";
-				for(i=0;i<sizeof(inv);i++)
-					str+="P OBJ: "+base_name(inv[i])+"\n";
-				str+="\n****************************\n";
-			}
-			log_file("trace/add_prop_"+prop,str);
-		}
-	}
-//jackyboy所增加的到此结束
+  //由 jackyboy 增加下面的程序用来跟踪！ 98/12/10
+  //FUN: 找出在什么地方用了非法技巧获取高等级经验
+  //没有解决使用set的情况！但是我想可能就是用add,如果还找不出来，就只好再改set了
+  //如果用set则建议只对一定经验以上的玩家进行跟踪！并且在1.1清除档案后才可能比较轻松些
+  proplist = ({ "int", "str", "max_jing", "per", "kar", "dex", "con", "max_neili",
+    "shen", "score", "max_jing", "max_qi", "max_jingli", "potential" });
+  //proplist 是要跟踪的属性列表，在每次增加的值大于3时将被记录下来。
+  //列表并未全部列出来，请根据具体情况增加。
+  me = this_player();
+  rm = environment(me);
+  ob = previous_object();
+  obj = this_object();
+  if (prop == "combat_exp" && userp(obj)) {
+    if (data > 10) {
+      str = "THIS OBJECT: " + obj->query("name") + "(" + obj->query("id") + ")\n";
+      str += "THIS PLAYER: " + me->query("name") + "(" + me->query("id") + ")\n";
+      str += obj->query("name") + " 得到 (combat_exp):" + data + "\n";
+      str += "房间:" + base_name(rm) + "\n";
+      if (userp(ob))
+        str += "PRE PLAYER: " + ob->query("name") + "(" + ob->query("id") + ")\n";
+      else
+        str += "PRE OBJECT: " + base_name(ob) + "\n";
+      inv = all_inventory(rm);
+      str += "该房间中的物件(包括该玩家):\n";
+      for (i = 0; i < sizeof(inv); i++)
+        if (userp(inv[i]))
+          str += "\t玩家:" + inv[i]->query("name") + "(" + inv[i]->query("id") + ")\n";
+        else
+          str += "\t房间物件: " + base_name(inv[i]) + "\n";
+      str += "----------------------\n";
+      inv = all_inventory(me);
+      if (!sizeof(inv))
+        str += "该玩家身上没有东西\n************************\n";
+      else {
+        str += "玩家身上的东西:\n";
+        for (i = 0; i < sizeof(inv); i++)
+          str += "P OBJ: " + base_name(inv[i]) + "\n";
+        str += "\n****************************\n";
+      }
+      log_file("trace/add_combat_exp", str);
+    }
+  }
+  if (member_array(prop, proplist) != -1) {
+    if (data > 3) {
+      str = "THIS OBJECT: " + obj->query("name") + "(" + obj->query("id") + ")\n";
+      str += "THIS PLAYER: " + me->query("name") + "(" + me->query("id") + ")\n";
+      str += obj->query("name") + " 得到 (" + prop + "):" + data + "\n";
+      str += "房间:" + base_name(rm) + "\n";
+      if (userp(ob))
+        str += "PRE PLAYER: " + ob->query("name") + "(" + ob->query("id") + ")\n";
+      else
+        str += "PRE OBJECT: " + base_name(ob) + "\n";
+      inv = all_inventory(rm);
+      str += "该房间中的物件(包括该玩家):\n";
+      for (i = 0; i < sizeof(inv); i++)
+        if (userp(inv[i]))
+          str += "玩家:" + inv[i]->query("name") + "(" + inv[i]->query("id") + ")\n";
+        else
+          str += "房间物件: " + base_name(inv[i]) + "\n";
+      str += "----------------------\n";
+      inv = all_inventory(me);
+      if (!sizeof(inv))
+        str += "该玩家身上没有东西\n************************\n";
+      else {
+        str += "玩家身上的物件:\n";
+        for (i = 0; i < sizeof(inv); i++)
+          str += "P OBJ: " + base_name(inv[i]) + "\n";
+        str += "\n****************************\n";
+      }
+      log_file("trace/add_prop_" + prop, str);
+    }
+  }
+  //jackyboy所增加的到此结束
 
-	if( !mapp(dbase) || !(old = query(prop, 1)) )
-		return set(prop, data);
+  if (!mapp(dbase) || !(old = query(prop, 1)))
+    return set(prop, data);
 
-	if( functionp(old) )
-		error("dbase: add() - called on a function type property.\n");
+  if (functionp(old))
+    error("dbase: add() - called on a function type property.\n");
 
-	return set(prop, old + data);
+  return set(prop, old + data);
 }
 
-mapping query_entire_dbase()
-{
-//	if( (previous_object() != this_object())
-//	&&	(geteuid(previous_object()) != ROOT_UID) )
-//		error("dbase: query_entire_dbase() - must has root euid or be this_object().\n");
+mapping query_entire_dbase() {
+  //	if( (previous_object() != this_object())
+  //	&&	(geteuid(previous_object()) != ROOT_UID) )
+  //		error("dbase: query_entire_dbase() - must has root euid or be this_object().\n");
 
-	return dbase;
+  return dbase;
 }
 
-mixed set_temp(string prop, mixed data)
-{
-	if( !mapp(tmp_dbase) ) tmp_dbase = ([]);
+mixed set_temp(string prop, mixed data) {
+  if (!mapp(tmp_dbase)) tmp_dbase = ([]);
 
-	if( strsrch(prop, '/')!=-1 )
-		return _set( tmp_dbase, explode(prop, "/"), data );
+  if (strsrch(prop, '/') != -1)
+    return _set(tmp_dbase, explode(prop, "/"), data);
 
-	return tmp_dbase[prop] = data;
+  return tmp_dbase[prop] = data;
 }
 
-varargs mixed query_temp(string prop, int raw)
-{
-	mixed data;
+varargs mixed query_temp(string prop, int raw) {
+  mixed data;
 
-	if( !mapp(tmp_dbase) ) return 0;
+  if (!mapp(tmp_dbase)) return 0;
 
-	if( strsrch(prop, '/')!=-1 )
-		data = _query(tmp_dbase, explode(prop, "/"));
-	else
-		data = tmp_dbase[prop];
+  if (strsrch(prop, '/') != -1)
+    data = _query(tmp_dbase, explode(prop, "/"));
+  else
+    data = tmp_dbase[prop];
 
-	if( functionp(data) && !raw )
-		return (*data)( this_object() );
-	else 
-		return data;
+  if (functionp(data) && !raw)
+    return (* data) (this_object());
+  else
+    return data;
 }
 
-int delete_temp(string prop)
-{
-	if( !mapp(tmp_dbase) ) return 0;
+int delete_temp(string prop) {
+  if (!mapp(tmp_dbase)) return 0;
 
-	if( strsrch(prop, '/')!=-1 )
-		return _delete(tmp_dbase, explode(prop, "/"));
-	else {
-		map_delete(tmp_dbase, prop);
-		return 1;
-	}
+  if (strsrch(prop, '/') != -1)
+    return _delete(tmp_dbase, explode(prop, "/"));
+  else {
+    map_delete(tmp_dbase, prop);
+    return 1;
+  }
 }
 
-mixed add_temp(string prop, mixed data)
-{
-	mixed old;
+mixed add_temp(string prop, mixed data) {
+  mixed old;
 
-	if( !mapp(tmp_dbase) || !(old = query_temp(prop, 1)) )
-		return set_temp(prop, data);
+  if (!mapp(tmp_dbase) || !(old = query_temp(prop, 1)))
+    return set_temp(prop, data);
 
-	if( functionp(old) )
-		error("dbase: add_temp() - called on a function type property.\n");
+  if (functionp(old))
+    error("dbase: add_temp() - called on a function type property.\n");
 
-	return set_temp(prop, old + data);
+  return set_temp(prop, old + data);
 }
 
-mapping query_entire_temp_dbase()
-{
-//	if( (previous_object() != this_object())
-//	&&	(geteuid(previous_object()) != ROOT_UID) )
-//		error("dbase: query_entire_temp_dbase() - must has root euid or be this_object().\n");
+mapping query_entire_temp_dbase() {
+  //	if( (previous_object() != this_object())
+  //	&&	(geteuid(previous_object()) != ROOT_UID) )
+  //		error("dbase: query_entire_temp_dbase() - must has root euid or be this_object().\n");
 
-	return tmp_dbase;
+  return tmp_dbase;
 }
-
