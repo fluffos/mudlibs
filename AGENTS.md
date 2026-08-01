@@ -854,7 +854,12 @@ cause, fix, detection, known-affected lineages.
   string differs from the input, which is what actually flips the driver
   into the working resolution path. Add this apply once in `master.lpc`
   and every future absolute-inside-`<>` include on that lib resolves
-  without touching individual files.
+  without touching individual files. Second confirmed application:
+  `kxkjii2` (ES II/Annihilator lineage, unrelated to
+  `unknownlib20150716`) had 358 files with this exact shape — the
+  `include_file()` apply fixed all of them in one master.lpc edit, no
+  individual file touched. General signal for reaching for this fix
+  over hand-quoting: grep count in the low hundreds or more.
 - **`..` in include paths is disallowed entirely** (security rule).
   Point at the real absolute quoted path. (Same libs.)
 - **Case-sensitivity**: `#include <Action.h>` vs on-disk `action.h` —
@@ -3016,6 +3021,31 @@ of the same X already have, that asymmetry is itself the diagnostic —
 check sibling call sites (and their comments) before deep-diving into
 driver internals. (`hy2000`.)
 
+### 7.64 A stray semicolon after `if (...)` turns the guard into a no-op, making an unconditional `call_other()` hit a daemon that was never shipped
+
+`natured.lpc`'s heartbeat loop had `if (wizardp(user[i]) &&
+user[i]->query("env/check_heart"));` — the trailing `;` ends the `if`
+right there (empty body), so the next statement,
+`"/adm/daemons/temp.lpc"->record_heart_beat(user[i]);`, runs
+unconditionally for every connected user on every heartbeat tick (every
+second, forever), not just the intended wizard-with-a-flag-set subset.
+`/adm/daemons/temp.lpc` doesn't exist anywhere in the codebase (`find
+-iname` across the whole lib came up empty) — a dev-only scratch daemon
+whose two call sites (one behind this broken guard, one behind a real
+guard chain further down) were never cleaned up before release.
+`call_other()` on a missing object is a soft failure (logs, returns 0,
+execution continues) so this never crashed anything — it just spammed
+one runtime-error message per connected user per second, forever,
+which is how it surfaced during a routine post-registration `look`.
+Fix: since the target file is confirmed absent project-wide, remove
+the dead call sites rather than fabricate a replacement daemon (no way
+to know what `record_heart_beat()` was supposed to record). General
+lesson: `if (cond);` (semicolon immediately after the closing paren,
+no braces) is always a bug in LPC same as in C — grep
+`if\s*\([^)]*\)\s*;` when a runtime error traces back to a `call_other`
+on a suspiciously named daemon (`temp`, `test`, `debug`, `tmp`) that a
+`find -iname` can't locate anywhere in the tree. (`kxkjii2`.)
+
 ---
 
 ## 8. Login and registration flow bugs
@@ -3385,6 +3415,9 @@ formatting ANY lib, run all three checks, then re-boot and re-test:**
    archive content, leave it). Fix by reverting the FILE (then
    optionally fix the original unbalanced quote by hand — the
    underlying typo is usually a real §6.6 bug worth fixing separately).
+   Confirmed again on `kxkjii2` (6 files) — the corpus-wide grep still
+   finds real instances on new libs; keep running it every pass, not
+   just once.
 
 The formatter is cosmetic; losing formatting on a handful of files is
 always the right trade for correctness.
