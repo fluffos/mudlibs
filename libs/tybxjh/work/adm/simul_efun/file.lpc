@@ -1,290 +1,284 @@
 #include <ansi.h>
 
-void log_file(string file, string text)
-{
-        seteuid(ROOT_UID);
-        write_file(LOG_DIR + file, text);
+void log_file(string file, string text) {
+  seteuid(ROOT_UID);
+  write_file(LOG_DIR + file, text);
 }
 
-void assure_file(string file)
-{
-        string path, *dir;
-        int i;
+void assure_file(string file) {
+  string path, *dir;
+  int i;
 
-        if (file_size(file) != -1) return;
+  if (file_size(file) != -1) return;
 
-        seteuid(ROOT_UID);
-        dir = explode(file, "/");
+  seteuid(ROOT_UID);
+  dir = explode(file, "/");
 
-        if (file[strlen(file) - 1] != '/')
-                // the file is refer to a file, not directory
-                dir = dir[0..sizeof(dir)-2];
+  if (file[strlen(file) - 1] != '/')
+    // the file is refer to a file, not directory
+    dir = dir[0..sizeof(dir) - 2];
 
-        path = "/";
-        for (i = 0; i < sizeof(dir); i++)
-        {
-                path += dir[i];
-                mkdir(path);
-                path += "/";
-        }
+  path = "/";
+  for (i = 0; i < sizeof(dir); i++) {
+    path += dir[i];
+    mkdir(path);
+    path += "/";
+  }
 
-        dir = 0;
+  dir = 0;
 }
 
-int is_root(mixed ob)
-{
-        if (stringp(ob))
-               return (SECURITY_D->get_status(ob) == "(boss)");
+int is_root(mixed ob) {
+  if (stringp(ob))
+    return (SECURITY_D->get_status(ob) == "(boss)");
 
-        if (objectp(ob))
-        {
-                if (geteuid(ob) == ROOT_UID)
-                        // Root object want to execute
-                        return 1;
+  if (objectp(ob)) {
+    if (geteuid(ob) == ROOT_UID)
+      // Root object want to execute
+      return 1;
 
-                return (SECURITY_D->get_status(geteuid(ob)) == "(boss)");
-        }
+    return (SECURITY_D->get_status(geteuid(ob)) == "(boss)");
+  }
 
+  return 1;
+}
+
+string base_name(object ob) {
+  string file;
+
+  if (sscanf(file_name(ob), "%s#%*d", file) == 2)
+    return file;
+  else
+    return file_name(ob);
+}
+private int valid(object obj, string filename) {
+  string euid;
+
+  if (!obj) return 0;
+  euid = geteuid(obj);
+
+  switch (SECURITY_D->get_status(euid)) {
+    case "(player)":
+      if (sscanf(filename, "/data/%*s"))
         return 1;
-}
-
-string base_name(object ob)
-{
-        string file;
-
-        if (sscanf(file_name(ob), "%s#%*d", file) == 2)
-                return file;
-        else
-                return file_name(ob);
-}
-private int valid(object obj,string filename)
-{
-    string euid;
-
-    if (!obj)   return 0;
-    euid=geteuid(obj);
-
-    switch ( SECURITY_D->get_status(euid) ){
-        case "(player)"     :   
-            if ( sscanf(filename,"/data/%*s") )  
+      return 0;
+    case "(immortal)": return 0;
+    case "(apprentice)":
+      if (sscanf(filename, "/u/" + euid + "/%*s")
+        || sscanf(filename, "/doc/%*s"))
         return 1;
-        return 0;
-        case "(immortal)"   :   return 0;
-        case "(apprentice)"   :  
-            if (sscanf(filename,"/u/"+euid+"/%*s")
-               ||sscanf(filename,"/doc/%*s") )
-                return 1;
-            write("警告：你不能操作这些目录下的文件。\n");
-            return 0;
-        case "(wizard)"     :
-            if (sscanf(filename,"/u/"+euid+"/%*s")
-               ||sscanf(filename,"/doc/%*s") 
-               ||sscanf(filename,"/d/%*s") )
-                return 1;
-            write("警告：你不能操作这些目录下的文件。\n");
-            return 0;
-        case "(arch)"     :
-            if (sscanf(filename,"/u/"+euid+"/%*s")
-               ||sscanf(filename,"/d/%*s")
-               ||sscanf(filename,"/clone/%*s")
-               ||sscanf(filename,"/quest/%*s")
-               ||sscanf(filename,"/quest2/%*s")
-               ||sscanf(filename,"/kungfu/%*s")
-               ||sscanf(filename,"/doc/%*s"))
-                return 1;
-            write("警告：你不能操作这些目录下的文件。\n");
-            return 0;
-        case "(admin)"      :  
-            if (sscanf(filename,"/u/"+euid+"/%*s")
-               ||sscanf(filename,"/d/%*s")
-               ||sscanf(filename,"/kungfu/%*s")
-               ||sscanf(filename,"/doc/%*s")
-               ||sscanf(filename,"/feature/%*s")
-               ||sscanf(filename,"/inherit/%*s")
-               ||sscanf(filename,"/clone/%*s")
-               ||sscanf(filename,"/job/%*s")
-               ||sscanf(filename,"/quest/%*s")
-               ||sscanf(filename,"/include/%*s"))
-               return 1;
-            write("警告：你不能操作这些目录下的文件。\n");
-            return 0;
-         case "(boss)"      :
-            if ( sscanf(filename,"/log/%*s") ) return 0;
-            if ( euid != "zjb" && euid != "daniel" ) {
-                    if ( sscanf(filename,"/adm/daemons/%*s")
-                      || sscanf(filename,"/feature/message%*s")
-                      || sscanf(filename,"/feature/dbase%*s") )
-                    {
-                         write("警告：你不能操作这些目录下的文件。\n");
-                         return 0;
-                    }
-                    return 1;
-            }
-            else return 1;
-    }
+      write("警告：你不能操作这些目录下的文件。\n");
+      return 0;
+    case "(wizard)":
+      if (sscanf(filename, "/u/" + euid + "/%*s")
+        || sscanf(filename, "/doc/%*s")
+        || sscanf(filename, "/d/%*s"))
+        return 1;
+      write("警告：你不能操作这些目录下的文件。\n");
+      return 0;
+    case "(arch)":
+      if (sscanf(filename, "/u/" + euid + "/%*s")
+        || sscanf(filename, "/d/%*s")
+        || sscanf(filename, "/clone/%*s")
+        || sscanf(filename, "/quest/%*s")
+        || sscanf(filename, "/quest2/%*s")
+        || sscanf(filename, "/kungfu/%*s")
+        || sscanf(filename, "/doc/%*s"))
+        return 1;
+      write("警告：你不能操作这些目录下的文件。\n");
+      return 0;
+    case "(admin)":
+      if (sscanf(filename, "/u/" + euid + "/%*s")
+        || sscanf(filename, "/d/%*s")
+        || sscanf(filename, "/kungfu/%*s")
+        || sscanf(filename, "/doc/%*s")
+        || sscanf(filename, "/feature/%*s")
+        || sscanf(filename, "/inherit/%*s")
+        || sscanf(filename, "/clone/%*s")
+        || sscanf(filename, "/job/%*s")
+        || sscanf(filename, "/quest/%*s")
+        || sscanf(filename, "/include/%*s"))
+        return 1;
+      write("警告：你不能操作这些目录下的文件。\n");
+      return 0;
+    case "(boss)":
+      if (sscanf(filename, "/log/%*s")) return 0;
+      if (euid != "zjb" && euid != "daniel") {
+        if (sscanf(filename, "/adm/daemons/%*s")
+          || sscanf(filename, "/feature/message%*s")
+          || sscanf(filename, "/feature/dbase%*s")) {
+          write("警告：你不能操作这些目录下的文件。\n");
+          return 0;
+        }
+        return 1;
+      } else return 1;
+  }
+  return 0;
+}
+
+void ed(string filename) {
+  string str, cmd;
+  object me, ob;
+
+  me = this_player();
+  ob = previous_object();
+
+  if (!objectp(me) || !objectp(ob)) return 0;
+
+  if (valid(me, filename)
+    && sscanf(base_name(ob), "/cmds/%*s", cmd) == 1) {
+    write_file(
+      "/log/edit/" + geteuid(me),
+      sprintf(
+        "edit %s %s %s\n",
+        resolve_path(me->query("cwd"), filename),
+        base_name(ob),
+        ctime(time())
+      )
+    );
+    return efun::ed(filename);
+  } else {
+    write_file("/log/edit/bugedit", sprintf("%s edit %s %s %s\n", me->query("id"), resolve_path(
+      me->query("cwd"),
+      filename
+    ), base_name(ob),
+      ctime(time())));
     return 0;
+  }
 }
 
-void ed(string filename)
-{
-    string str,cmd;
-    object me,ob;
+int cp(string src, string dst) {
+  string str, cmd;
+  object me, ob;
 
-    me=this_player();
-    ob=previous_object();
+  me = this_player();
+  ob = previous_object();
 
-    if( !objectp(me) || !objectp(ob) ) return 0;
+  if (base_name(ob) != "/adm/daemons/backupd")
+    return efun::cp(src, dst);
 
-    if ( valid(me,filename)
-         && sscanf(base_name(ob),"/cmds/%*s",cmd)==1) 
-    { 
-        write_file("/log/edit/"+geteuid(me), sprintf("edit %s %s %s\n",              resolve_path(me->query("cwd"), filename),base_name(ob) ,ctime(time())) );
-     return efun::ed(filename);
-    } else
-    {
-        write_file("/log/edit/bugedit", sprintf("%s edit %s %s %s\n",                     me->query("id"),resolve_path(me->query("cwd"), filename),base_name(ob),
-        ctime(time())) );
-     return 0;
-    } 
+  if (!objectp(me) || !objectp(ob)) return 0;
+
+  if ((valid(me, dst) || valid(me, src)) &&
+    sscanf(base_name(ob), "/cmds/%*s", cmd) == 1) {
+    str = "时间 " + ctime(time()) + " 名字" + me->query("id") + " 文件"
+      +base_name(ob) + " 路径" + src + " to " + dst + "\n";
+    if (base_name(ob) != "/adm/daemons/backupd")
+      write_file("/log/file/cp", str);
+    return efun::cp(src, dst);
+  } else {
+    str = "时间 " + ctime(time()) + " 名字" + me->query("id") + " 文件"
+      +base_name(ob) + " 路径" + src + " to " + dst + "\n";
+    write_file("/log/file/bugcp", str);
+    return 0;
+  }
+}
+int rename(string src, string dst) {
+  string str, cmd;
+  object me, ob;
+
+  me = this_player();
+  ob = previous_object();
+
+  if (!objectp(me) || !objectp(ob)) return 0;
+
+  if ((!valid(me, dst) || !valid(me, src)) &&
+    sscanf(base_name(ob), "/cmds/%*s", cmd) != 1) {
+    str = "时间 " + ctime(time()) + " 名字" + me->query("id") + " 文件"
+      +base_name(ob) + "路径" + src + " to " + dst + "\n";
+    write_file("/log/file/bugmv", str);
+    return 0;
+  } else {
+    str = "时间 " + ctime(time()) + " 名字" + me->query("id") + " 文件"
+      +base_name(ob) + "路径" + src + " to " + dst + "\n";
+    write_file("/log/file/mv", str);
+    return efun::rename(src, dst);
+  }
 }
 
-int cp( string src, string dst )
-{
-    string str,cmd;
-    object me,ob;
+int rm(string filename) {
+  string str, cmd, tmp;
+  object me, ob;
 
-    me=this_player();
-    ob=previous_object();
+  me = this_player();
+  ob = previous_object();
 
-    if( base_name(ob) != "/adm/daemons/backupd" )
-     return efun::cp(src,dst); 
+  if ((objectp(ob) && base_name(ob) == "/d/taishan/npc/shang-shan"
+    && sscanf(filename, "/data/npc/%*s", tmp) == 1) ||
+    (objectp(ob) && base_name(ob) == "/d/taishan/npc/fa-e"
+      && sscanf(filename, "/data/npc/%*s", tmp) == 1) ||
+    (objectp(ob) && base_name(ob) == "/cmds/app/update"
+      && sscanf(filename, "/binaries/%*s", tmp) == 1) ||
+    (objectp(ob) && base_name(ob) == "/adm/daemons/purge"
+      && sscanf(filename, "/data/%*s", tmp) == 1) ||
+    (objectp(ob) && base_name(ob) == "/cmds/std/bphelp"
+      && sscanf(filename, "/doc/bangpai/%*s", tmp) == 1) ||
+    (objectp(ob) && base_name(ob) == "/d/taishan/npc/xinxiu"
+      && sscanf(filename, "/data/npc/%*s", tmp) == 1) ||
+    (objectp(ob) && base_name(ob) == "/d/daniel/npc/paimai"
+      && sscanf(filename, "/data/%*s", tmp) == 1) ||
+    (objectp(ob) && base_name(ob) == "/cmds/usr/quit"
+      && sscanf(filename, "/data/%*s", tmp) == 1) ||
+    (objectp(ob) && base_name(ob) == "/adm/daemons/backupd"
+      && sscanf(filename, "/backup/%*s", tmp) == 1) ||
+    (objectp(ob) && base_name(ob) == "/d/taishan/npc/meng-zhu"
+      && sscanf(filename, "/data/npc/%*s", tmp) == 1))
+    return efun::rm(filename);
 
-    if( !objectp(me) || !objectp(ob) ) return 0; 
+  if (objectp(ob) && base_name(ob) == "/adm/daemons/securityd")
+    return efun::rm(filename);
 
-    if ( (valid(me,dst)||valid(me,src)) &&
-         sscanf(base_name(ob),"/cmds/%*s",cmd)==1 )
-    { 
-        str="时间 "+ctime(time())+" 名字"+me->query("id")+" 文件"
-             +base_name(ob)+" 路径"+src+" to "+dst+"\n";
-    if ( base_name(ob) != "/adm/daemons/backupd" )
-        write_file("/log/file/cp",str);
-     return efun::cp(src,dst); 
-    } else
-    {
-        str="时间 "+ctime(time())+" 名字"+me->query("id")+" 文件"
-             +base_name(ob)+" 路径"+src+" to "+dst+"\n";
-        write_file("/log/file/bugcp",str);
-     return 0;
-    } 
+  if (!objectp(me) || !objectp(ob)) return 0;
+
+  if (valid(me, filename) && sscanf(base_name(ob), "/cmds/%*s", cmd) == 1) {
+    str = "时间 " + ctime(time()) + " 名字" + me->query("id") + " 路径"
+      +base_name(ob) + " 文件" + filename + "\n";
+
+    if (base_name(ob) != "/cmds/std/suicide" &&
+      base_name(ob) != "/adm/daemons/backupd")
+      write_file("/log/file/rm", str);
+
+    return efun::rm(filename);
+  } else {
+    str = "时间 " + ctime(time()) + " 名字" + me->query("id") + " 路径"
+      +base_name(ob) + " 文件" + filename + "\n";
+    write_file("/log/file/bugrm", str);
+    return 0;
+  }
 }
-int rename( string src, string dst )   
-{
-    string str,cmd;
-    object me,ob;
+int rmdir(string arg) {
+  string str, dir, cmd, tmp;
+  object me, ob;
 
-    me=this_player();
-    ob=previous_object();
+  if (base_name(previous_object()) == "/adm/daemons/backupd" ||
+    base_name(previous_object()) == "/cmds/adm/adrm" && !objectp(this_player()))
+    return efun::rmdir(arg);
+  me = this_player();
+  dir = resolve_path(me->query("cwd"), arg);
+  ob = previous_object();
 
-    if( !objectp(me) || !objectp(ob) ) return 0;            
+  if (!objectp(me) || !objectp(ob)) return 0;
 
-    if ( (!valid(me,dst)||!valid(me,src)) &&
-         sscanf(base_name(ob),"/cmds/%*s",cmd)!=1 )
-    {
-       str="时间 "+ctime(time())+" 名字"+me->query("id")+" 文件"
-            +base_name(ob)+"路径"+src+" to "+dst+"\n";
-       write_file("/log/file/bugmv",str);
-     return 0;
-    } else
-    {
-       str="时间 "+ctime(time())+" 名字"+me->query("id")+" 文件"
-            +base_name(ob)+"路径"+src+" to "+dst+"\n";
-       write_file("/log/file/mv",str);
-      return efun::rename(src,dst);
-     }
-}
+  //   if ( valid(me,dir) && sscanf(base_name(ob),"/cmds/%*s",cmd)==1 )
+  if (valid(
+    me,
+    dir
+  ) && (int)SECURITY_D->valid_write(
+    dir,
+    me,
+    "write"
+  ) && sscanf(base_name(ob), "/cmds/%*s", cmd) == 1) {
+    str = "时间 " + ctime(time()) + " 名字" + me->query("id") + " 路径" + base_name(ob) + " 文件" + arg + "\n";
 
-int rm( string filename)
-{
-    string str,cmd,tmp;
-    object me,ob;
+    write_file("/log/file/rmdir", str);
 
-    me=this_player();
-    ob=previous_object();
+    return efun::rmdir(arg);
+  } else {
+    str = "时间 " + ctime(time()) + " 名字" + me->query("id") + " 路径" + base_name(ob) + " 文件" + arg + "\n";
+    write_file("/log/file/bugrmdir", str);
 
-    if( (objectp(ob) && base_name(ob) == "/d/taishan/npc/shang-shan"
-        && sscanf(filename,"/data/npc/%*s",tmp) == 1 ) ||
-      ( objectp(ob) && base_name(ob) == "/d/taishan/npc/fa-e"
-        && sscanf(filename,"/data/npc/%*s",tmp) == 1 ) ||
-      ( objectp(ob) && base_name(ob) == "/cmds/app/update"
-        && sscanf(filename,"/binaries/%*s",tmp) == 1 ) ||
-      ( objectp(ob) && base_name(ob) == "/adm/daemons/purge"
-        && sscanf(filename,"/data/%*s",tmp) == 1 ) ||
-      ( objectp(ob) && base_name(ob) == "/cmds/std/bphelp"
-        && sscanf(filename,"/doc/bangpai/%*s",tmp) == 1 ) ||
-      ( objectp(ob) && base_name(ob) == "/d/taishan/npc/xinxiu"
-        && sscanf(filename,"/data/npc/%*s",tmp) == 1 ) ||
-      ( objectp(ob) && base_name(ob) == "/d/daniel/npc/paimai"
-        && sscanf(filename,"/data/%*s",tmp) == 1 ) ||
-         ( objectp(ob) && base_name(ob) == "/cmds/usr/quit" 
-        && sscanf(filename,"/data/%*s",tmp) == 1 ) ||
-         ( objectp(ob) && base_name(ob) == "/adm/daemons/backupd" 
-        && sscanf(filename,"/backup/%*s",tmp) == 1 ) ||
-      ( objectp(ob) && base_name(ob) == "/d/taishan/npc/meng-zhu"
-        && sscanf(filename,"/data/npc/%*s",tmp) == 1 ) )
-     return efun::rm(filename);   
-
-    if( objectp(ob) && base_name(ob)=="/adm/daemons/securityd" )
-    return efun::rm(filename); 
-
-    if( !objectp(me) || !objectp(ob) ) return 0;            
-
-    if ( valid(me,filename) && sscanf(base_name(ob),"/cmds/%*s",cmd)==1 )
-    { 
-         str = "时间 "+ctime(time())+" 名字"+me->query("id")+" 路径"
-                +base_name(ob)+" 文件"+filename+"\n";
-
-     if ( base_name(ob)!="/cmds/std/suicide" &&
-         base_name(ob)!="/adm/daemons/backupd" )
-             write_file("/log/file/rm",str);
-
-     return efun::rm(filename);  
-    } else
-    {
-        str="时间 "+ctime(time())+" 名字"+me->query("id")+" 路径"
-             +base_name(ob)+" 文件"+filename+"\n";
-        write_file("/log/file/bugrm",str);
-     return 0;
-    }
-}
-int rmdir( string arg)
-{
-    string str,dir,cmd,tmp;
-    object me,ob;
-
-    if ( base_name(previous_object()) == "/adm/daemons/backupd" ||
-        base_name(previous_object()) == "/cmds/adm/adrm" && ! objectp(this_player()) )
-    return efun::rmdir(arg); 
-    me=this_player();
-    dir = resolve_path(me->query("cwd"), arg);
-    ob=previous_object();
-
-    if( !objectp(me) || !objectp(ob) ) return 0;            
-
-//   if ( valid(me,dir) && sscanf(base_name(ob),"/cmds/%*s",cmd)==1 )
-   if ( valid(me,dir)&&(int)SECURITY_D->valid_write(dir,me,"write") && sscanf(base_name(ob),"/cmds/%*s",cmd)==1 )
-    { 
-str="时间 "+ctime(time())+" 名字"+me->query("id")+" 路径"+base_name(ob)+" 文件"+arg+"\n";
-
-write_file("/log/file/rmdir",str);
-
-    return efun::rmdir(arg); 
-    } else
-    {
-str="时间 "+ctime(time())+" 名字"+me->query("id")+" 路径"+base_name(ob)+" 文件"+arg+"\n";
- write_file("/log/file/bugrmdir",str);
-
-     return 0;
-    }
+    return 0;
+  }
 }
 
 /*
@@ -298,136 +292,126 @@ void cat(string file)
 
 }
 */
-void cat(string file)
-{
-    string str,str1,cmd,tmp;
-    object me,ob;
-    me=this_player();
-    ob=previous_object();
-    if( !objectp(me) || !objectp(ob) ) return 0;   
-    if (geteuid(previous_object())== ROOT_UID||
-         valid(me,file)&& sscanf(base_name(ob),"/cmds/%*s",cmd)==1) 
-    {
-str="时间 "+ctime(time())+" 名字"+me->query("id")+" 路径"+base_name(ob)+" 文件"+file+"\n";
- if(base_name(ob)!="/adm/daemons/logind"&&base_name(ob)!="/cmds/usr/help")
-write_file("/log/file/cat",str);
-        str1 = efun::read_file( file );
-         write(str1);
-        return;
-    } else
-   {
-str="时间 "+ctime(time())+" 名字"+me->query("id")+" 路径"+base_name(ob)+" 文件"+file+"\n";
- if(base_name(ob)!="/adm/daemons/logind"&&base_name(ob)!="/cmds/usr/help")
-write_file("/log/file/bugcat",str);
-     return;
-    }
+void cat(string file) {
+  string str, str1, cmd, tmp;
+  object me, ob;
+  me = this_player();
+  ob = previous_object();
+  if (!objectp(me) || !objectp(ob)) return 0;
+  if (geteuid(previous_object()) == ROOT_UID ||
+    valid(me, file) && sscanf(base_name(ob), "/cmds/%*s", cmd) == 1) {
+    str = "时间 " + ctime(time()) + " 名字" + me->query("id") + " 路径" + base_name(ob) + " 文件" + file + "\n";
+    if (base_name(ob) != "/adm/daemons/logind" && base_name(ob) != "/cmds/usr/help")
+      write_file("/log/file/cat", str);
+    str1 = efun::read_file(file);
+    write(str1);
+    return;
+  } else {
+    str = "时间 " + ctime(time()) + " 名字" + me->query("id") + " 路径" + base_name(ob) + " 文件" + file + "\n";
+    if (base_name(ob) != "/adm/daemons/logind" && base_name(ob) != "/cmds/usr/help")
+      write_file("/log/file/bugcat", str);
+    return;
   }
-
-int tail(string file)
-{
-    string str,cmd,tmp;
-    object me,ob;
-    me=this_player();
-    ob=previous_object();
-    if( !objectp(me) || !objectp(ob) ) return 0;   
-    str="On "+ctime(time())+"\n"+
-       "This Player: "+me->query("name")+"("+me->query("id")+")\n"+
-       "Previous Object: "+base_name(ob)+"\n";
-    if (geteuid(previous_object())== ROOT_UID||
-       (valid(me,file)&& sscanf(base_name(ob),"/cmds/%*s",cmd)==1 ) ) 
-    {
-    str+="Tail file: "+file+"\n"+
-      "--------------------\n";   
-     log_file("file/tail_file",str);
-     { string tc = efun::read_file(file); if (!tc) return 0; write(tc); return 1; }
-    } else
-    {
-     str+="Try to tial file: "+file+"\n"+
-       "--------------------\n";
-     log_file("file/try_tail_file",str);
-     return 0;
-    }
-  }
-
-
-
-
-string color_filter(string content)
-{
-        if (! content)
-                return "";
-
-        // Foreground color
-        content = replace_string(content, "$BLK$", BLK);
-        content = replace_string(content, "$RED$", RED);
-        content = replace_string(content, "$GRN$", GRN);
-        content = replace_string(content, "$YEL$", YEL);
-        content = replace_string(content, "$BLU$", BLU);
-        content = replace_string(content, "$MAG$", MAG);
-        content = replace_string(content, "$CYN$", CYN);
-        content = replace_string(content, "$WHT$", WHT);
-        content = replace_string(content, "$HIR$", HIR);
-        content = replace_string(content, "$HIG$", HIG);
-        content = replace_string(content, "$HIY$", HIY);
-        content = replace_string(content, "$HIB$", HIB);
-        content = replace_string(content, "$HIM$", HIM);
-        content = replace_string(content, "$HIC$", HIC);
-        content = replace_string(content, "$HIW$", HIW);
-        content = replace_string(content, "$NOR$", NOR);
-
-        // Background color
-        content = replace_string(content, "$BBLK$", BBLK);
-        content = replace_string(content, "$BRED$", BRED);
-        content = replace_string(content, "$BGRN$", BGRN);
-        content = replace_string(content, "$BYEL$", BYEL);
-        content = replace_string(content, "$BBLU$", BBLU);
-        content = replace_string(content, "$BMAG$", BMAG);
-        content = replace_string(content, "$BCYN$", BCYN);
-
-        content = replace_string(content, "$HBRED$", HBRED);
-        content = replace_string(content, "$HBGRN$", HBGRN);
-        content = replace_string(content, "$HBYEL$", HBYEL);
-        content = replace_string(content, "$HBBLU$", HBBLU);
-        content = replace_string(content, "$HBMAG$", HBMAG);
-        content = replace_string(content, "$HBCYN$", HBCYN);
-
-        content = replace_string(content, "$U$", U);
-        content = replace_string(content, "$BLINK$", BLINK);
-        content = replace_string(content, "$REV$", REV);
-        content = replace_string(content, "$HIREV$", HIREV);
-        content = replace_string(content, "$BOLD$", BOLD);
-
-        return content;
 }
 
-void color_cat(string file)
-{
-        if (previous_object())
-                seteuid(geteuid(previous_object()));
-        else
-                seteuid(ROOT_UID);
-
-   write(color_filter(read_file(file)));
+int tail(string file) {
+  string str, cmd, tmp;
+  object me, ob;
+  me = this_player();
+  ob = previous_object();
+  if (!objectp(me) || !objectp(ob)) return 0;
+  str = "On " + ctime(time()) + "\n" +
+    "This Player: " + me->query("name") + "(" + me->query("id") + ")\n" +
+    "Previous Object: " + base_name(ob) + "\n";
+  if (geteuid(previous_object()) == ROOT_UID ||
+    (valid(me, file) && sscanf(base_name(ob), "/cmds/%*s", cmd) == 1)) {
+    str += "Tail file: " + file + "\n" +
+      "--------------------\n";
+    log_file("file/tail_file", str);
+    { string tc = efun::read_file(file); if (!tc) return 0; write(tc); return 1; }
+  } else {
+    str += "Try to tial file: " + file + "\n" +
+      "--------------------\n";
+    log_file("file/try_tail_file", str);
+    return 0;
+  }
 }
 
-int file_lines(string file)
-{
+
+
+
+string color_filter(string content) {
+  if (!content)
+    return "";
+
+  // Foreground color
+  content = replace_string(content, "$BLK$", BLK);
+  content = replace_string(content, "$RED$", RED);
+  content = replace_string(content, "$GRN$", GRN);
+  content = replace_string(content, "$YEL$", YEL);
+  content = replace_string(content, "$BLU$", BLU);
+  content = replace_string(content, "$MAG$", MAG);
+  content = replace_string(content, "$CYN$", CYN);
+  content = replace_string(content, "$WHT$", WHT);
+  content = replace_string(content, "$HIR$", HIR);
+  content = replace_string(content, "$HIG$", HIG);
+  content = replace_string(content, "$HIY$", HIY);
+  content = replace_string(content, "$HIB$", HIB);
+  content = replace_string(content, "$HIM$", HIM);
+  content = replace_string(content, "$HIC$", HIC);
+  content = replace_string(content, "$HIW$", HIW);
+  content = replace_string(content, "$NOR$", NOR);
+
+  // Background color
+  content = replace_string(content, "$BBLK$", BBLK);
+  content = replace_string(content, "$BRED$", BRED);
+  content = replace_string(content, "$BGRN$", BGRN);
+  content = replace_string(content, "$BYEL$", BYEL);
+  content = replace_string(content, "$BBLU$", BBLU);
+  content = replace_string(content, "$BMAG$", BMAG);
+  content = replace_string(content, "$BCYN$", BCYN);
+
+  content = replace_string(content, "$HBRED$", HBRED);
+  content = replace_string(content, "$HBGRN$", HBGRN);
+  content = replace_string(content, "$HBYEL$", HBYEL);
+  content = replace_string(content, "$HBBLU$", HBBLU);
+  content = replace_string(content, "$HBMAG$", HBMAG);
+  content = replace_string(content, "$HBCYN$", HBCYN);
+
+  content = replace_string(content, "$U$", U);
+  content = replace_string(content, "$BLINK$", BLINK);
+  content = replace_string(content, "$REV$", REV);
+  content = replace_string(content, "$HIREV$", HIREV);
+  content = replace_string(content, "$BOLD$", BOLD);
+
+  return content;
+}
+
+void color_cat(string file) {
+  if (previous_object())
+    seteuid(geteuid(previous_object()));
+  else
+    seteuid(ROOT_UID);
+
+  write(color_filter(read_file(file)));
+}
+
+int file_lines(string file) {
 #ifdef DOING_IMPROVED
-        return efun::file_lines(file);
+  return efun::file_lines(file);
 #else
-        int i;
-        int jmp;
+  int i;
+  int jmp;
 
-        i = 65536;
-        jmp = i / 2;
+  i = 65536;
+  jmp = i / 2;
 
-        while (jmp)
-        {
-   if (read_file(file, i, 1)) i += jmp; else
-                                           i -= jmp;
-                jmp /= 2;
-        }
+  while (jmp) {
+    if (read_file(file, i, 1)) i += jmp; else
+      i -= jmp;
+    jmp /= 2;
+  }
 
-        return i - 1;
+  return i - 1;
 #endif
 }

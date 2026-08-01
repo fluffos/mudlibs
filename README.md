@@ -284,7 +284,7 @@ classes it's found.
 | 101 | `sjshv2578bb` | 三界神话v2.578b版 | `三界神话v2.578b版.rar` | 40125 | WASM playable |
 | 102 | `sjshwzb` | 三界神话完整版 | `三界神话完整版.rar` | 40113 | WASM playable |
 | 103 | `sjshwzjqb` | 三界神话完整加强版 | `三界神话完整加强版.rar` | 40173 | WASM playable |
-| 104 | `tybxjh` | 天涯&碧血江湖 | `天涯&碧血江湖.rar` | 40158 | native-boot verified, WASM pending |
+| 104 | `tybxjh` | 天涯&碧血江湖 | `天涯&碧血江湖.rar` | 40158 | WASM playable |
 | 105 | `wlhd` | 武林浩荡 | `武林浩荡.rar` | 40121 | native-boot verified, WASM pending |
 | 106 | `wqfy` | 无情风云 | `无情风云.rar` | 40124 | native-boot verified, WASM pending |
 | 107 | `xajdxyj` | 西安交大西游记 | `西安交大西游记.rar` | 40179 | native-boot verified, WASM pending |

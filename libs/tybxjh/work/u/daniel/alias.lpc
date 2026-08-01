@@ -8,146 +8,144 @@
 mapping alias;
 nosave string *history, last_input;
 nosave int last_cmd, repeat_cnt = 0;
-nosave int last_cmd_time,cmd_time=0,kill_time=0;
-string process_input(string str)
-{
-    string *args, command, argstr,verb,arg,file,cmd;
-    int i, j;
-            int cq, cj; 
-    object ob,dest;
-    object room; 
-    room=environment(this_object()); 
-// rewrite限制晕倒后的add_action'
-if (userp(this_object()) && (this_object()->query_temp("block_msg/all")
-                || !living(this_object()) ) )
-                return "";
-           notify_fail(HIR"What message？\n"NOR); 
-// end
+nosave int last_cmd_time, cmd_time = 0, kill_time = 0;
+string process_input(string str) {
+  string *args, command, argstr, verb, arg, file, cmd;
+  int i, j;
+  int cq, cj;
+  object ob, dest;
+  object room;
+  room = environment(this_object());
+  // rewrite限制晕倒后的add_action'
+  if (userp(this_object()) && (this_object()->query_temp("block_msg/all")
+    || !living(this_object())))
+    return "";
+  notify_fail(HIR "What message？\n" NOR);
+  // end
 
-    if( str == (string)this_object()->query_temp("last_cmd"))
-        if(!this_object()->query_temp("last_cmd_ok"))return "";
-    cmd_time++;
+  if (str == (string)this_object()->query_temp("last_cmd"))
+    if (!this_object()->query_temp("last_cmd_ok")) return "";
+  cmd_time++;
 
-    if (time()-last_cmd_time<1){
-            if (kill_time>4){
-                tell_object( this_object(),YEL "\n\n天空忽然传来了几声冷笑，霎时间乌云密布！一道闪电从天而降!\n\n\n\n你被天神驱逐出去了!!!\n\n" NOR);
-                 this_object()->kick();
-                 return "";
-            }
-                        if (cmd_time>16){
-                tell_object( this_object(),YEL "\n\n你感觉天气突变，四周烟雾弥漫。\n\n\n\n天神从烟雾中浮现，大喝道：你再吵着我睡觉，我就不客气了!!!\n\n" NOR );
-                cmd_time=0;
-                kill_time++;
-            }
-    }else   {
-        cmd_time=0;
-        if (time()-last_cmd_time>1)
-                kill_time>0?kill_time--:0;
-          else
-                kill_time=0;
+  if (time() - last_cmd_time < 1) {
+    if (kill_time > 4) {
+      tell_object(
+        this_object(),
+        YEL "\n\n天空忽然传来了几声冷笑，霎时间乌云密布！一道闪电从天而降!\n\n\n\n你被天神驱逐出去了!!!\n\n" NOR
+      );
+      this_object()->kick();
+      return "";
     }
-    last_cmd_time=time();
-    if( str==last_input ) {
-        repeat_cnt++;
-        if( repeat_cnt > MAX_REPEAT && !wizardp(this_object())) {
-            tell_object( this_object(),
-                YEL "\n\n你感觉天气突变，四周烟雾弥漫。\n\n"
-                "\n\n天神从烟雾中浮现，大喝道：不给你点教训，你还真不知道死字怎么写!!!\n\n" NOR);
-
-                        // 晕倒以后要保证qi/jing不变
-                        cq = this_object()->query("qi");
-                        cj = this_object()->query("jing");
-
-                        // 确保qi/jing不小于零，免得指令过多而冤死
-                        if (cq < 4) cq = 4;
-                        if (cj < 4) cj = 4;
-
-                        // 我要保证清除最后打伤这个角色的人
-                        this_object()->set("jing", 0);
-                        this_object()->receive_damage("jing", 0);
-                        this_object()->unconcious();                               
-                        this_object()->remove_all_killer(); 
-                        all_inventory(room)->remove_killer(this_object()); 
-
-                        // 恢复晕倒前的qi/jing
-                        this_object()->set("qi", cq/2); //修改为晕前的一半
-                        this_object()->set("jing", cj/2); //同上
-
-                        // 确保有效的qi/jing不小于零，免得因
-                        // 为指令过多而冤死。
-                        if (this_object()->query("eff_qi") < 1)   this_object()->set("eff_qi", 0);
-                        if (this_object()->query("eff_jing") < 1) this_object()->set("eff_jing", 0);
-          return "";
-        }
-    } else {
-        repeat_cnt = 0;
-        last_input = str;
+    if (cmd_time > 16) {
+      tell_object(
+        this_object(),
+        YEL "\n\n你感觉天气突变，四周烟雾弥漫。\n\n\n\n天神从烟雾中浮现，大喝道：你再吵着我睡觉，我就不客气了!!!\n\n" NOR
+      );
+      cmd_time = 0;
+      kill_time++;
     }
-    if( str[0]=='!' ) {
-        if( pointerp(history) && sizeof(history) ) {
-            if( sscanf(str, "!%d", i) )
-                str = (string)history[(HISTORY_BUFFER_SIZE + last_cmd - i) % HISTORY_BUFFER_SIZE];
-            else
-                str = history[last_cmd];
-        } else
-            return "";
-    } else {
-        if( !pointerp(history) ) history = allocate(HISTORY_BUFFER_SIZE);
-        last_cmd = (last_cmd + 1) % HISTORY_BUFFER_SIZE;
-        history[last_cmd] = str;
-    }
-    if( mapp(alias) ) {
-        if( !undefinedp(alias[str]) )
-            return replace_string( alias[str], "$*", "" );
-        if( sscanf(str, "%s %s", cmd, argstr)==2 && !undefinedp(alias[cmd]) ) {
-            cmd = replace_string( alias[cmd], "$*", argstr );
-            args = explode(argstr, " ");
-            if( (j = sizeof(args)) )
-                for(i=0; i<j; i++)
-                    cmd = replace_string( cmd, "$" + (i+1), args[i] );
-            return cmd;
-        }
-    }
-    command=(string)ALIAS_D->process_global_alias(str);
+  } else {
+    cmd_time = 0;
+    if (time() - last_cmd_time > 1)
+      kill_time > 0 ? kill_time-- : 0;
+    else
+      kill_time = 0;
+  }
+  last_cmd_time = time();
+  if (str == last_input) {
+    repeat_cnt++;
+    if (repeat_cnt > MAX_REPEAT && !wizardp(this_object())) {
+      tell_object(this_object(),
+        YEL "\n\n你感觉天气突变，四周烟雾弥漫。\n\n"
+        "\n\n天神从烟雾中浮现，大喝道：不给你点教训，你还真不知道死字怎么写!!!\n\n" NOR);
 
-;    if (this_object()->query_temp("big5") )
-    command=LANGUAGE_D->Big52GB(command);
+      // 晕倒以后要保证qi/jing不变
+      cq = this_object()->query("qi");
+      cj = this_object()->query("jing");
 
-    if (!living(this_object())){
-        if (sscanf(command,"%s %s",verb,arg)!=2) verb=command;
-        file="/cmds/usr/"+verb+".lpc";
-      if (file_size(file)>0){
-         file->main(this_object(),arg);
-         return "";
-      }
-        else if( EMOTE_D->do_emote( this_object(), verb, arg ) )
-            return "";
-        else if( CHANNEL_D->do_channel( this_object(), verb, arg ) )
-            return "";
+      // 确保qi/jing不小于零，免得指令过多而冤死
+      if (cq < 4) cq = 4;
+      if (cj < 4) cj = 4;
+
+      // 我要保证清除最后打伤这个角色的人
+      this_object()->set("jing", 0);
+      this_object()->receive_damage("jing", 0);
+      this_object()->unconcious();
+      this_object()->remove_all_killer();
+      all_inventory(room)->remove_killer(this_object());
+
+      // 恢复晕倒前的qi/jing
+      this_object()->set("qi", cq / 2);  //修改为晕前的一半
+      this_object()->set("jing", cj / 2);  //同上
+
+      // 确保有效的qi/jing不小于零，免得因
+      // 为指令过多而冤死。
+      if (this_object()->query("eff_qi") < 1) this_object()->set("eff_qi", 0);
+      if (this_object()->query("eff_jing") < 1) this_object()->set("eff_jing", 0);
+      return "";
     }
-    return command;
+  } else {
+    repeat_cnt = 0;
+    last_input = str;
+  }
+  if (str[0] == '!') {
+    if (pointerp(history) && sizeof(history)) {
+      if (sscanf(str, "!%d", i))
+        str = (string)history[(HISTORY_BUFFER_SIZE + last_cmd - i) % HISTORY_BUFFER_SIZE];
+      else
+        str = history[last_cmd];
+    } else
+      return "";
+  } else {
+    if (!pointerp(history)) history = allocate(HISTORY_BUFFER_SIZE);
+    last_cmd = (last_cmd + 1) % HISTORY_BUFFER_SIZE;
+    history[last_cmd] = str;
+  }
+  if (mapp(alias)) {
+    if (!undefinedp(alias[str]))
+      return replace_string(alias[str], "$*", "");
+    if (sscanf(str, "%s %s", cmd, argstr) == 2 && !undefinedp(alias[cmd])) {
+      cmd = replace_string(alias[cmd], "$*", argstr);
+      args = explode(argstr, " ");
+      if ((j = sizeof(args)))
+        for (i = 0; i < j; i++)
+          cmd = replace_string(cmd, "$" + (i + 1), args[i]);
+      return cmd;
+    }
+  }
+  command = (string)ALIAS_D->process_global_alias(str);
+
+  ; if (this_object()->query_temp("big5"))
+    command = LANGUAGE_D->Big52GB(command);
+
+  if (!living(this_object())) {
+    if (sscanf(command, "%s %s", verb, arg) != 2) verb = command;
+    file = "/cmds/usr/" + verb + ".lpc";
+    if (file_size(file) > 0) {
+      file->main(this_object(), arg);
+      return "";
+    } else if (EMOTE_D->do_emote(this_object(), verb, arg))
+      return "";
+    else if (CHANNEL_D->do_channel(this_object(), verb, arg))
+      return "";
+  }
+  return command;
 }
-int set_alias(string verb, string replace)
-{
-    if( !replace ) {
-        if( mapp(alias) ) map_delete(alias, verb);
-        return 1;
-    } else {
-        if( !mapp(alias) ) alias = ([ verb:replace ]);
-        else if( sizeof(alias) > MAX_ALIASES )
-            return notify_fail("您设定的 alias 太多了，请先删掉一些不常用的。\n");
-        else alias[verb] = replace;
-        return 1;
-    }
+int set_alias(string verb, string replace) {
+  if (!replace) {
+    if (mapp(alias)) map_delete(alias, verb);
+    return 1;
+  } else {
+    if (!mapp(alias)) alias = ([ verb: replace ]);
+    else if (sizeof(alias) > MAX_ALIASES)
+      return notify_fail("您设定的 alias 太多了，请先删掉一些不常用的。\n");
+    else alias[verb] = replace;
+    return 1;
+  }
 }
-mapping query_all_alias()
-{
-    return alias;
+mapping query_all_alias() {
+  return alias;
 }
-string last_input()
-{
-        return last_input;
+string last_input() {
+  return last_input;
 }
-
-
-
