@@ -1,4 +1,3 @@
-
 #define FIRST_PERSONAL          1
 #define SECOND_PERSONAL         2
 #define THIRD_PERSONAL          3
@@ -11,4 +10,3 @@
 #define THIRD_PERSONAL_PRONOUN_FEMALE   "她"
 #define THIRD_PERSONAL_PRONOUN_ANIMAL   "牠"
 #define THIRD_PERSONAL_PRONOUN_DEFAULT  "它"
-

@@ -1,4 +1,3 @@
-
 #define FUTURES_NUM                     0
 #define FUTURES_NAME                    1
 #define FUTURES_MARGIN                  2
@@ -10,5 +9,3 @@
 #define FUTURES_VARIATION               8
 #define FUTURES_UPDATETIME              9
 #define FUTURES_VALIDTRADETIME          10
-
-

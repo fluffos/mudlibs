@@ -14,4 +14,3 @@ int sort_analectas(mapping a1, mapping a2) { return (a1["add_time"] - a2["add_ti
 
 // 筛选文选
 int filter_analectas(mapping analecta, int time) { return (analecta["add_time"] > time); }
-

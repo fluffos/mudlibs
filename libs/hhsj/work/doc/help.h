@@ -7,4 +7,3 @@
         "/doc/efuns/",\
         "/doc/applies/",\
         })
-

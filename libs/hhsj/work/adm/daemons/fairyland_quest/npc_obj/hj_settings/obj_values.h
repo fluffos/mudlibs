@@ -32,21 +32,20 @@
 
 ********************************************************************************/
 
-mapping all_values=([
-"dx":10,"fx":20,"tl":50,"hg":10,
-"qd":50,"zh":20,"fd":50,"qz":88,
-"xr":10,"kt":10,"dw":30,
+mapping all_values = ([
+  "dx": 10, "fx": 20, "tl": 50, "hg": 10,
+  "qd": 50, "zh": 20, "fd": 50, "qz": 88,
+  "xr": 10, "kt": 10, "dw": 30,
 
-"wmg":1,"xrg":5,"tqg":3,"dlg":5,"ysg":1,
-"slg":30,
+  "wmg": 1, "xrg": 5, "tqg": 3, "dlg": 5, "ysg": 1,
+  "slg": 30,
 
-"qtj":10,"lqj":20,"byj":15,"ydj":20,
-"hjj":20,"nlj":30,"xyj":50,"dhj":30,"bsj":50,
-"kfsj":20,"bysj":20,"llsj":20,"ydsj":20,
-"gssj":10,"fhsj":10,"dhsj":30,
+  "qtj": 10, "lqj": 20, "byj": 15, "ydj": 20,
+  "hjj": 20, "nlj": 30, "xyj": 50, "dhj": 30, "bsj": 50,
+  "kfsj": 20, "bysj": 20, "llsj": 20, "ydsj": 20,
+  "gssj": 10, "fhsj": 10, "dhsj": 30,
 
-"hfzs":20,"hyzs":20,"llzs":20,"ydzs":20,
-"gszs":10,"fhs":10,"dhzs":30,"fhzs":50
+  "hfzs": 20, "hyzs": 20, "llzs": 20, "ydzs": 20,
+  "gszs": 10, "fhs": 10, "dhzs": 30, "fhzs": 50
 
-    ]);
-
+]);

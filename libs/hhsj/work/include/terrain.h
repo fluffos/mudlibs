@@ -1,5 +1,3 @@
-
-
 #define CITY_FOREST_RADIUS		8	// 城市森林半径
 #define CITY_MOUNTAIN_RADIUS		8	// 城市山脉半径
 #define CITY_RIVER_WIDTH		7	// 城市河流半径
@@ -17,4 +15,3 @@
 #define FLOW_WEST	8
 #define FLOW_UP		16
 #define FLOW_DOWN	32
-

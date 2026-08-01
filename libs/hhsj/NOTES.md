@@ -12,7 +12,7 @@
   `/adm/kernel/master`+`/adm/kernel/simul_efun` paths).
 - Port: **40106**.
 
-## Status: DONE (native boot + registration verified) — see the one open item below before calling this fully equivalent to a 3-command-verified lib
+## Status: WASM playable (native boot + registration + admin all verified)
 
 ## Lineage-recognition payoff (AGENTS.md §2.1 applied literally)
 
@@ -83,23 +83,63 @@ proportion for a first bring-up; the core registration/world-entry bar
 above is what this project's convention treats as sufficient, same as
 `nitan170911`'s own MySQL-gated precedent).
 
-## Open item: admin `update` command not fully verified
+## Resolved (WASM pass): the "什么？" on EVERY command was a real bug, not a command-search-path gap
 
-Seeded `fluffos (admin)` into `adm/etc/wizlist` (same mechanism as every
-other lib in this family — `securityd.lpc` reads it directly, and `/` is
-already in `trusted_write` for `(admin)`). Registered the account through
-the normal flow successfully. However, running `update <path>` as
-`fluffos` returned the driver's default fail message (`什么？`), meaning
-the verb wasn't found in the command search path at all -- did not
-finish tracing exactly how/when this lineage adds `cmds/wiz/*` to a
-player's searchable command directories (unlike the simpler `Century`-
-family libs processed this session, this mega-lib's command dispatch
-wasn't quickly found via grep in the usual spots — `commandd.lpc`,
-`user.lpc`, `room.lpc` — in the time budget for this pass). The wizlist/
-ACL data-seeding side is done and structurally correct; the remaining
-question is purely which trigger actually grants the wizard verb
-namespace in this lineage. Flagging for a follow-up pass rather than
-under-verifying silently.
+The open item above under-diagnosed the symptom -- the "什么？" wasn't
+specific to `update`/wizard commands, it happened for `look`/`score`/
+literally everything, for every freshly-registered character (not just
+`fluffos`). Root cause (found via `write()`-based bisection through
+`get_char()` since `log_file()` output doesn't persist across separate
+WASM invocations): `adm/daemons/named.lpc`'s `create()` calls a bare
+`restore()` on its own ~168KB save file, which throws
+`*restore_object(): Illegal mapping format while restoring dbase.`
+uncaught. On THIS driver build, an uncaught error during `create()`
+leaves the object permanently non-resident (`find_object()` returns 0)
+rather than crashing loudly or completing with partial state -- and
+critically, a later implicit `NAME_D->invalid_new_name(...)` call-string
+invocation on the still-not-resident object silently does nothing at
+all (no error, no output, the call just never completes) instead of
+auto-compiling it the way an explicit `load_object(NAME_D)` would. Since
+`get_char()` (character creation) calls `NAME_D->invalid_new_name()`
+before ever calling `make_body()`, EVERY new character creation attempt
+silently died at that exact point -- no crash, no error, just an
+`input_to` chain that never reaches `call_out("enter_world", ...)`,
+leaving the connection wedged in the driver's default command loop with
+no `path` ever set, hence every subsequent command hitting the generic
+`什么？` fail message forever. Fixed with the standard corrupted-shipped-
+save-data guard: `catch(restore())` in `named.lpc`'s `create()` (AGENTS.md
+§7.41 class). This is a genuine mudlib bug independent of WASM -- the
+native pass above hit the exact same wall and, not being able to `write()`
+-debug an apparently call-that-does-nothing, incorrectly attributed it to
+a command-dispatch/path question instead. Verified post-fix: full
+registration → `look`/`score` → `fluffos` routed to 巫师休息室 (wizard
+rest room, confirming `(boss)`/`(admin)` status is recognized) →
+`update /adm/daemons/named.lpc` succeeds ("重新编译 ... ：成功！").
+Also upgraded the wizlist entry from `fluffos (admin)` to `fluffos
+(boss)` -- this lineage's `wiz_levels` ranks `(boss)` above `(admin)` as
+the actual top tier, confirmed present in `securityd.lpc`'s
+`trusted_read`/`trusted_write["/"]`.
+
+Unrelated non-blocking runtime error observed only on the `fluffos`/
+wizard-room entry path (not on regular player registration): `adm/kernel/
+simul_efun/message.lpc:346`, "Bad argument 4 to EFUN message() Expected:
+object, array, Got: int(0)" -- doesn't block anything (room description
+still prints correctly afterward), not chased further this pass.
+
+## LPC formatter (WASM pass)
+
+Ran across all 24177 `.lpc`/`.h` files (24082 written). Blind-spot check
+found 5 files with confirmed CJK re-spacing corruption (`d/yixing/doc/
+set_bang.h`, `help/family.h`, `help/intro.h`, `help/map.h`, `u/lonely/
+skybook/lianchengjue.lpc`) via a same-text-despaced-matches-old-file scan
+across all 287 formatter-touched files containing CJK-space-CJK
+sequences; all 5 reverted. Also directly diff-reviewed all 6 `map.lpc`
+ASCII-art zone-map files in this lib (`d/shaolin`, `d/emei`, `d/city`,
+`d/guanwai`, `d/gaochang`, `quest/skybook/xsfh`) since box-drawing art
+doesn't match the CJK-space regex -- all 6 clean (only cosmetic
+brace/spacing reformatting, string-literal content byte-identical).
+Post-formatter re-verified: clean boot, zero compile errors, registration
+and admin `update` both still working.
 
 ## Not yet done (out of scope for this pass)
 

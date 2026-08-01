@@ -2,72 +2,65 @@
 // Last Modified by Lonely on Jul. 12 2002
 // duty 1   to accept players
 
-int ask_join()
-{
-        object ob = this_player(), obj;
-        string myfam, ob_fam;
-        int exp=query("combat_exp", ob);
+int ask_join() {
+  object ob = this_player(), obj;
+  string myfam, ob_fam;
+  int exp = query("combat_exp", ob);
 
-        ob_fam=query("family/family_name", ob);
+  ob_fam = query("family/family_name", ob);
 
-        if( ob_fam == "丐帮" )
-        {
-                say(name() + "大怒道：" + RANK_D->query_rude(ob) + "一定是丐帮派来卧底的吧！\n");
-                return 1;
-        }
+  if (ob_fam == "丐帮") {
+    say(name() + "大怒道：" + RANK_D->query_rude(ob) + "一定是丐帮派来卧底的吧！\n");
+    return 1;
+  }
 
-        if( ob_fam == "大理段家" )
-        {
-                say(name() + "大怒道：" + RANK_D->query_rude(ob) + "一定是大理国派来卧底的吧！\n");
-                return 1;
-        }
+  if (ob_fam == "大理段家") {
+    say(name() + "大怒道：" + RANK_D->query_rude(ob) + "一定是大理国派来卧底的吧！\n");
+    return 1;
+  }
 
-        if( ob_fam == "武当派" || ob_fam == "峨嵋派" || ob_fam == "华山派" ||
-                ob_fam == "少林派" || ob_fam == "南少林派" )
-        {
-                say(name() + "大怒道：" + RANK_D->query_rude(ob) + "一定是名门正派派来卧底的吧！\n");
-                return 1;
-        }
+  if (ob_fam == "武当派" || ob_fam == "峨嵋派" || ob_fam == "华山派" ||
+    ob_fam == "少林派" || ob_fam == "南少林派") {
+    say(name() + "大怒道：" + RANK_D->query_rude(ob) + "一定是名门正派派来卧底的吧！\n");
+    return 1;
+  }
 
-        myfam = (string)query("party/party_name");
-        if( query("party/party_name", ob) == myfam )
-        {
-                say(name() + "大怒道：" + RANK_D->query_rude(ob) + "！竟敢开帮主的玩笑！！！\n");
-                return 1;
-        }
-        if( exp > query("combat_exp") && !wizardp(ob))
-        {
-                say(name() + "双手一抱拳道：" + RANK_D->query_respect(ob) + "莫非是开玩笑吧。\n");
+  myfam = (string)query("party/party_name");
+  if (query("party/party_name", ob) == myfam) {
+    say(name() + "大怒道：" + RANK_D->query_rude(ob) + "！竟敢开帮主的玩笑！！！\n");
+    return 1;
+  }
+  if (exp > query("combat_exp") && !wizardp(ob)) {
+    say(name() + "双手一抱拳道：" + RANK_D->query_respect(ob) + "莫非是开玩笑吧。\n");
 
-                return 1;
-        }
-        if( time()<query("party/entertime", ob)+600 )
-        {
-                say(name() + "大怒道：" + RANK_D->query_rude(ob) + "，你如此反复无常岂能容身于江湖！！！\n");
-                return 1;
-        }
-        message_vision("$N重重地拍了一下$n的肩膀，喝道：好样的！从今以后跟兄弟们有难同当！\n", this_object(), ob);
+    return 1;
+  }
+  if (time() < query("party/entertime", ob) + 600) {
+    say(name() + "大怒道：" + RANK_D->query_rude(ob) + "，你如此反复无常岂能容身于江湖！！！\n");
+    return 1;
+  }
+  message_vision("$N重重地拍了一下$n的肩膀，喝道：好样的！从今以后跟兄弟们有难同当！\n", this_object(), ob);
 
-        ob->set_temp("apply/short",
-                ({ HIR + myfam + "帮众"NOR + query("name",ob)+"("+capitalize(query("id",ob))+")" }));
-        delete("party", ob);
-        set("party/party_name", myfam, ob);
-        set("party/entertime", time(), ob);
+  ob->set_temp("apply/short",
+    ({ HIR + myfam + "帮众" NOR + query("name", ob) + "(" + capitalize(query("id", ob)) + ")" }));
+  delete("party", ob);
+  set("party/party_name", myfam, ob);
+  set("party/entertime", time(), ob);
 
-        if( obj = present("bang ling", ob) )
-                destruct(obj);
+  if (obj = present("bang ling", ob))
+    destruct(obj);
 
-        obj = new(BANGLING);
-        set("owner",query("id",  ob), obj);
-        set("fam", myfam, obj);
-        set("combat_exp", query("combat_exp"), obj);
-        obj->set("long",
-"这是"+myfam+"的帮令，上面刻着「"+query("name", ob)+"」。\n");
-        obj->move(ob);
-        message_vision("$N把一"+query("unit", obj)+obj->name()+"扔给$n。\n",this_object(),ob);
+  obj = new(BANGLING);
+  set("owner", query("id", ob), obj);
+  set("fam", myfam, obj);
+  set("combat_exp", query("combat_exp"), obj);
+  obj->set("long",
+    "这是" + myfam + "的帮令，上面刻着「" + query("name", ob) + "」。\n");
+  obj->move(ob);
+  message_vision("$N把一" + query("unit", obj) + obj->name() + "扔给$n。\n", this_object(), ob);
 
-        log_file("test/BangJoin",sprintf("%s于%s时加入%s\n",query("name", ob),ctime(time()),myfam));
-        return 1;
+  log_file("test/BangJoin", sprintf("%s于%s时加入%s\n", query("name", ob), ctime(time()), myfam));
+  return 1;
 }
 #include "guanjia.h"
 // duty 2  assign jobs

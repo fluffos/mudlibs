@@ -1,5 +1,3 @@
-
- 
 /* 一張地圖的大小規範 */
 #define MAP_WIDTH 	100	//寬
 #define MAP_LENGTH 	100	//長
@@ -59,5 +57,3 @@
 
 #define MAP_FOREST	0	// 森林型態的地圖
 #define MAP_OCEAN	1	// 海洋型態的地圖
-
-

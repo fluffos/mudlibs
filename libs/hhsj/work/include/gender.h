@@ -9,4 +9,3 @@
 #define MALE_GENDER             "男性"
 #define FEMALE_GENDER           "女性"
 #define ANIMAL_GENDER           "无性"
-

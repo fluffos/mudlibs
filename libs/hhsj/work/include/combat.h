@@ -29,4 +29,3 @@
 #define SPECIAL_ATTACK          3
 
 #endif
-

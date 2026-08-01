@@ -137,4 +137,3 @@
 #define GET_CONFIG_INT(x) get_config_int(x - BASE_CONFIG_INT)
 
 #endif                                /* RUNTIME_CONFIG_H */
-

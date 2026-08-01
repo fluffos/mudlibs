@@ -1,4 +1,3 @@
-
 #include "location.h"
 
 #define PRINT(x)        printf("%O\n", x)
@@ -13,5 +12,3 @@
 #define USER_NAME(x)    find_player(x)->query_idname()
 
 #define ENV(x)          environment(x)
-
-

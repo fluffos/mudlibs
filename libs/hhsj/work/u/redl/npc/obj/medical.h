@@ -9,4 +9,3 @@
 #define MEDICAL_BOOK            "/inherit/item/medical-book"
 
 #endif
-

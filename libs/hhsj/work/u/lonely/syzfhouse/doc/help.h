@@ -7,4 +7,3 @@
     "/doc/gbcefuns/",\
     "/doc/applies/",\
 	})
-

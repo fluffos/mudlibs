@@ -17,4 +17,3 @@
 #define MAX_ITEM_IN_ROOM        30
 
 #endif
-

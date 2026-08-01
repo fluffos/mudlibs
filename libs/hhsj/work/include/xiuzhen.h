@@ -12,7 +12,7 @@
 #define POINTED         8
 #define LONG           16
 
-#define AXE             "/inherit/xiuzhen/fabao"             
+#define AXE             "/inherit/xiuzhen/fabao"
 
 #define F_AXE           "/inherit/xiuzhen/_fabao"
 

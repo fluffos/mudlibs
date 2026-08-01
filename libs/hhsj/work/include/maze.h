@@ -45,7 +45,7 @@
 #define WOUND       5           /* 让玩家受伤           */
 
 // 迷宫的宝箱类型
-#define SPECIAL_MAP 1           /* 迷宫地图变为详细模式 */ 
+#define SPECIAL_MAP 1           /* 迷宫地图变为详细模式 */
 #define SPECIAL_DAN 2           /* 仙丹等物品           */
 #define JINKUAI     3           /* 金块等物品           */
 #define GOLD        4           /* 黄金                 */
@@ -54,10 +54,13 @@
 #define NPC_SKILL   7           /* 降低杀手的武功       */
 #define GEM         8           /* 宝石碎片       */
 
-void collect_all_maze_information();            /* 将所有的迷宫房间清理     */
-void init_line(mapping maze);                   /* 初始化迷宫地图           */
-void init_road(object room, mapping maze);      /* 初始化迷宫路线           */
-void init_wall(object room, mapping maze);      /* 给路线上的房间制造岔路   */
-object *finish_room(object room, mapping maze); /* 将呆死的房间打通         */
-void init_room_exits(mapping maze);             /* 将房间的出口刷新         */
-void init_special_room(mapping maze);           /* 给迷宫初始化宝箱和陷阱   */
+void collect_all_maze_information(); /* 将所有的迷宫房间清理     */ void init_line(mapping maze); /* 初始化迷宫地图           */ void init_road(
+  object room,
+  mapping maze
+); /* 初始化迷宫路线           */ void init_wall(
+  object room,
+  mapping maze
+); /* 给路线上的房间制造岔路   */ object *finish_room(
+  object room,
+  mapping maze
+); /* 将呆死的房间打通         */ void init_room_exits(mapping maze); /* 将房间的出口刷新         */ void init_special_room(mapping maze);           /* 给迷宫初始化宝箱和陷阱   */

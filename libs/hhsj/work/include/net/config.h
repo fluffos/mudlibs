@@ -6,7 +6,7 @@
 #endif
 
 #include <mudlib.h>
- 
+
 #define LISTNODES ([ \
         "FALLING-SUN" : "202.103.184.38 5559",\
         "YH"          : "61.139.77.196 3004",\
@@ -45,7 +45,7 @@
  * udp packet size.  Probably best kept at 512
  */
 #define MAIL_PACKET_SIZE        512
- 
+
 /* These macros are for the name service.  They determine how often the
  * database is refreshed, how often other muds are checked, how often
  * the sequence list is checked for timed out services, and how long a
@@ -81,4 +81,3 @@
 #define MUD_ADDRESSES   "/adm/etc/mud_addresses"
 #define MUD_SERVICES    "/adm/etc/mud_services"
 #endif //__NET__CONFIG_H
-

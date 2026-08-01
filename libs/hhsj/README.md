@@ -17,14 +17,31 @@
 
 https://mudlibs.fluffos.info/honghuangshijie/
 
+## WASM pass修复的 bug
+
+`adm/daemons/named.lpc`（记录所有玩家名字的精灵）的 `create()` 直接调
+用未加保护的 `restore()`，而它自己保存的档案（约 168KB）里有一处非法
+的 mapping 格式，导致 `restore()` 抛出未捕获的异常。这个驱动的实现下，
+`create()` 抛出异常会让这个物件永远无法真正加载成功，而后续代码里对
+它的隐式呼叫（`NAME_D->invalid_new_name(...)`）在物件未加载成功时会
+静默地什么都不做——不报错、不重试、直接卡住。而这个函数正好是每次新
+角色建立时 `get_char()` 必经的一步，于是每一次新建角色都会在这里默默
+卡死，`enter_world()` 永远不会被呼叫，导致此后所有指令（包括
+`look`/`score`/巫师的 `update` 等）全部落到驱动通用的失败提示"什么？"
+——此前的原生模式测试遇到的正是这个问题，当时被误判为"巫师指令的搜
+索路径问题"（见 NOTES.md），实际上是这个更底层、与 WASM 无关的真实
+bug。已按 AGENTS.md §7.41 的标准做法修复：`create()` 里把 `restore()`
+包一层 `catch()`。
+
 ## 管理员账号 / Admin account
 
 - **ID**: `fluffos`
 - **密码 / Password**: `Mud@2026`
 - **中文名 / Display name**: 浮浮
-- **权限 / Level**: `(admin)`，通过 `/adm/etc/wizlist` 授予。
-- 注：巫师指令（如 `update`）的具体验证尚未完成（见 NOTES.md），
-  wizlist 数据本身已按同引擎家族的标准方式正确写入。
+- **权限 / Level**: `(boss)`，通过 `/adm/etc/wizlist` 授予——这份档案
+  的 `wiz_levels` 把 `(boss)` 排在 `(admin)` 之上作为真正的最高权限，
+  且 `securityd.lpc` 的 `trusted_read`/`trusted_write["/"]` 都包含
+  `(boss)`。已验证 `update` 指令可正常执行。
 
 > 警告：对外公开架设前请务必修改此密码。
 

@@ -1,10 +1,10 @@
 //终极地狱转义协议
 
-#define ZJKEY           "123456789abcd" 
+#define ZJKEY           "123456789abcd"
 #define ZJPAYPORT		3001
 #define ZJUDPPORT		3004
 
-#define ESA		"" 
+#define ESA		""
 #define ZJSEP		"$zj#"
 #define ZJSP2		"$z2#"
 #define ZJBR		"$br#"
@@ -41,4 +41,3 @@
 
 #define ZJCHANNEL	ESA + "100"
 #define SYSEXIT		ESA + "999"
-

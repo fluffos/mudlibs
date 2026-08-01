@@ -11,24 +11,24 @@ protected nosave int max_exits = 5;
 protected nosave int max_action_per_room = 2;
 
 protected nosave mapping r_dir = ([
-        "north"         : "south",
-        "south"         : "north",
-        "west"          : "east",
-        "east"          : "west",
-        "northwest"     : "southeast",
-        "northeast"     : "southweat",
-        "southwest"     : "northeast",
-        "southeast"     : "northwest",
-        "northup"       : "southdown",
-        "northdown"     : "southup",
-        "southup"       : "northdown",
-        "southdown"     : "northup",
-        "westup"        : "eastdown",
-        "westdown"      : "eastup",
-        "eastup"        : "westdown",
-        "eastdown"      : "westup",
-        "enter"         : "out",
-        "out"           : "enter",
+  "north": "south",
+  "south": "north",
+  "west": "east",
+  "east": "west",
+  "northwest": "southeast",
+  "northeast": "southweat",
+  "southwest": "northeast",
+  "southeast": "northwest",
+  "northup": "southdown",
+  "northdown": "southup",
+  "southup": "northdown",
+  "southdown": "northup",
+  "westup": "eastdown",
+  "westdown": "eastup",
+  "eastup": "westdown",
+  "eastdown": "westup",
+  "enter": "out",
+  "out": "enter",
 ]);
 
 protected nosave string vdirs = "north south west east
@@ -36,5 +36,3 @@ northwest northeast southwest southeast
 northup northdown southup southdown
 westup westdown eastup eastdown
 enter out";
-
-

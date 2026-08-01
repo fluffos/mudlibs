@@ -11,5 +11,3 @@
 #define ORIGIN_FUNCTION_POINTER   "function_pointer"
 /* anonymous functions */
 #define ORIGIN_FUNCTIONAL         "functional"
-
-

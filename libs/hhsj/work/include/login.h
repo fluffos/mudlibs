@@ -21,8 +21,8 @@
 #define START_ROOM              "/d/city/kedian"
 #define DEATH_ROOM              "/d/death/gate"
 #define REVIVE_ROOM             "/d/city/wumiao"
-#define CHAT_ROOM               "/inherit/room/chatroom" 
-#define ENABLE_MD5_PASSWORD 
+#define CHAT_ROOM               "/inherit/room/chatroom"
+#define ENABLE_MD5_PASSWORD
 
 // This is how much users can 'enter' the mud actually. Maintained
 // by LOGIN_D. The max number of connections can be built between

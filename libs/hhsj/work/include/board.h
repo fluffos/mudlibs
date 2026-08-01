@@ -44,4 +44,3 @@ int is_web_mode(object me) { return me->query("env/board_mode"); }
 #define WEB_URL         "http://www.mudbuilder.com/phpbb/"
 #define FORUM_URL       WEB_URL "viewforum.php?f=%d"    // 版面页面地址
 #define TOPIC_URL       WEB_URL "viewtopic.php?t=%d"    // 主题页面地址
-

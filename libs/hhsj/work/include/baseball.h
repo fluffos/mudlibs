@@ -1,4 +1,3 @@
-
 #define BASEINCOME              400000000
 #define TICKTIME                14
 #define POSTSEASON_TICKTIME     9
@@ -56,8 +55,7 @@
 #define SCORETYPE_SACRIFICE             3       // 牺牲打
 #define SCORETYPE_HIT                   4       // 安打
 
-#define HINTTYPE_BATTER                 1       
-#define HINTTYPE_PITCHER                2       
-#define HINTTYPE_BUNT                   3       
+#define HINTTYPE_BATTER                 1
+#define HINTTYPE_PITCHER                2
+#define HINTTYPE_BUNT                   3
 #define HINTTYPE_WALK                   4
-

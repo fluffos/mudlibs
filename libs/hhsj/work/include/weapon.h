@@ -14,7 +14,7 @@
 
 #define AXE             "/inherit/weapon/axe"           // 斧
 #define BLADE           "/inherit/weapon/blade"         // 刀
-#define FABAO           "/inherit/weapon/fabao"        
+#define FABAO           "/inherit/weapon/fabao"
 #define CLUB            "/inherit/weapon/club"          // 棍
 #define DAGGER          "/inherit/weapon/dagger"        // 矛
 #define FORK            "/inherit/weapon/fork"          // 叉

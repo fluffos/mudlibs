@@ -23,18 +23,17 @@
 #define SELF_W_BOW      SELF_DIR"weapon/bow"
 
 
-class weapon_args
-{
-        string fname;
-        string name;
-        string id;
-        string desc;
-        string wield_msg;
-        string unwield_msg;
-        string material;
-        int damage;
-        int mangle;
-        int weapon_flag;
-        string weapon_effect;
+class weapon_args {
+  string fname;
+  string name;
+  string id;
+  string desc;
+  string wield_msg;
+  string unwield_msg;
+  string material;
+  int damage;
+  int mangle;
+  int weapon_flag;
+  string weapon_effect;
 }
 #endif

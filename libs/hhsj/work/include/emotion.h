@@ -1,4 +1,3 @@
-
 //无对象时        
 #define NONE_ALL                0  //显示给自己与大家
 #define NONE_ALL_ARG            1  //显示给自己与大家, 并附加文字
@@ -13,4 +12,3 @@
 
 #define NOTE                    6  //注解栏
 #define USE                     7  //使用次数
-

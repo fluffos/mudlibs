@@ -34,9 +34,8 @@
 void init_armor(int armor) { set("armor_prop/armor", armor); }
 void init_damage(int damage) { set("weapon_prop/damage", damage); }
 
-void killer_reward(object me, object victim)
-{
-        ITEM_D->killer_reward(me, victim, this_object());
+void killer_reward(object me, object victim) {
+  ITEM_D->killer_reward(me, victim, this_object());
 }
 
-string long() { return short() + query("long") + (query("makeinfo")?query("makeinfo"):""); }
+string long() { return short() + query("long") + (query("makeinfo") ? query("makeinfo") : ""); }

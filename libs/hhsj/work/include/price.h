@@ -73,5 +73,4 @@ private nosave string PRICES = @PRICE
 棉坯 cotton 担 30
 海盐 salt 担 40
 宣纸 paper 匹 200
-PRICE
-;
+PRICE;

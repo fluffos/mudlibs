@@ -1,10 +1,9 @@
 //显示屋宅图样
 
-private int house_picture_user()
-{
-    message_vision("$n取出一份图纸给$N看了一下，然后收了起来。\n",
-                                    this_player(), this_object());
-    tell_object(this_player(), "你看到图纸上画着：\n"HIW@PIC
+private int house_picture_user() {
+  message_vision("$n取出一份图纸给$N看了一下，然后收了起来。\n",
+    this_player(), this_object());
+  tell_object(this_player(), "你看到图纸上画着：\n" HIW @PIC
 
 　玲珑屋   　随意阁   　逍遥居  　　　锦绣宅
  ＝＝＝＝   ＝＝＝＝   ＝＝＝＝  ＝＝＝＝＝＝＝＝
@@ -19,14 +18,13 @@ private int house_picture_user()
  ＝＝＝＝   ＝＝＝＝   ＝＝＝＝  ＝＝＝＝＝＝＝＝
 
 PIC NOR);
-    return 1;
+  return 1;
 }
 
-private int house_picture_bang()
-{
-    message_vision("$n取出一份图纸给$N看了一下，然后收了起来。\n",
-                                    this_player(), this_object());
-    tell_object(this_player(), "你看到图纸上画着：\n"HIW@PIC
+private int house_picture_bang() {
+  message_vision("$n取出一份图纸给$N看了一下，然后收了起来。\n",
+    this_player(), this_object());
+  tell_object(this_player(), "你看到图纸上画着：\n" HIW @PIC
 
 　　　 集贤会馆　　　　　　　 聚英山庄
  ＝＝＝＝＝＝＝＝＝＝   ＝＝＝＝＝＝＝＝＝＝
@@ -45,14 +43,13 @@ private int house_picture_bang()
  ＝＝＝＝＝＝＝＝＝＝   ＝＝＝＝＝＝＝＝＝＝
 
 PIC NOR);
-    return 1;
+  return 1;
 }
 
-private int house_picture_xian()
-{
-    message_vision("$n取出一份图纸给$N看了一下，然后收了起来。\n",
-                                    this_player(), this_object());
-    tell_object(this_player(), "你看到图纸上画着：\n"HIW@PIC
+private int house_picture_xian() {
+  message_vision("$n取出一份图纸给$N看了一下，然后收了起来。\n",
+    this_player(), this_object());
+  tell_object(this_player(), "你看到图纸上画着：\n" HIW @PIC
 
 　　　 广陵逸境
  ＝＝＝＝＝＝＝＝＝＝
@@ -71,5 +68,5 @@ private int house_picture_xian()
  ＝＝＝＝＝＝＝＝＝＝
 
 PIC NOR);
-    return 1;
+  return 1;
 }

@@ -14,5 +14,3 @@
 
 #define EXTRA           5
 #define CODE            6
-
-
