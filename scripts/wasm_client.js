@@ -14,7 +14,20 @@
 //
 // Usage:
 //   node wasm_client.js WASM_BUILD_DIR LIB_ROOT_DIR \
-//       [--send LINE ...] [--timeout SEC] [--idle SEC]
+//       [--send LINE ...] [--timeout SEC] [--idle SEC] \
+//       [--reconnect-on-disconnect]
+//
+// --reconnect-on-disconnect: some libs (e.g. a distributed/staggered
+// preload that finishes AFTER the connection object already exists --
+// "系统载入中，请稍后..."-style gates) deliberately destruct the login
+// connection once startup work completes and expect the client to
+// reconnect, rather than gating input_to() until ready. Without this
+// flag a disconnect with unsent --send lines remaining just ends the
+// run early (the correct default -- most disconnects mid-script are a
+// genuine crash/ban and should NOT be silently retried). With it, a
+// disconnect while sends remain opens a fresh fluffos_connect() and
+// keeps going, so a scripted registration flow can survive exactly one
+// (or more) of these intentional reconnect gates.
 //
 // LIB_ROOT_DIR is a lib's top-level directory (e.g. libs/bxsj) containing
 // both config.fluffos and work/, matching this project's native-driver
@@ -40,15 +53,17 @@ function parseArgs(argv) {
   const sends = [];
   let timeout = 10.0;
   let idle = 1.0;
+  let reconnectOnDisconnect = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--send') { sends.push(argv[++i]); }
     else if (a === '--timeout') { timeout = parseFloat(argv[++i]); }
     else if (a === '--idle') { idle = parseFloat(argv[++i]); }
+    else if (a === '--reconnect-on-disconnect') { reconnectOnDisconnect = true; }
     else { positional.push(a); }
   }
   if (sends.length === 0) sends.push('', 'look', 'quit');
-  return { positional, sends, timeout, idle };
+  return { positional, sends, timeout, idle, reconnectOnDisconnect };
 }
 
 function mkdirsOnly(Module, src, dst) {
@@ -96,7 +111,7 @@ function copyDir(Module, src, dst) {
 }
 
 (async () => {
-  const { positional, sends, timeout, idle } = parseArgs(process.argv.slice(2));
+  const { positional, sends, timeout, idle, reconnectOnDisconnect } = parseArgs(process.argv.slice(2));
   const [buildDirArg, libRootArg] = positional;
   if (!buildDirArg || !libRootArg) {
     console.error('usage: wasm_client.js BUILD_DIR LIB_ROOT_DIR [--send LINE ...] [--timeout SEC] [--idle SEC]');
@@ -116,6 +131,7 @@ function copyDir(Module, src, dst) {
   let lastOutputAt = Date.now();
   let connId = null;
   let disconnected = false;
+  let needsReconnect = false;
   // fluffos_tick() expects a monotonic clock that starts near 0 (it mirrors
   // the browser's performance.now(), used directly in the driver's own
   // docs example) -- NOT Date.now()'s absolute epoch milliseconds. Passing
@@ -141,7 +157,7 @@ function copyDir(Module, src, dst) {
       transcriptChunks.push(Buffer.from(bytes));
       lastOutputAt = Date.now();
     },
-    onDisconnect: (id) => { disconnected = true; },
+    onDisconnect: (id) => { disconnected = true; needsReconnect = reconnectOnDisconnect; },
   };
 
   const rc = Module.ccall('fluffos_boot', 'number', ['string'], ['config.fluffos']);
@@ -162,6 +178,12 @@ function copyDir(Module, src, dst) {
   await new Promise((resolve) => {
     const pump = setInterval(() => {
       const elapsed = (Date.now() - start) / 1000;
+      if (disconnected && needsReconnect && sendIdx < sends.length) {
+        connId = Module.ccall('fluffos_connect', 'number', [], []);
+        disconnected = false;
+        needsReconnect = false;
+        lastOutputAt = Date.now();
+      }
       const idleFor = (Date.now() - lastOutputAt) / 1000;
       if (elapsed >= timeout || disconnected && sendIdx >= sends.length) {
         clearInterval(pump);
