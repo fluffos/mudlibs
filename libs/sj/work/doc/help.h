@@ -6,4 +6,3 @@
 	"/doc/lsp/",\
 	"/doc/efuns/",\
 	})
-

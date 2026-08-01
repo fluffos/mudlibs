@@ -1,6 +1,6 @@
 // 神话世界·西游记·版本４．５０
 /* <SecCrypt CPL V3R05> */
- 
+
 /*
  * This file contains information about the standard services used by
  * various parts of the mudlib, particularly the network communication

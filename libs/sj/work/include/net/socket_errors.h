@@ -1,6 +1,6 @@
 // 神话世界·西游记·版本４．５０
 /* <SecCrypt CPL V3R05> */
- 
+
 /*
  * socket_errors.h -- definitions for efun socket error return codes.
  *    5-92 : Dwayne Fontenot (Jacques@TMI) : original coding.

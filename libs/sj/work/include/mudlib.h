@@ -14,4 +14,3 @@
 #define MUD_WEB                 "http://sjmud.myrice.com";
 
 #endif
-

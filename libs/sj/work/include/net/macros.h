@@ -1,6 +1,6 @@
 // 神话世界·西游记·版本４．５０
 /* <SecCrypt CPL V3R05> */
- 
+
 //  This file contains useful network macros.
 #ifndef __NET__MACROS_H
 #define __NET__MACROS_H

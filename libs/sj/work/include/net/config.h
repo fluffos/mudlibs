@@ -52,7 +52,7 @@
  * udp packet size.  Probably best kept at 512
  */
 #define MAIL_PACKET_SIZE        512
- 
+
 /* These macros are for the name service.  They determine how often the
  * database is refreshed, how often other muds are checked, how often
  * the sequence list is checked for timed out services, and how long a
@@ -99,4 +99,3 @@
 #define Big5IP ({ "140","192","207","209", "129", "208", "206", "139", "202.178" })
 
 #endif //__NET__CONFIG_H
-

@@ -1,4 +1,3 @@
-
 #ifndef NPCDATA
 #define NPCDATA "/data/npc/"
 #endif
@@ -12,8 +11,8 @@
 #define BIWUD	"循环赛"
 
 string *family = ({
-	"凤凰星",
-	"特种部队",
-	"圣殿",
-	"皇族",
+  "凤凰星",
+  "特种部队",
+  "圣殿",
+  "皇族",
 });

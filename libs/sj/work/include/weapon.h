@@ -34,6 +34,6 @@
 #define F_CLUB		"/inherit/weapon/_club"
 #define F_THROWING	"/inherit/weapon/_throwing"
 #define F_WHIP		"/inherit/weapon/_whip"
-#define F_LINGFA		"/inherit/weapon/_lingfa"	
+#define F_LINGFA		"/inherit/weapon/_lingfa"
 
 #endif

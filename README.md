@@ -274,7 +274,7 @@ classes it's found.
 | 091 | `mnhf` | 模拟华附 | `模拟华附.rar` | 40156 | native-boot verified, WASM pending |
 | 092 | `nte` | 泥潭二 | `泥潭二.rar` | 40115 | native-boot verified, WASM pending |
 | 093 | `ntii` | 泥潭II | `泥潭II.rar` | 40151 | native-boot verified, WASM pending |
-| 094 | `sj` | 世纪 | `世纪.rar` | 40127 | native-boot verified, WASM pending |
+| 094 | `sj` | 世纪 | `世纪.rar` | 40127 | WASM playable |
 | 095 | `sje` | 书剑贰 | `书剑贰.rar` | 40146 | WASM playable |
 | 096 | `sjecl` | 书剑恩仇录 | `书剑恩仇录.rar` | 40139 | WASM playable |
 | 097 | `sjplgfjxb` | 书剑飘零官方教学版 | `书剑飘零官方教学版 .rar` | 40134 | native-boot verified, WASM pending |
