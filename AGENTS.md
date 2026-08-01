@@ -2804,7 +2804,10 @@ Do not chase this by adding narrow per-file `trusted_read` exemptions
 (tried first, insufficient — a compile touches its own file AND every
 `#include`, each a separate `valid_read()` call with a different `file`
 argument; only the func-based fix covers all of them at once).
-(`shujian3`.)
+(`shujian3`, and confirmed again on `jh2006` in the exact original
+`this_player()` shape — crashed immediately at boot with `*Read access
+denied.` inside `gb_big5()`'s very first `BAN_D->is_banned()` lazy
+compile, before the id prompt ever appeared.)
 
 **Variant: the clobber lives in `master.lpc`'s own `valid_read`/
 `valid_write` wrapper, using `previous_object()` instead of
@@ -3154,7 +3157,13 @@ string-literal path). Fix the pattern to `"%s.lpc$"`. Grep all daemons:
 `grep -rn 'sscanf.*\.c[$"]' adm/ secure/`. Confirmed again on
 `shujian3` (XKX/ES2-derived `commandd.lpc`) — every player command
 (`look`/`score`/`quit`/anything) silently fell through to the driver's
-default "什么？" fail message until fixed.
+default "什么？" fail message until fixed. Also confirmed on `jh2006`
+(same `commandd.lpc` lineage) — there, `quit` and `look` happened to
+work anyway (defined via `add_action` elsewhere / handled specially by
+the driver), but every OTHER command, including the score-equivalent
+verb, fell straight through to "什么？" until the fix; a lib where 2 of
+3 sanity-check commands work is not proof the command table itself is
+healthy — test a THIRD, non-`look`/`quit` command too.
 
 ### 8.4 Test `score`, not just `look`
 
