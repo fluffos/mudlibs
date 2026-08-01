@@ -287,7 +287,7 @@ classes it's found.
 | 104 | `tybxjh` | 天涯&碧血江湖 | `天涯&碧血江湖.rar` | 40158 | WASM playable |
 | 105 | `wlhd` | 武林浩荡 | `武林浩荡.rar` | 40121 | WASM playable |
 | 106 | `wqfy` | 无情风云 | `无情风云.rar` | 40124 | WASM playable |
-| 107 | `xajdxyj` | 西安交大西游记 | `西安交大西游记.rar` | 40179 | native-boot verified, WASM pending |
+| 107 | `xajdxyj` | 西安交大西游记 | `西安交大西游记.rar` | 40179 | WASM playable |
 | 108 | `xajh4gkb` | 笑傲江湖4公开版 | `笑傲江湖4公开版.rar` | 40154 | native-boot verified, WASM pending |
 | 109 | `xhcii` | 笑红尘Ⅱ | `笑红尘Ⅱ .rar` | 40163 | native-boot verified, WASM pending |
 | 110 | `xkx100` | 侠客行一百 | `侠客行一百.rar` | 40117 | native-boot verified, WASM pending |
