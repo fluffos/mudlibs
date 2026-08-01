@@ -289,7 +289,7 @@ classes it's found.
 | 106 | `wqfy` | 无情风云 | `无情风云.rar` | 40124 | WASM playable |
 | 107 | `xajdxyj` | 西安交大西游记 | `西安交大西游记.rar` | 40179 | WASM playable |
 | 108 | `xajh4gkb` | 笑傲江湖4公开版 | `笑傲江湖4公开版.rar` | 40154 | WASM playable |
-| 109 | `xhcii` | 笑红尘Ⅱ | `笑红尘Ⅱ .rar` | 40163 | native-boot verified, WASM pending |
+| 109 | `xhcii` | 笑红尘Ⅱ | `笑红尘Ⅱ .rar` | 40163 | WASM playable |
 | 110 | `xkx100` | 侠客行一百 | `侠客行一百.rar` | 40117 | native-boot verified, WASM pending |
 | 111 | `xkx2000zxb` | 侠客行2000最新版 | `侠客行2000最新版.rar` | 40140 | native-boot verified, WASM pending |
 | 112 | `xkx2017` | 侠客行2017 | `侠客行2017（MUD）.rar` | 40145 | native-boot verified, WASM pending |

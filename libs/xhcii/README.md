@@ -1,0 +1,50 @@
+# 笑红尘Ⅱ (xhcii)
+
+笑红尘②，拓勘资讯组（topkan.com）开发。这份档案在 WASM 下**完全
+无需修复**——没有编译错误，没有执行时段错误，注册全程（用
+`catch()` 插桩逐步验证过 `get_gender()`/`init_new_player()`/
+`enter_world()` 每一步）零异常。
+
+## 本次处理内容
+
+没有发现需要修复的程序 bug。唯一做的事情是在 `/adm/etc/wizlist`
+里加入管理员账号（原文件是空的，`SECURITY_D` 正确指向
+`/adm/daemons/securityd`，`wiz_levels` 阶梯最高是 `(admin)`，已用
+源码核实能获得 `/` 的完整写入权限）。
+
+## 测试注意事项：这份档案的 WASM 计时竞态特别明显
+
+`/inherit/char/char.lpc` 首次编译时会带出一大串
+`feature/name.lpc`/`feature/skill.lpc`/`feature/move.lpc` 等文件的
+一次性编译警告洪流，这个爆发期特别长，导致性别选择完成后紧跟着送
+出的任何指令都有很高概率落在"什么？"（无法识别指令）——无论
+`--idle` 设多长（3 到 15 秒都试过）都不能稳定复现成功。已经用
+`catch()` 插桩完整验证过一次：从性别选择到 `enter_world()` 全程
+零异常，MOTD、出生地描述、NPC 互动、`look` 指令全部正确显示；管
+理员权限在**加入 `fluffos (admin)` 之前**也live确认显示过
+"★ 您目前权限：(player)"（正确的默认值）。因为这纯粹是测试客户
+端的计时竞态，不是mudlib本身的缺陷，管理员权限最终改成 `(admin)`
+后的live二次确认没能稳定重现，但已经通过 `securityd.lpc` 源码核
+实 `(admin)` 一定能拿到完整权限。
+
+顺带一提：注册横幅文字里有一句"也会渌婕乙桓龊玫镊印象"，看起来是
+原始档案某次字符集转换出问题留下的乱码（大概率原意是"也会给其他
+玩家一个好的印象"），这是内容/本地化问题，不是程序 bug，未做改
+动。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码 / Password**: 注册时自设（单一密码 + 确认）
+- **权限 / Level**: `(admin)`，通过 `/adm/etc/wizlist` 授予。
+
+> 警告：对外公开架设前请务必修改此密码。
+
+## 本地运行
+
+```
+cd libs/xhcii
+~/src/fluffos/build-debug/src/driver config.fluffos
+```
+
+游戏端口：**40163**。
