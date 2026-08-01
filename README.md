@@ -292,7 +292,7 @@ classes it's found.
 | 109 | `xhcii` | 笑红尘Ⅱ | `笑红尘Ⅱ .rar` | 40163 | WASM playable |
 | 110 | `xkx100` | 侠客行一百 | `侠客行一百.rar` | 40117 | WASM playable |
 | 111 | `xkx2000zxb` | 侠客行2000最新版 | `侠客行2000最新版.rar` | 40140 | WASM playable |
-| 112 | `xkx2017` | 侠客行2017 | `侠客行2017（MUD）.rar` | 40145 | native-boot verified, WASM pending |
+| 112 | `xkx2017` | 侠客行2017 | `侠客行2017（MUD）.rar` | 40145 | WASM playable |
 | 113 | `xkxc98sj` | 侠客新传98书剑 | `侠客新传98书剑.rar` | 40126 | native-boot verified, WASM pending |
 | 114 | `xkxyb` | 侠客行一百 | `侠客行一百 (1).rar` | 40152 | native-boot verified, WASM pending |
 | 115 | `xkyxciii` | 侠客英雄传III | `侠客英雄传III.rar` | 40118 | native-boot verified, WASM pending |
