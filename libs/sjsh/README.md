@@ -1,0 +1,42 @@
+# 三界神话『宝鸡站』(sjsh)
+
+"三界神话"系列（San Jie Shen Hua）宝鸡站版本，五个同系档案中的第一
+个（另外四个：`sjshv150`/`sjshv2578bb`/`sjshwzb`/`sjshwzjqb`）。
+
+## 本次修复的关键 bug
+
+1. **`adm/daemons/convertd.lpc` 的希腊字母/GBK 转换表里有损坏的原始
+   字节**：44 行的结尾紧跟着一段非 UTF8 的乱码字节，恰好最后一个字
+   节是 `0x5C`（反斜杠），把本该结束字符串的引号给转义掉了，导致字
+   符串没有正常结束，编译直接失败。已用逐字节脚本只去掉每行末尾那
+   段"反斜杠+乱码"，表里其它非阻塞性的乱码内容（纯内容质量问题，不
+   影响启动）保持原样未动。
+2. **§7.41 类损坏的存档数据**：`adm/daemons/emoted.lpc` 的
+   `create()` 对自己损坏的存档做了未加保护的 `restore()`，preload
+   时未捕获抛出——已包一层 `catch()`，并显式补上 `emote=([])` 兜
+   底。（那条被捕获的错误依然会通过这份档案自己的 `error_handler()`
+   打印出一长串日志，这是已经在 `sjplgfjxb` 上确认过的正常/无害行
+   为，不代表还有问题。）
+
+## 注册流程（备忘，不是 bug）
+
+一个全新的 id 需要先输入字面上的 `new`，再输入想要的英文 id，然后
+直接是中文名字——`confirm_id()` 是硬编码 `"Yes"` 自动调用的，中间没
+有 y/n 确认这一步。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码 / Password**: 注册时自设（至少 5 位）
+- **权限 / Level**: `(admin)`，通过 `/adm/etc/wizlist` 授予。
+
+> 警告：对外公开架设前请务必修改此密码。
+
+## 本地运行
+
+```
+cd libs/sjsh
+~/src/fluffos/build-debug/src/driver config.fluffos
+```
+
+游戏端口：**40141**。

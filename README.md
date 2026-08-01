@@ -279,7 +279,7 @@ classes it's found.
 | 096 | `sjecl` | 书剑恩仇录 | `书剑恩仇录.rar` | 40139 | WASM playable |
 | 097 | `sjplgfjxb` | 书剑飘零官方教学版 | `书剑飘零官方教学版 .rar` | 40134 | WASM playable |
 | 098 | `sjplii` | 书剑飘零II | `书剑飘零II.rar` | 40153 | WASM playable |
-| 099 | `sjsh` | 三界神话 | `三界神话（宝鸡站的版本）.rar` | 40141 | native-boot verified, WASM pending |
+| 099 | `sjsh` | 三界神话 | `三界神话（宝鸡站的版本）.rar` | 40141 | WASM playable |
 | 100 | `sjshv150` | 三界神话V1.50 | `三界神话V1.50.rar` | 40171 | native-boot verified, WASM pending |
 | 101 | `sjshv2578bb` | 三界神话v2.578b版 | `三界神话v2.578b版.rar` | 40125 | native-boot verified, WASM pending |
 | 102 | `sjshwzb` | 三界神话完整版 | `三界神话完整版.rar` | 40113 | native-boot verified, WASM pending |
