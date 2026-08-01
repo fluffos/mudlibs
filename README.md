@@ -276,7 +276,7 @@ classes it's found.
 | 093 | `ntii` | 泥潭II | `泥潭II.rar` | 40151 | native-boot verified, WASM pending |
 | 094 | `sj` | 世纪 | `世纪.rar` | 40127 | native-boot verified, WASM pending |
 | 095 | `sje` | 书剑贰 | `书剑贰.rar` | 40146 | native-boot verified, WASM pending |
-| 096 | `sjecl` | 书剑恩仇录 | `书剑恩仇录.rar` | 40139 | native-boot verified, WASM pending |
+| 096 | `sjecl` | 书剑恩仇录 | `书剑恩仇录.rar` | 40139 | WASM playable |
 | 097 | `sjplgfjxb` | 书剑飘零官方教学版 | `书剑飘零官方教学版 .rar` | 40134 | native-boot verified, WASM pending |
 | 098 | `sjplii` | 书剑飘零II | `书剑飘零II.rar` | 40153 | native-boot verified, WASM pending |
 | 099 | `sjsh` | 三界神话 | `三界神话（宝鸡站的版本）.rar` | 40141 | native-boot verified, WASM pending |

@@ -99,70 +99,70 @@
 
 */
 
-string guanfu_title(object me)
-{
-	int i;
-	string str="没有？";
+string guanfu_title(object me) {
+  int i;
+  string str = "没有？";
 
-	if ( !me ) return str;
+  if (!me) return str;
 
-	i = (int)me->query("job_time/官府", 1);
+  i = (int)me->query("job_time/官府", 1);
 
-	if ( i < 50 ) str = "官府差役";
-	else if ( i < 100 )  str = HIY"从九品快捕"NOR;	//额外外委
-	else if ( i < 200 )  str = HIY"正九品捕头"NOR;	//外委把总
-	else if ( i < 500 )  str = HIY"从八品校尉"NOR;	//骁骑尉
-	else if ( i < 1000 ) str = HIY"正八品铁捕"NOR;	//外委千总
-	else if ( i < 1500 ) str = HIY"从七品都尉"NOR;	//盛京游牧副尉
-	else if ( i < 2000 ) str = HIY"正七品把总"NOR;	//把总
-	else if ( i < 2500 ) str = HIY"从六品卫总"NOR;	//卫千总
-	else if ( i < 3000 ) str = HIY"正六品营总"NOR;	//门千总，营千总
-	else if ( i < 3500 ) str = HIY"从五品千总"NOR;	//守御所千总
-	else if ( i < 4000 ) str = HIY"正五品守备"NOR;	//守备
-	else if ( i < 4500 ) str = HIY"从四品统领"NOR;	//城门领
-	else if ( i < 5000 ) str = HIY"正四品都司"NOR;	//都司
-	else if ( i < 5500 ) str = HIY"从三品游击"NOR;	//游击
-	else if ( i < 6000 ) str = HIY"正三品参将"NOR;	//参将
-	else if ( i < 6500 ) str = HIY"从二品副将"NOR;	//副将
-	else if ( i < 7000 ) str = HIY"正二品总兵"NOR;	//副督统，总兵
-	else if ( i < 7500 ) {
-		switch (random(3)){	//将军，督统，提督
-		case 2:
-			str = HIY"从一品将军"NOR;
-			break;
-		case 1:
-			str = HIY"从一品督统"NOR;
-			break;
-		case 0:
-			str = HIY"从一品提督"NOR;
-			break;
-		}
-	}
+  if (i < 50) str = "官府差役";
+  else if (i < 100) str = HIY "从九品快捕" NOR;  //额外外委
+  else if (i < 200) str = HIY "正九品捕头" NOR;  //外委把总
+  else if (i < 500) str = HIY "从八品校尉" NOR;  //骁骑尉
+  else if (i < 1000) str = HIY "正八品铁捕" NOR;  //外委千总
+  else if (i < 1500) str = HIY "从七品都尉" NOR;  //盛京游牧副尉
+  else if (i < 2000) str = HIY "正七品把总" NOR;  //把总
+  else if (i < 2500) str = HIY "从六品卫总" NOR;  //卫千总
+  else if (i < 3000) str = HIY "正六品营总" NOR;  //门千总，营千总
+  else if (i < 3500) str = HIY "从五品千总" NOR;  //守御所千总
+  else if (i < 4000) str = HIY "正五品守备" NOR;  //守备
+  else if (i < 4500) str = HIY "从四品统领" NOR;  //城门领
+  else if (i < 5000) str = HIY "正四品都司" NOR;  //都司
+  else if (i < 5500) str = HIY "从三品游击" NOR;  //游击
+  else if (i < 6000) str = HIY "正三品参将" NOR;  //参将
+  else if (i < 6500) str = HIY "从二品副将" NOR;  //副将
+  else if (i < 7000) str = HIY "正二品总兵" NOR;  //副督统，总兵
+  else if (i < 7500) {
+    switch (random(3)) {  //将军，督统，提督
+      case 2:
+        str = HIY "从一品将军" NOR;
+        break;
+      case 1:
+        str = HIY "从一品督统" NOR;
+        break;
+      case 0:
+        str = HIY "从一品提督" NOR;
+        break;
+    }
+  }
 
-	else if ( i < 8000 ) {				//领侍卫内大臣
-		random(2)?
-		str = HIY"正一品大将军"NOR:str = HIY"正一品领侍卫内大臣";
-	}
-	else str = HIY"御前护卫总领大臣"NOR;
+  else if (i < 8000) {    //领侍卫内大臣
+    random(2) ? str = HIY "正一品大将军" NOR : str = HIY "正一品领侍卫内大臣";
+  } else str = HIY "御前护卫总领大臣" NOR;
 
-	return str;
+  return str;
 }
 
-string get_title()
-{
-	object me = this_player();
-	int i = (int)me->query("job_time/官府", 1);
-	string str;
+string get_title() {
+  object me = this_player();
+  int i = (int)me->query("job_time/官府", 1);
+  string str;
 
-	if ( i < 1 )
-		return "这位"+RANK_D->query_respect(me)+"还没有为朝廷出过力，何谈功名呢？！\n";
+  if (i < 1)
+    return "这位" + RANK_D->query_respect(me) + "还没有为朝廷出过力，何谈功名呢？！\n";
 
-	if ( stringp(me->query_temp("guanfu_title")) && !wizardp(me))
-		return "这位"+RANK_D->query_respect(me)+"，好好为朝廷出力吧。\n";
+  if (stringp(me->query_temp("guanfu_title")) && !wizardp(me))
+    return "这位" + RANK_D->query_respect(me) + "，好好为朝廷出力吧。\n";
 
-	str = guanfu_title(me);
-	message_vision(CYN"$N言道：我已将"+RANK_D->query_respect(me)+"的功劳报给了兵部，前日朝廷来函任命$n为"+str+"。\n"NOR, this_object(), me);
-	me->set_temp("title", str);
-	me->set_temp("guanfu_title", "get");
-	return "如此下去，"+RANK_D->query_respect(me)+"以后的前途真是不可限量啊！\n";
+  str = guanfu_title(me);
+  message_vision(
+    CYN "$N言道：我已将" + RANK_D->query_respect(me) + "的功劳报给了兵部，前日朝廷来函任命$n为" + str + "。\n" NOR,
+    this_object(),
+    me
+  );
+  me->set_temp("title", str);
+  me->set_temp("guanfu_title", "get");
+  return "如此下去，" + RANK_D->query_respect(me) + "以后的前途真是不可限量啊！\n";
 }

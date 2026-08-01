@@ -55,54 +55,53 @@ hj_npc_ashman.c    清道夫（小矮人），将负责清除各类玩家丢下�
 
 #include "get_hj_dir.h"
 
-string *obj_list_all=({
+string *obj_list_all = ({
 
-    HJ_DIR + "npc_obj/hj_box",
-    HJ_DIR + "npc_obj/hj_box",        // 宝箱概率增加。
-    HJ_DIR + "npc_obj/hj_npc_kill",
-    HJ_DIR + "npc_obj/hj_npc_kill",   // 杀戮型怪物概率增加。
-    HJ_DIR + "npc_obj/hj_npc_quest",
-    HJ_DIR + "npc_obj/hj_npc_quest",  // 其他型NPC概率增加。
-    HJ_DIR + "npc_obj/hj_npc_other",
-    HJ_DIR + "npc_obj/hj_obj_tools",
-    HJ_DIR + "npc_obj/hj_obj_quest",
-    HJ_DIR + "npc_obj/hj_obj_other",
-    HJ_DIR + "npc_obj/hj_obj_weapon",
+  HJ_DIR + "npc_obj/hj_box",
+  HJ_DIR + "npc_obj/hj_box",        // 宝箱概率增加。
+  HJ_DIR + "npc_obj/hj_npc_kill",
+  HJ_DIR + "npc_obj/hj_npc_kill",   // 杀戮型怪物概率增加。
+  HJ_DIR + "npc_obj/hj_npc_quest",
+  HJ_DIR + "npc_obj/hj_npc_quest",  // 其他型NPC概率增加。
+  HJ_DIR + "npc_obj/hj_npc_other",
+  HJ_DIR + "npc_obj/hj_obj_tools",
+  HJ_DIR + "npc_obj/hj_obj_quest",
+  HJ_DIR + "npc_obj/hj_obj_other",
+  HJ_DIR + "npc_obj/hj_obj_weapon",
 });
 
-string *obj_list_obj=({
-    HJ_DIR + "npc_obj/hj_obj_tools",
-    HJ_DIR + "npc_obj/hj_obj_quest",
-    HJ_DIR + "npc_obj/hj_obj_other",
-    HJ_DIR + "npc_obj/hj_obj_other",   // 补充HP类果品多加一个机会取得。
-    HJ_DIR + "npc_obj/hj_obj_weapon",
+string *obj_list_obj = ({
+  HJ_DIR + "npc_obj/hj_obj_tools",
+  HJ_DIR + "npc_obj/hj_obj_quest",
+  HJ_DIR + "npc_obj/hj_obj_other",
+  HJ_DIR + "npc_obj/hj_obj_other",   // 补充HP类果品多加一个机会取得。
+  HJ_DIR + "npc_obj/hj_obj_weapon",
 });
 
-string *obj_list_npc=({
-    HJ_DIR + "npc_obj/hj_npc_kill",
-    HJ_DIR + "npc_obj/hj_npc_quest",
-    HJ_DIR + "npc_obj/hj_npc_other",
+string *obj_list_npc = ({
+  HJ_DIR + "npc_obj/hj_npc_kill",
+  HJ_DIR + "npc_obj/hj_npc_quest",
+  HJ_DIR + "npc_obj/hj_npc_other",
 });
 
 // 下面是各个国度的宝物组成部分。
 
-string *obj_list_feng=({
-    HJ_DIR + "npc_obj/feng_obj",
-    HJ_DIR + "npc_obj/feng_npc",
+string *obj_list_feng = ({
+  HJ_DIR + "npc_obj/feng_obj",
+  HJ_DIR + "npc_obj/feng_npc",
 });
 
-string *obj_list_yu=({
-    HJ_DIR + "npc_obj/yu_obj",
-    HJ_DIR + "npc_obj/yu_npc",
+string *obj_list_yu = ({
+  HJ_DIR + "npc_obj/yu_obj",
+  HJ_DIR + "npc_obj/yu_npc",
 });
 
-string *obj_list_lei=({
-    HJ_DIR + "npc_obj/lei_obj",
-    HJ_DIR + "npc_obj/lei_npc",
+string *obj_list_lei = ({
+  HJ_DIR + "npc_obj/lei_obj",
+  HJ_DIR + "npc_obj/lei_npc",
 });
 
-string *obj_list_dian=({
-    HJ_DIR + "npc_obj/dian_obj",
-    HJ_DIR + "npc_obj/dian_npc",
+string *obj_list_dian = ({
+  HJ_DIR + "npc_obj/dian_obj",
+  HJ_DIR + "npc_obj/dian_npc",
 });
-

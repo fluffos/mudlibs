@@ -20,4 +20,3 @@
 #define CLIENT_ROOMOBJ_OUT	12
 #define CLIENT_ROOM		13
 #define CLIENT_ROOM_LONG	15
-

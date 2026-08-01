@@ -11,4 +11,3 @@
 // 主目录调用时，使用如： #include "npc_obj/hj_settings/room_amount_hj.h" 语句。
 
 #define        HJ_ROOM_AMOUNT        60
-

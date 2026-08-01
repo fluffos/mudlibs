@@ -4,20 +4,19 @@
 
 #define        MY_LOG_FILE_NAME        "huanjing/hj2003"
 
-string get_log_file_name()
-{
-    int temp;
+string get_log_file_name() {
+  int temp;
 
 #ifdef        IS_TEST
 
-temp = IS_TEST;
+  temp = IS_TEST;
 
 #endif
 
-    if( temp )
-        return MY_LOG_FILE_NAME + "_" + "testlog";
+  if (temp)
+    return MY_LOG_FILE_NAME + "_" + "testlog";
 
-    return MY_LOG_FILE_NAME + ctime_format( "_YYM" );
+  return MY_LOG_FILE_NAME + ctime_format("_YYM");
 }
 
 // 每个月生成一份 LOG。
@@ -26,10 +25,7 @@ temp = IS_TEST;
 
 // 奖品转让处的 LOG 则依旧。
 
-void hj_log_file(string log_msg)
-{
-    if( !log_msg ) return;
-    log_file( get_log_file_name(), log_msg );
+void hj_log_file(string log_msg) {
+  if (!log_msg) return;
+  log_file(get_log_file_name(), log_msg);
 }
-
-
