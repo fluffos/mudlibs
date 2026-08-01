@@ -1,16 +1,16 @@
 // weapon.h
-
+
 #ifndef __WEAPON__
 #define __WEAPON__
-
+
 #define DEFAULT_WEAPON_LIMB "右手"
-
+
 #define TWO_HANDED	1
 #define SECONDARY	2
 #define EDGED		4
 #define POINTED		8
 #define LONG		16
-
+
 #define ARCHERY			"/std/weapon/archery"
 #define AXE			"/std/weapon/axe"
 #define BLADE			"/std/weapon/blade"
@@ -27,7 +27,7 @@
 #define WHIP			"/std/weapon/whip"
 #define SPEAR			"/std/weapon/spear"
 #define M_WEAPON                "/std/weapon/weapon"  //自制武器
-
+
 #define F_ARCHERY		"/std/weapon/_archery"
 #define F_AXE			"/std/weapon/_axe"
 #define F_BLADE			"/std/weapon/_blade"
@@ -43,5 +43,5 @@
 #define F_THROWING            "/std/weapon/_throwing"
 #define F_WHIP			"/std/weapon/_whip"
 #define F_SPEAR			"/std/weapon/_spear"
-
+
 #endif

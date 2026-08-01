@@ -28,4 +28,3 @@ void close_connection(int fd);
 protected void get_file(int fd, string file, string cmd);
 
 #endif /* __HTTP_H */
-

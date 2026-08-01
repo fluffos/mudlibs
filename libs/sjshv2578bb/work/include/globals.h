@@ -66,9 +66,9 @@
 #define COLOR_D                 "/adm/daemons/colord"
 #define DIR_D			"/adm/daemons/dird"
 #define NEWS_D                  "/adm/daemons/newsd"
-#define XYJTIME_D               "/adm/daemons/xyjtimed.lpc" 
+#define XYJTIME_D               "/adm/daemons/xyjtimed.lpc"
 #define NAME_D                  "/adm/daemons/named"
-#define USER_WEAPOND            "/adm/daemons/user_weapond" 
+#define USER_WEAPOND            "/adm/daemons/user_weapond"
 #define DIABLO_D                "/adm/daemons/diablod"
 #define NPC_D                   "/adm/daemons/npcd"
 #define QUIZ_D                  "/adm/daemons/quizd"
@@ -78,7 +78,7 @@
 //加入等级自动升级系统
 #define UPEXP_D		        "/adm/daemons/upexpd"
 //特殊事件启动精灵by koker@from old code hell.2004/05
-#define EVENT_D                 "/adm/daemons/eventd" 
+#define EVENT_D                 "/adm/daemons/eventd"
 
 #define CLASS_D(x)		("/daemon/class/" + x)
 #define SKILL_D(x)              ("/daemon/skill/" + x)
@@ -127,8 +127,8 @@
 #define PARTY                   "/std/char/party"
 
 #define HELL_ROOM               "/std/room/hellroom"
-#define MAGIC_ROOM              "/std/room/magicroom" 
-#define FANGZHU_ROOM            "/std/room/fangzhudao" 
+#define MAGIC_ROOM              "/std/room/magicroom"
+#define FANGZHU_ROOM            "/std/room/fangzhudao"
 #define MOFENG_ROOM             "/std/room/mofengroom"
 // User IDs
 

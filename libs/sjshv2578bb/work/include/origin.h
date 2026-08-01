@@ -1,4 +1,4 @@
-/* codes returned by the origin() efun */                          
+/* codes returned by the origin() efun */
 #define ORIGIN_BACKEND       "driver" /* backwards compat */           
 #define ORIGIN_DRIVER        "driver"                            
 #define ORIGIN_LOCAL         "local"                                   
@@ -6,8 +6,7 @@
 #define ORIGIN_SIMUL_EFUN    "simul"                             
 #define ORIGIN_CALL_OUT      "call_out"                             
 #define ORIGIN_EFUN          "efun"                     
-/* pseudo frames for call_other function pointers and efun pointer */   
+/* pseudo frames for call_other function pointers and efun pointer */
 #define ORIGIN_FUNCTION_POINTER   "function_pointer"         
-/* anonymous functions */  
+/* anonymous functions */
 #define ORIGIN_FUNCTIONAL         "functional"  
-

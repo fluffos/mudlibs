@@ -9,4 +9,3 @@
 #define LOCAL_PORT()            ((int) get_config(__MUD_PORT__))
 
 #endif
-

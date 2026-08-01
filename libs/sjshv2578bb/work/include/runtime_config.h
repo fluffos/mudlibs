@@ -87,4 +87,3 @@
 #define NUM_CONFIG_INTS (RUNTIME_CONFIG_NEXT - BASE_CONFIG_INT)
 
 #endif                          /* RUNTIME_CONFIG_H */
-

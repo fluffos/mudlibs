@@ -5,5 +5,27 @@
 // 如有需要取消，务请慎重。
 // 如发现bug，请及时报告，多谢合作。
 
-string *banned_cast=({"escape","chuqiao","qiankun","jieti","tudun","shuidun","yinshen","sheqi","nophase"});
-string *banned_action=({"practice","xiudao","learn","study","read","bian","accept","fly","surrender","move","recall"});
+string *banned_cast = ({
+  "escape",
+  "chuqiao",
+  "qiankun",
+  "jieti",
+  "tudun",
+  "shuidun",
+  "yinshen",
+  "sheqi",
+  "nophase"
+});
+string *banned_action = ({
+  "practice",
+  "xiudao",
+  "learn",
+  "study",
+  "read",
+  "bian",
+  "accept",
+  "fly",
+  "surrender",
+  "move",
+  "recall"
+});

@@ -9,4 +9,3 @@
 #define MEDICAL_BOOK            "/std/item/medical-book"
 
 #endif
-

@@ -281,7 +281,7 @@ classes it's found.
 | 098 | `sjplii` | 书剑飘零II | `书剑飘零II.rar` | 40153 | WASM playable |
 | 099 | `sjsh` | 三界神话 | `三界神话（宝鸡站的版本）.rar` | 40141 | WASM playable |
 | 100 | `sjshv150` | 三界神话V1.50 | `三界神话V1.50.rar` | 40171 | WASM playable |
-| 101 | `sjshv2578bb` | 三界神话v2.578b版 | `三界神话v2.578b版.rar` | 40125 | native-boot verified, WASM pending |
+| 101 | `sjshv2578bb` | 三界神话v2.578b版 | `三界神话v2.578b版.rar` | 40125 | WASM playable |
 | 102 | `sjshwzb` | 三界神话完整版 | `三界神话完整版.rar` | 40113 | native-boot verified, WASM pending |
 | 103 | `sjshwzjqb` | 三界神话完整加强版 | `三界神话完整加强版.rar` | 40173 | native-boot verified, WASM pending |
 | 104 | `tybxjh` | 天涯&碧血江湖 | `天涯&碧血江湖.rar` | 40158 | native-boot verified, WASM pending |

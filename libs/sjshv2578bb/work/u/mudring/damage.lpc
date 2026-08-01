@@ -15,514 +15,475 @@ int is_ghost() { return ghost; }
 // the three following function.
 // are no use in us mud.
 // mudring Dec/05/2002
-int self_purge()
-{
-    object me = this_object();
-    object link_ob = me->query_temp("link_ob");
+int self_purge() {
+  object me = this_object();
+  object link_ob = me->query_temp("link_ob");
 
-    if (!userp(me)) return 0;
+  if (!userp(me)) return 0;
 
-    if ((int)me->query("max_kee") > 0
-        && (int)me->query("max_sen") > 0 ) return 0;
-    set_heart_beat(0);
-    ghost =1;
-    me->move("/d/death/block.lpc");
-    CHANNEL_D->do_channel(me, "rumor", me->query("name")
-        + "因为年纪太大，心力交瘁，不幸与世长辞，永远离开了我们！");
-    return 1;
+  if ((int)me->query("max_kee") > 0
+    && (int)me->query("max_sen") > 0) return 0;
+  set_heart_beat(0);
+  ghost = 1;
+  me->move("/d/death/block.lpc");
+  CHANNEL_D->do_channel(me, "rumor", me->query("name")
+    + "因为年纪太大，心力交瘁，不幸与世长辞，永远离开了我们！");
+  return 1;
 }
 
-void gameover()
-{
-    object me = this_object();
+void gameover() {
+  object me = this_object();
 
-    //currently, only move the player to /d/death/block.c
-    if (!userp(me)) return;
+  //currently, only move the player to /d/death/block.c
+  if (!userp(me)) return;
 
 
-    me->move("/d/death/block.lpc");
-    if (!me->query("life/death_announced"))
-    {
-        me->set("life/death_announced", 1);
-        CHANNEL_D->do_channel(load_object(COMBAT_D), "rumor", me->query("name")
-            + "寿终正寝，永远地离开了我们。");
+  me->move("/d/death/block.lpc");
+  if (!me->query("life/death_announced")) {
+    me->set("life/death_announced", 1);
+    CHANNEL_D->do_channel(load_object(COMBAT_D), "rumor", me->query("name")
+      + "寿终正寝，永远地离开了我们。");
+  }
+}
+
+int check_gameover() {
+  object me = this_object();
+  return 0;
+
+  if (wizardp(me)) return 0;
+  if (!userp(me)) return 0;
+
+  if ((me->query("age") <= me->query("life/life_time"))
+    || me->query("life/live_forever")) return 0;
+
+  gameover();
+  return 1;
+}
+
+void announce_live_forever(string reason) {
+  object me = this_object();
+  object dadi;
+
+  if (!reason) return;
+
+  if (me->query("life/live_forever_announced")) return;
+
+  me->set("life/live_forever_announced", 1);
+  me->set("life/live_forever", 1);
+
+  dadi = new("/d/wiz/npc/dadi.lpc");
+  dadi->move(environment(me));
+
+  message_vision(HIY "只听一阵仙乐缥缈，一驾五彩云车从天缓缓而降。\n" NOR, dadi);
+  message_vision(HIY "$N从车上立起身来对$n一拱手：恭喜！恭喜！\n" NOR, dadi, me);
+  dadi->command_function("chat " + reason);
+  message_vision(HIY "$N一挥手，云车渐渐淡去...\n" NOR, dadi);
+  destruct(dadi);
+
+  return;
+}
+
+varargs int receive_damage(string type, int damage, object who) {
+  int val, mana, level;
+
+  // 这个老报错，烦死我了，看你还报错.
+  // mudring Dec/05/2002.
+  if (damage < 0) damage = 0;
+  if (type != "kee" && type != "sen")
+    error("F_DAMAGE: 伤害种类错误( 只能是 kee, sen 其中之一 )。\n");
+
+  if (who) set_temp("last_damage_from", who);
+
+  if (objectp(who)) {
+    // 这个东西在哪儿用的？
+    // 有空要看看.
+    if (objectp(who->query_temp("invoker")))
+      who = who->query_temp("invoker");
+    set_temp("last_damage_from", who);
+  }
+
+  // 这个在哪儿用呢？
+  mana = 0;
+  if (query_temp("apply/manashieldflag") == 1)  //use manashield
+  {
+    val = (int)query("mana");
+    mana = val;
+
+    if (mana >= damage * 4) {
+      set("mana", mana - (damage * 4));
+      damage = 0;
+    } else {
+      damage = damage - (mana / 4);
+      if (query_temp("apply/manashieldflag") == 1)  //use manashield
+        set("mana", 0);
     }
+  }
+
+  val = (int)query(type) - damage;
+  if (val < 0) val = -1;
+  set(type, val);
+
+  set_heart_beat(1);
+
+  return damage;
 }
 
-int check_gameover()
-{
-    object me = this_object();
-    return 0;
+varargs int receive_wound(string type, int damage, object who) {
+  int val;
 
-    if (wizardp(me)) return 0;
-    if (!userp(me)) return 0;
+  // mudring Dec/05/2002.
+  if (damage < 0) damage = 0;
+  if (type != "kee" && type != "sen")
+    error("F_DAMAGE: 伤害种类错误( 只能是 kee, sen 其中之一 )。\n");
 
-    if ((me->query("age") <= me->query("life/life_time"))
-        || me->query("life/live_forever")) return 0;
+  if (who) set_temp("last_damage_from", who);
+  if (objectp(who)) {
+    if (objectp(who->query_temp("invoker")))
+      who = who->query_temp("invoker");
+    set_temp("last_damage_from", who);
+  }
 
-    gameover();
-    return 1;
+  val = (int)query("eff_" + type) - damage;
+  if (val < 0) val = -1;
+  set("eff_" + type, val);
+
+  if ((int)query(type) > val) set(type, val);
+
+  set_heart_beat(1);
+
+  return damage;
 }
 
-void announce_live_forever(string reason)
-{
-    object me = this_object();
-    object dadi;
+int receive_heal(string type, int heal) {
+  int val;
 
-    if (!reason) return;
+  // mudring Dec/05/2002.
+  if (heal < 0) heal = 0;
+  if (type != "kee" && type != "sen")
+    error("F_DAMAGE: 恢复种类错误( 只能是 kee, sen 其中之一 )。\n");
 
-    if (me->query("life/live_forever_announced")) return;
+  val = (int)query(type) + heal;
 
-    me->set("life/live_forever_announced", 1);
-    me->set("life/live_forever", 1);
+  if (val > (int)query("eff_" + type))
+    val = (int)query("eff_" + type);
+  set(type, val);
 
-    dadi = new("/d/wiz/npc/dadi.lpc");
-    dadi->move(environment(me));
-
-    message_vision(HIY"只听一阵仙乐缥缈，一驾五彩云车从天缓缓而降。\n"NOR, dadi);
-    message_vision(HIY"$N从车上立起身来对$n一拱手：恭喜！恭喜！\n"NOR, dadi, me);
-    dadi->command_function("chat "+reason);
-    message_vision(HIY"$N一挥手，云车渐渐淡去...\n"NOR, dadi);
-    destruct(dadi);
-
-    return;
+  return heal;
 }
 
-varargs int receive_damage(string type, int damage, object who)
-{
-    int val, mana, level;
+int receive_curing(string type, int heal) {
+  int max, val;
 
-    // 这个老报错，烦死我了，看你还报错.
-    // mudring Dec/05/2002.
-    if (damage < 0) damage = 0;
-    if (type != "kee" && type != "sen")
-        error("F_DAMAGE: 伤害种类错误( 只能是 kee, sen 其中之一 )。\n");
+  // mudring Dec/05/2002.
+  if (heal < 0) heal = 0;
+  if (type != "kee" && type != "sen")
+    error("F_DAMAGE: 恢复种类错误( 只能是 kee, sen 其中之一 )。\n");
 
-    if (who) set_temp("last_damage_from", who);
+  val = (int)query("eff_" + type) + heal;
+  max = (int)query("max_" + type);
 
-    if (objectp(who))
-    {
-        // 这个东西在哪儿用的？
-        // 有空要看看.
-        if (objectp(who->query_temp("invoker")))
-            who = who->query_temp("invoker");
-        set_temp("last_damage_from", who);
-    }
+  if (val > max)
+    val = max;
+  set("eff_" + type, val);
 
-    // 这个在哪儿用呢？
-    mana = 0;
-    if (query_temp("apply/manashieldflag") == 1) //use manashield
-    {
-        val = (int)query("mana");
-        mana = val;
-
-        if (mana >= damage * 4)
-        {
-            set("mana", mana - (damage * 4));
-            damage = 0;
-        } else
-        {
-            damage = damage - (mana / 4);
-            if (query_temp("apply/manashieldflag") == 1) //use manashield
-                set("mana", 0);
-        }
-    }
-
-    val = (int)query(type) - damage;
-    if( val < 0 ) val = -1;
-    set(type, val);
-
-    set_heart_beat(1);
-
-    return damage;
-}
-
-varargs int receive_wound(string type, int damage, object who)
-{
-    int val;
-
-    // mudring Dec/05/2002.
-    if (damage < 0) damage = 0;
-    if (type != "kee" && type != "sen")
-        error("F_DAMAGE: 伤害种类错误( 只能是 kee, sen 其中之一 )。\n");
-
-    if (who) set_temp("last_damage_from", who);
-    if (objectp(who))
-    {
-        if (objectp(who->query_temp("invoker")))
-            who = who->query_temp("invoker");
-        set_temp("last_damage_from", who);
-    }
-
-    val = (int)query("eff_" + type) - damage;
-    if (val < 0) val = -1;
-    set("eff_" + type, val);
-
-    if ((int)query(type) > val) set(type, val);
-
-    set_heart_beat(1);
-
-    return damage;
-}
-
-int receive_heal(string type, int heal)
-{
-    int val;
-
-    // mudring Dec/05/2002.
-    if (heal < 0) heal = 0;
-    if (type != "kee" && type != "sen")
-        error("F_DAMAGE: 恢复种类错误( 只能是 kee, sen 其中之一 )。\n");
-
-    val = (int)query(type) + heal;
-
-    if (val > (int)query("eff_" + type))
-        val = (int)query("eff_" + type);
-    set(type, val);
-
-    return heal;
-}
-
-int receive_curing(string type, int heal)
-{
-    int max, val;
-
-    // mudring Dec/05/2002.
-    if (heal < 0) heal = 0;
-    if (type != "kee" && type != "sen")
-        error("F_DAMAGE: 恢复种类错误( 只能是 kee, sen 其中之一 )。\n");
-
-    val = (int)query("eff_" + type) + heal;
-    max = (int)query("max_" + type);
-
-    if (val > max)
-        val = max;
-    set( "eff_" + type, val);
-        
-    return heal;
+  return heal;
 }
 
 // snowcat feb 8 1998
-void remove_ride ()
-{
-    object rider, ridee;
+void remove_ride() {
+  object rider, ridee;
 
-    if (ridee = query_temp("ridee"))
-        ridee->delete_temp("rider");
-    delete_temp("ridee");
-    add_temp("apply/dodge", -query_temp("ride/dodge"));
-    set_temp("ride/dodge", 0);
-    if (rider = query_temp("rider"))
-        rider->remove_ride();
-    delete_temp("rider");
+  if (ridee = query_temp("ridee"))
+    ridee->delete_temp("rider");
+  delete_temp("ridee");
+  add_temp("apply/dodge", -query_temp("ride/dodge"));
+  set_temp("ride/dodge", 0);
+  if (rider = query_temp("rider"))
+    rider->remove_ride();
+  delete_temp("rider");
 }
 
 // optimize.
 // mudring Dec/05/2002
-void unconcious()
-{
-    object me;
-    object defeater;
+void unconcious() {
+  object me;
+  object defeater;
 
-    me = this_object();
+  me = this_object();
 
-    if (environment()
-        && environment()->query("alternative_die"))
-    {
-          environment()->alternative_die(me);
-          return;
-    }
+  if (environment()
+    && environment()->query("alternative_die")) {
+    environment()->alternative_die(me);
+    return;
+  }
 
-    if (!living(me)) return;
-    if (wizardp(me) && query("env/immortal")) return;
-    // mudring Dec/05/2002
-    if (me->is_busy()) me->interrupt_me();
+  if (!living(me)) return;
+  if (wizardp(me) && query("env/immortal")) return;
+  // mudring Dec/05/2002
+  if (me->is_busy()) me->interrupt_me();
 
-    if (objectp(defeater = query_temp("last_damage_from")))
-        COMBAT_D->winner_reward(defeater, me);
+  if (objectp(defeater = query_temp("last_damage_from")))
+    COMBAT_D->winner_reward(defeater, me);
 
-    me->remove_all_enemy();
-    me->set_temp("faint_by", defeater);
-    remove_ride();
-    // mudring Dec/05/2002
-    me->clear_written();
+  me->remove_all_enemy();
+  me->set_temp("faint_by", defeater);
+  remove_ride();
+  // mudring Dec/05/2002
+  me->clear_written();
 
-    tell_object(me, HIR "\n你只觉得头昏脑胀，眼前一黑，接着什么也不知道了……\n\n" NOR);
+  tell_object(me, HIR "\n你只觉得头昏脑胀，眼前一黑，接着什么也不知道了……\n\n" NOR);
+  command("hp");
+  me->disable_player(" <昏迷不醒>");
+  set("kee", 0);
+  set("sen", 0);
+  set_temp("block_msg/all", 1);
+  COMBAT_D->announce(me, "unconcious");
+
+  call_out("revive", random(100 - query("con")) + 30);
+}
+
+// optimize.
+// mudring Dec/05/2002
+varargs void revive(int quiet) {
+  object me;
+  object env;
+
+  me = this_object();
+
+  remove_call_out("revive");
+  env = environment();
+  // mudring Dec/05/2002
+  if (env) {
+    while (env->is_character() && environment(env))
+      env = environment(env);
+    if (env != environment())
+      me->move(env);
+  }
+
+  delete_temp("no_move");
+  delete_temp("no_special");
+  if (me->query_temp("faint_by")) me->delete_temp("faint_by");
+
+  // mudring Dec/05/2002
+  delete("disable_type");
+  delete_temp("disabled");
+  //    me->enable_player();
+  delete_temp("block_msg/all");
+  me->write_prompt();
+  if (!quiet) {
+    COMBAT_D->announce(me, "revive");
+    tell_object(me, HIY "\n慢慢地你终于又有了知觉．．．\n\n" NOR);
     command("hp");
-    me->disable_player(" <昏迷不醒>");
-    set("kee", 0);
-    set("sen", 0);
-    set_temp("block_msg/all", 1);
-    COMBAT_D->announce(me, "unconcious");
-
-    call_out("revive", random(100 - query("con")) + 30);
-}
-
-// optimize.
-// mudring Dec/05/2002
-varargs void revive(int quiet)
-{
-    object me;
-    object env;
-
-    me = this_object();
-
-    remove_call_out("revive");
-    env = environment();
-    // mudring Dec/05/2002
-    if (env)
-    {
-        while (env->is_character() && environment(env))
-            env = environment(env);
-        if (env != environment())
-            me->move(env);
-    }
-
-    delete_temp("no_move");
-    delete_temp("no_special");
-    if (me->query_temp("faint_by")) me->delete_temp("faint_by");
-
-    // mudring Dec/05/2002
-    delete("disable_type");
-    delete_temp("disabled");
-//    me->enable_player();
-    delete_temp("block_msg/all");
-    me->write_prompt();
-    if (!quiet)
-    {
-        COMBAT_D->announce(me, "revive");
-        tell_object(me, HIY "\n慢慢地你终于又有了知觉．．．\n\n" NOR);
-        command("hp");
-    }
+  }
 
 }
 
 // optimize.
 // mudring Dec/05/2002
-void die()
-{
-    object corpse, killer,me, guai;
-    object *inv;
-    int i;
-    string str;
-    string faint_by;
+void die() {
+  object corpse, killer, me, guai;
+  object *inv;
+  int i;
+  string str;
+  string faint_by;
 
-    me = this_object();
+  me = this_object();
 
-    if (environment() 
-        && environment()->query("alternative_die"))
-    {
-        environment()->alternative_die(me);
-          return;
+  if (environment()
+    && environment()->query("alternative_die")) {
+    environment()->alternative_die(me);
+    return;
+  }
+
+  if (query_temp("faint_by"))
+    faint_by = query_temp("faint_by");
+
+  if (!living(me)) revive(1);
+  else delete_temp("faint_by");
+
+  if (is_ghost()) return;
+  if (wizardp(me) && query("env/immortal")) return;
+
+  // mudring Dec/05/2002
+  if (me->is_busy()) me->interrupt_me();
+  if (faint_by)
+    set_temp("faint_by", faint_by);
+
+  COMBAT_D->announce(me, "dead");
+
+  if (me->query("rulaitask/get") &&
+    !me->query_condition("no_pk_time")) {
+    guai = me->query("rulaitask/guai");
+
+    if (objectp(guai) && (guai == me->query_temp("last_damage_from") ||
+      guai == me->query_temp("last_opponent"))) {
+      me->set("eff_kee", me->query("max_kee"));
+      me->set("eff_sen", me->query("max_sen"));
+      me->set("kee", me->query("max_kee") / 3);
+      me->set("sen", me->query("max_sen") / 3);
+      me->add("combat_exp", -3000);
+      me->add("daoxing", -3000);
+      me->add("rulaitask_log/die", 1);
+      me->delete("rulaitask/get");
+      me->set("rulaitask/fail", 1);
+      str = me->name() + "被" + guai->name() + "杀死了，幸好如来佛及时出手相救，才捡回一命。";
+      message("channel:rumor", HIM "〖" HIW "谣言传说" HIM "〗某人：" + str + "\n" NOR,
+        users());
+      log_file("taskdeath", sprintf("[%s] %s is task killed by %s.\n",
+        ctime(time()), me->query("id"), guai->name()));
+      remove_ride();
+      me->move("/d/qujing/lingshan/daxiong");
+      message_vision(HIY "如来佛一伸左手把$N的魂魄从地府里拉了回来，再一伸右手不知道从"
+        "哪里把$N的尸体抓了回来，接着两手一合，硬生生地把$N魂魄逼回身体。\n" NOR, me);
+      me->unconcious();
+      return;
     }
+  }
 
-    if (query_temp("faint_by"))
-        faint_by = query_temp("faint_by");
-
-    if (!living(me)) revive(1);
-    else delete_temp("faint_by");
-
-    if( is_ghost() ) return;
-    if (wizardp(me) && query("env/immortal")) return;
-
-    // mudring Dec/05/2002
-    if (me->is_busy()) me->interrupt_me();
-    if (faint_by)
-        set_temp("faint_by", faint_by);
-
-    COMBAT_D->announce(me, "dead");
-
-    if (me->query("rulaitask/get") &&
-        !me->query_condition("no_pk_time"))
-    {
-        guai = me->query("rulaitask/guai");
-
-        if (objectp(guai) && (guai == me->query_temp("last_damage_from") ||
-            guai == me->query_temp("last_opponent")))
-        {
-            me->set("eff_kee",me->query("max_kee"));
-            me->set("eff_sen",me->query("max_sen"));
-            me->set("kee",me->query("max_kee")/3);
-            me->set("sen",me->query("max_sen")/3);
-            me->add("combat_exp",-3000);
-            me->add("daoxing",-3000);
-            me->add("rulaitask_log/die",1);
-            me->delete("rulaitask/get");
-            me->set("rulaitask/fail",1);
-            str = me->name()+"被"+guai->name()+"杀死了，幸好如来佛及时出手相救，才捡回一命。";
-            message("channel:rumor",HIM"〖"HIW"谣言传说"HIM"〗某人：" + str + "\n"NOR,
-                    users());
-            log_file("taskdeath",sprintf("[%s] %s is task killed by %s.\n",
-                     ctime(time()),me->query("id"),guai->name()));
-            remove_ride();
-            me->move("/d/qujing/lingshan/daxiong");
-            message_vision(HIY"如来佛一伸左手把$N的魂魄从地府里拉了回来，再一伸右手不知道从"
-                           "哪里把$N的尸体抓了回来，接着两手一合，硬生生地把$N魂魄逼回身体。\n"NOR,me);
-            me->unconcious();
-            return;
-        }
+  // destroy all self-made fabao here
+  inv = all_inventory(me);
+  for (i = 0; i < sizeof(inv); i++) {
+    if (inv[i]->query("owner_id") == getuid(me)) {
+      tell_object(me, HIB + "你看到" + inv[i]->query("name") +
+        HIB + "破空而去，慢慢消失在天际．．．\n" + NOR);
+      destruct(inv[i]);
     }
+  }
 
-    // destroy all self-made fabao here
-    inv = all_inventory(me);
-    for (i=0; i < sizeof(inv); i++)
-    {
-        if (inv[i]->query("owner_id") == getuid(me)) 
-        {
-            tell_object(me, HIB+"你看到" + inv[i]->query("name") +
-                        HIB + "破空而去，慢慢消失在天际．．．\n"+NOR);
-            destruct( inv[i] );
-        }
+  // 为什么要这个判断？
+  // 没有搞明白.
+  // mudring Dec/05/2002
+  if ((int)me->query("max_kee") > 0
+    && (int)me->query("max_sen") > 0) {
+    if (objectp(killer = query_temp("last_damage_from"))) {
+      set_temp("my_killer", killer->query("id"));
+      COMBAT_D->killer_reward(killer, me);
+
+      if (userp(me))
+        log_file("death", sprintf("[%s] %s is killed by %s.\n",
+          ctime(time()), getuid(me), killer->query("id")));
+
+    } else if (userp(me)) {
+      COMBAT_D->victim_penalty(me);
+      // added die_reason and optimize here
+      // mudring Sep/26/2002
+      if (!str = me->query_temp("death_msg"))
+        // can set customized death message to death_msg.
+        str = "莫名其妙地死了。";
+      me->set("die_reason", str);
+      str = me->name(1) + str;
+      COMBAT_D->announce(me, "death_rumor", str);
+      me->delete_temp("death_msg");
+      log_file("death", sprintf("[%s] %s is killed: %s.\n",
+        ctime(time()), getuid(me), str));
     }
+  }
 
-    // 为什么要这个判断？
-    // 没有搞明白.
-    // mudring Dec/05/2002
-    if ((int)me->query("max_kee") > 0 
-        && (int)me->query("max_sen") > 0)
-    {
-        if (objectp(killer = query_temp("last_damage_from")))
-        {
-            set_temp("my_killer", killer->query("id"));
-            COMBAT_D->killer_reward(killer, me);
+  command("hp");
+  remove_ride();
 
-            if (userp(me))
-                log_file("death",sprintf("[%s] %s is killed by %s.\n",
-                         ctime(time()), getuid(me), killer->query("id")));
+  if (objectp(corpse = CHAR_D->make_corpse(me, killer)))
+    corpse->move(environment());
 
-        } else
-        if (userp(me))
-        {
-            COMBAT_D->victim_penalty(me);
-            // added die_reason and optimize here
-            // mudring Sep/26/2002
-            if (!str = me->query_temp("death_msg"))
-                // can set customized death message to death_msg.
-                str = "莫名其妙地死了。";
-            me->set("die_reason", str);
-            str = me->name(1) + str;
-            COMBAT_D->announce(me, "death_rumor", str);
-            me->delete_temp("death_msg");
-            log_file("death",sprintf("[%s] %s is killed: %s.\n",
-                     ctime(time()), getuid(me), str));
-        }
-    }
+  me->remove_all_killer();
+  all_inventory(environment())->remove_killer(me);
 
-    command("hp");
-    remove_ride();
+  me->dismiss_team();
+  if (me->self_purge()) return;
 
-    if (objectp(corpse = CHAR_D->make_corpse(me, killer)))
-        corpse->move(environment());
+  if (userp(me)) {
+    set("kee", 1);
+    set("eff_kee", 1);
+    set("sen", 1);
+    set("eff_sen", 1);
 
-    me->remove_all_killer();
-    all_inventory(environment())->remove_killer(me);
+    // 下面几个东西实际已经没有用处
+    // mudring Dec/05/2002 
+    if (!me->query("life/life_time"))
+      me->set("life/life_time", 60);
+    if (!me->query("life/no_death_decrease"))
+      me->set("life/life_time", (int)me->query("life/life_time") - 1);
 
-    me->dismiss_team();
-    if (me->self_purge()) return;
+    if (check_gameover()) return;
 
-    if (userp(me))
-    {
-        set("kee", 1);
-        set("eff_kee", 1);
-        set("sen", 1);
-        set("eff_sen", 1);
-
-        // 下面几个东西实际已经没有用处
-        // mudring Dec/05/2002 
-        if (!me->query("life/life_time"))
-            me->set("life/life_time", 60);
-        if (!me->query("life/no_death_decrease"))
-            me->set("life/life_time", (int)me->query("life/life_time") - 1);
- 
-        if (check_gameover()) return;
- 
-        ghost = 1;
-        me->move(DEATH_ROOM);
-        DEATH_ROOM->start_death(me);
-    } else
-        destruct(me);
+    ghost = 1;
+    me->move(DEATH_ROOM);
+    DEATH_ROOM->start_death(me);
+  } else
+    destruct(me);
 }
 
-void reincarnate()
-{
-    ghost = 0;
-    // 疑问点之一，不应该这儿解决
-    // mudring Dec/05/2002
-    command("drop all");
-    set("eff_kee", query("max_kee"));
-    set("eff_sen", query("max_sen"));
+void reincarnate() {
+  ghost = 0;
+  // 疑问点之一，不应该这儿解决
+  // mudring Dec/05/2002
+  command("drop all");
+  set("eff_kee", query("max_kee"));
+  set("eff_sen", query("max_sen"));
 }
 
 // 有空改改下面两个东西.
 // 随着练功，应该可以达到很大的饭量.
 // mudring Dec/05/2002
-int max_food_capacity() { return query("str")*3+query("con")*7; }
+int max_food_capacity() { return query("str") * 3 + query("con") * 7; }
 
-int max_water_capacity() { return query("str")*3+query("con")*7; }
+int max_water_capacity() { return query("str") * 3 + query("con") * 7; }
 
 // 下面这个东西可以好好构思，
 // 应该可以写的很有意思的.
-int heal_up()
-{
-    int update_flag, i;
-    mapping my;
-    object me;
+int heal_up() {
+  int update_flag, i;
+  mapping my;
+  object me;
 
-    me = this_object();
+  me = this_object();
 
-    if (objectp(environment(me))
-        && environment(me)->query("no_time")) return -1;
+  if (objectp(environment(me))
+    && environment(me)->query("no_time")) return -1;
 
-    update_flag = 0;
-    my = query_entire_dbase();
+  update_flag = 0;
+  my = query_entire_dbase();
 
-    if (sizeof(query_temp("no_heal_up")))
-        return update_flag;
-
-    if (!userp(me)
-        && me->is_fighting()
-        && !my["allow_heal_up"]) return update_flag;
-
-    if (my["water"] > 0) { my["water"] --; update_flag++; }
-    if (my["food"] > 0) { my["food"] --; update_flag++; }
-
-    if (me->is_busy() ) return update_flag;
-    
-
-    if (my["water"] < 1 && userp(me)) return update_flag;
-
-    my["kee"] += my["con"] / 3 + my["force"] / 10;
-    if (my["kee"] >= my["eff_kee"])
-    {
-        my["kee"] = my["eff_kee"];
-        if (my["eff_kee"] < my["max_kee"])     { my["eff_kee"] ++; update_flag++; }
-    } else update_flag++;
-
-    if (my["max_force"] && my["force"] < my["max_force"] )
-    {
-        my["force"] += (int)me->query_skill("force", 1) / 2;
-        if (my["force"] > my["max_force"]) my["force"] = my["max_force"];
-        update_flag++;
-    }
-
-    if( my["food"] < 1 && userp(me) ) return update_flag;
-
-    my["sen"] += my["con"] / 3 + my["mana"] / 10;
-    if (my["sen"] >= my["eff_sen"])
-    {
-        my["sen"] = my["eff_sen"];
-        if (my["eff_sen"] < my["max_sen"])     { my["eff_sen"] ++; update_flag++; }
-    } else update_flag++;
-
-    if (my["max_mana"] && my["mana"] < my["max_mana"])
-    {
-        my["mana"] += (int)me->query_skill("spells", 1) / 2;
-        if( my["mana"] > my["max_mana"] ) my["mana"] = my["max_mana"];
-        update_flag++;
-    }
-
+  if (sizeof(query_temp("no_heal_up")))
     return update_flag;
+
+  if (!userp(me)
+    && me->is_fighting()
+    && !my["allow_heal_up"]) return update_flag;
+
+  if (my["water"] > 0) { my["water"]--; update_flag++; }
+  if (my["food"] > 0) { my["food"]--; update_flag++; }
+
+  if (me->is_busy()) return update_flag;
+
+
+  if (my["water"] < 1 && userp(me)) return update_flag;
+
+  my["kee"] += my["con"] / 3 + my["force"] / 10;
+  if (my["kee"] >= my["eff_kee"]) {
+    my["kee"] = my["eff_kee"];
+    if (my["eff_kee"] < my["max_kee"]) { my["eff_kee"]++; update_flag++; }
+  } else update_flag++;
+
+  if (my["max_force"] && my["force"] < my["max_force"]) {
+    my["force"] += (int)me->query_skill("force", 1) / 2;
+    if (my["force"] > my["max_force"]) my["force"] = my["max_force"];
+    update_flag++;
+  }
+
+  if (my["food"] < 1 && userp(me)) return update_flag;
+
+  my["sen"] += my["con"] / 3 + my["mana"] / 10;
+  if (my["sen"] >= my["eff_sen"]) {
+    my["sen"] = my["eff_sen"];
+    if (my["eff_sen"] < my["max_sen"]) { my["eff_sen"]++; update_flag++; }
+  } else update_flag++;
+
+  if (my["max_mana"] && my["mana"] < my["max_mana"]) {
+    my["mana"] += (int)me->query_skill("spells", 1) / 2;
+    if (my["mana"] > my["max_mana"]) my["mana"] = my["max_mana"];
+    update_flag++;
+  }
+
+  return update_flag;
 }
-
-
-

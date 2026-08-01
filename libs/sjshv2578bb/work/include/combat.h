@@ -17,9 +17,8 @@
 // usage will be used in calculating skill power.
 #define SKILL_USAGE_ATTACK		1
 #define SKILL_USAGE_DEFENSE		2
-#define SKILL_USAGE_SPELL		3	
-#define SKILL_USAGE_DODGE		4	
-#define SKILL_USAGE_PARRY		5	
+#define SKILL_USAGE_SPELL		3
+#define SKILL_USAGE_DODGE		4
+#define SKILL_USAGE_PARRY		5
 
 #endif
-

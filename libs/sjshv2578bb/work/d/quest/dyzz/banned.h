@@ -5,5 +5,29 @@
 // 如有需要取消，务请慎重，并由巫师监控全部过关过程。
 // 如发现bug，请及时报告，多谢合作。
 
-string *banned_cast=({"escape","chuqiao","qiankun","jieti","tudun","shuidun","yinshen","sheqi","nophase"});
-string *banned_action=({"practice","exercise","meditate","xiudao","learn","study","read","bian","quit","accept","fly","surrender","move"}); 
+string *banned_cast = ({
+  "escape",
+  "chuqiao",
+  "qiankun",
+  "jieti",
+  "tudun",
+  "shuidun",
+  "yinshen",
+  "sheqi",
+  "nophase"
+});
+string *banned_action = ({
+  "practice",
+  "exercise",
+  "meditate",
+  "xiudao",
+  "learn",
+  "study",
+  "read",
+  "bian",
+  "quit",
+  "accept",
+  "fly",
+  "surrender",
+  "move"
+});

@@ -22,4 +22,3 @@
 #define UPTIME_CMD              "/cmds/usr/uptime"
 #define WHO_CMD                 "/cmds/usr/who"
 #define BJTIME_CMD               "/cmds/usr/bjtime"
-

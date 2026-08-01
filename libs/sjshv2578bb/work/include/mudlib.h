@@ -30,4 +30,3 @@
 #define VOTER_SITE   0
 #define GB_AND_BIG5
 #undef INTERMUD_ALL_MUD
-

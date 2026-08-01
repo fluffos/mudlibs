@@ -2,11 +2,11 @@
  * socket_errors.h -- definitions for efun socket error return codes.
  *    5-92 : Dwayne Fontenot (Jacques@TMI) : original coding.
  *   10-92 : Dave Richards (Cynosure) : less original coding.
- */
-
+ */
+
 #ifndef _SOCKET_ERRORS_H_
 #define _SOCKET_ERRORS_H_
-
+
 #define EESUCCESS	  1	/* Call was successful */
 #define EESOCKET	 -1	/* Problem creating socket */
 #define EESETSOCKOPT	 -2	/* Problem with setsockopt */
@@ -40,7 +40,7 @@
 #define EESOCKRLSD	-30	/* Socket already released */
 #define EESOCKNOTRLSD   -31	/* Socket not released */
 #define EEBADDATA       -32	/* sending data with too many nested levels */
-
+
 #define	ERROR_STRINGS	 33	/* sizeof (error_strings) */
-
+
 #endif				/* _SOCKET_ERRORS_H_ */
