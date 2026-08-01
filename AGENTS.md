@@ -827,7 +827,15 @@ cause, fix, detection, known-affected lineages.
   instance that an earlier grep-based sweep missed because the grep
   pattern was case-sensitive and only matched uppercase absolute paths
   (`<ABS/...>`); this one was lowercase (`<d/qujing/...>`). When
-  re-sweeping for this class, grep case-insensitively.)
+  re-sweeping for this class, grep case-insensitively. Also found as a
+  single-file instance on `jyqxc2013fwq` (`combatd.lpc`'s
+  `#include </quest/quest.h>`, the only angle-bracket absolute include
+  in an otherwise all-quoted codebase) — compiled fine once quoted, but
+  then hit this section's `inherit`-after-globals bullet below, since
+  the newly-resolved header's top-level `mapping` landed above the
+  file's `inherit` statement; fixed by moving the #include below the
+  inherit line. Worth checking for both bugs stacked whenever a single
+  angle-bracket absolute include is the only thing wrong with a file.)
   **Alternative fix when quoting individual `#include` lines is
   impractical (many scattered occurrences, or the exact same shape
   keeps recurring across new content)**: found on `unknownlib20150716`'s
