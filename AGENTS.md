@@ -349,6 +349,21 @@ points before quit saves", `xiaoaojianghu2`), skill/combat cooldowns —
 those are game design, not hosting protection. Record every bypassed
 gate in the lib's NOTES.md.
 
+- **Wizard-only-loopback login/registration gates** — a `sited.lpc`-style
+  `is_valid(id, ip)` that special-cases `127.0.0.1`/`localhost` to
+  require `wiz_level(id)` (protecting the server's own local console
+  from casual access) can end up blocking the literal registration
+  keyword itself (e.g. `"new"`), since a not-yet-chosen id is never a
+  wizard — every WASM/local-telnet registration attempt dies at the very
+  first prompt with a generic "can't login from this address" message,
+  before the id has even been typed. Bypass narrowly: add the keyword
+  (`id == "new"`) as an explicit exception alongside whatever hardcoded
+  bootstrap-id exception the lib already has (e.g. `sjshv150`'s own
+  `id == "allenc"`), not a blanket loopback bypass — real remote
+  deployments never hit the loopback branch at all, so this is exactly
+  the same class of test-only friction as the two gates above.
+  (`sjshv150`.)
+
 ### 1.4 WASM triage playbook (per lib)
 
 Status lives in `scripts/wasm_status.json` (generated), the README table,
