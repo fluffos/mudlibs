@@ -143,8 +143,8 @@ classes it's found.
 |---|---|---|---|---|---|
 | 001 | `shanhaizhanshen` | 山海战神 | `山海战神.rar` | 40001 | WASM playable |
 | 002 | `xingzhanyingxiong` | 星战英雄 | `星战英雄.rar` | 40002 | WASM playable |
-| 003 | `unknownlib20150716` | 小雨西游Ⅱ (Xiaoyu Xiyou II) | `20150716未知lib.zip` | 40003 | WASM limited |
-| 003-1 | `xiaoyuxiyou` | 小雨西游 | `小雨西游.zip` | 40046 | WASM limited |
+| 003 | `unknownlib20150716` | 小雨西游Ⅱ (Xiaoyu Xiyou II) | `20150716未知lib.zip` | 40003 | WASM playable |
+| 003-1 | `xiaoyuxiyou` | 小雨西游 | `小雨西游.zip` | 40046 | WASM playable |
 | 004 | `bxsj` | 书剑天下 (ShuJian MUD) | `bxsj.rar` | 40004 | WASM limited |
 | 004-1 | `bxsj1` | 书剑·经典 (ShuJian Classic) | `bxsj1.rar` | 40005 | WASM limited |
 | 004-2 | `jinyongwenzi` | 金庸文字版 | `金庸文字版 (1).exe` | — | pending |
