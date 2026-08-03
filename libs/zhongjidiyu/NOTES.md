@@ -790,3 +790,7 @@ clean.
   entirely after the fix, confirms no regression for a clean account).
   `data/user/f/fluffos.o` (admin) timestamp-touched by ordinary login, no
   content change beyond `last_on`.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+尽管标题相似，但和 hell 那对"终极地狱"没有关系。状态已从过时的 limited 修正——这份档案自己的 README 和 group_note 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）干净正常，'目前权限：(admin)'。另外还发现并修复了一个和手足档案 zjdyaryl/zjdyzj 共有的真实 bug：clone/user/login.lpc 的 query_save_file() 只防范了 id 不是字符串的情况（!stringp(id)），没有防范空字符串的情况——对 "" 取 id[0] 会回传整数 0，而 sprintf 的 %c 格式会拒绝这个值（'Incorrect argument to type %c, must be valid UTF8 char'），在任何 id 被输入之前，第一次自动呼叫 query_save_file() 就会崩溃。已通过额外检查 id == "" 修复。

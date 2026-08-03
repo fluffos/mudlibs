@@ -445,3 +445,7 @@ dir`) as part of a repo-wide port of a bug found live on sibling
 log_error writes to a bogus path); didn't fire in this lib's own sit,
 fixed proactively since it's the identical shared file. Retest: fresh
 registration (id `sanbztz`/秦峰) through look/score/quit, clean.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+状态已从过时的 limited 修正——这份档案自己的 README 和 group_note 里从未记录过任何缺陷说明，本轮重新测试也没有发现：完整的管理员登录流程（GB/BIG5 选择→一个"①进入(Enter) ②退出(Exit)"闸门，需要输入字面数字 '1'，而不是直接回车→id+登录密码→第三道密码提示，这份档案自己独有的"巫师专用密码"，按其自己 README 的说法，和登录密码、管理员/找回密码都不一样）能够干净完成：'您的系统权限目前是：总管巫师(admin)'，quit 正常。

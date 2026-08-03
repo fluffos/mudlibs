@@ -709,3 +709,7 @@ this lib's earlier lpcc-sweep section above). All 5 previously-documented
 regression-fixes (is_killing() type mismatches, message() bare-int
 guard, log_error() warning gate, eventd.lpc rename-width fix, shusheng.lpc
 factory-call guard) spot-checked present and untouched by this pass.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+状态已从过时的 limited 修正——这份档案自己的 README 和 group_note 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）干净正常，'目前权限：(admin)'。
