@@ -70,7 +70,7 @@
 #define PIG_D                   "/adm/daemons/pigd"
 #define PROFILE_D               "/adm/daemons/profiled"
 #define RANK_D                  "/adm/daemons/rankd"
-#define SECURITY_D              "/adm/obj/securityd"
+#define SECURITY_D              "/adm/daemons/securityd"
 #define UPDATE_D                "/adm/daemons/updated"
 #define VIRTUAL_D               "/adm/daemons/virtuald"
 #define WEAPON_D                "/adm/daemons/weapond"

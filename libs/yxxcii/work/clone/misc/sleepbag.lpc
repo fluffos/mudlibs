@@ -1,128 +1,116 @@
-
 // sleepdai.c
 #include <ansi.h>
-void wakeup(object,object);
+void wakeup(object, object);
 
 inherit ITEM;
 int sleep_number;
 
-void create()
-{
-	sleep_number = (random(10) + 10);
-	set_name(HIY"睡袋"NOR, ({ "sleep dai","dai"}) );
-	set_weight(1500);
-	set_max_encumbrance(8000);
-	if( clonep() )
-		set_default_object(__FILE__);
-	else {
-	  set("unit", "只");
-	  set("long", "这是一只普通的麻织睡袋，江湖人士用它来在野外露宿。\n");
-	  set("value", 100);
-	}
+void create() {
+  sleep_number = (random(10) + 10);
+  set_name(HIY "睡袋" NOR, ({ "sleep dai", "dai" }));
+  set_weight(1500);
+  set_max_encumbrance(8000);
+  if (clonep())
+    set_default_object(__FILE__);
+  else {
+    set("unit", "只");
+    set("long", "这是一只普通的麻织睡袋，江湖人士用它来在野外露宿。\n");
+    set("value", 100);
+  }
 }
-int is_container()	  {return 1;}
+int is_container() { return 1; }
 
-int init()
-{
-	if (!environment(this_player())->query("sleep_room")&&present("sleep dai",this_player()))
-	{
-		add_action("do_sleep", "sleep");
-	}
+int init() {
+  if (!environment(this_player())->query("sleep_room") && present("sleep dai", this_player())) {
+    add_action("do_sleep", "sleep");
+  }
 }
 
-int do_sleep(object me, string arg)
-{
-	object where;
-	mapping fam;
-	me = this_player();
-	where = environment(me);
+int do_sleep(object me, string arg) {
+  object where;
+  mapping fam;
+  me = this_player();
+  where = environment(me);
 
-	if(where->query("no_sleep_room") || where->query("outdoors"))
-		return notify_fail("这里太杂乱了，你怎么也睡不着。\n");
+  if (where->query("no_sleep_room") || where->query("outdoors"))
+    return notify_fail("这里太杂乱了，你怎么也睡不着。\n");
 
-	if(sleep_number<1)
-{
-	write(HIR"这个睡袋已经破烂不堪，不能再睡了。\n"NOR);
-	destruct(this_object());
-	return 0;
+  if (sleep_number < 1) {
+    write(HIR "这个睡袋已经破烂不堪，不能再睡了。\n" NOR);
+    destruct(this_object());
+    return 0;
+  }
+
+
+
+  seteuid(getuid());
+  if (me->is_busy())
+    return notify_fail(HIG "你正忙着呢！\n" NOR);
+
+  if (me->is_fighting())
+    return notify_fail(HIR "战斗中不能睡觉！\n" NOR);
+
+  if (where->query("sleep_room")) {
+    write(HIW "你往睡袋里一躺，开始睡觉。\n" NOR);
+    write(HIC "不一会儿，你就进入了梦乡。\n" NOR);
+    me->set_temp("block_msg/all", 1);
+    message_vision(HIG "$N一歪身，倒在睡袋里，不一会便鼾声大作，进入了梦乡。\n" NOR, me);
+  } else {
+    write(HIW "你展开一个睡袋钻了进去，开始睡觉。\n" NOR);
+    write(HIC "不一会儿，你就进入了梦乡。\n" NOR);
+    me->set_temp("block_msg/all", 1);
+    message_vision(HIG "$N展开一个睡袋钻了进去，不一会便鼾声大作，做起梦来。\n" NOR, me);
+  }
+
+  if (!where->query("no_fight")) {
+    where->set("no_fight", 1);
+    set("change_room", 1);
+  }
+  where->add_temp("sleeping_person", 1);
+  me->set_temp("block_msg/all", 1);
+  me->set("no_get", 1);
+  sleep_number--;
+  me->set("no_get_from", 1);
+
+  if (!(where->query("hotel")))
+    me->set_temp("sleeped", 1);
+  else
+    me->delete_temp("rent_paid");
+
+  me->disable_player("<睡梦中>");
+
+  call_out("wakeup", random(3) + 2, me, where);
+
+  return 1;
 }
 
+void wakeup(object me, object where) {
+  me->set("qi", me->query("eff_qi"));
+  me->set("jing", me->query("eff_jing"));
+  me->add("neili", me->query("max_neili") / 2 - me->query("neili") / 2);
+  me->enable_player();
 
+  message_vision(HIG "$N一觉醒来，精力充沛地活动了一下筋骨。\n" NOR, me);
+  me->set_temp("block_msg/all", 0);
+  write(HIG "你一觉醒来，只觉精力充沛。该活动一下了。\n" NOR);
 
-	seteuid(getuid());
-	if (me->is_busy())
-		return notify_fail(HIG"你正忙着呢！\n"NOR);
+  if (!where->query("sleep_room") && !where->query("hotel")) {
+    me->set("qi", me->query("eff_qi"));
+    me->set("jing", me->query("eff_jing"));
+    me->add("neili", me->query("max_neili") / 2 - me->query("neili") / 2);
+    me->enable_player();
 
-	if( me->is_fighting() )
-		return notify_fail(HIR"战斗中不能睡觉！\n"NOR);
+    message_vision(HIG "$N一觉醒来，精力充沛地活动了一下筋骨。\n" NOR, me);
+    me->set_temp("block_msg/all", 0);
+    write(HIG "你一觉醒来，只觉精力充沛。该活动一下了。\n" NOR);
+    if (query("change_room")) {
+      where->set("no_fight", 0);
+    }
+    if (!where->query("sleep_room") && !where->query("hotel"))
+      where->add_temp("sleeping_person", -1);
+    me->delete_temp("sleeped");
+    me->delete("no_get");
+    me->delete("no_get_from");
 
-	if (where->query("sleep_room"))
-{
-		write(HIW"你往睡袋里一躺，开始睡觉。\n"NOR);
-		write(HIC"不一会儿，你就进入了梦乡。\n"NOR);
-		me->set_temp("block_msg/all",1);
-		message_vision(HIG"$N一歪身，倒在睡袋里，不一会便鼾声大作，进入了梦乡。\n"NOR,me);
- }	   
-	else { 
-		write(HIW"你展开一个睡袋钻了进去，开始睡觉。\n"NOR);
-		write(HIC"不一会儿，你就进入了梦乡。\n"NOR);
-		me->set_temp("block_msg/all",1);
-		message_vision(HIG"$N展开一个睡袋钻了进去，不一会便鼾声大作，做起梦来。\n"NOR,me);
-	}
-
-	if(!where->query("no_fight")) {
-	where->set("no_fight", 1);
-	set("change_room",1);
+  }
 }
-	where->add_temp("sleeping_person", 1);
-	me->set_temp("block_msg/all",1);
-	me->set("no_get", 1);   
-	sleep_number--;
-	me->set("no_get_from", 1);	  
-	
-	if (!(where->query("hotel"))) 
-		me->set_temp("sleeped",1);
-	else
-		me->delete_temp("rent_paid");
-
-	me->disable_player("<睡梦中>");
-
-	call_out("wakeup", random(3) + 2, me, where);
-	
-	return 1;
-}
-
-void wakeup(object me,object where)
-{
-	me->set("qi",	me->query("eff_qi"));
-	me->set("jing",  me->query("eff_jing"));
-	me->add("neili", me->query("max_neili")/2 - me->query("neili")/2 );
-	me->enable_player();
-  
-	message_vision(HIG"$N一觉醒来，精力充沛地活动了一下筋骨。\n"NOR,me);
-	me->set_temp("block_msg/all", 0);
-	write(HIG"你一觉醒来，只觉精力充沛。该活动一下了。\n"NOR);
-
-	if (!where->query("sleep_room") && !where->query("hotel"))
-{
-	me->set("qi",	me->query("eff_qi"));
-	me->set("jing",  me->query("eff_jing"));
-	me->add("neili", me->query("max_neili")/2 - me->query("neili")/2 );
-	me->enable_player();
-  
-	message_vision(HIG"$N一觉醒来，精力充沛地活动了一下筋骨。\n"NOR,me);
-	me->set_temp("block_msg/all", 0);
-	write(HIG"你一觉醒来，只觉精力充沛。该活动一下了。\n"NOR);
-	if(query("change_room")) {
-	where->set("no_fight",0);
-}
-	if (!where->query("sleep_room") && !where->query("hotel"))
-	where->add_temp("sleeping_person", -1);
-	me->delete_temp("sleeped");
-	me->delete("no_get");   
-	me->delete("no_get_from");	  
-
-}
-}
-
-
