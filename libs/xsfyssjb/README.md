@@ -2,7 +2,9 @@
 
 风云Ⅳ（Sumxin 风云），以古龙小说为背景的 MUD
 （sumxin.com/bbs、fy.sumxin.com）。和这一轮的另一个"风云"手足档案
-`wqfy` 是同类 bug 模式，不过底层代码库并不相同。
+`wqfy` 是同类 bug 模式，不过底层代码库并不相同；和 `fysjmb`
+（风云四解密版）才是真正同源代码——`d/dreamland/shanding.lpc` 等
+文件逐字节相同，此前两份档案都没有互相记录这层关系。
 
 ## 内容亮点
 

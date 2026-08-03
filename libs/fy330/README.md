@@ -6,6 +6,15 @@
 jhfy3/fyzfqyy/fengyun2qinghua/fengyun3dianzang/fengyun3xiuding/
 jianghufengyun/zzfy/zzfy3/fengyun434/fy2005）也无 master-hash 匹配。
 
+## 内容亮点
+
+- 和 `fy2mg`（风云II美国版本）同属"金庸群侠传"/XKX 框架家族，登录
+  流程、密码复杂度要求、民族选择等字节级相同，但和本合集里其它
+  "风云"系档案（`fy2`/`fys`/`jhfy2`/`jhfy3`/`zzfy3` 等）都没有代码
+  匹配，是这批"风云"系里又一个独立分支。
+- 新手起始房间"凤求凰客栈"有持续的 NPC 心跳对话，气氛比一般的静
+  态新手房更热闹（但也因此测试脚本容易被岔开话题，详见下方说明）。
+
 ## 注册流程
 
 `new` 触发注册 → 英文 id（3-10 个英文字母）→ 确认创建（y/n）→ 中文
