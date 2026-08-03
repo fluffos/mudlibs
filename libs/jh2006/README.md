@@ -3,6 +3,18 @@
 游戏内标题为"江湖2005"（Annihilator/书剑 ES2 血统），金庸题材
 mudlib。
 
+## 内容亮点
+
+- Annihilator 的 ES2/书剑 血统档案（和 ES II 家族的 `sjplgfjxb`/
+  `sjplii` 同宗，但和 Century/adm-single 家族的 `sjecl`/`sje` 是完
+  全不同的谱系），地图有"苗疆"（`d/miaojiang/`）等场景。
+- 查看人物状态的指令不是常见的 `score`，而是 `stscore`，是这份档
+  案自己的命名习惯。
+- 踩中了经典的死指令表 bug（AGENTS.md §8.3b）：`commandd.lpc` 的
+  `rehash()` 用 `sscanf` 匹配旧版 `.c` 文件后缀来重建指令表，转换
+  成 `.lpc` 后缀后这个匹配永远落空，导致除了 `look`/`quit` 之外几
+  乎所有指令（包括 `stscore`）都变成"什么？"。
+
 ## 注册流程
 
 连线后先回答 BIG5 字体问题（y/n，本次未发现编码问题）→ 英文 ID
