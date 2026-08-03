@@ -366,12 +366,20 @@ gate in the lib's NOTES.md.
 
 ### 1.4 WASM triage playbook (per lib)
 
-Status lives in `scripts/wasm_status.json` (generated), the README table,
-and each lib's NOTES.md. For every lib not yet `playable`:
+Status lives in `libs/<slug>/meta.json`'s `wasm_status`/`group_note`
+fields — the single per-lib source of truth (also read for the main
+README table). `scripts/gen_site_index.py` (the Pages site generator)
+derives the deployed site's status badges directly from every lib's
+`meta.json` on each run (via `scripts/assemble_numbering.py`, which it
+always re-invokes first) — editing a lib's `meta.json` and re-running the
+site generator is the entire update path; there is no separate cache file
+to hand-sync. (`scripts/wasm_status.json` is still written as a build
+artifact/inspectable snapshot, but nothing reads it back to derive
+status.) For every lib not yet `playable`:
 
 1. Reproduce: `wasm_client.js` with the lib's documented login sequence
-   (read its README/NOTES for the flow — id, hidden prompts, Chinese
-   name). Read the FULL transcript plus captured driver output.
+   (read its README for the flow — id, hidden prompts, Chinese name).
+   Read the FULL transcript plus captured driver output.
 2. Classify against §1.3: IP-parse rejection/crash (a) → wait for the
    driver fix, or apply the loopback patch (b); sockets-absent daemon
    crash (c) → guard; pcre (d) → rewrite; instant silent disconnect at
@@ -381,9 +389,8 @@ and each lib's NOTES.md. For every lib not yet `playable`:
    WASM-only genuine mudlib bug is rare.
 3. Fix, re-run the FULL flow (registration with a real Chinese name →
    `look` → `score` → `quit`, same standard as native, §10.1).
-4. Update `wasm_status.json`'s source (the status is generated — fix the
-   underlying record, currently the per-lib notes it is generated from),
-   the lib's NOTES.md, and README table status.
+4. Update the lib's own `meta.json` (`wasm_status`, `group_note`) and the
+   main README table.
 5. Known one-off oddities to not rediscover: `xo` reaches the gender
    prompt then hangs at world-entry under WASM only (not IP-related, not
    reproducible on sibling `xo_final` — unexplained, flagged);

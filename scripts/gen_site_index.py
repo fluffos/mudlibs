@@ -2,13 +2,30 @@
 """Generate the GitHub Pages index for the packed mudlib site.
 
 Inputs (all inside this repo):
-  TODO.md            per-lib rows; the "2026-07-23 rebuild+format+WASM pass:"
-                     note in each row's Notes cell records the lib's WASM
-                     status, from which we derive:
-                       playable -- fully works end-to-end in the browser
-                       limited  -- boots, but login is blocked/limited
-                                   (reason kept alongside)
-                       noboot   -- does not boot under WASM at all
+  libs/<slug>/meta.json  per-lib source of truth (see AGENTS.md and
+                     scripts/assemble_numbering.py's docstring for the
+                     per-lib-file design rationale). The fields this
+                     script reads:
+                       wasm_status  playable / limited / partial /
+                                    password-protected / noboot /
+                                    not-mudlib / not-convertible /
+                                    deprioritized / "" (not yet WASM-
+                                    tested) -- mapped to the site's
+                                    3-tier badge via STATUS_MAP below;
+                                    entries in EXCLUDE_STATUSES (and
+                                    anything with duplicate_of set, or
+                                    missing libs/<slug>/config.fluffos)
+                                    are left off the site entirely.
+                       group_note   English WASM-pass summary, shown as
+                                    the badge's hover reason and the
+                                    on-card "reason" line for non-
+                                    playable entries.
+                     This script always re-runs assemble_numbering.py
+                     first so scripts/lib_numbering.json (its aggregated
+                     view of every meta.json) can never go stale under
+                     it -- editing a lib's meta.json and re-running this
+                     script is the entire update path, no separate sync
+                     step to remember or forget.
   libs/<slug>/README.md  first heading = the game's Chinese name; first
                      paragraph of the 简介 section = 1-line description;
                      the 「## 管理员账号 / Admin account」 section = the
@@ -26,9 +43,11 @@ Inputs (all inside this repo):
                      that line from the card.
 
 Outputs:
-  scripts/wasm_status.json  the derived slug -> status mapping (build
-                            artifact, so the parse is inspectable)
-  <out>/index.html          the site index (default: site/index.html)
+  scripts/lib_numbering.json  refreshed in place (see above).
+  scripts/wasm_status.json  the derived slug -> status mapping, kept as a
+                     build artifact for scripts/build_site.sh (which reads
+                     it for the packable-slugs list) and for inspectability.
+  <out>/index.html   the site index (default: site/index.html)
 
 Usage: python3 scripts/gen_site_index.py [--out DIR] [--commits FILE]
 """
@@ -37,69 +56,79 @@ import argparse
 import html
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 REPO_URL = "https://github.com/fluffos/mudlibs"
 
-PASS_MARKER = "rebuild+format+WASM pass:"
+# libs/<slug>/meta.json's wasm_status enum -> the site's 3-tier badge.
+# "limited"/"partial"/"password-protected" all mean "boots, but login is
+# blocked or unverified" -- exactly the site's existing "受限" bucket.
+STATUS_MAP = {
+    "playable": "playable",
+    "limited": "limited",
+    "partial": "limited",
+    "password-protected": "limited",
+    "noboot": "noboot",
+}
+# Statuses (and "" = not yet WASM-tested) that never appear on the site:
+# not-mudlib/not-convertible/deprioritized entries commonly have no
+# libs/<slug>/ dir at all (see scripts/non_mudlib_meta/), and even when
+# they do there is nothing confirmed playable to advertise.
+EXCLUDE_STATUSES = {"not-mudlib", "not-convertible", "deprioritized", ""}
 
-# A lib is "playable" only when the pass note claims a verified full flow.
-PLAYABLE_PATTERNS = [
-    r"WASM fully works",
-    r"full WASM playthrough confirmed",
-    r"native\+WASM both clean",
-    r"WASM works\b",
-    r"playthrough both natively and under WASM",
-    r"registration worked fully under WASM",
-    r"clean both natively and under WASM",
-    r"WASM plays essentially identically to native",
-]
-NOBOOT_PATTERN = r"WASM does NOT boot"
+
+def load_lib_numbering():
+    """Refresh scripts/lib_numbering.json from every libs/<slug>/meta.json
+    (see assemble_numbering.py's docstring for why that's the aggregation
+    point), then load it. Doing this unconditionally on every run is what
+    keeps the index from ever going stale relative to a lib's own
+    meta.json -- there is no separate sync step to remember."""
+    subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "assemble_numbering.py")],
+        check=True, cwd=REPO)
+    path = REPO / "scripts" / "lib_numbering.json"
+    return json.loads(path.read_text(encoding="utf-8"))["libs"]
 
 
-def parse_todo(todo_path):
-    """Yield dicts for every per-lib row with Status == done."""
-    rows = []
-    for line in todo_path.read_text(encoding="utf-8").splitlines():
-        if not line.startswith("| "):
+def build_status_from_meta():
+    """Return the {"counts": ..., "libs": {slug: {...}}} shape the rest of
+    this script expects, derived from every libs/<slug>/meta.json via
+    scripts/lib_numbering.json (see module docstring)."""
+    libs = {}
+    for entry in load_lib_numbering():
+        if entry.get("duplicate_of"):
             continue
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        # Notes cells may themselves contain '|' (e.g. a literal "||->&&"
-        # code fix) -- rejoin everything past the 5th cell.
-        if len(cells) < 6 or not cells[0].isdigit():
+        slug = entry["slug"]
+        wasm_status = entry.get("wasm_status") or ""
+        if wasm_status in EXCLUDE_STATUSES:
             continue
-        num, archive, slug, port, status = cells[:5]
-        notes = "|".join(cells[5:]).strip()
-        if status != "done":
+        if wasm_status not in STATUS_MAP:
+            raise SystemExit(
+                f"lib {slug}: unrecognized wasm_status {wasm_status!r} in "
+                "meta.json -- add it to STATUS_MAP or EXCLUDE_STATUSES in "
+                "scripts/gen_site_index.py")
+        if not (REPO / "libs" / slug / "config.fluffos").is_file():
+            # Declared playable/limited but nothing to actually pack --
+            # skip rather than ship a dead link.
             continue
-        if not slug:
-            raise SystemExit(f"TODO.md row #{num}: done but no slug")
-        rows.append(
-            {"archive_num": int(num), "archive": archive, "slug": slug,
-             "port": port, "notes": notes}
-        )
-    if not rows:
-        raise SystemExit("no done rows parsed from TODO.md")
-    return rows
-
-
-def classify(slug, notes):
-    """Return (status, wasm_note) derived from the WASM pass note."""
-    if PASS_MARKER not in notes:
-        raise SystemExit(
-            f"lib {slug}: no '{PASS_MARKER}' note in its TODO.md row -- "
-            "cannot derive a WASM status")
-    seg = notes.rsplit(PASS_MARKER, 1)[1].strip()
-    idx = seg.find("WASM")
-    wasm_note = re.sub(r"\s+", " ", seg[idx:] if idx >= 0 else seg).strip()
-    if re.search(NOBOOT_PATTERN, seg):
-        return "noboot", wasm_note
-    for pat in PLAYABLE_PATTERNS:
-        if re.search(pat, seg):
-            return "playable", wasm_note
-    return "limited", wasm_note
+        status = STATUS_MAP[wasm_status]
+        name, desc = parse_readme(slug)
+        libs[slug] = {
+            "name": name,
+            "status": status,
+            "reason": entry.get("group_note") or "",
+            "description": desc,
+            "archive": entry.get("archive", ""),
+            "archive_num": entry.get("number", ""),
+            "port": entry.get("port", ""),
+        }
+    counts = {}
+    for info in libs.values():
+        counts[info["status"]] = counts.get(info["status"], 0) + 1
+    return {"generated_from": "libs/*/meta.json", "counts": counts, "libs": libs}
 
 
 def parse_readme(slug):
@@ -159,27 +188,6 @@ def parse_admin(slug):
     if re.search(r"(?:密码|password)[^\n`]*[:：]\s*无", sec):
         return mid.group(1), ""  # documented "no password step"
     return mid.group(1), None
-
-
-def build_status(rows):
-    libs = {}
-    for row in rows:
-        slug = row["slug"]
-        status, wasm_note = classify(slug, row["notes"])
-        name, desc = parse_readme(slug)
-        libs[slug] = {
-            "name": name,
-            "status": status,
-            "reason": wasm_note,
-            "description": desc,
-            "archive": row["archive"],
-            "archive_num": row["archive_num"],
-            "port": row["port"],
-        }
-    counts = {}
-    for info in libs.values():
-        counts[info["status"]] = counts.get(info["status"], 0) + 1
-    return {"generated_from": "TODO.md", "counts": counts, "libs": libs}
 
 
 BADGE = {
@@ -445,22 +453,17 @@ def main():
         commits = json.loads(
             Path(args.commits).read_text(encoding="utf-8")).get("libs", {})
 
-    # TODO.md was retired (its content consolidated into README.md and
-    # AGENTS.md); the checked-in scripts/wasm_status.json is now the
-    # source of truth for per-lib WASM status. If TODO.md still exists
-    # (historical checkout), re-derive and refresh the JSON from it;
-    # otherwise read the JSON directly. Update the JSON by hand (or via
-    # a future status-updating tool) when a lib's WASM status changes.
+    # Status is derived fresh from every libs/<slug>/meta.json on every
+    # run (see build_status_from_meta / module docstring) -- there is no
+    # separate cache file to keep in sync by hand. wasm_status.json is
+    # still written, as a build artifact for build_site.sh's slug list
+    # and for inspectability, but it is output-only now: nothing reads
+    # it back to derive status.
+    status = build_status_from_meta()
     status_path = REPO / "scripts" / "wasm_status.json"
-    todo = REPO / "TODO.md"
-    if todo.is_file():
-        rows = parse_todo(todo)
-        status = build_status(rows)
-        status_path.write_text(
-            json.dumps(status, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8")
-    else:
-        status = json.loads(status_path.read_text(encoding="utf-8"))
+    status_path.write_text(
+        json.dumps(status, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8")
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -468,13 +471,8 @@ def main():
                                         encoding="utf-8")
 
     total = len(status["libs"])
-    print(f"wasm_status.json: {total} libs -> {status['counts']}")
+    print(f"derived from meta.json: {total} libs -> {status['counts']}")
     print(f"index written to {out_dir / 'index.html'}")
-    missing = [s for s in status["libs"]
-               if not (REPO / "libs" / s / "config.fluffos").is_file()]
-    if missing:
-        print(f"warning: slugs without libs/<slug>/config.fluffos: {missing}",
-              file=sys.stderr)
 
 
 if __name__ == "__main__":
