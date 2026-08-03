@@ -1,0 +1,658 @@
+// logind.c
+
+#include <ansi.h>
+#include <command.h>
+#include <login.h>
+
+inherit F_DBASE;
+
+int wiz_lock_level = WIZ_LOCK_LEVEL;
+string *banned_name = ({
+	"你", "妳", "我", "他", "她", "牠", "它", "祂", "您",
+});
+
+void logon(object ob);
+private void get_id(string arg, object ob);
+private void get_passwd(string pass, object ob);
+private void confirm_relogin(string yn, object ob, object user);
+private void confirm_id(string yn, object ob);
+private void get_name(string arg, object ob);
+private void new_password(string pass, object ob);
+private void confirm_password(string pass, object ob);
+private void get_email(string email, object ob);
+private void get_attributes( string arg, object ob, object user);
+private void get_gender(string gender, object ob, object user);
+object make_body(object ob);
+private void init_new_player(object user);
+varargs void enter_world(object ob, object user, int silent);
+varargs void reconnect(object ob, object user, int silent);
+object find_body(string name);
+int check_legal_id(string arg);
+int check_legal_name(string arg);
+object find_body(string name);
+int set_wizlock(int level);
+string wiz_lev(int lev);
+
+void create() 
+{
+	seteuid(getuid());
+	set("channel_id", "連線精靈");
+}
+
+void logon(object ob)
+{
+	object *usr;
+	int i, wiz_cnt, ppl_cnt, login_cnt;
+
+	cat(WELCOME);
+	UPTIME_CMD->main();
+
+	usr = users();
+	wiz_cnt = 0;
+	ppl_cnt = 0;
+	login_cnt = 0;
+	for(i=0; i<sizeof(usr); i++) {
+		if( !environment(usr[i]) ) login_cnt++;
+//		else if( wizardp(usr[i]) ) wiz_cnt++;
+		else ppl_cnt++;
+	}
+//	printf("目前共有 %d 位巫師、%d 位玩家在線上, 以及 %d 位使用者嘗試連線中.\n",
+//		wiz_cnt, ppl_cnt, login_cnt );
+	printf("目前共有 %d 位使用者在線上, 另外有 %d 位正在嘗試連線.\n",
+		ppl_cnt, login_cnt );
+
+	write("您的英文名字: ");
+	input_to( (: get_id :), ob );
+}
+
+private void get_id(string arg, object ob)
+{
+	object ppl;
+
+	arg = lower_case(arg);
+	if( !check_legal_id(arg)) {
+		write("您扮演角色的英文名字: ");
+		input_to("get_id", ob);
+		return;
+	}
+
+#ifdef MAX_USERS
+	if( (string)SECURITY_D->get_status(arg)=="(player)"
+	&& sizeof(users()) >= MAX_USERS ) {
+		ppl = find_body(arg);
+// Only allow reconnect an interactive player when MAX_USERS exceeded.
+		if( !ppl || !interactive(ppl) ) {
+			write("對不起, " + MUD_NAME + " 的使用者已經太多了, 請待會再來.\n");
+			destruct(ob);
+			return;
+		}
+	}
+#endif
+
+	if( wiz_level(arg) < wiz_lock_level ) {
+		write("對不起, " + MUD_NAME + " 目前限制巫師等級 " + wiz_lev(wiz_lock_level)
+			+ " 以上的人才能連線.\n");
+		destruct(ob);
+		return;
+	}
+	
+	if( (string)ob->set("id", arg) != arg ) {
+		write("Failed setting user name.\n");
+		destruct(ob);
+		return;
+	}
+
+	if( file_size(ob->query_save_file() + __SAVE_EXTENSION__) >= 0 ) {
+		if( ob->restore() ) {
+			write("請輸入密碼: ");
+			input_to("get_passwd", 1, ob);
+			return;
+		}
+		write("您的人物儲存擋出了一些問題, 請使用其他人物通知巫師處理.\n");
+		destruct(ob);
+		return;
+	}
+
+	write("使用 " + (string)ob->query("id") + " 這個名字將會創造一個新的人物, 您確定嗎(y/n)? ");
+	input_to("confirm_id", ob);
+}
+
+private void get_passwd(string pass, object ob)
+{
+	string my_pass;
+	object user;
+
+	write("\n");
+	my_pass = ob->query("password");
+	if( crypt(pass, my_pass) != my_pass ) {
+                write("密碼錯誤.\n");
+		log_file( "CRACK", sprintf("Attempted to crack %s ( %s )'s character from %s [%s]\n",
+			ob->query("name"), ob->query("id"),
+			query_ip_name(ob), ctime(time()) ) );
+		destruct(ob);
+		return;
+	}
+
+// Check if we are already playing.
+	user = find_body(ob->query("id"));
+	if (user) {
+		if( user->query_temp("netdead") ) {
+			reconnect(ob, user);
+			return;
+		}
+		write("您要將另一個連線中的相同人物趕出去, 取而代之嗎? (y/n)");
+		input_to("confirm_relogin", ob, user);
+		return;
+	}
+
+	if( objectp(user = make_body(ob)) ) {
+		if( user->restore() ) {
+			log_file( "USAGE", sprintf("%s (%s) loggined from %s [%s]\n",
+				user->query("name"), user->query("id"),
+				query_ip_name(ob), ctime(time()) ) );
+			enter_world(ob, user);
+			return;
+		} else {
+			destruct(user);
+		}
+	}
+	write("請您重新創造這個人物.\n");
+	confirm_id("y", ob);
+}
+
+private void confirm_relogin(string yn, object ob, object user)
+{
+	object old_link;
+
+	if( yn=="" ) {
+		write("您要將另一個連線中的相同人物趕出去, 取而代之嗎? (y/n)");
+		input_to("confirm_relogin", ob, user);
+		return;
+	}	
+
+	if( yn[0]!='y' && yn[0]!='Y' ) {
+		write("好吧.\n");
+		destruct(ob);
+		return;
+	} else {
+		tell_object(user, "有人從別處( " + query_ip_number(ob)
+			+ " )連線取代你所控制的人物.\n");
+		log_file( "USAGE", sprintf("%s (%s) replaced by %s [%s]\n",
+			user->query("name"), user->query("id"),
+			query_ip_name(ob), ctime(time()) ) );
+	}
+
+// Kick out tho old player.
+	old_link = user->link();
+	if( old_link ) {
+		exec(old_link, user);
+		destruct(old_link);
+	}
+
+	reconnect(ob, user);	
+}
+
+private void confirm_id(string yn, object ob)
+{
+	if( yn=="" ) {
+		write("使用這個名字將會創造一個新的人物, 您確定嗎(y/n)? ");
+		input_to("confirm_id", ob);
+		return;
+	}	
+
+	if( yn[0]!='y' && yn[0]!='Y' ) {
+		write("好吧, 那麼請重新輸入您扮演角色的英文名字: ");
+		input_to("get_id", ob);
+		return;
+	}
+
+	write("您扮演角色的中文名字: ");
+	input_to("get_name", ob);
+}
+
+private void get_name(string arg, object ob)
+{
+	if( !check_legal_name(arg) ) {
+		write("您的中文名字 (可用英文) : ");
+		input_to("get_name", ob);
+		return;
+	}
+
+	printf("%O\n", ob);
+	ob->set("name", NOR + arg);
+	write("請設定您的密碼: ");
+	input_to("new_password", 1, ob);
+}
+
+private void new_password(string pass, object ob)
+{
+	write("\n");
+	if( strlen(pass)<5 ) {
+		write("密碼的長度至少要五個字元, 請重設您的密碼: ");
+		input_to("new_password", 1, ob);
+		return;
+	}
+	ob->set("password", crypt(pass,0) );
+	write("請再輸入一次您的密碼, 以確認您沒記錯: ");
+	input_to("confirm_password", 1, ob);
+}
+
+private void confirm_password(string pass, object ob)
+{
+	string old_pass;
+	write("\n");
+	old_pass = ob->query("password");
+	if( crypt(pass, old_pass)!=old_pass ) {
+		write("您兩次輸入的密碼並不一樣, 請重新設定一次密碼: ");
+		input_to("new_password", 1, ob);
+		return;
+	}
+
+	write("為了在發生疑似 multi-login  情形時保護您的權益,\n請您輸入您的電子郵件地址: ");
+	input_to("get_email",  ob);
+}
+
+private void get_email(string email, object ob)
+{
+	object user;
+
+	ob->set("email", email);
+
+// If you want do race stuff, ask player to choose one here, then you can
+// set the user's body after the question is answered. The following are
+// options for player's body, so we clone a body here.
+        ob->set("body", USER_OB);
+	if( !objectp(user = make_body(ob)) )
+		return;
+
+	write("請決定您的人物屬性 [輸入 ? 或 h 顯示說明]: ");
+	input_to("get_attributes", ob, user);
+
+}
+
+private void get_attributes( string arg, object ob, object user)
+{
+	int str, dex, inte, not, con, tec;
+	
+	if( arg == "?" || arg == "" || arg == "help" || arg == "h") {
+		write(@LONG
+  FF 的人物屬性分為 [力量] [敏捷] [智力] [注意] [體質] [技術] 六項.
+	(英文代號 : [str]  [dex]  [int]  [not]  [con]  [tec] )
+
+  屬性就是一個人物其天賦的能力及才能, 為先天的因素, 除了特殊情況不會改變.
+  玩家所能扮演的種族為人類, 各項屬性的上下限如下:
+  
+	力量 (str):	5 ~ 15
+	敏捷 (dex):	6 ~ 19
+	智力 (int):	5 ~ 23
+	注意 (not):	4 ~ 18
+	體質 (con):	7 ~ 17
+	技術 (tec):	2 ~ 22
+
+  現在, 你必須決定你扮演角色的人物屬性, 屬性的總和必須是 60.
+  例如輸入: 15 10 10 6 17 2  決定人物是個肌肉發達、耐打、不聰明、遲緩的人.
+
+  ( 輸入 str  可以參考力量這項屬性的說明. 其它屬性的說明以此類推 )
+
+LONG
+		);
+		write("請決定您的人物屬性 [輸入 ? 或 h 顯示說明]: ");
+		input_to("get_attributes", ob, user);
+		return;
+	}
+
+	else if( arg == "str" ) {
+		write(@LONG
+  力量 (str): Strength
+
+	力量指示出一個人的肌肉強度和爆發力, 力量越強的人, 攜帶物品的
+	總重量上限就越高、也能使用更沉重的武器、穿戴更重的裝甲. 力量
+	值高的人, 將在傳統格鬥方面的技能獲得加分, 使用空手搏擊或傳統
+	撞擊武器戰鬥時也能造成更大的傷害.
+
+LONG
+		);
+		write("請決定您的人物屬性 [輸入 ? 或 h 顯示說明]: ");
+		input_to("get_attributes", ob, user);
+		return;
+	}
+
+	else if( arg == "dex" ) {
+		write(@LONG
+  敏捷 (dex): Dexterity
+
+	敏捷指示出一個人協調全身動作的能力、身手靈敏的程度. 敏捷值越
+	高, 戰鬥中攻擊和防禦越佔優勢、也有較高的時間單位值. 人物的移
+	動值也與敏捷有關. 敏捷值高的人, 將在所有格鬥方面的技能獲得加
+	分. 
+
+LONG
+		);
+		write("請決定您的人物屬性 [輸入 ? 或 h 顯示說明]: ");
+		input_to("get_attributes", ob, user);
+		return;
+	}
+
+	else if( arg == "int" ) {
+		write(@LONG
+  智力 (int): Intellegence
+
+	智力反映出一個人的智能或天才. 智力越高, 學習的速度及領悟力越
+	高, 也較能從錯誤中汲取教訓. 智力高的人, 將在所有學術方面的技
+	能知識獲得加分.
+
+LONG
+		);
+		write("請決定您的人物屬性 [輸入 ? 或 h 顯示說明]: ");
+		input_to("get_attributes", ob, user);
+		return;
+	}
+
+	else if( arg == "not" ) {
+		write(@LONG
+  注意 (not): Notation
+
+	注意力指示一個人專心致志的能力, 注意力越高, 越能集中觀察力,
+	也越能發現旁人所忽略的細節. 注意力高的人, 所有技能值的上限將
+	高於 80.
+	
+LONG
+		);
+		write("請決定您的人物屬性 [輸入 ? 或 h 顯示說明]: ");
+		input_to("get_attributes", ob, user);
+		return;
+	}
+
+	else if( arg == "con" ) {
+		write(@LONG
+  體質 (con): Constitution
+
+	體質表示一個人身體「耐不耐命」. 體質越高的人, 越能承受較大的
+	傷害而不死亡, 治療時恢復的速度較快, 戰鬥時也較能忍受長期纏鬥.
+
+LONG
+		);
+		write("請決定您的人物屬性 [輸入 ? 或 h 顯示說明]: ");
+		input_to("get_attributes", ob, user);
+		return;
+	}
+
+	else if( arg == "tec" ) {
+		write(@LONG
+  技術 (tec): Tech
+
+	技術表示一個人對理性、機械、邏輯思考的能力. 技術值高的人, 能
+	製作並操作較複雜的電子、機械物品. 技術值高的人, 將在物品製造
+	及科學技術的技能獲得加分.
+
+LONG
+		);
+		write("請決定您的人物屬性 [輸入 ? 或 h 顯示說明]: ");
+		input_to("get_attributes", ob, user);
+		return;
+	}
+
+	else if( sscanf( arg, "%d %d %d %d %d %d", str, dex, inte, not, con, tec ) == 6 ) {
+		if( str < 5 || str > 15 || dex < 6 || dex > 19
+			|| inte < 5 || inte > 23 || not < 4 || not > 18
+			|| con < 7 || con > 17 || tec < 2 || tec > 22 ) {
+
+			write("抱歉您輸入的屬性值不符合規定的範圍, 請您重新輸入.\n");
+
+			write("請決定您的人物屬性 [輸入 ? 或 h 顯示說明]: ");
+			input_to("get_attributes", ob, user);
+			return;
+		} else if( ( str + dex + inte + not + con + tec ) == 60 ) {
+			user->set("str", str );
+			user->set("dex", dex );
+			user->set("int", inte );
+			user->set("not", not );
+			user->set("con", con );
+			user->set("tec", tec );
+		} else {
+			write("抱歉您輸入的屬性值總和為 " 
+			+ sprintf("%d", str + dex + inte + not + con + tec ) 
+			+ " , 請您調整到 60.\n");
+
+			write("請決定您的人物屬性 [輸入 ? 或 h 顯示說明]: ");
+			input_to("get_attributes", ob, user);
+			return;
+		}
+	}
+	
+	else {
+		write("請決定您的人物屬性 [輸入 ? 顯示說明]: ");
+		input_to("get_attributes", ob, user);
+		return;
+	}
+	
+	write("您要扮演男性(m)的角色或女性(f)的角色: ");
+	input_to("get_gender", ob, user);
+}
+
+private void get_gender(string gender, object ob, object user)
+{
+	if( gender=="" ) {
+		write("您要扮演男性(m)的角色或女性(f)的角色? ");
+		input_to("get_gender", ob, user);
+		return;
+	}
+
+	if( gender[0]=='m' || gender[0]=='M' )
+		user->set("gender", "男性");
+	else if( gender[0]=='f' || gender[0]=='F' )
+		user->set("gender", "女性" );
+	else {
+		write("對不起, 您只能選擇男性(m)或女性(f)的角色: ");
+		input_to("get_gender", ob, user);
+		return;
+	}
+
+	log_file( "USAGE", sprintf("%s was created from %s (%s)\n", user->query("id"),
+		query_ip_name(ob), ctime(time()) ) );
+
+	user->set("newbie/in_school", 1 );
+	init_new_player(user);
+	enter_world(ob, user);
+}
+
+object make_body(object ob)
+{
+	string err;
+	object user;
+	int n;
+
+// query the variable saved in /data/login/????.o
+	user = new(ob->query("body"));
+	if(!user) {
+		write("現在可能有人正在修改使用者物件的程式, 無法進行複製.\n");
+		write(err+"\n");
+		return 0;
+	}
+	seteuid(ob->query("id"));
+	export_uid(user);
+	export_uid(ob);
+	seteuid(getuid());
+	user->set("id", ob->query("id"));
+	user->set_name( ob->query("name"), ({ ob->query("id")}) );
+	return user;
+}
+
+private void init_new_player(object user)
+{
+	user->set("title", "平民");
+	user->set("birthday", time() );
+	user->set("potential", 99);
+        user->set("level", 0);
+        user->set("combat_exp", 0);
+	user->set("race", "人類" );
+
+	user->set("channels", ({ "chat", "music", "rumor", "es" }) );
+
+	user->set("position", "stand");
+}
+
+varargs void enter_world(object ob, object user, int silent)
+{
+        object room, coat, pants, cloak, shoes;
+	string startroom;
+
+	user->set_link( ob );
+	ob->set_body( user );
+	exec(user, ob);
+
+	write("目前權限: " + wizhood(user) + "\n");
+	user->setup();
+
+// In case of new player, we save them here right aftre setup 
+// compeleted.
+	user->save();
+	ob->save();
+
+	if( !silent ) {
+                cat(MOTD);
+		if( ob->query("new_mail") ) {
+			write( GRN + "\n有您的信! 請到郵局來一趟...\n\n" + NOR);
+			ob->set("new_mail", 0);
+		}
+                if( user->is_ghost() )
+			startroom = DEATH_ROOM;
+		else if( !stringp(startroom = user->query("startroom")) ) {
+			startroom = START_ROOM;
+			if( user->query("newbie/in_school") ) {
+				coat = new("/obj/coat");
+				coat->move( user );
+				coat->wear();
+				pants = new("/obj/pants");
+				pants->move( user );
+				pants->wear();
+				cloak = new("/obj/cloak");
+				cloak->move( user );
+				cloak->wear();
+				shoes = new("/obj/shoes");
+				shoes->move( user );
+				shoes->wear();
+			}
+		}
+
+		if( !catch(load_object(startroom)) ) {
+			if( !user->move(startroom) )
+				user->move(GUEST_ROOM);
+		} else {
+			user->move(START_ROOM);
+			startroom = START_ROOM;
+			user->set("startroom", START_ROOM);
+		}
+		message_vision("$N 連線進入 The Final Frontier.\n", user );
+	}
+	CHANNEL_D->do_channel( this_object(), "sys",
+		sprintf("%s 由 %s 連線進入.", user->name(), query_ip_name(user)) );
+	write( HIY "上次連線地址: " + ob->query("last_from") +" ( " +
+		ctime( ob->query("last_on")) + " )\n" NOR );
+	write( HIC " ff mudlib release 及技術文件可於 http://bbs.csmc.edu.tw/spock/\n或 ff.muds.net 4100 取得.\n宇宙飛行系統說明請 help space_flight\n" NOR);
+	UPDATE_D->check_user(user);
+}
+
+varargs void reconnect(object ob, object user, int silent)
+{
+	user->set_link(ob);
+	ob->set_body(user);
+	exec(user, ob);
+
+	if( !silent ) {
+		tell_room(environment(user), user->query("name") + "重新連線回到這個世界.\n",
+		({user}));
+	}
+	CHANNEL_D->do_channel( this_object(), "sys",
+		sprintf("%s 由 %s 重新連線進入.", user->query("name"), query_ip_name(user)) );
+	UPDATE_D->check_user(user);
+	user->delete_temp("netdead");
+}
+
+int check_legal_id(string id)
+{
+	int i;
+
+	i = strlen(id);
+	
+	if( (strlen(id) < 3) || (strlen(id) > 20 ) ) {
+		write("對不起, 你的英文名字必須是 3 到 20 個英文字母.\n");
+		return 0;
+	}
+	while(i--)
+		if( id[i]<'a' || id[i]>'z' ) {
+			write("對不起, 你的英文名字只能用英文字母.\n");
+			return 0;
+		}
+
+	return 1;
+}
+
+int check_legal_name(string name)
+{
+	int i;
+
+	i = strlen(name);
+	
+	// UTF-8: strlen counts characters now (was BIG5 bytes); 1-10 hanzi.
+	if( (strlen(name) < 1) || (strlen(name) > 10 ) ) {
+		write("對不起, 你的中文名字必須是 1 到 10 個中文字.\n");
+		return 0;
+	}
+	while(i--) {
+		if( name[i]<=' ' ) {
+			write("對不起, 你的中文名字不能用控制字元.\n");
+			return 0;
+		}
+//		if( i%2==0 && !is_chinese(name[i..<0]) ) {
+//			write("對不起, 請您用「中文」取名字.\n");
+//			return 0;
+//		}
+	}
+	if( member_array(name, banned_name)!=-1 ) {
+		write("對不起, 這種名字會造成其他人的困擾.\n");
+		return 0;
+	}
+
+	return 1;
+}
+
+object find_body(string name)
+{
+	object ob, *body;
+
+	if( objectp(ob = find_player(name)) )
+		return ob;
+	body = children(USER_OB);
+	for(int i=0; i<sizeof(body); i++)
+		if( clonep(body[i])
+		&&	getuid(body[i]) == name ) return body[i];
+
+	return 0;
+}
+
+int set_wizlock(int level)
+{
+	if( wiz_level(this_player(1)) <= level )
+		return 0;
+	if( geteuid(previous_object()) != ROOT_UID )
+		return 0;
+	wiz_lock_level = level;
+	return 1;
+}
+
+
+// Lsr加的 Tue Nov 26 01:00:49 CST 1996
+
+string wiz_lev(int lev)
+{
+	if( lev == 5 ) return "壹級巫師 (admin)";
+	if( lev == 4 ) return "貳級巫師 (arch)";
+	if( lev == 3 ) return "參級巫師 (wizard)";
+	if( lev == 2 ) return "實習助手 (apprentice)";
+	if( lev == 1 ) return "見習助手 (immortal)";
+	return RED"-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n\n
+"HIW"呃...這...不會吧 ?!\n
+"HIC"你現在使用的這個人物有問題, 請用另外一位人物上線請巫師幫忙 !\n\n
+"RED"-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n\n"NOR;
+}

@@ -1,0 +1,82 @@
+// tie@fengyun
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+inherit F_SSERVER;
+int perform(object me, object target) {
+  string msg;
+  int extra;
+  int i, attack_time;
+  object weapon;
+
+  if (!target) target = offensive_target(me);
+  if (!target || !target->is_character() || !me->is_fighting(target))
+    return notify_fail("胡家刀法刀刀相连只能对战斗中的对手使用。\n");
+  if (!objectp(weapon = me->query_temp("weapon")) || (string)weapon->query("skill_type") != "blade")
+    return notify_fail("你使用的武器不对。\n");
+  if (target && target->query_temp("apply/shade_vision"))
+    return notify_fail("对方隐身了，你看不到" + target->query("name") + "。\n");
+  if (me->is_busy())
+    return notify_fail("你现在正忙着呢！\n");
+  if (me->query_skill_mapped("blade") != "hujia-dao")
+    return notify_fail("你必须激发胡家刀法才能使用「刀刀相连」！\n");
+  if ((int)me->query_skill("hujia-dao", 1) < 300)
+    return notify_fail("你的胡家刀法不够娴熟，不能用刀刀相连。\n");
+  if ((int)me->query("neili") < (int)me->query_skill("hujia-dao", 1) * 4)
+    return notify_fail("你的真气不够！\n");
+  if ((int)me->query("jingli") < 1000)
+    return notify_fail("你的精力不够。\n");
+  if ((int)me->query("max_neili") < 100000)
+    return notify_fail("你的内力修为不够！\n");
+  if (me->query_skill_mapped("force") != "lengyue-shengong")
+    return notify_fail("你没有使用冷月神功吧！。\n");
+  if ((int)me->query_skill("lengyue-shengong", 1) < 300)
+    return notify_fail("你的冷月神功修为不够高。\n");
+  if (me->query_skill_mapped("blade") != "hujia-dao")
+    return notify_fail("你没正确激发该技能 。\n");
+  if (me->query_temp("autolian"))
+    return notify_fail("你正在发动自动连招！\n");
+  if (me->query_temp("cooldown"))  //CD写法	2017.9.7添加
+    return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+
+  extra = me->query_skill("hujia-dao", 1);
+  msg = HIR "$N一咬牙，手上动作加快，同时使出［胡家刀法中］的刀刀相连，手中的" + weapon->name() + " 一刀连着一刀，闪电般的击向$n！" NOR;
+  message_vision(msg, me, target);
+  me->set_temp("cooldown", 1);  //CD写法	2017.9.7添加
+  call_out("del_cooldown", 3, me);  //CD写法1
+  msg = HIR "在一片刀光中，一刀劈了过来\n" NOR;
+  COMBAT_D->do_attack(me, target, weapon, TYPE_REGULAR, msg);
+  me->add_temp("apply/attack", -extra);
+  me->add_temp("apply/damage", -extra);
+  me->add_temp("apply/strength", -extra);
+  attack_time = me->query_skill("hujia-dao", 1) / 60;
+  if (attack_time < 1) attack_time = 1;
+  if (me->query("jm/humiao")) {
+    if (attack_time > 100) attack_time = 100;
+  } else {
+    if (attack_time > 50) attack_time = 50;
+  }
+
+  me->add_temp("lianzhao", attack_time);  //2016.6.1阿飞改，增加连招标记，用于削弱连招伤害
+  for (i = 0; i < attack_time; i++) {
+    msg = HIY "$N咬紧牙关，一刀又劈了过来！\n" NOR;
+    COMBAT_D->do_attack(me, target, weapon, TYPE_REGULAR, msg);
+  }
+  me->add_temp("apply/attack", extra);
+  me->add_temp("apply/damage", extra);
+  me->add_temp("apply/strength", extra);
+  me->delete_temp("lianzhao");  //2016.6.1阿飞改，连招结束取消连招标记
+  me->add("neili", -(100 * attack_time));
+  me->start_busy(1);
+  return 1;
+}
+
+void del_cooldown(object me)  //CD写法1
+{
+  if (!objectp(me)) return;
+  if (me->query_temp("cooldown")) {
+    me->delete_temp("cooldown");
+    tell_object(me, HIM "你呼出一口气，缓缓的将内力收回丹田。\n" NOR);
+  }
+}

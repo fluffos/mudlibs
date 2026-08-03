@@ -13,56 +13,56 @@ TOMUD 8888 in the raw config; reassigned to a single port 40065 here).
 (author's own readme) explicitly states this lib is built on top of
 **"夕阳再现－江湖风云2－风云再起"** ("Sunset Reappears - Jianghu Fengyun 2
 - Storm Rises Again") — i.e. this is a member of the same **夕阳再现
-(Xiyangzaixian)** lineage as archives #46 (`xiyangzaixian_fengkuang`), #47
-(`xiyangzaixian_fengyun2`), #55 (`weimingkongjian`), and #59
-(`jianghufengyun`), not a standalone codebase.
+(Xiyangzaixian)** lineage as archives #46 (`xyzxfk`), #47
+(`xyzxfy2`), #55 (`wmkj`), and #59
+(`jhfy`), not a standalone codebase.
 
 **Lineage confirmed via md5sum, not just the readme's claim**:
 - `adm/simul_efun/chinese.c`: **byte-identical** (md5 `961d77af057bb93db320af05be5883fc`)
   across all 5 archives (#46/#47/#55/#59 and this one).
 - `adm/daemons/securityd.c`: **byte-identical** (md5 `032452f57e844ff416d4747b12b85d27`)
-  specifically to `xiyangzaixian_fengyun2` (#47)'s copy — closest sibling
+  specifically to `xyzxfy2` (#47)'s copy — closest sibling
   in this family.
 - `adm/obj/master.c` and `adm/daemons/logind.c` are each distinct from
   every sibling (own md5sums, different line counts) — same pattern as
   every other pair of forks in this family: shared engine utility files,
   divergent site-specific daemons.
 
-## Cross-check against datangshuanglong (#49) — required by task instructions
+## Cross-check against dtsl2 (#49) — required by task instructions
 
-`libs/datangshuanglong/NOTES.md` documents that its raw config file's own
+`libs/dtsl2/NOTES.md` documents that its raw config file's own
 `name` field contained the **exact string "碧血残阳 之 豪侠晚歌"** — this
 archive's own title — as a confirmed-stale copy-paste leftover, not a sign
-that datangshuanglong is secretly a duplicate of this archive. Verified the
+that dtsl2 is secretly a duplicate of this archive. Verified the
 reverse direction too, as instructed, via direct `md5sum`/`diff` on both
 raw archives (not work copies):
 
 - `adm/simul_efun/chinese.c`: **differs** — this archive's md5 is
   `961d77af...` (the 夕阳再现-family shape: `strlen(str)>=2 && str[0] > 160
-  && str[0] < 255`, 14 lines); datangshuanglong's is `a619b926...` (a
+  && str[0] < 255`, 14 lines); dtsl2's is `a619b926...` (a
   different GBK-range formula: `str[0] < 176 || str[0] > 247` +
   `str[1]` checks, 19 lines). Not the same file at all.
 - `adm/obj/master.c`: **differs substantially** — this archive's is 342
   lines with a `TOMUD_PORT`/`get_player_fname()` backup-login-object
   fallback mechanism and a `"change by Fan@wanxia"` credit header, none of
-  which appear in datangshuanglong's (302-line, no TOMUD/backup-login
+  which appear in dtsl2's (302-line, no TOMUD/backup-login
   logic, no Fan@wanxia credit) — full diff is 646 lines of changes out of
   ~342, i.e. almost entirely different content past the shared
   `connect()`/`compile_object()` skeleton wording.
-- `adm/daemons/logind.c`: 1007 lines here vs 917 in datangshuanglong —
+- `adm/daemons/logind.c`: 1007 lines here vs 917 in dtsl2 —
   different.
 - **Interesting second piece of evidence for the copy-paste theory**:
-  datangshuanglong's raw archive's own config file is **also literally
-  named `config.bxcy`** (verified: `libs/datangshuanglong/raw/DTSL/config.bxcy`
+  dtsl2's raw archive's own config file is **also literally
+  named `config.bxcy`** (verified: `libs/dtsl2/raw/DTSL/config.bxcy`
   exists) — the same filename as this archive's `config.bxcy`. This means
   not just the `name` field's *text* but the config file's *filename
   convention itself* was copy-pasted from a bixiecanyang-lineage template
-  into whatever base datangshuanglong forked from, while the actual
+  into whatever base dtsl2 forked from, while the actual
   mudlib code (chinese.c/master.c/logind.c) diverged completely.
 
 **Conclusion**: confirmed NOT related in either direction. This archive is
 squarely 夕阳再现/Xiyangzaixian-lineage (shares chinese.c/securityd.c with
-#46/#47/#55/#59); datangshuanglong is squarely dtsl(#8)/大唐双龙-lineage
+#46/#47/#55/#59); dtsl2 is squarely dtsl(#8)/大唐双龙-lineage
 (shares chinese.c/F_UNIQUE-macro-gap/diamond-inherit-bug with #8/#18). The
 coincidence is purely a copy-pasted config template/field, confirmed twice
 over (stale name field + stale filename convention), never a sign of
@@ -200,7 +200,7 @@ shared mudlib content.
   ... input_to("get_version", ob, ip_cnt); }` — `get_version()` checks the
   input against a hardcoded literal `"2060"` (a TOMUD client-handshake
   code) and disconnects on any mismatch, exactly like the gate documented
-  in §15q on `xiyangzaixian3`. But this branch is itself gated behind the
+  in §15q on `xyzx3`. But this branch is itself gated behind the
   same `TOMUD_PORT`-only flag described above, which (per the point just
   above) never gets set on this project's assigned port — so the gate is
   present in the source but structurally unreachable for our single-port
@@ -258,7 +258,7 @@ Verified the **complete** registration path in **one continuous
 Zero real `error:` lines, zero "Read access denied"/"Bad argument"/"Too
 deep recursion"/segfault signatures anywhere in `debug.log` across the
 whole session — only the same cosmetic `编译时段错误：... warning:
-Unknown #pragma, ignored` lines seen in `xiyangzaixian_fengyun2` (this
+Unknown #pragma, ignored` lines seen in `xyzxfy2` (this
 lib's own `error_handler()`/`log_error()` mislabels compile-time
 *warnings* as "compile-time errors" in its Chinese message text; harmless,
 matches every other lib in this lineage family).
@@ -299,7 +299,7 @@ lpcc-sweep triage (below) didn't regress anything.
 ## lpcc sweep
 
 13,560 files initially (`.lpc`/`.c` count after rename — matching
-`xiyangzaixian_fengyun2`'s file count almost exactly, same-generation
+`xyzxfy2`'s file count almost exactly, same-generation
 snapshot of a similar world size); 13,559 after reclassifying 2 non-LPC
 files (below).
 
@@ -380,7 +380,7 @@ chase call_other/couldn't-find-object noise" triage method):
     (called live by `kungfu/skill/yunv-xinfa/roar.lpc`, 2 more call sites
     commented out elsewhere): never defined anywhere in this archive,
     same "§15b-style called-everywhere-defined-nowhere" gap already fixed
-    on `xingzhanyingxiong`/`weimingkongjian` for the identical function
+    on `xzyx`/`wmkj` for the identical function
     name. Added as a thin alias to `message_vision()` in
     `adm/simul_efun/message.lpc`. **Hit the exact §15aa/§8b trap while
     adding it**: an earlier attempt placed the alias BEFORE
@@ -419,7 +419,7 @@ noise (not fixed further)**:
   the real boot+interactive-test `debug.log` that NONE of these paths are
   ever touched** (`grep -i "migong\|clone/gem"` on the log came up empty)
   — none are on the preload/registration path, matching the exact
-  category documented in `xiyangzaixian_fengyun2`'s own NOTES.md for the
+  category documented in `xyzxfy2`'s own NOTES.md for the
   same shape of failure. Standalone `lpcc` re-checks of a sample (e.g.
   `/clone/gem/ring4`, whose `inherit/gems/ring.lpc` base class itself
   compiles clean standalone) confirm this is a bare-test-context
@@ -427,7 +427,7 @@ noise (not fixed further)**:
 - **~8× `/u/snow/wudujiao/...` `Cannot #include globals.h`**: the exact
   same personal-wizard-scratch-directory VM-context-dependent include gap
   already documented (and left unfixed, for the same reason) in
-  `xiyangzaixian_fengyun2`'s own NOTES.md — this world content is shared
+  `xyzxfy2`'s own NOTES.md — this world content is shared
   between the two forks. Not on the registration/preload path.
 - **`feature/vendor_sale.lpc`**: significantly corrupted in the RAW
   archive itself (confirmed via direct byte comparison, not a conversion
@@ -454,7 +454,7 @@ noise (not fixed further)**:
   macro — AXE/BLADE/DAGGER/FORK/HAMMER/SWORD/STAFF/CLUB/THROWING/WHIP/RING
   — but never PEN), and no `/inherit/weapon/pen` file exists either.
   Exact same shape as the already-documented `CLUB`/`WEAPON_COMBO`/
-  `BBS_BOARD` gaps on `datangshuanglong`(#49) — a missing macro with no
+  `BBS_BOARD` gaps on `dtsl2`(#49) — a missing macro with no
   clear matching target file to point it at, so guessing a mapping (e.g.
   to `STICK`) would be fabricating behavior rather than restoring a
   documented gap. Left unfixed, single file affected.
@@ -502,7 +502,7 @@ player, not just wizards — no `wizardp()` gate at all — for every compile
 diagnostic funneled through `APPLY_LOG_ERROR`, including harmless "Unused
 local variable" warnings triggered by the first lazy compile of an
 ordinary room/command file. Fixed proactively before booting (same pattern
-as `dtsl`/`datangshuanglong`/`dongfanggushi2`/`wuhanzhan`/`shenzhou`): only
+as `dtsl`/`dtsl2`/`dfgs2`/`wuhanzhan`/`shenzhou`): only
 show the full diagnostic to a wizard; only alarm an ordinary player with
 the generic `default error message` for a genuine compile **error** (gated
 on absence of `"warning:"` in the message) — `#include <runtime_config.h>`
@@ -602,3 +602,7 @@ upstream, so this was tightened to fail-closed: only an exact
 malformed or non-string address now falls through to the original gate
 logic (treated as untrusted/remote) instead of being auto-allowed.
 Re-verified fluffos login still works after tightening.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+基于"夕阳再现"衍生引擎的独立游戏。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：一次完整的 WASM 注册流程（英文 id 仅限小写字母 → 确认 → 中文名字 → 管理密码+确认 → 登录密码+确认 → 天赋摇点，0 为随机 → 接受 → 电子邮件，需 id@address 格式 → 性别）全程无错误地进入"武庙"起始区域（"你连线进入这个世界，开始了自己的江湖生涯"），预先播种的管理员账号（fluffos/Mud@2026）也能正常登录（"您目前权限：(admin)"）。

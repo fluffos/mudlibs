@@ -1,0 +1,98 @@
+// wade 1995 10 26
+// string *query_pk_list () 			// 取得所有杀人狂的名单
+// int get_pk_time(mixed ob)			// 取得杀人狂第一次杀人的时间
+// int add_pker (mixed ob, int time)		// 增加一名杀人狂
+// int delete_pker (mixed name)			// 删除一名杀人狂
+
+#include <login.h>
+
+// 这个 pk_list 记录所有 pker & pk 的时间
+mapping pk_list;
+
+void create() {
+  string *pkers, pker;
+  int i, pktime;
+
+  // 先读取资料进来, 注意, 这是以换行 "\n" 分开的...未经处理的资料
+  if (file_size(PKLIST) == -1) pkers = ({});
+  else pkers = explode(read_file(PKLIST), "\n");
+
+  // 分配记忆体给 pk_list 的 mapping
+  pk_list = allocate_mapping(sizeof(pkers));
+
+  // 把 pkers 的资料弄成 mapping 的格式存到 pk_list
+  for (i = 0; i < sizeof(pkers); i++) {
+    if (sscanf(pkers[i], "%s %d", pker, pktime) != 2) continue;
+    pk_list[pker] = pktime;
+  }
+}
+
+// 取得所有 pkers 的名字阵列
+string *query_pk_list() { return keys(pk_list); }
+
+// 取得该 pker 的 pk time
+int get_pk_time(mixed ob) {
+  string euid;
+
+  if (objectp(ob)) {
+    euid = geteuid(ob);
+    if (!euid) euid = getuid(ob);
+  } else if (stringp(ob)) euid = ob;
+
+  if (!undefinedp(pk_list[euid])) return pk_list[euid];
+  else return 0;
+}
+
+// 设定 pker 的 pk time
+// 这会增加一名 pker in pk_list
+int add_pker(mixed ob, int time) {
+  string uid, *pkers, pker;
+  int i;
+
+  if (stringp(ob)) uid = ob;
+  else return 0;
+
+  // 先更新 pk_list
+  pk_list[uid] = time;
+
+  // 然後写进档案里头
+  pkers = keys(pk_list);
+  for (pker = "", i = 0; i < sizeof(pkers); i++)
+    pker += pkers[i] + " " + pk_list[pkers[i]] + "\n";
+
+  // 写的时候当然是先砍旧档再写新档
+  rm(PKLIST);
+  write_file(PKLIST, pker);
+
+  // 并且记录下来
+  log_file("nosave/pker", capitalize(uid)
+    + " become a pker on " + ctime(time()) + "\n");
+  return 1;
+}
+
+// 从 pk_list 砍掉一名 pker
+int delete_pker(mixed name) {
+  string uid, *pkers, pker;
+  int i;
+
+  if ((uid = geteuid(previous_object(1))) != ROOT_UID) {
+    write("[delete_pker in pkd.c] 你没权执行此命令。\n");
+    return 0;
+  } else if (stringp(name)) uid = name;
+  else return 0;
+
+  // 从 pk_list 砍掉一名 pker
+  map_delete(pk_list, uid);
+
+  // 写进档案里
+  pkers = keys(pk_list);
+  for (pker = "", i = 0; i < sizeof(pkers); i++)
+    pker += pkers[i] + " " + pk_list[pkers[i]] + "\n";
+
+  rm(PKLIST);
+  if (sizeof(pk_list) != 0) write_file(PKLIST, pker);
+
+  log_file("nosave/pker", capitalize(uid)
+    + " become a normal player on " + ctime(time()) + "\n");
+  return 1;
+}

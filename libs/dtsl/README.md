@@ -1,7 +1,7 @@
 # 大唐双龙传 (Twin Dragons of the Tang Dynasty)
 
-属于"大唐双龙"世界观的一支，与 datangshuanglong、
-llmud_datangshuanglong 共享部分基础引擎代码，但各自剧情内容独立开发。
+属于"大唐双龙"世界观的一支，与 dtsl2、
+dtslmud 共享部分基础引擎代码，但各自剧情内容独立开发。
 取材自黄易同名武侠小说，以大唐初年江湖为背景。
 
 ## 内容亮点

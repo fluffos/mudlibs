@@ -32,7 +32,7 @@ passed its own boot test, so nothing already marked `done` is suspect.
    trailing-backslash-before-closing-quote typo in the Greek-alphabet
    conversion table (`"Ρ\",` → `"Ρ",` — this lib's specific character was
    Rho, not Alpha like the previously-seen instances), recurring for the
-   third time in this "西游记/ES"-adjacent family (`fluffos_xiyou2000`,
+   third time in this "西游记/ES"-adjacent family (`xyj2000f`,
    `mhxy`, now here). This file has plain LF line endings (not CRLF like
    `mhxy`'s copy) — used `sed -i -E 's/\\"(,)?$/"\1/'` directly; **caught
    and had to correct a mistake**: initially reused the CRLF-safe pattern
@@ -384,7 +384,7 @@ not a fresh mystery).**
   `scripts/pack_lib_for_web.sh` or a boot-prep step always `mkdir -p`
   `log/nosave/`) is worth doing centrally.
 - Not fixed / not independently root-caused at the LPC level, same as
-  the two prior §10.8 occurrences (`xianjianchuanqi`, `shiji`) — this
+  the two prior §10.8 occurrences (`xjcq2000`, `shiji`) — this
   is a driver-level internal-consistency failure, not a mudlib source
   pattern. Bug 1's fix removes ONE plausible contributing trigger (the
   aborted `user_dump()` mid-execution) but is not proven to be the

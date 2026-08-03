@@ -32,13 +32,13 @@
 
 Per the task's explicit instruction, all 5 already-done Journey-to-the-
 West-themed siblings' NOTES.md were read first
-(`libs/fluffos_xiyou2000/NOTES.md` #15, `libs/mhxy/NOTES.md` #19,
-`libs/menghuanxiyou2002/NOTES.md` #56, `libs/shenmo/NOTES.md` #73,
+(`libs/xyj2000f/NOTES.md` #15, `libs/mhxy/NOTES.md` #19,
+`libs/mhxyqd/NOTES.md` #56, `libs/shenmo/NOTES.md` #73,
 `libs/xiyouji2003/NOTES.md` #81), then this archive's `adm/obj/master.c`,
 `adm/simul_efun/chinese.c`, `adm/daemons/logind.c`, `adm/daemons/securityd.c`,
 `adm/daemons/named.c`, `adm/daemons/chinesed.c`, `adm/daemons/convertd.c`
 were md5sum'd/diffed against the corresponding raw files of `mhxy`(#19)/
-`menghuanxiyou2002`(#56)/`shenmo`(#73)/`fluffos_xiyou2000`(#15)/
+`mhxyqd`(#56)/`shenmo`(#73)/`xyj2000f`(#15)/
 `xiyouji2003`(#81) **before any conversion work began**.
 
 **Findings, by file** (raw pre-conversion bytes):
@@ -49,21 +49,21 @@ were md5sum'd/diffed against the corresponding raw files of `mhxy`(#19)/
   (`str[0]>160&&str[0]<255`), same `chinese_number()`/`to_chinese()`
   delegating to `CHINESE_D`. This is the single strongest piece of
   evidence tying this archive to the mhxy/梦幻西游/shenmo branch
-  specifically (as opposed to the `fluffos_xiyou2000`/`xiyouji2003` side
+  specifically (as opposed to the `xyj2000f`/`xiyouji2003` side
   of the wider "西游记" family tree, whose `chinese.c` implementations
   are shaped differently — confirmed via the diff done for
   `xiyouji2003`'s own lineage writeup).
 - **`adm/obj/master.c`**: own hash, differs from ALL compared siblings —
-  but a stripped-comment structural diff against `fluffos_xiyou2000`'s
+  but a stripped-comment structural diff against `xyj2000f`'s
   copy shows this file's ~237 lines of live logic are a genuine SUBSET of
-  `fluffos_xiyou2000`'s 341-line version (same `connect()`/
+  `xyj2000f`'s 341-line version (same `connect()`/
   `compile_object()`/`crash()`/`log_error()`/`standard_trace()` core
   shapes, same `log_file("static/CRASHES", ...)` idiom) — missing several
   later-added features (`print_vars()`/`report_error()`/the
   `error_handler()`'s wizard-vs-player trace-detail branching/`valid_read`
   delegating to `SECURITY_D`). This reads as an EARLIER/leaner snapshot of
   the same overall ES-II-derived "西游记" master.c lineage that both the
-  `fluffos_xiyou2000` and `mhxy` branches trace back to (matches
+  `xyj2000f` and `mhxy` branches trace back to (matches
   `xiyouji2003`'s own observation of a "much older shared root" beneath
   the branch point) — not a byte match to either specific sibling.
 - **`adm/daemons/logind.c`**: own hash; ~1168 lines (UTF-8-converted),
@@ -78,7 +78,7 @@ were md5sum'd/diffed against the corresponding raw files of `mhxy`(#19)/
   client-version gate described below, none of which are present in
   `mhxy`'s copy). The raw archive also ships `u/canoe/` and `u/vikee/`
   wizard home directories — `vikee` is the same cracker credited in
-  `fluffos_xiyou2000`'s `master.c` header — suggesting this specific
+  `xyj2000f`'s `master.c` header — suggesting this specific
   snapshot passed through (or was cross-pollinated by) people from BOTH
   sides of the wider "西游记" family tree, consistent with it being its
   own distinct fork rather than a clean descendant of only one branch.
@@ -88,13 +88,13 @@ were md5sum'd/diffed against the corresponding raw files of `mhxy`(#19)/
   trailing backslash before the closing quote" defect (45 occurrences),
   the same secondary evidence of a shared distant ancestor for that one
   daemon specifically that `xiyouji2003` already found linking it to
-  `mhxy`/`fluffos_xiyou2000`.
+  `mhxy`/`xyj2000f`.
 
 **Conclusion**: this is a genuine, independently-evolved 2006-era
 snapshot sharing a confirmed-byte-identical `chinese.c` with the
 mhxy/梦幻西游/shenmo branch specifically, while also showing cross-
 pollination evidence (the `vikee` credit, the leaner master.c) from the
-wider ES-II "西游记" family that `fluffos_xiyou2000`/`xiyouji2003`
+wider ES-II "西游记" family that `xyj2000f`/`xiyouji2003`
 belong to — **not a duplicate of any of the 5 siblings compared**. Per
 the task's instruction to port proven fixes directly when related: the
 §15h `is_chinese`/`check_legal_name` fix pattern and the §8h `convertd`
@@ -127,7 +127,7 @@ heuristic stragglers" grep was needed and is worth adding to the
 catalog**: the usual `file -b "$f" | grep -qE "text|script|empty"`
 straggler check caught only 1 hit (`d/qujing/start/24/12.lpc`, the
 same known `file`-heuristic false-positive already documented on
-`shenmo`/`menghuanxiyou2002` — confirmed valid UTF-8). But running
+`shenmo`/`mhxyqd` — confirmed valid UTF-8). But running
 `iconv -f UTF-8 -t UTF-8` against **every** `.lpc`/`.h` file (not just
 the ones `file` flags as non-text) found **2 more genuinely-unconverted
 files** that `file` happily classified as generic 8-bit "text":
@@ -289,7 +289,7 @@ generic "text" just as readily as it misclassifies valid UTF-8.
 - **§8c/§15n (custom `securityd.lpc` ACL blocking mid-connection
   `load_object`/`include`, or a `this_player()`-override footgun)**:
   `securityd.lpc`'s `valid_read()` already has the correct shape (matches
-  `menghuanxiyou2002`/`shenmo`'s confirmed-fine pattern exactly) — early-
+  `mhxyqd`/`shenmo`'s confirmed-fine pattern exactly) — early-
   returns `1` for any `func` OTHER than
   `read_file`/`file_size`/`stat`/`read_bytes`/`tail`/`ed_start`, so
   `load_object`/`recompile_object`/`include` are never subjected to the
@@ -306,7 +306,7 @@ generic "text" just as readily as it misclassifies valid UTF-8.
   — `feature/dbase.lpc` defines real, local `set(string prop, mixed
   data)`/`varargs query`/`delete`/`add` methods (confirmed by reading the
   file), same architecturally-correct shape as the whole
-  mhxy/menghuanxiyou2002/shenmo family. No `LONELY_IMPROVED` macro exists
+  mhxy/mhxyqd/shenmo family. No `LONELY_IMPROVED` macro exists
   anywhere in `include/*.h` either.
 - **§8e (missing `tail()` efun)**: zero call sites anywhere in the lib
   (`grep -rln '\btail('` → 0 hits) — genuinely absent, nothing to fix.
@@ -432,7 +432,7 @@ prompt text**:
   body is `if( arg!="2060" ) { <"wrong client, disconnect"> } else
   input_to("get_id1", ob);` — the FIRST input must be the literal string
   `"2060"` (a "Tomud"/笑傲江湖-client handshake code — same literal value
-  independently found on `xiyangzaixian3`, archive #48, suggesting this
+  independently found on `xyzx3`, archive #48, suggesting this
   specific magic string is shared convention across several
   Tomud-branded forks, not lib-specific), silently unrelated to whatever
   real id the player types next. Only after that does `get_id1` do the

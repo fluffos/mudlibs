@@ -1,0 +1,157 @@
+/* This program is a part of RW mudlib
+ * See /doc/help/copyright for more info
+ -----------------------------------------
+ * File   : chinese_d.c
+ * Author : Clode@RevivalWorld
+ * Date   : 2001-3-1
+ * Note   : 中文精靈, 預計將所有函式寫入 MudOS's Chinese Package
+ * Update :
+ *  o 2001-03-01 Clode 建立快取資料(佔30k左右ram), 大幅增進效率
+ *  o 2001-03-01 Clode 新增字串輸入可達無限位數的數字顯示
+ *
+ -----------------------------------------
+ */
+
+private string *number = ({ "零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十" });
+private string *number2 = ({ "零", "壹", "貳", "參", "肆", "伍", "陸", "柒", "捌", "玖", "什" });
+
+// 最大數值單位可自由增減
+//string *unit = ({"萬","億","兆","京","垓","杼","穰","溝","澗","正","載","極","恆河沙","阿僧祇","那由它","不可思議","無量","大數",});
+private string *unit = ({ "萬", "億", "兆", });
+
+private mapping cache;
+
+string chinese_number(mixed i) {
+  // 若輸入參數為 integer (會 overflow) 
+  if (intp(i)) {
+    if (i < 0)
+      return "負" + chinese_number(-i);
+    if (i < 11)
+      return number[i];
+    if (i < 1000)
+      return cache[i];
+    if (i < 10000) {
+      if (!(i % 1000)) return number[i / 1000] + "千";
+      if (i % 1000 < 100) return number[i / 1000] + "千零" + cache[i % 1000];
+      return number[i / 1000] + "千" + cache[i % 1000];
+    }
+    if (i < 100000000) {
+      if (!(i % 10000)) return chinese_number(i / 10000) + "萬";
+      if (i % 10000 < 1000) return chinese_number(i / 10000) + "萬零" + cache[i % 10000];
+      return chinese_number(i / 10000) + "萬" + chinese_number(i % 10000);
+    }
+    if (i < 2147483648) {
+      if (!(i % 100000000)) return cache[i / 100000000] + "億";
+      if (i % 100000000 < 10000000) return cache[i / 100000000] + "億零" + chinese_number(i % 100000000);
+      return cache[i / 100000000] + "億" + chinese_number(i % 100000000);
+    } else return "2147483647(overflow)";
+  }
+  // 若輸入參數為 string (無限位數處理)
+  else if (stringp(i) && i != "") {
+    int j, k, *n = ({}), usize = sizeof(unit);
+    string *u = ({ "" }), msg;
+
+    if (i[0] == '-') return "負" + chinese_number(i[1..]);
+
+    // 將數字依四位數拆解
+    while ((msg = i[<(j += 4)..<(j - 3)]) != "") {
+      n += ({ to_int(msg) });
+      if (j != 4) u += ({ unit[k++ % usize] });
+    }
+
+    j = k = sizeof(n);
+
+    while (j--)
+      if (n[j]) msg += (j + 1 < k ? (n[j + 1] && n[j] > 999 ? chinese_number(n[j]) : "零" + chinese_number(n[j])) : chinese_number(n[j])) + u[j];
+    else if (u[j] == unit[usize - 1]) msg += unit[usize - 1];
+
+    return msg;
+  } else return "錯誤數值";
+}
+
+nomask string chinese_period(int t) {
+  int y, n, d, h, m, s;
+  string time = "";
+
+  s = t % 60;
+  m = t / 60 % 60;
+  h = t / 60 / 60 % 24;
+  d = t / 60 / 60 / 24 % 30;
+  n = t / 60 / 60 / 24 / 30 % 13;
+  y = t / 60 / 60 / 24 / 30 / 13;
+
+  if (y) time = cache[y] + "年又";
+  if (n) time += cache[n] + "個月" + (y ? "" : "又");
+  if (d) time += cache[d] + "天" + (n || y ? "" : "又");
+  if (h) time += cache[h] + "小時" + (d || n || y ? "" : "又");
+  if (m) time += cache[m] + "分" + (h || d || n || y ? "" : "又");
+
+  return time + cache[s] + "秒";
+}
+
+private mapping chinese = ([
+  "north": "北邊",
+  "south": "南邊",
+  "east": "東邊",
+  "west": "西邊",
+  "northwest": "西北邊",
+  "northeast": "東北邊",
+  "southwest": "西南邊",
+  "southeast": "東南邊",
+  "down": "樓下",
+  "up": "樓上",
+]);
+
+string to_chinese(string idx) {
+  return chinese[idx];
+}
+
+int chinese_to_number(mixed chinese) {
+  int i, len, num, idx;
+
+  if (intp(chinese)) return chinese;
+
+  if (!stringp(chinese))
+    return 0;
+
+  len = sizeof(chinese);
+
+  for (i = 0; i < len; i += 2) {
+    idx = member_array(chinese[i..i + 1], number);
+
+    if (idx == -1)
+      idx = member_array(chinese[i..i + 1], number2);
+
+    if (idx == -1)
+      continue;
+
+    if (idx == 10) {
+      if (i != 0)
+        continue;
+      else if (i + 2 != len)
+        idx = 1;
+    }
+
+    num = num * 10 + idx;
+  }
+  return num;
+}
+
+string initialize(int i) {
+  if (i < 11) return number[i];
+  if (i < 20) return "十" + number[i % 10];
+  if (i < 100) return number[i / 10] + "十" + (i % 10 ? number[i % 10] : "");
+  if (i < 1000) return number[i / 100] + "百" + (i % 100 ? ((i % 100 < 10 ? "零" : 0) || (i % 100 < 20 ? "一" : "")) + initialize(i % 100) : "");
+}
+
+private void create() {
+  cache = allocate_mapping(0);
+
+  /* 建立數值快取 */
+  for (int i = 0; i <= 1000; i++)
+    cache[i] = initialize(i);
+}
+
+string query_name() {
+  return "中文系統(CHINESE_D)";
+}

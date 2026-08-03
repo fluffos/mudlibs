@@ -576,7 +576,7 @@ Early in this session, before fully internalizing AGENTS.md §10.5's
 after a background driver of mine appeared to have died (a stray
 SIGTERM — see below), saw two `driver config.fluffos` processes, and
 killed both by PID **without checking their `cwd` first**. Both turned
-out to belong to other libs (`xuanjianlu`, `shanhaizhanshen`) — i.e. two
+out to belong to other libs (`xuanjianlu`, `shzs`) — i.e. two
 other agents' sessions, not mine. New processes for those same two libs
 appeared moments later (either those agents' own retry logic, or purely
 coincidental relaunches by their sessions — I have no way to tell which

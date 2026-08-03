@@ -499,3 +499,7 @@ proof of the crash and the fix).
   socket-read logging would likely settle whether this is input
   coalescing during a slow synchronous first-compile, which was this
   pass's leading but unconfirmed hypothesis).
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+东方故事基础版（蓝天）。

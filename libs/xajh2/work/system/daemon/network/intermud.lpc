@@ -1,0 +1,329 @@
+/*    /system/daemon/network/intermud.c
+ *    from XO object LIB 1.5
+ *    daemon handling the InterMUD-3 Protocol
+ *    created by nerd@xo 98-5-1
+ */
+
+#ifndef __PACKAGE_SOCKETS__
+#error You should not try and load the I3 daemon with no sockets package.
+#else
+#undef NDEBUG
+
+#include <lib.h>
+#include <network.h>
+#include "mudlib.h"
+#include "intermud.h"
+#include "debug.h"
+#include <function.h>
+
+#define SAVE_INTERMUD "/data/daemon/intermud"
+
+inherit LIB_CLIENT;
+inherit F_DBASE;
+#undef DEBUG
+
+#include "service/tell.lpc"
+#include "service/channel.lpc"
+#include "service/finger.lpc"
+#include "service/who.lpc"
+#include "service/error.lpc"
+
+private int Password;
+private class list MudList, ChannelList;
+private mapping Banned;
+private mixed *Nameservers;
+private private int Connected, Tries;
+
+private nosave mapping dispatch = ([
+  "tell": (: eventReceiveTell :),
+  "emoteto": (: eventReceiveEmoteTo :),
+
+  "who-req": (: eventReceiveWhoRequest :),
+  "who-reply": (: eventReceiveWhoReply :),
+
+  "finger-req": (: eventReceiveFingerRequest :),
+  "finger-reply": (: eventReceiveFingerReply :),
+
+  "channel-m": (: eventReceiveChannelMessage :),
+  "channel-e": (: eventReceiveChannelEmote :),
+  "channel-t": (: eventReceiveChannelTargetEmote :),
+
+  "mudlist": (: eventReceiveMudList :),
+  "startup-reply": (: eventReceiveStartupReply :),
+  "error": (: eventReceiveError :),
+]);
+
+// -- mudos applies --
+private void create() {
+  client::create();
+  Connected = 0;
+  Password = 0;
+  Tries = 0;
+  Banned = ([]);
+  Nameservers = ({ ({ "*xo", "203.93.69.203 9999" }) });
+  MudList = new(class list);
+  ChannelList = new(class list);
+  MudList->ID = -1;
+  MudList->List = ([]);
+  ChannelList->ID = -1;
+  ChannelList->List = ([]);
+  restore();
+  set("no_clean_up", 1);
+  SetDestructOnClose(1);
+  SetSocketType(MUD);
+  call_out((: Setup :), 2);
+  seteuid(getuid());
+}
+
+void remove() {
+  SendToRouter("shutdown", ({}));
+  save();
+}
+// -- end applies --
+
+// methods
+void eventSend(string type, string mud, string target, mixed *packet) {
+  string thisuser;
+
+  if (this_player())
+    thisuser = this_player()->query("id");
+  else
+    thisuser = 0;
+  //    NBUG( packet );
+  eventWrite(({ type, 5, mud_id(), thisuser, mud, target }) + packet);
+}
+
+void SendToRouter(string type, mixed *data) {
+  eventSend(type, Nameservers[0][0], 0, data);
+}
+
+void SendToMud(string type, string mud, mixed *data) {
+  eventSend(type, mud, 0, data);
+}
+
+void SendToUser(string type, string mud, string user, mixed *data) {
+  eventSend(type, mud, user, data);
+}
+
+void SendToAll(string type, mixed *data) {
+  eventSend(type, 0, 0, data);
+}
+// end methods.
+
+// private functions
+private void Setup() {
+  string ip;
+  int port;
+
+  if (!Nameservers || !sizeof(Nameservers))
+    return;
+  sscanf(Nameservers[0][1], "%s %d", ip, port);
+  if (eventCreateSocket(ip, port) < 0)
+    return;
+  SendToRouter("startup-req-3",
+    ({
+      Password, MudList->ID, ChannelList->ID, query_host_port(),
+      PORT_OOB, PORT_UDP, mud_name(),
+      mudlib() + " " + mudlib_version(), version(), "LPMud",
+      MUD_STATUS, ADMIN_EMAIL,
+      GetServices(), ([]),
+    }));
+}
+
+// events
+private void eventRead(mixed *packet) {
+  if (!packet || sizeof(packet) < 6)
+    return; /* should send error */ if (Banned[packet[2]]) {
+      //string reason = Banned[packet[2]];
+
+      SendToUser("error", packet[2], packet[3],
+        ({ "unk-user", "Your mud is not allowed to send to XO.", packet }));
+      return;
+    }
+  if (undefinedp(dispatch[packet[0]])) {
+    eventSend("error", packet[2], packet[3], ({ "unk-type",
+      "未知的数据类型：" + packet[0], packet }));
+    return;
+  }
+  if (functionp(dispatch[packet[0]]) & FP_OWNER_DESTED)
+    return;
+  evaluate(dispatch[packet[0]], packet[2], packet[3], packet[5], packet[6..]);
+}
+
+private void eventReceiveStartupReply(string mud, string from, string to, mixed *packet) {
+  if (!sizeof(packet[0]))
+    return;
+  if (packet[0][0][0] == Nameservers[0][0]) {
+    Nameservers = packet[0];
+    Connected = Nameservers[0][0];
+    Password = packet[1];
+    save();
+  } else {
+    Nameservers = packet[6];
+    Setup();
+  }
+}
+
+private void eventReceiveMudList(string mud, string from, string to, mixed *packet) {
+  string cle;
+  mixed *val;
+  if (packet[0] == MudList->ID)
+    return;
+  if (mud != Nameservers[0][0])
+    return;
+  MudList->ID = packet[0];
+  foreach (cle, val in packet[1]) {
+    if (!val && MudList->List[cle] != 0)
+      map_delete(MudList->List, cle);
+    else if (val)
+      MudList->List[cle] = val;
+  }
+  save();
+}
+
+private void eventSocketClose() {
+  int extra_wait;
+
+  extra_wait = (Tries++) * 20;
+  if (extra_wait > 600)
+    extra_wait = 600;
+  Connected = 0;
+  call_out((: Setup :), 20 + extra_wait);
+}
+
+private void eventConnectionFailure() {
+  if (Connected)
+    return;
+  error("Failed to find a useful name server.\n");
+}
+
+int SetDestructOnClose(int x) {
+  return 0;
+}
+
+int SetSocketType(int x) {
+  return client::SetSocketType(MUD);
+}
+
+// misc functions...
+// GetMudName: user GetMudName to get a mud's visual name...
+// if return 0 , the mud doesn't exists.
+string GetMudName(string mud) {
+  string *lc, *uc;
+  int x;
+
+  if (MudList->List[mud])
+    return mud;
+  lc = map(uc = keys(MudList->List), function(string str)
+    {
+      if (!str)
+        return "";
+      else
+        return lower_case(str);
+    }
+  );
+  x = member_array(lower_case(mud), lc);
+  if (x < 0)
+    return 0;
+  else
+    return uc[x];
+}
+
+mapping GetMudList() {
+  return copy(MudList->List);
+}
+
+string *GetMuds() {
+  return keys(MudList->List);
+}
+
+mapping GetChannelList() {
+  return copy(ChannelList->List);
+}
+
+string *GetChannels() {
+  return keys(ChannelList->List);
+}
+
+// what's this?? i dunno... perhaps delete it.
+string *GetMatch(string mud) {
+  string *uc, *lc;
+
+  mud = lower_case(mud);
+  lc = map(uc = keys(MudList->List), (: lower_case :));
+  return map(filter(regexp(lc, "^" + mud, 1), (: intp :)), (: $(uc)[$1] :));
+}
+
+mixed *GetMudInfo(string mud) {
+  if (undefinedp(MudList->List[mud]))
+    return 0;
+  return MudList->List[mud];
+}
+
+mapping GetServices() {
+  return ([
+#ifdef SERVICE_AUTH
+    "auth": 1,
+#endif
+#ifdef SERVICE_CHANNEL
+    "channel": 1,
+#endif
+#ifdef SERVICE_EMOTETO
+    "emoteto": 1,
+#endif
+#ifdef SERVICE_FILE
+    "file": 1,
+#endif
+#ifdef SERVICE_FINGER
+    "finger": 1,
+#endif
+#ifdef SERVICE_LOCATE
+    "locate": 1,
+#endif
+#ifdef SERVICE_MAIL
+    "mail": 1,
+#endif
+#ifdef SERVICE_NEWS
+    "news": 1,
+#endif
+#ifdef SERVICE_TELL
+    "tell": 1,
+#endif
+#ifdef SERVICE_UCACHE
+    "ucache": 1,
+#endif
+#ifdef SERVICE_WHO
+    "who": 1,
+#endif
+#ifdef PORT_FTP
+    "ftp": PORT_FTP,
+#endif
+#ifdef PORT_HTTP
+    "http": PORT_HTTP,
+#endif
+#ifdef PORT_NNTP
+    "nntp": PORT_NNTP,
+#endif
+#ifdef PORT_RCP
+    "rcp": PORT_RCP,
+#endif
+#ifdef PORT_SMTP
+    "smtp": PORT_SMTP,
+#endif
+  ]);
+}
+
+int AddBanned(string mud, string reason) {
+  if (!(mud = GetMudName(mud))) {
+    return 0;
+  }
+  Banned[mud] = reason;
+  save();
+  return 1;
+}
+
+string query_save_file() {
+  return SAVE_INTERMUD;
+}
+
+#endif /* __PACKAGE_SOCKETS__ */

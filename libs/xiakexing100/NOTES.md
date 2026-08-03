@@ -323,13 +323,13 @@ Restored `NET_DEAD_TIMEOUT` to 900 and did a full clean driver restart
 before finishing (the test-only timeout value was never left in place).
 
 **Note for the project**: two other confirmed "Century/`adm-single`"
-lineage siblings (AGENTS.md §11) — `shiji` and `xianjianchuanqi` — still
+lineage siblings (AGENTS.md §11) — `shiji` and `xjcq2000` — still
 carry the exact same unfixed 2-arg `tell_room()` wrapper in their own
 `adm/simul_efun/message.lpc` (checked via grep during this pass, not
 fixed — out of scope for this task, which is `xiakexing100`-only).
-`shujian2008`, `xiakexinzhuan2`, and `zhonghua2` (same family) already
+`shujian2008`, `xkxz2`, and `zhonghua2` (same family) already
 carry the fix from earlier passes. Worth a follow-up pass on `shiji`/
-`xianjianchuanqi` specifically for this bug given `xianjianchuanqi` is
+`xjcq2000` specifically for this bug given `xjcq2000` is
 also the lib AGENTS.md §10.8 documents hitting an unrelated driver-fatal
 crash ~25 minutes into its own net-dead soak — the two are different
 bugs but both live in the same net-dead code path family.

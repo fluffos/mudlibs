@@ -1,0 +1,89 @@
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER;
+
+int cast(object me, object target) {
+  int damage, i, k, j;
+  string msg, succ_msg;
+  object *enemy;
+
+  if (me->query_level() < 40)
+    return notify_fail("你的人物等级不够。\n");
+  if (me->query("mana") < 500)
+    return notify_fail("你的法力不够。\n");
+  if (me->query_skill("spells") < 600)
+    return notify_fail("你的法术修为过低。\n");
+  if (time() < me->query_temp("XST_hpyy") + 6)
+    return notify_fail("你不能频繁调用天气元气。\n");
+
+  me->clean_up_enemy();
+  if (!me->is_fighting())
+    return notify_fail("「虎咆阳炎」只能战斗中使用。\n");
+  enemy = me->query_enemy();
+  if (!intp(i = sizeof(enemy))
+    || i < 1)
+    return notify_fail("「虎咆阳炎」只能战斗中使用。\n");
+
+  damage = random(me->query("mana_factor"));
+  if (me->query_level() >= 90 && me->query("shentong/90"))
+    damage = 5000;
+  else {
+    if (damage < 300)
+      damage = 300;
+    if (damage > 500)
+      damage = 500;
+  }
+  me->add("mana", -500);
+  me->set_temp("XST_hpyy", time());
+  me->add_temp("apply/attack", 90);
+  me->set_temp("pfm_msg", 1);
+
+  if (COMBAT_D->query_message_type(me) < 2)
+    msg = HIC "$N" HIC "张口吐出一团霞光，在半空迎风化作一只浑身" NOR RED "焰气" NOR HIC "冲天的巨虎，" NOR RED "炎虎" NOR HIC "张口一声巨啸，顿时一团团" HIR "火球" HIC "从口中喷出，从半空疾如流星般落下！\n" NOR;
+  else msg = HIC "$N" HIC "施展了「" HIY "虎" HIB "咆" HIW "阳" HIR "炎" HIC "」。\n" NOR;
+  message_vision(msg, me);
+
+  k = 1 + random(2);
+  while (i--) {
+    for (j = 0; j < k; j++) {
+      target = enemy[i];
+      if (!target || !me->is_fighting(target)
+        || !living(me))
+        continue;
+      if (target->query("family/family_name") == "火云洞"
+        || target->query("family/family_name") == "五庄观")
+        continue;
+      msg = HIR "\n红光一闪，一个拳头大小的火球直朝$n" HIR "$l奔去！\n" NOR;
+      succ_msg = HIR "$n" HIR "一身闷哼，$l处红光一闪，不由脸色一白。\n" NOR;
+      damage = COMBAT_D->do_attack(
+        me,
+        target,
+        me->query_temp("weapon"),
+        TYPE_QUICK,
+        msg,
+        succ_msg,
+        0,
+        damage,
+        "kee"
+      );
+      if (damage < 1)
+        message_vision(HIC "$n" HIC "轻咦一声，纵身闪开。\n" NOR, me, target);
+      else if (!target->query_condition("fire2_poison"))
+        target->apply_condition("fire2_poison", 3);
+    }
+  }
+
+  me->set_temp("pfm_msg", 0);
+  me->add_temp("apply/attack", -90);
+  return 1;
+}
+
+int help(object me) {
+  write(@HELP
+	神通名称：虎咆阳炎	
+	神通效果：对区域内的敌人进行物理型气血攻击，并可能使对方身中火毒
+		  冷却6秒
+		  对火云洞、五庄观弟子无效
+HELP);
+  return 1;
+}

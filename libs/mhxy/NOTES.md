@@ -2,7 +2,7 @@
 
 - Archive: `archives/mhxy.rar` (18.8MB — "梦幻西游"/"Fantasy Journey to
   the West", 青岛站/Qingdao station, running since 2002-01-15). Same
-  西游记 lineage as archive #15 (fluffos_xiyou2000) — shares the
+  西游记 lineage as archive #15 (xyj2000f) — shares the
   age-gate question, `convertd.lpc` Greek-table typo shape, etc.
   **Not a byte-duplicate of `梦幻西游2002版.rar` (a separate archive in
   this collection with the same game name)** — different snapshot,
@@ -16,7 +16,7 @@
 ## Status: DONE — boots clean, playable over telnet
 
 Full flow confirmed: banner, GB/BIG5 prompt (same legacy pattern as
-`fluffos_xiyou2000`), stats, age-gate question. Note: the BIG5 hint text
+`xyj2000f`), stats, age-gate question. Note: the BIG5 hint text
 in the banner is mojibake (same shape as other libs — a BIG5-encoded
 substring inside an otherwise-GBK file), cosmetic only.
 
@@ -33,10 +33,10 @@ substring inside an otherwise-GBK file), cosmetic only.
    handled it gracefully and continued; not investigated further (not on
    the boot path).
 2. `adm/daemons/convertd.lpc` — the SAME Greek-alphabet-table stray-
-   trailing-backslash bug as `fluffos_xiyou2000` (`"α\",` should be
+   trailing-backslash bug as `xyj2000f` (`"α\",` should be
    `"α",`, repeated ~45 times in this file specifically). **Gotcha this
    time**: this file has CRLF line endings, so the straightforward
-   `s/\\"(,)?$/"\1/` fix from `fluffos_xiyou2000` silently did nothing
+   `s/\\"(,)?$/"\1/` fix from `xyj2000f` silently did nothing
    (sed's `$` anchors before the `\n`, not before a preceding `\r`) —
    needed `s/\\"(,)?\r?$/"\1\r/` to actually match. Worth remembering:
    **always check for a stray `\r` before concluding an end-of-line sed

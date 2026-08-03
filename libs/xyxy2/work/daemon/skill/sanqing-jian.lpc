@@ -1,0 +1,162 @@
+#include <ansi.h>
+#include <combat.h>
+inherit SKILL;
+
+string *msg1 = ({
+  "身形稍退，使出一招",
+  "仰天长笑，看也不看，一招",
+  "轻轻一跃，使了个",
+  "神态悠闲，一招",
+  "身形转个不停，突然一招",
+  "脚下踏了个七星步，一招",
+});
+
+string *msg2 = ({
+  HIR "「星河影动」" NOR "，",
+  HIY "「一点灵犀」" NOR "，",
+  HIM "「古道西风」" NOR "，",
+  HIW "「沧海月明」" NOR "，",
+  HIB "「乘风归去」" NOR "，",
+  HIC "「白云千载」" NOR "，",
+  HIG "「曲径通幽」" NOR "，",
+});
+
+string *msg3 = ({
+  "手中$W势若飞瀑将之格开。",
+  "手中$W将之凌空弹开。",
+  "手中$W轻妙将之卸在一旁。",
+  "$W“镗”的一声，将之格开。",
+  "“镗”的一声挡住了。",
+});
+
+mapping *action = ({
+  ([ "action": "$N使出一招" + HIR "「星河影动」" NOR + "，剑光闪烁不定，若有若无地刺向$n$l。\n",
+    "dodge": 0,
+    "parry": 15,
+    "damage": 75,
+    "damage_type": "刺伤"
+  ]),
+  ([ "action": "$N身形转个不停，突然一招" + HIY "「一点灵犀」" NOR + "使出，手中$w划出一道银弧，径刺$n$l。\n",
+    "dodge": -10,
+    "parry": -15,
+    "damage": 75,
+    "damage_type": "刺伤"
+  ]),
+  ([ "action": "$N脚下踏了个七星步，一招" + HIM "「古道西风」" NOR + "手中$w势若飞瀑向$n拦腰一斩。\n",
+    "dodge": -5,
+    "parry": -15,
+    "damage": 80,
+    "damage_type": "劈伤"
+  ]),
+  ([ "action": "但见$N连退几步，忽然间纵身跃起，手中$w一式" + HIW "「沧海月明」" NOR + "对准$n的$l凌空一斩。\n",
+    "dodge": -15,
+    "parry": -5,
+    "damage": 80,
+    "damage_type": "劈伤"
+  ]),
+  ([ "action": "$N轻轻一跃，使了个" + HIB "「乘风归去」" NOR + "，却在转身之际对准$n$l斜斜挥出一剑。\n",
+    "dodge": 5,
+    "parry": -25,
+    "damage": 85,
+    "damage_type": "刺伤"
+  ]),
+  ([ "action": "$N神态悠闲，手中$w凭空一指，一招" + HIC "「白云千载」" NOR + "轻妙地划向$n的$l。\n",
+    "dodge": -10,
+    "parry": -10,
+    "damage": 90,
+    "damage_type": "刺伤"
+  ]),
+  ([ "action": "$N手中$w向外一分，使一招" + HIG "「曲径通幽」" NOR + "反手对准$n$l一剑刺去。\n",
+    "dodge": 0,
+    "parry": -20,
+    "damage": 95,
+    "damage_type": "刺伤"
+  ]),
+  ([ "action": "$N手中$w连续划出几个光环，一阵吸力带得$n向前踏出一步，$N左手一式" + HIC "「三清绝剑」" NOR + "已刺向$n的$l。\n",
+    "dodge": -80,
+    "parry": -80,
+    "damage": 125,
+    "force": 100,
+    "damage_type": "刺伤"
+  ]),
+});
+
+int valid_learn(object me) {
+  object ob;
+
+  if ((int)me->query_maxforce() < 50)
+    return notify_fail("你的内力不够，没有办法练三清剑法。\n");
+
+  if (!(ob = me->query_temp("weapon"))
+    || (string)ob->query("skill_type") != "sword")
+    return notify_fail("你必须先找一把剑才能练剑法。\n");
+
+  return 1;
+}
+
+int valid_enable(string usage) {
+  return usage == "sword" || usage == "parry";
+}
+
+mapping query_action(object me, object weapon) {
+  int i;
+  if (intp(i = me->query_temp("SQJ_perform"))
+    && i > 0) {
+    if (i > 8)
+      i = 8;
+    return action[i - 1];
+  } else return action[random(7)];
+}
+
+varargs int practice_skill(object me, int flag) {
+  if ((int)me->query("kee") < 30
+    || (int)me->query("force") < 10)
+    return notify_fail("你的内力或气不够，没有办法练习三清剑法。\n");
+  me->receive_damage("kee", 30);
+  me->add("force", -10);
+  if (flag)
+    write("你按着所学练了一遍三清剑法。\n");
+  return 1;
+}
+
+string perform_action_file(string action) {
+  return CLASS_D("wzg") + "/sanqing-jian/" + action;
+}
+
+varargs mixed hit_ob(object me, object victim, int damage, object weapon, string limb) {
+  int p, dd;
+  string str;
+  if (!me || !living(me) || !victim || !me->is_killing(victim->query("id")))
+    return 0;
+  if (damage < 1) return 0;
+  if (!objectp(weapon = me->query_temp("weapon"))
+    || (weapon->query("skill_type") != "sword"
+      && weapon->query("use_apply_skill") != "sword")
+    || me->query_skill_mapped("sword") != "sanqing-jian")
+    return 0;
+  if (me->query("family/family_name") != "五庄观"
+    && me->query("chushi/chushi_wzg") != "yes")
+    return 0;
+  if (me->query_skill("youshen-yuqi", 2) > 100) {
+    p = (me->query_skill("youshen-yuqi", 2) - 100) / 180 + 15;
+    if (damage > 10000)
+      damage = damage / 100 * p;
+    else damage = damage * p / 100;
+    dd = damage;
+  } else dd = 0;
+  if (me->query_temp("jianmang") <= 0)
+    return dd;
+  dd += damage;
+  victim->receive_wound("kee", dd, me, TYPE_CAST);
+  switch (random(5)) {
+    case 0: return HIG + COLOR_D->clean_color("$w上剑芒一吐，从$n$l穿过，带起一抹腥红！") + NOR "\n"; break;
+    case 1: return HIG + COLOR_D->clean_color("$n一声闷哼，却原来是被$w上的剑芒划出一道伤痕！") + NOR "\n"; break;
+    case 2: return HIG + COLOR_D->clean_color("$w上剑芒一闪，$n$l处现出一道剑伤！") + NOR "\n"; break;
+    case 3: return HIG + COLOR_D->clean_color("剑芒一闪，$n手捂$l踉跄而退！") + NOR "\n"; break;
+    default: return HIG + COLOR_D->clean_color("$w上剑芒闪烁，$n$l瞬间便被割得鲜血淋漓！") + NOR "\n"; break;
+  }
+}
+
+string query_parry_msg(object me, object target) {
+  return "结果$n" + msg1[random(sizeof(msg1))] + msg2[random(sizeof(msg2))] + msg3[random(sizeof(msg3))] + "\n";
+}

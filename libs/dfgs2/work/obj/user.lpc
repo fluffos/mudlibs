@@ -1,0 +1,173 @@
+// user.c
+
+#include <origin.h>
+#include <user.h>
+
+inherit CHARACTER;
+inherit F_AUTOLOAD;
+inherit F_EDIT;
+inherit F_SAVE;
+inherit F_MORE;
+
+private void user_dump(int type);
+
+nosave object my_link;
+nosave int last_age_set;
+
+#include <dbase_security.h>
+
+void create() {
+  // Let LOGIN_D export proper uid to us.
+  seteuid(0);
+}
+
+int move_or_destruct(object dest) {
+  if (dest) move(dest);
+  else {
+    message("system", "一阵时空的扭曲将你传送到另一个地方....\n", this_object());
+    set_temp("last_location", base_name(environment()));
+    move(VOID_OB);
+  }
+}
+
+int set_link(object link) {
+  if (origin() == ORIGIN_CALL_OTHER
+    && (geteuid(previous_object()) != ROOT_UID)
+    && (geteuid(previous_object()) != geteuid(this_object())))
+    return 0;
+  my_link = link;
+  return 1;
+}
+
+object link() { return my_link; }
+
+void terminal_type(string term_type) {
+  set_temp("terminal_type", term_type);
+  message("system", "终端机型态设定为 " + term_type + "　\n", this_object());
+}
+
+void reset() {
+  // To prevent the master copy of user object error out by security
+  // violation.
+  if (!userp(this_object())) return;
+
+  gain_score("survive", (int)query("age") / 2 + 1);
+}
+
+// This is used by F_SAVE to determine the filename to save our data.
+string query_save_file() {
+  string id;
+
+  id = geteuid();
+  if (!id) id = getuid();
+  if (!stringp(id)) return 0;
+  return sprintf(DATA_DIR "user/%c/%s", id[0], id);
+}
+
+int save() {
+  int res;
+
+  if (objectp(my_link)) my_link->save();
+  save_autoload();
+  res = ::save();
+  clean_up_autoload();  // To save memory
+  return res;
+}
+
+// This function updates player's age, called by heart_beat()
+void heart_beat() {
+  ::heart_beat();
+  if (!this_object()) return;
+
+  // Make us older. Note this should not rely on fixed period between
+  // each call to heart_beat bcz heart_beat could be stoped for various
+  // reason.                                           - Phoebus.suny
+  if (!last_age_set) last_age_set = time();
+  add("time_aged", time() - last_age_set);
+  last_age_set = time();
+  if ((int)query("time_aged") >= 86400) {
+    add("age", 1);
+    delete("time_aged");
+  }
+  if (objectp(my_link)) my_link->update_age();
+
+  if (interactive(this_object())
+    && query_idle(this_object()) >= IDLE_TIMEOUT)
+    user_dump(DUMP_IDLE);
+}
+
+void setup() {
+  ::setup();
+  restore_autoload();
+}
+
+private void user_dump(int type) {
+  switch (type) {
+    case DUMP_NET_DEAD:
+      tell_room(environment(), query("name") + "断线超过 "
+        +NET_DEAD_TIMEOUT / 60 + " 分钟，自动退出这个世界　\n");
+      command("quit");
+      break;
+    case DUMP_IDLE:
+      // wiz don't get kicked out (Elon 10-17-95)
+      if (wizardp(this_object())) return;
+      tell_object(this_object(), "对不起，您已经发呆超过 "
+        +IDLE_TIMEOUT / 60 + " 分钟了，请下次再来　\n");
+      tell_room(environment(), "一阵风吹来，将发呆中的" + query("name")
+        + "化为一堆飞灰，消失了　\n", ({ this_object() }));
+      command("quit");
+      break;
+    default: return;
+  }
+}
+
+// net_dead
+//
+// called by MudOS when an interactive player loses hir network connection
+// to the mud.
+private void net_dead() {
+  set_heart_beat(0);
+  if (objectp(my_link)) {
+    my_link->save();
+    destruct(my_link);
+  }
+
+  // Stop fighting, we'll be back soon.
+  remove_all_enemy();
+  if (environment())
+    set_temp("last_location", base_name(environment()));
+  call_out("move", 0, VOID_OB, 1);
+  set_heart_beat(0);
+
+  if (userp(this_object())) {
+    call_out("user_dump", NET_DEAD_TIMEOUT, DUMP_NET_DEAD);
+    tell_room(environment(), query("name") + "断线了　\n", this_object());
+    LOGIN_D->net_dead(this_object());
+  } else
+    command("quit");
+}
+
+// reconnect: called by the LOGIN_D when a netdead player reconnects.
+void reconnect() {
+  string last_loc;
+
+  set_heart_beat(1);
+  remove_call_out("user_dump");
+  tell_object(this_object(), "重新连线完毕　\n");
+  if (stringp(last_loc = query_temp("last_location")))
+    move(last_loc);
+}
+
+nosave string last_cmd;
+string process_input(string str) {
+  if (str[0..1] == "!!") return last_cmd + str[2..];
+  if (objectp(my_link)) return last_cmd = my_link->process_alias(str);
+
+  return 0;
+}
+
+void remove(string euid) {
+  if (euid != ROOT_UID)
+    error("remove: user object destruction security violated by " + euid + ".\n");
+  ::remove();
+}

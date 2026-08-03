@@ -1,7 +1,7 @@
 # 西游记2003-2 (xyj20032)
 
 档案名叫"西游记2003-2"，但游戏本身开机后自报家门是**三界神话（SanJie
-Myth）「测试二区」**——和 059 `sanjiechuanshuo`、060 `sanjieshenhua`
+Myth）「测试二区」**——和 059 `sjcs`、060 `sanjieshenhua`
 是同一套"三界"代码库家族的另一个成员（`get_gender()`/`enter_world()`/
 `make_body()` 等核心函式和 `sanjieshenhua` 逐字比对完全一致），开机横
 幅还留着一段"西游记之新纪元"的 ASCII 字画，应该是更早一次改名留下的

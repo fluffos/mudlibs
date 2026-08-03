@@ -19,9 +19,9 @@ live game tree.
 "ES II" engine chain explicitly — `// for ES II mudlib`, `// original from
 Lil`, `// rewritten by Annihilator (11/07/94)`, `// modified by Xiang for
 XKX (12/15/95)`, `// modified by Xuy for XKX (08/21/97)` — the same
-lineage already seen on es1_win/esI/xkx2001/rzrmud/xo/beimeixiakexing2001/
-xinkuangxiangkongjian2/yueyingqiyuan/wuhanzhan/haiyang2/yanhuangwuhun/
-yanhuangyingxiongshi/xuanjianlu. Layout is `adm/single/{master,simul_efun}`
+lineage already seen on es1_win/esI/xkx2001/rzrmud/xo/bmxkx2001/
+kxkj/yueyingqiyuan/wuhanzhan/haiyang2/yanhuangwuhun/
+yhyxs/xuanjianlu. Layout is `adm/single/{master,simul_efun}`
 + `adm/daemons/*` + `adm/simul_efun/*` (fragments `#include`d into
 `simul_efun.c`), matching that whole family. A further ShenZhou-specific
 layer was added on top by a "Karlopex@sz" (site admin, credited in several
@@ -96,7 +96,7 @@ runs).
    registered via `add_action("command_hook", "", 1)` in `enable_player()`.
    Exactly the pattern that broke every post-login command with zero
    visible error on `xuanjianlu` (#70) and retroactively on
-   `beimeixiakexing2001` (#45). Fixed by dropping `private` (kept
+   `bmxkx2001` (#45). Fixed by dropping `private` (kept
    `nomask`) BEFORE the first boot attempt, then verified with a real
    post-login `look`/`score`/`i`/`quit` sequence (see transcript below) —
    this is exactly the check the task's standing policy requires, and it
@@ -227,7 +227,7 @@ runs).
 
 11. **`is_killing(who)` type mismatch (object vs the declared `string
     id`)** — the same class of copy-paste bug already catalogued (§15b's
-    `nitan_ceshi`/`yanhuangyingxiongshi` findings): `feature/attack.lpc`
+    `nitan_ceshi`/`yhyxs` findings): `feature/attack.lpc`
     declares `varargs int is_killing(string id)` and every correct call
     site does `is_killing(ob->query("id"))`, but 5 files (all clearly
     copy-pasted from one template, sharing the exact same line/dialogue
@@ -415,7 +415,7 @@ runs).
   BIG5 prompt (`"Are you using BIG5 font(Y/N)?"`) is a genuine, simple
   either-way branch (any non-"y"/"yes" input defaults to `"GB"`, no
   rejection path at all) — not a disguised client-version literal check
-  like `xiyangzaixian3`'s finding. No hidden gate found.
+  like `xyzx3`'s finding. No hidden gate found.
 - **Anti-flood registration throttle (§15j)**: grepped for
   `IsTimeAllowed`/`NewIps`-shaped throttles — none found; ran two full
   independent registration sessions back-to-back from the same driver
@@ -612,7 +612,7 @@ and not consequential for this environment.
    successfully under wasm**, same flow as the native test above,
    through to `look`/`quit` producing correct real output at 新手的殿堂.
    This lib has **no IP-format-dependent login gate**, so — like
-   `shujianpiaoling2` — it is **fully playable under wasm**, one of the
+   `sjpl2` — it is **fully playable under wasm**, one of the
    best wasm results in this batch.
 
 ## WASM-enablement pass (2026-07-24)
@@ -894,7 +894,7 @@ net-dead timer itself ever fired — confirmed via save-file mtimes that
 this player's own `user_dump()` never ran), the driver process aborted
 outright** — `ss`/`ps` confirmed the PID and the port both gone. This is
 NOT the mudlib bug above; it is the SAME driver-level class already
-documented in AGENTS.md §10.8 (`xianjianchuanqi`, `shiji`) — this is
+documented in AGENTS.md §10.8 (`xjcq2000`, `shiji`) — this is
 the **third independent lib** to hit it, and the first time (of these
 three) the exact C-level signature was captured with a full backtrace
 (driver launched with stdout redirected to a file, per §10.8's own
@@ -924,7 +924,7 @@ not specific to any one lib's mudlib code — no LPC-level fix is
 possible or attempted here, matching §10.8's existing verdict. One
 difference from the prior two occurrences worth noting: **this time
 `log/debug.log` DID capture the `md: debugmalloc:...` line** (unlike
-`xianjianchuanqi`'s "debug.log showed nothing whatsoever") — though the
+`xjcq2000`'s "debug.log showed nothing whatsoever") — though the
 full C++ backtrace was still only in the driver's own redirected
 stdout, so capturing driver stdout during any long-sit session remains
 the only way to get the actionable detail. Per the task's cleanup

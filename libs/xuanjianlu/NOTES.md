@@ -6,13 +6,13 @@
 the live connect banner both confirm the game's own self-identified name is
 **玄剑录** ("Record of the Mysterious Sword") — matches the slug, no
 divergence to note. Distributed by the same "小熊泥苑" collector/hosting
-site seen on shujian2008/shujiantianxia (archive #35/#36) — `小熊泥苑.txt`
+site seen on shujian2008/sjtx2 (archive #35/#36) — `小熊泥苑.txt`
 sits alongside the mudlib root in the raw archive, just site branding, not
 part of the mudlib.
 
 **Lineage**: confirmed via `md5sum` that `adm/simul_efun/chinese.c` and
 `adm/single/master.c` are **byte-identical** to `xkx2001` (archive #25) and
-`beimeixiakexing2001` (archive #45) — this is the same "ES II" engine
+`bmxkx2001` (archive #45) — this is the same "ES II" engine
 family (master.c header credits "original from Lil", "rewritten by
 Annihilator", "modified by Xiang/Xuy for XKX"). `adm/register/xkxreg`,
 `xkxrestore`, `xkx_monitor` filenames further confirm the "XKX" (侠客行)
@@ -21,7 +21,7 @@ distinct wuxia setting (Ming-cult/明教/昆仑/侠客岛 zones, its own NPCs).
 `adm/daemons/logind.c` differs from both siblings (its own registration
 flow/banner), consistent with "shared engine, distinct game-world content"
 seen across this whole ES II family (es1_win/esI/xkx2001/rzrmud/xo/
-beimeixiakexing2001/xinkuangxiangkongjian2/yueyingqiyuan/wuhanzhan/
+bmxkx2001/kxkj/yueyingqiyuan/wuhanzhan/
 yanhuangwuhun/haiyang2).
 
 Layout: `adm/single/{master,simul_efun}` + `adm/daemons/*` + `adm/simul_efun/*`
@@ -97,7 +97,7 @@ sweep was run without incident (see below).
    which the driver refuses to boot without (`*No program in object
    '/adm/single/simul_efun'!`). Reimplemented in plain LPC (read the
    file, split lines, take the last N, write them) — same pattern as
-   catalogued in AGENTS.md, same severity as the `beimeixiakexing2001`
+   catalogued in AGENTS.md, same severity as the `bmxkx2001`
    instance of this exact bug (that lib shares this codebase family too).
 
 6. **AGENTS.md §15c** (`adm/etc/preload`-style bare-`.c` data-file refs):
@@ -146,7 +146,7 @@ sweep was run without incident (see below).
    ```
    **How this was missed on 2 prior sibling libs**: `xkx2001`'s own copy
    of this file has `nomask int command_hook` (no `private` at all) — so
-   `xkx2001` never hit this. `beimeixiakexing2001` (archive #45) *does*
+   `xkx2001` never hit this. `bmxkx2001` (archive #45) *does*
    have the identical `private nomask` shape, but that lib's own NOTES.md
    confirms testing stopped right at "reaches the password prompt" and
    never issued a real post-login command — so the bug was live there
@@ -506,7 +506,7 @@ the end of this pass; `work/data` (player save state from testing) and
 Investigated the previous pass's open observation that `score` silently
 produced no output for a fresh character. Root cause: **this lib's own
 onboarding/registration gate**, the same design family as
-`beimeixiakexing2001`'s `block_cmd` gate:
+`bmxkx2001`'s `block_cmd` gate:
 
 - `adm/daemons/logind.lpc` (enter_world): any player with
   `query("registered") != "yes"` (and `(player)` wizhood) is moved to

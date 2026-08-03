@@ -1,0 +1,182 @@
+// sword.c : an example weapon
+
+#include <weapon.h>
+#include <ansi.h>
+inherit SWORD;
+object user = this_player();
+object *target;
+int sp_time = 0;  //计算特工的储存时间 
+int max_sp_time;  //最大的时间
+int k;  //为了判段if team队友是否在一起
+string sp_message = " 真气指数 ";
+string start_message = "【 ";
+string end_message = " 】\n";
+void create() {
+  set_name("古锈剑", ({ "old sword", "sword" }));
+  set_weight(1000);
+  if (clonep())
+    set_default_object(__FILE__);
+  else {
+    set("unit", "把");
+    set("no_drop", 1);
+    set("long", "一把年代久远的锈剑。\n");
+    /*	set("value",1000);	*/
+    set("material", "gold");
+    set("no_sell", 1);
+    set("no_give", 1);
+    set("no_auc", 1);
+    set("wield_msg", "$N「唰”地一声抽出一把$n握在手中。\n");
+    set("unwield_msg", "$N将手中的$n插入腰间的剑鞘。\n");
+    set_heart_beat(1);
+  }
+  init_sword(10);
+  setup();
+}
+
+void init() {
+  add_action("do_team", "team");
+  add_action("slash_flower", "slash");
+  add_action("do_check", "check");
+}
+
+int do_check() {
+  int i;
+  int j;
+  string max_sp_message = "真气指数 ";
+  sp_message = "真气指数 ";
+  for (i = 0; i < sp_time; i++)
+    sp_message = sp_message + "[1;32m:[0m";
+  for (j = 0; j < max_sp_time; j++)
+    max_sp_message = max_sp_message + "[1;32m:[0m";
+  if (sp_time > max_sp_time) {
+    sp_time = max_sp_time;
+    sp_message = max_sp_message;
+  }
+  tell_object(user, "\n你暗运真气于丹田已经 " + HIY + sp_time + NOR + "之久..\n");
+  tell_object(user, "\n\n" + start_message + HIR + sp_message + NOR + end_message);
+  return 1;
+}
+int do_team(string arg) {
+  string item, targ, targ1;
+  int j, k = 0;
+  object *member;
+  member = this_player()->query_team();
+  for (j = 0; j < sizeof(member); j++)
+    if (present(member[j], environment(user)))
+      k = k + 1;
+  if (!arg)
+    return 0;
+  if (sscanf(arg, "form %s at %s", targ, targ1) == 2) {
+    if (targ != "sha-array") {
+      write("你要施展什么\n");
+      return 1;
+    } else {
+      if (k != sizeof(member)) {
+        write("队友不在这里 ,无法施展剑阵\n");
+        return 1;
+      } else {
+        user = this_player();
+        user->set_temp("use_sha-array", 1);
+        return 0;
+      }
+
+    }
+  }
+}
+int slash_flower(string str) {
+  int sp_level;
+  int sp_hit;
+  int i, j;
+  object me;
+  object *partner;
+  me = this_player();
+  partner = me->query_team();
+  sp_hit = user->query_skill("sha-array", 1) + 100;
+  if (sp_time > max_sp_time)
+    sp_time = max_sp_time;
+  sp_level = (int)sp_time / 10;
+  if (k != sizeof(partner)) {
+    message_vision("你队友不在这里 ,如何能帮助你使出大绝招\n", me);
+    return 1;
+  }
+
+  if (!(user->is_fighting() && user->query_temp("use_sha-array", 1))) {
+    message_vision("此招式乃在剑阵中对付敌人之决招 ,平时是无法施展的\n", user);
+    return 1;
+  }
+  if (str != "flower") {
+    message_vision("你要施展什么大决招??\n", user);
+    return 1;
+  }
+  if (sp_level < 1) {
+    message_vision(HIG + "$N真气尚未凝聚完全 ,无法使出大决招\n" + NOR, user);
+    return 1;
+  } else if (sp_level == 1) {
+    message_vision(HIR + "你祭起神剑 ,天空突然闪下一道闪电击中$N\n" + NOR, target[i]);
+    sp_time = sp_time - 5;
+    target[i]->add("kee", -sp_hit);
+    return 1;
+  } else if (sp_level == 2) {
+    message_vision(HIR + "$N运尽全身真气于剑上 ,只见$N手中长剑嗡嗡作响 ,朝敌人射去\n" + NOR, user);
+    target[i]->add("kee", -1.5 * sp_hit);
+    sp_time = sp_time - 10;
+    return 1;
+  } else if (sp_level > 2) {
+    message_vision(HIR + "$N得到队友的支持 ,加上天时地利的配合 ,击出惊天动地的一击\n" + NOR, user);
+    sp_time = sp_time - 15;
+    target[i]->add("kee", -2 * sp_hit);
+  }
+  return 1;
+}
+void heart_beat() {
+  int number, i, j;
+  object *partner;
+  set_heart_beat(0);
+  max_sp_time = (int)user->query_skill("sha-array", 1) / 4 + 8;
+  partner = user->query_team();
+  number = sizeof(user->query_team());
+  target = user->query_enemy();
+  k = 0;
+  if (random(100) > 5)
+    if (user->query("PKS") > 60) {
+      message_vision("体内一股邪气导致真气涣散 ,你感到似乎若有所失 ,\n", user);
+      user->add("combat_exp", -1000);
+      user->add("PKS", -1);
+    }
+  for (j = 0; j < number; j++)
+    if (present(partner[j], environment(user)))
+      k = k + 1;
+  if (k == number)
+    if (user->is_fighting()) {
+      if (number == 2) {
+        if (random(100) > 80) {
+          message_vision(HIY + "两仪剑阵如行云流水 ,生生不息 ,$N困于其中已渐渐迷失了自己\n" + NOR, target[i]);
+          target[i]->start_busy(2);
+        }
+        if (0.7 * user->query("combat-exp") < target[i]->query("combat_exp"))
+          sp_time++;
+      } else if (number == 4) {
+        if (random(100) > 80) {
+          message_vision(HIR + "四象剑阵内有如千军万马 ,登时吓的$N魂不附体 ,无法对你攻击\n" + NOR, target[i]);
+          target[i]->start_busy(4);
+        }
+        if (0.7 * user->query("combat-exp") < target[i]->query("combat_exp"))
+          sp_time = sp_time + 2;
+      }
+
+      else if (number == 8) {
+        if (random(100) > 80) {
+          message_vision(HIY + "八卦游龙引动九天九地之气 ,刹时金光万丈 ,使得$N妖气顿减 ,无法动弹\n" + NOR, target[i]);
+          target[i]->start_busy(4);
+        }
+        if (0.7 * user->query("combat-exp") < target[i]->query("combat_exp"))
+          sp_time = sp_time + 3;
+      }
+    }
+  set_heart_beat(1);
+  return;
+}
+int query_autoload() {
+  if (this_player()->query("family/family_name") == "仙剑派")
+    return 1;
+}

@@ -1,0 +1,164 @@
+// npc.c
+#pragma save_binary
+#include <command.h>
+inherit CHARACTER;
+object carry_object(string file) {
+  object ob, obj;
+  if (!objectp(ob = new(file))) return 0;
+  if (obj = present(ob->query("id"), this_object())) {
+    destruct(ob);
+    return obj;
+  }
+  ob->move(this_object());
+  return ob;
+}
+object add_money(string type, int amount) {
+  object ob;
+  ob = carry_object("/clone/money/" + type);
+  if (!ob) return 0;
+  ob->set_amount(amount);
+}
+int down_zc() {
+  int count, max_time;
+  if (!(int)query("zhongcheng")) return 0;
+  if (!query("xiha_flag/time")) set("xiha_flag/time", 0);
+  count = query("xiha_flag/time");
+  if (!(max_time = query("max_time"))) max_time = 1800;
+  max_time = max_time / 2;
+  if (count == max_time) {
+    set("zhongcheng", query("zhongcheng") - 1);
+    count = 0;
+    set("xiha_flag/time", count);
+    return 1;
+  }
+  count++;
+  set("xiha_flag/time", count);
+  return 1;
+}
+
+int accept_fight(object who) {
+  string att;
+  att = query("attitude");
+  if (is_fighting()) switch (att) {
+    case "heroism":
+      command("say 哼！出招吧！\n");
+      break;
+    default:
+      command("say 想倚多为胜，这不是欺人太甚吗！\n");
+      return 0;
+  }
+  if ((int)query("jing") * 100 / (int)query("max_jing") >= 90
+    && (int)query("qi") * 100 / (int)query("max_qi") >= 90) {
+    switch (att) {
+      case "friendly":
+        command("say " + RANK_D->query_self(this_object())
+          + "怎么可能是" + RANK_D->query_respect(who)
+          + "的对手？\n");
+        return 0;
+      case "aggressive":
+      case "killer":
+        command("say 哼！出招吧！\n");
+        break;
+      default:
+        if (!is_fighting())
+          command("say 既然" + RANK_D->query_respect(who)
+            + "赐教，" + RANK_D->query_self(this_object())
+            + "只好奉陪。\n");
+    }
+    return 1;
+  } else
+    return 0;
+}
+// This function is called by the reset() of the room that creates this
+// npc. When this function is called, it means the room demand the npc
+// to return its startroom.
+int return_home(object home) {
+  object ob = this_object();
+  mapping exits;
+  // Are we at home already?
+  if (!environment())
+    return 1;
+  exits = environment()->query("exits");
+  // Are we able to leave?
+  if (!living(ob)
+    || is_fighting()
+    || !mapp(exits) || !sizeof(exits)) {
+    remove_call_out("return_home");
+    call_out("return_home", 20, home);
+    return 1;
+  }
+  ob->set("water", ob->max_water_capacity());
+  ob->set("food", ob->max_food_capacity());
+  ob->create();
+  // Leave for home now.
+  if (environment() != home) {
+    message("vision", ob->name() + "急急忙忙地离开了。\n",
+      environment(), this_object());
+    message("vision", ob->name() + "走了过来。\n",
+      home, ob);
+    return move(home);
+  }
+  return 1;
+}
+// This is the chat function dispatcher. If you use function type chat
+// message, you can either define your own functions or use the default
+// ones.
+int chat() {
+  string *msg;
+  int chance, rnd;
+  if (!environment() || !living(this_object())) return 0;
+  if (!chance = (int)query(is_fighting() ? "chat_chance_combat" : "chat_chance"))
+    return 0;
+  if (arrayp(msg = query(is_fighting() ? "chat_msg_combat" : "chat_msg"))) {
+    if (random(100) < chance) {
+      rnd = random(sizeof(msg));
+      if (stringp(msg[rnd]))
+        say(msg[rnd]);
+      else if (functionp(msg[rnd]))
+        return evaluate(msg[rnd]);
+    }
+    return 1;
+  }
+}
+// Default chat function: Let the npc random move to another room.
+int random_move() {
+  mapping exits;
+  string *dirs;
+  if (!environment() || !living(this_object())) return 0;
+  if (!mapp(exits = environment()->query("exits"))) return 0;
+  dirs = keys(exits);
+  if (!sizeof(dirs)) return 0;
+  command("go " + dirs[random(sizeof(dirs))]);
+  return 1;
+}
+// Default chat function: Let the npc cast his/her enabled spells
+void cast_spell(string spell) {
+  string spell_skill;
+  if (!environment() || !living(this_object())) return;
+  if (stringp(spell_skill = query_skill_mapped("spells")))
+    SKILL_D(spell_skill)->cast_spell(this_object(), spell);
+}
+// Default chat function: Let the npc exert his/her enabled force
+int exert_function(string func) {
+  string force_skill;
+  if (!environment() || !living(this_object())) return 0;
+  if (!stringp(func)) return 0;
+  if (stringp(force_skill = query_skill_mapped("force")))
+    SKILL_D(force_skill)->exert_function(this_object(), func);
+}
+// Default chat function: Let the npc perform special action with 
+// his/her enabled martial art
+int perform_action(string action) {
+  string martial_skill, act;
+  if (!environment() || !living(this_object())) return 0;
+  if (!stringp(action)) return 0;
+  if (sscanf(action, "%s.%s", martial_skill, act) != 2)
+    return 0;
+  martial_skill = query_skill_mapped(martial_skill);
+  if (stringp(martial_skill))
+    return SKILL_D(martial_skill)->perform_action(this_object(), act);
+}
+void attempt_apprentice(object ob) {
+  command("sigh " + ob->query("id"));
+  command("say " + RANK_D->query_self(this_object()) + "才疏学浅，不敢误人子弟，这位" + RANK_D->query_respect(ob) + "另谋高就吧！");
+}

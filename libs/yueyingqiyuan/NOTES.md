@@ -14,7 +14,7 @@ banner text). Raw archive root is nested at `raw/yy/yueying/` (the top-level
 West)-themed reskin, credited "XYJ 2000, Copyright 2000-2001 by Moon lOVE
 Story", with wizard names 巫师协会 crediting "stone"/"fix". The raw archive
 also ships a generic `小熊泥苑.txt` readme (the same "小熊泥苑" hosting-site
-readme text seen bundled with `shujiantianxia`, archive #36) — same
+readme text seen bundled with `sjtx2`, archive #36) — same
 distribution site, unrelated codebase, not a lineage signal by itself
 (consistent with the project's repeated "similar branding ≠ shared lineage"
 finding).
@@ -22,7 +22,7 @@ finding).
 **Lineage**: `adm/obj/master.c`'s own header comment says `// for ES II
 mudlib` / `// original from Lil` / `// rewritten by Annihilator` — the same
 "ES II" family already seen in `es1_win`/`esI`/`xkx2001`/`rzrmud`/`xo`/
-`xo_final`/`beimeixiakexing2001`. Layout is `adm/obj/{master,simul_efun}`
+`xo_final`/`bmxkx2001`. Layout is `adm/obj/{master,simul_efun}`
 (not `adm/single/` like the Century family, not `adm/obj` overlapping with
 custom-ACL `securityd.lpc` like `shujian2008`). `feature/dbase.lpc` (the
 `F_DBASE`-equivalent) implements real local `set`/`query`/`delete`/`add`
@@ -329,7 +329,7 @@ process remains with cwd under `libs/yueyingqiyuan/` before finishing.
   `libs/*/work/adm/etc/banned_name` is unsafe as a blanket pattern and
   should be re-scoped or the other 90 libs re-checked for the same
   false-positive wipe (checked the other 7 libs in this batch —
-  `yuxuechongsheng` uses a differently-named `BANNED_NAMES` file that
+  `yxcs` uses a differently-named `BANNED_NAMES` file that
   IS genuinely runtime-managed via `write_file()` in `band.lpc`, so
   that one gitignore hit is correct; the remaining 5 libs in this batch
   have no `BANNED_NAME`-shaped gate at all).

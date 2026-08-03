@@ -1,0 +1,741 @@
+//  标准当铺    /system/std/room/shop.c  
+//************************************************************************//
+//    每个玩家当的东西，在一年（玩家时间）内可以赎回，价格和当的时候是一样//
+//的，都降为value的30%。一年后将不能再赎，当铺将这些东西公开以高价出售。  //
+//    因为考虑到不应该在一个当铺里当的东西哪儿都能赎，所以在当铺ROOM中加了//
+//个参数set( "dangpu_location", string ) 。 这个参数是必须的，否则就通当通//
+//赎了。                                                                  //
+//    铁铺如果inherit SMITHSHOP， 则有收购铁器的功能(sell)，按重量收。    //
+//************************************************************************//    
+// Edit by Lin on March 7,1997                                            //
+//************************************************************************//
+//    首先加入了购买过期商品的功能，又加入了替换ansi控制字的函数true_     //  
+//string（这个函数其实不一定要在这里加的，因为别的地方很可能也要用它，比如//
+//questnpc里面）改善了已经有的功能，然后又加入了店铺开关张的时间控制。    //  
+//************************************************************************//
+// Changed by lala on March 7, 1998 —— 真是很巧啊，整整一年。(lala)     //
+//************************************************************************//
+// Last modified : 98-09-22 by nerd :) remove one unused variable
+//************************************************************************//
+// Last modified : 98-10-02 by hydra  更改跟NATURE_D不兼容的地方
+// CAN_SHOP()里面判断晚上用NATURE_D->AtNight()代替CheckTime()
+//************************************************************************//
+
+#include <ansi.h>
+
+inherit ROOM;
+inherit F_FINANCE;
+
+void init() {
+  seteuid(getuid());
+  seteuid(geteuid());
+
+  add_action("DoValue", "value");   //给物品估价的函数。
+  add_action("DoPawn", "pawn");    //典当物品的函数。
+  add_action("DoPawnlist", "pawnlist");  //查看典当物品的函数。
+  add_action("DoRedeem", "redeem");  //赎买典当物品的函数。
+  add_action("DoSell", "sell");    //收购物品的函数。
+  add_action("DoList", "list");    //列出出售物品的函数。
+  add_action("DoBuy", "buy");     //买物品的函数。
+
+  add_action("DoConvert", "convert");  //换钱的函数。
+  add_action("DoSave", "cun");     //存钱的函数。
+  add_action("DoLoad", "qu");       //取钱的函数。
+  add_action("DoCheck", "check");    //查帐的函数。
+}
+
+//**************************************************************************//
+//  下面三个函数是标准当铺和标准钱庄所公用的。                              //
+//  int Dest()                                                              //
+//  int CheckTime()                                                         //
+//  int CanShop()                                                           //
+//**************************************************************************//
+
+int Dest()                                  //删除延时的函数。
+{
+  delete_temp("busy");
+}
+
+//Hydra modifid at 19981002
+//CheckTime is replaced by NATURE_D->AtNight()
+/*
+int CheckTime()                             //检查系统时间的函数。
+{
+    int hour = query_shichen() * 2;         //hour：现在的系统时间（小时）。
+    int open_time = query( "open_time" );   //open_time：本店的开门时间。
+    int close_time = query( "close_time" ); //close_time：本店的关门时间。
+
+    if ( !open_time )                       //缺省设定开门时间为晨五时。
+        open_time = 5;
+
+    if ( !close_time )                      //缺省设定关门时间为晚七时。
+        close_time = 19;
+
+    if ( hour > close_time                  //如果在关门以后或者在开门前
+        || hour < open_time )               //则失败。
+        return 0;
+
+    return 1;
+}*/
+
+int CanShop()                               //这是一个通用的检查是否可以交易的
+//函数。
+{
+  if (!this_player()->can_act())        //检查玩家是否忙。
+    return 0;
+
+  if (NATURE_D->AtNight())                     //检查是否是营业时间。
+    return notify_fail("店铺里空荡荡的，没有人搭理你。\n"
+      + "看来你来的不是时候，现在不是营业时间。\n");
+
+  if (query_temp("busy"))               //若有交易未处理完，返回失败信息。
+    return notify_fail("伙计生气地说：“着什么急，我正忙呢！”\n");
+
+  return 1;
+}
+
+//**************************************************************************//
+//  下面八个函数是标准当铺所用的。                                          //
+//  void AddGoods( string name, string base_name )                          //
+//  int DoValue( string arg )                                               //
+//  int DoPawn( string arg )                                                //
+//  int DoPawnlist( object ppl )                                            //
+//  int DoRedeem( int number )                                              //
+//  int DoSell( string arg )                                                //
+//  int DoList()                                                            //
+//  int DoBuy( string arg )                                                 //
+//**************************************************************************//
+int DoValue(string arg)                   //给物品估价的函数。
+{                                           //参数arg是物品的英文名。
+  object ob;                              //ob是通用指代的物品。
+  int value, value1;                      //value是物品的实际价值。
+  //value1是典当的价格。
+
+  if (!CanShop())
+    return 0;
+
+  if (!arg                               //若无参数或者玩家身上无此物品，
+  || !(ob = present(arg, this_player())))    //则返回失败信息。
+    return notify_fail("伙计提醒你：“你要估价什么物品？”\n");
+
+  if (ob->query("money_id"))          //若估价的是钱，则返回失败信息。
+    return notify_fail("伙计不解地说：“这是「钱」，你没见过吗？”\n");
+
+  if (ob->is_food())                    //若估价的是食品，则返回失败信息。
+    return notify_fail("伙计摇摇头：“食物不便估价。”\n");
+
+  value = ob->query("value");           //现在可以估价了，把物品的实际价
+  //值赋予value。
+  if (value > 10000000)                 //根据value的值计算value1。
+    value1 = (value / 100) * 30;       //value值过大的计算次序。
+    else
+      value1 = value * 30 / 100;          //value值非过大的计算次序。
+      if (!value)                           //物品无价值的反馈信息。
+        printf("伙计说：“%s一文不值。”\n", ob->query("name"));
+      else                                    //否则调用PriceString函数返回物
+        //品的中文价格。
+        printf("伙计告诉你：“%s价值%s。”\n",
+          ob->query("name"), PriceString(value));
+  return 1;
+}
+
+void AddGoods(string name, string base_name)          //向本店加入货物。
+{
+  if (!query("goods/" + name)) {
+    set("goods/" + name, 1);
+    set("pawn/" + name, base_name);
+  } else
+    add("goods/" + name, 1);
+}
+
+int DoPawn(string arg)                    //典当物品的函数。
+{
+  mapping goods;
+  object ob, ppl, this;
+  int value, value1, size, *num, i;
+  string location, name, msg;
+  ppl = this_player();                    //ppl定义为进行典当的玩家。
+  this = this_object();                   //this为当铺本身。
+
+  if (!CanShop())
+    return 0;
+
+  if (!arg                               //若无参数或者玩家身上无此物品，
+  || !(ob = present(arg, ppl)))  //则返回失败信息。
+    return notify_fail("伙计问：“你要典当什么物品？”\n");
+
+  if (ob->query("money_id"))          //若典当的是钱，则返回失败信息。
+    return notify_fail("伙计搔了搔头，问：“你要当「钱」？”\n");
+
+  if (ob->is_food())                    //若典当的是食品，则返回失败信息。
+    return notify_fail("伙计摇头道：“食物不便保存，概不典当。”\n");
+
+  value = ob->query("value");           //读取物品的价值赋予value。
+  if (value > 10000000)                 //按照上面的方法计算value1。
+    value1 = (value / 100) * 30;
+  else
+    value1 = value * 30 / 100;
+
+  if (value1 < 15)                      //若价值在50文以下，则不收。
+    return notify_fail("伙计嘲笑道：“这样不值钱的破烂也来换钱？”。\n");
+  if (ob->query("cant_sell"))             //如果是不能卖的物品，则失败。
+    return notify_fail((string)ob->query("cant_sell"));
+  location = this->query("dangpu_location");          //location记录交易进行
+  //的地点。
+  if (!location)                        //如果没有，就记一个通用的。
+    location = "hockshop";
+
+  goods = ppl->query("pawn/" + location);   //记录玩家以前在此典当过的物品。
+  if (goods)                            //若以前典当过，则进行以下的检查。
+  {
+    num = keys(goods);
+    for (i = 0; i < sizeof(num); i++)    //找到size的最大值，也就是最后一
+    {                                   //物品的序号（总序号，从一开始到
+      if (size < to_int(num[i]))     //目前的）。
+        size = to_int(num[i]);
+    }
+  } else
+    size = 0;                           //没有典当过，那么size为零。
+    size++;                                 //典当后典当物品数加一。
+    name = base_name(ob);                 //取物品的全路径名。
+    if (objectp(ob)) {
+      switch (ob->query("material"))   //显示典当信息。
+      {
+        case "wood": case "bamboo":
+          msg = "收朽烂发霉";
+          break;
+        case "iron": case "steel":
+        case "silver": case "gold":
+          msg = "收锈迹斑斑";
+          break;
+        case "paper": case "cloth":
+        case "silk": case "leather":
+          msg = "收破破烂烂";
+          break;
+        default:
+          msg = "收废品";
+      }
+      message_vision2("伙计吆喝道：“" + msg
+        +ob->query("name") + "一"
+        +ob->query("unit") + "，当" + PriceString(value1)
+        + "～～”然后付了一些钱给$N。", ppl);
+      destruct(ob);                       //销毁物品。
+      PayPlayer(ppl, value1);           //付钱给玩家。
+      ppl->set("pawn/" + location + "/" + size, name);      //记录典当物品名。
+      ppl->set("pawntime/" + location + "/" + size, ppl->query("mud_age"));
+    }                                       //记录典当物品的时间。
+  set_temp("busy", 1);                    //设一个延迟时间。
+  remove_call_out("Dest");
+  call_out("Dest", 1);
+  return 1;
+}
+
+int DoPawnlist(object ppl)                //查看典当物品的函数。
+{
+  mapping goods, time;
+  object this;
+  string location, list, temp;
+  int size, i, age, value, *num, numm, ltime, ratio;
+
+  this = this_object();                   //this为当铺本身。
+  ppl = this_player();                    //ppl定义为进行查询的玩家。
+
+  if (!CanShop())
+    return 0;
+
+  location = this->query("dangpu_location");          //读取本地的地名。
+
+  if (!location)
+    location = "hockshop";              //若没有则用通用的。
+
+    goods = ppl->query("pawn/" + location);   //读取玩家在本地当的东西。
+
+    if (!goods
+      || !sizeof(goods))               //如果没有记录，则失败。
+    {
+      tell_object(ppl, "伙计说：“您好象没有在敝店当过东西呀。”\n");
+      return 1;
+    }
+  num = keys(goods);                      //取所有物品。
+  size = sizeof(num);                     //计算物品总数。
+  time = ppl->query("pawntime/" + location);  //读取玩家在本地当东西的时间。
+  list = "你可以赎回以下这些东西：\n";
+  list += "─序号───名称────────────赎银────────────\n";
+  for (i = 0; i < size; i++)             //对物品列表。
+  {
+    age = time[num[i]];                //是否过期（以玩家的一年为限）。
+    ltime = ppl->query("mud_age") - age;   //计算两者的时间差（秒数）。
+    if (ltime > 86400)              //若超过一年，那么就删除这个记号，
+    {                                  //并加到货物中去；
+      temp = ppl->query("pawn/" + location + "/" + num[i]);
+      AddGoods(temp->query("id"), temp);
+      // ppl->delete( temp );
+      // 这里的写法有误,delete的不是temp,应该是num[i]
+      // 修改如下: -- by akuma 08/03/99
+      ppl->delete("pawn/" + location + "/" + num[i]);
+      ppl->delete("pawntime/" + location + "/" + num[i]);
+    } else {                                  //否则那么就显示这个记号。
+      ratio = ltime / 864 * 2 / 5 + 60;      //兑换率从60%到100%。
+      value = goods[num[i]]->query("value");  //读出真正的价值。
+      if (value > 100000)           //按照前面的办法算出折算后的价格。        
+        value = value / 100 * ratio;
+      else
+        value = value * ratio / 100;
+      numm = to_int(num[i]);         //numm中存放序号数。
+      list += sprintf("%s%-10d%-28s%s\n", "  ", numm,
+        trip_ansi(goods[num[i]]->short()), PriceString(value));
+    }
+  }
+  ppl->start_more(list);                //列表给玩家看。
+  return 1;
+}
+
+int DoRedeem(int number)                  //赎买典当物品的函数。
+{                                           //需要一个序号数(number)传入。
+  mapping goods, time;
+  string location, temp;
+  object this, ob, ppl;
+  int value, ratio, ltime;
+
+  ppl = this_player();                    //ppl定义为进行赎买的玩家。
+  this = this_object();                   //this为当铺本身。
+
+  if (!CanShop())
+    return 0;
+
+  if (!number)                          //如果没有序号，则失败。
+  {
+    tell_object(ppl, "格式： redeem < 序号 > \n");
+    return 1;
+  }
+
+  location = this->query("dangpu_location");    //读出本地名称。
+  if (!location)                         //如果没有，则用通用的。
+    location = "hockshop";
+  goods = ppl->query("pawn/" + location);  //读出在本地典当的货物。
+  time = ppl->query("pawntime/" + location);  //读出在本地典当货物的时间。
+
+  if (!time[number])                     //如果没有这个记录，失败。
+  {
+    tell_object(ppl, "伙计耸了耸肩：“你没有当过这样东西。”\n");
+    return 1;
+  }
+
+  ltime = ppl->query("mud_age") - time[number];   //算典当时间同现在时间差。
+  if (ltime > 86400)                     //如果过期，则删除记录，失败。
+  {
+    temp = ppl->query("pawn/" + location + "/" + number);
+
+    AddGoods(temp->query("id"), temp);
+    ppl->delete(temp);
+    ppl->delete("pawntime/" + location + "/" + number);
+    tell_object(ppl,
+      "伙计说：“这样东西的赎期已过，小店已经上架出售，不能再赎了。”\n"
+    );
+    return 1;
+  }
+
+  value = goods[number]->query("value");  //读货物的价值。
+  ratio = ltime / 864 * 2 / 5 + 60;       //算折算率。
+  if (value < 100000)                    //按照前面的算法算出价格。
+    value = value * ratio / 100;
+  else
+    value = value / 100 * ratio;
+  if (ppl->can_afford(value) != 1)       //如果玩家钱不够，失败。
+  {
+    message_vision("伙计狠狠地瞪了$N一眼，道：“没钱赎那门子的当头？！”"
+      + "\n", ppl);
+    return 1;
+  }
+  ppl->pay_money(value);                //玩家付钱。
+  message_vision("伙计从库中将$N当的" + goods[number]->query("name") + "取了" +
+    "出来，交给$N。\n一面摇头嘟哝着：“既然有钱，还当它作什么？真是有" +
+    "病。”\n", ppl);                  //显示讯息。
+  ob = new(goods[number]);            //创生货物。
+  ppl->delete("pawn/" + location + "/" + number);           //删除标记。
+  ppl->delete("pawntime/" + location + "/" + number);       //删除时间。
+  ob->move(ppl);                        //交给玩家。
+  set_temp("busy", 1);                  //加一延时。
+  remove_call_out("Dest");
+  call_out("Dest", 1);
+  return 1;
+}
+
+int DoSell(string arg)                    //收购物品的函数。
+{                                           //传入物品名(arg)参数。
+  object ob, ppl;
+  int value, value1;
+  string msg;
+
+  ppl = this_player();                    //ppl定义为进行出卖的玩家。
+
+  if (!CanShop())
+    return 0;
+
+  if (!arg                               //没有参数或玩家没有此物品，失败。
+  || !(ob = present(arg, ppl)))
+    return notify_fail("伙计问：“你有什么物品要卖？”\n");
+
+  if (ob->query("money_id"))          //参数为钱，失败。
+    return notify_fail("伙计呵呵大笑：“你要卖「钱」？”\n");
+
+  if (ob->is_food())                    //物品是食物，失败。
+    return notify_fail("伙计一摇头：“食物不便保存，不予收购。”\n");
+
+  value = ob->query("value");           //读出真正的价格。
+  if (value > 10000000)                 //按照前面的算法算出价格。
+    value1 = (value / 100) * 80;
+  else
+    value1 = value * 80 / 100;
+
+  if (value < 50)                       //价值低于50文不收。
+    return notify_fail("伙计一撇嘴：“什么破烂也拿来骗钱？！”\n");
+
+  if (ob->query("cant_sell"))           //属于不可出卖的物品。
+    return notify_fail((string)ob->query("cant_sell"));
+
+  switch (ob->query("material"))       //显示典当信息。
+  {
+    case "wood": case "bamboo":
+      msg = "收朽烂发霉";
+      break;
+    case "iron": case "steel":
+    case "silver": case "gold":
+      msg = "收锈迹斑斑";
+      break;
+    case "paper": case "cloth":
+    case "silk": case "leather":
+      msg = "收破破烂烂";
+      break;
+    default:
+      msg = "收破烂陈旧";
+  }
+  message_vision2("伙计吆喝道：“" + msg + ob->query("name")
+    + "一"
+    +ob->query("unit") + "，卖" + PriceString(value1)
+    + "～～”然后付了一些钱给$N。\n", ppl);
+
+  AddGoods(ob->query("id"), base_name(ob));       //物品的id和全名。
+  destruct(ob);                         //删除物品。
+  PayPlayer(ppl, value1);               //付钱给玩家。
+
+  set_temp("busy", 1);                  //设一延时。
+  remove_call_out("Dest");
+  call_out("Dest", 1);
+  return 1;
+}
+
+int DoList()                                //列出可出售物品的函数。
+{
+  mapping goods;
+  object ob, ppl = this_player();
+  string list, *pawn;
+  int i;
+
+  if (!CanShop())
+    return 0;
+
+  goods = query("goods");
+
+  if (!goods) {
+    tell_object(ppl, "伙计说：“真抱歉，现在店里没有东西出售。”\n");
+    return 1;
+  }
+  pawn = keys(goods);
+  list = "现在当铺里有以下物品出售：\n";
+  list += "─名称───────────件数────价格────────────\n";
+  for (i = 0; i < sizeof(pawn); i++) {
+    ob = new(query("pawn/" + pawn[i]));
+    list += sprintf("%s%-26s%-12s%s\n",
+      "  ", trip_ansi(ob->short()),
+      chinese_number(goods[pawn[i]]) + ob->query("unit"),
+      PriceString(ob->query("value")));
+    destruct(ob);
+  }
+  ppl->start_more(list);
+  return 1;
+}
+
+int DoBuy(string arg)                     //购买典当物品的函数。
+{                                           //arg：要购买物品的名称。
+  object ob, ppl = this_player();         //ppl：进行购买的玩家。
+  mixed *pawn;
+  int value;
+
+  if (!CanShop())
+    return 0;
+
+  if (!arg)                            //如果没有名称，则失败。
+  {
+    tell_object(ppl, "在当铺买东西的格式：buy < 货物的英文名 > \n");
+    return 1;
+  }
+
+  if (!query("pawn"))                 //如果没有出售记录，失败。
+  {
+    tell_object(ppl, "伙计抱歉地说：“现在小店没有什么货物出售。”\n"
+      + "看来你似乎应该看看(list)这里有什么货物出售才是。\n");
+    return 1;
+  }
+
+  if (!query("goods/" + arg)) {
+    tell_object(ppl, "伙计抱歉地说：“现在小店没有这样货物出售。”\n"
+      + "看来你似乎应该看看(list)这里有什么货物出售才是。\n");
+    return 1;
+  }
+
+  pawn = query("pawn/" + arg);
+  value = (pawn->query("value"));     //读货物的价值。
+
+  if (ppl->can_afford(value) != 1)    //如果玩家钱不够，失败。
+  {
+    message_vision("伙计白了$N一眼，道：“穷光蛋凑什么热闹？！”"
+      + "\n", ppl);
+    return 1;
+  }
+  ppl->pay_money(value);                //玩家付钱。
+  message_vision("$N向伙计买下一" + pawn->query("unit")
+    +pawn->name() + "。\n", ppl);     //显示讯息。
+  ob = new(pawn);                       //创生货物。
+
+  if (sizeof(query("goods")) == 1)  //如果是最后一件货物
+  {
+    delete("goods");                  //删除有关记录。
+    delete("pawn");
+  } else {
+    if (query("goods/" + arg) == 1)  //如果是该种商品的最后一件
+    {
+      delete("goods/" + arg);       //删除有关记录。
+      delete("pawn/" + arg);
+    } else
+      add("goods/" + arg, -1);      //否则货物数减一。
+  }
+  ob->move(ppl);                        //交给玩家。
+  set_temp("busy", 1);                  //加一延时。
+  remove_call_out("Dest");
+  call_out("Dest", 1);
+  return 1;
+}
+
+//**************************************************************************//
+//  下面四个函数是标准钱庄所用的。                                          //
+//  int DoConvert( string arg )                                             //
+//  int DoSave( string arg )                                                //
+//  int DoLoad( string arg )                                                //
+//  int DoCheck()                                                           //
+//**************************************************************************//
+int DoConvert(string arg)                 //换钱的函数。
+{                                           //参数：交换的两种货币名和数量。                
+  string from, to, name, unit;            //from：要换出的货币名。
+  int amount, bv1, bv2;                   //to：要换入的货币名。
+  object from_ob, to_ob, ppl;
+
+  ppl = this_player();                    //ppl：玩家自身。
+
+  if (!CanShop())
+    return 0;
+
+  if (!arg                               //若无参数，则失败。
+  || sscanf(arg, "%d %s to %s", amount, from, to) != 3)
+    return notify_fail(
+      "指令格式：convert <数量> <货币种类１> to <货币种类２>\n");
+
+  from_ob = present(from + "_money", ppl);          //from_ob：换出货币。
+  to_ob = present(to + "_money", ppl);              //to_ob：换入货币。
+  if (file_size(MONEY_DIR + to + ".lpc") < 0)       //若要换入的货币非法
+    return notify_fail("你想兑换哪一种钱？\n");   //则失败。
+
+    if (!from_ob)                         //若玩家身上无要换出的货币，失败。
+      return notify_fail("你身上没有这种货币。\n");
+  if (amount < 1)                       //若交换数量不足一，则失败。
+    return notify_fail("兑换货币一次至少要兑换一个。\n");
+
+  if ((int)from_ob->query_amount() < amount)        //若玩家身上数量不足
+    return notify_fail("你身上没有那么多"          //交换则失败。
+    +from_ob->query("name") + "。\n");
+
+  bv1 = from_ob->query("base_value");   //bv1：要换出的货币的基本价值。
+  if (!bv1)                             //若该货币无基本价值，则失败。
+    return notify_fail("这种东西不值钱。\n");
+
+  bv2 = to_ob ? to_ob->query("base_value") :        //bv2：换入货币价值。
+  call_other(MONEY_DIR + to, "query", "base_value");
+
+  if (bv1 < bv2)                        //在以零换整的时候，计算整数部分。
+    amount -= amount % (bv2 / bv1);
+  if (amount == 0)                        //若不足换一单位换入货币，则失败。
+    return notify_fail("这些" + from_ob->query("name")
+      + "的价值太低了，换不起。\n");
+
+  name = from_ob->query("name");          //name：换出货币的中文名。
+  unit = from_ob->query("base_unit");     //unit：换出货币的计量单位。
+  if (from_ob->query_amount() == amount)  //若正好换完，则销毁换出货币。
+    destruct(from_ob);
+  else
+    from_ob->add_amount(-amount);     //否则减少换出货币的量至应剩数目。
+    if (!to_ob)                           //如果内存中没有换入货币驻留，
+    {                                       //则创生新的换入货币。
+      to_ob = new(MONEY_DIR + to);
+      to_ob->move(ppl);                 //把换入货币交给玩家。
+      to_ob->set_amount(amount * bv1 / bv2);        //把换入货币设为
+      //应换数目。
+    } else                                    //否则直接把换入货币加上应换数目。
+      to_ob->add_amount(amount * bv1 / bv2);
+
+  message_vision(sprintf("$N从身上取出%s%s%s，换成%s%s%s。\n",
+    chinese_number(amount), unit, name,           //显示讯息。
+    chinese_number(amount * bv1 / bv2),
+    to_ob->query("base_unit"), to_ob->query("name")), ppl);
+
+  set_temp("busy", 1);                    //设一个延时。
+  remove_call_out("Dest");
+  call_out("Dest", 1, ppl);
+  return 1;
+}
+
+int DoSave(string arg)                    //存钱的函数。
+{                                           //arg：存入货币的数量和名称。
+  string money, name;                     //money：存入货币名。
+  int amount, value;
+  object from_ob, ppl, mon;
+
+  ppl = this_player();                    //ppl：玩家自身。
+
+  if (!CanShop())
+    return 0;
+
+  if (!arg                               //若参数不合规格，则失败。
+  || sscanf(arg, "%d %s", amount, money) != 2)
+    return notify_fail("指令格式：cun <数量> <货币种类> \n");
+
+  if (file_size(MONEY_DIR + money + ".lpc") < 0)    //若参数不是合法货币，
+    return notify_fail("这不是钱，不能存。\n");   //则失败。
+
+    from_ob = present(money + "_money", ppl);         //from_ob：存入货币。
+
+    if (!from_ob)                         //若玩家身上无存入货币，则失败。
+      return notify_fail("你身上没有这种货币。\n");
+  if (amount < 1)                       //若数量不足一，则失败。
+    return notify_fail("一次至少要存一个。\n");
+
+  if ((int)from_ob->query_amount() < amount)        //若玩家存入货币数量
+    return notify_fail("你身上没有那么多" +        //不足，则失败。
+    from_ob->query("name") + "。\n");
+
+  name = from_ob->query("name");                      //name：存入货币中文
+  //名。
+  value = from_ob->query("base_value") * amount;      //value：存入货币总价
+  //值。
+  if (value > 10000000)                  //取７％手续费。
+    value = value / 100 * 93;
+  else
+    value = value * 93 / 100;
+  if (value < 1)                         //若价值少于一文钱，则失败。
+  {
+    tell_object(ppl,
+      "伙计一笑：“客官的钱实在太多了，小店不敢收，抱歉抱歉。”\n");
+    return 1;
+  }
+
+  if ((int)from_ob->query_amount() == amount)       //若正好存完，
+    destruct(from_ob);                            //则销毁存入货币。
+    else
+      from_ob->add_amount(-amount);     //否则减少存入货币存入
+      //量。
+      if (!ppl->query("savemoney"))         //做玩家存款记录。
+        ppl->set("savemoney", value);
+      else
+        ppl->add("savemoney", value);
+  if (mon = new(MONEY_DIR + "money.lpc"))           //做一个存款的存档文
+  {                                                   //件，以方便检查。
+    mon->restore();
+    mon->set(ppl->query("id"), ppl->query("savemoney"));
+    mon->save();
+    destruct(mon);
+  }
+  message_vision(sprintf("$N从身上取出一些%s，交给伙计存了起来。\n",
+    name), ppl);                       //显示讯息。
+
+  set_temp("busy", 1);                    //设一个延时。
+  remove_call_out("Dest");
+  call_out("Dest", 1, ppl);
+  return 1;
+}
+
+int DoLoad(string arg)                    //取钱的函数。
+{                                           //arg：取出货币数量和名称。
+  string money;
+  int amount, value, basevalue;
+  object to_ob, ppl, mon;
+  ppl = this_player();                    //ppl：玩家自身。
+
+  if (!CanShop())
+    return 0;
+
+  if (!arg                               //若参数格式不合法，则失败。
+  || sscanf(arg, "%d %s", amount, money) != 2)
+    return notify_fail("指令格式：qu <数量> <货币种类> \n");
+
+  if (file_size(MONEY_DIR + money + ".lpc") < 0)    //若不是货币，则失败。
+    return notify_fail("这不是钱，不能取。\n");
+  if (amount < 1)                       //若数量不足一，则失败。
+    return notify_fail("一次至少要取一个。\n");
+  value = ppl->query("savemoney");        //value：玩家存款数目。
+  to_ob = present(money + "_money", ppl);           //to_ob：玩家身上携带
+  //的取出货币。    
+  basevalue = to_ob ? to_ob->query("base_value") :  //basevalue：取出货币
+  call_other(MONEY_DIR + money, "query", "base_value");     //的价值。
+
+  if (amount * basevalue < 1)           //若数量不足一，则失败。    
+    return notify_fail(
+      "伙计摇摇头：“抱歉，您取的太多了，小店一时拿不出来。”\n");
+
+  if (value < (amount * basevalue))       //若存款数不足数量，则失败。
+    return notify_fail("你没有存那么多钱。\n");
+  call_out("Dest", 1, ppl);                 //显示讯息
+  message_vision("伙计交给$N一些钱，说：“您收好！”\n", ppl);
+  PayPlayer(ppl, amount * basevalue);   //付款给玩家。
+  ppl->add("savemoney", -amount * basevalue);           //修改玩家存款记录。
+  if (ppl->query("savemoney") < 0)
+    ppl->set("savemoney", 0);
+  if (mon = new(MONEY_DIR + "money.lpc"))           //做总存款记录。
+  {
+    mon->restore();
+    mon->set(ppl->query("id"), ppl->query("savemoney"));
+    mon->save();
+    destruct(mon);
+  }
+  set_temp("busy", 1);                  //设一个延时。
+  remove_call_out("Dest");
+  call_out("Dest", 1, ppl);
+  return 1;
+}
+
+int DoCheck()                               //查帐函数。
+{
+  int value;
+  object ppl, mon;
+
+  ppl = this_player();                    //ppl：玩家自身。
+  value = ppl->query("savemoney");        //value：玩家存款总数。
+
+  if (value < 0)                        //如果记录为负，则清零。
+  {
+    ppl->delete("savemoney");
+    value = 0;
+  }
+  if (!value                             //如果为零，则失败。
+  || value == 0)
+    return notify_fail(
+      "伙计一翻白眼：“你根本就没存过钱，查什么帐？！”\n");
+  printf(GRN "伙计在你的耳边悄声说道：“您在本钱庄里共存有%s。”\n" NOR,
+    trip_ansi(PriceString(value)));
+  if (mon = new(MONEY_DIR + "money.lpc"))   //做总存款记录。
+  {
+    mon->restore();
+    mon->set(ppl->query("id"), ppl->query("savemoney"));
+    mon->save();
+    destruct(mon);
+  }
+  return 1;
+}

@@ -9,8 +9,8 @@
   is the tail half of the game's own full name, not a different name — no discrepancy to flag
   beyond noting the fuller self-identified form here, per the task's ask.
 - **Lineage**: "ES II" / **Neolith 0.0.2** engine by **Annihilator** (same engine family as
-  `es1_win`/`esI`/`xkx2001`/`rzrmud`/`beimeixiakexing2001`/`xinkuangxiangkongjian2`/
-  `yueyingqiyuan`/`wuhanzhan`/`yanhuangwuhun`/`haiyang2`/`kuangxiangkongjian`/`huoying` — the
+  `es1_win`/`esI`/`xkx2001`/`rzrmud`/`bmxkx2001`/`kxkj`/
+  `yueyingqiyuan`/`wuhanzhan`/`yanhuangwuhun`/`haiyang2`/`kxkj1`/`huoying` — the
   largest single family in this project). `adm/obj/master.c`'s own header comment reads
   "for ES II mudlib / original from Lil / rewritten by djx (09/09/2003) / xfan 3.10". Many
   personal wizard directories (`u/djx`, `u/fang`, `u/snowtu`, `u/cloud`, `u/tom`, `u/stey`,
@@ -67,7 +67,7 @@
 - `data/emoted.o` (the emote-definitions save file) hit `convert_lib.sh`'s `iconv -c`
   lossy-conversion fallback (invalid bytes dropped) — this is the **exact same file/symptom**
   AGENTS.md's own Encoding section already documents from the very first pilot lib
-  (`shanhaizhanshen`: "seen: `emoted.o`, position 25324"). Confirmed this manifests here as a
+  (`shzs`: "seen: `emoted.o`, position 25324"). Confirmed this manifests here as a
   genuine, harmless runtime symptom (see "Known, not fixed" below), not a new bug.
 
 ## Fixes applied (with why)
@@ -201,7 +201,7 @@
   has **no** `dns_master` entry — 27 daemons listed, none network/DNS-related. A stray, unused
   `adm/etc/preload.mud` backup file DOES list `/adm/daemons/network/dns_master`, but it is
   never read by anything (same "leftover backup preload copy" pattern documented on
-  `weimingkongjian`) — confirmed via `epilog()`'s exact literal string. No inline
+  `wmkj`) — confirmed via `epilog()`'s exact literal string. No inline
   `dns_master`/`DNS_MASTER` calls anywhere outside the `network/` subsystem's own internal
   files either (checked the §15ab variant proactively). Boot completed in well under 5 seconds.
 - **§14 (2-arg `valid_override`)**: `master.lpc`'s `valid_override(string file, string name)`
@@ -277,7 +277,7 @@
   conversion (invalid bytes dropped). At boot, `adm/daemons/emoted.lpc`'s `create()` calls
   `restore()` unguarded, which throws `*restore_object(): Illegal mapping format while
   restoring emote.` — the exact same file/symptom pair AGENTS.md's own Encoding section
-  documents from the very first pilot lib (`shanhaizhanshen`). The emote-definitions daemon's
+  documents from the very first pilot lib (`shzs`). The emote-definitions daemon's
   `emote` mapping simply stays unset (no further gate depends on it — checked, unlike the
   `zhonghua2`/§15m case, this does NOT masquerade as any kind of maintenance/sync block; the
   driver's own `catch(call_other(file, "??"))` around each `preload()` call absorbs the error
@@ -391,8 +391,8 @@ boot.
    "unchanged":625,"errors":426}` — took a few minutes given the file
    count, run in the background per this lib's own established
    mega-lib-scale conventions. Checked for the `::fn()`-after-`(`
-   formatter bug found on `tianxia`/`shujian2008`/`shujiantianxia`/
-   `suiyuanxijianlu` this same pass (see `tianxia/NOTES.md` for the full
+   formatter bug found on `tianxia`/`shujian2008`/`sjtx2`/
+   `syxjl` this same pass (see `tianxia/NOTES.md` for the full
    writeup) — **zero hits** of the `(: :` corruption signature anywhere
    in this lib's 33k+ reformatted files. Spot-verified the three
    critical fixes survived reformatting intact: `feature/command.lpc`'s

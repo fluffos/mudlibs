@@ -1,0 +1,85 @@
+//lightning.c  霹雳心经
+#include <ansi.h>
+
+inherit SSERVER;
+
+int conjure(object me, object target) {
+  string msg;
+  int damage, ap, dp;
+
+  if (!target) target = offensive_target(me);
+
+  if (!target
+    || !target->is_character()
+    || target->is_corpse()
+    || target == me)
+    return notify_fail("你要对谁念霹雳心经？\n");
+
+  if ((int)me->query("atman") < 100 + (int)me->query("atman_factor"))
+    return notify_fail("你的灵力不够！\n");
+
+  if ((int)me->query("gin") < 100)
+    return notify_fail("你无法集中精力！\n");
+
+  me->add("atman", -25 - (int)me->query("atman_factor"));
+  me->receive_damage("gin", 50);
+
+  if (random(me->query("max_atman")) < 50) {
+    write("你失败了！\n");
+    return 1;
+  }
+
+  msg = HIY
+    "\n$N口中念了句经文，半空走出一位容貌秀雅的电母，双手各持一枚铜镜。
+铜镜相转，忽的闪出一道金光射向$n！\n" NOR;
+
+  ap = me->query_skill("magic");
+  ap = (ap * ap * ap / (4 * 400)) * (int)me->query("gin");
+  ap += (int)me->query("combat_exp");
+  dp = target->query("combat_exp");
+  if (random(ap + dp) > dp) {
+    damage = (int)me->query("max_atman") / 10 + random((int)me->query("eff_gin") / 5);
+    damage -= (int)target->query("max_atman") / 10 + random((int)target->query("eff_gin") / 5);
+    damage += (int)me->query("atman_factor") - random((int)target->query("atman_factor"));
+    //here we can see if 2 players are at same status, the attacker has higher chance.
+    if (damage > 0) {
+      msg += HIR "\n结果「嗤」地一声，金光从$n身上透体而过，\n拖出一条长长的血箭，直射到两三丈外的地下！\n" NOR;
+      //finally damage also depends on enabled magic level.
+      damage += random((damage * (int)me->query_skill("magic")) / 100);
+      target->receive_damage("kee", damage, me);
+      target->receive_wound("kee", damage / 2, me);
+      if (random((int)me->query("magic_attack")) > (int)target->query("magic_defense")) {
+        damage = ((int)me->query("magic_attack") - (int)target->query("magic_defense")) / 10;
+        if (damage > 180) damage = 180;
+        if (!target->query_delay())
+          target->set_delay(random(damage));
+      }
+    } else {
+      //here, cast failed and the target's atman_factor will be added to the previous 
+      //damage to hurt yourself:(...note damage<0.
+      msg += HIC "\n结果金光被$n以法力反激，反而射中了$N！\n" NOR;
+      damage -= (int)target->query("atman_factor");
+      damage -= random((-damage * (int)target->query_skill("magic")) / 100);
+      me->receive_damage("kee", -damage, target);
+      me->receive_wound("kee", -damage / 3, target);
+    }
+  } else
+    msg += "\n但是被$n躲开了。\n";
+
+  message_vision(msg, me, target);
+  if (damage > 0) COMBAT_D->report_status(target);
+  else if (damage < 0) COMBAT_D->report_status(me);
+  //damage=0 corresponding to "但是被$n躲开了。\n"--no report.	
+
+  if (!target->is_fighting(me)) {
+    if (living(target)) {
+      if (userp(target)) target->fight_ob(me);
+      else
+        target->kill_ob(me);
+    }
+    me->kill_ob(target);
+  }
+
+  me->start_busy(1 + random(2));
+  return 3 + random(5);
+}

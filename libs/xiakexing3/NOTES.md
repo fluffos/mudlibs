@@ -59,7 +59,7 @@ shape (missing globals, a handful of syntax typos) — not triaged
 individually per AGENTS.md §6b/§13. Memory stayed healthy throughout
 (~13GB free).
 
-## Retroactive fix (found via archive #91, jinyongqunxiazhuan2008): this lib was completely command-dead after registration (AGENTS.md §15ae)
+## Retroactive fix (found via archive #91, jqxz2008): this lib was completely command-dead after registration (AGENTS.md §15ae)
 
 Archive #91 (`金庸群侠传2008加强版.rar`) turned out to have a master.c
 byte-identical (in both `adm/single/` and `adm/obj/` locations) to this
@@ -114,7 +114,7 @@ still-unfixed §15w bug, cosmetic and unrelated to command dispatch).
 ## WASM-enablement pass (loopback-allow / admin seeding)
 
 This lib is byte-identical (per §2.1 lineage check) to the
-`jinyongqunxiazhuan2008` engine/daemon files, whose WASM pass was
+`jqxz2008` engine/daemon files, whose WASM pass was
 already done and verified with the correct fail-closed convention —
 ported that fix here and re-verified independently rather than
 assuming it (§2.1's "ported fixes still need per-lib verification").

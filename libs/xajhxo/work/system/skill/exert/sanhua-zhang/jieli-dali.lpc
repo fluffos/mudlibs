@@ -1,0 +1,141 @@
+// jieli-dali.c 散花掌之借力打力
+
+#include <ansi.h>
+
+inherit SSERVER;
+
+string replace_limb(object enemy, string result);
+string replace_weapon(string, object, object);
+
+int exert(object me, mixed target) {
+  int damage;
+
+  if (!target) target = offensive_target(me);
+  else if (stringp(target) || objectp(target))
+    target = present(target, environment(me));
+
+  if (!objectp(target) ||
+    !target->is_character() ||
+    !me->is_fighting(target))
+    return notify_fail("借力打力只能对战斗中的对手使用。\n");
+
+  if (me->query_temp("exert/attack"))
+    return notify_fail("你正在施展绝技，不能施展新的绝技。\n");
+
+  if (objectp(me->query_temp("weapon")))
+    return notify_fail("你必须空手才能使用借力打力！\n");
+
+  if ((int)me->query_lingwu("sanhua-zhang", 1) < 60)
+    return notify_fail("你的散花掌不够娴熟，不会施展借力打力。\n");
+
+  me->set_temp("exert/attack",
+    ([
+      "name": EXERT_DIR "sanhua-zhang/jieli-dali",
+      "call": "pre_action",
+      "arg": target,
+      "内力": 0,
+    ]));
+
+  return 1;
+}
+
+int pre_action(object me) {
+  if (me->query("force") > 10) {
+    me->add("force", -10);
+    me->add_temp("exert/attack/内力", 10);
+    tell_object(me,
+      HIB "你暗自将内力运于双掌之上，准备施展借力打力之技。\n" NOR);
+  } else return 0;  //没有内力可准备的时候，让人家干等，实在是很不人道的。:D
+
+  if (me->query_temp("exert/attack/内力") >= 30) {
+    me->set_temp("exert/attack/call", "action");
+  }
+
+  return 1;
+}
+
+int action(object me, object target) {
+  string attack_skill, msg;
+  int damage;
+
+  if (!target || !present(target, environment(me)))
+    target = offensive_target(me);
+
+  if (!target) {
+    me->delete_temp("exert/attack/");
+    tell_object(me, "你找不到可以施展借力打力之技的对象，只好放弃了。\n");
+    return 0;
+  }
+
+  msg = "\n" + target->select_attack_action()["action"] + "！\n";
+  msg = replace_string(msg, "$n", "$A");
+  msg = replace_string(msg, "$N", "$n");
+  msg = replace_string(msg, "$A", "$N");
+  msg = replace_string(msg, "$w", "$A");
+  msg = replace_string(msg, "$v", "$w");
+  msg = replace_string(msg, "$A", "$v");
+
+  //这个时候select_attack_action()在target身上设了attack_skill了。
+  attack_skill = target->query_temp("attack_skill");
+
+  //如果应付不了攻击，就谈不上借力打力了。
+  if (random(COMBAT_D->wugong_power(me, "sanhua-zhang", 2) * 3) >
+    COMBAT_D->wugong_power(target, attack_skill, 0) * 2) {
+    damage = (int)me->query_lingwu("sanhua-zhang");
+
+    damage = damage / 2 + random(damage);
+
+    target->receive_damage("kee", damage);
+    target->receive_wound("kee", damage / 3);
+
+    if (damage < 30)
+      msg += "$N闪到一边，拿住$n的手臂，发力将$n往前一送，\n"
+        HIY "$n" HIY "「嘿」地一声往前冲出几步。\n" NOR;
+    else if (damage < 60)
+      msg += "$N身形急旋，避开$n的这一招，一掌印在$n的后背，\n"
+        RED "$n" RED "向前连冲了五六步！\n" NOR;
+    else
+      msg += "$N轻轻一侧，让过$n的这招，左掌一引，带得$n一个趔趄，\n"
+        "右掌趁势印在$n的后背要穴之上。\n"
+        HIR "$n" HIR "眼前一黑，身子向前飞出丈许！！\n" NOR;
+    me->set_temp("exert/attack/delay_time", 1);
+    me->set_temp("exert/attack/call", "suc_action");
+  } else {
+    msg = CYN "可是$p看破了$P的企图，并没有上当。\n" NOR;
+    me->delete("exert/attack");
+  }
+  msg = replace_limb(me, msg);
+  msg = replace_weapon(msg, me, target);
+  message_vision(msg, me, target);
+
+  return 1;
+}
+
+int suc_action(object me) {
+  if (me->query_temp("exert/attack/delay_time") > 1)
+    me->add_temp("exert/attack/delay_time", -1);
+  else me->delete_temp("exert/attack");
+
+  return 1;
+}
+
+private string replace_limb(object enemy, string result) {
+  string limb, *limbs;
+
+  limbs = enemy->query("limbs");
+  limb = limbs[random(sizeof(limbs))];
+  result = replace_string(result, "$l", limb);
+  return result;
+}
+
+private string replace_weapon(string result, object me, object you) {
+  object my_weapon, your_weapon;
+
+  my_weapon = me->query_temp("weapon");
+  your_weapon = you->query_temp("weapon");
+  if (objectp(my_weapon))
+    result = replace_string(result, "$w", my_weapon->name());
+  if (objectp(your_weapon))
+    result = replace_string(result, "$v", your_weapon->name());
+  return result;
+}

@@ -1,0 +1,63 @@
+// filename : /feature/autoload.c
+
+class Item {
+  string BaseName;
+  mixed ItemInfo;
+}
+
+class Item * AutoLoad;
+
+void clean_up_autoload() {
+  AutoLoad = 0;
+}
+
+void save_autoload() {
+  object *invs;
+  int j;
+  //    mixed param;
+  /* pigtrill.. there are no object has function is autoload now..
+    invs = all_inventory();
+
+    invs = filter_array( invs, function( object inv ){
+                return inv->IsAutoLoad();
+                } );
+*/
+  invs = filter(all_inventory(), (: $1->query_autoload() :));
+  AutoLoad = allocate(sizeof(invs));
+
+  j = 0;
+  foreach (object inv in invs) {
+    AutoLoad[j] = new(class Item);
+    AutoLoad[j]->BaseName = base_name(inv);
+    AutoLoad[j]->ItemInfo = inv->query_autoload();  //一般是数量。
+    j++;
+  }
+  AutoLoad = AutoLoad[0..j - 1];
+}
+
+void restore_autoload() {
+  object ob;
+  string err;
+
+  if (!pointerp(AutoLoad)) return;
+
+  foreach (class Item item in AutoLoad) {
+    err = catch(ob = new(item->BaseName));
+
+    //如果创生失败或初始化失败，那就是说恢复不了物品了。
+    //摧毁掉，记录失败原因。
+    if (err || !ob) {
+      write("你觉得似乎失落了什麽重要的东西，最好通知一下巫师。\n");
+      log_file(AUTOLOAD_LOG,
+        sprintf("Fail to autoload %s of %s, error %s\n",
+          item->BaseName, this_object()->query("id"), err));
+      continue;
+    }
+    ob->autoload(item->ItemInfo);
+
+    //物品恢复成功，设置uid ，然后移到玩家身上。
+    export_uid(ob);
+    ob->move(this_object());
+  }
+  clean_up_autoload();        // To save memory.
+}

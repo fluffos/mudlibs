@@ -63,7 +63,7 @@ registration test (Chinese surname + given name reaching the next prompt).
 - **Formatter**: `format-corpus.mjs` over all 2839 `.lpc` files; 2837
   reformatted, 2 unchanged, **0 errors**.
 - **Proactive fix applied before the first boot attempt of this pass**:
-  this lib is confirmed byte-identical to `fengyun2qinghua` (same
+  this lib is confirmed byte-identical to `fy2qh` (same
   distribution, per that lib's own NOTES.md cross-check), which this
   pass found has a `cmds/usr/quit.lpc` bug: `message("system", ...,
   environment(me), me)` assumes `environment(me)` is always non-zero,
@@ -78,7 +78,7 @@ registration test (Chinese surname + given name reaching the next prompt).
   errors.
 - **WASM test**: boots and plays fully. No errors of any kind (not even
   the usual non-fatal sockets-package warnings — this lib doesn't
-  preload a network daemon, same as `fengyun2qinghua`). Full
+  preload a network daemon, same as `fy2qh`). Full
   registration with a real Chinese name (段誉), `look`, and `quit` all
   completed cleanly. Not affected by the documented `query_ip_number()`
   WASM limitation.
@@ -296,7 +296,7 @@ mapping — `mapp()`-true but `sizeof()==0` — because it merged the real
 top-level line boundary between this file's `dbase (...)` and
 `emote (...)` variables; confirmed via temporary
 `efun::write_file()`/`keys(emote)` instrumentation in `create()`, removed
-after diagnosis). **Sibling lineage note**: `fengyun2qinghua` (confirmed
+after diagnosis). **Sibling lineage note**: `fy2qh` (confirmed
 elsewhere to be byte-identical to this archive) carries the exact same
 corrupted `data/emoted.o` — `fysquare_b.o`/`poem_b.o` were NOT checked
 there but are plausible candidates too, given the identical distribution;
@@ -434,3 +434,7 @@ working normally after the fix).
 - **The stuck-net-dead anomaly**: see above — actively investigated,
   not fixed, explicitly flagged as unresolved rather than presented as
   diagnosed.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+风云再起Ⅱ 基础版。

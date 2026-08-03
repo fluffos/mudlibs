@@ -1,0 +1,191 @@
+// corpse.c
+inherit ITEM;
+
+void create() {
+  set_name("无名尸体", ({ "corpse" }));
+  set("long", "这是一具无名尸体。\n");
+  set("unit", "具");
+  setup();
+  set_heart_beat(200);
+}
+
+int is_corpse() { return 1; }
+int is_character() { return 0; }
+int is_container() { return query("id") == "corpse"; }
+
+string short() { return name() + "(" + capitalize(query("id")) + ")"; }
+
+void heart_beat() {
+  if (!environment())
+    return;
+  switch (query("id")) {
+    case "corpse":
+      message("vision", query("name") + "开始腐烂了，发出一股难闻的恶臭。\n", environment());
+      switch (query("gender")) {
+        case "男性":
+          set_name("腐烂的男尸", ({ "rotten corpse", }));
+          break;
+        case "女性":
+          set_name("腐烂的女尸", ({ "rotten corpse", }));
+          break;
+        default:
+          set_name("腐烂的尸体", ({ "rotten corpse", }));
+      }
+      set("long", "这具尸体显然已经躺在这里有一段时间了，正散发着一股腐尸的味道。\n");
+      set_heart_beat(120);
+      break;
+    case "rotten corpse":
+      message("vision", query("name") + "被风吹干了，变成一具骸骨。\n", environment());
+      set_name("一具枯干的骸骨", ({ "skeleton", "骸骨" }));
+      set("long", "这副骸骨已经躺在这里很久了。\n");
+      set("is_skeleton", 1);
+      set_heart_beat(60);
+      break;
+    case "skeleton":
+      set_heart_beat(0);
+      message("vision", "一阵风吹过，把" + query("name") + "化成骨灰吹散了。\n", environment());
+      if (environment()) {
+        object *inv;
+        int i;
+        inv = all_inventory(this_object());
+        for (i = 0; i < sizeof(inv); i++)
+          inv[i]->move(environment());
+      }
+      destruct(this_object());
+      break;
+  }
+}
+
+object animate(object who, int time) {
+  int level, i;
+  object zombie;
+  mapping skill, mp_skill;
+  string *skills;
+
+  if (!environment())
+    return 0;
+  seteuid(getuid());
+  zombie = new("/obj/npc/zombie");
+  zombie->set_name((string)query("victim_name") + "的僵尸", ({ "zombie", "jiang shi", "shi" }));
+  zombie->move(environment());
+
+  level = this_object()->query("level");
+  if (level > who->query_level())
+    level = who->query_level();
+  if (this_object()->query("oldname"))
+    level /= 2;
+  if (level < 1)
+    level = 1;
+  zombie->set_level(level);
+  if (this_object()->query("family"))
+    zombie->set("family", this_object()->query("family"));
+  if (this_object()->query("gender"))
+    zombie->set("gender", this_object()->query("gender"));
+  else zombie->set("gender", ({ "男性", "女性" })[random(2)]);
+  zombie->set("age", this_object()->query("age"));
+  if (mapp(skill = this_object()->query("skill"))
+    && sizeof(skill) > 0) {
+    skills = keys(skill);
+    for (i = 0; i < sizeof(skills); i++)
+      zombie->set_skill(skills[i], level * 10);
+  }
+  if (mapp(mp_skill = this_object()->query("map_skill"))
+    && sizeof(mp_skill) > 0) {
+    skills = keys(mp_skill);
+    for (i = 0; i < sizeof(skills); i++)
+      zombie->map_skill(skills[i], mp_skill[skills[i]]);
+  }
+  if (this_object()->query("victim_title"))
+    zombie->set("title", this_object()->query("victim_title"));
+
+  zombie->set("max_kee", who->query_maxkee());
+  zombie->set("max_sen", who->query_maxsen());
+  zombie->set("max_force", who->query_maxforce());
+  zombie->set("max_mana", who->query_maxmana());
+  zombie->set(
+    "force_factor",
+    (who->query("force_factor") > 0 ? (who->query("force_factor") / 2 + 1) : 0)
+  );
+  zombie->set(
+    "mana_factor",
+    (who->query("mana_factor") > 0 ? (who->query("mana_factor") / 2 + 1) : 0)
+  );
+
+  zombie->animate(who, time);
+  zombie->command("wield all");
+  zombie->command("wear all");
+  zombie->powerup(0, 1);
+  destruct(this_object());
+  return zombie;
+}
+
+void init() {
+  add_action("do_mai", "mai");
+  add_action("do_mai", "bury");
+  add_action("do_shou", "shouhun");
+}
+
+//收元神
+int do_shou(string arg) {
+  string *strs;
+  object ball, me = this_player();
+  object ob = this_object();
+  if (!arg || !id(arg))
+    return notify_fail("你要收什么尸身的魂？\n");
+  if (ob->query("level") < 10)
+    return notify_fail("这是凡人的尸骸。\n");
+  if (me->query_level() < ob->query("level")) {
+    if (random(me->query_spi() / 10) < 3)
+      return notify_fail("对方生前修为高过你，你感觉有点力不从心。\n");
+  }
+  if (me->is_busy() || me->is_fighting())
+    return notify_fail("你先把手里的事忙完再说。\n");
+  if (me->query("mana") < 100)
+    return notify_fail("你法力不足。\n");
+  ball = present("souhun qiu", me);
+  if (!ball || !ball->is_fabao())
+    return notify_fail("没有搜魂球，你如何搜取残魂？\n");
+  if (ball->query("max_num") > 0) {
+    if (ball->query("num") >= ball->query("max_num"))
+      return notify_fail("搜魂球中残影翻滚，阴气弥漫，不时传出残魂的嘶叫。\n");
+  }
+  message_vision("$N捧着搜魂球，对着$n喃喃念了一通咒语。\n\n", me, ob);
+  me->start_busy(1);
+  me->add("mana", -81);
+  if (random(me->query_level()) >= ob->query("level") / 2) {
+    message_vision("\n只见一道黑气从搜魂球上冒出，笼罩住地上$N，须臾之间便见一道模糊不清的小人身影浑浑噩噩，随着黑气身不由己的吸到搜魂球中。\n", ob);
+    ball->add("num", 1);
+    strs = ball->query("owner_hun");
+    if (!strs || !arrayp(strs) || sizeof(strs) < 1)
+      strs = ({ ob->query("victim_name") });
+    else if (member_array(ob->query("victim_name"), strs) == -1)
+      strs += ({ ob->query("victim_name") });
+    ball->set("owner_hun", strs);
+    destruct(ob);
+    return 1;
+  } else {
+    write("结果什么反应也没有。\n");
+    return 1;
+  }
+}
+
+int do_mai(string arg) {
+  object me = this_player();
+  if (!arg || !id(arg))
+    return 0;
+  if (!environment(me)->query("mai_corpse_able"))
+    return err_msg("你不能在这里埋尸体！\n");
+  if (random(3) == 1)
+    me->add("potential", 5);
+  else if (random(3) == 1)
+    me->add("daoxing", random(50));
+  if (me->query("bellicosity") > 10)
+    me->add("bellicosity", -10);
+  me->receive_damage("kee", 5);
+  me->delete("bury_corpse");
+  me->add("mark/bury_corpse", 1);
+  message_vision("$N在地下刨了个坑，把$n放了进去，用土埋了起来。\n", me, this_object());
+  message_vision("$N对坟头鞠了个躬，道：怪你前世命短，好好修来生去吧！\n", me);
+  destruct(this_object());
+  return 1;
+}

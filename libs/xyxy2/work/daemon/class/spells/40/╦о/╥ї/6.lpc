@@ -1,0 +1,81 @@
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER;
+
+int cast(object me, object target) {
+  object *t, leader, *tmp;
+  int i, pp;
+
+  if (me->query_level() < 40)
+    return notify_fail("你的人物等级不够。\n");
+  if (me->query("mana") < 400)
+    return notify_fail("你的法力不够。\n");
+  if (me->query_skill("spells") < 600)
+    return notify_fail("你的法术修为过低。\n");
+  if (time() < me->query_temp("XST_dqjl") + 6)
+    return notify_fail("你不能频繁调用天气元气。\n");
+
+  if (!objectp(leader = me->query_leader()))
+    tmp = ({ me });
+  else {
+    if (!pointerp(t = leader->query_team())
+      || sizeof(t) < 2)
+      tmp = ({ me });
+    else {
+      tmp = ({});
+      for (i = 0; i < sizeof(t); i++) {
+        target = t[i];
+        if (!target || !living(target)
+          || !present(target, environment(me)))
+          continue;
+        tmp += ({ target });
+      }
+    }
+  }
+
+  message_vision(HIC "$N" HIC "将手一指，只见平地忽然冒起一股清泉，带着阵阵异香。在半空化作铺天盖地的水雾，其内隐约有巨大鲸影游嬉。\n" NOR, me);
+  me->set_temp("XST_dqjl", time());
+  me->add("mana", -400);
+
+  for (i = 0; i < sizeof(tmp); i++) {
+    target = tmp[i];
+    if (!target || !living(target)
+      || !present(target, environment(me)))
+      continue;
+    if (target->query("kee") >= target->query("eff_kee")
+      && target->query("eff_kee") >= target->query_maxkee()
+      && target->query("sen") >= target->query("eff_sen")
+      && target->query("eff_sen") >= target->query_maxsen())
+      continue;
+    message_combatd(HIC "\n$N" HIC "脸色顿时红润了不少。\n" NOR, target);
+    if (me && me->query_level() >= 90 && me->query("shentong/90"))
+      pp = target->query_maxkee() / 2 + 500;
+    else pp = target->query_maxkee() * 25 / 100 + 100;
+    target->receive_curing("kee", pp);
+    target->receive_heal("kee", pp);
+
+    if (me && me->query_level() >= 90 && me->query("shentong/90"))
+      pp = target->query_maxsen() / 2 + 500;
+    else pp = target->query_maxsen() * 25 / 100 + 100;
+    target->receive_curing("sen", pp);
+    target->receive_heal("sen", pp);
+  }
+  if (me->is_fighting())
+    me->start_busy(3);
+  return 1;
+}
+
+int help(object me) {
+  if (me && me->query_level() >= 90 && me->query("shentong/90"))
+    write(@HELP
+	神通名称：地泉鲸浪	
+	神通效果：治疗并恢复区域内的队友50%的气血、精神
+		  冷却6秒
+HELP);
+  else write(@HELP
+	神通名称：地泉鲸浪	
+	神通效果：治疗并恢复区域内的队友25%的气血、精神
+		  冷却6秒
+HELP);
+  return 1;
+}

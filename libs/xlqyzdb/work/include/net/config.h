@@ -1,0 +1,84 @@
+#ifndef __NET__CONFIG_H
+#define __NET__CONFIG_H
+
+#ifndef SVC_TCP
+#include "net/services.h"
+#endif
+
+/* These are the primary and secondry hosts to use as boot servers
+ * for the DNS.  It is better to set to the primary to be a mud on
+ * the same continent.
+ */
+// Elon (07-01-95) updated LISTNODES to current
+// The TMI-2
+#define MUDLIST_DNS  ({ "202.102.134.68", 5563 })
+// The Eastern Stories
+//#define MUDLIST_BAK  ({ "140.113.204.42", 8008 })
+#define LISTNODES ([ \
+       "CD"   : "202.103.101.13 6668",\
+       "HH"   : "61.138.37.101 6668",\
+	   "HONG" : "61.128.103.112 6668",\
+	   "HY"   : "202.103.88.188 6668", \
+       "HY_NEW"   : "202.102.233.85 6665", \
+	   "JN"   : "202.107.225.58 6668", \
+	   "JX"   : "202.109.129.220 6668", \
+       "MUDGM": "202.102.233.92 6665", \
+       "SMX"  : "202.102.233.85 6668", \
+       "JYQY" : "202.96.91.22 8890", \
+       "TY"   : "202.98.6.138 8890", \
+	   "VIP"  : "202.109.73.148 6668", \
+	     ])
+
+#define BANDLIST ([\
+"The.Admin.Mud" : "202.110.195.82 5009",\
+"JX_XLQY" : "202.101.234.104 6668",\
+])
+
+/* This is the default packet size of outgoing mail messages.  The ideal
+ * number is 512, maximum would be about 900, since 1024 is the maximum
+ * udp packet size.  Probably best kept at 512
+ */
+#define MAIL_PACKET_SIZE        512
+ 
+/* These macros are for the name service.  They determine how often the
+ * database is refreshed, how often other muds are checked, how often
+ * the sequence list is checked for timed out services, and how long a
+ * service is allowed to time out.
+ */
+#define REFRESH_INTERVAL    30*60
+#define PING_INTERVAL       30*60
+#define SEQ_CLEAN_INTERVAL  60*60
+#define SERVICE_TIMEOUT        30
+
+/* The number of muds that we initialy allocate space for.  This speeds
+ * up name lookup.
+ */
+#define MUDS_ALLOC 60
+
+/* This macro controls the level of tcp support used by the mud for
+ * services such as finger, tell and mail. Valid values are:
+ *  TCP_ALL   - all services available
+ *  TCP_ONLY  - only tcp services available
+ *  TCP_SOME  - some tcp services are available
+ *  TCP_NONE  - no tcp services available
+ */
+#define TCP_SERVICE_LEVEL TCP_ALL
+
+/* These are the prefered protocols used for certain services which can
+ * be done either way.  Mail should be left tcp, the others are up to
+ * the individual admin.  If the one you choose is not supported the
+ * other type _may_ be used depending on the service.
+ */
+
+#define PREF_MAIL         SVC_TCP
+#define PREF_FINGER       SVC_TCP
+#define PREF_TELL         SVC_UDP
+
+/* These macros are used by the name server to keep a list of muds which
+ * do not support the DNS.
+ */
+#define MUD_ADDRESSES   "/adm/etc/mud_addresses"
+#define MUD_SERVICES    "/adm/etc/mud_services"
+
+#endif //__NET__CONFIG_H
+

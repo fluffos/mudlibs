@@ -1,0 +1,292 @@
+// reward deamon,give killer rewards..
+// by nerd@xo
+// Qyz 增加各门派之间的友好度统计。
+// lnwm 增加带面具杀人的处理。97/11/29
+
+
+#include <family.h>
+#include <ansi.h>
+inherit F_DBASE;
+
+// by ffox 用来检查昆仑派光碧堂的命令是否执行。
+#define KL_ORDER "/system/menpai/kl_order_d"
+#define LOGFILE "pks"
+#define BIWU_PLACE "/d/place/biwu/biwutai"
+// end.
+
+private void RUMOR(string x);
+
+void create() {
+  seteuid(getuid());
+  set("name", "奖励精灵");
+  set("id", "reward_d");
+}
+
+//when winner win a fight the combat should call this function
+void fight_reward(object winner, object victim) {
+  //if ( !userp( winner ) )
+  winner->defeated_enemy(victim);
+  //if ( !userp( victim ) )
+  victim->be_defeated(winner);
+}
+
+// this function is called when the winner win a bihua.
+void bihua_reward(object winner, object loser) {
+  winner->win_bihua(loser);
+  loser->lose_bihua(winner);
+  if (winner->query_temp("pending/biwu") || loser->query_temp("pending/biwu")) {
+    winner->delete_temp("pending/biwu");
+    loser->delete_temp("pending/biwu");
+    winner->delete_temp("report");
+    loser->delete_temp("report");
+    message("channel:xo", HIW "【比武】" +
+      winner->query("name") + "打败了" + loser->query("name") + "!\n" NOR, users());
+    find_object(BIWU_PLACE)->record(winner, loser);
+  }
+
+}
+
+// this is called when killer killed victim
+// 真是难写。。
+void killer_reward(object victim) {
+  object killer;
+  int j;
+  object *team;
+  int bls, rein_time, mks, score;
+  string death_type, strShort;
+  mapping quest;
+  object room;
+  room = environment(victim);
+  strShort = room ? room->query("short") : "某地";
+  if (userp(victim)) {
+    if (time() - victim->query_temp("last_damage_time") < 20)
+      killer = victim->query_temp("last_damage_from");
+    else killer = 0;
+  } else
+    killer = victim->query_temp("last_damage_from");
+  if (userp(victim)) {
+
+    if (objectp(killer))
+      death_type = "kill";
+    else if (!death_type = victim->query_temp("last_damage_type"))
+      death_type = "unknown";
+    switch (death_type) {
+      case "poison":
+        RUMOR(sprintf("%s在%s中毒身亡了。", victim->short(1), strShort));
+        LOG_D->do_log(victim, "你中毒后，未找到解药，最终毒发而亡。");
+        break;
+
+      case "drawn":
+        RUMOR(sprintf("%s在%s被水淹死了。", victim->short(1), strShort));
+        LOG_D->do_log(victim, "你因不识水性，不小心被水淹死了。");
+        break;
+
+      case "trip":
+        RUMOR(sprintf("%s在%s摔死了。", victim->short(1), strShort));
+        LOG_D->do_log(victim, "你神智不清，一时疏忽而摔死了。");
+        break;
+
+      case "unknown":
+        RUMOR(sprintf("%s在%s莫名其妙的死了。", victim->short(1), strShort));
+        LOG_D->do_log(victim, "你因为某种不为人知的原因而死亡。");
+        break;
+
+      case "kill":
+        team = killer->query_team();
+        if (objectp(killer)) {
+          RUMOR(sprintf("%s被%s在%s杀死了。", victim->short(1),
+            killer->short(1), strShort));
+          LOG_D->do_log(victim, sprintf("你因技不如人而被%s杀死。", killer->short(1)));
+          if (userp(killer) && userp(victim)) {
+            if (killer->query("pks/" + victim->query("id")) > 0) {
+              LOG_D->do_log(killer, sprintf("你将%s杀死，终于报了血海深仇。", victim->short(1)));
+              log_file(
+                LOGFILE,
+                sprintf(
+                  "%s，%s\n%s(%s)在%s将%s(%s)杀死，终于报了血海深仇。\n",
+                  CHINESE_D->chinese_date(time()),
+                  ctime(time()),
+                  killer->name(1),
+                  geteuid(killer),
+                  strShort,
+                  victim->name(1),
+                  geteuid(victim)
+                )
+              );
+            } else if (team) {
+              for (j = 0; j < sizeof(team); j++)
+                if (team[j]->query("pks/" + victim->query("id")) > 0) {
+                  log_file(LOGFILE, sprintf("%s，%s\n%s(%s)在%s将%s(%s)杀死，终于为队友%s(%s)报了血海深仇。\n",
+                    CHINESE_D->chinese_date(time()), ctime(time()),
+                    killer->name(1), geteuid(killer), strShort,
+                    victim->name(1), geteuid(victim),
+                    team[j]->name(1), geteuid(team[j])));
+                  victim->add("pks/" + team[j]->query("id"), 1);
+                  team[j]->add("pks/" + victim->query("id"), -1);
+                }
+            } else {
+              log_file(
+                LOGFILE,
+                sprintf(
+                  "%s，%s\n%s(%s)在%s无故将%s(%s)杀死，因此结下深仇大恨。\n",
+                  CHINESE_D->chinese_date(time()),
+                  ctime(time()),
+                  killer->name(1),
+                  geteuid(killer),
+                  strShort,
+                  victim->name(1),
+                  geteuid(victim)
+                )
+              );
+              killer->add("PKS", 1);
+              victim->add("PKED", 1);
+            }
+            victim->add("pks/" + killer->query("id"), 1);
+            killer->add("pks/" + victim->query("id"), -1);
+          }
+          KL_ORDER->give_msg(victim, killer);  // by ffox
+          if (userp(killer) && killer->query_condition("mask")) {
+            //生活中本来就没有一定确定的东西。所以是真是假又有谁知道呢？ -- lnwm 97/11/29
+            //不过神例外。hehe。。。:PP  -- lnwm
+            log_file(
+              "nosave/mask_kill",
+              sprintf(
+                "%s（%s）乔装成%s将%s(%s)杀死。\n",
+                killer->name(1),
+                geteuid(killer),
+                killer->name(),
+                victim->name(1),
+                geteuid(victim)
+              )
+            );
+          }
+        } else {
+          RUMOR(sprintf("%s莫名其妙的被人杀死了。", victim->name(1)));
+          LOG_D->do_log(victim, "你因为受到上天的诅咒而亡。");
+        }
+        break;
+
+      default:
+        error("error damage type or killer.\n");
+        break;
+    }
+
+    rein_time = victim->query("PKS") * 20;
+    mks = victim->query("MKS");
+    rein_time += mks > 1000 ? mks / 100 + 90 : mks / 10;
+    rein_time += victim->query("bellicosity");
+    score = victim->query_score();
+    rein_time -= score > 1000 ? 500 : score / 2;
+    victim->set("rein_time", rein_time + victim->query("mud_age"));
+    if (death_type != "unkown")    //不是莫名其妙就penalty.
+    {
+      victim->clear_condition();
+      victim->set("bellicosity", 0);
+      victim->add("death", 1);
+      /*if ( victim->query( "PKS" ) )
+                victim->add( "PKS", -1 );
+            thief = victim->query( "thief" );
+            if ( thief )
+                victim->set( "thief", thief / 2 );*/
+      if (victim->query("death") >= 30)
+        victim->skill_death_penalty();
+    }
+  }
+
+  if (!killer) return;
+
+  if (objectp(killer)) {
+    // 调用 family.c 里面的 deal_family_relation()
+    FAMILY_D->deal_family_relation(victim, killer);
+    killer->killed_enemy(victim);
+    victim->be_killed(killer);
+    if (stringp(victim->query("vendetta_mark")))   // add this by tea 10.19.98
+      killer->add("vendetta/" + victim->query("vendetta_mark"), 1);
+    if (userp(victim)) {
+      if (victim->query("positive_score") > 1000) {
+        killer->add("negative_score", 1 * (int)victim->query("positive_score") / 1000);
+      }
+      if (victim->query("negative_score") > 1000) {
+        killer->add("positive_score", 1 * (int)victim->query("negative_score") / 1000);
+      }
+      if (victim->query("positive_score") < 1000) {
+        killer->add("negative_score", 10);
+      }
+      bls = 10;
+    } else {
+      killer->add("MKS", 1);
+      if (victim->query("positive_score") > 100) {
+        killer->add("negative_score", 1 * (int)victim->query("positive_score") / 100);
+      }
+      if (victim->query("negative_score") > 100) {
+        killer->add("positive_score", 1 * (int)victim->query("negative_score") / 100);
+      }
+      if (victim->query("positive_score") < 100) {
+        killer->add("negative_score", 1);
+      }
+      bls = 1;
+    }
+
+    killer->add("bellicosity", bls * (userp(killer) ? 1 : 10));
+  }
+
+  // 对killer的犯罪的记录。(trill)
+  /*    if ( userp(killer) )
+    {
+        env_mark = environment(victim)->query("no_kill");
+        ppl_mark = victim->query("no_kill");
+        if ( env_mark &&
+            !killer->query_temp( "can_kill_" + env_mark ) && (
+            killer->query( "quest/quest" ) != "杀" + victim->query("name") ||
+            killer->query( "quest/jina" ) != "杀" + victim->query( "name" ) ) )
+        {
+            CRIME_D->set_crime( killer, env_mark );
+        }
+        if ( ppl_mark &&
+            !killer->query_temp( "can_kill_" + ppl_mark ) && (
+            killer->query( "quest/quest" ) != "杀" + victim->query( "name" ) ||
+            killer->query( "quest/jina" ) != "杀" + victim->query( "name" ) ) )
+        {
+            CRIME_D->set_crime( killer, ppl_mark );
+        }
+
+        // 增加对random continue pk的记录和处理 (trill)
+        if ( ( userp( victim ) &&
+               killer->query("quest/jina" ) != "杀" + victim->query("name") ) ||
+             ( ppl_mark && (
+               !killer->query_temp( "can_kill_" + ppl_mark ) ||
+               killer->query( "quest/quest" ) != "杀" + victim->query("name") ) ) )
+        {
+            CRIME_D->check_continue_pk( killer );
+        }
+    }
+*/
+  //quest 的要求
+
+  if (interactive(killer) &&
+    (quest = killer->query("quest")) &&
+    (quest["quest"] == ("杀" + victim->query("name")))) {
+    if (!userp(victim))
+      killer->set("done_quest", quest["quest"]);
+  }
+
+  if (interactive(killer) &&
+    (quest = killer->query("quest")) &&
+    (quest["jina"] == ("杀" + victim->query("name")))) {
+    if (userp(victim))
+      killer->set("done_jina", quest["tongji"]);
+  }
+  // Task 的结束.
+  //    if (userp(killer))
+  //        killer->eventTaskEnd("kill", victim);
+
+  //专为一品堂写的yipin_task的结束。--lnwm 98/03/10
+  YIPIN_D->end_yipin_task("杀", killer, victim);
+
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+private void RUMOR(string x) {
+  CHANNEL_D->do_channel(this_object(), "rumor", x);
+}

@@ -18,7 +18,7 @@ boot, same as `rzrmud`). ~15,737 raw files, 12,168 `.lpc` files after
 rename — one of the larger libs in this batch.
 
 **Observation on lineage**: this lib's `adm/simul_efun/chinese.c` is
-byte-identical to `xiyangzaixian3`'s (archive #48), processed in
+byte-identical to `xyzx3`'s (archive #48), processed in
 parallel by another agent in this same project run — same standard
 single-first-character `is_chinese` shape
 (`strlen>=2 && str[0]>160 && str[0]<255`). Worth noting as a possible
@@ -153,8 +153,8 @@ things:
 Right after the driver was killed post-registration-test, `free -h`
 showed only ~1.7GB free with 2.4GB already swapped — two *other* libs
 being processed concurrently by other agents on this same host
-(`xiyangzaixian_fengyun2`'s `lpcc --batch` alone at ~6.1GB RSS,
-`datangshuanglong`'s at ~1.1GB RSS and rising) had consumed most of
+(`xyzxfy2`'s `lpcc --batch` alone at ~6.1GB RSS,
+`dtsl2`'s at ~1.1GB RSS and rising) had consumed most of
 the 23GB host's headroom. Waited rather than starting a third
 concurrent sweep on top of an already-below-threshold state; memory
 recovered to ~8.7GB free a couple minutes later once those other

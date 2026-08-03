@@ -1,0 +1,112 @@
+#include <ansi.h>
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+inherit F_MOVE;
+inherit F_NAME;
+
+nosave int amount;
+
+void setup() {}
+
+int query_amount() { return amount; }
+
+private void destruct_me() {
+  remove_call_out("destruct_me");
+  destruct(this_object());
+}
+
+void set_amount(int v) {
+  object dest;
+
+  if (v <= 0) {
+    amount = 0;
+    call_out("destruct_me", 1);
+    return;
+  } else {
+    amount = v;
+    this_object()->set_weight(v);
+  }
+}
+
+void add_amount(int v) { set_amount(amount + v); }
+
+string short() {
+  string id;
+  if (!stringp(id = query("owner_id")))
+    id = "";
+  else id = "[" + id + "]";
+  return chinese_number(query_amount()) + query("base_unit") + ::short() + id;
+}
+
+varargs int move(mixed dest, int silent) {
+  object env, *inv;
+  int i, total, total0, result;
+  string file;
+
+  result = ::move(dest, silent);
+  if (env = environment()) {
+    file = base_name(this_object());
+    inv = all_inventory(env);
+    total = (int)query_amount();
+    total0 = total;
+    for (i = 0; i < sizeof(inv); i++) {
+      if (inv[i] == this_object())
+        continue;
+      if (base_name(inv[i]) == file) {
+        if (inv[i]->query("owner_id")
+          && query("owner_id") != inv[i]->query("owner_id"))
+          continue;
+        set("owner_id", inv[i]->query("owner_id"));
+        total += (int)inv[i]->query_amount();
+        destruct(inv[i]);
+      }
+    }
+    if (total != total0)
+      set_amount(total);
+  }
+  return result;
+}
+
+void init() {
+  add_action("do_eat", "eat");
+}
+
+void create() {
+  set_name("寿元丹", ({ "shouyuan dan", "dan" }));
+  if (clonep())
+    set_default_object(__FILE__);
+  else {
+    set("base_unit", "粒");
+    set("unit", "些");
+    set("long", "这是一粒充满灵气的丹药，上面灵光浮动充满了生机。据说吃了能增加人的寿命。\n");
+    set("no_sell", "这么珍贵的灵丹你也舍得卖？！\n");
+    set("drug_type", "良药");
+  }
+  set_amount(1);
+  setup();
+}
+
+int do_eat(string arg) {
+  object me = this_player();
+  if (!arg || !id(arg))
+    return 0;
+  if (!present(this_object(), me))
+    return notify_fail("这不是你的。\n");
+  if (me->query("life/life_time") >= me->query("life/init_life_time"))
+    return err_msg("你现在吃了这个也是浪费。\n");
+  message_vision("$N吃下一粒$n。\n", me, this_object());
+  if (random(10) != 6 || !query("owner_id") || query("owner_id") != me->query("id")) {
+    write("结果什么反应也没有。\n");
+    if (query_amount() <= 1)
+      destruct(this_object());
+    else add_amount(-1);
+    return 1;
+  }
+  me->add("life/life_time", 1);
+  write(HIC "你只觉一股勃勃生机直接注入体内，感觉皱纹都少了不少。\n" NOR);
+  write(HIY "【系统】你的寿元增加了" HIR "1" HIY "点。\n" NOR);
+  if (query_amount() <= 1)
+    destruct(this_object());
+  else add_amount(-1);
+  return 1;
+}

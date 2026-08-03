@@ -12,7 +12,7 @@ registration flow verified three times with real Chinese names, post-login
 
 The raw `config.cfg`'s own `name` field (GBK-decoded) is `风云三（本地）`
 ("Fengyun III (local)") — a stale copy-paste leftover unrelated to this
-game, the same pattern already seen on `datangshuanglong` (archive
+game, the same pattern already seen on `dtsl2` (archive
 #71-ish). `raw/txjh/readme.txt` (by the original author, "hxsd") and
 `raw/txjh/小熊泥苑.txt` (the "小熊泥苑"/Xiongxiong-Niyuan mud-resource site's
 own re-packaging note) both independently confirm the real game is
@@ -27,7 +27,7 @@ set to `铁血江湖`, not the stale `风云三（本地）` value.
 `adm/obj/master.lpc`'s own header comment says `"for ES II mudlib,
 original from Lil, rewritten by Annihilator (11/07/94)"` — this is the
 same "ES II" (Eastern Stories II) lineage shared by the large majority of
-already-processed archives (shanhaizhanshen, wuhanzhan, huoying,
+already-processed archives (shzs, wuhanzhan, huoying,
 yueyingqiyuan, haiyang2, yanhuangwuhun, etc.) — directory layout
 (`adm/`, `feature/`, `std/`, `obj/`, `cmds/`, `d/`, `u/`), `securityd.lpc`'s
 ACL shape, and `feature/dbase.lpc`'s real (non-simul_efun) `set`/`query`
@@ -66,7 +66,7 @@ the original target driver), so every post-login command would have
 silently done nothing with zero error anywhere. Dropped `private`, kept
 `nomask`. **Checked and confirmed present exactly as documented in the
 catalog** — this lib would have failed the exact same silent-command
-symptom as `xuanjianlu`/`beimeixiakexing2001`/`bxsj`/`bxsj1`/`xiakexing3`
+symptom as `xuanjianlu`/`bmxkx2001`/`bxsj`/`bxsj1`/`xiakexing3`
 had this not been caught proactively before first boot.
 
 ### §15ar-adjacent — checked, NOT needed (worth documenting explicitly)

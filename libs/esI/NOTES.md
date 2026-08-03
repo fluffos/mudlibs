@@ -434,3 +434,7 @@ for whoever next touches `es1_win` to note in ITS OWN NOTES.md.
   lib-wide (protects every such room, not just the shop), but no attempt
   was made to enumerate or pre-visit every other room that might carry
   an equally-heavy first-load NPC.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+同一血统（屠龙之战）。

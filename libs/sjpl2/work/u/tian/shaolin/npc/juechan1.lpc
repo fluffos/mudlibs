@@ -1,0 +1,253 @@
+// juechan.c 小广场-觉禅
+
+inherit NPC;
+inherit F_MASTER;
+
+string *renwu = ({
+  "烤鸡腿", "jitui", "少林寺俗家四代弟子", 5000,
+  "包子", "baozi", "少林寺俗家三代弟子", 10000,
+  "水壶", "shui hu", "少林寺俗家二代弟子", 15000,
+  "牛皮酒袋", "jiudai", "少林寺俗家一代弟子", 20000,
+  "北京烤鸭", "kaoya", "少林寺俗家大弟子", 30000,
+});
+
+string *renwu1 = ({
+  "烤鸡腿", "jitui", "肚子饿了", 5000,
+  "蜂蜜", "feng mi", "炼制丹丸需要些蜂蜜", 10000,
+  "长剑", "sword", "要下山去一趟，可是没有兵器", 15000,
+  "烤鸡腿", "jitui", "肚子饿了", 20000,
+  "烤鸡腿", "jitui", "肚子饿了", 30000,
+});
+
+string ask_me();
+
+void create() {
+  set_name("觉禅", ({ "jue chan master", "jue chan", "master", }));
+  set("long",
+    "这是一位强壮的青年僧人，他长个国字脸，生得浓眉大眼，\n"
+    "虎背熊腰，全身似乎蕴含着无穷劲力。\n"
+  );
+
+
+  set("gender", "男性");
+  set("attitude", "friendly");
+  set("class", "shaolin1");
+
+  set("inquiry", ([
+    "学艺": "阿弥陀佛，贫僧武艺粗浅，只收些俗家弟子，传些少林入门的功夫。\n",
+    "拜师": "还上哪里找？拜我就是！\n",
+    "慧能大师": "慧能大师你都不知道？他是我的师傅，是[心禅堂]首座！\n",
+    "推荐信": (: ask_me :),
+  ]));
+
+  set("age", 25);
+
+  set("max_kee", 300);
+  set("max_gin", 500);
+  set("max_sen", 300);
+  set("force", 1000);
+  set("max_force", 1000);
+  set("force_factor", 20);
+  set("combat_exp", 300000);
+
+
+  set_skill("force", 80);
+  set_skill("xinyi_force", 80);
+  set_skill("dodge", 80);
+  set_skill("shaolin-dodge", 80);
+  set_skill("yecha_stick", 80);
+  set_skill("stick", 80);
+  set_skill("luohan-ken", 80);
+  set_skill("parry", 80);
+  set_skill("unarmed", 80);
+
+  //	set_skill("essencemagic", 80);
+  set_skill("buddhism", 80);
+  //	set_skill("magic", 80);
+  set_skill("literate", 40);
+
+  map_skill("force", "xinyi_force");
+  map_skill("dodge", "shaolin-dodge");
+  map_skill("stick", "yecha_stick");
+  map_skill("unarmed", "luohan-ken");
+
+  set("title", "少林寺俗家弟子师傅");
+  create_family("少林寺", 9, "弟子");
+
+  setup();
+  carry_object("/obj/weapon/stick")->wield();
+  carry_object(__DIR__ "obj/qing_jiasha")->wear();
+}
+
+void init() {
+  add_action("do_apprentice", "apprentice");
+}
+
+string ask_me() {
+  object me = this_player(), ob;
+
+  if (!(me->is_apprentice_of(this_object()))) return 0;
+  if (!(me->query("shaolin/tuijian"))) return 0;
+  if (ob = present("letter", me)) {
+    if (me->query("id") == ob->query("own_name")) {
+      return "推荐信不是在你身上吗？快去吧!\n";
+    }
+  }
+
+  command("faint " + me->query("id"));
+  tell_object(me, "推荐信搞丢了？真是粗心！\n");
+  tell_object(me, "觉禅拿出纸和笔，飞快地写了一封信，装到信封里递给你。\n");
+  ob = new(__DIR__ "obj/letter1");
+  ob->set("own_name", me->query("id"));
+  ob->move(me);
+  return "仔细保管好，不要再搞丢了！\n";
+
+}
+
+
+void attempt_apprentice(object ob) {
+  if ((string)ob->query("gender") != "男性") {
+    command("wa");
+    command("say 阿弥陀佛！女施主呀，贫僧可不敢开这等玩笑啊。");
+    ob->delete_temp("pending/apprentice");
+    return;
+  }
+
+  if ((string)ob->query("class") == "shaolin") {
+    command("say 阿弥陀佛，贫僧武艺粗浅，只收些俗家弟子，传些少林入门的功夫。\n");
+    ob->delete_temp("pending/apprentice");
+    return;
+  }
+  if (ob->query("betrayer")) {
+    command("shake");
+    message_vision("觉禅双手合十，对$N说道: 少林寺从不收叛师之徒!\n", ob);
+    ob->delete_temp("pending/apprentice");
+    return;
+  }
+
+  if ((string)ob->query("class") != "shaolin1") {
+    command("say 阿弥陀佛！贫僧就收下你做『俗家四代弟子』了。");
+    command("say 阿弥陀佛，善哉！善哉！");
+    command("recruit " + ob->query("id"));
+    ob->set("title", "少林寺俗家四代弟子");
+    ob->set("class", "shaolin1");
+    ob->set("shaolin/renwu", 0);
+    ob->set("shaolin/renwu_type", 0);
+    ob->set("shaolin/renwu_ok", 0);
+    ob->set("shaolin/tuijian", 0);
+  }
+}
+
+
+int do_apprentice(string arg) {
+  int exp, nn, ii, rr;
+  string old_t;
+  object ob = this_player(), m_name = this_object();
+
+  if (arg != "jue chan master" && arg != "jue chan" && arg != "master") return 1;
+  if (!(ob->is_apprentice_of(this_object()))) return 0;
+
+  //printf("%s %s %s %d",renwu[0],renwu[1],renwu[2],renwu[3]);
+  //return 1;
+  old_t = ob->query("title");
+  exp = ob->query("combat_exp");
+  nn = ob->query("shaolin/renwu");
+  rr = ob->query("shaolin/renwu_type");
+
+  if (ob->query("shaolin/tuijian")) {
+    command("wa " + ob->query("id"));
+    tell_object(ob, "你还没拜我师傅慧能大师？快去吧，别耽误了你的修行!\n");
+    return 1;
+  }
+
+  for (ii = 0; ii < 5; ii++) {
+    if (old_t == renwu[ii * 4 + 2]) {
+      if (exp < (int)renwu[ii * 4 + 3]) {
+        command("pat " + ob->query("id"));
+        command("say 你的功夫还不行，要抓紧时间练呀，别光聊天贪玩！\n");
+        //				command("addoil "+ob->query("id"));
+        return 1;
+      } else if (nn == ii) {
+        if ((rr = random(2))) {
+          command("nod " + ob->query("id"));
+          tell_object(ob, "为师现在有事叫你去办!\n");
+          tell_object(
+            ob,
+            "为师" + renwu1[ii * 4 + 2] + ",你去帮我找" + renwu1[ii * 4] + "(" + renwu1[ii * 4 + 1] + ")来!\n"
+          );
+          ob->add("shaolin/renwu", 1);
+          ob->set("shaolin/renwu_ok", 0);
+          ob->set("shaolin/renwu_type", rr);
+          return 1;
+        } else {
+          command("nod " + ob->query("id"));
+          tell_object(ob, "你也跟我不短时间了，为师现在交给你一个任务!\n");
+          tell_object(ob, "你替我将" + renwu[ii * 4] + "(" + renwu[ii * 4 + 1] + ")给我找来!\n");
+          ob->add("shaolin/renwu", 1);
+          ob->set("shaolin/renwu_ok", 0);
+          ob->set("shaolin/renwu_type", rr);
+          return 1;
+        }
+      } else {
+        command("pat " + ob->query("id"));
+        if (rr == 0)
+          tell_object(ob, "事情办得如何了？" + renwu[ii * 4] + "(" + renwu[ii * 4 + 1] + ")还没找到？\n");
+        else
+          tell_object(ob, renwu1[ii * 4] + "(" + renwu1[ii * 4 + 1] + ")还没找到？哎呀你要耽误我的事了！\n");
+        tell_object(ob, "可要加把劲呀，你看你的师弟都完成任务了!\n");
+        return 1;
+      }
+    }
+  }
+
+  return 1;
+}
+
+
+int accept_object(object me, object ob) {
+  int mm, nn, ii, rr;
+  string name1, id1;
+
+  if (!(me->is_apprentice_of(this_object()))) return 0;
+  if (me->query("class") != "shaolin1") return 0;
+  nn = me->query("shaolin/renwu");
+  if ((me->query("shaolin/renwu_ok") == 1) || (nn == 0)) return 0;
+  mm = (nn - 1) * 4;
+
+  rr = me->query("shaolin/renwu_type");
+  if (rr == 0) {
+    name1 = renwu[mm];
+    id1 = renwu[mm + 1];
+  } else {
+    name1 = renwu1[mm];
+    id1 = renwu1[mm + 1];
+  }
+
+  if (nn == 5) {
+    if ((me->query("title") == renwu[mm + 2]) && (ob->query("name") == name1) && (ob->id(id1))) {
+      command("say 太好了，这正是我需要的东西，干的不错！\n");
+      command("sigh");
+      command("say 真是长江后浪推前浪，一代新人换旧人！为师已没有什么可教你的了。");
+      command("say 拿上我的推荐信到慧能大师那里学艺吧！\n");
+      printf("觉禅拿出纸和笔，飞快地写了一封信，装到信封里递给你。\n");
+      ob = new(__DIR__ "obj/letter1");
+      ob->set("own_name", me->query("id"));
+      ob->move(me);
+
+      command("say 你我师徒一场，为师也没有什么东西，现在要分手了，送你个纪念品吧！\n");
+      me->set("shaolin/tuijian", 1);
+      me->set("shaolin/renwu_ok", 1);
+      return 1;
+    }
+  }
+  if ((me->query("title") == renwu[mm + 2]) && (ob->query("name") == name1) && (ob->id(id1))) {
+    command("haha");
+    command("spank " + me->query("id"));
+    command("say 很好，现在就提升你为" + renwu[mm + 2 + 4] + "。\n");
+    me->set("title", renwu[mm + 2 + 4]);
+    me->set("shaolin/renwu_ok", 1);
+    return 1;
+  }
+
+  return 0;
+}

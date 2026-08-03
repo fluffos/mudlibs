@@ -1,0 +1,104 @@
+// sc.c
+
+#include <ansi.h>
+#include <combat.h>
+
+inherit F_CLEAN_UP;
+
+varargs int skill_power2(object ob, string skill, int usage);
+
+
+void create() { seteuid(ROOT_UID); }
+
+int main(object me, string arg) {
+  object ob;
+  mapping my;
+  string line, str, skill_type;
+  object weapon;
+  int attack_points, dodge_points, parry_points;
+
+  seteuid(getuid(me));
+
+  if (!arg)
+    ob = me;
+  else if (wizardp(me)) {
+    ob = present(arg, environment(me));
+    if (!ob) ob = find_player(arg);
+    if (!ob) ob = find_living(arg);
+    if (!ob) return notify_fail("你要察看谁的状态？\n");
+  } else
+    return notify_fail("只有巫师能察看别人的状态。\n");
+
+  my = ob->query_entire_dbase();
+
+  printf(BOLD "%s" NOR "%s\n\n", RANK_D->query_rank(ob), ob->short(1));
+
+
+  if (objectp(weapon = ob->query_temp("weapon")))
+    skill_type = weapon->query("skill_type");
+  else
+    skill_type = "unarmed";
+  write(" attack ");
+  attack_points = skill_power2(ob, skill_type, SKILL_USAGE_ATTACK);
+  write(" parry  ");
+  parry_points = skill_power2(ob, skill_type, SKILL_USAGE_DEFENSE);
+  write(" dodge  ");
+  dodge_points = skill_power2(ob, "dodge", SKILL_USAGE_DEFENSE);
+
+  printf(" 实战经验= " HIM "%d\n\n" NOR, ob->query("combat_exp"));
+  printf(" 战斗力 = (有效技能的三次方 / 3 * 神的百份比 + 战斗经验) / 100 + 1\n");
+
+  printf("\n 战斗攻击力 " HIW "%d (+%d)" NOR "\t\t战斗防御力 " HIW "%d (+%d)\n\n" NOR,
+    attack_points / 100 + 1, ob->query_temp("apply/damage"),
+    (dodge_points + (weapon ? parry_points : (parry_points / 10))) / 100 + 1, ob->query_temp("apply/armor"));
+
+
+
+  return 1;
+}
+
+varargs int skill_power2(object ob, string skill, int usage) {
+  int status, level, power;
+
+  if (!living(ob)) return 0;
+
+  if (ob->query_temp("sleeping")) return 1;
+
+  level = ob->query_skill(skill, 0);
+  printf("有效技能 = %3d   ", level);
+
+  switch (usage) {
+    case SKILL_USAGE_ATTACK:
+      level += ob->query_temp("apply/attack");
+      printf("临时攻击力 = %3d     合计 = %d\n", ob->query_temp("apply/attack"), level);
+      break;
+    case SKILL_USAGE_DEFENSE:
+      level += ob->query_temp("apply/defense");
+      printf("临时防御力 = %3d     合计 = %d\n", ob->query_temp("apply/defense"), level);
+      break;
+  }
+
+  if (!level) return (int)ob->query("combat_exp") / 2;
+  //        printf("level 的三次方=%d\n",level*level*level);
+  if ((status = ob->query("max_sen")) > 0) {
+    if (level > 100) power = (level * level * level) / 3 / status * (int)ob->query("sen");
+    else power = (level * level * level) / 3 * (int)ob->query("sen") / status;
+  } else
+    power = (level * level * level) / 3;
+  //        printf("return=%d\n",power + ob->query("combat_exp"));
+  return power + ob->query("combat_exp");
+}
+
+
+
+int help(object me) {
+  write(@HELP
+指令格式 : sc
+           sc <对象名称>                   
+
+对玩家和 NPC 的战斗力及防御力分析。
+
+HELP
+  );
+  return 1;
+}

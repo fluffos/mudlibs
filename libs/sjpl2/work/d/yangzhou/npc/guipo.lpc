@@ -1,0 +1,137 @@
+#include <ansi.h>
+inherit NEW_VENDOR;
+
+int do_sell(string arg);
+void pay_player(object who, int amount);
+string buy_self();
+void pay_money(object ob, int value);
+
+void init() {
+  ::init();
+  add_action("do_sell", "sell");
+}
+
+
+void create() {
+  set_name("韦春花", ({ "wei" }));
+  set("title", "丽春院  鸨母");
+  set("gender", "女性");
+  set("age", 56);
+  set("long", "韦春花是丽春院的老板娘。\n");
+  set("combat_exp", 2300);
+  set("attitude", "friendly");
+  set_skill("literate", 20);
+  set_skill("dodge", 30);
+  set_skill("unarmed", 20);
+  set("inquiry", ([
+    "妓女": "找对地方了，我们这里有很多好姑娘哦。",
+    "召妓": "找对地方了，我们这里有很多好姑娘哦。",
+    "赎身": (: buy_self :),
+    "从良": (: buy_self :),
+    "招聘": "有好货色卖给我就是。",
+  ]));
+
+  setup();
+  add_money("silver", 100);
+}
+
+int do_sell(string arg) {
+  object ob, me;
+  int value;
+  me = this_player();
+  if (!arg || !(ob = present(arg, this_player())))
+    return notify_fail("你要卖掉什麽物品？\n");
+  if (ob->query("money_id")) return notify_fail("你要卖“钱”？\n");
+  if (!userp(ob))
+    return notify_fail("你只能卖玩家人物。\n");
+  value = ob->query("per");
+  value = (50 + (value - 27) * 30) * 100;
+  if (ob->query("gender") != "女性") value = value / 2;
+
+  message_vision("$N想把昏迷中的" + ob->query("name") + "卖掉。\n", this_player());
+  if (value < 0) {
+    command("faint");
+    command("say 这个丑八怪！你还是带回家自己享用吧！！！");
+    return 1;
+  }
+  if (ob->query("jinv")) {
+    command("faint");
+    command("say tmd, 拿我丽春院的人卖回给我？你不要命了！！！");
+    return 1;
+  }
+  message_vision("韦春花摸着" + ob->query("name") + "的脸蛋，说道：“这个还算可以。”\n", this_player());
+  command("smile");
+  message_vision("$N把背上的" + ob->query("name") + "卖掉了。\n", this_player());
+  message("channel:chat", MAG +
+    "【特大新闻】" + ob->name() + "被卖进丽春院了！\n" + NOR, users());
+
+  pay_player(this_player(), value * 80 / 100);
+  ob->set("jinv", 1);
+  ob->move("/d/yangzhou/fangjian1");
+  ob->set("startroom", "/d/yangzhou/fangjian1");
+  return 1;
+}
+
+void pay_player(object who, int amount) {
+  object ob;
+
+  if (amount < 1) amount = 1;
+  if (amount / 100) {
+    ob = new(SILVER_OB);
+    ob->set_amount(amount / 100);
+    ob->move(who);
+    amount %= 100;
+  }
+  if (amount) {
+    ob = new(COIN_OB);
+    ob->set_amount(amount);
+    ob->move(who);
+  }
+}
+
+string buy_self() {
+  int value;
+  object ob = this_player();
+  if (!ob->query("jinv")) return "你不是咱们丽春院的人!";
+  value = ob->query("per");
+  value = (50 + (value - 27) * 30) * 100;
+  if (ob->query("gender") != "女性") value = value / 2;
+  command("say 赎身需要" + chinese_number(value) + "两银子");
+  //	if(!pay_money(ob, value)) return "你身上带的钱不够呀！！";
+  //	else {
+  ob->set("jinv", 0);
+  message_vision("$N拿出" + chinese_number(value) + "两银子交给韦春花。\n", this_player());
+  return "可惜啊！" + ob->name() + "，唉，以后你就不能过咱们神仙般的生活啦！";
+  //	}
+}
+int pay_money(object ob, int value) {
+  object silver, gold;
+  int g = 0, s = 0;
+  gold = present("gold_money", ob);
+  silver = present("silver_money", ob);
+  if (gold) g = gold->value() / 10000;
+  if (silver) s = silver->value() / 100;
+  if (value < s) {
+    s = s - value;
+    if (silver) silver->set_amount(s);
+    printf("silver : %d,  gold :  %d\n", s, g);
+    return 1;
+  } else if (value == s) {
+    if (silver) silver->set_amount(0);
+    return 1;
+  } else {
+    if (value < g * 100 + s) {
+      printf("silver : %d,  gold :  %d\n", s, g);
+      value = g * 100 + s - value;
+      g = value / 100;
+      s = value % 100;
+      if (!silver) silver = new("/obj/money/silver");
+      if (!gold) silver = new("/obj/money/gold");
+      silver->set_amount(s);
+      gold->set_amount(g);
+      printf("silver : %d,  gold :  %d\n", s, g);
+      return 1;
+    } else return 0;
+  }
+  return 0;
+}

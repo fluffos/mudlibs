@@ -1,0 +1,141 @@
+//XXDER/TIE
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER;
+int perform(object me, object target) {
+  string msg, *limbs, limb;
+  int ap, dp, ep, extra, damage, anti_force, acup_level, wounded = 0;
+
+  if (!target) target = offensive_target(me);
+
+  //This perform do a special attack not basic on COMBAT_D.
+  //I added this restriction to keep the balance.
+  //XXDER 5/4/2001
+  if ((string)me->query("family/family_name") != "白云庵")
+    return notify_fail("只有白云庵弟子才能使用此招！\n");
+
+  if ((int)me->query_skill("rainbow-zhi", 1) < 50)
+    return notify_fail("你的［真虹指］还不够纯熟！\n");
+  acup_level = me->query_skill("acupuncture", 1);
+  if (acup_level < 100) return notify_fail("你认穴不准，无法使出［长虹经天］！\n");
+  if (!target
+    || !target->is_character()
+    || !me->is_fighting(target))
+    return notify_fail("［长虹经天］只能对战斗中的对手使用。\n" NOR);
+  if ((int)me->query("force") < 50)
+    return notify_fail("你的内力不够！\n");
+
+  limbs = me->query("limbs");
+  limb = limbs[random(sizeof(limbs))];
+
+  msg = HIR "\n$N脚踩五行罡斗，施展出流星雨般的" HIW "真虹指" HIR "直点向$n" HIR "的周身大穴。\n" NOR;
+  me->start_busy(3);
+  me->add("force", -50);
+  me->improve_skill("rainbow-zhi", 1, 1);
+
+  ap = me->query_skill("unarmed") + acup_level * 2;
+  ap = (ap / 10 * ap / 10 * ap) / 5 + me->query("combat_exp") / 25;
+  dp = target->query_skill("dodge") + target->query_skill("parry");
+  dp = (dp / 10 * dp / 10 * dp) / 5 + target->query("combat_exp") / 25;
+
+  if (target->is_busy()) dp /= 3;
+  if ((int)target->query_temp("is_unconcious")) dp = 1;
+
+  //If acupuncture is high enough, ignore target's defense.
+  if (acup_level > 340) {
+    dp = 0;
+    //Bonus to attacker.
+    acup_level *= 2;
+  }
+
+  if (random(ap + dp / 4) < dp / 4) {
+    msg += "但是被$n从容化解了。\n";
+    message_vision(msg, me, target);
+  } else {
+    damage = me->query("force") / 5 + me->query("max_force") / 5 + me->query_str() * 4 + me->query_temp("apply/damage") * 3 + me->query("force_factor") * 10;
+    anti_force = target->query("force") / 5 + target->query("max_force") / 5 + target->query("force_factor") * 10;
+    if (userp(target)) {
+      damage -= anti_force;
+      damage += acup_level * 5;
+    } else {
+      damage += acup_level * 10;
+      anti_force /= 10;
+    }
+
+    if (damage < 1) damage = 1;
+    damage = damage * 3 / 2;
+    damage += random(damage);
+
+    msg += "结果只听见一声闷哼，$N发出的指气已击中$n的" + limb + "。\n";
+    message_vision(msg, me, target);
+
+    target->receive_damage("kee", damage, me);
+    target->receive_damage("sen", damage, me);
+
+    if (damage > anti_force / 10) {
+      target->receive_wound("kee", (damage - anti_force / 10) / 1000, me);
+      target->receive_wound("sen", damage - (anti_force / 10), me);
+      wounded = 1;
+    }
+    COMBAT_D->report_status(target, wounded);
+    if (target->query("eff_kee") < 0
+      || target->query("eff_sen") < 0) {
+      target->die();
+      return 1;
+    }
+
+    if (!target->query_temp("is_unconcious") && target->query("race") == "人类") {
+      dp = random(target->query("combat_exp") / 5);
+      ep = acup_level;
+      ep *= ep;
+      ep += me->query("combat_exp") / 10;
+      if (ep < dp / 10) return 1;
+      extra = me->query_skill("acupuncture", 1);
+
+      if (ep < dp / 6) {
+        msg = "$N的指力正打在$n" + limb + "的穴道上，$n的动作已显迟滞。\n" NOR;
+        target->add_temp("apply/attack", -extra);
+        target->add_temp("apply/dodge", -extra / 5);
+        target->start_call_out(
+          (: call_other, __FILE__, "remove_half_busy", target, extra :),
+          random(extra / 6) + extra / 6
+        );
+      } else if (ep < dp / 4) {
+        msg = "$N的指力正打在$n" + limb + "的穴道上，$n已经半身麻木苦苦支撑。\n" NOR;
+        extra *= 2;
+        target->add_temp("apply/attack", -extra);
+        target->add_temp("apply/dodge", -extra / 5);
+        target->start_call_out(
+          (: call_other, __FILE__, "remove_half_busy", target, extra :),
+          extra / 6 + extra / 6
+        );
+      } else {
+        msg = HIC "$N的指力正打在$n" + limb + "的穴道上，$n登时浑身僵硬动弹不得！\n" NOR;
+        target->set("disable_type", HIY "<穴道被封>" NOR);
+        target->set_temp("disable_inputs", 1);
+        target->set_temp("is_unconcious", 1);
+        seteuid(ROOT_UID);
+        target->start_call_out(
+          (: call_other, __FILE__, "remove_busy", target :),
+          random(extra / 10) + extra / 20
+        );
+      }
+      message_vision(msg, me, target);
+    }
+
+  }
+  return 1;
+}
+
+void remove_half_busy(object target, int extra) {
+  target->add_temp("apply/attack", extra);
+  target->add_temp("apply/dodge", extra / 5);
+
+}
+void remove_busy(object target) {
+  target->delete("disable_type");
+  target->delete_temp("disable_inputs");
+  target->delete_temp("is_unconcious");
+  if (!target->is_ghost())
+    tell_object(target, HIY "\n你体内一股真气流走全身，终于冲破了被封穴道！\n" NOR);
+}

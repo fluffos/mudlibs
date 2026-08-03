@@ -84,3 +84,7 @@ cd libs/ds386
 # first connection ever triggers the Dead Souls admin setup wizard
 python3 ../../scripts/mudclient.py 127.0.0.1 40007 --timeout 15 --send "admin" --send "pass" --send "pass" --send "quit"
 ```
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+英文版 Dead Souls；已降级/部分处理。

@@ -11,7 +11,7 @@ build). Uses the `adm/single/{master,simul_efun}` layout convention (same
 shape as the ES II/bxsj-family libs, though otherwise unrelated content —
 its startup banner actually credits "星战英雄之乱世风沙" as the
 copyright, suggesting this is a modified/rebranded fork of the
-xingzhanyingxiong (archive #2) codebase or a shared common ancestor).
+xzyx (archive #2) codebase or a shared common ancestor).
 ~3,554 raw files.
 
 ## Fixes applied
@@ -165,7 +165,7 @@ consistently, no pressure — this is a small lib).
    under wasm. **This DNS_MASTER crash is a wasm-specific gap, not a
    mudlib bug** — natively the sockets package is present, `dns_master`
    compiles fine, and the call never fails; `shujian2008`/
-   `shujiantianxia` share this exact same `adm/etc/preload`-included
+   `sjtx2` share this exact same `adm/etc/preload`-included
    `dns_master` + unconditional `logind.lpc` call shape and hit the
    identical crash under wasm (see their own NOTES.md). Not patched, per
    the task's standing policy for wasm-only gaps — documented here
@@ -305,7 +305,7 @@ instances on this lib alone:
    message, just apparent no-op), because the NPC's own `command()`
    efun call is `ORIGIN_EFUN` on itself, same as move()'s case. This is
    the identical shape AGENTS.md already documents for
-   `xingzhanyingxiong` (the game this lib's banner is copyrighted to!)
+   `xzyx` (the game this lib's banner is copyrighted to!)
    — the exact same bug, independently present in what looks like a
    sibling/fork codebase.
 

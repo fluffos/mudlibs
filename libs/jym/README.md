@@ -5,7 +5,7 @@
 `d/taihu/gumu/houtang.lpc` 等场景内容相同，只是文件头的"破解"署名
 不同（`xkx2000zxb` 是"Cracked by Kafei"，这份档案是"Cracked by
 Roath"），应是同一款"侠客行I"底层代码库的不同流通版本，此前两份
-档案都没有互相记录这层关系。`xkm`（侠客梦）和 `beimeixiakexing2001`
+档案都没有互相记录这层关系。`xkm`（侠客梦）和 `bmxkx2001`
 （侠客行北美2001版）也是同一批"Cracked by Roath"流通版本的手足档案。
 
 ## 内容亮点

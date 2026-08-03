@@ -2,10 +2,10 @@
 
 由 "XiaKeXing Gaming Group" 制作，登录画面自称 1996-2003 年出品。属于
 早期"ES II"引擎家族的一支——与本项目中的 `rzrmud`（大唐西游）、
-`beimeixiakexing2001`、`xuanjianlu`（玄剑录）等同属一个更古老的技术
+`bmxkx2001`、`xuanjianlu`（玄剑录）等同属一个更古老的技术
 谱系，但游戏世界内容各自独立。精确到发行版本层面：`d/taihu/gumu/
 houtang.lpc` 等场景文件头带"Cracked by Roath"署名，和
-`beimeixiakexing2001`/`jym`/`xkm` 是同一批流通版本；`xuanjianlu` 则
+`bmxkx2001`/`jym`/`xkm` 是同一批流通版本；`xuanjianlu` 则
 是"Cracked by Kafei"的另一批流通版本（与 `xkx2000zxb` 同批），两批
 之间文件头署名不同，但核心引擎同源。
 

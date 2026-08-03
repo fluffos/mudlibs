@@ -5,7 +5,7 @@
   "红尘录" (Chapters of the Red Dust) wuxia game.
 - Mudlib root in archive: `hc/hc/` (two levels down; the outer `hc/`
   also has a `MUDOS.EXE`, a `架站帮助.txt` (setup help) and `小熊泥苑.txt`
-  — the "小熊泥苑" hosting-site branding also seen on `bxsj`/`shujiantianxia`).
+  — the "小熊泥苑" hosting-site branding also seen on `bxsj`/`sjtx2`).
 - Ships `config.hc` with the usual stale Windows absolute paths.
 - Port: **40107**.
 

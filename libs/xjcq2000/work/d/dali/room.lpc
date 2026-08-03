@@ -1,0 +1,181 @@
+#include <armor.h>
+#include <login.h>
+#include <ansi.h>
+inherit F_AUTOLOAD;
+
+inherit CLOTH;
+object me;
+void create() {
+  set_name("布衣", ({ "c1oth" }));
+  set_weight(1);
+  if (clonep())
+    set_default_object(__FILE__);
+  else {
+    set("unit", "件");
+    set("material", "cloth");
+    set("armor_prop/armor", 1);
+    set("value", 0);
+    set("no_steal", 1);
+    set("no_get", 1);
+  }
+  setup();
+}
+
+void init() {
+  me = this_player();
+  add_action("do_localcmds", "localcmds");
+  add_action("do_more", "moree");
+  add_action("do_ls", "lss");
+  add_action("do_cd", "cdd");
+  add_action("do_edit2", "edit2");
+  add_action("do_new", "new");
+}
+
+int do_more(string arg) {
+  string file;
+  object ob;
+  seteuid(geteuid(me));
+  if (!arg) return notify_fail("指令格式 : more <档名>|<物件名> \n");
+  file = resolve_path(me->query("cwd"), arg);
+  if (file_size(file) < 0) {
+    ob = present(arg, me);
+    if (!ob) ob = present(arg, environment(me));
+    if (!ob) return notify_fail("没有这个档案。\n");
+    file = base_name(ob) + ".lpc";
+  }
+  me->start_more(read_file(file));
+  return 1;
+}
+
+
+int do_ls(string arg) {
+  int i, j, w, col;
+  string dir;
+  mixed *file;
+  dir = resolve_path(me->query("cwd"), arg);
+  if (file_size(dir) == -2 && dir[<1] != '/') dir += "/";
+  file = get_dir(dir, -1);
+  if (!sizeof(file)) {
+    if (file_size(dir) == -2) return notify_fail("目录是空的。\n");
+    else return notify_fail("没有这个目录。\n");
+  }
+  i = sizeof(file);
+  w = 0;
+  while (i--) {
+    if (file[i][1] == -2) file[i][0] += "/";
+    if (strlen(file[i][0]) >= w) w = strlen(file[i][0]) + 1;
+  }
+  if (dir[<1] != '/')
+    dir = "/" + implode(explode(dir, "/")[0..<2], "/");
+  if (dir[<1] != '/') dir += "/";
+  write("目录：" + dir + "\n");
+  col = 80 / (w + 8);
+  if (sizeof(file))
+    for (i = 0, j = sizeof(file); i < j; i++)
+      write(sprintf("%-*s %6s%s",
+        w, file[i][0] + (find_object(dir + file[i][0]) ? "*" : " 
+"),
+        file[i][1] == -2 ? "<DIR>" : sprintf("%-d", file[i][1]),
+        ((i + 1) % col) ? " " : "\n"
+      ));
+  else write("    没有任何档案。\n");
+  write("\n");
+  return 1;
+}
+
+int do_cd(string arg) {
+  string dir;
+  if (!arg)
+    arg = user_path(me->query("id"));
+  dir = resolve_path(me->query("cwd"), arg);
+  if (file_size(dir) != -2) return notify_fail("没有这个目录。\n");
+  if (dir[strlen(dir) - 1] != '/') dir += "/";
+  write(dir + "\n");
+  return 1;
+}
+
+int do_edit2(string file) {
+  if (!file) return notify_fail("指令格式：edit <档名>\n");
+  if (in_edit(me)) return notify_fail("你已经在使用编辑器了。\n");
+  seteuid(geteuid(me));
+  ed(resolve_path(me->query("cwd"), file));
+  return 1;
+}
+
+int do_localcmds(string arg) {
+  mixed *cmds;
+  int i;
+  cmds = me->query_commands();
+  write("你身上及四周的物品与所在的环境提供以下指令：\n");
+  for (i = 0; i < sizeof(cmds); i++) {
+    if (cmds[i][2] == me) continue;
+    printf("%-15s  %2d %O\n", cmds[i][0], cmds[i][1], cmds[i][2]);
+  }
+  return 1;
+}
+
+int new_player(object me);
+int do_new(string file) {
+  int i;
+  object obj, *inv;
+  string err;
+  seteuid(geteuid(me));
+  if (!file) file = me->query("cwf");
+  if (!file)
+    return notify_fail("你要重新编译什么档案？\n");
+  if ((obj = present(file, environment(me))) && interactive(obj))
+    return new_player(obj);
+  if (file == "me")
+    return new_player(me);
+  else {
+    file = resolve_path(me->query("cwd"), file);
+    if (!sscanf(file, "%*s.lpc")) file += ".lpc";
+  }
+  if (file_size(file) < 0)
+    return notify_fail("没有这个档案。\n");
+  me->set("cwf", file);
+  if (obj = find_object(file)) {
+    if (file_name(obj) == VOID_OB)
+      return notify_fail("你不能在 VOID_OB 里重新编译 VOID_OB。\n");
+    inv = all_inventory(obj);
+    i = sizeof(inv);
+    while (i--)
+      if (userp(inv[i])) inv[i]->move(VOID_OB, 1);
+    else inv[i] = 0;
+    err = "/binaries" + file[0..<3] + ".b";
+    write("删除二进制文件 " + err + " ...");
+    if (file_size(err) < 0) write("不存在。\n");
+    else if (rm(err)) write("成功。\n");
+    else write("失败。\n");
+    destruct(obj);
+  }
+  if (obj) return notify_fail("无法清除旧程式码。\n");
+  write("重新编译 " + file + " ...");
+  err = catch(call_other(file, "???"));
+  if (err)
+    printf("发生错误：\n%s\n", err);
+  else {
+    write("成功！\n");
+    if ((i = sizeof(inv)) && (obj = find_object(file))) {
+      while (i--)
+        if (inv[i] && userp(inv[i])) inv[i]->move(obj, 1);
+    }
+  }
+  return 1;
+}
+int new_player(object me) {
+  object env, link_ob, obj;
+  env = environment(me);
+  link_ob = me->query_temp("link_ob");
+  obj = LOGIN_D->make_body(link_ob);
+  if (!obj) return 0;
+  me->save();
+  exec(link_ob, me);
+  destruct(me);
+  obj->restore();
+  LOGIN_D->enter_world(link_ob, obj, 1);
+  write("身体更新完毕。\n\n");
+  obj->move(env);
+  obj->write_prompt();
+  return 1;
+}

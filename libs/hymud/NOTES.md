@@ -220,7 +220,7 @@ against `haiyang2`'s raw archive:
     copy listed `/adm/daemons/securityd`, but the real file is
     `securd.c`/`.lpc` (matches `include/globals.h`'s `#define
     SECURITY_D "/adm/daemons/securd"`) — same typo shape documented for
-    haiyang2/weimingkongjian. Fixed the live copy's path.
+    haiyang2/wmkj. Fixed the live copy's path.
 21. **Missing save-data shard directories (§7.11)** — `data/user/` and
     `data/login/` shipped completely EMPTY (no `a`-`z` subdirectories at
     all), so the very first registration's `save_object()` (a bare
@@ -463,7 +463,7 @@ registration/first-login: that's simply the point where the largest
 number of files get compiled for the first time while a real player is
 connected. This is **already a catalogued class**: AGENTS.md §7.10's
 first bullet describes this exact case-sensitivity shape, previously
-found on `shenzhou` and `beimeixiakexing2001` — both, per §11's lineage
+found on `shenzhou` and `bmxkx2001` — both, per §11's lineage
 map, **siblings of this lib in the same ES II/东方故事 family**. The
 fix was simply never ported to `hymud` during its original conversion
 pass; this deep-test pass is what caught the gap.

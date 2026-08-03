@@ -388,9 +388,9 @@ path.
    and fixed in **3 other libs this same pass** —
    `d/changan/chengxf.lpc`'s `if(::valid_leave(me,dir))` in this lib
    itself (a second, independent hit), plus `shujian2008`/
-   `shujiantianxia`'s `cmds/leitai/npc_leitai.lpc` +
+   `sjtx2`'s `cmds/leitai/npc_leitai.lpc` +
    `d/tanggu/npc/npc_leitai.lpc` (`if(::move(dest,silently))`) and
-   `suiyuanxijianlu`'s `adm/object/bm.lpc`
+   `syxjl`'s `adm/object/bm.lpc`
    (`capitalize(::query("id"))`) — see those libs' own NOTES.md. All
    confirmed via `git diff` to be the identical `(: :` corruption
    signature, all hand-fixed and re-verified via `lpcc_check.sh` with no
@@ -496,7 +496,7 @@ bug this defensive fallback existed for is now fixed upstream).
    libs) — a plain `git add` picks them up, no force-add needed.
    Verified: `update /cmds/usr/score.lpc` → 成功 (confirmed the
    self-update-destructs-silently quirk also applies here, same as
-   `shujianpiaoling2`/others — not a bug introduced by this pass).
+   `sjpl2`/others — not a bug introduced by this pass).
 5. Retest: fresh registration (`qftxwasm`/秦风, deleted after test,
    including its `data/news/y100m1d15s452.p.1` "new player" announcement
    file) end-to-end into 松竹小院 with look/score/quit all producing
@@ -752,7 +752,7 @@ exercised several such self-calls, live:
   function this pass fixed).
 
 No new instance of the `private command_hook`/`command()`-self-call
-failure (the shape documented for `shiji`/`xingzhanyingxiong`) was
+failure (the shape documented for `shiji`/`xzyx`) was
 found on this lib — every self-call path exercised here worked
 correctly, consistent with `tianxia` already being listed as an
 exception, now demonstrated on the `command()`-self-call axis

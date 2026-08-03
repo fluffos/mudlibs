@@ -11,7 +11,7 @@ reconnect + quit, lpcc sweep 98.1% pass).
 `config.cfg`'s own `name` field says **火影** (matches the archive title),
 and the header comment identifies the underlying engine: `Neolith 0.0.2`
 by `Annihilator (09/07/2000)` — this is the **ES2 mudlib** lineage
-(Annihilator, `muds.net`), the same family as `wuhanzhan`/`xinkuangxiangkongjian2`/
+(Annihilator, `muds.net`), the same family as `wuhanzhan`/`kxkj`/
 `yueyingqiyuan` (archives #53/#54/#58) — confirmed via `master.lpc`'s own
 copyright header ("This program is a part of ES2 mudlib... Annihilator
 <annihilator@muds.net>") repeated verbatim across `master.lpc`,
@@ -409,7 +409,7 @@ gaps/incompatibilities rather than conversion bugs — left unfixed per the
 - Confirmed via `/proc/<pid>/cwd` before killing anything that a second
   `build-debug/src/driver config.fluffos` process (pid varies by run) seen
   in a broad `pgrep`/`ps` during this session belonged to a DIFFERENT
-  concurrently-running agent's lib (`libs/yuxuechongsheng/work`) — never
+  concurrently-running agent's lib (`libs/yxcs/work`) — never
   touched it, only ever killed this lib's own driver by its exact,
   recorded PID. No lingering driver process for this lib at the end of
   this session.

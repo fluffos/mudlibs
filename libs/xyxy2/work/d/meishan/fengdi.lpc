@@ -1,0 +1,102 @@
+#include <ansi.h>
+inherit ROOM;
+
+void create() {
+  set("short", "谷底");
+  set("long", @LONG
+正上方就是飞凤峰，身旁的悬崖(cliff)上长满绿草蔓藤。旁边
+的地上泥土(tu)好似有些松动。
+
+LONG);
+  set("outdoors", "meishan");
+  set("item_desc", ([
+    "cliff": "通向飞凤峰的悬崖，你可以顺着树藤爬(climb)上去。\n",
+    "tu": "这边的泥土看起来比较松软，可能经常被人挖(dig)过。\n",
+  ]));
+  setup();
+}
+
+void init() {
+  add_action("do_climb", "climb");
+  add_action("do_dig", ({ "dig", "wa" }));
+}
+
+int do_climb(string arg) {
+  object ob = this_player();
+
+  if (!arg || arg != "cliff")
+    return notify_fail("你要爬什么。\n");
+  if (ob->is_busy())
+    return notify_fail("你现在正忙着。\n");
+  if (random(4) == 2) {
+    message_vision("只见$N一头栽了下来。\n", ob);
+    ob->unconcious();
+    return 1;
+  }
+  message_vision("只见$N小心的向上爬去。\n", ob);
+  ob->move("/d/meishan/cuiping");
+  return 1;
+}
+
+int do_dig(string arg) {
+  int succ = 1;
+  object yao, weapon, zhu, me = this_player();
+
+  if (!arg || (arg != "di" && arg != "tu"))
+    return notify_fail("你要挖什么？\n");
+
+  if (objectp(zhu = present("tu lingzhu", me))
+    && zhu->is_5zhu())
+    succ = 0;
+  if (me->query("gin") < 30)
+    succ = 0;
+  if (time() < me->query("maze/lingzhu-tu") + 1800)
+    succ = 0;
+
+  if (!objectp(weapon = me->query_temp("weapon")))
+    return notify_fail("你就地刨土，弄的十指血肉模糊。\n");
+
+  switch (weapon->query("skill_type")) {
+    case "sword":
+    case "dagger":
+    case "blade": break;
+    case "unarmed": return notify_fail("拳套可挖不了土。\n");
+    case "stick": return notify_fail("你拿着根棍子在地上捅来捅去，出了一身臭汗。\n");
+    case "staff": return notify_fail("你拿着长杖在地上杵来杵去，出了一身臭汗。\n");
+    case "spear": return notify_fail("你拿着长枪在地上戳了无数个小洞，出了一身臭汗。\n");
+    case "mace": return notify_fail("硬鞭可挖不了土。\n");
+    case "hammer": return notify_fail("挖个锤子。\n");
+    case "fork": return notify_fail("你拿着叉子在地上戳来戳去，出了一身臭汗。\n");
+    case "axe": return notify_fail("你拿着斧子给修起地上的小草来。\n");
+    case "whip": return notify_fail("软鞭可挖不了土。\n");
+    default: return notify_fail("你拿着奇形怪状的兵器在地上一阵折腾。\n");
+  }
+
+  if (me->query("kee") < 50)
+    return notify_fail("你体力不支。\n");
+
+  if (random(6) != 3)
+    succ = 0;
+
+  message_vision("$N挥舞" + weapon->query("name") + "，土石纷飞，眨眼间就在地上挖了个深坑。\n", me);
+  me->receive_damage("kee", 50);
+  if (succ < 1) {
+    message_vision("$N费了大办天的劲，什么也没有挖到。\n", me);
+    return 1;
+  }
+  message_vision("$N用力挖了一会，突然感觉有个东西埋在地下。\n", me);
+  message_vision(HIC "$N" HIC "居然发现一个" HIY "土灵珠" HIC "。\n" NOR, me);
+  message_vision(HIR "糟糕！一个身扎兽皮裙，扛着小旗的小妖怪抓起了地上的" HIY "土灵珠" HIR "！" NOR "\n", me);
+  message_vision(HIC "拾遗小妖向下深坑落荒而逃了。\n" NOR, me);
+  me->dismiss_team();
+  me->delete_temp("maze");
+  if (MAZE_D->enter_maze(me, "lingzhu-tu")) {
+    me->set("maze/lingzhu-tu", time());
+    tell_object(me, CYN "你恼羞成怒，追着拾遗小妖不放。\n" NOR);
+    me->add("gin", -30);
+    yao = new("/d/maze/lingzhu-tu/npc/yao");
+    yao->move(environment(me));
+    return 1;
+  }
+  return 1;
+}

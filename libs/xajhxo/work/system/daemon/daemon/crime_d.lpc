@@ -1,0 +1,105 @@
+//crimed.c
+//by trill
+
+#include <dbase.h>
+
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+inherit F_SAVE;
+
+string query_save_file();
+int set_crime(object, string);
+mapping query_present_crime(string);
+int delete_crime(object, string);
+int is_crime(object, string);
+
+void create() {
+  seteuid(ROOT_UID);
+  set("name", "恶之花");
+  set("id", "crime");
+}
+
+string query_save_file() {
+  string crime;
+
+  crime = query("file_name");
+  return DATA_DIR + "crime/kill_" + crime;
+}
+
+int set_crime(object me, string arg) {
+  int bonus;
+
+  if (!me || !arg) return 0;
+  if (file_size("/system/condition/kill_" + arg + ".lpc") > 0)
+    me->apply_condition("kill_" + arg, 360);
+  else return 0;
+  set("file_name", arg);
+  if (file_size(query_save_file() + __SAVE_EXTENSION__) >= 0) {
+    restore();
+    set("file_name", arg);
+  } else return 0;
+  bonus = (int)me->query("positive_score") + (int)me->query("negative_score") + 100;
+  set("crime/" + (string)me->query("id"), bonus);
+  if (save()) return 1;
+  return 0;
+}
+
+mapping query_present_crime(string arg) {
+  if (!arg) return 0;
+  set("file_name", arg);
+  if (file_size(query_save_file() + __SAVE_EXTENSION__) >= 0) {
+    restore();
+    set("file_name", arg);
+  }
+  return query("crime");
+}
+
+int is_crime(object ob, string arg) {
+  if (!ob || !arg) return 0;
+  if (ob->query_condition("kill_" + arg))
+    return 1;
+  else
+    delete_crime(ob, arg);
+  return 0;
+}
+
+int delete_crime(object ob, string arg) {
+  if (!ob || !arg) return 0;
+  if (query("file_name") == arg) {
+    delete("crime/" + ob->query("id"));
+    if (save()) return 1;
+    return 0;
+  } else {
+    set("file_name", arg);
+    if (file_size(query_save_file() + __SAVE_EXTENSION__) >= 0) {
+      restore();
+      set("file_name", arg);
+    }
+    delete("crime/" + ob->query("id"));
+    if (save()) return 1;
+    return 0;
+  }
+  return 0;
+}
+
+int check_continue_pk(object me) {
+  int crime_time, mud_age;
+
+  crime_time = me->query("crime_time");
+  mud_age = me->query("mud_age");
+  if ((mud_age - crime_time) > 24 * 60) {
+    me->set("crime_time", mud_age);
+    me->set("continue_pks", 0);
+  } else {
+    me->add("continue_pks", 1);
+  }
+  // 一日不过三 :-)
+  if (me->query("continue_pks") > 2) {
+    // 开始官兵围剿了
+    if (wizardp(me))
+      message_vision("恶之花说道：你是巫师，饶你一命！\n", me);
+    // 等lin写完禁军再做处理。//反正玩家是没法子活啦!!!
+    return 1;
+  }
+  return 0;
+}

@@ -1,0 +1,142 @@
+// put.c
+
+#include <move.h>
+
+inherit F_CLEAN_UP;
+
+int can_put(object me, object obj, object dest);
+int do_put(object me, object obj, object dest);
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg) {
+  string target, item;
+  object obj, dest, *inv, obj2;
+  int i, amount;
+
+  if (me->query_temp("sleeping")) return notify_fail("你现在正躺着呢。\n");
+
+  if (!arg) return notify_fail("你要将什麽东西放进哪里？\n");
+
+  if (sscanf(arg, "%s in %s", item, target) != 2)
+    return notify_fail("你要把东西放到什么里面？\n");
+
+  dest = present(target, me);
+  if (!dest || living(dest)) dest = present(target, environment(me));
+  if (!dest || living(dest))
+    return notify_fail("这里没有这样东西。\n");
+
+  if (sscanf(item, "%d %s", amount, item) == 2) {
+    if (!objectp(obj = present(item, me)))
+      return notify_fail("你身上没有这样东西。\n");
+    if (!obj->query_amount())
+      return notify_fail(obj->name() + "不能被分开。\n");
+    if (amount < 1)
+      return notify_fail("东西的数量至少是一个。\n");
+    if (amount > obj->query_amount())
+      return notify_fail("你没有那麽多的" + obj->name() + "。\n");
+    else if (amount == (int)obj->query_amount()) {
+      if (!can_put(me, obj, dest)) return 0;
+      return do_put(me, obj, dest);
+    } else {
+      obj->set_amount((int)obj->query_amount() - amount);
+      obj2 = new(base_name(obj));
+      obj2->set_amount(amount);
+      if (!can_put(me, obj2, dest)) {
+        obj->set_amount(obj->query_amount() + obj2->query_amount());
+        destruct(obj2);
+        return 0;
+      }
+      if (obj->query_amount() <= 0) destruct(obj);
+      return do_put(me, obj2, dest);
+    }
+  }
+
+  if (item == "all") {
+    inv = all_inventory(me);
+    for (i = 0; i < sizeof(inv); i++)
+      if (inv[i] != dest) {
+        if (!can_put(me, inv[i], dest)) continue;
+        do_put(me, inv[i], dest);
+      }
+    write("完成。\n");
+    return 1;
+  }
+
+  if (!objectp(obj = present(item, me)))
+    return notify_fail("你身上没有这样东西。\n");
+
+  if (!can_put(me, obj, dest)) return 0;
+  return do_put(me, obj, dest);
+}
+
+int do_put(object me, object obj, object dest) {
+  string prep;
+
+
+  if (userp(me) && obj->query("money_id") && obj->value() >= 10000) {
+    log_file("PUT_GET_LOG", sprintf("%s %s（%s）在%s将一%s（%d）%s放入%s。\n",
+      ctime(time()), me->query("name"), me->query("id"),
+      (stringp(environment(me)->query("short"))) ?
+      environment(me)->query("short") : environment(me)->query("name"),
+      obj->query("unit"), obj->query_amount(), obj->query("name"),
+      dest->query("name"),
+    ));
+  }
+
+  switch ((string)dest->query("prep")) {
+    case "on":
+      prep = "放在" + dest->name() + "上";
+      break;
+    case "under":
+      prep = "放在" + dest->name() + "下";
+      break;
+    case "behind":
+      prep = "放在" + dest->name() + "后面";
+      break;
+    case "insdie":
+      prep = "放进" + dest->name() + "里面";
+      break;
+    default:
+      prep = "放进" + dest->name() + "里面";
+      break;
+  }
+
+  if (!obj->query("no_put") && obj->move(dest)) {
+    message_vision(sprintf("$N将一%s%s%s。\n",
+      obj->query("unit"), obj->name(), prep),
+      me);
+    return 1;
+  }
+
+  return 0;
+}
+
+int can_put(object me, object obj, object dest) {
+  /*
+        if( present( "banker", environment(me) ) && stringp(obj->query("money_id")) ) 
+                return notify_fail("旁边的人正睁大眼睛盯着你手中的钱！\n");
+*/
+  if (sizeof(all_inventory(obj)) >= MAX_CARRY)
+    return notify_fail(obj->name() + "里面的东西已经太多啦。\n");
+
+  if (obj->query("no_put") || obj == dest)
+    return notify_fail(sprintf("你不能将%s放进%s。\n", obj->name(), dest->name()));
+
+  if (dest->is_closed())
+    return notify_fail("你要先把" + dest->name() + "打开。\n");
+
+  return 1;
+}
+
+int help(object me) {
+  write(@HELP
+指令格式：put <物品名称> in <某容器>
+ 
+这个指令可以让你将某样物品放进一个容器，当然，首先你要拥有这样物品。
+ 
+HELP
+  );
+
+  return 1;
+}

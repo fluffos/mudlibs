@@ -13,7 +13,7 @@ similar Chinese title, this is a genuinely **different, older codebase
 snapshot** than `xlqy_new2007` (archive #26) — confirmed via `md5sum`
 diff on `chinese.c`/`logind.c`/`master.c` (all different). Similar
 naming across archives in this collection has now proven unreliable as
-a lineage signal twice (`shujianpiaoling2` vs `shujian2008` was the
+a lineage signal twice (`sjpl2` vs `shujian2008` was the
 first case) — always verify via file diff, never assume from the title
 alone. ~9,118 raw files, 7,237 after `.c`→`.lpc` rename (511 files hit
 lossy conversion — the highest lossy count of any lib processed so far,
@@ -108,7 +108,7 @@ quit sequence). Zero genuine runtime errors in `debug.log`.
 
 Also observed (across several runs) the same `default error message`
 noise (`你发现事情不大对了，但是又说不上来。`) documented in more depth in
-sibling lib `xianlvqingyuanzheda`'s NOTES.md — the count varies 0 to
+sibling lib `xlqyzdb`'s NOTES.md — the count varies 0 to
 dozens per connection against byte-identical code, never blocks any
 tested flow, and is very likely a shared engine-family artifact (same
 XLQY lineage, same "d/wiz/init" gift-selection room code) rather than
@@ -126,7 +126,7 @@ single deterministic cause and pointed to host-load/timing sensitivity.
   (no NOTES.md mention from the earlier pass). `chmod u+w` on those 9
   files, then reformatted cleanly: 5,675 written, 1,556 already-
   idempotent, 6 refused (self-check errors, expected).
-  Same formatter bug as the sibling `xianlvqingyuanzheda` lib (identical
+  Same formatter bug as the sibling `xlqyzdb` lib (identical
   shared file, same fix): `d/sky/xitian.lpc`'s `if (::valid_leave(me,dir))
   return notify_fail(...)` got mangled into `if (: : valid_leave(me, dir)
   ...)` — hand-restored to the original single-line form. Not on the
@@ -150,7 +150,7 @@ single deterministic cause and pointed to host-load/timing sensitivity.
 ## WASM-enablement pass (2026-07-24)
 
 Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5). Gates patched
-(same family shape as `xianlvqingyuanzheda`, patched analogously):
+(same family shape as `xlqyzdb`, patched analogously):
 
 1. **Loopback always allowed** — `adm/daemons/band.lpc`: added
    `is_local_site(site)` helper (127.0.0.1 / leading `127.` /
@@ -188,7 +188,7 @@ master's own catch — present before this pass). Test char saves removed.
 ## Fail-closed loopback retrofit (2026-07-24)
 
 **Security correction, applied retroactively.** Same fix as
-`xianlvqingyuanzheda`'s (shared `band.lpc` lineage): `is_local_site()`
+`xlqyzdb`'s (shared `band.lpc` lineage): `is_local_site()`
 originally treated an empty/non-string/malformed IP as "local"
 (fail-open) — a stopgap for a since-fixed WASM driver bug. Tightened to
 fail-closed:
@@ -279,7 +279,7 @@ rather than committed here per task instructions.
 
 ### Root-caused, not fixed: the "default error message" noise is a real (but practically harmless) race between a 0-delay `call_out` and fast/scripted client input
 
-This lib's NOTES.md (and sibling `xianlvqingyuanzheda`'s) already
+This lib's NOTES.md (and sibling `xlqyzdb`'s) already
 documented an unexplained, non-deterministic appearance of the driver's
 own `default error message` (`adm/etc/config.xiyou:126`, "你发现事情不
 大对了，但是又说不上来。") during registration, with no fix attempted

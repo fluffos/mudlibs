@@ -42,7 +42,7 @@ range (no memory pressure observed).
    要有两个汉字" (must be at least 2 Chinese characters) despite already
    being exactly 2.
 5. **`adm/daemons/named.lpc`** — same deep-fix shape as the nitan family
-   (nitan170911/nitan6/chidi/dtsl/llmud_datangshuanglong):
+   (nitan170911/nitan6/chidi/dtsl/dtslmud):
    - `PATH(name)` macro: `name[0..1]` (first GBK char) → `name[0..0]`
      (first character), plus a direct `name[0..1]` reference outside the
      macro in `remove_name()`.
@@ -219,7 +219,7 @@ Standard pass per AGENTS.md §1.3b/§1.3c/§1.3e/§1.5:
   `Admin@2026`, 普通密码 (daily login) `Mud@2026` — the lib rejects
   identical values, so the admin/recovery password deviates from the
   standard convention (documented in README). Same `feature/dbase.lpc`
-  anti-steal quirk as yuxuechongsheng (here keyed on "(admin)" and
+  anti-steal quirk as yxcs (here keyed on "(admin)" and
   covering "password"/"ad_password"/"wizpwd" AND blocking
   `set("id", <admin id>)` on login obs): register first as a plain
   player, then add to wizlist and restart. Verified: login shows
@@ -253,8 +253,8 @@ fixed them:
    ("Wrong permissions for opening file /u/task/log for append"/"No
    such file or directory"). Fixed: `return dir;`. **Same bug ported to
    7 sibling libs** that share this identical file byte-for-byte:
-   `yueyingqiyuan`, `zhongjidiyu`, `zhongjidiyu_airuoyoulan`,
-   `zhongjidiyu_zhijian`, `zitengzhan`, `zuizhonghuanjing`, `zzfy` (only
+   `yueyingqiyuan`, `zhongjidiyu`, `zjdyaryl`,
+   `zjdyzj`, `zitengzhan`, `zzhj`, `zzfy` (only
    `zhonghua2` happened to trip it live during this pass's sit; the
    others have the identical latent bug, fixed proactively).
 2. **`adm/daemons/questd.lpc`'s `collect_all_quest_information()`
@@ -302,9 +302,9 @@ fixed them:
    needs DECL_PRIVATE) when a money stack's amount hits 0 — denied the
    same way, so spent-down money stacks never actually self-destruct
    (a harmless but permanent resource leak). Dropped `private`. **Same
-   fix ported to `zhongjidiyu`, `zhongjidiyu_airuoyoulan`,
-   `zhongjidiyu_zhijian`**, which share this identical file; only
-   `zhongjidiyu_zhijian`'s sit happened to trigger it live.
+   fix ported to `zhongjidiyu`, `zjdyaryl`,
+   `zjdyzj`**, which share this identical file; only
+   `zjdyzj`'s sit happened to trigger it live.
 
 Retest after all six fixes: native registration (`zhtestqg`/李白) +
 look/score/quit clean, no regressions (an NPC — 水笙 — audibly
@@ -664,11 +664,11 @@ compilation of large swaths of the map (many `d/<city>/...` rooms/NPCs,
 player action** during most of that window — matching §10.8's
 already-documented "ambient NPC `heart_beat()`/`random_move()` wandering
 forces lazy compilation of much of the map" pattern from a different
-lib (`xianjianchuanqi`). The growth rate fluctuated (sometimes near-flat
+lib (`xjcq2000`). The growth rate fluctuated (sometimes near-flat
 for 30+ seconds, sometimes 20-30MB in a few seconds) but never became
 runaway/exponential, and the driver remained fully responsive
 throughout both waits with zero errors and a clean final reconnect —
-unlike §10.8's `xianjianchuanqi`/`shiji` cases, **no driver-fatal crash
+unlike §10.8's `xjcq2000`/`shiji` cases, **no driver-fatal crash
 occurred here**. Flagged as an observation worth watching on any future
 long-sit pass on this lib (or its `zhongjidiyu`/`yueyingqiyuan`/etc.
 siblings), not escalated to a new bug entry, since it never crossed into

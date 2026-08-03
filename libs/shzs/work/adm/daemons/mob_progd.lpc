@@ -1,0 +1,72 @@
+// mob_progd.c
+// mob program daemon.
+// Author: Spock @ FF	98.Aug.22.
+// Last modified by Spock @ FF	98.Aug.22.
+
+#include <localtime.h>
+
+mixed *mob_table = ({ ({}), ({}), ({}), ({}), ({}), ({}),
+  ({}), ({}), ({}), ({}), ({}), ({}),
+  ({}), ({}), ({}), ({}), ({}), ({}),
+  ({}), ({}), ({}), ({}), ({}), ({}), });
+void my_set_heart_beat();
+
+mixed query_mob_table() { return mob_table; }
+
+void create() {
+  mixed *local;
+
+  seteuid(getuid());
+
+  local = localtime(time() * 60);
+  call_out("my_set_heart_beat", 65 - local[LT_MIN]);
+}
+
+void my_set_heart_beat() {
+  set_heart_beat(30);
+  return;
+}
+
+void setup_mob_prog(object ob) {
+  mapping prog;
+  string *time;
+  int hour, i;
+
+  if (!mapp(prog = ob->query("mob_program")))
+    return;
+  time = keys(prog);
+  i = sizeof(time);
+  while (i--) {
+    if (!sscanf(time[i], "%d", hour))
+      continue;
+    mob_table[hour] += ({ ob });
+  }
+  return;
+}
+
+void heart_beat() {
+  mixed *local;
+  object *obs;
+  int i, count, hour, *delay;
+  string *prog;
+
+  local = localtime(time() * 60);
+  hour = local[LT_HOUR];
+
+  obs = mob_table[hour];
+
+  if (!(i = sizeof(obs)))
+    return;
+  while (i--) {
+    if (!arrayp(prog = obs[i]->query("mob_program/" + sprintf("%d", hour))) || prog == ({})
+      || !arrayp(delay = obs[i]->query("mob_program_delay/" + sprintf(
+        "%d",
+        hour
+      ))) || delay == ({}))
+      continue;
+    if (!objectp(obs[i]))
+      obs -= ({ obs[i] });
+    obs[i]->exec_mob_program(prog, delay);
+  }
+  return;
+}

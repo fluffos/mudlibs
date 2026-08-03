@@ -1,8 +1,8 @@
 # 风云再起Ⅱ — fy2
 
 河海大学计算机及信息工程学院开发。属于本批次的**"风云"（Fengyun）
-武侠引擎家族**，与 `fy2005`、`fengyun434`、`fengyun2qinghua`、
-`fengyun3xiuding`、`fengyun3dianzang` 同源——其中 `fengyun2qinghua`
+武侠引擎家族**，与 `fy2005`、`fengyun434`、`fy2qh`、
+`fy3xd`、`fy3dz` 同源——其中 `fy2qh`
 （"清华仿写版"）经核实其实就是本档案的另一个转发副本，源码完全一致。
 
 ## 内容亮点

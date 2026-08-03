@@ -19,11 +19,11 @@
 - Port: **40075** (per TODO.md's reservation for archive #81 at the time
   this pass started).
 
-## Lineage: confirmed a genuine relative of BOTH `fluffos_xiyou2000` (#15) and the 梦幻西游/mhxy family (#19/#56/#73) — but NOT a duplicate of any of them
+## Lineage: confirmed a genuine relative of BOTH `xyj2000f` (#15) and the 梦幻西游/mhxy family (#19/#56/#73) — but NOT a duplicate of any of them
 
 Per the task's explicit instruction, all four already-processed
-Journey-to-the-West-themed siblings were read (`libs/fluffos_xiyou2000/NOTES.md`,
-`libs/mhxy/NOTES.md`, `libs/menghuanxiyou2002/NOTES.md`,
+Journey-to-the-West-themed siblings were read (`libs/xyj2000f/NOTES.md`,
+`libs/mhxy/NOTES.md`, `libs/mhxyqd/NOTES.md`,
 `libs/shenmo/NOTES.md`) and this archive's `adm/obj/master.c`,
 `adm/simul_efun/chinese.c`, `adm/daemons/logind.c`, `adm/daemons/securityd.c`,
 `adm/daemons/named.c`, `adm/daemons/convertd.c` were diffed/md5sum'd
@@ -34,21 +34,21 @@ began.
 diffs):
 
 - **`adm/obj/master.c`**: **486 lines vs. 486 lines, only 3 trivial diffs**
-  against `fluffos_xiyou2000`'s copy (a header-comment credit line, one
+  against `xyj2000f`'s copy (a header-comment credit line, one
   commented-out `if` block, and a 2-line reordering) — this is
   overwhelmingly the SAME `master.c` (both trace back to "for ES II
   mudlib / original from Lil / rewritten by Annihilator (11/07/94)", the
   same lineage root as `es1_win`/`shenmo`/`xkx2001`/etc.), just with
-  `fluffos_xiyou2000`'s copy re-credited by a later cracker ("vikee")
+  `xyj2000f`'s copy re-credited by a later cracker ("vikee")
   vs. this archive's own maintainer credit ("Pkyou@xyj 2002-06-12"). This
   is the single strongest piece of evidence: `master.c` is essentially
   never touched by ordinary game-content authors, so two independent
   forks staying byte-for-byte identical outside 3 lines means they share
   a very recent common ancestor. **`master.c` was NOT identical to any of
-  `mhxy`/`menghuanxiyou2002`/`shenmo`'s copies** (those three inherit a
+  `mhxy`/`mhxyqd`/`shenmo`'s copies** (those three inherit a
   different, longer master.c under the same `adm/obj/` layout convention
   but a different code lineage) — confirming this archive sits
-  specifically on the `fluffos_xiyou2000` side of the "西游记" family
+  specifically on the `xyj2000f` side of the "西游记" family
   tree, not the `mhxy`/`shenmo` side, despite all sharing the same
   historical zone names (`d/lingjie`, `d/pansi`, `d/wudang`, `d/mojiao`,
   `d/shenjian`, `d/wuguan`, `d/nanhai` recur across all of them —
@@ -58,30 +58,30 @@ diffs):
   (own hash), but the same `is_chinese()`/`chinese_number()`/`to_chinese()`
   function set, credited "waiwai@2003/04/25" — a different (and, per the
   §15h investigation below, more elaborate/buggier) sliding-byte-pair
-  `is_chinese()` implementation than `fluffos_xiyou2000`'s simple
+  `is_chinese()` implementation than `xyj2000f`'s simple
   `str[0]>160&&str[0]<255` form.
 - **`adm/daemons/logind.c`**: same "waiwai" credit trail
   (`waiwai@2001/07/02` through `waiwai@2003/04/25`), same overall registration
   shape (gb/big5 → age-style "①进入②离开" gate → English id ("new" to
   register) → Chinese name → password → confirm password → email →
   gender → auto-gift → enter_world), but nearly 2x longer than
-  `fluffos_xiyou2000`'s copy (1901 vs 998 lines) — a substantially
+  `xyj2000f`'s copy (1901 vs 998 lines) — a substantially
   extended, later snapshot of the same base, not the same file.
 - **`adm/daemons/convertd.c`**: different hash from all three siblings
   that have this file, but the exact same §8h "Greek-alphabet lookup
   table, stray trailing backslash before the closing quote" defect,
   **45 occurrences** — the identical count found in both `mhxy` and
-  `menghuanxiyou2002`'s copies of this file, strong secondary evidence of
+  `mhxyqd`'s copies of this file, strong secondary evidence of
   a shared distant ancestor for this one daemon specifically (likely
   copied around wholesale across many "西游记"-lineage mudlibs of this
   era, independent of which master.c branch a given site forked).
 
 **Conclusion**: this is a genuine, independently-evolved 2003-era snapshot
 of the SAME `master.c`/ES-II-derived "西游记" (Journey to the West) engine
-that `fluffos_xiyou2000` (#15) also derives from — closer to #15 than to
-the `mhxy`/`menghuanxiyou2002`/`shenmo` branch, but not a duplicate of any
+that `xyj2000f` (#15) also derives from — closer to #15 than to
+the `mhxy`/`mhxyqd`/`shenmo` branch, but not a duplicate of any
 of the four. Per the task's instruction to port proven fixes directly when
-related: `fluffos_xiyou2000`'s and `mhxy`'s §8h convertd.lpc fix pattern
+related: `xyj2000f`'s and `mhxy`'s §8h convertd.lpc fix pattern
 (CRLF-aware sed) was ported directly and worked verbatim (same shape, same
 count). The §15h is_chinese/check_legal_name fix pattern was ALSO the
 right family of fix, but this archive's own `is_chinese()`/`check_legal_name()`
@@ -192,7 +192,7 @@ none present, nothing to revert there.
      assure_map_name(name[i..i+1]); if (i+3<=l) assure_map_name(name[i..i+2]);
      ... }` (2-char/3-char windows directly).
 4. **§8h, `adm/daemons/convertd.lpc`'s Greek-alphabet-table stray-trailing-backslash
-   typo** — same defect shape as `fluffos_xiyou2000`/`mhxy`
+   typo** — same defect shape as `xyj2000f`/`mhxy`
    (`"α\",` should be `"α",`), **45 occurrences**, same count as `mhxy`'s
    copy. File has CRLF line endings (confirmed via `file -b`), so the
    CRLF-aware pattern from `mhxy`'s precedent was used directly:
@@ -274,12 +274,12 @@ none present, nothing to revert there.
    automatic local-include-to-quote conversion handled 28 of them
    directly during the standard pass, and this master apply is insurance
    for the rest reached only mid-connection (matches the pattern
-   documented for `shenmo`/`menghuanxiyou2002`). The real boot +
+   documented for `shenmo`/`mhxyqd`). The real boot +
    registration test produced zero `Cannot #include` errors either way.
 10. **§15b, `message_combatd` restored as an alias to `message_vision`**
     (`adm/simul_efun/message.lpc`) — same "called (obj/weapon/bow.lpc)
     but never defined anywhere" gap already catalogued for
-    `weimingkongjian`. Needed a `varargs void message_vision(...)`
+    `wmkj`. Needed a `varargs void message_vision(...)`
     **forward declaration** ahead of the new `message_combatd` wrapper
     (§8b/§15aa: `message_combatd` is defined textually before
     `message_vision` in this file) to avoid an `Undefined function

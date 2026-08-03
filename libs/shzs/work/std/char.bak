@@ -1,0 +1,276 @@
+// char.c
+
+#pragma save_binary
+
+#include <action.h>
+#include <ansi.h>
+#include <command.h>
+#include <condition.h>
+#include <dbase.h>
+#include <move.h>
+#include <name.h>
+#include <skill.h>
+#include <team.h>
+#include <user.h>
+
+inherit F_ACTION;
+inherit F_ALIAS;
+inherit F_APPRENTICE;
+inherit F_ATTACK;
+inherit F_ATTRIBUTE;
+inherit F_COMMAND;
+inherit F_CONDITION;
+inherit F_DAMAGE;
+inherit F_DBASE;
+inherit F_EDIT;
+inherit F_FINANCE;
+inherit F_MESSAGE;
+inherit F_MORE;
+inherit F_MOVE;
+inherit F_NAME;
+inherit F_SKILL;
+inherit F_TEAM;
+
+// Use a tick with longer period than heart beat to save cpu's work
+static int tick;
+int time_unit;
+static int random_rest = 0;
+
+void create()
+{
+	seteuid(0); // so LOGIN_D can export uid to us
+}
+
+// Use this function to identify if an object is a character.
+int is_character() { return 1; }
+
+// Add action time unit here. Negative value is allowed.
+int query_time_unit() { return time_unit; }
+
+// This function deals with time unit.
+int time_unit_loss( int loss)
+{
+	time_unit -= loss;
+}
+
+// setup: used to configure attributes that aren't known by this_object()
+// at create() time such as living_name (and so can't be done in create()).
+void setup()
+{
+	seteuid(getuid(this_object()));
+
+	set_heart_beat(1);
+	tick = 5 + random(10);
+	enable_player();
+
+	CHAR_D->setup_char( this_object() );
+	time_unit = query("present_time_unit");
+}
+
+void heart_beat()
+{
+	int wimpy_ratio, cnd_flag;
+	object ob;
+        int *limbs_hit_h, *limbs_eff_hit_h, *limbs_max_hit_h, j;
+	int i, hit, max_hit;
+	int tu, rest_flag = 0;
+
+// Add action time units here. Negative value is allowed.
+
+	tu = query("time_unit");
+	time_unit += tu;
+	if( time_unit > tu ) time_unit = tu;
+
+        limbs_hit_h = query("limbs_hit");
+        limbs_eff_hit_h = query("limbs_eff_hit");
+        limbs_max_hit_h = query("limbs_max_hit");
+
+	for( i = 0; i < sizeof( limbs_hit_h); i++)
+		hit += limbs_hit_h[i];
+
+	for( i = 0; i < sizeof( limbs_max_hit_h); i++)
+		max_hit += limbs_max_hit_h[i];
+
+// If we are dying because of mortal wounds?
+        if( limbs_eff_hit_h[0] < 0 || limbs_eff_hit_h[1] < 0 || query("eff_spi") < 0) {
+		remove_all_enemy();
+		die();
+		return;
+	}
+
+// If we're dying or falling unconcious?
+        if( limbs_hit_h[0] < 0 || limbs_hit_h[1] < 0 ) {
+		remove_all_enemy();
+		if( !living(this_object()) ) die();
+		else unconcious();
+		return;
+	}
+
+// If we're too tired?
+	if( !query_temp("tired") ) {
+		if( query("spi") < 0 || query("mov") < 0 ) {
+			remove_all_enemy();
+			tired();
+			return;
+		}
+	}
+// Randomlly take a rest.
+	if( random_rest > 0 ) random_rest --;
+	if( !userp( this_object() ) && !is_fighting() ) {
+		if( random_rest <= 0 ) {
+			if( ( query("spi") * 10 / query("max_spi") ) < 4 ) 
+				rest_flag = 1;
+			if( ( query("mov") * 10 / query("max_mov") ) < 4 )
+				rest_flag = 1;
+			for( i = 0; i < sizeof( query("limbs") ); i ++ ) {
+				if( ( limbs_hit_h[i] * 10 / limbs_max_hit_h[i] ) < 5 )
+				rest_flag = 1;
+			}
+			if( rest_flag == 1 ) {
+				random_rest = 60 + random(30);
+				command("rest");
+			} else if( query("position") == "rest" ) {
+				command("stand");
+			}
+		}
+	}
+// Do attack if we are fighting.
+	if( is_busy() ) {
+		continue_action();
+// We don't want heart beat be halt eventually, so return here.
+		return;
+	} else {
+// Is it time to flee?
+	if( is_fighting()) {
+		if(	intp( wimpy_ratio = (int)query("wmp_spi"))
+		&&	wimpy_ratio >= 0 && wimpy_ratio <= 100
+                &&	query("spi") * 100 / query("max_spi") <= wimpy_ratio)
+			GO_CMD->do_flee(this_object());
+
+		if(	intp( wimpy_ratio = (int)query("wmp_hit"))
+		&&	wimpy_ratio >= 0 && wimpy_ratio <= 100
+                &&	hit * 100 / max_hit <= wimpy_ratio)
+			GO_CMD->do_flee(this_object());
+
+		if(	intp( wimpy_ratio = (int)query("wmp_mov"))
+		&&	wimpy_ratio >= 0 && wimpy_ratio <= 100
+		&&	query("mov") * 100 / query("max_mov") <= wimpy_ratio)
+			GO_CMD->do_flee(this_object());
+
+		if(	intp( wimpy_ratio = (int)query("wmp_vital"))
+		&&	wimpy_ratio >= 0 && wimpy_ratio <= 100
+                &&      ( limbs_hit_h[0] * 100 / limbs_max_hit_h[0] <= wimpy_ratio
+                        || limbs_hit_h[1] * 100 / limbs_max_hit_h[1] <= wimpy_ratio))
+			GO_CMD->do_flee(this_object());
+	}
+// Do attack or clean up enemy if we have fled.
+		attack();
+	}
+
+	if( !userp(this_object()) ) {
+		this_object()->chat();
+		this_object()->program_chat();
+
+// chat() may do anything -- include destruct(this_object())
+		if( !this_object() ) return;	
+	}
+
+	if( tick--  ) return;
+	else tick = 5 + random(10);
+
+	cnd_flag = update_condition();
+
+// If we are compeletely in peace, turn off heart beat.
+// heal_up() must be called prior to other two to make sure it is called
+// because the && operator is lazy :P
+	if( ((cnd_flag & CND_NO_HEAL_UP) || !heal_up())
+	&&	!is_fighting() 
+	&&	!interactive(this_object())) {
+		if( environment() ) {
+			ob = first_inventory(environment());
+			while(ob && !interactive(ob))
+				ob = next_inventory(ob);
+		}
+		if( !ob ) set_heart_beat(0);
+	}
+
+	if( !interactive(this_object()) ) return;
+
+// Make us a bit older. Only player's update_age is defined.
+// Note: update_age() is no need to be called every heart_beat, it
+//       remember how much time has passed since last call.
+//	this_object()->update_age();
+
+	if(query_idle(this_object()) > IDLE_TIMEOUT)
+		this_object()->user_dump(DUMP_IDLE);
+}
+
+int visible( object ob)
+{
+	int invis, detect_invis;
+	int sneak, detect_sneak;
+
+	if( wizardp( this_object() )) return 1;
+
+	detect_invis = this_object()->query_temp("apply/detect_invis");
+	invis = ob->query_temp("apply/invis");
+
+	if( intp( invis ) && ( invis > detect_invis )) return 0;
+
+	detect_sneak = this_object()->query_skill("sneak");
+	sneak = ob->query_temp("apply/sneak");
+
+	if( intp( sneak ) && ( random( sneak ) > detect_sneak )) return 0;
+
+	return 1;
+}
+
+// When add combat_exp, check if character reaches next level. 
+
+void level_up( string race)
+{
+	mapping my;
+	
+	my = this_object()->query_entire_dbase();
+
+	switch( race) {
+		case "¤HÃþ":
+			if( my["age"] < 40 ) {
+		                my["max_spi"] = my["int"] * 4 + my ["not"] * 4
+				+ ( my["level"] + my["age"] ) * ( my["int"] + my["not"] ) / 5;
+			} else {
+		                my["max_spi"] = my["int"] * 4 + my ["not"] * 4
+				+ ( my["level"] - my["age"] + 40 ) * ( my["int"] + my["not"] ) / 5;
+			}
+
+			if( my["age"] < 35 ) {
+                		my["limbs_max_hit"] = ({
+				my["con"] + my["not"] + ( my["level"] + my["age"] ) * (my["con"] + my["not"]) / 10,
+				my["con"]* 2 + ( my["level"] + my["age"]) * my["con"] / 5,
+		                my["con"] + my["str"] + ( my["level"] + my["age"] ) * (my["con"] + my["str"]) / 10,
+				my["con"] + my["str"] + ( my["level"] + my["age"] ) * (my["con"] + my["str"]) / 10,
+		                my["con"] + my["dex"] + ( my["level"] + my["age"] ) * (my["con"] + my["dex"]) / 10,
+				my["con"] + my["dex"] + ( my["level"] + my["age"] ) * (my["con"] + my["dex"]) / 10
+					});
+		        }
+
+                		my["limbs_max_hit"] = ({
+				my["con"] + my["not"] + ( my["level"] - my["age"] + 35 ) * (my["con"] + my["not"]) / 10,
+				my["con"]* 2 + ( my["level"] - my["age"] + 35 ) * my["con"] / 5,
+		                my["con"] + my["str"] + ( my["level"] - my["age"] + 35 ) * (my["con"] + my["str"]) / 10,
+				my["con"] + my["str"] + ( my["level"] - my["age"] + 35 ) * (my["con"] + my["str"]) / 10,
+		                my["con"] + my["dex"] + ( my["level"] - my["age"] + 35 ) * (my["con"] + my["dex"]) / 10,
+				my["con"] + my["dex"] + ( my["level"] - my["age"] + 35 ) * (my["con"] + my["dex"]) / 10
+					});
+
+			if( my["age"] < 35 ) {
+		                my["max_mov"] = my["dex"]* 2 + my["con"]* 2 
+				+ ( my["level"] - my["age"] + 35 ) * (my["con"] + my["dex"]) / 5;
+			} else {
+	        	        my["max_mov"] = my["dex"]* 2 + my["con"]* 2 
+				+ ( my["level"] - my["age"] + 35 ) * (my["con"] + my["dex"]) / 5;
+			}
+			my["time_unit"] = my["dex"] + my["level"] / 5;
+		break;
+	}
+}

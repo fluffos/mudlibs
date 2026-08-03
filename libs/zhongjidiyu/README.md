@@ -4,7 +4,7 @@ MUD 内部标识为 `hell.local`，属于 ES II 引擎系列，与 `es1_win`/
 `xkx2001`/`rzrmud` 等同属一支，master 文件署名一路写明 "for ES II
 mudlib" → "Annihilator" → "Xiang for XKX" → "Doing Lu for hell"。需要
 特别说明：本项目里还有另外两个名字里也带"终极地狱"字样的压缩包
-（`zhongjidiyu_airuoyoulan`、`zhongjidiyu_zhijian`），那两个是"地狱"
+（`zjdyaryl`、`zjdyzj`），那两个是"地狱"
 分支下的另一条独立血脉，与本作不是同一款游戏，只是碰巧都叫"终极地狱"，
 三者内容互不相同。
 
@@ -22,7 +22,7 @@ mudlib" → "Annihilator" → "Xiang for XKX" → "Doing Lu for hell"。需要
   `query_save_file()` 只判断了 id 是不是字符串，没有判断是不是空
   字符串——连线的第一时间 id 还没设置好，`id[0]` 在空字符串上取值
   会得到整数 0，`sprintf` 的 `%c` 格式一遇到这个 0 就直接报错崩溃。
-  现已修复（`zhongjidiyu_airuoyoulan`、`zhongjidiyu_zhijian` 两个姊妹
+  现已修复（`zjdyaryl`、`zjdyzj` 两个姊妹
   档案也有同样的问题，一并修好了）。
 
 ## 在线试玩

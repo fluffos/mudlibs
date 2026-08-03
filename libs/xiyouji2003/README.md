@@ -1,8 +1,8 @@
 # 西游记[光辉岁月]
 
 一款 2003 年前后的"西游记"系列文字 MUD，与本项目中的
-`fluffos_xiyou2000`、`xiyouji`、`xiyouji2006`、`xiyouji450`、`mhxy` 等
-同属"ES II / 西游记"这一大家族——它与 `fluffos_xiyou2000` 的核心引擎
+`xyj2000f`、`xiyouji`、`xiyouji2006`、`xiyouji450`、`mhxy` 等
+同属"ES II / 西游记"这一大家族——它与 `xyj2000f` 的核心引擎
 代码（`master.c`）几乎完全一致，是这条支线中较晚、内容更丰富的一个
 独立站点。
 

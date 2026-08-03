@@ -2,7 +2,7 @@
 
 登录画面自称 *A Journey to the West*，版本号 2.01，最早制作于
 1996-1998 年。本项目考证认为它极可能是"ES II / 西游记"这一整个引擎
-家族（包括 `fluffos_xiyou2000`、`mhxy`、`xiyouji2003`、`xiyouji2006`、
+家族（包括 `xyj2000f`、`mhxy`、`xiyouji2003`、`xiyouji2006`、
 `xiyouji450`、`shenmo` 等在内的众多同题材姊妹游戏）**最早的祖先版本**
 ——文件时间戳最早，且没有任何后续站点加上的"破解者"署名痕迹。
 

@@ -1,1 +1,0 @@
-fluffos64\driver.exe configs.cfg

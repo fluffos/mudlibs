@@ -14,7 +14,7 @@
   (was mojibake pre-conversion). No distinct in-game brand name beyond
   that (see the readme excerpt below — this is explicitly a "mirror" kit
   for the `xiyouji.org` game already represented in this project by
-  archive #15, `fluffos_xiyou2000`).
+  archive #15, `xyj2000f`).
 - Config: `xyj/config.cfg` (MudOS 0.9.20 format, standard directive set,
   no legacy `external_port_*` weirdness). Original `port number : 5555`,
   `address server port : 6665` (the readme says a real mirror should use
@@ -24,44 +24,44 @@
   started; TODO.md's own ledger showed "next free: 40076" before that
   reservation).
 
-## Lineage: confirmed via diff (not assumed from title) — genuine sibling of the whole "西游记/mhxy" ES-II-derived family, closest specifically to `mhxy`(#19)/`menghuanxiyou2002`(#56), NOT a duplicate of any of them
+## Lineage: confirmed via diff (not assumed from title) — genuine sibling of the whole "西游记/mhxy" ES-II-derived family, closest specifically to `mhxy`(#19)/`mhxyqd`(#56), NOT a duplicate of any of them
 
 Per the task's explicit instruction, all 5 already-processed
 Journey-to-the-West-themed siblings' `NOTES.md` were read first
-(`fluffos_xiyou2000`/#15, `mhxy`/#19, `menghuanxiyou2002`/#56, `shenmo`/#73,
+(`xyj2000f`/#15, `mhxy`/#19, `mhxyqd`/#56, `shenmo`/#73,
 `xiyouji2003`/#81), then this archive's `adm/obj/master.c`,
 `adm/simul_efun/chinese.c`, `adm/daemons/logind.c`, `adm/daemons/securityd.c`,
 `adm/daemons/chinesed.c`, `adm/daemons/convertd.c` were diffed (raw
 pre-conversion bytes, CRLF-normalized) against the corresponding raw files
-of `fluffos_xiyou2000` and `mhxy` before any conversion work began.
+of `xyj2000f` and `mhxy` before any conversion work began.
 
 **Findings, by file:**
 - **`adm/obj/master.c`**: 485 lines, differs from `mhxy`'s copy by only 2
   trivial lines (a local-variable-declaration/one-statement refactor
   inside `standard_trace()` — `string err, var;` + a separate `var=...`
   assignment vs. an inlined expression; functionally identical) — this is
-  essentially the SAME master.c. Diffed against `fluffos_xiyou2000`'s copy
+  essentially the SAME master.c. Diffed against `xyj2000f`'s copy
   too: only difference there is one extra header line ("cracked by vikee
-  2/09/2002 vikee@263.net", a redistribution-crack credit `fluffos_xiyou2000`
+  2/09/2002 vikee@263.net", a redistribution-crack credit `xyj2000f`
   picked up somewhere along its own distribution chain that this archive's
   copy never had) plus the same trivial refactor. All three trace to the
   same "for ES II mudlib / original from Lil / rewritten by Annihilator
   (11/07/94)" root, with `mon@xiyouji`-credited additions (`standard_trace`,
   the `object_name`/`query`/`valid_bind` block) layered on top — i.e. this
-  archive, `fluffos_xiyou2000`, and `mhxy` all descend from the same
+  archive, `xyj2000f`, and `mhxy` all descend from the same
   "xiyouji.org" codebase lineage, this archive's copy being closest to a
   clean/uncracked state.
 - **`adm/simul_efun/chinese.c`**: byte-identical to `mhxy`'s copy (only
-  differs from `fluffos_xiyou2000`'s copy by the same "cracked by vikee"
+  differs from `xyj2000f`'s copy by the same "cracked by vikee"
   header line plus a harmless reordering of the `chinese_number`/
   `to_chinese` function bodies).
 - **`adm/daemons/convertd.c`** (the Greek-alphabet charset-conversion
   table): near-identical to `mhxy`'s copy (one whitespace/tab difference
   on a single line, plus the same header-credit-line difference vs.
-  `fluffos_xiyou2000`) — and, importantly, carries the SAME known §8h
+  `xyj2000f`) — and, importantly, carries the SAME known §8h
   stray-trailing-backslash Greek-table typo (45 occurrences, see below).
 - **`adm/daemons/logind.c`/`securityd.c`/`chinesed.c`**: all differ
-  substantially from both `mhxy` and `fluffos_xiyou2000` (different ACL
+  substantially from both `mhxy` and `xyj2000f` (different ACL
   tables, different banned-name lists, different registration-flow
   details, a much simpler `securityd.c` with `valid_read` unconditionally
   `return 1;` and dead/commented-out `exclude_read` logic) — this is
@@ -69,13 +69,13 @@ of `fluffos_xiyou2000` and `mhxy` before any conversion work began.
   engine core, and every sibling in this family differs here too.
 
 **Conclusion**: genuine member of the same 西游记/xiyouji.org ES-II-lineage
-codebase family as `fluffos_xiyou2000`(#15)/`mhxy`(#19)/`menghuanxiyou2002`
+codebase family as `xyj2000f`(#15)/`mhxy`(#19)/`mhxyqd`
 (#56), sharing byte-for-byte-or-near-identical core engine files
 (`master.c`, `chinese.c`, `convertd.c`), but with its OWN distinct
 site-customization layer (`logind.c`/`securityd.c`/`chinesed.c`) and its
 own game-world content tree (`d/`, `daemon/class/`) — **not** a duplicate
 of any of them. Distinct again from `shenmo`(#73, "Neolith" mega-lib
-fork) and `xiyouji2003`(#81, itself confirmed closer to `fluffos_xiyou2000`
+fork) and `xiyouji2003`(#81, itself confirmed closer to `xyj2000f`
 specifically) — those two were read but not diffed byte-for-byte here
 since master.c/chinese.c already clearly separate this archive from them
 by shared-lineage-but-different-generation reasoning documented in their
@@ -258,7 +258,7 @@ this mirror-kit's apparent late-90s/2002-ish vintage) or a separate fork.
     convention). Copied the same file to `obj/toy/message.h` — not
     fabricated content, a verbatim restoration of an already-duplicated
     generic helper, matching the established "restore from an identical
-    sibling" precedent (e.g. `xiaoaojianghu_client`'s `cloth.lpc`).
+    sibling" precedent (e.g. `xajhzcjh`'s `cloth.lpc`).
 14. **Genuine pre-existing truncation, `d/nanhai/obj/jingu2.lpc`** (Honghaier's
     "golden hoop" item): raw archive file is exactly 1024 bytes, cutting
     off right after the LAST statement of `free_jingu()` with no closing

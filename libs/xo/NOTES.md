@@ -608,7 +608,7 @@ triggered by a specific command — the crashing call stack is entirely
 inside the driver's own periodic `reset()` sweep, `backend.cc`'s
 `look_for_objects_to_swap()`), the native driver process died outright
 with a SIGSEGV. **`debug.log` showed absolutely nothing** — identical to
-both prior §10.8 occurrences (`xianjianchuanqi`, `shiji`), reinforcing
+both prior §10.8 occurrences (`xjcq2000`, `shiji`), reinforcing
 that this class of failure is genuinely undetectable by log-watching
 alone; only the redirected driver stdout (captured per the standing
 recommendation from that section) had anything.

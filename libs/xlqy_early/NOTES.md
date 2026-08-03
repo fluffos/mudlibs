@@ -21,7 +21,7 @@ play.
 
 **Lineage confirmed via diff, not assumed from the shared title** (this
 project's own repeated lesson: similar Chinese titles are not a reliable
-lineage signal — see xianlvqiyuan vs xlqy_new2007, shujianpiaoling2 vs
+lineage signal — see xianlvqiyuan vs xlqy_new2007, sjpl2 vs
 shujian2008):
 - `adm/simul_efun/chinese.lpc` — identical logic to xlqy_new2007's copy,
   differing only in whitespace/brace style (`diff` shows only reformatting,

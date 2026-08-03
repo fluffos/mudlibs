@@ -19,10 +19,10 @@
 ## Triage / lineage
 
 Genuine LPC mudlib (`inherit` everywhere). Diffed core files against
-sibling `sanjiechuanshuo` (also in this batch, shares the "三界" title
+sibling `sjcs` (also in this batch, shares the "三界" title
 prefix) — substantially different `master.lpc`/`securityd.lpc`/
 `logind.lpc` (416/747/1179 lines here vs 495/316/1718 there) — **not** a
-derivative pair, same conclusion as documented in `sanjiechuanshuo`'s
+derivative pair, same conclusion as documented in `sjcs`'s
 NOTES.md. Treated as a fully independent unique game.
 
 ## State at handoff (this session)
@@ -38,7 +38,7 @@ attempted), no NOTES.md/README.md. This session completed the pipeline.
 ## Fixes applied this session
 
 1. **1 corrupted file**, same exact corruption as sibling
-   `sanjiechuanshuo`: `d/sea/npc/beast1.lpc` — 2 trailing garbage bytes
+   `sjcs`: `d/sea/npc/beast1.lpc` — 2 trailing garbage bytes
    (`\xff\xba`) right after a clean `}\n\n` ending, confirmed present in
    the raw archive itself. Truncated the 2 bytes.
 2. **Wizard write-ACL default was fully deny-by-default, so a freshly

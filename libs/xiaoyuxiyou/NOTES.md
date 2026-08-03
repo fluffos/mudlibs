@@ -12,7 +12,7 @@ the West", `name : 小雨西游`), but the live banner text hardcoded in
 says **`小雨西游Ⅱ`** ("Little Rain Journey to the West **II**"), v3.0,
 "站点创建时间：2013年12月30日" (site created 2013-12-30). This is the
 **same "小雨西游Ⅱ" engine/lineage as archive #3
-(`20150716未知lib.zip` → `unknownlib20150716`)** — confirmed via `md5sum`:
+(`20150716未知lib.zip` → `xyxy2`)** — confirmed via `md5sum`:
 `adm/simul_efun/chinese.lpc` is byte-identical between the two archives.
 `master.lpc`/`logind.lpc`/`securityd.lpc` differ (different site snapshot/
 build), but the shared `chinese.c` and matching 30-second startup grace
@@ -109,7 +109,7 @@ uncontaminated `work/` files.
   fragments correctly): `master.lpc`'s `valid_override` already uses
   `sscanf(file, "/adm/simul_efun/%s", file)` to detect the fragment case
   (the same alternate-but-valid solution AGENTS.md documents for
-  `unknownlib20150716`, this lib's sibling) — confirmed the one real
+  `xyxy2`, this lib's sibling) — confirmed the one real
   caller (`adm/simul_efun/object.lpc`'s `efun::destruct()`) matches this
   pattern and is allowed.
 - **§15l** (`master.lpc create()` destructing `SIMUL_EFUN_OB` — segfaults
@@ -191,7 +191,7 @@ Flow, in order (`logon()` → `encoding()` → `if_young()` → `get_id()` →
 
 1. `logon()`: **30-second startup grace period** (`if(uptime()<30)` reject
    with "驱动程序正在启动过程中，请稍候再来。") — same as sibling lib
-   `unknownlib20150716`. Then a GB/BIG5 encoding-selection prompt.
+   `xyxy2`. Then a GB/BIG5 encoding-selection prompt.
 2. `encoding()`: needs an answer starting with `g`/`G` or `b`/`B` — sent
    `gb`.
 3. `if_young()`: "请您做出选择：① 进入游戏(Enter) ② 立即退出(Exit)" — any
@@ -311,7 +311,7 @@ Triaged the 110 failures by category rather than fixing each individually
   is **never `#define`d anywhere in the archive** (confirmed: no
   `include/*.h` defines it, and no `std/obj/amulet.lpc`-shaped base class
   exists anywhere either). This is the AGENTS.md §8g "missing macro, not
-  a broken file" variant (same shape as `xiyangzaixian3`'s `WQA_ROOM`
+  a broken file" variant (same shape as `xyzx3`'s `WQA_ROOM`
   case) — 5 nominal failures collapse to ONE real root cause. Per the
   §13 precedent (don't fabricate missing content), left as a documented
   content gap rather than inventing a plausible `AMULET` base class from
@@ -709,7 +709,7 @@ instructions), but the finding is exactly an instance of the existing
 §7.21 class — worth folding the "the room's own manual resume command
 can be independently broken by an add_action signature mismatch, not
 just absent" observation into that entry's text for future passes on
-other libs in this family (`unknownlib20150716` shares this same
+other libs in this family (`xyxy2` shares this same
 `小雨西游Ⅱ` engine lineage per this file's own lineage note above and is
 worth a targeted grep for the identical `add_action("get_start1",
 "start")`-shaped pattern, though not checked live in this pass — out of

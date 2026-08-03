@@ -1,1 +1,0 @@
-get gold from corpse

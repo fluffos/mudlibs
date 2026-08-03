@@ -1,0 +1,117 @@
+// 镖局的师傅们教不教武功的凭证
+
+int valid_teach( object you, string skill )
+{
+    object me;
+    string f_name;
+
+//    if ( !::valid_teach( you, skill ) )
+//        return 0;
+    me = this_object();
+    if ( !SKILL_D( skill )->valid_learn( you ) )
+        return 0;
+//    if ( !BIAOJU_D->is_benmen_wugong( skill ) )
+//    {
+//        notify_fail( me->name() + "有些不解：镖局中有人会这门武功吗？\n" );
+//        return 0; 
+//    }
+//   这个BIAOJU_D在什么地方? -- by lnwm
+    if ( !you->query( "zuzhi" ) || you->query( "zuzhi/zuzhi_name" ) != "凤翔镖局" )
+    {
+        command( "? " + you->query( "id" ) );
+        notify_fail( me->name() + "说：有谁让你来找我学武功的吗？\n" );
+        return 0;
+    }
+    else
+    {
+        f_name = you->query( "family/family_name" );
+        if ( f_name == "蓬莱派" &&
+            f_name != me->query( "family/family_name" ) )
+        {
+            command( ":)" );
+            notify_fail( me->name() + "说道：你既然已是蓬莱派的弟子了，我就不好再传授你我派的武功了。\n" );
+            return 0;
+        }
+    }
+    if ( !me->query_jibie( skill ) )
+    {
+        return notify_fail( me->name() + "不愿意教你这项技能。\n");
+    }
+    return 1;
+}
+
+int win_bihua( object you )
+{
+    if ( you->query_temp( "fight_master" ) )
+    {
+        you->delete_temp( "fight_master" );
+        command( "say 呵呵，你想混到我这个位置，现在还是不行的！！！" );
+    }
+    else
+        command( "say 你还需多加努力才是！" );
+    return 1;
+}
+
+int lose_bihua( object you )
+{
+    // add by xli
+    if ( you->query("class")=="qingcheng" 
+      && you->query("xli_marks/bihua_liu") 
+      && this_object()->query("name")=="刘星海"
+       )
+    // 青城弟子奉师命找来了
+    {
+        command( "say "+ you->query("name")+"看来已得那个牛鼻子老道的真传，我竟然.....");
+        command( "say "+ "这笔帐总有一天要算的，回去和你师父说，改日一定登门拜访，雪我今日之耻！");
+        you->delete("xli_marks/bihua_liu");
+        you->set("xli_marks/win_liu",1);
+        return 1;
+    }
+    // end add
+
+    if ( you->query_temp( "fight_master" ) )
+    {
+        you->set( "defeat_master", 1 );
+        you->save();
+        command( "chat* admire " + you->query( "id" ) );
+        command( "say 厉害，你打赢了我，回去报告总镖头吧！" );
+    }
+    return 1;
+}
+
+
+int zhongcheng( object me, string skill )
+{
+    int dengji, jibie, zhongchen;
+    dengji = SKILL_D( skill )->query_dengji();
+    if( !dengji ) dengji = 1;
+    jibie = me->query_jibie( skill );
+    if ( SKILL_D( skill )->query_level() )
+        dengji = SKILL_D( skill )->query_level();
+    switch ( dengji )
+    {
+        case 1 : zhongchen = jibie * 10 / 6;        break;
+        case 2 : zhongchen = 100 + jibie * 10 / 6;  break;
+        case 3 : zhongchen = 200 + jibie * 10 / 6;  break;
+        case 4 : zhongchen = 300 + jibie * 20 / 6;  break;
+        case 5 : zhongchen = 500 + jibie * 30 / 6;  break;
+        case 6 : zhongchen = 800 + jibie * 50 / 6;  break;
+        case 7 : zhongchen = 1300 + jibie * 80 / 6; break;
+        case 8 : zhongchen = 2100 + jibie * 130 / 6; break;
+        case 9 : zhongchen = 3400 + jibie * 210 / 6; break;
+        case 10 : zhongchen = 5500 + jibie * 340 / 6; break;
+        default : zhongchen = jibie * 20 / 6; break;
+    }
+    if ( zhongchen <= me->query( "class_score/" + me->query( "zuzhi/zuzhi_name" ) ) )
+        return 1;
+    else if ( zhongchen <= me->query( "class_score/" + me->query( "family/family_name" ) ) )
+        return 1; 
+    else
+        return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////
+// Internal Function
+
+
+

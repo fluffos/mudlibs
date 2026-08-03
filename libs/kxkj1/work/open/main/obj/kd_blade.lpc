@@ -1,0 +1,140 @@
+// made by ccat
+// 二版,改正以往须call 一个隐形怪兽的缺点,使用的变数也大为简化.
+
+#include <ansi.h>
+#include <weapon.h>
+inherit BLADE;
+object user;
+int sp;
+void create() {
+  set_name("屠龙刀", ({ "dragon blade", "blade" }));
+  set_weight(40000);
+  if (clonep())
+    set_default_object(__FILE__);
+  else {
+    set("long", "一股杀气扑面而来,刀面闪烁凛凛青光,这就闻名天下的屠龙" +
+      "宝刀.\n");
+    set("unit", "件");
+    set("value", 5000);
+    set("no_sell", 1);
+    set("rigidity", 100);
+    set("material", "steal");
+  }
+  init_blade(100);
+  setup();
+}
+void init() {
+  add_action("do_drop", "drop");
+  add_action("do_auc", "auc");
+  add_action("do_wield", "wield");
+  add_action("do_give", "give");
+  add_action("do_unwield", "unwield");
+}
+int do_wield(string str) {
+  int my_cor, my_exp;
+  ::wield();
+  if (query("equipped")) {
+    user = this_player();     // 取得使用者
+    my_cor = user->query("cor", 1);
+    my_exp = user->query("combat_exp");
+    if (my_exp * my_cor < 300000) {
+      message_vision("$N的胆识与经验,并不足以号令屠龙刀.\n", user);
+      set_name("屠龙刀", ({ "dragon blade", "blade" }));
+      set_heart_beat(0);
+    } else {
+      message_vision(HIY "屠龙刀感受到$N的胆识,泛起一层金光.\n" NOR, user);
+      set_name(HIY "屠龙刀" NOR, ({ "dragon blade", "blade" }));
+      sp = my_cor;
+      set_heart_beat(1);
+    }
+  }
+}
+int do_drop(string str) {
+  if (str == "all" || str == "blade" || str == "dragon-blade")
+    if (query("equipped")) {
+      set_name("屠龙刀", ({ "dragon blade", "blade" }));
+      set_heart_beat(0);
+    }
+}
+int do_give(string str) {
+  if (str == "all" || str == "blade" || str == "dragon-blade")
+    if (query("equipped")) {
+      set_name("屠龙刀", ({ "dragon blade", "blade" }));
+      set_heart_beat(0);
+    }
+}
+int do_unwield(string str) {
+  if (str == "all" || str == "blade" || str == "dragon-blade")
+    if (query("equipped")) {
+      message_vision("$N将屠龙刀放回刀鞘.\n", user);
+      set_name("屠龙刀", ({ "dragon blade", "blade" }));
+      set_heart_beat(0);
+    }
+}
+int do_auc(string str) {
+  if (str == "all" || str == "blade" || str == "dragon-blade")
+    if (query("equipped")) {
+      set_name("屠龙刀", ({ "dragon blade", "blade" }));
+      set_heart_beat(0);
+    }
+}
+void heart_beat() {
+  object *enemy, who, ob;
+  int i, j;
+
+  if (!objectp(user)) {
+    set_heart_beat(0);
+    return;
+  }
+
+  if (user->is_fighting() && query("equipped")) {
+    if (random(sp + 100) > 100) {
+      enemy = user->query_enemy();
+      i = random(sizeof(enemy));
+      ob = enemy[i]->query_temp("weapon");
+      // 此机率为  次/每 heart beat       
+      // 如果对手是非武器使用者,连击 机率为 0.08-0.22
+      // 如果对手是武器使用者  ,连击 机率为 0.008-0.022    
+      if (!ob || random(10) > 8) {
+        message_vision("$N大喊" HIY "【 宝刀屠龙, 号令天下, 莫敢不从!!! 】" NOR,
+          user);
+        for (j = 0; j <= 2; j++)
+          COMBAT_D->do_attack(user, enemy[i], user->query_temp("weapon"), 2);
+        return;
+      }
+      if (environment(user) == environment(enemy[i]))
+        // 如果对手是玩家且使用武器,砍断机率为 0.032-0.086 (有的被 连击return了)       
+        // 如果对手是npc 且使用武器,砍断机率为 0.008-0.022 
+        if ((userp(enemy[i]) && random(10) > 5) ||
+          (!userp(enemy[i]) && random(10) > 8)) {
+          ob->unequip();
+          message_vision(HIY "只听到 __ㄎㄤ__ 一声,$N的" + ob->query("name") +
+            "已被屠龙刀斩成两段!!\n" NOR, enemy[i]);
+          if (!ob->query("bad")) {
+            ob->set("name", "(断掉)" + ob->query("name"));
+            ob->set("bad", 1);
+          }
+          ob->set("value", 1);
+          ob->set("weapon_prop/damage", 0);
+          ob->move(environment(enemy[i]));
+          enemy[i]->rest_action();
+          // 如果对手是玩家且使用武器,破坏机率为 0.04-0.112
+          // 如果对手是npc 且使用武器,破坏机率为 0.064-0.176          
+        } else {
+          ob->unequip();
+          message_vision(HIY "只听到 __ㄎㄤ__ 一声,$N的" + ob->query("name") +
+            "已被屠龙刀砍出一个大缺口!!\n" NOR, enemy[i]);
+          if (!ob->query("bad")) {
+            ob->set("name", "(受损)" + ob->query("name"));
+            ob->set("bad", 1);
+          }
+          if (ob->query("weapon_prop/damage") > 10) {
+            ob->add("weapon_prop/damage", -10);
+          } else
+            ob->set("weapon_prop/damage", 0);
+          ob->wield();
+        }
+    }
+  }
+  return;
+}

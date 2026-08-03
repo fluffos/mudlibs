@@ -3,7 +3,7 @@
 - Archive: `鹿鼎天下.rar` (from the 2026-07-29 bulk `mudlib.rar` drop).
   "Century / adm-single" family lineage (custom `securityd.lpc` ACLs,
   master at `/adm/single/master` — same shape as `shiji` (021),
-  `shujian2008` (024), `xianjianchuanqi` (027), `xiakexinzhuan2` (028),
+  `shujian2008` (024), `xjcq2000` (027), `xkxz2` (028),
   `xiakexing100` (030)). ES II heritage (`master.c` header: "for ES II
   mudlib... rewritten by Annihilator", further "modified by Xiang for
   XKX").

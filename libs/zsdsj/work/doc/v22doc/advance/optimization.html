@@ -1,0 +1,237 @@
+<HEAD> <TITLE> Optimization of LPC code </TITLE> </HEAD> <BODY BACKGROUND=http://www.imaginary.com/~beek/gifs/bg.jpg TEXT=#000000 ALINK=#FFFF00 VLINK=#550000 LINK=#000099> <center> <H1> Optimization of LPC code </H1> </center>
+<p>
+This page gives a few hints of how you can avoid writing hideously slow
+code which will cause large, complex LPC applications to grind to a halt.
+<p>
+The first, and most important, thing to remember is that some portions
+of your code are executed ALOT, and some portions are not executed all
+that often.  If a routine is called once every few minutes, it would
+have to be obscenely slow in order to cause a noticeable performance
+difference.
+<p>
+On the other hand, in a routine that gets called thousands of times every
+second, very small differences can make a big difference in overall speed.
+Hence, one of the first things you should do is find out where your
+application is spending most of its time; <A HREF=http://www.imaginary.com/~beek/mudos/profiling.html>  profiling </A> can be very
+useful in this regard.  Typically, you will find that 90% of the execution
+time is due to < 10% of the code, allowing you to double or triple the
+speed of your application while only worrying about a small portion
+of your code.
+<p>
+<h3> Example of how to optimize code </h3>
+<p>
+Secondly, doing things in a simple, straightforward matter is often
+better than making small modifications to an existing routine in order
+to make the existing routine run faster.  For example, consider the
+following code:
+<p>
+<pre>
+ #define ONES ({ "one", "two", "three", "four", "five", "six", "seven",
+		     "eight", "nine" })
+ #define TENS ({ "ten", "twenty", "thirty", "forty", "fifty", "sixty", 
+		     "seventy", "eighty", "ninety" })
+<p>
+int to_number(string str) {
+    string a, b;
+    int i, j;
+<p>
+    if (str == "eleven") return 11;
+    if (str == "twelve") return 12;
+    for (i = 0; i < 10; i++) {
+        if (str == ONES[i]) return i + 1;
+        for (j = 0; j < 10; j++) {
+            if (str == TENS[j] + "-" + ONES[i])
+                return (i + 1) * 10 + (j + 1);
+	}
+    }
+    return 0;
+}
+</pre>
+<p>
+Now, the above fragment will be hideously slow.  One thing it demonstrates
+is that you should be careful with <A HREF=http://www.imaginary.com/~beek/mudos/lpc/loops.html>  loops </A>.  The fragment does 100 and some
+odd string comparisons, which a much smaller number are actually necessary.
+<p>
+Although, as we will see below, this routine has some spots where its speed
+can be improved, the fundamental problem is that the algorithm it uses
+is flawed.  To fix it, one must go beyond simply tweaking things and
+rewrite the routine to require fewer operations, by using a better method.
+<p>
+We realize that we do not really need to check twenty-one, twenty-two, ...
+unless the string starts with twenty-.  So we can rewrite it like the folowing:
+<p>
+<pre>
+int to_number(string str) {
+    string a, b;
+    int i;
+    int ten = 0, one = 0;
+<p>
+    if (sscanf(str, "%s-%s", a, b) == 2) {
+        for (i = 0; i < 10; i++)
+            if (str == TENS[i]) tens = i + 1;
+	for (i = 0; i < 10; i++)
+            if (str == ONES[i]) ones = i + 1;
+        if (tens && ones) return tens * 10 + ones;
+    } else {
+	if (str == "twelve") return 12;
+	if (str == "eleven") return 11;
+<p>
+	for (i = 0; i < 10; i++)
+            if (str == ONES[i]) ones = i + 1;
+        if (ones) return ones;
+    }
+    return 0;
+}
+</pre>
+<p>
+This is much better (only 20 loop iterations in the worst case) but we
+can still do much better.
+<p>
+Now, we get to a second point.  <A HREF=http://www.imaginary.com/~beek/mudos/lpc/preprocessor/define>  #define </A> statements, especially in combination
+with an <A HREF=http://www.imaginary.com/~beek/mudos/lpc/array.html>  array </A> or <A HREF=http://www.imaginary.com/~beek/mudos/lpc/mapping.html>  mapping </A> values.  <A HREF=http://www.imaginary.com/~beek/mudos/lpc/preprocessor/define>  #define </A> statements aren't actually code,
+they simply substitute their values in for their names _before_ the code
+is compiled.  So every time TENS or ONES appears, the 10 item array is
+created (again) and promptly thrown away afterwards.  This is VERY slow.
+In general, you should use <A HREF=http://www.imaginary.com/~beek/mudos/lpc/preprocessor/define>  #define </A> carefully.  We can rewrite that part
+as follows:
+<p>
+<pre>
+string *ones = ({ "one", "two", "three", "four", ... });
+string *tens = ({ ... });
+</pre>
+<p>
+This way, the values are made once, then held in variables.  Each object
+holds these values, so this may be a bad solution if lots of clones are
+around (memory-wise).  Another point is that member_array() is faster
+than looking through the array by hand.  The best solution, however,
+is to avoid an array entirely:
+<p>
+<pre>
+int convert_ones(string str) {
+    switch (str) {
+    case "one": return 1;
+    case "two": return 2;
+    case "three": return 3;
+    ...
+    case "nine": return 9;
+    default: return 0;
+    }
+}
+<p>
+int convert_tens(string str) {
+    switch (str) {
+    case "ten": return 10;
+    case "twenty": return 20;
+    ...
+    default: return 0;
+    }
+}
+<p>
+int to_number(string str) {
+    string tmp;
+    int ret;
+    switch (str) {
+    case "eleven": return 11;
+    case "twelve": return 12;
+    default:
+        if (sscanf(str, "%s-%s", tmp, str)) {
+            if (ret = convert_tens(tmp)) {
+                int ret2 = convert_ones(str);
+                if (ret2) return ret + ret2;
+                else return 0;
+            }
+        } else {
+            if (ret = convert_tens(str))
+                return ret;
+            return convert_ones(str);
+        }
+    }
+}
+</pre>
+<p>
+This works based on the fact that string <A HREF=http://www.imaginary.com/~beek/mudos/lpc/switch.html>  switch </A> is MUCH faster than you
+would think; it doesn't actually compare the strings one at a time.
+It also properly divides the problem up into its components (recognizing
+a single word, etc) which generally leads to efficient solutions.
+<p>
+<h3> More general principles </h3>
+<p>
+Another good trick is moving constant expressions out of loops.  For example,
+doing a:
+<p>
+<pre>
+string tp_name = this_player()->query_name();
+</pre>
+<p>
+outside of the loop, instead of calling the function each time through
+the loop.  Call_others aren't particularly fast compared to local calls,
+and especially not compared to variables.
+<p>
+There are some things for which this isn't true, however.  this_object()
+and this_player() are actually faster than variables, and sizeof() is
+pretty blazingly fast as well, so it's not worth bothering with them.
+<p>
+If you are keeping a series of flags, consider using bit operators on ints.
+Also, consider using the set_bit() efun and friends; they are almost as
+fast and much more flexible.
+<p>
+Formatting strings for output is always a common question; for simple things,
+string addition is probably best.  (s)printf is noticeably slower due to
+its flexibility.
+<p>
+<h2> Data Types </h2>
+<p>
+<h3> Floats: </h3>
+<p>
+Floats are noticeably slower than integer arithmetic, and the accuracy
+isn't all that good (about 6-7 sig figs), so in many cases, you are
+better off using an integer and pretending it is a float:
+<p>
+<pre>
+int coinage = 375;
+<p>
+write(" You have " + (coinage / 100) + " dollars and " + (coinage % 100) +
+      " cents.\n");
+</pre>
+<p>
+<h3> Arrays: </h3>
+<p>
+There are lots of places where it is good to use an <A HREF=http://www.imaginary.com/~beek/mudos/lpc/array.html>  array </A>, but they can
+also kill you if overused.
+<p>
+When building arrays, try to allocate them beforehand if possible;
+adding one element at a time is slow:
+<p>
+<pre>
+x = allocate(10);
+for (i = 0; i < 10; i++) {
+    x[i] = ...
+}
+</pre>
+and not:
+<p>
+<pre>
+x = ({});
+for (i = 0; i < 10; i++) {
+    x += ({ ... });
+}
+</pre>
+<p>
+Of course, if you do not know beforehand how many there are, you can't
+do this.  In some cases, it is worth counting first, if that can be
+done easily.  This can make a huge difference for large arrays.
+<p>
+<h3> Mappings: </h3>
+<p>
+Avoid using a <A HREF=http://www.imaginary.com/~beek/mudos/lpc/mapping.html>  mapping </A> if possible.  Use a <A HREF=http://www.imaginary.com/~beek/mudos/lpc/class.html>  class </A> instead.  Mappings are really nice
+to work with, but should not be used in speed critical sections of code.
+There is, however, an exception: the above is based on the small mappings
+LPC coders typically use.  When used to organize large ammounts of data,
+mappings are actually faster than most other methods.  For example,
+keeping information about 100 things should use a mapping, as finding
+a particular element is significantly faster than searching an array.
+Lookup tables are excellent uses of mappings, and can be used to speed
+up operations.
+<p>
+<HR> <ADDRESS> <A HREF=http://wagner.princeton.edu/~tim>  Tim Hollebeek </A> <p> <A HREF="http://www.imaginary.com/~beek/">  Beek </A>@ZorkMUD, Lima Bean, IdeaExchange, TMI-2, and elsewhere </ADDRESS>
+<p>

@@ -1,0 +1,294 @@
+// emoted.c
+// Add new version support self rank calling and 
+// calling target.
+// modify 3/18/1997 Phoebus
+// refuse newbie by lnwm 89-09-16
+// rewrite by nerd 98-11-28 18:21
+
+
+#define IGNORE_RETURN   1
+#define EMOTE_CHAR       '*'
+#include <options.h>
+#include <channels.h>
+
+inherit F_SAVE;
+
+private mapping emote;
+private nosave int repeat_count;
+private nosave mapping channels = ([
+  "wiz": WIZ_STRING,
+  "chat": XO_STRING,
+  "rumor": RUMOR_STRING,
+  "new": NEWBIE_STRING,
+]);
+
+private nosave string *m_reserved = ({ "loveu", "hammer" });
+//不知道nosave有什么用，别人用，俺也用，修改对方名字里带颜色的问题。
+private nosave mapping chancolor = ([
+  "wiz": WHT BBLU,
+  "chat": HIC,
+  "rumor": HIM,
+  "new": WHT,
+]);
+varargs string GetReplacedEmote(string str, object me, object target, int f);
+mixed DoChannelEmote(object me, string chan, string arg, int emote_char);
+mixed DoEmote(object me, string verb, string arg);
+
+//    The emote mapping contains the data base of emote definitions. Each emote
+//    is defined in a sub-mapping with the following structure:
+//
+//    myself    - the message emoter will see
+//    target    - the message the target will see when targeted
+//    others    - the message others will see when no argument.
+//
+//    The emote mapping is indexed with the emote 'pattern' instead of emote
+//    verb. For example, typing "smile" without argument will cause the daemon
+//    search the emote mapping with "smile" as key, and typing "smile someone"
+//    will cause the daemon search the emote mapping with "smile $" pattern as
+//    the key, while $ means one argument.
+//
+//    In the message string, the following substitutions will be applied before
+//    sending the messages:
+//      $K              - 对自己的一般称呼。（如：在下）
+//      $k              - 对自己的粗鲁称呼。（如：愚兄）
+//      $F              - 对别人的尊称。    （如：这位师太）
+//      $f              - 对别人的粗鲁称呼。（如：死秃驴）
+//      以上都是annihilator在/doc/mudlib/daemons/rank说明过的。
+//      $Z              - 对自己的谦虚称呼。（如：笨弟我或愚兄我）
+//      $z              - 对别人的呢称。    （如：大哥你或小弟你）
+//      $Z 对应的参数回传是query_target_me。（系统自动判断哪个obj年龄大）
+//      $z 对应的参数回传是query_me_target。（系统自动判断哪个obj年龄大）
+//      add new by phoebus@xo(3/18/97)
+
+void create() {
+  if (!restore() && !mapp(emote))
+    emote = ([]);
+  seteuid(ROOT_UID);
+  repeat_count = 0;
+}
+
+int remove() {
+  save();
+  return 1;
+}
+
+string query_save_file() { return DATA_DIR + "daemon/emoted"; }
+
+mixed do_emote(object me, string verb, string arg) {
+  mixed result = 0;
+  if (!environment(me))
+    return notify_fail("你现在没有环境，做不了这个动作。\n");
+  if (!verb || !strlen(verb))
+    return 0;
+  if (verb[<1] == EMOTE_CHAR || verb[<1] == '&')  // EMOTE_CHAR = '*' now.
+  {
+    //DEBUG("This is a channel emote...\n");
+    result = DoChannelEmote(me, verb[0..<2], arg, verb[<1]);
+  } else {
+    //DEBUG("This is a general emote.\n");
+    result = DoEmote(me, verb, arg);
+  }
+  if (result && stringp(result)) {
+    message("vision", result, this_player());
+    return 1;
+  } else
+    return result;
+}
+
+mixed DoChannelEmote(object me, string chan, string arg, int emote_char) {
+  string who;
+  int rumor;  //width
+  string msg, em, target, name;
+  object another;  // -> target.
+  string *tuned_channels = me->query("channels");
+  // 这是不是一个合法的频道.
+  if (member_array(chan, keys(channels)) == -1)
+    return 0;
+  // 巫师专用.
+  if (chan == "wiz" && !wizardp(me))
+    return 0;
+  // 检查是否该频道被关闭。
+  if (me->query("chblk_" + chan))
+    return "你的这个频道被关闭了！\n";
+  // 比武大会也不许使用emote。by lnwm 990621
+  if (BIWU_D->query_biwu() && chan != "wiz")
+    return "现在是“笑傲江湖”比武大会时间，请噤声！\n";
+  // 检查是否是新手。
+  if (newbiep(me) && !wizardp(me) && chan != "new")
+    return "新手只能使用新手频道(new)。\n";
+  // 加在频道里。
+  if (!pointerp(tuned_channels))
+    me->set("channels", ({ chan }));
+  else if (member_array(chan, tuned_channels) == -1)
+    me->set("channels", tuned_channels + ({ chan }));
+  // 检查是否玩家重复交谈信息。
+  if (userp(me) && !wizardp(me)) {
+    if (arg == (string)me->query_temp("last_channel_msg"))
+      repeat_count++;
+    else
+      repeat_count = 0;
+    if (repeat_count >= CHAT_REPEAT_LIMIT)
+      return "用交谈频道说话请不要多次重复。\n";
+    me->set_temp("last_channel_msg", arg);
+  }
+  // 给巫师看的。
+  if (userp(me) || !stringp(who = me->query("channel_id")))
+    who = me->query("name") + CYN + "(" + capitalize(me->query("id")) + ")";
+
+  rumor = (chan == "rumor");
+  if (rumor) {
+    name = "某人";
+    message("channel:sys", format_string(SYSTEM_STRING + who
+      + "的谣言：" + arg + "\n") + NOR, users());
+  } else
+    name = me->name();
+  // 没有参数的情况。
+  if (!stringp(arg) || arg == "") {
+    message("channel:" + chan, channels[chan] + name
+      + "看起来表情丰富。" NOR "\n", users());
+    return 1;
+  }
+
+  if (emote_char == '&') {
+    msg = name + arg + "\n";
+  } else {
+    if (sscanf(arg, "%s %s", em, target) < 2) {
+      if (!undefinedp(emote[arg]))
+        msg = emote[arg]["others"];
+      // else msg = 0 ;P
+    } else {
+      another = present(target, environment(me));
+      if (!another)
+        another = find_player(target);
+      if (another && me->visible(another) &&  // another->is_character
+      !undefinedp(emote[em])) {
+        if (another != me)
+          msg = emote[em]["others_target"];
+        else
+          msg = emote[em]["others_self"];
+      }
+    }
+  }
+  if (!msg)
+    return 0;
+  //width = (int *) me->GetScreen()[0] || 80;
+  //width = width > 40 ? width - 10 : width ;
+  if (rumor)
+    msg = replace_string(msg, "$N", "某人");
+  msg = replace_string(msg, "$N", "$N" + chancolor[chan]);  //这个替换基本没什么必要,防止player名字有颜色吧
+  msg = replace_string(msg, "$n", "$n" + chancolor[chan]);
+  msg = GetReplacedEmote(msg, me, another);
+  message("channel:" + chan, format_string(channels[chan] + msg, 70,
+    IGNORE_RETURN) + NOR, users());
+  return 1;
+}
+
+mixed DoEmote(object me, string verb, string arg) {
+  object target = 0;
+  string self_msg = 0;
+  string target_msg = 0;
+  string other_msg = 0;
+  mapping curr;       // 当前的emote.
+  //int width = (int *)me->GetScreen()[0] || 80;
+
+  if (!mapp(emote) || !curr = emote[verb])
+    return 0;
+  /**if ( width > 40 )
+        width -= 10;*/
+  if (!arg)  // 自己做的emote,比如hi,此时verb = hi, arg = 0
+  {
+    self_msg = curr["myself"];
+    other_msg = curr["others"];
+  } else {
+    target = present(arg, environment(me));
+    if (!target || !me->visible(target))  // !target->is_character() ||
+      return notify_fail("你要对谁做这个ＥＭＯＴＥ？\n");
+    if (target == me) {
+      self_msg = curr["myself_self"];
+      other_msg = curr["others_self"];
+    } else {
+      self_msg = curr["myself_target"];
+      other_msg = curr["others_target"];
+      target_msg = curr["target"];
+    }
+  }
+  if (self_msg) {
+    self_msg = replace_string(self_msg, "$N", "$N" + CYN);
+    self_msg = replace_string(self_msg, "$n", "$n" + CYN);  //不好，我来改，hoho  改一个$n就差不多了，其他先不考虑了
+    self_msg = GetReplacedEmote(self_msg, me, target, 1);  // 这里写的不好
+    message("emote", CYN + format_string(self_msg, 75, IGNORE_RETURN)
+      +NOR, me);
+  }
+  if (other_msg) {
+    object *exclude = ({ me });
+    if (target_msg)
+      exclude += ({ target });
+    other_msg = replace_string(other_msg, "$N", "$N" + CYN);
+    other_msg = replace_string(other_msg, "$n", "$n" + CYN);
+    other_msg = CYN + format_string(GetReplacedEmote(other_msg, me, target),
+      75, IGNORE_RETURN) + NOR;
+    message("emote", other_msg, environment(me), exclude);
+  }
+  if (target_msg) {
+    target_msg = replace_string(target_msg, "$N", "$N" + CYN);
+    target_msg = replace_string(target_msg, "$n", "$n" + CYN);
+    target_msg = GetReplacedEmote(target_msg, me, target, 2);
+    if (member_array(verb, m_reserved) < 0)
+      target_msg = format_string(target_msg, 75, IGNORE_RETURN);
+    message("emote", CYN + target_msg + NOR, target);
+  }
+  if (objectp(target))
+    target->relay_emote(me, verb);
+  return 1;
+}
+
+// flag : bit 1 : $P 是否为self or pronoun
+// bit 2 : $p self or pronoun
+varargs string GetReplacedEmote(string str, object me, object target, int flag) {
+  string my_gender = me->query("gender");
+  if (!str || str == "")
+    return str;
+  str = replace_string(str, "$N", me->name());
+  if (flag & 1)  // self
+    str = replace_string(str, "$P", gender_self(my_gender));
+  else
+    str = replace_string(str, "$P", gender_pronoun(my_gender));
+  str = replace_string(str, "$K", RANK_D->query_self(me));
+  str = replace_string(str, "$k", RANK_D->query_self_rude(me));
+  if (objectp(target)) {
+    string target_gender = target->query("gender");
+    str = replace_string(str, "$Z", RANK_D->query_target_me(target));
+    str = replace_string(str, "$z", RANK_D->query_me_target(target));
+    str = replace_string(str, "$F", RANK_D->query_respect(target));
+    str = replace_string(str, "$f", RANK_D->query_rude(target));
+    str = replace_string(str, "$n", target->name());
+    if (flag & 2)  // self
+      str = replace_string(str, "$p", gender_self(target_gender));
+    else
+      str = replace_string(str, "$p", gender_pronoun(target_gender));
+  }
+  return str;
+}
+
+int set_emote(string pattern, mapping def) {
+  emote[pattern] = def;
+  save();
+  return 1;
+}
+
+int delete_emote(string pattern) {
+  map_delete(emote, pattern);
+  save();
+  return 1;
+}
+
+mapping query_emote(string pattern) {
+  if (!undefinedp(emote[pattern]))
+    return emote[pattern];
+  else
+    return ([]);
+}
+
+string *query_all_emote() {
+  return keys(emote);
+}

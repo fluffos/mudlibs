@@ -18,12 +18,12 @@ archived under a "武汉站" (Wuhan station) label by whoever collected it.
 
 `master.lpc`'s header comment says "for ES II mudlib, original from Lil,
 rewritten by Annihilator (11/07/94)" — same **ES II lineage** as
-es1_win/esI/xkx2001/rzrmud/xo/beimeixiakexing2001/xinkuangxiangkongjian2/
+es1_win/esI/xkx2001/rzrmud/xo/bmxkx2001/kxkj/
 yueyingqiyuan (archives #12/13/25/23/28/45/53/54), sharing the
 `adm/obj/{master,simul_efun}` + `adm/simul_efun/` + `adm/daemons/` +
 `cmds/{std,wiz,usr,adm,...}/` + `std/` + `obj/` + `d/<zone>/` layout shape.
 It is NOT byte-identical or even structurally close to any single prior ES
-II lib checked (confirmed via `diff` against `menghuanxiyou2002`'s/`mhxy`'s
+II lib checked (confirmed via `diff` against `mhxyqd`'s/`mhxy`'s
 master.c despite some files elsewhere in the tree carrying a "神话世界·
 西游记·版本4.50" header comment that superficially suggested that
 different, unrelated 西游记/xiyouji.org lineage — another confirmation that
@@ -45,7 +45,7 @@ scaffolding.
 `raw/.../bin/v22pre11/` is a full bundled **MudOS v22pre11 driver C source
 tree** (`src/interpret.c`, `array.c`, `backend.c`, etc. — real driver
 internals, not mudlib LPC) sitting alongside the mudlib content, the same
-"archive bundles a driver too" situation seen on `fluffos_xiyou2000` and
+"archive bundles a driver too" situation seen on `xyj2000f` and
 others. Renamed to `bin/v22pre11.orphaned-driver-src/` in `raw/` **before**
 running `convert_lib.sh`, per precedent, so it wouldn't be mistaken for
 real mudlib content. Note: this rename does NOT stop `convert_lib.sh`'s

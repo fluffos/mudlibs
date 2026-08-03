@@ -3,8 +3,8 @@
 与 151/fy2mg 同为 `jinyongqunxiazhuan`/XKX 框架家族成员（登录流程、
 `check_legal_name`、密码复杂度要求、民族选择等均字节级相同），但游戏
 内容和标题不同，与本合集里其它"风云"系 lib（fy2/fys/fysjmb/jhfy2/
-jhfy3/fyzfqyy/fengyun2qinghua/fengyun3dianzang/fengyun3xiuding/
-jianghufengyun/zzfy/zzfy3/fengyun434/fy2005）也无 master-hash 匹配。
+jhfy3/fyzfqyy/fy2qh/fy3dz/fy3xd/
+jhfy/zzfy/zzfy3/fengyun434/fy2005）也无 master-hash 匹配。
 
 ## 内容亮点
 

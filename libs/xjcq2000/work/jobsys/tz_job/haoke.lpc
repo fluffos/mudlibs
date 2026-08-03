@@ -1,0 +1,189 @@
+// made by sunyc 29/12/00
+#include <ansi.h>
+inherit NPC;
+inherit "/jobsys/xx_mz/job_npc_status.lpc";
+inherit "/jobsys/xx_mz/job_npc_skill.lpc";
+inherit "/jobsys/xx_mz/jobwhere.lpc";
+#include "story.lpc"
+void create() {
+  set_name("江湖豪客", ({ "haoke" }));
+  set("title", "落魄剑客");
+  set("long", @LONG
+一名衣衫破烂的剑客，浑身浴血，显然是经过了一场九死一生的搏斗。但是，他
+已经失血过多，变得非常衰弱了。
+LONG);
+  set("gender", "男性");
+  set("shen_type", -1);
+  set("age", 30);
+  set("attitude", "friendly");
+  set("no_quest", 1);
+  set("str", 20);
+  set("int", 20);
+  set("con", 20);
+  set("dex", 20);
+  set("chat_chance", 20);
+  set("chat_chance_combat", 20);
+  setup();
+
+}
+
+void init() {
+  object me = this_player();
+  add_action("do_help", ({ "help", "bangzhu" }));
+  add_action("do_rob", ({ "protect", "baohu", "bh" }));
+  add_action("do_didang", ({ "didang" }));
+  if (!query("saving") && query("saver") == this_player()->query("id")) {
+    set("saving", 1);
+    call_out("story", 10);
+  }
+  ::init();
+}
+int do_didang() {
+  object ob = this_object();
+  object me = this_player();
+  object killer;
+  if (ob->query("qi") < ob->query("max_qi")) {
+    message_vision("$n一个箭步冲在$N前面，替他挡下了一招！ \n", me, ob);
+    killer = present("killer", environment(me));
+    COMBAT_D->do_attack(killer, me, killer->query_temp("weapon"), 2);
+    message_vision("$N趁机大喘几口气，神色好了不少。\n", ob);
+    ob->add("qi", 200 + random(100));
+    if (ob->query("qi") > ob->query("max_qi")) ob->set("qi", ob->query("max_qi"));
+    return 1;
+  } else return notify_fail("他并没有什么危险，你瞎保护什么！\n");
+}
+int do_help() {
+  object me, ob, ob1;
+  string arg;
+  mapping myfam;
+  me = this_player();
+  ob = this_object();
+  if (objectp(present("killer", environment(me))))
+    return notify_fail("他看来伤势不重，你还是先打发了面前这个敌人再说吧！\n");
+  if (query("saver") == me->query("id")) {
+    message_vision(HIY "$N对着$n说道：“敌人已被杀退，还希望$n以后少参与些江湖仇杀，免遭杀身之祸。”\n" NOR, me, ob);
+    message_vision(CYN "$n见敌人已被杀死，对$N拱手道：“今日承蒙壮士搭救，大恩大德来日必报！”\n" NOR, me, ob);
+    message_vision("$N收起武器，转了几个弯就不见了。\n", ob);
+    message_vision(CYN "$N摇头叹息道：“这种江湖仇杀，何时是一个尽头啊！”\n" NOR, me);
+    tell_object(me, HIR "你的任务已经完成，应该回去复命了。\n" NOR);
+    tell_object(me, HIR "你得到了一封感谢信。\n" NOR);
+    ob1 = new("/jobsys/tz_job/obj/letter");
+    ob1->move(me);
+    destruct(ob);
+    return 1;
+  } else {
+    tell_object(me, HIY "这种江湖仇杀，你还是少插手为妙。\n");
+    return 1;
+  }
+  return 1;
+}
+int do_rob() {
+  object me, ob, killer;
+  string arg;
+  mapping myfam;
+  me = this_player();
+  ob = this_object();
+  myfam = me->query("family");
+  if (!myfam) return notify_fail(HIR "你还没有拜师！\n" NOR);
+  if (!present("killer", environment(me)))
+    return notify_fail("职业杀手已经死了啊。\n");
+  if (!living(ob))
+    return notify_fail("人都死了，还保护个什么劲啊！\n");
+  if (!query("saver") == me->query("id")) {
+    tell_object(me, HIY "这种江湖仇杀，你还是少插手为妙。\n");
+    return 1;
+  } else if (!me->query_temp("baohu")) {
+    message_vision(
+      HIY "$N对着$n说道：" + myfam["family_name"] + me->name() + "在此！容不得恶徒伤人！\n" NOR,
+      me,
+      ob
+    );
+    message_vision(CYN "职业杀手不屑的说：“嗬！来送死了！也罢，我就一并打发了你和他。受死吧！”\n" NOR, me, ob);
+    killer = present("killer", environment(me));
+    killer->kill_ob(me);
+    killer->kill_ob(ob);
+    me->set_temp("baohu", 1);
+    return 1;
+  } else return notify_fail("他并没有什么危险，你瞎保护什么！\n");
+}
+void unconcious() {
+  object ob;
+  ob = this_object();
+  ::unconcious();
+  message_vision(HIR "职业杀手冷漠的看了$N一眼，拔剑刺向$N的咽喉。\n" NOR, ob);
+  message_vision(HIR + query("name") + "动了动嘴，似乎想说些什么。\n" NOR, ob);
+  ob->die();
+}
+void die() {
+  object ob;
+  ob = this_object();
+  message_vision(CYN + query("name") + "愤声道：“怨怨相报永无宁日，我死后做历鬼也会报仇的！”\n" NOR, ob);
+  ::die();
+}
+void story() {
+  string *m1, *m2, *matter, *start, *end;
+  int i;
+  object job_npc, me, ob;
+  ob = this_object();
+  me = this_player();
+  if (!environment(me)->name(1) == environment(ob)->name(1)) call_out("story", 10);
+  m1 = bad_matter[random(4)];
+  m2 = bad_matter[random(4)];
+  start = ({});
+  end = ({});
+  matter = ({});
+  if (!m1 = m2) {
+    for (i = 0; i < sizeof(m1); i++)
+      matter += ({ CYN + m1[i] + "\n" + NOR });
+    for (i = 0; i < sizeof(m2); i++)
+      matter += ({ CYN + m2[i] + "\n" + NOR });
+  } else {
+    for (i = 0; i < sizeof(m1); i++)
+      matter += ({ CYN + m1[i] + "\n" + NOR });
+  }
+  job_npc = new(__DIR__ "killer");
+  set_npc_basedata(me, job_npc, 40, 60, 1);
+  set_npc_skill(me, job_npc, 50 + random(5));
+  job_npc->move(environment(ob));
+  job_npc->set("combat_exp", (int)me->query("combat_exp") / 4 * 3);
+  for (i = 0; i < sizeof(bad_story_msg_start); i++)
+    start += ({ bad_story_msg_start[i] + "\n" });
+  for (i = 0; i < sizeof(bad_story_msg_end); i++)
+    end += ({ bad_story_msg_end[i] + "\n" });
+  for (i = 0; i < sizeof(start + matter + end); i++)
+    call_out("show_story", i, start + matter + end, i);
+  call_out("do_kill", i, me, job_npc);
+}
+void show_story(string *str, int i) {
+  object me, ob;
+  string msg;
+  me = this_object();
+  ob = this_player();
+  msg = str[i];
+  msg = replace_string(msg, "$n", me->query("name"));
+  msg = replace_string(msg, "$N", "职业杀手");
+  message_vision(msg, me, ob);
+}
+void get_weapon() {
+  carry_object(BINGQI_D((string)query("my_weapon")))->wield();
+}
+void pfm_select(int i) {
+  switch (i) {
+    case 0:
+      set("chat_msg_combat", ({
+        (: perform_action, "strike.xiaohun" :),
+      }));
+      break;
+    case 1:
+      break;
+  }
+}
+void do_kill(object me, object ob) {
+  object ob1 = this_object();
+  me->set_temp("be_kill", 1);
+  ob1->set_temp("be_kill", 1);
+  ob->kill_ob(ob1);
+  ob->set("start_kill", 1);
+  message_vision("职业杀手冷笑一声，一个箭步冲上前，想要杀了$N！\n", ob1);
+  message_vision("看样子$N现在正需要你去保护(baohu)！\n", ob1);
+}

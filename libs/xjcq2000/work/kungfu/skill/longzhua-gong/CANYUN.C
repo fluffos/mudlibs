@@ -1,0 +1,53 @@
+// canyun 风卷残云
+
+#include <ansi.h>
+#include <combat.h> 
+inherit F_SSERVER;
+
+void remove_effect(object me, int improve);
+
+int perform(object me, object target)
+{
+        int lev, lev2;
+        lev = me->query_skill("longzhua-gong", 1)/4;
+ lev2 = me->query_skill("claw", 1)/4;
+
+        if( !target ) target = offensive_target(me);
+
+        if( !target || !me->is_fighting(target) )
+                return notify_fail("「风卷残云」只能在战斗中使用。\n");
+        if( me->query_temp("weapon"))
+                return notify_fail("你拿着武器怎么能使用「风卷残云」！\n");   
+        if( (int)me->query_skill("longzhua-gong", 1) < 120 )
+                return notify_fail("你的龙抓功还不够娴熟，使不出「风卷残云」绝技。\n");
+        if( (int)me->query_skill("yijin-jing", 1) < 120 )
+                return notify_fail("你的易筋经等级还不够，使不出「风卷残云」绝技。\n");
+        if ( me->query_skill_mapped("claw") != "longzhua-gong" )
+           return notify_fail("你现在无法使用「风卷残云」！\n");
+        if( target->query_temp("qianshou")   )
+                return notify_fail(target->name() + "已被你的千手如来所伤，放胆攻击吧。！\n");
+        if (me->query_temp("fumo"))
+                return notify_fail("你现在正在使用「金刚伏魔」神功。\n"); 
+        if( (int)me->query("max_neili") < (me->query_skill("force")+1000) )
+                return notify_fail("你现在内力太弱，使不出「风卷残云」。\n");      
+        if( (int)me->query("neili") < (me->query_skill("force")+1100) )
+                return notify_fail("你现在真气太弱，使不出「风卷残云」。\n");
+        message_vision(RED"\n$N突然大喝一声，纵身而上，双手犹如狂风骤雨，使出「风卷残云」，漫天爪影带着气浪有如怒海狂滔一般！\n"NOR,me);
+        me->add_temp("apply/claw", lev);
+        me->add_temp("apply/attack", lev2);       
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 2);
+        if(me->is_fighting(target)) 
+{
+if( random(me->query("combat_exp"))>target->query("combat_exp")/3)
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 3);
+else
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 1);
+}
+        me->add_temp("apply/claw", -lev);
+        me->add_temp("apply/attack", -lev2);
+        me->add("neili", -500);
+         me->start_busy(1 + random(2));
+        target->start_busy(1);
+        me->start_perform(5,"风卷残云");
+        return 1;
+}

@@ -1,0 +1,79 @@
+// Filename : /feature/char/action.c
+
+#include <dbase.h>
+
+nosave mixed busy, interrupt;
+nosave int time_unit_left;
+
+int time_left() {
+  return time_unit_left;
+}
+
+// Called by heart beat to reset the character's time unit.
+void reset_time_unit() {
+  time_unit_left = query("time_unit");
+}
+
+varargs void start_busy(mixed new_busy, mixed new_interrupt) {
+  if (!new_busy) return;
+  if (!intp(new_busy) && !functionp(new_busy))
+    error("action: Invalid busy action type.\n");
+  busy = new_busy;
+  if (!intp(new_interrupt) && !functionp(new_interrupt))
+    error("action: Invalid busy action interrupt handler type.\n");
+  interrupt = new_interrupt;
+  set_heart_beat(1);
+}
+
+nomask mixed query_busy() { return busy; }
+nomask int is_busy() { return busy != 0; }
+
+varargs int act(function action, function time_short_func) {
+  int time_unit_cost;
+
+  if (time_unit_left < 1)
+    return notify_fail("你的动作没那麽快 ...\n");
+
+  time_unit_cost = evaluate(action);
+  time_unit_left -= time_unit_cost;
+
+  if (time_unit_left < 0)
+    evaluate(time_short_func);
+
+  return time_unit_cost;
+}
+
+// This is called by heart_beat() instead of attack() when a ppl is busy
+// doing something else.
+nosave void continue_action() {
+  if (intp(busy) && (busy > 0)) {
+    busy--;
+  } else if (functionp(busy)) {
+    if (!evaluate(busy, this_object())) {
+      busy = 0;
+      interrupt = 0;
+    }
+  } else {
+    busy = 0;
+    interrupt = 0;
+  }
+}
+
+void interrupt_me(object who, string how) {
+  if (!busy) return;
+
+  if (how == "death") {
+    busy = 0;
+    interrupt = 0;
+    return;
+  }
+
+  if (intp(busy) && intp(interrupt)) {
+    if (busy < interrupt) busy = 0;
+  } else if (functionp(interrupt)) {
+    if (evaluate(interrupt, this_object(), who, how)) {
+      busy = 0;
+      interrupt = 0;
+    }
+  }
+}

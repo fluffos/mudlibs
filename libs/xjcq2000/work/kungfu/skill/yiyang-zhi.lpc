@@ -1,0 +1,116 @@
+#include <ansi.h>
+#include <skill.h>
+#include <power_control.h>
+inherit SKILL;
+string *xue_name = ({
+  "劳宫穴", "膻中穴", "曲池穴", "关元穴", "曲骨穴", "中极穴", "承浆穴", "天突穴", "百会穴",
+  "幽门穴", "章门穴", "大横穴", "紫宫穴", "冷渊穴", "天井穴", "极泉穴", "清灵穴", "至阳穴", });
+string *action_finger = ({
+  "$N右手食指微点，出招「晓天初阳」，一股雄浑的一阳指力射向$n，出手沉稳，招数正大",
+  "$N一指「日出霞光」，激出的一股罡气涌向$n，看似是温淳平和，但沛然浑厚，无可与抗",
+  "忽听嗤嗤轻响，一股柔和的气流自$N手指涌出，正是一招「阳春暖融」，缓缓点向$n$l",
+  "$N踏前一步，伸指凌空轻轻一点，$n只觉气息一紧，已被「赤日焦阳」的刚阳气劲触到$l",
+  "$N衣袖轻摆，罡阳柔气从袖底挥出，涌向$n的$l，正是玄功若神的一招「晓阳云暖」",
+  "$N面带微笑，伸出右食指，缓缓点向$n胸口，这招「暮云映日」劲气弥漫，却无丝毫破空之声",
+  "只见$N食指微屈，一指「九天乾阳」点出，气象森严，雍容肃穆，于威猛之中不脱王者风度！",
+  WHT "$N头顶白气氤氲，渐聚渐浓，便似蒸笼一般，食指伸出，一式「三阳开泰」按向$n！" NOR,
+});
+string *action_sword = ({
+  "$N嘴角轻笑，提$w平胸，看准时机一剑刺出，激起呼呼风声，迅猛无比地直插$n$l",
+  "$N左手捏个剑诀，右腕传动，将一阳指神功化于$w之上，出剑凝重，平平正正地刺向$n",
+  "只见$N屏息凝神，脚步沉着，剑走刀势，一式横劈，砍向$n$l，招式威猛正大",
+  "$N脚下步法微变，身随剑走，端凝自重，极飘逸的一剑向$n刺出，轻灵中却也不失王者气象",
+  "$N平推一剑，手中的$w看似渐渐沉重，使动时略比先前滞涩，但实是举轻若重，威猛之极",
+});
+
+int valid_enable(string usage) {
+  return usage == "finger" || usage == "parry" || usage == "sword";
+}
+int valid_combine(string combo) {
+  object me = this_player();
+  mapping myfam = (mapping)me->query("family");
+  if (myfam["master_name"] == "枯荣长老" && (int)me->query_con() + (int)me->query_int() > 89)
+    return combo == "kurong-changong";
+}
+int valid_learn(object me) {
+  if ((string)me->query("gender") != "男性")
+    return notify_fail("一阳指乃是纯阳玄功，你如何可以修习？\n");
+  if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+    return notify_fail("练一阳指必须空手。\n");
+  if ((int)me->query_skill("qingyan-zhang", 1) < 70)
+    return notify_fail("你的其它武功火候不够，无法学一阳指。\n");
+  if (!me->query_skill("kurong-changong", 1))
+    if ((int)me->query_skill("qiantian-yiyang", 1) < 100)
+      return notify_fail("你的内功火候不够，无法学一阳指。\n");
+  if ((int)me->query("max_neili") < 800)
+    return notify_fail("你的内力太弱，无法练一阳指。\n");
+  return 1;
+}
+
+mapping query_action(object me, object weapon) {
+  int i, level;
+  level = (int)me->query_skill("yiyang-zhi", 1);
+  if (!weapon)
+    return ([
+      "damage_type": random(2) ? "内伤" : "刺伤",
+      "weapon": random(2) ? RED "一阳指力" NOR : HIY "纯阳真气" NOR,
+      "action": action_finger[random(sizeof(action_finger))]
+    ]) + query_my_power(me, level, at_type_hand, attack_lvl_high, defense_lvl_normal);
+  else
+    return ([
+      "damage_type": random(2) ? "刺伤" : "割伤",
+      "action": action_sword[random(sizeof(action_sword))]
+    ]) + query_my_power(me, level, at_type_weapon, attack_lvl_high, defense_lvl_normal);
+}
+
+int practice_skill(object me) {
+  if (!me->query_skill("kurong-changong", 1))
+    if ((int)me->query_skill("qiantian-yiyang", 1) < 100)
+      return notify_fail("你的乾天一阳功火候不够，无法练一阳指。\n");
+  if ((int)me->query("jingli") < 50)
+    return notify_fail("你的体力太低了。\n");
+  if ((int)me->query("neili") < 30)
+    return notify_fail("你的内力不够练一阳指。\n");
+
+  me->receive_damage("jingli", 30);
+  me->add("neili", -20);
+  return 1;
+}
+
+string perform_action_file(string action) {
+  return __DIR__ "yiyang-zhi/" + action;
+}
+
+mixed hit_ob(object me, object victim, int damage_bonus) {
+  string name, weapon;
+  name = xue_name[random(sizeof(xue_name))];
+
+  if (me->query_skill("yiyang-zhi", 1) > 100
+    && me->query("neili") > 500
+    && me->query_skill_mapped("parry") == "yiyang-zhi"
+    && victim->query("neili") > 100) {
+    victim->add("neili", -random(20));
+  }
+  if (victim->is_busy()) return 0;
+  if (!objectp(weapon = me->query_temp("weapon"))) {
+    if ((!random(6)) && (me->query("neili") > 200) && me->query_skill("yiyang-zhi", 1) > 60) {
+      victim->start_busy(2);
+      me->add("neili", -30);
+      if (victim->query("neili") <= (damage_bonus / 2 + 30))
+        victim->set("neili", 0);
+      else
+        victim->add("neili", -(damage_bonus / 2 + 30));
+      return CYN "$n被$N凌空一指点中" RED + name + CYN "，真气不由得一滞！\n" NOR;
+    }
+  } else {
+    if ((!random(4)) && (me->query("neili") > 200) && me->query_skill("yiyang-zhi", 1) > 60) {
+      victim->start_busy(2);
+      me->add("neili", -30);
+      victim->add("neili", -30);
+      victim->receive_damage("qi", me->query_skill("yiyang-zhi", 1) / 5 + damage_bonus / 2);
+      victim->receive_wound("qi", me->query_skill("yiyang-zhi", 1) / 5 + damage_bonus / 2);
+      return CYN "$n被$N发出的剑气刺中" RED + name + CYN "，真气不由得一滞！\n" NOR;
+    }
+  }
+
+}

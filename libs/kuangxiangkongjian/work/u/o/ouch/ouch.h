@@ -1,5 +1,0 @@
-#define OUCH "/u/o/ouch/"
-#define OUCHR "/u/o/ouch/room/"
-#define OUCHO "/u/o/ouch/obj/"
-#define OUCHN "/u/o/ouch/npc/"
-#define OUCHW "/u/o/ouch/weapon/"

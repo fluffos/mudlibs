@@ -18,11 +18,11 @@ header credits the full lineage: `for ES II mudlib / original from Lil /
 rewritten by Annihilator (11/07/94) / modified by Xiang for XKX (12/15/95)
 / updated by Doing Lu for hell (2K)` — this is the same **"ES II" lineage**
 already seen across ~20 prior libs (es1_win/esI/xkx2001/rzrmud/xo/
-beimeixiakexing2001/xinkuangxiangkongjian2/yueyingqiyuan/wuhanzhan/haiyang2/
-yanhuangwuhun/yanhuangyingxiongshi/xuanjianlu/shenzhou/shenmo/
-kuangxiangkongjian/etc.), specifically closest in file layout
+bmxkx2001/kxkj/yueyingqiyuan/wuhanzhan/haiyang2/
+yanhuangwuhun/yhyxs/xuanjianlu/shenzhou/shenmo/
+kxkj1/etc.), specifically closest in file layout
 (`adm/single/{master,simul_efun}.c`, `adm/daemons/`, `adm/simul_efun/`) to
-`xkx2001`(#25)/`rzrmud`(#23)/`beimeixiakexing2001`(#45). `securityd.c`'s own
+`xkx2001`(#25)/`rzrmud`(#23)/`bmxkx2001`(#45). `securityd.c`'s own
 header credits "Annihilator@Eastern.Stories" then "Modified by Xiang for
 XKX" then "Updated by DOing Lu for ULTRA HELL" — same chain. MudOS
 `v22pre11`-era target.
@@ -37,7 +37,7 @@ files (`master.c`/`chinese.c`/`securityd.c`/`logind.c`) across all three
 once all are done** to determine whether they're the same game at
 different snapshots, forks of one lineage, or unrelated codebases that
 happen to share a title — per this project's repeated lesson (shujian2008
-vs shujianpiaoling2, xianlvqiyuan vs xlqy_new2007, etc.) that similar
+vs sjpl2, xianlvqiyuan vs xlqy_new2007, etc.) that similar
 Chinese titles are NOT a reliable lineage signal on their own.
 
 ## Extraction gotcha
@@ -250,7 +250,7 @@ filename in `work/`.
      files (`clone/quest/{explore,judge,search,shen,supply}.lpc`) pass a
      function-pointer closure (`(: ask_npc :)`), not a string — widened to
      `mixed info` (matches AGENTS.md's already-cataloged "quest
-     set_information signature" bug class, e.g. yanhuangyingxiongshi).
+     set_information signature" bug class, e.g. yhyxs).
 
 ## Confirmed NOT needed (checked, not present)
 
@@ -278,7 +278,7 @@ filename in `work/`.
 - **Uppercase `.C` files** (§ shenmo precedent): none found
   (`find work -name '*.C'` empty).
 - **§15ad**-style non-fatal `versiond.lpc` config-ID mismatch: PRESENT but
-  confirmed harmless by the same reasoning as yanhuangyingxiongshi —
+  confirmed harmless by the same reasoning as yhyxs —
   `setup()` sets `version_ok = 1` synchronously (this is a `local` release
   server) BEFORE the deferred `call_out("in_server", 2)` that does the
   broken `socket_bind()` (using `get_config(__MUD_PORT__)`, which this
@@ -472,7 +472,7 @@ Standard pass per AGENTS.md §1.3b/§1.3c/§1.3e/§1.5:
   the skeleton archive's missing zones, present before this pass,
   unrelated to the VERSION_D guards.)
 - **Second pre-existing bug found & fixed (backported from sibling
-  zhongjidiyu_airuoyoulan, same symptom confirmed here): first login
+  zjdyaryl, same symptom confirmed here): first login
   after every boot had ALL commands dead** (even `quit` → 什么？),
   working from the second login on. `logind.lpc check_ok()` lazily loads
   `MESSAGE_D` (`adm/daemons/network/messaged.lpc`) whose `create()` →

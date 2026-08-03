@@ -1,8 +1,8 @@
 # 风云Ⅳ — fengyun434
 
 **风云四**（风云Ⅳ，Sumxin 风云工作室出品）。属于本批次的**"风云"
-（Fengyun）武侠引擎家族**，与 `fy2`、`fy2005`、`fengyun2qinghua`、
-`fengyun3xiuding`、`fengyun3dianzang` 等同属一个核心引擎，各自是不同
+（Fengyun）武侠引擎家族**，与 `fy2`、`fy2005`、`fy2qh`、
+`fy3xd`、`fy3dz` 等同属一个核心引擎，各自是不同
 站点/年代的内容分支。
 
 ## 内容亮点

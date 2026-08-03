@@ -11,7 +11,7 @@ Booted with zero fixes needed (same clean lineage as fengyun434/fy2).
 **This build enforces a 5-minute wait before login is allowed**
 ("风云系统正在初始化，请在五分钟后再登陆。" — "Fengyun system is
 initializing, please log in again in 5 minutes.") — an intentional
-startup-grace mechanic (same shape as `unknownlib20150716`'s 30-second
+startup-grace mechanic (same shape as `xyxy2`'s 30-second
 wait, just longer here), not a bug. Not waited out to confirm the actual
 post-wait login flow given the time cost, but the boot itself is clean
 (no compile errors, no crashes) and the pre-wait prompt flow (name
@@ -66,7 +66,7 @@ registration test (Chinese surname + given name reaching the next prompt).
 - **Proactive fixes applied before the first boot attempt of this pass**
   (found via this same lib's `adm/daemons/securityd.lpc`, before even
   connecting): the same `resolve()`-before-`wiz_status` WASM-crashing
-  ordering bug as `fengyun3dianzang`/`fengyun3xiuding`/`fengyun434` (same
+  ordering bug as `fy3dz`/`fy3xd`/`fengyun434` (same
   风云 engine family) -- reordered + wrapped in `catch()`. **Also found a
   second, more serious latent bug in the same `create()`**: an
   AGENTS.md-§15u-style "phone-home license expiration" self-destruct --
@@ -75,7 +75,7 @@ registration test (Chinese surname + given name reaching the next prompt).
   `C_YEAR`/`C_MON`/`C_MDAY` (hardcoded to year **2109** here, so not
   reachable on any realistic host clock today -- but disabled/commented
   out as insurance per standing policy rather than left armed, same
-  treatment as `moniHuafu`'s/`fengyun3dianzang`'s equivalent).
+  treatment as `moniHuafu`'s/`fy3dz`'s equivalent).
 - **Native re-test against rebuilt driver**: clean boot, zero fixes
   needed beyond the two proactive ones above. The documented 5-minute
   startup grace period (`uptime() < 300`) still behaves exactly as
@@ -170,3 +170,7 @@ players are unaffected. Test char saves removed; no new debug.log errors.
 **Save files to force-add** (untracked, NOT gitignored):
 `libs/fy2005/work/data/user/f/fluffos/fluffos.o`,
 `libs/fy2005/work/data/login/f/fluffos/fluffos.o`.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+风云Ⅳ 2005 构建版。

@@ -14,7 +14,7 @@ discrepancy worth noting beyond the ASCII-ization to `nitan_san`). The live
 banner branding is actually **《終極魔界》** ("Ultimate Demon Realm") — a
 re-skin/theme layered on top of the underlying "nitan" engine, the same
 "self-ID differs from live banner" relationship documented for several
-other libs in this project (`weimingkongjian` #55, `nitan_ceshi` #60).
+other libs in this project (`wmkj` #55, `nitan_ceshi` #60).
 `u/lonely/welcome` (the actual banner used, distinct from a generic
 `adm/etc/welcome` template also present but unused) explicitly renders
 "泥潭" ASCII art with "一入泥潭深似海" and "驱动版本: MudOS v22.2b14
@@ -397,7 +397,7 @@ already drove this same 23GB host to ~214MB free with heavy swapping;
 killed/skipped for the same reason). Compounding factor this session
 specifically: multiple other agents' driver/`lpcc` processes were
 confirmed running concurrently against this host for most of this pass
-(`wuhanzhan` #58, `nitan_ceshi` #60, `jianghufengyun`, `moniHuafu` at
+(`wuhanzhan` #58, `nitan_ceshi` #60, `jhfy`, `moniHuafu` at
 various points) — `free -h` showed free memory drop as low as ~830MB at
 one point mid-session. Per this archive's own task instructions and
 AGENTS.md §6b, skipped the full sweep entirely and relied on the boot +

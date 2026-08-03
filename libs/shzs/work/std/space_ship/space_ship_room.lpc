@@ -1,0 +1,84 @@
+// space_ship_room.c
+
+#pragma save_binary
+
+#include <dbase.h>
+#include <move.h>
+
+inherit F_DBASE;
+inherit F_DOOR;
+inherit F_S_MOVE;
+inherit F_S_CLEAN_UP;
+
+nosave mapping doors;
+
+int is_space_ship_room() { return 1; }
+
+object make_inventory(string file) {
+  object ob;
+
+  ob = new(file);
+  ob->move(this_object());
+  return ob;
+}
+
+void reset() {
+  mapping ob_list, ob;
+  string *list;
+  int i, j;
+  mixed local;
+
+  //
+  // Check loaded objects to match the objects specified in "objects"
+  // while query("objects") is 
+  // ([ <object filename>: <amount>, ..... ])
+  // and query_temp("objects") is
+  // ([ <object filename>: ({ob1, ob2, ...}), .... ])
+  //
+  set("no_clean_up", 1);
+  set("mov_cost", 5);
+  ob_list = query("objects");
+  if (!mapp(ob_list)) return;
+
+  if (!mapp(ob = query_temp("objects")))
+    ob = allocate_mapping(sizeof(ob_list));
+  list = keys(ob_list);
+  for (i = 0; i < sizeof(list); i++) {
+    // Allocate an array if we have multiple same object specified.
+    if (undefinedp(ob[list[i]])
+      && intp(ob_list[list[i]])
+      && ob_list[list[i]] > 1)
+      ob[list[i]] = allocate(ob_list[list[i]]);
+
+    switch (ob_list[list[i]]) {
+      case 1:
+        if (!ob[list[i]]) ob[list[i]] = make_inventory(list[i]);
+        if (environment(ob[list[i]]) != this_object()
+          && ob[list[i]]->is_character()) {
+          if (!ob[list[i]]->return_home(this_object()))
+            add("no_clean_up", 1);
+        }
+        break;
+      default:
+        for (j = 0; j < ob_list[list[i]]; j++) {
+          // If the object is gone, make another one.
+          if (!objectp(ob[list[i]][j])) {
+            ob[list[i]][j] = make_inventory(list[i]);
+            continue;
+          }
+          // Try to call the wandering npc come back here.
+          if (environment(ob[list[i]][j]) != this_object()
+            && ob[list[i]][j]->is_character()) {
+            if (!ob[list[i]][j]->return_home(this_object()))
+              add("no_clean_up", 1);
+          }
+        }
+    }
+  }
+  set_temp("objects", ob);
+}
+
+void setup() {
+  seteuid(getuid());
+  this_object()->reset();
+}

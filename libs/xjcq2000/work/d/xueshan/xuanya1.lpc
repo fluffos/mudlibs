@@ -1,0 +1,161 @@
+// /u/dubei/xueshan/xuanya.c 悬崖
+// by dubei
+#include <ansi.h>
+#include <room.h>
+
+inherit ROOM;
+int do_sweep(string arg);
+int do_wo(string arg);
+int do_tiaoxi();
+void delete_done(object me);
+void create() {
+  set("short", HIW "悬崖" NOR);
+  set("long", @LONG 
+你费了九牛二虎之力，终于来到了这座山峰。仔细一看，这里是一处悬崖
+的边缘，向下往去，都是一片茫茫的白雪，也不知道有多厚。令你惊奇的是你
+在悬崖边上发现了几个脚印，似乎是通往悬崖下的，很象是有人跳下去过。几
+十米高的悬崖，即使轻功很高，一不小心，也难免摔的粉身碎骨。悬崖边什么
+都没有，只有一块块积满了厚厚白雪的岩石(stone)。
+LONG);
+  set("exits", ([
+    "down": __DIR__ "xuanya"
+  ]));
+  set("item_desc", ([
+    "stone":
+    "似乎是一块积满了雪的青石，长短正好是一个人横躺上去。\n",
+  ]));
+  setup();
+}
+void init() {
+  add_action("do_sweep", "sweep");
+  add_action("do_skee", "skee");
+  add_action("do_jump", "jump");
+  add_action("do_wo", "wo");
+  add_action("do_tiaoxi", "tiaoxi");
+}
+
+int do_jump(string arg) {
+  object me;
+
+  me = this_player();
+  if (!arg || arg != "down")
+    return notify_fail("你要往哪跳？\n");
+  if (arg == "down") {
+    write("你要从这麽高的地方跳下去，恐怕要摔死！还是另想办法吧！\n", me);
+    return 1;
+  }
+  return 1;
+}
+int do_sweep(string arg) {
+  if (!arg || (arg != "snow"))
+    return notify_fail("你要扫什麽？\n");
+
+  if (this_player()->is_busy())
+    return notify_fail("你正忙着呢。\n");
+
+  if (this_player()->query_temp("mz/sweep"))
+    return notify_fail("你已经把浮雪都扫干净了。\n");
+
+  this_player()->set_temp("mz/sweep", 20);
+  return notify_fail("你用衣袖轻轻拂开积雪，觉得这块晶莹剔透，异常光滑，原来是块千年玄冰。\n");
+}
+
+int do_wo(string arg) {
+  if (!arg || (arg != "ice"))
+    return notify_fail("你要卧在什么上面？\n");
+
+  if (this_player()->is_busy())
+    return notify_fail("你正忙着呢。\n");
+
+  if (this_player()->query_temp("mz/wo"))
+    return notify_fail("你已经躺在青石上了。\n");
+
+  if (!this_player()->query_temp("mz/sweep"))
+    return notify_fail("你要先把雪扫掉，才能躺。\n");
+
+  this_player()->set_temp("mz/wo", 1);
+  return notify_fail("你侧身躺于青石上，意守丹田，口眼轻闭，双腿自然微曲，全身放松。\n");
+}
+
+int do_tiaoxi() {
+  object me = this_player();
+
+  if (!me->query_temp("mz/sweep"))
+    return notify_fail("你要在那里调息？\n");
+
+  if (!me->query_temp("mz/wo"))
+    return notify_fail("你深深吸了几口气，只觉得寒气冲进五脏六腑，身体仿佛置身于一个冰窖里。\n");
+
+  if (me->is_busy())
+    return notify_fail("你正忙着呢。\n");
+
+  if (me->query_temp("mz/done"))
+    return notify_fail("寒风凛冽，你刚运过功，身子正十分虚弱，先好好休息一下吧。\n");
+
+  if ((int)me->query("neili") < 50 || (int)me->query("jing") < 50 || (int)me->query("jingli") < 50)
+    return notify_fail("你忽然真气一窒，感觉非常疲劳。\n");
+
+  if (me->query_skill("force") < 270)
+    return notify_fail("你内功基底太弱，无法在这极寒之地调息运功。\n");
+
+  if ((int)me->query("potential") < 5)
+    return notify_fail("你的潜能已经发挥到了极限，无法再在这里提高自己修为了。\n");
+
+  message_vision("$N集聚体内真气，深深吸进几口气，缓缓呼出，只觉得全身透彻清凉，心定似水，仿佛已物我浑然一体。\n", me);
+
+  me->receive_damage("jing", 30);
+  me->add("neili", -30);
+  me->receive_damage("jingli", 30);
+  me->improve_skill("force", (int)(me->query("int")) + (int)(me->query_skill("force", 1)) / 5);
+  me->add("potential", -(3 + random(3)));
+  me->set_temp("mz/done", 1);
+  me->start_busy(2);
+  call_out("delete_done", 6, me);
+
+  return 1;
+}
+
+int do_skee(string arg) {
+  object me, cor;
+  object *ob;
+  int i;
+  me = this_player();
+  if (!arg || arg != "down")
+    return notify_fail("你要向那里滑？\n");
+
+
+  message_vision("$N深深吸了一口气，身体向后一仰滑了下去。\n", me);
+  if ((int)me->query_skill(
+    "dodge",
+    1
+  ) < 120 || (int)me->query("neili") < 100 || (int)me->query("jingli") < 100) {
+    message_vision(RED "$N觉得难以掌握住平衡，身体摇摇欲坠，急速向下跌了下去。\n" NOR, me);
+    me->set_temp("last_damage_from", "摔下冰山跌");
+    me->die();
+    if (cor = present("corpse", this_object())) {
+      ob = deep_inventory(cor);
+      i = sizeof(ob);
+      while (i--) if (userp(ob[i])) ob[i]->move(this_object());
+      destruct(cor);
+      destruct("corpse");
+      if (me) tell_room(this_object(), me->name() + "的尸骨被积雪埋了。\n");
+    }
+    return 1;
+  }
+  me->move(__DIR__ "yadi");
+  tell_room(environment(me), me->name() + "从上面滑了下来。\n", ({ me }));
+  me->set_temp("mz/hua");
+  return 1;
+}
+
+void delete_done(object me) {
+  if (objectp(me))
+    me->delete_temp("mz/done");
+  me->add_temp("mz/sweep", -1);
+}
+
+int valid_leave(object me, string dir) {
+  me->delete_temp("mz/sweep");
+  me->delete_temp("mz/wo");
+  return ::valid_leave(me, dir);
+}

@@ -192,3 +192,7 @@ to `t` afterward regardless of whether the cap was hit. Compile-checked
 clean via `lpcc --batch`; not re-verified live in this lib specifically
 (verified live on `bxsj`, the source of the pattern) — flagging per
 §10.7 point 6 rather than silently claiming a live retest.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+同一套"书剑"代码库（书剑·经典）。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：一次完整的 WASM 注册流程（英文 id 仅限小写字母、3-8 位 → 确认 → 管理密码/登录密码分别设置+确认，密码需含数字和大写字母 → 中文名字 → 天赋摇点，0 为随机 → 接受 → 电子邮件，需 id@address 格式 → 性别）全程无错误地进入起始区域，预先播种的管理员账号（fluffos/Mud@2026）也能正常登录（"您目前的权限是：(admin)"）。和 bxsj（004）是同一套底层引擎——共享的那个真实历史 bug（top.lpc 排名衰减循环）和深度测试覆盖情况见 bxsj 自己的说明。

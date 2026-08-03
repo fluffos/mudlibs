@@ -16,8 +16,8 @@ regional-site fork of a shared codebase, config field not updated to match).
 
 **Lineage**: genuine **ES II** family (`master.c` header credits "original
 from Lil, rewritten by Annihilator (11/07/94)"), the same large family as
-es1_win/esI/xkx2001/rzrmud/beimeixiakexing2001/xinkuangxiangkongjian2/
-yueyingqiyuan/wuhanzhan/haiyang2/yanhuangwuhun/yanhuangyingxiongshi/
+es1_win/esI/xkx2001/rzrmud/bmxkx2001/kxkj/
+yueyingqiyuan/wuhanzhan/haiyang2/yanhuangwuhun/yhyxs/
 xuanjianlu/shenzhou/shenmo/zitengzhan/zhongjidiyu/xiyouji2003. Confirmed via
 `master.c` MD5 (after GBK→UTF-8 normalization) that this is **not** a
 byte-identical duplicate of any of those — it's its own distinct fork within

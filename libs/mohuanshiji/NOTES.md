@@ -36,7 +36,7 @@ build, not a rebrand of one already in the project.
 Notably **not** present in this lib despite the ES II ancestry: the
 nitan-family `dbase`-via-simul_efun architecture bug (§15) — this lib's
 `feature/dbase.lpc`-equivalent already implements `set`/`query`/`delete`
-directly, same as `tiexuejianghu`/`suiyuanxijianlu`/etc.
+directly, same as `tiexuejianghu`/`syxjl`/etc.
 
 ## Fixes applied (with why)
 

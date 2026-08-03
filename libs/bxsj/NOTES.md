@@ -550,3 +550,7 @@ wizard-flavored digression through the game's own "newbie gift" NPC
      require genuine travel/setup investment (money, a dangerous
      opponent) — budget time for them explicitly, or explicitly flag
      them as unverified rather than silently skipping past them.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+书剑 MUD 家族的基础版本。状态已从过时的 limited 修正——这份档案自己的 NOTES.md 记录了一次完整的原生驱动深度功能测试（2026-07-24），以普通新玩家身份走完了注册、移动、人物信息、战斗（木人安全对练机制）、门派/技能系统，并在过程中发现并修复了一个真实 bug（cmds/usr/top.lpc 的 add_rank() 系列函数：一个不设上限的按小时衰减排名循环，一旦这份 2008 年代的存档数据配上现代系统时钟运行，每一次 quit/top 指令都会撑爆求值成本上限——已限制在 240 次迭代以内）。只有商店/经济系统和死亡/复活没有被实测覆盖到（是测试覆盖缺口，不是已知损坏）。这份档案自己的 README 没有记录任何缺陷，本轮也没有发现新的。本轮在当前 WASM 驱动构建下重新验证了预先播种的管理员账号登录（fluffos/Mud@2026，look/score/quit 全部正常，"您目前的权限是：(admin)"）——由于 NOTES.md 里 2026-07-24 的深度测试已经完整覆盖过注册流程，本轮没有重跑注册；同一代码家族的手足档案 bxsj1 本轮则重新完整验证过一次注册流程，结果一致。

@@ -1,0 +1,115 @@
+// lianhua.c 【佛怒唐莲】
+// shang 97/6
+
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+
+inherit F_SSERVER;
+
+int perform(object me, object target) {
+  object *ob, weapon;
+  int i, skill, damage1, damage;
+
+  if (!target) target = offensive_target(me);
+  if (!target || !target->is_character() || !me->is_fighting(target))
+    return notify_fail("你不在战斗中，如何能先放暗器伤人呢！\n");
+  if (environment(me)->query("no_fight"))
+    return notify_fail("这里不允许放暗器。\n");
+  if (!objectp(weapon = me->query_temp("weapon")) || (string)weapon->query("skill_type") != "throwing")
+    return notify_fail("你使用的武器不对。\n");
+  //	if (target && target->query_temp("apply/shade_vision")) 
+  //		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 		
+  if (me->is_busy())
+    return notify_fail("你现在正忙着呢，哪有空运功？\n");
+  if ((int)me->query("max_neili") < 200000)
+    return notify_fail("你内力不雄厚不能使用【佛怒唐莲】攻击。\n");
+  if ((int)me->query("neili") < 1000)
+    return notify_fail("你现在没有足够的内力使用【佛怒唐莲】。\n");
+  if ((int)me->query("max_jingli") < 200000)
+    return notify_fail("你现在没有足够的精力使用【佛怒唐莲】。\n");
+  if ((int)me->query("jingli") < 1000)
+    return notify_fail("你现在没有足够的精力使用【佛怒唐莲】。\n");
+  if ((int)me->query_skill("pili-biao", 1) < 500)
+    return notify_fail("你的霹雳镖火侯还没到，【佛怒唐莲】使不出来。\n");
+  if (me->query_skill("biyun-xinfa", 1) < 500)
+    return notify_fail("你的本门内功火候未到！\n");
+  if (!wizardp(me) && me->query_skill_mapped("force") != "biyun-xinfa")
+    return notify_fail("不使用本门内功，如何使用本门绝学!\n");
+  if (me->query_skill_mapped("throwing") != "pili-biao")
+    return notify_fail("你没正确激发该技能 。\n");
+  if (weapon->query("weapon_prop/damage") < 10)
+    return notify_fail("你使用的暗器太差劲了！\n");
+  if (me->query_temp("autolian"))
+    return notify_fail("你正在发动自动连招！\n");
+  if (me->query_temp("cooldown"))  //CD写法	2017.9.7添加
+    return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+
+  skill = me->query_skill("pili-biao", 1);
+  me->add("neili", -500);
+  me->add("jingli", -500);
+
+  message_vision(HIY "$N运转毕生功力使出了霸绝天下的暗器---【佛怒唐莲】。\n" NOR, me);
+  message_vision(HIG "只见一朵莲花盛开，初时莲心一点红光，如宝石般灿烂！紧接着，莲花急速旋转起来，无数花瓣伴随着红光飞射而出。\n" NOR, me);
+  me->set_temp("cooldown", 1);  //CD写法	2017.9.7添加
+  call_out("del_cooldown", 3, me);  //CD写法1
+
+  ob = all_inventory(environment(me));
+  if (me->query("jm/tangmen"))
+    damage1 = me->query_skill(
+      "pili-biao",
+      1
+    ) * me->query(
+      "dex",
+      1
+    ) / 3 + me->query_skill(
+      "biyun-xinfa",
+      1
+    ) * me->query(
+      "int",
+      1
+    ) / 3 + me->query_skill("throwing", 1) + weapon->query("weapon_prop/damage") * 3;
+  else damage1 = me->query_skill(
+    "pili-biao",
+    1
+  ) / 5 + me->query_skill(
+    "biyun-xinfa",
+    1
+  ) * me->query(
+    "int",
+    1
+  ) / 5 + me->query_skill("throwing", 1) + weapon->query("weapon_prop/damage");
+  for (i = 0; i < sizeof(ob); i++) {
+    if (!living(ob[i]) || ob[i] == me) continue;
+    if (!ob[i]->is_fighting(me)) continue;
+    if (ob[i] == me) continue;
+    if (!ob[i]->is_character() || ob[i]->is_corpse()) continue;
+    damage = damage1 + random(damage1) + 500;
+
+    ob[i]->receive_damage("qi", damage, me);
+    ob[i]->receive_damage("jing", damage, me);
+    ob[i]->receive_wound("qi", damage / 2, me);
+    ob[i]->receive_wound("jing", damage / 2, me);
+    tell_object(ob[i], "你只觉得无数莲花花瓣飞射过来，身体已是千疮百孔！\n");
+    if (userp(me) && me->query("env/no_combat_msg") < 4) tell_object(
+      me,
+      HIW "该绝招对" + i + "个敌人气血的外伤为" + damage + "，内伤为" + damage / 2 + "，精神的外伤为" + damage + "，内伤为" + damage / 2 + "。\n" NOR
+    );
+    if (!me->is_killing(ob[i])) me->fight_ob(ob[i]);
+    if (!ob[i]->is_killing(me)) ob[i]->fight_ob(me);
+
+  }
+  me->start_busy(1);
+  return 1;
+}
+
+void del_cooldown(object me)  //CD写法1
+{
+  if (!objectp(me)) return;
+  if (me->query_temp("cooldown")) {
+    me->delete_temp("cooldown");
+    tell_object(me, HIM "你呼出一口气，缓缓的将内力收回丹田。\n" NOR);
+  }
+}

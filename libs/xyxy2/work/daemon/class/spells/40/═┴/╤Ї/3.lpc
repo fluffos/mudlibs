@@ -1,0 +1,91 @@
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER;
+
+int cast(object me, object target) {
+  object weapon;
+  int damage;
+  string msg, succ_msg, str;
+  if (me->query_level() < 40)
+    return notify_fail("你的人物等级不够。\n");
+  if (me->query("mana") < 200)
+    return notify_fail("你的法力不够。\n");
+  if (me->query_skill("spells") < 600)
+    return notify_fail("你的法术修为过低。\n");
+  if (time() < me->query_temp("XST_dimaoci") + 7)
+    return notify_fail("你不能频繁调用天气元气。\n");
+
+  if (!target) target = offensive_target(me);
+  if (!target
+    || !target->is_character()
+    || target == me
+    || !me->is_fighting(target)) {
+    if (me->query_level() >= 90 && me->query("shentong/90"))
+      return notify_fail("「荆棘茅刺」只能对战斗中的对手使用。\n");
+    else return notify_fail("「地茅刺」只能对战斗中的对手使用。\n");
+  }
+  if (target->query("family/family_name") == "陷空山无底洞"
+    || target->query("family/family_name") == "盘丝洞"
+    || target->query("family/family_name") == "阎罗地府")
+    return notify_fail("这招对他没用。\n");
+  me->add("mana", -200);
+  me->set_temp("XST_dimaoci", time());
+  me->add_temp("apply/attack", 10);
+
+  if (objectp(weapon = me->query_temp("weapon")))
+    str = weapon->name(1);
+  else str = "双手";
+  str = COLOR_D->clean_color(str);
+
+  msg = HBYEL "$N" HBYEL "面色黄气一闪，" HBYEL + str + "上顿时冲出一道黄光，在半空一闪即逝。“轰隆”一声巨响，$n" HBYEL "脚下忽地冒出数丈长的石茅，径直刺向$l！" NOR "\n";
+  succ_msg = ({
+    HBYEL "结果「噗」地一声刺进$n" HBYEL "的$l，使$p不由自主地退了步！" NOR "\n",
+    HBYEL "结果「噗嗤」地一声，石茅已在$p$l刺出一个血肉模糊的血窟窿！" NOR "\n",
+    HBYEL "结果只听见$n" HBYEL "一声惨嚎，石茅已在$p的$l对穿而出，鲜血溅得满地！" NOR "\n",
+  })[random(3)];
+  me->set_temp("pfm_msg", 1);
+  damage = COMBAT_D->do_attack(
+    me,
+    target,
+    me->query_temp("weapon"),
+    TYPE_CAST,
+    msg,
+    0,
+    0,
+    500,
+    "kee"
+  );
+  if (damage < 1)
+    message_vision(HIC "$N" HIC "身随心动，连忙纵身闪开。\n" NOR, target);
+  else {
+    if (!target->is_no_move())
+      target->start_no_move(6, HBYEL "你被" + me->name() + HBYEL "的驱石术震得双腿发麻，难以行动。" NOR "\n");
+    if (!target->is_busy()) {
+      if (me && me->query_level() >= 90 && me->query("shentong/90"))
+        target->start_busy(5);
+      else target->start_busy(3);
+    }
+  }
+  me->set_temp("pfm_msg", 0);
+  me->add_temp("apply/attack", -10);
+  return 1;
+}
+
+int help(object me) {
+  if (me && me->query_level() >= 90 && me->query("shentong/90"))
+    write(@HELP
+	神通名称：荆棘茅刺
+	神通效果：对敌进行法术型气血攻击
+	          并使其6秒内不能移动，busy5秒
+                  冷却时间7秒  	
+                  对无底洞、盘丝洞、地府弟子无效 
+HELP);
+  else write(@HELP
+	神通名称：地茅刺
+	神通效果：对敌进行法术型气血攻击
+	          并使其6秒内不能移动，busy3秒
+                  冷却时间7秒  	
+                  对无底洞、盘丝洞、地府弟子无效 
+HELP);
+  return 1;
+}

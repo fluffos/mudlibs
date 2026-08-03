@@ -1,0 +1,809 @@
+inherit NPC;
+#include <ansi.h>
+#include <combat.h>
+//#include "yaoguai_reward.lpc"
+
+nosave string *Txs = ({
+  HIM "驭法" NOR, HIY "厚土" NOR, HIG "轻灵" NOR, HIR "彪悍" NOR, HIM "通灵" NOR, RED "吸血" NOR, HIB "偷心" NOR, HIC "培元" NOR,
+});
+nosave string *msg1 = ({
+  "霹雳一声，",
+  "一声巨响，",
+});
+
+nosave string *msg2 = ({
+  "闪电划破长空，",
+  "一道银蛇划破苍穹，",
+  "一道长虹扫过天空，",
+});
+
+nosave string *msg3 = ({
+  "从天而降，飞入",
+  "大放异彩，落入了",
+  "挟云带雾，突现在",
+  "呜呜作响，出现在",
+});
+
+nosave string *msg4 = ({
+  "的手中！\n",
+  "的掌中！\n",
+});
+
+string _invocation(object who, int level);
+varargs string *guai_type(int no_color);
+void init_texing();
+mapping query_Weapons();
+
+int exp_reward, pot_reward;
+int announced = 0;
+nosave int ready = 0;
+
+string *death_msg = ({
+  HIB "\n$N" HIB "喝道：孽畜，与我回天上领罪去吧！$n" HIB "眼见无奈，只好化成股青烟附到了$N" HIB "的手中。" NOR "\n\n",
+  HIB "\n$n" HIB "一看不是$N的对手，只得就地一滚，变回原形，打了几个转，老老实实地走开了。" NOR "\n\n",
+  HIB "\n$n" HIB "大叫一声“我服了，我服了，我投降。。”乖乖地伏在$N" HIB "脚下不动了。$N手" HIB "一挥，$n" HIB "如蒙大赦，驯服地走开了。" NOR "\n\n",
+  HIB "\n$N" HIB "喝道：孽畜，与我回天上领罪去吧！$n" HIB "无可奈何，化做一道青光，直冲云霄去了．．．" NOR "\n\n",
+});
+
+string *dirs1 = ({
+  "/d/city", "/d/westway", "/d/kaifeng", "/d/lingtai", "/d/moon",
+  "/d/gao", "/d/sea", "/d/nanhai", "/d/eastway", "/d/ourhome/honglou",
+  "/d/qujing/wuzhuang", "/d/shushan", "/d/sea", "/d/jjf",
+  "/d/xueshan", "/d/qujing/wuzhuang", "/d/qujing/baotou", "/d/qujing/baoxiang",
+  "/d/qujing/bibotan", "/d/qujing/biqiu", "/d/qujing/chechi", "/d/qujing/dudi",
+  "/d/qujing/fengxian", "/d/qujing/firemount", "/d/qujing/jilei", "/d/qujing/jindou",
+  "/d/qujing/jingjiling", "/d/qujing/jinping", "/d/qujing/jisaiguo",
+  "/d/qujing/maoying", "/d/qujing/nuerguo", "/d/qujing/pingding", "/d/qujing/pansi",
+  "/d/qujing/tongtian", "/d/qujing/qilin", "/d/qujing/qinfa", "/d/qujing/qinglong",
+  "/d/qujing/tianzhu", "/d/qujing/wudidong", "/d/qujing/wuji", "/d/qujing/xiaoxitian",
+  "/d/qujing/yinwu", "/d/qujing/yuhua", "/d/qujing/zhujie", "/d/qujing/zhuzi",
+  "/d/penglai",
+  "/d/death", "/d/meishan", "/d/qujing/lingshan",
+  "/d/pansi", "/d/luoyang",
+
+});
+
+string job_type() { return "李靖任务"; }
+
+int random_place(object me, string *dirs);
+varargs void leave(int);
+
+void setname() {
+  mapping name = NAME_D->random_name("yaoguai");
+  set_name(name["name"], name["id"]);
+  set("gender", random(2) ? "男性" : "女性");
+}
+
+void create() {
+  setname();
+  set_level(80);
+  set("chat_chance", 1 + this_object()->query_level() / 5);
+  set("chat_msg", ({
+    (: random_move :)
+  }));
+  set("chat_chance_combat", 2 + this_object()->query_level() / 3);
+  set("age", 20 + random(80));
+  set("attitude", "heroism");
+  setup();
+}
+
+varargs string *guai_type(int no_color) {
+  mixed foo;
+  int i;
+  string str, *strs;
+  foo = query("my_type");
+  if (!foo)
+    return 0;
+  if (stringp(foo)) {
+    if (no_color)
+      return ({ COLOR_D->clean_color(foo) });
+    else return ({ foo });
+  } else if (arrayp(foo)) {
+    strs = ({});
+
+    if (member_array("驭法", foo) != -1
+      && member_array("厚土", foo) != -1) {
+      str = ({ HIM "驭法" NOR, HIY "厚土" NOR })[random(2)];
+      foo -= ({ str });
+      set("my_type", foo);
+    }
+    for (i = 0; i < sizeof(foo); i++) {
+      str = COLOR_D->clean_color(foo[i]);
+      if (member_array(str, strs) != -1)
+        continue;
+      if (no_color)
+        strs += ({ COLOR_D->clean_color(foo[i]) });
+      else strs += ({ foo[i] });
+    }
+    return strs;
+  } else return 0;
+}
+
+int random_move() {
+  if (this_object()->is_fighting()
+    || time() < this_object()->query_temp("last_move") + 3)
+    return 0;
+  set_temp("last_move", time());
+  return ::random_move();
+}
+
+void set_skills(int j) {}
+
+//me=NPC ob=owner lv=job_level
+int copy_status(object me, object ob, int lv) {
+  int i, lvl, k, level, v, max_skill;
+  int base = 20;
+  string file, *files, *tx, ss;
+  mapping skill;
+  string *skills;
+  object obj;
+
+  lvl = lv + base - 5;
+
+  if (!ob || !living(ob))
+    return 0;
+  level = ob->query_level();
+  v = 9 - last_num(level);
+  if (v > 1)
+    level += random(v);
+  me->set_level(level);
+  max_skill = level * 10;
+  max_skill = max_skill * 4 / 5;
+  max_skill = max_skill * lvl / base;
+  set_skills(max_skill);
+  set_skill("yijing", max_skill / 3 + random(max_skill / 3 * 2));
+  set("bellicosity", ob->query("bellicosity") / 3 * 2 + 1);
+  setup();
+  set("force", me->query_maxforce() * 2);
+  set("mana", me->query_maxmana() * 2);
+  set("force_factor", me->query_maxforce() / 20 + 1);
+  set("mana_factor", me->query_maxmana() / 20 + 1);
+  set("looking", HIC "一副道貌岸然的模样" NOR "。");
+  set("rank_info/pos_msg", HIB "浑身隐约笼罩着一层斑驳玄气" NOR "。\n");
+  v = 20 - lvl;
+  if (v < 1)
+    v = random(3) + 1;
+  set("npc_pfm", v);
+  set("npc_cast", v);
+  set("env/test", "HIM");
+  files = ({
+    "armor", "cloth", "hand", "kui", "pifeng", "neck", "ring",
+    "shoes", "wrists", "waist",
+  });
+  for (i = 0; i < sizeof(files); i++) {
+    obj = carry_object(0, files[i], 1);
+    obj->set("armor_title", this_object()->query("name"));
+    obj->wear();
+  }
+  add_temp("apply/combat_damage", 3500);
+  add_temp("apply/spells_damage", 3500);
+  add_temp("apply/combat_def", 3500);
+  add_temp("apply/spells_def", 3500);
+  add_temp("apply/def_combat", 2000);
+  add_temp("apply/def_spells", 2000);
+  add_temp("apply/def_eff_combat", 3000);
+  add_temp("apply/def_eff_spells", 3000);
+  tx = ({});
+  i = random(2) + 1;
+  while (i--) {
+    ss = Txs[random(sizeof(Txs))];
+    tx += ({ ss });
+    Txs -= ({ ss });
+  }
+  set("my_type", tx);
+  init_texing();
+  powerup();
+  return 1;
+}
+
+int random_place(object me, string *dirs) {
+  int i, j, k;
+  object newob;
+  mixed *file, exit;
+
+  if (!sizeof(dirs))
+    return 0;
+  if (!me || !living(me))
+    return 0;
+  i = random(sizeof(dirs));    // pick up one directory
+  file = get_dir(dirs[i] + "/*.lpc", -1);
+  if (!sizeof(file))
+    return 0;
+  reset_eval_cost();
+  for (k = 0; k < 20; k++)  // try 20 times
+  {
+    j = random(sizeof(file));
+    if (file[j][1] > 0) {
+      newob = load_object(dirs[i] + "/" + file[j][0]);
+      if (newob) {
+        if (newob->query("no_fight") || newob->query("no_magic")
+          || newob->query("no_mieyao") || !(exit = newob->query("exits"))
+          || sizeof(exit) < 1)
+          continue;
+        if (me && me->move(newob, 1)) {
+          message_vision("$N走了过来。\n", me);
+          return 1;
+        }
+      }
+    }
+  }
+  return 0;
+}
+
+varargs void leave(int v) {
+  if (environment() && !v)
+    message("vision", HIB "\n" + name() + HIB "身子一晃，变成一股青烟散去了。\n" NOR, environment());
+  this_object()->move("/obj/empty");
+  REMOVE_D->add_obj(this_object(), 1);
+}
+
+string invocation(object who, int level) {
+  object me = this_object();
+  if (!who)
+    return 0;
+  if (!copy_status(me, who, level)) {
+    leave();
+    return 0;
+  }
+  return _invocation(who, level);
+}
+
+string _invocation(object who, int level) {
+  object me = this_object(), env;
+  string *dirs, where, long;
+  int lv, i, p, lvl;
+
+  dirs = dirs1;
+  set("owner", who->query("id"));
+  set("owner_ob", who);
+  {
+    long = "一只" + query("name")[0..<3] + "，在" + ({
+      "深山中",
+      "密林中",
+      "野外",
+      "草原上",
+      "野林中",
+      "高山中",
+      "莽林中",
+      "莽原上",
+      "深谷中",
+    })[random(9)];
+    long += "汲取" + ({ "日月", "天地", "万物" })[random(3)] + "精华，颇有了些道行。\n";
+    set("long", long);
+    lv = me->query_level();
+    if (lv < 95)
+      long = "百年";
+    else if (lv < 100)
+      long = CYN "百年" NOR;
+    else if (lv < 105)
+      long = HIC "百年" NOR;
+    else if (lv < 110)
+      long = HIY "百年" NOR;
+    else if (lv < 115)
+      long = HIW "百年" NOR;
+    else if (lv < 120)
+      long = HIM "千年" NOR;
+    else if (lv < 130)
+      long = HIM "万年" NOR;
+    else if (lv < 150)
+      long = HIR "万年" NOR;
+    else long = RED "万年" NOR;
+    set("title", long + (query("title") ? query("title") : ""));
+  }
+  lvl = level;
+  i = random(800);
+  if (i < 10)
+    set("type", "aggressive");
+  else if (i < 20)
+    set("type", "blocker");
+  else if (i < 220)
+    set("type", "aggressive_on_owner");
+  else if (i < 320)
+    set("type", "aggressive_on_owner1");
+  else set("type", "normal");
+  if (random(10) == 0) {
+    set("env/wimpy", 50);
+    if (lvl < 11)
+      lvl = lvl + 1;  // as more difficult to kill.
+  } else set("env/wimpy", 10);
+
+  if (!random_place(me, dirs)) {
+    leave();
+    return 0;
+  }
+
+  if (who->query_level() < 95 || (wizardp(who) && who->query("env/test")))
+    exp_reward = 15000;
+  else exp_reward = 18000;
+  if (wizardp(who))
+    tell_object(who, sprintf(REV HIW "【李靖】当前为%d/10，经验基数%d" NOR "\n", level, exp_reward));
+  exp_reward = exp_reward * (lvl + 8) / 10;
+  exp_reward = exp_reward * 9 / 10 + random(exp_reward / 10);
+  pot_reward = exp_reward / (2 + random(2)) + 1;
+
+  env = environment(me);
+  where = me->short(1);
+  if (env)
+    where += "在" + MISC_D->find_place(env);
+  if (wizardp(who))
+    tell_object(who, sprintf(REV HIW "【李靖】生成后经验基数%d,潜能基数%d" NOR "\n", exp_reward, pot_reward));
+  return where;
+}
+
+int follow_me(object ob, string dir) {
+  if (!ob || !living(this_object()) || ob == this_object())
+    return 0;
+  if (ob == follow
+    || (query("pursuer") && this_object()->is_killing(ob->query("id"))))
+    return follow_path(dir);
+  return 0;
+}
+
+void init() {
+  object me = this_object(), who = this_player(), env = environment(me);
+
+  if (!userp(who) || !living(me))
+    return;
+  ::init();
+  if (me->is_fihgting())
+    return;
+  if (env->query("no_fight")
+    || env->query("no_magic")) {
+    random_move();
+    return;
+  }
+  if (random(3) == 0) {
+    if (!announced) {
+      message_vision("\n" HIY "$N" HIY "看见$n" HIY "，大叫一声：哈哈，送上门来的肉！\n", me, who);
+      announced = 1;
+      set_follow(who);
+      kill_ob(who);
+      who->kill_ob(me);
+    }
+  }
+}
+
+void die() {
+  object ob, weapon, owner_ob, me = this_object(), dropitem;
+  string owner, skill, str, msg;
+  int i, j, lv, exp_r, pot_r, dx_r;
+
+  all_inventory(environment())->remove_killer(me);
+  me->remove_all_killer();
+  me->powerup();
+
+  owner = query("owner");
+  if (!owner || !stringp(owner) || !objectp(owner_ob = find_player(owner))) {
+    msg = death_msg[random(sizeof(death_msg))];
+    msg = replace_string(msg, "$N", "李靖");
+    msg = replace_string(msg, "$n", "$N");
+    message_vision(msg, me);
+    leave(1);
+    return;
+  }
+  if (environment(owner_ob) == environment()
+    && living(owner_ob) && owner_ob == query_temp("last_damage_from")) {
+    msg = death_msg[random(sizeof(death_msg))];
+    msg = replace_string(msg, "$n", me->name());
+    msg = COLOR_D->replace_color(HIB + COLOR_D->clean_color(msg), 1);
+    message_vision(msg, owner_ob, this_object());
+    exp_r = exp_reward;
+    pot_r = pot_reward;
+    dx_r = exp_reward * 4 / 5 + random(exp_reward / 5);
+  } else {
+    message_vision("$N死了。\n", this_object());
+    exp_r = 0;
+    pot_r = 0;
+    dx_r = 0;
+  }
+  lv = owner_ob->query_job_level(job_type());
+  QUEST_D->job_reward_player(owner_ob, "combat_exp", exp_r, job_type());
+  QUEST_D->job_reward_player(owner_ob, "daoxing", pot_r, job_type());
+  QUEST_D->job_reward_player(owner_ob, "potential", dx_r, job_type());
+  QUEST_D->job_reward_player(owner_ob, "money", 20000, job_type());
+  tell_object(
+    owner_ob,
+    HIY + owner_ob->finish_job(job_type(), ({ exp_r, dx_r, pot_r, 20000 })) + NOR
+  );
+
+  i = 3 + random(7);
+  owner_ob->add("inventory/suipian", i);
+  tell_object(owner_ob, HIG "【系统】你得到了 " + i + "块 装备碎片。" NOR "\n");
+  if (lv < 7)
+    i = random(11) / 10;
+  else if (i < 10)
+    i = random(21) / 10;
+  else i = 2;
+  if (i > 0) {
+    owner_ob->add("skyscore", i);
+    tell_object(owner_ob, HIY "【系统】你得到了 " + i + "点天宫威望，可以在" HIR "巨灵神" HIY "处兑换极品道具。" NOR "\n");
+  }
+  if (lv == 10 && exp_r > 0) {
+    owner_ob->add_temp("mark/lijing_job", 1);
+    tell_object(
+      owner_ob,
+      HIY "【系统】李靖任务：恭喜，你已经完成了 " HIR + chinese_number(owner_ob->query_temp("mark/lijing_job")) + " 轮任务。" NOR "\n"
+    );
+    if (random(2)) {
+      owner_ob->add("inventory/suipian", 30);
+      tell_object(owner_ob, HIG "【系统】你得到了 30块 装备碎片的附加奖励。" NOR "\n");
+    } else {
+      owner_ob->add("skyscore", 3);
+      tell_object(owner_ob, HIG "【系统】你得到了 3点 天宫贡献 的附加奖励。" NOR "\n");
+    }
+    owner_ob->money_add(50000);
+    tell_object(owner_ob, "你得到了五两" HIY "黄金" NOR "的奖励。\n");
+    if (random(2) == 0) {
+      ob = new("/d/obj/drug/age");
+      ob->set("owner_id", owner_ob->query("id"));
+      if (ob->move(owner_ob))
+        tell_object(owner_ob, HIC "你得到了一粒驻颜丹。\n" NOR);
+      else if (ob)
+        destruct(ob);
+    } else if (random(2) == 0) {
+      ob = new("/d/obj/drug/guiyuan-dan");
+      ob->set("owner_id", owner_ob->query("id"));
+      if (ob->move(owner_ob))
+        tell_object(owner_ob, HIC "你得到了一粒归元丹。\n" NOR);
+      else if (ob)
+        destruct(ob);
+    }
+    if (random(5) == 3) {
+      switch (random(5)) {
+        case 0: ob = new("/d/obj/drug/exp-lijing1"); break;
+        case 1: ob = new("/d/obj/drug/dx-lijing1"); break;
+        default: ob = new("/d/obj/drug/qn-lijing1"); break;
+      }
+      ob->set("owner_id", owner_ob->query("id"));
+      if (ob->move(owner_ob))
+        tell_object(owner_ob, HIC "你得到了一粒" + ob->query("name") + "。\n" NOR);
+      else if (ob)
+        destruct(ob);
+    }
+  }
+  leave(1);
+}
+
+varargs object check_my_weapon(string type) {
+  object ob, me = this_object();
+  string color, *weapons, str = "";
+  mapping my_weapon;
+  int i;
+  if (!mapp(my_weapon = me->query_Weapons())
+    || sizeof(my_weapon) < 1)
+    return 0;
+  if (!type) {
+    if (!arrayp(weapons = keys(my_weapon))
+      || sizeof(weapons) < 1)
+      return 0;
+  } else weapons = ({ type });
+  for (i = 0; i < sizeof(weapons); i++) {
+    if (!me->query_temp("lj_guai/" + weapons[i])
+      || !objectp(ob = me->query_temp("lj_guai/" + weapons[i]))
+      || !present(ob, me)) {
+      if (ob) {
+        ob->unequip();
+        if (environment(ob)) {
+          tell_object(
+            environment(ob),
+            HIY "\n半空传来一声怒吼：还我宝贝！一只大手从天而降，一把抓起了" + ob->name() + HIY "。\n" NOR
+          );
+          if (environment(ob)->is_character())
+            environment(ob)->reset_action();
+        }
+        destruct(ob);
+      }
+      ob = carry_object(0, weapons[i], 1);
+      ob->set("weapon_title", me->query("name"));
+      me->set_temp("lj_guai/" + weapons[i], ob);
+      color = ({ HIR, HIW, HIM, HIC, HIG, })[random(5)];
+      str += color + msg1[random(sizeof(msg1))] + msg2[random(sizeof(msg2))] + "「" + ob->query("name") + color + "」" + msg3[random(sizeof(msg3))] + me->name() + color + msg4[random(sizeof(msg4))] + NOR;
+    }
+  }
+  if (str != "")
+    message("vision", str, environment());
+  return ob;
+}
+
+mixed change_enable() {
+  object ob, weapon, me = this_object();
+  string color, *weapons, *msgs, now_weapon, parry_skill, str = "";
+  mapping my_weapon;
+  int i, pp;
+
+  if (!environment() || !me->is_fighting())
+    return 0;
+  if (!mapp(my_weapon = me->query_Weapons())
+    || sizeof(my_weapon) < 1)
+    return 0;
+  if (!arrayp(weapons = keys(my_weapon))
+    || sizeof(weapons) < 1)
+    return 0;
+
+  check_my_weapon();
+
+  now_weapon = weapons[random(sizeof(weapons))];
+  pp = 0;
+  if (stringp(parry_skill = my_weapon[now_weapon])
+    && parry_skill != "NONE") {
+    me->map_skill(now_weapon, parry_skill);
+    pp = 1;
+  } else parry_skill = me->query_skill_mapped("unarmed");
+
+  ob = check_my_weapon(now_weapon);
+
+  if (!objectp(weapon = me->query_temp("weapon"))) {
+    if (ob->wield()) {
+      str += me->name() + "装备" + ob->name() + "。\n";
+      if (pp > 0)
+        me->map_skill("parry", parry_skill);
+      me->reset_action();
+      if (str != "")
+        message("vision", str, environment());
+      return 1;
+    }
+  } else if (weapon == ob)
+    return 0;
+  else {
+    if (weapon->unequip()) {
+      str += me->name() + "放下手中的" + weapon->name() + "。\n";
+      if (ob->wield()) {
+        str += me->name() + "装备" + ob->name() + "。\n";
+        if (pp > 0)
+          me->map_skill("parry", parry_skill);
+        me->reset_action();
+        if (str != "")
+          message("vision", str, environment());
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+void heart_beat() {
+  object who, invoker, target, *enemy, me = this_object();
+  int i;
+  string str;
+  if (!environment())
+    return;
+  if (!objectp(who = query("owner_ob")) || !living(who)) {
+    all_inventory(environment())->remove_killer(me);
+    me->remove_all_killer();
+    command("chat* haha");
+    leave();
+  }
+  clean_up_enemy();
+
+  if (me->is_fighting()) {
+    check_my_weapon();
+    enemy = me->query_enemy();
+    for (i = 0; i < sizeof(enemy); i++) {
+      invoker = 0;
+      if (!userp(enemy[i])
+        && objectp(invoker = enemy[i]->query_temp("invoker"))
+        && userp(invoker)) {
+        if (!living(invoker) || !invoker->is_fihgting(me)) {
+          enemy[i]->remove_killer(me);
+          me->remove_killer(enemy[i]);
+        }
+      }
+    }
+  }
+
+  if (living(me) && me->is_fighting()) {
+    if (time() >= (me->query_temp("no_exert/start") + me->query_temp("no_exert/time"))
+      && (!me->is_busy() || (int)me->query_busy() > 3)) {
+      if (query("eff_kee") < this_object()->query_maxkee())
+        QUEST_D->addEffKee(me);
+      if (query("eff_sen") < this_object()->query_maxsen())
+        QUEST_D->addEffSen(me);
+    }
+    if (query("kee") < query("eff_kee"))
+      QUEST_D->addKee(me);
+    if (query("sen") < query("eff_sen"))
+      QUEST_D->addSen(me);
+    if (living(me) && !me->is_busy()
+      && !me->is_blind()
+      && !me->is_hunluan()
+      && me->is_fighting()) {
+      if (random(2) == 1)
+        command("cast xiaoshen");
+      if (objectp(query_temp("weapon")))
+        str = query_temp("weapon")->query("skill_type");
+      else str = "unarmed";
+      QUEST_D->randomPfm(this_object(), str);
+    }
+  }
+  ::heart_beat();
+}
+
+void restart_enable() {
+  remove_call_out("restart_enable");
+  ready = 0;
+}
+
+void kill_ob(object who) {
+  if (userp(who) && query("owner_ob")
+    && query("owner_ob") != who) {
+    message_vision("\n" HIR "$N" HIR "将眼一瞪，冲着$n" HIR "喝道：不想死的就滚！\n\n" NOR, this_object(), who);
+    this_object()->remove_killer(who);
+    who->remove_killer(this_object());
+    return;
+  }
+  ::kill_ob(who);
+}
+
+int attack() {
+  if (ready)
+    return ::attack();
+  ready = 1;
+  change_enable();
+  remove_call_out("restart_enable");
+  call_out("restart_enable", 5);
+  return ::attack();
+}
+
+void init_texing() {
+  string str, *texing, *foo;
+  int i;
+
+  set(
+    "shentong/40",
+    sprintf(
+      "%s_%s_%d",
+      ({ "金", "木", "水", "火", "土", })[random(5)],
+      ({ "阴", "阳", })[random(2)],
+      1 + random(7)
+    )
+  );
+  set("shentong/90", 1);
+  if (!arrayp(foo = guai_type(1))
+    || sizeof(foo) < 1)
+    return;
+  for (i = 0; i < sizeof(foo); i++) {
+    str = foo[i];
+    switch (str) {
+      case "登峰":  //物理命中提高120%
+        add_temp("apply/combat_succ", 120);
+        break;
+      case "震古":  //法术命中提高120%
+        add_temp("apply/spells_succ", 120);
+        break;
+      case "彪悍":
+        add_temp("apply/combat_damage", 3000);
+        break;
+      case "通灵":
+        add_temp("apply/spells_damage", 3000);
+        break;
+    }
+  }
+}
+
+varargs string short(int v) {
+  int i;
+  string *foo, str = ::short(v);
+  if (!arrayp(foo = guai_type())
+    || sizeof(foo) < 1
+    || v > 0)
+    return str;
+  i = sizeof(foo);
+  if (i > 1)
+    str += NOR " [" HIY + chinese_number(i) + "重特性" NOR "]";
+  else {
+    while (i--)
+      str += NOR " [" + foo[i] + NOR "]";
+  }
+  return str;
+}
+
+string long() {
+  int i;
+  string *foo, str, long;
+
+  long = query("long");
+  if (!arrayp(foo = guai_type(1))
+    || sizeof(foo) < 1)
+    return long;
+  for (i = 0; i < sizeof(foo); i++) {
+    str = foo[i];
+    switch (str) {
+      case "厚土": long += HIY "战斗特性：物理伤害降低。\n" NOR; break;
+      case "驭法": long += HIY "战斗特性：法术伤害降低。\n" NOR; break;
+      case "轻灵": long += HIY "战斗特性：僵直状态下伤害降低。\n" NOR; break;
+      case "彪悍": long += HIY "战斗特性：高物理伤害。\n" NOR; break;
+      case "通灵": long += HIY "战斗特性：高法术伤害。\n" NOR; break;
+      case "吸血": long += HIY "战斗特性：击中回复自己3%的气血值。\n" NOR; break;
+      case "偷心": long += HIY "战斗特性：击中回复自己5%的法力值。\n" NOR; break;
+      case "培元": long += HIY "战斗特性：击中回复自己5%的内力值。\n" NOR; break;
+      //case "反戈" : long+= HIY"战斗特性：受到伤害的15%反弹给攻击者。\n"NOR;break;
+      case "登峰": long += HIY "战斗特性：物理命中提高150%。\n" NOR; break;
+      case "震古": long += HIY "战斗特性：法术命中提高150%。\n" NOR; break;
+    }
+  }
+  return long;
+}
+
+int accept_fight(object who) { return 0; }
+
+varargs int receive_wound(string type, int damage, object who, mixed attack_type) {
+  string *foo;
+  if (!arrayp(foo = guai_type(1))
+    || sizeof(foo) < 1)
+    return ::receive_wound(type, damage, who, attack_type);
+  if (who && who != this_object()) {
+    if (member_array("厚土", foo) != -1 && (attack_type != TYPE_CAST && attack_type != TYPE_CAST_2))
+      damage = damage / 500;
+    else if (member_array(
+      "驭法",
+      foo
+    ) != -1 && (attack_type == TYPE_CAST || attack_type == TYPE_CAST_2))
+      damage = damage / 500;
+    else if (member_array("轻灵", foo) != -1 && this_object()->is_busy())
+      damage = damage / 300;
+  }
+  return ::receive_wound(type, damage, who, attack_type);
+}
+
+varargs int receive_damage(string type, int damage, object who, mixed attack_type) {
+  string *foo;
+  if (!arrayp(foo = guai_type(1))
+    || sizeof(foo) < 1)
+    return ::receive_wound(type, damage, who, attack_type);
+  if (who && who != this_object()) {
+    if (member_array("厚土", foo) != -1 && (attack_type != TYPE_CAST && attack_type != TYPE_CAST_2))
+      damage = damage / 1000;
+    else if (member_array(
+      "驭法",
+      foo
+    ) != -1 && (attack_type == TYPE_CAST || attack_type == TYPE_CAST_2))
+      damage = damage / 1000;
+    else if (member_array("轻灵", foo) != -1 && this_object()->is_busy())
+      damage = damage / 500;
+  }
+  return ::receive_damage(type, damage, who, attack_type);
+}
+
+mixed hit_ob(object me, object who, int damage, mixed attack_type) {
+  int p;
+  string *foo, msg;
+  if (!arrayp(foo = guai_type(1))
+    || sizeof(foo) < 1)
+    return 0;
+
+  if (!living(me) || !who || !me->is_fighting(who) || damage <= 0)
+    return 0;
+
+  p = 0;
+  msg = "";
+  if (member_array("彪悍", foo) != -1) {
+    if (attack_type == TYPE_COMBAT || attack_type == TYPE_PERFORM || attack_type == TYPE_QUICK)
+      p += damage;
+  }
+  if (member_array("通灵", foo) != -1) {
+    if (attack_type == TYPE_CAST || attack_type == TYPE_CAST_2)
+      p += damage;
+  }
+  if (member_array("吸血", foo) != -1) {
+    me->receive_heal("kee", me->query_maxkee() / 33 + 1);
+    me->receive_curing("kee", me->query_maxkee() / 30 + 1);
+    msg += NOR "\n" RED "$N" RED "开始疯狂的吸血！" NOR "\n";
+  }
+  if (member_array("偷心", foo) != -1) {
+    if (me->query("mana") < me->query_maxmana() * 2) {
+      me->add("mana", me->query_maxmana() / 20 + 1);
+      msg += "\n" HIB "$N" HIB "疯狂吸收四周的灵气以补充自己的法力。" NOR "\n";
+    }
+  }
+  if (member_array("培元", foo) != -1) {
+    if (me->query("force") < me->query_maxforce() * 2) {
+      me->add("force", me->query_force() / 30 + 1);
+      msg += "\n" HIG "$N" HIG "疯狂吸收四周的灵气以补充自己的真气。" NOR "\n";
+    }
+  }
+  if (p <= 0) {
+    if (msg == "")
+      return 0;
+    else return msg;
+  } else return p;
+}

@@ -1,0 +1,192 @@
+// channeld.c
+// 修改：中山大学  张三丰（Micro）----Micro_Liang@Hotmail.Com    1997.06
+
+#include <ansi.h>
+#include <mudlib.h>
+#include <net/dns.h>
+
+inherit F_DBASE;
+
+mapping channels = ([
+  "sys": ([ "msg_speak": HIR "【系统】%s：%s\n" NOR,
+    "msg_emote": HIR "【系统】%s" NOR, "wiz_only": 1 ]),
+  "wiz": ([ "msg_speak": HIY "【神仙】%s：%s\n" NOR,
+    "msg_emote": HIY "【神仙】%s" NOR, "wiz_only": 1 ]),
+  "gwiz": ([ "msg_speak": HIG "【网际神仙】%s：%s\n" NOR,
+    "msg_emote": HIG "【网际神仙】%s" NOR,
+    "wiz_only": 1, "intermud": GWIZ, "channel": "CREATOR", "filter": 1 ]),
+  "mud": ([ "msg_speak": HIW "【" + MUD_NAME + "】%s：%s\n" NOR,
+    "msg_emote": HIW "【" + MUD_NAME + "】%s" NOR,
+    "intermud": GCHANNEL, "channel": "xk",
+    "filter": (: $1["MUDLIB"] == MUDLIB_NAME :) ]),
+  "chat": ([ "msg_speak": HIC "【闲聊】%s：%s\n" NOR,
+    "msg_emote": CYN "【闲聊】%s" NOR, ]),
+  "dream": ([ "msg_speak": HIB "【梦幻时空】%s：%s\n" NOR,
+    "msg_emote": HIB "【梦幻时空】%s" NOR, ]),
+  "rumor": ([ "msg_speak": HIM "【谣言】%s：%s \n" NOR,
+    "msg_emote": HIM "【谣言】%s" NOR, "anonymous": "某人" ]),
+]);
+
+int block_rumor = 0;
+int block_chat = 0;
+
+void create() {
+  seteuid(getuid());              // 这是通过MUD的检查所必须的
+  set("channel_id", "频道精灵");
+}
+
+varargs int do_channel(object me, string verb, string arg, int emote) {
+  object *ob;
+  string *tuned_ch, who;
+
+  if (!sizeof(verb)) return 0;
+
+
+  //  add by Fan    把指令执行时间调到最大
+
+  reset_eval_cost();
+
+  // 检查是否能使用频道
+  if ((int)me->query("chblk_on") && !wizardp(me))
+    return notify_fail("你的频道被关闭了！\n");
+  if ((int)me->query("chblk_on") && wizardp(me)) {
+    // 对巫师仅关闭rumor及chat频道，而对普通玩家则关闭所有频道
+    me->set("chblk_rumor", 1);
+    me->set("chblk_chat", 1);
+  }
+  // 检查是否个人的rumor及chat频道被关闭
+  if ((int)me->query("chblk_rumor")
+    && (verb == "rumor" || verb == "rumor*" || verb == "rumor#"))
+    return notify_fail("你的谣言频道被关闭了！\n");
+  if ((int)me->query("chblk_chat")
+    && (verb == "chat" || verb == "chat*" || verb == "chat#"))
+    return notify_fail("你的聊天频道被关闭了！\n");
+  // 检查是否全体rumor及chat频道被关闭
+  if ((int)block_rumor
+    && (verb == "rumor" || verb == "rumor*" || verb == "rumor#"))
+    return notify_fail("遥言频道被关闭了！\n");
+  if ((int)block_chat
+    && (verb == "chat" || verb == "chat*" || verb == "chat#"))
+    return notify_fail("聊天频道被关闭了！\n");
+
+  // Micro: 取消散布谣言要消耗精的功能
+  if (userp(me) && (verb == "rumor" || verb == "rumor*" || verb == "rumor#")) {
+    if (me->query("gin") < 50 && !wizardp(me))
+      return notify_fail("你已经没有精力散布谣言了。\n");
+    if (!wizardp(me))
+      me->add("gin", -random(50));
+  }
+
+  if (verb[sizeof(verb) - 1] == '*') {      // * 指令的处理
+    emote = 1;
+    verb = verb[0..<2];
+  }
+  if (verb[sizeof(verb) - 1] == '#') {      // # 指令的处理
+    emote = 2;
+    verb = verb[0..<2];
+  }
+  // 当chat后面没有内容时，显示效果同：chat ....        
+  if (!stringp(arg) || arg == "" || arg == " ") arg = "....";
+
+  if (!mapp(channels) || undefinedp(channels[verb])) return 0;
+
+  if (userp(me)) {
+    if (channels[verb]["wiz_only"] && !wizardp(me)) return 0;
+    // Micro: 巫师可以重复Chat，而普通玩家不行。
+    if (arg == (string)me->query_temp("last_channel_msg") && wiz_level(me) == 0)
+      return notify_fail("用交谈频道说话请不要重复相同的讯息。\n");
+    // 如果我们要使用这个频道，则必须打开这个频道
+    tuned_ch = me->query("channels");
+    if (!pointerp(tuned_ch))
+      me->set("channels", ({ verb }));
+    else if (member_array(verb, tuned_ch) == -1)
+      me->set("channels", tuned_ch + ({ verb }));
+  }
+
+  // 对emote的处理
+  if (emote && !channels[verb]["intermud_emote"]) {
+    string vb, emote_arg;
+    // 对emote * 的处理
+    if (sscanf(arg, "%s %s", vb, emote_arg) != 2) {
+      vb = arg;
+      emote_arg = "";
+    }
+    arg = EMOTE_D->do_emote(me, vb, emote_arg, 1, channels[verb]["anonymous"]);
+
+    // 对emote # 的处理
+    if (!arg && emote == 2)
+      arg = (channels[verb]["anonymous"] ?
+        channels[verb]["anonymous"] : me->name()) + vb + "\n";
+
+    // 非法emote
+    if (!arg) return 0;
+  }
+
+  // 设置使用频道者身份
+  if (channels[verb]["anonymous"]) {
+    who = channels[verb]["anonymous"];
+    if (userp(me))          // Micro: 显示造谣玩家的资料。
+      do_channel(this_object(), "sys", sprintf("%s（%s）在造谣。",
+        me->query("name"), me->query("id")));
+  } else if (userp(me) || !stringp(who = me->query("channel_id")))
+    who = me->query("name") + "(" + capitalize(me->query("id")) + ")";
+
+  // 发送频道信息给可以听到的玩家
+
+  ob = filter_array(users(), "filter_listener", this_object(), channels[verb]);
+
+  if (emote) {
+    // Micro: 巫师可以重复Chat*，而普通玩家不行。
+    if (arg == (string)me->query_temp("last_channel_msg") && wiz_level(me) == 0)
+      return notify_fail("用公共频道说话请不要重复相同的动作。\n");
+    // Support of old behavier of intermud emote.
+    // if( channels[verb]["intermud_emote"] ) arg = who + " " + arg;
+    if (!stringp(arg)) arg = "";
+    else message("channel:" + verb, sprintf(channels[verb]["msg_emote"], arg), ob);
+  } else
+    message("channel:" + verb, sprintf(channels[verb]["msg_speak"], who, arg), ob);
+
+  if (arrayp(channels[verb]["extra_listener"])) {
+    channels[verb]["extra_listener"] -= ({ 0 });
+    if (sizeof(channels[verb]["extra_listener"]))
+      channels[verb]["extra_listener"]->relay_channel(me, verb, arg);
+  }
+
+  if (!undefinedp(channels[verb]["intermud"])
+    && base_name(me) != channels[verb]["intermud"])
+    channels[verb]["intermud"]->send_msg(
+      channels[verb]["channel"], me->query("id"), me->name(1), arg, 0,
+      channels[verb]["filter"]);
+
+  if (userp(me))
+    me->set_temp("last_channel_msg", arg);
+
+  return 1;
+}
+
+int filter_listener(object ppl, mapping ch) {
+  // Don't bother those in the login limbo.
+  if (!environment(ppl)) return 0;
+
+  if (ch["wiz_only"]) return wizardp(ppl);
+  return 1;
+}
+
+void register_relay_channel(string channel) {
+  object ob;
+
+  ob = previous_object();
+  if (undefinedp(channels[channel]) || !ob) return;
+  if (arrayp(channels[channel]["extra_listener"])) {
+    if (member_array(ob, channels[channel]["extra_listener"]) >= 0) return;
+    channels[channel]["extra_listener"] += ({ ob });
+  } else
+    channels[channel]["extra_listener"] = ({ ob });
+}
+
+// 设置rumor、chat频道开关
+int set_block(string channel, int d) {
+  if (channel == "rumor") block_rumor = d;
+  if (channel == "chat") block_chat = d;
+  return 1;
+}

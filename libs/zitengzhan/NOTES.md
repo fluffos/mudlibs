@@ -12,9 +12,9 @@ in-game as `【紫藤西游】`/`大唐西游·紫藤站`. Config's own `name` f
 
 `adm/obj/master`'s header credits **"for ES II mudlib, original from Lil,
 rewritten by Annihilator (11/07/94)"** — this is the same "ES II" engine
-lineage as es1_win/esI/xkx2001/rzrmud/beimeixiakexing2001/
-xinkuangxiangkongjian2/yueyingqiyuan/wuhanzhan/yanhuangwuhun/haiyang2/
-kuangxiangkongjian/huoying/yanhuangyingxiongshi/shenzhou/shenmo — one of
+lineage as es1_win/esI/xkx2001/rzrmud/bmxkx2001/
+kxkj/yueyingqiyuan/wuhanzhan/yanhuangwuhun/haiyang2/
+kxkj1/huoying/yhyxs/shenzhou/shenmo — one of
 the largest lineages processed in this project. Layout is `adm/obj/` +
 `adm/daemons/` (not the `adm/single/` or `adm/kernel/` variants), matching
 es1_win/xkx2001/rzrmud most closely. Large lib: 189MB raw / 14,643 `.lpc`
@@ -369,8 +369,8 @@ category rather than fixing every one:
 `setsid nohup ... & disown` from `libs/zitengzhan/` (own session, `log/`
 created first); killed by exact PID after testing, never a pattern-based
 `pkill` (other agents had concurrent drivers running for
-`beimeixiakexing2001`, `zhongjidiyu_airuoyoulan`, and
-`zhongjidiyu_zhijian` at the same time on this host).
+`bmxkx2001`, `zjdyaryl`, and
+`zjdyzj` at the same time on this host).
 
 ## Re-verification pass: driver rebuild + formatter + WASM (2026-07)
 

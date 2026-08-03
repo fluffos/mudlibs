@@ -2,7 +2,7 @@
 
 源自 2026-07-29 批量归档 `mudlib.rar` 中的 `鹿鼎天下.rar`。"世纪
 (Century) / adm-single" 引擎家族的一支（与 `shiji`、`shujian2008`、
-`xianjianchuanqi`、`xiakexinzhuan2`、`xiakexing100` 同源），ES II 血统。
+`xjcq2000`、`xkxz2`、`xiakexing100` 同源），ES II 血统。
 
 有趣的是，压缩包本身叫"鹿鼎天下"，但登入画面品牌其实是"雄霸天下
 『西安站』"，而 `quit` 退出提示又写着"离开了鹿鼎天下"——两个名字

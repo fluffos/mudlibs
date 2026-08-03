@@ -91,7 +91,7 @@ registration test (Chinese surname + given name reaching the next prompt).
   gender selection. In the pre-fix transcript this dumped ~30 screens
   of raw compiler internals over the new player's very first moment in
   the game — same bug class already found and fixed on several sibling
-  libs in this project (`dtsl`/`datangshuanglong`/`dongfanggushi2`/
+  libs in this project (`dtsl`/`dtsl2`/`dfgs2`/
   `bixiecanyang`/`wuhanzhan`/`shenzhou`, AGENTS.md §15af), not
   previously caught here because this lib's original testing pass
   (like several others) never exercised a full registration through to
@@ -405,3 +405,7 @@ touching any PID, and RSS spot-checked between restarts (peaked around
 ~590MB after a longer no-restart stretch, never ran away) per the
 process-hygiene requirement. Final driver process killed cleanly at the
 end of this pass; confirmed dead via `ps -p`.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：一次完整的 WASM 注册流程（英文 id 仅限小写字母 → 确认 → 中文名字 → 管理密码+确认 → 登录密码+确认 → 天赋摇点，0 为随机 → 接受 → 电子邮件，需 id@address 格式 → 性别）全程无错误地进入"世外桃源"起始区域（"你连线进入这个世界，开始了自己的江湖生涯"），预先播种的管理员账号（fluffos/Mud@2026）也能正常登录，屏幕上确认了最高权限称号（"您目前权限：〖巫师协会懂事〗(boss)"——这份档案的顶层巫师等级字符串是 (boss)，不是 (admin)）。

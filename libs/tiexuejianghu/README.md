@@ -1,7 +1,7 @@
 # 铁血江湖 (Tie Xue Jiang Hu)
 
 属于 ES II（Eastern Stories II）引擎系列武侠 mudlib，与本项目中的
-wuhanzhan《大话西游》、weimingkongjian《未明空间》等同属一个大家族，
+wuhanzhan《大话西游》、wmkj《未明空间》等同属一个大家族，
 但代码库本身是独立分支。
 
 ## 内容亮点

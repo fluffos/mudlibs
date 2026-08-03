@@ -22,8 +22,8 @@
 
 ## Lineage: confirmed the likely ANCESTOR of the whole "ES II / XYJ" 西游记 family, not a duplicate of any already-done sibling
 
-Per the task's explicit instruction, read `libs/fluffos_xiyou2000/NOTES.md`
-(#15), `libs/mhxy/NOTES.md` (#19), `libs/menghuanxiyou2002/NOTES.md` (#56),
+Per the task's explicit instruction, read `libs/xyj2000f/NOTES.md`
+(#15), `libs/mhxy/NOTES.md` (#19), `libs/mhxyqd/NOTES.md` (#56),
 `libs/shenmo/NOTES.md` (#73), `libs/xiyouji2003/NOTES.md` (#81) first, then
 diffed/md5sum'd this archive's `adm/obj/master.c`, `adm/daemons/chinesed.c`
 (the translator daemon; the byte-check daemon is `adm/simul_efun/chinese.c`
@@ -34,14 +34,14 @@ all five before doing any conversion work.
 - **`adm/obj/master.c`**: header comment reads verbatim `// for ES II
   mudlib // original from Lil // rewritten by Annihilator (11/07/94)` with
   **no additional site-branding/cracker credit line at all** — every other
-  sibling's copy of this exact file adds one (`fluffos_xiyou2000`: "cracked
+  sibling's copy of this exact file adds one (`xyj2000f`: "cracked
   by vikee 2/09/2002"; `xiyouji2003`: "Last Modified By Pkyou@xyj
   2002-06-12 19:00"; `shenmo`: "rewritten by djx (09/09/2003), xfan
   3.10"). This is the earliest, least-modified copy of the family's
   master.c seen so far.
 - `md5sum`s of `master.c`/`chinesed.c`/`logind.c` did **not** match any of
   the five siblings byte-for-byte (this archive is not a duplicate of
-  any of them), but a line-count/structural diff against `fluffos_xiyou2000`
+  any of them), but a line-count/structural diff against `xyj2000f`
   and `xiyouji2003` showed a large fraction of lines textually different —
   consistent with those two being LATER, more-modified snapshots of the
   same lineage (both add/change site-specific banners, extra daemons,
@@ -55,7 +55,7 @@ all five before doing any conversion work.
   checker) — same overall shape as the rest of the ES II family, and the
   same GBK byte-range `is_chinese()` bug (§15h) recurs verbatim.
 - **`adm/daemons/logind.c`** (853 lines) has the same registration-flow
-  shape as `xianlvqiyuan`/`xiakexinzhuan2`-style Century/ES-family libs
+  shape as `xianlvqiyuan`/`xkxz2`-style Century/ES-family libs
   (GB/BIG5 prompt → student age-gate → English id → confirm → Chinese
   name → password → confirm password → email → gender → gift/stat-roll
   confirm), but its own `check_legal_id`/`check_legal_name` are defined
@@ -64,8 +64,8 @@ all five before doing any conversion work.
   did not apply here (there's no such file in this archive at all).
 
 **Conclusion**: this archive is a genuine, distinct member of the
-"ES II / XYJ" lineage shared with `fluffos_xiyou2000` (#15), `mhxy`/
-`menghuanxiyou2002` (#19/#56), `shenmo` (#73), and `xiyouji2003` (#81) —
+"ES II / XYJ" lineage shared with `xyj2000f` (#15), `mhxy`/
+`mhxyqd` (#19/#56), `shenmo` (#73), and `xiyouji2003` (#81) —
 almost certainly their common **ancestor snapshot** (oldest file
 timestamps, least site-specific modification) — but NOT a byte-duplicate
 of any of them. Known-lineage fixes (§15h chinese-detection, dns_master
@@ -121,7 +121,7 @@ this pass — its own separate NOTES.md should be consulted once available.)
    task's explicit instruction to check every catalog section against
    the actual source before boot).
 4. **§8h — `convertd.lpc`'s Greek/CJK-table stray-backslash typo**,
-   recurring exactly as documented for `fluffos_xiyou2000`/`mhxy`: **45
+   recurring exactly as documented for `xyj2000f`/`mhxy`: **45
    separate lines** (not just the usual handful) had a stray literal
    backslash immediately before the closing quote of a two-character
    string entry (`"α\",` → `"α",`, `"功\",` →

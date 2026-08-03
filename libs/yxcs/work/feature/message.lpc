@@ -1,0 +1,156 @@
+// message.c
+//modified by lonely&yxcs
+#pragma save_binary
+#include <dbase.h>
+
+#define MAX_MSG_BUFFER 500
+
+nosave string *msg_buffer = ({});
+int receive(string str) {
+  string *ids, id_list;
+  int i, t;
+
+  if (!str) return 1;
+  if (stringp(str)) {
+    if (interactive(this_object())) {
+      if (this_object()->query_temp("big5"))
+        str = (string)LANGUAGE_D->toBig5(str);
+    }
+    return efun::receive(str);
+  }
+  return 0;
+}
+
+void receive_message(string msgclass, string msg) {
+  string subclass, *ch;
+  int len;
+  if (!msg || (len = strlen(msg)) < 1) return;
+  if (len > 8000)
+    msg = msg[0..8000] + "\n\n．．．\n";
+  if (!interactive(this_object())) {
+    this_object()->relay_message(msgclass, msg);
+    return;
+  }
+
+  if (sscanf(msgclass, "%s:%s", subclass, msgclass) == 2) {
+    switch (subclass) {
+      case "channel":
+        if (!pointerp(ch = query("channels"))
+          || member_array(msgclass, ch) == -1)
+          return;
+        break;
+      case "outdoor":
+        if (!environment() || !environment()->query("outdoors"))
+          return;
+        break;
+      case "room":
+        if (!environment() || environment()->query("outdoors"))
+          return;
+        break;
+      default:
+        error("Message: Invalid Subclass " + subclass + ".\n");
+    }
+  }
+
+  if (query_temp("block_msg/all") || query_temp("block_msg/" + msgclass))
+    return;
+  //        if (query_temp("big5")) msg=LANGUAGE_D->GB2Big5(msg);
+  //        if (!msg) return;
+
+  if (in_input(this_object()) || in_edit(this_object())) {
+    if (sizeof(msg_buffer) < MAX_MSG_BUFFER)
+      msg_buffer += ({ msg });
+  } else
+    receive(msg);
+}
+
+/*
+void write_prompt()
+
+{        	
+	if( sizeof(msg_buffer) ) {
+		receive(BOLD +"[输入时暂存讯息]\n" + NOR);
+		for(int i=0; i<sizeof(msg_buffer); i++)
+			receive(msg_buffer[i]);
+		msg_buffer = ({});
+	}
+        write(HIM"☆"NOR);
+}
+*/
+void write_prompt() {
+  int env, b_size;
+  string prompt, msg, path;
+  object me;
+
+  me = this_player(1);
+  msg = "【暂存讯息】\n";
+  msg = LANGUAGE_D->output(msg, this_object());
+
+  if (b_size = sizeof(msg_buffer)) {
+    receive(BOLD + HIG + msg + NOR);
+    for (int i = 0; i < b_size; i++)
+      receive(msg_buffer[i]);
+    msg_buffer = ({});
+  }
+
+  if (intp(me->query("env/prompt")))  //提示符的形式
+  {
+    env = (int)me->query("env/prompt");
+    switch (env) {
+      case 1:
+        env = (int)me->query("env/time_format");
+        prompt = HIC + ctime(time())[11..18] + HIY "> " NOR "\n";
+        break;
+      case 2:
+        if (!stringp(prompt = me->query_temp("reply")))
+          prompt = HIY "℡『』" NOR "\n";
+        else
+          prompt = HIY "℡『" + HIW + prompt + HIY "』" NOR "\n";
+        break;
+      case 3:
+        prompt = HIY "『" + HIW + "气：" + me->query("qi") + "|精：" + me->query("jing") + HIY "』" NOR "\n";
+        break;
+      case 4:
+        prompt = HIY "『" + HIW + "气：" + me->query("qi") + "|精：" + me->query("jing") + "|经验：" + me->query("combat_exp") + "|潜能：" + ((int)me->query("potential") - (int)me->query("learned_points")) + HIY "』" NOR "\n";
+        break;
+      case 5:
+        if (!wizardp(this_object()) || wiz_level(this_object()) < 3)
+          break;
+        if (!stringp(path = query("cwd"))) {
+          path = "/";
+          set("cwd", path);
+        }
+        prompt = HIC + path[0..<2] + HIY "/ " NOR "\n";
+        break;
+      default:
+        prompt = HIM "☆" NOR;
+    }
+  } else
+    prompt = HIC + me->query("env/prompt") + HIY "> " NOR "\n";
+  //使玩家可自己设定提示符
+
+  write(prompt);
+  //write() - 对目前的玩家送出讯息.
+  //本mud对此函数用simul_efun进行了一些处理(为了解决内码转换的问题)
+}
+
+
+
+/*
+//  temp "snoop-big5" 需要在 snoop.c里面控制
+void receive_snoop(string msg)
+{
+        if ( msg && msg!="" && msg[0]!='%' ){
+            if( this_object()->query_temp("snoop-big5"))
+            if( this_object()->query_temp("big5")){
+                efun::receive(msg);
+                return;
+             }else
+                msg=LANGUAGE_D->Big52GB(msg);
+                receive("%" + msg);
+        }
+}
+*/
+void receive_snoop(string msg) {
+  receive("%" + msg);
+}

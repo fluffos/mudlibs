@@ -36,7 +36,7 @@
 - `adm/daemons/logind.lpc`：`crypt(ZJKEY, 0)` 在这个驱动上不是原版的
   确定性 DES-crypt，而是每次都生成一个全新的随机 `$6$` SHA-512
   盐值，导致这个客户端挑战/应答握手在数学上永远无法通过（参见
-  AGENTS.md §7.14，`zhongjidiyu_zhijian` 的同类问题）。已改为显式的
+  AGENTS.md §7.14，`zjdyzj` 的同类问题）。已改为显式的
   旧式 2 字符盐值 `crypt(ZJKEY, "zj")`，恢复确定性。
 - `adm/simul_efun/chinese.lpc` 的 `is_chinese()`：沿用旧版 GBK
   字节区间判断（`str[i]<176||str[i]>=248` 等），在这个驱动上

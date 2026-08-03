@@ -178,7 +178,7 @@ root cause:
   usually a clean "not welcome" rejection message.
 - `explode(query_ip_number(ob), ".")[1]`-style indexing throws an
   **uncaught `Array index out of bounds`** and silently desyncs the whole
-  prompt chain before the id prompt (e.g. `menghuanxiyou2002`/`mhxy`'s
+  prompt chain before the id prompt (e.g. `mhxyqd`/`mhxy`'s
   `ipd.lpc`, `zitengzhan`'s `band.lpc`).
 - Cosmetic-only uses (displaying the IP in a banner) — harmless, ignore.
 
@@ -269,19 +269,19 @@ recurring shapes DO break login and now get mudlib-side guards on sight:
 - **Unconditional `DNS_MASTER->query_muds()` / mirror-site checks** in
   `logind.lpc` — crash or `shutdown(1)` when the daemon is absent. Guard:
   `if (find_object(DNS_MASTER)) ...` and treat "absent" as "skip the
-  gate". (Seen: `shiji`, `fluffos_xiyou2000`, `xiyouji450`,
-  `suiyuanxijianlu` — note the check can hide inside the *absent* branch
-  of an earlier `find_object()` test, as on `fluffos_xiyou2000`.)
+  gate". (Seen: `shiji`, `xyj2000f`, `xiyouji450`,
+  `syxjl` — note the check can hide inside the *absent* branch
+  of an earlier `find_object()` test, as on `xyj2000f`.)
 - **`VERSION_D->is_version_ok()`-style gates** (the 中华英雄/终极地狱
   lineage idiom) — same fix: `find_object()` guard, absent ⇒ allow.
-  (Seen: `zhonghua2`, `zhongjidiyu`, `zhongjidiyu_zhijian`,
-  `yanhuangwuhun`, `yanhuangyingxiongshi`.)
+  (Seen: `zhonghua2`, `zhongjidiyu`, `zjdyzj`,
+  `yanhuangwuhun`, `yhyxs`.)
 - **`resolve()` called in a security daemon's `create()`** before it
   initializes its own state — under WASM the throw aborts `create()`
   mid-way, leaving globals (e.g. `wiz_status`) uninitialized, and the
   *first ACL lookup* crashes later with no obvious link to the cause.
   Fix: reorder state init before the `resolve()` call AND wrap it in
-  `catch()`. (Seen: `fengyun3dianzang`, `moniHuafu`, `fengyun434`/
+  `catch()`. (Seen: `fy3dz`, `moniHuafu`, `fengyun434`/
   `fy2005` proactively — the 风云 family's `securityd.lpc` idiom.)
   NOTE: the `resolve()` driver fix (§1.3a) is now merged, which makes
   the `catch()` unnecessary going forward — but the reordering is
@@ -299,7 +299,7 @@ UTF-8).
 
 #### (d) No `pcre` — can be a hard boot blocker
 
-`chongshengdeshijie` (055) is the one known no-boot: its
+`zsdsj` (055) is the one known no-boot: its
 `system_d`/simul_efun ANSI-code handling uses pcre efuns, so simul_efun
 itself fails to compile and nothing boots. Options, in preference order:
 rewrite the ANSI stripping/parsing in plain LPC string ops
@@ -320,16 +320,16 @@ WASM instance or local play, and per user direction should be
   destruct(ob)`, up to 5 minutes on `fy2005`). Natively you rarely
   notice; the WASM harness connects instantly after boot, so the gate
   fires deterministically every run. Known affected:
-  `unknownlib20150716`, `xiaoyuxiyou`, `bixiecanyang`,
-  `xiyangzaixian_fengyun2`, `fy2005` (5 min), `nitan_ceshi`,
-  `nitan_san`, `xiaoaojianghu_client` (uptime()<10), `tianxia`,
+  `xyxy2`, `xiaoyuxiyou`, `bixiecanyang`,
+  `xyzxfy2`, `fy2005` (5 min), `nitan_ceshi`,
+  `nitan_san`, `xajhzcjh` (uptime()<10), `tianxia`,
   `jhfy3` (uptime()<30, fired deterministically every WASM run since the
   harness connects instantly after boot — no amount of real-wall-clock
   waiting via filler `--send` traffic satisfies it, because the WASM
   event backend is host-tick-driven, not wall-clock-driven).
 - **Per-IP anti-flood / registration throttles** — "one new registration
   per N minutes per IP" mappings (`xo_final`'s `BAN_D` 3-minute
-  throttle, `xiaoaojianghu2`'s per-IP throttle) whose rejection path is
+  throttle, `xajh2`'s per-IP throttle) whose rejection path is
   often a *silent* disconnect (§8.6).
 
 **Patch pattern**: remove or short-circuit the `uptime()` check (or gate
@@ -345,7 +345,7 @@ if (ip == "127.0.0.1") return 1;   // IsTimeAllowed()-style check
 
 **KEEP in-game content timers** — quit-retention windows ("new accounts
 deleted if you quit within 30 min", `xiyouji2003`), save gates ("need 10
-points before quit saves", `xiaoaojianghu2`), skill/combat cooldowns —
+points before quit saves", `xajh2`), skill/combat cooldowns —
 those are game design, not hosting protection. Record every bypassed
 gate in the lib's NOTES.md.
 
@@ -394,7 +394,7 @@ status.) For every lib not yet `playable`:
 5. Known one-off oddities to not rediscover: `xo` reaches the gender
    prompt then hangs at world-entry under WASM only (not IP-related, not
    reproducible on sibling `xo_final` — unexplained, flagged);
-   `xiaoaojianghu_xo`'s character-creation finalization is flaky under
+   `xajhxo`'s character-creation finalization is flaky under
    the harness (timing-shaped, fine natively).
 
 ### 1.5 Admin account seeding (standard convention)
@@ -526,18 +526,18 @@ already-processed libs: `md5sum`/`diff` on `master.c`, `chinese.c`,
 `chinesed.c`, `logind.c`, `named.c`, `securityd.c`. A match means you
 port the sibling's proven fix list wholesale and boot clean on the first
 attempt (worked repeatedly: `bxsj1` from `bxsj`, `nitan6` from
-`nitan170911`, `shujiantianxia` from `shujian2008`,
-`menghuanxiyou2002` from `mhxy`, the whole `jinyongqunxiazhuan2008`
-group, `fengyun2qinghua` from `fy2`). §11 maps the known families.
+`nitan170911`, `sjtx2` from `shujian2008`,
+`mhxyqd` from `mhxy`, the whole `jqxz2008`
+group, `fy2qh` from `fy2`). §11 maps the known families.
 
 Two hard-won caveats:
 - **Similar Chinese titles are NOT a lineage signal, in either
-  direction.** Same-titled libs proved unrelated (`shujianpiaoling2` vs
+  direction.** Same-titled libs proved unrelated (`sjpl2` vs
   `shujian2008`; `zhongjidiyu` vs the other two 终极地狱;
-  `kuangxiangkongjian` vs `xinkuangxiangkongjian2` are same game but
+  `kxkj1` vs `kxkj` are same game but
   different snapshots; `xianlvqiyuan` vs `xlqy_new2007` different
   codebases) and different-titled libs proved identical
-  (`xiakexing3` = `jinyongqunxiazhuan2008`; `jinyongwenzi` = `bxsj`).
+  (`xiakexing3` = `jqxz2008`; `jinyongwenzi` = `bxsj`).
   Always verify by diff.
 - **Ported fixes still need per-lib verification** — a sibling can have
   independently drifted (the "identical" file you didn't diff), and an
@@ -599,7 +599,7 @@ if `raw/` ends up empty. Known traps:
   filename; always `ls archives/ | grep` for the exact name).
 - **Bare `.gz` of a tar** (`xixingzhanji`'s `西行战记.gz` → `xxzj.tar`).
 - **Mudlib nested inside a second archive** inside the first
-  (`fluffos_xiyou2000`: mudlib in `world.tar.gz` inside the tarball).
+  (`xyj2000f`: mudlib in `world.tar.gz` inside the tarball).
 - **"Binary version" archives**: mostly compiled MudOS bytecode (`.b`,
   `MUDB` magic) with no bootable source — not convertible
   (`longyunmeng_binary`, 033-3). Check for a "源码版"/source-version
@@ -618,7 +618,7 @@ if `raw/` ends up empty. Known traps:
 ### 4.1 Encoding rules
 
 - Default: `iconv -f GB18030 -t UTF-8` (superset of GBK/GB2312). Fall
-  back to `-f BIG5` when GB18030 errors (`chongshengdeshijie` is fully
+  back to `-f BIG5` when GB18030 errors (`zsdsj` is fully
   BIG5/CP950). Some files are already UTF-8 (mixed-era edits) — detect
   with a UTF-8 round-trip before converting.
 - **The "fall back to BIG5 when GB18030 errors" rule doesn't actually
@@ -674,13 +674,13 @@ if `raw/` ends up empty. Known traps:
   of that shape in a file flagged "LOSSY conversion" in the conversion
   log ⇒ diff against the raw bytes and re-insert the exact dropped
   character. Seen on `tianxia`, `xo_final`, `shujian2008`,
-  `xianlvqiyuan`, `yanlongfengyin_xiaoao3` (where it silently deleted
+  `xianlvqiyuan`, `ylfyxa3` (where it silently deleted
   NPC `set_name()` lines).
 - **Mixed encodings within ONE file**: BIG5 lines inside an otherwise-GBK
   file decode via GB18030 *without error* into valid-but-wrong mojibake —
   undetectable by the lossy-conversion log. Only a human skim of
   user-facing strings catches it (`huoying`'s `config.cfg`; also found
-  live during a §10.7 deep functional test on `shanhaizhanshen` — 9
+  live during a §10.7 deep functional test on `shzs` — 9
   `指令格式：` command-help headers mixing this lib's BIG5-heritage ES2
   base text with GBK text a later Chinese-reskin author appended without
   re-encoding; a broader automated scan of the same lib found the
@@ -690,7 +690,7 @@ if `raw/` ends up empty. Known traps:
   than assuming one spot-check found everything). Re-decode just the
   affected lines with BIG5.
 - **Whole help/motd/broadcast files skipped entirely by an earlier
-  conversion pass**: `shanhaizhanshen`'s `doc/help/{topics,cmds,story}`,
+  conversion pass**: `shzs`'s `doc/help/{topics,cmds,story}`,
   `adm/etc/motd`, and `adm/etc/nature/day_phase` (a preloaded daemon that
   broadcasts this text to every outdoor player on every day/night
   transition, for as long as the driver is up) were still raw GBK,
@@ -779,8 +779,8 @@ warning matters). Two collision classes to check after every run:
   the *values* into `nosave`, silently aliasing `protected` → `nosave`.
   Grep `#define\s\+\(nosave\|protected\)\s` in `.h` files and neutralize
   the shim entirely (both keywords are real on this driver). Seen on
-  `yuxuechongsheng`, `yanlongfengyin_xiaoao3`, `zitengzhan`,
-  `xiaoaojianghu_client`.
+  `yxcs`, `ylfyxa3`, `zitengzhan`,
+  `xajhzcjh`.
 
 ---
 
@@ -796,9 +796,9 @@ modern canonical example). Adaptation checklist for
 prune keys the driver rejects / add ones it requires (boot stderr tells
 you); never trust the shipped config's absolute paths (they're the
 original server's, e.g. `mudlib directory : /tx`) or even its `name:`
-field (stale copy-paste from other muds is common — `datangshuanglong`
+field (stale copy-paste from other muds is common — `dtsl2`
 ships a 碧血残阳 name field and even a `config.bxcy` filename;
-`tiexuejianghu` ships 风云三; `xiakexinzhuan2` ships 海洋II).
+`tiexuejianghu` ships 风云三; `xkxz2` ships 海洋II).
 
 ### 5.2 `log directory` resolves against the driver's CWD
 
@@ -844,7 +844,7 @@ cause, fix, detection, known-affected lineages.
   ```
 
   Extend an existing implementation rather than overwrite it. (ES II
-  family everywhere; first found on `unknownlib20150716`.)
+  family everywhere; first found on `xyxy2`.)
   **Timing caveat**: `get_include_path()` is NOT consulted for
   preload-time compiles (no VM context yet) — a `<local.h>` include in
   anything reachable via preload still fails; change those specific
@@ -858,8 +858,8 @@ cause, fix, detection, known-affected lineages.
   resolves (the `<>` resolver doesn't special-case absolute names). Can
   silently break only lazily-loaded objects, e.g. sending every new
   character into the void room instead of the start room. Convert to
-  quoted form. (359 files on `xinkuangxiangkongjian2`, 172 on
-  `kuangxiangkongjian`, recurs across ES II. Also found live on
+  quoted form. (359 files on `kxkj`, 172 on
+  `kxkj1`, recurs across ES II. Also found live on
   `wuhanzhan` via its §10.7 deep functional test — a single surviving
   instance that an earlier grep-based sweep missed because the grep
   pattern was case-sensitive and only matched uppercase absolute paths
@@ -875,7 +875,7 @@ cause, fix, detection, known-affected lineages.
   angle-bracket absolute include is the only thing wrong with a file.)
   **Alternative fix when quoting individual `#include` lines is
   impractical (many scattered occurrences, or the exact same shape
-  keeps recurring across new content)**: found on `unknownlib20150716`'s
+  keeps recurring across new content)**: found on `xyxy2`'s
   §10.7 pass. `get_include_path()` (this section's own opening fix)
   CANNOT resolve an already-absolute header name — the driver always
   builds `search_dir + "/" + header_name` for a `<...>` include, so no
@@ -893,7 +893,7 @@ cause, fix, detection, known-affected lineages.
   and every future absolute-inside-`<>` include on that lib resolves
   without touching individual files. Second confirmed application:
   `kxkjii2` (ES II/Annihilator lineage, unrelated to
-  `unknownlib20150716`) had 358 files with this exact shape — the
+  `xyxy2`) had 358 files with this exact shape — the
   `include_file()` apply fixed all of them in one master.lpc edit, no
   individual file touched. General signal for reaching for this fix
   over hand-quoting: grep count in the low hundreds or more.
@@ -917,7 +917,7 @@ cause, fix, detection, known-affected lineages.
 
 - **`tail(file)`** — reimplement in LPC (`read_file` + `explode` +
   slice). Fatal when it sits inside simul_efun. (`chidi` fatal,
-  `shanhaizhanshen` benign.)
+  `shzs` benign.)
 - **`efun::set/query/delete/addn(...)`** — nitan-family property system;
   see §7.15, the biggest architectural item in this catalog.
 - **`LONELY_IMPROVED`-gated `efun::` families** (nitan branch):
@@ -936,7 +936,7 @@ cause, fix, detection, known-affected lineages.
   silently killing `make_body()` mid-registration with zero visible
   error (compiles fine standalone; only the full inheritance chain
   fails). Rewrite call sites against `ed()`.
-  Grep `ed_start\|ed_cmd\|query_ed_mode` early. (`xiaoaojianghu2`.)
+  Grep `ed_start\|ed_cmd\|query_ed_mode` early. (`xajh2`.)
 - **Never-defined simul_efun globals** called from everywhere:
   `remove_ansi`, `noansi_strlen`, `B2G` (passthrough is correct
   post-UTF-8), `db_affected` (stub 1), `clr_ansi`, `chinese_number`
@@ -957,7 +957,7 @@ cause, fix, detection, known-affected lineages.
   doesn't actually declare anything; later use fails `Undefined
   variable`/`Illegal lvalue`. Fix occurrences as they surface (`array` →
   `mixed *`); don't bulk-fix 50k-file libs. (nitan family ~30-40/lib;
-  470 occurrences on `chongshengdeshijie` where bulk-fix WAS warranted.)
+  470 occurrences on `zsdsj` where bulk-fix WAS warranted.)
 - **`TYPE * a, b;`** — the `*` binds to the first declarator only
   (C-style); old code intends both as arrays. Symptom: `Bad assignment
   ( TYPE vs TYPE * )` in scattered files. Script-fix the narrow
@@ -965,7 +965,7 @@ cause, fix, detection, known-affected lineages.
 - **`switch` with only `default:`** — hard parse error ("need case
   statements"), fatal when it's `master.lpc`'s `connect()`. Rewrite as a
   plain block. Grep `switch\s*([^)]*)\s*{\s*default:`.
-  (`xixingzhanji`, `suiyuanxijianlu`.)
+  (`xixingzhanji`, `syxjl`.)
 - **`MACRO.0` float-promotion trick** — old-MudOS idiom
   `AVERAGING_NUM.0` (textually gluing `.0` onto a macro to make a float
   literal) is a hard syntax error here. Rewrite as
@@ -984,9 +984,9 @@ When the SAME error string appears in dozens/hundreds of sweep failures,
 check for one shared `inherit`/`#include` target before investigating
 any individual file: a single bad declaration in a common base fixed 299
 failures at once (`ds386`); a MISSING macro (`#define WQA_ROOM ...`
-absent from `globals.h`) fixed 81 (`xiyangzaixian3`); missing
+absent from `globals.h`) fixed 81 (`xyzx3`); missing
 `GROUP_TASK`/`EXERT_DIR`/armor macros fixed cascades on
-`xiaoaojianghu_xo`/`tiexuejianghu`. Extract the exact underlying error
+`xajhxo`/`tiexuejianghu`. Extract the exact underlying error
 line from a few failing blocks — byte-identical ⇒ one shared dependency.
 
 ### 6.5 Function-binding order within a file
@@ -1065,7 +1065,7 @@ int valid_read(string file, mixed user, string func) {
 ```
 
 Grep `load_object` inside master before first boot. (Widespread; first
-on `shanhaizhanshen`; also `dfgsiiv13b`, whose variant used
+on `shzs`; also `dfgsiiv13b`, whose variant used
 `catch(load_object(SECURITY_D))` directly in `valid_read`/`valid_write`
 with no guard at all — same fix applies regardless of the exact
 `load_object`/`find_object` shape.)
@@ -1103,7 +1103,7 @@ An old-MudOS force-reload trick in master's `create()`
 driver during bootstrap — raw C++ stack dump, nothing catchable. The
 reload serves no purpose here; delete it. Check every master's
 `create()` for `destruct` targeting SIMUL_EFUN_OB/MASTER_OB — invisible
-to lpcc, only crashes a real boot. (`dongfanggushi2`.)
+to lpcc, only crashes a real boot. (`dfgs2`.)
 
 ### 7.4 `this_player()` overriding the ACL caller identity
 
@@ -1155,7 +1155,7 @@ itself; two follow-on classes:
   absent (an anti-piracy registration check) — kill every connection or
   the whole driver. Guard on `find_object(DNS_MASTER)` truthiness,
   absent ⇒ skip the gate. (`xiyouji2003`, `xiyouji450`, `xiyouji`,
-  `suiyuanxijianlu`, `longyunmeng`.) Same idiom family as the WASM
+  `syxjl`, `longyunmeng`.) Same idiom family as the WASM
   VERSION_D gates (§1.3c).
 
 After the exclusion, always boot AND connect before considering it done.
@@ -1237,8 +1237,8 @@ connection-setup path needs a `stringp()` guard. Known fixed:
 pass — the gitignored counter file happened to already exist on that
 session's own disk from earlier testing, masking the crash locally;
 only a genuinely fresh checkout/CI pack reproduces it); also the
-`uptime.lpc` `write(read_file(LASTCRASH))` variant (`xianjianchuanqi`,
-`moniHuafu`, `suiyuanxijianlu`, `mnhf` — see also §7.11 for the
+`uptime.lpc` `write(read_file(LASTCRASH))` variant (`xjcq2000`,
+`moniHuafu`, `syxjl`, `mnhf` — see also §7.11 for the
 receiving side). On `mnhf` this crash fired on the FIRST connection
 attempt, since `logind.lpc`'s `logon()` calls `UPTIME_CMD->main()`
 before the id prompt on every connection — the driver auto-retried and
@@ -1258,12 +1258,12 @@ Two independent traps in the same apply:
   (98 in one session on `wuhanzhan`). Gate the broadcast on the message
   not containing `"warning:"` — LOWERCASE; the driver's diagnostic text
   is lowercase, and a `"Warning:"` check silently never fires
-  (`shenzhou`, `beimeixiakexing2001` shipped with the broken-case gate).
+  (`shenzhou`, `bmxkx2001` shipped with the broken-case gate).
 - `log_error()` calling `wizardp(this_player(1))` (or anything that
   lazily loads the security daemon) can fire from the FIRST preload
   compile, before securityd exists — crashing every boot at the
   earliest possible point (`shenzhou`), or generating dozens of caught
-  error-traces per boot (`beimeixiakexing2001`). Guard with
+  error-traces per boot (`bmxkx2001`). Guard with
   `find_object()` checks, same discipline as §7.1.
 - Related: `error_handler()` is a `void` apply here — old "falls
   through to debug.log" comments lie. An explicit
@@ -1279,7 +1279,7 @@ Two independent traps in the same apply:
   never shipped (`/log/nosave/`, `data/user/a/`...) fails mid-flow; if
   it sits deep in a registration `call_other` chain the error reaches
   NOTHING standard — not debug.log, not the player; on
-  `xiaoaojianghu2` it appeared only in the lib's own custom
+  `xajh2` it appeared only in the lib's own custom
   `/log/runtime/secure` log. Registration "silently stalls" ⇒ also grep
   the lib's own custom log paths. Fix: `mkdir -p` every directory any
   write call references as part of pre-boot setup (save-data shards
@@ -1336,7 +1336,7 @@ just an annoyance, until the wrapper is fixed.
 
 Functions in `securityd.lpc`-like files whose body mass-deletes the
 mudlib / `shutdown()`s, gated on an opaque "license"/date check —
-sometimes dormant, sometimes genuinely reachable (`fengyun3dianzang`
+sometimes dormant, sometimes genuinely reachable (`fy3dz`
 via `gtell.lpc`; a year-2109 time bomb on `fy2005`). While reading any
 security daemon, grep for `rm(`/`unlink`/`shutdown` in
 non-admin-command context and neutralize the destructive body (keep the
@@ -1352,7 +1352,7 @@ host" these traps were aimed at.
 - **`crypt(str, 0)`**: int salt = fresh random SHA-512 hash per call
   here (was: deterministic DES) — made a client challenge/response
   handshake mathematically unpassable, zero errors anywhere
-  (`zhongjidiyu_zhijian`; fixed with an explicit string salt `"zj"`).
+  (`zjdyzj`; fixed with an explicit string salt `"zj"`).
   Check every crypt() in custom handshakes.
 - **Factory calls chained without a check**:
   `SOME_D->create_x(...)->move(...)` — factories legitimately return 0
@@ -1363,8 +1363,8 @@ host" these traps were aimed at.
   post-registration prompt (or any moment the body has no environment)
   crashes on `environment(me)->query(...)`. Guard with
   `if (environment(me))`. Recurs across the 风云 family (`fy2`,
-  `fengyun2qinghua`, `fengyun434`, `fengyun3xiuding`,
-  `fengyun3dianzang`, `fluffos_xiyou2000`, `esI`) — when fixing it in
+  `fy2qh`, `fengyun434`, `fy3xd`,
+  `fy3dz`, `xyj2000f`, `esI`) — when fixing it in
   one member of a family, port it to every sibling immediately.
 - **Missing post-registration destination room**: registration moves
   the new player to a gift/init room absent from the archive; the move
@@ -1386,7 +1386,7 @@ host" these traps were aimed at.
 - **versiond `socket_bind()` config-ID noise**: harmless if the ready
   flag is set synchronously before the failing call — read the code
   before chasing a single non-fatal boot-log line.
-  (`yanhuangyingxiongshi`.)
+  (`yhyxs`.)
 
 ### 7.15 The nitan `set`/`query`/`dbase` architecture bug (the deep one)
 
@@ -1415,8 +1415,8 @@ Only use `ob->X(...)` when `ob` is a different object.
 **Scope**: applies to `nitan170911`/`nitan6` (check
 `adm/kernel/simul_efun/wizard.lpc`); does NOT apply to every nitan-ish
 lib — `nitan_ceshi`/`nitan_san` predate the bug (real local dbase
-already present), `rzrmud`/`suiyuanxijianlu`/`xiaoaojianghu2`/
-`yuxuechongsheng` have real per-object storage. Check whether the
+already present), `rzrmud`/`syxjl`/`xajh2`/
+`yxcs` have real per-object storage. Check whether the
 simul_efun actually defines global set/query before assuming.
 
 **A port of this fix can carry the explanatory comment without the
@@ -1678,7 +1678,7 @@ transfers.
 
 ### 7.20 Net-dead void-parking without a location-restore path strands players silently on disconnect
 
-Found on `shanhaizhanshen`'s deep functional test (§10.7). **Zero signal
+Found on `shzs`'s deep functional test (§10.7). **Zero signal
 in `debug.log`** — no crash, no error, no warning — the single hardest
 bug class in this catalog to detect, since every other bug here at least
 leaves SOME trace. Only reproducible by deliberately disconnecting
@@ -1879,7 +1879,7 @@ guaranteed per invocation, on every exit path, including error paths.
 
 Lineages likely affected: any lib with a copy-pasted "guide escorts a
 new player through scripted rooms" NPC pattern —
-`beimeixiakexing2001` (documented sibling of `xkx2001`) carries a
+`bmxkx2001` (documented sibling of `xkx2001`) carries a
 byte-identical, unfixed copy of the vulnerable file; check any other lib
 sharing this ES2 island-onboarding lineage for the same shape.
 
@@ -2003,13 +2003,13 @@ Fix: capture only the first segment after `/u/`
 first-segment discipline the rest of the function already uses for
 other root directories.
 
-Lineages likely affected: `menghuanxiyou2002`, `fluffos_xiyou2000`,
+Lineages likely affected: `mhxyqd`, `xyj2000f`,
 `xiyouji2003`, `xiyouji2006` (confirmed via grep to carry identical
 code, not yet fixed there — out of scope for the pass that found this).
 
 ### 7.27 (RETRACTED — false positive, see §10.7's scope note) A time-gated transit room deleting its exit on window-close
 
-Originally found on `unknownlib20150716`'s deep functional test (§10.7)
+Originally found on `xyxy2`'s deep functional test (§10.7)
 and initially "fixed" by restoring the deleted exit — **reconsidered and
 reverted on user review**: this is a real-time-gated raft mechanic
 (`room->delete("exits/out")` when a ~20s boarding window closes) whose
@@ -2170,7 +2170,7 @@ don't index the `query()` call's return value directly.
 
 ### 7.31 `enter_world()` overwrites the just-restored persistent player object's flag with the fresh per-connection object's stale/default value
 
-Found on `xiakexinzhuan2`'s deep functional test (§10.7). On login, two
+Found on `xkxz2`'s deep functional test (§10.7). On login, two
 distinct objects exist briefly: the persistent player body (`user`,
 restored from the player's save file, carrying their real accumulated
 state) and a brand-new per-connection login/network object (`ob`,
@@ -2206,7 +2206,7 @@ data.
 
 ### 7.32 A dangling/missing `else` in a sequential `if`-chain silently rejects every case but the last
 
-Found on `xiakexinzhuan2`'s deep functional test (§10.7). A classic
+Found on `xkxz2`'s deep functional test (§10.7). A classic
 control-flow defect, not lib-architecture-specific, but worth cataloging
 since it produced a severe, silent, near-total feature failure: a
 multi-destination dispatcher (a paid travel-guide NPC's `do_go()`)
@@ -2391,7 +2391,7 @@ save/quit that same handler exists to guarantee.
 
 ### 7.37 Calling `ob->efun_name(...)` where `efun_name` matches a real driver efun, but no method of that name is actually defined on `ob`, silently no-ops
 
-Found on `sanjiechuanshuo`'s deep functional test (§10.7): a room's
+Found on `sjcs`'s deep functional test (§10.7): a room's
 reconnect-triggered `call_out` tried to automatically resume a stalled
 gift-selection wizard via `me->command("start")` — but the real
 `command()` efun (`core.spec`: `int command(string)`) takes NO object
@@ -3300,10 +3300,10 @@ Registration shape differs per lib: GB/BIG5 font questions blended
 invisibly into the banner, "are you a student" age gates (any answer but
 "no" disconnects), literal `new` keyword vs. any-unused-id, English name
 → Chinese name with or without confirmations, surname/given-name split
-prompts. And a prompt's TEXT can lie: `xiyangzaixian3`'s "请输入您的英文
+prompts. And a prompt's TEXT can lie: `xyzx3`'s "请输入您的英文
 名字:" is actually a hardcoded client-version gate expecting the literal
 `"2060"` (and failed retries loop back to the gate, not the id prompt);
-`xiaoaojianghu_client` has the same `get_version` gate live. **Always
+`xajhzcjh` has the same `get_version` gate live. **Always
 read the actual `input_to` callback chain in `logind.lpc` before
 scripting a test.** If a scripted registration produces confusing
 cascading rejections, re-run with ONE `--send` at a time and read the
@@ -3339,17 +3339,17 @@ refuses to call it. Fix: drop `private` (keep `nomask`).
 // AFTER:   nomask int command_hook(string arg)
 ```
 
-Affected so far: `xuanjianlu`, `beimeixiakexing2001`, `bxsj`, `bxsj1`,
-`jinyongwenzi`, `xiakexing3`, the `jinyongqunxiazhuan2008` group,
+Affected so far: `xuanjianlu`, `bmxkx2001`, `bxsj`, `bxsj1`,
+`jinyongwenzi`, `xiakexing3`, the `jqxz2008` group,
 `zhongjidiyu` (twice — main hook plus an 18-handler NPC file),
-`zhongjidiyu_airuoyoulan`, `tiexuejianghu`, `xingzhanyingxiong` and
+`zjdyaryl`, `tiexuejianghu`, `xzyx` and
 `shiji` (both found via a deep functional test, §10.7 — reached only
 through an NPC's own `command()` call, not by any player-typed command,
 since ordinary typed commands arrive via `ORIGIN_DRIVER` and bypass the
 privacy check that only bites `ORIGIN_EFUN` calls; every earlier smoke
 test on both libs only ever typed commands directly, so movement's
 auto-look and every sect-join system silently never worked until these
-passes — `shiji` is the SAME underlying game as `xingzhanyingxiong`,
+passes — `shiji` is the SAME underlying game as `xzyx`,
 same bug, same lineage, independently discovered). **Empirical caveat,
 now narrowed**: `private` command_hook does NOT always break
 *player-typed* dispatch on current drivers — `shiji` itself, `tianxia`,
@@ -3425,9 +3425,9 @@ A direct (non-`->`) call with a wrong argument type is a hard compile
 error here: `is_killing(ob)` where the signature says `string` (every
 other call site passes `ob->query("id")`) blocked whole body classes.
 Recurs constantly: `nitan_ceshi`, `nitan_san`, `tianxia`
-(query_shadowed), `yanhuangyingxiongshi`, `shenzhou`,
-`zhongjidiyu_airuoyoulan`/`_zhijian`, the 金庸群侠传 group,
-`kuangxiangkongjian`. Grep `is_killing(` for object-passing call sites
+(query_shadowed), `yhyxs`, `shenzhou`,
+`zjdyaryl`/`_zhijian`, the 金庸群侠传 group,
+`kxkj1`. Grep `is_killing(` for object-passing call sites
 during the standard pass.
 
 ### 8.6 Anti-flood registration throttles (now bypassed, §1.3e)
@@ -3498,7 +3498,7 @@ short.
 **Whether the local-override shape is a LIVE bug depends entirely on
 the converter's byte-range test — always boot and select the legacy
 option live, never conclude from code shape alone.** Seen across a
-second family (`fluffos_xiyou2000`, `menghuanxiyou2002`, `mhxy`,
+second family (`xyj2000f`, `mhxyqd`, `mhxy`,
 `mohuanshiji` — same `feature/encoding.lpc` int-flag +
 `CONVERT_D`/`LANGUAGE_D` byte-table pattern as above): some of these
 libs' `SC_ISFIRSTBYTE(c)`-style test is UNBOUNDED (`c >= 0xA1`, no
@@ -3512,7 +3512,7 @@ are NOT bugs, selecting the legacy option already renders clean, and
 patching them would be needless churn. Same fix when it IS live: map
 the legacy branch to whatever value that lib's own converter treats as
 a no-op (usually `encode=0`/"GB"). Also check for dead code before
-fixing anything: `datangshuanglong`'s menu is unreachable behind an
+fixing anything: `dtsl2`'s menu is unreachable behind an
 `#ifdef GB_AND_BIG5x` typo (trailing "x" never matches the real
 `#define`) that always hardcodes the safe branch — a real but harmless
 bug, out of scope, don't "fix" the typo as part of this pass unless
@@ -3579,7 +3579,7 @@ formatting ANY lib, run all three checks, then re-boot and re-test:**
    formatted before the merge.
 2. **`case` label + trailing `//` comment merge** — the comment swallows
    the start of the next line's statement, silently deleting it
-   (`chongshengdeshijie`'s gender-selection crash). No clean grep;
+   (`zsdsj`'s gender-selection crash). No clean grep;
    diff-review case-heavy files after formatting.
 3. **Pre-existing unbalanced quotes → garbage re-spacing** — on a file
    whose quotes were ALREADY unbalanced (author typo), the formatter's
@@ -3890,7 +3890,7 @@ see `libs/bxsj/NOTES.md` "深度功能测试" for the worked example):
 
 ### 10.8 Long-sit soak testing can surface driver-fatal crashes invisible to `debug.log` entirely
 
-Found on `xianjianchuanqi`'s deep functional test (§10.7): roughly 25
+Found on `xjcq2000`'s deep functional test (§10.7): roughly 25
 minutes into an otherwise-ordinary session, the whole driver process
 died outright — `FATAL ERROR: FATAL: Object .../d/xingxiu/silk6 ref
 count 0, but not destructed (from free_svalue).`, a driver-level
@@ -3932,7 +3932,7 @@ explicitly checking, not assuming.
 (`FATAL: Object .../cmds/skill/recruit ref count 0, but not destructed
 (from free_svalue)`) roughly 20 minutes into an unrelated session, this
 time during an admin reconnect rather than ambient NPC wandering, and
-on a completely different lib/lineage from `xianjianchuanqi`. Two
+on a completely different lib/lineage from `xjcq2000`. Two
 follow-up attempts to reproduce the exact triggering sequence on a
 fresh character immediately after restart did not reproduce it, nor did
 another ~15 minutes of further play.
@@ -3993,66 +3993,66 @@ base-first):
 - **ES II / 东方故事 mega-family** (the region's common ancestor
   mudlib; expect §6.1 include fixes, §8.1, §7.12 message wrappers,
   §4.3 collisions): `es1_win`/`esI` (008); and ES II-derived but
-  distinct games: `xkx2001`/`beimeixiakexing2001` (017), `xuanjianlu`
+  distinct games: `xkx2001`/`bmxkx2001` (017), `xuanjianlu`
   (046), `rzrmud` (016), `wuhanzhan` (040), `haiyang2` (043)
   with confirmed derivative `hymud` (043-1, byte-diff confirmed same
   codebase), `huoying` (044, Neolith), `shenzhou` (048),
   `shenmo` (049, Neolith), `zitengzhan` (051), `zhongjidiyu` (052),
-  `xixingzhanji` (054), `tiexuejianghu` (056), `suiyuanxijianlu` (057),
+  `xixingzhanji` (054), `tiexuejianghu` (056), `syxjl` (057),
   `mohuanshiji` (058), `yueyingqiyuan` (037),
-  `xinkuangxiangkongjian2`/`kuangxiangkongjian` (036),
-  `yuxuechongsheng` (042, hybrid ES/nitan), `xiakexinzhuan2` (028),
-  `dongfanggushi2` (022), `zuizhonghuanjing` (061, explicit in-game
+  `kxkj`/`kxkj1` (036),
+  `yxcs` (042, hybrid ES/nitan), `xkxz2` (028),
+  `dfgs2` (022), `zzhj` (061, explicit in-game
   credit: "FF 的 MUD 函數庫改寫自東方故事 II" — a small, distinctly-
   shaped ES2 extension by a different author ("Spock"), not a
   derivative of any other single member here).
 - **西游记 / xiyouji.org branch of ES II** (§6.6's convertd Greek table,
   §7.6 mirror-site gates): `xiyouji` (010, the ancestor snapshot) with
-  `fluffos_xiyou2000`, `xiyouji2003`, `xiyouji450`, `xiyouji2006`;
-  `mhxy`/`menghuanxiyou2002` (012, 梦幻西游 branding);
+  `xyj2000f`, `xiyouji2003`, `xiyouji450`, `xiyouji2006`;
+  `mhxy`/`mhxyqd` (012, 梦幻西游 branding);
   `shenmo` (049) is a far-evolved fork; `wuhanzhan` (040) a 大话西游
   sibling; `aoxiangtianji` (063) is another far fork — rebranded from
   an old 西游记 base (login banner/system strings still literally say
   "西游记"/"Xi You Ji" in places despite the game itself being
   翱翔天际-branded throughout).
-- **yh2003**: `yanhuangwuhun`/`yanhuangyingxiongshi` (045).
-- **金庸群侠传 engine**: `jinyongqunxiazhuan2008` + `_std` + `_deluxe`
+- **yh2003**: `yanhuangwuhun`/`yhyxs` (045).
+- **金庸群侠传 engine**: `jqxz2008` + `_std` + `_deluxe`
   + `2015` + `xiakexing3` (031) — engine layer frozen across 7 years,
   fixes port 1:1.
 - **书剑 (ShuJian)**: `bxsj`/`bxsj1`/`jinyongwenzi` (004) — literal
-  same codebase. Unrelated to `shujian2008`/`shujiantianxia` (024,
-  Century family) and `shujianpiaoling2` (025) despite titles.
+  same codebase. Unrelated to `shujian2008`/`sjtx2` (024,
+  Century family) and `sjpl2` (025) despite titles.
 - **Century / adm-single family** (custom securityd ACLs — §7.5 on
-  sight): `shiji` (021), `shujian2008` (024), `xianjianchuanqi` (027),
-  `xiakexinzhuan2` (028), `xiakexing100` (030), `zhonghua2` (023,
+  sight): `shiji` (021), `shujian2008` (024), `xjcq2000` (027),
+  `xkxz2` (028), `xiakexing100` (030), `zhonghua2` (023,
   related shape).
-- **风云3 engine**: `zzfy`/`fengyun3xiuding`/`fengyun3dianzang` (020),
+- **风云3 engine**: `zzfy`/`fy3xd`/`fy3dz` (020),
   `moniHuafu` (039, own game). **风云Ⅳ**: `fengyun434`/`fy2005` (009).
-  **风云再起Ⅱ**: `fy2`/`fengyun2qinghua` (011). Family-wide idioms:
+  **风云再起Ⅱ**: `fy2`/`fy2qh` (011). Family-wide idioms:
   securityd `resolve()` ordering (§1.3c), environment(me) quit race
   (§7.14), phone-home checks (§7.13).
-- **夕阳再现 family**: `xiyangzaixian_fengkuang`/`_fengyun2`/
-  `jianghufengyun` (032); derived own-games `weimingkongjian` (038),
-  `bixiecanyang` (047), `xiaoaojianghu_client` (050).
-- **XYZX/炎龙封印 branch**: `xiyangzaixian3`/`yanlongfengyin_xiaoao3`/
+- **夕阳再现 family**: `xyzxfk`/`_fengyun2`/
+  `jhfy` (032); derived own-games `wmkj` (038),
+  `bixiecanyang` (047), `xajhzcjh` (050).
+- **XYZX/炎龙封印 branch**: `xyzx3`/`ylfyxa3`/
   `longyunmeng` (033; `longyunmeng_binary` 033-3 not convertible).
-- **XO / TMI-2 / Falcon**: `xo`/`xo_final`/`xiaoaojianghu2`/
-  `xiaoaojianghu_xo` (019). NOT nitan, despite 笑傲江湖 titles.
+- **XO / TMI-2 / Falcon**: `xo`/`xo_final`/`xajh2`/
+  `xajhxo` (019). NOT nitan, despite 笑傲江湖 titles.
 - **NT / nitan / Lonely**: `nitan170911` (014), `nitan6` (015) — §7.15
   applies; `nitan_ceshi`/`nitan_san` (041) — earlier branch, §7.15
   does NOT apply. Mega-libs; §10.4 memory rules.
-- **"hell" / Doing Lu**: `zhongjidiyu_airuoyoulan`/`zhongjidiyu_zhijian`
+- **"hell" / Doing Lu**: `zjdyaryl`/`zjdyzj`
   (053). `zhongjidiyu` (052) is UNRELATED despite the identical title.
-- **XLQY 仙侣情缘**: `xlqy_new2007`/`xlqy_early`/`xianlvqingyuanzheda`
+- **XLQY 仙侣情缘**: `xlqy_new2007`/`xlqy_early`/`xlqyzdb`
   (018); `xianlvqiyuan` (026) is a different, older codebase.
-- **小雨西游**: `unknownlib20150716`/`xiaoyuxiyou` (003).
-  **大唐双龙**: `dtsl`/`llmud_datangshuanglong`/`datangshuanglong`
+- **小雨西游**: `xyxy2`/`xiaoyuxiyou` (003).
+  **大唐双龙**: `dtsl`/`dtslmud`/`dtsl2`
   (007).
-- **Standalone/distinct**: `shanhaizhanshen` (001, simple/ES-derived),
-  `xingzhanyingxiong` (002), `chidi` (005), `xiakexing2017` (013),
-  `tianxia` (034), `tianxiawuxue` (035), `xiakeyingxiong3` (029),
-  `chongshengdeshijie` (055, GPLv2 BIG5 life-sim, custom dispatcher —
-  nothing ports in or out), `sanjiechuanshuo` (059) and
+- **Standalone/distinct**: `shzs` (001, simple/ES-derived),
+  `xzyx` (002), `chidi` (005), `xiakexing2017` (013),
+  `tianxia` (034), `tianxiawuxue` (035), `xkyx3b` (029),
+  `zsdsj` (055, GPLv2 BIG5 life-sim, custom dispatcher —
+  nothing ports in or out), `sjcs` (059) and
   `sanjieshenhua` (060, "三界神话") — share only their "三界" branding,
   NOT a lineage pair (diff-confirmed: `master.lpc`/`securityd.lpc`/
   `logind.lpc` all differ substantially in size and shape between the

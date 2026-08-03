@@ -12,7 +12,7 @@ The mudlib's own config (`adm/etc/config`) self-identifies as
 matching the archive's own title ("泥潭III测试版" = "Mud Pit III test
 version"). The live banner branding is actually **《終極魔界》** ("Ultimate
 Demon Realm") — a re-skin/theme layered on top of the "nitan" engine, same
-relationship as e.g. `weimingkongjian`(#55)'s "自称wmkj但banner显示别的" case.
+relationship as e.g. `wmkj`(#55)'s "自称wmkj但banner显示别的" case.
 A `小熊泥苑.txt` readme in the archive root credits a separate hosting site
 ("小熊泥苑"/dtxy.126.com, author 小熊/torrow0812) — this is a *site*, not the
 mudlib's own name; kept the `nitan_ceshi` slug rather than renaming, since

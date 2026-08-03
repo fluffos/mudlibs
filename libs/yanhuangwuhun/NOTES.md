@@ -17,7 +17,7 @@ mudlib / original from Lil / rewritten by Annihilator (11/07/94) /
 modified by Xiang for XKX (12/15/95) / updated by Doing Lu for hell (2K) /
 **Modify By Linux@lxtx for yh 2003.3**" ("yh" = 炎黄/Yanhuang). This is the
 same **ES II lineage** already seen in es1_win/esI/xkx2001/rzrmud/xo/
-beimeixiakexing2001/xinkuangxiangkongjian2/yueyingqiyuan/wuhanzhan (a 2003
+bmxkx2001/kxkj/yueyingqiyuan/wuhanzhan (a 2003
 fork of that common ancestor, done by an author using the handle "lxtx").
 `adm/single/{master,simul_efun}.c` layout (not `adm/obj/`) matches the
 xkx2001/rzrmud branch of that family most closely.
@@ -70,7 +70,7 @@ build.
    discovered content bugs, ending at **10747/10756 = 99.92% pass**.
 8. Killed the driver by exact PID when done (never used a broad
    `pkill -f` — verified other agents' concurrently-running drivers
-   for other libs, e.g. `huoying`, `yuxuechongsheng`, `haiyang2`, were
+   for other libs, e.g. `huoying`, `yxcs`, `haiyang2`, were
    never touched).
 
 ## Fixes applied proactively (before first boot), per the AGENTS.md catalog
@@ -401,7 +401,7 @@ password) → `new_password`/`confirm_password` (≥3 chars, must differ from
 admin password) → `get_type` (1-5 character archetype, blank defaults to
 5/"均衡型") → `get_gender` (m/f) → `make_body()` → `enter_world()`. No
 hidden BIG5/student/client-version pre-id gate — the very first prompt IS
-the real id prompt (unlike xiyangzaixian3/xiakexinzhuan2). "new"/"none"/
+the real id prompt (unlike xyzx3/xkxz2). "new"/"none"/
 "guest"/"cancel" are explicitly banned ids (routed to a guest/deny path,
 not character creation), matching several other libs in this project.
 
@@ -502,9 +502,9 @@ gameplay reachable from the tested paths).
   `d/fuzhou/mishi.lpc`'s `::valid_leave`), and independently in 5 sibling
   libs in this same pass (`xlqy_early`/`xlqy_new2007`'s shared
   `d/sky/xitian.lpc`, `xo_final`'s `system/daemon/user.lpc`, 4 files in
-  `xuanjianlu`, `yanhuangyingxiongshi`'s own copies of this lib's 2
+  `xuanjianlu`, `yhyxs`'s own copies of this lib's 2
   `combined.lpc`/`yue-wife.lpc` bugs, and 18 files in
-  `yanlongfengyin_xiaoao3`). Fixed all 6 instances in this lib by hand
+  `ylfyxa3`). Fixed all 6 instances in this lib by hand
   (restored the original `::FUNC(...)` call and matching brace structure,
   verified byte-for-byte against the pre-format git blob to make sure the
   original control flow — e.g. `combined.lpc`'s `return 1` staying

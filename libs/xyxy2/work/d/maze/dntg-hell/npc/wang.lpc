@@ -1,0 +1,314 @@
+#include <ansi.h>
+#include <combat.h>
+inherit NPC;
+
+varargs string *wang_type(int no_color) {
+  mixed foo;
+  int i;
+  string str, *strs;
+  foo = query("my_type");
+  if (!foo)
+    return 0;
+  if (stringp(foo)) {
+    if (no_color)
+      return ({ COLOR_D->clean_color(foo) });
+    else return ({ foo });
+  } else if (arrayp(foo)) {
+    strs = ({});
+
+    if (member_array("驭法", foo) != -1
+      && member_array("厚土", foo) != -1) {
+      str = ({ HIM "驭法" NOR, HIY "厚土" NOR })[random(2)];
+      foo -= ({ str });
+    }
+    for (i = 0; i < sizeof(foo); i++) {
+      str = COLOR_D->clean_color(foo[i]);
+      if (member_array(str, strs) != -1)
+        continue;
+      if (no_color)
+        strs += ({ COLOR_D->clean_color(foo[i]) });
+      else strs += ({ foo[i] });
+    }
+    return strs;
+  } else return 0;
+}
+
+void init_texing() {
+  object ob;
+  string str, *texing, *files, *foo;
+  int i;
+
+  set(
+    "shentong/40",
+    sprintf(
+      "%s_%s_%d",
+      ({ "金", "木", "水", "火", "土", })[random(5)],
+      ({ "阴", "阳", })[random(2)],
+      1 + random(7)
+    )
+  );
+  //set("env/brief_message",2);
+  if (!stringp(str = query("weapon_type")))
+    str = "unarmed";
+  if (objectp(ob = carry_object(0, str, 1))) {
+    ob->set("weapon_title", "阎罗地府");
+    ob->wield();
+  }
+  files = ({
+    "armor", "cloth", "hand", "kui", "neck", "pifeng", "ring", "shield", "shoes", "waist", "wrists",
+  });
+  for (i = 0; i < sizeof(files); i++) {
+    if (objectp(ob = carry_object(0, files[i], 1))) {
+      ob->set("armor_title", "阎罗地府");
+      ob->wear();
+    }
+  }
+  if (!arrayp(foo = wang_type(1))
+    || sizeof(foo) < 1)
+    return;
+  for (i = 0; i < sizeof(foo); i++) {
+    str = foo[i];
+    switch (str) {
+      case "反戈":  //受到伤害的15%反弹
+        add_temp("apply/re_spells_effdamage", 15);
+        add_temp("apply/re_combat_effdamage", 15);
+        add_temp("apply/re_spells_damage", 15);
+        add_temp("apply/re_combat_damage", 15);
+        break;
+      case "登峰":  //物理命中提高120%
+        add_temp("apply/combat_succ", 120);
+        break;
+      case "震古":  //法术命中提高120%
+        add_temp("apply/spells_succ", 120);
+        break;
+      case "彪悍":
+        add_temp("apply/combat_damage", 3000);
+        break;
+      case "通灵":
+        add_temp("apply/spells_damage", 3000);
+        break;
+    }
+  }
+}
+
+string short() {
+  int i;
+  string *foo, str = ::short();
+  if (!arrayp(foo = wang_type())
+    || sizeof(foo) < 1)
+    return str;
+  i = sizeof(foo);
+  if (i > 1)
+    str += NOR " [" HIY + chinese_number(i) + "重特性" NOR "]";
+  else {
+    while (i--)
+      str += NOR " [" + foo[i] + NOR "]";
+  }
+  return str;
+}
+
+string long() {
+  int i;
+  string *foo, str, long;
+
+  if (strsrch(query("name"), "王") != -1)
+    long = "此乃地府十王之" + query("name") + "的一尊分身。\n";
+  else long = query("long");
+  if (!arrayp(foo = wang_type(1))
+    || sizeof(foo) < 1)
+    return str;
+  for (i = 0; i < sizeof(foo); i++) {
+    str = foo[i];
+    switch (str) {
+      case "厚土": long += HIC "战斗特性：物理免疫。\n" NOR; break;
+      case "驭法": long += HIC "战斗特性：法术免疫。\n" NOR; break;
+      case "轻灵": long += HIC "战斗特性：busy状态下伤害降低。\n" NOR; break;
+      case "彪悍": long += HIC "战斗特性：高物理伤害。\n" NOR; break;
+      case "通灵": long += HIC "战斗特性：高法术伤害。\n" NOR; break;
+      case "吸血": long += HIC "战斗特性：击中回复自己3%的气血值。\n" NOR; break;
+      case "偷心": long += HIC "战斗特性：击中回复自己5%的法力值。\n" NOR; break;
+      case "培元": long += HIC "战斗特性：击中回复自己5%的内力值。\n" NOR; break;
+      case "反戈": long += HIC "战斗特性：受到伤害的15%反弹给攻击者。\n" NOR; break;
+      case "登峰": long += HIC "战斗特性：物理命中提高150%。\n" NOR; break;
+      case "震古": long += HIC "战斗特性：法术命中提高150%。\n" NOR; break;
+    }
+  }
+  return long;
+}
+
+int accept_fight(object who) { return 0; }
+
+varargs int receive_wound(string type, int damage, object who, mixed attack_type) {
+  string *foo;
+  if (!arrayp(foo = wang_type(1))
+    || sizeof(foo) < 1)
+    return ::receive_wound(type, damage, who, attack_type);
+  if (who && who != this_object()) {
+    if (member_array("厚土", foo) != -1 && (attack_type != TYPE_CAST && attack_type != TYPE_CAST_2))
+      damage = 0;
+    else if (member_array(
+      "驭法",
+      foo
+    ) != -1 && (attack_type == TYPE_CAST || attack_type == TYPE_CAST_2))
+      damage = 0;
+    else if (member_array("轻灵", foo) != -1 && this_object()->is_busy())
+      damage = 0;
+  }
+  return ::receive_wound(type, damage, who, attack_type);
+}
+
+varargs int receive_damage(string type, int damage, object who, mixed attack_type) {
+  string *foo;
+  if (!arrayp(foo = wang_type(1))
+    || sizeof(foo) < 1)
+    return ::receive_wound(type, damage, who, attack_type);
+  if (who && who != this_object()) {
+    if (member_array("厚土", foo) != -1 && (attack_type != TYPE_CAST && attack_type != TYPE_CAST_2))
+      damage = 0;
+    else if (member_array(
+      "驭法",
+      foo
+    ) != -1 && (attack_type == TYPE_CAST || attack_type == TYPE_CAST_2))
+      damage = 0;
+    else if (member_array("轻灵", foo) != -1 && this_object()->is_busy())
+      damage = 0;
+  }
+  return ::receive_damage(type, damage, who, attack_type);
+}
+
+mixed hit_ob(object me, object who, int damage, mixed attack_type) {
+  int p;
+  string *foo, msg;
+  if (!arrayp(foo = wang_type(1))
+    || sizeof(foo) < 1)
+    return 0;
+
+  if (!living(me) || !who || !me->is_fighting(who) || damage <= 0)
+    return 0;
+
+  p = 0;
+  msg = "";
+  if (member_array("彪悍", foo) != -1) {
+    if (attack_type == TYPE_COMBAT || attack_type == TYPE_PERFORM || attack_type == TYPE_QUICK)
+      p += damage;
+  }
+  if (member_array("通灵", foo) != -1) {
+    if (attack_type == TYPE_CAST || attack_type == TYPE_CAST_2)
+      p += damage;
+  }
+  if (member_array("吸血", foo) != -1) {
+    me->receive_heal("kee", me->query_maxkee() / 33 + 1);
+    me->receive_curing("kee", me->query_maxkee() / 30 + 1);
+    msg += NOR "\n" RED "$N" RED "开始疯狂的吸血！" NOR "\n";
+  }
+  if (member_array("偷心", foo) != -1) {
+    if (me->query("mana") < me->query_maxmana() * 2) {
+      me->add("mana", me->query_maxmana() / 20 + 1);
+      msg += "\n" HIB "$N" HIB "疯狂吸收四周的灵气以补充自己的法力。" NOR "\n";
+    }
+  }
+  if (member_array("培元", foo) != -1) {
+    if (me->query("force") < me->query_maxforce() * 2) {
+      me->add("force", me->query_force() / 30 + 1);
+      msg += "\n" HIG "$N" HIG "疯狂吸收四周的灵气以补充自己的真气。" NOR "\n";
+    }
+  }
+  if (p <= 0) {
+    if (msg == "")
+      return 0;
+    else return msg;
+  } else return p;
+}
+
+void heart_beat() {
+  object invoker, target, *enemy, me = this_object();
+  string str;
+  int k, i;
+  if (!environment())
+    return;
+
+  clean_up_enemy();
+
+  if (me->is_fighting()) {
+    enemy = me->query_enemy();
+    for (i = 0; i < sizeof(enemy); i++) {
+      invoker = 0;
+      if (!userp(enemy[i])
+        && objectp(invoker = enemy[i]->query_temp("invoker"))
+        && userp(invoker)) {
+        if (!living(invoker) || !invoker->is_fihgting(me)) {
+          enemy[i]->remove_killer(me);
+          me->remove_killer(enemy[i]);
+        }
+      }
+    }
+
+  }
+
+
+  if (living(me) && !me->is_busy()) {
+    if (!me->is_fighting()) {
+      if (query("eff_kee") < this_object()->query_maxkee()
+        || query("kee") < query("eff_kee")
+        || query("sen") < query("eff_sen")
+        || query("eff_sen") < this_object()->query_maxsen())
+        this_object()->powerup(1, 0);
+    } else {
+      if (time() >= (me->query_temp("no_exert/start") + me->query_temp("no_exert/time"))) {
+        if (query("eff_kee") < this_object()->query_maxkee())
+          QUEST_D->addEffKee(me);
+        if (query("eff_sen") < this_object()->query_maxsen())
+          QUEST_D->addEffSen(me);
+      }
+      if (query("kee") < query("eff_kee"))
+        QUEST_D->addKee(me);
+      if (query("sen") < query("eff_sen"))
+        QUEST_D->addSen(me);
+    }
+  }
+  if (living(me) && !me->is_busy()
+    && !me->is_blind()
+    && !me->is_hunluan()
+    && me->is_fighting()) {
+    if (random(5) == 1)
+      command("cast xiaoshen");
+    if (objectp(query_temp("weapon")))
+      str = query_temp("weapon")->query("skill_type");
+    else str = "unarmed";
+    if (intp(k = query("wang_pfm"))
+      && k > 0) {
+      if (random(k) == 0)
+        QUEST_D->randomPfm(this_object(), str);
+    }
+    if (intp(k = query("wang_cast"))
+      && k > 0) {
+      if (random(k) == 0)
+        QUEST_D->randomCast(this_object());
+    }
+  }
+  ::heart_beat();
+}
+
+int is_dntg_hell() { return 1; }
+
+void kill_ob(object who) {
+  if (strsrch(query("name"), "王") != -1) {
+    if (userp(who) && who->query_temp("maze/last_king") != query("name")) {
+      message_vision(
+        HIY "$N" HIY "皱了皱眉头，对$n" HIY "说道：“此事非我经手。冤有头，债有主，既是" HIR + who->query_temp("maze/last_king") + HIY "遣人勾你，你便去找他吧。”\n\n" NOR,
+        this_object(),
+        who
+      );
+      message_vision(
+        HIR "$N" HIR "皱了皱眉头，对$n" HIR "说道：“你我阴阳殊途，我不治你私闯幽冥之罪，也就是了。还不快快退下！”\n\n" NOR,
+        this_object(),
+        who
+      );
+      all_inventory(environment())->remove_killer(this_object());
+      this_object()->remove_all_killer();
+      this_object()->powerup();
+      return;
+    }
+  }
+  ::kill_ob(who);
+}

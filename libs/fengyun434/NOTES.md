@@ -60,7 +60,7 @@ registration test (Chinese surname + given name reaching the next prompt).
   policy).
 - **Proactive fix applied before the first boot attempt of this pass**:
   same `adm/daemons/securityd.lpc` `resolve()`-before-`wiz_status`
-  ordering bug as `fengyun3dianzang`/`fengyun3xiuding` (same 风云 engine
+  ordering bug as `fy3dz`/`fy3xd` (same 风云 engine
   family) — fixed proactively before booting. (A second, empty
   `adm/securityd.lpc` file also exists in this lib but is dead/unused —
   `SECURITY_D` in `globals.h` points at `adm/daemons/securityd`, not it —
@@ -163,10 +163,10 @@ message/wrapper argument bug" class, not a new one.**
   (there attributed to `yueyingqiyuan` and the ES II family) — this is
   the same bug class recurring in the unrelated 风云 engine lineage, not
   a new class. Notably, two OTHER 风云3-family siblings
-  (`fengyun3xiuding`, `fengyun3dianzang`) already carry the fix
+  (`fy3xd`, `fy3dz`) already carry the fix
   (`exclude || ({})`) in their copy of this same file, but three more
   siblings in this lib's own immediate 风云Ⅳ/风云再起Ⅱ family
-  (`fy2005`, `fy2`, `fengyun2qinghua`) plus `zzfy` (风云3) still have the
+  (`fy2005`, `fy2`, `fy2qh`) plus `zzfy` (风云3) still have the
   unfixed version — worth porting centrally per this task's scope note
   (not done here, out of scope for this session).
 - Fix (`adm/simul_efun/message.lpc:39`):
@@ -344,7 +344,7 @@ project has flagged before (AGENTS.md §7.6) for hanging boots, though
 not previously for sustained memory growth. **Not conclusively
 root-caused** — the process was killed for safety before further
 diagnosis, and a second, unrelated concurrent agent's driver (a
-different lib entirely, `xianjianchuanqi`) was independently observed
+different lib entirely, `xjcq2000`) was independently observed
 at a similarly elevated RSS at the same wall-clock time, so this may be
 a broader phenomenon (driver build, host machine memory pressure, or
 this specific test environment) rather than something specific to this
@@ -369,3 +369,7 @@ archive data misread as live), but a different, non-crashing mechanic
 (a wrong cosmetic number, not a runaway loop) — not fixed this pass
 given it's purely cosmetic and lower priority than the crashing
 `tell_room()` bug, flagged here for a future pass.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+风云Ⅳ 基础版。

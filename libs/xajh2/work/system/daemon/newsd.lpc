@@ -1,0 +1,156 @@
+// /system/daemon/newsd.c
+// build for news system
+// daemon for controling the news
+// first written by akuma@xo_group
+// ver 1.0
+// date 2001/05/22
+
+#include <ansi.h>
+
+#define NAME "笑傲江湖＋新闻系统"
+#define HEADER HIG"┏━━━━━━━━━━━━━"+NAME+"━━━━━━━━━━━━━┓\n"NOR
+#define TAIL   HIG"┗━━━━━━━━━━━━━"+NAME+"━━━━━━━━━━━━━┛\n"NOR
+#define LINE   HIG"┃━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┃\n"NOR
+
+inherit ITEM;
+inherit F_SAVE;
+
+
+mapping *news;
+
+void create() {
+  restore();
+}
+
+string query_save_file() {
+  return DATA_DIR + "daemon/newsd";
+}
+
+int news_list(object reader) {
+  int i, last_time_read;
+  string msg, tmp;
+
+  msg = "\n\n";
+  msg += HEADER;
+
+  if (!news || !sizeof(news)) {
+    msg += (sprintf(HIG "┃%-70s┃\n" NOR, "没有任何新闻存在"));
+    msg += TAIL;
+    reader->start_more(msg);
+    return 1;
+  }
+
+  last_time_read = this_player()->query("news_last_read/xkxnews");
+  for (i = 0; i < sizeof(news); i++) {
+    tmp = sprintf("[%s][%d]%-34s ",
+      (news[i]["time"] > last_time_read ? "未读" : "已读"),
+      i + 1, news[i]["title"]);
+    msg += (sprintf(HIG "┃%-70s%s┃\n" NOR, tmp, HIG));
+    tmp = (sprintf(
+      "---%s(%s)发布于%s",
+      news[i]["author"],
+      news[i]["author_id"],
+      ctime(news[i]["time"])[0..15]
+    ));
+    msg += (sprintf(HIG "┃%70s%s┃\n" NOR, tmp, HIG));
+  }
+  msg += TAIL;
+  reader->start_more(msg);
+  return 1;
+}
+
+void done_post_news(object poster, mapping note, string text) {
+  note["msg"] = text;
+  if (!pointerp(news) || !sizeof(news))
+    news = ({ note });
+  else
+    news += ({ note });
+
+  tell_object(poster, "新闻录入完成。\n");
+
+  save();
+  return;
+}
+
+int post_news(object poster, string arg) {
+  mapping note;
+
+  if (!wizardp(poster))
+    return -3;  //权限不够
+    note = allocate_mapping(5);
+  note["title"] = arg;
+  note["author"] = poster->query("name");
+  note["author_id"] = poster->query("id");
+  note["time"] = time();
+  poster->edit((: done_post_news, poster, note :));
+  return 1;
+}
+
+int read_news(object reader, string arg) {
+  int num;
+  int last_read_time;
+
+
+  last_read_time = reader->query("news_last_read/xkxnews");
+
+
+  if (arg == "new" || arg == "next") {
+    if (!last_read_time)
+      num = 1;
+    else
+      for (num = 1; num <= sizeof(news); num++)
+        if (news[num - 1]["time"] > last_read_time)
+          break;
+
+  } else if (!sscanf(arg, "%d", num))
+    return -1;  // dunno number
+
+    if (num < 1 || num > sizeof(news))
+      return -2;  // there is really no this number
+      num--;
+
+  reader->start_more("\n\n" + HEADER + HIG + sprintf("┃%-70s┃\n┃%70s┃\n",
+    sprintf("[%d][%s]", num + 1, news[num]["title"]),
+    "--" + news[num]["author"] + "发布于" + ctime(news[num]["time"])[0..9],)
+    +TAIL + news[num]["msg"] + TAIL);
+
+
+  if (!last_read_time)
+    reader->set("news_last_read/xkxnews", news[num]["time"]);
+  else if (undefinedp(last_read_time) || news[num]["time"] > last_read_time)
+    reader->set("news_last_read/xkxnews", news[num]["time"]);
+
+  return 1;
+}
+
+int do_discard(object discarder, string arg) {
+  int num;
+
+  if (!arg || sscanf(arg, "%d", num) != 1)
+    return -1;  //错误的参数
+    if (!arrayp(news) || num < 1 || num > sizeof(news))
+      return -2;  //没有该编号的新闻
+      num--;
+  if (news[num]["author"] != (string)discarder->query("name")
+    && (string)SECURITY_D->get_status(discarder) != "(admin)"
+    && !wizardp(discarder))
+    return -3;  //权限不够
+
+    if (num == 0)
+      news = news[num + 1..sizeof(news) - 1];
+    else
+      news = news[0..num - 1] + news[num + 1..sizeof(news) - 1];
+  save();
+  return 1;  //成功
+}
+
+int query_new(object reader) {
+  int num, total = 0;
+  int last_read_time;
+  last_read_time = reader->query("news_last_read/xkxnews");
+  for (num = 0; num < sizeof(news); num++) {
+    if (news[num]["time"] > last_read_time)
+      total++;
+  }
+  return total;
+}

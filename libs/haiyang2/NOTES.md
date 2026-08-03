@@ -24,8 +24,8 @@ Lineage: `adm/single/{master,simul_efun}.c` layout, `master.c`'s own
 header comment says **"for ES II mudlib... original from Lil...
 rewritten by Annihilator... modified by Xiang for XKX"** — this is the
 same "ES II" lineage already seen many times in this project (es1_win,
-esI, xkx2001, rzrmud, xo/xo_final, beimeixiakexing2001,
-xinkuangxiangkongjian2, yueyingqiyuan, wuhanzhan, ...). Small simul_efun
+esI, xkx2001, rzrmud, xo/xo_final, bmxkx2001,
+kxkj, yueyingqiyuan, wuhanzhan, ...). Small simul_efun
 set (`atoi`, `chinese`, `file`, `gender`, `object`, `path`, `wizard`,
 `message` — 7 files, ~350 lines total) confirms the correctly-architected
 per-object `F_DBASE` storage pattern (verified: `feature/dbase.lpc` has
@@ -98,7 +98,7 @@ the actual numbers observed.
    `master.lpc`'s `epilog()` reading `CONFIG_DIR+"preload"` where
    `CONFIG_DIR = "/adm/etc/"`, AND the stray unused `adm/daemons/preload`
    decoy copy — same "dead duplicate preload file" shape documented for
-   `weimingkongjian`/archive #55): both listed `/adm/daemons/securityd`,
+   `wmkj`/archive #55): both listed `/adm/daemons/securityd`,
    but the real file on disk is `adm/daemons/securd.c`/`.lpc` (matches
    `include/globals.h`'s `#define SECURITY_D "/adm/daemons/securd"`).
    Fixed both copies' typo'd path so the security daemon actually
@@ -202,7 +202,7 @@ the actual numbers observed.
 named `u/hxsd/workrom.c/` (containing one file, `workroom.c`, itself never
 renamed since the rename only recurses into files) — the classic
 "orphaned duplicate-content directory" pattern already seen on
-`xianjianchuanqi` (archive #40). Confirmed nothing references
+`xjcq2000` (archive #40). Confirmed nothing references
 `workrom`/`workrom.c` anywhere else in the tree (`grep` came up empty
 besides the directory's own contents), and a real `workroom.lpc` file
 already exists as a sibling — renamed the directory to

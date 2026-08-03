@@ -182,7 +182,7 @@ registration test (Chinese surname + given name reaching the next prompt).
   driver bug) — the native re-test above already fully covers that
   final step. The general `query_ip_number()` WASM limitation described
   in AGENTS.md remains real and does affect other libs in this batch
-  (see `xiyangzaixian_fengkuang`/`xiyangzaixian_fengyun2`'s NOTES.md,
+  (see `xyzxfk`/`xyzxfy2`'s NOTES.md,
   whose `BAN_D` checks use `query_ip_number()` directly) — it just
   doesn't reach this particular lib's tested registration path.
 
@@ -428,7 +428,7 @@ evidence, matching this project's standing convention):
   time did **not** abort the guide's schedule — it simply fell into the
   ordinary "拉起你的手" recovery branch like any other separation,
   which is the intended degraded behavior.
-- **Lineage check**: `libs/beimeixiakexing2001/work/d/xiakedao/npc/
+- **Lineage check**: `libs/bmxkx2001/work/d/xiakedao/npc/
   longx.lpc` is a **byte-for-byte identical copy** of the pre-fix file
   (confirmed via `diff`) — same missing `return`, same vulnerable
   shape, almost certainly equally capable of segfaulting that lib's

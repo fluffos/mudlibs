@@ -1,0 +1,383 @@
+// filename : /feature/zuzhi.c 
+// first reedit by Lin on 97-8-25 20:48 
+// to add some new function from groupd.c(zuzhid.c)
+//  说明：
+//    每个组织有一个自己的文件"zuzhi".c，放在/system/feature/zuzhi/下面，
+//  用来记载每个组织的一些数据库和单独的函数。每个人应该允许参加多个组织
+//  正因为如此，一般上不应该让别人看到这个人的组织归属情况。
+//  现在还是不让其它人看到组织属性，如果另一个人是你所在的组织中的上级，那么
+//  他可以看到你是这个组织的什么人。（这个交给look.c去完成）
+//  由于有TRILL 原来用的"zuzhi"数据存在，现在的组织数据改用"group"这个mapping.
+#include <dbase.h>
+
+string *GetZuzhiName();
+//玩家一共参加的组织 
+string *GetZuzhiId();
+int IsMemberOf(string zuzhiname);
+//检查这个玩家是否是这个组织的成员 
+int JoinedZuzhiNumber();
+//加入的组织的数目 
+mapping GetZuzhi(string zuzhiname);
+string ZuzhiName(string zuzhiname);
+//  组织的名称（正式中文名称） 
+string ZuzhiId(string zuzhiname);
+//  这个id实际上就是zuzhiname
+string ZuzhiTouxian(string zuzhiname);
+//  玩家在组织中的头衔 
+string ZuzhiZhiwu(string zuzhiname);
+//  职务 
+int EnterZuzhiTime(string zuzhiname);
+//  加入组织的时间（在加入组织时记录的） 
+int LastContactTime(string zuzhiname);
+//  获取上次与组织联系的时间：应该就是上个quest的时间吧？ 
+int ZuzhiScore(string zuzhiname);
+//  给出组织中的score.相当于family中的师门忠诚度.
+void JoinZuzhi(string zuzhiname, string touxian, string zhiwu);
+//加入组织,三项可以全是中文，也可以后两项是中文,
+void LeaveZuzhi(string zuzhiname);
+//离开组织
+void IncreaseZuzhiTouxian(string zuzhiname, int step);
+// 升级
+int SetZuzhiTouxian(string zuzhiname, string touxian);
+// 设定头衔
+int SetZuzhiZhiwu(string zuzhiname, string zhiwu);
+int DoneContact(string zuzhiname);
+// 接触组织的记录
+int SetZuzhiName(string zuzhiname, string name);
+int SetZuzhiScore(string zuzhiname, int score);
+int AddZuzhiScore(string zuzhiname, int score);
+void Welcome(object who, string zuzhiname);  //吸收who加入自己的组织.
+//  这个函数可以先不写，因为是留给玩家用来接纳其他玩家加入自己的组织的.
+//  这里只是对于数据的读出给予各种函数接口，关于数据的写入，一律由zuzhid.c完成，
+//  以便记录在系统的文件中.
+
+mapping group;
+//由于这里不能直接设值，所以在下面：
+// GetZuzhiname(),GetZuzhiId(),GetZuzhi( zuzhiname )
+//三个函数中定义了group = query("group");
+//而其他函数都要先调用到这三个函数否则不能得到group的数值。
+
+string *GetZuzhiName() {
+  string *name;
+  int i, num;
+  if (!group)
+    return ({});
+  num = JoinedZuzhiNumber();
+  name = allocate(num);
+  for (i = 0; i < num; i++)
+    name[i] = ZuzhiName(keys(group)[i]);
+  return name;
+}
+string *GetZuzhiId() {
+  string *id;
+  int i, num;
+  if (!group)
+    return ({});
+  num = JoinedZuzhiNumber();
+  id = allocate(num);
+  for (i = 0; i < num; i++)
+    id[i] = ZuzhiId(keys(group)[i]);
+  return id;
+}
+int IsMemberOf(string zuzhiname) {
+  string *zuzhi;
+  int i;
+  if (file_size(ZUZHI_DIR + zuzhiname + ".lpc") < 0)
+    return 0;
+  zuzhi = GetZuzhiId();
+  if (!zuzhi)
+    return 0;
+  for (i = 0; i < sizeof(zuzhi); i++)
+    if (zuzhi[i] == zuzhiname && !group[zuzhi[i]]["deleted"])
+      return 1;
+  return 0;
+}
+int JoinedZuzhiNumber() {
+  if (!group)
+    return 0;
+  return sizeof(keys(group));
+}
+mapping GetZuzhi(string zuzhiname) {
+  if (!group)
+    return ([]);
+  if (!group[zuzhiname])
+    return ([]);
+  return group[zuzhiname];
+}
+string ZuzhiName(string zuzhiname) {
+  return GetZuzhi(zuzhiname)["name"];
+}
+string ZuzhiId(string zuzhiname) {
+  return GetZuzhi(zuzhiname)["id"];
+}
+string ZuzhiTouxian(string zuzhiname) {
+  return GetZuzhi(zuzhiname)["touxian"];
+}
+string ZuzhiZhiwu(string zuzhiname) {
+  return GetZuzhi(zuzhiname)["zhiwu"];
+}
+int EnterZuzhiTime(string zuzhiname) {
+  return GetZuzhi(zuzhiname)["entertime"];
+}
+int ZuzhiScore(string zuzhiname) {
+  return GetZuzhi(zuzhiname)["score"];
+}
+int ZuzhiTouxianJibie(string zuzhiname) {
+  string *all_touxian;
+  int jibie, i;
+  string touxian;
+
+  all_touxian = (ZUZHI_DIR + zuzhiname)->QueryTouxian(this_object());
+  touxian = ZuzhiTouxian(zuzhiname);
+  jibie = 0;
+  for (i = 0; i < sizeof(all_touxian); i++)
+    if (touxian == all_touxian[i])
+      jibie = i;
+  return jibie;
+}
+int ZuzhiZhiwuJibie(string zuzhiname) {
+  string *all_zhiwu;
+  int jibie, i;
+  string zhiwu;
+
+  all_zhiwu = (ZUZHI_DIR + zuzhiname)->QueryZhiwu(this_object());
+  zhiwu = ZuzhiZhiwu(zuzhiname);
+  jibie = 0;
+  for (i = 0; i < sizeof(all_zhiwu); i++)
+    if (zhiwu = all_zhiwu[i])
+      jibie = i;
+  return jibie;
+}
+int LastContactTime(string zuzhiname) {
+  return GetZuzhi(zuzhiname)["lastcontacttime"];
+}
+void JoinZuzhi(string zuzhiname, string touxian, string zhiwu) {
+  //加入组织,三项可以全是中文，也可以后两项是中文
+  //  就是说，touxian必须有，而zhiwu可以省略,当然，都省略是可以的。
+  //    SetTouxian( touxian, zuzhiname );// touxian
+  //    if ( GetZuzhi( zuzhiname ) )
+  //        return notify_fail( "你已经是这个组织的成员了啊？！\n" );
+  //    这个好象不用在这里判断吧？应该放在命令里。
+  group = ZUZHI_D->SetupZuzhi(this_object(), zuzhiname, touxian, zhiwu, group);
+  return;
+}
+void IncreaseZuzhiTouxian(string zuzhiname, int step) {
+  string *all_touxian;
+  int jibie;
+
+  all_touxian = (ZUZHI_DIR + zuzhiname)->QueryTouxian(this_object());
+  jibie = ZuzhiTouxianJibie(zuzhiname) + step;
+  if (jibie < 0)
+    jibie = 0;
+  if (jibie > sizeof(all_touxian))
+    jibie = sizeof(all_touxian);
+  SetZuzhiTouxian(zuzhiname, all_touxian[jibie]);
+  return;
+}
+int SetZuzhiTouxian(string zuzhiname, string touxian) {
+  group[zuzhiname]["touxian"] = touxian;
+  return 1;
+}
+int SetZuzhiZhiwu(string zuzhiname, string zhiwu) {
+  group[zuzhiname]["zhiwu"] = zhiwu;
+  return 1;
+}
+int DoneContact(string zuzhiname) {
+  group[zuzhiname]["lastcontacttime"] = this_object()->query("mud_age");
+  return 1;
+}
+int SetZuzhiName(string zuzhiname, string name) {
+  group[zuzhiname]["name"] = name;
+  return 1;
+}
+int SetZuzhiScore(string zuzhiname, int score) {
+  group[zuzhiname]["score"] = score;
+  return 1;
+}
+int AddZuzhiScore(string zuzhiname, int score) {
+  group[zuzhiname]["score"] = ZuzhiScore(zuzhiname) + score;
+  return 1;
+}
+void LeaveZuzhi(string zuzhiname) {
+  group = ZUZHI_D->DeleteZuzhi(this_object(), zuzhiname, group);
+  return;
+}
+int IsRefusedBy(string zuzhiname) {
+  string *family, *zuzhi;
+  int i;
+  zuzhi = (ZUZHI_DIR + zuzhiname)->RefusedZuzhi();
+  family = (ZUZHI_DIR + zuzhiname)->RefusedFamily();
+  for (i = 1; i < sizeof(family); i++)
+    if (query("family/family_name") == family[i])
+      return 1;
+  for (i = 1; i < sizeof(zuzhi); i++)
+    if (IsMemberOf(zuzhi[i]))
+      return 1;
+  return 0;
+}
+int IsBossOf(object mate, string zuzhiname) {
+  int my_jibie, his_jibie;
+  if (!IsMemberOf(zuzhiname) || !mate->IsMemberOf(zuzhiname))
+    return 0;
+  my_jibie = ZuzhiTouxianJibie(zuzhiname);
+  his_jibie = mate->ZuzhiTouxianJibie(zuzhiname);
+  if (my_jibie > his_jibie)
+    return 1;
+  return 0;
+}
+/*
+void Welcome( object who, string zuzhiname )//吸收who加入自己的组织 
+{
+    who->JoinZuzhi( zuzhiname, ZuzhiTouxian( zuzhiname ), ZuzhiZhiwu( zuzhiname ) );
+    return;
+}
+*/
+//  这个函数可以先不写，因为是留给玩家用来接纳其他玩家加入自己的组织的。
+//  以下的函数是原来TRILL 搞的，要保留，并且要注意新的系统不能和这个老的
+//  系统混淆。
+
+int is_chairman_of(object chairman) {
+  mapping zuzhi;
+
+  if (!mapp(zuzhi = query("zuzhi")))
+    return 0;
+
+  if (zuzhi["chairman_id"] == (string)chairman->query("id") &&
+    zuzhi["chairman_name"] == (string)chairman->query("name"))
+    return 1;
+
+  return 0;
+}
+
+int is_tongshi_of(object obj) {
+  mapping my_zuzhi, your_zuzhi;
+
+  my_zuzhi = query("zuzhi");
+  your_zuzhi = obj->query("zuzhi");
+  if (!mapp(my_zuzhi) || !mapp(your_zuzhi))
+    return 0;
+
+  if (my_zuzhi["zuzhi_name"] == your_zuzhi["zuzhi_name"]) {
+    return 1;
+  }
+  return 0;
+}
+
+int in_samezuzhi_with(object obj) {
+  string *MyZuzhi, *UrZuzhi;
+
+  MyZuzhi = GetZuzhiId();
+  UrZuzhi = obj->GetZuzhiId();
+  if (!arrayp(MyZuzhi) || !arrayp(UrZuzhi))
+    return 0;
+
+  foreach (string Zuzhi in MyZuzhi) {
+    if (member_array(Zuzhi, UrZuzhi) != -1)
+      return 1;
+  }
+  return 0;
+}
+
+void assign_chengyuan(string title, int privs) {
+  mapping zuzhi;
+
+  if (!mapp(zuzhi = query("zuzhi")))
+    return;
+
+  zuzhi["title"] = title;
+  zuzhi["privs"] = privs;
+
+  if (userp(this_object()) || !query("title")) {
+    if (zuzhi["generation"] == 1) {
+      if (zuzhi["title"])
+        set("title", sprintf("%s%s", zuzhi["zuzhi_name"],
+          zuzhi["title"]));
+      else
+        set("title", zuzhi["zuzhi_name"] + "大首领");
+    } else
+      set("title", sprintf("%s%s", zuzhi["zuzhi_name"],
+        zuzhi["title"]));
+  }
+
+}
+
+// This is used for NPC, or start a new zuzhi for a player.
+varargs void create_zuzhi(string zuzhi_name, int generation, string title) {
+  mapping zuzhi;
+
+  zuzhi = allocate_mapping(6);
+
+  zuzhi["zuzhi_name"] = zuzhi_name;
+  zuzhi["generation"] = generation;
+
+  set("zuzhi", zuzhi);
+
+  // priv = -1 for ALL privileges.
+  assign_chengyuan(title, -1);
+}
+
+varargs int recruit_chengyuan(object dizi, string title) {
+  mapping my_zuzhi, zuzhi;
+
+  if (dizi->is_shouxia_of(this_object()))
+    return 0;
+  if (!mapp(my_zuzhi = query("zuzhi")))
+    return 0;
+  if (!title) title = "弟子";
+  zuzhi = allocate_mapping(sizeof(my_zuzhi));
+  zuzhi["chairman_id"] = query("id");
+  zuzhi["chairman_name"] = query("name");
+  zuzhi["zuzhi_name"] = my_zuzhi["zuzhi_name"];
+  zuzhi["generation"] = my_zuzhi["generation"] + 1;
+  zuzhi["enter_time"] = time();
+  dizi->set("zuzhi", zuzhi);
+  dizi->assign_chengyuan(title, 0);
+  LOG_D->do_log(dizi, sprintf("你加入%s的%s，成为%s。",
+    zuzhi["chairman_name"], zuzhi["zuzhi_name"],
+    dizi->query("title")));
+  return 1;
+}
+
+string get_tongshi_guanxi(object obj) {
+  object me;
+  mapping my_zuzhi, your_zuzhi;
+  int my_gen, your_gen;
+  int my_time, your_time;
+  string my_gender;
+
+  me = this_object();
+  my_zuzhi = me->query("zuzhi");
+  your_zuzhi = obj->query("zuzhi");
+
+  if (your_zuzhi["title"]) return your_zuzhi["title"];
+
+  if ((obj != me) && mapp(my_zuzhi) && mapp(your_zuzhi) &&
+    (my_zuzhi["zuzhi_name"] == your_zuzhi["zuzhi_name"])) {
+    my_gen = my_zuzhi["generation"];
+    your_gen = your_zuzhi["generation"];
+    my_time = my_zuzhi["enter_time"];
+    your_time = your_zuzhi["enter_time"];
+    my_gender = me->query("gender");
+    if (my_gen == your_gen) {
+      if (my_gender == "男性" || my_gender == "无性") {
+        if (my_time < your_time)
+          return "大哥";
+        else
+          return "贤弟";
+      } else {
+        if (my_time < your_time)
+          return "大姐";
+        else
+          return "小妹";
+      }
+    } else if (my_gen > your_gen) {
+      return "属下";
+    } else {
+      if (your_zuzhi["chairman_id"] == me->query("id"))
+        return "在下";
+      else
+        return "先生";
+    }
+  }
+  return 0;
+}

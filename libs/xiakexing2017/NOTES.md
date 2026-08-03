@@ -71,7 +71,7 @@ registration test (Chinese surname + given name reaching the next prompt).
 ## WASM-enablement pass (loopback-allow / admin seeding)
 
 This lib's `adm/daemons/band.lpc`/`logind.lpc` are byte-identical (per
-§2.1 lineage check) to the `xiakexing3`/`jinyongqunxiazhuan2008` engine
+§2.1 lineage check) to the `xiakexing3`/`jqxz2008` engine
 files, whose WASM pass was already done and verified with the correct
 fail-closed convention — ported that fix here and re-verified
 independently rather than assuming it.

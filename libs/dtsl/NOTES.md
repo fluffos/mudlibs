@@ -2,7 +2,7 @@
 
 - Archive: `archives/dtsl.rar` (3.4MB — "大唐双龙传"/"Twin Dragons of the
   Tang Dynasty", same "simple"/东方故事-ish lineage as lib #1
-  (shanhaizhanshen) — `adm/obj/master.c`+`adm/obj/simul_efun.c` layout).
+  (shzs) — `adm/obj/master.c`+`adm/obj/simul_efun.c` layout).
   **No config file shipped in this archive at all** — reused lib #1's
   `config.cfg` as a template (same lineage, same directive shapes) rather
   than reconstructing one from scratch.
@@ -105,12 +105,12 @@ registration test (Chinese surname + given name reaching the next prompt).
   now-reformatted source with a fresh real Chinese name (`秦诺`, ID
   `qinnuo`, following the same ID→confirm→Chinese name→password (5-8
   chars)→email→gender→4-stat-point-allocation flow as sibling
-  `datangshuanglong`) reaching the actual game world (大唐学院 starting
+  `dtsl2`) reaching the actual game world (大唐学院 starting
   room); `look`/`score` both produced correct output (full 人物档案
   stat card rendered correctly), `quit` exited cleanly. One background
   `*Read access denied.` runtime error appeared during this run, same
   pre-existing job-daemon content gap already documented in
-  `datangshuanglong`'s NOTES (`adm/daemons/jobmond.lpc`'s periodic
+  `dtsl2`'s NOTES (`adm/daemons/jobmond.lpc`'s periodic
   job-posting logic trying to move an NPC into a room via a chain that
   hits an ACL denial) — fires from that daemon's own independent
   heartbeat, unrelated to the registration/look/score/quit path under
@@ -121,7 +121,7 @@ registration test (Chinese surname + given name reaching the next prompt).
   ftpdsupp.h` and `adm/daemons/network/dns_master.lpc`'s
   `socket_create`/`socket_bind`/`socket_close`/`socket_address` →
   `Undefined function`, caught non-fatally, `Initializations complete.`
-  still printed). Like `datangshuanglong`, this lib's login path does
+  still printed). Like `dtsl2`, this lib's login path does
   **not** gate on `query_ip_number()`'s format, so a full registration
   proceeded all the way through under WASM too: ID `qinao` → Chinese
   name `秦傲` → password → email → gender → stat allocation → reached
@@ -131,7 +131,7 @@ registration test (Chinese surname + given name reaching the next prompt).
 
 ## WASM-enablement pass (2026-07 standard: loopback-allow, admin seed)
 
-Same "大唐双龙" simple-lineage shape as sibling `datangshuanglong`
+Same "大唐双龙" simple-lineage shape as sibling `dtsl2`
 (byte-identical `adm/daemons/band.lpc`/`sited.lpc`) -- checked directly
 rather than assumed:
 
@@ -143,14 +143,14 @@ rather than assumed:
 - No live `uptime()` startup-grace gate.
 - No live per-IP throttle: `get_id()`'s `ip_cnt>8` cap (~line 222) is
   entirely commented-out dead code in the raw archive, same as
-  `datangshuanglong` -- nothing to patch.
+  `dtsl2` -- nothing to patch.
 - `adm/daemons/sited.lpc`'s `is_valid(id, ip)` has the same dangling-
-  else bug as `datangshuanglong` (loopback+non-wizard is rejected,
+  else bug as `dtsl2` (loopback+non-wizard is rejected,
   every non-loopback IP unconditionally passes, the `valid_login`
   whitelist is unreachable) -- but it's dead code here too, only called
   from the unrelated `cmds/std/toupiao.lpc` voting command, so it does
   not gate logins. Left unpatched/undocumented-further for the same
-  reason as `datangshuanglong`.
+  reason as `dtsl2`.
 
 Admin account: id `fluffos` / `Mud@2026` / 浮浮, registered through the
 normal flow (id -> confirm y -> Chinese name 浮浮 -> password x2 ->
@@ -161,7 +161,7 @@ before registration, so wizard status was active immediately
 ("作为巫师，你可以迅速离线" shown on the very first `quit`). Verified
 on a SEPARATE re-login: password accepted, `update /d/newbie/door`
 succeeded ("重新编译 /d/newbie/door.lpc：成功！") -- unlike sibling
-`dongfanggushi2`, this lineage's restore path has no permission bug,
+`dfgs2`, this lineage's restore path has no permission bug,
 re-login just works. Save files (`data/user/f/fluffos.o`,
 `data/login/f/fluffos.o`) are plain untracked paths, not covered by any
 `.gitignore` pattern -- a normal `git add libs/dtsl/` picks them up, no
@@ -344,8 +344,8 @@ force-quits a player who never reconnects.**
   regression to ordinary gameplay (single-dispatch from Bug 2's fix
   still holds; `quit`/relogin round trip clean). `debug.log` clean
   across every post-fix iteration.
-- **Lineage scope**: checked directly -- `datangshuanglong` and
-  `llmud_datangshuanglong` share this exact `adm/simul_efun/message.lpc`
+- **Lineage scope**: checked directly -- `dtsl2` and
+  `dtslmud` share this exact `adm/simul_efun/message.lpc`
   `tell_room()` implementation and the identical `obj/user.lpc`
   `user_dump()` call site (confirmed via direct file inspection, not
   assumed), so this is **lineage-wide** and, given `tell_room()` is
@@ -488,7 +488,7 @@ calls in a row on every single sleep-and-wake cycle).**
   unguarded `enable_player()` in `feature/command.lpc`, byte-identical
   double-call from `enter_world()`, and byte-identical triple-call from
   `sleep.lpc`'s `wakeup()` are present in BOTH documented siblings,
-  `datangshuanglong` and `llmud_datangshuanglong` — this is a
+  `dtsl2` and `dtslmud` — this is a
   **lineage-wide** bug, not specific to this archive, though porting the
   fix to the siblings is out of scope for this pass (left for the
   orchestrating session per the task brief).
@@ -629,3 +629,7 @@ calls in a row on every single sleep-and-wake cycle).**
   savings (starting `deposit` is only 10), so a live SUCCESSFUL purchase
   was not reached this pass; not pursued further given the time already
   spent on the bug investigation above.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+此前被错误标记为某个不存在于本项目任何档案的原始压缩包文件名（dtsl.rar）的 duplicate_of——那份"兄弟"上传显然从未被真正转档过，所以这份 7z 重新打包版是这款游戏唯一存活、完全独立的副本。duplicate_of 已清除。

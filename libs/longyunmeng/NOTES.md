@@ -16,28 +16,28 @@ end of this file (also summarized in the final report).
 ## Lineage — confirmed, not assumed
 
 The task brief asked for a direct comparison against the two already-done
-"炎龙封印"-themed libs: `xiyangzaixian3` (#48, 夕阳再现III之炎龙封印) and
-`yanlongfengyin_xiaoao3` (#68, 炎龙封印-笑傲江湖3阿飞站). Both archives (binary
+"炎龙封印"-themed libs: `xyzx3` (#48, 夕阳再现III之炎龙封印) and
+`ylfyxa3` (#68, 炎龙封印-笑傲江湖3阿飞站). Both archives (binary
 AND source) self-identify their engine family via literal top-level
 directory names `xyzx/ylfy` ("XYZX" = pinyin initials of 夕阳再现/"Sunset
 Reappears", "YLFY" = pinyin initials of 炎龙封印/"Flame Dragon Seal") — the
-exact same macro-naming convention documented in `yanlongfengyin_xiaoao3`'s
+exact same macro-naming convention documented in `ylfyxa3`'s
 own NOTES.md.
 
 **md5sum/diff comparison against `master.c`, `chinese.c`, `securityd.c`**
 (the exact files the task brief named):
-- `adm/obj/master.c`: 544 lines here vs 375 in `xiyangzaixian3`'s copy (NOT
+- `adm/obj/master.c`: 544 lines here vs 375 in `xyzx3`'s copy (NOT
   the same revision) but **544 lines, near-byte-identical** to
-  `yanlongfengyin_xiaoao3`'s copy — `diff --strip-trailing-cr` shows only
+  `ylfyxa3`'s copy — `diff --strip-trailing-cr` shows only
   CRLF/whitespace noise plus ONE extra credit-comment line
   (`// ...每次啟動MudOS時報一次 By Wenwu`, present here, absent in
-  `yanlongfengyin_xiaoao3`'s copy). This "By Wenwu" signature matches the
+  `ylfyxa3`'s copy). This "By Wenwu" signature matches the
   binary archive's own `说明文档.txt`, which credits the whole lib to
   `By 龙云梦(Wenwu)` — i.e. this archive is Wenwu's own further-tweaked build
-  of the same engine core `yanlongfengyin_xiaoao3` is descended from, not an
+  of the same engine core `ylfyxa3` is descended from, not an
   independent rewrite.
 - `adm/simul_efun/chinese.c`: **byte-identical** (0 diff lines after
-  stripping CR) to `yanlongfengyin_xiaoao3`'s copy.
+  stripping CR) to `ylfyxa3`'s copy.
 - `adm/daemons/securityd.c`: 306 lines here vs 304 there — diff is 33 lines,
   entirely personalization (adding wizard names "wenwu"/"chenzhoul" to
   several ACL tables, e.g. `"/"` trusted-read gains `"wenwu"`, `"log"`
@@ -54,15 +54,15 @@ own NOTES.md.
   §15ai DNS_MASTER unconditional call in `logon()`.
 
 **Conclusion**: `longyunmeng` is a closely-related, independently-forked
-descendant of the same XYZX/YLFY engine family as `xiyangzaixian3` and
-`yanlongfengyin_xiaoao3` — sharing byte-identical core files in places
+descendant of the same XYZX/YLFY engine family as `xyzx3` and
+`ylfyxa3` — sharing byte-identical core files in places
 (chinese.c) and near-identical ones in others (master.c), but with its own
 evolved registration daemon and its own content tree (~19.5K files vs
-`yanlongfengyin_xiaoao3`'s 17.4K) — not a rebrand or a simple content-only
+`ylfyxa3`'s 17.4K) — not a rebrand or a simple content-only
 fork of either sibling. Diffing whole `raw/` trees pairwise wasn't
 attempted (would be a large, low-value effort given the daemon-level
 comparison above already answers the lineage question conclusively); the
-registration-flow fixes below were ported from `yanlongfengyin_xiaoao3`
+registration-flow fixes below were ported from `ylfyxa3`
 where the underlying shape matched exactly, and independently re-verified
 by reading `longyunmeng`'s own source where it didn't.
 
@@ -114,7 +114,7 @@ by reading `longyunmeng`'s own source where it didn't.
    independently correct, real keywords on this driver.
 4. **AGENTS.md §15n** — `adm/daemons/securityd.lpc`'s `valid_read()` has a
    genuine custom ACL (`trusted_read`/`exclude_read` tables, `By
-   Annihilator@Eastern.Stories` credit, same family as `yanlongfengyin_xiaoao3`'s
+   Annihilator@Eastern.Stories` credit, same family as `ylfyxa3`'s
    and `shujian2008`'s) with no func-based compile allowlist. Added the
    standard early-return `switch(func) { case "load_object": case
    "recompile_object": case "include": return 1; }` ahead of the euid/ACL
@@ -122,7 +122,7 @@ by reading `longyunmeng`'s own source where it didn't.
    never-preloaded `/adm`/`/cmds` object, attributed to a fresh
    pre-authentication connection's `(player)` status, would be denied the
    first time the registration flow lazily touches one. Ported directly
-   from `yanlongfengyin_xiaoao3`'s fix #5 (same securityd.lpc lineage,
+   from `ylfyxa3`'s fix #5 (same securityd.lpc lineage,
    confirmed via the md5sum/diff comparison above that the underlying ACL
    logic — not just the wizard-name personalization — is unchanged).
 5. **AGENTS.md §15s** — `adm/simul_efun/message.lpc`'s `tell_room(ob, str,
@@ -130,7 +130,7 @@ by reading `longyunmeng`'s own source where it didn't.
    straight into `message()`'s 4th argument in its common 2-arg call form;
    `shout(str)` passed `this_player()` (which can be `0`) as the exclude
    arg too. Fixed both to `exclude || ({})` / `this_player() || ({})`.
-   Same exact wrapper shape as `yanlongfengyin_xiaoao3`'s fix #7 (and the
+   Same exact wrapper shape as `ylfyxa3`'s fix #7 (and the
    original `yueyingqiyuan` discovery, archive #54) — ported directly,
    re-verified against this lib's own copy of the file (not assumed).
 6. **AGENTS.md §14** — `master.lpc`'s `valid_override(file, name)` upgraded
@@ -145,7 +145,7 @@ by reading `longyunmeng`'s own source where it didn't.
    `#include` reached mid-connection; `convert_lib.sh`'s own local-angle-
    bracket-to-quote pass had already converted most such includes to quoted
    form during the automated conversion step, so this is primarily
-   insurance, matching the same conclusion `yanlongfengyin_xiaoao3` reached.
+   insurance, matching the same conclusion `ylfyxa3` reached.
 8. **AGENTS.md §15w** — `master.lpc`'s `log_error()` displayed EVERY
    message reaching it (including ordinary compile *warnings*, not just
    real errors) to `this_player(1)` prefixed with the alarming "编译时段
@@ -219,9 +219,9 @@ by reading `longyunmeng`'s own source where it didn't.
     (inventory) command showing "□布衣(Cloth)" rendering correctly after
     the fix.
 12. **AGENTS.md's documented "iconv -c eats the adjacent real newline before
-    a heredoc's closing tag" gotcha** (already known from `xiyangzaixian3`/
-    `tianxia`/`yanlongfengyin_xiaoao3`) — recurred verbatim in the SAME 3
-    files as `yanlongfengyin_xiaoao3` (`d/heimuya/shenggu.lpc`,
+    a heredoc's closing tag" gotcha** (already known from `xyzx3`/
+    `tianxia`/`ylfyxa3`) — recurred verbatim in the SAME 3
+    files as `ylfyxa3` (`d/heimuya/shenggu.lpc`,
     `d/heimuya/tang.lpc`, `d/heimuya/npc/tang.lpc`), all flagged "LOSSY
     conversion" by `convert_lib.sh` and failing with `error: End of file in
     text block`. Confirmed via raw hex inspection: same `...奕奕.LONG );`/
@@ -245,7 +245,7 @@ by reading `longyunmeng`'s own source where it didn't.
     rename) — `doc/mudlib/efuns.lpc` is a plain-text listing of efun names
     (documentation index: "acos add_action all_inventory ..."), byte-
     identical in shape to the same file already found and fixed in
-    `yanlongfengyin_xiaoao3`. Confirmed nothing references it by path, then
+    `ylfyxa3`. Confirmed nothing references it by path, then
     renamed to `doc/mudlib/efuns.txt`. **Caveat**: this rename happened
     *while* the full `lpcc_check.sh` sweep was already running in the
     background (its file list was captured before the rename), so the
@@ -256,7 +256,7 @@ by reading `longyunmeng`'s own source where it didn't.
     when `find` enumerated the file list.
 15. **Genuine pre-existing typo** — `doc/mudlib/efuns/shiwu.lpc` (a real
     room, "小石屋", despite living under the `doc/mudlib/efuns/` path —
-    same exact file/typo already documented in `xiyangzaixian3`'s NOTES.md)
+    same exact file/typo already documented in `xyzx3`'s NOTES.md)
     had `call_out(do_close,0);` — a bare, unquoted function-name identifier
     instead of a string literal. Fixed to `call_out("do_close",0);`.
 16. **Missing `#include <liebiao.h>`** — 6 files under `clone/winbox/`
@@ -273,7 +273,7 @@ by reading `longyunmeng`'s own source where it didn't.
     `set_name(string name, string *id)` — a bare string instead of an id
     array. Fixed both to `set_name("海口大碗", ({"bowl"}));`. (Coincidentally
     the same class of bug independently found in the unrelated ES
-    II-lineage `jinyongqunxiazhuan2008`-family libs' own `bowl.lpc` this
+    II-lineage `jqxz2008`-family libs' own `bowl.lpc` this
     session — different lineage, same shape of mistake, not connected.)
 18. **AGENTS.md §15ap** — `kungfu/skill/force.h` and `d/gumu/npc/force.h`
     (byte-identical copies of the same `#include`d, not `inherit`ed,
@@ -409,7 +409,7 @@ in full before writing any test script. Notable subtleties found this way
   rolled stats — `get_gift(" ", ...)` (called with a literal `" "` yn value)
   takes the "reject and re-roll, ask again" branch since `" "[0]` isn't
   `'y'`/`'Y'`, requiring an explicit follow-up `"y"` (same §15j-adjacent
-  shape already documented for `yanlongfengyin_xiaoao3`).
+  shape already documented for `ylfyxa3`).
 - After the gift accept, there's an ADDITIONAL "魔法天赋" (innate magic
   element, 0-10) choice step (`get_magic_born`) not present in either
   sibling lib's registration flow, before finally reaching the email

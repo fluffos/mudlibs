@@ -3,7 +3,7 @@
 原始压缩包名为"武汉站"，但这只是收藏者标注的站点标签——游戏自身的
 config 与登录横幅都写明真正的名字是**"大话西游"**，由湖北楚天热线
 旗下的襄樊分站运营。属于 ES II（Eastern Stories II）引擎系列，与本
-项目中的 weimingkongjian、tiexuejianghu 等同宗但各自独立开发。
+项目中的 wmkj、tiexuejianghu 等同宗但各自独立开发。
 
 ## 内容亮点
 

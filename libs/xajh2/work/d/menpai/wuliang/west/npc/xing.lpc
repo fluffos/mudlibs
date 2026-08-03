@@ -1,0 +1,324 @@
+//xing.c 邢老头。
+// last modified by trill 97-11-1 09:45
+
+#define MAX_MIAN_ZHANG_JIBIE        150
+
+#include <ansi.h>
+#include "include/xing.mark"
+
+inherit NPC;
+
+int ask_xue();
+
+
+
+void create() {
+  set_name("邢老头", ({ "xing laotou", "xing" }));
+  set("long", @LONG
+他是管西宗菜园的邢老头。脸上布满皱纹，手臂上青筋绽露，身形略有些
+佝偻，似乎饱经风霜，不过红光满面，目蕴微笑，显得神完气足。
+LONG
+  );
+  set("gender", "男性");
+  set("age", 52);
+  set("attitude", "heroism");
+
+  set("str", 30);
+  set("int", 20);
+  set("spi", 20);
+  set("con", 20);
+  set("cps", 20);
+  set("cor", 20);
+
+  set("force", 1000);
+  set("max_force", 2000);
+  set("force_factor", 50);
+
+  set("combat_exp", 200000);
+  set("score", 9000);
+
+  set("inquiry", ([
+    "工作": "你想在园子里干活，好啊，不过活是很累人，报酬也是很少的。\n",
+    "干活": "你想在园子里干活，好啊，不过活是很累人，报酬也是很少的。\n",
+    "小玉": "她是我女儿，现在正在花园里。不过最近她好象有心事，老皱着眉头。\n",
+    "女儿": "就是小玉，她正在花园里。不过最近她好象有心事，老皱着眉头。\n",
+    "绵掌": "绵掌是我的家传绝学，不过好久不连，功夫都搁下了。\n",
+    "借力打力": "借力打力是绵掌的精髓，借力打力，四两拨千斤。\n",
+    "邢天崃": "呵呵，难得还有人记得我，不过现在都叫我邢老头。\n",
+    "邢虎": "提他做甚，恶贼还在那横行霸道，真是老天无眼。\n",
+    "学习": (: ask_xue :),
+    "学招": (: ask_xue :),
+    "新招": (: ask_xue :),
+    "学新招": (: ask_xue :),
+  ]));
+  set_wugong("mian-zhang", MAX_MIAN_ZHANG_JIBIE, MAX_MIAN_ZHANG_JIBIE, 1);
+  set_xiuwei_by_type("unarmed", 3000);
+
+  setup();
+  carry_object(CLOTH_DIR + "cloth1")->wear();
+}
+
+void init() {
+  ::init();
+  add_action("do_answer", ({ "answer", "huida" }));
+  if (can_act() && this_player()->can_act()) {
+    remove_call_out("greeting");
+    call_out("greeting", 1, this_player());
+  }
+}
+
+void greeting(object ppl) {
+  int xing_mark;
+  object obj;
+
+  if (!ppl || environment(ppl) != environment()) return;
+
+  xing_mark = (int)ppl->GetMark("xing");
+
+  //第一个忙：撮合小玉和小郎。判断是否完成。
+  if ((xing_mark & X_MATCH_XIAOLANG) && !(xing_mark & X_MASTER)) {
+    xing_mark &= NOT(X_TASK_MATCH_XIAOLANG);
+    xing_mark |= X_MASTER;
+    command("haha " + (string)ppl->query("id"));
+    message_vision("邢老头对$N笑道：\n多谢" + RANK_D->query_respect(ppl)
+      + "的帮忙了，小玉已经对我说了。来来来，让我来指点你几招绵掌。\n", ppl);
+    ppl->set_marks("xing", xing_mark);
+    return;
+  }
+
+  //第三个忙 打晕小郎，背过来
+  if (objectp(obj = present("xiao lang", ppl))) {
+    if ((string)obj->query("name") == "小郎") {
+      obj->move(environment());
+      obj->revive();
+      if (xing_mark & X_TASK_HIT_XIAOLANG) {
+        xing_mark &= NOT(X_TASK_HIT_XIAOLANG);
+        xing_mark |= X_HIT_XIAOLANG;
+        xing_mark |= X_MASTER;
+        ppl->SetMark("xing", xing_mark);
+        ppl->set("marks/xiaolang", 1);
+        command("kick " + (string)obj->query("id"));
+        message_vision("邢老头死死的盯着小郎，骂道:\n"
+          + "这死小子，竟敢欺负我女儿，对我女儿始乱终弃，我打死你！\n", obj);
+        remove_call_out("kill_ob");
+        call_out("kill_ob", 1, obj);
+      } else {
+        message_vision("邢老头迷惑的看着$N说道：\n" +
+          "好端端的你把小郎背来给我做甚？如果你把他背去给小玉，..." +
+          "说不定会有什么好处的。\n说着说着，老头就乐了。\n", ppl);
+      }
+    }
+  }
+  return;
+}
+
+int accept_object(object ppl, object obj) {
+  int xing_mark = ppl->GetMark("xing");
+  int xing_temp_mark = ppl->GetTempMark("xing");
+
+  if (xing_temp_mark & X_NOT_HELP_XING) {
+    write("邢老头对你说：不想帮我，还想做什么。过几天再说吧。\n");
+    return 0;
+  }
+
+  //第二个忙 杀邢虎,判断是否完成。
+  if ((string)obj->query("name") == "邢虎的人头") {
+    if (xing_mark & X_KILL_XINGHU) {
+      message_vision("邢老头看了人头，笑道：这其实是邢虎的兄弟的人头，\n"
+        + "虽然不是邢虎的，但他也是一方恶霸。\n", ppl);
+      return 1;
+    } else {
+      if ((xing_mark & X_MATCH_XIAOLANG)
+        && (xing_mark & X_TASK_KILL_XINGHU)) {
+        command("smile " + (string)ppl->query("id"));
+        message_vision("邢老头看了人头，大笑道：对对，这就是邢虎的人头，"
+          + "你看他脑门上的大黑斑。\n", ppl);
+        message_vision("邢老头长叹一声，对$N说道：\n我这一生最后一件恨事，在"
+          +RANK_D->query_respect(ppl) + "你的帮住下终于了结了。\n多谢你了。\n", ppl);
+      } else {
+        command("look " + (string)ppl->query("id"));
+        message_vision("邢老头冲着$N哈哈一乐，笑道：\n" +
+          "好小子，居然打听到老头我唯一的仇家是邢虎，提了他的人头来见\n" +
+          "我，多谢多谢了。我身无长物，无所报答，就教你几招绵掌吧。\n", ppl);
+      }
+      xing_mark &= NOT(X_TASK_KILL_XINGHU);
+      xing_mark |= X_KILL_XINGHU;
+      xing_mark |= X_MASTER;
+      ppl->SetMark("xing", xing_mark);
+      ppl->set("marks/xinghu", 1);
+      return 1;
+    }
+  }
+
+  if ((xing_temp_mark & X_WORKED) && ((int)obj->value() != 300)) {
+    return 0;
+  } else {
+    xing_temp_mark &= NOT(X_WORKED);
+    ppl->SetTempMark("xing", xing_temp_mark);
+
+    // 学到40级时，老头不教了，要求帮他一个忙。
+    // 第一个忙 撮合小玉和小郎。
+    if ((int)ppl->query_jibie("mian-zhang") >= 30) {
+      if (xing_mark < X_MATCH_XIAOLANG) {
+        message_vision("邢老头对着$N摇摇头，说道：\n"
+          + "年轻人要知足，前几天我心情好教了你三招，你还想把\n"
+          + "   老头我这点功夫都掏走吗？\n", ppl);
+        if (random(2)) {
+          return 0;
+        } else {
+          xing_mark |= X_TASK_MATCH_XIAOLANG;
+          ppl->SetMark("xing", xing_mark);
+          message_vision("邢老头顿了顿，又说道：\n"
+            + "不过嘛，如果你能替我办件事，如果办成了的话，\n"
+            + "老头我再教你几招。\n", ppl);
+          write("如果你想帮他就回答(huida)能，否则就回答(huida)不。\n");
+          return 1;
+        }
+      } else {
+        write("邢老头已经答应教你了，钱你自己留着吧。\n");
+        return 0;
+      }
+    } else {
+      command("look " + (string)ppl->query("id"));
+      if (random(3)) {
+        command("smile " + (string)ppl->query("id"));
+        command("say 不要钱？看来想从老头我这里学几招了，\n"
+          + "今天我心情好就教你几招吧。\n");
+        ppl->SetTempMark("xing", X_MASTER);
+      } else {
+        command("hehe " + (string)ppl->query("id"));
+        command("say 居然有干活不要钱的，少见少见。\n" +
+          "不要就不要，钱老头我自己留着了。\n");
+      }
+      return 1;
+    }
+    return 1;
+  }
+}
+
+int ask_xue() {
+  object ppl;
+  int skill_jibie, xing_mark, xing_temp_mark;
+
+  ppl = this_player();
+  skill_jibie = ppl->query_jibie("mian-zhang");
+  xing_mark = ppl->GetMark("xing");
+  xing_temp_mark = ppl->GetTempMark("xing");
+
+  if (xing_temp_mark & X_NOT_HELP_XING) {
+    message_vision("邢老头不满的对$N说：既然不想帮我，还问什么？过几天再说吧。\n", ppl);
+  } else if (!(xing_mark & X_MASTER)) {
+    message_vision("邢老头不耐烦的对$N说：\n" +
+      "学什么学，没看到我正忙着嘛，有工夫就来帮我干点农活。\n\n", ppl);
+    write("你还是先帮他干活，再试试能不能学。\n");
+  } else if (skill_jibie > MAX_MIAN_ZHANG_JIBIE - 10) {
+    write("邢老头告诉你：一套绵掌都已经传授给\n你了。没有新招了。\n");
+  } else {
+    if (skill_jibie >= MAX_MIAN_ZHANG_JIBIE / 5 && !(xing_mark & X_MATCH_XIAOLANG))
+      xing_mark |= X_TASK_MATCH_XIAOLANG;
+    else if ((skill_jibie >= MAX_MIAN_ZHANG_JIBIE / 3)
+      && !(xing_mark & X_KILL_XINGHU))
+      xing_mark |= X_TASK_KILL_XINGHU;
+    else if ((skill_jibie >= MAX_MIAN_ZHANG_JIBIE / 2)
+      && !(xing_mark & X_HIT_XIAOLANG))
+      xing_mark |= X_TASK_HIT_XIAOLANG;
+    else {
+      message_vision("邢老头对$N说道：\n" +
+        "师傅领进门，修行在自身嘛，认真练练吧。\n", ppl);
+      return 1;
+    }
+    message_vision("邢老头对$N说道：\n" +
+      "要想学新招，你得先帮我个忙。能帮我吗?\n", ppl);
+    ppl->SetTempMark("xing", xing_temp_mark |= X_HELP_OR_NOT);
+    ppl->SetMark("xing", xing_mark);
+    write("如果你想帮他就回答(huida)能，否则就回答(huida)不\n");
+    return 1;
+  }
+}
+
+int do_answer(string arg) {
+  object ppl, ob, axe;
+  int xing_mark, xing_temp_mark;
+
+  ppl = this_player();
+  ob = this_object();
+
+  xing_mark = ppl->GetMark("xing");
+  xing_temp_mark = ppl->GetTempMark("xing");
+
+  if (arg != "能") {
+    xing_temp_mark |= X_NOT_HELP_XING;
+    ppl->SetTempMark("xing", xing_temp_mark);
+    remove_call_out("del_temp_mark");
+    call_out("del_temp_mark", 1800, ppl, X_NOT_HELP_XING);
+    return notify_fail("邢老头失望的看着你，说到：下次吧。\n");
+  } else if (!(xing_temp_mark & X_HELP_OR_NOT)) {
+    return notify_fail("什么？你想干什么？\n");
+  } else if (xing_mark & X_TASK_MATCH_XIAOLANG)     //给出第一个任务：撮合小玉。    
+  {
+    command("say " + (string)ppl->query("nappl")
+      + "，小玉最近好象有心事。我猜可能是喜欢上了某个小子了。\n"
+      + "却一直不肯说，你去把她的心事了结了吧，怎么样？这个忙很容易帮吧？");
+    return notify_fail("邢老头笑着说：快去，快去。\n");
+  } else if (xing_mark & X_TASK_KILL_XINGHU)   //给出第二个任务：诛杀邢虎。
+  {
+    command("say " + "我要你把邢虎的人头提来。\n");
+    command("tell " + (string)ppl->query("id")
+      + " 邢虎原是我的义子，十年前他勾结外人妄图弑父，下毒\n"
+      + "想害死我和小玉，幸亏西宗的前掌门救了我和小玉的一命，可掌门说\n"
+      + "冤家易结不易解，要我饶他一命，我饶了他，可这小子死不悔改，这\n"
+      + "十年一直为非作歹，你给我把他杀了，提他的人头来。\n"
+      + "对了，给你一把大斧子，拿这把斧子可以干净利落的剁下他的头来了。\n"
+      + "那杂种有个极明显的特征，脑门有个大黑斑。\n");
+    axe = new(__DIR__ "obj/axe");
+    axe->move(ppl);
+    return notify_fail("邢老头对你说：赶紧去，留他一天就多危害一天。\n");
+  } else if (xing_mark & X_TASK_HIT_XIAOLANG)  //给出第三个任务：擒拿小郎。
+  {
+    message_vision("$n阴沉着脸，一改往昔笑眯眯的样子。\n", ob);
+    command("say " + (string)ppl->query("nappl") +
+      "我要你把小郎这狗东西给我抓到我面前来。\n");
+    return notify_fail("邢老头告诉你：不要问为什么了，快去。\n");
+  }
+
+}
+
+int valid_teach(object ppl, string skill) {
+  if (skill == "mian-zhang") {
+    int mark = ppl->GetMark("xing");
+    int temp_mark = ppl->GetTempMark("xing");
+    int skill_jibie = ppl->query_jibie(skill);
+    if (mark && ppl->query("marks/xinghu"))
+      return 1;
+    else if ((skill_jibie < MAX_MIAN_ZHANG_JIBIE / 5)
+      && ((temp_mark & X_MASTER) || (mark & X_MASTER)))
+      return 1;
+    else if ((skill_jibie < MAX_MIAN_ZHANG_JIBIE / 3)
+      && (mark & X_MATCH_XIAOLANG || ppl->query("marks/xiaolang")))
+      return 1;
+    else if ((skill_jibie < MAX_MIAN_ZHANG_JIBIE / 2)
+      && (mark & X_KILL_XINGHU || ppl->query("marks/xinghu")))
+      return 1;
+    else if (mark & X_HIT_XIAOLANG)
+      return 1;
+    else {
+      write("老头冲你摇了摇头，似乎是不愿再教你了。\n");
+      return 0;
+    }
+  } else {
+    return 0;
+  }
+}
+
+int zhongcheng(object me, string skill) {
+  return 1;
+}
+
+private void del_temp_mark(object ppl, int flag) {
+  int temp_mark = ppl->GetTempMark("xing");
+  if (temp_mark & flag) {
+    temp_mark &= NOT(flag);
+    ppl->SetTempMark("xing", temp_mark);
+  }
+  return;
+}

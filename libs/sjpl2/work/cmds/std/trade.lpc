@@ -1,0 +1,207 @@
+// trade.c   baiwt@sjpl 12,8,1999
+
+#include <ansi.h>
+inherit F_CLEAN_UP;
+void create() { seteuid(getuid()); }
+void pay_him(object who, int amount);
+int affordable(object who, int amount);
+int do_trade(object me, object obj, object who);
+
+int main(object me, string arg) {
+  string target, item;
+  object obj, who, *inv, obj2;
+  int i, amount;
+
+  if (!arg) return notify_fail("你要和谁交易什麽东西？\n");
+
+  if (sscanf(arg, "%s to %s", item, target) == 2
+    || sscanf(arg, "%s %s", target, item) == 2);
+  else return notify_fail("指令格式 : trade <某人> <物品名称>\n");
+  if (me->query("biguan_begin"))
+    return notify_fail("正在闭关修行中，无法执行该动作。\n");
+
+  if (!objectp(who = present(target, environment(me))) || !living(who))
+    return notify_fail("这里没有这个人。\n");
+  if (!environment(me)->query("outdoors"))
+    return notify_fail("这里是不适合商品交易的地方！\n");
+  if (environment(me)->query("oldarea"))
+    return notify_fail("这里是不适合商品交易的地方！\n");
+  if (environment(me)->query("no_fight"))
+    return notify_fail("这里是不适合商品交易的地方！\n");
+  if ((int)me->query_skill("trade", 1) < 20)
+    return notify_fail("你根本不懂得商品交易。\n");
+  if (me->query("national") != "出生于商贾之家")
+    return notify_fail("象你这种出身的人进行交易只赔不赚。\n");
+  if (me->is_fighting())
+    return notify_fail("你现在无法交易！\n");
+
+  if (who->is_fighting())
+    return notify_fail("这个人现在无法交易！\n");
+  if (me->is_busy())
+    return notify_fail("你上一个动作还没有完成，不能进行交易。\n");
+
+  if (sscanf(item, "%d %s", amount, item) == 2) {
+    if (!objectp(obj = present(item, who)))
+      return notify_fail("对方身上没有这样东西。\n");
+    if (obj->query("no_get") || obj->query("owner"))
+      return notify_fail("这样东西不能随便给人。\n");
+    if (obj->query("no_drop"))
+      return notify_fail("这样东西不能随便给人。\n");
+    if (!obj->query_amount())
+      return notify_fail(obj->name() + "不能被分开给人。\n");
+    if (amount < 1)
+      return notify_fail("东西的数量至少是一个。\n");
+    if (amount > obj->query_amount())
+      return notify_fail("对方没有那麽多的" + obj->name() + "。\n");
+    else if (amount == (int)obj->query_amount())
+      return do_trade(me, obj, who);
+    else {
+      obj->set_amount((int)obj->query_amount() - amount);
+      obj2 = new(base_name(obj));
+      obj2->set_amount(amount);
+      return do_trade(me, obj2, who);
+    }
+  }
+
+  if (arg == "all") {
+    inv = all_inventory(who);
+    for (i = 0; i < sizeof(inv); i++) {
+      do_trade(me, inv[i], who);
+    }
+    write("Ok.\n");
+    return 1;
+  }
+
+  if (!objectp(obj = present(item, who)))
+    return notify_fail("对方好像没有你想要的东西。\n");
+  return do_trade(me, obj, who);
+}
+
+int do_trade(object me, object obj, object who) {
+  object money;
+  int price, afford, change;
+
+  if (obj->query("no_drop"))
+    return notify_fail("这样东西不能交易。\n");
+  if (obj->query("money_id"))
+    return notify_fail("你不能把钱当商品进行交易。\n");
+
+  if (!interactive(who) && !objectp(who))
+    return notify_fail("你只能和其他人物进行交易。\n");
+  change = me->query_skill("trade", 1);
+  price = obj->query("value") / change;
+  if (!afford = affordable(me, price))
+    return notify_fail("你的钱不够。\n");
+  money = new(COIN_OB);
+  money->set_amount(price);
+  if (!userp(who) && (obj->query("value") >= 1000 || obj->query("value") <= 100)) {
+    tell_object(me, "你想就“" + obj->short() + "”和" + who->name() + "进行交易。\n");
+    tell_object(me, "显然" + who->name() + "不想跟你谈什么交易。\n");
+    return 1;
+  }
+  if ((me->query("combat_exp") + me->query("life_exp")) < who->query("life_exp")) {
+    tell_object(me, "你想就“" + obj->short() + "”和" + who->name() + "进行交易。\n");
+    tell_object(me, "显然" + who->name() + "不想跟你谈什么交易。\n");
+    return 1;
+  } else if (obj->move(me)) {
+    pay_him(me, afford - price);
+    message("vision", sprintf(CYN "%s向%s说道：在下欲购一%s%s，出价" + chinese_number(price) + "文钱如何？\n", me->name(),
+      who->name(), obj->query("unit"), obj->name()), environment(me));
+    message("vision", sprintf("%s向%s犹豫道：你开玩笑吧？一%s%s原价" + chinese_number(obj->query("value")) + "文钱，你出得太少了！\n",
+      who->name(), me->name(), obj->query("unit"), obj->name()), environment(me));
+    message("vision", sprintf("%s向%s笑道：怎么少？这一%s%s留着大不吉利啊！若是卖给我则少一祸害。\n", me->name(),
+      who->name(), obj->query("unit"), obj->name()), environment(me));
+    message("vision", who->query("name") + "沉吟半晌，说道：好吧，卖给你了！\n" NOR, environment(me));
+    message("vision", "经过一番讨价还价，双方终于成交了。\n" NOR, environment(me));
+
+    message("vision", sprintf("%s卖给%s一%s%s。\n", who->name(), me->name(),
+      obj->query("unit"), obj->name()), environment(me), ({ me, who }));
+
+    printf("你向%s买下一%s%s。\n", who->name(), obj->query("unit"),
+      obj->name());
+    message("vision", sprintf("你卖给%s一%s%s。\n", me->name(),
+      obj->query("unit"), obj->name()), who);
+    //		who->compelete_trade(me, obj->query("id"));
+    money->move(who);
+    me->add("relation_exp", random(1));
+    me->add("life_exp", random(1));
+    me->save();
+    me->start_busy(2);
+    who->start_busy(2);
+    log_file("trade_LOG", sprintf("(%s)
+%s trade %s to %s\n", ctime(time()), me->query("id"), obj->query("name"),
+      who->query("id")));
+    return 1;
+  } else return 0;
+}
+
+void pay_him(object who, int amount)
+
+{
+  object ob;
+  object cash, tencash, gold, silver, coin;
+  tencash = present("tenthousand-cash_money", who);
+  cash = present("thousand-cash_money", who);
+  gold = present("gold_money", who);
+  silver = present("silver_money", who);
+  coin = present("coin_money", who);
+  if (tencash) destruct(tencash);
+  if (cash) destruct(cash);
+  if (gold) destruct(gold);
+  if (silver) destruct(silver);
+  if (coin) destruct(coin);
+
+
+  if (amount < 1) amount = 1;
+  if (amount / 1000000) {
+    ob = new(TECASH_OB);
+    ob->set_amount(amount / 1000000);
+    ob->move(who);
+    amount %= 1000000;
+  }
+  if (amount / 100000) {
+    ob = new(THCASH_OB);
+    ob->set_amount(amount / 100000);
+    ob->move(who);
+    amount %= 100000;
+  }
+  if (amount / 10000) {
+    ob = new(GOLD_OB);
+    ob->set_amount(amount / 10000);
+    ob->move(who);
+    amount %= 10000;
+  }
+  if (amount / 100) {
+    ob = new(SILVER_OB);
+    ob->set_amount(amount / 100);
+    ob->move(who);
+    amount %= 100;
+  }
+  if (amount) {
+    ob = new(COIN_OB);
+    ob->set_amount(amount);
+    ob->move(who);
+  }
+}
+
+int affordable(object me, int amount) {
+  int total;
+  object cash, tencash, gold, silver, coin;
+
+  tencash = present("tenthousand-cash_money", me);
+  cash = present("thousand-cash_money", me);
+  gold = present("gold_money", me);
+  silver = present("silver_money", me);
+  coin = present("coin_money", me);
+
+  total = 0;
+  if (tencash) total += tencash->value();
+  if (cash) total += cash->value();
+  if (gold) total += gold->value();
+  if (silver) total += silver->value();
+  if (coin) total += coin->value();
+
+  if (total < amount) return 0;
+
+  return total;
+}

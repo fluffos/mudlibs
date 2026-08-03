@@ -529,14 +529,14 @@ previously documented at that scope).**
 ### Lineage note
 
 `zzfy` shares its `std/`, `feature/`, and `adm/daemons/logind.lpc`
-architecture with `fengyun3xiuding`/`fengyun3dianzang` (same 风云3
+architecture with `fy3xd`/`fy3dz` (same 风云3
 engine, AGENTS.md §11) and, one level further out, the whole 风云 family
-(`fy2`/`fengyun2qinghua`, `fengyun434`/`fy2005`, `moniHuafu`). Bugs #2
+(`fy2`/`fy2qh`, `fengyun434`/`fy2005`, `moniHuafu`). Bugs #2
 and #3 above live in shared engine files (`feature/vendor.lpc`,
 `std/room.lpc`) that are very likely byte-identical or near-identical
 across at least the 风云3 siblings, and possibly the wider family too —
 worth a proactive port-and-diff pass on those two files in
-`fengyun3xiuding`/`fengyun3dianzang` (out of scope for this task; not
+`fy3xd`/`fy3dz` (out of scope for this task; not
 done here). Bug #1 (`d/death/npc/panguan.lpc`) and bug #4
 (`cmds/wiz/summon.lpc`) are smaller, single-file changes — check whether
 the siblings carry the identical file before assuming the fix is needed

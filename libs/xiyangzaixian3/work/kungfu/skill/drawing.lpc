@@ -1,3 +1,0 @@
-// staff.c
-
-inherit SKILL;
