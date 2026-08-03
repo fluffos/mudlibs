@@ -6,7 +6,7 @@
 
 This repository preserves and restores the golden age of the Chinese MUD
 scene (mid-1990s to ~2015): **199 restored LPC mudlibs across 158 unique
-game codebases** (162 fully verified playable in the browser, 32 more
+game codebases** (170 fully verified playable in the browser, 24 more
 playable with a documented caveat, 1 native-only by policy, 4 confirmed
 non-bootable — see below) — 侠客行, 笑傲江湖,
 金庸群侠传, 西游记, 风云, 大唐双龙, 书剑天下, 东方故事, and dozens of
@@ -160,13 +160,13 @@ classes it's found.
 | 010-4 | `xiyouji2006` | 西游记2006·大唐西游 | `西游记2006之 最终幻想.rar` | 40077 | WASM playable |
 | 011 | `fy2` | 风云再起Ⅱ — fy2 | `fy2.rar` | 40014 | WASM playable |
 | 011-1 | `fengyun2qinghua` | 风云II | `风云II (清华仿写版） (1).ZIP` | — | WASM playable |
-| 012 | `mhxy` | 梦幻西游 (mhxy) | `mhxy.rar` | 40016 | WASM limited |
-| 012-1 | `menghuanxiyou2002` | 梦幻西游（青岛站） | `梦幻西游2002版.rar` | 40050 | WASM limited |
+| 012 | `mhxy` | 梦幻西游 (mhxy) | `mhxy.rar` | 40016 | WASM playable |
+| 012-1 | `menghuanxiyou2002` | 梦幻西游（青岛站） | `梦幻西游2002版.rar` | 40050 | WASM playable |
 | 013 | `xiakexing2017` | 侠客行 (MUD侠客行2017完整版) | `MUD侠客行2017完整版.zip` | 40017 | WASM playable |
-| 014 | `nitan170911` | 仙剑奇侠传 (nitan170911) | `nitan170911.7z` | 40018 | WASM limited |
+| 014 | `nitan170911` | 仙剑奇侠传 (nitan170911) | `nitan170911.7z` | 40018 | WASM playable |
 | 014-1 | `hhsj` | 洪荒世界 | `洪荒世界.rar` | 40106 | WASM playable |
 | 014-2 | `xfbhh` | 洪荒世界（修复版） | `修复版洪荒.rar` | 40190 | WASM playable |
-| 015 | `nitan6` | 笑傲江湖 (nitan6) | `nitan6.zip` | 40019 | WASM limited |
+| 015 | `nitan6` | 笑傲江湖 (nitan6) | `nitan6.zip` | 40019 | WASM playable |
 | 016 | `rzrmud` | 大唐西游 YWX人造人 (rzrmud) | `rzrmud.20130220.tar.gz` | 40020 | WASM playable |
 | 017 | `xkx2001` | 侠客行 Ⅰ (The Quest of Oriental Chivalry) | `xkx2001测试用老lib.zip` | 40021 | WASM playable |
 | 017-1 | `beimeixiakexing2001` | 侠客行 (The Quest of Oriental Chivalry) — 北美 2001 版 | `北美侠客行2001.rar` | 40039 | WASM playable |
@@ -181,7 +181,7 @@ classes it's found.
 | 020 | `zzfy` | 郑州风云3 | `zzfy (full).rar` | 40025 | WASM playable |
 | 020-1 | `fengyun3xiuding` | 风云III修订版 | `风云III修订版  (1).rar` | — | WASM playable |
 | 020-2 | `fengyun3dianzang` | 风云III典藏版 | `风云III典藏版 (1).rar` | — | WASM playable |
-| 021 | `shiji` | 世纪 | `世纪.zip` | 40026 | WASM limited |
+| 021 | `shiji` | 世纪 | `世纪.zip` | 40026 | WASM playable |
 | 022 | `dongfanggushi2` | 东方故事二 | `东方故事二 (1).rar` | — | WASM playable |
 | 023 | `zhonghua2` | 中华英雄苏州站 | `中华2.rar` | 40028 | WASM limited |
 | 024 | `shujian2008` | 书剑天下 2008 | `书剑2008.rar` | 40029 | WASM limited |
@@ -202,7 +202,7 @@ classes it's found.
 | 032-2 | `jianghufengyun` | 江湖风云 | `江湖风云 (1).rar` | — | WASM playable |
 | 033 | `xiyangzaixian3` | 夕阳再现III之炎龙封印 | `夕阳再线III之炎龙封印.rar` | 40042 | WASM limited |
 | 033-1 | `yanlongfengyin_xiaoao3` | 炎龙封印（笑傲江湖·阿飞站） | `炎龙封印-笑傲江湖3阿飞站.rar` | 40062 | WASM limited |
-| 033-2 | `longyunmeng` | 龙云梦·炎龙封印（源码版） | `龙云梦-炎龙封印源码版.rar` | 40094 | WASM limited |
+| 033-2 | `longyunmeng` | 龙云梦·炎龙封印（源码版） | `龙云梦-炎龙封印源码版.rar` | 40094 | WASM playable |
 | 033-3 | `longyunmeng_binary` | 龙云梦·炎龙封印（二进制版） | `龙云梦-炎龙封印-二进制版.rar` | — | not-convertible |
 | 033-4 | `xyzxiiidup` | 夕阳再现III (dup) | `夕阳再现III.rar` | — | not-mudlib |
 | 034 | `tianxia` | 天下 Beta | `天下.tar.gz` | 40044 | WASM limited |
@@ -213,8 +213,8 @@ classes it's found.
 | 038 | `weimingkongjian` | 未明空间 (Weiming Kongjian / "wmkj") | `未明空间.rar` | 40049 | WASM limited |
 | 039 | `moniHuafu` | mnhf | `mnhf.zip` | — | WASM playable |
 | 040 | `wuhanzhan` | 大话西游 (A Chinese Odyssey) | `武汉站.rar` | 40052 | WASM playable |
-| 041 | `nitan_ceshi` | 泥潭III测试版 / 《終極魔界》 (nitan_ceshi) | `泥潭III测试版.rar` | 40054 | WASM limited |
-| 041-1 | `nitan_san` | 泥潭三 / 《終極魔界》 (nitan_san) | `泥潭三.rar` | 40055 | WASM limited |
+| 041 | `nitan_ceshi` | 泥潭III测试版 / 《終極魔界》 (nitan_ceshi) | `泥潭III测试版.rar` | 40054 | WASM playable |
+| 041-1 | `nitan_san` | 泥潭三 / 《終極魔界》 (nitan_san) | `泥潭三.rar` | 40055 | WASM playable |
 | 042 | `yuxuechongsheng` | 浴血重生 | `浴血重生MUD.rar` | 40056 | WASM limited |
 | 043 | `haiyang2` | 海洋II 2010 正式无错完整版下载 | `海洋II 2010 正式无错完整版下载 (1).rar` | — | WASM playable |
 | 043-1 | `hymud` | 海洋V·星月传奇 | `hymud-main.zip` | 40103 | WASM playable |
