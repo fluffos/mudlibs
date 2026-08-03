@@ -5,204 +5,184 @@ inherit F_DISTANCE;
 
 int lost_fleet(mapping fleet);
 
-void failure(object me)
-{
-	me->unstationary();
-	tell_object(me,HIR"光幕消失了，但是正前方出现的虚空并不是舰队的目的地！\n"NOR);
+void failure(object me) {
+  me->unstationary();
+  tell_object(me, HIR "光幕消失了，但是正前方出现的虚空并不是舰队的目的地！\n" NOR);
 }
 
 void create() { seteuid(getuid()); }
 
-int main(object me, string arg)
-{
-	int success_jump, i, damage, eff_amt, skill;
-	int add_a, add_b, e, *cannot_jump=({});
-	string dest, mout, min, alpha, beta;
-	string *maps;
-	mapping exits, fleet;
-	object *result, *inv, *enemy;
-	object env, obj, nullspace;
+int main(object me, string arg) {
+  int success_jump, i, damage, eff_amt, skill;
+  int add_a, add_b, e, *cannot_jump = ({});
+  string dest, mout, min, alpha, beta;
+  string *maps;
+  mapping exits, fleet;
+  object *result, *inv, *enemy;
+  object env, obj, nullspace;
 
-	env = environment(me);
+  env = environment(me);
 
-	if( !env->is_space_room() )
-		return notify_fail("只有宇宙空间才能用jump命令。\n");
-	if( !arg ) return notify_fail("舰队要往哪个方向进行空间跳跃？\n");
-	if( sscanf(arg,"%s %s",alpha,beta) != 2 )
-		return notify_fail("舰队要往哪个方向进行空间跳跃？\n");
-	if( (skill = me->query_s_skill("reining",1)) < 50 )
-		return notify_fail("你没有足够的舰队驾驭能力，无法率领舰队进行空间跳跃。\n");
+  if (!env->is_space_room())
+    return notify_fail("只有宇宙空间才能用jump命令。\n");
+  if (!arg) return notify_fail("舰队要往哪个方向进行空间跳跃？\n");
+  if (sscanf(arg, "%s %s", alpha, beta) != 2)
+    return notify_fail("舰队要往哪个方向进行空间跳跃？\n");
+  if ((skill = me->query_s_skill("reining", 1)) < 50)
+    return notify_fail("你没有足够的舰队驾驭能力，无法率领舰队进行空间跳跃。\n");
 
-	for(i=0;i<sizeof(me->query_space("sub_fleet"));i++)
-	{
-		fleet = me->query_sub_fleet(i);
-		if( fleet["energy"] < 420 )
-			cannot_jump += ({ i+1 });
-	}
-	if( sizeof(cannot_jump) == sizeof(me->query_space("sub_fleet")) )
-		return notify_fail("我军所有部队都没有足够能源进行空间跳跃！\n");
-	if( me->query_space_temp("force_jump") != arg )
-		if( sizeof(cannot_jump) )
-		{
-			me->set_space_temp("force_jump",arg);
-			write("我军第");
-			for(i=0;i<sizeof(cannot_jump);i++)
-				write(chinese_number(cannot_jump[i])+"部队 ");
-			return notify_fail("没有足够能源进行空间跳跃！\n");
-		}
+  for (i = 0; i < sizeof(me->query_space("sub_fleet")); i++) {
+    fleet = me->query_sub_fleet(i);
+    if (fleet["energy"] < 420)
+      cannot_jump += ({ i + 1 });
+  }
+  if (sizeof(cannot_jump) == sizeof(me->query_space("sub_fleet")))
+    return notify_fail("我军所有部队都没有足够能源进行空间跳跃！\n");
+  if (me->query_space_temp("force_jump") != arg)
+    if (sizeof(cannot_jump)) {
+      me->set_space_temp("force_jump", arg);
+      write("我军第");
+      for (i = 0; i < sizeof(cannot_jump); i++)
+        write(chinese_number(cannot_jump[i]) + "部队 ");
+      return notify_fail("没有足够能源进行空间跳跃！\n");
+    }
 
-	tell_object(me,HIY"所有舰船在喷射的光焰中急遽加速，眼前的黑色虚空瞬间化做一片光海。\n"NOR);
+  tell_object(me, HIY "所有舰船在喷射的光焰中急遽加速，眼前的黑色虚空瞬间化做一片光海。\n" NOR);
 
-	if( sizeof(cannot_jump) )
-	{
-		me->set_space("sub_fleet",filter_array(me->query_space("sub_fleet"),"lost_fleet",this_object()));
-		tell_object(me,HIW"军事工作官：丢弃能源不足部队，开始强行跳跃！\n"NOR);
-	}
-	else
-	{
-		for(i=0;i<sizeof(me->query_space("sub_fleet"));i++)
-		{
-			fleet = me->query_sub_fleet(i);
-			fleet["energy"] -= 420;
-		}
-	}
+  if (sizeof(cannot_jump)) {
+    me->set_space(
+      "sub_fleet",
+      filter_array(me->query_space("sub_fleet"), "lost_fleet", this_object())
+    );
+    tell_object(me, HIW "军事工作官：丢弃能源不足部队，开始强行跳跃！\n" NOR);
+  } else {
+    for (i = 0; i < sizeof(me->query_space("sub_fleet")); i++) {
+      fleet = me->query_sub_fleet(i);
+      fleet["energy"] -= 420;
+    }
+  }
 
-	exits = env->query("exits");
-	if( !mapp(exits) ) success_jump = 0;
-	else if( !stringp(dest = exits[arg]) ) success_jump = 0;
-	else
-	{
-		if( !(obj = find_object(dest)) )
-			call_other(dest, "???");
+  exits = env->query("exits");
+  if (!mapp(exits)) success_jump = 0;
+  else if (!stringp(dest = exits[arg])) success_jump = 0;
+  else {
+    if (!(obj = find_object(dest)))
+      call_other(dest, "???");
 
-		if( !(obj = find_object(dest)) )
-		{
-			if( alpha == "0" ) add_a = 0;
-			if( alpha == "+" ) add_a = 50;
-			if( alpha == "-" ) add_a = -50;
-			if( beta == "0" ) add_b = 0;
-			if( beta == "+" ) add_b = 50;
-			if( beta == "-" ) add_b = -50;
-			me->add_space("x-dir", (add_a+random(50))*100 );
-			me->add_space("y-dir", (add_b+random(50))*100 );
-			write("\n    透过指挥台，可以看到舰外不断侵袭而来的光线，时间似乎停止了，\n");
-			write("所有的东西都保持着空间跳跃前的模样，没有任何感觉，对于所有的人\n");
-			write("来说，能够做的一切事情，只有等待着这段里程的结束罢了。\n\n");
-			me->stationary();
-			call_out("failure",30,me);
-			return notify_fail("");
-		}
-	}
+    if (!(obj = find_object(dest))) {
+      if (alpha == "0") add_a = 0;
+      if (alpha == "+") add_a = 50;
+      if (alpha == "-") add_a = -50;
+      if (beta == "0") add_b = 0;
+      if (beta == "+") add_b = 50;
+      if (beta == "-") add_b = -50;
+      me->add_space("x-dir", (add_a + random(50)) * 100);
+      me->add_space("y-dir", (add_b + random(50)) * 100);
+      write("\n    透过指挥台，可以看到舰外不断侵袭而来的光线，时间似乎停止了，\n");
+      write("所有的东西都保持着空间跳跃前的模样，没有任何感觉，对于所有的人\n");
+      write("来说，能够做的一切事情，只有等待着这段里程的结束罢了。\n\n");
+      me->stationary();
+      call_out("failure", 30, me);
+      return notify_fail("");
+    }
+  }
 
-	maps = me->query_space("maps");
-	if( !pointerp(maps) ) success_jump = 0;
-	else if( member_array(dest,maps) == -1 ) success_jump = 0;
-	else success_jump = 1;
+  maps = me->query_space("maps");
+  if (!pointerp(maps)) success_jump = 0;
+  else if (member_array(dest, maps) == -1) success_jump = 0;
+  else success_jump = 1;
 
-	result = receiver_filter(all_inventory(env),me);
+  result = receiver_filter(all_inventory(env), me);
 
-	if( !me->is_combating() )
-	{
-		message("vision",HIY"在星海深处延伸成广袤的光团，星系的重力场在剧烈的颤动。\n"NOR, result, ({}) );
-	}
-	else
-	{
-		message("vision",HIR"\n" + me->space_short()
-			+ "爆出一片令人眩目的强烈光云，整个舰队似乎被空间的扭曲撕扯着。\n"NOR, result, ({}) );
-		enemy = me->query_againster();
-		result = ({ });
-		for(i=0;i<sizeof(enemy);i++)
-		{
-			if( calculate_distance(enemy[i],me,50) )
-				result += ({ enemy[i] });
-		}
+  if (!me->is_combating()) {
+    message("vision", HIY "在星海深处延伸成广袤的光团，星系的重力场在剧烈的颤动。\n" NOR, result, ({}));
+  } else {
+    message("vision", HIR "\n" + me->space_short()
+      + "爆出一片令人眩目的强烈光云，整个舰队似乎被空间的扭曲撕扯着。\n" NOR, result, ({}));
+    enemy = me->query_againster();
+    result = ({});
+    for (i = 0; i < sizeof(enemy); i++) {
+      if (calculate_distance(enemy[i], me, 50))
+        result += ({ enemy[i] });
+    }
 
-		damage = F_S_ATTRIBUTE->query_eff_amount(me) / 5;
-		damage += random(damage);
-		for(i=0;i<sizeof(result);i++)
-		{
-			fleet = result[i]->query_sub_fleet(random(sizeof(result[i]->query_space("sub_fleet"))));
-			fleet["eff_amt"] -= damage;
-			tell_object(result[i],HIR"！\n");
-		}
+    damage = F_S_ATTRIBUTE->query_eff_amount(me) / 5;
+    damage += random(damage);
+    for (i = 0; i < sizeof(result); i++) {
+      fleet = result[i]->query_sub_fleet(random(sizeof(result[i]->query_space("sub_fleet"))));
+      fleet["eff_amt"] -= damage;
+      tell_object(result[i], HIR "！\n");
+    }
 
-		damage = damage*2/sizeof(me->query_space("sub_fleet"));
-		for(i=0;i<sizeof(me->query_space("sub_fleet"));i++)
-		{
-			fleet = me->query_sub_fleet(i);
-			fleet["eff_amt"] -= damage;
-		}
-		tell_object(me,HIR"交错的能源激波在虚空中震颤，来不及跳跃的舰船瞬间被时空涡流捻得粉碎！\n"NOR);
-	}
+    damage = damage * 2 / sizeof(me->query_space("sub_fleet"));
+    for (i = 0; i < sizeof(me->query_space("sub_fleet")); i++) {
+      fleet = me->query_sub_fleet(i);
+      fleet["eff_amt"] -= damage;
+    }
+    tell_object(me, HIR "交错的能源激波在虚空中震颤，来不及跳跃的舰船瞬间被时空涡流捻得粉碎！\n" NOR);
+  }
 
-	me->remove_all_againster();
+  me->remove_all_againster();
 
-	if( skill > 100 && success_jump )
-	{
-		e = random(150-skill)*random(150-skill)/5;
-		if( e > 10000 ) e = 10000;
-		if( random(2) ) e = -e;
-		me->set_space( "x-dir", e );
+  if (skill > 100 && success_jump) {
+    e = random(150 - skill) * random(150 - skill) / 5;
+    if (e > 10000) e = 10000;
+    if (random(2)) e = -e;
+    me->set_space("x-dir", e);
 
-		e = random(150-skill)*random(150-skill)/5;
-		if( e > 10000 ) e = 10000;
-		if( random(2) ) e = -e;
-		me->set_space( "y-dir", e );
+    e = random(150 - skill) * random(150 - skill) / 5;
+    if (e > 10000) e = 10000;
+    if (random(2)) e = -e;
+    me->set_space("y-dir", e);
 
-		nullspace = new("/std/room/nullspace");
-		if( !me->move(nullspace) ) return 0;
-		nullspace->do_delay(obj,me);
+    nullspace = new("/std/room/nullspace");
+    if (!me->move(nullspace)) return 0;
+    nullspace->do_delay(obj, me);
 
-//		return 1;
-	}
-	else if( random( (110-skill)/5 ) == 0 && success_jump )
-	{
-		e = random(150-skill)*random(150-skill)/5;
-		if( e > 10000 ) e = 10000;
-		if( random(2) ) e = -e;
-		me->set_space( "x-dir", e );
+    //		return 1;
+  } else if (random((110 - skill) / 5) == 0 && success_jump) {
+    e = random(150 - skill) * random(150 - skill) / 5;
+    if (e > 10000) e = 10000;
+    if (random(2)) e = -e;
+    me->set_space("x-dir", e);
 
-		e = random(150-skill)*random(150-skill)/5;
-		if( e > 10000 ) e = 10000;
-		if( random(2) ) e = -e;
-		me->set_space( "y-dir", e );
+    e = random(150 - skill) * random(150 - skill) / 5;
+    if (e > 10000) e = 10000;
+    if (random(2)) e = -e;
+    me->set_space("y-dir", e);
 
-		nullspace = new("/std/room/nullspace");
-		if( !me->move(nullspace) ) return 0;
-		nullspace->do_delay(obj,me);
+    nullspace = new("/std/room/nullspace");
+    if (!me->move(nullspace)) return 0;
+    nullspace->do_delay(obj, me);
 
-//		return 1;
-	}
-	else
-	{
-		if( alpha == "0" ) add_a = 0;
-		if( alpha == "+" ) add_a = 50;
-		if( alpha == "-" ) add_a = -50;
-		if( beta == "0" ) add_b = 0;
-		if( beta == "+" ) add_b = 50;
-		if( beta == "-" ) add_b = -50;
-		me->add_space("x-dir", (add_a+random(50))*100 );
-		me->add_space("y-dir", (add_b+random(50))*100 );
-		write("\n    透过指挥台，可以看到舰外不断侵袭而来的光线，时间似乎停止了，\n");
-		write("所有的东西都保持着空间跳跃前的模样，没有任何感觉，对于所有的人\n");
-		write("来说，能够做的一切事情，只有等待着这段里程的结束罢了。\n\n");
-		me->stationary();
-		call_out("failure",30,me);
-		return notify_fail("");
-	}
-	return 0;
+    //		return 1;
+  } else {
+    if (alpha == "0") add_a = 0;
+    if (alpha == "+") add_a = 50;
+    if (alpha == "-") add_a = -50;
+    if (beta == "0") add_b = 0;
+    if (beta == "+") add_b = 50;
+    if (beta == "-") add_b = -50;
+    me->add_space("x-dir", (add_a + random(50)) * 100);
+    me->add_space("y-dir", (add_b + random(50)) * 100);
+    write("\n    透过指挥台，可以看到舰外不断侵袭而来的光线，时间似乎停止了，\n");
+    write("所有的东西都保持着空间跳跃前的模样，没有任何感觉，对于所有的人\n");
+    write("来说，能够做的一切事情，只有等待着这段里程的结束罢了。\n\n");
+    me->stationary();
+    call_out("failure", 30, me);
+    return notify_fail("");
+  }
+  return 0;
 }
 
-int lost_fleet(mapping fleet)
-{
-	if( fleet["energy"] < 420 ) return 0;
-	fleet["energy"] -= 420;
-	return 1;
+int lost_fleet(mapping fleet) {
+  if (fleet["energy"] < 420) return 0;
+  fleet["energy"] -= 420;
+  return 1;
 }
 
-int help(object me)
-{
-	write(@HELP
+int help(object me) {
+  write(@HELP
 指令格式 : jump <Alpha> <Beta>
 
 空间跳跃是舰队进行星系间远程行军最好，也是唯一的方法。空间跳跃
@@ -238,6 +218,6 @@ int help(object me)
 向三点钟方向跳跃。
 
 HELP
-    );
-    return 1;
+  );
+  return 1;
 }

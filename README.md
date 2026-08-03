@@ -244,7 +244,7 @@ classes it's found.
 | 061 | `zuizhonghuanjing` | 最终幻境 | `最终幻境.zip` | 40099 | native-boot verified, WASM pending |
 | 062 | `niaoren` | 最新鳥人世界 | `最新鳥人世界.zip` | 40100 | native-boot verified, WASM pending |
 | 063 | `aoxiangtianji` | 翱翔天际 | `翱翔天际utf8.7z` | 40101 | native-boot verified, WASM pending |
-| 064 | `yhyxcs` | 银河英雄传说 | `银河英雄传说.zip` | 40104 | native-boot verified, WASM pending |
+| 064 | `yhyxcs` | 银河英雄传说 | `银河英雄传说.zip` | 40104 | WASM playable |
 | 065 | `ldtx` | 鹿鼎天下 (in-game: 雄霸天下『西安站』) | `鹿鼎天下.rar` | 40105 | native-boot verified, WASM pending |
 | 066 | `hc` | 红尘 (in-game: 红尘录) | `红尘.rar` | 40107 | WASM playable |
 | 067 | `cctx` | 驰骋天下 | `驰骋天下.rar` | 40161 | native-boot verified, WASM pending |
