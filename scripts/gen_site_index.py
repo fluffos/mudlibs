@@ -64,20 +64,30 @@ REPO = Path(__file__).resolve().parent.parent
 REPO_URL = "https://github.com/fluffos/mudlibs"
 
 # libs/<slug>/meta.json's wasm_status enum -> the site's 3-tier badge.
-# "limited"/"partial"/"password-protected" all mean "boots, but login is
-# blocked or unverified" -- exactly the site's existing "受限" bucket.
+# "limited"/"password-protected" both mean "boots, but login is blocked or
+# unverified" -- exactly the site's existing "受限" bucket.
 STATUS_MAP = {
     "playable": "playable",
     "limited": "limited",
-    "partial": "limited",
     "password-protected": "limited",
     "noboot": "noboot",
 }
 # Statuses (and "" = not yet WASM-tested) that never appear on the site:
 # not-mudlib/not-convertible/deprioritized entries commonly have no
 # libs/<slug>/ dir at all (see scripts/non_mudlib_meta/), and even when
-# they do there is nothing confirmed playable to advertise.
-EXCLUDE_STATUSES = {"not-mudlib", "not-convertible", "deprioritized", ""}
+# they do there is nothing confirmed playable to advertise. "partial" is
+# ds386 (Dead Souls) specifically -- an English-language lib deliberately
+# deprioritized per AGENTS.md §10.6 and never pushed through the WASM
+# pass. It also has no libs/ds386/README.md (deliberate, since it was
+# never given the standard per-lib docs pass either), which actively
+# breaks the Pages build: pack_lib_for_web.sh's `sed ... README.md
+# 2>/dev/null | head -1` swallows the "No such file" message, but under
+# `set -euo pipefail` sed's own exit code (2, for a missing file) still
+# kills the script -- the mystery "exit code 2" with no visible error in
+# CI. Not a Chinese mud and not meant to be on this site anyway, so
+# excluded outright rather than shipped in a "limited" state or patched
+# around.
+EXCLUDE_STATUSES = {"not-mudlib", "not-convertible", "deprioritized", "partial", ""}
 
 
 def load_lib_numbering():
