@@ -6,259 +6,244 @@
 #include <dbase.h>
 #include <ansi.h>
 string fill_blank(string type, int num);
-string remove_ansi(string str)
-{
-        int i;
-        string *color = ({ BLK, RED, GRN, YEL, BLU, MAG, CYN, WHT,
-                        HIR, HIG, HIY, HIB, HIM, HIC, HIW,
-                        HBRED, HBGRN, HBYEL, HBBLU, HBMAG, HBCYN, HBWHT,
-                        BBLK, BRED, BYEL, BBLU, BMAG, BCYN,
-                        NOR, BOLD });
-                        
-        if( !str || !stringp(str) ) return 0;
-        i = sizeof(color);
-        while( i-- ) {
-                str = replace_string(str, color[i], "");
-        }
-        return str;
-}
-string value_string(int value)
-{
-        if( value < 1 ) value = 1;
-         else    if( value < 100000 )
-                 return chinese_number(value) + "天涯币";
-        else    if( value < 10000 )
-                return chinese_number(value/100) + "两白银"
-                        + (value%100? "又" + chinese_number(value%100) + "文钱": "");
-        else
-                return chinese_number(value/10000) + "两黄金"
-                        +( (value%10000)/100 ? chinese_number((value%10000)/100) + "两白银" : "")
-                        +( (value%10000)%100 ? "又" + chinese_number((value%10000)%100) + "文钱": "");
-}
-string is_vendor_good(string arg,int once)
-{
-        string *goods,*all_id;
-        int i,j;
+string remove_ansi(string str) {
+  int i;
+  string *color = ({ BLK, RED, GRN, YEL, BLU, MAG, CYN, WHT,
+    HIR, HIG, HIY, HIB, HIM, HIC, HIW,
+    HBRED, HBGRN, HBYEL, HBBLU, HBMAG, HBCYN, HBWHT,
+    BBLK, BRED, BYEL, BBLU, BMAG, BCYN,
+    NOR, BOLD });
 
-        if (goods = query("vendor_goods")) 
-                for (i = 0; i < sizeof(goods); i++){
-                        if (!all_id=goods[i]->parse_command_id_list())
-                                return "";
-                        if (goods[i]->query("name")==arg)
-                                return goods[i];
-                        for (j=0;j<sizeof(all_id);j++)
-                                if (all_id[j]==arg)
-                                        if (once==1)
-                                                return goods[i];
-                                        else once--;
-                }
+  if (!str || !stringp(str)) return 0;
+  i = sizeof(color);
+  while (i--) {
+    str = replace_string(str, color[i], "");
+  }
+  return str;
+}
+string value_string(int value) {
+  if (value < 1) value = 1;
+  else if (value < 100000)
+    return chinese_number(value) + "天涯币";
+  else if (value < 10000)
+    return chinese_number(value / 100) + "两白银"
+      +(value % 100 ? "又" + chinese_number(value % 100) + "文钱" : "");
+  else
+    return chinese_number(value / 10000) + "两黄金"
+      +((value % 10000) / 100 ? chinese_number((value % 10000) / 100) + "两白银" : "") + ((value % 10000) % 100 ? "又" + chinese_number((value % 10000) % 100) + "文钱" : "");
+}
+string is_vendor_good(string arg, int once) {
+  string *goods, *all_id;
+  int i, j;
+
+  if (goods = query("vendor_goods"))
+    for (i = 0; i < sizeof(goods); i++) {
+      if (!all_id = goods[i]->parse_command_id_list())
         return "";
-}
-int vall(object me,string arg)
-{
-        object ob;
-        ob = present(arg, me);
-        if( !ob ) ob = present(arg, environment(me));
-        if( !ob ) ob = find_object(resolve_path(me->query("cwd"), arg));
-        if( !ob ) return notify_fail("没有这样物件或这样物件没有被载入。\n");
-        return 1;
-
-}
-
-
-int do_value(string arg)
-{
-        object ob;
-        int value;
-        int amount;
-        if( !arg || !(ob = present(arg, this_player())) )
-                return notify_fail("你要拿什麽物品给当铺估价？\n");
-
-        if (ob->query("shaolin") || ob->query("no_sell")||ob->query("no_drop")) return notify_fail("这东西是无价之宝！\n");
-
-        if( ob->query("money_id") )
-                return notify_fail("这是「钱」，你没见过吗？\n");
-
-        value = ob->query("value");
-
-        if( !value ){ printf("%s一文不值。\n", ob->query("name"));return 1;}
-        else 
-                if (!amount=ob->query_amount()) amount=1;
-                value*=amount;
-                if (value<100)
-                printf("\n %s%s%s价值%s。\n如果你要典当(pawn)，可以拿到%s。\n如果卖断(sell)，可以拿到%s。\n",
-                        chinese_number(amount),(ob->query("base_unit")?ob->query("base_unit"):ob->query("unit")),ob->query("name"), value_string(value),
-                        value_string(value *60 /100), value_string(value *80 /100));
-                else
-                printf("\n %s%s%s价值%s。\n如果你要典当(pawn)，可以拿到%s。\n如果卖断(sell)，可以拿到%s。\n",
-                        chinese_number(amount),(ob->query("base_unit")?ob->query("base_unit"):ob->query("unit")),ob->query("name"), value_string(value),
-                        value_string(value / 100 * 60), value_string(value / 100*80));
-        return 1;
-}
-
-string inventory_desc(object ob)
-{
-        if (ob->query("equipped")) return "";
-        else return sprintf("  (一%s)%-25s:  %s",
-                ob->query("unit"),              ob->short(),
-value_string(ob->query("value")));
-}
-
-int do_list()
-{
-        string *goods;
-        mapping my;
-        object ob,who,*inv;
-        int i,j,vip,amount;
-        who=this_player();
-        vip=who->query("vip/vip");
-        inv=all_inventory(this_object());
-        if (!sizeof(inv) && !arrayp(goods = query("vendor_goods")))
-                return notify_fail("目前没有可以卖的东西。\n");
-        if (arrayp(goods = query("vendor_goods"))){
-                printf("这是%s提供给你的物品价目表：\n非VIP玩家购买金额比VIP玩家贵3TYB\n", query("name"));
-                for (i = 0; i < sizeof(goods); i++)
-                printf("%-s："HIG"%20s\n"NOR"\t%s", 
-goods[i]->short()+fill_blank(remove_ansi(goods[i]->short()), 30) ,
-vip?(value_string(goods[i]->query("tianya_money"))):value_string(goods[i]->query("tianya_money")+3),
-
-//value_string(goods[i]->query("tianya_money")), 
-goods[i]->query("long"));
-        if(!vip){
-                printf(HIR"\n你不是VIP玩家，所看到的价格比VIP玩家贵3TYB\n"NOR,);}
-
-                return 1;
-        }
-        delete("my");
-        ob=first_inventory(this_object());
-        while(ob){
-                if (ob->query("equipped") || ob->query("money_id")){
-                        ob = next_inventory(ob);
-                        continue;
-                }
-                if (!mapp(my=query("my")))
-                        set("my",([base_name(ob):1]));
-                else{
-                        amount=my[base_name(ob)];
-                        my[base_name(ob)]=amount+1;
-                }
-                ob = next_inventory(ob);
-        }
-        if (!mapp(my=query("my")))
-        return notify_fail("目前没有可以卖的东西。\n");
-        printf("这是%s提供给你的物品价目表：\n", query("name"));
-                inv=keys(my);
-                for (i=0;i<sizeof(my);i++)
-                        printf("%-s：%20s\n20s\n", goods[i]->short()+fill_blank(remove_ansi(goods[i]->short()), 30) ,
-//                        value_string(goods[i]->query("tianya_money"))),goods[i]->short();
-                        vip?(value_string(goods[i]->query("tianya_money")+3)):value_string(goods[i]->query("tianya_money"))),goods[i]->short();
-
-                return 1;
-}       
-
-int do_buy(string arg)
-{
-        string items,targ;
-        object *inv, who,ob, owner,obj;
-        int price, i,amount=1;
-        int once=1;
-        who=this_player();
-
-        targ="";
-        if( who->query_temp("sleeping") )
-                return notify_fail("你正躺着呢！\n");
-        if ( !arg )
-                return notify_fail("你要买什么东西？\n");
-        if(sscanf(arg, "%d %s %d from %s",amount,items,once, targ)!=4 )
-                if(sscanf(arg, "%d %s from %s",amount,items, targ)!=3 )
-                if(sscanf(arg, "%s %d from %s", items,once,targ)!=3 )
-                if( sscanf(arg, "%d %s %d",amount,items,once)!=3 )
-                        if(sscanf(arg, "%s from %s", items, targ)!=2 )
-                        if( sscanf(arg, "%d %s",amount,items)!=2 )
-                        if( sscanf(arg, "%s %d",items,once)!=2 )
-                                items=arg;
-        if(targ=="")
-                owner=this_object();
-        else    if (!objectp(owner = present(targ, environment(who))) )
-                return notify_fail("你要跟谁买东西？\n");
-
-    inv = all_inventory(who);  
-    if (inv && sizeof(inv)>=50) {
-        if( who==this_player() )
-            return notify_fail( "你身上已经太多东西了。\n");
-        else
-        if (userp(who))
-            return notify_fail(ob->name() + "身上已经太多东西了。\n");
+      if (goods[i]->query("name") == arg)
+        return goods[i];
+      for (j = 0; j < sizeof(all_id); j++)
+        if (all_id[j] == arg)
+          if (once == 1)
+            return goods[i];
+          else once--;
     }
-        if (owner->query_temp("busy"))
-                return notify_fail(owner->query("name")+"说道：客倌等等，小的这就拿来！\n");
-        arg=items;
-        items = is_vendor_good(arg,once);
-        if (items == ""){
-                if (!objectp(obj=present(arg, owner)))
-                return notify_fail("你想买什么？ \n");
-        }
-        if(amount<1) return notify_fail("至少得买一个吧？\n");
-        if(amount>20) return notify_fail("你一次不能买这么多。\n");
-        if (items == ""){
-                if (obj->query("equipped")||obj->query("money_id"))
-                        return notify_fail(owner->query("name")+"气冲冲地说：身上的东西，不卖！\n");
-        price=obj->query("tianya_money");
-        }else{
-        price=items->query("tianya_money");
-                if (amount>9)
-                        if (items->query("name")=="牛皮酒袋")
-                                message_vision("$N一边转身去装酒，嘴里一边嘀咕：买这么多酒，用来洗澡呀？\n",
-                                owner );
-                        else
-                                message_vision("$N用一种奇怪的眼神看盯了$n好一会，似乎怕$n用来倒卖，抢了自己的生意！\n",
-                                owner,who );
-        }
-      if ( !who->query("vip") ){ price=price+3;}
-
-       if( who->query("moneyvip")+1>price*amount ) {
-                for (i=0;i<amount;i++){
-                        if (items == ""){
-                        if (ob = present(arg, owner))
-                                ob->move(who);
-                        else break;
-                        } else
-                        new(items)->move(who);
-                }
-                amount=i;
-                who->add("moneyvip",-price*amount);
-                 who->add("vip/buy",price*amount);
-
-                if (items == "")
-              message_vision("$N向$n买下" +CHINESE_D->chinese_number(amount)+obj->query("unit") + obj->query("name") + "。\n\n"HIR"请尽快使用kaiguang xxx为你的装备做记号，使用之外该装备下线才不会失落！\n如未使用kaiguang而造成的装备下线丢失，本站不负任何责任！。"NOR,
-                                who, owner );
-                else
-                message_vision("$N向$n买下" +CHINESE_D->chinese_number(amount)+items->query("unit") + items->query("name") + "。\n\n"HIR"请尽快使用kaiguang xxx为你的装备做记号，使用之外该装备下线才不会失落！\n如未使用kaiguang而造成的装备下线丢失，本站不负任何责任！\n"NOR,
-                                who, owner );
-log_file("login/vip",sprintf("%s买了%d个%s,(%s)\n",who->query("id"), amount,items->query("name"),
-"/cmds/usr/rtime.lpc"->chinese_time(5,ctime(time())) ) );
-                owner->set_temp("busy",1);
-                remove_call_out("clear_busy");
-                call_out("clear_busy",1,owner);
-                return 1;
-        } else
-                return notify_fail("你的天涯币不够。\n");
+  return "";
 }
+int vall(object me, string arg) {
+  object ob;
+  ob = present(arg, me);
+  if (!ob) ob = present(arg, environment(me));
+  if (!ob) ob = find_object(resolve_path(me->query("cwd"), arg));
+  if (!ob) return notify_fail("没有这样物件或这样物件没有被载入。\n");
+  return 1;
 
-void clear_busy(object me)
-{
-        me->delete_temp("busy");
-}
-string fill_blank(string type, int num)
-{
-        string bak;
-        int i, j;
-
-        bak="";
-        i=strlen(type);
-        for (j=0; j<num-i; j++ )
-                bak+=" ";
-        return bak;
 }
 
 
+int do_value(string arg) {
+  object ob;
+  int value;
+  int amount;
+  if (!arg || !(ob = present(arg, this_player())))
+    return notify_fail("你要拿什麽物品给当铺估价？\n");
+
+  if (ob->query("shaolin") || ob->query("no_sell") || ob->query("no_drop")) return notify_fail("这东西是无价之宝！\n");
+
+  if (ob->query("money_id"))
+    return notify_fail("这是「钱」，你没见过吗？\n");
+
+  value = ob->query("value");
+
+  if (!value) { printf("%s一文不值。\n", ob->query("name")); return 1; } else if (!amount = ob->query_amount()) amount = 1;
+  value *= amount;
+  if (value < 100)
+    printf("\n %s%s%s价值%s。\n如果你要典当(pawn)，可以拿到%s。\n如果卖断(sell)，可以拿到%s。\n",
+      chinese_number(amount), (ob->query("base_unit") ? ob->query("base_unit") : ob->query("unit")), ob->query("name"), value_string(value),
+      value_string(value * 60 / 100), value_string(value * 80 / 100));
+  else
+    printf("\n %s%s%s价值%s。\n如果你要典当(pawn)，可以拿到%s。\n如果卖断(sell)，可以拿到%s。\n",
+      chinese_number(amount), (ob->query("base_unit") ? ob->query("base_unit") : ob->query("unit")), ob->query("name"), value_string(value),
+      value_string(value / 100 * 60), value_string(value / 100 * 80));
+  return 1;
+}
+
+string inventory_desc(object ob) {
+  if (ob->query("equipped")) return "";
+  else return sprintf("  (一%s)%-25s:  %s",
+    ob->query("unit"), ob->short(),
+    value_string(ob->query("value")));
+}
+
+int do_list() {
+  string *goods;
+  mapping my;
+  object ob, who, *inv;
+  int i, j, vip, amount;
+  who = this_player();
+  vip = who->query("vip/vip");
+  inv = all_inventory(this_object());
+  if (!sizeof(inv) && !arrayp(goods = query("vendor_goods")))
+    return notify_fail("目前没有可以卖的东西。\n");
+  if (arrayp(goods = query("vendor_goods"))) {
+    printf("这是%s提供给你的物品价目表：\n非VIP玩家购买金额比VIP玩家贵3TYB\n", query("name"));
+    for (i = 0; i < sizeof(goods); i++)
+      printf("%-s：" HIG "%20s\n" NOR "\t%s",
+        goods[i]->short() + fill_blank(remove_ansi(goods[i]->short()), 30),
+        vip ? (value_string(goods[i]->query("tianya_money"))) : value_string(goods[i]->query("tianya_money") + 3),
+
+        //value_string(goods[i]->query("tianya_money")), 
+        goods[i]->query("long"));
+    if (!vip) {
+      printf(HIR "\n你不是VIP玩家，所看到的价格比VIP玩家贵3TYB\n" NOR,);
+    }
+
+    return 1;
+  }
+  delete("my");
+  ob = first_inventory(this_object());
+  while (ob) {
+    if (ob->query("equipped") || ob->query("money_id")) {
+      ob = next_inventory(ob);
+      continue;
+    }
+    if (!mapp(my = query("my")))
+      set("my", ([ base_name(ob): 1 ]));
+    else {
+      amount = my[base_name(ob)];
+      my[base_name(ob)] = amount + 1;
+    }
+    ob = next_inventory(ob);
+  }
+  if (!mapp(my = query("my")))
+    return notify_fail("目前没有可以卖的东西。\n");
+  printf("这是%s提供给你的物品价目表：\n", query("name"));
+  inv = keys(my);
+  for (i = 0; i < sizeof(my); i++)
+    printf("%-s：%20s\n20s\n", goods[i]->short() + fill_blank(remove_ansi(goods[i]->short()), 30),
+      //                        value_string(goods[i]->query("tianya_money"))),goods[i]->short();
+      vip ? (value_string(goods[i]->query("tianya_money") + 3)) : value_string(goods[i]->query("tianya_money"))), goods[i]->short();
+
+  return 1;
+}
+
+int do_buy(string arg) {
+  string items, targ;
+  object *inv, who, ob, owner, obj;
+  int price, i, amount = 1;
+  int once = 1;
+  who = this_player();
+
+  targ = "";
+  if (who->query_temp("sleeping"))
+    return notify_fail("你正躺着呢！\n");
+  if (!arg)
+    return notify_fail("你要买什么东西？\n");
+  if (sscanf(arg, "%d %s %d from %s", amount, items, once, targ) != 4)
+    if (sscanf(arg, "%d %s from %s", amount, items, targ) != 3)
+      if (sscanf(arg, "%s %d from %s", items, once, targ) != 3)
+        if (sscanf(arg, "%d %s %d", amount, items, once) != 3)
+          if (sscanf(arg, "%s from %s", items, targ) != 2)
+            if (sscanf(arg, "%d %s", amount, items) != 2)
+              if (sscanf(arg, "%s %d", items, once) != 2)
+                items = arg;
+  if (targ == "")
+    owner = this_object();
+  else if (!objectp(owner = present(targ, environment(who))))
+    return notify_fail("你要跟谁买东西？\n");
+
+  inv = all_inventory(who);
+  if (inv && sizeof(inv) >= 50) {
+    if (who == this_player())
+      return notify_fail("你身上已经太多东西了。\n");
+    else if (userp(who))
+      return notify_fail(ob->name() + "身上已经太多东西了。\n");
+  }
+  if (owner->query_temp("busy"))
+    return notify_fail(owner->query("name") + "说道：客倌等等，小的这就拿来！\n");
+  arg = items;
+  items = is_vendor_good(arg, once);
+  if (items == "") {
+    if (!objectp(obj = present(arg, owner)))
+      return notify_fail("你想买什么？ \n");
+  }
+  if (amount < 1) return notify_fail("至少得买一个吧？\n");
+  if (amount > 20) return notify_fail("你一次不能买这么多。\n");
+  if (items == "") {
+    if (obj->query("equipped") || obj->query("money_id"))
+      return notify_fail(owner->query("name") + "气冲冲地说：身上的东西，不卖！\n");
+    price = obj->query("tianya_money");
+  } else {
+    price = items->query("tianya_money");
+    if (amount > 9)
+      if (items->query("name") == "牛皮酒袋")
+        message_vision("$N一边转身去装酒，嘴里一边嘀咕：买这么多酒，用来洗澡呀？\n",
+          owner);
+      else
+        message_vision("$N用一种奇怪的眼神看盯了$n好一会，似乎怕$n用来倒卖，抢了自己的生意！\n",
+          owner, who);
+  }
+  if (!who->query("vip")) { price = price + 3; }
+
+  if (who->query("moneyvip") + 1 > price * amount) {
+    for (i = 0; i < amount; i++) {
+      if (items == "") {
+        if (ob = present(arg, owner))
+          ob->move(who);
+        else break;
+      } else
+        new(items)->move(who);
+    }
+    amount = i;
+    who->add("moneyvip", -price * amount);
+    who->add("vip/buy", price * amount);
+
+    if (items == "")
+      message_vision("$N向$n买下" + CHINESE_D->chinese_number(amount) + obj->query("unit") + obj->query("name") + "。\n\n" HIR "请尽快使用kaiguang xxx为你的装备做记号，使用之外该装备下线才不会失落！\n如未使用kaiguang而造成的装备下线丢失，本站不负任何责任！。" NOR,
+        who, owner);
+    else
+      message_vision("$N向$n买下" + CHINESE_D->chinese_number(amount) + items->query("unit") + items->query("name") + "。\n\n" HIR "请尽快使用kaiguang xxx为你的装备做记号，使用之外该装备下线才不会失落！\n如未使用kaiguang而造成的装备下线丢失，本站不负任何责任！\n" NOR,
+        who, owner);
+    log_file("login/vip", sprintf("%s买了%d个%s,(%s)\n", who->query("id"), amount, items->query("name"),
+      "/cmds/usr/rtime.lpc"->chinese_time(5, ctime(time()))));
+    owner->set_temp("busy", 1);
+    remove_call_out("clear_busy");
+    call_out("clear_busy", 1, owner);
+    return 1;
+  } else
+    return notify_fail("你的天涯币不够。\n");
+}
+
+void clear_busy(object me) {
+  me->delete_temp("busy");
+}
+string fill_blank(string type, int num) {
+  string bak;
+  int i, j;
+
+  bak = "";
+  i = strlen(type);
+  for (j = 0; j < num - i; j++)
+    bak += " ";
+  return bak;
+}
