@@ -5,10 +5,10 @@
 ![Screenshot of the mudlibs.fluffos.info game gallery](docs/site-preview.png)
 
 This repository preserves and restores the golden age of the Chinese MUD
-scene (mid-1990s to ~2015): **200 restored LPC mudlibs across 158 unique
-game codebases** (79 fully verified playable in the browser, 117 more
-native-boot verified with the WASM packaging pass still pending, 1
-native-only by policy, 4 confirmed non-bootable — see below) — 侠客行, 笑傲江湖,
+scene (mid-1990s to ~2015): **199 restored LPC mudlibs across 158 unique
+game codebases** (162 fully verified playable in the browser, 32 more
+playable with a documented caveat, 1 native-only by policy, 4 confirmed
+non-bootable — see below) — 侠客行, 笑傲江湖,
 金庸群侠传, 西游记, 风云, 大唐双龙, 书剑天下, 东方故事, and dozens of
 derivatives and forks — recovered from community archive dumps, transcoded
 to UTF-8, and fixed to boot and play on the modern
@@ -141,10 +141,10 @@ classes it's found.
 | 002 | `xingzhanyingxiong` | 星战英雄 | `星战英雄.rar` | 40002 | WASM playable |
 | 003 | `unknownlib20150716` | 小雨西游Ⅱ (Xiaoyu Xiyou II) | `20150716未知lib.zip` | 40003 | WASM playable |
 | 003-1 | `xiaoyuxiyou` | 小雨西游 | `小雨西游.zip` | 40046 | WASM playable |
-| 004 | `bxsj` | 书剑天下 (ShuJian MUD) | `bxsj.rar` | 40004 | WASM limited |
-| 004-1 | `bxsj1` | 书剑·经典 (ShuJian Classic) | `bxsj1.rar` | 40005 | WASM limited |
+| 004 | `bxsj` | 书剑天下 (ShuJian MUD) | `bxsj.rar` | 40004 | WASM playable |
+| 004-1 | `bxsj1` | 书剑·经典 (ShuJian Classic) | `bxsj1.rar` | 40005 | WASM playable |
 | 004-2 | `jinyongwenzi` | 金庸文字版 | `金庸文字版 (1).exe` | — | WASM playable |
-| 005 | `chidi` | 江湖 I (Jianghu I) | `chidi.rar` | 40006 | WASM limited |
+| 005 | `chidi` | 江湖 I (Jianghu I) | `chidi.rar` | 40006 | WASM playable |
 | 006 | `ds386` | Dead Souls 3.8.6 | `ds3.8.6.zip` | 40007 | WASM partial |
 | 007 | `dtsl` | DTSL | `DTSL.7z` | — | WASM playable |
 | 007-1 | `llmud_datangshuanglong` | 大唐双龙传（LLMUD） | `LLMUD(大唐双龙)v_0.11版.rar` | 40015 | WASM playable |
@@ -222,7 +222,7 @@ classes it's found.
 | 045 | `yanhuangwuhun` | 「武林群侠传」之炎黄武魂Ⅱ | `炎黄武魂_64bit.rar` | 40060 | WASM limited |
 | 045-1 | `yanhuangyingxiongshi` | 炎黄英雄史（游戏内也称"皇朝再现"） | `炎黄英雄史.rar` | 40061 | WASM limited |
 | 046 | `xuanjianlu` | 玄剑录 | `玄剑录.rar` | 40064 | WASM playable |
-| 047 | `bixiecanyang` | 碧血残阳 之「豪侠晚歌」 | `碧血残阳之豪侠晚歌.rar` | 40065 | WASM limited |
+| 047 | `bixiecanyang` | 碧血残阳 之「豪侠晚歌」 | `碧血残阳之豪侠晚歌.rar` | 40065 | WASM playable |
 | 048 | `shenzhou` | 神州 | `神州.rar` | 40066 | WASM playable |
 | 049 | `shenmo` | 神魔（西游记之神魔传说） | `神魔20190924版本.rar` | 40067 | WASM playable |
 | 050 | `xiaoaojianghu_client` | 笑傲江湖之重出江湖 | `笑傲江湖服务端+客户端.rar` | 40070 | WASM limited |
