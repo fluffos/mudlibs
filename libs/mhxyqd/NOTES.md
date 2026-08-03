@@ -518,3 +518,7 @@ WASM retest (`wasm_client.js`): `fluffos`
 login + `score` + `quit` also verified working post-`ipd.lpc`-guard —
 this lib's WASM-login-blocked verdict in the "Re-verification pass"
 section above is now superseded; WASM is fully playable.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+同一套代码库，14561/14563 个档案完全相同。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：完整流程（GB/BIG5 选择→未成年人关卡（否）→管理员 id+密码→如果存档数据还没经历过，登录成功后会立即在 /d/wiz/init.lpc 触发一次仅限首次的天赋/礼物定制画面，用'9'接受再用'y'确认）全程无错误地进入"南城客栈"，quit 也干净（"浮浮(Fluffos)离开游戏了"）。

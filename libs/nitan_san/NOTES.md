@@ -488,3 +488,7 @@ tightened the same way, with its original malformed-format fail-safe
 (`return 1` = banned) restored. Re-verified loopback fluffos login,
 `look`, `update /adm/daemons/band.lpc`, and quit all still work after
 tightening.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+nitan_ceshi 的手足快照。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）被识别为巫师账号（"没有设置巫师专用密码"的提示按预期出现，只是装饰性警告），干净地进入游戏世界，quit 干净。和 nitan6（015）、nitan_ceshi（041）是同一家族/同一流程。

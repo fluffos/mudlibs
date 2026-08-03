@@ -384,3 +384,7 @@ other site string (this lib's original `is_banned()` had no separate
 non-string fast-path, so no additional fail-safe was needed there).
 Re-verified loopback login, `look`, `update`, and quit all still work
 after tightening.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+和 mnhf 逐字节相同的重复压缩包档案。

@@ -583,3 +583,7 @@ large (11785 `.lpc` files).
   native-only per the task's stated scope; the existing "WASM build
   test" section above (from an earlier pass) is unrelated to what was
   found/fixed here and was not re-run.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+梦幻西游基础版（青岛）。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：和手足档案 mhxyqd（012-1）流程相同——GB/BIG5 选择→未成年人关卡（否）→管理员 id+密码→首次天赋/礼物画面（9 然后 y）→干净地进入"南城客栈"，quit 也干净（"浮浮(Fluffos)离开游戏了"）。

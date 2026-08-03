@@ -561,3 +561,7 @@ time budget.
 - **Progressing to real combat/death against a hostile NPC or a real
   duel.** Time budget was spent on the registration/persistence bug
   chain above instead, which was the far more consequential finding.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+NT/nitan 血统；游戏内品牌为"仙剑奇侠传"。没有预先播种管理员账号（这份档案的注册/存档后端真的要跑 MySQL，本环境没有配置——这份档案自己的 README 里已经记录为一个真实、永久的例外，不是 bug）——状态是靠重新测试一次全新的 WASM 注册流程来修正过时的 limited 标记：英文 id→确认→中文姓氏+名字（常见的测试名字比如"秦风"和已有的存档玩家数据冲突，需要一个真正没被用过的组合）→管理密码+确认→登录密码+确认→角色类型菜单→性别，干净地进入游戏世界，没有任何错误；quit 正确触发了这份档案自己"新账号 30 分钟内可撤销注册"的设计（不是 bug）并干净完成。mysql_d.lpc 的 db_connect()/db_exec()"Undefined function"编译错误是预期之中、转档前就存在的（这个驱动构建没有 db 包），不影响游戏。

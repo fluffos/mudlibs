@@ -439,3 +439,7 @@ only (`"127.0.0.1"`, `"::1"`, `"127."` prefix); `is_banned()`'s original
 fail-safe (malformed format ⇒ banned, `return 1`) restored below the
 carve-out. Re-verified loopback fluffos login, `look`, `score`,
 `update /adm/daemons/band.lpc`, and quit all still work after tightening.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+泥潭三/终极魔界基础版。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）被识别为巫师账号（"没有设置巫师专用密码"的提示按预期出现，只是装饰性警告），干净地进入游戏世界，quit 干净。和 nitan6（015）、nitan_san（041-1）是同一家族/同一流程。
