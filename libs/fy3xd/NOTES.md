@@ -403,3 +403,7 @@ that could have hit the sibling's identically-named process.
 - **Save files to force-add** (untracked, NOT gitignored):
   `libs/fy3xd/work/data/user/f/fluffos/fluffos.o`,
   `libs/fy3xd/work/data/login/f/fluffos/fluffos.o`.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+此前被错误标记为某个不存在于本项目任何档案的原始压缩包文件名的 duplicate_of；这里的内容其实是完全独立、可游玩的游戏（有自己的 -N 变体编号、自己的端口、自己的 README）——duplicate_of 已清除。

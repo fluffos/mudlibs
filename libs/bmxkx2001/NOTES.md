@@ -188,3 +188,7 @@ upstream, so this was tightened to fail-closed: only an exact
 malformed or non-string address now falls through to the original gate
 logic (treated as untrusted/remote) instead of being auto-allowed.
 Re-verified fluffos login still works after tightening.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+同一套代码库，北美 2001 版构建。

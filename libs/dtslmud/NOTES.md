@@ -183,3 +183,7 @@ NOT gitignored — orchestrator must add):
 **Retest:** fresh normal registration (ceshisan / 秦岭辛) end-to-end OK
 (look/score/quit correct; test saves removed); no new errors in
 debug.log.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+和 dtsl 是同一血统。

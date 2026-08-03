@@ -16,10 +16,20 @@ Inputs (all inside this repo):
                                     anything with duplicate_of set, or
                                     missing libs/<slug>/config.fluffos)
                                     are left off the site entirely.
-                       group_note   English WASM-pass summary, shown as
+                       group_note   TRANSITIONAL, being phased out: an
+                                    English WASM-pass summary, shown as
                                     the badge's hover reason and the
                                     on-card "reason" line for non-
-                                    playable entries.
+                                    playable entries. New/updated libs
+                                    should NOT add this field -- prose
+                                    belongs in the lib's own NOTES.md,
+                                    in Chinese, per AGENTS.md's
+                                    conventions list. Still read here
+                                    (via .get(), absent is fine) only
+                                    because ~180 libs haven't been
+                                    migrated off it yet; once none do,
+                                    delete this field and the "reason"/
+                                    search-corpus wiring built on it.
                      This script always re-runs assemble_numbering.py
                      first so scripts/lib_numbering.json (its aggregated
                      view of every meta.json) can never go stale under

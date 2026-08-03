@@ -547,3 +547,7 @@ initialize state — run it (or budget for its side effects) before
 setting up test-character save data you intend to keep as evidence, and
 sanity-check `git status` afterward for surprise touches, same
 discipline as checking `debug.log` after `quit`.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+此前被错误标记为某个不存在于本项目任何档案的原始压缩包文件名的 duplicate_of；这里的内容其实是完全独立、可游玩的游戏（有自己的 -N 变体编号、自己的端口、自己的 README）——duplicate_of 已清除。

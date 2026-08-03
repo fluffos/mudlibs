@@ -47,6 +47,36 @@ Conventions used throughout:
   an optional polish pass. Then check all three §9 blind spots and
   re-boot/re-test after formatting, since the formatter itself can
   introduce a regression.
+- **Slugs are short pinyin initials, not full transliterations.** Derive
+  from the Chinese `name`, not from the archive filename: `bxsj` (书剑天下),
+  `ldtx` (鹿鼎天下), `yhyxcs` (炎黄英雄史), `bmxkx2001` (北美侠客行2001).
+  Keep a distinguishing suffix (year, station name, `dlx`/`std`-style
+  English abbreviation, or a trailing digit) only when needed to
+  disambiguate siblings — Roman numerals in the Chinese title become plain
+  Arabic digits in the slug (`Ⅱ`/`II` → `2`, `Ⅲ`/`III` → `3`), never spelled
+  out. If you ever do need to rename a slug: `git mv` the directory, update
+  the lib's own `meta.json` `slug` field, fix the absolute `mudlib
+  directory` path baked into `config.fluffos`, then grep the whole tree
+  (`README.md`, this file, every other lib's `README.md`/`meta.json`) for
+  the old slug and replace it — a rename that leaves stale cross-references
+  is worse than not renaming at all.
+- **`meta.json` stays lightweight structured data — number, slug, archive,
+  name, wasm_status, port, duplicate_of.** It is not the place for prose.
+  Anything explaining *what was found or fixed* belongs in the lib's own
+  `NOTES.md`, in Chinese, alongside its historical conversion notes — not
+  in a `group_note` field. If you're about to write more than one sentence
+  into `meta.json`, it belongs in `NOTES.md` instead.
+- **Approach this project with curiosity and empathy, not just throughput.**
+  These are somebody's late nights from 1997–2015 — a wizard group's
+  in-jokes in a `securityd.lpc` comment, a founder's own bootstrap account
+  still hardcoded into `restore_list()`, a room description somebody was
+  clearly proud of. The goal is preservation, not just a green checkmark on
+  a boot test: read the actual room text, the actual NPC dialogue, the
+  actual quest chain before writing a README's content section — don't
+  reach for generic wuxia boilerplate when the lib in front of you has its
+  own specific, discoverable identity. When two libs turn out to share
+  code under different branding (or vice versa), that lineage *is* part of
+  the history worth recording, not just a dedup detail.
 
 ---
 
@@ -366,16 +396,18 @@ gate in the lib's NOTES.md.
 
 ### 1.4 WASM triage playbook (per lib)
 
-Status lives in `libs/<slug>/meta.json`'s `wasm_status`/`group_note`
-fields — the single per-lib source of truth (also read for the main
-README table). `scripts/gen_site_index.py` (the Pages site generator)
-derives the deployed site's status badges directly from every lib's
-`meta.json` on each run (via `scripts/assemble_numbering.py`, which it
-always re-invokes first) — editing a lib's `meta.json` and re-running the
-site generator is the entire update path; there is no separate cache file
-to hand-sync. (`scripts/wasm_status.json` is still written as a build
-artifact/inspectable snapshot, but nothing reads it back to derive
-status.) For every lib not yet `playable`:
+Status lives in `libs/<slug>/meta.json`'s `wasm_status` field — the single
+per-lib source of truth (also read for the main README table). Prose
+explaining what was found/fixed goes in the lib's own `NOTES.md` (Chinese),
+not in `meta.json` — see the "Conventions" list at the top of this file.
+`scripts/gen_site_index.py` (the Pages site generator) derives the
+deployed site's status badges directly from every lib's `meta.json` on
+each run (via `scripts/assemble_numbering.py`, which it always re-invokes
+first) — editing a lib's `meta.json` and re-running the site generator is
+the entire update path; there is no separate cache file to hand-sync.
+(`scripts/wasm_status.json` is still written as a build artifact/inspectable
+snapshot, but nothing reads it back to derive status.) For every lib not
+yet `playable`:
 
 1. Reproduce: `wasm_client.js` with the lib's documented login sequence
    (read its README for the flow — id, hidden prompts, Chinese name).
@@ -389,8 +421,8 @@ status.) For every lib not yet `playable`:
    WASM-only genuine mudlib bug is rare.
 3. Fix, re-run the FULL flow (registration with a real Chinese name →
    `look` → `score` → `quit`, same standard as native, §10.1).
-4. Update the lib's own `meta.json` (`wasm_status`, `group_note`) and the
-   main README table.
+4. Update the lib's own `meta.json` (`wasm_status`), write up what was
+   found/fixed in `NOTES.md` (Chinese), and update the main README table.
 5. Known one-off oddities to not rediscover: `xo` reaches the gender
    prompt then hangs at world-entry under WASM only (not IP-related, not
    reproducible on sibling `xo_final` — unexplained, flagged);

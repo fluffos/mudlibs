@@ -526,3 +526,7 @@ gated behind `combat_exp` thresholds the newbie gift doesn't clear
 discussion above), and reaching further content requires real travel time
 this pass's budget did not stretch to. Stated explicitly per §10.7 rather
 than silently skipped.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+dtsl/llmud 血统的相关分支。
