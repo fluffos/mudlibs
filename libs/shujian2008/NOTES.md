@@ -322,3 +322,7 @@ distant Yangzhou city zone not mapped this pass) and a full
 combat-to-death cycle (core combat mechanics already exercised via the
 safe-sparring dummy fight; the two real 16-minute net-dead waits
 consumed most of the remaining time budget).
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+书剑天下2008 基础版。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：是 shiji（021）/sjtx2 的 Century 家族手足档案。管理员登录（fluffos/Mud@2026，这个家族特有的"先问 BIG5 字体"式书剑流程）干净正常，"您目前的权限是：(admin)"。
