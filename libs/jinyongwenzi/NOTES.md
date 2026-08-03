@@ -564,3 +564,7 @@ of whether the cap was hit. Compile-checked clean via `lpcc --batch`; not
 re-verified live in this lib specifically (verified live on `bxsj`, the
 source of the pattern) — flagging per §10.7 point 6 rather than silently
 claiming a live retest.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+此前被错误标记为某个不存在于本项目任何档案的原始压缩包文件名的 duplicate_of；这里的内容其实是完全独立、可游玩的游戏（有自己的 -N 变体编号、自己的端口、自己的 README）——duplicate_of 已清除。

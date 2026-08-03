@@ -1,0 +1,4 @@
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+完成了一次中断的转档（多个档案，包括 master.lpc，残留有 static 关键字）；用 read_file+explode+slice 重新实现了 efun::tail()（§6.2）；启动干净。完整 WASM 修复：给 band.lpc 加了本地回环放行；修复了 logind.lpc（create()/make_body()/howmany_user() 都改成 seteuid(ROOT_UID)）里同样的 seteuid(getuid()) 把 euid 重置掉的 bug；修复了 check_legal_name() 过时的 GBK 字节长度界限，去掉了一个毫无意义的 name[j]+=128 变异操作（旧版 GBK 高位字节假设的遗留代码）；给 adm/daemons/securityd.lpc 的 get_status() 加上了防止 wiz_status/wiz_levels 尚未初始化时重入编译崩溃的保护。发现了两个新 bug：cmds/usr/quit.lpc 呼叫 environment(me)->query(...) 没做保护，玩家在环境为空时退出游戏就会崩溃报"*Bad argument 1 to call_other()"（已给全部三处呼叫点加上保护）；adm/simul_efun/message.lpc 的 tell_room(ob,str,exclude) 包装函式把省略的可变参数 exclude 直接以裸整数 0 传给 message() 的第 4 个参数，而不是空数组——导致游戏里第一次 tell_room() 呼叫（欢迎室自己的 create()）就崩溃，这是已收录进 AGENTS.md §7.12 的共享包装函式 bug，已用文档记载的 exclude || ({}) 写法修复。管理员账号播种进了 data/securityd.o 的 wiz_status 映射（这里是 CRLF 配对编码，不是 hy/hy5 那条血统里的纯 CR 逐键编码——出于保险仍用二进制模式编辑）。注册流程到进入游戏世界、look/score/quit、管理员权限识别都干净验证过，没有残留的横幅计时问题。

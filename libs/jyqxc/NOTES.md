@@ -1,0 +1,4 @@
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+金庸题材 mudlib（金庸群侠传），游戏内标题为"The Story of Hero"。修复了两个 bug：feature/name.lpc 的 short() 呼叫 capitalize(query("id")) 没做保护——只要有物件在没设置"id"属性的情况下走到 short()，就会崩溃报"Bad argument 1 to capitalize()"，这份档案里约 49 个留言板分身（data/board/*.o 存档用一种这个驱动的 restore_object() 解析不了的旧式紧凑二进制编码，魔术字节"#inh"/"?inh"）全都会撞上这个问题——"Illegal file format"失败在抛出异常之前会先清空物件的 dbase 映射（包括刚在 create() 里设置好的"id"），导致每次 look 一个摆着留言板的房间都会崩溃。已改成让 short() 的兜底逻辑用 stringp(id) 判断，而不是重新格式化这约 49 个旧式存档档案。另外通过 adm/etc/wizlist 把 fluffos/Mud2026Adm 播种为 (admin)。没有发现中文名字/宏定义/指令表相关的 bug（is_chinese() 本来就用正确的 Unicode 码点区间；check_legal_name() 的 i%2==0 隔字检查会漏检奇数位置的非中文字符，但从不会拒绝真实的中文名字，所以保持原样）。完整的注册→look→score→quit 流程在排版格式化前后各验证过一次；管理员流程通过可见的"目前权限：(admin)"显示验证。格式化工具还原了 3 个损坏的档案，都是 ASCII 地图（d/huashan/map.lpc、d/shaolin/npc/obj/map.lpc 及其在 d/shaolin/obj/map.lpc 下的副本）——和这条血统里手足档案同样的分词器混淆模式。

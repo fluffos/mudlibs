@@ -572,3 +572,7 @@ removed.
   `update` 成功. **Verdict: native OK + wasm OK.** No fixes needed this
   pass. Test character saves removed; fluffos.o timestamp churn
   reverted.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+同一引擎，不同内容构建版本。

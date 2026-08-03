@@ -746,3 +746,7 @@ were running concurrently throughout and were never touched. Final
 driver killed by exact PID after all testing completed, confirmed gone
 via `ps -p`/`ss -tlnp` no longer showing port 40084. Scratch file
 `driver_stdout.log` removed before finishing, per task instructions.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+同一代码库，内容更精简。

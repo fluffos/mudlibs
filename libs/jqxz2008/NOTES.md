@@ -872,3 +872,7 @@ concurrently throughout and were never touched). RSS stayed at
 (§10.8 checked, nothing concerning). Final driver (PID 1718534) killed
 by exact PID after all testing completed, confirmed via `ps`/`ss` no
 longer showing port 40082.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+金庸群侠传引擎基础版（2008 加强版）。

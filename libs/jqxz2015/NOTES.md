@@ -471,3 +471,7 @@ via `adm/etc/wizlist`. Registered through the real flow; login verified as
 Save files (must be committed — NOT gitignored, orchestrator: force-add if
 git status hides them): `work/data/user/f/fluffos.o`,
 `work/data/login/f/fluffos.o`.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+同一引擎核心，2015 年内容版本。
