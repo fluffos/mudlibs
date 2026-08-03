@@ -145,3 +145,7 @@ registration test (Chinese surname + given name reaching the next prompt).
 - **Save files to force-add** (untracked, NOT gitignored):
   `libs/xyj2000f/work/data/login/f/fluffos.o`,
   `libs/xyj2000f/work/data/user/f/fluffos.o`.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+西游记 2000 的一份快照。
