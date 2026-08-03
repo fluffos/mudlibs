@@ -1,0 +1,4 @@
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+ES2/金庸血统 mudlib（Annihilator/书剑衍生），游戏内标题为"江湖2005/江湖2006"（书剑主题）。修复的 bug：（1）adm/daemons/securityd.lpc 的 valid_read() 里经典的 §7.59 this_player() 顶替 root 身份 bug——开机时立刻就会崩溃报"*Read access denied."，出现在 logind.lpc 的 gb_big5() 第一次惰性编译 BAN_D->is_banned() 的时候，英文名字提示根本还没出现；已仿照既有模式，把 func=="load_object"/"include" 排除在 this_player() 覆盖之外来修复；（2）adm/daemons/logind.lpc 里经典的 §8.1 GBK 字节区间 is_chinese() bug 加上 check_legal_name() 字节数没减半的长度界限（4/8 字符，i%2 门槛→2/4 字符）；（3）adm/daemons/commandd.lpc 的 rehash() 里经典的 §8.3b 死指令表 sscanf——"%s.c$" 在改名成 .lpc 之后再也匹配不到任何东西，导致整个指令表变成空的；look/quit 碰巧还能用（是靠别处的 add_action 定义或者驱动内建），但包括查看状态用的指令（stscore，不是 score——这份档案不用"score"这个词）在内的其它所有指令都会落到"什么？"，直到修好为止。管理员账号（fluffos/Mud2026Pass）通过真实注册流程 + adm/etc/wizlist 播种，游戏内"您目前的权限：(admin)"显示确认生效（自动带到巫师休息室）。完整的注册→look→stscore→quit 流程在排版格式化前后各验证过一次，用的是真实中文名字——注意这份档案的注册顺序是 id→y/N 确认→密码→确认密码→中文名字→天赋数值→性别，不是其它档案更常见的 id→确认→中文名字→密码那种顺序。

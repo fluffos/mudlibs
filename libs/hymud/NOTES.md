@@ -710,3 +710,7 @@ where each class was originally found, not in a new mechanism.
   touched; confirmed via `readlink -f /proc/<pid>/cwd` before every
   kill throughout) → 2003090 → 2012389 → 2025702 → 2040420 (stopped
   cleanly, by exact recorded PID, at the end of this session).
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+海洋II/haiyang2 的衍生版本，同一套代码库（已用 diff 确认）。
