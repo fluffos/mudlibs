@@ -3,7 +3,11 @@
 登录横幅自称 "1.YXCS"/"浴血重生"。血统比较特殊：既有 ES II 引擎系列的
 痕迹（`chinesed.lpc` 等文件署名可追溯到 "ES"→"XKX" 一支），又混入了
 "Lonely"（"nitan/NT" 系列的作者）后期改写的部分模块，属于一个 ES 系底子
-上被二次深度魔改的分支，不是纯血统的任何一支。
+上被二次深度魔改的分支，不是纯血统的任何一支。地图这一层可以更精确地
+定位：`d/city/sj.lpc`（"世界之巅"跳崖场景）和"天涯"家族逐字节相同
+（与 `xysylmhb`/`xyzxiiylzymh`/`yzxiiizylfy`/`xiyangzaixian3`/
+`tianxiawuxue` 这批同样打着别的招牌、实际却是"天涯"血统的档案一致），
+"Lonely"这条线索也和 `tianxiawuxue` 鸣谢名单里的同一位作者相呼应。
 
 ## 内容亮点
 
