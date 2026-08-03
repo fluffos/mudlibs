@@ -680,3 +680,7 @@ fix, which is compile-time):
   Zero new runtime errors in `debug.log` (only the same benign
   `Unknown #pragma`/`Unused local variable` compile warnings seen on
   every boot of this lib).
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+"夕阳再现"衍生引擎上的一款独立游戏。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：这个版本需要 Tomud 客户端版本握手（第一行字面回答"2060"，和本项目其它地方已经记录过的家族共同模式一致）——实测确认：2060→id→密码→"★ 您目前权限：(admin)"，quit 干净。

@@ -519,3 +519,7 @@ Save files for the orchestrator to add (both paths tracked, not
 gitignored; `data/user/f/` and `data/login/f/` are NEW directories):
 - `libs/xajhxo/work/data/user/f/fluffos.o`
 - `libs/xajhxo/work/data/login/f/fluffos.o`
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+同一个 XO 血统，第三份快照。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）干净正常，"目前权限：(admin)"。

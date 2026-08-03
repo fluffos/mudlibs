@@ -499,3 +499,7 @@ admin (`boss`) login re-verified: `look` then `update
 /adm/daemons/logind` → `重新编译 /adm/daemons/logind.lpc：成功！`, then
 clean `quit`. Zero `执行时段错误` lines in `debug.log` for the whole
 session. Test char `qretest` removed afterward; fluffos kept.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+"夕阳再现"衍生引擎上的一款独立游戏。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）干净正常，等级确认（"您目前权限：(boss)"），进入起始区域，quit 干净。记录了一处不阻断游戏的历史遗留美观性 bug（本轮未修）：某个房间的夜间氛围文字里有一处没有被替换掉的字面 '%s'。

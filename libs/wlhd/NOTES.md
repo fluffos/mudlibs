@@ -1,0 +1,4 @@
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+武林浩荡，游戏内品牌为《金庸梦II》/《武林浩荡》。和 tybxjh（天涯之碧血江湖）同一血统/代码库——master.lpc/securityd.lpc/logind.lpc 字节相似，注册提示文字完全相同，wiz_levels 阶梯同样到 (ceo) 为止，globals.h 里同一条注释掉的 '// #define SECURITY_D "/adm/daemons/securd"' 诱饵档案提醒也一样。在 WASM 下启动并完整完成注册，没有任何编译或运行时错误——没有发现任何 LPC bug。唯一的改动：把 fluffos (admin) 播种进 adm/etc/wizlist（已有三个 (ceo) 级创始人账号——rock/jerry/kjh；SECURITY_D 正确指向 /adm/daemons/securityd）。注册流程在一次连续的 WASM 客户端会话里完整验证过：英文 id→y/n 创建确认→中文名字→管理密码+确认→普通密码（必须不同）+确认→天赋数值选择（0 为随机，y 接受）→电子邮件（需要 id@address 格式）→性别→带着完整角色属性表进入游戏世界，全程没有任何意外错误。管理员权限已直接通过登录后的横幅"您目前权限：(admin)"确认。LPC 格式化工具对全部 11160 个档案运行（写入 10179 个，945 个报错——大多是杂乱的 kungfu/quest 内容无法幂等往返触发的 TOKEN MISMATCH 安全门跳过，加上一处确认的未结束字符串词法失败，全都安全地保持原样未动，36 个未改动）。没有 :: 父类呼叫拆分命中，没有 CJK 重新加空格命中，没有 case 标签带尾随注释的候选。全部 4 个 map.lpc 档案确认内容完全相同（只是空白差异）。格式化后用同样的完整注册流程重新验证过——干净，管理员权限依然是 (admin)。

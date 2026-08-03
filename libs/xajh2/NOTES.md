@@ -786,3 +786,7 @@ left running at the end of this pass. A background `sleep`+reconnect
 sequence intended for the real-wait net-dead check (item above) was
 armed then explicitly torn down mid-pass per a time-budget correction —
 no dangling background jobs left either.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+同一个 XO 血统，2003 年快照。
