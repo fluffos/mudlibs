@@ -7,13 +7,14 @@
 `securityd.lpc`/`logind.lpc` 核心系统档案结构几乎一致，但地图内容
 各自独立修改过）、`xhcii`（笑红尘Ⅱ）、`zxty`（再现天涯）、
 `ffxymud`（非凡夕阳MUD/时空游侠录）、`jhfy2`（江湖风云2）、
-`xysylmhb`（夕阳三-炎龙美化版）和 `xyzxiiylzymh`（夕阳再现II-炎龙
-专用美化客户端）——后两者标题都带"夕阳再现"但地图其实是这个家族。
-除 `wlhd` 外，这六者的 `d/city/sj.lpc`（"世界之巅"跳崖场景）逐字节
-完全相同，`ffxymud`/`xysylmhb`/`xyzxiiylzymh` 连登入横幅/标题都完
-全不像同一批档案，如果不比对源码很难发现它们同源；`wlhd` 这个房间
-的具体写法已经被独立改写过（指令改成 `jump`，配上 `valid_leave()`），
-但核心系统档案的同源关系不受影响。
+`xysylmhb`（夕阳三-炎龙美化版）、`xyzxiiylzymh`（夕阳再现II-炎龙
+专用美化客户端）和 `yzxiiizylfy`（夕阳再现III之炎龙封印）——后三
+者标题都带"夕阳再现"但地图其实是这个家族（真正的"夕阳再现"血统是
+`xyzx`/`jhfy3`/`xajh4gkb`/`xyzxyl201412` 那一支完全不同的代码）。
+除 `wlhd`/`yxjh` 外，这七者的 `d/city/sj.lpc`（"世界之巅"跳崖场
+景）逐字节完全相同；`wlhd`/`yxjh` 用的是 `wlhd` 独立改写过的
+"jump"版本，`ffxymud`/`xysylmhb`/`xyzxiiylzymh`/`yzxiiizylfy` 连登
+入横幅/标题都完全不像同一批档案，如果不比对源码很难发现它们同源。
 
 ## 内容亮点
 
