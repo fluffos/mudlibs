@@ -2,10 +2,22 @@
 catalog) across every converted-but-not-yet-individually-fixed lib:
 the §8.1 GBK is_chinese() bug, the §4.3 nosave/protected shim
 collision, the §7.3 master.lpc SIMUL_EFUN_OB destruct-on-create
-segfault, and excluding actively-preloaded dns_master/ftpd. Every
-fix is an EXACT string/structural match, so it silently no-ops
-(never mis-fires) on any file that differs even slightly -- those
+segfault, excluding actively-preloaded dns_master/ftpd, the §6.6
+convertd.lpc Greek-table stray-backslash typo, absolute-path
+`#include </...>` (never resolves under this driver's include-directories
+search -- rewritten to a quoted include, which always resolves), and the
+§7.12 two-arg tell_room() wrapper's bare-int-0 exclude default crashing
+message(). Every fix is an EXACT string/structural (or, for the
+convertd/include fixes, a narrowly-scoped regex) match, so it silently
+no-ops (never mis-fires) on any file that differs even slightly -- those
 need individual attention via the fuller AGENTS.md catalog instead.
+
+Note: exclude_network_preload's dns_master/ftpd comment-out is a
+conservative FIRST pass for libs not yet individually triaged. If a
+later WASM pass gives dns_master.lpc the full §7.52 socket-gut treatment
+(making its own preload-time init safe), re-enable its preload line by
+hand -- this script does not know to undo its own earlier edit (see
+xyj2000's WASM-pass commit for the bug this causes if left disabled).
 
 Usage: python3 scripts/lib_bulk_fix.py
 Output: scripts/lib_bulk_fix_results.json (per-lib counts of what
@@ -133,6 +145,92 @@ def fix_shim_collision(work):
                 fixed.append(fpath)
     return fixed
 
+def fix_convertd_backslash(work):
+    """AGENTS.md §6.6: convertd.lpc's Greek-conversion table has a stray
+    backslash before the closing quote on ~43-45 lines (`"a\",` for
+    `"a\",` -- i.e. `"α\",` should read `"α",`), recurring across the whole
+    西游记/ES II family, often fatal (inside simul_efun's compile).
+    Exact-shape regex: a double-quoted string ending in `\"` immediately
+    followed by an optional comma and line end (CRLF or LF) -- matches
+    only the corrupt shape, never a legitimately escaped-quote-at-end
+    string (which would need something after it on the same line)."""
+    fixed = []
+    pat = re.compile(r'\\"(,)?\r?\n')
+    for f in find_files(work, {'convertd.c', 'convertd.lpc'}):
+        try:
+            content = read(f)
+        except Exception:
+            continue
+        new_content, n = pat.subn(lambda m: '"' + (m.group(1) or '') + '\n', content)
+        if n:
+            write(f, new_content)
+            fixed.append((f, n))
+    return fixed
+
+
+def fix_absolute_angle_include(work):
+    """This driver's `#include <...>` only searches config.fluffos's
+    'include directories' (normally just /include) -- an absolute-path
+    `#include </d/foo/bar.h>` never resolves there ("Cannot #include"),
+    even though the target file exists. Quoted includes always resolve
+    as a literal path from the mudlib root, so rewriting the delimiters
+    is a safe, purely mechanical fix (AGENTS.md's xkx100/xkx2017/xyj2006n
+    combatd.lpc/jitan.h cases) -- never touches `<net/foo.h>`-style
+    relative includes, only ones starting with a literal '/'."""
+    fixed = []
+    pat = re.compile(r'#include\s*<(/[^>]+)>')
+    for dirpath, dirnames, filenames in os.walk(work):
+        parts = dirpath.split(os.sep)
+        if any(p in ('log', 'save', 'data', 'binaries', '.git') for p in parts):
+            continue
+        for fn in filenames:
+            if not (fn.endswith('.lpc') or fn.endswith('.h')):
+                continue
+            fpath = os.path.join(dirpath, fn)
+            try:
+                content = read(fpath)
+            except Exception:
+                continue
+            new_content, n = pat.subn(r'#include "\1"', content)
+            if n:
+                write(fpath, new_content)
+                fixed.append((fpath, n))
+    return fixed
+
+
+def fix_tell_room_exclude(work):
+    """AGENTS.md §7.12: a 2-arg tell_room() wrapper forwards its varargs
+    `exclude` param straight into message()'s 4th arg; when the caller
+    omits it, that's a raw int 0 instead of an array/object, crashing
+    with 'Bad argument 4 to EFUN message()' the first time anything
+    calls tell_room() with 2 args (very common). Exact-literal shapes
+    only, matching every instance fixed by hand this session -- silently
+    no-ops on any wrapper whose body differs even slightly (parameter
+    name, extra whitespace), which needs individual attention instead."""
+    fixed = []
+    variants = [
+        ('message("tell_room", str, ob, exclude);',
+         'message("tell_room", str, ob, exclude || ({}));'),
+        ('message("tell_room",str,ob,exclude);',
+         'message("tell_room",str,ob,exclude || ({}));'),
+    ]
+    for f in find_files(work, {'message.c', 'message.lpc'}):
+        try:
+            content = read(f)
+        except Exception:
+            continue
+        new_content = content
+        hit = 0
+        for old, new in variants:
+            if old in new_content:
+                new_content = new_content.replace(old, new)
+                hit += 1
+        if hit:
+            write(f, new_content)
+            fixed.append((f, hit))
+    return fixed
+
+
 def exclude_network_preload(work):
     fixed = []
     fpath = os.path.join(work, 'adm', 'etc', 'preload')
@@ -172,8 +270,15 @@ def main():
         entry['master_destruct_fixed'] = [f.replace(work, '') for f in fix_master_destruct(work)]
         entry['shim_fixed'] = [f.replace(work, '') for f in fix_shim_collision(work)]
         entry['preload_fixed'] = [f.replace(work, '') for f in exclude_network_preload(work)]
+        entry['convertd_backslash_fixed'] = [
+            (f.replace(work, ''), n) for f, n in fix_convertd_backslash(work)]
+        entry['absolute_include_fixed'] = [
+            (f.replace(work, ''), n) for f, n in fix_absolute_angle_include(work)]
+        entry['tell_room_exclude_fixed'] = [
+            (f.replace(work, ''), n) for f, n in fix_tell_room_exclude(work)]
         results[slug] = entry
-        print(f"[{i+1}/{len(SLUGS)}] {slug}: cr={entry['cr_stripped']} chinese={len(entry['is_chinese_fixed'])} destruct={len(entry['master_destruct_fixed'])} shim={len(entry['shim_fixed'])} preload={len(entry['preload_fixed'])}", flush=True)
+        print(f"[{i+1}/{len(SLUGS)}] {slug}: cr={entry['cr_stripped']} chinese={len(entry['is_chinese_fixed'])} destruct={len(entry['master_destruct_fixed'])} shim={len(entry['shim_fixed'])} preload={len(entry['preload_fixed'])} "
+              f"convertd_bs={sum(n for _, n in entry['convertd_backslash_fixed'])} abs_include={sum(n for _, n in entry['absolute_include_fixed'])} tell_room={sum(n for _, n in entry['tell_room_exclude_fixed'])}", flush=True)
 
     with open(STATUS_FILE, 'w') as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
