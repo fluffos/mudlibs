@@ -308,7 +308,7 @@ classes it's found.
 | 125 | `xysylmhb` | 夕阳三-炎龙美化版 | `夕阳三-炎龙美化版.rar` | 40169 | WASM playable |
 | 126 | `xyxyutf8` | 小雨西游utf8 | `小雨西游utf8.zip` | 40168 | WASM playable |
 | 127 | `xyzx` | 夕阳再现 | `夕阳再现.rar` | 40180 | WASM playable |
-| 128 | `xyzxiiylzymh` | 夕阳再现II-炎龙专用美化客户端 | `夕阳再现II-炎龙专用美化客户端.rar` | 40130 | native-boot verified, WASM pending |
+| 128 | `xyzxiiylzymh` | 夕阳再现II-炎龙专用美化客户端 | `夕阳再现II-炎龙专用美化客户端.rar` | 40130 | WASM playable |
 | 129 | `xyzxyl201412` | 夕阳再现-炎龙20141231 | `夕阳再现-炎龙20141231.rar` | 40175 | native-boot verified, WASM pending |
 | 130 | `yhwhpublicfi` | 炎黄武魂public-final-2016-12-08 | `炎黄武魂public-final-2016-12-08.rar` | 40132 | native-boot verified, WASM pending |
 | 131 | `yxjh` | 浴血江湖 | `浴血江湖.rar` | 40148 | native-boot verified, WASM pending |
