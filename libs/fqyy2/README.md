@@ -1,8 +1,9 @@
 # 风起云涌2
 
 同一套"海洋/hy"代码线家族（`SECURITY_D` 同样指向
-`adm/daemons/securd.lpc`），从一个 rar 套 rar 的嵌套压缩包中提取
-（内层 `风起云涌.rar` 目录名为 `xkx2`）。
+`adm/daemons/securd.lpc`，和 `hy2000`/`hy2002`/`hy3`/`hy5` 等档案
+共享这套硬编码后门管理员机制），从一个 rar 套 rar 的嵌套压缩包中提
+取（内层 `风起云涌.rar` 目录名为 `xkx2`）。
 
 ## 内容亮点
 
