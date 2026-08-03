@@ -4,6 +4,22 @@
 slug 和 `sje`/`sjecl`（书剑系列）相似，但其实是完全不同的
 Century/adm-single 家族，不要混淆。
 
+## 内容亮点
+
+- 题材是科幻星际战争，不是常见的武侠泥潭：新角色从"天狼"星区的
+  街道开局，"太空港口"（`d/taikong/`）可以花电子货币购买星际战舰，
+  分别通往中心城的四大阵营——凤凰星、皇族、圣殿、特种部队
+  （`budui`）。
+- 权限称号也走同一套科幻风格：管理员在游戏内显示为〖银河特警〗
+  （Galaxy Special Police），而非常见的"admin"或"天神"之类的头衔。
+- 门派/流派系统仍保留传统 kungfu 目录结构（`kungfu/class`、
+  `kungfu/skill`），但配合"绝地""监狱""部队""神殿"等场景，呈现出
+  科幻背景下的江湖势力划分。
+- 管理员的启动授权走的是另一条隐藏路径：`securd.lpc` 自己的
+  `restore_list()` 里硬编码了一个后门账号 `keyboy`（`(zhuguan)`），
+  和标准的 `wizlist` 文本文件完全无关（详见下方"本次修复的关键
+  bug"第 4 条）。
+
 ## 本次修复的关键 bug
 
 1. **`master.lpc` 的 `log_error()`/`standard_trace()` 在 `CHANNEL_D`
