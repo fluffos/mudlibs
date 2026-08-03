@@ -517,3 +517,7 @@ Everything in the §10.7 checklist was reached this pass except:
 - **The FATAL crash's exact trigger**: documented with full trace above,
   hypothesis given, not conclusively reproduced or root-caused (driver
   internals, out of scope for a mudlib-level fix).
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+Century/adm-single 家族（自定义 securityd ACL 表）。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）干净正常，画面上确认了这份档案自己的顶层巫师称号字符串（"★目前权限：〖宇宙特警〗(zhuguan)"，通过 /adm/daemons/securd.o 的 wiz_status 映射授予，而不是 wizlist 档案）。
