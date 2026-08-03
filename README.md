@@ -317,7 +317,7 @@ classes it's found.
 | 134 | `yxzsj` | 逸  俠  之  世  界 | `逸  俠  之  世  界.rar` | 40170 | WASM playable |
 | 135 | `yzxiiizylfy` | 阳再线III之炎龙封印 | `阳再线III之炎龙封印.rar` | 40178 | WASM playable |
 | 136 | `zjdy2008wzb` | 终极地狱2008完整版 | `终极地狱2008完整版.rar` | 40110 | WASM playable |
-| 137 | `zjdywzb` | 终极地狱完整版 | `终极地狱完整版.rar` | 40109 | native-boot verified, WASM pending |
+| 137 | `zjdywzb` | 终极地狱完整版 | `终极地狱完整版.rar` | 40109 | WASM playable |
 | 138 | `zxty` | 再现天涯 | `再现天涯.rar` | 40166 | native-boot verified, WASM pending |
 | 138-1 | `zxty08nxgbb` | 再现天涯（08年修改版本） | `再现天涯08年修改版本.rar` | 40193 | native-boot verified, WASM pending |
 | 139 | `zzfy3` | 郑州风云3 | `郑州风云3.rar` | 40120 | native-boot verified, WASM pending |
