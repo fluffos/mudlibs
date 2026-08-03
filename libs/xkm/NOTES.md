@@ -1,0 +1,4 @@
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+和金庸梦（jym，147）同一血统/同一套 simul_efun 组成——用同样的方式重新实现了 efun::tail()（§6.2）；启动干净。完整 WASM 修复：给 band.lpc 加了本地回环放行；修复了 logind.lpc（create()/make_body()）里同样的 seteuid(getuid()) 把 euid 重置掉的 bug；修复了 check_legal_name() 过时的 GBK 字节长度界限（去掉了遗留的 +=128 字节变异，把 is_chinese() 校验改成逐字符）；给 securityd.lpc 的 get_status() 加上了防重入编译崩溃保护；修复了 quit.lpc 未加保护的 environment(me) 崩溃；修复了 message.lpc 的 tell_room() exc_target=0 崩溃（AGENTS.md §7.12）。jym 里没有的新 bug：get_id() 会无条件为任何 wiz_level>0 的 id 注册 input_to("get_passwdd",...)——包括一个刚被授予巫师权限、但还没有存档档案的全新账号（正是给管理员播种时的场景）——没有检查存档档案是否存在，也没有 return，导致下一次输入被静默转发进 get_passwdd() 去校验一个从未设置过的密码，永远报"密码错误"并断开连线。已修复为在 file_size(存档文件)>=0 时才注册这个早期呼叫（匹配同一函式后面已有的正确检查），并补上缺失的 return。这是原始存档里真实存在的 bug，不是本次管理员播种过程引入的——任何给一个尚未注册的 id 授予巫师权限的真实部署都会碰到。另外发现注册流程比 jym 手足档案多了一个 QQ 号码提示和一道"玩家守则"y/n 确认步骤——已按 AGENTS.md §8.2 直接读取真实的 input_to() 调用链，而不是假设 jym 的确切发送顺序可以照搬。

@@ -532,3 +532,7 @@ future pass doesn't need to re-investigate from scratch.
   itself (`feature/apprentice.lpc`'s `create_family`/
   `recognize_apprentice`/`bai.lpc`) was verified structurally and via
   the one live, correctly-declined attempt.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+侠客行 XKX 基础版。

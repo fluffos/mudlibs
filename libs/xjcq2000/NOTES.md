@@ -510,3 +510,7 @@ newlines/quotes inside post text, predating this conversion pass).
   specific file:line within this pass's budget.
 - `d/honghua/npc/yuyutong.lpc`/`xutianhong.lpc` post-fix — confirmed to
   recompile cleanly via admin `update`, not walked to live in-game.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录干净正常："Are you using BIG5 font [Y|N]?"（回答 n）→id+密码→"您目前的权限是：(admin)"。
