@@ -231,7 +231,7 @@ classes it's found.
 | 053 | `zhongjidiyu_airuoyoulan` | 终极地狱之爱若幽兰 | `终极地狱之爱若幽兰1.166正式版.rar` | 40073 | WASM limited |
 | 053-1 | `zhongjidiyu_zhijian` | 终极地狱-指间MUD版 | `终极地狱-指间mud版服务端.rar` | 40074 | WASM limited |
 | 054 | `xixingzhanji` | 西行战记 | `西行战记.gz` | 40080 | WASM playable |
-| 055 | `chongshengdeshijie` | 重生的世界 (Revival World) | `重生的世界v1.0.1.rar` | 40081 | noboot |
+| 055 | `chongshengdeshijie` | 重生的世界 (Revival World) | `重生的世界v1.0.1.rar` | 40081 | WASM playable |
 | 056 | `tiexuejianghu` | 铁血江湖 (Tie Xue Jiang Hu) | `铁血江湖.rar` | 40087 | WASM playable |
 | 057 | `suiyuanxijianlu` | 随缘洗剑录 | `随缘洗剑录.rar` | 40088 | WASM limited |
 | 058 | `mohuanshiji` | 魔幻世纪 (mohuanshiji) | `魔幻世纪.rar` | 40092 | WASM playable |
