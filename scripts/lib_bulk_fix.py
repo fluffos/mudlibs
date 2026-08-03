@@ -231,7 +231,36 @@ def fix_tell_room_exclude(work):
     return fixed
 
 
+SOCKET_CALL_RE = re.compile(
+    r'\bsocket_(create|bind|listen|accept|connect|write)\s*\(')
+
+
+def _daemon_still_has_sockets(work, preload_path):
+    """preload_path is a mudlib-absolute path with no extension (e.g.
+    '/adm/daemons/network/dns_master'). Resolve it to a .lpc/.c file
+    under work and check whether it still makes raw socket_*() calls.
+    Returns True (assume unsafe -> keep excluding) if the file can't be
+    found or read, so this only ever gets MORE conservative on unknowns,
+    never less."""
+    rel = preload_path.lstrip('/')
+    for ext in ('.lpc', '.c'):
+        fpath = os.path.join(work, *rel.split('/')) + ext
+        if os.path.isfile(fpath):
+            content = read(fpath)
+            if content is None:
+                return True
+            return bool(SOCKET_CALL_RE.search(content))
+    return True
+
+
 def exclude_network_preload(work):
+    """Comments out dns_master/ftpd preload lines -- but ONLY if that
+    daemon still makes raw socket_*() calls. A lib whose dns_master.lpc
+    was already individually gutted (AGENTS.md §7.52) needs ITS preload
+    line re-ENABLED, not disabled -- disabling a properly-gutted
+    dns_master.lpc breaks find_object(DNS_MASTER) checks elsewhere (see
+    xyj2000's WASM-pass commit for the exact bug this causes). This
+    function must never undo that kind of individual fix."""
     fixed = []
     fpath = os.path.join(work, 'adm', 'etc', 'preload')
     if not os.path.exists(fpath):
@@ -248,7 +277,9 @@ def exclude_network_preload(work):
         if stripped.startswith('#') or not stripped:
             new_lines.append(l)
             continue
-        if 'dns_master' in stripped or re.search(r'/ftpd(\.c|\.lpc)?$', stripped):
+        is_dns_master = 'dns_master' in stripped
+        is_ftpd = bool(re.search(r'/ftpd(\.c|\.lpc)?$', stripped))
+        if (is_dns_master or is_ftpd) and _daemon_still_has_sockets(work, stripped):
             new_lines.append('#' + l)
             changed = True
         else:
