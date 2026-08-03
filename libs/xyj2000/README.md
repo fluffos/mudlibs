@@ -37,6 +37,33 @@
    `dns_master.lpc` 能正常载入，把 `preload` 里那一行重新启用即可，
    不需要改动 `logind.lpc` 本身的检查逻辑。
 
+## 补充修复（静态扫描工具发现的潜伏 bug）
+
+本次会话新写了 `scripts/scan_known_bugs.py`（一个只读静态扫描工具），
+对已经标记 playable 的档案回头扫了一遍，抓到 5 个原本的"注册+look+
+score+quit"通关测试没有踩到的潜伏/延迟加载 bug：
+
+- `d/obj/books-nonskill/book-qujing.lpc` 的绝对路径
+  `#include </d/qujing/obstacle.h>`（读这本书才会触发，改成双引号）。
+- `logind.lpc` 的 `check_legal_name()` 有标准 §8.1 的 `i%2` 奇偶校验
+  + `[i..<0]` 后缀切片写法——这份档案因为 `is_chinese()` 恰好只检查
+  第一个字符所以没有实际造成拒绝，但还是按标准逐码点写法修正，保持
+  一致性和稳健性。
+- `master.lpc` 的 `valid_read()`/`valid_write()` 原样转呼叫
+  `SECURITY_D`，没有 `user == this_object()` 的短路判断——这正是让
+  同宗档案 `xyj20032` 每一次新角色注册都在选完性别后静默卡死的那个
+  bug（详见该档案的 README），这里虽然没有被实际触发，还是提前补上
+  同样的防御。
+- 3 处 `is_killing(me)` 传对象给宣告成 `is_killing(string id)` 的函
+  式（§7.50，`daemon/class/dragon/dragonforce/roar.lpc`、`daemon/
+  class/yaomo/kusong/huomo/fire.lpc`、`cmds/std/surrender.lpc`）。
+- `d/sky/npc/zz-tianwang.lpc` 还是原始 GBK 字节，最早那一轮批量转
+  码没有转到，用 `iconv -c -f GB18030 -t UTF-8` 补转。
+
+另外还发现并修复了 `adm/simul_efun/message.lpc` 的 `tell_room()`
+把未设定的 `exclude` 直接传给 `message()` 第 4 个参数的 §7.12 bug
+（`exclude || ({})`）。
+
 ## 管理员账号 / Admin account
 
 - **ID**: `fluffos`
