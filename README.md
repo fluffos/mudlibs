@@ -1,4 +1,4 @@
-# mudlibs — 200 restored classic Chinese LPC mudlibs (158 unique games), runnable natively and most in the browser
+# mudlibs — 199 restored classic Chinese LPC mudlibs (158 unique games), runnable natively and most in the browser
 
 **▶ Play now, no install: https://mudlibs.fluffos.info/**
 
@@ -6,9 +6,11 @@
 
 This repository preserves and restores the golden age of the Chinese MUD
 scene (mid-1990s to ~2015): **199 restored LPC mudlibs across 158 unique
-game codebases** (193 fully verified playable in the browser, 1 more
-playable with a documented caveat, 1 native-only by policy, 4 confirmed
-non-bootable — see below) — 侠客行, 笑傲江湖,
+game codebases** (193 fully verified playable — 191 with their own site
+card, plus 2 further archives confirmed byte-identical re-uploads of an
+already-listed sibling and folded into that sibling's card rather than
+duplicated — 1 more playable with a documented caveat, 1 native-only by
+policy, 4 confirmed non-bootable — see below) — 侠客行, 笑傲江湖,
 金庸群侠传, 西游记, 风云, 大唐双龙, 书剑天下, 东方故事, and dozens of
 derivatives and forks — recovered from community archive dumps, transcoded
 to UTF-8, and fixed to boot and play on the modern
@@ -143,10 +145,10 @@ classes it's found.
 | 003-1 | `xiaoyuxiyou` | 小雨西游 | `小雨西游.zip` | 40046 | WASM playable |
 | 004 | `bxsj` | 书剑天下 (ShuJian MUD) | `bxsj.rar` | 40004 | WASM playable |
 | 004-1 | `bxsj1` | 书剑·经典 (ShuJian Classic) | `bxsj1.rar` | 40005 | WASM playable |
-| 004-2 | `jinyongwenzi` | 金庸文字版 | `金庸文字版 (1).exe` | — | WASM playable |
+| 004-2 | `jinyongwenzi` | 金庸文字版 | `金庸文字版 (1).exe` | 40083 | WASM playable |
 | 005 | `chidi` | 江湖 I (Jianghu I) | `chidi.rar` | 40006 | WASM playable |
 | 006 | `ds386` | Dead Souls 3.8.6 | `ds3.8.6.zip` | 40007 | WASM partial |
-| 007 | `dtsl` | DTSL | `DTSL.7z` | — | WASM playable |
+| 007 | `dtsl` | DTSL | `DTSL.7z` | 40008 | WASM playable |
 | 007-1 | `llmud_datangshuanglong` | 大唐双龙传（LLMUD） | `LLMUD(大唐双龙)v_0.11版.rar` | 40015 | WASM playable |
 | 007-2 | `datangshuanglong` | 大唐双龙 (DaTangShuangLong) | `大唐双龙.rar` | 40043 | WASM playable |
 | 008 | `es1_win` | 东方故事（蓝天） — es1_win | `es1_win.rar` | 40009 | WASM playable |
@@ -159,7 +161,7 @@ classes it's found.
 | 010-3 | `xiyouji450` | 西游记450 | `西游记450.rar` | 40078 | WASM playable |
 | 010-4 | `xiyouji2006` | 西游记2006·大唐西游 | `西游记2006之 最终幻想.rar` | 40077 | WASM playable |
 | 011 | `fy2` | 风云再起Ⅱ — fy2 | `fy2.rar` | 40014 | WASM playable |
-| 011-1 | `fengyun2qinghua` | 风云II | `风云II (清华仿写版） (1).ZIP` | — | WASM playable |
+| 011-1 | `fengyun2qinghua` | 风云II | `风云II (清华仿写版） (1).ZIP` | 40091 | WASM playable |
 | 012 | `mhxy` | 梦幻西游 (mhxy) | `mhxy.rar` | 40016 | WASM playable |
 | 012-1 | `menghuanxiyou2002` | 梦幻西游（青岛站） | `梦幻西游2002版.rar` | 40050 | WASM playable |
 | 013 | `xiakexing2017` | 侠客行 (MUD侠客行2017完整版) | `MUD侠客行2017完整版.zip` | 40017 | WASM playable |
@@ -179,10 +181,10 @@ classes it's found.
 | 019-3 | `xiaoaojianghu_xo` | 笑傲江湖 XO | `笑傲江湖XO .rar` | 40069 | WASM playable |
 | 019-4 | `qhxajh` | 清华笑傲江湖 | `清华笑傲江湖）.tgz` | 40195 | WASM playable |
 | 020 | `zzfy` | 郑州风云3 | `zzfy (full).rar` | 40025 | WASM playable |
-| 020-1 | `fengyun3xiuding` | 风云III修订版 | `风云III修订版  (1).rar` | — | WASM playable |
-| 020-2 | `fengyun3dianzang` | 风云III典藏版 | `风云III典藏版 (1).rar` | — | WASM playable |
+| 020-1 | `fengyun3xiuding` | 风云III修订版 | `风云III修订版  (1).rar` | 40089 | WASM playable |
+| 020-2 | `fengyun3dianzang` | 风云III典藏版 | `风云III典藏版 (1).rar` | 40090 | WASM playable |
 | 021 | `shiji` | 世纪 | `世纪.zip` | 40026 | WASM playable |
-| 022 | `dongfanggushi2` | 东方故事二 | `东方故事二 (1).rar` | — | WASM playable |
+| 022 | `dongfanggushi2` | 东方故事二 | `东方故事二 (1).rar` | 40027 | WASM playable |
 | 023 | `zhonghua2` | 中华英雄苏州站 | `中华2.rar` | 40028 | WASM playable |
 | 024 | `shujian2008` | 书剑天下 2008 | `书剑2008.rar` | 40029 | WASM playable |
 | 024-1 | `shujiantianxia` | 书剑天下（小熊泥苑分站） | `书剑天下.rar` | 40030 | WASM playable |
@@ -197,9 +199,9 @@ classes it's found.
 | 031-2 | `jinyongqunxiazhuan2008_deluxe` | 金庸群侠传（2008 超豪华版） | `金庸群侠传2008超豪华版.rar` | 40085 | WASM playable |
 | 031-3 | `jinyongqunxiazhuan2015` | 金庸群侠传（2015版） | `金庸群侠传2015版.rar` | 40086 | WASM playable |
 | 031-4 | `xiakexing3` | 金庸群侠传 (原名"侠客行三") | `侠客行III .rar` | 40038 | WASM playable |
-| 032 | `xiyangzaixian_fengkuang` | 夕阳再现-疯狂江湖 | `夕阳再现-疯狂江湖(1).rar` | — | WASM playable |
+| 032 | `xiyangzaixian_fengkuang` | 夕阳再现-疯狂江湖 | `夕阳再现-疯狂江湖(1).rar` | 40040 | WASM playable |
 | 032-1 | `xiyangzaixian_fengyun2` | 夕阳再现·风云再起Ⅱ | `夕阳再现-风云再起2.rar` | 40041 | WASM playable |
-| 032-2 | `jianghufengyun` | 江湖风云 | `江湖风云 (1).rar` | — | WASM playable |
+| 032-2 | `jianghufengyun` | 江湖风云 | `江湖风云 (1).rar` | 40053 | WASM playable |
 | 033 | `xiyangzaixian3` | 夕阳再现III之炎龙封印 | `夕阳再线III之炎龙封印.rar` | 40042 | WASM playable |
 | 033-1 | `yanlongfengyin_xiaoao3` | 炎龙封印（笑傲江湖·阿飞站） | `炎龙封印-笑傲江湖3阿飞站.rar` | 40062 | WASM playable |
 | 033-2 | `longyunmeng` | 龙云梦·炎龙封印（源码版） | `龙云梦-炎龙封印源码版.rar` | 40094 | WASM playable |
@@ -208,7 +210,7 @@ classes it's found.
 | 034 | `tianxia` | 天下 Beta | `天下.tar.gz` | 40044 | WASM playable |
 | 035 | `tianxiawuxue` | 天下无雪 | `天下无雪.rar` | 40045 | WASM playable |
 | 036 | `xinkuangxiangkongjian2` | 狂想空间 | `新狂想空间II.rar` | 40047 | WASM playable |
-| 036-1 | `kuangxiangkongjian` | 狂想空间 | `狂想空间 (1).rar` | — | WASM playable |
+| 036-1 | `kuangxiangkongjian` | 狂想空间 | `狂想空间 (1).rar` | 40063 | WASM playable |
 | 037 | `yueyingqiyuan` | 月影奇缘 | `月影奇缘.rar` | 40048 | WASM playable |
 | 038 | `weimingkongjian` | 未明空间 (Weiming Kongjian / "wmkj") | `未明空间.rar` | 40049 | WASM playable |
 | 039 | `moniHuafu` | mnhf | `mnhf.zip` | — | WASM playable |
@@ -216,9 +218,9 @@ classes it's found.
 | 041 | `nitan_ceshi` | 泥潭III测试版 / 《終極魔界》 (nitan_ceshi) | `泥潭III测试版.rar` | 40054 | WASM playable |
 | 041-1 | `nitan_san` | 泥潭三 / 《終極魔界》 (nitan_san) | `泥潭三.rar` | 40055 | WASM playable |
 | 042 | `yuxuechongsheng` | 浴血重生 | `浴血重生MUD.rar` | 40056 | WASM playable |
-| 043 | `haiyang2` | 海洋II 2010 正式无错完整版下载 | `海洋II 2010 正式无错完整版下载 (1).rar` | — | WASM playable |
+| 043 | `haiyang2` | 海洋II 2010 正式无错完整版下载 | `海洋II 2010 正式无错完整版下载 (1).rar` | 40057 | WASM playable |
 | 043-1 | `hymud` | 海洋V·星月传奇 | `hymud-main.zip` | 40103 | WASM playable |
-| 044 | `huoying` | Naruto | `Naruto.rar` | — | WASM playable |
+| 044 | `huoying` | Naruto | `Naruto.rar` | 40059 | WASM playable |
 | 045 | `yanhuangwuhun` | 「武林群侠传」之炎黄武魂Ⅱ | `炎黄武魂_64bit.rar` | 40060 | WASM playable |
 | 045-1 | `yanhuangyingxiongshi` | 炎黄英雄史（游戏内也称"皇朝再现"） | `炎黄英雄史.rar` | 40061 | WASM playable |
 | 046 | `xuanjianlu` | 玄剑录 | `玄剑录.rar` | 40064 | WASM playable |
