@@ -1,10 +1,27 @@
 #!/usr/bin/env bash
 # Convert an extracted mudlib (libs/<slug>/raw/<mudlib-root>) into a working
-# copy (libs/<slug>/work) with: GB18030->UTF-8 on every text file, .c->.lpc
-# rename, literal ".c" reference fixes (.lpc + .h), and static->nosave.
+# copy (libs/<slug>/work) with: GB18030->UTF-8 (default) on every text file,
+# .c->.lpc rename, literal ".c" reference fixes (.lpc + .h), and
+# static->nosave.
 #
-# Usage: convert_lib.sh <raw-mudlib-root-dir> <work-dir>
+# Usage: convert_lib.sh <raw-mudlib-root-dir> <work-dir> [source-encoding]
 #   e.g. convert_lib.sh libs/foo/raw/simple libs/foo/work
+#        convert_lib.sh libs/foo/raw/simple libs/foo/work BIG5
+#
+# source-encoding defaults to GB18030 (the overwhelming majority of this
+# corpus is mainland-China GBK/GB18030). A handful of archives are
+# Taiwan-origin and shipped in BIG5 instead -- symptom: after a normal
+# GB18030 conversion the file is valid UTF-8 (iconv succeeds, no lossy
+# warnings) but every Chinese string is nonsense mojibake rather than an
+# iconv error, because GB18030 and BIG5 overlap enough in byte-range that
+# wrong-codepage decoding produces OTHER real (but wrong) codepoints
+# instead of failing outright. If boot-testing a freshly converted lib
+# shows garbled Chinese in the login banner/prompts (not just occasional
+# lossy-conversion dropouts), decode a raw source file with both `iconv -f
+# GB18030` and `iconv -f BIG5` and eyeball a write("...") string literal --
+# whichever produces real words is the actual source encoding. Re-run this
+# script with that encoding as the third argument (it deletes and
+# recreates $WORK from $RAW, so this is safe to re-run after a bad guess).
 #
 # This handles the MECHANICAL fixes from AGENTS.md's compatibility catalog.
 # It does NOT handle lib-specific logic bugs (e.g. the master.lpc
@@ -14,6 +31,7 @@ set -uo pipefail
 
 RAW="$1"
 WORK="$2"
+SRC_ENCODING="${3:-GB18030}"
 
 if [[ ! -d "$RAW" ]]; then
   echo "no such raw dir: $RAW" >&2
@@ -24,7 +42,7 @@ echo "== copying $RAW -> $WORK"
 rm -rf "$WORK"
 cp -r "$RAW" "$WORK"
 
-echo "== encoding: GB18030 -> UTF-8 for every text file"
+echo "== encoding: ${SRC_ENCODING} -> UTF-8 for every text file"
 find "$WORK" -type f > /tmp/convert_lib_filelist.$$.txt
 total=$(wc -l < /tmp/convert_lib_filelist.$$.txt)
 n=0; already_utf8=0; converted=0; lossy=0; skipped_binary=0
@@ -58,12 +76,12 @@ while IFS= read -r f; do
     already_utf8=$((already_utf8 + 1))
     continue
   fi
-  if timeout 2 iconv -f GB18030 -t UTF-8 "$f" > "$f.utf8tmp" 2>/dev/null; then
+  if timeout 2 iconv -f "$SRC_ENCODING" -t UTF-8 "$f" > "$f.utf8tmp" 2>/dev/null; then
     mv "$f.utf8tmp" "$f"
     converted=$((converted + 1))
   else
     rm -f "$f.utf8tmp"
-    if timeout 2 iconv -f GB18030 -t UTF-8 -c "$f" > "$f.utf8tmp" 2>/dev/null; then
+    if timeout 2 iconv -f "$SRC_ENCODING" -t UTF-8 -c "$f" > "$f.utf8tmp" 2>/dev/null; then
       mv "$f.utf8tmp" "$f"
       lossy=$((lossy + 1))
       echo "  LOSSY conversion (invalid bytes dropped): $f"
