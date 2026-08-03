@@ -305,7 +305,7 @@ classes it's found.
 | 122 | `xyj2006n` | 西游记2006年 | `西游记2006年.rar` | 40157 | WASM playable |
 | 123 | `xyj2006zzzhx` | 西游记2006之最终幻想 | `西游记2006之最终幻想.rar` | 40159 | WASM playable |
 | 124 | `xyj451` | 西游记451 | `西游记451.rar` | 40112 | WASM playable |
-| 125 | `xysylmhb` | 夕阳三-炎龙美化版 | `夕阳三-炎龙美化版.rar` | 40169 | native-boot verified, WASM pending |
+| 125 | `xysylmhb` | 夕阳三-炎龙美化版 | `夕阳三-炎龙美化版.rar` | 40169 | WASM playable |
 | 126 | `xyxyutf8` | 小雨西游utf8 | `小雨西游utf8.zip` | 40168 | native-boot verified, WASM pending |
 | 127 | `xyzx` | 夕阳再现 | `夕阳再现.rar` | 40180 | native-boot verified, WASM pending |
 | 128 | `xyzxiiylzymh` | 夕阳再现II-炎龙专用美化客户端 | `夕阳再现II-炎龙专用美化客户端.rar` | 40130 | native-boot verified, WASM pending |
