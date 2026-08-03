@@ -563,3 +563,7 @@ cached) completed normally. No mudlib change made for this.
 Retest: fresh registration reached 南城客栈, `look` correct; fluffos
 re-login `(admin)` + wizard commands OK; debug.log has no runtime errors
 beyond the documented first-attempt eval-cost abort (which did not recur).
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+西游记450 手足档案（master.c 约等于 mhxy）。

@@ -153,3 +153,7 @@ clean quit. `fluffos`/`Mud@2026` admin login verified twice (once via
 `update`, once via `score` to confirm `(admin)`/天神 status directly).
 Zero `执行时段错误` lines in `debug.log` across the whole session. Test
 character `qretest` removed afterward; fluffos kept.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+同一代码库换牌重发（master.c 逐字节相同）。

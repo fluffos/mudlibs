@@ -670,3 +670,7 @@ Applied the standard WASM-first changes (AGENTS.md §1.3b/§1.3e/§1.5):
 Retest: fresh registration (fluffos itself) reached 南城客栈 with `look`
 correct; fluffos re-login `(admin)` + wizard commands OK; debug.log has
 zero runtime errors.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+西游记2006 独立分支（改名为大唐西游）。

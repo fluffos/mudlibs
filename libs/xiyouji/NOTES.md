@@ -916,3 +916,7 @@ site) and `std/room.lpc:25` (`reset()`, the structural root).
   `LOG_DIR`-prefixed `write_file()`, which is both simpler AND avoids
   the ACL-check code path becoming an unwanted extra variable in the
   experiment.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+西游记/xiyouji.org 家族的祖先快照（1996-98）。
