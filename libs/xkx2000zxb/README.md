@@ -3,6 +3,19 @@
 侠客行Ⅰ（"The Quest of Oriental Chivalry"），XiaKeXing Gaming
 Group 1996-1999，MudOS v22b25 世系，由 sdong 移植。
 
+## 内容亮点
+
+- 1996-1999 年 MudOS v22b25 世系的老牌"侠客行I"，地图涵盖华山、武
+  当、少林、丐帮、峨嵋、慕容、终南等经典门派地标，以及洞庭湖、太
+  湖、黄山、西夏等地理场景。
+- 注册时需要先选择 GB/BIG5 编码，是这批老档案里典型的两岸三地共用
+  设计。
+- 管理员权限的存储方式很特别：既不是常见的 `wizlist` 文本文件，也
+  不是 `securityd.lpc` 里的表格常量，而是一份纯文本 mapping 存档
+  （`data/securityd.o`）——而且已有管理员账号被硬编码锁定在特定
+  局域网 IP（`192.168.0.40`），换了地址登录会被直接拒绝（详见下方
+  管理员账号说明）。
+
 ## 本次修复的关键 bug
 
 1. **§7.52 从零手写的 HTTP 服务器**：`adm/daemons/network/http.lpc`
