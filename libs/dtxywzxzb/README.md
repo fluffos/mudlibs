@@ -2,7 +2,10 @@
 
 一个西游记血统的 MUD（大唐西游 / Journey of the East），共享
 `convertd.lpc`/`feature/encoding.lpc` 这套典型 ES II 家族的 GB/BIG5
-编码切换机制。
+编码切换机制。和 `xyj2006n`（西游记2006年，AKAI Studio 的 Tomud 品
+牌版）地图逐字节相同（`d/gao/gate.lpc` 等场景内容完全一致），核心
+系统档案是同一套的两个不同发行版本，此前两份档案都没有互相记录这
+层关系。
 
 ## 内容亮点
 
