@@ -583,3 +583,7 @@ two admin logins + retests).
 add):
 - `libs/ylfyxa3/work/data/user/f/fluffos.o`
 - `libs/ylfyxa3/work/data/login/f/fluffos.o`
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+XYZX/YLFY 引擎的更大改动分支。状态已从过时的 limited 修正——这份档案自己的 README 和 group_note 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）干净正常，'★ 您目前的权限：(boss)'，quit 正常。

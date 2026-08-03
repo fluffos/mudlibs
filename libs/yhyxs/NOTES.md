@@ -690,3 +690,7 @@ command); `--idle 0.6` was reliable. Not a mudlib bug.
 add):
 - `libs/yhyxs/work/data/user/f/fluffos.o`
 - `libs/yhyxs/work/data/login/f/fluffos.o`
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+关系很近的手足档案，内容独立（炎黄英雄史）。状态已从过时的 limited 修正——和手足档案 yanhuangwuhun（045）共享完全相同的真实 bug，两份都已修复：adm/daemons/logind.lpc 的 check_ok() 在每一次成功登录时都未加保护地呼叫 MESSAGE_D->find_chatter()，而 MESSAGE_D 在 WASM 下编译不过（原始 socket 呼叫）——未捕获的'No program in object'错误会让 check_ok() 执行到一半就中止，之后每一条指令（包括 quit）都回显'什么？'，从未真正进入任何房间。已用 find_object(MESSAGE_D) 保护这个呼叫来修复。修复后重新验证干净：管理员登录（fluffos/Mud@2026）正常进入游戏世界，'目前权限：(admin)'，quit 正常（'欢迎下次再来！'）。这份档案的提示符会显示实时时钟——测试时用的是 --idle 0.3。

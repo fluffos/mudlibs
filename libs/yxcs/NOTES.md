@@ -526,3 +526,7 @@ correct 2-arg `sscanf(file, "/u/%s/%s", name, rest)` shape that doesn't
 have the 3-arg misattribution bug found live on sibling `zhonghua2` and
 ported to 7 other libs in this batch — checked and confirmed fine,
 nothing to port here.)
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+状态已从过时的 limited 修正——这份档案自己的 README 和 group_note 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）干净正常，权限已通过这份档案自己的最高阶层字符串确认（'★ 您目前权限：〖 巫师协会懂事 〗(boss)'），quit 正常。

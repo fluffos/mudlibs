@@ -83,3 +83,7 @@ noise only; does not affect play.
 
 WASM export / GitHub Pages packaging — deferred to a later batch pass
 across all newly-added libs.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+ES II 血统，独立档案（来自 2026-07-29 批量上传的 mudlib.rar）；游戏内重新包装成了银河英雄传说题材。之前一次会话对原生驱动的适配过程（记载在这份档案自己的 NOTES.md 里）已经修好了 master.lpc 的 create() 里那个会段错误的强制重新加载技巧、标准的 §8.1 GBK 字节区间 is_chinese()/check_legal_name() bug、/teature/ → /feature/ 的目录名拼写错误，以及 id_card.lpc 里一处 void 函式却 return 了值的编译错误，还播种了 fluffos (admin) 的 wizlist 条目——这些都没有在本轮重做。这次 WASM 修复覆盖了剩余的 §7.x 类检查：（1）三个碰 socket 的精灵（adm/daemons/ftpd.lpc、adm/daemons/network/ftpd.lpc、adm/daemons/network/dns_master.lpc）都完全处于休眠状态——在 adm/etc/preload 里被注释掉，而 DNS_MASTER 仅有的两个呼叫者（cmds/adm/shutdown.lpc、cmds/wiz/mudlist.lpc）都是巫师指令，已经带有 find_object() 检查保护——保持原样，不需要掏空。（2）master.lpc 的 valid_read() 本来就无条件回传 1（完全没有转发给 SECURITY_D，所以那种 new() 注册卡死的 bug 模式在这里不适用）；还是在 valid_write() 上加了标准的 'user == this_object()' 短路判断，和本次会话其它档案保持一致。（3）§7.50 类的 is_killing(object) 对 is_killing(string id) 修复了 cmds/std/surrender.lpc 里唯一一处呼叫点。is_chinese()/check_legal_name() 本来就已经正确（在更早的原生启动那一轮修好了，本轮没有重新处理）。原生启动那一轮留下的唯一悬而未决问题——securityd.lpc 的 valid_write() 里一个不会阻断的'Too deep recursion'，在每一次登录物件存档时都会通过 feature/dbase.lpc 的 default_ob 兜底链复现——在 WASM 下再次复现（错误签名/行号完全一致），依然只是外观问题：注册、进入游戏世界、以及 quit 都能围绕它正常完成。注册流程在格式化前后都用一个真实的中文名字完整验证过（id→y 确认→中文名字→密码+确认→电子邮件→性别→进入费沙中央宇宙港）。管理员权限已通过既有的 fluffos/Mud@2026 凭据确认：'目前权限：(admin)'。LPC 格式化工具对全部 834 个档案运行（写入 821 个，2 个转档之前就存在的错误，11 个未改动）。没有 :: 父类呼叫拆分命中，没有 case 标签带尾随注释的候选，没有 CJK 重新加空格/转义损坏命中。

@@ -608,3 +608,7 @@ justification. Retrofitted to fail-closed: loopback is now strictly
 through to the NORMAL gate instead of being treated as local. Retested
 after tightening: fresh driver boot clean, `fluffos` loopback login and
 its wizard `update` command both still work; zero new debug.log errors.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+yh2003 代码库基础版（炎黄武魂Ⅱ）。状态已从过时的 limited 修正——本轮找到并修复了一个真正的 bug：adm/daemons/logind.lpc 的 check_ok() 在每一次成功登录时都未加保护地呼叫 MESSAGE_D->find_chatter()，而 MESSAGE_D（adm/daemons/network/messaged.lpc）在 WASM 下编译不过（原始的 socket_create()/socket_bind() 呼叫，sockets 包不可用）——由此产生的未捕获'No program in object'运行时错误会在 check_ok() 执行到一半时中止，静默地把连线留在一个损坏状态，之后每一条指令（包括 quit）都回显'什么？'，从未真正进入任何房间。已用 find_object(MESSAGE_D) 保护这个呼叫来修复（手足档案 yhyxs 上也应用了同样的修复）。修复后重新验证干净：管理员登录（fluffos/Mud@2026）正常进入游戏世界，'目前权限：(admin)'，quit 正常。
