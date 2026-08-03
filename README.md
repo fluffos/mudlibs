@@ -311,7 +311,7 @@ classes it's found.
 | 128 | `xyzxiiylzymh` | 夕阳再现II-炎龙专用美化客户端 | `夕阳再现II-炎龙专用美化客户端.rar` | 40130 | WASM playable |
 | 129 | `xyzxyl201412` | 夕阳再现-炎龙20141231 | `夕阳再现-炎龙20141231.rar` | 40175 | WASM playable |
 | 130 | `yhwhpublicfi` | 炎黄武魂public-final-2016-12-08 | `炎黄武魂public-final-2016-12-08.rar` | 40132 | WASM playable |
-| 131 | `yxjh` | 浴血江湖 | `浴血江湖.rar` | 40148 | native-boot verified, WASM pending |
+| 131 | `yxjh` | 浴血江湖 | `浴血江湖.rar` | 40148 | WASM playable |
 | 132 | `yxsj` | 逸侠世界 | `逸侠世界.rar` | 40167 | native-boot verified, WASM pending |
 | 133 | `yxxcii` | 游侠笑传II | `游侠笑传II.rar` | 40136 | native-boot verified, WASM pending |
 | 134 | `yxzsj` | 逸  俠  之  世  界 | `逸  俠  之  世  界.rar` | 40170 | native-boot verified, WASM pending |
