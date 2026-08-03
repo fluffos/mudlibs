@@ -6,6 +6,18 @@
 `mudos.etc`/`www` 这些 `xkx100` 没有的目录），不是重复压缩包，所
 以没有标记 `duplicate_of`。
 
+## 内容亮点
+
+- 虽然和 110 `xkx100` 同名，但地图和门派齐全度更接近"标准配置"：
+  华山、武当、少林、丐帮、峨嵋、明教等门派与长安周边城池，规模比
+  `xkx100` 的跨境大地图更精简。
+- 自带的 HTTP 精灵（`httpd.lpc`）注释里写明"Modify to ES2 mudlib
+  base by xiaobao@XAJH"，档案里另一处标注版本为"MudOS v22.1b20,
+  XAJH mudlib 2.0b"——说明这份档案的血统是"XAJH mudlib"这个更早的
+  代码库分支，而非直接对应 110 号 `xkx100` 的核心代码。
+- 注册和角色名校验一次跑通，是这批"侠客行"系分支里少数不需要修
+  `is_chinese()`/`check_legal_name()` 的档案。
+
 ## 本次修复的关键 bug
 
 1. **§7.52 从零手写的 HTTP 服务器**：`adm/daemons/httpd.lpc`（经典
