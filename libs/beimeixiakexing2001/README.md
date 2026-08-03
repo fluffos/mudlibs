@@ -2,7 +2,10 @@
 
 属于 ES II/"侠客行"引擎家族（与 xkx2001、xuanjianlu 等同宗，`chinese.c`/
 `master.c` 字节级相同），1996-1999 年 XiaKeXing Gaming Group 制作、于
-北美地区运营的一个版本。
+北美地区运营的一个版本。`d/taihu/gumu/houtang.lpc` 等场景文件头带着
+"Cracked by Roath"署名，和另一轮处理过的 `jym`（金庸梦）、`xkm`（侠客
+梦）是同一批"Cracked by Roath"流通版本（`xkx2000zxb` 则是"Cracked by
+Kafei"的另一份流通版本），此前没有互相记录过这层关系。
 
 ## 内容亮点
 
