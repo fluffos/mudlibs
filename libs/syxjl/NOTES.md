@@ -633,3 +633,7 @@ treated as untrusted/remote and subject to the gate normally, not
 silently allowed through. Retested: fluffos login (127.0.0.1, real
 value under the current driver) still passes every gate; debug.log
 stayed clean of `denied`/`undefined function`/`error in error handler`.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录干净正常：GB/BIG5 选择→一个带自己"按 Enter 继续……"关卡的姊妹站泥潭列表画面→id+密码→"目前权限：(admin)"。

@@ -136,3 +136,7 @@ treated as untrusted/remote and subject to the gate normally, not
 silently allowed through. Retested: fluffos login (127.0.0.1, real
 value under the current driver) still passes every gate; debug.log
 stayed clean of `denied`/`undefined function`/`error in error handler`.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+代码完全相同，只是"小熊泥苑"站点品牌不同。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：是 shiji（021）/shujian2008 的 Century 家族手足档案。管理员登录（fluffos/Mud@2026，先问 BIG5 字体）干净正常，"您目前的权限是：(admin)"。

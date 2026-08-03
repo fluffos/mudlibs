@@ -858,3 +858,7 @@ specifically (not just typed dispatch) rather than merely asserted.
   (per the task's own instructions); the existing WASM boot-watch
   coverage from the prior pass (above) was not re-run, since nothing in
   this pass's fix touches preload/boot behavior.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录干净正常，用的是这份档案自己记录的登录密码（Mud@2026Admin，不是标准的 Mud@2026——这份档案对巫师账号强制执行更严格的密码规则，首次管理员提升时会自动升级登录密码，这在它自己的 README 里有记录）——"目前权限：(admin)"。
