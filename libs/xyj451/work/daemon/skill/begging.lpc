@@ -4,4 +4,3 @@
 // begging.c
 
 inherit SKILL;
-
