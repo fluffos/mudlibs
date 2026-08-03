@@ -301,7 +301,7 @@ classes it's found.
 | 118 | `xxcqii` | 小雪初晴II | `小雪初晴II.rar` | 40131 | WASM playable |
 | 119 | `xxcqii2` | 小雪初晴II | `小雪初晴II  .zip` | — | pending |
 | 120 | `xyj2000` | 西游记2000 | `西游记2000.rar` | 40155 | WASM playable |
-| 121 | `xyj20032` | 西游记2003-2 | `西游记2003-2.rar` | 40119 | native-boot verified, WASM pending |
+| 121 | `xyj20032` | 西游记2003-2 | `西游记2003-2.rar` | 40119 | WASM playable |
 | 122 | `xyj2006n` | 西游记2006年 | `西游记2006年.rar` | 40157 | native-boot verified, WASM pending |
 | 123 | `xyj2006zzzhx` | 西游记2006之最终幻想 | `西游记2006之最终幻想.rar` | 40159 | native-boot verified, WASM pending |
 | 124 | `xyj451` | 西游记451 | `西游记451.rar` | 40112 | native-boot verified, WASM pending |
