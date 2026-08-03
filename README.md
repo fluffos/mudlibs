@@ -6,7 +6,7 @@
 
 This repository preserves and restores the golden age of the Chinese MUD
 scene (mid-1990s to ~2015): **199 restored LPC mudlibs across 158 unique
-game codebases** (191 fully verified playable in the browser, 3 more
+game codebases** (193 fully verified playable in the browser, 1 more
 playable with a documented caveat, 1 native-only by policy, 4 confirmed
 non-bootable — see below) — 侠客行, 笑傲江湖,
 金庸群侠传, 西游记, 风云, 大唐双龙, 书剑天下, 东方故事, and dozens of
@@ -219,8 +219,8 @@ classes it's found.
 | 043 | `haiyang2` | 海洋II 2010 正式无错完整版下载 | `海洋II 2010 正式无错完整版下载 (1).rar` | — | WASM playable |
 | 043-1 | `hymud` | 海洋V·星月传奇 | `hymud-main.zip` | 40103 | WASM playable |
 | 044 | `huoying` | Naruto | `Naruto.rar` | — | WASM playable |
-| 045 | `yanhuangwuhun` | 「武林群侠传」之炎黄武魂Ⅱ | `炎黄武魂_64bit.rar` | 40060 | WASM limited |
-| 045-1 | `yanhuangyingxiongshi` | 炎黄英雄史（游戏内也称"皇朝再现"） | `炎黄英雄史.rar` | 40061 | WASM limited |
+| 045 | `yanhuangwuhun` | 「武林群侠传」之炎黄武魂Ⅱ | `炎黄武魂_64bit.rar` | 40060 | WASM playable |
+| 045-1 | `yanhuangyingxiongshi` | 炎黄英雄史（游戏内也称"皇朝再现"） | `炎黄英雄史.rar` | 40061 | WASM playable |
 | 046 | `xuanjianlu` | 玄剑录 | `玄剑录.rar` | 40064 | WASM playable |
 | 047 | `bixiecanyang` | 碧血残阳 之「豪侠晚歌」 | `碧血残阳之豪侠晚歌.rar` | 40065 | WASM playable |
 | 048 | `shenzhou` | 神州 | `神州.rar` | 40066 | WASM playable |
