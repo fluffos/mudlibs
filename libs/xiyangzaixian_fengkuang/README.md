@@ -3,7 +3,12 @@
 站点子名"疯狂江湖"。属于"夕阳再现"这一支武侠 MUD 引擎家族——与本项目
 中的 `xiyangzaixian_fengyun2`（风云再起Ⅱ）、`weimingkongjian`（未明
 空间）、`jianghufengyun`（江湖风云单机）、`bixiecanyang`（碧血残阳）
-等同源，各自是不同站点在同一套引擎基础上发展出的独立游戏世界。
+等同源，各自是不同站点在同一套引擎基础上发展出的独立游戏世界。这一
+支和另一轮处理过的 `xyzx`/`jhfy3`/`xajh4gkb`/`xyzxyl201412` 是同一
+个真正的"夕阳再现"血统（`d/city/sj.lpc` 逐字节相同）——注意本项目里
+还有另一批同样打着"夕阳再现"招牌、地图却是完全不同的"天涯"家族的档
+案（`xysylmhb`/`xyzxiiylzymh`/`yzxiiizylfy`/`xiyangzaixian3` 等），
+品牌名称不能作为判断血统的依据。
 
 ## 内容亮点
 

@@ -2,7 +2,13 @@
 
 属于"夕阳再现"引擎家族（与 xiyangzaixian_fengkuang、xiyangzaixian_fengyun2、
 weimingkongjian、jianghufengyun 同宗，核心工具文件字节级相同），作者自述
-基于"夕阳再现－江湖风云 2－风云再起"开发而成。
+基于"夕阳再现－江湖风云 2－风云再起"开发而成。这一支和另一轮处理过的
+`xyzx`（夕阳再现）/`jhfy3`（江湖风云3）/`xajh4gkb`（笑傲江湖4公开版）/
+`xyzxyl201412`（夕阳再现-炎龙20141231）是同一个真正的"夕阳再现"血统
+（`d/city/sj.lpc` 逐字节相同）——注意本项目里还有另一批同样打着"夕阳
+再现"招牌、但地图其实是完全不同的"天涯"家族的档案（`xysylmhb`/
+`xyzxiiylzymh`/`yzxiiizylfy`/`xiyangzaixian3`/`tianxiawuxue`/
+`yuxuechongsheng`），品牌名称不能作为判断血统的依据。
 
 ## 内容亮点
 

@@ -3,7 +3,11 @@
 原始压缩包自称"未明空间"，但实际连接后显示的游戏名是**"江湖风云之
 夕阳再现"**——这是"夕阳再现"（Sunset Reappears）引擎系列的一个分支
 版本，与本项目中的 xiyangzaixian_fengkuang、jianghufengyun 等同源，
-但 master/登录/安全模块各自独立开发，并非简单换皮。
+但 master/登录/安全模块各自独立开发，并非简单换皮。这一支和另一轮
+处理过的 `xyzx`/`jhfy3`/`xajh4gkb`/`xyzxyl201412` 是同一个真正的
+"夕阳再现"血统——注意本项目里还有另一批同样打着"夕阳再现"招牌、地
+图却是完全不同的"天涯"家族的档案（`xysylmhb`/`xyzxiiylzymh`/
+`yzxiiizylfy`/`xiyangzaixian3` 等），品牌名称不能作为判断血统的依据。
 
 ## 内容亮点
 
