@@ -18,6 +18,12 @@ mudlib" → "Annihilator" → "Xiang for XKX" → "Doing Lu for hell"。需要
   `register <邮箱>` 注册邮箱，再走"投胎做人"流程选择资质属性。
 - 修复了一个原始存档就有的老 Bug：以前任何账号重新登录都会提示
   "无法读取你的数据档案"，现已修复。
+- 又修复了一个每次连线都会触发的 bug：`clone/user/login.lpc` 的
+  `query_save_file()` 只判断了 id 是不是字符串，没有判断是不是空
+  字符串——连线的第一时间 id 还没设置好，`id[0]` 在空字符串上取值
+  会得到整数 0，`sprintf` 的 `%c` 格式一遇到这个 0 就直接报错崩溃。
+  现已修复（`zhongjidiyu_airuoyoulan`、`zhongjidiyu_zhijian` 两个姊妹
+  档案也有同样的问题，一并修好了）。
 
 ## 在线试玩
 
