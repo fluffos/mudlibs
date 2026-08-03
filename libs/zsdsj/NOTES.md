@@ -738,3 +738,7 @@ kill -- no runtime errors). Two driver instances killed by exact PID
 during this pass; one was an orphaned process from the previously-
 interrupted agent run on this same lib (killed first so the port could
 be reused).
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+GPLv2 的 BIG5 生活模拟游戏，血统完全独立（RWlib v1.0.1，一个带有约 70 个预加载系统精灵的大型内核式 mudlib 代码库，和本项目其它武侠类档案完全无关）。之前被分类为 'noboot'：2026-07-23 的一次复核发现 system/kernel/simul_efun/ansi.lpc 的 ANSI 颜色处理直接从这个启动关键的 simul_efun 档案本身呼叫了 pcre_replace_callback()/pcre_replace()/pcre_match_all()，而当时的 WASM 构建版本根本没有带 pcre 包（fluffos 自己的 docs/build-wasm.md 里有记载）——fluffos_boot() 直接失败报"No program in object '/system/kernel/simul_efun'!"，没有产生任何会话记录，是真正的驱动能力缺口，不是 mudlib 本身的 bug。本次会话针对当前的 WASM 驱动构建版本重新测试，确认 docs/build-wasm.md 现在记载已经加入了 PCRE 支持（"the pcre package is on, so its tests run for real"）——这份档案现在完全干净地启动，不需要任何代码改动。已通过一次完整连续的会话确认：干净启动全部约 70 个预加载系统（少数几个纯粹依赖 socket 的精灵——dict_d、ftp_d、http_client_d、im_d、realnews_d、smtp_d、socket_d、socket_ob、translate_d、whois_d——编译不过被跳过，和本项目其它地方一贯容忍的情况一样，都不阻断启动）；能到达 GB/BIG5 字符集提示和英文 ID 提示；一次完整的全新玩家注册（id→名字→密码+确认→电子邮件→性别）从头到尾完成，进入起始房间（巫師神殿），带有新手提示信息；既有的管理员账号（fluffos，是更早一次 WASM 适配过程中播种进 system/kernel/data/secure.o 的 wizards 映射的）通过本地回环触发的巫师登录自动重定向登录（在再次被提示时重新输入一次 ID，然后输入管理员密码），进入仅限巫师的起始房间（巫師大廳），系统横幅'由<Admin/...>連線進入'确认了管理员阶层；两条流程的 quit 都干净（'你離開遊戲了'）。这份档案更早一次 WASM 适配过程（本地回环放行门槛、节流豁免、播种进 secure.o 的管理员账号）保持不变、依然有效——本轮不需要任何进一步的代码改动，纯粹是因为上游驱动的能力缺口已经补上，属于状态修正。

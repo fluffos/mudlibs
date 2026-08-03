@@ -1,0 +1,4 @@
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+从 zjmud.7z（指间mud服务器+手机版客户端.zip）里嵌套的一个 zip 中提取，内部文件夹字面命名为 'hell'——和已有的 hell/zjdywzb 世纪家族无关，master 哈希不同。修复了 efun::message() 因 exc_target=0 被拒绝的问题；创建了缺失的 /log/nosave 目录。同样是 shujian3 血统的手机 app 协议和自定义 logind.lpc。需要完整的 WASM 修复：（1）crypt(ZJKEY, 0) 客户端握手的非确定性问题（AGENTS.md §7.14）——已修复为 crypt(ZJKEY, "zj")，和 zjdyzj 一样；和 shujian3 不同，这份档案里 get_user() 中基于 crypt 的密文检查没有被注释掉，也没有逗号到 ║ 的便利替换，所以注册需要字面的 ║ 分隔符和真实的 id/密码密文（crypt(ZJKEY,id)+crypt(ZJKEY,密码)）；（2）经典的 §8.1 GBK 字节区间 is_chinese() 检查修复成 CJK 码点区间；（3）clone/user/user.lpc 的 accept_kill() 里 is_killing() 物件对字符串参数不匹配（§7.50，这是第三个撞上这个 bug 的血统）；（4）按 §7.52 掏空了三个纯 socket 精灵（versiond.lpc——create/in_server/connect_server/send_command 等一共 12 个函式，不像之前那条笔记说的那样"保持原样"，因为它实际上在运行时破坏了 questd.lpc 的 collect_all_quest_information()；payd.lpc 的 HTTP 支付回呼；adm/daemons/network/dns_master.lpc 的 intermud UDP 层）。管理员（fluffos/Mud@2026）通过真实注册加 adm/etc/wizlist 播种。score 对刚创建的角色正确地被一个'born'标记挡住（游戏设计如此，不是 bug）——改用 look+quit 验证。

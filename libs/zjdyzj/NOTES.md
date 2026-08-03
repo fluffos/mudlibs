@@ -654,3 +654,7 @@ Retest via a small one-off Python client (`crypt`-module challenge/
 response, same shape as the original verification pass) confirmed
 registration → look → score → quit still clean; a fresh 200s WASM
 re-sit confirmed the "insufficient permission" line no longer appears.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+同一核心加上指间mud手机协议。这是这个家族里唯一一个反映真实、仍然生效的注意事项而不是过时状态的 'limited'（和已经在本轮修正为 playable 的手足档案 zhongjidiyu（052）/zjdyaryl（053）不同）：这个移植版本的 logind.lpc 把每一个连线都挡在一个为'指间'（手机）客户端设计的自定义基于 crypt 的客户端版本握手之后，而不是普通的 telnet/网页终端会话。服务器发送 'ver1.0,<crypt(ZJKEY,"zj")>'，期待客户端回复 crypt(ZJKEY, <那段字符串>[2..3])——本轮已确认这个握手过程确实是完全确定性的、可以通过的（这个驱动的 crypt() 和标准 libc 的 DES-crypt 完全一致，已用 Python 的 crypt 模块重现服务器自己的挑战值并计算出一个服务器能接受的回复，'版本验证成功'来验证），之后还有第二个自定义协议步骤：一整行输入，组合了 id║密码║crypt(ZJKEY,id)+crypt(ZJKEY,密码)║电子邮件（║ 是 U+2551）。手动完成这两个步骤能干净地到达完整游戏流程（管理员登录已确认，'目前权限：(admin)'，quit 正常）——但这个项目提供的通用 WASM 网页终端（一个普通的类 telnet 界面）无法自动计算出这些值，所以普通访客点进这份档案的页面，没有外部工具是过不了第一个提示的。另外还修复了和手足档案相同的一个真实 bug：clone/user/login.lpc 的 query_save_file() 空字符串保护（既检查 id == ""，也检查 !stringp(id)），阻止第一次连线时的 %c/sprintf 崩溃。

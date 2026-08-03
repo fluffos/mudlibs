@@ -541,3 +541,7 @@ done here). Bug #1 (`d/death/npc/panguan.lpc`) and bug #4
 (`cmds/wiz/summon.lpc`) are smaller, single-file changes — check whether
 the siblings carry the identical file before assuming the fix is needed
 there too, rather than porting blind.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+风云III 引擎基础版（郑州风云3）。
