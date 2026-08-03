@@ -148,3 +148,7 @@ and admin `update` both still working.
   finding new bug classes beyond what the boot+interactive test already
   found).
 - WASM export / GitHub Pages packaging — deferred to a later batch pass.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+NT/nitan/Lonely 血统，nitan170911 的手足档案（master.c/dbase.c 逐字节相同）——之前一轮原生启动测试里已经移植了 nitan170911 完整的 §15 dbase 架构修复系列。这次 WASM 修复找到了之前那轮"update 指令返回默认失败讯息"这个未解决遗留问题的真正根源：adm/daemons/named.lpc 的 create() 对自己损坏的约 168KB 存档档案（Illegal mapping format）做了未加保护的 restore()，抛出的异常没有被捕获——这个驱动上，一个未被捕获的 create() 异常会让这个物件永久无法驻留，之后任何隐式的 NAME_D->invalid_new_name(...) 字符串呼叫在这个还没加载的物件上什么都不会做（没有报错，没有重试），而不是自动编译它。由于 get_char()（角色创建）在真正走到 make_body()/enter_world() 之前就会呼叫这个函式，每一次新角色创建都会在这里静默死掉——没有崩溃，没有可见错误——连线卡住，从未设置任何指令处理路径，导致之后每一条指令（不只是巫师指令）永远撞上通用的"什么？"失败讯息。这影响的是所有玩家，不只是管理员账号；之前那轮原生测试的诊断（认为是巫师专属动词的指令搜索路径缺口）并不完整，这是可以理解的，因为基于 write() 的调试没法区分"呼叫静默空跑"和"动词没找到"。已用标准的 §7.41 损坏存档数据防护修复：named.lpc 的 create() 里包一层 catch(restore())。是通过在 get_char() 里用 write() 做二分定位找到的（log_file() 在不同的 WASM 调用之间不会持久化，所以只能在真实的交互式 input_to 环境里用 write()）。另外把 wizlist 条目从 fluffos (admin) 升级成了 fluffos (boss)——这条血统的 wiz_levels 阶梯把 (boss) 排在 (admin) 之上作为真正的顶层，securityd.lpc 的 trusted_read/trusted_write['/'] 里也确认了这一点。已验证：完整注册→look/score→fluffos 被正确带到巫师休息室，确认 (boss) 身份被识别→update 成功。LPC 格式化工具对全部 24177 个档案运行；还原了 5 个通过"去空格后比对旧档案"扫描（覆盖全部 287 个格式化工具触碰过的档案）确认有 CJK 重新加空格损坏的档案；另外直接逐一比对了全部 6 个 map.lpc ASCII 地图档案（方块字符画不会命中 CJK 正则）——全部 6 个干净，只是排版调整。格式化后重新验证过，干净。

@@ -95,3 +95,7 @@ errors, registration and `(boss)` permission display both re-verified.
 GitHub Pages packaging for this lib specifically is still deferred to a
 later batch pass; the WASM boot/gameplay/admin verification above is
 now complete.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+ES II 血统，独立分支；来自 2026-07-29 批量 mudlib.rar 投放。原生启动在之前一轮已经验证过（详见 NOTES.md）；这次 WASM 修复解决了两个原生驱动碰不到的 WASM 专属缺口：（1）include/restart.h 在原始压缩包和转档后的源码里都真的是空文件（0 字节）——这是转档之前就存在的原始源码不完整问题，不是转档产生的 artifact——导致 adm/daemons/restartd.lpc 的 SHUTDOWN/REBOOT/HALT/CALLOUT_INTERVAL/RESTART_INTERVAL 全部未定义；已根据这个精灵自己的用法重建了全部六个常量（restartd.lpc 会被预载但不是关键精灵，所以这个问题此前一直被开机流程掩盖）。（2）adm/daemons/logind.lpc 每次连线的第一条消息用 socket_address(ob)（sockets 包 efun，这个驱动上未定义）来取得连线端口——已改用这份代码库里其它地方本来就在用的真实 efun query_ip_port(ob)。另外把管理员 wizlist 条目从之前播种的"fluffos (admin)"升级成了"fluffos (boss)"——这条血统的 wiz_levels 阶梯把 (boss) 排在 (admin) 之上作为真正的顶层，securityd.lpc 的 trusted_read/trusted_write['/'] 表里也确认了 (boss) 的存在。完整注册（id→确认→中文名字→密码→确认→天赋摇点→电子邮件→性别）→进入游戏→look→score→quit 均验证正常，管理员 id "fluffos" 显示 (boss)，格式化前 update 也成功。LPC 格式化工具对全部 10328 个档案运行；还原了 2 个确认有历史损坏的档案（cmds/adm/hbless.lpc、d/city/diaoyuchi1.h——都是经典的 \n/未加引号 CJK 字符串损坏，源自本来就不配对的引号）和 1 个确认有 CJK 重新加空格损坏的档案（d/player/fyue_room.lpc），是通过对格式化工具触碰过的全部 112 个含"CJK-空格-CJK"序列的档案做去空格后比对旧档案的扫描找到的——其余 109 个都是原作者本来就有的间距，未受影响。格式化后重新验证：启动干净，零编译错误，注册流程和 (boss) 权限显示都仍然正确。

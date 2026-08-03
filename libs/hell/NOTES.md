@@ -1,0 +1,4 @@
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+Doing 血统的大型金庸题材 mudlib（7000+ 个 LPC 档案），游戏内标题为 REVIVE OF ULTRA HELL(BLOOD & MAGIC) FROM 1999.11.13。修复的 bug：（1）缺失的本地 log/nosave/ 目录导致 logon() 期间每一个新连线都会断线；（2）check_legal_id() 的 while(i--) 循环会静默接受一个空的英文 id，之后对这个空字符串呼叫 sprintf("%c", my_id[0]) 就会崩溃（新增 AGENTS.md §7.62）；（3）经典 §8.1 GBK 字节区间 is_chinese() bug；（4）三个各自独立的字节数没减半的长度界限 bug（check_legal_name 的姓氏/名字界限、姓名合并后的最短长度、以及 named.lpc 的 invalid_new_name() 滑窗查重检查）都按已确立的 §8.1 减半模式修复；（5）§7.12 类的 message() exclude 参数 bug 就活在 message() 包装函式本身，不只是 tell_room()——channeld.lpc 的 do_channel() 和 questd.lpc 的 collect_all_quest_information() 各自独立崩溃（新增 AGENTS.md §7.61）；（6）accept_kill() 里 §7.50 的 is_killing(ob) 物件/字符串不匹配 bug，是第 4 个确认的同类血统；（7）versiond.lpc 的 13 个碰 socket 的函式按 §7.52 掏空（和 zjmudhell/shujian3 那份几乎逐字节相同），修复了一个会让每个新用户在 logon() 时断线的崩溃。管理员账号（fluffos/Mud@2026，管理密码 Mud@2026Adm）通过真实注册流程 + adm/etc/wizlist 播种，游戏内"目前权限：(admin)"显示确认生效。完整的注册→look→score→quit 流程在排版格式化前后各验证过一次，用的是真实中文名字。

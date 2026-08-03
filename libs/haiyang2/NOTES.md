@@ -735,3 +735,7 @@ character `qixiazi` save files (`data/user/q/qixiazi.o`,
 `data/user/f/fluffos.o` runtime-churn timestamps reverted via `git
 checkout`. No instrumentation was left in place — the only diff against
 HEAD is the one-line `remove_action()` fix above.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+此前被错误标记为某个不存在于本项目任何档案的原始压缩包文件名的 duplicate_of；这里的内容其实是完全独立、可游玩的游戏（有自己的 -N 变体编号、自己的端口、自己的 README）——duplicate_of 已清除。

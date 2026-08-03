@@ -569,3 +569,7 @@ reachable room either.
 No bugs found or fixed this pass — the lib is clean for everything
 actually reachable. No code changes; test character save data removed
 after testing.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+Naruto 题材的 ES2/Neolith 引擎 mudlib（火影）；这是正统、可游玩的原版——hy2（078，火影 (2).rar）是同一份压缩包的第二次上传，确认除排版外逐字节相同，而且它自己的 duplicate_of 已经正确指回这个 slug。这份档案自己的 duplicate_of 之前被误设成一个不存在的压缩包文件名（火影.rar），现已清除。
