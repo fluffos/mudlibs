@@ -239,3 +239,7 @@ render correctly → `quit`); fluffos login + `update /adm/daemons/band`
 still succeeds (`重新编译 /adm/daemons/band.lpc：成功！`). Zero new
 runtime errors. Test char saves (`xlqzgat`/`xlqzone`/`xlqztwo`) removed
 after verification.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+浙大分支的 XLQY。状态已从过时的 limited 修正——这份档案自己的 README 和 group_note 里从未记录过任何缺陷说明，本轮重新测试也没有发现：XLQY 家族里 xianlvqiyuan 的手足档案。管理员登录干净正常：GB/BIG5 选择→未成年人门槛（否）→id+密码→'您的系统权限目前是：(admin)'。

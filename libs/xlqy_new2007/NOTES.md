@@ -423,3 +423,7 @@ not a fresh mystery).**
   comment doesn't match its actual single `"south"` key. Stale comment
   from a prior edit, not a functional bug (the room's actual exits
   work correctly as coded) — left alone.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+仙侣情缘 XLQY 基础版（2007）。

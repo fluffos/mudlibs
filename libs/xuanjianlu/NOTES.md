@@ -892,3 +892,7 @@ debug.log explanation" symptom.
 - **Death/respawn** — not attempted at all; would need either the
   above-blocked real combat or an admin-forced kill, and was
   deprioritized in favor of the two confirmed high-impact bugs above.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+基于 XKX 引擎的自制游戏。

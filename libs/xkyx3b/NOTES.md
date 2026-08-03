@@ -161,3 +161,7 @@ private, has: hidden` lines seen in `debug.log` are the known §8.3a
 introduced by this pass, and did not block `look`/`score`/`update`/`quit`
 in any observed session here; flagging for a future pass rather than
 fixing now since it's outside this pass's four-item scope).
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+状态已从过时的 limited 修正——这份档案自己的 README 和 group_note 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）干净正常，'目前权限：(admin)'，quit 正常。

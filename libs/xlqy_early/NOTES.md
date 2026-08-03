@@ -520,3 +520,7 @@ justification. Retrofitted to fail-closed: loopback is now strictly
 through to the NORMAL gate instead of being treated as local. Retested
 after tightening: fresh driver boot clean, `fluffos` loopback login and
 its wizard `update` command both still work; zero new debug.log errors.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+同一套代码库，更早的一份粗糙快照。
