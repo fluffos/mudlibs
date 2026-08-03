@@ -16,20 +16,6 @@ Inputs (all inside this repo):
                                     anything with duplicate_of set, or
                                     missing libs/<slug>/config.fluffos)
                                     are left off the site entirely.
-                       group_note   TRANSITIONAL, being phased out: an
-                                    English WASM-pass summary, shown as
-                                    the badge's hover reason and the
-                                    on-card "reason" line for non-
-                                    playable entries. New/updated libs
-                                    should NOT add this field -- prose
-                                    belongs in the lib's own NOTES.md,
-                                    in Chinese, per AGENTS.md's
-                                    conventions list. Still read here
-                                    (via .get(), absent is fine) only
-                                    because ~180 libs haven't been
-                                    migrated off it yet; once none do,
-                                    delete this field and the "reason"/
-                                    search-corpus wiring built on it.
                      This script always re-runs assemble_numbering.py
                      first so scripts/lib_numbering.json (its aggregated
                      view of every meta.json) can never go stale under
@@ -143,7 +129,6 @@ def build_status_from_meta():
         libs[slug] = {
             "name": name,
             "status": status,
-            "reason": entry.get("group_note") or "",
             "description": desc,
             "archive": entry.get("archive", ""),
             "archive_num": entry.get("number", ""),
@@ -264,13 +249,9 @@ def render_index(status, commits):
         icon, label, _ = BADGE[st]
         name = html.escape(info["name"])
         desc = html.escape(info["description"])
-        reason = html.escape(info["reason"])
         linked = st != "noboot"
         title_html = (f'<a class="play" href="{slug}/">{name}</a>' if linked
                       else name)
-        reason_html = ""
-        if st != "playable":
-            reason_html = f'<p class="reason" title="{reason}">{reason}</p>'
 
         meta_bits = []
         admin_id, admin_pw = parse_admin(slug)
@@ -304,7 +285,7 @@ def render_index(status, commits):
         # card.textContent) means search stays correct even if the visible
         # markup changes later.
         search_bits = [
-            slug, info["name"], info["description"], info["reason"],
+            slug, info["name"], info["description"],
             info.get("archive", ""), info.get("archive_num", ""),
             admin_id or "",
         ]
@@ -313,11 +294,10 @@ def render_index(status, commits):
         cards.append(f"""<div class="card {st}{' linked' if linked else ''}" data-search="{search_corpus}">
   <div class="card-head">
     <h2>{title_html}</h2>
-    <span class="badge {st}" title="{reason}">{icon} {label}</span>
+    <span class="badge {st}">{icon} {label}</span>
   </div>
   <p class="slug">{html.escape(slug)}</p>
   <p class="desc">{desc}</p>
-  {reason_html}
   {meta_html}
 </div>""")
 
@@ -395,12 +375,6 @@ def render_index(status, commits):
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
     overflow: hidden;
   }}
-  .reason {{
-    margin: 8px 0 0; font-size: 12px; color: var(--warn);
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-    overflow: hidden;
-  }}
-  .card.noboot .reason {{ color: var(--bad); }}
   .meta {{
     margin: 8px 0 0; font-size: 12px; color: var(--dim);
     display: flex; flex-wrap: wrap; gap: 2px 12px;
