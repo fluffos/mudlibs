@@ -7,9 +7,9 @@
 教、大理、荆州等）和"世界之巅"跳崖场景与 104 `tybxjh`/`wlhd` 高
 度一致（`d/city/sj.lpc` 逐行核对确认是同一段代码的不同转码版本），
 应属同一批"天涯"系家族的又一分支（`zxty`/再现天涯、`ffxymud`/非
-凡夕阳MUD、`jhfy2`/江湖风云2、`xysylmhb`/夕阳三-炎龙美化版 也是
-同一家族，`d/city/sj.lpc` 逐字节相同），此前的 AGENTS.md 里未记录
-这层关系。
+凡夕阳MUD、`jhfy2`/江湖风云2、`xysylmhb`/夕阳三-炎龙美化版、
+`xyzxiiylzymh`/夕阳再现II-炎龙专用美化客户端 也是同一家族，
+`d/city/sj.lpc` 逐字节相同），此前的 AGENTS.md 里未记录这层关系。
 
 ## 内容亮点
 
