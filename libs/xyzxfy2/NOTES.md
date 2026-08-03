@@ -291,3 +291,7 @@ Applied the four standard WASM-first changes (AGENTS.md §1.3b/§1.3e/§1.5):
 
 Retest: fresh registration reached 北疆小镇 as `(player)`; fluffos
 re-login `(admin)` + wizard commands OK; `log/debug.log` 0 runtime errors.
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+同一家族（风云再起2）。状态已从过时的 limited 修正——这份档案自己的 README 和 group_note 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）干净正常，'★ 您目前权限：(admin)'，quit 正常。

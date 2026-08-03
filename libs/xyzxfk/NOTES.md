@@ -146,3 +146,7 @@ Applied the four standard WASM-first changes (AGENTS.md §1.3b/§1.3e/§1.5):
 Retest: fresh registration (the fluffos registration itself) reached the
 world as a `(player)`; fluffos re-login has `(admin)` and wizard commands
 work; `log/debug.log` clean (0 runtime errors).
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+之前被误标记为某个孤儿档案文件名的逐字节重复版本，而那个文件名根本对应不到任何已追踪的档案；这里的内容其实是一款完全独立、可以游玩的游戏（有自己的 -N 版本号、自己的端口、自己的 README）——已清除 duplicate_of。
