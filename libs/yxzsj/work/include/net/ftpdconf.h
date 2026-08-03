@@ -41,7 +41,7 @@
 #define LOGIN_MSG       "/adm/etc/ftpd_welcome"
 
 /* the name of the MUD */
-#define THE_MUD_NAME    "狥よ珿ㄆ⒑"
+#define THE_MUD_NAME    "東方故事Ⅱ"
 
 /* Maximum number of simultaneous ftp users. */
 #define FTPD_MAX_USERS 2
