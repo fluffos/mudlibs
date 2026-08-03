@@ -26,9 +26,13 @@ Inputs (all inside this repo):
                      it -- editing a lib's meta.json and re-running this
                      script is the entire update path, no separate sync
                      step to remember or forget.
-  libs/<slug>/README.md  first heading = the game's Chinese name; first
-                     paragraph of the 简介 section = 1-line description;
-                     the 「## 管理员账号 / Admin account」 section = the
+  libs/<slug>/README.md  first heading = the game's Chinese name; the
+                     intro paragraph directly under that heading (before
+                     the first "##" subsection -- the "## 内容亮点"
+                     template used since the 2026-07-25 README rewrite
+                     has no standalone "简介" section anymore) = the
+                     1-line description; the 「## 管理员账号 / Admin
+                     account」 section = the
                      pre-seeded admin credentials (AGENTS.md §1.5: the
                      convention is fluffos / Mud@2026, but each lib's
                      README is authoritative -- a few document a variant
@@ -150,9 +154,14 @@ def parse_readme(slug):
     m = re.search(r"^#\s+(.+)$", text, re.M)
     name = m.group(1).strip() if m else slug
     desc = ""
-    m = re.search(r"^##\s*简介\s*$(.*?)(?=^#|\Z)", text, re.M | re.S)
     if m:
-        for para in re.split(r"\n\s*\n", m.group(1).strip()):
+        # The intro paragraph sits directly under the title, before the
+        # first "##" subsection (the "## 内容亮点" template used since the
+        # 2026-07-25 README rewrite has no standalone "简介" section
+        # anymore -- this replaces the old regex that looked for one).
+        intro = text[m.end():]
+        intro = re.split(r"^#", intro, maxsplit=1, flags=re.M)[0]
+        for para in re.split(r"\n\s*\n", intro.strip()):
             para = re.sub(r"\s+", " ", para.replace("\n", "")).strip()
             if para:
                 desc = para
