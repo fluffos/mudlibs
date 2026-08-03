@@ -287,7 +287,20 @@ def render_index(status, commits):
             'title="该游戏库的源代码目录">源码</a>')
         meta_html = ('<p class="meta">' + "\n    ".join(meta_bits) + '</p>')
 
-        cards.append(f"""<div class="card {st}{' linked' if linked else ''}">
+        # Search should cover every field a visitor might type, not just the
+        # visible slug/name/description text -- including fields that never
+        # render on the card at all (original archive filename, admin id).
+        # Building this as an explicit corpus (rather than relying on
+        # card.textContent) means search stays correct even if the visible
+        # markup changes later.
+        search_bits = [
+            slug, info["name"], info["description"], info["reason"],
+            info.get("archive", ""), info.get("archive_num", ""),
+            admin_id or "",
+        ]
+        search_corpus = html.escape(" ".join(b for b in search_bits if b).lower())
+
+        cards.append(f"""<div class="card {st}{' linked' if linked else ''}" data-search="{search_corpus}">
   <div class="card-head">
     <h2>{title_html}</h2>
     <span class="badge {st}" title="{reason}">{icon} {label}</span>
@@ -410,7 +423,7 @@ def render_index(status, commits):
     等浏览器环境缺失能力) · <b>{n_no}</b> 款暂无法启动(❌)
   </p>
   <div class="controls">
-    <input id="q" type="search" placeholder="搜索游戏名 / slug ……"
+    <input id="q" type="search" placeholder="搜索游戏名 / 简介 / slug / 原始文件名 ……"
            autocomplete="off">
     <button class="fbtn active" data-f="all">全部 {n_total}</button>
     <button class="fbtn" data-f="playable">✅ 可玩 {n_play}</button>
@@ -437,7 +450,8 @@ def render_index(status, commits):
     var needle = q.value.trim().toLowerCase();
     cards.forEach(function (c) {{
       var okStatus = filter === 'all' || c.classList.contains(filter);
-      var okText = !needle || c.textContent.toLowerCase().indexOf(needle) >= 0;
+      var hay = c.dataset.search || c.textContent.toLowerCase();
+      var okText = !needle || hay.indexOf(needle) >= 0;
       c.style.display = okStatus && okText ? '' : 'none';
     }});
   }}
