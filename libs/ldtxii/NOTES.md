@@ -1,0 +1,4 @@
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+ldtx 的手足档案（同一个 Century/adm-single 家族，同一套架构，内容大部分不同——不是重复压缩包）。WASM 修复：修复了 adm/simul_efun/chinese.lpc 的 is_chinese() 里经典的 §8.1 GBK 字节区间 bug（str[0] > 160 && str[0] < 255——一个 GBK 首字节判断，在这个驱动上会拒绝所有真实中文字符，因为中文码点是 0x4e00-0x9fff，远超过 255；已换成正确的码点区间判断）。另外掏空了 adm/daemons/network/dns_master.lpc 的 startup_udp()/send_udp()/socket_close()（§7.52），和 ldtx 完全相同的修法——同样的未定义 socket efun 失败破坏了每次连线在英文名字提示之前的 encoding_to_mudlist() 步骤。check_legal_name() 的 i%2==0 隔字检查存在但无害（和 ldtx 一样）。通过 adm/etc/wizlist 把 fluffos/Mud2026Adm 播种为 (admin)——和 ldtx 不同，这份档案没有更早一轮遗留下来的既有管理员账号或 README，所以没有 id 冲突需要处理。留下一处真实存在、不阻断的内容缺口未修：d/city/chatroom.lpc 的物件列表引用了 /u/mouse/topten，这个巫师目录在整个档案里根本不存在——某个 NPC 的 heart_beat 驱动的 random_move 走进这个房间时，make_inventory() 对这个缺失档案呼叫 new() 会失败，之后对结果 0 做 ->move() 就会崩溃，和 ldtx 的 xiaobao.lpc 情况（以及更广泛的 sj.lpc 先例）是同一类缺失内容——按惯例保持原样，没有凭空捏造替代内容。完整的注册（gb→id→确认→中文名字→密码→确认→天赋'0'→接受'y'→电子邮件→性别）和 look→score→quit 流程在排版格式化前后都验证过；格式化工具没有引入任何损坏（三类盲点检查都干净）。

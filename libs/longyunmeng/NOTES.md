@@ -871,3 +871,7 @@ end of the session — two via the game's own quit-before-30-min deletion
 flow (exercising that code path as a side effect), one (`shenym`, past the
 30-minute mark) via direct file removal. `wangdatui`/王大腿's own data was
 already gone by the end of the session (see the finding above).
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+YLFY 引擎的近亲分支（源码版）。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员账号（fluffos/Mud@2026）登录干净正常。这个家族的巫师登录在 id 和密码之间有一道"巫师登陆效验码"提示，但原始代码其实从未真正校验过它——这份档案自己的 README 里就记录着"随便填都行"——实测确认：id→验证码随便填→真实密码→干净地进入"群仙观"，quit 也干净（"欢迎下次再来！"）。

@@ -459,3 +459,7 @@ Save files for the orchestrator to add (both paths tracked, not
 gitignored; `data/user/f/` and `data/login/f/` are NEW directories):
 - `libs/kxkj/work/data/user/f/fluffos.o`
 - `libs/kxkj/work/data/login/f/fluffos.o`
+
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+狂想空间基础版（更晚的快照）。
