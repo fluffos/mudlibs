@@ -1,8 +1,10 @@
 # 郑州风云3 (zzfy3)
 
 《郑州风云3》（游戏内横幅：风云系列之天下无敌）。以古龙小说为背
-景的风云系列 MUD，由长孙无情（Xgchen）建立。档案里有一个巫师个
-人目录 `u/wiz/u/xxy/`，里面是真正的游戏内容（武功/NPC 档案，不
+景的风云系列 MUD，由长孙无情（Xgchen）建立，和 `wqfy`（无情风
+云，同样打着"天下无敌"横幅）是同一套"郑州风云"地图与代码库——
+`d/marry/hongniang-zhang.lpc` 逐字节相同，此前两份档案都没有互相
+记录这层关系。档案里有一个巫师个人目录 `u/wiz/u/xxy/`，里面是真正的游戏内容（武功/NPC 档案，不
 是死代码备份），另外还有几份真正没用的 `logind.lpc` 备份放在
 `d/wiz/xgchen/`、`u/wiz/u/china/`、`u/wiz/u/lxh/` 下——用
 `include/globals.h` 里的 `LOGIN_D`=`/adm/daemons/logind` 和
@@ -16,6 +18,19 @@
 硬编码执行 `set("wiz_status/xgchen","(admin)")`，所以第一次开机
 唯一能拿到管理员权限的方法就是用原作者自己的巫师 ID `xgchen` 注
 册（确认过 `xgchen` 不在 `logind.lpc` 的 `banned_id` 黑名单里）。
+
+## 内容亮点
+
+- 和 `wqfy` 共享同一套"郑州风云"地图与结婚系统（`d/marry/`，"红
+  娘"NPC 说媒牵线），但管理员引导机制完全不同：这份档案的
+  `securityd.lpc` 每次开机都硬编码授予固定 ID `xgchen` 管理员权
+  限，完全不读取 `wizlist`（详见下方管理员账号说明）。
+- 注册时要选择民族（0-3），呼应古龙背景下的跨民族江湖设定，和
+  `wqfy` 一致。
+- `daemon/class/` 和 `cmds/daemon/class/` 是两份内容完全相同的
+  平行目录，无法判断哪个是死代码，本次两边的 `is_killing()` bug
+  都做了修复（详见下方第 3 条）——这是本轮修复过的档案里
+  `is_killing` 波及范围最大的一次（25 处）。
 
 ## 本次修复的关键 bug
 
