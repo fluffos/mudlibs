@@ -2338,9 +2338,11 @@ half-written to a broken value.
 
 Found repeatedly across this round's deep functional tests: `esI` (five
 `tell_object(player, "ttt\n")`/`"ttt1\n"`/etc. checkpoints strung through
-`enter_world()`), `xianlvqiyuan` (a bare `printf("%O\n", ob)` printing
-the login object's raw internal path, e.g. `/obj/login#2`, between the
-name and password prompts), and noted-but-left-alone on `fy2` (a
+`enter_world()`), `xianlvqiyuan` and `cctx` (each a bare
+`printf("%O\n", ob)` printing the login object's raw internal path,
+e.g. `/obj/login#2`/`/clone/user/login#1`, between the name and
+password prompts — `cctx`'s instance found via §10.7 deep functional
+test, not just code review), and noted-but-left-alone on `fy2` (a
 similar stray `printf` in `logind.lpc`, existing precedent from `zzfy`
 treats it as harmless). A leftover diagnostic write/printf with no
 explanatory comment, sitting in an otherwise-clean sequence of
@@ -3629,6 +3631,39 @@ something the admin-seeding process introduces. (`xkm`, sibling of
 `jym` — `jym` itself doesn't have this early branch at all, so don't
 assume it's present just because two libs share the rest of their
 `logind.lpc`/`securityd.lpc` composition.)
+
+### 8.9 A food/water first-login initialization gate checks the wrong object's `age`, so it never fires for anyone
+
+Found on `cctx`'s deep functional test (§10.7): the `enter_world()`-
+equivalent in `logind.lpc` has two live objects at once — `ob` (the
+transient login/connection stub) and `user` (the freshly-`new()`'d
+player body) — and after `exec(user, ob)` + `user->setup()` (which
+internally sets `user`'s own `age` to 14 for a brand-new character),
+the one-time food/water seeding is gated on
+`!user->query("food") && !user->query("water") && ob->query("age")
+== 14`. Every condition in that `&&` chain reads `user` except the
+last, which reads `ob` — the login stub, whose "age" property is never
+set anywhere in the whole codebase (confirmed by grepping every
+`set("age"` call site: all of them target `user`/NPC objects, none
+target the login-object class). `ob->query("age")` therefore always
+returns the driver's default `0`, the gate is permanently false, and
+`user->max_food_capacity()`/`max_water_capacity()` never get applied
+to ANY new character — every single new player enters the world with
+food and water both stuck at 0, triggering an immediate "你饿得直冒
+金星" (starving) message on their very first `look`/`score`. Detection:
+in a first-login init block, if a condition mixes `user->query(...)`
+and `ob->query(...)` on what's conceptually "the same new character,"
+check whether that specific property is ever actually set on the
+object being read — a per-property grep for `set("<prop>"` across the
+whole tree (not just the file in front of you) is the fast way to
+catch a silently-always-0 default masquerading as a real gate. Fix:
+use `user->query("age")` to match the object `update_age()` actually
+writes to. Verified live with two side-by-side fresh characters on the
+native driver: `score`'s food/water bars were both fully empty (with
+an immediate "你饿得直冒金星" starving message) before the fix, and
+both fully filled after — same class of "wrong object read in an
+otherwise-correct multi-object function" as §7.63's missing-guard
+pattern, but on a `query()` rather than a `new()` call.
 
 ---
 
