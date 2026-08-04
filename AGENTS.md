@@ -3294,6 +3294,72 @@ unavoidable step of every new character's `get_char()`.)
 
 ---
 
+### 7.66 An archive snapshot ships only PART of the original `/d/obj/` shared-item tree, relocated under `d/city/obj/` — dozens of NPCs' hardcoded old paths now 404 into the driver's generic error message
+
+Found on `xiyouji2003`'s §10.7 deep functional test, and worth checking on
+any lib whose archive turns out to only ship a subset of the original
+zone tree (§3's "mudlib nested/partial" traps are the extraction-time
+version of this; this is the runtime symptom). This lib's `d/` only
+contains `city/` and `wiz/` — no `d/obj/`, no `d/moon/`, no
+`d/nanhai/`, no `d/lingtai/`, etc. — yet ~35 different city NPC files
+still `carry_object("/d/obj/cloth/<item>")` at `create()` time, a path
+that resolves nowhere in this snapshot. Because `carry_object()` (via
+`load_object()`) fails inside `catch()`-free code, every one of these
+NPCs throws `*call_other() couldn't find object '/d/obj/cloth/<item>'`
+the moment their room is first (lazily) loaded — caught by the driver's
+config-level `default error message`, so the player just sees a generic
+`系统局部错误，请向巫师汇报。` with zero detail, once per affected room
+per boot. Individually harmless (session continues, NPC just ends up
+unclothed) but pervasive enough to degrade nearly every room transition
+during exploration.
+
+**Two genuinely different outcomes hide behind the same symptom — check
+both before deciding a hit is fixable:**
+
+1. **Relocated, not lost**: some of the referenced basenames turn out to
+   have a same-name, same-purpose file sitting under `d/city/obj/`
+   instead (`linen` "粗布衣", `choupao` "绸袍"/"绸布长袍", `sengyi` "僧衣",
+   `sengxie` "僧鞋" — confirmed by matching `set_name()` and clothing
+   type, not just filename). This is a genuine, high-confidence,
+   mechanically fixable path bug: `CITY_OBJ` (`/d/city/obj/`) is already
+   the macro these libs use for everything else under that directory.
+   Swept all 58 affected files in one pass (binary-mode substitution per
+   §10.4's CRLF lesson, since this lineage mixes LF/CRLF file-by-file):
+   `/d/obj/cloth/linen` → `/d/city/obj/linen`,
+   `/d/obj/cloth/choupao` → `/d/city/obj/choupao`, plus the two
+   `jieding.lpc` hits by hand. Re-verified via a fresh boot + full
+   `debug.log` walk-through of the previously-affected rooms: all
+   `linen`/`choupao`/`sengyi`/`sengxie` errors gone.
+2. **Genuinely gone**: most other basenames referenced the same way
+   (`pink_cloth`, `shoupipifeng`, `yuanxiang`, `magua`, `piyi`,
+   `baguapao`, `shoupiqun`, and others) have no match anywhere in the
+   tree — this snapshot's `/d/obj/` subtree was never included at all,
+   full stop. Do not invent a substitute or guess a "close enough" item
+   from an unrelated directory (a top-level `/obj/cloth/` does exist and
+   happens to also contain `magua`/`piyi`/`shoupiqun` files, but nothing
+   confirms those are the SAME items rather than an unrelated later
+   addition — left untouched rather than guessed). Same root cause,
+   same shape, also confirmed genuinely missing: `hua_girl.lpc`'s
+   `/d/moon/obj/luoyi` (whole `d/moon/` zone absent),
+   `jieding.lpc`'s own `/d/obj/books-nonskill/book-qujing`, and
+   `dashi.lpc`'s `/d/obj/weapon/staff/gangzhang`. `d/city/zhuque-e2.lpc`
+   /`zhuque-e3.lpc` additionally throw a DIFFERENT-shaped error for the
+   same underlying cause — `room.lpc`'s `make_inventory()` doesn't guard
+   `load_object()` returning `0`, so a missing `d/nanhai/npc/bonze` NPC
+   surfaces as `*Bad argument 1 to EFUN call_other() ... Got: int(0)`
+   instead of the cleaner "couldn't find object" message; same
+   "genuinely missing zone" diagnosis, just a noisier symptom.
+
+Detection for a similar lib: grep for a hardcoded shared-item directory
+prefix (`carry_object("/d/obj/`, or whatever this lineage's macro
+resolves to) across all NPC files, then check `find <root> -maxdepth 1
+-type d` to see whether the archive's `d/` actually contains that
+directory at all — if not, expect this exact failure mode, and triage
+each distinct referenced basename individually (relocated vs. genuinely
+gone) rather than assuming either answer for the whole set.
+
+---
+
 ## 8. Login and registration flow bugs
 
 Registration is where restoration succeeds or fails: it exercises the

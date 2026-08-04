@@ -613,6 +613,72 @@ Retest: fresh registration (fluffos itself) reached 南城客栈 with
 `look` correct; fluffos wizard re-login verified; debug.log free of
 runtime errors.
 
+## 深度功能测试（第二轮，2026-08-03）
+
+之前只做过注册流程的浅层烟雾测试（fluffos 管理员账号那一轮），本
+轮做了完整的 §10.7 深度功能测试：新注册一个真实中文名角色（秦风游
+/ id `qindive`），进入起始房间南城客栈后，走遍朱雀大街东西两段、
+长安鼓楼（中心广场）、南安大道等约十个城内房间，和店小二、疥顶小
+僧等 NPC 对话，读了留言板上大量保留下来的历史开发者公告（任务修
+改说明、bug 修复公告、系统更新通知），查看 `score`（属性面板正
+常，食物/饮水槽满，没有 §8.9 那个坏 age 检查的问题），确认 quit/
+reconnect 都正常工作。
+
+**主要发现并修复：一个覆盖全城约 35 个 NPC 档案的路径失效 bug（新增
+AGENTS.md §7.66）。** 移动进入朱雀大街东段（zhuque-e1）时，客户端
+每次都收到一条毫无细节的通用提示"系统局部错误，请向巫师汇报。"——
+这是驱动 config.fluffos 里 `default error message` 配置项的内容，
+真正的报错细节只在 debug.log 里：`*call_other() couldn't find object
+'/d/obj/cloth/sengyi'`，来自疥顶小僧（jieding.lpc）create() 里的
+`carry_object("/d/obj/cloth/sengyi")->wear()`。往下查发现：这份档
+案的 `d/` 目录下只有 `city/` 和 `wiz/` 两个子目录——`d/obj/`
+`d/moon/` `d/nanhai/` `d/lingtai/` 等原版目录整个都不存在于这份快
+照里。但"僧衣"（sengyi）"僧鞋"（sengxie）这两件衣物本身其实还在，
+只是被挪到了 `d/city/obj/` 下（用 set_name() 核对确认是同一件东
+西，不是巧合同名）。进一步全库搜索发现，同样的坏路径模式还出现在
+另外 ~35 个 NPC 档案里，其中 `linen`（粗布衣）和 `choupao`（绸袍）
+这两种衣物也同样在 `d/city/obj/` 下找得到对应文件——于是用二进制
+安全的批量替换（保留每个档案原本的 CRLF/LF 混合换行，参照 AGENTS.md
+§10.4 的教训）把这 58 个档案里的
+`/d/obj/cloth/linen`→`/d/city/obj/linen`、
+`/d/obj/cloth/choupao`→`/d/city/obj/choupao` 全部改正，`jieding.lpc`
+的 sengyi/sengxie 两行手工改正。LPC 格式化器对 57 个档案确认"已经
+是规范格式，无需改动"，`biaoshi.lpc` 一个档案被格式化器自己的安全
+网拦下（token 不匹配，跟这次的改动无关，是这个档案本身早就存在的
+问题，格式化器选择不写入而不是冒险破坏它——我的单行路径修复本身不
+受影响）。重启驱动后重新走一遍之前会报错的房间，debug.log 确认
+linen/choupao/sengyi/sengxie 这几个类别的错误全部消失。
+
+同一次排查也确认了三个**真的无法修复、只能如实记录**的缺失内容（同
+样在 AGENTS.md §7.66 里归档）：`hua_girl.lpc`（花店老板娘 NPC）的
+`/d/moon/obj/luoyi`（月宫罗衣，整个 `d/moon/` 区域这份快照根本没
+带）、`jieding.lpc` 自己的 `/d/obj/books-nonskill/book-qujing`
+（取经书）、`dashi.lpc`（疥癞和尚）的
+`/d/obj/weapon/staff/gangzhang`（钢杖）——这三样物件在整个档案里
+搜不到任何同名同类的替代文件，不是路径写错，是内容本来就没有被打
+包进这份存档，没有去凭空捏造替代内容。另外 `d/city/zhuque-e2.lpc`/
+`zhuque-e3.lpc` 因为引用的 `/d/nanhai/npc/bonze`（南海观音座下的和
+尚 NPC）同样缺失，报错形态不太一样（`room.lpc` 的
+`make_inventory()` 没有对 `load_object()` 返回 0 做防御，表现为
+`Bad argument 1 to EFUN call_other()`），但根因和上面完全一样。
+
+关于"东门（east）连不通"的提示："你要去的区域还没有连通,请post通
+知巫师。"——这不是 bug，是这个 lib 自己设计好的、对未搭建区域的优
+雅降级提示（`cmds/std/go.lpc` 显式处理了 `load_object()` 失败的情
+况），南城客栈的东门（指向 `/d/obj/heidian/city_heidian`，同样属
+于上面提到的整个缺失掉的 `/d/obj/` 子树）就是这种情况——是内容缺
+口，不是程序错误，未做处理。
+
+**未覆盖范围（诚实记录，不假装测试过）**：本轮多次尝试对城内 NPC
+发起战斗（先后试过 jieding、nukid/"小女孩"），但长安鼓楼一带有个
+"土地"公告 NPC，几乎每次进入房间或稍作停留都会自动弹出一段很长的
+历史开发者留言分页阅读，反复吞掉后续测试指令的时机，导致战斗指令
+始终没能在一次干净的会话里送达并观察到结果；`nukid` 本身也有
+`random_move` 漫游行为，不一定总在原地。技能学习（learn）、门派加
+入、经济系统（购物、加工厂）同样因为时间原因没有实测，仅通过代码
+review 确认了对应的 `cmds/`/`d/city/*` 逻辑存在，不代表已验证可
+用。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 西游记2003/光辉岁月（master.c 约等于 xyj2000f）。
