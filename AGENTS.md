@@ -2370,11 +2370,11 @@ Found repeatedly across this round's deep functional tests: `esI` (five
 `printf("%O\n", ob)` printing the login object's raw internal path,
 e.g. `/obj/login#2`/`/clone/user/login#1`, between the name and
 password prompts — `cctx`'s instance found via §10.7 deep functional
-test, not just code review), `hc`, `yxjh`, and `xkyx3b` (each the SAME
-`printf("%O\n", ob)` line duplicated across TWO parallel name-entry
-code paths — accept a system-suggested random name vs type your own —
-both landing right before the password prompt, both found and fixed
-together), `sanjieshenhua` and `ldtxii` (each the same bare
+test, not just code review), `hc`, `yxjh`, `xkyx3b`, and `mnhf` (each
+the SAME `printf("%O\n", ob)` line duplicated across TWO parallel
+name-entry code paths — accept a system-suggested random name vs type
+your own — both landing right before the password prompt, both found
+and fixed together), `sanjieshenhua` and `ldtxii` (each the same bare
 `printf("%O\n", ob)` right before the Chinese-name is set — `ldtxii`'s
 sibling `ldtx` has the byte-identical line, unfixed; port the same
 one-line deletion there too when next touching that lib), and
