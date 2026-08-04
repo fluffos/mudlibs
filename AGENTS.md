@@ -2443,7 +2443,8 @@ right before the password prompt, both found and fixed together;
 previously left unfixed as "harmless" — worth revisiting that call the
 next time `fy2` is touched, now that this round treats the pattern as
 a routine, safe-to-fix hit rather than a judgment call), `sanjieshenhua`, `ldtxii`,
-`yszz`, `mohuanshiji`, `jyqxc`, and `syxjl` (each the same bare `printf("%O\n", ob)`
+`yszz`, `mohuanshiji`, `jyqxc`, `syxjl`, and `gjzddmudda` (each the same
+bare `printf("%O\n", ob)`
 right before the Chinese-name is set — `ldtxii`'s sibling `ldtx` has
 the byte-identical line, unfixed; port the same one-line deletion
 there too when next touching that lib), and noted-but-left-alone on
