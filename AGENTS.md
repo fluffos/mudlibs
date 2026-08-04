@@ -2370,15 +2370,16 @@ Found repeatedly across this round's deep functional tests: `esI` (five
 `printf("%O\n", ob)` printing the login object's raw internal path,
 e.g. `/obj/login#2`/`/clone/user/login#1`, between the name and
 password prompts — `cctx`'s instance found via §10.7 deep functional
-test, not just code review), `hc`, `yxjh`, `xkyx3b`, and `mnhf` (each
-the SAME `printf("%O\n", ob)` line duplicated across TWO parallel
-name-entry code paths — accept a system-suggested random name vs type
-your own — both landing right before the password prompt, both found
-and fixed together), `sanjieshenhua`, `ldtxii`, `yszz`, and
-`mohuanshiji` (each the same bare `printf("%O\n", ob)` right before
-the Chinese-name is set — `ldtxii`'s sibling `ldtx` has the
-byte-identical line, unfixed; port the same one-line deletion there
-too when next touching that lib), and noted-but-left-alone on `fy2` (a
+test, not just code review), `hc`, `yxjh`, `xkyx3b`, `mnhf`, and
+`bixiecanyang` (each the SAME `printf("%O\n", ob)` line duplicated
+across TWO parallel name-entry code paths — accept a system-suggested
+random name vs type your own — both landing right before the password
+prompt, both found and fixed together), `sanjieshenhua`, `ldtxii`,
+`yszz`, and `mohuanshiji` (each the same bare `printf("%O\n", ob)`
+right before the Chinese-name is set — `ldtxii`'s sibling `ldtx` has
+the byte-identical line, unfixed; port the same one-line deletion
+there too when next touching that lib), and noted-but-left-alone on
+`fy2` (a
 similar stray `printf` in `logind.lpc`, existing precedent from `zzfy`
 treats it as harmless). A leftover diagnostic write/printf with no
 explanatory comment, sitting in an otherwise-clean sequence of
@@ -3483,6 +3484,23 @@ abandonment — reserve the hard stop for a genuinely-destructed/gone
 object, since "briefly not here" and "gone forever" are different
 failure modes.
 
+**Second confirmed instance: `bixiecanyang`** (夕阳再现-derivative
+lineage — unrelated to `bmxkx2001`'s branded content, but clearly
+shares this same underlying death-system component somewhere upstream
+in the broader ES2 mega-family, byte-for-byte the same `if (!ob ||
+!present(ob)) return;` guard in both `d/death/npc/wgargoyle.lpc` and
+`d/death/npc/bgargoyle.lpc`). Found via §10.7 deep functional test —
+died fighting an NPC, landed at 鬼门关 with the same 白无常/黑无常
+ghost-guard pair. Applied the identical fix to both files before the
+soft-lock was ever actually triggered live here (the interaction that
+exposed it in `bmxkx2001` — an unrelated forced-move NPC colliding
+with an in-progress resurrection — wasn't reproduced in this session,
+but the vulnerable code shape is identical, so the fix was applied
+proactively rather than waiting for a live repro). Worth checking any
+other ES2-family lib's `d/death/npc/*gargoyle*.lpc` (or equivalently
+named ghost-guard files) for this same guard shape on sight, since it
+appears to be shared infrastructure, not lib-specific code.
+
 ### 7.69 The driver's own auto-included global header is missing a macro that a live daemon requires — while a near-identical, unused duplicate elsewhere in the tree still has it
 
 Found on `bmxkx2001`'s §10.7 deep functional test: `inherit/misc/
@@ -3966,8 +3984,13 @@ adm-single family, byte-identical condition to `cctx`/`niaoren`'s full
 14` shape, but an unrelated lineage — no known relation to either the
 `cctx`/`niaoren` pair or `yxjh`) — its sibling `ldtx` carries the exact
 same unfixed line at the same line number; port the fix there too when
-next touched. All four fixed identically: `ob->query("age")` →
-`user->query("age")`. The `enter_world()`-
+next touched. Fifth confirmed instance on `bixiecanyang` (夕阳再现
+derivative family — a fifth unrelated lineage, no known relation to
+any of the previous four) — same leaner shape as `yxjh`, a bare
+`if (ob->query("age") == 14) { ... }` right after `user->setup()`,
+found alongside two `printf("%O\n", ob)` debug leaks (§7.34) in the
+same file during the same pass. All five fixed identically:
+`ob->query("age")` → `user->query("age")`. The `enter_world()`-
 equivalent in `logind.lpc` has two live objects at once — `ob` (the
 transient login/connection stub) and `user` (the freshly-`new()`'d
 player body) — and after `exec(user, ob)` + `user->setup()` (which
