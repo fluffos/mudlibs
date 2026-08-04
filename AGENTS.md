@@ -3668,7 +3668,13 @@ assume it's present just because two libs share the rest of their
 
 ### 8.9 A food/water first-login initialization gate checks the wrong object's `age`, so it never fires for anyone
 
-Found on `cctx`'s deep functional test (§10.7): the `enter_world()`-
+Found on `cctx`'s deep functional test (§10.7), second confirmed
+instance on `niaoren` (same session, found specifically because
+`niaoren` turned out to share `logind.lpc`/`master.lpc` source with
+`cctx` — see §11's lineage note — so the same bug, byte-for-byte the
+same broken condition, carried over into an independently-branded
+fork). Both fixed identically: `ob->query("age")` → `user->query("age")`.
+The `enter_world()`-
 equivalent in `logind.lpc` has two live objects at once — `ob` (the
 transient login/connection stub) and `user` (the freshly-`new()`'d
 player body) — and after `exec(user, ob)` + `user->setup()` (which
@@ -4198,12 +4204,26 @@ base-first):
   `sanjieshenhua` (060, "三界神话") — share only their "三界" branding,
   NOT a lineage pair (diff-confirmed: `master.lpc`/`securityd.lpc`/
   `logind.lpc` all differ substantially in size and shape between the
-  two), `niaoren` (062, an ES-family/xkx-shaped codebase per its own
-  config layout, but NOT diff-confirmed as the same lineage as either
-  the ES2/Annihilator family above or the XKX family — different
-  `master.lpc`/daemon shapes and no shared copyright header against
-  `huoying`; treat as unclassified until someone actually diffs it
-  against `xkx2001`/`xuanjianlu`).
+  two).
+- **驰骋天下 / cctx family**: `cctx` (066) and `niaoren` (062,
+  "鳥人世界") — CONFIRMED same codebase (not just superficially
+  similar), found via `niaoren`'s §10.7 deep functional test after its
+  `logind.lpc` talent-selection prompt turned out to be a word-for-word
+  match with `cctx`'s ("一個人物的天賦...俠馳騁江湖中的人物大多具
+  有...", traditional/simplified conversion aside), and clinched by
+  `niaoren`'s `adm/daemons/logind.lpc` still literally calling
+  `read_file("/adm/etc/cctxinfo")` — a leftover filename from `cctx`'s
+  own codebase, never renamed when `niaoren` forked off and rebranded
+  as a Jin Yong "鳥人世界" (15-novel premise) setting. `master.lpc`/
+  `logind.lpc` are close but NOT byte-identical (independently patched
+  since forking — e.g. only `niaoren` had the §8.9 wrong-object food/
+  water bug already fixed on `cctx`'s side by the time `niaoren` was
+  tested, so the fix had to be reapplied there too). Previously
+  `niaoren` was marked "unclassified... different `master.lpc`/daemon
+  shapes" against the XKX family specifically (`xkx2001`/`xuanjianlu`)
+  — that negative result still stands (confirmed via diff, ruled out,
+  not just untested), it just wasn't compared against the right
+  sibling.
 
 14 archive files are byte-identical duplicates of another archive
 (mostly browser "(1)" copies, plus a couple of differently-named same-
