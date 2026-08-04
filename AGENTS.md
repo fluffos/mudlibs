@@ -2371,14 +2371,14 @@ Found repeatedly across this round's deep functional tests: `esI` (five
 e.g. `/obj/login#2`/`/clone/user/login#1`, between the name and
 password prompts — `cctx`'s instance found via §10.7 deep functional
 test, not just code review), `hc`, `yxjh`, `xkyx3b`, `mnhf`,
-`bixiecanyang`, and `fy330` (each the SAME `printf("%O\n", ob)` line
-duplicated across TWO parallel name-entry code paths — accept a
-system-suggested random name vs type your own — both landing right
-before the password prompt, both found and fixed together; `fy330`'s
-own sibling `fy2` carries the byte-identical line but was previously
-left unfixed as "harmless" — worth revisiting that call the next time
-`fy2` is touched, now that this round treats the pattern as a
-routine, safe-to-fix hit rather than a judgment call), `sanjieshenhua`, `ldtxii`,
+`bixiecanyang`, `fy330`, and `fy2mg` (each the SAME `printf("%O\n",
+ob)` line duplicated across TWO parallel name-entry code paths —
+accept a system-suggested random name vs type your own — both landing
+right before the password prompt, both found and fixed together;
+`fy330`'s own sibling `fy2` carries the byte-identical line but was
+previously left unfixed as "harmless" — worth revisiting that call the
+next time `fy2` is touched, now that this round treats the pattern as
+a routine, safe-to-fix hit rather than a judgment call), `sanjieshenhua`, `ldtxii`,
 `yszz`, and `mohuanshiji` (each the same bare `printf("%O\n", ob)`
 right before the Chinese-name is set — `ldtxii`'s sibling `ldtx` has
 the byte-identical line, unfixed; port the same one-line deletion
@@ -3530,6 +3530,32 @@ living trespasser in the underworld" check with no multi-stage
 bug class. Don't pattern-match on the guard text alone; confirm the
 function actually drives a multi-stage resurrection sequence before
 treating a `!present(ob)` bare-return as this bug.
+
+**Fourth confirmed instance: `fy2mg`** (风云Ⅱ美国版本, `fy330`'s own
+XKX-framework sibling — same `adm/obj/master.lpc` euid/check_legal_name
+bug pair as `fy330`, and it turns out the same death system too):
+`d/death/npc/{wgargoyle,bgargoyle}.lpc` (白无常/黑无常), byte-identical
+`revive_loc`/`death_msg` text to `bixiecanyang`'s pair of the same
+filenames — this shared "白无常/黑无常 gargoyle" death subsystem spans
+at least two otherwise-unrelated top-level lineages now (夕阳再现-family
+`bixiecanyang` and XKX-family `fy2mg`), not just one. Both files had the
+same `if (!ob || !present(ob)) return;`; `bgargoyle.lpc` additionally
+has a "not yet a ghost → attack the trespasser" branch BEFORE the
+revival-stage loop (same shape as `fy330`'s `panguan2.lpc`), but unlike
+`panguan2.lpc` it falls through into the same multi-stage
+`death_stage()` as `wgargoyle.lpc` rather than being a separate
+single-shot function — so both files here needed the fix, unlike
+`fy330` where only one of the two death-NPC files did. Fixed with the
+same split-guard pattern. Also not verified with a live disturbed-
+sequence repro: three separate combat engagements against
+progressively stronger NPCs (including one that actively pursued the
+player between rooms, unlike every other instance's engagements) all
+ended in the character's own auto-flee-at-critical-hp safety mechanic
+saving it, down to as low as 11% of a combat-shrunken max-HP pool,
+never actual death — worth noting as a recurring property of this
+whole mega-family's core combat loop, not just bad luck: the auto-flee
+safety net has now reliably prevented a live repro of this bug class
+across `fy330` and `fy2mg` both.
 
 ### 7.69 The driver's own auto-included global header is missing a macro that a live daemon requires — while a near-identical, unused duplicate elsewhere in the tree still has it
 
