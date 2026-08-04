@@ -503,3 +503,69 @@ session. Test char `qretest` removed afterward; fluffos kept.
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 "夕阳再现"衍生引擎上的一款独立游戏。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）干净正常，等级确认（"您目前权限：(boss)"），进入起始区域，quit 干净。记录了一处不阻断游戏的历史遗留美观性 bug（本轮未修）：某个房间的夜间氛围文字里有一处没有被替换掉的字面 '%s'。
+
+## 深度功能测试（§10.7，2026-08-04）
+
+原生 driver（端口 40049）跑了一遍超出注册流程的完整游玩。这份档案
+和 `bixiecanyang` 同属"夕阳再现"血统（同源 chinese.lpc/securityd.lpc
+等工具文件），注册流程也高度相似：单组密码、天赋可选 1-4 项自定或
+0=全随机、六项天赋（含福缘/容貌两项隐藏属性）、email、性别。
+
+**主动检查命中 3 处，都在 `adm/daemons/logind.lpc`**：两处紧挨在
+`ob->set("name", ...)` 之前的 `printf("%O\n", ob)` 调试残留（§7.34，
+随机取名/手动取名两条平行路径各一处，和 `bixiecanyang` 逐字节相同
+的形状）；`enter_world()` 里食物/饮水初始化用错对象的经典 §8.9
+bug（`ob->query("age")` 应为 `user->query("age")`）。三处均已修
+复；注册后食物/饮水显示 280/280（满值），确认 §8.9 修复生效。
+`command_hook`（`feature/command.lpc`）是干净的 `nomask`，没有
+`private`，不是 bug；没有 MESSAGE_D-> 未防护调用；全树 UTF-8 解码
+扫描没有发现 extensionless GBK 文本残留（唯一的 6 个解码失败文件全
+部确认是二进制可执行档、tar 归档或巫师私人调试日志，不是应该转码
+的内容）；`feature/alias.lpc` 没有 `command("quit")`，不适用
+§7.72 那类 flood-kick bug。
+
+**注册与游玩**：注册测试角色，落在"铁枪庙"（随机起始点之一，另有
+"客店""嘉兴南门"等），携带"法传送帖"道具。探索了客店（有间客栈）、
+钱庄方向的南大街、当铺、天安门广场等区域，地图连通性正常。
+
+**死亡系统：修复了标准的 §7.68，但同时发现并诚实记录了一个更深、
+未能在本轮定位根因的独立异常**：`d/death/npc/{wgargoyle,bgargoyle}.lpc`
+（只有 `wgargoyle.lpc` 真正生效，`DEATH_ROOM` 宏指向它所在的
+`d/death/gate.lpc`；`bgargoyle.lpc` 未被任何房间引用，是死代码）
+和 `d/shaolin/npc/yu-zu2.lpc`（同样是被 `yu-zu.lpc` 取代的死代码，
+和 `jyqxc`/`syxjl`/`wmkj` 此前发现的同一个监狱机制 bug 一致）都有
+标准的 `if (!ob || !present(ob)) return;` 复活软锁死守卫，已按已
+验证的修法全部拆分修复。
+
+**现场测试时发现**：死亡后被"四只乌鸦"或"小贩"这类极弱的 NPC 杀死
+（战力 300 左右，说明测试角色初始战斗力极低，"攻击力：1"，几乎任
+何 NPC 都能致命——这是内容/数值现象，不是 bug），落到"鬼门关"，
+"白无常"在场。**用临时插入的 `tell_object` 调试探针逐行追踪**确认：
+五阶段死亡对话在 §7.68 修复后能完整走完（`stage` 从 0 递增到 4，
+每条 `death_msg` 文本都正确显示），`ob->reincarnate()` 也确认执行
+成功（探针显示 `ghost=0`），但**紧接着的 `ob->move(REVIVE_ROOM)`
+调用之后，连一条最简单、不涉及任何字符串拼接或返回值处理的
+`tell_object` 探针都没有再显示过**——反复用不同测试角色、不同起始
+房间复现了同样的结果：五段对话全部显示完毕后，角色仍然留在"鬼门
+关"，只收到白无常的日常闲聊（`chat_msg`），从未真正传送到"武庙"。
+`debug.log` 和 driver 自身的 stdout（`boot.log`）全程没有任何报
+错，driver 进程本身也没有崩溃。追查了 `feature/move.lpc` 里
+`move()` 自己的"如果身上有装备就先卸下"逻辑（`if (query("equipped")
+&& !this_object()->unequip()) return notify_fail(...)`，怀疑
+`notify_fail()` 在没有活跃玩家指令的 call_out 语境下可能返回一个
+让调用方误判的值）、`reincarnate()` 内部 `UPDATE_D->check_user()`
+的 `is_ghost()` 时序等几个假设，但在本轮的时间预算内未能定位到确
+切根因就没有继续深挖，也没有做任何"猜测性"修复——**诚实记录为一
+个新发现、尚未解决的独立异常，不是 §7.68 那个已经验证过的 bug
+类，也没有被本次的 §7.68 修复引入**（§7.68 修复本身已经证明是正
+确的：如果没有这个修复，五阶段对话根本不可能完整走完）。已将调试
+探针代码全部还原，不带任何调试残留提交。建议下一次有余力时，从
+`feature/move.lpc` 的 `move()` 全函数体（不只是 equip 检查那一段）
+逐行插桩来精确定位。
+
+`quit` 正常退出，driver 全程存活未崩溃。`debug.log` 全程没有真实
+的 `error:`/`denied`/`Bad argument`/`Too deep recursion` 行。
+formatter 检查（改动文件均已是干净格式或首次接触触发全文件重排
+版，语义改动已逐一核对）、`git status --short libs/wmkj/` 复查均
+确认改动范围干净——四处源码修改是跟踪变更，测试角色的新存档保持未
+跟踪、未提交。

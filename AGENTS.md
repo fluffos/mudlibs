@@ -2422,7 +2422,7 @@ Found repeatedly across this round's deep functional tests: `esI` (five
 e.g. `/obj/login#2`/`/clone/user/login#1`, between the name and
 password prompts — `cctx`'s instance found via §10.7 deep functional
 test, not just code review), `hc`, `yxjh`, `xkyx3b`, `mnhf`,
-`bixiecanyang`, `fy330`, and `fy2mg` (each the SAME `printf("%O\n",
+`bixiecanyang`, `fy330`, `fy2mg`, and `wmkj` (each the SAME `printf("%O\n",
 ob)` line duplicated across TWO parallel name-entry code paths —
 accept a system-suggested random name vs type your own — both landing
 right before the password prompt, both found and fixed together;
@@ -3737,6 +3737,23 @@ variant already cataloged from `jyqxc` (`d/shaolin/npc/yu-zu2.lpc`,
 confirmed dead — superseded by a `yu-zu.lpc` with no jail mechanic at
 all) for consistency at negligible cost.
 
+**Ninth confirmed instance: `wmkj`** (夕阳再现/`bixiecanyang` lineage —
+sibling to `bixiecanyang`, sharing the same `chinese.lpc`/`securityd.lpc`
+tooling files) — `d/death/npc/wgargoyle.lpc` (live, `DEATH_ROOM` points
+at its room) plus the same two already-cataloged dead-code variants
+(`bgargoyle.lpc`, confirmed unreferenced by any room; `d/shaolin/npc/
+yu-zu2.lpc`, superseded by a jail-mechanic-free `yu-zu.lpc`), all fixed
+with the standard split-guard pattern. Verified via debug instrumentation
+(not just a clean reconnect) that the fix itself works exactly as
+intended: all five `death_msg` stages play in full and `reincarnate()`
+completes successfully. See §7.74 for a DIFFERENT, deeper, and
+UNRESOLVED anomaly found immediately downstream of this fix on the same
+lib — the character never actually arrives at `REVIVE_ROOM` despite the
+dialogue and `reincarnate()` both completing correctly, which is NOT
+this bug class and was not introduced by this fix (confirmed: without
+this fix, the sequence would abort even earlier, at the missing-present
+check, never even reaching the point where the new anomaly occurs).
+
 ### 7.69 The driver's own auto-included global header is missing a macro that a live daemon requires — while a near-identical, unused duplicate elsewhere in the tree still has it
 
 Found on `bmxkx2001`'s §10.7 deep functional test: `inherit/misc/
@@ -3953,6 +3970,72 @@ steps the whole question. Verified live after the correction: walked
 to the square, confirmed the NPC loads and renders correctly, and
 `debug.log` stayed clean where it had shown the error every time
 before.
+
+### 7.74 (UNRESOLVED) `object->move(dest)` appears to silently never return when called from deep inside a `call_out()` chain, downstream of a `reincarnate()` call — no error, no crash, no completion
+
+Found on `wmkj`'s §10.7 deep functional test, in the exact same death-
+resurrection sequence already fixed by this lib's own §7.68 instance.
+With that fix correctly in place (confirmed: all five `death_msg`
+stages play in full, in order, every time), `d/death/npc/wgargoyle.lpc`'s
+`death_stage()` reaches its final branch: `ob->reincarnate();` followed
+by an inventory-drop loop and `ob->move(REVIVE_ROOM);`. Instrumented
+with `tell_object()` debug probes at each step (not `write()`, which
+targets `this_player()` — wrong context inside a `call_out`) to
+localize the failure precisely:
+```lpc
+} else
+  ob->reincarnate();
+tell_object(ob, "TRACE: reincarnate done, ghost=" + ob->is_ghost() + "\n");
+inv = all_inventory(ob);
+for (i = 0; i < sizeof(inv); i++) DROP_CMD->do_drop(ob, inv[i]);
+tell_object(ob, "TRACE: about to move\n");
+i = ob->move(REVIVE_ROOM);
+tell_object(ob, "TRACE: move returned\n");   // <-- never printed
+```
+The "reincarnate done" and "about to move" lines print reliably and
+consistently (`ghost=0`, confirming `reincarnate()` itself completed
+correctly). The "move returned" line — a bare `tell_object()` with NO
+string concatenation, NO computed value, nothing that could itself
+throw — NEVER printed, across multiple independent repro attempts with
+different fresh characters. The character remains stuck at the death
+gate room afterward, receiving only the gargoyle's ambient `chat_msg`
+chatter, never arriving at `REVIVE_ROOM`. Neither `debug.log` nor the
+driver's own captured stdout (`boot.log`, per §10.8's precedent for
+catching what `debug.log` misses) showed ANY trace of an error,
+warning, or crash — the driver process itself stayed alive and
+responsive to new, unrelated connections throughout.
+
+Ruled out as NOT the cause, with evidence:
+- **Not this lib's §7.68 fix**: the sequence would abort even earlier
+  (at the `!present(ob)` check, before ever reaching `reincarnate()`)
+  without that fix — this anomaly is strictly downstream of a working
+  fix, not caused by it.
+- **Not `reincarnate()` itself**: confirmed executing successfully
+  (`ghost=0` observed) before the stall.
+- **Not the destination room**: `/d/city/wumiao` has no visible
+  `prevent_enter`/ghost-blocking logic in its `create()`.
+- **Not a stale/corrupted test character**: reproduced with multiple
+  independently-registered fresh characters, not just repeated reuse
+  of one.
+- **Not the driver crashing**: confirmed alive via a parallel connection
+  attempt with a different id succeeding normally while the stuck
+  character's session was still active.
+
+Suspected but NOT confirmed: `feature/move.lpc`'s own `move()`
+override has an early guard — `if (query("equipped") &&
+!this_object()->unequip()) return notify_fail(...);` — and
+`notify_fail()`'s behavior when there is no active player command being
+processed (as is the case deep inside a `call_out`) is untested territory
+in this codebase; it's plausible this returns something that reads as
+"still executing" to the caller rather than a clean failure, though this
+was not proven within this pass's time budget. Not fixed — no root
+cause was pinned down with enough confidence to make a real change
+rather than a guess, and this project's standing discipline is to
+document honestly rather than patch speculatively. If revisited: instrument
+`move()`'s own function body directly (not just the calling site) with
+probes at every branch, particularly around the `equipped`/`unequip()`
+guard, to see whether execution ever actually enters the function body
+at all when called in this specific context.
 
 ---
 
@@ -4362,8 +4445,14 @@ leak (§7.34) in the same file. Seventh confirmed instance on `syxjl`
 same full shape, also alongside a single-path `printf("%O\n", ob)`
 debug leak in the same file — this specific pairing (both bugs, same
 file, same session) has now recurred often enough to be worth checking
-both on sight whenever one is found in a `logind.lpc`. All seven fixed
-identically: `ob->query("age")` → `user->query("age")`. The `enter_world()`-
+both on sight whenever one is found in a `logind.lpc`. Eighth confirmed
+instance on `wmkj` (夕阳再现/`bixiecanyang` lineage — a different
+lineage from all seven priors), the bare leaner shape (`ob->query("age")
+== 14`, no `!user->query("food")` guard), found alongside the
+TWO-parallel-path `printf` variant (§7.34) this time rather than the
+single-path one — the pairing recurs, but not always with the same
+`printf` shape. All eight fixed identically: `ob->query("age")` →
+`user->query("age")`. The `enter_world()`-
 equivalent in `logind.lpc` has two live objects at once — `ob` (the
 transient login/connection stub) and `user` (the freshly-`new()`'d
 player body) — and after `exec(user, ob)` + `user->setup()` (which
