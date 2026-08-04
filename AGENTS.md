@@ -733,7 +733,35 @@ if `raw/` ends up empty. Known traps:
   log ⇒ diff against the raw bytes and re-insert the exact dropped
   character. Seen on `tianxia`, `xo_final`, `shujian2008`,
   `xianlvqiyuan`, `ylfyxa3` (where it silently deleted
-  NPC `set_name()` lines).
+  NPC `set_name()` lines), and `qhxajh` (same xo/TMI-2/ES2/Falcon
+  engine family as `xo_final` — same conversion-tooling corruption hit
+  a sibling archive independently). `qhxajh` surfaced a second shape of
+  the same root cause worth watching for beyond the heredoc-tag case:
+  a `//` line comment immediately followed (no newline) by the next
+  line's real code swallows that code INTO the comment — found live via
+  §10.7 deep functional testing, not a boot-time compile error, in two
+  different ways. `clone/misc/void.lpc` (a room a player can actually
+  walk into) threw the expected "End of file in text block" the moment
+  a wizard tried to `update` it (the heredoc-tag sub-case, same as
+  above). `system/skill/basic/kongshou.lpc` — the base UNARMED combat
+  skill, exercised by nearly every fight in the game — had
+  `// 这个函数用来区别...int is_native_skill()\n{` (the comment
+  swallowing the very next line's function signature, leaving a bare
+  `{` with no declaration): this one compiles-on-boot fine (unarmed
+  skill objects are lazily compiled on first use, not preloaded) and
+  only surfaced once combat was actually exercised — every single
+  combat round threw a repeating `*No program in object
+  '/system/skill/basic/kongshou'!` runtime error until fixed, easy to
+  miss if a testing pass never gets to combat. **Because this sub-case
+  produces no compile-time error and can just as easily swallow a
+  function that's never LATER referenced (silently deleting it with
+  zero symptom, same failure mode already seen in `ylfyxa3`'s vanished
+  `set_name()` calls)**, don't assume a lib flagged "LOSSY conversion"
+  is clean just because it boots and compiles clean — a live §10.7 pass
+  that actually exercises combat/movement/interaction is what catches
+  this shape, not a boot-log read. Fix is identical either way: diff
+  against the raw archive bytes at the exact offset and re-insert the
+  single dropped newline.
 - **Mixed encodings within ONE file**: BIG5 lines inside an otherwise-GBK
   file decode via GB18030 *without error* into valid-but-wrong mojibake —
   undetectable by the lossy-conversion log. Only a human skim of
