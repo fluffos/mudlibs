@@ -2346,9 +2346,11 @@ test, not just code review), `hc`, `yxjh`, and `xkyx3b` (each the SAME
 `printf("%O\n", ob)` line duplicated across TWO parallel name-entry
 code paths — accept a system-suggested random name vs type your own —
 both landing right before the password prompt, both found and fixed
-together), `sanjieshenhua` (the same bare `printf("%O\n", ob)`
-between the Chinese-name and email prompts), and noted-but-left-alone
-on `fy2` (a
+together), `sanjieshenhua` and `ldtxii` (each the same bare
+`printf("%O\n", ob)` right before the Chinese-name is set — `ldtxii`'s
+sibling `ldtx` has the byte-identical line, unfixed; port the same
+one-line deletion there too when next touching that lib), and
+noted-but-left-alone on `fy2` (a
 similar stray `printf` in `logind.lpc`, existing precedent from `zzfy`
 treats it as harmless). A leftover diagnostic write/printf with no
 explanatory comment, sitting in an otherwise-clean sequence of
@@ -3878,7 +3880,13 @@ pair), same mistake independently made, but a slightly leaner shape:
 no `!user->query("food") && !user->query("water")` guard at all, just
 a bare `if (ob->query("age") == 14) { user->set("food", ...); ... }`
 right after `user->setup()` — same wrong-object read, same permanent
-false, same fix. All three fixed identically: `ob->query("age")` →
+false, same fix. Fourth confirmed instance on `ldtxii` (Century/
+adm-single family, byte-identical condition to `cctx`/`niaoren`'s full
+`!user->query("food") && !user->query("water") && ob->query("age") ==
+14` shape, but an unrelated lineage — no known relation to either the
+`cctx`/`niaoren` pair or `yxjh`) — its sibling `ldtx` carries the exact
+same unfixed line at the same line number; port the fix there too when
+next touched. All four fixed identically: `ob->query("age")` →
 `user->query("age")`. The `enter_world()`-
 equivalent in `logind.lpc` has two live objects at once — `ob` (the
 transient login/connection stub) and `user` (the freshly-`new()`'d
