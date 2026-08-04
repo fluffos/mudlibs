@@ -3799,6 +3799,38 @@ reconnect (no commands sent during the `call_out` chain, to avoid
 that all five `death_msg` stages complete, `reincarnate()` succeeds, and
 the character lands correctly at `/d/city/guangchang`.
 
+**Twelfth confirmed instance: `fysjmb`** (风云Ⅳ解密版, Sumxin-风云
+family — the death NPC's own `// TIE@FY3` header comment reveals it
+originates from the same source as `fy330`/`fy2mg`'s own 判官 NPC,
+though this archive's copy had drifted independently) —
+`d/death/npc/panguan.lpc` (朱笔判官, live and reachable — confirmed
+present in the 鬼门关 room the test character actually landed in after
+dying). Distinctive shape here: the guard bundled FOUR conditions into
+one early return — `if (!ob || !present(ob) || !ob->is_ghost() ||
+(int)ob->query("combat_exp") > MAX_EXP) return;` — where only
+`!present(ob)` should retry; the other three (destructed, no longer a
+ghost, or over this judge's `combat_exp` ceiling) are legitimate
+permanent aborts and were deliberately preserved as such, matching the
+precedent already set by `fy330`'s own combat_exp-gated instance. Two
+sibling files in the same directory were checked and confirmed NOT
+instances of this bug despite superficially similar shapes:
+`panguan2.lpc`'s `death_stage()` is a one-shot trespasser check (attacks
+a living player who wandered too deep into the underworld) with no
+multi-stage rescheduling — quietly doing nothing if the visitor already
+left is correct behavior, not a stuck state; `greengirl.lpc`'s
+`next_stage()` similarly no-ops via an `environment(me) ==
+environment()` check with nothing left to lose if the target moved on.
+**Don't blindly pattern-match every `if (!present(...)) return;` in a
+death/NPC file as this bug class — confirm the function is actually a
+multi-stage chain whose LATER stages depend on this one firing, not a
+one-shot check that's supposed to silently no-op on absence.** Fixed by
+splitting `!ob` (permanent) from `!present(ob)` (5-second retry) while
+keeping the ghost/combat_exp check as a permanent abort after the
+retry-guard. Verified via two full death cycles (one pre-fix showing
+only the room-arrival message, one post-fix via an undisturbed
+wait-then-reconnect) that the fix lands the character at one of the two
+randomized `revive_loc` destinations.
+
 ### 7.69 The driver's own auto-included global header is missing a macro that a live daemon requires — while a near-identical, unused duplicate elsewhere in the tree still has it
 
 Found on `bmxkx2001`'s §10.7 deep functional test: `inherit/misc/
