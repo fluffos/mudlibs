@@ -742,3 +742,102 @@ be reused).
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 GPLv2 的 BIG5 生活模拟游戏，血统完全独立（RWlib v1.0.1，一个带有约 70 个预加载系统精灵的大型内核式 mudlib 代码库，和本项目其它武侠类档案完全无关）。之前被分类为 'noboot'：2026-07-23 的一次复核发现 system/kernel/simul_efun/ansi.lpc 的 ANSI 颜色处理直接从这个启动关键的 simul_efun 档案本身呼叫了 pcre_replace_callback()/pcre_replace()/pcre_match_all()，而当时的 WASM 构建版本根本没有带 pcre 包（fluffos 自己的 docs/build-wasm.md 里有记载）——fluffos_boot() 直接失败报"No program in object '/system/kernel/simul_efun'!"，没有产生任何会话记录，是真正的驱动能力缺口，不是 mudlib 本身的 bug。本次会话针对当前的 WASM 驱动构建版本重新测试，确认 docs/build-wasm.md 现在记载已经加入了 PCRE 支持（"the pcre package is on, so its tests run for real"）——这份档案现在完全干净地启动，不需要任何代码改动。已通过一次完整连续的会话确认：干净启动全部约 70 个预加载系统（少数几个纯粹依赖 socket 的精灵——dict_d、ftp_d、http_client_d、im_d、realnews_d、smtp_d、socket_d、socket_ob、translate_d、whois_d——编译不过被跳过，和本项目其它地方一贯容忍的情况一样，都不阻断启动）；能到达 GB/BIG5 字符集提示和英文 ID 提示；一次完整的全新玩家注册（id→名字→密码+确认→电子邮件→性别）从头到尾完成，进入起始房间（巫師神殿），带有新手提示信息；既有的管理员账号（fluffos，是更早一次 WASM 适配过程中播种进 system/kernel/data/secure.o 的 wizards 映射的）通过本地回环触发的巫师登录自动重定向登录（在再次被提示时重新输入一次 ID，然后输入管理员密码），进入仅限巫师的起始房间（巫師大廳），系统横幅'由<Admin/...>連線進入'确认了管理员阶层；两条流程的 quit 都干净（'你離開遊戲了'）。这份档案更早一次 WASM 适配过程（本地回环放行门槛、节流豁免、播种进 secure.o 的管理员账号）保持不变、依然有效——本轮不需要任何进一步的代码改动，纯粹是因为上游驱动的能力缺口已经补上，属于状态修正。
+
+## 深度功能测试（第二轮，2026-08-03）
+
+此前的验证只做到"注册+look+score+quit"的浅层冒烟测试（见上一节），
+从未真正走进这份档案自己独特的经营/生活模拟系统。本轮找到并修复了
+一个会让**每一个新角色永远无法真正喝水**的真实 bug，并借助浏览器环
+境（Playwright 驱动的真实 Chromium）确认了这份代码库若干与本项目其
+它武侠类档案完全不同的独特设计。
+
+### 发现并修复的 bug：`stat/water/*` 和 `stat/drink/*` 键名不一致
+
+`system/daemons/char_d.lpc` 的 `create_char()`/`create_npc()`（新角
+色/NPC 建立时唯一执行一次的初始化函式）把饮水状态写在
+`stat/water/max`/`stat/water/cur` 键下；`system/daemons/
+birthday_d.lpc` 的生日奖励逻辑也用同一个"water"键给饮水上限加成
+（`addn("stat/water/max", random(6) + 15, user)`）。但真正被整个游戏
+读写这项状态的唯一实现——`std/inherit/feature/living/
+_attribution_liv.lpc` 的 `query_drink_max()`/`query_drink_cur()`/
+`cost_drink()`/`add_drink()`——从头到尾用的都是"drink"这个键
+（`stat/drink/max`/`stat/drink/cur`），而且这套函式正是 `cmds/std/
+ppl/score.lpc`（score 面板显示）、`cmds/std/npc/drink.lpc`（真正的
+`drink` 指令）、以及玩家/NPC 两份 `_heart_beat_*.lpc`（心跳一点点消
+耗饮水）唯一调用的接口。也就是说 `char_d.lpc`/`birthday_d.lpc` 写的
+`stat/water/*` 是一处完全没有任何代码读取的死键，而真正被读取的
+`stat/drink/max` 从未被初始化过，映射查找会得到默认值 0——每一个新
+角色的"飲水"上限永远卡在 0，`add_drink()` 里
+`query_drink_cur() + i > query_drink_max()` 对任何正数 `i` 都恒成
+立，导致 `drink` 指令**永远不可能成功**，生日奖励给饮水上限加成的
+逻辑也永远是在给一个没人读取的死键加数字。用真实浏览器实测复现：一
+个全新角色的 `score` 面板显示"飲水 0 / 0"，`drink` 指令因为上限为 0
+根本没有意义。
+
+已把 `char_d.lpc`（`create_char()`/`create_npc()` 两处）和
+`birthday_d.lpc`（生日加成那一行）里的 `stat/water/*` 全部改成
+`stat/drink/*`，和 `_attribution_liv.lpc`/`score.lpc`/`drink.lpc`/
+心跳档案已经在用的真实键名保持一致。修复前后各创建一个全新角色对照
+验证：修复前 `score` 显示"飲水 0 / 0"；修复后（`drinktest`/喝水測
+試）显示"飲水 0 / 100"，和食物的"0 / 100"完全对称，符合
+`char_d.lpc` 本来的设计意图。这份档案既有的存档角色（比如
+`ceshiliu`）不会被这次修复自动补正，因为 `create_char()` 只在建立
+新角色的那一刻执行一次——这是预期行为，不是本次修复范围内需要处理
+的问题（矫正既有存档数据是内容/设计决策，不属于 AGENTS.md §10.7 界
+定的编程 bug 修复范围）。
+
+### 已确认属于设计、不是 bug 的观察
+
+- **分批式预加载 + 主动断线重连**：`system/daemons/system_d.lpc` 的
+  `distributed_preload()` 会把约 70 个系统精灵的载入拆成多个
+  `call_out`，期间任何连线上来的用户都会看到一段完整的载入动画；载
+  入全部完成后，`system_d.lpc` 会对所有等待中的连线明确发送"啟動完
+  畢，重新連線中..."，然后主动 `destruct()` 掉这个连线对象，要求客
+  户端重新连线——这是刻意的架构选择（避开在分批载入期间维护一个半初
+  始化的连线状态），不是崩溃。`scripts/wasm_client.js` 自己的文档注
+  释里早就记载了这个模式（"a distributed/staggered preload that
+  finishes AFTER the connection object already exists"），本次实测
+  确认这份档案正是那个模式的实例——WASM 环境下这整个动画耗时明显比
+  原生驱动长得多（WASM 下等了 90 秒仍未播完，原生驱动下同样的动画
+  在十几秒内就能播完），这是 WASM 模拟层的固有开销，不是这份档案的
+  bug；生产网站的播放页面（`index.html`）目前对这种"载入完成后断
+  线"没有自动重连处理，只会在 Logs/终端显示"*** disconnected ***"，
+  真实访客需要手动点击"+"或重新整理页面——这是站点层面的可用性观
+  察，超出本轮"单一 mudlib 深度测试"的范围，留给后续网站体验改进
+  一并处理，本轮不做改动。
+- **每日新角色注册上限**：`system/daemons/ppl_login_d.lpc` 对同一
+  IP 每天限制建立 5 个新角色（`newchar[ip]`，纯内存映射，驱动重启
+  即重置，不持久化），本轮测试期间反复注册触发过这个上限——是正常
+  的防滥用设计，不是 bug。
+- **socket 依赖精灵按预期跳过**：`dict_d`/`ftp_d`/`html_d`/
+  `http_client_d`/`im_d`/`translate_d`/`whois_d` 等纯粹依赖 socket
+  的精灵在 WASM 下逐一"Failed"，和上一节已经记载的一致，均不阻断
+  启动或后续注册/游玩流程。
+
+### 完整验证：从注册到城市地图
+
+用全新账号在原生驱动上完整走通：GB/BIG5 编码选择 → `new` → 英文 id
+→ 中文名字 → 密码 + 确认 → 电子邮件（留空跳过）→ 性别 → 巫師神殿
+（新角色共享的出生点，一段石造神殿的场景描写）→ `score` 显示完整
+五维属性面板（力量/体格/智商/敏捷/魅力，均为 10）→ `command player`
+列出完整指令表（`build`/`buildbridge`/`buildterrain`、`buy`/`sell`、
+`grow`、`land`/`occupy`、`estate`、`enterprise`、`labor`、`tax`/
+`levy`、`quest` 等，印证 README 里"生活模拟/城市经营"的定位不是空
+话）→ `mayor` 查看城市列表（目前只有一座"廢棄都市"<Fallencity1>）→
+`gocity Fallencity1` 进入该城市地图，触发一套即时渲染的 ANSI 小地
+图系统——玩家坐标、地形类型（荒地）、实时时钟、天气、方向罗盘全部
+动态显示，是这批档案里见过最精致的自定义终端 UI 之一，和 CITY_D 模
+块启动时报告的 1163KB 体积相称。`occupy`/`buy`/`estate` 均正确提示
+"必须先加入城市才能拥有房地产"或要求具体参数，`grow` 正确提示"这块
+土地不是你的"，`quest` 正确提示"尚未完成任何任务"——经济系统的各条
+入口在未入籍状态下全部有意义、无崩溃地拒绝，符合"尚未入籍任何城市
+者"这条既有说明。`quit` 干净退出，附带一段郑愁予《赋别》的诗句作为
+告别语，"你離開遊戲了。"
+
+### 未覆盖范围（诚实说明）
+
+预算集中在饮水 bug 排查和核心注册/城市/经济入口的验证，没有走到：
+真正入籍某个城市、`build`/`grow` 完整产出一轮农作物或建筑、
+`enterprise`（企业系统）从零创建一家公司、以及 `fight` 战斗系统
+（这份档案的战斗看起来是次要机制，不是核心玩法）。这些留给下一轮，
+目前的验证边界如上所述。
