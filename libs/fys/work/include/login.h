@@ -11,7 +11,14 @@
 
 #define START_ROOM 			"/d/zhongzhou/yinghao"
 #define DEATH_ROOM			"/d/death/gate"
-#define REVIVE_ROOM			"/d/yangzhou/temple"
+// AGENTS.md §7.75: the original target "/d/yangzhou/temple" no longer
+// exists -- it only survives under the abandoned, unreferenced backup
+// copy of this zone at /d/yz_bak/yangzhou/temple.lpc. The live zone's
+// renamed successor is "大名寺" (damingshi.lpc); confirmed live that
+// every resurrection previously failed with "*call_other() couldn't
+// find object '/d/yangzhou/temple'" and left the ghost stuck at the
+// death gate forever.
+#define REVIVE_ROOM			"/d/yangzhou/damingshi"
 
 // This is how much users can 'enter' the mud actually. Maintained
 // by LOGIN_D. The max number of connections can be built between

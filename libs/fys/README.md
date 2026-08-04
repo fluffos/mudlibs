@@ -12,6 +12,9 @@
   有"台湾"（`d/taiwan/`）场景。
 - 登入后有真实的 30 秒退出冷却（提示"档案正在存取中，三十秒后方能
   下线!"），是这批档案里为数不多明确写在游戏设计里的反刷退机制。
+- "扬州"（`d/yangzhou/`）分区旁边留着一个完全没被引用的旧版备份目
+  录 `d/yz_bak/yangzhou/`，两者部分房间内容相同但路径/文件名不
+  同，是当年重新整理分区时留下的历史痕迹（见下方 bug 修复说明）。
 
 ## 注册流程
 
@@ -30,6 +33,34 @@
   假设，导致包括标准测试名字在内的所有真实中文名字都被拒绝——已改
   为匹配错误提示文字本身声明的字符数界限（2-6）和逐字符判断
   （AGENTS.md §8.1）。
+
+## 深度功能测试新发现的 bug（§10.7，2026-08-04）
+
+- **§7.34 printf 调试泄漏**：`adm/daemons/logind.lpc` 的
+  `get_name()` 里有一行遗留的 `printf("%O\n", ob);`，已删除。
+- **§7.68 复活软锁死（第 13 例）**：`d/death/npc/{wgargoyle,
+  bgargoyle}.lpc`（鬼门关的白无常/黑无常）已按标准修法拆分
+  `!ob`/`!present(ob)` 两种情况。
+- **全新发现：`REVIVE_ROOM` 宏指向不存在的文件，导致复活流程走完
+  后玩家永久卡死**（比 §7.68 更严重——即使全程不打断也一样卡
+  死）：`include/login.h` 的 `REVIVE_ROOM` 指向
+  `/d/yangzhou/temple`，这个文件早已不存在，只残留在一个完全没被
+  引用的旧版备份目录 `d/yz_bak/yangzhou/` 里。现场复现确认
+  `boot.log`（不是 `debug.log`）记录了
+  `*call_other() couldn't find object '/d/yangzhou/temple'`，白无
+  常的对话和 `reincarnate()` 都能正常完成，但最后一步移动角色失
+  败，永久卡在鬼门关。凭 `d/yz_bak/yangzhou/daxiongbaodian.lpc` ↔
+  现役 `d/yangzhou/damingshi1.lpc`（同为"大雄宝殿"）这组内容相同、
+  路径不同的房间对照，确认现役区语义上对应的"寺庙"房间是
+  `d/yangzhou/damingshi.lpc`（"大名寺"）——已把 `REVIVE_ROOM` 改指
+  向这里，现场复现验证角色能成功落地。
+- 顺手修复一处确认为原始压缩包本身损坏的乱码字（白无常/黑无常对
+  话"□上册子"→"合上册子"，凭本项目另外 10+ 个不同血统档案的同款
+  对话逐字印证）。
+- 留意但未修复：巫师自建赌场 `u/lxh/dufang.lpc` 的 `east` 出口同
+  样指向一个不存在的文件（`chunxilu3`），项目里确实有同名文件
+  `d/chengdu/chunxilu3.lpc`，但缺乏像 `REVIVE_ROOM` 那样的结构性
+  证据能确认这就是原意，按不确信不瞎猜的原则先如实记录、未改动。
 
 ## 管理员账号 / Admin account
 

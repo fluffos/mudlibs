@@ -3832,6 +3832,71 @@ only the room-arrival message, one post-fix via an undisturbed
 wait-then-reconnect) that the fix lands the character at one of the two
 randomized `revive_loc` destinations.
 
+**Thirteenth confirmed instance: `fys`** (风云三 archive name, 铁血江湖
+in-game banner — ES2-lineage, unrelated to the `fysjmb`/`fy330` sub-
+family above despite the similar `fy`-prefixed slug) — `d/death/npc/
+{wgargoyle,bgargoyle}.lpc` (白无常/黑无常; `DEATH_ROOM` macro places
+`wgargoyle` directly, its own `north` exit reaches `bgargoyle` — both
+confirmed reachable). Fixed with the standard split-guard pattern. This
+lib ALSO had a second, more severe bug in the same death sequence — see
+§7.76 — where `REVIVE_ROOM` itself pointed at a nonexistent file, so
+even a perfectly undisturbed death cycle (this §7.68 fix alone would
+not have been enough) landed the ghost permanently stuck. Both fixes
+were required together and verified together via a full undisturbed
+death→resurrection cycle post-fix.
+
+### 7.76 A revive/recall macro points at a file that was renamed or reorganized out of existence, so a normally-completing resurrection sequence's FINAL step (not the multi-stage present() chain covered by §7.68) fails and strands the ghost forever, even with zero interruption
+
+Found on `fys`'s §10.7 deep functional test, immediately downstream of
+that lib's own §7.68 fix (13th instance). With the `present(ob)` guard
+correctly split, `d/death/npc/wgargoyle.lpc`'s `death_stage()` reliably
+plays all five `death_msg` stages and calls `ob->reincarnate()` — but
+the very next line, `ob->move(REVIVE_ROOM)`, silently failed on EVERY
+run, including ones with zero disconnects or interruptions of any kind.
+`REVIVE_ROOM` (`include/login.h`) was `#define`d as `"/d/yangzhou/
+temple"`, a path with no corresponding file anywhere in the live,
+reachable part of the mudlib. `debug.log` showed nothing; the failure
+only surfaced in the driver's own captured stdout (`boot.log`, per
+§10.8's established precedent for catching what `debug.log` misses):
+`执行时段错误：*call_other() couldn't find object '/d/yangzhou/
+temple'.` The dead giveaway this was a stale-path problem, not a
+missing-content problem: a file named `temple.lpc` DOES still exist in
+this archive, but only inside a completely unreferenced backup copy of
+the same zone, `d/yz_bak/yangzhou/` (confirmed via a repo-wide grep
+that nothing outside that directory ever references `yz_bak`). That
+backup's `temple.lpc` no longer even matches its own filename
+semantically (its `long` describes "隋炀帝陵", a tomb, not a temple) —
+strong evidence the zone was reorganized/renamed at some point and the
+`REVIVE_ROOM` macro was simply never updated to track the move. Root-
+caused the correct live-zone target by finding a second file that
+exists on BOTH sides with matching content: `d/yz_bak/yangzhou/
+daxiongbaodian.lpc` ("大雄宝殿") pairs with the live `d/yangzhou/
+damingshi1.lpc` (same "大雄宝殿" content) — this pairing, plus the live
+zone's OWN `damingshi.lpc` ("大名寺", a temple room immediately adjacent
+to `damingshi1.lpc`, complete with a resident 知客僧 monk NPC), gave
+enough confidence to redirect `REVIVE_ROOM` to `/d/yangzhou/damingshi`
+rather than leaving the finding undocumented-and-unfixed the way
+`wmkj`'s genuinely-unresolved §7.74 was. Verified live: killed a fresh
+test character, waited fully undisturbed past the entire dialogue
+sequence, reconnected, and confirmed the character had landed at "大名
+寺" instead of being stuck at the death gate. **Distinguish this from
+§7.68**: §7.68 is about a multi-stage `call_out` chain abandoning its
+subject on TRANSIENT absence mid-sequence (recoverable by retrying);
+this bug fires even on a flawless, completely uninterrupted death cycle
+— the sequence completes in full, and only the FINAL, one-shot `move()`
+call fails because its destination doesn't exist. Fixing §7.68 alone on
+a lib with this bug would NOT be sufficient — always verify a full
+undisturbed death cycle lands the character somewhere real, not just
+that the dialogue plays to completion. A second, structurally identical
+dangling exit was found in the same archive (`u/lxh/dufang.lpc`'s
+`east` exit, `__DIR__ "chunxilu3"`, pointing at a nonexistent file in a
+wizard's personal directory) but was deliberately left unfixed and
+just documented: unlike `REVIVE_ROOM`, there was no comparably strong
+structural evidence (no paired same-content file under both an old and
+new name) for what the "correct" target should be — a same-named file
+does exist elsewhere (`d/chengdu/chunxilu3.lpc`), but a shared filename
+alone is too weak a signal to act on; document, don't guess.
+
 ### 7.69 The driver's own auto-included global header is missing a macro that a live daemon requires — while a near-identical, unused duplicate elsewhere in the tree still has it
 
 Found on `bmxkx2001`'s §10.7 deep functional test: `inherit/misc/
