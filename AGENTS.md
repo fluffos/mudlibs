@@ -2450,7 +2450,7 @@ Found repeatedly across this round's deep functional tests: `esI` (five
 e.g. `/obj/login#2`/`/clone/user/login#1`, between the name and
 password prompts — `cctx`'s instance found via §10.7 deep functional
 test, not just code review), `hc`, `yxjh`, `xkyx3b`, `mnhf`,
-`bixiecanyang`, `fy330`, `fy2mg`, and `wmkj` (each the SAME `printf("%O\n",
+`bixiecanyang`, `fy330`, `fy2mg`, `wmkj`, and `jhfy2` (each the SAME `printf("%O\n",
 ob)` line duplicated across TWO parallel name-entry code paths —
 accept a system-suggested random name vs type your own — both landing
 right before the password prompt, both found and fixed together;
@@ -3934,6 +3934,27 @@ copied across ES2-family forks) and two unrelated stray-backslash
 (`fist_trainer.lpc`, `annihir.lpc`) — see §7.77's sibling finding for
 the food/water bug found on the same lib.
 
+**Fifteenth confirmed instance: `jhfy2`** (江湖风云II 之 辽宁风云再起,
+"tianya"-map-family sibling to `tybxjh`/`xhcii`/`zxty`/`ffxymud` — a
+relationship this lib itself was the SIXTH confirmed member of, per its
+own README, but unrelated to any prior §7.68 instance's lineage).
+`d/death/npc/{wgargoyle,bgargoyle}.lpc` (`DEATH_ROOM` places
+`wgargoyle` directly, its `north` exit reaches `bgargoyle`, both
+confirmed reachable). Fixed with the standard split-guard pattern. Both
+`REVIVE_ROOM` (`/d/city/wumiao`) and `DEATH_ROOM` confirmed to resolve
+to real files (not a §7.76 case), and this lib's copy of the death
+dialogue was NOT corrupted (clean "合上册子" already, unlike the `fys`/
+`njhhdxdes2hx` instances). Notable here: this lib's own prior WASM-pass
+NOTES.md entry explicitly concluded "no mudlib bugs found — clean
+first try" based on a registration-only smoke test (no combat, no
+death) — this §10.7 pass is a reminder that a clean registration flow
+says nothing about what's reachable only through combat/death, and
+"no bugs found" conclusions from registration-only passes should be
+read as scoped, not as a clean bill of health for the whole lib. Two
+OTHER bug classes were also found live on the same pass — see the
+`printf("%O\n", ob)` catalog entry above (§7.34) and the §8.9 catalog
+entry below, both newly confirmed on this lib in the same session.
+
 ### 7.77 A new character's food/water capacity is computed from `query_weight()` before the character owns any equipment, so it's always initialized to zero
 
 Found on `njhhdxdes2hx`'s §10.7 deep functional test: immediately after
@@ -4734,6 +4755,24 @@ an immediate "你饿得直冒金星" starving message) before the fix, and
 both fully filled after — same class of "wrong object read in an
 otherwise-correct multi-object function" as §7.63's missing-guard
 pattern, but on a `query()` rather than a `new()` call.
+
+Ninth confirmed instance on `jhfy2` (江湖风云II 之 辽宁风云再起,
+"tianya"-map family — a ninth unrelated lineage from all priors), the
+bare leaner shape (`ob->query("age") == 14`, no `!user->query("food")`
+guard), found alongside the TWO-parallel-path `printf` variant (§7.34)
+in the same file during the same pass — same recurring pairing noted on
+`syxjl`/`wmkj` above. Notable wrinkle: unlike every prior instance,
+this lib's fresh characters did NOT show empty food/water bars at
+registration (`score` showed both fully filled) — some other default
+elsewhere in this lib's character-creation path evidently already
+covers it, making this instance currently inert/harmless in practice.
+Fixed anyway or `ob->query("age")` → `user->query("age")`, matching
+every prior instance's fix: **a condition being currently masked by an
+unrelated default doesn't make the underlying wrong-object read
+correct** — the gate should still do what its own code clearly intends,
+and a future refactor of that other default would silently reintroduce
+the visible bug with no warning. Don't skip an §8.9 fix just because
+this pass's live test didn't observe starving characters.
 
 ---
 
