@@ -88,6 +88,27 @@ above; logging here rather than auditing all 167 individually.
 
 WASM export / GitHub Pages packaging — deferred to a later batch pass.
 
+## 移植修复（2026-08-03，来自姊妹档案 ldtxii 的深度测试）
+
+`ldtxii` 深度功能测试（§10.7）在其 `logind.lpc` 里发现两个 bug，
+逐行核对后确认 `ldtx` 这份档案在完全相同的行号上有一字不差的同一
+段代码——是共享血统里从未修过的祖传问题，不是 `ldtxii` 自己引入
+的。按 AGENTS.md §2.1 的"跨手足档案移植已验证修复"惯例，直接把两
+个修复移植了过来：
+
+1. `get_name()` 里紧跟在中文名字设定之前的调试残留
+   `printf("%O\n", ob)`（AGENTS.md §7.34）——删除。
+2. 食物/饮水满值初始化误读 `ob->query("age")` 而不是
+   `user->query("age")`（AGENTS.md §8.9）——已改正。
+
+用一个全新角色（`ldtxdive`）验证：注册流程无调试残留输出，
+`score`显示食物/饮水槽创建时即为满值（16/16格），`look`/`score`/
+`quit`均正常。重启后 debug.log 里出现的两条报错都是本档案早就记录
+过的既有内容缺口（`xiaobao.lpc` 引用不存在的 `/u/rhxlwd/cloth.lpc`
+的老问题，以及和 `ldtxii`一样的 `chatroom.lpc`/`/u/mouse/` 缺口），
+不是这次改动引入的新问题。未做完整的第二轮深度功能测试（本次是移
+植已验证的修复，不是从头深挖这个档案）。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 Century/adm-single 家族（shiji/shujian2008/xjcq2000/xkxz2/xiakexing100），游戏内标题为"雄霸天下『西安站』"。WASM 修复：把 adm/daemons/network/dns_master.lpc 的 startup_udp()/send_udp()/send_shutdown() 里那行 socket_close() 掏空（§7.52 socket 精灵掏空）——这个 WASM 构建下 socket_create()/socket_bind() 是未定义的 efun，导致编译失败，进而破坏了每一个中途呼叫进这个档案的 call_other()，包括每次连线在英文名字提示之前就会跑的 encoding_to_mudlist() 步骤。没有中文名字/宏定义/指令表相关的 bug（is_chinese() 本来就是正确的码点判断）。管理员账号"fluffos"/"Mud@2026"其实早在这份档案更早、WASM 之前的一轮里就已经播种进 adm/etc/wizlist 了（这份档案的 README 里已经提到过一个真实上线过的部署）——已验证既有凭据依然能登录并正确显示 (admin)，不需要新账号（一开始误以为这是 §1.5 那种引导 id 冲突的模式，多加了一个多余的并行账号"fladmin"，后来发现这份档案自己既有的 README 早就记录过可用的 fluffos 凭据，已撤销这个多余的添加）。留下一处真实存在、不阻断的内容缺口未修：d/city/npc/xiaobao.lpc 的 create() 引用了一个不存在的 /u/rhxlwd/cloth.lpc（这个巫师目录在整个档案里根本不存在）——对结果为 0 的物件做 call_other() 会抛出"Bad argument 1 to EFUN call_other()"，但被房间自己的 setup()/reset() 包装函式捕获了，从未传到玩家那里；按"不凭空捏造内容"的先例保持原样（和 ffxymud/jhfy2/jhfy3 的 d/city/sj.lpc 是同一类情况）。完整的注册（选 gb 编码→id→确认→中文名字→密码→确认→天赋选'0'→接受'y'→电子邮件→性别）和 look→score→quit 流程在排版格式化前后都验证过；格式化工具没有引入任何损坏（三类盲点检查都干净）。

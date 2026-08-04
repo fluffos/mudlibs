@@ -48,6 +48,14 @@ Mud 列表 → 英文名字（3-8 个小写英文字母）→ 确认建立新角
 和 `ffxymud`/`jhfy2`/`jhfy3` 里 `d/city/sj.lpc` 那种预先存在、不
 补内容的缺字符串是同一类，按项目一贯做法不去凭空补一个档案。
 
+## 移植修复（详见 NOTES.md）
+
+姊妹档案 `ldtxii` 深度测试时在 `logind.lpc` 发现两个 bug，逐行核
+对后确认这份档案在完全相同的行号有一字不差的同一段代码——已移植
+过来：调试残留 `printf("%O\n", ob)`（AGENTS.md §7.34）和食物/饮水
+满值初始化误读 `ob->query("age")`（应为 `user->query("age")`，
+AGENTS.md §8.9）。两处均已修复并用新角色验证。
+
 ## 在线试玩
 
 https://mudlibs.fluffos.info/ludingtianxia/
