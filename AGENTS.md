@@ -2345,8 +2345,9 @@ password prompts — `cctx`'s instance found via §10.7 deep functional
 test, not just code review), `hc` (the SAME `printf("%O\n", ob)` line
 duplicated across TWO parallel name-entry code paths — accept a
 system-suggested random name vs type your own — both landing right
-before the password prompt, both found and fixed together), and
-noted-but-left-alone on `fy2` (a
+before the password prompt, both found and fixed together),
+`sanjieshenhua` (the same bare `printf("%O\n", ob)` between the
+Chinese-name and email prompts), and noted-but-left-alone on `fy2` (a
 similar stray `printf` in `logind.lpc`, existing precedent from `zzfy`
 treats it as harmless). A leftover diagnostic write/printf with no
 explanatory comment, sitting in an otherwise-clean sequence of
@@ -3357,6 +3358,41 @@ resolves to) across all NPC files, then check `find <root> -maxdepth 1
 directory at all — if not, expect this exact failure mode, and triage
 each distinct referenced basename individually (relocated vs. genuinely
 gone) rather than assuming either answer for the whole set.
+
+---
+
+### 7.67 A character-creation menu's displayed label doesn't match what selecting it actually assigns — copy-pasted from a sibling menu that numbers the same slot differently
+
+Found on `sanjieshenhua`'s §10.7 deep functional test: the registration
+flow's role-selection prompt displays `5. 均衡型` ("Balanced"), but
+`get_type()`'s `switch (n) { case 5: ob->set_temp("type", "野蛮人"); ...
+}` actually assigns `"野蛮人"` ("Barbarian") — a completely different,
+unlisted value. Selecting option 5 and immediately being told "您选择
+了野蛮人的角色" (a role you never saw on the menu) is the live symptom.
+Root-caused by checking where the resulting value is actually consumed
+downstream: `enter_world()` calls `user->set("hell_type", ...)` — the
+field name alone gives it away — and `"野蛮人"` turns out to be a real,
+extensively-used class value throughout this lib's separate `daemon/
+hellfire/` combat subsystem (attack-efficiency tables, class-specific
+NPC logic), while `"均衡型"` has zero references anywhere else in the
+codebase. A sibling character-creation script (`d/wiz/init2.lpc`, a
+different/older entry point into the same hellfire system) displays the
+SAME six-slot menu but with slot 5 correctly labeled `野蛮人` — strong
+evidence the main registration prompt's label was copy-drifted to say
+something else (`均衡型`) while the `switch` block underneath, copied
+from (or shared design intent with) the hellfire menu, kept assigning
+the original value. **The display string was the bug, not the
+`switch`** — confirmed by checking which of the two candidate values is
+actually load-bearing elsewhere before "fixing" either one. Fixed by
+changing the menu label to `野蛮人` to match both the `switch` and the
+sibling menu; left the `switch`'s assignment untouched.
+
+General lesson: when a menu's displayed option and its resulting
+assigned value disagree, don't assume the `switch`/dispatch table is
+the stale one just because it's more "code-like" — grep for where the
+resulting value actually gets consumed (a `set()` key name, a lookup
+table, a sibling subsystem) and let that settle which side of the
+mismatch is load-bearing before editing either.
 
 ---
 
