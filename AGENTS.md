@@ -1352,6 +1352,21 @@ After the exclusion, always boot AND connect before considering it done.
   tolerate it" lesson above.
 
   or pass flag 1 where preserving unmentioned globals is the intent.
+- **Second confirmed instance of the `capitalize(query("id"))` crash
+  site, different proximate cause: `njhhdxdes2hx`.** Same shared-code
+  crash (`feature/name.lpc`'s `short()`), same board-triggers-it-on-
+  every-`look` symptom, but this time the save file (`data/board/
+  common_b.o`) is a normal text-format save (not `jyqxc`'s binary
+  `#inh` format) whose message bodies were simply never converted from
+  raw GBK — the invalid byte sequences embedded in the `notes` array's
+  `msg`/`title`/`author` strings appear to break `restore_object()`'s
+  parse partway through, with the same end result: the whole `dbase`
+  mapping — including `id`, set moments earlier in `create()` — ends up
+  wiped. Confirms the general lesson generalizes across DIFFERENT
+  underlying corruption shapes (wrong binary format vs. invalid string
+  encoding), not just the one binary-magic-bytes case — same fix
+  (`stringp()`-guard the shared crash site) applies regardless of why
+  the restore failed.
 
 ### 7.8 Case-sensitive DATA-file paths (Windows-origin)
 
@@ -3896,6 +3911,61 @@ structural evidence (no paired same-content file under both an old and
 new name) for what the "correct" target should be — a same-named file
 does exist elsewhere (`d/chengdu/chunxilu3.lpc`), but a shared filename
 alone is too weak a signal to act on; document, don't guess.
+
+**Fourteenth confirmed instance: `njhhdxdes2hx`** (ES2/侠客行 hybrid,
+南京河海大学 campus build — unrelated lineage to `fys` above despite
+sharing the exact same shared "白无常/黑无常" gargoyle NPC boilerplate
+almost every ES2-family lib in this project carries). `d/death/npc/
+{wgargoyle,bgargoyle}.lpc` (`DEATH_ROOM` places `wgargoyle` directly,
+its `north` exit reaches `bgargoyle`, both confirmed reachable). Fixed
+with the standard split-guard pattern. Here `REVIVE_ROOM`
+(`/d/snow/temple`) and `DEATH_ROOM` both resolve to real, existing
+files — confirmed NOT an instance of §7.76 on top of this one. Found a
+combat_exp-200000 NPC (`d/snow/npc/annihir.lpc`, a money-changer shop
+owner far stronger than anything else in the newbie zone) to guarantee
+a one-hit kill, then verified via a fully undisturbed wait that all
+five `death_msg` stages play and the character lands correctly at "城
+隍庙". Also fixed the same one-word text corruption as the `fys`/
+`kxkj1` instances above ("阁上册子" → "合上册子" — a different
+corrupted character than either prior instance, but the same target
+phrase, further corroborating how widely this exact dialogue line was
+copied across ES2-family forks) and two unrelated stray-backslash
+`Unknown escape sequence` corruptions in two other NPC files
+(`fist_trainer.lpc`, `annihir.lpc`) — see §7.77's sibling finding for
+the food/water bug found on the same lib.
+
+### 7.77 A new character's food/water capacity is computed from `query_weight()` before the character owns any equipment, so it's always initialized to zero
+
+Found on `njhhdxdes2hx`'s §10.7 deep functional test: immediately after
+registration, `score` showed both the food and water bars completely
+empty (0%) for a brand-new character — not gradually draining, starting
+empty. `adm/daemons/logind.lpc`'s `init_new_player()` calls
+`user->set("food", user->max_food_capacity());` (and the water
+equivalent) while setting up a fresh character's stats — but this
+lib's `feature/damage.lpc` defines `max_food_capacity()` and
+`max_water_capacity()` as `query_weight() / 200`, i.e. proportional to
+how much the character is currently carrying. `init_new_player()` runs
+BEFORE `enter_world()` gives the new character their starting clothes
+(`cloth->wear()`), so at the moment food/water capacity is computed,
+`query_weight()` is genuinely 0 — every single new character's food and
+water are set to `0 / 200 = 0`, silently, with no error of any kind.
+**Distinguish this from §8.9**: §8.9 is about checking the WRONG
+OBJECT's `age`, making an existing gate permanently false; this bug has
+no such gate at all — the assignment runs unconditionally and
+successfully, it just computes a always-zero value because of
+initialization ORDER, not because of a wrong-object reference. Detection:
+if a freshly-registered character's `score` shows an empty (not just
+low) food/water bar, check whether the capacity formula depends on
+`query_weight()` (or any other piece of character state) and whether
+that dependency is actually populated yet at the point the initial value
+is computed — grep for where clothes/starting equipment get assigned
+relative to where food/water get set. Fix: move the food/water
+assignment from `init_new_player()` to `enter_world()`, placed AFTER
+the starting clothes are equipped (guarded with `if
+(!user->query("food"))` so it doesn't clobber an already-fed returning
+player whose `enter_world()` call is shared between new-character and
+restore-login paths). Verified live: a fresh character's `score` showed
+full food/water bars immediately after registration, post-fix.
 
 ### 7.69 The driver's own auto-included global header is missing a macro that a live daemon requires — while a near-identical, unused duplicate elsewhere in the tree still has it
 
