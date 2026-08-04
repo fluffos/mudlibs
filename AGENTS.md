@@ -776,6 +776,19 @@ if `raw/` ends up empty. Known traps:
   check the raw archive for a same-path file before assuming it's
   inconsequential runtime state** — it may be a silently-reconstructed
   weaker stand-in for content the conversion pass dropped.
+  **A fourth confirmed instance on `kxkj1`** (independent ES2-family
+  branch, unrelated to the `yh2003`/`syxjl` cases above) — five files
+  across the tree: `doc/help/main_map2`, `doc/help/quest`,
+  `doc/skill/taoist.chun`, `open/island/room/board`, and
+  `open/main/README`, found via a whole-tree Python UTF-8-decode scan
+  during a §10.7 pass. Notable here: `file(1)` actively misdirected
+  triage on three of the five, reporting "COM executable for DOS" (a
+  false-positive collision between certain GBK double-byte sequences
+  and the DOS-executable magic-byte heuristic) rather than the more
+  common "data"/binary-silent-skip failure mode documented above —
+  worth knowing `file(1)` can misfire in this specific direction too,
+  not just fail open. All five confirmed genuine grammatical Chinese
+  via direct GB18030 decode before converting.
 - **`iconv -c` can eat an adjacent REAL byte** along with an invalid one
   — most damagingly a newline or closing quote, producing "End of file
   in text block" / missing-quote errors at compile time (a heredoc's
@@ -3754,6 +3767,21 @@ this bug class and was not introduced by this fix (confirmed: without
 this fix, the sequence would abort even earlier, at the missing-present
 check, never even reaching the point where the new anomaly occurs).
 
+**Tenth confirmed instance: `kxkj1`** (狂想空间, ES2-family — an
+independent early-台湾 branch, not sharing tooling files with the
+`bixiecanyang`/`wmkj`/`yhyxs` sub-lineages above) — `open/death/npc/
+wgargoyle.lpc` (live, `DEATHROOM` macro's target room places it
+directly) and `open/death/npc/bgargoyle.lpc` (placed one room over, via
+the `DEATHROOM` room's own `north` exit — reachable, though this pass
+didn't separately walk a ghost there to confirm in play; fixed
+identically regardless, since an unreachable-in-practice copy of this
+bug is still worth closing while editing the sibling file). Both fixed
+with the standard split-guard pattern. Unlike `wmkj`'s §7.74 anomaly,
+`kxkj1`'s `ob->move(REVIVEROOM)` completes normally — verified via
+reconnect after an undisturbed death sequence, landing the test
+character at `REVIVEROOM` in normal, playable state. Both files also
+had an unrelated second bug fixed in the same edit — see §7.75.
+
 ### 7.69 The driver's own auto-included global header is missing a macro that a live daemon requires — while a near-identical, unused duplicate elsewhere in the tree still has it
 
 Found on `bmxkx2001`'s §10.7 deep functional test: `inherit/misc/
@@ -4036,6 +4064,45 @@ document honestly rather than patch speculatively. If revisited: instrument
 probes at every branch, particularly around the `equipped`/`unequip()`
 guard, to see whether execution ever actually enters the function body
 at all when called in this specific context.
+
+### 7.75 A "canonical" room macro used as a call target actually points at the WRONG file after a historical split/rename, silently orphaning the real function it was meant to call
+
+Found on `kxkj1`'s §10.7 deep functional test, in the same death/
+resurrection files as the §7.68 fix above. After the fixed-and-verified
+`death_stage()` sequence completes and calls `ob->reincarnate();`, both
+`open/death/npc/wgargoyle.lpc` and `bgargoyle.lpc` immediately call
+`DEATHROOM->end_death(ob);` — `DEATHROOM` is a simple room-path macro,
+resolving to `open/death/gate.lpc` (this exact room; both gargoyles are
+literally standing in or next to it). But `gate.lpc` only
+`inherit ROOM;` — it has no `end_death()` function at all, so this call
+has been a silent no-op (implicit `->` on an object with no matching
+function just fails to do anything, per this driver's semantics —
+distinct from §7.65's "object not resident yet" case, but the same
+class of symptom: a call site that LOOKS like it does something but
+doesn't) since the file was written. The REAL `end_death()` — genuine
+death-penalty logic, deducting `combat_exp` proportional to whichever
+attribute the dying character trained hardest — is defined in
+`open/death/start.lpc`, a completely different file. The giveaway that
+this wasn't just "wrong macro, pick a different existing one" but a
+genuine historical accident: `start.lpc`'s OWN file-header comment
+reads `// Room: /open/death/gate.c` — i.e. `start.lpc` was originally
+meant to BE (or replace) `gate.lpc`, and at some point the codebase
+split/renamed rooms without updating the `DEATHROOM->end_death(ob)`
+call sites to point at wherever the logic actually ended up. Confirmed
+`start.lpc` is not itself dead code — it's still reachable via
+`open/death/bridge1.lpc` — so this isn't a case of "just delete the
+orphaned call," the function is real and was meant to fire. Fix: changed
+both gargoyle files' `DEATHROOM->end_death(ob);` to
+`"/open/death/start"->end_death(ob);`, calling the file that actually
+defines the function. Detection pattern for future libs: when a
+"death penalty" / "quest completion" / similar consequential call site
+uses a macro pointing at a ROOM rather than a daemon, don't assume the
+macro's target file has the function just because the call compiles
+clean (implicit `->` calls to a missing function are NOT compile
+errors) — grep for the function's actual definition and confirm the
+macro's resolved path matches it. A stray `// Room: X` header comment
+on a DIFFERENT file than the one it's found in is a strong signal of
+exactly this kind of drift.
 
 ---
 
