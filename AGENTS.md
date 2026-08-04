@@ -3782,6 +3782,23 @@ reconnect after an undisturbed death sequence, landing the test
 character at `REVIVEROOM` in normal, playable state. Both files also
 had an unrelated second bug fixed in the same edit — see §7.75.
 
+**Eleventh confirmed instance: `zjdyzj`** (终极地狱-指间MUD版, ES2 →
+XKX → "hell"-branch family, sibling to `zjdyaryl` — unrelated to every
+prior instance's lineage) — `d/death/npc/{wgargoyle,bgargoyle}.lpc`
+(白无常/黑无常; `DEATH_ROOM` macro places `wgargoyle` directly, and its
+own `north` exit reaches the room holding `bgargoyle` — both confirmed
+reachable). Both fixed with the standard split-guard pattern. Notable
+here: this lib ships its own non-`mudclient.py`-compatible client
+handshake (a `crypt()`-based version-challenge protocol, see this lib's
+own NOTES.md), so verifying the fix required a purpose-written Python
+client that computes the driver's own DES-crypt challenge response
+before it could even reach a login prompt, let alone drive a full
+death/resurrection cycle. Verified via an undisturbed wait-then-silent-
+reconnect (no commands sent during the `call_out` chain, to avoid
+`present(ob)` ever seeing anything but the ghost's real absence/presence)
+that all five `death_msg` stages complete, `reincarnate()` succeeds, and
+the character lands correctly at `/d/city/guangchang`.
+
 ### 7.69 The driver's own auto-included global header is missing a macro that a live daemon requires — while a near-identical, unused duplicate elsewhere in the tree still has it
 
 Found on `bmxkx2001`'s §10.7 deep functional test: `inherit/misc/
