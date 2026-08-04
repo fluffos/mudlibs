@@ -724,7 +724,27 @@ if `raw/` ends up empty. Known traps:
   Any hit is raw GBK masquerading as source. A full Python
   UTF-8-decode scan across the tree is the stronger check (it caught 15
   files on `mohuanshiji` that both `file` and the extension list missed
-  because their extension was uppercase `.C`).
+  because their extension was uppercase `.C`). **Run the tree-wide scan
+  against the WHOLE `work/` directory, not just `.lpc`/`.h`** — found on
+  `yhyxs`'s §10.7 deep functional test, months after this lib's own
+  original conversion pass and WASM-enablement pass had both already
+  been marked done: `help/rules` (a first-login rules text, triggered
+  automatically or via `help rules`) and `clone/game/{8,21}_hlp` (the
+  拱猪/21点 card-minigame help text) were still raw GB18030 bytes —
+  extensionless filenames, exactly the class the first bullet above
+  warns about, invisible to any `.lpc`/`.h`-scoped sweep and never
+  caught by the original `convert_lib.sh` pass. Symptom in play: a
+  wall of `U+FFFD`-replacement-character mojibake (or, over a raw
+  telnet client instead of this project's UTF-8-decoding
+  `mudclient.py`, literal garbled GBK bytes) exactly where the real
+  text should be — easy to misread as a terminal/rendering quirk
+  rather than a real conversion gap. A plain `python3 -c
+  "open(f,'rb').read().decode('utf-8')"` walk of the entire `work/`
+  tree (skip `raw/`, and expect a few genuine binaries/runtime
+  artifacts to fail too — filter those by content inspection, not by
+  assuming every hit is text) finds these in seconds; fix with the
+  same `iconv -f GB18030 -t UTF-8` as any other straggler, then verify
+  the decoded output reads as grammatical Chinese before installing it.
 - **`iconv -c` can eat an adjacent REAL byte** along with an invalid one
   — most damagingly a newline or closing quote, producing "End of file
   in text block" / missing-quote errors at compile time (a heredoc's
@@ -3600,6 +3620,23 @@ the same split-guard pattern. When scanning a new lib for this bug
 class, grep for the guard SHAPE (`!ob || !present(ob)) return`) across
 the whole tree, not just `d/death/`.
 
+**Sixth confirmed instance: `yhyxs`** (yh2003/炎黄英雄史 lineage, sibling
+of `yanhuangwuhun` — an unrelated top-level lineage from every prior
+instance) — `d/death/npc/{hei,bai}.lpc` (黑无常/白无常), the same
+`if (!ob || !present(ob)) return;` inside a five-stage `death_stage()`
+revival loop. Fixed with the same split-guard pattern. **Verified with
+a second genuine live undisturbed death-and-resurrection repro** (the
+first being `jyqxc`'s): fought and lost to an overwhelming named NPC
+(欧阳克, the same Jin Yong villain encountered independently on
+`jyqxc`'s own street — apparently recurring set-dressing across
+multiple unrelated lineages) — combat damage combined with an active
+winter-weather frostbite effect for a flavorful "被活活冻死了" (froze
+to death) kill message — landed at 鬼门关 with the just-fixed
+`bai.lpc`'s 白无常 present, left the sequence fully undisturbed, and
+confirmed via reconnect the character resurrected correctly at 武庙
+(扬州), alive, mobile, full 精气/气血, 潜能 halved as the expected
+death penalty.
+
 ### 7.69 The driver's own auto-included global header is missing a macro that a live daemon requires — while a near-identical, unused duplicate elsewhere in the tree still has it
 
 Found on `bmxkx2001`'s §10.7 deep functional test: `inherit/misc/
@@ -4532,22 +4569,47 @@ process during ordinary extended play, no mudlib-catchable error, no
 `debug.log` trace). Triggered by the player's own net-dead body, not
 ambient activity.
 
-Five independent occurrences now, across five unrelated libs/lineages,
-different corrupted structures (objects AND a string), different
-immediate trigger paths (ambient NPC wandering, admin reconnect,
-periodic GC sweep, natural idle time, a player's own net-dead body),
-same fatal shape (a driver-internal consistency check aborting the whole
-process). This is corroborating evidence the underlying driver-level
-memory-corruption class is real and not a one-off, but it remains
-genuinely low-reproducibility and root-caused to the driver level (not
-mudlib-fixable), not any specific mudlib source pattern — no single
-occurrence has yet pinned down a REPRODUCIBLE trigger (one that fires
-reliably on demand, not just "eventually during a long-enough
-session"). Given the occurrence count, this is worth flagging to the
-human maintainer for a possible dedicated driver-level investigation
-(ASan/valgrind against a long-sit soak) in the `~/src/fluffos` checkout
-itself, rather than continuing to treat each new occurrence as a
-per-lib mudlib finding.
+**Sixth independent occurrence**: `yhyxs`'s deep functional test — a
+genuine outright `Segmentation fault` this time (not a caught
+`FATAL ERROR`/`abort()`), roughly 16 minutes into an ordinary session,
+between two otherwise-unremarkable client reconnects (the previous
+command was a plain `hp`; the next connection attempt got
+`CONNECT_FAILED: Connection refused`). `debug.log` again showed
+nothing — its last lines were ordinary `Unknown #pragma` compile
+warnings. The driver's own captured stdout (`boot.log`) had the full
+C++ crash backtrace: the fault was inside the driver's OWN periodic
+game-tick reset sweep (`backend_run_one_gametick` →
+`look_for_objects_to_swap` → `reset_object` → `object_visible`,
+crashing on the write to `ob->next_reset`), not inside any callable
+LPC function or player command at all — the closest thing to a
+"trigger" in the log is a long run of lazy first-time compiles of
+zones the test character never visited (青城/洛阳/泉州/开封 and others),
+matching `xjcq2000`'s original "ambient world simulation forces mass
+lazy compilation, eventually corrupts something" mechanism almost
+exactly, just caught one step further downstream (a bad object
+pointer during reset, rather than a bad refcount during
+`free_svalue`). No LPC-level fix applied or attempted — this is
+driver-internal memory corruption, not a mudlib bug, consistent with
+every prior occurrence.
+
+Six independent occurrences now, across six unrelated libs/lineages,
+different corrupted structures (objects, a string, and now a
+segfault with no caught error at all), different immediate trigger
+paths (ambient NPC wandering, admin reconnect, periodic GC sweep,
+natural idle time, a player's own net-dead body, the driver's own
+periodic reset sweep), same underlying shape (silent memory
+corruption during ordinary extended play that eventually kills the
+whole process, invisible to `debug.log`). This is corroborating
+evidence the underlying driver-level memory-corruption class is real
+and not a one-off, but it remains genuinely low-reproducibility and
+root-caused to the driver level (not mudlib-fixable), not any
+specific mudlib source pattern — no single occurrence has yet pinned
+down a REPRODUCIBLE trigger (one that fires reliably on demand, not
+just "eventually during a long-enough session"). Given the occurrence
+count, this is worth flagging to the human maintainer for a possible
+dedicated driver-level investigation (ASan/valgrind against a
+long-sit soak) in the `~/src/fluffos` checkout itself, rather than
+continuing to treat each new occurrence as a per-lib mudlib finding.
 
 ---
 
