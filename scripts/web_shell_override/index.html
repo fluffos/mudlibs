@@ -130,6 +130,52 @@
   #logs .log-line { white-space: pre-wrap; word-break: break-word; }
   #logs .log-line.err { color: #f7768e; }
   #logs .log-ts { color: var(--dim); margin-right: 8px; user-select: none; }
+  /* Info pane: the lib's own README.md + NOTES.md, fetched and rendered
+     (minimal markdown -- see renderMarkdown() below) on first open. Same
+     flex/overflow shape as #logs so it slots into the same #term-sized
+     area; its own typographic rules are separate since this is prose,
+     not a monospace transcript. */
+  #info {
+    flex: 1; min-height: 0; overflow-y: auto; display: none;
+    padding: 8px 20px 24px; font-size: 13px; line-height: 1.6;
+    overscroll-behavior: contain; max-width: 760px;
+  }
+  #info.active { display: block; }
+  #info h1, #info h2, #info h3 {
+    color: var(--accent); line-height: 1.35; margin: 1.2em 0 0.5em;
+  }
+  #info h1 { font-size: 17px; margin-top: 0; }
+  #info h2 { font-size: 15px; }
+  #info h3 { font-size: 13.5px; }
+  #info p, #info ul, #info ol { margin: 0.6em 0; }
+  #info ul, #info ol { padding-left: 1.4em; }
+  #info li { margin: 0.25em 0; }
+  #info li::marker { color: var(--dim); }
+  #info code {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 3px; padding: 0.05em 0.35em; font-size: 0.92em;
+  }
+  #info pre {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px 10px; overflow-x: auto;
+  }
+  #info pre code { background: none; border: none; padding: 0; }
+  #info strong { color: var(--fg); }
+  #info hr { border: none; border-top: 1px solid var(--border); margin: 1.4em 0; }
+  #info blockquote {
+    margin: 0.6em 0; padding: 2px 12px; border-left: 3px solid var(--border);
+    color: var(--dim);
+  }
+  #info a { color: var(--accent); }
+  #info .info-section {
+    margin-bottom: 1.6em; padding-bottom: 1.2em; border-bottom: 1px solid var(--border);
+  }
+  #info .info-section:last-child { border-bottom: none; }
+  #info .info-heading {
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--dim); margin: 0 0 0.8em;
+  }
+  #info .info-empty { color: var(--dim); font-size: 13px; }
   /* Boot progress overlay: covers the (blank) terminal area while the wasm
      driver + packed mudlib download, unpack and boot.  Driven by the
      BootProgress script below; removed once the first session connects. */
@@ -179,7 +225,7 @@
   #inputbar {
     display: flex; border-top: 1px solid var(--border); background: var(--panel);
   }
-  #inputbar.hidden, #inputbar.logs-active { display: none; }
+  #inputbar.hidden, #inputbar.logs-active, #inputbar.info-active { display: none; }
   #inputbar .prompt { padding: 10px 0 10px 16px; color: var(--accent); }
   /* Custom command input: NOT a real <input>/<textarea> -- #cmd is a plain
      div that renders text/caret/placeholder itself, overlaying an
@@ -311,8 +357,9 @@
     }
     #tabs { padding: 0 6px; }
     #tabs .tab { padding: 10px 10px 8px; font-size: 12.5px; }
-    #term, #logs { padding: 5px 6px; }
+    #term, #logs, #info { padding: 5px 6px; }
     #logs { font-size: 13px; }
+    #info { font-size: 13px; padding: 5px 10px 20px; }
     /* font-size matches #cmd below -- .prompt and the input text share a
        baseline, so a size mismatch here reads as the two being on
        different lines even though they're the same flex row. */
@@ -375,7 +422,7 @@
   body.compact #tabs { grid-area: 1 / 2; }
   body.compact #tabs .tab { padding: 5px 10px 4px; min-height: 36px; }
   body.compact #tabAdd { min-width: 36px; }
-  body.compact #term, body.compact #logs { grid-area: 2 / 1 / 3 / 3; }
+  body.compact #term, body.compact #logs, body.compact #info { grid-area: 2 / 1 / 3 / 3; }
   body.compact #term { padding: 3px 6px; }
   body.compact #inputbar { grid-area: 3 / 1 / 4 / 3; }
   /* keep the row tappable but tight: 16px text + 2*7px = ~37px */
@@ -417,6 +464,7 @@
           title="Open another connection to this mud">+</button>
   <button id="tabLogs" class="tab" type="button">Logs
     <span id="logsBadge" class="badge" hidden>0</span></button>
+  <button id="tabInfo" class="tab" type="button">Info</button>
 </nav>
 <div id="term">
   <div id="boot">
@@ -425,6 +473,7 @@
   </div>
 </div>
 <div id="logs" aria-label="Driver logs" aria-live="off"></div>
+<div id="info" aria-label="About this mudlib"></div>
 <canvas id="jscanvas" width="300" height="130"></canvas>
 <div id="inputbar">
   <span class="prompt">&gt;</span>
@@ -765,9 +814,11 @@ const cmdPlaceholder = document.getElementById('cmdPlaceholder');
 const inputBar = document.getElementById('inputbar');
 const termEl = document.getElementById('term');
 const logsEl = document.getElementById('logs');
+const infoEl = document.getElementById('info');
 const gameTabsEl = document.getElementById('gameTabs');
 const tabAdd = document.getElementById('tabAdd');
 const tabLogs = document.getElementById('tabLogs');
+const tabInfo = document.getElementById('tabInfo');
 const logsBadge = document.getElementById('logsBadge');
 const utf8enc = new TextEncoder();
 
@@ -1115,7 +1166,7 @@ function applyInputState(s) {
 }
 
 function saveDraft() {
-  if (view && view !== 'logs') view.inputValue = cmdRealValue();
+  if (view && view !== 'logs' && view !== 'info') view.inputValue = cmdRealValue();
 }
 
 function activateSession(s) {
@@ -1128,8 +1179,10 @@ function activateSession(s) {
   s.badge.hidden = true;
   tabLogs.classList.remove('active');
   logsEl.classList.remove('active');
+  tabInfo.classList.remove('active');
+  infoEl.classList.remove('active');
   termEl.classList.remove('hidden');
-  inputBar.classList.remove('logs-active');
+  inputBar.classList.remove('logs-active', 'info-active');
   for (const o of sessions) {
     o.tab.classList.toggle('active', o === s);
     o.pane.classList.toggle('active', o === s);
@@ -1146,15 +1199,156 @@ function showLogs() {
   saveDraft();
   view = 'logs';
   tabLogs.classList.add('active');
+  tabInfo.classList.remove('active');
+  infoEl.classList.remove('active');
   for (const o of sessions) o.tab.classList.remove('active');
   termEl.classList.add('hidden');
   logsEl.classList.add('active');
+  inputBar.classList.remove('info-active');
   inputBar.classList.add('logs-active');
   unreadLogs = 0;
   logsBadge.hidden = true;
   if (logsAtBottom) logsEl.scrollTop = logsEl.scrollHeight;
 }
 tabLogs.addEventListener('click', showLogs);
+
+// --- Info pane -------------------------------------------------------------
+// The lib's own README.md + NOTES.md (see AGENTS.md's meta.json-vs-NOTES.md
+// convention: README is the reader-facing pitch, NOTES.md is the working
+// log of what was found/fixed/played-through) -- fetched once, lazily, on
+// first open of the tab and cached as rendered HTML in infoLoaded.
+let infoLoaded = false;
+
+// Minimal, deliberately non-exhaustive markdown -> HTML renderer: this
+// project's READMEs/NOTES.md only ever use headings, paragraphs, bullet
+// lists, bold, inline code, fenced code blocks, blockquotes and hr -- no
+// tables, no nested lists, no images. Escaping happens once up front on
+// the whole raw string, then inline patterns are applied on top of the
+// escaped text (safe: none of the inline patterns can introduce raw '<').
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function renderInline(s) {
+  return s
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+function renderMarkdown(md) {
+  const lines = escapeHtml(md).split('\n');
+  let html = '';
+  let i = 0;
+  let listOpen = false;
+  const closeList = () => { if (listOpen) { html += '</ul>'; listOpen = false; } };
+  while (i < lines.length) {
+    const line = lines[i];
+    const fence = line.match(/^```/);
+    if (fence) {
+      closeList();
+      const buf = [];
+      i++;
+      while (i < lines.length && !lines[i].match(/^```/)) { buf.push(lines[i]); i++; }
+      html += '<pre><code>' + buf.join('\n') + '</code></pre>';
+      i++;
+      continue;
+    }
+    const heading = line.match(/^(#{1,3})\s+(.*)$/);
+    if (heading) {
+      closeList();
+      const level = heading[1].length;
+      html += `<h${level}>${renderInline(heading[2])}</h${level}>`;
+      i++;
+      continue;
+    }
+    if (line.match(/^---+\s*$/)) {
+      closeList();
+      html += '<hr>';
+      i++;
+      continue;
+    }
+    const quote = line.match(/^&gt;\s?(.*)$/);
+    if (quote) {
+      closeList();
+      html += `<blockquote>${renderInline(quote[1])}</blockquote>`;
+      i++;
+      continue;
+    }
+    const item = line.match(/^[-*]\s+(.*)$/);
+    if (item) {
+      if (!listOpen) { html += '<ul>'; listOpen = true; }
+      const buf = [item[1]];
+      i++;
+      // Absorb wrapped continuation lines (indented, non-blank, not a new
+      // marker) into this same <li> -- this project's READMEs/NOTES.md
+      // routinely wrap a long bullet onto an indented next line rather
+      // than keeping it on one long line.
+      while (i < lines.length && /^\s+\S/.test(lines[i])
+             && !lines[i].match(/^\s*[-*]\s|^\s*(#{1,3})\s|^\s*```|^\s*&gt;\s?|^\s*---+\s*$/)) {
+        buf.push(lines[i].trim());
+        i++;
+      }
+      html += `<li>${renderInline(buf.join(' '))}</li>`;
+      continue;
+    }
+    if (line.trim() === '') {
+      closeList();
+      i++;
+      continue;
+    }
+    // Plain paragraph: absorb consecutive non-blank, non-special lines.
+    closeList();
+    const buf = [line];
+    i++;
+    while (i < lines.length && lines[i].trim() !== ''
+           && !lines[i].match(/^(#{1,3})\s|^```|^[-*]\s|^&gt;\s?|^---+\s*$/)) {
+      buf.push(lines[i]);
+      i++;
+    }
+    html += `<p>${renderInline(buf.join('\n'))}</p>`;
+  }
+  closeList();
+  return html;
+}
+
+async function loadInfoDoc(path, label) {
+  try {
+    const res = await fetch(path, { cache: 'no-store' });
+    if (!res.ok) return '';
+    const text = (await res.text()).trim();
+    if (!text) return '';
+    return `<div class="info-section"><div class="info-heading">${label}</div>${renderMarkdown(text)}</div>`;
+  } catch (e) {
+    return '';
+  }
+}
+
+async function ensureInfoLoaded() {
+  if (infoLoaded) return;
+  infoLoaded = true;   // set eagerly: a failed fetch shouldn't retry every tab click
+  infoEl.innerHTML = '<p class="info-empty">loading…</p>';
+  const [readme, notes] = await Promise.all([
+    loadInfoDoc('README.md', 'README'),
+    loadInfoDoc('NOTES.md', 'NOTES'),
+  ]);
+  const body = readme + notes;
+  infoEl.innerHTML = body || '<p class="info-empty">(no README/NOTES.md shipped for this lib)</p>';
+}
+
+function showInfo() {
+  if (view === 'info') return;
+  saveDraft();
+  view = 'info';
+  tabInfo.classList.add('active');
+  tabLogs.classList.remove('active');
+  logsEl.classList.remove('active');
+  for (const o of sessions) o.tab.classList.remove('active');
+  termEl.classList.add('hidden');
+  infoEl.classList.add('active');
+  inputBar.classList.remove('logs-active');
+  inputBar.classList.add('info-active');
+  ensureInfoLoaded();
+}
+tabInfo.addEventListener('click', showInfo);
 
 function closeSession(s) {
   const i = sessions.indexOf(s);
@@ -1279,7 +1473,7 @@ cmdReal.addEventListener('keydown', (ev) => {
 //      #inputbar naturally lands at the bottom of the visible area.
 let viewportTimer = 0;
 function refitVisible() {
-  if (view === 'logs' || !activeGame) return;
+  if (view === 'logs' || view === 'info' || !activeGame) return;
   // Char mode: always a real fit, never nowrap-pinned -- same reasoning
   // as applyInputState's charMode branch.
   if (activeGame.charMode) activeGame.fit.fit();
@@ -1344,7 +1538,7 @@ wrapToggle.addEventListener('click', () => {
   wrapMode = !wrapMode;
   localStorage.setItem('fluffos-wrap', wrapMode ? 'on' : 'off');
   updateWrapToggle();
-  if (view !== 'logs' && activeGame && !activeGame.charMode) refit(activeGame);
+  if (view !== 'logs' && view !== 'info' && activeGame && !activeGame.charMode) refit(activeGame);
 });
 
 // --- fullscreen toggle ----------------------------------------------------

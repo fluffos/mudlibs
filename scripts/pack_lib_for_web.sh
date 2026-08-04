@@ -205,6 +205,14 @@ window.FLUFFOS_BOOT = {
 };
 EOF
 
+# --- 4b. README.md / NOTES.md, verbatim, for the page's Info tab -------------
+# index.html fetches these two by their plain filename (relative to the lib's
+# own page) and renders them client-side -- see renderMarkdown()/showInfo() in
+# scripts/web_shell_override/index.html. Copy whichever exist; the Info tab
+# degrades to "(no README/NOTES.md shipped for this lib)" if neither does.
+[ -f "$LIB/README.md" ] && cp "$LIB/README.md" "$OUT/README.md"
+[ -f "$LIB/NOTES.md" ] && cp "$LIB/NOTES.md" "$OUT/NOTES.md"
+
 # --- 5. per-lib page: patched copy of the web terminal -----------------------
 # Path patches (MUST all apply -- fail loudly if the upstream page changed):
 #   vendor/, telnet.js, fluffos.js -> ../_driver/...
