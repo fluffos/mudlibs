@@ -321,6 +321,17 @@ recurring shapes DO break login and now get mudlib-side guards on sight:
   lineage idiom) — same fix: `find_object()` guard, absent ⇒ allow.
   (Seen: `zhonghua2`, `zhongjidiyu`, `zjdyzj`,
   `yanhuangwuhun`, `yhyxs`.)
+- **`MESSAGE_D->find_chatter()` called unconditionally from
+  `logind.lpc`'s `check_ok()`** (every successful password check, both
+  new and returning logins) — `MESSAGE_D` is a chat/UDP daemon with raw
+  `socket_create()`/`socket_bind()` in its own `create()`, so it fails to
+  compile under WASM entirely; the unguarded call throws `*No program in
+  object`, which aborts `check_ok()` mid-way and disconnects the user
+  before `make_body()`/`enter_world()` ever run — the connection just
+  silently drops with no further prompt. Fix: `if (find_object(MESSAGE_D))
+  { user = MESSAGE_D->find_chatter(...); ... }`, absent ⇒ skip (no one
+  to kick off a chat session with). (Seen: `yanhuangwuhun`, `yhyxs`,
+  `hell`.)
 - **`resolve()` called in a security daemon's `create()`** before it
   initializes its own state — under WASM the throw aborts `create()`
   mid-way, leaving globals (e.g. `wiz_status`) uninitialized, and the
@@ -3389,17 +3400,32 @@ refuses to call it. Fix: drop `private` (keep `nomask`).
 Affected so far: `xuanjianlu`, `bmxkx2001`, `bxsj`, `bxsj1`,
 `jinyongwenzi`, `xiakexing3`, the `jqxz2008` group,
 `zhongjidiyu` (twice — main hook plus an 18-handler NPC file),
-`zjdyaryl`, `tiexuejianghu`, `xzyx` and
-`shiji` (both found via a deep functional test, §10.7 — reached only
-through an NPC's own `command()` call, not by any player-typed command,
-since ordinary typed commands arrive via `ORIGIN_DRIVER` and bypass the
-privacy check that only bites `ORIGIN_EFUN` calls; every earlier smoke
-test on both libs only ever typed commands directly, so movement's
-auto-look and every sect-join system silently never worked until these
-passes — `shiji` is the SAME underlying game as `xzyx`,
-same bug, same lineage, independently discovered). **Empirical caveat,
-now narrowed**: `private` command_hook does NOT always break
-*player-typed* dispatch on current drivers — `shiji` itself, `tianxia`,
+`zjdyaryl`, `tiexuejianghu`, `xzyx`, `shiji` and
+`hell` (found via §10.7 deep functional test). `hell`'s manifestation was
+the sharpest yet: its ENTIRE character-creation flow (the "投胎" ritual —
+`register <email>` → `decide` → walk to a personality NPC → `wash` for
+talents → `born <place>`) runs through NPC `command("say/tell/nod ...")`
+self-calls in `d/register/npc/shuisheng.lpc`'s `do_register()`/
+`do_decide()`, so this single demotion silently broke registration for
+EVERY brand-new player from the very first step — worse than the
+movement/sect-join cases below, which at least let an already-registered
+character reach the world. Symptom was maximally confusing: the typed
+command (`register foo@bar.com`) was silently accepted (add_action
+matched fine, no "什么？"), but zero reply ever came back from the NPC —
+indistinguishable from a network/timing issue until the driver's own Logs
+output was checked for `apply() with insufficient permission:
+... function: command_hook ... needs: private, has: hidden`, timestamped
+exactly when the command was sent. (`shiji`/`xzyx` both found via a deep
+functional test, §10.7 — reached only through an NPC's own `command()`
+call, not by any player-typed command, since ordinary typed commands
+arrive via `ORIGIN_DRIVER` and bypass the privacy check that only bites
+`ORIGIN_EFUN` calls; every earlier smoke test on both libs only ever
+typed commands directly, so movement's auto-look and every sect-join
+system silently never worked until these passes — `shiji` is the SAME
+underlying game as `xzyx`, same bug, same lineage, independently
+discovered). **Empirical caveat, now narrowed**: `private` command_hook
+does NOT always break *player-typed* dispatch on current drivers —
+`shiji` itself, `tianxia`,
 and `zhonghua2` all confirmed to accept ordinary typed commands despite
 it (exact conditions unestablished; possibly declaration-shape or
 driver-version dependent) — but `shiji`'s own §10.7 pass proves this
