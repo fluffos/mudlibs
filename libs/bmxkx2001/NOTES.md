@@ -189,6 +189,68 @@ malformed or non-string address now falls through to the original gate
 logic (treated as untrusted/remote) instead of being auto-allowed.
 Re-verified fluffos login still works after tightening.
 
+## 深度功能测试（第二轮，2026-08-03）
+
+之前的会话只测到"注册成功、到达沙滩、`look`正确、quit干净"这一步
+——`score`在挂名（岛上登记）之前是刻意被封锁的，所以从未真正验证
+过挂名之后的完整流程。本轮把 README 里提到的"侠客岛迎宾/登记"流程
+完整走了一遍：新角色一入游戏被"赏善使"张三迎接 → `follow zhang
+san` → 到达"侠客岛挂名处" → 向"登记使"木老六用
+`register <email>` 命令登记 → 系统生成一个新的随机密码并要求用新密
+码重新连线 → 重连后正式进入游戏，`score`/`hp`工作正常，食物/饮水/
+气/精/内力槽创建时即为满值（无 §8.9 症状），落脚点是另一处沙滩场
+景（渔夫 NPC 主动给新手提示）。
+
+proactive 检查了 AGENTS.md 已归档的四类常见坏味道，均未命中
+（`§8.9`附近命中的几处`query("age")`用法核对后确认是易筋丸
+药效相关的正常游戏逻辑，不是登录初始化 bug）。
+
+**发现并修复的三个真实 bug（均为战斗/死亡/复活链路里的新类型，已
+分别新增 AGENTS.md §7.68、§7.69）：**
+
+1. **死亡复活序列会被无关的"引路"NPC 打断后永久卡死**——正常打
+   NPC练手时不慎被"华山第十四代弟子 凌逍"（combat_exp 只有120，
+   看似很弱但实战中把满状态的新手角色直接打死）杀死，鬼魂被送到
+   "鬼门关"，白无常按流程读五段台词、约50秒后让鬼魂复活。但鬼魂在
+   复活流程进行中被另一个完全无关的"引路使龙x"系统 NPC（
+   `d/xiakedao/npc/longx.lpc`，负责把偏离固定路线的玩家强行拽回
+   剧情路径，不检查目标是死是活）强行`move()`带走，白无常这边的
+   `death_stage()`发现`!present(ob)`就直接永久放弃、再也不重试
+   ——鬼魂从此卡死，`score`一直显示【鬼魂】、气精槽全空，没有任
+   何报错提示，reconnect 也不会自愈。实测复现：故意送死、被"龙"
+   系NPC拖走、等待远超50秒确认彻底卡死；然后在三份鬼差NPC档案
+   （`wgargoyle.lpc`/`wgargoyle1.lpc`/`bgargoyle.lpc`）里把"永久放
+   弃"改成"暂时不在场就5秒后重试"，重启后正常复活流程依旧完整无
+   误，第二次死亡+被同一系统NPC打断，这次角色最终还是正常复活并
+   能自由行动（鬼魂状态下玩家自身无法移动，能自由行动本身就是已
+   复活的证据）。
+2. **"引路使龙x"自己也有一个空指针解引用**：`greeting()`里
+   `present(query_temp("xkd/guest"), environment(this_object()))`
+   结果没有判空就直接`.query_leader()`，玩家不在场时触发
+   `*Bad argument 1 to EFUN call_other() ... Got: int(0)`。已加
+   `if (!objectp(me)) return;` 防御。
+3. **真正被驱动加载的`include/globals.h`漏了一个宏定义**：
+   `inherit/misc/bboard.lpc`（留言板基类，被城内所有布告板 clone
+   继承）编译时报`Undefined variable 'EDITOR_D'`，进而导致任何布告
+   板 clone 都"No program in object"。查了`config.fluffos`的
+   `global include file`配置，确认驱动实际加载的是`include/
+   globals.h`，而不是树里另一份看起来一样、注释里自称"会被驱动自
+   动包含"的`inherit/misc/globals.h`（这份反而是没被使用的旧副
+   本，且它自己也缺另外几个新宏，不是简单的"更完整版本"）。已在真
+   正生效的`include/globals.h`里补上缺失的一行`#define EDITOR_D
+   "/adm/daemons/editord"`（`/adm/daemons/editord.lpc`确认真实存
+   在，不是内容缺失）。
+
+**完整流程验证**：多次注册全新角色，走完"迎宾→跟随→挂名登记→改
+密码重连→渔夫新手提示"完整链路；在"山路"场景和"黄衣大汉"NPC互动
+（`ask han about 武器`/`ask han about 防具`，一个用问答方式而非
+list/buy 的兵器防具供应NPC）；和"凌逍"打斗致死，完整体验死亡→鬼门
+关→复活的流程；`quit`干净退出。除上述三个已修复的 bug 外，全程
+debug.log 无其它报错。
+
+**未覆盖范围**：离岛（乘船去中原）之后的正式江湖内容、门派拜师、
+留言板具体内容阅读，因时间原因未实测。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 同一套代码库，北美 2001 版构建。

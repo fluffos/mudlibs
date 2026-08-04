@@ -3397,6 +3397,102 @@ mismatch is load-bearing before editing either.
 
 ---
 
+### 7.68 A multi-stage `call_out()` sequence gated on `present(ob)` silently and PERMANENTLY abandons its subject if something else moves it away mid-sequence — no error, no retry, no recovery
+
+Found on `bmxkx2001`'s §10.7 deep functional test, in the death/
+resurrection NPCs (`d/death/npc/{wgargoyle,wgargoyle1,bgargoyle}.lpc`).
+Dying moves the player-ghost to a 鬼门关 (ghost-gate) room and starts a
+~50-second, five-stage flavor-text sequence
+(`call_out("death_stage", 30, ob, 0)`, each stage rescheduling itself
+`call_out("death_stage", 5, ob, stage+1)`) that ends by calling
+`ob->reincarnate()` and moving the now-living player back into the
+world. Every stage opens with `if (!ob || !present(ob)) return;` — a
+reasonable-looking guard against acting on a player who's since logged
+off or wandered away. The bug: this guard doesn't distinguish "gone
+forever" from "not here THIS INSTANT" — a bare `return` with no
+reschedule means ANY single instant of absence during the ~50-second
+window kills the whole sequence permanently. Normally this never
+fires, because a ghost's own movement commands are blocked (`你已经
+精疲力尽，动弹不得` — confirmed live, matches the room's own flavor
+text "一进鬼门关就无法再回阳间了"), so `present(ob)` always holds for
+a player behaving normally. It DOES fire when something else issues a
+forced `ob->move(...)` on the ghost mid-sequence — found live via an
+unrelated scripted tour-guide NPC (`d/xiakedao/npc/longx.lpc`,
+`move_next()`) that can grab ANY tracked player (dead or alive, no
+`is_ghost()`/interactivity check on its side either) and forcibly
+relocate them per its own script. When the two systems collide, the
+death daemon's next `death_stage()` tick finds `!present(ob)`, returns,
+and NEVER reschedules — the player is left stuck as a 【鬼魂】(ghost)
+indefinitely, silently, with no error in `debug.log` and no message
+telling them what happened; only a wizard's manual intervention (or
+this fix) recovers them. Reproduced live: fought and died deliberately,
+got dragged away by the tour-guide NPC before the sequence finished,
+reconnected and waited it out — confirmed permanently stuck (score
+still showed 【鬼魂】/empty 精气 bars with no further progress after
+another full wait). Fix (applied to all three ghost-guard files):
+split the combined guard so only a truly-gone `ob` (`!ob`, i.e. the
+object itself was destructed) aborts for good; a merely-absent-right-now
+`ob` reschedules the same stage 5 seconds later instead of giving up:
+```lpc
+if (!ob) return;
+if (!present(ob)) {
+  call_out("death_stage", 5, ob, stage);
+  return;
+}
+```
+Verified: normal (undisturbed) death→resurrection still completes
+correctly post-fix (fresh 【平民】status, full stat bars, at the
+expected revive room); a second death, disturbed by the same tour-guide
+NPC mid-sequence exactly as before, this time still resulted in the
+character ending up alive and freely mobile afterward (a ghost cannot
+move on its own, so free movement is itself proof of resurrection).
+General lesson: a `present()`/liveness guard inside a multi-stage
+`call_out()` chain that's meant to protect against a subject going away
+permanently should default to RETRY on ambiguous absence, not permanent
+abandonment — reserve the hard stop for a genuinely-destructed/gone
+object, since "briefly not here" and "gone forever" are different
+failure modes.
+
+### 7.69 The driver's own auto-included global header is missing a macro that a live daemon requires — while a near-identical, unused duplicate elsewhere in the tree still has it
+
+Found on `bmxkx2001`'s §10.7 deep functional test: `inherit/misc/
+bboard.lpc` (the bulletin-board base class, inherited by every board
+clone in the game, e.g. `/clone/board/xkd_b`) failed to compile with
+`error: Undefined variable 'EDITOR_D'`, which cascaded into `*No
+program in object '/inherit/misc/bboard'!` the moment any code tried
+to use a board clone (here, an NPC's ambient room-population logic
+loading `d/xiakedao/dadong.lpc`, which sets up a board). `EDITOR_D` is
+a completely ordinary daemon-path macro (`"/adm/daemons/editord"`,
+and `/adm/daemons/editord.lpc` genuinely exists — this is not missing
+content). The lib's `config.fluffos` auto-includes `<globals.h>` →
+resolves to `include/globals.h` — and that specific file was simply
+missing the `#define EDITOR_D` line that every sibling daemon macro
+around it has. The twist that makes this easy to misdiagnose: there's
+a SECOND, 90%-identical `globals.h` sitting at `inherit/misc/globals.h`
+(literally commented "this file will be automatically included by the
+driver", i.e. it LOOKS like the canonical one) which DOES have
+`EDITOR_D` — but per `config.fluffos` it is never actually the one the
+driver includes, and it's independently missing several OTHER macros
+(`REGBAN_D`, `UPDATE_D`, `BEAST_D`, `FERRY`, `HARBOR`, `SHIP`,
+`F_MULTI`, `SAVE_EXTENSION`, etc.) that the real, auto-included
+`include/globals.h` already has — so it's not simply "the good copy",
+either; it's a stale duplicate that drifted independently. Before
+"fixing" a missing-macro compile error by swapping in a duplicate
+header wholesale, confirm via `config.fluffos`'s `global include file`
+directive (or the lib's include-path setup) which file the driver
+ACTUALLY loads, and diff the two candidates fully (`diff` both
+directions) rather than assuming the one with the macro you need is
+the complete/correct one — it may itself be missing things the real
+file already has. Fix: added the single missing `#define EDITOR_D
+"/adm/daemons/editord"` line to the real `include/globals.h`, in its
+alphabetical place among the other `*_D` daemon macros; left the
+unused duplicate at `inherit/misc/globals.h` untouched (out of scope,
+and deleting/syncing dead files is a separate cleanup, not this fix).
+Verified: fresh boot's `debug.log` no longer shows the `Undefined
+variable`/`No program in object` pair.
+
+---
+
 ## 8. Login and registration flow bugs
 
 Registration is where restoration succeeds or fails: it exercises the
