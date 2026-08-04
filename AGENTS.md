@@ -2370,11 +2370,15 @@ Found repeatedly across this round's deep functional tests: `esI` (five
 `printf("%O\n", ob)` printing the login object's raw internal path,
 e.g. `/obj/login#2`/`/clone/user/login#1`, between the name and
 password prompts — `cctx`'s instance found via §10.7 deep functional
-test, not just code review), `hc`, `yxjh`, `xkyx3b`, `mnhf`, and
-`bixiecanyang` (each the SAME `printf("%O\n", ob)` line duplicated
-across TWO parallel name-entry code paths — accept a system-suggested
-random name vs type your own — both landing right before the password
-prompt, both found and fixed together), `sanjieshenhua`, `ldtxii`,
+test, not just code review), `hc`, `yxjh`, `xkyx3b`, `mnhf`,
+`bixiecanyang`, and `fy330` (each the SAME `printf("%O\n", ob)` line
+duplicated across TWO parallel name-entry code paths — accept a
+system-suggested random name vs type your own — both landing right
+before the password prompt, both found and fixed together; `fy330`'s
+own sibling `fy2` carries the byte-identical line but was previously
+left unfixed as "harmless" — worth revisiting that call the next time
+`fy2` is touched, now that this round treats the pattern as a
+routine, safe-to-fix hit rather than a judgment call), `sanjieshenhua`, `ldtxii`,
 `yszz`, and `mohuanshiji` (each the same bare `printf("%O\n", ob)`
 right before the Chinese-name is set — `ldtxii`'s sibling `ldtx` has
 the byte-identical line, unfixed; port the same one-line deletion
@@ -3500,6 +3504,32 @@ proactively rather than waiting for a live repro). Worth checking any
 other ES2-family lib's `d/death/npc/*gargoyle*.lpc` (or equivalently
 named ghost-guard files) for this same guard shape on sight, since it
 appears to be shared infrastructure, not lib-specific code.
+
+**Third confirmed instance: `fy330`** (风云Ⅲ, a different branch of the
+same broad ES2/古龙-flavored mega-family, sharing the "朱笔判官"
+ghost-judge naming and flavor text already seen in `mohuanshiji`/
+`yszz`), found in `d/death/npc/panguan.lpc`'s `death_stage()`: `if (!ob
+|| !present(ob) || (int)ob->query("combat_exp") > MAX_EXP) return;` —
+same bug, with an extra legitimate content-gate (`combat_exp >
+MAX_EXP`, a real design choice to route over-leveled characters to a
+different judge) bundled into the same condition. Fixed by splitting
+`!present(ob)` out into its own reschedule branch while leaving the
+`!ob`/`combat_exp` checks as permanent aborts (both are genuine
+disqualifications, not transient absence). Found via §10.7 deep
+functional test via code reading, not a live repro — the test
+character's auto-flee-from-combat safety mechanic reliably rescued it
+from actual death against every NPC tried this session, so the
+resurrection sequence itself was never driven live end-to-end here;
+documented honestly as an unverified-live fix in `fy330`'s own
+NOTES.md. **Also checked and deliberately left alone**: the same
+directory's `d/death/npc/panguan2.lpc` has the identical-looking `if
+(!ob || !present(ob)) return;` line, but it's a single-shot "attack a
+living trespasser in the underworld" check with no multi-stage
+`call_out` chain and nothing to abandon — absence there just means
+"nothing to punish," which is correct as-is, not an instance of this
+bug class. Don't pattern-match on the guard text alone; confirm the
+function actually drives a multi-stage resurrection sequence before
+treating a `!present(ob)` bare-return as this bug.
 
 ### 7.69 The driver's own auto-included global header is missing a macro that a live daemon requires — while a near-identical, unused duplicate elsewhere in the tree still has it
 
