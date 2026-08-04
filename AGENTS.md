@@ -2342,11 +2342,11 @@ Found repeatedly across this round's deep functional tests: `esI` (five
 `printf("%O\n", ob)` printing the login object's raw internal path,
 e.g. `/obj/login#2`/`/clone/user/login#1`, between the name and
 password prompts — `cctx`'s instance found via §10.7 deep functional
-test, not just code review), `hc` and `yxjh` (each the SAME
+test, not just code review), `hc`, `yxjh`, and `xkyx3b` (each the SAME
 `printf("%O\n", ob)` line duplicated across TWO parallel name-entry
 code paths — accept a system-suggested random name vs type your own —
-both landing right before the admin-password prompt, both found and
-fixed together), `sanjieshenhua` (the same bare `printf("%O\n", ob)`
+both landing right before the password prompt, both found and fixed
+together), `sanjieshenhua` (the same bare `printf("%O\n", ob)`
 between the Chinese-name and email prompts), and noted-but-left-alone
 on `fy2` (a
 similar stray `printf` in `logind.lpc`, existing precedent from `zzfy`

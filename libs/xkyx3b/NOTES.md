@@ -162,6 +162,44 @@ introduced by this pass, and did not block `look`/`score`/`update`/`quit`
 in any observed session here; flagging for a future pass rather than
 fixing now since it's outside this pass's four-item scope).
 
+## 深度功能测试（第二轮，2026-08-03）
+
+之前的会话只做过注册流程 + 管理员权限验证，本轮做了完整的 §10.7
+深度功能测试。proactive 检查 AGENTS.md 已归档的四类常见坏味道：
+
+- **§8.3a `private nomask command_hook`**：只在死档案
+  `feature/command.c.new`/`feature/command.bak` 里还留着，真正生效
+  的 `feature/command.lpc` 已经是 `nomask int command_hook`（没有
+  `private`）——查了 git log 确认这是本项目更早一次系统性排查
+  （`20f407c4048`）就已经修好的，上面"已知但未修复"那条关于
+  `apply() with insufficient permission ... command_hook` 的记录已
+  经过时，本轮重新测试全程没有再出现这条报错——**更正**：这条不再
+  是待办事项。
+- 命中了新的一类：`logind.lpc` 里两条并行取名流程（接受系统随机中
+  文名 / 自己手动输入）都各自残留一行调试用的 `printf("%O\n", ob)`，
+  紧挨在"请设定您的密码："提示之前，每一个新玩家注册时都会看到
+  （AGENTS.md §7.34，新增 `xkyx3b` 到确认实例列表）。已删除两处。
+- 未命中 unguarded MESSAGE_D->、stat/water 键名、§8.9 坏 age 判断
+  这三类。
+
+**完整流程验证**：连续注册多个全新角色，走完整个官方新手教程（游
+戏本身把教程做成了六个连续房间：`start1`如何移动→`start2`如何看/
+捡→`start3`如何吃喝购买→`start4`如何求助→`start5`关于战斗→`down`
+进入正式世界），教程房间之间的出口方向并不是简单的连续东进（
+`start2`出口是south，`start3`出口是west，`start4`出口是north），
+按各房间实际定义的方向走通；`start5`教程明确指引"wear cloth"/
+"wield sword"装备防具武器后"fight dog"和野狗打一场——照做，完整
+交手十余回合，伤害叙述随野狗伤势分级变化（从"可能受了点轻伤"一路
+到"受了相当重的伤，只怕会有生命危险"再到力竭倒地），战斗系统工作
+正常；`score`/`hp`面板渲染正确（食物/饮水槽创建时即为满值，没有
+§8.9 症状）；一路到达"中央广场"（登录留言板显示15张留言），
+`quit`干净退出（"欢迎下次再来！"）。全程 debug.log 没有任何一条
+`执行时段错误`——是这次会话覆盖的几个 lib 里少见的、从注册到教程
+到战斗到 quit 全程零报错的一次。
+
+**未覆盖范围**：留言板内容、拜师、商店购买、种族差异（矮人/精灵/
+妖精/龙人/兽人五个非人类种族本轮未测）因时间原因未实测。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 状态已从过时的 limited 修正——这份档案自己的 README 和 group_note 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）干净正常，'目前权限：(admin)'，quit 正常。
