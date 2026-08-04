@@ -2342,12 +2342,13 @@ Found repeatedly across this round's deep functional tests: `esI` (five
 `printf("%O\n", ob)` printing the login object's raw internal path,
 e.g. `/obj/login#2`/`/clone/user/login#1`, between the name and
 password prompts — `cctx`'s instance found via §10.7 deep functional
-test, not just code review), `hc` (the SAME `printf("%O\n", ob)` line
-duplicated across TWO parallel name-entry code paths — accept a
-system-suggested random name vs type your own — both landing right
-before the password prompt, both found and fixed together),
-`sanjieshenhua` (the same bare `printf("%O\n", ob)` between the
-Chinese-name and email prompts), and noted-but-left-alone on `fy2` (a
+test, not just code review), `hc` and `yxjh` (each the SAME
+`printf("%O\n", ob)` line duplicated across TWO parallel name-entry
+code paths — accept a system-suggested random name vs type your own —
+both landing right before the admin-password prompt, both found and
+fixed together), `sanjieshenhua` (the same bare `printf("%O\n", ob)`
+between the Chinese-name and email prompts), and noted-but-left-alone
+on `fy2` (a
 similar stray `printf` in `logind.lpc`, existing precedent from `zzfy`
 treats it as harmless). A leftover diagnostic write/printf with no
 explanatory comment, sitting in an otherwise-clean sequence of
@@ -3775,8 +3776,14 @@ instance on `niaoren` (same session, found specifically because
 `niaoren` turned out to share `logind.lpc`/`master.lpc` source with
 `cctx` — see §11's lineage note — so the same bug, byte-for-byte the
 same broken condition, carried over into an independently-branded
-fork). Both fixed identically: `ob->query("age")` → `user->query("age")`.
-The `enter_world()`-
+fork), third confirmed instance on `yxjh` — an unrelated lineage
+(浴血江湖/"天涯" family, no known relation to the `cctx`/`niaoren`
+pair), same mistake independently made, but a slightly leaner shape:
+no `!user->query("food") && !user->query("water")` guard at all, just
+a bare `if (ob->query("age") == 14) { user->set("food", ...); ... }`
+right after `user->setup()` — same wrong-object read, same permanent
+false, same fix. All three fixed identically: `ob->query("age")` →
+`user->query("age")`. The `enter_world()`-
 equivalent in `logind.lpc` has two live objects at once — `ob` (the
 transient login/connection stub) and `user` (the freshly-`new()`'d
 player body) — and after `exec(user, ob)` + `user->setup()` (which
