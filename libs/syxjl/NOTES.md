@@ -637,3 +637,118 @@ stayed clean of `denied`/`undefined function`/`error in error handler`.
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录干净正常：GB/BIG5 选择→一个带自己"按 Enter 继续……"关卡的姊妹站泥潭列表画面→id+密码→"目前权限：(admin)"。
+
+## 深度功能测试（§10.7，2026-08-04）
+
+原生 driver（端口 40088）跑了一遍超出注册流程的完整游玩。这份档案
+每次连线都要先选 GB/Big5 编码（发给 UTF-8 客户端时这一步已经是安
+全的空操作，选哪个都行），紧接着还有一个泥潭列表画面自带的"按
+Enter 继续……"关卡，测试脚本要多算一步空发送，容易漏掉。
+
+**主动检查命中 2 处，都在 `adm/daemons/logind.lpc`**：单一姓名输入
+路径（没有随机取名分支）紧挨在 `ob->set("name", arg)` 之前的
+`printf("%O\n", ob)` 调试残留（§7.34）；`enter_world()` 里食物/饮
+水初始化用错对象的经典 §8.9 bug（`ob->query("age")` 应为
+`user->query("age")`，紧跟在 `user->setup()` 之后）。两处都已修
+复；注册后食物/饮水显示 280/280（满值），确认 §8.9 修复生效。
+`command_hook` 有两份拷贝（`feature/command.lpc` 是 `F_COMMAND` 宏
+实际指向的活文件，`u/ybl/command.lpc` 是巫师私人目录下未被引用的
+死拷贝），两份都是干净的 `nomask`，不是 bug。
+
+**注册与游玩**：注册测试角色（秦水 / id `qinshui`），天赋可以自选
+一项数值、其余系统随机（或全部 0=随机），落在"随缘客栈"，"李寻
+欢"（古龙小说角色）作为新手向导 NPC 出场讲解基本指令，角色自带专
+属邮箱。
+
+**发现并修复 §7.68 的又一实例，外加一个更严重的全新变体**：这份档
+案的死亡系统有 `d/death/npc/{wgargoyle,bgargoyle}.lpc`（活的，
+`DEATH_ROOM` 宏指向 `d/death/gate.lpc`，摆的是 `npc/wgargoyle`）——
+
+1. `wgargoyle.lpc`（白无常，真正在游戏里生效）有标准的
+   `if (!ob || !present(ob)) return;` §7.68 守卫，已按已验证的修法
+   拆分修复。**现场完整验证**：被"欧阳克"（金庸小说反派，本轮是第
+   四个独立血统里发现的同一个反复出现的固定布景角色，之前已经在
+   `jyqxc`/`yhyxs`/`yanhuangwuhun` 里见过）一击致死，落到"鬼门关"
+   见到"白无常"，没有主动打断复活序列，重连确认角色已复活、站在
+   "武庙"，精神/气息 31/100（死亡惩罚，正在恢复中）、食物/饮水基
+   本无损、潜能减半——本轮系列测试第四次现场完整验证 undisturbed
+   路径正确性。另外确认死亡的鬼魂**无法移动**（"你已经没有力气再
+   走路了，休息一下吧。"），这意味着 `d/death/gateway.lpc`
+   （摆着 `npc/bgargoyle`）在正常玩法里实际上不可达——虽然技术上
+   被一个房间的 exit 引用着，鬼魂状态下走不过去。
+2. **一个比 §7.68 更严重的全新变体，在 `bgargoyle.lpc`（黑无常）里
+   发现**：`init()` 正常调度了 `call_out("death_stage", 5,
+   previous_object(), 0)`，但 `death_stage()` 函数本体整个被
+   `/* ... */` 注释掉了！这意味着这个 call_out 永远静默地调用一个
+   不存在的函数——没有任何报错，没有任何提示，任何走到黑无常面前
+   的对象都会被永久晾在原地，复活对话一句都不会说，`reincarnate()`
+   永远不会被呼叫。已把整段函数体取消注释并按标准修法拆分守卫，恢
+   复成和 `wgargoyle.lpc` 对等的可用状态。因为鬼魂物理上走不到黑无
+   常面前（见上），这个修复没能现场触发真实的复活对话，只验证了恢
+   复后的代码能正常编译、不再报错——诚实记录为未现场复现的修复。
+   `d/death/wgargoyle.lpc`（不带 `npc/` 子目录的裸路径重复文件，
+   已确认无任何引用，是被 `d/death/npc/wgargoyle.lpc` 取代的旧
+   副本）里也有同样"整个 death_stage() 被注释掉"的写法，但因为这
+   份文件是双重死代码（既未被引用，函数体又被注释），修复它不会产
+   生任何实际效果，故未做改动，只记录在案。
+3. `d/shaolin/npc/yu-zu2.lpc`（少林地牢"狱卒"关禁闭机制，和
+   `jyqxc` 发现的同名同形状 bug 一致）——确认是被
+   `d/shaolin/npc/yu-zu.lpc`（没有任何监狱机制的简化版）取代的死代
+   码，仍按已验证的修法拆分修复（成本很低）。
+
+**发现并修复两个全新的、和死亡系统无关的独立 bug**：
+
+4. `feature/alias.lpc` 的防刷屏踢人逻辑（`process_input()`）：连续
+   发送 30 次以上相同指令会触发 `command("quit")` 把玩家踢下线，但
+   `quit` 会销毁 `this_object()`，之后紧接着第 34 行还有一句
+   `this_object()->query_temp("disable_inputs")`，在已销毁的物件上
+   呼叫方法，每次踢人都会在 `debug.log` 里留下一条
+   `Bad argument 1 to EFUN call_other()` 运行时错误（物件显示为
+   `0`）。虽然玩家看到的踢出效果本身是对的，但这是一处真实的、每
+   次触发都会留痕的运行时错误。已在 `command("quit")` 后补上
+   `return`，修复后现场用连续 35 次 `look` 重新触发踢人验证，
+   `debug.log` 干净，不再报错。
+5. `u/bsd/npc/christmas-man.lpc`（"圣诞老人"，实际摆在"扬州广场"，
+   不是纯粹的巫师私人测试内容）的 `create()` 里
+   `carry_object("/u/bsd/obj/silver-cloth")->wear()` 没有做存在性
+   检查——`/u/bsd/obj/silver-cloth.lpc` 这个文件在整个归档里完全不
+   存在（包括 raw 原始压缩包，不是转码遗漏，是内容本身就缺失；
+   `u/bsd/obj/` 目录下只有另外三个不相关的物件），`carry_object()`
+   返回 `int 0`，对 `0` 呼叫 `->wear()` 触发同样的
+   `Bad argument 1 to EFUN call_other()`，每次这个 NPC 被克隆（进
+   入"扬州广场"、地图重置时）都会报错一次。没有编造替代物品，改成
+   先判断 `carry_object()` 是否真的返回了物件再穿。**修复过程中的
+   一个教训**：第一次尝试用 `if (object cloth = carry_object(...))`
+   这种内联声明写法，通过了 lpc-syntax 格式化工具的解析，但实际
+   driver 编译报语法错误（"unexpected L_IDENTIFIER, expecting
+   L_COLON_COLON or '('"）——这个 driver 的 LPC 方言不支持 if 条件
+   内联变量声明，格式化工具的解析器比实际 driver 更宽松，不能只靠
+   它验证语法，必须重启 driver 实际编译才能确认。改成先单独声明变
+   量再赋值后编译通过，现场重连并走到"扬州广场"确认"圣诞老人"正
+   常出现、`ask laoren about liwu` 触发圣诞祝福对话，`debug.log` 干
+   净。
+
+**发现并修复一个和 yhyxs/yanhuangwuhun 会话完全同类的 extensionless
+GBK 文本残留 bug，但这次是配置数据而不是帮助文档**：`adm/etc/
+banned_name`（禁止注册使用的姓名黑名单）在原始压缩包里是一份真正
+的 137 行列表（包含大量特定历史时期的敏感政治词汇/职务名称——领导
+人姓名、政府机关职务、"台独"相关词汇等，是这类 2000 年前后中文泥
+巴常见的内容审核配置），但从未被转码进 `work/`（同样是无扩展名文
+件，转码流程的已知盲区）。`logind.lpc` 的 `check_legal_name()` 有
+一个"文件不存在就用硬编码的 6 个代词兜底，并把兜底列表写回磁盘"
+的自我播种逻辑（第 979-986 行）——本轮测试连线时，这个自我播种逻辑
+真的触发了，在 `work/` 里创建了一个只有"自己/它/她/他/我/你"六项
+的弱化版名单，掩盖了原本 137 项的真实内容审核名单从未存在这个事
+实。用 `iconv -f GB18030 -t UTF-8` 转换 raw 归档里的原始文件（137
+行全部转换成功，人工核对是通顺的中文），替换掉刚被自动生成的弱化
+版，重启验证：`banned_name` 文件行数恢复到 137 行，用"你"注册仍
+然正确触发"对不起，这种名字会造成其他人的困扰。"的拒绝提示，确
+认文件被正确加载而不是被兜底逻辑覆盖。
+
+`quit` 正常退出，driver 全程存活未崩溃。`debug.log` 全程没有真实
+的 `error:`/`denied`/`Too deep recursion` 行（`Bad argument 1 to
+EFUN call_other()` 的两处已在本轮修复并现场确认消失）。formatter
+检查（所有改动的 `.lpc` 文件均已是干净格式或首次接触触发全文件重
+排版，语义改动已逐一核对）、`git status --short libs/syxjl/` 复查
+均确认改动范围干净——六处 `.lpc` 源码修改 + 一份新增的 `banned_name`
+配置数据文件是跟踪变更，测试角色的新存档保持未跟踪、未提交。

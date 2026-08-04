@@ -752,6 +752,30 @@ if `raw/` ends up empty. Known traps:
   both sibling archives. When one sibling in an already-established
   lineage (§11) turns out to have this gap, check every other sibling
   for the same specific files before assuming it's isolated.
+  **A third, structurally different instance on `syxjl`** (unrelated
+  ES2 branch, not a `yh2003` sibling) — this time not a help/doc text
+  but `adm/etc/banned_name`, a 137-entry registration name-blacklist
+  (period-appropriate politically-sensitive terms, government titles,
+  etc. — genuine early-2000s Chinese-MUD content-moderation config).
+  Made harder to notice than the help-text instances: `logind.lpc`'s
+  `check_legal_name()` has a self-seeding fallback (`if
+  (file_size(CONFIG_DIR + "banned_name") >= 0) { load it } else {
+  write out a hardcoded 6-entry default }`) — since the real file was
+  never converted, EVERY boot of this lib silently wrote a plausible-
+  looking-but-drastically-weaker 6-entry `banned_name` file into
+  `work/`, masking the fact that the real 137-entry list had never
+  existed there at all. A missing extensionless config file with a
+  self-seeding fallback can look, superficially, like "this file just
+  doesn't need to exist" — the tree-wide UTF-8 scan doesn't care
+  either way (a freshly-seeded ASCII/UTF-8 file decodes fine and won't
+  show up as a decode failure), so this one was only caught by
+  independently noticing `git status` showing a brand-new untracked
+  file after a play session and checking whether the raw archive had
+  a same-path original. **When a play session produces an unexpected
+  new untracked file in `adm/etc/` or similar config directories,
+  check the raw archive for a same-path file before assuming it's
+  inconsequential runtime state** — it may be a silently-reconstructed
+  weaker stand-in for content the conversion pass dropped.
 - **`iconv -c` can eat an adjacent REAL byte** along with an invalid one
   — most damagingly a newline or closing quote, producing "End of file
   in text block" / missing-quote errors at compile time (a heredoc's
@@ -2406,7 +2430,7 @@ right before the password prompt, both found and fixed together;
 previously left unfixed as "harmless" — worth revisiting that call the
 next time `fy2` is touched, now that this round treats the pattern as
 a routine, safe-to-fix hit rather than a judgment call), `sanjieshenhua`, `ldtxii`,
-`yszz`, `mohuanshiji`, and `jyqxc` (each the same bare `printf("%O\n", ob)`
+`yszz`, `mohuanshiji`, `jyqxc`, and `syxjl` (each the same bare `printf("%O\n", ob)`
 right before the Chinese-name is set — `ldtxii`'s sibling `ldtx` has
 the byte-identical line, unfixed; port the same one-line deletion
 there too when next touching that lib), and noted-but-left-alone on
@@ -3692,6 +3716,27 @@ not just the §7.68 guard shape) on sight in any lib with multiple
 death-NPC implementations, in case a future archive has this same
 typo in a file that turns out to actually be live.
 
+**Eighth confirmed instance: `syxjl`** (随缘洗剑录, ES2-family but a
+distinct branch from every prior instance's lineage — shares code with
+神州/火影/武汉站, not the XKX or yh2003 families) —
+`d/death/npc/wgargoyle.lpc` (白无常, the one `DEATH_ROOM` actually
+points at). Fixed with the standard split-guard pattern. **Verified
+with a fourth genuine live undisturbed death-and-resurrection repro**
+(after `jyqxc`/`yhyxs`/`yanhuangwuhun`) — killed by 欧阳克 again (now
+confirmed recurring across FOUR unrelated lineages as shared ES2-family
+set-dressing), landed at 鬼门关, left undisturbed, confirmed via
+reconnect the character resurrected at 武庙 with the expected
+half-精气/full-food-water state. Also confirmed live that a fresh
+ghost cannot move at all ("你已经没有力气再走路了，休息一下吧。") —
+worth remembering when judging whether an adjacent room's death-NPC
+variant is practically reachable, not just technically referenced by
+an exit (see §7.71's `bgargoyle.lpc`/`gateway.lpc` case on this same
+lib, which turned out to be exactly this kind of technically-linked-
+but-practically-unreachable room). Also fixed the same jail-mechanic
+variant already cataloged from `jyqxc` (`d/shaolin/npc/yu-zu2.lpc`,
+confirmed dead — superseded by a `yu-zu.lpc` with no jail mechanic at
+all) for consistency at negligible cost.
+
 ### 7.69 The driver's own auto-included global header is missing a macro that a live daemon requires — while a near-identical, unused duplicate elsewhere in the tree still has it
 
 Found on `bmxkx2001`'s §10.7 deep functional test: `inherit/misc/
@@ -3781,6 +3826,133 @@ substantially reworked/forked codebase, not a shared-lineage family
 member per §11) — no other lib has shown this shape yet, but the
 detection grep above is generic enough to run on any lib during triage
 if a similar "Bad type for argument 2 of query" compile error surfaces.
+
+### 7.71 A `call_out()` is scheduled to a function whose entire body is commented out — no error, no dialogue, no progress, forever
+
+Found on `syxjl`'s §10.7 deep functional test, in the death system's
+`d/death/npc/bgargoyle.lpc` (黑无常): `init()` correctly calls
+`call_out("death_stage", 5, previous_object(), 0)` on every arriving
+ghost — but `void death_stage(object ob, int stage) { ... }`, the
+entire function including its signature, is wrapped in `/* ... */`
+just below. A `call_out()` targeting a function name that doesn't
+resolve to any actual function on the object silently no-ops when it
+fires (same "no error, no crash, no `debug.log` trace" shape as every
+other entry in this section) — so every single object that reaches
+this NPC gets scheduled for a revival sequence that will NEVER run:
+no death dialogue, no `reincarnate()`, no revival, forever, with
+nothing telling the player or a wizard anything went wrong. This is
+strictly worse than §7.68's soft-lock (which at least works normally
+until interrupted) — here NOTHING ever works, unconditionally, for
+every single visitor.
+
+Detection: when auditing a lib's death-NPC (or any `call_out`-scheduled
+revival/release) files, don't just grep for the `!ob || !present(ob)`
+guard shape (§7.68) — also check that the scheduled function actually
+EXISTS as live code, not inside a `/* */` block. A quick sanity check:
+`grep -n "call_out(\"<funcname>\"" file.lpc` paired with
+`grep -n "^void <funcname>\|^/\*.*<funcname>"` to see whether the
+function definition sits inside or outside a comment.
+
+Fix: restore the function (uncomment it) rather than removing the
+`call_out()` — the commented-out body is clearly the intended,
+already-written implementation (matches its sibling `wgargoyle.lpc`'s
+shape almost exactly), not dead/abandoned design; this is a case of
+"restore already-written content," not "fabricate new content." Apply
+whatever other fixes are independently warranted (here, the §7.68
+split-guard) while restoring. If a companion file exists that's
+ALSO unreferenced by any room (confirmed dead, not just the specific
+function questionably alive), it's fine to leave a matching commented-
+out `death_stage()` untouched there — fixing genuinely-unreachable
+code inside an ALSO-unreferenced file has no observable effect either
+way, so it's a documentation note rather than a required fix (`syxjl`
+had exactly this second case: `d/death/wgargoyle.lpc`, a bare-path
+duplicate superseded by `d/death/npc/wgargoyle.lpc`, with the same
+commented-out shape, left as-is).
+
+Verification caveat: confirm the room the fixed NPC lives in is
+actually reachable by whatever's supposed to reach it. On `syxjl`,
+`bgargoyle.lpc`'s room (`d/death/gateway.lpc`) is only reachable via a
+`north` exit from the primary death gate (`d/death/gate.lpc`) — but a
+freshly-dead ghost cannot move at all ("你已经没有力气再走路了，休息
+一下吧。"), so this specific fix could be verified as compiling and
+loading cleanly, but NOT re-triggered through an actual live ghost
+encounter. Document that gap honestly rather than implying a full live
+repro that didn't happen.
+
+### 7.72 A flood-kick handler calls `command("quit")` (destructing the caller) without returning immediately after — every subsequent line touching the now-destructed object throws
+
+Found on `syxjl`'s §10.7 deep functional test: `feature/alias.lpc`'s
+`process_input()` — the input-dispatch mixin every player command
+passes through — counts repeated identical input and, past
+`MAX_REPEAT`, tells the player they've been flood-kicked and calls
+`command("quit")` to disconnect them. `command("quit")` runs the quit
+sequence synchronously, which destructs `this_object()` (the player).
+But `process_input()` has no `return` after that call — execution
+falls through to the very next lines, which call
+`this_object()->query_temp("disable_inputs")` on the object that was
+just destructed a few lines above, throwing `Bad argument 1 to EFUN
+call_other()` (object shown as `0` in the trace) on literally every
+single flood-kick. The player-visible kick itself looks correct (they
+really do get disconnected with the intended flavor message), which is
+exactly why this is easy to miss without checking `debug.log` — the
+bug is silent to the person it happens to.
+
+Fix: add `return` (or an early return of whatever the function's
+normal no-op return value is) immediately after `command("quit")`, so
+nothing past that point ever touches the destructed object. Verified
+live: re-triggered the kick (30+ repeated identical commands) after
+the fix and confirmed `debug.log` stayed clean, where it had shown the
+error every time before.
+
+Detection: any handler that calls `command("quit")`, `destruct()`, or
+similar self-terminating action on `this_object()`/`this_player()`
+needs a `return` immediately after — grep for `command("quit")` or
+bare `destruct(` calls not immediately followed by `return` in the
+same block as a quick triage signal.
+
+### 7.73 An NPC's `create()` unconditionally chains `->wear()`/`->wield()` off `carry_object()`/`new()` for a file that never existed anywhere in the archive
+
+Found on `syxjl`'s §10.7 deep functional test: `u/bsd/npc/
+christmas-man.lpc` (a seasonal "Santa Claus" NPC actually placed in
+the main town square, `d/city/guangchang.lpc` — not isolated wizard
+scratch content despite living under a personal `u/<wizard>/`
+directory) has `carry_object("/u/bsd/obj/silver-cloth")->wear();` in
+`create()`. `/u/bsd/obj/silver-cloth.lpc` does not exist anywhere —
+not in `work/`, not in the raw archive, no similarly-named sibling
+file either (confirmed: `u/bsd/obj/` holds exactly three unrelated
+items). `carry_object()` returns `0` for a missing path, and the
+unguarded `->wear()` on that `0` throws `Bad argument 1 to EFUN
+call_other()` every single time this NPC is cloned (on every room
+reset that repopulates the square). Same shape as §7.63's missing-
+guard class, but on a chained `carry_object()->method()` rather than a
+bare `new()`.
+
+Since the target file is a genuine, irrecoverable content gap (not a
+misspelled path pointing at an existing file — confirmed by checking
+both `work/` and the raw archive), the fix is a defensive guard, not
+fabricating a replacement garment:
+```lpc
+object cloth;
+cloth = carry_object("/u/bsd/obj/silver-cloth");
+if (cloth) cloth->wear();
+```
+**A syntax trap hit while writing this fix**: an initial attempt used
+the more compact `if (object cloth = carry_object(...)) cloth->wear();`
+inline-declaration form. This project's `lpc-syntax` formatter parsed
+it without complaint (`{"errors":0}`), but the actual FluffOS driver
+rejected it at compile time (`syntax error, unexpected L_IDENTIFIER,
+expecting L_COLON_COLON or '('`) — this driver's LPC grammar does not
+support C99-style inline variable declarations inside an `if`
+condition. **The formatter's parser is more permissive than the real
+driver's grammar; passing the formatter is not proof a fix compiles.**
+Always restart the driver and watch it load the actual file (or
+trigger the code path live) after any edit more syntactically novel
+than a straight-line statement change — don't trust formatter-clean as
+the final word. Declaring the variable on its own line first side-
+steps the whole question. Verified live after the correction: walked
+to the square, confirmed the NPC loads and renders correctly, and
+`debug.log` stayed clean where it had shown the error every time
+before.
 
 ---
 
@@ -4185,8 +4357,13 @@ same file during the same pass. Sixth confirmed instance on `jyqxc`
 full `!user->query("food") && !user->query("water") &&
 ob->query("age") == 14` shape byte-identical to `cctx`/`niaoren`/
 `ldtxii`, found alongside a single-path `printf("%O\n", ob)` debug
-leak (§7.34) in the same file. All six fixed identically:
-`ob->query("age")` → `user->query("age")`. The `enter_world()`-
+leak (§7.34) in the same file. Seventh confirmed instance on `syxjl`
+(ES2-family, 神州/火影/武汉站 branch — a seventh unrelated lineage),
+same full shape, also alongside a single-path `printf("%O\n", ob)`
+debug leak in the same file — this specific pairing (both bugs, same
+file, same session) has now recurred often enough to be worth checking
+both on sight whenever one is found in a `logind.lpc`. All seven fixed
+identically: `ob->query("age")` → `user->query("age")`. The `enter_world()`-
 equivalent in `logind.lpc` has two live objects at once — `ob` (the
 transient login/connection stub) and `user` (the freshly-`new()`'d
 player body) — and after `exec(user, ob)` + `user->setup()` (which
