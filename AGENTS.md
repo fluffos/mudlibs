@@ -59,7 +59,22 @@ Conventions used throughout:
   directory` path baked into `config.fluffos`, then grep the whole tree
   (`README.md`, this file, every other lib's `README.md`/`meta.json`) for
   the old slug and replace it — a rename that leaves stale cross-references
-  is worse than not renaming at all.
+  is worse than not renaming at all. **Also re-run
+  `python3 scripts/gen_keep_dirs.py`** (see its own docstring, and the
+  `pack_lib_for_web.sh`/§1.4 note on `wasm_keep_dirs.txt`) — this manifest
+  is keyed by slug, so a rename that skips it silently orphans the old
+  slug's entries and ships the new slug with NONE of its needed runtime
+  directory shape. Caught live on `xkyx3b` (renamed from
+  `xiakeyingxiong3`): the packed site booted the driver fine but every
+  single connection died silently at `logind.lpc`'s very first
+  `write_file(LOG_DIR "login/users", ...)` (missing `log/login/`
+  directory — the classic missing-directory-swallows-errors pattern, just
+  one CI rebuild removed from the rename instead of immediate) — the
+  in-browser symptom was the status line stuck forever at "connecting…"
+  with zero console errors, only visible by opening the page's own Logs
+  tab and reading the driver's `execution error` trace, or by diffing
+  `git ls-files libs/<slug>/work/` against `find libs/<slug>/work -type d`
+  for directories that exist locally but hold no tracked file.
 - **`meta.json` stays lightweight structured data — number, slug, archive,
   name, wasm_status, port, duplicate_of.** It is not the place for prose.
   Anything explaining *what was found or fixed* belongs in the lib's own
