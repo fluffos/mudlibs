@@ -745,6 +745,13 @@ if `raw/` ends up empty. Known traps:
   assuming every hit is text) finds these in seconds; fix with the
   same `iconv -f GB18030 -t UTF-8` as any other straggler, then verify
   the decoded output reads as grammatical Chinese before installing it.
+  **Confirmed on `yhyxs`'s own sibling `yanhuangwuhun` too** (yh2003
+  lineage) — same three files, byte-for-byte identical content to
+  `yhyxs`'s (confirmed via `diff` after converting both), meaning this
+  wasn't a one-off gap but content shared — and un-transcoded — across
+  both sibling archives. When one sibling in an already-established
+  lineage (§11) turns out to have this gap, check every other sibling
+  for the same specific files before assuming it's isolated.
 - **`iconv -c` can eat an adjacent REAL byte** along with an invalid one
   — most damagingly a newline or closing quote, producing "End of file
   in text block" / missing-quote errors at compile time (a heredoc's
@@ -3636,6 +3643,54 @@ to death) kill message — landed at 鬼门关 with the just-fixed
 confirmed via reconnect the character resurrected correctly at 武庙
 (扬州), alive, mobile, full 精气/气血, 潜能 halved as the expected
 death penalty.
+
+**Seventh confirmed instance: `yanhuangwuhun`** (yh2003 lineage,
+`yhyxs`'s own sibling) — this archive ships TWO complete death
+systems: `d/death/` (the one `DEATH_ROOM` in `include/login.h`
+actually points at — live) and `d/death22/` (never referenced by any
+room, code path, or macro anywhere in the tree — dead content,
+paired with an equally-unreferenced `adm/daemons/logind2.lpc`,
+apparently a whole bundled-but-never-wired-up alternate version).
+`d/death/npc/{hei,bai}.lpc` (live) and `d/death22/npc/{hei,bai}.lpc`
+(dead) all four have the identical `if (!ob || !present(ob)) return;`
+guard; fixed all four with the same split-guard pattern — the two
+dead-code ones cost nothing to fix now and are ready if that content
+is ever wired up later. **Verified with a third genuine live
+undisturbed death-and-resurrection repro**, once again via 欧阳克 (now
+confirmed recurring across three unrelated lineages —
+`jyqxc`/`yhyxs`/`yanhuangwuhun` — as shared ES2-family set-dressing,
+not a coincidence): this time the character's own `wimpy` auto-flee
+attempt was actively blocked by the opponent ("欧阳克飞身一闪，已将
+你的退路封死" — a first: every prior instance's auto-flee always
+succeeded), then two more hits plus the same active winter-frostbite
+stacking killed the character. Resurrection at 武庙 confirmed via
+reconnect exactly as the prior two instances.
+
+**An interesting NEAR-miss found only in the dead `d/death` code**:
+`d/death/npc/{wgargoyle,bgargoyle}.lpc` — an older "gargoyle"-named
+implementation of the same 黑无常/白无常 pair, superseded by
+`hei.lpc`/`bai.lpc` in the same directory and, like `d/death22`,
+referenced by no room at all. Both carry the same §7.68 guard, but
+`bgargoyle.lpc`'s `init()` ALSO has its `wizardp()` check inverted:
+`!wizardp(previous_object())` where every sibling (including its own
+neighbor `hei.lpc`) correctly has bare `wizardp(previous_object())`
+(the intent: skip scheduling revival for wizard ghosts, who get
+handled elsewhere). Inverted, this reads "skip scheduling revival for
+NON-wizard ghosts" — meaning if this file were ever live, ordinary
+players would NEVER get their `death_stage()` call_out scheduled at
+all and would be permanently stuck as ghosts, while wizards (who
+don't need this path) would be the only ones it worked for. **Left
+unfixed**, per the project's confirmed-unreachable-content convention
+(§13) — this file is provably dead code (no references found anywhere
+in the tree), so the inverted condition can never actually fire.
+Recorded here as a real bug that happens to be inert, likely
+introduced during this lineage's own rename from "gargoyle.c" to
+"hei.c"/"bai.c" at some point in its history, with the newer files
+getting the condition right and the superseded ones keeping the typo.
+Worth grep'ing for `!wizardp(previous_object())` (the inverted shape,
+not just the §7.68 guard shape) on sight in any lib with multiple
+death-NPC implementations, in case a future archive has this same
+typo in a file that turns out to actually be live.
 
 ### 7.69 The driver's own auto-included global header is missing a macro that a live daemon requires — while a near-identical, unused duplicate elsewhere in the tree still has it
 
