@@ -3521,6 +3521,58 @@ and deleting/syncing dead files is a separate cleanup, not this fix).
 Verified: fresh boot's `debug.log` no longer shows the `Undefined
 variable`/`No program in object` pair.
 
+### 7.70 A whole codebase confuses its own two-argument `query(prop, raw)` with the far more common `query(prop, target_object)` idiom from other mudlib families — a pervasive, ~162-file pattern found via a genuinely-completed multi-step quest, not a boot check
+
+Found on `wxddym`'s §10.7 deep functional test, while actually finishing
+the "投胎" (reincarnation) multi-NPC ritual that a sibling lib (`hhsj`)
+had explicitly deferred as "out of proportion for a first bring-up" —
+this project's first time actually walking that quest chain to
+completion on any lib in this shape. Doing so reached a room
+(`/d/newbie/shijiezhishu`, the newbie-zone entry point) whose populating
+NPC, `d/newbie/npc/laocunzhang.lpc`, failed to compile:
+`error: Bad type for argument 2 of query (int vs object)` at
+`query("id", me)` — a call clearly *intending* "look up `me`'s own
+`id` property" (embedded in help text: `"look " + query("id", me)`),
+but written as if `query()` were a global two-arg helper meaning
+`query(property, target_object)`. **It isn't, in this codebase.** Every
+actual definition of `query()` in the whole tree (`feature/dbase.lpc`,
+`inherit/room/room.lpc`, `adm/daemons/examined.lpc`, `u/rock/dbase.lpc`)
+has the signature `query(string prop, int raw)` — `raw` is a
+"return the unformatted value" flag, not a target object — so passing
+an object where an `int` is statically expected is a genuine type
+error, not a matter of which overload gets picked. Fixed this one
+instance: `query("id", me)` → `me->query("id")` (the call-other form is
+what the surrounding code actually needs). Verified live: the fix
+alone was sufficient to let the reincarnation ritual complete end-to-end
+(the previously-punted-on quest chain now genuinely finishes, character
+reaches 【天界总管】/普通百姓 status with full attributes, personality,
+and talents all correctly set, and the newbie-zone NPC's dialogue works).
+
+**Scope note, not fixed further in this pass**: `grep -rlP
+'query\("[a-zA-Z_/]+",\s*(me|ob|user|this_player\(\)|this_object\(\))\)'`
+across this lib's whole tree matches **162 files** — this exact
+misuse is not a one-off typo, it's a systemic confusion running through
+a large fraction of the codebase (`feature/apprentice.lpc`, most of
+`kungfu/class/**`, and many more), almost certainly copy-pasted forward
+from file to file or carried over by an author used to a different
+mudlib family's convention. Whether each individual instance actually
+breaks depends on whether the driver's static type checker can see a
+concrete `object`-typed value at that call site (a `mixed`-typed local
+might dodge the compile-time check and only misbehave at runtime, or
+silently do the wrong thing without erroring at all) — this was NOT
+verified per-instance and needs real triage, not a blind global
+replace. Given the scale (162 files) this is out of proportion for a
+single-lib deep-dive pass; flagging for a future **dedicated systematic
+sweep** on this lib specifically, following the same triage discipline
+as the §8.3a `command_hook` sweep (batch-classify hits, verify each
+survives a real boot before rewriting, expect some false positives
+where a variable named `me`/`ob` happens to actually hold an int).
+Detection for other libs: this is `wxddym`-specific so far (a
+substantially reworked/forked codebase, not a shared-lineage family
+member per §11) — no other lib has shown this shape yet, but the
+detection grep above is generic enough to run on any lib during triage
+if a similar "Bad type for argument 2 of query" compile error surfaces.
+
 ---
 
 ## 8. Login and registration flow bugs
