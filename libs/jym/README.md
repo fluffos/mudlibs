@@ -17,6 +17,12 @@ Roath"），应是同一款"侠客行I"底层代码库的不同流通版本，�
 - 管理员权限存储在 `securityd.lpc` 自己的存档文件里（`data/
   securityd.o` 的 `wiz_status` 属性，CRLF 编码），不是常见的
   `wizlist` 文本文件。
+- 新手殿堂里"金庸"本人被拟人化成一个会主动搭话的 NPC，帮玩家介绍
+  全部 12 个可加入的门派（丐帮、全真教、武当派、华山派、密宗、星宿
+  派、白驼山庄、桃花岛、少林派、峨眉派、大理段氏、灵鹫宫）——跨越
+  射雕/神雕、天龙八部、笑傲江湖、倚天屠龙记等多部金庸小说的门派体
+  系被揉进了同一个世界观，`join <门派>` 立即生效并触发全服公共频道
+  广播。
 
 ## 注册流程
 
@@ -47,6 +53,14 @@ Roath"），应是同一款"侠客行I"底层代码库的不同流通版本，�
   导致游戏里第一次 `tell_room()` 调用（欢迎室自己的 `create()`）就崩溃。
   这是 AGENTS.md §7.12 已归档的共享 wrapper bug，按文档修复为
   `exclude || ({})`。
+- `feature/command.lpc`（真正生效的玩家指令分发中枢）的
+  `command_hook` 声明为 `private nomask`，在这个驱动上继承后会降级
+  为 `DECL_HIDDEN`，导致 `add_action("command_hook", "", 1)` 这种
+  "捕获全部指令"的注册方式对 `ORIGIN_EFUN`（其它物件用 `command()`
+  efun 发起的呼叫，例如 NPC 主动搭话）静默失效（AGENTS.md §8.3a）。
+  本轮深度功能测试（见 `NOTES.md`）在启动前主动排查发现，已去掉
+  `private`，保留 `nomask`；同名的 `feature/command2.lpc` 确认是没
+  有任何 `inherit` 引用的死代码，保持原样未改。
 
 ## 管理员账号 / Admin account
 
