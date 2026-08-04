@@ -537,3 +537,39 @@ strict loopback only (`"127.0.0.1"`, `"::1"`, `"127."` prefix) across
 to "未知地区" for unparseable input instead of "本地连接"), and
 `logind.lpc`'s `local_conn` flag. Re-verified loopback login/look/`update`/
 quit all still work after tightening.
+
+## 深度功能测试（第二轮，2026-08-03）
+
+之前的会话只测过注册流程，本轮做了完整的 §10.7 深度功能测试。
+proactive 检查 AGENTS.md 已归档的四类常见坏味道：`feature/
+command.lpc` 里的"private nomask command_hook"只是一行历史注释
+（`// private nomask int command_hook(...)`），真正生效的声明早已
+是干净的 `nomask int command_hook(...)`；命中了一处 `adm/daemons/
+logind.lpc` 里的 printf("%O") 调试残留（新增 `mohuanshiji` 到
+AGENTS.md §7.34 确认实例列表）；未命中 unguarded MESSAGE_D->、
+stat/water 键名、§8.9 坏 age 判断。
+
+**完整流程验证**：注册全新角色（沐魔幻/id `mhsjqin`，途中还发现
+了一步之前没记录过的"您是否是中小学学生或年龄更小？(yes/no)"年
+龄自述关卡——答 yes 或不理会直接被系统劝退，答 no 才能继续注册，
+纯属游戏自带的内容提示，不是 bug），从"南城客栈"（同一个西游记
+ES2 大家族的经典布景，唐僧、店小二、千里眼 NPC 驻场）出发，向
+"朱雀大街"的"疥顶小僧"（这批西游记题材姊妹档案里反复出现的同一个
+高战力 NPC，combat_exp 50000）发起战斗——完整交手数回合后被击昏
+迷致死，送往"阴阳界"由"朱笔判官 崔珏"接引（和 `yszz`/`bmxkx2001`
+是同一套死亡/复活设计），静候片刻后自动复活还阳，`score` 数据完
+整（气血显示"重伤"正在恢复中，其余状态正常）；`quit` 干净退出。
+全程 debug.log 零报错。
+
+**顺带核实一处文档与实际行为不一致，判断为陈旧帮助文档而非 bug，
+未做代码改动**：`doc/help/newbie` 第二条明确写着"刚进入时，你的
+食物和饮水都是空的"，但实测新角色食物/饮水槽创建时就是满的
+（"正常"状态）。查了 `logind.lpc` 里的赋值语句——
+`user->set("food", user->max_food_capacity())`
+/`user->set("water", user->max_water_capacity())`——这是一行无条
+件执行、没有任何坏掉的前置判断的正常代码，明确就是设计成"创建时
+直接给满"，不是 §8.9 那种"卡在错误物件的判断条件"式 bug。判断为
+帮助文档没有跟上后来的某次平衡性调整，按项目惯例不去改动这行明
+确、正常工作的代码去迁就一份过时文档。
+
+**未覆盖范围**：拜师、留言板、当铺/兵器铺购物因时间原因未实测。
