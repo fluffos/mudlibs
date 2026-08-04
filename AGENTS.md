@@ -2379,7 +2379,7 @@ right before the password prompt, both found and fixed together;
 previously left unfixed as "harmless" — worth revisiting that call the
 next time `fy2` is touched, now that this round treats the pattern as
 a routine, safe-to-fix hit rather than a judgment call), `sanjieshenhua`, `ldtxii`,
-`yszz`, and `mohuanshiji` (each the same bare `printf("%O\n", ob)`
+`yszz`, `mohuanshiji`, and `jyqxc` (each the same bare `printf("%O\n", ob)`
 right before the Chinese-name is set — `ldtxii`'s sibling `ldtx` has
 the byte-identical line, unfixed; port the same one-line deletion
 there too when next touching that lib), and noted-but-left-alone on
@@ -3557,6 +3557,49 @@ whole mega-family's core combat loop, not just bad luck: the auto-flee
 safety net has now reliably prevented a live repro of this bug class
 across `fy330` and `fy2mg` both.
 
+**Fifth confirmed instance: `jyqxc`** (金庸群侠传, another XKX-framework
+sibling of `fy330`/`fy2mg`, sharing the same `adm/obj/master.lpc`) —
+THREE death-NPC files this time: `d/death/npc/{newgargoyle,bgargoyle,
+wgargoyle}.lpc` (实习无常/黑无常/白无常 — a third "trainee gargoyle"
+ghost-guard role alongside the usual white/black pair). All three had
+the same `if (!ob || !present(ob)) return;`; `bgargoyle.lpc` again has
+the pre-revival "attack the live trespasser" branch that falls through
+into the same multi-stage loop (same shape as `fy2mg`'s `bgargoyle.lpc`,
+not `fy330`'s separate-file `panguan2.lpc`), so all three files needed
+the fix. **Unlike `fy330`/`fy2mg`, this one WAS verified with an actual
+live death**: the newbie-guide-recommended "safe" `fight` command
+(auto-halts at 50% HP) still didn't save the test character against an
+overwhelming named NPC (欧阳克, a Jin Yong villain standing on an
+ordinary street) — a single blow went from full health to dead, too
+fast for the 50%-threshold check to ever fire — landing the character
+at 鬼门关 with the just-fixed `newgargoyle.lpc`'s "实习无常" and
+`wgargoyle.lpc`'s "白无常" both present. Left the sequence fully
+undisturbed (no forced mid-sequence move this time) and confirmed via
+reconnect that the character resurrected correctly at the revive room,
+alive, mobile, with the expected 40%-精气 death penalty and full food/
+water — the first live, end-to-end confirmation of this fix's
+undisturbed path in this bug class's whole history in this project
+(every prior instance either code-reviewed the fix or got saved by
+auto-flee before death). Still didn't reproduce the ORIGINAL
+disturbed-mid-sequence trigger (an unrelated NPC forcibly moving the
+ghost away mid-revival) — that remains verified only on `bmxkx2001`.
+
+**A genuinely novel variant of this same bug class, unrelated to
+death/resurrection**: `d/shaolin/npc/yu-zu2.lpc` ("狱卒", a Shaolin
+prison guard) uses the identical `if (!ob || !present(ob)) return;`
+inside its own multi-stage `call_out()` chain — but this one drives a
+"jail" punishment mechanic (60-second ticks advancing the jailer's
+dialogue, eventually releasing the prisoner via `move()`), not the
+underworld revival system at all. Confirms this bug class isn't tied
+to any one narrative wrapper: ANY multi-stage `call_out()` sequence
+that's supposed to eventually release/resolve its subject, gated on a
+combined `!ob || !present(ob)` bare-return, is vulnerable — a jailed
+player who happens to be absent for one tick would be stuck in jail
+forever, exactly like a ghost stuck unable to reincarnate. Fixed with
+the same split-guard pattern. When scanning a new lib for this bug
+class, grep for the guard SHAPE (`!ob || !present(ob)) return`) across
+the whole tree, not just `d/death/`.
+
 ### 7.69 The driver's own auto-included global header is missing a macro that a live daemon requires — while a near-identical, unused duplicate elsewhere in the tree still has it
 
 Found on `bmxkx2001`'s §10.7 deep functional test: `inherit/misc/
@@ -4045,7 +4088,12 @@ derivative family — a fifth unrelated lineage, no known relation to
 any of the previous four) — same leaner shape as `yxjh`, a bare
 `if (ob->query("age") == 14) { ... }` right after `user->setup()`,
 found alongside two `printf("%O\n", ob)` debug leaks (§7.34) in the
-same file during the same pass. All five fixed identically:
+same file during the same pass. Sixth confirmed instance on `jyqxc`
+(XKX/金庸群侠传 framework family — a sixth unrelated lineage), the
+full `!user->query("food") && !user->query("water") &&
+ob->query("age") == 14` shape byte-identical to `cctx`/`niaoren`/
+`ldtxii`, found alongside a single-path `printf("%O\n", ob)` debug
+leak (§7.34) in the same file. All six fixed identically:
 `ob->query("age")` → `user->query("age")`. The `enter_world()`-
 equivalent in `logind.lpc` has two live objects at once — `ob` (the
 transient login/connection stub) and `user` (the freshly-`new()`'d
