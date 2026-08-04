@@ -3402,8 +3402,38 @@ refuses to call it. Fix: drop `private` (keep `nomask`).
 Affected so far: `xuanjianlu`, `bmxkx2001`, `bxsj`, `bxsj1`,
 `jinyongwenzi`, `xiakexing3`, the `jqxz2008` group,
 `zhongjidiyu` (twice — main hook plus an 18-handler NPC file),
-`zjdyaryl`, `tiexuejianghu`, `xzyx`, `shiji` and
-`hell` (found via §10.7 deep functional test). `hell`'s manifestation was
+`zjdyaryl`, `tiexuejianghu`, `xzyx`, `shiji`,
+`hell`, `jym` and `cctx` (found via §10.7 deep functional test) and,
+via a proactive repo-wide sweep prompted by how often this kept
+recurring during deep-testing (2026-08-03): `fys`, `fyzfqyy`,
+`gjzddmudda`, `jh2006`, `jyqxc`, `jyqxc2`, `jyqxc2013fwq`,
+`njhhdxdes2hx`, `nt1`, `shujian3`, `sj`, `sje`, `sjecl`, `tianxia`,
+`wxddym`, `xjcq2000`, `xkm`, `xkx100`, `xkx2000zxb`, `xkx2017`,
+`xkxc98sj`, `xkxyb`, `xkyx3b`, `xkyxciii`, `yhwhpublicfi`, `yxsj`,
+`yxzsj`, `zjdy2008wzb`, `zjdywzb`, `zjmudhell` (30 libs, one commit).
+The sweep grepped every lib for `private.*command_hook`, found 109
+hits across 81 libs, then filtered hard before touching anything: 48
+of those hits were leftover false positives (an explanatory comment
+mentioning "private command_hook" sitting near an already-fixed
+declaration, or a match inside `feature/command2.lpc`-style dead
+files) and 31 were genuinely-dead variant files (`commandbak.lpc`,
+`commandhell.lpc`, `command_new.lpc`, `command2.lpc`, personal
+`u/<wizard>/command.lpc` copies) confirmed dead by grepping the whole
+lib for an `inherit` statement targeting that exact path — none
+found, so left untouched, same as the established `feature/
+command2.lpc` precedent on `jym`. Only the 30 listed above had a
+live, still-`private`, genuinely-inherited `feature/command.lpc`.
+**Gotcha hit while fixing these 30 in bulk**: doing the `private` →
+(nothing) removal in Python text mode silently normalized 17
+originally-CRLF files to LF (invisible in a quick diff --stat glance,
+`git diff` shows it as a full-file rewrite) — redone with binary-mode
+`rb`/`wb` regex substitution on the raw bytes instead, which produced
+a clean 1-line diff per file. Verified: all 30 boot cleanly (native
+driver, one lib at a time, exact-PID kills between each to avoid the
+shared-driver-process gotchas in §10.5), plus two full interactive
+registration/NPC-dialogue spot checks (`xkyx3b`, `tianxia`) confirmed
+the fix actually restores NPC `command()` self-call dispatch, not
+just a clean compile. `hell`'s manifestation was
 the sharpest yet: its ENTIRE character-creation flow (the "投胎" ritual —
 `register <email>` → `decide` → walk to a personality NPC → `wash` for
 talents → `born <place>`) runs through NPC `command("say/tell/nod ...")`
