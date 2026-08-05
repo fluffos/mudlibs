@@ -4409,6 +4409,16 @@ because that pass only tested the wizard login path) — fix is `if
 `adm/kernel/simul_efun/message.lpc` for a non-varargs `message()`
 wrapper on any `nitan`-lineage lib before assuming this one's fine.
 
+**Confirmed 3rd instance: `nt1`** — and this one has NO exact
+master-hash match to `xfbhh`/`hhsj`/`nitan170911` (its own README notes
+it as an independent branch, e.g. `F_SHELL` where the others have
+`F_EQUIP_LIV`). Same architecture, same `command.lpc` `enable_player()`
+crash, same fix — proving this bug traces to the shared NT/nitan/Lonely
+UPSTREAM design itself (bare set/query in composed-but-not-inheriting
+mixin files), not to one archive being copy-pasted from another. Treat
+`§7.78` as a standing check for **every** lib in the NT/nitan/Lonely
+family (§11 lineage map), not just byte-identical siblings.
+
 ### 7.79 (IDENTIFIED, NOT FIXED — too large for one pass) Bare, self-targeting `addn()`/`addn_temp()` calls are ALWAYS broken, codebase-wide, regardless of `F_DBASE` — because `addn` is simul_efun-ONLY and never locally defined anywhere
 
 Related to §7.78 but a distinct trap: unlike `set`/`query`/`delete`
@@ -4451,6 +4461,61 @@ this_object())->add(prop, data)` for the already-3-arg call sites, per
 per-file transform plus spot-verification rather than manual editing,
 and should probably be its own dedicated pass rather than bundled into
 an unrelated lib's deep-dive cycle.
+
+### 7.80 A filename-suffix-stripping slice is off by (suffix-length − 1) because `str[0..<n]` keeps `len-n+1` characters, not `len-n`
+
+Found on `nt1`'s §10.7 deep-dive: `adm/daemons/eventd.lpc` builds its
+list of loadable event files with `get_dir(EVENT_DIR + "*.lpc")` then
+`map_array(event_name, (: $1[0..<3] :))` to strip the `.lpc` extension
+before using each name as a `call_other` target. `.lpc` is 4 characters,
+but the slice only drops 3 — because this driver's `str[0..<n]` range
+keeps indices `0` through `sizeof(str)-n` INCLUSIVE, i.e. `len-n+1`
+characters survive, not `len-n`. `"emei.lpc"[0..<3]` is `"emei.l"`, not
+`"emei"`. Every single event in the directory got the same off-by-one
+corruption (`"huanggs.lpc"` → `"huanggs.l"`, etc.), so
+`collect_all_event()`'s `(EVENT_DIR + event)->create_event()` always
+targeted a nonexistent path — caught by the driver's error handler
+(`*call_other() couldn't find object ...`), so it never crashed
+anything, just silently disabled the entire event system on every boot.
+Detection: grep for `\[0\s*\.\.\s*<\s*\d+\]` (or the equivalent
+`sizeof(str)-N` arithmetic) anywhere it's paired with a known fixed
+suffix like `.lpc`/`.c`, and check the off-by-one by hand — `[0..<N]`
+needs `N = suffix_length + 1` to fully remove an N-1-character suffix,
+not `N = suffix_length`. Fix: change the slice bound to
+`suffix_length + 1` (here, `.lpc` is 4 characters, so `[0..<5]`).
+
+### 7.81 A shared base file's own method signature is narrower than the daemon it forwards to, breaking every content file that relies on the daemon's wider contract
+
+Found alongside §7.80 on the same `nt1` deep-dive:
+`inherit/misc/quest.lpc` (inherited by every quest content file in the
+lib) declares `void set_information(string key, string info)` — but
+this is just a thin forward to `adm/daemons/questd.lpc`'s own
+`set_information(object qob, string key, mixed info)`, which already
+and correctly accepts `mixed`. Nine separate quest files
+(`clone/quest/{capture,shen,supply,trace,search,explore,deliver,
+judge}.lpc`) call `set_information(NAME, (: ask_npcN :))`, passing a
+closure — perfectly valid against the daemon's real `mixed` contract,
+but rejected by the narrower local wrapper with a hard compile error
+(`Bad type for argument 2 of set_information ( string vs function )`),
+taking all nine quest types out of rotation with no runtime symptom at
+all (a compile error on a `clone/` file just means `new()` produces an
+empty-program object later — see §7.7-adjacent "no program in object"
+symptom, not a boot-time failure). This is the same "check whether
+scattered-looking errors share one inherited ancestor" lesson as
+`ds386`'s `body.lpc` case (§3), but the SHAPE is different: here it's a
+narrower TYPE on a wrapper function, not a syntax error, and the
+signature narrowing is easy to miss because the wrapper's OWN body
+(`QUEST_D->set_information(this_object(), key, info)`) compiles fine —
+only callers passing a non-string ever hit it. Detection: when several
+unrelated content files fail to compile with the identical "Bad type
+for argument N" message on the same call shape, check whether they all
+route through one shared inherited wrapper, and compare that wrapper's
+declared parameter types against whatever it actually forwards to —
+the wrapper is very often more restrictive than its own real backend
+for no functional reason. Fix: widen the wrapper's parameter type to
+match what it forwards to (here, `string info` → `mixed info`) — a
+single-file fix that resolved all nine quest files at once, no content
+file itself needed touching.
 
 ---
 
