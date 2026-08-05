@@ -46,6 +46,19 @@ email`，角色创建则是 `性别║头像║昵称`），这是为配合专�
    查原始字节区间（176-247/161-254）；这个驱动是按 UTF8 码点索引字
    符串的，导致奇数字数的中文名字（比如"小浮侠"）被误判为不合法。
    已改成逐码点检查（0x4e00-0x9fff）。
+4. **§7.78 CHARACTER mixin 裸 set()/query()（深度测试新发现，第 5
+   个确认实例）**：`alias`/`apprentice`/`attack`/`attribute`/
+   `command`/`damage`/`message`/`more`/`name`/`skill` 共 10 个组成
+   CHARACTER 的 mixin 文件里有裸 `set()`/`query()` 调用，但这些文件
+   自己都没有 `inherit F_DBASE`——包括 `command.lpc` 的
+   `enable_player()`，每个新角色登录都会崩溃。这份档案和
+   xfbhh/hhsj/nt1/nitan170911 同属 NT/nitan/Lonely 血统（连线协议一
+   样，多了一个独有的 `F_SUIT` mixin）。已用连续 3 次真人注册验证：
+   NPC"水笙"的欢迎语和玩家自己的名字全程正确显示，`debug.log` 全程
+   空白。
+5. **3 处 §7.68 死亡/复活软锁**（`d/death/npc/{bai,bgargoyle,
+   wgargoyle}.lpc`）：`death_stage()` 把"角色永久离开"和"暂时不在
+   场"混在一起处理，已拆分为"暂时不在场则重试"。
 
 ## 管理员账号 / Admin account
 
