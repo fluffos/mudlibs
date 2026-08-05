@@ -46,7 +46,20 @@ int set_emote(string pattern, mapping def, int raw);
 mapping query_emote(string pattern);
 
 void create() {
-  if (!restore() && !mapp(emote))
+  // AGENTS.md §7.87: the old `!restore() && !mapp(emote)` assumed
+  // restore() always returns a value -- but when the save file is
+  // malformed/oversized (emoted.o here, 328298 bytes vs this lib's
+  // 300000-byte "maximum read file size" default), restore() instead
+  // THROWS, aborting create() before either the old or a naive `||`
+  // rewrite ever reaches the `emote = ([])` fallback line. That left
+  // this daemon's `emote` mapping permanently 0 for the whole boot,
+  // crashing every single do_emote() call server-wide (NPC chat
+  // included) with no error ever logged (the throw happens during
+  // preload/lazy-compile, same swallowed-trace shape as AGENTS.md
+  // §7.60's CHANNEL_D bug). catch() so a bad save degrades to an
+  // empty emote table instead of taking down the whole feature.
+  catch(restore());
+  if (!mapp(emote))
     emote = ([]);
 }
 

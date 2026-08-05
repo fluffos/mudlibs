@@ -21,6 +21,12 @@ Myth）「测试二区」**——和 059 `sjcs`、060 `sanjieshenhua`
   求"误判成了权限不足而拒绝——这个 bug 后来用
   `scripts/scan_known_bugs.py` 静态扫描确认在其它同源档案里也有类
   似的死代码残留（未加载，未修）。
+- 深度功能测试（§10.7）发现一个此前从未被记录过、影响面极大的严重
+  bug（新增 AGENTS.md §7.87）：表情精灵 `emoted.lpc` 自己的存档文
+  件超过了这份档案 `config.fluffos` 里配置的读档大小上限，导致
+  `restore()` 直接抛出异常而不是老实回传失败——每一次 `smile` 之
+  类的表情指令、甚至 NPC 自己心跳驱动的闲聊都会崩溃，而且完全没有
+  任何 `debug.log` 记录。
 
 ## 本次修复的关键 bug
 
@@ -69,6 +75,28 @@ Myth）「测试二区」**——和 059 `sjcs`、060 `sanjieshenhua`
    logind.lpc` 的 `check_legal_name()`（同样的奇偶校验假设）都改成
    逐码点检查（0x4e00–0x9fff）——这也是为什么"小浮侠"这样三个字的名
    字一开始会被拒绝的原因。
+
+## 深度功能测试（§10.7）修复的 bug
+
+- **管理员账号播种缺失**：上一轮 WASM 修复笔记声称已经把 `fluffos
+  (admin)` 加入 `adm/etc/wizlist`，但实际检查存档只有 `rwz
+  (admin)` 一行——这次补上了 `fluffos (admin)`。
+- **printf 调试残留**：`adm/daemons/logind.lpc` 的 `get_name()`。
+- **留言板 `post` 崩溃（AGENTS.md §7.86，第四次跨家族确认）**：全档
+  案 99 份留言板文件都有同样的 `inherit` + 多余 `replace_program`
+  致命形状（97 处 `BULLETIN_BOARD` + 2 处 `BBS_BOARD`）。已删除全
+  部 97 处多余调用。
+- **`emoted.lpc` 存档超限导致 `restore()` 抛异常（AGENTS.md
+  §7.87，新发现）**：`data/emoted.o` 328298 字节，超过
+  `config.fluffos` 原来 `maximum read file size : 300000` 的限
+  制，`restore()` 因此直接抛出异常而不是回传失败，导致 `create()`
+  里"失败就给空 mapping"的兜底逻辑根本没机会执行——`emote` 这个全
+  局 mapping 永久停留在 `0`，让每一次表情指令、乃至 NPC 自己心跳驱
+  动的闲聊都崩溃，而且完全没有 `debug.log` 记录。双管齐下修复：把
+  读档大小上限提到 400000（和 `esI`/`mhxy`/`mhxyqd`/`sjcs`/
+  `xiyouji2003`/`zzhj` 等档案的做法一致），并给 `create()` 加上
+  `catch(restore())`，让它无论 `restore()` 是回传失败还是直接抛出
+  异常都能正确兜底。
 
 ## 已知但非 bug 的测试摩擦：注册流程的 call_out(0) 竞态
 

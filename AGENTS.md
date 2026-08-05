@@ -4750,6 +4750,7 @@ command that creates closures (an editor callback, a delayed
 `call_out()` bound to `this_object()`, anything using `(: lfun, ... :)`
 literal syntax without an explicit target object) mysteriously fails
 only on that one command while everything else on the same object works
+fine.
 
 **Confirmed across three unrelated codebase families, not one
 lineage's quirk**: reproduced byte-for-byte identically on `zxty`
@@ -4766,7 +4767,78 @@ same crash). Treat this as a near-universal copy-paste idiom across
 this whole generation of ES2-derived codebases -- check EVERY class a
 board-like object inherits for a matching redundant
 `replace_program()`, not just the most common `BULLETIN_BOARD` name.
-fine.
+
+---
+
+### 7.87 A save file exceeding the driver's configured "maximum read file size" makes `restore()` THROW instead of failing gracefully, and the throw happens during a lazy first-load with no error ever reaching `debug.log`
+
+Found on `xyj20032`'s §10.7 deep functional test: `smile` and other
+one-word emote commands, and — far more alarmingly — ordinary NPC
+chat/heart_beat-driven social actions (an NPC drinking, chatting,
+anything routed through `do_emote()`) started throwing:
+```
+执行时段错误：*Value being indexed is zero.
+程式：/adm/daemons/emoted.lpc 第 341 行
+```
+on `query_emote()`'s `emote[pattern]` lookup — meaning `emote`, the
+daemon's own persistent mapping, was `0` instead of a mapping. Its
+`create()` looked properly defensive at a glance:
+```lpc
+void create() {
+  if (!restore() && !mapp(emote))
+    emote = ([]);
+}
+```
+The intent: if `restore()` fails, fall back to an empty mapping. But
+`emoted.o` — this lib's save file for hundreds of custom emote
+definitions — is 328298 bytes, and this lib's `config.fluffos` has
+`maximum read file size : 300000`. When the file exceeds that limit,
+`restore()` doesn't return a falsy value at all — it **throws**, which
+aborts `create()` immediately, before the `if` statement's fallback
+assignment ever executes. `emote` is left permanently `0` for the rest
+of that boot. Because this happens the first time ANYTHING calls
+`do_emote()` (frequently an NPC's own ambient chat, not a player
+command), and because the throw occurs mid lazy-compile/first-call
+rather than during boot's own preload sweep, **nothing was ever
+written to `debug.log`** — the only visible symptom was the runtime
+error shown live to whichever player happened to trigger it (or
+silently to nobody, if it was only ever NPC-to-NPC). This is the same
+"uncaught throw during a lazy first load, invisible to every standard
+log" shape as §7.60's `CHANNEL_D` bug and §7.5's `file_size` ACL
+false-denial, but the trigger here is a driver-level resource limit,
+not mudlib logic.
+
+Two-part fix: (1) raise `config.fluffos`'s `maximum read file size`
+past the actual save file's size — bumped to `400000` here, matching
+the value already used by several other libs in this project
+(`esI`/`mhxy`/`mhxyqd`/`sjcs`/`xiyouji2003`/`zzhj`/others) for the
+identical reason. (2) **Also** make the daemon's own `create()` robust
+regardless of *how* `restore()` fails — a thrown error and a falsy
+return both need the same fallback:
+```lpc
+void create() {
+  catch(restore());
+  if (!mapp(emote))
+    emote = ([]);
+}
+```
+Verified live: before either fix, `smile` and ambient NPC chat both
+crashed with the error above, and `debug.log` had zero related entries
+despite dozens of triggers across two boot sessions. After both fixes,
+ten+ minutes of ambient NPC activity and direct emote commands produced
+zero occurrences.
+
+Detection pattern: any lib with a `create()` shaped like
+`if (!restore() && !mapp(X)) X = ...;` is silently assuming `restore()`
+can only ever return a value, never throw — check `config.fluffos`'s
+`maximum read file size`/`maximum string length` against the actual
+byte size of every `.o` save file that daemon-level object owns
+(`ls -la` the path from its own `query_save_file()`), not just the
+per-player save files this project already routinely checks elsewhere.
+A singleton daemon whose OWN save data silently exceeds the configured
+limit is a different failure shape from a corrupted per-player save —
+it breaks the feature for every single player and NPC in the game,
+permanently, for that boot, with no log trace at all.
 
 ---
 
