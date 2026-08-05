@@ -562,6 +562,42 @@ time budget.
   duel.** Time budget was spent on the registration/persistence bug
   chain above instead, which was the far more consequential finding.
 
+## 深度功能测试后续（本轮）：§7.78 第 4 个确认实例
+
+本轮不是全新的 §10.7 深度测试——上面已有的记录已经相当完整（技能升级
+实测、`message()`/`tell_room()` 修复、一次真实的驱动崩溃发现、净断连
+soak test 等）。本轮专门针对 xfbhh/hhsj/nt1 三个 lib 依次确认过的
+**§7.78**（CHARACTER 组成的 mixin 文件里裸 `set()`/`query()` 调用解
+析不到本对象的 F_DBASE）做一次定向检查——`nitan170911` 是这整条
+NT/nitan 血统的最初母本（xfbhh/hhsj/nt1 都是它的后代分支），如果连它
+自己都有这个 bug，就能确认这是上游架构从一开始就带着的通病，不是后
+续哪个分支自己引入的。
+
+**结果：确实有，而且裸调用数量和 xfbhh 几乎逐行对得上**
+（`attack.lpc` 12 处、`damage.lpc` 54 处等），`command.lpc` 的
+`enable_player()` 也是同款 `set_living_name(query("id"))` 崩溃写法。
+按已经验证过 3 次的相同修法处理：13 个 mixin 文件（`action`/
+`apprentice`/`attack`/`attribute`/`command`/`condition`/`damage`/
+`equip_liv`/`message`/`more`/`move`/`name`/`team`）里"自己对自己"的
+裸调用改成 `this_object()->set(...)`/`this_object()->query(...)`。
+`feature/message.lpc`（这次改的这个）和已经修好的
+`adm/kernel/simul_efun/message.lpc`（README 里记录的
+exc_target=0/tell_room() 修复）是两个完全不同的档案，互不冲突，改动
+前已确认过。
+
+**本轮明确做不到的事：真人游玩验证。** 这份档案的注册与登录**完全**
+依赖 MySQL（`#ifdef DB_SAVE`分支——不只是新注册，连 `qinfeng`
+这样已有本地存档的老角色登录也会先走 `DATABASE_D->query_db_status()`
+检查，本环境这台机器上根本没装 MySQL/MariaDB，`which mysql` 都找不
+到），这是 README 里已经记录过的真实、永久的环境限制，不是这次新发
+现。因此本轮只能做到：格式化工具确认 13 个文件 0 语法错误、干净重新
+编译（`debug.log`/`boot.log` 都不含任何和这 13 个档案相关的报错或警
+告）、以及依赖已经在 xfbhh/hhsj/nt1 三次真人验证过的同一套修法本身的
+可信度——没有再做一次真正的注册/登录/对话验证。如果将来这台机器配置
+了 MySQL，建议优先用 `qinfeng`/`PlayPass123` 登录一次，走到任意一个
+有 NPC 对话的场景，确认 NPC 名字和自己的名字都正确显示（不再是
+xfbhh 那种"巨斧"/字面 "0" 的乱码）。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 NT/nitan 血统；游戏内品牌为"仙剑奇侠传"。没有预先播种管理员账号（这份档案的注册/存档后端真的要跑 MySQL，本环境没有配置——这份档案自己的 README 里已经记录为一个真实、永久的例外，不是 bug）——状态是靠重新测试一次全新的 WASM 注册流程来修正过时的 limited 标记：英文 id→确认→中文姓氏+名字（常见的测试名字比如"秦风"和已有的存档玩家数据冲突，需要一个真正没被用过的组合）→管理密码+确认→登录密码+确认→角色类型菜单→性别，干净地进入游戏世界，没有任何错误；quit 正确触发了这份档案自己"新账号 30 分钟内可撤销注册"的设计（不是 bug）并干净完成。mysql_d.lpc 的 db_connect()/db_exec()"Undefined function"编译错误是预期之中、转档前就存在的（这个驱动构建没有 db 包），不影响游戏。
