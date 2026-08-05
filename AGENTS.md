@@ -3597,7 +3597,43 @@ mismatch is load-bearing before editing either.
 
 ---
 
-### 7.68 A multi-stage `call_out()` sequence gated on `present(ob)` silently and PERMANENTLY abandons its subject if something else moves it away mid-sequence — no error, no retry, no recovery
+### 7.68 (LARGELY RETRACTED — see note below; narrowed to `bmxkx2001` only) A multi-stage `call_out()` sequence gated on `present(ob)` silently and PERMANENTLY abandons its subject if something else moves it away mid-sequence — no error, no retry, no recovery
+
+**Retraction (user correction, 2026-08-05): "stuck as a ghost if you're
+not in the room" is a plausible, even likely, INTENTIONAL design choice
+— not a universal bug.** After the original `bmxkx2001` finding, this
+fix was applied to every other lib found with the same `if (!ob ||
+!present(ob)) return;` guard shape purely by pattern-matching the code,
+without re-verifying the finding's actual precondition in each new lib:
+that (a) a ghost's own movement is normally blocked entirely, so
+`present(ob)` can only go false via some OTHER system forcibly moving
+the ghost against its will, and (b) such a forcing mechanism actually
+exists in that lib. `bmxkx2001` itself satisfies both — confirmed live
+(a ghost couldn't move on its own, and a scripted tour-guide NPC with no
+`is_ghost()` check yanked the ghost mid-sequence) — so the fix is
+legitimate THERE. Multiple later "confirmed instances" below explicitly
+admit they were "applied proactively... before the soft-lock was ever
+actually triggered live" (i.e. never confirmed condition (b), and in
+several cases never even checked condition (a)). If a lib's ghosts CAN
+freely wander off under their own power, then a ghost that leaves the
+death room and never triggers the resurrection NPC's dialogue again is
+just as plausibly an intentional "wander the underworld until you find
+your own way back" mechanic — the room's own `init()` re-schedules the
+sequence fresh from stage 0 the next time the ghost re-enters, so
+nothing is unrecoverably lost, and forcing an indefinite retry (as this
+fix does) can actually introduce a NEW bug: if the ghost wanders back in
+later, the old resumed retry and a fresh `init()`-triggered sequence can
+run concurrently, garbling the dialogue. **Action taken**: the retry
+patch has been reverted in every lib below except `bmxkx2001` itself
+(restored to the original bare `if (!ob || !present(ob)) return;`).
+Each of those libs' own NOTES.md has a short correction note. Do NOT
+apply this fix to a new lib on code-shape alone — first confirm LIVE
+that (1) a ghost genuinely cannot move under its own power in that
+specific lib, AND (2) some other system actually forces ghosts to move
+against their will during the resurrection window. Absent both, treat
+"absent → abandon the sequence, restart fresh on next room-entry" as
+correct, intentional behavior and leave it alone — same spirit as
+§7.27's transit-room retraction.
 
 Found on `bmxkx2001`'s §10.7 deep functional test, in the death/
 resurrection NPCs (`d/death/npc/{wgargoyle,wgargoyle1,bgargoyle}.lpc`).
@@ -3653,7 +3689,7 @@ abandonment — reserve the hard stop for a genuinely-destructed/gone
 object, since "briefly not here" and "gone forever" are different
 failure modes.
 
-**Second confirmed instance: `bixiecanyang`** (夕阳再现-derivative
+**Second confirmed instance: `bixiecanyang`** (RETRACTED — see top of §7.68) (夕阳再现-derivative
 lineage — unrelated to `bmxkx2001`'s branded content, but clearly
 shares this same underlying death-system component somewhere upstream
 in the broader ES2 mega-family, byte-for-byte the same `if (!ob ||
@@ -3670,7 +3706,7 @@ other ES2-family lib's `d/death/npc/*gargoyle*.lpc` (or equivalently
 named ghost-guard files) for this same guard shape on sight, since it
 appears to be shared infrastructure, not lib-specific code.
 
-**Third confirmed instance: `fy330`** (风云Ⅲ, a different branch of the
+**Third confirmed instance: `fy330`** (RETRACTED — see top of §7.68) (风云Ⅲ, a different branch of the
 same broad ES2/古龙-flavored mega-family, sharing the "朱笔判官"
 ghost-judge naming and flavor text already seen in `mohuanshiji`/
 `yszz`), found in `d/death/npc/panguan.lpc`'s `death_stage()`: `if (!ob
@@ -3696,7 +3732,7 @@ bug class. Don't pattern-match on the guard text alone; confirm the
 function actually drives a multi-stage resurrection sequence before
 treating a `!present(ob)` bare-return as this bug.
 
-**Fourth confirmed instance: `fy2mg`** (风云Ⅱ美国版本, `fy330`'s own
+**Fourth confirmed instance: `fy2mg`** (RETRACTED — see top of §7.68) (风云Ⅱ美国版本, `fy330`'s own
 XKX-framework sibling — same `adm/obj/master.lpc` euid/check_legal_name
 bug pair as `fy330`, and it turns out the same death system too):
 `d/death/npc/{wgargoyle,bgargoyle}.lpc` (白无常/黑无常), byte-identical
@@ -3722,7 +3758,7 @@ whole mega-family's core combat loop, not just bad luck: the auto-flee
 safety net has now reliably prevented a live repro of this bug class
 across `fy330` and `fy2mg` both.
 
-**Fifth confirmed instance: `jyqxc`** (金庸群侠传, another XKX-framework
+**Fifth confirmed instance: `jyqxc`** (RETRACTED — see top of §7.68) (金庸群侠传, another XKX-framework
 sibling of `fy330`/`fy2mg`, sharing the same `adm/obj/master.lpc`) —
 THREE death-NPC files this time: `d/death/npc/{newgargoyle,bgargoyle,
 wgargoyle}.lpc` (实习无常/黑无常/白无常 — a third "trainee gargoyle"
@@ -3750,7 +3786,7 @@ disturbed-mid-sequence trigger (an unrelated NPC forcibly moving the
 ghost away mid-revival) — that remains verified only on `bmxkx2001`.
 
 **A genuinely novel variant of this same bug class, unrelated to
-death/resurrection**: `d/shaolin/npc/yu-zu2.lpc` ("狱卒", a Shaolin
+death/resurrection (RETRACTED — see top of §7.68)**: `d/shaolin/npc/yu-zu2.lpc` ("狱卒", a Shaolin
 prison guard) uses the identical `if (!ob || !present(ob)) return;`
 inside its own multi-stage `call_out()` chain — but this one drives a
 "jail" punishment mechanic (60-second ticks advancing the jailer's
@@ -3765,7 +3801,7 @@ the same split-guard pattern. When scanning a new lib for this bug
 class, grep for the guard SHAPE (`!ob || !present(ob)) return`) across
 the whole tree, not just `d/death/`.
 
-**Sixth confirmed instance: `yhyxs`** (yh2003/炎黄英雄史 lineage, sibling
+**Sixth confirmed instance: `yhyxs`** (RETRACTED — see top of §7.68) (yh2003/炎黄英雄史 lineage, sibling
 of `yanhuangwuhun` — an unrelated top-level lineage from every prior
 instance) — `d/death/npc/{hei,bai}.lpc` (黑无常/白无常), the same
 `if (!ob || !present(ob)) return;` inside a five-stage `death_stage()`
@@ -3782,7 +3818,7 @@ confirmed via reconnect the character resurrected correctly at 武庙
 (扬州), alive, mobile, full 精气/气血, 潜能 halved as the expected
 death penalty.
 
-**Seventh confirmed instance: `yanhuangwuhun`** (yh2003 lineage,
+**Seventh confirmed instance: `yanhuangwuhun`** (RETRACTED — see top of §7.68) (yh2003 lineage,
 `yhyxs`'s own sibling) — this archive ships TWO complete death
 systems: `d/death/` (the one `DEATH_ROOM` in `include/login.h`
 actually points at — live) and `d/death22/` (never referenced by any
@@ -3830,7 +3866,7 @@ not just the §7.68 guard shape) on sight in any lib with multiple
 death-NPC implementations, in case a future archive has this same
 typo in a file that turns out to actually be live.
 
-**Eighth confirmed instance: `syxjl`** (随缘洗剑录, ES2-family but a
+**Eighth confirmed instance: `syxjl`** (RETRACTED — see top of §7.68) (随缘洗剑录, ES2-family but a
 distinct branch from every prior instance's lineage — shares code with
 神州/火影/武汉站, not the XKX or yh2003 families) —
 `d/death/npc/wgargoyle.lpc` (白无常, the one `DEATH_ROOM` actually
@@ -3851,7 +3887,7 @@ variant already cataloged from `jyqxc` (`d/shaolin/npc/yu-zu2.lpc`,
 confirmed dead — superseded by a `yu-zu.lpc` with no jail mechanic at
 all) for consistency at negligible cost.
 
-**Ninth confirmed instance: `wmkj`** (夕阳再现/`bixiecanyang` lineage —
+**Ninth confirmed instance: `wmkj`** (RETRACTED — see top of §7.68) (夕阳再现/`bixiecanyang` lineage —
 sibling to `bixiecanyang`, sharing the same `chinese.lpc`/`securityd.lpc`
 tooling files) — `d/death/npc/wgargoyle.lpc` (live, `DEATH_ROOM` points
 at its room) plus the same two already-cataloged dead-code variants
@@ -3868,7 +3904,7 @@ this bug class and was not introduced by this fix (confirmed: without
 this fix, the sequence would abort even earlier, at the missing-present
 check, never even reaching the point where the new anomaly occurs).
 
-**Tenth confirmed instance: `kxkj1`** (狂想空间, ES2-family — an
+**Tenth confirmed instance: `kxkj1`** (RETRACTED — see top of §7.68) (狂想空间, ES2-family — an
 independent early-台湾 branch, not sharing tooling files with the
 `bixiecanyang`/`wmkj`/`yhyxs` sub-lineages above) — `open/death/npc/
 wgargoyle.lpc` (live, `DEATHROOM` macro's target room places it
@@ -3883,7 +3919,7 @@ reconnect after an undisturbed death sequence, landing the test
 character at `REVIVEROOM` in normal, playable state. Both files also
 had an unrelated second bug fixed in the same edit — see §7.75.
 
-**Eleventh confirmed instance: `zjdyzj`** (终极地狱-指间MUD版, ES2 →
+**Eleventh confirmed instance: `zjdyzj`** (RETRACTED — see top of §7.68) (终极地狱-指间MUD版, ES2 →
 XKX → "hell"-branch family, sibling to `zjdyaryl` — unrelated to every
 prior instance's lineage) — `d/death/npc/{wgargoyle,bgargoyle}.lpc`
 (白无常/黑无常; `DEATH_ROOM` macro places `wgargoyle` directly, and its
@@ -3900,7 +3936,7 @@ reconnect (no commands sent during the `call_out` chain, to avoid
 that all five `death_msg` stages complete, `reincarnate()` succeeds, and
 the character lands correctly at `/d/city/guangchang`.
 
-**Twelfth confirmed instance: `fysjmb`** (风云Ⅳ解密版, Sumxin-风云
+**Twelfth confirmed instance: `fysjmb`** (RETRACTED — see top of §7.68) (风云Ⅳ解密版, Sumxin-风云
 family — the death NPC's own `// TIE@FY3` header comment reveals it
 originates from the same source as `fy330`/`fy2mg`'s own 判官 NPC,
 though this archive's copy had drifted independently) —
@@ -3932,7 +3968,7 @@ only the room-arrival message, one post-fix via an undisturbed
 wait-then-reconnect) that the fix lands the character at one of the two
 randomized `revive_loc` destinations.
 
-**Thirteenth confirmed instance: `fys`** (风云三 archive name, 铁血江湖
+**Thirteenth confirmed instance: `fys`** (RETRACTED — see top of §7.68) (风云三 archive name, 铁血江湖
 in-game banner — ES2-lineage, unrelated to the `fysjmb`/`fy330` sub-
 family above despite the similar `fy`-prefixed slug) — `d/death/npc/
 {wgargoyle,bgargoyle}.lpc` (白无常/黑无常; `DEATH_ROOM` macro places
@@ -3997,7 +4033,7 @@ new name) for what the "correct" target should be — a same-named file
 does exist elsewhere (`d/chengdu/chunxilu3.lpc`), but a shared filename
 alone is too weak a signal to act on; document, don't guess.
 
-**Fourteenth confirmed instance: `njhhdxdes2hx`** (ES2/侠客行 hybrid,
+**Fourteenth confirmed instance: `njhhdxdes2hx`** (RETRACTED — see top of §7.68) (ES2/侠客行 hybrid,
 南京河海大学 campus build — unrelated lineage to `fys` above despite
 sharing the exact same shared "白无常/黑无常" gargoyle NPC boilerplate
 almost every ES2-family lib in this project carries). `d/death/npc/
@@ -4019,7 +4055,7 @@ copied across ES2-family forks) and two unrelated stray-backslash
 (`fist_trainer.lpc`, `annihir.lpc`) — see §7.77's sibling finding for
 the food/water bug found on the same lib.
 
-**Fifteenth confirmed instance: `jhfy2`** (江湖风云II 之 辽宁风云再起,
+**Fifteenth confirmed instance: `jhfy2`** (RETRACTED — see top of §7.68) (江湖风云II 之 辽宁风云再起,
 "tianya"-map-family sibling to `tybxjh`/`xhcii`/`zxty`/`ffxymud` — a
 relationship this lib itself was the SIXTH confirmed member of, per its
 own README, but unrelated to any prior §7.68 instance's lineage).
