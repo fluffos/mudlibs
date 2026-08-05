@@ -10,6 +10,21 @@ void init_day_phase();
 
 void create() {
   day_phase = read_table("/adm/etc/nature/day_phase");
+  // AGENTS.md §7.9 follow-up: this archive shipped without
+  // /adm/etc/nature/day_phase at all, so read_table() (guarded above
+  // to not crash on the missing file) returns an empty array -- but
+  // every other function in this file (init_day_phase(),
+  // update_day_phase(), outdoor_room_description()/_outcolor()) reads
+  // day_phase[current_day_phase] assuming at least one entry, and
+  // sizeof(day_phase)-1 going negative crashed every outdoor room's
+  // look. A single all-day fallback phase keeps every existing
+  // index/modulo computation well-defined instead of guarding each
+  // call site separately.
+  if (!sizeof(day_phase))
+    day_phase = ({ ([
+      "length": 1440, "desc_msg": "天色如常", "outcolor": "HIW",
+      "time_msg": "时间照常流逝",
+    ]) });
   init_day_phase();
 }
 string query_day_file() {
@@ -236,9 +251,14 @@ void event_noon() {
 }
 
 string outdoor_room_description() {
+  // AGENTS.md §7.9 follow-up: day_phase is empty when its data table
+  // (/adm/etc/nature/day_phase) is missing -- indexing an empty array
+  // crashed every outdoor room's look. Fall back to no extra text.
+  if (!sizeof(day_phase)) return "";
   return "    " + day_phase[current_day_phase]["desc_msg"] + "。\n";
 }
 string outdoor_room_outcolor() {
+  if (!sizeof(day_phase)) return 0;
   return day_phase[current_day_phase]["outcolor"];
 }
 
@@ -247,11 +267,17 @@ string game_time() {
 }
 
 mapping *read_table(string file) {
-  string *line, *field, *format;
+  string *line, *field, content;
+  string *format;
   mapping *data;
   int i, rn, fn;
   day_file = file;
-  line = explode(read_file(file), "\n");
+  // AGENTS.md §7.9: read_file() returns 0 (not a string) when the table
+  // file is missing (this archive shipped without /adm/etc/nature/ at
+  // all) -- explode(0, ...) crashed uncaught on the very first access,
+  // during logind.lpc's startroom move() lazy-compiling this daemon.
+  content = read_file(file);
+  line = stringp(content) ? explode(content, "\n") : ({});
   data = ({});
   for (i = 0; i < sizeof(line); i++) {
     if (line[i] == "" || line[i][0] == '#') continue;

@@ -1445,6 +1445,59 @@ for a `new_conn_handler: logon() ... has failed, the user is
 disconnected` line earlier in the log.
 Grep: `grep -rn "sscanf(read_file\|write(read_file" work/`.
 
+**Whole-directory-missing variant, found on `xxcq`'s deep functional
+test (§10.7): every registration was silently aborted, stranding the
+character with no environment at all, no error ever shown to the
+player.** This archive shipped with no `/adm/etc/` at all (already
+known from the WASM pass — see below), but the WASM-fix pass's directory
+seed only created `users`/`iduser`, missing `/adm/etc/motd`. `logind.lpc`'s
+`enter_world()` does `write(read_file(MOTD));` completely unconditionally,
+with **no** `stringp()` guard and not even inside the usual
+`sscanf`/uptime-counter idiom — `write(0)` throws `*Bad argument 1 to
+receive(): Expected: string or buffer Got: 0` straight out of
+`receive_message()`, uncaught, which aborts `enter_world()` **before**
+the `user->move(startroom)` call that appears later in the very same
+function. Net effect: the character object is fully created and saved,
+but never actually placed in any room — `look` afterward shows "你的四
+周灰蒙蒙地一片，什么也没有" (the generic no-environment message), with
+no crash trace visible to the player and nothing in debug.log pointing
+at the real cause unless you're watching boot.log at the exact moment.
+Symptomatic of a broader lesson: §7.9's fix pattern (`stringp()` guard)
+has to be applied to **every** unconditional `write(read_file(...))`
+that sits before a room-move in the login chain, not just the ones
+already shaped like a counter/banner read.
+
+A second daemon on the same archive hit the identical root cause one
+level removed: `adm/daemons/natured.lpc`'s day/night-phase system reads
+`/adm/etc/nature/day_phase` (also entirely absent) via
+`explode(read_file(file), "\n")` with no guard, crashing
+`*Bad argument 1 to explode()` the first time anything lazily touched
+it (here: the wizard-start room's own `move()` triggering an
+auto-`look`, then every subsequent outdoor room). Guarding just the
+`explode()` call is not enough on its own, though — `day_phase` ends up
+an **empty array**, and half a dozen *other* functions in the same file
+(`init_day_phase()`, `update_day_phase()`,
+`outdoor_room_description()`/`_outcolor()`) all index
+`day_phase[current_day_phase]` assuming at least one entry exists;
+`sizeof(day_phase)-1` goes negative, and modulo-by-`sizeof(day_phase)`
+divides by zero. Patching each read site individually is fragile and
+easy to under-cover; the more robust fix is a single minimal one-entry
+fallback table installed right where the file is read, so every
+existing index/modulo computation downstream stays well-defined:
+
+```lpc
+day_phase = read_table("/adm/etc/nature/day_phase");
+if (!sizeof(day_phase))
+  day_phase = ({ (["length": 1440, "desc_msg": "...", "outcolor": "...", "time_msg": "..."]) });
+```
+
+General lesson: when a `read_file()`/table-parse guard produces an
+*empty* collection rather than erroring, grep every other use of that
+same variable in the file before declaring the fix complete — an empty
+array/mapping is a different failure mode than a missing file, and can
+resurface the same crash (or a new one, e.g. division-by-zero) one
+level downstream.
+
 ### 7.10 `log_error()` receives WARNINGS too — and must not touch the ACL
 
 Two independent traps in the same apply:
@@ -4586,6 +4639,64 @@ for no functional reason. Fix: widen the wrapper's parameter type to
 match what it forwards to (here, `string info` → `mixed info`) — a
 single-file fix that resolved all nine quest files at once, no content
 file itself needed touching.
+
+### 7.82 A login object's own protective `set()` override is too strict, silently blocking a legitimate registration step
+
+Found on `xxcq`'s deep functional test (§10.7). `clone/user/login.lpc`
+hardens its own data against tampering with a `nomask` override:
+
+```lpc
+// Protect login object's data against hackers.
+nomask mixed set(string prop, mixed data) {
+  if (geteuid(previous_object()) != ROOT_UID) {
+    write("login set is error!" + geteuid(previous_object()) + "\n");
+    return 0;
+  }
+  return ::set(prop, data);
+}
+```
+
+Reasonable threat model (block a player-triggered exploit from
+overwriting `password`/`id` directly) — but the ROOT-only allowlist is
+too narrow: `inherit/room/regroom.lpc`'s own `do_register()` (the
+*intended*, core email-registration flow, not player-authored content)
+calls `linkob->set("password", crypt(pass, 0))` and `linkob->set("email",
+...)` while running at the registration room's own ordinary domain euid
+(here `"Domain"`), not root. Every call gets silently rejected —
+`"login set is error!Domain"` prints to the player, and the function
+carries on as if nothing happened (does NOT `return`/abort), so the
+rest of registration completes and *looks* successful ("你是第1个注册
+的朋友！发送到...的邮件已经加入发送队列！"), but the freshly-generated
+password mailed to the player is never actually applied — the
+account's real password stays whatever the player originally chose,
+silently diverging from what the "forgot your password? check your
+email" flow promises. Easy to miss because nothing crashes and the
+registration transcript reads as clean; only the literal `"login set is
+error!"` string in the transcript gives it away.
+
+Fix: don't widen the login object's own guard (that reopens exactly the
+hole its own comment warns about — "现在还是不够的！还是有漏洞！").
+Instead route the privileged write through a daemon that already
+legitimately holds root euid (`/adm/daemons/logind.lpc`, whose
+`create()` does `seteuid(getuid())`), via a small helper:
+
+```lpc
+// logind.lpc
+mixed set_login_field(object linkob, string prop, mixed data) {
+  if (!objectp(linkob) || base_name(linkob) != LOGIN_OB) return 0;
+  return linkob->set(prop, data);
+}
+// regroom.lpc, instead of linkob->set(...) directly:
+LOGIN_D->set_login_field(linkob, "password", crypt(pass, 0));
+```
+
+Detection pattern: grep for the literal guard-rejection string(s) in a
+live transcript (`"set is error"`, `"is fail"`, `"denied"` etc.) even
+when the surrounding flow doesn't crash — a `nomask` self-protecting
+`set()`/`save()` override on a login/character object is a recurring
+idiom in this lineage, and it's easy for the ORIGINAL author's own
+system code (not just modern conversion tooling) to end up on the
+wrong side of its own guard.
 
 ---
 

@@ -59,6 +59,21 @@ void create() {
   set("channel_id", "连线精灵");
 }
 
+// AGENTS.md: clone/user/login.lpc's own set() is nomask'd to only
+// accept ROOT-euid callers ("Protect login object's data against
+// hackers"), but that also blocks the legitimate email-registration
+// flow -- /inherit/room/regroom.lpc's do_register() runs at the room's
+// own (non-root) domain euid, so its linkob->set("password", ...) and
+// linkob->set("email", ...) calls were silently rejected ("login set
+// is error!Domain"), meaning the "new password mailed to you" step
+// never actually took effect. This daemon already has root euid
+// (create() above), so route the write through here instead of
+// widening login.lpc's own guard.
+mixed set_login_field(object linkob, string prop, mixed data) {
+  if (!objectp(linkob) || base_name(linkob) != LOGIN_OB) return 0;
+  return linkob->set(prop, data);
+}
+
 void logon(object ob) {
   write("\n\nWelcome to SnowMud! Select GB or BIG5 (gb/big5):");
   input_to((: logon_main :), ob);
@@ -334,7 +349,6 @@ void get_name(string arg, object ob) {
     input_to("get_name", ob);
     return;
   }
-  printf("%O\n", ob);
   ob->set("name", arg);
   write("请设定您的临时密码：");
   input_to("new_password", 1, ob);
@@ -477,7 +491,11 @@ varargs void enter_world(object ob, object user, int silent) {
     write("link_ob不正确，请重新连线进入游戏！\n");
 
   user->setup();
-  if (!user->query("food") && !user->query("water") && ob->query("age") == 14) {
+  // AGENTS.md §8.9: age is a property of the character (user), not the
+  // login object (ob) -- ob->query("age") is always undefined, so this
+  // gate was permanently false and every new character's food/water
+  // silently stayed at 0/empty forever, regardless of age.
+  if (!user->query("food") && !user->query("water") && user->query("age") == 14) {
     user->set("food", user->max_food_capacity());
     user->set("water", user->max_water_capacity());
   }
@@ -496,7 +514,11 @@ varargs void enter_world(object ob, object user, int silent) {
 
   // End of modification
   if (!silent) {
-    write(read_file(MOTD));
+    // AGENTS.md §7.9: read_file() returns 0 (not a string) when MOTD is
+    // absent, and write(0) crashes receive_message() uncaught, aborting
+    // enter_world() before the startroom move() below ever runs --
+    // stranding every new character with no environment at all.
+    if (stringp(read_file(MOTD))) write(read_file(MOTD));
     write("  \n" NOR);
     if (user->query("new_mail")) {
       tell_object(user, BLINK + HIY + "\n有您的信！快看你的信箱吧！\n\n" + NOR);
