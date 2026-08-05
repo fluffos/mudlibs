@@ -126,6 +126,70 @@ simul_efun/message.lpc:346`, "Bad argument 4 to EFUN message() Expected:
 object, array, Got: int(0)" -- doesn't block anything (room description
 still prints correctly afterward), not chased further this pass.
 
+**Correction from this session's §10.7 deep-dive (see below): this was
+under-scoped.** It's not wizard-specific -- it fires from
+`logind.lpc`'s `enter_world()` for EVERY new character, not just the
+`fluffos` admin account. Now fixed, see below.
+
+## 深度功能测试（§10.7，本轮）
+
+之前几轮只验证到"注册成功进入世界之树"这一步，`d/register/npc/pangu.lpc`
+到"投胎"仪式之后的内容、以及上面提到的 `message()` 报错都没有深入查。这
+次用真实驱动起服，走了完整流程：注册 → 生命之谷见盘古 → zz（选种族）→
+xuan（选性别）→ choose（选性格）→ washto（洗点，本 lib 的分配区间是
+13-30、总和 80，跟 xfbhh 的 10-200/200 不同——这是正常的数值设计差异，
+不是 bug）→ 进入"世界之树"新手村，全程用了好几个不同的中文名字反复验
+证，`debug.log` 全程保持空白。
+
+### 发现并修复的 bug
+
+**1. 与 xfbhh 完全相同血统的 §7.78：13 个 CHARACTER 组成 mixin 文件
+（`action`/`apprentice`/`attack`/`attribute`/`command`/`condition`/
+`damage`/`equip_liv`/`message`/`more`/`move`/`name`/`team`）里的裸
+`set()`/`query()` 调用无法正确解析到本对象的 F_DBASE。** 这个 lib 跟
+xfbhh 共享同一份 `dbase.c`/`name.c`（逐字节内容一致，只有排版差异），
+所以这就是同一个架构缺陷的第二个实例——不是巧合，是同一血统的共同祖先
+问题。修法完全一致：把这些 mixin 文件里"自己对自己"的裸调用改成
+`this_object()->set(...)`/`this_object()->query(...)`（call_other），
+让调用动态派发到真正组合出来的对象身上。修复前 `command.lpc` 的
+`enable_player()`——每个新角色登录都会触发——会因为裸 `query("id")`
+读回 0 而让 `set_living_name()` 崩溃；修复后完整走了好几次注册流程，
+NPC 名字（"盘古[Pan gu]"）和玩家自己的名字在对话里都正确显示。
+
+**2. 重新定位并修复了 README 里早就记录、但归因错误的
+`efun::message()` 崩溃。** 原记录说这个 bug"只在 fluffos/巫师房间入
+口路径观察到，不在普通玩家注册路径上"——这次深挖发现完全不是这样：
+`adm/daemons/logind.lpc` 的 `enter_world()` 第 1664 行
+`message("system", ADD2(user), users);` 这个调用只传了 3 个参数，而
+`adm/kernel/simul_efun/message.lpc` 里的本地 `message()` 包装函数签
+名是 `void message(mixed arg, string message, mixed target, mixed
+exclude)`——不是 varargs，缺的第 4 个参数 `exclude` 会被静默补成整数
+`0`，再传给 `efun::message(...)` 时这个驱动的原生 message() efun 拒
+绝接受字面 `0` 作为 exclude（要求 object/array 或者干脆不传）。这意味
+着**每一个新角色**在 `enter_world()` 阶段都会撞上这个报错，不只是巫
+师账号——之前的记录之所以只在巫师入口观察到，大概率只是因为那一轮测
+试没有用普通玩家账号复现到这一步。修法沿用 xfbhh 之前已经验证过的同
+一处：`if (!exclude) exclude = ({});` 补齐再转发给 `efun::message()`。
+
+**3. §7.68 死亡/复活软锁，5 处实例**（`d/death/npc/{bai,hei,bgargoyle,
+wgargoyle,chacha}.lpc`——比 xfbhh 多一个 `chacha.lpc`）：`death_stage()`
+的 `if (!ob || !present(ob)) return;` 把"角色永久离开"和"角色只是暂时
+不在场"混在一起处理。按各文件自己原有的重试间隔拆分修复：bai/hei/
+bgargoyle 是 5 秒，wgargoyle 是 10 秒（其 `init()` 首次用 30 秒），
+chacha 是 3 秒。
+
+### 未继续测试的部分
+
+`score` 指令这次测试里没能稳定拿到完整角色卡输出（怀疑是任务提示消息
+挤占了同一批返回，不是指令本身的问题——`debug.log` 全程没有任何报
+错，`气`/`精`/`内力` 状态条数值在多个测试角色间高度一致，看起来是设计
+好的数值而不是随机/错误数据）；没有触发死亡/复活流程去验证这次的 5 个
+§7.68 修复是否真的生效（下一轮如果继续深挖这个 lib，建议优先找怪打死
+一次角色验证）；也没有走 `d/register/yanluodian.lpc`（阎罗殿，"投胎"
+仪式的一部分，`wash`/`born` 指令）——粗略读了一下代码，这个房间看起来
+是死亡/转生系统的一部分，不是初始注册流程会经过的地方，留给专门测试
+死亡循环的下一轮。
+
 ## LPC formatter (WASM pass)
 
 Ran across all 24177 `.lpc`/`.h` files (24082 written). Blind-spot check
