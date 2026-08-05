@@ -573,6 +573,69 @@ removed.
   pass. Test character saves removed; fluffos.o timestamp churn
   reverted.
 
+## 深度功能测试（§10.7，本轮）：移植同引擎兄弟档案 jqxz2008 已确认的 4 个 bug
+
+这份档案自己的 README 已经说明和"2008 加强版"（`jqxz2008`）、"2008 标
+准版"（`jqxz2008std`）是完全相同的服务端引擎核心，只在门派 NPC、战斗
+数值、部分地图内容上有独立调整。`jqxz2008` 自己已经做过一轮扎实的
+§10.7 深度测试并记录了 4 个真实 bug——既然引擎核心相同，这轮直接逐一
+核对这些 bug 是否也存在于 `jqxz2008dlx`（而不是重新从零排查），四个
+全部确认存在且未修复：
+
+**1. `adm/daemons/chinesed.lpc`（§7.7：损坏存档数据把全局 mapping 清
+零）。** `data/e2c_dict.o` 是损坏的二进制垃圾数据（不是合法的 mapping
+字面量），`create()` 原本是 `seteuid(getuid()); restore();`——
+`restore()` 抛出的运行时错误没有在 `create()` 内被捕获，会让 `create()`
+在那一行直接中止，`mapping dict` 被清零。第一次真正用到
+`chinese()`/`to_chinese()` 的地方（战斗/技能提示大量使用）就会崩溃。
+修法和 `jqxz2008` 完全一致：`catch(restore()); if (!mapp(dict)) dict
+= ([]);`——单独加 `mapp()` 判断而不加 `catch()` 是不够的，因为不加
+`catch()` 那一行代码根本不会被执行到。
+
+**2. `adm/daemons/combatd.lpc`/`cmds/std/kill.lpc`/`cmds/skill/{bai,
+apprentice}.lpc`（§7.11：缺失的 `/log/nosave/` 目录让 `write_file()`
+静默中止一个多步骤清理函数）。** `work/log/nosave/` 目录在这份档案里
+同样不存在。最严重的是 `combatd.lpc` 的 `killer_reward()`——这个函数
+在**每一次死亡**时都会跑到，中间不加保护地 `write_file("/log/nosave/
+KILLRECORD", ...)`，一旦目录不存在就会抛出未捕获异常，让 `die()` 在
+那一行永久中止：角色的死亡清理（尸体、鬼魂状态、移动到死亡场景）全部
+不会执行，角色变成"活着但气血精气归零"的破损状态，而且这个崩溃会在
+之后的**每一次 heart_beat() 都重新触发一次**，变成死循环。用真实驱动
+让测试角色（沈十）被"欧阳克"这个 NPC 杀死做了实测验证：`你死了` →
+干净地进入"鬼门关"死亡场景，NPC"白无常"正常打招呼，全程 `debug.log`
+保持空白（十秒以上的心跳观察也没有延迟复现）。修法沿用 `jqxz2008` 已
+验证过的 `assure_file()`（这份档案自己的 `adm/simul_efun/file.lpc` 里
+已经有这个函数），在全部四处 `write_file("/log/nosave/...", ...)` 调
+用前各加一行 `assure_file(...)`；顺手也给 `bai.lpc`/`apprentice.lpc`
+里的 `read_file()` 结果加了 `stringp()` 判断（避免 `atoi(0)`）。
+
+**3. `cmds/skill/bai.lpc`/`cmds/skill/apprentice.lpc`（一处括号位置
+错误，把 `==` 比较写进了 `query()` 的参数列表内）。** 这两个完全相同
+的档案里都有：
+```lpc
+if (((string)me->query("family/master_id" == "feng qingyang")) || ...)
+```
+`==` 比较被夹在 `query(...)` 的参数括号内，所以传给 `query()` 的实际
+是一个布尔/整数值（永远是 `0`），不是想要的属性名字符串——这个用来检
+测"是否从风清扬门下叛出"的分支永远不可能触发。已改成先呼叫
+`query("family/master_id")`，再拿它的返回值和字符串比较（和同一档案
+里其它所有正确写法一致）。触发条件很窄（角色确实拜风清扬为师后又叛
+出），本轮没有专门构造这个场景做实测，但代码结构本身已经明确证明这
+是笔误而非设计判断。
+
+以上四个 bug 全部对应到既有的 AGENTS.md §7.7/§7.11/§7.9 类别，不是新
+分类，只是在同一引擎的另一个具体档案上再确认一次——这也进一步印证了
+"共享同一底层引擎的多个档案（内容版本不同）值得直接核对已知 bug 列
+表，而不是每份都从零排查"这条经验（和这个会话里 NT/nitan 家族的
+§7.78 系列发现是同一个模式）。
+
+### 未继续测试的部分
+
+时间关系，除了已经验证的注册、战斗、死亡流程外，没有测试拜师
+（`bai`/`apprentice`）本身、购物、以及触发风清扬叛出这个罕见分支——
+`bai`/`apprentice` 的两处修复已经通过代码对照（逐字节对比两个档案确
+认改动一致）验证，未做额外的实机拜师测试。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 同一引擎，不同内容构建版本。
