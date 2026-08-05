@@ -4389,6 +4389,26 @@ inherits of other equally bare-handed mixins) that still calls
 `query(...)`/`set(...)` is a strong signal — even if the object it's
 ultimately composed into looks completely fine on paper.
 
+**Confirmed 2nd instance: `hhsj`** (the `xfbhh`/`nitan170911` lineage
+sibling — byte-identical `feature/dbase.c`/`feature/name.c` down to
+formatting). Same 13 mixin files, same fix. Worth checking on EVERY
+`nitan`/`hhsj`/`nitan170911`-lineage lib (§11 lineage map) — a
+byte-identical `dbase.c` is a near-certain predictor of the same bug in
+the same 13 files, not just a hint. `hhsj`'s deep-dive also caught a
+related-but-distinct bug this pattern can mask: `adm/daemons/
+logind.lpc`'s `enter_world()` calls `message("system", ADD2(user),
+users);` — only 3 args, but the local `message()` wrapper (`adm/kernel/
+simul_efun/message.lpc`) isn't varargs (`void message(mixed arg, string
+message, mixed target, mixed exclude)`), so the omitted `exclude` is
+silently `0`, and `efun::message()` on this driver build rejects a
+literal `0` for that arg (`Bad argument 4... Expected: object, array`).
+Fires for EVERY new character at `enter_world()`, not just wizard
+accounts as an earlier, less-thorough pass had it scoped (mis-scoped
+because that pass only tested the wizard login path) — fix is `if
+(!exclude) exclude = ({});` before the `efun::message()` call. Grep
+`adm/kernel/simul_efun/message.lpc` for a non-varargs `message()`
+wrapper on any `nitan`-lineage lib before assuming this one's fine.
+
 ### 7.79 (IDENTIFIED, NOT FIXED — too large for one pass) Bare, self-targeting `addn()`/`addn_temp()` calls are ALWAYS broken, codebase-wide, regardless of `F_DBASE` — because `addn` is simul_efun-ONLY and never locally defined anywhere
 
 Related to §7.78 but a distinct trap: unlike `set`/`query`/`delete`
