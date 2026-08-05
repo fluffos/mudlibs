@@ -3597,42 +3597,35 @@ mismatch is load-bearing before editing either.
 
 ---
 
-### 7.68 (LARGELY RETRACTED — see note below; narrowed to `bmxkx2001` only) A multi-stage `call_out()` sequence gated on `present(ob)` silently and PERMANENTLY abandons its subject if something else moves it away mid-sequence — no error, no retry, no recovery
+### 7.68 (RETRACTED except `bmxkx2001` — read the retraction before applying) A multi-stage `call_out()` sequence gated on `present(ob)` can look like it silently abandons its subject if something else moves it away mid-sequence — but absence is usually the subject just wandering off on its own, which is often intentional design, not a bug
 
 **Retraction (user correction, 2026-08-05): "stuck as a ghost if you're
-not in the room" is a plausible, even likely, INTENTIONAL design choice
-— not a universal bug.** After the original `bmxkx2001` finding, this
-fix was applied to every other lib found with the same `if (!ob ||
-!present(ob)) return;` guard shape purely by pattern-matching the code,
-without re-verifying the finding's actual precondition in each new lib:
-that (a) a ghost's own movement is normally blocked entirely, so
-`present(ob)` can only go false via some OTHER system forcibly moving
-the ghost against its will, and (b) such a forcing mechanism actually
-exists in that lib. `bmxkx2001` itself satisfies both — confirmed live
-(a ghost couldn't move on its own, and a scripted tour-guide NPC with no
-`is_ghost()` check yanked the ghost mid-sequence) — so the fix is
-legitimate THERE. Multiple later "confirmed instances" below explicitly
-admit they were "applied proactively... before the soft-lock was ever
-actually triggered live" (i.e. never confirmed condition (b), and in
-several cases never even checked condition (a)). If a lib's ghosts CAN
-freely wander off under their own power, then a ghost that leaves the
-death room and never triggers the resurrection NPC's dialogue again is
-just as plausibly an intentional "wander the underworld until you find
-your own way back" mechanic — the room's own `init()` re-schedules the
-sequence fresh from stage 0 the next time the ghost re-enters, so
-nothing is unrecoverably lost, and forcing an indefinite retry (as this
-fix does) can actually introduce a NEW bug: if the ghost wanders back in
-later, the old resumed retry and a fresh `init()`-triggered sequence can
-run concurrently, garbling the dialogue. **Action taken**: the retry
-patch has been reverted in every lib below except `bmxkx2001` itself
-(restored to the original bare `if (!ob || !present(ob)) return;`).
-Each of those libs' own NOTES.md has a short correction note. Do NOT
-apply this fix to a new lib on code-shape alone — first confirm LIVE
-that (1) a ghost genuinely cannot move under its own power in that
-specific lib, AND (2) some other system actually forces ghosts to move
-against their will during the resurrection window. Absent both, treat
-"absent → abandon the sequence, restart fresh on next room-entry" as
-correct, intentional behavior and leave it alone — same spirit as
+not in the room" is a plausible, even likely, INTENTIONAL design
+choice, not a universal bug.** The original `bmxkx2001` finding below
+is real and confirmed live. But the fix was then applied to ~13 other
+libs found with the same `if (!ob || !present(ob)) return;` shape
+purely by pattern-matching the code, without re-verifying the actual
+precondition each time: this fix is only correct if (a) a ghost's own
+movement is normally blocked entirely, so `present(ob)` can only go
+false via some OTHER system forcibly moving it, AND (b) such a forcing
+mechanism actually exists in that lib. Most of those 13 never checked
+(b), several never even checked (a) — a few were applied "proactively,
+before the soft-lock was ever triggered live." If a lib's ghosts CAN
+wander off under their own power, then never re-triggering the revival
+dialogue is just as plausibly an intentional "wander the underworld
+until you find your own way back" mechanic (the room's `init()`
+re-schedules the whole sequence fresh next time the ghost re-enters,
+so nothing is unrecoverably lost) — and forcing indefinite retry
+instead can introduce a NEW bug: if the ghost wanders back later, the
+stale retry and a fresh `init()`-triggered sequence run concurrently
+and garble the dialogue. **Action taken**: reverted in every lib below
+except `bmxkx2001` (restored to the original bare guard); each lib's
+own NOTES.md has a short correction note. **Do not apply this fix to a
+new lib on code-shape alone** — first confirm LIVE that (1) a ghost
+genuinely cannot move under its own power there, AND (2) some other
+system actually forces ghosts to move against their will during the
+resurrection window. Absent both, "absent → abandon, restart fresh on
+next room-entry" is correct, intentional behavior — same spirit as
 §7.27's transit-room retraction.
 
 Found on `bmxkx2001`'s §10.7 deep functional test, in the death/
@@ -3677,8 +3670,7 @@ if (!present(ob)) {
 }
 ```
 Verified: normal (undisturbed) death→resurrection still completes
-correctly post-fix (fresh 【平民】status, full stat bars, at the
-expected revive room); a second death, disturbed by the same tour-guide
+correctly post-fix; a second death, disturbed by the same tour-guide
 NPC mid-sequence exactly as before, this time still resulted in the
 character ending up alive and freely mobile afterward (a ghost cannot
 move on its own, so free movement is itself proof of resurrection).
@@ -3687,299 +3679,36 @@ General lesson: a `present()`/liveness guard inside a multi-stage
 permanently should default to RETRY on ambiguous absence, not permanent
 abandonment — reserve the hard stop for a genuinely-destructed/gone
 object, since "briefly not here" and "gone forever" are different
-failure modes.
+failure modes. **But only apply that principle once (1) and (2) above
+are actually confirmed live — see the retraction.**
 
-**Second confirmed instance: `bixiecanyang`** (RETRACTED — see top of §7.68) (夕阳再现-derivative
-lineage — unrelated to `bmxkx2001`'s branded content, but clearly
-shares this same underlying death-system component somewhere upstream
-in the broader ES2 mega-family, byte-for-byte the same `if (!ob ||
-!present(ob)) return;` guard in both `d/death/npc/wgargoyle.lpc` and
-`d/death/npc/bgargoyle.lpc`). Found via §10.7 deep functional test —
-died fighting an NPC, landed at 鬼门关 with the same 白无常/黑无常
-ghost-guard pair. Applied the identical fix to both files before the
-soft-lock was ever actually triggered live here (the interaction that
-exposed it in `bmxkx2001` — an unrelated forced-move NPC colliding
-with an in-progress resurrection — wasn't reproduced in this session,
-but the vulnerable code shape is identical, so the fix was applied
-proactively rather than waiting for a live repro). Worth checking any
-other ES2-family lib's `d/death/npc/*gargoyle*.lpc` (or equivalently
-named ghost-guard files) for this same guard shape on sight, since it
-appears to be shared infrastructure, not lib-specific code.
-
-**Third confirmed instance: `fy330`** (RETRACTED — see top of §7.68) (风云Ⅲ, a different branch of the
-same broad ES2/古龙-flavored mega-family, sharing the "朱笔判官"
-ghost-judge naming and flavor text already seen in `mohuanshiji`/
-`yszz`), found in `d/death/npc/panguan.lpc`'s `death_stage()`: `if (!ob
-|| !present(ob) || (int)ob->query("combat_exp") > MAX_EXP) return;` —
-same bug, with an extra legitimate content-gate (`combat_exp >
-MAX_EXP`, a real design choice to route over-leveled characters to a
-different judge) bundled into the same condition. Fixed by splitting
-`!present(ob)` out into its own reschedule branch while leaving the
-`!ob`/`combat_exp` checks as permanent aborts (both are genuine
-disqualifications, not transient absence). Found via §10.7 deep
-functional test via code reading, not a live repro — the test
-character's auto-flee-from-combat safety mechanic reliably rescued it
-from actual death against every NPC tried this session, so the
-resurrection sequence itself was never driven live end-to-end here;
-documented honestly as an unverified-live fix in `fy330`'s own
-NOTES.md. **Also checked and deliberately left alone**: the same
-directory's `d/death/npc/panguan2.lpc` has the identical-looking `if
-(!ob || !present(ob)) return;` line, but it's a single-shot "attack a
-living trespasser in the underworld" check with no multi-stage
-`call_out` chain and nothing to abandon — absence there just means
-"nothing to punish," which is correct as-is, not an instance of this
-bug class. Don't pattern-match on the guard text alone; confirm the
-function actually drives a multi-stage resurrection sequence before
-treating a `!present(ob)` bare-return as this bug.
-
-**Fourth confirmed instance: `fy2mg`** (RETRACTED — see top of §7.68) (风云Ⅱ美国版本, `fy330`'s own
-XKX-framework sibling — same `adm/obj/master.lpc` euid/check_legal_name
-bug pair as `fy330`, and it turns out the same death system too):
-`d/death/npc/{wgargoyle,bgargoyle}.lpc` (白无常/黑无常), byte-identical
-`revive_loc`/`death_msg` text to `bixiecanyang`'s pair of the same
-filenames — this shared "白无常/黑无常 gargoyle" death subsystem spans
-at least two otherwise-unrelated top-level lineages now (夕阳再现-family
-`bixiecanyang` and XKX-family `fy2mg`), not just one. Both files had the
-same `if (!ob || !present(ob)) return;`; `bgargoyle.lpc` additionally
-has a "not yet a ghost → attack the trespasser" branch BEFORE the
-revival-stage loop (same shape as `fy330`'s `panguan2.lpc`), but unlike
-`panguan2.lpc` it falls through into the same multi-stage
-`death_stage()` as `wgargoyle.lpc` rather than being a separate
-single-shot function — so both files here needed the fix, unlike
-`fy330` where only one of the two death-NPC files did. Fixed with the
-same split-guard pattern. Also not verified with a live disturbed-
-sequence repro: three separate combat engagements against
-progressively stronger NPCs (including one that actively pursued the
-player between rooms, unlike every other instance's engagements) all
-ended in the character's own auto-flee-at-critical-hp safety mechanic
-saving it, down to as low as 11% of a combat-shrunken max-HP pool,
-never actual death — worth noting as a recurring property of this
-whole mega-family's core combat loop, not just bad luck: the auto-flee
-safety net has now reliably prevented a live repro of this bug class
-across `fy330` and `fy2mg` both.
-
-**Fifth confirmed instance: `jyqxc`** (RETRACTED — see top of §7.68) (金庸群侠传, another XKX-framework
-sibling of `fy330`/`fy2mg`, sharing the same `adm/obj/master.lpc`) —
-THREE death-NPC files this time: `d/death/npc/{newgargoyle,bgargoyle,
-wgargoyle}.lpc` (实习无常/黑无常/白无常 — a third "trainee gargoyle"
-ghost-guard role alongside the usual white/black pair). All three had
-the same `if (!ob || !present(ob)) return;`; `bgargoyle.lpc` again has
-the pre-revival "attack the live trespasser" branch that falls through
-into the same multi-stage loop (same shape as `fy2mg`'s `bgargoyle.lpc`,
-not `fy330`'s separate-file `panguan2.lpc`), so all three files needed
-the fix. **Unlike `fy330`/`fy2mg`, this one WAS verified with an actual
-live death**: the newbie-guide-recommended "safe" `fight` command
-(auto-halts at 50% HP) still didn't save the test character against an
-overwhelming named NPC (欧阳克, a Jin Yong villain standing on an
-ordinary street) — a single blow went from full health to dead, too
-fast for the 50%-threshold check to ever fire — landing the character
-at 鬼门关 with the just-fixed `newgargoyle.lpc`'s "实习无常" and
-`wgargoyle.lpc`'s "白无常" both present. Left the sequence fully
-undisturbed (no forced mid-sequence move this time) and confirmed via
-reconnect that the character resurrected correctly at the revive room,
-alive, mobile, with the expected 40%-精气 death penalty and full food/
-water — the first live, end-to-end confirmation of this fix's
-undisturbed path in this bug class's whole history in this project
-(every prior instance either code-reviewed the fix or got saved by
-auto-flee before death). Still didn't reproduce the ORIGINAL
-disturbed-mid-sequence trigger (an unrelated NPC forcibly moving the
-ghost away mid-revival) — that remains verified only on `bmxkx2001`.
-
-**A genuinely novel variant of this same bug class, unrelated to
-death/resurrection (RETRACTED — see top of §7.68)**: `d/shaolin/npc/yu-zu2.lpc` ("狱卒", a Shaolin
-prison guard) uses the identical `if (!ob || !present(ob)) return;`
-inside its own multi-stage `call_out()` chain — but this one drives a
-"jail" punishment mechanic (60-second ticks advancing the jailer's
-dialogue, eventually releasing the prisoner via `move()`), not the
-underworld revival system at all. Confirms this bug class isn't tied
-to any one narrative wrapper: ANY multi-stage `call_out()` sequence
-that's supposed to eventually release/resolve its subject, gated on a
-combined `!ob || !present(ob)` bare-return, is vulnerable — a jailed
-player who happens to be absent for one tick would be stuck in jail
-forever, exactly like a ghost stuck unable to reincarnate. Fixed with
-the same split-guard pattern. When scanning a new lib for this bug
-class, grep for the guard SHAPE (`!ob || !present(ob)) return`) across
-the whole tree, not just `d/death/`.
-
-**Sixth confirmed instance: `yhyxs`** (RETRACTED — see top of §7.68) (yh2003/炎黄英雄史 lineage, sibling
-of `yanhuangwuhun` — an unrelated top-level lineage from every prior
-instance) — `d/death/npc/{hei,bai}.lpc` (黑无常/白无常), the same
-`if (!ob || !present(ob)) return;` inside a five-stage `death_stage()`
-revival loop. Fixed with the same split-guard pattern. **Verified with
-a second genuine live undisturbed death-and-resurrection repro** (the
-first being `jyqxc`'s): fought and lost to an overwhelming named NPC
-(欧阳克, the same Jin Yong villain encountered independently on
-`jyqxc`'s own street — apparently recurring set-dressing across
-multiple unrelated lineages) — combat damage combined with an active
-winter-weather frostbite effect for a flavorful "被活活冻死了" (froze
-to death) kill message — landed at 鬼门关 with the just-fixed
-`bai.lpc`'s 白无常 present, left the sequence fully undisturbed, and
-confirmed via reconnect the character resurrected correctly at 武庙
-(扬州), alive, mobile, full 精气/气血, 潜能 halved as the expected
-death penalty.
-
-**Seventh confirmed instance: `yanhuangwuhun`** (RETRACTED — see top of §7.68) (yh2003 lineage,
-`yhyxs`'s own sibling) — this archive ships TWO complete death
-systems: `d/death/` (the one `DEATH_ROOM` in `include/login.h`
-actually points at — live) and `d/death22/` (never referenced by any
-room, code path, or macro anywhere in the tree — dead content,
-paired with an equally-unreferenced `adm/daemons/logind2.lpc`,
-apparently a whole bundled-but-never-wired-up alternate version).
-`d/death/npc/{hei,bai}.lpc` (live) and `d/death22/npc/{hei,bai}.lpc`
-(dead) all four have the identical `if (!ob || !present(ob)) return;`
-guard; fixed all four with the same split-guard pattern — the two
-dead-code ones cost nothing to fix now and are ready if that content
-is ever wired up later. **Verified with a third genuine live
-undisturbed death-and-resurrection repro**, once again via 欧阳克 (now
-confirmed recurring across three unrelated lineages —
-`jyqxc`/`yhyxs`/`yanhuangwuhun` — as shared ES2-family set-dressing,
-not a coincidence): this time the character's own `wimpy` auto-flee
-attempt was actively blocked by the opponent ("欧阳克飞身一闪，已将
-你的退路封死" — a first: every prior instance's auto-flee always
-succeeded), then two more hits plus the same active winter-frostbite
-stacking killed the character. Resurrection at 武庙 confirmed via
-reconnect exactly as the prior two instances.
-
-**An interesting NEAR-miss found only in the dead `d/death` code**:
-`d/death/npc/{wgargoyle,bgargoyle}.lpc` — an older "gargoyle"-named
-implementation of the same 黑无常/白无常 pair, superseded by
-`hei.lpc`/`bai.lpc` in the same directory and, like `d/death22`,
-referenced by no room at all. Both carry the same §7.68 guard, but
-`bgargoyle.lpc`'s `init()` ALSO has its `wizardp()` check inverted:
-`!wizardp(previous_object())` where every sibling (including its own
-neighbor `hei.lpc`) correctly has bare `wizardp(previous_object())`
-(the intent: skip scheduling revival for wizard ghosts, who get
-handled elsewhere). Inverted, this reads "skip scheduling revival for
-NON-wizard ghosts" — meaning if this file were ever live, ordinary
-players would NEVER get their `death_stage()` call_out scheduled at
-all and would be permanently stuck as ghosts, while wizards (who
-don't need this path) would be the only ones it worked for. **Left
-unfixed**, per the project's confirmed-unreachable-content convention
-(§13) — this file is provably dead code (no references found anywhere
-in the tree), so the inverted condition can never actually fire.
-Recorded here as a real bug that happens to be inert, likely
-introduced during this lineage's own rename from "gargoyle.c" to
-"hei.c"/"bai.c" at some point in its history, with the newer files
-getting the condition right and the superseded ones keeping the typo.
-Worth grep'ing for `!wizardp(previous_object())` (the inverted shape,
-not just the §7.68 guard shape) on sight in any lib with multiple
-death-NPC implementations, in case a future archive has this same
-typo in a file that turns out to actually be live.
-
-**Eighth confirmed instance: `syxjl`** (RETRACTED — see top of §7.68) (随缘洗剑录, ES2-family but a
-distinct branch from every prior instance's lineage — shares code with
-神州/火影/武汉站, not the XKX or yh2003 families) —
-`d/death/npc/wgargoyle.lpc` (白无常, the one `DEATH_ROOM` actually
-points at). Fixed with the standard split-guard pattern. **Verified
-with a fourth genuine live undisturbed death-and-resurrection repro**
-(after `jyqxc`/`yhyxs`/`yanhuangwuhun`) — killed by 欧阳克 again (now
-confirmed recurring across FOUR unrelated lineages as shared ES2-family
-set-dressing), landed at 鬼门关, left undisturbed, confirmed via
-reconnect the character resurrected at 武庙 with the expected
-half-精气/full-food-water state. Also confirmed live that a fresh
-ghost cannot move at all ("你已经没有力气再走路了，休息一下吧。") —
-worth remembering when judging whether an adjacent room's death-NPC
-variant is practically reachable, not just technically referenced by
-an exit (see §7.71's `bgargoyle.lpc`/`gateway.lpc` case on this same
-lib, which turned out to be exactly this kind of technically-linked-
-but-practically-unreachable room). Also fixed the same jail-mechanic
-variant already cataloged from `jyqxc` (`d/shaolin/npc/yu-zu2.lpc`,
-confirmed dead — superseded by a `yu-zu.lpc` with no jail mechanic at
-all) for consistency at negligible cost.
-
-**Ninth confirmed instance: `wmkj`** (RETRACTED — see top of §7.68) (夕阳再现/`bixiecanyang` lineage —
-sibling to `bixiecanyang`, sharing the same `chinese.lpc`/`securityd.lpc`
-tooling files) — `d/death/npc/wgargoyle.lpc` (live, `DEATH_ROOM` points
-at its room) plus the same two already-cataloged dead-code variants
-(`bgargoyle.lpc`, confirmed unreferenced by any room; `d/shaolin/npc/
-yu-zu2.lpc`, superseded by a jail-mechanic-free `yu-zu.lpc`), all fixed
-with the standard split-guard pattern. Verified via debug instrumentation
-(not just a clean reconnect) that the fix itself works exactly as
-intended: all five `death_msg` stages play in full and `reincarnate()`
-completes successfully. See §7.74 for a DIFFERENT, deeper, and
-UNRESOLVED anomaly found immediately downstream of this fix on the same
-lib — the character never actually arrives at `REVIVE_ROOM` despite the
-dialogue and `reincarnate()` both completing correctly, which is NOT
-this bug class and was not introduced by this fix (confirmed: without
-this fix, the sequence would abort even earlier, at the missing-present
-check, never even reaching the point where the new anomaly occurs).
-
-**Tenth confirmed instance: `kxkj1`** (RETRACTED — see top of §7.68) (狂想空间, ES2-family — an
-independent early-台湾 branch, not sharing tooling files with the
-`bixiecanyang`/`wmkj`/`yhyxs` sub-lineages above) — `open/death/npc/
-wgargoyle.lpc` (live, `DEATHROOM` macro's target room places it
-directly) and `open/death/npc/bgargoyle.lpc` (placed one room over, via
-the `DEATHROOM` room's own `north` exit — reachable, though this pass
-didn't separately walk a ghost there to confirm in play; fixed
-identically regardless, since an unreachable-in-practice copy of this
-bug is still worth closing while editing the sibling file). Both fixed
-with the standard split-guard pattern. Unlike `wmkj`'s §7.74 anomaly,
-`kxkj1`'s `ob->move(REVIVEROOM)` completes normally — verified via
-reconnect after an undisturbed death sequence, landing the test
-character at `REVIVEROOM` in normal, playable state. Both files also
-had an unrelated second bug fixed in the same edit — see §7.75.
-
-**Eleventh confirmed instance: `zjdyzj`** (RETRACTED — see top of §7.68) (终极地狱-指间MUD版, ES2 →
-XKX → "hell"-branch family, sibling to `zjdyaryl` — unrelated to every
-prior instance's lineage) — `d/death/npc/{wgargoyle,bgargoyle}.lpc`
-(白无常/黑无常; `DEATH_ROOM` macro places `wgargoyle` directly, and its
-own `north` exit reaches the room holding `bgargoyle` — both confirmed
-reachable). Both fixed with the standard split-guard pattern. Notable
-here: this lib ships its own non-`mudclient.py`-compatible client
-handshake (a `crypt()`-based version-challenge protocol, see this lib's
-own NOTES.md), so verifying the fix required a purpose-written Python
-client that computes the driver's own DES-crypt challenge response
-before it could even reach a login prompt, let alone drive a full
-death/resurrection cycle. Verified via an undisturbed wait-then-silent-
-reconnect (no commands sent during the `call_out` chain, to avoid
-`present(ob)` ever seeing anything but the ghost's real absence/presence)
-that all five `death_msg` stages complete, `reincarnate()` succeeds, and
-the character lands correctly at `/d/city/guangchang`.
-
-**Twelfth confirmed instance: `fysjmb`** (RETRACTED — see top of §7.68) (风云Ⅳ解密版, Sumxin-风云
-family — the death NPC's own `// TIE@FY3` header comment reveals it
-originates from the same source as `fy330`/`fy2mg`'s own 判官 NPC,
-though this archive's copy had drifted independently) —
-`d/death/npc/panguan.lpc` (朱笔判官, live and reachable — confirmed
-present in the 鬼门关 room the test character actually landed in after
-dying). Distinctive shape here: the guard bundled FOUR conditions into
-one early return — `if (!ob || !present(ob) || !ob->is_ghost() ||
-(int)ob->query("combat_exp") > MAX_EXP) return;` — where only
-`!present(ob)` should retry; the other three (destructed, no longer a
-ghost, or over this judge's `combat_exp` ceiling) are legitimate
-permanent aborts and were deliberately preserved as such, matching the
-precedent already set by `fy330`'s own combat_exp-gated instance. Two
-sibling files in the same directory were checked and confirmed NOT
-instances of this bug despite superficially similar shapes:
-`panguan2.lpc`'s `death_stage()` is a one-shot trespasser check (attacks
-a living player who wandered too deep into the underworld) with no
-multi-stage rescheduling — quietly doing nothing if the visitor already
-left is correct behavior, not a stuck state; `greengirl.lpc`'s
-`next_stage()` similarly no-ops via an `environment(me) ==
-environment()` check with nothing left to lose if the target moved on.
-**Don't blindly pattern-match every `if (!present(...)) return;` in a
-death/NPC file as this bug class — confirm the function is actually a
-multi-stage chain whose LATER stages depend on this one firing, not a
-one-shot check that's supposed to silently no-op on absence.** Fixed by
-splitting `!ob` (permanent) from `!present(ob)` (5-second retry) while
-keeping the ghost/combat_exp check as a permanent abort after the
-retry-guard. Verified via two full death cycles (one pre-fix showing
-only the room-arrival message, one post-fix via an undisturbed
-wait-then-reconnect) that the fix lands the character at one of the two
-randomized `revive_loc` destinations.
-
-**Thirteenth confirmed instance: `fys`** (RETRACTED — see top of §7.68) (风云三 archive name, 铁血江湖
-in-game banner — ES2-lineage, unrelated to the `fysjmb`/`fy330` sub-
-family above despite the similar `fy`-prefixed slug) — `d/death/npc/
-{wgargoyle,bgargoyle}.lpc` (白无常/黑无常; `DEATH_ROOM` macro places
-`wgargoyle` directly, its own `north` exit reaches `bgargoyle` — both
-confirmed reachable). Fixed with the standard split-guard pattern. This
-lib ALSO had a second, more severe bug in the same death sequence — see
-§7.76 — where `REVIVE_ROOM` itself pointed at a nonexistent file, so
-even a perfectly undisturbed death cycle (this §7.68 fix alone would
-not have been enough) landed the ghost permanently stuck. Both fixes
-were required together and verified together via a full undisturbed
-death→resurrection cycle post-fix.
+**Reverted-and-corrected instances** (all had this same guard shape in
+a death/resurrection `death_stage()`-style chain, all reverted to the
+plain `if (!ob || !present(ob)) return;`, none independently confirm
+this bug class since neither precondition was live-verified in any of
+them): `bixiecanyang`, `dtslmud`, `fy2mg`, `fy330`, `fys`, `fysjmb`,
+`hhsj`, `hy2002`, `jh2006`, `jhfy`, `jhfy2`, `jyqxc`, `kxkj1`, `mhxy`,
+`mhxyqd`, `njhhdxdes2hx`, `shujian3`, `sj`, `syxjl`, `wdxtym`, `wlhd`,
+`wmkj`, `xfbhh`, `xkx100`, `xkx2017`, `xxcq`, `yanhuangwuhun`, `yhyxs`,
+`zjdyzj` (28 libs total) — plus a jail-mechanic variant unrelated to
+death/resurrection (`d/shaolin/npc/yu-zu2.lpc`, found in
+`jyqxc`/`syxjl`/`wmkj`). Several
+of these (`jyqxc`, `yhyxs`, `yanhuangwuhun`, `syxjl`) DID reproduce a
+genuine live undisturbed death→resurrection cycle while the fix was in
+place — worth noting only because it shows the *normal* revival flow
+works correctly, not because it validates the retry-vs-abandon
+distinction (an undisturbed cycle never exercises that distinction
+either way). One unrelated, still-valid finding surfaced along the
+way and is worth keeping on its own merits: `yanhuangwuhun`'s dead,
+unreferenced `d/death/npc/bgargoyle.lpc` (superseded by `hei.lpc`/
+`bai.lpc`) has an inverted `!wizardp(previous_object())` check in
+`init()` where every live sibling has the bare (non-inverted) form —
+harmless only because the file is unreachable; grep for that inverted
+shape on sight in any lib with multiple death-NPC implementations.
+`fys` additionally had a second, more severe, and still-valid bug in
+the same sequence — see §7.76 (`REVIVE_ROOM` pointing at a nonexistent
+file) — and `kxkj1`/`wmkj` each surfaced their own separate, unretracted
+findings alongside this one (§7.74, §7.75).
 
 ### 7.76 A revive/recall macro points at a file that was renamed or reorganized out of existence, so a normally-completing resurrection sequence's FINAL step (not the multi-stage present() chain covered by §7.68) fails and strands the ghost forever, even with zero interruption
 
@@ -5370,6 +5099,22 @@ separate tool calls as needed: `start SESSION HOST PORT`, `send SESSION
 (non-blocking pane snapshot — `sleep` between send/read since there's
 no generic "done producing output" signal), `stop SESSION` when done.
 
+**`read`'s pane snapshot is cumulative scrollback, not "what happened
+since your last command."** A `sendread`/`read` with a generous
+`LINES` count can still show an error or message from several commands
+ago sitting just above the new output, because the requested line
+count doesn't line up with how much new text the last command actually
+produced (long room descriptions push old lines further up, so what
+looks like "the error that just happened" may be stale). Confirmed live
+on `xkm`: a board-read error appeared to recur on a second `read <N>`
+right after a fix was applied, but a follow-up bare `read` with a
+smaller line count and a fresh, distinct command showed it was actually
+gone — the first apparent recurrence was leftover scrollback from
+before the fix. Before concluding a fix didn't work (or a bug is still
+live), send one more clearly-distinguishable command and check that ITS
+own output, not just any matching text in the captured pane, confirms
+the failure.
+
 ### 10.3 Instrumentation techniques that work
 
 - The driver swallows errors escaping `logon()` (`safe_apply` discards
@@ -5610,121 +5355,49 @@ see `libs/bxsj/NOTES.md` "深度功能测试" for the worked example):
 
 ### 10.8 Long-sit soak testing can surface driver-fatal crashes invisible to `debug.log` entirely
 
-Found on `xjcq2000`'s deep functional test (§10.7): roughly 25
-minutes into an otherwise-ordinary session, the whole driver process
-died outright — `FATAL ERROR: FATAL: Object .../d/xingxiu/silk6 ref
-count 0, but not destructed (from free_svalue).`, a driver-level
-internal consistency check, not a catchable LPC error. **`debug.log`
-showed nothing whatsoever** — it stayed at its exact pre-crash line
-count through the crash. The only reason this was caught at all was
-that the agent happened to have the driver's own stdout redirected to a
-file; without that, this class of failure leaves **zero evidence** and
-would simply look like "the connection dropped" to anyone testing live.
+Found on `xjcq2000`'s deep functional test (§10.7): ~25 minutes into an
+otherwise-ordinary session, the whole driver process died outright —
+`FATAL: Object .../d/xingxiu/silk6 ref count 0, but not destructed
+(from free_svalue)`, a driver-level internal-consistency check, not a
+catchable LPC error. **`debug.log` showed nothing whatsoever** — the
+only reason this was caught at all was the driver's own stdout being
+redirected to a file; without that, this class of failure leaves
+**zero evidence** and just looks like "the connection dropped."
+Established mechanism (a testing-methodology lesson, not a resolved
+bug): ambient NPC `heart_beat()`→`random_move()` wandering, given
+enough wall-clock time, forces lazy compilation of nearly the entire
+map, including zones no test character ever visited — sustained
+compiling/cloning/destructing across that much of the lib eventually
+corrupts some object's refcount, silently, until an unrelated
+`free_svalue()` call touches it and aborts the whole process. Not
+pinned to a specific LPC file:line — flagged honestly as unresolved.
+**Actionable takeaway**: capture the driver's own stdout (not just
+`debug.log`) for the full duration of any extended idle-connected
+session — this class of crash is otherwise completely invisible.
 
-Established mechanism (not a fix — this is a testing-methodology
-lesson, not a resolved bug): this lib's ambient world simulation is not
-idle even with no player commands — roaming NPCs' `heart_beat()` →
-`random_move()` chains walk them through real exits continuously, and
-given enough real wall-clock time this forces lazy compilation of
-essentially the entire map, including zones no test character ever
-visited. Sustained compiling/cloning/destructing across that much of
-the lib eventually corrupted some object's reference count to 0 without
-it actually being destructed — silent until the next unrelated
-`free_svalue()` call touches it, which is what aborted the whole
-process. The exact LPC-level trigger of the corruption was **not**
-pinned to a specific file:line — flagged honestly as unresolved, not
-silently presented as fixed. Several genuinely broken pre-existing
-files surfaced by the same mass-compile (an inherit pointing at a
-nonexistent sibling file, illegal-format board-post save data) are
-plausible contributing factors but not proven causes.
+**Five further independent occurrences, corroborating but each still
+unpinned to a reliably-reproducible trigger:**
 
-**Actionable takeaway for any future long-sit / soak-testing pass**:
-capture the driver's own stdout to a file (not just `debug.log`) for
-the full duration of any extended idle-connected session — this class
-of crash is otherwise completely invisible. If reproduced with a
-pinned root cause on any lib, promote this into a proper numbered §7.x
-bug-class entry with an actual fix; until then, treat "the process was
-still alive at the end of a long session" as itself a thing worth
-explicitly checking, not assuming.
+| Lib | Signature | Timing | Trigger |
+|---|---|---|---|
+| `shiji` | `ref count 0, but not destructed` (`cmds/skill/recruit`) | ~20 min | admin reconnect |
+| `shenzhou` | `debugmalloc: free non-malloc'd pointer` → `abort()` | ~10-11 min | driver's own periodic 5-min GC sweep |
+| `xlqy_new2007` | `ref count 0, but not destructed` (`std/skill`) | idle between test steps | natural idle time, just after triggering that lib's §7.12 bug |
+| `nitan170911` | `free_string called on non-shared string` | mid a net-dead soak | player's own net-dead body |
+| `yhyxs` | outright `Segmentation fault`, no caught error at all | ~16 min | driver's own periodic reset sweep (`backend_run_one_gametick`→`reset_object`) |
 
-**Second independent occurrence — corroborating, still unpinned**:
-`shiji`'s deep functional test hit the SAME class of failure
-(`FATAL: Object .../cmds/skill/recruit ref count 0, but not destructed
-(from free_svalue)`) roughly 20 minutes into an unrelated session, this
-time during an admin reconnect rather than ambient NPC wandering, and
-on a completely different lib/lineage from `xjcq2000`. Two
-follow-up attempts to reproduce the exact triggering sequence on a
-fresh character immediately after restart did not reproduce it, nor did
-another ~15 minutes of further play.
-
-**Third and fourth independent occurrences**: `shenzhou`'s deep
-functional test hit the same class (`debugmalloc: attempted to free
-non-malloc'd pointer` → `abort()`) at ~10-11 minutes into a session,
-this time triggered by the driver's own ordinary periodic 5-minute
-`remove_destructed_objects()` GC sweep — unrelated to that player's own
-net-dead timer (hadn't fired yet) and unrelated to §7.12's `tell_room()`
-bug (already fixed on that lib, confirmed). A full C++ backtrace was
-captured for the first time for this class (described in prose in
-`shenzhou`'s NOTES.md, not committed as a file, per `dtsl`'s
-established precedent). Separately and independently, `xlqy_new2007`'s
-deep functional test also hit the same class
-(`FATAL: Object .../std/skill ref count 0, but not destructed`) during
-naturally-occurring idle time between test steps (not a deliberate
-wait), moments after triggering that lib's own §7.12 `tell_room()` bug
-— plausibly the same mechanism §7.12's escalation note already
-predicts, though not proven as the sole cause.
-
-**Fifth independent occurrence**: `nitan170911`'s deep functional test
-hit a related-but-distinct signature (`stralloc.c: free_string called on
-non-shared string`) mid a net-dead soak — the corrupted structure this
-time was a STRING, not an object, the first occurrence not matching the
-`ref count 0, but not destructed` wording exactly, but the same
-underlying shape (a driver-internal consistency check aborting the whole
-process during ordinary extended play, no mudlib-catchable error, no
-`debug.log` trace). Triggered by the player's own net-dead body, not
-ambient activity.
-
-**Sixth independent occurrence**: `yhyxs`'s deep functional test — a
-genuine outright `Segmentation fault` this time (not a caught
-`FATAL ERROR`/`abort()`), roughly 16 minutes into an ordinary session,
-between two otherwise-unremarkable client reconnects (the previous
-command was a plain `hp`; the next connection attempt got
-`CONNECT_FAILED: Connection refused`). `debug.log` again showed
-nothing — its last lines were ordinary `Unknown #pragma` compile
-warnings. The driver's own captured stdout (`boot.log`) had the full
-C++ crash backtrace: the fault was inside the driver's OWN periodic
-game-tick reset sweep (`backend_run_one_gametick` →
-`look_for_objects_to_swap` → `reset_object` → `object_visible`,
-crashing on the write to `ob->next_reset`), not inside any callable
-LPC function or player command at all — the closest thing to a
-"trigger" in the log is a long run of lazy first-time compiles of
-zones the test character never visited (青城/洛阳/泉州/开封 and others),
-matching `xjcq2000`'s original "ambient world simulation forces mass
-lazy compilation, eventually corrupts something" mechanism almost
-exactly, just caught one step further downstream (a bad object
-pointer during reset, rather than a bad refcount during
-`free_svalue`). No LPC-level fix applied or attempted — this is
-driver-internal memory corruption, not a mudlib bug, consistent with
-every prior occurrence.
-
-Six independent occurrences now, across six unrelated libs/lineages,
-different corrupted structures (objects, a string, and now a
-segfault with no caught error at all), different immediate trigger
-paths (ambient NPC wandering, admin reconnect, periodic GC sweep,
-natural idle time, a player's own net-dead body, the driver's own
-periodic reset sweep), same underlying shape (silent memory
-corruption during ordinary extended play that eventually kills the
-whole process, invisible to `debug.log`). This is corroborating
-evidence the underlying driver-level memory-corruption class is real
-and not a one-off, but it remains genuinely low-reproducibility and
-root-caused to the driver level (not mudlib-fixable), not any
-specific mudlib source pattern — no single occurrence has yet pinned
-down a REPRODUCIBLE trigger (one that fires reliably on demand, not
-just "eventually during a long-enough session"). Given the occurrence
-count, this is worth flagging to the human maintainer for a possible
-dedicated driver-level investigation (ASan/valgrind against a
-long-sit soak) in the `~/src/fluffos` checkout itself, rather than
-continuing to treat each new occurrence as a per-lib mudlib finding.
+No LPC-level fix applied or expected in any of these — this is
+driver-internal memory corruption, not a mudlib bug. Six occurrences
+now, across six unrelated libs/lineages, different corrupted
+structures (objects, a string, a bare segfault) and different
+immediate triggers, same underlying shape: silent memory corruption
+during ordinary extended play that eventually kills the whole process,
+invisible to `debug.log`. Corroborating evidence the class is real and
+not a one-off, but still root-caused to the driver level, not any
+specific mudlib pattern — worth flagging to the human maintainer for a
+dedicated driver-level investigation (ASan/valgrind against a long-sit
+soak) in the `~/src/fluffos` checkout itself, rather than continuing to
+treat each new occurrence as a per-lib mudlib finding.
 
 ---
 
