@@ -4989,6 +4989,18 @@ Use `--idle 0.3`–`0.5` on any lib whose prompt shows a live clock
 (§8.3 item 1). One `--send` at a time when a flow behaves confusingly. WASM:
 same interface via `scripts/wasm_client.js` (§1.2).
 
+For a flow that needs several separate sequential commands with real
+state in between (a multi-step registration ritual, walking through
+several rooms, a fight that needs `attack` then a few `look`s to watch
+it resolve) — each `mudclient.py` invocation opens a NEW connection, so
+it can't carry session state (a mid-ritual account/character) across
+calls. `scripts/tmux_mud.sh {start|send|read|stop} SESSION [...]` keeps
+one real telnet connection alive in a tmux session across as many
+separate tool calls as needed: `start SESSION HOST PORT`, `send SESSION
+"text"` (one line, or `""` for a bare Enter), `read SESSION [LINES]`
+(non-blocking pane snapshot — `sleep` between send/read since there's
+no generic "done producing output" signal), `stop SESSION` when done.
+
 ### 10.3 Instrumentation techniques that work
 
 - The driver swallows errors escaping `logon()` (`safe_apply` discards
