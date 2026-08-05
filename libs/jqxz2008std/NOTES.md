@@ -747,6 +747,59 @@ driver killed by exact PID after all testing completed, confirmed gone
 via `ps -p`/`ss -tlnp` no longer showing port 40084. Scratch file
 `driver_stdout.log` removed before finishing, per task instructions.
 
+## 深度功能测试（§10.7，本轮）：发现并修复一处 §8.9 wrong-object 食物/饮水初始化 bug
+
+这份档案自己此前没有做过深度游玩测试。这次先核对了同引擎兄弟档案
+`jqxz2008`（"2008 加强版"）已经发现的 4 个 bug——结果这四处
+（`chinesed.lpc` 损坏存档、`combatd.lpc`/`kill.lpc`/`bai.lpc`/
+`apprentice.lpc` 缺失 `/log/nosave/` 目录、`bai.lpc`/`apprentice.lpc`
+括号位置错误）在这份"标准版"里**全部已经是正确的写法**，说明这几
+个 bug 是"加强版"/"超豪华版"在标准版基础上二次修改时引入的回归，
+标准版本身反而更干净。
+
+不过，用真实驱动完整走一遍注册流程时发现了一个新的、三个版本**共同**
+携带的 bug：注册后 `score` 显示的〖食物〗〖饮水〗状态条都是空的
+（`□□□...`），而不是新角色应有的满格状态。查
+`adm/daemons/logind.lpc` 的 `enter_world()`：
+
+```lpc
+user->setup();
+if (!user->query("food") && !user->query("water") && ob->query("age") == 14) {
+  user->set("food", user->max_food_capacity());
+  user->set("water", user->max_water_capacity());
+}
+```
+
+这正是 AGENTS.md §8.9 那个"检查了错误对象的 age"模式：`age` 是角色
+本身（`user`）的属性，不是登录物件（`ob`）的属性——`ob->query("age")`
+永远是 `0`/undefined，永远不等于 `14`，所以这个 if 分支从来没有真正
+执行过，每一个新角色的食物/饮水从创建那一刻起就永远是空的，静默地，
+没有任何报错。改成 `user->query("age") == 14` 后，用真实驱动重新注册
+了一个新角色（沈贰），`score` 正确显示食物/饮水两条状态全满。
+
+**这个 bug 同样存在于 `jqxz2008` 和 `jqxz2008dlx`（同一份
+`adm/daemons/logind.lpc` 逐行相同）——`jqxz2008` 自己之前那轮相当扎
+实的 §10.7 深度测试也没有发现它（大概率是因为那次测试用的角色已经
+拜入丐帮，"没有钱怎么办不要问巫师"式的贫困角色对食物条空着这件事没
+有特别在意）。已经在这两个档案里用完全一致的修法同步修复，并各自用
+真实驱动重新注册验证过。** 三个档案的这一处修复分别提交，不合并成一
+个 commit。
+
+### 其它验证过的内容
+
+用测试角色（沈贰）走了：注册 → "客店" → `west` 到"北大街"（遇到白驼
+山"欧阳克"）→ `south` 到"中央广场"（遇到"流氓头"/"流氓"/"菩提子"）→
+对"流氓头"使用非致命的 `fight` 指令切磋——正确在角色明显落于下风时
+自动停手（"你向后一纵，恨恨地说道：君子报仇，十年不晚！"），没有真
+实死亡风险。全程 `debug.log` 保持空白。
+
+### 未继续测试的部分
+
+时间关系，没有测试拜师、购物、真实死亡（`kill`）流程，以及留言板。
+下一轮如果继续深挖，可以直接复用 `jqxz2008dlx` 那一轮已经验证过的
+死亡流程（同一引擎、同一 `d/death/` 内容），重点关注拜师和购物这两
+块还没被任何一个版本验证过的部分。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 同一代码库，内容更精简。
