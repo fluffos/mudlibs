@@ -16,6 +16,12 @@ NT/nitan 系代码线（与 nitan170911/nitan6/hhsj 无精确 master-hash 匹配
   Node.js 的目录扫描直接崩溃（`ENOENT`）——这是一个此前没在其它档
   案里见过的、和内容本身无关的转档层面问题，本次改名为安全的 ASCII
   文件名以修复。
+- 深度测试修复了与 xfbhh/hhsj 同架构、但独立血统的 CHARACTER mixin
+  裸 `set()`/`query()` 解析失败问题（AGENTS.md §7.78）；一个让全部
+  5 个区域事件永久失效的文件名截断算术错误（`eventd.lpc`）；以及一
+  个让全部 9 种任务类型编译失败的共同祖先文件类型收窄 bug
+  （`inherit/misc/quest.lpc` 的 `set_information()`）。详见
+  NOTES.md。
 
 ## 注册流程
 
