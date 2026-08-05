@@ -16,6 +16,12 @@
   同类呼叫都有的防御性判断，导致每次玩家退出游戏都会崩溃——修复时
   发现同一份代码库里 `topdel.lpc` 甚至留着一句注释"topten的
   magic-rice出问题了"，说明原作者自己也遇到过这个问题的一部分。
+- 深度功能测试（§10.7）发现并修复了两个真正会影响游玩的 bug：全档
+  案 53 块留言板的 `post` 指令必然崩溃（AGENTS.md §7.86，此前只在
+  "天涯"家族见过，这是跨家族的第三次确认），以及地图第一次巡逻时
+  `securd.lpc` 的自定义 ACL 把技能文件存在性检查误判为"文件不存
+  在"、连带炸掉 NPC 初始化（AGENTS.md §7.5，和手足档案 `hy2002` 完
+  全相同的 bug）。
 
 ## 注册流程
 
@@ -49,6 +55,29 @@ Y/BIG5 同样可正常显示，未发现编码问题）→ 英文 id（3-12 个�
   "topten的magic-rice出问题了"）一样加上 `if(ob=new(...))` 的防御
   性判断，导致每次玩家退出游戏都会崩溃报错（新增 AGENTS.md
   §7.63）。已比照其余四处调用补上同样的判断。
+
+## 深度功能测试（§10.7）修复的 bug
+
+- **§8.9 变体**：`enter_world()` 的年龄判断
+  `if (!user->query("food") && !user->query("water") &&
+  ob->query("age") == 14)` 里，食物/饮水的空值检查用对了 `user`，但
+  年龄判断仍然错误地用了登录对象 `ob`，导致食物/饮水永远不会被初
+  始化。已改为 `user->query("age")`。
+- **留言板 `post` 崩溃（AGENTS.md §7.86）**：全档案 53 份留言板文
+  件都同时 `inherit BULLETIN_BOARD` 又多余地对自己
+  `replace_program(BULLETIN_BOARD)`，导致 `post` 指令必然崩溃。这
+  是这个 bug 第一次在"天涯"家族之外的代码库里被发现——证实这是这一
+  代 ES2 衍生代码库的通用陷阱，不是某个家族特有的问题。已删除全部
+  53 处多余调用。
+- **`securd.lpc` 的 `file_size` ACL 误判（AGENTS.md §7.5）**：地图
+  第一次巡逻/populate 时，`debug.log` 报出一连串 `F_SKILL: No such
+  skill` 错误，但对应的技能档案其实都存在。根源和手足档案 `hy2002`
+  已经确认过的一模一样：自定义 `valid_read()` 没有为
+  `load_object`/`include`/`file_size` 这类纯检查用途放行，当触发
+  调用的 NPC 还在自己 `create()` 内部、euid 还没设置好时，
+  `file_size()` 被 ACL 拒绝、表现得像文件不存在，导致 `set_skill()`
+  误判并中断那个 NPC 的初始化。已比照 `hy2002` 的修法在
+  `securd.lpc` 里补上放行判断。
 
 ## 管理员账号 / Admin account
 

@@ -1322,6 +1322,23 @@ never-yet-touched game content on every fresh boot. Fix: add
 `load_object`/`recompile_object`/`include` — checking whether a file
 exists on disk is exactly as harmless as compiling it.
 
+**Second confirmed instance: `hy2000`** (same "hy"/海洋 lineage as
+`hy2002`, byte-identical `feature/skill.lpc`/`securd.lpc` shape) — the
+exact same `F_SKILL: No such skill (strike)`/`(unarmed)` errors on the
+very first population of the starting-town map (`d/city/npc/{man,
+qian}.lpc`'s `create()`). Root-caused via temporary instrumentation
+(a `write_file()` call added right before the `error()`, which itself
+silently produced NO output — a useful confirming clue on its own,
+since a "harmless" logging write getting silently dropped inside the
+exact same call stack that's about to hit an ACL-driven false negative
+is consistent with the write itself also being denied by the same
+euid-not-set-yet condition). Fixed with the identical allowlist
+addition to `securd.lpc`'s `valid_read()`. Two independent instances in
+the same family in one project session — treat this as a standing
+checklist item for any new "hy"-lineage lib: grep `debug.log` for
+`F_SKILL` after the first real map traversal, not just after
+registration.
+
 ### 7.6 DNS/intermud daemons: exclude from preload, then guard the callers
 
 Standing policy — before first boot, remove `dns_master`-style daemons
@@ -5550,6 +5567,20 @@ see `libs/bxsj/NOTES.md` "深度功能测试" for the worked example):
    gold, or being deliberately outmatched to reach — code review is an
    acceptable fallback ONLY if stated explicitly as unverified-live in
    NOTES.md, never silently presented as tested.
+6a. **If a death/resurrection sequence with an admin test character
+   never progresses past idle NPC chatter, check the ghost-guard's
+   `init()` for a `wizardp(previous_object())` exclusion before
+   assuming a §7.68-class soft-lock.** Found on `hy2000`: the standard
+   admin test account is itself `wizardp()`, and `d/death/npc/
+   wgargoyle.lpc`'s `init()` deliberately never schedules
+   `death_stage()` at all for wizard ghosts (staff are expected to
+   self-recover via wizard commands, not occupy the NPC-driven revival
+   flow) — this is normal, intentional design, not a bug. A
+   second, non-admin test character died and resurrected cleanly and
+   quickly (all stages, correct `reincarnate()`, landed at the revive
+   room) on the exact same lib, proving the sequence itself was never
+   broken. When an admin-account death sequence stalls, register a
+   throwaway non-admin character before concluding anything is wrong.
 7. **Fix what you find, in-place, and write it up immediately**: the
    bug, the file:line, the fix pattern, and the test character/state
    left as evidence — in the lib's own NOTES.md — plus a new AGENTS.md
