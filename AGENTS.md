@@ -4442,6 +4442,21 @@ record on architecturally-identical siblings is the fallback — say so
 explicitly rather than skipping the fix or claiming false-confidence
 live verification.
 
+**Confirmed 5th instance: `wdxtym`** — another independent NT/nitan
+branch (same `ver1.0` version-challenge handshake and `║`-separated
+registration fields as `xfbhh`/`hhsj`/`nt1`/`nitan170911`, plus its own
+extra `F_SUIT` mixin). 10 mixin files affected (`alias`, `apprentice`,
+`attack`, `attribute`, `command`, `damage`, `message`, `more`, `name`,
+`skill`), same `command.lpc` `enable_player()` crash, same fix. Unlike
+`nitan170911`, this one has NO MySQL dependency for login, so it got a
+full live verification: 3 separate fresh registrations, each showing
+the NPC greeting and player name rendering correctly and an empty
+`debug.log` throughout. This lib's own pre-existing NOTES.md/README
+*also* independently documents fixing the exact §7.80 bug (the
+`eventd.lpc` `[0..<3]` slice) during an earlier WASM pass, before §7.80
+existed as a cataloged entry — confirms §7.80 recurs across this
+lineage too, not just a one-off on `nt1`.
+
 ### 7.79 (IDENTIFIED, NOT FIXED — too large for one pass) Bare, self-targeting `addn()`/`addn_temp()` calls are ALWAYS broken, codebase-wide, regardless of `F_DBASE` — because `addn` is simul_efun-ONLY and never locally defined anywhere
 
 Related to §7.78 but a distinct trap: unlike `set`/`query`/`delete`
