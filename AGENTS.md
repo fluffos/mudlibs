@@ -4736,6 +4736,73 @@ wrong side of its own guard.
 
 ---
 
+### 7.83 A stat-farming cooldown gate silently never engages because its `apply_condition()`/`update_condition()` heartbeat daemon file is missing from the archive
+
+Found on `xkm`'s §10.7 deep functional test, while reading messages off
+the newbie-hall board (`大山洞`). `inherit/misc/bboard.lpc`'s `do_read()`
+grants `chatpts` (a "灌水积分"/chat-points stat, presumably a leaderboard
+or title-unlock currency) once per read, gated by a cooldown condition:
+
+```lpc
+if ((int)the_player->query_condition("boardread") > 0) {
+  the_player->apply_condition("boardread", 10);
+} else {
+  the_player->apply_condition("boardread", 10);
+  the_player->add("chatpts", 3);
+}
+```
+
+The intent is clear: `query_condition("boardread")` should read as
+"already on cooldown" on the second-and-later read, so only the first
+read in a cooldown window grants `chatpts`. But `apply_condition()`
+just writes into a plain mapping (`feature/condition.lpc`) — decay is
+entirely the job of a per-condition-name daemon at
+`CONDITION_D(name)` == `/kungfu/condition/<name>.lpc`, driven from
+`heart_beat()`'s `update_condition()`. That daemon file
+(`/kungfu/condition/boardread.lpc`) does not exist anywhere in the
+archive — `kungfu/condition/` has ~50 sibling condition daemons
+(`drunk.lpc`, `sleep.lpc`, `poisoned.lpc`, ...) but no `boardread.lpc`
+was ever shipped. Every board read therefore: (1) sets the condition,
+(2) on the very next heartbeat tick, `update_condition()` tries to
+`find_object`/lazily `call_other` the missing daemon, fails, logs
+`Failed to load condition daemon /kungfu/condition/boardread` to
+`log/condition.err`, and immediately `map_delete()`s the condition —
+so it can never be observed as "still active" by a later read. Net
+effect: the cooldown never engages (`chatpts` is granted on literally
+every single `read <N>`, an unlimited farm — the exact opposite of the
+throttle the code was trying to implement), AND every read spams a
+caught runtime error visible in the player's own transcript (`错误讯息
+被拦截: 执行时段错误：*call_other() couldn't find object
+'/kungfu/condition/boardread'.`) and grows the error log without
+bound. `work/log/condition.err.lpc` already had hundreds of these
+entries going back to 2002 across dozens of distinct real player names
+— this is a long-standing bug in the original archive, not something
+introduced by conversion.
+
+Fix: write the missing daemon, mirroring the minimal shape of the
+simplest existing sibling (`sleep.lpc`) — decrement and re-apply until
+the duration counts down to 0, then let the caller's `map_delete()`
+remove it:
+
+```lpc
+// kungfu/condition/boardread.lpc
+int update_condition(object me, int duration) {
+  if (duration < 1)
+    return 0;
+  me->apply_condition("boardread", duration - 1);
+  return 1;
+}
+```
+
+Detection pattern: any `apply_condition("<name>", ...)` call site is a
+promise that `/kungfu/condition/<name>.lpc` exists — grep
+`kungfu/condition/` for the name before assuming a cooldown/buff/debuff
+mechanic actually works; a caught-and-logged `call_other() couldn't
+find object` error for a `CONDITION_D`-shaped path is this bug, not a
+red herring.
+
+---
+
 ## 8. Login and registration flow bugs
 
 Registration is where restoration succeeds or fails: it exercises the
