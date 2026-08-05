@@ -4532,6 +4532,132 @@ red herring.
 
 ---
 
+### 7.84 (SEVERITY: HIGH) Every account's plaintext password gets appended to a file under `doc/help/`, which the standard `help` command serves to ANY connected player, not just wizards
+
+Found on `tybxjh`'s §10.7 deep functional test, as an unexpected `git
+status` diff in `doc/help/neima2`/`neima3` after a routine test
+registration. `adm/daemons/logind.lpc`'s dual-password registration
+flow (every account sets BOTH an "admin/recovery password" and an
+everyday password, not just wizard accounts) does the real,
+correct thing first — `ob->set("ad_password", crypt(pass, 0))` /
+`ob->set("password", crypt(pass, 0))`, hashed, exactly as it should be
+— and then, immediately after, ALSO does this:
+```lpc
+write_file("/doc/help/neima2", sprintf("%s的管理密码是%s。\n", ob->query("id"), pass));
+...
+write_file("/doc/help/neima3", sprintf("%s的普通密码是%s。\n", ob->query("id"), pass));
+```
+`pass` here is the raw plaintext the player just typed, appended
+verbatim, once per registration, forever. The critical second half of
+this bug: `/doc/help/` is not some root-only admin log directory — it
+is listed directly in `doc/help.h`'s `DEFAULT_SEARCH_PATHS`, the exact
+path list `cmds/usr/help.lpc`'s `main()` searches for ANY player's
+plain `help <topic>` command, with no `wizardp()` gate at all (unlike
+the same file's `/doc/skill/` entry, which IS specifically gated). Any
+player, wizard or not, typing `help neima2` or `help neima3` gets back
+the complete, ever-growing plaintext dump of literally every account's
+admin and regular password, ever registered. This lib's own MOTD
+banner reports 86,000+ registered accounts over 20+ years of
+operation — the two files already contained real entries (`kjh`,
+`commando`) predating this project's involvement, confirming this was
+a live, exploitable vulnerability throughout the game's actual
+operational history, not a conversion artifact. Fix: delete both
+`write_file()` calls — the hashed `ob->set(...)` two lines above each
+one already IS the real, correct persistence; the plaintext dump serves
+no function the rest of the login flow depends on. Do NOT scrub the
+pre-existing historical entries already in `neima2`/`neima3` (that's
+original archive data worth preserving, like any other save file), but
+DO revert any password your OWN test session appended before
+committing — treat it exactly like the existing test-account save-file
+hygiene rule, just for this one extra pair of files.
+
+Detection pattern: grep the whole tree for `write_file(` calls whose
+target path sits under a directory also present in `help.h`'s
+`DEFAULT_SEARCH_PATHS` (or equivalent per-lib mechanism) — logind.lpc
+writing "helpfully" to a doc path is the shape to watch for. More
+generally, after ANY registration-flow test, diff `doc/`, not just
+`data/` — a write into shipped documentation content is exactly as
+easy to miss in a routine `git status` skim as a stray save file, and
+here it was far more consequential.
+
+---
+
+### 7.85 A percent-bar renderer's index arithmetic still assumes each glyph is 2 storage units wide (a GBK-byte-era leftover), so it silently clamps to a full-looking bar for most non-empty values and for a fully-EMPTY value alike
+
+Found on `tybxjh`'s §10.7 deep functional test: a freshly registered
+character's 食物/饮水 (food/water) bars showed completely full in
+`score` immediately after login, which looked like it contradicted the
+already-confirmed §8.9 bug (`ob->query("age")` instead of
+`user->query("age")`, meaning food/water should have been left at 0).
+Both things were true at once — §8.9 WAS live (food really was 0) and
+the bar STILL rendered full, because `cmds/usr/score.lpc`'s
+`tribar_graph()` has its own, independent bug:
+```lpc
+string tribar_graph(int val, int eff, int max, string color) {
+  return color + bar_string[0..(val * 16 / max) * 2 - 1] + ...
+}
+```
+`bar_string` is a 16-CHARACTER string (`"■■■■■■■■■■■■■■■■"`) in this
+UTF-8-converted codebase, but the arithmetic still multiplies the
+16-wide fill fraction by 2 before slicing — a leftover from the
+pre-conversion GBK source, where each glyph really did cost 2 bytes and
+byte-indexed slicing needed the `*2`. Two independent failures follow
+from this one stale multiplier: (1) at `val=0`, `(0*16/max)*2-1` = `-1`,
+and `bar_string[0..-1]` — meant as an empty-slice sentinel — is instead
+interpreted by this driver's negative-index convention as "up to the
+LAST character," returning the ENTIRE bar_string; an empty stat renders
+as completely full. (2) For any `val/max` ratio above ~50%, the
+computed end index already exceeds `bar_string`'s real 16-character
+length and the slice silently clamps to the full string too — so the
+bar is only ever a meaningful gauge below the halfway point, and
+reads identically "full" for 51% and 100%. Confirmed both failure modes
+live: a fresh character's genuinely-zero food/water (from the
+still-unfixed-at-that-moment §8.9 bug) showed full bars, and mid-combat
+damage that brought `<气>`(qi) down to exactly 50% also rendered as a
+completely solid bar. Fixed by reworking the same visual shape
+(filled/pending/blank three-segment bar) with a one-glyph-per-character
+scale, no stale width multiplier:
+```lpc
+string tribar_graph(int val, int eff, int max, string color) {
+  int filled, shown;
+  if (!max) return none_string;
+  if (val < 0) val = 0;
+  if (eff < val) eff = val;
+  filled = val * 16 / max;
+  shown = eff * 16 / max;
+  if (filled > 16) filled = 16;
+  if (shown > 16) shown = 16;
+  return color
+    + (filled > 0 ? bar_string[0..filled - 1] : "")
+    + (shown > filled ? blank_string[filled..shown - 1] : "")
+    + (shown < 16 ? none_string[0..15 - shown] : "")
+    + NOR;
+}
+```
+Verified via temporary instrumentation (call `tribar_graph()` directly
+with synthetic 0/25%/50%/100% inputs, log the results, remove the
+instrumentation) that all four points now render with the correct
+proportional fill, then confirmed live in actual combat that a
+mid-fight, partially-depleted stat shows a genuinely partial bar. This
+lib ships THREE OTHER, differently-implemented copies of
+`tribar_graph()` (`cmds/wiz/score1.lpc`, `cmds/wiz/score2.lpc`,
+`cmds/usr/i2.lpc`) for the wizard `score`/`i` variants — at least
+`score1.lpc`'s copy has the same shape of mismatch between its own
+`bar_string` (17 characters) and a `blk_string` companion (34
+characters, i.e. still assuming double-width), but this pass only
+confirmed and fixed the ordinary player-facing `cmds/usr/score.lpc`
+copy (the one every single player sees on every `score`); the other
+three are unaudited and may have the same or a differently-shaped
+issue. **A full bar is not proof a depletion mechanic (food, water, a
+poison condition, anything else rendered through a similar bar
+function) is actually fine** — this is exactly the kind of rendering
+bug that can silently mask a real §8.9-class initialization bug, so
+don't let a full-looking bar substitute for checking the underlying
+value when investigating a stat-initialization bug in any lib that
+renders stats this way.
+
+---
+
 ## 8. Login and registration flow bugs
 
 Registration is where restoration succeeds or fails: it exercises the
