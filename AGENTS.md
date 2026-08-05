@@ -4658,6 +4658,75 @@ renders stats this way.
 
 ---
 
+### 7.86 A board object that both `inherit`s its board base class AND redundantly self-`replace_program()`s the same class permanently breaks its own `post` command, driver-wide, across every board instance in the lib
+
+Found on `xhcii`'s §10.7 deep functional test: `post <title>` on an
+ordinary player board crashed instantly, every time, on every board
+tried:
+```
+执行时段错误：*cannot bind an lfun fp to an object with a pending replace_program()
+程式：/inherit/misc/bboard.lpc 第 88 行
+```
+Line 88 is `this_player()->edit((: done_post, this_player(), note :));`
+— a closure literal referencing `done_post`, an lfun of the CURRENT
+object (the board itself, since `done_post` has no explicit object
+prefix). Every single board file in this archive (~90 of them, both
+`clone/board/*_b.lpc` and various `d/**/`-embedded ones) has the exact
+same `create()` shape:
+```lpc
+inherit BULLETIN_BOARD;   // "/inherit/misc/bboard" -- gives this object
+                          // every bboard.lpc function/variable directly,
+                          // at compile time.
+void create() {
+  ...
+  replace_program(BULLETIN_BOARD);   // redundant: already inherited above
+}
+```
+`replace_program()` is meant for a lightweight shell file to dynamically
+BECOME another class at runtime, when it doesn't already have that
+class's code compiled in. Calling it on an object that already directly
+`inherit`s the exact same target is a no-op at best -- but on this
+driver it's actively harmful: the object never clears its "replace
+pending" flag, and any later attempt to bind a closure to that object's
+own lfun (exactly what `do_post()`'s editor callback needs) fails
+permanently, forever, for the lifetime of that object. `do_read()`/
+`list`/`look` all work fine because they never create a closure --
+`post` is the ONLY command that touches this path, which is why the
+original WASM/registration-smoke-test pass never caught it: a
+functioning board (`look`, message counts, `read`) looks completely
+healthy right up until a real player tries to actually write something.
+Several board files in this same archive already had the
+`replace_program()` line COMMENTED OUT (`//  replace_program(...)`) --
+plausible evidence a past wizard hit this exact crash on some boards
+and silently worked around it file-by-file without ever finding or
+fixing the root shape.
+
+Fix: delete the redundant `replace_program(BULLETIN_BOARD);` call from
+every board file that already `inherit`s `BULLETIN_BOARD` directly --
+the `inherit` alone is sufficient and was always doing 100% of the real
+work. Verified live: before the fix, `post test` crashed instantly with
+the error above on a freshly-registered account; after removing the
+line (all ~90 files, confirmed none has the two calls with anything
+BETWEEN them worth preserving) and restarting, `post` opens the normal
+line editor, completes ("留言完毕"), and the board's unread count
+updates correctly -- reconfirmed clean on a second board after a full
+driver restart.
+
+Detection pattern: any `inherit X;` immediately followed, in the same
+file's `create()`, by `replace_program(X)` with the SAME target -- grep
+for a class macro appearing both after `inherit` and inside
+`replace_program(...)` in the same file. This is a `bboard.lpc`-family
+idiom in this codebase (and its "天涯" sibling lineage), but the
+general shape -- redundant self-replace_program() on an already-
+directly-inherited class -- is worth checking in ANY lib where a
+command that creates closures (an editor callback, a delayed
+`call_out()` bound to `this_object()`, anything using `(: lfun, ... :)`
+literal syntax without an explicit target object) mysteriously fails
+only on that one command while everything else on the same object works
+fine.
+
+---
+
 ## 8. Login and registration flow bugs
 
 Registration is where restoration succeeds or fails: it exercises the
