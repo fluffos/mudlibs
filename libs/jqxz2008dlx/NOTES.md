@@ -636,6 +636,20 @@ if (((string)me->query("family/master_id" == "feng qingyang")) || ...)
 `bai`/`apprentice` 的两处修复已经通过代码对照（逐字节对比两个档案确
 认改动一致）验证，未做额外的实机拜师测试。
 
+## 补充发现（来自对同引擎兄弟档案 jqxz2008std 的深度测试）：第 5 个 bug，§8.9 食物/饮水初始化检查错了对象
+
+`adm/daemons/logind.lpc` 的 `enter_world()` 里：
+```lpc
+if (!user->query("food") && !user->query("water") && ob->query("age") == 14) {
+```
+`age` 是角色本身（`user`）的属性，不是登录物件（`ob`）的属性——
+`ob->query("age")` 永远是 `0`，这个分支从来没有真正执行过，每个新
+角色的食物/饮水从创建起就永远是空的（`score` 显示空白状态条），静
+默、无报错。已改成 `user->query("age") == 14`，用真实驱动重新注册
+验证过（沈叁），`score` 正确显示食物/饮水两条状态全满。这个 bug 在
+标准版（`jqxz2008std`）先发现，确认加强版/超豪华版/标准版三份档案
+里 `logind.lpc` 这一行逐字节相同，一并同步修复。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 同一引擎，不同内容构建版本。
