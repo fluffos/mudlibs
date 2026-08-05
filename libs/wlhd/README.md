@@ -30,10 +30,18 @@
 
 ## 本次处理内容
 
-没有发现需要修复的程序 bug——在 WASM 下编译、注册、进入游戏全程
-干净无错误。唯一做的事情是在 `/adm/etc/wizlist` 里加入管理员账号
-（已有 `rock`/`jerry`/`kjh` 三个 `(ceo)` 级创始人账号，
+WASM 修复阶段没有发现需要修复的程序 bug——在 WASM 下编译、注册、
+进入游戏全程干净无错误。唯一做的事情是在 `/adm/etc/wizlist` 里加入
+管理员账号（已有 `rock`/`jerry`/`kjh` 三个 `(ceo)` 级创始人账号，
 `SECURITY_D` 正确指向 `/adm/daemons/securityd`）。
+
+深度功能测试（§10.7）发现这个结论过于乐观：和逐字节共享地图的手足
+档案 `yxjh` 各自独立犯下了同样的 3 个 bug（两处 printf("%O") 调试
+残留、§8.9 食物/饮水年龄检查错对象），照搬 `yxjh` 已验证的修法逐一
+修复；另外发现一个 `yxjh` 自己没记录的独立新问题：`d/jerry/
+saveme.lpc` 的 `exert_function(10)` 类型错误彻底压垮了武庙（巫师起
+始房间之一）里的 NPC "江湖医生"；以及两处 `d/death/npc/{b,w}
+gargoyle.lpc` 的 §7.68 复活软锁。详见 NOTES.md。
 
 ## 管理员账号 / Admin account
 
