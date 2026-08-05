@@ -2,3 +2,88 @@
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 hy2000 的演进/后期手足档案（hy2000 的 10630/10632 个档案按路径重合；hy2002 是一个多出约 3000 个档案的超集）——同一套 ES2/金庸血统"海洋II"（Ocean II）代码库。修复的 bug（多数是主动套用已知的 hy2000 修法并确认这里同样存在）：（1）过时的 MASTER_OB/SIMUL_EFUN_OB 宏指向 /adm/single/ 死代码副本（§7.56 类）；（2）logind.lpc 的 howmany_visitor()/howmany_card() 和 uptime.lpc 的 LASTCRASH 显示里 §7.54 类的 sscanf(read_file(缺失档案)) 崩溃；（3）adm/daemons/network/dns_master.lpc 的 startup_udp()/send_udp()/send_shutdown() 里那行 socket_close() 的 §7.52 类 socket 掏空——这里特别关键，因为 logind.lpc 的 gb_big5() 流程中途会呼叫 DNS_MASTER->query_muds()/query_svc()，一旦这个精灵编译失败，会静默中止 gb_big5() 剩下的代码，包括最后显示英文名字提示的 write()，导致注册完全无法开始，且没有任何可见错误；（4）logind.lpc 里经典的 §8.1 check_legal_name() 字节数没减半的长度界限（4/10 字符→2/5）加上 i%2==0 门槛和 name[i..<0] 尾部切片（is_chinese() 本身已经是正确的）。GB 和 BIG5 两个编码选单选项都实测正常，不用修。管理员引导既偏离常规的 wizlist 模式，也和 hy2000 的不同：securd.lpc 在 restore_list() 里硬编码了引导用管理员 id "hxsd"，但这个 id 已经是档案里一个真实存在的旧玩家账号（密码未知——新增 AGENTS.md §1.5 bug 类型）——已在旁边追加一行 set("wiz_status/fluffos","(admin)")，用 fluffos/Mud@2026Pass1 正常注册，游戏内"目前权限：(admin)"显示确认生效。完整的注册→look→score→quit 流程在排版格式化前后各验证过一次，用的是真实中文名字。格式化工具发现 2 个真正损坏的档案（cmds/usr/setbak.lpc 的 heredoc 帮助文字，以及 help/help/menpai.lpc——一份被压成一行、每个字符都被重新加空格的纯文本帮助内容档案）——两者都用 git checkout 还原。另外记录：同一 IP 60 秒内只能注册一次新角色，是真实存在的反滥用限制（§10.1 类的有意设计，不是 bug）。
+
+## §10.7 深度功能测试（本次新增）
+
+此前只做过注册→look→score→quit 的浅层验证。本次用 `fluffos` 管理员
+账号和一个全新普通角色 `testerxyz`（浮浮二）实际走通了注册→新手引导
+→平安城/平安武馆探索→出城→中央广场战斗→死亡→鬼门关复活的完整流程。
+
+### 修复 1：§8.9 食物/饮水年龄检查错对象
+
+`adm/daemons/logind.lpc` 的 `enter_world()`：
+`if (!user->query("food") && !user->query("water") && ob->query("age") == 14)`
+——`ob` 是登录对象（login object），不是角色本体 `user`，`ob->query("age")`
+永远是 undefined，这道门槛永久为假，每个新角色的食物/饮水会静默永远
+保持 0。已改为 `user->query("age") == 14`，实测新角色食物/饮水栏正确
+显示为接近满格（18/20），确认修复生效。
+
+### 修复 2：两处 §7.68 复活软锁（d/death/npc/{b,w}gargoyle.lpc）
+
+`death_stage(object ob, int stage)` 原代码
+`if (!ob || !present(ob)) return;` 把"鬼魂对象已经不存在了"和"鬼魂此
+刻只是暂时不在这个房间里（延迟/网络卡顿）"混为一谈，一旦判定瞬间鬼
+魂碰巧不在场就永久放弃后续引导，把鬼魂永久卡住。按标准修法拆开：
+`!ob` 才是真正放弃，`!present` 改为 5 秒后重试。本次死亡测试里，白无常
+(wgargoyle) 的完整六段对话（"你叫什么名字" → ... → "阳寿未尽" → 阴冷
+浓雾包围你）全部顺利播放完毕，角色被正确送到复活点（武庙），未卡死。
+
+### 修复 3：新发现的 bug——securd.lpc 的 file_size 被自定义 ACL 误拒（AGENTS.md §7.5 新增变体）
+
+深度测试中，一个全新角色第一次踏入"平安武馆"（新手学武场地）时触发了
+一个此前完全没被发现的严重 bug：
+
+```
+执行时段错误：*F_SKILL: No such skill (dodge)
+物件: /d/pingan/npc/chen2
+呼叫来自：/feature/skill.lpc 的 set_skill() 第 20 行
+```
+
+根因：`feature/skill.lpc` 的 `set_skill()` 用
+`!find_object(SKILL_D(skill)) && file_size(SKILL_D(skill)+".lpc") < 0`
+判断技能档案是否存在——本局游戏第一次有人引用某个技能（如 "dodge"）
+时，`find_object()` 正确返回 0（还没编译过），于是继续检查
+`file_size()`；但 `adm/daemons/securd.lpc` 的自定义 `valid_read()` 对
+`file_size` 这个 func 没有像 `load_object`/`include` 一样放行，而是走
+了普通的 euid/权限判断——此时触发调用的 NPC（chen2）自己还在
+`create()` 执行中途，euid 尚未建立，于是这次 `file_size()` 被 ACL 拒
+绝，返回 -1（"文件不存在"的假象），导致 `set_skill()` 误判"dodge"这
+个技能压根不存在而 `error()`，chen2 的 `create()` 从这一行起彻底中
+断（后续所有 `set_skill()` 调用、装备发放等全部跳过）。
+
+这个 bug 极其隐蔽：**每个技能文件在本局游戏中只会踩中一次**——一旦任
+意对象成功 `load_object()` 过一次该技能档（比如巫师手动 `update` 过），
+`find_object()` 此后总能命中已驻留的 blueprint，短路掉那条永远出错的
+`file_size()` 分支，同一技能不会再触发。这意味着每次全新重启这个 lib
+后，第一个踏入武馆（或任何首次引用某项技能的场景）的玩家，会看到该
+NPC 的技能/装备初始化在技能列表中间某处神秘"卡住"，而且没有任何面向
+玩家的错误提示（只有服务端 debug 才看得到），后续的战斗/招式效果因
+此可能整段缺失。这不是 AGENTS.md §7.5 已记录的"编译期访问被拒绝崩
+溃"那种硬性崩溃形态，而是同一根因（自定义 ACL 没有放行编译期/文件探
+测类操作）的一个安静得多的变体——已把 `file_size` 和
+`load_object`/`recompile_object`/`include` 一起加入
+`securd.lpc` `valid_read()` 的放行名单，写入 AGENTS.md §7.5 作为新确
+认的变体。修复后重启驱动，全新角色第一次进入武馆，`chen2` 的
+`create()`（含 `set_skill("dodge", ...)` 等全部技能设置）完整执行、
+无任何报错；同样在中央广场首次触发 `dodge.lpc` 的战斗中也确认干净编
+译、无报错。
+
+### 战斗与死亡
+
+出城后在（城市）中央广场对"流氓头"（帮派头目 NPC，`combat_exp` 明显
+高于新手角色）发起攻击，几回合内被击杀——死亡提示、"江湖谣言"广播、
+送入鬼门关的整个链路均正常触发，紧接着完整验证了上面第 2 项的复活
+流程。
+
+### 其它检查、确认不适用的已知 bug 类别
+
+- CHARACTER 的 F_* 混入档缺 F_DBASE inherit（§7.78 结构相符检查）：
+  本次因时间关系未对 hy2002 单独重复验证，但其 `feature/dbase.lpc`
+  与近期在 `shujian3`（同为 ES2 血统）上live-verify过的版本几乎逐字
+  节相同（唯有极小差异），且该次调查已确认这个具体驱动/ES2 代码库组
+  合下该 bug 并不会真正复现（damage.lpc 的裸 set/query 实测确实写入
+  了角色真正的 dbase）。留待未来某次针对 hy2002/hy2000 的后续 pass
+  用同样方法直接验证，而非直接照搬结论。
+- 夜晚"天色太黑了，看不清明显的出路"会让裸方向词（north/south 等）
+  失效、只能用 `go <方向>`——这是有意的昼夜可见度设计（游戏内容，不
+  是 bug），已用 `go` 系列指令正常绕过。

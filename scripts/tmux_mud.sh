@@ -5,18 +5,26 @@
 # way a fresh scripts/mudclient.py invocation does every time.
 #
 # Usage:
-#   scripts/tmux_mud.sh start SESSION HOST PORT   # open telnet in a new tmux session
-#   scripts/tmux_mud.sh send  SESSION "text"      # send one line (Enter appended)
-#   scripts/tmux_mud.sh send  SESSION ""          # send a bare Enter
-#   scripts/tmux_mud.sh read  SESSION [LINES]     # dump last LINES of the pane (default 200)
-#   scripts/tmux_mud.sh stop  SESSION             # kill the session
-#   scripts/tmux_mud.sh list                      # list active mud tmux sessions
+#   scripts/tmux_mud.sh start SESSION HOST PORT       # open telnet in a new tmux session
+#   scripts/tmux_mud.sh send  SESSION "text"          # send one line (Enter appended)
+#   scripts/tmux_mud.sh send  SESSION ""              # send a bare Enter
+#   scripts/tmux_mud.sh read  SESSION [LINES]         # dump last LINES of the pane (default 200)
+#   scripts/tmux_mud.sh sendread SESSION "text" [WAIT] [LINES]
+#                                                      # send one line, sleep WAIT (default 0.8s),
+#                                                      # then read back -- ONE call instead of
+#                                                      # send+sleep+read three separate tool calls
+#   scripts/tmux_mud.sh multi SESSION $'cmd1\ncmd2\ncmd3' [PER_WAIT] [LINES]
+#                                                      # send several lines in sequence (small
+#                                                      # PER_WAIT between each, default 0.5s),
+#                                                      # read back once at the end -- use this to
+#                                                      # drive a whole multi-step ritual (e.g. a
+#                                                      # full registration flow) in a single call
+#   scripts/tmux_mud.sh stop  SESSION                 # kill the session
+#   scripts/tmux_mud.sh list                          # list active mud tmux sessions
 #
 # Sessions are tmux sessions named "mud-SESSION" so they don't collide with
-# unrelated tmux usage. `read` is non-blocking -- it just snapshots the
-# pane; caller is responsible for waiting/polling (e.g. `sleep 1` between
-# send and read) since there's no clean way to detect "done producing
-# output" for a telnet stream in general.
+# unrelated tmux usage. Prefer `sendread`/`multi` over separate send+read
+# calls -- far fewer tool round-trips for the same interactive session.
 
 set -euo pipefail
 
@@ -35,6 +43,22 @@ case "$cmd" in
     ;;
   read)
     name="mud-$2"; lines="${3:-200}"
+    tmux capture-pane -t "$name" -p -S "-$lines"
+    ;;
+  sendread)
+    name="mud-$2"; text="${3-}"; wait="${4:-0.8}"; lines="${5:-200}"
+    tmux send-keys -t "$name" -l -- "$text"
+    tmux send-keys -t "$name" Enter
+    sleep "$wait"
+    tmux capture-pane -t "$name" -p -S "-$lines"
+    ;;
+  multi)
+    name="mud-$2"; body="${3-}"; per_wait="${4:-0.5}"; lines="${5:-200}"
+    while IFS= read -r line; do
+      tmux send-keys -t "$name" -l -- "$line"
+      tmux send-keys -t "$name" Enter
+      sleep "$per_wait"
+    done <<< "$body"
     tmux capture-pane -t "$name" -p -S "-$lines"
     ;;
   stop)

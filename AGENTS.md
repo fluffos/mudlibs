@@ -1290,6 +1290,38 @@ case "load_object": case "recompile_object": case "include":
 (`shujian2008` and every genuinely-custom securityd since; far more
 robust than growing the preload list.)
 
+**Variant found on `hy2002`'s deep functional test (§10.7): `file_size`,
+not just `load_object`.** Same custom-ACL root cause, but a different
+and much sneakier symptom — no crash, no visible error at all, just a
+silently *wrong answer*. `feature/skill.lpc`'s `set_skill()` probes
+`file_size(SKILL_D(skill) + ".lpc")` to check whether a skill file
+genuinely exists before accepting it:
+
+```lpc
+if (!find_object(SKILL_D(skill))
+    && file_size(SKILL_D(skill) + ".lpc") < 0)
+    error("F_SKILL: No such skill (" + skill + ")\n");
+```
+
+The very first time any NPC's `create()` references a skill nobody has
+touched yet this boot (e.g. the very first player to enter the
+starting-town martial-arts hall, referencing `"dodge"`), `find_object()`
+correctly returns 0 (not loaded yet) — but the fallback `file_size()`
+call gets denied by the same custom ACL (attributed to the low-privilege
+object still mid-`create()`, no euid yet), returns `-1` as if the file
+didn't exist, and the game incorrectly `error()`s claiming the skill
+doesn't exist — aborting that NPC's entire `create()` partway through.
+Once *any* object has successfully `load_object()`'d the skill file
+(e.g. a wizard manually `update`-recompiling it), `find_object()` finds
+the resident blueprint and the buggy `file_size()` branch is never
+reached again for the rest of that boot — so this reproduces exactly
+once per skill file per boot, which makes it easy to mistake for a
+one-off fluke rather than a systemic ACL bug hitting a large fraction of
+never-yet-touched game content on every fresh boot. Fix: add
+`case "file_size":` to the same allowlisted-func `switch` as
+`load_object`/`recompile_object`/`include` — checking whether a file
+exists on disk is exactly as harmless as compiling it.
+
 ### 7.6 DNS/intermud daemons: exclude from preload, then guard the callers
 
 Standing policy — before first boot, remove `dns_master`-style daemons
