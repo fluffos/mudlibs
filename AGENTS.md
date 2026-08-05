@@ -4419,6 +4419,29 @@ mixin files), not to one archive being copy-pasted from another. Treat
 `§7.78` as a standing check for **every** lib in the NT/nitan/Lonely
 family (§11 lineage map), not just byte-identical siblings.
 
+**Confirmed 4th instance: `nitan170911` itself** — the original mega-lib
+(014) that `xfbhh`/`hhsj`/`nt1` all descend from, with the near-exact
+same bare-call counts per mixin file as `xfbhh` (`attack.lpc` 12,
+`damage.lpc` 54, etc.). This is the strongest confirmation yet that the
+bug is baked into the upstream NT/nitan/Lonely design itself, present
+since before any of the archived forks diverged. Fixed with the
+identical `this_object()->` treatment, verified via clean recompile
+(0 syntax errors, no new `debug.log`/`boot.log` entries touching the 13
+mixin files) — **could NOT be verified via live login/registration**,
+because this specific archive's login path requires a real MySQL
+connection even for RETURNING characters with an existing local save
+(`adm/daemons/logind.lpc`'s `#ifdef DB_SAVE` branch calls
+`DATABASE_D->query_db_status()` unconditionally, before ever checking
+for a local save file), and this environment has no MySQL/MariaDB
+installed at all — a pre-existing, already-documented, permanent
+limitation (see this lib's own README), not something this pass could
+work around. When a fix can't be live-verified for an environmental
+reason like this, static verification (clean compile + no regressions
+in the touched files' surrounding log output) plus a proven track
+record on architecturally-identical siblings is the fallback — say so
+explicitly rather than skipping the fix or claiming false-confidence
+live verification.
+
 ### 7.79 (IDENTIFIED, NOT FIXED — too large for one pass) Bare, self-targeting `addn()`/`addn_temp()` calls are ALWAYS broken, codebase-wide, regardless of `F_DBASE` — because `addn` is simul_efun-ONLY and never locally defined anywhere
 
 Related to §7.78 but a distinct trap: unlike `set`/`query`/`delete`
