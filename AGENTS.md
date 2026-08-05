@@ -4750,6 +4750,22 @@ command that creates closures (an editor callback, a delayed
 `call_out()` bound to `this_object()`, anything using `(: lfun, ... :)`
 literal syntax without an explicit target object) mysteriously fails
 only on that one command while everything else on the same object works
+
+**Confirmed across three unrelated codebase families, not one
+lineage's quirk**: reproduced byte-for-byte identically on `zxty`
+(same "天涯" family as `xhcii`, 102 more files), on `hy2000` (an
+entirely unrelated ES2/金庸 "hy"/海洋 lineage, 53 files), and on
+`xyj2000` (a third, unrelated 西游记-themed codebase, where it also
+turned out to affect a SECOND, differently-named board base class --
+`BBS_BOARD` == `/std/bbsboard.lpc`, not just `BULLETIN_BOARD` ==
+`/std/bboard.lpc` -- 3 of `xyj2000`'s 28 total affected files used
+`inherit BBS_BOARD;` + `replace_program(BBS_BOARD);` instead; confirmed
+`bbsboard.lpc`'s own `do_postnews()` has the identical
+`ob->edit((: done_postnews, ... :))` closure-creation shape driving the
+same crash). Treat this as a near-universal copy-paste idiom across
+this whole generation of ES2-derived codebases -- check EVERY class a
+board-like object inherits for a matching redundant
+`replace_program()`, not just the most common `BULLETIN_BOARD` name.
 fine.
 
 ---
