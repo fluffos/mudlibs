@@ -23,6 +23,12 @@ grep 确认过这些备份没有被任何活动路径引用（`include/globals.h
 - 巫师个人目录 `u/zjb/` 里留着好几份核心系统文件的旧备份
   （`logind.lpc`/`master.lpc`/`securityd.lpc` 等），已确认完全不
   被任何活动路径引用，属于历史遗留死代码，未做任何改动。
+- 深度功能测试（§10.7）发现并修复了和 `tybxjh`/`xhcii` 共享的三个
+  bug：进度条渲染缩放（食物/饮水/气血曾经无论真实数值都显示"满
+  格"）、全档案 105 块留言板的 `post` 指令必然崩溃、以及 4 个
+  NPC（升级师、转世僧人、两份"大魔道士"医疗 NPC）因为
+  `exert_function()` 参数类型错误而编译失败、从房间里消失，详见下
+  方和 NOTES.md。
 
 ## 本次修复的关键 bug
 
@@ -56,6 +62,31 @@ NPC/指令呼叫）——用 grep 确认过没有任何被预载的精灵或
 来缺失（被好几个不在开机路径上的功能用到，比如 shell 日志、打造
 日志、吃丹日志）——为保险起见建了这个目录，虽然这里并不是致命
 bug（`logon()` 自己的 `log_file()` 呼叫都不走 nosave 路径）。
+
+## 深度功能测试（§10.7）修复的 bug
+
+sibling-check 自 `tybxjh`/`xhcii`（同一"天涯"家族，已完成深挖）：
+
+- `adm/daemons/logind.lpc` 的 2 处 printf 调试残留，逐字节相同。
+- §8.9 食物/饮水年龄检查错对象（`ob->query("age")` 应为
+  `user->query("age")`）。
+- **进度条渲染缩放 bug（AGENTS.md §7.85）**：`cmds/usr/score.lpc`
+  的 `tribar_graph()` 和 `tybxjh` 修复前的版本逐字节相同（残留的
+  GBK 时代 `*2` 宽度乘数），已用相同的字符数索引重写修复。
+- **留言板 `post` 崩溃 bug（AGENTS.md §7.86）**：全档案 105 份留
+  言板文件都同时 `inherit BULLETIN_BOARD` 又多余地对自己
+  `replace_program(BULLETIN_BOARD)`，导致 `post` 指令必然崩溃。已
+  删除全部 102 处多余调用（3 处已被前任巫师注释掉，未动）。
+- **`exert_function(10)` 类型错误，4 处**：`d/zjb/shengji.lpc`（升
+  级师）、`d/daniel/saveme.lpc` 和 `d/player/ltsh/npc/saveme.lpc`
+  （两份"大魔道士--雅薇丝"）、`u/zjb/hlxy/zs.lpc`（转世僧人）——和
+  `tybxjh` 完全相同的四个档案。**之前两次深挖用来排查这个 bug 的
+  grep 写错了**（`exert_function([0-9])` 只匹配单个数字，漏掉两位
+  数的 `10`）——这次死亡/复活测试期间在 `debug.log` 里直接撞见了
+  编译错误才发现。已全部删除这行死代码，用 `goto` 重新编译确认。
+
+（这份档案不需要 `xhcii` 的缺失 `/log/login/` 目录修复：这个目录
+本来就存在。）
 
 ## 管理员账号 / Admin account
 

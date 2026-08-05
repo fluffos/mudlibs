@@ -2068,8 +2068,18 @@ eval-cost abort does, landing the player with no environment and the
 same "灰蒙蒙一片"/can't-move symptom. Same detection/fix shape applies:
 grep `debug.log`'s compile-error output for anything in the
 zone-room-and-its-NPCs dependency chain of any room a fresh login can
-reach, not just runtime errors. Not worth a separate numbered class —
-the uncatchable-crash-during-cold-first-compile shape is the same
+reach, not just runtime errors. **Grep pitfall (caught on `zxty`,
+2026-08-05): `exert_function([0-9])` — a single-digit character
+class — silently misses `exert_function(10)` and any other multi-digit
+argument.** Two prior deep-tests (`tybxjh`, `xhcii`) used exactly this
+pattern; `tybxjh` had already found its 4 instances by other means
+(sibling-check, a live compile error) so nothing was missed there, but
+the grep itself would have reported a false "clean" on any lib whose
+only instances happened to be double-digit. Use
+`exert_function([0-9]+)` (or just `exert_function([0-9]` with no
+anchor) when checking a new lib for this pattern. Not worth a separate
+numbered class — the uncatchable-crash-during-cold-first-compile shape
+is the same
 regardless of whether the crash is an eval-cost abort or a compile
 error; treat both as instances of this section.
 
