@@ -4310,6 +4310,128 @@ macro's resolved path matches it. A stray `// Room: X` header comment
 on a DIFFERENT file than the one it's found in is a strong signal of
 exactly this kind of drift.
 
+### 7.78 A §7.15-architecture fix doesn't reach bare `set()`/`query()` calls made from INSIDE a mixin file that doesn't itself inherit `F_DBASE` — even though the composed object it's mixed into does
+
+Found on `xfbhh`'s §10.7 deep functional test, while chasing why
+`d/register/npc/pangu.lpc`'s `set_name("盘古", ...)` didn't persist:
+`query("name")` read back `0` immediately after `set("name", ...)`
+returned. This is the same underlying mechanism as §7.15 (bare
+`set`/`query` resolving to the simul_efun's shared fallback dbase when
+no local candidate exists) but §7.15's own fix doesn't fully cover it.
+
+§7.15's fix works by making `feature/dbase.lpc` (`F_DBASE`) define real
+local `set`/`query`/`delete`, on the assumption that "nearly everything
+already inherits F_DBASE, so bare calls then resolve locally". That
+holds for the TOP-LEVEL composed file (e.g. `inherit/char/char.lpc`,
+which directly `inherit F_DBASE;`) — but LPC binds a bare call inside a
+function body to whatever's in **that function's own defining file's**
+compile-time inheritance graph, not the final merged object's. `char.lpc`
+composes CHARACTER out of ~14 separate `F_*` mixin files (`inherit
+F_ACTION; inherit F_ATTACK; ...`), each independently compiled. A mixin
+that itself has zero (or unrelated, e.g. `F_NATURE`) inherits and calls
+bare `query(...)`/`set(...)` in its own body has NO local candidate at
+ITS OWN compile time — those calls fall through to the simul_efun
+exactly like a §7.15-unfixed object would, regardless of what `char.lpc`
+inherits elsewhere. Confirmed empirically: `set("long", ...)` called
+directly in `pangu.lpc`'s own `create()` persisted correctly; `set_name()`
+(defined in `feature/name.lpc`, which only `inherit F_NATURE;`) calling
+`set("name", ...)` internally did not — same object, same moment, only
+the DEFINING FILE of the call differed.
+
+**The obvious-looking fix doesn't work.** Adding `inherit F_DBASE;`
+directly to the mixin (e.g. `name.lpc`) seems like the natural §7.15-style
+fix, but `char.lpc` already inherits `F_DBASE` directly — re-inheriting
+the same file via a second path is NOT deduplicated/shared by this
+driver's compiler, it's a hard error: `Illegal to redefine 'nomask'
+function '_query'` (from `F_DBASE`'s own `inherit F_TREEMAP;` colliding
+with itself), because a duplicate inherit of a file containing `nomask`
+functions can't just be silently merged. This broke `char.lpc`'s
+compile entirely and cascaded into garbled login-prompt behavior for
+EVERY connection, not just the one object being edited — revert
+immediately if you see this error after adding an inherit line.
+
+**Real fix**: route the mixin's self-targeting bare
+`set`/`query`/`query_temp`/`set_temp`/`delete`/`delete_temp`/`add`/`add_temp`
+calls through `this_object()->` (call_other) instead of inheriting
+anything. `this_object()->query(prop, ob)` dispatches dynamically
+against the object's REAL, fully-composed function table (which does
+have `F_DBASE` via `char.lpc`), and is behaviorally identical to what a
+correctly-resolved bare call would have done — including calls that
+already pass an explicit different target object (`query(prop, ob)`
+where `ob != this_object()`), since `F_DBASE`'s own `query()`/`set()`
+still handle that redirect internally. No need to case-by-case judge
+which calls are "already safe" via the simul_efun fallback's own
+incidental `ob`-redirect (`adm/kernel/simul_efun/wizard.lpc` does
+support it) — converting uniformly is simpler and removes the
+dependency on that fallback entirely.
+
+**Severity/symptom**: not cosmetic. `feature/command.lpc`'s
+`enable_player()` — called from `char.lpc`'s `setup()` on EVERY new
+character's login, not just this one NPC's dialogue — has a bare
+`query("id")` that returned `0`, crashing `set_living_name()` (`Bad
+argument 1... Expected: string Got: 0`) for every fresh registration.
+`feature/attribute.lpc`'s `query_str()`/`query_int()`/`query_con()`/
+`query_dex()`/`query_per()` (core combat/attribute reads) all had the
+same bare-call pattern. On `xfbhh` this touched 13 of CHARACTER's ~14
+`F_*` mixins with bare-call sites: `action`, `apprentice`, `attack`,
+`attribute`, `command`, `condition`, `damage`, `equip_liv`, `message`,
+`more`, `move`, `name`, `team` (only `alias`/`edit`/`finance`/`skill`
+had none). Fixed and verified live via a full registration → attribute
+allocation → world-entry playthrough: NPC names/dialogue render
+correctly, `score` shows the exact str/int/con/dex values assigned
+during `washto`, and `debug.log` stayed empty through the whole session.
+
+**Detection**: grep each mixin file composed into a shared base (not
+just the base itself) for bare `\bset\(`/`\bquery\(`/etc., then check
+whether THAT SPECIFIC FILE (not the composing object) has `F_DBASE`
+anywhere in its own `inherit` chain. A mixin with zero inherits (or only
+inherits of other equally bare-handed mixins) that still calls
+`query(...)`/`set(...)` is a strong signal — even if the object it's
+ultimately composed into looks completely fine on paper.
+
+### 7.79 (IDENTIFIED, NOT FIXED — too large for one pass) Bare, self-targeting `addn()`/`addn_temp()` calls are ALWAYS broken, codebase-wide, regardless of `F_DBASE` — because `addn` is simul_efun-ONLY and never locally defined anywhere
+
+Related to §7.78 but a distinct trap: unlike `set`/`query`/`delete`
+(which `feature/dbase.lpc` DOES define locally, so a bare call resolves
+correctly for any file with `F_DBASE` genuinely in its own inherit
+chain), `addn`/`addn_temp` are **never defined as local/inherited
+functions anywhere in this lineage** — only in
+`adm/kernel/simul_efun/wizard.lpc`, as a compatibility shim for a
+driver efun this build doesn't have (see that file's own header
+comment). Every bare `addn(...)` call, no matter what file it's in or
+what that file inherits, is ALWAYS a genuine simul_efun call. The
+shim's own redirect (`if (!ob) ob = this_object(); return
+ob->add(prop, data);`) only works when an explicit target `ob` is
+passed AND is not `this_object()` — for the extremely common
+self-targeting form (`addn("some_stat", delta)`, no third argument,
+meant to buff the caller), `this_object()` inside that simul_efun call
+is the simul_efun object itself, so the shim redirects the write to the
+simul_efun's own throwaway dbase instead of the caller's. Symptom:
+skill/effect code that looks like it's applying a buff or decrementing
+a resource on the acting character silently does nothing measurable to
+that character (no crash, no error — same "silent no-op" signature as
+§7.15's original discovery).
+
+**Scope check on `xfbhh`**: `grep -rPn '(?<!->)\baddn\(|(?<!->)\baddn_temp\('
+--include="*.lpc"` found **~10,150 bare call sites across ~3,590
+files**, overwhelmingly in `kungfu/`/skill-effect code (e.g.
+`feature/pill.lpc`'s `addn("food_remaining", -1);`,
+`kungfu/class/murong/murongfu.lpc`'s `addn("san_count", -1);`). This is
+far too large to hand-fix in one deep-dive pass and was NOT attempted
+here — documented per the established precedent (§7.74) of leaving a
+genuinely-too-large finding honestly recorded rather than
+partially/riskily patched. Fix pattern for a future pass: same
+`this_object()->` treatment doesn't apply here (bare `addn` is never
+locally defined, so `this_object()->addn(...)` would just throw "Unknown
+function"); instead replace each self-targeting bare `addn(prop, data)`
+with `this_object()->add(prop, data)` (or `(ob ||
+this_object())->add(prop, data)` for the already-3-arg call sites, per
+§7.15's own `addn`-replacement guidance) — `add()` IS a real local
+`F_DBASE` function. Given the scale, this likely wants a scripted
+per-file transform plus spot-verification rather than manual editing,
+and should probably be its own dedicated pass rather than bundled into
+an unrelated lib's deep-dive cycle.
+
 ---
 
 ## 8. Login and registration flow bugs
