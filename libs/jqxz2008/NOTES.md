@@ -873,6 +873,22 @@ concurrently throughout and were never touched). RSS stayed at
 by exact PID after all testing completed, confirmed via `ps`/`ss` no
 longer showing port 40082.
 
+## 补充发现（来自对同引擎兄弟档案 jqxz2008std 的深度测试）：这轮 §10.7 测试当时漏掉的第 5 个 bug，§8.9 食物/饮水初始化检查错了对象
+
+`adm/daemons/logind.lpc` 的 `enter_world()` 里：
+```lpc
+if (!user->query("food") && !user->query("water") && ob->query("age") == 14) {
+```
+`age` 是角色本身（`user`）的属性，不是登录物件（`ob`）的属性——
+`ob->query("age")` 永远是 `0`，这个分支从来没有真正执行过，每个新
+角色的食物/饮水从创建起就永远是空的，静默、无报错。这轮上面记录的
+深度测试用的是 `shenshaofeng`/沈少峰这个角色，一路走到拜入丐帮、学
+`begging`——没有专门核对过食物/饮水初始状态是否为满，所以当时漏掉
+了这个 bug。已改成 `user->query("age") == 14`，用真实驱动重新注册
+验证过（沈叁），`score` 正确显示食物/饮水两条状态全满。这个 bug 在
+同引擎的"标准版"（`jqxz2008std`）先发现，确认三个版本档案里
+`logind.lpc` 这一行逐字节相同，一并同步修复。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 金庸群侠传引擎基础版（2008 加强版）。
