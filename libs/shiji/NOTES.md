@@ -521,3 +521,7 @@ Everything in the §10.7 checklist was reached this pass except:
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 Century/adm-single 家族（自定义 securityd ACL 表）。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）干净正常，画面上确认了这份档案自己的顶层巫师称号字符串（"★目前权限：〖宇宙特警〗(zhuguan)"，通过 /adm/daemons/securd.o 的 wiz_status 映射授予，而不是 wizlist 档案）。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD`、`W_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 19 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。

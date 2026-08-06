@@ -2,3 +2,7 @@
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 ES II 血统（adm/obj/master.lpc，"original from Lil, rewritten by Annihilator"），飞白工作室《书剑飘零》教学版。WASM 修复：（1）§7.60 类的 master.lpc report_error()→CHANNEL_D 编译期崩溃（这是这个模式的第三个呼叫点，在常见的 log_error()/standard_trace() 之外——report_error() 在这里是它自己独立的函式），已用 find_object(CHANNEL_D) 守卫。（2）adm/daemons/whod.lpc 用了未定义的 REMOTE_DIR 常量，破坏了它（被预载）的编译——已在 globals.h 里加上 #define REMOTE_DIR "/data/remote/"（硬盘上没有对应目录可以推断原意，但 get_dir() 对不存在的目录只会返回空数组，所以这样做是安全的，哪怕这个目录本身从未真正被创建）。（3）§7.41 类损坏的存档数据：adm/daemons/emoted.lpc 的 create() 对自己损坏的 emoted.o 做了未加保护的 restore()，预载时抛出未被捕获的异常；已包一层 catch(restore())，并显式补上 emote=([]) 兜底。深入调查后排除了一个疑似 bug：注册过程中反复出现的"你发现事情不大对了"讯息是这份 mudlib 自己的（有点吵闹但故意如此的）设计——master.lpc 的 log_error() 会把当时正好连线中的玩家告知每一次编译警告，而新角色第一次创建时其继承的各个 feature 档案（alias/damage/more/move/skill/troop）恰好都是第一次编译；临时让 error_handler 无条件显示完整细节后确认，每一条都只是无害的"Unused local variable"警告。管理员账号播种：fluffos (admin) 加入 adm/etc/wizlist（这份档案没有 sj 里那种 securd/securityd 分裂——securityd.lpc 在这里是真正、唯一的安全精灵）。已验证：完整注册（id→确认→名字→密码→确认→电子邮件→性别→出生地选择）→look/score/quit 全部干净，权限正确显示 (admin)，update 成功。LPC 格式化工具对全部 2310 个档案运行；还原了 1 个确认有损坏的档案（一种丢引号的损坏，不是常见的 CJK 重新加空格形态，但被同一个去空格比对扫描抓到），覆盖 17 个格式化工具触碰过的 CJK 间距档案；这份档案里没有 ASCII 地图档案。格式化后重新验证过，干净。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 31 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
