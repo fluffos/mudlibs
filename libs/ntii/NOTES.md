@@ -2,3 +2,7 @@
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 泥潭II——和 nte（泥潭二）同一个 ES2/Annihilator 架构家族，本轮改动的每一个档案（logind.lpc、named.lpc、versiond.lpc、dns_master.lpc、clone/user/user.lpc）都确认和 nte 修复前的版本逐字节相同——不是整个档案的重复（全库约 14-16k 个档案里有 10731 个不同，主要是游戏内容），但这一组基础设施档案是逐字共享的。直接复制了 nte 已验证过的修复档案，而不是重新推导相同的补丁：is_chinese() 的 GBK 字节区间修复、logind.lpc 里 check_legal_name() 没减半的长度界限（2 处呼叫点+姓名合并检查）、named.lpc 的 invalid_new_name() 空名字界限、uptime()<30 回环放行、dns_master.lpc（整个掏空）和 versiond.lpc（选择性掏空——13 个碰 socket 的函式，约 32 个呼叫者的非 socket 公开接口如 is_version_ok()/query() 保留）的 §7.52 socket 精灵掏空，以及 user.lpc 的 accept_kill() 里 is_killing() 物件/字符串不匹配（§7.50）。在这份档案自己身上独立通过一次真实的 WASM 注册验证：完整注册流程零编译错误完成，look/quit 也已验证（包括 quit 的新账号删除确认流程），wizlist 里的管理员 id（fluffos）重新注册后也被正确带到巫师专属起始房间。完整流程在排版格式化前后都验证过；格式化工具没有引入任何损坏（三类盲点检查都干净——和 nte 相同的两处大 diff，都已确认不是损坏：versiond.lpc 自己的掏空、combatd.lpc 合法的 if-else-if 讯息阶梯合并）。和 nte/nt6 相同的游戏内出生仪式内容关卡会影响刚注册角色的 score——不是 bug。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 55 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。

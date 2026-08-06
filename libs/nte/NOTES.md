@@ -2,3 +2,7 @@
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 泥潭二——一个和 nt6/nitan 不同的 ES2/Annihilator 衍生血统（feature/dbase.lpc 自己已经有完整的双参数 set/query/delete 架构，没有 §7.15 那个 bug）。WASM 修复：（1）经典的 §8.1 GBK 字节区间 is_chinese() bug（生效的那份和一份注释掉的死代码副本都用字节区间判断；已把生效的那份换成码点检查）加上两处独立反复出现的长度界限没减半变体——logind.lpc 的 check_legal_name(arg, 4)（应为 2，对应它自己"不超过两个汉字"的提示）在 2 处呼叫点、它的姓名合并检查 strlen(fname) < 4（应为 < 2）、以及 named.lpc 的 invalid_new_name() 里 strlen(name) < 2（应为 < 1，会把任何单字给名当成"空名字"拒绝）。（2）logind.lpc 的 logon() 里 §1.3e 的 uptime()<30 闸门——对本地回环放行。（3）在两个各自独立的精灵上做了 §7.52 socket 精灵掏空：dns_master.lpc（小型、单一用途，整个掏空）和 versiond.lpc（大型多用途的版本同步精灵，它的 is_version_ok()/query() 等非 socket 函式有 32 个外部呼叫者——只掏空了 13 个碰 socket 的函式/回呼，按既定的"大型多用途精灵"方针保留了其余公开接口）。（4）user.lpc 的 accept_kill() 里 §7.50 的 is_killing(ob) 物件/字符串不匹配——和 nt1/wxddym/zjmudhell/hell 上看到的同一个反复出现的复制粘贴 bug。通过 adm/etc/wizlist 把 fluffos/AdminPass1+loginpw1（双密码机制）播种为管理员，确认注册后被带到巫师专属起始房间。完整的注册→look→quit（包括 quit 的新账号删除确认）流程在排版格式化前后都验证过；格式化工具没有引入任何损坏（三类盲点检查都干净——两处大 diff 分别是 versiond.lpc 自己的掏空和 combatd.lpc 合法的 if-else-if 伤害讯息阶梯合并，不是损坏）。和 nt6/nt6nitan6win 相同的、游戏内"完成出生仪式对话之前不算出生"的内容关卡会影响刚注册角色的 score——不是 bug，不在本轮范围内。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 55 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
