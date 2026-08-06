@@ -4988,6 +4988,69 @@ ships its own — don't wait for a wizard-login crash (or any other
 lazy-first-touch call site) to surface it, since — per §7.60/§7.87 — a
 throw during a lazy first load often leaves zero trace in `debug.log`.
 
+### 7.90 `config.fluffos`'s `maximum evaluation cost` is set to this project's common default, but this lib's own NPC-creation cost routinely exceeds it — ordinary movement into any not-yet-compiled room trips a global eval-cost abort and shows every non-wizard player a generic "bug found, report it" message
+
+Found on `xajh4gkb`'s §10.7 deep-dive. WASM-stage testing (registration
+only) found zero LPC bugs — the first symptom only appeared once actual
+movement was tested. Walking into ordinary, never-before-visited rooms
+(no special content, just lazy-compiled NPCs like `d/city/npc/
+scavenger.lpc`/`bing.lpc`) repeatedly threw:
+```
+Eval interrupted: object d/city/npc/bing#265 cost limit reached, limit: 700000 usec.
+执行时段错误：*Too long evaluation. Execution aborted.
+程式：/feature/skill.lpc 第 17 行
+```
+Because this driver has `mudlib error handler : 1`, non-wizard players
+never see this — the global `error_handler()` in `adm/obj/master.lpc`
+downgrades it to a generic "这里发现了臭虫，请用 SOS 指令将详细情况
+报告给巫师。" (only wizards get the real stack trace via a `debug`
+channel check), so the underlying eval-cost abort is invisible unless
+you're grepping `debug.log` or testing as a wizard.
+
+Traced the full call chain (NPC `create()` → `inherit/char/char.lpc`'s
+`setup()` → `feature/skill.lpc`'s `set_skill()` → the `file_size()`/
+`valid_read()` ACL check) looking for one specific expensive statement
+and didn't find a smoking gun — no missing files, no ACL
+false-denial-forcing-a-reload (§7.5), no infinite loop. What's
+different about this lib: `char.lpc`'s `setup()` has an author-added
+block (`//2017.8.5阿飞改，若NPC有技能，统一重置NPC的基础技能与特殊
+技能等级`) that iterates every skill an NPC's `query_skills()` already
+holds and calls `set_skill()` on each one AGAIN — meaning most NPCs pay
+for their own skill-setting cost twice (once in their own `create()`,
+once redundantly via this "unify-reset" pass in `setup()`), on top of
+whatever real ACL-check cost `set_skill()` already carries. None of that
+is unambiguously a single bug to "fix" — it reads as this lib's content
+simply being more NPC/skill-setup-heavy than most, colliding with
+`maximum evaluation cost : 700000`, the single most common value in
+this project (100+ libs use it, largely because it was this project's
+own generated `config.fluffos` template default) but one that sits at
+the low end of the range libs in this project actually use (300000 up
+to 50000000000, per-lib).
+
+Fix: raised `maximum evaluation cost` to `5000000` (already used by 30
+other libs in this project) — the exact same class of remedy as §7.87's
+`maximum read file size` bump, just for a different resource-limit knob.
+Verified live: before the fix, a fixed movement path (`fly yz; w; n; w`
+through several never-before-visited rooms) reliably produced multiple
+`cost limit reached` aborts every single run. After the fix and a driver
+restart, the identical path — same character, same rooms — produced
+zero aborts across 12 consecutive movement commands, and `debug.log`
+showed no further `cost limit reached` entries for the rest of the
+session (including a full combat + death + resurrection cycle).
+
+Detection pattern: don't stop testing at "registration completes
+cleanly" — a lib can pass every WASM-stage check and still throw
+eval-cost aborts the moment a player actually walks around, because
+lazy-compiled room/NPC creation is exactly the kind of bursty, one-time
+cost that a registration-only smoke test never exercises. If ordinary
+movement (not combat, not a quest, just `w`/`n`/`look`) into new areas
+triggers the generic "臭虫"/"bug found" message for a non-wizard
+character, `grep -c "cost limit reached" log/debug.log` before assuming
+it's a one-off content bug — a whole exploration session producing
+several hits, with no single suspiciously-expensive statement in the
+traced call chain, points at the config ceiling being undersized for
+this lib's content rather than a discrete logic error to chase down.
+
 ---
 
 ## 8. Login and registration flow bugs
