@@ -564,6 +564,63 @@ Retest: fresh registration reached 南城客栈, `look` correct; fluffos
 re-login `(admin)` + wizard commands OK; debug.log has no runtime errors
 beyond the documented first-attempt eval-cost abort (which did not recur).
 
+## 深度功能测试 / Deep functional test (2026-08-06)
+
+第一次完整游玩测试（原生驱动 `build`，ASAN/UBSAN debug 构建）。测试角
+色 id `xyfourf`，中文名 白龙马。本轮 WASM 未重新验证：emsdk 工具链下
+载硬编码指向 `storage.googleapis.com`，本次会话的出口代理策略性拒绝
+该域名（403，已用 `curl $HTTPS_PROXY/__agentproxy/status` 确认是策略
+拒绝而非临时故障），本地无法构建 WASM 驱动。
+
+### 更正此前的误诊：上面记录的"首次注册偶发 eval-cost 中止"其实是 100% 可复现的真实配置 bug，不是环境偶发（AGENTS.md §7.90 严重实例）
+
+上面"Flaky-first-registration note"一节把这次中止归因为"冷启动时并
+发编译负载"，判定为环境偶发、未做任何修复。刚测试完同一血缘家族的
+`xyj2000f`（`config.fluffos` 的 `maximum evaluation cost` 同样被设成
+`400000`，比这个项目常见的 700000 模板默认值还低）才发现：这不是并
+发负载导致的偶发，而是**每一次冷启动后的第一次注册都 100% 会撞上**
+——`make_body()` 第一次编译整条 `/std/char` 继承链的开销本来就稳定超
+过 400000 usec 预算，与是否有其它驱动同时在跑毫无关系。此前那次记录
+之所以看起来像是"重试一次就好了"，只是因为失败的那次编译已经把继
+承链的编译结果缓存进了驱动进程，同一进程内后续的注册自然不会再触发
+冷编译——如果当时重启驱动再试一次全新注册，会看到同样的中止 100%
+复现。这次深度测试**在动手注册前就先主动对齐**了 `xyj2000f` 那次找
+到的修复：把 `maximum evaluation cost` 从 `400000` 提到 `5000000`
+（AGENTS.md §7.90 记录的、本项目 30+ 份档案已验证安全的数值），此后
+两次独立的全新注册（重启驱动之间跨越两个不同的驱动进程）均一次通
+过，无需任何重试或运气。已在 AGENTS.md §7.90 的对应实例段落里追加了
+这份档案作为第二例确认。
+
+### 顺带更正 README 的一处失实描述
+
+原 README 写"与姊妹版 `xiyouji` 不同，本版注册流程没有性别/天赋选择
+环节，更简洁"——本轮实测注册流程完整包含性别选择（m/f）与八项天赋
+（膂力/胆识/悟性/灵性/定力/容貌/根骨/福缘）确认环节，与 `xyj2000f`
+一致，并没有省略。已在 README 里更正这一句。
+
+### 测试内容与结果
+
+- **注册**：GB 编码 → 是否中小学生（no）→ 直接输入英文名（无需先输
+  `new`，与 `xyj2000f` 的流程略有差异）→ 中文名（白龙马，未出现
+  `xyj2000f` 那种 `printf("%O", ob)` 调试泄漏——`logind.lpc` 全文 grep
+  确认这份档案没有这一行）→ 密码 → 确认密码 → 邮箱 → 性别 → 天赋确
+  认，全程顺利进入 `南城客栈`。
+- **战斗**：同一血缘家族共享的 `朱雀大街` 疥顶小僧（`d/city/npc/
+  jieding.lpc`，`attitude: peaceful`）——`set wimpy 70` 后 `fight
+  seng` 触发真实对战，气血降到 59%（低于 70% 阈值）时角色正确说出
+  "佩服，佩服"认输（与 `xyj2000f` 的"自动逃跑到相邻房间"不同的具体
+  实现，但同属 wimpy 安全机制，无崩溃）。
+- **持久化**：真实 `quit` 后重新登录（同一驱动进程内），正确恢复到
+  `南城客栈`（这份家族的登录固定入口，非位置持久化 bug，参见
+  `xyj2000f` 的同类记录）、气血自然回复（59→66，符合时间流逝的自然
+  恢复，非存档丢失）。
+- **管理员账号**：`fluffos`/`Mud@2026` 登录，`update
+  /adm/daemons/logind` 热更新成功（编译警告是既有的未使用变量，非本
+  轮引入），确认写 ACL 正常。
+- **门派/拜师、经济/商店**：**未覆盖**——与 `xyj2000f` 本轮测试遇到
+  的时间预算限制相同，如实标注为未覆盖，而非默认"同血缘家族所以没
+  问题"。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 西游记450 手足档案（master.c 约等于 mhxy）。

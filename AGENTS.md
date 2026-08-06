@@ -5122,6 +5122,25 @@ in `debug.log` pre-fix, then a full clean registration (past the
 former hang point, straight through to gender/gift selection and
 entering the world) post-fix with zero further eval-cost entries.
 
+Second confirmed instance, same lineage: `xiyouji450` (a sibling
+"mirror-site" release of the same xiyouji.org engine family) shipped
+the identical `maximum evaluation cost : 400000`. An earlier pass on
+this lib had already hit the exact same `make_body()` abort, but
+misdiagnosed it as environmental flakiness ("cold boot, concurrent
+driver load") because a retry *within the same driver process*
+succeeded — the failed compile attempt had already cached
+`/std/char`'s inheritance chain in the process, so later registrations
+in that same still-running driver never re-paid the first-load cost
+and never re-tripped the limit, masking that a fresh process would
+deterministically fail its very first registration every time. Applied
+the §7.90 fix proactively before ever registering a character this
+round (raised to `5000000`); two independent registrations, each in
+its own freshly-booted driver process, both succeeded cleanly on the
+first try. Lesson: a first-load eval-cost abort that "goes away on
+retry" within one driver session is not evidence it was a fluke — it
+just means the expensive compile got cached; test with a fresh driver
+restart before concluding no fix is needed.
+
 Detection pattern: don't stop testing at "registration completes
 cleanly" — a lib can pass every WASM-stage check and still throw
 eval-cost aborts the moment a player actually walks around, because
