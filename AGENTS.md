@@ -4788,6 +4788,30 @@ When sweeping a lib for this bug, also grep for `BULLETIN_BOARD`/
 `inherit`/`replace_program()` statements -- a few libs in this project
 generate board (or NPC, or item) source code at runtime this way.
 
+**A fourth confirmed lineage, `xiakexing3`** (金庸群侠传, `jqxz2008`
+engine family): `post board` in the starting-room 客店 board
+(`clone/board/kedian_b.lpc`) crashed with the byte-for-byte identical
+error text (`*cannot bind an lfun fp to an object with a pending
+replace_program()`, just a different line number --
+`/inherit/misc/bboard.lpc` 第 102 行 here, since this lib's `bboard.lpc`
+has a few extra lines vs. `xhcii`'s -- both point at the same
+`this_player()->edit((: done_post, ... :))` closure in `do_post()`).
+All 18 of this lib's board instances (`clone/board/*_b.lpc` plus one
+`d/taohua/taohua_b.lpc` duplicate) had the exact `inherit
+BULLETIN_BOARD;` + `create()`-tail `replace_program(BULLETIN_BOARD);`
+shape; no runtime-generated board factory in this lib. Fixed by
+deleting the redundant `replace_program()` line from all 18 (CRLF line
+endings preserved). Live-verified: before the fix, `post board`
+crashed instantly; after the fix and a driver restart, `post board`
+opened the line editor normally, `留言完毕` on `.`, and the post showed
+up correctly under both `look board`'s unread count and `read <n>`.
+Worth noting as a secondary effect of the fix: the board's save file's
+class header line changed from `#/inherit/misc/bboard.c` (the class it
+used to `replace_program()` into) to `#/clone/board/kedian_b.lpc` (its
+real file) after the redundant call was removed -- cosmetic only, the
+save/restore mapping data is unaffected and `restore()` doesn't
+validate that header strictly.
+
 ---
 
 ### 7.87 A save file exceeding the driver's configured "maximum read file size" makes `restore()` THROW instead of failing gracefully, and the throw happens during a lazy first-load with no error ever reaching `debug.log`

@@ -157,3 +157,97 @@ character `qretest` removed afterward; fluffos kept.
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 同一代码库换牌重发（master.c 逐字节相同）。
+
+## 深度功能测试（§10.7，2026-08-05）
+
+WASM 阶段的"完整验证过注册流程，没有发现 bug"结论需要更正——这次
+§10.7 深挖在注册后的日常操作（留言板发帖）里找到一个此前从未触发
+过的致命 bug，此外还确认并修好了两个在本轮次开头就已发现的问题。
+
+- **§8.9 食物/饮水初始化判断的对象错了**：`adm/daemons/logind.lpc`
+  `enter_world()` 里 `if (!user->query("food") && !user->query("water")
+  && ob->query("age") == 14)` 判断的 `ob->query("age")` 拿的是登录阶段
+  用完即弃的连线桩物件，而不是真正的玩家角色本体 `user`——桩物件永
+  远没有 `age` 这个属性，条件恒为假，导致**每一个新角色的食物/饮水
+  永远初始化成 0**。改成 `user->query("age") == 14` 后，live 验证：
+  修复前新注册角色 `score` 食物/饮水两栏都是空的（□□□），修复并
+  重启驱动后同一注册流程走到底食物/饮水都是满格（■■■），第二次
+  重启后（新角色 `testfive`）依然保持满格，确认修复稳定。
+- **`get_name()` 里一行遗留调试 `printf("%O\n", ob)`**：紧跟在玩家
+  输入中文姓名之后，会把连线桩物件的原始引用（形如
+  `/clone/user/login#0`）直接回显给正在注册的新玩家，是内部调试信
+  息泄漏。已删除该行；删除前后的注册流程 transcript 对比确认泄漏
+  行消失、其余流程不受影响。
+- **缺失的 `log/nosave/` 目录**：`adm/daemons/combatd.lpc`、
+  `cmds/std/kill.lpc`、`cmds/skill/apprentice.lpc`、
+  `cmds/skill/bai.lpc` 都会往这个目录写文件（主要是 PK 击杀记录和
+  拜师技能的 FENG 记录，多数写入点还带 `userp()` 判断，NPC 战斗未
+  必会触发），但 AGENTS.md §7.11 已经在这个 `jqxz2008` 系列的其它
+  版本上确认过"目录缺失导致复活流程卡死"这个确切形状，属于零风险
+  的预防性修复，提前建了这个目录（.gitignore 规则本身就会忽略
+  `work/**/log`，不需要额外 git 操作）。
+- **§7.86（第四个确认命中的独立血统家族）留言板 `post` 崩溃**：在
+  起始房间"客店"的留言板（`clone/board/kedian_b.lpc`）测试
+  `post board` 时，瞬间抛出运行时错误：
+  ```
+  执行时段错误：*cannot bind an lfun fp to an object with a pending replace_program()
+  程式：/inherit/misc/bboard.lpc 第 102 行
+  物件: /clone/board/kedian_b
+  呼叫来自：/inherit/misc/bboard.lpc 的 do_post() 第 102 行，物件： /clone/board/kedian_b ("客店留言板")
+  ```
+  这行错误文字和 AGENTS.md §7.86（首次在 `xhcii` 上发现）记录的完
+  全逐字一致（仅行号不同，102 行对应这份档案自己的
+  `/inherit/misc/bboard.lpc` 里同一处
+  `this_player()->edit((: done_post, this_player(), note :))` 闭包
+  创建语句）。检查 `kedian_b.lpc` 确认是标准的致命形状：既
+  `inherit BULLETIN_BOARD;`，`create()` 结尾又多余地对自己
+  `replace_program(BULLETIN_BOARD);`。`grep` 全档案后确认这份档案
+  一共 18 个留言板实例全部命中同一形状（`clone/board/` 下 17 个
+  `*_b.lpc`/`*_r.lpc` 加上 `d/taohua/taohua_b.lpc` 一个重复放置的
+  桃花岛留言板），没有发现 `sje` 那种运行时生成留言板源码的工厂变
+  体。修复：18 个文件全部只删除多余的 `replace_program(BULLETIN_BOARD);`
+  一行，保留 `inherit BULLETIN_BOARD;`，CRLF 行尾格式原样保留。
+  Live 验证：重启驱动后用测试角色 `testfive`（李四）在客店留言板
+  `post board` 顺利进入编辑器，输入正文、`.` 结束后提示"留言完
+  毕。"；`look board` 显示未读数正确从 1 涨到 2，新增一条署名"李
+  四"、时间戳为当天的记录；`read 2` 能完整读出刚才写的内容。测试
+  完成后已把该留言板存档 `work/data/board/kedian_b.o` 还原到修复
+  前的原始内容（只保留档案自带的那条测试留言），不留会话痕迹。此
+  修复顺带把该存档文件的类头从 `#/inherit/misc/bboard.c`（`post`
+  以外的场景之前一直"变身"成的那个类）改成了 `#/clone/board/kedian_b.lpc`
+  （物件自己的真实文件）——纯粹是移除多余 `replace_program()` 的
+  自然结果，存档数据本身不受影响，`restore()` 也不严格校验这行类
+  头字符串。已在 AGENTS.md §7.86 追加这份档案作为第四个确认命中的
+  独立血统。
+- **§7.88 message() 参数缺失检查**：走查了 `adm/simul_efun/message.lpc`
+  （通过 `adm/obj/simul_efun.lpc` 的 `#include`），`message_vision`/
+  `tell_room`/`shout`/`say`/`write` 全部只是转呼叫内建 `message()`，
+  没有本档案自己重新定义/包装一个签名不一致的 `message()`，不适用
+  §7.88 这个特定形状。
+- **§8.3a/§8.3b 指令表**：本轮登录、`look`、`score`、`post board`、
+  `kill`、移动指令全部正常响应，WASM 阶段笔记里"已检查过没问题"的
+  结论继续成立。
+- **战斗与移动测试**：从"客店"往西走到"北大街"（遇到"白驼山少庄
+  主「玉面蛇心」欧阳克"这个调戏 NPC，纯对话骚扰不主动攻击），再往
+  南到"中央广场"，对普通"流氓"（Liu mang）发起 `kill`，多回合拳脚
+  攻防（出拳/踢腿的命中、闪避、擦伤判定文字均正常），最终测试角色
+  体力耗尽昏死，`debug.log` 全程零 `执行时段错误`。
+- **死亡→复活流程完整走通，无需人工干预**：角色死亡后自动送入
+  "鬼门关"，NPC"白无常"翻账册确认"阳寿未尽"后放行 `north` 到
+  "酆都城门"，NPC"黑无常"重复同一套账册判断后主动"哼"一声送出，
+  一股"阴冷的浓雾"把角色直接传送到复活点"武庙"（岳王庙正殿）。全
+  程无需任何指令输入之外的干预，也没有出现 AGENTS.md §7.68 记录
+  的那种"present() 判断游戏对象已经不在场导致流程卡死"的鬼魂卡死
+  形状——**按 §7.68 的既有结论，这里明确不施加那条已经在其它 lib
+  撤回的重试修复**，只如实记录观察到的行为。复活后 `score` 确认
+  精/气恢复到约四成、食物/饮水依旧满格（§8.9 修复在多次死亡后依
+  然生效）、实战经验从 0 涨到 3。
+- 本轮测试方法论：中文角色名（李四）通过 `mudclient.py` 原始
+  socket 发送，注册流程与两次驱动重启后的复测均未再撞上此前记录
+  过的本地 `telnet`/CJK 字节转义问题；`post`/`kill`/移动等纯
+  ASCII 指令改用 `scripts/tmux_mud.sh` 的 tmux 会话完成，全程无异
+  常。
+- 会话结束前清理：删除测试角色 `testfive`/`testfour` 的存档
+  （`work/data/{login,user}/t/*.o`，均无 git 历史、确认是本轮测试
+  产物）；`kedian_b` 留言板存档已还原；停止 tmux 会话、终止驱动进
+  程；未触碰其它 lib 的任何未追踪文件。
