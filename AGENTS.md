@@ -5107,6 +5107,21 @@ zero aborts across 12 consecutive movement commands, and `debug.log`
 showed no further `cost limit reached` entries for the rest of the
 session (including a full combat + death + resurrection cycle).
 
+A harsher variant on `xyj2000f`: `maximum evaluation cost : 400000`
+(even lower than the 700000 template default), and the cold compile
+that tripped it wasn't ordinary room movement but `make_body()` itself
+— `/std/char.lpc`'s first-ever load, pulling in its whole inheritance
+chain (`feature/edit`, `feature/finance`, etc.) during ordinary
+registration's `get_email()` step. Every single new registration hit
+`Eval interrupted: ... cost limit reached` and aborted mid-`make_body()`
+with no player-facing error at all (the connection just silently stops
+responding right after the email prompt) — 100% reproducible, not the
+"only some never-visited rooms" flavor §7.90 first documented. Same
+fix, same remedy value (`5000000`); verified by reproducing the abort
+in `debug.log` pre-fix, then a full clean registration (past the
+former hang point, straight through to gender/gift selection and
+entering the world) post-fix with zero further eval-cost entries.
+
 Detection pattern: don't stop testing at "registration completes
 cleanly" — a lib can pass every WASM-stage check and still throw
 eval-cost aborts the moment a player actually walks around, because
