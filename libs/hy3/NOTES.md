@@ -2,3 +2,7 @@
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 ES/金庸血统 mudlib，游戏内标题为"火云录2000"（Huo Yun Lu 2000）。修复的 bug：（1）真正生效的 adm/simul_efun/chinese.lpc 里经典的 §8.1 is_chinese() GBK 字节区间 bug——adm/single/chinese.lpc 那份死代码副本早就修好了（经典的 §7.56 类陷阱：真正被 include 的那份档案反而还是有 bug 的旧版本）；（2）adm/daemons/logind.lpc 里经典的 §8.1 check_legal_name() 字节数没减半的长度界限（2/10→1/5 字符）加上 i%2==0 门槛和 name[i..<0] 尾部切片；（3）新发现的严重 bug（AGENTS.md §7.59 的一个变体）：adm/obj/master.lpc 的 valid_read/valid_write 包装函式无条件地用 previous_object() 覆盖驱动提供的 user 参数，包括 load_object/include 这两种情形，静默拒绝了注册过程中编译玩家自己身体类别的请求——这个崩溃完全不可见（没有报错，没有编译警告），直到把可疑的呼叫包进 catch() 才浮现出"*Read access denied."；已仿照原始 §7.59 的模式，把 func=="load_object"/"include" 排除在覆盖之外来修复；（4）adm/daemons/wzd_log.lpc 里的管理员登录 bug：它的防盗号 IP 验证系统用 regexp()（真正的正则语法，不是通配符）来比对连线 IP 和按管理员分类的白名单——最初尝试用通配符语法（'*.*.*.*'）给测试管理员账号加白名单，结果因为无效的正则语法崩溃，静默杀死了 wzd_log() 剩下的代码，没有任何可见症状；已改用合法的正则（'.*'）修复。从白名单外的 IP 用管理员身份登录本来就会要求当场解答一道显示在画面上的随机数学题（这是有意的、设计良好的防盗号功能，不是 bug）——本次为了标准的 fluffos 测试账号绕过了这一步，用的是 IP 白名单映射，而不是真的去在线解题。GB 和 BIG5 两个编码选单选项都实测正常，不用修。完整的注册→look→score→quit 流程在排版格式化前后各验证过一次，用的是真实中文名字，管理员流程（fluffos/loginpass1，"目前权限：(admin)"）格式化后也重新验证过。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD`、`M_BOARD`、`WIZ_BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 47 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。

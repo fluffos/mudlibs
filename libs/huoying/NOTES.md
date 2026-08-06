@@ -573,3 +573,7 @@ after testing.
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 Naruto 题材的 ES2/Neolith 引擎 mudlib（火影）；这是正统、可游玩的原版——hy2（078，火影 (2).rar）是同一份压缩包的第二次上传，确认除排版外逐字节相同，而且它自己的 duplicate_of 已经正确指回这个 slug。这份档案自己的 duplicate_of 之前被误设成一个不存在的压缩包文件名（火影.rar），现已清除。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 8 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
