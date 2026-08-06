@@ -6,9 +6,10 @@ continues the work. Read the section relevant to your task before touching
 a lib; almost every problem you will hit has been hit before and is
 cataloged here with its fix.
 
-**Current state**: 98 Chinese LPC mudlibs converted and committed, 97 of
-them fully WASM-playable end to end (plus `ds386`/Dead Souls, English,
-deliberately left native-only/partial per §10.6) — every converted lib
+**Current state**: 97 Chinese LPC mudlibs converted and committed, all
+fully WASM-playable end to end (`ds386`/Dead Souls, English, was
+deliberately left native-only/partial per §10.6 and has since been
+purged from the repo — see §10.6) — every converted lib
 has now also been through the long-sit boot-log sweep (§10.0), not just
 a quick login check. The corpus keeps growing as new archives get
 dropped in; `README.md`'s table and `lib_numbering.json` are the current
@@ -5875,7 +5876,13 @@ raising it.
 
 Standing policy: deprioritized. Confirm what an English lib is, note
 it, don't sink conversion time (`ds386` Dead Souls partial;
-Discworld bundles untouched). Revisit only on request.
+Discworld bundles untouched). Revisit only on request. `ds386`'s
+`libs/` directory was later purged entirely as permanently out of
+scope (2026-08-05, alongside four other structurally-rejected libs —
+duplicates, no standalone master object, or a non-shared driver
+requirement); its bug-pattern notes elsewhere in this file remain
+valid precedent for future English archives even though the lib
+itself is gone. Raw archive preserved at `archives/006_ds386_ds3.8.6.zip`.
 
 ### 10.7 Deep functional testing methodology (round two)
 

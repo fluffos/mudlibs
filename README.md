@@ -123,10 +123,12 @@ WASM status values: **playable** = full registration + gameplay verified
 end-to-end in the WASM harness (registration, look/score/quit, and the
 seeded admin account's login + a wizard command all confirmed); **limited**
 = boots and plays under WASM with a known caveat documented in that lib's
-own README; **partial (native only)** = `ds386` (Dead Souls), an
-English-language lib deliberately deprioritized per project policy (see
-`AGENTS.md` §10.6) and not pushed through the WASM pass; **noboot** = a
-genuine LPC mudlib that fails to boot for a structural reason unrelated
+own README; **partial (native only)** = an English-language lib
+deliberately deprioritized per project policy (see `AGENTS.md` §10.6)
+and not pushed through the WASM pass — none currently in the collection
+(the sole prior example, `ds386`/Dead Souls, was purged as permanently
+out of scope; its raw archive is preserved under `archives/`); **noboot**
+= a genuine LPC mudlib that fails to boot for a structural reason unrelated
 to this project's own conversion (a missing master object in the archive
 itself, a different mudlib codebase family the driver isn't built for)
 — not a pending-work item, filed for provenance. Every lib that has been through the
@@ -147,7 +149,6 @@ classes it's found.
 | 004-1 | `bxsj1` | 书剑·经典 (ShuJian Classic) | `bxsj1.rar` | 40005 | WASM playable |
 | 004-2 | `jinyongwenzi` | 金庸文字版 | `金庸文字版 (1).exe` | 40083 | WASM playable |
 | 005 | `chidi` | 江湖 I (Jianghu I) | `chidi.rar` | 40006 | WASM playable |
-| 006 | `ds386` | Dead Souls 3.8.6 | `ds3.8.6.zip` | 40007 | WASM partial |
 | 007 | `dtsl` | DTSL | `DTSL.7z` | 40008 | WASM playable |
 | 007-1 | `dtslmud` | 大唐双龙传（LLMUD） | `LLMUD(大唐双龙)v_0.11版.rar` | 40015 | WASM playable |
 | 007-2 | `dtsl2` | 大唐双龙 (DaTangShuangLong) | `大唐双龙.rar` | 40043 | WASM playable |
@@ -247,7 +248,6 @@ classes it's found.
 | 066 | `hc` | 红尘 (in-game: 红尘录) | `红尘.rar` | 40107 | WASM playable |
 | 067 | `cctx` | 驰骋天下 | `驰骋天下.rar` | 40161 | WASM playable |
 | 068 | `dfgsiiv13b` | 东方故事IIv1.3b | `东方故事IIv1.3b.tar.gz` | 40144 | WASM playable |
-| 069 | `dfgsitlzjwin` | 东方故事I屠龙战记WIN98版 | `东方故事I屠龙战记WIN98版.rar` | 40111 | noboot |
 | 070 | `dtxywzxzb` | 大唐西游完整修正版 | `大唐西游完整修正版.rar` | 40150 | WASM playable |
 | 071 | `ffxymud` | 非凡夕阳MUD | `非凡夕阳MUD.rar` | 40142 | WASM playable |
 | 072 | `fys` | 风云三 | `风云三.rar` | 40164 | WASM playable |
@@ -256,7 +256,6 @@ classes it's found.
 | 075 | `gjzddmudda` | 国家制度的MUD DA | `国家制度的MUD DA.rar` | 40122 | WASM playable |
 | 076 | `hell` | hell | `hell.7z` | 40114 | WASM playable |
 | 077 | `hxxtjqb` | 幻想西天加强版 | `幻想西天加强版.rar` | 40177 | WASM playable |
-| 078 | `hy2` | 火影 | `火影 (2).rar` | 40123 | noboot |
 | 079 | `hy2000` | 海洋2000 | `海洋2000.rar` | 40174 | WASM playable |
 | 080 | `hy2002` | 海洋2002 | `海洋2002.rar` | 40116 | WASM playable |
 | 081 | `hy3` | 火云 | `火云.rar` | 40162 | WASM playable |
@@ -319,13 +318,11 @@ classes it's found.
 | 138 | `zxty` | 再现天涯 | `再现天涯.rar` | 40166 | WASM playable |
 | 138-1 | `zxty08nxgbb` | 再现天涯（08年修改版本） | `再现天涯08年修改版本.rar` | 40193 | WASM playable |
 | 139 | `zzfy3` | 郑州风云3 | `郑州风云3.rar` | 40120 | WASM playable |
-| 140 | `hellxg` | hell（修改版） | `hell - 修改.7z` | 40181 | noboot |
 | 141 | `wxddym` | 武学大道 | `武学大道源码.7z` | 40189 | WASM playable |
 | 142 | `nt6` | 泥潭6 | `泥潭6.zip` | 40186 | WASM playable |
 | 142-1 | `nt6nitan6win` | 泥潭6 (win_nodb版) | `泥潭6nitan6-win_nodb.rar` | 40187 | WASM playable |
 | 143 | `yszz` | 妖神之争 | `妖神之争.rar` | 40192 | WASM playable |
 | 144 | `njhhdxdes2hx` | es2/侠客行（南京河海大学校内版1.01） | `南京河海大学的es2和xkx《校内_1.01版》.tar.gz` | 40194 | WASM playable |
-| 145 | `sgzmudsgz` | 三国志MUD (sgz) | `三国志MUDsgz.tar.gz` | 40196 | noboot |
 | 146 | `hy` | 海洋（基础版） | `海洋（由千堆雪上传）.rar` | 40182 | WASM playable |
 | 146-1 | `hy5` | 海洋5 | `海洋5.7z` | 40183 | WASM playable |
 | 147 | `jym` | 金庸梦 | `金庸梦.rar` | 40184 | WASM playable |
