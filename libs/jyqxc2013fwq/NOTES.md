@@ -2,3 +2,7 @@
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 金庸题材 mudlib（金庸群侠传2013_服务器版），jyqxc/jyqxc2 的手足档案（同一架构家族；不是文件级完全相同）。修复了两个 bug，都在 adm/daemons/combatd.lpc：（1）#include </quest/quest.h> 用了尖括号绝对路径写法，这个驱动会把它解析成相对于配置好的 include 目录（/include），而不是 mudlib 根目录——这份代码库里其它所有绝对路径 include 都正确使用带引号的写法（#include "/path.h"），只有这一处用了尖括号，导致"Cannot #include /quest/quest.h"，接着连锁触发"Undefined function quest_finished"，让 combatd.lpc 整个编译失败（"No program in object"），破坏了每个玩家的战绩显示。已改成带引号写法修复。（2）include 路径解决之后，又暴露出 quest.h 顶层的 mapping quest_name = ([...]); 定义抢在了 combatd.lpc 的 inherit F_DBASE; 之前（因为 #include 写在 inherit 之上），这个驱动不允许这样（"Illegal to inherit after defining global variables"）——已把 #include 挪到 inherit 语句之后修复。另外也照搬了 jyqxc/jyqxc2 已知的 feature/name.lpc 里 short()/capitalize(query("id")) 防护修复（同样的旧式二进制存档格式留言板崩溃）。通过 adm/etc/wizlist 把 fluffos/Mud2026Adm 播种为 (admin)（原始档案末尾没有换行符，加了一个以保证两条条目分行）。完整的注册→look→score→quit 流程和管理员流程在排版格式化前后都验证过；格式化工具还原了 3 个损坏的 ASCII 地图档案，和 jyqxc/jyqxc2 同样的模式。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 19 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
