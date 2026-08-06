@@ -4768,6 +4768,26 @@ this whole generation of ES2-derived codebases -- check EVERY class a
 board-like object inherits for a matching redundant
 `replace_program()`, not just the most common `BULLETIN_BOARD` name.
 
+**Don't stop at grepping static `.lpc` files.** Found on `sje`'s §10.7
+deep functional test: 37 of 38 matches were the usual static board
+files, but the 38th was `cmds/king/set_board.lpc` -- a player-facing
+command letting a kingdom/faction leader pay in-game gold to build a
+board in their own territory, implemented by string-concatenating a
+brand new `.lpc` source file at runtime (`write_file()`) and compiling
+it on demand. The generated template embedded the exact same `inherit
+BULLETIN_BOARD;` + redundant `replace_program(BULLETIN_BOARD);` shape
+as every static file in the same lib -- meaning the bug wasn't just
+sitting in already-shipped content, it was baked into the *factory*
+that generates NEW boards, so every future board any player ever
+built with this command would be born already broken. Fixed by
+deleting the `replace_program` line from the template string (keeping
+the `inherit` line, exactly like every other fix in this section).
+When sweeping a lib for this bug, also grep for `BULLETIN_BOARD`/
+`BBS_BOARD` appearing inside a `sprintf`/string-literal template being
+`write_file()`'d out and compiled, not just literal top-level
+`inherit`/`replace_program()` statements -- a few libs in this project
+generate board (or NPC, or item) source code at runtime this way.
+
 ---
 
 ### 7.87 A save file exceeding the driver's configured "maximum read file size" makes `restore()` THROW instead of failing gracefully, and the throw happens during a lazy first-load with no error ever reaching `debug.log`
