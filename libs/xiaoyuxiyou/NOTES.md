@@ -993,3 +993,7 @@ shape, independent of lineage.
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 同一套小雨西游代码库，2013 年站点快照，和 xyxy2/xyxyutf8 同一引擎家族（共享 chinese.c）。状态已从过时的 limited 修正——这份档案自己的 NOTES.md 记录了一次更早一轮会话里已经完成的彻底深度功能测试（§10.7）：对本地回环放行了 uptime()<30 开机闸门，另外发现并修复了两个真实 bug（feature/clean_up.lpc 的房间闲置清理检查只用了 interactive() 而不是 interactive()||userp()，会把网络已断但还没重连的玩家静默清空出一个已经被清理掉的房间；obj/user.lpc 的 user_dump() 强制退出/存档安全网对一个未加保护的 ->query('short') 呼叫在环境为空时崩溃，导致被遗弃的断网会话从来没能被强制存档）。这两处修复都已按 NOTES.md 的记录端到端实测过，包括一次约 330 秒的真实断网复现，确认房间不再会在唯一一个断线玩家还没走的时候就被销毁。管理员账号播种：fluffos (admin) 通过 /adm/etc/notices（WIZLIST）播种，密码 Mud@2026。这份档案的 meta.json/README 只是一直没有跟着更新反映这项已经完成的工作——本轮不需要新的测试，只是重新验证了一遍开机+注册能干净到达 id 提示，确认没有出现回归。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 40 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。

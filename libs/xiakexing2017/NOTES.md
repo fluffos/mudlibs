@@ -505,3 +505,7 @@ live).
   §7.12 re-verification (`NET_DEAD_TIMEOUT` 600→15→600); confirmed
   byte-identical to the pre-pass version (`git diff` empty) before
   finishing.
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 19 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。

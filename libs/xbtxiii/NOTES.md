@@ -2,3 +2,7 @@
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 按它自己的说明是真正的 1997-2001 年代 mudlib（一个"风云"衍生分支）；以 4 个分卷 zip（XB.ZIP.1-4）形式提供，需要二进制拼接，内部是 12 个按目录拆分的嵌套 tar.gz，而不是扁平目录树——转档前已经拼接解压；启动干净，零修复。完整 WASM 修复：修复了 logind.lpc 的 make_body() 里 seteuid(getuid()) 把 euid 重置掉的 bug；修复了 check_legal_name() 过时的 GBK 字节长度界限；给 securityd.lpc 的 get_status() 加上了防御性保护；这份档案里完全没有 band.lpc（logind.lpc 从未引用过 BAN_D，所以没有什么可保护的）。两个依赖 socket 的精灵编译失败，各自独立破坏了游戏的不同部分：adm/daemons/network/dns_master.lpc（跨服 intermud UDP，因为开机流程间接碰到它，破坏了每一次连线的登录）和 adm/daemons/network/smtp.lpc（原始 SMTP 发信，破坏了 natured.lpc 的周期性检查）——都按 AGENTS.md §7.52 掏空成 no-op。另外发现并修复了：一个缺失的 /topten/ 目录导致 toptend.lpc 在每次进入游戏世界时存档崩溃（已 mkdir -p 补上）；cmds/usr/score.lpc 对 EXPLORE_D->query_total_explore() 做除法没有保护，而这个值在任何探索数据被扫描之前合法地是 0，导致全新安装下每一次 score 指令都崩溃（已用三元运算符保护）。注册流程到进入游戏世界、look/score/quit、管理员权限识别都已干净验证。注意注册流程既包含职业选择（enchanter 魔法师/fighter 武士，英文拼写）加上对这个选择的 y/n 确认，还有一个正式起始区域之前的新手教程房间。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 22 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
