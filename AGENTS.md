@@ -875,7 +875,23 @@ each of these shapes has bitten at least once:
    `/adm/daemons/securityd.c` one per line; `load_object()` fails
    silently inside the preload loop's `catch()`, so (often) the security
    daemon just never loads, and every write is denied with no error.
-   Check every `adm/etc/`-style data file for bare `/path.c` lines.
+   Check every `adm/etc/`-style data file for bare `/path.c` lines. Can
+   hit at real scale, not just a handful of preload lines: `fy2005`'s
+   `adm/etc/scenery_phase` (17 rows) and `quest/dynamic_location` (1440
+   rows, a room pool `taskd.lpc` samples for quest-item placement) had
+   EVERY row stale — the whole scenery-event feature was silently dead
+   and `spread_quest()`'s "drop on the ground" path had been
+   unreachable for the entire archive's lifetime, degrading to "always
+   hand it to an NPC instead". One of the two consumers additionally
+   crashed the caught-vs-uncaught way this class of bug can split: the
+   scenery daemon's own preload self-check is `catch()`-wrapped and
+   just logs a warning, but its actual "make the event happen" function
+   (`scenery_happen()`) does an unguarded `load_object()` result straight
+   into `room->init_scenery()` with no `catch()`/`objectp()` at all —
+   crashes for real the first time a `random()` roll actually picks a
+   dead entry. Verify a whole data file's worth of paths at once with a
+   quick script (confirm the `.lpc` exists for each, strip `.c`), don't
+   assume a couple of samples generalize.
 3. **Runtime `sscanf` extension filters** — `sscanf(f+"$", "%s.c$", f)`
    in a command-indexing daemon matches nothing forever after the
    rename; the command table stays empty and every typed command
