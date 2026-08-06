@@ -5064,6 +5064,27 @@ verb, fell straight through to "什么？" until the fix; a lib where 2 of
 3 sanity-check commands work is not proof the command table itself is
 healthy — test a THIRD, non-`look`/`quit` command too.
 
+**Third confirmed instance: `sjecl`**, and a useful worked example of
+§8.3's own point that causes 2 and 3 can coexist and mask each other:
+`sjecl` was already on §8.3a's fixed-list from an earlier repo-wide
+`private command_hook` sweep, so `command_hook()` itself was already
+correctly wired -- but registration still ended with 100% of commands
+(`look` included) silently falling through to "什么？", because
+`commandd.lpc`'s `rehash()` independently had this exact `%s.c$`
+pattern, leaving `search`/`user_cmds` permanently empty regardless of
+`command_hook()` being called correctly. A downstream symptom made this
+one unusually loud: `adm/daemons/baoshid.lpc`'s periodic
+`choose_baosi()`/`random_place()` (placing random treasure NPCs) logged
+repeated `*Too long evaluation. Execution aborted.` eval-cost aborts
+during the same session -- these stopped entirely once the command
+table was fixed, suggesting the empty command table was causing
+something (likely `EMOTE_D`/`CHANNEL_D`'s own fallback probing, hit on
+literally every player keystroke) to trigger far more object-compile
+pressure than normal, tipping an unrelated daemon over its eval budget.
+Don't treat that kind of noisy-but-distinct-looking error as its own
+separate bug before checking whether the command table itself is
+healthy first -- fixing the root cause here silently resolved both.
+
 ### 8.4 Test `score`, not just `look`
 
 `look` proves dispatch + environment; **`score` additionally proves the
