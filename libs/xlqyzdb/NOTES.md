@@ -243,3 +243,7 @@ after verification.
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 浙大分支的 XLQY。状态已从过时的 limited 修正——这份档案自己的 README 和 group_note 里从未记录过任何缺陷说明，本轮重新测试也没有发现：XLQY 家族里 xianlvqiyuan 的手足档案。管理员登录干净正常：GB/BIG5 选择→未成年人门槛（否）→id+密码→'您的系统权限目前是：(admin)'。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 39 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。

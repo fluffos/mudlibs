@@ -2,3 +2,7 @@
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 侠客英雄传 II/III（"欢乐天地"，五邑无尽豪情），一个金庸小说/欧洲中世纪/漫画风混搭的世界观设定。WASM 修复了两处经典的 §8.1 GBK 字节区间 is_chinese() bug：adm/daemons/chinesed.lpc 的 is_chinese()（CHINESE_D 委托的真正实现——只检查 str[0] 的原始字节区间，还要求总长度是偶数，在 UTF8 码点索引下永远失败）和 adm/daemons/logind.lpc 自己的 check_legal_name()（i%2 奇偶门槛，加上按字节数算的长度界限 2-12，本意是按用户提示"1 到 6 个中文字"应为 1-6 个字符）。已把 chinesed.lpc 的 is_chinese() 重写成逐码点 0x4e00-0x9fff 区间循环，check_legal_name() 改成通过 CHINESE_D->is_chinese(name[i..i]) 逐字符检查，长度界限修正为 1-6。管理员账号播种：fluffos (admin) 加入 adm/etc/wizlist（已通过源码确认 SECURITY_D 真的会在开机时读取 WIZLIST；wiz_levels 顶层是 (admin)）。注册流程在多次连续的 WASM 客户端会话里完整验证过：英文 id→y/n 确认创建→中文名字→密码+确认→性别（m/f）→种族选择（0-5）→带着完整角色属性表和可用的 score/look 指令进入游戏世界，全程没有任何意外错误。测试笔记：性别/种族选择正好接在 /std/char.lpc 首次编译的大量负荷之后（加载 feature/damage.lpc、feature/skill.lpc 等），引发了和 xhcii 上记载过的同一类测试工具时序竞争——不论 --idle 设多少，'m' 有时会被当作无法识别的输入吞掉；补发一次重复的 'm'/'0' 能可靠绕过，这是客户端时序上的假象，不是 mudlib 本身的缺陷（一次完全干净的运行在注册流程里没有捕获到任何异常，可以证实这一点）。管理员权限已直接通过 'wizlist' 指令输出确认"目前权限：(admin)"，fluffos 出现在最高阶层里。LPC 格式化工具对全部 3178 个档案运行（写入 3145 个，12 个报错，21 个未改动）。没有 :: 父类呼叫拆分命中，没有 CJK 重新加空格命中，没有 case 标签带尾随注释的候选，这份快照里没有 map.lpc 档案。格式化后用同样的完整注册流程重新验证过——干净，管理员权限依然是 (admin)。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 4 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
