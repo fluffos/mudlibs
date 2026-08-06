@@ -565,6 +565,120 @@ re-verified live in this lib specifically (verified live on `bxsj`, the
 source of the pattern) — flagging per §10.7 point 6 rather than silently
 claiming a live retest.
 
+## 深度功能测试 / Deep functional test (2026-08-06)
+
+第一次完整游玩测试（原生驱动 `build`，ASAN/UBSAN debug 构建）。测试角色
+id `jyxtest`，中文名 云飞扬，起手绝学选择「太极拳」（选项 4）。本轮
+WASM 未重新验证：emsdk 工具链下载硬编码指向 `storage.googleapis.com`，
+本次会话的出口代理策略性拒绝该域名（403，已用 `curl
+$HTTPS_PROXY/__agentproxy/status` 确认是策略拒绝而非临时故障），本地无
+法构建 WASM 驱动。
+
+### 发现并修复：`natured.lpc` 的 `event_morning()` 缺失 `objectp()` 守卫，导致日夜循环心跳永久停摆（新 AGENTS.md §7.63 追加实例）
+
+- **症状**：真实游玩触发（连续通过「第一关」监狱越狱剧情的 3 场剧情战
+  斗后），`debug.log` 出现 `*Bad argument 1 to EFUN call_other()
+  Expected: object, string, array, Got: int(0)`，栈追踪指向
+  `adm/daemons/natured.lpc` 第 386 行（`event_morning()`）由
+  `update_day_phase()` 第 132 行通过 `call_other()` 触发。
+- **根因**：`event_morning()` 的 15 个 `if (random(8) == N) { ... }`
+  天气事件分支各自生成 2-8 个「外敌奸细」NPC（`badguy =
+  new("/quest/weiguo/<国家>/<文件>N")`）。每个分支里第一个 `new()`
+  （boss 变体）都正确用 `objectp(badguy = new(...)) &&
+  badguy->move(room)` 守卫，但同一分支后续的 2-6 个小兵变体
+  一律是裸 `badguy = new(X); badguy->move(room);`（全档案共 40 处）。
+  `find work/quest/weiguo` 确认这整棵目录树在这份快照里根本不存在
+  ——`new()` 必然返回 0，紧接着的 `->move()` 崩溃。因为这次
+  `call_other()` 崩溃发生在没有 `catch()` 包裹的调用里，
+  `update_day_phase()` 自己在崩溃点之后的收尾代码
+  （`remove_call_out`/重新 `call_out("update_day_phase", ...)`）根本没
+  机会执行——也就是说，只要 `event_morning` 某次 `random(8)` 抽中任何一
+  个未存档的分支，整个驱动的日夜循环心跳就会永久停摆，不只是这一次生
+  成失败。
+- **修复**：机械化地把所有 40 处裸 `badguy = new(X); badguy->move(room);`
+  改写为 `if (objectp(badguy = new(X))) badguy->move(room);`，与同一
+  代码块里本来就有守卫的兄弟调用保持一致写法。修复后用
+  `find ... -name '*.lpc' | node .../format-corpus.mjs` 跑过§9格式化
+  自检（unchanged，无需改动），并逐行 grep 确认 `event_morning()` 范围
+  内不再有任何裸 `badguy = new(...)` 紧跟 `badguy->move` 的组合。
+  `event_afternoon()` 里对应的清场逻辑用的是 `children()`，本身对不存
+  在的文件天然安全，未改动。
+- **验证**：修复前先用真实游玩重现了一次崩溃（debug.log 有完整栈追
+  踪）；修复后 `lpcc`/驱动重启编译干净（这份档案里 `natured` 常驻且总
+  有未完成的 `call_out`，`update` 指令的向导会直接拒绝热更新常驻精
+  灵——`cmds/imm/update.lpc:40-44` 检测到 pending call_out 就直接
+  `return 1` 放弃编译——所以走的是完整重启驱动来加载新代码，而不是热
+  update）。重启后确认无新增运行时错误；`event_morning()` 本身要等游
+  戏内真实经过一次「早晨」阶段才会被再次调用（`day_phase` 配置的阶段
+  长度以真实秒计，累计要等相当长时间），这次会话的时间预算内没有等到
+  再次触发同一分支来现场复现"修复后不再崩溃"——但修复本身是严格机械
+  化的、且与同一函数里另一处已经在正常工作的守卫写法完全一致，可信度
+  高，如实记录未能重新触发验证这一点，而不是假装已验证。
+- 已在 AGENTS.md §7.63（"one caller of new(X) missing the guard that
+  every sibling call site already has"）追加了这个实例，因为它是同一
+  个错误模式在更大规模下的例子（40 处而非 1 处），且根因（整棵内容目
+  录缺失）比 §7.63 原案例（原因不明的 `new()` 失败）更容易在其它档案
+  里复现和识别。
+
+### 发现并修复：`回车一次即可进入`提示与实际代码行为矛盾——按提示操作反而进不去
+
+- **症状**：已注册账号重新连线时，`adm/daemons/logind.lpc` 明确提示
+  "回车一次即可进入"（本档案密码校验代码已被原作者删除，任意输入均
+  可登录，这是保留的历史设计——见 README），但真的只按回车（空字符
+  串）时，代码却把你送回"您的英文名字(ID)是："重新输入 ID，不会登录。
+  用任意非空字符（哪怕一个字母）代替空回车则能正常登录——与 README
+  文档的"任意输入均可登录"部分相符，只有"空输入"这一种情况被排除在
+  外，而这恰好是提示语言唯一明确建议的操作。
+- **根因**：`get_passwd(string pass, object ob)`（`logind.lpc:211`）开
+  头有 `if (pass == "") { ob->delete("id"); write("您的英文名字(ID)
+  是："); input_to((: get_id :), ob); return; }`——这段代码在整个文件
+  里只有唯一一个调用方（`logind.lpc:183` 的
+  `input_to("get_passwd", 1, ob)`，紧跟在打印"回车一次即可进入"之
+  后），逻辑上明显是删除密码校验之前遗留下来的旧分支：那时这个函数大
+  概率还承担"输入密码"职责，空输入自然应该打回重新输入。密码校验被
+  整段删除、调用方文案也改成"按回车即可"之后，这个旧的空输入特判没
+  有同步移除，从而和新提示的意图直接相反。`grep` 确认同目录下
+  `logind2.lpc` 有完全相同的死代码副本，但全档案没有任何地方
+  `inherit`/引用 `logind2.lpc`（真正生效的 `LOGIN_OB` 只解析到
+  `logind.lpc`），故未改动这份从未被使用过的重复文件。
+- **修复**：删除 `logind.lpc` 里这段孤立的 `if (pass == "") {...}`
+  分支，让空输入和其它任意输入一样直接往下走正常的登录/重连流程。
+- **验证**：用管理员账号 `fluffos` 现场复现了修复前的问题（按提示裸
+  回车 → 弹回 ID 重新输入提示 → 超时踢出）；`update
+  /adm/daemons/logind` 热更新编译成功后，用新连接重新尝试裸回车登
+  录，正确进入"人物目前正在游戏当中，是否取代"确认流程（因为原会话
+  仍连着），证明修复后空输入确实按提示所说的那样被当作"确认登录"处
+  理，不再被踢回 ID 输入。
+
+### 测试内容与结果
+
+- **注册**：英文 ID（`jyxtest`）、密码不校验（原始设计，未改动）、中文
+  名（云飞扬）、天赋随机摇点（回车确认）全程无错误，注册流程与
+  `bxsj`/`bxsj1` 系同源但独立实现（没有 BIG5 编码选择提示）。
+- **起手绝学**：新角色开局即可从"一阳指/九阳神功/易筋经/太极拳/白手起
+  家"中任选其一（本轮选太极拳），立即获得对应的基础技能组
+  （`cuff`/`dodge`/`force`/`parry` 四项基本技能 + `piaoyi-shenfa`/
+  `taiji-quan`/`yinyun-ziqi` 三项特殊武功）——`skills` 命令确认发放正
+  确，非 bug。
+- **剧情战斗（"第一关"越狱情节）**：连续三场由房间/剧情驱动的强制战斗
+  （分别对阵 1 名、3 名、2 名"监狱第六代狱卒"），全部靠角色自身技能
+  （无需玩家手动 `fight`/`kill` 指令，走到房间即自动触发对战）胜利，
+  过程中气血最低降到约 64%，未出现死亡风险；战斗系统本身（招式描述、
+  闪避/格挡/命中判定、经验/潜能结算）全程无崩溃、无异常。
+- **持久化**：完整 `quit`（在非战斗状态下，`is_fighting()` 守卫按预期
+  正常放行）之后重新登录，正确恢复到退出时所在的房间（却日殿）——一开
+  始怀疑这是"每次重连都被强制送回起点"的持久化 bug，追踪
+  `enter_world()`/`quit.lpc` 的 `startroom` 读写逻辑并现场复现后确
+  认：房间本身会在有角色进入时（含重连復位）重新生成守卫 NPC，与地点
+  持久化无关，是设计内的"守卫巡逻/重生"机制，不是 bug。
+- **管理员账号**：`fluffos`/密码任意非空字符串均可登录，显示"您目前的
+  权限是：(admin)"（README 已注明本档案密码不校验）。
+- **经济/商店、门派/师承、死亡/复活**：**未覆盖**——这份快照走的是剧
+  情驱动的越狱关卡开局，而非 `bxsj` 系那种一开始就在武馆自由活动的沙
+  盒式新手村，传统的 `bai`/`menpai` 拜师系统在测试范围内的场景没有出
+  现（起手绝学替代了拜师流程，见上）；商店与死亡系统留给后续测试覆
+  盖，如实标注为未覆盖而非默认判定为正常。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 此前被错误标记为某个不存在于本项目任何档案的原始压缩包文件名的 duplicate_of；这里的内容其实是完全独立、可游玩的游戏（有自己的 -N 变体编号、自己的端口、自己的 README）——duplicate_of 已清除。

@@ -3452,6 +3452,34 @@ of the same X already have, that asymmetry is itself the diagnostic —
 check sibling call sites (and their comments) before deep-diving into
 driver internals. (`hy2000`.)
 
+Same asymmetry, larger scale, simpler root cause on `jinyongwenzi`:
+`adm/daemons/natured.lpc`'s `event_morning()` has 15 `if (random(8) ==
+N) { ... }` weather-event blocks, each spawning 2-8 "invading spy"
+NPCs via `badguy = new("/quest/weiguo/<nation>/<file>N")` — the FIRST
+`new()` in every block (the "boss" variant) is properly guarded
+(`objectp(badguy = new(...)) && badguy->move(room)`), but every
+following `new()` in the same block (the rank-and-file variants,
+sometimes 2-6 more per block, ~40 unguarded call sites total) is bare
+`badguy = new(X); badguy->move(room);` with no check. Here the reason
+is mundane and confirmable, unlike `hy2000`'s driver mystery: the
+entire `/quest/weiguo/` directory tree was never shipped in this
+archive (`find work/quest/weiguo` comes up empty), so every `new()`
+call in this whole feature silently returns 0, and the very next
+unguarded `->move()` throws `*Bad argument 1 to EFUN call_other() ...
+Got: int(0)`. Because this crash happens INSIDE `update_day_phase()`'s
+`call_other(this_object(), event_fun)` (no `catch()`), the abort skips
+that function's own tail — `remove_call_out("update_day_phase")` /
+`call_out("update_day_phase", ...)` never run — permanently killing the
+driver's entire day/night cycle heartbeat the first time `event_morning`
+draws an unlucky `random(8)`, not just failing one spy-spawn. Fix:
+mechanically wrap every previously-bare pair in `if (objectp(badguy =
+new(X))) badguy->move(room);`, matching the already-guarded sibling in
+the same block — confirmed via a fresh grep that no bare pair remains.
+Detect this shape fast in any lib: grep a daemon file for `new(` calls
+sharing a variable name, and diff which ones are `objectp()`-guarded
+vs bare — an asymmetric split within the SAME function/file is the
+signal, same as `hy2000`. (`jinyongwenzi`.)
+
 ### 7.64 A stray semicolon after `if (...)` turns the guard into a no-op, making an unconditional `call_other()` hit a daemon that was never shipped
 
 `natured.lpc`'s heartbeat loop had `if (wizardp(user[i]) &&
