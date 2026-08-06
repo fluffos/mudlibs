@@ -28,3 +28,7 @@ combat_exp 50000）发起战斗——完整交手数回合后被击昏迷致死�
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 WASM 修复：修好了 §8.1 GBK 字节区间 is_chinese()/check_legal_name() bug（这个驱动下 str[i] 是一个码点，不是一个 GBK 字节——真实的中文名字会被静默拒绝）；给 band.lpc 的 is_banned()/create_char_banned() 打上了本地回环放行补丁；通过 adm/etc/wizlist 把 fluffos/Mud@2026 播种为 (admin)。在 WASM 下用一个真实的中文名字（秦风）完整验证了注册+look/score/quit，管理员账号的 update 指令也验证可用。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 38 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
