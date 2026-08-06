@@ -2,3 +2,7 @@
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 夕阳再现 之「风云再起Ⅱ」——夕阳三-炎龙美化版（xysylmhb）家族的原始基础版本；logind.lpc/master.lpc/注册流程几乎一致，标准端口上没有 Tomud '2060' 握手闸门（master.lpc 的 connect() 里有一个单独的 TOMUD_PORT 检查会设一个临时标记，logind.lpc 只在这个标记被设置时才检查它，所以普通的、相当于 telnet 的端口完全跳过这一步）。WASM 修复靠 scripts/lib_bulk_fix.py + scripts/scan_known_bugs.py 在第一次启动测试之前就主动抓出来：（1）一个 uptime()<30 启动宽限门槛（AGENTS.md §1.3(e)，和 xyxyutf8 等档案同样的模式）——已对本地回环连线放行。（2）标准的 §8.1 check_legal_name() i%2 奇偶门槛/[i..<0] 后缀切片（is_chinese() 本身已经正确）改成了逐码点的 name[i..i]。（3）master.lpc 的 valid_read()/valid_write() 缺少 'user == this_object()' 短路判断（这份档案已经有一段基于 previous_object() 的局部保护，和 xysylmhb 一样——为了一致性又额外补上了标准保护）。httpd.lpc/dns_master.lpc 本来就已经在 preload 里被注释掉（原来就是这样，休眠状态）——保持原样。管理员账号播种：fluffos (admin) 加入 adm/etc/wizlist（SECURITY_D 正确指向 securityd.lpc，真的会读取 WIZLIST；globals.h 里另一个 securd 路径是注释掉的，没有 §7.56 的歧义问题）。注册流程在一次连续的 WASM 客户端会话里完整验证过：英文 id→y（确认新角色）→中文名字→管理员密码+确认→登录密码+确认→天赋菜单（0 随机，y 接受）→电子邮件→性别（m/f）→在客店进入游戏世界，look/score 都干净。管理员权限已通过"★ 您目前权限：(admin)"确认。LPC 格式化工具对全部 14000 个档案运行（写入 13888 个，75 个转档之前就存在的未结束字符串/文本块内容错误未做格式化——是目前这一批里最杂乱的代码库——37 个未改动）。没有 :: 父类呼叫拆分命中，没有 CJK 重新加空格命中；和 xysylmhb 一样的 2 处 case 标签带尾随注释的命中（cmds/bakcmds/csc.lpc、cmds/bakcmds/meskills.lpc，都是死代码备用指令副本）经 diff 复核干净。格式化后重新验证干净，管理员权限依然是 (admin)。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 100 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。

@@ -413,3 +413,7 @@ as this lib's pre-existing `adm/etc/log/` fix above, AGENTS.md §7.11).**
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 小雨西游家族基础版。状态已从过时的 limited 修正——这份档案自己的 NOTES.md 记载着早前某次会话就已经完成的完整转换+修复过程（GBK→UTF8 编码转换、.c→.lpc 改名、static→nosave、补上缺失的 adm/etc/log/ 目录，以及一种通用的 #include <local.h> 式同目录头文件模式，靠 master.lpc 的 get_include_path() 修复），并确认"启动干净，可以通过 telnet 游玩"，带有一次真正验证过的注册流程。uptime()<30 的启动宽限门槛已经正确地对本地回环放行了（adm/daemons/logind.lpc 的 logon()："if (lb_ip != "127.0.0.1" && uptime() < 30)"）——本轮已通过一次立即（没有等 30 秒）的 WASM 连线干净到达注册 id 提示、零编译错误来现场确认。这份 meta.json/README 只是从未更新以反映已经完成的工作——除了这次冒烟级别的复核之外不需要新的测试。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 40 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
