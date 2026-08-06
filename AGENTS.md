@@ -4860,6 +4860,134 @@ limit is a different failure shape from a corrupted per-player save —
 it breaks the feature for every single player and NPC in the game,
 permanently, for that boot, with no log trace at all.
 
+### 7.88 A simul_efun `message()` wrapper is declared with 4 *required* params but called with only 3 in several places in the same file, so the missing arg silently becomes `int(0)` and crashes the builtin `efun::message()` — and when that crash lands synchronously inside a gating function, it can permanently soft-lock players, not just spam the log
+
+Found on `zjdywzb`'s §10.7 deep functional test. This lib's
+`adm/simul_efun/message.lpc` wraps the builtin:
+```lpc
+void message(mixed arg, string message, mixed target, mixed exclude) {
+  efun::message(arg, message, target, exclude);
+}
+```
+— no `varargs`, all 4 params required. But the *same file* calls it
+with only 3 args in half a dozen places (`message("tell_object", str1,
+me);`, etc.). This driver pads a missing trailing arg to `int(0)`
+rather than erroring at the call site, so `exclude` becomes `int(0)`,
+and `efun::message()` itself rejects that: `*Bad argument 4 to EFUN
+message() Expected: object, array, Got: int(0).` Both `zjdywzb` and its
+sibling `zjdy2008wzb` had already logged this exact runtime error
+during their WASM-stage passes and dismissed it as "a pre-existing,
+non-fatal `message()` signature quirk, out of scope" — it fires
+constantly (preload, quit, ambient chat) and the game still boots and
+plays, so it read as cosmetic log noise.
+
+It is not cosmetic. During the §10.7 deep-dive's character-creation
+ritual, choosing a "quality" (`out` from the 桃源石屋 room) calls
+`hua.lpc`'s `check_leave()`:
+```lpc
+void check_leave(object me, string dir) {
+  if (dir == "out") {
+    message_vision("$N对$n奸笑道：上路吧！\n", this_object(), me);
+    command("chat 哈哈！江湖上又要...... 嘿嘿！");   // <-- crashes here
+    me->set("character", "阴险奸诈");                 // <-- never runs
+  }
+```
+The `command("chat ...")` triggers a channel broadcast that hits the
+buggy 3-arg `message()` call inside `channeld.lpc`, which throws. Since
+nothing between `check_leave()` and the top-level command dispatcher
+catches it, the throw unwinds the *entire* `go.lpc` → `valid_leave()` →
+`check_leave()` chain: the room-leave permission is never granted (the
+player stays in 桃源石屋 forever) AND the character-quality `set()` on
+the next line never executes. Every new player hit this — repeating
+`out` just repeats the identical crash and the identical non-move,
+forever. This is a permanent, unrecoverable soft-lock in the
+*mandatory* character-creation path, not a rare edge case.
+
+Fix — make the wrapper tolerant of the same omission its own file already
+relies on, matching the `|| ({})` pattern its sibling `tell_room()`
+already uses one function above it:
+```lpc
+varargs void message(mixed arg, string message, mixed target, mixed exclude) {
+  efun::message(arg, message, target, exclude || ({}));
+}
+```
+Verified live: before the fix, `out` in 桃源石屋 crashed identically on
+every attempt (reproduced 3×) and the player never left the room. After
+the fix and a driver restart, the same room, same NPC, same `out`
+command moved the player to 阎罗殿 with no error, and the rest of the
+registration ritual (跳入忘忧池 → `born <地名>`) completed cleanly for
+the first time.
+
+Detection pattern: don't dismiss a `Bad argument N to EFUN message()`
+(or any wrapped efun) runtime error as "pre-existing and harmless" just
+because the mud keeps running after it — check whether the call site
+that triggers it sits inside a function whose *return value or
+side-effect gates something the player needs* (a room-leave check, a
+quest-stage advance, a shop transaction). A crash mid-function silently
+skips every line after it; if one of those skipped lines was the actual
+state change the player was trying to make, "the game didn't crash" is
+not the same as "the action worked."
+
+### 7.89 A mudlib's own bundled `runtime_config.h` uses a `get_config()` index numbering that doesn't match this driver build's actual internal enum, so a `get_config()` call silently returns a value from an unrelated (and wrongly-typed) config slot instead of erroring — and if that value then flows into a typed efun call, it crashes
+
+Extends the pattern first noted on `ds386` (whose own bundled
+`runtime_config.h` gave wrong/empty values for `get_config()` calls,
+deprioritized as an English-lib finding without chasing a live crash).
+On `zjdywzb`'s §10.7 deep-dive, logging in as a **wizard** account
+specifically (not a normal player — normal registration never touches
+this path) crashed immediately after the password prompt, leaving the
+connection in a broken state where every subsequent command, including
+plain `look`, silently returned nothing (not even "什么？"):
+```
+执行时段错误：*Bad argument 2 to socket_bind()
+Expected: int Got: "10".
+呼叫来自：/adm/daemons/network/messaged.lpc 的 startup_udp() 第 101 行
+呼叫来自：/adm/daemons/logind.lpc 的 get_passwd()/check_ok()
+```
+`logind.lpc`'s `check_ok()` (a wizard-login-only step) loads
+`/adm/daemons/network/messaged` for the first time, whose `create()`
+calls `startup_udp()` → `socket_bind(socket_id, my_port)`. `my_port`
+is computed as `LOCAL_PORT() + MESSAGE_PORT`, i.e.
+`(int)get_config(__MUD_PORT__) + 10`, and `__MUD_PORT__` is
+`CFG_INT(0)` — but this lib's bundled `include/runtime_config.h` used
+its own from-scratch `BASE_CONFIG_STR`/`BASE_CONFIG_INT` numbering that
+does **not** match this driver build's real internal config-slot
+ordering (confirmed by diffing against the driver's own canonical
+`~/src/fluffos/src/include/runtime_config.h` — same divergence already
+seen on `ds386`). `get_config(14)` (this lib's miscomputed index for
+"mud port") actually reads whatever the *real* driver puts in slot 14,
+which turned out to be some unrelated **string** config value — hence
+`my_port` ending up holding the *string* `"10"` (`MESSAGE_PORT`
+concatenated onto a string instead of added to an int), which
+`socket_bind()` then rejects outright with the driver aborting
+`check_ok()` mid-function, before the login can complete.
+
+Fix: replace the lib's stale `include/runtime_config.h` with the
+driver's own canonical copy (same remedy as `ds386`) rather than trying
+to patch individual indices. Diff the symbol set between old and new
+before swapping — any symbol used elsewhere in the lib that the new
+header dropped needs either a compatibility `#define` aliasing it to
+the closest still-valid equivalent, or its call site updated/removed.
+On `zjdywzb`: `__SAVE_BINARIES_DIR__` (used only inside an
+already-§7.52-gutted sync daemon) got aliased to `__MUD_LIB_DIR__`;
+`__ADDR_SERVER_IP__` (one cosmetic wizard-`config`-command display
+line, addr_server support doesn't exist in this driver at all) got
+removed outright rather than faked; `__PORT__` needed **no** alias —
+it's a compiler-predefined literal on this driver
+(`add_predefine("__PORT__", ...)`), and re-`#define`-ing it is a
+compile error ("Illegal to redefine a predefined value"), not a no-op.
+
+Detection pattern: a lib bundling its own `runtime_config.h` (common in
+archives that shipped with their own driver source) is a standing risk
+even when nothing crashes yet — wrong-but-untyped `get_config()`
+results (empty strings, 0) fail quietly, but a wrong-and-wrongly-typed
+result WILL crash the instant it reaches a typed efun call like
+`socket_bind()`, `set_config()`, or similar. Diff the lib's copy against
+the driver's canonical header as a matter of course whenever a lib
+ships its own — don't wait for a wizard-login crash (or any other
+lazy-first-touch call site) to surface it, since — per §7.60/§7.87 — a
+throw during a lazy first load often leaves zero trace in `debug.log`.
+
 ---
 
 ## 8. Login and registration flow bugs
@@ -5465,6 +5593,44 @@ before the fix. Before concluding a fix didn't work (or a bug is still
 live), send one more clearly-distinguishable command and check that ITS
 own output, not just any matching text in the captured pane, confirms
 the failure.
+
+**A local `telnet`-CLI-backed tmux session can mangle specific CJK
+input bytes before they ever reach the driver — don't mistake a
+transport artifact for a server-side `is_chinese()` bug.** On
+`zjdywzb`, sending certain single Chinese characters (者 U+8005, 考
+U+8003) through `scripts/tmux_mud.sh` got rejected at a Chinese-name
+prompt with "请您用「中文」取名字" (`is_chinese()` returning false),
+while other characters (老 U+8001, 王, 五, 张, 三) sent the identical
+way went through fine — no consistent range/byte pattern explained
+the split. Reproducing the exact same input through
+`scripts/mudclient.py` (a raw socket client, no local `telnet`
+process or pty in between) accepted every character cleanly,
+including the ones tmux had rejected. The local `telnet` binary (or
+its pty) was corrupting specific UTF-8 byte sequences in transit —
+not a driver or mudlib bug at all. If a Chinese-name/text prompt
+rejects a real, valid Chinese string sent via `tmux_mud.sh`, retry the
+identical input through `mudclient.py` before concluding `is_chinese()`
+or any name-validation code is broken; only trust the `tmux_mud.sh`
+result once the raw-socket client agrees.
+
+**`mudclient.py`'s `--idle`-based "wait for silence, then send the
+next line" pacing can starve forever against a live-updating clock
+prompt (per §8.3's ticking-prompt libs).** If the prompt reprints
+every ~1 second, `--idle 1.0` (or any value ≈ the tick interval) races
+the next tick and can lose indefinitely — commands after the first one
+or two silently never get sent, and every subsequent `--send` line
+(even a trivial, always-safe one like `look` or `score`) shows zero
+server response, which looks identical to a hung/crashed connection.
+Confirmed on `zjdywzb`: `wash`/`born <地名>`/`score` all produced no
+visible output whatsoever with `--idle 1.0` against its per-second
+prompt clock, and the driver/debug.log showed nothing wrong. Lowering
+to `--idle 0.5` (comfortably under the tick interval) fixed it
+immediately — every command got sent and answered. `scripts/tmux_mud.sh
+multi`'s *fixed* `per_wait` between sends (not idle-detection) doesn't
+have this failure mode and is the more robust choice against a
+ticking-clock lib; if using `mudclient.py`'s reactive `--idle` pacing
+against one, drop `--idle` well below the tick interval rather than
+raising it.
 
 ### 10.3 Instrumentation techniques that work
 
