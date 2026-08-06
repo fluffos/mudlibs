@@ -633,3 +633,7 @@ calls in a row on every single sleep-and-wake cycle).**
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 此前被错误标记为某个不存在于本项目任何档案的原始压缩包文件名（dtsl.rar）的 duplicate_of——那份"兄弟"上传显然从未被真正转档过，所以这份 7z 重新打包版是这款游戏唯一存活、完全独立的副本。duplicate_of 已清除。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 20 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。

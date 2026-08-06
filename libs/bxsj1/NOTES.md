@@ -196,3 +196,7 @@ clean via `lpcc --batch`; not re-verified live in this lib specifically
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 同一套"书剑"代码库（书剑·经典）。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：一次完整的 WASM 注册流程（英文 id 仅限小写字母、3-8 位 → 确认 → 管理密码/登录密码分别设置+确认，密码需含数字和大写字母 → 中文名字 → 天赋摇点，0 为随机 → 接受 → 电子邮件，需 id@address 格式 → 性别）全程无错误地进入起始区域，预先播种的管理员账号（fluffos/Mud@2026）也能正常登录（"您目前的权限是：(admin)"）。和 bxsj（004）是同一套底层引擎——共享的那个真实历史 bug（top.lpc 排名衰减循环）和深度测试覆盖情况见 bxsj 自己的说明。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 1 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
