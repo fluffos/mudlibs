@@ -200,3 +200,69 @@ clean via `lpcc --batch`; not re-verified live in this lib specifically
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 1 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试 / Deep functional test (2026-08-06)
+
+第一次真正的完整游玩测试（此前所有测试都只覆盖了注册+`look`/`score`/`quit`
+或纯编译检查）。原生驱动（`build`，ASAN/UBSAN debug 构建），测试角色
+id `qintwo`，中文名 秦风，密码 `Abc12345`——保留未清理，已加入武当派，
+留作有效状态的活证据。本轮 WASM 未重新验证：emsdk 的工具链下载硬编码
+指向 `storage.googleapis.com`，本次会话的出口代理对该域名返回策略性
+403（已通过 `curl $HTTPS_PROXY/__agentproxy/status` 确认是策略拒绝而
+非临时故障），因此本地无法构建 WASM 驱动；在 WASM 侧的状态维持上一轮
+（README/`meta.json`）记录的结果不变。
+
+### 结论：本轮未发现新 bug，此前的主动修复在真实 quit 中持续有效
+
+`cmds/usr/top.lpc` 的 5 处 `add_rank*()` 迭代上限修复（2026-07-24 从
+`bxsj` 主动移植，见上方条目）此前只做过编译检查，未在 `bxsj1` 自己身
+上真正触发过 `quit`。本轮多次真实 `quit`（含首次注册后的 quit、学艺
+后的 quit、加入武当后的 quit）全部干净——`debug.log` 全程无
+`Too long evaluation`/任何运行时错误（只有 `SAVE_EXTENSION` 宏重复定
+义和 `valid_learn` 参数数量不一致这两类良性编译期警告，与其它同族档
+案已知一致，非本轮新问题）。确认这条此前只经编译检查、未经真实
+quit 验证的修复，在这份档案自己的存档数据下同样成立。
+
+### 测试内容与结果
+
+- **注册**：真实中文名（秦风），完整流程（英文 ID 仅限字母，纯字母数
+  字组合会被拒绝 → 密码含数字+大写字母，二次确认 → 中文名 → 天赋摇点
+  0=随机 → 确认 → 邮箱 → 性别）全程无错误进入 `武馆前院`。
+- **新手引导链**：`answer y` 触发 狄云→孙均 的教学对话（`ask sun about
+  学习`/`about 襄阳武馆`），指令讲解正确发放经验/潜能奖励；`help
+  map_wuguan` 输出的 ASCII 地图与房间实际出口存在若干处细节不完全一
+  致（例如"碎石路"房间描述写"南面是一间偏厅"，实际房间名是"练功
+  房"）——这是地图/房间描述这类**内容层面的历史小出入**，不影响任何
+  指令/寻路的正确性，按 §10.7 的 scope 规则不作为 bug 处理。
+- **战斗**：`d/wuguan/wuchang4`（东武场）的 `muren`（木人）陪练目标，
+  `fight muren` 产生完整的攻防叙事，在约 50% 资源阈值正确自动终止
+  （"这场比试算我输了，佩服，佩服！"），无崩溃。
+- **技能**：组织路线——`东练武场`的 `武馆教头`（`recognize_apprentice()`
+  硬编码为真，教任何人）`cha jiaotou` 查看技能表、`xue jiaotou cuff`
+  学习成功。`enable strike taiji-quan` 正确拒绝（"这个技能不能当成这
+  种用途"，因为 `taiji-quan` 实际映射到 `cuff` 而非 `strike`）、
+  `enable cuff taiji-quan` 正确成功——与 `bxsj` 记录的结论一致，不是
+  bug。
+- **门派**：两条路径均验证——(1) 礼物使者捷径：`ask shizhe about
+  newbie`→`about 拜师`→`about 武当`，清空技能后一次性授予武当全套特
+  殊技能并传送至三清殿；(2) 组织路线：传送后对宋远桥 `bai song`，第一
+  次执行了完整拜师流程（而不是像 `bxsj` 那样直接识别为"已是同门"——两
+  种实现都不是 bug，只是这份快照里 `family`/`is_apprentice_of` 判定在
+  礼物使者赠送和真实拜师之间不完全共享状态，行为上仍然幂等且正确：紧
+  接着再次 `bai song` 就正确识别为"已经磕头请安"，不会重复消耗）。
+- **持久化**：(a) 静默重连（net_dead 后 `find_body()` 重新绑定）—— 房
+  间、装备、状态零丢失；(b) 完整 `quit`+重新登录（真实 `save()`/
+  `restore()`）——门派身份、技能表、贵宾状态全部正确复原；`quit` 时
+  非 `autoload`/`unique` 的普通衣物（布履/布衣、道袍）被丢弃，与
+  `bxsj` 记录的原始设计一致（反屯积机制，非存档 bug）。
+- **管理员账号**：`fluffos`/`Mud@2026` 登录显示 `(admin)`，`update
+  /d/wuguan/dayuan` 成功重新编译，确认写 ACL 正常。
+- **经济/商店、死亡/复活**：**未做实测**，与 `bxsj` 记录的缺口相同——
+  `inherit/room/shop.lpc` 与 `bxsj` 的版本逐字节相同（`diff` 确认），
+  已在 `bxsj` 一侧做过代码级审查、未发现红旗；`feature/damage.lpc` 的
+  `die()`/`reincarnate()` 路径同样与 `bxsj` 共享，本轮测试角色被礼物
+  使者一次性拉高到与附近 NPC 明显不对等的强度（综合评价 3615+，技能
+  ~201），要在合理时间预算内制造一次真实、可控的死亡不现实（需要专门
+  跑去找一个够格的对手，或回程翻越到武馆重新用 `kill muren`/
+  `suicide -f`）。如实标注为未覆盖，而非默认"和 bxsj 一样所以没问
+  题"。
