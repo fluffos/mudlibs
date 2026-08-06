@@ -5639,6 +5639,50 @@ and a future refactor of that other default would silently reintroduce
 the visible bug with no warning. Don't skip an §8.9 fix just because
 this pass's live test didn't observe starving characters.
 
+### 8.10 A retry re-prompt after the version-handshake gate loops back to the wrong `input_to` callback, so a real player's SECOND login attempt gets falsely accused of using an unsupported client and disconnected
+
+Found on `xiyouji2006` (a Tomud-family lineage that gates every
+connection behind a hidden client-version handshake: the first thing a
+real client is expected to send is the literal string `2060`, checked
+in `logind.lpc`'s `get_id()`; anything else prints "你的客户端非Tomud
+或者非笑傲江湖WWW客户端!!" and disconnects). The REAL "type your
+English name" logic lives one function down, `get_id1()`, which
+`get_id()` calls after the version check passes. Two of `get_id1()`'s
+own retry paths — an illegal-ID rejection and a "no such player"
+message — each re-print the "您的英文名字：" prompt and then call
+`input_to("get_id", ob)` to wait for the retyped name. That's the
+version-gate function, not the ID-entry one: the player's very next
+keystroke (their corrected username, or `new` to register) gets
+compared against the literal string `"2060"` instead of validated as
+an ID, and since a real name is essentially never exactly `"2060"`,
+every single player who mistypes their ID once (a digit, too short,
+too long — any of the ordinary reasons `check_legal_id()` might
+reject a first attempt) or types a genuinely-unregistered name gets
+falsely told their client is unsupported and kicked. A third, identical
+occurrence exists in `confirm_id()` but is entirely commented out
+(`/* ... */`) and therefore inert — left alone, don't "fix" dead code.
+
+Root cause reads as a copy-paste of the very first `input_to((:
+get_id :), ob)` call (the one right after the banner, which correctly
+starts the version handshake) into two spots that actually needed to
+resume `get_id1()`'s own loop. Fix: change both live
+`input_to("get_id", ob)` calls to `input_to("get_id1", ob)`. Verified
+live: pre-fix, deliberately sending an invalid ID (a digit) followed by
+a real, syntactically-valid retry name reproduced the false
+"服务器已经和你断开连接了" disconnect every time; post-fix, the same
+sequence correctly re-prompts through `get_id1()` and reaches normal
+registration.
+
+Detection: grep any Tomud/xiyouji.org-lineage `logind.lpc` for
+`input_to("get_id", ob)` outside the single legitimate call site right
+after the version-handshake banner — any OTHER call reaching that same
+function is this bug. Confirmed present with the identical
+line-for-line shape (three occurrences, same relative positions, third
+one commented out) in **three sibling libs not yet given this fix**:
+`mhxy`, `mhxyqd`, `shenmo` — check and apply the same two-line change
+the next time any of those is touched, rather than rediscovering this
+from scratch.
+
 ---
 
 ## 9. LPC formatter (`~/src/fluffos/tools/lpc-syntax/`) — required checks
