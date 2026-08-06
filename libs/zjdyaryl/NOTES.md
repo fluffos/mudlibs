@@ -488,3 +488,7 @@ Neither fired visibly in this lib's own sit. Retest: fresh registration
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 'hell'/Doing-Lu 引擎基础版。状态已从过时的 limited 修正——本轮修复了一个真实的 bug：clone/user/login.lpc 的 query_save_file() 只防范了 id 不是字符串的情况（!stringp(id)），没有防范空字符串的情况——对 "" 取 id[0] 会回传整数 0，而 sprintf 的 %c 格式会拒绝这个值（'Incorrect argument to type %c, must be valid UTF8 char'），在任何 id 被输入之前，第一次自动呼叫 query_save_file() 就会崩溃（每一次连线尝试都会现场触发，把 id 提示搞坏）。已通过额外检查 id == "" 修复（手足档案 zhongjidiyu（052）和 zjdyzj（054）上也应用了同样的修复）。修复后重新验证管理员登录（fluffos/Mud@2026）干净正常，'目前权限：(admin)'，quit 正常。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 44 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
