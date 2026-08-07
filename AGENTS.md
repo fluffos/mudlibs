@@ -5298,6 +5298,43 @@ if it's flat (no single-letter subdirectories) but `user_cwd()`/
 `user_path()` insert one, this bug is present regardless of whether it's
 been independently confirmed on that specific archive yet.
 
+### 7.93 An admin "grant sect/skills to a target player" command silently mutates the *caller* instead of the target for one field, because a late edit reused `me` where every other line in the function correctly uses `ob`
+
+Found on `sjtx2`'s §10.7 deep functional test, in THREE copies of the
+same file: `cmds/wiz/setparty.lpc` and `cmds/arch/setparty.lpc` (the
+live one — `arch` commands shadow `wiz` commands of the same name for
+an `(admin)`-level caller, so this is the copy that actually runs) plus
+two untouched dated backup copies (`setparty15.lpc`, `setparty18.lpc`).
+`setparty <target> <party>` is a wizard shortcut that resolves `ob =
+find_player(obj)` (the target) up front, then spends ~380 lines
+correctly calling `ob->set(...)`/`ob->set_skill(...)` to grant the
+target sect-appropriate stats and skills — except the very last line:
+
+```lpc
+default: party = "普通百姓";
+}
+me->set("family/family_name", party);   // should be ob->set(...)
+```
+
+`me` is the admin invoking the command, not the target. Live
+reproduction: `setparty sjtxdeep wd` as admin `fluffos` correctly
+applied all the stat/skill grants to `sjtxdeep` (combat_exp, neili,
+skills, VIP registration) but left `sjtxdeep`'s own `师承`
+(sect-membership display) at 普通百姓, while `fluffos`'s OWN character
+data was silently flipped to `师承:【武当派】` — a wizard testing tool
+corrupting the admin's own save file as a side effect, with the
+intended target left without the one field the command exists to set.
+Fix: `ob->set("family/family_name", party);` in all three live/backup
+copies (the two numbered backups aren't reachable as commands but carry
+the identical bug — fixed for consistency since the diff is one word).
+This `me`/`ob` transposition — the target object resolved correctly up
+top, used correctly everywhere else in a long function, then swapped
+for the caller on one late-added or hand-edited line — is a generic
+copy-paste risk in any admin "set field(s) on a named target" command,
+not specific to sect data; worth grepping any newly-picked lib's
+`cmds/{wiz,arch,adm}/set*.lpc` for a bare `me->set(...)` sitting among
+otherwise-consistent `ob->set(...)` calls in the same function.
+
 ---
 
 ## 8. Login and registration flow bugs
