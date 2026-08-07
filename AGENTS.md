@@ -1602,6 +1602,23 @@ Two independent traps in the same apply:
   and the actual `enter_world()`/move-into-game call, not just the
   first one found — this one was buried inside a *logging* side-call,
   not the visible save/world-entry code itself.
+- **New blast-radius shape, `nitan_ceshi`'s deep functional test (§10.7):
+  a non-fatal, permanently-silent variant outside `log_file()`
+  entirely.** `adm/daemons/toptend.lpc::topten_save()` (the top-ten
+  leaderboard daemon, called from `logind.lpc::enter_world()` for every
+  non-wizard login) did the same unguarded `write_file()` into a
+  never-shipped `/data/topten/` directory, but its own
+  `if (!write_file(...)) return notify_fail(...)` guard kept it from
+  crashing the registration flow the way the `log_file()` call sites
+  above do — the failure just meant the five leaderboards
+  (rich/pker/exp/age/killed) silently never updated for any player,
+  forever, with the error visible only in `debug.log`'s ordinary
+  runtime-error stream (not a custom log path this time). Same fix
+  shape (`assure_file(f_name)` before the `write_file()`), same lesson:
+  §7.11 is not confined to `log_file()`/simul_efun call sites or to
+  registration-blocking failures — grep every unguarded `write_file()`
+  in daemons that fire on common player actions, not just the login
+  chain.
 
 ### 7.12 Shared message/wrapper argument bugs
 

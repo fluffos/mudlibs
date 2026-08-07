@@ -447,3 +447,135 @@ carve-out. Re-verified loopback fluffos login, `look`, `score`,
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 56 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试 / Deep functional test (AGENTS.md §10.7)
+
+本档案没有传统意义的新手帮助文档（`doc/help/register/` 下全是空文件桩：
+`toc`/`speciall`/`xkx01`~`xkx36`）；实际的"新手入门必读"是角色创建流程
+中盘古（`d/register/npc/pangu.lpc`）赠送的同名书籍，读过之后才走
+`register` → 选定角色 → `washto` 洗任督二脉 → `born <地名>` 出生。全程
+两组密码：管理密码（找回专用，规则上必须与普通密码不同）+ 普通密码，
+注册时各输入两次确认。
+
+### 修复的程序性 bug
+
+- **`toptend.lpc`（十大排行榜守护进程）缺少运行期目录、`write_file()`
+  静默失败（AGENTS.md §7.11 类，新子系统确认实例）**：第一个测试角色
+  （`nitandeep`）注册落地后，`debug.log` 记录
+  `执行时段错误：*Wrong permissions for opening file
+  /data/topten/rich.txt for overwrite. "No such file or directory"`，
+  调用链 `logind.lpc::enter_world()` → `toptend.lpc::topten_checkplayer()`
+  → `topten_add()` → `topten_save()`（第 35 行 `write_file()`）。
+  `/data/topten/` 目录在 `work/` 下确实不存在。此前本 session 见到的
+  §7.11 实例全部集中在 `log_file()`/simul_efun 调用点，这是本 session
+  第一次在**排行榜守护进程**这个全新子系统里撞见同一类缺陷——每一次新
+  玩家注册都会触发，但由于 `topten_save()` 自带
+  `if (!write_file(...)) return notify_fail(...)` 保护，不会像
+  `log_file()` 那样直接让整个注册流程崩溃，只是让排行榜永远静默地更新
+  失败。修复：在 `adm/daemons/toptend.lpc::topten_save()` 的
+  `write_file()` 调用前插入 `assure_file(f_name);`。同时顺手把
+  `adm/simul_efun/file.lpc::log_file()` 里同一款隐患也按本 session 惯用
+  的写法加固（补充 `assure_file` 前向声明 + 调用前置），虽然本轮测试没
+  有实际触发到这个调用点。重启驱动、用第二个测试角色（`nitandeq`）复现
+  注册流程，确认 `/data/topten/{rich,pker,exp,age,killed}.txt` 全部被
+  正确创建（5 个文件，各约 21-23 字节），排行榜提示消息正常出现，
+  `debug.log` 不再新增该错误。
+  - **§9 格式化工具盲点（file-specific，非本次引入）**：`file.lpc`
+    使用大括号独占一行的风格（`void cat(string file)\n{`，而非项目里
+    常见的 K&R 同行 `{`），本工具在这份文件上 `TOKEN MISMATCH,
+    refusing to write`；用 `git show HEAD:...` 取出编辑前的原文件单独
+    跑一遍格式化工具，同样失败，证实此为该文件已有的格式化盲点，与本
+    次编辑无关。改为手工核对 §9 文档记录的 3 类已知盲点 grep 规则（均
+    干净），未跑自动格式化工具于此文件。
+
+### 发现但判定为既有设计、未改动的现象
+
+- **`fight` 指令对"会说话"人形 NPC 与其余生物的真伤分流，与 kxkj
+  （同为"东方故事Ⅱ"血统，见游戏内规则文本"改编自「侠客行」，原是建立
+  在「东方故事Ⅱ」MUDLIB上"）结构完全一致**：`cmds/std/fight.lpc` 里
+  `can_speak` 的人形对手走双向 `fight_ob()`/`fight_ob()`（安全，点到
+  为止），非 `can_speak` 的对手会被 NPC 一侧调用真实 `kill_ob()`
+  （能真正打死玩家）。默认 `accept_fight()`（`inherit/char/npc.lpc`）
+  同样是"不会说话就直接 `kill_ob()`"。现场用 `fight nan dizi`（伏虎寺
+  `峨嵋派第五代弟子 男弟子`，`d/emei/npc/boydizi.lpc`，无自定义
+  `accept_fight()` 覆盖）验证安全切磋：几回合后对方一方"你向后一纵，
+  躬身做揖说道：阁下武艺不凡，果然高明！"体面认输收场——不是昏迷，也
+  不是死亡，是这个家族分支独有的"体面认输"结局，与 kxkj 的"昏迷→自动
+  清醒"略有差异，记录为家族内部的文案变体，不是 bug。
+- **管理员技能快捷授予命令 `wizlian` 仅能对自己生效**：`cmds/wiz/
+  wizlian.lpc`（指令格式 `wizlian <武功/属性> 值`，靠
+  `SECURITY_D->valid_grant(me, "(apprentice)")` 把关）只操作调用者自身
+  （`me`），不能指定任意目标玩家；现场对管理员自己执行
+  `wizlian unarmed 200` 验证成功（`skills` 确认 unarmed 200/0%）。另有
+  `cmds/wiz/copyskill.lpc`（`copyskill <对象> [to <目的对象>]`）可以整
+  份拷贝技能表+`combat_exp`，是本档案里唯一能"跨角色"操作技能的管理员
+  工具，本轮未使用。如实记录两者的能力边界，不是缺陷。
+- **正规拜师路径要求先找对"收徒对象"，普通门下弟子 NPC 不响应
+  `apprentice`**：`cmds/skill/apprentice.lpc`（本档案真正在用的
+  `apprentice`/`bai` 指令，与未被使用的 `cmds/std/apprentice.lpc` 不同
+  ——后者要求玩家预先有 `class` 属性才能拜师，前者没有这条限制）对
+  `create_family()` 过的目标会调用 `ob->attempt_apprentice(me)`；但
+  `boydizi.lpc`/`girldizi.lpc` 这类"陪练用"的普通弟子 NPC 虽然也
+  `create_family("峨嵋派", 5, "弟子")`，却没有覆盖 `attempt_apprentice`
+  ——整个继承链（`inherit/char/npc.lpc` 等）也没有提供默认实现，所以对
+  它们 `apprentice` 只会停在"你想要拜 XX 为师"，永远等不到回应（非崩
+  溃，`debug.log` 无新增错误，等同"这个 NPC 不是真正意义上收徒的掌
+  门"）。真正的掌门 `灭绝师太`（`kungfu/class/emei/miejue.lpc`，位于
+  `/d/emei/hcahoudian`）有完整实现，但她的 `permit_recruit()`
+  （`kungfu/class/emei/emei.h`）只收 `class == "bonze"` 且性别女性的
+  俗家弟子，其余一律回绝并明确导流："阿弥陀佛！贫尼不收俗家弟子。你若
+  想继续学峨嵋派的功夫，还是去找我俗家师妹吧。"——现场用一个没有
+  `class` 属性的新角色验证到这条回绝分支，符合金庸原著设定（灭绝师太
+  不收男弟子/俗家弟子），是刻意的剧情式门槛，不是 bug。
+
+### 测试覆盖
+
+- **注册**：英文 id 分两轮——`nitandeep`（触发排行榜 bug 的第一个角
+  色）、`nitandeq`（bug 修复后复测 + 后续全部测试用的角色）；中文姓名
+  长度上限为给名 ≤2 字（`风廿九` 因 3 字被拒，改 `风九`；正式测试角色
+  最终用"秦风十"）。管理密码/普通密码两两确认，全程无崩溃。中途因真实
+  的对话打断消耗了连线时间，撞到 `clone/user/login.lpc` 的
+  `net_dead()` → 1 秒宽限 `time_out()` 机制两次（"您花在连线进入手续
+  的时间太久了，下次想好再来吧。"），重新连线后正常完成，非 bug（是有
+  意的挂断连线保护）。`look`/`score`/`i` 全部正常。
+- **排行榜子系统**：见上方"修复的程序性 bug"——用两个角色的注册流程分
+  别复现问题、验证修复。
+- **安全切磋**：见上方"既有设计"——`fight nan dizi` 确认双向
+  `fight_ob()` 安全分支，体面认输收场。
+- **技能/门派习得（管理员快捷路径）**：`wizlian unarmed 200` 对管理员
+  自己生效，验证成功。
+- **技能/门派习得（正规组织路径）**：管理员用 `summon` 把测试角色
+  `nitandeq` 依次拉到伏虎寺（`/d/emei/fhs`，验证"陪练弟子"不响应
+  `apprentice`）、`/d/emei/hcahoudian`（验证灭绝师太的俗家弟子/性别门
+  槛回绝分支）、`/d/emei/lianhuashi`（`峨嵋派第四代弟子 苏梦清`，
+  `kungfu/class/emei/su.lpc`，`class` 为 `fighter` 非 `bonze`，
+  `permit_recruit()` 里跳过僧尼限制），`apprentice su mengqing` 一次成
+  功："苏梦清决定收你为弟子"，`score` 确认【门派】峨嵋派、【师承】苏梦
+  清、称号"峨嵋派第五代传人"。
+- **管理员账号 `score` 失败（"还没有出生呐，察看什么？"）**：定位到
+  `cmds/usr/score.lpc` 的 `born` 字段检查，追查是这份档案早前 WASM 启
+  用轮次里直接通过 `/adm/etc/wizlist` 授予管理员权限、跳过了正常
+  `born <地名>` 步骤留下的账号历史遗留状态，不是 mudlib 缺陷；管理员
+  `look` 一切正常，证明角色本身功能完好，未做任何代码改动。
+- **退出/重连持久化**：`nitandeq`（本轮新建，账号年龄远低于 30 分钟）
+  在 `quit` 时撞到"新建账号必须连续在线半小时才能被有效保留，退出该
+  游戏将删除你的账号"确认提示——选 `n` 取消，改用直接 `kill` 底层 `nc`
+  进程模拟净断线，避免误删测试账号；约 22 分钟后用同一 id/密码重新连
+  线，提示"重新连线完毕。"，`score` 确认所在门派（峨嵋派）、师承（苏梦
+  清）、称号（峨嵋派第五代传人）、地点全部正确保留，`debug.log` 全程
+  （含本次重连）稳定在 11 行，无新增错误。
+
+### 进程卫生附注
+
+清理了两处与本次修复无关的测试残留：(a) 管理员账号 `wizlian` 测试技能
+授予 + 现场走动导致的 `data/{login,user}/f/fluffos.o` 存档漂移
+（`skills`/`mud_age`/`food`/`water` 等字段），已用 `git checkout --`
+还原；(b) 两个测试角色（`nitandeep`/`nitandeq`）的
+`data/{login,user}/n/*.o` 存档文件，已删除，未纳入本次提交。
+
+### WASM 未验证说明
+
+按本 session 约定：`emsdk` 固定从 `storage.googleapis.com` 拉取，被本
+session 出站代理策略拒绝（`curl -sS $HTTPS_PROXY/__agentproxy/status`
+返回 403），WASM 编译/运行验证本轮继续跳过，仅做原生驱动（linux-debug
+预设，ASAN/UBSAN）下的完整 §10.7 测试。
