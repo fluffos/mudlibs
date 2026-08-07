@@ -2619,7 +2619,17 @@ a routine, safe-to-fix hit rather than a judgment call), `sanjieshenhua`, `ldtxi
 bare `printf("%O\n", ob)`
 right before the Chinese-name is set — `ldtxii`'s sibling `ldtx` has
 the byte-identical line, unfixed; port the same one-line deletion
-there too when next touching that lib), and noted-but-left-alone on
+there too when next touching that lib), `xiakexing3` and `jqxz2015`
+(same ES II lineage, §10.7 deep-dives; `logind.lpc`'s `get_name()`,
+bare `printf("%O\n", ob)` right after the Chinese-name prompt — present
+on `xiakexing3` and confirmed as a SECOND independent instance on
+sibling `jqxz2015` despite `jqxz2015`'s own content-lineage precedent
+(`jqxz2008`/`jqxz2008dlx`/`jqxz2008std`) NOT carrying the line at all,
+underscoring that even within one shared-engine family, individual
+archives can pick up or drop this class of leftover debug scaffolding
+independently — worth checking `jqxz2008std`/`jqxz2008dlx`'s own
+`get_name()` again the next time either is touched), and
+noted-but-left-alone on
 `fy2` (a
 similar stray `printf` in `logind.lpc`, existing precedent from `zzfy`
 treats it as harmless). A leftover diagnostic write/printf with no

@@ -479,3 +479,132 @@ git status hides them): `work/data/user/f/fluffos.o`,
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 19 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试 / Deep functional test (2026-08-07)
+
+按 AGENTS.md §10.7 流程做的第一轮真正意义上的深度游玩测试——此前几
+轮都停留在注册/登录/编译层面。这份档案自己的 README 及既有 NOTES 已
+确认它和"2008 加强版"（`jqxz2008`）、"2008 标准版"（`jqxz2008std`）、
+"2008 豪华版"（`jqxz2008dlx`）、`xiakexing3` 共享同一套 ES II 引擎核
+心，其中 `jqxz2008`/`jqxz2008dlx`/`jqxz2008std`/`xiakexing3` 都已经
+各自做过一轮 §10.7 深挖并记录了具体 bug——开机前先把这几份记录读了
+一遍当路线图，逐条对照本档案的实际源码，5 个全部确认存在（细节见下
+"开机前主动移植"），比预期的还要更省事：不用重新从零排查，直接照着
+清单核对再动手修。
+
+WASM 本轮仍然跳过验证：emsdk 安装器把工具链下载硬编码到
+`storage.googleapis.com`，本 session 的出站代理策略拒绝该域名
+（`curl -sS $HTTPS_PROXY/__agentproxy/status` 确认为 403），未重试。
+但这份档案自己 NOTES.md 里"WASM build test"一节记录过更早一轮会话
+已经用 `scripts/wasm_client.js` 完整验证过注册/登录流程在 WASM 下能
+跑通——本轮只是没有重新跑一遍确认这轮修的 bug 在 WASM 下同样生效，
+不是"从未验证过"。
+
+**开机前主动移植（对照 `jqxz2008` 系家族已确认修好的 bug）：**
+
+1. **AGENTS.md §7.7（已确认第 N 例）**——`adm/daemons/chinesed.lpc`
+   的 `create()` 原本是裸 `restore()`，本档案的 `data/e2c_dict.o` 是
+   损坏的二进制垃圾（不是合法 mapping 字面量），`restore_object()`
+   抛出的运行时错误没有被捕获，会让 `create()` 在那一行直接中止，
+   全局 `mapping dict` 被清零——第一次真正用到 `chinese()`/
+   `to_chinese()` 的地方（战斗/技能提示大量使用）就会崩溃。改成
+   `catch(restore()); if (!mapp(dict)) dict = ([]);`，和 `jqxz2008`
+   系已验证过的修复完全一致。开机日志里能直接看到这处 `catch()`
+   正确拦下了损坏存档的运行时错误（而不是让 `create()` 中止），
+   验证修复生效。
+2. **AGENTS.md §7.11（已确认第 N 例，且是本档案里最严重的一处）**——
+   `work/log/nosave/` 目录在这份 `work/` 树里从未被创建（gitignore
+   忽略的运行期目录，与仓库无关），但至少 4 个 `write_file()`/
+   `log_file()` 调用点无保护地往里面写：`adm/daemons/combatd.lpc`
+   的 `killer_reward()`（**每一次玩家死亡**都会跑到，且这一处不像
+   `kill.lpc` 那样有 `userp()` 判断限定 PK 场景，任何死亡都会触发）、
+   `cmds/std/kill.lpc`（仅 `userp()` 场景）、`cmds/skill/{bai,
+   apprentice}.lpc` 的风清扬弟子计数器。`killer_reward()` 这一处一旦
+   目录缺失就会在 `die()` 中途未捕获地抛异常，让角色的死亡清理（尸
+   体、鬼魂状态、移到死亡场景）全部不会执行，角色变成"活着但气血
+   精气归零"的破损状态，而且会在之后**每一次 `heart_beat()`** 都
+   重新触发——`jqxz2008`/`jqxz2008dlx` 都通过实际杀死角色确认过这
+   个死循环崩溃。本轮用该家族已验证的 `assure_file()` 模式在 4 处
+   `write_file()` 调用前各加一行 `assure_file(...)`（`combatd.lpc`/
+   `kill.lpc`/`bai.lpc`/`apprentice.lpc`），并给 `bai.lpc`/
+   `apprentice.lpc` 里 `read_file()` 的结果加了 `stringp()` 判断
+   （避免 `atoi(0)`）。**本轮额外发现的第 6 个同类隐患**：这份档案
+   自己的 `adm/simul_efun/file.lpc` 里 `log_file()`（全档案通用的日
+   志辅助函数，被 `cmds/arch/call.lpc` 等至少 5 个不同的
+   `nosave/*` 日志点调用）本身也只是裸 `write_file(LOG_DIR + file,
+   text)`，没有调用同一个文件里现成的 `assure_file()` 辅助函数——
+   直接在 `log_file()` 内部加一行 `assure_file(LOG_DIR + file)`，一
+   次性覆盖它所有的调用点，比逐个日志点手工加保护更彻底（`assure_file`
+   定义原本在 `log_file` 后面，这个驱动的编译器要求同文件内被调用
+   的函数需要先声明/定义，所以顺手把两个函数的顺序对调了）。
+3. **`cmds/skill/bai.lpc`/`cmds/skill/apprentice.lpc`（一处括号位置
+   错误）**——`if (((string)me->query("family/master_id" ==
+   "feng qingyang")) || ...)`，`==` 比较被夹在 `query(...)` 的参数
+   括号内，传给 `query()` 的实际是恒为假的布尔值，不是想要的属性名
+   字符串，导致"从风清扬门下叛出"检测分支永远不会触发。已改成先呼叫
+   `query("family/master_id")` 拿返回值再比较，两个完全相同的文件都
+   改了。
+4. **AGENTS.md §8.9（已确认第 N 例）**——`adm/daemons/logind.lpc`
+   `enter_world()` 里 `if (!user->query("food") && !user->query("water")
+   && ob->query("age") == 14)`，`age` 取自登录阶段用完即弃的连线桩物
+   件 `ob`，不是真正的角色本体 `user`——桩物件永远没有 `age` 属性，
+   条件恒为假，导致每个新角色的食物/饮水从创建起就永远是空的。改成
+   `user->query("age") == 14`。Live 验证：注册后 `score` 食物/饮水两
+   栏均满格（■■■...），管理员账号 `fluffos` 重新登录后同样两栏被
+   补上（此前从未有 food/water 字段，见下方存档 diff）。
+5. **`get_name()` 遗留调试 `printf("%O\n", ob)`（新发现，`jqxz2008`
+   系没有，`xiakexing3` 有）**——紧跟在玩家输入中文姓名之后，会把连
+   线桩物件的原始引用（`/clone/user/login#0` 这类内部标识）直接回显
+   给正在注册的新玩家，属于内部调试信息泄漏。已删除该行，Live 验证：
+   注册流程中输入中文名字后直接进入密码设置提示，没有任何对象引用
+   泄漏。
+
+**测试路径**：读 `doc/help/newbie` 确认「较量」(fight) 是安全对练的
+标准做法（气/精跌到 50% 或以下自动停止）后，在原生驱动下一次连续会
+话里：注册（真实中文名 叶秋白，id `jqxzdeep`）→ 落地客店，`look`/
+`score`/`i` 确认干净、食物/饮水满格（§8.9 修复验证）→ `west`→`south`
+到中央广场，`fight liu mang` 对普通"流氓"安全对练，几回合后自动
+"承让了"结束，`score` 确认气条降到约 50%、无死亡/无损失 → `enter
+shudong` 进入丐帮地下通道，`bai zuo` 组织性拜入 `丐帮` 第二十代弟子
+（师父左全），`xue zuo begging` 组织性学习技能，即时进步提示正常 →
+另开管理员会话（`fluffos`/`Mud@2026`，账号已在 `adm/etc/wizlist` 中）
+用 `call jqxzdeep->set_skill(sword,50)`（该引擎家族没有专门的
+`setskill`/`setparty` 类快捷指令，`cmds/arch/call.lpc` 是通用的管理
+员任意函数调用指令，充当本档案的技能赋予捷径路径）验证捷径路径——
+`nosave/CALL_PLAYER` 操作日志正确写入（验证了上面第 2 点里 `log_file()`
+的修复），角色 `skills` 指令确认组织性的 `begging` 与捷径赋予的
+`sword` 同时存在 → `quit`（触发 `save()`）→ `debug.log` 全程检查
+（`grep -v` 排除编译期 warning 后）零 `error:`/`crash`/`fatal` 行 →
+真实间隔重新连线（`nc` 断开重连，非同一 TCP 会话），`score`/`skills`
+确认门派归属、师父、组织性/捷径两条技能、已花费潜能全部正确持久化。
+
+**一次会话内的持久化教训（记录，非 bug）**：本轮为了应用
+`log_file()` 修复重启过一次驱动，但重启前忘了让测试角色先 `quit`
+（只是杀掉了旧驱动进程）——重连后发现角色回到全新状态（无门派、无
+技能、潜能满格），排查后确认这不是 mudlib 的持久化 bug：`cmds/usr/
+quit.lpc` 的 `main()` 明确调用 `me->save()`，本档案没有自动周期性
+存档，纯粹是测试流程上少做了一次 `quit` 才导致进度丢失。之后重新走
+了一遍拜师/学艺流程并正确 `quit`，最终的持久化验证（见上）就完全
+正常了。
+
+**测试角色**：id `jqxzdeep`，中文名 叶秋白，密码 `Jqxz2026Test`，
+丐帮第二十代弟子（师父左全），技能 begging（组织性）+ sword（捷径路
+径，50 级），位于客店。存档：`work/data/{login,user}/j/jqxzdeep.o`。
+管理员账号 `fluffos` 存档因本轮测试产生了正常的 food/water/mud_age
+增量（§8.9 修复的直接体现，非损坏），按这份档案自己既有 NOTES 里
+"必须提交，不受 gitignore"的约定一并提交。
+
+**验证通过**：真实中文名注册；`look`/`score`/`i` 多次状态检查；食
+物/饮水初始化（§8.9）；安全对练 `fight`（自动停止机制）；丐帮组织
+性拜师+学艺；管理员捷径路径（`call`）技能赋予；`chinesed.lpc`
+损坏存档的 `catch()` 防护；`log_file()`/`assure_file()` 缺失目录防
+护（含新发现的 `log_file()` 自身漏洞）；`quit`（`save()`）后
+debug.log 检查；真实断线重连后的完整状态持久化。
+
+**明确未验证**（记录而非静默跳过）：完整战斗到死亡的循环（`fight`
+安全对练已覆盖核心战斗机制，真正杀死角色需要更多时间预算构造合适
+对手，本轮未做）；风清扬弟子叛出这个罕见分支（`bai.lpc`/
+`apprentice.lpc` 的括号修复已通过代码比对验证，未构造这个特定场景
+实机触发）；商店购买（起始区域客店本身没有商店，真实商业区未探索）；
+WASM 下的重新验证（详见上方说明，proxy 阻断，且此前已有会话独立确
+认过 WASM 可用）。
