@@ -305,3 +305,122 @@ gitignored):
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 93 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试 / Deep functional test (AGENTS.md §10.7)
+
+先读 `README.md`/`group_note` 已知：本档案虽带"夕阳再现"招牌，但地图血统实
+为"天涯"家族（与 `xysylmhb`/`xyzxiiylzymh`/`yzxiiizylfy` 同源），不是真正
+的"夕阳再现"世系（`xyzxfk`/`xyzxfy2` 那支）——品牌名不可靠，本轮以
+`d/city/sj.lpc` 字节比对方式独立确认过，细节见 README。同为 AGENTS.md §11
+"XYZX/炎龙封印分支"（`xyzx3`/`ylfyxa3`/`longyunmeng`）的另一已深测同门是
+`longyunmeng`；对照读过它的 §10.7 记录作为路线图，但两者代码已明显分叉（见
+下方"分支不完全同源"一节）。
+
+登陆需要先发送隐藏的 Tomud/笑傲江湖 WWW 客户端版本暗号 `"2060"` 作为连接后
+第一行输入（`logind.lpc::get_id()`），随后才是正常的英文 id 流程；输错或漏
+发直接被断线，这是本档案自己的合法握手机制，不是缺陷。
+
+### 修复的程序性 bug
+
+1. **§7.11（`log_file()` 未确保目录存在，注册必崩）**：`adm/simul_efun/
+   file.lpc` 的 `log_file()` 直接 `write_file(LOG_DIR + file, text)`，
+   `/log/login/`、`/log/nosave/` 在 `work/` 里并不存在；`logind.lpc::
+   get_gender()` 在 `init_new_player()`/`enter_world()` 前调用
+   `log_file("login/newid.log", ...)`，本会导致每次新注册崩溃。按本 session
+   已确立的修法：把 `assure_file()` 挪到 `log_file()` 之前（本驱动的编译器
+   要求同文件内被调函数需先声明/定义），并让 `log_file()` 内部先调用
+   `assure_file(LOG_DIR + file)`。一次修复覆盖全档案所有 `log_file()`
+   调用点。本回合是本 session 内本类 bug 第 4 次连续命中（继 jqxz2015→
+   xyzxfk→xyzxfy2 之后），且跨越了互不相关的世系（ES II 系 / 夕阳再现真系 /
+   本档案的天涯系），说明这个"忘记 `assure_file()`"的 `log_file()` 写法在
+   这一代中文 MudOS 代码库里几乎是通病，与"血统"无关。
+   另外 4 处同类隐患一并修：`adm/daemons/combatd.lpc`（PK 死亡记录
+   `KILL_PLAYER`，本档案允许玩家间 PK，此路径可达）、`cmds/adm/
+   shutdown.lpc`/`reboot.lpc`（`LASTCRASH`）、`cmds/adm/restoredata.lpc`
+   （`RESTORE_PLAYER`）、`cmds/usr/helpbbs.lpc`（留言注册日志）——均加
+   `assure_file()`。
+2. **§8.9（食物/饮水初始化检查错对象）**：`logind.lpc::enter_world()` 用
+   `ob->query("age")`（登录桩对象，永远没有 age 字段）判断是否新号，应为
+   `user->query("age")`（真正的玩家 body）——导致新角色食物/饮水条永远是
+   空的。改 `ob` 为 `user`，与本 session 内 5+ 例同类修法一致。
+3. **§7.94（命令文件丢失 `.lpc` 扩展名，命令静默不存在）新增确认实例**：
+   `cmds/adm/setskill.c.org`——管理员技能授予快捷命令，唯一候选（无竞争草
+   稿，不构成内容判断），复制为 `cmds/adm/setskill.lpc` 使其重新可被驱动派
+   发。恢复过程中在同一文件里又发现一个独立的拷贝粘贴 bug：单技能
+   `level == 0` 分支的提示信息误引用了 `all` 分支专用、此处未初始化的
+   `skills[i]` 数组，应为局部变量 `skill`——原样触发会是运行时错误
+   （`setskill <目标> <单个技能> 0` 必现）。已改用 `skill`。已在
+   AGENTS.md §7.94 补充了这第二例确认实例的说明。
+4. **`cat()` 对不存在文件的空指针式崩溃（新发现，未归入既有编号）**：
+   `adm/simul_efun/file.lpc::cat(string file)` 在 `file_size(file) == -1`
+   （文件不存在）时仍会走 `write(read_file(file))` 分支，`read_file()`
+   对不存在的文件返回 `0`（非字符串），传给 `write()`/`receive_message()`
+   触发运行时错误 `*Bad argument 1 to receive() Expected: string or
+   buffer Got: 0`。现场复现：`get_id()` 的 `"2060"` 校验失败分支会
+   `cat("/adm/etc/new.txt")`，而该文件在 `work/` 里并不存在，每次输错客户
+   端暗号都会命中。修法：`write(read_file(file) || "")`，不猜测/新增
+   `new.txt` 的内容（那属于内容判断，超出本项目范围）。重启驱动后现场复测
+   两次错误握手，`debug.log` 未再新增该错误（新驱动进程下错误计数保持不
+   变）。注意：本档案的 `simul_efun` 实际编译单元是 `adm/obj/
+   simul_efun.lpc`（`config.fluffos` 的 `simulated efun file` 指向此
+   处），它通过 `#include "/adm/simul_efun/file.lpc"` 预处理拼入 —— 该
+   include 型 simul_efun 只在驱动**启动时**编译一次，不会像普通对象那样按
+   需热重载，因此这条修复必须重启驱动才能生效（前面 3 条也是同一物理文件，
+   同样受此约束，但因为是在**驱动首次启动前**就已编辑完成，所以首次启动即
+   生效，未受影响）。
+
+### 分支不完全同源（未误移植 longyunmeng 的修复）
+
+`longyunmeng` 那轮深测在其 `inherit/room/room.lpc` 的 `reset()`/
+`xyzx_system_clean_up()` 里发现并修了一个 `filter_array()`+闭包在
+`replace_program(ROOM)` 提交前被绑定导致的驱动级崩溃相关错误。直接读取
+`xyzx3` 自己的 `work/inherit/room/room.lpc` 确认：`new_clean_up()`/
+`reset()` 用的是 `all_inventory()` + 手写 for 循环，完全没有 `filter_array()`
+闭包写法，结构上就不是同一份代码——因此**没有**移植该修复到本档案，这不是
+遗漏，是确认了"§11 同分支标签 ≠ 代码字节甚至结构相同"，与本 session 之前
+的观察一致。
+
+### 测试覆盖
+
+- **注册**：`2060` → 英文 id `xyzxdeep` → 中文名 **秦风廿七** → 密码
+  `abc12345`（×2）→ 天资随机 `0`（膂力21/悟性18/根骨22/身法19）→ 邮箱 →
+  性别 `m` → 落地北疆小镇（星宿海系新手村）。`look`/`score`/`i` 均正常；
+  `score` 面板显示食物、饮水满格，确认 §8.9 已修复；`i` 正确列出新手赠品
+  （布衣、魔法传送帖）。全程未见 debug.log 新增运行时错误，确认 §7.11 修
+  复解决了注册必崩问题（`/log/login/newid.log` 成功写入并核对内容）。
+- **安全切磋**：`fight.lpc` 自带 help 明确写"点到为止，因此只会消耗体力，
+  不会真的受伤"。木人陪练在 `d/shaolin/wuchang.lpc`（少林练武场），但少林
+  山门有 `knock gate` + `valid_leave()` 的俗家弟子拒入逻辑（"本寺不接待俗
+  人"，正常设计，非 bug），测试角色未入少林门派，无法进入——改用已确认
+  `(admin)` 身份（`fluffos`/`Mud@2026`）`goto /d/shaolin/wuchang` 现场验
+  证木人机制本身：`fight mu ren` 完整跑完一轮判定文本、`死亡: 0 次`（
+  `no_die` 生效）、冷却期内再次 `fight` 正确被拒绝（"你刚跟这个木人练过
+  功！"）。木人机制经确认工作正常，仅因门派门槛借用了管理员身份，如实记
+  录。
+- **拜师+学艺（正规路径）**：`trans hs` 直达华山派练武场（未设门槛，与少
+  林形成对比），`apprentice yue` 一次成功，`score` 确认"华山派第十四代弟
+  子"/师傅"岳不群"。`learn <技能> from <某人>` 语法下 `learn unarmed from
+  yue` 成功（岳不群内部技能 `huashan-ken` 通过 `map_skill("unarmed",
+  "huashan-ken")` 映射，直接用 `huashan-ken` 当技能名反而学不到——这是设
+  计内的映射机制，非 bug，是我自己第一次测试时的用法错误）。`skills` 确
+  认"基本拳脚(unarmed) 1/0"。
+- **学艺（管理员快捷路径）**：`setskill.lpc` 修复后现场验证：
+  `setskill xyzxdeep force 1` 成功写入，玩家端 `skills` 确认"基本内功
+  (force) 1/0"。
+- **退出/重连**：`quit` 正常结算（丢弃不值钱物品，存档写入
+  `data/user/x/xyzxdeep.o`/`data/login/x/xyzxdeep.o`）。`logind.lpc` 的
+  重连防抖冷却是 50 秒（本档案比 longyunmeng 的 10 秒更长）；等待约 75 秒
+  实际时间后重连，`2060` → id → 密码成功进入，`score`/`skills` 确认门派
+  头衔、师傅、两项技能、潜能消耗（99/1%）均完整保留。
+- **未测试/超出范围**：完整 900 秒 `NET_DEAD_TIMEOUT` 净断线软测试（本轮
+  时间预算内未做，§10.8 类驱动级崩溃若存在未复现）；商店购买全流程（未
+  找到可达且未测试的商铺）；30 分钟内退号删档的计时器——`grep` 未在
+  `cmds/usr/quit.lpc` 找到此逻辑，本档案似乎没有这个机制（与
+  longyunmeng 不同）。
+
+### WASM 未验证说明
+
+按本 session 约定：`emsdk` 固定从 `storage.googleapis.com` 拉取，被本
+session 出站代理策略拒绝（`curl -sS $HTTPS_PROXY/__agentproxy/status`
+返回 403），WASM 编译/运行验证本轮继续跳过，仅做原生驱动（linux-debug
+预设，ASAN/UBSAN）下的完整 §10.7 测试。

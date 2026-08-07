@@ -5386,6 +5386,17 @@ sibling files with non-`.lpc` extensions, `.bak`/`.old` suffixes, or
 localized "copy of" prefixes before concluding the command was
 intentionally removed.
 
+Confirmed a second instance on `xyzx3`'s §10.7 deep functional test:
+`cmds/adm/setskill.c.org`, the admin skill-grant shortcut command, was
+the ONLY candidate under that name (no competing drafts, so no content
+judgment call — narrower than the `xyzxfk` case). Restoring it as
+`cmds/adm/setskill.lpc` also surfaced an independent copy-paste bug in
+the same file: the single-skill `level == 0` branch's message referenced
+the `all`-branch's `skills[i]` array (uninitialized in that code path)
+instead of the local `skill` string — a guaranteed runtime error on
+`setskill <target> <single-skill> 0`, fixed by using `skill` in that
+branch.
+
 ---
 
 ## 8. Login and registration flow bugs
