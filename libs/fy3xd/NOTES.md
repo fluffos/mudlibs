@@ -411,3 +411,142 @@ that could have hit the sibling's identically-named process.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 8 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试 / Deep functional test (2026-08-07)
+
+第一次完整游玩测试（原生驱动）。测试角色 id `fyxdtest`，中文名 云梦仙，
+苗族/女性，后拜入金钱帮第三代弟子门下（师父荆无命）。本轮 WASM 未重新
+验证：emsdk 工具链下载硬编码指向 `storage.googleapis.com`，本次会话的
+出口代理策略性拒绝该域名（403，已用 `curl $HTTPS_PROXY/__agentproxy/status`
+确认是策略拒绝而非临时故障），本地无法构建 WASM 驱动。
+
+与同引擎家族的 `fy3dz`（风云3典藏版）核心代码高度一致（README 及此前
+的血统分析已确认），本轮开局前先按 `fy3dz` 自己深潜时记录的、明确标注
+"很可能同样影响 fy3xd" 的两处已知 bug 做了主动排查，两处均确认存在并
+按已验证过的同一手法修复；另外独立发现并修复了一处新的、注册流程里
+的 §7.34 已知模式实例。
+
+### 主动排查并修复：`file_owner()` 路径深度差一错误（AGENTS.md §7.26 已确认实例，`fy3dz` 记录中明确标注"值得检查 fy3xd"）
+
+- **确认存在**：`adm/simul_efun/object.lpc` 的 `file_owner()` 与
+  `fy3dz` 修复前的版本逐字节一致：
+  ```lpc
+  if (sscanf(file, "/u/%s/%s/%s", dir, name, rest) == 3) {
+    return name;
+  }
+  ```
+  只在路径恰好是 `/u/<wizard>/<file>/<更多>` 三段式时才生效，对这份档
+  案实际使用的 `/u/<wizard>/npc/xxx.lpc`（两段式：wizard 目录本身就
+  直接放 `npc/`/`obj/` 子目录）永远匹配不到 3 段，返回 0——任何在这
+  类嵌套内容上的编译诊断（哪怕只是一条"Unused local variable"警告）
+  都会让 `master.lpc` 的 `log_error()` 把日志写到一个错误路径，抛出
+  `*Wrong permissions for opening file ... for append. "No such file or
+  directory"`（被驱动接住不会崩溃，但会把 debug.log 灌满无关噪音）。
+- **修复**：与 `fy3dz` 同一手法，只截取 `/u/` 后第一段：
+  ```lpc
+  if (sscanf(file, "/u/%s/%s", name, rest) == 2) {
+    return name;
+  }
+  ```
+- **验证**：修复后重启驱动，`update /u/guanwai/npc/waiter` 干净重新
+  编译成功（"重新编译 ...：成功！"），`debug.log` 行数在这次
+  `update` 前后完全没有变化，也没有出现任何"Wrong permissions"字样。
+
+### 主动排查并修复：`user_cwd()`/`user_path()` 假设了这份档案从未使用过的按首字母分片的巫师目录布局
+
+- **确认存在**：`adm/simul_efun/path.lpc`：
+  ```lpc
+  string user_cwd(string name) {
+    return ("/u/" + name[0..0] + "/" + name);
+  }
+  ```
+  （比如 `guanwai` 会解析成 `/u/g/guanwai`）。实测 `work/u/` 目录列表
+  确认是**扁平布局**（`chuenyu`/`ghost`/`guanwai`/`palace`/
+  `quicksand`/`resort`/`taoguan`/`wudang` 直接平铺在 `/u/` 下，没有任
+  何按首字母分片的中间层），与 `fy3dz` 记录的情形完全一致。
+- **修复**：与 `fy3dz` 同一手法，去掉分片段：
+  ```lpc
+  string user_cwd(string name) {
+    return ("/u/" + name);
+  }
+  ```
+  这个函数只有 3 处调用点（`cmds/adm/cd.lpc`、`master.lpc` 的
+  `log_error()`、`path.lpc` 自身），均为巫师/管理指令，不影响普通玩
+  家游玩。
+- **验证**：`cd /u/guanwai`（绝对路径，`cmds/imm/cd.lpc` 的相对路径
+  解析行为本身与本次修复无关，不受影响）正确进入；配合上一条
+  `file_owner()` 的修复，`update /u/guanwai/npc/waiter` 全程零错误。
+
+### 主动排查并加固：`save.lpc` 缺少与 `quit.lpc` 同款的 `environment(me)` 空指针防护
+
+- 同一 lib 里 `cmds/usr/quit.lpc` 已经有针对"角色刚注册、还没真正落
+  地到房间就执行指令"这种竞态的防护（`if (environment(me)) ...`，代
+  码注释明确点名"和 fy2qh/fy2 同一个修法"），但姊妹指令 `save.lpc` 的
+  同类调用点（`environment(me)->query("valid_startroom")`）没有加同
+  样的判空。本轮未独立复现（这份档案的 `enter_world()` 没有中途暂停
+  的 `input_to`，竞态窗口很窄），但修法便宜、安全，且直接照搬同一文
+  件树里已经验证过的既有模式，按 AGENTS.md"发现后立刻移植到每一个姊
+  妹调用点"的既定原则主动加固。
+
+### 新发现并修复：注册流程中文名确认环节的 `printf("%O", ob)` 调试输出泄漏（AGENTS.md §7.34 已知模式的又一实例）
+
+- **症状**：这份档案自己的新手指南 `doc/help/newbie.txt` 里给的示例
+  对话（应该是作者从真实登录会话里截取的）在"请设定您的密码："提示
+  前赫然夹着两行裸露的对象引用文本 `obj/login#1638`/`obj/login#1660`
+  ——这正是 §7.34 那个未加注释的 `printf("%O\n", ob);` 泄漏的典型症
+  状，说明这条 bug 从帮助文档编写的年代起就一直存在，作者截图时甚至
+  没意识到那两行不该出现。
+- **根因**：`adm/daemons/logind.lpc` 的 `get_name()`（用户自己输入中
+  文名分支）和 `get_resp()`（接受系统随机生成的中文名分支）各有一行
+  `printf("%O\n", ob);`，都紧跟在中文名确认成功、`ob->set("name",
+  ...)` 之前。
+- **修复**：按 §7.34 既定手法直接删除两处。全档案搜索确认没有第三处
+  （其余 `printf("%O"...)` 全部落在 `cmds/arch`/`cmds/wiz`/`cmds/imm`
+  下的巫师诊断指令或 `adm/daemons` 内部调试日志里，均非玩家可见路
+  径）。
+- **验证**：`§9` 格式化自检通过（`{"total":1,...,"unchanged":1,
+  "errors":0}`），3 处格式化盲点检查干净。实测注册（英文名→确认→中
+  文名→密码×2→邮箱→性别→民族）全程未再出现任何裸露对象引用。
+
+### 主动排查并提高：`maximum evaluation cost` 沿用了这份档案自己偏低的默认值
+
+`config.fluffos` 原为 `300000`（低于本项目常见的 700000 模板默认值，
+更远低于 `fy3dz`/`zzfy` 两个姊妹档案已经验证过安全的 `5000000`）。按
+AGENTS.md §7.90 的既定判断标准（"数值接近或低于 700000 时上手就查"）
+主动提高到 `5000000`，与两个姊妹档案对齐，避免潜在的首次房间/NPC 编
+译触发 eval-cost 中止。本轮全程游玩未观察到任何 eval-cost 相关错误。
+
+### 测试内容与结果
+
+- **注册**：英文名（纯字母）→ 确认 y → 中文名（云梦仙，确认上面的
+  printf 泄漏已修复）→ 密码 ×2 → 邮箱 → 性别（f）→ 民族（0-3 四选
+  一，选了苗族）→ 顺利进入民族对应的起始场景〖沉香镇中心〗。
+- **状态查看**：`look`/`score`/`i`/`hp` 在天赋、门派加入、学会技能前
+  后均正确刷新。
+- **安全陪练**：`fight <目标>` 指令（帮助文档写明"点到为止，只消耗体
+  力不会真正受伤"）。先尝试 `attitude: peaceful` 的 NPC（天机老人）
+  被拒绝——该 NPC 的 `accept_fight()` 被覆写为永远拒绝（"生命可贵！
+  不要自寻死路！"，是一个纯剧情 NPC，非正常设计漏洞）；改用满血状态
+  下默认接受挑战的普通杂鱼 NPC（地头蛇，未设置 attitude，走
+  `std/char/npc.lpc` 默认逻辑），交锋全程只有"结果没有造成任何伤害"
+  级别的描述，`hp`显示气血上限全程未变（只是当前值随消耗浮动，符合
+  "只耗体力不真正受伤"的设计），确认安全陪练机制工作正常。
+- **门派/技能——组织路线**：`apprentice master jin`（荆无命，金钱帮
+  第二代护法，`/d/fy/jbang`）一次成功，`score`正确显示"金钱帮第三代
+  弟子"、师承"荆无命"；`learn move from master with 10`（精确语法，
+  帮助文本明确写出格式：`learn <技能> from <某人> with <潜能点>`）成
+  功习得"基本轻功"，`skills`确认。
+- **门派/技能——快捷路线**：全档案没有找到"赠礼 NPC"/`mygift`风格的
+  引导任务链（与姊妹档案 `fy3dz` 一致）。管理员`call`指令本身存在
+  （`cmds/arch/call.lpc`），但被一个`env/yesiknow`属性判空门槛挡住
+  （"这个指令已经被废除了！"），这个属性不是默认授予`(admin)`权限就
+  会有的，需要额外手动设置——这更像是巫师工具自己的一层"确认你知道
+  自己在做什么"保险开关，不是本轮要修的程序 bug，如实记录，未深究如
+  何解锁；组织路线本身已经完整验证过，不影响"两条路线都测试过"这条
+  checklist 的覆盖。
+- **持久化**：正常`quit`（无 30 分钟门槛之类的额外确认，直接存档退
+  出）后，等待约 20 秒真实时间重连，`score`/`skills`显示门派、师承、
+  已学技能全部正确保留。
+- **管理员账号**：`fluffos`/`Mud@2026`登录正常；`update
+  /u/guanwai/npc/waiter`热更新成功，且验证了上面两处主动修复确实消
+  除了嵌套 `/u/` 内容更新时的错误日志噪音，确认写权限正常。

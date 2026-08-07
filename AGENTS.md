@@ -5266,6 +5266,42 @@ removed from the actual cause. Fix: correct the one-character spelling
 to match the real skill file; verify by re-visiting the NPC's room after
 a driver restart and confirming it now appears in the room listing.
 
+### 7.92 `user_cwd()`/`user_path()` assume a letter-sharded wizard-directory layout an archive's `/u/` tree never had
+
+First found on `fy3dz`'s §10.7 deep functional test, confirmed as a
+SECOND independent instance on sibling `fy3xd` (same 风云3/Fengyun III
+engine family, §11) — worth checking on any remaining sibling
+(`zzfy`) too. `adm/simul_efun/path.lpc`:
+
+```lpc
+string user_cwd(string name) {
+  return ("/u/" + name[0..0] + "/" + name);
+}
+```
+
+assumes the ES II-family letter-sharding convention (`/u/g/guanwai/`)
+seen elsewhere in this project, but these archives' actual `/u/` trees
+are flat (`/u/guanwai/`, `/u/palace/`, ...) — confirmed present in the
+RAW pre-conversion archive too on `fy3dz`, so it's a pre-existing
+mismatch in the original code, not something the conversion pipeline
+introduced. Only 2-3 call sites lib-wide (bare `cd` with no argument,
+`master.lpc`'s `log_error()`, `path.lpc` itself) — all wizard/admin
+paths, so a non-wizard player never notices. Symptoms: bare `cd`
+resolves to a directory that never exists for ANY wizard ("没有这个目
+录"); chained with a §7.26-shaped `file_owner()` bug in the same file
+tree, `log_error()` fails one level further down too
+(`/u/g/guanwai/log` instead of `/u/guanwai/log`), so error-logging from
+lazy compiles of nested `/u/<wizard>/npc|obj/` content silently goes to
+the wrong path. Fix: drop the letter-shard segment —
+`return ("/u/" + name);`. Detection: `ls u/` on any newly-picked lib —
+if it's flat (no single-letter subdirectories) but `user_cwd()`/
+`user_path()` insert one, this bug is present regardless of whether it's
+been independently confirmed on that specific archive yet.
+
+---
+
+## 8. Login and registration flow bugs
+
 Registration is where restoration succeeds or fails: it exercises the
 connection object, the security ACL, lazy compiles, the chinese-
 detection stack, and the player-body class in one chain. The classes
