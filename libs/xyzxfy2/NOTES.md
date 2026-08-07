@@ -299,3 +299,114 @@ re-login `(admin)` + wizard commands OK; `log/debug.log` 0 runtime errors.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 100 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试 / Deep functional test (2026-08-07)
+
+按 AGENTS.md §10.7 流程做的第一轮完整交互式游玩测试。这份档案自己
+的 README 已经确认与 `xyzxfk`（疯狂江湖，本 session 上一轮刚做过
+§10.7 深挖的手足档案）共享部分底层"夕阳再现"引擎文件（`d/city/
+sj.lpc` 逐字节相同），但登录/安全/世界内容各自独立开发——开机前直
+接把上一轮在 `xyzxfk` 上新发现的两个严重 bug 拿来对照本档案的实际
+源码，两个全部命中（细节见下）。WASM 本轮仍被跳过验证：emsdk 安装
+器把工具链下载硬编码到 `storage.googleapis.com`，本 session 的出站
+代理策略拒绝该域名（`curl -sS $HTTPS_PROXY/__agentproxy/status` 确
+认为 403），未重试；这份档案自己 NOTES.md 里之前的 WASM 相关记录
+（`uptime()<30` 启动门禁、`query_ip_number()` 驱动限制）仍然有效，
+本轮只是没有重新验证这次新修的 bug 在 WASM 下同样生效。
+
+**开机前主动核对手足档案 `xyzxfk` 新发现的 bug：**
+
+1. **AGENTS.md §7.11（已确认第 N 例，含注册路径 + 死亡路径两处）**——
+   `adm/simul_efun/file.lpc` 的 `log_file()` 和 `xyzxfk` 修复前逐字
+   节相同的形状：裸 `write_file(LOG_DIR + file, text)`，同一文件里
+   现成的 `assure_file()` 辅助函数从未被调用。`adm/daemons/
+   logind.lpc` 的 `get_gender()`（注册流程最后一步，紧接着调用
+   `enter_world()`）里同样有 `log_file("login/newid.log", ...)`，而
+   `work/log/login/` 目录在这份 `work/` 树里同样不存在——这意味着
+   **每一个新角色的注册流程本身就是坏的**，和 `xyzxfk` 一模一样的
+   崩溃形状。修复：在 `log_file()` 内部加一行 `assure_file(LOG_DIR
+   + file)`（`assure_file` 原本定义在 `log_file` 后面，这个编译器
+   要求同文件内被调用的函数需要先声明/定义，顺手把两个函数的顺序
+   对调了，和 `xyzxfk`/`jqxz2015` 遇到的完全相同的编译器限制）。
+   `adm/daemons/combatd.lpc` 里也有一处独立的、不经过 `log_file()`
+   的裸 `write_file("/log/nosave/KILL_PLAYER", ...)`——这一处比
+   `xyzxfk` 的版本条件更窄（包在 `if (userp(killer))` 里，只有"玩家
+   杀死玩家"才会触发，不像 `xyzxfk` 那样任何死亡都会触发），本档案
+   README 明确写了"本MUD不禁止玩家之间的PK"，这是真实会被触碰到的
+   路径，一并加了 `assure_file(...)`。顺手排查了同一目录类别下的其
+   余 `write_file("/log/...", ...)` 直接调用点，全部补上
+   `assure_file(...)`：`cmds/{arch,adm}/shutdown.lpc`、`cmds/arch/
+   reboot.lpc`（各一处 `/log/nosave/LASTCRASH`，`arch`/`adm` 两份
+   `shutdown.lpc`/`restoredata.lpc` 逐字节相同，两份都改了）、
+   `cmds/{arch,adm}/restoredata.lpc`（`/log/nosave/RESTORE_PLAYER`）、
+   `cmds/usr/helpbbs.lpc`（`/log/doc/register/<id>`）。
+2. **AGENTS.md §8.9（已确认第 N 例）**——`adm/daemons/logind.lpc`
+   `enter_world()` 食物/饮水初始化判断 `if (ob->query("age") == 14)`
+   用的是登录桩对象 `ob` 而不是玩家本体 `user`，和 `xyzxfk`/三个
+   "夕阳再现" 手足档案（`jhfy`/`wmkj`/`bixiecanyang`）确认过的形状
+   完全一致。改成 `user->query("age") == 14`。
+3. **AGENTS.md §7.94（新增，`xyzxfk` 那一轮命中）——本档案检查后确
+   认不适用**：`cmds/usr/inventory.lpc`（以及一份 `inventory2.lpc`）
+   都以正常文件名存在，`i` 指令实测正常工作，没有 `xyzxfk` 那种"只
+   剩非标准扩展名备份文件"的缺失情况。
+4. **AGENTS.md §7.34（printf 调试残留）——本档案自己此前已经修
+   过**：读代码确认 `logind.lpc` 的 `get_resp()`/`get_name()` 没有
+   `printf("%O\n", ob)` 残留，本轮实测注册流程也没有泄漏对象引用，
+   未重复修改。
+
+**测试路径**：读 `doc/help/newbie` 确认 `kill`/`hit`/`fight` 均可用
+于练级后，在原生驱动下一次连续会话里：注册（真实中文名 沈知远，id
+`xyzfydeep`，随机天赋，需要设置"管理密码"+"普通密码"两组独立密
+码）→ 完整 MOTD/权限横幅显示、落地"铁枪庙"（bug 1 注册路径的修复
+验证：修复前会卡死在裸提示符，`look`/`score`/`help` 全部返回默认
+的"什么？"）→ `score`/`i` 确认食物/饮水满格（§8.9 修复验证）、`i`
+正常工作 → `kill wuya` 攻击庙前的乌鸦，多回合拳脚攻防正常，组织性
+学会"基本拳脚"，最终被乌鸦击杀，死亡讯息只出现一次、`debug.log`
+全程零新增错误（NPC 击杀不经过 `KILL_PLAYER` 那一条 `userp(killer)`
+门槛，但确认了死亡/复活整条流程本身干净，`combatd.lpc` 里唯一那处
+`write_file` 已通过代码核对方式确认修复到位——见下方"未验证"部分）
+→ 死亡 → 鬼门关 → 白无常判词全套自动走完 → 送回"武庙" → 门派加入：
+拜访"忆香亭"红花会总舵主陈家洛，`apprentice` 正确按代码里的正气门
+槛（`shen >= 50000`）拒绝（合理设计，和 `xyzxfk` 完全一致，未强行
+绕过）→ 改用管理员 `setskill xyzfydeep sword 50` 验证捷径路径（此
+引擎家族同样没有专门的 `setskill`/`setparty` 类快捷指令外的门派赋
+予手段，`setskill.lpc` 存在 `cmds/{adm,arch}` 两份逐字节相同的拷
+贝，均正确操作 `ob` 而非 `me`，未发现 sjtx2 那类 `me`/`ob` 错位
+bug）→ `skills` 确认组织性的 `dodge`/`unarmed` 和捷径赋予的
+`sword`（50 级）同时存在 → `quit` → `debug.log` 检查（零新增错误）
+→ 断线重连：这份档案的 `logind.lpc` 有一个 120 秒的"刚退出游戏，为
+了减轻系统负担请过一会再连入"防洪门禁（`time() - ob->query
+("last_on") < 120`，独立于 §1.3e 已归档的 kickout 30 分钟惩罚门
+禁，同属合理的游戏设计，未做任何改动），第一次重连在门禁窗口内被
+正确拒绝，等待真实的 120+ 秒后重连成功，`skills`/`score` 确认门
+派归属（未加入，符合预期）、组织性+捷径两条技能、死亡次数全部正确
+持久化。
+
+**测试角色**：id `xyzfydeep`，中文名 沈知远，普通密码
+`Xfy2026Deep`，管理密码 `Adm2026xfy`，普通百姓（未入门派，
+`apprentice` 门槛未达到），技能 dodge/unarmed（组织性）+ sword（捷
+径路径，50 级），死亡 1 次，位于武庙（REVIVE_ROOM）。存档：
+`work/data/{login,user}/x/xyzfydeep.o`。管理员账号 `fluffos` 存档
+产生了正常的 food/water/mud_age/startroom 增量（无损坏，
+`setskill.lpc` 全程正确操作 `ob` 而非 `me`），按这份档案自己既有
+NOTES 里"必须提交，不受 gitignore"的约定一并提交；
+`adm/daemons/maxonline`（本轮测试期间因驱动重启被意外改写为较低的
+同时在线人数峰值）已用 `git restore` 还原到测试前的真实历史峰值。
+
+**验证通过**：真实中文名注册（含两组独立密码，修复后）；
+`look`/`score`/`i` 多次状态检查；食物/饮水初始化（§8.9）；`kill`
+战斗与死亡→复活完整循环；组织性技能学习；管理员捷径路径
+`setskill`；门派加入的正气门槛正确生效（未绕过）；`quit` 后
+debug.log 检查；120 秒防洪门禁内重连正确拒绝、门禁过后重连正确成
+功，全部状态正确持久化。
+
+**明确未验证**（记录而非静默跳过）：`combatd.lpc` 里 `userp(killer)`
+门槛保护的 `KILL_PLAYER` 写入路径（真实玩家对战玩家的击杀）未通过
+实机 PK 复现——构造一次真正的玩家对玩家击杀需要两个同时在线的真实
+角色，超出本轮时间预算；这一处的修复只通过代码核对（和已验证过的
+`log_file()` 通用修复、以及本轮已验证的 NPC 击杀死亡流程都用的是
+同一个 `assure_file()` 防护模式）确认，不是独立实机复现的。`cmds/
+{arch,adm}/{shutdown,restoredata}.lpc`/`cmds/usr/helpbbs.lpc` 四组
+新加的 `assure_file()` 防护同理（管理员专用或低频功能，未逐一实机
+复现）。商店购买（本轮未探索到商店所在区域）。WASM 下的重新验证
+（详见上方说明，proxy 阻断）。
