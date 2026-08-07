@@ -5345,6 +5345,47 @@ not specific to sect data; worth grepping any newly-picked lib's
 `cmds/{wiz,arch,adm}/set*.lpc` for a bare `me->set(...)` sitting among
 otherwise-consistent `ob->set(...)` calls in the same function.
 
+### 7.94 A live command file lost its plain `.lpc` name somewhere along the way, leaving only differently-named draft/backup copies — the command silently doesn't exist
+
+Found on `xyzxfk`'s §10.7 deep functional test: `cmds/usr/` had
+`inventory.C` (uppercase extension), `inventory.c.bak`, and a
+Chinese-prefixed `复件 inventory.lpc` ("copy of inventory.lpc") — three
+different historical implementations of the same command, none of them
+named plain `inventory.lpc`. The alias table (`aliasd.lpc`) maps `"i":
+"inventory"` as usual, so every `i`/`inventory` invocation resolved to
+a nonexistent command file and hit the driver's generic "什么？" (default
+fail message) — indistinguishable from a genuine typo unless you
+already suspect the command is missing. Confirmed which content was the
+intended live file (not a guess among the three candidates) by finding
+a byte-for-byte match, module the project's own `.lpc` reformatting, in
+`u/isle/ToMud/inventory.lpc` — a working per-wizard sandbox copy
+elsewhere in the SAME archive, using the same `CLEAN1`/`ADD1` macros
+from `include/tomud.h` that only `inventory.C` (not the `.bak` or
+`复件` variant) also referenced. This is what distinguishes the fix
+from a content/design judgment call: without an independent matching
+copy proving which implementation was "the real one," picking among
+three materially different draft implementations would itself be a
+content decision outside this project's scope — the fix here is
+narrowly "restore the missing filename with content already proven
+correct elsewhere in this exact archive," not "choose which feature
+set the inventory command should have."
+
+Fix: copy the confirmed-correct content to a properly-named
+`inventory.lpc` in the same directory; leave the `.C`/`.c.bak`/`复件`
+files untouched (harmless dead backups, not compiled or dispatched).
+This is a distinct failure mode from AGENTS.md's `.c`→`.lpc` rename
+and GBK-encoding conversion-gap classes (§2, §12) — those are about the
+*conversion pipeline* missing a file; this is about the *original
+archive* itself already having lost the canonical filename before the
+archive was even captured, evidenced by the archive shipping multiple
+non-canonically-named candidates side by side. Detection heuristic for
+any newly-picked lib: if a command works via `help <name>` (help text
+compiles standalone) but the live command itself returns the driver's
+default fail message, `find cmds -iname "<name>*"` and check for
+sibling files with non-`.lpc` extensions, `.bak`/`.old` suffixes, or
+localized "copy of" prefixes before concluding the command was
+intentionally removed.
+
 ---
 
 ## 8. Login and registration flow bugs
