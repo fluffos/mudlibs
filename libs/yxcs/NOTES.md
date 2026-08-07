@@ -534,3 +534,284 @@ nothing to port here.)
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 115 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试 / Deep functional test (AGENTS.md §10.7)
+
+Read `doc/help/newbie` in full first (5-part in-game newbie guide, credited
+"By 黑客(lonely)"): covers stat-roll ranges, personality/character choice
+(光明磊落/狡黠多变/心狠手辣/阴险奸诈, each with a mechanical effect),
+sect recommendations by weapon type, and a Q&A section explicitly naming
+`gc e n` + `learn zhu literate` as the free literacy-training route (`gc`
+= 扬州中央广场).
+
+### NEW bug found and fixed: every single connection crashed inside `logon()`, before the id prompt, on a genuinely fresh checkout
+
+First boot attempt (driver launched clean from `libs/yxcs`, port up in
+~1s) produced, for every connection attempt: `new_conn_handler: logon()
+on object clone/user/login#N has failed, the user is disconnected` in
+the driver's own `debug.log` — a total, silent connection block with
+zero player-visible banner text (matches the exact symptom class in
+AGENTS.md §7.9/§7.11: the driver's own crash-summary line carries no
+LPC stack trace).
+
+Root cause, found via the **second**, LPC-level `debug.log`
+(`work/log/debug.log`, written by `error_handler()`'s own
+`write_file(LOG_DIR "debug.log", ...)` — see the `log_error()`
+discussion above; check BOTH log locations per AGENTS.md's standing
+instruction, this bug was invisible in the first one):
+
+```
+执行时段错误：*Wrong permissions for opening file /log/file/cat_file for append.
+"No such file or directory"
+呼叫来自：/clone/user/login.lpc 的 logon() 第 7 行
+呼叫来自：/adm/daemons/logind.lpc 的 logon() 第 115 行
+呼叫来自：/adm/obj/simul_efun.lpc 的 cat() 第 291 行
+呼叫来自：/adm/obj/simul_efun.lpc 的 log_file() 第 11 行
+```
+
+`adm/daemons/logind.lpc`'s `logon()` — the very first thing every new
+connection's `login.lpc` calls — does `cat(WELCOME)` to print the login
+banner. `adm/simul_efun/file.lpc`'s `cat()` unconditionally calls
+`log_file("file/cat_file", ...)` as its own audit-log side effect
+*before* actually printing anything, and `log_file()` itself was a bare
+`write_file(LOG_DIR + file, text)` with **no directory guard at all** —
+a fresh checkout never ships `work/log/file/`, so the write throws, the
+throw is never caught anywhere in the `logon()` call chain, and the
+entire apply aborts before the banner (or the id prompt after it) ever
+gets sent to the connecting socket. This is a new confirmed instance of
+AGENTS.md §7.11 ("missing runtime directories and the silent
+`write_file` abort") — same shape as the `xajhxo` precedent
+(`log_login()` → uncaught `log_file()` write into a never-shipped
+directory, killing registration one step earlier than the visible
+symptom), except here it fires on **every** connection, not just at one
+step of character creation, because `cat(WELCOME)` sits at the very top
+of `logon()` itself.
+
+**Fix**: patched `log_file()` itself (`adm/simul_efun/file.lpc`), not
+just the one call site, since it's a shared simul_efun used by dozens of
+call sites across the whole tree — added the missing `assure_file()`
+guard (this file already has its own `assure_file()` helper, same
+pattern as the `xajhxo` fix; needed a one-line forward declaration since
+`assure_file()` is defined later in the same file and this compiler
+doesn't resolve same-file forward references without one):
+
+```c
+void assure_file(string file);
+void log_file(string file, string text) {
+  assure_file(LOG_DIR + file);
+  write_file(LOG_DIR + file, text);
+}
+```
+
+Verified: killed the driver, restarted clean, reconnected —
+`work/log/file/cat_file` now gets created on first write, banner prints,
+id prompt reached, zero `logon() ... has failed` lines in either
+`debug.log` for the rest of the session.
+
+**Also required** (pure operational setup, not a code bug, but a
+fresh-checkout prerequisite worth recording): the archive shipped with
+neither `libs/yxcs/log/` (the driver's own real `debug.log`, §5.2 —
+CWD-relative, not mudlib-relative) nor `work/log/` (the mudlib-virtual
+`LOG_DIR` target used by the LPC code above) on disk at all. `mkdir -p
+log work/log/nosave work/log/wiz` before boot; without it, `debug.log`
+itself never gets written (silent, not even the crash-summary line makes
+it to disk) and `log_error()`'s own write additionally throws during
+preload compile-warning logging (self-healing since it's already inside
+`preload()`'s outer `catch()`, but pollutes preload output).
+
+**Defensive fix applied alongside** (not confirmed as a live crash this
+pass, but matches the exact AGENTS.md §7.9 shape and the underlying data
+files are explicitly gitignored — `libs/*/work/adm/daemons/iduser` /
+`.../users`, per this project's own `.gitignore` comment "user-id
+counters... not meaningful shipped content"): `logind.lpc`'s `logon()`
+did `i_user = atoi(read_file(__DIR__"users", 1))` (and the same shape
+for `iduser` and `maxonline`) with no `stringp()` guard — on a fresh
+checkout where those counter files don't exist yet, `read_file()`
+returns int `0`, and `atoi()` on a non-string argument is exactly the
+`§7.9` "fresh-checkout crash bomb" pattern. Guarded all three with
+`stringp(...) ? atoi(...) : 0`. (`maxonline` already existed on this
+checkout so this one wasn't empirically confirmed as live here, but
+`users`/`iduser` were both genuinely absent and this guard is cheap
+insurance regardless of which exact site would have thrown first.)
+
+### Registration — real Chinese name, full flow
+
+Continuous session via a small custom Python telnet-IAC-stripping client
+in tmux (this environment has no `telnet` or `nc`-with-negotiation
+binary available, so `scripts/tmux_mud.sh` — which shells out to
+`telnet` — doesn't work here; wrote a ~90-line drop-in replacement using
+the same IAC-strip logic as `scripts/mudclient.py`, kept in the
+scratchpad, not committed).
+
+`qinfengb` (rejected once first as `qftest2` — digits not allowed, "你的
+英文名字只能用英文字母") → `y` → **秦风波** (real Chinese name, accepted
+immediately, no separate confirmation prompt — matches the `logind.lpc`
+source read in the earlier pass) → `test12345` ×2 → gift-attribute `0`
+(random) → `y` → `qinfengb@test.com` → `m` → landed in `世外桃源`
+(`/d/register/entry`), correct room description, water笙/狄云 present,
+news system fired. `look`/`score`/`i` all correct at this state.
+
+Then the personality-choice sub-flow (not covered by the earlier
+registration-only pass): `east` → 陆天抒 (光明磊落 branch) → `out` →
+「阎罗殿」(reincarnation hall, 地藏王) → `born 扬州人氏` → landed in
+`/d/city/kedian` ("有间客栈"). `score` afterward correctly shows
+性格:光明磊落, correct stats, food/water bars full (§8.9 pattern:
+confirmed NOT present here, bars start full).
+
+### Combat — safe sparring via the training-dummy stat-mirror pattern
+
+`cmds/std/fight.lpc`'s actual logic read first (per AGENTS.md's standing
+warning against assuming a "safe" NPC without checking the real
+`accept_fight` gate): a `can_speak`-having NPC's `accept_fight(me)` must
+return 1 for `fight` to proceed. `d/shaolin/npc/mu-ren.lpc` (and an
+apparently-orphaned identical copy at `d/city/npc/mu-ren.lpc` — see
+"observations" below) matches the exact §10.7-documented dummy shape:
+`set("no_die", 1)`, and `accept_fight()` deletes its own skills/stats
+and copies the attacker's own skill map + str/int/con/dex/qi/jing/neili
+onto itself before the fight starts (a genuine mirror match, not a
+scripted-weak opponent). Admin-cloned one into the player's current room
+(`clone /d/shaolin/npc/mu-ren`) since none of this lib's dummy instances
+happen to be placed along the 世外桃源→扬州 walking path used above.
+`fight mu ren` in a `no_fight`-clear outdoor room ran a full multi-round
+exchange (both sides landing and missing hits, HP-state narration
+escalating normally) and resolved with the player conceding
+("这场比试算我输了，佩服，佩服！") — no crash, no stuck state,
+`score`/`look` immediately afterward both correct.
+
+### Skill acquisition — organic path AND admin shortcut, both verified
+
+**Organic**: per the newbie doc's own "gc e n" hint and the `board`
+item_desc text in `d/city/shuyuan.lpc` ("学文化的格式是 learn zhu
+literate!"), gave money to 朱丹臣 (`d/city/npc/zhu.lpc`, aliased `zhu`)
+via `give 10 silver to zhu` (money supplied by admin `clone
+/clone/money/silver 20` + `give`, since a level-14 newbie starts with no
+cash) → NPC's own `accept_object()` credited a `mark/朱` balance → `learn
+zhu literate` → "你听了朱丹臣的指导，似乎有些心得。你的「读书写字」
+进步了！" — real accept-logic path, no shortcut, works end to end.
+
+**Admin shortcut**: `cmds/wiz/copyskill.lpc` (`copyskill <target>`) —
+copies a target's entire skill map + skill_prepare + combat stats onto
+the caller. Ran `copyskill qinfengb` from the admin account: "你口中念
+念有词，只见一道红光笼罩了你和秦风波。" — no dedicated single-skill
+grant command exists in `cmds/wiz/` (checked the whole directory; the
+closest is this bulk stat/skill copy), documented honestly rather than
+assumed.
+
+### `quit`, debug.log, reconnect after a real gap
+
+No new-account quit-deletes-account grace period found in this lineage
+(unlike the nitan family): `logind.lpc`'s registration chain only calls
+`ob->save()`/`user->save()` once, inside `enter_world()`, at the very
+end of the full flow (after gender selection) — by the time a player can
+even type `quit`, the account is already durably saved, so there is no
+partial-registration window to worry about. `cmds/usr/quit.lpc` read in
+full: no lockout for `wizardp()`, and for non-wizards a `pker_starttime`
+window is punitive-PK-cooldown design, not a fresh-account grace period.
+
+`quit` from 「东大街」 (outdoors, mid-conversation with 朱丹臣): dropped
+one worthless `Cloth` item as expected content-consistency (§7-adjacent
+but plainly intentional — "因为这样东西并不值钱，所以人们并不会注意到
+它的存在" is a normal drop-message, not an error), printed "欢迎下次再
+来！", connection closed cleanly. Both `debug.log` (driver-level) and
+`work/log/debug.log` (LPC-level) checked immediately after — zero new
+error/crash/access-denied lines beyond the already-documented,
+pre-existing `d/city2/npc/wizer.lpc:22` `exert_function()` type-mismatch
+content bug (unrelated to this session, confirmed via grep this bug's
+own earlier pre-existing note in this same file).
+
+Used the post-quit interval productively (reverted incidental resave
+noise on `data/{login,user}/f/fluffos.o`, spot-checked earlier
+prior-pass fixes — the `nosave nosave`/`protected protected` macro
+rewrite, `F_NOCLONE`→`F_UNIQUE`, `SSERVER`→`F_SSERVER` — all still
+intact, grepped 6 sibling same-lineage libs for the same
+`log_file()`-missing-`assure_file()` shape found above (see "cross-lib
+observation" below), and drafted this NOTES.md section) — then
+registered a **second** throwaway character, `persisttest`/李持久
+(female, so the §8.9-adjacent gender-conditional `init_new_player()`
+money/combat_exp bonus path got exercised too), specifically to redo
+the persistence check cleanly (the first attempt, on `qinfengb`, was
+invalidated by deleting its own `.o` save files as part of the
+resave-noise cleanup *before* actually reconnecting to confirm — logged
+that mistake so a future pass doesn't repeat it: do the persistence
+reconnect BEFORE any save-file cleanup, not after).
+
+`persisttest` `quit`ed from 世外桃源, then reconnected after a genuine
+~1-2 minute additional wall-clock gap (on top of the several minutes
+already spent on the interval work above) via a **fresh telnet
+session** (real disconnect+reconnect, not a resumed connection):
+banner printed clean, `persisttest` + password → **recognized as an
+existing account** (no "creates a new person" prompt this time,
+confirming the id correctly round-tripped through save/reload) →
+"☆ 您现在是第 二 次光临浴血重生" / "☆ 您上次连线的地址是 127.0.0.1" /
+"☆ 您上次退出本游戏的时间是：［ 2026年8月7日21点36分 ］" (matches the
+exact prior quit time) → `score` showed the exact same character:
+中文姓名 李持久, 性别 女性, stats 膂力25/悟性22/根骨18/身法15 (the exact
+roll accepted at registration), 钱庄存款 二十两白银 and 实战经验 50
+(both from the female-branch `init_new_player()` bonus, confirming
+`user->save()`/reload round-trips that data correctly too). Full state
+persistence confirmed. `quit`ed again cleanly, `debug.log`/`work/log/
+debug.log` both still clean (same pre-existing `wizer.lpc` content bug
+only, no new errors).
+
+### 发现但判定为既有设计、未改动的现象
+
+- **`d/city/shuyuan.lpc`'s `valid_leave()` deliberately blocks
+  non-wizard players from going `north` into `shuyuan2`** ("那是朱熹的
+  私人寝室！！" — explicit `notify_fail`, not a broken/accidental gate).
+  The room's own flavor `long` description ("那就是当今大儒朱先生了")
+  and the newbie doc's "朱熹处给钱" phrasing both point at 朱熹
+  (`zhuxi.lpc`, the NPC actually living in the blocked `shuyuan2`), but
+  the REAL, reachable literacy teacher is 朱丹臣 (`zhu.lpc`, present in
+  the accessible `shuyuan` room, and the room's own in-game `board` item
+  spells out the correct `learn zhu literate` command). This is
+  intentional content design (a padlocked "boss's private room" flavor
+  choice) with slightly misleading flavor text/doc-vs-actual-NPC
+  mismatch — a content/documentation nit, not a programming bug; left
+  untouched.
+- **`d/city/npc/mu-ren.lpc`** (a byte-for-byte near-duplicate of the
+  live `d/shaolin/npc/mu-ren.lpc` training dummy, differing only in
+  `no_get`/combat_exp increment) appears to be genuinely unreferenced —
+  grepped the whole `work/` tree for both `city/npc/mu-ren` and a
+  relative `__DIR__ "npc/mu-ren"` from any `d/city/*.lpc` room and found
+  no call site. Orphaned dead content (a leftover duplicate from map
+  development), not wired into any room's `objects` mapping; harmless,
+  left as-is.
+
+### Cross-lib observation (not fixed this pass — out of scope, `yxcs`-only pass)
+
+The `log_file()`-missing-`assure_file()` shape fixed above in
+`adm/simul_efun/file.lpc` is present, unfixed, in every other checked
+sibling of this lib's ES/XKX lineage (§11): `xkx2001`, `rzrmud`,
+`bmxkx2001`, `kxkj`, `yueyingqiyuan`, `wuhanzhan` all ship the identical
+unguarded `void log_file(string file, string text) {
+write_file(LOG_DIR + file, text); }`. Whether any of them actually hits
+the crash live depends on whether their own `logon()`/registration chain
+routes through an equivalent `cat()`-audit-log or other `log_file()`
+call before the id prompt (not checked here — that's each lib's own
+§10.7 pass to make). Flagging for whichever future dive picks one of
+these up: check `work/log/debug.log` (not just the driver's own
+`debug.log`) for a `Wrong permissions ... for append` trace through
+`log_file()` before assuming registration is clean.
+
+### §9 formatter
+
+Ran `format-corpus.mjs` on both edited files (`adm/daemons/logind.lpc`,
+`adm/simul_efun/file.lpc`) — both reformatted clean, 0 errors. Checked
+all 3 documented blind spots: `grep -rnE ':\s:\s*[a-zA-Z_]+\('` — zero
+hits in either file; no `case`-label lines touched by either diff (no
+manual diff-review needed); `grep -rl '\\ n'` — zero hits in either
+file. Re-booted and re-tested the full flow above against the
+reformatted files (this NOTES entry's own registration/combat/skill/quit
+walkthrough was run AFTER formatting, not before).
+
+### WASM 未验证说明
+
+Per this project's build state this pass: WASM build permanently
+blocked (`emsdk` hardcodes `storage.googleapis.com`, denied by the
+proxy — confirmed via `curl -sS $HTTPS_PROXY/__agentproxy/status`). The
+fixes above (both the new `log_file()`/`assure_file()` fix and the
+`logind.lpc` counter-file guard) are pure LPC-level runtime-error
+guards with no WASM-specific code path — expected to apply identically
+under WASM once a build becomes available, but genuinely unverified
+under WASM this pass; the earlier WASM-enablement pass's own findings
+(loopback ban-bypass, admin seeding) are untouched and still apply.
