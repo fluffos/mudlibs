@@ -1574,6 +1574,34 @@ Two independent traps in the same apply:
   post-login body copy has — `write(0)` from routine startup code then
   crashes every fresh connection at the first banner line (`haiyang2`'s
   `clone/user/login.lpc`). Audit the pre-auth object's copy separately.
+- **Sibling-lineage instance, same custom-log-not-debug.log shape, worse
+  severity: `xajhxo`.** Same TMI-2/ES2/Falcon "XO" family as `xajh2`
+  above (§11). `logind.lpc`'s `get_gender()` — the LAST step of
+  character creation, called right after the gender prompt — calls
+  `log_login()`, which calls the simul_efun `log_file()`
+  (`write_file(LOG_DIR + file, text)`, no directory guard at all) to
+  append to `/log/static/usage`, a directory this archive never shipped.
+  Because this fires before `init_new_player()`/`enter_world()` in the
+  same function, EVERY new registration died right there — silently
+  routed to this lib's own `error_handler()` (`mudlib error handler : 1`
+  in `config.fluffos`), which writes to `log/runtime`, not
+  `debug.log`, exactly like `xajh2`. The player saw a bare `>` prompt
+  forever, no error, no world entry — misdiagnosed in an earlier pass on
+  this same archive as a WASM-only timing artifact around this exact
+  `get_email()`→`get_gender()` handoff; it reproduces identically on the
+  native driver and has nothing to do with WASM. Fix used this lib's own
+  pre-existing `assure_file(file)` helper (already correctly called by
+  `log_d.lpc` and others in the same tree) instead of a blanket `mkdir
+  -p`: `assure_file(LOG_DIR + file); write_file(LOG_DIR + file, text);`
+  — needed a one-line forward declaration too, since `assure_file()` is
+  defined textually after `log_file()` in the same file and this
+  compiler doesn't resolve forward references without one (same
+  convention `logind.lpc` itself already uses for its own helpers).
+  Lesson: when §7.11 hits a registration flow specifically, check
+  EVERY `log_file()`/`write_file()` call between the last input prompt
+  and the actual `enter_world()`/move-into-game call, not just the
+  first one found — this one was buried inside a *logging* side-call,
+  not the visible save/world-entry code itself.
 
 ### 7.12 Shared message/wrapper argument bugs
 
@@ -5202,9 +5230,41 @@ several hits, with no single suspiciously-expensive statement in the
 traced call chain, points at the config ceiling being undersized for
 this lib's content rather than a discrete logic error to chase down.
 
----
+### 7.91 A one-character skill-name typo in a sect master NPC's `create()` silently deletes that entire sect's join path from the archive's first boot onward
 
-## 8. Login and registration flow bugs
+Found on `xajhxo`'s §10.7 deep functional test. `d/menpai/shaolin/npc/
+xuanci.lpc` — 玄慈, the Shaolin abbot and the sect's actual
+`create_family()` holder — has:
+
+```lpc
+set_wugong("shalin-xinfa", 200);   // should be "shaolin-xinfa"
+create_family("少林派", 36, "掌门方丈");
+```
+
+`shaolin-xinfa.lpc` exists in `system/skill/shaolin/`; `shalin-xinfa`
+(missing the "o") does not — a plain authorship typo, not a renamed or
+removed skill (confirmed: no other file in the archive references
+either spelling). `set_wugong()` on a nonexistent skill throws
+(`F_SKILL: No such skill (...)`), and this line sits textually BEFORE
+`create_family()` in the same `create()` — so the throw aborts the
+function before the abbot is ever registered as his sect's master. Two
+compounding effects make this far worse than a typical single-NPC
+compile warning: (1) the room-population code that instantiates NPCs on
+room load only logs the failure (`创建房间中的物体失败, 详见
+room_log`) — the abbot's OWN room shows a normal description with no
+NPC in it, no crash the player ever sees; (2) because `create_family()`
+never runs, EVERY other Shaolin NPC that gates on "does this sect have a
+registered master/family" (here, `huijue.lpc`'s recruiter dialogue)
+degrades to a permanently-unsatisfiable prerequisite — the entire sect's
+join path is dead from the archive's first boot, not just this one NPC.
+Detection: `grep -c "No such skill" log/debug.log` after visiting every
+sect's own master/leader room specifically (not just after registration
+or ordinary map traversal) — a master NPC failing to spawn produces no
+player-visible symptom until someone tries to interact with a
+sect-gated feature and gets an unexplained rejection several steps
+removed from the actual cause. Fix: correct the one-character spelling
+to match the real skill file; verify by re-visiting the NPC's room after
+a driver restart and confirming it now appears in the room listing.
 
 Registration is where restoration succeeds or fails: it exercises the
 connection object, the security ACL, lazy compiles, the chinese-

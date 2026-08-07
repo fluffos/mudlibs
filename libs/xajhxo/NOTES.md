@@ -527,3 +527,172 @@ gitignored; `data/user/f/` and `data/login/f/` are NEW directories):
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 13 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试 / Deep functional test (2026-08-07)
+
+第一次真正的完整游玩测试。测试角色最终定格在 `xajhthr`（中文名 秦岭三，
+女），另有一个更早的测试角色 `xajhtwo`（秦岭，男，无量剑派东宗第六代弟
+子）在验证"初次30分钟内quit会清空存档"这个既定设计时被系统正确删除，
+细节见下。本轮 WASM 未重新验证：emsdk 工具链下载硬编码指向
+`storage.googleapis.com`，本次会话的出口代理策略性拒绝该域名（403，已用
+`curl $HTTPS_PROXY/__agentproxy/status` 确认是策略拒绝而非临时故障），
+本地无法构建 WASM 驱动。之前 WASM 测试记录里提到的"性别选择之后角色创
+建有时卡住、有时重复循环"的问题，这一轮在原生驱动上找到了真正的根因
+（见下方"发现并修复"第一条）——**这不是 WASM 专属的时序抖动，是一个
+一直存在、原生驱动同样会触发的真实崩溃**，只是这份档案自己的错误处理
+机制把崩溃现场写进了一个此前没人查看过的独立日志文件，而不是
+`debug.log`，导致此前的排查方向被误导。
+
+### 发现并修复：每一个新玩家在创建人物流程的最后一步（选择性别之后）都会静默崩溃，从未真正进入游戏世界
+
+- **症状**：完成英文名/确认/中文名/密码×2/邮箱/性别选择后，玩家只会看
+  到一个光秃秃的 `>` 提示符，`目前权限：`等欢迎语从未出现，后续任何指
+  令（`look`等）一律得到"什么? 你想干嘛?"——就像玩家账号从未真正连接
+  到任何游戏对象一样。`log/debug.log` 里完全没有任何相关记录。
+- **根因排查**：这份档案的 `secure/obj/master.lpc` 把
+  `mudlib error handler`设为启用，所有未捕获的运行时错误都被路由到自
+  定义的 `error_handler()`，而这个处理函数把崩溃现场写进
+  `LOG_DIR + "/runtime"`（而不是驱动默认的 `debug.log`）——查看这个
+  之前没人想到要看的文件，找到了真正的崩溃：
+  ```
+  *Wrong permissions for opening file /log/static/usage for append.
+  "No such file or directory"
+  'get_gender' at /system/daemon/logind at line 422
+  'log_login' at /system/daemon/logind at line 678
+  'log_file' at /secure/obj/simul_efun at /secure/simul_efun/file.lpc:17
+  ```
+  `logind.lpc` 的 `get_gender()`（设置完性别后）先调用
+  `log_login(ob, user, ...)` 记录新玩家日志，`log_login()` 又调用
+  simul_efun 的 `log_file(PPL_USAGE_LOG, ...)`（`PPL_USAGE_LOG` 宏是
+  `"static/usage"`），而 `log_file()` 只是裸的
+  `write_file(LOG_DIR + file, text)`，从不检查 `/log/static/` 这个
+  目录是否存在——而这个目录**根本不存在于这份档案里**。这一步崩溃
+  发生在 `get_gender()` 函数体的最开头，`init_new_player(user)` 和
+  `enter_world(ob, user)`（真正把玩家送进游戏世界的调用）都排在这次
+  崩溃之后，从未有机会执行——**每一个新注册的玩家都会在这里卡死**，
+  不是偶发的时序问题。
+- **修复**：这份档案自己的 `secure/simul_efun/file.lpc` 里已经有一个
+  现成的 `assure_file(file)` 辅助函数（检查文件是否存在，不存在就逐
+  级 `mkdir()` 建好所有父目录），并且已经被 `system/daemon/log_d.lpc`
+  等其它日志函数正确使用（`assure_file(file); return
+  write_file(file, ...);` 的固定搭配）——`log_file()`是唯一一处漏调
+  用它的地方。修复为：
+  ```lpc
+  void log_file(string file, string text) {
+    assure_file(LOG_DIR + file);
+    write_file(LOG_DIR + file, text);
+  }
+  ```
+  这个 `secure/simul_efun/file.lpc` 文件本身还有一个 orphaned 的孪生
+  副本 `secure/sefun/file.lpc`（确认没有任何代码 `#include` 或加载它，
+  与此档案自己 NOTES.md 之前记录的"重复 sefun 目录"是同一批遗留文件）
+  ——同样的修法作为廉价保险也一并应用了。
+  修复过程中还发现：`assure_file()`在物理上定义在`log_file()`**之
+  后**，加上调用它需要一个"先声明后使用"的前置原型（这份档案的编译
+  器不支持在同一文件里调用尚未出现在源码前面的函数——`logind.lpc`
+  文件头部本身就有一长串`private void xxx(...)`这样的前置声明，是这
+  份代码库自己的既定写法）：第一次只加 `assure_file()`调用而没加前置
+  声明，编译报错`Undefined function assure_file`——按同一惯例在文件
+  开头加了一行`void assure_file(string file);`补上。
+- **验证**：修复前，用刚重启的驱动新注册一个角色，选择完性别后必现上
+  述崩溃（原生驱动，非 WASM），角色永远停留在光秃秃的`>`。加上修复后
+  重启驱动，同样的注册流程（英文名/确认/中文名/密码/邮箱/性别）顺利
+  显示"目前权限："并正确落地到随机分配的四个起始场景之一（本次是
+  〖龙门客栈〗）；`log/runtime`（此次修复前的旧崩溃记录仍留在文件里，
+  但确认 mtime 早于本轮重启，本轮全程没有任何新增内容）和
+  `debug.log`双双干净。
+
+### 发现并修复：少林寺方丈（本派拜师环节的关键 NPC）因为一处技能名拼写错误，从存档诞生起就从未真正出现在他自己的房间里
+
+- **症状**：走到少林寺法堂想拜师，执事慧觉回答"未得方丈准许，贫僧不
+  敢擅收俗家弟子"——但走进方丈应该所在的〖方丈精舍书房〗，房间里空
+  无一人（正常应有的 NPC 完全缺席），`debug.log` 里能看到一条编译期
+  的房间物件创建失败信息：
+  ```
+  *F_SKILL: No such skill (shalin-xinfa)
+  创建房间中的物体失败, 详见 room_log
+  ```
+- **根因**：`d/menpai/shaolin/npc/xuanci.lpc`（玄慈方丈，少林派第三十
+  六代掌门方丈）的 `create()` 里有
+  ```lpc
+  set_wugong("shalin-xinfa", 200);
+  ```
+  ——技能名拼成了"shalin"，少了一个"o"。`system/skill/shaolin/
+  shaolin-xinfa.lpc`（正确拼写）确实存在，证明这是纯粹的拼写笔误，
+  不是故意改名或缺失内容。`set_wugong()`对一个不存在的技能名会直接
+  抛出未捕获的错误，而这一行排在 `create_family("少林派", 36, "掌门
+  方丈")`**之前**——玄慈的整个`create()`在能把自己注册为少林派掌门
+  之前就先崩溃了，导致这个对象连同"少林派"这个门派的掌门归属，从这
+  份档案诞生起就从未真正被创建过。全档案搜索确认这个拼写错误只出现
+  这一处。
+- **修复**：改成正确拼写 `set_wugong("shaolin-xinfa", 200);`。`§9`
+  格式化自检通过，3 处格式化盲点检查干净。
+- **验证**：修复前用刚重启的驱动 `goto` 到方丈的房间，房间描述正常但
+  玩家列表里没有玄慈；修复后同样的房间，玄慈正常出现，`look`能看到
+  完整的"少林派第三十六代掌门方丈「少林寺方丈」玄慈"称号，`apprentice
+  xuan ci`也能触发他自己的`attempt_apprentice()`对话逻辑（"小兄弟与
+  本派素无来往，不知此话从何谈起？"——这是他要求申请人必须已经是少
+  林弟子才会考虑收为徒的既定门规判断，属于正常游戏设计，不是本次要
+  修的问题）。
+
+### 观察但未处理（超出"仅修程序 bug"范围）
+
+- **`F_MASTER`（`system/std/char/master.lpc`）从未提供`attempt_apprentice()`
+  的默认实现**：`cmds/verb/apprentice.lpc`对任何门派师父都会调用
+  `ob->attempt_apprentice(me)`，但基类完全没有这个方法，只有部分师父
+  NPC（如`huijue.lpc`/`xuanci.lpc`/无量剑派的`zuo_zimu.lpc`）自己实
+  现了它。对没有实现这个方法的师父（比如大理段氏的`fu_sigui.lpc`、
+  `gao_shengtai.lpc`）执行`apprentice`指令会完全静默——没有任何回应
+  也没有报错，`call_other`调用一个对象上不存在的函数在 LPC 里就是这
+  样静默返回 0。这更像是"这些 NPC 压根没打算走`apprentice`这条路线
+  （可能是走剧情任务由代码主动调用`recruit_apprentice()`）"的设计不
+  一致，而不是一个能明确判断"应该怎么补"的程序 bug——要不要给
+  `F_MASTER`加一个统一的默认回应，属于会影响全档案所有门派 NPC 行为
+  的设计决策，如实记录为观察，未做改动。
+- **`d/zuzhi/yipin_tang/dixia/npc/weishi2.lpc`第 20 行`set_wugong("ny-
+  bufa", ...)`引用了一个全档案都找不到的技能名**：搜遍`system/skill/`
+  没有任何文件匹配"ny-bufa"（`system/skill/kongdong/nieyun-bufa.lpc`
+  在拼写上有点像，但无法确定"ny"是否就是"nieyun"的缩写，猜测重命名
+  需要对这个组织的技能设定有更多背景知识才能确认）。这个 NPC 是"一
+  品堂"底下的普通杀手侍卫（`JoinZuzhi`加入的是反派组织，不是正统门
+  派拜师路线），不是任何关键剧情节点，严重程度远低于少林方丈那处—
+  —如实记录为观察，未做改动。
+- **"必须玩够 30 分钟才能保存"的退出门槛，实测会真的删除存档文件**：
+  用第一个测试角色`xajhtwo`（已经拜入无量剑派东宗、学会`wuliang-
+  jian`）故意在 30 分钟内确认`quit`，`data/login/x/`、`data/user/x/`
+  下对应的`.o`存档文件被系统直接删除（不只是"不保存这次的改动"，是
+  整个账号一并清空，下次用同一个英文名登录会重新走"创建新角色"流
+  程）——这与 README 里"这是游戏本身的防灌水设计"的说明完全一致，也
+  与本项目其它同源档案（`xo`/`xo_final`）NOTES.md 里记录的同一机制
+  一致，是刻意为之，不是 bug。
+
+### 测试内容与结果
+
+- **注册**：英文名（只能纯字母，3-12 位）→ 确认 y → 中文名（秦岭/秦
+  岭三，均一次通过）→ 密码 ×2 → 邮箱 → 性别（m/f 均测试过）→ 顺利落
+  地到随机四选一起始场景之一。
+- **状态查看**：`look`/`score`/`i`在天赋随机分配、门派加入、学会技能
+  前后均正确刷新。
+- **门派——组织路线（拜师）**：少林寺（修复后）能正常触发掌门对话逻
+  辑，但被"必须先是本派弟子"的门规正确拒绝（正常设计）；大理段氏的
+  `gao_shengtai`/`fu_sigui`因为`F_MASTER`默认无实现而静默无反应（如
+  实记录为观察，见上）；**无量剑派东宗**（`zuo zimu`/左子穆）走完整
+  流程成功：`apprentice zuo zimu`→ 掌门带去侧厅→ 讲门规→`kneel`跪拜
+  祖师像→ 正式收徒，`score`正确显示"无量剑派东宗第六代弟子"、师承
+  "左子穆"，还获赠一把随身长剑。
+- **门派/技能——快捷路线**：全档案没有找到"赠礼 NPC"或`mygift`风格的
+  新手引导任务链（不同于同血脉`xo_final`的`mygiftd.lpc`），改用管理
+  员`call <玩家>->set_wugong(...)`直接授予技能验证快捷路径确实可行
+  （`call xajhthr->set_wugong("jiben-qinggong",30)`成功，`skills`确
+  认）。
+- **安全陪练/对练（duilian）**：`duilian gong gjie`（无量剑派同门师
+  兄）——真实交锋但只有轻微划伤，`stop`指令能随时正常终止对练。
+- **持久化**：（1）刻意验证了"30 分钟内 quit 会清空存档"的既定设计，
+  与 README 描述完全一致，见上"观察"小节；（2）正常场景：管理员
+  `call`授予技能后显式`->save()`，直接断开连接（不发`quit`，模拟真
+  实网络掉线）等待约 15 秒后用同一账号重连，`重新连线返回`提示正确
+  出现，`skills`显示授予的技能完整保留。
+- **管理员账号**：`fluffos`/`Mud@2026`登录正常，`目前权限：(admin)`
+  正确显示；`call`指令（本档案没有单独的`update`风格热更新指令，
+  `call obj->func(args)`承担了同样的诊断/管理功能）执行`->set_wugong()`
+  /`->save()`均成功返回预期结果，确认写权限正常。
