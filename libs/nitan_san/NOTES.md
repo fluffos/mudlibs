@@ -496,3 +496,70 @@ nitan_ceshi 的手足快照。状态已从过时的 limited 修正——这份�
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 56 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §10.7 深度功能测试尝试记录（本轮未完成，供下次接续）
+
+**注意：本节标题故意不叫"深度功能测试"，因为本轮没有完成实机验证——
+候选库挑选脚本靠 grep "深度功能测试" 判断是否已测过，这样下次巡检还
+会把 `nitan_san` 挑出来重新尝试，而不是被误判为"已完成"。**
+
+### 已应用、高置信度的程序性修复（源码层面已核实，未做完整实机验证）
+
+本库和刚测完 `nitan_ceshi`（同一 "NT/nitan/Lonely" 血统，见本文件顶部
+"手足快照"说明）共享同一个 §7.11 类缺陷（运行期目录缺失 + 无保护的
+`write_file()`），三处调用点全部按 `nitan_ceshi` 已确认的修复手法处理：
+
+- `adm/daemons/toptend.lpc::topten_save()`：`write_file(f_name, str, 1)`
+  前插入 `assure_file(f_name);`（十大排行榜守护进程，写 `/data/topten/`）。
+- `adm/simul_efun/file.lpc::log_file()`：`write_file(LOG_DIR + file,
+  text)` 前插入 `assure_file(LOG_DIR + file);`，并在文件顶部加了
+  `void assure_file(string file);` 前向声明（`assure_file` 定义在文件
+  靠后位置）。
+- `adm/single/master.lpc::log_error()`：`efun::write_file(home + "log",
+  message)` 前插入 `assure_file(home + "log");`——这是 `nitan_ceshi` 那
+  轮没有遇到（或没有触发到）的第三处同款调用点，本库额外发现。
+
+三处改动均逐字对照 `nitan_ceshi` 已验证成功的写法，模式高度成熟（本
+session 至此已有 15+ 次独立确认实例），有很高把握是正确的，但**本轮未
+能通过实机注册流程验证**，见下方原因说明。
+
+### 未完成实机验证的原因：本 session 环境下这份快照的驱动预载异常缓慢
+
+连续 4 次尝试从 `config.fluffos` 所在的库根目录启动原生驱动
+（`~/src/fluffos/build/src/driver config.fluffos`，linux-debug 预设，
+ASAN/UBSAN），全部未能在预载阶段结束前完成：
+
+- 第 1、2、3 次都被本 session 环境的容器重启中断（分别在约 48 分钟、
+  几分钟、几分钟处，容器重启看起来和每小时一次的巡检定时任务大致同
+  步，给每次启动尝试留出的窗口大约 55-60 分钟）。
+- 第 4 次拿到了几乎完整的一个窗口（约 58 分钟不间断运行），进程本身
+  没有崩溃或卡死——`debug.log` 编译警告仍在稳定增长（约 3-4 行/秒，
+  全程速率基本恒定，RSS 从几百 MB 稳定爬升到 11GB+，CPU 占用稳定在
+  40% 左右），但直到第 58 分钟被下一轮容器重启打断时，`ss -tlnp` 上
+  40055 端口仍未监听，预载仍未完成。
+
+对照：体积/文件数几乎相同的手足库 `nitan_ceshi`（`work/` 目录
+82M/13913 个 `.lpc`+`.h` 文件，本库为 79M/13852 个，几乎一样）在同一套
+驱动/同一 session 里稳定在 90 秒到 2 分钟内完成预载并可连线——按日志
+行数估算，`nitan_san` 每文件的预载耗时比 `nitan_ceshi` 慢了一个数量级
+以上。本文件最上方"状态：done（boots clean, connects...）"的描述来自
+**更早一轮测试**（很可能是不同驱动/环境下做的），并非本轮结论——本轮
+在本 session 的原生 ASAN 驱动下反复复现了这个异常缓慢的预载，怀疑与
+ASAN 在这份快照某处特别深/特别大的结构上开销异常有关，但没有进一步深
+挖具体是哪个文件/子系统（超出本轮已投入的时间预算）。对比过
+`config.fluffos`（`maximum buffer size`/`maximum byte transfer` 等几个
+数值比 `nitan_ceshi` 大不少，`time to clean up/swap/reset` 只有
+`nitan_ceshi` 的一半），没有找到能直接解释 10-20 倍预载耗时差异的单一
+配置项，未做进一步论证前不下结论。
+
+**遗留给下一次巡检**：直接从这里接着做——三处源码修复已经就位且高置
+信度正确，欠缺的只是实机验证（注册、安全切磋、正规/快捷两条技能路
+径、quit/重连持久化，参照 `nitan_ceshi` 的完整清单）。如果下一次驱动
+恰好在一个不被容器重启打断的窗口里顺利跑起来，直接接着走完 §10.7 清
+单、把"深度功能测试"正式小节写进来即可，不需要重新调查源码层面的 bug。
+
+### WASM 未验证说明
+
+按本 session 约定：`emsdk` 固定从 `storage.googleapis.com` 拉取，被本
+session 出站代理策略拒绝（`curl -sS $HTTPS_PROXY/__agentproxy/status`
+返回 403），WASM 编译/运行验证本轮继续跳过。
