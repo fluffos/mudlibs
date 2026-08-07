@@ -5141,6 +5141,18 @@ retry" within one driver session is not evidence it was a fluke — it
 just means the expensive compile got cached; test with a fresh driver
 restart before concluding no fix is needed.
 
+Fourth instance, unrelated lineage: `xlqy_early` (an ES-II-family "早期
+测试版" snapshot, not the xiyouji.org/Tomud family the first three
+instances share) shipped `maximum evaluation cost : 500000`, tripped at
+boot by `adm/daemons/leveld.lpc`'s `create()` — a genuinely legitimate
+nested loop precomputing a per-level exp/道行 table, not a bug in
+itself — preloaded from `master.lpc`. One occurrence was severe enough
+to bypass even `catch()` (`*Can't catch eval cost too big error.`).
+Same fix (`5000000`); confirms this isn't a single-lineage quirk —
+check `maximum evaluation cost` on sight for ANY lib, regardless of
+engine family, when it's set anywhere near or below this project's
+700000 template default.
+
 Detection pattern: don't stop testing at "registration completes
 cleanly" — a lib can pass every WASM-stage check and still throw
 eval-cost aborts the moment a player actually walks around, because
@@ -5682,6 +5694,35 @@ one commented out) in **three sibling libs not yet given this fix**:
 `mhxy`, `mhxyqd`, `shenmo` — check and apply the same two-line change
 the next time any of those is touched, rather than rediscovering this
 from scratch.
+
+### 8.11 A macro reference embedded literally inside a multi-line `@TEXT` string block never gets expanded, so its literal name leaks straight to every player
+
+Found on `xlqy_early`. Most of `adm/daemons/logind.lpc`'s player-facing
+messages reference `GAME_NAME` (`#define GAME_NAME "洪荒西游"`) the
+normal way — string concatenation, `"..." + GAME_NAME + "..."` — and
+those all render correctly. One prompt (the "give yourself a Chinese
+name" confirmation, in `confirm_id()`) was written as a `write(@TEXT
+... TEXT)` multi-line raw string literal instead, with `GAME_NAME`
+typed directly inside the block's text rather than concatenated in.
+LPC's preprocessor does not expand macro identifiers that appear inside
+a string literal (multi-line `@TEXT` blocks are still one string
+literal to the lexer) — so every single player who has ever registered
+on this archive has seen the literal 9-character text `GAME_NAME`
+sitting where the real game name belongs: `请您给自己想一个符合〖
+GAME_NAME 〗神话世界的中文名字...`. Confirmed present since the
+archive's original creation (byte-identical in the raw, unconverted
+source), not a conversion-pipeline artifact.
+
+Fix: rewrite the `@TEXT` block as an ordinary `write()` call using the
+same string-concatenation style already used everywhere else in the
+file for `GAME_NAME`/`LIB_NAME`, so the macro is substituted at
+preprocess time like normal. Detection: for any lib, grep every
+`@WORD\n...\nWORD` multi-line string block in `adm/daemons/` (and any
+other file with player-facing text) for identifiers matching a
+`#define`d ALL-CAPS constant — a hit means that constant's value has
+never actually reached a player, no matter how long the lib has run.
+Verify by re-triggering the exact prompt and confirming the real value
+now renders instead of the macro name.
 
 ---
 

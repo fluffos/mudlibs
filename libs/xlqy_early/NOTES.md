@@ -521,6 +521,97 @@ through to the NORMAL gate instead of being treated as local. Retested
 after tightening: fresh driver boot clean, `fluffos` loopback login and
 its wizard `update` command both still work; zero new debug.log errors.
 
+## 深度功能测试 / Deep functional test (2026-08-06/07)
+
+第一次完整游玩测试（原生驱动 `build`，ASAN/UBSAN debug 构建）。测试角
+色 id `xlqytstb`，中文名 小仙女。本轮 WASM 未重新验证：emsdk 工具链
+下载硬编码指向 `storage.googleapis.com`，本次会话的出口代理策略性拒
+绝该域名（403，已用 `curl $HTTPS_PROXY/__agentproxy/status` 确认是策
+略拒绝而非临时故障），本地无法构建 WASM 驱动。
+
+### 发现并修复：`maximum evaluation cost` 过低，开机预载阶段真实崩溃过一次（AGENTS.md §7.90 新实例）
+
+- **症状**：驱动首次启动（未做任何修复前），`debug.log` 出现
+  `Eval interrupted: object adm/daemons/leveld cost limit reached,
+  limit: 500000 usec.` 以及更严重的一条`*Can't catch eval cost too big
+  error.`（连 `catch()` 都拦不住的版本），栈追踪指向
+  `adm/obj/master.lpc:139` 的 `preload("/adm/daemons/leveld")` 调用。
+- **根因**：`config.fluffos` 的 `maximum evaluation cost : 500000` 比
+  这个项目常见的 700000 模板默认值还低。`leveld.lpc` 的 `create()`
+  内建一个真实的、合法的双层循环（为每个等级预计算升级所需经验/道行
+  表，`levelup_cfg` 有多个等级分段），本身不是死循环或 bug，只是这份
+  预载计算的开销天然超过了 500000 usec 的预算。
+- **修复**：提高到 `5000000`（本项目 30+ 份档案验证过安全的数值，与
+  `xyj2000f`/`xiyouji450`/`xiyouji2006` 系列同一处理方式，虽然血缘家
+  族不同）。
+- **验证**：修复前重启驱动，`debug.log` 稳定复现上述两条错误；修复
+  后重启，同样的预载流程（含这份档案自带的 100 个自动游走"人造人"
+  NPC 在开机后几分钟内陆续触发全图房间编译，是这份档案的已知特色负
+  载）全程无任何 eval-cost 中止或"can't catch"错误，即使在这个持续
+  高负载窗口内也没有复发。
+
+### 发现并修复：注册流程遗留的 `printf("%O", ob)` 调试输出（AGENTS.md §7.34 已知模式的又一实例）
+
+`adm/daemons/logind.lpc` 中文名确认成功分支有一行未加注释的
+`printf("%O\n", ob);`，同一文件里没有找到第二条并行路径的重复实例。
+按 §7.34 既定修法直接删除。修复前用第一个测试账号亲眼看到裸露的对象
+路径（如 `/obj/login#N`）夹在提示语之间；修复后第二次注册未再出现。
+`§9` 格式化自检通过。
+
+### 发现并修复：中文名确认提示里的 `GAME_NAME` 宏字面量泄漏（新发现的模式，未见于此前任何一份档案的记录）
+
+- **症状**：注册流程走到确认中文名的提示时，玩家会看到字面的英文单
+  词 `GAME_NAME` 出现在原本应该显示游戏真实名称（"洪荒西游"）的地
+  方：`请您给自己想一个符合〖 GAME_NAME 〗神话世界的中文名字...`。
+- **根因**：`adm/daemons/logind.lpc` 的 `confirm_id()` 用
+  `write(@TEXT ... TEXT)` 多行原始字符串字面量输出这段提示，`GAME_NAME`
+  被直接打在字符串内部而不是像同一文件里其它十几处那样用
+  `+ GAME_NAME +` 字符串拼接引用宏。LPC 的宏预处理不会展开多行字符串
+  字面量内部的标识符，所以这两处 `GAME_NAME` 从未真正被替换成
+  `#define GAME_NAME "洪荒西游"` 的实际值，从这份档案诞生起就一直原
+  样显示给每一个新注册的玩家。
+- **修复**：把这段 `@TEXT` 块改写成普通的 `write()` 字符串拼接（与文
+  件里其它 `GAME_NAME` 引用点写法一致），让宏值正确代入。
+- **验证**：修复前实测复现（提示语里的字面 `GAME_NAME`）；修复后同
+  一提示正确显示"洪荒西游"。已用脚本扫描全档案 `adm/daemons/` 目录
+  下所有 `@WORD ... WORD` 多行字符串块，确认没有其它 `GAME_NAME`/
+  `LIB_NAME` 被同样错误地嵌入字符串内部的情况。这类"宏字面量嵌进多
+  行字符串导致原样泄漏给玩家"是一个新观察到的模式，值得在检查其它档
+  案的登录流程时留意（检测方法：grep 每个 `@WORD ... WORD` 块内容是
+  否含有已 `#define` 的大写常量名）。
+
+### 测试内容与结果
+
+- **注册**：GB 编码 → 是否中小学生（no）→ `new` → 英文名（8 字符上限，
+  超长会被拒绝）→ 中文名（小仙女，确认了上面两个 bug 均已修复）→ 密
+  码 ×2 → 邮箱 → 性别（f），全程顺利进入起始房间〖聚见亭〗。
+- **门派/技能捷径**：驻留在起始房间的"发礼物的 小老头"（`d/ourhome/
+  npc/laotou.lpc`）——`ask laotou about 礼物` 一次性授予 9 项技能（等
+  级 100）及 100 万点战斗经验/道行/潜能，`skills` 命令确认发放正确，
+  与 `bxsj`/`xiyouji2006` 系的"赠礼 NPC"捷径同类设计，非 bug。附带触
+  发了一条"存款不够,需要一两黄金"的消息（疑似自动升级检查在零存款下
+  被部分拒绝）——未深究，属于经济系统内部逻辑，不在本轮"仅修程序
+  bug"范围内，如实记录为观察而非缺陷。
+- **持久化**：真实 `quit`（无反滥用二次确认，直接产生告别文字）后重
+  新登录，技能/经验/道行等级全部正确复原（`score` 显示 `[驾轻就熟]`
+  与 quit 前一致），但房间重置回了起始房间〖聚见亭〗而非 quit 时所在
+  的〖荒郊小店〗——与本轮之前测试过的 `xyj2000f`/`xiyouji450`/
+  `xiyouji2006` 三份档案（不同血缘家族）表现出的"固定登录入口"设计完
+  全一致，判断为这一批"西游"题材 MUD 共有的既定设计，不是位置持久化
+  bug。
+- **管理员账号**：`fluffos`/`Mud@2026` 登录，`update /adm/daemons/
+  logind` 热更新成功（含本轮三处修复），确认写 ACL 正常——本轮实测
+  中这份档案因为 100 个人造人 NPC 的持续后台编译负载，响应延迟明显
+  比其它档案更高，命令确认经常要等待数秒才能收到，属于已知的特色负
+  载而非 bug，测试时相应放宽了等待时间。
+- **战斗、门派拜师（组织路线）、经济/商店**：**未覆盖**——沿着起始
+  房间往北探索了数个房间（荒郊野外若干段、荒郊小店），全程未遇到任
+  何主动可挑战的敌对目标，源码里唯一疑似"安全陪练木人"的两份文件
+  （`d/city/obj/muren.lpc`、`d/obj/misc/muren.lpc`）在 `work/d/` 里没
+  有任何房间引用它们，很可能是这份"半成品测试版"存档里从未真正接入
+  地图的遗留内容。如实标注为本轮未覆盖，而非默认"和同代码库的其它档
+  案一样所以没问题"。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 同一套代码库，更早的一份粗糙快照。
