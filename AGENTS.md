@@ -2632,7 +2632,11 @@ independently — worth checking `jqxz2008std`/`jqxz2008dlx`'s own
 noted-but-left-alone on
 `fy2` (a
 similar stray `printf` in `logind.lpc`, existing precedent from `zzfy`
-treats it as harmless). A leftover diagnostic write/printf with no
+treats it as harmless). `ylfyxa3` (XYZX/炎龙封印 branch, §11) carries the
+SAME pair — `get_resp()` (accept-random-name path) and `get_name()`
+(typed-name path) — each a bare `printf("%O\n", ob)` printing
+`/clone/user/login#N`, found via §10.7 deep functional test; both
+removed. A leftover diagnostic write/printf with no
 explanatory comment, sitting in an otherwise-clean sequence of
 player-facing `write()`/prompt calls in a login or registration daemon,
 prints raw internal state (an object's driver-assigned path, a
