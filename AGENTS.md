@@ -4929,6 +4929,21 @@ limit is a different failure shape from a corrupted per-player save —
 it breaks the feature for every single player and NPC in the game,
 permanently, for that boot, with no log trace at all.
 
+**Second confirmed instance, different trigger: `xlqyzdb`.** Byte-for-byte
+the same vulnerable `emoted.lpc` `create()` shape, but `data/emoted.o`
+(262239 bytes) was well under this lib's `maximum read file size`
+(300000) — `restore()` still threw, this time with
+`*restore_object(): Illegal mapping format while restoring emote.`,
+i.e. genuinely corrupt/unparseable mapping syntax in the save data
+itself (the §7.7 corruption shape), not a resource-limit throw. Same
+fix applies regardless of *why* `restore()` throws — only the
+`catch(restore()); if (!mapp(emote)) emote = ([]);` half of the two-part
+fix was needed here since the size limit was already fine. Confirms the
+detection pattern generalizes: any `if (!restore() && !mapp(X))`
+`create()` is unsafe against *any* restore failure mode, not just
+oversized files — check for both before ruling a daemon's save-restore
+safe.
+
 ### 7.88 A simul_efun `message()` wrapper is declared with 4 *required* params but called with only 3 in several places in the same file, so the missing arg silently becomes `int(0)` and crashes the builtin `efun::message()` — and when that crash lands synchronously inside a gating function, it can permanently soft-lock players, not just spam the log
 
 Found on `zjdywzb`'s §10.7 deep functional test. This lib's

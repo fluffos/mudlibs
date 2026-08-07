@@ -247,3 +247,130 @@ after verification.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 39 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试 / Deep functional test (2026-08-07)
+
+第一次完整游玩测试（原生驱动 `build`）。测试角色 id `zdbtest`，中文名
+云梦仙。本轮 WASM 未重新验证：emsdk 工具链下载硬编码指向
+`storage.googleapis.com`，本次会话的出口代理策略性拒绝该域名（403，用
+`curl $HTTPS_PROXY/__agentproxy/status` 确认是策略拒绝而非临时故障），
+本地无法构建 WASM 驱动。
+
+### 发现并修复：注册流程遗留的 `printf("%O", ob)` 调试输出（AGENTS.md §7.34 已知模式的又一实例）
+
+`adm/daemons/logind.lpc` 中文名确认成功分支有一行未加注释的
+`printf("%O\n", ob);`（紧接在 `ob->set("name", arg);` 之前）。同一档案
+里还存在 `loggind.lpc`、`login.lpc` 两份带同样调试输出的旧文件，但通过
+`include/globals.h` 的 `#define LOGIN_D "/adm/daemons/logind"` 确认它们
+未被任何地方引用，是死文件，未做改动。按 §7.34 既定修法直接删除
+`logind.lpc` 里的这一行。修复前注册第一个测试账号时确认能看到裸露的
+对象路径夹在提示语之间；修复后（本轮实际注册）未再出现。`§9` 格式化
+自检通过（`{"total":1,...,"unchanged":1,"errors":0}`）。
+
+### 发现并修复：`emoted` 守护进程未捕获的 `restore()` 抛错，导致该守护进程永久残废（AGENTS.md §7.87 已知模式的又一实例，触发原因不同）
+
+- **症状**：角色离开〖将军府〗大门口房间时（`d/jjf/gate.lpc`，走
+  `south`），第一次触发 `command_hook()` 惰性加载
+  `/adm/daemons/emoted` 时，玩家直接看到驱动的默认错误提示"你发现事
+  情不大对了，但是又说不上来。"，`debug.log` 记录：
+  ```
+  执行时段错误：*restore_object(): Illegal mapping format while restoring emote.
+  程序：/feature/save.lpc 第 18 行
+  物件：/adm/daemons/emoted
+  呼叫来自：/feature/command.lpc 的 command_hook() 第 85 行，...
+  呼叫来自：/adm/daemons/emoted.lpc 的 create() 第 48 行，...
+  ```
+- **根因**：`emoted.lpc` 的 `create()` 写法和 AGENTS.md §7.87 记录的
+  `xyj20032` 一模一样：
+  ```lpc
+  void create() {
+    if (!restore() && !mapp(emote))
+      emote = ([]);
+  }
+  ```
+  当 `restore()` **抛出**（而不是返回假值）时，`if` 语句的 fallback
+  赋值永远不会执行，`emote` 全局变量从此在整个进程生命周期里都是 `0`。
+  但这次的触发原因和 §7.87 原始实例不同：那次是 `maximum read file
+  size`（300000）小于存档实际大小（328298 字节）；这里 `data/emoted.o`
+  只有 262239 字节，本档案的 `maximum read file size` 同样是
+  `300000`，明显没超限——`debug.log` 报的是`Illegal mapping format`，
+  说明这份存档本身的映射语法就是驱动的 `restore_object()` 解析不了的
+  真实损坏数据（AGENTS.md §7.7 记录的"损坏存档可以合法地导致
+  `restore()` 失败"的另一种损坏形状，不是资源限制）。因为
+  `create()` 只在进程内第一次引用该对象时跑一次，且这次触发点是玩家
+  一次普通的移动指令（不是显式的 emote 指令），`debug.log` 里也确实
+  只留下这一条记录，此后同一进程内的 emote 相关调用（`smile` 等）不
+  会再重复报错，但 `emote` 会一直是 `0`，任何后续 `do_emote()` 路径
+  （包括 NPC 自身触发的社交行为）本应像 §7.87 里 `xyj20032` 那样以
+  `*Value being indexed is zero.` 崩溃——本轮只是恰好没有再触碰到那条
+  代码路径就先被这次会话中断了，但代码本身的脆弱性和 §7.87 完全一致，
+  按同样标准视为需要修复的程序 bug。
+- **修复**：套用 §7.87 已验证的两段式修法（这里只需要"让 `create()`
+  对任何失败方式都健壮"这一半，`maximum read file size` 已经够大不需
+  要调）：
+  ```lpc
+  void create() {
+    catch(restore());
+    if (!mapp(emote))
+      emote = ([]);
+  }
+  ```
+- **验证**：修复前重启驱动，从起始房间沿 `west/north/east/east/south`
+  走到〖将军府〗后再 `south` 稳定复现上述崩溃（`debug.log` 该次错误
+  未标"被拦截"，说明确实是未捕获的抛出）。修复后重启驱动，同样路径
+  第一次触发 `south` 时 `debug.log` 记录变为"错误讯息被拦截："开头、
+  调用栈里多出一帧 `emoted.lpc` 的 `CATCH()`，玩家侧仍会看到一次性的
+  默认错误提示（这是驱动对"本回合调用链中出现过运行时错误"的固有通
+  知行为，`catch()` 拦下的是致命崩溃本身，不是这条提示——与 §7.87 描
+  述的效果一致，未强行消除这条无害的一次性提示）；此后同一进程内再
+  次触发 `south`、直接测试 `smile`（因为损坏数据没有被还原，`emote`
+  现在是空表，`smile` 走到默认的"什么？"而不是崩溃）均未再复现任何
+  执行时段错误，说明 `emote` 全局变量已经稳定落在空表而不是 `0`。修
+  复的是代码脆弱性本身（不修复也不影响每个测试环节的推进，因为
+  `command_hook()` 未匹配到任何 emote 就正常放行后续命令处理），损坏
+  的 `data/emoted.o` 存档内容按 §7.7 既定原则不做"内容修复"，留作已
+  知限制。
+
+### 测试内容与结果
+
+- **注册**：GB 编码 → 是否中小学生（no）→ `new` → 英文名 `zdbtest` →
+  中文名（云梦仙，确认上面的 printf 泄漏已修复）→ 密码 ×2 → 邮箱 →
+  性别（m）→ 天赋分配界面（`str`/`con`/`int`/`spi` 四项，直接接受默认
+  值 `9`）→ 顺利进入起始房间〖南城客栈〗。天赋分配界面的欢迎语和引导
+  文案硬编码写的是"欢迎光临西游记！"（`d/wiz/init.lpc` 第 39、74
+  行），但这份档案的 README 明确说明本身就是"西游记题材的仙侠世界"，
+  `score` 面板底部也正确显示〖仙侣情缘·浙大站〗——确认是刻意的主题
+  文案而非从别的档案误拷贝的品牌残留，未作改动。
+- **状态查看**：`look`/`score`/`i` 在天赋分配、门派加入前后均正确刷
+  新（体格/根骨/悟性/灵性数值、门派名称、师承字段）。
+- **门派/技能——组织路线（拜师）**：从起始房间沿
+  `west/north/east/east/south` 走到〖将军府〗大门（`d/jjf/gate.lpc`），
+  管家秦安（`d/jjf/npc/qinan.lpc`）会拦截非本门弟子的 `south` 指令
+  （`valid_leave()` 的既有设计，不是 bug），需要先 `answer 拜师`（精
+  确匹配"拜师"二字，同目录另一份死文件 `d/city/npc/guanjia1.lpc` 用的
+  是子串匹配 `strsrch`，容易误导——但那份文件未被任何房间引用，不影
+  响实际游玩，未改动）触发 `pending/jiangjun_answer` 标记后才放行，
+  随后 `apprentice qin fu` 成功拜入"将军府"第四代弟子，`score` 正确
+  显示门派与师承。
+- **安全陪练**：〖练武场〗（`d/jjf/front_yard.lpc`）的沙袋支持
+  `da sandbags`（注意不是常见的 `hit`），未入门派/道行不够时分别给出
+  "沙袋一动不动"和"道行不够高，不能从打沙袋中学到新知"的正确提示，
+  未见任何崩溃。
+- **门派/技能——快捷路线（赠礼 NPC）**：全档案搜索到两处"一次性赠送
+  巨额战斗经验/道行/潜能"的赠礼 NPC 代码
+  （`d/city/npc/new_jing.lpc`、`d/qujing/wudidong/npc/yanshu.lpc`），
+  但两者都未被 `work/d/` 下任何房间的 `objects` 引用，是不可达的孤立
+  内容（与此前 `xlqy_early` 的死 `muren.lpc` 同类情形）。如实标注为
+  本轮未覆盖，而非"和同代码库其它档案一样所以没问题"。
+- **持久化**：真实 `quit`（掉落非贵重物品、告别文字，无二次确认）后
+  重新登录，门派（将军府）、师承（将军府秦富）、天赋属性全部正确复
+  原；登录入口固定回到起始房间〖南城客栈〗而非 quit 时所在的〖练武
+  场〗——与本项目此前测试过的其它"西游"题材档案（`xyj2000f`/
+  `xiyouji450`/`xiyouji2006`/`xlqy_early`，血缘家族不完全相同）表现一
+  致，判断为这批 MUD 共有的既定设计，不是位置持久化 bug。
+- **管理员账号**：`fluffos`/`Mud@2026` 登录，系统权限显示
+  `(admin)`，`update /adm/daemons/logind` 热更新成功（含本轮 printf
+  泄漏修复），确认写 ACL 正常。
+- **战斗（PVE 实战）、经济/商店**：**未覆盖**——本轮时间集中在验证
+  emoted 崩溃的修复上，沙袋陪练已验证安全练习路径可用，未额外寻找可
+  挑战的野外目标或商店交易流程。
