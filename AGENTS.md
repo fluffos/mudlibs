@@ -3131,6 +3131,27 @@ in a casual read of the transcript unless the full boot log is
 inspected. Fix the same way: guard with `if (content) write(content);`
 before printing. (`hy2000`.)
 
+**Fourth confirmed instance, different shape: `xo_final`'s `topten_add()`
+crashes on EVERY player login, not just a fresh-checkout edge case.**
+`system/daemon/toptend.lpc`'s `topten_add()` (called for 12 leaderboard
+categories from `logind.lpc`'s `enter_world()`, unconditionally, for
+every non-wizard login) DOES have a guard — but the wrong one:
+`if (file_size(f_name) == 0) { ...write a fresh file... }` only catches
+"file exists and is empty", not `file_size()`'s `-1` ("doesn't exist").
+`libs/*/work/data/topten/` is project-wide `.gitignore`d as
+"regenerable", so this isn't archive-specific — it fires on any real
+first boot from a fresh checkout, on every single login, for as long as
+the topten files stay unwritten. The same file's OTHER two read sites
+(`topten_query()`, `topten_del()`) correctly check `== -1` — proof the
+`== 0` at the `topten_add()` site is a typo'd comparison value, not an
+intentional design choice. Fix: change `== 0` to `<= 0` so both "missing"
+and "empty" fall into the same existing "write a fresh file" branch
+(matches the two sibling checks' effective behavior without changing
+anything for the "file already has real data" path). Detection pattern
+for this specific variant: grep a file for multiple `file_size(...) ==`
+guards on the same kind of resource — if most say `-1` and one says `0`,
+the `0` one is very likely the bug, not a deliberate difference.
+
 ### 7.55 A security/status daemon crashes on a REENTRANT call to itself, mid-`create()`, before its own later-declared variables initialize
 
 Top-level variable initializers in a `.lpc` file run in DECLARATION
