@@ -6198,6 +6198,97 @@ extension-searching) — never assume a `file_size()` check ahead of a
 
 ---
 
+### 7.100 (IDENTIFIED, ONLY PARTIALLY FIXED — too large for one pass) §7.86's "redundant self-`replace_program()`" shape recurs on the universal `ROOM` base class itself, not just boards — turning nearly every room in the archive into a dormant closure-crash landmine
+
+Found on `jhfy3`'s §10.7 deep functional test. §7.86 documented a fatal
+`replace_program()` misuse (`inherit X;` immediately followed by a
+redundant, no-op-but-harmful `replace_program(X);` in the same file's
+`create()`) that permanently blocks any later attempt to bind a closure
+to that object's own lfuns — confirmed on `BULLETIN_BOARD`/`BBS_BOARD`
+across six unrelated lineages, always breaking the board's `post`
+command specifically. `jhfy3` has that exact shape too (a handful of
+already-`//`-commented-out board instances, harmless) — but it ALSO has
+the identical shape on `ROOM` (`/inherit/room/room`, `#define ROOM
+"/inherit/room/room"` in `include/globals.h`), the base class nearly
+every single room object in the archive inherits: `grep -c
+"replace_program(ROOM)"` across `work/` returned **5,717 matches**, of
+which only 124 were already commented out — **5,591 live, standalone
+`replace_program(ROOM);` calls**, roughly 60% of this ~9,300-file
+archive. Confirmed this is not theoretical: an ordinary room visit
+during a routine post-registration walk (`/d/city/xxci1.lpc`, a room
+with nothing unusual about it) produced a live `debug.log` line at
+first load — `d/city/xxci1.lpc: cannot replace a program with function
+references, ignored` — a DIFFERENT, non-fatal driver message than
+§7.86's board crash, because this room happens to call `create_door()`
+(which does `set("item_desc/" + dir, (: look_door, dir :));` — a
+closure bound to `this_object()`) BEFORE its own `replace_program(ROOM)`
+line runs in `create()`; the driver detects the already-pending
+function reference at replace-time and safely REFUSES the replace
+rather than performing an inconsistent one, so this specific room
+never actually breaks. That refusal is the exception, not the rule:
+any room that does NOT create a closure before its `replace_program(ROOM)`
+call (the vast majority — `create_door()` is only used by rooms with
+doors) gets a SUCCESSFUL, silent replace at boot time, which sets the
+same permanent "pending replace" flag §7.86 documented — and that
+object will crash exactly like a §7.86 board the first time ANYTHING
+later in its lifetime binds a closure to itself (a `set("item_desc/...",
+(: ... :))` added outside `create_door()`, an `edit()` call, a
+`call_out()` closure argument, a custom `input_to()` callback bound to
+the room, etc.) — the same "everything works until the one command that
+creates a closure" signature as the original board bug, just spread
+across the single most common object class in the entire lib instead of
+one board file per zone.
+
+**Compounding discovery**: the exact same broken `create()` shape is
+baked into this lib's own in-game room-building tool,
+`clone/misc/roommaker.lpc` (byte-identical duplicate at
+`u/fyue/misc/roommaker.lpc`) — in TWO separate places: a heredoc
+(`@ROOM_CODE ... ROOM_CODE`) template for its "make an empty room"
+command, and a `str += "...replace_program(ROOM);..."` string-builder
+for its "clone the room I'm standing in" command. Every room any
+player or wizard ever built with this in-game tool was therefore born
+with the same dormant landmine already inside it — this is the
+`sje`-precedent "the bug lives in the factory, not just the shipped
+content" shape (see §7.86's fourth confirmed lineage writeup).
+
+**Scope decision**: given the fix is the exact same one-line-deletion
+pattern already validated safe across six §7.86 lineages (delete the
+redundant `replace_program(X);` line, keep the `inherit`), a scripted
+sweep across all 5,591 live occurrences was attempted but declined by
+this session's own execution-safety tooling as too broad an automated
+bulk-rewrite to approve in one shot — consistent with this project's
+own standing rule against deriving a mass action from a broad
+tree-wide scan (§10.5's `git status`-derived-deletion-list lesson,
+same shape applied to a mass *edit* instead of a mass *delete*). Fixed
+in this pass, individually reviewed: the one file with LIVE observed
+evidence (`d/city/xxci1.lpc`), both copies of the room-building tool's
+TWO code-generation templates (`clone/misc/roommaker.lpc`,
+`u/fyue/misc/roommaker.lpc` — so newly-built rooms stop inheriting the
+bug going forward), plus three more spot-fixed as a pattern check
+(`d/mingjiao/maowu.lpc`, `d/quanzhou/nanhu.lpc`,
+`d/xiangyang/qianzhuang.lpc`). **The remaining ~5,585 room files are
+UNFIXED** — left as a known, large, mechanically-simple but
+individually-unverified backlog for a dedicated future sweep session
+(ideally run in explicit, hand-reviewed batches rather than one
+tree-wide script, per the scope decision above). All six fixed files
+verified via `update <path>` recompiling successfully post-fix, and
+`xxci1.lpc`'s "cannot replace a program... ignored" warning confirmed
+gone from a fresh boot's `debug.log`.
+
+Detection pattern: `grep -c "replace_program(ROOM)" work -r --include=
+"*.lpc"` (substitute the lib's own room-base-class macro, found via
+`grep 'define ROOM' include/*.h`) on ANY lib already known to carry
+§7.86's board-file shape — if the count is in the thousands rather than
+the tens, the bug has very likely also colonized the room base class,
+not just boards, and deserves a dedicated sweep pass of its own rather
+than being folded into a single §10.7 session. Also check any in-lib
+room/NPC/item content-generation tool (`roommaker`, `npcmaker`,
+`objmaker`, etc.) for the same shape baked into its own output
+templates — a factory bug compounds silently every time a player uses
+the tool.
+
+---
+
 ## 8. Login and registration flow bugs
 
 Registration is where restoration succeeds or fails: it exercises the
