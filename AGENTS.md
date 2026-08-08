@@ -6,23 +6,39 @@ continues the work. Read the section relevant to your task before touching
 a lib; almost every problem you will hit has been hit before and is
 cataloged here with its fix.
 
-**Current state**: 97 Chinese LPC mudlibs converted and committed, all
-fully WASM-playable end to end (`ds386`/Dead Souls, English, was
-deliberately left native-only/partial per §10.6 and has since been
-purged from the repo — see §10.6) — every converted lib
-has now also been through the long-sit boot-log sweep (§10.0), not just
-a quick login check. The corpus keeps growing as new archives get
-dropped in; `README.md`'s table and `lib_numbering.json` are the current
-source of truth for the exact count, not the number above. Every lib has
-a number: `NNN` per unique game, `NNN-M` for confirmed derivatives of the
-same codebase, `9xx` for non-LPC archives (one, `033-3`, is a cataloged
-binary-only release that was never convertible and has no `libs/` dir).
-This file refers to libs by **slug** (`libs/<slug>/`) and number, never by
-"archive #N" (a retired convention) or by any machine-local path.
+**Current state**: 222 libs in `libs/` (193 `playable`, the rest
+`not-mudlib`/`not-convertible`/`limited`), all fully WASM-playable end to
+end and through the long-sit boot-log sweep (§10.0) — the WASM-conversion
+phase is essentially done. `dfgsitlzjwin`/`ds386`/`hellxg`/`hy2`/
+`sgzmudsgz` were purged as permanently out of scope (duplicates, no
+standalone master object, wrong driver requirement, deprioritized
+English lib — see the git history around 2026-08-07 for the purge
+commit); their raw archives are preserved in `archives/`, not `libs/`.
+The corpus keeps growing as new archives get dropped in; `README.md`'s
+table and `lib_numbering.json` are the current source of truth for the
+exact count, not the numbers above.
 
-**The mission now: every lib fully playable under WASM.** The browser
-build is the primary distribution channel; native telnet is the
-development/verification environment. §1 is the triage playbook.
+**The mission now: §10.7 deep functional testing, not just WASM
+conversion.** WASM-stage triage (registration-flow-only) is done for
+essentially every lib, but a WASM-clean boot has repeatedly proven not
+to mean bug-free — §10.7's methodology (actual movement/combat/board/
+death-resurrection play, not just registration) keeps surfacing real,
+previously-invisible bugs even on libs whose WASM pass found nothing.
+**53 of 193 playable libs have had a full §10.7 pass as of this
+writing** (grep `libs/*/NOTES.md` for a `深度功能测试（§10.7` heading
+to check current status per lib — do NOT trust this count once it's
+stale, recompute it). This is the primary ongoing work: pick a
+not-yet-deep-dived playable lib, sibling-check it against any
+same-lineage lib that's already been done, actually play it, fix what's
+broken, document in Chinese, commit, push. §1 is still the triage
+playbook for any lib that somehow hasn't had its WASM pass yet.
+
+Every lib has a number: `NNN` per unique game, `NNN-M` for confirmed
+derivatives of the same codebase, `9xx` for non-LPC archives (one,
+`033-3`, is a cataloged binary-only release that was never convertible
+and has no `libs/` dir). This file refers to libs by **slug**
+(`libs/<slug>/`) and number, never by "archive #N" (a retired
+convention) or by any machine-local path.
 
 Conventions used throughout:
 
