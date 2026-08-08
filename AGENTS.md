@@ -6733,6 +6733,60 @@ path forward (or an explicit, deliberate lockout with a clear message
 this is a first-run-only setup step), never silent fallthrough with no
 further `input_to` armed.
 
+### 8.14 A custom connection-time IP ban check is fed a reverse-DNS hostname where its own implementation expects a dotted-quad IP, so it fail-closes and bans nearly every connection, silently, right after the login banner
+
+Found on `hy3`'s §10.7 deep functional test. `adm/daemons/logind.lpc`
+has an author-added anti-abuse gate right after the login banner
+(comment: "added by xingyun用来禁止恶意破坏的ip login"):
+```lpc
+if (BAN_D->is_banned(query_ip_name(ob))) {
+    write("Sorry, your ip is banned by this mud.\n");
+    destruct(ob);
+    return;
+}
+```
+`band.lpc`'s `is_banned(string site)` parses its argument as a
+dotted-quad IP (`sscanf(site, "%s.%s.%s.%s", ...)`) and, matching the
+fail-closed convention this project has seen before (§7.5's
+`securd.lpc` ACLs), treats a parse failure as "banned" — `if
+(sscanf(...) != 4) return 1;` — before ever consulting the actual
+`Sites` blacklist array. But the call site passes `query_ip_name(ob)`,
+the REVERSE-DNS HOSTNAME, not `query_ip_number(ob)` (the actual IP) —
+a few dozen lines later in the same file, a different gate
+(`BAN_D->is_netclub(query_ip_number(ob))`) uses the correct efun,
+confirming this is a genuine argument mix-up rather than a deliberate
+hostname-based design. On a native driver, a loopback connection's
+reverse lookup resolves near-instantly (glibc's `/etc/hosts` NSS hit)
+to the literal string `"localhost"` — no dots at all — so the sscanf
+fails and every local test connection gets banned immediately after
+choosing an encoding, before the "your English name:" prompt ever
+appears, with zero signal in `debug.log` (just the plain-English
+banner text and a disconnect). This is not merely a local-testing
+artifact either: most real remote players with a resolvable PTR
+record have a hostname that isn't shaped like four dot-separated
+numeric octets, so a real production deployment of this exact idiom
+would ban the majority of genuine incoming connections too, not just
+loopback ones — this is a real programming bug (wrong efun passed to
+a function with a narrower contract than its caller assumed), not a
+`§1.3b`-style loopback-only convenience gate. Fix: pass
+`query_ip_number(ob)` instead, matching what `is_banned()`'s own
+`sscanf` shape actually expects. Verified live: before the fix, a
+tmux telnet session was disconnected with "Sorry, your ip is banned
+by this mud." immediately after selecting GB encoding, every single
+run; after the fix and a driver restart, the same connection
+sequence proceeded normally into the id/registration prompts, and
+(with the lib's `banned_sites` file empty, as shipped) no connection
+was rejected. Detection pattern: any custom ban/allowlist daemon
+whose matching logic assumes a specific string SHAPE (dotted-quad IP,
+fixed-length code, etc.) — check what the CALLER actually passes in
+against what the callee's own parsing expects, especially when the
+callee's failure path is fail-closed (denies by default on a parse
+miss) — a `query_ip_name()`/`query_ip_number()` mix-up is one
+concrete instance of a broader class where a hostname-shaped or
+otherwise differently-shaped string silently satisfies neither the
+happy path nor an explicit error, just the same generic deny branch
+as a real bad actor.
+
 ---
 
 ## 9. LPC formatter (`~/src/fluffos/tools/lpc-syntax/`) — required checks

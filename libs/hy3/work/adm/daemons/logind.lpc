@@ -160,8 +160,15 @@ protected void logon_in(object ob) {
   write(time + "\n" NOR);
 
   //added by xingyun用来禁止恶意破坏的ip login
+  // BUG FIX (AGENTS.md §8.14): was query_ip_name(ob), a reverse-DNS
+  // hostname string -- but band.lpc's is_banned() sscanf()s its argument
+  // as a dotted-quad IP and fail-closed bans (returns 1) whenever that
+  // parse doesn't yield exactly 4 dot-separated tokens, which a hostname
+  // (including "localhost" for loopback) essentially never does. Use the
+  // real IP so is_banned() actually evaluates against banned_sites as
+  // designed instead of rejecting almost every connection outright.
 
-  if (BAN_D->is_banned(query_ip_name(ob))) {
+  if (BAN_D->is_banned(query_ip_number(ob))) {
     write("Sorry, your ip is banned by this mud.\n");
     destruct(ob);
     return;
@@ -628,7 +635,14 @@ varargs void enter_world(object ob, object user, int silent) {
 
   __DIR__ "check_level.lpc"->check_level(user);
   // added by xingyun,进行经验和所支持武技等级的检测;
-  if (!user->query("food") && !user->query("water") && ob->query("age") == 14) {
+  // BUG FIX (AGENTS.md §8.9): was ob->query("age") -- ob is the transient
+  // login stub, whose "age" is never set anywhere in this codebase, so
+  // this condition was permanently false by construction. Currently
+  // masked in practice because init_new_player() (called just above, at
+  // enter_world()'s call site) already unconditionally seeds food/water
+  // to 300, but the gate should still read the object update_age()
+  // actually writes to, in case that other default is ever refactored.
+  if (!user->query("food") && !user->query("water") && user->query("age") == 14) {
     user->set("food", user->max_food_capacity());
     user->set("water", user->max_water_capacity());
   }
