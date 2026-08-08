@@ -79,6 +79,158 @@ need auditing every `set_default_object()` call site for a cycle or
 self-reference; out of scope for a first bring-up pass. Cosmetic log
 noise only; does not affect play.
 
+## 深度功能测试 / Deep functional test (AGENTS.md §10.7)
+
+Not a wuxia lib — sci-fi *Legend of the Galactic Heroes* (银河英雄传说)
+theme, confirmed by reading source directly (no `doc/help/` tree shipped
+at all in this archive — `HELP_DIR` topics file doesn't exist, so newbie
+orientation came from `README.md`/`NOTES.md` plus tracing
+`adm/daemons/logind.lpc::init_new_player()`/`enter_world()` and the
+`d/phezzan/` room tree). One continuous session, real Chinese-named
+account (`qintestcc` / 秦风测, password `TestPass123`), `look`/`score`/`i`
+at every state change:
+
+1. **Registration**: id → confirm → Chinese name (rejected an ASCII-only
+   English id first, as expected) → password ×2 → email → gender → into
+   `START_ROOM` (`/d/phezzan/starport`, 费沙中央宇宙港), matching
+   README's stat set exactly (力量/胆识/才智/统率/沉着/魅力/体格/运气,
+   实战/格斗经验 split). Same pre-existing, non-blocking
+   `securityd.lpc`/`feature/dbase.lpc` "Too deep recursion" noise
+   documented above reproduced twice on this pass too (still cosmetic,
+   still doesn't block anything).
+
+2. **§7.90 new instance, found live, not by static grep**: the test
+   character's very first `look` command — which lazily compiled
+   `/cmds/usr/look.lpc`, `/feature/s_attribute.lpc`, `/std/char/rank.lpc`
+   and friends for the first time on this boot — hit `Eval interrupted:
+   object d/phezzan/starport cost limit reached, limit: 700000 usec` /
+   `执行时段错误: *Too long evaluation. Execution aborted.` at
+   `/feature/dbase.lpc:266` (the same `default_ob` fallback chain as the
+   documented recursion issue, but this time exhausting the full
+   eval-cost budget before the recursion-depth guard could catch it —
+   FluffOS charges first-time lazy-compilation cost against the calling
+   context, and this lib's `700000` ceiling was too tight to absorb a
+   cold-boot compile burst plus one `dbase.lpc` fallback in the same
+   tick). The room description itself still rendered correctly to the
+   player — silent/invisible exactly per §10.7's premise. **Fix**: raised
+   `maximum evaluation cost` in `config.fluffos` from `700000` to
+   `5000000` (matching this session's `zzhj`/`xixingzhanji`/`zjdyaryl`
+   precedent, §7.90). Verified: killed the driver, rebooted, registered a
+   second fresh character (`qintwob`/秦风乙) from a cold boot (so
+   `look.lpc`/`std/room.lpc`/`id_card.lpc` etc. all lazily compiled again)
+   — zero `Eval interrupted`/`Too long evaluation` lines in `debug.log`
+   this time (`grep -c` = 0), only the pre-existing recursion noise.
+   `maximum call depth : 30` (driver default 150) was left untouched —
+   it's what makes the `default_ob` recursion resolve as a *fast*,
+   harmless guard-catch rather than a slow burn, and the prior pass
+   already made an explicit, reasoned decision not to chase the
+   underlying `default_ob` cycle itself; not re-litigated here.
+
+3. **§7.11, second instance this pass**: `adm/simul_efun/file.lpc`'s
+   `log_file()` called `write_file(LOG_DIR + file, text)` directly with
+   no `assure_file()` guard, even though this file defines its own
+   `assure_file()` two functions down — same shape as `zzhj`/`xajhxo`
+   etc. this session. `LOG_DIR` (`/log/`) doesn't exist in a fresh
+   checkout (gitignored runtime dir). `logind.lpc::enter_world()` calls
+   `log_file("USAGE", ...)` on **every** successful registration and
+   login — did not reproduce as a hard crash on THIS lib specifically
+   (this driver's mudlib error handler + `securityd.lpc`'s own already-
+   fragile `valid_write` swallowed it into more of the same recursion
+   noise rather than aborting registration outright), but it's the exact
+   same latent bug class and was silently no-op'ing the USAGE log every
+   time. **Fix**: `assure_file(LOG_DIR + file)` before the `write_file()`
+   call, plus a one-line forward declaration (`assure_file()` is defined
+   textually after `log_file()` in the same file). Verified:
+   `work/log/USAGE` now gets created and correctly appended
+   (`qintestcc was created from 127.0.0.1 (...)`, `fluffos loggined from
+   127.0.0.1 (...)`) — did not exist as a possibility before the fix
+   since the directory was never created.
+
+4. **Safe-sparring mechanism**: read `cmds/std/fight.lpc`/`kill.lpc`
+   before assuming anything — turns out this lineage uses the exact same
+   `can_speak`/`accept_fight()`/`fight_ob()` vs `kill_ob()` convention as
+   the wuxia-family ES2 siblings tested elsewhere this session (same
+   engine, just reskinned) — `fight` is the non-lethal "点到为止" spar
+   (stamina only, no real injury, per its own help text) and `kill` is
+   real combat; both gated by `environment(me)->query("allow_fight")`.
+   **Notable, NOT a bug**: only **one** room in the entire `d/` tree sets
+   `allow_fight` (`d/phezzan/earth_antehall.lpc`), and its only NPC
+   (`earth_monk`, a hostile "地球教徒" cultist) attacks on sight via
+   `kill_ob()` in its own `init()` before a player ever gets a command
+   prompt — confirmed by walking the admin character in there: it
+   auto-fought back, took real damage, and died (`sethp hp==5000` fired
+   too late). This reads as intentional "hostile cult guard" quest
+   content (fits the Terra-cult antagonist lore), not a broken
+   spar-room — but it does mean there's no NPC anywhere that offers a
+   truly walk-up-and-`fight` safe spar out of the box. Verified the
+   `fight_ob()` mechanic itself works correctly and safely by using the
+   admin's `call <obj>-><func>(<args>)` wizard tool (this lib's only
+   `cmds/wiz/` general-purpose object-mutator, effectively its "eval") to
+   temporarily set `allow_fight` on `/d/phezzan/winter_library` (already
+   the location of a friendly, `can_speak` NPC — see below), then had the
+   test character `fight n.b` (博尔德克/Boltic): mutual `fight_ob()`
+   exchange, ended cleanly with "今日点到为止，我们下次再比试！", no HP
+   loss, only stamina — reverted `allow_fight` back to unset on both
+   rooms touched afterward (runtime-only property, not persisted to
+   disk, so this was a pure in-memory test scaffold, not a code or save
+   change).
+
+5. **Faction/rank acquisition, organic path — fully verified,
+   end-to-end**: `apprentice <npc>` at `/d/phezzan/npc/boltic.lpc`
+   (尼古拉斯·博尔德克, 帝国驻在事务官, reachable from `START_ROOM` via
+   `north×7, west×3, north, northup, east, north×2, east` through the
+   费沙 winter palace — `boltic.attempt_apprentice()` directly issues
+   `command("recruit " + id)` on itself, i.e. it always accepts).
+   Result: `score` went from 【普通公民】to 【费沙武官】, "现任费沙自治领
+   低级幕僚，官阶列兵"/"你的直属上司是尼古拉斯·博尔德克", a `uniform.lpc`
+   (费沙军服) was written to `data/login/q/qintestcc/` and cloned into
+   the player's inventory. Contrast: the higher-ranked `fuguan.lpc`/
+   `blackfox.lpc` NPCs' `attempt_apprentice()` unconditionally refuse
+   ("以你现在的实力恐怕还不足以成为我的手下") — that's a deliberate
+   score/rank gate on the higher-tier recruiters, not a bug (only
+   `boltic`, the lowest-generation recruiter, accepts newcomers
+   unconditionally, which is exactly the newbie on-ramp you'd expect).
+
+6. **Admin shortcut path — genuinely does not exist, checked
+   honestly**: grepped `cmds/wiz/`, `cmds/adm/`, `cmds/arch/` for any
+   rank/family/skill grant command — none. `cmds/adm/promote.lpc` only
+   changes *wizard* status (`(player)`→`(admin)` etc.), not in-game
+   faction/rank. `cmds/adm/sethp.lpc` (`sethp <prop>==<value>`, sets an
+   arbitrary property on the admin's own body) and `cmds/wiz/call.lpc`
+   (`call <obj>-><func>(<args>)`, arbitrary `call_other`) are the closest
+   things to a generic admin toolkit and were used above for test
+   scaffolding, but neither is a dedicated "grant faction/rank" shortcut
+   — the organic `apprentice`/`recruit` path above is the only way any
+   character (including staff) joins a 势力 in this lib.
+
+7. **`quit` → `debug.log` → real reconnect → persistence confirmed**:
+   no new-account-quit-deletes-account grace period found in
+   `cmds/usr/quit.lpc` (plain save + destruct, no lockout timer), so a
+   normal `quit` was used directly. `debug.log` after quit showed only
+   the pre-existing recursion noise. Killed the driver
+   (`config.fluffos` change requires a restart to take effect), rebooted,
+   did the NOTES.md write-up in between for a real wall-clock gap, then
+   reconnected as `qintestcc` with a fresh `nc` session after the reboot:
+   password accepted, `score` on landing showed 【费沙武官】秦风测 with
+   the family/rank/uniform state fully intact — confirms both the
+   registration fix and the faction-join state survive a real disconnect
+   + driver restart + reconnect cycle.
+
+Cleanup: deleted the `qintestcc`/`qintwob` test-character save files
+under `data/{login,user}/q/` before committing; reverted the admin
+(`fluffos`) save-file drift caused by the `earth_antehall` death (HP/
+stamina/score fields) back to its pre-test committed state via `git
+checkout --` (no revision) since it's incidental test drift on a shared
+account, not an intended change.
+
+**WASM**: unverified under WASM this pass — `curl -sS
+"$HTTPS_PROXY/__agentproxy/status"` confirms emsdk's
+`storage.googleapis.com` dependency is still proxy-denied; not retried.
+Both fixes above (§7.11, §7.90) are plain LPC/config changes with no
+WASM-specific code path, so they're expected to carry over cleanly
+whenever WASM verification becomes possible, consistent with this
+archive's `wasm_status: playable` from the prior pass.
+
 ## Not yet done (out of scope for this pass)
 
 WASM export / GitHub Pages packaging — deferred to a later batch pass
