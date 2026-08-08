@@ -1810,6 +1810,32 @@ Two independent traps in the same apply:
   夕阳再现/XYZX lineage above — grep any new lib's `log_file()`
   implementation for a missing `assure_file()` call on sight, regardless
   of which engine family it belongs to.
+- **Fifth+ instance, a third unrelated lineage: `ldtx`'s §10.7 deep
+  functional test** (Century/`adm-single` family — §11 — unrelated to
+  both the 夕阳再现/XYZX lineage and `zjmudhell`'s "hell"-map codebase
+  above, yet the identical `adm/simul_efun/file.lpc` shared-utility
+  file, right down to `log_file()` sitting unguarded two functions above
+  its own already-correct `assure_file()` helper). Symptom here was
+  milder than a boot-time hang: `/log/nosave/` was one of the few
+  `log_file()`-referenced subdirectories genuinely missing from this
+  archive (confirmed via a full-tree grep of every `log_file("<dir>/...",`
+  call site against `find work/log -type d`), and it's the target of
+  `cmds/app/update.lpc`'s own audit-log line — so every wizard `update`
+  command, on a lib that otherwise boots and plays perfectly cleanly,
+  threw a raw stack trace to the wizard's screen (`*Wrong permissions
+  for opening file /log/nosave/update for append. "No such file or
+  directory"`) immediately AFTER a successful recompile, masking the
+  "成功！" confirmation message. Same 17 call sites share `nosave/` in
+  this lib (`master.lpc`'s crash logger, `securd.lpc`'s promotion
+  logger, and most `cmds/{app,arch,wiz,std}/*.lpc` audit logs), all
+  silently broken the same way. Same fix, same forward-declaration
+  gotcha, same verification method (`update <path>` as admin, before/
+  after). Fourth unrelated confirmation this bug shape is a near-
+  universal copy-paste idiom, not tied to any one lineage — the pairing
+  of "`log_file()` with no `assure_file()` guard" plus "the guard
+  already exists two functions below, unused" is now common enough that
+  it's worth checking on sight in ANY newly-encountered `adm/simul_efun/
+  file.lpc`, independent of engine family.
 
 ### 7.12 Shared message/wrapper argument bugs
 
@@ -4494,6 +4520,50 @@ steps the whole question. Verified live after the correction: walked
 to the square, confirmed the NPC loads and renders correctly, and
 `debug.log` stayed clean where it had shown the error every time
 before.
+
+**Wider-blast-radius confirmed instance, `ldtx`'s §10.7 deep functional
+test: the same unguarded chain, when it lives inside a ROOM's own
+NPC-population step, can silently abort an unrelated LATER statement in
+that same room's `create()` — here, the room's own message-board force-
+load.** `d/city/npc/xiaobao.lpc` (a named NPC placed in `d/city/kedian`,
+this lib's actual starting room) had `carry_object("/u/rhxlwd/cloth")
+->wear();` in `create()`, targeting a wizard directory (`/u/rhxlwd/`)
+that doesn't exist anywhere in the archive — already known and
+documented as a "harmless, caught" content gap in an earlier pass. It
+is not harmless: `kedian.lpc`'s own `create()` populates its NPCs via
+`setup()` (which recurses into `xiaobao.lpc`'s `create()`) as one
+statement, then force-loads its bulletin board via a bare `"/clone/
+board/kd_b"->foo();` as the textually NEXT statement. Because `xiaobao`'s
+`carry_object(...)->wear()` throws and nothing in the `create()`/
+`setup()`/`reset()`/`make_inventory()` chain catches it, the throw
+propagates out of `kedian.lpc`'s own `create()` entirely — silently
+skipping the board-load line that follows, so the board was never
+present in the room, for any player, for the entire lifetime of the
+boot. Confirmed live: on a fresh driver boot, the very first connection
+into the starting room showed no board in the room's inventory listing
+and `look kdboard`/`post kdboard` both failed with "你要看什么？"; a
+manual admin `update /clone/board/kd_b` fixed it retroactively for that
+boot only. Applying the exact §7.73 guard (`object cloth; cloth =
+carry_object(...); if (cloth) cloth->wear();`) to `xiaobao.lpc` let
+`kedian.lpc`'s `create()` run to completion on the very next fresh boot
+— the board appeared correctly in the room description on the first-
+ever visit, `post`/`look` both worked, and the NPC's own dialogue
+(`chat_msg`/`inquiry`) was unaffected either way, before or after the
+fix (its own logic never reaches the broken line). A static sweep of
+this lib for the same shape (`carry_object("<literal path>")->wear()/
+->wield()`, excluding already-commented-out lines) found 25 further
+live call sites across 15 files referencing 8 distinct missing paths
+(mostly an entire absent wizard directory, `/u/csy/kunlun/obj/`, hit by
+11 of them) — all given the same guard, none independently confirmed to
+have this room-create()-abort side effect, but fixed proactively since
+the guard is mechanical, safe, and identical in shape. **Detection
+takeaway beyond §7.73's original scope: when auditing this bug class,
+don't stop at "does the broken NPC itself look wrong" — check what
+OTHER statements execute later in the same room's `create()` (or any
+caller up that stack), since a single uncaught throw silently truncates
+everything sequentially after it, and a completely unrelated feature
+(a board, a second NPC, an exit) can go missing with zero error visible
+to a player.**
 
 ### 7.74 (UNRESOLVED) `object->move(dest)` appears to silently never return when called from deep inside a `call_out()` chain, downstream of a `reincarnate()` call — no error, no crash, no completion
 

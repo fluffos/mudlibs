@@ -15,6 +15,22 @@
 - 客栈开局，NPC 店小二和一只可爱的小白狗会互动欢迎新玩家。
 - 明确提醒"请尽量不要选择金庸小说中已有人物姓名"，鼓励玩家自创
   角色名而非直接扮演原著人物。
+- 死亡机制走的是"原地昏迷→片刻后自动苏醒＋精气属性惩罚"，不是分
+  阶段的鬼魂/冥界流程——被打倒后角色留在原地，`look`/`score` 等指
+  令短暂被封锁，几秒后自动恢复行动，死亡次数与最后死因会记入档案。
+
+**血统澄清**：游戏内品牌"雄霸天下"同时也是另一份完全不同代码库
+`xbtxiii`（雄霸天下III）的品牌名，但逐行核对 `master.lpc`/
+`securityd.lpc`/`config.fluffos` 后确认**两者不是同一份代码**——
+`ldtx` 的 `master file` 指向 `/adm/single/master`（档头明确写着
+"for ES II mudlib... modified by Xiang for XKX"，`securd.lpc`+
+`securityd.lpc` 两文件分工），`xbtxiii` 指向 `/adm/obj/master`（无
+该血统注释，`securityd.lpc` 是单一文件）。两者 `connect()` 函式体
+确实一字不差相同，说明共享更早的"东方故事 ES II"共同祖先（AGENTS.md
+§11），但各自独立演化，不属于同一具体分支——"雄霸天下"是被至少两
+个互不相关的分支各自沿用的品牌名，与本项目已反复验证的"共享品牌
+名≠共享血统"规律（§5.1）再添一例。`ldtx` 真正的血统伙伴是下面已
+记录的 Century/adm-single 家族。详见 NOTES.md 深度功能测试小节。
 
 ## 注册流程
 
@@ -39,14 +55,13 @@ Mud 列表 → 英文名字（3-8 个小写英文字母）→ 确认建立新角
 
 没有发现 Chinese 姓名判断、宏定义或指令表相关的 bug。
 
-另外发现一个**不影响游戏进行、没有修复**的内容缺失：
-`d/city/npc/xiaobao.lpc` 的 `create()` 里引用了
-`/u/rhxlwd/cloth.lpc`，但整个存档里根本没有 `/u/rhxlwd/` 这个巫师
-目录。`carry_object()` 拿到的 0 去呼叫 `->wear()` 会抛出
-`Bad argument 1 to EFUN call_other()`，但这个例外被房间自己的
-`setup()`/`reset()` 包装的 `catch()` 接住了，玩家端完全看不到——
-和 `ffxymud`/`jhfy2`/`jhfy3` 里 `d/city/sj.lpc` 那种预先存在、不
-补内容的缺字符串是同一类，按项目一贯做法不去凭空补一个档案。
+另外发现一个内容缺失（`d/city/npc/xiaobao.lpc` 的 `create()` 引用
+了不存在的 `/u/rhxlwd/cloth.lpc`）——WASM 阶段曾误判为"被房间自己
+的 catch() 接住、无害"，**后续 §10.7 深度功能测试追查发现并不是
+这样**：这个未捕获的例外实际会打断开局客店房间 `create()` 里紧接
+在后面的留言板加载语句，导致这份档案的开局留言板每次开机都不会出
+现。已用标准防御性守卫修复（不补内容，只挡例外），详见 NOTES.md
+和 AGENTS.md §7.73。
 
 ## 移植修复（详见 NOTES.md）
 

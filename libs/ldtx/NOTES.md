@@ -116,3 +116,45 @@ Century/adm-single 家族（shiji/shujian2008/xjcq2000/xkxz2/xiakexing100），�
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD`、`WIZ_BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 34 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（§10.7，2026-08-08）
+
+之前的 WASM 阶段和 §7.86 扫描都只做过编译检查/浅层注册测试，没有真正玩过。这次用原生驱动（`build-debug/src/driver`）通过 `scripts/tmux_mud.sh` 完整走了一遍。
+
+### 与 `xbtxiii` 的血统关系：确认为"同源但非同支"，不是同一份代码
+
+本次深挖前先核对了 `xbtxiii`（雄霸天下III）——两者游戏内品牌都叫"雄霸天下"，但直接比对 `master.lpc`/`securityd.lpc`/`config.fluffos` 的结构后确认**不是同一份代码**：
+
+- `ldtx` 的 `master file` 配置指向 `/adm/single/master`，档头明确写着"for ES II mudlib... rewritten by Annihilator... modified by Xiang for XKX"；`securd.lpc`（397 行）+ `securityd.lpc`（299 行）两个文件分工。
+- `xbtxiii` 的 `master file` 配置指向 `/adm/obj/master`，档头只有一句 `#pragma save_binary`，没有那段 ES II/XKX 血统注释；`securityd.lpc` 是单一 286 行文件，没有配对的 `securd.lpc`。
+- 两者的 `connect()` 函式体（包括那句一字不差的中文错误提示"现在有人正在修改使用者连线部份的程式，请待会再来。"）确实相同，说明两者都是更早期"东方故事 ES II"共同祖先的后代（AGENTS.md §11 的 ES II 大家族），但 `xbtxiii` 自己的 NOTES.md 早已记录"README 自称风云衍生分支，但没有发现和 风云3/风云Ⅳ/风云再起Ⅱ/夕阳再现 任何一支共享 master.lpc/securityd.lpc/logind.lpc 结构证据"——`xbtxiii` 走的是完全独立的一支演化路径，`master file` 路径、securityd 拆分方式都不同。
+
+结论：**"雄霸天下"是被至少两个互不相关的具体分支各自沿用的品牌名，不是同一血统的确凿证据**——与本项目反复验证过的"共享品牌名≠共享血统"规律（AGENTS.md §5.1）再添一例。`ldtx` 真正的血统伙伴是 README/NOTES.md 已经记录的 Century/adm-single 家族（`shiji`/`shujian2008`/`xjcq2000`/`xkxz2`/`xiakexing100`）。
+
+### `xbtxiii` 姊妹发现逐项核对（均不适用——不同代码库）
+
+- **§8.12（大写字母属性类别选择菜单，提示大写实际只认小写）**：不适用。`ldtx` 的 `adm/daemons/logind.lpc` 里根本没有 `get_kind()` 这一步——注册流程里没有"12 种类型 A-L"的属性类别选择环节（这份档案的天赋分配是"输入 0-4"数字选择，见 README 已记录的流程），二者的角色创建设计完全不同。
+- **§7.95（`fight` 婉拒切磋时 `notify_fail()` 后错误 `return 1`）**：不适用。`cmds/std/fight.lpc` 第 49-50 行本身就是 `notify_fail(...); if (!userp(obj) && !obj->accept_fight(me)) return 0;`——已经是正确的 `return 0`，不是 `xbtxiii` 那种写反的 `return 1`。两份 `fight.lpc` 是独立撰写的不同实现，只是恰好都用同一套 `notify_fail()` 惯例。
+- **§7.90（`maximum evaluation cost` 太低，第三种触发形态）**：本档案 `config.fluffos` 已经是 `700000`（本项目常见默认值），但整轮注册→移动→战斗→死亡复活→重连的完整会话里 `debug.log` 全程没有出现任何 `cost limit reached`，说明这份档案自己的内容开销没有撞到这个默认上限，不需要调高。
+
+### 本次新发现并已修复的 bug
+
+- **AGENTS.md §7.11 新增实例（第五+例，第三个互不相关血统）：`adm/simul_efun/file.lpc` 的 `log_file()` 没有调用同文件里现成的 `assure_file()`，导致每次 `update` 指令后都抛出可见的执行时段错误**：`cmds/app/update.lpc` 重新编译任意档案成功后会呼叫 `log_file("nosave/update", ...)` 记录审计日志，而 `log/nosave/` 这个子目录在整份档案里从未存在（`work/log/` 下只有 `buglog`/`backup`/`static` 三个目录）。`log_file()` 本身只是裸 `write_file(LOG_DIR + file, text)`，同一个档案里紧接着定义的 `assure_file()`（会用 `mkdir` 逐级建立缺失目录）从未被呼叫过。全档案共 17 处 `log_file("nosave/...", ...)` 调用命中同一个缺口，包括 `adm/single/master.lpc`/`adm/obj/master.lpc` 的当机记录、`securd.lpc`/`securityd.lpc` 的晋升记录、`adm/daemons/autosaved.lpc` 的自动备份记录，以及几乎所有 `cmds/{app,arch,wiz,std}/*.lpc`（`update`、`rm`、`edit`、`clone`、`cp`、`give`、`drop`、`suicide`、`reboot`、`purge`、`chgkf`、`call`）的操作审计。实测：`update /inherit/room/room` 重新编译**成功**，但紧接着抛出 `*Wrong permissions for opening file /log/nosave/update for append. "No such file or directory"`，玩家/巫师端看不到本该出现的"成功！"确认字样。修复：在 `log_file()` 开头加一行 `assure_file(LOG_DIR + file);`（因为 `assure_file()` 在同一档案里定义在 `log_file()` 之后，还需要一行前向声明 `void assure_file(string file);`，否则整个 `simul_efun`/`master` 编译失败——AGENTS.md §7.11 已有的 `zjmudhell` 实例记录过同样的坑）。重启驱动后重测：`update` 干净显示"成功！"，无任何报错。已追加为 AGENTS.md §7.11 的新确认实例（第三个互不相关的具体血统，同一份 `adm/simul_efun/file.lpc` 工具文件在完全不同代码库里独立复制出现）。
+- **AGENTS.md §7.73 新增实例，并发现该 bug 类别一个此前未记录的更严重后果——同一 `create()` 里"后面"的无关语句会被静默跳过**：`d/city/npc/xiaobao.lpc`（韦小宝，这份档案实际的开局房间"客店"里的固定 NPC）的 `create()` 末尾有 `carry_object("/u/rhxlwd/cloth")->wear();`，`/u/rhxlwd/` 这个巫师目录在整份档案里根本不存在。这个缺口此前（WASM 阶段）就已记录，但被误判为"无害，被房间自己的 catch() 接住"——实际追查发现**并没有任何 catch() 接住它**：`d/city/kedian.lpc`（开局客店房间）的 `create()` 用 `setup();` 触发 NPC populate（内部递归调用 `xiaobao.lpc` 的 `create()`），紧接着下一行是 `"/clone/board/kd_b"->foo();`（强制加载本房间的留言板）。因为 `xiaobao` 的 `carry_object(...)->wear()` 抛出未捕获例外，整条调用链一路往外传，`kedian.lpc` 自己的 `create()` 被中途打断，**留言板加载这一行永远不会执行**。实测确认：全新驱动首次开机、第一个连线进入客店的玩家，房间物品列表里完全没有"客店留言板"，`look kdboard`/`post kdboard` 都得到"你要看什么？"；用管理员手动 `update /clone/board/kd_b` 能临时补救（但只对当次开机有效，下次重启又会消失）。修复用标准 §7.73 写法（`object cloth; cloth = carry_object(...); if (cloth) cloth->wear();`）。重启驱动后用全新角色验证：第一次进入客店，房间描述里正确显示"客店留言板(Kdboard) [ 没有任何留言 ]"和"韦小宝"，`post`/`look kdboard` 均正常。顺手对全档案做了一次同类模式的静态扫描（`carry_object("<字面路径>")-><br>方法()`，排除已注释掉的行），另外命中 25 处、15 个档案、引用 8 个不同的缺失路径（其中 11 处指向同一个整体缺失的巫师目录 `/u/csy/kunlun/obj/`），逐一用同样的防御性写法修复，均为机械式、低风险改动。已追加为 AGENTS.md §7.73 的新确认实例。
+- **§7.86 复查**：全档案 `inherit BULLETIN_BOARD`/`BBS_BOARD` + 冗余 `replace_program()` 的检测干净（此前已修复的 34 处均已生效，`post` 命令实测正常，无新命中）。
+
+### 完整游玩验证（一次连续会话，原生驱动）
+
+用全新角色 `ldtxqa`（中文名"云飞扬"）走完整套注册流程：`gb` 编码 → 英文 id → 确认 y → 中文名字（无 §7.34 调试残留输出）→ 密码 → 确认密码 → 天赋 0（系统随机）→ 接受 y → 电子邮件 → 性别 m → 进入游戏世界（客店），过程干净无报错。
+
+- **移动**：`kedian`（客店，`no_fight` 生效，`fight`/`kill` 均被正确拒绝）→ `west` 到"北大街" → `south` 到"中央广场"，房间描述、出口、NPC 列表均正常。
+- **留言板**：`post kdboard` 打开内建行编辑器，留言成功（"留言完毕。"），`look kdboard` 正确显示"[ 1] kdboard ... 云飞扬(ldtxqa)"，未读数统计准确。
+- **战斗与死亡/恢复**：对"中央广场"的"流氓头"（`Liumang tou`）打 `kill`，多回合真实攻防判定正常（命中部位、伤害描述、体力状态提示逐条推进），角色被打倒后出现"你的眼前一黑，接著什么也不知道了...."——此时 `look`/`score` 均返回"什麽？"（指令被封锁），几秒后自动"慢慢地你终于又有了知觉...."恢复行动，`score` 显示"你共死亡：1 次"、"最后一次死于：[流氓头] 之手"，精/气条从满格降到 2/16（惩罚性削减），食物/饮水条未受影响，人物位置未变。这份档案的死亡机制是"原地昏迷→自动苏醒+属性惩罚"，不是分阶段鬼魂/冥界流程，全程一次顺畅完成，不属于 AGENTS.md §7.68 的"present() 守卫吞掉重试"情形（本档案压根没有那种多阶段 `call_out` 鬼魂守卫）。
+- **`quit`/重连**：`quit` 显示"欢迎下次再来！"正常退出（因为最后所在的"中央广场"没有设置 `valid_startroom`，`quit.lpc` 正确地没有更新存档点——这是既有代码的正确设计，不是 bug）；重新用同一账号密码登录，正确恢复到之前保存的起始点（HP/食物/饮水延续为退出前的数值），未触发 §8.13 类的巫师二次登录死锁（本账号是普通玩家，未测试；管理员 `fluffos` 账号已在下面单独验证）。
+- **管理员权限**：用既有 `fluffos`/`Mud@2026` 账号登录（`adm/etc/wizlist` 里已有的记录，非本次新增），立即显示"目前权限：(admin)"；`update /adm/simul_efun/file` 成功验证 §7.11 修复生效（"重新编译 ... 成功！"，无报错）；`look` 到客店房间物品栏正确显示留言板"[ 1 张留言，1 张未读]"，确认之前玩家角色的留言持久化正常。
+
+全程 `debug.log` 无任何异常记录（唯一出现过的执行时段错误就是本次修复的 §7.11 `nosave` 问题本身，修复前后各测了一遍）。
+
+### 未覆盖
+
+商店/购买、正式门派拜师、邮件系统本轮时间有限未继续深挖；本档案的开局区域是围绕客店/北大街/中央广场展开的城市地图，未继续往更远的地图区域探索。
