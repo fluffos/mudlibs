@@ -492,3 +492,216 @@ Neither fired visibly in this lib's own sit. Retest: fresh registration
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 44 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试 / Deep functional test (AGENTS.md §10.7)
+
+Native driver only (`~/src/fluffos/build/src/driver`, `-DPACKAGE_DB=OFF`
+ASAN/UBSAN preset), booted from the lib root (`libs/zjdyaryl/`, port
+40073) per §5.2. Client: `scripts/mudclient.py` (raw-socket, single
+continuous connection per invocation) — `scripts/tmux_mud.sh` was tried
+first but this container has no `telnet` binary at all, so every
+session below is a `mudclient.py` invocation carrying the full
+send-sequence in one shot (one TCP connection = one continuous session).
+
+### Pre-boot environment gotcha (not a code bug)
+
+First boot in this container hit `*Wrong permissions for opening file
+/log/log for append. "No such file or directory"` (spammed once per
+preloaded daemon, caught by `master.lpc`'s own `catch()`, non-fatal) —
+neither `libs/zjdyaryl/log/` (lib-root, for `debug.log` itself, driver
+CWD-relative per §5.2) nor `libs/zjdyaryl/work/log/{static,user}/`
+(mudlib-virtual-root, for `log_file()`/`assure_file()` targets like
+`clone/user/login.lpc`'s `log_file("static/logon", ...)`) existed yet in
+this fresh container — both are gitignored runtime directories that a
+prior pass's WASM-enablement notes assumed were already present. Created
+both (`mkdir -p log log/static log/user`, lib-root and `work/`
+respectively) before the real test boot; zero `Wrong permissions` lines
+in every subsequent boot. Not committed (gitignored), noted here so a
+future dive in a fresh container doesn't misread the same symptom as a
+regression in the already-fixed `log_file()`/`assure_file()` pair
+(`adm/simul_efun/file.lpc`'s `log_file()` genuinely still lacks its own
+`assure_file()` guard, matching this lineage's known §7.11 shape, but
+every actual call site either goes through an already-`assure_file()`d
+caller — e.g. `channeld.lpc` — or targets a directory that exists once
+the above `mkdir -p` is done; no live crash reproduced from it this
+pass).
+
+### Newbie material
+
+`clone/misc/newbie.lpc`("新手必读") is a `read book` → `HELP_CMD->main(me,
+"feature")` pointer, but the real onboarding path is entirely
+NPC-driven: land in 世外桃源 (`d/register/entry.lpc`) →
+水笙(shuisheng)'s `greeting()`/`do_register()` prompts `register
+<email>` → `decide` → walk to one of 4 personality-NPC rooms (`east` =
+陆天抒/"光明磊落") → `out` → 阎罗殿(`yanluodian.lpc`) → `wash` (roll the
+4 stats per chosen 猛士/智慧/耐力/敏捷/均衡 type) → `born <地名>` (e.g.
+`born 扬州人氏`) lands in a real starting city (`/d/city/kedian`).
+
+### Registration + state verification (two independent continuous sessions)
+
+- **卫长风** (id `weifeng`, male, 敏捷型): full register→decide→east→
+  out→wash→`born 扬州人氏` in one connection, `look`/`score`/`i` at every
+  state change (pre-birth `还没有出生呐` message pre-`born`, correct
+  gender-appropriate starting gear post-`born`), landed in 客店 →
+  `west` to 北大街.
+- **蓝天** (id `lantian`, female, 耐力型): identical flow, independently
+  verified gender-specific gear (绣花小鞋/粉红绸衫) and stat allocation
+  (根骨 highest, matching 耐力型).
+- Cosmetic note, not a bug: the starting `cloth` clone's displayed name
+  re-rolls a random flavor variant on each fresh `create()` (短打劲装 /
+  黑色劲装 across weifeng's own sessions) — core inventory count, weight%
+  and all persisted stats stayed exactly consistent across reconnects.
+
+### Combat mechanism
+
+Read `cmds/std/fight.lpc` before testing, per this session's standing
+lead: confirmed the exact `can_speak`-gated split it was looking for —
+`obj->query("can_speak")` true → routes through `obj->accept_fight(me)`
+(decline-or-spar, "点到为止...不会真的受伤" per `fight`'s own help text);
+false → unconditionally `obj->kill_ob(me)`, a real fight. Default
+`accept_fight()` (`inherit/char/npc.lpc`) itself calls `kill_ob()`
+directly when `!can_speak`, so the split is enforced at both call sites,
+consistently — existing, intentional design, not a bug (matches the
+pattern already documented project-wide; did not test the non-`can_speak`
+branch against a live creature, by design, since that branch is
+genuinely lethal).
+
+Live test: `fight ouyang ke` (欧阳克, a human/`can_speak` story NPC at
+北大街) correctly invoked `accept_fight()` — declined in-character
+("在下怎么可能是小兄弟的对手？" / "看起来欧阳克并不想跟你较量。") because
+its `attitude` is `"friendly"` and its qi/jing were both at 100%
+(`inherit/char/npc.lpc`'s default `accept_fight()`: `"friendly"` +
+≥75% qi/jing → decline). A real, clean exercise of the safe branch with
+a negative outcome — no damage, no crash, no error. (This same fight
+attempt is also what first reproduced the `eval_function` bug below, via
+`combatd.lpc`'s post-fight-request `start_call_out()`.)
+
+### Skill/sect acquisition — both paths
+
+- **Organic**: `apprentice ouyang ke` correctly dispatched
+  `attempt_apprentice()` → `permit_recruit()` (`kungfu/class/ouyang/
+  ouyang.h`) → declined in-character ("你不是我们欧阳家的人，我怎能收你
+  为徒？") because the test character's `born_family` wasn't 欧阳世家.
+  Confirmed the full mechanism runs end-to-end without error; a
+  successful join would require `born 欧阳世家` instead of `born
+  扬州人氏` at registration (not repeated with a 3rd character, given
+  time budget — the declining path already proves
+  `apprentice`→`attempt_apprentice`→`permit_recruit` all resolve and
+  execute correctly, which is what this session was actually checking
+  for after `permit_recruit()` initially looked suspiciously undefined
+  by a too-narrow grep — see below).
+- **Admin shortcut**: `cmds/arch/setsk.lpc` (`setsk [<对象>] <技能>
+  <级别>`, `(arch)`-gated) — confirmed working live on the admin account
+  itself (`setsk force 30` → 目标：浮云(fluffos) 设定技能：force 等级：
+  30; `setsk force 0` → 取消技能：force). `cmds/wiz/copyskill.lpc`
+  (`(wizard)`-gated, copies an existing character's whole skill/stat set
+  onto another) is a second, independent shortcut. Could not test
+  `setsk`/`copyskill` against the offline test characters directly
+  (both commands require the *target* to be a currently-loaded/online
+  `living()` object, not just a save file — correct, intentional
+  behavior, reproduced as "目标不存在，如果是设定自身技能，目标参数可
+  作缺省。" when targeting an offline `lantian`), so verified the
+  mechanism on the admin's own account instead.
+- **False-alarm investigated and cleared**: `permit_recruit()` (called
+  unqualified from every sect-master NPC's `attempt_apprentice()`, 125+
+  call sites under `kungfu/class/*/`) appeared completely undefined
+  anywhere in the tree on a first grep — worth flagging since an
+  undefined local function call would be a genuine crash-on-every-
+  apprentice-attempt bug. Root cause of the false alarm: my own filter
+  excluded `kungfu/class/` from the search entirely. Each sect actually
+  defines its own `permit_recruit()` in a shared per-sect header
+  (`kungfu/class/ouyang/ouyang.h`, `kungfu/class/quanzhen/quanzhen.h`,
+  etc., byte-identical to sibling `zjdyzj`/`zjdywzb`/`zjdy2008wzb`),
+  `#include`d by every NPC file in that sect directory. Confirmed via
+  `lpcc --batch` compiling `kungfu/class/ouyang/ouyangke` cleanly and
+  the live `apprentice` test above actually reaching `permit_recruit()`'s
+  real decline logic. No bug here — noted so a future pass doesn't
+  re-walk the same dead end.
+
+### quit / reconnect / persistence
+
+`cmds/usr/quit.lpc` has no new-account grace-period or delete-on-quit
+logic (checked before testing) — ordinary `quit` is always safe here,
+no need to simulate a raw disconnect instead. Existing design, not a
+bug: non-wizards get all non-equipped, non-autoload inventory dropped on
+`quit` (anti-hoarding-while-offline mechanic).
+
+- `weifeng`: registered → played → **reconnected mid-test** (prior
+  connection had ended without an explicit `quit`, so the driver
+  correctly treated the next connection as "重新连线完毕" / link-dead
+  reconnect rather than a fresh login — same character, same room) →
+  `look`/`quit` clean ("欢迎下次再来！").
+- `lantian`: registered → played → clean `quit` → **driver fully
+  restarted** (killed by exact PID, rebooted with the `maximum
+  evaluation cost` fix below applied) → real wall-clock gap while this
+  fix was written up and the driver reboot completed → reconnected:
+  name/gender/stats/location/inventory/`born`/`registered` status all
+  persisted correctly from the on-disk save, unchanged. `debug.log`
+  after every session in this pass: zero unexplained errors (grepped
+  both `libs/zjdyaryl/log/debug.log`, the only `debug.log` this lib
+  produces — no separate `work/log/debug.log` exists, `log directory`
+  is lib-root-relative per §5.2 here).
+
+## Bugs found and fixed
+
+1. **§8.3a addendum, 3rd confirmed instance: `feature/action.lpc`'s
+   `eval_function()` declared `private`.** `private`→`DECL_HIDDEN`
+   demotion-on-inheritance (this file is `inherit`ed into every
+   character via `inherit/char/char.lpc`) silently blocks the
+   `call_out("eval_function", ...)` dispatch that `start_call_out()`
+   (this file's own general-purpose "run this function after a delay"
+   primitive) relies on — 91 files across the tree call
+   `start_call_out()`, including `adm/daemons/combatd.lpc` and 80+
+   `kungfu/skill/`/`kungfu/special/` buff/poison/powerup files. Reproduced
+   live: `debug.log` showed `apply() with insufficient permission: ...
+   ob: clone/user/user#N, function: eval_function, origin: internal,
+   needs: private, has: hidden` immediately after an ordinary declined
+   `fight` command (which schedules a `combatd.lpc` recovery callback via
+   `start_call_out()`). **Fix**: dropped `private`
+   (`void eval_function(function fun) { evaluate(fun); }`). Re-tested the
+   identical `fight` decline post-fix, fresh boot: zero further
+   `eval_function`/`insufficient permission` lines. Also fixed the
+   identically-shaped `clone/questob/letter.lpc:private void
+   eval_function(...)` for consistency — not confirmed live-triggered
+   (nothing in that file actually schedules a `call_out("eval_function"`
+   itself, so it may be dead code), but same bug shape, same trivial fix,
+   zero risk.
+2. **§7.90, 5th confirmed instance (new lineage): `maximum evaluation
+   cost : 2000000`** (`config.fluffos`) was too tight — not tripped by
+   registration or movement, but by ordinary background daemon activity:
+   `adm/daemons/quest/capture.lpc`'s periodic `heart_beat()` spawning a
+   `kungfu/class/generate/capturenpc3` NPC whose randomly-chosen
+   `setup_family()` branch (`from_xueshan()`) hit `Eval interrupted: ...
+   cost limit reached, limit: 2000000 usec` mid-`set_skill()`/ACL-check,
+   roughly 20 minutes into an otherwise-idle boot with no player nearby.
+   **Fix**: raised to `5000000` (established §7.90 remedy value, already
+   used by 30+ other libs). Verified: fresh boot + full replay of both
+   registration sessions + the `fight`/`apprentice`/`setsk` tests above,
+   zero further `cost limit reached` lines in `debug.log`.
+
+## 发现但判定为既有设计、未改动的现象 (observations, not bugs)
+
+- `fight` command's `can_speak` split (safe spar vs. real `kill_ob()`) —
+  confirmed intentional, documented in the command's own `help fight`
+  text; only the `can_speak` branch was exercised, by design.
+- 欧阳克 declining `fight` (friendly attitude, full qi/jing) and 欧阳克
+  declining `apprentice` (wrong `born_family`) — both correct,
+  in-character existing gating logic, not bugs.
+- Starting `cloth` clone's cosmetic flavor-name re-roll across sessions
+  — cosmetic only, no data-persistence issue (see above).
+- `setsk`/`copyskill` requiring a *loaded* (online) target object rather
+  than accepting an offline save file — correct, intentional behavior
+  for a live-stat-copy command, not a limitation worth changing.
+
+## WASM 未验证说明
+
+Not re-verified under WASM this pass (native-only, per this project's
+current WASM build blocker). Confirm via:
+`curl -sS "$HTTPS_PROXY/__agentproxy/status"` — emsdk's
+`storage.googleapis.com` dependency is denied by the proxy, unchanged
+from every other lib checked this session. This lib's own prior
+WASM-enablement pass (2026-07, above) already covers WASM-specific gates
+(`VERSION_D`, `messaged.lpc` socket_bind, loopback allow); the two fixes
+in this pass (`eval_function` visibility, eval-cost ceiling) are
+driver-behavior-general and apply identically under WASM once it's
+buildable again in this environment.

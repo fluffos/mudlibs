@@ -5263,6 +5263,20 @@ check `maximum evaluation cost` on sight for ANY lib, regardless of
 engine family, when it's set anywhere near or below this project's
 700000 template default.
 
+Fifth instance, unrelated lineage: `zjdyaryl` (ES II → XKX → "hell"
+family, not xiyouji.org/Tomud or the xlqy_early ES-II snapshot) shipped
+`maximum evaluation cost : 2000000`. Not tripped by registration or
+movement, but by ordinary background quest activity: `adm/daemons/
+quest/capture.lpc`'s periodic `heart_beat()` spawning a `kungfu/class/
+generate/capturenpc3` NPC whose randomly-chosen `setup_family()` branch
+(`from_xueshan()`) hit `Eval interrupted: ... cost limit reached, limit:
+2000000 usec` mid-`set_skill()`/ACL-check, ~20 minutes into an otherwise
+idle boot with no player nearby. Same remedy (`5000000`); confirms the
+detection net needs to include a plain `grep -c "cost limit reached"
+log/debug.log` after letting a boot idle for a while, not just after
+active player movement/registration — a low ceiling can be tripped by
+daemon `heart_beat()`s alone.
+
 Detection pattern: don't stop testing at "registration completes
 cleanly" — a lib can pass every WASM-stage check and still throw
 eval-cost aborts the moment a player actually walks around, because
@@ -5638,6 +5652,24 @@ powerups, ALL of them). Fix identically: drop `private`. Worth a
 proactive grep (`private (void|int|...) NAME` + `call_out("NAME"` in the
 same file) on any lib with a custom delayed-callback or
 combined/stackable-item helper.
+
+**Third confirmed instance: `zjdyaryl`'s §10.7 deep functional test**,
+same `feature/action.lpc`/`eval_function()` shape (independently
+confirmed on a different lineage than `xuanjianlu` — ES II → XKX →
+"hell", not that lib's family). Reproduced live: `debug.log` showed
+`apply() with insufficient permission: ... ob: clone/user/user#N,
+function: eval_function, origin: internal, needs: private, has: hidden`
+immediately after an ordinary declined `fight` command (which schedules
+a `combatd.lpc` recovery call_out via `start_call_out()`). Fixed
+identically (drop `private`); re-tested the same `fight` decline
+post-fix and confirmed zero further `eval_function`/`insufficient
+permission` lines. A second, non-inherited, likely-dead occurrence in
+the same lib's `clone/questob/letter.lpc` (declares an identical
+`private void eval_function`, but nothing in that file actually
+`call_out()`s it) was fixed too for consistency, though it wasn't
+confirmed live-triggered — the proactive grep for `private NAME` +
+`call_out("NAME"` in the same file catches these even when a live
+reproduction isn't easy to force.
 
 #### 8.3b Dead command-indexer sscanf
 
