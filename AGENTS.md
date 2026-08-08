@@ -753,6 +753,19 @@ if `raw/` ends up empty. Known traps:
   both sibling archives. When one sibling in an already-established
   lineage (§11) turns out to have this gap, check every other sibling
   for the same specific files before assuming it's isolated.
+  **A third instance, found via `yhwhpublicfi`'s §10.7 deep functional
+  test**: the exact same three files (`help/rules`,
+  `clone/game/8_hlp`, `clone/game/21_hlp`), still raw GB18030, months
+  after this lib's own separate WASM-enablement pass had already been
+  marked done — `yhwhpublicfi` is a different, independently-forked
+  yh2003-lineage branch (§11: "modified by Linux@lxtx for yh 2003.3"
+  per its own `master.lpc` header) from `yhyxs`/`yanhuangwuhun`, not a
+  copy of either, so this is genuinely a third independent carrier of
+  the same un-transcoded content rather than a repeat finding on an
+  already-known pair. `help/rules` is reached automatically on every
+  character's very first `born` (character-creation finalization), not
+  just via the `help rules` command — the mojibake is unavoidable for
+  every new player, not an easter egg only curious players trip over.
   **A third, structurally different instance on `syxjl`** (unrelated
   ES2 branch, not a `yh2003` sibling) — this time not a help/doc text
   but `adm/etc/banned_name`, a 137-entry registration name-blacklist
@@ -4659,6 +4672,23 @@ match what it forwards to (here, `string info` → `mixed info`) — a
 single-file fix that resolved all nine quest files at once, no content
 file itself needed touching.
 
+**Second confirmed instance, unrelated lineage: `yhwhpublicfi`'s §10.7
+deep functional test.** Byte-for-byte the same `inherit/misc/quest.lpc`
+shape and the same eight `clone/quest/{capture,shen,judge,deliver,
+search,trace,supply,explore}.lpc` filenames as `nt1` above — but
+`yhwhpublicfi` is a Doing/"hell" lineage fork (§11), completely unrelated
+to `nt1`'s NT/nitan family, confirming this is a generic wrapper-narrowing
+trap and not something specific to one codebase's quest system. Unlike
+`nt1`, this instance had zero runtime symptom reachable from ordinary
+play in the test session (each affected quest type's own daemon
+(`adm/daemons/quest/*.lpc`) just logs `*No program in object
+'/clone/quest/capture'!` etc. on its own periodic `heart_beat()` — the
+whole random-quest-generation subsystem was silently dead from the
+archive's first boot, invisible without a `debug.log` read after letting
+the boot idle). Fix identical (`string info` → `mixed info`); verified
+live by having a wizard account `update` all eight `clone/quest/*.lpc`
+files after the fix — all eight now compile clean.
+
 ### 7.82 A login object's own protective `set()` override is too strict, silently blocking a legitimate registration step
 
 Found on `xxcq`'s deep functional test (§10.7). `clone/user/login.lpc`
@@ -5194,6 +5224,23 @@ skips every line after it; if one of those skipped lines was the actual
 state change the player was trying to make, "the game didn't crash" is
 not the same as "the action worked."
 
+**Second confirmed instance, sibling lineage: `yhwhpublicfi`'s §10.7
+deep functional test.** Same "hell" root lineage as `zjdywzb` (an
+independent yh2003-era fork, not a later pass on the same archive —
+§11), byte-identical `adm/simul_efun/message.lpc` wrapper shape and the
+same `tell_object()`/`write()` 3-arg call sites. New detail this
+instance surfaced: the crash isn't gated behind any player action at
+all — a completely clean, freshly-booted driver hits it during ordinary
+**preload**, before any connection exists (`adm/daemons/analectad.lpc`'s
+`create()` → `channeld.lpc`'s `do_channel()` → the buggy `message()`),
+confirming this bug class can be a boot-time finding, not only a
+gameplay-triggered one — worth checking a fresh boot's very first
+`debug.log` lines for this exact error shape even before attempting any
+login. The same 花铁干/`out`/桃源石屋 character-creation soft-lock as
+`zjdywzb` reproduced identically here too. Fixed identically (`varargs`
++ `exclude || ({})`); verified both the preload error disappearing on a
+clean reboot and the `out` command completing successfully afterward.
+
 ### 7.89 A mudlib's own bundled `runtime_config.h` uses a `get_config()` index numbering that doesn't match this driver build's actual internal enum, so a `get_config()` call silently returns a value from an unrelated (and wrongly-typed) config slot instead of erroring — and if that value then flows into a typed efun call, it crashes
 
 Extends the pattern first noted on `ds386` (whose own bundled
@@ -5253,6 +5300,51 @@ the driver's canonical header as a matter of course whenever a lib
 ships its own — don't wait for a wizard-login crash (or any other
 lazy-first-touch call site) to surface it, since — per §7.60/§7.87 — a
 throw during a lazy first load often leaves zero trace in `debug.log`.
+
+**Second confirmed instance, sibling lineage, different victim daemon
+and NOT wizard-only: `yhwhpublicfi`'s §10.7 deep functional test.**
+Same "hell" root lineage as `zjdywzb` (§11 — an independent 2003 fork,
+not a later pass on the same archive), same bundled
+`include/runtime_config.h` divergence, but an EARLIER pass on this
+specific lib had already "fixed" the symptom it found (`versiond.lpc`'s
+`in_server()` crashing `socket_bind()`) by gutting that one daemon's
+socket calls per §7.52 — without recognizing the header mismatch itself
+was the root cause. This deep-test pass found the SAME broken header
+also breaks a second, completely different daemon:
+`adm/daemons/network/messaged.lpc` (`MESSAGE_D`, a cross-mud UDP chat
+daemon that this lib's `tell`/`chat`/"缥缈虚空" chat-room subsystem
+depends on for real — not a discardable dead intermud feature). Worse,
+the crash site is NOT wizard-gated here: `logind.lpc`'s `check_ok()`
+calls `MESSAGE_D->find_chatter(ob->query("id"))` unconditionally for
+**every** login (new or returning) that doesn't already have a live/
+net-dead body — the very first such login in a boot lazily compiles
+`messaged.lpc`, whose `create()` → `startup_udp()` →
+`socket_bind(socket_id, my_port)` crashes on the same
+`Bad argument 2 to socket_bind() ... Got: "10"` shape (this lib's
+`__MUD_PORT__` mis-numbered to the slot the real driver uses for
+`__MUD_IP__`, a string that happens to be `""` here, so `"" + 10`
+string-concatenates to `"10"` rather than adding to an int). This time,
+instead of gutting yet another daemon's sockets one-by-one (whack-a-mole
+against however many more daemons might share the same broken header),
+the header itself was replaced with the driver's canonical copy — the
+correct, root-cause fix this class always called for — with the same
+three-symbol reconciliation as `zjdywzb` (`__SAVE_BINARIES_DIR__` →
+alias to `__MUD_LIB_DIR__`; `__ADDR_SERVER_IP__` → removed from
+`cmds/arch/config.lpc`'s display line; `__PORT__` → no alias needed,
+compiler-predefined). One NEW wrinkle worth generalizing: `__BIN_DIR__`
+is a real symbol name in the canonical header, but this driver's
+`rc.cc` never actually populates that string slot from any config-file
+key (checked the `STR_FLAGS` table directly) — `get_config(__BIN_DIR__)`
+THROWS, not silently returns empty, even with the canonical header
+correctly aliased. Any cosmetic display line referencing a canonical-
+but-never-populated slot needs its own `catch()` guard, same as any
+other lazy-first-touch call site. Detection generalizes: don't assume
+a lib is "done" with this bug class just because one crashing daemon
+got patched — grep the WHOLE lib for `get_config(` call sites (not just
+the one that happened to crash first) before concluding the header
+itself doesn't also need fixing, especially when the first-found victim
+is a non-essential daemon that was easy to just gut instead of asking
+why its `get_config()` call was wrong in the first place.
 
 ### 7.90 `config.fluffos`'s `maximum evaluation cost` is set to this project's common default, but this lib's own NPC-creation cost routinely exceeds it — ordinary movement into any not-yet-compiled room trips a global eval-cost abort and shows every non-wizard player a generic "bug found, report it" message
 
