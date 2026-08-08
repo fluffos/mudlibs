@@ -28,6 +28,13 @@ object make_inventory(string file) {
   object ob;
 
   ob = new(file);
+  // Some rooms' "objects" mappings reference a path that doesn't (or no
+  // longer) exists (missing/relocated content) -- new() then silently
+  // returns 0. Calling ob->set()/ob->move() on that would throw "Bad
+  // argument 1 to EFUN call_other()", which aborts this room's *entire*
+  // reset() partway through, silently skipping every other NPC/item
+  // still left to populate. Skip just this one broken entry instead.
+  if (!ob) return 0;
   ob->set("startroom", base_name(this_object()));
   ob->move(this_object());
   return ob;
@@ -90,8 +97,12 @@ void reset() {
 
     switch (ob_list[list[i]]) {
       case 1:
-        if (!ob[list[i]]) ob[list[i]] = make_inventory(list[i]);
-        if (environment(ob[list[i]]) != this_object() &&
+        // A single broken/missing "objects" entry (e.g. an NPC whose
+        // own create() throws on a missing equipment file) must not
+        // abort this whole reset() and skip every other entry still
+        // left to populate -- catch() it and move on to the next one.
+        if (!ob[list[i]]) catch(ob[list[i]] = make_inventory(list[i]));
+        if (ob[list[i]] && environment(ob[list[i]]) != this_object() &&
           ob[list[i]]->is_character()) {
           if (!ob[list[i]]->return_home(this_object()))
             add("no_clean_up", 1);
@@ -101,7 +112,7 @@ void reset() {
         for (j = 0; j < ob_list[list[i]]; j++) {
           // If the object is gone, make another one.
           if (!objectp(ob[list[i]][j])) {
-            ob[list[i]][j] = make_inventory(list[i]);
+            catch(ob[list[i]][j] = make_inventory(list[i]));
             continue;
           }
           // Try to call the wandering npc come back here.
