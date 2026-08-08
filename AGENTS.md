@@ -1435,6 +1435,29 @@ confirm `get_dir()`'s return value directly, and check the ACL's
 catalog's list, since new efuns can introduce new `func` strings this
 project hasn't hit yet.
 
+**Confirmed instance: `hy5`** (same "hy"/海洋 naming, `master.lpc`
+byte-identical to `hy`'s, but `securd.lpc` independently rewritten — a
+`trusted_read`/`trusted_write`/`exclude_read`/`exclude_write` directory-
+prefix ACL, not a `switch(func)` dispatcher). Its `valid_read()` has the
+same root shape as every other instance in this section
+(`euid = geteuid(user); if (!euid) return 0;`, unconditionally, before
+any func-specific allowance) but no `switch(func)` at all to extend —
+fixed by adding one, as an early return ahead of the existing euid check:
+`switch (func) { case "load_object": case "recompile_object": case
+"include": case "file_size": case "stat": return 1; }`. Both known
+symptoms confirmed live in the same session: (1) `feature/skill.lpc`'s
+`file_size()`-based skill-existence probe crashing the first NPC to
+reference a given never-loaded skill file (`chen2`/`陈有德`'s `create()`
+in the starting martial-arts hall), and (2) `commandd.lpc`'s `rehash()`
+`get_dir()` call (func `"stat"`) being silently denied and leaving
+`look`/`score`/every command answering "什麼？" for a freshly-registered
+character — reproduced and fixed together in one pass since this lib's
+ACL denied both at once (unlike `hy2000`/`hy2002`, which only hit the
+`file_size` variant). Detection and fix verified identical to the
+pattern above; only the shape of where to splice the allowlist into the
+custom ACL differs per lineage — always read the actual `valid_read()`
+body rather than assuming a `switch(func)` already exists to extend.
+
 ### 7.6 DNS/intermud daemons: exclude from preload, then guard the callers
 
 Standing policy — before first boot, remove `dns_master`-style daemons
@@ -3799,6 +3822,48 @@ sharing a variable name, and diff which ones are `objectp()`-guarded
 vs bare — an asymmetric split within the SAME function/file is the
 signal, same as `hy2000`. (`jinyongwenzi`.)
 
+**Confirmed at a much larger scale, `hy5`'s §10.7 deep functional
+test**: `adm/daemons/taskd.lpc`'s `give_gift()` (a periodic
+`call_out("auto_save", 88 + random(20), ...)`-driven random-quest/gift
+daemon) repeats `room2 = load_object(location); local =
+room2->query("short"); if (local) { ... }` across roughly a dozen
+near-identical `case N:` blocks, where `location` is a random line
+picked from `read_file("/clone/medicine/map1")` (a plain-text list of
+room paths). Exactly one block's `new(target["where"] + ".lpc")` call
+site is guarded with `if (room2) { ... }`; every other block — 19 sites
+in this one file alone — is bare, crashing with the same `*Bad argument
+1 to EFUN call_other()` the instant any one line in the map-list file is
+a stale/typo'd path. Because the daemon fires roughly every 90 seconds
+regardless of player activity, this reproduced multiple times in a
+single short test session (confirmed via `debug.log`, not merely
+inferred). The exact same copy-pasted pattern, evidently propagated by
+copy-paste from a shared original, turned up in `p/npc/teamjob.lpc` (12
+sites), `quest/menpai/teamjob.lpc` (12 sites — a near-duplicate of the
+first, reached via a different `#include`), `adm/daemons/natured.lpc`
+(4 sites, inside the same file as this lib's §7.98 instance above), and
+`cmds/std/ask.lpc` (7 sites) — 54 unguarded call sites total across 5
+files. Rather than restructure every call site's braces (risky at this
+volume under time pressure), fixed with a minimal, behavior-preserving
+substitution applied uniformly: `local = room2->query("short");` →
+`local = objectp(room2) ? room2->query("short") : 0;` — the very next
+line in every single one of these blocks is already `if (local) { ...
+}`, so making `local` correctly fall through to falsy on a failed
+`load_object()` fully neutralizes the crash without touching any
+control flow. Verified live: before the fix, this crash recurred
+multiple times across one ~10-minute session purely from the
+background `call_out`, unrelated to any specific player action; after
+the fix and a reboot, the same daemon cycled repeatedly with zero
+crashes. Two backup/dev copies of the same file under `u/hxsd/` (e.g.
+`u/hxsd/taskd.lpc/taskd.lpc`) have the identical unfixed pattern but are
+not on any code path the driver actually loads (not referenced by path
+from anywhere else in the tree) — left untouched, matching this
+project's standing convention for `.old`/backup-directory copies.
+Detection pattern at this scale: `grep -c` a suspect literal query
+string (here `room2->query("short")`) across the whole tree, not just
+the one file where a crash first surfaced — a bug this mechanical is
+rarely confined to a single file when the underlying idiom is this
+copy-paste-friendly.
+
 ### 7.64 A stray semicolon after `if (...)` turns the guard into a no-op, making an unconditional `call_other()` hit a daemon that was never shipped
 
 `natured.lpc`'s heartbeat loop had `if (wizardp(user[i]) &&
@@ -6054,6 +6119,28 @@ or under-authenticating a *privileged* daemon that never bothered to
 `seteuid()` itself before doing legitimate privileged work (this
 entry). Check both whenever one shows up.
 
+**Confirmed instance: `hy5`** (a distinct-but-related codebase — `master.lpc`
+is byte-identical to `hy`'s, but `securd.lpc` is an independently-shaped
+rewrite, confirmed via diff before assuming anything carried over
+unmodified). Same exact crash shape at the same two files,
+`adm/daemons/questd.lpc` (`create()` → `read_table()` → `explode(read_file(...))`
+at a different line number than `hy`'s) and `adm/daemons/natured.lpc`,
+both missing `seteuid()` in `create()`, both fixed the same way. A third,
+previously-unseen variant surfaced in the same lib: `adm/daemons/bgift.lpc`
+has no `create()` at all (so no chance to `seteuid()`) and calls
+`read_file()` from `killer_rewardboss()`, a function that only runs when a
+player kills a specific "boss" NPC with a treasure-drop reward key — this
+is the same underlying bug (an un-authenticated daemon touching
+`read_file()`), but the trigger is a live PLAYER ACTION, not preload, so it
+would never show up in a boot-log scan at all, only via actually killing
+the right kind of NPC or via a static grep for `read_file`/`read_table`
+call sites with zero `seteuid` anywhere in the file. Fixed by adding a
+`create() { seteuid(ROOT_UID); }` to `bgift.lpc` where none existed
+before. **Broadened detection pattern**: don't limit the "daemon missing
+`seteuid()`" grep to files with a `create()` that runs at preload — some
+daemons only touch `read_file()`/`read_table()` from a function reachable
+solely through in-game player actions, and still need the same fix.
+
 ### 7.99 A `file_size()` existence-check guard added ahead of a case-mismatch-sensitive `new()`/`load_object()` call is a false negative for legitimate EXTENSIONLESS paths, because `file_size()` does a literal `stat()` with no `.lpc`/`.c` resolution, unlike `new()`/`load_object()`
 
 Found on `sjshwzjqb`'s §10.7 deep functional test, while porting sibling
@@ -6911,6 +6998,32 @@ conversion blind spot), grep every `.lpc` file's own `new(`/bare-string
 of any such filename's basename; a hit won't show up in a boot log or a
 `§9` formatter pass, only by actually visiting the room or forcing a
 first compile via `update`.
+
+**Confirmed instance outside a room, `hy5`'s §10.7 deep functional
+test**: the same class isn't limited to rooms — `kungfu/class/qingcheng/
+yu.lpc` (a sect-master NPC template), in its own `create()`, does
+`carry_object(__DIR__ "whammer")->wield()` on a 50%-random branch
+(`if (i == 0) { changjian } else { whammer }`), but the on-disk file is
+`kungfu/class/qingcheng/Whammer.lpc` (capital `W`) — the only reference
+to it anywhere in the tree, confirmed by grep. `carry_object()` already
+has its own internal `objectp()` guard and returns `0` on a failed
+`new()`, but the caller doesn't check before chaining `->wield()`,
+so `new()`'s case-mismatch failure surfaces one call downstream as
+`*Bad argument 1 to EFUN call_other() ... Got: int(0)`. This one is
+NOT tied to a room's first visit — it fires from a driver-internal
+random-quest-NPC-cloning feature (`questd.lpc`'s `spread_quest()`,
+itself invoked from `create()`, itself run at every preload AND on every
+wizard `update` of `questd.lpc`), so it's fully deterministic given the
+`random(2)` roll and reproduces on roughly half of all boots/updates,
+not just once. Traced by noticing the crash's file:line
+(`kungfu/class/qingcheng/yu.lpc` line 91) didn't match a `carry_object`
+call for the branch the trace's own `i` value implied, then diffing the
+two branches against `ls` of the directory. Fixed by correcting the
+string literal's case (`"whammer"` → `"Whammer"`) to match the on-disk
+name — the general lesson from the room-based instances above still
+applies: grep every `.lpc` file's `new()`/`carry_object()`/bare-`->`
+argument literals against the actual on-disk casing of files they
+reference, not just inside room `create()`s.
 
 ---
 
