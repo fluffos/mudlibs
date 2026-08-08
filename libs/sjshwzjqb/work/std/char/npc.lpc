@@ -11,6 +11,28 @@ inherit F_CLEAN_UP;
 object carry_object(string file) {
   object ob;
 
+  // Guard against a hardcoded item path that doesn't exist anywhere in
+  // the archive (case-mismatched / never-converted content, etc.):
+  // `file->query_unique()` below does an implicit call_other() on the
+  // path string, which on this driver THROWS ("call_other() couldn't
+  // find object") rather than evaluating to 0 when the object can't be
+  // loaded -- a plain catch() around the caller's carry_object() call
+  // does not intercept it, since the throw happens via find_object()
+  // inside a nested call_other(), not a normal runtime error site an
+  // outer catch() would see reliably. Check file existence up front
+  // instead so a missing garment/item never crashes the NPC's create().
+  //
+  // file_size() does a literal stat() with NO extension resolution,
+  // unlike new()/load_object() which try the bare name, then ".lpc",
+  // then ".c" -- a bare file_size(file) check alone is a false negative
+  // for the (very common) extensionless caller shape, e.g. this file's
+  // own add_money()'s carry_object("/obj/money/"+type), which silently
+  // broke NPC money-granting/item-wearing for every EXTANT extensionless
+  // item the moment this guard was added (AGENTS.md §7.99). Check all
+  // three forms before concluding the file genuinely doesn't exist.
+  if (file_size(file) < 0 && file_size(file + ".lpc") < 0 &&
+    file_size(file + ".c") < 0) return 0;
+
   if (file->query_unique()) {
     if (clonep()) {  // only the cloned copy can have unique item.
       if (!objectp(ob = new(file->clone_file()))) return 0;

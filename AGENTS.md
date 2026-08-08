@@ -6038,6 +6038,61 @@ or under-authenticating a *privileged* daemon that never bothered to
 `seteuid()` itself before doing legitimate privileged work (this
 entry). Check both whenever one shows up.
 
+### 7.99 A `file_size()` existence-check guard added ahead of a case-mismatch-sensitive `new()`/`load_object()` call is a false negative for legitimate EXTENSIONLESS paths, because `file_size()` does a literal `stat()` with no `.lpc`/`.c` resolution, unlike `new()`/`load_object()`
+
+Found on `sjshwzjqb`'s §10.7 deep functional test, while porting sibling
+`sjshwzb`'s own §8.15 fix (a `carry_object()` helper in `std/char/npc.lpc`
+guarded against loading a case-mismatched/missing item path with `if
+(file_size(file) < 0) return 0;` before the `file->query_unique()` call
+that would otherwise throw — see §8.15). Applying the byte-identical fix
+here produced a NEW crash the very first time a fresh character entered
+the starting room: `d/ourhome/npc/bigeye.lpc` (千里眼, the mail-hint NPC)
+crashed in its own `create()` at `carry_object("/d/ourhome/obj/linen")->
+wear();` with `*Bad argument 1 to EFUN call_other() Expected: object,
+string, array, Got: int(0)` — even though `/d/ourhome/obj/linen.lpc`
+genuinely exists on disk, correctly cased, at exactly that path. Root
+cause: `file_size()` (`fluffos/src/packages/core/file.cc`) calls
+`check_valid_path()` then a plain `stat()` on the LITERAL string passed
+in — it does **not** perform the `.lpc`-then-`.c` extension resolution
+that `new()`/`load_object()` do for an extensionless path. `bigeye.lpc`
+passes `"/d/ourhome/obj/linen"` with no extension (the normal, idiomatic
+way to reference an item in this codebase — the SAME file's own
+`add_money()` helper does the identical thing via `carry_object("/obj/
+money/" + type)`), so `file_size(file)` on that literal returns `-1`
+even though the file is right there as `linen.lpc` — the newly-added
+guard returns `0` for a perfectly good item, and the caller's `->wear()`
+on that `0` crashes exactly the same way the original bug (an actually-
+missing file) did, just for a different, much more common reason. This
+is a regression risk inherent to the §8.15 fix'S OWN SHAPE, not specific
+to this lib — any lib porting that same `carry_object()` guard is
+exposed to it the moment any caller passes an extensionless path to an
+item that legitimately exists, which on this codebase family is the
+common case, not the exception. Fix: check all three forms before
+concluding the file is genuinely missing —
+```lpc
+if (file_size(file) < 0 && file_size(file + ".lpc") < 0 &&
+  file_size(file + ".c") < 0) return 0;
+```
+Verified live: before this refinement, a fresh character's first `look`
+in the starting room (〖南城客栈〗) crashed loading `bigeye.lpc` on every
+single registration/reconnect; after it, the same room populated cleanly
+with `千里眼` present, `add_money()`-driven money grants and clothing
+`wear()` calls both worked normally across a full registration →
+combat → death → resurrection → board-post session with zero further
+`call_other()`/`int(0)` errors in `debug.log`.
+
+Detection pattern: whenever adding a `file_size()`-based (or any other
+literal-`stat()`-based) existence guard ahead of a `new()`/`load_object()`
+call that historically accepted extensionless paths, grep the SAME guard
+function's other call sites (and sibling helpers like `add_money()`) for
+extensionless callers before shipping the guard — a guard that's
+correct for the ONE call site that motivated it can silently break every
+OTHER extensionless caller of the same shared helper. More generally:
+`file_size()`/`stat()`-family efuns and `new()`/`load_object()`-family
+efuns resolve paths under DIFFERENT rules on this driver (literal vs.
+extension-searching) — never assume a `file_size()` check ahead of a
+`new()` call is an equivalent, side-effect-free existence probe for it.
+
 ---
 
 ## 8. Login and registration flow bugs

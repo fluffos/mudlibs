@@ -30,3 +30,7 @@
 - **未覆盖**：`buy`/商店购买流程本轮时间有限只看了荒郊小店"店小二" `list` 出的菜单，没有实测 `buy`；帮派/门派拜师流程未触及；`d/emei/` 之外的其它大写目录残留（`d/youxia/OBJ`、`d/youxia/NPC`、`d/youxia/BAGUA`、`daemon/class/emei/MAHAYANA` 等，`find . -type d -regex '.*/[A-Z][A-Z0-9_]*$'` 命中 10 个非 `binaries/` 目录）未逐一探查是否也有类似 `d/SHAOLIN/` 这样的死链，留给后续转档专项。
 
 管理员账号（`fluffos`/普通密码 `Mud@2026`/管理密码 `AdminPass123`）本次通过正常注册流程首次真正落地——`adm/etc/wizlist` 顶层就是 `(admin)`，注册完成后立即显示"您的系统权限目前是：(admin)"；`update` 反复验证写权限正常。README 的既有"管理员账号"记录已同步更新为具体密码（此前写的是"注册时自设"）。
+
+## 补充修复（随 sjshwzjqb §10.7 深挖回填，2026-08-08）
+
+- **（新增 AGENTS.md §7.99）`std/char/npc.lpc` 的 `carry_object()` 存在防护漏判**：本档案第五个（也是最后一个）家族手足 `sjshwzjqb` 在移植这份 `npc.lpc` 的 §8.15 `file_size()` 存在性检查时，发现该检查对不带扩展名的合法路径是假阴性——`file_size()` 是字面 `stat()`，不像 `new()`/`load_object()` 那样做 `.lpc`→`.c` 扩展名解析。本档案自己的 `d/ourhome/npc/bigeye.lpc`（南城客栈邮差"千里眼"）的 `carry_object("/d/ourhome/obj/linen")->wear()`——完全合法、文件确实存在——在这份档案自己身上就会触发同样的假阴性崩溃（现场重新验证：用 `fluffos` 账号重连南城客栈，`look` 显示"千里眼"正常在场，`debug.log` 全程无 `call_other()`/`int(0)` 崩溃，确认补丁生效）。已同步补上三重检查（`file_size(file)`/`+".lpc"`/`+".c"`），详见 AGENTS.md §7.99 与 `sjshwzjqb/NOTES.md`。
