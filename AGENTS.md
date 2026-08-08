@@ -1619,6 +1619,21 @@ Two independent traps in the same apply:
   registration-blocking failures — grep every unguarded `write_file()`
   in daemons that fire on common player actions, not just the login
   chain.
+- **Third+ independent confirmation in the same 夕阳再现/XYZX lineage:
+  `xajhzcjh`'s deep functional test (§10.7).** Identical shape to
+  `xajhxo` above, down to the exact call site (`logind.lpc`'s
+  `get_gender()`, the step right before `enter_world()`, calling
+  `log_file("login/newid.log", ...)`), and `libs/xyzxfy2` and
+  `libs/ylfyxa3` had ALREADY independently found and fixed the identical
+  bug in their own deep-test passes before this one — `adm/simul_efun/
+  file.lpc`'s `log_file()`/`assure_file()` pair is a shared low-level
+  utility file copy-pasted across this whole engine family (confirmed:
+  `bixiecanyang` and `jhfy` still carry the unfixed, bare-`write_file()`
+  version as of this writing). **Check this exact file/function FIRST**
+  on any future 夕阳再现-lineage deep-test pass, before spending time
+  live-diagnosing what looks like a mysterious "registration silently
+  stalls with no banner, no working commands, no save, and nothing in
+  debug.log" bug from scratch — it's almost certainly this.
 
 ### 7.12 Shared message/wrapper argument bugs
 

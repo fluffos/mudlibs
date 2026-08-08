@@ -688,3 +688,250 @@ fix, which is compile-time):
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 98 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试 / Deep functional test (AGENTS.md §10.7)
+
+**Status: done.** One real programming bug found and fixed (registration-
+breaking, every single new character); everything else — combat, organic
+skill/sect acquisition, quit/reconnect persistence — verified live and
+clean.
+
+### Environment setup gap (not a code bug, noted for the record)
+
+This session's fresh checkout had no `log/` directory at all (gitignored,
+`libs/*/log/` + `libs/*/work/log/`), so the FIRST boot attempt crashed
+before the connection handler ever printed a prompt: `*Wrong permissions
+for opening file /log/debug.log for append. "No such file or directory"`,
+followed by `Error in mudlib error handler` (the driver's own error
+reporting couldn't even write *itself* because the directory was missing).
+Fixed by `mkdir -p log work/log` before booting — this project's two
+distinct log roots for this lib: the **driver's own** `debug.log`
+(`log directory` config key, resolves against the launch CWD == lib root,
+confirmed via `ls libs/xajhzcjh/log/`) vs. **mudlib-level** `write_file()`/
+`log_file()` calls using the LPC-virtual `/log/` path (resolves against
+`work/`, confirmed via `libs/xajhzcjh/work/log/dbgtrace` appearing there
+during live instrumentation) — two genuinely separate roots for two
+genuinely separate log mechanisms, not a typo. Both are the standard,
+already-documented (§7.44) "runtime dir doesn't exist in a fresh
+checkout" setup step, not something to fix in code.
+
+### Bug found and fixed: `log_file()` never calls `assure_file()` — breaks EVERY new registration (AGENTS.md §7.11, new confirmed sibling instance)
+
+**Symptom, 100% reproducible across 5+ independent registration attempts
+in this session**: a brand-new character completes the ENTIRE registration
+ritual (client-version gate → id → Chinese name → wizpwd → password →
+gift → email → gender) with every prompt rendering correctly, then lands
+on a bare `> ` prompt with **zero** world-entry banner (no MOTD, no "你连
+线进入这个世界" line, no `★ 您目前权限`), **zero** working commands
+(`look`/`score`/`i` all return the driver's generic `default fail
+message`, "什么?", because `enable_player()` never ran), and **zero**
+save file ever written to `work/data/{login,user}/<letter>/<id>.o`. No
+error appears anywhere — not on the player's screen, not in `debug.log`.
+This exactly matches AGENTS.md §7.11's already-documented `xajhxo`
+sibling-instance shape (same TMI-2/夕阳再现-adjacent family pattern, same
+`get_gender()` call site) — this is now a **second confirmed instance in
+the same 夕阳再现/XYZX lineage** (`libs/xyzxfy2` and `libs/ylfyxa3` were
+ALSO independently found and fixed with the identical shape in their own
+deep-test passes — `adm/simul_efun/file.lpc`'s `log_file()`/`assure_file()`
+pair is a shared low-level utility copy-pasted across this whole family,
+so check it FIRST on any future 夕阳再现-lineage dive rather than
+rediscovering this from scratch).
+
+**Root cause**: `adm/daemons/logind.lpc`'s `get_gender()` — the LAST step
+of the registration `input_to()` chain, executed right after the gender
+prompt, immediately before `init_new_player()`/`enter_world()` — calls
+`log_file("login/newid.log", sprintf(...))` to record the new account in
+a per-lib registration log. `adm/simul_efun/file.lpc`'s `log_file()` was a
+bare `write_file(LOG_DIR + file, text)` with no directory-existence guard
+at all. On a fresh `work/` tree, `work/log/login/` has never been created
+(nothing in this archive's own boot path creates it), so this
+`write_file()` throws `*Wrong permissions for opening file
+/log/login/newid.log for append. "No such file or directory"` — and
+since nothing in `get_gender()` catches it, the uncaught error aborts the
+**rest of that function**, meaning `CHANNEL_D->do_channel(...)`,
+`init_new_player(user)`, and — critically — `enter_world(ob, user)` never
+run. `enter_world()` is where `user->setup()` (which calls
+`enable_player()`, wiring up every player command) and `user->save()`/
+`ob->save()` live, so skipping it silently strands the new character with
+no commands, no save, and no visible sign anything went wrong.
+
+Confirmed via live `catch()`-wrapped instrumentation (temporarily added
+then reverted, not part of the shipped fix) that this exact call is the
+one throwing: `err=*Wrong permissions for opening file
+/log/login/newid.log for append. "No such file or directory"`, and that
+wrapping it (or fixing the shared root) lets `enter_world()` run to
+completion with the full banner, working commands, and a real save file.
+
+**Fix** (`adm/simul_efun/file.lpc`, matching this lineage's established
+`assure_file()`-before-`write_file()` convention exactly, same shape as
+`xyzxfy2`/`ylfyxa3`'s own fixes): added `assure_file(LOG_DIR + file);`
+as the first line of `log_file()`, plus a one-line forward declaration
+(`void assure_file(string file);` before `log_file()`'s own definition)
+since `assure_file()` is textually defined further down in the same file
+and this driver's compiler doesn't resolve forward references without an
+explicit prototype (same convention `logind.lpc` itself already uses
+elsewhere). This is the shared-root-cause fix (AGENTS.md §6.4): it covers
+every `log_file()` call site in the tree, not just `get_gender()`'s,
+including any future subdirectory nobody has thought to pre-seed yet.
+
+**Formatter**: ran `format-corpus.mjs` on the touched file — 0 written
+(already idempotent with the fix applied), 0 errors. Checked the 3 §9
+blind-spot greps on this file specifically: clean (no `: :` split, no
+`\ n` corruption).
+
+### Registration + state verification (multiple independent live sessions, post-fix)
+
+Raw-socket Python test client (`scripts/mudclient.py`-equivalent, written
+ad hoc this session — `tmux`/`telnet` kept dying mid-session in this
+particular container for unrelated reasons, see below) driving one
+continuous connection each time:
+
+- **`秦岚`** (id `quicka`) — full registration → world entry at 武庙
+  (wumiao), banner/MOTD/permission line all render, `look`/`score`/`i`
+  all work. Save file confirmed on disk. (Used for the root-cause
+  instrumentation pass; re-verified clean again as the final post-fix
+  smoke test with a fresh boot.)
+- **`文剑`** (id `wenjianc`) — registration → world entry at 武庙 →
+  `look`/`score`/`i` → walked to 北大街, `fight scavenger` (收破烂的):
+  correctly invoked the safe-spar `accept_fight()` path (human NPC,
+  `can_speak` set) but the scavenger **declined** in-character ("小兄弟
+  饶命！小的这就离开！" / "看起来收破烂的并不想跟你较量。") — a real,
+  clean exercise of the mechanism with a negative outcome, not a bug (see
+  combat mechanism notes below). Continued to 丽春院 (an age-gated room,
+  see content-observation note below) → `apprentice kongkong` failed
+  because kongkong was never reached. `score`/`i` → `quit` clean.
+- **`林牧`** (id `linmuc`) — registration → world entry at 铁枪庙
+  (tieqiang, one of the 4 `start_room`s) → `fight wuya` (a 乌鸦/crow):
+  this is a **beast**-race NPC, not human, so it has no `can_speak` and
+  `fight.lpc` silently routes it through the REAL `kill_ob()` branch
+  instead of the safe spar (see below) — character took a few points of
+  real combat damage (survived fine, "气" bar stayed full) before moving
+  away broke off the fight. `apprentice limochou` (a nearby quanzhou-local
+  NPC copy, no `attempt_apprentice` override) got the correct
+  default-reject dispatch (`你想拜谁为师？`, meaning `present()` didn't
+  even find her by that name — a harmless test-script naming miss, not a
+  bug). `score`/`i` → `quit` clean.
+- **`杨飞`** (id `yangfei`, password `playpass456`) — **the complete
+  end-to-end run**: registration → world entry at 北疆小镇 (beijiang) →
+  `look`/`score`/`i` → walked east to 巴依家院 → `fight bayi` (a human
+  NPC, `attitude: heroism`): **accepted** ("巴依说道：既然小兄弟赐教，
+  老头子只好奉陪。"), a real multi-round sparring exchange followed
+  ("你挥拳攻击巴依的后心...但是巴依已有准备"/"巴依对准你的腰间用力挥出
+  一拳...你受了几处伤，不过似乎并不碍事" — flavor text matching the
+  documented "只会消耗体力，不会真的受伤" non-lethal design) → `look`/
+  `score` after combat → walked to 天山山路 (near 灵鹫宫, ~5 hops from
+  beijiang) → **`apprentice shihou`** (matched 狮吼子/"Shihou zi", a
+  星宿派/Xingxiu-sect NPC with an unconditional `attempt_apprentice()`
+  accept) **succeeded completely**: "狮吼子说道：好吧，我就收下你了。" →
+  "你跪了下来向狮吼子恭恭敬敬地磕了四个响头，叫道：「师父！」" →
+  "恭喜您成为星宿派的第三代弟子。" — confirmed via `score`: title changed
+  from 布衣平民 to **【武林人物】星宿派第三代弟子**. → `score`/`i` →
+  `quit` clean ("你丢下一件布衣" / "欢迎下次再来！").
+  - **Reconnect after a real ~1-hour wall-clock gap** (this session's own
+    root-cause investigation + NOTES.md drafting time, not a sleep):
+    logged back in with `yangfei`/`playpass456` → **landed back at the
+    exact saved room** (天山山路) → `score` confirmed **full state
+    persistence**: title still 星宿派第三代弟子, "你的师父是狮吼子。"
+    (master field persisted), all 4 attributes unchanged (19/22/18/21) →
+    `quit` clean again. No quit-retention lockout or grace-period logic
+    exists in `cmds/usr/quit.lpc` for new accounts (confirmed by reading
+    it: unconditional `me->save(); destruct(me);`, no deletion path) —
+    didn't need the "kill the raw connection instead" fallback.
+
+`log/debug.log` grepped after every one of the above sessions for real
+`error:`/`denied`/`crash`/`undefined`/`bad argument` lines (excluding the
+benign `Unknown #pragma`/`Unused local variable` compile warnings and the
+literal string "mudlib error handler" in a config dump key): **zero real
+errors in the entire final (post-fix) test corpus.**
+
+### Combat mechanism (read from `cmds/std/fight.lpc`, then live-verified both branches)
+
+`fight <target>` is this lib's dedicated safe-sparring command — its own
+`help` text says so explicitly ("这种形式的战斗纯粹是点到为止，因此只会
+消耗体力，不会真的受伤"/"purely a courtesy bout, only costs stamina, no
+real injury"), distinct from `kill` (real, lethal) and `hit`. **Critical
+nuance this lib's own source reveals, worth reading before picking a test
+target in ANY sibling of this lineage**: `fight.lpc`'s `main()` branches
+on `obj->query("can_speak")` — if the target can't speak, the "polite
+challenge" flow is skipped ENTIRELY and it falls straight into
+`me->fight_ob(obj); obj->kill_ob(me);`, i.e. a **real, lethal** fight,
+even though the player typed `fight`, not `kill`. `can_speak` is set to 1
+only by `adm/daemons/race/human.lpc`'s `setup_human()` — so it's
+effectively "is this NPC human" — every non-human race (beasts, etc.) is
+UNSAFE to `fight` despite the command's name and help text. Confirmed
+live on both sides: `fight wuya` (race `野兽`/beast, no `can_speak`) →
+real `kill_ob()` combat, took actual damage. `fight bayi` (default race,
+human, `can_speak` set) → real `accept_fight()`-mediated safe spar,
+non-lethal flavor text only. **Lesson for future dives in this lineage**:
+"a clearly-safe humanoid NPC" isn't just stylistic advice here — picking
+an animal NPC for the "safe" combat test would have been actively unsafe
+on this exact codebase.
+
+Default `accept_fight()` (`inherit/char/npc.lpc`) requires the target NOT
+be already fighting, above 90% jing/qi, and NOT have `attitude: friendly`
+(friendly NPCs always decline — matches the scavenger/`维吾尔族妇女`
+rejections seen live). `heroism`/`aggressive`/`killer`/unset attitudes all
+accept by default. No dedicated "training dummy" NPC was actually reached
+live this pass (the `d/*/npc/mu-ren.lpc` "练功木人" with `no_die: 1` seen
+during source review would have been an even stronger choice, but `bayi`
+already gave a clean, complete, accepted spar).
+
+### Skill/sect acquisition — organic path (live, succeeded) and admin shortcut (confirmed absent)
+
+**Organic path**: `apprentice <target>` (aliased `bai`, `cmds/skill/
+apprentice.lpc`) → for an NPC target with a working `attempt_apprentice()`
+override, an unconditional acceptor recruits immediately in one command
+(see 狮吼子/Shihou-zi run above — full success, title + master field both
+persisted through a reconnect). Most class-master NPCs
+(`kungfu/class/<sect>/*.lpc`) gate acceptance on stats/gender/karma (read
+several: `kungfu/class/gaibang/hong.lpc` wants `str>=20 && con>=25`,
+`.../liang.lpc` wants `str>=25`, `.../zuo-qu.lpc` wants male, etc.) — but
+a handful (`kungfu/class/xingxiu/{azi,shihou,tianlang,zhaixing}.lpc`, at
+least) accept unconditionally. Default `attempt_apprentice()`
+(`inherit/char/npc.lpc`) always politely declines for any NPC without an
+override (verified live: `apprentice tuobo-seng`/`apprentice limochou`
+against non-master NPCs both got the correct in-character decline/
+not-found response, no crash).
+
+**Admin shortcut**: confirmed absent. This lib ships **no `cmds/adm/` or
+`cmds/wiz/` directory at all** (`ls cmds/` → only `skill/`, `std/`,
+`usr/`) — matches the already-documented `include/command.h` finding
+(§1.5 admin-seeding pass, this same NOTES.md above) that this archive
+never shipped any wizard-only command files. There is no in-game
+admin command anywhere in this lib to directly grant a skill or sect
+membership to a player — the organic `apprentice`/`learn`/`study`/
+`practice` commands are the only path, for admins and players alike.
+
+### 发现但判定为既有设计、未改动的现象 (observations, not bugs)
+
+- **丽春院 (brothel room) blocks entry for a 14-year-old character** with
+  "小朋友不要到那种地方去！！" ("kid, don't go to that kind of place!!").
+  Every fresh character is born age 14 (`adm/daemons/race/human.lpc`:
+  `if (undefinedp(my["age"])) my["age"] = 14;`), so this room — and its
+  resident NPC 孔空儿/kongkong (an otherwise-unconditional gaibang
+  recruiter) — is unreachable by any brand-new character until they age
+  up in-game. Sensible, deliberate content gating, not a bug; just meant
+  picking a different apprentice target for this pass's live test.
+- **`收破烂的`/scavenger declining a `fight` challenge** and fleeing
+  ("小兄弟饶命！") is intentional per-NPC characterization (a coward/thief
+  archetype), not the safe-spar mechanism malfunctioning — the same
+  `accept_fight()` call correctly ran and correctly returned a decline;
+  `attitude` just wasn't set to something that accepts by default for
+  this particular NPC (or it has its own override not investigated
+  further, out of scope once the mechanism itself was already confirmed
+  working elsewhere).
+- **Wuya (crow) escalating a typed `fight` into a real `kill_ob()` fight**
+  is fully explained by `fight.lpc`'s own `can_speak` branch (documented
+  above under "Combat mechanism") — read as intentional design (animals
+  don't have a "point to stop" courtesy fight the way humans do in this
+  lineage's combat model), not a bug, though it IS a genuine safety trap
+  for a careless player (or a careless test pass) expecting `fight` to
+  always mean "safe" against any target regardless of species.
+
+### WASM 未验证说明
+
+Not re-verified under WASM this pass (native-only, per this project's
+current WASM build blocker). Confirm via:
+`curl -sS "$HTTPS_PROXY/__agentproxy/status"` — emsdk's
+`storage.googleapis.com` dependency is denied by the proxy, unchanged
+from every other lib checked this session.
