@@ -4639,6 +4639,17 @@ needs `N = suffix_length + 1` to fully remove an N-1-character suffix,
 not `N = suffix_length`. Fix: change the slice bound to
 `suffix_length + 1` (here, `.lpc` is 4 characters, so `[0..<5]`).
 
+**Second confirmed instance: `zjdy2008wzb`'s §10.7 deep functional
+test.** Byte-for-byte the same `adm/daemons/eventd.lpc` file and the
+same `event_name = map_array(event_name, (: $1[0..<3] :))` line as
+`nt1` above, in a completely unrelated Doing/"hell"-lineage codebase —
+confirming this isn't specific to one mudlib family, just a copy-pasted
+idiom. Same symptom (`*call_other() couldn't find object '/adm/
+daemons/event/emei.l'.` etc. on every boot, entire event subsystem
+silently dead, no other symptom), same fix (`[0..<3]` → `[0..<5]`),
+verified by a clean reboot producing zero `couldn't find object
+'.../event/...'` lines in `debug.log`.
+
 ### 7.81 A shared base file's own method signature is narrower than the daemon it forwards to, breaking every content file that relies on the daemon's wider contract
 
 Found alongside §7.80 on the same `nt1` deep-dive:
@@ -4688,6 +4699,17 @@ archive's first boot, invisible without a `debug.log` read after letting
 the boot idle). Fix identical (`string info` → `mixed info`); verified
 live by having a wizard account `update` all eight `clone/quest/*.lpc`
 files after the fix — all eight now compile clean.
+
+**Third confirmed instance, sibling lineage: `zjdy2008wzb`'s §10.7 deep
+functional test.** Same "hell" root lineage as `yhwhpublicfi` (an
+independent, direct sibling of `zjdywzb` — §11), same `inherit/misc/
+quest.lpc` wrapper shape, same eight affected `clone/quest/{capture,
+shen,deliver,search,supply,judge,explore,avoid}.lpc` files (this
+archive's set swaps `trace` for `avoid` but the shape is otherwise
+identical). Same zero-runtime-symptom presentation (`heart_beat()`
+logging `*No program in object` silently, invisible without a
+`debug.log` read) and identical fix/verification (`string info` →
+`mixed info`; all eight files `update` clean afterward).
 
 ### 7.82 A login object's own protective `set()` override is too strict, silently blocking a legitimate registration step
 
@@ -5240,6 +5262,35 @@ login. The same 花铁干/`out`/桃源石屋 character-creation soft-lock as
 `zjdywzb` reproduced identically here too. Fixed identically (`varargs`
 + `exclude || ({})`); verified both the preload error disappearing on a
 clean reboot and the `out` command completing successfully afterward.
+
+**Nuance found on `zjdy2008wzb`'s §10.7 deep functional test (direct
+sibling of `zjdywzb`, same lineage): the exact same wrapper-shape bug
+did NOT reproduce live on this project's current driver build.** The
+code shape is byte-for-byte identical (`message()` non-`varargs`,
+called with 3 args from `message_vision()`/`message_combatd()` in the
+same file), and the fix was applied anyway (harmless, matches the
+lineage's own precedent, and is simply the more correct declaration).
+But deliberately reverting the fix and replaying the exact same
+crash-triggering path (`register` → `decide` → `west` into 桃源石屋 →
+`out`, which necessarily calls `message_vision()` → the 3-arg
+`message()` call) produced no error at all, on a full reboot, verified
+against a fresh `debug.log`. Root cause, read directly from this
+project's `~/src/fluffos` checkout
+(`src/packages/core/efuns_main.cc`'s `f_message()`): the 4th arg
+(`exclude`) only gets a `bad_argument()` check for the 3rd arg
+(`target`); for the 4th, `num_arg==4`'s `switch` has cases for
+`T_OBJECT`/`T_ARRAY` and a silent `default` that treats anything else
+(including the `int(0)` a missing arg pads to) as "no exclusions" —
+there is no path to `bad_argument()` for arg 4 at all on this build.
+The `"Bad argument 4 to EFUN message() Expected: object, array, Got:
+int(0)."` text documented above for `zjdywzb`/`yhwhpublicfi` is real
+(it was captured live in those sessions), but whether it reproduces
+appears to depend on the exact driver build/version in use, not just
+the mudlib code shape — **don't assume this bug class is live just
+because the wrapper shape matches; if reproducing it matters (e.g. to
+justify a fix beyond the free, harmless `varargs` change), verify
+against a debug.log first**, the same "shape isn't proof" discipline
+this whole catalog otherwise insists on for the mudlib side.
 
 ### 7.89 A mudlib's own bundled `runtime_config.h` uses a `get_config()` index numbering that doesn't match this driver build's actual internal enum, so a `get_config()` call silently returns a value from an unrelated (and wrongly-typed) config slot instead of erroring — and if that value then flows into a typed efun call, it crashes
 
