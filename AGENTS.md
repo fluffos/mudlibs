@@ -5792,6 +5792,53 @@ for that input line, even one that runs alongside/after the
 `notify_fail()` call — this is easy to get backwards when a function
 has multiple exit points and only some of them are meant to "fail."
 
+### 7.96 `catch(load_object(path))` is not a reliable "does this room/file exist" existence check on this driver — a nonexistent path returns `0` without throwing, so the `catch()`-guarded fallback branch never runs
+
+Found on `fyzfqyy`'s §10.7 deep functional test, in the very common
+`enter_world()` shape:
+
+```lpc
+if (! catch(load_object(startroom)))
+    user->move(startroom);
+else
+    user->move(START_ROOM);   // "fallback if the real room is missing"
+```
+
+The intent is obvious (if the player's saved `startroom` can't be
+loaded, fall back to a known-good `START_ROOM`), but on this driver
+`load_object()` on a path with no matching file just returns `0`
+silently — no error, nothing for `catch()` to catch — so
+`!catch(load_object(startroom))` evaluates true (no exception ⇒
+"success") even though nothing actually loaded, and the very next
+statement (`user->move(startroom)`, or the same shape inside `->set()`/
+`->move()` chains elsewhere) throws its own *different*,
+uncaught-by-this-`catch()` error (`*call_other() couldn't find object
+'...'` or, one layer further in, `*Bad argument 1 to EFUN call_other()`
+once something already holds a `0` "object"). The fallback branch this
+code was clearly trying to protect never fires, because the thing
+guarding it never fires either. This bit twice in the same lib: once in
+`enter_world()`'s own `START_ROOM` fallback (which was itself ALSO
+missing, an ordinary content gap — but the fallback logic's inability
+to detect that made it crash instead of degrading gracefully), and
+independently in a sibling lib's death-room fallback with the identical
+shape (`move(DEATH_ROOM)` with no existence check at all).
+
+Fix: use `file_size(path + ".lpc") >= 0` as the existence check instead
+of `catch(load_object(path))` — `file_size()` is a plain filesystem
+stat, unambiguous, and (per §7.5) already commonly allowlisted for
+every ACL in this project. Chain fallbacks as needed (this lib's
+`enter_world()` now falls back `startroom → START_ROOM → REGISTER_ROOM`,
+each step gated by its own `file_size()` check, since `START_ROOM`
+itself is not guaranteed to exist any more than the player's own saved
+value is).
+
+Detection for a similar lib: grep for `catch(load_object(` used purely
+as an existence test (as opposed to guarding a real nested-compile
+hazard like §7.60) feeding an `if (!catch(...)) move(...) else
+move(fallback)` branch, and verify live by pointing the guarded path at
+something that genuinely doesn't exist — if the "success" branch still
+runs and crashes on the subsequent `move()`/`set()`, this is the bug.
+
 ---
 
 ## 8. Login and registration flow bugs
