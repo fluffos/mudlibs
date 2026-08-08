@@ -5507,6 +5507,26 @@ log/debug.log` after letting a boot idle for a while, not just after
 active player movement/registration — a low ceiling can be tripped by
 daemon `heart_beat()`s alone.
 
+Sixth instance, unrelated lineage: `xbtxiii` (风云-derived, not any of
+the five priors) shipped the project's common `700000` default. Not
+tripped by registration or player movement either — caught in
+`debug.log` during an otherwise ordinary interactive session,
+attributed to `adm/daemons/taskd.lpc`'s `send_task()`/`find_target()`
+lazily compiling a not-yet-loaded quest NPC
+(`d/shaolin/npc/cheng-xin1.lpc`) as a side effect of the room
+(`d/shaolin/banruo1.lpc`) that NPC lives in being populated for the
+first time — the player never walked there; `taskd`'s own background
+task-matching logic reached the room on its own. Same remedy
+(`5000000`); a full subsequent play session (movement, board post,
+friendly-spar decline, real `kill` combat, death, full resurrection
+sequence, quit, relogin) produced zero further `cost limit reached`
+hits. Reinforces the §7.90 lesson from a third angle beyond
+"registration" and "movement": a background daemon's own bookkeeping
+pass can be the thing that first lazily-compiles an expensive room/NPC,
+with no player action anywhere near it — `grep -c "cost limit reached"
+log/debug.log` after any extended session, not just after directed
+exploration.
+
 Detection pattern: don't stop testing at "registration completes
 cleanly" — a lib can pass every WASM-stage check and still throw
 eval-cost aborts the moment a player actually walks around, because
@@ -5676,6 +5696,59 @@ the `all`-branch's `skills[i]` array (uninitialized in that code path)
 instead of the local `skill` string — a guaranteed runtime error on
 `setskill <target> <single-skill> 0`, fixed by using `skill` in that
 branch.
+
+### 7.95 A queued `notify_fail()` rejection message never reaches the player because the same code path unconditionally `return`s success right afterward
+
+Found on `xbtxiii`'s §10.7 deep functional test, in `cmds/std/fight.lpc`
+(the friendly "讨教/切磋" spar command, distinct from `kill`). The
+handler's own `help` text explains that some NPCs will decline a spar
+challenge ("并不是所有的 NPC 都喜欢打架"), and the code visibly tries
+to say so:
+```lpc
+notify_fail("看起来" + obj->name() + "并不想跟你较量。\n");
+if (!userp(obj) && !obj->accept_fight(me)) return 1;
+```
+`notify_fail()` only queues a rejection string — the driver's command
+dispatcher displays it *only if the eventually-returned value from the
+whole `add_action` chain for that input line is 0* (a real failure); if
+any handler for the line returns nonzero, the queued message is
+discarded unshown, no matter how many times `notify_fail()` was called
+along the way. This handler calls `notify_fail()` and then explicitly
+`return 1;` (success) on the exact branch where the NPC actually
+declined — so the very message meant to explain the decline can
+*never* be displayed. Live symptom: challenging an NPC that declines
+(here, `d/fy/npc/waiter.lpc`, a friendly shopkeeper) produced the
+player's own opening "领教...高招" challenge line and then complete
+silence — no acceptance, no rejection, no combat, indistinguishable
+from a hang. Confirmed via the surrounding file's own established
+idiom: every OTHER rejection path in the same function (missing
+target, target not a creature, target already fighting you, etc.) uses
+`return notify_fail(...)` — the standard pattern where `notify_fail()`'s
+own return value (0) becomes the function's return value, correctly
+triggering the queued message. Only this one branch breaks the
+pattern by calling `notify_fail()` as a bare statement and then
+returning a hardcoded `1` instead of forwarding the 0. Fix: change
+`return 1;` to `return 0;` on the declined-spar branch (equivalently,
+`return notify_fail(...)` inline) — leaves the accepted-spar path
+(which still reaches `fight_ob()`/`return 1` further down) untouched.
+Verified live: before the fix, `fight waiter` produced only the
+player's own challenge line and nothing else; after the fix and a
+driver restart, the identical command produced "看起来店小二并不想
+跟你较量。" as intended.
+
+Detection pattern: `notify_fail("...")` followed, in the same
+conditional branch, by an explicit `return <nonzero>` (or any codepath
+that returns nonzero without going through `notify_fail()`'s own
+return value) — the message was written to explain a real rejection,
+so the branch should almost always return 0. Cross-check against
+sibling branches in the same function: if some already correctly use
+`return notify_fail(...)`, a branch that instead calls it as a bare
+statement is very likely the same author's mistake, not a deliberate
+choice. General lesson beyond this one file: `notify_fail()`'s message
+is silently swallowed by ANY successful (nonzero-returning) outcome
+for that input line, even one that runs alongside/after the
+`notify_fail()` call — this is easy to get backwards when a function
+has multiple exit points and only some of them are meant to "fail."
 
 ---
 
@@ -6252,6 +6325,49 @@ other file with player-facing text) for identifiers matching a
 never actually reached a player, no matter how long the lib has run.
 Verify by re-triggering the exact prompt and confirming the real value
 now renders instead of the macro name.
+
+### 8.12 A character-creation menu prompts for uppercase letters but the validation range-check only accepts lowercase, silently rejecting exactly the input the player was told to type
+
+Found on `xbtxiii`'s §10.7 deep functional test, in
+`adm/daemons/logind.lpc`'s `get_kind()` — the "pick your character's
+attribute category" step, prompted as `请您选择您的人物的属性类别,
+有12种类型(A,B,C,D,E,F,G,H,I,J,K,L)` and, on a bad entry, re-prompted
+as `你只能在(A--L)中选择一种人物类型`. Both messages spell the valid
+range in uppercase. The actual check:
+```lpc
+if (kind < "a" || kind > "l") { ... re-prompt ... }
+```
+compares against LOWERCASE bounds. Typing exactly what the prompt
+says (`A`) fails the check (`"A" < "a"` is true in LPC string
+ordering, since `'A'` is 65 and `'a'` is 97) and loops back to the
+same re-prompt, which itself still says uppercase — a player who types
+precisely what they were told gets stuck in an unwinnable retry loop
+until they guess to try lowercase instead. Confirmed live: `A` at the
+prompt bounced with the rejection message every time; `a` (undocumented
+to the player) was accepted and proceeded normally to the gift/stat
+display. Downstream code (`choice_gift()`) independently only matches
+against a hardcoded lowercase alphabet (`"abcdefghijklmnopqrstuvwxyz"`),
+confirming lowercase — not uppercase — is what the rest of the
+codebase actually expects; the bug is squarely in the prompt/validation
+mismatch, not in a downstream lookup table that could just as easily
+have been "fixed" the other way. Fix: normalize the input with
+`lower_case()` at the top of `get_kind()`, before the range check, so
+either case works and downstream code keeps receiving the lowercase
+form it already assumes:
+```lpc
+if (stringp(kind)) kind = lower_case(kind);
+if (!stringp(kind) || kind < "a" || kind > "l") { ... }
+```
+Verified live: after the fix and a driver restart, typing `A` at the
+identical prompt proceeded straight to the gift/stat display instead
+of re-prompting. Detection pattern: any character-creation (or other)
+menu whose prompt text and re-prompt/error text both display one case
+convention (commonly uppercase, since single-letter menus read better
+that way) while the actual comparison uses string bounds/literals in
+the other case — grep for `"%s%s" NOR ...(A-`-style prompts alongside
+a `kind < "a"`/`kind > "l"`-shaped guard, and check which case the
+literals in the comparison actually use versus what the surrounding
+`write()` calls tell the player to type.
 
 ---
 
