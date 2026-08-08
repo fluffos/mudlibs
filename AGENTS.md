@@ -6657,6 +6657,82 @@ a `kind < "a"`/`kind > "l"`-shaped guard, and check which case the
 literals in the comparison actually use versus what the surrounding
 `write()` calls tell the player to type.
 
+### 8.13 A wizlist account's separate "WIZ password" login gate has no success path for the (extremely common) case where that password was never set, permanently dead-ending every login after the first
+
+Found on `sjshv150`'s §10.7 deep functional test, on the SECOND
+connection (the restore/relogin path, distinct from the
+just-registered session that never exercises this code) for the
+seeded `fluffos` (admin) test account. On top of this lib's already
+unusual double-password scheme (a separate "管理密码"/"普通密码",
+see the README), any id listed in `adm/etc/wizlist` gets a THIRD gate
+in `adm/daemons/logind.lpc`'s `get_passwd()`:
+```lpc
+if ((id = ob->query("id")) && member_array(id, SECURITY_D->get_wizlist()) != -1) {
+    write(HIR "№" WHT "『" HIG "请输入相应的WIZ密码" WHT "』" NOR "");
+    input_to("get_wizpwd", 1, ob);
+} else
+    check_ok(ob);
+```
+`get_wizpwd()` itself:
+```lpc
+private void get_wizpwd(string pass, object user, object ob) {
+  ...
+  if (!user->query("wiz_password")) {
+    write(HIW "你没有设定WIZ密码，请用WIZPWD来设定！\n" NOR);
+  }
+  if (user->query("wiz_password")) {
+    if (crypt(pass, old_pass) == old_pass) { ...; check_ok(user); return; }
+    else { ...; input_to("get_id", user); return; }
+  }
+}
+```
+Nothing about setting a `wiz_password` is part of registration — a
+brand-new account (even a pre-seeded admin one, per §1.5) never has
+one, and the ONLY way to set it is the in-game `WIZPWD` command,
+which requires already being logged in. The very first time any
+wizlist id reconnects (i.e. every session after the first), it hits
+`get_wizpwd()` with `wiz_password` unset: the first `if` prints the
+nag and falls straight through with no `check_ok()`, no re-`input_to`,
+nothing — the function just returns. The player's next keystroke (in
+this case, `look`) has nowhere to go: no `input_to` is armed and no
+player body exists yet, so it lands on the bare connection object's
+own generic `"什么？"` fail response, forever — a textbook chicken-
+and-egg deadlock (can't set the password without logging in, can't
+log in without the password already being set) that permanently locks
+out EVERY wizlist member (not just admin — apprentice/wizard/arch too)
+who has never explicitly run `WIZPWD`, which in practice is nearly
+everyone on a freshly-seeded or freshly-restored archive. Confirmed
+live: reconnecting as `fluffos` and answering the regular-password
+prompt correctly reached `"你没有设定WIZ密码，请用WIZPWD来设定！"`,
+then every subsequent input (`look`, `score`) produced only `什么？`
+with no player ever entering the world, and `debug.log` showed
+nothing at all (silent, not crashing). Fix: treat the unset-password
+case as non-blocking, matching what the nag message actually implies
+(a reminder to set one, not a hard requirement) and matching how the
+game already treats it moments earlier on FIRST login (`check_ok()`'s
+own post-`enter_world` code prints the identical nag with no gating
+whatsoever) — call `check_ok(user)` and `return` right after the nag:
+```lpc
+if (!user->query("wiz_password")) {
+    write(HIW "你没有设定WIZ密码，请用WIZPWD来设定！\n" NOR);
+    check_ok(user);
+    return;
+}
+```
+Verified live: after the fix and a driver restart, the identical
+reconnect sequence showed the same nag but then proceeded straight
+into the world (landed in `〖巫师会议厅〗`, the wizard meeting room),
+with `look`/`score`/`quit` all working normally and prior character
+state (death count, HP) intact from the previous session. Detection
+pattern: any `input_to` callback gating login behind a secondary,
+separately-settable credential — grep for a conditional structure of
+the shape `if (!has_secondary_cred) { <nag>; } if (has_secondary_cred)
+{ <verify path> }` with no unconditional continuation after the nag
+branch — the "not set yet" case must always have its own explicit
+path forward (or an explicit, deliberate lockout with a clear message
+this is a first-run-only setup step), never silent fallthrough with no
+further `input_to` armed.
+
 ---
 
 ## 9. LPC formatter (`~/src/fluffos/tools/lpc-syntax/`) — required checks
