@@ -19,6 +19,10 @@
   算 `crypt(ZJKEY, str[2..3])` 才能通过握手，账号密码字段也要求真
   实的 `crypt()` 密文，和 `shujian3` 的"密文字段目前未做真正校验"
   形成对比——这是这批档案里安全性设计最认真的一个手机协议实现。
+- 地图内容逐字节相同，但核心系统被完全重写这一事实也带来一个副作用：
+  旧系统专属的功能（留言板 `post`、玩家可用的商店/买卖/邮件指令）在
+  重写时没有被移植过来——不是这些子系统里藏着 bug，是它们在这份手机
+  App 引擎里根本不存在，深度功能测试（§10.7，见 NOTES.md）确认过。
 
 ## 注册流程（手机 App 协议）
 
@@ -62,6 +66,25 @@
     "非致命错误，保持原样"是不准确的。
   - `adm/daemons/payd.lpc`（HTTP 充值回调服务器）。
   - `adm/daemons/network/dns_master.lpc`（跨服 intermud UDP 层）。
+
+## 深度功能测试补充修复（2026-08-08，§10.7）
+
+- `adm/simul_efun/file.lpc` 的 `log_file()` 一直是裸的 `write_file()`，
+  没有调用同一份文件里紧邻定义的 `assure_file()`（AGENTS.md §7.11）；
+  每一条新连线最先执行的 `clone/user/login.lpc::logon()` 就会调用它
+  写 `/log/nosave/logon`。此前的记录说"创建了缺失的 /log/nosave 目
+  录"只是治标：那个目录从未被 git 追踪（`.gitignore` 把整个
+  `libs/*/work/log/` 当运行时状态排除），只是恰好还没在某次 checkout
+  中丢失过。已在 `log_file()` 里补上 `assure_file(LOG_DIR + file);`，
+  并在文件顶部加一行 `assure_file()` 前向声明（否则整个
+  `simul_efun`/`master` 编译失败）——live 验证：临时清空
+  `work/log/nosave/` 后重启驱动，新连线不再卡死，目录被自动重建。
+- `efun::message()` 的 0 值 `exclude` 参数问题：核实后确认
+  `adm/simul_efun/message.lpc` 的 `message()` 函数体本身就有
+  `if (!exclude) exclude = ({});` 防护，属于彻底根治，不是像
+  `zjdywzb`/`yhwhpublicfi`（AGENTS.md §7.88）那样"包装函数漏标
+  `varargs`、部分调用点参数不足"的破损形状——这份代码从一开始就没
+  有这个漏洞，此前的 WASM 笔记"已修复"这个说法是准确的。
 
 ## 管理员账号 / Admin account
 

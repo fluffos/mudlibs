@@ -1679,6 +1679,48 @@ Two independent traps in the same apply:
   live-diagnosing what looks like a mysterious "registration silently
   stalls with no banner, no working commands, no save, and nothing in
   debug.log" bug from scratch — it's almost certainly this.
+- **Fourth+ instance, unrelated lineage: `zjmudhell`'s §10.7 deep
+  functional test** (custom mobile-app-protocol "hell"-map-content
+  archive — §11 — unrelated codebase to the 夕阳再现/XYZX family above
+  despite sharing this exact bug shape). `adm/simul_efun/file.lpc`'s
+  `log_file(string file, string text)` was a bare `write_file(LOG_DIR +
+  file, text)` with no `assure_file()` guard, even though `assure_file()`
+  is declared in the very same file, two functions below it, and is
+  already used correctly by a dozen other call sites across the tree
+  (`channeld.lpc`, `examined.lpc`, `versiond.lpc`, `securityd.lpc`,
+  several `adm/npc/*.lpc` files, `cmds/arch/{punish,restore}.lpc`).
+  `clone/user/login.lpc`'s `logon()` — the very first thing that runs on
+  ANY new connection, before the version-handshake banner even prints —
+  calls `log_file("nosave/logon", ...)` unconditionally. `log/nosave/`
+  happened to already exist on disk from an earlier WASM-stage pass
+  (confirmed via `git status`/`git ls-files`: it was NEVER git-tracked,
+  since this whole project's `.gitignore` excludes `libs/*/work/log/`
+  wholesale as driver-recreated runtime state — same treatment as
+  `debug.log`), so the crash hadn't been re-triggered since. A previous
+  pass's own NOTES.md flagged this exact risk ("created-but-possibly-
+  missing `/log/nosave` directory") without confirming whether the
+  underlying code was actually fixed or the directory just hadn't been
+  lost yet. Verified live both ways: temporarily renamed `log/nosave`
+  out of the way and confirmed a fresh driver boot + connect against the
+  UNFIXED code hung the very first connection dead at the version
+  banner (never even printed `ver1.0,...`); applied the standard
+  `assure_file(LOG_DIR + file);` guard immediately before the
+  `write_file()` call, and the identical fresh-boot-with-missing-
+  directory scenario then connected cleanly, auto-creating `log/nosave/`
+  on demand (confirmed via `ls`/`git status` immediately after — freshly
+  timestamped, containing only the files this session actually wrote).
+  Hit the exact same forward-reference gotcha `xajhxo` above already
+  documents: `assure_file()` is defined textually AFTER `log_file()` in
+  this file, so the fix needed its own one-line forward declaration
+  (`void assure_file(string file);` near the top of the file) or the
+  whole `simul_efun`/`master` compile fails outright (`No program in
+  object '/adm/single/simul_efun'!` — a hard boot-abort, not a warning).
+  Confirms this exact bug shape (unguarded `log_file()` sitting right
+  next to its own unused `assure_file()` helper) recurs independently
+  across at least two unrelated codebase families, not just the
+  夕阳再现/XYZX lineage above — grep any new lib's `log_file()`
+  implementation for a missing `assure_file()` call on sight, regardless
+  of which engine family it belongs to.
 
 ### 7.12 Shared message/wrapper argument bugs
 

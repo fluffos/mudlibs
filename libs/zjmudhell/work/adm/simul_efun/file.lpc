@@ -2,6 +2,12 @@
 #include <ansi.h>
 #include <zjmud.h>
 
+// forward declaration: needed because log_file() (below) now calls
+// assure_file(), which is defined textually LATER in this same file --
+// this compiler doesn't resolve forward references without one (same
+// convention logind.lpc's own helpers already use, per AGENTS.md §7.11).
+void assure_file(string file);
+
 void cat(string file) {
   if (previous_object())
     seteuid(geteuid(previous_object()));
@@ -12,6 +18,14 @@ void cat(string file) {
 
 void log_file(string file, string text) {
   seteuid(ROOT_UID);
+  // §7.11: this call has no directory guard, unlike every other write_file()
+  // site in this codebase (see assure_file() right below, already used
+  // consistently by channeld.lpc/examined.lpc/versiond.lpc/securityd.lpc/
+  // etc.) -- on a checkout that never had log/nosave/ (or any other
+  // LOG_DIR subdirectory a caller passes) created on disk, this would
+  // fail every write silently (or throw, depending on caller), including
+  // the very first connection's clone/user/login.lpc::logon() call.
+  assure_file(LOG_DIR + file);
   write_file(LOG_DIR + file, text);
 }
 
