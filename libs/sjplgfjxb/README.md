@@ -7,8 +7,15 @@ adm-single 家族的 `sjecl`/`sje` 属于完全不同的引擎谱系，纯属巧
 
 ## 内容亮点
 
-- 新角色从长安城的"大慈恩寺"起步，地图以唐代长安城的真实地标为骨架
-  展开。
+- 新角色的出生地由角色创建时选择的"出生状况"（书香门第/商贾之家/
+  贫寒农家/武力世家）决定，分别落在山东泰安或福州的一户普通民居
+  （`adm/daemons/logind.lpc` 的 `start_loc` 数组），并非长安城；
+  长安城的"大慈恩寺"（`d/city/ciensi`）只在角色已保存的
+  `startroom` 失效时才作为兜底出生点使用。长安城本身仍以唐代真实
+  地标为骨架展开（`d/city/` 下的城门都用真实地名，如 `kaiyuan-men`
+  开远门、`zhuque-men` 朱雀门、`qixia-men`/`yanping-men`/
+  `tonghua-men`/`yanxing-men`；`ciensi` 大慈恩寺、`baodian` 保定殿
+  等也是真实地标），是游戏地图的另一大区域，值得探索。
 - 除了常见的拜师门派体系，还提供一条独立的"镖师"生涯：加入"红旗
   镖局"（`d/city/biaoju/`，含帐房、佛堂、武器库等一整套镖局建筑）
   只需 `shenqing` 申请即可上任，不必事先拜师，`tuichu` 可随时退出。
@@ -35,6 +42,25 @@ adm-single 家族的 `sjecl`/`sje` 属于完全不同的引擎谱系，纯属巧
    `create()` 对自己损坏的 `emoted.o` 存档做了未加保护的
    `restore()`，preload 时未捕获抛出——已包一层 `catch()`，并显式补
    上 `emote=([])` 兜底。
+4. **§7.34 类调试遗留**：`adm/daemons/logind.lpc` 的 `get_resp()`/
+   `get_name()`（角色创建流程中确认中文名字的两条并行路径）各留了
+   一行 `printf("%O\n", ob)`，会在设定密码提示前把登录物件的内部路
+   径（`/obj/login#N`）原样打印给玩家看——已删除两行。
+5. **一处编译期 ERROR**：`d/fuzhou/npc/chess_player.lpc`（棋摊老板
+   韦守儒）的 `play_chess()` 把继承自 `feature/name.lpc` 的本地方法
+   `name(int raw)` 当成"取得对方名字"的自由函数误用为
+   `name(this_player())`——传对象给一个只接受 int 的参数，编译直接
+   报错，导致这个 NPC 全程无法编译，福州"茶馆"（`d/fuzhou/
+   tearoom2`）填充该 NPC 时级联出 `*No program in object` 崩溃並反
+   复刷屏。已改为 `this_player()->name()`，顺带删掉同一行紧挨着的一
+   处无意义 `printf` 调试输出（§7.34 类）。
+6. **§7.86 类第三个变体**：`obj/board/wizard_j.lpc`（巫师工作进度报
+   告板）`inherit "/std/jboard"` 之后又多余 `replace_program(
+   "/std/jboard")`，与已修复的 31 处 `BULLETIN_BOARD`/`inherit`
+   实例是同一 bug 形状，只是换了一个板类基类名字；`/std/jboard.lpc`
+   自己的 `do_report()`/`do_describe_project()` 也用
+   `this_player()->edit((: lfun, ... :))` 建闭包，一样会崩。已删除
+   多余的 `replace_program()` 调用。
 
 ## 排查过程中确认"不是 bug"的现象
 
@@ -49,9 +75,10 @@ move/skill/troop）恰好都是第一次编译。临时让 `error_handler` 无�
 ## 管理员账号 / Admin account
 
 - **ID**: `fluffos`
-- **密码 / Password**: 注册时自设（至少 6 位，需同时包含大小写英文
-  字母，且不能和 ID 太像）
-- **权限 / Level**: `(admin)`，通过 `/adm/etc/wizlist` 授予。
+- **密码 / Password**: `Mud@2026`（标准注册流程完成，`update` 指令验
+  证过读写权限正常）
+- **权限 / Level**: `(admin)`，`/adm/etc/wizlist` 里早已有
+  `fluffos (admin)` 一行，注册该 id 后自动获得。
 
 > 警告：对外公开架设前请务必修改此密码。
 
