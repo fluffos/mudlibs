@@ -6787,6 +6787,60 @@ otherwise differently-shaped string silently satisfies neither the
 happy path nor an explicit error, just the same generic deny branch
 as a real bad actor.
 
+### 8.15 A room's own `create()` force-loads a Windows-era-cased NPC/board filename at RUNTIME (`new()`/bare `"path"->func()`), not at compile time — so it compiles clean, ships clean, and only throws when a player is the first to actually enter that specific room
+
+Found on `sjshwzb`'s §10.7 deep functional test, in `d/emei/huayanding.lpc`
+(峨嵋 华严顶). This is a sibling of the already-cataloged case-sensitivity
+classes — §7.8 (`read_file()`/data-path case mismatch) and the `#include
+<Action.h>`-vs-`action.h` compile-time class documented in §6.1 — but a
+third, RUNTIME-only shape neither of those covers: a bare object-reference
+string passed to `new()` or used as the left side of `->` in a room's
+`create()`. This compiles fine (the compiler never resolves a runtime
+string), so it survives every static sweep and even a full `lpcc`/boot
+check with a clean log. It only detonates the first time a real player (or
+a wizard's `update`) actually walks into that specific room and the room's
+own `create()`/`reset()` executes, at which point `new()`/`load_object()`
+silently returns `0` for the wrong-cased path and the very next line's
+`->` on that `0` throws `Bad argument 1 to EFUN call_other() ... Got:
+int(0)`. Two independent hits in the same 25-line file: `set("objects",
+(["npc/yingke": 1]))` — the "objects" mapping value flows into `std/room.lpc`'s
+`make_inventory()` (`ob = new(file); ob->move(this_object());`), and the
+actual on-disk file is `d/emei/NPC/YINGKE.C` (all-uppercase), so `new()`
+returns 0 and the very next line's `ob->move(...)` crashes; and a separate,
+unrelated-looking board-preload idiom, `"obj/board/emei_b"->foo();`, whose
+actual on-disk file is `obj/board/EMEI_B.C` (also all-uppercase) — this one
+additionally lacks the leading `/` that the lib's OTHER, working instances
+of this same idiom all have (e.g. `d/city/kezhan.lpc`'s
+`call_other("/obj/board/nancheng_b", "???")`), so it would still fail even
+after a case fix without also adding the slash. Traced via `update
+/d/emei/huayanding` as an admin, which wraps `compile_object`'s first-load
+in its own `catch()` and surfaced the full stack instead of a bare
+disconnect: `/std/room.lpc` line 18 (`make_inventory()`) → `reset()` line 61
+→ `setup()` line 212 → `huayanding.lpc create()` line 21 (the `setup()`
+call, which happened to be BEFORE the board line in source order, so the
+NPC crash pre-empts the room ever reaching the board line at all on first
+load). Because `update.lpc` catches the error, the driver itself survives
+and logs a normal-looking recoverable trace — but an ordinary player
+walking into the room for the first time each boot gets the same
+uncaught-but-driver-caught runtime error with no NPC ever spawned and
+(until also fixed) no board ever preloaded, and zero visible symptom
+besides a possibly-truncated room description depending on where in
+`create()` the throw lands relative to `set()` calls already having run.
+Not fixed in this pass beyond noting it (scope was the `EMEI_B.C`
+`replace_program()` fix, a different bug in the same file — see the
+`§7.86` write-up in `sjshwzb`'s `NOTES.md`); flagged here as its own
+class since the driving question — "why does a room that compiles clean
+and boots clean still crash on first visit" — needs a different diagnostic
+move (`update <room>` as admin to force a `catch()`-wrapped first
+compile) than any of the other case-sensitivity entries. Detection
+pattern: whenever a lib has a cluster of leftover uppercase-`.C` files
+(common on any Windows/GBK-era archive — see §4's uppercase-`.C`
+conversion blind spot), grep every `.lpc` file's own `new(`/bare-string
+`->`/`call_other(` argument literals for a lowercase or unslashed variant
+of any such filename's basename; a hit won't show up in a boot log or a
+`§9` formatter pass, only by actually visiting the room or forcing a
+first compile via `update`.
+
 ---
 
 ## 9. LPC formatter (`~/src/fluffos/tools/lpc-syntax/`) — required checks
