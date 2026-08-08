@@ -269,6 +269,22 @@ int valid_read(string file, mixed user, string func) {
       return 1;  //允许无条件读取board数据
   }
 
+  // 编译期/存在性检查不算敏感数据读取，即使调用者自己还在create()里、
+  // euid尚未设置也必须放行，否则任何NPC create()中第一次引用某个还没
+  // 被load_object()过的档案（比如set_skill()探测技能档案是否存在）都
+  // 会被误判为"文件不存在"（AGENTS.md §7.5）
+  switch (func) {
+    case "load_object":
+    case "recompile_object":
+    case "include":
+    case "file_size":
+    case "stat":  // get_dir() 效率函式底层走的是func=="stat"，不放行会让
+      // commandd.lpc等一切在create()阶段没有先seteuid()的
+      // 精灵一 get_dir() 就被拒绝，返回空造成指令表永远建不
+      // 起来——列目录本身和file_size一样只是存在性探测
+      return 1;
+  }
+
   // 取得用户的euid和status
   euid = geteuid(user);
   if (!euid) return 0;

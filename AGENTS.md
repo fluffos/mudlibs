@@ -1369,6 +1369,56 @@ checklist item for any new "hy"-lineage lib: grep `debug.log` for
 `F_SKILL` after the first real map traversal, not just after
 registration.
 
+**Third confirmed instance, and the most severe yet: `hy` itself (the
+predecessor/ancestor lib of the `hy2000`/`hy2002` pair, confirmed via
+its own §10.7 deep functional test — NOT byte-identical to either
+sibling, its own independently-shaped `securd.lpc`) — a `func` value
+neither prior instance covered (`"stat"`) that breaks the ENTIRE
+command table for EVERY player, not just one NPC's `create()`.** The
+driver's `get_dir()` efun (used by `adm/daemons/commandd.lpc`'s
+`rehash()` to list each command directory's `.lpc` files and build the
+verb-lookup cache) internally calls `check_valid_path(path,
+current_object, "stat", 0)` — **`func == "stat"`, not `"file_size"` or
+any compile-related string** (confirmed by reading
+`fluffos/src/packages/core/file.cc`'s `get_dir()`). `commandd.lpc`
+itself never calls `seteuid()` anywhere, so at the moment `rehash()`
+first calls `get_dir()` for `/cmds/std/` etc., `commandd.lpc`'s own
+euid is unset (falsy) and the custom ACL's `if (!euid) return 0;` path
+denies it — `get_dir()` gets silently treated as "empty directory"
+(FluffOS returns `0`/an empty result on denial, no error, no
+exception), so `search[dir]` never gets populated, `find_command()`
+never finds ANY verb in ANY directory, and `command_hook()` falls
+through to the driver's own `default fail message` for literally every
+command a player types — `look`, `score`, `kill`, everything —
+including for the account that just finished registering. No crash, no
+debug.log signal at all; the only visible symptom is every single
+command silently answering with the driver's generic "what?" text
+(`什麼？` in this lib's `config.fluffos`), which is easy to mistake for
+§8.3's `private command_hook` or dead-command-table sscanf bugs (§8.3a/
+§8.3b) — check those first since they're more common, but if both come
+back clean and EVERY command including `look` fails identically, grep
+the driver's C source for what `func` string `get_dir()` (or any other
+efun you're suspicious of) actually passes to `valid_read`/
+`check_valid_path`, rather than assuming only the funcs already in this
+catalog exist. Fixed by adding `case "stat":` to the same allowlisted
+`switch(func)` as `load_object`/`recompile_object`/`include`/
+`file_size` — listing a directory's filenames is exactly as harmless as
+checking one file's size or existence. Verified live: before the fix,
+a freshly-registered character's `look`/`score` both returned "什麼？"
+immediately after entering the world (native driver, tmux + mudclient
+sessions independently reproduced it); after adding `"stat"` and
+rebooting, the same account's `look`/`score`/`kill`/`post` all resolved
+correctly. **Detection pattern**: if `private command_hook` and the
+`.lpc`-suffix sscanf in `commandd.lpc`'s `rehash()` are BOTH already
+clean but every typed command still dies with the driver's generic fail
+message, suspect a custom `securd.lpc`-style ACL denying `get_dir()`
+(func `"stat"`) from the command-table daemon itself — add a
+`write_file()` or `printf()` right before the `rehash()` call to
+confirm `get_dir()`'s return value directly, and check the ACL's
+`switch(func)` list against the driver's own source rather than this
+catalog's list, since new efuns can introduce new `func` strings this
+project hasn't hit yet.
+
 ### 7.6 DNS/intermud daemons: exclude from preload, then guard the callers
 
 Standing policy — before first boot, remove `dns_master`-style daemons
@@ -5927,6 +5977,66 @@ crash trace mentions a network/intermud daemon (`dns_master`,
 unrelated (death, chat, a channel broadcast), check that daemon's own
 `#include`d headers for a truncated multi-line macro before assuming
 the crash lives in the calling code.
+
+### 7.98 A daemon's `create()` reads its own config file/table before ever calling `seteuid()`, so a custom `securd.lpc`-style ACL denies the read as if the object had no privileges — and the resulting crash trace points at `explode()`/`sscanf()`, not at the real permission problem
+
+Found on `hy`'s §10.7 deep functional test, in the very first seconds of
+boot (well before any player connects): `debug.log` showed two
+back-to-back crashes during preload,
+```
+执行时段错误：*Bad argument 1 to explode()
+Expected: string Got: 0.
+程式：/adm/daemons/questd.lpc 第 698 行
+呼叫来自：/adm/daemons/questd.lpc 的 create() 第 39 行
+呼叫来自：/adm/daemons/questd.lpc 的 read_table() 第 698 行
+```
+and an identical shape in `adm/daemons/natured.lpc`'s `create()` →
+`read_table()` → `explode(read_file(file), "\n")`. Both crash traces
+look exactly like this project's well-known §7.9 "missing file" class
+(`read_file()` on a nonexistent path returns `0`, and an unguarded
+`explode()`/`sscanf()` on that `0` throws "Bad argument 1") — but
+`/quest/dynamic_quest` and `/adm/etc/nature/day_phase` were BOTH
+present on disk at their expected sizes. The real cause: `read_file()`
+is itself subject to the mudlib's custom `valid_read()` ACL (func
+`"read_file"`), and neither daemon calls `seteuid()` anywhere in its
+own source — at the exact moment `create()` runs during preload, the
+object's own effective uid is unset (falsy), so `securd.lpc`'s
+`valid_read()` hits its `if (!euid) return 0;` fallback and silently
+denies the daemon's read of its OWN config file. `read_file()` then
+returns `0` exactly as if the file didn't exist, and the crash surfaces
+one level downstream, inside whatever parse function is unlucky enough
+to call `explode()`/`sscanf()` on the result — nowhere near the actual
+missing ingredient (a `seteuid()` call). This is the mirror image of
+§7.5: where §7.5 is about the ACL wrongly denying harmless
+compile-time/existence checks (fixable by broadening the ACL's
+allowlist), this is about a daemon that genuinely SHOULD be
+authenticated failing to authenticate itself before touching privileged
+data — the correct fix is on the daemon's side, not the ACL's.
+Confirmed nothing else in this lib's `adm/daemons/*.lpc` shares the
+bug: grepping every daemon file for `read_file(`/`read_table(` while
+having zero `seteuid` calls anywhere in the same file turned up
+exactly these two. Fixed by adding `seteuid(ROOT_UID);` as the first
+line of each `create()`, matching the same defensive pattern this
+lib's own `logind.lpc` already needed in three other places (see its
+`README.md`). Verified live: before the fix, boot.log showed the two
+`explode()` crashes every single boot, `quests`/`day_phase` silently
+stayed empty (breaking the dynamic-quest system and, per this
+project's established §7.9 "empty collection" lesson, risking a
+downstream `sizeof()-1`/modulo-by-zero the moment anything indexes
+`day_phase[current_day_phase]`); after the fix, a clean reboot showed
+neither crash and both tables loaded with their real content.
+**Detection pattern**: a `*Bad argument to explode()/sscanf()` crash
+during PRELOAD (before any player has connected) whose file argument
+genuinely exists on disk (`ls -la` it before assuming §7.9 applies) is
+the tell — grep the crashing daemon for `seteuid` first; if it has
+none, the custom ACL is almost certainly denying its own
+`read_file()`/`get_dir()` calls, not reporting a missing file. Same
+family as §7.5's `"stat"` variant (also `hy`, same session) — a custom
+`securd.lpc` can break either side of the same problem: over-denying
+harmless operations from *other* not-yet-authenticated objects (§7.5),
+or under-authenticating a *privileged* daemon that never bothered to
+`seteuid()` itself before doing legitimate privileged work (this
+entry). Check both whenever one shows up.
 
 ---
 
