@@ -5792,6 +5792,95 @@ for that input line, even one that runs alongside/after the
 `notify_fail()` call — this is easy to get backwards when a function
 has multiple exit points and only some of them are meant to "fail."
 
+### 7.96 A multi-line `#define` mapping literal is missing the line-continuation backslash on its very first line, silently truncating the macro to `([` and leaking the rest of the mapping as raw top-level statements — breaking an unrelated daemon's compile and, from there, permanently aborting death/resurrection mid-sequence
+
+Found on `sjsh`'s §10.7 deep functional test, while deliberately fighting
+an NPC to death to exercise the resurrection cycle. `kill`ing an NPC
+(`d/city/npc/jieding.lpc`/`bonze.lpc`, both wandering 疥顶小僧/和尚 in
+朱雀大街) to a normal, undisturbed death produced a *repeating* "你死了"
+message — the exact same death line firing over and over, forever, on
+every subsequent heartbeat tick, with no ghost stage, no death-gate
+room, no resurrection NPC ever appearing. `debug.log` showed the real
+cause on the very first death:
+```
+执行时段错误：*No program in object '/adm/daemons/network/dns_master'!
+程式：/adm/daemons/network/services/gchannel.lpc 第 36 行
+呼叫来自：/std/char.lpc 的 heart_beat() 第 79 行
+呼叫来自：/feature/damage.lpc 的 die() 第 349 行
+呼叫来自：/adm/daemons/combatd.lpc 的 killer_reward() 第 1238 行
+呼叫来自：/adm/daemons/channeld.lpc 的 do_channel() 第 341 行
+呼叫来自：/adm/daemons/network/services/gchannel.lpc 的 send_msg() 第 36 行
+```
+`dns_master.lpc` itself failed to compile with `include/net/config.h:21:4:
+error: syntax error, unexpected L_STRING`. Root cause, in
+`include/net/config.h`:
+```lpc
+#define LISTNODES ([ 
+"SK": "61.141.216.74 6668", \
+"BJ": "61.150.127.254 6668", \
+"SD": "61.137.138.166 6668", \
+     ])
+```
+Line 1 (`#define LISTNODES ([`) has **no trailing `\`**, while every
+following line does. The C preprocessor treats a `#define` body as
+ending at the first line lacking a continuation backslash — so
+`LISTNODES` silently expands to the incomplete literal `([` and lines
+2-4 (`"SK": "...", \` etc.) are NOT part of the macro at all; they leak
+into whatever file `#include`s `net/config.h` as bare top-level LPC
+statements, which the compiler rejects outright. `dns_master.lpc` never
+compiles as a result — but because that failure happens lazily, at
+whatever moment something first calls into `DNS_MASTER` (here, the
+public death-announcement broadcast in `gchannel.lpc::send_msg()`, itself
+called from `channeld.lpc`'s ordinary "系统频道" relay, from
+`combatd.lpc::killer_reward()`, from `feature/damage.lpc::die()` at the
+exact line where a dying player's kill gets announced), it surfaces as
+an uncaught runtime error deep inside a completely unrelated subsystem
+—nowhere near the actual broken file. Because nothing between
+`killer_reward()` and `die()`'s call site catches the error, the throw
+unwinds `die()` entirely: everything AFTER line 349 — resetting
+`kee`/`eff_kee`/`sen`/`eff_sen` to 1, moving the corpse-shedding player
+into `DEATH_ROOM`, starting the judge-NPC resurrection dialogue — never
+runs. The character's `eff_kee`/`eff_sen` stay at their fatal
+(negative) values forever, so `heart_beat()`'s own `my["eff_kee"] < 0 ||
+my["eff_sen"] < 0` check re-fires `die()` on literally every subsequent
+tick, forever, with the exact same crash each time — a permanent,
+unrecoverable death loop stricter than the §7.68 stuck-ghost class:
+here the player never even reaches the ghost stage, let alone a
+recoverable one. Fix: add the missing backslash —
+```lpc
+#define LISTNODES ([ \
+"SK": "61.141.216.74 6668", \
+```
+Verified live: before the fix, a deliberate `kill` to death repeated
+"你死了" indefinitely with the `dns_master`/`gchannel` crash trace on
+every tick and the character permanently un-resurrectable; after the
+fix and a driver restart, an identical `kill`-to-death on a fresh
+character produced the public death broadcast cleanly (`【三界神话】
+某人：紫电仙人在长安城被和尚杀死了。`), moved the character to
+`〖阴阳界〗` (the death gate), the judge NPC 崔珏 ran its full
+生死簿/画押/还阳 dialogue, and the character landed alive (albeit
+`重伤`/badly-wounded) in the revival room `〖荒郊小店〗` — the complete
+cycle, no crash, one clean `你死了`.
+
+Detection pattern: grep any lib's `#define NAME (...` (or `({...`,
+`([...`) for a multi-line macro whose FIRST line ends without a
+trailing `\` while later lines have one — this is a strict subset of
+the already-cataloged "stray backslash mangles a string literal"
+class (see the `convertd.lpc` Greek-table note in §6 and the entry
+this document keeps under §7.13's neighborhood), but inverted: instead
+of an accidental backslash breaking a string, a MISSING backslash
+breaks the macro's line continuation itself. The daemon that fails to
+compile is often a cosmetic-sounding one (DNS/intermud service tables
+are exactly the kind of file nobody boots into interactively), so the
+failure can sit dormant for a long time — it only becomes visible the
+moment some ordinary, unrelated player action (here: literally just
+dying once) happens to call into it. When a `heart_beat()`-driven
+crash trace mentions a network/intermud daemon (`dns_master`,
+`gchannel`, `mudlist_*`) crashing something that looks completely
+unrelated (death, chat, a channel broadcast), check that daemon's own
+`#include`d headers for a truncated multi-line macro before assuming
+the crash lives in the calling code.
+
 ---
 
 ## 8. Login and registration flow bugs

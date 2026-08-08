@@ -1,6 +1,6 @@
 // 神话世界·西游记·版本４．５０
 /* <SecCrypt CPL V3R05> */
- 
+
 #ifndef __NET__CONFIG_H
 #define __NET__CONFIG_H
 
@@ -17,7 +17,7 @@
 // The Eastern Stories
 #define MUDLIST_DNS  ({ "202.96.88.60", 5563 })
 //  #define MUDLIST_BAK  ({ "202.102.14.25", 6666 })
-#define LISTNODES ([ 
+#define LISTNODES ([ \
 "SK": "61.141.216.74 6668", \
 "BJ": "61.150.127.254 6668", \
 "SD": "61.137.138.166 6668", \
@@ -31,7 +31,7 @@
  * udp packet size.  Probably best kept at 512
  */
 #define MAIL_PACKET_SIZE        512
- 
+
 /* These macros are for the name service.  They determine how often the
  * database is refreshed, how often other muds are checked, how often
  * the sequence list is checked for timed out services, and how long a
