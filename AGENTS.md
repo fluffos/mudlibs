@@ -1619,6 +1619,38 @@ Two independent traps in the same apply:
   registration-blocking failures — grep every unguarded `write_file()`
   in daemons that fire on common player actions, not just the login
   chain.
+- **Escalated-severity instance, `xixingzhanji`'s deep functional test
+  (§10.7): the exact same `topten_save()` shape, same missing
+  `/topten/` directory, but this time the `write_file()` call itself
+  throws instead of just returning 0.** `nitan_ceshi`'s finding above
+  relied on `if (!write_file(...)) return notify_fail(...)` degrading
+  gracefully because `write_file()` returned a falsy value on failure.
+  On this lib's driver build, `write_file(f_name, str, 1)` — note the
+  3rd arg, FluffOS's "open in overwrite mode" flag, absent from
+  `log_file()`'s plain 2-arg calls — throws `*Wrong permissions for
+  opening file /topten/rich.txt for overwrite` / `"No such file or
+  directory"` when the parent directory doesn't exist, rather than
+  returning 0. Because this call is UNCAUGHT and sits textually BEFORE
+  the player's start-room `move()` in `logind.lpc::enter_world()`
+  (`"/adm/daemons/toptend"->topten_checkplayer(user);` runs first, the
+  `if (user->query("no_gift")) user->move(...)` block second, same
+  function), the whole rest of `enter_world()` — including the move —
+  never executes. Every new registration completed the id/name/
+  password/gender prompts, printed the normal "目前权限" banner, then
+  silently left the player parented to no room at all (`look` showing
+  "灰蒙蒙一片", `quit` then crashing per the `message()` entry above) —
+  with NO error visible to the connecting player and nothing before a
+  `debug.log`/`RUNTIME_ERRORS` grep to suggest why. Lesson: `write_file(f,
+  s, 1)` (overwrite mode) is not equivalent to the bare 2-arg
+  (append-creates-if-missing) form for missing-directory behavior on
+  this driver — audit `write_file(..., 1)` call sites for a missing
+  `assure_file()`/`mkdir` guard even more aggressively than plain
+  `write_file()` sites, since the failure mode here is a hard throw, not
+  a quiet return-0. Same fix (`assure_file(f_name)` before the call);
+  additionally wrapped the `enter_world()` call site itself in `catch()`
+  as defense-in-depth, since a second, unrelated bug in the same
+  function (`topten_add()`'s `sscanf` array-argument slip, new §7.54
+  instance below) was ALSO capable of aborting this exact call chain.
 - **Third+ independent confirmation in the same 夕阳再现/XYZX lineage:
   `xajhzcjh`'s deep functional test (§10.7).** Identical shape to
   `xajhxo` above, down to the exact call site (`logind.lpc`'s
@@ -3225,6 +3257,40 @@ anything for the "file already has real data" path). Detection pattern
 for this specific variant: grep a file for multiple `file_size(...) ==`
 guards on the same kind of resource — if most say `-1` and one says `0`,
 the `0` one is very likely the bug, not a deliberate difference.
+
+**Fifth confirmed instance, third distinct bug shape in the same
+recurring `toptend.lpc` daemon: `xixingzhanji`'s `topten_add()` passes
+the whole line-array to `sscanf()` instead of the current line.**
+`adm/daemons/toptend.lpc::topten_add()`'s fallback parse of an existing
+leaderboard file does:
+```lpc
+astr = explode(str, "\n");
+...
+if (sscanf(astr[i], "%s(%s)%d", name, id, data) != 3)
+  if (sscanf(astr, "%s(%s)%d;%*s", name, id, data) != 3)   // astr, not astr[i]
+    return notify_fail(...);
+```
+The primary attempt correctly indexes `astr[i]` (the current line); the
+fallback attempt — meant to retry the SAME line against an alternate
+format — passes the bare array `astr` instead, throwing `*Bad argument
+1 to sscanf Expected: string Got: array` the moment any existing
+leaderboard line fails the primary pattern (uncommon on a fresh file,
+but not rare once several players' entries with slightly different
+`short()` text have accumulated). Called unconditionally from
+`logind.lpc::enter_world()` for every non-wizard login, uncaught, so
+this aborts the ENTIRE remainder of `enter_world()` — including the
+subsequent `move()` into the player's start room — leaving the
+connecting player parented nowhere (`environment()` stays 0) with no
+player-visible error at all; only `look` printing "灰蒙蒙一片" and a
+later `quit` crashing on `message()`'s null-environment argument (see
+§7.11 above) gave it away. Fix: `astr` → `astr[i]` in the fallback
+call. Detection: any `sscanf(<array-typed-var>, ...)` where a sibling
+line one statement above correctly indexed that same array is very
+likely a copy-paste slip, not an intentional whole-array parse (`sscanf`
+never accepts an array as its subject argument). As with the §7.11
+instance immediately below, this is another reason `enter_world()`'s
+call into `toptend.lpc` deserves a defensive `catch()` at the call
+site regardless of which specific internal bug it's masking this time.
 
 ### 7.55 A security/status daemon crashes on a REENTRANT call to itself, mid-`create()`, before its own later-declared variables initialize
 

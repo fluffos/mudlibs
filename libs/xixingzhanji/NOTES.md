@@ -450,3 +450,170 @@ gitignored):
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 35 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试 / Deep functional test (AGENTS.md §10.7)
+
+Full round-two pass: native driver rebuilt not needed (already present),
+booted from the lib root, played one continuous session via
+`scripts/mudclient.py`/a custom `interact.py` wrapper (adaptive send/recv,
+since the plain idle-based script mis-synced on this lib's non-blocking
+"student age gate" prompt), registered multiple real Chinese-name
+characters, tested combat, both skill-acquisition paths, quit, a real
+wall-clock-gap reconnect, and grepped `debug.log` + `work/log/
+RUNTIME_ERRORS` throughout.
+
+### Bugs found and fixed
+
+**1. `config.fluffos`: `maximum evaluation cost : 400000` — 6th confirmed
+instance of AGENTS.md §7.90 (unrelated lineage: ES II mega-family, distinct
+from the five lineages §7.90 already lists).** The very first cold compile
+of `/std/char` (during the first-ever `make_body()` in registration) and,
+separately, of `START_ROOM` (`/d/city/kezhan` + its NPCs, on a wizard's
+first real-startroom login) blew straight through the 400000usec ceiling —
+one instance severe enough to bypass even `catch()`
+(`*Can't catch eval cost too big error.`, matching the `xlqy_early`
+variant already on file). Raised to `5000000` (the project's standard
+remedy value, already used by 30+ other libs). Verified: after the fix and
+a driver restart, `grep -c "cost limit reached" log/debug.log` across the
+rest of this test session (multiple registrations + an admin `goto` into
+a never-before-loaded room) came back **0**.
+
+**2. `adm/daemons/toptend.lpc::topten_save()` — unguarded `write_file(f,
+str, 1)` into the never-shipped `/topten/` directory, THROWS (not just
+returns 0) on this driver — new escalated-severity instance of AGENTS.md
+§7.11, full write-up added to that section.** Unlike the already-documented
+`nitan_ceshi` instance (same shape, but the `if (!write_file(...))
+return notify_fail(...)` guard degraded gracefully there), the 3-arg
+"overwrite mode" `write_file()` call here throws `*Wrong permissions for
+opening file /topten/rich.txt for overwrite` / `"No such file or
+directory"` — an UNCAUGHT error that sits textually before the player's
+start-room `move()` in the same `logind.lpc::enter_world()` function, so
+the whole rest of that function (including the move) silently never ran.
+Every fresh registration completed every prompt, printed the normal
+"目前权限" banner, and then left the new character parented to **no room
+at all** — `look` printed "你的四周灰蒙蒙地一片，什么也没有。" (confirmed via
+`environment(me) == 0`), and a subsequent `quit` then crashed separately
+(see bug 4 below) because `environment(me)` was passed as `message()`'s
+3rd argument. No error was ever visible to the connecting player, and
+nothing short of a `debug.log`/`RUNTIME_ERRORS` grep gave any indication
+why — this is exactly the "silent stall, only the crash log tells the
+true story" shape AGENTS.md §7.11 exists to catch. Fix: added
+`assure_file(f_name)` before the `write_file()` call (the lib's own
+existing helper, already used correctly elsewhere).
+
+**3. `adm/daemons/toptend.lpc::topten_add()` — `sscanf(astr, ...)` passes
+the whole line-array instead of `astr[i]`, the current line — new §7.54
+addendum (third distinct bug shape confirmed in this recurring
+`toptend.lpc` daemon's `topten_add()`, alongside `xo_final`'s `== 0`
+comparison typo).** The fallback parse-format retry
+(`sscanf(astr, "%s(%s)%d;%*s", ...)`, one line below the correct
+`sscanf(astr[i], "%s(%s)%d", ...)`) throws `*Bad argument 1 to sscanf
+Expected: string Got: array` the moment ANY existing leaderboard line
+fails the primary pattern — reproducible only once at least one prior
+registration has already written a line to that leaderboard file
+(explaining why this bug was intermittent across successive test
+registrations in this same session: it depended on what a PRIOR test
+character's line looked like, not on the new registration's own data).
+Same blast radius as bug 2 (uncaught, aborts the rest of `enter_world()`,
+same silent-void-room symptom). Fix: `astr` → `astr[i]`.
+
+**4. `cmds/usr/quit.lpc:72` — `message("system", ..., environment(me),
+me)` with `environment(me) == 0` (a downstream symptom of bugs 2/3, not
+a bug in its own right once those are fixed).** `*Bad argument 3 to EFUN
+message() Expected: string, array, object, array, Got: int(0)` on every
+`quit` for a character that had never successfully been placed in a room.
+No code change needed here — this was purely a consequence of the
+registration-time bugs above; confirmed by re-testing `quit` after fixes
+1–3 and seeing a clean "欢迎下次再来！" with zero backtrace.
+
+**Defense-in-depth**: also wrapped `logind.lpc::enter_world()`'s call
+into `toptend.lpc` in `catch()` (`catch("/adm/daemons/toptend"->
+topten_checkplayer(user));`), since two independent, unrelated bugs (2
+and 3 above) both lived in that one unguarded call site — a `catch()`
+there means any THIRD undiscovered bug in `toptend.lpc` can no longer
+take the entire registration flow down with it.
+
+### Live verification
+
+Root cause was found via a "call `donglai->environment()`" red herring
+first (call_other cannot invoke a real efun like `environment()` unless
+the target program defines a same-named wrapper function — it silently
+returns 0 for ANY object, proving nothing) — the real diagnosis came from
+reading `work/log/RUNTIME_ERRORS`, which showed the uncaught
+`topten_checkplayer()` backtrace landing squarely between `enter_world()`
+line 739 (the toptend call) and line 746 (the `move()` call), with the
+`move()` never appearing anywhere in any backtrace across the whole test
+session — proof it was never reached.
+
+After fixes 1–3, re-verified with driver restart + fresh test characters:
+
+- Registration flow (`gb → no → new → <id> → <Chinese name> → password
+  ×2 → email → gender → 9 → y`) for **two independent characters**
+  (李氏终验 male, 张氏终验 female), both correctly landing in the real
+  starting room **南城客栈** (with board + NPCs visible), `look`/`score`/`i`
+  all producing correct, gender-appropriate output.
+- `fight` command against 疥顶小僧 (a `can_speak` humanoid NPC, per
+  `adm/daemons/race/human.lpc`'s race-default `can_speak=1`) went through
+  the safe `fight_ob()`/`fight_ob()` sparring path exactly as
+  `cmds/std/fight.lpc`'s source predicts — HP dropped from sparring damage
+  but the bout ended in a normal "疥顶小僧胜了这招，向后跃开三尺，笑道：承让！"
+  concession, not a real kill. **The same `can_speak`-gated
+  fight-vs-kill split flagged as a recurring pattern this session (fight
+  routes to `accept_fight()`+`fight_ob()` for `can_speak` NPCs, straight
+  to a real `kill_ob()` otherwise) is confirmed present here too** — see
+  "发现但判定为既有设计" below; not fixed, matches this lib's own `help
+  fight`/`help combat` text describing `fight` as "点到为止" sparring and
+  `kill` as the real-damage command.
+- No dedicated training-dummy object (`d/city/obj/muren.lpc`, a
+  stat-mirroring `accept_fight()` NPC matching the "safe sparring
+  mechanism" pattern the checklist describes) is actually placed in any
+  room's `objects` mapping anywhere in the archive — dead content, not a
+  bug (nothing calls or references it). The ordinary `fight`-vs-`can_speak`
+  NPC route above IS this lib's real, reachable safe-sparring mechanism.
+- Skill/sect acquisition, both paths: **organic** — `apprentice qin qiong`
+  (秦琼, a real `create_family()`-holding sect master reached via admin
+  `goto`+`summon`) correctly ran the NPC's `accept` logic and rejected the
+  request with in-character dialogue ("这位小兄弟还是先去跟本府家将打打基础吧！") —
+  a level-gate, working exactly as designed, not a bug. **Admin shortcut**
+  — `cmds/arch/setskill.lpc` (`setskill <id> <skill> <level>`) exists and
+  works: `setskill lifinal unarmed 5` applied cleanly as `fluffos`.
+- `quit` → grep `log/debug.log` and `work/log/RUNTIME_ERRORS` (both exist
+  and were checked; the driver's own `debug.log` lives at the lib-root
+  launch CWD per this driver's path resolution, `work/log/` holds the
+  mudlib's own simul_efun `LOG_DIR`/`RUNTIME_ERRORS` output — both grepped
+  every round) → **empty of new errors after the fix**. No
+  new-account-quit-deletes-account grace period exists in this lib's
+  `quit.lpc`/`logind.lpc` (checked explicitly) — a plain `quit` was safe
+  to test directly, no raw-socket-kill workaround needed.
+- **Real wall-clock-gap reconnect**: registered 李氏终验, played (combat +
+  admin setskill), `quit` cleanly, then reconnected several minutes later
+  (real elapsed time spent drafting this NOTES.md section and the AGENTS.md
+  §7.11/§7.54 additions in between, not a scripted no-op wait) — state
+  persisted correctly: same room (南城客栈), same stats, the earlier
+  `setskill`-granted `unarmed` skill level, and full HP regenerated from
+  the intervening rest, all confirmed via `score`/`skills` after
+  reconnect.
+
+### 发现但判定为既有设计、未改动的现象
+
+- **`fight` vs `kill` safe/unsafe split by `can_speak`** (see above) —
+  matches this lib's own help text, not a bug.
+- **`apprentice`'s level-gate rejection** (see above) — an NPC declining
+  a too-weak player, standard sect-gating design, not a bug.
+- Two multi-error clusters seen only via `lpcc`-style standalone
+  compilation of `#include`-only fragment files were NOT re-chased this
+  pass (already triaged in the "Confirmed NOT needed"/"lpcc_check.sh
+  sweep" sections above from the prior conversion-pass verification);
+  nothing new surfaced from live play this round beyond bugs 1–4.
+
+### WASM
+
+Not re-verified under WASM this pass (native-only; this project's WASM
+build path is permanently blocked). Confirm via:
+`curl -sS "$HTTPS_PROXY/__agentproxy/status"` — emsdk's
+`storage.googleapis.com` dependency is denied by the proxy, unchanged
+from every other lib checked this session. This lib's own prior WASM pass
+(2026-07, above) already covers WASM-specific gates (loopback exemptions,
+admin seed); the four fixes in this pass are driver-behavior-general
+(eval-cost ceiling, missing-directory guards, an `sscanf` argument typo)
+and apply identically under WASM once that build path is unblocked.
