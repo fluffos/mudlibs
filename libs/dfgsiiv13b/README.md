@@ -50,6 +50,27 @@
   突的 `#define MUD_NAME`（先查過 git 記錄確認那次提交只動過這一個檔
   案，再重新套用）。
 
+## §10.7 深度功能測試修復的 bug（詳見 NOTES.md）
+
+- **`feature/dbase.lpc` 的 `query()`/`query_temp()` 對多層
+  `"exits/east"` 這類路徑永遠靜默傳回 `0`**（與 AGENTS.md §7.29 是同
+  一種 bug）：`match_path()` 是 ACL 風格的「同層最長前綴比對」，不會
+  像 `set()` 那樣遞迴鑽進巢狀 mapping。影響面極廣——玩家完全無法用
+  `go`/方向指令移動房間，`apprentice` 拜師的兩段式確認也失效。已改
+  成逐層遞迴查表。
+- **`std/char.lpc` 的 `rank()`** 在沒有對應 `class` daemon（本檔案
+  從未出貨任何 `daemon/class/*.lpc`）時，`call_other` 靜默傳回
+  `int 0`，被 `score` 的 `%s` 格式化成字面 "0" 混進中文敘述句。已加
+  `objectp()`/`function_exists()` 防護，退回既有的姓名式 `rank()`。
+- **`data/chinese.o` 內嵌 13 處孤立反斜線**（原始 1994-2000 年代
+  BIG5 檔案自帶的作者年代產物），導致整個中文翻譯詞典
+  `restore_object()` 失敗，`to_chinese()` 全面失效（種族/性別等欄位
+  顯示英文原文而非中文）。已用 `tr -d '\\'` 清除。
+- **`config.fluffos` 的 `maximum evaluation cost : 700000`**（本專案
+  模板預設值）在冷啟動後第一次登入時不夠用，觸發 eval-cost abort，
+  角色被送進保底的 `/obj/void`。已按 AGENTS.md §7.90 提到
+  `5000000`。
+
 ## 管理員帳號 / Admin account
 
 - **id**: `fluffos`

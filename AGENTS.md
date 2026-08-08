@@ -2515,6 +2515,27 @@ descent through nested submappings, one `/`-segment per level, returning
 the final leaf value or `0`/unset if any level isn't a mapping) rather
 than delegating to the closest-matching real efun.
 
+**Second confirmed instance, no restored-passthrough involved:
+`dfgsiiv13b`** (§10.7) — same `feature/dbase.lpc` `set()`/`query()`/
+`query_temp()` shape, but here `match_path()` was never missing; the
+lib just calls the real efun directly on the full `"a/b"` path, with
+the exact same wrong nested-descent assumption. Root-caused via `call
+here->query("exits/east")` returning `0` while `call
+here->query("exits")` correctly returned the real nested mapping — a
+crisp, reproducible isolation of the ACL-prefix-match-vs-recursive-
+descent gap. Impact was total: every `go <dir>` failed ("這個方向沒有
+出路" on a real, listed exit), `apprentice`'s two-step accept flow
+(`query_temp("pending/alchemist")`) always read `0` even right after
+the matching `set_temp()`, and `score`'s class-title lookup silently
+lost data the same way. `dfgsiiv13b` is this session's best candidate
+for the literal ES II engine root (`xkxz2`/`xiyouji`/`kxkj`/`rzrmud`/
+etc. group in §11's lineage map) — since this exact `feature/dbase.lpc`
+shape is what many of those forked from, grep any ES II-lineage
+sibling's `feature/dbase.lpc` for a bare `match_path(dbase, prop)` (no
+truncate-and-descend loop matching `set()`'s own) before assuming its
+`query()` works just because its `set()`/single-key `query()` do. Same
+fix as above, applied to both `query()` and `query_temp()`.
+
 ### 7.30 A mapping-typed accessor returns its raw never-initialized variable (`int 0`) instead of an empty mapping, crashing any unguarded indexing/`keys()` call
 
 Found on `xiakexing2017`'s deep functional test (§10.7), in two

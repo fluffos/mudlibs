@@ -52,12 +52,27 @@ mixed set(string prop, mixed data) {
 }
 
 varargs mixed query(string prop, int raw) {
-  int fp;
-  mixed data;
+  int fp, r;
+  mixed data, cont;
 
   if (!mapp(dbase)) return 0;
 
-  data = match_path(dbase, prop);
+  // match_path() 是 ACL 風格的「最長比對前綴」比對，只在同一層
+  // mapping 內找以 / 結尾的 key 當作萬用字元，並不會像 set() 那樣
+  // 真的往下鑽進巢狀 mapping 的值裡 (AGENTS.md §7.29 已有同一種
+  // bug 的紀錄：restore 一個同名同參數的缺失函式時直接轉呼叫真正
+  // 的 match_path()，但呼叫端其實假設的是遞迴往下查)。set() 用逐
+  // 段縮短 prop 再查表的方式，建出真正的巢狀 mapping（例如
+  // dbase["exits"] = (["east": ..., "west": ...])），但這裡原本
+  // 直接對完整的 "exits/east" 呼叫 match_path()，永遠找不到那層
+  // 巢狀 mapping 本身，靜靜傳回 0——例如整個 go 指令、
+  // query_score()、query_temp("pending/...") 都失效。改成逐層遞
+  // 迴真正往下查，比對 set() 實際建出的資料形狀。
+  if ((r = strsrch(prop, '/', -1)) > 0) {
+    cont = query(prop[0..r - 1], 1);
+    data = mapp(cont) ? cont[prop[r + 1..]] : 0;
+  } else
+    data = dbase[prop];
 
   if (raw) return data;
 
@@ -132,10 +147,20 @@ mixed set_temp(string prop, mixed data) {
 }
 
 varargs mixed query_temp(string prop, int raw) {
-  mixed data;
+  mixed data, cont;
+  int r;
 
   if (!mapp(tmp_dbase)) return 0;
-  data = match_path(tmp_dbase, prop);
+
+  // 同 query() 上面的說明：match_path() 不會遞迴往下鑽進巢狀
+  // mapping，改成逐層遞迴查，比對 set_temp() 實際建出的資料形狀
+  // （例如 alchemist.lpc 的 "pending/alchemist"）。
+  if ((r = strsrch(prop, '/', -1)) > 0) {
+    cont = query_temp(prop[0..r - 1], 1);
+    data = mapp(cont) ? cont[prop[r + 1..]] : 0;
+  } else
+    data = tmp_dbase[prop];
+
   return raw ? data : evaluate(data, this_object());
 }
 
