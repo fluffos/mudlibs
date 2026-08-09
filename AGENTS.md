@@ -1836,6 +1836,47 @@ Two independent traps in the same apply:
   already exists two functions below, unused" is now common enough that
   it's worth checking on sight in ANY newly-encountered `adm/simul_efun/
   file.lpc`, independent of engine family.
+- **Sixth+ instance, and the most severe blast radius yet: `jyqxc2013fwq`'s
+  §10.7 deep functional test — this one breaks the death/resurrection
+  system itself, on EVERY death, not just registration or a leaderboard.**
+  `adm/daemons/combatd.lpc::killer_reward(object killer, object victim)`
+  — called unconditionally from `feature/damage.lpc::die()` for every
+  single death, player or NPC-on-player — ends with an unguarded
+  `write_file("/log/nosave/KILLRECORD", ...)` into a directory this
+  archive never shipped. Unlike the `topten_save()`/leaderboard instances
+  above, this write sits BEFORE the two lines in `die()` that actually
+  matter: `this_object()->move(DEATH_ROOM); DEATH_ROOM->start_death(...)`.
+  Because the throw is uncaught, it doesn't just abort `killer_reward()`
+  — it unwinds the entire call stack back through `die()` and up to the
+  `heart_beat()` that triggered it, so the move-to-death-room and
+  `start_death()` calls never execute. The result, verified live: a
+  player killed by an ordinary street NPC (流氓头/"thug leader") got
+  "你死了" ("you died") printed every combat heartbeat, forever, while
+  remaining in the same room, at 0 HP, still being attacked by the same
+  NPC, which itself kept re-triggering `die()` on the next heartbeat —
+  an infinite "already dead but never actually removed from combat"
+  loop with no way out except a wizard `update`/directory fix, not
+  merely a missing log line. This lib's own `adm/simul_efun/file.lpc`
+  already had a correct, unused `assure_file()` helper (same idiom as
+  the instances above); adding `assure_file("/log/nosave/KILLRECORD");`
+  immediately before the `write_file()` call fixed it — hot-`update`d
+  `combatd.lpc` while a test character was mid-loop, and the very next
+  heartbeat's death resolved cleanly, moving the player to `/d/death/gate`
+  and completing a full, undisturbed death→白无常 dialogue→`reincarnate()`
+  →revive-room cycle. **`jyqxc`/`jyqxc2` (this lib's already-deep-dived
+  sibling archives, same architecture family, §11) carry the byte-identical
+  unguarded `write_file()` call in their own `combatd.lpc` — unlike this
+  lib, theirs is gated behind `if (userp(killer))` (player-killed-player
+  only), so it never fired during either of those libs' own §10.7 passes
+  (both killed an NPC), and remains UNFIXED there as of this writing.**
+  Detection pattern: when a death sequence "sort of" works — the death
+  message prints, but the player never leaves the room, or the same death
+  message repeats every few seconds — suspect an uncaught error partway
+  through `die()`/`killer_reward()`/equivalent aborting the function
+  before its actual state-transition (move to death room, `reincarnate()`,
+  revive) runs; check for any unguarded `write_file()`/`log_file()` call
+  textually BEFORE that transition in the same function, not just at
+  the login/registration boundary this bug class was first found at.
 
 ### 7.12 Shared message/wrapper argument bugs
 
@@ -7224,6 +7265,31 @@ concrete instance of a broader class where a hostname-shaped or
 otherwise differently-shaped string silently satisfies neither the
 happy path nor an explicit error, just the same generic deny branch
 as a real bad actor.
+
+**Sibling instance, opposite failure direction: `jyqxc2013fwq`'s §10.7
+deep functional test (same "jyqxc" architecture family as `hy3`? — no,
+unrelated lineage, §11 — but the identical call-site typo).**
+`adm/daemons/logind.lpc` has the exact same
+`BAN_D->is_banned(query_ip_name(ob))` call (`query_ip_number(ob)` used
+correctly a few lines later in the same file for an unrelated message),
+but this lib's `band.lpc::is_banned()` matches candidates with
+`regexp(({site}), Sites[i])` against a `banned_sites` file of literal
+dotted-quad patterns, with no fail-closed default — so feeding it a
+hostname instead of an IP makes the ban list **fail OPEN** (every
+banned dotted-quad pattern silently never matches a hostname string),
+the opposite of `hy3`'s fail-closed "bans everyone" outcome, but the
+same root cause and same fix (`query_ip_number(ob)`). Also confirmed:
+this lib's own already-deep-dived sibling archives `jyqxc`/`jyqxc2`
+(§11) carry the byte-identical unfixed call site in their own
+`logind.lpc`, missed by both of those libs' own §10.7 passes since
+banning wasn't specifically exercised — worth a quick sweep on both if
+picked up again. Detection pattern: don't assume this bug class only
+fails closed — grep for `query_ip_name(` anywhere feeding a ban/allow
+check regardless of the callee's own default-on-parse-failure
+behavior, since a fail-open instance produces NO visible symptom during
+ordinary play (bans just quietly never trigger) and will only surface
+by reading the call site directly or testing against a real banned
+entry.
 
 ### 8.15 A room's own `create()` force-loads a Windows-era-cased NPC/board filename at RUNTIME (`new()`/bare `"path"->func()`), not at compile time — so it compiles clean, ships clean, and only throws when a player is the first to actually enter that specific room
 
