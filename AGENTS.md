@@ -2874,7 +2874,11 @@ a routine, safe-to-fix hit rather than a judgment call), `sanjieshenhua`, `ldtxi
 bare `printf("%O\n", ob)`
 right before the Chinese-name is set — `ldtxii`'s sibling `ldtx` has
 the byte-identical line, unfixed; port the same one-line deletion
-there too when next touching that lib), `xiakexing3` and `jqxz2015`
+there too when next touching that lib), `jyqxc2` (`jyqxc`'s own sibling
+— §10.7 deep-dive found the two libs' `work/` trees are byte-identical
+apart from `logind.lpc` itself, i.e. `jyqxc2` was carrying `jyqxc`'s
+PRE-fix state of this exact file, printf and all; same one-line
+deletion), `xiakexing3` and `jqxz2015`
 (same ES II lineage, §10.7 deep-dives; `logind.lpc`'s `get_name()`,
 bare `printf("%O\n", ob)` right after the Chinese-name prompt — present
 on `xiakexing3` and confirmed as a SECOND independent instance on
@@ -6351,7 +6355,16 @@ Detection pattern: `grep -c "replace_program(ROOM)" work -r --include=
 §7.86's board-file shape — if the count is in the thousands rather than
 the tens, the bug has very likely also colonized the room base class,
 not just boards, and deserves a dedicated sweep pass of its own rather
-than being folded into a single §10.7 session. Also check any in-lib
+than being folded into a single §10.7 session. `jyqxc`/`jyqxc2` (XKX/
+金庸群侠传 framework family, unrelated to `jhfy3`) both carry the same
+`inherit ROOM; ... replace_program(ROOM);` shape at a smaller but still
+substantial scale (845 occurrences, 804 live) — checked during
+`jyqxc2`'s own §10.7 pass, `debug.log` showed zero "cannot replace a
+program" lines across a full registration→combat→death→board→mailbox
+session, so no live trigger was ever observed and, per this entry's own
+scope decision, no sweep was attempted; left as an unconfirmed-but-
+plausible backlog item for whoever next does a dedicated pass on this
+family. Also check any in-lib
 room/NPC/item content-generation tool (`roommaker`, `npcmaker`,
 `objmaker`, etc.) for the same shape baked into its own output
 templates — a factory bug compounds silently every time a player uses
@@ -6951,6 +6964,20 @@ correct** — the gate should still do what its own code clearly intends,
 and a future refactor of that other default would silently reintroduce
 the visible bug with no warning. Don't skip an §8.9 fix just because
 this pass's live test didn't observe starving characters.
+
+Tenth confirmed instance on `jyqxc2` (XKX/金庸群侠传 framework family,
+sixth instance `jyqxc`'s own sibling) — the full `!user->query("food")
+&& !user->query("water") && ob->query("age") == 14` shape,
+byte-identical to `jyqxc`'s own pre-fix line (this session's §10.7
+deep-dive on `jyqxc2` found its `work/` tree is byte-identical to
+`jyqxc`'s apart from `logind.lpc`, which was still carrying `jyqxc`'s
+UNFIXED original content — the two archives are effectively the same
+raw dump, `jyqxc`'s own fix from an earlier pass never having been
+back-ported). Verified live: a fresh non-admin test character's `score`
+showed food/water both stuck at empty pre-fix, both fully filled after
+the one-line `ob->query("age")` → `user->query("age")` fix, `update
+/adm/daemons/logind` hot-reloaded cleanly. Same session also removed
+the file's matching §7.34 `printf("%O\n", ob)` leak.
 
 ### 8.10 A retry re-prompt after the version-handshake gate loops back to the wrong `input_to` callback, so a real player's SECOND login attempt gets falsely accused of using an unsupported client and disconnected
 
@@ -7842,6 +7869,24 @@ base-first):
 content repacks like `Naruto.rar`/`huoying`) — they share their
 sibling's number in `lib_numbering.json` (`duplicate_of` field) and
 were never processed separately.
+
+**`jyqxc` (086, archive `金庸群侠传 (1).rar`) / `jyqxc2` (087, archive
+`金庸群侠传.rar`) turned out to be a 15th instance of this same
+"browser `(1)` duplicate download" shape that the original dedup pass
+missed**, discovered only during `jyqxc2`'s own §10.7 deep-dive
+(`diff -rq` on the two `work/` trees returned exactly 3 non-log
+differences out of ~3,690 files: `jyqxc2`'s still-unfixed `logind.lpc`
+vs `jyqxc`'s already-fixed one, plus each lib's own leftover single-
+character test save). The raw archives themselves are equally
+near-identical (`raw/jy` trees differ only by one extra `svr.exe`
+binary in `jyqxc2`'s copy) — almost certainly why the dedup check
+missed it, since it likely compared `.rar` container bytes rather than
+extracted content, and the two `.rar`s are not byte-identical even
+though everything they contain is. Both libs were already independently
+converted, README'd, and (in `jyqxc`'s case) deep-tested before this
+was noticed; not worth un-converging them retroactively, but any future
+fix ported to one of this pair should be ported to the other in the
+same pass — they are, for all practical purposes, the same codebase.
 
 ---
 
