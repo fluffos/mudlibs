@@ -6357,6 +6357,98 @@ room/NPC/item content-generation tool (`roommaker`, `npcmaker`,
 templates — a factory bug compounds silently every time a player uses
 the tool.
 
+### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
+
+Found on `kxkjii2`'s §10.7 deep functional test (ES II/Annihilator
+lineage). This engine's generic movement command,
+`cmds/std/go.lpc`, gates on the room's OWN `exits` mapping before ever
+consulting `valid_leave()`:
+```lpc
+if (!mapp(exit = env->query("exits"))) { ...; return 0; }
+...
+if (undefinedp(exit[arg])) {
+  if (repeat >= 1) me->force_me("look");
+  return 0;
+}
+...
+if (!env->valid_leave(me, arg)) return 0;
+```
+— a direction that is not a KEY in `exits` is rejected outright
+(`"什么? south? 请用 help cmds 查询指令。"`, indistinguishable from a
+genuinely nonexistent command) with `valid_leave()` never called at
+all. `open/death/start.lpc` (the room every dead player lands in,
+`阴曹入口`) sets:
+```lpc
+set("exits", ([ /* sizeof() == 3 */
+  //  "up" : "/open/common/room/inn",
+  //  "south" : "/open/common/room/inn",
+  "north": __DIR__ "bridge1",
+]));
+```
+— only `"north"` is a real key, but `valid_leave()` a few lines down
+has a full, working implementation for BOTH `"south"` (a "do you
+really want to go home" random-5-to-9-attempt gate) and `"up"` (the
+actual payoff: `reincarnate()` + `move()` back to the world, printing
+"恭禧你又重回人世了"). Because `go.lpc` never reaches `valid_leave()`
+for either direction, both branches are 100% dead code and every
+single player death in this codebase was a permanent, unrecoverable
+dead end — the ONLY listed exit, `"north"`, leads deeper into an
+unfinished side zone (`open/death/road2.lpc`/`road3.lpc`, the latter's
+own `long` text literally reading "路的尽头 ..... 还没想到 ...." — "end
+of the road, ... haven't figured it out yet ...", the original 2002
+author's own placeholder) that dead-ends at a ONE-WAY gate
+(`open/death/gate.lpc`'s `valid_leave()` unconditionally blocks
+`"south"` once entered: "进了鬼门关就别想回去了！"). A player who
+died and didn't know to try wizard-only commands had no way back
+except `suicide -n`/`suicide -f` (self-destructing the character) or a
+wizard's manual `goto`/`transfer` rescue. The comment `/* sizeof() ==
+3 */` immediately above the mapping, plus the commented-out values
+being byte-identical to the `REVIVEROOM` macro in `include/login.h`
+(`"/open/common/room/inn"`), are strong evidence these two lines were
+the original, correct configuration and got disabled by accident (or
+an abandoned debug shortcut), not an intentional design choice.
+Byte-identical file confirmed on sibling `kxkj` (`diff` clean) — same
+bug present there too, unfixed as of this pass; port the same
+two-line uncomment next time `kxkj` is touched.
+
+Fix: uncomment the two lines. Verified live: killed a test character
+(real death via `fight dog` in `d/snow`, not a scripted event), landed
+at `阴曹入口` with only `north` listed; before the fix, `south` and
+`up` were both rejected as unrecognized commands and `look` never
+listed them as exits. After uncommenting and `update`-ing the file
+live, `look` showed all three exits, `south` × 6 produced the
+"你真的那么想回家吗？" threshold message, and `up` completed the full
+cycle — "突然天中降下一团祥光...你终于从阴间偷跑回来了。" — landing
+the character back at `STARTROOM` with `score` confirming intact
+stats. `debug.log` stayed clean throughout (no crash — this bug's
+signature is silent unreachability, not an error).
+
+**Distinguish from §7.68/§7.76**: those are about a `call_out()`
+chain (the classic `wgargoyle`/`bgargoyle` "白无常/黑无常" NPC dialogue
+sequence, also present in this same lib, gated on `present(ob)` or a
+stale `REVIVE_ROOM` path) abandoning its subject mid-sequence or on
+its final step. This bug is upstream and unrelated to that
+machinery entirely — it's a player-typed movement command being
+rejected by the shared dispatcher before any death-specific code runs,
+in a completely different room using a completely different (`exits`-
+map-driven) recovery idiom. `kxkjii2`'s own `wgargoyle`/`bgargoyle`
+chain was separately observed to correctly skip wizard-level accounts
+(`wgargoyle.lpc`'s `init()` explicitly checks `!wizardp(previous_object())`)
+— consistent with this project's established, deliberate
+admin-exclusion pattern, not re-flagged here.
+
+Detection pattern: on any ES2-family (or similar `exits`-map-gated
+`go.lpc`) lib, grep death/resurrection rooms for a `valid_leave()`
+branch on a direction string that does NOT also appear as a key in
+that same file's `set("exits", ...)` call — especially a commented-out
+exits entry sitting directly above an active one, or a `/* sizeof() ==
+N */` comment whose N doesn't match the mapping's actual live key
+count. Always drive a full, undisturbed death cycle to the point of
+actually typing every documented recovery command and confirming
+`look` lists it as a real exit — reaching the death room and seeing
+dialogue play is not sufficient; the FINAL escape step is exactly
+where this class of bug hides.
+
 ---
 
 ## 8. Login and registration flow bugs
