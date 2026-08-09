@@ -34,6 +34,22 @@ West"，大学生版)，西安交大兵马俑 BBS 附属的 MUD。
    驱动按 UTF8 码点索引字符串的情况下，奇数字数的合法中文名字会被
    误判为不合法。两处都已改成逐码点的 0x4e00-0x9fff 区间检查，
    `check_legal_name` 的长度上限也从字节数 2-12 改成字符数 1-6。
+4. **§7.90：`maximum evaluation cost` 700000 太低，驱动 PRELOAD 阶段
+   （囚室房间 NPC 的冷编译开销）就直接触发不可 `catch()` 的 eval-cost
+   报错**：`config.fluffos` 已把该项调到 5000000。
+5. **§7.12：`adm/simul_efun/message.lpc` 的 `shout()` 把
+   `this_player()` 直接传给 `message()` 的排除参数**，在游戏内整点
+   报时（无玩家上下文的 `call_out`）触发时炸出
+   `Bad argument 4 to EFUN message()`——已按同文件 `tell_room()` 已有
+   写法改成 `this_player() || ({})`。
+6. **§7.34 debug 遗留输出**：`logind.lpc::get_name()` 里取名成功后有
+   一行裸的 `printf("%O\n", ob)`，把登录对象内部路径直接打在提示语
+   之间——已删除。
+
+详见 `NOTES.md`"深度功能测试（§10.7）"一节：完整验证过移动、留言板
+`post`、`kill` 战斗、死亡/复活全流程（NPC 判官对话驱动，非 `exits`
+出口驱动，§7.101 不适用；§7.68 的重试式修复因未满足前提条件也未套
+用）、`quit` 后重连存档恢复。
 
 ## 已记录但不是 bug：连线开机保护期
 
@@ -46,10 +62,12 @@ West"，大学生版)，西安交大兵马俑 BBS 附属的 MUD。
 ## 管理员账号 / Admin account
 
 - **ID**: `fluffos`
-- **密码 / Password**: 注册时自设（单一密码 + 确认，没有双密码机
+- **密码 / Password**: `Mud@2026`（单一密码 + 确认，没有双密码机
   制）
 - **权限 / Level**: `(admin)`，通过 `/adm/etc/wizlist` 授予（原文
-  件是空的），`wizlist` 命令确认显示"目前权限：(admin)"。
+  件是空的），`wizlist` 命令确认显示"目前权限：(admin)"。存档已在
+  `work/data/{login,user}/f/fluffos.o` 生成并提交，登录/重连均验证
+  过权限保留正常。
 
 > 警告：对外公开架设前请务必修改此密码。
 

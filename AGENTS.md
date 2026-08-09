@@ -7853,7 +7853,15 @@ base-first):
   `shenmo` (049, Neolith), `zitengzhan` (051), `zhongjidiyu` (052),
   `xixingzhanji` (054), `tiexuejianghu` (056), `syxjl` (057),
   `mohuanshiji` (058), `yueyingqiyuan` (037),
-  `kxkj`/`kxkj1` (036),
+  `kxkj`/`kxkj1`/`kxkjii2` (036, §7.101's "ES II/Annihilator" death-
+  recovery bug — `kxkj` unfixed, port the same fix there next time it's
+  touched) with a further, more distant sibling by the same `master.lpc`
+  header ("for ES II mudlib / original from Lil / rewritten by
+  Annihilator (11/07/94)"), `xajdxyj` (107, 西安交大西游记/《欢乐园》 —
+  its own death-recovery flow is NPC-`call_out()`-driven rather than
+  `exits`-map-driven, so §7.101 does not apply there, but its
+  `adm/simul_efun/message.lpc`'s `shout()` had the §7.12 unguarded-
+  `this_player()`-as-exclude shape, fixed),
   `yxcs` (042, hybrid ES/nitan), `xkxz2` (028),
   `dfgs2` (022), `zzhj` (061, explicit in-game
   credit: "FF 的 MUD 函數庫改寫自東方故事 II" — a small, distinctly-
@@ -7981,6 +7989,35 @@ present after any fresh checkout (`git log` in the fluffos repo):
 4. **MERGED**: the WASM **`query_ip_number()`/`resolve()` fixes**
    (§1.3a) — already landed; the "limited"-status IP-gated libs are a
    retest target, not a patch target, going forward.
+5. **`MARCH_NATIVE:BOOL` in `build-debug`'s CMakeCache defaults to
+   `ON`** (`-march=native`), which bakes in whatever instruction set
+   the machine that ran `cmake`/`cmake --build` happened to have. If a
+   session's underlying host later changes to older/different hardware
+   (observed: an Intel Xeon L5520 — Nehalem, 2009, no AVX at all) the
+   existing `build-debug/src/driver`/`build/src/driver` binaries SIGILL
+   immediately on every invocation, with **zero output on stdout/stderr
+   and no debug.log line at all** — `echo $?` shows 132
+   (128+SIGILL), and `strace` is the fastest way to confirm
+   (`--- SIGILL {si_signo=SIGILL, si_code=ILL_ILLOPN, ...} ---` right
+   after the dynamic linker finishes and before any mudlib-visible
+   output). This reproduces identically for EVERY lib, not just the one
+   you're working on — confirm with a second, known-good lib before
+   concluding it's a driver-vs-environment problem rather than a
+   mudlib regression. Fix: `cmake -S ~/src/fluffos -B
+   ~/src/fluffos/build-debug -DMARCH_NATIVE=OFF && cmake --build
+   ~/src/fluffos/build-debug -- -j8` (full rebuild, ~5-10 minutes on 8
+   cores; `build/` needs the same treatment if you use it too) — the
+   resulting binary runs on any x86-64 host, at negligible runtime cost
+   for this project's purposes. Since `build-debug/` is a shared
+   checkout across sessions, this fix benefits every concurrent/future
+   session once applied — but also means a DIFFERENT session could
+   rebuild it back to `MARCH_NATIVE=ON` on a fast host and silently
+   reintroduce the crash for anyone whose sandbox lands on older
+   hardware later; if native driver boots start SIGILL-ing for no
+   apparent reason, check this before assuming a deeper problem.
+   (Found on `xajdxyj`'s §10.7 pass, mid-session, after an unrelated
+   environment interruption — the driver had booted fine minutes
+   earlier in the same session before the underlying host changed.)
 
 The formatter (`tools/lpc-syntax/`) and all three of its bug fixes
 (§9) also live in the fluffos repo, and are likewise MERGED upstream.
