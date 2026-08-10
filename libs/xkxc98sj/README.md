@@ -3,7 +3,11 @@
 「侠客新传」v0.1b，MudOS v22pre11，Xkxz MUD Wizard Group 2000-2001，
 由 jjgod 维护。名字里带"书剑"二字，但和 `sjecl`/`sje`/`sjplgfjxb`/
 `sjplii` 那批真正的"书剑"系列泥潭完全不同源，纯属命名巧合（"98书
-剑"应该是站点当年的版本代号）。
+剑"应该是站点当年的版本代号）。血统上也和同样带"XKX"/"侠客"字样的
+`xkx100`/`xkx2017`（另一支"侠客行"泥潭）无关——`master.lpc` 逐字节
+确认属于 AGENTS.md §11 的「"hell" / Doing Lu」支系（ES II → XKX →
+hell），和 `zjdyaryl`/`zjdyzj`/`hell` 同源，详见 NOTES.md 的深度测
+试记录。
 
 ## 内容亮点
 
@@ -15,6 +19,13 @@
   25 处的更大规模版本）。
 - 游戏内事件系统曾因 `eventd.lpc` 的字符串切片 off-by-one 完全失
   效（和 `wdxtym` 的是同一个 bug），本次修复后应已恢复正常。
+- 死亡/复活系统实际打死过角色（管理员+非管理员各一次）验证过完整
+  无干扰循环，落地房间、属性、经验值都正确保留，没有类似同血统
+  `kxkjii2` 那种死亡出口 bug（详见 NOTES.md §10.7）。
+- 任务系统 7 个任务档案（`clone/quest/{search,shen,judge,supply,
+  deliver,explore,defend}.lpc`）曾因共享的 `inherit/misc/quest.lpc`
+  包装函数类型声明过窄而全部编译失败、静默退出随机任务生成轮换，
+  本次一并修复（AGENTS.md §7.81 第四个确认实例）。
 
 ## 本次修复的关键 bug
 
@@ -47,10 +58,12 @@
 ## 管理员账号 / Admin account
 
 - **ID**: `fluffos`
-- **密码 / Password**: 注册时自设
+- **密码 / Password**: `Mud@2026`
 - **权限 / Level**: `(admin)`，通过 `/adm/etc/wizlist` 授予（这份档
-  案的 `securityd.lpc` 真的会在开机时读取 `WIZLIST`），登录后显示
-  "您目前的权限是：(admin)"确认生效。
+  案的 `securityd.lpc` 真的会在开机时读取 `WIZLIST`，`fluffos
+  (admin)` 这一行早已存在，本轮认领了这个 id），登录后显示
+  "您目前的权限是：(admin)"确认生效，并用 `update` 指令验证过实际
+  写权限。
 
 > 警告：对外公开架设前请务必修改此密码。
 

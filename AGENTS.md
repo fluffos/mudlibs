@@ -4999,6 +4999,34 @@ logging `*No program in object` silently, invisible without a
 `debug.log` read) and identical fix/verification (`string info` →
 `mixed info`; all eight files `update` clean afterward).
 
+**Fourth confirmed instance, another "hell" sibling: `xkxc98sj`'s §10.7
+deep functional test.** `master.lpc`/`securd.lpc` headers confirmed
+byte-identical-lineage with `hell`/`zjdyaryl`/`zjdyzj` (§11 — "for ES
+II mudlib ... modified by Xiang for XKX ... updated by Doing Lu for
+hell (2K)"), NOT the same codebase as the similarly-"XKX"-titled
+`xkx100`/`xkx2017` family despite the shared branding (confirmed by
+diff — see §11). Same `inherit/misc/quest.lpc` wrapper shape, this
+archive's set is seven files (`clone/quest/{search,shen,judge,supply,
+deliver,explore,defend}.lpc`; `avoid.lpc`/`block.lpc` don't call
+`set_information()` with a closure and were unaffected). Same
+zero-runtime-symptom presentation (`adm/daemons/quest/{search,supply,
+deliver}.lpc`'s periodic `heart_beat()` silently logging `*No program
+in object '/clone/quest/search'!` etc., discovered via a `debug.log`
+read after letting the boot idle, not from any player-visible
+symptom) and identical fix (`string info` → `mixed info` in both
+`include/quest.h`'s forward declaration and the wrapper body in
+`inherit/misc/quest.lpc`). Verified live: a wizard `update` on all
+seven previously-erroring files now reports "重新编译 ... 成功！"
+with zero `Bad type for argument 2 of set_information` lines
+remaining in the log. `defend.lpc` and `block.lpc` each have
+additional, unrelated compile errors of their own (`Undefined
+variable 'ENEMYS'`/`'my'`/`'i'`, `Illegal lvalue`, `Illegal to use
+local variable in a functional`, `Too few arguments to 'message'`) —
+these look like genuinely incomplete/broken original quest scripts,
+not a copy-paste artifact of this bug class, and were left as a
+documented-not-fixed observation in `xkxc98sj`'s own NOTES.md rather
+than guessed at.
+
 ### 7.82 A login object's own protective `set()` override is too strict, silently blocking a legitimate registration step
 
 Found on `xxcq`'s deep functional test (§10.7). `clone/user/login.lpc`
@@ -5814,6 +5842,27 @@ pass can be the thing that first lazily-compiles an expensive room/NPC,
 with no player action anywhere near it — `grep -c "cost limit reached"
 log/debug.log` after any extended session, not just after directed
 exploration.
+
+Seventh instance, same lineage as the fifth: `xkxc98sj` (another ES II
+→ XKX → "hell" family member — §11) shipped the project's common
+`700000` default and tripped it immediately at the least-forgiving
+point yet seen: character creation's own `make_body()` (via
+`logind.lpc`'s `get_gender()`, the very first cold compile of
+`inherit/char/char.lpc`'s whole feature-inheritance chain), 100%
+reproducible on a completely fresh driver process, every single time —
+not a sometimes-flaky "some rooms" or "some background daemon" shape
+like the earlier instances, but every new registration dying silently
+mid-`make_body()` with no player-facing error at all (same presentation
+as the `xyj2000f`/`xiyouji450` instances above, just a different
+lineage). Same remedy (`5000000`); verified live with a fresh driver
+restart: the identical registration flow (id → password → Chinese name
+→ class → gender) that previously aborted with `Eval interrupted:
+object adm/single/master cost limit reached` now completes cleanly into
+the game world, and a subsequent full session (movement, board,
+combat, and two full undisturbed death→resurrection cycles) produced
+zero further `cost limit reached` hits in `log/log` (this lib's
+`master.lpc` writes compile/runtime diagnostics to a file literally
+named `log`, not `debug.log` — see this lib's own NOTES.md).
 
 Detection pattern: don't stop testing at "registration completes
 cleanly" — a lib can pass every WASM-stage check and still throw
@@ -8035,6 +8084,23 @@ base-first):
   does NOT apply. Mega-libs; §10.4 memory rules.
 - **"hell" / Doing Lu**: `zjdyaryl`/`zjdyzj`
   (053). `zhongjidiyu` (052) is UNRELATED despite the identical title.
+  `xkxc98sj` (113, 「侠客新传」) is a further confirmed member — its
+  `adm/single/master.lpc` is byte-identical (mod CRLF) to `hell`'s,
+  header included ("for ES II mudlib ... modified by Xiang for XKX
+  (12/15/95) ... updated by Doing Lu for hell (2K)"); despite the
+  shared "XKX"/"侠客" branding this is NOT the same codebase as the
+  `xkx100`/`xkx2017` family (§2.1's naming-is-not-lineage lesson
+  again — confirmed by diff, `xkx100`/`xkx2017`'s own master.lpc stops
+  at "modified by Xiang for XKX", no "hell" line at all). `securd.lpc`
+  has independently drifted (813 vs 796 lines, Chinese-translated with
+  a further "Last modified by Jjgod Jiang for FYTX" credit) — same
+  root, not a byte-identical fork. See also §7.42's Century/adm-single
+  bulk-convert note (`zjdywzb`/`zjdy2008wzb`/`hell`/`xkxc98sj`/`ntii`/
+  `nte` all share the "content NPC named master.c" auto-detection trap)
+  and §7.81's "hell"-lineage `set_information` wrapper instances
+  (`yhwhpublicfi`, `zjdy2008wzb`, `xkxc98sj`) — the wider family is
+  broader than core-file-diff-confirmed here, but these are all at
+  least documented as sharing recognizable idioms.
 - **XLQY 仙侣情缘**: `xlqy_new2007`/`xlqy_early`/`xlqyzdb`
   (018); `xianlvqiyuan` (026) is a different, older codebase.
 - **小雨西游**: `xyxy2`/`xiaoyuxiyou` (003).
