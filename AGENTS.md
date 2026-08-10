@@ -6503,6 +6503,115 @@ actually typing every documented recovery command and confirming
 dialogue play is not sufficient; the FINAL escape step is exactly
 where this class of bug hides.
 
+### 7.102 The shared movement dispatcher's own force-load of an exit's destination is unguarded, so ANY stale/missing exit target anywhere in the archive dumps a raw driver traceback to the player instead of a normal rejection
+
+Found on `zzfy3`'s §10.7 deep functional test (风云3 engine family,
+sibling `zzfy`, §11). `cmds/std/go.lpc` (the ONE command every typed
+movement direction goes through) force-loads an exit's destination room
+before checking it actually loaded:
+```lpc
+dest = exit[arg];
+
+if (!(obj = find_object(dest)))
+  call_other(dest, "???");
+if (!(obj = find_object(dest)))
+  return notify_fail("无法移动。\n");
+```
+When `dest` doesn't exist as a file at all (not a compile failure, a
+genuinely missing path), `call_other()` **throws** an uncaught
+`*call_other() couldn't find object '<dest>'` straight out of the
+dispatcher — the driver's own runtime error handler intercepts it (this
+codebase's `master.lpc` dumps the FULL traceback, program name, line
+numbers, and call stack straight to the offending player, wizard or
+not — see §7.103), but the command itself aborts mid-execution with no
+`notify_fail()` shown, leaving the player staring at a raw stack trace
+instead of an ordinary "you can't go that way" message. Distinct from
+§7.25 (which covers a room's own `create()`/`reset()` force-loading a
+companion object like a board): this is the SHARED, universal command
+every single exit in the whole archive is dispatched through, so any
+one stale/renamed/never-shipped room reference anywhere in the map hits
+this same crash, not just one room's own population helper. Reproduced
+live: `/d/fy/fqkhotel.lpc`'s `"新手学堂"` exit — the very first thing
+the starting inn's own waiter NPC tells every brand-new player to
+type — points at `/d/newbei/wel1`, a newbie-academy zone that does not
+exist anywhere in this archive (confirmed via `find`; a genuine
+missing-content gap, not a typo'd path to real content, so not
+"fixed" by fabricating the zone). Sibling `zzfy` carries the byte-
+identical `go.lpc` and the byte-identical broken `"新手学堂"` exit,
+unfixed as of this writing — the bug was never noticed there either,
+since that lib's own §10.7 pass didn't happen to try that specific
+exit.
+
+Fix: `catch()` the force-load and degrade to the same friendly
+rejection already used for a confirmed-missing exit:
+```lpc
+if (!(obj = find_object(dest))) {
+  if (catch(call_other(dest, "???")))
+    return notify_fail("无法移动。\n");
+}
+if (!(obj = find_object(dest)))
+  return notify_fail("无法移动。\n");
+```
+Verified live: post-fix, taking the same broken exit now shows a
+caught-error trace (this codebase's standard "错误讯息被拦截" caught-
+error convention, matching every other `catch()`-guarded fix in this
+project) followed by the normal `"无法移动。"` rejection, and the
+command dispatcher continues functioning normally afterward — confirmed
+by successfully moving/fighting/dying/resurrecting in the same session.
+
+Detection pattern: on any lib whose shared movement command force-loads
+an exit's destination via a bare `call_other(dest, "???")` (or
+equivalent) before confirming `find_object()` succeeded, grep every
+room's `set("exits", ...)` values against `find`/`file_size()` for a
+target that doesn't exist in the archive — especially exits mentioned
+by an NPC's own dialogue (a "go here for X" hint), since those are the
+ones a real newbie is most likely to actually type.
+
+### 7.103 `master.lpc`'s runtime error handler dumps plain compile WARNINGS (not just genuine errors) straight to every ordinary player's screen, on nearly every lazily-compiled file
+
+Found on `zzfy3`'s §10.7 deep functional test, same 风云3 engine family
+as §7.102. `adm/obj/master.lpc`'s `log_error()` — called by the driver
+for every compile diagnostic, warnings included — writes the message to
+`this_player(1)` unconditionally:
+```lpc
+if (this_player(1)) efun::write("编译时段错误：" + message + "\n");
+```
+`this_player(1)` on this driver returns the raw current player
+regardless of wizard status (it bypasses shadows, not privilege), so
+**every** connected player — not just staff — sees a raw
+`"编译时段错误：...warning: Unused local variable 'x'"`-style dump
+every time ANY file with an unused-variable/unknown-`#pragma`/similar
+warning gets lazily compiled for the first time this boot, which in
+practice is nearly every room/NPC/command file touched during ordinary
+play (confirmed live: dozens of these fired during a single
+registration + a few room visits). This isn't a leftover developer
+`printf()` (§7.34's shape) — it's the mudlib's own permanent error-
+reporting policy simply never distinguishing "warning" from "error"
+before deciding what a non-wizard should see. Sibling `zzfy` already
+carries the fix independently (found via diff during this lib's own
+lineage check):
+```lpc
+if (this_player(1) && strsrch(message, "warning:") == -1) efun::write("编译时段错误：" + message + "\n");
+```
+Fix: port the same `strsrch(message, "warning:") == -1` guard — genuine
+errors (which don't contain the literal substring `"warning:"`) still
+reach the player exactly as before; plain compile warnings are silently
+dropped from the player-visible stream (still `write_file()`'d to the
+per-owner log either way, for wizards to find later). Verified live:
+post-fix, the same registration + movement flow that previously spammed
+warning text produced none, while a real caught runtime error
+(§7.102's fix, deliberately re-triggered) still showed its
+"错误讯息被拦截" trace correctly.
+
+Detection pattern: on any lib whose master.lpc/securityd-style
+`log_error()` writes compile diagnostics to `this_player()`/
+`this_player(1)`, check whether the write is gated on the message NOT
+containing `"warning:"` (or an equivalent severity check) — if not,
+every ordinary player is seeing raw compiler warning spam on ordinary
+lazy-compiles, not just genuine errors. Cheap to confirm live: register
+a fresh character and watch for `"编译时段错误：...warning:"`-prefixed
+lines appearing unprompted during normal movement.
+
 ---
 
 ## 8. Login and registration flow bugs
@@ -7888,7 +7997,29 @@ base-first):
   `xkxz2` (028), `xiakexing100` (030), `zhonghua2` (023,
   related shape).
 - **风云3 engine**: `zzfy`/`fy3xd`/`fy3dz` (020),
-  `moniHuafu` (039, own game). **风云Ⅳ**: `fengyun434`/`fy2005` (009).
+  `moniHuafu` (039, own game). `zzfy3` (139) is a NEAR-DUPLICATE of
+  `zzfy` (020), not previously cross-referenced — same title (郑州风云3),
+  same ~10,345-file map/engine, `diff -rq` on the two `work/` trees
+  returns only 183 differing files (mostly individual NPC price/dialogue
+  tweaks, a handful of already-independently-applied bugfixes on one
+  side or the other, log/save-state noise) — almost certainly two
+  operators' independently-run, slightly-diverged copies of the same
+  original archive rather than two different games (found during
+  `zzfy3`'s own §10.7 pass; not worth un-converging the two separate
+  `libs/` entries retroactively, same call as the `jyqxc`/`jyqxc2`
+  near-duplicate pair below — but any future fix to one should be
+  cross-checked against the other, same shared files: §7.24 (death
+  code overwriting startroom), §7.25 (unguarded room-population
+  `new()`/`move()`), §7.102 (unguarded exit force-load in `go.lpc`),
+  §7.103 (compile-warning leak in `log_error()`), and a bad
+  `/obj/example/wineskin` vendor path in 13 shared NPC files were all
+  found+fixed on `zzfy` first and ported to `zzfy3` in the same session
+  that discovered the duplication; `zzfy` itself still carries the
+  `go.lpc`/`"新手学堂"` exit bug (§7.102) unfixed, and possibly the
+  §7.103 warning-leak was the only one already independently fixed on
+  `zzfy`'s side — check both directions, don't assume either lib is
+  strictly "ahead" of the other).
+  **风云Ⅳ**: `fengyun434`/`fy2005` (009).
   **风云再起Ⅱ**: `fy2`/`fy2qh` (011). Family-wide idioms:
   securityd `resolve()` ordering (§1.3c), environment(me) quit race
   (§7.14), phone-home checks (§7.13).

@@ -6,3 +6,176 @@
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 34 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（§10.7，2026-08-09）
+
+**血统确认（新发现，AGENTS.md §11 已更新）**：`zzfy3` 和已经做过完整
+§10.7 深度测试的 `zzfy`（020 号，同名"郑州风云3"，此前两份档案从未
+互相记录过关系）其实是**同一套引擎/地图的近乎重复副本**——两边
+`work/` 目录都是 10345 个档案，`diff -rq` 只有 183 个档案内容不同，
+且大部分差异是个别 NPC 的对话/价格微调、日志/存档噪音，或者两边各自
+独立修过的同一个 bug（比如这份档案自己此前已经修过的 §7.50
+`is_killing()`、check_legal_name 等，`zzfy` 那边没有；反过来
+`zzfy` 已经修过的几个 bug 这份档案还没有）。核心文件（`obj/master.lpc`、
+`std/char/master.lpc`、`p/fystreet/npc/master.lpc`、`u/tangmen/master.lpc`
+等）目录结构完全一致，`adm/obj/master.lpc` 档头都是同一句 "for ES II
+mudlib / original from Lil / rewritten by Annihilator (11/07/94)"。
+结论：这是两个站长各自运营、各自轻微改动过的同一份原始档案，不是
+两个不同的游戏——按本项目 `jyqxc`/`jyqxc2` 近重复对的先例处理（不
+回头合并两个 `libs/` 条目的编号，但把 `zzfy` 已经现场验证过的 §10.7
+发现直接当作已确认的兄弟 bug 列表来对照移植，逐条现场复测而不是盲
+搬）。移植并现场验证过的 `zzfy` 既有发现：
+
+1. **§7.24（死亡代码覆盖永久登入地点）**：`d/death/npc/panguan.lpc`
+   的 `death_stage()` 最后一步无条件 `ob->set("startroom",
+   base_name(environment(ob)))`，把玩家的永久登入/存档地点覆盖成两个
+   临时"投胎候位点"之一（`/d/fy/church` 或 `/u/guanwai/tower`，都没
+   有 `cmds/usr/save.lpc` 要求的 `valid_startroom` 标记）——删除了这
+   一行，`move()` 已经处理了死后的即时安置，不需要再改登入地点。
+2. **§7.25（房间填充助手 `new()`/`move()` 无防护）**：`std/room.lpc`
+   的 `make_inventory()` 对 `new(file)` 的结果没有任何检查就直接
+   `->move()`/`->set()`——补了 `catch(ob = new(file)) ||
+   !objectp(ob)` 防护，并在 `reset()` 两处消费该结果的地方加了
+   `objectp()` 检查。
+3. **`feature/vendor.lpc` 商店 bug（同一 §7.25 类，不同调用点）**：
+   `vendor_goods` 里一条商品路径 `/obj/example/wineskin`
+   不存在（正确路径是 `/obj/food/wineskin`），13 个 NPC 档案
+   （`d/laowu/npc/{dang,waiter,drunk}.lpc`、`d/chenxiang/npc/oldman.lpc`、
+   `d/kaifeng/npc/waiter.lpc`、`d/fy/npc/{drunk,waiter,waiter_bak,
+   biaotou}.lpc`、`d/tieflag/npc/xiaofan.lpc`、
+   `d/songshan/npc/waiter.lpc`、`u/tangmen/npc/waiter.lpc`、
+   `u/wudang/npc/waiter.lpc`）都用了这条坏路径，`do_vendor_list()`/
+   `buy_object()`/`compelete_trade()` 对商品路径直接 `->name()`
+   之类隐式 `load_object()`，撞到坏路径就整个商店 `list`/`buy`
+   崩溃——13 个 NPC 档案的路径都改成 `/obj/food/wineskin`，
+   `feature/vendor.lpc` 三处循环都包一层 `catch(load_object(name[i]))`
+   跳过，防止未来任何一个未发现的坏路径继续把整个商店拖垮。
+4. **`cmds/wiz/summon.lpc` 空指针判断顺序（管理员专用，小问题）**：
+   `ob->query("id")` 判断在 `!ob` 判断之前，`summon` 一个当前不在线
+   的玩家会直接崩成 `Bad argument 1 to EFUN call_other()`——调换了
+   两行顺序。
+
+**本轮（`zzfy` 自己的 §10.7 没发现、`zzfy3` 独有的）新发现**：
+
+5. **新增 AGENTS.md §7.102：`cmds/std/go.lpc` 移动派发器自己的出口
+   强制加载没有防护**：`凤求凰客栈`（`/d/fy/fqkhotel.lpc`）店小二明确
+   叫每个新玩家打「新手学堂」，但这个出口指向 `/d/newbei/wel1`——一个
+   整个档案里根本不存在的新手学堂分区（`find` 确认，真实内容缺失，
+   不是拼写错误能修的路径问题）。`go.lpc` 用裸 `call_other(dest,
+   "???")` 强制加载出口目标，目标压根不存在时直接抛出未捕获的
+   `*call_other() couldn't find object`，把驱动自己的完整报错堆栈
+   （程式名、行号、呼叫链）甩到玩家屏幕上，而不是正常的"无法移动。"
+   拒绝提示。这不是这个房间独有的问题——任何房间的任何一个失效/
+   过期出口都会炸出同样的堆栈，因为 `go.lpc` 是所有移动指令共用的
+   唯一派发器。`zzfy` 那边 `go.lpc` 和这个坏出口都是字节相同、同样
+   没修（该库自己的 §10.7 没有恰好试到这个出口）。修复：
+   `call_other()` 外面包一层 `catch()`，失败就走跟"确认不存在"完全
+   一样的 `notify_fail("无法移动。\n")`。现场验证：修复前 `新手学堂`
+   直接甩出完整报错堆栈；修复后同一指令显示"错误讯息被拦截"（本项目
+   `catch()`-防护类修复的标准输出约定）+ 正常的"无法移动。"，命令
+   派发器继续正常工作（同一会话里后续的战斗/死亡/复活全部正常）。
+   缺失的"新手学堂"分区本身是真实的内容缺口，没有编造内容去填。
+6. **新增 AGENTS.md §7.103：`master.lpc` 的运行时报错处理器把纯编译
+   *警告*（不只是真正的错误）原样甩给每一个普通玩家**：
+   `adm/obj/master.lpc` 的 `log_error()` 对 `this_player(1)`（这个
+   驱动上是"忽略 shadow 拿到当前玩家"，不是"仅限巫师"）无条件
+   `efun::write("编译时段错误：" + message)`，结果是几乎每一次某个
+   房间/NPC/指令档案第一次惰性编译时产生的"Unused local variable"/
+   "Unknown #pragma"之类纯警告，都会原样刷屏甩给当时在线的**任何**
+   玩家，包括普通玩家——现场确认：光是注册流程+走几步路，就已经刷了
+   几十行这种警告文本。兄弟档案 `zzfy` 其实已经独立修过这个问题（本次
+   血统核对时通过 diff 发现），补丁是给 `this_player(1)` 那个条件加
+   一个 `&& strsrch(message, "warning:") == -1`——移植了同样的补丁：
+   真正的报错（消息里不含字面 "warning:"）照常显示，纯警告不再进入
+   玩家可见的输出流（仍然会 `write_file()` 进对应巫师的 log，只是
+   不刷屏）。现场验证：补丁前的注册+移动流程刷了大量警告文本，补丁
+   后同样的流程干净，而 §7.102 的真实 catch() 报错依然正常显示。
+7. **标准 §1.3b/§1.3e 连线节流豁免此前缺失**：`adm/daemons/band.lpc`
+   没有 `is_local_site()`，`adm/daemons/logind.lpc` 的多重登录上限
+   （`iplimit > 15`）和 20 秒重连节流都没有本地/回环豁免——测试过程
+   中亲自撞上了这个节流（`quit` 后立刻重连被拒："你刚退出游戏19秒，
+   为了减轻系统负担请过二十秒再连入"）。兄弟档案 `zzfy` 已经有这个
+   标准补丁（本项目对所有档案的既定政策），直接移植：
+   `band.lpc` 新增 `is_local_site()`（127.0.0.1/::1/localhost/127.
+   前缀），两处节流各加 `&& !BAN_D->is_local_site(query_ip_number(ob))`
+   短路（1 小时踢出惩罚保持不变，那是游戏设计不是连线保护）。现场
+   验证：补丁后 `quit` 立刻重连不再被节流拒绝。
+
+**§7.68 / §7.101 是否适用于本库的死亡系统**：都不适用，理由分别记录：
+
+- **§7.101（`exits` 缺键导致 `valid_leave()` 永远打不到）不适用**：
+  本库的死亡引擎完全不是 ES2/`kxkjii2` 那种 `exits`-映射-门控的复活
+  机制——`d/death/gate.lpc`（鬼门关）的出口（south/east）都是普通、
+  完整可用的键，没有被注释掉或缺失的方向；真正负责复活的是房间里的
+  判官 NPC `d/death/npc/panguan.lpc`，靠自己的 `init()`/`call_out()`
+  链条播放对话、`reincarnate()`、`move()` 送回人间，完全不经过
+  `go`/`valid_leave()` 这条路径。
+- **§7.68（`present(ob)` 缺失重试导致鬼魂卡死）不适用，现场验证过
+  两条前提都不成立**：`panguan.lpc::death_stage()` 的守卫确实是同样
+  的 `if (!ob || !present(ob) || ...) return;` 形状，但现场验证：
+  (1) 鬼魂**可以**在这个房间自主移动——`单于五(zztestone)` 死后从
+  `鬼门关` 主动打 `south` 成功走到了 `冥府大道`，没有任何"你已经
+  精疲力尽，动弹不得"之类的阻挡提示；(2) 通读全库没有找到任何类似
+  `bmxkx2001` 剧情 NPC 那种会强行拖走鬼魂的机制。两条前提都不成立，
+  保持原样不改，这正是"鬼魂在阴间自己游荡、下次撞见判官会重新触发
+  对话"的有意设计——现场也确认了这一点：`死亡玩家` 先在没有判官的
+  `鬼门关` 落地（判官那时候刚好走去了别处），死亡对话完全没有开始；
+  用 `goto panguan` 把 `zztestone` 移到判官所在的 `冥府大道` 后，
+  判官的 `init()` 立刻触发，五段对话如期播放，`reincarnate()` +
+  `move()` 落地在 `天主教堂`（两个投胎候位点之一）。
+- **现场验证的完整死亡/复活流程（非管理员角色）**：注册了一个普通
+  玩家 `zztestone`/`单于五`，用管理员 `xgchen` 在同一房间 `clone`
+  出一只山西土匪（`d/fy/npc/tufei11111.lpc`，`combat_exp` 高达十万到
+  四百万，"aggressive" 主动攻击属性）——土匪一进房间就主动开打，先后
+  打死了在场的管理员 `xgchen`、`店小二`、`zztestone`（三人都是同一
+  只土匪杀的，纯粹是测试道具选得太狠，不是游戏平衡问题）。`zztestone`
+  死后经上文所述的判官对话链完整走完，`score` 确认"被杀了一次"、
+  属性/血条恢复正常、不再显示鬼魂状态。**`quit` 后真实重连验证
+  §7.24 修复**：重新登入 `zztestone`，落地地点是原本注册时选的
+  `凤求凰客栈`（而不是死亡候位点 `天主教堂`/`关外楼`），确认永久
+  登入地点没有被死亡流程覆盖。
+- **管理员账号的鬼魂状态（§10.7 第 6a 条已知模式，非 bug）**：
+  管理员 `xgchen` 死后同样被移到 `鬼门关`，但 `panguan.lpc::init()`
+  对 `wizardp(previous_object())` 直接 `return`，从不给巫师排死亡
+  对话——这是本项目已确认的标准设计（巫师靠自己的指令自救，不占用
+  NPC 复活剧情），现场确认 `xgchen` 用 `goto`/巫师权限完全可以自由
+  行动，没有任何卡死。
+
+**已观察但未深入调查（不属于本轮已验证修复范围，如实记录）**：
+`adm/daemons/natured.lpc::event_noon()`（应为每游戏日中午触发一次的
+天气/生病随机事件）在本轮测试session 里短时间内连续触发了几十次
+"你偶感风寒，竟而发起烧来"/"单于五的脸蛋烧得通红"（在场两名玩家交替
+出现），远超"一天一次"的预期频率——可能是这个函数被多次
+`call_out()`/`heart_beat()` 重复排程（类似 §7.23 的形状），也可能是
+游戏内时间推进速度本身很快导致短短几分钟真实时间跨过了好几个游戏日
+的中午。没有现场追踪具体的排程代码来确认是哪一种，也没有改动任何
+代码——与本轮的所有 bug 修复（§7.24/§7.25/§7.102/§7.103/商店坏路径/
+连线节流）均无关，纯属游戏天气系统的既有行为，留给下一次专门调查。
+
+**其余检查过、确认没问题的项目**：留言板 `post`/`look board`
+现场复测正常（`/d/fy/fysquare.lpc` 强制加载的 `/obj/board/
+fysquare_b.lpc`，此前 §7.86 扫描已删过多余的 `replace_program()`，
+本轮实际发帖验证：`post stone` 写入一条新留言，`look stone` 确认
+可见）；`skills`（技能查询）、`score`、`i`、移动多房间穿行均无异常；
+`feature/skill.lpc`、`d/fy/npc/{gmaster,sqx}.lpc`（教师/帮派收徒
+NPC）与 `zzfy` 逐字节相同（仅一处纯空白差异），`zzfy` 自己的
+§10.7 已经现场验证过技能学习（`learn ... from ... with ...`）和
+帮派加入（`apprentice`）两条路径均正常，本档案共用同一份代码，未
+重复验证。`replace_program(ROOM)`（AGENTS.md §7.100 描述的"ROOM
+基类版 §7.86"landmine 变体）在本库出现 2059 次——量级上属于"很可能
+已经殖民了房间基类"的区间，但本轮完整会话（注册/移动/战斗/死亡/
+复活/留言板）的 `debug.log` 和驱动 stdout 里没有出现过一次 "cannot
+replace a program" 的驱动警告，说明本轮没有现场触发——按 AGENTS.md
+§7.100 已有的处置原则（`jyqxc`/`jyqxc2` 先例），量级记录在案、留作
+后续专门扫描的已知积压，本轮不做批量修改。
+
+**本轮种子/测试角色**：管理员 `xgchen`/`Mud@2026`（按本档案既有的
+硬编码 `restore_list()` 机制自动获得 `(admin)`，本轮重新走完整注册
+流程验证过，登入横幅确认"目前权限：(admin)"，`update` 指令验证过写
+权限）；普通玩家 `zztestone`/`Mud@2026`/随机分配中文名`单于五`
+（中文取名步骤在这个特定 tmux 会话里被 telnet 传输损坏了一次，
+跟 AGENTS.md §10.2 记录的已知 CJK 字节损坏陷阱一致——本轮注册
+`xgchen` 时用同样的 tmux 链路顺利输入了真实中文名"长孙风"，说明不是
+`is_chinese()` 本身的问题，纯属传输层偶发损坏，接受随机名继续测试）。
+两个角色、测试期间产生的尸体/骸骨等战斗残留物均保留在存档里，作为
+本轮测试证据，未删除。
