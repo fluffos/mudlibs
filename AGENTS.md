@@ -6461,6 +6461,23 @@ room/NPC/item content-generation tool (`roommaker`, `npcmaker`,
 templates — a factory bug compounds silently every time a player uses
 the tool.
 
+**SWEEP COMPLETE (11 batches)**: the ~5,585-file jhfy3 backlog
+described above is now fully closed out. Worked off in eleven batches,
+each independently boot-tested (native debug driver, existing seeded
+admin account, `goto` into 8-10 rooms drawn from that batch, clean
+`debug.log`) and committed/pushed separately: batch 1, 508 files,
+`1b18f1ce550`; batch 2, 520 files, `a199792470c`; batch 3, 520 files,
+`3e273269ab5`; batch 4, 550 files, `62147942e9c`; batch 5, 550 files,
+`caa774e425a`; batch 6, 481 files, `60446dfce1c`; batch 7, 522 files,
+`17d7b6565db`; batch 8, 501 files, `2d0951fbf72`; batch 9, 559 files,
+`72085ed5259`; batch 10, 550 files, `13fae17062e`; batch 11 (final),
+324 files, `50f6701eec2`. Grand total: **5,585 files fixed** across all
+eleven batches (508+520+520+550+550+481+522+501+559+550+324). A final
+post-batch-11 sweep confirms 0 live `replace_program(ROOM);`
+occurrences remain in `work/` — the only 124 remaining matches are
+pre-existing, already-`//`-commented-out instances (harmless, and
+intentionally left untouched, consistent with every prior batch).
+
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
 Found on `kxkjii2`'s §10.7 deep functional test (ES II/Annihilator
