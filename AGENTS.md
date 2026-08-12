@@ -34,6 +34,30 @@ files each, see §7.100 below for detail) until either it's exhausted
 or a new/promoted lib needs its own §10.7 pass. §1 is still the triage
 playbook for any lib that somehow hasn't had its WASM pass yet.
 
+**Round-two re-test campaign in progress (started 2026-08-12), against
+an upgraded driver.** `~/src/fluffos` was rebuilt from a fresh
+`origin/master` pull (brings in two PRs from this project's own driver
+work: #1343 diagnostics-arena, #1344 O(1) ASCII-string fast path). This
+also follows a live production crash found and fixed corpus-wide: a
+`%` operator handed a corrupted-float player attribute
+(`quest_count = killer->query("questXX_times") % 500` and the
+copy-pasted `win_times`-referee-NPC equivalent) — fixed with `to_int()`
+across 175 files/255 occurrences (commit `c571a53629f`; see
+`project_quest_times_percent_operator_corpus_sweep` memory for the full
+writeup, including why driver-side truncation was considered and
+rejected). A corpus-wide `lpcc_check.sh` compile sweep sampled 30 libs
+post-upgrade and found **zero compile-level regressions**. Live §10.7
+playthrough re-testing is the higher-value check and is working
+through the corpus lib-by-lib (one at a time, via the recurring cron
+job) — round-two passes so far use a dated heading like `深度功能测试
+（2026-08-12` rather than the bare `（§10.7` marker, so grep for the
+current year-month to find what's already been re-covered vs. what
+still only has a round-one pass. Two lineage siblings already done
+(`zhonghua2`, `ntii`) turned up real new bugs (a dead random-quest
+subsystem from a stale non-`mixed` param type, a missing-`varargs`
+crash, off-by-2 suffix-slice bugs) — check sibling libs in the same
+lineage for the same patterns before assuming a fresh find is isolated.
+
 Every lib has a number: `NNN` per unique game, `NNN-M` for confirmed
 derivatives of the same codebase, `9xx` for non-LPC archives (one,
 `033-3`, is a cataloged binary-only release that was never convertible
