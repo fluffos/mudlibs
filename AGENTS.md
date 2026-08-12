@@ -6703,6 +6703,63 @@ lazy-compiles, not just genuine errors. Cheap to confirm live: register
 a fresh character and watch for `"编译时段错误：...warning:"`-prefixed
 lines appearing unprompted during normal movement.
 
+### 7.104 A new-account "must stay online 30 minutes or your account is revocable" policy's AUTOMATIC (netdead-timeout) cleanup path silently deletes the account with no confirmation, even though the INTERACTIVE quit path for the exact same policy requires an explicit y/n
+
+Found on `nte`'s §10.7 round-two deep functional test (nitan/ES2-family
+infrastructure shared with `ntii`) — and not found by code review, by
+actually getting bitten by it: the pass's own first test character was
+silently deleted mid-session because repeated `mudclient.py` connect/
+disconnect cycles (each ending the TCP connection without an explicit
+`quit`) accumulated past the driver's `NET_DEAD_TIMEOUT` (900s/15min),
+triggering `net_dead()` → `user_dump(DUMP_NET_DEAD)` →
+`QUIT_CMD->force_quit()`.
+
+The interactive `quit` command (`cmds/usr/quit.lpc`'s `main()`) enforces
+this lib's "new accounts must accumulate 30 real minutes online before
+they're permanent" policy correctly: it detects `mud_age < 1800`,
+prints the account-loss warning, and requires an explicit `y` via
+`input_to((: confirm :), me)` before doing anything destructive — `n`
+(or anything else) just cancels. But `force_quit()`, invoked by the
+*automatic* netdead-timeout path (no player present to answer any
+prompt), applied the exact same "<30 minutes → delete" rule
+unconditionally:
+```lpc
+if (me->query("mud_age") < 1800 && !me->query("jieti")) {
+  UPDATE_D->remove_user(me->query("id"));
+  return 1;
+}
+me->save();
+```
+i.e. it treated "the connection dropped" as equivalent to an explicit
+`y` confirmation — the one outcome the interactive path's confirmation
+prompt exists specifically to gate. A flaky client, a brief network
+blip, or (as here) a test harness that reconnects rather than issuing
+`quit` all silently destroy a legitimate new account with zero warning
+and zero chance to object. Fix: delete the unconfirmed branch entirely;
+fall through to the same safe `save()` + `move(VOID_OB)` +
+`destruct()` cleanup already used for accounts ≥30 minutes old — a
+disconnected new account keeps its data exactly like an established one
+does, and only the interactive path (which can actually get consent)
+is allowed to delete a sub-30-minute account.
+
+Verified live: registered a fresh account, then called
+`ob->user_dump(1)` directly (the exact `DUMP_NET_DEAD` code path a real
+15-minute-timeout disconnect takes) from a wizard session — pre-fix,
+this deleted both save files (`data/login/`, `data/user/`); post-fix,
+the identical call left both files intact.
+
+Detection pattern: on any lib with (a) a "new account must stay online
+N minutes or is revocable" policy enforced via an explicit y/n prompt
+in the interactive `quit` command, AND (b) a `net_dead()`/netdead-
+timeout auto-cleanup path (`user_dump(DUMP_NET_DEAD)` or equivalent)
+that reuses the same account-age check — diff the two code paths' age
+check against what happens next. If the automatic path calls a
+`remove_user()`/delete-style function directly instead of falling
+through to the ordinary safe-disconnect save, it's destroying accounts
+that never got a chance to consent. Likely to recur across the whole
+ES2/nitan lineage family (any sibling with this same "new account
+retention" mechanic) — not yet swept, check on next contact.
+
 ---
 
 ## 8. Login and registration flow bugs
