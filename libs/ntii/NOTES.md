@@ -232,12 +232,12 @@ temp/dbase 状态处理有微妙问题，值得未来某次深挖时留意，但
 - **随机任务系统修好之后，`place_npc()` 把此前从未被任何测试角色走到过
   的整片新区域（如星宿/`d/xingxiu/`、图龙/`d/tulong/`）在同一次心跳里
   连锁懒编译，触发多次"Too long evaluation. Execution aborted."**：这
-  是 AGENTS.md §10.8 记录的既有类别（"ambient NPC 漫游/系统行为强制懒
+  是 AGENTS.md §7.90 记录的既有类别（"ambient NPC 漫游/系统行为强制懒
   编译大片地图，冷启动级联编译撑爆 `maximum evaluation cost`"）的又一个
   实例，不是本轮改动引入的新缺陷，也不是可以钉死到具体 file:line 的独
   立 bug——是这份档案随机任务系统一旦真正开始运作（本轮才第一次实现）
   就会暴露的、更大范围的地图冷启动开销问题，超出单文件修补的范畴，
-  按 §10.8 惯例诚实记录、未修。会话中途 `config.fluffos` 的
+  按 §7.90 惯例诚实记录、未修。会话中途 `config.fluffos` 的
   `maximum evaluation cost` 被外部从 700000 调到 5000000（非本次改动），
   重启验证过依旧干净启动，但没有专门验证这个提升是否足以消除这类冷启
   动级联报错。
