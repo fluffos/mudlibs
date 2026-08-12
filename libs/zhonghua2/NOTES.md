@@ -717,3 +717,144 @@ factory-call guard) spot-checked present and untouched by this pass.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 75 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08，round two 补做：战斗/拜师 + 新驱动重测）
+
+延续 2026-07 的第一轮 §10.7 深度测试（见上方，已完成注册、四合院"选品质"迷你任务、
+新手礼物、商店 `list`、一次真实 quit+reconnect，以及两次完整 15 分钟 net-dead 等待
+并修复了 Bug 3）。那一轮明确记录**未**做到战斗、拜师/门派获取、完整任务奖励流程。
+本轮针对新编译的 `~/src/fluffos/build-debug`（含最新合并的 PR）重新验证，并补做
+上一轮跳过的战斗/拜师测试。
+
+### 驱动升级重测
+
+`cd libs/zhonghua2 && ~/src/fluffos/build-debug/src/driver config.fluffos`（PID
+882921，测试结束后已按精确 PID kill 并用 `ss -tlnp` 确认端口 40028 不再监听）：干净
+启动，`log/log`（此档案的 debug-log 文件名，参见 `config.fluffos`）里唯一出现的运行
+时讯息仍是既有已记录的 §15ad `versiond.lpc`/`socket_bind()` 配置 ID 不匹配错误（非
+致命，早已归档），没有任何新的编译或运行时错误。
+
+### `to_int()` 任务计数器修复：通过一次性测试对象 `call`/`update` 验证
+
+会话上文（非本次 subagent 所做）诊断出一次真实的生产崩溃：`u/yuchang/combatd.lpc`
+的任务奖励代码 `killer->query("questsn_times") % 500`（以及 `questdg_times`/
+`quesths_times`/`questkh_times` 的兄弟写法）在拿到一个损坏成 FLOAT 类型的玩家属性
+时崩溃——`*Bad argument 1 to % Expected: int Got: 97467776479476432.000000`——因为
+这个驱动方言里的 `%` 运算符对 float 左操作数直接抛错。已用 `to_int()` 包裹修复（**不是**
+`(int)`，那只是编译期类型标注，不做运行期转换）。本次已确认这个 lib 里的修复确实存在
+且形状正确：`u/yuchang/combatd.lpc` 第 2040/2111/2183 行、`kungfu/class/dugu.lpc`
+第 668 行均为 `to_int(...) % 500`。
+
+任务奖励代码本身要走到 `独孤求败`（`d/emei/duguangtai.lpc`）在峨嵋（`d/emei/`，"远离
+尘嚣，处在丛山峻林之中"，与上一轮已记录的"真实门派都很远"结论一致）才能触发，在测试
+预算内不现实。按任务本身给出的兜底方案，改用**一次性测试对象**直接验证同一个表达式
+形状：
+
+在 `work/adm/daemons/qftest.lpc`（临时脚手架，测试完已删除，`git status` 确认未残留）
+写入用 `mapping` 间接取值（保持编译期类型为 `mixed`，而不是像 `float bad = ...;` 那样
+被编译器静态推断出具体类型——首次尝试直接用 `float` 局部变量时，编译器在**编译期**就
+以 `error: Bad left argument to '%' : "float "` 拒绝了，这反而不是生产环境真实触发的
+那种"运行期才发现是 float"的路径，所以改用 mapping 取值伪装成 `mixed`，才是对生产
+`query()` 返回值场景的忠实复现）：
+
+```lpc
+mapping bad_data = (["k": 97467776479476432.000000]);
+mixed bad = bad_data["k"];
+```
+
+由于此档案的 `call` 巫师指令（`cmds/arch/call.lpc`）要求 `me->is_admin()`，而
+`clone/user/user.lpc` 第 63 行的 `is_admin()` **硬编码判断 `getuid() == "yuchang"`**
+（原始 2006 年真实站点的超级管理员账号名，与巫师名单等级/`(admin)` rank 无关），本项目
+按惯例种下的 `fluffos` 管理员账号（虽然 `(admin)` 权限、`wizlist` 里也是 `(admin)`）
+**无法**使用 `call` 指令（`你没有使用该命令的权限。`）。这是一处观察记录，不是本轮要修的
+bug——它是一个内部自洽、刻意的访问控制设计（只有原始超级管理员账号能用 `call`/`clone`/
+`smash`/`copyskill` 等危险指令），属于 AGENTS.md §10.7 明确排除的"设计选择"范畴，未作
+修改；只是记录下来避免未来的 pass 把它当成权限系统坏掉来排查。改用 `update <文件>`
+指令触发 `create()` 里直接调用测试函数（`update` 指令本身只需要 `(arch)` grant，
+`fluffos` 账号具备）：
+
+- **修复前**（`create()` 直接调用未加 `to_int()` 保护的 `test_unfixed_shape()`）：
+  ```
+  执行时段错误：*Bad argument 1 to %
+  Expected: int Got: 97467776479476432.000000.
+  程式：/adm/daemons/qftest.lpc 第 12 行
+  ...
+  呼叫来自：/adm/daemons/qftest.lpc 的 create() 第 16 行，物件： /adm/daemons/qftest
+  呼叫来自：/adm/daemons/qftest.lpc 的 test_unfixed_shape() 第 12 行，物件： /adm/daemons/qftest
+  发生错误：
+  *Bad argument 1 to %
+  Expected: int Got: 97467776479476432.000000.
+  ```
+  与生产崩溃报告的错误文本逐字一致，确认测试忠实复现了原始崩溃形状。这条错误被
+  `cmds/wiz/update.lpc` 自己的 `CATCH()` 拦住（"错误讯息被拦截："），只回显给当前
+  连线的巫师，不会写进 `log/log`——这是这个 lib 特有的行为（`update` 指令自身 catch
+  编译期加载错误），跟生产代码里那次真正未捕获的崩溃（走的是 `user_dump()`/正常游戏
+  逻辑路径，没有类似 `update` 的外层 catch）不是同一条日志路径，属于测试脚手架本身
+  的传输方式差异，不影响验证结论。
+- **修复后**（改成 `to_int(bad) % 500`）：`update` 显示"重新编译 ... 成功！"，
+  `create()` 里 `write_file()` 把返回值写到 `qftest_result.log`：
+  `test_fix returned: 432`。独立用 Python 验证
+  `int(97467776479476432.0) % 500 == 432`，与驱动内计算结果一致——确认修复后的
+  表达式对完全相同的损坏输入返回一个合理的 int（0-499 区间），且不抛任何错误。
+
+结论：`combatd.lpc`/`dugu.lpc` 里 `to_int(x) % 500` 的修复形状，针对确切的报告故障
+条件，被直接、诚实地验证有效——虽然不是通过一次真实的完整任务达成，但复现了完全相同
+的表达式与完全相同的损坏输入，前后对比证据充分。
+
+### 战斗测试（本轮新补做，上一轮明确记录为未验证）
+
+`cmds/std/fight.lpc` 的安全切磋机制 `fight <目标>`：武庙本身设了 `no_fight`
+房间标记（"这里禁止战斗。"，与上一轮记录的中华英雄/浪翻云"这里禁止战斗"一致，是房间
+标记而非这两个特定 NPC 的属性），北大街/中央广场沿途的 NPC（欧阳克、小混混、捡破烂的、
+李阿婆等）`attitude` 都是 `"friendly"`——`inherit/char/npc.lpc` 的通用
+`accept_fight()` 对 `friendly` 属性在玩家气血/精神值 ≥75% 时**必定拒绝**（"某某怎么
+可能是您的对手？"），所以新手在城内主干道上找不到会接受切磋的目标。往南走到
+`/d/city/nandajie1.lpc`（南大街，中央广场再往南一格）的"流氓"与"流氓头"NPC
+（`d/city/npc/liumang.lpc`）`attitude` 是 `"peaceful"`——通用 `accept_fight()`
+对非 `friendly`/非 `heroism` 的属性、气血精神值 ≥75% 时会接受。
+
+实测路径：武庙 → east（北大街，实为 beidajie2）→ south（北大街，beidajie1，遇到
+欧阳克，未攻击）→ south（中央广场）→ south（南大街/nandajie1）→ `fight liu`。
+战斗完整走完整个回合序列（拳脚交替、命中/擦身而过描述），最终"流氓头"服输
+（"流氓头脸色微变，说道：佩服，佩服！"），全程无崩溃、无异常。`log/log` 全程无
+新增错误。确认此档案的安全切磋机制在新驱动上功能完全正常。
+
+### 拜师/门派测试（本轮新补做）
+
+`cmds/skill/bai.lpc` 对没有 `family` 属性的 NPC 正确报错、不崩溃：`bai liu`
+（对刚切磋过的"流氓头"）返回"流氓头既不属於任何门派，也没有开山立派，不能拜师。"，
+与上一轮对中华英雄/浪翻云观察到的同类拒绝一致。真正拥有 `family` 的门派 NPC（独孤
+求败等）都在远离扬州新手区的深山（峨嵋等），本轮测试预算内未能实际走到并完成拜师，
+与上一轮"远离尘嚣"的结论一致——机制本身（家族检查、失败路径）经两个不同 NPC 交叉验证
+均无异常，未发现新 bug，只是仍未走完一次真正的成功拜师。
+
+### `tmux_mud.sh` 的 CJK 传输损坏问题再次命中（非 bug，AGENTS.md §10.2 已有前例）
+
+用 `tmux_mud.sh` 发送 `born 扬州人氏` 时，服务端收到的参数没有正确解析（"牛头恶狠狠
+的对你说：你要干什么！投胎去哪里？"），后续同一条 telnet 连线连纯 ASCII 的 `look`
+都不再有任何响应，怀疑连线状态已经损坏。改用 `scripts/mudclient.py`（原始 socket，
+无本地 telnet/pty）在**新连线**上重发完全相同的 `born 扬州人氏`，一次成功——角色正确
+落地扬州武庙（`startroom":"/d/city/wumiao"`、`"born":"扬州人氏"`、`"registered":1`
+均已写入存档）。这与 AGENTS.md §10.2 已经记录的 `zjdywzb` 传输层问题同一类：本地
+telnet CLI/pty 会损坏特定的 CJK 字节序列，不是驱动或 mudlib 的 bug。之后的 `look`/
+`score`/`fight`/`bai`/`quit` 等纯 ASCII 指令改回 `tmux_mud.sh` 均正常，无需继续用
+mudclient.py。
+
+### quit + reconnect（本轮新测试角色）
+
+新注册角色 `shenqingz`（秦云，男，均衡型，阴险奸诈，扬州人氏——与已保留的
+`shenfengid` 证据角色完全独立，测试完已删除其 `data/user/s/`、`data/login/s/`
+存档，不影响 `shenfengid`）：完整走完注册 → 桃源石屋选品质 → wash → born → 新手
+礼物 → 战斗 → 拜师测试全流程，`quit` 干净退出（"欢迎下次再来！"），`log/log` 全程
+grep 无新增错误，约 50 秒后重新连线，完整走一遍正常登录流程（非静默重连），经验
+350000/潜能 101299 等全部数值原样保留，位置回到 `startroom`（武庙——此档案的角色
+似乎总是回到 `startroom` 而非精确的退出房间，这是既有设计，不是本轮新发现的问题）。
+
+### 本轮结论
+
+未发现新的编程 bug。驱动升级后干净启动、无新增错误；`to_int()` 任务计数器修复通过
+一次性测试对象直接验证生效；战斗与拜师这两个上一轮标记"未验证"的系统本轮均已实际
+走通（战斗完整验证成功案例，拜师验证了失败路径且逻辑正确，真正的门派 NPC 仍因地理
+距离在预算内不可达，与上一轮结论一致，非新增缺口）。对这个 lib 在新驱动构建下的
+整体信心：高——核心系统（注册、任务奖励防崩溃、战斗、拜师失败路径、断线重连持久化）
+均已验证正常。
