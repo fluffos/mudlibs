@@ -236,3 +236,73 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 83 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-12，round two，新驱动重测）
+
+用新编译的 `~/src/fluffos/build-debug/src/driver`（origin/master 最新拉取，
+含本项目自己提交并合入的 #1343/#1344 两个 PR）重新验证。
+
+### `to_int()` 任务计数器修复
+
+`adm/daemons/combatd.lpc`/`cmds/std/whisper.lpc` 里全部 `quest_count = ...
+% 500` 已经是 `to_int(query(...)) % 500` 的修复后形状（本会话早前的语料库
+扫描已覆盖），无需改动。
+
+### 新发现并修复：`log_error()` 大小写不匹配导致警告过滤形同虚设
+
+`adm/kernel/master/error.lpc` 的 `log_error()`（AGENTS.md §7.103 已有先例，
+这是同一 bug class 在 kernel 架构、不是 single-file master 架构下的第 N
+个独立实例）：`error_type = strsrch(message, "Warning") == -1 ? "错误" :
+"警告"` 只匹配大写 `Warning`，而真实编译器输出的是小写 `warning:`——这个
+大小写不匹配意味着 `error_type` 恒为"错误"，但**更关键的是**：这段代码
+从来没有真正拿 `error_type`（或任何等价判断）去**门控**是否要
+`tell_object()` 转发给玩家——不管是不是纯 warning，一律无条件转发。新注
+册流程期间反复触发（每个第一次被懒编译的档案都会命中），修复：改成不区
+分大小写匹配 `"warning:"`，只在真正的 error 时才 `tell_object()` 转发给
+玩家（`debug` 频道广播给巫师和 `write_file()` 落盘均保持不变，未受影
+响）。**现场验证**：修复前后各跑一次干净的全新账号注册流程对比，修复后
+的欢迎序列（news/msg/wenxuan 提示）不再夹带任何"编译时段错误：...
+warning:"文本。
+
+### 之前记录的"什么？"排查：证实是 tmux_mud.sh 的已知 CJK 传输问题，不是驱动回归
+
+本轮一开始用 `tmux_mud.sh` 送中文名字（"秦风六"、"凌霄"）反复触发
+`check_legal_name()` 拒绝（"对不起，请您用「中文」取名字。"），一度怀疑
+是本会话审查并合入的 PR #1344（O(1) ASCII 字符串快速路径）引入的字符串
+处理回归——认真排查过：用 `lpcshell` 直接、脱离网络层测试
+`is_chinese()`、`name[i..i]` 单字符切片、以及和真实代码路径完全一致的
+`explode(arg, "║")`，三项在纯 LPC 字面量输入下全部返回正确结果。结论：
+驱动本身的字符串处理完全正常，问题在 `tmux_mud.sh` 本地 telnet 客户端对
+中文的传输损坏（AGENTS.md §10.2 已有先例，和 `zhonghua2`/`ntii`/`nte`
+本轮记录的现象一致）。改用 `scripts/mudclient.py`（原始 socket）后同样
+的中文名字注册流程一次成功。
+
+### 冷启动级联编译撑爆 `maximum evaluation cost`（AGENTS.md §7.90/§10.8 已有先例）
+
+刚重启的驱动上，连续几次全新账号注册各自在 `enter_world()` 链路上不同的
+文件（`clone/user/user.lpc` 的 `calc_sec_id()`、`adm/kernel/
+simul_efun.lpc` 的 `append_color()`、`adm/daemons/band.lpc` 的
+`load_welcome()`）触发"Too long evaluation. Execution aborted."——每次都
+是当时还没被懒编译过的不同档案，符合已知的"冷启动一次性懒编译级联撑爆
+`maximum evaluation cost`（700000，未改动）"既有类别，不是新的独立 bug，
+也不是驱动升级引入的回归（同一会话里 `ntii`/`nte` 用同一份升级后驱动测
+试时记录了完全相同的现象）。**验证自愈**：驱动"热身"几次注册尝试后（多
+数常用档案已被编译进内存），后续全新账号（`qinfengba`）一次性干净走完
+注册→"泥潭注册室"→欢迎序列，全程零报错。
+
+### 完整游玩测试范围
+
+沿用 round one 已经验证过的"注册成功进入洪荒世界，欢迎序列正确显示"作为
+及格线（`score`/`born` 相关的盘古投胎仪式在 round one 已确认是深山之外
+的独立系统，本轮同样未走）。战斗/死亡循环仍未触达——受限于本轮时间预
+算，留给下一次专门测试。
+
+### 本轮结论
+
+驱动升级后 hhsj 整体状态良好：任务计数器 `to_int()` 修复确认已生效；新
+发现并修复一个真实的 `log_error()` 严重度门控缺失 bug（§7.103 家族第 N
+例）；此前记录疑似"什么？"的诡异现象证实只是本地 telnet 传输问题，不是
+驱动或代码的 bug；冷启动 eval-cost 级联属已知类别且验证自愈。测试账号
+（`fluffos`/`fluffosb`/`qinfengwu`/`qinfengliu`/`qinfengqi`/`qinfengba`）
+存档留在 `data/` 下作为佐证，未清理（同批次未跟踪文件，不纳入本次提
+交）。
