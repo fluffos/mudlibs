@@ -391,3 +391,45 @@ ob->query("age") == 14)`，前两个条件读 `user`（玩家身体），最后�
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD`、`W_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 60 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+上面"第二轮"（2026-08-03）那次早于今天的驱动重建（全库
+`quest_times`/`win_times` `%`-operator 修复 + Warning/warning 驱动
+文本回退），不能算作针对当前驱动的覆盖——这是真正针对今天驱动的重
+测。`log_error()`（`adm/obj/master.lpc`，CRLF 行尾档案）已经在更
+早一轮正确修复过（`strsrch(message, "arning:")` 大小写无关判断，
+注释虽然还写着"驱动文本是小写"的旧记录，但判断本身与大小写无
+关，今天的驱动文本回大写后依然正确工作），管理员账号
+（`fluffos`/`Mud@2026`，`adm/etc/wizlist` 已有 `fluffos (admin)`
+且存档已提交）也已经用真实注册流程创建并提交过，本轮只发现并修复
+了 `log_file()` 一处。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_file()`（`adm/simul_efun/file.lpc`，CRLF 行尾档案）完全没
+   有 `assure_file()` 保护（AGENTS.md §7.11-class 的又一确认实
+   例）**：`feature/dbase.lpc`/`inherit/item/combined.lpc` 等文件
+   多处 `log_file("trace/...", ...)` 调用依赖对应子目录存在。注册
+   /登录本身只写 `log_file("USAGE", ...)`（无子目录，本来就存
+   在），不受影响。已补上 `assure_file(LOG_DIR + file);`（含前向
+   声明，用 Python 字节级替换保留原 CRLF 行尾格式）。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:184`
+  （繁体字变体，`已獲勝`）。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+
+### 实测过程
+
+登录前有一个"輸入任意鍵繼續..."（press any key to continue）分页
+步骤，紧跟在欢迎横幅之后、id 提示之前，和本轮 `ldtxii` 遇到的形状
+完全一样——已提前读代码确认，避免重蹈覆辙丢失第一个真实输入。用已
+提交的 `fluffos`/`Mud@2026` 登录，`score`（画面繁体输出"目前權
+限：(admin)"）确认权限正确，`update /adm/simul_efun/file`（就是本
+轮改过的文件）确认可正常重新编译。`adm/log/debug.log` 时间戳全程
+未变化（`Jul 24`，早于本次会话），确认无新增未捕获运行期错误。登
+录本身产生的存档时间戳类微小 diff 已用 `git checkout` 撤销，不提
+交。驱动最终按精确 PID kill，`ps -p` 确认已退出。
