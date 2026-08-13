@@ -743,3 +743,48 @@ HEAD is the one-line `remove_action()` fix above.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 61 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。这份档案是本轮"XKX/hy 家族" log_error() 扫荡里唯一
+**已经提前修复过**的一个——`adm/single/master.lpc` 的 `log_error()`
+早就有正确的 `strsrch(message, "arning:")` 判断（注释里引用了更早一
+轮的 "AGENTS.md #15w"），管理员账号 `fluffos` 也早已用真实注册流程
+创建并提交（`work/data/{login,user}/f/fluffos.o`，WASM-enablement 那
+次提交）。本轮只发现一处新 bug：
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例，与 `fqyy2`/`fy2mg`/
+   `fys` 同一形状）**：全档案 `quest/shenshu/man.lpc` 等文件多处
+   `log_file("nosave/ZS", ...)` 调用依赖 `LOG_DIR` 下的 `nosave/`
+   子目录存在。这台开发机本地的 `work/log/nosave/` 目录当前确实存
+   在（一个 `EXP` 文件，`Jul 24` 的旧测试痕迹），但 `work/log/` 整
+   条路径被项目级 `.gitignore` 规则（`libs/*/work/**/log`）排除在
+   外，本地存在不代表新检出安全——真正的一次全新 clone 仍会在首次
+   触发这条路径时未捕获抛出。修复：补上
+   `assure_file(LOG_DIR + file);`（含前向声明），使其与目录是否被
+   提交无关，运行时自愈。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:177`/
+  `d/beijing/npc/refereew.lpc:177` 均已用
+  `(string)(to_int(query("win_times")) % 5)`。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+- `assure_file()` 本身末尾不做 `seteuid(getuid())` 重置，不属于
+  euid-reset 那一类形状。
+
+### 实测过程
+
+以已提交的管理员账号 `fluffos`/`Mud@2026` 登录（连线后有一个
+GB/Big5 选码提示，选 `g`），`score`/`update /adm/simul_efun/file`
+（就是本轮改过的那个文件）确认可正常重新编译，屏幕上零次诊断刷
+屏。`log/debug.log` 时间戳全程未变化，确认无新增未捕获运行期错
+误。登录本身产生的存档时间戳类微小 diff（`data/user/f/fluffos.o`
+的 `last_on` 字段）已用 `git checkout` 撤销，不提交。驱动最终按精确
+PID kill，`ps -p` 确认已退出。
