@@ -643,3 +643,137 @@ dbase.lpc` 检查确认这份档案**不属于** `tybxjh`/`wlhd` 那个"天涯"
 
 - 登录测试产生的存档时间戳类微小 diff 已用 `git checkout` 撤销，不
   提交。
+
+## 后续处理（2026-08-13）：上面三项被记录为"世界内容问题、暂不修复"的发现，逐一深挖并按可行程度修复
+
+用户明确要求把上面标记为"内容层面既有问题、本轮不修"的三项拿回来
+实际修：`feizeid.lpc` 的 `call_other(0,...)`、缺失的
+`/u/xiha/banghui/bhnpc`、以及 `kuang-jian`/`feitian-yujianliu` 两个
+不存在的技能名。三项各自的根因、范围比原始记录深很多，逐一说明：
+
+1. **`adm/daemons/feizeid.lpc`（飞贼精灵）—— 已修复。** 根因：
+   `choose_npc()` 第 44 行 `newob = new("/u/xiha/npc/" + feizei[...]);`
+   ——`/u/xiha/npc/` 整个目录在 `work/` 和 `raw/` 里都完全不存在（不
+   是某几个文件缺失，是这个 12 个飞贼 NPC 的目录从来没进过这份归
+   档），所以 `new()` **每次**都回传 `0`，紧接着的
+   `newob->set(...)` 就是对 `int(0)` 的 `call_other`——这正是
+   AGENTS.md §7.63/§7.73 的标准形状。由于飞贼精灵的 `call_out`
+   周期是 320 秒且从 `create()` 就排上，这个 crash 在驱动运行期间
+   持续、周期性发生，不是偶发。修复：`new()` 后立即判空，`return`
+   之前重排下一次 `call_out`，不吞掉整个报错循环：
+   ```lpc
+   newob = new("/u/xiha/npc/" + feizei[random(sizeof(feizei))]);
+   if (!newob) {
+     remove_call_out("choose_npc");
+     call_out("choose_npc", 320);
+     return;
+   }
+   ```
+   验证：`update /adm/daemons/feizeid` 编译干净；驱动运行期间不再
+   出现相关报错（此前 `debug.log` 会每 320 秒新增一条）。
+
+2. **`/u/xiha/banghui/bhnpc`（以及同目录下的 `banghui.lpc`/
+   `vendor.lpc`）—— 无法恢复原内容，已改为让崩溃不再发生。**
+   `include/globals.h` 里 `BHNPC`/`F_BH`/`F_BVENDOR` 三个宏都指向
+   `/u/xiha/banghui/` 下的文件；这整个目录在 `work/` 和归档原始的
+   `raw/wmkjlib/world/u/` 里都不存在（`u/` 下只有 `fyue`、`snow`、
+   `workroom.c`，从来没有过 `xiha`）——这份归档本身的说明文件就写
+   明作者的 ID 正是 "xiha"，所以这是这份 2001 年"离线备份"归档在
+   打包时就已经缺失的作者个人目录，不是转换流程的问题，也没有任何
+   同名/近似的候选文件可以恢复（§7.94 式判断：不是"选哪份候选"的
+   内容判断，是彻底找不到）。按项目惯例不编造替代内容。真正会崩溃
+   的不是那 28 个直接 `inherit BHNPC` 的 NPC 文件本身（它们只是编
+   译失败，不会产生游戏内容之外的连带崩溃）——而是
+   `inherit/room/room.lpc`（几乎所有房间的公共基类）的
+   `make_inventory()`：
+   ```lpc
+   ob = new(file);
+   ob->move(this_object());   // new() 对编译失败的文件回传 0，这里是 call_other(0,...)
+   ```
+   以及 `reset()` 里同一个模式的两处调用点（`case 1` 单件、
+   `default` 多件分支）。凡是房间的 `"objects"` 表里放了这 28 个
+   NPC 之一，`reset()`（包括 `natured.lpc` 的日夜事件、NPC
+   `random_move()` 换房间触发的目标房间 `reset()`，两条路径实测都
+   命中过）就会在 `make_inventory()` 里对 `0` 做 `call_other`。修
+   复：给 `make_inventory()` 的 `new()` 结果判空，`reset()` 两处调
+   用点在使用前也判空——这是修复"房间生成逻辑"本身，不是编造缺失
+   的帮会内容，28 个 NPC 依然会因为找不到 `bhnpc` 编译失败（这点
+   没变、也不可能变），只是不再把这个失败向上传播成整栋房间的
+   crash。验证：实测触发过两条不同路径（`/d/city3/guangchang` 经
+   `natured.lpc` 的清晨事件、`/d/city3/xijie2` 经 NPC 游走进房间触
+   发的 `reset()`），`debug.log` 里两次都只留下预期中的"继承文件不
+   存在"记录，driver 全程存活，没有级联报错。
+
+3. **`kuang-jian`（有正确技能实现，只是放错目录，已修复）和
+   `feitian-yujianliu`（连同同一批彻底缺失的 14 个"飞天"专属技
+   能，无法恢复，已加保护）—— 两者根因完全不同，分开处理。**
+
+   - **`kuang-jian`**：不是缺失内容，是**放错了目录**。
+     `quest/weiguo/xixiabing/kuang-jian.lpc`（以及配套的
+     `kuang-jian/kuang.lpc`、`kuang-jian/leitingpili.lpc` 招式文
+     件）本身是一份完整、可用的 `SKILL` 类实现（"狂风快剑"），`raw/`
+     归档里就已经放在这个任务目录下，从来没在
+     `kungfu/skill/`（`feature/skill.lpc` 的 `SKILL_D()` 宏硬编码
+     指向的技能查找目录，`learn`/`practice`/`perform`/`chkskill`
+     等**所有**技能相关指令都走这个宏）出现过——所以哪怕
+     `set_skill()` 的存在性检查侥幸通过，`perform_action()` 也永
+     远解析不到招式文件。这不是"选哪个候选实现"的内容判断（本作者
+     只写了这一份实现，没有竞争版本），是把已确认正确的文件挪到引
+     擎唯一认可的位置，对应 AGENTS.md §7.94 的"用归档里已证明正确
+     的内容补回缺失文件名"这类判断。用 `git mv` 把三个文件整体搬到
+     `kungfu/skill/kuang-jian.lpc` + `kungfu/skill/kuang-jian/`（保
+     持 `__DIR__` 相对招式文件路径不变，`perform_action_file()` 不
+     用改）。验证：`update` 三份文件、以及 4 个引用它的
+     `quest/weiguo/xixiabing/xixia{1..4}.lpc` 全部编译成功；现场
+     `clone` 了一个 `xixia1` 西夏兵实测，`set_skill("kuang-jian",..)`
+     不再报错，且在真实战斗里触发了"雷霆霹雳"/风系剑招的战斗文本
+     （证实 `perform_action()` → `SKILL_D("kuang-jian")` →
+     `perform_action_file()` 整条链路已经生效，不只是编译通过）。
+
+   - **`feitian-yujianliu`**：深挖后发现原始记录的"两处 NPC"严重低
+     估了范围——`d/feitian/`（"飞天御剑流"门派区域，绯村剑心/比古
+     清十郎等 NPC）整个技能体系一共引用了 **15 个** `kungfu/skill/`
+     下完全不存在的技能名（`feitian-yujianliu`、`wuxing-dun`、
+     `shayi-xinfa`、`shayi`、`aikido`、`bearart`、
+     `xuanhualiu-quanfa`、`edge`、`huoxinliu-jianfa` 等），分布在
+     **11 个 NPC 文件**（`biguqing`/`jianxin`/`qingyun`/`axun`/
+     `miyan`/`dizi`/`luo`/`luoren`/`shiren`/`xunjing`/`zuo`）里，
+     `raw/` 归档同样完全没有——是这整片"飞天"（其实是新选组／绯村
+     剑心题材）门派区域自带的一整套自定义技能树，连同 `xiha` 的个
+     人目录一起，从归档诞生起就没有实现文件。`feature/skill.lpc`
+     的 `set_skill()`/`map_skill()` 对不存在的技能名是故意
+     `error()`（这是这份代码库统一、正确的校验逻辑，其它调用点用
+     的都是真实存在的技能，不能因为这三个区域性文件就改
+     `feature/skill.lpc` 本身），而这些 NPC 的 `create()` 里，缺失
+     技能的 `set_skill()`/`map_skill()` 调用夹在正常技能中间——一
+     旦抛错，`create()` 当场中断，后面的 `create_family()`（帮派注
+     册）、`setup()`、穿装备统统执行不到，等于这整个门派的掌门/长
+     老 NPC 从未正常初始化过。既不编造这 15 个技能的具体实现（属于
+     游戏设计/平衡工作，超出本项目范围），也不能改
+     `feature/skill.lpc` 的校验语义，所以修复落在调用点：给这 15
+     个引用（`set_skill()` 及唯一一处第一参数就是缺失技能名的
+     `map_skill("edge", "feitian-yujianliu")`）逐一套上
+     `catch(...)`，让 `create()` 能跳过这一句继续往下执行——这些
+     NPC 该有的技能数值就是少了几项（本来就从未真正生效过），但至
+     少角色本身、帮派注册、装备穿戴这些不该被牵连的初始化逻辑都恢
+     复正常。验证：对全部 11 个文件逐一 `update`，`debug.log`
+     显示每一处缺失技能都变成"错误讯息被拦截"（`catch()` 生效）后
+     紧跟"成功！"（`create()` 完整跑完），不再有任何未捕获的
+     `F_SKILL: No such skill` 中断 `create()`。
+
+   顺带在同一次测试中发现一个**范围外**的同类实例：
+   `d/lingxiao/npc/wang.lpc` 引用了同样不存在的技能 `xueshan-sword`
+   （`baoshid.lpc` 的 `choose_baosi()`/`random_place()` 触发），未
+   修——不属于本轮明确要处理的 `kuang-jian`/`feitian-yujianliu`
+   范围，留给下一轮处理。
+
+### 验证方式（本次三项修复共用）
+
+原生 driver（端口 40049）重新起过一轮，用 `fluffos`/`Mud@2026`
+（`(boss)`）登录后对全部改动文件逐一 `update` 确认编译/`create()`
+干净；另注册了一个全新测试角色（`wmkjqatest`/中文名"秦风测"）走完
+整个注册流程直达游戏世界，`score` 输出正确，`quit` 后等满 50 秒冷
+却、用同一账号密码重新连线，成功恢复到退出前所在房间（断线重连闭
+环）。驱动最终按精确 PID `kill`，`ps -p` 确认已退出。测试产生的
+`fluffos` 存档时间戳类微小 diff 已 `git checkout` 撤销；新注册的
+`wmkjqatest` 测试存档文件（未追踪）已删除，未提交。
