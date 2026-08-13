@@ -251,3 +251,32 @@ WASM 阶段的"完整验证过注册流程，没有发现 bug"结论需要更正
   （`work/data/{login,user}/t/*.o`，均无 git 历史、确认是本轮测试
   产物）；`kedian_b` 留言板存档已还原；停止 tmux 会话、终止驱动进
   程；未触碰其它 lib 的任何未追踪文件。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有
+   `assure_file()` 保护（AGENTS.md §7.11-class）**：已加上前向声明
+   + `assure_file(LOG_DIR + file);`。
+
+### Proactive checks（无需改动）
+
+- `log_error()`（`adm/obj/master.lpc`，即实际生效的 master file）
+  已经在 WASM 阶段修复过（`strsrch(message, "arning:") == -1` 判
+  断），确认仍然生效。
+- `win_times` 的 `%`-operator 修复确认存在且正确：
+  `d/city2/npc/refereew.lpc:176`、`u/wind/refereew.lpc:176`、
+  `u/wind/refereew2.lpc:184` 均已用 `to_int(query("win_times")) %
+  N`。
+- `feature/dbase.lpc` 未发现 tybxjh/wlhd 那种密码写保护，不适用。
+
+### 实测过程
+
+管理员 `fluffos`/`Mud@2026` 用真实密码重新连线，落地在此前保存的
+地点（客店），`score` 显示"【天神】"头衔和正确的属性数值，留言板
+未读数正常显示。全程 `debug.log` 无运行时错误。驱动按精确 PID 结
+束；测试期间产生的存档时间戳增量已 `git checkout --` 还原。
