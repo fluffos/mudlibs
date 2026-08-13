@@ -36,3 +36,70 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 19 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`，实际生效的 master file）
+   完全没有严重度检查（AGENTS.md §7.34-class）**：已加上
+   `strsrch(message, "arning:") == -1` 判断。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有
+   `assure_file()` 保护（AGENTS.md §7.11-class）**：已加上前向声明
+   + `assure_file(LOG_DIR + file);`。
+3. **`feature/name.lpc` 的通用 `short()` 兜底逻辑对 `query("id")`
+   没有做类型检查，任何 `id` 属性缺失的物件都会在被 `look` 到时崩
+   溃——新发现的一类通用性 bug，波及全库任何走这条兜底路径的物件，
+   不止留言板**：`str = name(raw) + "(" + capitalize(query("id")) +
+   ")"`——`capitalize()` 拿到非字符串直接抛 `*Bad argument 1 to
+   capitalize() Expected: string Got: 0.`。Live 测试注册后第一次
+   `look` 客店就撞上：留言板 `/clone/board/kedian_b` 的存档数据本身
+   已损坏（见下），`restore_object()` 把 `create()` 里 `set_name()`
+   刚设好的 `dbase` 映射整个替换成了存档里那份不完整/损坏的映射，
+   `id`/`name` 字段全部丢失。这个兜底路径是全库任何"没有自定义
+   `short`"物件共用的通用逻辑，不是留言板专属代码，所以修复方式选
+   在这个通用点上加防御性检查，而不是逐个物件类型修：`str =
+   name(raw) + "(" + (stringp(query("id")) ? capitalize(query("id"))
+   : "") + ")"`（`stringp(query("id"))` 这个判断风格和
+   `feature/command.lpc`/`clone/misc/corpse.lpc` 里已有的写法一
+   致，是这份代码库自己认可的惯用防护模式）。
+4. **`data/board/*.o` 里 12 份存档数据本身已损坏（AGENTS.md
+   §7.7 第三条"restore_object() 会整个替换/清零全域变量"那一类），
+   修复方式是删除而不是只在 #3 那样加防御**：`bonze_b`、
+   `gaibang_b`、`gaibang_r`、`huashan_b`、`kedian_b`、`shaolin_b`、
+   `taohua_b`、`towiz_b`、`wiz_b`、`xiaoy_b`、`xingxiu_b`、
+   `xueshan_b` 共 12 份（缺少 `#` 存档头，或者括号/圆括号计数不配
+   对），逐一核对 `raw/` 原始压缩包确认这些档案本身就是这个字节形
+   状，转档前就已损坏，不是本项目引入的回归。只加 #3 的防御性检查
+   能防止崩溃，但不能修复"留言板显示名字变成裸档案路径而不是中文名
+   字"这个副作用（`restore_object()` 会把 `create()` 里
+   `set_name()` 刚设好的整个 `dbase` 映射替换成损坏存档里解析出来
+   的残缺内容）——live 测试确认：只加 #3 的修复时，`look` 客店显示
+   `/clone/board/kedian_b() [ 没有任何留言 ]`，删除损坏存档后重
+   测，正确显示 `客店留言板(Board) [ 没有任何留言 ]`。`
+   restore_object()` 对不存在的文件只会静默返回 0，不会替换
+   `dbase`，所以删除这些无法再被正确解析的损坏存档是安全的。另外 6
+   份留言板存档（`baituo_b`、`kedian2_b`、`lingjiu_b`、`tiandi_b`、
+   `wudang_b`、`xiaoyao_b`）确认存档头和括号计数都正常，未触碰。
+
+### Proactive checks（无需改动）
+
+- `win_times` 的 `%`-operator 修复确认存在且正确：
+  `d/city2/npc/refereew.lpc:176`、`d/npc/refereew.lpc:176` 均已用
+  `to_int(query("win_times")) % 5`；`d/huashan/npc/refereew.lpc` 未
+  用到 `%`，不适用。
+- `feature/dbase.lpc` 未发现 tybxjh/wlhd 那种密码写保护，不适用。
+
+### 实测过程
+
+`adm/etc/wizlist` 里的 `fluffos (admin)` 一直没有对应存档。本轮通
+过完整注册流程创建（id → y → 中文名 → 密码 ×2 → 天赋接受 y →
+email → 性别 m），落地"客店"，`score` 显示"【天神】"头衔，食物/饮
+水满格。随后**单独一步**做了真实断线重连+密码验证：用刚设的密码
+重新连线成功登录，`look` 确认客店留言板正确显示"客店留言板(Board)
+[ 没有任何留言 ]"。全程 `debug.log` 无运行时错误。驱动按精确 PID
+结束；管理员存档已提交；`data/{login,user}/x/{xiaosi,xiaowu}.o`
+是 2026-08-05 遗留的、无 git 历史的测试存档，与本轮无关，未触碰。
