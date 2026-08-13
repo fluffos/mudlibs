@@ -657,3 +657,45 @@ if (!user->query("food") && !user->query("water") && ob->query("age") == 14) {
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 19 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。`log_error()`（`adm/obj/master.lpc`）已经在更早一
+轮（引用注释里的"AGENTS.md #15w"）正确修复过，管理员账号
+（`fluffos`/`Mud@2026`，`adm/etc/wizlist` 已有 `fluffos (admin)`）
+也已经用真实注册流程创建并提交过，本轮只发现并修复了 `log_file()`
+一处（和同引擎兄弟档案 `jqxz2008` 同一形状）。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例）**：注册/登录本身只
+   写 `log_file("USAGE", ...)`（无子目录，本来就存在），不受影响，
+   但 `nosave/CRASHES`/`nosave/PURGE`/`nosave/CALL_PLAYER` 等管理指
+   令路径会在首次使用时未捕获抛出。已补上
+   `assure_file(LOG_DIR + file);`（含前向声明）。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:176`；
+  姊妹文件 `u/wind/refereew.lpc:176`/`refereew2.lpc:184` 同样已修。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+- 本次未观察到 `jqxz2008` 那份档案独有的 `data/e2c_dict.o` 存档损
+  坏问题——开机 preload 阶段和 `log/debug.log` 均干净，两份档案虽
+  然同引擎但各自数据文件的完整性状态并不共享。
+
+### 实测过程
+
+用已提交的 `fluffos`/`Mud@2026` 登录，`score` 确认"目前权限：
+(admin)"，`update /adm/simul_efun/file`（就是本轮改过的文件）确认
+可正常重新编译。`log/debug.log` 时间戳全程未变化（`Aug 5`，早于本
+次会话，且文件本身为空），确认无新增未捕获运行期错误。登录本身产
+生的存档时间戳类微小 diff（`data/{login,user}/f/fluffos.o` 的
+`last_on` 字段）已用 `git checkout` 撤销，不提交。驱动最终按精确
+PID kill，`ps -p` 确认已退出。
+
+（`data/{login,user}/s/shenten.o` 是此前会话遗留的未提交测试存档
+——`Aug 5` mtime，早于本次会话，未受本轮任何操作影响，未触碰。）
