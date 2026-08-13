@@ -30,3 +30,68 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 3 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-12，round two，新驱动重测）
+
+用新编译的 `~/src/fluffos/build-debug/src/driver`（origin/master 最新拉
+取，含本项目自己提交并合入的 #1343/#1344 两个 PR，以及同一会话里另外
+提交的驱动 PR：把编译诊断严重度标记从小写改回大写 "Warning:"/
+"Error:"）重新验证。
+
+### `to_int()` 任务计数器修复
+
+实际生效的 `u/lonely/combatd.lpc`/`u/redl/combatd.lpc`（`adm/daemons/
+combatd.lpc` 是一份没有任务奖励代码的旧/未用副本）里全部 `quest_count
+= ... % 500` 已经是 `to_int(query(...)) % 500` 的修复后形状，无需改动。
+
+### 新发现并修复：`log_error()` 完全没有严重度判断（比 hhsj/nt6/xfbhh 更原始的同类 bug）
+
+`adm/single/master.lpc` 的 `log_error()`（AGENTS.md §7.103/§7.10 已有
+先例，这是 nitan 血统家族内的又一个独立实例）：`if (this_player(1))
+efun::write("编译时段错误：" + message + "\n");`——连 severity label
+都没有计算，不管是 error 还是 warning 一律无条件转发给玩家。修复：加
+上 `strsrch(message, "arning:") == -1` 门控（大小写无关匹配，AGENTS.md
+§7.10 案例记录），只转发真正的 error。`adm/simul_efun/message.lpc` 的
+`message()` 包装函式已经带有 `if (!exclude) exclude = ({});` 守卫，不
+是本轮的 bug，未改动。
+
+### 连线协议细节：本档不接受逗号分隔，且需要真实的版本挑战应答
+
+和 hhsj/xfbhh 不同，`wdxtym` 的 `jiance()` 真的会校验版本挑战字符串
+（`crypt(ZJKEY, str[2..3])` 或者两个固定后门值之一，`"123456789abcd"`
+是其中一个后门值，和其它血统兄弟档案共用），且 `get_user()` 直接
+`explode(arg, "║")`，**没有**其它血统兄弟档案那种"逗号自动转║方便手
+机端"的兼容处理——账号行必须原样用"║"分隔（`id║password║密文║
+email`），逗号分隔会静默失败，得到"未知错误，请重试s"。记录下来避免
+以后测试这份档案时重蹈覆辙。
+
+### 冷启动级联编译撑爆 `maximum evaluation cost`（AGENTS.md §7.90/§10.8 已有先例，含一次"Can't catch"级重症）
+
+第一次全新注册尝试命中了一次比常见"Too long evaluation. Execution
+aborted."更严重的变体——"Can't catch eval cost too big error"（预载阶
+段 `wabaod.lpc`/`taohua/daojufang.lpc` 触发，`catch()` 本身都无法拦
+截），导致那次注册反复卡在"未知错误，请重试s"（后来定位到其实是我自
+己送错了分隔符，见上一条；但驱动重启后同样的错误分隔符仍然复现，证明
+不是那次级联导致的，是协议问题本身）。第二次全新账号尝试（用正确的
+║ 分隔符）在 `enter_world()` 链路上（`make_body()`→武功/任务生成）命
+中一次普通"Too long evaluation"，该角色未能成功存档；**验证自愈**：
+驱动继续热身后，第三次全新账号一次性干净走完注册→投胎→进入
+"wdxtym"世界，全程无"臭虫"报警。最后一次干净运行的 debug.log 尾部仍
+有一条 NPC 装备初始化触发的 eval-cost 中断（不影响玩家自己的注册流
+程），同一已知类别，未修。
+
+### 完整游玩测试范围
+
+沿用既有记录的"注册成功进入世界，欢迎/状态栏正确显示"作为及格线（本
+轮额外确认了"score"风格的状态栏数据正确渲染）。战斗/死亡循环仍未触
+达，留给下一次专门测试。
+
+### 本轮结论
+
+驱动升级后 wdxtym 整体状态良好：任务计数器 `to_int()` 修复确认已生
+效；新发现并修复一个真实 bug（`log_error()` 完全没有严重度判断，本轮
+最原始的同类实例）；`message()` 包装函式不是 bug（已有守卫）；冷启动
+eval-cost 级联（含一次罕见的"Can't catch"级重症）验证自愈。协议细节
+（无逗号兼容、需要真实版本挑战应答）已记录避免下次踩坑。测试账号
+（`qinfengshiwu_1`/`qinfengshiliu_1`）存档留在 `data/` 下作为佐证，未
+清理（未跟踪文件，不纳入本次提交）。
