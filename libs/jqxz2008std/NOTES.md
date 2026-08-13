@@ -807,3 +807,56 @@ if (!user->query("food") && !user->query("water") && ob->query("age") == 14) {
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 18 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。`log_error()`（`adm/obj/master.lpc`）、§8.9 食物/
+饮水初始化 bug（`user->query("age")` 而非 `ob->query("age")`）、管
+理员账号（`fluffos`/`Mud@2026`，`adm/etc/wizlist` 已有
+`fluffos (admin)`）均已经在更早一轮正确修复/创建过，本轮复核确认
+全部依然生效，只发现并修复了 `log_file()` 一处（和同引擎兄弟档案
+`jqxz2008`/`jqxz2008dlx` 同一形状）。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例）**：注册/登录本身只
+   写 `log_file("USAGE", ...)`（无子目录，本来就存在），不受影响，
+   但 `nosave/CRASHES`/`nosave/SUICIDE`/`nosave/CALL_PLAYER` 等管理
+   指令路径会在首次使用时未捕获抛出。已补上
+   `assure_file(LOG_DIR + file);`（含前向声明）。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:176`；
+  姊妹文件 `u/wind/refereew.lpc:176`/`refereew2.lpc:184` 同样已修。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+- §8.9 食物/饮水年龄检查复核：`adm/daemons/logind.lpc:419` 确认为
+  `user->query("age") == 14`，此前的修复依然生效。
+
+### 观察到但判定为既有游戏内容、非 bug 的现象
+
+首次登录 `fluffos` 进入起始区域后不久，屏幕上出现了
+`feature/damage.lpc` 的"你的眼前一黑，接著什么也不知道了...."（
+`unconcious()` 函数的标准昏迷提示），`score` 确认 `<精>`/`<气>`
+条大幅下降到接近底部。第二次重新连线（同一账号）没有再次触发，角
+色状态正常持续、逐步回血，未死亡。追查 `unconcious()` 本身：
+`if (wizardp(this_object()) && query("env/immortal")) return;`——
+巫师账号只有在同时设置了 `env/immortal` 才会被豁免昏迷，本档案的
+`fluffos` 测试账号显然没有设置这个标志，所以和普通玩家一样会被起
+始区域里的某个（未深入追查具体来源，未见明显敌对 NPC）伤害来源打
+到接近昏迷。这是游戏内容/平衡范畴（巫师默认不豁免战斗伤害，是否要
+豁免属于设计选择），不是程序逻辑 bug，未修改。登录测试产生的这部分
+存档状态变化（`<精>`/`<气>` 大幅下降）已用 `git checkout` 撤销，不
+提交一个"半死不活"的管理员存档。
+
+### 实测过程
+
+用已提交的 `fluffos`/`Mud@2026` 登录，`update /adm/simul_efun/file`
+（就是本轮改过的文件，第二次连线时确认，第一次连线时因为上述昏迷
+状态导致指令被暂时阻塞）确认可正常重新编译。`log/debug.log` 时间
+戳全程未变化（`Aug 5`，早于本次会话，且文件本身为空），确认无新增
+未捕获运行期错误。驱动最终按精确 PID kill，`ps -p` 确认已退出。
