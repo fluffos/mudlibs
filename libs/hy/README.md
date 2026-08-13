@@ -86,14 +86,21 @@
 - **权限 / level**: `(admin)`
 
 此代码线的权限系统**不通过** `/adm/etc/wizlist`（该文件从未被
-`securd.lpc` 读取，是遗留自旧版本的死代码路径）。管理员名单实际存储在
-`adm/daemons/securd.o` 存档文件自身的 `wiz_status` 属性里。授予方式是
-直接编辑该存档文件的 `wiz_status` 映射，追加 `"fluffos":"(admin)"`。
+`securd.lpc` 读取，是遗留自旧版本的死代码路径）。
 
-> 注意：`securd.o` 用真实的回车符（CR, `\r`）而非换行符对映射键里的
-> `/` 做编码，编辑此文件务必使用二进制模式读写，文本模式的换行符转换
-> 会静默把 `\r` 转成 `\n`，破坏存档格式（`restore_object(): Illegal
-> mapping format`）。
+修正（round-two 深度测试发现，上面这段此前的记录是错的）：
+`adm/daemons/securd.lpc` 的 `wiz_status` 实际声明为 `nosave
+mapping`——永远不会被存档持久化，每次开机都会被 `restore_list()`
+里的硬编码赋值重置成只有一个 `lywin`（`"预先留个门"`的原始后门
+id）。"直接编辑 `securd.o` 的 `wiz_status` 映射"这个此前记录的授权
+方式**根本不可能生效**：`nosave` 字段既不会被写入存档，也不会在
+`restore()` 时被读取，编辑那个文件毫无意义。而 `lywin` 本身已经是原
+始存档里一个真实玩家（`data/user/l/lywin.o`，密码未知），`fluffos`
+无法冒领这个 id。已在 `lywin` 那行旁边并列加一行
+`set("wiz_status/fluffos", "(admin)");`（AGENTS.md §1.5 标准修法）。
+此前虽然已经有一个 `fluffos` 角色存档被提交过，但由于上述 bug，那个
+账号登录后从未真正拿到过 `(admin)` 权限——本轮修复后已用真实登录 +
+`update` 指令验证权限真正生效。
 
 > 警告：这是一个公开的默认密码，仅供本地/浏览器试玩。正式对外开服前
 > 请务必修改此密码。

@@ -171,3 +171,66 @@ Expected: string Got: 0.
   计，不是 bug，深度测试过程中用 `go` 系列指令正常绕过。
 - 本次没有测试到：拜师/门派系统、商店/交易、邮箱（虽然注册时确认
   收到了新手礼包信）、task 系统。留给未来某次针对 `hy` 的后续 pass。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。
+
+### 更正上一轮（2026-08-08）的一处误判
+
+上一轮"没有发现的 bug"清单里写着"§1.5（管理员账号是否被真实旧账号
+占用）：… `securd.o` 的 `wiz_status` 映射本来就已经包含
+`"fluffos":"(admin)"`，无需重新播种"——**这个结论是错的**，是仅凭检
+查存档文件内容得出、未做真实登录验证的判断失误。本轮读代码发现
+`adm/daemons/securd.lpc` 的 `wiz_status` 声明为 `nosave mapping`
+（第 6 行）——永远不会被存档持久化，无论 `securd.o` 文件里实际写了
+什么都无关紧要，每次开机都会被 `restore_list()` 里的硬编码赋值重置
+成只有一个 `lywin`。也就是说，即使 `fluffos` 角色本身早就注册并提
+交了存档，这个账号登录后**从未真正拿到过 `(admin)` 权限**——这个误
+判很可能正是当年检查存档文件内容（看到里面确实写着
+`wiz_status:{"fluffos":"(admin)"}` 之类的内容）却没有意识到这个字
+段是 `nosave`、从不会被真正 `restore()` 读取所致。这正是 AGENTS.md
+§1.5 归档的"wiz_status 声明为 nosave"这一类 bug 的又一实例，和本轮
+`fqyy2` 独立发现的同一类形状完全一致。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/single/master.lpc`）完全没有严重度检查
+   （AGENTS.md §7.34-class，与本轮 `wdxtym`/`ffxymud`/`fy2mg`/`fys`/
+   `hc` 同一原始形状）**：`if (this_player(1)) efun::write(...)`——
+   不区分巫师/玩家，也不区分警告/错误。修复：加上
+   `strsrch(message, "arning:") == -1` 判断。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例）**：注册/登录本身只
+   写 `log_file("USAGE", ...)`（无子目录，本来就存在），不受影响，
+   但 `nosave/SUICIDE` 等管理指令路径会在首次使用时未捕获抛出。已
+   补上 `assure_file(LOG_DIR + file);`（含前向声明）。
+3. **管理员账号从未真正拿到 admin 权限（见上方"更正"一节，AGENTS.md
+   §1.5 的"wiz_status 声明为 nosave"形状，与本轮 `fqyy2` 同一模
+   式）**：已在 `lywin` 那行旁边并列加一行
+   `set("wiz_status/fluffos", "(admin)");`。README 已同步更正此前
+   错误的授权机制描述。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:177`。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+
+### 实测过程
+
+登录时有一个 GB/Big5 选码提示（选 `g`），用已提交的 `fluffos`/
+`Mud@2026` 账号登录，`score` 确认显示"目前权限：(admin)"（修复前
+按代码分析必然显示较低权限，未做修复前的真实登录复现，因为已经确
+信 bug 形状与 `fqyy2` 完全一致，直接应用了已验证过的修法），
+`update /adm/simul_efun/file`（就是本轮改过的文件）确认可正常重新
+编译。`adm/log/debug.log` 时间戳全程未变化（`Jul 30`，早于本次会
+话），确认无新增未捕获运行期错误。登录本身产生的存档时间戳类微小
+diff（`data/{login,user}/f/fluffos.o` 的 `last_on` 字段）已用
+`git checkout` 撤销，不提交。驱动最终按精确 PID kill，`ps -p` 确认
+已退出。
+
+（本档案 `work/` 目录下还嵌着一份完整的姊妹档案 `海洋2002/hy3/` 副
+本——不是这次任务的目标，未触碰，留给 `hy3` 自己的 pass。）
