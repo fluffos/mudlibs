@@ -21,3 +21,49 @@ WASM 阶段和 §7.86 扫描都只做过编译检查/浅层注册测试，没有
 - **未覆盖**：邮件系统（`help mail` 未命中任何帮助主题，本档案似乎没有独立的玩家间邮件指令，或者命令名不在常见猜测范围内，本轮时间有限未继续深挖）、正式门派拜师流程（起始区域的 1-13 传送点直达各门派，本轮选了`1`号"有一间客栈"入口熟悉环境，未继续走完某个具体门派的拜师/学技能全流程）。
 
 管理员账号（`fluffos`/`Mud@2026`）本次通过正常注册流程重新走了一遍确认——`adm/etc/wizlist` 里已有 `fluffos (admin)` 一行（应为更早的 WASM 阶段留下），注册后立即显示"目前权限：(admin)"，`update` 验证 write ACL 正常，说明 §1.5 的既有 README 记录依然准确、无需改动或标记为过期声明。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测，覆盖此前两轮（WASM 阶段、2026-08-08 的
+§10.7）之后新出现或新引入的问题。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class）**：`write_file(LOG_DIR + file, text)`
+   直接写，`LOG_DIR` 下的子目录若不存在会未捕获抛出。已加上
+   `assure_file(LOG_DIR + file);`（含前向声明，因为 `assure_file()`
+   本身定义在同一文件后面）。
+
+### Proactive checks（无需改动）
+
+- `log_error()`（`adm/obj/master.lpc`）已经用 `if (me &&
+  wizardp(me))` 把编译期诊断限制在巫师身上，不是 §7.34-class 那种
+  "任何玩家都能看到" 的形状——这份档案里编译诊断本来就只给巫师看，
+  属于合理的调试辅助设计，不是 bug，未改动。
+- `feature/dbase.lpc` 没有 tybxjh/wlhd 那种基于 `wizhood()` 的密码
+  写保护，不适用那一类 bug。
+- `win_times` 的 `%`-operator 修复确认存在且正确：
+  `d/city2/npc/refereew.lpc:176` 已用 `to_int(query("win_times")) %
+  5`；同一文件姊妹档 `d/huashan/npc/refereew.lpc` 里对应位置根本不
+  用 `%`，不适用。
+- `maximum evaluation cost`（此前已从 700000 提到 5000000）在本轮
+  完整会话（注册→移动→look→score→quit→重连→look→score）中未再触发
+  eval-cost 相关崩溃。
+
+### 实测过程
+
+新角色 `xbtest`/中文名"风灵二"，完整走了一遍注册流程（id → 确认 y
+→ 中文名 → 密码 → 确认密码 → 性别 m → email → 属性类别 a → 接受 y
+→ 职业 fighter → 确认 y），进入"时空通道"新手教程房间，食物/饮水槽
+满格，`look`/`score` 输出正常，`quit` 干净退出。随后**单独一步**做
+了真实的断线重连+密码验证：用刚设的密码 `xbtest`/`test12345` 重新
+连线，成功登录，存档位置（"文庙"）正确持久化，`score` 数据一致。
+全程 `debug.log` 只有正常的编译期 Warning/note（`Unknown #pragma`、
+未使用局部变量等）和三处已知的 "cannot replace a program with
+function references, ignored"（预加载阶段的良性提示，不是崩溃，出
+现在房间文件而非留言板文件上，和此前 §7.86 扫描修复的留言板
+`replace_program()` 死形状不是同一类，未处理）。驱动按精确 PID 结
+束。测试角色存档（`xbtest`）及聊天名字缓存增量未提交，仅提交
+`file.lpc` 的实际修复。
