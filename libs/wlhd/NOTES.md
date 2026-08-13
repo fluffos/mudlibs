@@ -98,3 +98,58 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 100 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。这份档案和 `tybxjh`（天涯之碧血江湖）是同一套"天
+涯"引擎的姊妹档案（`master.lpc`/`securityd.lpc`/`logind.lpc`/
+`feature/dbase.lpc` 逐字节相似），本轮三个 bug 全部命中，和
+`tybxjh` 完全同一形状，修法也完全相同。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`，CRLF 行尾档案）完全没有严
+   重度检查**：和 `tybxjh` 完全同一形状，同一修法
+   （`strsrch(message, "arning:") == -1`）。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护**：和 `tybxjh` 完全同一形状（`login/newid.log` 在
+   `get_gender()` 注册最后一步调用），同一修法。这份档案的
+   `assure_file()` 也定义在 `log_file()` 后面，同样需要前向声明
+   （这次没有漏加）。
+3. **`feature/dbase.lpc` 的 `set()` 密码防劫持保护错误拦截了自己第
+   一次的密码设置——这份档案不仅命中了和 `tybxjh` 完全相同的这个
+   新发现 bug 类别，而且是**活生生的现场证据**：此前提交的
+   `data/{login,user}/f/fluffos.o` 存档（"WASM 修复摘要"一节声称
+   "登录横幅直接显示确认生效"）打开一看，`dbase` 映射里根本没有
+   `"password"`/`"ad_password"` 这两个键——和 `tybxjh` 修复前的现
+   场复现结果一模一样，证实这个旧存档从一开始就是坏的，账号从未真
+   正能够登录。已应用和 `tybxjh` 完全相同的修法（只在
+   `dbase[prop]` 已存在时才触发保护）。删除旧的坏存档，重新走完整
+   注册流程，新存档的 `dbase` 映射正确包含两个密码哈希；用刚设置
+   的普通密码断线重连，"重新连线完毕"确认真正登录成功。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:146`。
+- 未发现 `message()` simul_efun 包装函数。
+
+### 实测过程
+
+登录流程和 `tybxjh` 完全一致（英文 id → y/n 确认 → 中文名字 → 管理
+密码+确认 → 普通密码+确认 → 天赋 0 随机+接受 → 邮箱 → 性别）。
+`log/debug.log` 里全是 `*Too long evaluation`/`*Can't catch eval
+cost too big error`，追查后确认全部发生在全新驱动进程首次预载/注
+册触发的冷编译级联期间（AGENTS.md §7.90/§10.8 已归档类别），断线
+重连后未再出现，确认已自愈，非持久性 bug。驱动最终按精确 PID
+kill，`ps -p` 确认已退出。
+
+### 已清理
+
+- 管理员 `fluffos` 的存档已更新提交（`data/{login,user}/f/
+  fluffos.o`，密码：管理密码 `AdminPass123`，普通密码
+  `LoginPass456`；旧的、从未真正可用的存档已删除重建）。
+- `data/{login,user}/c/ccc.o` 是此前会话遗留的角色存档，本轮某个
+  背景守护进程（`closed.lpc` 的 `heart_beat()`）的例行存盘产生了
+  纯粹的时间戳类 diff，已用 `git checkout` 撤销，不提交。

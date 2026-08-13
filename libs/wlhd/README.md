@@ -48,13 +48,23 @@ gargoyle.lpc` 的 §7.68 复活软锁。详见 NOTES.md。
 ## 管理员账号 / Admin account
 
 - **ID**: `fluffos`
-- **管理密码 / Admin password**: 注册时自设（至少 5 位，且不能与
-  普通密码相同）
-- **普通密码 / Regular password**: 注册时自设（双密码机制）
+- **管理密码 / Admin password**: `AdminPass123`
+- **普通密码 / Regular password**: `LoginPass456`
 - **权限 / Level**: `(admin)`，通过 `/adm/etc/wizlist` 授予，登录
   横幅直接显示"您目前权限：(admin)"确认生效。
 
-> 警告：对外公开架设前请务必修改此密码。
+修正（round-two 深度测试发现）：上面这段此前的记录不准确——
+`feature/dbase.lpc` 的 `set()` 有一条防劫持保护，会把"这个 id 已经
+在 wizlist 里登记为 (admin)"错误地当成"已有一个受保护的旧密码"，导
+致 `fluffos` 在**第一次设置密码时**就被自己的保护机制拦截，密码从
+未真正写入存档（此前提交的存档打开后确认 `dbase` 映射里根本没有
+`"password"`/`"ad_password"` 这两个键）——虽然登录横幅正常显示
+"(admin)"，但用刚设置的密码根本无法重新登录。已修复该逻辑缺陷（同
+姊妹档案 `tybxjh` 的修法），删除旧的坏存档重新注册，并用真实的
+"设置密码→重新连线"往返验证过。详见 NOTES.md。
+
+> 警告：这是一个公开的默认密码，仅供本地/浏览器试玩。正式对外开服前
+> 请务必修改此密码。
 
 ## 本地运行
 
