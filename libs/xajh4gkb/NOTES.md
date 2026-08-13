@@ -58,3 +58,82 @@ bug），但深挖发现了一个会在普通游玩中反复打断玩家的资�
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 62 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对升级后的驱动（`quest_times`/`win_times` `%`-operator 修复 +
+Warning/warning 大小写驱动兼容回退）做的第二轮 §10.7 重测。`config.fluffos`
+里 round one 的 `maximum evaluation cost`（700000→5000000）修复仍
+然在位，重测期间移动未再触发"Too long evaluation"崩溃。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`）完全没有严重度检查
+   （AGENTS.md §7.103 的又一确认实例）**：`if (this_player(1))
+   efun::write("编译时段错误：" + message + "\n");`——任何一次编译警
+   告（不只是真正的错误）都会原样丢给当前连线玩家，包括普通玩家在
+   正常游玩中触发的懒编译警告。修复：加上大小写不敏感的
+   `strsrch(message, "arning:") == -1` 判断，与本项目现行惯例一致。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class）**：`write_file(LOG_DIR + file, text)`
+   前没有先建目录，而 `assure_file()` 恰好就定义在同一个文件里稍后
+   的位置。全档案所有 `log_file()` 调用点（`feature/command.lpc`、
+   `feature/condition.lpc`、`feature/move.lpc`、`feature/autoload.lpc`、
+   `inherit/char/npcsave.lpc`、多个 `d/`/`clone/` 下的调用点等）都经
+   由这个 simul_efun，一次性全部修复。修复：`assure_file(LOG_DIR +
+   file); write_file(LOG_DIR + file, text);`，并在文件顶部加了
+   `void assure_file(string file);` 前向声明（`assure_file()` 定义在
+   `log_file()` 之后，这个驱动不做前向解析）。
+3. **`adm/daemons/logind.lpc` 里两处遗留的 `printf("%O\n", ob);` 调
+   试残留（AGENTS.md §7.34 的形状）**：分别在"确认中文名字后进入密
+   码设置"的两条并行分支（手动输入名字 `get_name()`、接受随机名字
+   `get_resp()`）里，每次注册确认名字后都会原样把 `ob` 的
+   `file_name`（如 `/clone/user/login#18`）打印给玩家——live 实测已
+   确认复现（用测试号 `gktestqq` 注册时屏幕上出现了裸的
+   `/clone/user/login#18`）。两处均已删除该行，只保留紧邻的
+   `ob->set("name", ...)`。同目录下还有一份 `logind碎梦.lpc`，含相
+   同形状的调试残留，但确认全档案没有任何地方 `inherit`/`call` 它
+   ——是未接入编译树的废弃备份文件，未做改动。
+
+### §5/dbase.lpc 密码守卫检查：不适用
+
+`feature/dbase.lpc` 的 `set(prop, data)` 是纯粹的无守卫赋值，没有任
+何 `wizhood()`/`password` 相关的特殊分支，跟 tybxjh/wlhd 那个类的
+bug 形状完全不同。也没有单独的 `ad_password` 密码守卫代码路径。
+
+### 管理员播种验证：round one 的 wizlist 条目此前没有对应存档
+
+`adm/etc/wizlist` 里 `fluffos (admin)` 这一条 round one 就已写入，
+但 `data/login/f/`、`data/user/f/` 下都没有 `fluffos.o`——和本次重
+测系列里其他几个 lib 遇到的情况一样，"wizlist 里看起来对"但从未真
+正走过一次注册流程留下真实存档。本轮用 `fluffos` 这个 id 走了一次
+完整注册（英文 id→y/n 创建确认→中文名"王五测"→密码
+`testpass123`+确认→身份标识+确认→天赋 0 随机→邮箱
+`fluffos@example.com`（`id@domain` 格式）→性别 m→进入游戏世界），
+入世后游戏内横幅确认 `★ 您目前的权限：(admin)`，`score` 面板头衔显
+示"天界总管"。**强制验证步骤**：`quit` 断线后重新连接，输入
+`fluffos`/`testpass123` 完成一次真正的断线重连，密码验证通过，管理
+员权限保持 (admin)——不是只看世界进入和权限横幅就下结论，是真正做
+了断线-密码-重连这一步。新产生的 `data/login/f/fluffos.o`、
+`data/user/f/fluffos.o` 已提交，`fluffos` 现在是真正可用的种子管理
+员账号。
+
+### 移动/驱动兼容性检查
+
+`kedian`→`south`→`up`→`north` 往返移动多次未触发任何"Too long
+evaluation"崩溃或其他异常，`debug.log` 全程只有一条无关紧要的编译期
+`Unused local variable 'time'` 警告（preload 阶段产生，未连线玩家，
+不受 §7.103 修复影响也无需影响）。
+
+### `quest_times`/`win_times` `%`-operator 修复：抽查确认在位
+
+`d/city2/npc/refereew.lpc` 现有 `to_int(query("win_times")) % 5`，
+是corpus-wide 2026-08-12 sweep（commit `c571a53629f`）已经打过补丁
+的写法，无需额外改动。
+
+### 未在本轮测试
+
+拜师门派、商店购物、完整战斗到死亡/复活循环（round one 已用测试号
+`testrole`/王五在北大街对郭靖打过一次完整的死亡/复活循环，本轮认为
+不需要重复；本轮重点是驱动升级后的回归检查 + 正常游玩中顺手发现的
+bug）。
