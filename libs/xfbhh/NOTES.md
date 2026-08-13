@@ -119,3 +119,58 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 83 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-12，round two，新驱动重测）
+
+用新编译的 `~/src/fluffos/build-debug/src/driver`（origin/master 最新拉
+取，含本项目自己提交并合入的 #1343/#1344 两个 PR，以及同一会话里另外提
+交的驱动 PR：把编译诊断严重度标记从小写改回大写 "Warning:"/"Error:"，
+专门为了兼容本语料库大量老式 MudOS 惯例的 mudlib 代码）重新验证。
+
+### `to_int()` 任务计数器修复
+
+`adm/daemons/combatd.lpc`/`cmds/std/whisper.lpc` 里全部 `quest_count = ...
+% 500` 已经是 `to_int(query(...)) % 500` 的修复后形状，无需改动。
+
+### 新发现并修复：与 hhsj/nt6 逐字节相同的 `log_error()` 严重度门控缺失
+
+`adm/kernel/master/error.lpc`——和 `hhsj`/`nt6`（同一会话本轮更早修复
+过）的对应文件逐字节相同，同一个 bug。修复：只在真正的 error 时才转
+发给玩家（`debug` 频道广播给巫师和 `write_file()` 落盘均保持不变），
+用 `"arning:"` 大小写无关匹配（AGENTS.md §7.10 案例记录）。
+
+`adm/kernel/simul_efun/message.lpc` 的 `message()` 包装函式**已经**带
+有 `if (!exclude) exclude = ({});` 守卫（虽然没声明 `varargs`，这个驱
+动仍然接受 3 个实参的呼叫），不是本轮的 bug，未改动。
+
+### 新发现并修复：`data/emotion/` 目录缺失导致 `emote_d.lpc` 存档失败（AGENTS.md §7.11 已有先例）
+
+`adm/daemons/emote_d.lpc` 的 `DATA` 常量是 `"/data/emotion/emotion" +
+__SAVE_EXTENSION__`，但这份档案从未附带 `data/emotion/` 目录，每次表
+情指令（`emote_d.lpc` 的 `create()`→`remove()`）触发存档都命中
+"*Could not open /data/emotion/emotion.o.tmp for a save."，玩家端表现
+为"这里发现了臭虫"。修复：`mkdir -p data/emotion`（含 `.gitkeep` 占位
+以便提交这个空目录）。**现场验证**：修复前干净注册流程命中这个报
+错；修复后同样的注册+欢迎序列流程零报错。
+
+### 冷启动级联编译撑爆 `maximum evaluation cost`（AGENTS.md §7.90/§10.8 已有先例）
+
+第一次全新注册在 `combatd.lpc`→`simul_efun.lpc` 的 `append_color()`
+链路上命中一次"Too long evaluation. Execution aborted."，符合已知类
+别。**验证自愈**：驱动"热身"一次注册尝试后，后续全新账号一次性干净
+走完注册→欢迎序列（含活动/新闻/邮件提示），全程零报错。
+
+### 完整游玩测试范围
+
+沿用既有记录的"注册成功进入泥潭注册室，欢迎序列正确显示"作为及格
+线。战斗/死亡循环仍未触达（上一轮已经记录过同样的时间预算取舍），留
+给下一次专门测试。
+
+### 本轮结论
+
+驱动升级后 xfbhh 整体状态良好：任务计数器 `to_int()` 修复确认已生
+效；新发现并修复两个真实 bug（与 hhsj/nt6 逐字节相同的 `log_error()`
+严重度门控缺失、`data/emotion/` 目录缺失导致的存档失败）；`message()`
+包装函式这次不是 bug（已经带有守卫）；冷启动 eval-cost 级联验证自
+愈。测试账号（`qinfengshiyi`/`qinfengshier`/`qinfengshisan`）存档留在
+`data/` 下作为佐证，未清理（未跟踪文件，不纳入本次提交）。
