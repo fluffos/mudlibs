@@ -1667,9 +1667,24 @@ Two independent traps in the same apply:
   warning) through `APPLY_LOG_ERROR` alongside real errors; a mudlib
   that broadcasts them to players spams everyone with scary messages
   (98 in one session on `wuhanzhan`). Gate the broadcast on the message
-  not containing `"warning:"` — LOWERCASE; the driver's diagnostic text
-  is lowercase, and a `"Warning:"` check silently never fires
-  (`shenzhou`, `bmxkx2001` shipped with the broken-case gate).
+  NOT containing the severity marker. **Case history, since this has
+  flip-flopped once already and cost real debugging time both
+  directions:** the driver originally used capitalized `"Warning:"`
+  (matching this whole corpus's old MudOS-era convention); a compiler
+  rewrite switched it to clang-style lowercase `"warning:"`, silently
+  breaking every mudlib's capitalized check (`shenzhou`, `bmxkx2001`
+  shipped with what was, at the time, a "broken-case" gate); this
+  project's own driver fork then reverted that back to capitalized
+  `"Warning:"`/`"Error:"` specifically for this corpus's sake (see
+  fluffos PR `claude/keep-capitalized-warning-error`, and this file's
+  §7.104-adjacent case-mismatch fixes on `hhsj`/`nt6`/`ntii`/`nte` from
+  that same investigation). **Don't hardcode either case going
+  forward** — match the substring `"arning:"` (no leading `w`/`W`),
+  which is present in both `"warning:"` and `"Warning:"` identically,
+  so the check survives if this ever flip-flops a third time. A
+  corpus-wide sweep (2026-08-12) already converted every previously-
+  lowercase-only `strsrch(message, "warning:")` gate found across the
+  corpus to this case-agnostic form.
 - `log_error()` calling `wizardp(this_player(1))` (or anything that
   lazily loads the security daemon) can fire from the FIRST preload
   compile, before securityd exists — crashing every boot at the
