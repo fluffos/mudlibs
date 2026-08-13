@@ -608,3 +608,23 @@ debug.log 检查；真实断线重连后的完整状态持久化。
 实机触发）；商店购买（起始区域客店本身没有商店，真实商业区未探索）；
 WASM 下的重新验证（详见上方说明，proxy 阻断，且此前已有会话独立确
 认过 WASM 可用）。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。本次复核确认这份档案已经是本轮 `jqxz2008` 家族里
+最干净的一个：`log_error()`（已有 `#15w` 引用注释）、`log_file()`
+（早前会话自己就发现并修复了同一个 `assure_file()` 缺失 bug，见
+commit `4603617af84`）、管理员账号（`fluffos`/`Mud@2026`，
+`wizlist` 已有授权且存档已提交）全部依然正确生效，本轮**没有发现
+新 bug，未做任何改动**。
+
+`win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:176`；
+未发现 `message()` simul_efun 包装函数。用已提交的 `fluffos`/
+`Mud@2026` 登录，`update /adm/simul_efun/file` 确认可正常重新编
+译，零诊断刷屏（这次连线也没有再触发姊妹档案 `jqxz2008std` 那次遇
+到的随机昏迷事件）。`log/debug.log` 时间戳全程未变化（`Jul 23`，
+早于本次会话），确认无新增未捕获运行期错误。登录本身产生的存档时
+间戳类微小 diff 已用 `git checkout` 撤销，不提交。驱动最终按精确
+PID kill，`ps -p` 确认已退出。
