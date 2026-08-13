@@ -869,3 +869,43 @@ full room-resetting `quit`.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 47 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。`log_error()`（`adm/obj/master.lpc`，CRLF 行尾档
+案）已经在更早一轮（引用注释里的"AGENTS.md #15w"）正确修复过，管
+理员账号（`fluffos`/`Mud@2026`，`adm/etc/wizlist` 已有
+`fluffos (admin)` 且存档已提交）也已经全部正确，本轮只发现并修复
+了 `log_file()` 一处。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_file()`（`adm/simul_efun/file.lpc`，CRLF 行尾档案）完全没
+   有 `assure_file()` 保护（AGENTS.md §7.11-class 的又一确认实
+   例）**：`cmds/app/{clone,rm,update}.lpc`/`cmds/wiz(/arch)/
+   summon.lpc` 等文件多处 `log_file("wiz/<子目录>/<id>.log", ...)`
+   调用依赖对应子目录存在，其中 `wiz/update/<id>.log` 每次巫师执
+   行 `update` 指令都会触发，本轮的 `update` 验证步骤本身就顺带验
+   证了这个修复。注册/登录本身只写 `log_file("USAGE", ...)`（无子
+   目录，本来就存在），不受影响。已补上
+   `assure_file(LOG_DIR + file);`（含前向声明，用 Python 字节级替
+   换保留原 CRLF 行尾格式）。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:177`；
+  姊妹文件 `u/xxy/city2/npc/refereew.lpc:176` 同样已修。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+- `logon()` 没有 GB/Big5 选码提示，也没有"Press Enter to
+  Continue"分页步骤——直接进英文 id 提示，本轮读代码确认后未误踩。
+
+### 实测过程
+
+用已提交的 `fluffos`/`Mud@2026` 登录，`update /adm/simul_efun/file`
+（就是本轮改过的文件）确认可正常重新编译，零诊断刷屏。全程未生成
+`log/debug.log`（说明真的零运行期错误，不是文件被清空）。登录本
+身产生的存档时间戳类微小 diff 已用 `git checkout` 撤销，不提交。
+驱动最终按精确 PID kill，`ps -p` 确认已退出。
