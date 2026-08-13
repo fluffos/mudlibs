@@ -207,3 +207,60 @@ reached, limit: 700000 usec.` / `执行时段错误：*Too long evaluation.`，
 - printf/debug 泄漏：全库 grep 未发现活的调试输出泄漏进正常游玩路径。
 - 本次没有测试：拜师/门派系统深入验证、商店/交易、邮箱（虽然新手礼
   包正常发放）。留给未来某次针对 `hy5` 的后续 pass。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。
+
+### 更正上一轮（2026-08-08）的一处不完整记录
+
+上一轮的管理员账号记录只写了"已用真实注册流程创建并提交存档"，没
+有意识到（也没有记录）`securd.lpc` 的 `wiz_status` 是 `nosave`——
+这个存档文件本身对权限判定完全不起作用，每次开机都会被
+`restore_list()` 里的硬编码赋值重置成只有一个 `hxsd`（已经是原始存
+档里一个真实玩家）。也就是说，尽管 `fluffos` 角色确实存在，这个账
+号登录后**从未真正拿到过 `(admin)` 权限**——和本轮 `hy`（同款 bug，
+硬编码 id 是 `lywin`）完全一样的形状，只是 `hy5` 的姊妹档案
+`hy2002` 那次的 pass 已经正确记录并修复了这一步，`hy5` 自己这次没
+有。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/single/master.lpc`）完全没有严重度检查
+   （AGENTS.md §7.34-class，与本轮 `wdxtym`/`ffxymud`/`fy2mg`/`fys`/
+   `hc`/`hy`/`hy2000`/`hy2002`/`hy3` 同一原始形状）**：
+   `if (this_player(1)) efun::write(...)`——不区分巫师/玩家，也不区
+   分警告/错误。修复：加上 `strsrch(message, "arning:") == -1` 判
+   断。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例）**：`clone/family/
+   {jiuzhuan,xiaobao}.lpc`/`quest/shenshu/man.lpc` 等文件多处
+   `log_file("nosave/using", ...)`/`log_file("nosave/ZS", ...)` 调
+   用依赖对应子目录存在。注册/登录本身只写 `log_file("USAGE", ...)`
+   （无子目录，本来就存在），不受影响。已补上
+   `assure_file(LOG_DIR + file);`（含前向声明）。
+3. **管理员账号从未真正拿到 admin 权限（见上方"更正"一节，AGENTS.md
+   §1.5 的"wiz_status 声明为 nosave"形状）**：已在 `hxsd` 那行旁边
+   并列加一行 `set("wiz_status/fluffos", "(admin)");`。README 已同
+   步更正此前不完整的记录。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:177`/
+  `d/beijing/npc/refereew.lpc:177`。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+
+### 实测过程
+
+登录时有一个 GB/Big5 选码提示（选 `g`），用已提交的 `fluffos`/
+`Mud@2026` 登录，`score` 确认显示"目前权限：(admin)"（修复后新增
+的这次登录才是真正验证过的，上一轮记录的"确认生效"实际上从未真正
+生效过），`update /adm/simul_efun/file`（就是本轮改过的文件）确认
+可正常重新编译。`u/hxsd/debug.log`/`adm/log/debug.log` 时间戳全程
+未变化（`Jul 30`，早于本次会话），确认无新增未捕获运行期错误。登
+录本身产生的存档时间戳类微小 diff（`data/user/f/fluffos.o` 的
+`last_on` 字段）已用 `git checkout` 撤销，不提交。驱动最终按精确
+PID kill，`ps -p` 确认已退出。

@@ -60,9 +60,18 @@
 - **密码 / password**: `Mud@2026`
 - **权限 / level**: `(admin)`
 
-与 146/hy 相同，本代码线的权限系统也不通过 `/adm/etc/wizlist`，而是
-存储在 `adm/daemons/securd.o` 存档文件自身的 `wiz_status` 属性里。编辑
-该 `.o` 文件务必使用二进制模式读写（同 146/hy 的踩坑记录）。
+与 146/hy 相同，本代码线的权限系统也不通过 `/adm/etc/wizlist`。
+
+修正（round-two 深度测试发现，上面这段此前的记录不完整）：
+`wiz_status` 实际声明为 `nosave mapping`——永远不会被存档持久化，
+"存储在 securd.o 里"这个说法本身是错的，每次开机都会被
+`restore_list()` 里的硬编码赋值重置成只有一个 `hxsd`（"预先留个门"
+的原始后门 id，已经是原始存档里一个真实玩家）。此前虽然已经有一个
+`fluffos` 角色存档被提交过，但因为没有并列的 `wiz_status/fluffos`
+授权行（不像姊妹档案 `hy2002` 的 README 明确记录了这一步），那个账
+号登录后实际上从未真正拿到过 `(admin)` 权限。已在 `hxsd` 那行旁边
+并列加一行 `set("wiz_status/fluffos", "(admin)");`（AGENTS.md §1.5
+标准修法），用真实登录 + `update` 指令验证权限真正生效。
 
 > 警告：这是一个公开的默认密码，仅供本地/浏览器试玩。正式对外开服前
 > 请务必修改此密码。
