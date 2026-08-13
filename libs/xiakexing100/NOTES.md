@@ -364,3 +364,38 @@ guessing which clock should govern the gate.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 70 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有
+   `assure_file()` 保护（AGENTS.md §7.11-class）**：已加上前向声明
+   + `assure_file(LOG_DIR + file);`。
+
+### Proactive checks（无需改动）
+
+- 实际生效的 master file 是 `adm/single/master.lpc`（`config.fluffos`
+  指定），其 `log_error()` 已经在更早一轮修复过（`strsrch(message,
+  "arning:") == -1` 判断）。仓库里还有一份未使用的
+  `adm/obj/master.lpc`（没有任何档案 `#include`/引用它，也不是
+  `config.fluffos` 指定的 master file），其中的 `log_error()` 仍是
+  未修复的旧形状——确认它是死代码后未改动。
+- `win_times` 的 `%`-operator 修复确认存在且正确：
+  `d/city/npc/jinyong.lpc:197`、`d/beijing/npc/refereew.lpc:177`、
+  `d/city/npc/gulong.lpc:246` 均已用 `to_int(query("win_times")) %
+  5`。
+- `feature/dbase.lpc` 未发现 tybxjh/wlhd 那种密码写保护，不适用。
+
+### 实测过程
+
+管理员 `fluffos`/`Mud@2026`（此前 WASM 阶段已注册并提交存档）用真
+实密码重新连线，落地在此前保存的地点（车马店），`score` 正常显示
+天赋/属性，`quit` 前的游戏内状态与存档一致。全程 `debug.log` 只有
+正常的编译期提示（`Unknown #pragma` 等价的 `In file included
+from` 追踪行、未使用局部变量），无运行时错误。驱动按精确 PID 结
+束；测试期间产生的存档时间戳增量已 `git checkout --` 还原，未提
+交无关变化。
