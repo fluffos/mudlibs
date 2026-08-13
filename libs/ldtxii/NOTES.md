@@ -54,3 +54,77 @@ ldtx 的手足档案（同一个 Century/adm-single 家族，同一套架构，�
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD`、`WIZ_BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 34 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+上面"第二轮"（2026-08-03）那次早于今天的驱动重建（全库
+`quest_times`/`win_times` `%`-operator 修复 + Warning/warning 驱动
+文本回退），不能算作针对当前驱动的覆盖——这是真正针对今天驱动的重
+测。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`）完全没有严重度检查
+   （AGENTS.md §7.34-class，本轮反复确认的形状）**：`if
+   (this_player(1)) efun::write(...)`——不区分巫师/玩家，也不区分
+   警告/错误。修复：加上 `strsrch(message, "arning:") == -1` 判断。
+2. **`log_file()`（`adm/simul_efun/file.lpc`，CRLF 行尾档案）完全没
+   有 `assure_file()` 保护（AGENTS.md §7.11-class 的又一确认实
+   例，比本轮此前见过的所有实例都更严重）**：`adm/daemons/
+   logind.lpc` 的 `get_passwd()`（**每一次密码提交，不只是新角色
+   注册，包括普通老玩家的日常登录**）第一行就调用
+   `log_file("buglog/npc_save", ...)`——`LOG_DIR` 下的 `buglog/`
+   子目录若不存在，会在**每一次**登录尝试（不管新号老号）未捕获
+   抛出，比 `ffxymud`/`hc`/`jhfy` 那些"只在新角色注册最后一步"触
+   发的实例影响面更大。已补上 `assure_file(LOG_DIR + file);`
+   （含前向声明，CRLF 行尾用 Python 字节级替换保留原格式，未破坏
+   行尾风格）。
+
+### 发现但按规范未修改：明文密码写入日志（安全问题，非崩溃 bug）
+
+`get_passwd()` 那一行 `log_file("buglog/npc_save", sprintf("%s%s
+login from %s %s\n", ob->query("name"), ..., pass, ctime(time())))`
+把玩家刚提交的**明文密码**原样写进了这份"buglog/npc_save"日志文
+件——函数名暗示这原本是给 NPC 存档调试用的，被错误地复用到了玩家
+密码日志上，很可能是拷贝粘贴或调试代码遗留。这不会导致崩溃，是一
+个数据处理/安全层面的问题，超出本项目"修复程序崩溃类 bug"的既定
+范围（移除或修改这行属于内容/安全策略判断，不是简单的崩溃修
+复），如实记录，交由项目所有者判断是否需要处理（如彻底删除这行调
+试日志，或至少不记录明文密码）。**未做任何改动**。
+
+### 一个额外的注册流程排查记录（非 bug）
+
+`logon()` 之后的 `encoding_to_mudlist()` 在处理完编码选择、打印
+mud 列表之后，会额外要求一次"Press Enter to Continue..."才真正进
+入 `login()`（进而才是 `get_id`）——这一步很容易被漏发送导致后续
+所有输入错位（第一次尝试时 `fluffos` 被这一步吃掉，后续所有输入
+都被当成非法英文 id 反复重问）。已确认这是这份档案自己的真实流程
+形状，不是 bug，只是测试时容易踩的坑，记录下来供未来复测参考。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:176`。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+- `check_legal_name()` 沿用旧版 GBK 字节长度界（`strlen(name) <
+  2 || > 10`，按字节而非字符数），普通 2 字中文名字（6 字节）仍在
+  范围内可以正常使用，4-5 字长名字会被误拒——已知的 §8.1 类问题，
+  本轮未修改（不在这次任务的标准检查范围内，如实记录）。
+
+### 实测过程
+
+管理员账号 `fluffos`/`Mud2026Adm`——README 记录"已在游戏内确认"，
+但 `git log`/本地文件都确认从未真正提交过存档。已用真实注册流程
+（GB/BIG5 选码 → Press Enter 继续 → 英文 id → 确认建立 → 中文名 →
+密码 → 确认密码 → 天赋 0 随机 → 接受 → 邮箱 → 性别）重新创建，
+`score` 确认"目前权限：(admin)"（这份档案的 `wiz_status` 不是
+`nosave`，注册后立即拿到权限，机制上比 `hy`/`fqyy2` 那类更简
+单），`update /adm/simul_efun/file`（就是本轮改过的文件）确认可正
+常重新编译。全程未生成 `debug.log`（说明真的零运行期错误，不是文
+件被清空）。驱动最终按精确 PID kill，`ps -p` 确认已退出。
+
+### 已清理
+
+- 管理员 `fluffos` 的存档已提交（`data/{login,user}/f/fluffos.o`）。
+- `data/{login,user}/l/ldtdive.o` 是此前会话遗留的未提交测试存档
+  ——`Aug 3` mtime，早于本次会话，未受本轮任何操作影响，未触碰。
