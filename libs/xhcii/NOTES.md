@@ -69,3 +69,47 @@
   角色状态（疲倦/受伤但存活、食物/饮水正常）符合预期。
 - **本次没有测试**：拜师/门派系统（这次深挖时间主要花在追查上面两
   个更严重的 bug 上，留给后续深挖）。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`）完全没有严重度检查
+   （AGENTS.md §7.34-class）**：`if (this_player(1))
+   efun::write("编译时段错误：" + message + "\n")`——不区分玩家/巫
+   师，也不区分警告/错误，任何在场玩家都会看到原始编译诊断。修复：
+   加上 `strsrch(message, "arning:") == -1` 判断，只有真正的 Error
+   才会显示。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有
+   `assure_file()` 保护（AGENTS.md §7.11-class）**：这是通用
+   simul_efun 本身缺保护，不止之前 2026-08-05 那次单独在
+   `get_gender()` 调用点上加的 `catch()`——已加上前向声明 +
+   `assure_file(LOG_DIR + file);`，让所有 `log_file()` 调用点统一
+   受益，不必逐个调用点补 `catch()`。
+
+### Proactive checks（无需改动）
+
+- `feature/dbase.lpc` 没有 tybxjh/wlhd 那种基于 `wizhood()` 的密码
+  写保护，不适用那一类 bug。
+- `win_times` 的 `%`-operator 修复确认存在且正确：
+  `d/city2/npc/refereew.lpc:146` 已用 `to_int(query("win_times")) %
+  5`。
+- 此前（2026-08-05）修复的 `get_gender()` 里 `login/newid.log` 写入
+  的 `catch()` 防护、§7.86 留言板 `replace_program()` 死形状修复均
+  确认仍然生效。
+
+### 实测过程
+
+`adm/etc/wizlist` 里的 `fluffos (admin)` 一直没有对应存档（此前只
+做过结构性核实，没有真正注册过）。本轮通过完整注册流程创建
+（id → 确认 y → 中文名"笑红二" → 确认 y → 密码 → 确认密码 → 天赋
+0 随机 → 接受 y → email → 性别 m），落地武庙，`score` 显示"目前权
+限：(admin)"。随后**单独一步**做了真实断线重连+密码验证：用刚设
+的密码重新连线成功登录，存档位置（铁枪庙，`quit` 前移动过）正确
+持久化，`score` 数据一致。全程 `debug.log` 只有正常的编译期
+Warning（`Unknown #pragma`、未使用局部变量等），无运行时错误。驱
+动按精确 PID 结束，管理员存档（`data/{login,user}/f/fluffos.o`）
+已提交。
