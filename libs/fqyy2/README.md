@@ -48,9 +48,15 @@
 - **密码 / password**: `Mud@2026`
 - **权限 / level**: `(admin)`
 
-管理员名单存储在 `adm/daemons/securd.o` 存档文件自身的 `wiz_status`
-属性里（不是 `/adm/etc/wizlist`）。该文件用真实的回车符（CR）对映射
-键里的 `/` 做编码，编辑时使用二进制模式读写。
+修正（round-two 深度测试发现旧记录有误）：`wiz_status` 实际声明为
+`nosave mapping`（`adm/daemons/securd.lpc` 第 6 行），永远不会被存档
+持久化——每次开机都会被 `restore_list()` 里的硬编码赋值重置。原来这
+一行只授权了 `titny` 这个 id，而 `titny` 已经是原始存档里一个真实的
+玩家（`data/user/t/titny.o`，密码未知，`fluffos` 无法冒领），所以此
+前任何"写进 securd.o"的播种尝试实际上从未生效（此仓库里从未真正提
+交过 `fluffos` 的存档，直到这次修复）。已在 `titny` 那行旁边并列加
+了一行 `set("wiz_status/fluffos", "(admin)");`，`fluffos` 走正常注册
+流程创建，`update` 指令验证可正常编译，管理权限真正生效。
 
 > 警告：这是一个公开的默认密码，仅供本地/浏览器试玩。正式对外开服前
 > 请务必修改此密码。
