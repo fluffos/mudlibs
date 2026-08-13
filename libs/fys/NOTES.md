@@ -115,3 +115,62 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 47 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`）完全没有严重度检查（AGENTS.md
+   §7.34-class，与本轮 `wdxtym`/`ffxymud`/`fy2mg` 同一原始形状）**：
+   `if (this_player(1)) efun::write("编译时段错误：" + message +
+   "\n");`——不区分巫师/玩家，也不区分警告/错误。真实复现：全新驱动
+   进程下首次完整注册流程（`fluffos` 管理员账号）触发的冷编译级
+   联，屏幕上连续刷出 **124 行**原始诊断（本轮迄今为止最严重的一
+   次，这份档案的场景/NPC 数量明显更大）。修复：加上
+   `strsrch(message, "arning:") == -1` 判断。已用同一新驱动进程下的
+   完整重新注册复测：零次诊断刷屏（唯一命中的"什么"是正常游戏文本
+   "发生什么了？"）。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例，与 `fqyy2`/`fy2mg`
+   同一形状）**：`LOG_DIR` 下的 `nosave/` 子目录在全新检出里不存
+   在，`suicide`/崩溃日志/巫师 `clone` 日志等管理指令路径的
+   `log_file()` 调用会在首次使用时未捕获抛出。注册/登录本身只写
+   `log_file("USAGE", ...)`（无子目录，本来就存在），不受影响，但
+   这是一个明确存在的 bug，按标准模式补上
+   `assure_file(LOG_DIR + file);`（含前向声明）。
+3. **管理员账号从未真正创建（AGENTS.md §1.5 的"wizlist 有记录但角色
+   从未真正建立"形状，与 `fy2mg` 同一模式）**：`adm/etc/wizlist`
+   里早就有 `fluffos (admin)` 这一行，但 README 此前的记录"账号本身
+   通过正常注册流程创建"经核实是错的——`git log` 确认仓库里从未提交
+   过 `data/{login,user}/f/fluffos.o`。已用真实注册流程完整创建
+   `fluffos` 角色，`score` 确认显示"目前权限：(admin)"，
+   `update /adm/daemons/securityd` 确认可正常重新编译。README 已同
+   步更正这段记录。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:177`
+  和 `u/xxy/city2/npc/refereew.lpc:176` 均已用
+  `(string)(to_int(query("win_times")) % 5)`。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+- `assure_file()` 本身末尾不做 `seteuid(getuid())` 重置，不属于
+  `nitan_san`/`nt6nitan6win` 那种"assure_file 自己把 euid 重置掉"的
+  形状。
+
+### 实测过程
+
+`fluffos` 管理员账号完整注册（英文 id → 确认建立 → 中文名，直接设定
+不需要二次确认 → 密码（此代码线只要求 ≥3 字元，比 `fqyy2`/`fy2mg`
+宽松很多）→ 确认密码 → 邮箱 → 性别）进入起始区域。修复前后各做一次
+全新驱动进程下的完整注册；修复前复现了 124 行诊断刷屏，修复后干
+净。`log/debug.log` 全程时间戳未变化，确认无新增未捕获运行期错误。
+驱动最终按精确 PID kill，`ps -p` 确认已退出。
+
+### 已清理
+
+- 管理员 `fluffos` 的存档已提交（`data/{login,user}/f/fluffos.o`）。
