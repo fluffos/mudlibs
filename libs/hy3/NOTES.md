@@ -227,20 +227,64 @@ Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
   ({});` 防御——不适用 message()-missing-varargs 这一类 bug。
 - `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:176`。
 
-### 发现但未修复：`wabaod.lpc`（寻宝系统）的开机期崩溃
+### 2026-08-13：`wabaod.lpc`（寻宝系统）开机期崩溃——已修复
 
-真实登录测试期间 `log/debug.log`（时间戳落在本次会话内，第一时间
-以为是新增回归）里出现了 `*Can't catch eval cost too big error.` 和
-多条 `*push_lvalue_range: invalid ind2`，追查后确认全部发生在
-`adm/obj/master.lpc` 的 `preload()`（第 135 行，`CATCH()` 包裹）加
-载 `/adm/daemons/wabaod`（寻宝系统精灵）`create()`→`init_xunbao()`
-→`insert_blank()`/`get_long()` 期间——是**开机阶段的 preload 崩
-溃**，和玩家登录/注册本身无关（此前的会话从未特意检查过这类运行期
-错误，因为当时 `log_error()` 只会转发编译期诊断，这类运行期错误一
-直悄悄写进了 debug.log 却没人注意到）。已确认这不影响注册、登录、
-`update`、战斗等本轮验证过的核心流程（`fluffos` 完整走完注册/登录/
-战斗全程零阻塞）。按本项目惯例，不在本轮的标准 3-bug 扫荡范围内展
-开修复，如实记录，留给未来专门针对 `wabaod`/寻宝系统的 pass。
+上一轮记录的 `*Can't catch eval cost too big error.` /
+`*push_lvalue_range: invalid ind2` 崩溃已追查到根因并修复。逐条比对
+`log/debug.log` 里每条崩溃的完整调用链后发现这堆日志其实是两类性质
+完全不同的问题：
+
+1. **`insert_blank()` 自身的 bug（真正的 wabaod bug，已修复）**：
+   `*push_lvalue_range: invalid ind2 程式：wabaod.lpc 第 112/116 行`
+   这两条报错的调用链完全在 `wabaod.lpc` 内部收尾（`create()`→
+   `init_xunbao()`→`insert_blank()`，不再往下调用任何其他物件），
+   是自包含的真实 bug：`insert_blank()` 把描述字符串里等间隔的
+   `lost`（6~10）个位置逐个替换成"■"来抠字——`desc[begin..begin+1]
+   = "■"`。这段逻辑是老 GBK 双字节码时代遗留的写法，隐含"每个字符
+   固定 2 字节、替换前后长度不变"的假设；但这套驱动的字符串是按
+   Unicode 码点寻址的，"■"只占 1 个字符，每次替换都会把 `desc`
+   缩短 1 个字符，而后续几次替换用的下标却是按缩短前的固定坐标算
+   好的，越到后面越容易越界，命中 `push_lvalue_range: invalid
+   ind2`。修复：先把全部要替换的下标收集到 `blanks[]` 里（下标本来
+   就是严格递增的，不需要另外排序），再从最大下标往最小下标倒着做
+   替换——对某个位置做替换只会让它右边的下标失效，倒着做保证每次
+   替换发生时其余待替换下标还都在当前（尚未被这次替换影响到）的字
+   符串范围内。同时把 `insert_blank()` 里找一条合格描述的
+   `while (1) { long = get_long(); if (long != "") break; }` 改成
+   最多重试 50 次就放弃、直接 return（下个 `call_out` 周期自然会
+   重试）——这是防御性加固，不是本次崩溃的直接原因，但 `get_long()`
+   每次不成功的尝试都可能 `load_object()` 一个此前从未加载过的房间
+   /NPC（见下），无界重试等于把这类下游开销无限放大，收窄成有界重
+   试后即使某个方向再出问题也不会拖垮整个 `preload()`。
+
+2. **`*Too long evaluation.` / `*Read access denied.`（不是 wabaod
+   的 bug，级联触发，现已随其他 fix 消失）**：这几条报错的调用链会
+   一路下钻到 `get_long()` 里的 `load_object(file)`（第 129 行）
+   随机加载到的某个此前未加载过的房间（比如
+   `/d/quanzhou/haigang.lpc`），再经 `room.lpc` 的
+   `setup()/reset()/make_inventory()` 触发房间里 NPC（如
+   `/d/quanzhou/npc/girl.lpc`）的 `create()`→`npc.lpc`
+   `carry_object()`→`master.lpc` 的 `valid_read()`/`valid_object()`。
+   这条日志其实是**本 lib 更早一轮修复之前**的旧存档：那一轮
+   （见本文件顶部第 (3) 条，也是 `6a6b352b545` 那次跨 155 个 lib
+   的批量修复）已经把 `valid_read`/`valid_write` 无条件用
+   `previous_object()` 覆盖 `user` 参数、连 `load_object`/`include`
+   都一起被拒绝写权限的那个 bug 修好了；本次重新开机复现测试时这
+   一类报错完全没有再出现（`log/debug.log` 这次干净到驱动都没建
+   这个文件），说明它们本来就是同一个已知 bug 在 wabaod 触发路径
+   下的又一种表现形式，并不是 wabaod 自己独有的问题，无需额外改动。
+
+修复只改了 `adm/daemons/wabaod.lpc` 一个文件（`insert_blank()`）。
+验证：`~/src/fluffos/build-debug/src/driver config.fluffos` 全新开
+机，`log/debug.log` 全程未生成（零运行期报错，wabaod 的 `create()`
+正常跑完并成功 `log_file("wabao", ...)` 记下本轮选中的房间）；随后
+用 `scripts/mudclient.py` 走完整注册流程（`wabaoe`/`宝藏测试`，
+密码 `test12345`，选性别、留邮箱、接受天赋、`look`/`score` 确认属
+性正常、`quit` 正常道别扣布衣），并按本项目惯例额外做了一次真正的
+断线重连验证：新开一条连接、用刚设的密码登录，成功进入游戏并
+`look`/`quit`，全程 `log/debug.log` 仍未产生任何报错。驱动测试
+结束后按精确 PID kill，`ps -p` 确认已退出；测试产生的
+`data/{login,user}/w/wabaoe.o` 存档已删除，不提交。
 
 ### 已清理
 
