@@ -576,3 +576,72 @@ ASAN 在这份快照某处特别深/特别大的结构上开销异常有关，�
 按本 session 约定：`emsdk` 固定从 `storage.googleapis.com` 拉取，被本
 session 出站代理策略拒绝（`curl -sS $HTTPS_PROXY/__agentproxy/status`
 返回 403），WASM 编译/运行验证本轮继续跳过。
+
+## 深度功能测试（2026-08-12，round two，新驱动重测——补完上方"尝试记录"）
+
+**重要更正：上方"§10.7 深度游玩测试尝试记录"一节记录的"预载异常缓慢（10-20
+倍于手足库 nitan_ceshi，怀疑是内容层面问题）"结论是错的，根因是测试用的驱
+动构建本身，不是这份档案的内容。** 那几次尝试用的是 `~/src/fluffos/build/
+src/driver`（ASAN/UBSAN 插桩构建）；本轮改用这个项目其余所有 round-two 测
+试统一使用的 `~/src/fluffos/build-debug/src/driver`（无插桩的纯 debug 构
+建），预载在 **33 秒**内完成、干净监听端口——和手足库 `nitan_ceshi` 的量级
+完全一致，之前记录的"10-20 倍差异"、"疑似内容层面问题，值得单独开一轮根
+因排查"的结论应视为撤销：这纯粹是 ASAN 插桩对这份档案某处开销异常大的代
+码路径的固有减速，不是这份档案本身有问题。以后测试这份档案（或任何类似
+"预载异常慢"的档案）优先换用非插桩的 `build-debug` 排除这一类假阳性，而
+不是花时间做二分排查。
+
+### 已应用的三处 §7.11 修复（上方已记录，本轮现场验证）
+
+`toptend.lpc`/`file.lpc::log_file()`/`master.lpc::log_error()` 的
+`assure_file()` 三处改动（含从 `nitan_ceshi` 移植来的 `quest.h`/
+`toptend.lpc` 修复）均现场验证：干净注册流程正确显示"你名列最近十大富翁/
+高手排行榜第五名！"，`log/debug.log` 总行数在整个流程中保持 365 行不变。
+
+### 新发现并修复：`log_file()` 的 euid 提权在 `assure_file()` 内部被自己撤销
+
+`adm/simul_efun/file.lpc` 的 `log_file()` 先 `seteuid(ROOT_UID)` 再呼叫
+`assure_file()`，但 `assure_file()` 自己的实现在结尾做了 `seteuid(getuid())`
+——把调用者刚设置的 ROOT 权限撤销了，等 `log_file()` 接着呼叫
+`write_file()` 时，实际跑在撤销后的低权限下，对 `/log/nosave/` 这种没有单
+独走白名单的路径命中"Wrong permissions for opening file ... for append."
+（本轮由 `cmds/usr/quit.lpc` 的 `confirm()`→"y"确认删号分支触发，写
+`/log/nosave/register` 的注销记录）。修复：`assure_file()` 返回之后、
+`write_file()` 之前再呼叫一次 `seteuid(ROOT_UID)`，恢复调用者原本设定的权
+限。**现场验证**：注册一个抛弃用测试角色（`zhaoliuqi`），真的走完
+"quit"→"y"确认删号流程，`log/nosave/register` 文件被正确创建并写入
+"Aug/12/2026 ... zhaoliuqi(zhaoliuqi) commits a suicide from
+127.0.0.1"，`debug.log` 总行数全程保持 365 行不变（对照修复前的 stale 报
+错行仍在文件靠前位置，是修复前那次尝试留下的，本轮没有再新增一条）。
+
+### 新发现但未修：随机送货任务系统的 `/inherit/item/combined` 运行期"No
+program"报错
+
+`adm/daemons/quest/deliver.lpc` 的 `heart_beat()`（送货任务生成，本轮因
+`quest.h` 的 `set_information` 类型修复而首次真正开始运作）反复触发
+`*No program in object '/inherit/item/combined'!`——从驱动刚起服（甚至早
+于任何玩家连线）就开始出现，反复命中同一个物件引用。已排查：`inherit/
+item/combined.lpc` 本体和实际会被 `load_object()` 的 `clone/questob/
+rice.lpc`（`inherit COMBINED_ITEM`）单独用 `lpcc` 编译均无错误，只有
+warning。怀疑和 `/inherit/` 前缀档案作为顶层可加载物件的某种驱动/mudlib
+惯例限制有关（这类档案通常只设计成被 inherit，不直接 load_object()/
+new()），但没有在本轮时间预算内定位到精确根因。**不阻塞注册/登录/quit核
+心流程**（全部现场验证正常），属于背景守护进程的独立问题，按"长尾，记录
+不修"惯例处理，留给下一次专门针对这个随机任务子系统的深挖。
+
+### 完整游玩测试范围
+
+沿用 `nitan_ceshi` 已验证过的及格线：注册成功进入注册房间，欢迎/排行榜播
+报正确显示，`quit` 的两条分支（"n"取消、"y"确认删号）都现场走过。战斗/
+门派/门派任务仍未触达，留给下一次专门测试。
+
+### 本轮结论
+
+驱动升级后 nitan_san 整体状态良好：任务计数器/`log_error()`/`message()`
+均确认无需改动；此前"预载异常缓慢"的结论确认是插桩驱动的假阳性，用非插
+桩构建后和手足库同量级；从 `nitan_ceshi` 移植的两处修复（`quest.h`、
+`toptend.lpc`）现场验证有效；新发现并修复了 `log_file()` 的 euid 提权被
+自己撤销的问题；随机送货任务子系统一个背景守护进程级的"No program"报错
+记录但未修（不阻塞核心流程）。测试账号（`linsansan`/`wangsanwu`）存档留
+在 `data/` 下作为佐证（`zhaoliuqi` 已按测试流程自行删除），未清理（未跟
+踪文件，不纳入本次提交）。
