@@ -107,3 +107,40 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 57 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。管理员账号（`fluffos`/`Mud@2026Pass1`，通过并列
+`wiz_status/fluffos` 授权行解决 `hxsd` 被真实旧账号占用的问题）和
+`log_file()`/`assure_file()` 相关的 §1.5 处理此前已经做过，本轮复用
+并只做真实登录 + `update` 复测，未发现回归。本轮只发现一处新 bug：
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`）完全没有严重度检查（AGENTS.md
+   §7.34-class，与本轮 `wdxtym`/`ffxymud`/`fy2mg`/`fys`/`hc`/`hy`/
+   `hy2000` 同一原始形状）**：`if (this_player(1))
+   efun::write(...)`——不区分巫师/玩家，也不区分警告/错误。修复：
+   加上 `strsrch(message, "arning:") == -1` 判断。
+
+### Proactive checks（无需改动）
+
+- `log_file()`（`adm/simul_efun/file.lpc`）此前没有 `assure_file()`
+  保护，`nosave/CRASHES`/`nosave/addobj`/`nosave/tenrich` 等管理指
+  令路径会在首次使用时未捕获抛出（AGENTS.md §7.11-class）；注册/
+  登录本身只写 `log_file("USAGE", ...)`（无子目录），不受影响。本
+  轮补上 `assure_file(LOG_DIR + file);`（含前向声明）。
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:177`。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+- 管理员账号真正可用（不是仅凭旧记录假设）：登录时有 GB/Big5 选码
+  提示（选 `g`），用已提交的 `fluffos`/`Mud@2026Pass1` 登录，
+  `score` 确认"目前权限：(admin)"，
+  `update /adm/simul_efun/file`（就是本轮改过的文件）确认可正常
+  重新编译。`adm/log/debug.log`（含 `debuglog.bak/` 备份）时间戳全
+  程未变化（`Jul 30`，早于本次会话），确认无新增未捕获运行期错
+  误。登录本身产生的存档时间戳类微小 diff（`data/user/f/
+  fluffos.o` 的 `last_on` 字段）已用 `git checkout` 撤销，不提交。
+  驱动最终按精确 PID kill，`ps -p` 确认已退出。
