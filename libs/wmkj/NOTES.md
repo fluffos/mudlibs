@@ -589,3 +589,57 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 142 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。`log_error()`（`adm/obj/master.lpc`）已经在更早一
+轮正确修复过，管理员账号（`fluffos`/`Mud@2026`，`adm/etc/wizlist`
+已有 `fluffos (boss)`）此前的存档也已经**真正可用**——`feature/
+dbase.lpc` 检查确认这份档案**不属于** `tybxjh`/`wlhd` 那个"天涯"
+血统，没有那条会拦截首次密码设置的防劫持保护，存档文件里
+`password` 字段本身就有正确的哈希值，直接登录 + `update` 验证全部
+一次通过。本轮只发现并修复了 `log_file()` 一处。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例）**：`adm/daemons/
+   logind.lpc` 的 `get_gender()`（新角色注册流程的最后一步）紧跟
+   着调用 `log_file("login/newid.log", ...)`。已补上
+   `assure_file(LOG_DIR + file);`（含前向声明）。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:146`。
+- 未发现 `message()` simul_efun 包装函数。
+- `feature/dbase.lpc` 确认没有 `tybxjh`/`wlhd` 那条
+  `wizhood(id)=="(admin)"` 密码防劫持保护的 bug 形状——不适用本轮
+  新增的这一类检查。
+
+### 实测过程
+
+用已提交的 `fluffos`/`Mud@2026` 直接登录（本代码线无双密码机制，
+只有一个普通密码），断线重连（"重新连线完毕"）+ `update
+/adm/simul_efun/file`（就是本轮改过的文件，"重新编译...成功！"）
+均一次通过验证。
+
+### 发现但未修复：多条 debug.log 记录，均为既有游戏内容问题（世界
+   模拟背景活动，和注册/登录/管理员流程无关）
+
+登录测试期间 `log/debug.log` 新增了不少条目，追查后确认全部是背景
+世界模拟活动触发的既有内容问题，和本轮任何改动都无关：
+`adm/daemons/feizeid.lpc`（飞贼精灵）的 `choose_npc()` 传了一个
+`int(0)` 给 `call_other()`；某个帮会房间 `inherit` 了一个不存在的
+文件 `/u/xiha/banghui/bhnpc`；两处 NPC `create()` 里 `set_skill()`
+引用了并不存在的技能名（`kuang-jian`/`feitian-yujianliu`）。这些都
+是纯内容/数据层面的既有问题，按项目惯例不在本轮 §10.7 标准检查范
+围内展开修复，如实记录。`log/debug.log` 里没有任何和
+`log_error()`/`log_file()`/注册/登录路径相关的条目。驱动最终按精
+确 PID kill，`ps -p` 确认已退出。
+
+### 已清理
+
+- 登录测试产生的存档时间戳类微小 diff 已用 `git checkout` 撤销，不
+  提交。
