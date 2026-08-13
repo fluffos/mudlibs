@@ -149,3 +149,61 @@ teleport talisman，量:1 单:张，暗示一种一次性传送道具机制）�
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 98 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+上面"第二轮"（2026-08-03）那次早于今天的驱动重建（全库
+`quest_times`/`win_times` `%`-operator 修复 + Warning/warning 驱动
+文本回退），不能算作针对当前驱动的覆盖——这是真正针对今天驱动的重
+测。管理员账号 `fluffos`/`Mud@2026`（`(boss)` 级）此前已用真实注册
+流程创建并提交，本轮复用，只做登录验证。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`）完全没有严重度检查（AGENTS.md
+   §7.34-class，与本轮 `wdxtym`/`ffxymud`/`fy2mg`/`fys` 同一原始形
+   状）**：`if (this_player(1)) efun::write("编译时段错误：" +
+   message + "\n");`——不区分巫师/玩家，也不区分警告/错误。修复：加
+   上 `strsrch(message, "arning:") == -1` 判断。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例）**：`adm/daemons/
+   logind.lpc` 的 `get_gender()`（**新角色注册流程的最后一步**）紧
+   跟着调用 `log_file("login/newid.log", ...)`——和本轮 `ffxymud`
+   最初发现的那个 bug**完全同一形状**：`LOG_DIR` 下的 `login/`
+   子目录若不存在，会在每一个全新角色注册完成的那一刻未捕获抛出。
+   这台开发机本地 `work/log/login/` 当前确实存在（早年测试留下的
+   `newid.log`），但 `work/log/` 整条路径被项目级 `.gitignore`
+   排除在外，本地存在不代表新检出安全。修复：补上
+   `assure_file(LOG_DIR + file);`（含前向声明）。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:146`。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+- 管理员账号确认真正可用：登录后权限显示 `(boss)`，
+  `update /adm/simul_efun/file`（正是本轮改过的文件）确认可正常重
+  新编译。
+
+### 实测过程与一次误报排查
+
+第一次登录时，紧接着 `password` 之后立刻发送 `update` 指令，收到了
+一句没头没脑的"什麽？"而不是正常的编译结果——起初怀疑是 `log_error`/
+`error_handler` 相关的又一个 bug，但检查后发现"什麽？"其实来自
+`feature/alias.lpc` 的 `disable_inputs` 临时标志检查，和编译诊断无
+关。进一步查 `log/debug.log`（时间戳恰好落在这次测试期间，被误认为
+"有新错误"）确认真正原因：这是全新驱动进程下**首次**触发
+`make_body()` 整条 `/clone/user/user` 继承链冷编译导致的
+`*Too long evaluation. Execution aborted.`（AGENTS.md §7.90/§10.8 已
+归档的冷启动惰性编译级联类别，注册流程本身仍然完整走完，只是紧接着
+的下一条指令因为 eval cost 预算刚好在那次调用耗尽而被中止，留下
+`disable_inputs` 卡在真值状态）。带着几秒钟的额外等待时间重新登录、
+重新发送 `update` 指令，第二次完全干净，确认是一次性冷启动状态，非
+持久性 bug，不需要修复，也不代表 `log_error()`/`log_file()` 的修复
+无效。
+
+### 已清理
+
+- 登录测试产生的存档时间戳类微小 diff（`data/{login,user}/f/
+  fluffos.o` 的 `last_on` 字段）已用 `git checkout` 撤销，不提交。
+  驱动最终按精确 PID kill，`ps -p` 确认已退出。
