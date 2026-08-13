@@ -518,3 +518,54 @@ newlines/quotes inside post text, predating this conversion pass).
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 100 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。
+
+### 发现并修复：`data/board/news_b.o` 存档数据本身已损坏，每次登录都
+### 触发一次被顶层捕获的运行时错误
+
+登录后固定 1 秒的 `call_out("check_news", ...)` 会加载新闻留言板
+`/clone/board/news_b`，其 `setup()` 无保护地调用 `restore()` →
+`restore_object()`，而这份存档本身括号不配对（`[`/`]`：371 对
+339，`(`/`)`：707 对 706）——`raw/` 原始压缩包里的同一份存档就已经
+是这个字节形状（`md5sum` 内容不同是编码转换导致的正常膨胀，但括号
+计数在转档前后完全一致），确认是转档之前就存在的损坏数据，不是本
+项目引入的回归。因为 `check_news()` 是通过 `call_out` 异步触发（不
+在注册/登录的主执行路径上），崩溃只会让这一次 `call_out` 的执行栈
+被顶层错误处理器捕获并写进 `debug.log`（`执行时段错误：
+*restore_object(): Illegal mapping format while restoring dbase.`），
+不会打断登录本身——但每一次任何人登录都会在 `debug.log` 里重复留
+下这条噪音，且新闻板永远不可用。`restore_object()` 对不存在的文件
+只会静默返回 0，不会抛出，所以删除这个无法再被正确解析的损坏文件
+是安全的：`git rm work/data/board/news_b.o`。删除前后各做一次完整
+的 `fluffos`/`Mud@2026` 管理员登录验证：删除前能在 `debug.log` 里
+稳定复现这条错误，删除后同样的登录流程干净无此错误，`score` 显示
+"【天神】"头衔正常，功能无回归（本来就不可读的新闻板，删除后
+`setup()` 的 `restore()` 只是拿到"文件不存在"，走默认空白留言板路
+径）。
+
+### Proactive checks（无需改动）
+
+- 实际生效的 master file 是 `adm/single/master.lpc`，其
+  `log_error()` 里对玩家的 `efun::write()` 调用整行被注释掉，编译
+  诊断只写日志文件不回显给任何人，不适用 §7.34-class；仓库里还有一
+  份未被任何档案引用的死代码 `adm/obj/master.lpc`（旧形状，未改
+  动）。
+- `log_file()`（`adm/simul_efun/file.lpc`）已经用 `catch()` 包裹
+  `write_file()`，功能上等价于 `assure_file()` 保护，确认仍然生
+  效。
+- `win_times` 的 `%`-operator 修复确认存在且正确：
+  `d/city2/npc/refereew.lpc:177` 已用 `to_int(query("win_times")) %
+  5`；`d/hs/npc/refereew.lpc` 里没有用到 `%`，不适用。
+- `feature/dbase.lpc` 未发现 tybxjh/wlhd 那种密码写保护，不适用。
+
+### 实测过程
+
+管理员 `fluffos`/`Mud@2026` 用真实密码重新连线（含"Are you using
+BIG5 font"→n 这一步），落地在此前保存的地点，`score`
+显示"【天神】"头衔和正确属性数值。驱动按精确 PID 结束；测试期间产
+生的存档时间戳增量已 `git checkout --` 还原，只提交
+`news_b.o` 的删除。
