@@ -579,3 +579,77 @@ carve-out. Re-verified loopback fluffos login, `look`, `score`,
 session 出站代理策略拒绝（`curl -sS $HTTPS_PROXY/__agentproxy/status`
 返回 403），WASM 编译/运行验证本轮继续跳过，仅做原生驱动（linux-debug
 预设，ASAN/UBSAN）下的完整 §10.7 测试。
+
+## 深度功能测试（2026-08-12，round two，新驱动重测）
+
+用新编译的 `~/src/fluffos/build-debug/src/driver`（origin/master 最新拉
+取，含本项目自己提交并合入的 #1343/#1344 两个 PR，以及同一会话里另外
+提交的驱动 PR：把编译诊断严重度标记从小写改回大写 "Warning:"/
+"Error:"）重新验证。
+
+### `to_int()` 任务计数器修复
+
+`adm/daemons/combatd.lpc`/`cmds/std/whisper.lpc` 里全部 `quest_count = ...
+% 500` 已经是 `to_int(query(...)) % 500` 的修复后形状，无需改动。
+
+`log_error()`（`adm/single/master.lpc`）和 `message()`（`adm/simul_efun/
+message.lpc`）之前的 round-one 记录已经确认正确修复（大小写无关匹配 +
+`exclude` 守卫），本轮核对无需改动。
+
+### 补做此前明确记录但未修的两个真实 bug
+
+早前的 round-one 记录（"Interactive test transcript / outcome"章节）把
+下面两个问题明确归类为"pre-existing、not driver-compat、长尾内容问
+题、未修"——但本会话在 `ntii`/`nte`（`set_information` 类型不匹配）和
+`xfbhh`（缺失存档目录）上分别独立确认了同样的形状是真实的程序 bug 而
+非内容问题，所以本轮回头补上：
+
+1. **`inherit/misc/quest.lpc` 的 `set_information()` 实现本体早就是
+   `mixed info`（.lpc 文件自己的注释显示"Same fix already applied to
+   sibling nitan_san"），但 `include/quest.h` 的函式原型声明还停留在
+   `string info`——两者不一致导致所有传闭包 `(: ask_npc :)` 的呼叫点仍
+   然编译期报"Bad type for argument 2 of set_information"，
+   `adm/daemons/quest/{capture,trace,search,judge,shen,explore,supply,
+   deliver}.lpc` 共 9 个任务档案全部编译失败。修复：把 `quest.h` 的原型
+   声明也改成 `mixed info`，和实现对齐。**现场验证**：修复前后各干净
+   注册一次角色对比，`log/debug.log` 里"Bad type for argument 2"报错行
+   数从多条降为 0（用总行数不变来确认干净跑没有再新增任何一条）。**同
+   一血统的 `nitan_san` 也有逐字节相同的 `quest.h` 原型/实现不一致**，
+   一并修复（未在本轮单独跑完整 playthrough 验证，留给 `nitan_san` 自
+   己那一轮）。
+2. **`adm/daemons/toptend.lpc`（十大排行榜精灵）完全没有 `create()`**，
+   因此以无 euid 运行，而 `securityd.lpc` 的 `valid_write()` 对
+   `/data/topten/` 没有像 `/data/board/`、`/data/maze/`、
+   `/data/business/` 那样开白名单——每次角色进入游戏触发
+   `topten_checkplayer()`→`topten_save()` 都命中"Wrong permissions for
+   opening file /data/topten/rich.txt for overwrite."。修复：加
+   `protected void create() { seteuid(ROOT_UID); mkdir("/data/topten");
+   }`（`seteuid` 沿用这份档案自己 `boardd.lpc` 已经在用的同款修法；额
+   外加 `mkdir()` 是因为这个专案的 `.gitignore` 专门排除了
+   `libs/*/work/data/topten/`——纯运行期排行榜数据，不作为源码提交——
+   所以光在这台机器上手动 `mkdir`/提交空目录占位并不能在全新 clone 后
+   生效，让代码自己在运行期创建目录才是真正持久的修法）。**现场验
+   证**：先把 `data/topten/` 目录整个删除，重启驱动，注册一个全新角
+   色——`create()` 自动重建了目录和全部 5 个排行榜档案，注册流程正确
+   显示"你名列最近十大富翁/魔头/高手/老手/悲情人物排行榜第一名！"，
+   全程 `debug.log` 总行数保持不变（0 条新报错）。同一血统的
+   `nitan_san` 的 `toptend.lpc` 有逐字节相同的缺失 `create()` 问题（这
+   台机器本地碰巧已经有 `data/topten/` 目录和内容，但那份内容本身也不
+   受 git 追踪，全新 clone 一样会踩坑），一并用相同修法修复。
+
+### 完整游玩测试范围
+
+沿用既有记录的"注册成功进入注册房间，欢迎序列/排行榜播报正确显示"作
+为及格线；`quit` 的新账号 30 分钟保留确认流程此前已验证过。战斗/死亡
+循环仍未触达，留给下一次专门测试。
+
+### 本轮结论
+
+驱动升级后 nitan_ceshi 整体状态良好：任务计数器 `to_int()`/
+`log_error()`/`message()` 三处此前修复均确认无需改动；补做并修复了
+round-one 明确记录但当时误判为"长尾内容问题"的两个真实程序 bug（quest.h
+原型与实现不一致、toptend.lpc 缺失 create() 导致的目录权限问题），两
+处都现场验证过（含删除目录测试运行期自愈）。同一血统的 `nitan_san` 已
+经顺手同步了这两个修法（未做完整 playthrough，留给它自己的轮次）。测
+试账号（`qinshijiu`/`linshier`/`wangershi`）存档留在 `data/` 下作为佐
+证，未清理（未跟踪文件，不纳入本次提交）。
