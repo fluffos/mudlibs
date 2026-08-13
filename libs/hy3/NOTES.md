@@ -189,3 +189,65 @@ post 内容全链路验证
 GB 编码选项本次实测正常显示中文（连线横幅、房间描述、战斗提示全部无
 乱码）；BIG5 选项本次未重复测试（此前 WASM 阶段已确认过两者都正常，
 本次时间聚焦在新发现的连线拒绝 bug 上）。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。管理员账号（`fluffos`/`Mud@2026`）此前已用真实注册
+流程创建并提交，本轮复用，只做真实登录 + `update` 复测（未发现回
+归）。本轮发现并修复两处新 bug：
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`）完全没有严重度检查（AGENTS.md
+   §7.34-class，与本轮 `wdxtym`/`ffxymud`/`fy2mg`/`fys`/`hc`/`hy`/
+   `hy2000`/`hy2002` 同一原始形状）**：`if (this_player(1))
+   efun::write(...)`——不区分巫师/玩家，也不区分警告/错误。修复：
+   加上 `strsrch(message, "arning:") == -1` 判断。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例）**：`feature/
+   skill.lpc`/`feature/dbase.lpc`/`feature/vi.lpc` 等文件多处
+   `log_file("trace/...", ...)`/`log_file("edit/<euid>", ...)` 调用
+   依赖 `LOG_DIR` 下对应子目录存在。注册/登录本身只写顶层文件
+   （`USAGE`/`npc_save`，无子目录，本来就存在），不受影响，但这些
+   管理/编辑追踪路径会在首次使用时未捕获抛出。已补上
+   `assure_file(LOG_DIR + file);`（含前向声明，`assure_file()` 定
+   义在同文件后面）。
+
+### Proactive checks（无需改动）
+
+- `assure_file()` 本身末尾确实做 `seteuid(getuid())` 重置，但
+  `log_file()` 从未在调用前 `seteuid(ROOT_UID)` 过——不属于
+  `nitan_san` 那种"调用者依赖 assure_file 后仍保持提权"的形状，无
+  需修复。
+- `message()`（`adm/simul_efun/message.lpc`）已经是
+  `varargs void message(...)`，且已有
+  `if (!objectp(exc_target) && !arrayp(exc_target)) exc_target =
+  ({});` 防御——不适用 message()-missing-varargs 这一类 bug。
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:176`。
+
+### 发现但未修复：`wabaod.lpc`（寻宝系统）的开机期崩溃
+
+真实登录测试期间 `log/debug.log`（时间戳落在本次会话内，第一时间
+以为是新增回归）里出现了 `*Can't catch eval cost too big error.` 和
+多条 `*push_lvalue_range: invalid ind2`，追查后确认全部发生在
+`adm/obj/master.lpc` 的 `preload()`（第 135 行，`CATCH()` 包裹）加
+载 `/adm/daemons/wabaod`（寻宝系统精灵）`create()`→`init_xunbao()`
+→`insert_blank()`/`get_long()` 期间——是**开机阶段的 preload 崩
+溃**，和玩家登录/注册本身无关（此前的会话从未特意检查过这类运行期
+错误，因为当时 `log_error()` 只会转发编译期诊断，这类运行期错误一
+直悄悄写进了 debug.log 却没人注意到）。已确认这不影响注册、登录、
+`update`、战斗等本轮验证过的核心流程（`fluffos` 完整走完注册/登录/
+战斗全程零阻塞）。按本项目惯例，不在本轮的标准 3-bug 扫荡范围内展
+开修复，如实记录，留给未来专门针对 `wabaod`/寻宝系统的 pass。
+
+### 已清理
+
+- 登录测试产生的存档时间戳类微小 diff（`data/{login,user}/f/
+  fluffos.o` 的 `last_on` 字段）已用 `git checkout` 撤销，不提交。
+  驱动最终按精确 PID kill，`ps -p` 确认已退出。
+
+（本档案已在此前一轮明确确认与 `hy`/`海洋` 血统无关，独立验证出同
+一类 log_error/log_file bug 形状，纯属拷贝粘贴模式的巧合，不是同源
+血统关系。）
