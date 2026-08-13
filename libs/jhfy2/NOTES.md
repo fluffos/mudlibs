@@ -84,3 +84,62 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 93 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。与手足档案 `jhfy` 不同，这份档案的 `log_error()`
+此前**没有**被修复过——两者虽是姊妹档案，`log_error()` 的修复状态
+却各自独立，印证了"不能从血统关系假设 bug 状态"这条本轮反复验证过
+的教训。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`）完全没有严重度检查（AGENTS.md
+   §7.34-class，与本轮 `wdxtym`/`ffxymud`/`fy2mg`/`fys`/`hc`/`hy`/
+   `hy2000`/`hy2002`/`hy3`/`hy5`/`hyiishzdscbb` 同一原始形状）**：
+   `if (this_player(1)) efun::write(...)`——不区分巫师/玩家，也不区
+   分警告/错误。修复：加上 `strsrch(message, "arning:") == -1` 判
+   断。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例，和姊妹档案 `jhfy`
+   完全同一形状）**：`adm/daemons/logind.lpc` 的 `get_gender()`
+   （**新角色注册流程的最后一步**）紧跟着调用
+   `log_file("login/newid.log", ...)`——`LOG_DIR` 下的 `login/`
+   子目录若不存在，会在每一个全新角色注册完成的那一刻未捕获抛出。
+   已补上 `assure_file(LOG_DIR + file);`（含前向声明）。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:146`。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+
+### 管理员账号：存档从未真正提交
+
+README 记录"账号本身通过正常注册流程创建，已在游戏内确认权限显示
+正确"——`git log` 确认这个存档从未被提交过，本地 `work/` 目录里也
+不存在。已用真实注册流程（英文 id → 确认建立 → 中文名 → 密码
+`loginpass1` → 确认密码 → 天赋 0 随机 → 接受 → 邮箱 → 性别）重新
+创建 `fluffos`/浮浮，`score` 确认"★ 您目前权限：(admin)"。
+
+### 一次测试方法论的排查记录（非 bug）
+
+`update /adm/simul_efun/file` 报错 `*No program in object
+'/adm/simul_efun/file'!`——排查后发现 `adm/simul_efun/file.lpc` 是
+被 `#include` 进 `adm/obj/simul_efun.lpc`（`simulated efun file`
+配置项指向的档案）的，本身不是一个独立编译单元，不能直接 `update`。
+改用 `update /adm/obj/simul_efun` 也报错（`destruct()` 相关，热重
+载 simul_efun 对象本身在多数驱动上都有特殊限制，属于测试方法的局
+限，不是这份档案的 bug）。改用一个普通对象 `update
+/adm/daemons/logind` 成功验证了真正的写权限。`log/debug.log` 里唯
+一新增的两条运行期错误就是这两次排查性尝试留下的痕迹，均已确认与
+本轮修复无关。驱动最终按精确 PID kill，`ps -p` 确认已退出。
+
+### 已清理
+
+- 管理员 `fluffos` 的存档已提交（`data/{login,user}/f/fluffos.o`）。
+- `data/{login,user}/{q/qinfeng,s/shenmu}.o` 是此前会话遗留的未提
+  交测试存档（`Aug 4` mtime，早于本次会话），未受本轮任何操作影
+  响，未触碰。
