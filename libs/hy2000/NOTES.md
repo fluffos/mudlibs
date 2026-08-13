@@ -62,3 +62,59 @@ ES2/金庸血统 mudlib，游戏内标题为"海洋II"（Ocean II）。修复的
   只狼狗对新手角色明显偏难，符合"江湖险恶"的设计但值得注意，不作为
   bug 处理（战斗力数值属于游戏平衡，不在本项目 §10.7 的修复范围内）。
 - **本次没有测试**：拜师/门派（扬州武馆已找到，未深入）、商店。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`）完全没有严重度检查（AGENTS.md
+   §7.34-class，与本轮 `wdxtym`/`ffxymud`/`fy2mg`/`fys`/`hc`/`hy`
+   同一原始形状）**：`if (this_player(1)) efun::write(...)`——不区
+   分巫师/玩家，也不区分警告/错误。修复：加上
+   `strsrch(message, "arning:") == -1` 判断。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例）**：注册/登录本身只
+   写 `log_file("USAGE", ...)`（无子目录，本来就存在），不受影响，
+   但 `nosave/CRASHES`/`nosave/addobj` 等管理指令路径会在首次使用
+   时未捕获抛出。已补上 `assure_file(LOG_DIR + file);`（含前向声
+   明）。
+
+### 管理员账号：核实此前的"已确认生效"记录
+
+上一轮（2026-08-05）WASM 修复摘要明确写着"管理员账号以 id `wuyou`
+注册，游戏内'目前权限：(admin)'显示确认生效"——`git log` 确认这个
+存档从未被提交过，本地 `work/` 目录里也不存在。按本轮 `hy` 学到的
+教训（"验证过"的记录如果只是凭存档文件内容或旧会话记忆，不能直接
+信任），重新用真实注册流程创建了 `wuyou`/`Mud@2026` 账号：`score`
+确认"目前权限：(admin)"，`update /adm/simul_efun/file`（就是本轮改
+过的文件）确认可正常重新编译。这次是**真正的**live 验证（不是凭
+旧记录），且这份档案的管理员机制本身没有 `hy`/`fqyy2` 那种
+"nosave + 硬编码单一 id 被真实玩家占用"的问题——`wuyou` 本身就是硬
+编码授权的那个 id，直接注册就能拿到权限，机制上更简单也更可靠，此
+次核实结果是正面的（此前的记录内容是真的，只是存档从未被提交，现
+已一并提交存档）。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:177`。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+
+### 实测过程
+
+登录时有一个 GB/Big5 选码提示（选 `g`）。注册 `wuyou`/无忧
+（英文 id → 确认建立 → 中文名，直接设定不需要二次确认 → 密码 →
+确认密码 → 天赋 0 随机 → 接受 → 邮箱 → 性别）完整进入游戏，屏幕上
+出现"有人使用过权限命令，立即查看 /log/nosave/promotion"（`securd.
+lpc` 的晋升日志写入，本轮修复的 `log_file()` 让这条路径正常工作，
+未见崩溃）。`adm/log/debug.log` 时间戳全程未变化（`Jul 30`，早于本
+次会话），确认无新增未捕获运行期错误。驱动最终按精确 PID kill，
+`ps -p` 确认已退出。
+
+### 已清理
+
+- 管理员 `wuyou` 的存档已提交（`data/{login,user}/w/wuyou.o`）。
