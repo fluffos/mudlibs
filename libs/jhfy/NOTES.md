@@ -602,3 +602,41 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 93 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。`log_error()`（`adm/obj/master.lpc`）已经在更早一轮
+（引用注释里的"AGENTS.md #15w"）正确修复过，本轮只发现并修复了
+`log_file()` 一处。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例，与本轮 `ffxymud`/
+   `hc` 完全同一形状）**：`adm/daemons/logind.lpc` 的
+   `get_gender()`（**新角色注册流程的最后一步**）紧跟着调用
+   `log_file("login/newid.log", ...)`——`LOG_DIR` 下的 `login/` 子
+   目录若不存在，会在每一个全新角色注册完成的那一刻未捕获抛出，属
+   于会影响核心注册路径的高优先级实例（不只是 `nosave/*` 这类只在
+   管理指令才会触发的低优先级路径）。已补上
+   `assure_file(LOG_DIR + file);`（含前向声明）。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:146`。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+- 管理员账号（`fluffos`/`Mud@2026`，`adm/etc/wizlist` 里已有
+  `fluffos (boss)`）此前已用真实注册流程创建并提交，本轮复用，只做
+  真实登录 + `update` 复测：`score` 确认"您目前权限：(boss)"，
+  `update /adm/simul_efun/file`（就是本轮改过的文件）确认可正常重
+  新编译。`log/debug.log` 时间戳全程未变化（`Aug 5`，早于本次会
+  话），确认无新增未捕获运行期错误。登录本身产生的存档时间戳类微
+  小 diff（`data/{login,user}/f/fluffos.o` 的 `last_on` 字段）已用
+  `git checkout` 撤销，不提交。驱动最终按精确 PID kill，`ps -p` 确
+  认已退出。
+
+（`data/{login,user}/c/chenba.o` 是此前会话遗留的未提交测试存档
+——`Aug 5` mtime，早于本次会话，未受本轮任何操作影响，未触碰。）
