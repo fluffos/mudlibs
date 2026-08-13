@@ -78,3 +78,115 @@
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`§7.86` 留言板 `post` 崩溃，本档案此前实际从未修复**：AGENTS.md §7.86 的记录曾把本档案列为"天涯"家族已确认命中并修复的三个成员之一（连同 `xhcii`/`zxty`），但本次跨库扫描核实后发现这个说法不准确——`git log`/`NOTES.md` 里都找不到任何针对本档案的 §7.86 提交或记录，全档案 100 处 `BULLETIN_BOARD` 仍是原始的 `inherit` + 多余 `replace_program()` 致命形状，`post` 命令在修复前实际上一直是崩溃的。已在本次扫描中删除全部 100 处多余的 `replace_program(...)` 调用（保留 `inherit`），编译检查通过（驱动干净启动、监听端口正常）。未做完整 §10.7 深度游玩测试，之前记录的"已修复"结论应视为误传，以本条为准。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`，CRLF 行尾档案）完全没有严
+   重度检查（AGENTS.md §7.34-class，本轮反复确认的形状）**：
+   `if (this_player(1)) efun::write(...)`——不区分巫师/玩家，也不区
+   分警告/错误。修复：加上 `strsrch(message, "arning:") == -1` 判
+   断（用 Python 字节级正则替换保留 CRLF 行尾——第一次尝试直接用
+   贪婪正则捕获整行字符串字面量时越界匹配到了跨越
+   `+ message + "\n"` 的部分，产生了重复代码，已发现并撤销重做，
+   改用精确匹配已知字面量的方式）。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例）**：`adm/daemons/
+   logind.lpc` 的 `get_gender()`（新角色注册流程的最后一步）紧跟
+   着调用 `log_file("login/newid.log", ...)`——和 `ffxymud`/`hc`/
+   `jhfy`/`jhfy2` 完全同一形状。已补上
+   `assure_file(LOG_DIR + file);`。**第一次尝试时漏加了前向声明**
+   （`assure_file()` 定义在同文件后面），导致 `/adm/obj/
+   simul_efun` 编译失败、整个驱动无法启动（"Undefined function
+   assure_file"）——立即发现（下一步就是启动驱动）并补上前向声明
+   重新编译，驱动恢复正常启动。
+
+### 发现并修复的重大 PROGRAMMING bug：新注册的管理员账号永远无法真
+   正登录（密码从未被持久化）
+
+3. **`feature/dbase.lpc` 的 `set()` 对 `password`/`ad_password` 属
+   性有一条防劫持保护，但错误地把"这个 id 已经在 wizlist 里被列为
+   (admin)"当成了"这个账号已经有一个受保护的旧密码"，导致这个 id
+   **第一次注册、设置自己密码的那一刻**就已经被自己的保护机制拦
+   截**（新发现的 bug 类别）**：
+   ```
+   if ((prop == "password" || prop == "ad_password") &&
+       wizhood(this_object()->query("id")) == "(admin)" &&
+       this_player() && geteuid(this_player()) != this_object()->query("id"))
+     return;
+   ```
+   `wizhood()` 只读取 `/adm/etc/wizlist` 这个纯文本文件，和这个 id
+   是否已经有一个真实存在的角色/密码完全无关。本项目标准做法是提
+   前把 `fluffos (admin)` 写进 `wizlist`，再让 `fluffos` 走正常注
+   册流程——但正是这个标准做法，让 `fluffos` 在**它自己第一次设置
+   密码的那一刻**，就已经满足 `wizhood(id)=="(admin)"` 这个条件；
+   同时因为此刻这个连线对象自己的 euid 还没被 `seteuid(id)` 提权
+   （提权发生在后面的 `make_body()`），第二个条件
+   `geteuid(this_player()) != id` 也成立——两个条件同时满足，
+   `set("password", ...)` 直接 `return`，**从未真正写入
+   `dbase["password"]`**。现场复现确认：修复前完整走完注册流程、
+   `score` 也正常显示"(admin)"权限，但存档文件 `data/login/f/
+   fluffos.o` 里 `dbase` 映射根本没有 `"password"`/`"ad_password"`
+   这两个键；第二次用刚设置的密码重新连线，被要求输入密码时三次
+   都被拒绝，账号被踢下线。这不是这份档案独有的偶发问题，而是
+   `set()` 权限检查本身的逻辑缺陷：它把"保护一个已存在的密码不被
+   覆盖"错误地实现成了"任何 wizlist 里已登记为 admin 的 id，永远
+   不能通过正常流程设置自己的密码"——任何库如果也用了同一段
+   `feature/dbase.lpc`（或类似逻辑），都会在"提前播种 wizlist、再
+   走正常注册"这个本项目的标准 §1.5 流程下必然复现这个 bug。
+   修复：只在 `dbase[prop]` 已经存在（真的有一个旧密码需要保护）
+   时才触发这条保护，不影响原本"禁止非本人覆盖他人已有密码"的安
+   全意图：
+   ```
+   if ((prop == "password" || prop == "ad_password") &&
+       wizhood(this_object()->query("id")) == "(admin)" &&
+       this_player() && geteuid(this_player()) != this_object()->query("id") &&
+       mapp(dbase) && dbase[prop])
+     return;
+   ```
+   已现场复现验证：修复后重新走一次完整注册流程，`data/login/f/
+   fluffos.o` 的 `dbase` 映射里 `"password"`/`"ad_password"` 两个
+   键都有正确的 crypt 哈希值；用刚设置的普通密码重新连线，
+   "重新连线完毕"确认真正登录成功（此前会被三振出局踢下线）。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复本档案未搜到对应的 refereew.lpc 场景 NPC（此项
+  目 §10.7 检查清单并非每份档案都适用，如实记录未命中）。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+
+### 发现但未修复：`update` 指令报"没有这个档案"
+
+修复验证阶段尝试用 `update /adm/simul_efun/file`/`/adm/daemons/
+logind`/`/adm/obj/master` 都报"没有这个档案。"，但这些文件在磁盘上
+确实存在（`file_size()` 检查失败的原因未查明——不是本轮改动引入的
+回归，`update.lpc` 的 `resolve_path()`/`SECURITY_D->valid_write()`
+链路较复杂，值得未来单独排查，但不影响本轮已经验证过的核心结论：
+密码持久化 bug 已用真实的"设置密码→重新连线"往返验证过，属于比
+`update` 权限检查更直接、更关键的验证）。
+
+### 发现但未修复：两条 debug.log 记录，均判定为已知的非 bug 类别
+
+- `*Too long evaluation. Execution aborted.`（`log_error()` 那行，
+  三次）：全新驱动进程下首次触发 `get_gender()`→`enter_world()` 冷
+  编译级联，AGENTS.md §7.90/§10.8 已归档的冷启动 eval-cost 耗尽类
+  别，第二次登录（重新连线）未再出现，确认已自愈，非持久性 bug。
+- `*restore_object(): Illegal mapping format while restoring
+  emote.`（`/adm/daemons/emoted` 开机 preload 阶段）：追查后确认是
+  这份档案原始存档数据本身的损坏（不是本轮改动引入的），已用
+  `CATCH()` 包裹不影响开机，和 `jqxz2008` 的 `e2c_dict.o` 数据损坏
+  同一性质，按项目惯例不展开修复数据文件本身，如实记录。
+
+### 已清理
+
+- 管理员 `fluffos` 的存档已提交（`data/{login,user}/f/fluffos.o`，
+  密码：管理密码 `AdminPass123`，普通密码 `LoginPass456`）。
+- `data/board/`、`data/{login,user}/t/testfixseven.o` 是此前会话遗
+  留的未提交测试痕迹——`Aug 5` mtime，早于本次会话，未受本轮任何
+  操作影响，未触碰。
