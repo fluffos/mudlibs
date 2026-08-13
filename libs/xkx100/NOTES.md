@@ -69,3 +69,61 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 70 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。这份档案的注册流程比大多数同类档案多两
+步（出生地选择、天赋点数手动分配 80 点预算），完整走了一遍：id →
+y → 中文名 → 密码 ×2 → 出生地(1) → 膂力/悟性/根骨各输入 20（身法
+自动算出 20）→ 接受 y → 性格(0) → email → 性别(m)。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`，实际生效的 master file）
+   完全没有严重度检查（AGENTS.md §7.34-class）**：`if
+   (this_player(1))` 无条件回显。已加上 `strsrch(message, "arning:")
+   == -1` 判断。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有
+   `assure_file()` 保护（AGENTS.md §7.11-class）**：已加上前向声明
+   + `assure_file(LOG_DIR + file);`。
+3. **`inherit/char/char.lpc` 第 111 行 `heart_beat()` 里
+   `environment()->is_chat_room()` 没有先判断 `environment()`
+   是否为空，`call_other()` 拿到 int(0) 直接崩溃**：live 测试注册流
+   程进入"北京"区域时，`clone/quest/questyinshi#4`（"江湖豪客"）连
+   续多个心跳周期反复抛出 `*Bad argument 1 to EFUN call_other()
+   Expected: object... Got: int(0).`——该 NPC 在这一刻没有
+   `environment()`（不在任何房间容器里）。这份档案自己在
+   `feature/command.lpc:46` 已经有 `environment() && ...` 的标准写
+   法，说明这是本代码库自己认可的惯用防护模式，只是这一处漏加。已
+   改成 `if (!environment() || !environment()->is_chat_room() ||
+   ...)`。修复后同样流程的完整会话（含约 90 秒纯 idle 观察期）里
+   debug.log 里这个错误没有再出现过。
+4. **冷启动 eval-cost 耗尽（AGENTS.md §7.90/§10.8-class）**：注册流
+   程首次进入"北京"区域时大量档案第一次编译，`maximum evaluation
+   cost`（默认 700000）在注册会话期间连续触发了近 20 次 `Eval
+   interrupted`/`Too long evaluation`——比典型的"仅冷启动一次"更严
+   重，属于这份档案自己文件规模较大触发的更严重实例。按已确认的补
+   救方式把 `config.fluffos` 的这个值从 700000 提到 5000000（本项
+   目另有 30+ 档案在用这个值）。修复后重新走一遍同样的注册+同一区
+   域访问流程，debug.log 里零 `Eval interrupted`/`Too long
+   evaluation`。
+
+### Proactive checks（无需改动）
+
+- `win_times` 的 `%`-operator 修复确认存在且正确：
+  `d/city/npc/jinyong.lpc:197`、`d/beijing/npc/refereew.lpc:177`、
+  `d/city/npc/gulong.lpc:246` 均已用 `to_int(query("win_times")) %
+  5`；`d/huashan/npc/referee.lpc`/`.old` 不涉及 `%`，不适用。
+- `feature/dbase.lpc` 未发现 tybxjh/wlhd 那种密码写保护，不适用。
+
+### 实测过程
+
+`adm/etc/wizlist` 里的 `fluffos (admin)` 一直没有对应存档（此前只
+做过 WASM 阶段的结构性核实）。本轮通过完整注册流程创建（含出生地/
+天赋点数分配这两步本档案独有的额外流程），落地"北京"客店，`score`
+显示"目前权限：(admin)"，食物/饮水满格。随后**单独一步**做了真实
+断线重连+密码验证：用刚设的密码重新连线成功登录，存档数据一致。全
+程（含 90 秒 idle 观察期）`debug.log` 干净，无运行时错误。驱动按精
+确 PID 结束；管理员存档（`data/{login,user}/f/fluffos.o`，此前从
+未真正注册过）已提交。
