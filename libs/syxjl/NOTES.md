@@ -772,3 +772,43 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD`、`WIZ_BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 36 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。`log_error()`（`adm/obj/master.lpc`，CRLF 行尾档
+案）已经在更早一轮（引用注释里的"AGENTS.md #15w"）正确修复过，管
+理员账号（`fluffos`/`Mud@2026`，`adm/etc/wizlist` 已有
+`fluffos (admin)` 且存档已提交，README 本身已经准确记录了 GB/BIG5
++"Press Enter to Continue"这两步登录细节）也已经全部正确，本轮只
+发现并修复了 `log_file()` 一处。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_file()`（`adm/simul_efun/file.lpc`，CRLF 行尾档案）完全没
+   有 `assure_file()` 保护（AGENTS.md §7.11-class 的又一确认实
+   例）**：`cmds/std/{drop,give,put}.lpc`/`cmds/app/update.lpc` 等
+   文件多处 `log_file("static/...", ...)` 调用依赖对应子目录存
+   在——其中 `static/update` 这一条**每次巫师执行 `update` 指令都
+   会触发**，本轮的 `update` 验证步骤本身就顺带验证了这个修复。注
+   册/登录本身只写 `log_file("USAGE"/"loginnum", ...)`（无子目
+   录，本来就存在），不受影响。已补上
+   `assure_file(LOG_DIR + file);`（含前向声明，用 Python 字节级替
+   换保留原 CRLF 行尾格式）。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:368`。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+
+### 实测过程
+
+用已提交的 `fluffos`/`Mud@2026` 登录（`gb` 选码 → "Press Enter to
+Continue" → 密码），`score`/`update /adm/simul_efun/file`（就是本
+轮改过的文件，同时验证了上面提到的 `static/update` 日志路径）确认
+可正常重新编译，零诊断刷屏。`log/debug.log` 时间戳全程未变化
+（`Jul 23`，早于本次会话），确认无新增未捕获运行期错误。登录本身
+产生的存档时间戳类微小 diff 已用 `git checkout` 撤销，不提交。驱
+动最终按精确 PID kill，`ps -p` 确认已退出。
