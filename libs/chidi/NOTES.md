@@ -413,3 +413,51 @@ end of this pass; confirmed dead via `ps -p`.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 116 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-12，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver` (post
+corpus-wide `quest_times`/`win_times` `%`-operator fix + the
+Warning/warning driver-text revert). Booted clean, port 40006, zero
+errors in boot log.
+
+**Proactive source checks (no changes needed, all already correct
+from earlier passes)**:
+- `win_times` fix confirmed present and correct at
+  `d/city2/npc/refereew.lpc:146`:
+  `(string)(to_int(query("win_times")) % 5)`.
+- `log_error()` (`adm/obj/master.lpc`) already uses case-agnostic
+  `strsrch(message, "arning:")` matching (from an earlier session's
+  §15af work) — correctly gates so wizards always see raw diagnostics
+  but non-wizards only see a generic message for genuine errors, never
+  warnings.
+- No custom `message()` simul_efun wrapper exists in this lib at all
+  (zero matches for `void message(mixed` corpus-wide) — this lib calls
+  the native efun directly, so the message()-missing-`varargs` bug
+  class (found on `nt6`/`nt6nitan6win`) doesn't apply here.
+- `adm/simul_efun/file.lpc`'s `log_file()` has a simpler shape than the
+  assure_file-euid-reset pattern found on the kernel-lineage/nitan
+  libs (`log_file()` here is just
+  `write_file(LOG_DIR + file, text)` — no `seteuid()`/`assure_file()`
+  call at all, even though `assure_file()` is defined elsewhere in the
+  same file). Did not assume this was a bug without live evidence.
+
+**Live verification**: fresh registration via `mudclient.py`
+(`linshuangb` / 尘沐, id → confirm y → Chinese name → admin password
+×2 → login password ×2 → stat roll (0=random) → accept y → email →
+gender m), reached 世外桃源 start room cleanly
+("你连线进入这个世界，开始了自己的江湖生涯"), player count
+incremented 103861→103862 confirming a real save. `debug.log` mtime
+unchanged across the entire registration (predates this test session
+by hours) — zero new errors. Re-logged-in with the same credentials
+(`重新连线完毕`), confirmed persistence. Ran `quit` from inside a room
+— found this lib's `cmds/usr/quit.lpc` does **not** call
+`log_file("nosave/register", ...)` at all (unlike the
+kernel-lineage/nitan siblings' `confirm()`-gated delete path;
+`grep -rln log_file` across the whole tree turns up no `quit.lpc`
+hit) — so the `log_file()` shape difference noted above is confirmed
+**not a live bug**: this lib's quit flow simply never exercises that
+function. No new bugs found this round; no changes made.
+
+Driver killed cleanly by exact PID at the end of this pass; confirmed
+dead via `ps -p`.
