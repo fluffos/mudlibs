@@ -6,3 +6,54 @@
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 53 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，第一次真正的 §10.7 深度测试）
+
+此前只做过 WASM 修复摘要 + §7.86 扫描修复，从未跑过真正的注册/游玩
+全流程。这是第一次。Re-tested against the freshly-rebuilt
+`build-debug/src/driver`（post 全库 `quest_times`/`win_times`
+`%`-operator 修复 + Warning/warning 驱动文本回退）。这份档案和
+`hy2000`/`hy2002` 是同一套"海洋II"血统的又一个快照（README 已记
+录），管理员 `wiz_status/fluffos` 并列授权行已经从更早的一次会话
+里正确修复过（`titny` 是已被占用的真实旧账号，和 `hy2002` 的
+`hxsd` 同一形状），本轮只发现并修复了 log_error()/log_file() 两处。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`）完全没有严重度检查（AGENTS.md
+   §7.34-class，与本轮 `wdxtym`/`ffxymud`/`fy2mg`/`fys`/`hc`/`hy`/
+   `hy2000`/`hy2002`/`hy3`/`hy5` 同一原始形状）**：`if
+   (this_player(1)) efun::write(...)`——不区分巫师/玩家，也不区分
+   警告/错误。修复：加上 `strsrch(message, "arning:") == -1` 判断。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例）**：注册/登录本身只
+   写 `log_file("USAGE", ...)`（无子目录，本来就存在），不受影响，
+   但 `nosave/CRASHES`/`nosave/PURGE`/`nosave/tengaoshou`/
+   `nosave/tenrich`/`nosave/addobj` 等管理指令路径会在首次使用时未
+   捕获抛出。已补上 `assure_file(LOG_DIR + file);`（含前向声明）。
+
+### 管理员账号：存档从未真正提交
+
+README 记录"账号通过正常注册流程创建，已在游戏内确认'目前权限：
+(admin)'显示正确"——`git log` 确认这个存档从未被提交过，本地
+`work/` 目录里也不存在。已用真实注册流程（英文 id → 确认建立 →
+中文名，直接设定不需要二次确认 → 密码 `loginpass1` → 确认密码 →
+天赋 0 随机 → 接受 → 邮箱 → 性别）重新创建 `fluffos`/浮浮，`score`
+确认"目前权限：(admin)"，`update /adm/simul_efun/file`（就是本轮改
+过的文件）确认可正常重新编译，本次是真正的 live 验证。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:177`。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+
+### 实测过程
+
+登录时有一个 GB/Big5 选码提示（选 `g`）。`adm/log/debug.log` 时间
+戳全程未变化（`Jul 30`，早于本次会话），确认无新增未捕获运行期错
+误。驱动最终按精确 PID kill，`ps -p` 确认已退出。
+
+### 已清理
+
+- 管理员 `fluffos` 的存档已提交（`data/{login,user}/f/fluffos.o`）。
