@@ -935,3 +935,87 @@ current WASM build blocker). Confirm via:
 `curl -sS "$HTTPS_PROXY/__agentproxy/status"` — emsdk's
 `storage.googleapis.com` dependency is denied by the proxy, unchanged
 from every other lib checked this session.
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对升级后的驱动（`quest_times`/`win_times` `%`-operator 修复 + Warning/
+warning 大小写驱动兼容回退）做的第二轮 §10.7 重测。
+
+### 环境笔记：`build/src/driver` 在本次会话的宿主 CPU 上崩溃（非本 lib 问题）
+
+`scripts/`/AGENTS.md 惯用的 `/home/sunyc/src/fluffos/build/src/driver`
+本次会话启动即崩溃：`Illegal instruction` 于
+`evthread_use_pthreads`——反汇编确认该函数被编译成使用 AVX 指令
+（`vmovq`/`vpinsrq`/`vinsertf128`），而本次会话实际落地的宿主 CPU 是
+`Intel(R) Xeon(R) CPU L5520`（Nehalem，2009 年，`/proc/cpuinfo`
+`flags` 里最高只到 `sse4_2`，完全没有 AVX）——一个构建/宿主 CPU 不匹配
+的环境问题，与 xajhzcjh 自身代码无关。改用同仓库另一份构建
+`/home/sunyc/src/fluffos/build-debug/src/driver`（未启用相同的
+AVX 代码生成路径）成功干净启动、监听 40070、完成本轮全部测试。记录此
+坑供后续同一宿主上的 session 参考：如果 `build/src/driver` 启动即
+"Illegal instruction"，先试 `build-debug/src/driver`，不要误判为
+lib 本身的问题。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`adm/daemons/logind.lpc` 里两处遗留的 `printf("%O\n", ob);` 调试
+   残留（AGENTS.md §7.34 的形状，与 xajh4gkb round two 独立确认的同一
+   位置形状一致）**：分别在确认中文名字后进入密码设置的两条并行分支
+   ——`get_resp()`（接受随机产生的名字）第 532 行、`get_name()`（手动
+   输入名字被接受）第 565 行——每次注册确认名字后都会把 `ob` 的
+   `file_name`（如 `/clone/user/login#0`）原样打印给玩家。**Live 实测
+   已复现**：用测试号 `testqqchen` 走完整注册流程，屏幕上在"请设定您
+   的管理密码"提示前出现了裸的 `/clone/user/login#0`。两处均删除该行，
+   只保留紧邻的 `ob->set("name", ...)`。round one 的 NOTES 完全没有提
+   到这两行，是本轮新发现（round one 覆盖了这个文件的其它 bug 类，唯
+   独漏了这个）。修复后用第二个测试号 `verqqchen`（女性分支）重新走完
+   整注册流程确认：不再出现任何裸路径泄漏，正常进入游戏世界，男女分
+   支各自的起始服装（布衣 vs 粉红绸衫）都正确。
+
+### §7.34 `log_error()` / §7.11 `log_file()`：round one 已修复，本轮确认仍在位
+
+`adm/obj/master.lpc`'s `log_error()` 仍有大小写不敏感的
+`strsrch(message, "arning:") == -1` 判断；`adm/simul_efun/file.lpc`'s
+`log_file()` 仍在 `write_file()` 前调用 `assure_file(LOG_DIR + file)`
+（含正确的前向声明）。两处均未见回归。
+
+### §5/dbase.lpc 密码守卫检查：不适用
+
+`feature/dbase.lpc` 的 `set(prop, data)` 是纯粹的无守卫赋值（读取整份
+文件确认），没有任何 `wizhood()`/`password` 相关的特殊分支——跟
+tybxjh/wlhd 那个 bug 形状完全不同，这个 lib 没有对应问题。
+
+### 管理员播种验证：wizlist 条目确有对应存档，本轮做了真正的断线重连
+
+`adm/etc/wizlist` 里 `fluffos (admin)` 这条 round one 就已写入，
+`data/login/f/fluffos.o`、`data/user/f/fluffos.o` 也确实存在（不像本
+轮重测系列里其他几个 lib 那样"wizlist 里看起来对但从未真正注册过"）。
+本轮用 `fluffos`/`Mud@2026` 走了一次登陆（`2060` → id → 密码），入世
+后横幅确认 `★ 您目前权限：(admin)`，`look`/`east`/`west`/`score` 全部
+正常。**强制验证步骤**：`quit` 断线后用一个全新的 tmux 会话重新连接，
+`2060` → `fluffos` → `Mud@2026` 完成一次真正的断线-密码-重连，密码验
+证通过，管理员权限保持 `(admin)`，落回原来存档的房间（武庙）——不是
+只看世界进入和权限横幅就下结论。存档文件的 `last_on`/`combat_exp` 字
+段随之更新（`score` 命令触发的正常游玩状态变化），已随本次提交一并
+纳入。
+
+### 移动/驱动兼容性检查
+
+`east`→`west` 往返移动、`score` 多次未触发任何"Too long evaluation"
+崩溃或其他异常，`debug.log` 全程（262 行，逐行读过）只有一贯的
+`Unknown #pragma`/`Unused local variable` 编译期警告，与 round one 记
+录的基线一致，零真实 error/denied/crash/undefined。
+
+### `quest_times`/`win_times` `%`-operator 修复：抽查确认在位
+
+`d/city2/npc/refereew.lpc` 现有 `to_int(query("win_times")) % 5`，是
+corpus-wide 2026-08-12 sweep（commit `c571a53629f`）已经打过补丁的写
+法，无需额外改动。
+
+### 未在本轮测试
+
+拜师门派、商店购物、完整战斗到死亡/复活循环——round one 已用多个测试
+号做过完整覆盖（安全切磋 vs 真实战斗的 `can_speak` 分支、组织化拜师
+成功案例、跨重连状态持久化），本轮认为不需要重复；本轮重点是驱动升级
+后的回归检查 + 正常游玩中顺手发现的 bug（本次即发现了新的 §7.34 实
+例）。
