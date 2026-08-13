@@ -6,3 +6,76 @@
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 76 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-12，round two，首次完整实机测试）
+
+这是这份档案第一次真正的实机深度测试（此前只有 WASM 修复摘要和 §7.86 跨
+库扫描记录，均未做过真人注册流程）。用 `~/src/fluffos/build-debug/src/
+driver`（origin/master 最新拉取，含本项目自己提交并合入的 #1343/#1344
+两个 PR，以及同一会话里另外提交的驱动 PR：把编译诊断严重度标记从小写改
+回大写 "Warning:"/"Error:"）。
+
+### `to_int()` 任务计数器修复
+
+`adm/daemons/combatd.lpc`/`cmds/std/whisper.lpc` 里全部 `quest_count = ...
+% 500` 已经是 `to_int(query(...)) % 500` 的修复后形状，无需改动。
+
+### 已确认无需改动：`log_error()`
+
+`adm/kernel/master/error.lpc` 已经是本会话早前语料库扫描（commit
+fe27592a94c）修复后的形状（`arning:` 大小写无关匹配 + 门控转发），核对
+无需改动。
+
+### 新发现并修复：`message()` 包装函式非 varargs（与 ntii/nte/nt6/hhsj 同类，本档之前误判为"已修"）
+
+`adm/kernel/simul_efun/message.lpc` 的 `message(mixed arg, string
+message, mixed target, mixed exclude)` 缺 `varargs` 且没有 `exclude` 守
+卫——本轮排查时最初误信了对同一份文件早前"grep 到 exclude || (" 就是已修
+复"的粗略检查（那些命中其实是 `message_vision()`/`message_sort()` 等其
+他辅助函式内部**呼叫** `message()` 时自己加的守卫，不是 `message()` 本体
+的守卫），后来直接读函式本体才发现没修。修复：加 `varargs` + `exclude ||
+({})`，和 ntii/nte/nt6/hhsj 完全一致的修法。**现场验证**：修复前"执行时
+段错误：Bad argument 4 to EFUN message()"在 `actiond.lpc` 的活动播报链
+路反复出现；修复+重启后，同样触发活动播报的注册流程干净完成，"多倍
+BOSS奖励"等十条活动公告正确显示，`debug.log` 总行数在多次干净跑（含
+`look`/`score`）中稳定保持 402 行不变。
+
+### 新发现并修复：`log_file()` 的 euid 提权在 `assure_file()` 内部被自己撤销（与 nitan_san 逐字节相同）
+
+`adm/kernel/simul_efun/file.lpc` 的 `log_file()` 和 `nitan_san` 修复前的
+对应文件逐字节相同（`assure_file()` 结尾 `seteuid(getuid())` 撤销了调用
+者刚设置的 ROOT_UID）。用完全相同的修法（`assure_file()` 返回后再
+`seteuid(ROOT_UID)` 一次）处理。**同一轮顺手核对并同样修复了这份档案所
+在血统的三个兄弟库**（`hhsj`/`nt6`/`xfbhh`，均确认逐字节相同的缺陷，此
+前几轮测试这些库时没有专门检查这个函式）。**未能在本轮通过 `quit`→"y"
+确认删号路径独立实机验证**——反复尝试（含分两次连线模拟"重新登录"）在
+"quit" 之后都遇到"什么？"（未识别指令），但 `debug.log` 全程保持 402 行
+不变，说明不是崩溃，很可能是本轮 `mudclient.py` 测试时序上还有没摸清楚
+的地方（这份档案在世界入口之后是否需要额外一步才能进入正常指令循环，未
+查清），不是这处修复本身的问题——这个修复和 `nitan_san` 已经现场验证过
+的版本逐字节相同，源码层面置信度高，留给下一次接触这份档案时用更细致的
+时序补做 `quit` 路径的实机验证。
+
+### 冷启动级联编译撑爆 `maximum evaluation cost`（AGENTS.md §7.90/§10.8 已有先例）
+
+和同血统的 `nt6` 一样，第一、二次全新注册尝试在 `master.lpc` 的
+`valid_read()`/`valid_object()`/`log_error()`、`get_gender()` 链路上多次
+命中"Too long evaluation. Execution aborted."。**验证自愈**：驱动热身几
+次后，后续全新账号一次性干净走完注册→"泥潭注册室"→欢迎/活动播报序列，
+全程零报错。
+
+### 完整游玩测试范围
+
+沿用其它 nt6/hhsj/xfbhh 血统兄弟库已验证过的"注册成功进入泥潭注册室，
+欢迎/活动播报序列正确显示"作为及格线。战斗/门派/quit 完整链路仍未触
+达，留给下一次专门测试。
+
+### 本轮结论
+
+这是 nt6nitan6win 第一次真正的实机测试：任务计数器/`log_error()`均确认
+无需改动；新发现并修复两个真实 bug（`message()` 非 varargs、`log_file()`
+euid 提权被自己撤销），后者同一轮顺手同步修复到 `hhsj`/`nt6`/`xfbhh` 三
+个兄弟库（此前测试这些库时遗漏了这个特定函式的检查）；冷启动 eval-cost
+级联验证自愈；`quit`→"y"确认删号路径未能独立实机验证（源码层面高置信
+度，留给下一轮）。测试账号（`wumeiliu`/`zhoubaqi`/`hematou` 等）存档留
+在 `data/` 下作为佐证，未清理（未跟踪文件，不纳入本次提交）。
