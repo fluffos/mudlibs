@@ -92,3 +92,69 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 7 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-12，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
+全库 `quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+驱动文本回退）。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`）完全没有严重度检查（AGENTS.md
+   §7.34-class，与本轮 `wdxtym`/`ffxymud`/`fqyy2` 同一原始形状）**：
+   `if (this_player(1)) efun::write("编译时段错误：" + message +
+   "\n");`——不区分巫师/玩家，也不区分警告/错误，无条件把所有编译诊断
+   转发给当前连线的任何人。真实复现：全新驱动进程下首次注册
+   `fluffos` 管理员账号触发的冷编译级联（`/std/char` 及其十余个
+   `feature/*.lpc` inherit 链首次编译），修复前屏幕上连续刷出二十多
+   行原始 "Warning: Unused local variable"/"Unknown #pragma" 诊断。
+   修复：加上 `strsrch(message, "arning:") == -1` 判断，只有真正的错
+   误才转发。已用同一新驱动进程下的完整重新注册复测：零次诊断刷屏。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class 的又一确认实例，与 `fqyy2` 同一形
+   状）**：`LOG_DIR` 下的 `nosave/` 子目录在全新检出里不存在，
+   `suicide`/崩溃日志/`purge`/巫师晋升等管理指令路径的
+   `log_file("nosave/...", ...)` 调用会在首次使用时未捕获抛出。注册
+   /登录本身只写顶层文件（`USAGE`/`ATTEMPT_LOGIN`，无子目录，本来就
+   存在），不受影响，但这是一个明确存在的 bug，按标准模式补上
+   `assure_file(LOG_DIR + file);`（含前向声明）。
+3. **管理员账号从未真正创建（AGENTS.md §1.5 的"wizlist 有记录但角色
+   从未真正建立"形状，与本次会话开头几个档案的 commit 记录同一
+   模式）**：`adm/etc/wizlist` 里早就有 `fluffos (admin)` 这一行，
+   但 `wizlist` 只决定权限等级，不会凭空创建这个 id 的角色本身——用
+   README 记录的密码尝试登录时，系统把它当成一个**从未注册过的全新
+   id**（提示"这个名字将会创造一个新的人物"），而不是要求密码，证
+   实此前从未有人真正走完注册流程。已用真实注册流程完整创建
+   `fluffos` 角色（密码沿用 README 已记录的 `Mud@2026x`，本代码线密
+   码复杂度要求最严格，需同时含大小写字母+特殊符号），`score` 确认
+   显示"目前权限：(admin)"，`update /adm/daemons/securityd` 确认可
+   正常重新编译（验证的是真正的写权限，不只是"看起来是 admin"）。
+   README 已同步更正这段记录。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`u/wind/refereew.lpc:176`
+  `(string)(to_int(query("win_times")) % 5)`；姊妹文件
+  `u/wind/refereew2.lpc:184` 同样已修（`% 3`）。
+- 未发现 `message()` simul_efun 包装函数——不适用
+  message()-missing-varargs 这一类 bug。
+
+### 实测过程
+
+`fluffos` 管理员账号完整注册（英文 id → 确认建立 → 中文名，直接设定
+不需要二次确认 → 密码 → 确认密码 → 邮箱 → 性别 → 民族选择 0-3，此前
+未在 README 的注册流程摘要之外单独强调过这一步是新号注册流程的最后
+一环）进入"凤求凰客栈"起始区域。修复前后各做一次全新驱动进程下的完
+整注册；修复前复现了上述诊断刷屏，修复后干净。`log/debug.log`
+全程时间戳未变化，确认无新增未捕获运行期错误。中途一度因为清理测试
+存档时用错了路径（这份档案的 `query_save_file()` 比大多数档案多嵌套
+一层：`/data/user/f/fluffos/fluffos.o`，不是常见的
+`/data/user/f/fluffos.o`）而误以为存档失败，重新确认路径后排除是自
+己的操作失误，非真实 bug。驱动最终按精确 PID kill，`ps -p` 确认已
+退出。
+
+### 已清理
+
+- 管理员 `fluffos` 的存档已提交（`data/{login,user}/f/fluffos/
+  fluffos.o`，注意这份档案的嵌套路径）。
