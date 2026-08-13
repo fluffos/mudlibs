@@ -7847,6 +7847,32 @@ raising it.
   fragments — apply on sight when reading master (mostly an lpcc-noise
   fix, but free and correct).
 
+### 10.4a An ASAN/UBSAN-instrumented driver build can make a lib's preload look 10-20x slower than it really is — don't diagnose that as a content-level bug before ruling out the build
+
+`nitan_san` had 5 separate attempts (up to 58 uninterrupted minutes
+each) to boot against `~/src/fluffos/build` (ASAN/UBSAN-instrumented)
+never finish preload, versus its near-identical sibling `nitan_ceshi`
+finishing in 90 seconds–2 minutes on the same build. That gap led to a
+documented (wrong) conclusion: "10-20x slower than a same-size sibling,
+suspected content-level issue in this specific snapshot, needs a
+dedicated root-cause pass (bisect preload order, comment out chunks)."
+The actual cause: those attempts used the sanitizer-instrumented build.
+Re-tested with `~/src/fluffos/build-debug` (uninstrumented) and preload
+completed in 33 seconds — matching the sibling exactly. ASAN/UBSAN
+overhead is not uniform across code shapes; it can be dramatically
+worse on whatever this lib's preload happens to stress (large nested
+data literals, heavy string/array churn, etc.), so a "10-20x" gap
+between two similar-sized libs on an instrumented build doesn't mean
+anything is wrong with the slower one's content.
+
+**How to apply:** before spending a root-cause session on "this lib's
+boot/preload is mysteriously way slower than a similar-sized sibling,"
+check which driver build was used. If it was an ASAN/UBSAN build,
+re-test with the plain `build-debug` (or equivalent uninstrumented
+build) first — that alone has fully explained every such case seen so
+far in this corpus. Only escalate to a dedicated content-level
+bisection if the slowdown reproduces on an uninstrumented build too.
+
 ### 10.5 Process hygiene (multi-session/multi-agent)
 
 - **Don't arm a background Monitor/wait around a boot-watch loop and
