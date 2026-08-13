@@ -44,3 +44,51 @@
 
 - 测试用一次性小号 `xiyangke` 的存档（`data/{login,user}/x/`）已删除，未提交。
 - 管理员 `fluffos` 的存档已提交（`data/{login,user}/f/fluffos.o`），密码与 README 一致；账号在测试过程中拜入白驼山派并被设置了 unarmed/dodge 技能等级，属于走真实流程验证捷径/机制留下的痕迹，未额外清空。
+
+## 深度功能测试（2026-08-12，round two，新驱动重测）
+
+Re-tested against the freshly-rebuilt `build-debug/src/driver` (post
+corpus-wide `quest_times`/`win_times` `%`-operator fix + the
+Warning/warning driver-text revert).
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc:140`）完全没有严重度检查（AGENTS.md
+   §7.34-class，与本轮此前 `wdxtym` 上修的形状完全相同——不是"算出
+   severity 但没真正拿来 gate"，而是压根没有算）**：
+   `if (this_player(1)) efun::write("编译时段错误：" + message + "\n");`
+   把**所有**诊断信息（包括最普通的编译警告）无条件转发给当前连线的
+   任何玩家，不区分是巫师还是普通玩家，也不区分警告还是错误。真实复现：
+   一次全新驱动进程下的全新注册（首次冷编译级联，触发大量
+   `Unknown #pragma, ignored.`/`Unused local variable` 一类的纯警告），
+   新角色一进游戏前就先看到十几行原始编译诊断刷屏。修复：改成
+   `if (this_player(1) && strsrch(message, "arning:") == -1) efun::write(...)`
+   （沿用本轮项目统一的大小写无关 `"arning:"` 判断惯例）。已用同一新
+   驱动进程下的第二次全新注册复测：debug.log 时间戳在整场会话前后
+   均未变化（无新错误），且屏幕上不再出现任何编译诊断刷屏。
+
+### Proactive checks（无需改动）
+
+- `win_times` 修复确认存在且正确：`d/city2/npc/refereew.lpc:146`
+  `(string)(to_int(query("win_times")) % 5)`。
+- 未发现 `message()` simul_efun 包装函数（`void message(mixed` 全档案
+  零命中）——不适用 message()-missing-varargs 这一类 bug。
+- `adm/simul_efun/file.lpc` 的 `log_file()` 已经正确调用
+  `assure_file()`（本档案第一轮测试里已修复过的 §7.11 实例）；
+  `assure_file()` 本身末尾不做 `seteuid(getuid())` 重置，所以不属于
+  `nitan_san`/`nt6nitan6win` 那种"assure_file 自己把 euid 重置掉"的
+  形状，无需再修。
+
+### 实测过程
+
+新号 `chenmufb`/沐辰：`shikongyouxia3.0` → 英文 id → 确认建立 → 中文名
+（无 y/n 确认，直接进密码环节，与档案内 `get_name()` 非空分支的实际
+实现一致）→ 密码（≥5 字元）→ 确认密码 → 天赋（0 随机）→ 接受 → 邮箱
+→ 性别，完整走通进入"北疆小镇"起始区域。修复前后各做一次全新注册；
+修复前复现了上述编译诊断刷屏，修复后干净。`log/debug.log` 全程时间戳
+未变化，确认无新增未捕获运行期错误。驱动最终按精确 PID kill，`ps -p`
+确认已退出。
+
+### 已清理
+
+- 测试用一次性小号 `chenmufb` 的存档已删除，未提交。
