@@ -177,11 +177,67 @@ logind`/`/adm/obj/master` 都报"没有这个档案。"，但这些文件在磁�
   三次）：全新驱动进程下首次触发 `get_gender()`→`enter_world()` 冷
   编译级联，AGENTS.md §7.90/§10.8 已归档的冷启动 eval-cost 耗尽类
   别，第二次登录（重新连线）未再出现，确认已自愈，非持久性 bug。
-- `*restore_object(): Illegal mapping format while restoring
-  emote.`（`/adm/daemons/emoted` 开机 preload 阶段）：追查后确认是
-  这份档案原始存档数据本身的损坏（不是本轮改动引入的），已用
-  `CATCH()` 包裹不影响开机，和 `jqxz2008` 的 `e2c_dict.o` 数据损坏
-  同一性质，按项目惯例不展开修复数据文件本身，如实记录。
+
+### 2026-08-13 更正并修复：emote 存档损坏，之前误判为"仅噪音"
+
+上一轮记录把 `*restore_object(): Illegal mapping format while
+restoring emote.`（`/adm/daemons/emoted` 开机 preload 阶段）当成和
+`jqxz2008` 的 `e2c_dict.o` 一样的"数据损坏但已被 `catch()` 安全吞掉、
+不影响运行"，未展开修复。本轮重新深挖，结论有一半不成立：损坏本
+身确认属实（`data/emoted.o` 291724 字节，`[`/`]`/`(`/`)` 括号计数
+不平衡：`[` 455 次 vs `]` 454 次，`(` 461 次 vs `)` 462 次，是真实
+的存档级结构损坏，不是格式化工具误判），`master.lpc` 的
+`preload()` 确实用 `catch(call_other(file, "??"))` 拦住了这个错误
+让开机不中断——但错误往上抛穿了 `emoted.c` 的 `create()`：
+
+```
+void create() {
+  if (!restore() && !mapp(emote))
+    emote = ([]);
+}
+```
+
+`restore()` 内部的 `restore_object()` 抛出的是一个**可以被 catch()
+拦截、但不是"返回 0"的错误**，会中断 `create()` 的执行，导致
+`emote = ([])` 这个兜底赋值根本没机会跑到——`emote` 全局变量最终
+停留在**从未初始化的 `int 0`**，不是一个空 mapping。用临时
+`write_file()` 埋点在真实驱动里验证过：`preload()` 里
+`catch(call_other(file, "??"))` 捕获到的 `err` 正是这行错误文本；
+紧接着调用 `EMOTE_D->query_all_emote()`（内部是 `keys(emote)`）会
+再抛出 `*Bad argument 1 to keys(): Expected mapping Got: 0`——而
+`cmds/imm/edemote.lpc`/`cmds/adm/udemote.lpc`（巫师/管理员编辑预
+设动作表的指令）第一步就调用 `EMOTE_D->query_all_emote()`，也就是
+说这两个巫师指令在修复前会**直接崩溃**，不只是开机日志噪音。
+
+修复：`git rm work/data/emoted.o`。删除后 `restore()` 正常返回 0
+（文件不存在），`emote = ([])` 按设计兜底执行，`query_all_emote()`/
+`query_emote()` 恢复正常（返回空表而不是报错）。`do_emote()`（`emote
+<动作词>` 里带参数匹配预设动作模式的那条路径）修复前后行为其实一致
+——它自己用 `!mapp(emote) || ...` 短路判断，`mapp(0)` 返回假不会报
+错，所以预设动作在修复前后都是"匹配不到"（数据本来就已经不可用），
+不构成回归，只是 `edemote`/`udemote` 的硬崩溃被消除了。
+
+验证：新驱动进程干净启动 5 次，`boot_verify.log`/`debug.log` 均不再
+出现 `Illegal mapping` 或任何 `emote` 相关报错；用临时埋点直接调用
+`EMOTE_D->query_all_emote()` 确认不再抛错、返回空 array。完整走了
+两次全新注册流程（英文 id→中文名→双密码→天赋→email→性别→进入游戏
+世界），均正常到达 `(player)` 权限、正常显示房间描述，没有任何
+emote 相关报错。另外用已提交的管理员 `fluffos` 账号（`data/login`/
+`data/user` 下的存档早于本次改动，来自更早的会话）做了一次真实的
+"全新连线→用已存普通密码登录→look 看到正确房间描述"的重连验证。
+
+**顺带发现但明确排除在本次修复范围之外、留给未来处理的两个不相关
+pre-existing bug**（用同一个 `fluffos` 账号反复重连测试时命中，用
+"先还原 `emoted.o`、同样步骤复现" 的对照实验确认这两个和本次的
+emote 修复无关，删除/不删除损坏档案都一样会触发）：
+1. `Too deep recursion. program: /adm/daemons/securityd.lpc:263`——
+   在管理密码登录改密码、以及"踢掉重复连线"两条路径上都能稳定复
+   现,不是一次性冷启动效应（同一新号连续两次注册都命中同一行）。
+2. `cmds/usr/quit.lpc` 第 38 行 `environment(me)->query("fight_room")`
+   在 `environment(me)` 为 0 时 `call_other()` 直接报错——命中一次，
+   与前一条同一次会话里的 `fluffos` 账号状态有关，未确认是否对全
+   新注册角色同样可复现。
+两者均已如实记录，不属于本轮任务范围（emote 存档），未做任何改动。
 
 ### 已清理
 
