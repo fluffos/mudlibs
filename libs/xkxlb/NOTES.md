@@ -6,3 +6,55 @@
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 18 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测，同时也是这份档案第一次真正的 §10.7 深
+度游玩测试（此前只做过 WASM 阶段的注册流程验证）。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/single/master.lpc`，实际生效的 master
+   file）完全没有严重度检查（AGENTS.md §7.34-class）**：已加上
+   `strsrch(message, "arning:") == -1` 判断。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有
+   `assure_file()` 保护（AGENTS.md §7.11-class）**：已加上前向声明
+   + `assure_file(LOG_DIR + file);`。
+3. **§8.9 食物/饮水初始化判断的对象错了**：`adm/daemons/
+   logind.lpc` 的 `enter_world()` 里 `!user->query("food") &&
+   !user->query("water") && ob->query("age") == 14` 判断的
+   `ob->query("age")` 拿的是登录阶段用完即弃的连线桩物件，永远没有
+   `age` 这个属性，条件恒为假，每个新角色食物/饮水永远初始化成
+   0。改成 `user->query("age") == 14`。live 测试确认：修复前注册
+   `score` 食物/饮水两栏全空（□□□），修复后重连（这个判断在
+   `enter_world()` 里每次登录都会重新求值，只要 `food`/`water` 仍
+   是 0 就会补发）同一账号立即变满格（■■■）。
+
+### Proactive checks（无需改动）
+
+- `win_times` 的 `%`-operator 修复确认存在且正确：
+  `d/city2/npc/refereew.lpc:176`、`u/wind/refereew.lpc:176`、
+  `u/wind/refereew2.lpc:184` 均已用 `to_int(query("win_times")) %
+  N`。
+- `feature/dbase.lpc` 未发现 tybxjh/wlhd 那种密码写保护，不适用。
+- **留言板存档括号计数怀疑（未采取行动）**：用简单的方括号/圆括号
+  配对启发式扫描全部 `data/board/*.o`，`bonze_b`、`gaibang_b`、
+  `gaibang_r`、`huashan_b`、`shaolin_b`、`taohua_b`、`towiz_b`、
+  `wiz_b`、`wudang_b`、`xiaoy_b`、`xueshan_b` 共 11 份显示括号不配
+  对（`kedian_b.o` 那份真正确认损坏的存档 WASM 阶段已经删除）。这
+  个启发式本身不可靠（留言内容里出现的普通括号标点也会误报），本
+  轮完整注册/look/score/重连流程没有触发任何一份的
+  `restore_object()` 报错，`debug.log` 全程干净，没有实际证据证明
+  这些是真损坏（不像 `xkx2017` 那批，有确认的存档头缺失+live 崩溃
+  复现）。按"没有真实复现就不动"的纪律，本轮未删除任何一份，留给
+  以后如果真的踩到崩溃再处理。
+
+### 实测过程
+
+管理员 `fluffos`/`Mud@2026`（`adm/etc/wizlist` 早已播种，但从未真
+正注册过）用完整注册流程创建，落地"客店"，`score` 显示"【天神】"
+头衔。随后**单独一步**做了真实断线重连+密码验证：用刚设的密码重
+新连线成功登录（顺带验证了 #3 的食物/饮水修复对已存在账号的自愈效
+果）。全程 `debug.log` 无运行时错误。驱动按精确 PID 结束；管理员
+存档已提交。
