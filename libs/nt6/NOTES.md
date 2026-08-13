@@ -6,3 +6,77 @@ NT/nitan 血统，但和 nitan170911/nitan6 不是逐字节相同。之前一轮
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 76 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-12，round two，新驱动重测）
+
+用新编译的 `~/src/fluffos/build-debug/src/driver`（origin/master 最新拉
+取，含本项目自己提交并合入的 #1343/#1344 两个 PR，以及同一会话里另外提
+交的驱动 PR：把编译诊断的严重度标记从 clang 风格的小写 `warning:`/
+`error:` 改回大写 `Warning:`/`Error:`，专门为了兼容本语料库里大量按老式
+MudOS 惯例检查大写"Warning"的 mudlib 代码）重新验证。
+
+### `to_int()` 任务计数器修复
+
+`adm/daemons/combatd.lpc`/`cmds/std/whisper.lpc` 里全部 `quest_count = ...
+% 500` 已经是 `to_int(query(...)) % 500` 的修复后形状，无需改动。
+
+### 新发现并修复：与 hhsj 逐字节相同的 `log_error()` 严重度门控缺失
+
+`adm/kernel/master/error.lpc`——和 `hhsj`（同一会话本轮更早修复过）的对
+应文件逐字节相同，同一个 bug：`error_type` 的大小写判断本身是对的
+（`strsrch(message, "Warning") == -1`），但从来没有真正拿这个判断结果去
+门控是否要 `tell_object()` 转发给玩家——不管是不是纯 warning，一律无条
+件转发。修复：只在真正的 error 时才转发（`debug` 频道广播给巫师和
+`write_file()` 落盘均保持不变）。**现场验证**：驱动升级后（大写
+"Warning:" 恢复）配合这个修复，干净注册流程的欢迎序列不再夹带任何
+"编译时段警告：...Warning:"文本。
+
+### 新发现并修复：`message()` 包装函式非 varargs（与 ntii/nte 同类）
+
+`adm/kernel/simul_efun/message.lpc` 的 `message(mixed arg, string
+message, mixed target, mixed exclude)` 没有声明 `varargs`，但驱动仍然接
+受少于 4 个实参的呼叫（缺失的 `exclude` 静默补成整数 `0`），再原样转发
+给 `efun::message()`——这个驱动的原生 message() efun 拒绝接受字面 `0`
+作为 exclude。`adm/daemons/actiond.lpc` 的 `check_action_startend()`（每
+次新角色 `enter_world()` 时通过 `festival.lpc`→`actiond.lpc`创建触发）
+用 3 个参数呼叫 `message("system", ..., users())`，每次新注册都会命中。
+修复（加 `varargs`，`exclude || ({})`）与 ntii/nte 的修法完全一致。**现
+场验证**：修复前"执行时段错误：Bad argument 4 to EFUN message()"反复出
+现在 debug.log；修复+重启后，同样触发活动播报的注册流程干净完成，"多倍
+BOSS奖励"等活动公告正确显示在欢迎序列里，没有任何报错。
+
+### 冷启动级联编译撑爆 `maximum evaluation cost`（AGENTS.md §7.90/§10.8 已有先例，本档尤其严重）
+
+这份档案的分布式预载设计（`SYSTEM_D->valid_login()` 靠 `preload_list`
+每秒载入一个档案，约 30 秒才允许登录，见既有 WASM 修复摘要记录）意味着
+驱动刚起服后的头几次全新注册撞上的冷启动级联比 `hhsj`/`ntii`/`nte` 更
+频繁：`master.lpc` 的 `valid_read()`/`valid_object()`、`logind.lpc` 的
+`get_gender()`、`user.lpc` 的 `calc_sec_id()`、`simul_efun.lpc` 的
+`assure_file()` 等多处各自独立触发过"Too long evaluation. Execution
+aborted."，符合已知类别，不是新回归（同一会话里 `hhsj`/`ntii`/`nte` 用
+同一份升级后驱动测试时记录了同样的现象）。**验证自愈**：驱动"热身"几
+次注册尝试、账号存档确认幸存（`qinfengjiu`/`qinfenger`/`qinfengshi` 均
+成功落盘）后，后续全新账号（`qinfengba`）一次性干净走完注册→"泥潭注
+册室"→欢迎序列（含活动播报），全程零报错。一次由冷启动级联间接触发的
+下游症状（`adm/daemons/analectad.lpc` 的 `prompt_user()` 在
+`analecta_list` 疑似因 `create()` 被级联打断而未初始化的情况下命中
+"Value being indexed is zero"）同样在驱动热身后的干净重跑里没有再复
+现，判定为同一根因的下游表现，不是独立 bug，未单独修复。
+
+### 完整游玩测试范围
+
+沿用 hhsj/round one 已经验证过的"注册成功进入泥潭注册室，欢迎/活动播报
+序列正确显示"作为及格线（`score` 对未完成"出生仪式"的角色返回"还没有出
+生呐"，是这份档案自己的设计，不是 bug，和 hhsj 的记录一致）。战斗/死亡
+循环仍未触达，留给下一次专门测试。
+
+### 本轮结论
+
+驱动升级（含把诊断严重度标记改回大写"Warning"的驱动侧修复）后 nt6 整体
+状态良好：任务计数器 `to_int()` 修复确认已生效；新发现并修复两个真实
+bug（与 hhsj 逐字节相同的 `log_error()` 严重度门控缺失、与 ntii/nte 同
+类的 `message()` 非 varargs 崩溃），均现场验证；冷启动 eval-cost 级联比
+其他档案更频繁但同样验证自愈，一个下游症状（analectad.lpc 索引崩溃）
+同样自愈、判定为同一根因。测试账号
+（`qinfengjiu`/`qinfenger`/`qinfengshi`/`qinfengba`）存档留在 `data/`
+下作为佐证，未清理（未跟踪文件，不纳入本次提交）。
