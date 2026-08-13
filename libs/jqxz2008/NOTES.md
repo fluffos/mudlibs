@@ -916,20 +916,16 @@ Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
    指令路径会在首次使用时未捕获抛出。已补上
    `assure_file(LOG_DIR + file);`（含前向声明）。
 
-### 发现但未修复：`e2c_dict.o` 存档数据本身已损坏
+### 更正（2026-08-13）：`e2c_dict.o` 已删除
 
-开机 preload 阶段 `adm/daemons/chinesed.lpc` 的 `create()` 里
-`restore()` 抛出 `*restore_object(): Illegal file format`（被
-`master.lpc` 的 `CATCH()` 包裹，不影响开机，且未写入
-`log/debug.log`，只出现在驱动自身的 stdout）。追查发现
-`data/e2c_dict.o` 本身就是一堆无法解析的二进制乱码（既不是 gzip
-压缩格式，也不是任何合法的存档文本格式），大概率是原始压缩包在更早
-的某次转换/提取过程里本来就已经损坏，不是这次驱动升级引入的回归。
-`chinesed.lpc` 的核心功能（`chinese_number()` 等数字转中文函数）不
-依赖这份存档，注册/登录/`update` 全程验证通过、零阻塞。按项目惯例
-不在本轮的标准 bug 扫荡范围内展开修复（这是数据损坏，不是程序逻
-辑错误），如实记录，留给未来专门的 pass 判断是否需要重建这份字典
-存档。
+上面记录的"未修复"已过时。用户指示清理这类噪音后，重新确认
+`chinesed.lpc` 的 `create()`：`catch(restore()); if (!mapp(dict))
+dict = ([]);`——即使 `restore()` 失败，`dict` 也会正确回退成空映
+射，删除这个永远无法被正确解析的损坏文件不会改变任何行为（有它在
+的时候和没有它的时候，`chinesed` 的实际运行状态完全一样，区别只是
+每次开机是否会在驱动 stdout 上多打印一条被 CATCH() 吞掉的错误
+噪音）。已删除 `data/e2c_dict.o`，重新走一遍完整注册/登录流程复
+测，`chinesed` 干净加载、无任何报错，功能无回归。
 
 ### Proactive checks（无需改动）
 
