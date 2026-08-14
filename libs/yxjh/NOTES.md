@@ -66,6 +66,80 @@ debug.log 全程除开机那次已记录的 eval-cost 问题外无新增报错�
 器人的资深玩家流程也未尝试复现——只走了组织化程度较低的自然探索
 路径。
 
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。第一轮已修复的 §7.34 printf 泄漏/§8.9 均
+逐项核对代码仍然生效；`win_times` 的 `%`-operator 也已用
+`to_int(query("win_times")) % 5`（`d/city2/npc/refereew.lpc:146`）；
+`feature/dbase.lpc`（真正生效的 F_DBASE，`u/rock/dbase.lpc` 是巫师
+沙盒死代码副本，不适用）未发现密码写保护，不适用 tybxjh/wlhd 那一
+类 bug。
+
+### 本轮新发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`，实际生效的 master file）
+   完全没有严重度检查（AGENTS.md §7.34-class）**：这份档案的写法比
+   较特殊——`this_player(1)` 和 `this_player()` 两个分支都无条件回
+   显——已把两个分支一起包进 `strsrch(message, "arning:") == -1`
+   判断。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有
+   `assure_file()` 保护（AGENTS.md §7.11-class）**：已加上前向声明
+   + `assure_file(LOG_DIR + file);`。
+3. **`confirm_relogin()`（`adm/daemons/logind.lpc`）"踢掉重复连线"
+   分支在 `old_link` 为空时的兜底路径参数传错、且没有重新提示，导
+   致后续任意输入被静默当成新英文 id 处理（新发现，本轮实测复现）**：
+   `old_link = user->query_temp("link_ob")` 为 0 时（旧连线的
+   link_ob 已经不存在，但角色对象本身还残留"看起来仍在连线"的状
+   态——真实触发场景：短时间内两次断线重连，第一次连线的 socket 已
+   经关闭但驱动侧的清理还没跟上），代码走进 `else` 分支：
+   `input_to("get_id", ob, user)`——`get_id()` 的真实签名是
+   `(string arg, object ob, int ip_cnt)`，这里把一个（刚被
+   destruct 的）物件传进本该是 `int` 的第三个参数位置，而且**没有
+   先 `write()` 任何提示**就注册了下一次输入的回调。玩家看到的现
+   象：屏幕上什么提示都没有，下一条自己随便发的指令（比如
+   `look`）被 `get_id()` 当成新英文 id 处理，弹出"使用 look 这个
+   名字将会创造一个新的人物，您确定吗"——完全静默的指令流错位，除
+   非玩家仔细看提示文字否则很容易误以为是网络问题。live 复现：连
+   续两次快速重连触发了这个分支，第二次的 `look`/`score` 被吞成了
+   假注册流程。修复：加回缺失的提示 `write("请输入您的英文名字：
+   \n");`，并把第三个参数改成合法的 `int`（`0`，和其它正常调用点
+   一致的默认值）。同一个签名不匹配的写法在 `get_wizpwd()`（巫师
+   密码重试失败分支）里也独立出现了一次（`input_to("get_id",
+   user)`，直接漏掉第三个参数，此处 `user` 参数实际语义是连线物
+   件），一并修复（补上提示 + `0` 参数）。重启驱动后用连续两次真实
+   重连复测：第二次不再触发假注册流程，`look`/`score` 正常执行，
+   `debug.log` 里不再出现"中间登陆出错"配对的错位指令。
+
+### Proactive checks（无需改动）
+
+- **一次性冷启动 eval-cost 耗尽（AGENTS.md §7.90/§10.8-class），本
+  轮确认自愈，未修改**：注册流程（`get_gender()`→`enter_world()`
+  首次编译 `adm/daemons/race/human.lpc` 等）和第一次 `look`
+  广场触发的邻近 NPC `feature/dbase.lpc::query()`（内部
+  `evaluate()` 求值一个未编译过的表达式）各触发了一次
+  `Eval interrupted`/`Too long evaluation`——均发生在
+  `Accepting telnet connections` **之后**，是活跃会话期间真实可达
+  的冷编译突发，不只是开机 preload 噪音。用第二次全新连线复测同一
+  账号、同样访问广场：`debug.log` 里这些错误没有再出现，确认是一
+  次性冷编译代价，不是持续性阻断问题，维持第一轮记录的判断（不修
+  改 `maximum evaluation cost`，NOTES.md 已有类似 `boss.lpc` 冷编
+  译实例的先例记录）。
+
+### 实测过程
+
+管理员 `fluffos`/`Mud@2026`（`adm/etc/wizlist` 早已播种，但从未真
+正注册过）用完整双密码注册流程（管理密码+登陆密码）创建，落地"铁
+枪庙"，`score` 显示"【天界总管】"头衔，食物/饮水满格。随后**两次连
+续**真实断线重连+密码验证（第二次专门用来复现并验证上面 #3 的修
+复）：均成功登录，存档数据一致，第二次重连后 `look`/`score` 正常
+执行（未再被吞成假注册）。驱动按精确 PID 结束；测试期间产生的
+NPC/拍卖背景世界模拟状态漂移（`data/npc/*.o`、`data/paimai.o`、
+`u/rock/log.txt`）已 `git checkout --` 还原；管理员存档
+（`data/{login,user}/f/fluffos.o`）已提交；`data/{login,user}/y/
+yxdive.o` 是 2026-08-03 上一轮深挖遗留的测试角色，与本轮无关，未
+触碰。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 浴血江湖3梦回江湖。WASM 修复找到并修好了 5 个真正的 bug：（1）压缩包里缺少不带后缀的 adm/etc/preload 档案（只有 preload.bak 和一份稍短的 preloadbb 变体）——已从 preload.bak（两者中更完整的一份）恢复，而这份档案还带有 CRLF 换行符，update_file() 的 explode(str,"\n") 不会剥除它们，导致每一个预加载精灵的路径都被静默地变成了例如 '/adm/daemons/securityd\r.lpc'，file_size() 检查失败——已转换成 LF 让预加载真正生效（之前实际上零个精灵被预加载；logind.lpc 之所以之前还能凑合工作，纯属侥幸，是因为它直接继承自 clone/user/login.lpc）。（2）唯一真正生效的 adm/daemons/logind.lpc 里标准的 §8.1 GBK 字节区间 check_legal_name()（i%2==0 奇偶门槛、name[i..<0] 后缀切片、字节数翻倍的 2/10 界限），已修复成逐码点的 name[i..i] 和 1/5 界限；is_chinese() 本身已经正确。保留了三份死代码备用副本未做改动（clone/user/logind.lpc 和真正的 clone/user/login.lpc 以及 login_back.lpc/loginbak.lpc 放在一起；u/rock/ 是某个巫师的个人全量 mudlib 备份目录，自带一整套 logind.lpc/master.lpc/user.lpc 等）——已通过 config.fluffos 里的 master file/simulated efun file 路径确认，LOGIN_D 和 master 档案配置都没有指向这两处任何一处。（3）master.lpc 的 valid_read()/valid_write()（真正生效的 adm/obj/master.lpc，不是 u/rock/obj/master.lpc 那份死代码副本）缺少标准的 'user == this_object()' 短路判断——两处都已加上。（4）d/jerry/saveme.lpc 的 create() 呼叫了 exert_function(10)——exert_function(string func)（定义在 inherit/char/npc.lpc 里）需要的是一个技能名字符串，不是整数，导致这个 NPC 完全编译不过（'*No program in object'），每次启动都会破坏一整块城市房间的居民；这次呼叫的原始意图已经无法还原（是死代码，不像本次会话其它档案的修复那样是打错的算术），所以直接删掉了，做法和 yhyxcs 更早那次原生启动过程里删掉一个无法还原的强制重新加载技巧、而不是猜测修复方式一致。（5）data/ 下 130 个 .o 存档档案里有 118 个是 CRLF 换行，驱动的 restore_object() 在处理嵌套映射结构时可能会因此卡住——已全部统一转换成 LF；这修复了大部分但不是全部的 restore 问题（见下）。碰 socket 的 adm/daemons/httpd.lpc 和 adm/daemons/network/dns_master.lpc 都不在（现在已经恢复的）预加载列表里，也没有真正的外部呼叫者——保持原样，不需要 §7.52 掏空处理。管理员账号播种：fluffos (admin) 加入 adm/etc/wizlist（这份档案的阶层一直到 (admin) 之上的 (ceo)——为了和本次会话的惯例保持一致，用的是标准的 (admin) 阶层）。注册流程在格式化前后都完整验证过（英文 id→y 确认→中文名字→管理员密码+确认→登录密码+确认→天赋菜单（'0' 随机→'y' 接受）→电子邮件→性别→进入中央广场），管理员权限已通过'◇ 您目前权限：(admin)'确认。已知未修复的问题：即使做了 CRLF 修复，adm/daemons/named.lpc 的 restore_object() 每次启动依然会抛出'Illegal mapping format while restoring dbase'——存档档案里的映射字面量语法上是配平的（已核对括号匹配），所以原因出在这个驱动更严格的 restore_object() 解析器里的其它地方，没有进一步深挖；这个失败已被捕获（preload() 的 catch()），只会降级 named.lpc 的近似名字冲突去重检查功能，不会阻挡注册、进入游戏世界、或任何其它已观察到的功能——按 AGENTS.md §7.15 的精神记录在案，不算阻断性问题。LPC 格式化工具对全部 13038 个档案运行（写入 11874 个，1119 个针对本次会话里最杂乱代码库的转档之前就存在的未结束字符串/文本块错误未做格式化，45 个未改动）。没有 :: 父类呼叫拆分命中，没有 case 标签带尾随注释的候选，没有 CJK 重新加空格/转义损坏命中。格式化后用同样的完整注册+管理员登录流程重新验证过——干净，管理员权限依然是 (admin)。
