@@ -509,3 +509,117 @@ live).
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 19 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第三轮 / Deep functional test round three (2026-08-14)
+
+Independently re-verified every §10.7 checklist item against current code
+rather than trusting the round-two writeup above; found and fixed one new
+bug, plus confirmed a driver-build-speed artifact that looked like a bug
+at first but wasn't.
+
+### New fix: `cmds/wiz/update.lpc` — `present(file, environment(me))` crashes when the caller has no environment
+
+**File:line: `cmds/wiz/update.lpc:20`.**
+
+`main()`'s first check calls `present(file, environment(me))` unconditionally.
+When `environment(me)` is `0` — reachable any time `update` is typed by an
+object that isn't currently placed in a room — this throws `*Bad argument 2
+to present() Expected: object Got: 0.`, aborting the whole command with no
+useful message.
+
+- **How this was found**: reproduced twice in a row (immediately post-login,
+  and again after an interposed `look`) while investigating what first
+  looked like a genuinely void/broken saved room for the `fluffos` admin
+  account (`look` printed "你的四周灰蒙蒙地一片，什么也没有。"). Root cause
+  turned out to be a **separate, unrelated issue** (see below) that was
+  corrupting `make_body()` mid-flight and leaving the character in a
+  genuinely environment-less state — `update.lpc`'s missing null-check is a
+  real bug regardless (any admin whose environment is legitimately unset for
+  any reason would hit this), just not the *primary* cause of what was
+  observed live.
+- **Fix**:
+  ```lpc
+  // BEFORE:
+  if ((obj = present(file, environment(me))) && interactive(obj))
+  // AFTER:
+  if (environment(me) && (obj = present(file, environment(me))) && interactive(obj))
+  ```
+- **Verified**: post-fix, `update /adm/daemons/logind` from a normal,
+  properly-placed session (客店) succeeded ("重新编译 ... 成功！"), confirming
+  real admin write access without going through the `#include`-simul_efun
+  pitfall (this file is its own standalone compiled command object).
+
+### Investigated and ruled out as a mudlib bug: cold-start eval-cost exhaustion is 100% reproducible on this lib's configured budget, not intermittent — but it's a debug-build artifact, not an LPC logic bug
+
+Round two's writeup (and this session's own general practice) treated
+`Eval interrupted: ... cost limit reached` during `make_body()` as a
+self-healing, order-of-magnitude-rare cold-start artifact. On this lib it is
+**not rare** — it reproduced on every single fresh-boot first login attempt,
+every time, across multiple independent boots, and crucially it does **not
+cleanly self-heal**: the character that "succeeds" after the aborted
+`make_body()` calls lands in a session where every command (`look`, `who`,
+`update`) returns the generic "什么？" fallback — command dispatch never
+finished wiring up properly. Reconnecting doesn't help; the very next login
+attempt hits the identical abort, every time.
+
+- **Root cause**: `config.fluffos` sets `maximum evaluation cost : 300000`
+  (300ms) — already raised once from the shipped default of 100000 per an
+  in-file comment ("Because of the heavy load on the Power PC, made it
+  larger to pass the bad time"), i.e. this value was already hand-tuned for
+  slow hardware once, in the original 2000s-era production environment.
+  `make_body()`'s cumulative interpreted LPC work (loading skill tables,
+  `dbase`, etc.) reliably exceeds 300ms end-to-end on this repo's
+  `build-debug` driver, which runs LPC substantially slower than an
+  optimized/release build. Confirmed by temporarily raising the limit to
+  5000000 for testing only (`config.fluffos` reverted to 300000 immediately
+  after, `git diff` empty) — with the higher budget, the identical first
+  login after a fresh boot succeeded cleanly on the very first attempt, full
+  room description, "目前权限：(admin)" shown, zero eval errors in
+  `debug.log`. The "灰蒙蒙" void-room symptom seen investigating the
+  `update.lpc` bug above was a downstream artifact of this same thrashing,
+  not a real saved-location bug.
+- **Why not fixed in the committed lib**: this is a test-environment/config-
+  tuning mismatch (slow debug driver vs. a limit tuned for a specific piece
+  of 2000s-era production hardware), not an LPC code defect — no call site
+  is doing anything actually wrong. Bumping the committed `config.fluffos`
+  value would be a content/tuning change made on the basis of one specific
+  debug-build's speed, not a correctness fix, so it was left as-is per this
+  project's standing discipline against re-tuning historical config values
+  without a code-level reason. Flagged here explicitly in case it recurs on
+  future passes against this lib — the fix, if ever needed, is a config
+  change (raise `maximum evaluation cost`), not an LPC change.
+
+### Re-verified still holding (code-inspection, not full live re-repro — see rationale)
+
+All three round-two fixes remain present and unmodified in the current
+code (`adm/simul_efun/message.lpc`'s `exclude || ({})`, `feature/skill.lpc`'s
+four `mapp()`-guarded accessors plus the `mingjiao.h`/`bojuan.lpc` guards,
+and `cmds/std/go.lpc`'s `catch(call_other(dest, "???"))` plus its two
+`guest_room.lpc`/`wizard_room.lpc` siblings) — confirmed by direct grep
+against each fix's exact diff, not merely assumed. Bug 2 Instance A was
+additionally re-verified **live**: walked to 北大街 where 萧峰/xiaofeng sits,
+waited past his `check_skills()` `call_out`, `debug.log` showed zero errors
+afterward (previously crashed with "Bad argument 1 to keys()" pre-fix).
+Bug 1's full `NET_DEAD_TIMEOUT` reproduction and Bug 3's maze route were
+**not** re-walked live this pass — both require multi-minute real-time or
+multi-step scripted routes already thoroughly live-verified twice in the
+round-two writeup above, and this pass's time budget went to the new
+`update.lpc` bug investigation instead; noted honestly rather than silently
+re-claimed as freshly live-tested.
+
+### Verification method
+
+Two rapid consecutive reconnects as `fluffos` (both clean, both showing
+"目前权限：(admin)"), `update /adm/daemons/logind` used as the real
+privileged-action admin-rights check (not the login banner), driver killed
+by exact PID after testing, incidental `fluffos.o` save-timestamp churn and
+the temporary `config.fluffos` eval-cost bump both reverted before commit.
+
+### Files modified this pass
+
+- `work/cmds/wiz/update.lpc` — new fix (`environment(me)` null-check).
+- `work/adm/simul_efun/file.lpc` — `cat()`/`log_file()` hardening
+  (`assure_file()` guard on `log_file()`, null-guard on `cat()`'s
+  `read_file()`).
+- `work/adm/daemons/logind.lpc` — §8.9 fix (`ob->query("age")` →
+  `user->query("age")`), removed one `printf("%O\n", ob)` debug leak.
