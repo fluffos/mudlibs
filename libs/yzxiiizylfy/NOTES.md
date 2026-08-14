@@ -6,3 +6,53 @@
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 93 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测，同时也是这份档案第一次真正的 §10.7 深
+度游玩测试（此前只做过 WASM 阶段的注册流程验证）。连线握手
+（"2060"）沿用同一"夕阳再现/炎龙封印"家族的机制，单一密码流程
+（没有独立的管理密码步骤）。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`get_resp()`/`get_name()`（`adm/daemons/logind.lpc`）各有一处
+   调试残留 `printf("%O\n", ob)`（AGENTS.md §7.34-class）**：紧跟
+   在中文名字确认之后，把连线桩物件的原始引用直接回显给正在注册
+   的新玩家。已删除两处。
+2. **`log_error()`（`adm/obj/master.lpc`，实际生效的 master
+   file）完全没有严重度检查（AGENTS.md §7.34-class）**：已加上
+   `strsrch(message, "arning:") == -1` 判断。
+3. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有
+   `assure_file()` 保护（AGENTS.md §7.11-class）**：已加上前向声明
+   + `assure_file(LOG_DIR + file);`。
+4. **§8.9 食物/饮水初始化判断的对象错了**：`adm/daemons/
+   logind.lpc` 的 `enter_world()` 里 `ob->query("age") == 14`（应为
+   `user`）。已改成 `user->query("age") == 14`。
+5. **`cat()`（同一文件）对不存在文件的空指针式崩溃，主动加固**：
+   未在本档案现场触发，属主动加固，改成 `write(read_file(file) ||
+   "");`。
+
+### Proactive checks（无需改动）
+
+- `get_id()`/`get_id1()` 签名是 `(string arg, object ob, int
+  ip_cnt)`，全档案五处 `input_to("get_id", ...)` 调用点参数个数都
+  一致，未发现 yxjh 那种参数错位。
+- `feature/dbase.lpc` 未发现密码写保护，不适用 tybxjh/wlhd 那一类
+  bug。
+- `win_times` 的 `%`-operator 修复确认存在且正确：
+  `d/city2/npc/refereew.lpc:146` 已用 `to_int(query("win_times")) %
+  5`；`d/huashan/npc/refereew.lpc`/`referee.lpc` 未用到 `%`，不适
+  用。
+
+### 实测过程
+
+管理员 `fluffos`/`Mud@2026`（`adm/etc/wizlist` 早已播种，但从未真
+正注册过）用完整注册流程（含"2060"握手）创建，落地一处描述为"灰
+蒙蒙一片，什么也没有"的房间（内容层面的空房间，非崩溃），`score`
+显示"【天界总管】"头衔，食物/饮水满格。随后**连续两次**真实断线重
+连+密码验证（每次都重新发送"2060"握手）：均成功登录，存档数据一
+致，两次重连均未触发任何异常（未复现 yxjh 那类仅在连续快速重连时
+才出现的错位崩溃）。全程 `debug.log` 无运行时错误。驱动按精确 PID
+结束；管理员存档已提交。
