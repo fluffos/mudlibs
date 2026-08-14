@@ -872,6 +872,43 @@ flow (exercising that code path as a side effect), one (`shenym`, past the
 30-minute mark) via direct file removal. `wangdatui`/王大腿's own data was
 already gone by the end of the session (see the finding above).
 
+## 深度功能测试（2026-08-14，round three，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测，逐项独立核对了本轮新确立的检查项（不只
+是信任 NOTES.md 已有记录）：`log_error()` 确认已经有大小写敏感的
+`"warning: "` 判断；`inherit/room/room.lpc` 的 `catch()` 修复仍然
+生效——特意重新走访了之前记录过会 100% 复现崩溃的全部五个房间
+（`d/baituo/{caoping,fende,dongkou,menlang,xiaolu3}`），
+`debug.log` 里零 "cannot bind a functional" 出现，修复稳定持续生
+效。`feature/dbase.lpc` 未发现密码写保护；`win_times` 的
+`%`-operator 也已用 `to_int(query("win_times")) % 5`。
+
+### 本轮新发现并修复的 PROGRAMMING bug
+
+1. **`get_resp()`/`get_name()`（`adm/daemons/logind.lpc`）各有一处
+   调试残留 `printf("%O\n", ob)`（AGENTS.md §7.34-class）——此前的
+   深挖没有覆盖到**：紧跟在中文名字确认之后，把连线桩物件的原始
+   引用直接回显给正在注册的新玩家。已删除两处。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）本身缺少
+   `assure_file()` 保护**：已加上前向声明 +
+   `assure_file(LOG_DIR + file);`。
+3. **`cat()`（同一文件）对不存在文件的空指针式崩溃，主动加固**：
+   未在本档案现场触发，属主动加固，改成 `write(read_file(file) ||
+   "");`。
+
+### 实测过程
+
+管理员 `fluffos`/`Mud@2026`（这份档案和同一"炎龙封印"分支的
+`zxty`/`zxty08nxgbb` 一样有独立的巫师登陆效验码步骤，任意输入都会
+"验证通过"）真实重连两次：第一次专门用 `update
+/adm/simul_efun/file` 确认写权限仍然生效（"重新编译
+/adm/simul_efun/file.lpc：成功！"），并顺带复测了 `room.lpc` 修复
+在五个已知问题房间上的持续有效性；第二次单独验证密码重连本身。均
+成功登录，存档数据一致。全程 `debug.log` 无运行时错误。驱动按精
+确 PID 结束；测试期间产生的存档时间戳增量已 `git checkout --` 还
+原。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 YLFY 引擎的近亲分支（源码版）。状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员账号（fluffos/Mud@2026）登录干净正常。这个家族的巫师登录在 id 和密码之间有一道"巫师登陆效验码"提示，但原始代码其实从未真正校验过它——这份档案自己的 README 里就记录着"随便填都行"——实测确认：id→验证码随便填→真实密码→干净地进入"群仙观"，quit 也干净（"欢迎下次再来！"）。
