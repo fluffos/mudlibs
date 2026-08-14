@@ -514,8 +514,8 @@ live).
 
 Independently re-verified every §10.7 checklist item against current code
 rather than trusting the round-two writeup above; found and fixed one new
-bug, plus confirmed a driver-build-speed artifact that looked like a bug
-at first but wasn't.
+bug (`update.lpc`), plus a 100%-reproducible recurrence of the
+already-cataloged AGENTS.md §7.90 eval-cost class.
 
 ### New fix: `cmds/wiz/update.lpc` — `present(file, environment(me))` crashes when the caller has no environment
 
@@ -549,45 +549,44 @@ useful message.
   real admin write access without going through the `#include`-simul_efun
   pitfall (this file is its own standalone compiled command object).
 
-### Investigated and ruled out as a mudlib bug: cold-start eval-cost exhaustion is 100% reproducible on this lib's configured budget, not intermittent — but it's a debug-build artifact, not an LPC logic bug
+### Fix: cold-start eval-cost exhaustion during `make_body()` — recurrence of AGENTS.md §7.90 ("xyj2000f" variant), 100% reproducible, not intermittent
 
-Round two's writeup (and this session's own general practice) treated
-`Eval interrupted: ... cost limit reached` during `make_body()` as a
-self-healing, order-of-magnitude-rare cold-start artifact. On this lib it is
-**not rare** — it reproduced on every single fresh-boot first login attempt,
-every time, across multiple independent boots, and crucially it does **not
-cleanly self-heal**: the character that "succeeds" after the aborted
-`make_body()` calls lands in a session where every command (`look`, `who`,
-`update`) returns the generic "什么？" fallback — command dispatch never
-finished wiring up properly. Reconnecting doesn't help; the very next login
-attempt hits the identical abort, every time.
+Initially misdiagnosed this as a debug-build-speed test artifact to note
+and leave alone. Checking AGENTS.md before drafting a new entry caught the
+mistake: §7.90 already documents this exact class, including a variant
+("harsher variant on `xyj2000f`") that matches this lib symptom-for-symptom
+— eval-cost abort inside `make_body()` itself, 100% reproducible on every
+attempt (not the more common "only some never-visited rooms" flavor), no
+player-facing error, and §7.90's own prescribed and verified fix is to
+**raise the committed `maximum evaluation cost`**, not leave it alone.
+Applying that established fix here instead of inventing a new
+rationalization.
 
-- **Root cause**: `config.fluffos` sets `maximum evaluation cost : 300000`
+It reproduced on every single fresh-boot first login attempt, every time,
+across multiple independent boots, and did **not** cleanly self-heal the
+way this session's other libs' cold-start eval-cost hits did: the character
+that "succeeds" after the aborted `make_body()` lands in a session where
+every command (`look`, `who`, `update`) returns the generic "什么？"
+fallback — command dispatch never finished wiring up. Reconnecting doesn't
+help; the very next login attempt hits the identical abort, every time.
+
+- **Root cause**: `config.fluffos` set `maximum evaluation cost : 300000`
   (300ms) — already raised once from the shipped default of 100000 per an
   in-file comment ("Because of the heavy load on the Power PC, made it
-  larger to pass the bad time"), i.e. this value was already hand-tuned for
-  slow hardware once, in the original 2000s-era production environment.
+  larger to pass the bad time"), i.e. hand-tuned once already for slow
+  hardware, in the original 2000s-era production environment, but still far
+  below the `5000000` this project's own §7.90 precedent established as the
+  working value (already used by 30+ other libs in this project).
   `make_body()`'s cumulative interpreted LPC work (loading skill tables,
   `dbase`, etc.) reliably exceeds 300ms end-to-end on this repo's
-  `build-debug` driver, which runs LPC substantially slower than an
-  optimized/release build. Confirmed by temporarily raising the limit to
-  5000000 for testing only (`config.fluffos` reverted to 300000 immediately
-  after, `git diff` empty) — with the higher budget, the identical first
-  login after a fresh boot succeeded cleanly on the very first attempt, full
-  room description, "目前权限：(admin)" shown, zero eval errors in
-  `debug.log`. The "灰蒙蒙" void-room symptom seen investigating the
+  `build-debug` driver.
+- **Fix**: `config.fluffos`: `maximum evaluation cost : 300000` → `5000000`.
+- **Verified**: fresh boot, first login attempt succeeded cleanly on the
+  very first try (previously failed 100% of the time) — full room
+  description, "目前权限：(admin)" shown, zero eval-cost errors in
+  `debug.log`. The "灰蒙蒙" void-room symptom seen while investigating the
   `update.lpc` bug above was a downstream artifact of this same thrashing,
-  not a real saved-location bug.
-- **Why not fixed in the committed lib**: this is a test-environment/config-
-  tuning mismatch (slow debug driver vs. a limit tuned for a specific piece
-  of 2000s-era production hardware), not an LPC code defect — no call site
-  is doing anything actually wrong. Bumping the committed `config.fluffos`
-  value would be a content/tuning change made on the basis of one specific
-  debug-build's speed, not a correctness fix, so it was left as-is per this
-  project's standing discipline against re-tuning historical config values
-  without a code-level reason. Flagged here explicitly in case it recurs on
-  future passes against this lib — the fix, if ever needed, is a config
-  change (raise `maximum evaluation cost`), not an LPC change.
+  not a real saved-location bug — resolved by this same fix.
 
 ### Re-verified still holding (code-inspection, not full live re-repro — see rationale)
 
@@ -612,8 +611,8 @@ re-claimed as freshly live-tested.
 Two rapid consecutive reconnects as `fluffos` (both clean, both showing
 "目前权限：(admin)"), `update /adm/daemons/logind` used as the real
 privileged-action admin-rights check (not the login banner), driver killed
-by exact PID after testing, incidental `fluffos.o` save-timestamp churn and
-the temporary `config.fluffos` eval-cost bump both reverted before commit.
+by exact PID after testing, incidental `fluffos.o` save-timestamp churn
+reverted before commit.
 
 ### Files modified this pass
 
@@ -623,3 +622,4 @@ the temporary `config.fluffos` eval-cost bump both reverted before commit.
   `read_file()`).
 - `work/adm/daemons/logind.lpc` — §8.9 fix (`ob->query("age")` →
   `user->query("age")`), removed one `printf("%O\n", ob)` debug leak.
+- `config.fluffos` — §7.90 fix (`maximum evaluation cost` 300000 → 5000000).
