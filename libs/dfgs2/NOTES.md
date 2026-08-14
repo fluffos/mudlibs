@@ -566,3 +566,77 @@ this pass's own test-character convention (matching `xiyouji`'s
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 9 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## Deep functional test round two (2026-08-14)
+
+Independently re-verified against current code rather than trusting the
+2026-07-24 round-one writeup. One fix applied; round one's real find (the
+4-room `__DIR__ "obj/..."` wrong-subdirectory crash) was re-confirmed live
+by physically walking the exact original crash route, not just by grepping
+the diff.
+
+### Fix: `adm/simul_efun/file.lpc` — missing `assure_file()` guard on `log_file()`, plus `cat()` null-guard
+
+Standard §7.11-class gap: `log_file()` called `write_file(LOG_DIR + file,
+text)` directly with no directory-existence guard, and `cat()` had no
+null-guard on `read_file()`.
+```lpc
+// BEFORE:
+void cat(string file) {
+  write(read_file(file));
+}
+void log_file(string file, string text) {
+  write_file(LOG_DIR + file, text);
+}
+// AFTER:
+void cat(string file) {
+  write(read_file(file) || "");
+}
+void assure_file(string file);
+void log_file(string file, string text) {
+  assure_file(LOG_DIR + file);
+  write_file(LOG_DIR + file, text);
+}
+```
+Checked and already correct, no action needed: `adm/simul_efun/message.lpc`'s
+`tell_room()` already has the AGENTS.md §7.12 `exclude || ({})` guard (this
+lib shares the ES II lineage's vulnerable `message.lpc` shape but was
+already fixed for it); `adm/obj/master.lpc`'s `log_error()` severity gate
+already uses the case-agnostic `strsrch(message, "arning:")` check. No §8.9
+food/water wrong-object read, no `printf` debug leak in `logind.lpc`, no
+`dbase.lpc` password-write-guard shape present in this lib's admin-seeding
+architecture.
+
+### Re-verified live: the 4-room `__DIR__` wrong-subdirectory crash (round one's fix) still holds
+
+Walked the exact original crash route as admin (`fluffos`): 小客栈 →
+`east` → `east`, landing in `广场中央` (`/d/snow/square`) — the room whose
+first-ever `reset()` originally threw `*Bad argument 1 to EFUN
+call_other()` via `make_inventory()`. Landed cleanly, `大水缸(Pot)`
+correctly present in the room's object listing, `work/log/debug.log`'s
+line count unchanged before/after (checked directly, not just eyeballed
+the screen) — zero new runtime-error entries, only the expected wizard-
+visible compile warnings from lazy-loading each room/object for the first
+time this boot (shown inline to the connected admin via `编译时段错误：`-
+prefixed lines, which is normal wizard compile-warning echo, not a leak —
+`log_error()`'s severity gate already confirmed correct above).
+
+### Verification method
+
+Booted native `build-debug` driver, admin login (`fluffos`/`Mud@2026`),
+`update /adm/daemons/logind` as the real privileged-action admin-rights
+check (succeeded: "Ok." after showing compile warnings — expected wizard-
+visible output, not a leak). Two rapid consecutive admin reconnects, both
+clean. Driver killed by exact PID after testing; incidental `fluffos.o`
+save-timestamp churn reverted before commit. Did not re-run the full
+`shenluoy` playthrough (registration, sparring, apprentice flow) from round
+one given this pass's time budget — the round-one writeup's other findings
+(the dead `acquire_skill` stub, the zero-starting-money shop gap, the
+unreachable lethal-combat content) are content/coverage gaps already
+correctly documented as such, not crash bugs, so didn't need live
+re-verification this pass.
+
+### Files modified this pass
+
+- `work/adm/simul_efun/file.lpc` — `log_file()` `assure_file()` guard,
+  `cat()` null-guard.
