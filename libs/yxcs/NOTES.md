@@ -815,3 +815,50 @@ guards with no WASM-specific code path — expected to apply identically
 under WASM once a build becomes available, but genuinely unverified
 under WASM this pass; the earlier WASM-enablement pass's own findings
 (loopback ban-bypass, admin seeding) are untouched and still apply.
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。核对上面记录的所有修复（新连线 `logon()`
+崩溃、`log_file()`、counter-file 防护、宏重写等）逐项确认代码仍然
+生效；`win_times` 的 `%`-operator 也已用
+`to_int(query("win_times")) % 5`（`d/city2/npc/refereew.lpc:146`、
+`d/taoyuan/npc/{jinyong,gulong}.lpc`）。
+
+### 本轮新发现并修复的 PROGRAMMING bug（上一轮 §10.7 深挖未覆盖到）
+
+1. **`feature/dbase.lpc` 的 `set()` 密码写保护是 tybxjh/wlhd 那一类
+   已确认的 bug 形状**：`if (prop == "password") if
+   (wizhood(this_object()->query("id")) == "(boss)") if
+   (this_player()) if (geteuid(this_player()) !=
+   this_object()->query("id")) return;`——注释明确写着"Add by
+   Lonely to fix a steal-power bug"，本意是防止别人冒充覆盖既有
+   (boss) 级账号的密码，但 `wizhood()` 纯粹读 `wizlist` 文件，不检
+   查 `dbase` 里是否真的已经存在密码。本轮实测 `fluffos` 的注册/重
+   连都正常（这份档案里 `this_player()` 在密码 `set()` 那一刻的
+   euid 恰好已经和目标 id 一致，所以没有触发拦截——和 tybxjh 的具
+   体触发时机不同，但代码形状完全一致，属于潜在缺陷，不是已经在
+   本档案上实测复现的活跃崩溃）。按已确立的标准修法加上
+   `mapp(dbase) && dbase[prop]`，只在密码已经存在时才拦截，不影响
+   首次创建。
+2. **§8.9 食物/饮水初始化判断的对象错了——上一轮深挖遗漏**：
+   `adm/daemons/logind.lpc` 的 `enter_world()` 里
+   `ob->query("age") == 14`（应为 `user`）。已改成
+   `user->query("age") == 14`。
+3. **`get_resp()`（系统随机中文名接受分支）一处调试残留
+   `printf("%O\n", ob)`（AGENTS.md §7.34-class）——上一轮深挖用的是
+   手动输入中文名分支，没有触发这条泄漏**：紧跟在中文名字确认之
+   后，把连线桩物件的原始引用直接回显给正在注册的新玩家。已删除；
+   `get_name()`（手动输入分支）本来就没有这个残留，核对确认。
+
+### 实测过程
+
+管理员 `fluffos`/`Mud@2026`（此前深挖已注册并提交存档）用真实密码
+重新连线两次（先重启驱动应用上面三处修复，再各做一次独立的登录+重
+连验证），落地此前保存的地点，`score` 显示食物/饮水满格。**两个
+debug.log 位置**（驱动级 `log/debug.log` 和 LPC 级
+`work/log/debug.log`，本档案自己此前记录过必须都查）全程干净，无
+运行时错误。驱动按精确 PID 结束；测试期间产生的存档时间戳增量已
+`git checkout --` 还原。启动前按此前记录的前置条件手动创建了
+`log/`、`work/log/{nosave,wiz}` 目录（均已确认被 `.gitignore` 正确
+忽略，非代码问题）。
