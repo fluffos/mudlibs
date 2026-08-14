@@ -542,6 +542,60 @@ done here). Bug #1 (`d/death/npc/panguan.lpc`) and bug #4
 the siblings carry the identical file before assuming the fix is needed
 there too, rather than porting blind.
 
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。上面记录的四个修复逐项核对代码仍然生
+效；`log_error()`（实际生效的 `adm/obj/master.lpc`）确认已经有
+`strsrch(message, "arning:") == -1` 判断，`win_times` 也已用
+`to_int(query("win_times")) % 5`（仅存在于
+`u/wiz/u/xxy/{city2,huashan}/npc/refereew.lpc` 这份巫师个人工作目
+录副本里，已确认修复覆盖到位）。
+
+### 本轮新发现并修复的 PROGRAMMING bug
+
+1. **管理员账号播种从未真正生效——`securityd.lpc` 的 `wiz_status`
+   是 `nosave`，每次开机只硬编码授予 `xgchen`（AGENTS.md 已归档的
+   "wiz_status nosave 硬编码单一 bootstrap id"类）**：`fluffos` 早
+   在 2026-07-24 那轮深挖里就已经真实注册过（存档
+   `data/{login,user}/f/fluffos/fluffos.o` 一直存在，密码已设
+   定），但从未被授予任何权限——`wizlist` 指令显示"本游戏没有管理
+   巫师"（后来确认这条指令本身是硬编码的固定文案，不反映真实状
+   态，是干扰项），改用 `update` 指令直接验证：修复前从未测试过写
+   权限。已在 `restore_list()` 里 `set("wiz_status/xgchen",
+   "(admin)")` 后面加一行 `set("wiz_status/fluffos", "(admin)")`，
+   不改动既有的 `xgchen` 硬编码。Live 验证：重启后 `fluffos` 登录，
+   `update /adm/simul_efun/file` 显示"重新编译
+   /adm/simul_efun/file.lpc：成功！"，确认拥有 `(admin)` 级写权
+   限。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）本身缺少
+   `assure_file()` 保护**：已加上前向声明 +
+   `assure_file(LOG_DIR + file);`。
+3. **`cat()`（同一文件）对不存在文件的空指针式崩溃，主动加固**：
+   未在本档案现场触发，属主动加固，改成 `write(read_file(file) ||
+   "");`。
+4. **`get_resp()`/`get_name()`（`adm/daemons/logind.lpc`）各有一处
+   调试残留 `printf("%O\n", ob)`（AGENTS.md §7.34-class）**：紧跟
+   在中文名字确认之后，把连线桩物件的原始引用直接回显给正在注册
+   的新玩家。已删除两处。
+
+### Proactive checks（无需改动）
+
+- §8.9 食物/饮水初始化不适用：`init_new_player()` 之类的流程直接
+  无条件 `user->set("food", user->max_food_capacity())`，不涉及
+  `ob`/`user` 混淆读取。
+- `feature/dbase.lpc` 未发现密码写保护，不适用 tybxjh/wlhd 那一类
+  bug。
+
+### 实测过程
+
+管理员 `fluffos`（此前深挖已注册、密码 `Mud@2026`，但从未真正拿到
+过权限）用真实密码重新连线两次（第一次先用 `update` 验证写权限，
+第二次单独验证密码重连本身）：均成功登录，`update
+/adm/simul_efun/file` 确认 `(admin)` 权限生效，存档数据一致。全程
+`debug.log` 无运行时错误。驱动按精确 PID 结束；测试期间产生的存档
+时间戳增量已 `git checkout --` 还原。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 风云III 引擎基础版（郑州风云3）。
