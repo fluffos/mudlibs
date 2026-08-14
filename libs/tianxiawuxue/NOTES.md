@@ -767,6 +767,48 @@ further here, consistent with the existing entry's own conclusion.
 - **WASM interactive playthrough**: this pass was native-driver only,
   per the task's own instructions.
 
+## 深度功能测试（2026-08-14，round three，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测，逐项独立核对了本轮新确立的检查项（不只
+是信任 NOTES.md 已有记录）：`log_error()` 确认已经有严重度判断；
+安全陪练木人 `can_speak` 修复仍然生效——现场用 `fluffos` 管理员对
+`d/city2/wuchang` 的木人打了完整一轮 `fight mu ren`（受伤但非致
+命，`score` 确认"你共死亡：0 次"），修复稳定持续生效；
+`feature/dbase.lpc` 未发现密码写保护；`win_times` 的
+`%`-operator 也已用 `to_int(query("win_times")) % 5`。§10.8 已归
+档的驱动级致命崩溃类问题不属于本轮 mudlib 检查范围。
+
+### 本轮新发现并修复的 PROGRAMMING bug
+
+1. **§8.9 食物/饮水初始化判断的对象错了**：`adm/daemons/
+   logind.lpc` 的 `enter_world()` 里 `ob->query("age") == 14`（应为
+   `user`）。已改成 `user->query("age") == 14`。
+2. **`get_resp()`/`get_name()`（`adm/daemons/logind.lpc`）各有一处
+   调试残留 `printf("%O\n", ob)`（AGENTS.md §7.34-class）**：紧跟
+   在中文名字确认之后，把连线桩物件的原始引用直接回显给正在注册
+   的新玩家。已删除两处。
+3. **`log_file()`（`adm/simul_efun/file.lpc`）本身缺少
+   `assure_file()` 保护**：已加上前向声明 +
+   `assure_file(LOG_DIR + file);`。
+4. **`cat()`（同一文件）对不存在文件的空指针式崩溃，主动加固**：
+   未在本档案现场触发，属主动加固，改成 `write(read_file(file) ||
+   "");`。
+
+### 实测过程
+
+管理员 `fluffos`/`Mud@2026`（此前已确认可用）真实重连两次（先用
+`update /adm/simul_efun/file` 触发了这个档案已知的 §include 型
+simul_efun 限制——`/adm/simul_efun/file.lpc` 被 `#include` 进
+`adm/obj/simul_efun.lpc`，不是独立编译单元，`update` 直接指向它会
+报"No program in object"，改用一个真正独立的物件
+`/adm/daemons/logind` 验证写权限："重新编译
+/adm/daemons/logind.lpc：成功！"）。第二次单独验证密码重连本身。
+均成功登录，存档数据一致。全程 `debug.log` 无运行时错误（除了我自
+己误触发的 §include 限制产生的编译期错误，与 mudlib 本身无关）。
+驱动按精确 PID 结束；测试期间产生的帮会背景数据/存档时间戳增量已
+`git checkout --` 还原。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）干净正常，"★ 您目前权限：(admin)"。
