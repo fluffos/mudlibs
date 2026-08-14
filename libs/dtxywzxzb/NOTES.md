@@ -41,3 +41,99 @@
 
 - 测试用一次性小号 `shenyh`、`toptt` 的存档（`data/{login,user}/{s,t}/`）已删除，未提交。
 - 管理员 `fluffos` 的存档已提交（`data/{login,user}/f/fluffos.o`），密码与 README 一致。
+
+## Deep functional test round two (2026-08-14)
+
+Independently re-verified all 4 round-one fixes still hold (`do_counter()`
+`stringp()` guard, `file.lpc`/`master.lpc` `assure_file()` guards,
+`toptend.lpc` `assure_file()`, `setskill.lpc`'s `skill` variable fix — all
+confirmed present by direct code inspection). Found and fixed three more
+issues on top: a new §7.10-class log_error() gate gap, an active printf
+leak, and — the highest-value find — a §7.90-class eval-cost abort that
+was the ROOT CAUSE of two separate-looking crashes (`update.lpc` and
+`quit.lpc`), and turned out to match a shape already confirmed on two
+other libs this session, now a corpus-wide sweep candidate (128 libs).
+
+### New fix 1: `adm/obj/master.lpc`'s `log_error()` had no severity gate at all
+
+Same shape found on `dfgsiiv13b` earlier this session — not the more
+common case-mismatch variant, but a complete absence of any warning/error
+distinction:
+```lpc
+// BEFORE:
+if (this_player(1)) efun::write("编译时段错误：" + message + "\n");
+// AFTER:
+if (this_player(1) && strsrch(message, "arning:") == -1)
+  efun::write("编译时段错误：" + message + "\n");
+```
+
+### New fix 2: active `printf("%O\n", ob)` debug leak in `logind.lpc`
+
+Reached on every registration, right before the "请设定您的管理密码："
+prompt in the manual-name-confirmation branch. Removed (one-line deletion,
+`// by canoe for suppwd` comment above it left in place as it's clearly an
+old author annotation, not describing the printf itself).
+
+### New fix 3 (root cause of two crashes): §7.90-class eval-cost abort during `enter_world()`'s cold room compile — reused the established remedy, and it happens to explain why the `update.lpc`/`present(environment(me))` crash class exists at all
+
+- **How this was found**: first admin login this pass hit `update` and
+  got `*Bad argument 2 to present() Expected: object Got: 0.` at
+  `cmds/wiz/update.lpc:20` — the exact same crash shape already found and
+  fixed on `xiakexing2017` and `dtslmud` earlier this session. Applied the
+  same defensive fix there:
+  ```lpc
+  // BEFORE:
+  if ((obj = present(file, environment(me))) && interactive(obj)) {
+  // AFTER:
+  if (environment(me) && (obj = present(file, environment(me))) && interactive(obj)) {
+  ```
+  But unlike the other two instances, this pass also caught the SAME
+  session's `quit` crashing too (`*Bad argument 3 to EFUN message()` at
+  `cmds/usr/quit.lpc:75`, `message("system", ..., environment(me), me)`)
+  — both crashes share one root cause: `debug.log` showed `Eval
+  interrupted: object obj/user#7 cost limit reached, limit: 700000 usec`
+  during `enter_world()`'s cold compile of the admin's real starting room
+  (`/d/city/kezhan.lpc`), aborting mid-`enter_world()` and leaving the
+  character with no environment at all for the rest of that session — a
+  direct instance of AGENTS.md §7.90's already-documented class (the
+  700000usec project-template default sitting at the low end of what
+  libs in this corpus actually need).
+- **Fix**: `config.fluffos`: `maximum evaluation cost : 700000` →
+  `5000000` (§7.90's established remedy, already used by 30+ other libs).
+- **Verified**: fresh reboot, first login as `fluffos` landed cleanly in
+  the real starting room (`「南城客栈」`), `update`/`quit` both succeeded
+  with zero errors, across two further rapid reconnects. The
+  `update.lpc` defensive guard (fix above) is still worth keeping even
+  though this config fix eliminated the specific reproduction — any
+  admin whose environment is legitimately unset for any other reason
+  would still hit it otherwise.
+- **Corpus-wide implication, not yet acted on beyond this lib**: grepped
+  for the `update.lpc` crash shape (`present(file, environment(me)))`
+  without an `environment(me) &&` guard) — **128 other libs** share the
+  identical vulnerable code, only 3 (`xiakexing2017`, `dtslmud`, this lib)
+  fixed so far, each found independently this session. This crosses this
+  project's own "3+ independent lineages" threshold for a mechanical
+  corpus-wide sweep rather than continuing to find it one lib at a time —
+  flagged for the very next work cycle.
+
+### Verification method
+
+Booted native `build-debug` driver, admin login (`fluffos`/`Mud@2026`),
+`update /adm/daemons/logind` and `quit` as the checks that caught the
+eval-cost root cause. Two rapid consecutive admin reconnects post-fix,
+both clean. Driver killed by exact PID after each reboot (two total:
+initial boot where the crashes were found, clean reboot for
+verification); incidental `fluffos.o`/`zhangmen_chang_e.o` save churn
+reverted before commit.
+
+### Files modified this pass
+
+- `config.fluffos` — §7.90 fix (`maximum evaluation cost` 700000 →
+  5000000).
+- `work/cmds/wiz/update.lpc` — `environment(me)` null-check (defensive,
+  proactive given the config fix already resolves the specific repro).
+- `work/adm/obj/master.lpc` — `log_error()` severity gate (§7.10-class,
+  previously entirely absent).
+- `work/adm/simul_efun/file.lpc` — `cat()` null-guard.
+- `work/adm/daemons/logind.lpc` — removed one `printf("%O\n", ob)` debug
+  leak.
