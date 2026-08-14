@@ -6,3 +6,47 @@
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 93 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测，同时也是这份档案第一次真正的 §10.7 深
+度游玩测试（此前只做过 WASM 阶段的注册流程验证）。这份档案的连线
+握手比较特殊：`get_id()` 要求连线后的第一行输入必须是字面
+的"2060"（Tomud 专用客户端协议握手，不是真正的英文 id 提示，尽管
+显示的提示文字写的是"请输入您的英文名字"），之后才是真正的
+id→y→中文名→密码 ×2→天赋(0)→接受(y)→email→性别 流程。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`，实际生效的 master
+   file）完全没有严重度检查（AGENTS.md §7.34-class）**：已加上
+   `strsrch(message, "arning:") == -1` 判断。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有
+   `assure_file()` 保护（AGENTS.md §7.11-class）**：已加上前向声明
+   + `assure_file(LOG_DIR + file);`。
+3. **§8.9 食物/饮水初始化判断的对象错了**：`adm/daemons/
+   logind.lpc` 的 `enter_world()` 里 `ob->query("age") == 14`（应为
+   `user`，且这份档案的写法比其它手足档案更简化——连
+   `!user->query("food")` 这层"只在从未初始化时才补发"的保护都没
+   有，只单纯判断 age）。已改成 `user->query("age") == 14`。
+
+### Proactive checks（无需改动）
+
+- `win_times` 的 `%`-operator 修复确认存在且正确：
+  `d/city2/npc/refereew.lpc:146` 已用 `to_int(query("win_times")) %
+  5`；`d/huashan/npc/refereew.lpc`/`referee.lpc` 未用到 `%`，不适
+  用。
+- `feature/dbase.lpc` 未发现 tybxjh/wlhd 那种密码写保护，不适用。
+
+### 实测过程
+
+管理员 `fluffos`/`Mud@2026`（`adm/etc/wizlist` 早已播种，但从未真
+正注册过）用完整注册流程（含"2060"握手）创建，落地"铁枪庙"，
+`score` 显示"【天界总管】"头衔，食物/饮水满格。随后**单独一步**做
+了真实断线重连+密码验证（同样先发"2060"握手）：用刚设的密码重新
+连线成功登录，存档数据一致。全程 `debug.log` 无运行时错误（连线过
+程中出现的 `bnway`/`lbadd0`/`ptext` 之类原始字符串是 Tomud 客户端
+专用的带外控制标记，正常客户端会解析成小地图/状态栏 UI，不是
+bug，用原始 socket 客户端测试时会看到字面文字属于预期噪音）。驱
+动按精确 PID 结束；管理员存档已提交。
