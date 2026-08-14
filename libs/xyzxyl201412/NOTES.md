@@ -6,3 +6,67 @@
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 101 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测，同时也是这份档案第一次真正的 §10.7 深
+度游玩测试（此前只做过 WASM 阶段的注册流程验证）。**更正**：
+group_note 描述的"管理员密码+确认→登录密码+确认"双密码流程读代码
+后确认不准确——实际只有一组密码，但确实比大多数手足档案多一步独
+立的"身份标识"（`new_biaoshi`/`confirm_biaoshi`，至少 9 个字符，
+和密码分开设置），以及密码之后的元素亲和力选择（0-10）。§8.9 的食
+物/饮水判断在这份档案里本来就用的是 `user`（不是 `ob`），不适用
+那一类 bug。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`get_resp()`/`get_name()`（`adm/daemons/logind.lpc`）各有一处
+   调试残留 `printf("%O\n", ob)`（AGENTS.md §7.34-class）**：紧跟
+   在中文名字确认之后，把连线桩物件的原始引用直接回显给正在注册
+   的新玩家。已删除两处。
+2. **`log_error()`（`adm/obj/master.lpc`，实际生效的 master
+   file）完全没有严重度检查（AGENTS.md §7.34-class）**：已加上
+   `strsrch(message, "arning:") == -1` 判断。
+3. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有
+   `assure_file()` 保护（AGENTS.md §7.11-class）**：已加上前向声明
+   + `assure_file(LOG_DIR + file);`。
+
+### Proactive checks（无需改动）
+
+- `win_times` 的 `%`-operator 修复确认存在且正确：
+  `d/city2/npc/refereew.lpc`；`d/huashan/npc/refereew.lpc`/
+  `referee.lpc` 未用到 `%`，不适用。
+- `feature/dbase.lpc` 未发现 tybxjh/wlhd 那种密码写保护，不适用。
+- **一次性冷启动 eval-cost 耗尽（AGENTS.md §7.90/§10.8-class），发
+  生在 `Accepting telnet connections` 之前的开机预加载阶段，和任何
+  连线会话无关，未修改**：`Eval interrupted: object
+  d/wizard/newer#2 cost limit reached` 发生在驱动 preload 阶段（早
+  于开始接受连线），是纯粹的开机首次编译突发，不是本轮任何操作触
+  发的。
+
+### 一个额外的登录流程排查记录（非 bug）
+
+**重连一个已存在的 `(admin)` 账号时，`get_id1()` 会先要求一段"巫师
+登陆效验码"（`get_wizpas()`），和真正的密码是分开的两步**——这一
+步只在 `wiz_level(arg) > 0`（即用一个已经在 `wizlist` 里的 id 重连
+已有存档）时触发，新账号首次注册不会经过这条路径。核实代码发现
+`get_wizpas()` 里的实际校验被写死成 `if (1 /* crypt(wizpas,
+wizpass) == wizpass */)`——真正的效验码比对被注释掉了，任何输入都
+会"验证通过"。这是既有代码里已经存在的宽松验证（非本轮引入，也不
+是崩溃/功能性 bug，只是一个安全层面的形同虚设），按本项目惯例不在
+§10.7 常规测试范围内擅自修改安全逻辑，如实记录。第一次重连测试时
+没注意到这一步，把真实密码当成了这一步的输入，导致后续两次真正的
+密码提示被错误消费（"您还有一次机会"），第二次重连补上这一步后正
+常登录成功。
+
+### 实测过程
+
+管理员 `fluffos`/`Mud@2026`（`adm/etc/wizlist` 早已播种，但从未真
+正注册过）用完整注册流程（含身份标识、元素亲和力选择）创建，落地
+"客栈"，`score` 显示"【天界总管】"头衔。随后**单独一步**做了真实
+断线重连+密码验证（含上述"巫师登陆效验码"步骤）：成功登录，存档数
+据一致。驱动按精确 PID 结束；管理员存档（`data/{login,user}/f/
+fluffos.o` 以及这份档案自己的 `data/key/data/{login,user}/f/
+fluffos.key`，同一账号创建流程的正常产物，其余账号的 `.key` 文件
+本来就已提交在 git 里）已提交。
