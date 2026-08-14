@@ -637,3 +637,85 @@ calls in a row on every single sleep-and-wake cycle).**
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 20 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## Deep functional test round two (2026-08-14)
+
+Independently re-verified against current code rather than trusting the
+round-one writeup above. This is by a wide margin the highest-stakes lib
+on this session's re-test list — round one's Bug 1 was a driver-crash-
+class finding — so the priority this pass was re-confirming it live, at
+real (accelerated) accuracy, not just checking the diff.
+
+### Re-verified live at accelerated timing: Bug 1's `tell_room()` fix (the driver-crash-class §7.12 finding) still holds
+
+Confirmed the `if (exclude) message(...); else message(...);` fix is still
+present in `adm/simul_efun/message.lpc`, then re-ran the same accelerated
+methodology round one used: temporarily changed `include/user.h`'s
+`NET_DEAD_TIMEOUT` from `900` to `20` (restored to `900` immediately after,
+confirmed via `git diff` returning empty), rebooted, logged in as
+`fluffos`, raw-killed the tmux session running its telnet connection
+(genuine socket drop, not `quit`) to trigger a real net-dead, waited a real
+26 seconds past the shortened timeout. Result: `work/log/debug.log`'s line
+count was unchanged before/after (no `Bad argument 4 to EFUN message()`,
+no anything), the driver process stayed alive (`ps`-confirmed by exact
+PID), and reconnecting as `fluffos` landed in a genuinely fresh
+`enter_world()` — confirmed by the "上次连线" (last-connect) banner
+showing the *previous* login's timestamp rather than a stale in-memory
+resume, proving `user_dump()`'s `save()`+`destruct()` path actually ran to
+completion this time. Did not re-attempt the two-simultaneous-character
+double-free reproduction from round one (a one-time, already-rigorously-
+documented confirmation of a downstream C-level consequence of the same
+root cause) — re-triggering the LPC-level root cause and confirming it no
+longer throws is sufficient to confirm this specific fix still holds.
+
+### Re-verified: Bug 2's `enable_player()` duplicate-dispatch fix still holds
+
+Code-confirmed the `remove_action("command_hook", "")`-before-`add_action()`
+guard is still present in `feature/command.lpc`, with its explanatory
+comment intact.
+
+### New fix, and a near-miss: `adm/simul_efun/file.lpc`'s `log_file()`/`cat()` hardening
+
+Standard §7.11-class gap: `cat()` had no null-guard, `log_file()` had no
+`assure_file()` guard. First attempt at this fix defined `log_file()`
+(which calls `assure_file()`) BEFORE `assure_file()`'s own definition with
+no forward declaration — this driver does NOT tolerate forward references
+within a single file the way some LPC drivers do, and it broke the ENTIRE
+boot (`Error: Undefined function assure_file` inside
+`/adm/simul_efun/file.lpc`, cascading to `No program in object
+'/adm/obj/simul_efun'!` — nothing loads, not just this one function).
+Caught immediately by checking the boot log rather than assuming success;
+fixed by adding a `void assure_file(string file);` forward declaration
+before `log_file()`, matching the pattern already used correctly on this
+session's other libs (`bxsj`/`dfgs2`/`dfgsiiv13b`) — this lib's `file.lpc`
+just happened to have `log_file()` textually before `assure_file()` in the
+source, which those others didn't.
+
+Checked and confirmed already correct, no action needed: `log_error()`'s
+severity gate already uses the case-agnostic `strsrch(message, "arning:")`
+check; no §8.9 food/water wrong-object read; the one `printf("%O\n", ob)`
+in `logind.lpc` is already commented out (dead code, harmless).
+
+### Observed, not investigated: an unrelated wizard-channel message during idle time
+
+`【系统】系统核心：/std/char/npc.lpc 第 11 行，物件：/d/gaoli/npc/xiake
+*Read access denied.` appeared once, unprompted, during an idle stretch
+between commands (some background/heartbeat-driven NPC action hitting an
+ACL check). Not connected to either fix above, not a crash, no player-
+facing impact observed — flagged for whoever does a full playthrough pass
+on this lib next, not chased further this pass since it's outside this
+pass's scope (re-verifying round one's fixes plus the standard checklist).
+
+### Verification method
+
+Booted native `build-debug` driver, admin login (`fluffos`/`Mud@2026`),
+`update /adm/daemons/logind` as the real privileged-action check
+(succeeded). Two rapid consecutive admin reconnects, both clean. Driver
+killed by exact PID after each reboot (three total this pass: initial
+boot, accelerated-timeout boot, final clean-config boot); incidental
+`fluffos.o` save-timestamp churn reverted before commit.
+
+### Files modified this pass
+
+- `work/adm/simul_efun/file.lpc` — `log_file()` `assure_file()` guard
+  (with forward declaration), `cat()` null-guard.
