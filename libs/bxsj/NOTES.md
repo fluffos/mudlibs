@@ -558,3 +558,86 @@ wizard-flavored digression through the game's own "newbie gift" NPC
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 1 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## Deep functional test round two (2026-08-14)
+
+Independently re-verified every §10.7 checklist item against current code
+rather than trusting the 2026-07-24 writeup above. One proactive hardening
+fix applied; the one real bug found in round one (`top.lpc`'s rank-decay
+crash) was re-confirmed still fixed via a genuine live regression test on
+the same character that originally triggered it, not just by grepping the
+diff.
+
+### Fix: `adm/simul_efun/file.lpc`'s `cat()` had no null-guard on `read_file()`
+
+Standard proactive hardening for this session's checklist (§7.11-adjacent):
+`cat()` called `write(read_file(file))` unguarded — `read_file()` returns
+`0` for a missing/unreadable file, and `write(0)` is a latent throw risk.
+```lpc
+// BEFORE:
+void cat(string file) {
+  write(read_file(file));
+}
+// AFTER:
+void cat(string file) {
+  write(read_file(file) || "");
+}
+```
+`log_file()` in the same file was already correctly hardened — it delegates
+to `LOG_D->log_file()` (`adm/daemons/logd.lpc`), which unconditionally calls
+`assure_file(file)` before every write regardless of the optional `db` flag
+(the `if (db)` only guards the preceding `dbquery()` call — misleading
+indentation, correct semantics, verified by reading the actual statement
+boundaries rather than trusting the visual layout). No callers in this lib
+pass a truthy `db` flag, so the MySQL `dbquery()` branch is dead code, not
+exercised, not a live risk.
+
+Checked and ruled out as not applicable to this lib: no `log_error()`
+severity-gate case-mismatch (none found in `adm/single/master.lpc`), no
+`dbase.lpc` password-write-guard shape (this lib's admin seeding doesn't use
+that pattern), no `%`-operator-on-corrupted-float shape beyond the
+already-corpus-fixed `quest_times`/`win_times` class (the only unguarded `%`
+hits found were unrelated weight-formatting arithmetic in
+`d/city/weapon/weapon*.lpc`, not attribute counters), no §8.9 food/water
+wrong-object read, no `printf` debug leaks in `logind.lpc`.
+
+### Re-verified live: `top.lpc` rank-decay crash (round one's fix) still holds
+
+Logged in as `qintest` (the same character whose `quit` originally
+reproduced the crash on 2026-07-24) rather than trusting the diff was still
+applied. `top` correctly rendered the real ranking entry (综合评价 3470),
+and `quit` — the exact original crash trigger, since `cmds/usr/quit.lpc`
+unconditionally calls `TOP_CMD->add_rank(me)` — completed with zero new
+`work/log/debug.log` lines (checked the file's line count before and after:
+unchanged). The original crash was invisible in the player-facing output
+even when it was happening, so a clean-looking `quit` message alone isn't
+sufficient evidence; the debug.log line-count check is what actually
+confirms it.
+
+### Verification method
+
+Booted native `build-debug` driver, admin login (`fluffos`/`Mud@2026`) with
+`update /adm/daemons/logind` as the real privileged-action check (succeeded
+— "重新编译 ... 成功！"; `adm/simul_efun/file.lpc` itself is `#include`'d into
+`adm/single/simul_efun.lpc`, a container object, so it can't be `update`'d
+directly — same limitation documented elsewhere this campaign). Two rapid
+consecutive admin reconnects, both clean, both landing a full fresh login
+(上次连线 timestamp updated each time). One login attempt as `qintest` timed
+out mid-password-entry on the login procedure's overall timer
+(`clone/user/login.lpc`'s `time_check()`/`time_out()`) when sent via too
+many separate tool calls; resolved by sending the whole
+id+password sequence as a single batched `tmux_mud.sh multi` call with a
+slightly longer per-line wait — not a mudlib bug, a test-harness pacing
+issue (this lib's overall login-procedure timeout is comparatively tight).
+Noted a stale `FATAL ERROR: SIGTERM: Process terminated` line at the tail of
+`work/log/debug.log` predating this session's own boot — the driver
+(confirmed via `readlink /proc/<pid>/cwd`) stayed alive and responsive
+throughout testing, so this is leftover content from an earlier, unrelated
+process instance sharing the same log path, not a live crash; not
+investigated further since it didn't correlate with any actual failure
+during this pass. Driver killed by exact PID after testing; incidental
+`fluffos.o`/`qintest.o` save-timestamp churn reverted before commit.
+
+### Files modified this pass
+
+- `work/adm/simul_efun/file.lpc` — `cat()` null-guard on `read_file()`.
