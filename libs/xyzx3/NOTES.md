@@ -424,3 +424,17 @@ gitignored):
 session 出站代理策略拒绝（`curl -sS $HTTPS_PROXY/__agentproxy/status`
 返回 403），WASM 编译/运行验证本轮继续跳过，仅做原生驱动（linux-debug
 预设，ASAN/UBSAN）下的完整 §10.7 测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。上面记录的所有修复（§7.11 `log_file()`、
+§8.9 食物/饮水、§7.94 `setskill.lpc`、`cat()` 空指针）逐项核对代码
+仍然生效，`win_times` 的 `%`-operator 也已用
+`to_int(query("win_times")) % 5`（`d/city2/npc/refereew.lpc:146`）；
+未发现新的 printf 调试残留，`feature/dbase.lpc` 未发现 tybxjh/wlhd
+那种密码写保护，均不适用。管理员 `fluffos`/`Mud@2026`（含"2060"握
+手）真实重连验证：落地此前保存的"客店"，`score` 显示"【天界总
+管】"头衔，食物/饮水满格，`debug.log` 全程干净。驱动按精确 PID 结
+束；测试期间产生的存档时间戳增量已 `git checkout --` 还原，本轮无
+需新代码改动。
