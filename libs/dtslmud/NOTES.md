@@ -245,3 +245,114 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 20 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## Deep functional test round two (2026-08-14)
+
+Independently re-verified against current code rather than trusting the
+round-one writeup above. Found and fixed two real, live-reproduced bugs
+neither previous pass caught, both root-caused to the same admin-account
+symptom: the `fluffos` account's real saved startroom silently failing to
+load, falling back to the void room.
+
+### New fix 1: `cmds/wiz/update.lpc` — `present(file, environment(me))` crashes when the caller has no environment
+
+Byte-identical to a bug found and fixed on `xiakexing2017` earlier this
+session — same file shape, same crash line:
+```lpc
+// BEFORE:
+if ((obj = present(file, environment(me))) && interactive(obj))
+// AFTER:
+if (environment(me) && (obj = present(file, environment(me))) && interactive(obj))
+```
+Reached immediately on this pass's first admin login: `environment(me)`
+was `0` because the admin's saved startroom load had already failed (see
+fix 2 below) and dumped the character into `/obj/void` before `update` was
+even typed.
+
+### New fix 2 (the actual root cause): `adm/daemons/race/human.lpc`'s `query_action()` indexes `combat_action` before it's populated, crashing during a reentrant first-load of the daemon — which silently sends the admin's real saved room's force-loaded NPC init chain into `move()`'s void-room error fallback
+
+**File:line: `adm/daemons/race/human.lpc:132`.**
+
+- **How this was found**: `look` (not `update`) was the first command to
+  actually surface it, live: the admin's real saved `startroom`
+  (`/d/yangzhou/guangchang`, a legitimate, actively-used zone — confirmed
+  via the in-game "任务监控系统" task-board listing it as a real Fight-task
+  location, not dead/unreachable content) was being compiled for the very
+  first time this boot. Its `reset()`/`make_inventory()` force-loads an NPC
+  (`/d/yangzhou/npc/gongzi`), whose `create()` → `std/char.lpc` `setup()`
+  → `chard.lpc`'s `setup_char()` chain evaluates a `dbase.lpc`-stored
+  closure for `"default_actions"`, which calls into
+  `/adm/daemons/race/human`'s `query_action()` — the FIRST call to this
+  daemon this boot, triggering its own lazy compile mid-call (the trace's
+  `/<driver> 的 <fake>() 第 0 行` frame is the driver's own apply-during-
+  compile mechanism). At that moment `combat_action` — a `mapping *`
+  populated by a literal at variable-declaration time — wasn't yet
+  populated, so `combat_action[random(sizeof(combat_action))]` threw
+  `*Value being indexed is zero.` The throw aborts the room's own
+  `create()` uncaught, and `feature/move.lpc`'s `move()` (the caller that
+  triggered this whole chain, moving `fluffos` into the room on login)
+  falls back to `/obj/void` — the visible symptom was the admin's
+  connection landing in the void ("最後乐园") with no error shown, and
+  `environment(me)` reading `0` for every subsequent command including
+  `update` (fix 1 above).
+- **Fix**: defensive guard at the accessor, matching this project's
+  established "guard the choke point" idiom for a value that isn't
+  reliably populated by the time it's read:
+  ```lpc
+  // BEFORE:
+  mapping query_action() {
+    return combat_action[random(sizeof(combat_action))];
+  }
+  // AFTER:
+  mapping query_action() {
+    if (!sizeof(combat_action)) return ([]);
+    return combat_action[random(sizeof(combat_action))];
+  }
+  ```
+- **Verified**: fresh driver reboot, first login as `fluffos` — landed
+  cleanly in 大唐学院 (`/d/newbie/door`, the real starting room), not the
+  void; `debug.log` grepped for both this error and the `update.lpc` crash
+  signature afterward — zero hits for either, across the full session
+  including `update`, two rapid reconnects, and `quit`.
+
+### Standard checklist gap found and fixed
+
+`adm/simul_efun/file.lpc` had the common §7.11-class gap: `cat()` had no
+null-guard, `log_file()` had no `assure_file()` guard. Fixed both, with
+the forward declaration this session's `dtsl` pass just learned is
+required by this driver (`log_file()` is defined before `assure_file()` in
+this file too). Already confirmed correct, no action needed:
+`log_error()`'s severity gate, the §7.12 `tell_room()` fix (this lib
+shares `dtsl`'s lineage and already has `exclude || ({})`), the §7.68
+ghost-retry revert (confirmed still reverted to the single-check form), no
+§8.9 food/water issue, the one `printf("%O\n", ob)` is already commented
+out.
+
+### Investigated and ruled out as a leak: `TMI()`-wrapped strings ("login input_passwd", "login ok") showing as raw text on screen
+
+These looked like leaked internal debug/state strings at first glance —
+they're not. `include/tomud.h` defines `TMI(x)` as `TMA+x+TMB` where
+`TMA`/`TMB` are the literal control characters `\x19`/`\x1A` — a Tomud
+(ToMUD/LLMud) client-protocol marker convention, meant to signal UI state
+to a Tomud-aware client (this lib's own welcome banner explicitly says
+"配合使用llmud客户端" — "designed for use with the llmud client"). A plain
+telnet client doesn't strip or interpret the control characters, so the
+wrapped label text shows through raw. Genuine protocol content, not a bug
+— left untouched.
+
+### Verification method
+
+Booted native `build-debug` driver, admin login (`fluffos`/`Mud@2026`),
+`update /adm/daemons/logind` and a real `look` as the checks that actually
+caught the two bugs above. Two rapid consecutive admin reconnects, both
+clean. Driver killed by exact PID after each reboot (two total: initial
+boot where both bugs were found, clean reboot for fix verification);
+incidental `fluffos.o` save-timestamp churn reverted before commit.
+
+### Files modified this pass
+
+- `work/cmds/wiz/update.lpc` — new fix (`environment(me)` null-check).
+- `work/adm/daemons/race/human.lpc` — new fix (`query_action()` guard
+  against reading `combat_action` before it's populated).
+- `work/adm/simul_efun/file.lpc` — `log_file()` `assure_file()` guard
+  (with forward declaration), `cat()` null-guard.
