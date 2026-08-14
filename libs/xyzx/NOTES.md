@@ -6,3 +6,48 @@
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 100 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测，同时也是这份档案第一次真正的 §10.7 深
+度游玩测试（此前只做过 WASM 阶段的注册流程验证）。这份档案（和手
+足档案 `xysylmhb` 一样）用双密码机制：先设"管理密码"（用于账号安
+全恢复），再设"普通密码"（日常登录用，系统会拒绝和管理密码相同的
+普通密码）——已确认没有 tybxjh 那种把管理密码明文写进 help 文件的
+§7.84 泄漏，也没有 `feature/dbase.lpc` 里 tybxjh/wlhd 那种密码写保
+护 bug（这份档案压根没有 `dbase.lpc` 里涉及密码字段的守卫逻辑）。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`get_resp()`/`get_name()`（`adm/daemons/logind.lpc`，CRLF 行
+   尾档案）各有一处调试残留 `printf("%O\n", ob)`（AGENTS.md
+   §7.34-class）**：紧跟在中文名字确认之后，把连线桩物件的原始引
+   用直接回显给正在注册的新玩家。已删除两处。
+2. **`log_error()`（`adm/obj/master.lpc`，实际生效的 master
+   file）完全没有严重度检查（AGENTS.md §7.34-class）**：已加上
+   `strsrch(message, "arning:") == -1` 判断。
+3. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有
+   `assure_file()` 保护（AGENTS.md §7.11-class）**：已加上前向声明
+   + `assure_file(LOG_DIR + file);`。
+4. **§8.9 食物/饮水初始化判断的对象错了**：`adm/daemons/
+   logind.lpc` 的 `enter_world()` 里 `ob->query("age") == 14`（应为
+   `user`）。已改成 `user->query("age") == 14`。
+
+### Proactive checks（无需改动）
+
+- `win_times` 的 `%`-operator 修复确认存在且正确：
+  `d/city2/npc/refereew.lpc:146` 已用 `to_int(query("win_times")) %
+  5`；`d/huashan/npc/refereew.lpc`/`referee.lpc` 未用到 `%`，不适
+  用。
+
+### 实测过程
+
+管理员 `fluffos`（管理密码 `AdminMud@2026`，普通密码
+`Mud@2026`，`adm/etc/wizlist` 早已播种但从未真正注册过）用完整注
+册流程创建（id → y → 中文名 → 确认 y → 管理密码 ×2 → 普通密码 ×2
+→ 天赋(0) → 接受 y → email → 性别 m），落地"北疆小镇"，`score`
+显示"【玄法天君】"头衔，食物/饮水满格，`debug.log` 干净，未见调试
+泄漏。随后**单独一步**做了真实断线重连+密码验证（用普通密码
+`Mud@2026`）：成功登录，存档数据一致。驱动按精确 PID 结束；管理员
+存档已提交。
