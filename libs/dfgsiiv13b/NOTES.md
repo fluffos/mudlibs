@@ -146,3 +146,84 @@ topics/` 是空目录，`cmds/std/` 没有 `join` 指令）确认这很可能就
 session 出站代理策略拒绝，WASM 编译/运行验证本轮继续跳过，仅做原生驱动
 （linux-debug 预设，ASAN/UBSAN）下的完整 §10.7 测试，全程 debug.log 干净
 （仅编译期无害警告）。
+
+## Deep functional test round two (2026-08-14)
+
+Independently re-verified against current code rather than trusting the
+round-one writeup above. Found and fixed one new bug (a real, live-
+reachable instance of AGENTS.md §7.10, not previously caught here); all 4
+of round one's fixes re-confirmed live, not just via diff.
+
+### New fix: `adm/obj/master.lpc`'s `log_error()` had no severity gate at all — broadcast every compile WARNING (not just real errors) to whichever player happened to trigger a lazy compile
+
+Distinct from the more common §7.10 case-mismatch shape this session has
+been checking for (`"Warning:"` vs `"warning:"`) — this lib's `log_error()`
+had no gate concept whatsoever:
+```lpc
+// BEFORE:
+if (this_player(1)) efun::write("編譯時段錯誤﹕" + message);
+// AFTER:
+if (this_player(1) && strsrch(message, "arning:") == -1)
+  efun::write("編譯時段錯誤﹕" + message);
+```
+No `wizardp()` check either — this fires for whichever player is
+`this_player(1)` at compile time, which for a lazy first-visit room compile
+can be an ordinary player, not just a wizard running `update`. Live-
+verified the fix: `update /adm/daemons/enterd` (a file with a real,
+harmless "Unused local variable" warning, confirmed present in the boot
+log) now completes with only "成功。" on screen — pre-fix this would have
+dumped the raw compiler warning text at whoever was connected. The
+underlying `write_file(home + "log", ...)` call that persists the compile
+record has its own separate, lower-severity gap (no `assure_file()` guard
+on `home`, so the write can silently no-op if that wizard's log directory
+doesn't exist) — left alone this pass, out of scope: it doesn't affect
+players, isn't part of this session's established checklist, and touching
+it wasn't necessary to fix the actual player-facing leak.
+
+### Re-verified live: all 4 of round one's fixes still hold
+
+- **§7.29 `dbase.lpc` multi-level path bug** (`query()`/`query_temp()` doing
+  a flat `match_path()` instead of recursing into nested mappings, which
+  made `go`/movement commands fail entirely via `query("exits/east")`):
+  code-confirmed the recursive-descent rewrite is still present (the
+  `match_path(dbase, prop[0..r-1])` shape plus the explanatory Chinese
+  comments), then live-confirmed by actually walking `east` from 小客棧 to
+  广场 as admin — worked cleanly, exactly the command path that was
+  completely broken before the fix.
+- **`std/char.lpc`'s `rank()` int-0 leak**: code-confirmed the
+  `function_exists("query_rank", cd)` guard is still present.
+- **`data/chinese.o` stray-backslash corruption** (broke
+  `restore_object()` for the whole Chinese dictionary): confirmed zero
+  backslash bytes remain in the file, and live-verified via `call
+  /adm/daemons/chinesed->chinese("human")` returning "人類" (not the raw
+  "human" fallback the corrupted dict would have produced).
+- **§7.90 eval-cost bump** (300000usec original config trips a "Can't catch
+  eval cost too big error" on the very first cold-boot login): confirmed
+  `config.fluffos` still has `maximum evaluation cost : 5000000`, and
+  live-verified the FIRST login attempt after a fresh driver boot completed
+  cleanly with zero eval-cost errors (not the second, which round one's own
+  writeup noted was the only clean path pre-fix).
+
+### Standard checklist gap found and fixed
+
+`adm/simul_efun/file.lpc` had the common §7.11-class gap: `log_file()`
+called `write_file()` with no `assure_file()` guard, and `cat()` had no
+null-guard on `read_file()`. Fixed both, matching the pattern applied
+across this session's other libs. No §8.9 food/water wrong-object read, no
+`printf` debug leak in `logind.lpc`.
+
+### Verification method
+
+Booted native `build-debug` driver, admin login (`fluffos`/`Mud@2026`) —
+clean on the very first attempt (confirming the §7.90 fix). `update
+/adm/daemons/logind` and `update /adm/daemons/enterd` as real privileged-
+action checks. Two rapid consecutive admin reconnects, both clean. Driver
+killed by exact PID after testing; incidental `fluffos.o`/`data/daemon.o`
+save-timestamp churn reverted before commit.
+
+### Files modified this pass
+
+- `work/adm/obj/master.lpc` — new fix: `log_error()` severity gate
+  (§7.10-class, previously entirely absent).
+- `work/adm/simul_efun/file.lpc` — `log_file()` `assure_file()` guard,
+  `cat()` null-guard.
