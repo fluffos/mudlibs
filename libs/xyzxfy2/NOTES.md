@@ -410,3 +410,16 @@ debug.log 检查；120 秒防洪门禁内重连正确拒绝、门禁过后重连
 新加的 `assure_file()` 防护同理（管理员专用或低频功能，未逐一实机
 复现）。商店购买（本轮未探索到商店所在区域）。WASM 下的重新验证
 （详见上方说明，proxy 阻断）。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。核对上面记录的所有修复（§7.11
+`log_file()` 及其覆盖的注册/死亡路径、`log_error()` severity 判
+断）逐项确认代码仍然生效；`win_times` 的 `%`-operator 也已用
+`to_int(query("win_times")) % 5`（`d/city2/npc/refereew.lpc:146`）；
+`feature/dbase.lpc` 未发现 tybxjh/wlhd 那种密码写保护，不适用。管
+理员 `fluffos`/`Mud@2026` 真实重连验证两次：`score` 显示食物/饮水
+满格，`debug.log` 全程干净。驱动按精确 PID 结束；测试期间产生的存
+档增量（纯游戏时间计数器）已 `git checkout --` 还原，本轮无需新代
+码改动。
