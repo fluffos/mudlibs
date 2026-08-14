@@ -913,6 +913,45 @@ if `raw/` ends up empty. Known traps:
   when grepping `raw/` trees (still GBK), use `/bin/grep -a` (or
   `grep -a`) so matches in unconverted files aren't invisibly dropped.
   A "no matches in raw/" conclusion made without `-a` is unreliable.
+- **`.o` save files can be un-transcoded GBK too, and hand-fixing one
+  needs a QUOTE-AWARE scan, not a blind `iconv`/CRLF collapse.** Found
+  on `fy2`/`fy2qh` (byte-identical siblings): `data/board/fysquare_b.o`
+  (a message board every new player walks past on their first
+  exploration), `data/board/poem_b.o`, and `data/emoted.o` (the entire
+  emote-command pattern database) were all raw, un-transcoded GBK —
+  `restore_object(): Invalid utf8 string`, thrown uncaught from each
+  owning daemon/board's `create()` (see §7.7's third `fy2`/`fy2qh`
+  instance and §7.87's third instance for the downstream crashes this
+  caused). A first, naive fix attempt (`iconv -f GB18030 -t UTF-8`, then
+  blindly collapsing every `\r\n` → `\r`) silently produced NEW
+  corruption: this driver's `save_svalue()` writes an embedded real
+  `\n` inside a saved string as a bare `\r` byte (not `\r\n`, not an
+  escaped `\n` — see `src/vm/internal/base/object.cc`'s
+  `save_svalue()`/`restore_string()`), and `restore_object_from_buff()`
+  splits the WHOLE file strictly on literal `\n` bytes with no
+  bracket-balance continuation logic — so a GENUINE `\r\n` pair
+  anywhere in the body (these `.o` files carry real Windows-style CRLF
+  line endings predating this project, most plausibly from the original
+  Windows-hosted server or a Windows-based archival step) desyncs the
+  whole file's variable-boundary parsing. Blindly collapsing every
+  `\r\n` → `\r` merges genuine top-level statement boundaries (it
+  merged `emoted.o`'s `dbase (...)` and `emote (...)` variables into one
+  unparseable statement, silently producing an EMPTY-but-`mapp()`-true
+  `emote` mapping rather than an error). **Correct fix**: walk the
+  decoded text tracking whether the cursor is inside an (unescaped) `"`
+  string literal, and only collapse `\r\n` → `\r` when INSIDE one —
+  every `\r\n` OUTSIDE a string literal is a genuine top-level statement
+  separator and must stay a real `\n`. Re-deriving both board saves from
+  the pristine `git show HEAD:...`/raw-archive bytes with this
+  quote-aware scanner restored their real archived content (including a
+  garbled multi-`\r` control-sequence-spam post an earlier, cruder
+  attempt had manually "cleaned" into one line) instead of losing it.
+  General lesson: when a `.o` save file throws `restore_object():
+  Invalid utf8 string`/`Illegal file format`/`Illegal mapping format`
+  and the archive is Windows-era, check for GBK un-transcoding AND
+  genuine embedded CRLF before assuming either alone explains the
+  corruption — fixing one without the other can silently trade one
+  parse failure for a different, quieter one.
 
 ### 4.2 The `.c` → `.lpc` rename and its long tail of fallout
 
@@ -1198,6 +1237,14 @@ cause, fix, detection, known-affected lineages.
   `feature/alias.lpc`, breaking the entire player-body class and
   silently failing every character creation at gender-confirmation. Fix
   to `case '\''`. Similar: a `'25'` multi-char literal (`zitengzhan`).
+- **`TYPE array NAME`** (two words — a type keyword directly followed by
+  the literal word `array`, e.g. `string array arrCmd = explode(cmd,
+  ";")`) is a SECOND, distinct old-MudOS array-declaration dialect this
+  driver doesn't accept — not to be confused with the *bare* `array x;`
+  (no element type) bug above. Fix by dropping the `array` keyword and
+  using the real array-type syntax (`string *arrCmd`). (`xajh2`'s
+  `clone/user/immortal.lpc`, the wizard-only `;`-separated multi-command
+  batching feature.)
 
 ### 6.4 One shared root cause, not N bugs
 
@@ -1560,6 +1607,37 @@ After the exclusion, always boot AND connect before considering it done.
   encoding), not just the one binary-magic-bytes case — same fix
   (`stringp()`-guard the shared crash site) applies regardless of why
   the restore failed.
+- **Third confirmed instance, a third distinct corruption source, plus
+  a wider collateral-damage mechanism: `fy2`/`fy2qh` (byte-identical
+  siblings).** `std/bboard.lpc`'s (and `std/jboard.lpc`'s) `setup()` did
+  `move(loc); ...; restore();` with NEITHER call guarded. This time the
+  corruption source was a genuine `.o`-file conversion gap (§4.1: some
+  `data/board/*.o` save files were never GBK→UTF-8 transcoded at all —
+  `restore_object(): Invalid utf8 string`), not a wrong binary format or
+  embedded-invalid-bytes-in-text. Same end result as the two instances
+  above: the throw aborts the board's `create()` before `set_name()`/
+  `id` is ever set, and every subsequent `look` at the ROOM containing
+  that board crashes a second time on the same
+  `capitalize(query("id"))` in `feature/name.lpc`'s `short()` — but
+  because this crash is a **first-boot-load**, not a first-*visit*, it
+  does NOT self-heal after one visit the way the §7.17/§7.19/§7.22
+  family does; it keeps crashing every `look` at that room for the rest
+  of the boot, since the board's in-memory name/id state is genuinely
+  never populated, not just racily so. A second, independent trigger for
+  the same unguarded-`move()`/`restore()` shape: a board whose own
+  `"location"` field is a stale/renamed path (§7.18) makes the unguarded
+  `move()` throw instead, with the identical collateral effect on the
+  owning room. Fix: wrap BOTH the `move()` and the `restore()` calls in
+  `std/bboard.lpc`/`std/jboard.lpc`'s `setup()` in `catch()` — a bad
+  board (missing location, corrupt/un-transcoded save data) now degrades
+  to an unpopulated-but-present board object instead of aborting the
+  room's own `create()`. This is the same general lesson §7.73's own
+  "wider blast radius" addendum documents (an uncaught throw inside a
+  populated CHILD object's `create()`/`setup()` can silently truncate
+  whatever statements come after it in the PARENT room's `create()`) —
+  here the child is a board via `restore()`/`move()` rather than an NPC
+  via `carry_object()->wear()`, confirming the general shape recurs with
+  different trigger calls, not just the one already cataloged there.
 
 ### 7.8 Case-sensitive DATA-file paths (Windows-origin)
 
@@ -2243,6 +2321,26 @@ used elsewhere in the same flow for the same purpose (here, `START_ROOM`
 missing custom startroom) rather than resurrecting the disconnected old
 zone, which would reconnect deliberately-superseded content back into
 the live map.
+
+**Confirmed lineage instance: `fy2`/`fy2qh`** (byte-identical siblings,
+风云 family). A zone rename from `/d/wiz/` to `/d/waterfog/` left FOUR
+stale references behind: `d/waterfog/hall1.lpc`/`jobroom.lpc` (both
+still carry `// Room: /d/wiz/....c` header comments — the tell) and
+their two message boards `obj/board/wizard_b.lpc`/`wizard_j.lpc`
+hardcoded absolute exits/`"location"` values under the old path, even
+though the zone's own `d/waterfog/entrance.lpc` already correctly uses
+`__DIR__`-relative exits for the same neighbors. A fourth, more
+consequential instance of the same stale path lived outside the zone
+itself: `feature/alias.lpc`'s anti-bot "you look like a script"
+auto-teleport (a genuinely reachable safety mechanism, not dead code)
+sent the accused player to `load_object("/d/wiz/courthouse")` — also
+nonexistent — which would have silently `move()`d the player into
+environment 0 (§7.14) had it ever fired. Fixed all four to point at
+`/d/waterfog/...`/`__DIR__`, plus an `objectp()` guard on the
+`alias.lpc` teleport as defense in depth. One of the two stale boards
+also fed the §7.7 `capitalize(query("id"))` collateral-crash shape via
+an unguarded `move()` in the board's own `setup()` — see the third
+`fy2`/`fy2qh` instance recorded under §7.7.
 
 ### 7.19 Calling a create()-only driver primitive from `init()` re-triggers that object's own `init()` — first-visit-only "Too deep recursion"
 
@@ -5534,6 +5632,26 @@ detection pattern generalizes: any `if (!restore() && !mapp(X))`
 oversized files — check for both before ruling a daemon's save-restore
 safe.
 
+**Third confirmed instance, a third distinct trigger: `fy2`/`fy2qh`**
+(byte-identical siblings). Same vulnerable `if (!restore() &&
+!mapp(emote)) emote = ([]);` `create()` shape, but this time `restore()`
+threw because `data/emoted.o` (~72KB, the entire `smile`/`nod`/`bow`/
+`wave`/... emote pattern database) was simply never GBK→UTF-8
+transcoded by the conversion pipeline (§4.1) — `restore_object():
+Invalid utf8 string`, a conversion GAP rather than either a resource
+limit (first instance) or pre-existing corrupt mapping syntax (second
+instance). Same end effect regardless of cause: `emote` stayed
+permanently `0` for the rest of the boot, so EVERY emote command
+(`smile`, `nod`, ...) silently fell through to the generic
+"什麽？"/unknown-command message, for the entire archive's lifetime.
+Same two-part fix (re-transcode the save data per §4.1's quote-aware
+CRLF-collapse addendum, plus `catch(restore())`). Confirms the class
+generalizes across THREE independent trigger shapes now (oversized
+file, corrupt mapping, un-transcoded encoding) — the `if (!restore() &&
+!mapp(X))` idiom is unsafe against any of them, and a lib carrying it
+is worth checking for all three before declaring the daemon's
+save/restore path safe.
+
 ### 7.88 A simul_efun `message()` wrapper is declared with 4 *required* params but called with only 3 in several places in the same file, so the missing arg silently becomes `int(0)` and crashes the builtin `efun::message()` — and when that crash lands synchronously inside a gating function, it can permanently soft-lock players, not just spam the log
 
 Found on `zjdywzb`'s §10.7 deep functional test. This lib's
@@ -6775,6 +6893,72 @@ that never got a chance to consent. Likely to recur across the whole
 ES2/nitan lineage family (any sibling with this same "new account
 retention" mechanic) — not yet swept, check on next contact.
 
+### 7.105 A lib's own safe-sparring training-dummy NPC never sets the flag its shared `fight`/`hit` commands gate real-vs-mock combat on, so every "safe" spar routes through genuine lethal `kill_ob()` instead
+
+Found on `tianxiawuxue`'s §10.7 deep functional test, by doing exactly
+what the methodology's own checklist item 3 recommends — finding the
+lib's documented safe-sparring mechanism before risking a real fight.
+`d/shaolin/npc/mu-ren.lpc` (and 8 sibling copies across other zones — a
+`mu-ren`/`muren` training dummy) has an elaborate, obviously
+purpose-built `accept_fight(object ob)` override: it copies the
+attacker's own skills/stats onto itself, sets `"no_die": 1`, and tracks
+`fight_times` so it "breaks" after repeated use rather than ever dying
+— matching `help combat`'s own promise that `fight`/`hit` never cause
+real death. A **fresh, unequipped, level-0 test character died outright
+on the dummy's second exchange** (`你口中喷出几口鲜血，倒在地上,死了！`).
+
+Root cause: `cmds/std/fight.lpc`'s `main()` (and `cmds/std/hit.lpc`,
+identically) only calls `obj->accept_fight(me)` inside `if
+(obj->query("can_speak")) { ... }` — the `else` branch, taken whenever
+`can_speak` is unset/falsy, skips `accept_fight()` entirely and instead
+runs `me->fight_ob(obj); obj->kill_ob(me);`, the exact same call
+`kill.lpc` would make. None of the 9 dummy files anywhere `set(
+"can_speak", 1)`, so `query("can_speak")` returns `0`/undefined for
+every one of them, and EVERY `fight`/`hit` against a training dummy —
+lib-wide, in every zone that has one — silently took the lethal branch
+instead of the safety-net branch its own code was clearly written for;
+`accept_fight()` was provably 100% dead code for every instance in the
+archive (confirmed via `grep -rn 'accept_fight('` — the ONLY call site
+in the whole codebase is this one, in `fight.lpc`).
+
+**Why this is a programming bug, not a design/balance judgment call**
+(the §10.7 scope note's own test): this is not "the skill gap between
+two REAL opponents is too large," an intentional risk `help combat`
+already documents — it's a single-purpose, `no_die`-flagged practice
+NPC whose entire elaborate stat-mirroring safety mechanism is
+architecturally unreachable via the only command that could ever invoke
+it, contradicting both its own code's obvious purpose and the command's
+own player-facing help text. Confirmed byte-identical in the pristine
+raw archive (not introduced by conversion).
+
+Fix: `set("can_speak", 1);` right after `set_name(...)` in all 9 dummy
+files (the dummy's own `long` description already says "如同真人一
+般" — "as lifelike as a real person" — consistent with its own flavor
+text, not an invented property). Narrow, zero-blast-radius: does not
+touch `fight.lpc`/`hit.lpc` themselves (which route hundreds of other,
+genuinely-hostile silent NPCs system-wide and were deliberately left
+alone) and affects no other NPC in the lib. Verified live: before the
+fix, `fight mu ren` killed the test character on the second exchange;
+after the fix (and a driver restart), the identical command produced
+several rounds of combat text, then the dummy conceded (matching a
+sibling lib's own documented safe-spar-concedes shape) — the character
+survived with stamina depleted but no injury and no death-counter
+increment.
+
+Detection pattern: for any lib with an explicit "safe sparring"
+mechanic (a training dummy, a `no_die`-flagged NPC, a documented
+`fight`-never-kills promise in `help`), grep the shared `fight`/`hit`
+command(s) for the exact condition gating the call into
+`accept_fight()` (or whatever the lib's own safe-combat entry point is
+named), then confirm every intended-safe NPC actually sets whatever
+property that condition tests — an NPC whose safety override exists in
+source but is unreachable through the only command that could invoke it
+is easy to miss by reading the NPC file alone; the gap only shows up by
+tracing the CALLER's dispatch condition against what the NPC actually
+sets. Always test the lib's own documented safe-sparring target with a
+fresh, unequipped character before assuming "fight" is safe by
+convention.
+
 ---
 
 ## 8. Login and registration flow bugs
@@ -7642,6 +7826,118 @@ name — the general lesson from the room-based instances above still
 applies: grep every `.lpc` file's `new()`/`carry_object()`/bare-`->`
 argument literals against the actual on-disk casing of files they
 reference, not just inside room `create()`s.
+
+### 8.16 A reconnect-kick branch re-arms `input_to()` with a wrong-typed/missing argument AND no player-visible prompt, so the player's very next arbitrary keystroke is silently misrouted into a completely different flow
+
+Found on `yxjh`'s deep functional test (§10.7), reproduced live via two
+rapid, back-to-back real reconnects. `adm/daemons/logind.lpc`'s
+`confirm_relogin()` — the "kick the old, stale connection off, let the
+new one take over" handler run when a player reconnects while an old
+link object is still technically registered — has a fallback branch for
+when `old_link` has already gone away (`user->query_temp("link_ob")` is
+`0`, the old socket already closed but the driver's own cleanup hadn't
+caught up yet — genuinely reachable via two disconnect/reconnect cycles
+in quick succession, not a contrived edge case):
+
+```lpc
+// the else branch, old_link already gone:
+input_to("get_id", ob, user);
+```
+
+`get_id()`'s real signature is `(string arg, object ob, int ip_cnt)` —
+this call passes the just-reconnected `user` OBJECT into what should be
+an `int` third argument, AND — the more consequential half of the bug —
+does so with **no preceding `write()`/prompt at all**. The player sees
+nothing on screen, but their very next arbitrary input (e.g. an
+ordinary `look`) gets silently captured by `get_id()`'s callback and
+processed as if it were a freshly-typed ENGLISH ID for a brand-new
+registration, popping "使用 `look` 这个名字将会创造一个新的人物，您确
+定吗" — a completely silent command-stream derailment that's easy to
+mistake for a network glitch unless the player reads the prompt text
+carefully. The identical shape (`input_to("get_id", user)`, missing the
+third argument entirely rather than mistyping it) recurs independently
+in the same file's `get_wizpwd()` wizard-password-retry-failure branch.
+
+Detection: grep a lib's `logind.lpc`-equivalent for any `input_to(
+"get_id", ...)` (or whatever function name resumes ID entry) call site
+OTHER than the single legitimate one right after the connection banner
+— per §8.10's related lesson, any such call reaching that function from
+elsewhere is suspect, but check the ARGUMENT SHAPE too, not just which
+function name is being resumed: an object/wrong-type argument in a slot
+the target function declares as a narrower type, and/or a missing
+`write()` immediately before the `input_to()` call, both independently
+indicate a copy-pasted-and-not-fully-adapted reconnect branch. Reproduce
+live with two rapid real reconnects (not a scripted single-shot
+registration) so `old_link` is genuinely already gone by the time the
+second attempt lands.
+
+Fix: add the missing prompt (matching whatever the function's other,
+correct call sites already write immediately before arming the same
+`input_to`) and correct the argument to the type the callback actually
+declares — here, a plain default `int` (`0`), matching every other
+normal call site's convention. Verified live: before the fix, two
+consecutive rapid reconnects reliably swallowed the second session's
+next command into a fake-registration prompt; after the fix, the same
+sequence completed normally with `look`/`score` both executing as
+ordinary commands.
+
+### 8.17 An account-existence check reads disk save-file presence only, never a live/net-dead in-memory body — so a brand-new registrant who disconnects before their very first save looks permanently "never registered" to their own reconnect attempt
+
+Found on `xajh2`'s deep functional test (§10.7), as a downstream
+consequence of an ordinary §7.14-class missing-room bug: a fresh
+registration's post-`enter_world()` move to a hardcoded newbie-start
+room (`/d/place/newbie/start`, a path this archive's `d/place/` never
+actually ships) threw an UNCAUGHT `*call_other() couldn't find object`
+error — and because that move sits textually BEFORE `user->save()`/
+`ob->save()` near the tail of `enter_world()`, the throw aborts the rest
+of the function outright, so **no save file is written to disk at all**
+until the next periodic autosave or net-dead force-quit (both 900s
+later) fires. That part alone is an ordinary instance of the
+already-cataloged "guard the move, fall back to `START_ROOM`" fix
+(§7.14) — the genuinely new finding is what this delayed-first-save
+window exposes: `system/daemon/logind.lpc`'s `get_id()` decides "does
+this id already exist" purely from
+`file_size(ob->query_save_file() + __SAVE_EXTENSION__)` — it never
+consults `find_body(arg)` for a live or net-dead in-memory body (that
+check only happens LATER, in `get_passwd()`, which is unreachable
+without first passing the disk-existence gate). A brand-new player who
+disconnects uncleanly — the single most common real-world disconnect
+mode — within their first ~15 minutes therefore has a genuinely live
+(or net-dead, reconnectable) body sitting in server memory, but ANY
+reconnect attempt during that window is told **"对不起，这个id还没有
+登录过，请用new来起用这个id"** ("this id has never logged in") — reads
+exactly like account/data loss to a real user, even though nothing was
+actually lost.
+
+Distinguish from §7.20/§7.21: those are both about a `net_dead()`-found
+body's LOCATION not being correctly restored on reconnect — the body
+IS found. Here the body is never found at all, because the very first
+gate in the login flow short-circuits on disk state before any
+in-memory lookup ever runs.
+
+Detection: on any lib whose registration flow can leave a real save
+write DELAYED past the initial `enter_world()` call (an uncaught throw
+per §7.14/§7.33, a deliberate "must play N minutes before first save"
+retention policy, or any other reason a brand-new account's first save
+might not land immediately), check whether the login flow's own
+"does this id exist yet" gate consults `find_body()`/an equivalent
+live-body lookup BEFORE falling back to a disk check — if it's
+disk-only, a legitimately-alive new account can be told it doesn't
+exist. Reproduce by registering fresh, forcing (or waiting for) the
+delayed-first-save condition, then reconnecting before the first real
+save has landed.
+
+Fix: guard the newbie-room move the same way §7.14 already prescribes
+(`catch()`, falling back to the already-validated `startroom`) so the
+save actually happens promptly in the common case; as defense in depth,
+have the existence check also try `find_body(arg)` before concluding an
+id has never registered, so a delayed-save window (from this cause or
+any other) can't itself manufacture a false "never registered" verdict.
+Verified live: post-fix, fresh registration landed in a real room (not
+void) and — the primary fix already prevents the delayed-save window
+from being reached in the first place for this specific trigger — a
+save file existed immediately after registration, before any reconnect
+was attempted.
 
 ---
 
