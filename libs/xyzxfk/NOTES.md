@@ -317,3 +317,16 @@ reboot.lpc`/`cmds/adm/shutdown.lpc`/`cmds/adm/restoredata.lpc`/
 或低频功能，未逐一实机复现，仅代码层面确认修法与已验证的四处完全
 一致）；WASM 下的重新验证（详见上方说明，proxy 阻断，此前已有会话
 独立确认过登录阶段的 WASM 限制且与本轮修的 bug 无关）。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。核对上面记录的所有修复（§7.11 `log_file()`
+及其覆盖的注册/死亡路径、§7.94 `inventory.lpc`、`log_error()`
+severity 判断）逐项确认代码仍然生效；`win_times` 的 `%`-operator 也
+已用 `to_int(query("win_times")) % 5`（`d/city2/npc/refereew.lpc:146`）；
+`feature/dbase.lpc` 未发现 tybxjh/wlhd 那种密码写保护，不适用。管
+理员 `fluffos`/`Mud@2026` 真实重连验证：`score` 显示"【玄法天君】"
+头衔，食物/饮水满格，`i` 正确列出随身物品，`debug.log` 全程干净。
+驱动按精确 PID 结束；测试期间产生的存档时间戳增量已 `git checkout
+--` 还原，本轮无需新代码改动。
