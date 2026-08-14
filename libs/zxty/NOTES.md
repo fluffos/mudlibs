@@ -63,3 +63,76 @@
   `xhcii` 是同一套实现。
 - **本次没有测试**：拜师/门派系统、商店（时间主要花在追查/验证上
   面几个更严重的 bug 上，留给后续深挖）。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。上面记录的所有修复（printf 泄漏、§8.9、
+§7.85 进度条、§7.86 留言板、`exert_function` 类型错误）逐项核对代
+码仍然生效；`win_times` 的 `%`-operator 也已用
+`to_int(query("win_times")) % 5`（`d/city2/npc/refereew.lpc:146`）。
+
+### 本轮新发现并修复的 PROGRAMMING bug
+
+1. **`feature/dbase.lpc`（真正生效的 F_DBASE）的密码写保护是
+   tybxjh/wlhd 那一类已确认的 bug 形状**：`if ((prop == "password"
+   || prop == "ad_password") && wizhood(this_object()->query("id"))
+   == "(boss)" && this_player() && geteuid(this_player()) !=
+   this_object()->query("id")) return;`——`wizhood()` 纯粹读
+   `wizlist` 文件，不检查密码是否已经真正存在于 `dbase` 里，任何
+   预先播种为 `(boss)` 的 id 都会在自己第一次设置密码时被这条守卫
+   拦截。按已确立的标准修法加上 `mapp(dbase) && dbase[prop]`，只在
+   密码已存在时才拦截，不影响首次创建。（`u/zjb/` 目录下另外三份
+   `dbase.lpc` 死代码副本有完全相同的形状，但没有任何宏或引用指向
+   它们，未改动。）
+2. **`log_error()`（`adm/obj/master.lpc`，实际生效的 master
+   file）的严重度检查漏了第二个回显分支**：这份档案的写法有两条并
+   行的回显路径——`if (this_player(1)) efun::write(...)` 和 `else
+   if (this_player()) tell_object(...)`——第一轮编辑只把严重度判
+   断包进了第一条分支，live 复现：注册过程中仍然收到大量原始的
+   `编译时段错误：.../combatd.lpc:1384:1: Warning: Unused local
+   variable ...` 泄漏，因为走的是第二条 `tell_object` 分支。已把
+   两条分支一起包进 `strsrch(message, "arning:") == -1` 判断（和
+   yxjh 上确认过的同一类"多分支各自需要单独加保护"教训一致）。
+3. **`log_file()`（`adm/simul_efun/file.lpc`）本身缺少
+   `assure_file()` 保护**：函数体只有裸 `write_file()`，同一文件里
+   的 `assure_file()` 辅助函数从未被调用。已加上前向声明 +
+   `assure_file(LOG_DIR + file);`。
+4. **`cat()`（同一文件，供玩家/巫师直接呼叫的 `cat` 指令）两处独立
+   的 `write_file("/log/file/{cat,bugcat}", ...)` 同样缺少
+   `assure_file()` 保护，且对不存在文件的 `read_file()` 结果没有类
+   型检查**：`work/log/file/` 整个目录被 `.gitignore` 忽略，真正
+   全新的检出不会带有这个目录。特别检查过 `enter_world()` 里的
+   `cat(MOTD)` 调用——它的调用者 `base_name(ob)` 正好是
+   `/adm/daemons/logind`，两处 `write_file()` 都显式排除了这个调
+   用者，所以这条路径本身不会导致"每次登录必崩"（不像 yxcs 的
+   `cat(WELCOME)` 那次），但玩家/巫师直接用 `cat` 指令读取任意档
+   案时仍然会命中未防护的 `write_file()`。已给两处都加上
+   `assure_file()`，并把 `write(str1)` 改成 `write(str1 || "")`。
+
+### Proactive checks / 观察记录
+
+- **一个间歇性触发、确认为既有安全设计、未修改的现象**：
+  `adm/daemons/wzd_log.lpc`（真正被 `logind.lpc` 多处呼叫，不是死
+  代码）给巫师/管理员账号加了一层算术验证码防护——`wizardp(user)`
+  为真时，`enter_world()`/`reconnect()` 会被重定向进
+  `wzd_log()`，显示一串数字并要求提交一个基于隐藏公式
+  `(n1*n4+8)*100+n2*n3-3` 算出的答案，答错就直接断线（不崩溃，干
+  净拒绝）。本轮测试中这个挑战在某些重连尝试中出现、某些又不出
+  现（比如用一个独立的裸 socket 脚本单独测试时完全没有触发，紧接
+  着的另一次快速连续重连又触发了）——具体触发条件似乎和
+  `previous_object()`/连线时序有关，和 yxjh 那次确认的连线状态竞争
+  同属一类现象，但这次是驱动干净拒绝，没有崩溃或指令流错位，
+  `debug.log` 全程也没有任何报错。因为触发/不触发都不产生真正的
+  程序错误（只是安全挑战有没有被插入这一步），按本项目"没有实测复
+  现真正崩溃就不改动"的纪律未做处理，如实记录供未来复测参考。
+
+### 实测过程
+
+管理员 `fluffos`（管理密码 `AdminMud@2026`，普通密码
+`Mud@2026`，`adm/etc/wizlist` 早已播种但从未真正注册过）用完整双
+密码注册流程创建，落地"有间客栈"，`score` 显示"【巫师总兼】"头
+衔，食物/饮水满格。随后做了三次独立的断线重连+密码验证（详见上方
+"间歇性触发"记录）：均成功用普通密码登录，存档数据一致。全程两个
+调试日志位置都干净，无运行时错误。驱动按精确 PID 结束；管理员存
+档已提交。
