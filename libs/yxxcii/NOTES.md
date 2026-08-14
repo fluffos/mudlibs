@@ -6,3 +6,50 @@
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 48 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测，同时也是这份档案第一次真正的 §10.7 深
+度游玩测试（此前只做过 WASM 阶段的注册流程验证）。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/single/master.lpc`，实际生效的 master
+   file）完全没有严重度检查（AGENTS.md §7.34-class）**：已加上
+   `strsrch(message, "arning:") == -1` 判断。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有
+   `assure_file()` 保护（AGENTS.md §7.11-class）**：已加上前向声明
+   + `assure_file(LOG_DIR + file);`。
+3. **`cat()`（同一文件）对不存在文件的空指针式崩溃，主动加固**：
+   `read_file()` 对不存在的文件返回非字符串 `0`，直接传给
+   `write()` 会崩溃——未在本档案现场触发，属主动加固，改成
+   `write(msg || "");`。
+
+### Proactive checks（无需改动）
+
+- §8.9 食物/饮水初始化不适用：`init_new_player()` 直接无条件
+  `user->set("food", 700); user->set("water", 700);`，不涉及
+  `ob`/`user` 混淆读取。
+- `logind.lpc` 里唯一的 `printf("%O", ...)` 出现在一段已经被
+  `/* ... */` 整体注释掉的死代码块里，不是活跃泄漏，未改动。
+- `get_id()` 签名是 `(string arg, object ob)`，全档案三处
+  `input_to("get_id", ob)` 调用点参数个数都一致，未发现
+  yxjh 那种参数错位。
+- `feature/dbase.lpc` 未发现密码写保护，不适用 tybxjh/wlhd 那一类
+  bug。
+- `win_times` 的 `%`-operator 修复确认存在且正确：
+  `d/city2/npc/refereew.lpc:177`、`d/city/npc/jinyong.lpc:199`、
+  `d/city/npc/gulong.lpc:246` 均已用 `to_int(query("win_times")) %
+  5`。
+
+### 实测过程
+
+`adm/etc/wizlist` 里的 `fluffos (admin)` 一直没有对应存档。本轮通
+过完整注册流程创建（先选 GB 编码 → id → y → 中文名 → 密码 ×2 → 天
+赋接受 y → email → 性别 m），落地"巫师休息室"，`score` 显示"目前
+权限：(主管巫师)"，食物/饮水满格。随后**连续两次**真实断线重连+
+密码验证（每次都重新走一遍 GB 编码选择）：均成功登录，存档数据一
+致，两次重连均未触发任何异常（未复现 yxjh 那类仅在连续快速重连时
+才出现的错位崩溃）。全程 `debug.log` 无运行时错误。驱动按精确 PID
+结束；管理员存档已提交。
