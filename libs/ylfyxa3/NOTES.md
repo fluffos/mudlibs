@@ -723,3 +723,17 @@ query("age") == 14)` 已经用的是 `user`（真正的玩家 body），不是 `
 session 出站代理策略拒绝（`curl -sS $HTTPS_PROXY/__agentproxy/status`
 返回 403），WASM 编译/运行验证本轮继续跳过，仅做原生驱动（linux-debug
 预设，ASAN/UBSAN）下的完整 §10.7 测试。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。核对上面记录的所有修复（§7.11
+`log_file()`、`cat()` 空指针加固、§7.34 printf 泄漏、`log_error()`
+severity 判断）逐项确认代码仍然生效；`win_times` 的 `%`-operator 也
+已用 `to_int(query("win_times")) % 5`（`d/city2/npc/refereew.lpc:149`）；
+`feature/dbase.lpc` 未发现 tybxjh/wlhd 那种密码写保护，不适用。管
+理员 `fluffos`/`Mud@2026`（无需身份标识，登录只用密码）真实重连验
+证两次：落地此前保存的地点，"最后对手：木人"等历史状态完整保留，
+`score` 显示"【布衣平民】"头衔，`debug.log` 全程干净。驱动按精确
+PID 结束；测试期间产生的存档时间戳增量已 `git checkout --` 还原，
+本轮无需新代码改动。
