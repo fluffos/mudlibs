@@ -179,3 +179,56 @@ replace a program" 的驱动警告，说明本轮没有现场触发——按 AGE
 `is_chinese()` 本身的问题，纯属传输层偶发损坏，接受随机名继续测试）。
 两个角色、测试期间产生的尸体/骸骨等战斗残留物均保留在存档里，作为
 本轮测试证据，未删除。
+
+## 深度功能测试（2026-08-13，round two，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测。上面记录的修复逐项核对代码仍然生效
+（`log_error()` 已经有严重度判断，`d/death/npc/panguan.lpc`/
+`std/room.lpc`/`feature/vendor.lpc`/`cmds/std/go.lpc`/
+`band.lpc` 的修复都还在）；这份档案没有 `win_times` 相关的裁判
+NPC（`u/wiz/` 巫师个人目录不存在），不适用。
+
+### 本轮新发现并修复的 PROGRAMMING bug
+
+1. **管理员账号播种从未覆盖 `fluffos`——和兄弟档案 `zzfy` 完全相
+   同的 bug 形状**：`securityd.lpc` 的 `wiz_status` 是 `nosave`，
+   `restore_list()` 只硬编码授予 `xgchen` 管理员权限；上一轮深挖
+   全程用的都是 `xgchen` 这个账号，`fluffos` 从未被注册或授权过。
+   已在 `set("wiz_status/xgchen", "(admin)")` 后面加一行
+   `set("wiz_status/fluffos", "(admin)")`，不改动既有的 `xgchen`
+   硬编码。Live 验证：完整注册流程创建 `fluffos` 后，`update
+   /adm/simul_efun/file` 显示"重新编译
+   /adm/simul_efun/file.lpc：成功！"，确认真实拥有 `(admin)` 级写
+   权限（没有只看登入横幅的状态文字就下结论——这份档案的登入横幅
+   本身没有显示"目前权限"这类文字，用 `update` 直接验证写权限是
+   唯一可靠的确认方式）。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）本身缺少
+   `assure_file()` 保护**：已加上前向声明 +
+   `assure_file(LOG_DIR + file);`。
+3. **`cat()`（同一文件）对不存在文件的空指针式崩溃，主动加固**：
+   未在本档案现场触发，属主动加固，改成 `write(read_file(file) ||
+   "");`。
+4. **`get_resp()`/`get_name()`（`adm/daemons/logind.lpc`）各有一处
+   调试残留 `printf("%O\n", ob)`（AGENTS.md §7.34-class）**：紧跟
+   在中文名字确认之后，把连线桩物件的原始引用直接回显给正在注册
+   的新玩家。已删除两处。
+
+### Proactive checks（无需改动）
+
+- §8.9 食物/饮水初始化不适用：无条件
+  `user->set("food", user->max_food_capacity())`。
+- `feature/dbase.lpc` 未发现密码写保护，不适用 tybxjh/wlhd 那一类
+  bug。
+- **确认这份档案的注册流程比 `zzfy` 多一步民族选择（0-3：汉/苗/
+  满/蒙古），没有天赋赠礼菜单**：读代码核实过实际顺序是 id→y→中文
+  名→密码 ×2→email→性别→民族，不是盲搬 `zzfy` 的流程假设。
+
+### 实测过程
+
+管理员 `fluffos`（`wiz_status` 此前从未覆盖到这个 id）用完整注册
+流程（含民族选择步骤）创建，落地"凤求凰客栈"。随后**两次**真实断
+线重连+密码验证：第一次专门用 `update /adm/simul_efun/file` 确认
+`(admin)` 权限真正生效，第二次单独验证密码重连本身。均成功登录，
+存档数据一致。全程 `debug.log` 无运行时错误。驱动按精确 PID 结
+束；管理员存档（`data/{login,user}/f/fluffos/fluffos.o`）已提交。
