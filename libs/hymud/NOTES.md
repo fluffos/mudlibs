@@ -711,6 +711,44 @@ where each class was originally found, not in a new mechanism.
   kill throughout) → 2003090 → 2012389 → 2025702 → 2040420 (stopped
   cleanly, by exact recorded PID, at the end of this session).
 
+## 深度功能测试（2026-08-14，round three，新驱动重测）
+
+针对驱动升级（`quest_times`/`win_times` `%`-operator 修复 + Warning/warning
+大小写回退兼容）做的重测，逐项独立核对了本轮新确立的检查项（不只
+是信任 NOTES.md 已有记录）：`log_error()` 确认已经有大小写兼容的
+`warning`/`Warning` 双重检查；§7.35/§7.36/§7.11 三处修复均确认代
+码状态和记录一致；`feature/dbase.lpc` 未发现密码写保护；
+`win_times` 的 `%`-operator 也已用 `to_int(query("win_times"))%5`。
+
+### 本轮新发现并修复的 PROGRAMMING bug
+
+1. **§8.9 食物/饮水初始化判断的对象错了——此前的深挖没有覆盖到**：
+   `adm/daemons/logind.lpc` 的 `enter_world()` 里
+   `ob->query("age") == 14`（应为 `user`）。已改成
+   `user->query("age") == 14`。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）本身缺少
+   `assure_file()` 保护**：已加上前向声明 +
+   `assure_file(LOG_DIR + file);`。
+3. **`cat()`（同一文件）对不存在文件的空指针式崩溃，主动加固**：
+   未在本档案现场触发，属主动加固，改成 `write(read_file(file) ||
+   "");`。
+
+### Proactive checks（无需改动）
+
+- `adm/daemons/logind.lpc` 里唯一的 `printf("%O\n", ob)` 出现在一
+  行已经被注释掉的死代码里，不是活跃泄漏，未改动。
+
+### 实测过程
+
+管理员 `fluffos`（登录密码和巫师专用密码"wizpwd"都是
+`Mud@2026`——这份档案的登录流程有独立的巫师验证步骤，早于常规密
+码提示）真实重连两次（先选 GB 编码）：第一次用 `update
+/adm/simul_efun/file` 确认写权限仍然生效（"重新编译
+/adm/simul_efun/file.lpc：成功！"），第二次单独验证完整登录+巫师
+密码流程。均成功登录，落地"世界之树"，存档数据一致。全程
+`debug.log` 无运行时错误。驱动按精确 PID 结束；测试期间未产生需
+要清理的存档增量。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 海洋II/haiyang2 的衍生版本，同一套代码库（已用 diff 确认）。
