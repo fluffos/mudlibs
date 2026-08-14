@@ -500,6 +500,98 @@ proof of the crash and the fix).
   coalescing during a slow synchronous first-compile, which was this
   pass's leading but unconfirmed hypothesis).
 
+## Deep functional test round two (2026-08-14)
+
+Independently re-verified against current code rather than trusting the
+round-one writeup above. Confirmed all 3 prior fixes still hold (the
+net-dead-during-registration `restart_heart()` fix, the
+`compress_obj.h` `__FILE__`/§7.14 fix, and the ported §7.12
+`tell_room()` fix), and found one new §7.90-class issue: a real preload
+crash, not just a theoretical risk.
+
+### New fix: §7.90-class eval-cost abort during boot preload — `chinese_d`'s dictionary build genuinely failed, not just at-risk
+
+`config.fluffos` had `maximum evaluation cost : 300000`, below even this
+project's common 700000 template default. Unlike some other libs this
+session where a low eval-cost config was flagged as a latent risk without
+a confirmed failure, THIS lib's boot log showed a real, live preload
+crash:
+```
+Eval interrupted: object adm/daemons/chinese_d cost limit reached, limit: 300000 usec.
+执行时段错误：*Too long evaluation. Execution aborted.
+程式：/adm/daemons/chinese_d.lpc 第 60 行
+呼叫来自：/adm/daemons/chinese_d.lpc 的 make_dictionary() 第 60 行
+执行时段错误：*Can't catch eval cost too big error.
+```
+`chinese_d`'s `make_dictionary()` (called from its own `create()`, itself
+called from `master.lpc`'s `preload()`) never finished building its
+dictionary — every boot, unconditionally, not an occasional flake. Fixed
+with the established §7.90 remedy: `maximum evaluation cost` → `5000000`.
+Verified: fresh reboot, zero `cost limit`/`Too long evaluation`/`Can't
+catch` hits anywhere in the boot log.
+
+### Re-verified live: all 3 round-one fixes still hold
+
+- **`compress_obj.h` §7.14 fix**: code-confirmed `set_default_ob(base_name(this_object()))`
+  still present (with its explanatory comment), then live-verified by
+  walking the exact original crash route as admin (远风镇冒险者公会 →
+  east → east → 商店) and running `list` — full item list rendered
+  cleanly (油灯/绷带/魔法地图/火把 with prices), zero new `work/log/debug.log`
+  lines (checked the file's line count before and after the whole
+  session: unchanged at 1035).
+- **§7.12 `tell_room()` fix**: code-confirmed `exclude || ({})` still
+  present in `adm/simul_efun/tell_room.lpc`.
+- **Net-dead-during-registration `restart_heart()` fix**: code-confirmed
+  the `else if (base_name(environment(this_object())) == LINKDEAD_ROOM)
+  { ... complete_setup(""); }` branch is still present. **Not re-walked
+  live this pass** (requires a fresh registration interrupted mid-MOTD,
+  then a real disconnect/reconnect cycle — expensive relative to this
+  pass's time budget given the fix is a small, previously-thoroughly-
+  verified, self-contained conditional) — noted honestly per this lib's
+  own established "not verified live" convention rather than silently
+  re-claimed as freshly tested.
+
+### Other checklist items: mostly not applicable, different lineage architecture
+
+This lib's TMI/Discworld-family codebase doesn't share the ES2/大唐
+lineage's `adm/simul_efun/file.lpc`/`cmds/wiz/update.lpc` shapes this
+session's checklist was tuned around — no `update.lpc` exists at all (the
+wizard reload command is `_update.lpc`, invoked as `update`, a different
+implementation entirely; tested live, works correctly). `log_error()`
+(`adm/obj/master.lpc:348`) never broadcasts compile diagnostics to the
+connected player at all (only writes to a log file, with a fallback
+`write()` only on write FAILURE) — confirmed this lineage simply doesn't
+have the §7.10-class leak risk by construction, not because it's
+correctly gated. `work/log/` is a real, git-tracked, already-existing
+directory (not gitignored, unlike some other libs), so no
+`assure_file()`-class gap applies to its own log writes either.
+
+### A cosmetic finding, not a bug: `fluffos`'s displayed rank shows "apprentice", not an admin-sounding title
+
+First login this pass printed `目前权限：apprentice`, which looked
+concerning at a glance. Investigated rather than assumed broken: this
+label comes from `DOMAIN_D->query_domain_level(player)`, a separate
+"domain" title-display system, NOT from the actual ACL groups that
+control real permissions. `/adm/etc/groups` still correctly lists
+`fluffos` under both `(root)` and `(admin)`. Verified REAL admin access
+directly rather than trusting either label: `update /adm/daemons/logind`
+succeeded ("Updated and loaded."). Left the cosmetic domain-title as-is —
+this project's own "don't fabricate content" principle applies to
+game-facing labels too, and actual access is unaffected.
+
+### Verification method
+
+Booted native `build-debug` driver, admin login (`fluffos`/`Mud@2026`),
+`update /adm/daemons/logind` as the real privileged-action check
+(succeeded despite the cosmetic "apprentice" display). One rapid
+reconnect (the connection's own `quit` is gated behind `okip` for
+wizards — a genuine safety feature, not a bug — so the reconnect
+exercised the silent net-dead body-reattach path instead, landing back
+in the exact same room/state, which is itself valid reconnect-stability
+evidence). Driver killed by exact PID after testing; incidental
+`fluffos.o` save churn and a stray `.tmp` save file reverted/removed
+before commit.
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 东方故事基础版（蓝天）。
