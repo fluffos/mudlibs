@@ -6959,6 +6959,73 @@ sets. Always test the lib's own documented safe-sparring target with a
 fresh, unequipped character before assuming "fight" is safe by
 convention.
 
+### 7.106 `cmds/wiz/update.lpc`'s first check, `present(file, environment(me))`, crashes whenever the calling wizard has no environment — confirmed independently on 3 unrelated libs this round, present unfixed in 128 more (135 total corpus-wide)
+
+**File:line: `cmds/wiz/update.lpc`, the `main()` function's very first
+conditional, typically around line 20.** A near-universal shared
+command-file shape across this corpus (135 libs carried the vulnerable
+form as of this sweep).
+
+- **Symptom**: `*Bad argument 2 to present() Expected: object Got: 0.`
+  — thrown the instant a wizard types `update <anything>` (including the
+  extremely common `update /adm/daemons/logind` self-check) while
+  `environment(me)` is `0`. Reachable any time a wizard's environment is
+  genuinely unset — most commonly as a downstream symptom of a cold-start
+  `enter_world()` failure (see §7.90: an eval-cost abort mid-`enter_world()`
+  leaves the character with no environment for the rest of that session,
+  so literally the first thing an admin tries — `update` — crashes too).
+  Independently found and root-caused on `xiakexing2017`, `dtslmud`, and
+  `dtxywzxzb` in the same round-two testing pass, each time initially
+  investigated as if it might be an isolated bug before the shared shape
+  became obvious via a corpus grep.
+- **Root cause**: `present()`'s 2nd argument requires an `object`; passing
+  `environment(me)` unguarded assumes `me` always has one, which isn't
+  true the moment anything upstream (an eval-cost abort, a corrupted
+  save, a genuinely-void `startroom`) prevented the character from ever
+  being `move()`d into a real room.
+- **Fix**: guard with `environment(me) &&` before the `present()` call —
+  the single one-line change needed regardless of the surrounding
+  `if`/assignment shape:
+  ```lpc
+  // most common shape:
+  if ((obj = present(file, environment(me))) && interactive(obj))
+  // becomes:
+  if (environment(me) && (obj = present(file, environment(me))) && interactive(obj))
+
+  // a rarer assignment-statement shape (7 libs):
+  if (!obj) obj = present(file, environment(me));
+  // becomes:
+  if (!obj) obj = environment(me) && present(file, environment(me));
+  ```
+  Both shapes are syntactically and semantically safe to patch
+  mechanically: the guard adds no new parentheses (paren-balance is
+  preserved), and `&&`'s tighter binding than `||` means a compound
+  condition like `(obj = present(...)) && playerp(obj) || (obj =
+  find_player(file)) && playerp(obj)` still short-circuits correctly to
+  the `find_player()` fallback when `environment(me)` is falsy.
+- **Verified**: live-reproduced and fixed individually on the 3 libs that
+  found it; the remaining 128 were fixed via a corpus-wide mechanical
+  sweep (a Python `str.replace()` pass across every
+  `libs/*/work/cmds/wiz/update.lpc`, `newline=''` to preserve CRLF/LF per
+  file, matching the discipline established for the `quest_times`
+  corpus sweep) — spot-checked the diff shape on several libs across
+  different lineages for correctness (including the `||`-compound and
+  assignment-statement variants above), then did one full live
+  end-to-end verification (`fy3xd`: booted, admin login, `update
+  /adm/daemons/logind` succeeded cleanly) to confirm the mechanically-
+  patched file actually compiles and runs, not just that the text diff
+  looks right. Did not live-test all 135 individually — matches this
+  project's established "compile-check-level verification for a
+  mechanical, well-understood, single-line sweep" precedent (the
+  `quest_times`/`win_times` and §7.86 board-crash sweeps were verified
+  the same way).
+- **Detection**: `grep -L 'environment(me) &&' libs/*/work/cmds/wiz/update.lpc
+  | xargs grep -l 'present(file, environment(me))'` for the common shape;
+  check `grep -l 'if (!obj) obj = present(file, environment(me));'` for
+  the rarer assignment-statement variant. Any new/promoted lib should be
+  checked against this pattern as part of its own §10.7 pass if it
+  carries this file at all.
+
 ---
 
 ## 8. Login and registration flow bugs
