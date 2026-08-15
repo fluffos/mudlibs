@@ -442,3 +442,83 @@ working normally after the fix).
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 15 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## Deep functional test round two (2026-08-14)
+
+Independently re-verified against current code rather than trusting the
+extensive round-one writeup above. All 9 round-one fixes confirmed still
+present (code/data inspection for all 9, live re-exercise for the
+highest-value ones — tell_room, the board/emote data fixes, and the
+waterfog path fixes' zone was not re-walked but the underlying files were
+grep-checked). Found and fixed two new standard-checklist gaps, plus one
+genuinely new §7.90-class eval-cost crash not caught by round one.
+
+### New fix: §7.90-class eval-cost abort during `make_body()` — 100% reproducible on this lib's configured budget
+
+First admin login this pass hit a real, live `*Too long evaluation`
+abort during `get_passwd()`/`make_body()` (`maximum evaluation cost :
+300000`, the low end of this project's range). Fixed with the
+established remedy: `config.fluffos` → `5000000`. Verified: fresh
+reboot, first login attempt succeeded cleanly (previously failed),
+zero eval-cost errors for the rest of the session.
+
+### New fix: `adm/simul_efun/file.lpc` — same §7.11-class gap as sibling `fengyun434`
+
+`log_file()` had no `assure_file()` guard, `cat()` had no null-guard.
+Fixed both (with the forward declaration this driver requires).
+
+### New fix: two active `printf("%O\n", ob)` debug leaks in `logind.lpc`
+
+Byte-identical shape and location to `fengyun434`'s own finding earlier
+this session (both name-confirmation branches, right before the password
+prompt) — this lib shares that sibling's `logind.lpc` lineage closely.
+Removed both.
+
+### Re-verified live: the highest-value round-one fixes
+
+- **§7.12 `tell_room()`**: code-confirmed `exclude || ({ })` present,
+  then live-exercised throughout the whole session (room transitions,
+  `smile`, board interactions) — the shared wrapper is called
+  constantly by ordinary play, and zero argument-type errors occurred.
+- **Board/emote GBK+CRLF data fixes (bugs 4/5/6/8)**: walked the exact
+  original crash room (风云广场) — the board rendered as
+  "风云广场留言版(Board) [ 13 张留言，13 张未读]", not the broken/unnamed
+  state the pre-fix `capitalize()` crash would have produced on every
+  subsequent `look` at that room. `smile` rendered its real Chinese
+  flavor text ("你愉快地微笑着。"), confirming `emoted.o`'s dictionary is
+  intact. `debug.log` line count unchanged across the whole navigation
+  + emote + `update` session.
+- **§7.25 `make_inventory()` catch guard**: code-confirmed
+  `catch(ob = new(file)) || !objectp(ob)` present in `std/room.lpc`.
+- **§7.28 `enable_player()` fix**: code-confirmed the
+  `remove_action("command_hook", "")`-before-`add_action()` guard is
+  present.
+- **§7.24 death-code startroom stomp removal**: code-confirmed zero
+  `set("startroom", ...)` matches remain in the three flagged death/limbo
+  files.
+- **§7.18 stale `/d/wiz/` path fixes**: code-confirmed all four
+  call-site fixes present (only harmless historical header comments like
+  `// Room: /d/wiz/hall1.c` still mention the old path, which is
+  expected and inert).
+
+### Verification method
+
+Booted native `build-debug` driver, admin login (`fluffos`/`Mud@2026`).
+`update /adm/daemons/logind` as the real privileged-action check
+(succeeded). Two full rapid reconnects, both clean fresh logins (this
+lib's `net_dead()` design never void-parks, matching `fengyun434`'s own
+sibling architecture). Same test-harness pacing note as `fengyun434`:
+this lib's id/password prompts need individually-paced sends, not a
+batched `multi` burst. Driver killed by exact PID after each reboot (two
+total: initial boot where the eval-cost crash was found, clean reboot
+for verification); incidental `fluffos.o` save-timestamp churn reverted
+before commit.
+
+### Files modified this pass
+
+- `config.fluffos` — §7.90 fix (`maximum evaluation cost` 300000 →
+  5000000).
+- `work/adm/simul_efun/file.lpc` — `log_file()` `assure_file()` guard
+  (with forward declaration), `cat()` null-guard.
+- `work/adm/daemons/logind.lpc` — removed two `printf("%O\n", ob)` debug
+  leaks (both name-confirmation branches).
