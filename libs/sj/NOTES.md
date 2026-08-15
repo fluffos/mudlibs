@@ -69,3 +69,55 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD`、`W_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 19 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单发现并修复四处问题：
+
+1. **`config.fluffos`**：`maximum evaluation cost` 从 `700000`（已知风
+   险区间）提升到 `5000000`。
+2. **`cmds/app/update.lpc`（AGENTS.md §7.106）**：缺少
+   `environment(me) &&` 前置防护，补上。
+3. **`adm/simul_efun/file.lpc`**：`log_file()` 没有 `assure_file()`
+   目录预建保护，补上调用及前向声明；`cat()` 补上
+   `read_file() || ""` 空值防护。
+4. **`adm/obj/master.lpc::log_error()`（AGENTS.md §7.10/§7.103）**：
+   `if (this_player(1)) efun::write(...)` 完全没有警告过滤门——不是
+   大小写写错，是压根没有这道防护，任何编译警告（包括每一次
+   lazily-compile 遇到的无害"Unused local variable"之类）都会原样广
+   播给当前玩家。补上 `strsrch(message, "arning:") == -1` 判定。
+5. **`clone/user/user.lpc::reconnect()`（AGENTS.md §7.108，第六条独
+   立确认的血统——同 Century/书剑家族的 shiji、shujian2008、
+   shujian3 均命中过同一处）**：缺少 `enable_commands()`。按 §7.108
+   记录的写法预防性修复，现场验证见下。
+
+### 方法论记录（非 bug）：既有 `fluffos` 账号密码未知，改用新账号测试
+
+已有存档的 `fluffos` 账号（第一轮登录种子播种，本档案通过
+`securd.lpc::restore_list()` 里紧邻 `keyboy` 那行加的
+`set("wiz_status/fluffos","(admin)")` 硬编码授权）用本项目标准密码
+`Mud@2026`/`Mud@2026admin` 均登录失败——第一轮 NOTES.md 未记录当时
+实际选用的密码，属于记录疏漏，不是本轮引入的问题。由于账号本身的
+管理员授权是纯代码层面（不依赖密码正确与否，只依赖 id 字符串），
+直接在 `securd.lpc` 里新增一行 `set("wiz_status/fluffosb",
+"(admin)")`，用全新 id `fluffosb` 走真实注册流程验证（密码
+`Mud@2026`），本轮所有测试均用这个新账号完成。原 `fluffos` 账号存
+档原样保留，未触碰。
+
+### 现场验证摘要
+
+驱动干净启动，`fluffosb` 走完整注册流程（中文名秦风→密码→天赋确
+认→邮箱→性别）后确认 `★目前权限：〖银河特警〗(Admin)`，
+`update /adm/daemons/logind` 成功验证真实写入权限。踢掉重复登录重
+连路径现场用两个真实连线验证通过（保持第一个连线不断开→第二个连
+线登录→答 y 踢掉旧连线→`score` 立即正常输出）。`debug.log` 全程干
+净（516 行，无真实错误，也没有观察到编译警告泄漏到玩家屏幕）。
+
+### 本轮修改的文件
+
+- `config.fluffos`
+- `work/adm/daemons/securd.lpc`
+- `work/adm/obj/master.lpc`
+- `work/adm/simul_efun/file.lpc`
+- `work/cmds/app/update.lpc`
+- `work/clone/user/user.lpc`
