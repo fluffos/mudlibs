@@ -578,3 +578,189 @@ NT/nitan 血统；游戏内品牌为"笑傲江湖"。状态已从过时的 limit
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 76 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## Round-two re-test (2026-08-14): post-driver-upgrade re-verification
+
+Standard round-two §10.7 pass against the rebuilt driver (`~/src/fluffos`
+post PRs #1343/#1344, plus the corpus-wide `%`-on-float fix). This lib
+was in the round-one-only queue. Unlike `nitan170911`, `DB_SAVE` is
+undefined here (confirmed again this round, same reasoning as the
+2026-07-24 pass's DB-backend-check section), so a real live playthrough
+was practical and used throughout, rather than the light/grep-only path
+`nitan170911`'s round-two pass had to fall back to (no MySQL/Docker
+available in this environment).
+
+### 1. Re-verified every previously-documented fix is still in the code
+
+All confirmed present and unchanged, by direct grep against the current
+source (not trusted from NOTES.md prose):
+
+- `feature/name.lpc` / `feature/command.lpc` / `feature/apprentice.lpc`:
+  all three still carry their `this_object()` redirects (22/15/22
+  occurrences respectively) — the F_DBASE bare-call bootstrapping-trap
+  fix.
+- `adm/daemons/databased.lpc`: still has 48 `stringp(...)` guards around
+  `db_restore_all()`'s `restore_variable()` calls.
+- `adm/kernel/simul_efun/message.lpc`: forward prototype
+  (`varargs void message(...)`, line 15) still present before its
+  callers.
+- `feature/alias.lpc`: the single-quote character-literal fix
+  (`case '\'':`) is intact — re-verified this is not just present but
+  load-bearing, since a fresh `bai`-flow `fight`/`halt` session below
+  depends on the whole player-body class compiling.
+- `d/city/npc/gongzi.lpc` / `d/city/npc/guidao.lpc`:
+  `is_killing(query("id", who))` still in place at both call sites (no
+  regression to the old `is_killing(who)` bare-object-argument shape).
+- `adm/daemons/mudlistd.lpc`: `mixed *usercount` (not bare `array`) and
+  the `seteuid(getuid())` call in `create()` both still present.
+- `timed.lpc`'s crontab loader: the `catch()` guard around
+  `load_object(table[1])` is intact.
+- The fail-closed loopback retrofit: `logind.lpc` still has the separate
+  `local_conn` boolean (distinct from the real `str` IP variable, used
+  throughout `logon()`'s anti-flood gates), and `band.lpc`'s
+  `is_banned()`/`is_multi_login()` still do the strict-loopback check
+  with the fail-safe restored below the carve-out.
+
+### 2. Standard checklist
+
+- **Kernel simul_efun `file.lpc`'s `assure_file()`**: defined at line
+  13, textually before its only two callers `log_file()` (line 37) and
+  `sys_log()` (line 127) — already correctly ordered, no fix needed
+  (matches `nitan170911`'s clean result on the same check).
+- **`config.fluffos`'s `maximum evaluation cost`**: `2000000` — above
+  this task's 1000000 floor, so left unchanged per the literal
+  threshold. Note for a future pass: AGENTS.md §7.90's fifth instance
+  (`zjdyaryl`) shows a lib can still trip a `cost limit reached` abort
+  at exactly this value under background daemon `heart_beat()` load; no
+  `cost limit reached` hits appeared in this pass's own boot+session log
+  (`grep -c` returned 0), but this wasn't a multi-hour idle soak, so the
+  ceiling isn't proven safe long-term — worth bumping to `5000000`
+  preemptively if a future pass has spare time, not urgent enough to do
+  blind in this one.
+- **`cmds/wiz/update.lpc`'s `present(file, environment(me))` crash
+  (§7.106)**: already correctly guarded —
+  `if (environment(me) && (obj = present(file, environment(me))) && ...`
+  short-circuits before calling `present()`. No fix needed.
+
+### 3. New bug found and fixed: corrupted byte sequences (embedded NUL +
+non-UTF8 codepoints) in `adm/npc/nanxian.lpc` — hard compile failure,
+broke a real, newbie-doc-referenced NPC
+
+Not part of the original conversion pass's or the 2026-07-24 deep-test's
+findings — surfaced live this round when a room populate (客店, the
+inn) lazily triggered a nearby compile chain that touched this file.
+`adm/npc/nanxian.lpc` (南贤, "武林泰斗「天下至贤」南贤" — an admin/
+gift-dispensing NPC at 武庙, the default new-character spawn temple)
+failed to compile entirely: `lpcc`/`update` reported `Illegal embedded
+NUL byte (0x00) in source` at two separate spots (lines 491 and 787)
+plus an `Invalid UTF8 codepoint in string literal` at line 787, with
+three cascading `syntax error, unexpected ';'` at lines 812/820/828
+(the parser losing its place after the corrupted literal, not
+independent bugs) — ending in `*No program in object '/adm/npc/
+nanxian'!` on every load attempt. Confirmed via direct hexdump: line
+787's string literal contains a real `0x00` byte followed by six
+Private-Use-Area Unicode codepoints (U+E139, U+E308, U+E431, U+E433,
+U+E0E9, U+E4E2) mixed in with otherwise-valid UTF-8 — not a driver bug
+and not something this pass's own tooling introduced (the corruption
+predates this session; the shape looks like a lost/unmapped legacy
+GBK user-defined-character region from long before this project's
+conversion pipeline touched the archive, though the raw `nitan6.zip`
+itself is password-protected and wasn't decrypted to confirm the
+byte-for-byte origin).
+
+**Impact**: `d/city/wumiao.lpc:34` calls `("/adm/npc/nanxian")->
+come_here()` unconditionally from a prominent, always-reachable room —
+every server boot, `nanxian` silently failed to spawn at 武庙, and
+`d/newbie/npc/huabo.lpc`'s own newbie-hint text ("到扬州武庙(南贤)处
+输入指令 ask nanxian 新手福利 还可领取新手福利!") pointed players at
+an NPC that was never actually present. `inherit/room/room.lpc`'s
+`make_inventory()` calling `new()` with no `catch()` (same non-crashing-
+but-silently-broken shape as the `is_killing()` bug documented in the
+2026-07-24 pass) meant this never showed up as a room-level crash,
+just a permanently-missing NPC with only a compile-time diagnostic
+as any trace.
+
+**Fixed** by recovering the original, uncorrupted text from
+`nitan170911`'s byte-identical copy of the same shared file (confirmed
+matching surrounding structure line-for-line): line 787 (live code,
+`ask_reborn()`'s "already reincarnated 3 times" branch) restored to
+`"$N对$n一拱手，道：你已经历过三世轮回了，我看就不用了吧！\n"`; line
+491 (dead code inside a `/* */` comment, `ask_me2()`'s commented-out
+`message()` call) restored to `" 领取二小时的高效练功时间开始计时。
+\n"`. This is a straight content restoration from a confirmed-clean
+sibling in the same lineage, not an invented rewrite — same precedent
+as this lib's own earlier `feature/alias.lpc` single-quote fix and the
+F_DBASE-family ports, just sourced from a different sibling file this
+time. Verified: `update /adm/npc/nanxian.lpc` now reports `重新编译
+/adm/npc/nanxian.lpc：成功！` with zero errors, and live `goto /d/city/
+wumiao` confirms `南贤(nan xian)` now actually appears in the room
+population (previously absent every time this room was checked).
+
+**Not independently confirmed on `nitan170911`** — that lib's own
+`nanxian.lpc` is the SOURCE of the recovered text (i.e. already clean
+there), so no parallel fix was needed on that sibling. Worth a quick
+grep sweep across the other ~15 libs sharing this exact file
+(`hhsj`, `wxddym`, `nitan_san`, `nt1`, `nt6`, `nt6nitan6win`,
+`yanhuangwuhun`, `xfbhh`, `ntii`, `yhyxs`, `hy5`, `nte`, `nitan_ceshi`,
+`yhwhpublicfi`, `zhonghua2`, `hymud`) for the same two corrupted spots
+in a future pass — not done here, out of this pass's scope (this task
+is a single-lib re-test, not a corpus sweep), but flagged since the
+corruption is clearly pre-existing/upstream rather than something
+`nitan6` alone picked up.
+
+### 4. Open question from the 2026-07-24 pass resolved: the `【门派】丐帮` display was location-flavor, not a bug
+
+The prior pass left this as an honest open question (`xiakebug` showing
+`丐帮` in `score` despite no `bai` success and no `"family"` key in the
+on-disk save). This round, `xiakebug` was reconnected fresh (net-dead
+reconnect, no wizard `goto`) and landed in `客店` (扬州城 inn), OUTSIDE
+`/d/gaibang/inhole` — `score` now shows `【门派】普通百姓` (the default,
+"ordinary civilian"), not `丐帮`. This confirms the earlier hypothesis:
+the sect-name display was tied to physically standing in the Beggar
+Sect hideout room (content/flavor, not a persisted or buggy state
+change) — the character's actual saved `family` data is, and always
+was, empty. No code change needed; documenting this as resolved so a
+future pass doesn't re-open it.
+
+### Playthrough summary this round
+
+Native driver booted from `libs/nitan6/work` (port 40019), stdout
+captured to `/tmp/nitan6_boot.log` per the debug.log-truncation
+caveat (no ad-hoc `lpcc` used this round — all compile checks went
+through live `update` instead, so `debug.log` itself stayed reliable
+too). Admin login (`fluffos`/`Mud@2026`): wizard-password warning
+banner appeared as expected, landed in 巫师休息室, real write access
+confirmed via `update` on `guidao.lpc`/`gongzi.lpc`/`nanxian.lpc` (all
+non-self files), `goto /d/city/zuixianlou2` confirmed `guidao` (王五)
+actually spawns and responds to `look`, `goto /d/city/wumiao` confirmed
+`nanxian` spawns post-fix. `xiakebug`/`TestPass123` login: state
+(53207 combat exp / 102853 potential / washed 20/20/20/20 attributes /
+six basic skills, `阅历163`) persisted correctly across the driver
+rebuild and every reconnect. Two full reconnect cycles exercised: a
+net-dead disconnect+reconnect (`重新连线完毕`, silent resume, same
+room/state) and a real `quit`+relogin (correctly gated by the 30-minute-
+equivalent quit-flood guard — `"你距上一次退出时间只有十二秒钟，请稍候
+再登录"` on an immediate retry, succeeded cleanly ~15s later). Zero
+`debug.log`/stdout errors across the whole session except the
+`nanxian.lpc` corruption (fixed above) and the routine compile-time
+`Unused local variable`/`Unknown #pragma` warning noise already present
+pre-session. `grep -c "cost limit reached"` on the captured stdout: 0.
+
+Driver killed by exact PID (`kill 1646569`, confirmed dead via `ps`),
+never `pkill -f`. `git status --short libs/nitan6/` after the session
+showed the expected `data/daemon/mrtg*` churn (reverted via `git
+checkout --`) plus real save-file updates for `fluffos` and `xiakebug`
+(kept, matching this lib's own established precedent) and the
+`nanxian.lpc` fix (kept).
+
+### Net result
+
+One new, genuine, previously-undiscovered programming bug found and
+fixed (`adm/npc/nanxian.lpc`'s corrupted string literals — a hard
+compile failure silently removing a newbie-doc-referenced NPC from the
+game's default spawn room). Every previously-documented fix
+independently re-verified present and correct. Every standard-checklist
+item checked; two were already clean, `maximum evaluation cost` left as
+literally-in-range but flagged for a preemptive bump next time there's
+spare budget. The prior pass's one open question (`丐帮` display) is now
+resolved as location-flavor content, not a bug.
