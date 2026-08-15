@@ -611,3 +611,168 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 47 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第三轮 / Deep functional test round three (2026-08-14, post driver-upgrade re-test)
+
+Re-verification pass against the 2026-08-12 driver rebuild (upstream
+PRs #1343/#1344) per this project's round-two re-test campaign. This
+lib's last live pass was 2026-07-24 (the "round two" section above,
+before the rebuild), so this is a fresh boot-and-play confirmation
+against the current driver, not a repeat of that pass's full
+exploration.
+
+### Independently re-verified (grepped the actual code, not trusted from prose)
+
+All five bugs from the 2026-07-24 pass, the two fixes borrowed from
+`mhxyqd`, and the §7.68 revert are confirmed still present/correct:
+
+- `feature/command.lpc`: `in_enable_player_now` reentrancy guard around
+  `enable_player()` — present (declaration line 119, checked/set/cleared
+  lines 150-191).
+- `std/room.lpc`: `resetting_now` reentrancy guard in `reset()` —
+  present (declaration line 22, guard lines 45-108).
+- `d/obj/books-nonskill/book-qujing.lpc:4`: `#include
+  "/d/qujing/obstacle.h"` — still quoted, not angle-bracket.
+- `adm/simul_efun/message.lpc`'s `tell_room()`: `exclude || ({ })` fix —
+  present (line 56).
+- `find libs/mhxy/work -name '*.C'` — zero results, the 302-file rename
+  held.
+- `adm/daemons/logind.lpc`'s `get_name()` — no `printf("%O\n", ob);`
+  debug leak; the function goes straight from the legal-name check to
+  `ob->set("name", arg)` and the password prompt, matching the
+  mhxyqd-borrowed fix. (Two ORPHANED copies of `logind.lpc` under
+  `www/cgi-bin/` and `www/relative/` DO still carry the old
+  `printf("%O\n", ob);` line — confirmed via grep that nothing in the
+  live tree references either path; this lib has no httpd wiring
+  reaching them, so left alone as genuinely dead code, not a live bug.)
+- `d/death/npc/{b,bgargoyle,wgargoyle}.lpc`'s `death_stage()` — all
+  three still have the original single-check
+  `if (!ob || !present(ob)) return;` shape, no retry-`call_out` loop
+  grafted back in. The §7.68 revert is intact.
+
+### New checklist items checked this pass (not covered by 2026-07-24's pass)
+
+- **`cmds/wiz/update.lpc`§7.106**: already has the guarded form
+  (`environment(me) && (obj = present(file, environment(me))) &&
+  interactive(obj)`) — no fix needed here, presumably shipped this way
+  originally (this lib doesn't show up as vulnerable in the
+  corpus-wide §7.106 sweep record).
+- **`adm/simul_efun/file.lpc` — new §7.11-class fix applied.**
+  `log_file()` was a bare `write_file(LOG_DIR + file, text)` with no
+  `assure_file()` guard, despite `assure_file()` being defined 4 lines
+  below it in the same file (unused by `log_file()` itself). `log/` is
+  driver-recreated (gitignored), and several subdirectories `log_file()`
+  targets don't exist on disk pre-boot — most notably `log/nosave/`,
+  referenced by ~30 call sites including `master.lpc`'s own crash
+  logger (`log_file("nosave/CRASHES", ...)`), several admin commands
+  (`full`/`shutdown`/`purge`/`qiangpo`/`call`), gift-item objects
+  (`cookie.lpc`/`giftbox.lpc`/`tang.lpc`), and `cmds/usr/quit.lpc`'s
+  large-stat-gain audit log (gated behind high thresholds so not hit by
+  ordinary play, but real for any long-lived character). Confirmed via
+  driver source (`fluffos/src/packages/core/file.cc`'s `write_file()`)
+  that a missing parent directory makes `fopen()` fail and the efun
+  `error()`s — an uncaught throw, not a quiet return-0 — so this is a
+  live crash risk, not cosmetic. Fixed with the project's standard
+  `assure_file(LOG_DIR + file);` guard before the `write_file()` call,
+  plus a one-line forward declaration (`void assure_file(string
+  file);`) since `assure_file()` is defined textually after
+  `log_file()` and this compiler needs one. Also fixed `cat()`'s
+  `write(read_file(file))` → `write(read_file(file) || "")` (minor,
+  cosmetic-only — `write(0)` just prints a literal "0" to the caller
+  rather than crashing, confirmed via `print_svalue()`'s `T_NUMBER`
+  case in the driver source — but a one-line fix matching this
+  project's established convention for this file, see `kxkj`'s
+  round-two pass for the same pairing). Compile-verified via a live
+  `update /adm/daemons/logind` (which recompiles the whole simul_efun
+  chain including `file.lpc`) — succeeded cleanly. **Not live-triggered
+  this pass** (would need e.g. a real `master.lpc` crash or one of the
+  gated `quit.lpc` thresholds to prove the pre-fix throw live) — fixed
+  proactively on the strength of the driver-source read and the
+  extremely well-established §7.11 precedent (10+ prior lineages), same
+  verification depth this project uses for other mechanical §7.11
+  instances.
+- **`config.fluffos`'s `maximum evaluation cost`**: was `400000` — in
+  the documented risky range (300000/700000 known to cause
+  `enter_world()`/`make_body()` aborts on this project's debug driver
+  build). Raised to `5000000`, this project's standard safe value. No
+  eval-cost abort was actually observed pre-fix in this pass (boot and
+  play were already clean), so this is a preventative fix per the
+  standard checklist, not a reproduced-and-fixed live bug.
+- `log_error()` (`adm/obj/master.lpc`) already has the standard severity
+  gate (only broadcasts to the triggering player if one exists, skips
+  broadcasting compiler warnings per the AGENTS.md §15w convention) —
+  no fix needed.
+- Scanned `logind.lpc` end to end for any other stray `printf("%O"` /
+  raw debug leaks beyond the already-checked `get_name()` — none found;
+  every other `printf`/`write` call in the file is legitimate
+  player-facing banner/status text.
+- `file_owner()` (§7.26, originally found and fixed ON this lib):
+  re-confirmed the correct first-segment-capture version
+  (`adm/simul_efun/object.lpc`) is the one actually wired into
+  `simul_efun.lpc`'s `#include` chain; a second, still-buggy
+  fixed-depth-3 copy exists at `adm/simul_efun/oo.lpc` but is NOT
+  `#include`d anywhere — dead code, confirmed not a live risk.
+
+### 现场验证 / Live verification
+
+Native `build-debug` driver, launched from `libs/mhxy` per this file's
+"How to run" section. **Boot: completely clean** — the entire
+`/tmp/mhxy_boot.log` capture (1816 lines) contains nothing but routine
+"Unknown #pragma, ignored" / "In file included from" preload noise;
+zero eval-cost errors, zero new compile errors, and notably *cleaner*
+than the 2026-07-24 pass's own boot (which logged non-fatal
+`emoted.lpc`/`questd.lpc`/`baoshi.lpc` preload traces — those didn't
+reproduce this run, consistent with them being incidental/order-
+dependent preload noise rather than deterministic, not investigated
+further since they're already documented as known-harmless).
+`work/log/debug.log` stayed at **0 lines for the entire session** —
+before, during, and after every test step below.
+
+Connected via `scripts/tmux_mud.sh`, logged in as `fluffos`/`Mud@2026`,
+landed in `南城客栈` with `目前权限：(admin)`. Verified REAL write
+access (not just the login banner) via `update /adm/daemons/logind` —
+"重新编译 /adm/daemons/logind.lpc：成功！" — which also compile-verified
+this pass's own `file.lpc` edit (loaded via the same simul_efun
+recompile chain).
+
+Targeted spot-checks of the three highest-value original crash
+triggers:
+
+- `west` from `南城客栈` to `朱雀大街` — `疥顶小僧` (the book-qujing
+  NPC, bug 3's original crash site) present, no crash.
+- `south` from `南城客栈` to `聊天室` (bug 4's `tell_room()` crash site)
+  — clean welcome broadcast ("热烈欢迎，普通百姓 浮浮(fluffos)来到梦幻
+  西游聊天室！"), no crash.
+- `goto /d/jjf/front_yard2` (bug 1's original crash site, the
+  `将军府`/`jjf` sect-entrance `zhangmen` NPC) — correct title on load
+  (`大唐天下兵马大元帅 朝廷兵马大元帅(Zhang men)`), not the corrupted
+  shape; no reentrancy crash.
+
+`quit` — clean, standard farewell banner, `debug.log` unchanged. Two
+rapid reconnects (`fluffos`/`Mud@2026` each time) — both landed
+correctly in `南城客栈` with `目前权限：(admin)` intact, `debug.log`
+unchanged throughout.
+
+### 进程与仓库卫生 / Process and repo hygiene
+
+Driver killed by exact PID (`kill 1633949`, confirmed dead via `ps`),
+never `pkill -f`. `git status --short libs/mhxy/` post-test showed four
+incidental save-timestamp-churn files from the login/test cycle
+(`data/login/f/fluffos.o`, `data/user/f/fluffos.o`,
+`data/zhangmen/zhangmen_qin_qiong.o`,
+`data/zhangmen/zhangmen_master_puti.o` — mapping key re-serialization
+order only, same content — plus `u/tianlin/log`, a duplicate append of
+this boot's own compile-warning noise) — all reverted via `git
+checkout --`. Only the two genuine fixes (`config.fluffos`,
+`adm/simul_efun/file.lpc`) remain staged.
+
+### Net result
+
+No new crash-class bugs found in this pass — the 2026-07-24 pass was
+thorough enough that the driver rebuild alone introduced no
+regressions. Two proactive standard-checklist fixes applied
+(`file.lpc`'s `log_file()`/`cat()` guards, `config.fluffos`'s eval
+cost) per this pass's standard checklist, neither live-reproduced as a
+crash this session but both matching well-established bug classes
+(§7.11, the eval-cost-abort risk) with real (if not this-session-
+triggered) blast radius.
