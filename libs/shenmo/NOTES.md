@@ -779,3 +779,45 @@ twice**:
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 181 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单发现并修复两处问题：
+
+1. **`adm/simul_efun/file.lpc`**：`log_file()` 没有 `assure_file()`
+   目录预建保护；补上调用及前向声明。`cat()` 补上 `read_file() || ""`
+   空值防护。（`simul_efun1/`、`simul_efun2/` 下的重复副本未被
+   `adm/obj/simul_efun.lpc` `#include`，确认是死代码，未处理。）
+2. **`adm/daemons/closed.lpc`（AGENTS.md §7.107，本轮在 `nt1` 发现的
+   同一类 bug——独立确认的第二条血统）**：`load_all_users()` 的两处
+   `restore()` 调用同样没有 `catch()` 保护，结构与 `nt1` 那份逐字节
+   一致。本档案的 `data/closed.o` 目前 `closed_users` 记录很少（几乎
+   为空），所以严重程度远不如 `nt1`（后者约 150 个账号），但同一漏
+   洞成立——按 §7.107 记录的写法预防性修复（`catch(ok = X->restore())`
+   + `err || !ok` 判定），未等真的出现损坏账号触发才修。
+
+`cmds/wiz/update.lpc`（§7.106）与 `master.lpc::log_error()`（§7.10 的
+`"arning:"` 大小写无关写法）均已是正确写法，无需改动。
+
+`config.fluffos` 的 `maximum evaluation cost` 已经是 `2000000000`，远
+超本项目安全值，无需调整。
+
+### 现场验证
+
+驱动干净启动，以管理员账号 `fluffos`/`Mud@2026` 登录，确认
+`您的系统权限目前是：(admin)`，落地"南城客栈"（既有存档正确持久
+化）。`update /adm/daemons/logind` 成功（"重新编译
+/adm/daemons/logind.lpc ...成功！"），确认两处修复编译干净。两次快
+速重连均正确显示 `(admin)` 权限、连线次数正确递增（第八次、第九
+次），`quit` 均干净。`debug.log` 全程检查（1175 行）：无真实错误，
+仅无害的宏定义匹配。
+
+（登录流程记录一处方法论细节，非 bug：本档案开场"① 进入(Enter)
+② 离开(Exit)"菜单的 `if_young()` 处理函式实际检查 `arg[0..0] ==
+"1"`，纯空字串确认不会推进——尽管提示文字写着"(Enter)"，脚本化测试
+时需要真的送出字元 `"1"`，而不是空白 Enter，才能进入下一步。）
+
+### 本轮修改的文件
+
+- `work/adm/simul_efun/file.lpc`
+- `work/adm/daemons/closed.lpc`
