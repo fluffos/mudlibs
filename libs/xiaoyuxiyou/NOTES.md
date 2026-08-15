@@ -997,3 +997,43 @@ shape, independent of lineage.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 40 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第三轮 / Deep functional test round three (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单发现并修复四处问题：
+
+1. **`config.fluffos`**：`maximum evaluation cost` 从 `400000`（已知
+   风险区间）提升到 `5000000`。
+2. **`cmds/arch/update.lpc`（AGENTS.md §7.106）**：缺少
+   `environment(me) &&` 前置防护，补上（`cmds/wiz/update.lpc` 已是正
+   确写法）。
+3. **`adm/simul_efun/file.lpc`**：`log_file()` 没有 `assure_file()`
+   目录预建保护，补上调用及前向声明；`cat()` 补上
+   `read_file() || ""` 空值防护。
+4. **`obj/user.lpc::reconnect()`（AGENTS.md §7.108，第十一条独立确
+   认的血统）**：本档案的 `reconnect()` 已经带有 §7.21 类礼物精灵恢
+   复的既有修复（详见文件内注释），但仍然完全没有
+   `enable_commands()`——两个类别互不重叠，礼物精灵修复解决的是
+   `input_to()` 状态丢失，不解决指令派发本身。`adm/daemons/
+   logind.lpc` 有同款 `exec(old_link, user);` 踢掉重复登录写法。按
+   §7.108 记录的写法预防性修复，现场用两个真实连线复现"保持第一个
+   连线不断开→第二个连线登录→答 y 踢掉旧连线"验证：`score` 修复后
+   立即正常显示完整角色档案。
+
+`master.lpc::log_error()` 已经是正确的 `"arning:"` 大小写无关写法，
+均无需改动；本档案无 `adm/daemons/closed.lpc`，不受 §7.107 影响。
+
+### 现场验证摘要
+
+驱动干净启动，管理员 `fluffos`/`Mud@2026` 登录（GB/BIG5 选择→
+"① 进入游戏(Enter)"菜单需送出字元 `1`，纯空白 Enter 不推进→id+密
+码）确认 `目前权限：(admin)`，`update /adm/daemons/logind` 成功验证
+真实写入权限。踢掉重复登录重连路径现场验证通过（见上）。
+`debug.log` 全程干净（669 行，无真实错误）。
+
+### 本轮修改的文件
+
+- `config.fluffos`
+- `work/adm/simul_efun/file.lpc`
+- `work/cmds/arch/update.lpc`
+- `work/obj/user.lpc`
