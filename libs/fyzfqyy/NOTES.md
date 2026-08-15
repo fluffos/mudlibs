@@ -242,3 +242,63 @@ email→性别→民族）已经**过时**，与当前 `logind.lpc` 实际代码
 - 门派/技能内容缺口意味着"角色成长"这条主线（学武功、拜师、参数点分配到
   实战技能上）在当前存档状态下事实上不可玩；已在上面如实记录，供后续如
   果要专门"填内容"时参考起点。
+
+## Deep functional test round two (2026-08-14)
+
+Independently re-verified against current code rather than trusting the
+extensive round-one writeup above. All 10+ round-one fixes confirmed
+still present (code inspection for all, live re-exercise of the
+highest-value ones — the §7.12 `message()` type check and the §7.96
+`START_ROOM` fallback, both exercised on literally the first login).
+Found and fixed one small remaining gap this round's own checklist
+covers that round one's pass didn't touch.
+
+### New fix: `adm/simul_efun/file.lpc`'s `cat()` still had no null-guard
+
+Round one already fixed `log_file()`'s `assure_file()` gap (§7.11) but
+missed `cat()`'s separate null-guard need. One-line fix:
+`write(read_file(file) || "");`.
+
+### Re-verified live: the two highest-value round-one fixes
+
+- **§7.12 `message()` 4th-arg type check**: first admin login this pass
+  completed with zero `Bad argument 4` errors (the original bug made
+  EVERY login crash at `enter_world()`'s `tell_room()` broadcast).
+- **§7.96 `START_ROOM`-doesn't-exist fallback**: landed cleanly at
+  `世外桃源`/`REGISTER_ROOM` on login, exactly the fallback the fix
+  produces (`START_ROOM` genuinely doesn't exist in this archive, a
+  documented content gap, not something to fabricate).
+- **§7.25 `make_inventory()` isolation fix**: `goto
+  /quest/kaifeng/zhengtang` (admin teleport, since `/d/fy` doesn't exist
+  for organic navigation) reproduced `yayi.lpc`'s own `create()` still
+  throwing repeatedly (`*Bad argument 1 to EFUN call_other()`) — this is
+  the ALREADY-DOCUMENTED, deliberately-unfixed content gap (yayi's own
+  equipment references `/d/fy/npc/obj/...`, which doesn't exist).
+  Critically, despite yayi's own failure, the room and 包拯/Bao daren
+  both loaded and displayed correctly — confirming the isolation fix
+  (one broken NPC doesn't take down the room or its siblings) still
+  holds exactly as designed.
+- **Other fixes** (`unew()` guard, the `yayi` path fix itself, the
+  `zhanzhao` cloth-path fix, the 5 `feature/skill.lpc` error→log-and-skip
+  sites, `channeld.lpc`'s non-string-speaker guard, the printf leak
+  removal, the §7.90 eval-cost bump): all code-confirmed present via
+  direct grep, not independently re-triggered live this pass given the
+  time budget — round one's own writeup already live-verified each of
+  these individually and in detail.
+
+### Verification method
+
+Booted native `build-debug` driver, admin login (`fluffos`/`Mud@2026`) —
+clean on the first attempt. `update /adm/daemons/logind` as the real
+privileged-action check (succeeded). `goto /quest/kaifeng/zhengtang` as
+a targeted re-exercise of the make_inventory isolation fix. Two full
+rapid reconnects, both clean. `work/log/debug.log` grepped for the
+original error signatures (`Bad argument 4`, `Wrong permissions`,
+`F_SKILL`) after the whole session — zero hits; all new log growth was
+either harmless compile warnings or the already-documented `yayi`
+content-gap trace. Driver killed by exact PID after testing; incidental
+`fluffos.o` save-timestamp churn reverted before commit.
+
+### Files modified this pass
+
+- `work/adm/simul_efun/file.lpc` — `cat()` null-guard.
