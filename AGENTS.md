@@ -7025,6 +7025,14 @@ form as of this sweep).
   the rarer assignment-statement variant. Any new/promoted lib should be
   checked against this pattern as part of its own §10.7 pass if it
   carries this file at all.
+- **Path variant, found later**: some libs (the 风云3/`fy3dz` lineage
+  and a few unrelated others — `wdxtym`, `xiyouji2003`, `shenzhou`,
+  `mohuanshiji`, `sjcs`, 6 total) carry this exact command at
+  `cmds/adm/update.lpc` instead of `cmds/wiz/update.lpc` — same
+  vulnerable shape, same fix, just a different directory. The original
+  135-file sweep only searched `cmds/wiz/`, so it missed these; fixed
+  separately once found. Re-run the detection greps above against BOTH
+  `cmds/wiz/update.lpc` and `cmds/adm/update.lpc` on any future lib.
 
 ---
 
