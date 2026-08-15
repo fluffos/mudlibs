@@ -7029,18 +7029,20 @@ form as of this sweep).
   under a different directory than `cmds/wiz/update.lpc` — same
   vulnerable shape, same fix, just a different path. Found so far:
   `cmds/adm/update.lpc` (the 风云3/`fy3dz` lineage plus `wdxtym`,
-  `xiyouji2003`, `shenzhou`, `mohuanshiji`, `sjcs`, 6 total) and
+  `xiyouji2003`, `shenzhou`, `mohuanshiji`, `sjcs`, 6 total),
   `cmds/imm/update.lpc` (`jh2006` plus 21 more — `bmxkx2001`, `bxsj`,
   `bxsj1`, `fqyy2`, `haiyang2`, `hy2002`, `hy3`, `hy5`, `hymud`,
   `jinyongwenzi`, `jym`, `shenzhou` again (both paths), `shujian2008`,
   `shujian3`, `sjecl`, `sjtx2`, `xkm`, `xkx2000zxb`, `xkx2001`,
-  `xuanjianlu`, `zitengzhan`). The original 135-file sweep only searched
-  `cmds/wiz/`, so it missed both. Re-run the detection greps above
-  against `cmds/wiz/update.lpc`, `cmds/adm/update.lpc`, AND
-  `cmds/imm/update.lpc` on any future lib — there may be further path
-  variants (`cmds/god/`, `cmds/arch/`, etc.) not yet found; check
-  whichever directory a lib's own wizard-level commands actually live
-  in if none of these three exist.
+  `xuanjianlu`, `zitengzhan`), and `cmds/apr/update.lpc` (the ES II
+  wade/`kxkj` lineage — `kxkj`, `kxkj1`, `kxkjii2`, `njhhdxdes2hx`,
+  `xbtxiii`, 5 total). The original 135-file sweep only searched
+  `cmds/wiz/`, so it missed all three. Re-run the detection greps above
+  against `cmds/wiz/update.lpc`, `cmds/adm/update.lpc`,
+  `cmds/imm/update.lpc`, AND `cmds/apr/update.lpc` on any future lib —
+  there may be further path variants (`cmds/god/`, `cmds/arch/`, etc.)
+  not yet found; check whichever directory a lib's own wizard-level
+  commands actually live in if none of these four exist.
 
 ---
 
