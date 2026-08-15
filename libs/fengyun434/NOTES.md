@@ -377,3 +377,76 @@ given it's purely cosmetic and lower priority than the crashing
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 15 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## Deep functional test round two (2026-08-14)
+
+Independently re-verified against current code rather than trusting the
+round-one writeup above. Found and fixed two new gaps (both standard
+checklist items, no new bug classes); re-confirmed round one's real find
+(§7.12 `tell_room()`) live via the exact original crash route.
+
+### New fix: `adm/simul_efun/file.lpc`'s `log_file()` missing `assure_file()`, plus `cat()` null-guard
+
+Standard §7.11-class gap: `log_file()` wrote directly with no
+directory-existence guard, `cat()` had no null-guard on `read_file()`.
+Fixed both, with a forward declaration (this driver requires one when a
+function is called before its own textual definition in the same file —
+confirmed the hard way on `dtsl` earlier this session).
+
+### New fix: two active `printf("%O\n", ob)` debug leaks in `logind.lpc`
+
+Both in the Chinese-name-confirmation flow, right before the "请设定您的
+密码：" password prompt — one in the manual-name-entry branch
+(`get_name()`), one in the random-name-accept branch (`get_resp()`).
+Matches this session's established checklist item to check both branches
+independently. Removed both; `update /adm/daemons/logind` confirmed the
+file still compiles cleanly afterward.
+
+### Re-verified live: round one's §7.12 `tell_room()` fix still holds
+
+Code-confirmed `exclude || ({ })` still present in
+`adm/simul_efun/message.lpc`, then live-walked the exact original crash
+route as admin: 凤求凰客栈 → across 风云城 → east through the 东云
+corridor to 风云东城门 (the east gate), then `west` — the precise
+`valid_leave()`/`tell_room()` call site round one's bug report cited.
+Landed cleanly, zero new `debug.log` errors (only harmless compile
+warnings from the newly-loaded gate-guard NPCs). Also noted: this lib's
+actual live `debug.log` is at `log/debug.log` (the driver's launch-cwd
+level), not `work/log/debug.log` — the latter contains only stale
+content from a much earlier (`fluffos 20260721`) boot and is not written
+to by the current driver; same quirk this project has documented before
+on other libs (config's `log directory : /log` resolves against launch
+cwd, not the mudlib root).
+
+### Not re-investigated this pass: the RSS-growth flag and cosmetic online-count inflation
+
+Round one's flagged-but-not-root-caused native RSS leak (unrelated to any
+LPC-level fix, `~40MB → ~4.5GB` over 15 minutes) and the cosmetic
+inflated "目前共有%d位人士" online-count (stale shipped rwho data) were
+both left exactly as documented — neither is something this pass's
+checklist-driven verification touches, and this pass's own driver was
+killed well within a couple of minutes of uptime each boot, so the RSS
+question wasn't (and didn't need to be) re-observed.
+
+### Verification method
+
+Booted native `build-debug` driver, admin login (`fluffos`/`Mud@2026`) —
+note this lib's login flow (encoding choice → id → password) needs each
+step sent as a separate paced call, not batched via a single rapid
+`multi` — a batched attempt this pass left the session at the password
+prompt with subsequent input silently misrouted as game commands
+("什么？"), while individual `sendread` calls worked correctly both
+times; not a mudlib bug, a test-harness pacing note for next time on
+this lib. `update /adm/daemons/logind` as the real privileged-action
+check. Two full rapid reconnects (each a fresh full login, not silent
+resume — this lib's `net_dead()` design never void-parks a player, so
+prompt reconnects go through the ordinary registration-shaped login
+path), both clean. Driver killed by exact PID promptly after each boot;
+incidental `fluffos.o` save-timestamp churn reverted before commit.
+
+### Files modified this pass
+
+- `work/adm/simul_efun/file.lpc` — `log_file()` `assure_file()` guard
+  (with forward declaration), `cat()` null-guard.
+- `work/adm/daemons/logind.lpc` — removed two `printf("%O\n", ob)` debug
+  leaks (both name-confirmation branches).
