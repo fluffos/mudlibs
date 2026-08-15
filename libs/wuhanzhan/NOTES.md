@@ -764,3 +764,44 @@ this NOTES.md update plus the `qiufeng` test-character save files.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 64 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单发现并修复三处问题：
+
+1. **`config.fluffos`**：`maximum evaluation cost` 从 `1400000` 提升
+   到 `5000000`（本项目标准安全值，预防性调整，此前的值本身未被确
+   认在风险区间内）。
+2. **`adm/simul_efun/file.lpc`**：`log_file()` 没有 `assure_file()`
+   目录预建保护，补上调用及前向声明；`cat()` 补上
+   `read_file() || ""` 空值防护。
+3. **`obj/user.lpc::reconnect()`（AGENTS.md §7.108，第九条独立确认
+   的血统）**：`adm/daemons/logind.lpc` 有同款 `exec(old_link,
+   user);` 踢掉重复登录写法，`reconnect()` 缺少
+   `enable_commands()`。按 §7.108 记录的写法预防性修复，现场用两个
+   真实连线复现"保持第一个连线不断开→第二个连线登录→答 y 踢掉旧连
+   线"验证：`score` 修复后立即正常显示完整角色档案。
+
+**复核确认非 bug**：`update`/`score` 等指令首次惰性编译时，管理员
+账号屏幕上出现"编译时段错误：...Warning: Unused local variable"这
+类原始编译诊断文字——这是 `master.lpc::log_error()`（AGENTS.md
+§15u，本档案自己第一轮已修复并留有详细注释）的**既有设计**：巫师
+账号（`wizardp(this_player(1))`）本来就应该看到完整原始编译诊断，
+只有非巫师普通玩家才走过滤警告的分支。本轮误以为是泄漏又重新核对
+了一遍代码，确认这是正确行为，未做任何改动。
+
+`cmds/wiz/update.lpc`（§7.106）已经是正确写法；本档案无
+`adm/daemons/closed.lpc`，不受 §7.107 影响。
+
+### 现场验证摘要
+
+驱动干净启动，管理员 `fluffos`/`Mud@2026` 登录确认
+`您已经成功登陆游戏！目前权限：(admin)`，`update /adm/daemons/
+logind` 成功验证真实写入权限。踢掉重复登录重连路径现场验证通过
+（见上）。`debug.log` 全程干净（710 行，无真实错误）。
+
+### 本轮修改的文件
+
+- `config.fluffos`
+- `work/adm/simul_efun/file.lpc`
+- `work/obj/user.lpc`
