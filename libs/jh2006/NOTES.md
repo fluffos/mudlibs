@@ -77,3 +77,100 @@ damen`）试图找一个可以安全测试战斗/死亡的目标，但该房间 
 除外——那份档案里这确实是一个真实存在、经过实际复现验证的 bug：鬼魂
 本身完全无法移动，是另一个不相关的 NPC 强行把鬼魂拖走导致的）。详见
 AGENTS.md §7.68 顶部的撤销说明。
+
+## Deep functional test round two (2026-08-14)
+
+Independently re-verified against current code rather than trusting the
+round-one writeup above. All 3 prior fixes confirmed still present. Found
+and fixed a real, 100%-reproducible §7.90-class eval-cost crash — this
+one hit `enter_world()` itself and, because it left the admin character
+with no environment, cascaded into a SECOND crash at `quit.lpc`'s
+`message()` call, which looked like a new, unrelated bug at first.
+
+### New fix: §7.90-class eval-cost abort during `enter_world()` — root cause of a second, seemingly-unrelated `quit.lpc` crash
+
+First admin login this pass never printed a room description at all —
+went straight from the password prompt to a bare `>` prompt, with
+`update`/`stscore` both still working (command dispatch was fine) but
+`quit` crashed: `*Bad argument 3 to EFUN message()` at `cmds/usr/
+quit.lpc:113` (`message("system", ..., environment(me), me)`).
+`work/log/debug.log` showed the actual root cause a few lines earlier:
+`Eval interrupted: object clone/user/user#2 cost limit reached, limit:
+700000 usec` during `enter_world()` itself (`adm/daemons/updated.lpc`'s
+`create()` → `cmds/arch/gift.lpc`'s `create()` → `restore()`) — the
+abort happened before `enter_world()` ever `move()`d the character into
+`巫师休息室`, leaving `environment(me)` permanently `0` for the rest of
+that session, which is exactly why the LATER `quit` crashed on an
+unrelated-looking line. Fixed with the established remedy:
+`config.fluffos`'s `maximum evaluation cost : 700000` → `5000000`.
+Verified: fresh reboot, first login landed cleanly in `巫师休息室` (the
+real starting room, not silently void), and the identical `quit` that
+crashed before now completes cleanly.
+
+### New fix: `cmds/imm/update.lpc` — the same `present(environment(me))` crash class, a third path variant
+
+This lib's wizard reload command lives at `cmds/imm/update.lpc` (not
+`cmds/wiz/` or `cmds/adm/`, the two path variants already found and
+fixed on other libs this session) — same vulnerable shape, same fix.
+Finding this led to a corpus-wide check: 21 more libs share this exact
+path, fixed separately (see the dedicated `corpus sweep:
+cmds/imm/update.lpc` commit). AGENTS.md §7.106 updated to note all three
+known path variants.
+
+### New fix: `adm/simul_efun/file.lpc`'s `cat()` had no null-guard
+
+Standard proactive hardening; `log_file()` already correctly delegates
+to `LOG_D->log_file()`, which already calls `assure_file()`.
+
+### Considered and rejected: `adm/single/master.lpc`'s `log_error()` missing `assure_file()`
+
+Unlike `logd.lpc`'s `log_file()`, the real master file's `log_error()`
+writes directly with no `assure_file()` guard. Initially added one, then
+reverted: `log_error()` can fire during the simul_efun object's OWN
+compile (the function explicitly guards its `file_owner()` call with
+`find_object(SIMUL_EFUN_OB)` for exactly this reason), at which point
+`assure_file()` — itself a simul_efun — might not be callable yet,
+making the "fix" a plausible NEW crash rather than a safe hardening.
+The practical risk is low anyway (`work/log/` already exists as a
+tracked directory, and the player-facing broadcast is already
+commented out, so no §7.10-class leak risk either) — left as-is rather
+than risk an unverified speculative change.
+
+### Re-verified: all 3 round-one fixes still hold
+
+- **`securityd.lpc`'s `valid_read()` `this_player()` override
+  exemption**: code-confirmed `func != "load_object" && func !=
+  "include"` still present. Live-confirmed indirectly — the driver
+  booted and the very first lazy compile (`gb_big5()`'s `BAN_D->
+  is_banned()` call) didn't crash, which is exactly what this fix
+  prevents.
+- **`is_chinese()`/`check_legal_name()` byte-length fix**: code-
+  confirmed `strlen(name)` bounds check uses the corrected `i < 2 || i
+  > 4` codepoint range (not the old byte-doubled 4/8 range).
+- **`commandd.lpc`'s `rehash()` dead `.c$` pattern fix**: code-confirmed
+  `sscanf(cmds[i] + "$", "%s.lpc$", cmds[i])` present. Live-confirmed:
+  `stscore` (which would show "什么？" if the command table were still
+  empty) rendered the full stat card correctly, on both the pre-fix and
+  post-fix eval-cost sessions alike.
+
+### Verification method
+
+Booted native `build-debug` driver, admin login (`fluffos`/
+`Mud2026Pass`) — this lib's login flow requires sending a blank line
+first to trigger the banner (`logon()` only registers an `input_to`
+callback, doesn't `write()` anything itself — a documented test-
+methodology note from round one, still holds). `update /cmds/imm/
+update` and `stscore` as privileged-action/command-table checks. Two
+full rapid reconnects post-fix, both clean. Driver killed by exact PID
+after each reboot (three total: initial boot where the crash was found,
+one aborted reconnect during the config edit, clean reboot for
+verification); incidental `fluffos.o` save-timestamp churn reverted
+before commit.
+
+### Files modified this pass
+
+- `config.fluffos` — §7.90 fix (`maximum evaluation cost` 700000 →
+  5000000).
+- `work/cmds/imm/update.lpc` — `environment(me)` null-check (§7.106
+  path variant).
+- `work/adm/simul_efun/file.lpc` — `cat()` null-guard.
