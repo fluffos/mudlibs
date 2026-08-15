@@ -7044,6 +7044,117 @@ form as of this sweep).
   not yet found; check whichever directory a lib's own wizard-level
   commands actually live in if none of these four exist.
 
+### 7.107 An offline-cultivation daemon's unbounded, uncaught `restore()` on every account in its retry queue causes a multi-hour driver CPU stall and silently rewrites hundreds of real player save files — NT/nitan lineage, confirmed on 7 libs
+
+**File:line: `adm/daemons/closed.lpc`'s `load_all_users()`, both
+`login_ob->restore()` and `user_ob->restore()` calls (around line
+147/162, or 129/144 on the `nte`/`ntii` snapshot).** Found on `nt1`'s
+round-two §10.7 pass; the same unguarded shape independently confirmed
+present (via grep, not yet each individually live-reproduced) in 6
+sibling snapshots of this lineage: `nitan6`, `nitan170911`, `hhsj`,
+`xfbhh`, `nte`, `ntii`.
+
+- **Symptom**: after a boot with no player ever connecting, the driver
+  process sits at 80-95% single-core CPU indefinitely (observed
+  continuously for 11+ real hours in one session before the trigger
+  was diagnosed), and `git status` shows hundreds of real player save
+  files under `data/user/*/*.o`/`data/login/*/*.o` mutated on every
+  pass — pure incidental save-timestamp/state churn from a background
+  daemon repeatedly reloading accounts nobody is using, not any
+  player-visible action. `log/debug.log` (or the driver's own stdout,
+  if debug.log gets truncated by concurrent ad-hoc `lpcc` runs — see
+  the §10.8-adjacent caveat elsewhere in this file) accumulates
+  `*restore_object(): Illegal mapping format while restoring alias.`
+  and/or `Eval interrupted: ... cost limit reached` traces, tagged
+  `program: /feature/save.lpc` or `/inherit/char/char.lpc`, `object:
+  /clone/user/user#NNNN` with NNNN climbing into the thousands over a
+  long session — a fresh object number every retry, meaning each
+  attempt genuinely creates and never cleans up a whole new player-body
+  object rather than reusing/caching one.
+- **Root cause**: this is an offline-cultivation ("闭关修炼") mechanic —
+  `closed_users` is a persisted mapping of account-id → return-room for
+  every character currently "in seclusion." `heart_beat()` (armed every
+  10-19 real seconds) calls `load_all_users()`, which does a FULL,
+  synchronous re-login (`new(LOGIN_OB)` → `restore()` → `make_body()` →
+  `restore()` → `enter_world()`) for every entry in `closed_users` that
+  isn't already an interactive body — expensive even when it works,
+  since it forces first-time compilation of a real character's
+  equipment/skill objects. Two independent failure modes compound this:
+  1. `feature/save.lpc`'s `restore()` calls `restore_object(file)` with
+     **no `catch()`**. If any ONE account's save data is genuinely
+     corrupted (a real, pre-existing archive-data issue, not something a
+     conversion pass introduces — confirmed via a literal `"Illegal
+     mapping format while restoring alias"` restore-time error, i.e. one
+     specific property's serialized form is malformed on disk), the
+     uncaught exception unwinds straight through
+     `load_all_users()`/`heart_beat()`, aborting the WHOLE tick early
+     (every account later in that tick's `foreach` never gets
+     processed) and — critically — skipping the `destruct()` +
+     `map_delete(closed_users, u)` cleanup that would otherwise remove
+     the offending account from the retry queue. That account is
+     therefore retried forever, once per heartbeat, forever leaking a
+     fresh zombie object each time.
+  2. Separately, a converted archive can ship with a large fraction of
+     the whole account roster still marked "closed" at snapshot time
+     (one seen instance: ~150 of ~200 total accounts) — this is
+     legitimate original content, not a bug, but on a static test
+     conversion (no real players will ever reconnect to clear these
+     entries via `user_opened()`) it means the daemon is perpetually
+     trying to fully re-login essentially the entire historical
+     playerbase, every heartbeat cycle, forever. `enter_world()`'s own
+     failure path (already correctly `catch()`-guarded in the existing
+     code) cleans up gracefully when an individual account's setup
+     blows the eval-cost budget, so this half is "expensive but
+     architecturally sound," not itself the crash — it's what turns a
+     single corrupted account (item 1) into a sustained multi-hour
+     stall instead of a one-off logged error, and is worth knowing
+     about as a distinct, separate performance characteristic when
+     triaging a slow/high-CPU NT-lineage boot.
+- **Fix**: wrap both `restore()` calls in `catch()`, matching this
+  project's standard "guard a risky call, don't change its surrounding
+  control flow" shape:
+  ```lpc
+  // before:
+  if (!login_ob->restore()) { destruct(login_ob); map_delete(...); ... continue; }
+  // after:
+  err = catch(ok = login_ob->restore());
+  if (err || !ok) { destruct(login_ob); map_delete(...); ... continue; }
+  ```
+  (same treatment for the second, `user_ob->restore()` call; declare
+  `string err; int ok;` alongside the function's existing locals). This
+  makes a single corrupted account fail exactly once, get cleaned up and
+  removed from `closed_users` via the existing (already-correct) error
+  path, and never get retried — collapsing the unbounded leak into a
+  single logged, harmless failure per genuinely-corrupted account.
+- **Verified**: live-reproduced and fixed on `nt1` (confirmed via a
+  rebooted driver: the same corrupted account that previously aborted
+  the whole tick now shows a caught "错误讯息被拦截" trace instead, and
+  a 150-second post-fix observation window showed zero new
+  `Eval interrupted` occurrences vs. 100+ in an equivalent pre-fix
+  window). The other 6 sibling libs were fixed via the identical
+  mechanical `catch()`-wrap (Python `str.replace()`, `newline=''`/
+  `surrogateescape` to preserve exact file bytes) and verified via
+  `lpcc --batch` single-file compile checks only (no closed.lpc-specific
+  errors on any of the 6; one sibling, `nitan6`, additionally got a full
+  driver boot + port-listening check) — not individually live-tested
+  end-to-end, matching this project's established "mechanical,
+  well-understood, single-shape sweep" verification bar (same as the
+  §7.86 board-crash and §7.106 update.lpc sweeps).
+- **Note on the data-file churn this bug causes**: while diagnosing/
+  fixing this, `git status` will show a large number of real player
+  `.o` saves as modified — this is pure incidental churn from the
+  buggy daemon re-restoring+re-saving accounts, not real content
+  change; revert with `git checkout -- libs/<slug>/work/data/user/
+  libs/<slug>/work/data/login/` (and `data/room/*/*.o`, `data/closed.o`
+  if similarly touched) before committing any fix, per this project's
+  standard save-churn discipline.
+- **Detection**: `grep -l 'restore()' adm/daemons/closed.lpc` plus
+  manual check that neither `restore()` call is wrapped in `catch()`;
+  if `data/closed.o` exists and its `closed_users` mapping isn't empty,
+  the exposure is live regardless of whether a corrupted account has
+  been hit yet. Any future NT/nitan-lineage lib should be checked for
+  this file/pattern as a standard part of its own §10.7 pass.
+
 ---
 
 ## 8. Login and registration flow bugs
