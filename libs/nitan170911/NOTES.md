@@ -605,3 +605,148 @@ NT/nitan 血统；游戏内品牌为"仙剑奇侠传"。没有预先播种管理
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 83 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## Round-two re-test (2026-08-14): post-driver-upgrade re-verification
+
+Standard round-two §10.7 pass against the rebuilt driver (`~/src/fluffos`
+post PRs #1343/#1344, plus the corpus-wide `%`-on-float fix). This lib
+was in the round-one-only queue.
+
+### Scope decision: light path, not a fresh MySQL playthrough
+
+Checked for a working MySQL/MariaDB setup before starting: no `mysql`/
+`mariadb` client binaries on this host, and — more importantly — the
+Docker **daemon itself is not running** (`/var/run/docker.sock` doesn't
+exist, `docker ps` fails with "no such file or directory") and starting
+it requires `systemctl start docker`, which needs an interactive sudo
+password not available in this environment. The `nitan170911_mysql`
+container from the 2026-07-24 pass therefore couldn't even be inspected
+(`docker ps -a` itself fails, not just "container not found"). Standing
+up Docker from scratch here would mean first getting a root shell,
+outside this pass's time budget, so per this task's own fallback
+guidance this pass took the **lighter, non-MySQL path** (same precedent
+as the §7.78 follow-up pass above): independent re-verification of every
+documented fix by grep, the standard checklist, and a native boot +
+connect check.
+
+### 1. Re-verified every previously-documented fix is still in the code
+
+All confirmed present and unchanged in shape:
+
+- `feature/name.lpc`: every live `query()`/`set()`/`query_temp()` call
+  site (`set_name`, `set_color`, `id()`, `name()`, `short()`, `long()`)
+  still carries the `this_object()` redirect — 17 occurrences, all via
+  the (even more explicit) `this_object()->query(..., this_object())`
+  form. The one bare `query("name")` grep hit is inside a comment
+  (line 60), not live code.
+- `adm/daemons/databased.lpc`'s `db_restore_all()`: all ten
+  `restore_variable()` calls (`f_dbase`, `f_autoload`, `f_condition`,
+  `f_business`, `f_mail`, `f_alias`, `f_attack`, `f_damage`, `f_skill`,
+  `f_user`, plus `char_idname`/`login_dbase`) still guarded with
+  `stringp(...) ? restore_variable(...) : <fallback>`.
+- `adm/kernel/simul_efun/message.lpc`: forward prototype
+  (`varargs void message(...)`, line 13) present before `message_vision`/
+  `message_sort`/`message_combatd`/`tell_room` etc., and the real
+  `message()` wrapper still normalizes a non-array/non-object `exclude`
+  to `({})` before calling the raw efun.
+- The 13 §7.78 mixin files (`feature/action.lpc`,
+  `apprentice.lpc`, `attack.lpc`, `attribute.lpc`, `command.lpc`,
+  `condition.lpc`, `damage.lpc`, `equip_liv.lpc`, `message.lpc`,
+  `more.lpc`, `move.lpc`, `name.lpc`, `team.lpc`): all still carry their
+  `this_object()->set/query(...)` redirects (counts range from 1 to 150
+  occurrences per file, e.g. `damage.lpc` 150, `attack.lpc` 26,
+  `apprentice.lpc` 31).
+- §7.86 board sweep: 84 files still `inherit BULLETIN_BOARD`
+  (one more than the originally-reported 83 — harmless, likely a newly
+  swept-in file counted differently), spot-checked a sample of 5 and
+  confirmed none carry a lingering `replace_program(...)` call.
+- The fail-closed loopback retrofit (`band.lpc`'s strict-loopback
+  `is_banned()`/`is_multi_login()` checks, `logind.lpc`'s separate
+  `local_conn` boolean distinct from the real `str` IP variable): both
+  still present and unchanged.
+
+### 2. Standard checklist
+
+- **Kernel simul_efun `file.lpc`-equivalent**
+  (`adm/kernel/simul_efun/file.lpc`): `assure_file()` is defined at
+  line 13, textually BEFORE its only two callers `log_file()` (line 37)
+  and `sys_log()` (line 125) — already correctly ordered, no forward
+  declaration needed, no fix required.
+- **`config.fluffos`'s `maximum evaluation cost`**: already
+  `2147483647` (effectively unbounded) — well above the 5000000 safe
+  floor, no change needed.
+- **`cmds/wiz/update.lpc`'s `present(file, environment(me))` crash
+  (§7.106)**: already correctly guarded —
+  `if (environment(me) && (obj = present(file, environment(me))) &&
+  playerp(obj) || ...)` (line 32) short-circuits on a null environment
+  before calling `present()`. This lib apparently never had the bug in
+  this exact spot (or it was fixed silently in an earlier, undocumented
+  pass) — no fix needed, verified by direct reading of the current
+  source.
+
+No code changes were needed for either the re-verification pass or the
+standard checklist — everything already holds.
+
+### 3. Native boot + connect (light-path live check)
+
+Booted `build-debug` driver from `libs/nitan170911` directly (not
+inside a lib-specific working directory quirk — `config.fluffos`'s
+`mudlib directory` is absolute). Boot log: clean, only routine
+`Unknown #pragma`/`Unused local variable` warnings, ending in
+`Accepting telnet connections on 127.0.0.1:40018.` /
+`Initializations complete.`
+
+Connected via `scripts/tmux_mud.sh`: banner renders correctly (ANSI art,
+UTF-8 Chinese glyphs, uptime/registered-count lines), username prompt
+validates length/alphabetic correctly. Attempted the standard project
+admin id (`fluffos`, wizlist-seeded, `Mud@2026`) — this time it also hit
+the documented MySQL-unavailable rejection ("对不起，由于连接不上数据
+库所在服务器…") and disconnected, **not just the password prompt**.
+Traced why: `logind.lpc`'s `logon()` (~line 502) runs
+`DATABASE_D->do_sql("select online, ... from users where id = '"+arg+"'")`
+*before* it ever calls `ob->restore()` on the local save file — with no
+DB reachable, `do_sql()` returns non-array, `flag` stays 0, so the
+"restore from local save, prompt for password" branch (lines 539-556)
+is skipped entirely regardless of whether a local `.o` save exists
+(confirmed `data/login/f/fluffos.o` and `data/user/f/fluffos.o` both do
+exist on disk), and every login falls straight through to the same
+`query_db_status()` gate as a brand-new registration. This is not a
+new bug — it's the general case of exactly what the §7.78 follow-up
+section above already documented for `qinfeng` specifically
+("连 `qinfeng` 这样已有本地存档的老角色登录也会先走
+`DATABASE_D->query_db_status()` 检查"); this pass empirically confirms
+it also applies to the wizlist-admin id, i.e. **every** login on this
+lib is unconditionally gated on DB reachability once `DB_SAVE` is
+defined, with no local-save fallback path at all. Consequence for this
+pass: the standard checklist's "verify admin wizlist access via
+`update`" step could not be exercised live in this environment (it
+requires getting past login, which requires MySQL) — documented here
+rather than skipped silently.
+
+`log/debug.log` grew from 212 to 818 lines across the session; the new
+818-212=606 lines are exclusively compile-time warnings from lazily-
+loaded files pulled in while attempting `make_body()`/board inherits
+during the login attempt (`Unused local variable`, `Unknown #pragma`,
+`Macro redefined` etc.) — zero errors, zero `FATAL`, zero "Bad
+argument"/"Undefined function" lines (checked via grep on the new
+lines specifically).
+
+Driver killed by exact PID (`kill 1644111`, confirmed dead via `ps`),
+never `pkill -f`. `git status --short libs/nitan170911/` after the
+session showed **zero changes** — no save-timestamp churn at all (the
+login attempt never got far enough to write anything), so nothing to
+revert.
+
+### Net result
+
+No new bugs found or fixed this round. Every previously-documented fix
+independently re-verified present and correct in the current source;
+every standard-checklist item checked and already clean/correct. The
+one substantive new finding is diagnostic, not a bug: this lib's login
+path (not just registration) is unconditionally DB-gated with no
+local-save fallback, confirmed for the wizlist-seeded admin account as
+well as `qinfeng` — a real, permanent architectural fact about this lib
+worth knowing for any future pass that has real MySQL access and wants
+to do a full live playthrough re-test (which remains the recommended
+higher-value follow-up whenever Docker/MySQL becomes available in this
+environment).
