@@ -525,3 +525,40 @@ Century/adm-single 家族（自定义 securityd ACL 表）。状态已从过时�
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD`、`W_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 19 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单发现并修复三处问题：
+
+1. **`cmds/app/update.lpc`（AGENTS.md §7.106）**：`present(file,
+   environment(me))` 缺少 `environment(me) &&` 前置防护，补上。
+2. **`adm/simul_efun/file.lpc`**：`log_file()` 没有 `assure_file()`
+   目录预建保护，补上调用及前向声明；`cat()` 补上
+   `read_file() || ""` 空值防护。
+3. **`clone/user/user.lpc::reconnect()`（AGENTS.md §7.108，本轮在
+   `shenzhou` 发现的同一类 bug——第二条独立确认的血统）**：本档案的
+   `adm/daemons/logind.lpc` 同样有 `exec(old_link, user);
+   destruct(old_link);` 踢掉重复登录的写法，而 `reconnect()` 逐字节
+   与 `shenzhou` 修复前的版本一致——完全没有 `enable_commands()`。
+   按 §7.108 记录的写法预防性加了同一行修复（未先在本档案单独复现
+   修复前的崩溃再修——鉴于代码逐字节一致，直接套用已在 `shenzhou`
+   验证过的修法），现场用两个真实连线复现"保持第一个连线不断开→第
+   二个连线登录→答 y 踢掉旧连线"的完整流程做修复后验证：`score`
+   立即正常显示完整角色档案，确认修复本身不会引入新问题。
+
+`master.lpc::log_error()` 已经是正确的 `"arning:"` 大小写无关写法，
+`maximum evaluation cost` 已经是 `5000000`，均无需改动；本档案无
+`adm/daemons/closed.lpc`，不受 §7.107 影响。
+
+### 现场验证摘要
+
+驱动干净启动，管理员 `fluffos`/`Mud@2026` 登录确认权限
+`〖宇宙特警〗`，`update /adm/daemons/logind` 成功验证真实写入权限。
+踢掉重复登录重连路径现场验证通过（见上）。`debug.log` 全程干净
+（507 行，无真实错误）。
+
+### 本轮修改的文件
+
+- `work/adm/simul_efun/file.lpc`
+- `work/cmds/app/update.lpc`
+- `work/clone/user/user.lpc`
