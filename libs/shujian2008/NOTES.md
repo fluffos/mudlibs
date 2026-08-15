@@ -330,3 +330,43 @@ consumed most of the remaining time budget).
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 1 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单发现并修复三处问题：
+
+1. **`cmds/app/update.lpc`（AGENTS.md §7.106）**：缺少
+   `environment(me) &&` 前置防护，补上（`cmds/imm/update.lpc` 已是正
+   确写法）。
+2. **`adm/simul_efun/file.lpc`**：`cat()` 补上 `read_file() || ""`
+   空值防护（`log_file()` 委托给 `LOG_D`，不是本档案直接
+   `write_file()`，未处理；`assure_file()` 本身已有正确的存在性检
+   查）。
+3. **`clone/user/user.lpc::reconnect()`（AGENTS.md §7.108，第三条独
+   立确认的血统——shiji（同 Century 手足家族）也命中过同一处）**：
+   `logind.lpc` 同样有 `exec(old_link, user);` 踢掉重复登录的写法，
+   `reconnect()` 缺少 `enable_commands()`。按 §7.108 记录的写法预防
+   性修复，现场用两个真实连线复现"保持第一个连线不断开→第二个连线
+   登录→答 Y 踢掉旧连线"验证：`score` 修复后立即正常显示完整角色档
+   案。
+
+`master.lpc::log_error()` 的广播行本身是注释掉的（无泄漏风险），
+`maximum evaluation cost` 已经是 `5000000`，均无需改动；本档案无
+`adm/daemons/closed.lpc`，不受 §7.107 影响。
+
+### 现场验证摘要
+
+驱动干净启动，管理员 `fluffos`/`Mud@2026` 登录确认
+`您目前的权限是：(admin)`，`update /adm/daemons/logind` 成功验证真实
+写入权限。踢掉重复登录重连路径现场验证通过（见上）。`debug.log`
+全程干净（377 行，无真实错误）。
+
+（一处方法论记录，非 bug：第一次登录尝试因为工具调用间隔较长，触发
+了本档案自己的"您花在连线进入手续的时间太久了"登录超时保护，属预
+期行为，用更短间隔重新连线后正常完成。）
+
+### 本轮修改的文件
+
+- `work/adm/simul_efun/file.lpc`
+- `work/cmds/app/update.lpc`
+- `work/clone/user/user.lpc`
