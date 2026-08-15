@@ -548,3 +548,71 @@ correct at every state change.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 8 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## Deep functional test round three (2026-08-14)
+
+Independently re-verified against current code rather than trusting the
+round-two writeup above. All 3 prior fixes confirmed still present and
+live-re-exercised. Found and fixed a fourth bug — the same
+`cmds/wiz/update.lpc`-class `present(environment(me))` crash found
+repeatedly this session, but at this lib's own alternate path
+(`cmds/adm/update.lpc`), which the original 135-file corpus sweep didn't
+cover. That discovery led to a small follow-up sweep across the corpus
+for the same alternate path — see the separate `corpus sweep:
+cmds/adm/update.lpc` commit for the other 5 libs found. Plus the two
+now-standard checklist gaps (`file.lpc` hardening, one printf leak).
+
+### New fix: `cmds/adm/update.lpc` — `present(file, environment(me))` crash, alternate path
+
+Byte-identical crash shape to the one found on `xiakexing2017`/
+`dtslmud`/`dtxywzxzb` earlier this session, just living at
+`cmds/adm/update.lpc` instead of the more common `cmds/wiz/update.lpc` —
+this lib doesn't have a `cmds/wiz/` directory equivalent. Fixed with the
+same `environment(me) &&` guard. Live-verified: `update
+/u/guanwai/npc/petowner` succeeded cleanly.
+
+### New fix: `adm/simul_efun/file.lpc` — same §7.11-class gap as siblings
+
+`log_file()` missing `assure_file()`, `cat()` missing a null-guard.
+Fixed both (with the forward declaration this driver requires).
+
+### New fix: one active `printf("%O\n", ob)` debug leak in `logind.lpc`
+
+This lib only has the manual-name-entry branch (`get_resp()` is
+forward-declared but never implemented, so there's no separate random-
+name-accept path to check) — one leak found and removed.
+
+### Re-verified live: all 3 round-two fixes still hold
+
+- **§7.26 `file_owner()` path-depth fix**: code-confirmed
+  `sscanf(file, "/u/%s/%s", name, rest) == 2` present. Live-verified by
+  running `update /u/guanwai/npc/petowner` as admin — succeeded cleanly
+  ("重新编译 ... 成功！"), the exact command the original bug made throw
+  `*Wrong permissions for opening file ... for append`.
+- **`user_cwd()`/flat-`/u/`-layout fix**: code-confirmed `return ("/u/"
+  + name);` present. Live-verified: `cd ~guanwai` correctly resolved to
+  `/u/guanwai/` (not the broken letter-sharded `/u/g/guanwai/`).
+- **`cmds/usr/save.lpc`'s `environment(me)` guard (§7.14-class)**:
+  code-confirmed `if (environment(me) && environment(me)->query(...))`
+  present.
+
+### Verification method
+
+Booted native `build-debug` driver, admin login (`fluffos`, no password
+step in this lineage — confirmed flow, not a bug). `update
+/u/guanwai/npc/petowner` and `cd ~guanwai` as the real privileged-action
+checks that also re-exercise the two path-fix bugs. Two full rapid
+reconnects, both clean. `work/log/debug.log` line count checked before/
+after (357→363, only harmless compile warnings, zero error-signature
+matches for either original bug). Driver killed by exact PID after
+testing; incidental `fluffos.o` save-timestamp churn reverted before
+commit.
+
+### Files modified this pass
+
+- `work/cmds/adm/update.lpc` — new fix (`environment(me)` null-check,
+  §7.106 path variant).
+- `work/adm/simul_efun/file.lpc` — `log_file()` `assure_file()` guard
+  (with forward declaration), `cat()` null-guard.
+- `work/adm/daemons/logind.lpc` — removed one `printf("%O\n", ob)` debug
+  leak.
