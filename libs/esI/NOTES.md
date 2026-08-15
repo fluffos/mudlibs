@@ -435,6 +435,56 @@ for whoever next touches `es1_win` to note in ITS OWN NOTES.md.
   was made to enumerate or pre-visit every other room that might carry
   an equally-heavy first-load NPC.
 
+## Deep functional test round two (2026-08-14)
+
+Independently re-verified all 5 round-one fixes against current code and
+live behavior rather than trusting the writeup above. All 5 confirmed
+still holding; no new bugs found or fixes needed this pass.
+
+- **Fix 1 (net-dead-during-registration `restart_heart()`)**:
+  code-confirmed the `complete_setup("")` fallback branch is still
+  present. Not re-walked live this pass (same reasoning as `es1_win`'s
+  own round-two pass — expensive relative to a small, previously
+  thoroughly-verified conditional).
+- **Fix 2 (`compress_obj.h` §7.14 `base_name(this_object())`)** and
+  **fix 4 (§7.90 eval-cost, `300000` → `5000000`)**: both live-verified
+  together in one test, matching the exact original crash scenario —
+  walked 冒险者公会 → east → east into 商店 on this boot's genuinely
+  first-ever visit (fresh reboot, first attempt). Landed cleanly, full
+  item list rendered (油灯/绷带/魔法地图/火把 with prices), the
+  level-19 `woodman` NPC (皇家护卫团四将 怒, the original crash's
+  heavyweight first-load trigger) present and correct, zero new
+  `work/log/debug.log` lines (checked the line count before and after:
+  unchanged at 2693).
+- **Fix 3 (leftover `ttt`/`ttt1`-`ttt4` debug prints in `logind.lpc`)**:
+  code-confirmed zero `ttt` matches remain, then live-confirmed by
+  watching a full fresh admin login transcript end-to-end — no stray
+  `ttt*` lines anywhere.
+- **Fix 5 (§7.12 `tell_room()` `exclude || ({})`)**: code-confirmed
+  still present with its explanatory comment. Not re-triggered live via
+  the original `weather_d.lpc`/outdoor-room mechanism this pass (would
+  require registering an outdoor room and waiting for a phase-change
+  `call_out`), but the same underlying `tell_room()` code path was
+  exercised indirectly during ordinary movement/room-entry broadcasts
+  throughout this session with zero errors.
+
+Also verified: real admin write access via `update /adm/daemons/logind`
+(succeeded, "Updated and loaded.") — used as the actual privileged-action
+check rather than trusting any login banner. One reconnect exercised (the
+connection's own `quit` is gated behind `okip` for wizards, same as
+`es1_win`'s sibling architecture — a genuine safety feature, not a bug —
+so the reconnect went through the silent net-dead body-reattach path,
+landing back in the shop with identical state, which is itself valid
+reconnect-stability evidence).
+
+### Verification method
+
+Booted native `build-debug` driver (zero eval-cost/preload errors this
+boot, confirming fix 4 holds from cold start), admin login
+(`fluffos`/`Mud@2026`). Driver killed by exact PID after testing;
+incidental `fluffos.o`/`d/noden/log`/`d/zeq/log` save churn reverted
+before commit (no code changes this pass — nothing else to stage).
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 同一血统（屠龙之战）。
