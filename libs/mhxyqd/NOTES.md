@@ -589,3 +589,107 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 47 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-14，post driver-upgrade re-test）
+
+Round-two re-verification pass against the rebuilt `fluffos` driver
+(picks up upstream PRs #1343/#1344) plus the corpus-wide `quest_times`
+`%`-operator fix — neither of which touches this lib's own code paths,
+but a live re-play was still warranted since this lib was last tested
+before the rebuild.
+
+**All previously-documented fixes independently re-verified still in
+place** (grepped/read the actual source, not just NOTES.md prose):
+`adm/etc/banner` exists as a real file alongside `Banner` (§15k case
+fix), `adm/obj/master.lpc`'s `log_error()` still gates the broadcast on
+`strsrch(message, "arning:") == -1` (§15w), `/u/npc/log` and
+`/u/feizei/log` are both plain files (not directories), `logind.lpc`'s
+`get_name()` debug-leak `printf("%O\n", ob);` is gone,
+`is_chinese()`/`check_legal_name()` still use the CJK-codepoint /
+character-count logic (not the old GBK byte-range check), and the
+`d/death/npc/{b,bgargoyle,wgargoyle}.lpc` death files still carry the
+ORIGINAL single-check `if (!ob || !present(ob)) return;` shape — the
+2026-08-05 §7.68 revocation held, no regression crept back in. The
+§7.86 board `replace_program()` sweep fix also spot-checked clean (0
+files remaining with both a `BBS_BOARD`/`BULLETIN_BOARD` `inherit` and
+a redundant `replace_program()`).
+
+**New standard-checklist items checked this round (not previously
+checked in this lib's history):**
+
+1. **`adm/simul_efun/file.lpc`**: `log_file()` (line 7) textually
+   precedes `assure_file()` (line 11), but `log_file()` doesn't call
+   `assure_file()` at all — no forward-declaration risk here, unlike
+   the sibling `mhxy`'s finding this session. No fix needed.
+2. **`config.fluffos`'s `maximum evaluation cost`**: was `400000`,
+   matching the exact value that caused 100%-reproducible
+   `enter_world()`/`make_body()` aborts on the sibling `mhxy` this
+   session (and matching this lib's own previously-documented
+   `*Too long evaluation.`/`*Can't catch eval cost too big error.`
+   preload noise). Raised to `5000000` (matching `mhxy`'s fix).
+   Re-verified live: the preload's previously-documented eval-cost
+   error categories (`Too long evaluation`, `Can't catch eval cost too
+   big error`) are now **zero** across a full boot, vs. the
+   previously-documented handful per boot.
+3. **§7.106 (`cmds/wiz/update.lpc`'s `present(file, environment(me))`
+   crash)**: already fixed (`environment(me) && (obj = present(file,
+   environment(me))) && interactive(obj)`) — this lib was one of the
+   135 libs covered by the corpus-wide mechanical sweep referenced in
+   AGENTS.md §7.106. Live-verified: `update /adm/daemons/band` as
+   admin succeeded cleanly (`重新编译 /adm/daemons/band.lpc：成功！`).
+
+**New bug found and fixed (not from the standard checklist, found
+while executing this round's required "two rapid reconnects" step):**
+the admin account (a wizard) got blocked by the 40-second "刚退出就想
+进来？为了降低系统负荷，还是等一小会再连入吧！" quick-reconnect
+throttle in `adm/daemons/logind.lpc`'s `get_passwd()`, even though the
+guard is written as `!wizardp(user) && ...` (i.e. intended to exempt
+wizards). `wizardp(user)` evaluates false at this point in the login
+sequence (before `enter_world()` grants full wizard status to the
+freshly-restored body), so the exemption never actually fires for
+anyone, admin included — reproduced live twice. The byte-identical
+sibling `mhxy` hit and fixed this exact gap earlier this session by
+adding an explicit loopback-IP exemption alongside the (non-functional
+at this point) `wizardp()` check; ported that fix verbatim: a new
+`reconn_ip` local captures `query_ip_number(ob)`, and the throttle is
+skipped when it's `"127.0.0.1"`, `"::1"`, or a `"127."`-prefixed
+string. Verified live: recompiled `logind.lpc` via `update`, then did
+two back-to-back quit→reconnect cycles within a few seconds each —
+both landed straight back into the game with no throttle message
+(previously reproduced the block twice before the fix). This gap was
+present in the archive from the original conversion; the
+WASM-enablement pass's loopback carve-outs (band.lpc, `encoding()`'s
+IP/host-cap gates, `get_id()`'s multi-login cap, `securityd.lpc`'s
+`match_wiz_site()`) evidently didn't cover this specific throttle site
+when `mhxy` and `mhxyqd` diverged in prior passes — now aligned with
+`mhxy`.
+
+**Live re-play** (real driver, `scripts/tmux_mud.sh`, existing admin
+account, logging in via `gb → no → id → password`, transiting
+`/d/wiz/init` with `9` then `y` each login as documented): confirmed
+`look`/`score` render correctly (food/water both "正常", no §8.9
+issue), `update` gives real write access, and re-walked the exact
+death/resurrection path this lib's original §10.7 pass documented —
+moved 南城客栈 → 朱雀大街 (west), attacked 疥顶小僧 (`kill seng`; the
+`kill jieding` alias from the original NOTES no longer resolves since
+the NPC's id list is `({"jieding xiaoseng", "xiaoseng", "seng"})`, not
+a bare `"jieding"` token — a client/id quirk, not a mudlib bug), died,
+landed at 「阴阳界」, and 崔判官 auto-ran the full unattended dialogue
+→ judgment → "送你还阳" sequence, landing cleanly at 「荒郊小店」 —
+identical to the pass documented before the driver upgrade.
+`log/debug.log` grew only with expected lazy-compile warnings (unused
+locals, a couple of pre-existing signature mismatches) across the
+entire session; zero FATAL, zero SIGSEGV, zero new error classes.
+
+**Process/repo hygiene**: driver killed by exact PID (`kill 1638278`,
+confirmed dead via `ps`), never `pkill -f`. `git status --short
+libs/mhxyqd/` post-test showed only the two genuine fixes
+(`config.fluffos`, `adm/daemons/logind.lpc`) plus the admin's own
+`data/{login,user}/f/fluffos.o` saves (real gameplay state from this
+session — timestamp, kill/death record, stat drain from the death
+tested above) — all kept. Six untracked `data/{login,user}/c/chen{ba,
+shi,wu}.o` files predate this session (timestamped 2026-08-05, not in
+`git ls-files`) and were left untouched, consistent with this lib's own
+caution about not deleting unfamiliar test-character residue without
+checking history first; `qinfeng`'s committed save files were not
+touched.
