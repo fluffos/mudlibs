@@ -116,3 +116,43 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 1 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。本档案登录走的是自定义手机 App 协议
+（单行 `账号,密码,密文,email`，逗号自动替换成 ║，密文校验本身已被
+源码注释掉），本轮沿用这一格式验证。标准检查清单发现并修复四处问题：
+
+1. **`config.fluffos`**：`maximum evaluation cost` 从 `700000`（已知
+   风险区间）提升到 `5000000`。
+2. **`cmds/app/update.lpc`（AGENTS.md §7.106）**：缺少
+   `environment(me) &&` 前置防护，补上（`cmds/imm/update.lpc` 已是正
+   确写法）。
+3. **`adm/simul_efun/file.lpc`**：`cat()` 补上 `read_file() || ""`
+   空值防护（`log_file()` 委托给 `LOG_D`，未处理）。
+4. **`clone/user/user.lpc::reconnect()`（AGENTS.md §7.108，第四条独
+   立确认的血统——同 Century/书剑家族的 shiji、shujian2008 均命中过
+   同一处）**：缺少 `enable_commands()`。按 §7.108 记录的写法预防性
+   修复，现场验证：本档案的踢掉重复登录路径**不问 y/n，直接自动踢
+   掉旧连线**（与 shiji/shujian2008 的确认式不同，但底层
+   `exec(old_link, user)` 机制一致）——用两个真实连线复现"保持第一
+   个连线不断开→第二个连线用同一账号登录"，第二个连线显示"重新连
+   线完毕"后 `score` 立即正常输出完整角色资料卡，确认修复有效。
+
+`master.lpc::log_error()` 的直接玩家广播已注释掉（改走 `CHANNEL_D`
+的 `"err"` 频道广播，属频道订阅制、非无差别泄漏，判定非 bug，未
+处理）；本档案无 `adm/daemons/closed.lpc`，不受 §7.107 影响。
+
+### 现场验证摘要
+
+驱动干净启动，管理员 `fluffos`/`Mud@2026,x,x` 登录确认
+`您目前的权限是：(admin)`，`update /adm/daemons/logind` 成功验证真
+实写入权限。踢掉重复登录重连路径现场验证通过（见上）。`debug.log`
+全程干净（393 行，无真实错误）。
+
+### 本轮修改的文件
+
+- `config.fluffos`
+- `work/adm/simul_efun/file.lpc`
+- `work/cmds/app/update.lpc`
+- `work/clone/user/user.lpc`
