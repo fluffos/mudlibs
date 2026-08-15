@@ -448,3 +448,38 @@ unchanged) from logging in as admin repeatedly during this pass.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 44 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单发现并修复三处问题：
+
+1. **`cmds/appr/update.lpc`（AGENTS.md §7.106）**：缺少
+   `environment(me) &&` 前置防护，补上（`cmds/wiz/update.lpc` 已是正
+   确写法）。
+2. **`adm/simul_efun/file.lpc`**：`log_file()` 没有 `assure_file()`
+   目录预建保护，补上调用及前向声明；`cat()` 补上
+   `read_file() || ""` 空值防护。
+3. **`obj/user.lpc::reconnect()`（AGENTS.md §7.108，第七条独立确认
+   的血统）**：`adm/daemons/logind.lpc` 有同款 `exec(old_link,
+   user);` 踢掉重复登录写法，`reconnect()` 缺少
+   `enable_commands()`。按 §7.108 记录的写法预防性修复，现场用两个
+   真实连线复现"保持第一个连线不断开→第二个连线登录→答 y 踢掉旧连
+   线"验证：`score` 修复后立即正常显示完整角色档案。
+
+`master.lpc::log_error()` 已经是正确的 `"arning:"` 大小写无关写法，
+`maximum evaluation cost` 已经是 `5000000`，均无需改动；本档案无
+`adm/daemons/closed.lpc`，不受 §7.107 影响。
+
+### 现场验证摘要
+
+驱动干净启动，管理员 `fluffos`/`Mud@2026` 登录确认
+`目前权限：(admin)`（登录横幅带一处"按回车继续"分页符，第一次
+`update` 指令被当作翻页 Enter 吃掉，重发一次即成功验证真实写入权
+限）。踢掉重复登录重连路径现场验证通过（见上）。`debug.log` 全程
+干净（338 行，无真实错误）。
+
+### 本轮修改的文件
+
+- `work/adm/simul_efun/file.lpc`
+- `work/cmds/appr/update.lpc`
+- `work/obj/user.lpc`
