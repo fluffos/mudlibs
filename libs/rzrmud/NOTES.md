@@ -640,3 +640,44 @@ code" policy.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 36 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级（引入 PR #1343/#1344、`quest_times` 语料修复）
+后的重测。独立复核第一轮（2026-07-24）的三处修复均仍在代码中：`obj/
+user.lpc::reconnect()` 的礼物精灵恢复补丁、`do_counter()` 的
+`stringp()` 防护、`log_error()` 的大小写无关 `"arning:"` 警告过滤门
+（这处已经是正确写法，未触发本 session 在 `nt1` 上踩过的小写坑）。
+
+### 标准检查清单发现并修复的问题
+
+- **`config.fluffos`**：`maximum evaluation cost` 从 `400000`（已知风
+  险区间）提升到 `5000000`。
+- **`adm/simul_efun/file.lpc`**：`log_file()` 原本直接
+  `write_file(LOG_DIR + file, ...)`，没有 `assure_file()` 目录预建保
+  护；补上调用及前向声明（`log_file()` 定义在 `assure_file()` 之前，
+  本驱动不容忍未声明的前向调用）。`cat()` 补上 `read_file() || ""`
+  空值防护。
+- **`cmds/wiz/update.lpc`**：已有 `environment(me) &&` 防护（§7.106），
+  无需修复。
+- **确认无 `adm/daemons/closed.lpc`**：本档案属于 ES II wade 血统
+  （非 NT/nitan 血统），不受 §7.107（`nt1` 本轮发现的闭关精灵未捕获
+  异常类）影响。
+
+### 现场验证
+
+驱动干净启动（`build-debug`），以管理员账号 `fluffos`/`Mud@2026` 登
+录，确认 `目前权限：(admin)`，落地既有存档房间"南城客栈"（确认账号
+存档正确持久化，无 `nt1` 那种"注册未满 30 分钟强行 kill 驱动导致密
+码从未落盘"陷阱——本档案的账号是早前 pass 正常 `quit` 播种的，本轮
+只是复用）。`update /adm/daemons/logind` 成功，确认
+`file.lpc`/`config.fluffos` 两处修复编译干净、不影响正常巫师指令。
+两次快速重连（各自独立 `fluffos`/`Mud@2026` 登录）均正确显示
+`目前权限：(admin)`，`quit` 均产生正常告别提示与断线。`debug.log` 全
+程检查（1283 行）：仅 4 处无害的宏定义/未使用变量相关误配匹配，无真
+实错误。
+
+### 本轮修改的文件
+
+- `config.fluffos`
+- `work/adm/simul_efun/file.lpc`
