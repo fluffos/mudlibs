@@ -862,3 +862,38 @@ specifically (not just typed dispatch) rather than merely asserted.
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 状态已从过时的 limited 修正——这份档案自己的 README 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录干净正常，用的是这份档案自己记录的登录密码（Mud@2026Admin，不是标准的 Mud@2026——这份档案对巫师账号强制执行更严格的密码规则，首次管理员提升时会自动升级登录密码，这在它自己的 README 里有记录）——"目前权限：(admin)"。
+
+## 深度功能测试第三轮 / Deep functional test round three (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单发现并修复两处问题：
+
+1. **`adm/simul_efun/file.lpc`**：`log_file()` 没有 `assure_file()`
+   目录预建保护，补上调用及前向声明（`log_file()` 定义在
+   `assure_file()` 之前，本驱动不容忍未声明的前向调用）；`cat()`
+   两处 `write(read_file(file))` 补上 `|| ""` 空值防护（此文件本身
+   已有 Find 加固过的 `valid_read()` 安全检查，未改动那部分逻辑）。
+2. **`obj/user/user.lpc::reconnect()`（AGENTS.md §7.108，第八条独立
+   确认的血统）**：`adm/daemons/logind.lpc` 有同款 `exec(old_link,
+   user);` 踢掉重复登录写法，`reconnect()` 缺少
+   `enable_commands()`。按 §7.108 记录的写法预防性修复，现场用两个
+   真实连线复现"保持第一个连线不断开→第二个连线登录→答 y 踢掉旧连
+   线"验证：`score` 修复后立即正常显示完整角色档案。
+
+`cmds/wiz/update.lpc`（§7.106）与 `master.lpc::log_error()`（§7.10
+的 `"arning:"` 大小写无关写法）均已是正确写法，`maximum evaluation
+cost` 已经是 `2000000`，均无需改动；本档案无 `adm/daemons/
+closed.lpc`，不受 §7.107 影响。
+
+### 现场验证摘要
+
+驱动干净启动，管理员 `fluffos`/`Mud@2026Admin`（此库自己文档记录
+的巫师专用强密码，非标准 `Mud@2026`——首次尝试用标准密码触发
+"密码错误！"并立即断线，重新连线用正确密码成功）登录确认
+`目前权限：(admin)`，`update /adm/daemons/logind` 成功验证真实写入
+权限。踢掉重复登录重连路径现场验证通过（见上）。`debug.log` 全程
+干净（227 行，无真实错误）。
+
+### 本轮修改的文件
+
+- `work/adm/simul_efun/file.lpc`
+- `work/obj/user/user.lpc`
