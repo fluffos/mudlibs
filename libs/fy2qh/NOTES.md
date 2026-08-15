@@ -555,3 +555,67 @@ discipline as checking `debug.log` after `quit`.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 15 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## Deep functional test round three (2026-08-14)
+
+Independently re-verified against current code rather than trusting the
+extensive round-two writeup above. All 7 ported fixes plus the 3 data
+fixes confirmed still present (code/data inspection for all 10, live
+re-exercise of the highest-value ones). This lib's sibling `fy2` picked
+up 3 NEW fixes earlier this session (not part of the original 7 ported
+here) — checked and confirmed `fy2qh` had the exact same 3 gaps,
+byte-identical down to the line numbers, and applied the same fixes.
+
+### New fixes, ported from sibling `fy2`'s own round-two pass earlier this session
+
+1. **§7.90-class eval-cost**: `config.fluffos`'s `maximum evaluation
+   cost : 300000` (same value `fy2` had) → `5000000`. Not independently
+   reproduced as a live crash here first (unlike `fy2`, where it was
+   caught live) — applied proactively given the confirmed byte-identical
+   config value, then verified: first login attempt on a fresh boot
+   succeeded cleanly with zero eval-cost errors.
+2. **`adm/simul_efun/file.lpc`**: same §7.11-class gap as `fy2`
+   (`log_file()` missing `assure_file()`, `cat()` missing a null-guard).
+   Fixed identically, including the forward declaration this driver
+   requires.
+3. **Two `printf("%O\n", ob)` debug leaks in `logind.lpc`**: byte-
+   identical location (lines 273/308) and shape to `fy2`'s own finding.
+   Removed both.
+
+### Re-verified live: the highest-value round-two-ported fixes
+
+- **§7.12 `tell_room()`, §7.25 `make_inventory()`, §7.28
+  `enable_player()`, §7.24 death-startroom-stomp removal, §7.18 stale
+  `/d/wiz/` paths**: all code-confirmed present (grepped for each
+  fix's exact shape; the remaining `/d/wiz/` matches are all in
+  historical header comments, expected and inert).
+- **Board/emote data fixes**: walked to 风云广场 as admin — the board
+  rendered "风云广场留言版(Board) [ 13 张留言，13 张未读]", exactly
+  matching both `fy2`'s and this lib's own round-two post-fix count
+  (confirming the copied data files are still intact, not just present).
+  `smile` rendered correct Chinese flavor text ("你愉快地微笑着。"),
+  confirming `emoted.o` is still valid. `work/log/debug.log` line count
+  unchanged (331→387, all 56 new lines were harmless `update`-triggered
+  compile warnings, zero runtime errors) across the whole session.
+
+### Verification method
+
+Booted native `build-debug` driver, admin login (`fluffos`/`Mud@2026`) —
+clean on the first attempt (confirming the eval-cost fix). `update
+/adm/daemons/logind` as the real privileged-action check (succeeded).
+Two full rapid reconnects, both clean fresh logins (matching `fy2`'s
+own `net_dead()` design — never void-parks a disconnected player).
+Driver killed by exact PID after testing; incidental `fluffos.o`
+save-timestamp churn reverted before commit. Did not re-run the
+extensive net-dead-timeout investigation from the prior pass (already
+exhaustively documented above, twice-independently reproduced and
+analyzed — nothing new to add this pass).
+
+### Files modified this pass
+
+- `config.fluffos` — §7.90 fix (`maximum evaluation cost` 300000 →
+  5000000).
+- `work/adm/simul_efun/file.lpc` — `log_file()` `assure_file()` guard
+  (with forward declaration), `cat()` null-guard.
+- `work/adm/daemons/logind.lpc` — removed two `printf("%O\n", ob)` debug
+  leaks (both name-confirmation branches).
