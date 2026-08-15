@@ -967,3 +967,65 @@ backtrace exists.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 229 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单（`cmds/imm/update.lpc`、
+`cmds/adm/update.lpc` 的 §7.106 防护、`master.lpc::log_error()` 的
+§7.10 大小写无关 `"arning:"` 过滤门、`maximum evaluation cost`）全部
+确认已是正确/安全状态，无需改动；本档案无 `adm/daemons/closed.lpc`，
+不受 §7.107 影响。
+
+### 新发现并修复的 bug（AGENTS.md 新增 §7.108）
+
+**"踢掉重复登录"重连路径导致角色永久无法接收任何指令**——现场用两
+个真实 telnet 连线复现：先用 `fluffos` 登录并保持连线不断开，再用同
+一账号从第二个连线登录，触发"您要将另一个连线中的相同人物赶出去，
+取而代之吗？(y/n)"提示，答 `y` 后显示"重新连线完毕"、房间内 NPC 环
+境对话正常继续刷新，但此后 `score`/`look` 等任何指令一律只回应
+"什么？"（未知指令），角色实质性瘫痪。
+
+与之对照：单纯"断线不 quit，等驱动判定净断线后重连"这条路径（本项
+目 §10.7 checklist 更常规测试的那条）用同一账号复测完全正常——问题
+专门出在"旧连线仍活着、主动踢掉它"这条分支。根因追查到
+`adm/daemons/logind.lpc::confirm_relogin()`（`y`分支）的
+`exec(old_link, user); destruct(old_link);` 顺序——把角色的活跃连线
+转移到旧的、即将销毁的 login 外壳物件上后再销毁它，这个"瞬间失去
+interactive"的过程似乎连带清空了指令派发表，而随后
+`reconnect(ob, user)` 自己的 `exec(user, ob)` 只恢复了连线本身，没有
+重新注册指令。`clone/user/user.lpc::reconnect()`（角色类自己的重连
+回调）本身也从未呼叫 `enable_commands()`——净断线重连路径因为角色物
+件全程没有真的失去 interactive，所以从未暴露过这个缺口。
+
+**修复**：在 `reconnect()` 开头无条件加一行 `enable_commands();`
+（幂等，两条重连路径都安全）：
+```lpc
+void reconnect() {
+  enable_commands();
+  set_heart_beat(1);
+  ...
+```
+
+**验证**：重启驱动加载修复后，用完全相同的"保持第一个连线不断开→
+第二个连线登录→答 y 踢掉旧连线"复现步骤，`score` 修复后立即正常显
+示完整角色档案；净断线超时重连路径复测依旧正常（确认没有破坏原本
+就工作的分支）。
+
+**规模提示，本轮未展开成扫描**：`grep -rl 'exec(old_link'
+libs/*/work` 命中 140+ 个档案、覆盖相当一部分语料库（经由共享的
+`logind.lpc` 传承/惯例扩散，不是单一血统），但和 §7.106/§7.107 那种
+逐字节一致的形状不同，各档案 `reconnect()` 自己的实现差异较大，不
+适合盲目机械扫描——已记录进 AGENTS.md §7.108，标记为未来任何库做
+§10.7 时的一个建议检查项（专门测"踢掉重复登录"这条路径，不能只测净
+断线超时）。
+
+### 现场验证摘要
+
+驱动干净启动（`build-debug`），管理员 `fluffos`/`Mud@2026` 登录确认
+`目前权限：(admin)`，`update /adm/daemons/logind` 成功验证真实写入权
+限。净断线重连、踢掉重复登录重连两条路径均已现场验证（见上）。
+`debug.log` 全程干净（569 行，无真实错误）。
+
+### 本轮修改的文件
+
+- `work/clone/user/user.lpc`

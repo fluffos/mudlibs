@@ -7155,6 +7155,84 @@ sibling snapshots of this lineage: `nitan6`, `nitan170911`, `hhsj`,
   been hit yet. Any future NT/nitan-lineage lib should be checked for
   this file/pattern as a standard part of its own §10.7 pass.
 
+### 7.108 The "kick out an already-connected duplicate login" reconnect path leaves the character permanently unable to receive ANY command — genuinely reachable (client crash + immediate relogin), only found by testing this specific reconnect variant, not the more commonly-tested net-dead-timeout one
+
+**File:line: `clone/user/user.lpc`'s `reconnect()` (found on `shenzhou`;
+this pattern — `logind.lpc`'s `confirm_relogin()` doing `exec(old_link,
+user); destruct(old_link); reconnect(ob, user);` on "y" — appears
+extremely widely across this corpus, a `grep -rl 'exec(old_link'
+libs/*/work` hit 140+ files across dozens of libs, though not all
+necessarily share the exact missing-`enable_commands()` gap; not
+individually verified corpus-wide, see below).**
+
+- **Symptom**: connect while an id is already interactively logged in
+  elsewhere (the everyday "my client crashed, let me log back in" case
+  — the driver still considers the old connection alive) → get the
+  standard "another connection is using this character, kick it and
+  take over? (y/n)" prompt → answer `y` → "重新连线完毕" (reconnect
+  complete) prints and the room/NPC ambient text still flows normally
+  (heartbeats keep ticking) — but **every single typed command,
+  including `look`, produces only "什么？" (unrecognized command)**,
+  forever, for the rest of that session. This is a DIFFERENT code path
+  than the far-more-commonly-tested "disconnect without quit, wait,
+  reconnect" net-dead-timeout scenario — that path (`logind.lpc`'s
+  `if (user->query_temp("netdead")) reconnect(ob, user);` branch,
+  reached when the driver has already timed out the old connection)
+  calls the exact same `reconnect()` and works perfectly fine, which is
+  why this bug survived prior passes that only tested the timeout-based
+  reconnect (the §10.7 checklist's own "net-dead soak" item) and never
+  the "old connection still technically alive, kick it" variant.
+- **Root cause**: `confirm_relogin()`'s kick-out sequence
+  (`exec(old_link, user)` then `destruct(old_link)`) moves the
+  character's live interactive connection onto the OLD login-object
+  husk and destroys it — closing the stale socket, as intended — but as
+  an observed side effect on this driver, whatever state backs command
+  dispatch (`add_action()` bindings via the living-object command
+  table) does not survive that momentary loss of interactivity. The
+  subsequent `reconnect(ob, user)` call's own `exec(user, ob)`
+  correctly restores `user`'s interactivity with the NEW connection,
+  but nothing re-registers commands — `reconnect()` (the character-
+  class function) only clears the netdead flag/heartbeat/call_outs, it
+  never calls `enable_commands()`. On the plain net-dead-timeout path,
+  interactivity was never actually lost (the object just sat
+  non-interactive-but-still-living the whole time), so the same gap
+  never surfaces there.
+- **Fix**: unconditionally call `enable_commands()` at the top of
+  `reconnect()` — safe/idempotent regardless of which path led here:
+  ```lpc
+  void reconnect() {
+    enable_commands();
+    set_heart_beat(1);
+    set_temp("netdead", 0);
+    ...
+  ```
+- **Verified**: live-reproduced twice with two real telnet sessions (one
+  left connected, a second logging in as the same id and answering
+  `y` to the kick prompt) — pre-fix, `score`/`look` both produced only
+  "什么？" after the kick-reconnect; the plain net-dead-timeout
+  reconnect (separately tested, same character) worked fine both times,
+  isolating the bug to the kick-out path specifically. Post-fix
+  (driver restarted to pick up the change), the identical kick-out
+  reproduction sequence left `score` working correctly immediately
+  after "重新连线完毕".
+- **Scope note, not yet resolved**: the `exec(old_link` idiom this bug
+  depends on is very widely shared across this corpus (140+ file hits,
+  many libs, via a shared `logind.lpc` ancestry/convention rather than
+  one specific lineage) — but unlike §7.106/§7.107's mechanically
+  uniform shapes, `reconnect()`'s own body varies enough between libs
+  that a blind corpus sweep isn't safe without checking each one
+  individually for whether it already calls `enable_commands()`
+  (or an equivalent) on reconnect. Flagging this as a **known
+  candidate check for any future lib's §10.7 pass**: if a lib has this
+  `confirm_relogin`/`exec(old_link` shape, specifically test the
+  kick-duplicate-login path (not just net-dead-timeout) before
+  declaring reconnect-handling clean.
+- **Detection**: `grep -n 'exec(old_link' adm/daemons/logind.lpc` to
+  confirm the lib has this kick-out shape at all; if so, live-test by
+  connecting twice with the same id and answering `y` to the kick
+  prompt, then trying an ordinary command (`look`/`score`) — "什么？"
+  on everything means this bug is present.
+
 ---
 
 ## 8. Login and registration flow bugs
