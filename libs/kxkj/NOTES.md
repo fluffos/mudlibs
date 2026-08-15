@@ -568,3 +568,62 @@ if (obj->query("can_speak")) {
 session 出站代理策略拒绝（`curl -sS $HTTPS_PROXY/__agentproxy/status`
 返回 403），WASM 编译/运行验证本轮继续跳过，仅做原生驱动（linux-debug
 预设，ASAN/UBSAN）下的完整 §10.7 测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-14)
+
+第一轮（上一节）确认零程序性 bug；本轮独立复核第一轮结论，并新增修复。
+
+### 新发现并修复的 bug
+
+- **AGENTS.md §7.106 第 4 种路径变体**：`cmds/apr/update.lpc` 的
+  `main()` 里 `present(file, environment(me))` 在 `environment(me)`
+  为 0 时崩溃（`*Bad argument 2 to present()`）。本库属于 ES II
+  wade/kxkj 血统，走的是 `apr` 而非 `wiz`/`adm`/`imm` 目录，是本项目
+  第一次在此路径命中该崩溃类。修复：
+  ```lpc
+  // 修复前
+  if ((obj = present(file, environment(me))) && interactive(obj))
+  // 修复后
+  if (environment(me) && (obj = present(file, environment(me))) && interactive(obj))
+  ```
+  已跨库扫描确认同一路径变体还命中 `kxkj1`、`kxkjii2`、
+  `njhhdxdes2hx`、`xbtxiii`（含本库共 5 库），随本库一并提交、已推送
+  （独立 commit `413ad703415`）。AGENTS.md §7.106 已补充"第 4 种路径
+  变体"小节记录这批库。
+- **`adm/simul_efun/file.lpc`**：两处既有类别的实例，本库此前未修：
+  1. `cat(string file, int trans)`（2 参数变体，本库特有签名）缺少
+     `read_file()` 空值防护，`read_file(file) || ""` 修复；
+  2. `log_file()` 缺少 `assure_file()` 目录预建保护，且其定义在
+     `assure_file()` 自身定义之前（本驱动不容忍前向调用未声明函数，
+     参见本 session 在 `dtsl` 上的发现），补上
+     `void assure_file(string file);` 前向声明 + `log_file()` 内的
+     `assure_file(LOG_DIR + file);` 调用。
+
+### 复核第一轮已有结论（独立验证，非盲信原记录）
+
+- 全库 grep `log_error(`/`logind.lpc` 两处 `printf` 分支：均已有正确
+  的错误级别门控与参数校验，无 §7.34/§8.9 已知类别的未修实例。
+- `config.fluffos` 的 `maximum evaluation cost` 为 `1500000`，高于本
+  项目已知的问题阈值（300000/700000），无 §7.90 类崩溃风险，无需调整。
+- 第一轮记录的"`fight` 对动物走真杀伤分支、对人形 NPC 走安全分支"现
+  象复核代码未变，`cmds/std/fight.lpc` 的 `can_speak` 分流逻辑与第一
+  轮描述一致，仍判定为既有设计，非 bug。
+
+### 现场验证
+
+驱动干净启动（PID 1630062，`linux-debug`/ASAN 预设），以管理员账号
+`fluffos`/`Mud@2026` 登录，确认 `目前权限 -> 【 天  帝 】(manager)`
+（角色所在地为第一轮死亡测试遗留的真实存档位置"阴曹入口"，非 bug）。
+用 `update /adm/daemons/logind` 验证真实写入权限（重编译成功，确认
+`file.lpc`/`update.lpc` 两处修复编译干净）；`update /cmds/apr/update`
+自我更新命令本身无可见输出（命令对象在执行中自毁重载的正常边界情
+况，非 bug，`debug.log` 确认编译无错误）。`debug.log` 由 570 行增至
+673 行，逐行核对零已知错误特征，仅编译期无害警告。两次快速重连（各
+自独立 `fluffos`/`Mud@2026` 登录）均正确显示
+`目前权限 -> 【 天  帝 】(manager)`，`quit` 产生正常告别横幅与断线
+提示。
+
+### 本轮修改的文件
+
+- `work/cmds/apr/update.lpc`
+- `work/adm/simul_efun/file.lpc`
