@@ -924,3 +924,38 @@ site) and `std/room.lpc:25` (`reset()`, the structural root).
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 23 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单发现并修复三处问题：
+
+1. **`config.fluffos`**：`maximum evaluation cost` 从 `400000`（已知
+   风险区间）提升到 `5000000`。
+2. **`adm/simul_efun/file.lpc`**：`log_file()` 没有 `assure_file()`
+   目录预建保护，补上调用及前向声明；`cat()` 补上
+   `read_file() || ""` 空值防护。
+3. **`obj/user.lpc::reconnect()`（AGENTS.md §7.108，第十三条独立确
+   认的血统——本档案是 xiyouji.org 大家族本身的祖先快照，§7.17/
+   §7.19 等多条既有条目的血统源头，这次在它自己身上也确认了同一类
+   bug）**：`adm/daemons/logind.lpc` 有同款 `exec(old_link, user);`
+   踢掉重复登录写法，`reconnect()` 缺少 `enable_commands()`。按
+   §7.108 记录的写法预防性修复，现场用两个真实连线复现"保持第一个
+   连线不断开→第二个连线登录→答 y 踢掉旧连线"验证：`score` 修复后
+   立即正常显示完整角色档案。
+
+`cmds/wiz/update.lpc`（§7.106）与 `master.lpc::log_error()`（§7.10
+的 `"arning:"` 大小写无关写法）均已是正确写法，均无需改动；本档案无
+`adm/daemons/closed.lpc`，不受 §7.107 影响。
+
+### 现场验证摘要
+
+驱动干净启动，管理员 `fluffos`/`Mud@2026` 登录（GB/BIG5 选择→未成
+年人关卡"no"→id+密码）确认 `目前权限：(admin)`，`update
+/adm/daemons/logind` 成功验证真实写入权限。踢掉重复登录重连路径现
+场验证通过（见上）。`debug.log` 全程干净（387 行，无真实错误）。
+
+### 本轮修改的文件
+
+- `config.fluffos`
+- `work/adm/simul_efun/file.lpc`
+- `work/obj/user.lpc`
