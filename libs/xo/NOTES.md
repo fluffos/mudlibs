@@ -667,3 +667,47 @@ triaged further as none are live/reachable.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 4 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单发现并修复四处问题：
+
+1. **`cmds/app/update.lpc`（AGENTS.md §7.106）**：完全没有
+   `environment(me)` 空值防护（`if (obj = present(file,
+   environment(me)))`），补上
+   `if (environment(me) && (obj = present(file, environment(me))))`。
+2. **`secure/sefun/file.lpc`**：`log_file()` 没有 `assure_file()`
+   目录预建保护，补上调用及前向声明；`cat()` 补上
+   `read_file() || ""` 空值防护。
+3. **`secure/daemon/master.lpc::log_error()`（AGENTS.md §7.10 大小写
+   坑的又一实例，与本轮在 `xlqy_new2007` 上发现的一样）**：
+   `strsrch(message, "warning: ")`（小写、带尾随空格）逐字节对不上
+   本驱动实际吐出的大写 `Warning: `，等于完全没有过滤——本档案这处
+   还额外没有 `wizardp()` 分流（对所有连线玩家一视同仁广播），改成
+   不含开头 w/W 的 `"arning:"` 子串匹配（§7.10 标准写法）后即可正常
+   过滤警告，未额外新增巫师分流（不在本轮范围内，且原代码本就没
+   有这层区分）。
+4. **`clone/user/user.lpc`、`clone/user/wizard.lpc` 的 `reconnect()`
+   （AGENTS.md §7.108，第十六条独立确认的血统）**：两个档案各自独
+   立定义 `reconnect()`（`wizard.lpc` 覆写而非继承 `user.lpc`），均
+   缺少 `enable_commands()`。`system/daemon/logind.lpc` 有同款
+   `exec(old_link, user);` 踢掉重复登录写法。按 §7.108 记录的写法
+   预防性修复两处，现场用两个真实连线复现"保持第一个连线不断开→
+   第二个连线登录→答 y 踢掉旧连线"验证：`score` 修复后立即正常显
+   示完整角色档案。
+
+### 现场验证摘要
+
+驱动干净启动，管理员 `fluffos`/`Mud@2026` 登录（回车进入→id+密码）
+成功进入游戏世界，`update /system/daemon/logind` 成功验证真实写入
+权限，现场未观察到编译警告泄漏（确认 log_error 修复生效）。踢掉重
+复登录重连路径现场验证通过（见上）。`debug.log` 全程干净（216 行，
+无真实错误）。
+
+### 本轮修改的文件
+
+- `work/cmds/app/update.lpc`
+- `work/secure/sefun/file.lpc`
+- `work/secure/daemon/master.lpc`
+- `work/clone/user/user.lpc`
+- `work/clone/user/wizard.lpc`
