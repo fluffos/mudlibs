@@ -771,3 +771,42 @@ per this pass's explicit scope, documented for a future content pass.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 27 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单发现并修复三处问题：
+
+1. **`adm/daemons/closed.lpc`（AGENTS.md §7.107，第三条独立确认的
+   血统）**：`load_all_users()` 的两处 `restore()` 调用没有
+   `catch()` 保护，结构与本 session 在 `nt1`/`shenmo` 发现的完全一
+   致。按 §7.107 记录的写法预防性修复
+   （`catch(ok = X->restore())` + `err || !ok` 判定）。
+2. **`adm/simul_efun/file.lpc`**：`log_file()` 没有 `assure_file()`
+   目录预建保护，补上调用及前向声明；`cat()` 补上
+   `read_file() || ""` 空值防护。
+3. **`clone/user/user.lpc::reconnect()`（AGENTS.md §7.108，第十四条
+   独立确认的血统）**：`adm/daemons/logind.lpc` 有同款
+   `exec(old_link, user);` 踢掉重复登录写法，`reconnect()` 缺少
+   `enable_commands()`。按 §7.108 记录的写法预防性修复，现场用两个
+   真实连线复现"保持第一个连线不断开→第二个连线登录→答 Y 踢掉旧连
+   线"验证：`look`/`score` 修复后立即正常响应（`score` 显示"还没有
+   出生呐"是本档案自己"注册未 register/born 前 score 内容受限"的既
+   有设计，不是指令派发失败——`look` 正常显示房间描述已确认指令派
+   发本身工作正常）。
+
+`cmds/wiz/update.lpc`（§7.106）与 `master.lpc::log_error()`（§7.10
+的 `"arning:"` 大小写无关写法）均已是正确写法，`maximum evaluation
+cost` 已经是 `5000000`，均无需改动。
+
+### 现场验证摘要
+
+驱动干净启动，管理员 `fluffos`/`Mud@2026` 登录（BIG5 询问答"N"→
+id+密码）确认 `您目前的权限是：(admin)`，`update /adm/daemons/
+logind` 成功验证真实写入权限。踢掉重复登录重连路径现场验证通过
+（见上）。`debug.log` 全程干净（488 行，无真实错误）。
+
+### 本轮修改的文件
+
+- `work/adm/daemons/closed.lpc`
+- `work/adm/simul_efun/file.lpc`
+- `work/clone/user/user.lpc`
