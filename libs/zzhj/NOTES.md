@@ -359,3 +359,46 @@ fixes in this pass are driver-behavior-general (eval-cost ceiling,
 missing-directory guard, `private`-visibility, two missing-function
 stubs, a dead reconnect-location-restore call) and apply identically
 under WASM once that build path is unblocked.
+
+## 深度功能测试第二轮 / Deep functional test round 2 (2026-08-15, post driver-upgrade re-test)
+
+Round-two re-verification against the current native `build-debug` driver
+(post-upgrade — pulls in PRs #1343/#1344 and the corpus-wide `%`-operator
+float-crash fix). Standard checklist + live playthrough-style verification.
+
+Findings:
+
+1. **AGENTS.md §7.108** (`obj/user.lpc`'s `reconnect()` missing
+   `enable_commands()`): this lib has the kick-duplicate-login pattern
+   (`adm/daemons/logind.lpc` calls `user->reconnect()` on the character
+   body). Fixed by adding `enable_commands();` as the first statement.
+   Live-verified with two concurrent telnet sessions: session 2 logged in
+   as `fluffos`, confirmed the "趕出去, 取而代之嗎? (y/n)" prompt with
+   `y`, and the resulting session correctly dispatched `look` (real room
+   description) and `score` (real stat panel).
+2. **AGENTS.md §7.10** (`adm/obj/master.lpc`'s `log_error()`): had no
+   compile-severity filter at all — every message, including routine
+   compile warnings, was unconditionally written to the admin's screen.
+   Added the standard `strsrch(message, "arning:") == -1` guard.
+3. **`adm/simul_efun/file.lpc`**: `cat()`'s `write(read_file(file))` had
+   no null-guard; changed to `write(read_file(file) || "")`. `log_file()`
+   already correctly called `assure_file()` first — no change needed
+   there.
+4. **Already correct, no change needed**: `cmds/wiz/update.lpc` (only
+   `update.lpc` in this lib) already guards with `environment(me) &&`.
+   No `adm/daemons/closed.lpc` exists, so AGENTS.md §7.107 does not
+   apply. `maximum evaluation cost` was already `5000000`.
+
+Live verification summary: booted the native driver on port 40099 (clean
+boot, only pre-existing unused-variable/unknown-pragma warnings, no
+fatals; `Initializations complete` / `Accepting telnet connections` both
+printed). Logged in as the seeded `fluffos` admin (`Mud@2026`), confirmed
+real write access via `update /adm/simul_efun/file` (recompiled
+successfully). Ran the two-session kick-duplicate-login reconnect test
+described above and confirmed the §7.108 fix live. No fatal errors in
+the driver's console output. Killed the driver by exact PID when done.
+
+本轮修改的文件 / Files modified this round:
+- `libs/zzhj/work/obj/user.lpc`
+- `libs/zzhj/work/adm/obj/master.lpc`
+- `libs/zzhj/work/adm/simul_efun/file.lpc`
