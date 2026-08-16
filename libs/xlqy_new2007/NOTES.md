@@ -431,3 +431,43 @@ not a fresh mystery).**
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 40 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单发现并修复四处问题：
+
+1. **`config.fluffos`**：`maximum evaluation cost` 从 `500000`（已知
+   风险区间）提升到 `5000000`。
+2. **`adm/obj/master.lpc::log_error()`（AGENTS.md §7.10 大小写坑的
+   又一实例）**：判定用的是 `strsrch(message, "warning: ")`（小写
+   w，且要求紧跟一个空格），而本驱动实际吐出的是大写
+   `Warning: Unused local variable` 一类文字，逐字节对不上，等于
+   完全没有过滤——每次惰性编译遇到警告都会把原始编译诊断广播给连
+   线玩家。改成不含开头 w/W 的 `"arning:"` 子串匹配（§7.10 记录的
+   标准写法，同时兼容大小写两种历史形态）。
+3. **`adm/simul_efun/file.lpc`**：`log_file()` 没有 `assure_file()`
+   目录预建保护，补上调用及前向声明；`cat()` 补上
+   `read_file() || ""` 空值防护。
+4. **`obj/user.lpc::reconnect()`（AGENTS.md §7.108，第十五条独立确
+   认的血统）**：`adm/daemons/logind.lpc` 有同款 `exec(old_link,
+   user);` 踢掉重复登录写法，`reconnect()` 缺少
+   `enable_commands()`。按 §7.108 记录的写法预防性修复，现场用两个
+   真实连线复现"保持第一个连线不断开→第二个连线登录→答 y 踢掉旧连
+   线"验证：`score` 修复后立即正常显示完整角色档案。
+
+`cmds/wiz/update.lpc`（§7.106）已经是正确写法，无需改动。
+
+### 现场验证摘要
+
+驱动干净启动，管理员 `fluffos`/`Mud@2026` 登录（GB/BIG5 选择→未成
+年人关卡"no"→id+密码）确认 `您的系统权限目前是：(admin)`，
+`update /adm/daemons/logind` 成功验证真实写入权限，现场未观察到编
+译警告泄漏（确认 log_error 修复生效）。踢掉重复登录重连路径现场验
+证通过（见上）。`debug.log` 全程干净（876 行，无真实错误）。
+
+### 本轮修改的文件
+
+- `config.fluffos`
+- `work/adm/obj/master.lpc`
+- `work/adm/simul_efun/file.lpc`
+- `work/obj/user.lpc`
