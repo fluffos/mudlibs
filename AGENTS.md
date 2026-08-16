@@ -6889,9 +6889,23 @@ that reuses the same account-age check — diff the two code paths' age
 check against what happens next. If the automatic path calls a
 `remove_user()`/delete-style function directly instead of falling
 through to the ordinary safe-disconnect save, it's destroying accounts
-that never got a chance to consent. Likely to recur across the whole
-ES2/nitan lineage family (any sibling with this same "new account
-retention" mechanic) — not yet swept, check on next contact.
+that never got a chance to consent.
+
+**Sweep completed 2026-08-16**: grepped every lib's `cmds/usr/quit.lpc`
+for a `force_quit()` containing both `mud_age` and `remove_user`
+(narrower and more reliable than a lineage-name assumption — see the
+§8.10 correction above for why lineage/grep-count alone isn't enough).
+7 libs matched and were confirmed by reading each `force_quit()` in
+full before editing: `nitan_ceshi`, `nt6nitan6win`, `ntii`, `nitan_san`,
+`nt6`, `nt1`, `nitan6`. Fixed identically on all 7 (removed the
+unconfirmed delete branch). Live-verified on `nitan_ceshi` specifically
+(registered a fresh account, called the real `user_dump(DUMP_NET_DEAD)`
+trigger via the wizard `call` command, confirmed both save files
+survived post-fix where they'd have been `rm()`d pre-fix); the other 6
+were textually diffed against the identical confirmed shape but not
+independently re-booted (`nt1` in particular has a pre-existing,
+already-documented unrelated CPU-pegging issue in its closed-cultivation
+daemon that makes a quick verification boot impractical — see §7.107).
 
 ### 7.105 A lib's own safe-sparring training-dummy NPC never sets the flag its shared `fight`/`hit` commands gate real-vs-mock combat on, so every "safe" spar routes through genuine lethal `kill_ob()` instead
 
