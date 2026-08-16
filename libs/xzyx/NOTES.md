@@ -413,3 +413,60 @@ previously on §8.3a's "affected so far" list; recommend adding it.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD`、`W_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 63 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round 2 (2026-08-15, post driver-upgrade re-test)
+
+Round-two re-verification against the current native `build-debug` driver
+(post-upgrade — pulls in PRs #1343/#1344 and the corpus-wide `%`-operator
+float-crash fix). Standard checklist + live playthrough-style verification.
+
+Findings:
+
+1. **AGENTS.md §7.108** (`clone/user/user.lpc`'s `reconnect()` missing
+   `enable_commands()`): this lib has the kick-duplicate-login pattern
+   (`exec(old_link` in both `adm/daemons/logind.lpc` and a stray unused
+   `u/lsg/logind.lpc` copy). `reconnect()` lacked `enable_commands()` as
+   its first statement, so a player confirming "y" to kick out their own
+   already-connected duplicate session would reconnect into a permanently
+   non-interactive character (every command silently no-ops). Fixed by
+   adding `enable_commands();` as the first line. Live-verified with two
+   concurrent telnet sessions: session 2 logged in as `fluffos`, got the
+   "赶出去，取而代之吗？(y/n)" prompt, confirmed `y`, and the resulting
+   session correctly dispatched `look` (real room description) and `score`
+   (real stat panel) — confirming the fix, not just a clean login.
+2. **`adm/simul_efun/file.lpc`**: `log_file()` wrote directly via
+   `write_file()` without ever calling `assure_file()` first, so the first
+   write to any not-yet-existing log path would silently fail. Added the
+   `assure_file(LOG_DIR + file)` call (plus a forward declaration, since
+   `assure_file()` is defined later in the file) — same shape as the
+   standard checklist fix applied across this window's other libs. Also
+   null-guarded `cat()`'s `write(read_file(file))` to `write(read_file(file)
+   || "")`.
+3. **AGENTS.md §7.106** (`cmds/ang/update.lpc`): `present(file,
+   environment(me))` was called without guarding `environment(me)` first;
+   added the `environment(me) &&` guard.
+4. **`config.fluffos`**: `maximum evaluation cost` was `1000000`, below
+   this project's standard safe value; raised to `5000000`.
+5. **Already correct, no change needed**: `adm/obj/master.lpc`'s
+   `log_error()` already uses the case-agnostic `"arning:"` substring match
+   (AGENTS.md §7.10) — no genuine bug here. No `adm/daemons/closed.lpc`
+   exists in this lib's tree, so AGENTS.md §7.107 does not apply.
+
+Live verification summary: booted the native driver on port 40002 (only
+pre-existing compile warnings, no fatals — one benign, self-limiting "Too
+deep recursion" during `httpd.lpc`'s optional load, caught by the driver's
+own recursion guard, does not block boot; `Initializations complete` /
+`Accepting telnet connections` both printed). Logged in as the seeded
+`fluffos` admin (`Mud@2026`), confirmed real write access via `update
+/adm/simul_efun/file` (recompiled successfully). Ran the two-session
+kick-duplicate-login reconnect test described above and confirmed the
+§7.108 fix live. No new errors surfaced in `log/debug.log` (unchanged from
+the prior pass — this driver instance didn't append fresh entries to it,
+console output captured separately showed nothing beyond pre-existing
+warnings). Killed the driver by exact PID when done.
+
+本轮修改的文件 / Files modified this round:
+- `libs/xzyx/work/clone/user/user.lpc`
+- `libs/xzyx/work/adm/simul_efun/file.lpc`
+- `libs/xzyx/work/cmds/ang/update.lpc`
+- `libs/xzyx/config.fluffos`
