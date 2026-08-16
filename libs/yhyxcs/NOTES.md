@@ -239,3 +239,65 @@ across all newly-added libs.
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 ES II 血统，独立档案（来自 2026-07-29 批量上传的 mudlib.rar）；游戏内重新包装成了银河英雄传说题材。之前一次会话对原生驱动的适配过程（记载在这份档案自己的 NOTES.md 里）已经修好了 master.lpc 的 create() 里那个会段错误的强制重新加载技巧、标准的 §8.1 GBK 字节区间 is_chinese()/check_legal_name() bug、/teature/ → /feature/ 的目录名拼写错误，以及 id_card.lpc 里一处 void 函式却 return 了值的编译错误，还播种了 fluffos (admin) 的 wizlist 条目——这些都没有在本轮重做。这次 WASM 修复覆盖了剩余的 §7.x 类检查：（1）三个碰 socket 的精灵（adm/daemons/ftpd.lpc、adm/daemons/network/ftpd.lpc、adm/daemons/network/dns_master.lpc）都完全处于休眠状态——在 adm/etc/preload 里被注释掉，而 DNS_MASTER 仅有的两个呼叫者（cmds/adm/shutdown.lpc、cmds/wiz/mudlist.lpc）都是巫师指令，已经带有 find_object() 检查保护——保持原样，不需要掏空。（2）master.lpc 的 valid_read() 本来就无条件回传 1（完全没有转发给 SECURITY_D，所以那种 new() 注册卡死的 bug 模式在这里不适用）；还是在 valid_write() 上加了标准的 'user == this_object()' 短路判断，和本次会话其它档案保持一致。（3）§7.50 类的 is_killing(object) 对 is_killing(string id) 修复了 cmds/std/surrender.lpc 里唯一一处呼叫点。is_chinese()/check_legal_name() 本来就已经正确（在更早的原生启动那一轮修好了，本轮没有重新处理）。原生启动那一轮留下的唯一悬而未决问题——securityd.lpc 的 valid_write() 里一个不会阻断的'Too deep recursion'，在每一次登录物件存档时都会通过 feature/dbase.lpc 的 default_ob 兜底链复现——在 WASM 下再次复现（错误签名/行号完全一致），依然只是外观问题：注册、进入游戏世界、以及 quit 都能围绕它正常完成。注册流程在格式化前后都用一个真实的中文名字完整验证过（id→y 确认→中文名字→密码+确认→电子邮件→性别→进入费沙中央宇宙港）。管理员权限已通过既有的 fluffos/Mud@2026 凭据确认：'目前权限：(admin)'。LPC 格式化工具对全部 834 个档案运行（写入 821 个，2 个转档之前就存在的错误，11 个未改动）。没有 :: 父类呼叫拆分命中，没有 case 标签带尾随注释的候选，没有 CJK 重新加空格/转义损坏命中。
+
+## 深度功能测试第二轮 / Deep functional test round 2 (2026-08-15, post driver-upgrade re-test)
+
+Round-two re-verification against the current native `build-debug` driver
+(post-upgrade — pulls in PRs #1343/#1344 and the corpus-wide `%`-operator
+float-crash fix). Standard checklist + live playthrough-style verification.
+
+Findings:
+
+1. **AGENTS.md §7.108** (`obj/user.lpc`'s `reconnect()` missing
+   `enable_commands()`): this lib has the kick-duplicate-login pattern
+   (`exec(old_link` in `adm/daemons/logind.lpc`, calling `user->reconnect()`
+   on the character body). `reconnect()` lacked `enable_commands()` as its
+   first statement, so confirming "y" to kick out an already-connected
+   duplicate session would reconnect into a permanently non-interactive
+   character. Fixed by adding `enable_commands();` as the first line.
+   Live-verified with two concurrent telnet sessions: session 2 logged in
+   as `fluffos`, confirmed the "赶出去，取而代之吗？(y/n)" prompt with `y`,
+   and the resulting session correctly dispatched `look` (real room
+   description) and `score` (real stat panel). Note: a separate, unrelated
+   `obj/connection.lpc` also defines a `reconnect()` with the same missing
+   shape, but it is dead code (not referenced anywhere else in the tree,
+   not part of the `logind.lpc` call path) — left untouched.
+2. **AGENTS.md §7.10** (`adm/obj/master.lpc`'s `log_error()`): had no
+   compile-severity filter at all — every message, including routine
+   compile warnings, was unconditionally written to the admin's screen via
+   `efun::write()`. Added the standard `strsrch(message, "arning:") == -1`
+   guard.
+3. **`adm/simul_efun/file.lpc`**: `cat()`'s `write(read_file(file))` had no
+   null-guard; changed to `write(read_file(file) || "")`. `log_file()`
+   already correctly called `assure_file()` first — no change needed there.
+4. **Already correct, no change needed**: `cmds/wiz/update.lpc` (only
+   `update.lpc` in this lib) already has the `environment(me) &&` guard.
+   No `adm/daemons/closed.lpc` exists in this lib's tree, so AGENTS.md
+   §7.107 does not apply. `maximum evaluation cost` was already
+   `5000000`.
+5. **Recurrence of a previously-documented cosmetic issue** (see this
+   NOTES.md's own WASM-pass section above): the non-blocking "Too deep
+   recursion" during `securityd.lpc`'s `valid_write()` → `feature/dbase.lpc`
+   `default_ob` fallback chain reproduced again on every login-object save
+   during this round's admin login (`program: /obj/login.lpc, object:
+   /obj/login#0, file: /obj/login.lpc:33`), exact same signature as
+   before. Confirmed again to be purely cosmetic — login, `update`,
+   the reconnect test, `look`, and `score` all completed normally around
+   it. Not re-chased, per the prior pass's own conclusion.
+
+Live verification summary: booted the native driver on port 40104 (clean
+boot, only pre-existing unused-variable warnings, no fatals;
+`Initializations complete` / `Accepting telnet connections` both printed).
+Logged in as the seeded `fluffos` admin (`Mud@2026`), confirmed real write
+access via `update /adm/simul_efun/file` (recompiled successfully). Ran
+the two-session kick-duplicate-login reconnect test described above and
+confirmed the §7.108 fix live. No new fatal errors in the driver's console
+output (the pre-existing `debug.log` file itself is stale, dating to an
+earlier pre-`.lpc`-conversion bring-up session — this boot's output was
+captured separately and showed nothing beyond the known cosmetic
+recursion note above). Killed the driver by exact PID when done.
+
+本轮修改的文件 / Files modified this round:
+- `libs/yhyxcs/work/obj/user.lpc`
+- `libs/yhyxcs/work/adm/obj/master.lpc`
+- `libs/yhyxcs/work/adm/simul_efun/file.lpc`
