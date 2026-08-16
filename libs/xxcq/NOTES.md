@@ -123,3 +123,53 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 20 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round two (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单发现并修复五处问题：
+
+1. **`config.fluffos`**：`maximum evaluation cost` 从 `700000`（已知
+   风险区间）提升到 `5000000`。
+2. **`cmds/ang/update.lpc`（AGENTS.md §7.106）**：缺少
+   `environment(me) &&` 前置防护，补上。
+3. **`adm/simul_efun/file.lpc`**：`log_file()` 没有 `assure_file()`
+   目录预建保护，补上调用及前向声明；`cat()` 补上
+   `read_file() || ""` 空值防护。
+4. **`adm/obj/master.lpc::log_error()`（AGENTS.md §7.10/§7.103）**：
+   `if (this_player(1)) efun::write(...)` 完全没有警告过滤门，任何
+   编译警告都会原样广播给连线玩家。补上
+   `strsrch(message, "arning:") == -1` 判定。
+5. **`clone/user/user.lpc::reconnect()`（AGENTS.md §7.108，第十八条
+   独立确认的血统）**：`adm/daemons/logind.lpc` 有同款
+   `exec(old_link, user);` 踢掉重复登录写法，`reconnect()` 缺少
+   `enable_commands()`。按 §7.108 记录的写法预防性修复，现场用两个
+   真实连线复现"保持第一个连线不断开→第二个连线登录→答 y 踢掉旧连
+   线"验证：`score` 修复后立即正常显示完整角色档案。
+
+### 方法论记录（非 bug）：既有 `fluffos` 账号密码未知，改用新账号测试
+
+与本 session 早前在 `sj` 上遇到的情况一样：已有存档的 `fluffos` 账
+号（第一轮用"临时密码"通过真实注册流程播种，但 NOTES.md 没有记录
+具体密码值）用标准密码 `Mud@2026` 登录失败。管理员授权在
+`securd.lpc::restore_list()` 里是纯代码层硬编码（`set("wiz_status/
+fluffos", "(admin)")`），不依赖密码正确与否。仿照 `sj` 的处理方
+式，新增一行 `set("wiz_status/fluffosb", "(admin)")`，用全新 id
+`fluffosb` 走真实注册流程验证（密码 `Mud@2026`），本轮所有测试均
+用这个新账号完成。原 `fluffos` 账号存档原样保留，未触碰。
+
+### 现场验证摘要
+
+驱动干净启动，`fluffosb` 走完整注册流程（GB 选择→id→中文名"秦
+风"→临时密码→天赋确认→性别）后确认 `目前权限：(admin)`，`update
+/adm/daemons/logind` 成功验证真实写入权限，现场未观察到编译警告
+泄漏（确认 log_error 修复生效）。踢掉重复登录重连路径现场验证通过
+（见上）。`debug.log` 全程干净（196 行，无真实错误）。
+
+### 本轮修改的文件
+
+- `config.fluffos`
+- `work/adm/daemons/securd.lpc`
+- `work/adm/obj/master.lpc`
+- `work/adm/simul_efun/file.lpc`
+- `work/cmds/ang/update.lpc`
+- `work/clone/user/user.lpc`
