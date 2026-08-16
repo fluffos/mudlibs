@@ -481,3 +481,64 @@ bug）→ 回到朱雀大街，找到一个游荡 NPC"疥顶小僧"，`kill` 触
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 43 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round 2 (2026-08-15, post driver-upgrade re-test)
+
+Round-two re-verification against the current native `build-debug` driver
+(post-upgrade — pulls in PRs #1343/#1344 and the corpus-wide `%`-operator
+float-crash fix). Standard checklist + live playthrough-style verification.
+
+Findings:
+
+1. **AGENTS.md §7.108** (`obj/user.lpc`'s `reconnect()` missing
+   `enable_commands()`): confirmed active `LOGIN_D` (`adm/daemons/logind.lpc`)
+   calls `user->reconnect()` on the character body after `exec(old_link,
+   user)`. Fixed by adding `enable_commands();` as the first statement.
+   Live-verified with two concurrent telnet sessions using this lib's
+   three-password wizard flow (login password `Mud@2026` then
+   wizard-only password `Wiz@2026`): session 2 confirmed the "赶出去，
+   取而代之吗？(y/n)" prompt with `y`, and the resulting session correctly
+   dispatched `look` (real room description) and `score` (real stat
+   panel). (An identically-shaped dead `obj/user2.lpc` — not referenced
+   anywhere outside the archive's `u/` stray-account tree, confirmed via
+   `include/globals.h`'s `USER_OB` define pointing only at `obj/user` —
+   was left untouched.)
+2. **AGENTS.md §7.106** (`present(file, environment(me))` missing the
+   `environment(me) &&` guard): this lib ships FOUR separate `update.lpc`
+   copies under different `cmds/<rank>/` directories. `cmds/imm/update.lpc`
+   and `cmds/wiz/update.lpc` already had the guard; `cmds/eld/update.lpc`
+   and `cmds/arch/UPDATE.lpc` did not — fixed both.
+3. **`adm/simul_efun/file.lpc`**: `log_file()` never called `assure_file()`
+   before `write_file()`; added the call (plus a forward declaration).
+   `cat()`'s `write(read_file(file))` had no null-guard; changed to
+   `write(read_file(file) || "")`.
+4. **`config.fluffos`**: `maximum evaluation cost` was `500000`, well
+   below this project's standard safe value; raised to `5000000`.
+5. **Already correct, no change needed**: `adm/obj/master.lpc`'s
+   `log_error()` already uses the case-agnostic `"arning:"` filter
+   (AGENTS.md §7.10). No `adm/daemons/closed.lpc` exists, so AGENTS.md
+   §7.107 does not apply.
+
+Live verification summary: booted the native driver on port 40071 (clean
+boot, only pre-existing unused-variable warnings, no fatals;
+`Initializations complete` / `Accepting telnet connections` both printed).
+Logged in as the seeded `fluffos` admin through this lib's three-password
+flow (`Mud@2026` then `Wiz@2026`), confirmed real write access via `update
+/adm/simul_efun/file` (recompiled successfully — the very first `update`
+attempt was silently absorbed by the post-login news pager/gift-menu
+sequence, a known pattern on this project; resending it at the settled
+prompt worked). Noted the "请选择你想重新设置哪一项天赋" gift-reroll
+prompt shown on every wizard login is a genuine pre-existing
+`d/wiz/init.lpc` feature shared across this lineage (confirmed via a
+corpus grep hitting several unrelated sibling libs), not a bug — answered
+`9`/`y` to keep the current values, matching normal play. Ran the
+two-session kick-duplicate-login reconnect test described above and
+confirmed the §7.108 fix live. No fatal errors in the driver's console
+output. Killed the driver by exact PID when done.
+
+本轮修改的文件 / Files modified this round:
+- `libs/zitengzhan/work/obj/user.lpc`
+- `libs/zitengzhan/work/cmds/eld/update.lpc`
+- `libs/zitengzhan/work/cmds/arch/UPDATE.lpc`
+- `libs/zitengzhan/work/adm/simul_efun/file.lpc`
+- `libs/zitengzhan/config.fluffos`
