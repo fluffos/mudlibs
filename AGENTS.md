@@ -3063,15 +3063,22 @@ test, not just code review), `hc`, `yxjh`, `xkyx3b`, `mnhf`,
 ob)` line duplicated across TWO parallel name-entry code paths —
 accept a system-suggested random name vs type your own — both landing
 right before the password prompt, both found and fixed together;
-`fy330`'s own sibling `fy2` carries the byte-identical line but was
-previously left unfixed as "harmless" — worth revisiting that call the
-next time `fy2` is touched, now that this round treats the pattern as
-a routine, safe-to-fix hit rather than a judgment call), `sanjieshenhua`, `ldtxii`,
+`fy330`'s own sibling `fy2` was previously documented as carrying the
+byte-identical line unfixed — **checked 2026-08-16 and found already
+clean**: `fy2`'s active `adm/daemons/logind.lpc` (confirmed via its own
+`LOGIN_D` define) has no `printf("%O` anywhere in `get_name()`/
+`get_resp()`; the line only survives in dead backup/legacy copies
+(`logindold.lpc`, `logind.BAK`, a stray `d/qianjin/npc/logind.lpc`),
+none of which are reachable. Stale claim corrected, no fix needed),
+`sanjieshenhua`, `ldtxii`,
 `yszz`, `mohuanshiji`, `jyqxc`, `syxjl`, and `gjzddmudda` (each the same
 bare `printf("%O\n", ob)`
-right before the Chinese-name is set — `ldtxii`'s sibling `ldtx` has
-the byte-identical line, unfixed; port the same one-line deletion
-there too when next touching that lib), `jyqxc2` (`jyqxc`'s own sibling
+right before the Chinese-name is set — `ldtxii`'s sibling `ldtx` was
+previously documented as carrying the byte-identical line unfixed, but
+**checked 2026-08-16 and found already clean** the same way as `fy2`
+above: the printf only survives in `ldtx`'s dead
+`logindnew.lpc`/`logind.ldj` copies, not the active `LOGIN_D`-defined
+`adm/daemons/logind.lpc`. Stale claim corrected, no fix needed), `jyqxc2` (`jyqxc`'s own sibling
 — §10.7 deep-dive found the two libs' `work/` trees are byte-identical
 apart from `logind.lpc` itself, i.e. `jyqxc2` was carrying `jyqxc`'s
 PRE-fix state of this exact file, printf and all; same one-line
@@ -3083,8 +3090,9 @@ sibling `jqxz2015` despite `jqxz2015`'s own content-lineage precedent
 (`jqxz2008`/`jqxz2008dlx`/`jqxz2008std`) NOT carrying the line at all,
 underscoring that even within one shared-engine family, individual
 archives can pick up or drop this class of leftover debug scaffolding
-independently — worth checking `jqxz2008std`/`jqxz2008dlx`'s own
-`get_name()` again the next time either is touched), and
+independently — `jqxz2008std`/`jqxz2008dlx`'s own `get_name()`
+**checked 2026-08-16: both already clean**, no `printf("%O` anywhere in
+their active `LOGIN_D`-defined `logind.lpc`), and
 noted-but-left-alone on
 `fy2` (a
 similar stray `printf` in `logind.lpc`, existing precedent from `zzfy`
