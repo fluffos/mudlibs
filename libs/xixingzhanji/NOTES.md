@@ -617,3 +617,35 @@ from every other lib checked this session. This lib's own prior WASM pass
 admin seed); the four fixes in this pass are driver-behavior-general
 (eval-cost ceiling, missing-directory guards, an `sscanf` argument typo)
 and apply identically under WASM once that build path is unblocked.
+
+## 深度功能测试第三轮 / Deep functional test round three (2026-08-15, post driver-upgrade re-test)
+
+驱动于 2026-08-12 升级后的重测。标准检查清单发现并修复一处问题：
+
+- **`obj/user.lpc::reconnect()`（AGENTS.md §7.108，第十二条独立确认
+  的血统——本档案与 shenzhou/shiji/shujian2008/shujian3/xianlvqiyuan
+  等血统均无关联，属于此 ES II 大家族自己的一条独立分支）**：
+  `adm/daemons/logind.lpc` 有同款 `exec(old_link, user);` 踢掉重复登
+  录写法，`reconnect()` 缺少 `enable_commands()`。按 §7.108 记录的写
+  法预防性修复，现场用两个真实连线复现"保持第一个连线不断开→第二
+  个连线登录→答 y 踢掉旧连线"验证：`score` 修复后立即正常显示完整
+  角色档案。
+
+`cmds/wiz/update.lpc`（§7.106）、`adm/simul_efun/file.lpc` 的
+`log_file()`（已有 `assure_file()`）、`master.lpc::log_error()`
+（§7.10 的 `"arning:"` 大小写无关写法）均已是正确写法，`maximum
+evaluation cost` 已经是 `5000000`（此前一轮 §7.90 修复），仅 `cat()`
+补上 `read_file() || ""` 空值防护；本档案无 `adm/daemons/closed.lpc`，
+不受 §7.107 影响。
+
+### 现场验证摘要
+
+驱动干净启动，管理员 `fluffos`/`Mud@2026` 登录（GB/BIG5 选择→未成
+年人关卡"no"→id+密码）确认 `目前权限：(admin)`，`update
+/adm/daemons/logind` 成功验证真实写入权限。踢掉重复登录重连路径现
+场验证通过（见上）。`debug.log` 全程干净（803 行，无真实错误）。
+
+### 本轮修改的文件
+
+- `work/adm/simul_efun/file.lpc`
+- `work/obj/user.lpc`
