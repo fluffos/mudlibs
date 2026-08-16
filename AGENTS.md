@@ -7296,18 +7296,28 @@ necessarily share the exact missing-`enable_commands()` gap).**
   one commit per lib. ~140 verified via a clean compile-check boot; ~22
   outliers (disproportionately slow or genuinely stalled preload —
   concentrated in a handful of large/slow-boot lineages: `dtxywzxzb`;
-  `kxkj`/`kxkjii2`; `mhxy`/`mhxyqd`; `sjcs`; the 5-way `sjsh*` family;
-  the 3-way `xiyouji200x` family; `xlqy_early` and siblings, later
-  confirmed to just be an unusually large lib rather than a distinct
-  bug; the 5-way `xyj200x` family) were committed source-level only —
-  the fix itself was already proven safe/idempotent across 24+
-  independently live-tested instances earlier in the campaign, so a
-  skipped boot check on these is not a quality gap. If any of these
-  outlier libs comes up for a real §10.7 pass later, the §7.108 fix can
-  be assumed already correct with no need to re-derive it; a couple of
-  the outlier notes (`kxkj`/`kxkjii2`'s shared clan-daemon stall, `sjcs`'s
-  `baoshi` query chain) flag a separate, real bug in that lineage that's
-  worth investigating on its own merits, not related to this fix.
+  `kxkj`/`kxkjii2`, later re-investigated and confirmed to be parallel-
+  boot resource contention, not a real hang (see below); `mhxy`/
+  `mhxyqd`; `sjcs`; the 5-way `sjsh*` family; the 3-way `xiyouji200x`
+  family; `xlqy_early` and siblings, also confirmed to just be an
+  unusually large lib rather than a distinct bug; the 5-way `xyj200x`
+  family) were committed source-level only — the fix itself was already
+  proven safe/idempotent across 24+ independently live-tested instances
+  earlier in the campaign, so a skipped boot check on these is not a
+  quality gap. If any of these outlier libs comes up for a real §10.7
+  pass later, the §7.108 fix can be assumed already correct with no need
+  to re-derive it. `sjcs`'s `baoshi` query-chain stall (see §7.108's
+  original outlier notes in project memory) has NOT been re-verified and
+  remains an open lead worth investigating on its own merits.
+- **`kxkj`/`kxkjii2` re-investigated (2026-08-16)**: both were flagged
+  above as a possible genuine hang in `adm/daemons/cland.lpc`'s
+  `create()` (shared clan-daemon preload path, both siblings stalled at
+  the same file). Re-booted each alone (no other drivers competing) and
+  both booted completely cleanly in under 20 seconds with zero errors —
+  `cland.lpc`'s `create()` is trivial (`seteuid()` + `restore()` against
+  a 9KB save file), nothing that could plausibly hang on its own. The
+  original stall was resource contention from booting many drivers in
+  parallel during the batch sweep, not a bug in either lib's own code.
 
 ---
 
