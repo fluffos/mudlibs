@@ -7306,9 +7306,7 @@ necessarily share the exact missing-`enable_commands()` gap).**
   earlier in the campaign, so a skipped boot check on these is not a
   quality gap. If any of these outlier libs comes up for a real §10.7
   pass later, the §7.108 fix can be assumed already correct with no need
-  to re-derive it. `sjcs`'s `baoshi` query-chain stall (see §7.108's
-  original outlier notes in project memory) has NOT been re-verified and
-  remains an open lead worth investigating on its own merits.
+  to re-derive it.
 - **`kxkj`/`kxkjii2` re-investigated (2026-08-16)**: both were flagged
   above as a possible genuine hang in `adm/daemons/cland.lpc`'s
   `create()` (shared clan-daemon preload path, both siblings stalled at
@@ -7318,6 +7316,29 @@ necessarily share the exact missing-`enable_commands()` gap).**
   a 9KB save file), nothing that could plausibly hang on its own. The
   original stall was resource contention from booting many drivers in
   parallel during the batch sweep, not a bug in either lib's own code.
+- **`sjcs` re-investigated (2026-08-16) — exposed a methodology bug in
+  the outlier-classification process itself.** Re-booted alone and the
+  log again went static right after an NPC error trace through
+  `adm/daemons/baoshi` — matching the original "stall" symptom. But
+  `/proc/PID/wchan` showed it idle in `ep_poll` (not spinning), `ss
+  -tlnp` showed it listening, `nc -zv` connected instantly, and a real
+  `scripts/tmux_mud.sh` telnet session received the full game banner and
+  login prompt — the driver had ALREADY finished booting successfully;
+  the redirected boot log just never flushed its final lines (C stdio is
+  fully-buffered, not line-buffered, when stdout isn't a TTY). Even
+  SIGTERM-killing the process afterward didn't recover the missing
+  lines (this build's crash handler appears to exit without flushing on
+  a fatal signal). **Conclusion: `wc -l`/`tail` staying flat on a
+  redirected boot log is NOT sufficient proof of a real stall** — an
+  actual connectivity check (`nc -zv`, ideally a live telnet session) is
+  required before concluding a hang. See
+  [[feedback_verify_stalls_with_connectivity_check]]. This means the
+  OTHER "genuinely stalled" outliers above (`dtxywzxzb`, `mhxy`/
+  `mhxyqd`, the `sjsh*` family, the `xiyouji200x` family, the `xyj200x`
+  family) were all classified via this same unreliable log-only method
+  and have NOT been re-verified with a connectivity check — treat their
+  "stalled" status as unconfirmed, not established fact, if any of them
+  comes up for a real pass later.
 
 ---
 
