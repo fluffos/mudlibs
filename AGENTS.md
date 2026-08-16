@@ -7767,7 +7767,7 @@ something the admin-seeding process introduces. (`xkm`, sibling of
 assume it's present just because two libs share the rest of their
 `logind.lpc`/`securityd.lpc` composition.)
 
-### 8.9 A food/water first-login initialization gate checks the wrong object's `age`, so it never fires for anyone
+### 8.9 A food/water first-login initialization gate checks the wrong object's `age`, so it never fires for anyone — corpus-wide sweep completed, 21 libs fixed total
 
 Found on `cctx`'s deep functional test (§10.7), second confirmed
 instance on `niaoren` (same session, found specifically because
@@ -7870,6 +7870,30 @@ showed food/water both stuck at empty pre-fix, both fully filled after
 the one-line `ob->query("age")` → `user->query("age")` fix, `update
 /adm/daemons/logind` hot-reloaded cleanly. Same session also removed
 the file's matching §7.34 `printf("%O\n", ob)` leak.
+
+**Corpus sweep completed (2026-08-16)**: the 10 instances above were all
+found opportunistically across unrelated sessions, never via a scoped
+search — well past this project's "3+ independent lineages → sweep"
+threshold. A corpus-wide `grep -rl 'ob->query("age") *== *14'` across
+every lib's active `adm/daemons/logind.lpc` found 11 more unfixed
+instances, all fixed identically: `hyiishzdscbb`, `chidi`, `fqyy2`,
+`shiji`, `haiyang2`, `hy5`, `xajhzcjh`, `hc`, `xiakexing100`, `xxcqii`,
+`xxcqii2`. A broader whole-tree grep for the same pattern also surfaced
+several look-alike hits that were checked and confirmed NOT this bug —
+`ob->query("age")` inside `updated.lpc`'s periodic account-migration
+`check_user(object ob)` (single-parameter function, `ob` there IS the
+actual player, not a login stub — used correctly for an age-tiered
+money-limit calculation) and the same pattern in a few `score.lpc`/
+`score2.lpc`/`xscore.lpc` display commands (`hy2000`, `hy2002`, `hy5`,
+`hymud`) — both are a different, unrelated meaning of "age" and were
+left untouched. The rest of the wider grep's hits were all dead/backup
+copies (`.bak`, dated snapshots, personal `.ivan`/`.snow` variants, or
+stray per-user `u/*` trees) rather than each lib's actual active
+`logind.lpc`, confirmed via each file's path shape, not touched. All 11
+fixed libs verified via compile-check boot only (driver up cleanly,
+port listening, no new `debug.log` errors) — not individually live-
+tested end-to-end, matching this project's established "mechanical,
+well-understood, single-shape sweep" verification bar.
 
 ### 8.10 A retry re-prompt after the version-handshake gate loops back to the wrong `input_to` callback, so a real player's SECOND login attempt gets falsely accused of using an unsupported client and disconnected
 
