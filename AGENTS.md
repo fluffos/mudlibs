@@ -2613,10 +2613,20 @@ self-rescheduling `call_out` chain needs EXACTLY one registration
 guaranteed per invocation, on every exit path, including error paths.
 
 Lineages likely affected: any lib with a copy-pasted "guide escorts a
-new player through scripted rooms" NPC pattern —
-`bmxkx2001` (documented sibling of `xkx2001`) carries a
-byte-identical, unfixed copy of the vulnerable file; check any other lib
-sharing this ES2 island-onboarding lineage for the same shape.
+new player through scripted rooms" NPC pattern — this project's own
+`d/xiakedao/npc/longx.lpc` guide file.
+
+**Sweep completed 2026-08-16.** `bmxkx2001` — previously documented
+here as an unfixed sibling — was checked and found to ALREADY carry the
+fix (correcting a stale claim in an earlier version of this entry; the
+fix must have been applied in a session after the original write-up but
+before this correction). `find … -path '*/d/xiakedao/npc/longx.lpc'`
+across the whole corpus turned up 7 total copies: `xkx2001` (original
+fix) and `bmxkx2001` (already fixed) plus 5 genuinely unfixed siblings —
+`shenzhou`, `xkx2000zxb`, `xkm`, `jym`, `xuanjianlu` — each diffed
+byte-for-byte against the vulnerable shape (not assumed from lineage
+alone) before applying the identical fix. Compile-check verified (clean
+boot, no fatals) on all 5.
 
 ### 7.24 Death/reincarnation code silently overwrites the permanent login-location field
 
