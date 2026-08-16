@@ -7084,7 +7084,7 @@ form as of this sweep).
   not yet found; check whichever directory a lib's own wizard-level
   commands actually live in if none of these four exist.
 
-### 7.107 An offline-cultivation daemon's unbounded, uncaught `restore()` on every account in its retry queue causes a multi-hour driver CPU stall and silently rewrites hundreds of real player save files — NT/nitan lineage, confirmed on 7 libs
+### 7.107 An offline-cultivation daemon's unbounded, uncaught `restore()` on every account in its retry queue causes a multi-hour driver CPU stall and silently rewrites hundreds of real player save files — NT/nitan lineage, confirmed on 7 libs, corpus-wide sweep completed on 29 more (36 total)
 
 **File:line: `adm/daemons/closed.lpc`'s `load_all_users()`, both
 `login_ob->restore()` and `user_ob->restore()` calls (around line
@@ -7194,6 +7194,30 @@ sibling snapshots of this lineage: `nitan6`, `nitan170911`, `hhsj`,
   the exposure is live regardless of whether a corrupted account has
   been hit yet. Any future NT/nitan-lineage lib should be checked for
   this file/pattern as a standard part of its own §10.7 pass.
+- **Corpus sweep completed (2026-08-16)**: a corpus-wide
+  `find … -name closed.lpc -path '*/adm/daemons/*'` (39 total hits) plus
+  a manual read of each candidate's `load_all_users()` (not grep alone —
+  see the §8.10 lesson below on why hit-count matching isn't sufficient)
+  found 29 more libs beyond the original 7 carrying the identical
+  unguarded-`restore()` shape, all now fixed with the same
+  `catch()`-wrap: `nt6`, `xiyouji2003`, `zjdywzb`, `yanhuangwuhun`,
+  `nitan_san`, `tybxjh`, `zjdy2008wzb`, `zxty`, `fyzfqyy`, `sjshv150`,
+  `nt6nitan6win`, `yhyxs`, `xyj20032`, `yxjh`, `zhonghua2`, `xkxc98sj`,
+  `wdxtym`, `chidi`, `wxddym`, `zjdyzj`, `zjmudhell`, `nitan_ceshi`,
+  `sjshv2578bb`, `zhongjidiyu`, `zxty08nxgbb`, `yhwhpublicfi`, `hell`,
+  `yxcs`, `wlhd`. Every candidate's `load_all_users()` was read in full
+  before patching to confirm the exact vulnerable shape (identical
+  `void load_all_users() { string u; object login_ob; object user_ob;`
+  locals block, `if (!login_ob->restore())` / `if (!user_ob->restore())`
+  with no `catch()`) rather than trusting a lineage-name or grep-hit-count
+  assumption. About a third of the files use CRLF line endings; the fix
+  script was made encoding-aware (detects `\r\n` vs `\n` per-file and
+  builds matching patterns) after two early attempts (`xiyouji2003`,
+  `zjdywzb`) failed silently against literal-`\n` patterns on CRLF files.
+  All 29 verified via compile-check boot only (driver up cleanly, port
+  listening, no new `closed.lpc`-related `debug.log` errors); this
+  matches the established "mechanical, well-understood, single-shape
+  sweep" verification bar, not individual live end-to-end testing.
 
 ### 7.108 The "kick out an already-connected duplicate login" reconnect path leaves the character permanently unable to receive ANY command — genuinely reachable (client crash + immediate relogin), only found by testing this specific reconnect variant, not the more commonly-tested net-dead-timeout one
 
