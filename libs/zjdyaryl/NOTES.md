@@ -705,3 +705,61 @@ WASM-enablement pass (2026-07, above) already covers WASM-specific gates
 in this pass (`eval_function` visibility, eval-cost ceiling) are
 driver-behavior-general and apply identically under WASM once it's
 buildable again in this environment.
+
+## 深度功能测试第二轮 / Deep functional test round 2 (2026-08-15, post driver-upgrade re-test)
+
+Round-two re-verification against the current native `build-debug` driver
+(post-upgrade — pulls in PRs #1343/#1344 and the corpus-wide `%`-operator
+float-crash fix). Standard checklist + live playthrough-style verification.
+The prior pass's own reconnect test only covered the link-dead/wall-clock-
+gap path, not the kick-duplicate-login confirmation path — this round adds
+that.
+
+Findings:
+
+1. **AGENTS.md §7.107** (`adm/daemons/closed.lpc`'s `load_all_users()`
+   calling `login_ob->restore()`/`user_ob->restore()` with no `catch()`
+   guard): a corrupted closed-cultivation account's save data would throw
+   uncaught, aborting the whole `heart_beat()` tick before the cleanup
+   (`destruct()`+`map_delete()`) runs, and retrying forever. Fixed by
+   wrapping both `restore()` calls in `catch()` with an `ok` flag, same
+   pattern as the other confirmed instances of this class this window.
+2. **AGENTS.md §7.108** (`clone/user/user.lpc`'s `reconnect()` missing
+   `enable_commands()`): confirmed active `LOGIN_D` (`adm/daemons/logind.lpc`)
+   calls `user->reconnect()` on the character body after `exec(old_link,
+   user)`. Fixed by adding `enable_commands();` as the first statement.
+   Live-verified with two concurrent telnet sessions: session 2 logged in
+   as `fluffos` (this lib's regular login password `Mud@2026`), confirmed
+   the "赶出去，取而代之吗？(y/n)" prompt with `y`, and the resulting
+   session correctly dispatched `look` (real room description). `score`
+   returned "还没有出生呐" — expected content-gated response for this
+   still-unregistered admin account (not a bug; same pattern as
+   previously confirmed on sibling lib xkxz2), confirmed harmless by
+   cross-checking with `look`.
+3. **`adm/simul_efun/file.lpc`**: `log_file()` never called `assure_file()`
+   before `write_file()`; added the call (plus a forward declaration).
+   `cat()`'s `write(read_file(file))` had no null-guard; changed to
+   `write(read_file(file) || "")`.
+4. **Already correct, no change needed**: `cmds/wiz/update.lpc` already
+   guards with `environment(me) &&`. `adm/single/master.lpc`'s
+   `log_error()` already uses the case-agnostic `"arning:"` filter
+   (AGENTS.md §7.10). `maximum evaluation cost` was already `5000000`
+   (raised in an earlier pass per this NOTES.md's own §8.3a section).
+
+Live verification summary: booted the native driver on port 40073 (the
+known-harmless, previously-documented `versiond.lpc socket_bind()`
+argument-type error fired again at boot as expected, non-fatal;
+`Initializations complete` / `Accepting telnet connections` both
+printed). Logged in as the seeded `fluffos` admin (`Mud@2026`), confirmed
+real write access via `update /adm/simul_efun/file` (recompiled
+successfully). Ran the two-session kick-duplicate-login reconnect test
+described above and confirmed the §7.108 fix live — this specific path
+(distinct from the link-dead reconnect this lib's earlier passes already
+covered) had not been exercised before. No new error classes in
+`log/debug.log` beyond the known `versiond`/boot-time line. Killed the
+driver by exact PID when done.
+
+本轮修改的文件 / Files modified this round:
+- `libs/zjdyaryl/work/adm/daemons/closed.lpc`
+- `libs/zjdyaryl/work/clone/user/user.lpc`
+- `libs/zjdyaryl/work/adm/simul_efun/file.lpc`
