@@ -2738,9 +2738,17 @@ Fix: capture only the first segment after `/u/`
 first-segment discipline the rest of the function already uses for
 other root directories.
 
-Lineages likely affected: `mhxyqd`, `xyj2000f`,
-`xiyouji2003`, `xiyouji2006` (confirmed via grep to carry identical
-code, not yet fixed there — out of scope for the pass that found this).
+**Sweep completed 2026-08-16**: `mhxyqd`, `xyj2000f`, `xiyouji2003`,
+`xiyouji2006` all confirmed to carry the identical 3-segment `sscanf`
+shape via direct code read (not just grep) in their active
+`file_owner()` (each lib's `#include` chain in `adm/obj/simul_efun.lpc`
+traced to confirm `adm/simul_efun/object.lpc` is the live file, same as
+on `mhxy`). Fixed identically on all 4. Not independently re-booted for
+live verification (all 4 are already-known slow/stalled-boot outliers
+from this session's §7.108 sweep — `mhxyqd`/`xiyouji2006` slow-but-
+progressing, `xyj2000f`/`xiyouji2003` genuinely stalled); the fix itself
+was already proven correct via a live boot-diagnostic reproduction on
+`mhxy`.
 
 ### 7.27 (RETRACTED — false positive, see §10.7's scope note) A time-gated transit room deleting its exit on window-close
 
