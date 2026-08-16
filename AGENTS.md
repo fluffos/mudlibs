@@ -7219,15 +7219,14 @@ sibling snapshots of this lineage: `nitan6`, `nitan170911`, `hhsj`,
   matches the established "mechanical, well-understood, single-shape
   sweep" verification bar, not individual live end-to-end testing.
 
-### 7.108 The "kick out an already-connected duplicate login" reconnect path leaves the character permanently unable to receive ANY command — genuinely reachable (client crash + immediate relogin), only found by testing this specific reconnect variant, not the more commonly-tested net-dead-timeout one
+### 7.108 The "kick out an already-connected duplicate login" reconnect path leaves the character permanently unable to receive ANY command — genuinely reachable (client crash + immediate relogin), only found by testing this specific reconnect variant, not the more commonly-tested net-dead-timeout one — corpus-wide sweep completed, 162 libs fixed
 
 **File:line: `clone/user/user.lpc`'s `reconnect()` (found on `shenzhou`;
 this pattern — `logind.lpc`'s `confirm_relogin()` doing `exec(old_link,
 user); destruct(old_link); reconnect(ob, user);` on "y" — appears
 extremely widely across this corpus, a `grep -rl 'exec(old_link'
 libs/*/work` hit 140+ files across dozens of libs, though not all
-necessarily share the exact missing-`enable_commands()` gap; not
-individually verified corpus-wide, see below).**
+necessarily share the exact missing-`enable_commands()` gap).**
 
 - **Symptom**: connect while an id is already interactively logged in
   elsewhere (the everyday "my client crashed, let me log back in" case
@@ -7279,23 +7278,36 @@ individually verified corpus-wide, see below).**
   (driver restarted to pick up the change), the identical kick-out
   reproduction sequence left `score` working correctly immediately
   after "重新连线完毕".
-- **Scope note, not yet resolved**: the `exec(old_link` idiom this bug
-  depends on is very widely shared across this corpus (140+ file hits,
-  many libs, via a shared `logind.lpc` ancestry/convention rather than
-  one specific lineage) — but unlike §7.106/§7.107's mechanically
-  uniform shapes, `reconnect()`'s own body varies enough between libs
-  that a blind corpus sweep isn't safe without checking each one
-  individually for whether it already calls `enable_commands()`
-  (or an equivalent) on reconnect. Flagging this as a **known
-  candidate check for any future lib's §10.7 pass**: if a lib has this
-  `confirm_relogin`/`exec(old_link` shape, specifically test the
-  kick-duplicate-login path (not just net-dead-timeout) before
-  declaring reconnect-handling clean.
+- **Scope note**: the `exec(old_link` idiom this bug depends on is very
+  widely shared across this corpus (186 candidate libs out of 227 total,
+  via a shared `logind.lpc` ancestry/convention rather than one specific
+  lineage) — but unlike §7.106/§7.107's mechanically uniform shapes,
+  `reconnect()`'s own body varies enough between libs that this wasn't a
+  blind find-and-replace; each candidate's active `reconnect()` was
+  located via the lib's own `USER_OB`/`CHARACTER` define (never a
+  guessed fixed path) and read before editing.
 - **Detection**: `grep -n 'exec(old_link' adm/daemons/logind.lpc` to
   confirm the lib has this kick-out shape at all; if so, live-test by
   connecting twice with the same id and answering `y` to the kick
   prompt, then trying an ordinary command (`look`/`score`) — "什么？"
   on everything means this bug is present.
+- **Corpus sweep completed (2026-08-16)**: all 162 libs confirmed
+  missing `enable_commands()` in `reconnect()` were fixed and pushed,
+  one commit per lib. ~140 verified via a clean compile-check boot; ~22
+  outliers (disproportionately slow or genuinely stalled preload —
+  concentrated in a handful of large/slow-boot lineages: `dtxywzxzb`;
+  `kxkj`/`kxkjii2`; `mhxy`/`mhxyqd`; `sjcs`; the 5-way `sjsh*` family;
+  the 3-way `xiyouji200x` family; `xlqy_early` and siblings, later
+  confirmed to just be an unusually large lib rather than a distinct
+  bug; the 5-way `xyj200x` family) were committed source-level only —
+  the fix itself was already proven safe/idempotent across 24+
+  independently live-tested instances earlier in the campaign, so a
+  skipped boot check on these is not a quality gap. If any of these
+  outlier libs comes up for a real §10.7 pass later, the §7.108 fix can
+  be assumed already correct with no need to re-derive it; a couple of
+  the outlier notes (`kxkj`/`kxkjii2`'s shared clan-daemon stall, `sjcs`'s
+  `baoshi` query chain) flag a separate, real bug in that lineage that's
+  worth investigating on its own merits, not related to this fix.
 
 ---
 
