@@ -7787,12 +7787,30 @@ registration.
 Detection: grep any Tomud/xiyouji.org-lineage `logind.lpc` for
 `input_to("get_id", ob)` outside the single legitimate call site right
 after the version-handshake banner — any OTHER call reaching that same
-function is this bug. Confirmed present with the identical
-line-for-line shape (three occurrences, same relative positions, third
-one commented out) in **three sibling libs not yet given this fix**:
-`mhxy`, `mhxyqd`, `shenmo` — check and apply the same two-line change
-the next time any of those is touched, rather than rediscovering this
-from scratch.
+function is this bug, **but only if a distinct `get_id1()` function
+actually exists in that lib** (see correction below).
+
+**Correction (2026-08-16): `mhxy`/`mhxyqd`/`shenmo` do NOT have this
+bug — do not apply the fix there.** An earlier version of this entry
+claimed these three sibling libs had "the identical line-for-line
+shape" and needed the same `get_id` → `get_id1` change based on a grep
+match on `input_to("get_id", ob)`'s occurrence count/positions alone.
+That grep was a false positive: none of the three actually define a
+`get_id1()` function anywhere in `logind.lpc` (checked via `grep -n
+"void get_id"` — only `get_id()` itself exists, at both the forward
+declaration and the definition). These libs never had the two-tier
+`get_id`/`get_id1` split that `xiyouji2006` has; their `input_to(
+"get_id", ob)` retry calls are already correct as-is. Applying the
+documented fix here was tried and immediately caught live: the retry
+prompt after an invalid ID accepted input but the driver silently
+failed to bind the callback (no such function), so the next several
+keystrokes fell through to the default in-game command parser instead
+of continuing registration ("指令錯誤，請輸入 help cmds..." on totally
+unrelated input) — a real regression, reverted before commit.
+**Lesson: grep hit-count/position matching alone is not enough to
+confirm this bug on a new lib — always also confirm a distinct
+`get_id1()` definition exists before assuming the `xiyouji2006` fix
+applies.**
 
 ### 8.11 A macro reference embedded literally inside a multi-line `@TEXT` string block never gets expanded, so its literal name leaks straight to every player
 
