@@ -698,3 +698,52 @@ No other scratch/diagnostic files were created outside `/tmp` (removed).
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD`、`BULLE_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 39 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / Deep functional test round 2 (2026-08-15, post driver-upgrade re-test)
+
+Round-two re-verification against the current native `build-debug` driver
+(post-upgrade — pulls in PRs #1343/#1344 and the corpus-wide `%`-operator
+float-crash fix). Standard checklist + live playthrough-style verification.
+
+Findings:
+
+1. **AGENTS.md §7.108** (`obj/user.lpc`'s `reconnect()` missing
+   `enable_commands()`): this lib has the kick-duplicate-login pattern
+   (`adm/daemons/logind.lpc` calls `user->reconnect()` on the character
+   body after `exec(old_link, user)`). Fixed by adding `enable_commands();`
+   as the first statement. Live-verified with two concurrent telnet
+   sessions: session 2 logged in as `fluffos`, confirmed the "赶出去，
+   取而代之吗？(y/n)" prompt with `y`, and the resulting session correctly
+   dispatched `look` (real room description) and `score` (real stat
+   panel). (Other `exec(old_link`/`reconnect()` copies under `www/cgi-bin`,
+   `www/relative`, and `u/yxm/obj/logind.lpc` are stray/dead per-user or
+   web-tree copies, not the active `LOGIN_D` — confirmed via
+   `include/globals.h`'s `LOGIN_D` define — left untouched.)
+2. **`adm/simul_efun/file.lpc`**: `log_file()` never called `assure_file()`
+   before `write_file()`; added the call (plus a forward declaration).
+   `cat()`'s `write(read_file(file))` had no null-guard; changed to
+   `write(read_file(file) || "")`.
+3. **Already correct, no change needed**: `cmds/wiz/update.lpc` (only
+   `update.lpc` in this lib) already guards with `environment(me) &&`.
+   `adm/obj/master.lpc`'s `log_error()` already uses the case-agnostic
+   `"arning:"` filter (AGENTS.md §7.10). No `adm/daemons/closed.lpc`
+   exists, so AGENTS.md §7.107 does not apply. `maximum evaluation cost`
+   was already `30000000`.
+
+Live verification summary: booted the native driver on port 40048 (clean
+boot aside from pre-existing unused-variable/unknown-pragma warnings, no
+fatals; `Initializations complete` / `Accepting telnet connections` both
+printed). Logged in as the seeded `fluffos` admin (`Mud@2026`, via the
+`gb`-encoding prompt then the internal-network "还有好多工作没有做完？"
+gate answered `no`), confirmed real write access via `update
+/adm/simul_efun/file` (recompiled successfully). The lib's own boot-warning
+notifier ("有新文件update错误，立即查看 /log/log") fired as expected —
+checked `/log/log`, confirmed it's just the routine pre-existing compile
+warnings, not a new error. Ran the two-session kick-duplicate-login
+reconnect test described above and confirmed the §7.108 fix live. No
+fatal errors in the driver's console output. Killed the driver by exact
+PID when done.
+
+本轮修改的文件 / Files modified this round:
+- `libs/yueyingqiyuan/work/obj/user.lpc`
+- `libs/yueyingqiyuan/work/adm/simul_efun/file.lpc`
