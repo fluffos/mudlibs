@@ -7331,14 +7331,28 @@ necessarily share the exact missing-`enable_commands()` gap).**
   a fatal signal). **Conclusion: `wc -l`/`tail` staying flat on a
   redirected boot log is NOT sufficient proof of a real stall** — an
   actual connectivity check (`nc -zv`, ideally a live telnet session) is
-  required before concluding a hang. See
-  [[feedback_verify_stalls_with_connectivity_check]]. This means the
-  OTHER "genuinely stalled" outliers above (`dtxywzxzb`, `mhxy`/
-  `mhxyqd`, the `sjsh*` family, the `xiyouji200x` family, the `xyj200x`
-  family) were all classified via this same unreliable log-only method
-  and have NOT been re-verified with a connectivity check — treat their
-  "stalled" status as unconfirmed, not established fact, if any of them
-  comes up for a real pass later.
+  required before concluding a hang.
+- **Full re-verification completed (2026-08-16): every "genuinely
+  stalled" outlier from this sweep is now confirmed a false positive.**
+  Individually re-booted and connectivity-checked (raw-socket probe,
+  then a real `scripts/tmux_mud.sh` telnet session confirming an actual
+  game banner and working login prompt) — the entire `xiyouji200x`
+  family (`xiyouji2003`, `xiyouji2006`, `xiyouji450`) and the entire
+  `xyj200x` family (`xyj2000`, `xyj20032`, `xyj2006n`, `xyj2006zzzhx`)
+  all came up completely healthy and serving real login prompts (some
+  in under 20 seconds; `xiyouji2006` took ~12 minutes but was genuinely
+  progressing the whole time — 45s sampling windows just made slow
+  growth look flat). Combined with `sjcs`/`kxkj`/`kxkjii2` above, no lib
+  in this project has EVER been confirmed to have a real hang bug behind
+  a "stalled boot" classification — it's always been either resource
+  contention from parallel boots or this stdio-buffering artifact. The
+  remaining `dtxywzxzb`/`mhxy`/`mhxyqd`/`sjsh*` family were only ever
+  classified as "slow but progressing" (never "stalled"), which per this
+  now-consistent pattern (and the `xlqy_early` precedent) is almost
+  certainly the same "ordinary large lib, slow cold-preload" story, not
+  a bug — no further action needed on any of them. See
+  [[feedback_verify_stalls_with_connectivity_check]] for the standing
+  methodology lesson this uncovered.
 
 ---
 
