@@ -80,3 +80,51 @@ bug（与 hhsj 逐字节相同的 `log_error()` 严重度门控缺失、与 ntii
 同样自愈、判定为同一根因。测试账号
 （`qinfengjiu`/`qinfenger`/`qinfengshi`/`qinfengba`）存档留在 `data/`
 下作为佐证，未清理（未跟踪文件，不纳入本次提交）。
+
+## 深度功能测试（2026-08-17，round three）——上一轮"自愈"结论被推翻
+
+上一轮把冷启动 eval-cost 级联归类为"验证自愈"（靠存档幸存作为证据）。
+这一轮真正把新角色一路测到能正常下达指令，发现"自愈"结论低估了严重
+性，找到并修复了两个真实 bug：
+
+1. **AGENTS.md §7.109（跨库扫描）**：`logind.lpc` 的 `get_gender()` 未加
+   `catch()` 呼叫 `init_new_player(user)`，其后紧接的
+   `waiting_enter_world(ob, user)`（真正设置出生点/开启指令派发的那一
+   步）。`init_new_player()` 内部的 `CHANNEL_D->query_default_channel(...)`
+   在冷启动时会强制首次编译 `channeld.lpc`，若撞上 eval-cost 上限就会
+   未捕获地抛出，导致角色永久卡在"已登录但没有环境、没有指令派发"的
+   状态——`look` 等任何指令都只返回"什么？"，且**永远不会有存档**（比
+   上一轮记录的"自愈"更严重，account 甚至没能落盘过）。修复：
+   `catch(init_new_player(user))`。此形状在另外 112 个档案里逐字节相
+   同，已跨库批量修复（AGENTS.md §7.109）。
+2. **`maximum evaluation cost` 700000 不足以撑过本档案的冷启动级联**：
+   即使套用 §7.109 的 `catch()` 修复后，同一驱动进程里**第一个**注册的
+   角色仍然在 `/feature/command.lpc` 自身的编译过程中（即 `add_action()`
+   指令注册所在的那份档案）撞上 `Eval interrupted: ... cost limit
+   reached`——这条路径完全在 §7.109 的 `catch()` 范围之外（发生在
+   `logind.lpc` 调用链之外，是驱动装载 `char.lpc` 继承链时的编译期开
+   销），角色一样卡死在无指令派发状态，`look` 依旧"什么？"。修复：把
+   `config.fluffos` 的 `maximum evaluation cost` 从 `700000` 提到
+   `5000000`（AGENTS.md §7.90 的标准补救值，本项目 30+ 档案已使用）。
+   **现场验证**：重开一个全新驱动进程，第一次注册（`qinteste`）在拉高
+   eval-cost 前必现同样的"什么？"卡死；拉高后重开驱动，同一批第一次
+   注册干净走完（`look` 正确显示"泥潭注册室"，`debug.log` 全程零
+   `cost limit reached`）。上一轮"自愈"的判断标准（存档能幸存）不够
+   充分——本轮才发现最坏情况是"连存档都没有"，必须真正拉高上限。
+3. **`cmds/std/say.lpc` 对 NPC 触发的 `say` 未加保护**：出生仪式的
+   `pangu`（盘古）NPC 通过 `command("say ...")` 以自己的身份触发 `say`
+   命令，但 `say.lpc` 的广播行无条件 `capitalize(query("id", me))`——
+   NPC 从不设置 `"id"`（这是玩家专属属性），导致 `capitalize(0)` 崩溃
+   （被驱动的 mudlib 错误处理器捕获、降级为玩家可见的"发现了臭虫"提
+   示，不阻断后续流程，但确实是一个真实、可复现的类型错误）。修复：
+   `stringp(query("id", me)) ? capitalize(...) : "?"`，与本项目对同类
+   `capitalize(query("id"))` 问题的一贯处理方式一致（AGENTS.md
+   §7.7）。只在本档案修复，未跨库扫描（触发条件依赖"NPC 用
+   `command()` 主动触发 `say`"这个具体交互，未确认是否在其它档案里也
+   存在，留给未来遇到时再核实，不盲目套用）。
+
+完整验证了注册 → 出生仪式（盘古对话、`choose` 性格、`washto` 天赋）→
+`score` 显示完整角色面板（不再是"还没有出生呐"）全程零报错。战斗/死
+亡循环/留言板仍未触达——本轮时间预算内先把发现的两个严重 bug 落地，
+留给下一轮专门测试。测试账号 `qinteste` 存档留在 `data/` 下作为佐证，
+未清理（未跟踪文件，不纳入本次提交）。

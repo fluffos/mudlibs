@@ -7535,6 +7535,30 @@ could actually issue a command afterward.
   `enter_world` structurally depends on, before applying the same
   `catch()` fix to the whole batch at once and spot-checking the diff.
   113 libs fixed total.
+- **Correction (2026-08-17): the `catch()` fix alone was NOT sufficient
+  on `nt6` itself.** The "verified" registration above happened after
+  the process's expensive `char.lpc` inheritance-chain compile had
+  already been paid off by earlier failed attempts in the same driver
+  session — the same masking effect documented in §7.90's third
+  instance ("a first-load eval-cost abort that goes away on retry
+  within one driver session is not evidence it was a fluke"). A true
+  fresh-boot test (new driver process, first registration attempt)
+  still failed identically post-fix: this time `Eval interrupted: ...
+  cost limit reached` hit mid-compile of `/feature/command.lpc` itself
+  (the file containing the `add_action()` command-dispatch
+  registration) — a path entirely outside `logind.lpc`/
+  `init_new_player()`, so no `catch()` placement in this bug's scope
+  could have covered it. Fixed by applying §7.90's own standard remedy
+  on `nt6`: raised `maximum evaluation cost` from `700000` to
+  `5000000` in `config.fluffos`. Re-verified on an actually-fresh
+  driver process: first registration attempt now completes cleanly,
+  zero `cost limit reached` entries anywhere in `debug.log`. Lesson
+  generalizes to the rest of this §7.109 sweep too: any lib with
+  `maximum evaluation cost` at or near the 700000 template default
+  should get a real fresh-driver-process registration test (not just
+  the `catch()` fix applied and assumed sufficient), since §7.109 and
+  §7.90 are two independent failure modes that happen to produce the
+  identical player-visible symptom.
 
 ---
 
