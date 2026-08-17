@@ -6184,7 +6184,7 @@ removed from the actual cause. Fix: correct the one-character spelling
 to match the real skill file; verify by re-visiting the NPC's room after
 a driver restart and confirming it now appears in the room listing.
 
-### 7.92 `user_cwd()`/`user_path()` assume a letter-sharded wizard-directory layout an archive's `/u/` tree never had
+### 7.92 `user_cwd()`/`user_path()` assume a letter-sharded wizard-directory layout an archive's `/u/` tree never had — all known instances fixed, 3 libs total
 
 First found on `fy3dz`'s §10.7 deep functional test, confirmed as a
 SECOND independent instance on sibling `fy3xd` (same 风云3/Fengyun III
@@ -6215,6 +6215,14 @@ the wrong path. Fix: drop the letter-shard segment —
 if it's flat (no single-letter subdirectories) but `user_cwd()`/
 `user_path()` insert one, this bug is present regardless of whether it's
 been independently confirmed on that specific archive yet.
+
+**Third confirmed instance, closing out the family (2026-08-17):
+`zzfy`.** Same 风云3/Fengyun III engine sibling flagged above as
+worth checking — confirmed via `ls u/` (flat, no letter-sharding) and
+the byte-identical `user_cwd()` shape, fixed identically. This was the
+last remaining sibling in this specific engine family; no further
+corpus-wide search is warranted since the bug is tied to this one small
+lineage's `/u/` layout choice, not a general pattern across the corpus.
 
 ### 7.93 An admin "grant sect/skills to a target player" command silently mutates the *caller* instead of the target for one field, because a late edit reused `me` where every other line in the function correctly uses `ob`
 
