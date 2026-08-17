@@ -8247,7 +8247,7 @@ unreachable code" convention. `sjshv150` (the original discovery)
 remains the only confirmed-and-fixed live instance of this bug in the
 whole corpus.
 
-### 8.14 A custom connection-time IP ban check is fed a reverse-DNS hostname where its own implementation expects a dotted-quad IP, so it fail-closes and bans nearly every connection, silently, right after the login banner
+### 8.14 A custom connection-time IP ban check is fed a reverse-DNS hostname where its own implementation expects a dotted-quad IP, so it fail-closes and bans nearly every connection, silently, right after the login banner — corpus-wide sweep completed, 67 libs fixed total
 
 Found on `hy3`'s §10.7 deep functional test. `adm/daemons/logind.lpc`
 has an author-added anti-abuse gate right after the login banner
@@ -8325,6 +8325,22 @@ behavior, since a fail-open instance produces NO visible symptom during
 ordinary play (bans just quietly never trigger) and will only surface
 by reading the call site directly or testing against a real banned
 entry.
+
+**Corpus sweep completed (2026-08-17)**: a corpus-wide grep for the
+exact `is_banned(query_ip_name(` substring (including `jyqxc`/`jyqxc2`,
+already flagged above) found 65 candidate libs, all fixed with the same
+`query_ip_name(ob)` → `query_ip_number(ob)` substitution — 67 total
+libs now fixed. The fix was scoped narrowly to the `is_banned(...)`/
+`REGBAN_D->is_banned(...)` call site specifically via an exact-substring
+match, since `query_ip_name(ob)` is called many more times per file for
+legitimate hostname logging/display that must not be touched. A handful
+of libs (e.g. `bmxkx2001`, `xkx2001`) have both a `BAN_D` and a separate
+`REGBAN_D` call site, both fixed. Verified live via
+`scripts/tmux_mud.sh` on 4 representative libs (`cctx`, `jyqxc`,
+`zzfy`, `bmxkx2001`) — all reached the real registration/id prompt with
+no ban disconnect, where pre-fix this exact loopback connection
+sequence reliably disconnected immediately after banner/encoding
+selection.
 
 ### 8.15 A room's own `create()` force-loads a Windows-era-cased NPC/board filename at RUNTIME (`new()`/bare `"path"->func()`), not at compile time — so it compiles clean, ships clean, and only throws when a player is the first to actually enter that specific room
 
