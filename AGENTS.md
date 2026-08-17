@@ -5099,7 +5099,7 @@ per-file transform plus spot-verification rather than manual editing,
 and should probably be its own dedicated pass rather than bundled into
 an unrelated lib's deep-dive cycle.
 
-### 7.80 A filename-suffix-stripping slice is off by (suffix-length − 1) because `str[0..<n]` keeps `len-n+1` characters, not `len-n`
+### 7.80 A filename-suffix-stripping slice is off by (suffix-length − 1) because `str[0..<n]` keeps `len-n+1` characters, not `len-n` — corpus-wide sweep completed, 15 libs fixed total
 
 Found on `nt1`'s §10.7 deep-dive: `adm/daemons/eventd.lpc` builds its
 list of loadable event files with `get_dir(EVENT_DIR + "*.lpc")` then
@@ -5131,6 +5131,22 @@ daemons/event/emei.l'.` etc. on every boot, entire event subsystem
 silently dead, no other symptom), same fix (`[0..<3]` → `[0..<5]`),
 verified by a clean reboot producing zero `couldn't find object
 '.../event/...'` lines in `debug.log`.
+
+**Corpus sweep completed (2026-08-17)**: a corpus-wide grep for the
+exact `map_array(event_name, (: $1[0..<3] :))` line found 13 more
+unfixed libs and fixed all of them with the same `[0..<3]` → `[0..<5]`
+change: `hy2002`, `hell`, `hhsj`, `nitan170911`, `nt6`, `xyj20032`,
+`wxddym`, `nitan6`, `nt6nitan6win`, `xfbhh`, `sjshv2578bb`, `zjmudhell`,
+`zjdywzb` — 15 total libs now fixed. The grep also matched 4 libs
+(`nt1`, `xlqy_early`, `yhyxs`, `aoxiangtianji`) that only contain
+`[0..<3]` inside an explanatory COMMENT documenting a fix already
+applied — read each match in context rather than trusting a bare grep
+hit before touching it. This bug runs unconditionally in `eventd.lpc`'s
+own `create()` during boot preload, so a plain compile-check boot
+directly exercises the fix; 3 of the 13 (`nt6`, `hell`, `zjdywzb`) were
+spot-verified via a clean reboot producing zero `couldn't find object`
+lines in `debug.log`, confirming the fix live rather than assuming
+correctness from the diff alone.
 
 ### 7.81 A shared base file's own method signature is narrower than the daemon it forwards to, breaking every content file that relies on the daemon's wider contract — corpus-wide sweep completed, 16 libs fixed total
 
