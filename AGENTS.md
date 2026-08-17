@@ -2616,6 +2616,36 @@ Lineages likely affected: any lib with a copy-pasted "guide escorts a
 new player through scripted rooms" NPC pattern — this project's own
 `d/xiakedao/npc/longx.lpc` guide file.
 
+**Correction (2026-08-17): the driver-level segfault does NOT reproduce
+against current fluffos `master` — do not cite this as an active driver
+vulnerability without re-testing first.** Before filing a driver issue,
+built a minimal isolated repro (a standalone test object, unrelated to
+`longx.lpc`, that directly schedules two `call_out()`s with the same
+function name back-to-back with no intervening `remove_call_out()`,
+then `destruct()`s itself while both are still pending, then waits for
+both to fire) against a freshly booted `build-debug` driver on current
+`master` (`2e2eaa2`, 2026-08-12). **The driver survived cleanly** —
+both call_outs against the destructed object were silently dropped, no
+crash, connection stayed fully responsive (`score` worked immediately
+after). Reading `src/packages/core/call_out.cc` explains why: the
+firing path checks `!ob || (ob->flags & O_DESTRUCTED)` and safely
+no-ops before ever touching the cited `while (ob->shadowing)` line, AND
+`call_out()`'s own scheduling path does `add_ref(ob, "call_out")`, so a
+pending call_out keeps the target's `object_t` memory alive (not just
+flagged) even after `destruct()` — the "freed `object_t*`" claim in the
+original root-cause write-up above does not hold on this driver version.
+It's unclear whether this was fixed upstream between the original
+observation and now, or whether the original diagnosis was simply
+wrong (e.g. the real trigger might involve the shadow-chain walk on a
+genuinely separate, independently-destructed shadow object, which this
+simplified test didn't exercise) — either way, **this entry's driver
+crash claim is unconfirmed as of 2026-08-17 and should not be forwarded
+to fluffos or acted on further without a fresh reproduction.** The
+mudlib-level bug (missing `return`, double `call_out` registration) is
+still real and still worth fixing defensively — that part is unaffected
+by this correction — but the "segfaults the driver" framing in this
+entry's title and body is now unverified, not confirmed fact.
+
 **Sweep completed 2026-08-16.** `bmxkx2001` — previously documented
 here as an unfixed sibling — was checked and found to ALREADY carry the
 fix (correcting a stale claim in an earlier version of this entry; the
