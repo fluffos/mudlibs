@@ -1550,7 +1550,7 @@ itself; two follow-on classes:
 
 After the exclusion, always boot AND connect before considering it done.
 
-### 7.7 Unguarded `restore()` / corrupted save data
+### 7.7 Unguarded `restore()` / corrupted save data — shared `feature/name.lpc` crash site sweep completed, 154 libs fixed
 
 - A daemon's `create()` calling `restore()` uncaught on a stale/corrupt
   shipped `.o` file aborts `create()` and can masquerade as an
@@ -1638,6 +1638,25 @@ After the exclusion, always boot AND connect before considering it done.
   here the child is a board via `restore()`/`move()` rather than an NPC
   via `carry_object()->wear()`, confirming the general shape recurs with
   different trigger calls, not just the one already cataloged there.
+- **Corpus sweep completed (2026-08-17), the shared `feature/name.lpc`
+  crash site specifically (not the varying root-cause-of-corruption
+  half of this bug, which remains lib-specific and out of scope for a
+  mechanical sweep):** a corpus-wide grep for the exact unguarded
+  `capitalize(query("id"))` substring in every lib's `feature/name.lpc`
+  found 155 candidate libs (one, `xkx2017`, was already guarded with an
+  equivalent ternary and correctly excluded). 154 libs fixed with a
+  uniform minimal guard — `capitalize(query("id"))` →
+  `(stringp(query("id")) ? capitalize(query("id")) : "?")` — so a
+  missing `id` (from ANY cause: corrupt binary save, un-transcoded
+  encoding, unguarded `move()`/`restore()`, or anything else that zeroes
+  an object's property table before `short()` runs) degrades to a "?"
+  placeholder instead of crashing `look`/name-formatting for every
+  player in any room containing the broken object. This closes the
+  single shared blast-radius amplifier common to all three
+  corruption-source instances above; it does NOT fix the underlying
+  corruption sources themselves (those still need the lib-specific
+  `catch()`/re-transcode treatment documented above if a given lib's
+  own board/board-like save data is actually corrupt).
 
 ### 7.8 Case-sensitive DATA-file paths (Windows-origin)
 
