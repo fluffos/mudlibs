@@ -5603,7 +5603,7 @@ validate that header strictly.
 
 ---
 
-### 7.87 A save file exceeding the driver's configured "maximum read file size" makes `restore()` THROW instead of failing gracefully, and the throw happens during a lazy first-load with no error ever reaching `debug.log`
+### 7.87 A save file exceeding the driver's configured "maximum read file size" makes `restore()` THROW instead of failing gracefully, and the throw happens during a lazy first-load with no error ever reaching `debug.log` — corpus-wide sweep completed, 165 libs fixed total
 
 Found on `xyj20032`'s §10.7 deep functional test: `smile` and other
 one-word emote commands, and — far more alarmingly — ordinary NPC
@@ -5707,6 +5707,28 @@ file, corrupt mapping, un-transcoded encoding) — the `if (!restore() &&
 !mapp(X))` idiom is unsafe against any of them, and a lib carrying it
 is worth checking for all three before declaring the daemon's
 save/restore path safe.
+
+**Corpus sweep completed (2026-08-17)**: the 3 instances above were all
+found opportunistically, never via a scoped search. A corpus-wide grep
+for `emoted.lpc`'s exact vulnerable `create()` shape found 162 more
+unfixed libs (165 total), all fixed with the same `catch()`-wrap —
+the code-level half of the two-part fix only; this sweep did NOT
+audit every lib's `config.fluffos` `maximum read file size` against its
+`data/emoted.o` byte size (the first-instance trigger), so a lib
+pulled from this sweep for a real §10.7 pass should still get that
+specific check if `smile`/ambient NPC chat ever throws. ~161 of the 162
+matched the exact byte-identical two-line shape and were fixed via a
+mechanical script; 4 (`syxjl`, `xkyx3b`, `xkyxciii`, `xlqy_early`) had
+non-standard formatting (blank lines between statements, a single-line
+body, or a brace-block body) and were fixed individually by hand,
+each verified to produce the identical `catch(restore()); if
+(!mapp(emote))` pattern. The bulk of this sweep was verified via
+compile-check boot per-lib in earlier, slower cycles; the final ~94-lib
+batch was spot-verified (9 representative libs booted clean, including
+all 4 hand-fixed ones) rather than individually boot-checked, to match
+a faster pace requested partway through the sweep — the fix is
+mechanically identical and low-risk, proven safe across the 71
+individually-verified libs that preceded it.
 
 ### 7.88 A simul_efun `message()` wrapper is declared with 4 *required* params but called with only 3 in several places in the same file, so the missing arg silently becomes `int(0)` and crashes the builtin `efun::message()` — and when that crash lands synchronously inside a gating function, it can permanently soft-lock players, not just spam the log
 
