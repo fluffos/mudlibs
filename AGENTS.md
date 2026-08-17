@@ -5132,7 +5132,7 @@ silently dead, no other symptom), same fix (`[0..<3]` → `[0..<5]`),
 verified by a clean reboot producing zero `couldn't find object
 '.../event/...'` lines in `debug.log`.
 
-### 7.81 A shared base file's own method signature is narrower than the daemon it forwards to, breaking every content file that relies on the daemon's wider contract
+### 7.81 A shared base file's own method signature is narrower than the daemon it forwards to, breaking every content file that relies on the daemon's wider contract — corpus-wide sweep completed, 16 libs fixed total
 
 Found alongside §7.80 on the same `nt1` deep-dive:
 `inherit/misc/quest.lpc` (inherited by every quest content file in the
@@ -5220,6 +5220,25 @@ these look like genuinely incomplete/broken original quest scripts,
 not a copy-paste artifact of this bug class, and were left as a
 documented-not-fixed observation in `xkxc98sj`'s own NOTES.md rather
 than guessed at.
+
+**Corpus sweep completed (2026-08-17)**: the 4 instances above were all
+found opportunistically. A corpus-wide grep for `inherit/misc/
+quest.lpc`'s exact narrow `void set_information(string key, string
+info)` shape found 12 more unfixed libs, all fixed with the same
+`string` → `mixed` widening: `nitan170911`, `hhsj`, `nt6`, `hell`,
+`nt6nitan6win`, `xfbhh`, `zjdywzb`, `wxddym`, `zhonghua2`,
+`tianxiawuxue`, `zjmudhell`, `nitan6` — 16 total libs now fixed. Before
+applying, confirmed `questd.lpc`'s real contract is `mixed info` (not
+assumed from lineage) and that at least one lib's `clone/quest/*.lpc`
+genuinely calls `set_information(NAME, (: closure :))` live — the
+narrow wrapper is reachable, not latent. 11 of the 12 also needed the
+matching `include/quest.h` forward declaration widened;
+`tianxiawuxue`'s `quest.h` has no matching declaration to fix. Spot-
+verified via compile-check boot on 3 of the 12 (`nt6`, `hell`,
+`tianxiawuxue`) — clean, zero new `debug.log` errors; full per-lib
+wizard `update` verification (the method used for the original 4
+instances) was not repeated for all 12, since the fix is a one-word
+type change already live-proven safe 4 times over.
 
 ### 7.82 A login object's own protective `set()` override is too strict, silently blocking a legitimate registration step
 
