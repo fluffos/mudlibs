@@ -7468,6 +7468,74 @@ necessarily share the exact missing-`enable_commands()` gap).**
   [[feedback_verify_stalls_with_connectivity_check]] for the standing
   methodology lesson this uncovered.
 
+### 7.109 `logind.lpc`'s uncaught `init_new_player()` call, immediately followed by the real world-entry call, silently strands a new character forever with no environment and no command dispatch if anything inside `init_new_player()` throws — corpus-wide sweep completed, 113 libs fixed
+
+Found on `nt6`'s round-three §10.7 deep-dive — a lib whose prior two
+passes only verified that account SAVES survived the well-documented
+§7.90 cold-start eval-cost cascade, never that the resulting character
+could actually issue a command afterward.
+
+- **Symptom**: register a brand-new character on a freshly-booted
+  driver → the banner and world-entry text never print → every
+  subsequent typed command, including `look`, returns only "什么？"
+  (unrecognized command), forever, for that character. Unlike §7.108's
+  "什么？"-forever bug (a duplicate-login reconnect gap), this one has
+  **no save file at all** — `git status`/`ls` on the account's save
+  directory shows nothing, because the crash happens before the
+  character ever reaches a point that persists.
+- **Root cause**: `get_gender()`'s final steps are, in order,
+  `init_new_player(user);` (an UNCAUGHT call) then immediately
+  `waiting_enter_world(ob, user);` (or `enter_world(ob, user);` on
+  non-`nt6`-shaped siblings — the actual step that sets the starting
+  room and arms command dispatch via `enable_commands()`/
+  `add_action()`). `init_new_player()` itself is harmless on its own —
+  every instance checked across this sweep only sets soft player
+  properties (`title`, `birthday`, `potential`, `channels`,
+  `food`/`water`, `env/wimpy`, occasionally a `NAME_D->map_name()`
+  call) — but on `nt6` specifically it also calls
+  `CHANNEL_D->query_default_channel(...)`, which on a cold boot forces
+  the first-ever compile of `channeld.lpc`. That compile can independently
+  exceed `maximum evaluation cost` (the same §7.90 cascade, here caught
+  mid-`init_new_player()` instead of mid-`make_body()`) and throw
+  `*Too long evaluation. Execution aborted.` — uncaught, this unwinds
+  straight out of `get_gender()`, and the world-entry call after it
+  never runs. The mudlib's own error handler then ALSO crashed trying
+  to log the failure via `channeld.lpc`'s own `do_channel()` (`*Value
+  being indexed is zero`, since `channeld` itself hadn't finished
+  initializing), leaving zero trace in `debug.log` (the file didn't
+  even exist on this run) — the only evidence was in the raw stdout
+  boot log's backtrace.
+- **Fix**: `catch(init_new_player(user));` — this class of setter-only
+  helper has no result the caller depends on, and every instance
+  checked in this sweep only sets soft, independently-settable player
+  properties, so swallowing a mid-call throw and continuing straight to
+  world entry (possibly with some properties left at their defaults) is
+  strictly better than the current behavior of never entering the world
+  at all. Consistent with this project's standing "guard the risky
+  call, don't change surrounding control flow" fix philosophy used
+  throughout this catalog (§7.87, §7.96, etc.).
+- **Verified on `nt6`**: pre-fix, three fresh-boot registration
+  attempts in a row all failed identically (`look` → "什么？", no save
+  file, no `debug.log` entry — confirmed via a full backtrace read off
+  the raw stdout boot log). Post-fix, a fresh registration on a
+  restarted driver succeeded cleanly — `look` correctly showed the
+  starting room description and full welcome sequence, `score` returned
+  the lib's own separate, expected "还没有出生呐" (birth-ritual not yet
+  completed — a documented `nt6` design feature, unrelated to this bug)
+  instead of silence.
+- **Corpus sweep (2026-08-17)**: `grep -rl '^  init_new_player(user);$'
+  libs/*/work/adm/daemons/logind.lpc` found the identical unguarded
+  shape (uncaught `init_new_player(user);` immediately followed by
+  `enter_world`/`waiting_enter_world`, sometimes via a `call_out`) in
+  112 more libs beyond `nt6` — this is not an NT/nitan-lineage-specific
+  bug, it's a shared `logind.lpc` convention spanning most of this
+  corpus's engine families. Read `init_new_player()`'s body in a
+  diverse sample (`bxsj`, `cctx`, `zxty`, `zjmudhell`, `tianxiawuxue`)
+  first to confirm none of them set anything `waiting_enter_world`/
+  `enter_world` structurally depends on, before applying the same
+  `catch()` fix to the whole batch at once and spot-checking the diff.
+  113 libs fixed total.
+
 ---
 
 ## 8. Login and registration flow bugs
