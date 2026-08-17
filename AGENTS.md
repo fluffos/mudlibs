@@ -8219,6 +8219,34 @@ path forward (or an explicit, deliberate lockout with a clear message
 this is a first-run-only setup step), never silent fallthrough with no
 further `input_to` armed.
 
+**Corpus investigation completed (2026-08-17), negative result — no
+further fix needed anywhere.** A corpus-wide grep for `get_wizpwd`
+found 26 candidate libs; reading each one's actual CALLER site (not
+just `get_wizpwd()` itself) found every single one already safe. The
+whole NT/nitan-lineage family (13 libs, a structurally different
+2-param `get_wizpwd(pass, ob)` shape doing a direct `crypt(pass,
+old_pass) == old_pass` comparison with no nag path at all) gates the
+`input_to("get_wizpwd", ...)` call itself behind `if
+(ob->query("wizpwd"))` at the caller, so the function is never invoked
+when unset — confirmed by reading `~/src/fluffos`'s `f_crypt()`
+directly first: `crypt(pass, int(0))` doesn't error, it silently
+generates a random salt, so if this WERE reachable it would be a worse
+variant (immediate connection `destruct()` via the `else` branch, not
+just a silent hang) — making the caller-side guard load-bearing, not
+incidental, and worth re-confirming rather than assuming from the 2-arg
+signature alone. Of the 13 libs sharing `sjshv150`'s original 3-param
+shape, 9 have the identical caller-level guard (safe regardless of the
+function body); the remaining 3 (`sanjieshenhua`, `sjshv2578bb`,
+`xyj20032`) call `get_wizpwd` unconditionally but gate their own
+destructive fallback behind `#ifdef NO_CHECK_WIZPWD`, which all three
+`#define` — the alarming-looking `destruct(user)` branch is dead code
+in all three. `zxty` defines `get_wizpwd()` but never calls it anywhere
+(no `input_to("get_wizpwd"` call site at all) — genuinely dead code,
+unreachable, left alone per this project's standing "don't fix
+unreachable code" convention. `sjshv150` (the original discovery)
+remains the only confirmed-and-fixed live instance of this bug in the
+whole corpus.
+
 ### 8.14 A custom connection-time IP ban check is fed a reverse-DNS hostname where its own implementation expects a dotted-quad IP, so it fail-closes and bans nearly every connection, silently, right after the login banner
 
 Found on `hy3`'s §10.7 deep functional test. `adm/daemons/logind.lpc`
