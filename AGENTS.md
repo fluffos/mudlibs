@@ -8387,7 +8387,20 @@ Not fixed in this pass beyond noting it (scope was the `EMEI_B.C`
 class since the driving question — "why does a room that compiles clean
 and boots clean still crash on first visit" — needs a different diagnostic
 move (`update <room>` as admin to force a `catch()`-wrapped first
-compile) than any of the other case-sensitivity entries. Detection
+compile) than any of the other case-sensitivity entries.
+
+**Resolved (checked 2026-08-17)**: `sjshwzb`'s own two flagged
+call sites are no longer broken — `d/emei/huayanding.lpc`'s `create()`
+now references `NPC/yingke` and `/obj/board/emei_b`, and the on-disk
+files (`d/emei/NPC/yingke.lpc`, `obj/board/emei_b.lpc`) match both
+references exactly (case AND the leading slash on the board path).
+Not clear whether this was fixed in a later session or was already
+correct by the time this was re-checked; either way, no further action
+needed on this specific instance. This bug class remains real and
+worth checking on any newly-picked lib with leftover uppercase-`.C`
+files (per the detection pattern below) — just not still open here.
+
+Detection
 pattern: whenever a lib has a cluster of leftover uppercase-`.C` files
 (common on any Windows/GBK-era archive — see §4's uppercase-`.C`
 conversion blind spot), grep every `.lpc` file's own `new(`/bare-string
