@@ -6,6 +6,8 @@ void init()
      me->delete_temp("no_fight");
 	if (!userp(me)
 	|| me->query("combat_exp") < 10000 && me->query("death_count") > me->query("death_times") * 5) return;
+	if (me->query_temp("death_stage_active")) return;
+	me->set_temp("death_stage_active", 1);
 	  if (me->query_temp("special_poison",1))
                 call_out("death_stage", 20, me, 0);
         else
@@ -17,9 +19,13 @@ void death_stage(object ob, int stage)
 {
 //        int i;
         object *inv;
-        if( !ob || !present(ob) ) return;
+        if( !ob || !present(ob) ) {
+                if (ob) ob->delete_temp("death_stage_active");
+                return;
+        }
 
         if( !ob->is_ghost() ) {
+                ob->delete_temp("death_stage_active");
                 command("say 轮回无常，阳间之人，应当回到阳间去才是。");
                 message_vision("两名力士闪了出来，架起$N，一晃就不见了！\n", ob);
                 ob->reincarnate();
@@ -34,8 +40,10 @@ void death_stage(object ob, int stage)
         if( ++stage < sizeof(death_msg) ) {
                 call_out( "death_stage", 5, ob, stage );
                 return;
-        } else
+        } else {
+                ob->delete_temp("death_stage_active");
                 ob->reincarnate();
+        }
 
         inv = all_inventory(ob);
 /*        if(!ob->query_temp("special_die")){

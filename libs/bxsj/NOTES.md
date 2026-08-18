@@ -641,3 +641,170 @@ during this pass. Driver killed by exact PID after testing; incidental
 ### Files modified this pass
 
 - `work/adm/simul_efun/file.lpc` — `cat()` null-guard on `read_file()`.
+
+## Round three deep functional test (2026-08-18)
+
+Went deeper than rounds one/two per the standing checklist: real combat
+death/reincarnation (not just code review), board post/read, shop dispatch,
+and a persistent-guild command smoke test — plus a project-wide sweep for
+three newly-catalogued bug patterns (AGENTS.md §7.111/§7.112, and the
+§8 logind.lpc `enter_world()` missing-save shape).
+
+### Bug found and fixed: §7.112 unguarded reincarnation-chain `init()` (2 live instances + 1 hardening)
+
+Grepped every `init()` containing a `call_out(` corpus-wide (2,278 files have
+`init()`, 543 also schedule a `call_out`; narrowed to 81 candidates lacking
+any existing `remove_call_out`/`query_temp` guard, then to the ones whose
+scheduled function recursively re-schedules itself — a genuine multi-stage
+chain, not a one-shot timer). Two real hits, both in the death/reincarnation
+zone (`/d/death/`), exactly matching the reference shape from
+`haiyang2`/`jym`'s `wgargoyle.lpc`:
+
+1. **`work/d/death/npc/death.h`** (included by `mengpo.lpc`/孟婆,
+   `yanluo.lpc`/阎罗, `pusa.lpc`/菩萨 — the three reincarnation-guide NPCs a
+   dead player's ghost meets) — `init()` unconditionally scheduled a 5-stage
+   `death_stage()` message/teleport chain (first stage 20-40s out, then 5s
+   between stages) with no guard. Since the driver re-broadcasts `init()` to
+   every NPC in a room whenever a living object's commands are enabled
+   (including on a player reconnect), a player who disconnects and
+   reconnects while standing in front of one of these NPCs — very plausible
+   given the 20-60s window — would stack a second parallel chain: doubled
+   dialogue, and a second `reincarnate()`/move at the end.
+2. **`work/d/shaolin/npc/yu-zu2.lpc`** (狱卒, a Shaolin-jail guard) — same
+   unguarded shape, its own private 5-stage `death_stage()` chain (60s
+   between stages) ending in `ob->move("/d/shaolin/woshi1")`. Grep found no
+   room anywhere in the corpus that currently places this NPC (a sibling
+   `yu-zu.lpc`, no "2", is the one actually used in `d/shaolin/jianyu1.lpc`,
+   and it already has its own correctly-guarded `remove_call_out`+`call_out`
+   pattern) — `yu-zu2.lpc` looks like dead/orphaned code today, but fixed it
+   anyway since the shape is real and harmless to guard.
+
+Fix (matching the documented reference shape): a `death_stage_active`
+per-player `set_temp()`/`query_temp()` guard around the `call_out()`
+scheduling call in `init()`, cleared at every exit point of
+`death_stage()` (the ghost-already-resurrected early return, the
+target-left-the-room early return, and the final completion branch).
+
+**Proactive hardening in the same zone**: `work/d/death/gate.lpc` (地门/鬼门关
+— `DEATH_ROOM`, the very first room a dying player lands in) had the
+identical unguarded shape one level up — its own `init()` unconditionally
+scheduled a `call_out("run", 1, me)` that randomly routes the ghost into
+`gateway`/`mpting` (yanluo/mengpo). Narrower window (1s) and more benign
+outcome (a duplicated flavor-text line, and a possible unwanted second
+random reroute) than the death.h chain, but same class of bug and directly
+in the path being live-tested here, so hardened it with the same
+`gate_run_active` guard shape for consistency.
+
+**Live-verified end-to-end, twice**:
+- As admin (`fluffos`), became a ghost (`ghost`), then `goto`'d into
+  `/d/death/mpting` (mengpo) **twice in immediate succession** (bounce out
+  to `/d/wuguan/dayuan` and back) to force two `init()` calls within the
+  vulnerable 40-second window. Only **one** copy of the 5-stage message
+  chain played (confirmed by watching for the "孟婆说道：哦！又来了个新的"
+  opening line — appeared exactly once, not twice), and the chain completed
+  correctly (moved back to `/d/wuguan/dayuan` matching `enter_wuguan`).
+  `debug.log` stayed completely empty throughout.
+- **A real, non-simulated combat death**: as admin, `smash qintest` (a
+  wizard command that calls the target's real `die()`) while qintest was
+  actively logged in. Watched the full pipeline fire for real: corpse
+  created, `qintest` became a ghost, `save()`d, moved to `DEATH_ROOM`
+  (`gate.lpc`, our new guard), routed into the reincarnation NPC's room,
+  ran the full 5-stage `death.h` chain once, and correctly returned
+  `qintest` to `REVIVE_ROOM` (`/d/city/chmiao`). Verified via a later
+  `score` on `qintest`: `死亡：一次` (death count 1), `上次遇害：被闪电劈死
+  了` (matches `smash.lpc`'s flavor text), `combat_exp` reduced by exactly
+  10,000 (the death penalty), skills all reduced accordingly — the whole
+  death→reincarnation→revival cycle executed correctly with zero
+  `debug.log` errors. This closes the "**death/respawn not conclusively
+  live-tested**" gap flagged as a to-do in round one's notes.
+
+**Not a match — checked and ruled out**: `work/adm/single/master.lpc`'s
+`standard_trace()` (§7.111) formats `error["object"]` with `%O` (safe,
+never throws on a non-object), not an unguarded `file_name(error["object"])`
+— this lib's error handler doesn't have the §7.111 shape at all.
+`adm/daemons/logind.lpc`'s `enter_world()` (the §8 logind save-guard check)
+already unconditionally calls both `user->save()` and `ob->save()` right
+after `setup()` completes — not commented out, not missing.
+
+### Live-verified: economy/shop (closes another round-one gap, partially)
+
+Round one flagged shop transactions as reviewed-but-never-actually-run.
+This pass: `goto`'d directly to `/d/xiangyang/zahuopu` (牛老板's general
+store) as admin, ran `list` (correct item/price/stock table), then
+`buy deng long` — item-id resolution worked correctly (`vendor.lpc`'s
+`is_vendor_good()`/`do_buy()` dispatch fired without error), and since
+admin had no money, `MONEY_D->player_pay()`'s real insufficient-funds path
+executed and returned the correct in-character rejection ("穷光蛋，一边呆
+着去！"). Confirms the shop's full command-dispatch and payment-check code
+path executes cleanly end-to-end; a **successful** purchase (money actually
+changing hands) is still not verified — no in-game money-granting wizard
+command exists in this lib (checked `cmds/wiz/*`, `cmds/adm/*`; no
+`clone`/`cash`/`give` tool), and legitimately earning coin would require a
+genuine trek/job. Left as a to-do, same as round one.
+
+### Live-verified: board post/read (new coverage)
+
+As admin on the 巫师留言簿 (`/d/wizard/wizard_room`'s wizard board):
+`post <title>` (title must be given inline, then drops into the real
+`ed`-style multiline editor via `me->edit(...)`) → wrote a body line → `.`
+to end — got "留言完毕" (posting complete), board count went from 124 to
+125, and `read 125` played back the exact posted title/body/author/timestamp
+correctly. Confirms `bboard.lpc`'s post/read path (including the
+`§7.86`-fixed `inherit`/`replace_program` shape from the earlier corpus
+sweep) is still fully live-functional, not just "loads without crashing."
+
+### Smoke-tested: persistent-guild commands (`cmds/group/*`, new coverage)
+
+Distinct from the menpai/sect system (`bai`/`apprentice`, tested in round
+one) — this lib also has a separate persistent-faction system
+(`gcreate`/`glist`/`gmove`/`grant`/`gforce`/`abdicate`/`destory`, dispatched
+by filename via `commandd.lpc`, not `add_action`). `glist` rendered a
+correctly-formatted (empty) faction leaderboard without error. `gcreate`
+with a syntactically-valid Chinese faction name (`测试帮`, ends in a legal
+suffix character) correctly rejected with "抱歉，当前只允许贵宾玩家才能创
+建帮派" (VIP-only gate) — read `gcreate.lpc`: this is a genuine, deliberate
+VIP paywall, not a bug, so left alone per scope discipline. Confirms the
+command-dispatch and argument-validation paths for this whole subsystem are
+alive; full faction creation remains unverified (would need a VIP account).
+
+### Methodology notes
+
+- **A wizard `ghost`/`goto` combo (or, better, a real `smash`-triggered
+  death) is a fast, repeatable way to reach and re-trigger reincarnation-NPC
+  `init()` chains for regression-testing §7.112-class guards** without
+  waiting on genuine risky combat — `goto` into the NPC's room fires
+  `init()` on every occupant exactly like a room-entry would, so re-entering
+  twice in a row is a faithful stand-in for the reconnect-mid-chain
+  scenario, and is much faster to script than arranging two real
+  concurrent socket connections.
+- **`smash <target>` is a real, unguarded wizard-level kill command**
+  (calls `ob->die()` directly, bypassing combat) — useful for deterministic
+  death/respawn testing on any character regardless of level, without
+  needing to find a "fair fight." Requires the target to be `present()` in
+  the admin's own room first (`goto` there).
+- **This lib has no in-game way to grant money to a test account outside
+  earning it legitimately** — checked `cmds/wiz/*` and `cmds/adm/*`
+  thoroughly; no `clone`/`cash`/`give`-style tool exists. A future full
+  shop-purchase test needs either a real trek+job/quest income, or a
+  save-file edit while the driver is stopped.
+
+### Flag for cross-lib awareness (not fixed elsewhere, per instructions)
+
+The §7.112 pattern (unguarded reincarnation/staged `call_out()` chain in a
+room or NPC's `init()`) was found here in the death-zone specifically. Any
+other lib in this corpus with its own `/d/death/`-style
+reincarnation-guide NPCs (or any other multi-stage `init()`-scheduled
+process) is worth the same grep sweep
+(`call_out(` inside `init()`, minus files that already `remove_call_out`
+or check a `temp` flag first) — this is the third or so independent lineage
+this exact shape has now been found in per today's (2026-08-18) session
+notes.
+
+### Files modified this pass
+
+- `work/d/death/npc/death.h` — `death_stage_active` re-entrancy guard
+  (§7.112).
+- `work/d/shaolin/npc/yu-zu2.lpc` — same guard, likely-dead code but fixed
+  for consistency (§7.112).
+- `work/d/death/gate.lpc` — `gate_run_active` guard, proactive hardening of
+  the same class one room upstream.
