@@ -627,3 +627,105 @@ session 出站代理策略拒绝（`curl -sS $HTTPS_PROXY/__agentproxy/status`
 
 - `work/cmds/apr/update.lpc`
 - `work/adm/simul_efun/file.lpc`
+
+## 深度功能测试第三轮 / Deep functional test round three (2026-08-18)
+
+第一、二轮已确认注册/新手引导/`fight` 安全分流/正规拜师/quit-净断线重连均
+正常。本轮先读完第一、二轮记录，确认无重复，转向前两轮未覆盖的系统：经
+济（商店买卖）、布告栏（真实发帖/读取）、帮派（`cmds/clan/` 整套子系
+统）、以及死亡后的完整"奈何桥→鬼门关→酆都城门→黑白无常"复活流程（前两
+轮只读过 `/open/death/start.lpc` 源码，从未真正走完全程）。另确认本库
+`adm/obj/master.lpc::standard_trace()` 用 `sprintf("%O", error["object"])`
+格式化，并未调用 `file_name()`，AGENTS.md §7.111（`file_name(error["object"])`
+未判空导致的崩溃）**不适用本库**，无需修补。
+
+### 修复的程序性 bug
+
+无。全程 `debug.log` 完全干净（未生成该文件，即零运行时错误），只有编译
+期无害警告。
+
+### 新覆盖并确认工作正常的系统
+
+- **经济 / 商店**：`open/capital/room/cshop.lpc`（`inherit /std/room/shop`
+  的正规商行）`sell cloth` 真实卖出（物品从背包移除，店主给出合理反
+  馈）；`open/start/room/s5.lpc` 的小贩 NPC（`inherit F_VENDOR`）
+  `list`/`buy tea from vendor` 在余额不足时正确走 `notify_fail("你的钱
+  不够。")` 失败分支，未崩溃、未静默丢失物品。（顺带发现
+  `feature/finance.lpc:262` 有一行 `if (wizardp(this_object())) printf
+  ("total=%d\tamount=%d\n", total, amount);` 调试输出，只对巫师身份的
+  角色可见——判定为刻意保留给巫师看的诊断辅助，不是崩溃或静默失败，未
+  改动。）
+- **布告栏（真实发帖）**：`/open/trans/room/room4.lpc`（"中央驿站"，经
+  `call_other(.., "???")` 惰性加载 `/obj/board/start_b`）`post <标题>`
+  → 编辑器 `.` 结束 → "留言完毕。"，版上留言数从 26 增至 27；`read 1`
+  正确读出旧文章内容。确认第 §7.86 节此前修的"多余
+  `replace_program()`"崩溃点在真实 `post` 流程下确实不再触发。
+- **帮派 / 公会子系统**（`cmds/clan/`，前两轮完全未测）：`c_list` 正确
+  列出全部 5 个真实存在的帮派（十三吉祥/阴曹地府/傲云山庄/红莲教/天道
+  无极，`adm/daemons/clanvd.lpc::fs_clan()` 扫描 `/open/clan/` 子目录并
+  过滤系统保留目录）及四项排行榜；`c_index` 列出完整帮务说明文件索
+  引；`help c_deposit`/`help c_donate` 文本正常。`c_create`/`c_join` 读
+  代码确认均为合理的既有设计门槛（`c_create` 需要 `wiz_level>=5`；
+  `c_join` 需先被现有帮众邀请），非 bug，未做门槛测试（不适合用巫师账
+  号測試玩家专属流程）。
+- **死亡→复活完整流程**（前两轮只读代码，本轮首次现场走通全程）：从
+  `/open/death/start`（阴曹入口）经 `north` ×5 依次穿过奈何桥头
+  →奈何桥上→奈何桥尾→鬼门关（白无常）→酆都城门（黑无常），在酆都城门
+  停留不动，`open/death/npc/bgargoyle.lpc::init()` 于玩家进入房间时自
+  动排程 5 段对话（每段间隔 5 秒），全部播完后自动
+  `ob->reincarnate()` + `DEATHROOM->end_death(ob)` + 食物/饮水回满，并
+  将玩家送回 `STARTROOM`（"狂想空间入口处"，与新角色注册落地点相同）。
+  现场验证：`score` 面板从"(鬼气)"状态变回正常称谓显示、精气神回满
+  100%、食物/饮水回满 300/300，`look` 确认房间已切换。**唯一前提**：
+  必须在酆都城门原地停留满约 25 秒（5 段 ×5 秒）让 `call_out` 链跑完；
+  中途再移动房间会让链条在下一次 `present(ob)` 检查时静默中止（此设计
+  与许多 MUD 的"NPC 触发对话需玩家留在原地"惯例一致，不是 bug）。另确
+  认：任何鬼魂身份的玩家一旦 `quit`/断线重连（走 `press_enter()`），
+  `logind.lpc:867` 的 `if (user->is_ghost()) startroom = DEATHROOM;` 会
+  强制把其重新丢回 `/open/death/start`（阴曹入口）——不管之前走到迷宫
+  多深处，都会从头开始；判定为刻意的防卡关设计，不是 bug。
+- **`阎罗王`（Ghost king，`open/death/npc/king.lpc`）**：这是复活迷宫外
+  的一个独立小彩蛋（`kneeze` 下跪给 `standby` 属性加值，用于某种"免死
+  符"周边玩法），与黑白无常的自动复活机制无关，未深入测试（超出本轮
+  程序性 bug 排查范围，且看起来是内容/玩法而非崩溃点）。
+
+### 排查但判定非 bug（读代码确认，未改动）
+
+- **`/open/death/start.lpc::valid_leave()` 的 `south`/`up` 分支是死代
+  码**：函数体对 `"south"`（"想回家吗"警告后需要连续尝试 5~9 次才放
+  行）和 `"up"`（`back_road>=10` 时走旧版"手动重生"逻辑）都有完整实
+  现，但该房间自己的 `exits` 映射里这两个方向都被注释掉了（只留
+  `"north"`），玩家从来无法在这个房间打出 `south`/`up` 指令（会得到
+  "什么? south? 请用 help cmds 查询指令。"，因为驱动只给已注册的出口
+  自动生成移动指令）。由于本库真正、可达、已现场验证工作正常的复活路
+  径是上面那条"黑白无常自动复活"流程，这段死代码不影响任何真实游玩路
+  径，只是历史遗留（大概率是从更早的版本继承下来、后来把手动重生改成
+  自动化时忘记清掉的旧逻辑）——不是崩溃、不是静默失败，未改动。
+- **一开始怀疑 `goto /open/center/room/inn` 会静默吞掉传送（写了个隔离
+  测试，重开全新驱动作为连线后第一条指令复现），但排查后发现这是**测
+  试脚本的假象**，不是 mudlib bug：本库登录成功后会先打印一条"--
+  请按 Enter 键继续 --"，要求先按一次 Enter 才会真正开始处理后续输
+  入；连线后发的第一条"真实"指令实际上被这次按键吞掉了（对任何指令都
+  会重现，不只 `goto`）。加一条空指令吃掉这次"按 Enter"提示后，同一个
+  `goto` 立刻按预期工作。记录此陷阱供以后同 lineage（ES II）库测试参
+  考，此次未误报为 bug、未做任何代码改动。
+
+### 现场验证摘要
+
+驱动 `linux-debug`（ASAN/UBSAN）预设，两次全新冷启动分别验证：(1) 管理
+员账号 `fluffos`/`Mud@2026`（(manager) 权限）用于经济/布告栏/帮派/死亡
+复活流程测试；(2) 全新注册角色 `kxkjrthb` / 中文名"秦风卅一"（英文 id
+只能纯小写字母，无数字——首次因误用带数字 id 被反复拒绝后遭防灌水机制
+断线，重新用合规 id 后一次成功注册）验证新手引导（`enter`→
+`give cloth to girl`→`down`）流程与第一轮结论一致，`down` 第二次进入的
+是暗室（"四周到处黑沉沉的, 看也看不清。"，需要光源，属正常暗房设计非
+bug）。两条会话全程 `log/debug.log` 均未生成（零运行时错误）。
+
+### 进程卫生附注
+
+测试产生的存档churn（`data/board/start_b.o` 因真实发帖测试、
+`data/user/f/fluffos.o` 因管理员多次登入/移动/复活状态变化）已用
+`git checkout --` 还原；测试用的全新角色存档
+（`data/user/k/kxkjrthb.o`，未跟踪）与临时创建的 `u/f/`（供 `eval` 指
+令使用的巫师工作目录，未跟踪）均已删除，未纳入本次提交。驱动进程按
+PID 精确 kill（非 pkill 模式匹配）。
