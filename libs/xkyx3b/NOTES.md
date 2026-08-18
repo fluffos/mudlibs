@@ -207,3 +207,18 @@ fixing now since it's outside this pass's four-item scope).
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 4 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 信件系统整体死亡（与 xkyxciii 完全同源的 bug）
+
+`adm/daemons/logind.lpc` 的 `enter_world()` 在创建/挂载玩家的邮箱物件
+之后紧跟一行多余的 `destruct(mail_box)`——这销毁了那个在 `init()`
+里注册全部六个信件指令（`send`/`mail`/`forward`/`check`/`from`/
+`read`/`discard`）的物件，导致每一次登录、每一位玩家的信件系统
+完全失效，报"什么？"（未知指令），且没有任何玩家可见的错误提示。
+这个 bug 是 `xkyxciii` 那一轮 round-three 深度测试发现并修复后，
+用同一行代码做全库 grep 时命中的姐妹档案（`libs/xkyxciii` 的
+NOTES.md round-three 章节里已经记录了这条线索）。修复：删除多余的
+`destruct(mail_box)` 调用。已用干净重启的驱动实测验证：
+`fluffos`/`Mud@2026` 登录后，`send`/`check`/`from`/`read` 全部给出
+正常的交互式提示（标题/内容/是否留底 y-n 询问、"没有这个编号的
+信件"等），不再是未知指令；`debug.log` 全程干净。
