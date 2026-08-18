@@ -3718,32 +3718,44 @@ vulnerable line in **16 other libs** beyond `hell` (`aoxiangtianji`,
 `yanhuangwuhun`, `zjdywzb`, `xkxz2`, `zjdyaryl`, `xkxc98sj`,
 `zjdy2008wzb`, `wxddym`, `yhwhpublicfi`, `yhyxs`, `fyzfqyy`,
 `zhongjidiyu`, `zjdyzj`, `zjmudhell`, `nt1`, `zhonghua2`). Live results
-so far (2026-08-18), 12 of 16 tested:
+so far (2026-08-18), 14 of 16 tested:
 
 - **Confirmed crash, fixed**: `zjmudhell`, `zjdyaryl`, `zjdyzj`,
-  `yhyxs` — all four reproduced the identical `*Bad argument 2 to
-  socket_bind(); Expected: int Got: "10"` and were fixed with the
-  standard remedy (`startup_udp()` reduced to `return 0`, `send_udp()`
-  given a `!socket_id` guard). `zjdyaryl`, `zjdyzj`, AND `yhyxs` ALSO
-  had a second, related crash in the same lib's `versiond.lpc`
-  (`in_server()`'s unguarded `get_config(__MUD_PORT__) +
-  VERSION_PORT`, no `(int)` cast at all — same `socket_bind()`
+  `yhyxs`, `zhonghua2` — all five reproduced the identical `*Bad
+  argument 2 to socket_bind(); Expected: int Got: "10"` and were fixed
+  with the standard remedy (`startup_udp()` reduced to `return 0`,
+  `send_udp()` given a `!socket_id` guard). `zjdyaryl`, `zjdyzj`, AND
+  `yhyxs` ALSO had a second, related crash in the same lib's
+  `versiond.lpc` (`in_server()`'s unguarded `get_config(__MUD_PORT__)
+  + VERSION_PORT`, no `(int)` cast at all — same `socket_bind()`
   type-mismatch shape, same fix: reduce `in_server()` to a no-op stub)
   — worth checking `versiond.lpc` for the identical pattern on every
-  remaining lib in this list too, not just `messaged.lpc`. On
-  `zjdyaryl`/`zjdyzj` the crash fires on every single login (via
-  `logind.lpc`'s `check_ok()` → `get_passwd()` → `messaged.lpc`'s
-  `create()`), not just when a wizard uses `goto` — already wrapped in
-  an existing `catch()` so login itself doesn't break, but confirmed
-  present via `debug.log`'s "错误讯息被拦截" (error message intercepted)
-  wrapper text. `yhyxs` was confirmed via `goto`'s unguarded
-  `MESSAGE_D->find_user()` fallback on a fresh boot; post-fix, `goto`
-  returns a clean "no such player" message and `debug.log` shows zero
-  `socket_bind` entries.
+  remaining lib in this list too, not just `messaged.lpc`, though it's
+  NOT always a fix candidate: `zhonghua2` and `zhongjidiyu` (see
+  below) both carry the pattern in `versiond.lpc` too, but their own
+  NOTES.md already analyze it as non-fatal there (a deferred
+  `call_out` firing after `version_ok` is already set synchronously —
+  cosmetic, no live-visible impact) and it was deliberately left
+  alone, unlike the `messaged.lpc` occurrence which sits directly in
+  the synchronous login path. On `zjdyaryl`/`zjdyzj`/`zhonghua2` the
+  crash fires on every single login (via `logind.lpc`'s `check_ok()`
+  → `get_passwd()`/`find_chatter()` → `messaged.lpc`'s `create()`),
+  not just when a wizard uses `goto` — `zhonghua2`'s own NOTES.md had
+  already independently found and documented this exact crash,
+  wrapping only the *caller* in `catch()` (masking it, not fixing the
+  underlying `messaged.lpc` bug); this sweep applied the standard fix
+  directly to `messaged.lpc` itself for consistency. `yhyxs` was
+  confirmed via `goto`'s unguarded `MESSAGE_D->find_user()` fallback
+  on a fresh boot; post-fix, `goto` returns a clean "no such player"
+  message and `debug.log` shows zero `socket_bind` entries.
 - **Confirmed clean, no fix needed**: `aoxiangtianji`, `zjdywzb`,
   `zjdy2008wzb`, `yanhuangwuhun`, `xkxz2`, `xkxc98sj`, `yhwhpublicfi`,
-  `fyzfqyy` — despite `zjdywzb`/`zjdy2008wzb` both explicitly sharing
-  the same "Doing"/`hell`-family lineage as the crashing libs (per
+  `fyzfqyy`, `zhongjidiyu` — `zhongjidiyu`'s `messaged.lpc` itself
+  compiles/runs clean (confirmed via `tell <nonexistent-player>`,
+  zero `debug.log` entries); it separately carries the same non-fatal
+  `versiond.lpc` config-ID-mismatch pattern described above, already
+  documented in its own NOTES.md as harmless and left alone. Despite
+  `zjdywzb`/`zjdy2008wzb` both explicitly sharing the
   their own NOTES.md), `get_config(__MUD_PORT__)` behaves correctly on
   all eight and `messaged.lpc` compiles/runs without error.
   `yanhuangwuhun`/`yhwhpublicfi` were confirmed via `goto` (zero
@@ -3779,9 +3791,12 @@ so far (2026-08-18), 12 of 16 tested:
 on every lib sharing the source line, and it is NOT simply
 lineage-wide either — even within the exact same "Doing"/`hell`-family
 lineage, results are mixed (3 crash, 3 clean). Each lib genuinely needs
-its own live check; grep alone cannot predict the outcome. 4 libs
-remain unconfirmed: `wxddym` (inconclusive, see above), `zhongjidiyu`,
-`nt1`, `zhonghua2`. Fastest reliable trigger: the wizard
+its own live check; grep alone cannot predict the outcome. 2 libs
+remain unconfirmed: `wxddym` (inconclusive, see above), `nt1` (driver
+preload is unusually slow for this lib — 24,649 `.lpc` files, several
+times larger than any other lib tested in this sweep — testing is
+still in progress as of this writing). Fastest reliable trigger: the
+wizard
 `call /adm/daemons/network/messaged->query_udp_port()` one-liner
 (bypasses needing to find a lib-specific command that happens to
 reference `MESSAGE_D`, and bypasses `goto`'s own unrelated
