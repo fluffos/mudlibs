@@ -719,3 +719,201 @@ boot, accelerated-timeout boot, final clean-config boot); incidental
 
 - `work/adm/simul_efun/file.lpc` — `log_file()` `assure_file()` guard
   (with forward declaration), `cat()` null-guard.
+
+## Round three deep functional test (2026-08-18)
+
+Went past round one/two's scope on purpose: this pass targeted the items
+round one/two explicitly left "not verified live" (a full sect-join round
+trip, a successful funded shop purchase, real combat death/respawn) plus
+systems neither prior round touched at all (bulletin boards). Also
+confirmed the `adm/obj/master.lpc` §7.111 `standard_trace()` fix from
+today's corpus sweep wasn't disturbed (not independently re-exercised,
+since nothing in this pass triggered a driver-level error until the bug
+investigation below, whose repro's own driver-level-adjacent trace stayed
+clean throughout — see Bug 3).
+
+**Method**: booted native `build-debug` driver; ran two-connection live
+sessions (admin `fluffos` + fresh test characters) via a raw Python
+socket harness (hard wall-clock recv budgets per AGENTS.md §10.7,
+no reliance on quiet-detection). Used `goto`/`summon`/`force`/`clone`/
+`give` (all real `cmds/imm|wiz|adm` commands) to reach content round
+one/two's time budget didn't stretch to.
+
+### Confirmed working, no bug: full sect-join round trip
+
+Test character `shenceng`/深层 (male, fresh registration) was `summon`ed
+to 净念禅院's `d/chanyuan/wuchang` (虚尘's room) and `force`d to run
+`apprentice xu chen`. Full chain fired correctly end-to-end:
+`cmds/std/apprentice.lpc``main()` → `xuchen.lpc`'s `attempt_apprentice()`
+(gender/family/couple/PKS/bellicosity gates, all satisfiable by a fresh
+male character) → `command("recruit " + id)` → `cmds/std/recruit.lpc` →
+`feature/apprentice.lpc`'s `recruit_apprentice()`/`assign_apprentice()`.
+`score` afterward correctly showed title 【俗家弟子】, 称谓 "净念禅院第
+八代弟子", 师傅 "净念禅院 虚尘". This closes round one's "not verified
+live" item — no bug in this chain.
+
+### Confirmed working, no bug: economy (funded purchase)
+
+Used a genuine two-connection live session (admin + `shenceng`, both
+connected simultaneously) rather than `force` for this one, since
+`cmds/std/give.lpc`'s `do_give()` gates on `interactive(who)` (an
+offline/netdead recipient falls through to an NPC-only `accept_object()`
+call_other, which silently no-ops for a player target — confirmed this
+is why an earlier `force`-based `give gold to shenceng` attempt failed
+with "对方不要你的东西" while `shenceng` was disconnected; not a bug,
+`give` to an offline character is a reasonable design gate, not chased
+further). With `shenceng` actually connected: admin `clone`d
+`/obj/money/gold` and `give`-gave it, then `shenceng` ran
+`buy sword from tiejiang` (`d/slwg/bingqipu`) — correct purchase, correct
+automatic denomination change (2两黄金 → 长剑 + 99两银子), 讨价还价 skill
+ticked up. Closes round one's "not verified live" item — no bug.
+
+### Confirmed pre-existing, not new: the round-two-flagged `xiake` "Read access denied"
+
+Round two observed, but didn't investigate, an unprompted
+`*Read access denied.` on `/std/char/npc.lpc:11` for object
+`/d/gaoli/npc/xiake`. Traced this pass: `adm/daemons/jobmond.lpc`'s
+`do_start_job()` (its own periodic job-posting/NPC-restocking heartbeat,
+independent of any player action) tries to `move()` a job NPC into one
+of a hardcoded room list including `/d/gaoli/qinglong-1`, and
+`xiake.lpc`'s `create()``carry_object()`s a weapon/armor via `new()`
+under an ACL context that gets denied. Confirmed this is the exact same
+`jobmond.lpc` room-list content gap already documented for sibling
+`dtsl2` (not this lib's own new finding) — fires from `jobmond`'s own
+independent heartbeat during ordinary boot/idle time, unrelated to any
+of this pass's live test paths. Left unfixed, as already established for
+the sibling.
+
+### Bug 3 (NEW bug class, FIXED): reconnecting while a character sits in the death/ghost sequence stacks a duplicate `death_stage()` call_out chain, misdirecting the revival room and risking a double-applied death penalty
+
+**File:line of the fix: `d/death/npc/yanluo.lpc`'s `init()` (~line 51)
+and `death_stage()` (~lines 61, 78).**
+
+- **How this was found**: doing a real, previously-unattempted combat
+  death (`kill xu chen` against 虚尘, a heavily overmatched 100000-
+  combat_exp NPC, per AGENTS.md §10.7's "use a significantly outmatched
+  opponent" guidance) and then reconnecting the test character mid-
+  sequence to check on progress — an utterly ordinary thing for a real
+  player to do while waiting through the ~30-second death narration
+  (阎罗殿's `death_msg` stage sequence), not a contrived edge case.
+- **Symptom**: with test character `shenceng` (combat_exp 0, no
+  `zuolao`), `yanluo.lpc`'s own branch logic should send them to
+  `/d/slwg/zoulang1` (the low-experience revival room) once the death
+  sequence completes. Instead, after reconnecting twice during the ~30s
+  wait, they landed at `/d/yangzhou/hotel` (`REVIVE_ROOM`, the
+  *high*-experience destination) — confirmed via `admin goto shenceng`.
+  Narration messages also appeared out of their intended stage order
+  (message index 2 before index 0) across the reconnects.
+- **Root cause**: `d/death/npc/yanluo.lpc`'s `init()` unconditionally
+  runs `call_out("death_stage", 5, ob)` every time it fires, with no
+  guard against firing more than once for the same `ob`. `init()` is
+  applied to every object present in a room whenever a *new* object's
+  commands are (re-)established in that room — and, critically,
+  FluffOS's `enable_commands()` efun itself re-broadcasts `init()` to
+  the environment by default (`__RC_ENABLE_COMMANDS_CALL_INIT__`
+  defaults to 1, confirmed in `fluffos/src/packages/core/add_action.cc`,
+  not overridden in this lib's `config.fluffos`). `obj/user.lpc`'s
+  `reconnect()` calls bare `enable_commands()` on every single
+  reconnect. So: a ghost sitting in 阎罗大殿 who reconnects even once
+  causes `yanluo.lpc`'s `init()` to fire again, scheduling a **second,
+  fully independent** 5-stage `call_out` chain on top of whatever chain
+  was already running. Two (or more, with more reconnects) concurrent
+  chains race:
+  - Interleaved/duplicate narration is the visible-but-harmless symptom.
+  - The real damage: EACH chain independently runs the terminal branch
+    (item-drop loop, `lose()` PK/combat_exp penalty, and the
+    `zuolao`/`combat_exp`/`zoulang1` room-move decision) when it reaches
+    its own final stage. Whichever chain finishes LAST calls
+    `ob->reincarnate()` a second time, which the earlier-finishing
+    chain(s) already did — meaning by the time a stale second chain
+    checks `!ob->is_ghost()` at the top of `death_stage()` (a check
+    meant to catch a non-ghost object wandering in by mistake), `ghost`
+    has *already* been reset to 0 by the first chain's completion, so
+    the stale chain takes the "you're not actually a ghost, teleporting
+    you to REVIVE_ROOM" shortcut (lines 61-70) **unconditionally**,
+    silently overriding whatever room the real chain's
+    `combat_exp`/`zuolao` branch had already (correctly) chosen. A
+    character with nonzero `combat_exp` reconnecting mid-sequence could
+    additionally have `lose()`'s PK/exp penalty applied more than once.
+- **Fix**: a per-victim `temp` flag (`"in_death_stage"`, set on `ob` —
+  the ghost, not the NPC singleton, since one `yanluo` instance handles
+  every ghost that passes through) guards `init()`'s scheduling call,
+  cleared at both of `death_stage()`'s exit points (the early
+  "not-a-ghost" shortcut and the terminal branch after the last
+  narration stage). Mirrors the same "make a repeatedly-retriggered side
+  effect idempotent via removal/flag-before-registering" shape already
+  applied to this lib's `feature/command.lpc``enable_player()` fix
+  (round two's Bug 2) — same underlying driver behavior class
+  (something meant to fire once per real event instead re-fires on every
+  redundant `enable_commands()`/`init()` broadcast), different call
+  site and much worse blast radius (silent wrong-room misdirection +
+  potential double death-penalty, vs. round two's duplicate command
+  dispatch).
+- **Verified**: reproduced pre-fix live exactly as described above
+  (`shenceng`, killed by `xu chen`, reconnected twice during the ~30s
+  sequence, landed at `/d/yangzhou/hotel` instead of the correct
+  `/d/slwg/zoulang1`). Applied the fix, killed and restarted the native
+  driver, then **stress-tested** with a fresh character (`chongshi`/重
+  试, combat_exp 0): killed by `xu chen`, reconnected **five** times in
+  rapid succession (a Python harness cycling connect→wait 3s→disconnect→
+  wait 3s, five times, then a final reconnect) across the full death
+  sequence — landed correctly at `/d/slwg/zoulang1`, title correctly
+  reverted from 【鬼魂】 to 【少年】, `work/log/debug.log` stayed absent
+  (no runtime errors) across both the pre-fix repro and the post-fix
+  stress test. This is a materially more aggressive repro than the
+  original 2-reconnect finding, specifically to make sure the fix holds
+  under real-world-plausible flaky-connection conditions, not just the
+  minimal repro.
+- **Lineage scope**: not checked against `dtsl2`/`dtslmud` this pass
+  (time budget went to the live investigation+fix+stress-test above) —
+  worth a proactive check on a future round given `enable_commands()`'s
+  init()-rebroadcast behavior is a driver-level default, not something
+  specific to this lib, so ANY lib with an NPC that unconditionally
+  schedules a `call_out` from its own `init()` (a common pattern for
+  multi-stage NPC dialogue/reaction sequences, not unique to death
+  narration) is a candidate for the same class of bug. Flagging this
+  pattern for whoever does the next corpus sweep pass: grep for
+  `void init()` bodies that call `call_out(...)` without first checking
+  some kind of "already scheduled" guard on the `previous_object()`/
+  target — the death-narration case here is likely not the only
+  instance in this lineage or elsewhere in the corpus.
+
+### Confirmed working, no bug: bulletin board post/read/list
+
+Tested at 净念禅院's `obj/board/party_cy_b.lpc` (placed in
+`d/chanyuan/miaodoor` via its own `setup()`'s `move(query("location"))`
+— the room's `"...party_cy_b.lpc"->foo()` call is a harmless no-op,
+`foo()` is undefined anywhere in the inheritance chain, same silent-0
+call_other idiom as `attempt_apprentice()` on a non-recruiter NPC,
+already documented in round one; it's there only to force the singleton
+board to compile-load once at room-`create()` time). `list` correctly
+showed a pre-existing real player note; `post <标题>` (4 Chinese chars,
+even length, per `do_post()`'s gate) correctly invoked the line editor
+(`me->edit(...)`, `.` to end); the new post was correctly appended and
+`read 2` rendered it back with correct author/time/title/body formatting.
+No bug.
+
+### Verification method / cleanup
+
+Two native driver boots this pass (initial, then post-fix). Both killed
+by exact PID after `readlink /proc/<pid>/cwd` confirmed this lib's `work`
+directory. Incidental `data/user/f/fluffos.o` + `data/login/f/fluffos.o`
+(admin account) and `data/orgroom/baling.o` (unrelated background-daemon
+resave, pure key-reorder no value change) save churn reverted before
+commit via `git checkout --` on those specific files only. Kept as
+evidence: `shenceng`/深层 and `chongshi`/重试 test character saves (both
+`data/user/` and `data/login/`), and the real board-post content change
+in `data/board/party_cy_b.o` + `data/board/all_post_b.o` (the aggregate
+board mirror, which legitimately picked up the same new post).
+`work/log/debug.log` never existed at any point this pass (no runtime
+errors triggered outside the Bug 3 investigation itself, which is
+LPC-catchable and doesn't write to `debug.log` when caught cleanly by
+the top-level dispatcher). Two harmless "Too deep recursion" lines
+appeared once in `boot.log` during the very first cold boot's daemon-
+preload sequence (`adm/simul_efun/file.lpc:32` / `adm/obj/master.lpc:396`
+— `log_file()`→`assure_file()`→`mkdir()`→`valid_write()`→`SECURITY_D`
+mutual bootstrap ordering during the earliest part of preload, before
+`SECURITY_D` itself is fully loaded), self-resolved (`Initializations
+complete.` still printed, never recurred during ~40 minutes of live
+testing afterward) — flagged here, not investigated further, since it's
+boot-time-only and unrelated to every live path this pass exercised.
