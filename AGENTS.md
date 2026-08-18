@@ -2014,6 +2014,44 @@ Two independent traps in the same apply:
   revive) runs; check for any unguarded `write_file()`/`log_file()` call
   textually BEFORE that transition in the same function, not just at
   the login/registration boundary this bug class was first found at.
+- **Widest-blast-radius instance yet, `xkyxciii`'s deep functional test
+  (§10.7): hits EVERY new character, not a conditional/rare path.**
+  `logind.lpc::enter_world()` has an anomaly-detection block — if
+  `combat_exp`/`exp` differ by ≥1000 or `potential`/`pot` differ by
+  ≥500, `log_file("nosave/WARNING", ...)` — sitting, uncaught, textually
+  BEFORE `cat(MOTD)`/room-selection/`user->move(startroom)` in the same
+  function. This archive never shipped `/log/nosave/`, and its
+  `log_file()` (in `adm/simul_efun/file.lpc`) is a bare
+  `write_file(LOG_DIR + file, text)` with no directory guard. Because a
+  fresh character's default `combat_exp`/`exp`/`potential`/`pot` values
+  are far enough apart to trip this check essentially every time
+  (confirmed on multiple independent characters, both mortal and
+  wizard, across repeated fresh-driver boots), this isn't a rare/
+  conditional failure like the `topten_save()`/`KILLRECORD` instances
+  above — it silently strands EVERY new registration with no
+  environment, forever (`score` still works since it doesn't touch
+  `environment()`; `look` shows the same "灰蒙蒙一片" fallback;
+  `east`/any real exit returns "什么？"; even a wizard's own `goto`
+  throws `*Bad argument 1 to file_name()` on the same broken
+  `environment(me)`). This directly CONTRADICTS an earlier WASM-era
+  pass's own notes claiming a clean, complete registration through to a
+  working `look`/`score` — that earlier test's specific character
+  attributes apparently happened to land under both thresholds, masking
+  the bug; the trigger is attribute-value-dependent, not universal by
+  code path, so "one clean registration" is not sufficient evidence of
+  safety for this bug class — re-verify with `look` (not just `score`)
+  after registration, ideally across 2+ independently-created
+  characters. Fix: same `assure_file()`-before-`write_file()` shape as
+  every instance above, applied inside `log_file()` itself (fixes every
+  call site in the lib at once, not just these two). This lib's
+  `assure_file()` helper is textually defined AFTER `log_file()` in the
+  same file — needed the same one-line forward declaration `xajhxo`
+  above required, or the whole `simul_efun` fails to compile and the
+  driver won't even boot (`lpcc_check.sh`'s batch sweep went from
+  3178 files checked to 0 without it). Verified live on two independent
+  fresh-driver registrations (one mortal, one wizard): `look` now shows
+  the correct starting room and NPC, `debug.log` clean, and a live
+  combat encounter against an aggressive NPC resolved normally.
 
 ### 7.12 Shared message/wrapper argument bugs
 
