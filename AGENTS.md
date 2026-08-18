@@ -3718,7 +3718,7 @@ vulnerable line in **16 other libs** beyond `hell` (`aoxiangtianji`,
 `yanhuangwuhun`, `zjdywzb`, `xkxz2`, `zjdyaryl`, `xkxc98sj`,
 `zjdy2008wzb`, `wxddym`, `yhwhpublicfi`, `yhyxs`, `fyzfqyy`,
 `zhongjidiyu`, `zjdyzj`, `zjmudhell`, `nt1`, `zhonghua2`). Live results
-so far (2026-08-18), 14 of 16 tested:
+so far (2026-08-18), 15 of 16 tested:
 
 - **Confirmed crash, fixed**: `zjmudhell`, `zjdyaryl`, `zjdyzj`,
   `yhyxs`, `zhonghua2` — all five reproduced the identical `*Bad
@@ -3750,14 +3750,24 @@ so far (2026-08-18), 14 of 16 tested:
   message and `debug.log` shows zero `socket_bind` entries.
 - **Confirmed clean, no fix needed**: `aoxiangtianji`, `zjdywzb`,
   `zjdy2008wzb`, `yanhuangwuhun`, `xkxz2`, `xkxc98sj`, `yhwhpublicfi`,
-  `fyzfqyy`, `zhongjidiyu` — `zhongjidiyu`'s `messaged.lpc` itself
-  compiles/runs clean (confirmed via `tell <nonexistent-player>`,
-  zero `debug.log` entries); it separately carries the same non-fatal
-  `versiond.lpc` config-ID-mismatch pattern described above, already
-  documented in its own NOTES.md as harmless and left alone. Despite
-  `zjdywzb`/`zjdy2008wzb` both explicitly sharing the
-  their own NOTES.md), `get_config(__MUD_PORT__)` behaves correctly on
-  all eight and `messaged.lpc` compiles/runs without error.
+  `fyzfqyy`, `zhongjidiyu`, `wxddym` — `zhongjidiyu`'s `messaged.lpc`
+  itself compiles/runs clean (confirmed via `tell
+  <nonexistent-player>`, zero `debug.log` entries); it separately
+  carries the same non-fatal `versiond.lpc` config-ID-mismatch pattern
+  described above, already documented in its own NOTES.md as harmless
+  and left alone. `wxddym` (the earlier "inconclusive" case, now
+  resolved) hit an unrelated `goto.lpc` permission-tier bug on its
+  first trigger attempt; switched to the player-accessible `finger`
+  command instead (`cmds/usr/finger.lpc` → `FINGER_D` →
+  `MESSAGE_D->visible()`, no wizard tier required), which lazy-loads
+  `messaged.lpc` cleanly with zero `socket_bind` hits; its
+  `versiond.lpc` carries the same pattern but is confirmed deferred
+  (`version_ok` set synchronously before the `call_out`), same
+  harmless shape as `zhongjidiyu`/`zhonghua2`. Despite
+  `zjdywzb`/`zjdy2008wzb` both explicitly sharing the same
+  "Doing"/`hell`-family lineage as the crashing libs (per their own
+  NOTES.md), `get_config(__MUD_PORT__)` behaves correctly on all eight
+  and `messaged.lpc` compiles/runs without error.
   `yanhuangwuhun`/`yhwhpublicfi` were confirmed via `goto` (zero
   `socket_bind` hits in `debug.log`); `yanhuangwuhun` separately
   carries an already-fixed, unrelated
@@ -3777,26 +3787,29 @@ so far (2026-08-18), 14 of 16 tested:
   completing the forced password-reset flow it triggers; `debug.log`
   was never even created (zero errors logged since boot), and it too
   lacks the `versiond.lpc` sibling pattern.
-- **Inconclusive**: `wxddym` — `goto` returned "什么？" (command not
-  found) rather than triggering the daemon, traced to a separate,
-  unrelated issue (`SECURITY_D->valid_grant(me, "(wizard)")` not
-  recognizing this lib's seeded admin as satisfying the "(wizard)"
-  tier check, so `goto.lpc`'s own `main()` returns 0 before ever
-  reaching the `MESSAGE_D` fallback) — not yet resolved, needs a
-  different trigger command (`tell`/`finger`/`who chatter` all
-  reference `MESSAGE_D` too, per this file) or a fix to the permission
-  check first.
-
 **Conclusion so far**: this is NOT a universal defect that reproduces
 on every lib sharing the source line, and it is NOT simply
 lineage-wide either — even within the exact same "Doing"/`hell`-family
 lineage, results are mixed (3 crash, 3 clean). Each lib genuinely needs
-its own live check; grep alone cannot predict the outcome. 2 libs
-remain unconfirmed: `wxddym` (inconclusive, see above), `nt1` (driver
-preload is unusually slow for this lib — 24,649 `.lpc` files, several
-times larger than any other lib tested in this sweep — testing is
-still in progress as of this writing). Fastest reliable trigger: the
-wizard
+its own live check; grep alone cannot predict the outcome. 1 lib
+remains unconfirmed: `nt1` — its driver preload is not merely slow but
+appears to have a genuine, severe memory-blowup problem: an unlimited
+boot attempt grew unboundedly and was still climbing past 10GB after
+15 minutes when the *host* ran out of memory and the OOM killer took
+the driver down, wedging the whole machine hard enough to need a
+manual reset (this happened during an autonomous session; see this
+file's own §-worthy note once root-caused — for now this is flagged as
+a serious open finding in its own right, independent of the
+`messaged.lpc` sweep, and `nt1`'s driver should only ever be started
+under a memory cap, e.g. `(ulimit -v 6291456; exec ./driver ...)` for
+a 6GB ceiling, never bare). `nt1` has 24,649 `.lpc` files, several
+times larger than any other lib tested in this sweep, but that alone
+does not obviously explain double-digit-GB growth — worth a real
+root-cause pass (e.g. is some preloaded daemon eagerly compiling or
+cloning far more of the tree than the 27-entry `adm/etc/preload` list
+would suggest) before ever booting this lib's driver again
+unsupervised. Fastest reliable trigger for the underlying
+`messaged.lpc` question, once `nt1` can be booted safely: the wizard
 `call /adm/daemons/network/messaged->query_udp_port()` one-liner
 (bypasses needing to find a lib-specific command that happens to
 reference `MESSAGE_D`, and bypasses `goto`'s own unrelated
