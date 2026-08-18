@@ -3792,24 +3792,26 @@ on every lib sharing the source line, and it is NOT simply
 lineage-wide either — even within the exact same "Doing"/`hell`-family
 lineage, results are mixed (3 crash, 3 clean). Each lib genuinely needs
 its own live check; grep alone cannot predict the outcome. 1 lib
-remains unconfirmed: `nt1` — its driver preload is not merely slow but
-appears to have a genuine, severe memory-blowup problem: an unlimited
-boot attempt grew unboundedly and was still climbing past 10GB after
-15 minutes when the *host* ran out of memory and the OOM killer took
-the driver down, wedging the whole machine hard enough to need a
-manual reset (this happened during an autonomous session; see this
-file's own §-worthy note once root-caused — for now this is flagged as
-a serious open finding in its own right, independent of the
-`messaged.lpc` sweep, and `nt1`'s driver should only ever be started
-under a memory cap, e.g. `(ulimit -v 6291456; exec ./driver ...)` for
-a 6GB ceiling, never bare). `nt1` has 24,649 `.lpc` files, several
-times larger than any other lib tested in this sweep, but that alone
-does not obviously explain double-digit-GB growth — worth a real
-root-cause pass (e.g. is some preloaded daemon eagerly compiling or
-cloning far more of the tree than the 27-entry `adm/etc/preload` list
-would suggest) before ever booting this lib's driver again
-unsupervised. Fastest reliable trigger for the underlying
-`messaged.lpc` question, once `nt1` can be booted safely: the wizard
+remains unconfirmed: `nt1` — blocked, not by the `messaged.lpc`
+question itself, but by a separate, severe boot-time memory-blowup bug
+now documented in full as **§7.110**. A first unlimited boot attempt
+grew unboundedly past 10GB after 15 minutes and triggered a host-wide
+OOM crash requiring a manual hard reset (during an autonomous
+session). A follow-up boot under a `ulimit -v 6291456` (6GB) cap
+climbed steadily to the cap and died there without ever becoming
+network-responsive — root-caused to `closed.lpc`'s `load_all_users()`
+mass-restoring and `enter_world()`-ing all 138 accounts in `nt1`'s
+`data/closed.o` backlog synchronously in one heartbeat tick at t≈3s,
+each resuming its own saved activity (including active `scheme.lpc`
+auto-training loops) with no batching or pacing — see §7.110 for the
+full mechanism and the diagnostic method for spotting this on other
+libs before booting them unlimited. `nt1`'s driver must never be
+started without a memory cap going forward. The `messaged.lpc`
+question for `nt1` specifically remains untested and will stay that
+way until §7.110 is fixed or worked around (e.g. temporarily emptying
+`data/closed.o` to test `messaged.lpc` in isolation, not yet tried).
+Fastest reliable trigger for the underlying `messaged.lpc` question,
+once `nt1` can be booted safely: the wizard
 `call /adm/daemons/network/messaged->query_udp_port()` one-liner
 (bypasses needing to find a lib-specific command that happens to
 reference `MESSAGE_D`, and bypasses `goto`'s own unrelated
@@ -7851,6 +7853,29 @@ could actually issue a command afterward.
   the `catch()` fix applied and assumed sufficient), since §7.109 and
   §7.90 are two independent failure modes that happen to produce the
   identical player-visible symptom.
+
+### 7.110 An unpaced, single-heartbeat mass-restore of every saved "closed-door retreat" account can grow driver memory unboundedly during boot and take the whole HOST down via OOM, not just the driver — caution required before ever booting a lib with a large `closed.o` backlog
+
+**Severity note**: this entry caused a REAL incident during this project's own testing, not just a theoretical concern. Testing `nt1` for the §7.52 sweep (below), an unlimited (`ulimit -v` unset) driver boot grew steadily past 10GB after ~15 minutes of continuous climbing (confirmed genuinely progressing via repeated `debug.log`/boot-log growth checks, not stuck/hung) and eventually exhausted ALL host memory — the Linux OOM killer took the driver process down, but by then the host itself had wedged badly enough to require a manual hard reset. **Never boot a driver for a lib with a suspiciously large save file at `data/closed.o` without a hard memory cap** (e.g. `(ulimit -v 6291456; exec ./driver config.fluffos)` for a 6GB ceiling in a subshell, or `systemd-run --scope -p MemoryMax=6G -- ./driver ...`) — this lets the process itself fail cleanly (malloc-failure crash, or a driver-level abort) instead of the OOM killer reaching for other processes and potentially the whole system.
+
+**Mechanism** (traced via `adm/daemons/closed.lpc`, present across many libs derived from the same "Lonely" author lineage as `nt1`, though the account-count that makes it dangerous varies per lib): this daemon implements a "闭关" (closed-door retreat) feature — a player who starts a long unattended activity (via `cmds/usr/scheme.lpc`'s `scheme start`, or the `closed`/`xiulian`/`breakup`/`animaout` skill commands) gets `CLOSE_D->user_closed(me)` called, which records `closed_users[id] = startroom` in a persisted mapping and saves it. On `create()`, `closed.lpc` immediately arms `set_heart_beat(3)` — so 3 seconds after driver boot, its own `heart_beat()` fires and calls `load_all_users()`, which does:
+```lpc
+foreach (u in keys(closed_users)) {
+  if (!objectp(user_ob = LOGIN_D->find_body(u))) {
+    // restore the saved character AND enter_world() it — synchronously, right here
+    ...
+    catch(LOGIN_D->enter_world(login_ob, user_ob));
+    continue;
+  }
+  if (query_heart_beat(user_ob)) continue;
+  continue_doing(user_ob);
+}
+```
+This `foreach` has **no batching, no yield, and no cap** — every single entry in `closed_users` gets fully restored and `enter_world()`-ed in ONE heartbeat call. On a fresh boot, `find_body(u)` finds nobody for any of them (nobody's logged in yet), so EVERY account in the map gets a fresh `restore()` + `enter_world()` in that single call. `nt1`'s own `data/closed.o` had **138 accounts** queued this way. Each `enter_world()` restores that character's full saved dbase (potentially large nested skill/mapping data for a long-played character — one such account's dump showed `combat_exp: 217276983`, dozens of nested `can_perform`/`special_skill` mappings, etc.), re-establishes their own `heart_beat()`, and — for any account whose saved `"doing"` was `"scheme"` — resumes an active auto-training schedule (`cmds/usr/scheme.lpc`'s `execute_schedule()`, which processes a `REPEAT`/`LOOP`-structured command macro one step per heartbeat tick henceforth). A driver crash-dump backtrace captured during the OOM-adjacent boot showed the LPC call stack actively inside `execute_schedule()` for one such character at the moment memory finally ran out, with that stack frame's locals showing the character's full restored dbase and its schedule array — consistent with this mass-restore-then-resume-138-schedules mechanism being the actual driver of the unbounded growth, though the exact allocation that never gets freed has not been isolated to a single line (this needs a live `gdb`/heap-profiler session under the memory cap to pin down further, not just log-reading).
+
+**Why this differs from "just a big lib, boots slow"**: `nt1` also has an unusually large source tree (24,649 `.lpc` files), which does slow ordinary preload — but that alone is a linear, bounded cost, not the unbounded climb observed here. The 138-account mass-restore-and-resume is a genuinely unbounded design gap: nothing caps how many accounts `load_all_users()` will process in one call, and nothing paces `enter_world()`/schedule-resumption across multiple heartbeat ticks. A lib with a `closed.o` backlog of even a few hundred long-played, heavily-decorated characters could hit this regardless of total `.lpc` file count.
+
+**If you hit this on another lib**: check `wc -c data/closed.o` and a rough entry count (`grep -o '":"' data/closed.o | wc -l` on the raw mapping literal) BEFORE ever booting that lib's driver unlimited. If it's large (tens of entries or more), boot only under a memory cap and watch RSS growth over the first 1-2 minutes after `create()` (i.e., past the 3s mark when `closed.lpc`'s first `heart_beat()` fires) — a lib with a small/empty `closed_users` map won't show this pattern at all. A proper fix (not yet attempted on any lib) would batch `load_all_users()`'s `foreach` — e.g. process only N accounts per heartbeat tick, or stagger `enter_world()` calls via `call_out()` — but this hasn't been implemented or tested here; this entry exists to document the danger and the diagnostic method, not a verified remedy.
 
 ---
 
