@@ -109,6 +109,57 @@ Doing 血统的大型金庸题材 mudlib（7000+ 个 LPC 档案），游戏内�
 经济系统/商店、以及门派加入。这些留给下一轮深入测试；目前的验证边
 界到"进入游戏世界 + score + board + quit"为止，如上所述。
 
+## 深度功能测试（第二轮，2026-08-18）——发现并修复两个真实 bug：messaged.lpc 的 socket_bind() 崩溃、eval-cost 过低
+
+补完上一轮留下的战斗/门派测试，过程中发现并修复两个真实 bug。
+
+- **发现并修复：`adm/daemons/network/messaged.lpc` 的 `startup_udp()`
+  第一次被触发时崩溃**（§7.52 类，本档案自己已经确认过的同一类问
+  题的漏网之鱼）：用巫师账号第一次执行 `goto` 指令时（触发
+  `messaged.lpc` 首次懒编译/初始化），撞上
+  `执行时段错误：*Bad argument 2 to socket_bind(); Expected: int
+  Got: "10"`。追根溯源：`create()` 里 `my_port = LOCAL_PORT() +
+  MESSAGE_PORT;`，`LOCAL_PORT()` 宏是
+  `(int) get_config(__MUD_PORT__)`——这个 `(int)` 转型只在编译期
+  有效，`get_config()` 实际运行时返回的不是数字（这个驱动版本上这
+  个 config key 的取值行为和预期不一致），所以 `LOCAL_PORT()` 真
+  正返回的是一个空字符串，`"" + 10`（LPC 里字符串 + 整数是字符串
+  拼接，不是数值相加）就得到了字符串 `"10"`，传给要求 `int` 类型
+  的 `socket_bind()` 直接崩溃。这份档案的 `adm/daemons/versiond.lpc`
+  在更早一轮（2026-07-31）就已经因为完全同一类"socket 包在这个驱
+  动环境下不可用"的问题被按 AGENTS.md §7.52 掏空过 13 个函式，但
+  `messaged.lpc`（同样是碰 UDP socket 的收发信件精灵）当时被漏掉
+  了。修复：按同一手法把 `startup_udp()` 掏空成直接 `return 0`（跨
+  MUD UDP 消息在这个环境下本来就不可用，让它安安静静地做无害的
+  no-op），顺手给 `send_udp()` 加了 `!socket_id` 的保护（原本没有
+  判断 `socket_id` 是否真的建立成功就直接呼叫 `socket_write()`）。
+  **现场验证**：重启全新驱动进程，`goto` 现在干净执行，`debug.log`
+  里不再出现任何 `socket_bind`/`Bad argument` 记录。
+- **发现并修复：`config.fluffos` 的 `maximum evaluation cost` 撞上
+  §7.90 已确立的"后台任务精灵"变体**：`debug.log` 里出现两条
+  `Eval interrupted: ... cost limit reached, limit: 700000 usec` →
+  `*Too long evaluation. Execution aborted.`，调用点分别是
+  `d/xueshan/obj/yinlun#96` 和
+  `kungfu/class/generate/questnpc#275`——都是这份档案自己非常活跃
+  的后台"任务精灵"系统（游戏内持续能看到"【系统报告】任务精灵：
+  进程(...)创建了一个任务"的滚动播报）动态生成 NPC/物件时的冷编译
+  开销，不是玩家直接触发的。按 §7.90 已确立的标准修复，从 700000
+  （本项目模板默认值）提到 5000000（本项目内 30+ 档案已经在用的同
+  一个值）。**现场验证**：重启后驱动空转约 30 秒（任务精灵系统持
+  续在后台生成任务），`debug.log` 全程零 `cost limit reached` 记录。
+- **战斗测试**：练功房的木人（`clone/npc/mu-ren.lpc`）继承自
+  `inherit/char/fighter.lpc` 的 `accept_fight()`/`accept_hit()`，
+  两者都要求 `ob->query("combat_exp") >= 12000` 才允许练功
+  （"你这点身手还不足以和木人练功。"）——一个全新角色的
+  `combat_exp` 默认是 0，永远达不到这个门槛。这不是一个可以直接判
+  定为程序 bug 的发现（`combat_exp` 门槛属于内容/数值设计范畴，按
+  本项目既有的"深度测试范围限定在程序 bug"原则不去动它），只是如
+  实记录：这个具体的木人可能是给中高阶角色用的进阶陪练目标，不是
+  绝对新手的第一个练功对象，真正给新手用的陪练（如果存在）需要下
+  一轮另外去找。
+- **门派加入、经济系统仍未测试**：本轮时间预算集中在排查上面两个
+  真实 bug，没有再去找门派拜师的 NPC 或商店，留给下一轮。
+
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 44 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
