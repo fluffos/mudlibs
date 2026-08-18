@@ -7142,6 +7142,41 @@ independently re-booted (`nt1` in particular has a pre-existing,
 already-documented unrelated CPU-pegging issue in its closed-cultivation
 daemon that makes a quick verification boot impractical — see §7.107).
 
+**Sweep gap found and closed 2026-08-17**: the 2026-08-16 sweep's grep
+signature (`force_quit()` containing both `mud_age` and `remove_user`)
+had a false-negative blind spot — a sibling variant of this exact
+lineage stores the same "how long has this account existed" value
+under a *different* property name, `birthday`, not `mud_age`
+(`if (time() - query("birthday", me) < 1800 && !query("reborn", me))`
+instead of `if (me->query("mud_age") < 1800 && !me->query("jieti"))`).
+`nte`'s own instance of this bug (documented above) was this exact
+`birthday`-keyed variant — already a hint the original sweep's
+`mud_age`-only grep wouldn't have caught it, but that wasn't
+cross-checked against the sweep's own coverage list at the time. A
+broader grep this round (`remove_user` appearing anywhere inside
+`force_quit()`, not gated on the specific property name) found 3 more
+unfixed instances the original sweep missed entirely: `hhsj`, `xfbhh`,
+`nitan170911` — all three byte-identical to `nte`'s `birthday`/`reborn`
+shape (`nitan170911`'s window is the original 1800s/30min; `hhsj`'s and
+`xfbhh`'s are a narrower 3-5s window, presumably a downstream fork's
+own tuning, but the same unconfirmed-delete defect regardless of window
+width). Fixed identically (removed the unconfirmed branch). Live-
+verified on `xfbhh` and `hhsj`: fresh test accounts, clean driver boots
+post-fix with zero compile errors on the edited file; direct
+`user_dump(DUMP_NET_DEAD)` reproduction via a wizard `call` was
+attempted but blocked by an unrelated per-lib `is_admin()` gate on this
+specific lineage fork (see hhsj's own NOTES.md/§7.90 ninth-instance
+writeup) — confidence instead rests on the fix being a verbatim,
+line-for-line match to `nte`'s already fully live-verified remedy
+against byte-identical source. A corpus-wide re-grep after this pass
+(`remove_user` appearing anywhere inside any lib's `force_quit()`)
+returned zero remaining matches. Lesson: when a sweep's detection grep
+matches a specific property/variable name, check whether the bug's
+*origin* report (here, `nte`) actually used that exact name before
+trusting the sweep's coverage — a renamed-property sibling can slip
+through a signature that's more specific than the underlying bug shape
+actually requires.
+
 ### 7.105 A lib's own safe-sparring training-dummy NPC never sets the flag its shared `fight`/`hit` commands gate real-vs-mock combat on, so every "safe" spar routes through genuine lethal `kill_ob()` instead
 
 Found on `tianxiawuxue`'s §10.7 deep functional test, by doing exactly
