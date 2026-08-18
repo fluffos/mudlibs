@@ -7922,6 +7922,23 @@ two of them even naturally exercised the fixed path via their own
 boot's unrelated pre-existing driver-level trace, confirming
 `standard_trace()` no longer self-crashes on a null object).
 
+### 7.112 An NPC's `init()` unconditionally scheduling a `call_out()` chain gets a duplicate stacked on top of it every time the player it's tracking simply reconnects — because `enable_commands()` re-broadcasts `init()`, and every ordinary reconnect calls `enable_commands()`
+
+**Found via `dtsl`'s round-three §10.7 deep test**, in `d/death/npc/yanluo.lpc` — a reincarnation-desk NPC that stages a dying ghost through a multi-step `death_stage()` sequence:
+```lpc
+void init() {
+  object ob;
+  ob = previous_object();
+  if (!ob) return;
+  call_out("death_stage", 5, ob);   // no guard against a second call
+}
+```
+FluffOS re-broadcasts `init()` to every object in a room whenever `enable_commands()` is called on an interactive there (`__RC_ENABLE_COMMANDS_CALL_INIT__` defaults to 1, and this project's libs don't override it). `obj/user.lpc`'s `reconnect()` calls `enable_commands()` on every single reconnect — an everyday event for any player with a flaky connection, not an edge case. So a ghost sitting in this NPC's room who reconnects even once while mid-sequence gets a **second, fully independent** copy of the whole multi-stage `call_out` chain stacked on the first. The two chains then race: whichever finishes last wins, and since each chain independently completes the entire sequence (revival-room routing, PK/`combat_exp` death-penalty application, item drops), a stale second chain finishing after the first has already reset state can silently misroute the player to the wrong room or double-apply a penalty — with no error anywhere, since nothing crashed.
+
+**This is a general pattern, not specific to one NPC or lib**: any `init()` that unconditionally does `call_out(...)` (or otherwise starts a stateful, delayed multi-step process) without a re-entry guard is vulnerable the same way, on any lib whose `reconnect()` calls `enable_commands()` (check via `grep -n enable_commands work/obj/user.lpc` or wherever that lib's player-body reconnect logic lives). **Fix shape**: a per-victim `set_temp()`/`delete_temp()` guard flag around the `call_out()` scheduling, cleared at every exit point of the chain (mirrors this same project's earlier `feature/command.lpc` `enable_player()` fix for an analogous "`init()` gets re-broadcast, make the side effect idempotent" shape).
+
+**Confirmed and fixed in 3 libs so far** (`dtsl`, `dtsl2`, `dtslmud` — all three share a byte-identical `yanluo.lpc`, confirmed via `diff` before applying the identical fix to the siblings). Not yet swept corpus-wide — worth a grep for `void init()` bodies containing an unconditional `call_out(` with no adjacent guard on any lib not yet checked, but each hit needs the specific chain's shape read (the guard/clear-point placement isn't as mechanically uniform as §7.111's single-line swap).
+
 ---
 
 ## 8. Login and registration flow bugs
