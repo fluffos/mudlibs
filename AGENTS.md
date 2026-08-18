@@ -3711,22 +3711,58 @@ though nothing ever actually created a valid socket). Verified live:
 clean, zero `socket_bind`/`Bad argument` entries in `debug.log` across
 a fresh boot.
 
-**Sweep candidate, not yet swept**: `grep -rl "my_port = LOCAL_PORT() +
-MESSAGE_PORT" libs/*/work/adm/daemons/network/messaged.lpc` found this
-exact vulnerable line in **16 other libs** beyond `hell`
-(`aoxiangtianji`, `yanhuangwuhun`, `zjdywzb`, `xkxz2`, `zjdyaryl`,
-`xkxc98sj`, `zjdy2008wzb`, `wxddym`, `yhwhpublicfi`, `yhyxs`, `fyzfqyy`,
-`zhongjidiyu`, `zjdyzj`, `zjmudhell`, `nt1`, `zhonghua2`) — a shared
-codebase file across a wide swath of unrelated-lineage libs in this
-project, well past the "3+ independent lineages" threshold this
-project treats as a sweep trigger. Not yet confirmed whether the
-runtime crash reproduces identically on all 16 (the underlying
-`get_config()` misbehavior could in principle be driver-build- or
-config-specific rather than universal), so each should be spot-checked
-live (trigger a `goto` or anything else that lazily compiles this
-daemon, confirm the crash, then apply the identical fix) rather than
-blindly batch-edited — same discipline as every other multi-lib sweep
-in this catalog.
+**Sweep in progress, mixed results so far — do NOT batch-apply
+blindly**: `grep -rl "my_port = LOCAL_PORT() + MESSAGE_PORT"
+libs/*/work/adm/daemons/network/messaged.lpc` found this exact
+vulnerable line in **16 other libs** beyond `hell` (`aoxiangtianji`,
+`yanhuangwuhun`, `zjdywzb`, `xkxz2`, `zjdyaryl`, `xkxc98sj`,
+`zjdy2008wzb`, `wxddym`, `yhwhpublicfi`, `yhyxs`, `fyzfqyy`,
+`zhongjidiyu`, `zjdyzj`, `zjmudhell`, `nt1`, `zhonghua2`). Spot-checking
+so far (2026-08-18):
+
+- **`zjmudhell`** (same `shujian3`/"Doing" mobile-app lineage as `hell`
+  — its own `goto.lpc` shares the identical `MESSAGE_D->find_user(arg)`
+  fallback) — **confirmed live, identical crash**
+  (`*Bad argument 2 to socket_bind(); Expected: int Got: "10"`), fixed
+  with the same remedy, verified clean post-fix. This lib's own earlier
+  WASM pass had already gutted 3 other socket daemons
+  (`versiond.lpc`/`payd.lpc`/`dns_master.lpc`) but missed `messaged.lpc`
+  — the exact same "one sibling daemon overlooked" pattern as `hell`
+  itself.
+- **`aoxiangtianji`** (unrelated lineage — Xiyouji-themed, no
+  connection to the `shujian3`/"Doing"/`zjmud` family) — **does NOT
+  reproduce**. Forced `messaged.lpc`'s `create()` directly via the
+  wizard `call` command (`call
+  /adm/daemons/network/messaged->query_udp_port()`) and it returned a
+  real port number (6670) with zero error — `get_config(__MUD_PORT__)`
+  behaves correctly on this lib. The vulnerable source line is present
+  but harmless here.
+- **`wxddym`** — attempted but inconclusive: `goto` returned "什么？"
+  (command not found) rather than triggering the daemon, traced to a
+  separate, unrelated issue (`SECURITY_D->valid_grant(me, "(wizard)")`
+  not recognizing this lib's seeded admin as satisfying the "(wizard)"
+  tier check, so `goto.lpc`'s own `main()` returns 0 before ever
+  reaching the `MESSAGE_D` fallback) — not yet resolved, needs a
+  different trigger command (`tell`/`finger`/`who chatter` all
+  reference `MESSAGE_D` too, per this file) or a fix to the permission
+  check first.
+
+**Conclusion so far**: this is NOT a universal defect that reproduces
+on every lib sharing the source line — it appears tied to something
+lineage/config-specific (2/2 tested libs from the `hell`/`zjmudhell`
+"Doing" family crash identically; the one tested unrelated-lineage lib
+does not). Do not batch-fix the remaining 13
+(`yanhuangwuhun`/`zjdywzb`/`xkxz2`/`zjdyaryl`/`xkxc98sj`/
+`zjdy2008wzb`/`wxddym`/`yhwhpublicfi`/`yhyxs`/`fyzfqyy`/`zhongjidiyu`/
+`zjdyzj`/`nt1`/`zhonghua2`) without a live confirmation each — the
+fastest reliable trigger is the wizard `call
+/adm/daemons/network/messaged->query_udp_port()` one-liner (bypasses
+needing to find a lib-specific command that happens to reference
+`MESSAGE_D`, and bypasses `goto`'s own unrelated permission-tier
+issues like the one hit on `wxddym`) — but `call` itself requires
+`(arch)`-tier grant, which not every lib's seeded admin may have; fall
+back to any command file that references `MESSAGE_D` (grep `grep -rln
+"MESSAGE_D" work --include='*.lpc'`) if `call` isn't available.
 
 ### 7.53 A daemon's own defensive `seteuid(getuid())` silently resets a euid that `create()` deliberately set
 

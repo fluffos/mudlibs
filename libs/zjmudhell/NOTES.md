@@ -144,4 +144,32 @@ README/NOTES.md，逐条对照其已知 bug（§7.68 复活软锁、commandd.lpc
   暴露给玩家指令——这些功能很可能只通过手机客户端自己的结构化菜单
   协议（连线时看到的 `06b12:...` 这类按钮提示）触发，raw telnet/
   socket 测试触及不到，不代表功能缺失，只是这次测试方法的覆盖边界，
+
+## §7.52 追加实例（2026-08-18）：`adm/daemons/network/messaged.lpc` 的 `socket_bind()` 崩溃
+
+作为 `hell` 那份档案（AGENTS.md §7.52）发现的同一个 bug 的跨库排查
+一环，确认这份档案（和 `hell` 属于同一个 `shujian3`/"Doing" 手机
+App 血统家族，`goto.lpc` 也共用完全相同的
+`MESSAGE_D->find_user(arg)` 兜底逻辑）**现场复现了完全一致的崩
+溃**：巫师账号第一次执行 `goto`（触发 `messaged.lpc` 首次懒编译）
+时，`执行时段错误：*Bad argument 2 to socket_bind(); Expected: int
+Got: "10".`——根因和 `hell` 完全相同（`LOCAL_PORT()` 的 `(int)` 转
+型对 `get_config()` 实际返回的非数字值在运行时不起作用）。这份档
+案自己早前的 WASM 修复记录里提到过"按 §7.52 掏空了三个纯 socket
+精灵"（`versiond.lpc`、`payd.lpc`、`dns_master.lpc`），但
+`messaged.lpc`（第四个碰 UDP socket 的精灵）当时被漏掉了——和
+`hell` 自己的 `versiond.lpc`-修过-但-`messaged.lpc`-漏掉是完全相
+同的疏漏模式。修复：`startup_udp()` 掏空成 `return 0`，
+`send_udp()` 补上 `!socket_id` 保护。**现场验证**：重启全新驱动进
+程，`goto` 干净执行，`debug.log` 里不再出现任何
+`socket_bind`/`Bad argument` 记录。
+
+**跨库排查结论（截至本次）**：这个 bug 在 `hell`/`zjmudhell` 这两
+个同源手机 App 血统档案上都 100% 复现；但在完全不相关的血统
+`aoxiangtianji`（西游记题材）上用同样的方法（`call`/`eval` 直接触
+发 `create()`）**没有复现**——`get_config(__MUD_PORT__)` 在那份档
+案上正确返回了数字端口。这说明这不是一个对所有携带这段代码的档案
+都必然触发的 bug，可能和具体的血统/配置有关，不能不加验证就对
+AGENTS.md §7.52 列出的其余 14 个档案批量套用同一个修复——已经把这
+个结论更新回 AGENTS.md §7.52 本身，留给下一轮继续逐个排查。
   记录以供以后有更完整客户端模拟能力时补测。
