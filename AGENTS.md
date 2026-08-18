@@ -7879,6 +7879,49 @@ This `foreach` has **no batching, no yield, and no cap** — every single entry 
 
 **If you hit this on another lib**: check `wc -c data/closed.o` and a rough entry count (`grep -o '":"' data/closed.o | wc -l` on the raw mapping literal) BEFORE ever booting that lib's driver unlimited. If it's large (tens of entries or more), boot only under a memory cap (`(ulimit -v 6291456; exec ./driver config.fluffos)` in a subshell) and watch RSS growth over the first few minutes past the 3s mark (when `closed.lpc`'s first `heart_beat()` fires) — a lib with a small/empty `closed_users` map won't show this pattern at all. In-game, `mud_status(int verbose)`/its wizard-command wrapper (commonly `cmds/wiz/status.lpc`'s `status detail`, or `cmds/wiz/mem.lpc`'s `mem -m`) is the fastest way to confirm the "accounted memory is small, RSS is huge" signature on any similarly-affected lib without needing gdb — note it lives under `cmds/wiz/`, so it needs real wizard-tier command-path access even if the file's own internal `SECURITY_D->valid_grant` check happens to be disabled. A proper fix (not yet attempted on any lib) would batch `load_all_users()`'s `foreach` — e.g. process only N accounts per heartbeat tick, or stagger `enter_world()` calls via `call_out()` — this would bound both the peak compile-burst size and the resulting allocator fragmentation, but has not been implemented or tested here; this entry documents the danger and the diagnostic method, not a verified remedy.
 
+### 7.111 `master.lpc`'s own error handler (`standard_trace()`) crashes on a driver-level error whose `error["object"]` is `0` — `file_name()` called unconditionally — corpus-wide sweep completed, 67 libs fixed
+
+`master.lpc`'s `standard_trace(mapping error, int caught)` formats a
+runtime-error trace for `debug.log`. In this file's most common
+un-fixed shape:
+```lpc
+res = sprintf("%s\n执行时段错误：%s\n程式：%s 第 %i 行\n物件: %s\n",
+  res, error["error"],
+  error["program"], error["line"],
+  file_name(error["object"]));
+```
+`error["object"]` is `0` (not an object) for driver-level errors that
+aren't attributed to any specific LPC object — e.g. an `add_action.cc`
+safety trap ("Illegal to move or destruct") or other C-level runtime
+error. `file_name(0)` itself throws `Bad argument 1 to file_name()`
+**from inside the mudlib's own error handler**, so the ORIGINAL error's
+trace is lost and `debug.log` only shows a terse secondary crash
+instead of the real one — actively working against future debugging on
+any lib carrying this shape.
+
+**Found via round-three §10.7 deep testing on `wqfy`** (a driver-level
+trap fired once during ordinary gameplay testing and this bug ate its
+trace). Fixed there with `objectp(error["object"]) ? file_name(...) :
+"(driver)"`.
+
+**Sweep**: a corpus-wide grep for the literal vulnerable line
+(`file_name(error["object"])`) hit **129 libs**. Careful contextual
+classification (checking whether an `objectp()`/`undefinedp()`/`!`
+guard already preceded the call — many libs in this shared lineage
+already fixed it locally, in several different ternary shapes) found
+**96 already safely guarded** and **67 with the exact byte-identical
+unguarded shape** shown above (confirmed one match per file, no file
+had a mix requiring careful disambiguation of which occurrence to
+touch — the guarded and unguarded shapes in files carrying both always
+differ in trailing punctuation, `));` vs `)),`, so a literal
+`file_name(error["object"]));` → `objectp(error["object"]) ?
+file_name(error["object"]) : "(driver)");` string replace is safe and
+unambiguous). All 67 fixed in one mechanical pass; 8 spot-checked with
+live driver boots across the batch (no compile errors, clean boot;
+two of them even naturally exercised the fixed path via their own
+boot's unrelated pre-existing driver-level trace, confirming
+`standard_trace()` no longer self-crashes on a null object).
+
 ---
 
 ## 8. Login and registration flow bugs
