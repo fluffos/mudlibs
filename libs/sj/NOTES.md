@@ -121,3 +121,121 @@ AGENTS.md §7.68 顶部的撤销说明。
 - `work/adm/simul_efun/file.lpc`
 - `work/cmds/app/update.lpc`
 - `work/clone/user/user.lpc`
+
+## 深度功能测试第三轮 / Deep functional test round three (2026-08-18)
+
+标准三项检查清单（§7.111/§7.112/logind `enter_world` 缺存盘）+ 更深
+的经济/留言板/门派/重连竞态测试。用种子管理员账号 `fluffosb`
+（`Mud@2026`）实测。
+
+### 标准三项检查清单结果
+
+1. **§7.111**（`master.lpc::standard_trace()` 无守卫 `file_name(error["object"])`）：不适用。`work/adm/obj/master.lpc`（真正被
+   `config.fluffos` 的 `master file` 指向的那份）和陪伴的
+   `work/adm/single/master.lpc` 的 `standard_trace()` 都是用 `%O` 直接
+   格式化 `error["object"]`，不是无守卫的 `file_name()` 调用，全档案
+   grep `file_name(error` 零命中。
+2. **§7.112**（`init()` 里无守卫的 `call_out()` 链）：**命中，已修
+   复**——见下。全档案对每个 `init()` 函式体扫了 `call_out(`，多数
+   命中点已经有 `remove_call_out()` 自我去重守卫（如一大批 NPC 的
+   `"greeting"` 招呼语），真正符合本类 bug 形状（多阶段链、且发起
+   端完全没有去重）的只有死亡链 `wgargoyle.lpc`/`bgargoyle.lpc` 这
+   两份。另发现两处结构相同但确认是死代码/无害的旁支，未动：
+   `d/fenghuang/fenghuang/npc/leader.lpc`（及其 `u/zhangm` 下的重复
+   拷贝）全档案 grep 找不到任何房间引用这个 NPC 路径，是从未被实
+   例化过的孤儿内容；`d/tianlang/biwu.lpc`（武林大会广场，PK 竞技
+   场）的 `call_out("do_recover", ...)` 即使被 `enable_commands()` 重
+   连触发第二次，`do_recover()` 本身也是幂等的（把气血内力恢复到
+   满，重复执行无副作用），不构成真实 bug，未动。
+3. **`logind.lpc::enter_world()` 缺 `ob->save()`**：不适用，该函式里
+   `user->save()` 和 `ob->save()` 都齐全且未被注释掉（第 821-822
+   行）。
+
+### 修复 3（§7.112）：`d/death/npc/{w,b}gargoyle.lpc` 死亡链重连竞态
+
+`init()` 无条件对刚进房的活人（`userp(previous_object())`）排一个 5
+秒后的 `call_out("death_stage", 5, ob, 0)`，且驱动在任何
+`enable_commands()`（含玩家断线重连）时都会对房间内每个物件重播
+`init()`。如果鬼魂角色在这 5 秒窗口内恰好断线重连一次，会在原有
+链条之上再叠一条并行的 `death_stage` 链，导致白无常/黑无常的五段
+对话交错重复播放。按 §7.112 标准修法：`init()` 里用
+`previous_object()->query_temp("death_stage_active")` 去重、
+`set_temp(...)` 占位；`death_stage()` 的两个提前返回点（鬼魂不在场
+/ 阶段走完转生）都补上 `delete_temp("death_stage_active")`
+清除。`wgargoyle.lpc`/`bgargoyle.lpc` 两份文件形状完全相同，同样手法
+修复。两份文件均为纯 CRLF，用 Python 二进制模式做精确字节替换，
+`git diff --stat` 确认只改了预期的行。
+
+**现场验证（竞态复现）**：干净重启驱动后，用 `fluffosb` 在
+`/d/city/guangchang` 攻击「交通警察」致死，进入 `/d/death/gate`
+（白无常已在 `init()` 里排好第一条 5 秒链）；立刻断线重连，重连完
+成时刻距死亡时刻仅 **3.10 秒**——正好落在原本会触发重复排程的窗口
+内。之后静静等待完整链条跑完：五句死亡对话（"你叫什么名字" /
+"你也怪可怜的" / "喘不过气来" / "你命不该绝" / "白无常大吼道"）
+**各出现且仅出现一次**，无交错重复，最终正常送到本档案的
+REVIVE_ROOM（太空港口）。`debug.log`/`error.log` 全程干净。
+
+### 修复 4（新发现，非清单项）：`u/SEAKING` 整个巫师目录大小写不匹配，商店等多处功能性静默崩溃
+
+在 `/d/tianlang/zhahuopu`（杂货铺）用 `list`/`buy` 时，触发未捕获运
+行时错误：`*call_other() couldn't find object '/u/seaking/headjia'.`
+（`/feature/dealer.lpc:132` 的 `do_list()`、`:15` 的
+`is_vendor_good()`）——错误直接原样广播给玩家，且 `do_list()` 的迭
+代在命中第一个失败项后中断，导致清单/购买对大多数商品静默失效。
+
+根源：全档案有 **9 处**跨 5 个不同目录（`d/city/npc/liu.lpc`、
+`d/city/npc/dianyuan.lpc`、`d/budui/npc/dxlaoban.lpc`、
+`d/tianlang/npc/liu.lpc`、`d/shendian/{npc/,}dxlaoban.lpc`、
+`d/shendian/npc/liu.lpc`）的 `vendor_goods`/`new()` 都用小写路径
+`/u/seaking/...` 引用这个巫师的私人目录，但硬盘上目录本身是大写
+`/u/SEAKING`——Linux 是大小写敏感文件系统，路径永远解析不到。目录
+里 4 个文件（`guangjian.lpc`、`jieshouqi.lpc`、`shangwutong.lpc`、
+`yangwuliu.lpc`）历史上已经被转成小写 `.lpc`（说明小写才是预期约
+定），但目录本身和其余 15 个文件（含 `NPC/` 子目录 3 个）一直停留
+在大写 `.C`，从未跟着转换，是当年 WASM/格式化批量转换遗漏的一批。
+除商店清单外，`cmds/std/zhizao.lpc`（`new("/u/seaking/jiqiren")`）、
+`cmds/skill/jujian.lpc`（`new("/u/seaking/guangjian")`）等制造/铸剑
+类巫师指令此前也必然因同一原因静默失败。
+
+修复：全档案 grep 确认零处引用大写 `/u/SEAKING`，`git mv` 整个目录
+到小写 `u/seaking`（先转一次性中间名再转最终名规避大小写重命名的
+文件系统竞态），并把目录内剩余的 15 个 `.C` 文件（含 `NPC/` 子目录
+里 3 个孤儿 NPC，全档案确认未被任何路径引用，纯粹顺手统一命名）
+一并 `git mv` 成小写 `.lpc`。纯改名，字节内容零改动。`u/SEAKING/WELCOME`
+（非代码文本文件，未被任何路径引用）原样改名跟随目录移动，未改内容。
+
+**现场验证**：干净重启驱动后，`fluffosb` 在杂货铺执行 `list`——原
+本卡住的头/手/腿/躯干/足部装甲五件套全部正常列出，无报错；
+`buy headjia` 成功购买（"你从刘振那里买下了一块头部装甲"）。
+`debug.log`/`error.log` 干净。
+
+### 其它测试
+
+- **留言板**：`/d/wizard/bugroom` 的 `BUG留言簿`，`post <标题>` →
+  编辑器写正文 → `.` 保存，`留言完毕` 正常；无 bug（第一次误测漏
+  了标题参数导致"什么？"，是测试脚本用法错误，不是 mudlib 问题）。
+- **拜师/门派**：`bai jingcha`（交通警察）被正确拒绝——"交通警察
+  既不属於任何门派，也没有开山立派，不能拜师"，代码逻辑本身如
+  此（NPC 未挂门派属性），是设计而非 bug，未动。
+- **战斗/死亡/复活**：完整重跑一遍（结果同前两轮一致，额外验证
+  了上面的重连竞态场景）。
+
+### 本轮修改/改名的文件
+
+- `work/d/death/npc/wgargoyle.lpc`（§7.112 修复）
+- `work/d/death/npc/bgargoyle.lpc`（§7.112 修复）
+- `work/u/SEAKING/` → `work/u/seaking/`（整个目录改名，含目录内 20
+  个文件改名为小写 `.lpc`，纯 rename，无内容改动）
+
+### 供未来 sweep 参考的跨库线索
+
+- §7.112 死亡/复活链重连竞态：本次是继本项目今日已在 10+ 个库中独
+  立确认之后的第 N 次命中，再次证实是这批档案共有的普遍拷贝粘贴
+  形状，值得继续按 AGENTS.md §7.112 清单扫描其余尚未测试的库。
+- 大小写不匹配的巫师目录导致整片功能静默失效（本次是 `u/SEAKING`
+  vs 引用侧 `/u/seaking`）：这是本项目里之前主要在单个文件名层面
+  见过的模式（如 AGENTS.md §7.8/§7.9 记录的 MUDVISITOR/GIFTCARD），
+  但本次是**整个目录**层面的大小写不一致，波及面明显更大（商店、
+  制造、铸剑等多个不相关的指令入口）。值得在其余库里也用
+  `find . -type d` 找一遍是否有全大写的 `u/<WIZID>` 目录、同时又有
+  代码以小写路径引用同名目录的情况。
