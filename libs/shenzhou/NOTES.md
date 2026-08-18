@@ -1029,3 +1029,7 @@ libs/*/work` 命中 140+ 个档案、覆盖相当一部分语料库（经由共�
 ### 本轮修改的文件
 
 - `work/clone/user/user.lpc`
+
+## §7.112 跨库扫描修复（无常 NPC 重连触发重复轮回链）
+
+- **`d/death/npc/{wgargoyle,bgargoyle,wgargoyle3}.lpc` 的 `init()` 无条件调度 `death_stage` call_out 链（AGENTS.md §7.112）**：三个文件原本都没有任何去重判定——`enable_commands()` 会在同房间内向所有对象重播 `init()`，玩家哪怕只是断线重连一次，也会在原有的判官对话/转生链之上再叠一条新链。已仿照同族已修复库（`dtsl`/`dtsl2`/`dtslmud`/`jym`/`xuanjianlu`）的做法，给每个 `init()` 加上按受害者存的 `set_temp("death_stage_active", 1)`/`query_temp(...)` 门槛判定，并在 `death_stage()` 的每一个退出点（角色离场、黑无常"阳人退回"分支、链条走完转生）里 `delete_temp(...)` 清除标记。这三个文件与 `xkm`/`xkx2001` 同族但非字节一致（`wgargoyle.lpc`/`wgargoyle3.lpc` 转生后会给角色套一件衣服 `cloth`，`wgargoyle3.lpc` 还多出一个独立于 `init()` 链的 `ask_death()`"多死一次"命令，未受这次改动影响）。`u/lara/`、`u/scatter/update/` 下的同名文件是未加载的重复/备份拷贝，未触碰。已用独立驱动干净编译+启动验证，未发现残留 save 数据变化。
