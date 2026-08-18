@@ -788,3 +788,159 @@ GB/Big5 选码提示，选 `g`），`score`/`update /adm/simul_efun/file`
 误。登录本身产生的存档时间戳类微小 diff（`data/user/f/fluffos.o`
 的 `last_on` 字段）已用 `git checkout` 撤销，不提交。驱动最终按精确
 PID kill，`ps -p` 确认已退出。
+
+## Round three deep functional test (2026-08-18, AGENTS.md §10.7)
+
+Went deeper than round two's zone-walk/net-dead pass: real board post/read,
+a real weak-NPC kill (not just training-dummy sparring), shop `list`/`buy`,
+and a targeted live stress-test of the death corridor for the newly
+catalogued §7.112 pattern. Also checked the two other newly catalogued
+2026-08-18 bug shapes (§7.111 `standard_trace()`, `logind.lpc`
+`enter_world()` missing `->save()`) — neither applies here (details below).
+
+### Proactive checks — not applicable
+
+- **§7.111** (`file_name(error["object"])` unguarded in `standard_trace()`):
+  the *live* master file (`master file : /adm/single/master` in
+  `config.fluffos`) never calls `file_name(error["object"])` at all — its
+  `standard_trace()` has that argument commented out entirely (dead/inert
+  code, predates this pass). A stray `adm/obj/master.lpc` (already has the
+  §7.111-shaped guard applied from some earlier pass) and an unused
+  `adm/obj/masterold.lpc` (has the true unguarded shape) both exist on disk
+  but are **not** the file the driver actually loads as master — dead
+  duplicates, confirmed via `config.fluffos` and `grep -rl masterold`
+  finding zero real references. Nothing to fix.
+- **`logind.lpc` `enter_world()` missing `->save()`**: present and not
+  commented out — `user->save(); ob->save();` right after `user->setup()`
+  (around line 1256). Not applicable.
+
+### Bug found and fixed: §7.112 — unguarded staged `init()` → `call_out()`
+chains, duplicated by a reconnect's `enable_commands()` re-broadcast
+
+Same pattern as the freshly catalogued §7.112 class. Grepped the whole tree
+for `call_out` inside files defining `init()`, narrowed with a `*_stage`
+naming heuristic, and manually inspected every hit outside `d/death/npc/`
+(the directory the task briefing specifically flagged). Found the exact
+unguarded shape — `init()` unconditionally calling
+`call_out("death_stage"/"..._stage", N, previous_object(), ...)` with no
+per-target idempotency flag — in **13 files**, all fixed the same way
+(`jym`/`xuanjianlu` `wgargoyle.lpc` reference shape: a `set_temp`/
+`query_temp`/`delete_temp("death_stage_active")` guard around the
+scheduling call in `init()`, cleared at every exit point of the
+callback):
+
+1. **`d/death/npc/{wgargoyle,bgargoyle,mengpo,panguan,panguan2,pusa}.lpc`**
+   (6 files) — the actual post-death ghost-realm corridor
+   (`d/death/{gate,gateway,naihe2,yanluo,mengpo,dizang}.lpc`, walked by
+   every player who dies), each NPC's `init()` scheduling its own
+   multi-stage `death_stage` dialogue/reincarnation chain with zero guard.
+   A player who reconnects (or has `enable_commands()` invoked on them by
+   any other path) while standing in one of these rooms would get a
+   second, fully-independent `death_stage` chain stacked on top of the
+   first — duplicate dialogue, and for `wgargoyle`/`bgargoyle`/`pusa`,
+   double execution of `reincarnate()`/inventory-drop/`move()`/`save()`
+   side effects.
+2. **`d/shaolin/npc/yu-zu2.lpc`** — identical shape, a 少林 "jailer" NPC
+   running its own 5-stage `death_stage` chain (its own `reincarnate()`
+   call is already commented out from an earlier edit, but the
+   `tell_object`/`move()` side effects still duplicate without the guard).
+3. **`d/bwdh/{sjsz,sjsz2,sjsz3}/{east,west}_xiangfang.lpc`** (6 files) —
+   NOT an NPC; these are the 比武场 (PK-arena) staging **rooms** for the
+   门派论剑 (sect tournament) event. Unlike the death-corridor NPCs, this
+   `init()` has **no** `wizardp()` exclusion at all, so literally anyone
+   (player or wizard) entering the room schedules a 90-second
+   `death_stage` (misleadingly named — it's actually the
+   team-assignment/bodyguard-spawn callback, nothing to do with dying)
+   that assigns a team, teleports the player into the arena, and can spawn
+   an extra `weishi` (guard) NPC. A reconnect while waiting in this room
+   would duplicate all of that — most consequentially, an extra `weishi`
+   spawned per stray reconnect, silently inflating one team's guard count
+   in a competitive event.
+
+**Live verification** (fresh driver rebuild, both scenarios): used the
+committed admin account (`fluffos`) plus a fresh test character
+(`qintongshan`) in two separate sockets, teleported the test character
+into `/d/death/gate` (via `summon`) and separately into
+`/d/bwdh/sjsz/west_xiangfang`, and used the `callouts death_stage` wizard
+command (`cmds/arch/callouts.lpc`) as ground truth for exactly how many
+`death_stage` call_outs are live system-wide:
+
+- **Death corridor**: after the real `init()` broadcast from `summon`,
+  `callouts death_stage` showed exactly **1** entry
+  (`/d/death/npc/wgargoyle#... death_stage`) and
+  `qintongshan->query_temp("death_stage_active")` was `1`. Called
+  `qintongshan->enable_commands()` three times via admin `call` (the exact
+  driver-level effect a real reconnect has) — `callouts death_stage`
+  still showed exactly **1** entry throughout (delay ticking down
+  naturally, not reset), confirming no duplicate stacking. Let the chain
+  run to completion: `callouts death_stage` went to **0** entries and
+  `query_temp("death_stage_active")` correctly dropped back to `0` —
+  the guard clears itself on both the abort and completion paths, not
+  just blocking re-entry.
+- **PK-arena room**: teleported admin into `west_xiangfang` (which,
+  correctly, also scheduled admin's own `death_stage` entry — this room
+  has no wizard exclusion by design) then `summon`ed `qintongshan` in —
+  `callouts death_stage` showed **2** entries (one per distinct
+  `previous_object()`, i.e. admin and the player each get their own,
+  which is correct — the guard is per-target, not global). Three more
+  `enable_commands()` calls on `qintongshan` left the count at exactly
+  **2** throughout, confirming the fix works for the room-init shape too.
+- `debug.log` never came into existence during any of this (fresh driver,
+  full registration + death-corridor stress test + board/shop/combat
+  testing below, all in one session) — zero runtime errors of any kind.
+
+**Files modified**: the 13 files listed above (one-line `init()` guard +
+one-line clear at each `death_stage`/`..._stage` exit point, same shape
+throughout). `git diff --stat` confirms no other lines changed in any of
+them — the `_xiangfang.lpc` files originally have mixed CRLF/LF line
+endings, so those six were fixed with a binary-mode (`rb`/`wb`) Python
+literal-byte replacement rather than the text-mode Edit tool, after the
+first Edit-tool attempt was caught silently normalizing the whole file's
+line endings to LF (reverted via `git checkout` and redone).
+
+**Lineage note**: worth a proactive `call_out.*_stage` + missing-guard grep
+on other libs sharing this "ES II" / `bwdh` 门派论剑 content family —
+out of scope for this pass (single-lib rule), flagging per the task
+briefing's "recurring pattern, don't fix elsewhere yourself" instruction.
+
+### Other round-three coverage (all clean, no new findings)
+
+- **Board post/read**: `客店留言板` (`clone/board/kedian_b.lpc`,
+  `inherit BULLETIN_BOARD`) at 客店 (kedian). `post <title>` → editor
+  prompt → message body → `.` → "留言完毕。", confirmed successful; `read`
+  with no argument correctly prompts "您要读哪一封信？" instead of
+  crashing. No errors.
+- **Real combat + kill** (not just the training-dummy spar rounds one/two
+  already covered): fought and killed `小混混` (`d/city/npc/hunhun.lpc`,
+  `combat_exp` 200, 十里长街/nandajie1) with the default starting
+  character build — full multi-round fight resolved correctly, `杀死人数`
+  incremented from 零 to 一 on `score`, no errors.
+- **Shop mechanics**: `药铺` (`d/city/npc/huoji.lpc`, `inherit F_DEALER`)
+  — `list` correctly prices and lists all `vendor_goods`; `buy <id>`
+  correctly rejects an unmatched Chinese display-name argument
+  (`is_vendor_good()` matches against the goods object's `id()` keyword
+  list, not its Chinese short name — expected/correct dealer behavior,
+  not a bug, confirmed by reading `feature/dealer.lpc`).
+- **Death/reincarnation full-cycle completion**: covered above as part of
+  the §7.112 verification — the `wgargoyle` chain was allowed to run to
+  natural completion (not just stress-tested for duplication), ending
+  with the player correctly reincarnated and the guard flag cleared.
+- Sect-joining (`bai`) not re-attempted this round — round two already
+  confirmed the design-gate behavior (flavor recruiter NPC correctly
+  rejects, real sect masters are out-of-reach without a lengthy walk);
+  nothing new to add without an unreasonable time investment for a single
+  data point already established as "working as designed."
+
+### Process hygiene
+
+Native driver, port 40057, rebuilt/restarted once after the §7.112 fixes
+to confirm clean compilation and re-verify live. Both sessions' PIDs
+(58051, then 61890) confirmed via `readlink -f /proc/<pid>/cwd` matching
+this lib's `work/` before every kill; killed by exact PID each time.
+Runtime-churn saves from testing (`data/board/kedian_b.o`,
+`data/npc/menpai.o`/`menpai1.o` — an unrelated periodic sect-of-the-day
+daemon effect, not caused by this pass — `data/topten.o`,
+`data/user/f/fluffos.o`) reverted via `git checkout`; test character
+`qintongshan`'s save files removed (not committed). `boot.log` scratch
+file removed. `git status --short` confirmed clean except the 13
+intentional source fixes before committing.
