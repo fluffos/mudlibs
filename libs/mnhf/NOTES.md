@@ -35,3 +35,30 @@ wizlist` 里列了名，实际存档从未真正创建过（本轮通过正常�
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 4 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## eval-cost 核实（2026-08-17）——检查过，700000 够用，未改动
+
+同源孪生档案 `moniHuafu`（meta.json 标了 `duplicate_of: mnhf`）在自己
+的 §10.7 测试中发现 `maximum evaluation cost : 300000` 太低，冷启动
+编译 `std/char.lpc` 本身和死亡区判官 NPC 时会撞上
+`Eval interrupted: ... cost limit reached`（AGENTS.md §7.90 同类）。
+`mnhf` 自己的 `config.fluffos` 用的是 `700000`——比 `moniHuafu` 高，
+但仍然低于本项目"确认已知偏低"名单里的门槛，值得专门核实是不是
+也有同样的风险（之前那轮"第二轮"战斗测试很可能只是被同会话内先
+前的注册尝试"预热"过，见 AGENTS.md §7.90 第三个实例的先例）。
+
+**核实方法**：(1) `lpcc_check.sh` 全档案重新编译一遍——933/945 通
+过，12 个失败和早前记录的完全一致（都是已确认无害的孤立网络精灵/
+example 档案/lpcc-sweep-only 的 `valid_override` 假阳性），零处
+`cost limit reached`。(2) 单独重开一个全新驱动进程，`fluffos` 账号
+**在这个全新进程里的第一次连线**（`std/char.lpc`/`std/char/npc.lpc`
+的冷启动编译现场发生，日志里能看到成串的编译警告）直接 `goto
+/d/death/yanluo`——房间、判官 NPC（"监考官"、"铁索 数学老师"、"枷
+铐 语文老师"、阎王爷）全部正常载入；监考官甚至主动攻击了测试角色，
+完整交手数回合直到角色"死亡"，正确移动回 `/d/death/gate`——全程
+`debug.log` 零 `cost limit reached`/`Too long evaluation` 记录。
+
+**结论：`mnhf` 的 `700000` 在这份档案里是够用的，不是虚惊后侥幸——
+两种独立方法（批量编译扫描 + 全新进程现场战斗/死亡验证）都没有触
+发问题。未改动 `config.fluffos`。`moniHuafu` 的问题是它自己配置值
+（`300000`）明显更低导致的，不是这份共享代码本身的通病。**
