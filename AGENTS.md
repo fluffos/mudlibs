@@ -3683,6 +3683,51 @@ daemon on a new lib, not just the ones with "dns"/"mudlist" in the
 name; any from-scratch network-server daemon (HTTP, FTP, telnet proxy)
 is equally likely to hit this.
 
+Also confirmed, a slightly different failure shape from all the above:
+`adm/daemons/network/messaged.lpc` (an inter-mud UDP messaging daemon,
+found on `hell`'s round-two §10.7 pass) doesn't fail to COMPILE — it
+compiles fine and crashes the first time it's actually TRIGGERED at
+runtime (a wizard's first `goto` call lazily loaded it in this
+session): `*Bad argument 2 to socket_bind(); Expected: int Got: "10"`.
+Root cause is a step removed from the usual "socket efuns just don't
+work here": `create()` computes `my_port = LOCAL_PORT() +
+MESSAGE_PORT`, where `LOCAL_PORT()` is `(int) get_config(__MUD_PORT__)`
+— and per this project's own established lesson (an `(int)` cast is
+compile-time only, it does not coerce a non-numeric value at runtime),
+`get_config()` on this driver build returns something that evaluates
+as an empty string here, so `LOCAL_PORT()` silently returns `""`
+instead of the real port number. `"" + 10` in LPC is string
+concatenation (not addition) when the left operand is a string, so
+`my_port` ends up holding the literal string `"10"` instead of an int,
+and `socket_bind()` throws on the type mismatch. This lib's own
+`versiond.lpc` had already received this section's standard gutting
+treatment in an earlier round for the ordinary "sockets don't work
+right here" reason — `messaged.lpc` is the OTHER UDP-touching daemon
+in the same lib and was simply missed at the time. Same remedy:
+`startup_udp()` reduced to `return 0`, plus a `!socket_id` guard added
+to `send_udp()` (which unconditionally called `socket_write()` even
+though nothing ever actually created a valid socket). Verified live:
+`goto` (and anything else that lazily loads this daemon) now runs
+clean, zero `socket_bind`/`Bad argument` entries in `debug.log` across
+a fresh boot.
+
+**Sweep candidate, not yet swept**: `grep -rl "my_port = LOCAL_PORT() +
+MESSAGE_PORT" libs/*/work/adm/daemons/network/messaged.lpc` found this
+exact vulnerable line in **16 other libs** beyond `hell`
+(`aoxiangtianji`, `yanhuangwuhun`, `zjdywzb`, `xkxz2`, `zjdyaryl`,
+`xkxc98sj`, `zjdy2008wzb`, `wxddym`, `yhwhpublicfi`, `yhyxs`, `fyzfqyy`,
+`zhongjidiyu`, `zjdyzj`, `zjmudhell`, `nt1`, `zhonghua2`) — a shared
+codebase file across a wide swath of unrelated-lineage libs in this
+project, well past the "3+ independent lineages" threshold this
+project treats as a sweep trigger. Not yet confirmed whether the
+runtime crash reproduces identically on all 16 (the underlying
+`get_config()` misbehavior could in principle be driver-build- or
+config-specific rather than universal), so each should be spot-checked
+live (trigger a `goto` or anything else that lazily compiles this
+daemon, confirm the crash, then apply the identical fix) rather than
+blindly batch-edited — same discipline as every other multi-lib sweep
+in this catalog.
+
 ### 7.53 A daemon's own defensive `seteuid(getuid())` silently resets a euid that `create()` deliberately set
 
 If a daemon's real uid never resolves (e.g. `master.lpc`'s
