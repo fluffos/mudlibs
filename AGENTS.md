@@ -2053,6 +2053,28 @@ Two independent traps in the same apply:
   the correct starting room and NPC, `debug.log` clean, and a live
   combat encounter against an aggressive NPC resolved normally.
 
+A milder, non-blocking variant found on `cctx`'s round-three §10.7
+pass: `adm/daemons/toptend.lpc`'s `topten_save()` does an unguarded
+`write_file()` to one of 8 `/topten/*.txt` leaderboard files (rich,
+exp, pker, neili, shen1, shen2, per1, per2, age), and the archive never
+shipped a `/topten/` directory. Unlike every instance above, this one
+does NOT crash or abort anything — `topten_save()` already checks
+`write_file()`'s own return value and just returns a `notify_fail()`
+message instead of throwing. The call chain (`enter_world()` →
+`get_gender()` → `topten_checkplayer()` → `topten_add()` →
+`topten_save()`) means it fires on literally every new registration,
+but registration, world-entry, and ordinary play all continued working
+normally — the only casualty is that the entire leaderboard subsystem
+(8 different rankings) had never successfully written a single record
+since this archive's first boot, completely silently. Fix: same
+`assure_file()`-before-`write_file()` shape, verified live — a fresh
+driver restart and a new registration produced zero `Wrong permissions`
+entries in `debug.log`, and all 8 `/topten/*.txt` files were created
+and populated. Worth remembering this bug class doesn't always present
+as a broken registration/room — sometimes it's a background feature
+quietly failing every single time with normal play completely
+unaffected, only visible via `debug.log`.
+
 ### 7.12 Shared message/wrapper argument bugs
 
 A 2-arg `tell_room()` wrapper passing a raw int 0 as `message()`'s
