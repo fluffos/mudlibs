@@ -65,3 +65,99 @@ command_hook` 声明，但确认它是死代码——全代码库里唯一提到
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 44 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## Round three deep functional test（2026-08-18）
+
+本轮预算集中在第二轮明确留白的范围：门派内技能/经济/留言板/死亡复活，
+并主动排查了当天新收录的两类 bug 模式（AGENTS.md §7.111、§7.112）。
+
+### §7.111（`master.lpc` 的 `standard_trace()` 无条件呼叫 `file_name()`）：不适用
+
+本档案真正生效的 master 是 `adm/single/master/master.lpc`（config.fluffos
+的 `master file` 指向这里，`adm/single/master.lpc` 是未使用的旁支）。
+它的 `standard_trace()` 用 `%O` 格式化 `error["object"]`，不是无条件
+`file_name()`，`%O` 对 0/非物件值都是安全的。确认不受影响，未改动。
+
+### §7.112（NPC `init()` 无守卫地排 `call_out()` 链，重连会叠加第二条链）：命中并修复
+
+`d/death/npc/wgargoyle.lpc`、`wgargoyle1.lpc`、`bgargoyle.lpc`（鬼门关/
+酆都城门的白无常、黑无常）三个死亡引导 NPC 的 `init()` 都是这个形状：
+`if (!previous_object() || !userp(...) || wizardp(...)) return; call_out("death_stage", 30, previous_object(), 0);`
+——没有任何防止玩家重连时 `init()` 被驱动重新广播、从而叠加第二条独立
+`death_stage` 链的守卫。三个文件都按文档记载的修法加了
+`previous_object()->query_temp("death_stage_active")` 守卫（`init()`
+里排 `call_out` 前检查+置位），并在 `death_stage()` 的每个出口
+（含 `bgargoyle` 特有的"阳人闯阴间被赶出"分支）用
+`delete_temp("death_stage_active")` 清除。
+
+现场验证（用 `eval` 直接检查 `call_out_info()`）：admin 把测试号
+summon 进鬼门关，白无常 `init()` 触发，`call_out_info()` 只有一条
+`death_stage` 记录（守卫已置位）；随后让该测试号断线重连（触发
+`enable_commands()` 重新广播 `init()`），再查 `call_out_info()`——
+仍然只有一条链在推进，没有叠加第二条。链走完后守卫标志正确清零
+（`query_temp` 归零），玩家被移到 `/d/city/wumiao`（`REVIVE_ROOM`）
+恰好一次，全程 debug.log 无报错。
+
+### 主动排查发现并修复两处严重程序缺陷（非目录里的两类模式，是本库独有）
+
+1. **`adm/daemons/logind.lpc` 的 `enter_world()` 里 `ob->save()` 被注
+   释掉**（第 907 行，原文 `//        ob->save();`）——新角色完成注册
+   后，登入身份物件（`data/login/<首字母>/<id>.o`，含密码/保密密码/
+   email/`registered` 等字段）**从未被存盘**，除非玩家恰好从设了
+   `valid_startroom` 的房间正常 `quit`（会走 `cmds/usr/quit.lpc` 里
+   `link_ob->save()` 的立即存盘分支），或者等到 `autosaved.lpc` 的
+   8~108 分钟一轮的心跳存盘赶上。新手殿堂（`d/welcome/welcome.lpc`）
+   本身没设 `valid_startroom`（该行被注释掉了），所以任何在离开新手
+   殿堂之前断线/退出的新号，登入身份**永久丢失**——下次再用同一个
+   id 登入，系统会误判"账号不存在"，提示重新创建新角色（角色本体
+   `data/user/...` 即使侥幸存在也对不上）。这也解释了为什么本库此前
+   两轮播种的 `fluffos` 管理员账号在本轮开始时已经完全消失（`data/
+   login/f/` 和 `data/user/f/` 都没有档案，只剩 `securityd.o` 里的
+   `wiz_status` 授权记录）。修法：去掉注释，让 `ob->save()` 在
+   `enter_world()` 里无条件执行（新号和回头客都会跑到这一行，无害）。
+   现场验证：修复前，全新注册号在没跳出新手殿堂时 quit 后无法用原密
+   码重新登入（提示创建新号）；修复后，同样流程的全新注册号可以立
+   刻正常重连（提示"你距上次退出仅N秒，请稍后再登陆"的防刷屏节流，
+   证明账号被正确识别）。已按 AGENTS.md §1.5 惯例用标准凭证
+   `fluffos`/`Mud@2026` 重新走完整注册流程播种管理员账号（`data/
+   login/f/fluffos.o`、`data/user/f/fluffos.o` 都已就位，`wiz_status`
+   授权原本就还在），此账号文件已提交。
+
+2. **`include/globals.h`（驱动 `global include file` 自动包含给所有
+   源文件的全域头）缺少 `EDITOR_D` 宏定义**——`inherit/misc/bboard.lpc`
+   （`BULLETIN_BOARD` 的实现，被所有留言板 clone 继承）第 304 行用到
+   `EDITOR_D->get_file_num(...)`，但这个宏只在另一个不会被自动包含
+   的旁支头文件 `inherit/misc/globals.h` 里定义过，导致 `bboard.lpc`
+   编译失败（`Error: Undefined variable 'EDITOR_D'`）。后果两层：(a)
+   任何驻留留言板 clone（如客店的 `kedian_b`）的房间，第一次在某次
+   驱动会话里被访问、触发房间 `create()` 尝试 clone 留言板对象时，会
+   因为 clone 物件"没有程式"而抛出未捕获运行时错误，导致移动指令
+   （如新手殿堂的 `down`）整体中断——当事玩家会卡在原地，只看到"你
+   发现事情不大对了"的模糊提示，摸不着头脑（第二个及以后访问同一房
+   间的玩家不受影响，因为房间物件已经在内存里创建过一次，不会重新
+   触发）；(b) 全档案所有留言板永久性地没有实际留言板物件可用，
+   `list`/`post`/`read` 全部静默失效——客店留言板还原后一次性找回了
+   189 条 2007 年的历史留言（此前完全无法访问）。修法：在
+   `include/globals.h` 里按字母序补上
+   `#define EDITOR_D "/adm/daemons/editord"`（与 `inherit/misc/
+   globals.h` 里的定义完全一致，`/adm/daemons/editord.lpc` 本来就存
+   在）。现场验证：修复前，全新驱动会话里第一个走 `down` 的号必然
+   触发上述崩溃；修复后，同样全新驱动会话里第一个走 `down` 的号顺利
+   进客店，`list` 能看到 189 条历史留言。
+
+### 其余深度测试
+
+`join wudang` 门派加入本轮再次复核无误（与第二轮一致）。留言板
+list/post 流程在客店验证可用（`list` 走分页，`ENTER`/`q`/`b` 翻页；
+未继续测 post/discard 全流程，范围已覆盖到功能修复所需的最低验证）。
+死亡复活链路（白无常/黑无常引导流程）已在上面 §7.112 段落里连同守
+卫修复一起验证。经济系统（铁匠铺等商店 `list`/`buy`）、门派内技能学
+习/PK 战斗仍未覆盖，留给下一轮。
+
+### 潜在跨库线索（未在本库外验证，仅标记）
+
+`logind.lpc` 里 `enter_world()` 缺失 `ob->save()` 这个具体行号可能是
+本库独有的历史误删，但"新号未经由 `valid_startroom` 房间正常退出就
+会丢失登入凭证"这类问题的**排查方法**（检查 `enter_world`/等价函式
+里是否存在被注释掉的登入物件 `save()` 调用）值得在其它库round-three
+测试中留意，尤其是那些新手初始房间没设 `valid_startroom` 的血统。
