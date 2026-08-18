@@ -47,6 +47,7 @@
 #define CLUB_D        "/adm/daemons/clubd" 
 #define COMBAT_D	"/adm/daemons/combatd"
 #define COMMAND_D	"/adm/daemons/commandd"
+#define EDITOR_D	"/adm/daemons/editord"
 #define EMOTE_D		"/adm/daemons/emoted"
 #define FINGER_D	"/adm/daemons/fingerd"
 #define FTP_D		"/adm/daemons/ftpd"
