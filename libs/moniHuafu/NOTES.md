@@ -392,3 +392,54 @@ after tightening.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 4 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（2026-08-17，round one）——两个真实 bug：移植自双胞胎档案的 §7.34，加上一个本档案独有的冷启动 eval-cost 崩溃
+
+这份档案的原始压缩包和 `mnhf`（archive #14，已确认完全同源）在
+meta.json 里就标了 `duplicate_of: mnhf`——先检查了 `mnhf` 是否已经
+做过 §10.7 深度测试而不是从零重跑，果然找到 `mnhf/NOTES.md` 记录的
+"第二轮"深度测试（注册 → 军训引导 → quest → 完整战斗 10+ 回合 → 干
+净 quit，全程 debug.log 零报错），并在那一轮里发现并修复了一个
+`logind.lpc` 里的调试残留 `printf("%O\n", ob)`（AGENTS.md §7.34 已归
+档的确认实例之一）。
+
+**移植修复 1**：对照检查后确认这份档案自己的 `logind.lpc` **仍然带
+着**同样两处 `printf("%O\n", ob)` 残留（`get_resp()`/`get_name()` 各一
+处）——虽然是同源代码，但两份档案各自独立经历过转档管线，`mnhf`
+那边的修复从未同步过来。直接删除这两行（和 `mnhf` 的修法逐字节一
+致），`lpcc_check.sh` 确认 `logind.lpc` 编译干净。
+
+**新发现并修复的问题，本档案独有**：`lpcc_check.sh` 全档案编译检查
+（945 个档案）比 NOTES.md 早前记录的 12 个失败多出 2 个新失败——
+`/std/char/npc`（角色基类本身！）和 `/d/death/yanluo`（死亡区"阎罗
+殿"房间）——都是同一类：`Eval interrupted: ... cost limit reached,
+limit: 300000 usec.`，和本项目 AGENTS.md §7.90 已归档的冷启动
+eval-cost 级联完全同类（这次撞的是 `master.lpc` 的 `valid_read()` 和
+`d/death/npc/panguan2.lpc`（阎罗殿判官 NPC）首次编译时的
+`feature/dbase.lpc`/`attribute.lpc` 调用链）。`config.fluffos` 的
+`maximum evaluation cost` 只有 `300000`——比本项目最常见的 `700000`
+默认值还要低（文件里甚至留着一行被注释掉的更低值
+`#maximum evaluation cost : 100000`，说明之前就有人调过这个数字但
+调得还不够），是本项目已知范围里偏低的一档。
+
+**移植修复 2 / 新修复**：把 `maximum evaluation cost` 从 `300000` 提到
+`5000000`（AGENTS.md §7.90 的标准补救值，本项目 30+ 档案已使用）。
+**现场验证**：重开一个全新驱动进程，用管理员账号 `fluffos` `goto
+/d/death/yanluo`——修复前这个房间在 `lpcc` 批量编译时必现上述崩溃；
+修复后干净渲染出完整房间描述、阎王爷（Death-god）和四名判官
+（Death-judge/Niutou/Mamian）NPC，`debug.log` 全程零 `cost limit
+reached`/`Too long evaluation` 记录。孪生档案 `mnhf` 自己的
+`config.fluffos` 用的是 `700000`（比这份档案高，但仍属于本项目已知
+"偏低、部分档案不够用"的那一档）——`mnhf` 早前的战斗测试之所以没撞
+上这个问题，很可能是同一会话内先做过的注册/quest 尝试已经把
+`std/char`/`feature/*` 这条昂贵编译链"预热"过了（和 AGENTS.md §7.90
+第三个实例记录的"同会话内重试掩盖首次编译代价"效应一致），不代表
+`mnhf` 真的没有这个风险；本次会话未去动 `mnhf` 自己的配置（超出本
+轮任务范围），留给未来专门测试 `mnhf` 时一并核实。
+
+**战斗/死亡循环**：鉴于孪生档案 `mnhf` 已经用同一份共享代码验证过
+完整战斗流程（10+ 回合攻防判定正常），本轮聚焦在冷启动 eval-cost 崩
+溃这个 `mnhf` 测试没有触及、且这份档案独有偏低配置值导致的具体问
+题上，未重复完整战斗/复活/留言板测试——`goto` 死亡区确认房间和
+NPC 都能正常载入即视为该风险点已解除。测试账号 `fluffos` 死亡/移
+动产生的存档变化已还原，未纳入本次提交。
