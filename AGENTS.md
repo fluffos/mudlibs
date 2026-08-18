@@ -3718,7 +3718,7 @@ vulnerable line in **16 other libs** beyond `hell` (`aoxiangtianji`,
 `yanhuangwuhun`, `zjdywzb`, `xkxz2`, `zjdyaryl`, `xkxc98sj`,
 `zjdy2008wzb`, `wxddym`, `yhwhpublicfi`, `yhyxs`, `fyzfqyy`,
 `zhongjidiyu`, `zjdyzj`, `zjmudhell`, `nt1`, `zhonghua2`). Live results
-so far (2026-08-18), 10 of 16 tested:
+so far (2026-08-18), 12 of 16 tested:
 
 - **Confirmed crash, fixed**: `zjmudhell`, `zjdyaryl`, `zjdyzj`,
   `yhyxs` — all four reproduced the identical `*Bad argument 2 to
@@ -3741,13 +3741,14 @@ so far (2026-08-18), 10 of 16 tested:
   returns a clean "no such player" message and `debug.log` shows zero
   `socket_bind` entries.
 - **Confirmed clean, no fix needed**: `aoxiangtianji`, `zjdywzb`,
-  `zjdy2008wzb`, `yanhuangwuhun`, `xkxz2`, `xkxc98sj` — despite
-  `zjdywzb`/`zjdy2008wzb` both explicitly sharing the same
-  "Doing"/`hell`-family lineage as the crashing libs (per their own
-  NOTES.md), `get_config(__MUD_PORT__)` behaves correctly on all six
-  and `messaged.lpc` compiles/runs without error. `yanhuangwuhun` was
-  confirmed via `goto` (zero `socket_bind` hits in `debug.log`); it
-  separately carries an already-fixed, unrelated
+  `zjdy2008wzb`, `yanhuangwuhun`, `xkxz2`, `xkxc98sj`, `yhwhpublicfi`,
+  `fyzfqyy` — despite `zjdywzb`/`zjdy2008wzb` both explicitly sharing
+  the same "Doing"/`hell`-family lineage as the crashing libs (per
+  their own NOTES.md), `get_config(__MUD_PORT__)` behaves correctly on
+  all eight and `messaged.lpc` compiles/runs without error.
+  `yanhuangwuhun`/`yhwhpublicfi` were confirmed via `goto` (zero
+  `socket_bind` hits in `debug.log`); `yanhuangwuhun` separately
+  carries an already-fixed, unrelated
   `check_ok()`/`MESSAGE_D->find_chatter()` bug per its own NOTES.md,
   which does not protect `goto.lpc`'s own fallback line but turned out
   not to matter since this lib's `get_config()` just works.
@@ -3758,7 +3759,12 @@ so far (2026-08-18), 10 of 16 tested:
   `create()`); both returned a clean "user not logged in" message with
   zero `socket_bind` hits, and neither has the `versiond.lpc` sibling
   pattern at all (`in_server()` doesn't reference
-  `get_config(__MUD_PORT__)` in either file).
+  `get_config(__MUD_PORT__)` in either file). `fyzfqyy` (dual
+  admin/login-password registration flow, unrelated lineage) was
+  confirmed via `goto` after logging in with the admin password and
+  completing the forced password-reset flow it triggers; `debug.log`
+  was never even created (zero errors logged since boot), and it too
+  lacks the `versiond.lpc` sibling pattern.
 - **Inconclusive**: `wxddym` — `goto` returned "什么？" (command not
   found) rather than triggering the daemon, traced to a separate,
   unrelated issue (`SECURITY_D->valid_grant(me, "(wizard)")` not
@@ -3773,10 +3779,9 @@ so far (2026-08-18), 10 of 16 tested:
 on every lib sharing the source line, and it is NOT simply
 lineage-wide either — even within the exact same "Doing"/`hell`-family
 lineage, results are mixed (3 crash, 3 clean). Each lib genuinely needs
-its own live check; grep alone cannot predict the outcome. 6 libs
-remain unconfirmed: `wxddym` (inconclusive, see above),
-`yhwhpublicfi`, `fyzfqyy`, `zhongjidiyu`, `nt1`, `zhonghua2`. Fastest
-reliable trigger: the wizard
+its own live check; grep alone cannot predict the outcome. 4 libs
+remain unconfirmed: `wxddym` (inconclusive, see above), `zhongjidiyu`,
+`nt1`, `zhonghua2`. Fastest reliable trigger: the wizard
 `call /adm/daemons/network/messaged->query_udp_port()` one-liner
 (bypasses needing to find a lib-specific command that happens to
 reference `MESSAGE_D`, and bypasses `goto`'s own unrelated
