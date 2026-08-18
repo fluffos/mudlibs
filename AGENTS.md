@@ -6228,6 +6228,40 @@ Confirms the lpcc-sweep-hit-but-deprioritized state is worth circling
 back to explicitly on a lib's next testing round, rather than treating
 "round one found a worse bug" as a reason to drop it permanently.
 
+Ninth instance, unrelated lineage: `hhsj` (NT/nitan/Lonely 洪荒世界
+family) shipped the project's common `700000` default, and this
+instance is worse than the "self-heals after warm-up" framing an
+earlier round on this same lib had settled on. The cold compile that
+trips it is `get_char()`'s `make_body(ob)` — the very first load of
+the whole `/inherit/char/char.lpc` inheritance chain during character
+creation — and `get_char()` has no `catch()` around any of it. The
+abort happens before `input_to("get_char", ob)` re-registers, so the
+connection object falls back to default command dispatch and every
+subsequent input (including blank lines, `look`, `score`) gets the
+generic "什么？" with no indication anything went wrong; the account's
+login-level record gets written but the character/body-level save
+never does (`registered:0` forever). An earlier round on this exact
+lib had already observed the raw `cost limit reached` spam during
+registration warm-up and concluded it was the known self-healing
+category (subsequent registrations went clean) — true as far as it
+went, but that framing missed that any registration attempt caught
+*during* the cold-compile window is not just slow, it's silently and
+permanently destroyed, no different from the `xyj2000f`/`xkxc98sj`
+100%-first-try instances above, just intermittent rather than
+guaranteed depending on timing. Same remedy (`5000000`); verified live
+after a driver restart: the same character id's `get_char()` step
+completed cleanly with zero `cost limit reached` entries, and the
+account is a normal reachable full-tier character. This lib's own
+admin-seeded `fluffos` account turned out to be a casualty of this
+exact bug from an earlier round: a login-level save existed with a
+working password but no character/body save had ever been created,
+discovered only when a routine `fluffos` login this round hit the same
+"0008 → get_char" path a brand-new id would. Lesson: when a
+"self-heals" eval-cost conclusion is reached, check whether anything
+created *during* the observed instability window (including this
+project's own seeded admin account) was silently lost rather than just
+slowed down.
+
 ### 7.91 A one-character skill-name typo in a sect master NPC's `create()` silently deletes that entire sect's join path from the archive's first boot onward
 
 Found on `xajhxo`'s §10.7 deep functional test. `d/menpai/shaolin/npc/
