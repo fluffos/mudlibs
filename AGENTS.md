@@ -3718,30 +3718,39 @@ vulnerable line in **16 other libs** beyond `hell` (`aoxiangtianji`,
 `yanhuangwuhun`, `zjdywzb`, `xkxz2`, `zjdyaryl`, `xkxc98sj`,
 `zjdy2008wzb`, `wxddym`, `yhwhpublicfi`, `yhyxs`, `fyzfqyy`,
 `zhongjidiyu`, `zjdyzj`, `zjmudhell`, `nt1`, `zhonghua2`). Live results
-so far (2026-08-18), 6 of 16 tested:
+so far (2026-08-18), 8 of 16 tested:
 
-- **Confirmed crash, fixed**: `zjmudhell`, `zjdyaryl`, `zjdyzj` — all
-  three reproduced the identical `*Bad argument 2 to socket_bind();
-  Expected: int Got: "10"` and were fixed with the standard remedy
-  (`startup_udp()` reduced to `return 0`, `send_udp()` given a
-  `!socket_id` guard). `zjdyaryl` and `zjdyzj` ALSO had a second,
-  related crash in the same lib's `versiond.lpc` (`in_server()`'s
-  unguarded `get_config(__MUD_PORT__) + VERSION_PORT`, no `(int)` cast
-  at all — same `socket_bind()` type-mismatch shape, same fix: reduce
-  `in_server()` to a no-op stub) — worth checking `versiond.lpc` for
-  the identical pattern on every remaining lib in this list too, not
-  just `messaged.lpc`. On `zjdyaryl`/`zjdyzj` the crash fires on every
-  single login (via `logind.lpc`'s `check_ok()` → `get_passwd()` →
-  `messaged.lpc`'s `create()`), not just when a wizard uses `goto` —
-  already wrapped in an existing `catch()` so login itself doesn't
-  break, but confirmed present via `debug.log`'s "错误讯息被拦截"
-  (error message intercepted) wrapper text.
+- **Confirmed crash, fixed**: `zjmudhell`, `zjdyaryl`, `zjdyzj`,
+  `yhyxs` — all four reproduced the identical `*Bad argument 2 to
+  socket_bind(); Expected: int Got: "10"` and were fixed with the
+  standard remedy (`startup_udp()` reduced to `return 0`, `send_udp()`
+  given a `!socket_id` guard). `zjdyaryl`, `zjdyzj`, AND `yhyxs` ALSO
+  had a second, related crash in the same lib's `versiond.lpc`
+  (`in_server()`'s unguarded `get_config(__MUD_PORT__) +
+  VERSION_PORT`, no `(int)` cast at all — same `socket_bind()`
+  type-mismatch shape, same fix: reduce `in_server()` to a no-op stub)
+  — worth checking `versiond.lpc` for the identical pattern on every
+  remaining lib in this list too, not just `messaged.lpc`. On
+  `zjdyaryl`/`zjdyzj` the crash fires on every single login (via
+  `logind.lpc`'s `check_ok()` → `get_passwd()` → `messaged.lpc`'s
+  `create()`), not just when a wizard uses `goto` — already wrapped in
+  an existing `catch()` so login itself doesn't break, but confirmed
+  present via `debug.log`'s "错误讯息被拦截" (error message intercepted)
+  wrapper text. `yhyxs` was confirmed via `goto`'s unguarded
+  `MESSAGE_D->find_user()` fallback on a fresh boot; post-fix, `goto`
+  returns a clean "no such player" message and `debug.log` shows zero
+  `socket_bind` entries.
 - **Confirmed clean, no fix needed**: `aoxiangtianji`, `zjdywzb`,
-  `zjdy2008wzb` — despite `zjdywzb`/`zjdy2008wzb` both explicitly
-  sharing the same "Doing"/`hell`-family lineage as the crashing libs
-  (per their own NOTES.md), `get_config(__MUD_PORT__)` behaves
-  correctly on all three and `messaged.lpc` compiles/runs without
-  error.
+  `zjdy2008wzb`, `yanhuangwuhun` — despite `zjdywzb`/`zjdy2008wzb` both
+  explicitly sharing the same "Doing"/`hell`-family lineage as the
+  crashing libs (per their own NOTES.md), `get_config(__MUD_PORT__)`
+  behaves correctly on all four and `messaged.lpc` compiles/runs
+  without error. `yanhuangwuhun` was confirmed via `goto` (zero
+  `socket_bind` hits in `debug.log`); it separately carries an
+  already-fixed, unrelated `check_ok()`/`MESSAGE_D->find_chatter()`
+  bug per its own NOTES.md, which does not protect `goto.lpc`'s own
+  fallback line but turned out not to matter since this lib's
+  `get_config()` just works.
 - **Inconclusive**: `wxddym` — `goto` returned "什么？" (command not
   found) rather than triggering the daemon, traced to a separate,
   unrelated issue (`SECURITY_D->valid_grant(me, "(wizard)")` not
@@ -3755,11 +3764,11 @@ so far (2026-08-18), 6 of 16 tested:
 **Conclusion so far**: this is NOT a universal defect that reproduces
 on every lib sharing the source line, and it is NOT simply
 lineage-wide either — even within the exact same "Doing"/`hell`-family
-lineage, results are mixed (3 crash, 2 clean). Each lib genuinely needs
-its own live check; grep alone cannot predict the outcome. 10 libs
-remain unconfirmed: `yanhuangwuhun`, `xkxz2`, `xkxc98sj`, `wxddym`
-(inconclusive, see above), `yhwhpublicfi`, `yhyxs`, `fyzfqyy`,
-`zhongjidiyu`, `nt1`, `zhonghua2`. Fastest reliable trigger: the wizard
+lineage, results are mixed (3 crash, 3 clean). Each lib genuinely needs
+its own live check; grep alone cannot predict the outcome. 8 libs
+remain unconfirmed: `xkxz2`, `xkxc98sj`, `wxddym` (inconclusive, see
+above), `yhwhpublicfi`, `fyzfqyy`, `zhongjidiyu`, `nt1`, `zhonghua2`.
+Fastest reliable trigger: the wizard
 `call /adm/daemons/network/messaged->query_udp_port()` one-liner
 (bypasses needing to find a lib-specific command that happens to
 reference `MESSAGE_D`, and bypasses `goto`'s own unrelated
