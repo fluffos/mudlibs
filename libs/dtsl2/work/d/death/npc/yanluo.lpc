@@ -51,6 +51,27 @@ void init() {
 
   ob = previous_object();
   if (!ob) return;
+  // Guard against duplicate concurrent death_stage chains: init() is
+  // re-broadcast to every object in this room (including this NPC) on
+  // EVERY enable_commands() call, and obj/user.lpc's reconnect() calls
+  // enable_commands() on every reconnect -- so a ghost who reconnects
+  // even once while sitting in this room (a very ordinary event, not an
+  // edge case) would otherwise get a second, fully independent 5-stage
+  // call_out chain stacked on top of the first. Two concurrent chains
+  // race: jumbled/duplicate narration is the mild symptom, but the real
+  // damage is that each chain independently completes the WHOLE
+  // reincarnate()+item-drop+lose()+room-move sequence -- a stale second
+  // chain finishing after the first already reset ghost=0 hits the
+  // "not a ghost any more" branch below unconditionally, silently
+  // re-routing the player to REVIVE_ROOM regardless of their actual
+  // combat_exp/zuolao status (which decides the CORRECT destination),
+  // and could double-apply the PK/combat_exp death penalty via lose().
+  // A per-victim temp flag (cleared at both of death_stage()'s exit
+  // points below) keeps exactly one chain alive per ghost, mirroring
+  // the same "make a repeatedly-retriggered side effect idempotent"
+  // fix already applied to feature/command.lpc's enable_player().
+  if (ob->query_temp("in_death_stage")) return;
+  ob->set_temp("in_death_stage", 1);
   call_out("death_stage", 5, ob);
 }
 
@@ -59,6 +80,7 @@ void death_stage(object ob, int stage) {
   object *inv;
   if (!objectp(ob)) { return; }
   if (!ob->is_ghost()) {
+    ob->delete_temp("in_death_stage");
     message_vision("$N奇道：怎么来了个阳人？！定是黑白无常弄错了！\n", this_object());
     message_vision("突然黑白无常冒了出来，夹起$N一晃不见了！\n", ob);
     ob->reincarnate();
@@ -76,6 +98,7 @@ void death_stage(object ob, int stage) {
     call_out("death_stage", 5, ob, stage);
     return;
   } else ob->reincarnate();
+  ob->delete_temp("in_death_stage");
   inv = all_inventory(ob);
   for (i = 0; i < sizeof(inv); i++)
     if (!inv[i]->query("save_box"))
