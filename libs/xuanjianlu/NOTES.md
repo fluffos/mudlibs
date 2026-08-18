@@ -931,3 +931,174 @@ debug.log explanation" symptom.
 ### 本轮修改的文件
 
 - `work/clone/user/user.lpc`
+
+## Round three deep functional test (2026-08-18)
+
+Context: `libs/xuanjianlu/work/include/globals.h` had just been patched
+(commit `cc35c33d23e`, same session) for a missing `EDITOR_D` macro that
+`inherit/misc/bboard.lpc` needs — this lib shares close lineage with
+`libs/jym`, whose own round-three pass earlier the same day found several
+real bugs (missing `EDITOR_D`, `enter_world()`'s `ob->save()` commented
+out, and an unguarded `init()`→`call_out()` chain in the death-guide
+NPCs — AGENTS.md §7.112). This pass specifically re-checked all three
+patterns here, plus went deeper than round two on combat/death.
+
+**Checked all three jym-lineage patterns**:
+
+1. **`logind.lpc`'s `enter_world()` `ob->save()`**: read in full (lines
+   704-788) — `ob->save()` (line 722) and `user->save()` (line 788) are
+   both present and uncommented. Not affected. No fix needed.
+2. **§7.112 (`init()` unconditional `call_out()` chain, no re-entry
+   guard)**: **found and fixed**, see below.
+3. **§7.111 (`master.lpc`'s `standard_trace()` unconditional
+   `file_name()`)**: not applicable — this lib's `standard_trace()`
+   (`adm/single/master.lpc:211`) formats `error["object"]`/
+   `error["trace"][i]["object"]` with `%O`, not `file_name()`.
+
+### Bug found and fixed: §7.112 in the death-guide gargoyle NPCs (same shape as jym, byte-for-byte matching source)
+
+`d/death/npc/{wgargoyle,wgargoyle1,bgargoyle}.lpc` (the underworld-gate
+NPCs a player's character is escorted through on death — `wgargoyle`/
+`wgargoyle1` at `/d/death/gate`, `bgargoyle` at `/d/death/gateway`, both
+reached via `DEATH_ROOM` = `/d/death/gate.lpc` from `feature/damage.lpc`'s
+`die()`) all had `init()` unconditionally calling
+`call_out("death_stage"/"final_death_stage", 30, previous_object(), 0)`
+with no guard against being called twice. Per AGENTS.md §7.112, FluffOS
+re-broadcasts `init()` to every object in a room whenever
+`enable_commands()` is called on an interactive there (confirmed default
+`__RC_ENABLE_COMMANDS_CALL_INIT__ = 1` in this driver build via
+`src/base/internal/rc.cc`), and this lib's `clone/user/user.lpc`
+`reconnect()` calls `enable_commands()` on every reconnect (already fixed
+for a related gap in the 2026-08-15 round-two pass, §7.108) — so a
+player/ghost sitting in one of these rooms who reconnects even once mid-
+sequence would get a duplicate `call_out` chain stacked on the first,
+racing to apply `reincarnate()`/room-move/drop-inventory twice.
+
+Fix (matching the exact shape already applied and proven in `jym`): added
+a `set_temp("death_stage_active", 1)`/`query_temp` guard around the
+`call_out()` scheduling in each `init()`, cleared via `delete_temp()` at
+every exit point of `death_stage()`/`final_death_stage()` (the `!ob ||
+!present(ob)` early return, `bgargoyle`'s "not a ghost" early return, and
+both the intermediate-stage and final-stage completion branches). All
+three files are pure-LF (verified via a byte-mode read before editing,
+per this task's CRLF-safety instruction); `git diff --stat` confirms only
+the intended lines changed.
+
+**Live-verified two ways**:
+
+- **Reconnect-race repro** (the actual mechanism the bug exploits):
+  logged in as admin `fluffos`, `goto /d/death/gateway` (real `move()`,
+  which broadcasts `init()` via the same `setup_new_commands()` path as
+  `enable_commands()` — confirmed via `callouts death_stage` showing
+  exactly one scheduled call immediately after the move), then
+  reconnected as the *same* character **twice more** in two fresh
+  connections (each real reconnect → kick-old-link confirmation →
+  `enable_commands()` re-broadcast). `cmds/arch/callouts.lpc`'s
+  `callouts death_stage` after each reconnect showed **exactly one**
+  `bgargoyle` `death_stage` entry throughout (delay counting down 29→18→
+  7→6 across the connections, never duplicating) — the guard held under
+  real repeated re-broadcast.
+- **Full real death/reincarnation flow** (not exercised in any prior
+  round): used the round-two `wentian`/闻天笑 character (still `registered:
+  "yes"`, alive in `沙滩`) and admin's wizard `call` command to invoke the
+  real `die()` codepath (`call wentian->die()`, exactly what a lost fight
+  calls) rather than the admin-only "not a ghost" early-exit branch
+  tested above. Result end-to-end: `闻天笑倒在地上，挣扎了几下就死了` →
+  moved to `/d/death/gate` (`DEATH_ROOM`) → `wgargoyle`'s `init()` fired
+  once (`callouts death_stage` confirmed a single entry) → full 5-stage
+  `death_msg` dialogue played out correctly over the real 30s+4×5s delay
+  → `reincarnate()` restored 精/气/内力 to full → moved back to the real
+  `沙滩` start room → `score` correctly showed `死了 1 次，其中 1 次是
+  正常死亡` and a `闻天笑的尸体(Corpse)` was left behind in the room.
+  `callouts death_stage` was empty again afterward (guard cleared
+  correctly, no leaked call_out). Zero `debug.log` errors across the
+  whole sequence (checked before/after: 0 error-pattern hits both times).
+  Side note: `DEATH_ROOM->start_death(this_object())`
+  (`feature/damage.lpc:239`) calls a `start_death()` function that is
+  **never defined anywhere in the codebase** (grep confirmed, call sites
+  only) — harmless (LPC `call_other()` to an undefined function silently
+  returns 0, no crash), almost certainly vestigial from an earlier
+  version; not fixed since it does nothing observable and touching
+  dead code isn't in scope.
+
+### Bulletin board (§7.86/globals.h `EDITOR_D` fix) — live-verified working end-to-end, first real test since the fix
+
+Tested at `/d/xiakedao/dadong`'s `侠客岛告示牌` board (reached via admin
+`goto`, real accessible in-game location — a large hall on the tutorial
+island, not otherwise reached during either prior round's playthrough).
+`list` → `一块白杨木的牌子。侠客岛告示牌上目前没有任何留言。` (empty,
+correct). `post <title>` opens the real in-game line editor (`结束离开
+用'.'，取消输入用'~q'，使用内建列编辑器用'~e'`); typed a line, ended
+with `.` → `留言完毕。`. `list` afterward correctly showed the new entry
+with author/timestamp; `read 1` correctly displayed the full posted text.
+Re-verified against a **fresh cold-compile boot** (killed the driver,
+restarted, `list`/`read` against the still-empty board after removing the
+test post) — no compile error, board loads and responds correctly from a
+completely cold `/inherit/misc/bboard.lpc` compile. The `EDITOR_D` fix
+works; boards are fully functional. (Test post + its `data/board/xkd_b.o`
+save file were removed before finishing — pure test debris, not real
+player content.)
+
+### Real combat — verified for the first time (neither prior round exercised it)
+
+`wentian` (登 `strike` skill, weak stats) vs `d/xiakedao/pubu`'s skill-
+teacher NPC (`master2.lpc`, "蓝衣弟子", reached via the same
+`shatan→n→n→n→n→northup` route round two documented). Two findings on
+verb syntax, both confirmed as **intentional design**, not bugs:
+- `hit <npc>` is PvP-only ("你只能偷袭玩家。") — `d/xiakedao/no_pk_room.lpc`'s
+  `do_hit()` explicitly rejects non-player targets by design (this
+  override exists specifically to block on-island player-vs-player
+  `hit`, not to gate PvE).
+- `shatan` itself has `set("no_fight", "1")` — the beach room is a
+  deliberately safe tutorial hub; `pubu` does not set this, and combat
+  worked there normally.
+- `fight <npc>` is the correct PvE verb: `fight dizi` produced a full,
+  correctly-alternating attack/defense exchange (hit/miss detection,
+  damage messages, `score`'s 气 bar dropping from the damage taken) and
+  ended normally with the NPC conceding (`蓝衣弟子双手一拱，笑著说道：
+  承让！`). Zero `debug.log` errors.
+- Also re-confirmed round two's sect-join-is-gated finding at this same
+  NPC: `bai dizi` → `蓝衣弟子既不属於任何门派，也没有开山立派，不能拜师。`
+  (this skill teacher legitimately has no sect to join) — matches the
+  documented design, not touched.
+
+### Not reached this round either (same off-island travel gate as round two)
+
+The boat/mainland travel gate (`chuan`'s one-shot 15s boarding window,
+`config.fluffos`'s `time to reset : 1800`) still wasn't budgeted for —
+real sect-hall joining, a mainland skill teacher, and a player-currency
+(not admin-assisted) shop purchase remain unverified by an organic
+character, same gap round two flagged. Everything reachable from the
+tutorial island (board, real death/revival, real PvE combat, the two
+jym-lineage bug patterns) is now covered.
+
+### Generalizable finding for future sweeps (not chased further here, per task scope)
+
+§7.112's `init()`-unconditional-`call_out()` shape and the §7.111
+`file_name()` shape are both proven-safe/proven-absent patterns worth a
+quick grep-and-check on any other lib in this same ES-II/XKX lineage
+(`xkm`, `shenzhou`, `xkx2001`, and any other sibling that got the same
+`cc35c33d23e` `EDITOR_D` fix) — not done here since this task's scope was
+`xuanjianlu` only.
+
+### Cleanup
+
+Fresh driver restart after the fix (killed original PID by exact PID,
+confirmed cwd match); re-verified board + gargoyle compile cleanly from a
+cold boot. Test-debris save files (`wjltestc` abandoned unregistered
+character, the board test post's `data/board/xkd_b.o`) removed before
+finishing. `wentian`'s and admin `fluffos`'s save-file diffs from this
+session (`death_count`→1, `startroom`, position, `qi` after combat,
+`board_last_read`, etc) are genuine gameplay state from the tests above
+and were kept/committed, matching this project's established convention
+of committing real playthrough state for the representative/admin
+characters. `debug.log`/`boot.log` scratch files removed from the lib
+directory before finishing.
+
+### Files modified this round
+
+- `work/d/death/npc/wgargoyle.lpc`
+- `work/d/death/npc/wgargoyle1.lpc`
+- `work/d/death/npc/bgargoyle.lpc`
+- `work/data/user/f/fluffos.o`, `work/data/user/w/wentian.o` (save-state
+  churn from live testing, see above)
