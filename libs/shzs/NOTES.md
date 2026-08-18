@@ -509,3 +509,182 @@ holding room — **zero exits**) instead of back where they'd been.
 - `config.fluffos`
 - `work/adm/simul_efun/file.lpc`
 - `work/obj/user.lpc`
+
+## 深度功能测试第三轮 / Deep functional test round three (2026-08-18)
+
+Standard §7.111/§7.112/logind-save/case-mismatch checklist (all clean,
+no action needed):
+
+- **§7.111** (`master.lpc::standard_trace()` unguarded `file_name(error["object"])`):
+  already fixed here — `objectp(error["object"]) ? file_name(...) : "(driver)"`
+  at `adm/obj/master.lpc:200`.
+- **§7.112** (`init()` unconditionally scheduling a `call_out()` chain):
+  grepped every `init()` with a `call_out(` in it (~47 hits, all NPCs).
+  All of them either fire a single one-shot `call_out("welcome", 0, ...)`
+  from the shared `feature/attack.lpc` (no chain, harmless if duplicated),
+  or already guard their `"greeting"` call_out with
+  `remove_call_out("greeting"); call_out("greeting", 1, ob);` — the
+  correct anti-duplication idiom. No plain ROOM objects schedule
+  call_outs from `init()` at all. Nothing to fix.
+- **`logind.lpc::enter_world()` missing `ob->save()`**: present and
+  correct (`user->save(); ob->save();` right after `setup()`, before the
+  MOTD).
+- **`u/<wizid>` case-mismatch**: not applicable — this lib has no `u/`
+  wizard-home tree at all.
+
+### Bug found and fixed — `adm/simul_efun/gender.lpc` was BIG5 bytes
+mis-decoded as GBK during the original conversion pass (same class as
+round two's Bug 2, much wider blast radius)
+
+- Symptom: found while doing a from-scratch PK-combat playthrough
+  (round one/two never exercised PK). Every first-person combat/action
+  message that should read "你" (you) — e.g. "你对着测试四号喝道...",
+  "忽然，狂声大笑，纵身跃起，向...发动攻击" — instead showed a blank
+  where "你" belongs (leading space, no pronoun). Also affected `score`'s
+  "你是一...的男性人类" line, `tell`/`reply`, `emote`, and any other
+  message using `gender_self()`/`gender_pronoun()`.
+- Root cause: `adm/simul_efun/gender.lpc` (the shared `gender_self()` /
+  `gender_pronoun()` simul_efuns) was raw BIG5 bytes in the archive
+  (`raw/simple/adm/simul_efun/gender.c`) but got run through the
+  project's GB18030 conversion pass like everything else. Because these
+  particular BIG5 byte sequences (`case "女性"`/`"男性"`/`"雄性"`/
+  `"雌性"` etc., and their return values `"你"`/`"妳"`/`"他"`/`"她"`/
+  `"牠"`/`"它"`/`"祂"`) happen to be *unmappable* under GB18030, iconv's
+  lossy fallback silently remapped them into Unicode Private-Use-Area
+  codepoints instead of erroring — so the file "converted" cleanly with
+  no warning, but every `case` label became garbage that could never
+  match a real `"男性"`/`"女性"` gender string, and `gender_self()`
+  always fell through to its own corrupted `default:` value (also
+  garbage, effectively empty when rendered). Confirmed byte-for-byte:
+  decoding `raw/simple/adm/simul_efun/gender.c` as BIG5 recovers
+  perfectly formed, grammatical Chinese matching this exact function's
+  known contract.
+- Fix: precise byte-level patch (Python binary mode, no whole-file
+  regeneration) replacing only the 8 corrupted string literals with
+  their correctly-BIG5-decoded UTF-8 equivalents. `git diff --stat`
+  confirmed exactly 8 lines changed, CRLF preserved.
+- Verified live: rebuilt driver, ran the same PK-combat scenario —
+  first-person messages now correctly show "你" throughout (e.g. "你对
+  着测试四号喝道小王八蛋！你死定了！"), third-person pronoun refs also
+  correct. `debug.log` stayed empty across the whole session.
+- **This mis-decode class (§4.1/round-two's Bug 2) is proven to recur
+  independently at least twice in this one lib now** (help-topic syntax
+  lines in round two, this shared simul_efun in round three) — flagging
+  for the orchestrator: any lib sharing this "Final Frontier"/ES2
+  ancestry (BIG5-authored base + GBK-authored Chinese reskin layered on
+  top) should have `adm/simul_efun/gender.lpc` (or equivalent) spot
+  checked, since a silently-empty `gender_self()` has no crash signature
+  and is very easy to miss without an actual PK/combat playthrough.
+
+### Bug found and fixed — netdead reconnect never restores `heart_beat`,
+permanently soft-locking anyone who dies and ever has one dropped
+connection (new bug class, not previously in AGENTS.md)
+
+- Found while trying to complete the death → reincarnation loop (`kill`
+  → die → `/d/death/gate` → `/d/death/hall` → `say return` to 史巴克).
+  `d/death/npc/toilet.lpc`'s `relay_say()` requires every limb's
+  `limbs_eff_hit` to be at least 50% of `limbs_max_hit` before `return`
+  is allowed ("您目前的状况还无法回到人世，请多休息一下吧" otherwise) —
+  reasonable design, not a bug. But after admin-forced death (`call
+  hbtestb->die()`, matching real PK-death numerically) the character's
+  limbs sat frozen at `1/1/max` (`重伤`) for over a minute of real wall
+  time with zero movement, never healing even while standing — the one
+  path (`feature/damage.lpc::heal_up()`'s standing branch) that's
+  supposed to add +1/tick to a ghost's `limbs_eff_hit`.
+- Root cause, confirmed live via the `info <target>` wizard command's
+  "心跳:N" field (the reliable way to read real heart-beat state — the
+  `call obj->query_heart_beat()` idiom used earlier in this pass is
+  *not* reliable for this efun, since `query_heart_beat` has no
+  user-defined LPC wrapper and `call_other` to a nonexistent function
+  silently returns 0 rather than erroring, which cost real time here
+  chasing a false "always 0" signal before switching to `info`):
+  `obj/user.lpc::net_dead()` correctly calls `set_heart_beat(0)` on an
+  unclean disconnect (self-context, correct). But the *actually invoked*
+  reconnect path, `adm/daemons/logind.lpc::reconnect(object ob, object
+  user, int silent)` (called from `get_passwd()` when
+  `user->query_temp("netdead")`, and from `confirm_relogin()`'s
+  duplicate-login-kick path), never re-enabled it — so `heal_up()`
+  (and aging, idle-timeout, hunger/thirst decay — everything gated on
+  heart-beat) silently stopped running for the rest of that session, any
+  time a player's connection ever dropped and they reconnected. Combined
+  with the death mechanism's healing requirement, this means: **any
+  player who dies and has ever had even one dropped connection can never
+  heal enough limb health to reincarnate again**, with zero error/crash
+  signature (`debug.log` stays completely clean the whole time).
+  `obj/user.lpc` already has its own `reconnect()` *apply* with the
+  correct shape (`enable_commands(); set_heart_beat(1); ...`), doc-
+  commented "called by the LOGIN_D when a netdead player reconnects" —
+  but nothing calls it (same "intended but never wired up" dead-code
+  pattern round one's Bug 3 found in this same function name).
+- Fix: `set_heart_beat()`/`enable_commands()` are efuns with no
+  cross-object form (bare calls always target `this_object()`, which
+  inside `logind.lpc::reconnect()` is the daemon itself, not the
+  player — this is exactly why a first attempt at this fix, calling the
+  efuns directly from `logind.lpc`, silently did nothing). Added a thin
+  `resume_heart_beat()` wrapper to `obj/user.lpc` (right after the
+  existing dead-code `reconnect()` apply) that does
+  `enable_commands(); set_heart_beat(1);` in the user object's own
+  context, and call it as `user->resume_heart_beat();` from
+  `logind.lpc`'s actually-invoked `reconnect()`.
+- Verified live with an A/B test (git-stashed the fix, rebuilt, re-ran
+  the same scenario, then restored and rebuilt again): pre-fix, `info
+  <player>` showed `心跳:1` on fresh login but the "心跳:" field
+  disappeared entirely after a real drop-and-reconnect cycle (heart_beat
+  = 0, confirmed reproducible). Post-fix, `心跳:1` is present both
+  before and after the same reconnect. Further verified the actual
+  downstream effect: killed a test character, dropped+reconnected them,
+  then sampled `body` every 20s — limb values climbed steadily
+  (1→3→5→8 over 60s, previously frozen forever at 1) confirming
+  `heal_up()` is running again and the reincarnation path is no longer
+  permanently soft-locked. `debug.log` stayed empty throughout.
+- **Flagging for the orchestrator**: this is a new, previously
+  uncataloged bug class — likely recurs in any lib whose
+  `net_dead()`/`reconnect()` split mirrors this shape (a `set_heart_beat`
+  call in the disconnect handler with no corresponding restore in the
+  actually-invoked reconnect path). Worth a grep sweep across the corpus
+  for `set_heart_beat(0)` in `net_dead()`-style applies paired with a
+  `reconnect()` that doesn't call `set_heart_beat(1)` (directly or via a
+  wrapper) — not fixed elsewhere in this pass, this lib only.
+
+### What else was tested this round
+
+- **PK combat** (two live characters, `cetesta` vs `cetestb`): full
+  exchange of blows, damage accumulation, skill-up messages, auto-flee
+  trigger at low spirit/stamina, and the loser fleeing to an adjacent
+  room — all worked correctly end-to-end (this is what surfaced the
+  `gender.lpc` bug above).
+- **Attacking an essential shop NPC** (`kill li meng zhe`): confirmed
+  this is *intentional* content, not a bug — `d/lwe/npc/bartender.lpc`
+  and every other vendor NPC in `d/lwe` override `kill_ob()` to show a
+  dramatic "transforms into a beast" flavor message and immediately
+  `remove_killer()` both ways, cancelling the fight before any damage
+  lands. Confirmed via code (identical pattern across
+  `zhahuo`/`zhanggui`/`xiaoer2`/`jiubao`/`wuqi`/`faju`), not a gap.
+  Matches this lib's existing documented finding that no reachable wild
+  monster exists in the connected `d/lwe` zone.
+- **Death → hell zone**: `/d/death/gate` and `/d/death/hall` (with NPC
+  史巴克/`toilet.lpc`) *are* reachable (unlike the disconnected
+  `d/mochen`/`d/mohao`/etc. zones noted in round one) — death correctly
+  routes here via `feature/damage.lpc::die()`. The `DEATH_ROOM->
+  start_death(this_object())` call in `die()` targets a function that
+  doesn't exist anywhere in the codebase (`gate.lpc` is a plain `ROOM`)
+  — confirmed this is harmless, not a bug: `call_other` to an
+  undefined function silently returns 0 in this driver config, no
+  error, no `debug.log` entry, and death still proceeds correctly.
+- **A completed shop purchase (`buy`)**: still not completed live this
+  round either (admin-`clone`d gold onto a test character, but
+  navigating on-foot to the weapon shop repeatedly landed one room off
+  from wherever the last `list`/`buy` attempt needed — same live-exit-
+  vs-static-grep mismatch round one already flagged for this lib's
+  street grid). Not investigated further; `list`'s working output and
+  `do_buy()`'s code path were already reviewed as correct in round one.
+- Registration flow, `look`/`score`/`i`/`body`, and the netdead/void
+  reconnect fix from round two all re-confirmed still working correctly
+  throughout this pass's ~15 test sessions.
+
+### Files modified this round
+
+- `work/adm/simul_efun/gender.lpc` (BIG5-as-GBK mis-decode fix)
+- `work/adm/daemons/logind.lpc` (call `user->resume_heart_beat()` in
+  the real reconnect path)
+- `work/obj/user.lpc` (new `resume_heart_beat()` wrapper)

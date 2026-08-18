@@ -571,6 +571,20 @@ varargs void reconnect(object ob, object user, int silent) {
   ob->set_body(user);
   exec(user, ob);
 
+  // net_dead() (obj/user.lpc) turns heart_beat off when a connection
+  // drops, so heal_up()/aging/idle-timeout etc. all silently stop
+  // running for the object until something re-enables it. This is the
+  // actually-invoked reconnect path, so it must be the one to turn
+  // heart_beat back on. set_heart_beat()/enable_commands() are efuns
+  // with no cross-object form (they always apply to this_object(),
+  // which inside *this* function is LOGIN_D itself, not the player) --
+  // so this calls the user's own wrapper for it. Confirmed live: a
+  // netdead reconnect through this function left query_heart_beat()
+  // == 0 for the rest of the session -- e.g. a dead/ghost player who
+  // has ever had one dropped connection can never heal enough to pass
+  // the reincarnation threshold and say `return` successfully again.
+  user->resume_heart_beat();
+
   // AGENTS.md bug catalog: net_dead() (obj/user.lpc) parks a player
   // who drops connection uncleanly in VOID_OB (a room with no exits)
   // as a temporary holding spot while awaiting reconnect, remembering
