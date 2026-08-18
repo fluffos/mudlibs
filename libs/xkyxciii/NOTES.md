@@ -72,3 +72,58 @@
   色都安全过。这也是本次能找到这个 bug 的关键：早前的测试只覆盖
   了"注册流程走没走通"，没有像本轮这样进一步验证"注册完之后
   `look` 是否真的显示了一个房间"。
+
+## 深度功能测试（2026-08-17，round two）——补完死亡/复活、留言板，另发现并修复两个新问题
+
+补完上一轮留下的死亡/复活循环和留言板发帖测试，过程中额外发现并
+修复两个此前未覆盖到的问题。
+
+- **AGENTS.md §7.90 类新实例，`/d/jiangjunfu/main-05`/`main-06`
+  真实的 eval-cost 崩溃**：上一轮 `lpcc_check.sh` 批量编译扫描曾
+  在这两个房间报过 eval-cost 命中，当时判断优先级不够、未深入调
+  查（详见 `feedback_lpcc_sweep_eval_cost_artifact` 的方法论教
+  训——批量编译的共享 eval-cost 预算可能对本身廉价的档案产生假阳
+  性）。本轮用巫师账号 `goto /d/jiangjunfu/main-05` 复现，确认是
+  真实崩溃而非批量编译假象："执行时段错误：*Too long evaluation.
+  Execution aborted."，崩在房间 `create()` 载入多个"将军"NPC、每
+  个 NPC 的 `create()` 又要 `wear()` 装备的连锁编译成本上。这份档
+  案的 `config.fluffos` 和大多数本项目档案一样用着
+  `maximum evaluation cost : 700000`（本项目最常见的模板默认值，
+  但同时也是本项目实际使用范围里偏低的一档）。修复：按
+  AGENTS.md §7.90 已确立的手法，调到 `5000000`（本项目内 30+ 档
+  案已经在用的同一个值）。重启驱动后现场验证：`main-05` 和
+  `main-06` 两个房间都能干净载入，NPC 列表正常显示，
+  `debug.log` 里零 "Too long evaluation"/"cost limit reached" 记
+  录。
+- **`cmds/imm/goto.lpc` 的 `file_name(environment(me))` 未做空值
+  保护**：本轮为搭建死亡测试环境，用一个刚触发过上一轮 bug 的
+  （测试用）巫师账号做 `goto` 时意外复现——`environment(me)` 为
+  空时，`goto` 函式第 11 行无条件对其取 `file_name()`，在检查
+  `arg` 参数之前就先崩了（"*Bad argument 1 to file_name(); Expected:
+  object Got: 0"）。这个变量 `ll_me` 只在函式末尾的一条日志格式化
+  字串里用到，完全没必要在函式最前面无条件计算——后果是任何巫师
+  一旦自己的环境意外变成空（不论是本档案 §7.11 那类 bug 还是其他
+  未知原因），`goto` 本身作为"自救"工具反而永久失效，连去别的房
+  间重新落脚都做不到。修复：判空后再取 `file_name()`
+  （`where_me ? (string)file_name(where_me) : "无环境"`）。跨库检
+  查同一段代码（`ll_me = (string)file_name(where_me)`）只在
+  `xkyxciii` 和 `xkyx3b`（很可能是同源姊妹档案）命中，命中率太低，
+  未作为跨库扫描立项，仅在本档案修复并记录，供以后遇到同源档案时
+  参考。
+- **死亡/复活循环现场验证**：巫师账号在中央广场 `clone` 出一个
+  "扬武将军"NPC，`force <测试角色> to kill yangwu` 逼真实战斗一
+  击致死（"秦侠死死了。"），重新连线后角色正确复活于
+  `REVIVE_ROOM`（`/d/center/chenghuangmiao`，城隍庙），
+  `score` 显示的死亡惩罚符合预期：气血精气神清零至个位数、潜能
+  从 500 降到 251、经验从 4000 降到 3961、"死亡"计数器正确 +1。
+  全程无崩溃、无卡死、无未捕获错误。
+- **留言板发帖/阅读现场验证**：巫师账号在中央广场对
+  `中央广场留言板` 执行 `post <标题>`，走完编辑器交互
+  （`.` 结束输入），提示"留言完毕。"，`read <序号>` 能正常读出
+  历史留言内容。`debug.log` 全程干净。（测试产生的留言已从
+  `work/data/board/guangchang.o` 存档里撤销，不作为本次改动的一
+  部分提交。）
+- 本轮结论：round one 修复的 §7.11 类 bug 是这份档案迄今为止影响
+  面最大的问题；round two 补完的死亡/复活/留言板全部正常，另外顺
+  手确认并修复了两个此前搁置的小问题（真实的 §7.90 eval-cost 崩
+  溃、goto 自救失效）。这份档案目前没有已知未处理的发现。

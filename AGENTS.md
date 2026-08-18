@@ -6205,6 +6205,29 @@ several hits, with no single suspiciously-expensive statement in the
 traced call chain, points at the config ceiling being undersized for
 this lib's content rather than a discrete logic error to chase down.
 
+Eighth instance, unrelated lineage: `xkyxciii` (欢乐天地/五邑无尽豪
+情 family) shipped the project's common `700000` default. First
+surfaced as a handful of unexplained `lpcc_check.sh` batch-sweep hits
+on `/d/jiangjunfu/main-05`/`main-06` during round one's §10.7 pass,
+deprioritized at the time (a much more severe §7.11-class bug — see
+above — consumed that round's budget, and the batch-sweep artifact
+possibility from `feedback_lpcc_sweep_eval_cost_artifact` meant the
+hits weren't yet trustworthy on their own). Round two reproduced it
+live with a wizard `goto /d/jiangjunfu/main-05`: `*Too long
+evaluation. Execution aborted.`, traced to the room's `create()`
+populating half a dozen "将军" (general) NPCs, each NPC's own
+`create()` additionally calling `wear()` on its equipment — a cold
+first-compile-and-equip chain expensive enough on its own to blow
+`700000`, no infinite loop or single pathological statement involved,
+same shape as the original §7.90 finding. Same remedy (`5000000`);
+verified live after a driver restart: both rooms load cleanly with
+their full NPC rosters visible, and a subsequent full session
+(movement, real combat, a full death→resurrection cycle, board
+post/read) produced zero further `cost limit reached` entries.
+Confirms the lpcc-sweep-hit-but-deprioritized state is worth circling
+back to explicitly on a lib's next testing round, rather than treating
+"round one found a worse bug" as a reason to drop it permanently.
+
 ### 7.91 A one-character skill-name typo in a sect master NPC's `create()` silently deletes that entire sect's join path from the archive's first boot onward
 
 Found on `xajhxo`'s §10.7 deep functional test. `d/menpai/shaolin/npc/
