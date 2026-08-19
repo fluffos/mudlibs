@@ -809,3 +809,23 @@ were left untracked and deleted, not committed — only the two source
 fixes (`bgargoyle.lpc`, `wgargoyle.lpc`) are part of this commit, per
 this project's convention that test-character saves never get
 committed.
+
+## §7.100 跨库扫描修复（ROOM 冗余 replace_program() 关闭包炸弹，2026-08-19）
+
+同一形状覆盖到几乎所有房间基类（机制详见 AGENTS.md §7.100）。本库属
+于该扫描已知最大规模的 10 个库之一。二进制模式脚本机械删除了 5241
+处独立、未注释的 replace_program(ROOM); 整行。另外手工清理了造房工
+具代码生成模板里内嵌的同一形状，本库有两份完全同形状的拷贝
+（`clone/misc/roommaker.lpc`、`u/fyue/misc/roommaker.lpc`，各 1 处
+字符串拼接，和同一 XYZX 血统的 longyunmeng/xyzxfk/xyzx 完全一样的形
+状）。删除总计 5243 行，与本次扫描 FINDINGS.md 记录的 bixiecanyang
+存活命中数完全一致。
+
+验证：干净启动一次真实调试驱动，端口 40065 正常监听，
+work/log/debug.log 全程无新增内容。用已播种的 `fluffos`/`Mud@2026`
+管理员账号连线，在北疆小镇/巴依家庭院/巴依家客厅之间往返走了十余个
+房间（含 NPC 互动），look/score/who 均正常（score 首次惰性编译
+`adm/daemons/combatd.lpc` 打印了一条无害的 Unknown #pragma 警告，与
+本次修复无关），未见任何 "cannot replace"/"cannot bind" 或崩溃迹
+象。测试产生的 `data/{login,user}/f/fluffos.o` 存档时间戳 diff 已
+`git checkout` 撤销，不提交。驱动按精确 PID kill。
