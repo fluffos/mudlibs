@@ -7449,6 +7449,67 @@ each), `xbtxiii` (2,174), `yxxcii` (2,160), and onward — see
 `candidates_ge100.tsv`/`FINDINGS.md` in the survey's scratchpad for
 the full ranked list.
 
+**Fix-phase batch 8 (2026-08-19), next 10 libs by impact**: exactly
+the ten libs named at the end of batch 7's hand-off (`zjdywzb`
+through `yxxcii`, ranks 61-70 of the >=100 list). Same method as
+batches 1-7. Two sibling pairs shared byte-identical roommaker
+tooling and fixed rooms: `bmxkx2001`/`xkx2001` (globals.h defines
+`ROOM` twice — `/std/room` then redefined to `/inherit/room/room`;
+the macro NAME is what the sweep matches, so the double-`#define` is
+harmless to this fix) and `sjpl2`/`sjplii` (both carry one
+pre-existing, transcription-broken file, `u/lark/luoyang/dongmen.lpc`
+— missing semicolons throughout including on `inherit ROOM` itself —
+confirmed via `git show HEAD` predating this change, left unfixed as
+out of scope). `sjpl2`/`sjplii` also introduced a new irregular shape
+not seen in batches 1-7: a "smart" room-building-tool variant,
+`if (!mapp(env->query("item_desc"))) str += "\treplace_program(ROOM);";`,
+that only bakes the bug into rooms WITHOUT doors (i.e. the original
+tool author had already half-noticed the driver's door-room immunity
+from this entry's opening discussion and inadvertently encoded it
+into the generator) — hit across 7 files (4 roommaker-tool copies + 3
+NPC files with the same code embedded); fixed by deleting the whole
+conditional line. `xkxyb` was verified compile-only: its login banner
+carries a per-second live uptime counter feeding into a "press any
+key" screen ahead of the name prompt, and repeated scripted login
+attempts on the known-good `fluffos` account were rejected as
+"invalid English letters" by the driver — consistent with that same
+banner's own admission that raw telnet/Ptelnet clients have login
+timing problems on this build (recommends Zmud) — `debug.log` stayed
+clean with zero "cannot replace"/"cannot bind" lines throughout the
+run regardless. `yxxcii` needed its own GB/BIG5 dual-encoding login
+selector (send `gb` first) reused successfully.
+
+| lib | live occurrences deleted | roommaker copies fixed | commit |
+|---|---|---|---|
+| zjdywzb | 2,310 | 1 (`clone/misc`, string-builder variant) | `f2a80a4c9a5` |
+| zjdy2008wzb | 2,306 | 1 (`clone/misc`, string-builder variant) | `e44e7d1bee5` |
+| sjpl2 | 2,289 | 3 copies (`obj`, `u/losey`, `u/set/obj`, all string-builder; 2 with new "item_desc"-conditional variant) + 3 NPC files with same embedded code + 1 hand-fixed irregular (`u/lark/yangmingzhai/ss.lpc`, trailing `*/` comment) — 1 occurrence left unfixed (`u/lark/luoyang/dongmen.lpc`, pre-existing broken file) | `ac2e779e2f6` |
+| sjplii | 2,289 | same set as `sjpl2` (sibling lib, byte-identical tooling) — 1 occurrence left unfixed (same pre-existing broken file) | `658172571b8` |
+| jhfy | 2,245 | 2 copies (`clone/misc`, `u/fyue/misc`, both string-builder variant) | `2ee773e0e7d` |
+| xkxyb | 2,225 | 1 (`clone/misc`, string-builder variant) | `448cc5698ce` |
+| bmxkx2001 | 2,210 | 1 (`clone/misc`, string-builder variant) | `fa95bab685b` |
+| xkx2001 | 2,210 | 1 (`clone/misc`, string-builder variant, sibling of `bmxkx2001`) | `7eb0805e1f6` |
+| xbtxiii | 2,174 | 3 copies (`obj/misc`, `cmds/wiz`, `d/ny/obj`, all string-builder variant) | `c3a3bd57af5` |
+| yxxcii | 2,160 | 1 (`clone/misc`, string-builder variant) | `5d1e76b4524` |
+
+**Batch 8 total: 22,418 live occurrences deleted across 10 libs.**
+Running total after batches 1-8: **70 libs fixed, 265,177 live
+occurrences deleted** (242,759 + 22,418). All ten libs verified via a
+real `build-debug` driver boot (clean compile, port listening, zero
+new "cannot replace"/"cannot bind" `debug.log` lines); nine of ten
+also got a live admin login + room walk through the specific
+previously-affected rooms + `quit` spot-check (`xkxyb` compile-only,
+see above). No player save data was committed — every incidental
+`last_on`/inventory timestamp drift from the spot-check logins was
+reverted with `git checkout HEAD --` before staging. **98 libs from
+the survey's >=100 list remain unfixed** (108 minus this batch's 10).
+Next up by impact (rank 72 onward, `xkx2000zxb`/`cctx` already done
+in earlier work): `ffxymud` (2,087), `syxjl` (2,073),
+`yzxiiizylfy`/`xyzxiiylzymh`/`xyzx3`/`xysylmhb`/`jhfy2` (2,070 each),
+`sje` (2,004), `zzfy`/`zzfy3` (1,967 each), `shenmo` (1,957), and
+onward — see `candidates_ge100.tsv`/`FINDINGS.md` in the survey's
+scratchpad for the full ranked list.
+
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
 Found on `kxkjii2`'s §10.7 deep functional test (ES II/Annihilator
