@@ -402,3 +402,24 @@ the driver's console output. Killed the driver by exact PID when done.
 - `libs/zzhj/work/obj/user.lpc`
 - `libs/zzhj/work/adm/obj/master.lpc`
 - `libs/zzhj/work/adm/simul_efun/file.lpc`
+
+## §7.114 fix: `private input_line()` broke multi-line board post (2026-08-19)
+
+`work/feature/edit.lpc` (this lib's `F_EDIT` mixin, inherited by
+`std/char.lpc`) declared its `input_to()` re-arm target `private`:
+`private void input_line(string line, string text, function callback)`.
+Per AGENTS.md §7.114, this silently breaks the recursive `input_to()`
+re-arm on every line after the first, since the function is reached
+through the inherited mixin rather than defined directly on the player
+object. Fix: dropped `private` (one-line change, `input_line` was never
+player-typeable as a command anyway).
+
+Live-verified on a fresh driver boot (port 40099), fresh character
+(`秦柒壹肆`/`qinqiba`): `post <title>` → two body lines → `.` →
+`留言完畢.` (success). `read 23` confirmed both `Body line one.` and
+`Body line two.` were saved (not truncated after the first line, which
+is the pre-fix symptom). Killed the driver by exact PID when done.
+
+Files modified this pass:
+- `libs/zzhj/work/feature/edit.lpc` — dropped `private` from
+  `input_line()`.
