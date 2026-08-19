@@ -78,3 +78,29 @@ this_object\(\))\)'` 在这份档案全库扫了一遍，命中 **162 个档案*
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD`、`DATABASE_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 5 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 跨库扫描修复（ROOM 冗余 replace_program() 关闭包炸弹，2026-08-19）
+
+同一形状覆盖到几乎所有房间基类（机制详见 AGENTS.md §7.100）。本库属
+于该扫描已知最大规模的 10 个库之一。二进制模式脚本机械删除了 5921
+处独立、未注释的 replace_program(ROOM); 整行。另外手工清理了造房工
+具代码生成模板里内嵌的同一形状，共发现三份独立的造房工具
+（`clone/misc/roommaker.lpc` 1 处、`u/lonely/obj/roommaker.lpc` 3
+处、`u/lonely/obj/roommk.lpc` 3 处，后两份是巫师个人目录下的完整独
+立拷贝，同样内嵌了这个模板 bug，一并清理）。删除总计 5928 行，与本
+次扫描 FINDINGS.md 记录的 wxddym 存活命中数完全一致。
+
+验证：干净启动一次真实调试驱动，端口 40189 正常监听，
+work/log/debug.log 全程无新增内容。本库登录用自定义"指尖客户端" App
+协议而非普通 telnet 文本菜单（详见上方"迁移自 meta.json"记录），且
+第一行任意内容都会被 jiance() 无条件放行，真正的登录行要在第二行发
+送 UTF-8 编码的 `id║密码║密文║email` 格式（GBK 编码会导致分隔符字
+节不匹配、explode() 拆不出 4 段而报"未知错误"——排查耗时最长的一步）；
+登录成功后世界会持续推送任务精灵后台广播消息，属正常游戏内容非卡
+死。用已播种的 `fluffos`/`Mud@2026` 管理员账号连线成功（"目前权
+限：(admin)"），在世界之树/村间小路之间往返移动，`look`/`score`
+均正常，未见任何 "cannot replace"/"cannot bind" 或崩溃迹象（唯一
+噪音是 `cmds/std/go.lpc` 首次惰性编译时打印的几个无害 Unused local
+variable 警告，与本次修复无关）。测试产生的
+`data/{login,user}/f/fluffos.o` 存档时间戳 diff 已 `git checkout`
+撤销，不提交。驱动按精确 PID kill。
