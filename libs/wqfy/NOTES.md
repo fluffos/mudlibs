@@ -219,3 +219,78 @@
   该血统的其它兄弟库大概率共享同一份 `master.lpc`，值得作为下一轮
   跨库机械扫描的候选（搜索模式：`file_name(error["object"])` 或
   `file_name(error\["object"\])` 且前面没有 `objectp()` 判空）。
+
+## 深度功能测试（2026-08-19，round four）——用当前完整清单复测，四项全部确认已经干净，无新修复
+
+按 AGENTS.md 当前完整目录（round three 之后新增的 §7.112～§7.114、
+以及 §7.90/§7.111）逐条复查本档案，并用一个全新角色重新走了一遍完
+整 §10.7 流程。**结论：全部四项已有检查点都确认干净，本轮没有发现
+新 bug，也没有做任何代码改动。**
+
+- **§7.111（`standard_trace()` 空 `error["object"]` 崩溃）**：直接读
+  `work/adm/obj/master.lpc` 第 194 行，确认就是本档案本身在 round
+  three 里落地的修复
+  `objectp(error["object"]) ? file_name(error["object"]) : "(driver)"`，
+  git 无未提交改动，只是确认，未重复验证触发路径。
+- **§7.112（`init()` 无重入保护的 `death_stage` call_out 链）**：本档
+  案的 `d/death/npc/panguan.lpc`／`panguan2.lpc`（判官系 NPC）两份都
+  已经带有 `query_temp("death_stage_active")`／`set_temp(...)` 的重
+  入保护，corpus 扫描早前已覆盖，直接读代码确认无需改动。全库没有
+  `wgargoyle.lpc`/`bgargoyle.lpc`/`yu-zu2.lpc` 等该 bug 常见的其它别
+  名文件。
+- **§7.113（netdead 重连不恢复 `heart_beat`，本档案是 62 库扫描名单
+  外的漏检对象，本轮做了从零开始的完整核实）**：静态读
+  `LOGIN_D`（`adm/daemons/logind.lpc`）的 `reconnect(object ob, object
+  user, int silent)`，确认它无条件调用 `user->reconnect()`（第 656
+  行），并且是从两条真实调用路径触发的活代码（同一 id netdead 后重
+  连、以及"已在线，确认踢人重连"两个分支都会走到这里，不是死代
+  码）。`work/obj/user.lpc` 自己的 `reconnect()`（第 115-121 行）无
+  条件执行 `enable_commands()` + `set_heart_beat(1)`，在正确的
+  `this_object() == user` 上下文中生效——属于本项目已确认的"正确血
+  统"形状，不是 `shzs` 那种"reconnect() 是死代码，真正入口另有别
+  处"的坏形状。**做了实机验证，不只是静态读代码**：用全新角色
+  （`qintestrn`）在新手学堂领到初始食物/饮水（`hp` 指令读到基线
+  食物 98%／饮水 98%），直接关闭 socket（不走 `quit`，模拟真实断
+  线）模拟 netdead，空等 25 秒后用同一帐号+密码重连，重连瞬间
+  `hp` 读到的食物/饮水仍是 98%/98%（证明 `net_dead()` 的
+  `set_heart_beat(0)` 生效，断线期间没有偷跑/也没有额外扣血），随
+  后带着这条重新连线保持连接 20 秒，再读一次 `hp`，食物/饮水已经
+  降到 97%/97%——证明 `heal_up()`／`heart_beat` 在重连后确实恢复
+  正常跳动。这是一个干净的三点式实机对照（断线前→断线中冻结→重
+  连后恢复递减），不是靠单次 `call`/`query_heart_beat()` 的不可靠
+  读数下的结论。**本档案不需要任何 §7.113 修复。**
+- **§7.114（`private` 修饰的 `input_to()` 回调经 mixin 继承后失
+  效）**：`work/feature/edit.lpc` 的 `input_line()` 本身就没有
+  `private` 修饰符，`work/std/char.lpc`（`CHARACTER`，`obj/user.lpc`
+  的父类）用 `inherit F_EDIT;` 引入这份 mixin，链路是活的。全库对
+  `private.*input_line`、以及所有 `->edit(` 调用点（`bboard.lpc`/
+  `jboard.lpc`/`mailbox.lpc`/`chfn.lpc`/`to.lpc` 等）逐个 grep 确认
+  没有任何 `private` 修饰。**实机验证**：全新角色在风云广场"盘龙摩
+  天柱"留言板 `post stone <标题>`，连续输入两行正文，以裸 `.` 结
+  束，服务端回应"留言完毕。"；直接读存档文件
+  `work/data/board/fysquare_b.o` 确认两行正文都完整写入了同一条留
+  言的 `msg` 字段（不是只有第一行、第二行被吞掉），证明多行编辑续
+  行回调没有被吞。验证后已用 `git checkout` 撤销这条测试留言，board
+  存档文件恢复原状。
+- **§7.90（eval-cost 默认值）**：`config.fluffos` 第 39 行
+  `maximum evaluation cost : 5000000`，早前 §7.90 机械扫描已经把本
+  档案纳入，不是危险的 `700000` 默认值，无需改动。
+
+- **完整 §10.7 游玩流程（全新角色）**：注册（英文 id→y/n→中文名→
+  密码×2→邮箱→性别 m/f→民族 0-3→进入游戏世界）、`look`/`score`、
+  移动（凤求凰客栈↔南风大街↔风云广场，出口/地图 ASCII 图正常）、
+  留言板发帖（见上）、以及上面详细描述的断线-重连-心跳恢复验证，
+  全部正常。战斗/死亡复活循环本轮沿用 round three 已经记录的判断
+  （白手空拳双方都打不出有效伤害，需要兵器/武学才能真正打死 NPC，
+  属于"深度玩通关"范围而非找 bug，未追）——没有新证据推翻这个判
+  断。经济、拜师本轮未重复测试（round three 已验证过、且本轮没有
+  发现任何提示需要重新验证它们的迹象）。
+
+- **本轮结论**：无新 bug，无代码改动，无需要提交的修复。测试用的
+  全新角色帐号（`qintestrh`/`qintestrj`/`qintestrk`/`qintestrm`/
+  `qintestrn`/`qintestro`/`qintestrp`）已在测试结束后清理（这些账号
+  存档从未被 git 跟踪，本来就是本地测试残留，不影响仓库状态）；
+  round one/two/three 遗留的 `qintestd`/`qintestrb`/`qintestww`/
+  `qintestzz` 未动（早于本轮，且 `qintestrb`/`qintestww`/`qintestzz`
+  已在 NOTES.md 前文中被指名引用为历史排查证据）。驱动进程测试结
+  束后按精确 PID kill，未使用 `pkill -f`。
