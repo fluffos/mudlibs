@@ -281,3 +281,27 @@ goto/update 三重验证"之后没有让角色真正存过档（`obj/user.lpc` �
 **清理**：临时的 `wztestfour` 管理员测试账号（存档 + wizlist 条
 目）已经清理干净，损坏的 `fluffos` 残留登录存档也已删除；驱动测
 试进程按 PID 正常 kill，未使用 `pkill -f`。
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`/inherit/room/room`）在本档案 2,306 处房间文件的
+`create()` 里紧跟 `inherit ROOM;` 之后又多余调用了一次
+`replace_program(ROOM);`——和姊妹档案 `zjdywzb`/`zjdyzj`/`zjmudhell`
+同一个 AGENTS.md §7.100 记录的休眠 bug（多余调用给对象打上永久
+"pending replace"标记，对象一旦绑定任何闭包就会崩溃）。用
+`fix_710_room.py`（二进制模式，只删除内容严格等于
+`replace_program(ROOM);` 的独立行）扫过 `work/`，删除 2,305 处；剩
+余 1 处是房间生成工具 `clone/misc/roommaker.lpc` 里
+`str += "...replace_program(ROOM);..."` 的字符串拼接变体，手工改成
+`str += "\n\tsetup();\n}\n";`。另有 17 处是转档之前已注释掉的 `//`
+行，原样保留；`work/version/`（一份独立的 46 文件版本同步子树）和
+`work/data/` 下都没有真实 `.lpc` 源码命中。`git diff --stat` 确认
+2305 个文件各删 1 行 + roommaker.lpc 1 处字符串编辑，与脚本自报数
+字吻合。修复后真实驱动干净启动（零新增编译错误、端口正常监听、
+`debug.log` 无任何"cannot replace"/"cannot bind"行）；由于这份档案
+先前的 `fluffos` 存档已被上一轮测试清理删除，重新走了一次完整注
+册流程（`fluffos`/`浮浮云`/管理密码`Mud@2026Adm`/登录密码
+`Mud@2026`/均衡型/男），确认"目前权限：(admin)"后 `look`/`goto`
+两个曾经命中过这个 bug 的房间
+（`d/mingjiao/shanlu3.lpc`、`d/guanwai/shanhaiguan.lpc`）/`quit`
+全部正常，无回归。
