@@ -75,3 +75,38 @@ d/city/xxci1.lpc: cannot replace a program with function references, ignored.
 - **§8.15 大小写不匹配的档案名运行期崩溃**：留言板目录 `d/board/` 下抽查未发现大小写相关的运行期崩溃证据；本轮实测未触发。
 - **§7.11 log_file()/write_file() 缺 assure_file()**：注册流程会写入 `log/login/newid.log`，该目录本身已存在于档案库中，注册测试全程未见任何写入失败。
 - **§8.3 指令表 bug**：`kill`/`look`/`score`/`post`/`update`/`quit` 等核心指令全部实测正常，未见任何指令表相关异常。
+
+## 第四轮补测（§10.7 round four，2026-08-19）：拜师、购物、寄信
+
+补测第一轮明确留下未测的三个系统：拜师（sect/guild apprenticeship）、购物（shopping）、寄信（mail）。原生驱动，端口 40143，用真实注册账号 `shenqingyang`（中文名"沈清扬"，悟性 30）+ 已有管理员账号 `fluffos` 双连线（`goto`/`summon`/`clone`/`give`/`call` 配合）实测。**三个系统全部正常工作，没有发现任何真正的 bug**（无编译错误、无 debug.log 崩溃、无卡死状态）。
+
+### 1. 拜师（`cmds/skill/apprentice.lpc` + `feature/apprentice.lpc`）：正常
+
+用 `bai huchong`（华山派"大师兄"令狐冲，`/d/heimuya/npc/linghu.lpc`，被 `/d/huashan/sgyhole1.lpc` 引用克隆）实测：角色悟性 30 ≥ 门槛 25、负神 0 ≥ 门槛 0，`attempt_apprentice()` 一次通过，NPC 自动 `command("recruit ...")`，`score` 确认"华山派第十五代弟子"、"你的师父是令狐冲"。机制（`is_apprentice_of`/`recruit_apprentice`/`create_family`）运作正常，是一次干净的通过。（第一次尝试用了错误的 NPC id "linghu"——`set_name` 实际登记的 id 是 `({"ling huchong","ling","huchong"})`，没有"linghu"——属于测试方法问题，不是 mudlib bug。）
+
+### 2. 购物（`feature/dealer.lpc` / `F_DEALER`）：正常
+
+在 `/d/xiangyang/jiekou1`（大街口）的小贩 NPC 处，给角色银子后 `buy egg`（五香茶叶蛋）成功购得，`i` 确认物品与找零都正确到账。`list`/`buy` 命令、`can_afford`/`pay_money` 结算链路均正常。
+
+（诊断过程中发现 `feature/finance.lpc` 的 `can_afford()`/`pay_money()` 使用 `this_player()` 而不是（注释所声称的）`this_object()`——用管理员的 `call` 指令跨物件直接调用 `pay_money()` 给测试角色打钱时，钱进了管理员自己的背包而不是目标角色的，因为 `this_player()` 此时是发指令的管理员。**这不是真实 bug**：正常游戏流程里 `do_buy()` 内部是 `dest = this_player()` 然后 `dest->can_afford(...)`，`this_player()` 全程就是发起 `buy` 指令的玩家自己，`call_other()` 不会改变 `this_player()`，链路是自洽的；只有像管理员 `call obj->pay_money()` 这种跳出正常指令上下文的诊断手段才会踩到这个上下文错位。已改用 `clone`+`give` 的正常游戏内流程绕过，不建议改动 `finance.lpc`。)
+
+### 3. 当铺/收购（买卖提 `d/xingxiu/npc/maimaiti.lpc` 卖哈密瓜 → 波斯生意人 `d/gaochang/npc/dealer.lpc` 收购哈密瓜）：正常，round-trip 验证
+
+`buy hamigua`（跟买卖提买）→ `sell hamigua`（卖给波斯生意人"收购店"）全部成功，银两正确增减。这个项目一贯的"多数商人只卖不收，只有当铺/收购类 NPC 才收购"设计（已在 hell/niaoren/ylfyxa3/xyzx3 独立确认）在这里同样成立：`d/gaochang/npc/dealer.lpc`（波斯生意人）只注册了 `add_action("do_sell","sell")`，没有注册 `buy`/`list`——这是有意为之的"收购店"（sign 原文"专门收购当地物产"），不是缺陷；同理 `inherit/room/hockshop.lpc`（当票/pawn 房间 mixin）扫描全档案 0 处房间实际 `inherit` 它，看起来是未使用的死代码，但没有任何编译错误或运行期错误，判定为未完成/未接入的内容而非 bug，未做改动。
+
+（诊断中还确认了这份档案里"NPC 后到达房间"不会自动给房间里已存在的玩家绑定该 NPC 的指令——`买卖提` 是在测试角色已经站在房间里之后才用 `clone` 补进去的，此时角色执行 `buy hamigua` 报"你想买什么？"，因为 `add_action` 只绑定给了触发 `clone` 动作的 `this_player()`（管理员），不是旁观的角色；让角色重新"进入"房间一次（再 `summon` 一次）后立刻可以正常 `buy`。这是标准 LPC driver 语义，不是本档案的 bug，纯粹是本轮测试方法上的一个坑，记录下来供未来测试参考。）
+
+### 4. 寄信（`d/city/npc/post_officer.lpc` + `clone/misc/mailbox.lpc`）：正常
+
+`ask officer about 寄信` 领取信箱 → `mail shenqingyang`（寄给自己）→ 标题/内容（内建行编辑器 `.` 结束）→ 备份询问 `n` → 系统提示"有您的信！"。`from` 正确列出信件，`read 1` 正确显示标题/寄信人/内容。整条链路（`post_officer.lpc` 的 `send_mail()`/`receive_mail()` 依赖的 `query("startroom")`，由 `inherit/room/room.lpc` 的 `setup()` 在克隆时自动写入）完整可用，不是 `zjdy2008wzb`/`zjdywzb`/`hell` 那种被禁用的 stub。
+
+### 5. 标准积压清单快速核对（§7.90、§7.111、§7.112、§7.113、§7.114、§7.115）：均无异常
+
+- **§7.90**（eval-cost 过低）：`config.fluffos` 已是 `maximum evaluation cost : 5000000`（上一轮记录还是 700000，现已被 §7.90 语料级扫描修复覆盖），本轮多次跨房间冷编译（含新克隆的 `maimaiti`）未见任何 eval-cost 报错。
+- **§7.111**（`standard_trace()` 对 `error["object"]==0` 的 `file_name()` 崩溃）：`adm/obj/master.lpc` 第 206 行已是 `objectp(error["object"]) ? file_name(error["object"]) : "<none>"` 的守卫写法，修复已在。
+- **§7.112**（NPC `init()` 无守卫重复挂 `call_out`）：抽查多个 `d/baituo/npc/*.lpc` 等文件的 `init()`，全部是 `remove_call_out(...)` 紧跟 `call_out(...)` 的守卫写法，修复已在。
+- **§7.113**（netdead 重连不恢复 `heart_beat`）：`clone/user/user.lpc` 第 196 行 `reconnect()` 明确包含 `set_heart_beat(1)`，修复已在。
+- **§7.114**（mixin 里的 `private input_to` 回调失效）：`feature/edit.lpc` 的 `edit()` 是 `public`（非 `private`），本轮寄信、上一轮留言板都验证过内建行编辑器（`.` 结束）正常工作，不适用。
+- **§7.115**（`QUEST` 宏指向缺失文件）：`include/globals.h` 的 `#define QUEST "/inherit/quest"` 对应的 `inherit/quest.lpc` 确实存在且内容完整（`quest_give`/`quest_ask`/`quest_kill`），不适用（本档案不是 aoxiangtianji 那种孤立个案）。
+
+**结论：本档案没有发现新 bug，第四轮补测的三个系统（拜师/购物/寄信）全部工作正常，标准积压清单六项复核全部通过。** 测试用账号 `shenqingyang` 的存档在测试结束后已删除，不留痕迹；`fluffos` 管理员账号的存档因正常使用（`last_on` 等字段）产生了预期内的小改动。
