@@ -7337,6 +7337,57 @@ verification only, do not boot live**), `zhonghua2` (2,718),
 (2,451), and onward — see `candidates_ge100.tsv`/`FINDINGS.md` in this
 sweep's scratchpad for the full ranked list.
 
+**Fix-phase batch 6 (2026-08-19), `nt1` + next 9 libs by impact**:
+`nt1` first (rank 41, per its standing §7.110 OOM-risk exclusion —
+**static-only verification via `lpcc --batch` fed all changed files in
+one process, no live driver boot attempted**), then continuing straight
+down the ranked list — `zhonghua2`, `xuanjianlu`, `hc`, `jym`,
+`hyiishzdscbb`, `yxjh`, `yxcs`, `tianxia`, `xjcq2000` (ranks 42, 43(*),
+44, 45, 46, 47, 48, 49, 50 — `xuanjianlu`'s own raw/live counts are
+slightly out of strict rank order in the survey table but was next in
+the batch-5 hand-off list). Same method as batches 1-5.
+
+| lib | live occurrences deleted | roommaker copies fixed | commit |
+|---|---|---|---|
+| nt1 | 2,748 | 1 (`clone/misc`, string-builder variant) | `ffdb2e466ee` |
+| zhonghua2 | 2,718 | 3 (`clone/misc`, `u/smallfish/editroom.lpc`, `u/smallfish/obj/editroom.lpc`) | `19c9c25fe82` |
+| xuanjianlu | 2,696 | 1 (`clone/misc`) | `a0b3aa42c94` |
+| hc | 2,676 | 1 (`clone/misc`) | `e84d54ecd08` |
+| jym | 2,662 | 1 (`clone/misc`) | `890cbd5f55a` |
+| hyiishzdscbb | 2,623 | 2 (`clone/misc`, `adm/roommaker.lpc` — 2 templates) + 1 hand-fixed irregular (`d/happy/workroom.lpc`, trailing empty `//`) | `123d87566f7` |
+| yxjh | 2,607 | 1 (`clone/misc`) | `bc0089a31aa` |
+| yxcs | 2,530 | 5 (`clone/misc`, `obj/roommaker.lpc`, `obj/rmmaker.lpc`, `u/lonely/obj/roommaker.lpc`, `u/lonely/obj/roommk.lpc` — last two are the "Lonely" 3-occurrence variant) | `c31314b9e3f` |
+| tianxia | 2,526 | 2 (`obj/wizard/roommaker.lpc`, `wiz/zling/roommaker3.lpc` — 3-occurrence variant) + 1 hand-fixed irregular (`wiz/zling/txmap.lpc`, trailing empty `//`) | `6e9050fee9d` |
+| xjcq2000 | 2,451 | 4 (`clone/misc`, `u/deng/roommaker.lpc` — both 3-occurrence variant, plus `adm/daemons/groupd.lpc`, `cmds/debug/roommaker.lpc`) | `f3c689e6f1e` |
+
+**Batch 6 total: 26,237 live occurrences deleted across 10 libs.**
+Running total after batches 1-6: **50 libs fixed, 219,221 live
+occurrences deleted** (192,984 + 26,237). `nt1`'s survey-recorded live
+count (2,749) was off by one from what was actually on disk (2,748) —
+same harmless survey/actual-count-mismatch class flagged in batch 5's
+`fys` note. `nt1` verification method per its OOM exclusion: fed all
+2,748 changed object paths to a single `lpcc --batch` invocation
+(chunking into smaller per-process batches was tried first and turned
+out far SLOWER than one big batch, apparently due to per-process
+master/simul_efun recompilation overhead — don't bother chunking for
+this tool). Result: 2,746 PASS, 2 pre-existing FAILs
+(`/d/fuzhou/wuxiang`, `/d/quanzhou/nanhu`, both "End of file in text
+block" syntax errors) — both independently confirmed present in the
+ORIGINAL pre-fix file too (re-compiled the `git show HEAD:...` blob
+standalone), so unrelated to this change. Zero "cannot replace"/"cannot
+bind" lines in the lpcc output. All nine other libs verified via a real
+`build-debug` driver boot (clean compile, port listening, zero new
+"cannot replace"/"cannot bind" `debug.log` lines); `zhonghua2` also got
+a live socket connectivity spot-check (login/registration screen
+rendered normally). Two more libs joined the "Lonely" 3-occurrence
+`room_code`/`str` room-building-tool variant family first seen in
+batch 5 (`yxcs`, `xjcq2000`), and two more hit the "trailing empty `//`
+comment" irregular shape first seen on `hy2002`/`hy2000`
+(`hyiishzdscbb`, `tianxia`). No new irregular shapes beyond what
+batches 1-5 already catalogued. **118 libs from the survey's >=100
+list remain unfixed** (128 minus this batch's 10) — continue down
+`candidates_ge100.tsv`/`FINDINGS.md` by impact for the next batch.
+
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
 Found on `kxkjii2`'s §10.7 deep functional test (ES II/Annihilator
