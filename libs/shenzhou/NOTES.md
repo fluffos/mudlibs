@@ -1033,3 +1033,22 @@ libs/*/work` 命中 140+ 个档案、覆盖相当一部分语料库（经由共�
 ## §7.112 跨库扫描修复（无常 NPC 重连触发重复轮回链）
 
 - **`d/death/npc/{wgargoyle,bgargoyle,wgargoyle3}.lpc` 的 `init()` 无条件调度 `death_stage` call_out 链（AGENTS.md §7.112）**：三个文件原本都没有任何去重判定——`enable_commands()` 会在同房间内向所有对象重播 `init()`，玩家哪怕只是断线重连一次，也会在原有的判官对话/转生链之上再叠一条新链。已仿照同族已修复库（`dtsl`/`dtsl2`/`dtslmud`/`jym`/`xuanjianlu`）的做法，给每个 `init()` 加上按受害者存的 `set_temp("death_stage_active", 1)`/`query_temp(...)` 门槛判定，并在 `death_stage()` 的每一个退出点（角色离场、黑无常"阳人退回"分支、链条走完转生）里 `delete_temp(...)` 清除标记。这三个文件与 `xkm`/`xkx2001` 同族但非字节一致（`wgargoyle.lpc`/`wgargoyle3.lpc` 转生后会给角色套一件衣服 `cloth`，`wgargoyle3.lpc` 还多出一个独立于 `init()` 链的 `ask_death()`"多死一次"命令，未受这次改动影响）。`u/lara/`、`u/scatter/update/` 下的同名文件是未加载的重复/备份拷贝，未触碰。已用独立驱动干净编译+启动验证，未发现残留 save 数据变化。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次五）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：2892 个房间文件的 `create()` 里紧跟 `inherit ROOM;` 之后
+都有这一行多余调用，永久设下"待替换"标记，第一次对该房间对象绑
+定闭包就会崩溃。自带建房工具有 2 份拷贝（`clone/misc/roommaker.lpc`、
+`u/karlopex/obj/roommaker.lpc`），都是"Lonely"三处独立字符串拼接
+写法（和 tianxiawuxue 的 u/lonely 工具同款）。另外发现 4 个门派房源
+码文件放在 `work/data/house/` 下（真正的 .lpc 源码，不是存档），扫
+描脚本默认排除 `data/` 目录误伤了这批文件——针对这个子目录单独关
+闭排除，手动补上（和 xkm 的 work/data/group/ 同一类缺口）。累计
+2896 处 live 调用删除，和 survey 记录的数字精确吻合，修复后 0 处
+遗留。
+
+验证：`build-debug` 驱动真实冷启动，端口 40066 正常监听，
+`debug.log` 全程干净。既有管理员账号 `fluffos`/`Mud@2026` 登录正常
+（落地沙滩，look/quit），全程无新增
+"cannot replace"/"cannot bind" 日志行。
