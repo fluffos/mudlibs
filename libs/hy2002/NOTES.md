@@ -144,3 +144,20 @@ Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
   误。登录本身产生的存档时间戳类微小 diff（`data/user/f/
   fluffos.o` 的 `last_on` 字段）已用 `git checkout` 撤销，不提交。
   驱动最终按精确 PID kill，`ps -p` 确认已退出。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次三）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：4436 处命中。除标准脚本删除的 4431 处外，另有 5 处不规
+则格式手动修复：`adm/roommaker.lpc` 两个代码生成模板里的三处字符
+串拼接、`clone/misc/roommaker.lpc` 的一处，以及 `d/happy/workroom.lpc`
+里一行与空 `//` 注释共享同一行的 `replace_program(ROOM);  //`（严
+格脚本按设计不匹配这种形状，手动二进制安全删除）。
+
+`git diff --stat`：4433 files changed, 4 insertions(+), 4436 deletions(-)，
+与预期精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40116 正常监听。既有管理
+员账号 `fluffos`/`Mud@2026Pass1` 通过 `oldplayer` 路径登录，落地
+〖客店〗，多房间走访无误，`quit` 自动存档、干净退出，全程无新增
+"cannot replace"/"cannot bind" 日志行。
