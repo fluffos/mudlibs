@@ -153,3 +153,36 @@ kill，`ps -p` 确认已退出。
 - `data/{login,user}/c/ccc.o` 是此前会话遗留的角色存档，本轮某个
   背景守护进程（`closed.lpc` 的 `heart_beat()`）的例行存盘产生了
   纯粹的时间戳类 diff，已用 `git checkout` 撤销，不提交。
+
+## AGENTS.md §7.100 fix (2026-08-19): redundant replace_program(ROOM) landmine
+
+Same corpus-wide bug as the batch-1-6 sweep (`ROOM` macro
+`"/inherit/room/room"` from `include/globals.h`). Deleted 2,384 live
+standalone `replace_program(ROOM);` lines under `work/` via
+`fix_710_room.py`, plus hand-fixed both room-building tool copies'
+string-builder template (`work/clone/misc/roommaker.lpc`,
+`work/u/tyui/obj/roommaker.lpc`). Checked 98 real `.lpc` files under
+`work/data/{area,room,proom,...}` for the known data/-exclusion
+false-negative — none had the bug pattern. All remaining
+`replace_program(ROOM)` matches after the fix are pre-existing
+`//`-commented lines only.
+
+Verified: clean `build-debug` boot (zero new compile errors, zero
+"cannot replace"/"cannot bind" in `debug.log`), live admin login
+(`fluffos`/`LoginPass456`) into the game world, `look`/`west`/`score`/
+`quit` all worked cleanly.
+
+**Extra caution note per this lib's standing player-save-damage
+history**: the live login run left several incidental data/ diffs —
+routine `heart_beat()` background saves on unrelated player accounts
+(`ccc.o`, `cscb.o`, `seven.o`, `area/*.o`), the `fluffos` account
+picking up starting equipment from normal gameplay, AND (more
+notably) a **deletion** of `data/login/f/fluffos.o` (the credential/
+password-hash file) observed after `quit`, even though that same file
+was used successfully to log in during this very session. Root cause
+not investigated (out of scope for this sweep — not related to the
+replace_program fix), but ALL data/ drift including this deletion was
+reverted via `git checkout HEAD -- work/data` before committing, so
+the credential file and all other player saves are untouched in the
+committed diff. Flagging for whoever next touches this lib's `fluffos`
+account or investigates login/logout save behavior.
