@@ -1102,3 +1102,14 @@ directory before finishing.
 - `work/d/death/npc/bgargoyle.lpc`
 - `work/data/user/f/fluffos.o`, `work/data/user/w/wentian.o` (save-state
   churn from live testing, see above)
+
+## §7.100 修复（`ROOM` 基类的同一"多余 replace_program()"形状，全档案扫描第 6 批）
+
+- 删除 `work/` 下 2,695 处存活的 standalone `replace_program(ROOM);` 行
+  （脚本删除），另外手工修复 `clone/misc/roommaker.lpc` 建房工具代码
+  生成模板里的同形状变体（`str += "...replace_program(ROOM);..."`），
+  共 2,696 处，与普查记录一致。注意 `include/globals.h` 里有两处
+  `ROOM` 宏定义，第一处（`"/std/room"`）在 `/* ... */` 注释块内，真正
+  生效的是第二处 `"/inherit/room/room"`。
+- 验证：真实 `build-debug` 驱动干净开机、端口正常监听，`debug.log` 中
+  零 "cannot replace"/"cannot bind" 行。
