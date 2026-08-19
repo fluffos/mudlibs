@@ -177,3 +177,18 @@ interrupted` 错误数保持为 0（此前第一次开机在类似时间窗口�
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 51 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 修复（`ROOM` 基类的同一形状 landmine，全档案扫描第 6 批）
+
+- 同样的"多余 `replace_program()`"形状也出现在几乎每个房间都继承的
+  `ROOM` 基类上（`/inherit/room/room`）：删除了 `work/` 下 2,748 处存活
+  的 standalone `replace_program(ROOM);` 行，以及 `clone/misc/
+  roommaker.lpc`（本库在线建房工具）代码生成模板里同形状的
+  `str += "...replace_program(ROOM);..."` 变体。
+- **⚠️ 本库有已记录的 §7.110 OOM 事故（一次实机开机曾占用 22GB+ 内存
+  并压垮主机）——本次修复只用 `lpcc --batch` 静态编译全部 2,748 个改动
+  文件验证，未开实机驱动。** 结果：2,746 PASS，2 个失败
+  （`d/fuzhou/wuxiang.lpc`、`d/quanzhou/nanhu.lpc`，均为"End of file in
+  text block"语法错误）——两个都用原始（修复前）文件单独复测确认是
+  **预先存在**的问题，与本次改动无关。编译输出中零 "cannot replace"/
+  "cannot bind" 警告。
