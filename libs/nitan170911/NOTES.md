@@ -750,3 +750,25 @@ worth knowing for any future pass that has real MySQL access and wants
 to do a full live playthrough re-test (which remains the recommended
 higher-value follow-up whenever Docker/MySQL becomes available in this
 environment).
+
+## AGENTS.md §7.100 修复（2026-08-19）
+
+同族（`hhsj`/`xfbhh`）共享的 `ROOM` 基类冗余
+`replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md §7.100）：本 lib
+作为该血统的最初母本，4976 个房间文件的 `create()` 末尾同样都有这
+一行多余调用，同款地雷也烤进了自带建房工具
+`clone/misc/roommaker.lpc` 的字符串拼接代码生成模板。
+
+修复：脚本化删除所有房间文件里独立成行的 `replace_program(ROOM);`
+（`d/huangshan/banshan.lpc` 有两处独立调用，均删除），加上
+roommaker.lpc 里手动摘除字符串拼接片段。`git diff --stat`：4977
+files changed, 1 insertion(+), 4979 deletions(-)，与预期精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40018 正常监听，
+`debug.log` 全程干净。由于本 lib 没有预置管理员账号（注册流程依赖
+外部 MySQL，见上文"管理员账号"一节），无法像 hhsj/xfbhh 那样做房间
+`goto` 走访回归验证——改为连通性验证：连线后输入英文名，确认原有
+"由于连接不上数据库所在服务器，目前仙剑奇侠传暂时不接受数据漫游或
+新玩家注册" 降级提示依旧正常触发（说明登录流程本身没有被这次修改
+破坏），全程 `debug.log` 无新增错误。按精确 PID 结束驱动，因未能注
+册无存档增量需要还原。
