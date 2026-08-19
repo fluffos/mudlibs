@@ -816,3 +816,22 @@ simul_efun 限制——`/adm/simul_efun/file.lpc` 被 `#include` 进
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 94 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次五）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：3004 个房间文件的 `create()` 里紧跟 `inherit ROOM;` 之后
+都有这一行多余调用，永久设下"待替换"标记，第一次对该房间对象绑
+定闭包就会崩溃。自带建房工具有 8 份拷贝（`clone/misc/roommaker.lpc`
+及 7 个巫师目录下的副本），其中 `u/lonely/obj/roommaker.lpc`/
+`roommk.lpc` 各自有 3 处独立的字符串拼接地雷（缩进/后缀写法略有不
+同），全部逐一手动摘除。
+
+修复：脚本化删除所有房间文件里独立成行的 `replace_program(ROOM);`，
+加上 8 处模板手动摘除字符串拼接片段。`git diff --stat`：3004 files
+changed，与预期精确吻合（0 处遗留匹配，全部干净）。
+
+验证：`build-debug` 驱动真实冷启动，端口 40045 正常监听，
+`debug.log` 全程干净。既有管理员账号 `fluffos`/`Mud@2026` 登录正常
+（落地武庙，look/quit），全程无新增
+"cannot replace"/"cannot bind" 日志行。
