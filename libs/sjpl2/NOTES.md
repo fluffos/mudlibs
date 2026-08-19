@@ -483,3 +483,46 @@ unchanged) from logging in as admin repeatedly during this pass.
 - `work/adm/simul_efun/file.lpc`
 - `work/cmds/appr/update.lpc`
 - `work/obj/user.lpc`
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`/std/room`，见 `include/globals.h`）在本档案 2,290 处
+房间文件的 `create()` 里紧跟 `inherit ROOM;` 之后又多余调用了一次
+`replace_program(ROOM);`——AGENTS.md §7.100 记录的同一个休眠 bug（多
+余调用给对象打上永久"pending replace"标记，对象一旦绑定任何闭包就
+会崩溃）。用 `fix_710_room.py`（二进制模式，只删除内容严格等于
+`replace_program(ROOM);` 的独立行）扫过 `work/`，删除 2,280 处标准
+形状；另有几处不规则形状手工修复：
+- `obj/roommaker.lpc` 一处字符串拼接变体
+  `str += "...replace_program(ROOM);..."`；
+- `u/losey/roommaker.lpc`、`u/set/obj/roommaker.lpc`、
+  `u/gdjk/roomm.lpc`、`u/gdjk/hongnong/maker.lpc`（4 份房间生成工
+  具副本）以及两份内嵌了同一份工具代码的 NPC 档案
+  `u/lark/xiaoyao/npc/{rich,tumu}.lpc`、`u/jakey/npc/rich.lpc` 共
+  7 处一种新变体：`if (!mapp(env->query("item_desc"))) str +=
+  "\treplace_program(ROOM);";`（只在房间没有 `item_desc`——即没有
+  门——时才拼接这一行，本质上是原作者已经注意到"有门的房间会拒绝
+  replace"这个驱动行为、但反而把 bug 精确地保留在了"没有门"的多数
+  房间上）——整行删除；
+- `u/lark/yangmingzhai/ss.lpc` 一处真实房间文件，`replace_program`
+  紧跟在一段已被注释掉的 `/* setup() */` 后面同一行，手工删除。
+
+`u/lark/luoyang/dongmen.lpc` 里剩下 1 处**转档之前就已经损坏、留
+着未修**：整个文件从 `inherit ROOM`（无分号）开始就缺失几乎所有语
+句分号，`git show HEAD` 确认这个损坏在本次改动之前就存在，和这次
+的 sweep 无关，保持原样。实测走读时另外撞见两个类似的、转档之前
+就存在、和本次改动无关的编译错误（`y/city/zhuque-n4.lpc` 的
+`NPC_DIR "people/army"` 宏拼接语法错误、`u/lark/yangmingzhai/ss.lpc`
+文件开头一个原始 ANSI 转义字节残留导致的语法错误）——两份档案的
+`git diff` 都确认本次改动只碰了 `replace_program` 那一行，编译错
+误是转档遗留问题，不在本次修复范围内。`work/data/` 下没有真实
+`.lpc` 源码命中。`git diff --stat` 显示 2284 个文件净删 2289 行
+（脚本 2280 + 手工 9 处），与预期的"2290 处存活 - 1 处保留不修"吻
+合；另有 150 处转档之前已注释掉的 `//` 行原样保留。
+
+驱动干净启动（零新增编译错误、端口正常监听、`debug.log` 无任何
+"cannot replace"/"cannot bind"行），巫师账号 `fluffos`/`Mud@2026`
+`look`/`goto` 走读了 3 个曾经命中过这个 bug 的房间
+（`y/city/baihu-n1.lpc`、`y/city/baozipu.lpc`、`y/city/bingqipu.lpc`）
+均正常，`quit` 干净退出，登录存档的 `last_on` 时间戳增量已用
+`git checkout HEAD --` 撤销，未落入提交。
