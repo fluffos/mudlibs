@@ -440,3 +440,138 @@ void init()
 ### 本轮结论
 
 发现并修复一例真实、跨会话已证明高价值的 §7.112 同类静默复活重复 bug（`d/death/npc/pang.lpc`），已实测验证死亡→断线→重连→复活全链路在修复后正确无重复；经济系统的两条真实路径（当铺 sell/pawn、留言板 post/read）均已实测确认可用，商店"全部关闭"确认是巫师运营设计而非 bug；标准五项检查清单（§7.90/§7.11/§7.111/§7.112/§7.113）逐项复核，除本轮新修复的 pang.lpc 外均确认此前记录有效或本档案不适用。**AGENTS.md §7.112 的通用教训在此再次成立：文件名匹配（`wgargoyle.lpc`）的机械 sweep 无法覆盖所有同功能异名 NPC，任何后续档案的深度测试都应该独立按"`init()` 内无保护 `call_out()`"这一行为特征去查，而不是只看文件名。
+
+## 深度功能测试（第四轮，2026-08-19）——用全新角色独立复核经济系统，发现并修复一例真实 `give`/`ask` 崩溃 bug
+
+本轮任务书的前提（"经济系统仍未定位"）实际上已经过时：第三轮（同为
+2026-08-18）已经找到并实测了当铺 sell/pawn 与留言板两条真实经济路径
+（见上一节），只是驱动本轮任务的记忆索引条目没有跟上第三轮的进度。
+没有因此跳过任务——本轮改用一个**全新注册、从未被任何前几轮账号触
+碰过**的测试角色，独立地把"卖东西换钱"这条链路完整走了一遍作为二
+次确认，并且在走查 `give`/`ask` 命令时发现了一例此前三轮测试都没有
+覆盖到的真实运行时崩溃 bug，已修复并实测验证。
+
+### 经济系统：用全新角色独立复核 sell 交易，确认可正常工作
+
+全新注册账号 `axtjshi`（中文名"李四"），走完完整注册流程后进入"南
+城客栈"。该角色出生自带装备为"皮靴(pi xue)"和"蓝马褂(cloth)"——分别
+读代码确认为 `work/obj/cloth/male-shoe.lpc` 和 `work/obj/cloth/
+male6-cloth.lpc`（两份文件的注释都明确写着"This is the basic equip
+for players just login."），两者 `create()` 里都显式 `set("value",
+0)`。用巫师账号 `goto`+`summon` 把这个全新角色带到"古记当铺"
+（`/d/city/dangpu_e`）后，`value pi xue`/`sell cloth` 均返回"一文不
+值"——**这不是经济系统坏了，是这两件新手起始装备本来就被设计成 0 价
+值**（防止用重复注册小号刷钱的常见 MUD 设计），与经济系统本身能否
+正常运作是两回事。
+
+为了排除"起始装备恰好都不值钱"这个巧合，进一步用巫师账号 `clone
+/obj/cloth/jinduan`（`value=800` 的锦缎，第三轮用的也是这件）后
+`give jinduan to axtjshi` 把一件真正有价值的物品转移给这个全新角
+色，再切回该角色执行完整交易：`value jinduan` 正确显示"锦缎价值八
+两白银……如果卖断(sell)，可以拿到二两白银又四十文钱"，`sell
+jinduan` 正确扣除物品、正确发放"四十文铜钱(Coin)"+"二两白银
+(Silver)"到背包，`i`/`score` 确认到账无误。**结论：经济系统（当铺
+sell 路径）在一个完全独立、未被前几轮任何账号触碰过的全新角色上再
+次验证工作正常，不是"账号级偶然"，是系统级可用**。全档案 9 处
+`obj/shop/*.lpc` 商店仍确认全部 `shop_type=0`（巫师未上架，运营设
+计而非 bug，与第三轮记录一致，本轮 `grep` 复核未变）。
+
+### 新发现并修复：`give`/`ask` 命令的 `QUEST` 宏路径错误，导致运行时崩溃
+
+在准备"把物品转移给测试角色"这一步时，`give jinduan to axtjshi`
+第一次尝试直接在玩家的转移路径上崩溃：
+
+```
+执行时段错误：*call_other() couldn't find object '/std/quest'.
+程式：/cmds/std/give.lpc 第 108 行
+```
+
+`work/cmds/std/give.lpc` 第 108 行：`if (QUEST->quest_give (me, who,
+obj))`；`work/include/globals.h` 第 152 行：`#define QUEST
+"/std/quest"`。全档案里根本不存在 `/std/quest.lpc` 这个文件——最接近
+的同名文件是 `work/std/misc/quest.lpc`，但读了它的内容后确认这是
+"所有玩家任务继承此对象"的**任务基类模板**（供各个具体任务对象
+`inherit`，本身没有 `quest_give`/`quest_ask` 这两个全局钩子函数)，
+不是 `QUEST` 宏原本想指向的那种"通用任务完成检测守护进程"。也就是
+说这不是简单的路径打错字（"缺一段 `misc/`"那么简单），而是这个全局
+`QUEST` 守护进程本身在这份档案里从未被真正实现/交付过——是一个从祖
+先代码库遗留下来、一直没写完的钩子。
+
+**影响范围**：`grep -rn "QUEST->" work --include="*.lpc"` 全档案只
+有三处：
+- `work/cmds/std/give.lpc` 第 108 行（活代码，**任何一次成功的
+  `give <物品> to <目标>` 都会触发**——只要 `present()`/`playerp()`
+  等前置检查都通过，必然执行到这一行，等于说这个玩家最基础的社交/
+  交易命令，长期以来对**任何**"给某人某东西"的合法用例都会崩溃）。
+- `work/cmds/std/ask.lpc` 第 87 行（活代码，`ask <NPC> about <话
+  题>` 分支——只要目标不是玩家（`!userp(ob)`），即绝大多数"向 NPC
+  打听消息"的正常用法都会触发同样的崩溃）。
+- `work/std/char/char.lpc` 第 113 行：`QUEST->quest_kill(...)` 整
+  行被注释掉，死代码，未处理。
+
+**修复**：给两处活的 `QUEST->` 调用点各加一个house-style的文件存在
+性守卫（本档案里 `file_size(path+".lpc") > 0` 这个写法在
+`cmds/std/go.lpc`/`cmds/imm/goto.lpc`/`cmds/adm/restore.lpc` 等多处
+已经是既有习惯用法），而不是瞎编一个"最小实现"或者把宏改指到语义
+完全不符的 `std/misc/quest.lpc` 模板类去凑合：
+
+```lpc
+// give.lpc 第108行
+if (file_size(QUEST + ".lpc") > 0 && QUEST->quest_give (me, who, obj))
+// ask.lpc 第87行
+if ( file_size(QUEST + ".lpc") > 0 && (msg = QUEST->quest_ask(me, ob, topic)) )
+```
+
+效果：这个从未交付的全局任务钩子被安全跳过（`give`/`ask` 命令的其
+余逻辑完全不受影响，只是不会再触发这个本来就不存在的钩子），不会再
+崩溃。
+
+**实测验证**：`update /cmds/std/give` + `update /cmds/std/ask` 热更
+新成功后，重新执行 `give jinduan to axtjshi`（"你给李四一件锦
+缎。"，无崩溃）与 `ask gu guiyou about jinduan`（"古贵有疑惑地看着
+你，摇了摇头。"——正常的 NPC 不认识话题回复，无崩溃），两条命令均
+恢复正常。`work/log/debug.log`（本次会话从空文件开始）全程只捕捉到
+**这一条**修复前的报错，修复并热更新之后的所有后续操作（含上面完整
+的 sell 交易）零报错。
+
+**未做的事**：没有去写一个真正的 `/std/quest.lpc` 全局任务守护进
+程——这份档案里从来没有交付过这个功能，凭空发明一套任务完成检测逻
+辑属于新增游戏功能而不是修 bug，超出本轮范围。也没有把这个发现扩大
+成跨库 sweep——本轮只确认了这一份档案里的实例，`QUEST` 这个宏名字
+本身很通用，其他血统家族即使同名宏也未必是同一份 `globals.h`/同样
+的路径错误，需要每个库各自读代码确认，不建议不经验证就批量替换。
+
+### 标准清单复核（快速确认，非重新深挖）
+
+- **§7.111**（`master.lpc` 的 `file_name(error["object"])` 空指针
+  防护）：`work/adm/obj/master.lpc` 第 416、552 行两处调用点仍然带
+  三元判空保护，与第三轮记录一致，无需再动。
+- **§7.112**（`init()` 内无保护 `call_out()` 死亡引导链）：
+  `d/death/npc/pang.lpc` 第三轮已修复的重入锁仍在（本轮未改动该文
+  件，快速 `grep "death_stage_running"` 确认锁仍存在），无需再动。
+- **§7.113**（netdead 重连不恢复 heart_beat）：`work/adm/daemons/
+  logind.lpc` 的 `logon()`→`reconnect()` 路径与第三轮读到的一致，
+  本轮亲自靠 `find_body`+"重新连线完毕" 的实测重连（多次，见上文两
+  处后台连线技巧）反复验证了重连后角色仍能正常收发命令、正常交易，
+  没有观察到任何 heart_beat 卡死的迹象，维持"不适用"结论。
+- **§7.114**（`private` 的 `input_to()` 回调经由继承 mixin 静默失
+  效）：`grep -rn "private.*input_line\|private.*input_to"
+  work --include="*.lpc"` 全档案零命中；本档案唯一的编辑器 mixin
+  `work/feature/edit.lpc` 的 `input_line()` 本身不带 `private`，不
+  是这个 bug 的 shape，不适用。
+- **§7.90**（eval-cost 过低）：`config.fluffos` 的 `maximum
+  evaluation cost : 30000000`，与第三轮记录一致，早已是高位修正
+  值，无需再动。
+
+### 本轮结论
+
+经济系统（当铺 sell/pawn）经一个全新、未被任何前几轮账号触碰过的测
+试角色独立复核，确认系统级可用，不是账号偶然；顺带发现并修复一例此
+前三轮都未覆盖到的真实 bug——`give`/`ask` 命令因 `QUEST` 宏指向一个
+从未交付的全局任务守护进程路径而在几乎所有正常用例下崩溃，已加存在
+性守卫修复并实测验证（`give`、`ask` 均恢复正常，交易全程 `debug.
+log` 零报错）。标准五项检查清单（§7.90/§7.111/§7.112/§7.113/
+§7.114）逐项复核均确认此前结论有效或本档案不适用，没有发现新的异
+常。测试用留存证据账号：`axtjshi`（含一次完整、已验证到账的 sell
+交易）。会话中产生的一个额外遗留测试账号 `qinzhan`（第三轮某次未清
+理干净的残留，未提交追踪）已一并清理。
