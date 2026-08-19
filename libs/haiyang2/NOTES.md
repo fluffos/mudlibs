@@ -944,3 +944,21 @@ daemon effect, not caused by this pass — `data/topten.o`,
 `qintongshan`'s save files removed (not committed). `boot.log` scratch
 file removed. `git status --short` confirmed clean except the 13
 intentional source fixes before committing.
+
+## §7.100 跨库扫描修复（ROOM 冗余 replace_program() 关闭包炸弹，2026-08-19）
+
+同一形状覆盖到几乎所有房间基类（机制详见 AGENTS.md §7.100）。本库属
+于该扫描已知最大规模的 10 个库之一。二进制模式脚本机械删除了 8340
+个文件里 8341 处独立、未注释的 replace_program(ROOM); 整行（其中一
+个文件 d/huangshan/banshan.lpc 里同一 create() 有两处独立冗余调用，
+分别在 setup() 前后各一处，均属同一 bug 形状，一并删除）。另外手工
+清理了造房工具 clone/misc/roommaker.lpc/adm/roommaker.lpc 代码生成
+模板里内嵌的同一形状（4 处，含一处 heredoc、三处字符串拼接）。删除
+总计 8345 行，与本次扫描 FINDINGS.md 记录的 haiyang2 存活命中数完全
+一致，git diff --stat 与脚本自报数字吻合。
+
+验证：干净启动一次真实调试驱动，端口 40057 正常监听，
+work/log/debug.log 全程无新增内容。用已播种的 fluffos/Mud@2026 管理
+员账号连线，在欢迎村新手教学区往返走了十余个房间
+（newbie1/newbie2/newbie4），look/who 均正常。未产生需要撤销的存档
+改动。驱动按精确 PID kill。
