@@ -862,3 +862,13 @@ debug.log 位置**（驱动级 `log/debug.log` 和 LPC 级
 `git checkout --` 还原。启动前按此前记录的前置条件手动创建了
 `log/`、`work/log/{nosave,wiz}` 目录（均已确认被 `.gitignore` 正确
 忽略，非代码问题）。
+
+## §7.100 修复（`ROOM` 基类的同一"多余 replace_program()"形状，全档案扫描第 6 批）
+
+- 删除 2,530 处存活的 `replace_program(ROOM);` 相关行，与普查记录一致。
+  本库有五套独立的建房工具副本，全部命中同一形状：`clone/misc/
+  roommaker.lpc`、`obj/roommaker.lpc`、`obj/rmmaker.lpc`、
+  `u/lonely/obj/roommaker.lpc`、`u/lonely/obj/roommk.lpc`（后两个
+  "Lonely" 变体各含 3 处 `room_code`/`str` 拼接模板命中）。
+- 验证：真实 `build-debug` 驱动干净开机、端口正常监听，`debug.log` 中
+  零 "cannot replace"/"cannot bind" 行。
