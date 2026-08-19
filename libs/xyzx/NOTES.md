@@ -51,3 +51,22 @@
 泄漏。随后**单独一步**做了真实断线重连+密码验证（用普通密码
 `Mud@2026`）：成功登录，存档数据一致。驱动按精确 PID 结束；管理员
 存档已提交。
+
+## §7.100 跨库扫描修复（ROOM 冗余 replace_program() 关闭包炸弹，2026-08-19）
+
+同一形状覆盖到几乎所有房间基类（机制详见 AGENTS.md §7.100）。本库属
+于该扫描已知最大规模的 10 个库之一。二进制模式脚本机械删除了 5591
+处独立、未注释的 replace_program(ROOM); 整行。另外手工清理了造房工
+具代码生成模板里内嵌的同一形状，本库有两份完全同形状的拷贝
+（`clone/misc/roommaker.lpc`、`u/fyue/misc/roommaker.lpc`，各 1 处
+字符串拼接，和同一 XYZX 血统的 longyunmeng/xyzxfk 完全一样的形状）。
+删除总计 5593 行，与本次扫描 FINDINGS.md 记录的 xyzx 存活命中数完全
+一致。
+
+验证：干净启动一次真实调试驱动，端口 40180 正常监听，
+work/log/debug.log 全程无新增内容。用已播种的 `fluffos`/`Mud@2026`
+管理员账号连线（沿用上方记录确认的密码），在北疆小镇/巴依家庭院之
+间往返走了十余个房间（含 NPC 互动），look/score/who 均正常，未见任
+何 "cannot replace"/"cannot bind" 或崩溃迹象。测试产生的
+`data/{login,user}/f/fluffos.o` 存档时间戳 diff 已 `git checkout`
+撤销，不提交。驱动按精确 PID kill。
