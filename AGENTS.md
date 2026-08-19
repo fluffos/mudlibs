@@ -7976,6 +7976,30 @@ Without an active `heart_beat`, a character stops receiving the periodic `heal_u
 
 **Not yet corpus-swept.** A rough grep for `net_dead`-containing `logind.lpc` files and `set_heart_beat(0)` in `obj/user.lpc` hits ~60-75 libs, but — like §7.112 — this needs per-lib judgement (does that lib's ACTUAL reconnect path restore heart_beat somewhere, just not obviously?) rather than a blind mechanical sweep. Add to the standing round-three checklist: after any reconnect during testing, verify healing/aging is still progressing, not just that the character is playable.
 
+### 7.114 A `private` function used as an `input_to()` string-callback target silently fails to re-arm when reached through an inherited mixin — breaking board posting, mail, and any other multi-line "type until `.`" input flow, with no error anywhere
+
+**Found via `dfgs2`'s round-three §10.7 deep test** — and only found because a first pass's "board post worked" conclusion was double-checked with a byte-level live re-test rather than taken at face value. `feature/user/edit.lpc` implements the shared "type lines until a bare `.`" input flow used by board posting, in-game mail, and profile-description editing:
+```lpc
+int edit(function callback) {
+  ...
+  input_to("input_line", "", callback);   // first line: works fine
+  return 1;
+}
+
+private void input_line(string line, string text, function callback) {
+  if (line == ".") { ... return; }
+  ...
+  input_to("input_line", text, callback);  // re-arm for the NEXT line
+}
+```
+The **first** `input_to("input_line", ...)` call, made from `edit()` in the same file, works. But `input_line()` is declared `private`, and the object actually using this flow (`obj/user.lpc`) only has it via `inherit F_EDIT` — a separately-compiled mixin file. The **recursive** re-arm made from *inside* `input_line()` on every line except the last silently fails to register through that inherited path. The player then has no active `input_to` waiting for their next line; it falls through to normal verb dispatch, which fails and prints the driver's generic default-fail message (e.g. `什么？`) — no LPC error, nothing in `debug.log`, indistinguishable from "the player typed something wrong" unless you're specifically watching for it.
+
+**Root-caused by bisection**: pasting a byte-identical copy of `edit()`/`input_line()` directly into `obj/user.lpc` (bypassing the mixin) works perfectly; the exact same code reached through `inherit F_EDIT` does not. The only variable that flips the outcome is the `private` modifier on `input_line()` — every other hypothesis tried (recursive `input_to()` re-arming in general, function-pointer/`bind()` carryover through nested `input_to()`, `add_action` vs. plain `call_other` dispatch, closure-creation timing, §7.86-style `replace_program()` poisoning on the inheritance chain) was tried and disproven in isolation. This looks like a genuine, narrow driver/mudlib interaction: a `private` function is only callable via `call_other()` from within the SAME file it's defined in, and `input_to()`'s string-based re-dispatch of a callback appears to go through a call path that doesn't count as "the same file" when the function was reached via inheritance rather than being defined directly on the object. **Fix**: drop `private` from the callback function. It's never player-typeable as a command (only ever reached via the internal `input_to()` continuation mechanism), so this exposes no new capability.
+
+**Blast radius wider than the symptom you'll actually see**: a `grep -rl '\->edit(' work/` search on `dfgs2` found this exact `edit()`/`input_line()` pair also drives the in-game mail system (`obj/mailbox.lpc`), the `to` mail-sending command (`cmds/usr/to.lpc`), and profile-description editing (`cmds/usr/chfn.lpc`) — all silently broken the identical way, not just bulletin boards. One board-posting test catching this is enough to fix all of them, but don't assume board-only if you're deciding how far to test after finding this.
+
+**Not yet checked on other libs.** If a lib's board `post` (or `mail`/`to`/`chfn`) command accepts the initial line-edit prompt but then every subsequent line gets swallowed with a generic "unknown command" instead of accumulating into the message, check whether that lib's edit-flow callback function is declared `private` and reached through an inherited mixin rather than defined directly on the object using it.
+
 ---
 
 ## 8. Login and registration flow bugs
