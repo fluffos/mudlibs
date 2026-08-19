@@ -423,3 +423,29 @@ debug.log 检查；120 秒防洪门禁内重连正确拒绝、门禁过后重连
 满格，`debug.log` 全程干净。驱动按精确 PID 结束；测试期间产生的存
 档增量（纯游戏时间计数器）已 `git checkout --` 还原，本轮无需新代
 码改动。
+
+## AGENTS.md §7.100 修复（2026-08-19）
+
+同 `jhfy3` 起源发现的 `ROOM` 基类冗余 `replace_program(ROOM);` 自崩
+溃地雷（详见 AGENTS.md §7.100）：本 lib 5239 个房间文件的 `create()`
+末尾（紧跟 `inherit ROOM;`）都有这一行多余调用，第一次对该房间对象
+绑定闭包（`set(..., (: ... :))`、`edit()`、`call_out()` 闭包参数等）
+会永久失败。同款地雷还烤进了自带建房工具
+`clone/misc/roommaker.lpc`/`u/fyue/misc/roommaker.lpc` 的两处代码生
+成模板（heredoc 与字符串拼接各一处），意味着玩家/巫师用建房工具新
+建的房间也会天生带着这个地雷。
+
+修复：脚本化删除所有 5239 个房间文件里独立成行的
+`replace_program(ROOM);`，加上两份 roommaker 工具模板里各自手动摘
+除字符串拼接里的 `\treplace_program(ROOM);\n` 片段，保留
+`inherit`/`setup()` 不变。`git diff --stat`：5241 files changed, 2
+insertions(+), 5243 deletions(-)，与脚本自报删除行数（5241 处标准
+行）+ 2 处手动摘除（roommaker 字符串拼接）精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40041 正常监听，
+`debug.log` 全程干净（无新增编译错误/警告）；管理员 `fluffos`账号
+`goto` 走访 14 个刚修复的房间（`d/binghuodao`/`d/quanzhen_old`/
+`d/taishan`/`d/baituo`/`d/migong`/`d/gaochang` 等区域），`look`/
+`goto` 均正常返回，无 "cannot replace"/"cannot bind" 新增日志行。
+按精确 PID 结束驱动，登录产生的两处存档增量（`fluffos.o` 登录/用户
+档案）已 `git checkout --` 还原。
