@@ -7177,15 +7177,72 @@ confirmed unrelated to the replace_program regression (debug.log had
 zero "cannot replace"/"cannot bind" lines in both cases) and left
 unfixed, out of scope for this sweep.
 
-**147 libs from the survey's >=100 list remain unfixed** — this is a
-large remaining backlog for future sweep batches, same shape, same
-fix, just needs the same per-lib verification discipline (this bug's
-fix is mechanically simple but each lib still needs its own compile
-+ live-boot verification, which is the real bottleneck, not the edit
-itself). Pick up by remaining impact from `candidates_ge100.tsv`/
-`FINDINGS.md` in the survey scratchpad — next up: `ylfyxa3` (4,692),
-`zxty` (4,478), `hy2002` (4,436), `xiakexing100` (4,430),
-`xajhzcjh` (4,239), `chidi` (4,030), and onward.
+**Fix-phase batch 3 (2026-08-19), next 9 libs by impact**: continuing
+straight down the ranked list from batch 2 — `ylfyxa3` through
+`chidi` (ranks 20-25 of the >=100 list), then `yhyxs`/`yanhuangwuhun`/
+`fqyy2` (ranks 26, 28, 29 — `yhwhpublicfi`, rank 27, was skipped this
+batch: its admin account uses a non-`fluffos` id (`wlqxztest`) and a
+more involved surname/given-name + dual-password registration flow
+that wasn't worth reverse-engineering mid-batch; left for a future
+pass). Same method as batches 1-2.
+
+| lib | live occurrences deleted | roommaker copies fixed | commit |
+|---|---|---|---|
+| ylfyxa3 | 4,692 | 1 (`clone/misc`) | `1c174efc632` |
+| zxty | 4,478 | 4 (`clone/misc`, `u/xiyang/obj/roommaker1`, `u/landy/obj/roommaker`, `u/bzhou/obj/roommaker`) | `bda9b2ba06f` |
+| hy2002 | 4,436 | 2 (`clone/misc`, `adm/roommaker` — 2 templates in this one file) + 1 hand-fixed irregular-formatting line (`d/happy/workroom.lpc`, trailing empty `//` comment) | `4549a65f1fd` |
+| xiakexing100 | 4,430 | 1 (`clone/misc`) | `29820002489` |
+| xajhzcjh | 4,239 | 1 (`clone/misc`) | `3d890cd1553` |
+| chidi | 4,030 | 3 (`clone/misc`, `obj/roommaker`, `obj/rmmaker`) | `3d296ecb75f` |
+| yhyxs | 3,431 | 1 (`clone/misc`) | `07bff31872a` |
+| yanhuangwuhun | 3,370 | 1 (`clone/misc`) | `a049ce26c0e` |
+| fqyy2 | 3,257 | 1 (`clone/misc`) + 1 hand-recovered file (see below) | `6569158a89e` |
+
+**Batch 3 total: 36,363 live occurrences deleted across 9 libs.**
+Notable finds: `haiyang2`/`xkx100`'s "TWO independent redundant calls
+in one `create()`" shape recurred once more on `xiakexing100`
+(`d/huangshan/banshan.lpc`, both instances removed). `hy2002` and
+`chidi` both needed >1 room-builder-tool copy fixed, and `hy2002`
+additionally had one room file with the redundant call sharing a line
+with a trailing empty `//` comment (`replace_program(ROOM);  //`) —
+the strict script correctly left it alone (not an exact standalone-line
+match) and it was hand-deleted, binary-mode, diff-verified. `fqyy2`
+surfaced a new process hazard, not a mudlib bug: a mid-verification
+`git stash push`/`pop` (used to A/B-test whether a "Too deep recursion"
+boot warning was pre-existing) left one file
+(`d/gumu/tree.lpc`) with literal `<<<<<<<`/`=======`/`>>>>>>>` conflict
+markers merged into the working tree — caught by `git diff` inspection
+before committing, fixed by re-deriving the file from the original
+`HEAD` blob with the same script logic rather than hand-editing through
+the conflict (hand-editing via a text-editing tool had already once
+silently stripped this lib's CRLF line endings and trailing whitespace
+on the same file — reverted, redone binary-safe). Lesson for future
+batches: avoid `git stash` on a lib mid-sweep; use `git diff`/`git
+checkout <path>` against a specific path instead when an A/B check is
+needed, since `stash pop` merge conflicts on binary-sensitive CRLF
+files are easy to get wrong silently. Two lineages required
+non-idle-based login scripts because a per-second live clock prompt
+(`他/她…[HH:MM:SS]>`-style) defeats `mudclient.py`'s "wait for quiet"
+polling (per the standing `feedback_recv_loop_breaks_on_live_clock_prompt`
+lesson) — `yhyxs`/`yanhuangwuhun` (shared 世外桃源 registration-zone
+content, same underlying lineage) both used a fixed-interval raw-socket
+script instead. All nine libs verified via clean boot + admin login +
+multi-room walk + zero new "cannot replace"/"cannot bind" `debug.log`
+lines; incidental admin-account save-timestamp drift committed as
+normal, one incidental `data/login/f/fluffos.o` deletion (`zxty`,
+triggered by that lib's own "no save under 30 game-minutes" logic
+during the spot-check) reverted via `git checkout` before committing.
+
+**138 libs from the survey's >=100 list remain unfixed** (147 minus
+this batch's 9) — this is a large remaining backlog for future sweep
+batches, same shape, same fix, just needs the same per-lib verification
+discipline (this bug's fix is mechanically simple but each lib still
+needs its own compile + live-boot verification, which is the real
+bottleneck, not the edit itself). Pick up by remaining impact from
+`candidates_ge100.tsv`/`FINDINGS.md` in the survey scratchpad — next
+up: `yhwhpublicfi` (3,374, skipped this batch, see above),
+`ntii`/`nte` (3,253 each), `nitan_san` (3,253), `nitan_ceshi` (3,251),
+`xkm` (3,177), and onward.
 
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
