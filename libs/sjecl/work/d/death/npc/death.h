@@ -5,6 +5,8 @@ void init() {
   me->delete_temp("no_fight");
   if (!userp(me)
     || me->query("combat_exp") < 10000 && me->query("death_count") > me->query("death_times") * 5) return;
+  if (me->query_temp("death_stage_active")) return;
+  me->set_temp("death_stage_active", 1);
   if (me->query_temp("special_poison", 1))
     call_out("death_stage", 20, me, 0);
   else
@@ -15,7 +17,10 @@ void init() {
 void death_stage(object ob, int stage) {
   //        int i;
   object *inv;
-  if (!ob || !present(ob)) return;
+  if (!ob || !present(ob)) {
+    if (ob) ob->delete_temp("death_stage_active");
+    return;
+  }
 
   if (!ob->is_ghost()) {
     command("say 轮回无常，阳间之人，应当回到阳间去才是。");
@@ -25,6 +30,7 @@ void death_stage(object ob, int stage) {
     else ob->move(REVIVE_ROOM);
     tell_object(ob, HIW "你一阵晕旋，醒来后却发现自己已经回到了阳间！\n" NOR);
     message("vision", "你忽然发现人影不知从什么地方冒了出来。\n", environment(ob), ob);
+    ob->delete_temp("death_stage_active");
     return;
   }
 
@@ -44,6 +50,7 @@ void death_stage(object ob, int stage) {
         }
 */
   ob->delete_temp("special_die");
+  ob->delete_temp("death_stage_active");
 
   if (ob->query("enter_wuguan")) ob->move(START_ROOM);
   else ob->move(REVIVE_ROOM);
