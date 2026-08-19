@@ -764,3 +764,25 @@ item checked; two were already clean, `maximum evaluation cost` left as
 literally-in-range but flagged for a preemptive bump next time there's
 spare budget. The prior pass's one open question (`丐帮` display) is now
 resolved as location-flavor content, not a bug.
+
+## AGENTS.md §7.100 修复（2026-08-19）
+
+同族（`nt6`/`nt6nitan6win`/`hhsj`/`xfbhh`/`nitan170911`）共享的
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：本 lib 4925 个房间文件的 `create()` 末尾都有这一行多余调
+用，同款地雷也烤进了自带建房工具 `clone/misc/roommaker.lpc` 的字符
+串拼接代码生成模板。
+
+修复：脚本化删除所有房间文件里独立成行的 `replace_program(ROOM);`
+（`d/huangshan/banshan.lpc` 有两处独立调用，均删除），加上
+roommaker.lpc 里手动摘除字符串拼接片段。`git diff --stat`：4926
+files changed, 1 insertion(+), 4928 deletions(-)，与预期精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40019 正常监听，
+`debug.log` 全程干净。既有管理员账号 `fluffos`/`Mud@2026` 登录正
+常，`goto` 走访 14 个刚修复的房间（`d/kaifeng`/`d/changan`/
+`d/wuxi`/`d/huashan`/`d/hangzhou`/`d/huanggong`/`d/ruzhou`/
+`d/northft`/`d/wuyi`），均正常返回，无 "cannot replace"/"cannot
+bind" 新增日志行。按精确 PID 结束驱动；测试期间产生的 `mrtg`（第三
+方流量统计）及 `fluffos` 账号存档增量已全部 `git checkout --` 还
+原。
