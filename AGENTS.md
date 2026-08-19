@@ -7388,6 +7388,67 @@ batches 1-5 already catalogued. **118 libs from the survey's >=100
 list remain unfixed** (128 minus this batch's 10) — continue down
 `candidates_ge100.tsv`/`FINDINGS.md` by impact for the next batch.
 
+**Fix-phase batch 7 (2026-08-19), next 10 libs by impact**: continuing
+straight down the ranked list from batch 6 — `zitengzhan`, `wlhd`
+(extra caution per its standing player-save-damage history — see
+below), `tybxjh`, `hell`, `niaoren`, `hy3`, `zxty08nxgbb`, then the
+`zjdyaryl`/`zjdyzj`/`zjmudhell` cluster (ranks 51-60, 70-72 — the
+`zjdywzb`/`zjdy2008wzb` half of the cluster and `sjpl2`/`sjplii` were
+left for the next batch to keep this one at 10 libs). Same method as
+batches 1-6.
+
+| lib | live occurrences deleted | roommaker copies fixed | commit |
+|---|---|---|---|
+| zitengzhan | 2,447 | 2 (`clone/misc`, `obj`, both string-builder variant) | `1ac44aad36c` |
+| wlhd | 2,386 | 2 (`clone/misc`, `u/tyui/obj`, both string-builder variant) | `7aed9742e8e` |
+| tybxjh | 2,377 | 1 (`clone/misc`, string-builder variant) | `5047ec2dc95` |
+| hell | 2,373 | 1 (`clone/misc`, string-builder variant) | `59dc16122bf` |
+| niaoren | 2,346 | 1 (`clone/misc`, string-builder variant) + 6 hand-fixed irregular "space-before-semicolon" files (`replace_program(ROOM) ;`) | `b9ee61d39a3` |
+| hy3 | 2,336 | 0 (this lib's `roommaker.lpc` never had the bug at all) | `8f0ebb7d0a0` |
+| zxty08nxgbb | 2,325 | 2 (`clone/misc`, `u/landy/obj`, both string-builder variant) | `6457d1bbe6b` |
+| zjdyaryl | 2,316 | 1 (`clone/misc`, string-builder variant) | `910d3f1742f` |
+| zjdyzj | 2,316 | 1 (`clone/misc`, string-builder variant) | `259f4c27612` |
+| zjmudhell | 2,316 | 1 (`clone/misc`, string-builder variant) | `0be38f4b162` |
+
+**Batch 7 total: 23,538 live occurrences deleted across 10 libs.**
+Running total after batches 1-7: **60 libs fixed, 242,759 live
+occurrences deleted** (219,221 + 23,538). Notable finds: `wlhd` and
+its sibling lineage (`tybxjh`, `zxty08nxgbb`) all showed the SAME
+quirk on `quit` — the shared admin `fluffos` account's
+`data/login/f/fluffos.o` credential file got silently DELETED by the
+driver after a successful login/quit cycle using that exact file,
+even though nothing in this fix touches login/save code; root cause
+not investigated (unrelated to replace_program, out of scope), but
+flagged in each lib's own NOTES.md for whoever next works on this
+lineage's save/login path — all reverted via
+`git checkout HEAD -- work/data` before committing, so no real data
+loss occurred. `wlhd` itself (this project's standing extra-caution
+lib after an earlier accidental mass player-save-damage incident) got
+the full careful treatment: `git status` inspected line-by-line before
+staging, all incidental `heart_beat()`-driven saves on unrelated
+player accounts (not just the credential-file deletion) reverted —
+confirmed clean, only the intended source-file fix + NOTES.md landed
+in the commit. `zjdyzj`/`zjmudhell` both required reproducing this
+lineage's custom 指间MUD (Fingertip MUD) `crypt()`-based client-version
+handshake login protocol (previously documented in each lib's own
+NOTES.md, §7.14-shaped: `crypt(ZJKEY, 0)` was fixed to
+`crypt(ZJKEY, "zj")` in an earlier pass to make the DES-crypt challenge
+deterministic again on this driver) — reused via a small Python
+`crypt` module script computing the matching challenge-response and
+account-signature values, successfully reaching a live admin session
+on both. All ten libs verified via a real `build-debug` driver boot
+(clean compile, port listening, zero new "cannot replace"/"cannot
+bind" `debug.log` lines) plus a live admin login + room walk/look/quit
+spot-check; `zjmudhell` additionally needed its missing `log/`
+directory created before the driver would boot at all (unrelated
+pre-existing gap, not part of this fix). **108 libs from the survey's
+>=100 list remain unfixed** (118 minus this batch's 10). Next up:
+`zjdywzb` (2,310), `zjdy2008wzb` (2,306), `sjpl2`/`sjplii` (2,290
+each), `jhfy` (2,245), `xkxyb` (2,225), `bmxkx2001`/`xkx2001` (2,210
+each), `xbtxiii` (2,174), `yxxcii` (2,160), and onward — see
+`candidates_ge100.tsv`/`FINDINGS.md` in the survey's scratchpad for
+the full ranked list.
+
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
 Found on `kxkjii2`'s §10.7 deep functional test (ES II/Annihilator
