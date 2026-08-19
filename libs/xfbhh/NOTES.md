@@ -174,3 +174,25 @@ __SAVE_EXTENSION__`，但这份档案从未附带 `data/emotion/` 目录，每�
 包装函式这次不是 bug（已经带有守卫）；冷启动 eval-cost 级联验证自
 愈。测试账号（`qinfengshiyi`/`qinfengshier`/`qinfengshisan`）存档留在
 `data/` 下作为佐证，未清理（未跟踪文件，不纳入本次提交）。
+
+## AGENTS.md §7.100 修复（2026-08-19）
+
+同 `hhsj` 同源的 `ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷
+（详见 AGENTS.md §7.100）：本 lib 4984 个房间文件的 `create()` 末尾
+（紧跟 `inherit ROOM;`）都有这一行多余调用，第一次对该房间对象绑定
+闭包会永久失败。同款地雷也烤进了自带建房工具
+`clone/misc/roommaker.lpc` 的一处字符串拼接代码生成模板。
+
+修复：脚本化删除所有房间文件里独立成行的 `replace_program(ROOM);`
+（`d/huangshan/banshan.lpc` 有两处独立调用，均删除），加上
+roommaker.lpc 里手动摘除字符串拼接片段。`git diff --stat`：4985
+files changed, 1 insertion(+), 4987 deletions(-)，与预期精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40190 正常监听，
+`debug.log` 全程干净。管理员 `fluffos` 账号（同 hhsj 的"自连数据
+库"登录握手：单行 `id,password,x,email`）`goto` 走访 14 个刚修复的
+房间（`d/huijiang`/`d/huanggong`/`d/luoyang`/`quest/zhuzao`/
+`d/shenfeng`/`d/fuzhou`/`d/xingxiu`/`d/baihuagu`/`d/kunlun` 等区
+域），均正常返回，无 "cannot replace"/"cannot bind" 新增日志行。按
+精确 PID 结束驱动；登录产生的两处已跟踪存档增量
+（`work/data/{login,user}/f/fluffos.o`）已 `git checkout --` 还原。
