@@ -118,3 +118,20 @@ lpc` 的晋升日志写入，本轮修复的 `log_file()` 让这条路径正常�
 ### 已清理
 
 - 管理员 `wuyou` 的存档已提交（`data/{login,user}/w/wuyou.o`）。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次五）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：2867 个房间文件的 `create()` 里紧跟 `inherit ROOM;` 之后
+都有这一行多余调用，永久设下"待替换"标记，第一次对该房间对象绑
+定闭包就会崩溃。自带建房工具有 2 处模板（`clone/misc/roommaker.lpc`
+简单字符串拼接写法、`adm/roommaker.lpc` 三处独立拼接的"Lonely"变
+体）。手动修复了一处不规则格式：`d/happy/workroom.lpc` 的冗余调用
+和一个空的尾随 `//` 注释共享同一行（`replace_program(ROOM);  //`），
+严格的独立成行脚本正确跳过了它。累计 2870 处 live 调用删除，和
+survey 记录的数字精确吻合，修复后 0 处遗留。
+
+验证：`build-debug` 驱动真实冷启动，端口 40174 正常监听，
+`debug.log` 全程干净。用这份档案自己播种的管理员账号
+`wuyou`/`Mud@2026`（不是 fluffos）登录正常（落地海洋之初，
+look/quit），全程无新增 "cannot replace"/"cannot bind" 日志行。
