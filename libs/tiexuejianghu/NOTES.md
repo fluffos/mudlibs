@@ -909,3 +909,25 @@ Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
 `log/debug.log`（说明真的零运行期错误，不是文件被清空）。登录本
 身产生的存档时间戳类微小 diff 已用 `git checkout` 撤销，不提交。
 驱动最终按精确 PID kill，`ps -p` 确认已退出。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次五）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：3010 个房间文件的 `create()` 里紧跟 `inherit ROOM;` 之后
+都有这一行多余调用，永久设下"待替换"标记，第一次对该房间对象绑
+定闭包就会崩溃。有 5 处代码生成模板烤了同一个地雷（`obj/roommaker.lpc`、
+`d/obj/clone/misc/roommaker.lpc`、`obj/rmmaker.lpc`、
+`u/panguan/rmmaker.lpc`、`u/panguan/room.lpc`——和手足档案 fys 同一
+套模板家族）。
+
+本档案独有的新变体（fys 没有）：`u/heart/xuedao/` 下 143 个文件的
+冗余调用和一行 UTF-8 尾随注释共享同一行
+（`replace_program(ROOM);  //如果没有init函数请不要删除这句话`），
+严格的独立成行脚本正确地跳过了它——另写了一个针对这个精确行形状
+的脚本手动摘除。累计 3012 处 live 调用删除，和 survey 记录的数字精
+确吻合，修复后 0 处遗留。
+
+验证：`build-debug` 驱动真实冷启动，端口 40087 正常监听，
+`debug.log` 全程干净。既有管理员账号 `fluffos`/`Mud@2026` 登录正常
+（落地英豪酒楼，look/quit），全程无新增
+"cannot replace"/"cannot bind" 日志行。
