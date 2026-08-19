@@ -916,3 +916,22 @@ YLFY 引擎的近亲分支（源码版）。状态已从过时的 limited 修正
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 99 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 跨库扫描修复（ROOM 冗余 replace_program() 关闭包炸弹，2026-08-19）
+
+同一形状覆盖到几乎所有房间基类（机制详见 AGENTS.md §7.100）。本库属
+于该扫描已知最大规模的 10 个库之一。二进制模式脚本机械删除了 5875
+处独立、未注释的 replace_program(ROOM); 整行。另外手工清理了造房工
+具代码生成模板里内嵌的同一形状，本库有两份完全同形状的造房工具拷贝
+（`clone/misc/roommaker.lpc`、`u/fyue/misc/roommaker.lpc`，各 1 处
+字符串拼接），均已清理。删除总计 5877 行，与本次扫描 FINDINGS.md 记
+录的 longyunmeng 存活命中数完全一致。
+
+验证：干净启动一次真实调试驱动，端口 40094 正常监听，
+work/log/debug.log 全程无新增内容。用已播种的 `fluffos`/`Mud@2026`
+管理员账号连线（"巫师登陆效验码"提示随便填即可，与上方记录一致），
+在华山派练武场/前厅/玉女峰之间往返走了十余个房间，look/score/who
+均正常（who 命令首次惰性编译打印了一条无害的 Unused local variable
+警告，与本次修复无关）。测试产生的 `data/{login,user}/f/fluffos.o`
+存档时间戳 diff 已 `git checkout` 撤销，不提交。驱动按精确 PID
+kill。
