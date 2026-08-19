@@ -92,3 +92,25 @@ Warning/warning driver-text revert).
 ### 已清理
 
 - 测试用一次性小号 `chenmufb` 的存档已删除，未提交。
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`/inherit/room/room`）在本档案 2,087 处房间文件的
+`create()` 里紧跟 `inherit ROOM;` 之后又多余调用了一次
+`replace_program(ROOM);`——AGENTS.md §7.100 记录的同一个休眠 bug。
+用 `fix_710_room.py` 扫过 `work/`，删除 2,085 处标准形状（净删
+2,087 行，2 个文件各含 2 处）；`clone/misc/roommaker.lpc` 与
+`d/huanggon/obj/roommaker.lpc`（两份独立的房间建造工具字符串拼接
+模板）各剩 1 处 `str += "...replace_program(ROOM);..."` 变体，手工
+改成 `str += "\n\tsetup();\n}\n";`。两份工具的 heredoc 模板本身已
+经是干净的（没有这个 bug）。修复后 `work/` 下 0 处存活残留，其余
+均为转档之前已注释掉的 `//` 行，原样保留；`work/data/` 下没有真实
+`.lpc` 源码命中。`git diff --stat` 显示 2085 个文件净删 2085 行、
+增 2 行，与脚本自报数字 + 2 处手工编辑吻合。
+
+驱动干净启动（零新增编译错误、端口 40142 正常监听、`debug.log`
+无任何"cannot replace"/"cannot bind"行）。管理员 `fluffos`
+（`shikongyouxia3.0` 魔术字符串 + 密码 `Mud@2026`）实机登录成功，
+`look`/`score`/`quit` 均正常，全程 `debug.log` 保持干净。管理员存
+档的 last_on 时间戳漂移已用 `git checkout HEAD --` 还原，未提交。
+驱动按精确 PID 结束。
