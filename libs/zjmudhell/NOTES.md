@@ -173,3 +173,23 @@ Got: "10".`——根因和 `hell` 完全相同（`LOCAL_PORT()` 的 `(int)` 转
 AGENTS.md §7.52 列出的其余 14 个档案批量套用同一个修复——已经把这
 个结论更新回 AGENTS.md §7.52 本身，留给下一轮继续逐个排查。
   记录以供以后有更完整客户端模拟能力时补测。
+
+## AGENTS.md §7.100 fix (2026-08-19): redundant replace_program(ROOM) landmine
+
+Same corpus-wide bug as the batch-1-6 sweep (`ROOM` macro
+`"/inherit/room/room"` from `include/globals.h`). Deleted 2,315 live
+standalone `replace_program(ROOM);` lines under `work/` via
+`fix_710_room.py`, plus hand-fixed the room-building tool's
+string-builder template (`work/clone/misc/roommaker.lpc`). 3 real
+`.lpc` files under `work/data/` checked — none had the bug pattern.
+Remaining matches after the fix are all pre-existing `//`-commented.
+
+Verified: clean `build-debug` boot (zero new compile errors, zero
+"cannot replace"/"cannot bind" in `debug.log`; `log/` directory didn't
+exist for this lib and had to be created before the driver would
+boot). Live admin login through this lib's custom 指间MUD
+`crypt()`-challenge protocol (same ZJKEY/handshake as sibling
+`zjdyzj`) as `fluffos`/`Mud@2026` — entered 客店, `look`/`quit` both
+worked cleanly. Incidental `data/{login,user}/f/fluffos.o` save drift
+from the login test was reverted via `git checkout HEAD` before
+committing.
