@@ -615,3 +615,25 @@ MONEY_D->pay_player(...)` 现场充值 10 兩黃金，模拟"缺錢花，也可�
 属于正常存档演进，已随本轮改动一并提交。驱动全程用精确 PID
 kill（两次重启各自记录 PID，`kill <pid>` + `ps -p <pid>` 确认已退
 出），未使用任何 pattern-match 方式。
+
+## AGENTS.md §7.100 fix (2026-08-19): redundant replace_program(ROOM) landmine
+
+Same corpus-wide bug as the batch-1-6 sweep (`ROOM` macro
+`"/inherit/room/room"` from `include/globals.h`). `fix_710_room.py`
+deleted 2,339 live standalone `replace_program(ROOM);` lines; a
+follow-up hand fix caught 6 more files with the irregular
+"space-before-semicolon" shape (`replace_program(ROOM) ;`) the strict
+script correctly left alone — `d/shenlong/dahai.lpc`,
+`d/quanzhou/dahai.lpc`, `d/taohua/chufang.lpc`, `d/taohua/dahai.lpc`,
+`d/xiakedao/duchuan.lpc`, `d/xiakedao/dahai.lpc` — plus the
+room-building tool's string-builder template
+(`work/clone/misc/roommaker.lpc`). Total 2,346 live occurrences
+removed, matching the survey's count exactly. No `.lpc` files under
+`work/data/` at all in this lib, so no false-negative risk there.
+
+Verified: clean `build-debug` boot (zero new compile errors, zero
+"cannot replace"/"cannot bind" in `debug.log`), live admin login
+(`fluffos`/`Mud@2026`, traditional-Chinese client) into 巫師休息室,
+`look`/`score`/`quit` all worked cleanly. Incidental
+`data/{login,user}/f/fluffos.o` save drift from the login test was
+reverted via `git checkout HEAD` before committing.
