@@ -688,3 +688,27 @@ connection (new bug class, not previously in AGENTS.md)
 - `work/adm/daemons/logind.lpc` (call `user->resume_heart_beat()` in
   the real reconnect path)
 - `work/obj/user.lpc` (new `resume_heart_beat()` wrapper)
+
+## §7.114 fix: `private input_line()` broke multi-line `to`/board/mail input (2026-08-19)
+
+Same ES2/FF-ancestry bug as `zzhj`/`dfgs2` (see AGENTS.md §7.114):
+`work/feature/edit.lpc` (this lib's `F_EDIT` mixin, inherited by
+`std/char.lpc`) declared its `input_to()` re-arm target `private`:
+`private void input_line(string line, string text, function callback)`.
+The recursive re-arm from inside `input_line()` silently failed to
+register once reached through the inherited mixin, so any multi-line
+`.`-terminated input session (board post, `to`, mail) dropped everything
+after the first line. Fix: dropped `private`.
+
+Live-verified on a fresh driver boot (port 40001), fresh character
+(`秦捌捌`/`qinbaba`): `to say` → two lines of text → `.` → resulting
+`say` output showed both lines (`你 说道: hello line one\nhello line
+two`), not truncated after line 1. This lib has no `chfn.lpc` and its
+board object isn't placed in any reachable room in this archive, so
+`cmds/usr/to.lpc` (which drives the identical `edit()`/`input_line()`
+flow) was used as the representative live test instead of `post`.
+Killed the driver by exact PID when done.
+
+Files modified this pass:
+- `libs/shzs/work/feature/edit.lpc` — dropped `private` from
+  `input_line()`.
