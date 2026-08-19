@@ -127,3 +127,23 @@ y → 中文名 → 密码 ×2 → 出生地(1) → 膂力/悟性/根骨各输�
 程（含 90 秒 idle 观察期）`debug.log` 干净，无运行时错误。驱动按精
 确 PID 结束；管理员存档（`data/{login,user}/f/fluffos.o`，此前从
 未真正注册过）已提交。
+
+## §7.100 跨库扫描修复（ROOM 冗余 replace_program() 关闭包炸弹，2026-08-19）
+
+同一形状覆盖到几乎所有房间基类（机制详见 AGENTS.md §7.100）。本库属
+于该扫描已知最大规模的 10 个库之一。二进制模式脚本机械删除了 5928
+个文件里 5929 处独立、未注释的 replace_program(ROOM); 整行（其中
+`d/huangshan/banshan.lpc` 和 haiyang2 一样，同一 create() 里有两处
+独立冗余调用）。另外手工清理了造房工具 clone/misc/roommaker.lpc 代
+码生成模板里内嵌的同一形状（1 处 heredoc 已被脚本一并捕获、1 处字
+符串拼接手工清理）。删除总计 5930 行，与本次扫描 FINDINGS.md 记录
+的 xkx100 存活命中数完全一致。
+
+验证：干净启动一次真实调试驱动，端口 40117 正常监听，
+work/log/debug.log 全程无新增内容。用已播种的 `fluffos`/`Mud@2026`
+管理员账号连线（密码与本项目标准约定一致，权限确认为 (admin)），从
+`d/beijing/kedian` 出发往返走了 10 余个房间（客栈/南大街/马厩/天安
+门广场），look/score/who 均正常。启动期间某个后台精灵在
+`data/` 下产生的三个 1 字节临时文件（`HUICHUN`/`XUMING`/`YANGYAN`，
+与本次登录无关）连同存档时间戳 diff 一起清理/撤销，不提交。驱动按
+精确 PID kill。
