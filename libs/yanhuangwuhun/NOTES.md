@@ -735,3 +735,19 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 61 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次三）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：3370 处命中。自带建房工具 `clone/misc/roommaker.lpc` 的
+字符串拼接模板同样修复。
+
+`git diff --stat`：3369 files changed, 1 insertion(+), 3370 deletions(-)，
+与预期精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40060 正常监听。既有管理
+员账号 `fluffos`/`Mud@2026`（姓氏栏留空跳过）登录，`目前权限：
+(admin)`，世外桃源→桃源茅屋→世外桃源多房间走访无误（与 yhyxs 共
+享同一份注册区场景内容，同样改用固定间隔裸 socket 脚本规避活动时
+钟提示符），`quit` 干净退出，全程无新增 "cannot replace"/"cannot
+bind" 日志行。
