@@ -739,3 +739,96 @@ before commit — none of it reflects a real fix, all of it is test debris.
 ### Files modified this pass
 
 None — this was a verification-only pass, no bugs found to fix.
+
+## Correction to round three: board post was NOT actually working — real bug found and fixed (2026-08-19, same day)
+
+The "Board post ... worked as expected" claim in the round-three section
+above is **wrong**. A follow-up deeper live test (raw-byte-level socket
+inspection, not just eyeballing decoded text) found `post <title>` →
+type body line(s) → `.` reliably fails to save the message: the `.`
+terminator is silently swallowed by the driver's `default fail message`
+config (`什么？`) instead of ending the edit session, and `read new`
+afterward still reports no messages. Reproduced on 3 independent fresh
+driver boots, as both `fluffos` (admin) and a brand-new ordinary player
+character, with generous (1.5s+) delays between each line to rule out a
+test-harness timing race.
+
+### Root cause
+
+`feature/user/edit.lpc`'s `input_line()` — the callback `edit()` uses to
+drive its "type lines until `.`" input loop — is declared `private`:
+```lpc
+private void input_line(string line, string text, function callback) {
+  ...
+  input_to("input_line", text, callback);   // re-arm for the next line
+}
+```
+The **first** `input_to("input_line", "", callback)` call (from `edit()`
+itself, in the same file) works fine. But the **recursive** re-arm made
+from *inside* `input_line()` — needed after every line except the last —
+silently fails to register whenever `input_line` is reached via the
+object's `inherit F_EDIT` mixin (i.e. the real, live code path: `obj/
+user.lpc inherits F_EDIT`, and `do_post()` in `std/bboard.lpc` calls
+`this_player()->edit(callback)`). The driver then has no active
+`input_to` for the next line typed, so it falls through to normal verb
+dispatch, which fails and prints the driver's `default fail message`
+(`什么？`, per `config.fluffos`) — this is why the symptom looks like a
+generic "huh?" rather than any visible LPC error, and why it's invisible
+to `debug.log`.
+
+Root-caused via bisection with temporary diagnostic commands (added and
+fully removed before this fix landed, not part of the final diff): a
+byte-for-byte copy of `edit()`/`input_line()` pasted **directly** into
+`obj/user.lpc` (bypassing the `inherit F_EDIT` mixin) works perfectly;
+the exact same code reached through the mixin does not. The only
+difference that flips the behavior is the `private` modifier on
+`input_line()` — dropping it fixes the real file. (Every other
+hypothesis tried and disproven along the way: recursive-`input_to()`
+re-arming in general, function-pointer `bind()`/carryover through nested
+`input_to()`, `add_action` vs. plain `call_other` dispatch, closure
+created inline vs. passed in as a parameter, `§7.86`-style `replace_program()`
+poisoning on the board/player class chain — none of these reproduced the
+failure in isolation; only "private function defined in an inherited,
+separately-compiled file used as an `input_to()` string-callback target"
+does. This looks like a genuine, narrow driver/mudlib interaction quirk,
+not a mudlib logic bug — recorded here for anyone else who hits the same
+shape, since it doesn't fit any existing AGENTS.md class.)
+
+### Fix
+
+```diff
+-private void input_line(string line, string text, function callback) {
++void input_line(string line, string text, function callback) {
+```
+One-line change, `work/feature/user/edit.lpc`. `input_line` was never a
+directly-typeable player command (it's only ever reached via the
+internal `input_to()` continuation mechanism), so dropping `private`
+does not expose any new player-facing capability.
+
+### Blast radius: not just the board
+
+`grep -rl '\->edit(' work/` shows `edit()` is also the mechanism behind:
+- `obj/mailbox.lpc` — the in-game **mail system**
+- `cmds/usr/to.lpc` — **sending** mail
+- `cmds/usr/chfn.lpc` — editing your finger/profile description
+
+All of these were silently broken the same way (any multi-line `.`-
+terminated input session would fail to complete), not just bulletin
+boards. The one-line fix repairs all of them simultaneously; mail/`to`/
+`chfn` were not independently live-tested this pass (board post/read was
+the live-verified representative), but they share the exact same
+`edit()`/`input_line()` code path so the same root cause and fix apply.
+
+### Verification
+
+Fresh driver boot, fresh non-wizard player (`陈嘉怡`/`chenjiayi`):
+`post 新人报到` → body line → `.` → `留言完毕` (success message, was
+previously `什么？`) → `read new` correctly shows the posted title,
+author, and body text. Re-verified a second time as admin (`fluffos`)
+on a separate fresh boot. `debug.log` clean (only expected lazy-compile
+warnings) across all verification boots.
+
+### Files modified this pass (supersedes the "None" note above)
+
+- `work/feature/user/edit.lpc` — dropped `private` from `input_line()`
+  (the real fix; see root cause above).
