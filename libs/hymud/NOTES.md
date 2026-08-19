@@ -756,3 +756,33 @@ where each class was originally found, not in a new mechanism.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 62 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 跨库扫描修复（`ROOM` 冗余 `replace_program()` 关闭包炸弹，2026-08-19）
+
+同一形状覆盖到几乎所有房间基类（机制详见 AGENTS.md §7.100）。本库属
+于该扫描已知最大规模的 10 个库之一。二进制模式脚本机械删除了 12231
+处独立、未注释的 `replace_program(ROOM);` 整行；另有 12 处不规则形
+状需要单独手工处理：9 个文件用 `replace_program(ROOM) ;`（分号前带
+空格）而非精确匹配脚本目标串，`d/suiye/houyuan.lpc` 的调用和右花括
+号挤在同一行（`replace_program(ROOM);}`，改写为单独一行 `}`），
+`u/dhxy/workroom.lpc` 沿用该文件"每条语句自成一行、分号另起一行"的
+古怪风格（调用行和它的孤立 `;` 续行合并删除）。另外造房工具
+`clone/misc/roommaker.lpc`/`d/ny/obj/roommaker.lpc`/`adm/roommaker.lpc`
+的代码生成模板里同样内嵌了这个形状，共 6 处（含两处 heredoc、四处字
+符串拼接），已同步清除。删除总计 12248 行，`git diff --stat` 与脚本
+自报数字完全吻合（含手工修的部分）。
+
+**脚本踩坑记录**：本库部分档案（`d/mayi/changcheng*.lpc`/`nanmen.lpc`
+等 17 处）行尾用的是异常的双 `\r\r\n`，Python `bytes.splitlines()`
+会把裸 `\r` 也当作独立换行符处理，导致目标行被拆成两段、删除后残留
+一行只含孤立 `\r` 的空白行——功能上无害（多余空白行），但为了保持
+删除干净，改用只按 `\n` 切分的自定义分行逻辑重新跑了一遍整个库（先
+`git checkout` 撤销脏改动再重跑），确认不再产生这类残留。用到的
+`fix_710_room.py`（含此修复）留在会话 scratchpad 供后续 8 个库复用。
+
+验证：干净启动一次真实调试驱动，端口 40103 正常监听，
+`work/log/debug.log` 全程无新增内容。用已播种的 `fluffos`/
+`Mud@2026` 管理员账号连线（本库巫师密码和账号密码都是
+`Mud@2026`，需要连续输入两次），在欢迎村一带往返走了十余个房间
+（`welcome`↔`qianzhuang`↔`dangpu`），`look`/`score`/`who` 均正常。
+未产生需要撤销的存档改动。驱动按精确 PID kill。
