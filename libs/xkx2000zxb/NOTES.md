@@ -61,3 +61,121 @@ wgargoyle.lpc` 的自动复活 `call_out` 链**明确排除巫师**
 
 测试账号（`fluffos`、`qintestk`）存档留在 `data/` 下作为佐证，均
 为未跟踪文件，未纳入本次提交。
+
+## 深度功能测试（2026-08-19，round four）——补完普通玩家自动复活验证，顺带修好巫师 `call` 指令
+
+本轮的主要目标是解决 round one 留下的唯一缺口：**普通玩家（非巫
+师）的死亡自动复活流程**，当时因为"卡在电子邮件验证"而没能用真
+正的普通玩家账号走完。
+
+**先弄清楚"电子邮件验证"到底是什么**：读了 `d/xiakedao/npc/
+mux.lpc`（挂名室的登记使 NPC，`do_register()`）和它调用的
+`adm/daemons/regid.lpc::register_char()`，发现这压根不是一个需要
+真实 SMTP 的外部依赖——`register_char()` 只是：①把 `registered`
+字段设成 `"yes"` 并存盘（这才是解锁 `score`/`hp`/`i` 等指令的真正
+开关），②生成一个 5 字母随机密码，③用 `write_file()` **把这个明
+文密码写进本地档案 `/queue/register`**（`REGDATA`，一行
+`id:email:密码`），④告诉玩家"一封邮件将在一分钟内寄给您"然后主
+动把连线断掉。全程没有任何 SMTP/mail-send efun 呼叫——这一行
+`write_file()` 显然是设计给一个从未随这份档案一起出现的外部发信
+脚本用的，纯粱本地文本档案，**测试环境完全可以直接读这个档案拿
+到明文密码**，不需要真的收发邮件。
+
+**"挂名处"的真实流程比 round one 记录的更复杂一层**：新注册玩家
+落地的房间其实是 `/d/xiakedao/shatan1.lpc`（"沙滩"，张三/李四两
+个引路 NPC 之一），而不是有 `register` 指令的那个房间；这个房间
+的 `block_cmd()` 白名单里根本没有 `register`，只有 `follow`——
+必须先 `follow zhang san`（或 `follow li si`）才能被带到真正挂
+着"登记使"木老 NPC、允许 `register <email>` 指令的
+`/d/xiakedao/register.lpc`（"侠客岛挂名处"）。round one 用巫师账
+号绕过了整段流程，所以没碰到这层，这次用真正的新建账号
+`qinfuhuo`/`test1234` 走了一遍完整流程才发现。
+
+**完整验证过程**：①`register`创建新账号 `qinfuhuo`（GB→英文
+id→中文名"秦复活"→密码→天赋→email `qinfuhuo@example.com`→
+gender），落地 `shatan1`；②`follow zhang san` 被带到挂名处，
+`register qinfuhuo@example.com` 成功，服务器提示"一封包括随机密
+码的 email 将在一分钟内寄给您……"并断线；③直接读
+`work/queue/register`，拿到明文新密码 `cecbx`；④用新密码重新连
+线，确认 `registered` 已经生效——`score`/`hp`/`i` 全部正常返回完
+整数值面板（不再是空字符串），落地到真正的新手海滩（渔夫 NPC 那
+个"沙滩"，`/d/xiakedao/shatan`）。**至此电子邮件验证缺口彻底解
+开，且证明它从来都不是一个真正的外部依赖。**
+
+**死亡与自动复活的真实验证**：用巫师账号（新建 `fluffos`，
+`wiz_sites` 早已播种为 `.*`）执行 `call qinfuhuo->move("/d/island/
+icefire3")` 把 `qinfuhuo` 传送到冰火岛（跟 round one 巫师死亡测
+试同一个危险房间，两只 `attitude: aggressive` 白熊），几秒内被
+白熊咬死（"你倒在地上，挣扎了几下就死了"），正确移动到
+`/d/death/gate`（鬼门关），`d/death/npc/wgargoyle.lpc`（白无常）
+的 `init()`——因为 `qinfuhuo` 不是巫师，没有触发 wgargoyle 的巫师
+排除分支——正常挂上 `death_stage` call_out 链，5 句对白按 30 秒
++4×5 秒的节奏播完，随后 `reincarnate()` 被呼叫：精/气/精力/内力
+全部重置回满血，物品正确按 `DROP_CMD->do_drop()` 掉落在死亡房间，
+角色被送回 `/d/xiakedao/shatan`（因为 `xkd/set` 标记为真）。断线
+重连复核：`score` 显示"你到目前为止总共死了 1 次，其中 1 次是正
+常死亡"，数值面板全部满血，`debug.log` 全程无任何报错——**一次
+真实、完整、无 bug 的普通玩家自动复活循环，确认为设计正确**。
+
+**过程中顺带抓到一个真实 bug（已修复并现场验证）**：第一次尝试
+`call qinfuhuo->move(...)` 时，巫师 `call` 指令直接崩溃：
+```
+执行时段错误：*Wrong permissions for opening file /log/nosave/CALL_PLAYER.lpc for overwrite.
+"No such file or directory"
+```
+这是 AGENTS.md §7.11（"未存在的运行期目录导致 write_file() 静默/
+崩溃中止"）这个已知病灶家族的一个新实例：`cmds/wiz/call.lpc` 只
+要目标物件是 `/clone/user/user`（也就是任何玩家角色本体——这是
+`call` 指令最常见的使用场景），就会无条件呼叫
+`log_file("nosave/CALL_PLAYER", ...)` 做审计记录；而这份档案的
+`adm/simul_efun/message.lpc::log_file()` 是裸的
+`efun::write_file(filename, str, 1)`（第三参数 1 = overwrite 模
+式，会硬抛错而不是静默返回 0），完全没有 `assure_file()` 防护，
+而这份档案从未附带 `/log/nosave/` 目录——导致巫师 `call` 指令**只
+要目标是任何玩家角色就必崩**，这是巫师工具箱里最常用的指令之一。
+检查过实际死亡流程本身（`feature/damage.lpc::die()` 里
+`log_file("PLAYER_DEATH"/"PKILL_DATA", ...)`）——这几处目标都是
+`/log/` 根目录下（已存在），不受影响，所以死亡/复活主线没被这个
+bug 波及，只有巫师 `call` 指令本身。修复：仿照 AGENTS.md §7.11 里
+反复验证过的标准做法，在 `message.lpc` 顶部加一行 `void
+assure_file(string file);` 前向声明（因为 `assure_file()` 定义在
+后编译的 `file.lpc` 里），并在两处 `efun::write_file()` 前各加一
+行 `assure_file(filename)`/`assure_file(filename2)`。现场验证：
+修复前 `call qinfuhuo->query("name")` 直接崩溃报错；重启驱动加载
+修复后同一条指令正常返回 `"秦复活"`，之后的
+`call qinfuhuo->move(...)` 也正常执行，`/log/nosave/` 目录被自动
+创建。**这个具体实例未做跨库扫描**（不在本轮任务范围内），但同样
+的 `log_file()`/`assure_file()` 缺口在这份档案的
+`adm/simul_efun/message.lpc` 里只有这一处未加保护，`file.lpc` 自
+己的 `assure_file()` 实现本身没问题。
+
+**本轮 checklist 快速核对**（均为已跨库扫描过的项目，逐一确认本
+档案没有异常）：
+- §7.111（`master.lpc`/`standard_trace()` 的 `file_name(0)` 崩
+  溃）：**不适用/天然安全**——`work/adm/single/master.lpc` 的
+  `standard_trace()` 用的是 `%O` 格式化 `error["object"]`，根本没
+  有呼叫 `file_name()`，不是这个漏洞的易感形状。
+- §7.112（`init()` 里无重入保护的 `call_out("death_stage", ...)`
+  链）：`d/death/npc/wgargoyle.lpc`、`bgargoyle.lpc` 以及
+  `d/bwdh/sjsz{,2,3}/{east,west}_xiangfang.lpc` 全部已经带有
+  `query_temp("death_stage_active")` 防护——干净。唯一没加防护的
+  `d/death/npc/wgargoyle1.lpc` 经确认是**死代码**：全档案没有任何
+  地方 `clone`/引用它，鬼门关（`gate.lpc`）和另一处死亡入口
+  （`gateway.lpc`）分别用的是已加防护的 `wgargoyle.lpc`/
+  `bgargoyle.lpc`，不影响任何真实游玩路径，未做修改。
+- §7.113（断线重连不恢复 `heart_beat`）：干净——
+  `adm/daemons/logind.lpc::reconnect()` 呼叫
+  `user->reconnect()`，`clone/user/user.lpc::reconnect()` 在玩家
+  本体上无条件 `set_heart_beat(1)`，属于已确认的正确谱系。
+- §7.114（继承 mixin 里的 `private` `input_to()` 回调）：干净——
+  `feature/edit.lpc` 的 `input_line()` 没有 `private` 修饰符。
+- §7.115（`QUEST` 宏指向不存在的档案）：**不适用**——本档案
+  `include/globals.h` 里根本没有 `QUEST` 宏定义，全档案也没有
+  `QUEST->` 呼叫点。
+- §7.90（eval-cost 默认值）：已是 `5000000`（round one 已修）。
+
+测试账号 `qinfuhuo`（已注册、已完整走过死亡复活）和 `fluffos`（巫
+师，用于 `call`/`goto` 操作）存档留在 `data/` 下作为本轮佐证，均
+为未跟踪文件（`work/data/login|user/{q,f}/*.o`），未纳入本次提交；
+`work/queue/register`、`work/log/` 均已被仓库 `.gitignore` 整体排
+除，无需清理。
