@@ -871,3 +871,21 @@ PID 结束；测试期间产生的存档时间戳增量已 `git checkout --` 还
 已 `git checkout HEAD --` 还原，未纳入本次提交；未新建任何测试账号
 （全程复用既有的 `fluffos` 管理员与 `ylfydeeptwo` 测试角色），无需
 额外账号清理。本轮无代码改动，仅测试与记录。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次三）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：4691 个房间文件的 `create()` 里紧跟 `inherit ROOM;` 之后
+都有这一行多余调用，永久设下"待替换"标记，第一次对该房间对象绑
+定闭包就会崩溃。自带建房工具 `clone/misc/roommaker.lpc` 的字符串
+拼接代码生成模板里也烤了同一个地雷。
+
+修复：脚本化删除所有房间文件里独立成行的 `replace_program(ROOM);`，
+加上 roommaker.lpc 里手动摘除字符串拼接片段。`git diff --stat`：
+4691 files changed，与预期精确吻合（103 处仍存在的匹配全部是既有
+注释，未改动）。
+
+验证：`build-debug` 驱动真实冷启动，端口 40062 正常监听，
+`debug.log` 全程干净。既有管理员账号 `fluffos`/`Mud@2026` 登录正常
+（华山派场景，练武场/兵器房多房间走访），`score` 正确显示，
+`quit` 干净退出，全程无新增 "cannot replace"/"cannot bind" 日志行。
