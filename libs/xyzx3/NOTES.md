@@ -438,3 +438,153 @@ session 出站代理策略拒绝（`curl -sS $HTTPS_PROXY/__agentproxy/status`
 管】"头衔，食物/饮水满格，`debug.log` 全程干净。驱动按精确 PID 结
 束；测试期间产生的存档时间戳增量已 `git checkout --` 还原，本轮无
 需新代码改动。
+
+## 深度功能测试（round four，2026-08-19）——商店流程 + 完整净断线超时测试
+
+针对 round three 遗留的两项未测内容做的专项补测：完整真实等待的
+`NET_DEAD_TIMEOUT` 净断线软超时、以及一套可达且可完整走通的商店购买
+流程。原生驱动（`build-debug`），管理员 `fluffos`/`Mud@2026`。
+
+### 商店购买流程 — 已找到并完整测试通过，未发现程序性 bug
+
+Round three 说"未找到可达且未测试的商铺"，原因是它只看到
+`feature/vendor_sale.lpc`（round one/two 已记录的、从文件中段开始几
+乎每条语句都缺分号/括号的严重损坏文件）。本轮重新排查发现这份档案
+其实有**两套**商人 mixin：
+
+- `feature/vendor_sale.lpc`（`F_VENDOR_SALE` 宏）：严重损坏，**只有
+  一个文件** `kungfu/class/npc/xiaoer.lpc` 继承它——本轮未见其被摆
+  放到任何房间的 `objects` 里（`grep` 未命中任何引用），大概率是死
+  代码，不影响正常游戏内容。
+- `feature/dealer.lpc`（`F_VENDOR` 宏）：**完整无损**，被 **21 个**
+  NPC 文件继承（`d/village/npc/seller.lpc`、`d/city2/npc/jia.lpc`
+  等），是这份档案真正在用的商人系统。
+
+选了两个可达的真实商铺现场走通完整交易：
+
+1. **普通杂货铺**（`d/village/ehouse1.lpc`「草棚」，NPC
+   `d/village/npc/seller.lpc`「小贩」）：`goto` 抵达后 `clone
+   /clone/money/coin` 现场造币、`call coin->set_amount(500)` 设为
+   500 文钱（管理员专用手段，等价于给测试角色发钱，不是内容判定）。
+   `list` 正确列出价目（手杖一两白银=100文、麻鞋150文、水壶100
+   文、五香茶叶蛋50文）。`buy stick`：铜板扣除、找零正确换算为四两
+   白银（500-100=400=4两），手杖进入物品栏。`buy 2 egg`：白银从4两
+   扣到3两（400-100=300，两颗蛋各50文），物品栏正确出现两颗蛋。全
+   程金额换算（文→两白银→两黄金三级进位）与 `feature/dealer.lpc::
+   pay_player()`/`value_string()` 的实现完全吻合，无一处算错。
+2. **当铺（贾老六，`d/city2/dangpu.lpc`）**：`value stick` 正确估价
+   （"卖断可得八十文钱"），`sell stick`：手杖移除、铜板+80（=
+   100*80/100，与代码 `value*80/100` 吻合）。`pawn spicy egg`（蛋值
+   50<100）被拒绝（"你当我这是垃圾店…"）——**这是 `do_pawn()`
+   `if (value<100) return notify_fail(...)` 的设计内下限门槛，不是
+   bug**，随后改用刚买的手杖（值=100，恰好压线通过下限）成功
+   `pawn stick`：典当后铜板+60（=100*60/100），`check` 正确列出典当
+   记录，`redeem stick`：扣钱赎回，手杖回到物品栏——买/卖/典/赎四
+   种交易全部现场走通，金额、库存变化全部核对无误。
+
+**买断 vs 典当赎回的两级商人设计**：额外 grep 全档案 `add_action`
+同时挂 `buy` 又挂 `sell`/`pawn` 的文件，只有 11 处（多数命名含
+`boss`/`dangpu`/`xiaoer2`/`xiaoer3` 等"当铺/大掌柜"角色），其余大
+多数商人 NPC（含本轮实测的 `seller.lpc`）只挂 `buy`/`list`，`sell`/
+`value`/`pawn` 等命令对它们返回"什么？"（未知命令）——这与项目已知
+的 hell/§7.52 教训完全一致的两级设计（普通商铺只卖不收，当铺/估价
+NPC 才收购），**已现场用两套不同 NPC 分别验证两级设计各自都按预期
+工作，不是 bug，未做任何修改**。
+
+测试完毕后用 `dest` 逐一销毁现场造出的铜板/银子/手杖/蛋，`fluffos`
+物品栏还原为初始的布衣+魔法传送帖（`i` 核对，`autoload` 也确认为
+空），无遗留测试道具。
+
+### 完整 600 秒 `NET_DEAD_TIMEOUT` 净断线超时测试
+
+**先读代码确认预期行为**：本档案 `include/user.h` 定义的是
+`NET_DEAD_TIMEOUT 600`（10分钟），**不是** 900 秒——`grep -rn
+NET_DEAD_TIMEOUT` 全档案确认这是唯一定义，`clone/user/user.lpc`（真
+正在用的玩家 body，`LOGIN_D` 走 `make_body()`→ 这份文件）的
+`net_dead()` 在断线时 `set_heart_beat(0)` + `call_out("user_dump",
+NET_DEAD_TIMEOUT, DUMP_NET_DEAD)`；`user_dump()` 在 600 秒后触发会
+`tell_room(...断线超过10分钟，自动退出这个世界...)` + `command
+("quit")`，预期效果是玩家 body 被正常 quit 流程销毁+存档。据此本
+轮按这份档案的真实值（600秒）而非任务描述里泛用的 900 秒去测试，
+并在下方如实注明。
+
+现场步骤：注册全新测试小号 `ndtestxy`/中文名"测试小号"（英文 id 全
+字母，避免踩 round one/two 记录过的"含数字 id 触发 2060 暗号需要重
+发"的坑），完整走完 `2060`→id→确认→中文名→密码×2→天赋0→确认→邮
+箱→性别，落地"客店"房间确认注册成功。随后**直接关闭 TCP 连接（不
+发送 `quit`）**模拟真实断线，用管理员 `call ndtestxy->query_temp
+("netdead")` 确认驱动侧 `net_dead()` 已触发（返回 `1`）。记录断线
+时刻（`date +%s` ≈ 1787150605，即北京时间约 07:43，`ndtestxy.o` 存
+档 mtime 后续验证与此吻合）。
+
+**真实阻塞等待了完整 600+ 秒**（未用后台 Monitor 挂起等待，而是在
+主循环内用阻塞式 `python3 -c "time.sleep(...)"` 调用持续等待，符合
+"这类真实等待就该真等"的要求；等待期间同步完成了标准检查清单核对，
+见下文），目标时刻设在断线时刻+660秒（留60秒余量）。到达目标时刻
+后现场验证：
+
+- `call ndtestxy->query_temp("netdead")` 返回"**找不到指定的物
+  件**"——`ndtestxy` 的玩家 body 已不存在，说明 `user_dump()` 已经
+  触发并把它销毁掉了（不再是 netdead 挂起态，而是彻底不在游戏世界
+  里了）。
+- `ulist` 只剩 `fluffos` 一个在线，`ndtestxy` 确认已下线。
+- `work/data/user/n/ndtestxy.o` 的 mtime 是 **07:53**，与断线时刻
+  07:43 恰好相差 **10 分钟**，与 `NET_DEAD_TIMEOUT=600` 精确吻合，
+  确认存档正是被 `user_dump()`→`command("quit")` 这条路径正常写入
+  的，不是异常崩溃或提前掉线。
+- `debug.log` 全程无新增错误/trace（只有驱动启动时的既有 warning），
+  确认整条净断线超时链路（`net_dead()`→`call_out`→`user_dump()`→
+  `command("quit")`→正常退出存档流程）无崩溃、无报错。
+- 之后用 `ndtestxy`/`abc12345` **重新连线**验证：走的是全新登录流程
+  （"你连线进入这个世界，开始了自己的江湖生涯"提示再次出现，落地
+  一个新的随机新手出生点"北疆小镇"，而不是恢复到断线前的"客
+  店"）——证实超时后账号已完全脱离旧会话，`reconnect()`/netdead 恢
+  复分支不会被误触发，后续正常登录路径工作正常。`quit` 正常退出。
+
+**结论：`NET_DEAD_TIMEOUT` 机制在本档案里完全按预期工作，无程序性
+bug**，超时自动退出、存档、清理全部正常，无需任何代码改动。测试用
+临时小号 `ndtestxy` 的两个存档文件（未被 git 跟踪的新增文件）测试
+后已直接删除。
+
+### 标准检查清单核对（§7.90/§7.111/§7.112/§7.113/§7.114/§7.115）
+
+等待净断线超时期间同步完成，逐项现场核对源码（均已在此前各轮修复
+过，本轮只做"确认没有异常"的抽查，未发现任何新问题）：
+
+- **§7.90**（eval-cost 过低）：`config.fluffos` 的 `maximum
+  evaluation cost` 已是 `5000000`（round one 已修），确认无回退。
+- **§7.111**（`standard_trace()` 对 `error["object"]==0` 未加保护）：
+  `adm/obj/master.lpc:224` 已是 `objectp(error["object"]) ?
+  file_name(error["object"]) : "<none>"` 的加保护形态，干净。
+- **§7.112**（`init()` 无重入保护的 `call_out` 链，重连时重复叠
+  加）：`grep call_out("death_stage"` 命中 `d/death/npc/
+  wgargoyle.lpc`/`bgargoyle.lpc`/`d/shaolin/npc/yu-zu2.lpc` 三个文
+  件，逐一读取确认三个 `init()` 都已带
+  `if (...->query_temp("death_stage_active")) return;` 重入保护
+  （对应的 `death_stage()` 也在每个终止分支正确
+  `delete_temp("death_stage_active")`），已是修复后的形态，干净。
+  另一处 `d/shenlong/npc/pang.lpc` 用的是不同机制
+  （`remove_call_out("kill_ob")` 后再 `call_out`），本身自带幂等保
+  护，不属于此条模式。
+- **§7.113**（净断线重连未恢复 `heart_beat`，导致永久卡在无法满血
+  转生的软死锁）：`adm/daemons/logind.lpc::reconnect()`（第754行起）
+  确认调用 `user->reconnect()`（非死代码，`301`/`382` 两处调用点都
+  在真实执行路径上），`clone/user/user.lpc::reconnect()` 内确认无
+  条件执行 `set_heart_beat(1)`，是标准正确形态，干净。
+- **§7.114**（`private` 修饰的 `input_to` 回调经 mixin 继承后静默失
+  效，导致留言板/邮件多行输入从第二行起失效）：`grep -rn "private.*
+  input_line"` 全档案零命中；`feature/edit.lpc` 里 `input_line()`
+  本身就没有 `private` 修饰，干净（且此条已知全库仅 4 个受影响的
+  库，`xyzx3` 不在其中）。
+- **§7.115**（`QUEST` 宏指向不存在的全局任务钩子文件，`give`/`ask`
+  崩溃）：`include/globals.h` 的 `QUEST` 宏指向 `/inherit/quest`，
+  确认该文件真实存在于 `work/inherit/quest.lpc`（385字节，非空），
+  且此条已知全库仅 `aoxiangtianji` 一例，`xyzx3` 不在其中，干净。
+
+### 本轮清理
+
+驱动按精确 PID（367813）结束。测试期间新增的临时文件：`ndtestxy`
+两个存档（已删除，未跟踪文件）；`fluffos` 存档因商店测试+净断线测
+试产生的游戏时间/食物饮水/`last_on` 等增量已用 `git checkout --`
+还原，`git status` 确认工作区干净，无遗留 diff。本轮全程未修改任何
+源代码文件。
