@@ -147,3 +147,12 @@ yxdive.o` 是 2026-08-03 上一轮深挖遗留的测试角色，与本轮无关�
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 102 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 修复（`ROOM` 基类的同一"多余 replace_program()"形状，全档案扫描第 6 批）
+
+- 删除 `work/` 下 2,606 处存活的 standalone `replace_program(ROOM);` 行
+  （脚本删除），另外手工修复 `clone/misc/roommaker.lpc` 建房工具代码
+  生成模板里的同形状变体，共 2,607 处，与普查记录一致。
+- 验证：真实 `build-debug` 驱动干净开机、端口正常监听，`debug.log` 中
+  零 "cannot replace"/"cannot bind" 行。开机产生的存档时间戳噪声
+  （`data/npc/qianyankai.o`、`u/rock/log.txt`）已用 `git checkout` 撤销。
