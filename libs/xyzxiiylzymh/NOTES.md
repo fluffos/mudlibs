@@ -53,3 +53,23 @@ group_note 里描述的"管理员密码+确认→登录密码+确认"双密码�
 的 `bnway`/`lbadd0`/`lbclear0`/`ptext` 之类原始字符串是 Tomud 客户
 端专用带外控制标记，正常客户端会解析成小地图/状态栏 UI，不是
 bug）。驱动按精确 PID 结束；管理员存档已提交。
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`/inherit/room/room`）在本档案 2,070 处房间文件的
+`create()` 里紧跟 `inherit ROOM;` 之后又多余调用了一次
+`replace_program(ROOM);`——AGENTS.md §7.100 记录的同一个休眠 bug，
+和手足档案 `yzxiiizylfy` 完全同源。用 `fix_710_room.py` 扫过
+`work/`，删除 2,068 处标准形状；两份房间建造工具（`clone/misc/
+roommaker.lpc`、`d/huanggon/obj/roommaker.lpc`）各剩 1 处字符串拼
+接变体，手工改成 `str += "\n\tsetup();\n}\n";`。修复后 `work/` 下
+0 处存活残留，`work/data/` 下没有真实 `.lpc` 源码命中。`git diff
+--stat` 显示 2068 个文件净删 2070 行、增 2 行，与脚本自报数字 + 2
+处手工编辑吻合。
+
+驱动干净启动（零新增编译错误、端口 40130 正常监听、`debug.log`
+无任何"cannot replace"/"cannot bind"行）。管理员 `fluffos`/
+`Mud@2026`（'2060' Tomud 客户端握手）实机登录成功，`look`/
+`score`/`quit` 均正常，全程 `debug.log` 保持干净。管理员存档的时
+间戳漂移已用 `git checkout HEAD --` 还原，未提交。驱动按精确 PID
+结束。
