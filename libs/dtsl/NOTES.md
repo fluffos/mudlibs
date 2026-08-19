@@ -917,3 +917,102 @@ mutual bootstrap ordering during the earliest part of preload, before
 complete.` still printed, never recurred during ~40 minutes of live
 testing afterward) — flagged here, not investigated further, since it's
 boot-time-only and unrelated to every live path this pass exercised.
+
+## Round four re-test (2026-08-19): full catalog checklist, clean — no new bugs
+
+Re-checked this lib against the current AGENTS.md catalog items that didn't
+exist (or weren't corpus-swept) when round one/two/three ran, plus a fresh
+full §10.7 playthrough with a brand-new test character. All items came back
+clean; no code changes this pass.
+
+- **§7.111** (`master.lpc` `standard_trace()` `file_name(error["object"])`
+  crash): confirmed already guarded (`adm/obj/master.lpc` lines 251/317
+  both use the `objectp(error["object"]) ? file_name(...) : "(none)"`
+  ternary) — part of the 67-lib corpus sweep, untouched since.
+- **§7.112** (death-stage duplicate `call_out` chain on reconnect):
+  confirmed the round-three fix is still in place — `d/death/npc/
+  yanluo.lpc`'s `init()`/`death_stage()` still guard scheduling with the
+  `in_death_stage` temp flag (set before `call_out`, cleared at both exit
+  points).
+- **§7.113** (netdead reconnect never restores `heart_beat`): **checked
+  live, confirmed clean, no bug** (this lib was absent from both batches of
+  the 62-lib sweep tally, so this is the first real confirmation for
+  `dtsl` itself, not an inherited one from `dtsl2`). `adm/daemons/
+  logind.lpc`'s `reconnect(object ob, object user, int silent)` (~line
+  603) unconditionally calls `user->reconnect()` — live, not dead code.
+  `obj/user.lpc`'s own `reconnect()` (line 224) unconditionally does
+  `set_heart_beat(1)` in the correct `this_object() == user` context.
+  Live-verified with test character `huice`/秦回: took real combat damage
+  via `qiecuo` (气血 dropped to 14/92), disconnected (netdead), waited a
+  real 15s offline, reconnected — `hp` immediately after reconnect showed
+  only a trivial +11/+1 tick (consistent with a single heartbeat firing
+  right at reconnect, not 15s of ticks squeezed in), then over a further
+  25s of **connected** real time, `hp` showed 气血 climb from 35→67 and
+  food/water tick down 994→991 each — proving `heal_up()` is actively
+  ticking after reconnect, not frozen. No fix needed.
+- **§7.114** (private `input_to()` mixin callback): already documented in
+  round one/two as dead/orphaned code (`feature/logind.lpc`'s
+  `confirm_id`/`confirm_relogin`, unreachable — nothing inherits or
+  `#define`s a login-daemon pointer at it). Confirmed the ACTUAL edit flow
+  (`feature/edit.lpc`, inherited via `F_EDIT` by `std/char.lpc` and the
+  board classes) has no `private` modifier on its `input_line()` callback
+  at all — a different, simpler implementation than the vulnerable
+  `dfgs2`-lineage shape. Live-verified with a real multi-line board post
+  (see below) — works correctly.
+- **§7.90** (eval-cost default): `config.fluffos` already has `maximum
+  evaluation cost : 5000000` (the `100000` line is commented out) — no
+  action needed.
+
+### Fresh §10.7 playthrough (test character `huice`/秦回, male, password
+`Hc123456`)
+
+- **Registration**: normal id→confirm→Chinese name→password×2→email
+  (skip)→gender→4-stat allocation (`20 20 20 20`) flow, landed in
+  大唐学院, `look`/`score` correct.
+- **Combat**: real `qiecuo di zi` sparring at 石龙武馆's 练武场 (repeated
+  3 rounds) correctly dealt damage, `hp` command showed accurate
+  精血/气血/内力/食物/饮水 tracking throughout; a 4th `qiecuo` attempt
+  while badly hurt was correctly refused ("你的身体状况太差了").
+- **Real death**: admin (`fluffos`) summoned `huice` to 净念禅院's 虚尘
+  (100000 combat_exp, per the same "significantly outmatched opponent"
+  method as round three) and forced a real `kill` — one hit killed
+  `huice`. Reconnected during/after the death sequence: landed correctly
+  at `/d/slwg/zoulang1` (combat_exp 0 → low-exp branch, matching
+  `yanluo.lpc`'s routing logic), title correctly reverted to 【少年】, no
+  misrouting — reconfirms the round-three §7.112 fix from a fresh,
+  independent repro (not a reused test character). `deadtimes` correctly
+  stayed at 0 and no PK/exp penalty was applied because `lose()` is gated
+  on `ob->query("age") > 12` and a freshly-created character's `age` is
+  10 — intentional youth-protection design, not a bug (not chased
+  further, out of programming-bug scope).
+- **Netdead reconnect + real-time healing**: see §7.113 above — the main
+  new ground this pass covered relative to round three.
+- **Bulletin board**: real multi-line `post` (two content lines + bare
+  `.` terminator) at 净念禅院's board, immediately visible and correctly
+  numbered via `list` — confirms §7.114 is a non-issue in practice, not
+  just by code review.
+- **Economy**: admin `clone`d and `give`-gave gold to the connected
+  `huice`, who then `buy sword from tiejiang` at 石龙武馆's 兵器铺 —
+  correct purchase and correct automatic denomination change (2两黄金 →
+  长剑 + 99两银子), identical shape to round three's independent
+  purchase test.
+- **Sect-joining**: not re-tested live this pass (round three already did
+  a full round trip against 虚尘/`xuchen.lpc` with a different character
+  and found no bug; this pass's time budget went to the §7.113 live
+  verification instead, which was this round's actual open question).
+
+`work/log/debug.log` never existed at any point this pass (no runtime
+errors triggered by anything tested) — the only anomaly in the boot log
+was the same pre-existing, already-documented `jobmond.lpc`/`xiake`
+`*Read access denied.` content gap from round two/three's own independent
+heartbeat, confirmed byte-identical, not a regression.
+
+### Cleanup
+
+One native driver boot this pass, killed by exact PID after confirming
+`readlink /proc/<pid>/cwd` matched this lib's `work` directory. Incidental
+`data/login/f/fluffos.o` + `data/user/f/fluffos.o` (admin save-timestamp
+churn) reverted via `git checkout --` before commit. Kept as evidence:
+`huice`'s saves (`data/user/h/huice.o`, `data/login/h/huice.o`) and the
+real board-post content change (`data/board/party_cy_b.o` +
+`data/board/all_post_b.o`).
