@@ -174,3 +174,27 @@ Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
 ### 已清理
 
 - 管理员 `fluffos` 的存档已提交（`data/{login,user}/f/fluffos.o`）。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次五）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：2868 个房间文件的 `create()` 里紧跟 `inherit ROOM;` 之后
+都有这一行多余调用，永久设下"待替换"标记，第一次对该房间对象绑
+定闭包就会崩溃。这份档案有 5 处代码生成模板烤了同一个地雷：
+`obj/roommaker.lpc`、`d/obj/clone/misc/roommaker.lpc`（简单字符串
+拼接写法）以及 `obj/rmmaker.lpc`、`u/panguan/rmmaker.lpc`、
+`u/panguan/room.lpc`（`room_code +=` 缩进写法略有不同的另一套模板，
+前两处修完后仍剩 3 处才发现）。
+
+修复：脚本化删除所有房间文件里独立成行的 `replace_program(ROOM);`，
+加上 5 处模板手动摘除字符串拼接片段。`git diff --stat`：2868 files
+changed。备注：survey 记录的"live"数字（3013）和实际盘面对不上，
+真实 live 数量是 2870（总匹配 3157 减去 287 处确认为既有注释的行，
+逐条抽样核实过），修复后 0 处遗留 live 匹配，287 处注释原样保留未
+动。
+
+验证：`build-debug` 驱动真实冷启动，端口 40164 正常监听，
+`debug.log` 全程干净。既有管理员账号 `fluffos`/`Mud@2026` 登录正常
+（落地英豪酒楼，look/quit——quit 触发"三十秒后才能下线"的存档中提
+示，属正常游戏机制不是崩溃），全程无新增
+"cannot replace"/"cannot bind" 日志行。
