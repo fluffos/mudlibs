@@ -79,3 +79,27 @@ euid 提权被自己撤销），后者同一轮顺手同步修复到 `hhsj`/`nt6
 级联验证自愈；`quit`→"y"确认删号路径未能独立实机验证（源码层面高置信
 度，留给下一轮）。测试账号（`wumeiliu`/`zhoubaqi`/`hematou` 等）存档留
 在 `data/` 下作为佐证，未清理（未跟踪文件，不纳入本次提交）。
+
+## AGENTS.md §7.100 修复（2026-08-19）
+
+同族（`nt6`/`hhsj`/`xfbhh`/`nitan170911`）共享的 `ROOM` 基类冗余
+`replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md §7.100）：本 lib
+4925 个房间文件的 `create()` 末尾都有这一行多余调用，同款地雷也烤进
+了自带建房工具 `clone/misc/roommaker.lpc` 的字符串拼接代码生成模
+板。
+
+修复：脚本化删除所有房间文件里独立成行的 `replace_program(ROOM);`
+（`d/huangshan/banshan.lpc` 有两处独立调用，均删除），加上
+roommaker.lpc 里手动摘除字符串拼接片段。`git diff --stat`：4926
+files changed, 1 insertion(+), 4928 deletions(-)，与预期精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40187 正常监听，
+`debug.log` 全程干净。本 lib 之前没有任何预置存档，按 README 记录
+的双密码机制（`AdminPass1`/`loginpw1`）走完整注册流程创建
+`fluffos` 账号，正确落地"巫师休息室"，确认基于 wizlist 的管理员判
+定生效。`goto` 走访 14 个刚修复的房间（`d/wuxi`/`d/emei`/
+`d/jingzhou`/`d/wuyi`/`d/luoyang`/`d/yanziwu`/`d/shouxihu`/
+`d/northft`/`d/huijiang`/`d/huashan`），均正常返回，无 "cannot
+replace"/"cannot bind" 新增日志行。按精确 PID 结束驱动；测试期间产
+生的 `mrtg`（第三方流量统计）已跟踪存档漂移已 `git checkout --`
+还原，新建的 `fluffos` 存档本就是未跟踪状态，未纳入提交。
