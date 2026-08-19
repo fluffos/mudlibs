@@ -399,3 +399,20 @@ guessing which clock should govern the gate.
 from` 追踪行、未使用局部变量），无运行时错误。驱动按精确 PID 结
 束；测试期间产生的存档时间戳增量已 `git checkout --` 还原，未提
 交无关变化。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次三）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：4430 处命中，其中 `d/huangshan/banshan.lpc` 是本项目已见
+过多次的"同一个 `create()` 里两处独立冗余调用"形状（`setup()` 前
+后各一次），两处均删除。自带建房工具 `clone/misc/roommaker.lpc` 的
+字符串拼接模板同样修复。
+
+`git diff --stat`：4428 files changed, 1 insertion(+), 4430 deletions(-)，
+与预期精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40037 正常监听。既有管理
+员账号 `fluffos`（登录密码为 `Mud@2026`，与原始注册记录的
+`test1234` 不同，二者都在 NOTES 中留档过）登录，`目前权限：(admin)`
+确认，车马店→南大街→车马店多房间走访无误，`quit` 干净退出，全程
+无新增 "cannot replace"/"cannot bind" 日志行。
