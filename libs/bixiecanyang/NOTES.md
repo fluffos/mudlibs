@@ -727,3 +727,85 @@ AGENTS.md §7.68 顶部的撤销说明。
 二次单独验证密码重连本身。均成功登录，存档数据一致。全程
 `debug.log` 无运行时错误。驱动按精确 PID 结束；测试期间产生的存
 档时间戳增量已 `git checkout --` 还原。
+
+## Round three deep functional test (2026-08-18)
+
+Registered a fresh character (`killguoj`) and ran it through a full
+死亡/复活 playthrough — combat kill by a `d/death/npc/{bgargoyle,
+wgargoyle}.lpc` (鬼门关) death sequence — with a deliberate mid-chain
+disconnect/reconnect, mirroring the reconnect-race scenario documented
+in AGENTS.md §7.112.
+
+### Bug found and fixed: AGENTS.md §7.112 (duplicate `death_stage()` call_out chain on reconnect)
+
+Both `d/death/npc/bgargoyle.lpc` and `d/death/npc/wgargoyle.lpc` had the
+textbook vulnerable shape: `init()` unconditionally scheduled a 5-stage
+`death_stage()` `call_out` chain with no re-entry guard. Because
+`enable_commands()` re-broadcasts `init()` to every object in the room
+and this lib's `clone/user/user.lpc::reconnect()` calls
+`enable_commands()` on every reconnect, any ghost sitting in 鬼门关 who
+reconnects even once mid-sequence would get a second, independent copy
+of the whole chain stacked on top of the first — the two chains racing
+to move/reincarnate the player, potentially double-applying the death
+penalty or misrouting the revival.
+
+Fix (matches the reference shape from `dtsl`/`sj`/`yueyingqiyuan` etc.
+in §7.112): added a per-victim `set_temp("death_stage_active", 1)` /
+`query_temp(...)` guard around the `call_out()` scheduling in `init()`,
+cleared at every exit point of `death_stage()` (early return on
+`!present(ob)`, the aggressive-living-player branch, and the final
+reincarnation branch).
+
+**Live-verified**: registered `killguoj`, walked to 铁枪庙, picked a
+fight with 乌鸦 to die, landed in 鬼门关 with 白无常
+(`wgargoyle.lpc`). Deliberately dropped the connection ~2s after the
+death-stage chain had already started, then reconnected as the same
+character mid-chain (which re-triggers `init()` via
+`enable_commands()`). Post-fix behavior: each of the 5 `death_msg[]`
+lines appeared exactly once, in order, 5 seconds apart, with no
+interleaving or duplication; the final stage reincarnated the character
+exactly once (moved to 武庙, `startroom` reset, inventory dropped) and
+`score` afterward showed "你共死亡：1 次" — a single, correctly-counted
+death, not a doubled one. Confirms the guard suppresses the duplicate
+chain without breaking the normal single-chain path.
+
+### Standing round-three checklist — other items checked
+
+- **§7.111** (`master.lpc` `standard_trace()` crash on `error["object"]
+  == 0`): already fixed in this lib — `adm/obj/master.lpc:221` already
+  guards with `objectp(error["object"]) ? file_name(error["object"]) :
+  "<none>"`. Clean, no action needed.
+- **§7.113** (netdead reconnect never restores `heart_beat`): checked
+  the real reconnect path (`adm/daemons/logind.lpc::reconnect()` →
+  `clone/user/user.lpc::reconnect()`). Unlike `shzs`, this lib's actual
+  reconnect function correctly calls `set_heart_beat(1)`
+  (`clone/user/user.lpc:198`), matching its `net_dead()`'s
+  `set_heart_beat(0)`. Clean, not applicable.
+- **§7.90** (eval-cost too low for this lib's NPC-creation cost):
+  `config.fluffos` already sets `maximum evaluation cost : 50000000`,
+  far above the 700000 template default that triggers this class of
+  bug. No `cost limit reached` aborts observed anywhere in this
+  session's testing (combat, room movement, death, reincarnation, two
+  full reconnects). Clean, not applicable.
+- **§7.11 nosave-dir pattern / logind.lpc save path**: this lib's
+  `log_file()` simul_efun was already hardened with `assure_file()` in
+  the round-two pass above, so every `log_file()` call site in
+  `logind.lpc` (registration id-creation log, etc.) is covered.
+  Separately checked `adm/daemons/toptend.lpc::topten_save()`'s
+  unguarded `write_file(f_name, ...)` (the `nitan_ceshi`-class
+  non-fatal §7.11 variant) — its target directory `/topten/` ships with
+  the archive and is present (`rich.txt`, `exp.txt`, etc. all exist), so
+  this write path is not broken here. `logind.lpc`'s other
+  `write_file()` calls (`users`, `maxonline`, `iduser` counters) target
+  its own `adm/daemons/` directory, which obviously exists. Registration
+  itself was live-verified working end-to-end (new character reached
+  `score` successfully). Clean, not applicable.
+
+### Test hygiene
+
+Driver ended by exact PID. Test-character save files (`killguoj`,
+`deathtst`, `deathwu` and their `.o` twins under `data/{login,user}/`)
+were left untracked and deleted, not committed — only the two source
+fixes (`bgargoyle.lpc`, `wgargoyle.lpc`) are part of this commit, per
+this project's convention that test-character saves never get
+committed.
