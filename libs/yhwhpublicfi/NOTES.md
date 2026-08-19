@@ -247,3 +247,21 @@
   响任何实际指令的执行（`washto`/`born` 本身运作完全正常），按
   §10.7 的范围界定（只修程式 bug，不做内容/文案判断）如实记录，
   未改动。
+
+## §7.100 修复（ROOM 基类多余 replace_program()，2026-08-19）
+
+- 与其它同类档案一样，`inherit ROOM;`（`/inherit/room/room`）后面跟着
+  一个多余、有害的 `replace_program(ROOM);`，给几乎每个房间物件都埋
+  下了一个"首次绑定 closure 就崩溃"的休眠地雷。删除了全部 3373 处存
+  活的独立调用行（40 处已注释掉的历史遗留行保持原样未动）；房间构
+  建工具 `clone/misc/roommaker.lpc` 的字符串拼接模板
+  （`str += "...replace_program(ROOM);..."`）里的同一形状也一并手动
+  修掉，避免玩家用工具新建的房间继续继承这个 bug。`git diff --stat`
+  核对为 3373 文件纯删除 + roommaker.lpc 的 1 行改写，和脚本自报数字
+  完全一致。真实驱动干净启动，用本轮之前播种的 `fluffos`/
+  `MudLogin2026` 管理员账号登录（`(admin)` 权限确认生效），在投胎前
+  的世外桃源区域走了 6+ 个房间（entry↔roomn↔rooms 往返），debug.log
+  全程零"cannot replace"/"cannot bind"行。之前批次搁置这份档案是因
+  为以为只有非标准的 `wlqxztest` 管理员账号可用，重新核对 README 后
+  发现本轮 §10.7 深测已经按标准约定并行播种了 `fluffos`/
+  `MudLogin2026`，不需要再逆向工程注册流程。
