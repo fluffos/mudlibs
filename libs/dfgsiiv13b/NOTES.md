@@ -406,3 +406,25 @@ money/items and the death/resurrect cycle) reverted via targeted
 - `work/feature/npc/vendor.lpc` — `affirm_merchandise()`: don't let a
   failed `sscanf("%s %d", ...)` truncate the item name being looked up
   (new fix, breaks `buy` for any multi-word item name).
+
+## §7.114 fix: `private input_line()` broke multi-line `to`/board/mail/chfn input (2026-08-19)
+
+Same ES2-ancestry bug as `zzhj`/`shzs`/`huoying`/`dfgs2` (AGENTS.md
+§7.114): `work/feature/user/edit.lpc` (this lib's `F_EDIT` mixin,
+inherited by `obj/user.lpc`) declared its `input_to()` re-arm target
+`private`: `private void input_line(string line, string text, function
+callback)`. The recursive re-arm from inside `input_line()` silently
+failed to register once reached through the inherited mixin, so any
+multi-line `.`-terminated input session (board post, `to`, mail,
+`chfn`) dropped everything after the first line. Fix: dropped
+`private`.
+
+Live-verified on a fresh driver boot (port 40144), fresh character
+(`秦肆八`/`qinsiba`, human/male): `to say` → two lines of text → `.` →
+resulting `say` output showed both lines (`你說道﹕test line one\ntest
+line two`), not truncated after line 1. Killed the driver by exact PID
+when done.
+
+Files modified this pass:
+- `libs/dfgsiiv13b/work/feature/user/edit.lpc` — dropped `private` from
+  `input_line()`.
