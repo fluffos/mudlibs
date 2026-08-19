@@ -777,3 +777,22 @@ dbase.lpc` 检查确认这份档案**不属于** `tybxjh`/`wlhd` 那个"天涯"
 环）。驱动最终按精确 PID `kill`，`ps -p` 确认已退出。测试产生的
 `fluffos` 存档时间戳类微小 diff 已 `git checkout` 撤销；新注册的
 `wmkjqatest` 测试存档文件（未追踪）已删除，未提交。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次五）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：2797 个房间文件的 `create()` 里紧跟 `inherit ROOM;` 之后
+都有这一行多余调用，永久设下"待替换"标记，第一次对该房间对象绑
+定闭包就会崩溃。自带建房工具有 4 处拷贝（`obj/roommaker.lpc`、
+`clone/misc/roommaker.lpc`、`u/fyue/misc/roommaker.lpc` 简单字符串
+拼接写法；`obj/rmmaker.lpc` 的 `room_code +=` 写法）。累计 2800 处
+live 调用删除，和 survey 记录的数字精确吻合，修复后 0 处遗留。
+
+验证：`build-debug` 驱动真实冷启动，端口 40049 正常监听。启动期间
+观察到一条既有的 debug.log 报错（`natured.lpc` 早晨事件在
+`/d/city/guangchang` 生成一个继承 `u/xiha/banghui/bhnpc.lpc` 的 NPC，
+但该文件在盘面上确实不存在）——确认和本次扫描无关（零处
+"cannot replace"/"cannot bind"，文件本身就缺失，是一个既有的缺失
+继承内容 bug，不是 replace_program 回归），未修，超出本次范围。既
+有管理员账号 `fluffos`/`Mud@2026` 登录正常（落地北疆小镇，
+look/quit），全程 debug.log 零新增行。
