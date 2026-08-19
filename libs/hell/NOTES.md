@@ -211,3 +211,23 @@ Doing 血统的大型金庸题材 mudlib（7000+ 个 LPC 档案），游戏内�
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 44 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## AGENTS.md §7.100 fix (2026-08-19): redundant replace_program(ROOM) landmine
+
+Same corpus-wide bug as §7.86 above, but on the universal `ROOM` base
+class (`"/inherit/room/room"` from `include/globals.h`) instead of
+just boards — the batch-1-6 sweep's shape. Deleted 2,372 live
+standalone `replace_program(ROOM);` lines under `work/` via
+`fix_710_room.py`, plus hand-fixed the room-building tool's
+string-builder template (`work/clone/misc/roommaker.lpc`). 8 real
+`.lpc` files under `work/data/` checked for the known false-negative
+class — none had the bug pattern. Remaining matches after the fix are
+all pre-existing `//`-commented.
+
+Verified: clean `build-debug` boot (zero new compile errors, zero
+"cannot replace"/"cannot bind" in `debug.log`), live admin login
+(`fluffos`/`Mud@2026`) into the game world, `look`/`score`/`quit` all
+worked cleanly (the "还没有出生呐" `score` response is pre-existing
+admin-account behavior, unrelated to this fix). Incidental
+`data/{login,user}/f/fluffos.o` save drift from the login test was
+reverted via `git checkout HEAD` before committing.
