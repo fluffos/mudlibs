@@ -157,3 +157,127 @@
   `inherit/misc/quest.lpc`、`adm/daemons/eventd.lpc`）都是手工做的
   外科手术式最小改动，逐行对照周围代码风格，风险较低，但仍留作已
   知欠账，下次有 `node` 可用的会话应补跑一次格式化再复核。
+
+## 深度功能测试第四轮（§10.7 round-four，2026-08-19）
+
+本轮任务：补测第三轮明确标记为"未测试"的三个系统——门派拜师、商
+店购物、邮件系统；并对已经全库扫描完毕的几条 checklist（§7.90、
+§7.111-§7.115）做一次本档案专属的抽查。**没有发现任何新的编程
+bug**，三个系统里两个（拜师、购物）完整验证正常工作，第三个（邮
+件）确认是这个"hell"血统家族项目本身就蓄意关闭的功能，不是本档
+案独有的坏损。
+
+**测试前置状况**：管理员账号 `fluffos` 的存档处于损坏的中间状
+态——`data/login/f/fluffos.o` 存在（`purename` 是"浮浮"，明显是
+一次未走完的注册残留），但 `data/user/f/fluffos.o` 完全不存在，
+导致用 `fluffos` 连线会在 `logind.lpc` 的 `user->restore()` 失败
+分支直接断线（"无法读取你的数据档案，您需要和巫师联系。"），且
+这个档案的 `CONFIG_D->query_int("ask_recreate")` 返回假，连"是否
+重新创造玩家"的补救提示都不会出现。判断是第三轮会话在" look/
+goto/update 三重验证"之后没有让角色真正存过档（`obj/user.lpc` 的
+存档很可能只在正常 `quit`/心跳周期性存档时触发，而不是巫师权限检
+查本身需要的），随后如果那次会话是直接杀掉驱动进程结束的，新建的
+角色存档就会跟着丢失——这本身可能是个值得未来注意的"角色数据只
+在正常退出/心跳时落盘，异常关闭会丢刚创建的角色"式的存档可靠性
+问题，但和本档案玩家实际测试无关，未展开处理。本轮临时在
+`adm/etc/wizlist` 加了 `wztestfour (admin)`，通过正常注册流程重
+新播种了一个可用的管理员测试角色，验证完毕后已经把 wizlist 恢复
+原状、删除了 `wztestfour`/`fluffos` 的残留存档档案（`fluffos` 的
+损坏 login 存档也一并清掉了，避免下一轮踩同一个坑）。
+
+- **门派拜师（bai/apprentice）：完整验证正常工作**。走读
+  `cmds/skill/apprentice.lpc`（`bai`/`apprentice` 指令的实现）确
+  认调用链是 `apprentice.lpc` → NPC 的 `attempt_apprentice()` →
+  （接受时）`recruit_apprentice()`/`assign_apprentice()`
+  （`feature/apprentice.lpc`）。逐个走读了几个宗门的
+  `attempt_apprentice()` 实现：`d/heimuya/npc/xiang.lpc`（向问天）
+  直接拒收，`d/baituo/npc/{trainer,li}.lpc`（白驼山教练/李管家）
+  门槛是"必须先天生就是欧阳世家出身"（`born_family` 检查，创角色
+  时选择，不能后天拜入），这两处都是合理的内容级拒绝，不是 bug。
+  找到 `kungfu/class/gaibang/{li-futou,qiu-wanjia}.lpc`（丐帮六袋
+  弟子李斧头/邱五嘉）这类新手可达成的拜师入口——门槛只是
+  `permit_recruit()`（没有叛师/没有已拜过其他门派）加性别检查，
+  对一个全新注册的男性角色正好满足。用巫师 `goto /d/gaibang/
+  underhs` 传送新角色到场，`bai li futou` 一次成功："你想要拜李
+  斧头为师。" → "李斧头决定收你为弟子。" → "你跪了下来向李斧头恭
+  恭敬敬地磕了四个响头，叫道：「师父！」" → "恭喜您成为丐帮的第
+  二十代弟子。"，`family`/`title`/`recruit_apprentice()` 全部正
+  确落地，机制完全正常。
+
+- **商店购物（buy/sell）：完整验证正常工作，买卖双向都测了，货币
+  找零精确无误**。`d/huashan/npc/xiaoer2.lpc`（山顶小店店小二，
+  `inherit F_DEALER`）挂了 `buy`/`list` 指令。用巫师 `call /adm/
+  daemons/moneyd->pay_player(<角色对象>, 5000)` 给测试角色发了
+  50 两白银的启动资金（`call` 指令要求 `(arch)` 以上权限，本档案
+  admin 账号满足），`list` 正确列出四样商品及单价（烤鸡腿每根
+  八十文铜板等），`buy jitui` 成功买下一根烤鸡腿，`i` 确认库存
+  正确增加、白银从五十两正确扣到四十九两（找零二十文铜钱，
+  5000-80=4920=49两+20文，算术完全对得上）。又在 `d/huashan/
+  shop` 买了一个牛皮酒袋（一两白银=100文，找零精确到九十文铜
+  钱），带去 `d/beijing/dangpu`（当铺，`d/beijing/npc/
+  dangpuzhang.lpc` 挂了 `sell`/`value` 指令）用 `sell jiudai` 卖
+  掉，到手 70 文铜钱（100 文 × 70% 折价率，`feature/dealer.lpc`
+  的 `do_sell()` 里 `MONEY_D->pay_player(this_player(), value *
+  70 / 100)` 精确对应），`i` 确认铜钱从二十文正确增加到九十文。
+  另外验证了 `do_sell()` 对不可回收物品的正确拒绝（`sell jitui`
+  被拒"剩菜剩饭留给您自己用吧"，因为 `food_supply` 字段命中；
+  `sell jinduan`/`sell shoes` 被拒"一文不值"，因为新手服装道具
+  `value` 为 0）——这些都是设计内合理拒绝，不是 bug。
+
+- **邮件系统：确认是这个"hell"血统家族项目本身蓄意关闭的功能，
+  不是本档案独有的坏损，不作为 bug 处理**。`cmds/usr/mail.lpc`
+  的 `main()` 第一行就是 `return notify_fail("此服务已经暂停。
+  \n");`——在解析任何参数、进入任何 `input_to` 编辑流程之前就无
+  条件拒绝，说明这是原始游戏运营方自己关掉的功能（中文提示"此服
+  务已经暂停"读起来就是运营公告口吻，不像是移植过程中引入的坏
+  损）。走读 `adm/daemons/maild.lpc` 确认底层 `queue_mail()` 面
+  向的是真实 SMTP 外发邮件（收件地址必须是 `user@domain` 格式，
+  `mail_from`/`mail_to` 都要求含 `@`），压根不是玩家对玩家的站内
+  信——这个游戏没有独立的站内信/信箱系统，`clone/misc/letter.lpc`
+  等"信件"档案只是任务道具，没有读写内容的逻辑。对照血统同源的
+  `zjdywzb`/`hell` 两份档案，`cmds/usr/mail.lpc` 的这一行拒绝逐字
+  节完全相同，确认这是这个"hell"家族项目级别的统一决定（很可能
+  是原始运营者出于防止滥发垃圾邮件或者当时没配置真实 SMTP 服务
+  器），和之前记录的 `ftpd.lpc`/`dns_master.lpc` 休眠状态属于同一
+  类"刻意保持原样"的档案，不需要也不应该重新启用——启用与否是内
+  容/策略决定，不是这次深挖任务该处理的编程 bug 范畴。
+
+- **checklist 抽查（均已是全库扫描完毕的条目，本档案只做专属核
+  实，未发现异常）**：
+  - **§7.111**（`master.lpc` 的 `standard_trace()` `file_name
+    (error["object"])` 崩溃）：`adm/single/master.lpc` 第 230
+    行已经是 `error["object"] ? file_name(error["object"]) :
+    "0"` 的三元保护写法，安全。
+  - **§7.112**（`init()` 重连叠加 `call_out` 链）：
+    `d/death/npc/{wgargoyle,bgargoyle}.lpc` 都已经用
+    `query_temp("death_stage_active")`/`set_temp(...)`/
+    `delete_temp(...)` 做了防重入闸门，和第三轮"死亡复活流程完
+    整走通、无卡死"的实测结果一致。
+  - **§7.113**（netdead 重连不恢复 `heart_beat`）：`adm/daemons/
+    logind.lpc` 的 `reconnect()` 无条件呼叫 `user->reconnect()`，
+    `clone/user/user.lpc` 的 `reconnect()` 里无条件
+    `set_heart_beat(1)`——属于 AGENTS.md §7.113 记录的"批次二"
+    45 库之一，本档案当时就已确认干净，本轮静态复查结论一致。
+  - **§7.114**（`private` 修饰的 `input_to` 回调经 mixin 失效）：
+    `feature/edit.lpc` 的 `input_line()` 没有 `private` 修饰符，
+    不受影响——而且这次实测走过的"多行输入"路径（`bai`/`buy`/
+    `sell` 都不需要多行编辑，但拜师确认、购物问答等交互全程响应
+    正常，没有出现"第一行有效、后续行被吞"的症状），间接佐证这
+    个档案确实不在 §7.114 名单里。
+  - **§7.115**（`QUEST` 宏指向不存在的档案）：本档案的
+    `include/quest.h`/`include/globals.h` 里 `QUEST_OB`（`/inherit/
+    misc/quest`）、`QUEST_D`（`/adm/daemons/questd`）两个真正会被
+    `call_other` 呼叫的宏对应的档案都真实存在（`work/inherit/
+    misc/quest.lpc`、`work/adm/daemons/questd.lpc`），没有"单纯
+    叫 `QUEST` 且指向缺失档案"的那种宏，不适用本条。
+  - **§7.90**（eval-cost 配置）：`config.fluffos` 的 `maximum
+    evaluation cost` 已经是 `5000000`（第三轮已修），本轮驱动干
+    净启动 + 完整拜师/购物/多次巫师 `call`/`goto` 操作，全程
+    `debug.log` 没有出现任何 `cost limit reached`/`Too long
+    evaluation`，佐证了第三轮"那两次 eval-cost 报错是当时会话自
+    己连续 8 条 `update` 造成的高强度负载，不是常规游玩会触发的
+    一般性配置问题"的判断是站得住的，本轮没有推翻这个结论。
+
+**清理**：临时的 `wztestfour` 管理员测试账号（存档 + wizlist 条
+目）已经清理干净，损坏的 `fluffos` 残留登录存档也已删除；驱动测
+试进程按 PID 正常 kill，未使用 `pkill -f`。
