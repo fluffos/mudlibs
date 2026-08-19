@@ -57,3 +57,14 @@ README 记录"账号通过正常注册流程创建，已在游戏内确认'目�
 ### 已清理
 
 - 管理员 `fluffos` 的存档已提交（`data/{login,user}/f/fluffos.o`）。
+
+## §7.100 修复（`ROOM` 基类的同一"多余 replace_program()"形状，全档案扫描第 6 批）
+
+- 删除 2,623 处存活的 `replace_program(ROOM);` 相关行，与普查记录一致。
+  除脚本批量删除的标准 standalone 行外，另手工修复三处不规则形状：
+  `d/happy/workroom.lpc` 的行尾空注释变体（`replace_program(ROOM);
+  //`）、`adm/roommaker.lpc`（本库第二套建房工具，独立于
+  `clone/misc/roommaker.lpc`）里 `room_code`/`str` 两处字符串拼接
+  模板变体。
+- 验证：真实 `build-debug` 驱动干净开机、端口正常监听，`debug.log` 中
+  零 "cannot replace"/"cannot bind" 行。
