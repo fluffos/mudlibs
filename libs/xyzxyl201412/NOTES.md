@@ -70,3 +70,31 @@ wizpass) == wizpass */)`——真正的效验码比对被注释掉了，任何�
 fluffos.o` 以及这份档案自己的 `data/key/data/{login,user}/f/
 fluffos.key`，同一账号创建流程的正常产物，其余账号的 `.key` 文件
 本来就已提交在 git 里）已提交。
+
+## AGENTS.md §7.100 修复（2026-08-19）
+
+同 `xyzxfy2` 同源的 `ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃
+地雷（详见 AGENTS.md §7.100）：本 lib 4833 个房间文件的 `create()`
+末尾（紧跟 `inherit ROOM;`）都有这一行多余调用，第一次对该房间对象
+绑定闭包会永久失败。同款地雷也烤进了自带建房工具两份副本
+（`clone/misc/roommaker.lpc`、`u/fyue/misc/roommaker.lpc`）的字符串
+拼接代码生成模板。
+
+修复：脚本化删除所有房间文件里独立成行的 `replace_program(ROOM);`，
+加上两份 roommaker 工具模板里各自手动摘除字符串拼接片段。`git diff
+--stat`：4835 files changed, 2 insertions(+), 4837 deletions(-)，与
+预期精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40175 正常监听，
+`debug.log` 全程干净。管理员 `fluffos`/`Mud@2026` 账号重连（含上文
+记录的"巫师登陆效验码"额外一步，任意输入即可通过）成功，`goto` 走
+访 14 个刚修复的房间（`d/migong`/`d/tiezhang`/`d/mingjiao`/
+`d/new`/`d/tongchi`），13 个正常返回，无 "cannot replace"/"cannot
+bind" 新增日志行。走访 `/d/migong/lev12/dong60` 时触发一个与本次修
+复无关的既有内容 bug——房内 NPC（`/d/migong/lev12/npc/lev5.lpc`）
+的 `create()` 给自己设置了一个从未定义过的技能 "xuantie-sword"，
+`feature/skill.lpc` 的 `set_skill()` 抛出 "*F_SKILL: No such skill"
+——已确认 `debug.log` 里没有 "cannot replace"/"cannot bind" 相关字
+样，属于房间填充时的独立内容问题，不在本次 §7.100 修复范围内，如实
+记录未修。按精确 PID 结束驱动；测试期间产生的 `fluffos` 存档增量
+（`data/{login,user}/f/fluffos.o`）已 `git checkout --` 还原。
