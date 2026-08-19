@@ -222,3 +222,30 @@ telnet IAC 转义误报）驱动。**全程 `debug.log` 始终为空文件，没
 中文字节误判为控制序列导致的假阳性。测试号 `rfourtest`/肆轮测已在
 `quit` 时被游戏自身的"半小时内退出自动删号"机制清理，`data/login/`、
 `data/user/` 下未留下任何新存档，`git status` 确认无新增/改动文件。
+
+## AGENTS.md §7.100 修复（2026-08-19）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：本 lib 4745 个房间文件的 `create()` 末尾（紧跟 `inherit
+ROOM;`）都有这一行多余调用，第一次对该房间对象绑定闭包会永久失败。
+同款地雷也烤进了自带建房工具 `clone/misc/roommaker.lpc` 的字符串拼
+接代码生成模板。
+
+修复：脚本化删除所有房间文件里独立成行的 `replace_program(ROOM);`，
+加上 roommaker.lpc 里手动摘除字符串拼接片段。`git diff --stat`：
+4746 files changed, 1 insertion(+), 4747 deletions(-)，与预期精确吻
+合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40154 正常监听，
+`debug.log` 全程干净。既有管理员账号 `fluffos`/`testpass123`（本文
+件上方记录）登录正常，`goto` 走访 14 个刚修复的房间（`d/migong`/
+`d/wizard`/`d/xiangyang`/`d/qingcheng`/`d/baituo`/`d/city`/
+`d/zhongzhou`/`d/wanjiegu`/`d/wudang`），均无 "cannot replace"/
+"cannot bind" 新增日志行。走访过程中顺带遇到两个与本次修复无关的既
+有问题：`/d/migong/lev7/dong47` 一场 NPC 战斗把测试角色打死（正常
+游戏机制，非 bug）；`/d/wudang/bolin` 的 NPC
+（`kungfu/class/wudang/famu.lpc`）`create()` 里呼叫
+`carry_object()` 抛出 "*Read access denied."——均已确认与
+`replace_program(ROOM)` 无关，不在本次修复范围内，如实记录未修。按
+精确 PID 结束驱动；测试期间产生的 `fluffos` 存档增量（登录计数器 +
+死亡状态）已 `git checkout --` 还原。
