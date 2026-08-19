@@ -227,3 +227,182 @@ save-timestamp churn reverted before commit.
   (§7.10-class, previously entirely absent).
 - `work/adm/simul_efun/file.lpc` — `log_file()` `assure_file()` guard,
   `cat()` null-guard.
+
+## Round three deep functional test (2026-08-19)
+
+Went deeper than rounds one/two, which only tested "safe sparring" combat
+and never pushed a character through an actual death. This pass did a full
+death→ghost→reconnect→admin-resurrect cycle, real economy transactions
+(buy from a vendor NPC), and re-checked the AGENTS.md checklist items
+current at the time of this session (§7.111, §7.112, §7.113, §7.90, §7.11
+class, `logind.lpc` registration-save).
+
+### Checklist items — all clean, no action needed
+
+- **§7.111** (`master.lpc`'s `standard_trace()` calling `file_name(error["object"])`
+  unconditionally): does not apply here — this lib's `standard_trace()`
+  formats `error["object"]` with `%O` (`sprintf`), never calls
+  `file_name()` on it at all. Different shape, not the same bug.
+- **§7.112** (gargoyle/judge-lineage death NPCs with unguarded `call_out()`
+  chains in `init()`): `find` for the full filename list in AGENTS.md
+  §7.112 found only `d/snow/egate.lpc` and `d/snow/wgate.lpc` present in
+  this archive — both are plain gate rooms (`inherit ROOM`), not NPCs, and
+  contain no `call_out()`/`death_stage_active` code at all. Not applicable.
+- **§7.113** (netdead reconnect never restoring `heart_beat`): checked the
+  actually-invoked path — `obj/user.lpc`'s `reconnect()` (called from
+  `LOGIN_D->reconnect()`) does `enable_commands()` +
+  `set_heart_beat(1)` + `remove_call_out("user_dump")` correctly. Verified
+  live in round two already (rapid reconnects) and reconfirmed by code
+  read this round; no fix needed.
+- **§7.90** (eval-cost): `config.fluffos`'s `maximum evaluation cost` is
+  still `5000000` (the round-one fix); confirmed clean cold-boot logins.
+- **§7.11 class** (`log_file()`/`write_file()` into a runtime dir the
+  archive never shipped): `adm/simul_efun/file.lpc`'s `log_file()` still
+  has its round-two `assure_file()` guard.
+- **`logind.lpc` `enter_world()`'s `ob->save()`**: present and reachable
+  (`#ifdef SAVE_USER` / `user->save()` right after `setup()`, before the
+  startroom move) — a newly-registered account is saved immediately on
+  first login, not silently dropped.
+
+### New fix: `feature/npc/vendor.lpc`'s `affirm_merchandise()` corrupted
+multi-word item names, breaking `buy <item> from <vendor>` for any item
+whose primary/full name has a space in it
+
+Live-reproduced at `/d/snow/herb_shop` (the only working vendor NPC in
+this archive, `藥鋪掌櫃`/Herbalist): `buy pill from herbalist` (single-word
+alias) succeeded, but `buy black pill from herbalist` (the item's actual
+full name, `"black pill"`) always failed with the generic "對方好像不願意
+跟你交易" decline — even though `"black pill"` is a directly registered
+alias on `/obj/medication/black_pill.lpc`. This is a live, easily-hit bug:
+a player who types the item's real name (as printed by `list`, e.g.
+"Black pill") rather than guessing a shorter alias gets a
+false rejection every time.
+
+Root cause: `affirm_merchandise()` uses `sscanf(what, "%s %d", what,
+index)` to split an optional trailing item-index number (`buy sword 2`)
+off the item name — but LPC's `%s` stops at the *first* embedded space,
+not the last, so for `"black pill"` the match attempt sets
+`what = "black"` and then fails to parse `"pill"` as `%d`, so the overall
+`sscanf()` returns 1 (not 2). The old code only guarded the `index`
+variable on failure (`if (sscanf(...) != 2) index = 1;`) but never
+restored `what`, so the corrupted `"black"` was used for the subsequent
+`item->id(what)` lookup — which fails to match any of `black_pill.lpc`'s
+aliases (`"烏心丹"`, `"black pill"`, `"pill"`), even though the correct
+full name was typed. Confirmed the exact `sscanf()` truncation behavior
+with a throwaway diagnostic wizard command (`sscanf("black pill 1", "%s
+%d", what, index)` → `n=1, what="black"` — even with a valid trailing
+index number it only manages to peel off the first word, not the whole
+multi-word name before it).
+
+Fix: parse into a separate temp variable and only commit it to `what`
+when `sscanf()` actually matched both pieces (return value `== 2`);
+otherwise leave `what` untouched.
+```lpc
+// BEFORE:
+if (sscanf(what, "%s %d", what, index) != 2)
+  index = 1;
+// AFTER:
+if (sscanf(what, "%s %d", base, index) == 2)
+  what = base;
+else
+  index = 1;
+```
+Live-reverified after a fresh driver restart: `buy black pill from
+herbalist` now succeeds (money deducted, item delivered), and a
+subsequent purchase attempt that's correctly short on funds (`buy wild
+ginseng from herbalist`) now fails with the correct "你身上的錢不夠"
+(can't afford) message instead of the misleading "won't trade with you"
+one — confirming the item-name match itself now works and the failure
+path is the genuinely-intended one. `debug.log` stayed clean throughout.
+
+Same buggy `sscanf(arg, "%s %d", arg, index) != 2 → index = 1` idiom
+(without restoring `arg`/`what` on failure) also exists in
+`std/room/hockshop.lpc`'s `do_buy()` and `obj/clan_symbol.lpc` — left
+unfixed this pass because neither is reachable from any room actually
+shipped in this archive's `d/snow` map (no hockshop room instance exists,
+and `obj/CLAN` is an empty directory) — a content gap, not a live bug
+here. Flagging in case either becomes reachable in a future content
+addition, or as a pattern worth checking on other libs that build on the
+same ES2-family `feature/npc/vendor.lpc`/`hockshop.lpc` lineage.
+
+### Deeper death-cycle testing (new ground, not covered by rounds one/two)
+
+Forced a real death via `call me->consume_stat("HP",9999)` as admin (round
+one/two only ever tested harmless point-to-point sparring against a
+`civilized` child NPC, never an actual death). Full cycle exercised and
+confirmed clean end to end, `debug.log` empty throughout:
+
+- Death correctly transitions `life_form` from `"living"` to `"ghost"`
+  (`CHAR_D->make_ghost()`), with the expected in-game death message and
+  stat-panel change (精/神 shown at reduced-but-full ghost values, 氣/`kee`
+  row temporarily absent from `score` while a ghost — this is `make_ghost()`'s
+  intentional `clear_temp_dbase()`/stat-remap behavior, not a display bug).
+- As a ghost: `look`, movement (`west`/`east`), and `say` all work
+  normally; inventory is correctly empty (nothing carried over).
+- `quit` while a ghost, then reconnect: `life_form` correctly persists as
+  `"ghost"` across save/restore (confirms ghost state isn't silently lost
+  on disconnect/reconnect — a plausible failure mode this round
+  specifically wanted to rule out).
+- `resurrect <name>` (the only player-reachable-by-proxy revival path in
+  this archive — see below) correctly flips `life_form` back to
+  `"living"` and applies the intentional death penalty (`kee`/氣
+  30 → 27, matching `chard.lpc`'s `make_living()`'s documented "corpse-less
+  revival loses 10% of max" logic).
+
+**Content-gap finding, not a bug, left alone**: the *only* code path that
+calls `CHAR_D->make_living()` (the ghost→living transition) in this
+archive is `cmds/adm/resurrect.lpc`, an admin-only command — there is no
+player-facing temple/prayer/NPC mechanism to self-resurrect in `d/snow`'s
+content, and no hostile/non-`civilized` NPC exists there either (per
+round two's finding), so in practice a mortal player who somehow dies
+(there is currently no reachable way to, since all `d/snow` NPCs are
+`civilized`) would need a wizard to `resurrect` them by hand forever, or
+be killed again as a ghost to trigger `LOGIN_D->reincarnate()` (karma-based
+character reset). This matches the same "missing daemon/class content"
+gap class already documented in round one (no player-facing progression
+content shipped beyond the single demo village) — the death/ghost/revival
+*machinery itself* is sound and bug-free, it's just missing a
+player-reachable front door in this content-limited archive.
+
+### Board/guild system investigation — confirmed unreachable, but for a
+benign content-gap reason (not a crash)
+
+Tried `board`/`list`/`post` at `/adm/guild/guildhall` (the only bulletin
+board room this archive references) — all returned "什麼？" (unknown
+command). Traced this to `guildhall.lpc`'s `create()` calling
+`load_object("/daemon/board/wizard")`, but `/daemon/board/` doesn't exist
+anywhere in this archive (confirmed via `update`: "沒有
+/daemon/board/wizard.lpc 這個檔案"). Since the board object never loads,
+its `add_action("do_post","post")` etc. never registers, so `post`/`read`
+correctly fall through to "unknown command" rather than crashing —
+graceful degradation, no uncaught error, `debug.log` stayed clean through
+this. `/adm/guild/` itself is confirmed (again) to be the OOC
+wizard-workshop area (巫師公會/巫師學院/會議廳, all `(admin)`-flavored text
+about researching LPC), not a player-facing sect/guild system — consistent
+with round one/two's finding that `d/snow` ships no player guild/sect
+content. `academy.lpc` has the identical `load_object("/daemon/board/lpc")`
+gap. Not fixed: missing shipped file (content gap), not a programming
+defect, and it doesn't affect any player-facing system.
+
+### Verification method
+
+Booted native `build-debug` driver fresh (debug.log removed first).
+Admin login (`fluffos`/`Mud@2026`). Tested: board/guild area (unreachable,
+traced to missing shipped file), store/herb_shop economy exploration
+(`list` correct), real `buy` transactions (multi-word bug found + fixed +
+reverified), full death→ghost→quit→reconnect→resurrect cycle (twice — once
+pre-fix baseline, once post-fix on a fresh restart). Used a throwaway
+wizard diagnostic command (`cmds/wiz/sstest.lpc`) to directly confirm
+`sscanf()`'s truncation behavior; deleted before commit, not part of the
+mudlib. Driver killed by exact PID after testing (single SIGTERM
+sufficed, no respawn this time). Incidental `.o` save-timestamp churn on
+`data/daemon.o` and the `fluffos` login/user saves (from cloning test
+money/items and the death/resurrect cycle) reverted via targeted
+`git checkout --` before commit; `boot.log` and `work/log/debug.log`
+(gitignored scratch) removed.
+
+### Files modified this pass
+
+- `work/feature/npc/vendor.lpc` — `affirm_merchandise()`: don't let a
+  failed `sscanf("%s %d", ...)` truncate the item name being looked up
+  (new fix, breaks `buy` for any multi-word item name).
