@@ -104,3 +104,26 @@ AGENTS.md 的已知 bug 类别清单出发逐项排查，而不是 sibling-check
   `mudclient.py --idle 1.0`（等于时钟跳动间隔）会和每秒一次的时钟
   刷新赛跑，导致后续指令永远发不出去（`wash`/`born`/`score` 全部
   石沉大海），改用 `--idle 0.5` 后立即解决。
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`/inherit/room/room`，见 `include/globals.h`）在 2,310 处
+房间文件的 `create()` 里紧跟 `inherit ROOM;` 之后又多余地调用了一次
+`replace_program(ROOM);`——和 AGENTS.md §7.100 记录的 `jhfy3`/其它
+姊妹档案同一形状的休眠 bug：这个多余调用给对象打上永久的"pending
+replace"标记，该对象一旦在生命周期里绑定任何闭包（`call_out`、
+`edit()`、自定义 `input_to`、房间外的 `set(..., (: ... :))` 等）就
+会崩溃。用已验证过的 `fix_710_room.py`（二进制模式，只删除内容严
+格等于 `replace_program(ROOM);` 的独立行）扫过 `work/`，删除 2,309
+处；剩余 1 处是房间生成工具 `clone/misc/roommaker.lpc` 里的
+`str += "...replace_program(ROOM);..."` 字符串拼接变体，手工改成
+`str += "\n\tsetup();\n}\n";`（同一工具另有一处 heredoc 模板已被脚
+本正常扫到）。另有 21 处是转档之前就已经被注释掉的 `//` 行，原样保
+留。`work/data/` 子目录下没有真实 `.lpc` 源码被脚本误跳过（唯一的
+`work/data/room/moman/*.lpc` 4 个文件本身没有这个 bug）。`git diff
+--stat` 确认 2309 个文件各删 1 行 + roommaker.lpc 1 处字符串编辑，
+与脚本自报数字吻合。修复后真实驱动干净启动（零新增编译错误、端口
+正常监听、`debug.log` 里没有任何"cannot replace"/"cannot bind"行），
+巫师账号 `fluffos`/`Mud@2026` 实测走了 2 个曾经被注释触发过这个 bug
+的房间（`d/city/library.lpc`、`d/mingjiao/shanlu3.lpc`）以及世外桃
+源出生点，`look`/`goto`/`quit` 全部正常，无回归。
