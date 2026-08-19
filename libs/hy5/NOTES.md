@@ -264,3 +264,24 @@ Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
 录本身产生的存档时间戳类微小 diff（`data/user/f/fluffos.o` 的
 `last_on` 字段）已用 `git checkout` 撤销，不提交。驱动最终按精确
 PID kill，`ps -p` 确认已退出。
+
+## §7.100 跨库扫描修复（`ROOM` 冗余 `replace_program()` 关闭包炸弹，2026-08-19）
+
+`inherit ROOM;` + `create()` 结尾冗余调用 `replace_program(ROOM);` 的
+致命形状（机制详见 AGENTS.md §7.100，与 §7.86 留言板崩溃同源，只是
+覆盖对象换成了几乎所有房间基类）。本库属于该扫描已知最大规模的
+10 个库之一。用二进制模式脚本机械删除了 12248 处独立、未注释的
+`replace_program(ROOM);` 整行（`git diff --stat` 与脚本自报删除数
+完全吻合），另手工修复了造房工具 `clone/misc/roommaker.lpc`/
+`d/ny/obj/roommaker.lpc`/`adm/roommaker.lpc` 代码生成模板里内嵌的
+同一形状（5 处，含一处 heredoc、四处字符串拼接），使新建房间不再
+继承这颗地雷。删除总数 12253，与本次扫描 FINDINGS.md 记录的
+`hy5` 存活命中数完全一致。
+
+验证：干净启动一次真实调试驱动（`build-debug/src/driver`），端口
+40183 正常监听，`work/log/debug.log` 全程无新增内容（无
+"cannot replace"/"cannot bind"/crash 行）。用已播种的
+`fluffos`/`Mud@2026` 管理员账号连线，在欢迎村一带往返走了十余个
+房间（`welcome`↔`new1`↔`qianzhuang`↔`dangpu`），`look`/`score`/
+`who` 均正常。测试产生的 `data/user/f/fluffos.o` 存档时间戳 diff
+已 `git checkout` 撤销，不提交。驱动按精确 PID kill。
