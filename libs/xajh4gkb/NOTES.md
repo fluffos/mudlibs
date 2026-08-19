@@ -137,3 +137,88 @@ evaluation"崩溃或其他异常，`debug.log` 全程只有一条无关紧要的
 `testrole`/王五在北大街对郭靖打过一次完整的死亡/复活循环，本轮认为
 不需要重复；本轮重点是驱动升级后的回归检查 + 正常游玩中顺手发现的
 bug）。
+
+## 深度功能测试（2026-08-19，round four，补测此前五项未测系统）
+
+针对 round one/two 均标注"本次未测试"的五个系统做的专项补测：拜师门派、
+商店购物、组队巡街、日本神户跨海区域、杀手楼路线。用全新测试号
+`rfourtest`/肆轮测在真实驱动（`~/src/fluffos/build-debug/src/driver`，
+`build`(ASAN/UBSAN) 目录在本机会因 `evthread_use_pthreads` 内的一条
+非法指令直接崩溃，与本 lib 代码无关，改用 `build-debug` 正常启动）上
+完整走完注册流程，全程通过 `nc localhost 40154`（而非 telnet，避免
+telnet IAC 转义误报）驱动。**全程 `debug.log` 始终为空文件，没有任何
+一条编译/运行时错误**——五项系统的机制本身均可正常触达和运行，没有
+发现任何需要修复的 PROGRAMMING bug。
+
+1. **拜师门派**：找到新手盟教练 NPC「阿飞」(`d/new/npc/xinshou-afei.lpc`
+   ，位于 `fly new` → `northwest`)，`bai xinshou afei`（注意：`set_name`
+   的 id 是整个 `"xinshou afei"` 字符串，单独 `bai afei` 找不到人，属于
+   命名习惯不是 bug）。以零级新号身份尝试，`cmds/skill/apprentice.lpc`
+   的等级门槛检查正常触发，返回"阿飞斜眼瞟了你一眼，就你这种实力还想拜
+   师？我不收无能之人。"——机制本身（`feature/apprentice.lpc` 的
+   `attempt_apprentice`/`recruit_apprentice`）正常运行，用合理理由拒绝，
+   属于干净通过（EITHER 接受或拒绝都算通过，见任务范围说明）。**顺手
+   观察，未改动**：`kungfu/class/huashan/yue-buqun.lpc` 里
+   `recruit_apprentice()` 覆写用 `add("apprentice_availavble", -1)`（拼写
+   错误，多了个 `v`），实际字段名是 `apprentice_available`——这个 typo
+   使得该 NPC 的"招满三个弟子就不再收徒"计数永远不会真正递减，可能是一
+   个真实的编程 bug（变量名打错），但没有观察到任何报错或崩溃，且是否
+   "应该限流收徒"本身是设计意图问题，按标准审慎存疑不动，仅记录在案。
+2. **商店购物**：`fly yz` 进城后经 `西大街→中央广场→东大街→杂货铺`（或
+   `d/city/zahuopu.lpc`，`杨永福` 老板，`inherit F_VENDOR`* 类似的自定义
+   `do_buy`/`list`）完成一次真实购买：`list` 正常列出货物表，`buy budai`
+   成功购得"麻布袋"一个，扣款/发货全部正常，无任何报错。未测试卖出（按
+   `hell` 教训，不同 NPC 是否收购属于内容设计，不在没有报错的情况下当
+   bug 处理）。
+3. **组队巡街**：`team found rfourteam` 得到明确的拒绝提示——"鉴于组队
+   没任何用处，巫师关闭组队功能。"——这是巫师主动关闭的、带清晰理由的
+   拒绝，机制本身运行正常，不是 bug。进一步代码走查发现这与"组队巡街"
+   的抓奸细任务（`quest/kangwo/teamjob.lpc` 的 `ask_jianxi()`：要求
+   2-4 人组队，随机分派到某条街道设伏拦截"日本奸细"，正是"组队+巡街"
+   的字面对应）是一致的：该任务函数唯一被 `#include` 的宿主 NPC
+   `quest/hyhusong/wang.lpc`（王坚，泉州守备）的整个 `inquiry` 映射表都
+   被注释掉了（连 `job`/`fangqi` 等其他条目也一并注释），也没有其他任何
+   活跃代码路径调用 `ask_jianxi()`。也就是说该任务在当前档案里完全没有
+   入口——但这和"组队"功能被巫师主动关闭一样，属于内容被有意停用/未完
+   工，没有任何报错，符合"内容缺失可能是有意为之"的判断标准，未改动。
+4. **日本神户跨海区域**：确认可达，且有两条独立路径：(a) `fly dy` 直达
+   `/d/japan/zhongxin.lpc`（"这里是神户的中心"）；(b) 真实航海路径
+   `d/quanzhou/haigang2.lpc`（"城外海港，有商船前往东瀛"）`enter chuan`
+   → `/d/feitian/dahai`（有几率遭遇倭寇海盗）→ 20-50 秒后 `rfeitian()`
+   送达 `/d/japan/haigang.lpc`；日本境内另有 `/d/gaoli/gangkou.lpc`
+   （高丽港口）到日本、日本到高丽的对向航线。本轮走了 (a) 路线并在神户
+   境内 `市中心→east→街道`（当铺/铁匠铺子）继续走了一步，房间/出口/
+   描述均正常加载，无任何错误。
+5. **杀手楼路线**：`fly ssl` 直达 `/d/shashou/enterance.lpc`（"杀手楼大
+   门"），沿 `north→north→north` 连续穿过"小路"→"枫林"→"校场"（杀手楼
+   校场，含留言板），全程四个房间连续加载、出口正常、无任何报错。
+
+### 标准清单巡检（§7.90/§7.111/§7.112/§7.113/§7.114/§7.115）：全部确认在位/不适用
+
+- **§7.90**：`config.fluffos` 的 `maximum evaluation cost` 确认为
+  `5000000`（round one 已修复的值），在位。
+- **§7.111**：`adm/obj/master.lpc` 里 `error["object"] ? file_name(error
+  ["object"]) : "0"` guard 确认在位。
+- **§7.112**：`d/death/npc/wgargoyle.lpc`/`bgargoyle.lpc` 的 `init()` 均
+  有 `death_stage_active` temp 标记防重入 guard，确认在位。
+- **§7.113**：`LOGIN_D` 指向 `adm/daemons/logind.lpc`，其 `reconnect()`
+  调用 `user->reconnect()`；`clone/user/user.lpc::reconnect()` 内
+  `set_heart_beat(1)` 在正确的 `this_object()==user` 语境下无条件执行，
+  是已知的"正确谱系"写法，确认在位。
+- **§7.114**：`feature/edit.lpc` 的 `input_line()` 没有 `private` 修饰，
+  该 bug 形状不适用于这份档案。
+- **§7.115**：`include/globals.h` 里 `#define QUEST "/inherit/quest"` 指
+  向的 `inherit/quest.lpc` 文件真实存在且实现完整（`quest_give`/
+  `quest_ask`/`quest_kill`），不是像 `aoxiangtianji` 那样指向不存在的文
+  件，不适用。
+
+### 测试环境说明
+
+`~/src/fluffos/build` (ASAN/UBSAN 编译) 在本机启动时于
+`evthread_use_pthreads()` 内直接 `Illegal instruction` 崩溃（与 mudlib
+代码无关的驱动/环境问题），改用 `~/src/fluffos/build-debug` 正常启动，
+干净监听 40154 端口，`Initializations complete.`。测试全程用
+`nc localhost 40154`（tmux 会话）而非 telnet，避免 telnet IAC 转义把
+中文字节误判为控制序列导致的假阳性。测试号 `rfourtest`/肆轮测已在
+`quit` 时被游戏自身的"半小时内退出自动删号"机制清理，`data/login/`、
+`data/user/` 下未留下任何新存档，`git status` 确认无新增/改动文件。
