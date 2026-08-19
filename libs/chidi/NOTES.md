@@ -461,3 +461,139 @@ function. No new bugs found this round; no changes made.
 
 Driver killed cleanly by exact PID at the end of this pass; confirmed
 dead via `ps -p`.
+
+## Round three deep functional test (2026-08-18)
+
+Standard 5-item checklist against a fresh `build-debug` boot, plus a
+death→revive→reconnect playthrough and a board post/read test that
+earlier rounds hadn't reached.
+
+**Checklist items 1/3/4/5 — already clean, no changes needed**:
+- §7.111 (`master.lpc`'s `standard_trace()`): already guards
+  `file_name(error["object"])` with `objectp()` at line 242
+  (`error["object"] ? file_name(...) : "<none>"`).
+- §7.113 (netdead reconnect losing `heart_beat`): the real reconnect
+  path IS `adm/daemons/logind.lpc`'s own `reconnect()` (line 1139),
+  which calls `user->reconnect()` unconditionally (not gated on
+  `silent`); `obj/user.lpc:110`'s `reconnect()` calls
+  `set_heart_beat(1)` directly on the player body. Not dead code, not
+  gapped — confirmed correct by inspection and live-verified below via
+  an actual net-dead-then-reconnect cycle immediately after a real
+  death.
+- §7.90 (eval cost): `config.fluffos` already has `maximum evaluation
+  cost : 10000000`, not the risky 700000 default.
+- `logind.lpc`'s `enter_world()`: both `user->save()` and `ob->save()`
+  present and uncommented (lines 914-915).
+
+**§7.112 (`init()` unguarded `call_out()` chain, reconnect double-fire)
+— found and fixed, but on DEAD CODE with zero live blast radius**:
+`d/death/npc/wgargoyle.lpc` and `d/death/npc/bgargoyle.lpc` (白无常/
+黑无常, reincarnation-desk NPCs) both had the exact vulnerable shape —
+`init()` unconditionally `call_out("death_stage", 0, <target>, 0)`
+with no re-entry guard, and `death_stage()` calling `ob->reincarnate()`
++ dropping inventory + moving to `REVIVE_ROOM`. However: neither NPC is
+actually spawned anywhere in this lib. `d/death/gate.lpc` (the real,
+live `DEATH_ROOM` = `/d/death/gate`) has its own `objects` entry for
+`npc/wgargoyle` **commented out**, and a corpus-wide grep for
+`wgargoyle`/`bgargoyle` outside their own two files turned up nothing
+else. This lib's actual reincarnation flow is implemented directly and
+*synchronously* inside `gate.lpc`'s own `init()` (no `call_out` at all
+— reincarnate/drop/move all happen in one uninterruptible call chain),
+so the real, live-reachable death path is not vulnerable to this bug
+class. Fixed the two dead-code NPCs anyway (matches an established,
+now-standard bug shape; consistent with this lib's own round-two
+precedent of proactively fixing a code-shape match without live
+reproduction — see round-two bug 4 above) — per-victim
+`set_temp("death_stage_active", …)`/`delete_temp(...)` guard set in
+`init()`, cleared at all 3 `death_stage()` exit points (early
+`!ob`/`!present` return, the `!is_ghost()` redirect branch, and right
+before `reincarnate()` on the success path). Both files are CRLF;
+edited via binary-mode Python to avoid line-ending churn (confirmed via
+`git diff --stat`: 9 lines changed each, no whole-file rewrite).
+
+**New real bug found and fixed — §7.11 pattern (missing `/log/nosave/`
+directory, unguarded `log_file()`), reproduced LIVE via the wizard
+`call` command**: `adm/simul_efun/file.lpc`'s `log_file(string file,
+string text)` (line 39) was a bare `write_file(LOG_DIR + file, text)`
+with no `assure_file()` guard, even though a correct, unused
+`assure_file()` helper already exists 300+ lines below in the same
+file (identical to the 6-instance pattern already catalogued in
+AGENTS.md §7.11). `log/nosave/` does not exist in this lib's `work/`
+tree (confirmed: 84 *other* libs in this project have it, chidi
+doesn't). Reproduced live: logged in as the seeded admin (`fluffos`)
+and ran `call qiuyan->die()` on an online test character —
+`cmds/adm/call.lpc`'s own audit-log call
+(`log_file("nosave/CALL_PLAYER", ...)`) threw an uncaught
+`*Wrong permissions for opening file /log/nosave/CALL_PLAYER for
+append. "No such file or directory"`, printed as a raw error trace to
+the admin's screen (via `master.lpc`'s `error_handler()`, working
+correctly per §7.111) and aborting the `call` command **before**
+`call_other(obj, args)` ever ran — so `me->die()` never actually fired.
+This is not confined to `call.lpc`: the same unguarded `log_file()` is
+shared by ~24 other `nosave/...`-prefixed call sites across the tree,
+including `adm/obj/master.lpc`'s own crash logger
+(`nosave/CRASHES`), `cmds/usr/passwd.lpc`'s password-change audit log,
+`cmds/std/suicide.lpc`, `cmds/adm/{purge,setskill}.lpc`,
+`cmds/wiz/kickout.lpc`, and `adm/daemons/securityd.lpc`'s promotion
+log — all of these would throw the same uncaught error and abort
+whatever command triggered them. (`feature/skill.lpc`'s
+`nosave/set_skill` logger is whitelist-gated to skip all the normal
+`xue`/`learn`/newbie-gift/combat-daemon paths, so it wouldn't have
+fired during either round's normal playthrough testing — consistent
+with neither round noticing it organically.) Fix: added
+`assure_file(LOG_DIR + file);` immediately before the `write_file()`
+call in `log_file()`, plus a one-line forward declaration
+(`void assure_file(string file);`) — confirmed required live: the
+first attempt without the forward declaration hard-aborted the whole
+boot (`Undefined function assure_file` → `No program in object
+'/adm/obj/simul_efun'!`, matching AGENTS.md §7.11's documented
+forward-reference gotcha exactly). Both edits are CRLF; applied via
+binary-mode Python (2-line and 1-line diffs respectively, verified via
+`git diff --stat`).
+
+**Verified live after the fix, fresh driver restart**: re-ran
+`call qiuyan->die()` — full death sequence played out correctly
+(combat-style death message, 〖江湖传闻〗 broadcast, gate.lpc's
+white-无常 reincarnation dialogue, item drop, move to `REVIVE_ROOM`
+i.e. 武庙/Wu Miao); `score` afterward showed 你共死亡 incremented to 1,
+`i` (inventory) showed empty (starting cloth correctly dropped);
+`log/nosave/CALL_PLAYER` now exists and contains the expected audit
+line. Immediately chained into a real net-dead-then-reconnect test
+(abrupt socket close, 3-second wait, fresh reconnect with the same
+credentials): "重新连线完毕", landed back in 武庙 correctly, no
+stranding, no error — confirms §7.113 still holds after a real death
++ reconnect sequence, not just an ordinary one. `work/log/debug.log`
+did not exist at all after this entire pass (only created on a real
+runtime error) — zero errors end to end.
+
+**Board post/read tested for the first time this lib** (earlier rounds
+never reached it): `d/board/towiz_b.lpc` (巫师反馈意见板), whose
+`create()`/`setup()` moves itself into `/d/wizard/guest_room`
+(reachable via `northwest` from the 武庙/wumiao start room) — confirmed
+this project's "board file force-loaded via a bogus `call_other(...,
+"???")` in the room's `create()`" idiom is just triggering the board's
+own `setup()`→`move(location)` chain, not dead code. This specific
+board's `do_post()` is wizard-gated (`if (!wizardp(this_player()))
+return 0;`), so tested as admin: `post <title>` → FluffOS line editor
+→ body text → `.` to save → "新贴子完成。" → `read 3` showed the new
+post with correct title/author/body. (Board already had 2 pre-existing
+posts carried over from the original archive's live save data,
+including one from a real historical player titled "投胎的时候被踢出
+来，没法投胎" — unrelated to this session's testing, left untouched.)
+Reverted the test post's save-file churn (`data/board/towiz_b.o`)
+before committing, along with the seeded admin account's routine
+login-timestamp churn (`data/login/f/fluffos.o`, `data/user/f/fluffos.o`)
+and the fresh test character's untracked save files
+(`qiuyan`, id/password `qiuyan`/`LoginPw456`, created and then removed
+— not kept as a seeded account).
+
+Driver restarted 3 times total this pass (initial boot, post-§7.11-fix
+attempt that hard-aborted on the forward-reference gotcha, final
+working build); final process killed by exact PID, cross-checked via
+`readlink /proc/<pid>/cwd` before killing, confirmed dead via `ps -p`.
+
+**Flag for other libs**: the `adm/simul_efun/file.lpc` unguarded
+`log_file()`/present-but-unused-`assure_file()` shape is now confirmed
+independently on at least 7 lineages project-wide (6 already catalogued
+in AGENTS.md §7.11 plus this one) — worth checking on sight in any
+future round-three pass, not just when a symptom already points at it.
