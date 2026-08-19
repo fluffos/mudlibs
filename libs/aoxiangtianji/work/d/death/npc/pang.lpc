@@ -43,18 +43,33 @@ void create()
 
 void init()
 {
+  object ob;
   ::init();
-  if( !previous_object()
-   || !userp(previous_object()) )
+  ob = previous_object();
+  if( !ob
+   || !userp(ob) )
     return;
-  call_out( "death_stage", 5, previous_object(), 0 );
+  // §7.112-class guard: enable_commands() re-broadcasts init() to every
+  // object in the room on every ordinary reconnect, so a ghost who
+  // reconnects mid-sequence would otherwise get a second, independent
+  // death_stage() call_out chain stacked on top of the first -- the
+  // stale chain later fires a duplicate reincarnate()/move(REVIVE_ROOM),
+  // silently re-dropping/re-unequipping gear wherever the player happens
+  // to be standing by then. Guard with a per-victim temp flag.
+  if( ob->query_temp("death_stage_running") )
+    return;
+  ob->set_temp("death_stage_running", 1);
+  call_out( "death_stage", 5, ob, 0 );
 }
 
 void death_stage(object ob, int stage)
 {
   if(!ob) return;
   if( !ob->is_ghost() )
+  {
+    ob->delete_temp("death_stage_running");
     return;
+  }
   if (environment(this_object()) != environment(ob))
   {
     message_vision("冥冥之中刮起一股阴风，将$N的鬼魂卷住不见了。\n", ob);
@@ -76,5 +91,6 @@ void death_stage(object ob, int stage)
   ob->set("sen", (int)ob->query("max_sen")/4);
   ob->move(REVIVE_ROOM);
   tell_room(environment(ob), "眼前一股青气飘荡，满满地聚成了一个人的样子。\n",({ob, ob}));
+  ob->delete_temp("death_stage_running");
 }
 

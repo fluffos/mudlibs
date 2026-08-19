@@ -394,3 +394,49 @@ id（3-8 个英文字母）→ 中文名字（二到四个字，重名会被拒�
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 24 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（第三轮，2026-08-18）——真实死亡→断线→重连→复活全流程，发现并修复一例 §7.112 同类 bug
+
+本轮延续第二轮留下的问题（经济系统定位、拜师系统、战斗），重点补上前两轮从未走到的：真实死亡（非 `fight` 切磋）→断线模拟→重连→复活的完整链路，以及留言板、当铺(拍当/卖断)经济系统。开始前先按标准清单核对了本次会话已固化的五类高价值 bug 模式。
+
+### 标准清单核对结果
+
+- **§7.111**（`master.lpc` `standard_trace()` 的 `file_name(error["object"])` 空指针）：`adm/obj/master.lpc` 内两处调用点（行 416、552）**均已带三元判空保护**（`error["object"] ? file_name(...) : "0"` 及 `(undefinedp(...)||!...) ? "(none)" : file_name(...)`），无需再动。
+- **§7.112**（gargoyle 血统 `wgargoyle.lpc`/`bgargoyle.lpc`）：本档案没有这两个文件名（`find -iname "*gargoyle*"` 零命中）。但**没有止步于按文件名判断**——按 AGENTS.md §7.112 "标准清单"要求，对全档案 `init()` 内 `call_out()` 做了针对性检查，在 `d/death/npc/pang.lpc`（本档案自己的地府判官 NPC，功能上与 `dtsl` 的 `yanluo.lpc`、其他血统的 `wgargoyle.lpc` 完全等价：五段式 `death_stage()` 引导亡魂复活）中找到了**本档案自己的、未被任何已有 sweep 命中过的真实实例**，详见下方"发现并修复"。
+- **§7.113**（netdead 重连不恢复 heart_beat）：读代码 + 实测双重确认**不存在**。`adm/daemons/logind.lpc` 的 `logon()`（约行 754：`user = find_body(...); if (!interactive(user)) { reconnect(ob, user); return; }`）是驱动实际调用的重连入口；其 `reconnect(object ob, object user, int silent)`（约行 1976）会调用 `user->reconnect()`，也就是 `obj/user/user.lpc` 的真正实现（非死代码），该实现正确地 `set_heart_beat(1); net_dead = 0;`。用真实断线+重连实测复核：管理员账号在整个死亡链路中用 `info` 观察未见异常（虽然 `info` 命令本身对在线角色用 id 字符串查找会返回"没有这样物件"——`info.lpc` 只支持 `present()`/`find_object()` 风格查找，不支持 `find_player()`，这是 `info` 命令自身查找逻辑的局限，**不是本次任务范围内的 bug**，未处理），但整个死亡→断线→重连→复活序列的**行为本身**（见下）已经足以证明 heart_beat 链路没有卡死。
+- **§7.90**（eval-cost 过低）：`config.fluffos` 的 `maximum evaluation cost : 30000000`，早已是本项目的高位修正值，非默认低值，无需再动。
+- **§7.11 类**（`log_file()`/`write_file()` 写入未随包的运行时目录）：审查了 `adm/simul_efun/file.lpc` 的 `log_file()`（确认**无 `assure_file()` 保护**，属于潜在风险形状）以及全档案约 50 处调用点涉及的目标子目录（`static/`、`wizcmds/`、`quest_xyj/` 等），逐一核对 `work/log/` 下这些子目录**全部随包存在**（`ls work/log/` 确认 `static`、`wizcmds`、`quest_xyj`、`channel`、`cmds`、`dig`、`player`、`quest`、`user` 均已随包创建）。本档案未命中 §7.11。
+- **`logind.lpc` `enter_world()` 的 `ob->save()`**：确认存在且非注释掉（约行 1551-1553：`user->save(); ... ob->save();`），无需处理。
+
+### 发现并修复：`d/death/npc/pang.lpc` 的 §7.112 同类 bug（未被此前的 gargoyle 专项 sweep 命中）
+
+`d/death/npc/pang.lpc`（阴阳界的"崔判官"NPC，玩家死亡后被送到这里走完五段式复活引导）的 `init()` 原样：
+```lpc
+void init()
+{
+  ::init();
+  if( !previous_object()
+   || !userp(previous_object()) )
+    return;
+  call_out( "death_stage", 5, previous_object(), 0 );
+}
+```
+没有任何重入保护。`obj/user/user.lpc` 的 `reconnect()`（第 349 行起）无条件调用 `enable_commands()`，而 FluffOS 会在 `enable_commands()` 时把房间内每个物件的 `init()` 重新广播一次——也就是说，一个正处在"阴阳界"五段对话/复活流程中的鬼魂玩家，只要恰好断线重连一次（哪怕只是网络抖动的几秒钟），就会在原有链条之外**额外堆叠一条完全独立的 `death_stage()` call_out 链**。第二条链最终仍会各自跑到 `ob->reincarnate()`（该函数默认 `wakeup=0` 分支会把玩家身上所有物品 unequip 并 `command("drop ...")` 全部丢弃）以及 `ob->move(REVIVE_ROOM)`，于是玩家在**已经复活、正常游玩一段时间之后**，会在某个随机的后续时刻被无声地二次强制传送回复活点，并把当时正穿戴的所有装备原地丢在地上——没有任何报错，纯粹的静默破坏性 bug，和 AGENTS.md §7.112 原始发现（`dtsl` 的 `yanluo.lpc`）在功能形状上完全一致，只是这里的 NPC 换了名字和文案（"崔判官"而非"阎罗王"/"石像鬼"），因此没有被基于 `wgargoyle.lpc`/`bgargoyle.lpc` 文件名的原始 corpus sweep 覆盖到。
+
+**修复**（`d/death/npc/pang.lpc`，纯 LF 文件，无 CRLF 顾虑）：给 `init()` 加了按受害者（`ob`）区分的 `set_temp`/`query_temp`/`delete_temp("death_stage_running")` 重入锁，在链条正常终点（`reincarnate()`+`move(REVIVE_ROOM)` 之后）和提前退出分支（`!ob->is_ghost()`）都清除该标记，写法与 AGENTS.md §7.112 记录的标准修复形状一致。
+
+**实测验证**（修复后重启驱动，双连线编排：管理员连线 A + 测试角色连线 B/C）：
+1. 用全新注册角色 `axtjrsan`（阮三），管理员执行 `call axtjrsan->die()` 制造真实死亡（非 `fight` 切磋），角色正常死亡、被送入"阴阳界"，崔判官 `init()` 触发，第一、二段对话按 5 秒间隔正常出现。
+2. 在第二段对话后**直接关闭 socket B（不发送 quit，模拟断线）**，2 秒后用新 socket C 以同一账号重新连线——`logind.lpc` 立即判定 `!interactive(user)` 走 `reconnect()` 分支，显示"重新连线完毕"，没有走"是否踢掉旧连线"的确认分支（证明是真断线而非仍在线的旧连线冲突）。
+3. C 连线上收到的后续对话**只完整播放了一次**（第三、四段对话 + 最终"崔判官伸手向你一指...魂魄又回到了自己身上"+复活传送到"荒郊小店"），reconnect 触发的 `init()` 重新广播被新加的重入锁正确挡住，没有出现重复的复活消息或二次强制传送——在 reconnect 后又等待了完整 25 秒宽裕窗口以捕捉可能的"迟到"第二条链，未见任何异常。
+4. `work/log/debug.log`（本次会话从空文件开始）全程只有驱动启动噪音（211 行），没有任何来自这次死亡/断线/重连/复活序列的运行时错误。
+
+### 经济系统：确认定位，两条真实可用路径，此前"未找到真正商店"的疑问已解决
+
+- **`obj/shop/*.lpc`（"百宝斋"等 9 个跨城市同款商店，通过如 `/d/city/majiu` 的 `up` 出口进入）全部在 `create()` 里硬编码 `set("shop_type", 0)`**（`adm/daemons/shopd.lpc` 里 `shop_type` 的语义明确写着"0 表示关闭"，且 `do_list`/`do_buy`/`do_sell`/`do_pawn`/`do_retrieve` 全部有 `if (!room->query("shop_type")) return "对不起，该店铺目前已经被巫师关闭。\n";` 的门禁）。9 处实例**全部**是 0，没有一个例外，且开关本身就是标准巫师指令（`shopd.lpc` 里的 `open_shop`/`close_shop`）能操作的运营状态位——这是这份档案"商店需要巫师上架/开张才能营业"的运营设计（游戏管理员的常规工作，不是玩家能触发的路径），**不是编程 bug**，未做任何改动。这与第二轮"起始客栈附近没找到杂货铺/兵器店"的观察吻合并给出了确切原因。
+- **真正对普通玩家开放、随开随用的经济路径是当铺（`std/room/hockshop.lpc`，如 `/d/city/dangpu_e` 古记当铺）**：`value <物品>`（估价）、`sell <物品>`（卖断，一次性换钱）、`pawn <物品>`（典当，可赎回）均已实测正常工作——管理员账号把起始装备"锦缎"用 `sell jinduan` 卖给当铺，正确收到"二两白银又四十文钱"，`i` 确认物品消失、`Coin`/`Silver` correctly 入包。这条路径此前两轮均未测试到，本轮补完。
+- **留言板**（`std/item/bboard.lpc`）：在南城客栈自带的留言板上 `post <标题>` → 输入正文 → `.` 结束（不是 `@`，编辑器提示"结束离开用 '.'"）→ `read 1` 正确显示刚发的帖子（标题、作者、时间、正文全部正确）。普通玩家发帖需要"读书识字"技能 ≥30（`do_post()` 里的门槛判定），这是设计门槛（新手还没学识字技能），未作为 bug 处理。
+
+### 本轮结论
+
+发现并修复一例真实、跨会话已证明高价值的 §7.112 同类静默复活重复 bug（`d/death/npc/pang.lpc`），已实测验证死亡→断线→重连→复活全链路在修复后正确无重复；经济系统的两条真实路径（当铺 sell/pawn、留言板 post/read）均已实测确认可用，商店"全部关闭"确认是巫师运营设计而非 bug；标准五项检查清单（§7.90/§7.11/§7.111/§7.112/§7.113）逐项复核，除本轮新修复的 pang.lpc 外均确认此前记录有效或本档案不适用。**AGENTS.md §7.112 的通用教训在此再次成立：文件名匹配（`wgargoyle.lpc`）的机械 sweep 无法覆盖所有同功能异名 NPC，任何后续档案的深度测试都应该独立按"`init()` 内无保护 `call_out()`"这一行为特征去查，而不是只看文件名。
