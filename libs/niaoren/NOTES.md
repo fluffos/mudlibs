@@ -465,3 +465,153 @@ ob->query("age") == 14)`，前两个条件读 `user`（玩家身体），最后�
 未变化（`Jul 24`，早于本次会话），确认无新增未捕获运行期错误。登
 录本身产生的存档时间戳类微小 diff 已用 `git checkout` 撤销，不提
 交。驱动最终按精确 PID kill，`ps -p` 确认已退出。
+
+## 深度功能测试（第四轮，2026-08-19）——经济系统（商店买卖）验证，发现并修复两个真实 crash
+
+前几轮已确认战斗、拜师均正常工作，唯独经济系统（真实商店买卖）一
+直未测试。本轮专门针对欢迎文本提到的"到雜貨店去買金絲甲"、"到醉
+仙樓去買東西吃"这两家店做完整验证，过程中发现并修复了两个独立的
+真实 programming bug（均为无保护的运行期错误，非平衡性/内容设
+计问题），验证了经济系统本身是可用的。
+
+### Bug 1：`toptend.lpc::topten_add()` 的 `sscanf` 传错参数（AGENTS.md
+### 排行榜家族 bug 的第 N 个独立实例，同一 codebase 血统里的确认）
+
+新号注册流程（`logind.lpc::get_gender()` → `enter_world()` →
+`TOPTEN_D->topten_checkplayer()` → `topten_add()`）在 `debug.log`
+里稳定触发一条未捕获运行期错误：
+```
+執行時段錯誤：*Bad argument 1 to sscanf
+Expected: string Got: ({ ... }).
+程式：/adm/daemons/toptend.lpc 第 319 行
+```
+`topten_add()` 解析既有排行榜文件的 fallback 分支把整个 `explode()`
+结果数组 `astr` 传给了 `sscanf()`（应该传当前行 `astr[i]`）：
+```lpc
+if(sscanf(astr[i],"%s(%s)%d",name,id,data)!=3)
+    if(sscanf(astr,"%s(%s)%d;%*s",name,id,data)!=3)   // 应为 astr[i]
+        return notify_fail(...);
+```
+这正是 AGENTS.md 里已经记录过的、`toptend.lpc` 这个共享守护进程反
+复出现的第三种独立 bug 形状（"whole line-array passed to sscanf
+instead of current line"，此前在 `xixingzhanji` 等库独立发现过），
+`niaoren` 与 `cctx` 共享同一份 `toptend.lpc`（含 `add by
+jackyboy@cctx 1999/3/8` 注释残留），这次是这份共享代码在 `niaoren`
+这一支里独立复现。因为 `enter_world()` 里 `user->move(startroom)`
+先于 `TOPTEN_D->topten_checkplayer()` 执行，未捕获错误只会截断
+`enter_world()` 尾部两个 `set_temp("temp_exp"/"temp_time", ...)`
+调用，不影响玩家进入起始房间本身——注册/进游戏表面上看起来完全正
+常，只有翻 `debug.log` 才能发现。修复：`astr` → `astr[i]`（第 319
+行），`update /adm/daemons/toptend` 热编译后用第二个全新角色重新
+注册验证：`debug.log` 干净，无新增 `執行時段錯誤`。
+
+### Bug 2：`feature/dealer.lpc`（商人 mixin）对 `vendor_goods` 里指
+### 向不存在档案的条目没有任何保护，导致 `list`/`buy` 直接崩溃
+
+`d/city/npc/yang.lpc`（雜貨鋪老板 楊永福，正是欢迎文本"到雜貨店去
+買金絲甲"指的那家店）的 `vendor_goods` 数组里有一条
+`"/u/sunpoet/torch.lpc"`——这份档案在整个 archive 里根本不存在
+（`work/u/sunpoet/` 目录都没有；`sunpoet` 是原始 admin 账号之一，
+这条大概率是残留的、从未真正落地的赠品引用）。`feature/dealer.lpc`
+的 `is_vendor_good()`／`do_list()` 对 `vendor_goods` 数组里每一项
+都直接 `->id(arg)`／`->short()`／`->query("value")`，任何一项文件
+缺失都会抛出未捕获的 `*call_other() couldn't find object` 错误，
+**且是无保护的**——玩家在楊老板店里打 `list` 或 `buy <任何东西>`
+都会先崩这一条，`list` 崩到看不全后半段商品，`buy` 直接崩到完全买
+不了任何东西（`is_vendor_good()` 遍历数组时崩在缺失条目上，永远走
+不到匹配的正常条目那一步，取决于崩溃条目在数组里的位置）。这是一
+个真实 crash（有明确 `debug.log` trace，非"店家拒绝"/"功能未实现"
+这类设计范畴），修复方式沿用项目里 §7.115（`QUEST` 宏）同款"保护
+调用点，不发明缺失档案"的原则：`is_vendor_good()`／`do_list()` 里
+每次访问 `vendor_goods[i]` 前都包一层 `catch()`，缺失条目静默跳
+过、不影响数组里其余条目正常展示/购买。这个 mixin 是通用商人基
+类，`sell`/`value` 两个函数没有类似逐项遍历 `vendor_goods` 的写
+法，未改动。修复后重新验证：`list` 完整列出楊老板全部商品（缺失
+的那一条被跳过，后面的"袋子"等条目正常显示），`buy jia`（金絲甲
+的实际关键字是 `"jinsi jia"`/`"jia"`，不是欢迎文本字面的
+"金絲甲"三个字，第一次用错关键字试成了"你想買什么？"，换关键字后
+成功）扣款、拿到物品全部正确。
+
+### 经济系统完整验证（两笔真实交易，金额扣减/物品到手均正确）
+
+用已注册好的测试号 `qinjinghuo`（管理员账号 `eval
+MONEY_D->pay_player(...)` 现场充值 10 兩黃金，模拟"缺錢花，也可以
+請老玩家幫你暫渡難關"这句欢迎文本里描述的、新手找人接济的机制，
+而不是发明一个游戏本身没有的起始资金）：
+
+- **雜貨鋪**（`/d/city/zahuopu`，客店 west→north→east→south 或从
+  中央廣場 east→dongdajie1→south 可达）：`buy jia` 从 10 兩黃金扣
+  到 7 兩黃金（金絲甲标价"三兩黃金"，扣款 3 兩，精确匹配），
+  `i` 确认背包里多了"金絲甲(Jinsi jia)"。
+- **醉仙樓**（`/d/city/zuixianlou`，北大街东边）：`buy baozi` 从 7
+  兩黃金扣到"六兩[白銀]九十九兩[銅板]五十文"（即 69950 文，包子
+  标价"五十文銅板"，精确扣掉 50 文，驱动自动拆整找零逻辑正常），
+  `i` 确认背包里多了"包子(Baozi)"。
+- **卖出测试**（按任务要求做了，但确认是设计范畴不是 bug）：对楊
+  老板/醉仙樓店小二两家店分别 `sell baozi`/`sell jinsi jia` 都返
+  回"什么？"（命令未识别）——追查代码发现 `feature/dealer.lpc` 里
+  确实有 `do_sell()` 函数体，但 `yang.lpc`/`xiaoer2.lpc` 的
+  `init()` 都只 `add_action("do_buy","buy")`/`add_action("do_list",
+  "list")`，从未给任何一家普通商店 `add_action` 过 `"sell"`。全库
+  搜了一遍谁真的 wire 了 `"sell"`：只有 `feature/pawn.lpc`、
+  `inherit/room/hockshop.lpc` 和几个明确带"当铺/估价"性质的 NPC
+  （`aqingsao`/`wei`/`tang` 等）。这和本项目此前在 `hell` 上踩过
+  的近失误一模一样——普通杂货店/食肆本来就设计成只卖不收，只有当
+  铺类 NPC 才回收物品，**不是 bug，未做任何改动**。
+
+### 标准 bug 清单快速核对（本轮，均已 corpus-sweep 过，抽查确认无异常）
+
+- **§7.90**（eval-cost 上限）：`config.fluffos` 第 40 行
+  `maximum evaluation cost : 5000000`，已是标准值，无需改动。
+- **§7.111**（`master.lpc::standard_trace()` 的
+  `file_name(error["object"])` 未保护）：真正被驱动加载的 master
+  文件是 `config.fluffos` 里配置的 `/adm/obj/master`，其
+  `standard_trace()` 已经是 `objectp(error["object"]) ?
+  file_name(...) : "(driver)"` 的正确保护形式。另有一份
+  `/adm/single/master.lpc`（`MASTER_OB` 宏指向的辅助对象，供
+  `domain_file()`/`author_file()` 等 call_other 用）里的
+  `standard_trace()` 确实是未保护的旧写法，但全库搜索确认没有任何
+  地方真的调用 `MASTER_OB->standard_trace(...)`——是死代码，不影响
+  实际错误处理路径，未改动。
+- **§7.112**（NPC `init()` 里无保护重复 `call_out` 死亡阶段链）：
+  `d/death/npc/{bgargoyle,wgargoyle}.lpc` 都已经有
+  `query_temp("death_stage_active")` 防重入保护（AGENTS.md 里记录
+  `niaoren` 正是最终查漏补缺那 4 个库之一，已在更早的 wave
+  之外单独修过），本轮确认保护仍然完整存在。
+- **§7.113**（netdead 重连不恢复 `heart_beat`）：`adm/daemons/
+  logind.lpc::reconnect()` 无条件调用 `user->reconnect()`，
+  `clone/user/user.lpc::reconnect()` 无条件 `set_heart_beat(1)`，
+  是正确血统（本库不在 AGENTS.md 62 库候选名单里被专门列出过，本
+  轮直接静态核对，链路正确）。
+- **§7.114**（`private input_line()` 通过 mixin inherit 导致递归
+  `input_to()` 静默失效）：`grep -rl 'private.*input_line'` 全库零
+  命中，不适用。
+- **§7.115**（`QUEST` 宏指向不存在档案）：`include/globals.h` 里根
+  本没有 `QUEST` 宏定义，也没有任何 `QUEST->` 调用点，不适用。
+
+### 其他观察（未处理，记录以备将来参考）
+
+- 第一次全新 boot（本轮 fix 之前）在加载 `/adm/daemons/httpd` 时
+  `debug.log` 打印过一次 `Too deep recursion.`（`program:
+  /adm/obj/master.lpc, object: /adm/obj/master, file:
+  /adm/obj/master.lpc:341`），驱动随即正常继续完成剩余 daemon 编
+  译并进入 `Accepting telnet connections`；`httpd.lpc::create()`
+  本身没有被本项目 §7.52 那种"gut 掉 socket 守护进程"的处理过（仍
+  然完整 `call_out("setup",5)` + 频道公告），不属于那个已知模式。
+  修完上面两个 bug 后的第二次全新 boot 未复现这条 recursion 打印，
+  怀疑是编译顺序/依赖加载时序相关的一次性瞬态，而非稳定可复现的
+  driver-level bug——记录在案，但没有足够证据认定是真实 bug，未
+  作任何改动（按"不确定就不动"的原则处理）。
+- `work/data/{user,login}/q/qinzhandou.o` 是一个 2026-08-18（本轮
+  之前一天）就存在的未跟踪测试号存档，明显是上一轮（拜师/战斗测
+  试）遗留、未清理干净的痕迹，不是本轮创建的，本轮未触碰。
+
+### 清理与收尾
+
+测试号 `qinjinghuo`（经济测试主号）、`qinerhuo`（topten 修复验证
+用的干净对照号）的存档在验证完成后已删除
+（`work/data/{user,login}/q/{qinjinghuo,qinerhuo}.o`）。管理员账
+号 `fluffos` 因本轮登录/`update`/`eval` 操作产生的存档时间戳更新
+属于正常存档演进，已随本轮改动一并提交。驱动全程用精确 PID
+kill（两次重启各自记录 PID，`kill <pid>` + `ps -p <pid>` 确认已退
+出），未使用任何 pattern-match 方式。
