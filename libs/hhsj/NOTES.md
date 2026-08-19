@@ -379,3 +379,26 @@ simul_efun.lpc` 的 `append_color()`、`adm/daemons/band.lpc` 的
   升级测试角色到一定等级后村庄本身可能会开放更多区域；(3) 死亡机制本
   身的代码（`inherit/char/`、`d/register/yanluodian.lpc`）值得直接读
   代码先确认死亡触发条件和复活流程的实现，不必完全依赖实战复现。
+
+## AGENTS.md §7.100 修复（2026-08-19）
+
+同 `jhfy3` 起源发现的 `ROOM` 基类冗余 `replace_program(ROOM);` 自崩
+溃地雷（详见 AGENTS.md §7.100）：本 lib 4984 个房间文件的 `create()`
+末尾（紧跟 `inherit ROOM;`）都有这一行多余调用，第一次对该房间对象
+绑定闭包会永久失败。同款地雷也烤进了自带建房工具
+`clone/misc/roommaker.lpc` 的一处字符串拼接代码生成模板。
+
+修复：脚本化删除所有房间文件里独立成行的 `replace_program(ROOM);`
+（`d/huangshan/banshan.lpc` 有两处独立调用，均删除），加上
+roommaker.lpc 里手动摘除字符串拼接片段。`git diff --stat`：4985
+files changed, 1 insertion(+), 4987 deletions(-)，与预期精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40106 正常监听，
+`debug.log` 全程干净。管理员 `fluffos` 账号（本 lib 特有的"自连数
+据库"登录握手：单行 `id,password,x,email`，收到 `ver1.0,...`/"版本
+验证成功" 后再发送）`goto` 走访 14 个刚修复的房间（`d/huanggong`/
+`d/yuanyue`/`d/lingxiao`/`d/luoyang`/`d/taishan`/`d/huijiang`/
+`d/newbie`/`d/item`/`d/death`/`quest/zhuzao` 等区域），均正常返回，
+无 "cannot replace"/"cannot bind" 新增日志行。按精确 PID 结束驱
+动；登录产生的存档增量已通过 `git add -u` 只暂存已跟踪文件规避（未
+跟踪的 `.o` 存档文件本就是会话开始前已存在的未跟踪状态，未触碰）。
