@@ -897,3 +897,13 @@ closed.lpc`，不受 §7.107 影响。
 
 - `work/adm/simul_efun/file.lpc`
 - `work/obj/user/user.lpc`
+
+## §7.100 修复（`ROOM` 基类的同一"多余 replace_program()"形状，全档案扫描第 6 批）
+
+- 删除 2,526 处存活的 `replace_program(ROOM);` 相关行，与普查记录一致。
+  除标准脚本删除外，手工修复三处不规则形状：`obj/wizard/
+  roommaker.lpc` 模板、`wiz/zling/roommaker3.lpc`（3 处 `room_code`/
+  `str` 拼接变体）、`wiz/zling/txmap.lpc` 的行尾注释变体
+  （`replace_program(ROOM);  //`）。
+- 验证：真实 `build-debug` 驱动干净开机、端口正常监听，`debug.log` 中
+  零 "cannot replace"/"cannot bind" 行。
