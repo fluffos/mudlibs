@@ -68,3 +68,22 @@
 食物/饮水满格。随后用独立裸 socket 脚本做了真实断线重连+密码验
 证：成功登录，`(admin)` 权限确认，存档数据一致。全程 `debug.log`
 无运行时错误。驱动按精确 PID 结束；管理员存档已提交。
+
+## AGENTS.md §7.100 fix (2026-08-19): redundant replace_program(ROOM) landmine
+
+Same corpus-wide bug as the batch-1-6 sweep (`ROOM` macro
+`"/inherit/room/room"` from `include/globals.h`). Deleted 2,323 live
+standalone `replace_program(ROOM);` lines under `work/` via
+`fix_710_room.py`, plus hand-fixed both room-building tool copies'
+string-builder template (`work/clone/misc/roommaker.lpc`,
+`work/u/landy/obj/roommaker.lpc`). 3 real `.lpc` files under
+`work/data/` checked — none had the bug pattern. Remaining matches
+after the fix are all pre-existing `//`-commented.
+
+Verified: clean `build-debug` boot (zero new compile errors, zero
+"cannot replace"/"cannot bind" in `debug.log`), live admin login
+(`fluffos`/`Mud@2026`) into 铁枪庙, `look`/`score`/`quit` all worked
+cleanly. Same sibling-lineage quirk as `wlhd`/`tybxjh`: `quit` deleted
+`data/login/f/fluffos.o` even though it had just been used to log in
+— reverted via `git checkout HEAD -- work/data` before committing,
+unrelated to this fix and out of scope.
