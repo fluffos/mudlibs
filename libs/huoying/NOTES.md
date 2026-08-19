@@ -577,3 +577,23 @@ Naruto 题材的 ES2/Neolith 引擎 mudlib（火影）；这是正统、可游�
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 8 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.114 fix: `private input_line()` broke multi-line `to`/board/mail/chfn input (2026-08-19)
+
+Same ES2-ancestry bug as `zzhj`/`shzs`/`dfgs2` (AGENTS.md §7.114):
+`work/feature/user/edit.lpc` (this lib's `F_EDIT` mixin, inherited by
+`obj/user.lpc`) declared its `input_to()` re-arm target `private`:
+`private void input_line(string line, string text, function callback)`.
+The recursive re-arm from inside `input_line()` silently failed to
+register once reached through the inherited mixin, so any multi-line
+`.`-terminated input session (board post, `to`, mail, `chfn`) dropped
+everything after the first line. Fix: dropped `private`.
+
+Live-verified on a fresh driver boot (port 40059), fresh character
+(`秦三八`/`qinsanba`): `to say` → two lines of text → `.` → resulting
+`say` output showed both lines (`你说道﹕test line one\ntest line two`),
+not truncated after line 1. Killed the driver by exact PID when done.
+
+Files modified this pass:
+- `libs/huoying/work/feature/user/edit.lpc` — dropped `private` from
+  `input_line()`.
