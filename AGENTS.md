@@ -7129,13 +7129,63 @@ line after any-content-accepted first line) that cost significant
 verification time to reverse-engineer — see that lib's own NOTES.md
 for the working recipe.
 
-**156 libs from the survey's >=100 list remain unfixed** — this is a
+**Fix-phase batch 2 (2026-08-19), next 9 libs by impact**: continuing
+straight down the ranked list from batch 1 (`xyzxfy2` through
+`xajh4gkb`, ranks 11-19 of the >=100 list). Same method as batch 1.
+One new wrinkle worth flagging for future batches: on the shared
+NT/nitan/Lonely lineage (`hhsj`/`xfbhh`/`nitan170911`/`nt6`/
+`nt6nitan6win`/`nitan6`), the room-builder tool's second redundant
+call lives inside a `str += "...replace_program(ROOM);..."`
+string-builder line, which `fix_710_room.py`'s exact-standalone-line
+match correctly leaves alone (by design — it only deletes bare
+`replace_program(MACRO);` lines) — this needs a small manual
+string-replace pass on `clone/misc/roommaker.lpc` every time, same
+one-liner: replace `str += "\n\tsetup();\n\treplace_program(ROOM);\n}\n";`
+with `str += "\n\tsetup();\n}\n";`. `git diff --stat`'s deletion count
+was cross-checked against script output + this manual fix on every
+lib; all matched exactly.
+
+| lib | live occurrences deleted | roommaker copies fixed | commit |
+|---|---|---|---|
+| xyzxfy2 | 5,243 | 2 (`clone/misc`, `u/fyue/misc`) | `41ce92d3203` |
+| hhsj | 4,987 | 1 (`clone/misc`) | `fa217dfc710` |
+| xfbhh | 4,987 | 1 (`clone/misc`) | `66a18162afd` |
+| nitan170911 | 4,979 | 1 (`clone/misc`) | `a41a7053462` |
+| nt6 | 4,928 | 1 (`clone/misc`) | `ec7642382d5` |
+| nt6nitan6win | 4,928 | 1 (`clone/misc`) | `49673cbde34` |
+| nitan6 | 4,928 | 1 (`clone/misc`) | `67b4f43e46e` |
+| xyzxyl201412 | 4,837 | 2 (`clone/misc`, `u/fyue/misc`) | `b8d56b136b4` |
+| xajh4gkb | 4,747 | 1 (`clone/misc`) | `dc825c2430a` |
+
+**Batch 2 total: 44,564 live occurrences deleted across 9 libs.**
+Notable finds: `hhsj`/`xfbhh`/`nitan170911`/`nt6`/`nt6nitan6win`/
+`nitan6` share the exact same `d/huangshan/banshan.lpc` doubled-call
+file seen in batch 1's `haiyang2`/`xkx100` (both instances removed
+each time). Two admin-account access hiccups worth noting for future
+batches on this same corpus: `nitan170911` has no seedable admin
+account at all (MySQL-dependent registration, degrades gracefully per
+its own README) — verified via boot + connectivity check + confirming
+the documented DB-unavailable rejection message still fires, no
+room-walk possible; `nt6`'s documented `fluffos` save had a password
+that no longer matched its README (likely drifted from an earlier
+test session) — rather than delete player save data (out of scope),
+registered a second wizlist-listed id (`wuji`) fresh to get an admin
+walk instead. Two unrelated pre-existing content bugs spotted in
+passing on `xyzxyl201412` (undefined NPC skill "xuantie-sword") and
+`xajh4gkb` (`carry_object()` "*Read access denied." on one NPC) — both
+confirmed unrelated to the replace_program regression (debug.log had
+zero "cannot replace"/"cannot bind" lines in both cases) and left
+unfixed, out of scope for this sweep.
+
+**147 libs from the survey's >=100 list remain unfixed** — this is a
 large remaining backlog for future sweep batches, same shape, same
 fix, just needs the same per-lib verification discipline (this bug's
 fix is mechanically simple but each lib still needs its own compile
 + live-boot verification, which is the real bottleneck, not the edit
-itself). Pick up alphabetically or by remaining impact from
-`candidates_ge100.tsv`/`FINDINGS.md` in the survey scratchpad.
+itself). Pick up by remaining impact from `candidates_ge100.tsv`/
+`FINDINGS.md` in the survey scratchpad — next up: `ylfyxa3` (4,692),
+`zxty` (4,478), `hy2002` (4,436), `xiakexing100` (4,430),
+`xajhzcjh` (4,239), `chidi` (4,030), and onward.
 
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
