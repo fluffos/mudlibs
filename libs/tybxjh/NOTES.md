@@ -246,3 +246,23 @@ emote 修复无关，删除/不删除损坏档案都一样会触发）：
 - `data/board/`、`data/{login,user}/t/testfixseven.o` 是此前会话遗
   留的未提交测试痕迹——`Aug 5` mtime，早于本次会话，未受本轮任何
   操作影响，未触碰。
+
+## AGENTS.md §7.100 fix (2026-08-19): redundant replace_program(ROOM) landmine
+
+Same corpus-wide bug as the batch-1-6 sweep (`ROOM` macro
+`"/inherit/room/room"`, same `tybxjh`/`wlhd` sibling lineage as
+`include/globals.h` confirms). Deleted 2,376 live standalone
+`replace_program(ROOM);` lines under `work/` via `fix_710_room.py`,
+plus hand-fixed the room-building tool's string-builder template
+(`work/clone/misc/roommaker.lpc`). `work/data/` only had 2 real
+`.lpc` files, neither with the bug pattern — no false negative.
+Remaining matches after the fix are all pre-existing `//`-commented.
+
+Verified: clean `build-debug` boot (zero new compile errors, zero
+"cannot replace"/"cannot bind" in `debug.log`), live admin login
+(`fluffos`/`LoginPass456`) into the game world, `look`/`score`/`quit`
+all worked cleanly. Same sibling-lineage quirk as `wlhd`: `quit`
+deleted `data/login/f/fluffos.o` (credential file) even though it had
+just been used to log in successfully — reverted via
+`git checkout HEAD -- work/data` before committing, unrelated to this
+fix and out of scope.
