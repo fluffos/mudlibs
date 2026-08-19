@@ -812,3 +812,23 @@ Continue" → 密码），`score`/`update /adm/simul_efun/file`（就是本
 （`Jul 23`，早于本次会话），确认无新增未捕获运行期错误。登录本身
 产生的存档时间戳类微小 diff 已用 `git checkout` 撤销，不提交。驱
 动最终按精确 PID kill，`ps -p` 确认已退出。
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`/inherit/room/room`）在本档案 2,073 处房间文件的
+`create()` 里紧跟 `inherit ROOM;` 之后又多余调用了一次
+`replace_program(ROOM);`——AGENTS.md §7.100 记录的同一个休眠 bug。
+用 `fix_710_room.py` 扫过 `work/`，删除全部 2,073 处标准形状，与脚
+本自报数字、`git diff --stat` 净删行数完全吻合。`clone/misc/
+roommaker.lpc`（本档案的房间建造工具）确认从未含有这个 bug（两处
+`ROOM_CODE`/字符串拼接模板都只有 `setup();`，没有多余的
+`replace_program`），无需修复。修复后 `work/` 下 0 处存活残留，剩
+余 118 处均为转档之前已注释掉的 `//` 行，原样保留；`work/data/`
+下没有真实 `.lpc` 源码命中。
+
+驱动干净启动（零新增编译错误、端口 40088 正常监听、`debug.log`
+无任何"cannot replace"/"cannot bind"行）。管理员 `fluffos`/
+`Mud@2026`（先选 `gb` 编码、"Press Enter to Continue"）实机登录成
+功，`look`/`score`/`quit` 均正常，全程 `debug.log` 保持干净。管理
+员存档的时间戳漂移已用 `git checkout HEAD --` 还原，未提交。驱动
+按精确 PID 结束。
