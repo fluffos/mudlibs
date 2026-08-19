@@ -258,3 +258,27 @@ debug.log 无其它报错。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 40 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`include/globals.h` 里定义了两次——`/std/room` 后又被
+`/inherit/room/room` 重新定义，驱动的"Macro redefined"警告确认后
+一个生效，但宏名本身不受影响，不影响这次扫描的匹配）在本档案
+2,210 处房间文件的 `create()` 里紧跟 `inherit ROOM;` 之后又多余调
+用了一次 `replace_program(ROOM);`——AGENTS.md §7.100 记录的同一个
+休眠 bug，和上面 §7.86 那批 `BULLETIN_BOARD` 崩溃同一根本形状，只
+是这次覆盖的是整个房间基类而不是留言板。用 `fix_710_room.py` 扫
+过 `work/`，删除 2,209 处标准形状；`clone/misc/roommaker.lpc` 剩
+下 1 处字符串拼接变体，手工改成 `str += "\n\tsetup();\n}\n";`。
+修复后 `work/` 下 0 处存活残留，282 处转档之前已注释掉的 `//` 行
+原样保留，`work/data/` 下没有真实 `.lpc` 源码命中。`git diff
+--stat` 显示 2209 个文件净删 2210 行，与脚本自报数字 + 1 处手工编
+辑吻合。
+
+驱动干净启动（零新增编译错误、端口正常监听、`debug.log` 无任何
+"cannot replace"/"cannot bind"行），巫师账号 `fluffos`/`Mud@2026`
+（GB 编码分支）登录后确认"目前权限：(admin)"，`look`/`goto` 走读
+了 2 个曾经命中过这个 bug 的房间
+（`d/zhongnan/zoudao4.lpc`、`kungfu/class/baituo/btyard.lpc`）均正
+常，`quit` 干净退出。登录存档的时间戳增量已用 `git checkout HEAD
+--` 撤销，未落入提交。
