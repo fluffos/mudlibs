@@ -544,3 +544,25 @@ future pass doesn't need to re-investigate from scratch.
 ## §7.112 跨库扫描修复（无常 NPC 重连触发重复轮回链）
 
 - **`d/death/npc/{wgargoyle,wgargoyle1,bgargoyle}.lpc` 的 `init()` 无条件调度 `death_stage` call_out 链（AGENTS.md §7.112）**：这三个文件原本都没有任何去重判定——`enable_commands()` 会在同房间内向所有对象重播 `init()`，玩家哪怕只是断线重连一次，也会在原有的 `death_stage`/最终判官对话链之上再叠一条新链，导致重复的判官对白、重复扣血/转生等竞态错误。已仿照同族已修复库（`dtsl`/`dtsl2`/`dtslmud`/`jym`/`xuanjianlu`）的做法，给每个 `init()` 加上按受害者存的 `set_temp("death_stage_active", 1)`/`query_temp(...)` 门槛判定，并在 `death_stage()` 的每一个退出点（角色离场、黑无常"阳人退回"分支、链条走完转生）里 `delete_temp(...)` 清除标记。三个文件形状与 `xkm` 版本几乎一致（均无 `final_death_stage` 分支）。已用独立驱动干净编译+启动验证，未发现残留 save 数据变化。
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（同一份 `include/globals.h`，重复定义两次，后一个
+`/inherit/room/room` 生效，宏名不受影响）在本档案 2,210 处房间文件
+的 `create()` 里紧跟 `inherit ROOM;` 之后又多余调用了一次
+`replace_program(ROOM);`——AGENTS.md §7.100 记录的同一个休眠 bug，
+和姊妹档案 `bmxkx2001`（同一份 `clone/misc/roommaker.lpc` 工具、
+同一批受影响房间）逐字节一致。用 `fix_710_room.py` 扫过 `work/`，
+删除 2,209 处标准形状；`clone/misc/roommaker.lpc` 剩下 1 处字符串
+拼接变体，手工改成 `str += "\n\tsetup();\n}\n";`。修复后 `work/`
+下 0 处存活残留，278 处转档之前已注释掉的 `//` 行原样保留，
+`work/data/` 下没有真实 `.lpc` 源码命中。`git diff --stat` 显示
+2209 个文件净删 2210 行，与脚本自报数字 + 1 处手工编辑吻合。
+
+驱动干净启动（零新增编译错误、端口正常监听、`debug.log` 无任何
+"cannot replace"/"cannot bind"行），巫师账号 `fluffos`/`Mud@2026`
+登录后确认"目前权限：(admin)"，`look`/`goto` 走读了 2 个曾经命中
+过这个 bug 的房间（`d/zhongnan/zoudao4.lpc`、
+`kungfu/class/baituo/btyard.lpc`，与 `bmxkx2001` 完全相同）均正
+常，`quit` 干净退出。登录存档的时间戳增量已用 `git checkout HEAD
+--` 撤销，未落入提交。
