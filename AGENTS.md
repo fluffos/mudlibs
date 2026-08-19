@@ -8010,6 +8010,29 @@ Broader search for the same shape under different names/locations, corpus-wide:
 - Widened further: every file under any `feature/` directory corpus-wide that both calls `input_to(` and contains `private` (120 files) was checked for name-overlap between a `private` function declaration and an `input_to("name", ...)` string target in the same file — the precise shape of this bug. Found exactly one additional match: `libs/{dtsl,dtsl2,dtslmud}/work/feature/logind.lpc` (`confirm_id`/`confirm_relogin`, both `private`, both used as recursive `input_to()` targets). **Not fixed** — confirmed via corpus-wide grep that no file in any of these 3 libs `inherit`s `feature/logind.lpc`, nor does any `#define` (e.g. `LOGIN_D`/`LOGIN_OB`) point at it; the real login object in all 3 is `adm/obj/master.lpc`'s `LOGIN_OB` → `obj/login.lpc`, which doesn't inherit this file either. `feature/logind.lpc` appears to be dead/orphaned code never instantiated at runtime, so the bug shape is present but unreachable — flagged here in case a future archaeology pass finds it's wired in some way this search missed.
 - This sweep did not do a from-scratch search for non-ES2-lineage mudlibs (different codebases entirely) implementing an equivalent private-recursive-`input_to()`-mixin pattern under a completely different architecture; if a lib outside this family shows the "first line works, rest silently swallowed" symptom, re-run the same diagnostic from scratch rather than assuming this sweep covered it.
 
+### 7.115 A `QUEST` macro pointing at a never-delivered global quest-hook file crashes `give`/`ask` when the target is missing AND actually called — corpus survey shows this is isolated to `aoxiangtianji`, not systemic
+
+**Found via `aoxiangtianji`'s round-four re-test** (see §7.114's neighbor commit): `cmds/std/give.lpc` and `cmds/std/ask.lpc` call `QUEST->quest_give()`/`quest_ask()`, where `QUEST` (`include/globals.h`) is `#define QUEST "/std/quest"` — a file that does not exist anywhere in that archive, an evidently never-finished global quest-completion daemon. This crashed `give <item> to <target>` on every successful give and `ask <npc> about <topic>` for nearly every NPC target with `*call_other() couldn't find object '/std/quest'`. Fixed by guarding both call sites with the codebase's own existence-check idiom:
+
+```lpc
+// BEFORE:
+if (QUEST->quest_give(me, who, obj)) { ... }
+// AFTER:
+if (file_size(QUEST + ".lpc") > 0 && QUEST->quest_give(me, who, obj)) { ... }
+```
+
+Do not invent a stub `/std/quest.lpc` or repoint the macro at an unrelated file — the guard is correct because the intent was clearly an optional hook that was never wired up.
+
+**Corpus survey completed (2026-08-19).** Given the shape looked like it could easily be a repo-wide pattern (a `QUEST` file-path macro shows up in 80 libs corpus-wide, with paths varying across `/std/quest`, `/inherit/quest`, `/std/misc/quest`, `/data/quests`), every one was checked for (a) whether its target `.lpc` actually exists in that lib's archive, and (b) whether anything actually calls `QUEST->` (or `call_other(QUEST, ...)`) if it doesn't. (Excluded from the 80: ~6 libs — `bxsj`, `bxsj1`, `shujian2008`, `shujian3`, `sjecl`, `sjtx2` — reuse the identifier `QUEST` in `skills.h` as an unrelated integer skill-ID constant, not a file path; and `xjcq2000` defines a function-like `#define QUEST(x) (QUEST_DIR + x)` path-builder that is never used as a `call_other` target anywhere in that archive, a different shape entirely.)
+
+Results:
+- **67 of 80** libs have their `QUEST` target file genuinely present — not a bug, the path resolves fine regardless of how odd it looks (e.g. `/inherit/quest.lpc`, `/std/misc/quest.lpc` all exist in their respective archives).
+- **13 of 80** have a genuinely missing target: `aoxiangtianji`, `fyzfqyy`, `hhsj`, `kxkj`, `kxkj1`, `kxkjii2`, `nitan170911`, `nitan6`, `nt6`, `nt6nitan6win`, `shenzhou`, `wxddym`, `xfbhh`.
+- Of those 13, **only `aoxiangtianji` has any live `QUEST->` call site** — already fixed as described above (plus one third call site in `std/char/char.lpc`'s kill hook that turned out to already be commented out, so no action needed there).
+- The other **12 are dead/unused**: a missing target but zero call sites anywhere in the archive (checked both `QUEST->` and `call_other(QUEST` shapes). A few substring false-positives surfaced and were ruled out by hand — e.g. `shenzhou`'s `baohe.lpc` files contain the Chinese sentence "...要破 QUEST, 可以向巫师..." (prose, not code), and `hhsj`/`nitan170911`/`nitan6`/`nt6`/`nt6nitan6win`/`xfbhh` all share one `doc/legend/xkx25` lore document that happens to contain the literal substring "QUEST,". No fix needed for any of the 12 — nothing calls the macro, so there's nothing to crash. (`kxkj`/`kxkj1`/`kxkjii2`'s `QUEST` is additionally a data-directory path, `/data/quests`, not a code file — consistent with being unused.)
+
+**Sweep status: COMPLETE.** All 80 real file-path `QUEST` macro instances corpus-wide surveyed; 1 real bug found, and it was already fixed in the commit that discovered this pattern before the sweep began. No new bugs, no new fixes needed this session. Documented here mainly so a future pass doesn't re-run the same 80-lib survey from scratch — the answer is stable unless a lib's archive is re-extracted from a different source dump.
+
 ---
 
 ## 8. Login and registration flow bugs
