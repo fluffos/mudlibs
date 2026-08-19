@@ -67,3 +67,26 @@ function references, ignored"（预加载阶段的良性提示，不是崩溃，
 `replace_program()` 死形状不是同一类，未处理）。驱动按精确 PID 结
 束。测试角色存档（`xbtest`）及聊天名字缓存增量未提交，仅提交
 `file.lpc` 的实际修复。
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`/std/room`）在本档案 2,174 处房间文件的 `create()` 里
+紧跟 `inherit ROOM;` 之后又多余调用了一次 `replace_program(ROOM);`
+——AGENTS.md §7.100 记录的同一个休眠 bug（多余调用给对象打上永久
+"pending replace"标记，对象一旦绑定任何闭包就会崩溃）。这份档案
+有 3 份房间生成工具副本（`obj/misc/roommaker.lpc`、
+`cmds/wiz/roommaker.lpc`、`d/ny/obj/roommaker.lpc`），全部同一形
+状。用 `fix_710_room.py` 扫过 `work/`，删除 2,171 处标准形状；三
+份工具各剩 1 处字符串拼接变体 `str +=
+"...replace_program(ROOM);..."`，手工改成
+`str += "\n\tsetup();\n}\n";`。修复后 `work/` 下 0 处存活残留，
+162 处转档之前已注释掉的 `//` 行原样保留，`work/data/` 下没有真
+实 `.lpc` 源码命中。`git diff --stat` 显示 2171 个文件净删 2174
+行，与脚本自报数字 + 3 处手工编辑吻合。
+
+驱动干净启动（零新增编译错误、端口正常监听、`debug.log` 无任何
+"cannot replace"/"cannot bind"行），巫师账号 `fluffos`/`Mud@2026`
+登录后确认"目前权限：(admin)"，`look`/`goto` 走读了 2 个曾经命中
+过这个 bug 的房间（`u/quicksand/saiwai2.lpc`、
+`u/quicksand/sandroad.lpc`）均正常，`quit` 走完退出流程。登录存
+档的时间戳增量已用 `git checkout HEAD --` 撤销，未落入提交。
