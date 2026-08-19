@@ -53,3 +53,26 @@
 致，两次重连均未触发任何异常（未复现 yxjh 那类仅在连续快速重连时
 才出现的错位崩溃）。全程 `debug.log` 无运行时错误。驱动按精确 PID
 结束；管理员存档已提交。
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`/inherit/room/room`）在本档案 2,160 处房间文件的
+`create()` 里紧跟 `inherit ROOM;` 之后又多余调用了一次
+`replace_program(ROOM);`——AGENTS.md §7.100 记录的同一个休眠 bug。
+用 `fix_710_room.py` 扫过 `work/`，删除 2,159 处标准形状；
+`clone/misc/roommaker.lpc` 剩下 1 处字符串拼接变体，手工改成
+`str += "\n\tsetup();\n}\n";`（同一工具的 heredoc 模板已被脚本正
+常扫到）。修复后 `work/` 下 0 处存活残留，39 处转档之前已注释掉的
+`//` 行原样保留，`work/data/` 下没有真实 `.lpc` 源码命中。`git diff
+--stat` 显示 2159 个文件净删 2160 行，与脚本自报数字 + 1 处手工编
+辑吻合。
+
+驱动干净启动（零新增编译错误、端口正常监听、`debug.log` 无任何
+"cannot replace"/"cannot bind"行）。登录用了这份档案自己的
+GB/BIG5 双编码选择流程（先送 `gb`），巫师账号 `fluffos`/`Mud@2026`
+登录后确认"目前权限：(维护巫师)"，`look`/`goto` 走读了 2 个曾经命
+中过这个 bug 的房间
+（`kungfu/class/shaolin/hsyuan2.lpc`、`u/michael/workroom.lpc`）均
+正常，`quit` 干净退出（退出时自动丢弃了几件不值钱的随身物品，是
+这份档案 quit 流程本身的既有行为，与本次改动无关）。登录存档的时
+间戳增量已用 `git checkout HEAD --` 撤销，未落入提交。
