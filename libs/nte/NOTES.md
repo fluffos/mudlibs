@@ -291,3 +291,21 @@ netdead 阈值，但足以验证真实断线重连，不是同一进程内的状
 已验证正常，五类 bug 全部修复并现场验证，唯一遗留的是需要更大范围基础设
 施改动（周期性存档、地图冷启动开销）或属于内容/设计判断（`help newbie`
 过时文本、`goto` 后未设 startroom）而未动手的观察项，均已诚实记录。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次五）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：3252 个房间文件的 `create()` 里紧跟 `inherit ROOM;` 之后
+都有这一行多余调用，永久设下"待替换"标记，第一次对该房间对象绑
+定闭包就会崩溃。自带建房工具 `clone/misc/roommaker.lpc` 的字符串
+拼接代码生成模板里也烤了同一个地雷。
+
+修复：脚本化删除所有房间文件里独立成行的 `replace_program(ROOM);`，
+加上 roommaker.lpc 里手动摘除字符串拼接片段。`git diff --stat`：
+3252 files changed，与预期精确吻合（85 处仍存在的匹配全部是既有
+注释，未改动）。
+
+验证：`build-debug` 驱动真实冷启动，端口 40115 正常监听，
+`debug.log` 全程干净。既有管理员账号 `fluffos`/`Mud@2026` 登录正常
+（巫师休息室/巫师会客室多房间走访 down/up），`quit` 干净退出，全程
+无新增 "cannot replace"/"cannot bind" 日志行。
