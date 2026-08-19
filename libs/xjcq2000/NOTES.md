@@ -569,3 +569,12 @@ BIG5 font"→n 这一步），落地在此前保存的地点，`score`
 显示"【天神】"头衔和正确属性数值。驱动按精确 PID 结束；测试期间产
 生的存档时间戳增量已 `git checkout --` 还原，只提交
 `news_b.o` 的删除。
+
+## §7.100 修复（`ROOM` 基类的同一"多余 replace_program()"形状，全档案扫描第 6 批）
+
+- 删除 2,451 处存活的 `replace_program(ROOM);` 相关行，与普查记录一致。
+  本库有四套建房/建群组工具副本命中同形状：`clone/misc/
+  roommaker.lpc`、`u/deng/roommaker.lpc`（各含 3 处 `room_code`/`str`
+  拼接变体）、`adm/daemons/groupd.lpc`、`cmds/debug/roommaker.lpc`。
+- 验证：真实 `build-debug` 驱动干净开机、端口正常监听，`debug.log` 中
+  零 "cannot replace"/"cannot bind" 行。
