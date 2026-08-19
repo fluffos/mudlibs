@@ -597,3 +597,20 @@ working build); final process killed by exact PID, cross-checked via
 independently on at least 7 lineages project-wide (6 already catalogued
 in AGENTS.md §7.11 plus this one) — worth checking on sight in any
 future round-three pass, not just when a symptom already points at it.
+
+## AGENTS.md §7.100 修复（2026-08-19，批次三）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：4030 处命中。本 lib 有三份独立的建房工具拷贝
+（`clone/misc/roommaker.lpc`、`obj/roommaker.lpc`、`obj/rmmaker.lpc`），
+三份的代码生成模板里都烤了同一个地雷，一并修复。
+
+`git diff --stat`：4028 files changed, 3 insertions(+), 4030 deletions(-)，
+与预期精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40006 正常监听。既有管理
+员账号 `fluffos`/`Mud@2026` 登录，头衔显示【西天如来】，武庙→北大
+街→中央广场多房间走访无误，`quit` 干净退出，全程无新增 "cannot
+replace"/"cannot bind" 日志行（游戏本身既有的"首次编译警告显示给
+管理员"调试功能产生了大量屏显编译警告，与本次修复无关，属预先存
+在的行为）。
