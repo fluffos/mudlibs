@@ -653,3 +653,20 @@ round-one 明确记录但当时误判为"长尾内容问题"的两个真实程�
 经顺手同步了这两个修法（未做完整 playthrough，留给它自己的轮次）。测
 试账号（`qinshijiu`/`linshier`/`wangershi`）存档留在 `data/` 下作为佐
 证，未清理（未跟踪文件，不纳入本次提交）。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次五）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：3250 个房间文件的 `create()` 里紧跟 `inherit ROOM;` 之后
+都有这一行多余调用，永久设下"待替换"标记，第一次对该房间对象绑
+定闭包就会崩溃。自带建房工具 `clone/misc/roommaker.lpc` 的字符串
+拼接代码生成模板里也烤了同一个地雷。
+
+修复：脚本化删除所有房间文件里独立成行的 `replace_program(ROOM);`，
+加上 roommaker.lpc 里手动摘除字符串拼接片段。`git diff --stat`：
+3250 files changed，与预期精确吻合（0 处遗留匹配，全部干净）。
+
+验证：`build-debug` 驱动真实冷启动，端口 40054 正常监听，
+`debug.log` 全程干净。既有管理员账号 `fluffos`/`Mud@2026` 登录正常
+（巫师休息室，look/quit），全程无新增
+"cannot replace"/"cannot bind" 日志行。
