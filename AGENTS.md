@@ -8033,6 +8033,31 @@ Results:
 
 **Sweep status: COMPLETE.** All 80 real file-path `QUEST` macro instances corpus-wide surveyed; 1 real bug found, and it was already fixed in the commit that discovered this pattern before the sweep began. No new bugs, no new fixes needed this session. Documented here mainly so a future pass doesn't re-run the same 80-lib survey from scratch — the answer is stable unless a lib's archive is re-extracted from a different source dump.
 
+### 7.116 A `feature/dealer.lpc` (`F_DEALER`)-mixin vendor NPC's `init()` registers `list`/`buy` but forgets `sell`/`value` — items can be bought but never sold back, silently, at nearly every shop in the game
+
+**Found via `hell`'s round-four §10.7 deep test**, testing the economy system for the first time (earlier rounds had only verified combat/registration, explicitly leaving shops untested). `feature/dealer.lpc` is a shared mixin implementing 4 commands for any vendor NPC that inherits it: `do_list`, `do_buy`, `do_sell`, `do_value` — but the mixin itself does **not** call `add_action()`; each individual NPC's own `init()` is responsible for wiring up all 4 verbs by hand:
+
+```lpc
+void init() {
+  ::init();
+  ...
+  add_action("do_list", "list");
+  add_action("do_buy", "buy");
+  // do_sell / do_value: silently forgotten
+}
+```
+
+A copy-paste-descended vendor NPC that only wires up `list`/`buy` compiles fine, sells items to players fine (buy works, money is deducted correctly, item is received correctly), but the moment a player tries `sell <item>` at that shop the driver's generic verb-not-found response (`什么？`) fires — indistinguishable from a typo, no error anywhere, no `debug.log` trace, since `add_action` simply never registered the verb. `value` (price-checking before selling) is silently broken the identical way. This is NOT a rare edge case: a corpus grep across `hell`'s own `work/d/*/npc/*.lpc` files inheriting `F_DEALER` found **72 of 78** vendor NPCs missing `sell`, and **72 of 78** missing `value` — only 6 correctly wired all 4 verbs. (3 of the 78 `F_DEALER` inherits turned out to be non-functional vestigial inherits with no `vendor_goods` and no `add_action` for ANY dealer verb at all — not real shops, left alone as a content gap rather than this bug.)
+
+**Fix**: for every affected NPC file, add the two missing lines immediately after the existing `add_action("do_list", "list");`/`add_action("do_buy", "buy");` pair (whichever appears later in the file, to match each file's own line order):
+```lpc
+  add_action("do_sell", "sell");
+  add_action("do_value", "value");
+```
+No other change needed — `do_sell()`/`do_value()` are already fully implemented in the shared mixin, just never reachable as a command. **`hell`**: fixed mechanically across all 69 real vendor NPCs (excluding the 3 non-functional inherits), verified via `update <path>` recompile of all 69 files on a live driver (zero errors, only pre-existing unused-variable warnings) plus an end-to-end live test: bought a sword from `d/changan/npc/murong-hao.lpc` (money deducted correctly), walked to `d/changan/npc/teawaiter.lpc` and sold it back (received 70% of value back in the correct currency denomination, matching `do_sell()`'s payout formula). Note: a vendor correctly refuses to buy back an item that is also in its OWN `vendor_goods` list (`"我卖给你好不好？"`) — this is intentional anti-arbitrage logic in `is_vendor_good()`, not a bug; test the sell fix against a DIFFERENT shop than the one the item was bought from, or against a non-vendor-good item, to avoid a false "still broken" read.
+
+**Not yet corpus-swept beyond `hell`.** This mixin (`feature/dealer.lpc`, `F_DEALER`) is very likely shared by many other libs in this project's ES2/XKX-descended lineage (same shape/authorship pattern as several other mixins already found to have per-lib-inconsistent wiring, e.g. §7.114's `feature/edit.lpc`). A future pass should: (1) find every lib whose `F_DEALER`-equivalent macro points at a `dealer.lpc`-shaped file with independent `do_sell`/`do_value` functions; (2) for each, grep every NPC file inheriting it for `add_action("do_buy"` present but `add_action("do_sell"` absent; (3) apply the same two-line fix, excluding non-functional vestigial inherits (no `vendor_goods`, no `add_action` at all) the same way `hell`'s 3 exclusions were handled. Given `hell` alone had 72 broken out of 78, this could be a very wide-reaching corpus sweep if the mixin is common.
+
 ---
 
 ## 8. Login and registration flow bugs
