@@ -7051,6 +7051,92 @@ occurrences remain in `work/` — the only 124 remaining matches are
 pre-existing, already-`//`-commented-out instances (harmless, and
 intentionally left untouched, consistent with every prior batch).
 
+**CORPUS-WIDE SURVEY (2026-08-19)**: a dedicated survey subagent
+scoped this bug across the ENTIRE corpus (194 libs with a `work/`
+tree), not just the `jhfy3`/`jyqxc`/`jyqxc2` instances noted above.
+Detection: for each lib, resolve its room-base-class macro (`grep
+"define ROOM" include/*.h` or equivalent — 189/194 libs use exactly
+`ROOM`, a handful use `STANDARD_ROOM`/other names, see
+`final_macros.txt` in that survey's scratchpad), then count live
+(non-`//`-commented) `replace_program(<macro>);` occurrences. Result:
+**166 libs have >=100 live occurrences** (the survey's threshold for
+"this is the real bug, not noise"), **103 of those have >=1,000**, and
+the **total live-occurrence count across all >=100 libs is 349,237**
+— nearly two orders of magnitude larger than the ~6,400 previously
+known from the `jhfy3`/§7.86 board-file work. The survey also checked
+each lib's in-game room-building tool (`roommaker.lpc` or equivalent)
+for the same shape baked into its code-generation template — **most
+libs above the ~100 threshold have this factory-bug variant too**
+(see `roommaker_bug_libs.txt`), meaning newly-built rooms keep
+inheriting the landmine until that template is also fixed. Full
+ranked table (lib, macro, total matches, live occurrences,
+roommaker-bug yes/no) is preserved in that survey's scratchpad
+(`FINDINGS.md`) for whoever picks up the next sweep batch — given the
+scale, this needs the same kind of explicit hand-reviewed-batch
+approach as the `jhfy3` backlog above, not a single tree-wide script.
+
+**Fix-phase batch 1 (2026-08-19), highest-impact 10 libs**: the
+top 10 libs by live-occurrence count from the survey were fixed,
+verified, and pushed as individual commits. Method per lib: (1) a
+binary-mode Python script (`fix_710_room.py`, kept in this session's
+scratchpad) walks the lib's `work/` tree and deletes every `.lpc` line
+whose content, stripped of surrounding whitespace, is EXACTLY
+`replace_program(<macro>);` — safe because it only matches a
+standalone call, never a line with other code or a different argument;
+(2) any irregular near-miss shapes the strict script correctly leaves
+alone (a stray space before the semicolon, the call sharing a line
+with a closing brace, an unusual "semicolon on its own continuation
+line" style, a doubled `\r\r\n` line-ending artifact in a handful of
+source files that needed the script's line-splitter to key on `\n`
+only rather than `bytes.splitlines()`'s CR-sensitive default) get
+individually hand-fixed and diff-verified; (3) the room-builder tool's
+own code-generation template(s) get the same one-line deletion inside
+their heredoc/string-literal source; (4) `git diff --stat`'s deletion
+count is cross-checked against the script's self-reported count before
+proceeding — every one of the 10 matched exactly (mismatches, when
+they occurred, were fully explained by the irregular-shape files in
+step 2, never a real script bug after the `\n`-only line-splitter
+fix); (5) a real `build-debug` driver boot (not `lpcc`) confirms clean
+compile and the config's port listening, with zero new `debug.log`
+lines; (6) a live admin session (raw Python socket script, this
+session's own credentials/protocol notes per lib) walks 10-15 rooms
+confirming no "cannot replace"/"cannot bind" regression, then reverts
+any incidental save-file drift before committing.
+
+| lib | live occurrences deleted | roommaker copies fixed | commit |
+|---|---|---|---|
+| hy5 | 12,253 | 1 (`clone/misc`, `adm`, `d/ny/obj` — 3 files) | `dd4a34c6ad9` |
+| hymud | 12,248 | 1 (`clone/misc`, `adm`, `d/ny/obj` — 3 files) | `780a440e636` |
+| haiyang2 | 8,345 | 1 (`clone/misc`, `adm` — 2 files) | `3ee00e5d64d` |
+| hy | 7,857 | 1 (`clone/misc`, `adm` — 2 files, **doubled** because of an embedded dead `海洋2002/hy3/` copy fixed alongside) | `a79d35d8f4d` |
+| xkx100 | 5,930 | 1 (`clone/misc`) | `ad6f052fdcd` |
+| wxddym | 5,928 | 3 separate tool copies (`clone/misc`, `u/lonely/obj/roommaker.lpc`, `u/lonely/obj/roommk.lpc`) | `977a96e7b84` |
+| longyunmeng | 5,877 | 2 copies (`clone/misc`, `u/fyue/misc`) | `8030ae3c299` |
+| xyzxfk | 5,762 | 2 copies (`clone/misc`, `u/fyue/misc`) | `ef64dec0b96` |
+| xyzx | 5,593 | 2 copies (`clone/misc`, `u/fyue/misc`) | `8d3c94bdba4` |
+| bixiecanyang | 5,243 | 2 copies (`clone/misc`, `u/fyue/misc`) | `d5deac6613c` |
+
+**Batch 1 total: 75,036 live occurrences deleted across 10 libs.**
+Notable finds along the way: `haiyang2` and `xkx100` each had one file
+(`d/huangshan/banshan.lpc`) with TWO independent redundant calls in
+the same `create()` (before and after `setup()`) — both legitimately
+the same bug, both removed. `longyunmeng`/`xyzxfk`/`xyzx`/
+`bixiecanyang` are all the same XYZX-family lineage and share
+byte-identical `clone/misc/roommaker.lpc`/`u/fyue/misc/roommaker.lpc`
+tool pairs. `wxddym` uses a custom non-telnet "app protocol" login
+(`id║password║ciphertext║email`, UTF-8-encoded, sent as the SECOND
+line after any-content-accepted first line) that cost significant
+verification time to reverse-engineer — see that lib's own NOTES.md
+for the working recipe.
+
+**156 libs from the survey's >=100 list remain unfixed** — this is a
+large remaining backlog for future sweep batches, same shape, same
+fix, just needs the same per-lib verification discipline (this bug's
+fix is mechanically simple but each lib still needs its own compile
++ live-boot verification, which is the real bottleneck, not the edit
+itself). Pick up alphabetically or by remaining impact from
+`candidates_ge100.tsv`/`FINDINGS.md` in the survey scratchpad.
+
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
 Found on `kxkjii2`'s §10.7 deep functional test (ES II/Annihilator
