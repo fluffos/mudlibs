@@ -200,3 +200,30 @@ escape 字符）启动连接后问题消失。
 about` 各编号选项，一步步做完老村长的任务），用系统本身引导的路径推
 进到真正学会技能，这样才能排除"用了非常规账号/指令导致的假象"这个反
 复出现的干扰因素。
+
+## AGENTS.md §7.100 修复（2026-08-19）
+
+同族（`hhsj`/`xfbhh`/`nitan170911`）共享的 `ROOM` 基类冗余
+`replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md §7.100）：本 lib
+4925 个房间文件的 `create()` 末尾都有这一行多余调用，同款地雷也烤进
+了自带建房工具 `clone/misc/roommaker.lpc` 的字符串拼接代码生成模
+板。
+
+修复：脚本化删除所有房间文件里独立成行的 `replace_program(ROOM);`
+（`d/huangshan/banshan.lpc` 有两处独立调用，均删除），加上
+roommaker.lpc 里手动摘除字符串拼接片段。`git diff --stat`：4926
+files changed, 1 insertion(+), 4928 deletions(-)，与预期精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40186 正常监听，
+`debug.log` 全程干净。既有的 `fluffos` 管理员存档密码与 README 记录
+的默认值（`loginpw1`/`AdminPass1`）都对不上（大概率是更早一轮测试
+时被改过），且删除玩家存档不在本次修复授权范围内——改用另一个
+`wizlist` 里列出、此前从未创建过存档的 id `wuji`，走完整注册流程
+（含双密码机制）后正确落地"巫师休息室"，确认基于 wizlist 的管理员
+判定在修复后依旧生效。`goto` 走访 14 个刚修复的房间（`d/wuxi`/
+`d/city`/`d/changan`/`d/wuyi`/`d/beijing`/`d/northft`/`d/kaifeng`/
+`d/huashan`/`d/ruzhou`），均正常返回，无 "cannot replace"/"cannot
+bind" 新增日志行。按精确 PID 结束驱动；测试期间产生的
+`mrtg`（第三方流量统计）相关四个已跟踪存档文件漂移已
+`git checkout --` 还原，新建的 `wuji`/`qinteste` 存档本就是未跟踪状
+态，未纳入提交。
