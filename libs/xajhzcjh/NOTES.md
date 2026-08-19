@@ -1019,3 +1019,18 @@ corpus-wide 2026-08-12 sweep（commit `c571a53629f`）已经打过补丁的写
 成功案例、跨重连状态持久化），本轮认为不需要重复；本轮重点是驱动升级
 后的回归检查 + 正常游玩中顺手发现的 bug（本次即发现了新的 §7.34 实
 例）。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次三）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：4239 处命中。自带建房工具 `clone/misc/roommaker.lpc` 的
+字符串拼接模板同样修复。
+
+`git diff --stat`：4238 files changed, 1 insertion(+), 4239 deletions(-)，
+与预期精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40070 正常监听。既有管理
+员账号 `fluffos`/`Mud@2026`（经本 lib 要求的 "2060" 客户端版本握手）
+登录，`您目前权限：(admin)` 确认，武庙→北大街→北门多房间走访无
+误，`quit` 干净退出，全程无新增 "cannot replace"/"cannot bind" 日
+志行。
