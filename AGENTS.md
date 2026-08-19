@@ -7244,6 +7244,99 @@ up: `yhwhpublicfi` (3,374, skipped this batch, see above),
 `ntii`/`nte` (3,253 each), `nitan_san` (3,253), `nitan_ceshi` (3,251),
 `xkm` (3,177), and onward.
 
+**Fix-phase batch 4 (2026-08-19), 2 libs**: `yhwhpublicfi` (rank 27,
+skipped in batch 3 for its non-`fluffos` admin id/registration flow)
+and `ntii`/`nte` rank pair's `ntii` half. Same method as batches 1-3.
+
+| lib | live occurrences deleted | roommaker copies fixed | commit |
+|---|---|---|---|
+| yhwhpublicfi | 3,373 | 1 (`clone/misc`) | `e5e9e5e1b78` |
+| ntii | 3,251 | 1 (`clone/misc`) | `731c84935ea` |
+
+**Batch 4 total: 6,624 live occurrences deleted across 2 libs.** This
+batch's own AGENTS.md tally update was not written at the time (a
+process-discipline gap, see the note at the top of this section's
+sweep-continuation briefing) — backfilled here in batch 5 once
+discovered via `git log` showing the fixes were committed and pushed
+but never tallied. Running total after batches 1-4: **30 libs fixed,
+162,587 live occurrences deleted** (75,036 + 44,564 + 36,363 + 6,624).
+
+**Fix-phase batch 5 (2026-08-19), next 10 libs by impact**: continuing
+straight down the ranked list from batch 4 — `nte`, `nitan_san`,
+`nitan_ceshi`, `xkm`, `tianxiawuxue`, `fys`, `tiexuejianghu`,
+`shenzhou`, `hy2000`, `wmkj` (ranks 30-39 of the >=100 list, `nt1`
+skipped per its standing §7.110 OOM-risk exclusion — static-only
+verification, not attempted this batch). Same method as batches 1-4,
+plus two new gotchas worth flagging for future batches:
+
+1. **The sweep script's `data/`-directory exclusion (meant to protect
+   player `.o` save files) can false-negative on real `.lpc` source
+   content that a lib happens to store under `work/data/`** — `xkm`
+   stores its 31 sect-hall room files under `work/data/group/*.lpc`
+   (plus a 32nd copy of the bug in `adm/daemons/groupd.lpc`'s own
+   string-builder template), and `shenzhou` stores 4 house/street room
+   files under `work/data/house/*.lpc`. Both confirmed via direct file
+   inspection to be genuine `.lpc` source (an `inherit ROOM;` room
+   definition), not save state, and fixed by re-running the sweep
+   script against just that subtree with the `data/` exclusion lifted.
+   Always check remaining live-occurrence file paths after the main
+   sweep for anything under `data/` before declaring a lib clean.
+2. **A new irregular shape**, not seen in batches 1-4: the redundant
+   call sharing a line with a trailing *non-empty* comment in a
+   different encoding than the file's default. `tiexuejianghu` had 143
+   files under `u/heart/xuedao/` with
+   `replace_program(ROOM);  //如果没有init函数请不要删除这句话` — the
+   comment text is UTF-8 while the rest of the file is otherwise
+   GBK-consistent-looking; a same-shaped fix script keyed to GBK
+   silently matched 0 files until re-encoded to UTF-8. Always verify a
+   targeted fix script's byte-level encoding assumption against an
+   actual `repr()` of the raw file bytes before trusting a 0-file
+   result as "nothing to fix" rather than "encoding mismatch."
+
+| lib | live occurrences deleted | roommaker copies fixed | commit |
+|---|---|---|---|
+| nte | 3,253 | 1 (`clone/misc`) + roommaker string-builder variant | `208fcc44c69` |
+| nitan_san | 3,253 | 1 (`clone/misc`) | `de2a4ed3935` |
+| nitan_ceshi | 3,251 | 1 (`clone/misc`) | `ecb9e4b8878` |
+| xkm | 3,177 | 2 (`clone/misc`, `adm/daemons/groupd.lpc`) + 31 `work/data/group/*.lpc` source files | `1b07cdc1033` |
+| tianxiawuxue | 3,015 | 8 copies (`clone/misc` + 7 wizard-dir copies, 2 with 3-occurrence "Lonely" variant) | `4f00c298703` |
+| fys | 2,870 | 5 copies (2 simple + 3 `room_code`-variant) | `b73d1372c4a` |
+| tiexuejianghu | 3,012 | 5 copies + 143 `u/heart/xuedao/*.lpc` trailing-comment irregulars | `e8198e53ba9` |
+| shenzhou | 2,896 | 2 copies (3-occurrence "Lonely" variant) + 4 `work/data/house/*.lpc` source files | `22160edb464` |
+| hy2000 | 2,870 | 2 templates + 1 hand-fixed irregular (`d/happy/workroom.lpc`, trailing empty `//`) | `fe2b727316d` |
+| wmkj | 2,800 | 4 copies (3 simple + 1 `room_code`-variant) | `54a024fa467` |
+
+**Batch 5 total: 30,397 live occurrences deleted across 10 libs.**
+Running total after batches 1-5: **40 libs fixed, 192,984 live
+occurrences deleted** (162,587 + 30,397). Notable: `fys`'s survey-
+recorded "live" count (3,013) didn't match what was actually on disk —
+true live count was 2,870 (total raw matches 3,157 minus 287 genuinely
+pre-existing `//`-commented lines, spot-checked); flagging in case
+other libs in the remaining backlog have the same survey/actual
+mismatch (harmless either way, since the fix always converges on "0
+live occurrences remain," but worth not being surprised by a
+`git diff --stat` count that doesn't match `candidates_ge100.tsv`).
+`wmkj` surfaced one pre-existing, unrelated content bug in passing
+(`natured.lpc`'s morning event spawning an NPC whose banghui inherit
+target `u/xiha/banghui/bhnpc.lpc` doesn't exist on disk) — confirmed
+unrelated to this sweep (zero "cannot replace"/"cannot bind" lines)
+and left unfixed, out of scope. All ten libs verified via clean
+build-debug boot + live admin login + room walk + zero new
+"cannot replace"/"cannot bind" `debug.log` lines, except `xkm` where
+the documented `fluffos`/`Mud@2026` credential no longer matched the
+seeded save's password hash (same credential-drift class as batch 2's
+`nt6`) — verified via clean boot alone (including through the failed
+login attempts) per this sweep's established fallback policy, without
+touching player save data.
+
+**128 libs from the survey's >=100 list remain unfixed** (138 minus
+this batch's 10). Next up by impact: `nt1` (2,749 — **OOM-risk, static
+verification only, do not boot live**), `zhonghua2` (2,718),
+`xuanjianlu` (2,696), `hc` (2,676), `jym` (2,662), `hyiishzdscbb`
+(2,623), `yxjh` (2,607), `yxcs` (2,530), `tianxia` (2,526), `xjcq2000`
+(2,451), and onward — see `candidates_ge100.tsv`/`FINDINGS.md` in this
+sweep's scratchpad for the full ranked list.
+
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
 Found on `kxkjii2`'s §10.7 deep functional test (ES II/Annihilator
