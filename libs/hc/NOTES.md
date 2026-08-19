@@ -207,3 +207,11 @@ teleport talisman，量:1 单:张，暗示一种一次性传送道具机制）�
 - 登录测试产生的存档时间戳类微小 diff（`data/{login,user}/f/
   fluffos.o` 的 `last_on` 字段）已用 `git checkout` 撤销，不提交。
   驱动最终按精确 PID kill，`ps -p` 确认已退出。
+
+## §7.100 修复（`ROOM` 基类的同一"多余 replace_program()"形状，全档案扫描第 6 批）
+
+- 删除 `work/` 下 2,675 处存活的 standalone `replace_program(ROOM);` 行
+  （脚本删除），另外手工修复 `clone/misc/roommaker.lpc` 建房工具代码
+  生成模板里的同形状变体，共 2,676 处，与普查记录一致。
+- 验证：真实 `build-debug` 驱动干净开机、端口正常监听，`debug.log` 中
+  零 "cannot replace"/"cannot bind" 行。
