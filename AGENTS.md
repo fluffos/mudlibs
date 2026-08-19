@@ -6426,6 +6426,23 @@ created *during* the observed instability window (including this
 project's own seeded admin account) was silently lost rather than just
 slowed down.
 
+**Proactive corpus-wide bump (2026-08-18)**: `xysylmhb`'s round-three
+test flagged that ANY lib still on the low `700000` template default
+is a latent instance of this class regardless of whether a live
+incident has actually been observed yet — since the fix (raising the
+ceiling) has no behavioral downside and this project's own precedent
+across 30+ prior individual fixes never caused a regression, applying
+it proactively is safe. Grepped the corpus for the literal template
+line, confirmed one match per file, bumped `73 more libs` in one
+mechanical sweep (`cctx` fixed individually first when originally
+flagged, then the remaining 73 in a single batch commit), spot-checked
+8 with live driver boots (all clean). Any lib still showing `maximum
+evaluation cost : 700000` in `config.fluffos` at this point genuinely
+wasn't caught by this sweep (check the file directly — a few libs
+carry the value inside a comment or with different surrounding
+whitespace that wouldn't literal-match) and is worth the same bump on
+sight, not just when a live incident forces the question.
+
 ### 7.91 A one-character skill-name typo in a sect master NPC's `create()` silently deletes that entire sect's join path from the archive's first boot onward
 
 Found on `xajhxo`'s §10.7 deep functional test. `d/menpai/shaolin/npc/
