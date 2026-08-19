@@ -858,3 +858,14 @@ grep 无新增错误，约 50 秒后重新连线，完整走一遍正常登录�
 距离在预算内不可达，与上一轮结论一致，非新增缺口）。对这个 lib 在新驱动构建下的
 整体信心：高——核心系统（注册、任务奖励防崩溃、战斗、拜师失败路径、断线重连持久化）
 均已验证正常。
+
+## §7.100 修复（`ROOM` 基类的同一"多余 replace_program()"形状，全档案扫描第 6 批）
+
+- 删除 `work/` 下 2,715 处存活的 standalone `replace_program(ROOM);` 行
+  （脚本删除），另外手工修复了三处建房工具代码生成模板里的同形状变体
+  （`clone/misc/roommaker.lpc`、`u/smallfish/editroom.lpc`、
+  `u/smallfish/obj/editroom.lpc` 的 `str += "...replace_program(ROOM);
+  ..."` 拼接行），共 2,718 处，与普查记录的存活计数一致。
+- 验证：真实 `build-debug` 驱动干净开机、端口正常监听，`debug.log` 中
+  零 "cannot replace"/"cannot bind" 行；一次实机 socket 连接确认登录/
+  注册欢迎屏正常渲染。
