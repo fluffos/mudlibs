@@ -542,3 +542,20 @@ output. Killed the driver by exact PID when done.
 - `libs/zitengzhan/work/cmds/arch/UPDATE.lpc`
 - `libs/zitengzhan/work/adm/simul_efun/file.lpc`
 - `libs/zitengzhan/config.fluffos`
+
+## AGENTS.md §7.100 fix (2026-08-19): redundant replace_program(ROOM) landmine
+
+Same corpus-wide bug as the `hy5`/`hymud`/... batch-1-6 sweep (ES II
+lineage, `ROOM` macro from `include/globals.h`). Deleted 2,445 live
+standalone `replace_program(ROOM);` lines from `.lpc` files under
+`work/` via `fix_710_room.py`, plus hand-fixed both room-building
+tool copies' string-builder template
+(`work/clone/misc/roommaker.lpc`, `work/obj/roommaker.lpc`:
+`str += "\n\tsetup();\n\treplace_program(ROOM);\n}\n";` →
+`str += "\n\tsetup();\n}\n";`). No `work/data/` false-negative source
+files found. All remaining `replace_program(ROOM)` matches in `work/`
+are pre-existing `//`-commented lines (harmless, left alone).
+Verified: clean `build-debug` boot (zero new compile errors, zero
+"cannot replace"/"cannot bind" in `debug.log`), live admin login
+(`fluffos`/`Mud@2026`/`Wiz@2026`) + `update /d/city/kezhan.lpc` +
+`quit`, all successful.
