@@ -640,3 +640,27 @@ Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
 
 （`data/{login,user}/c/chenba.o` 是此前会话遗留的未提交测试存档
 ——`Aug 5` mtime，早于本次会话，未受本轮任何操作影响，未触碰。）
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`/inherit/room/room`，见 `include/globals.h`）在本档案
+2,245 处房间文件的 `create()` 里紧跟 `inherit ROOM;` 之后又多余调
+用了一次 `replace_program(ROOM);`——AGENTS.md §7.100 记录的同一个
+休眠 bug（多余调用给对象打上永久"pending replace"标记，对象一旦绑
+定任何闭包就会崩溃）；本档案属于 XYZX/`fyue` 房间生成工具血统，
+`clone/misc/roommaker.lpc`/`u/fyue/misc/roommaker.lpc` 两份逐字节
+相同的副本。用 `fix_710_room.py` 扫过 `work/`，删除 2,243 处标准
+形状；两份房间生成工具各剩 1 处字符串拼接变体
+`str += "...replace_program(ROOM);..."`（heredoc 模板里的独立行
+已被脚本正常扫到），手工改成 `str += "\n\tsetup();\n}\n";`。修复
+后 `work/` 下 0 处存活 `replace_program(ROOM)` 残留，105 处转档之
+前已注释掉的 `//` 行原样保留，`work/data/` 下没有真实 `.lpc` 源码
+命中。`git diff --stat` 显示 2243 个文件净删 2245 行，与脚本自报
+数字 + 2 处手工编辑吻合。
+
+驱动干净启动（零新增编译错误、端口正常监听、`debug.log` 无任何
+"cannot replace"/"cannot bind"行），巫师账号 `fluffos`/`Mud@2026`
+确认"您目前权限：(boss)"后 `look`/`goto` 走读了 2 个曾经命中过这
+个 bug 的房间（`u/snow/wudujiao/yaoshi.lpc`、
+`u/snow/wudujiao/zhushe.lpc`）均正常，`quit` 干净退出。登录存档
+的时间戳增量已用 `git checkout HEAD --` 撤销，未落入提交。
