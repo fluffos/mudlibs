@@ -737,3 +737,137 @@ severity 判断）逐项确认代码仍然生效；`win_times` 的 `%`-operator 
 `score` 显示"【布衣平民】"头衔，`debug.log` 全程干净。驱动按精确
 PID 结束；测试期间产生的存档时间戳增量已 `git checkout --` 还原，
 本轮无需新代码改动。
+
+## 深度功能测试（2026-08-19，round four：当铺全流程 + 完整 900 秒净断线）
+
+针对 round two 遗留的三项未测项目中的两项做补测（副本进入/掉落仍按任
+务要求跳过，超出单次测试窗口）：当铺（典当行）完整购买/典当/赎回/
+卖断流程，以及完整 900 秒 `NET_DEAD_TIMEOUT` 净断线软测试（此前只用
+约 10 分钟真实等待代替过）。全程用管理员 `fluffos`/`Mud@2026` 与既有
+测试角色 `ylfydeeptwo`（秦风烈，密码 `abc12345`）操作，`log/debug.log`
+在整个测试窗口（含 900 秒等待）始终保持 209 行，零新增错误。
+
+### 当铺（d/city/dangpu，NPC 唐楠 `tang.lpc`，经 `feature/dealer.lpc`）
+
+用管理员账号 `clone /clone/weapon/gangdao`（钢刀，原始 value 1000，
+`set_name` 的 id 是 `blade` 不是文件名 `gangdao`，用 `blade` 才能被
+`present()` 找到）逐一验证：
+
+- `value blade` → "一柄钢刀价值十两白银。如果你要典当(pawn)，可以拿
+  到六两白银。如果卖断(sell)，可以拿到八两白银。"（60%/80% 报价公式
+  与 `feature/dealer.lpc::do_value()` 代码一致）。
+- `sell blade` → 实际支付八两白银（80% of 1000），玩家身上正确生成
+  `silver_money` 物件。
+- `pawn blade` → 实际支付六两白银（60% of 1000）；`check` 在"已典当
+  过东西"状态下正确列出典当清单；`redeem blade` 按原价 1000 扣款并
+  归还物品，物品与 `pawns` 清单联动正确。
+- **普通杂物卖断后不会进入唐楠的可购清单，是设计不是 bug**：
+  `do_sell()` 尾部对 `value < 100000` 的物品会 `destruct(obj)`，只有
+  `xyzx_save_item`/`owner_id`/`zhubao_save`（宝石类/绑定动态物品）或
+  value ≥ 100000 的贵重物品才会保留供其他玩家 `buy` 回。现场把测试武
+  器的 `value` 临时改成 200000（管理员 `call blade->set("value",
+  200000)`）验证：卖断后 `list` 正确显示、`buy blade` 正确按其
+  `value`（200000，不打折）扣款并拿回物品——完整验证了"当铺确实卖东
+  西"这条路径本身没有问题，只是绝大多数便宜杂物走的是"当铺回收即销
+  毁"分支，这与 hell 档案那次典当行误判（普通商店不支持 `sell` 被误
+  判为 bug、后被撤销）性质相反但同源：都是"这一支代码本身自洽的既定
+  经济设计"，未改动。
+- **重要经济设计说明（非 bug，记录以免下次测试误判）**：`sell`/
+  `pawn` 的收款走 `feature/dealer.lpc::pay_player()`，直接在玩家身
+  上生成实体 `gold_money`/`silver_money`/`coin_money` 物件；而
+  `buy`/`redeem` 走 `feature/finance.lpc::can_afford()`/`pay_money()`
+  （项目内所有商人共用），检查/扣的是玩家 `money`/`more_money` 两个
+  抽象属性——也就是 `score` 面板上的"钱庄存款"。这两套货币**不会自
+  动互通**：卖/当得到的实体铜钱必须先拿到钱庄柜台（`feature/
+  banker.lpc`，本档案是 d/city/qianzhuang 的 NPC 钱眼开）用
+  `deposit <数量> <gold|silver|coin>` 存进钱庄余额，才能在任何商铺
+  `buy`/`redeem`。现场完整验证：卖断得到的一百十六两黄金+当铺赎回
+  剩下的十四两白银，`deposit all gold`/`deposit all silver` 后
+  `score` 面板"钱庄存款"正确更新为"一百十六两黄金二十四两白银"，随
+  后 `buy blade`（200000 价）在 dangpu 成功扣款拿回武器。这是本档案
+  故意的双层货币设计（另有 `withdraw`/`convert`/`zhuan` 转账指令），
+  未改动、未上报为 bug。
+- **观察记录（非 bug，未改动）**：在唐楠这里从未典当过任何东西时，
+  裸 `check` 命令会被一个完全无关的全局 `check`（`cmds/std/
+  check.lpc`，丐帮专属"打探他人技能"指令）接管，显示"只有乞丐才能
+  打探别人的技能！"而不是唐楠自己的"客官并未在本店典当过任何物品"提
+  示；典当过东西之后再 `check` 则正确显示唐楠自己的清单。根因：
+  `do_check()` 在无典当记录时 `return notify_fail(...)`，
+  `notify_fail()` 求值为 0，LPC 的 `add_action` 语义把返回 0 当作"未
+  处理"，继续尝试同一动词绑定的下一个处理函数，于是落到了
+  `cmds/std/check.lpc`。没有崩溃、没有 debug.log 报错、没有数据损
+  坏，只是空典当记录这一特定情形下提示语不对题——按本轮任务的严格判
+  定标准（无编译/运行时错误即视为内容而非 bug）未修复，仅记录。
+
+### 完整 900 秒 NET_DEAD_TIMEOUT 净断线测试
+
+先读代码确认预期行为：`clone/user/user.lpc::net_dead()` 在
+`call_out("user_dump", NET_DEAD_TIMEOUT, DUMP_NET_DEAD)`
+（`include/user.h` 定义 `NET_DEAD_TIMEOUT` 为 900）；`user_dump()` 的
+`DUMP_NET_DEAD` 分支无条件执行 `command("quit")`（`in_input`/
+`in_edit` 只影响是否额外广播一条房间提示，不影响是否退出）；
+`cmds/usr/quit.lpc` 在非交互（`!interactive(me)`）且账号年龄 ≥ 3600
+秒时走正常退出收尾（不触发"注册不足一小时删档"分支，`ylfydeeptwo`
+账号已存在多轮，远超一小时）。预期：净断线满 900 秒后角色应被强制
+`quit`（对象被 `destruct`），此后重连应该是"账号已存在、正常直接进
+入游戏"的全新会话，而不是 `reconnect()` 那种"重新连线完毕"的续接。
+
+实测：`ylfydeeptwo` 登录确认（落地"假日客店"，`score`/`skills` 显示
+`force` 技能等级 1、潜能 100000、钱庄存款一两黄金），记录断线发起的
+精确 unix 时间戳后，直接断开原始 socket（不发 `quit`，真实模拟净断
+线）。之后**真实阻塞等待了完整 900+ 秒**（未用任何缩短的替代等待）。
+900 秒时间点到达后：
+
+- `debug.log` 全程保持 209 行，无新增错误——净断线本身与后续强制退
+  出都没有触发任何运行时报错。
+- 重新用同一 id/密码连线：**没有出现"重新连线完毕"提示**，而是走了
+  完整的"欢迎光临"banner→会员资格→权限等级→上次连线信息→房间描述→
+  新手礼物提示的全新登录流程——这正是 `logind.lpc` 里
+  `find_body(id)` 找不到存活对象、退回 `make_body()`+`restore()` 分
+  支时才会出现的输出形状，证明旧的净断线角色对象**已经被 900 秒后
+  的 `user_dump` 强制 `quit`（destruct）**，而不是仍挂在内存里等待
+  重连。
+- 存档完整性确认：`skills`（`force` 等级 1、其余技能等级不变）、
+  `score`（潜能 100000/>100%、钱庄存款一两黄金）与断线前完全一致，
+  证明净断线→超时强制退出→重连整个链条没有丢数据、没有状态损坏。
+  落地房间从"假日客店"变成了"最後乐园"（VOID）——核对
+  `logind.lpc::enter_world()` 代码确认这是因为该测试角色存档里从来
+  没有 `startroom` 字段（`!stringp(startroom = user->query
+  ("startroom"))` 时随机取 `start_room[i]` 四个候选之一），断线前后
+  两次都命中了这个"无有效存档房间→随机新手房"分支，与本次净断线超
+  时逻辑本身无关，是该角色存档的既有状态，不是本轮引入或发现的新
+  问题。
+- 结论：**900 秒 `NET_DEAD_TIMEOUT` 行为符合代码预期，完整验证通
+  过，本轮完成了完整真实等待，没有用缩短等待代替。**
+
+### §7.90/§7.111/§7.112/§7.113/§7.114/§7.115 标准清单巡检——本档案均已干净
+
+- §7.90（eval-cost）：`config.fluffos` 的 `maximum evaluation cost`
+  仍是 `10000000000`，未回退。
+- §7.111（`master.lpc::standard_trace()` 的 `file_name(error["object"
+  ])` 未加保护）：`adm/obj/master.lpc` 第 198-199 行已是
+  `error["object"] ? file_name(error["object"]) : "0"`，已加保护。
+- §7.112（`death_stage` 重连/重复调度的 `call_out` 叠加）：
+  `d/death/npc/wgargoyle.lpc`/`bgargoyle.lpc` 在 `call_out
+  ("death_stage", ...)` 前已有 `query_temp("death_stage_active")` 防
+  重入判断。
+- §7.113（净断线重连后 `heart_beat` 未恢复）：`clone/user/
+  user.lpc::reconnect()` 无条件 `set_heart_beat(1)`，
+  `adm/daemons/logind.lpc` 的 `reconnect()` 两条净断线重连分支都无
+  条件调用 `user->reconnect()`——本轮净断线测试也侧面验证了这条链路
+  （见上）。
+- §7.114（`private` 声明的 `input_to()` 编辑器 mixin 回调）：全档案
+  `grep -rl "private.*input_line"` 零命中。
+- §7.115（`QUEST` 宏指向不存在的文件）：`include/globals.h` 里
+  `QUEST` 是 `"/inherit/quest"`，`inherit/quest.lpc` 文件本身确实存
+  在（385 字节），目标文件不缺失，不适用本档案。
+
+### 进程卫生附注
+
+驱动按精确 PID（`360392`）结束，未使用 `pkill -f` 模式匹配。测试期
+间产生的存档漂移（`data/user/f/fluffos.o`、`data/login/f/fluffos.o`、
+`data/user/y/ylfydeeptwo.o`、`data/login/y/ylfydeeptwo.o`，以及测试
+窗口内背景世界模拟触发的 `data/npc/menpai.o`/`menpai1.o` 状态漂移）
+已 `git checkout HEAD --` 还原，未纳入本次提交；未新建任何测试账号
+（全程复用既有的 `fluffos` 管理员与 `ylfydeeptwo` 测试角色），无需
+额外账号清理。本轮无代码改动，仅测试与记录。
