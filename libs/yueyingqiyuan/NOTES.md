@@ -747,3 +747,180 @@ PID when done.
 本轮修改的文件 / Files modified this round:
 - `libs/yueyingqiyuan/work/obj/user.lpc`
 - `libs/yueyingqiyuan/work/adm/simul_efun/file.lpc`
+
+## Round-three deep functional test (2026-08-18)
+
+Standard §10.7 round-three pass, going deeper than rounds one/two per the
+task brief: pushed through a real death→gate→reincarnation cycle with a
+netdead reconnect *during* the reincarnation chain, completed a full
+shop purchase (round two flagged this as untested), live-verified board
+post+read, and ran the five standing checklist items from the task
+(§7.111/§7.112/§7.113/§7.90/`logind.lpc enter_world() save`).
+
+### Standing checklist results
+
+1. **§7.111** (`master.lpc`'s `standard_trace()` calling `file_name(error["object"])`
+   unconditionally): **not present**. Both call sites in `adm/obj/master.lpc`
+   (`standard_trace()` line ~244 and `report_error()` line ~338) already
+   guard with `(undefinedp(error["object"]) || !error["object"]) ? "(none)" :
+   file_name(error["object"])`. No fix needed.
+2. **§7.112** (NPC/room `init()` scheduling an unguarded `call_out()` chain,
+   exploitable via a netdead reconnect re-broadcasting `init()`): **found
+   and fixed**, see below.
+3. **§7.113** (netdead reconnect not restoring `heart_beat`): **not
+   present**. `obj/user.lpc`'s `reconnect()` (the one actually invoked —
+   confirmed via `adm/daemons/logind.lpc:1175`'s `user->reconnect();`, itself
+   called from the real `reconnect(object ob, object user, int silent)`
+   handler at lines 625/702, not dead code here) already does
+   `enable_commands(); set_heart_beat(1); ...` as its first two statements.
+   This predates the round-two §7.108 fix (which only added
+   `enable_commands()`; `set_heart_beat(1)` was already there per `git log`
+   on this file). Live-verified below rather than trusting the code read
+   alone, per the task's own "`call`'s `query_heart_beat()` is unreliable"
+   warning — used a real health-regen signal instead.
+4. **§7.90** (`maximum evaluation cost` stuck at the risky `700000`
+   default): **not applicable**, already `30000000` (set in the round-two
+   pass).
+5. **`logind.lpc`'s `enter_world()` missing/commented-out `ob->save()`**:
+   **not applicable**, `enter_world()` calls `ob->save();` at line 1027.
+
+### Bug found and fixed: §7.112, this lib's own 4-file instance of the death/reincarnation `init()`-`call_out()` race
+
+Grepped every `init()` body in the archive for an unguarded `call_out(`
+(481 hits total, the overwhelming majority ordinary one-shot NPC chat/
+greeting timers where a duplicate is harmless). Narrowed to the
+death/reincarnation-themed directory the task flagged as the highest-risk
+shape: `d/death/npc/{b,pang,bgargoyle,wgargoyle}.lpc` — all four are
+`阴间判官`-style "psychopomp" NPCs placed in the death-zone rooms a
+player's character is moved into on death (`feature/damage.lpc`'s
+`die()` → `this_object()->move(DEATH_ROOM)`, `DEATH_ROOM` =
+`/d/death/gate`, which places `npc/pang`; the other three sit in
+`new-out*`-linked rooms further into the zone). All four have the
+identical shape: `init()` unconditionally does
+`call_out("death_stage", 5, previous_object(), 0);` with **no** guard
+against being re-triggered, and `death_stage()`'s final stage calls
+`ob->reincarnate()` and `ob->move(REVIVE_ROOM)` — i.e. exactly the
+"duplicate reincarnation chain" hazard the task describes. Since a
+netdead reconnect re-broadcasts `init()` to every object in the
+reconnecting player's environment (the same mechanism the round-two
+§7.108 fix depends on), reconnecting while standing in one of these
+rooms mid-chain would schedule a **second**, independently-ticking
+`death_stage` chain overlapping the first — duplicate/interleaved
+psychopomp dialogue at minimum, and a real risk of a second
+`ob->reincarnate()`/`ob->move(REVIVE_ROOM)` racing the first.
+
+**Fix** (ported from the task's reference shape, `libs/sj/work/d/death/
+npc/wgargoyle.lpc`, extended slightly — see below): added a per-target
+`"death_stage_active"` `set_temp()`/`query_temp()`/`delete_temp()` guard.
+`init()` now checks `if (previous_object()->query_temp
+("death_stage_active")) return;` before setting the flag and scheduling
+the first `call_out`. `death_stage()` clears the flag on **every** exit
+path (not just the two the `sj` reference clears) — including the
+"turned out not to be a ghost, attack/kick them instead" branches in
+`b.lpc`/`bgargoyle.lpc`/`wgargoyle.lpc` and the `max_gin/kee/sen <= 0`
+early-return in `bgargoyle.lpc`, which the `sj` reference's own fix
+leaves un-cleared (a latent gap there — if that branch fires, the flag
+would stay set forever for that player object, permanently blocking any
+*future* legitimate death_stage chain for the same login session).
+Applied identically across all four files; confirmed each diff is
+minimal (`git diff --stat`, 9-17 lines changed per file, all plain-LF
+files so no CRLF risk).
+
+**Live reproduction and verification** (single script, deterministic
+timing, native `build-debug` driver, fresh `debug.log`):
+- Triggered a real death via `call qintan->die()` as the seeded admin
+  (exercises the actual `die()` apply combat calls too — not a
+  synthetic path) — confirmed `qintan` moved to `/d/death/gate`
+  (阴阳界) with `npc/pang` (崔珏, 朱笔判官) present, matching
+  `feature/damage.lpc`'s documented `DEATH_ROOM`/`start_death()` flow
+  (`DEATH_ROOM->start_death(this_object())` is itself a pre-existing,
+  harmless no-op — no `start_death()` function exists anywhere in the
+  codebase, and LPC's `call_other()`-to-undefined-function silently
+  returns 0 rather than erroring; not fixed, dead but non-fatal, noting
+  for the record).
+- Closed the `qintan` socket ~0.6s after the death-move (simulating a
+  network drop) and reconnected ~1.5s later — the reconnect landed
+  during the ~5-10s window (confirmed via wall-clock timestamps in the
+  test script), i.e. **squarely between** `death_stage` stage 0
+  (fired ~5s after entry, its message text arrived mid-login) and stage
+  1 (due ~5s later). This is exactly the race window the fix closes.
+  Watched the full remaining chain: stages 1, 2, and 3 (崔判官's four
+  dialogue lines) each printed **exactly once**, at the correct ~5-second
+  cadence, with no duplicate or interleaved text — confirming the guard
+  blocked the second `init()` broadcast (triggered by the reconnect's
+  `enable_commands()`) from scheduling a competing chain.
+- `debug.log` (freshly cleared at boot) stayed **completely empty**
+  through the whole death→reconnect→chain→revive sequence — no errors,
+  no "Too deep recursion.", nothing.
+- A follow-up connection confirmed the chain completed correctly exactly
+  once: `qintan` ended up in the real revive room (荒郊小店, "Wilderness
+  Small Shop") with its own corpse and board present, `score` showed
+  被杀 incremented to 二 (2, correct — two real deaths this session), and
+  `hp` showed 气血 56/200 recovering (not stuck at the post-death floor
+  of 1) — direct live evidence `heart_beat` resumed correctly after the
+  reconnect (confirms the §7.113 code-read finding above without relying
+  on the unreliable `call`-based `query_heart_beat()` check the task
+  warned about).
+
+### Economy: completed a real purchase (round-two gap closed)
+
+Round two flagged "no successful purchase completed live" as an honest
+gap. This round closed it: discovered live that `score`'s "存款" (bank
+deposit, the `"balance"` property) is **not** the currency `cmds/std/
+buy.lpc`'s `can_afford()`/`pay_money()` check — those check for actual
+money *objects* carried in inventory (`feature/finance.lpc`, presence-
+checks `coin_money`/`silver_money`/`gold_money`/`gold-coin_money`/
+`thousand-cash_money`), a deliberate two-tier economy (bank deposit vs.
+cash-in-hand), not a bug. Used the seeded admin to `clone /obj/money/
+silver`, `set_amount(50)`, and `give` it to `qintan`; `buy jiudai from
+xiao er` then succeeded correctly (`你向店小二买下一个桂花酒袋。`,
+inventory and remaining silver both updated correctly, 49 taels left).
+Confirms the vendor/purchase code path is sound.
+
+### Board post/read: live-verified end to end
+
+`南城客栈留言板` (`obj/board/nancheng_b.lpc`, a `BULLETIN_BOARD` instance
+— the same class the corpus-wide §7.86 sweep touched in this lib,
+previously only compile-checked, never live-played) — `read new` and
+`post <title>` (via the real `ed`-editor flow, `<body text>` then `.` to
+end) both worked correctly as the seeded admin (posting requires either
+wizard status or `literate` skill ≥ 10, a real, intentional gate — a
+fresh player correctly gets "还是先去学点读书写字吧！" instead, not a
+bug). Confirms the §7.86 fix (dropping the redundant
+`replace_program()` call) did not break the underlying post/read
+mechanism it was applied to. (Test churn: reverted the board's own save
+file, `data/board/nancheng_b.o`, after confirming the post worked —
+kept the fix, not the test data.)
+
+### Other things tested, no issues found
+
+- Registration (fresh char, `qintan`/秦探三): clean, same flow as prior
+  rounds.
+- `goto`, `call`, `clone`, `give` wizard commands: all work correctly for
+  the seeded `fluffos` admin account.
+- Reconnect while netdead (silent, no `quit`): resumes in place, per
+  prior rounds' findings — reconfirmed here as a side effect of the
+  death-chain test's own reconnect step.
+
+### Housekeeping
+
+Driver killed by exact PID (`kill 102769`; verified via `ps` and
+`ss -tln` that both the process and port 40048's listener were gone)
+after confirming `readlink /proc/102769/cwd` matched this lib's `work/`
+directory. Reverted incidental save-file churn that wasn't real test
+evidence: `data/board/nancheng_b.o` (the test board post) and the
+seeded admin's `data/login/f/fluffos.o` / `data/user/f/fluffos.o` (pure
+key-reordering + `last_on` timestamp bump from login activity, no real
+state change). Kept `qintan`'s save files (`data/user/q/qintan.o`,
+`data/login/q/qintan.o`) as playthrough evidence, consistent with prior
+rounds' convention — it demonstrates a full death→reincarnation→revive
+cycle survived two real deaths cleanly. `adm/etc/banned_name` picked up
+`秦探三`'s name-reservation entries (kept, since the character save is
+kept). No scratch files were left in the lib's own directory (test
+scripts lived under the session scratchpad, not the repo).
+
+本轮修改的文件 / Files modified this round:
+- `libs/yueyingqiyuan/work/d/death/npc/b.lpc`
+- `libs/yueyingqiyuan/work/d/death/npc/pang.lpc`
+- `libs/yueyingqiyuan/work/d/death/npc/bgargoyle.lpc`
+- `libs/yueyingqiyuan/work/d/death/npc/wgargoyle.lpc`
