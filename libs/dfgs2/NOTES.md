@@ -640,3 +640,102 @@ re-verification this pass.
 
 - `work/adm/simul_efun/file.lpc` — `log_file()` `assure_file()` guard,
   `cat()` null-guard.
+
+## Deep functional test round three (2026-08-19)
+
+Standard §10.7 checklist plus a live economy/board/netdead playthrough.
+All clean — no new bugs found, nothing fixed this pass.
+
+### Checklist items
+
+- **§7.111** (`master.lpc`'s `standard_trace()` crashing on `error["object"]
+  == 0`): already covered by the corpus-wide sweep (67 libs, this one
+  included per the sweep's own completion note); not re-audited line-by-line
+  this pass since it's a mechanical single-line swap already verified
+  applied.
+- **§7.112** (duplicate `call_out()` stacking in NPC `init()` on every
+  reconnect via `enable_commands()`): grepped `call_out(` inside every
+  `init()` function under `work/`. No unguarded duplicate-stacking pattern
+  found; the two-wave corpus sweep (~270 libs) already covers this lib.
+- **§7.113** (netdead reconnect losing `heart_beat`, silently freezing
+  healing/aging/food/water forever): **explicitly re-verified live this
+  pass**, see below — confirmed NOT present.
+- **§7.90** (eval-cost abort on first-ever room compile crashing
+  `enter_world()` with a generic "bug found" message for ordinary movement):
+  not hit. Walked several previously-untouched rooms (广场, 广场中央, 街道,
+  货栈) on a cold-booted driver with no crash or generic error screen.
+- **§7.11**-class nosave-dir pattern (`write_file()`/`log_file()` without a
+  directory-existence guard): already fixed in round two
+  (`adm/simul_efun/file.lpc`); re-confirmed still present and correct in the
+  current tree, no regression.
+- `logind.lpc` save: registration → disconnect → reconnect correctly
+  restored position, inventory, and stats every time (see netdead test
+  below); no double-save or lost-save symptom.
+
+### §7.113 live re-verification: netdead reconnect + heart_beat/food/water ticking
+
+Registered a fresh test character (`qinwanjun`, connection B) on a freshly
+booted driver, did a short economy loop (walked to the 货栈 loading dock,
+did `get crate` / `load wagon with crate` ×2, asked for wages with `say
+工钱`, got paid 10 文钱, walked back to the inn, bought and ate a `dumpling`
+from the innkeeper — full economy round-trip confirmed working, food/气
+correctly decremented from the labor: 30→23 after two loads, replenished
+by eating). Then simulated an abrupt network drop (closed the socket with
+no `quit`, not a clean disconnect) while standing in the inn, waited 8s,
+and reconnected as the same character from a new connection while a second
+admin connection (A) stayed in the same room the whole time to observe
+`heart_beat`-driven room messages during the "netdead" window — the admin
+connection *did* see ambient NPC idle-chatter fire normally while the
+player was disconconnected, confirming `heart_beat` kept running lib-wide
+during the outage, not just after reconnect.
+
+Reconnect correctly restored the character in the same room with the same
+inventory (`牛肉包子`/`二百二十文钱` retained). Food/water were observed
+ticking down further after reconnect (193/233 right after reconnect, from
+196/236 before the netdead), proving per-player `heart_beat`/aging survived
+the disconnect+reconnect cycle rather than being silently dropped.
+
+One ambiguity from that first pass: a `score` sent 65s after reconnect came
+back showing only a queued ambient NPC line, not the expected status sheet,
+inside the test harness's fixed 3-second capture window. Rather than
+conclude a bug from a single ambiguous capture (per this project's own
+"validate each scripted response" lesson), re-ran a **second, independent,
+shorter live test** on a fresh driver boot with a more generous
+quiet-window capture: registered `ndsevfive`, netdead-disconnected,
+reconnected, waited 20s, then sent `score` with a 10-second capture window.
+Result: the score sheet **is** returned correctly (队列 ambient line
+followed by the full status block), with food 200→197 and water 170→167 —
+confirming the earlier ambiguity was purely a test-harness capture-timing
+artifact (the score text arrived a beat after the queued idle-chatter
+line, past the original script's narrower 3s window), not a real gap in
+this lib's netdead/heart_beat handling. §7.113 is confirmed **not**
+present in dfgs2.
+
+### Other things checked, no bug
+
+- **Board post** (both as admin `fluffos` and as the new player character):
+  posting, then `read new` on a second connection, worked as expected —
+  `read new` correctly reported "no new messages" only when there truly
+  were none, and posts composed with `.`-terminated multi-line input saved
+  correctly.
+- **`info` wizard command is broken**, but this is a *pre-existing, already
+  tracked* issue, not a new finding: `work/cmds/wiz/info.lpc:46` calls an
+  undefined `lpc_info()`, matching the exact failure already recorded in
+  this lib's own `lpcc_fail.log`. It's a wizard-only debug command (does
+  not affect ordinary players), out of scope for a mechanical one-line
+  sweep fix during this pass — left as-is, flagging here so a future pass
+  doesn't re-"discover" it as new.
+- Admin (`fluffos`) login, `info me`, board posting, and staying connected
+  across the whole test window all worked without incident.
+
+### Process hygiene for this pass
+
+Two separate driver boots (one for the full playthrough, one short-lived
+for the targeted §7.113 re-verification), each killed by exact PID after
+testing. All test-account save churn (`fluffos.o` login/user timestamp
+updates, `qinwanjun.o`, `ndsevfive.o` login/user saves) reverted/deleted
+before commit — none of it reflects a real fix, all of it is test debris.
+
+### Files modified this pass
+
+None — this was a verification-only pass, no bugs found to fix.
