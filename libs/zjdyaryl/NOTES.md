@@ -763,3 +763,21 @@ driver by exact PID when done.
 - `libs/zjdyaryl/work/adm/daemons/closed.lpc`
 - `libs/zjdyaryl/work/clone/user/user.lpc`
 - `libs/zjdyaryl/work/adm/simul_efun/file.lpc`
+
+## AGENTS.md §7.100 fix (2026-08-19): redundant replace_program(ROOM) landmine
+
+Same corpus-wide bug as the batch-1-6 sweep (`ROOM` macro
+`"/inherit/room/room"` from `include/globals.h`). Deleted 2,315 live
+standalone `replace_program(ROOM);` lines under `work/` via
+`fix_710_room.py`, plus hand-fixed the room-building tool's
+string-builder template (`work/clone/misc/roommaker.lpc`). No `.lpc`
+files under `work/data/`, so no false-negative risk. Remaining matches
+after the fix are all pre-existing `//`-commented.
+
+Verified: clean `build-debug` boot (zero new compile errors, zero
+"cannot replace"/"cannot bind" in `debug.log`), live admin login
+(`fluffos`/`Mud@2026`) into the game world, `look`/`quit` worked
+cleanly (`score`'s "还没有出生呐" is pre-existing admin-account
+behavior). Incidental `data/{login,user}/f/fluffos.o` save drift from
+the login test was reverted via `git checkout HEAD` before
+committing.
