@@ -750,3 +750,24 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 44 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## AGENTS.md §7.100 fix (2026-08-19): redundant replace_program(ROOM) landmine
+
+Same corpus-wide bug as the batch-1-6 sweep (`ROOM` macro
+`"/inherit/room/room"` from `include/globals.h`). Deleted 2,315 live
+standalone `replace_program(ROOM);` lines under `work/` via
+`fix_710_room.py`, plus hand-fixed the room-building tool's
+string-builder template (`work/clone/misc/roommaker.lpc`). No `.lpc`
+files under `work/data/`, so no false-negative risk. Remaining matches
+after the fix are all pre-existing `//`-commented.
+
+Verified: clean `build-debug` boot (zero new compile errors, zero
+"cannot replace"/"cannot bind" in `debug.log`), live admin login
+through this lib's custom 指间MUD `crypt()`-challenge login protocol
+(reused the DES-crypt handshake this lib's own NOTES documents above:
+reply to `ver1.0,<str>` with `crypt(ZJKEY, str[2:4])`, then send
+`id║password║crypt(ZJKEY,id[:2])+crypt(ZJKEY,password[:2])║email`) as
+`fluffos`/`Mud@2026` — banner confirmed "目前权限：(admin)",
+`look`/`quit` both worked cleanly. Incidental
+`data/{login,user}/f/fluffos.o` save drift from the login test was
+reverted via `git checkout HEAD` before committing.
