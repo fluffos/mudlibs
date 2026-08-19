@@ -164,3 +164,33 @@ WIZ 密码之类的二级门槛，`securityd.lpc` 是这份档案里唯一、真
 号 `sjplcheck`（中文名"赵日天"）及测试留言板存档（`大慈恩寺`板、
 `wizard_j` 板各一条测试留言/计画）已在提交前删除，只保留
 `fluffos` 的账号存档。
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`/std/room`）在本档案 2,290 处房间文件的 `create()` 里
+紧跟 `inherit ROOM;` 之后又多余调用了一次 `replace_program(ROOM);`
+——和姊妹档案 `sjpl2`（同一份 `书剑飘零` 血统，房间生成工具家族逐字
+节相同）完全一样的 AGENTS.md §7.100 休眠 bug。用 `fix_710_room.py`
+扫过 `work/`，删除 2,280 处标准形状；另有 9 处不规则形状手工修复，
+和 `sjpl2` 的处理逐一对应：`obj/roommaker.lpc` 字符串拼接变体、
+4 份房间生成工具副本 + 2 份内嵌同一段代码的 NPC 档案
+（`u/lark/xiaoyao/npc/{rich,tumu}.lpc`、`u/jakey/npc/rich.lpc`）里
+"仅当房间没有 item_desc 时才拼接" 的条件变体（`u/losey/roommaker.lpc`
+`u/set/obj/roommaker.lpc`、`u/gdjk/roomm.lpc`、
+`u/gdjk/hongnong/maker.lpc`），以及 `u/lark/yangmingzhai/ss.lpc`
+一处真实房间文件（`replace_program` 紧跟在已注释掉的
+`/* setup() */` 后面同一行）。`u/lark/luoyang/dongmen.lpc` 剩下 1
+处留着未修：整份文件从 `inherit ROOM`（无分号）起就缺失几乎全部语
+句分号，确认是转档之前就已经损坏、与本次改动无关，和 `sjpl2` 同一
+份损坏文件的表现一致。`git diff --stat` 显示 2284 个文件净删 2289
+行，与 `sjpl2` 完全对称吻合；另有 150 处转档之前已注释掉的 `//` 行
+原样保留。`work/data/` 下没有真实 `.lpc` 源码命中。
+
+驱动干净启动（零新增编译错误、端口正常监听、`debug.log` 无任何
+"cannot replace"/"cannot bind"行），巫师账号
+`fluffos`/`Mud@2026` 确认"目前权限：(admin)"后 `look`/`goto` 走读
+了 `y/city/baozipu.lpc`（曾经命中过这个 bug 的房间）正常，`quit`
+干净退出。走读时另外撞见 `y/city/baihu-n1.lpc` 一处转档之前就存在
+的 `NPC_DIR "people/man"` 宏拼接语法错误（`git diff` 确认本次改动
+只碰了 `replace_program` 那一行），与本次 sweep 无关，不在修复范
+围内。登录存档的增量已用 `git checkout HEAD --` 撤销，未落入提交。
