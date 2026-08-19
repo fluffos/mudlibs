@@ -161,3 +161,11 @@ list/post 流程在客店验证可用（`list` 走分页，`ENTER`/`q`/`b` 翻�
 会丢失登入凭证"这类问题的**排查方法**（检查 `enter_world`/等价函式
 里是否存在被注释掉的登入物件 `save()` 调用）值得在其它库round-three
 测试中留意，尤其是那些新手初始房间没设 `valid_startroom` 的血统。
+
+## §7.100 修复（`ROOM` 基类的同一"多余 replace_program()"形状，全档案扫描第 6 批）
+
+- 删除 `work/` 下 2,661 处存活的 standalone `replace_program(ROOM);` 行
+  （脚本删除），另外手工修复 `clone/misc/roommaker.lpc` 建房工具代码
+  生成模板里的同形状变体，共 2,662 处，与普查记录一致。
+- 验证：真实 `build-debug` 驱动干净开机、端口正常监听，`debug.log` 中
+  零 "cannot replace"/"cannot bind" 行。
