@@ -83,3 +83,23 @@
 
 - 测试用一次性小号存档已删除，未提交。
 - 管理员 `fluffos` 的存档已提交（`data/{login,user}/f/fluffos.o`）。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次三）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：3257 处命中。自带建房工具 `clone/misc/roommaker.lpc` 的
+字符串拼接模板同样修复。修复过程中因本地一次 `git stash` 误操作，
+`d/gumu/tree.lpc` 一度残留了字面 `<<<<<<<`/`=======`/`>>>>>>>` 冲
+突标记——提交前被 `git diff` 检查发现，改用从原始 `HEAD` blob 重新
+按脚本逻辑派生该文件（二进制安全，保留原始 CRLF/尾随空格）修复，
+未手动编辑穿过冲突。
+
+`git diff --stat`：3256 files changed, 1 insertion(+), 3257 deletions(-)，
+与预期精确吻合。
+
+验证：`build-debug` 驱动真实冷启动（既有的"Too deep recursion"启动
+期警告在改动前的原始代码上同样存在，与本次修复无关），端口 40197
+正常监听。既有管理员账号 `fluffos`/`Mud@2026`（GB/Big5 编码选择
+后）登录，头衔【天帝】，经 `oldplayer` 路径走访至〖圣殿〗，`quit`
+自动存档、干净退出，全程无新增 "cannot replace"/"cannot bind" 日志
+行。
