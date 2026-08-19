@@ -295,3 +295,23 @@ Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
 （本档案已在此前一轮明确确认与 `hy`/`海洋` 血统无关，独立验证出同
 一类 log_error/log_file bug 形状，纯属拷贝粘贴模式的巧合，不是同源
 血统关系。）
+
+## AGENTS.md §7.100 fix (2026-08-19): redundant replace_program(ROOM) landmine
+
+Same corpus-wide bug as the batch-1-6 sweep (`ROOM` macro
+`"/inherit/room/room"` from `include/globals.h`). Deleted 2,336 live
+standalone `replace_program(ROOM);` lines under `work/` via
+`fix_710_room.py` — matched the survey's live-occurrence count
+exactly. `work/clone/misc/roommaker.lpc` does not have the
+string-builder variant of this bug (no `replace_program` reference at
+all in that file), so no manual tool fix was needed here. No `.lpc`
+files under `work/data/` in this lib, so no false-negative risk.
+Remaining matches after the fix are all pre-existing `//`-commented.
+
+Verified: clean `build-debug` boot (zero new compile errors, zero
+"cannot replace"/"cannot bind" in `debug.log`), live admin login
+(`fluffos`/`Mud@2026`, GB-encoding client) into the game world,
+`score`/`quit` worked cleanly (`look` landed mid-MOTD pagination and
+just advanced a page — non-issue). Incidental
+`data/{login,user}/f/fluffos.o` save drift from the login test was
+reverted via `git checkout HEAD` before committing.
