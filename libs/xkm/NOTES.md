@@ -69,3 +69,26 @@ chatpts（聊天/灌水积分），但用一个叫 `boardread` 的 10 拍冷却�
 ## §7.112 跨库扫描修复（无常 NPC 重连触发重复轮回链）
 
 - **`d/death/npc/{wgargoyle,wgargoyle1,bgargoyle}.lpc` 的 `init()` 无条件调度 `death_stage` call_out 链（AGENTS.md §7.112）**：这三个文件原本都没有任何去重判定——`enable_commands()` 会在同房间内向所有对象重播 `init()`，玩家哪怕只是断线重连一次，也会在原有的 `death_stage`/最终判官对话链之上再叠一条新链，导致重复的判官对白、重复扣血/转生等竞态错误。已仿照同族已修复库（`dtsl`/`dtsl2`/`dtslmud`/`jym`/`xuanjianlu`）的做法，给每个 `init()` 加上按受害者存的 `set_temp("death_stage_active", 1)`/`query_temp(...)` 门槛判定，并在 `death_stage()` 的每一个退出点（角色离场、黑无常"阳人退回"分支、链条走完转生）里 `delete_temp(...)` 清除标记。三个文件形状与 `jym` 版本几乎一致（均无 `final_death_stage` 分支），已用独立驱动干净编译+启动验证，未发现残留 save 数据变化。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次五）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：3176 个房间文件的 `create()` 里紧跟 `inherit ROOM;` 之后
+都有这一行多余调用，永久设下"待替换"标记，第一次对该房间对象绑
+定闭包就会崩溃。这份档案有两处代码生成模板烤了同一个地雷：自带建
+房工具 `clone/misc/roommaker.lpc`，以及帮派堂口建造精灵
+`adm/daemons/groupd.lpc`（各自独立的字符串拼接模板）。另外发现 31
+个帮派堂口房间源码文件放在 `work/data/group/` 下（真正的 .lpc 源码，
+不是存档），扫描脚本默认排除 `data/` 目录（为了保护玩家 .o 存档）
+误伤了这批文件——针对这个子目录单独关闭排除，手动补上。
+
+修复：脚本化删除所有房间文件里独立成行的 `replace_program(ROOM);`，
+加上两处模板手动摘除字符串拼接片段。`git diff --stat`：3176 files
+changed，与预期精确吻合（0 处遗留匹配，全部干净）。
+
+验证：`build-debug` 驱动真实冷启动，端口 40191 正常监听，
+`debug.log` 全程干净。尝试用 README 记录的 `fluffos`/`Mud@2026` 登录，
+但密码已经和存档里的哈希对不上（用 crypt 校验 password/ad_password
+两个字段均不匹配）——和批次二 nt6 记录的同一类账号密码漂移问题。
+未触碰玩家存档，也未继续深挖新密码，改为依赖干净冷启动（含失败登
+录尝试全程 debug.log 零新增行）作为本次纯机械修复的充分验证证据。
