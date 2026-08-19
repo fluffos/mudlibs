@@ -50,3 +50,117 @@ id→y→中文名→密码 ×2→天赋(0)→接受(y)→email→性别 流程�
 专用的带外控制标记，正常客户端会解析成小地图/状态栏 UI，不是
 bug，用原始 socket 客户端测试时会看到字面文字属于预期噪音）。驱
 动按精确 PID 结束；管理员存档已提交。
+
+## 深度功能测试（2026-08-18，round three）——冷启动 §7.90、死亡室
+§7.112、cat() 缺失文件三个真实 bug
+
+本轮目标是在 round two 覆盖面之外做更深的玩法回路测试：留言板、移
+动探索、拜师、战斗/死亡/转世、断线重连穿插在死亡对话链中间。按标
+准清单主动核对了四个跨库高发 bug 形状（§7.111 / §7.112 / §7.113 /
+`logind.lpc enter_world()` 的 `ob->save()`）。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **§7.112：死亡室白无常/黑无常 NPC 的 `init()` 无重复触发保护**
+   （`d/death/npc/wgargoyle.lpc`、`d/death/npc/bgargoyle.lpc`）：两
+   者的 `init()` 都无条件 `call_out("death_stage", 5, ...)`，玩家
+   进入死亡室后若中途断线重连（`enable_commands()` 会让驱动对房间
+   内每个物件重新广播 `init()`），会在原有对话链之外再叠加一条新
+   链，导致对话重复、甚至 `reincarnate()` 被调用两次。已仿照
+   `libs/sj/work/d/death/npc/wgargoyle.lpc` 已确立的修复手法，加上
+   `set_temp("death_stage_active", 1)` / `query_temp(...)` /
+   `delete_temp(...)` 门闩，在 `death_stage()` 的**每一个**退出点
+   （消失、非幽魂反杀、转世完成）都清空标记。**现场验证**：用
+   `call <id>->die()` 强制测试角色死亡进入死门关，在对话链进行到
+   一半时主动断开 socket 模拟掉线，再重新连线——续接的对话没有从
+   头重播（未见重复的"喂！新来的"开场白），链条按原节奏继续到转
+   世完成，`你共死亡` 计数每次死亡只加一，`debug.log` 全程干净。
+2. **`adm/simul_efun/file.lpc` 的 `cat()` 缺文件存在性检查（
+   §7.11-class）**：`file_size(file) < __LARGEST_PRINTABLE_STRING__`
+   对不存在的文件（`file_size()` 返回 -1）恒真，于是
+   `write(read_file(file))` 里 `read_file()` 返回 0，`write(0)` 触
+   发 `Bad argument 1 to receive()` 运行时错误。触发路径：
+   `get_id()` 对非 Tomud 客户端连线断线前会 `cat("/adm/etc/
+   new.txt")`，而这份档案里这个文件本来就不存在——也就是说**每一
+   次**普通 telnet/非 Tomud 客户端连线尝试都会在 `debug.log` 里留
+   一条运行时错误。已加 `if (file_size(file) == -1) return;` 前置
+   判断。**现场验证**：修复后用原始 socket 发送非法握手字符串，
+   连线被正常拒绝且断开，`debug.log` 无新增错误。
+3. **§7.90：`config.fluffos` 的 `maximum evaluation cost` 只有本
+   项目模板默认值 `700000`（此项目 30+ 档案已经统一提升到
+   `5000000`），冷启动第一次真实登录时在 `enter_world()` 里编译
+   `/clone/cloth/cloth`（首次登录送的新手服装）触发
+   eval-cost 超限，且**这一级超限是不可 `catch()` 的**（`debug.log`
+   出现 `*Can't catch eval cost too big error.`，driver 的硬保护机
+   制），导致整个 `enter_world()` 被中断在 `user->move(startroom)`
+   之前——玩家永远没有被放进任何房间，卡在"你的四周灰蒙蒙地一
+   片，什么也没有"的虚空里，`look`/移动全部失效，且不会自愈（
+   每次冷启动后第一个撞上这条路径的玩家都会中招）。这正是本项目
+   `hhsj` round three 记录过的同一类根因（`get_char()`/
+   `make_body()` 冷编译被打断），只是这次撞在 `enter_world()` 的穿
+   衣逻辑上。**修复**：`config.fluffos` 的 `maximum evaluation
+   cost` 从 `700000` 提升到 `5000000`（沿用项目内已确立的标准值）
+   ；另外把穿衣逻辑拆成独立的 `give_starting_cloth()` 函数并用
+   `catch()` 包起来（防御性加固，仿照同一函数里
+   `catch(load_object(startroom))` 的既有写法——虽然这一级
+   eval-cost 超限本身不可捕获，但如果未来某次是较轻的、可捕获的
+   超限，这层 `catch()` 能避免连锁中断整个 `enter_world()`）。**现
+   场验证**：杀掉旧驱动进程、彻底重启一个全新驱动，用同一账号做
+   第一次真正登录（此前正是这个场景 100% 复现问题）——现在干净落
+   地在真实房间（"武庙"），有正常出口，`debug.log` 全程无
+   eval-cost 错误。
+
+### Proactive checks（清单核对，无需改动）
+
+- §7.111（`adm/obj/master.lpc` 的 `standard_trace()`）：已经是
+  `objectp(error["object"]) ? file_name(...) : "<none>"` 的三元表
+  达式写法，不适用。
+- §7.113（netdead 重连未恢复 heart_beat）：真正生效的重连路径是
+  `adm/daemons/logind.lpc` 的 `reconnect()`（当
+  `find_body(id)->query_temp("netdead")` 为真时，`get_passwd()` 会
+  转发到这里），它调用 `user->reconnect()`，即
+  `clone/user/user.lpc` 里的 `nomask` 版本，正确执行了
+  `enable_commands()` + `set_heart_beat(1)`，不是死代码，不适用。
+- `logind.lpc` 的 `enter_world()`：`ob->save()`（第 662 行附近）
+  正常存在，未被注释掉，不适用。
+
+### 其它已测试、无异常
+
+- 留言板：`look board` / `read board` 正常；`post <标题>` 命令的
+  语法核实（需要标题作为参数，不是分步 input_to），发帖本身受
+  `literate` 技能 ≥101 的门槛限制（`inherit/misc/bboard.lpc`），是
+  正常设计门槛，未强行绕过测试。
+- 移动/探索：夜晚"天色太黑看不清出路"只是氛围文字，不阻挡实际移
+  动。
+- 拜师（`bai`）：对非门派 NPC（"魔法师"）正确拒绝"既不属於任何门
+  派，也没有开山立派，不能拜师"，是设计判断，不是 bug。
+- 战斗/死亡/转世全链路：用管理员 `call <id>->die()` 强制触发死
+  亡（`smash` 命令本身设计上禁止对未成年角色/玩家生效，是保护设
+  计不是 bug），确认死亡→鬼门关→白无常五段对话→转世→回到武庙的
+  完整链路正常，死亡次数计数正确递增，转世后精/气各恢复一半（正
+  常设计惩罚）。
+
+### 测试账号
+
+`xytestc`/`Test@2026`、`xytestd`/`Test@2026`（两个新注册测试账
+号，事后已清理存档，未纳入提交）。管理员 `fluffos`/`Mud@2026` 存档
+的死亡次数/位置在测试过程中被改动，已用 `git checkout` 还原到测试
+前状态，不纳入提交。
+
+### 潜在的跨库扫描候选（未在本次任务范围内处理其它档案）
+
+- **§7.112 死亡室 NPC 无重复触发保护**：本档案的 `wgargoyle.lpc`/
+  `bgargoyle.lpc` 是这个 bug 形状的又一个实例（本日已在 11+ 个其
+  它档案发现并修复过同类问题），建议按已有的跨库清单继续排查其它
+  尚未测试的档案。本档案里同一 bug 形状（`init()` 里无条件
+  `call_out()`）在 kungfu/quest/d 目录下还有约 400 处命中，但多数
+  已经用 `remove_call_out()` 自清或 `query_temp` 门闩规避了重复
+  触发（437 处命中里 371 处已有防护），只有死亡室这两处是真正会
+  引发"双倍转世"级别后果的高危实例，其余约 66 处未加防护的多是
+  NPC 自身的学技能/巡逻自计时器，量级和后果都小得多，本轮未逐一
+  处理。
+- **§7.90 config.fluffos eval-cost 过低**：`700000` 是本项目模板
+  默认值，这份档案原来也是这个值，已知至少 `hhsj`（round three）
+  和 `cctx` 也用同一默认值——`cctx` round three 报告未记录到同类问
+  题，可能只是运气好没撞上，值得在其它仍是 `700000` 的档案里主动
+  核查 `config.fluffos`，而不是等一次真实的冷启动踩雷才发现。
