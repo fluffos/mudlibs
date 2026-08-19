@@ -136,3 +136,23 @@
 "间歇性触发"记录）：均成功用普通密码登录，存档数据一致。全程两个
 调试日志位置都干净，无运行时错误。驱动按精确 PID 结束；管理员存
 档已提交。
+
+## AGENTS.md §7.100 修复（2026-08-19，批次三）
+
+`ROOM` 基类冗余 `replace_program(ROOM);` 自崩溃地雷（详见 AGENTS.md
+§7.100）：4474 个房间文件命中。本 lib 有四份独立的建房工具拷贝
+（`clone/misc/roommaker.lpc`、`u/xiyang/obj/roommaker1.lpc`、
+`u/landy/obj/roommaker.lpc`、`u/bzhou/obj/roommaker.lpc`），全部
+四份的字符串拼接代码生成模板里都烤了同一个地雷，一并修复。
+
+修复：脚本化删除独立成行的 `replace_program(ROOM);`，四份 roommaker
+模板手动摘除字符串拼接片段。`git diff --stat`：4474 files changed，
+与预期精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40166 正常监听。既有管理
+员账号 `fluffos`/`Mud@2026` 登录（本次连线未触发既有记录过的间歇
+性 wzd_log 巫师身份验证挑战），`score` 显示【巫师总兼】头衔，
+`quit` 干净退出，全程无新增 "cannot replace"/"cannot bind" 日志行。
+测试触发了本 lib 自身"游戏内时长不足 30 分钟不予存档"的既有逻辑，
+误删了 `data/login/f/fluffos.o`，已用 `git checkout` 还原，未纳入
+提交。
