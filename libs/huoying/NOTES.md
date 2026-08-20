@@ -597,3 +597,15 @@ not truncated after line 1. Killed the driver by exact PID when done.
 Files modified this pass:
 - `libs/huoying/work/feature/user/edit.lpc` — dropped `private` from
   `input_line()`.
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). 7 live
+`replace_program(ROOM);` occurrences: 5 room files under
+`world/area/wizard/*.lpc` (`bug.lpc`, `propose.lpc`, `newbie.lpc`,
+`guildhall.lpc`, `academy.lpc`) plus this lib's own room-building tool
+`obj/roommaker.lpc`'s string-builder template (mixed tab/space-indent
+variant, hand-fixed). A full post-fix grep confirms 0 live occurrences
+remain. Verified via a clean native driver boot (zero new `debug.log`
+errors, port listening, killed by exact PID after ~8s).
