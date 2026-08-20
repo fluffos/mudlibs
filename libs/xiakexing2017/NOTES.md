@@ -623,3 +623,14 @@ reverted before commit.
 - `work/adm/daemons/logind.lpc` — §8.9 fix (`ob->query("age")` →
   `user->query("age")`), removed one `printf("%O\n", ob)` debug leak.
 - `config.fluffos` — §7.90 fix (`maximum evaluation cost` 300000 → 5000000).
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/inherit/room/room"`：删除 818 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），与 `xkx2017`/
+`jqxz2008` 系列同一血统同一形状（本档案不是逐字节相同的手足档案，
+独立验证）。`clone/misc/roommaker.lpc` 同样有两套模板——"造一间空
+房间"的 heredoc 本来干净，"克隆我所在的房间"命令的字符串拼接模板
+把同一枚多余的 `replace_program(ROOM);` 烤进了每一个新克隆的房间，
+已同步修正。已用 `build-debug` 驱动干净启动验证（0 个新增编译错
+误，端口正常监听）；未做完整 §10.7 深度游玩测试。
