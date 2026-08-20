@@ -81,3 +81,7 @@ obj` 下确认没有真实命中。
 管理员存档（`data/{login,user}/f/fluffos.o`）已提交，补全此前
 NOTES.md 记录过、但从未真正落地的管理员播种。驱动按精确 PID 结
 束。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/yanluo.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
