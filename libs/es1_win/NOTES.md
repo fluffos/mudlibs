@@ -592,6 +592,18 @@ evidence). Driver killed by exact PID after testing; incidental
 `fluffos.o` save churn and a stray `.tmp` save file reverted/removed
 before commit.
 
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). 2 live
+`replace_program(ROOM);` occurrences: `d/noden/6,8.noden.lpc`'s
+`create()` (same shape/location as sibling `esI`), and this lib's own
+room-building tool `u/s/sage/test/roommaker.lpc`'s heredoc
+`ROOM_CODE` template — so newly-built rooms were inheriting the bug too.
+Both fixed by deleting the redundant line. Verified via a clean native
+driver boot (zero new `debug.log` errors, port listening, killed by
+exact PID after ~8s).
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 东方故事基础版（蓝天）。
