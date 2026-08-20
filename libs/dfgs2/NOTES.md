@@ -833,6 +833,293 @@ warnings) across all verification boots.
 - `work/feature/user/edit.lpc` — dropped `private` from `input_line()`
   (the real fix; see root cause above).
 
+## Deep functional test round four (2026-08-20): the three previously-unverified items resolved
+
+Follow-up pass specifically targeting the three items round one's "Explicitly
+not verified live" section (above) left open, per §10.7 item 6. All three
+are now resolved — one real bug found and fixed (economy), one confirmed
+genuinely-dead/harmless content (missing exit), one confirmed clean with a
+full real death/ghost cycle exercised live (combat).
+
+### 1. Shop purchase round trip — completed live, and a real economy bug found and fixed along the way
+
+Did the full intended flow: day-labor at 货栈 → `buy` → `deliver_merchandise`
+→ `handover` at 店小二(waiter) in 小客栈. While setting this up, found and
+fixed a genuine bug in the wage payment, not present in round one/two/three's
+partial testing (which never got past `can_afford()` rejecting an unpaid
+character):
+
+**Bug**: `d/snow/npc/foreman.lpc`'s `relay_say()` (the `say 工钱` wage-payment
+handler) creates a new `/obj/money/coin` object for exactly the wage owed,
+moves it into itself (`money->move(this_object())`), then does
+`do_chat((: command, "give coin to " + me->query("id") :))` — an
+**unquantified** `give`. `std/money.lpc`/`std/item/combined.lpc`'s
+`COMBINED_ITEM` money objects **auto-merge with any same-type stack already
+in the destination's inventory** when moved into a `living()` object
+(`combined.lpc`'s `move()` override). `foreman.lpc`'s own `create()` grants
+him `carry_money("coin", 220)` as flavor starting cash — so the very first
+`money->move(this_object())` after boot silently merges the wage into his
+220-coin personal stash into a single combined object, and the unquantified
+`give coin to <player>` then hands over the **entire merged stack** (220 +
+wage), not just the wage owed. Reproduced live: a character who did exactly
+3 crate-loads (15 wen owed) received "总共是十五文钱" as the spoken amount
+but their actual `i` inventory showed **235 wen** (220 + 15) after the first
+`give` on a fresh boot. This is a one-time-per-boot windfall (the foreman's
+own stash, once given away, isn't replenished — NPCs aren't re-`create()`d
+by room `reset()`), not a stable duplication exploit, but it's still a real
+code defect (an unintended currency leak from an item-stacking side effect
+colliding with an unqualified `give`), not a game-balance/content choice —
+nothing about the code's intent is "give the player your entire wallet."
+
+**Fix** (one line, `d/snow/npc/foreman.lpc`):
+```diff
+-      do_chat((: command, "give coin to " + me->query("id") :));
++      do_chat((: command, "give " + amount + " coin to " + me->query("id") :));
+```
+`cmds/std/give.lpc` already correctly handles a quantified `give <n> <item>
+to <target>` by splitting off exactly `<n>` from whatever stack is present
+(creating a fresh split object and reducing the original), regardless of how
+the source stack got that large — so this is the minimal, correct fix, not
+a workaround.
+
+**Verified**: fresh driver boot (clears the in-memory foreman's merged
+state), fresh character, exactly 1 crate-load (5 wen owed) → `say 工钱` →
+"总共是五文钱" spoken → `i` shows exactly **五文钱(Coin)**, no merge with
+the foreman's stash. Re-verified the full 3-crate (15 wen) case on a
+separate fresh character in the same boot: `i` showed exactly 十五文钱,
+confirming the fix isn't order-dependent. Then completed the actual shop
+round trip on that same character: `buy dumpling from waiter` → the
+delayed `deliver_merchandise`→`handover` chat-driven flow correctly fired
+("你的牛肉包子来啦！") → final `i` showed **exactly** 牛肉包子 + 五文钱
+(15 - 10 = 5), confirming both price deduction and item receipt are
+correct. `debug.log` stayed completely empty (no file even created) across
+this whole sequence — zero errors.
+
+### 2. The missing `/d/domain/snow2goat` exit at `d/snow/ngate.lpc` — confirmed genuinely dead/harmless content, not a crash bug (live-proven this time, not just static analysis)
+
+Root-caused the exact mechanics rather than relying on round one's static
+read. `cmds/std/go.lpc`'s `main()` does `dest = env->query("exits/" + arg)`
+— `feature/dbase.lpc`'s `query()` resolves nested-path properties via
+`_query()` then **unconditionally runs the result through `evaluate(data,
+this_object())`** before returning, and the driver's `evaluate()`/
+`_evaluate()` efun (`packages/ops/ops.cc`) calls the value as a function
+pointer if it is one. So `ngate.lpc`'s north exit —
+`(: clone_object, "/d/domain/snow2goat" :)` — genuinely gets **invoked**
+(not just referenced) the moment `query("exits/north")` is read, i.e. the
+instant `go north` is attempted, guards or no guards.
+
+Traced `clone_object()`'s actual driver implementation
+(`vm/internal/simulate.cc`): it calls `find_object()` first, which itself
+calls `load_object()` if not already loaded; `load_object()`
+(`vm/internal/simulate.cc:437`) `stat()`s the real file first, and since
+`/d/domain/snow2goat.lpc` doesn't exist on disk, falls through to
+`load_virtual_object()` (the `compile_object` master-apply / `virtuald.lpc`
+mechanism) — which itself only handles `server:arg`-shaped virtual paths
+(no colon in this path), so it also returns 0. **No `error()` is ever
+thrown anywhere in this chain** — `clone_object()` on a nonexistent,
+non-virtual path simply returns 0, gracefully, by design (this is standard,
+intentional MudOS/FluffOS behavor, not a driver bug). Back up the call
+chain: `evaluate()` returns 0, `dbase.lpc`'s `query()` returns 0, and
+`go.lpc`'s `if (!(dest = env->query(...))) return notify_fail("这个方向
+没有出路　\n");` fires immediately — the *generic* "no exit this way"
+message, not even the exit's own more specific "有问题，请通知巫师处理"
+fallback (that fallback is only for a non-string/non-0 `dest`, e.g. a
+non-object return from a working-but-broken closure).
+
+**Live-verified without touching the 5 guard NPCs at all**, per this pass's
+own instruction to prefer a controlled admin test over the costly combat
+route: as `fluffos` (admin), `goto /d/snow/ngate` (teleport, bypasses
+`go`'s `intercept()` add_action entirely) then
+`call /d/snow/ngate->query(exits/north)` — this calls the room's own
+`query()` exactly the way `go.lpc` does — returned `= 0` cleanly (`执行
+指令数：837`, i.e. it really did run the closure/`clone_object()`, not
+short-circuit). Also independently confirmed `clone /d/domain/snow2goat`
+(the wizard clone command, which pre-checks `file_size()`) reports "没有
+这个档案(/d/domain/snow2goat.lpc)　" — the file is genuinely absent, matching
+round one's archive-wide search. And for full realism, `goto`'d to `ngate`
+and typed the literal `go north` (not the bare `north` shorthand — this lib
+has no direction-alias commands, `north` alone just gives the driver's
+generic "什么？" fail message) — got exactly the documented guard
+interception ("官兵将你拦了下来　" / "野羊山最近有盗匪出没，你们走别条路吧　"),
+confirming the guards work as designed too. `debug.log` stayed completely
+empty across all of this — zero errors, zero crashes.
+
+**Conclusion: confirmed unreachable-but-harmless dead content, not a bug.**
+Even a player who somehow got past all 5 guards would just see "这个方向
+没有出路　" and stay put — no crash, no broken state, nothing to fix. Not
+touched.
+
+### 3. Real combat and death/respawn — reached without needing the guard-provocation route at all; a legitimate always-lethal path exists for any NPC
+
+Re-examined the "civilized" gating more carefully than round one/two: it
+turns out `cmds/std/fight.lpc`'s civilized branch **only gates the `fight`
+(sparring) command**. `cmds/std/kill.lpc` — a completely separate, always-
+available command, explicitly documented in its own `help kill` text
+("kill 只需单方面一厢情愿就可以成立，因此你对任何人使用 kill 指令都会开始
+战斗") — calls `me->kill_ob(obj)` and (for any non-player NPC)
+unconditionally `obj->kill_ob(me)` right back, **with no civilized check
+anywhere in that path** (`feature/char/attack.lpc`'s `kill_ob()` has none).
+The three `accept_kill()` overrides found across the codebase
+(`villager.lpc`/`fighter.lpc`/`soldier.lpc`) are all `void` — flavor chat
+only, their return value never gates whether the mutual kill happens
+(`kill.lpc` calls `obj->kill_ob(me)` regardless of what `accept_kill`
+"returns"). So **`kill` triggers genuine lethal combat against literally
+any NPC in the archive**, civilized or not — the "no non-civilized NPC
+exists to fight" framing in round one only applied to the `fight` command,
+not `kill`.
+
+Still did the broader-archive search the task asked for first, for
+completeness: `grep`'d every `set_race(` call in the whole tree — **every
+single NPC in this archive is race `human` or (2 `d/hell` NPCs) `woochan`**,
+both of which get `"civilized"` from their race daemon; genuinely zero
+`beast`-race (or any other non-civilized-race) NPC exists anywhere in the
+archive, confirming round one's specific claim was accurate as far as it
+went — it just wasn't the relevant gate for reaching lethal combat, since
+`kill` bypasses "civilized" entirely.
+
+Picked `d/snow/npc/guard.lpc` (青衣汉子, level 20, `sword`/`blade`/`parry`/
+`dodge` all 40-70) at `d/snow/ebridge.lpc` as the target — a `F_VILLAGER`
+NPC (no `soldier_assist` group-retaliation mechanic, unlike the ngate
+garrison/lieutenant), strong enough to reliably kill a fresh level-1
+character, reachable with 8 plain `go` moves from 小客栈 with zero gating.
+Live sequence on a fresh level-1 test character (`qinlaosan`/秦劳动, after
+completing items 1 above on the same character): `kill guard` → mutual
+`kill_ob()` fight proceeded automatically via `COMBAT_D`'s heartbeat-driven
+combat with no further player input needed → character's 气/精/神 dropped
+turn by turn (30→22→...→18 rounds) → real death: `daemon/race/human.lpc`'s
+`statistic_destroyed()` fired (`kee` stat destroyed) → `die()` → `userp()`
+branch → `CHAR_D->make_ghost()` → character transitioned to
+`"life_form":"ghost"` (confirmed via `score`: "你现在没有形体，因此没有气，
+只有精和神　", food/water stats deleted and now show 0/0) → a
+`秦劳动的...体(Corpse)` object correctly appeared in the room, both guards
+survived (as expected for a losing fight).
+
+**Ghost-state behavior verified, no crash anywhere**: moved normally as a
+ghost (`go west` worked cleanly, ordinary room-to-room movement), `quit`
+as a ghost correctly refused with a safety prompt ("你现在离开将会失去你
+的肉体，无法复活，如果确定要离开请用 'quit !'　" — matches
+`LOGIN_D->reincarnate()`'s permadeath-and-reroll design read from code:
+confirming a ghost quit is a deliberate, guarded, irreversible action, not
+an accident waiting to happen) — did NOT send the confirming `quit !`,
+just closed the raw socket (simulating a link-death) to test the
+non-destructive path; reconnecting picked the ghost character back up
+cleanly in the same room/state, no corruption, no double-object, `score`
+showed continued natural stat drift (气/神 18/30, further heartbeat-driven
+decay while linkdead) — all correct persistence behavior.
+
+**Two content-completeness gaps found, NOT bugs (no error signature,
+consistent with this project's crash-only fix policy)**, recorded for
+completeness rather than fixed:
+- `adm/daemons/logind.lpc:437`'s `if (user->is_ghost()) startroom =
+  DEATH_ROOM;` calls `is_ghost()`, which **is never defined anywhere in
+  the entire codebase** (`grep -rn "is_ghost"` finds only this one call
+  site). A `call_other` to an undefined function returns 0 silently on this
+  driver (no error) rather than erroring, so this condition can never be
+  true — dead code, not a crash. In practice this means a ghost's
+  reconnect just resumes wherever they physically are (confirmed above),
+  never redirected to `DEATH_ROOM` (`/obj/void`, itself a generic
+  "something broke" safety room, not actually `d/hell` despite the
+  confusing macro name).
+- **No file anywhere outside `d/hell/` references `d/hell`** (`grep -rln
+  "d/hell" | grep -v "^./d/hell/"` returns nothing) — the entire 黄泉/地府
+  afterlife zone (`death_start.lpc`'s `"valid_startroom":1` "黄泉路" plus
+  ~18 more rooms) has **no reachable entrance from the mortal-world map at
+  all**. `CHAR_D->make_ghost()` doesn't move the player there either (just
+  flips `life_form` in place). Combined with the `is_ghost()` gap above,
+  a player who dies has no in-game path to ever reach `d/hell` short of
+  wizard `goto` — the afterlife content exists but is entirely
+  unreachable, same "smaller/less-finished codebase" pattern already
+  documented for the dead `acquire_skill` stub in round one. Not fixed,
+  per AGENTS.md's missing-content-is-an-archive-gap precedent (§7.14) —
+  inventing a connecting exit would be fabricating content, not restoring
+  an authored-but-broken reference (unlike item 2 above, where the
+  reference target is provably absent from the source, not merely
+  disconnected).
+
+`debug.log` stayed completely empty (no file created at all) across the
+entire round-four pass — registration, economy, shop, 8-room travel, real
+combat, real death, ghost movement, quit-attempt, and reconnect. Zero
+errors, zero crashes, at any point.
+
+### Checklist items (fast pass, confirming already-applied fixes, not re-deriving)
+
+- **§7.90** (`config.fluffos` eval-cost): `maximum evaluation cost : 5000000`
+  — already correct.
+- **§7.100** (live `replace_program(ROOM);`): `grep -rn
+  "replace_program(ROOM)" work/ --include="*.lpc" | grep -v "^\s*//"` —
+  zero live hits, consistent with the tail-sweep completion note above.
+- **§7.111** (`standard_trace()` null-guard): already covered by the
+  corpus-wide sweep per round three's note; not re-audited line-by-line
+  this pass.
+- **§7.112** (`death_stage()`-style reentrancy guard completeness): this
+  lib's actual death path (`std/char.lpc`'s `die()` /
+  `daemon/race/human.lpc`'s `statistic_destroyed()`) is a different shape
+  than the `death_stage()` class this check targets (no `call_out`-based
+  reentrancy window found in the traced path); the two-wave corpus sweep
+  and round three's own `init()`-`call_out` grep already cover this lib.
+  Live-exercised the real death path this pass (see item 3 above) with
+  zero reentrancy symptoms (no duplicate corpse, no double-`die()` message,
+  no stuck-fighting state after death).
+- **§7.79** (bare 2-arg `addn()`/`addn_temp()`): `grep -rn "addn(" work/
+  --include="*.lpc"` — no hits at all in this lib (this lib doesn't use
+  `addn`/`addn_temp`, it uses `add`/`add_temp` throughout, e.g.
+  `wagon.lpc`'s `add_temp("wage_deserved", ...)`); not applicable.
+- **§7.108** (`reconnect()` should call `enable_commands()`): `obj/
+  user.lpc`'s `reconnect()` (the real implementation, confirmed by grepping
+  for the function definition rather than assuming a path) already calls
+  `enable_commands()`; matches round two/three's implicit clean bill (no
+  reconnect-related freeze symptom in any pass including this one's
+  ghost-reconnect test).
+- **§7.25** (`set_skill()` referencing a nonexistent skill file, causing an
+  uncaught `error()`): checked properly rather than assumed clean. Several
+  `set_skill()` names used across NPC `create()`s (`twohanded sword`,
+  `twohanded axe`, `secondhand dagger`, `taoism-fire`, `alchemy-medication`/
+  `-wealth`/`-magic`/`-immortality`) do **not** have an exact matching file
+  under `daemon/skill/` (which only has one file per broad category —
+  `sword.lpc`, `dagger.lpc`, `alchemy.lpc`, etc., no per-subskill files).
+  But this lib's architecture is safe against the crash class §7.25 targets,
+  for two independent reasons, both confirmed by reading the actual code:
+  (1) `feature/char/skill.lpc`'s `set_skill()` is a bare `skills[skill] =
+  val;` — no daemon lookup, no `load_object`/`new()` at all, so it can
+  never fail at NPC-creation time regardless of whether a matching skill
+  file exists; (2) the daemon lookup only happens later, when a skill is
+  actually *used* (`SKILL_D(x)` → `DAEMON_D->query_daemon("skill:"+x)` in
+  `adm/daemons/daemond.lpc`), and `query_daemon()` already wraps its
+  `load_object()` in `catch()` and falls back to returning `this_object()`
+  (itself) rather than propagating an error or returning 0 — so even a
+  genuinely-missing skill daemon file degrades to a silent no-op
+  (`SKILL_D(missing)->some_method(...)` becomes a call to an undefined
+  function on `DAEMON_D`, which this driver's `call_other` returns 0 for,
+  not an error) rather than a crash. Confirmed no `make_inventory()`/
+  `move()`-time crash is possible from this angle in this lib — the
+  `fyzfqyy`/`chidi` shape (uncaught `error()` at creation time) requires an
+  architecture where the skill file is loaded synchronously and unguarded
+  at `create()`, which this lib's `set_skill()` doesn't do.
+
+### Files modified this pass
+
+- `work/d/snow/npc/foreman.lpc` — quantified the wage-payment `give`
+  (item 1's fix, see above).
+
+### Process hygiene for this pass
+
+Native `build-debug` driver, one boot for the admin/`ngate` investigation
+(4 short-lived connections, killed and restarted between the bug-fix and
+its verification to clear the in-memory foreman's already-merged money
+state), one longer boot for the full economy→shop→combat→death→ghost
+playthrough. All killed by exact recorded PID, confirmed via
+`readlink -f /proc/<pid>/cwd` before each kill. Throwaway test-account
+saves (`qincha`/`qincheck1`-typo'd id rejected/`qinboyan`/`qinlaoerh`/
+`qinlaodong`/`qindiaocha`/`qinwage` — assorted false starts from id
+collisions and one character who happened to roll too little carry
+strength to lift a crate on the first try) all deleted before commit;
+`fluffos.o` login/user timestamp churn from the admin `ngate` tests
+reverted via `git checkout --`. `qinlaosan`/秦劳动 (the character that
+completed all three test items, now a ghost) kept as playthrough evidence,
+matching this project's established convention (`shenluoy` in round one,
+etc.) — saves at `work/data/user/q/qinlaosan.o` /
+`work/data/login/q/qinlaosan.o`.
+
 ## §7.100 sub-threshold instance (2026-08-20)
 
 Found during the §7.100 tail-sweep (below the original 166-lib survey's
