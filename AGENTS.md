@@ -7639,6 +7639,54 @@ impact: `sanjieshenhua` (1,335), `kxkj`/`kxkjii2` (1,310 each),
 `candidates_ge100.tsv`/`FINDINGS.md` in the survey's scratchpad for
 the full ranked list.
 
+**Fix-phase batch 11 (2026-08-19), next 10 libs by impact**: continuing
+straight down the ranked list from batch 10 — `sanjieshenhua` through
+`wqfy` (ranks 91-100 of the >=100 list). Same method as batches 1-10.
+
+| lib | live occurrences deleted | roommaker copies fixed | commit |
+|---|---|---|---|
+| sanjieshenhua | 1,335 | 3 copies (`obj/misc/roommaker.lpc`, `obj/obj/roommaker.lpc`, `obj/obj/misc/roommaker.lpc`, string-builder variant) + 1 irregular room file (`d/dongying/dahai.lpc`, stray space before the semicolon defeated the strict script match) | `bcad48315ef` |
+| kxkj | 1,310 | 0 (tool template never had the bug) | `2e0746a651b` |
+| kxkjii2 | 1,310 | 0 (byte-identical sibling of `kxkj`, same tool, same result) | `560e75575af` |
+| xsfyssjb | 1,188 | 0 (no room-building tool exists in this lib) | `4c0b7cbcb1c` |
+| fengyun434 | 1,188 | 0 (byte-identical sibling of `xsfyssjb`, same result) | `d39b55cfa51` |
+| xyj20032 | 1,183 | 3 copies (`obj/misc/roommaker.lpc`, `obj/obj/roommaker.lpc`, `obj/obj/misc/roommaker.lpc`, string-builder variant) | `c5602a6938e` |
+| sjshv2578bb | 1,183 | 3 copies (same shape as sibling `xyj20032`) | `98ca024cef8` |
+| fysjmb | 1,180 | 0 (no room-building tool exists in this lib) | `f13caf5fb91` |
+| xyj451 | 1,155 | 2 copies (`obj/roommaker.lpc`, `d/obj/clone/misc/roommaker.lpc`, string-builder variant) | `398a2a553c7` |
+| wqfy | 1,095 | 3 separate tools, 5 total fix sites: `obj/wall.lpc` (this lib's room-editor tool, named `wall.lpc` not `roommaker.lpc`; its `mkroom` heredoc template was already clean, only `do_saveroom()`'s string-builder had the bug), `d/wiz/xgchen/roommaker.lpc` (independent copy, same shape), `cmds/adm/roommaker.lpc` (a third, separate admin room-generation tool, 3 occurrences: `mkroom`'s string-builder plus two branches of `do_saveroom()`) | `ba2fc2b1086` |
+
+**Batch 11 total: 12,127 live occurrences deleted across 10 libs.**
+Running total after batches 1-11: **100 libs fixed, 314,421 live
+occurrences deleted** (302,294 + 12,127). Notable finds: `kxkj`/
+`kxkjii2` and `xsfyssjb`/`fengyun434` are both byte-identical sibling
+pairs (down to line-for-line matching diffs) with zero roommaker bug
+— confirms the "some sibling pairs never had the tool-side bug"
+pattern already seen in batch 10 isn't limited to libs that were
+never touched by a room-building tool at all. `xyj20032`/
+`sjshv2578bb` are a second sibling pair, this time both WITH the
+same 3-copy string-builder tool bug — same `sanjieshenhua`-lineage
+shape (`/std/room/room` macro path, `gg.h`+`globals.h` dual-define).
+`wqfy` is this batch's most complex case: three genuinely independent
+room-building tools in one lib (`obj/wall.lpc` under an unexpected
+non-`roommaker` filename, plus two more separate copies), the first
+time this sweep has found 3+ distinct tools in a single lib rather
+than 2-3 near-identical copies of the same one. All ten libs verified
+via a real `build-debug` driver boot (clean compile, port listening,
+zero new "cannot replace"/"cannot bind" `debug.log` lines); `wqfy`
+additionally cross-checked its handful of pre-existing pragma/nosave
+warnings to confirm they predate this sweep and aren't a new
+regression. No `git add` directory-sweep incidents this batch — every
+commit used `git add -u` plus explicit `NOTES.md` staging, and
+`wqfy`'s pre-existing untracked test-account debris (`data/login/q/
+qintest{d,rb,ww,zz}/`, predating this session) was confirmed left
+untouched by `git status` review before staging. **66 libs from the
+survey's >=100 list remain unfixed** (166 total minus 100 now fixed).
+Next up by impact: `fy2005` (1,001), `xxcqii`/`xxcqii2` (847 each),
+`jqxz2008dlx`/`jqxz2008std`/`jqxz2008` (827/825/825), and onward — see
+`candidates_ge100.tsv`/`FINDINGS.md` in the survey's scratchpad for
+the full ranked list.
+
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
 Found on `kxkjii2`'s §10.7 deep functional test (ES II/Annihilator
