@@ -711,3 +711,16 @@ triaged further as none are live/reachable.
 - `work/secure/daemon/master.lpc`
 - `work/clone/user/user.lpc`
 - `work/clone/user/wizard.lpc`
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). 73 live
+`replace_program(ROOM);` occurrences across 73 room files — mostly a
+large `d/menpai/wuliang/*.lpc` sect-zone cluster (68 rooms including a
+`west/` subdirectory), plus `d/city/matou/mache.lpc`/`kechuan.lpc` and
+a `d/place/death/*.lpc` cluster of 8 rooms. No room-building tool
+exists in this lib. 4 pre-existing already-`//`-commented instances
+left untouched. Fixed by deleting the redundant lines. Verified via a
+clean native driver boot (zero new `debug.log` errors, port listening,
+killed by exact PID after ~8s).
