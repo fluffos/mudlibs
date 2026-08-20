@@ -681,3 +681,7 @@ user.lpc::reconnect()` 的礼物精灵恢复补丁、`do_counter()` 的
 
 - `config.fluffos`
 - `work/adm/simul_efun/file.lpc`
+
+## §7.100 sweep (2026-08-19)
+
+Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 262 live occurrences deleted: 261 via scripted sweep (`fix_710_room.py`), plus 1 hand-fixed roommaker-tool template (`obj/roommaker.lpc`, simple string-builder variant). 7 already-commented-out instances left untouched. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, port 40020 listening, zero new "cannot replace"/"cannot bind" debug.log lines.
