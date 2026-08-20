@@ -62,3 +62,16 @@ example 档案/lpcc-sweep-only 的 `valid_override` 假阳性），零处
 两种独立方法（批量编译扫描 + 全新进程现场战斗/死亡验证）都没有触
 发问题。未改动 `config.fluffos`。`moniHuafu` 的问题是它自己配置值
 （`300000`）明显更低导致的，不是这份共享代码本身的通病。**
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). 61 live
+`replace_program(ROOM);` occurrences across 61 room files
+(`obj/void.lpc`, `d/huafu/*.lpc`, `d/new/wel1-3.lpc`,
+`d/wiz/jobroom.lpc`, and a large `d/death/*.lpc` cluster of 38 rooms) —
+same fatal redundant-replace-after-inherit shape as the rest of the
+§7.100 family. No room-building tool exists in this lib. Fixed by
+deleting the redundant lines. Verified via a clean native driver boot
+(zero new `debug.log` errors, port listening, killed by exact PID after
+~8s).
