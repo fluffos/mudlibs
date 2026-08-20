@@ -470,3 +470,7 @@ warnings). Killed the driver by exact PID when done.
 - `libs/xzyx/work/adm/simul_efun/file.lpc`
 - `libs/xzyx/work/cmds/ang/update.lpc`
 - `libs/xzyx/config.fluffos`
+
+## §7.100 sweep (2026-08-19)
+
+Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 176 live occurrences deleted: 173 via scripted sweep (`fix_710_room.py`), plus 2 hand-fixed irregular shapes (same lineage as `sj`/`shiji`) — `clone/misc/roommaker.lpc`'s string-builder, and both `d/fenghuang/fenghuang/taikong.lpc` (space before semicolon, single-line file) and `d/huang/zoulang4.lpc` (two redundant calls on one CRLF line, fixed via a single Edit spanning both instances). 4 already-commented-out instances left untouched. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, zero new "cannot replace"/"cannot bind" debug.log lines; confirmed serving via raw-socket connect on port 40002.
