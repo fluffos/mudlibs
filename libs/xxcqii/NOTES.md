@@ -6,3 +6,15 @@
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 20 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+同一形状扩展到全库通用房间基类 `#define ROOM "/inherit/room/room"`：
+删除 846 处多余的、独立成行的 `replace_program(ROOM);`（保留
+`inherit ROOM;`）。此外，本库自带的房间建造工具
+`clone/misc/roommaker.lpc` 有两套生成模板——"造一间空房间"的
+heredoc 模板本来就是干净的，但"克隆我所在的房间"命令的字符串拼接
+模板（第 138 行）把同一枚多余的 `replace_program(ROOM);` 直接烤进了
+每一个用它克隆出来的新房间，已同步修正（删除该拼接片段，保留
+`setup();`）。已用 `build-debug` 驱动干净启动验证（0 个新增编译
+错误，端口正常监听）；未做完整 §10.7 深度游玩测试。
