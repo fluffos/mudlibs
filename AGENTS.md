@@ -5277,48 +5277,102 @@ the NPC greeting and player name rendering correctly and an empty
 existed as a cataloged entry — confirms §7.80 recurs across this
 lineage too, not just a one-off on `nt1`.
 
-### 7.79 (IDENTIFIED, NOT FIXED — too large for one pass) Bare, self-targeting `addn()`/`addn_temp()` calls are ALWAYS broken, codebase-wide, regardless of `F_DBASE` — because `addn` is simul_efun-ONLY and never locally defined anywhere
+### 7.79 (SWEEP COMPLETE, 2026-08-19 — 6/6 confirmed-affected libs fixed) Bare, self-targeting `addn()`/`addn_temp()` 2-arg calls are broken — `addn` is simul_efun-ONLY (or, on 2 of 6 libs, shadowed by a real local override) and evaluates `this_object()` inside the simul_efun's own scope, not the caller's
 
 Related to §7.78 but a distinct trap: unlike `set`/`query`/`delete`
 (which `feature/dbase.lpc` DOES define locally, so a bare call resolves
 correctly for any file with `F_DBASE` genuinely in its own inherit
-chain), `addn`/`addn_temp` are **never defined as local/inherited
-functions anywhere in this lineage** — only in
-`adm/kernel/simul_efun/wizard.lpc`, as a compatibility shim for a
-driver efun this build doesn't have (see that file's own header
-comment). Every bare `addn(...)` call, no matter what file it's in or
-what that file inherits, is ALWAYS a genuine simul_efun call. The
-shim's own redirect (`if (!ob) ob = this_object(); return
-ob->add(prop, data);`) only works when an explicit target `ob` is
-passed AND is not `this_object()` — for the extremely common
-self-targeting form (`addn("some_stat", delta)`, no third argument,
-meant to buff the caller), `this_object()` inside that simul_efun call
-is the simul_efun object itself, so the shim redirects the write to the
-simul_efun's own throwaway dbase instead of the caller's. Symptom:
-skill/effect code that looks like it's applying a buff or decrementing
-a resource on the acting character silently does nothing measurable to
-that character (no crash, no error — same "silent no-op" signature as
-§7.15's original discovery).
+chain), `addn`/`addn_temp` are (in this lineage's *unmodified* form)
+only defined in `adm/kernel/simul_efun/wizard.lpc`, as a compatibility
+shim for a driver efun this build doesn't have. The shim's own
+redirect (`if (!ob) ob = this_object(); return ob->add(prop, data);`)
+only works when an explicit target `ob` is passed — LPC evaluates a
+`this_object()` argument at the CALL SITE, not inside the callee, so
+any 3+-arg call (explicit target) was already correct. For the
+self-targeting bare 2-arg form (`addn("some_stat", delta)`, no third
+argument), `this_object()` inside that simul_efun call is the
+simul_efun object itself, so the write silently lands in the wrong
+place — no crash, no error, just a buff/effect that does nothing (same
+"silent no-op" signature as §7.15's original discovery).
 
-**Scope check on `xfbhh`**: `grep -rPn '(?<!->)\baddn\(|(?<!->)\baddn_temp\('
---include="*.lpc"` found **~10,150 bare call sites across ~3,590
-files**, overwhelmingly in `kungfu/`/skill-effect code (e.g.
-`feature/pill.lpc`'s `addn("food_remaining", -1);`,
-`kungfu/class/murong/murongfu.lpc`'s `addn("san_count", -1);`). This is
-far too large to hand-fix in one deep-dive pass and was NOT attempted
-here — documented per the established precedent (§7.74) of leaving a
-genuinely-too-large finding honestly recorded rather than
-partially/riskily patched. Fix pattern for a future pass: same
-`this_object()->` treatment doesn't apply here (bare `addn` is never
-locally defined, so `this_object()->addn(...)` would just throw "Unknown
-function"); instead replace each self-targeting bare `addn(prop, data)`
-with `this_object()->add(prop, data)` (or `(ob ||
-this_object())->add(prop, data)` for the already-3-arg call sites, per
-§7.15's own `addn`-replacement guidance) — `add()` IS a real local
-`F_DBASE` function. Given the scale, this likely wants a scripted
-per-file transform plus spot-verification rather than manual editing,
-and should probably be its own dedicated pass rather than bundled into
-an unrelated lib's deep-dive cycle.
+**Scoping correction (survey pass, before any fix applied)**: the
+original `xfbhh` grep count above (~10,150 bare call sites, no
+arg-count filtering) hugely overstated the true bug scope — roughly
+90% of those calls already pass an explicit 3rd argument and were
+never broken. A paren-depth-aware, comment/string-masking argument
+counter (`argcount.py`, hand-verified 30/30 against real call sites)
+found the TRUE scope across the whole corpus is a single lineage/fork
+family sharing a byte-identical shim: **`xfbhh` (923), `hhsj` (915),
+`nitan170911` (850), `nitan6` (599), `nt6` (599), `nt6nitan6win`
+(599)** — 4,485 genuinely-broken 2-arg call sites total, none of it in
+7 other libs that also call bare `addn`/`addn_temp` but were positively
+ruled out: `xo_final` and `zsdsj` have a real local/inherited `addn`
+(not a simul_efun-only shim, so bare calls were never broken), and
+`wdxtym`/`wxddym`/`hy5`/`hymud`/`shenmo`/`yanhuangwuhun`/`yhwhpublicfi`
+were left unconfirmed (no local `addn` definition found in their own
+tree, small-to-negligible 2-arg-shaped call counts) — worth a future
+per-lib check but out of scope for this sweep.
+
+**Fix-pass correction (a second, more dangerous gap found mid-fix)**:
+applying the naive `addn(A, B)` → `this_object()->add(A, B)` transform
+to `xfbhh` corrupted `clone/user/user.lpc` — that file has a **real
+local function literally named `addn`** (a copy-paste/naming typo: the
+comment says "override add function by Lonely" but the function itself
+is `mixed addn(string prop, mixed data) { ... }`, 2 formal params).
+The naive script saw an `addn(` token followed by 2 comma-separated
+things inside parens and rewrote the *function definition itself* into
+`mixed this_object()->add(string prop, mixed data) {` — a syntax error
+(`L_ARROW unexpected`) caught immediately by a driver boot. Worse: even
+once the definition-vs-call ambiguity is handled, a **second-order
+effect** applies — every *other* bare `addn(...)` call inside that same
+file (12 of them, `addn("thief", -1)` etc.) resolves via normal LPC
+name lookup to the file's own LOCAL `addn`, never reaching the
+simul_efun at all, so those calls were never actually broken and must
+NOT be rewritten either. The same pattern, minus the naming typo,
+exists in **all 6 libs**: `clone/user/baby.lpc` locally overrides
+`addn` (correctly, with its own `this_object()`-safe redirect — a
+pre-existing partial fix for this exact bug, scoped to one file) but
+NOT `addn_temp`, so its 8 bare `addn(...)` calls must be excluded while
+its 1 bare `addn_temp(...)` call is genuinely still broken and must be
+fixed. Confirmed (grep for `inherit`) that nothing else in any of the 6
+libs inherits `baby.lpc` or `user.lpc`, so this exclusion is
+file-scoped and doesn't need to propagate further.
+
+**Fix**: rewrite genuinely-2-argument `addn("prop", value)` →
+`this_object()->add("prop", value)` and `addn_temp("prop", value)` →
+`this_object()->add_temp("prop", value)`, using a definition-vs-call
+classifier (any match immediately preceded by a type/modifier keyword
+AND followed by `{`/`;` is a definition, never touched) plus a
+per-file, per-name exclusion set discovered fresh at fix time (any name
+locally defined in a file is excluded from rewrite in that same file).
+Also corrected an encoding bug in the survey tooling: the corpus is
+UTF-8, not GB18030 as `argcount.py` assumed — decoding UTF-8 bytes as
+GB18030 didn't corrupt ASCII-only classification (verified: identical
+counts either way) but WOULD have corrupted every multi-byte Chinese
+character in every touched file on write-back had the original script
+been used for the actual rewrite instead of just the survey.
+
+**Result**: 4,424 call sites rewritten across the 6 confirmed-affected
+libs (`xfbhh` 902, `hhsj` 907, `nitan170911` 842, `nitan6` 591, `nt6`
+591, `nt6nitan6win` 591) — 61 fewer than the pre-fix 4,485 estimate,
+fully explained by the `baby.lpc`/`user.lpc` exclusions found above (60
+correctly-excluded local-override calls + 1 corrected
+definition-line miscount in `xfbhh`). Verified per-lib with
+`git diff --stat` matching the expected count exactly, a real
+`build-debug` cold boot with zero new compile errors, and a live
+spot-check: full new-account registration on `xfbhh`/`hhsj` (both
+succeed end-to-end into the world), `guest` quick-login on
+`nitan6`/`nt6`/`nt6nitan6win` (all succeed), and a connectivity-only
+check on `nitan170911` (pre-existing, already-documented MySQL
+dependency blocks new registration in this environment — same fallback
+used for this lib's §7.100 fix). Each lib committed individually with
+`git add -u` and pushed; per-lib methodology and counts also recorded
+in each lib's own `NOTES.md`.
+
+This closes out the confirmed scope of §7.79. The 7 unconfirmed libs
+above (`wdxtym`, `wxddym`, `hy5`, `hymud`, `shenmo`, `yanhuangwuhun`,
+`yhwhpublicfi`) still need an independent per-lib shim check before any
+fix — do not assume they match this pattern.
 
 ### 7.80 A filename-suffix-stripping slice is off by (suffix-length − 1) because `str[0..<n]` keeps `len-n+1` characters, not `len-n` — corpus-wide sweep completed, 15 libs fixed total
 
