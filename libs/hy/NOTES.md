@@ -258,3 +258,7 @@ diff（`data/{login,user}/f/fluffos.o` 的 `last_on` 字段）已用
 非本次修复引入的问题）。测试产生的 `data/{login,user}/f/fluffos.o`
 存档时间戳 diff 已 `git checkout` 撤销，不提交。驱动按精确 PID
 kill。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `海洋2002/hy3/d/death/npc/bgargoyle.lpc`, `海洋2002/hy3/d/death/npc/wgargoyle.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
