@@ -280,3 +280,14 @@ WASM 阶段的"完整验证过注册流程，没有发现 bug"结论需要更正
 地点（客店），`score` 显示"【天神】"头衔和正确的属性数值，留言板
 未读数正常显示。全程 `debug.log` 无运行时错误。驱动按精确 PID 结
 束；测试期间产生的存档时间戳增量已 `git checkout --` 还原。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/inherit/room/room"`：删除 795 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），与 `jqxz2008`/
+`jyqxc` 系列同一血统同一形状。`clone/misc/roommaker.lpc` 同样有两
+套模板——"造一间空房间"的 heredoc 本来干净，"克隆我所在的房间"命
+令的字符串拼接模板把同一枚多余的 `replace_program(ROOM);` 烤进了
+每一个新克隆的房间，已同步修正。已用 `build-debug` 驱动干净启动
+验证（0 个新增编译错误，端口正常监听）；未做完整 §10.7 深度游玩
+测试。
