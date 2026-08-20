@@ -450,3 +450,12 @@ incidental `fluffos.o` save-timestamp churn reverted before commit.
   (with forward declaration), `cat()` null-guard.
 - `work/adm/daemons/logind.lpc` — removed two `printf("%O\n", ob)` debug
   leaks (both name-confirmation branches).
+
+## §7.100 跨库扫描修复（`ROOM` 基类同款 `replace_program()` 致命形状）
+
+- 同款 `inherit ROOM; ... replace_program(ROOM);` 冗余自替换（AGENTS.md
+  §7.100）：与 `xsfyssjb`（同为风云系血统）完全同构，`work/` 下 1,188 处
+  存活匹配，全部标准独立行形式，脚本一次性删除，无不规则残留。没有房间
+  生成类工具，不涉及工厂模板修复。`data/` 下额外核查过，无命中。验证：
+  真实 debug 驱动干净编译启动、端口正常监听，`debug.log` 无新增
+  "cannot replace"/错误行。
