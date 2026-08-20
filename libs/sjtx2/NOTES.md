@@ -255,3 +255,13 @@ yudaiyan.lpc` 无 `attempt_apprentice()`，设定上本就不收徒，`apprentic
 间预算）；组织性拜师直到正气达标的完整流程（需要大量游戏内时间积
 累善行，超出本轮深度测试的合理时间预算，改用管理员捷径验证同一底
 层技能/门派赋予路径）；商店购买（起始区域武馆内未发现商店）。
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). Same lineage/shape as
+sibling libs `bxsj`/`bxsj1`: 24 live `replace_program(ROOM);`
+occurrences deleted (`d/wanshou/*.lpc`, `data/group/groom/*.lpc`,
+`d/cangzhou/dangpu.lpc`). No roommaker.lpc factory-bug variant.
+Verified via a clean native driver boot (zero new `debug.log` errors,
+port listening, killed by exact PID after ~8s).
