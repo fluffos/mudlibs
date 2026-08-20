@@ -649,3 +649,7 @@ evaluation cost` 已经是 `5000000`（此前一轮 §7.90 修复），仅 `cat(
 
 - `work/adm/simul_efun/file.lpc`
 - `work/obj/user.lpc`
+
+## §7.100 sweep (2026-08-19)
+
+Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 216 live occurrences deleted: 213 via scripted sweep (`fix_710_room.py`), plus 3 hand-fixed roommaker-tool occurrences (`obj/roommaker.lpc`, "room_code"/`str` 3-occurrence variant). 3 already-commented-out instances left untouched. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, zero new "cannot replace"/"cannot bind" debug.log lines; confirmed serving via raw-socket connect on port 40080.
