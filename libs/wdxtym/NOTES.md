@@ -95,3 +95,30 @@ eval-cost 级联（含一次罕见的"Can't catch"级重症）验证自愈。协
 （无逗号兼容、需要真实版本挑战应答）已记录避免下次踩坑。测试账号
 （`qinfengshiwu_1`/`qinfengshiliu_1`）存档留在 `data/` 下作为佐证，未
 清理（未跟踪文件，不纳入本次提交）。
+
+## §7.100 sweep (2026-08-19): redundant `replace_program(ROOM);` landmine
+
+Same corpus-wide bug as documented at AGENTS.md §7.100 (found originally
+on `jhfy3`): rooms inheriting `ROOM` (`/inherit/room/room`) had a
+redundant, harmful `replace_program(ROOM);` call right after `inherit
+ROOM;` in `create()`, setting a permanent "pending replace" flag that
+crashes the object the first time anything binds a closure to it. This
+lib had **1,845 live occurrences** (survey-ranked #82 of 166 candidates
+>=100; the survey's raw 1,846 count included one harmless string-literal
+occurrence inside `clone/misc/roommaker.lpc`'s own generated-room-code
+template, which was ALREADY commented out — `//replace_program(ROOM);`
+— in the generated output, so this lib's room-building tool never
+actually had the factory-bug variant at all, unlike most other libs in
+this sweep). Fixed with the sweep's binary-mode script
+(`fix_710_room.py`); `git diff --numstat` totals (0 insertions, 1845
+deletions) match exactly. No `work/data/` room-source false-negative
+found (3,389 `.lpc` files under `data/`, zero with a live
+`replace_program(ROOM);`). Verified via a clean `build-debug` boot (zero
+"cannot replace"/"cannot bind" `debug.log` lines, port 40188 listening)
+plus a live spot-check: this lib's custom `ver1.0,<salt>` challenge
+protocol bypassed with the documented `123456789abcd` literal, followed
+by a fresh `id║password║x║email` + `gender║avatar║nickname` registration
+— entered the game world normally (NPC 水笙 welcome message displayed
+correctly), `look`/`quit` both worked. Test account's save files
+(`sweeptest1_1.o`) deleted before committing (this sweep's own throwaway
+account, not pre-existing player data).
