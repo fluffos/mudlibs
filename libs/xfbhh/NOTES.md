@@ -196,3 +196,37 @@ files changed, 1 insertion(+), 4987 deletions(-)，与预期精确吻合。
 域），均正常返回，无 "cannot replace"/"cannot bind" 新增日志行。按
 精确 PID 结束驱动；登录产生的两处已跟踪存档增量
 （`work/data/{login,user}/f/fluffos.o`）已 `git checkout --` 还原。
+
+## AGENTS.md §7.79 修复（2026-08-19）
+
+裸 `addn("prop", value)`（无第三参数）恒为静默无效果：`addn`/
+`addn_temp` 只在 `adm/kernel/simul_efun/wizard.lpc` 有 shim 定义，
+`ob` 缺省为 `this_object()`——但这个 `this_object()` 是在 simul_efun
+内部求值，指向 simul_efun 对象自身，不是真正调用者，于是写入垃圾去
+处、静默丢失。3 参及以上调用（显式传 `ob`）从调用点求值 `this_
+object()`，本就正确，不受影响。
+
+用改造版 `argcount.py`（括号深度 + 注释/字符串屏蔽的顶层参数计数器）
+定位裸 2 参调用，改写为 `this_object()->add(...)`/`this_object()->
+add_temp(...)`。首轮脚本一度误伤 `clone/user/user.lpc`——该文件本地
+定义了一个（命名笔误，本应叫 `add` 却写成 `addn` 的）2 形参覆盖函
+数，脚本把这个函数定义行当成了"2 参调用"改写，产出语法错误
+（`L_ARROW unexpected`）。修复脚本加入"定义 vs 调用"通用判别（前一
+个词是类型/修饰符关键字 + 右括号后紧跟 `{`/`;` → 判定为定义，绝不
+改写），并逐文件探测本地覆盖：`clone/user/baby.lpc` 全 6 个 lib 都
+本地覆盖了 `addn`（未覆盖 `addn_temp`），`clone/user/user.lpc` 仅
+xfbhh 有上述笔误覆盖——两处的裸 `addn(...)` 调用经正常 LPC 名字解
+析走本地函数，从未真正命中过 simul_efun shim，予以排除；`baby.lpc`
+唯一的 `addn_temp(...)` 调用未被本地覆盖，正常修复。核实全库无任何
+文件 `inherit` 这两个文件，排除范围无需向外传播。
+
+结果：902 处改写（`clone/user/user.lpc` 排除 12 处、`clone/user/
+baby.lpc` 排除 8 处但修复其 1 处 `addn_temp`），`git diff --stat`：
+458 files changed, 902 insertions(+), 902 deletions(-)，与工具输出精
+确吻合。`cmds/adm/rp.lpc`/`rpp.lpc`（已知损坏的旧管理工具，`addn`
+参数解析本就不成立）按调查阶段结论跳过未动。
+
+验证：`build-debug` 驱动真实冷启动，端口 40190 正常监听，`debug.
+log` 全程干净，无新增编译错误。全新账号（`qintest779c`/角色名"秦
+测风"）走完注册流程，成功进入泥潭注册室并收到欢迎序列，符合 §10.1
+及格线。按精确 PID 结束驱动。
