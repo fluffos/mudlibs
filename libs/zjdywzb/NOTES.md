@@ -127,3 +127,16 @@ replace"标记，该对象一旦在生命周期里绑定任何闭包（`call_out
 巫师账号 `fluffos`/`Mud@2026` 实测走了 2 个曾经被注释触发过这个 bug
 的房间（`d/city/library.lpc`、`d/mingjiao/shanlu3.lpc`）以及世外桃
 源出生点，`look`/`goto`/`quit` 全部正常，无回归。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 5 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
