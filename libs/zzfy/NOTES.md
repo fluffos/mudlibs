@@ -636,3 +636,16 @@ recv 循环会因为提示符持续刷新而永远等不到静默，进而误判
 常完成，`debug.log` 全程干净，确认不是本次改动引入的回归，也不
 是真实的驱动 bug。管理员存档的时间戳漂移已用 `git checkout HEAD
 --` 还原，未提交。驱动按精确 PID 结束。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 3 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
