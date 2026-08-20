@@ -485,6 +485,20 @@ boot, confirming fix 4 holds from cold start), admin login
 incidental `fluffos.o`/`d/noden/log`/`d/zeq/log` save churn reverted
 before commit (no code changes this pass — nothing else to stage).
 
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (the original 166-lib corpus sweep
+only surveyed libs with >=100 live occurrences; this lib was below that
+threshold and never checked). 1 live `replace_program(ROOM);` occurrence
+in `d/noden/6,8.noden.lpc`'s `create()`, immediately after
+`inherit ROOM;` — same fatal shape as the rest of the §7.100 family
+(sets a permanent "pending replace" flag that crashes the object the
+first time anything binds a closure to it). No `roommaker.lpc`-style
+room-building tool exists in this lib, so no factory-template copy of
+the bug. Fixed by deleting the redundant line. Verified via a clean
+native driver boot (zero new `debug.log` errors, port listening,
+killed by exact PID after ~8s).
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 同一血统（屠龙之战）。
