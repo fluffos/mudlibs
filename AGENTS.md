@@ -7831,6 +7831,97 @@ libs from the survey's >=100 list remain unfixed** (166 total minus
 `candidates_ge100.tsv`/`FINDINGS.md` in the survey's scratchpad for
 the full ranked list.
 
+**Fix-phase batch 14 (2026-08-19), final 33 libs — SWEEP COMPLETE**:
+finished the entire remaining backlog from the survey's >=100-occurrence
+list in one dispatch, `sj` through `xkx2000zxb` (ranks 134-166). Same
+method as batches 1-13.
+
+| lib | live occurrences deleted | roommaker copies fixed | commit |
+|---|---|---|---|
+| sj | 378 (374 scripted + 4 hand-fixed: roommaker string-builder, 2× `d/.../taikong.lpc` space-before-semicolon, `d/huang/zoulang4.lpc` two calls on one CRLF line) | 1 (`clone/misc`) | `d818c103097` |
+| shiji | 378 (same shapes as sibling `sj`) | 1 (`clone/misc`) | `491670b46a2` |
+| wuhanzhan | 375 (368 scripted + 7 hand-fixed across 5 tool copies) | 5 (`clone/misc`, `obj`, `d/obj/clone/misc`, `u/ken/obj` — simple; `wizu/link/obj` — room_code 3-occurrence variant) | `69a4503050f` |
+| yueyingqiyuan | 369 (365 scripted + 4 hand-fixed) | 4 (`obj`, `d/wiz`, `u/misc`, `u/stone/obj`) | `0ca71ef8ce2` |
+| xlqy_new2007 | 337 | 1 (`obj`) | `d4791290cfd` |
+| xlqy_early | 332 | 1 (`obj`, sibling of `xlqy_new2007`) | `cb3cce0071b` |
+| yszz | 305 | 2 (`clone/misc`, `obj`) | `96605044628` |
+| hxxtjqb | 295 | 2 (`clone/misc` — simple; `obj` — room_code 3-occurrence variant) | `33e3d183fee` |
+| mohuanshiji | 274 (269 scripted + 5 hand-fixed; 1 occurrence in `d/city/center2.lpc` left unfixed — file already syntactically broken independent of this bug, never compiles) | 3 (`clone/misc`, `obj` — simple; `cmds/wiz` — room_code variant) | `b40e04f4f94` |
+| rzrmud | 262 | 1 (`obj`) | `4fedae267bd` |
+| xyj42 | 239 | 1 (`obj`) | `4af73ac6269` |
+| xyj2006zzzhx | 235 | 1 (`obj`) | `a6a6d83290a` |
+| xyj2006n | 235 (near-identical sibling of `xyj2006zzzhx`) | 1 (`obj`) | `4e4299c7ef6` |
+| xiyouji2006 | 235 (same lineage) | 1 (`obj`) | `1132a196503` |
+| dtxywzxzb | 235 (same lineage) | 1 (`obj`) | `fc9c9cf0ed0` |
+| xlqyzdb | 231 | 1 (`obj`) | `c1e9c5521ea` |
+| sjplgfjxb | 228 | 1 (`obj`) | `95d64248820` |
+| xixingzhanji | 216 | 1 (`obj`, room_code 3-occurrence variant) | `52f51a9eb11` |
+| xianlvqiyuan | 210 | 1 (`obj`) | `2098c859405` |
+| xyxyutf8 | 205 | 1 (`obj`) | `3bd8021deb0` |
+| xiaoyuxiyou | 205 (same lineage as `xyxyutf8`) | 1 (`obj`) | `f8b149d00ef` |
+| xyxy2 | 196 (same lineage) | 1 (`obj`) | `fa8cd51b8c9` |
+| xajdxyj | 192 | 3 (`obj`, `d/obj/clone/misc`, `u/fof`) | `0bcb6f7cbcd` |
+| yxzsj | 185 | 1 (`obj`) | `0edd2d8d2f2` |
+| yxsj | 185 (byte-identical sibling of `yxzsj`) | 1 (`obj`) | `9d5ac0a053b` |
+| xzyx | 176 (173 scripted + 2 hand-fixed, same `taikong.lpc`/`zoulang4.lpc` shapes as `sj`/`shiji`) | 1 (`clone/misc`) | `967ce26df73` |
+| xiyouji | 172 | 1 (`obj`) | `f93d6e56718` |
+| xiyouji450 | 172 (sibling of `xiyouji`) | 1 (`obj`) | `da381f0b7e7` |
+| xyj2000 | 142 | 1 (`obj`) | `1e6eb77c918` |
+| xyj2000f | 142 (sibling of `xyj2000`) | 1 (`obj`) | `0e02d520afa` |
+| xiyouji2003 | 105 | 1 (`obj`) | `26ed2aeb36d` |
+| cctx | 2081 (2073 scripted + 8 hand-fixed: 5 real `.lpc` files under `d/quanzhou/shaolin/xingsu/binaries/` — a real-content directory misleadingly named like a compiled-binaries dir, false-negatived by the sweep script's own `binaries`-exclusion; `clone/misc/roommaker.lpc`; `d/shenlong/lwta2.lpc` — call shared a line with unrelated code; `d/gumu/bingqifang.lpc` — space before semicolon) | 1 (`clone/misc`) | `39848f4ac17` |
+| xkx2000zxb | 2124 (2123 scripted + 1 hand-fixed) | 1 (`clone/misc`) | `cc306694110` |
+
+**Batch 14 total: 11,651 live occurrences deleted across 33 libs.**
+Notable finds: `cctx`'s `d/quanzhou/shaolin/xingsu/binaries/` directory
+is the sharpest instance yet of the standing "check `work/data/` for
+real source" gotcha — it's not `data/` at all, but a directory literally
+named `binaries` that nonetheless holds 6 genuine UTF-8 `.lpc` source
+files (5 with the bug), and `fix_710_room.py`'s own directory-exclusion
+list (`data`, `log`, `binaries` — added early in this sweep specifically
+to protect compiled driver artifacts) silently skipped it; caught only
+by this batch's mandatory post-sweep `work/`-wide grep, not by the
+per-lib `work/data/` spot-check alone — future sweeps on unfamiliar
+libs should grep the *whole* `work/` tree for leftover live occurrences
+after running the script, not just the excluded-directory names.
+`sj`/`shiji`/`xzyx` share the exact `d/fenghuang/fenghuang/taikong.lpc`
+(space-before-semicolon, single-line `create()`) and
+`d/huang/zoulang4.lpc` (two redundant calls on one CRLF line) shapes
+first seen nowhere in batches 1-13 — a previously-unseen sub-lineage.
+Two libs had one occurrence each left deliberately unfixed because the
+containing file was already syntactically broken independent of this
+bug and therefore never compiles regardless: `wuhanzhan`'s
+`d/wiz/officer/officer.lpc` (missing semicolons throughout, including
+right after `inherit ROOM`) and `mohuanshiji`'s `d/city/center2.lpc`
+(unquoted CJK string literals, a stray `??` token, zero semicolons
+anywhere in `create()`).
+All 33 libs verified via a real `build-debug` driver boot; several
+(`xyj2006zzzhx`, `xyj2006n`, `xiyouji2006`, `xianlvqiyuan`, etc.) had
+delayed/buffered stdout that made the log look stalled — resolved via
+a raw-socket connect confirming the real login banner rendered
+correctly on the config's port, consistent with the standing
+`feedback_verify_stalls_with_connectivity_check` lesson; no real hangs.
+No `git add` directory-sweep incidents — every commit used `git add -u`
+plus explicit `NOTES.md` staging. One transient `.git/index.lock` from
+a concurrent session (during `xajdxyj`'s commit) cleared on its own
+within 20 seconds, consistent with prior batches' experience.
+
+**§7.100 SWEEP COMPLETE.** All 166 libs identified by the 2026-08-19
+corpus-wide survey (>=100 live occurrences) have now been fixed,
+verified, and pushed, across fourteen fix-phase batches:
+133 libs (batches 1-13) + 33 libs (batch 14) = **166/166 libs**,
+**349,072 live `replace_program(<macro>);` occurrences deleted**
+(337,421 through batch 13 + 11,651 in batch 14). Every fixed lib was
+individually boot-verified with a real `build-debug` driver (clean
+compile, zero new "cannot replace"/"cannot bind" `debug.log` lines)
+and committed/pushed separately. The survey's full candidate list is
+now 100% addressed — no libs remain in the >=100-occurrence backlog.
+Libs below the survey's 100-occurrence threshold (noise-level counts,
+per the survey's own cutoff) were never in scope and remain
+unexamined; a future session could lower the threshold if this bug
+shape is suspected on a specific below-threshold lib during unrelated
+work, but no further scheduled sweep is needed for this bug.
+
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
 Found on `kxkjii2`'s §10.7 deep functional test (ES II/Annihilator
