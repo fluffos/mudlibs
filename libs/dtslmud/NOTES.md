@@ -356,3 +356,16 @@ incidental `fluffos.o` save-timestamp churn reverted before commit.
   against reading `combat_action` before it's populated).
 - `work/adm/simul_efun/file.lpc` — `log_file()` `assure_file()` guard
   (with forward declaration), `cat()` null-guard.
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/std/room"`：删除 686 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），与手足档案
+`dtsl2`/`dtsl` 同一血统同一形状（`obj/roommaker.lpc` 字节级一
+致）。其中 685 处由脚本自动删除，另 1 处在 `obj/roommaker.lpc` 第
+138 行——"克隆我所在的房间"命令的字符串拼接模板把同一枚多余调用
+烤进了每一个新克隆的房间，已同步手动修正。修复后全库仅剩 82 处历
+史遗留的 `//`-注释掉实例，均确认无害、未改动。已用 `build-debug`
+驱动干净启动验证（0 个新增编译错误，端口 40015 正常监听，
+`debug.log` 无新增 "cannot replace"/"cannot bind" 行）；未做完整
+§10.7 深度游玩测试。
