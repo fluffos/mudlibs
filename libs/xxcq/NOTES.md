@@ -185,3 +185,16 @@ heredoc 本来干净，"克隆我所在的房间"命令的字符串拼接模板�
 口正常监听；启动时的 `domain_stats`/`author_stats` 统计文件缺失
 警告是预先存在的良性提示）；未做完整 §10.7 深度游玩测试。
 - `work/clone/user/user.lpc`
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 4 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
