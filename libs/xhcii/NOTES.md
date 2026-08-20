@@ -113,3 +113,27 @@
 Warning（`Unknown #pragma`、未使用局部变量等），无运行时错误。驱
 动按精确 PID 结束，管理员存档（`data/{login,user}/f/fluffos.o`）
 已提交。
+
+## §7.100 sweep (2026-08-19): redundant `replace_program(ROOM);` landmine
+
+Same corpus-wide bug as documented at AGENTS.md §7.100: rooms
+inheriting `ROOM` (`/inherit/room/room`) had a redundant, harmful
+`replace_program(ROOM);` call right after `inherit ROOM;` in `create()`,
+setting a permanent "pending replace" flag that crashes the object the
+first time anything binds a closure to it. This lib had **1,798 live
+occurrences** (survey-ranked #83 of 166 candidates >=100). Fixed with
+the sweep's binary-mode script (`fix_710_room.py`) plus one hand-fixed
+room-building-tool copy (`clone/misc/roommaker.lpc`, the simple
+`str += "...replace_program(ROOM);..."` string-builder variant).
+`git diff --numstat` totals (1 insertion, 1798 deletions) match the
+survey's live-occurrence count exactly. No `work/data/` room-source
+false-negative found. Verified via a clean `build-debug` boot (zero
+"cannot replace"/"cannot bind" `debug.log` lines, port 40163 listening)
+plus a live spot-check: the pre-existing seeded `fluffos` admin
+account's actual password no longer matched the documented
+placeholder, so a fresh test account (`sweeptestv`) was registered
+through the full flow (name → confirm → Chinese display name → password
+→ stat roll → gender) and landed cleanly at 铁枪庙; a second
+reconnect+relogin, `look`, and `quit` all worked normally.
+`debug.log` stayed clean throughout. Test account's save files deleted
+before committing (this sweep's own throwaway account).
