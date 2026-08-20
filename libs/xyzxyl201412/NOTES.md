@@ -98,3 +98,16 @@ bind" 新增日志行。走访 `/d/migong/lev12/dong60` 时触发一个与本次
 样，属于房间填充时的独立内容问题，不在本次 §7.100 修复范围内，如实
 记录未修。按精确 PID 结束驱动；测试期间产生的 `fluffos` 存档增量
 （`data/{login,user}/f/fluffos.o`）已 `git checkout --` 还原。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 4 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
