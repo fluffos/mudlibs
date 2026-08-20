@@ -889,3 +889,16 @@ PID 结束；测试期间产生的存档时间戳增量已 `git checkout --` 还
 `debug.log` 全程干净。既有管理员账号 `fluffos`/`Mud@2026` 登录正常
 （华山派场景，练武场/兵器房多房间走访），`score` 正确显示，
 `quit` 干净退出，全程无新增 "cannot replace"/"cannot bind" 日志行。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 4 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
