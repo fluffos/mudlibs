@@ -538,3 +538,16 @@ wudang_b.lpc`，`inherit BULLETIN_BOARD`）用 `post <标题>` 进入多行编
 子留言板的测试帖子存档保留作为本轮验证证据，未纳入 git 提交（本 lib
 未跟踪的 `.o` 存档文件本就不在版本控制范围内）。驱动按精确 PID
 （`kill 636652`）结束。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 6 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
