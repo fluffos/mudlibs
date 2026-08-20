@@ -805,3 +805,7 @@ logind` 成功验证真实写入权限。踢掉重复登录重连路径现场验
 - `config.fluffos`
 - `work/adm/simul_efun/file.lpc`
 - `work/obj/user.lpc`
+
+## §7.100 sweep (2026-08-19)
+
+Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 375 live occurrences deleted: 368 via scripted sweep (`fix_710_room.py`), plus 7 hand-fixed roommaker-tool templates across 5 separate tool copies (`clone/misc/roommaker.lpc`, `obj/roommaker.lpc`, `d/obj/clone/misc/roommaker.lpc`, `u/ken/obj/roommaker.lpc` — simple variant, 1 each; `wizu/link/obj/roommaker.lpc` — "room_code"/`str` 3-occurrence variant). 10 already-commented-out instances (incl. 2 in `wizu/link/obj/citymaker.lpc`) left untouched. One occurrence NOT fixed: `d/wiz/officer/officer.lpc` has a non-standalone `setup() replace_program(ROOM)` with no semicolons anywhere in its `create()` — this file is already syntactically broken independent of this bug (`inherit ROOM void create() {` is missing its own semicolon), so it never compiles regardless; left alone as out of scope for this sweep. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile (only pre-existing pragma/unused-variable warnings), port 40052 listening, zero new "cannot replace"/"cannot bind" debug.log lines.
