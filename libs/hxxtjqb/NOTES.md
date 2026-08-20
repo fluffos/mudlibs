@@ -55,3 +55,7 @@ telnet 客户端这层不可靠的中间人。**建议以后凡是在这个项�
 `§10.7` 深度游玩测试，默认就用这个原始 socket 脚本方式，而不是
 `scripts/tmux_mud.sh`**——tmux+telnet 现在已经在两个互不相关的档案
 上各自制造过一次足以误导排查方向的假象。
+
+## §7.100 sweep (2026-08-19)
+
+Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 295 live occurrences deleted: 291 via scripted sweep (`fix_710_room.py`), plus 4 hand-fixed roommaker-tool occurrences across 2 tool copies (`clone/misc/roommaker.lpc` — simple variant; `obj/roommaker.lpc` — "room_code"/`str` 3-occurrence variant). 3 already-commented-out instances left untouched. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, port 40177 listening, zero new "cannot replace"/"cannot bind" debug.log lines. Pre-existing untracked test-account debris (`data/{login,user}/{f/fluffos,q/qintest}.o`) confirmed left untouched by `git status` review before staging.
