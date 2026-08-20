@@ -215,3 +215,126 @@ teleport talisman，量:1 单:张，暗示一种一次性传送道具机制）�
   生成模板里的同形状变体，共 2,676 处，与普查记录一致。
 - 验证：真实 `build-debug` 驱动干净开机、端口正常监听，`debug.log` 中
   零 "cannot replace"/"cannot bind" 行。
+
+## 深度功能测试（第四轮，2026-08-20）——拜师/战斗/经济系统补测
+
+第二轮（2026-08-03）明确留白的三块——拜师、战斗、经济系统（含"钱庄
+存款"机制）——本轮全部补测完毕，均为**干净通过**，未发现任何编译错
+误或运行时崩溃。管理员账号 `fluffos`/`Mud@2026`（`(boss)` 级）复用，
+另注册全新测试账号 `hctestqin`（中文名"秦风试"）做实际游玩验证，用
+双 Python socket 连线（管理员 + 玩家）配合 `goto`/`summon` 把玩家搬
+运到各测试地点。
+
+### 拜师（结果：正常通过）
+
+目标 NPC：`d/newbie/npc/hssz.lpc`（"华山使者"，`inherit F_MASTER`，
+`create_family("华山派", 15, "弟子")`），房间 `/d/newbie/hsroom`。全
+新角色 `bai hs`：一次通过——`attempt_apprentice()` 接受，`recruit_
+apprentice()` 落实师徒关系，`score` 面板正确显示"华山派第十六代弟
+子"、"你的师傅：华山使者"。机制本身工作正常（接受/拒绝两种结果都算
+合理通过，本次是接受路径）。
+
+### 战斗（结果：正常通过）
+
+目标：`d/city2/wuchang.lpc`（练武场）里的"木人"（`d/city/npc/mu-
+ren.lpc`）——一个专门设计的安全陪练木人：`accept_fight()` 会把它自
+己的六维属性/技能/气血/内力全部临时替换成挑战者的镜像数值，`set(
+"no_die", 1)` 使其不会真死，只会在多次陪练后进入"damaged"状态。`kill
+mu` 后完整走通了多回合攻防判定（拳脚招式描述、命中/闪避/格挡三态、
+双方血条状态提示逐步下降），最终测试角色不敌木人（因为是镜像战，几
+乎是公平的 50/50 对局）力竭死亡——死亡记录 +1，`combat_exp` 按标准
+比例扣减（100000→97500），干净复活回武庙（起始/复活点），全程零
+driver 报错。确认多回合攻防结算、伤害、死亡/复活转换均正常工作。
+
+### 经济系统 + 钱庄存款机制（结果：正常通过；确认"两层货币"是既有设
+计，非 bug）
+
+- **常规购买**：`d/village/npc/seller.lpc`（草棚里的"小贩"，
+  `inherit F_VENDOR`→`/feature/dealer.lpc`）。给测试角色实物黄金/银
+  子后 `buy egg` 成功购得"五香茶叶蛋"，找零银票正确发放，`i` 背包/
+  身上金钱显示准确。注意：`F_VENDOR` 宏实际指向 `/feature/dealer.
+  lpc`，不是同目录下看起来更像"这个"的 `/feature/vendor.lpc`（后者
+  没有任何文件 `inherit` 它，是未使用的旧稿/草稿档）——价格公式是
+  `value * 100 / skill`（`skill` = 讨价还价技能等级*2，无技能时钳到
+  最低值 1），新手因此要付出正常标价的**100 倍**——这就是本轮测试中
+  一次"钱不够"背后的真实原因（不是 bug，是刻意的杀熟/砍价玩法机
+  制），换算成足够的黄金后购买立即成功。
+- **钱庄存款机制**（`feature/banker.lpc`，NPC 见 `d/city/npc/qian.
+  lpc`「钱眼开」，房间 `/d/city/qianzhuang`）：`deposit`/`withdraw`/
+  `check` 三个指令全部实测且工作正常——`deposit all silver`（连同
+  `tensilver` 银票）把玩家身上的实物货币转换成 `this_player()` 上的
+  `"money"`/`"more_money"` 两个 dbase 字段（记账式余额），`check`
+  正确回报"钱眼开悄悄的告诉你，你在敝庄共存有五十四两白银"；
+  `withdraw 20 silver` 正确扣减记账余额（含约 1% 手续费，"三十三两
+  白银又八十文钱"）并生成对应面额的实物货币放回背包。
+- **关键结论（对应 NOTES 里此前标注"未实测"的那一句）**：钱庄存款
+  **不是**一个可以直接用来买东西的余额——`feature/vendor.lpc`/
+  `feature/dealer.lpc` 的 `can_afford()`/`pay_money()`（定义在
+  `feature/finance.lpc`）只检查玩家身上**实物货币物件**
+  （`gold_money`/`silver_money`/`coin_money`/...），完全不读取
+  `"money"`/`"more_money"` 这两个记账字段。实测复现：把全部实物货币
+  存入钱庄后（背包金钱清零，但 `check` 显示 54 两白银存款），到小贩
+  处 `buy` 直接返回"你的钱不够"——即便有存款也不能买东西；必须先
+  `withdraw` 把记账余额换回实物货币，才能正常购物。这和本 session 里
+  `ylfyxa3`/`xyzx3` 发现的"物理货币 vs 银号记账余额"两层货币模式**完
+  全一致**，是这一批 wuxia mudlib 里刻意设计的经济机制，不是 bug，
+  已按要求原样记录。
+
+### 顺带修复的一处真实 programming bug：`cmds/adm/eval.lpc` 的
+`/tmp` 目录缺失（AGENTS.md §7.11 同形状）
+
+测试经济系统途中尝试用管理员 `eval` 指令直接改玩家背包数值时触发：
+`EVAL_FILE = "/tmp/tmp_eval.lpc"`（即 `work/tmp/tmp_eval.lpc`），
+`work/tmp/` 目录在这份归档里从未存在过，`write_file()` 未加保护直接
+抛出运行时错误（"Wrong permissions for opening file /tmp/tmp_eval.lpc
+for append" + "No such file or directory"），`debug.log` 里有完整栈。
+`eval` 是巫师专用调试指令，不在普通玩家可达路径上，但这确实是一处会
+在 `debug.log` 留痕的真实 crash，且与 AGENTS.md §7.11 记录的"目录缺
+失导致未捕获 write_file() 中止"完全同形状，顺手修了：在
+`write_file()` 前加 `assure_file(EVAL_FILE);`（`adm/simul_efun/
+file.lpc` 里的既有 simul_efun，`feature/save.lpc`/`cmds/adm/xcp.lpc`
+等文件已经这样直接调用，不需要额外声明）。**踩坑记录**：第一次尝试
+按 §7.11 条目里"含前向声明"的措辞加了一行 `void assure_file(string
+file);` 前向声明，结果导致 `Undefined function called: assure_file`
+——在这个驱动上，给一个 simul_efun 名字加**没有函数体**的前向声明会
+让编译器把它当成"本地声明但未实现"的函数，反而挡住了向 simul_efun
+的正常回退解析；去掉声明、直接裸调用 `assure_file(...)`（和
+`feature/save.lpc`/`cmds/adm/xcp.lpc` 里的写法一致）后 `update` 重编
+译成功，`eval 1+1` 正确返回 `Result = 2`，`debug.log` 无新错误。
+
+### 标准 checklist 抽查结果（均已在此前批次修过，本轮仅复核未发现异
+常）
+
+- **§7.90**（eval-cost）：`config.fluffos` 里 `maximum evaluation
+  cost : 5000000`，已是修复后的值，正常。
+- **§7.100**（`ROOM` 多余 `replace_program()`）：全档案 `grep` 命中
+  79 处 `replace_program(ROOM)` 字符串，逐一确认全部是注释掉的死代码
+  （`//` 开头），零处存活调用——本轮 §7.100 修复完好无损。
+- **§7.111**（`master.lpc` `standard_trace()` 的 `file_name(error
+  ["object"])`）：`objectp(error["object"]) ? file_name(...) : "<none>"`
+  防护仍在，正常。
+- **§7.112**（NPC `init()` 里无重入保护的 `call_out` 链）：全档案命中
+  的 3 个 `wgargoyle.lpc`/`bgargoyle.lpc`/`yu-zu2.lpc` 全部已带
+  `death_stage_active` 临时标记防护，正常。
+- **§7.113**（netdead 重连不恢复 `heart_beat`）：`LOGIN_D` 的
+  `reconnect()` 调用 `user->reconnect()`，`clone/user/user.lpc::
+  reconnect()` 内确认 `set_heart_beat(1)`，正常。
+- **§7.114**（`private` `input_to()` 回调经 mixin 继承失效）：
+  `feature/edit.lpc` 里全档案 grep `private.*input_line` 零命中，不
+  适用。
+- **§7.115**（`QUEST` 宏指向不存在的全局钩子档案）：该 sweep 结论是
+  "只影响 `aoxiangtianji`，非系统性"，本库未见异常触发路径，跳过。
+- **§7.79**（裸 2 参 `addn`/`addn_temp` 误落到 simul_efun 作用域）：
+  该 sweep 明确限定在 `xfbhh`/`hhsj`/`nitan170911`/`nitan6`/`nt6`/
+  `nt6nitan6win` 六个共享同一 shim 的血统家族里，本库 grep 裸 2 参
+  `addn(...)`/`addn_temp(...)` 调用**零命中**，不适用此 bug 类别。
+
+### 已清理
+
+- 测试账号 `hctestqin`（`data/{login,user}/h/hctestqin.o`）用完即删，
+  不作为存档提交。
+- 管理员账号 `fluffos` 因本轮测试产生的存档噪音（`last_on`/`cwf`/
+  `startroom`/`mud_age` 等字段浮动）已用 `git checkout` 撤销。
+- `eval` 修复触发生成的 `work/tmp/` 目录（含 `tmp_eval.lpc`）测试完
+  已删除。
+- 驱动最终按精确 PID kill，`ps -p` 确认已退出，未使用 `pkill -f`。
