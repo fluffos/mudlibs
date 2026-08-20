@@ -796,3 +796,16 @@ live 调用删除，和 survey 记录的数字精确吻合，修复后 0 处遗�
 继承内容 bug，不是 replace_program 回归），未修，超出本次范围。既
 有管理员账号 `fluffos`/`Mud@2026` 登录正常（落地北疆小镇，
 look/quit），全程 debug.log 零新增行。
+
+## 补完 d/lingxiao/npc/wang.lpc 缺失技能崩溃（2026-08-20）
+
+此前一轮记录本文件的 `xueshan-sword` 缺失技能"超出范围，留给下一轮"，
+只是未验证是否真的只有这一处。现场用 `update` 实测发现：光包住
+`xueshan-sword` 依然在下一行 `set_skill("bingxue-xinfa", ...)` 崩溃
+中断 `create()`——这个 NPC 的整套"凌霄城"技能（`xueshan-sword`/
+`bingxue-xinfa`/`snow-zhang`/`snowstep`，`set_skill`+`map_skill` 共
+9 处引用）全部是未实现的内容，不止 NOTES.md 之前记录的那一个。已按
+和本库其余 11 个同类档案完全一致的手法，把全部 9 处引用套上
+`catch(...)`。现场验证：`update d/lingxiao/npc/wang.lpc` 后
+debug.log 依次显示 4 次"错误讯息被拦截"（对应 4 个缺失技能），最终
+"成功！"，`create()` 完整跑完。
