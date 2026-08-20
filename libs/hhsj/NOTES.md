@@ -402,3 +402,25 @@ files changed, 1 insertion(+), 4987 deletions(-)，与预期精确吻合。
 无 "cannot replace"/"cannot bind" 新增日志行。按精确 PID 结束驱
 动；登录产生的存档增量已通过 `git add -u` 只暂存已跟踪文件规避（未
 跟踪的 `.o` 存档文件本就是会话开始前已存在的未跟踪状态，未触碰）。
+
+## AGENTS.md §7.79 修复（2026-08-19）
+
+裸 `addn("prop", value)`（无第三参数）恒为静默无效果：simul_efun
+shim（`adm/kernel/simul_efun/wizard.lpc`）里 `ob` 缺省为
+`this_object()`，但这是在 simul_efun 内部求值，指向的是 simul_efun
+对象自身而非真正调用者，写入垃圾去处、静默丢失。3 参及以上调用（显
+式传 `ob`）从调用点求值，本就正确不受影响。方法论、脚本、以及
+"定义 vs 调用"判别修法详见同源 `xfbhh` 的 NOTES.md 对应小节（同一
+`fix_addn2.py`）。
+
+本 lib 只有 `clone/user/baby.lpc` 一处本地覆盖（覆盖 `addn` 未覆盖
+`addn_temp`，同 xfbhh），排除其 8 处 `addn(...)` 调用；未发现
+xfbhh 那种 `clone/user/user.lpc` 命名笔误覆盖（本 lib 该处正确命名
+为 `add`）。结果：907 处改写，`git diff --stat`：456 files changed,
+907 insertions(+), 907 deletions(-)，加上排除的 8 处，907+8=915，与
+调查阶段统计精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40106 正常监听，`debug.
+log` 全程干净，无新增编译错误。全新账号（`qintest915`/角色名"秦测
+九"）走完注册流程，成功进入泥潭注册室并收到欢迎序列，符合 §10.1 及
+格线。按精确 PID 结束驱动。
