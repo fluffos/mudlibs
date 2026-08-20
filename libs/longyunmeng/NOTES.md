@@ -935,3 +935,16 @@ work/log/debug.log 全程无新增内容。用已播种的 `fluffos`/`Mud@2026`
 警告，与本次修复无关）。测试产生的 `data/{login,user}/f/fluffos.o`
 存档时间戳 diff 已 `git checkout` 撤销，不提交。驱动按精确 PID
 kill。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 4 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
