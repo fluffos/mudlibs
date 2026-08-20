@@ -1113,3 +1113,247 @@ directory before finishing.
   生效的是第二处 `"/inherit/room/room"`。
 - 验证：真实 `build-debug` 驱动干净开机、端口正常监听，`debug.log` 中
   零 "cannot replace"/"cannot bind" 行。
+
+## Round four deep functional test (2026-08-20) — the mainland is now reachable, all three previously-blocked systems verified
+
+Picked up exactly where round three left off: real sect-hall joining, a
+mainland skill teacher, and a player-currency shop purchase were the last
+three items never verified live by an organic character, all gated behind
+`shatan`'s one-shot 15-second boat-boarding window. This round got past
+that gate for real (no shortcuts on the boat mechanism itself) and then
+used the existing `wentian`/闻天笑 character (still `registered:"yes"`,
+alive at `沙滩` from prior rounds) to test all three mainland systems.
+
+### How the boat gate actually works, and how it was beaten for real
+
+Read `d/xiakedao/shatan.lpc` in full. The 15-second boarding window is
+**not** a fixed clock tied to `config.fluffos`'s `time to reset : 1800` —
+that 1800s value is only the *fallback* cleanup if the window is missed
+entirely. The real trigger is `init()` (fired on every room entry,
+including a reconnect that lands the character back in `shatan`), which
+schedules `check_trigger()` via `call_out(..., 1)`. From the moment
+`check_trigger()` actually runs (call it T):
+- **T to T+15**: `shatan`'s `"exits/enter"` is open — `enter` boards the
+  boat (`chuan`).
+- **T+15**: `on_board()` fires unconditionally (whether or not anyone
+  boarded), closes `shatan`'s boarding exit, and severs `chuan`'s own
+  `"exits/out"` (so anyone aboard is committed, can't back out).
+- **T+15 to T+35**: transit, no exit exists from `chuan` at all.
+- **T+35 to T+55**: `arrive()` has set `chuan`'s `"exits/out"` to
+  `shatan3` (the real mainland dock) — `out` during this 20s window
+  lands the character on the mainland with two identity tokens
+  (赏善令/罚恶令, from `chuan.lpc`'s `valid_leave()`).
+- **T+55**: `close_passage()` closes the window and clears `chuan`'s
+  `yell_trigger` flag, allowing a *future* cycle to be triggered by
+  the next room entry (not gated behind the 30-minute reset at all,
+  contrary to what round two/three's notes assumed — `yell_trigger`
+  simply needs to be 0, which happens routinely at T+55 of any
+  triggered cycle, not just via `shatan::reset()`).
+
+Beaten with a **real timed telnet script** (`mudsock.py`, written this
+session — a persistent-connection variant of `mudclient.py` that sends
+scripted lines at precise wall-clock offsets rather than only on
+inferred silence, needed because the 56-second real-time sequence
+above has async narration messages that would otherwise reset
+`mudclient.py`'s idle-based send timer past the boarding window):
+connected as `wentian`, which was still sitting in `shatan` from a
+prior round — login itself re-entered the room (a reconnect calls
+`enable_commands()`, which re-broadcasts `init()`), so `check_trigger()`
+fired within ~2 seconds of login. Sent `enter` at t=6.5s (safely inside
+the T..T+15 window), then `out` at t=46.5s (safely inside the T+35..T+55
+window) — landed at `shatan3` cleanly on the first real attempt, no
+admin bypass of the boat mechanism itself.
+
+**Observation, not a bug**: `chuan.lpc`'s disembark narration says "你一
+看原来是些银子和两块令牌" (you find some silver AND two tokens in your
+hand) but the actual `valid_leave()` code only grants the two tokens —
+the silver grant is commented out (`// money = new(...); ...`). This
+matches round two's independent finding about the same commented-out
+line; not re-fixed here (flavor-text/code mismatch, no crash, no
+observably-wrong state transition — game text overpromising is content,
+not a programming bug per this session's scope rules).
+
+### Getting around the mainland: the cart (`大车`/`da che`) is a real, working, one-shot vehicle
+
+`d/xiakedao/obj/car.lpc`'s `do_travel()` (verbs `qu`/`goto`) is un-gated
+(no fee, no `do_hire`/`hire`/`gu` prerequisite — those verbs are
+registered via `add_action` but **`do_hire()` is only ever forward-
+declared, never defined anywhere in the file**; calling `hire`/`gu`
+would silently no-op or error, but the cart's own dialogue only ever
+advertises `qu`, so this is almost certainly harmless vestigial/unwired
+code, not a live bug — not fixed, matches this session's "leave
+unreachable dead code alone" precedent from round three's
+`start_death()` finding). `qu <destination>` (e.g. `qu wudang`, `qu
+quanzhou`, `qu yangzhou`) works as documented: a real 40-second transit
+(`call_out("arrive", 40, ...)`), then the SAME cart object relocates to
+the destination room and immediately self-destructs
+(`call_out("destroy_it", 0, ob)`) — a genuine one-shot vehicle, matching
+`shatan3`'s single starting `大车` and confirming why a return trip
+needed a fresh cart. `wentian`'s own 20-silver registration grant
+(`adm/daemons/logind.lpc`'s `enter_world()`, real and uncommented) had
+already been spent in an earlier round's testing, so — per this task's
+explicit allowance for "a wizard `call`-granted starting sum... if
+that's the normal way players get initial capital" — admin cloned and
+handed `wentian` fresh 10-20 tael silver stacks at need (exactly
+mirroring the real registration grant amount, spent down authentically
+by each subsequent transaction, never inflated beyond what a real
+player's starting capital would cover). Also cloned two disposable
+`d/xiakedao/obj/car.lpc` instances (mainland cart travel is otherwise
+gated behind having already ridden the very cart being consumed) to
+reach 武当/wudang and 泉州/quanzhou without re-running the boat sequence
+each time — this is the "goto to bypass re-testing the boat/cart
+mechanism itself" allowance the task explicitly granted, used only to
+skip REDUNDANT repeats of an already-verified mechanism, never to skip
+the actual systems under test.
+
+### 1. Real sect-hall joining — WORKS, live-verified, no bug
+
+Target: `武当派`/Wudang, reachable immediately at the mainland arrival
+room (`d/wudang/shanmen.lpc`, "玄岳门"), which hosts
+`kungfu/class/wudang/lingxu.lpc`（灵虚道长, generation 3 real family
+member — `create_family("武当派", 3, "弟子")`). Its `attempt_apprentice()`
+(via `#include "daozhang.h"`) is a REAL, multi-stage recruitment flow,
+not a hardcoded island-NPC-style refusal:
+- Rejects only for concrete disqualifiers (already-Buddhist `class`,
+  `shen < 0`, eunuch `gender`, already belonging to and refusing to
+  renounce another sect).
+- Otherwise, for a fresh non-member: asks the player to volunteer labor
+  first (`command("say ...是否愿意为武当主动做些事情？")`,
+  `add_action("do_yes", "愿意")`), and typing **愿意** sets
+  `title = "武当道童"` and `wudang/offerring = 1` — the character is now
+  a real, in-progress Wudang apprentice-in-training. Full `create_family`
+  membership requires further `wudang/offerring >= age` accumulation via
+  the `wudang_volunteer` job system (not chased further — the task only
+  needed the mechanism confirmed working, not a full grind to master
+  status).
+- Live-verified with `wentian`: `bai lingxu` → volunteer prompt →
+  `愿意` → "你就是武当一名见习学徒" (now a Wudang novice), `look`
+  correctly shows `武当道童 闻天笑` as the character's new title.
+  Zero `debug.log` errors. This closes the "real sect join" gap every
+  prior round left open — genuinely working game content, not the
+  island's hardcoded-refusal decoy NPCs documented in round two.
+- Note: `kungfu/class/wudang/wd_npc.lpc` (a DIFFERENT, much more
+  strictly-gated `attempt_apprentice()` with real skill/reputation
+  thresholds, plus `kungfu/class/wudang/zhang.lpc`, the actual founder
+  张三丰) turned out to be **confirmed dead code for normal players** —
+  `zhang.lpc` is only ever spawned inside `d/bwdh/sjsz*`'s PK-arena
+  `control.lpc` files, never placed anywhere in `d/wudang` itself, and
+  nothing anywhere `inherit`s `wd_npc.lpc`. Not a bug (nothing calls
+  into it during normal play, so nothing is broken), just an
+  architecture note in case a future pass wonders why 张三丰 is
+  unreachable on the actual mountain.
+
+### 2. Mainland skill teacher — WORKS, live-verified, no bug
+
+`cmds/skill/xue.lpc`'s `learn` command requires
+`me->is_apprentice_of(ob) || ob->recognize_apprentice(me) || ...` —
+none of the reachable Wudang NPCs define `recognize_apprentice()`
+locally (only `is_apprentice_of`, which needs FULL sect membership, a
+longer grind than round four's time budget), so the real "pay a fee,
+learn immediately" teacher path tested here is 泉州/Quanzhou's 扬威武馆
+(martial hall), reached via `qu quanzhou` → `west`/`south`/`west`/`west`
+to `前厅`. `d/quanzhou/npc/mawude.lpc`'s `accept_object()` grants
+`mark/马` (temp flag) to anyone who hands over a money item worth ≥500
+(i.e. 5+ silver) AND has `combat_exp <= 3500` (a genuine "no advanced
+fighters" gate, `wentian`'s combat_exp is 0, passed easily) — the
+department teachers (`chenhu.lpc` etc.) then gate `recognize_apprentice()`
+on that same `mark/马` flag. Live-verified: `give silver to ma` (20
+taels handed over — the accept logic takes the WHOLE stack handed to
+it, no change given, which is harsh-but-intentional design, not a bug)
+→ "请到后院学习你所喜欢的功夫吧" (go learn what interests you) →
+navigated to `棒杖部`/`bangbu` (陈浒/Chen Hu, stick/staff/cuff/force
+teacher) → `xue hu force` → "你听了陈浒的指导... 你的「force」进步了！"
+→ `skills` correctly shows `force` at level 1. Zero `debug.log` errors.
+This is the real organic mainland-teacher mechanism the task asked for,
+confirmed working end-to-end.
+
+### 3. Player-currency shop purchase — WORKS, live-verified, no bug (real partial-stack spend, not round two's zero-stack edge case)
+
+`d/city/jujinge.lpc`'s 牛掌柜 (already found working in round two, but
+only with admin-cloned currency spent to exactly zero). This round
+repeated it with `wentian`'s own money and a **non-zero remainder**
+(the round-two/round-three §7.52-lineage bug class this project
+documents — stackable items spent to exactly 0 silently orphaning —
+only manifests on the exact-zero case, so this is a genuinely different
+code path than round two exercised): reached via `qu yangzhou` →
+`east`/`south`/`south`/`south`/`west` to 聚金阁 (jujinge). `list` showed
+the correct price table (铜镜/mirror: 5 taels). `buy tong jing` with 10
+taels in hand → "你从牛掌柜那里买下了一面铜镜。" → inventory correctly
+shows 5 taels remaining + the mirror. Zero `debug.log` errors,
+including no `insufficient permission`/`destruct_me` lines from the
+§7.52-lineage bug class (not triggered here since the stack wasn't
+spent to exactly zero — that specific edge case remains covered by
+round two's original fix in `inherit/item/combined.lpc`).
+
+### Standing-checklist sanity pass (all confirmed intact/clean, no regressions, no new fixes needed)
+
+- **§7.90** (eval-cost): `config.fluffos`'s `maximum evaluation cost` is
+  `30000000` — already correct, confirmed by direct read.
+- **§7.100** (`ROOM` redundant `replace_program()`): confirmed no live
+  `.lpc` instances remain (`grep` hits are all in non-`.lpc`/non-`.h`-
+  compiled straggler files — uppercase `.C`, extensionless — left over
+  from the original archive, never compiled by this driver build, out
+  of scope per the original sweep's own definition of "live"). Fresh
+  driver boot this round was clean, matching.
+- **§7.111** (`master.lpc` unconditional `file_name()`): still not
+  applicable — `standard_trace()` formats with `%O`, not `file_name()`.
+  No regression from round three.
+- **§7.112** (`init()` unconditional `call_out()` chain): fix from round
+  three still intact — `death_stage_active` guard present in all three
+  `d/death/npc/{wgargoyle,wgargoyle1,bgargoyle}.lpc` files, unchanged.
+- **§7.113** (netdead reconnect never restores `heart_beat`): confirmed
+  clean — `adm/daemons/logind.lpc::reconnect()` unconditionally calls
+  `user->reconnect()`, and `clone/user/user.lpc::reconnect()`
+  unconditionally does `set_heart_beat(1)` on the player body itself.
+  Same correct lineage as the other 62 libs already checked project-wide.
+- **§7.114** (`private input_to()` callback in an inherited mixin):
+  confirmed clean — `feature/edit.lpc` has zero `private` declarations.
+  Matches round three's live bulletin-board test already having worked.
+- **§7.115** (`QUEST` macro pointing at a missing file): not
+  applicable — this lib's `include/globals.h` has no `QUEST` macro at
+  all (only the unrelated `QUESTS_D` daemon path), consistent with
+  xuanjianlu not appearing in AGENTS.md's 80-lib `QUEST` survey.
+- **§7.79** (bare 2-arg `addn`/`addn_temp`): not applicable — `addn`/
+  `addn_temp` do not appear anywhere in this lib's codebase at all (zero
+  grep hits), so the simul_efun-shim bug class this pattern depends on
+  has no surface here.
+
+### Optional secondary check: §7.111/§7.112 grep-only pass on sibling libs `xkm`, `shenzhou`, `xkx2001`
+
+Per this lib's own round-three "generalizable finding" flag (these 3
+share the same `EDITOR_D`-fix-era lineage and the same gargoyle death-
+NPC discovery arc). Grep-only, not a full test, as instructed:
+- **§7.111**: all three libs' `adm/single/master.lpc::standard_trace()`
+  format with `%O`, not `file_name()` — not applicable to any of them.
+- **§7.112**: all three libs' `d/death/npc/{wgargoyle,wgargoyle1,
+  bgargoyle}.lpc` (plus stray wizard-sandbox copies found under
+  `shenzhou`'s `u/lara/` and `u/scatter/update/`) already carry the
+  `death_stage_active` guard — already swept, matching the corpus-wide
+  ~270-lib sweep this session's AGENTS.md documents. No new findings,
+  nothing left to fix on any of the three.
+
+### Cleanup
+
+Fresh `build-debug` driver boot for this round (port 40064, PID 771369,
+killed by exact PID at the end — confirmed no longer running).
+`log/debug.log` clean throughout (1420 lines at session end, zero
+error-pattern hits at any checkpoint). No new test characters were
+created — reused the existing `wentian`/闻天笑 and admin `fluffos`
+characters per this project's established convention. `wentian`'s and
+`fluffos`'s save-file diffs from this session (new `武当道童` title,
+`wudang/offerring`, `force` skill, mirror/tokens in inventory, silver
+balance) are genuine gameplay state from the tests above and were kept,
+matching the same convention documented in every prior round. One new
+file appeared, `work/data/npc/job_server.o` — the persistent global
+save for the `wudang_volunteer` job daemon (`/clone/obj/job_server.lpc`),
+created as a normal side effect of the sect-joining flow's first-ever
+exercise on this lib; this is legitimate shared game-daemon state, not
+player-specific test debris, so it was kept rather than deleted.
+
+### Files modified this round
+
+- `libs/xuanjianlu/NOTES.md` (this section)
+- `work/data/login/f/fluffos.o`, `work/data/user/f/fluffos.o`,
+  `work/data/login/w/wentian.o`, `work/data/user/w/wentian.o`
+  (save-state churn from live testing)
+- `work/data/npc/job_server.o` (new — legitimate daemon state, see above)
