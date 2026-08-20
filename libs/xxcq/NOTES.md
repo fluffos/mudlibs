@@ -172,4 +172,16 @@ fluffos", "(admin)")`），不依赖密码正确与否。仿照 `sj` 的处理�
 - `work/adm/obj/master.lpc`
 - `work/adm/simul_efun/file.lpc`
 - `work/cmds/ang/update.lpc`
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/inherit/room/room"`：删除 792 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），与 `xxcqii`/
+`xxcqii2` 同一血统同一形状（本档案是它们的祖先/同系原始档案）。
+`clone/misc/roommaker.lpc` 同样有两套模板——"造一间空房间"的
+heredoc 本来干净，"克隆我所在的房间"命令的字符串拼接模板把同一枚
+多余的 `replace_program(ROOM);` 烤进了每一个新克隆的房间，已同步
+修正。已用 `build-debug` 驱动干净启动验证（0 个新增编译错误，端
+口正常监听；启动时的 `domain_stats`/`author_stats` 统计文件缺失
+警告是预先存在的良性提示）；未做完整 §10.7 深度游玩测试。
 - `work/clone/user/user.lpc`
