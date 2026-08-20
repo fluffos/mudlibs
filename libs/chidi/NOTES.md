@@ -614,3 +614,188 @@ future round-three pass, not just when a symptom already points at it.
 replace"/"cannot bind" 日志行（游戏本身既有的"首次编译警告显示给
 管理员"调试功能产生了大量屏显编译警告，与本次修复无关，属预先存
 在的行为）。
+
+## Round-four deep functional test (2026-08-20): both round-three "not verified live" gaps closed, one new real bug found and fixed
+
+Targeted follow-up on this lib's own two explicitly-flagged gaps from the
+round-three pass (shop purchase with real cash, and combat leading to a
+real death/respawn cycle), plus a fast standard-checklist sanity pass.
+
+### Checklist re-confirmation (all already clean, no changes needed)
+
+- §7.90: `config.fluffos` `maximum evaluation cost : 10000000` — confirmed.
+- §7.100: corpus-wide grep for live, non-commented `replace_program(ROOM);`
+  in `.lpc` files returns zero hits (all remaining raw-text matches are in
+  `.bak`/`.vns`/doc files, or are commented out) — confirmed still fully
+  swept from the 2026-08-19 batch-three pass.
+- §7.111: `adm/obj/master.lpc`'s `standard_trace()` still correctly guards
+  `file_name(error["object"])` with `objectp()` — confirmed.
+- §7.112: `death_stage()` reentrancy — `d/death/npc/wgargoyle.lpc`/
+  `bgargoyle.lpc` (fixed round three) still correct. Found one more
+  instance not previously checked, `d/shaolin/npc/yu-zu2.lpc` (狱卒,
+  少林 death-themed NPC) — its `init()`/`death_stage()` pair already has
+  the correct guard shape (`set_temp`/`delete_temp("death_stage_active")`
+  cleared at all 3 exit points: early return, escalation continuation,
+  and the terminal move), so no fix needed. Also confirmed dead code (no
+  room anywhere spawns `npc/yu-zu2`), consistent with the other two
+  gargoyle files' dead-code status.
+- §7.79: zero bare 2-arg `addn(`/`addn_temp(` calls corpus-wide.
+- §7.108: `clone/user/user.lpc` (the real `USER_OB`, confirmed via
+  `include/globals.h`) already has `enable_commands()` in `reconnect()`
+  from the 2026-08-16 sweep commit. (A different, unrelated file,
+  `obj/user.lpc`, looks similar but is dead legacy code not used as
+  `USER_OB` — not to be confused with the real one.)
+
+### Gap 1 (shop purchase with real cash) — RESOLVED, no bug, purchase completed live
+
+This lib has a genuine two-tier currency system exactly like the sibling
+libs referenced in the task brief: bank deposit (`money`/`more_money`
+player fields) vs. physical coin objects (`coin_money`/`silver_money`/
+`gold_money`, `/clone/money/*`). `feature/finance.lpc`'s `can_afford()`/
+`pay_money()` (used by both `feature/vendor.lpc` and `feature/dealer.lpc`,
+the two shop-NPC mixins) check ONLY physical coin objects present on the
+player — bank deposit is never consulted. This is a legitimate design
+split, not a bug, and it's exactly what round-three's `linshuang` got
+stuck on.
+
+**Found the sanctioned withdrawal command**: `feature/banker.lpc`'s
+`do_withdraw()` (`withdraw <amount> <currency>`, e.g. `withdraw 200
+coin`), registered on real live bank-teller NPCs (`d/city/npc/qian.lpc`,
+钱眼开/"Money Eyes Open", 扬州钱庄) — reachable from the start-area map
+(`d/city/qianzhuang.lpc`, west of `beidajie1`, itself one hop from
+`wumiao`). Confirmed live: fresh character (`ceshiqi`, no admin
+shortcuts used for this part) walked `wumiao`→`beidajie2`→`beidajie1`→
+`qianzhuang`, `withdraw 200 coin` correctly cloned 200 physical coins
+into inventory and deducted 200 from the bank-deposit balance (verified
+via `check`). Then walked to `d/city/zahuopu.lpc` (杂货铺/general store,
+`d/city/npc/yang.lpc` vendor, `dongdajie1`→south), `buy caoxie` (草鞋,
+listed price 100) correctly deducted 100 coin from inventory and added
+the item — confirmed via `i` (inventory) before/after. **Real cash
+purchase completed end-to-end through unmodified game logic, no bug
+found or fixed.**
+
+### Gap 2 (combat → unconsciousness/death → respawn) — RESOLVED, real death reproduced, plus a genuine new bug found and fixed en route
+
+**New bug found and fixed (§7.25 instance, `feature/skill.lpc` +
+`inherit/room/room.lpc`)**: reaching a genuinely dangerous NPC required
+teleporting a test character (admin `call ceshiqi->move(...)`, per the
+task's sanctioned use of admin assistance for positioning) into
+`/d/migong/lev15/dong4` (眠龙洞尽头, the endgame 12-level maze's final
+boss lair — 7 aggressive dragon NPCs including `d/migong/lev15/npc/boss.lpc`
+"千年火龙王"). The move threw an uncaught runtime error and **failed
+outright** — the whole room's first-ever `reset()`/`make_inventory()`
+chain aborted partway through, because `d/migong/lev15/npc/lev1.lpc`
+("蓝龙") and its ~9 siblings across `d/migong/lev13`, `lev14`, `lev15`
+(38 files total, confirmed via corpus grep) call
+`set_skill("dragon", ...)`/`map_skill("unarmed","dragon")`/
+`prepare_skill("unarmed","dragon")` — but this archive never shipped a
+`/kungfu/skill/dragon.lpc` file (a genuine content gap, confirmed via
+`find`; only compound names like `king-of-dragon`/`longxiang` exist).
+`feature/skill.lpc`'s `set_skill()`/`map_skill()`/`prepare_skill()`/
+`can_improve_skill()`/`improve_skill()` all `error()`ed on the missing
+file, which — since `inherit/room/room.lpc`'s `make_inventory()` calls
+`new(file)` completely unguarded — aborted the ENTIRE room population
+cascade (every other dragon still left to spawn) and, via the call
+chain `move()`→room `create()`→`setup()`→`reset()`→`make_inventory()`,
+also aborted the calling `move()` itself. This is exactly AGENTS.md
+§7.25's bug class (confirmed via `debug.log`'s full call-stack trace),
+with the missing-skill trigger mechanism specifically matching a
+precedent already fixed on a sibling lib (`fyzfqyy`, commit
+`59145635381`). **Fix, ported from that precedent**: `feature/skill.lpc`'s
+five `error("F_SKILL: No such skill...")` call sites now log to
+`/log/nosave/missing_skill` and return/skip gracefully instead of
+throwing (content gap logged, not fabricated); `inherit/room/room.lpc`'s
+`make_inventory()` now wraps `new(file)` in `catch()` and returns `0` on
+either failure mode, and both `reset()` call sites now guard the result
+with `objectp()` before calling `is_character()`/`return_home()` on it.
+**Verified live**: fresh driver restart, re-ran the same `move()` into
+`dong4` — succeeded cleanly (`= 1`), all 7 dragons spawned correctly,
+`/log/nosave/missing_skill` correctly recorded 14 skipped `dragon`/
+`magic-old` skill grants across the room's full population, zero
+`debug.log` errors. This is a real, previously-unencountered live bug
+(this exact room was never visited in any prior testing pass on this
+lib) with genuine blast radius (blocks entry to 3 whole maze levels'
+worth of rooms on their first-ever load, for any real player who
+eventually reaches them through normal maze progression, not just for
+this admin-assisted test).
+
+**Real combat → real death → real respawn, fully reproduced live**:
+this lib's fresh-character combat balance turned out to be extremely
+defense-favored — even 7 simultaneous endgame-tier dragons (skill
+700-800, combat_exp up to 2×10⁹ on some) landed **zero** hits across
+~150+ attack attempts against an untrained fresh character over several
+minutes of real combat. Traced the actual cause by reading
+`adm/daemons/combatd.lpc`'s `skill_power()`: the `apply/attack`/
+`apply/attack1` temp fields (the obvious lever) only ever gate which of
+two code branches fires (`level < 1`) — the branch that's actually
+**returned** as usable attack/defense power is computed from
+`str`/`dex`/`combat_exp`/a separate `dj` (`query_level()`, this lib's
+distinct level-up-room-driven rank stat, unrelated to `combat_exp`) —
+and both our fresh characters and the maze dragons had `dj = 0` (dragons
+never went through the level-up room either), so hit chance reduced to
+a `str`-vs-`dex` contest where our fresh characters' base stats
+happened to dominate essentially every roll. This is a real oddity in
+the formula (`apply/attack`'s magnitude is silently discarded once
+`level >= 1`) but produces no error/crash — per this project's scope
+rule, a combat-balance quirk with no error signature is not something to
+"fix", so it was left alone and treated purely as a testing obstacle to
+route around with legitimate admin assistance (exactly as the task
+brief anticipated: "use admin ... stat or skill grants to get INTO
+position").
+Used admin `set()`/`set_temp()` on a `str` (the field that DOES feed the
+formula, unlike `apply/attack`) — first on the endgame boss (partial
+effect: it landed a very high hit that put the character into a genuine
+`unconscious` state — the first of the two flagged states — with the
+correct `hunmi=1`/disable/"你的眼前一黑" flow, confirmed live), then
+more decisively via a fresh admin-summoned `/d/city/npc/liumang.lpc`
+clone (a normal low-tier NPC template) with `str` set very high and a
+real `kill liu` issued from the test character's own live session (not
+an admin-forced action) in a normal fightable room
+(`/d/city/beidajie2`, outdoor street — the maze boss room and the
+`wumiao` start room are both `no_fight`-gated, confirmed by hitting
+"这里不准战斗"/"大胆！在神像面前也敢胡来" and having to relocate).
+**Result, fully through real unmodified combat/death mechanics**: the
+`kill` command's own combat loop (real turn-by-turn attack/damage
+resolution, `receive_wound()` reducing `qi`/`jing` for real) produced a
+genuine lethal blow ("造成 92880 点瘀伤" → "你受伤过重...随时都可能
+断气" → "扑在地上挣扎了几下，腿一伸，口中喷出几口鲜血，死了！"),
+followed by the real 〖江湖传闻〗 public death broadcast, `feature/damage.lpc`'s
+real `die()` (item drop — inventory confirmed empty afterward — ghost
+flow, `DEATH_ROOM`), and landing safely at `REVIVE_ROOM` (武庙/Wu Miao,
+matching round-three's finding) with **零** new `debug.log` errors and
+no soft-lock (the exact bug class round-three flagged as a precedent
+risk on `xajh2` did NOT recur here). `score` confirmed 你共死亡
+incremented correctly (2, from an earlier near-death unconscious episode
+plus this real kill). Immediately re-verified a genuine net-dead
+reconnect after this real death (abrupt socket close + fresh reconnect)
+landed back in 武庙 correctly with no stranding — §7.113/round-three's
+reconnect-after-death finding re-confirmed under a DIFFERENT death
+trigger (real combat, not the admin `->die()` shortcut round three used).
+
+**Confirmed a real `kill`-command PvP-only gate, not an NPC-combat
+gate** (matching the task brief's stated precedent from `dtsl2`/`mhxy`/
+`xajh2`): `cmds/std/kill.lpc`'s `combat_exp < 500`-vs-`>10000` block is
+wrapped in `if (userp(obj) ...)` — confirmed by reading the source, not
+just by the successful NPC kill above.
+
+**Process hygiene**: driver restarted 3 times (initial boot for the
+checklist/gap-1 pass, post-`§7.25`-fix restart, final clean-boot
+re-verification), each restart's PID cross-checked via
+`readlink -f /proc/<pid>/cwd` before touching it and killed by exact PID.
+The summoned `liumang` clone (temporarily `str`-buffed for the death
+test) briefly went aggressive with its buffed stats before being
+`dest`royed — it landed a few hits on the seeded admin account
+(`fluffos`) too, including two real admin deaths; harmless (same
+respawn mechanics, no permanent state loss) and cleaned up immediately
+(`dest liu` once back in the same room). Driver RSS grew to ~4.7GB
+during the multi-dragon/high-stat-NPC combat stress (chinese-number
+string formatting and heartbeat combat resolution across 7
+simultaneously-fighting high-stat NPCs is not cheap) but never
+approached a real OOM risk (18GB free throughout) and returned to the
+normal ~21MB baseline on the final clean restart. All throwaway test
+character saves (`ceshiliu` — abandoned mid-registration after an
+unrelated unclean-disconnect artifact left it looping through
+re-registration, never completed; `ceshiqi`; `ceshiba`) removed before
+committing, along with routine admin (`fluffos`)/`linshuang`
+login-timestamp churn — none kept as seeded accounts, consistent with
+round-three's `qiuyan` precedent.
