@@ -559,3 +559,7 @@ Verified: clean `build-debug` boot (zero new compile errors, zero
 "cannot replace"/"cannot bind" in `debug.log`), live admin login
 (`fluffos`/`Mud@2026`/`Wiz@2026`) + `update /d/city/kezhan.lpc` +
 `quit`, all successful.
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/bgargoyle.lpc`, `d/death/npc/wgargoyle.lpc`, `d/shengdoushi/7hai/nby/npc/haijiangjun.lpc`, `death/npc/wgargoyle.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
