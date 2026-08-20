@@ -92,3 +92,16 @@ changed，与预期精确吻合（0 处遗留匹配，全部干净）。
 两个字段均不匹配）——和批次二 nt6 记录的同一类账号密码漂移问题。
 未触碰玩家存档，也未继续深挖新密码，改为依赖干净冷启动（含失败登
 录尝试全程 debug.log 零新增行）作为本次纯机械修复的充分验证证据。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 4 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
