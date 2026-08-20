@@ -962,3 +962,204 @@ work/log/debug.log 全程无新增内容。用已播种的 fluffos/Mud@2026 管�
 员账号连线，在欢迎村新手教学区往返走了十余个房间
 （newbie1/newbie2/newbie4），look/who 均正常。未产生需要撤销的存档
 改动。驱动按精确 PID kill。
+
+## Round four deep functional test (2026-08-20, AGENTS.md §10.7)
+
+Targeted pass closing the three gaps round three's own NOTES explicitly
+left open (sect apprenticeship + skill learning, shop purchase, combat
+death/respawn), plus a fast standard-checklist sanity re-confirm. Native
+driver, port 40057, PID 850332 (confirmed via `readlink -f
+/proc/850332/cwd` before every action and before the final kill), driven
+via two persistent raw-socket Python sessions (a FIFO-fed telnet client
+written for this pass, `/tmp/.../mudsession.py`, since `mudclient.py`'s
+one-shot `--send` list doesn't support inspecting a response before
+deciding the next command) — one for the committed admin account
+(`fluffos`/`Mud@2026`), one for a fresh test character (`qinwudang`/秦武当).
+
+### 1. Real sect apprenticeship + skill learning — RESOLVED, fully completed live
+
+Traced `cmds/skill/bai.lpc`'s real gate (`mapp(ob->query("family"))`) back
+to `feature/apprentice.lpc`'s `create_family()`, then grepped for
+generation-1 (`create_family(".*", 1, ...)`) callers to find genuine
+grandmaster NPCs rather than guessing. Picked `kungfu/class/wudang/
+zhang.lpc` (张三丰/Zhang Sanfeng, 武当派 generation-1 grandmaster,
+`combat_exp` 9,000,000) — placed in `/d/wudang/xiaoyuan.lpc` ("后山小
+院"), reachable in-fiction via `/d/xiangyang/caodi6.lpc`'s `south` exit
+(`/d/wudang/wdroad5`) from the 襄阳 (xy) hub off the welcome room, several
+rooms deep. Used admin `goto`/`summon` to reach it directly (the
+established precedent from round three's death-corridor test) rather than
+spending the session's budget on the walk itself, since the goal was to
+exercise the real `bai`/`xue` mechanics at a genuine family-holding
+master, not re-prove pathfinding.
+
+`zhang.lpc`'s own `attempt_apprentice()` gates recruitment behind real
+stat thresholds (`guarded>=5`, `taiji-shengong>=60`, `taoism>=80`,
+`shen>=2000`, `int>=30` — a deliberately steep, legitimate late-game
+questline, not a bug) — used admin `call qinwudang->set(...)`/`set_skill(...)`
+to satisfy them directly (same "reach real content without an unreasonable
+grind" precedent as round three's `combat_exp` bump). First `bai zhang`
+attempt (before the stats were set) correctly failed with the loyalty
+message and left `pending/apprentice` set; a bare retry after setting
+stats was **silently absorbed by `bai.lpc`'s own "still pending, ask
+again later" short-circuit** (`if (ob == old_app) return notify_fail(...)`
+— it does NOT re-invoke `attempt_apprentice()` on a repeat call) — this is
+correct, intentional command semantics (you must `bai cancel` first to
+retry), not a bug; re-tested with `bai cancel` → `bai zhang` and got a
+full, real recruitment: "张三丰决定收你为弟子。...恭喜您成为武当派的第
+二代弟子。" (real `family` mapping populated, generation 2, confirmed via
+`score`).
+
+Followed with a full `xue` cycle: `xue zhang force 1` was first rejected
+by `inherit/char/master.lpc`'s `prevent_learn()` (`shen > 0 && me->query("shen")
+< shen` — Zhang's own `shen` is 200000, a legitimately steep "your moral
+standing isn't high enough yet" master-teaching gate, not a bug) —
+bumped `shen` to 250000 via admin `call` (same rationale as above) and
+retried: **"你向张三丰请教了一句有关「基本内功」的疑问。你听了张三丰的
+指导，似乎有些心得。你的「基本内功」进步了！"** — real skill acquisition,
+confirmed via `query_skill("force", 1)` going from `0` to `1`. Zero
+`debug.log` errors throughout either the `bai` or `xue` sequence.
+
+**Real bug found and fixed during this investigation — 3rd confirmed
+instance of AGENTS.md §7.30** (mapping-typed accessor returning its raw
+never-initialized `int 0` instead of an empty mapping): `feature/
+skill.lpc`'s `query_skills()`/`query_learned()`/`query_skill_map()`/
+`query_skill_prepare()`/`query_wprepare()` all had the exact bare-`return
+<instance var>;` shape previously confirmed crashing on `xiakexing2017`
+and `jqxz2015` (same lineage family). Grepped every call site of
+`query_skills()` (164 files) across the whole tree for unguarded
+`keys(...)`/`sizeof(...)`/direct-index usage and found real,
+live-reachable unguarded crashes:
+- `kungfu/skill/bingxue-xinfa.lpc:12` — `sname = keys(skl);` with zero
+  guard, unconditionally executed at the very top of `valid_learn()` —
+  **any player with zero skills learned so far attempting to learn this
+  skill would crash immediately** with `Bad argument 1 to keys() Expected:
+  mapping Got: 0`, directly in the `xue` skill-learn path this very task
+  item exercises.
+- `kungfu/class/mingjiao/yangxiao.lpc:123`, `kungfu/class/shaolin/
+  qing-le.lpc:88` and `:116` — three sect-reward-command functions
+  (明教 tie-token / 少林 达摩令·手谕), unguarded `keys(skl)` on a
+  freshly-recruited sect member's own `query_skills()`.
+- `kungfu/condition/lyjob.lpc:47-48` — a different but related shape:
+  `learned = me->query_learned(); if (undefinedp(learned["buddhism"]))
+  learned["buddhism"] = 0;` indexes the raw `query_learned()` return
+  directly with no guard — crashes for any never-trained player reciting
+  scripture (诵经) at 灵隐寺 (a generically reachable training spot, not
+  sect-gated).
+- `cmds/wiz/wizlian.lpc:177` — unguarded `keys(me->query_skills())` in a
+  wizard "reset to origin" admin command; lower severity (wizard-only)
+  but a real crash risk on a target with zero skills.
+(`d/zangbei/npc/xiaodie.lpc`, `d/zangbei/star_room3.lpc`'s own
+`keys(...)` call sites were already correctly truthiness-guarded —
+confirmed clean, not fixed.)
+
+**Fix**: applied the documented §7.30 remedy at the accessor level rather
+than patching every call site — `return mapp(x) ? x : ([]);` for all five
+`feature/skill.lpc` mapping accessors (`skills`, `learned`, `skill_map`,
+`skill_prepare`, `wprepare`). This closes all found and any not-yet-found
+call sites at once (confirmed via `grep`: 164 files call `query_skills()`
+alone), including the `lyjob.lpc` indexing case (an always-real mapping
+now safely returns `0` for an absent key instead of crashing on the index
+itself). Verified live: the `bai`/`xue` cycle above was run *after* this
+fix was applied, so the real skill-learning path was exercised
+post-fix with zero errors. `git diff` confirms only `libs/haiyang2/work/
+feature/skill.lpc` changed (5 one-line accessor bodies).
+
+### 2. Shop purchase — RESOLVED, fully completed live
+
+`药铺` (`d/city/npc/huoji.lpc`, room `d/city/yaopu.lpc`) — same shop
+round three used for `list`. Granted spendable coin via the sanctioned
+admin `clone`+`give` pattern for this lib's actual coin objects
+(`/clone/money/gold`, `set_amount()`, `give <item> to <target>` — note
+`give.lpc`'s own arg-parsing quirk: `give <target> <item>` mis-parses as
+`target=<item> item=<target>` for the no-"to" form, so `give X to Y` is
+the reliable syntax). `buy dust` (化尸粉, the cheapest listed item at 70
+base copper) succeeded: **"你从药铺伙计那里买下了一颗化尸粉。你的「讨价
+还价」进步了！"** — item received (confirmed via `i`), price correctly
+deducted with correct change-making across all three coin denominations
+(50000 base units in, item cost 70, result 4 gold + 99 silver + 30 copper
+= 49930, exact). Zero `debug.log` errors.
+
+### 3. Combat leading to death/respawn — RESOLVED, fully completed live, real organic death
+
+Per this session's cross-lib precedent, checked `kill.lpc` directly rather
+than assuming a spar-gate applies — confirmed no such gate exists for
+real NPC targets. First `kill zhang` (against the same Zhang Sanfeng, a
+massively overtuned combat_exp-9,000,000 opponent, guaranteeing a fast
+loss) hit `feature/damage.lpc`'s **"新手不死" (newbies don't die)**
+mechanic: any `userp()` character with `combat_exp < 2,500,000` (and not
+already flagged a killer/high-PK/`zhuanshen`) who would die is instead
+rescued with a "白光" (white light) message, healed, and moved to `/d/
+pingan/guangchang` — a deliberate, clearly-commented, intentional design
+gate (same category as this lib's already-documented aggressive netdead
+newbie reaper), **not** a bug, left alone. Bumped `combat_exp` to
+3,000,000 via admin `call` (same "clear a design gate to reach the real
+mechanic" rationale used throughout this pass) and retried: real death
+this time — **"你「啪」地一声倒在地上，嘴角溢出几丝鲜血，痛苦的挣扎了几
+下就死了。"** — moved to `/d/death/gate`'s "鬼门关" (Ghost Gate) death
+corridor with 白无常 (`d/death/npc/wgargoyle.lpc`, one of the 13 files
+fixed for §7.112 in round three) present.
+
+Let the full `death_stage` dialogue chain run to natural completion
+(5 stages, ~5s apart) rather than short-circuiting it — this is the
+**first genuinely organic real-combat death** this lib has seen tested
+(round three's §7.112 verification used admin `summon` directly into the
+death corridor, not a real `kill`-triggered death), giving the strongest
+possible confirmation of that fix: reincarnation completed correctly,
+character landed in `/d/city/wumiao` ("武庙", matching the lib's own
+documented death-respawn room), and `callouts death_stage` plus
+`qinwudang->query_temp("death_stage_active")` both confirmed **0**
+afterward — the guard cleared itself with zero stacking, fully organically
+triggered. `score` post-respawn showed consistent, correctly-updated
+state (离奇死亡: 一, 上次死因: 被zhang sanfeng杀死, `combat_exp` reduced
+from 3,000,000 to 2,970,075 as an expected death penalty). Zero
+`debug.log` errors across the entire combat → death → reincarnation
+sequence. (The doubled "你有武功为零级了，请重新enable 所有的武功，特别
+是force！" notice from `feature/skill.lpc`'s post-death skill-reset
+handling printed twice, from two separate call sites — cosmetic UI
+messaging, no error signature, not chased per scope.)
+
+### Standard checklist re-confirm (all clean, no new findings)
+
+- **§7.90** (`config.fluffos` eval cost): `maximum evaluation cost :
+  30000000` — already well above the documented `5000000` remedy floor.
+  Not applicable.
+- **§7.100** (live `replace_program(ROOM);`): 385 raw-text hits across the
+  tree, but every single one is either a non-`.lpc` dead/backup file
+  (`.C`/`.bak`/`.old`/`.txt`/`.java`/`.vns`/`.jas`, a stray `log/edit`
+  entry) or, within real `.lpc` files (256 hits), already commented out
+  (`//`) — confirmed via a targeted follow-up grep excluding `//`-prefixed
+  lines, zero live matches. Already fully closed by the 2026-08-19
+  cross-lib sweep documented above.
+- **§7.111** (`file_name(error["object"])` unguarded in the real master's
+  `standard_trace()`): re-confirmed still not applicable, matching round
+  three's own finding — the live master (`/adm/single/master`) never
+  calls that pattern at all.
+- **§7.112** (`death_stage()` reentrancy): manually re-read all 7 death-
+  corridor/shaolin NPC files' full `death_stage()` bodies (not just
+  grepped for the guard string) confirming every exit branch clears
+  `death_stage_active`, and all 6 `bwdh/*_xiangfang.lpc` PK-arena room
+  files clear the guard unconditionally at the top of the function before
+  any branching — all 13 originally-fixed files verified structurally
+  sound, then re-confirmed live end-to-end via the real combat death above
+  (see item 3).
+- **§7.79** (bare 2-arg `addn()`/`addn_temp()`): zero hits anywhere in the
+  tree.
+- **§7.108** (`reconnect()` calling `enable_commands()`): re-confirmed
+  present — `clone/user/user.lpc`'s `reconnect()` still calls
+  `enable_commands()` first thing, matching round three's finding.
+- **§7.30** (uninitialized-mapping accessor crashing `keys()`): found and
+  fixed a real, 3rd-corpus-wide-confirmed instance — see item 1 above.
+
+### Process hygiene
+
+Driver PID 850332 (`readlink -f /proc/850332/cwd` confirmed matching this
+lib's `work/` both before every `call`/teleport action and immediately
+before the final kill). Both test sessions quit cleanly (`quit` from
+`qinwudang`, `quit` from `fluffos`) before the driver was killed. Runtime
+churn from testing (`data/login/f/fluffos.o`, `data/user/f/fluffos.o`,
+`data/npc/menpai.o`/`menpai1.o` — the same unrelated periodic sect-of-
+the-day daemon effect round three noted) reverted via `git checkout`;
+test character `qinwudang`'s save files (`data/login/q/qinwudang.o`,
+`data/user/q/qinwudang.o`) deleted, not committed. `git status --short`
+confirmed clean except the one intentional `feature/skill.lpc` fix before
+committing.
