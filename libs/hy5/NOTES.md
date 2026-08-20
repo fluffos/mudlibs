@@ -285,3 +285,7 @@ PID kill，`ps -p` 确认已退出。
 房间（`welcome`↔`new1`↔`qianzhuang`↔`dangpu`），`look`/`score`/
 `who` 均正常。测试产生的 `data/user/f/fluffos.o` 存档时间戳 diff
 已 `git checkout` 撤销，不提交。驱动按精确 PID kill。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/panguan2.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
