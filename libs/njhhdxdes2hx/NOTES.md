@@ -109,3 +109,35 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 23 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 sweep (2026-08-19): redundant `replace_program(ROOM);` landmine
+
+Same corpus-wide bug as documented at AGENTS.md §7.100, this time on the
+universal `ROOM` base class (`/std/room`) instead of just boards: rooms
+inheriting `ROOM` had a redundant, harmful `replace_program(ROOM);` call
+right after `inherit ROOM;` in `create()`, setting a permanent "pending
+replace" flag that crashes the object the first time anything binds a
+closure to it. This lib had **1,703 live occurrences** (survey-ranked
+#86 of 166 candidates >=100). Fixed with the sweep's binary-mode script
+(`fix_710_room.py`, 1,439 files) plus **a new irregular shape not seen
+in prior batches**: 261 files under `d/road/*.lpc` share the call on
+the SAME LINE as `setup()` (`setup(); replace_program(ROOM);`, one with
+no space — `setup();replace_program(ROOM);`), which the strict
+standalone-line script correctly leaves alone; hand-fixed via a
+targeted byte-replace keeping `setup();` and dropping the trailing
+call. Also fixed two room-building-tool copies
+(`obj/roommaker.lpc`, `obj/wizard/roommaker.lpc`, the simple
+`str += "...replace_program(ROOM);..."` string-builder variant) and a
+THIRD, different kind of factory: `d/heimuya/midao/mud/room/
+flatroom.lpc`, a maze/area room-code generator whose `fprintf(out,
+"replace_program(ROOM); \n}\n")` line baked the same bug into every
+auto-generated maze room file — fixed the same way (drop the
+`fprintf` call emitting the redundant line). `git diff --numstat`
+totals (264 insertions, 1703 deletions) match the survey's
+live-occurrence count exactly (1439 + 261 + 3 tool-template edits).
+No `work/data/` room-source false-negative found. Verified via a clean
+`build-debug` boot (zero "cannot replace"/"cannot bind" `debug.log`
+lines, port 40194 listening) plus a live admin login
+(`fluffos`/`Mud@2026`) — landed at 饮风客栈, `look`/`quit` both worked
+normally, `debug.log` stayed clean throughout. Incidental admin
+save-timestamp drift from the spot-check reverted before committing.
