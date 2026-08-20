@@ -729,3 +729,13 @@ bug）。两条会话全程 `log/debug.log` 均未生成（零运行时错误）
 （`data/user/k/kxkjrthb.o`，未跟踪）与临时创建的 `u/f/`（供 `eval` 指
 令使用的巫师工作目录，未跟踪）均已删除，未纳入本次提交。驱动进程按
 PID 精确 kill（非 pkill 模式匹配）。
+
+## §7.100 跨库扫描修复（`ROOM` 基类同款 `replace_program()` 致命形状）
+
+- 同款 `inherit ROOM; ... replace_program(ROOM);` 冗余自替换（AGENTS.md
+  §7.100）：`work/` 下 1,310 处存活匹配，全部为标准独立行形式，脚本一次
+  性删除，无不规则残留。房间生成工具 `obj/roommaker.lpc` 检查过——它的
+  heredoc 模板本身没有把这行冗余调用写进生成结果，不受影响，不需要修。
+  `data/` 下的其余 `.lpc` 源文件（自动加载装备等）额外核查过，无命中。
+  验证：真实 debug 驱动干净编译启动、端口正常监听，`debug.log` 无新增
+  "cannot replace"/错误行。
