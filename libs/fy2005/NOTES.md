@@ -304,3 +304,17 @@ players are unaffected. Test char saves removed; no new debug.log errors.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 8 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+同一形状扩展到全库通用房间基类 `#define ROOM "/std/room"`：删除
+1001 处多余的、独立成行的 `replace_program(ROOM);`（保留
+`inherit ROOM;`）——999 处由脚本批量删除，另外 2 处
+（`d/fy/wcloud1.lpc`、`d/fy/tiandoor.lpc`）行尾带有开发者注释
+`//add by ldb`（后者还有中文说明"希望刷掉乱走的NPC"），脚本的严格
+匹配跳过了它们，手工确认后一并删除——注释表明作者是有意添加该调用
+以期"冲掉"游荡 NPC，但技术上仍是同一枚定时炸弹（对已 `inherit` 的
+对象重复 `replace_program()`，一旦该对象后续绑定任何闭包就会崩溃），
+故仍按同一原则删除。本库没有房间建造工具（`roommaker.lpc` 等），
+无需修复第二处。已用 `build-debug` 驱动干净启动验证（0 个新增编译
+错误，端口正常监听）；未做完整 §10.7 深度游玩测试。
