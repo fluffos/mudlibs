@@ -801,3 +801,16 @@ jqxztest}.o`。管理员账号 `fluffos` 存档因本轮测试（`clone`/
 前只做过代码比对、从未实机触发过的 `pending/recruit==me` 分支）；
 新发现并修复一处 §7.30 家族真实运行时崩溃 bug（5 处实例）；标准
 检查清单六项全部确认干净。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 4 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
