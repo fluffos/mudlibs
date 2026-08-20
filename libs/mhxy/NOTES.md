@@ -776,3 +776,22 @@ cost) per this pass's standard checklist, neither live-reproduced as a
 crash this session but both matching well-established bug classes
 (§7.11, the eval-cost-abort risk) with real (if not this-session-
 triggered) blast radius.
+
+## §7.100 sweep fix (`ROOM` base-class redundant `replace_program()`)
+
+`#define ROOM "/std/room"`: deleted 563 redundant, live, standalone
+`replace_program(ROOM);` lines (kept `inherit ROOM;`) — 561 caught by
+the scripted sweep, plus 2 hand-fixed instances baked into the two
+copies of this lib's in-game room-building tool
+(`obj/roommaker.lpc`, `clone/misc/roommaker.lpc` — near-identical,
+differ only in one `is_monitored` set() call and encoding of two
+traditional-vs-simplified characters). Both tools have the standard
+two-template shape: the "make an empty room" heredoc was already
+clean, only the "clone the room I'm standing in" command's
+`str += "\n\tsetup();\n\treplace_program(ROOM);\n}\n";` string-builder
+carried the bug — fixed to drop the redundant call and keep
+`setup();`. 8 pre-existing `//`-commented instances remain untouched,
+confirmed harmless. Verified via a clean `build-debug` driver boot
+(0 new compile errors, port 40016 listening, zero new "cannot
+replace"/"cannot bind" `debug.log` lines); no full §10.7 gameplay
+walkthrough this pass.
