@@ -1017,3 +1017,16 @@ Saves: `work/data/user/l/linhaoran.o`, `work/data/login/l/linhaoran.o`.
 - **§7.108** (`reconnect()` calls `enable_commands()`): `obj/user/user.lpc`'s `reconnect()` (fixed in round three) still correctly calls `enable_commands()` as its first line — unchanged, and exercised live again this pass via the routine reconnects between test segments.
 
 No bugs found this round — both explicitly-flagged gaps from round two/three are now fully closed by direct live verification (not just design reasoning), and the standard checklist is a clean confirm-only pass.
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 3 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
