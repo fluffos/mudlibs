@@ -832,3 +832,18 @@ warnings) across all verification boots.
 
 - `work/feature/user/edit.lpc` — dropped `private` from `input_line()`
   (the real fix; see root cause above).
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). 48 live
+`replace_program(ROOM);` occurrences across 47 room files
+(`d/hell/*.lpc`, `d/snow/*.lpc`, `d/goat/*.lpc`, `d/choyin/ngate.lpc`,
+`adm/guild/*.lpc`) plus this lib's own room-building tool
+`obj/roommaker.lpc`'s string-builder template (a tab-indented variant of
+the pattern, `\n\tsetup();\n\treplace_program(ROOM);\n}\n"`, that
+required a hand fix since it uses tabs rather than the 2-space indent
+the mechanical script targets) — so newly-built rooms were inheriting
+the bug too. All fixed; a full post-fix grep confirms 0 live occurrences
+remain. Verified via a clean native driver boot (zero new `debug.log`
+errors, port listening, killed by exact PID after ~8s).
