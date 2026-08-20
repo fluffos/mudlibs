@@ -449,3 +449,16 @@ insertions(+), 5243 deletions(-)，与脚本自报删除行数（5241 处标准
 `goto` 均正常返回，无 "cannot replace"/"cannot bind" 新增日志行。
 按精确 PID 结束驱动，登录产生的两处存档增量（`fluffos.o` 登录/用户
 档案）已 `git checkout --` 还原。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 4 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
