@@ -135,3 +135,16 @@ survey 记录的数字精确吻合，修复后 0 处遗留。
 `debug.log` 全程干净。用这份档案自己播种的管理员账号
 `wuyou`/`Mud@2026`（不是 fluffos）登录正常（落地海洋之初，
 look/quit），全程无新增 "cannot replace"/"cannot bind" 日志行。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 5 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
