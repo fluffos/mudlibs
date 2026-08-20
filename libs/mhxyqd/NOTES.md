@@ -693,3 +693,25 @@ shi,wu}.o` files predate this session (timestamped 2026-08-05, not in
 caution about not deleting unfamiliar test-character residue without
 checking history first; `qinfeng`'s committed save files were not
 touched.
+
+## §7.100 sweep fix (`ROOM` base-class redundant `replace_program()`)
+
+`#define ROOM "/std/room"`: deleted 550 redundant, live, standalone
+`replace_program(ROOM);` lines (kept `inherit ROOM;`) — 548 caught by
+the scripted sweep, plus 2 hand-fixed instances baked into the two
+copies of this lib's room-building tool (`obj/roommaker.lpc`,
+`clone/misc/roommaker.lpc`), same shape as sibling `mhxy`. 8
+pre-existing `//`-commented instances remain untouched, confirmed
+harmless. Verified via a clean `build-debug` driver boot (0 new
+compile errors, port 40050 listening, zero new "cannot replace"/
+"cannot bind" `debug.log` lines) plus a raw-socket connectivity check
+(login banner rendered correctly) — a handful of transient "Too deep
+recursion" errors during a weapon object's lazy compile
+(`d/obj/weapon/mace/copperjian.lpc`, `/adm/obj/master.lpc:433`)
+appeared well after "Initializations complete" and are unrelated to
+this fix (no room/ROOM involvement); boot log growth briefly looked
+stalled but was confirmed to be stdio buffering, not a real hang, via
+the same connectivity check. No full §10.7 gameplay walkthrough this
+pass. The 6 pre-existing untracked `data/{login,user}/c/chen{ba,shi,
+wu}.o` files (timestamped 2026-08-05, predating this session) were
+left untouched.
