@@ -804,3 +804,264 @@ and `d/menpai/wuliang/west/shufang1.lpc`. No room-building tool exists
 in this lib. Fixed by deleting the redundant lines. Verified via a
 clean native driver boot (zero new `debug.log` errors, port listening,
 killed by exact PID after ~8s).
+
+## 深度功能测试第四轮 / Round four (2026-08-20): the 3 explicitly-flagged §10.7-rule-6 gaps
+
+Targeted pass closing the three gaps the round-two pass ("2026-07-25")
+explicitly left unverified-live. Native `build-debug` driver, own raw
+Python dual-socket telnet client (`dual.py`, adapted from
+`scripts/mudclient.py` to drive TWO simultaneous connections — needed
+because `give` requires the recipient to be genuinely `interactive()`,
+not just alive-but-netdead, so a player and an admin connection had to
+be open at once), each response inspected before sending the next
+command. Standard checklist re-confirmed first (see below) — all
+already clean/fixed by prior passes, no new checklist regressions.
+
+### Gap 1: reconnect persistence — RESOLVED, completed live
+
+Test character `qinlie`/秦烈 (registered fresh this pass). After
+reaching a stable state (money via the sanctioned admin
+`clone`+`summon`+`give` pattern — see Gap 2 — landed `qinlie` at 太白楼
+carrying 青布衣衫(worn)/百宝箱/两银子), issued a real `quit` at
+real playtime > `CAN_SAVE_LIMIT_TIME` (1800s past `birthday`, confirmed
+via `query("birthday")` vs wall clock first) — this is the FULL
+`later_quit()` path (`call_out("later_quit", 30, me)`, not the
+"confirm without saving" gate), which fired after the real 30-second
+delay, dropped non-autoload items with on-screen confirmation ("你丢下
+一个百宝箱。你丢下一套青布衣衫。"), then the standard farewell text and
+a genuine `destruct(me)` — confirmed via `find_body`/`call qinlie->...`
+both returning "找不到指定的物件" immediately after. Waited a real
+~3 additional minutes (character fully absent from memory the entire
+time — not a netdead body, an actual absence, so this is an unambiguous
+disk-only restore test) before reconnecting. Restored state matched:
+`score` showed identical stats/attributes/skill levels/death count
+(3 deaths, matching pre-quit); `i` showed the silver money intact
+(`AutoLoad` in the raw `.o` save file confirmed `/clone/money/silver`
+survived with its exact amount) — this is the only inventory item that
+is expected to survive a `quit`, per `later_quit()`'s own
+`query_autoload()`-gated drop logic, verified correct. Two adjacent
+findings, both confirmed NOT bugs (no error signature, fully graceful,
+consistent across repeated reproduction):
+- **Location does not persist across a full quit+relogin** — the
+  character lands at `startroom` (the value frozen in the save file,
+  `/d/city/gaochang/center` in this case), not wherever they actually
+  quit from (太白楼). Traced to `enter_world()`
+  (`system/daemon/logind.lpc` ~line 565): a full login only consults
+  `user->query("startroom")`, never the room the character was
+  physically in at last save — this is pre-existing, previously
+  documented behavior for THIS lib (see the "Player-visible side
+  effect" note in the round-two section above), not something this
+  pass changed.
+- **Cloth + a starting `百宝箱` box are silently re-issued on every
+  full (non-netdead-reconnect) login**, regardless of what the
+  character is already carrying or dropped at their last `quit` —
+  found in `enter_world()` itself (`system/daemon/logind.lpc` ~line
+  514): `if (!user->is_ghost()) { cloth = new(CLOTH_DIR+"cloth1");
+  cloth->move(user); cloth->wear(); mb = new("/clone/misc/box");
+  mb->move(user); }`, unconditional on any existing-inventory check,
+  every single `enter_world()` call. This is why `qinlie`'s `i` showed
+  the box/cloth back even though `later_quit()` had just dropped them
+  moments earlier — a deliberate "always guarantee basic gear" design
+  (no error/crash, fully consistent, matches this project's
+  no-error-signature-means-design rule), not a persistence bug. Only
+  the MONEY in this test reflects genuine save/restore fidelity; the
+  cloth/box are freshly re-provisioned each full login by design.
+
+A separate accidental discovery while investigating a stalled `qinshen`
+reconnect (see the §7.108 fix below) is the REAL bug found this pass.
+
+### Gap 2: shop purchase — RESOLVED, completed live, correct
+
+Followed the sanctioned admin pattern this project's other round-four
+passes established (see `mhxy`'s NOTES): as admin (`fluffos`,
+pre-seeded per the 2026-07-24 WASM-enablement pass), `clone
+/clone/money/gold` (this lib's own `/clone/money/gold.lpc` — `value`
+10000), then `summon qinshen`/`give gold to qinshen` to bring a fresh,
+ordinarily-registered test character (`qinshen`/秦深, id `qinshen`, pw
+`Test2026`) into the same room and hand over real currency — but this
+lib has an extra wrinkle worth documenting for future passes:
+**`give` to a non-`wizardp` recipient silently routes through a
+different, stricter accept path when the recipient is netdead
+(`!interactive(who)`) — `cmds/verb/give.lpc`'s `do_generate` block calls
+`who->accept_object(ppl, obj)` (the quest-turn-in handler,
+`system/std/char/master.lpc`), which almost always declines for an
+ordinary gift, producing the exact same "好象不大愿意接收你的物品。"
+text a genuine `env/refuse_give` opt-out would show — easy to
+misdiagnose as the wrong bug.** Fix for testing purposes (not a code
+change, a methodology note): the recipient must be genuinely
+`interactive()` — i.e., actually connected, not merely alive-but-
+netdead — for a plain `give` to succeed. Wrote a small dual-socket
+Python driver (`dual.py`) to hold the player connection open with
+periodic blank keepalives while a separate admin connection acted on
+them in the same room.
+Completed purchase: `list san` at 小三 (酒保, 太白楼) showed
+`女儿红(nver hong)：一两银子`; `buy nver hong from san` succeeded
+(the plain alias `nver` alone does NOT match — `vendor.lpc`'s
+`buy_object()` matches the object's full `id()` string, which for this
+item is the two-word `"nver hong"`, not the shorter aliases also
+registered via `set_name`). Verified via `query_money()` and `i`
+before/after: exact price deduction with correct auto-change (paid with
+1 gold = 10000, price 1000, correct remainder = 9000, redistributed by
+`feature/finance.lpc`'s `pay_money()` into 0 gold + 9 silver + 0 coin —
+confirmed both the existing gold object's amount getting adjusted and a
+brand-new silver object being created for the change, matching
+`pay_money()`'s own logic read from source) — both the price deduction
+and the item receipt (`女儿红(Nver hong)` in `i`) verified correct.
+
+### Gap 3: combat/death progression — RESOLVED, real death/respawn cycle, ONE REAL BUG FOUND AND FIXED
+
+Per the task's dtsl2/mhxy precedent question: checked `cmds/verb/kill.lpc`
+first — its only gate at all for an NPC target (`!userp(obj)` branch) is
+`obj->refuse_killing(ppl)`, an NPC-defined opt-out (many NPCs have it,
+many don't; undefined-function `call_other` returns 0/allow by default)
+— no `combat_exp` or other PK-only gate applies to NPC targets at all,
+confirming the precedent holds here too. `kill` (not `bihua`) worked
+immediately.
+
+Found a genuinely killable target: `d/city/gaochang/npc/asan.lpc`
+(combat_exp 50000, `set_hp` gin/kee/sen 500/700/700) has
+`refuse_killing()` (a protected quest NPC, not usable), but its sibling
+`d/city/gaochang/bosipu.lpc`'s `npc/shangren2.lpc` (波斯商人 阿里,
+combat_exp 50000, no `refuse_killing` override) does not. Test character
+`qinlie`/秦烈 (age 14, fresh, 0 combat_exp) walked there for real
+(`center`→west→west→north) and `kill shangren` — real, unmodified
+combat resolved over a few rounds ("你的眼前一黑，接着什么也不知道
+了……" → "你满身血迹，再也支持不住，一头撞倒在地上") into a genuine
+death, moved to 黄泉路 (`d/place/death/yellow1`). `debug.log` stayed
+completely clean (0 new lines) through the entire combat/death/
+reincarnation sequence, this pass's entire session.
+
+Walked the full underworld chain for real
+(`yellow1`→north→`yellow2`(孟婆's `chat_msg` ambient lines look
+identical to её her real `death_msg` stage-0 line and briefly caused a
+misdiagnosis — the REAL `tea_give()` sequence completed correctly and
+gave `孟婆茶`)→north→`gate`(白无常/黑无常)→north→`difu1`
+(牛头/马面)→north→`difu2`→north→`dadian`/阎罗大殿, where
+`d/place/death/npc/chacha.lpc` (查察司判官) runs the actual
+reincarnation dialogue.
+
+**Real bug found: `chacha.lpc`'s `death_stage()` permanently soft-locks
+any ghost who still has ANY item (including the `孟婆茶` mengpo tea
+EVERY ghost receives automatically two rooms earlier) at stage 4.**
+```lpc
+void death_stage(object ob, int stage) {
+  ...
+  else {
+    obs = deep_inventory(ob);
+    if (sizeof(obs)) {
+      command("hmm");
+      command("say 不过阴间的东西是不能带到阳间的，你先要把你身上的东西放下来。");
+      return;                              // <-- never clears the guard
+    } else
+      tell_object(ob, death_msg[stage]);
+  }
+  ...
+```
+`init()` guards re-entry with `ob->query_temp("death_stage_active")` —
+every OTHER exit path in this file (the early `!ob || !present(ob)`
+branch, and the normal end-of-sequence path after `reincarnate()`)
+correctly clears this flag, but the item-check branch does not. Since
+nothing else in the whole codebase ever calls `death_stage()` except
+`init()` (itself blocked by the still-set flag), a ghost who reaches
+stage 4 still carrying items — which is EVERY ghost, since `die()`
+never auto-drops inventory and every ghost is handed a `孟婆茶` two
+rooms before reaching 查察司 — gets stuck in ghost form permanently:
+re-entering the room after dropping items is a no-op forever, with zero
+error anywhere (`debug.log` stays clean the whole time — this is a
+silent, crash-free soft-lock, not a crash). **Live-reproduced twice**
+(once via natural gameplay — stalled for real, `query_temp` confirmed
+the flag stuck at 1 with no error and no pending `callouts` entry for
+`death_stage` at all; once via a controlled repro with an admin-given
+item after the fix, confirming the exact same stall shape). **Fix**:
+added `ob->delete_temp("death_stage_active");` right before the
+existing `return;` in that branch, matching the pattern every other
+exit path in the file already uses. **Verified end-to-end, twice**:
+(1) direct repro — cleared the stuck flag via admin, re-entered with an
+item still carried, confirmed the NEW code now clears the flag itself
+(`query_temp` → 0, not stuck at 1) when hitting the item-check message;
+(2) full natural recovery — dropped the item, re-entered the room with
+zero admin intervention, and the complete 5-stage dialogue played out
+correctly this time, ending in a real `reincarnate()` + move to a live
+room (`d/city/gaochang/center`). `lpcc`-equivalent live `update` +
+destroy-and-respawn-the-clone (`dest`, `call
+.../dadian->reset()`) used to get the fix into the ALREADY-LOADED live
+NPC instance without a full driver restart — confirmed via `callouts`
+listing that the fresh clone (`chacha#160`) picked up the new
+`update`d bytecode where the stale clone (`chacha#119`, still running
+pre-fix code even after a successful file-level `update`) had not.
+
+Post-reincarnation state verified correct: `score` showed the death
+count incremented (3, after 2-3 real deaths across this pass's testing)
+and all stats restored to full (`heal_up()`/`reincarnate()`'s
+`eff_*=max_*` reset), no lingering ghost flags.
+
+### §7.108 gap found and fixed: `interactive.lpc`'s `reconnect()` missing `enable_commands()`
+
+**Found by accident while investigating why a long-idle `qinshen`
+reconnect left every command producing "什么？你想干嘛？"/showed "对
+不起，由于你没有环境，转移到void..."** — this is AGENTS.md's own
+cataloged §7.108 ("kick out an already-connected duplicate login"
+reconnect path), which a corpus-wide sweep already fixed on 162 libs —
+`xajh2` was evidently missed by that sweep (`grep -n enable_commands
+system/feature/user/interactive.lpc` → zero hits, confirming the gap).
+`system/daemon/logind.lpc`'s `confirm_relogin()` has the exact
+vulnerable shape (`exec(old_link, user); destruct(old_link);` then
+`reconnect(ob, user)`), and `system/feature/user/interactive.lpc`'s
+character-class `reconnect()` never called `enable_commands()` — only
+`set_heart_beat(1)`/`set_temp("netdead",0)`/`remove_call_out`. **Fix**:
+added `enable_commands();` as the first line of `reconnect()`, matching
+AGENTS.md §7.108's exact proven remedy. **Verified live, twice**:
+(1) reproduced the exact "kick out" sequence pre-fix is implied by the
+`qinshen` symptom (not independently re-confirmed broken pre-fix, since
+the fix was applied before a clean isolated repro was run — see
+honesty note below); (2) post-fix, reproduced the full canonical
+§7.108 repro live (connection A holds `qinlie` open and interactive,
+connection B logs in as the same id, gets the "另一个连线中的相同人物"
+kick-out prompt, answers `y`) — `look`/`score` both produced full,
+correct output immediately after "重新连线返回。", not the generic
+fail message. **Honesty note**: the `qinshen` anomaly that led to
+finding this (commands failing AND environment loss AND
+`find_player()`/`call` unable to resolve the object even though
+`find_body()`'s internal fallback still could) was not independently
+root-caused beyond identifying it as this same gap's family — it may be
+a compound symptom of §7.108 interacting with this lib's long-idle
+netdead path rather than a byte-for-byte match to the catalogued
+symptom; not chased further given the canonical repro above already
+gives an unambiguous, clean positive/negative comparison.
+
+### Checklist re-confirmation (all already clean/fixed by prior passes — no regressions found)
+
+- **§7.90 eval-cost**: `config.fluffos`'s `maximum evaluation cost` is
+  `5000000000` (5 billion) — comfortably above the `5000000` minimum
+  remedy value. Confirmed via the live driver's own boot-time "Runtime
+  Config Table" dump too (shows the driver's actual effective value).
+- **§7.100 `replace_program(ROOM)`**: `grep -rn
+  "replace_program(ROOM)" work` → zero hits (the two sub-threshold
+  instances above were already the last of them).
+- **§7.111 `file_name(error["object"])` null-guard**: not applicable —
+  this lib's `standard_trace()` uses `sprintf("...%O...", err["object"],
+  ...)` (`%O` handles `0` fine) rather than the vulnerable
+  `file_name(error["object"])` shape at all; `error_handler()`
+  separately guards its own `file_name(err["object"])` call with
+  `if (err["object"])` first. Confirmed clean by reading the source.
+- **§7.112 `death_stage()` reentrancy**: `grep -rl 'call_out("death_stage"'
+  work` → only `chacha.lpc`, already guarded via the
+  `death_stage_active` temp flag (the SAME flag whose item-check exit
+  path had the newly-found bug above — the reentrancy guard itself was
+  already correct, just one of its several exit paths leaked).
+- **§7.79 bare `addn()`/`addn_temp()`**: `grep -rn "addn(\|addn_temp("
+  work` → zero hits, not applicable to this lib.
+
+### Process hygiene
+
+Driver restarted once mid-pass (to pick up the `interactive.lpc` fix
+cleanly, since it affects the live player-body class shared by every
+connected character — safer than a live `update` for a base class
+already in active use by test characters). Every kill used the exact
+PID (`804454`, then `813660`), confirmed via `readlink -f
+/proc/<pid>/cwd` before each kill. No other libs' drivers were touched.
+Test character save files (`qinlie`, `qinshen` — login/user/log, all
+three dirs) removed after testing per this lib's established
+convention; `fluffos` admin save-timestamp churn (`data/login/f/`,
+`data/user/f/`) left as-is per this project's standard practice for the
+seeded admin account.
