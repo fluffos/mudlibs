@@ -628,3 +628,14 @@ commit `4603617af84`）、管理员账号（`fluffos`/`Mud@2026`，
 早于本次会话），确认无新增未捕获运行期错误。登录本身产生的存档时
 间戳类微小 diff 已用 `git checkout` 撤销，不提交。驱动最终按精确
 PID kill，`ps -p` 确认已退出。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/inherit/room/room"`：删除 818 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），与 `jqxz2008`
+系列同一血统同一形状。`clone/misc/roommaker.lpc` 同样有两套模
+板——"造一间空房间"的 heredoc 本来干净，"克隆我所在的房间"命令的
+字符串拼接模板把同一枚多余的 `replace_program(ROOM);` 烤进了每一
+个新克隆的房间，已同步修正。已用 `build-debug` 驱动干净启动验证
+（0 个新增编译错误，端口正常监听）；未做完整 §10.7 深度游玩测
+试。
