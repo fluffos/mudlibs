@@ -169,3 +169,105 @@ list/post 流程在客店验证可用（`list` 走分页，`ENTER`/`q`/`b` 翻�
   生成模板里的同形状变体，共 2,662 处，与普查记录一致。
 - 验证：真实 `build-debug` 驱动干净开机、端口正常监听，`debug.log` 中
   零 "cannot replace"/"cannot bind" 行。
+
+## Round four deep functional test（2026-08-19）
+
+本轮专门补完第三轮明确留白的三大系统：战斗、门派内技能学习、经济系
+统（铁匠铺 list/buy）。全程用真实 `build-debug` 驱动 + 全新注册测试
+号（`rfourjym`）+ admin（`fluffos`）双连线协同测试（`goto`/`summon`/
+`eval` 辅助定位与状态调整），驱动全程干净，`debug.log` 除编译期警告
+外零运行时错误。三项全部验证通过，**没有发现任何真实程序 bug**。
+
+### 1. 战斗：通过
+
+在武当柏林用新号空手攻击「野兔」（`d/wudang/npc/yetu.lpc`），完整走
+完多回合攻防：命中/招架/闪避描述随机切换，野兔的状态提示逐步升级
+（"力不从心" → "半昏迷" → 摔倒 → 死亡），死亡触发 `die()` 正确清除
+物件并生成"兔肉"战利品，全程无崩溃、无 debug.log 报错。
+
+### 2. 门派内技能学习：通过
+
+已知加入武当派（`join wudang`）的角色，其 `family/master_id` 是欢迎
+室里"金庸"NPC（`d/welcome/npc/shizhe.lpc`）自己，而这个 NPC 没有设
+置任何 `set_skill()`，所以理论上无法直接向他 `learn`。真正的门派内
+授业 NPC 是 `kungfu/class/wudang/*.lpc` 这批角色（通过 `CLASS_D`
+宏放置在 `d/wudang/sanqingdian.lpc` 等房间里，例如宋远桥、谷虚道
+长、张三丰），都用 `bai <NPC>` 拜师、`ob->attempt_apprentice()` 里
+按 `taiji-shengong` 内功等级 + `shen`（声望）双重门槛决定是否收徒，
+门槛因人而异（宋远桥最低：`taiji-shengong>=60` 且 `shen>=35000`）。
+
+刚 `join wudang` 的新号 `shen` 只有 30000，天然差 5000 达不到宋远桥
+门槛——这是**内容/设计门槛，不是 bug**，符合本项目已反复确认的"声
+望/等级门槛拒绝求教"模式。为了验证 `bai`/`recruit_apprentice`/
+`learn`/`is_apprentice_of` 这条机制本身是否work，用 admin `eval`
+把测试号的 `shen` 临时提到 40000（纯粹测试用途的状态调整，不是代码
+修复）。之后：
+
+- `bai song` → 宋远桥 `attempt_apprentice()` 检查通过 → 自动
+  `command("recruit "+id)` → `你跪了下来向宋远桥恭恭敬敬地磕了四个
+  响头，叫道：「师父！」恭喜您成为武当派的第三代弟子。`（`family`
+  正确更新为 `master_id`=宋远桥、`generation`=3）
+- `learn song sword 3` → `你向宋远桥请教有关「基本剑法」的疑问。你
+  听了宋远桥的指导，似乎有些心得。` → `skills` 确认 `sword` 技能的
+  进度值从 `62/0` 变为 `62/73`（尚未跳级，但确认经验值真实累积）。
+
+途中还观察到 `bai` 指令本身有一个**符合设计**的行为、不是 bug：对
+同一 NPC 连续 `bai` 两次，第二次会命中"你想拜XX为师，但是对方还没
+有答应"的 pending 分支而不重新触发 `attempt_apprentice()`——必须先
+`bai cancel` 清掉 pending 状态才能让门槛检查重新跑一次。这解释了本
+轮测试过程中第一次 boost shen 后立刻重试 `bai song` 依然被拒的现
+象（当时 pending 状态还压着上一次失败的请求）。机制本身完全正常。
+
+### 3. 经济系统：通过
+
+- **大理铁器铺**（`d/dali/smithshop.lpc`，NPC 南彝商人
+  `d/dali/npc/ironsmith.lpc`）：`list` 正确列出菜刀/铁锤及价格；
+  `buy hammer` 扣款 150 文（50 两白银 → 48 两白银 + 50 文铜钱），角
+  色背包正确收到铁锤。该 NPC 只注册了 `buy`/`list` 两个 `add_action`
+  （没有 `sell`），`sell pao` 返回"什么？"——**这是本项目已反复确认
+  的"只收不卖"NPC 设计模式，不是 bug**，遵照本轮任务说明未做任何改
+  动。
+- **京城打铁铺**（`d/city/datiepu.lpc`，NPC 王铁匠
+  `d/city/npc/tiejiang.lpc`）：确认这个 NPC 额外注册了
+  `do_sell`/`sell`（`feature/dealer.lpc` 标准商人混入），把刚买的
+  铁锤 `sell hammer` 成功卖出，`你卖掉了一把铁锤给王铁匠。`，钱包正
+  确增加，物品正确移出背包。买卖两条路径均验证通过、无报错。
+
+`inherit/room/hockshop.lpc`（当铺基类）在全档案里没有任何房间
+`inherit` 它——是完全未使用的死代码，本档案没有可达的当铺型 NPC，
+符合"未使用旁支保持原样"的既有惯例。
+
+### 标准 bug 清单快速复核（全部干净，无异常）
+
+- **§7.90**（eval cost）：`config.fluffos` 的 `maximum evaluation
+  cost` 已是 5000000，符合此前扫描修复记录。
+- **§7.100**（`ROOM` 冗余 `replace_program()`）：全档案仅剩 9 处，
+  全部是已被注释掉的死代码残留（`//	replace_program(ROOM);`），无
+  一处存活，符合第 6 批扫描"完全清除"的记录。
+- **§7.111**（`master.lpc` `standard_trace()`）：本库真正生效的
+  master 用 `%O` 格式化 `error["object"]`，本就安全，不受影响（与
+  round-three 记录一致）。
+- **§7.112**（NPC `init()` 重连叠加 `call_out` 链）：`wgargoyle.lpc`
+  /`wgargoyle1.lpc`/`bgargoyle.lpc` 的 `death_stage_active` 守卫仍
+  然完整在位，未被回退。
+- **§7.113**（netdead 重连不恢复 `heart_beat`）：`LOGIN_D`
+  （`adm/daemons/logind.lpc`）的 `reconnect()` 无条件呼叫
+  `user->reconnect()`；`clone/user/user.lpc::reconnect()` 无条件
+  `set_heart_beat(1)`——正确血统，不受影响。
+- **§7.114**（`private` `input_to()` 回调经 mixin 失效）：
+  `feature/edit.lpc`（`F_EDIT`）里的 `input_line()` 根本没有
+  `private` 修饰，全档案 grep 也找不到任何 `private ... input_line`
+  形状——不受影响。
+- **§7.115**（`QUEST` 宏指向不存在的档案）：本库 `include/globals.h`
+  /`globals2.h` 都没有定义 `QUEST` 宏，`cmds/std/give.lpc`/
+  `ask.lpc` 也完全不引用它——不适用。
+- **§7.79**（裸 2 参数 `addn`/`addn_temp`）：全档案 grep
+  `addn(`/`addn_temp(` 零命中——本库不存在这个形状，不是新发现。
+
+### 清理
+
+测试号 `rfourjym` 的存档（`data/login/r/rfourjym.o`、
+`data/user/r/rfourjym.o`）已在测试结束后删除，不作为常驻测试凭证保
+留。驱动进程按精确 PID kill，未使用模式匹配。`work/tmp/`（`eval`
+指令写临时文件用的目录，本档案原先没有这个目录）予以保留，纯粹是
+运行时基础设施，不含任何游戏状态。
