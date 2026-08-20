@@ -258,3 +258,7 @@ survey 记录的存活总数完全吻合。`work/data/` 下没有真实 `.lpc`
 落地"凤求凰客栈"（和兄弟档案 `zzfy` 相同的起始房间）。管理员存
 档的时间戳漂移已用 `git checkout HEAD --` 还原，未提交。驱动按精
 确 PID 结束。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/panguan.lpc`, `d/death/npc/panguan2.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
