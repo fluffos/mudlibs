@@ -265,3 +265,7 @@
   为以为只有非标准的 `wlqxztest` 管理员账号可用，重新核对 README 后
   发现本轮 §10.7 深测已经按标准约定并行播种了 `fluffos`/
   `MudLogin2026`，不需要再逆向工程注册流程。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/bgargoyle.lpc`, `d/death/npc/wgargoyle.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
