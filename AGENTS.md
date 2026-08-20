@@ -7510,6 +7510,72 @@ in earlier work): `ffxymud` (2,087), `syxjl` (2,073),
 onward — see `candidates_ge100.tsv`/`FINDINGS.md` in the survey's
 scratchpad for the full ranked list.
 
+**Fix-phase batch 9 (2026-08-19), next 10 libs by impact**: exactly
+the ten libs named at the end of batch 8's hand-off (`ffxymud`
+through `zzfy3`, ranks 72-81 of the >=100 list). Same method as
+batches 1-8.
+
+| lib | live occurrences deleted | roommaker copies fixed | commit |
+|---|---|---|---|
+| ffxymud | 2,087 | 2 (`clone/misc`, `d/huanggon/obj`, both string-builder variant) | `cbb700fd481` |
+| syxjl | 2,073 | 0 (this lib's `roommaker.lpc` never had the bug at all) | `1ea6d8fdcbc` |
+| yzxiiizylfy | 2,070 | 2 (`clone/misc`, `d/huanggon/obj`, both string-builder variant) | `6c17addba54` |
+| xyzxiiylzymh | 2,070 | 2 (`clone/misc`, `d/huanggon/obj`, sibling of yzxiiizylfy) | `4266c16c1bc` |
+| xyzx3 | 2,070 | 2 (`clone/misc`, `d/huanggon/obj`, sibling of yzxiiizylfy) | `b8e6509a0e7` |
+| xysylmhb | 2,070 | 2 (`clone/misc`, `d/huanggon/obj`, sibling of yzxiiizylfy) | `ea8572e362d` |
+| jhfy2 | 2,070 | 2 (`clone/misc`, `d/huanggon/obj`, sibling of yzxiiizylfy) | `57ec549bef7` |
+| sje | 2,004 | 14 files/18 occurrences (`clone/misc/roommaker.lpc` plus the ENTIRE `cmds/minister/*`/`cmds/king/*` guild-room-management command set + `cmds/adm/ra.lpc` — the §7.100 "sje precedent" itself) + 10 real `.lpc` room files under `work/data/group/groom/` | `5c7a791caa2` |
+| zzfy | 1,967 | 14 files/18 occurrences (`cmds/adm/roommaker.lpc` alone had 3 distinct variants) + 143 `u/wiz/u/heart/xuedao/*.lpc` trailing-comment irregulars (tiexuejianghu-lineage shape) | `25bac2ea645` |
+| zzfy3 | 1,967 | same set as `zzfy` (sibling lib, same 郑州风云 lineage, identical script counts) | `39abec8fcc1` |
+
+**Batch 9 total: 20,448 live occurrences deleted across 10 libs.**
+Running total after batches 1-9: **80 libs fixed, 285,625 live
+occurrences deleted** (265,177 + 20,448). Notable finds: five of
+these ten libs (`yzxiiizylfy`/`xyzxiiylzymh`/`xyzx3`/`xysylmhb`/
+`jhfy2`) are near-byte-identical siblings sharing the exact same
+double-roommaker-copy tooling (`clone/misc/roommaker.lpc` +
+`d/huanggon/obj/roommaker.lpc`, both fixed the same one-line
+string-builder edit each time) — confirmed via `diff -rq` before
+starting, which made verification fast once the pattern was
+established on the first sibling. `jhfy2` uses its own password
+(`loginpass1`) rather than the family's usual `Mud@2026` and has no
+client handshake gate, unlike its `yzxiiizylfy`-family siblings'
+Tomud `'2060'` handshake — don't assume credentials transfer across
+a lineage without checking each lib's own README/NOTES.md first.
+`sje` is the single richest "factory bug" case found in this sweep
+so far: beyond the standard `roommaker.lpc`, the redundant
+`replace_program(ROOM)` call was independently baked into 13 more
+room-generating admin/minister commands (guild hall building, NPC
+placement, room linking, etc.) — all fixed the same one-line way.
+`sje` had never actually been registered before (only wizlist-seeded
+from earlier work); this pass completed that seed with a real
+registration and committed the resulting save. `zzfy`/`zzfy3` are a
+confirmed-identical sibling pair (same lineage, same script counts,
+same irregular-shape set) that both carry the `tiexuejianghu`-family
+143-file trailing-UTF-8-comment shape in `u/wiz/u/heart/xuedao/` —
+fixed by whole-line deletion (including the comment) per that
+batch's established precedent, not by stripping only the call and
+leaving the comment behind. Both `zzfy`/`zzfy3` also surfaced a pure
+test-harness gotcha (not a mudlib bug, see
+`feedback_recv_loop_breaks_on_live_clock_prompt`): their post-login
+prompt refreshes every second (`HH:MM:SS>`), which defeats a
+wait-for-quiet recv loop and, combined with two improperly
+SIGKILL'd verification connections leaving the test account in a
+zombie "still linked" state, produced a convincing false hang on the
+first two attempts — resolved by restarting the driver fresh and
+switching to a fixed-total-duration read strategy; `debug.log`
+confirmed clean throughout, no real driver issue. All ten libs
+verified via a real `build-debug` driver boot (clean compile, port
+listening, zero new "cannot replace"/"cannot bind" `debug.log`
+lines) plus a live admin login + look/score/quit spot-check; no
+player save data was committed beyond `sje`'s new legitimate admin
+seed, every incidental timestamp drift from spot-check logins was
+reverted with `git checkout HEAD --` before staging. **88 libs from
+the survey's >=100 list remain unfixed** (98 minus this batch's 10).
+Next up by impact: `shenmo` (1,957) and onward — see
+`candidates_ge100.tsv`/`FINDINGS.md` in the survey's scratchpad for
+the full ranked list.
+
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
 Found on `kxkjii2`'s §10.7 deep functional test (ES II/Annihilator
