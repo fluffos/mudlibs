@@ -810,3 +810,24 @@ logind` 成功验证真实写入权限。踢掉重复登录重连路径现场验
 - `work/adm/daemons/closed.lpc`
 - `work/adm/simul_efun/file.lpc`
 - `work/clone/user/user.lpc`
+
+## §7.100 sweep (2026-08-19): redundant `replace_program(ROOM);` landmine
+
+Same corpus-wide bug as documented at AGENTS.md §7.100: rooms
+inheriting `ROOM` (`/inherit/room/room`) had a redundant, harmful
+`replace_program(ROOM);` call right after `inherit ROOM;` in `create()`,
+setting a permanent "pending replace" flag that crashes the object the
+first time anything binds a closure to it. This lib had **1,715 live
+occurrences** (survey-ranked #84 of 166 candidates >=100, tied with its
+sibling lib `xkxc98sj`). Fixed with the sweep's binary-mode script
+(`fix_710_room.py`) plus two hand-fixed room-building-tool copies
+(`clone/misc/roommaker.lpc`, `cmds/debug/roommaker.lpc`, both the
+simple `str += "...replace_program(ROOM);..."` string-builder variant).
+`git diff --numstat` totals (2 insertions, 1715 deletions) match the
+survey's live-occurrence count exactly. No `work/data/` room-source
+false-negative found. Verified via a clean `build-debug` boot (zero
+"cannot replace"/"cannot bind" `debug.log` lines, port 40035 listening)
+plus a live admin login (`fluffos`/`Mud@2026`, after answering the
+BIG5-font prompt with `n`) — `look`/`quit` both worked normally,
+`debug.log` stayed clean throughout. Incidental admin save-timestamp
+drift from the spot-check reverted before committing.
