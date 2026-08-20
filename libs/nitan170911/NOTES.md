@@ -796,3 +796,7 @@ log` 全程干净，无新增编译错误。因本 lib 注册流程依赖外部 
 有"由于连接不上数据库所在服务器…"降级提示依旧正常触发，说明登录流
 程本身未被这次改动破坏；全程 `debug.log` 无新增错误。按精确 PID 结
 束驱动。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/bai.lpc`, `d/death/npc/hei.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
