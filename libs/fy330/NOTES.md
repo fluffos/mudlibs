@@ -95,3 +95,13 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 8 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/std/room"`：删除 638 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），全部由脚本自动
+删除，无任何历史遗留的 `//`-注释实例、无异常格式。本库没有任何在
+游戏内建造房间的工具（`roommaker`/`rmmaker` 等名称均未找到），因
+此没有"工厂"侧需要修复。已用 `build-debug` 驱动干净启动验证（0 个
+新增编译错误，端口 40199 正常监听，`debug.log` 无新增 "cannot
+replace"/"cannot bind" 行）；未做完整 §10.7 深度游玩测试。
