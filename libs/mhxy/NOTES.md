@@ -569,13 +569,19 @@ large (11785 `.lpc` files).
 
 - **Shop purchase completing successfully** — character never
   accumulated gold in the time budget; the rejection path (`list`/`buy`
-  with insufficient funds) WAS verified.
+  with insufficient funds) WAS verified. **Resolved in the 2026-08-20
+  round-four pass** — see "深度功能测试第四轮" below (admin-granted money
+  via the lib's own `clone`, real `buy`, price/receipt both verified).
 - **Death and respawn** — the one real fight conducted was won safely;
   deliberately seeking out a lethal fight was out of scope for the time
-  budget.
+  budget. **Resolved in the 2026-08-20 round-four pass** — real death via
+  `kill` against a genuinely lethal NPC, full ghost/`death_stage`/revive
+  flow completed live, no bugs found (see below).
 - **Net-dead disconnect specifically mid the gift-point creation
   wizard** (the §7.21 shape) — every registration in this pass completed
-  in one sitting before any disconnect test.
+  in one sitting before any disconnect test. **Resolved in the 2026-08-20
+  round-four pass** — both a graceful and a real RST-forced disconnect
+  mid-wizard reconnected cleanly (see below).
 - **Content correctness of the other 301 `.C`→`.lpc` renames** beyond
   the one live-reproduced instance (`goldarmor`) — fixed proactively by
   mechanical rename, boot-clean confirmed, but not walked to in-game.
@@ -776,6 +782,164 @@ cost) per this pass's standard checklist, neither live-reproduced as a
 crash this session but both matching well-established bug classes
 (§7.11, the eval-cost-abort risk) with real (if not this-session-
 triggered) blast radius.
+
+## 深度功能测试第四轮 / Round four (2026-08-20): the 3 explicitly-flagged §10.7-rule-6 gaps, resolved live
+
+Targeted pass specifically closing the three "not verified live" items the
+2026-07-24 pass named. Native `build-debug` driver, own raw-Python-socket
+telnet client (not `tmux_mud.sh`), each response inspected before sending
+the next command. `work/log/debug.log` stayed at **0 lines for the entire
+session** — before, during, and after every step below, including the
+death sequence.
+
+### Gap 1: shop purchase — RESOLVED, completed live, correct
+
+No in-game gold-earning path was chased (out of scope to hunt for a
+starter quest reward under time pressure); instead followed the task's
+sanctioned pattern: as admin (`fluffos`), `clone /clone/money/silver 5`
+(the lib's own `/clone/money/silver.lpc` — clone.lpc has dedicated,
+built-in handling for exactly this file plus gold/coin, so this is a
+first-class supported admin action, not an exploit) then `give 5 silver
+to luchen` to a fresh, ordinarily-registered test character (`luchen`/
+陆晨, id `luchen`, password `Test2026`) standing in the same room
+(南城客栈). Confirmed via `i` the money object actually landed
+(`五两银子`). `list` at 店小二 showed `桂花酒袋(jiudai) ：一两银子`;
+`buy jiudai from xiao er` succeeded ("你向店小二买下一个桂花酒袋。"),
+and `i` afterward showed **exactly** the expected result: `五两银子` →
+`四两银子` (1 silver unit deducted, matching the listed price) and the
+new `桂花酒袋(Jiudai)` present in inventory. Both the price deduction and
+the item receipt verified correct via before/after inventory snapshots,
+not just the transaction message. `feature/finance.lpc`'s `can_afford()`/
+`pay_money()` (checked while tracing this) confirmed the earlier-observed
+"你的钱不够" rejection path uses physical carried money objects
+(`gold_money`/`silver_money`/`coin_money` presence), not the separate bank
+`balance` attribute (`deposit`/`withdraw` in `std/room/bank.lpc`) — the
+two economies are distinct in this lib, `buy` only cares about the former.
+
+### Gap 2: death/respawn — RESOLVED, completed live via real combat, no bugs found
+
+Used the admin connection to scout (read room/NPC source, not live-teleport
+the test character) for a genuinely lethal, reliably-reachable target
+rather than the deliberately-weak `japan2.lpc` sparring dummy already
+confirmed safe in the 2026-07-24 pass. Found `d/jjf/npc/jiajiang.lpc`
+(家将, "jia jiang"/"jia"/"jiang", **not** the same file as the
+already-documented `d/city/npc/jiajiang.lpc` 校尉 despite the identical
+basename — a second, separate, much stronger NPC class): `combat_exp`
+200000-250000, `force` 500, skills 70 across spear/dodge/parry/unarmed,
+statically placed ×2 in `d/jjf/keting.lpc` (正厅, the general's own hall,
+reached via the already-mapped route `南城客栈`→west→`朱雀大街`→north→
+`十字街头`→east→`青龙大街`(qinglong-e1)→east→`青龙大街`(qinglong-e2)→
+south→`将军府`(gate, `answer 拜师` required to unlock `south` per
+`gate.lpc`'s `valid_leave()`)→south→`练武场`(front_yard)→south→
+`练武场`(front_yard2)→south→`正厅`/keting). Walked there for real with
+`luchen` (no teleport), then `kill jia` (not `fight` — `cmds/std/kill.lpc`
+was checked first per the task's dtsl2-precedent question: its only
+`combat_exp` gate, `if (me->query("combat_exp") < 100000 && userp(obj))
+return notify_fail(...)`, is guarded by `userp(obj)` and so does **not**
+apply to an NPC target; `kill` worked immediately with no gate).
+
+Real, unmodified combat played out over several heartbeat rounds with
+escalating injury text (受伤不轻 → 气息粗重 → 受了相当重的伤 → 受伤过重
+已经奄奄一息 → 已经陷入半昏迷状态 → "你的眼前一黑，接着什么也不知道
+了" (`unconcious()`) → "你死了" (`die()`, confirming `std/char.lpc`'s
+`heart_beat()` mortal-wound check, `eff_kee/eff_sen/eff_gin < 0`, fired
+for real, not just the `kee/sen/gin < 0` unconscious branch). Moved
+correctly to `阴阳界`/`DEATH_ROOM` (`d/death/gate.lpc`) with `崔判官`
+(`d/death/npc/pang.lpc`) present; its `death_stage()` reentrancy-guarded
+init (the §7.68-shape code already audited clean in this file's earlier
+sections) ran its full 5-stage dialogue at the coded 5-second cadence
+with no overlap or corruption, then `reincarnate()`'d the character into
+`荒郊小店`/REVIVE_ROOM — a fully valid, populated room (店小二, a board,
+a working exit). Reconnecting afterward confirmed persistent state:
+`score` correctly shows `死亡记录：你在战斗中被杀害过一次`, `气血` at a
+recovering-but-not-full level (expected post-respawn regen, not a bug),
+inventory empty (matches `die()`'s `command("drop all")` in
+`reincarnate()` plus the self-made-fabao destruction loop — same
+item-loss-on-death design this lineage already documents for `quit`).
+`quit` afterward was clean.
+
+**Incidentally checked and ruled out as a bug**: `feature/damage.lpc`'s
+`die()` calls `DEATH_ROOM->start_death(this_object())`
+(`DEATH_ROOM` = `/d/death/gate`), but **no `start_death()` function is
+defined anywhere in this lib** (`grep -rn start_death` across all
+`.lpc`/`.h` finds only the two call sites, one live one in `feature/back/
+damage.lpc`'s unused backup copy) — this call always resolves to a
+missing function. It is provably harmless: the actual ghost/`death_stage`
+flow triggers independently, through the ordinary room-entry `init()` of
+whatever `npc/pang`-shaped NPC the `gate.lpc`-family room happens to
+carry (confirmed exactly this way above, live), not through
+`start_death()` at all — and the live reproduction above proves a
+call_other to this permanently-undefined function produces **no**
+`debug.log` entry (FluffOS's call_other-to-missing-function behavior is a
+silent no-op here, not a catchable/logged error). Per this project's
+scope rule (only real crash/`debug.log`-error signatures count), this is
+dead/vestigial code, not a bug — left untouched.
+
+### Gap 3: mid-wizard net-dead reconnect (§7.21 shape) — RESOLVED, clean on two separate live reproductions
+
+First (incidental): an earlier registration script for `luchen` dropped
+the connection right at the gift-wizard's opening menu (a plain,
+non-forced TCP close). Reconnecting (`luchen`/`Test2026`) produced
+"重新连线完毕。" and cleanly re-presented the exact same top-level wizard
+menu — resumed, not stuck, not corrupted.
+
+Then (deliberate, rigorous): registered a second fresh character
+(`hujie`/胡杰, id `hujie`, password `Test2026`) through to the wizard,
+sent `0` to start a stat-reroll, waited for the **sub-prompt**
+("请输入体格的新取值[10-30]：" — deeper into the wizard state than the
+top-level menu, mid-reroll with no answer given), then force-closed the
+socket with `SO_LINGER=0` (a real RST, not a graceful close, matching
+`xiyouji`/this-file's own established net-dead-testing technique).
+Reconnecting immediately afterward: "重新连线完毕。", and the wizard
+**discarded the orphaned reroll sub-state cleanly and re-presented the
+top-level menu** (not stuck waiting on the abandoned sub-prompt, not
+duplicated, not corrupted). Completed the wizard normally (`9`/`y`),
+`score` rendered a fully correct fresh character, `quit` was clean.
+`debug.log` stayed empty through both reproductions. **This lib's
+character-creation wizard has no §7.21-shape bug** — net-dead mid-wizard,
+even via a genuine RST at the deepest (sub-prompt) point tested, resumes
+safely.
+
+### Standard checklist re-confirmation pass (all previously fixed, spot-checked, no regressions)
+
+- **§7.90** (`config.fluffos` eval cost): `5000000` — already fixed
+  (2026-08-14 pass), confirmed still in place.
+- **§7.100** (`replace_program(ROOM);`): zero live hits. The only
+  `grep` matches left are inside `u/Love/`'s and `u/linger/`'s numbered
+  `workroom.c.<timestamp>` backup files (a room-builder tool's auto-saved
+  revision history, not `.lpc`/`.c`-suffixed, never resolved by this
+  driver's extensionless `load_object()`) and one doc-directory prose
+  mention (`doc/build/room`) — neither is live code. The 563-line
+  original sweep (documented above) holds.
+- **§7.111** (`file_name(error["object"])` null-guard): present, both
+  call sites in `adm/obj/master.lpc` (lines ~240, ~334) still guarded
+  with `undefinedp(error["object"]) || !error["object"]`.
+- **§7.112** (`death_stage()` reentrancy guard): re-checked all 5 files
+  with a `call_out("death_stage", ...)` site in this lib
+  (`d/death/npc/{b,bgargoyle,wgargoyle,pang}.lpc` and
+  `u/tianlin/d/shaolin/npc/yu-zu2.lpc`) — every one already has the
+  `query_temp("death_stage_active")`/`set_temp(...)` guard in `init()`,
+  matching the fix shape found on 3 other libs this session. No gap here.
+  (`pang.lpc`'s own guard was exercised live for real by the death test
+  above, not just grepped.)
+- **§7.79** (bare 2-arg `addn`/`addn_temp()`): zero hits
+  (`grep -rn 'addn_temp(\|addn('` with a check for a 3rd argument found
+  none missing one).
+
+### Process and repo hygiene
+
+Driver killed by exact PID (`kill 800001`, confirmed dead via `ps`),
+never `pkill -f`. Post-test `git status --short libs/mhxy` showed the two
+new test characters' saves (`luchen`, `hujie` — kept as playthrough
+evidence, per this project's established convention) plus admin
+(`fluffos`) login/user churn from repeated logins; three `zhangmen_*.o`
+files (`ao_guang`, `guanyin_pusa`, `qin_qiong` — sects never touched this
+pass beyond walking past `qin_qiong`'s own NPC) and a duplicate
+`u/tianlin/log` append were confirmed pure re-serialization/background-
+daemon noise (byte-diffed: same content, reordered mapping keys plus a
+`mana`/`force_factor` recompute artifact matching the exact shape already
+documented in this file's 2026-08-14 pass) and reverted via `git checkout
+--`.
 
 ## §7.100 sweep fix (`ROOM` base-class redundant `replace_program()`)
 
