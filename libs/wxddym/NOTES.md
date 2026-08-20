@@ -104,3 +104,9 @@ work/log/debug.log 全程无新增内容。本库登录用自定义"指尖客户
 variable 警告，与本次修复无关）。测试产生的
 `data/{login,user}/f/fluffos.o` 存档时间戳 diff 已 `git checkout`
 撤销，不提交。驱动按精确 PID kill。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/bai.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
+
+Note: `bai.lpc` has a PRE-EXISTING, unrelated compile error (`query("reborn_offer", ob)` -- bad arg-2 type, int vs object -- at the original file's own line, untouched by this edit) that makes the whole file fail to load regardless of this fix. Confirmed via `git diff` that the erroring line is unmodified context, not something this edit introduced. The guard fix is textually correct and ready the moment the underlying pre-existing bug gets fixed separately.
