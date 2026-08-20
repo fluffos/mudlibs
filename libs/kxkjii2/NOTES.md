@@ -162,3 +162,7 @@ local variable"级别的无害警告原样刷给正在连线的普通玩家。�
   结果，不受影响。`data/` 下额外核查过，无命中。验证：真实 debug 驱动
   干净编译启动、端口正常监听，`debug.log` 无新增 "cannot replace"/错误
   行。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `open/death/npc/bgargoyle.lpc`, `open/death/npc/wgargoyle.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
