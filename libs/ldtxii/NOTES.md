@@ -130,3 +130,28 @@ mud 列表之后，会额外要求一次"Press Enter to Continue..."才真正进
 - 管理员 `fluffos` 的存档已提交（`data/{login,user}/f/fluffos.o`）。
 - `data/{login,user}/l/ldtdive.o` 是此前会话遗留的未提交测试存档
   ——`Aug 3` mtime，早于本次会话，未受本轮任何操作影响，未触碰。
+
+## §7.100 sweep (2026-08-19): redundant `replace_program(ROOM);` landmine
+
+Same corpus-wide bug as documented at AGENTS.md §7.100: rooms
+inheriting `ROOM` (`/inherit/room/room`) had a redundant, harmful
+`replace_program(ROOM);` call right after `inherit ROOM;` in `create()`,
+setting a permanent "pending replace" flag that crashes the object the
+first time anything binds a closure to it. This lib had **1,516 live
+occurrences** (survey-ranked #88 of 166 candidates >=100, tied with and
+sharing the same 雄霸天下/LDJ lineage as `ldtx`). Fixed with the
+sweep's binary-mode script (`fix_710_room.py`); `git diff --numstat`
+totals (0 insertions, 1516 deletions) match the survey's
+live-occurrence count exactly. Like `ldtx`, this lib's
+`clone/misc/roommaker.lpc` room-building tool never had the
+factory-bug variant — its generated-room templates never included a
+`replace_program(ROOM)` call. No `work/data/` room-source
+false-negative found. Verified via a clean `build-debug` boot (zero
+"cannot replace"/"cannot bind" `debug.log` lines, port 40176 listening)
+plus a live admin login (`fluffos`/`Mud2026Adm`, GB encoding
+selection, `Press Enter to Continue` banner) — entered the game world
+normally, `look`/`quit` both worked, `debug.log` stayed clean
+throughout. Incidental admin save-timestamp drift from the spot-check
+reverted before committing; only the two tracked `fluffos.o` files
+were touched, the pre-existing untracked `ldtdive.o` save files were
+left alone.
