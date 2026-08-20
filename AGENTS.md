@@ -7762,6 +7762,75 @@ libs from the survey's >=100 list remain unfixed** (166 total minus
 `candidates_ge100.tsv`/`FINDINGS.md` in the survey's scratchpad for
 the full ranked list.
 
+**Fix-phase batch 13 (2026-08-19), next 18 libs by impact**: continuing
+straight down the ranked list from batch 12 — `dtsl2` through `xajhxo`
+(ranks 118-135 of the >=100 list). Same method as batches 1-12.
+
+| lib | live occurrences deleted | roommaker copies fixed | commit |
+|---|---|---|---|
+| dtsl2 | 687 | 1 (`obj/roommaker.lpc`, string-builder variant) | `81cec8ff450` |
+| dtsl | 686 | 1 (`obj/roommaker.lpc`, byte-identical to sibling `dtsl2`) | `0787aaaf891` |
+| dtslmud | 686 | 1 (`obj/roommaker.lpc`, byte-identical to siblings `dtsl2`/`dtsl`) | `d895f0b363c` |
+| fy3xd | 663 | 0 (no room-building tool exists) | `bd26a1be1b6` |
+| sjshwzb | 662 | 6 copies (`obj/roommaker.lpc`, `u/leox/obj`, `u/ziyie/obj`, `u/calvin/obj` — simple variant; `u/qkl/roommaker.lpc`, `u/koker/obj/teshu/roommaker.lpc` — "room_code" 3-occurrence variant) | `aadbc3724e5` |
+| fy3dz | 662 | 0 (no room-building tool exists) | `03260621f5b` |
+| sjshwzjqb | 644 | 4 copies (`obj/roommaker.lpc`, `u/calvin/obj` — simple variant; `u/qkl/roommaker.lpc`, `u/koker/obj/teshu/roommaker.lpc` — "room_code" 3-occurrence variant, sibling of `sjshwzb`) | `5372fedc929` |
+| fy330 | 638 | 0 (no room-building tool exists) | `30ec579c68f` |
+| xo_final | 615 | 0 (no room-building tool exists; macro `STD_DIR "room/room"`, a concatenation, unaffected since the source token is still literal `ROOM`) | `93407914fd8` |
+| mhxy | 563 | 2 (`obj/roommaker.lpc`, `clone/misc/roommaker.lpc`, both simple variant) | `2c9edf4a15a` |
+| mhxyqd | 550 | 2 (`obj/roommaker.lpc`, `clone/misc/roommaker.lpc`, sibling of `mhxy`) | `4601c4740bc` |
+| fy2 | 525 | 1 (`obj/roommaker.lpc`, simple variant) | `08bf9b2558c` |
+| fy2qh | 525 | 1 (`obj/roommaker.lpc`, sibling of `fy2`) | `99a95d1b39a` |
+| fy2mg | 525 | 1 (`obj/roommaker.lpc`, sibling of `fy2`/`fy2qh`) | `97e2d621baa` |
+| sjshv150 | 515 | 1 tool copy (`obj/roommaker.lpc`) + 2 real `.lpc` source files under `work/data/group/obj/` (`ling-pai.lpc`, `ling.lpc` — guild-token/banner item objects with embedded room-building commands, 5 occurrences total) | `0f8ce264f2a` |
+| sjsh | 513 | 3 copies (`obj/roommaker.lpc`, `u/calvin/obj` — simple variant; `u/koker/obj/roommaker.lpc` — "room_code" 3-occurrence variant, same lineage as `sjshwzb`/`sjshwzjqb`) | `22891674793` |
+| sjcs | 479 | 2 copies (`clone/misc/roommaker.lpc` — simple variant; `obj/roommaker.lpc` — "room_code" 3-occurrence variant) | `83e9a4f131c` |
+| xajhxo | 439 | 1 (`clone/wizard/roommaker.lpc`, string-builder variant; macro `STD_DIR "room"`, a concatenation, unaffected) | `6cca62c3965` |
+
+**Batch 13 total: 10,577 live occurrences deleted across 18 libs.**
+Running total after batches 1-13: **133 libs fixed, 337,421 live
+occurrences deleted** (326,844 + 10,577). Notable finds: `dtsl`/
+`dtsl2`/`dtslmud` are a byte-identical three-way sibling set (down to
+`obj/roommaker.lpc` matching line-for-line), the first three-way tie
+this sweep has hit. `sjshwzb`/`sjshwzjqb`/`sjsh`/`sjshv150` are all
+the same 三界神话 (`shsh`-family) lineage sharing the "room_code"/
+`str` 3-occurrence room-building-tool variant first seen in batch 5's
+`shenmo`, spread across `u/qkl/`, `u/koker/obj/[teshu/]roommaker.lpc`
+copies. `sjshv150` surfaced this batch's one new-shape find: the
+scripted sweep's `data/`-directory exclusion (meant to protect player
+saves) again false-negatived on real `.lpc` source stored under
+`work/data/group/obj/` — two guild-token/banner item objects
+(`ling-pai.lpc`, `ling.lpc`) each embed a full "build a guild hall
+room" command with the same string-builder bug baked in (same class of
+gap as batch 5's `xkm`/`shenzhou` `work/data/` finds); both confirmed
+via direct read to be genuine source, not save state, and fixed by
+hand after the main sweep. Two libs use a macro value that's a
+`STD_DIR`-prefixed concatenation rather than a bare literal
+(`xo_final`: `STD_DIR "room/room"`; `xajhxo`: `STD_DIR "room"`) —
+confirmed harmless to the fix, since the sweep matches the literal
+source token `ROOM`, not the macro's expanded value. All eighteen libs
+verified via a real `build-debug` driver boot (clean compile, port
+listening, zero new "cannot replace"/"cannot bind" `debug.log`
+lines); `mhxyqd`'s boot briefly looked stalled (stdio buffering
+delayed log flushes during a large room preload, plus a handful of
+transient, unrelated "Too deep recursion" errors from a weapon
+object's lazy compile well after "Initializations complete") —
+resolved via a raw-socket connectivity check confirming the login
+banner rendered correctly, consistent with the standing
+`feedback_verify_stalls_with_connectivity_check` lesson; no real hang.
+No full §10.7 gameplay walkthrough this batch (per the task's own
+time-budget guidance). No `git add` directory-sweep incidents — every
+commit used `git add -u` plus explicit `NOTES.md` staging;
+`mhxyqd`'s 6 pre-existing untracked `data/{login,user}/c/chen{ba,shi,
+wu}.o` files (timestamped 2026-08-05, predating this session) were
+confirmed left untouched by `git status` review before staging. **33
+libs from the survey's >=100 list remain unfixed** (166 total minus
+133 now fixed). Next up by impact: `sj`/`shiji` (378 each),
+`wuhanzhan` (376), `yueyingqiyuan` (369), `xlqy_new2007` (337),
+`xlqy_early` (332), `yszz` (305), `hxxtjqb` (295), and onward — see
+`candidates_ge100.tsv`/`FINDINGS.md` in the survey's scratchpad for
+the full ranked list.
+
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
 Found on `kxkjii2`'s §10.7 deep functional test (ES II/Annihilator
