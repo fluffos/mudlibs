@@ -59,3 +59,16 @@ telnet 客户端这层不可靠的中间人。**建议以后凡是在这个项�
 ## §7.100 sweep (2026-08-19)
 
 Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 295 live occurrences deleted: 291 via scripted sweep (`fix_710_room.py`), plus 4 hand-fixed roommaker-tool occurrences across 2 tool copies (`clone/misc/roommaker.lpc` — simple variant; `obj/roommaker.lpc` — "room_code"/`str` 3-occurrence variant). 3 already-commented-out instances left untouched. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, port 40177 listening, zero new "cannot replace"/"cannot bind" debug.log lines. Pre-existing untracked test-account debris (`data/{login,user}/{f/fluffos,q/qintest}.o`) confirmed left untouched by `git status` review before staging.
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 3 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
