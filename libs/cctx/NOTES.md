@@ -208,3 +208,16 @@ buy/sell/sleep 等基本生存指令，并主动提示"如果你没有盘缠的�
 ## §7.100 sweep (2026-08-19)
 
 Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 2081 live occurrences deleted: 2073 via scripted sweep (`fix_710_room.py`), plus 8 hand-fixed: 5 real `.lpc` source files under `d/quanzhou/shaolin/xingsu/binaries/` (a real-content directory misleadingly named like a compiled-binaries dir — the sweep script's `binaries`-directory exclusion, meant to protect driver-compiled artifacts, false-negatived on it; caught by this batch's mandatory post-sweep `work/`-wide recheck) fixed with the same scripted logic applied directly; `clone/misc/roommaker.lpc`'s string-builder template; `d/shenlong/lwta2.lpc` (call shared a line with unrelated code: `setup(); replace_program(ROOM); set("outdoors", "shenlong");`); `d/gumu/bingqifang.lpc` (space before semicolon). ~70 already-commented-out instances left untouched. Verified via `build-debug` driver boot: clean compile, zero new "cannot replace"/"cannot bind" debug.log lines; confirmed serving via raw-socket connect on port 40161. Pre-existing untracked test-account debris under `data/{login,user}/` confirmed left untouched.
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 4 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
