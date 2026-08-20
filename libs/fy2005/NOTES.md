@@ -318,3 +318,173 @@ players are unaffected. Test char saves removed; no new debug.log errors.
 故仍按同一原则删除。本库没有房间建造工具（`roommaker.lpc` 等），
 无需修复第二处。已用 `build-debug` 驱动干净启动验证（0 个新增编译
 错误，端口正常监听）；未做完整 §10.7 深度游玩测试。
+
+## Round-four re-test (2026-08-20): combat + economy, previously untested
+
+Prior rounds explicitly left combat and economy uncovered (no newbie-safe
+sparring target found within the time budget; shops looked like a
+standard fy-engine implementation but were never actually transacted
+against). This pass closed both gaps.
+
+### Combat: confirmed working
+
+`obj/npc/champion.lpc`'s cross-sect `accept_fight()` gate
+(`me->query("class") != query("class")`) is real and correctly blocks
+newbie-unaffiliated challenges, as previously documented — not a bug.
+Rather than force a sect join, tested combat via the admin account and
+a disposable `clone /obj/npc/scavenger` (a plain, non-quest NPC with no
+`accept_fight` override) in `/d/wiz/hall`:
+
+- `kill scavenger` produced full multi-round attack/defense resolution
+  — hit/parry/dodge/graze outcomes with distinct messages each round,
+  real `kee`(HP)-pool depletion on both sides, and a low-HP "wimpy"
+  auto-flee kicking in correctly (character fled to an adjacent room,
+  **dropped an inventory item in a panic** — a real, working low-HP
+  survival mechanic, not a bug).
+- Confirmed the room-scoped `no_fight` flag independently blocks `kill`
+  in a designated safe room (`/d/wiz/jobroom`: "这里不准战斗。").
+- Used the wizard `smash <npc>` debug command (calls the NPC's real
+  `die()` apply, same code path as a natural HP-zero death) to trigger
+  an actual death/cleanup transition without further risking the
+  under-equipped admin test character: death message printed, NPC
+  destructed, a corpse object (`/obj/item/corpse`) spawned correctly in
+  the room. Both the corpse and the earlier panic-dropped item were
+  `dest`royed afterward as test cleanup (this was a disposable clone,
+  not a placed/shared world NPC).
+- Net result: multi-round combat resolution, damage, low-HP
+  flee/survival behavior, room-scoped no-fight enforcement, and
+  death/corpse transitions all confirmed working correctly.
+
+### Economy: confirmed working, including a real bug found and fixed along the way
+
+Tested the two facilities actually reachable near the newbie zone
+(`fywest`/`fysouth` maps): `d/fy/nanbank.lpc` (南宫钱庄, bank) and
+`d/fy/qianyin.lpc` (千银当铺, pawnshop), plus a real vendor purchase at
+`d/fy/fqkhotel.lpc`'s 店小二 (inn waiter, functionally the
+teahouse-equivalent shop — no room literally named/tagged 茶馆 exists
+near the newbie start; the one `d/biancheng/teashop.lpc` teahouse in
+the whole archive is in an unrelated, far-off zone, and
+`d/fy/npc/teawaiter1.lpc`, which reads like a dedicated teahouse
+vendor, is dead content — never placed in any room's `objects` map, and
+had its own `list`/`buy` `add_action`s commented out even if it were
+reachable).
+
+- **Bank**: `deposit 100 silver` → `balance` correctly showed 一两黄金
+  (10000 = 100 units × base_value 100); `withdraw 30` correctly reduced
+  it to 九十九两银子七十文钱 (9970) and paid out matching physical coin.
+  Confirms the same two-tier currency architecture already found on
+  `ylfyxa3`/`xyzx3`/`hc`: bank `deposit` is a separate int stat from
+  physical coin objects. `feature/bankowner.lpc`'s `do_deposit()`/
+  `do_withdraw()` correctly move value between the two; `buy.lpc`
+  defaults to consuming physical coins (see below) but has an
+  `env/e_money` branch that debits the bank balance directly instead
+  (`MONEY_D->charge_him()`) — present in the code, not live-tested this
+  round (no time budget to also flip that flag and re-verify), so
+  documented rather than assumed.
+- **Pawnshop**: `value <item>` and `sell <item>` both work correctly.
+  A worthless test item (布衣, cloth armor, value 0) correctly triggered
+  "并不值很多钱" with no transaction; a low-but-nonzero-value item
+  (单刀, blade, value 5) sold for 4文钱 (80% of value, matching
+  `do_sell()`'s `value*80/100` payout) and was correctly removed from
+  inventory, coin balance increased to match.
+  `redeem`/`pawn` (as opposed to outright `sell`) were not separately
+  exercised — `value`/`sell` already confirm the shop's core
+  transaction path works.
+- **Buy**: `list` at 店小二 showed the real vendor_goods table (牛皮酒袋
+  20文/十个, 包子 15文/三十个, 烤鸡腿 30文/四十根); `buy wineskin from
+  waiter` completed a real purchase — item moved into inventory, ALL
+  physical currency was destroyed and reissued as change in the
+  correct denominations (exactly matches `moneyd.lpc`'s
+  `pay_him()`: destroy every cash object, reissue `afford - price`),
+  arithmetic verified exactly (34文+200两银子 = 20034 total value; paid
+  20; change 20014 = 14文+2两黄金, confirmed in inventory afterward).
+
+### Real bug found and fixed: `log_file()` had no `assure_file()` guard (AGENTS.md §7.11 instance)
+
+While setting up test money via the wizard `call` debug command (`call
+silver->set_amount(300)`), hit a live, uncaught runtime error:
+```
+执行时段错误：*Wrong permissions for opening file /log/nosave/CALL_OTHER for append.
+"No such file or directory"
+程式：/adm/obj/simul_efun.lpc 第 14 行
+```
+`adm/simul_efun/file.lpc`'s `log_file()` did a bare
+`write_file(LOG_DIR + file, text)` with no directory-existence guard,
+even though a correct, already-written `assure_file()` helper sits two
+functions below it in the same file, unused — the exact AGENTS.md §7.11
+pattern (six-plus prior independent instances across unrelated
+lineages). This lib's archive never shipped `/log/nosave/`.
+
+**This is not just a debug-tool inconvenience** — grepping every
+`log_file("nosave/...")` call site found it also sits on the real
+player-facing `cmds/usr/suicide.lpc::check_password()` path (the
+"永远死掉" / permanent-delete branch of the double-confirmation
+`suicide -f` flow, precisely the mechanic last round's NOTES flagged as
+untested): the log call is textually BEFORE the actual
+`rmhirdir()` save-directory deletion and `destruct(me)` calls in that
+function. An uncaught error there would silently abort the whole
+deletion sequence — the player would see a raw stack trace instead of
+the "永别了" farewell message, their save data would NOT actually be
+deleted, and `destruct(me)` would never run, leaving the confirmation
+flow in a broken half-state. Also present in `master.lpc`'s own crash
+logger (`nosave/CRASHES`), `securityd.lpc`'s promotion log,
+`imprison`/`purge` wizard audit logs.
+
+**Fix**: added a forward declaration (`void assure_file(string file);`)
+plus a call to `assure_file(LOG_DIR + file);` immediately before the
+`write_file()` in `log_file()`, matching the established project-wide
+fix idiom exactly.
+
+**Verified live**: reproduced the crash pre-fix (`call
+silver->set_amount(300)` threw the trace above, and the call silently
+never executed — confirmed by `balance`/inventory not reflecting the
+intended amount). The regular `update <path>` wizard command cannot
+hot-reload this fix, since `/adm/obj/simul_efun` is a driver-special
+`#include`-based object, not a normal `inherit`-based one — attempting
+`update /adm/obj/simul_efun` live threw its own `*No program in object`
+error and did not apply the fix. Restarted the driver clean instead
+(old PID killed, fresh boot), then re-ran the identical `call`
+sequence: no error, `/log/nosave/` auto-created on demand, and all
+subsequent bank/pawnshop/buy transactions above completed without
+incident.
+
+### Standing bug checklist sanity pass
+
+- **§7.90** (eval-cost): `config.fluffos` already carries `maximum
+  evaluation cost : 5000000` (bumped from the 700000 default) — intact.
+- **§7.100** (`ROOM` redundant `replace_program()`): grepped for
+  `replace_program(ROOM)` — 45 hits, all already commented out
+  (`//replace_program(ROOM);`) from the original sweep — intact, no
+  live instances remain.
+- **§7.111** (`standard_trace()` unguarded `file_name(error["object"])`):
+  `adm/obj/master.lpc` already carries the `objectp(error["object"]) ?
+  file_name(...) : "(driver)"` guard — intact.
+- **§7.112** (duplicate `call_out()` chain on reconnect via
+  `enable_commands()`): no local finding to report; not re-audited in
+  depth this round (out of this round's assigned scope), no symptoms
+  observed.
+- **§7.113** (netdead reconnect never restores `heart_beat`): traced
+  the real call graph — `LOGIN_D`-defined `adm/daemons/logind.lpc`'s
+  `reconnect()` unconditionally calls `user->reconnect()`, and
+  `obj/user.lpc::reconnect()` unconditionally does `set_heart_beat(1)`
+  in the correct `this_object()` context. Clean, matches the
+  already-verified-correct lineage documented for 60+ other libs.
+- **§7.114** (`private` `input_to()` target via inherited mixin): no
+  `private`-qualified `input_to()` callback pattern found in this lib.
+  Not applicable.
+- **§7.115** (`QUEST` macro pointing at a missing global quest-hook
+  file): no `QUEST` macro defined anywhere in this lib's includes. Not
+  applicable.
+- **§7.79** (bare 2-arg `addn`/`addn_temp`): zero call sites of either
+  function anywhere in this lib's `work/` tree. Not applicable — this
+  lib was never in the affected-lineage list and confirms it cleanly.
+
+### Cleanup
+
+No new player/test accounts were created this round (all testing done
+through the existing `fluffos` admin account, already documented and
+already save-tracked from earlier passes). Test artifacts (a cloned
+scavenger corpse, a panic-dropped starting-kit item, cloned test
+currency/weapon/armor consumed by the transactions themselves) were
+either consumed by the transactions or explicitly `dest`royed
+afterward. Driver killed by exact PID at session end.

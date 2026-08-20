@@ -2075,6 +2075,25 @@ as a broken registration/room — sometimes it's a background feature
 quietly failing every single time with normal play completely
 unaffected, only visible via `debug.log`.
 
+- **Another instance, found via `fy2005`'s round-four §10.7 economy
+  test**: same byte-identical `adm/simul_efun/file.lpc` shape
+  (`log_file()` unguarded, `assure_file()` defined two functions below,
+  unused). Surfaced first via the wizard `call` debug command (`*Wrong
+  permissions for opening file /log/nosave/CALL_OTHER for append`), but
+  grepping every `log_file("nosave/...")` call site in this lib found
+  it also sits on the real player-facing `cmds/usr/suicide.lpc`
+  permanent-delete path, textually BEFORE the actual save-directory
+  deletion and `destruct(me)` — an uncaught throw there would silently
+  abort the whole "永远死掉" confirmation flow, leaving a half-deleted
+  character. Also present in `master.lpc`'s crash logger,
+  `securityd.lpc`'s promotion log, and several wizard audit-log call
+  sites. Same fix (forward-declare + `assure_file(LOG_DIR + file)`
+  immediately before `write_file()`), verified live. Note: this
+  particular `#include`-based `simul_efun.lpc` could not be
+  hot-`update`d (driver-special object, `update` threw `*No program in
+  object`) — required a full driver restart to pick up the fix, unlike
+  the `inherit`-based instances above.
+
 ### 7.12 Shared message/wrapper argument bugs
 
 A 2-arg `tell_room()` wrapper passing a raw int 0 as `message()`'s
