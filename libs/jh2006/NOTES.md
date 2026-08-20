@@ -186,3 +186,211 @@ Found during the §7.100 tail-sweep (below the original 166-lib survey's
 `d/kunlun/lang2.lpc`). No roommaker.lpc factory-bug variant. Verified
 via a clean native driver boot (zero new `debug.log` errors, port
 listening, killed by exact PID after ~8s).
+
+## Round four (2026-08-20): `menwei` mystery solved, first-ever live combat/death/resurrection, §7.78 confirmed, §7.112 found and fixed
+
+Prior rounds never got past the `combat_exp >= 3000` starting-hall gate and
+were blocked by an unexplained "这里没有这个人" (no such person here) when
+trying to interact with the one NPC (`npc/menwei`) at the hall's outer gate
+room (`/d/xiangyang/damen`). Root-caused and resolved this pass, then used
+the fixed NPC's room to reach a real live death/resurrection cycle for the
+first time in this lib's testing history.
+
+### Root cause of the `menwei` mystery: a real compile error, not a wrong alias
+
+`d/wuguan/npc/menwei.lpc:463` had a stray full-width Chinese period (`。`)
+placed OUTSIDE a string literal, right before an orphaned `\n`:
+```lpc
+// BEFORE (byte-for-byte, confirmed via python3 repr()):
+message_vision( sprintf(HIW "武馆门卫交给$N一块武馆令牌"。\n" NOR), me);
+```
+The lexer chokes on the individual UTF-8 bytes of the stray `。`
+(`Illegal character 0xe3`/`0x80`/`0x82`), then chokes again on the bare
+`\n` outside a string, cascading into a second, unrelated-looking error at
+line 467 (`$var illegal outside of function pointer`) from the resulting
+string/quote misalignment. **This is a genuine compile error that has
+blocked `menwei.lpc` from compiling at all, apparently since this file was
+last touched** — confirmed live: a fresh `goto /d/xiangyang/damen` on an
+unpatched driver throws `*No program in object '/d/wuguan/npc/menwei'!`
+uncaught from inside `d/xiangyang/damen.lpc`'s own `create()` (which
+`new()`s every entry in its `objects` mapping during `setup()`), which
+means **the entire `/d/xiangyang/damen` room fails to load, not just the
+NPC** — and this room is a normal, ungated city street any player can walk
+through on the way into or out of the wuguan district, not an
+admin-test-only path. Fixed by moving the closing quote to the correct
+position:
+```lpc
+// AFTER:
+message_vision( sprintf(HIW "武馆门卫交给$N一块武馆令牌。\n" NOR), me);
+```
+Live-verified: `update /d/wuguan/npc/menwei` recompiles clean, and a fresh
+`goto` (after also `update`-ing the room object, since the room's earlier
+crashed instance stayed resident in a half-initialized state until forced
+to reload — a red herring worth remembering: after a compile-error fix,
+force-reload the ROOM too, not just the fixed file, or a stale broken
+instance can persist and make the fix look like it didn't work) loads
+`武馆门卫(Men wei)` into the room correctly, responds to `look`/`ask`, and
+a completely fresh driver boot from scratch compiles this file with zero
+errors and the NPC is present and interactive on the very first visit.
+
+### First-ever live combat → death → resurrection cycle
+
+Registered a fresh throwaway character (`testnine`, 测武生), used the
+admin `summon` command to bring it (bypassing the hall's exit gate, which
+only applies to normal `valid_leave()` walking) to `/d/xiangyang/eroad1`
+(`/d/xiangyang/damen` itself has `no_fight` set, so combat had to happen
+one room over) alongside a wandering beggar-sect NPC
+(`kungfu/class/gaibang/qigai.lpc`, `combat_exp` ~43000+ vs. the fresh
+character's 0). `kill qigai` produced a fully real combat sequence
+(genuine attack/dodge/damage exchange, not an admin-forced kill) ending in
+death, correct routing through `d/death/gate.lpc` → `d/death/gateway.lpc`
+(阎罗大殿) or `mpting.lpc` (孟婆亭, random 50/50 per `gate.lpc`'s `run()`),
+and — after the `death_stage()` chain completed — full resurrection back
+into `START_ROOM` (武馆前院, since the test character never left the hall
+proper), HP/qi/jing fully restored, `is_ghost()` cleared, and the game
+auto-saved cleanly. **Zero debug.log errors or crashes anywhere in this
+cycle**, confirmed by diffing `log/debug.log` against a pre-test baseline.
+This is the first time this specific end-to-end path has been verified
+live on this lib across all four testing rounds.
+
+### New bug found and fixed: §7.112-class `init()`/`call_out()` duplication in `d/death/npc/death.h`
+
+While chasing the death cycle, found that `mengpo.lpc`, `yanluo.lpc`, and
+`pusa.lpc` all `#include "d/death/npc/death.h"`, a shared header defining
+`init()`/`death_stage()` for exactly the reincarnation-desk NPC shape
+AGENTS.md §7.112 describes — an unconditional `call_out("death_stage", 90,
+me, 0)` in `init()` with no re-entry guard, in a lib whose
+`clone/user/user.lpc::reconnect()` unconditionally calls
+`enable_commands()` (confirmed: `adm/daemons/logind.lpc`'s driver-invoked
+`reconnect()` calls `user->reconnect()` unconditionally on both netdead-
+reconnect branches). Every one of the earlier §7.112 corpus sweeps missed
+this lib — it was never on either wave's batch list. **This is a real,
+live, wide-reaching bug**: any player who is a ghost in 阎罗大殿/孟婆亭/
+菩萨殿 and reconnects even once (a routine event, not an edge case) gets a
+second, independent `death_stage()` `call_out` chain stacked on the first,
+which can double-apply the death penalty or race-misroute the
+reincarnation.
+
+Fixed with the project's established minimal fix shape — a
+`death_stage_active` per-victim temp-flag guard set in `init()` and
+cleared at every exit point of `death_stage()` — deliberately NOT
+importing the extra `special_poison`/`special_die`/`no_fight` divergences
+found in sibling libs' (`bxsj`, `shujian3`) later-evolved copies of this
+same file, since those are unrelated feature additions this lib's own
+code never references. Live-verified with the project's established
+`callouts death_stage` technique: put `testnine` into `阎罗大殿` as a
+ghost, confirmed exactly one `death_stage` call_out pending via
+`callouts death_stage` (as admin), forced an explicit reconnect
+("重新连线完毕"), and re-checked — still exactly one call_out, confirming
+the guard works. Let the chain run to completion and confirmed full,
+clean resurrection.
+
+`d/death/npc/wgargoyle.lpc`/`bgargoyle.lpc` in this lib are plain
+decorative gargoyle NPCs with NO `death.h` include and no `call_out` at
+all — not vulnerable, don't need the same fix. Not corpus-swept this pass
+(single-lib fix only, since it was found via this lib's own testing, not
+a dedicated sweep) — worth checking sibling libs sharing this exact
+`data/group/groom` lineage (`bxsj`, `sjecl`, `sjtx2`, `shujian2008`,
+`shujian3`) for whether their divergent `death.h` copies already carry
+this guard (spot-checked `bxsj` and `shujian3` while looking for a
+reference fix shape — both already have it) or need it independently
+checked against their own `enable_commands()`-on-reconnect behavior.
+
+### §7.78 F_DBASE: confirmed live via real bare `set`/`query`/`delete`
+
+Used the admin wizard `call` command (`call me->set("test_dbase_marker",
+424242)` / `call me->query(...)` / `call me->delete(...)`) directly on the
+admin's own `char.lpc`-derived player object — genuinely bare calls, not
+wrapped through any other function. Value round-tripped correctly across
+an explicit `save`, full disconnect, and reconnect (new object instance,
+confirmed via a different `#N` clone id in the `%O` dump before and
+after), and `delete()` correctly zeroed it back out on a second
+disconnect/reconnect cycle. **F_DBASE is confirmed genuinely working on
+this lib**, not just inherited-by-assumption from a sibling lib as round
+one left it. Test marker was deleted before the final save; no residue in
+`git diff` on `data/user/f/fluffos.o`.
+
+### Sect apprenticeship: works correctly
+
+`bai tan` (against a non-sect NPC, 冯坦, the wuguan instructor) correctly
+rejected with "既不属於任何门派，也没有开山立派，不能拜师" (matches
+`cmds/skill/apprentice.lpc`'s `family` mapping check — not a bug, reasoned
+rejection). `bai yue` at 华山正气堂 against 岳不群 (`d/huashan/npc/
+yuebuqun.lpc`, which does `create_family("华山派", 13, "掌门")`) succeeded
+cleanly: "岳不群决定收你为弟子" + kowtow message + "恭喜您成为华山派的
+第十四代弟子". No crash, no error. Mechanism confirmed sound.
+
+### Standing checklist sanity pass — all confirmed, no regressions
+
+- **§7.90** (eval-cost 700000→5000000): code-confirmed still present in
+  `config.fluffos`; also indirectly reconfirmed by a completely clean
+  admin login/enter_world() this round (no repeat of the original crash).
+- **§7.100** (sub-threshold `replace_program(ROOM)` fix, 15 occurrences):
+  not re-diffed this pass, no reason to suspect regression (mechanical
+  content fix, not touched by anything this round did).
+- **§7.111** (`standard_trace()` `file_name(error["object"])` crash):
+  **not applicable to this lib** — `adm/single/master.lpc`'s
+  `standard_trace()` uses `%O` (driver's own safe object formatter) on
+  `error["object"]` directly, never calls `file_name()` on it at all. A
+  different, already-safe shape, not the vulnerable one.
+- **§7.112**: see above — found unswept, fixed this round.
+- **§7.113** (netdead reconnect losing `heart_beat`): not on the original
+  62-lib checked list; spot-verified this round via the same call-graph
+  method — `adm/daemons/logind.lpc::reconnect()` calls `user->
+  reconnect()` unconditionally, and `clone/user/user.lpc::reconnect()`
+  unconditionally does `enable_commands()` and (per user.lpc's own
+  `heart_beat` handling elsewhere) resumes ticking correctly. No live
+  disconnected-then-heal test was run this pass (no time), but the
+  static shape matches every other confirmed-clean lib in this sweep,
+  not `shzs`'s broken one.
+- **§7.114** (private `input_line()` in an inherited `F_EDIT` mixin):
+  **not applicable** — `feature/edit.lpc` has no `private` modifier
+  anywhere and re-arms via a bound closure (`input_to((: input_line :),
+  ...)`), not a string-name re-dispatch, sidestepping the whole bug
+  shape. Live-verified anyway with a real multi-line board post
+  (`post 测试标题` + 2 content lines + `.`) at `巫师休息室`'s board —
+  every line was accepted correctly, not just the first, and posting
+  completed ("留言完毕"). Test post was NOT left on the board (see
+  cleanup note below).
+- **§7.115** (missing `QUEST` file target): jh2006 is one of the "13 of
+  80 missing-target" libs from the completed corpus survey in AGENTS.md,
+  but has zero live `QUEST->` call sites — confirmed dead/unused, no
+  action needed (already covered by that completed sweep, not
+  re-verified from scratch this round).
+- **§7.79** (bare 2-arg `addn`/`addn_temp`): **confirmed inapplicable** —
+  `grep` found zero uses of `addn(` or `addn_temp(` anywhere in this
+  lib's tree. The vulnerable simul_efun shim isn't even relevant here
+  since nothing calls it.
+
+### Observation, not fixed (out of strict scope per this round's directive): possible §8.1-shape title-length check
+
+`clone/board/wuguan_b.lpc` inherits `inherit/misc/bboard.lpc`'s
+`do_post()`, which checks `i = strlen(arg); if (i < 4 || i > 24 || i % 2)`
+— on this driver `strlen()` counts real characters (not GBK byte pairs),
+so this rejects any title with an ODD number of Chinese characters (e.g.
+5-character titles), only accepting even counts. This has the same
+byte-halving-not-adjusted shape as the already-fixed §8.1
+`check_legal_name()` bug elsewhere in this lib, but it's a title-length
+validation quirk, not a crash or data-corruption — players can always
+pick a title with an even character count, so this doesn't block board
+posting (verified: a 4-character title posted successfully end-to-end).
+Left untouched per this round's explicit scope guidance (no crash/error/
+stuck-state, so treated as a possible latent quirk to flag, not a bug to
+fix without further confirmation this is unintended).
+
+### Test methodology / cleanup
+
+Native `build-debug` driver, two full boots (one to find/fix the
+`menwei`/`death.h` bugs, one clean reboot from scratch to verify neither
+regressed and to run the full combat/death/dbase/sect test sequence from
+a known-clean state). Admin `fluffos`/`Mud2026Pass` used for `goto`/
+`summon`/`call`/`callouts`/`update`; a throwaway character `testnine`
+(测武生) used for all player-facing testing. Cleaned up before commit:
+removed `testnine`'s save files (`data/user/t/testnine.o`,
+`data/login/t/testnine.o`), reverted the test board post on
+`data/board/wuguan_b.o` and an incidental resave of the unrelated,
+real-player-content `data/board/post_b.o` (both via `git checkout --`,
+confirmed no real player data was altered), and confirmed the admin's own
+resaved `data/user/f/fluffos.o` has no test-marker residue. Driver killed
+by exact PID after each boot (723700, then 726243) — never pattern-match
+`pkill`.

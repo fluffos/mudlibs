@@ -5,6 +5,8 @@ void init()
         ::init();
 	if (!userp(me)
 	|| me->query("combat_exp") < 10000 && me->query("death_count") > me->query("death_times") * 5) return;
+	if (me->query_temp("death_stage_active")) return;
+	me->set_temp("death_stage_active", 1);
 	call_out( "death_stage", 90, me, 0);
 }
 
@@ -12,9 +14,13 @@ void death_stage(object ob, int stage)
 {
         int i;
         object *inv;
-        if( !ob || !present(ob) ) return;
+        if( !ob || !present(ob) ) {
+                if (ob) ob->delete_temp("death_stage_active");
+                return;
+        }
 
         if( !ob->is_ghost() ) {
+                ob->delete_temp("death_stage_active");
                 command("say 轮回无常，阳间之人，应当回到阳间去才是。");
                 message_vision("两名力士闪了出来，架起$N，一晃就不见了！\n", ob);
                 ob->reincarnate();
@@ -29,8 +35,10 @@ void death_stage(object ob, int stage)
         if( ++stage < sizeof(death_msg) ) {
                 call_out( "death_stage", 5, ob, stage );
                 return;
-        } else
+        } else {
+                ob->delete_temp("death_stage_active");
                 ob->reincarnate();
+        }
 
         inv = all_inventory(ob);
         for (i = 0; i < sizeof(inv); i++)
