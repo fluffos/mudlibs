@@ -772,3 +772,27 @@ files changed, 1 insertion(+), 4979 deletions(-)，与预期精确吻合。
 新玩家注册" 降级提示依旧正常触发（说明登录流程本身没有被这次修改
 破坏），全程 `debug.log` 无新增错误。按精确 PID 结束驱动，因未能注
 册无存档增量需要还原。
+
+## AGENTS.md §7.79 修复（2026-08-19）
+
+裸 `addn("prop", value)`（无第三参数）恒为静默无效果：simul_efun
+shim 里 `ob` 缺省为 `this_object()`，但这是在 simul_efun 内部求值，
+指向的是 simul_efun 对象自身而非真正调用者，写入垃圾去处、静默丢
+失。3 参及以上调用（显式传 `ob`）从调用点求值，本就正确不受影响。
+方法论、脚本、"定义 vs 调用"判别修法详见同源 `xfbhh` NOTES.md 对应
+小节（同一 `fix_addn2.py`）。作为该血统最初母本，本 lib 未发现
+`clone/user/user.lpc` 命名笔误覆盖（正确命名为 `add`）；只有
+`clone/user/baby.lpc` 一处本地覆盖（覆盖 `addn` 未覆盖
+`addn_temp`），排除其 8 处 `addn(...)` 调用。
+
+结果：842 处改写，`git diff --stat`：429 files changed, 842
+insertions(+), 842 deletions(-)，加上排除的 8 处，842+8=850，与调
+查阶段统计精确吻合。
+
+验证：`build-debug` 驱动真实冷启动，端口 40018 正常监听，`debug.
+log` 全程干净，无新增编译错误。因本 lib 注册流程依赖外部 MySQL（见
+上文"管理员账号"一节，环境中无 MySQL/MariaDB），无法做完整注册验
+证——改为与 §7.100 修复同款的连通性验证：连线后输入英文名，确认原
+有"由于连接不上数据库所在服务器…"降级提示依旧正常触发，说明登录流
+程本身未被这次改动破坏；全程 `debug.log` 无新增错误。按精确 PID 结
+束驱动。
