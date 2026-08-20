@@ -3070,6 +3070,30 @@ variable. At an inline `query(...)["key"]` chain, capture the query
 result into a local first and guard with `mapp()` before indexing —
 don't index the `query()` call's return value directly.
 
+**Second confirmed instance: `jqxz2015`** (§10.7, round three, real
+`kill`-to-death combat test) — same `feature/skill.lpc` `mapping
+query_skills() { return skills; }` shape, `skills` never initialized
+for a genuinely fresh/untrained character. Reproduced live: a brand
+new, zero-skills character killed by a real NPC fight walked through
+`/d/npc/xiaofeng.lpc`'s room; its `init()`-scheduled `call_out`
+`check_skills()` ran `keys(ob->query_skills())` 2s later with no guard,
+throwing "Bad argument 1 to keys() Expected: mapping Got: 0" into
+debug.log. Grepping the whole lib for other unguarded
+`keys(...->query_skills())`/`sizeof(...->query_skills())`-without-
+`mapp()` call sites (most call sites in this lib already guard
+correctly with `mapp()` or a truthiness check — only a minority don't)
+found 4 more real instances: `/d/npc/duanyanqing.lpc` (identical
+`check_skills()` call_out shape, confirmed placed/reachable in
+`/d/city/xidajie2.lpc`), `/kungfu/class/mingjiao/yangxiao.lpc` and
+`/kungfu/class/shaolin/qing-le.lpc` (two functions) — both gated behind
+sect membership so only hit by a freshly-recruited, still-untrained
+sect member, not any fresh player — and `/d/city/npc/baibian.lpc`
+(currently unplaced/dead content in this archive, its sibling
+`/d/wudang/npc/baibian.lpc` was already correctly guarded). All 5 fixed
+with `if (!mapp(skl)) return;`/an equivalent early-return guard;
+recompiled clean and re-verified live with a real zero-skill character
+that no longer crashes.
+
 ### 7.31 `enter_world()` overwrites the just-restored persistent player object's flag with the fresh per-connection object's stale/default value
 
 Found on `xkxz2`'s deep functional test (§10.7). On login, two

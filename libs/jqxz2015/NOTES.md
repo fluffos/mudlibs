@@ -639,3 +639,165 @@ PID kill，`ps -p` 确认已退出。
 个新克隆的房间，已同步修正。已用 `build-debug` 驱动干净启动验证
 （0 个新增编译错误，端口正常监听）；未做完整 §10.7 深度游玩测
 试。
+
+## 深度功能测试（2026-08-20，round three，补齐三处"明确未验证"）
+
+本轮专门针对上面 2026-08-07 记录的三处"明确未验证"项，预算充足，
+逐一构造场景实机验证。开机前先做了一遍标准清单快速核对（全部确认
+已经是干净状态，未发现新问题，细节见下）。
+
+**标准清单核对**：§7.90（`config.fluffos` 第 40 行 `maximum
+evaluation cost : 5000000`，确认——注意 `work/config.cfg` 里另有一份
+`maximum evaluation cost : 300000`，但那不是驱动实际加载的配置文件，
+`config.fluffos` 的 `master file`/`mudlib directory` 等字段才是真正
+生效的一份，已核实）；§7.100（全档案 `replace_program(ROOM);` 42 处
+命中全部是注释行，零处存活，确认已是上一轮修复后的干净状态）；
+§7.111（`adm/obj/master.lpc`——`config.fluffos` 的 `master file`
+字段指向的真正生效文件——第 200 行已经是
+`objectp(error["object"]) ? file_name(error["object"]) : "(driver)"`
+的空指针防护写法；`adm/single/master.lpc` 那份没有防护但从未被驱动
+加载，非生效代码，确认无需处理）；§7.79（全档案零 `addn()`/
+`addn_temp()` 2 参数裸调用，本档案这套血统本来就不含这个 bug 形
+状，确认不适用）；§7.108（`clone/user/user.lpc` 第 110-116 行
+`reconnect()` 明确调用了 `enable_commands()`，确认干净）；§7.112
+（`death_stage()` 家族 4 个实例——`bgargoyle`/`wgargoyle`/
+`newgargoyle`/`yu-zu2`——逐一检查每一个真正终止流程的 exit 分支，
+全部正确清除了 `death_stage_active` 重入锁，确认无残缺分支）。
+
+**1. 完整战斗到死亡的循环——已验证，真实死亡+复活全流程跑通**：
+新建测试角色 `jqxzfour`（中文名 秦四，密码 `Jqxz2026Four`，男性），
+读 `cmds/std/kill.lpc` 确认（与本 session 其它库的规律一致）`kill`
+指令对 NPC 目标确实没有任何安全阀（`obj->kill_ob(me)` 对方直接反
+击）。找到 `d/npc/xiaofeng.lpc`（萧峰，北大街）——`max_qi 4500`/
+`max_jing 1500` 级别的高战力 NPC，远超新手角色——在原生驱动下对他
+下 `kill xiao feng`：几回合后被"雷霆一击"重创，"眼前一黑"，真实死
+亡（非 `fight` 安全对练）。死亡后走的是完全真实、未修改的代码路
+径：`feature/damage.lpc` 的 `die()` → `CHAR_D->make_corpse()` 掉落
+尸体 → 移动到 `DEATH_ROOM`（`/d/death/gate.lpc`，鬼门关）→ 房间内
+`white gargoyle`（白无常）NPC 的 `death_stage()` 对话流程逐条播放
+（"你叫什么名字？"→…→"阳寿未尽？"）→ 最终 `reincarnate()` 并移动到
+复活点 `/d/city/wumiao`（武庙）。`score` 确认惩罚符合设计（潜能从
+99 减半到 50，气/精降为约 75%，随心跳自然恢复中）、身上物品全部
+随尸体掉落（`i` 显示"目前你身上没有任何东西"，与登录时"你丢下一件
+布衣"的既有设计一致）。整段过程 `debug.log` 零 `error:`/`crash`/
+`Segmentation`。断线重连验证状态正确持久化。（注：`feature/
+damage.lpc` 里 `DEATH_ROOM->start_death(this_object())`
+这一行调用的函数在全档案任何地方都未定义——`call_other` 到不存在
+的函数在这个驱动下是静默返回 0，不是运行时错误，`debug.log` 全程
+确认没有相关报错；真正的死亡流程是靠玩家被移动进鬼门关房间后，房
+间里 `wgargoyle` 的 `init()` 自己探测 `previous_object()` 触发的，
+不依赖这个从未实现的 `start_death()`，纯粹是历史遗留的死代码，不
+是本轮范围内的 bug）。
+
+**2. 风清扬弟子叛出——已验证，真实触发，且额外发现并修复一个真
+实运行时崩溃 bug（详见下）**：读 `cmds/skill/apprentice.lpc`/
+`kungfu/class/huashan/feng.lpc` 确认触发条件——先要成为风清扬的弟
+子（`family/master_id == "feng qingyang"`），再拜一个不同门派的师
+父，且对方已经对你 `pending/recruit`（即对方已经用 `recruit` 指
+令点名收你为徒、只等你回拜）。`feng.lpc` 收徒门槛很高（剑法/紫霞
+神功/身法/文学等技能全部 ≥130~160、`shen ≥ 100000`、`int ≥ 41`、
+随机 `kar` 检定），管理员 `call` 赋予测试角色对应技能/属性后（符
+合任务允许的"用管理员捷径进入场景，但让真正的触发指令走真实代码"
+原则），先在 `/d/huashan/buwei2` 拜入门槛较低的入门弟子路线（岳不
+群，仅需 `shen≥1000`+`query_int()≥25`），确认拿到 `family_name ==
+"华山派"` 后，再到 `/d/huashan/houshan` 拜风清扬，成功——`family/
+master_id` 确认变为 `"feng qingyang"`。随后用管理员 `possess`
+指令附身到丐帮 `左全`（`/d/gaibang/inhole`）身上手动对 `jqxzfour`
+下一次 `recruit` 指令（不经由 `attempt_apprentice()` 的自动即时收
+徒分支，只是先挂起 `pending/recruit`），退出附身后，`jqxzfour` 玩
+家自己下 `bai zuo`——这次真正命中 `apprentice.lpc`（原括号 bug
+修复处）里 `ob->query_temp("pending/recruit")==me` 那个分支，输出
+"你决定背叛师门，改投入左全门下！！"，`family_name` 变为"丐帮"，
+`family/master_id` 变为左全，`score` 也确认师承信息正确更新；`/
+kungfu/class/huashan/FENG` 计数文件从"0"变为"2"（两次拜风清扬产生
+的正常计数递增，一次是最初的入门测试，一次是为复现这个分支而重
+新拜的），确认原括号错误修复后这条分支的运行时行为完全符合预期。
+
+（补充观察，非 bug，未修改）：`feng.lpc`/`kungfu/class/gaibang/
+hong.lpc` 的 `attempt_apprentice()` 用
+`(string)ob->query("family/family_name") != ""` 判断"对方是否已
+经有师父"——对一个从未加入任何门派的全新角色，`query(...)` 返回
+的是裸 `int 0`，`(string)0` 在这个驱动下转成字符串 `"0"` 而非空
+字符串 `""`，导致该判断对"完全没有门派"和"已有其它门派"两种情况
+一视同仁地拒绝，实机复现确认（`bai feng` 对一个从未拜过师的全新
+角色会被拒绝，提示"既然已有名师指点，何必又来拜老朽呢"）。但这条
+分支在正常玩法里几乎不可能被触发——华山派/丐帮的高阶传人一定是先
+经过入门弟子（岳不群/宁中则/令狐冲，或丐帮的左全等）才可能有资格
+再进阶拜访风清扬/洪七公，不会有全新角色跳过所有入门步骤直接来见
+这两位——按本 session 的 scope 纪律（无编译错误/运行时崩溃/
+debug.log 报错/驱动级拒绝，大概率是设计而非 bug）未作修改，只记
+录在此供后续参考。
+
+**3. 商店购买——已验证，价格扣除+实物到手全部正确**：`d/city/
+zahuopu.lpc`（杂货铺，东大街南）用 `list`/`buy` 两个指令，NPC
+`杨永福`（`d/city/npc/yang.lpc`）用 `F_DEALER` 混入。给测试角色
+`jqxzfour` 用管理员 `clone /clone/money/coin` + `call
+coin->set_amount(500)` + `give coin to jqxzfour`（任务允许的
+"clone+give 该档案真实货币物件"标准手法，需要角色在线才能接收，
+先重连再 give）；`list` 确认价目表，`buy budai`（麻布袋，标价一
+两白银=100）购买成功，`i` 确认物品到手且找零正确（四两白银，
+500-100=400=4两，数学验证一致）。有一处值得记录但非 bug 的现象：
+`buy` 命令刚执行完的一瞬间，`i` 仍然显示"五百文铜板"（旧的、本该
+被清空的硬币堆）——根源是 `inherit/item/combined.lpc` 的
+`set_amount(0)` 并不会立即把 `amount` 归零，只是 `call_out
+("destruct_me", 1)` 延迟 1 秒后再摧毁物件，这 1 秒窗口内
+`query_amount()`/`short()` 显示的是即将消失前的旧值；2 秒后再查
+`i`，旧硬币堆已经正确消失，只剩找零后的银两，最终状态完全正确。
+无编译错误/运行时崩溃/debug.log 报错，纯粹是这个 ES2 引擎家族的
+货币物件通用的、无害的、会自我纠正的显示延迟，不是本档案独有，
+不作修改。
+
+**新发现并修复的真实 bug（AGENTS.md §7.30 第二例）**：在"1.完整战
+斗到死亡"测试过程中，`debug.log` 捕获到一条真实未拦截的运行时错
+误——`执行时段错误：*Bad argument 1 to keys() Expected: mapping
+Got: 0`，来自 `/d/npc/xiaofeng.lpc` 第 99 行 `check_skills()`。根
+源：`feature/skill.lpc` 的 `mapping query_skills() { return
+skills; }`，`skills` 这个成员变量对一个从未学过任何技能的全新角色
+从来没有被赋值过，LPC 对未初始化 `mapping` 变量的默认值是裸
+`int 0` 而非 `([])`，`xiaofeng.lpc` 的 `init()` 在任何玩家进入他
+所在房间（北大街）2 秒后排程的 `check_skills()` 无防护地对这个
+可能是 0 的返回值调用 `keys()`，直接崩溃——**任何全新、从未学过
+任何技能的角色路过北大街都会触发**，属于高可及性的真实 bug，不是
+本档案独有内容/平衡设计。全档案排查所有 `keys(...->query_skills
+())`/`sizeof(...)` 调用点（多数早已用 `mapp()`/真值判断正确防
+护），额外发现 4 处同款无防护实例并一并修复（均改为在调用 `keys()`
+前加 `if (!mapp(skl)) return;` 或等价的提前返回防护）：
+- `d/npc/xiaofeng.lpc`（萧峰，北大街，已确认可达且已实机复现崩溃
+  与修复后不再崩溃）
+- `d/npc/duanyanqing.lpc`（段延庆，西大街2，与萧峰同款
+  `check_skills()` call_out 形状，确认已放置可达）
+- `kungfu/class/mingjiao/yangxiao.lpc`（杨逍，明教铁焰令对话，需
+  先加入明教才会走到这条分支，但明教新弟子零技能时仍会命中）
+- `kungfu/class/shaolin/qing-le.lpc`（清乐，少林两处——藏经楼手谕
+  +达摩令——同理需先加入少林）
+- `d/city/npc/baibian.lpc`（城内"百变"，目前档案里未被任何房间引
+  用，是死代码，但为与已有防护的姊妹文件
+  `d/wudang/npc/baibian.lpc` 保持一致，顺手一并修复）
+
+全部 5 处用 `update` 指令在活驱动上重新编译确认"成功"，并用一个全
+新注册、`skills` 指令确认"你目前并没有学会任何技能"的角色（`秦五`
+/`jqxztest`）真实走进萧峰房间验证不再崩溃、`debug.log` 全程零
+`error:`。已提交。
+
+**测试角色**：`jqxzfour`（秦四，`Jqxz2026Four`，男性，历经商店购
+买→真实死亡复活→华山派→风清扬弟子→丐帮叛徒的完整测试链）、
+`jqxztest`（秦五，`Jqxz2026Test5`，男性，仅用于验证 §7.30 fix，
+零技能状态）。存档：`work/data/{login,user}/j/{jqxzfour,
+jqxztest}.o`。管理员账号 `fluffos` 存档因本轮测试（`clone`/
+`give`/`possess` 等操作）产生正常增量，按既有约定一并提交。
+
+**测试过程中的插曲（记录，非 bug）**：`possess`（附身 NPC）后，
+账号与"当前受控身体"的绑定关系（`find_body(id)`）会保持指向被
+附身的 NPC，若不先用某种方式正确退出附身就断线，下次用密码重新
+连线会走 `confirm_relogin` 的"是否踢掉旧连线"流程而不是直接
+`reconnect`，且如果同一批命令里把 y/n 确认和后续指令一起发送，
+非 y/n 的后续指令会被当成 y/n 回答误吃掉（`yn[0]!='y'` 直接判定
+为"否"，`destruct(ob)` 断开这次新连线）——这不是 mudlib bug，是
+测试脚本没有先手动处理这个确认提示；后续通过重启驱动清空所有连
+线状态解决，之后的 `update` 验证等操作均在干净状态下完成。**验证通过**：真实商店购买（价格扣除+实物到手+找零正确）；真实
+`kill`战斗死亡到复活的完整流程（掉落尸体/鬼门关对话/复活点正
+确/惩罚符合设计/断线重连持久化正确）；风清扬弟子叛出的完整真实
+触发（含用管理员 `possess` 精确构造出 `apprentice.lpc` 里那条此
+前只做过代码比对、从未实机触发过的 `pending/recruit==me` 分支）；
+新发现并修复一处 §7.30 家族真实运行时崩溃 bug（5 处实例）；标准
+检查清单六项全部确认干净。
