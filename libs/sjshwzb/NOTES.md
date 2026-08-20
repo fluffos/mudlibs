@@ -34,3 +34,22 @@
 ## 补充修复（随 sjshwzjqb §10.7 深挖回填，2026-08-08）
 
 - **（新增 AGENTS.md §7.99）`std/char/npc.lpc` 的 `carry_object()` 存在防护漏判**：本档案第五个（也是最后一个）家族手足 `sjshwzjqb` 在移植这份 `npc.lpc` 的 §8.15 `file_size()` 存在性检查时，发现该检查对不带扩展名的合法路径是假阴性——`file_size()` 是字面 `stat()`，不像 `new()`/`load_object()` 那样做 `.lpc`→`.c` 扩展名解析。本档案自己的 `d/ourhome/npc/bigeye.lpc`（南城客栈邮差"千里眼"）的 `carry_object("/d/ourhome/obj/linen")->wear()`——完全合法、文件确实存在——在这份档案自己身上就会触发同样的假阴性崩溃（现场重新验证：用 `fluffos` 账号重连南城客栈，`look` 显示"千里眼"正常在场，`debug.log` 全程无 `call_other()`/`int(0)` 崩溃，确认补丁生效）。已同步补上三重检查（`file_size(file)`/`+".lpc"`/`+".c"`），详见 AGENTS.md §7.99 与 `sjshwzjqb/NOTES.md`。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/std/room"`：删除 662 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），654 处脚本自动
+删除；另有 6 份房间建造工具副本手动修正——`obj/roommaker.lpc`、
+`u/leox/obj/roommaker.lpc`、`u/ziyie/obj/roommaker.lpc`、
+`u/calvin/obj/roommaker.lpc` 是标准的"两套模板"简单变体（heredoc
+本来干净，字符串拼接模板第 138/139 行把多余调用烤进克隆出的房
+间）；`u/qkl/roommaker.lpc`、`u/koker/obj/teshu/roommaker.lpc` 是
+`shenmo`/`sjsh` 家族已知的"3 处出现"`room_code`/`str` 变体（一处
+`room_code +=` 拼接 + `do_saveroom()` 里两条分支各一处），三处均
+手动删除。`work/data/room/*.lpc`（4 个文件）确认无此调用，无需处
+理。修复后全库仅剩 26 处历史遗留的 `//`-注释掉实例，均确认无害、
+未改动。已用 `build-debug` 驱动干净启动验证（0 个新增编译错误，端
+口 40113 正常监听，`debug.log` 无新增 "cannot replace"/"cannot
+bind" 行；启动时出现的 `/log/dlog/money` 权限报错为既有、与本次
+改动无关的缺目录问题，未处理，超出本次范围）；未做完整 §10.7 深
+度游玩测试。
