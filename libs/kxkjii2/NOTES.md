@@ -152,3 +152,13 @@ local variable"级别的无害警告原样刷给正在连线的普通玩家。�
 （`death_record` 测试行、`data/board/start_b.o` 测试留言、
 `data/clan.o` 的例行序列化 mtime 变动均已用 `git checkout` 还原，
 不纳入本次提交）→ 正常 telnet 断线以确保账号存档落盘。
+
+## §7.100 跨库扫描修复（`ROOM` 基类同款 `replace_program()` 致命形状）
+
+- 同款 `inherit ROOM; ... replace_program(ROOM);` 冗余自替换（AGENTS.md
+  §7.100）：与姊妹库 `kxkj` 完全同构，`work/` 下 1,310 处存活匹配，全部
+  标准独立行形式，脚本一次性删除，无不规则残留。房间生成工具
+  `obj/roommaker.lpc` 与 `kxkj` 字节相同，模板本身未把冗余调用写进生成
+  结果，不受影响。`data/` 下额外核查过，无命中。验证：真实 debug 驱动
+  干净编译启动、端口正常监听，`debug.log` 无新增 "cannot replace"/错误
+  行。
