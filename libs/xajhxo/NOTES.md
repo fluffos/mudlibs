@@ -696,3 +696,17 @@ gitignored; `data/user/f/` and `data/login/f/` are NEW directories):
   正确显示；`call`指令（本档案没有单独的`update`风格热更新指令，
   `call obj->func(args)`承担了同样的诊断/管理功能）执行`->set_wugong()`
   /`->save()`均成功返回预期结果，确认写权限正常。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM STD_DIR "room"`（`STD_DIR` = `/system/std/`，宏名本
+身仍是字面量 `ROOM`，源码里的调用不受拼接影响）：删除 439 处多余
+的、独立成行的 `replace_program(ROOM);`（保留 `inherit ROOM;`），
+438 处脚本自动删除；另 1 处在本库房间建造工具
+`clone/wizard/roommaker.lpc`"克隆我所在的房间"命令的字符串拼接模
+板里，已同步手动修正。`help/wizard/es/help/roommaker` 是纯文本帮助
+文档，不含该 bug 模式，无需处理。`work/data` 下未发现额外 `.lpc`
+源文件。修复后全库仅剩 52 处历史遗留的 `//`-注释掉实例，均确认无
+害、未改动。已用 `build-debug` 驱动干净启动验证（0 个新增编译错误
+，端口 40069 正常监听，`debug.log` 无新增 "cannot replace"/
+"cannot bind" 行）；未做完整 §10.7 深度游玩测试。
