@@ -7687,6 +7687,81 @@ Next up by impact: `fy2005` (1,001), `xxcqii`/`xxcqii2` (847 each),
 `candidates_ge100.tsv`/`FINDINGS.md` in the survey's scratchpad for
 the full ranked list.
 
+**Fix-phase batch 12 (2026-08-19), next 15 libs by impact**: continuing
+straight down the ranked list from batch 11 — `fy2005` through `xkxlb`
+(ranks 101-117 of the >=100 list, one rank skipped: `wqfy` at rank 102
+was already fixed in batch 11). Same method as batches 1-11.
+
+| lib | live occurrences deleted | roommaker copies fixed | commit |
+|---|---|---|---|
+| fy2005 | 1,001 (999 scripted + 2 hand-fixed trailing-comment variants in `d/fy/wcloud1.lpc`/`d/fy/tiandoor.lpc`) | 0 (no room-building tool exists) | `deeff1348bf` |
+| xxcqii | 846 | 1 (`clone/misc/roommaker.lpc` string-builder variant only; its heredoc "make an empty room" template was already clean) | `f8ce3863575` |
+| xxcqii2 | 846 | 1 (same tool, independently verified — turned out NOT byte-identical to `xxcqii` despite NOTES.md's earlier claim, just same bug shape) | `993411a40eb` |
+| jqxz2008dlx | 826 | 1 (`clone/misc/roommaker.lpc` string-builder variant) | `8095798f120` |
+| jqxz2008std | 824 | 1 (same tool shape as sibling `jqxz2008dlx`) | `5f25cce45f5` |
+| jqxz2008 | 824 | 1 (same tool shape) | `b7212135f0e` |
+| xkx2017 | 818 | 1 (same tool shape) | `d2f02d9a1d8` |
+| xiakexing2017 | 818 | 1 (same tool shape, independently verified) | `0a2e92944aa` |
+| jyqxc2013fwq | 818 | 1 (same tool shape) | `11a7d462c98` |
+| jqxz2015 | 818 | 1 (same tool shape) | `f1670962177` |
+| jyqxc | 803 | 1 (same tool shape) | `68b45cdf319` |
+| jyqxc2 | 803 | 1 (same tool shape, sibling of `jyqxc`) | `0e8a4268958` |
+| xiakexing3 | 795 | 1 (same tool shape) | `7fe578fb831` |
+| xxcq | 792 | 1 (same tool shape as `xxcqii`/`xxcqii2` — this is their ancestor/sibling archive) | `e0713d52e35` |
+| xkxlb | 791 | 1 (same tool shape) | `c4f874b27e5` |
+
+**Batch 12 total: 12,423 live occurrences deleted across 15 libs.**
+Running total after batches 1-12: **115 libs fixed, 326,844 live
+occurrences deleted** (314,421 + 12,423). Notable finds: this batch
+surfaced a single dominant lineage — a `jqxz2008`-family
+`clone/misc/roommaker.lpc` shape (two heredoc/string-builder templates,
+where only the SECOND one, the "clone the room I'm standing in"
+command's string-builder, ever had the bug; the "make an empty room"
+heredoc template was clean in every single instance across all 13 libs
+that had this tool) — that recurred nearly unchanged across 13 of the
+15 libs this batch (`xxcqii`, `xxcqii2`, `jqxz2008dlx`, `jqxz2008std`,
+`jqxz2008`, `xkx2017`, `xiakexing2017`, `jyqxc2013fwq`, `jqxz2015`,
+`jyqxc`, `jyqxc2`, `xiakexing3`, `xxcq`, `xkxlb` — 14 actually), always
+fixed the same way (delete the embedded `\n\treplace_program(ROOM);`
+from the string literal, keep `\n\tsetup();`). `fy2005` was the only
+lib in this batch with no room-building tool at all, and its only
+irregularity was two trailing-comment variants
+(`replace_program(ROOM);   //add by ldb` and a second with an added
+Chinese rationale "希望刷掉乱走的NPC" — hoping the call would flush
+out wandering NPCs) that defeated the strict scripted match and needed
+hand-fixing; the comment's stated intent doesn't change the technical
+bug, so both were deleted like every other instance. `xxcqii2` is a
+notable process finding, not just a mechanical repeat: its own
+NOTES.md (from an earlier WASM-fix session) claimed it was
+byte-identical to sibling `xxcqii`, but a fresh `diff -rq` this batch
+found ~2,988 of ~3,034 files differing (indentation/brace-style
+reformatting throughout, including inside `roommaker.lpc` itself) —
+the bug counts and shapes matched exactly regardless, but this is a
+reminder that an inherited "identical to sibling X" claim in NOTES.md
+should still be spot-checked before skipping independent verification,
+not taken on faith. All fifteen libs verified via a real `build-debug`
+driver boot (clean compile, port listening, zero new "cannot replace"/
+"cannot bind" `debug.log` lines); no full §10.7 gameplay walkthrough
+this batch (per the task's own time-budget guidance). No `git add`
+directory-sweep incidents — every commit used `git add -u` plus
+explicit `NOTES.md` staging; `jqxz2008dlx`'s and `jyqxc`'s/`jyqxc2`'s
+pre-existing untracked test-account debris (`data/{login,user}/s/
+shenten.o`, `data/{login,user}/q/qindongxi.o`) was confirmed left
+untouched by `git status` review before staging each commit. One
+transient, unrelated hazard: a concurrent process (a separate Claude
+Code session sharing this same repo checkout, evidently mid-recovery
+from the reboot noted at the top of this file) briefly held
+`.git/index.lock` during this batch's `jyqxc2` NOTES.md commit; the
+lock cleared on its own within ~20 seconds and a plain retry succeeded
+— no data was lost, but this confirms the shared-repo/single-agent
+discipline matters even across sessions, not just within one. **51
+libs from the survey's >=100 list remain unfixed** (166 total minus
+115 now fixed). Next up by impact: `dtsl2` (687), `dtsl`/`dtslmud`
+(686 each), `fy3xd` (663), `sjshwzb` (662), `fy3dz` (662),
+`sjshwzjqb` (644), `fy330` (638), and onward — see
+`candidates_ge100.tsv`/`FINDINGS.md` in the survey's scratchpad for
+the full ranked list.
+
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
 Found on `kxkjii2`'s §10.7 deep functional test (ES II/Annihilator
