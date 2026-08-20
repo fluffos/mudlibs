@@ -26,3 +26,18 @@
 - **未覆盖**：邮差千里眼（南城客栈里的 NPC）暗示存在邮件系统，但本轮没有找到/测试具体邮件指令；代码里存在 `d/city/obj/muren.lpc`/`d/shushan/obj/muren.lpc`（练功木人，`accept_fight()` 会复制攻击者自身属性，是典型的安全陪练设计）但全档案 grep 不到任何房间引用这两个文件路径，可能是要靠某条尚未找到的指令动态 `new()` 出来，或是死内容——本轮未继续深挖；门派拜师、正式技能学习流程也未触及。
 
 管理员账号（`fluffos`/`Mud@2026`）本次通过正常注册流程重新走了一遍——`adm/etc/wizlist` 里已有 `fluffos (admin)` 一行（更早的 WASM 阶段留下），但存档目录 `data/login/f/`、`data/user/f/` 下当时并没有真正落地的 `fluffos.o`（说明此前只播种了权限数据，账号从未真正注册过）。本次老老实实走完整个注册流程后立即显示"系统权限目前是：(admin)"，`update /d/city/kezhan.lpc` 重编译成功，确认 write ACL 完全没问题；README 的既有记录基本准确，只是密码此前写的是"注册时自设"，现已确认为标准 `Mud@2026`。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/std/room"`：删除 513 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），508 处脚本自动
+删除；另有 3 份房间建造工具副本手动修正——`obj/roommaker.lpc`、
+`u/calvin/obj/roommaker.lpc` 是标准的"两套模板"简单变体；
+`u/koker/obj/roommaker.lpc` 是同一血统家族已知的"3 处出现"
+`room_code`/`str` 变体（一处 `room_code +=` 拼接 + `do_saveroom()`
+里两条分支各一处），三处均手动删除。`work/data` 下未发现额外
+`.lpc` 源文件（与手足 `sjshv150` 不同，本库没有那个变体）。修复后
+全库仅剩 17 处历史遗留的 `//`-注释掉实例，均确认无害、未改动。已
+用 `build-debug` 驱动干净启动验证（0 个新增编译错误，端口 40141
+正常监听，`debug.log` 无新增 "cannot replace"/"cannot bind" 行）；
+未做完整 §10.7 深度游玩测试。
