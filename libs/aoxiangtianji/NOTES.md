@@ -575,3 +575,17 @@ log` 零报错）。标准五项检查清单（§7.90/§7.111/§7.112/§7.113/
 常。测试用留存证据账号：`axtjshi`（含一次完整、已验证到账的 sell
 交易）。会话中产生的一个额外遗留测试账号 `qinzhan`（第三轮某次未清
 理干净的残留，未提交追踪）已一并清理。
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). 10 live
+`replace_program(ROOM);` occurrences across 10 room files
+(`obj/misc/void.lpc`, `d/kaifeng/wroad3.lpc`, `d/nanhai/zhulin2.lpc`,
+`d/lanzhou/duchuan.lpc`, `d/lanzhou/huanghe_2.lpc`,
+`d/emei/qfachanfang.lpc`, `d/emei/xiaolu2.lpc`, `d/chengdu/sanxia2.lpc`,
+`d/chengdu/shudao12.lpc`, `d/chengdu/chaoyangdong.lpc`) — same fatal
+redundant-replace-after-inherit shape as the rest of the §7.100 family.
+No room-building tool exists in this lib. Fixed by deleting the
+redundant lines. Verified via a clean native driver boot (zero new
+`debug.log` errors, port listening, killed by exact PID after ~8s).
