@@ -664,3 +664,134 @@ Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
 个 bug 的房间（`u/snow/wudujiao/yaoshi.lpc`、
 `u/snow/wudujiao/zhushe.lpc`）均正常，`quit` 干净退出。登录存档
 的时间戳增量已用 `git checkout HEAD --` 撤销，未落入提交。
+
+## 深度功能测试（round four, 2026-08-20）：拜师 / 购物 / 留言板 + 清单复核
+
+**环境说明**：本轮会话开始时宿主机之前已重启过（archives-side `build-debug/`
+符号链接不存在），实际驱动二进制路径是 `/home/sunyc/src/fluffos/build-debug/src/driver`
+（不是任务提示里写的 `mudlib/build-debug/src/driver`——那个路径这台机器上
+从未存在过，`lpcc_check.sh` 自己引用的也是 `~/src/fluffos/build-debug/...`），
+从这个路径正常编译启动，端口 40053 正常监听。
+
+### 1. 拜师（sect apprenticeship）：干净通过
+
+`attempt_apprentice()` 的实际调用点在 `cmds/skill/apprentice.lpc`（`apprentice`/`bai`
+指令），选了武当派开山祖师张三丰（`kungfu/class/wudang/zhang.lpc`），通过
+`d/wudang/xiaoyuan.lpc`（"金殿"）房间的 `set("objects", ...)` 克隆放置定位到该
+房间。管理员 `fluffos` 用 `goto /d/wudang/xiaoyuan` 抵达后 `bai zhang`：
+
+```
+☆你想要拜张三丰为师。
+张三丰说道：我武当派乃内家武功，最重视内功心法。
+```
+
+命中 `zhang.lpc` 里 `taiji-shengong` 技能不足 50 的合理拒绝分支（`fluffos`
+账号没有武当内功技能），机制走通、拒绝理由合理，无崩溃、`debug.log` 无新增
+错误——按验收标准算干净通过（不需要真正收徒成功才算过）。
+
+### 2. 购物（shopping）：完整验证买入 + 当铺卖出双向交易，两级货币确认正常
+
+- **买入**：确认 `feature/vendor.lpc` 是一份未被任何文件使用的旧副本（`grep -rl
+  'inherit.*vendor\.lpc'` 全库零命中），真正被 NPC 使用的是同目录下
+  `F_VENDOR` 宏指向的 `feature/dealer.lpc`（`buy`/`sell`/`list`/`value`/
+  `pawn`/`redeem`/`check` 七个函数的真正实现）。`d/city2/xidan.lpc`
+  （"西单"）房间的小贩 `d/city2/npc/xiaofan.lpc` 只 `add_action` 了
+  `buy`/`list`（符合项目已知的"普通商铺只卖不收"内容设计，不是 bug）。
+  用 `clone /clone/money/silver` 给 `fluffos` 变出一两银子后：
+  ```
+  ☆你向小贩买下一串冰糖葫芦。
+  ☆
+  你身上带着的物品有(负重 4%)：
+    五十个铜板(Coin)
+  √布衣(Cloth)
+    糖葫芦(Bingtang hulu)
+    法传送帖(Trans site)
+  ```
+  一两银子买五十文的东西，正确找零五十个铜板——两级/三级货币（金/银/铜）换算
+  正确。
+- **卖出（两级货币 sell-back）**：`inherit/room/hockshop.lpc` 全库 `grep -rl`
+  零继承者，确认是真正的死代码基类（不是"可达但没测"），未强行测试。改用
+  实际有 `add_action("do_sell", "sell")` 的当铺 NPC `d/city/npc/tang.lpc`
+  （通过 `d/city/dangpu.lpc`"当铺"房间的 `objects` 克隆定位），把刚买的
+  糖葫芦拿去卖：
+  ```
+  ☆你把身上的一串冰糖葫芦卖掉四十文钱。
+  ☆
+  你身上带着的物品有(负重 5%)：
+    九十个铜板(Coin)
+  ```
+  五十文的东西按 `do_sell()` 的 80% 折算卖得四十文（50+40=90，与背包铜板
+  数吻合）——买入/卖出双向真实交易全部走通，无崩溃。
+
+### 3. 留言板（board posting）：确认 §7.114 不适用，真实多行留言完整验证
+
+先静态核对 `feature/edit.lpc`（本档案 F_EDIT 的实际实现）：
+
+```lpc
+void input_line(string line, string text, function callback) {
+```
+
+**没有 `private` 修饰符**——`grep -n "private.*input_line" libs/jhfy/work/feature/edit.lpc`
+零命中，§7.114（`input_to()` 递归回调被误标 `private` 导致多行输入第二行起
+静默丢失）在本档案不成立。
+
+再用真实驱动做端到端多行留言测试：`goto /d/city/kedian`（"有间客栈"），
+`post 测试留言标题`，输入两行正文，`.` 结束，`read new`：
+
+```
+留言完毕。
+☆
+[1] 测试留言标题                             浮浮(fluffos)(Thu Aug 20)
+----------------------------------------------------------------------
+这是第一行测试内容。
+这是第二行，确认多行留言能完整保存。
+```
+
+**两行正文全部保存并读出**（不是只有第一行）——§7.86 之前修复的
+`replace_program()` 崩溃 bug 也没有复发（`post` 指令本身没有崩溃）。测试帖
+用 `discard 1` 清除，board 存档目录（`work/data/board/kedian_b.o`，测试前
+不存在）测试后一并删除，不留churn。
+
+### 4. 清单复核（静态检查，均确认无需改动）
+
+- **§7.90**：`config.fluffos:40` `maximum evaluation cost : 5000000`——已是
+  大数值，非原始小默认值，确认无需改动。
+- **§7.100**：`grep -rnE "replace_program\(ROOM\)" work --include="*.lpc" |
+  grep -vE '^\S+:[0-9]+:\s*//'` 零命中——全库残留的 100 处
+  `replace_program(ROOM)` 全部是行首 `//` 注释掉的死代码，确认此前的扫尾
+  修复完全生效，无遗漏。
+- **§7.111**：`adm/obj/master.lpc:211` `standard_trace()` 里
+  `objectp(error["object"]) ? file_name(error["object"]) : "<none>"`——已
+  有正确的 0/null 守卫，确认无需改动。
+- **§7.112**：全库 `grep -rl 'call_out("death_stage"'` 只有 3 个文件
+  （`d/death/npc/{bgargoyle,wgargoyle}.lpc`、`d/shaolin/npc/yu-zu2.lpc`），
+  三个文件的 `init()` 都已经带有 `death_stage_active` 的
+  `query_temp`/`set_temp`/`delete_temp` 重入保护——不在 AGENTS.md §7.112
+  记录的"残留缺口"名单（`hhsj`/`nt6nitan6win`/`jh2006`）里，本档案已经
+  是修复过的状态，确认无需改动。
+- **§7.113**：`clone/user/user.lpc` 的 `reconnect()` 函数第 198 行确认
+  调用了 `set_heart_beat(1)`，`adm/daemons/logind.lpc` 的 `reconnect()`
+  正确转调 `user->reconnect()`——确认无需改动。
+- **§7.114**：见上方第 3 项，已现场验证不适用。
+- **§7.115**：`include/globals.h` 里唯一含 `QUEST` 的宏是
+  `#define QUEST_D(x) ("/quest/qlist" + x)`（一个函数式宏，不是指向单个
+  缺失文件的静态路径）和 `#define QUEST "/inherit/quest.lpc"`，后者对应
+  的 `inherit/quest.lpc` 文件确认真实存在——本档案不受影响，符合
+  AGENTS.md"仅 aoxiangtianji 命中"的记录。
+- **§7.79**：`grep -rn '\baddn(\|\baddn_temp(' work --include="*.lpc" |
+  grep -v /data/` 零命中，与 NOTES.md 之前"零调用点"的记录一致，且本档
+  案不在 AGENTS.md §7.79 记录的 6 个真正受影响的库（`xfbhh`/`hhsj`/
+  `nitan170911`/`nitan6`/`nt6`/`nt6nitan6win`）名单内——确认不适用。
+
+### 本轮结论
+
+四项深度测试（拜师、购物买入、购物卖出、留言板多行发帖）全部干净通过，
+七项清单复核全部确认无需改动，**本轮未发现任何新的 programming bug**，
+未做任何代码改动。`debug.log` 全程只新增两行良性 `Unknown #pragma,
+ignored` 编译期警告（`inherit/char/master.lpc`、`feature/dealer.lpc`
+首次被本次会话触发懒编译时输出），没有任何 error/denied/segmentation
+等级别的新增内容。驱动测试结束后按精确 PID 正常终止（`kill -TERM`，
+`ss -ltnp` 确认端口 40053 不再监听）。测试产生的存档 churn
+（`fluffos.o` 的 `last_on` 时间戳、临时 `data/board/kedian_b.o`）已全部
+撤销/删除，`git status` 干净（仅剩此前会话遗留、与本轮无关的
+`data/{login,user}/c/chenba.o`，原样未动）。
