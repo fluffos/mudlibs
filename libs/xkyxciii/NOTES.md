@@ -213,3 +213,31 @@
   重的（仅次于 round one 的出生房间 bug）——同样是"score 等基础
   指令一切正常，但一整块子系统悄无声息地失效"的模式。经济（当
   铺/古玩店）、拜师门槛判定，均验证正常、无新发现。
+
+## §7.100 sweep (2026-08-19): redundant `replace_program(ROOM);` landmine
+
+Same corpus-wide bug as documented at AGENTS.md §7.100: rooms
+inheriting `ROOM` (`/std/room`) had a redundant, harmful
+`replace_program(ROOM);` call right after `inherit ROOM;` in `create()`,
+setting a permanent "pending replace" flag that crashes the object the
+first time anything binds a closure to it. This lib had **1,452 live
+occurrences** (survey-ranked #89 of 166 candidates >=100, tied with
+sibling lib `xkyx3b`). Fixed with the sweep's binary-mode script
+(`fix_710_room.py`); `git diff --numstat` totals (0 insertions, 1452
+deletions) match the survey's live-occurrence count exactly. This lib
+has no in-game room-building tool at all (`roommaker.lpc` or
+equivalent doesn't exist), so there was no factory-bug variant to fix.
+No `work/data/` room-source false-negative found. Verified via a clean
+`build-debug` boot (zero "cannot replace"/"cannot bind" `debug.log`
+lines, port 40118 listening) plus a live spot-check: no player save
+data exists yet in `data/login/` at all (a genuinely fresh, never-
+registered state despite the seeded `fluffos`/`lywin` wizlist
+entries), so a fresh test account was registered through the full flow
+(id → confirm → Chinese name → password → email → gender → race) and
+landed at the new-player training room; `look`/`quit` both worked,
+`debug.log` stayed clean throughout (only harmless first-compile-burst
+Warning noise, matching this lib's own documented pattern). Test
+account's save directory deleted before committing; an accidental
+`rm -rf` of the ADJACENT `data/login/s/` directory's tracked
+`.donotdelete` placeholder file was caught via `git status` and
+restored with `git restore` before committing.
