@@ -179,3 +179,7 @@ assure_file(string file);` 前向声明（因为 `assure_file()` 定义在
 为未跟踪文件（`work/data/login|user/{q,f}/*.o`），未纳入本次提交；
 `work/queue/register`、`work/log/` 均已被仓库 `.gitignore` 整体排
 除，无需清理。
+
+## §7.100 sweep (2026-08-19)
+
+Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 2124 live occurrences deleted: 2123 via scripted sweep (`fix_710_room.py`), plus 1 hand-fixed roommaker-tool template (`clone/misc/roommaker.lpc`, simple string-builder variant). ~284 already-commented-out instances left untouched. Checked `work/data/` (incl. `d/shenlong/data/`) for real `.lpc` source false-negatives per this batch's standing gotcha — none found. Verified via `build-debug` driver boot: clean compile, zero new "cannot replace"/"cannot bind" debug.log lines; confirmed serving via raw-socket connect on port 40140. Pre-existing untracked test-account debris confirmed left untouched.
