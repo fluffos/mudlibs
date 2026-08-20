@@ -428,3 +428,15 @@ when done.
 Files modified this pass:
 - `libs/dfgsiiv13b/work/feature/user/edit.lpc` — dropped `private` from
   `input_line()`.
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). Sibling of `dfgs2`: 30 live
+`replace_program(ROOM);` occurrences across 29 `d/snow/*.lpc` and
+`adm/guild/*.lpc` room files plus this lib's own room-building tool
+`obj/roommaker.lpc`'s string-builder template (mixed tab/space-indent
+variant, `\n\tsetup();\n    replace_program(ROOM);\n}\n"`, hand-fixed).
+A full post-fix grep confirms 0 live occurrences remain. Verified via a
+clean native driver boot (zero new `debug.log` errors, port listening,
+killed by exact PID after ~8s).
