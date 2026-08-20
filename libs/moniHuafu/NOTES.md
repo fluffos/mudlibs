@@ -443,3 +443,14 @@ reached`/`Too long evaluation` 记录。孪生档案 `mnhf` 自己的
 题上，未重复完整战斗/复活/留言板测试——`goto` 死亡区确认房间和
 NPC 都能正常载入即视为该风险点已解除。测试账号 `fluffos` 死亡/移
 动产生的存档变化已还原，未纳入本次提交。
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). Sibling of `mnhf`
+(diverged fork, but shares this exact bug in the same 61 files): 61
+live `replace_program(ROOM);` occurrences deleted (`obj/void.lpc`,
+`d/huafu/*.lpc`, `d/new/wel1-3.lpc`, `d/wiz/jobroom.lpc`, and a large
+`d/death/*.lpc` cluster of 38 rooms). No room-building tool exists in
+this lib. Verified via a clean native driver boot (zero new
+`debug.log` errors, port listening, killed by exact PID after ~8s).
