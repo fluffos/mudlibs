@@ -550,3 +550,14 @@ AGENTS.md §7.90 的既定判断标准（"数值接近或低于 700000 时上手
 - **管理员账号**：`fluffos`/`Mud@2026`登录正常；`update
   /u/guanwai/npc/waiter`热更新成功，且验证了上面两处主动修复确实消
   除了嵌套 `/u/` 内容更新时的错误日志噪音，确认写权限正常。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/std/room"`：删除 663 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），全部由脚本自动
+删除。本库没有任何在游戏内建造房间的工具（`roommaker`/`rmmaker`
+等名称均未找到），因此没有"工厂"侧需要修复。修复后全库仅剩 2 处
+历史遗留的 `//`-注释掉实例，均确认无害、未改动。已用 `build-debug`
+驱动干净启动验证（0 个新增编译错误，端口 40089 正常监听，
+`debug.log` 无新增 "cannot replace"/"cannot bind" 行）；未做完整
+§10.7 深度游玩测试。
