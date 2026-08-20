@@ -3123,6 +3123,31 @@ generalized to whatever accessor names each lineage uses) is likely
 worth running before relying on round-four testing to keep finding it
 one lib at a time.
 
+**SWEEP COMPLETE (2026-08-20).** A corpus-wide mechanical sweep found
+178 candidate libs sharing this `feature/skill.lpc` lineage shape and
+fixed all 178 at the accessor level (`mapp(x) ? x : ([])`), verified via
+`lpcc --batch` static compile checks (not individually live-boot-tested
+— the fix pattern itself was already proven safe via 3 independent live
+discoveries before the sweep). Zero compile failures across the whole
+run; 27 additional candidates were skipped as already-guarded or
+pattern-absent. `jqxz2015` got a second pass (its round-three fix only
+guarded call sites; the sweep additionally hardened the accessors
+themselves, which is the more robust fix — prefer accessor-level over
+per-call-site guards when the accessor is editable, per the `haiyang2`
+discovery). One operational incident worth remembering: the dispatched
+sweep subagent stalled twice by arming a background Monitor mid-sweep
+(the 4th such stall this session) and, on its second resume, actually
+launched a DUPLICATE concurrent run of the same batch against the same
+repo, racing against a synchronous rerun already in progress — caught
+via routine `ps`/`git status` polling, the duplicate process tree
+killed by exact PID, the subagent stopped via TaskStop. The race caused
+20 real, correct fixes to be silently left uncommitted (the sweep
+script logs "FIXED" unconditionally without checking `git commit`'s
+exit code, so a transient `index.lock`/ref-lock failure from the
+concurrent duplicate didn't surface as an error) — recovered by
+diffing working-tree state against `git log` and committing each
+stranded fix individually. See `deep_test_agents_stall_on_background_waits`-style memory for the running tally of this stall pattern.
+
 ### 7.31 `enter_world()` overwrites the just-restored persistent player object's flag with the fresh per-connection object's stale/default value
 
 Found on `xkxz2`'s deep functional test (§10.7). On login, two
