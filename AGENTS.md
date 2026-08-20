@@ -6990,7 +6990,7 @@ extension-searching) — never assume a `file_size()` check ahead of a
 
 ---
 
-### 7.100 (IDENTIFIED, ONLY PARTIALLY FIXED — too large for one pass) §7.86's "redundant self-`replace_program()`" shape recurs on the universal `ROOM` base class itself, not just boards — turning nearly every room in the archive into a dormant closure-crash landmine
+### 7.100 (SWEEP COMPLETE 2026-08-19 — see closing summary below) §7.86's "redundant self-`replace_program()`" shape recurs on the universal `ROOM` base class itself, not just boards — turning nearly every room in the archive into a dormant closure-crash landmine
 
 Found on `jhfy3`'s §10.7 deep functional test. §7.86 documented a fatal
 `replace_program()` misuse (`inherit X;` immediately followed by a
