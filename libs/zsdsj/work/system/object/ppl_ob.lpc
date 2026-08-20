@@ -38,6 +38,35 @@ nomask void reconnect() {
   }
 }
 
+// set_living_name()/enable_commands() are driver efuns that always
+// operate on THIS_OBJECT() -- neither can be pointed at another object
+// via call_other, so this must be a real function defined ON the player
+// body itself and invoked via `->` (e.g. from ppl_login_d.lpc's
+// ENTER_GAME case) so that this_object() inside is genuinely the
+// player. Without this, this entire codebase never calls
+// set_living_name() OR enable_commands() anywhere (confirmed via
+// corpus-wide grep) -- and find_player()/find_living() require BOTH
+// (FluffOS's find_living_object() skips any candidate missing the
+// O_ENABLE_COMMANDS flag, regardless of whether a living name was set)
+// -- so find_player() can never find ANY connected player, including
+// themselves. That in turn makes load_user()/user_exists()'s fallback
+// path treat an already-loaded, currently INTERACTIVE character as an
+// ordinary offline save file and silently restore() (or even
+// destruct()) it out from under whatever code is mid-flight using it,
+// discarding any not-yet-saved change with no error of any kind.
+// (enable_commands() also re-broadcasts init() to the room per
+// AGENTS.md §7.112 -- already confirmed via corpus grep that this lib
+// has no vulnerable unguarded call_out()-in-init() shape, so this is
+// safe here.)
+nomask void register_living_name() {
+  string id = this_object()->query_id(1);
+
+  if (stringp(id))
+    set_living_name(id);
+
+  enable_commands();
+}
+
 nomask string query_save_file() {
   if (this_object()->is_living())
     return file_name(this_object()) + "/data.o";

@@ -585,6 +585,20 @@ private nomask varargs void logon_handle(int state, object ob, string arg) {
         string ip = query_ip_number(ob);
         ip_time[ip] = time();
 
+        // 這份 codebase 從未呼叫過 set_living_name() (corpus-wide
+        // grep 確認), 造成 find_player() 對任何一位玩家 (包括正在
+        // 連線中的自己) 永遠找不到, 進而讓 load_user()/user_exists()
+        // 的 fallback 分支把「已經在線上、記憶體中還有尚未存檔異動
+        // 的活躍角色物件」誤判成離線角色, 對它多做一次 restore()
+        // (把尚未存檔的異動全部蓋掉, 靜默資料遺失, 無任何錯誤訊息)
+        // 甚至 destruct() (若 userp() 誤判為 false)。此處在每一次
+        // 成功進入遊戲時登記活著的名字, 讓 find_player() 對目前所有
+        // 登入路徑 (新角色/舊角色/reconnect) 都能正確找到本人。
+        // (set_living_name() 一定是登記 this_object(), 無法用 ->
+        // 指定別的物件, 所以真正呼叫它的函式得定義在玩家物件本身
+        // ppl_ob.lpc 上, 由這裡用 -> 呼叫。)
+        ob->register_living_name();
+
         // 記錄該 ip 上線次數 (WASM/local play: loopback exempt from the
         // 30-login command-rate limit)
         if (stringp(ip) && (ip == "127.0.0.1" || ip[0..3] == "127."))
