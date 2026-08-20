@@ -588,3 +588,23 @@ bug**，超时自动退出、存档、清理全部正常，无需任何代码改
 试产生的游戏时间/食物饮水/`last_on` 等增量已用 `git checkout --`
 还原，`git status` 确认工作区干净，无遗留 diff。本轮全程未修改任何
 源代码文件。
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`/inherit/room/room`）在本档案 2,070 处房间文件的
+`create()` 里紧跟 `inherit ROOM;` 之后又多余调用了一次
+`replace_program(ROOM);`——AGENTS.md §7.100 记录的同一个休眠 bug，
+和手足档案 `yzxiiizylfy`/`xyzxiiylzymh` 同源（同一双 roommaker 副
+本血统）。用 `fix_710_room.py` 扫过 `work/`，删除 2,068 处标准形
+状；两份房间建造工具（`clone/misc/roommaker.lpc`、`d/huanggon/obj/
+roommaker.lpc`）各剩 1 处字符串拼接变体，手工改成 `str += "\n\t
+setup();\n}\n";`。修复后 `work/` 下 0 处存活残留，`work/data/` 下
+没有真实 `.lpc` 源码命中。`git diff --stat` 显示 2068 个文件净删
+2070 行、增 2 行，与脚本自报数字 + 2 处手工编辑吻合。
+
+驱动干净启动（零新增编译错误、端口 40042 正常监听、`debug.log`
+无任何"cannot replace"/"cannot bind"行）。管理员 `fluffos`/
+`Mud@2026`（'2060' Tomud 客户端握手）实机登录成功，`look`/
+`score`/`quit` 均正常，全程 `debug.log` 保持干净。管理员存档的时
+间戳漂移已用 `git checkout HEAD --` 还原，未提交。驱动按精确 PID
+结束。
