@@ -943,3 +943,14 @@ dict = ([]);`——即使 `restore()` 失败，`dict` 也会正确回退成空�
 生的存档时间戳类微小 diff（`data/{login,user}/f/fluffos.o` 的
 `last_on` 字段）已用 `git checkout` 撤销，不提交。驱动最终按精确
 PID kill，`ps -p` 确认已退出。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/inherit/room/room"`：删除 824 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），与手足档案
+`jqxz2008dlx`/`jqxz2008std` 同一血统同一形状。`clone/misc/
+roommaker.lpc` 同样有两套模板——"造一间空房间"的 heredoc 本来干
+净，"克隆我所在的房间"命令的字符串拼接模板把同一枚多余的
+`replace_program(ROOM);` 烤进了每一个新克隆的房间，已同步修正。已
+用 `build-debug` 驱动干净启动验证（0 个新增编译错误，端口正常监
+听）；未做完整 §10.7 深度游玩测试。
