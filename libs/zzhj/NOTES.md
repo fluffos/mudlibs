@@ -423,3 +423,20 @@ is the pre-fix symptom). Killed the driver by exact PID when done.
 Files modified this pass:
 - `libs/zzhj/work/feature/edit.lpc` — dropped `private` from
   `input_line()`.
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). 38 real live
+`replace_program(ROOM);` occurrences fixed: 36 standalone room files
+(`obj/void.lpc`, `d/test/*.lpc` x7, `d/newbie/*.lpc` x6, `d/wiz/*.lpc`
+x2, `d/death/*.lpc` x4, a 14-file `d/maniac/*.lpc` cluster,
+`daemon/class/scholar/entrance.lpc`) plus this lib's own room-building
+tool `obj/roommaker.lpc`'s string-builder template — so newly-built
+rooms were inheriting the bug too. One additional grep hit (the same
+file, line 37) is a harmless documentation string inside the tool's
+help-text `LONG` block ("如果你要在房間的程式碼中使用 set 以外的函式,
+請先刪除: replace_program(ROOM) 這一行." — advising room authors to
+delete that line themselves) — not executable code, correctly left
+untouched. Verified via a clean native driver boot (zero new
+`debug.log` errors, port listening, killed by exact PID after ~8s).
