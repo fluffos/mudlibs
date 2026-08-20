@@ -872,3 +872,7 @@ debug.log 位置**（驱动级 `log/debug.log` 和 LPC 级
   "Lonely" 变体各含 3 处 `room_code`/`str` 拼接模板命中）。
 - 验证：真实 `build-debug` 驱动干净开机、端口正常监听，`debug.log` 中
   零 "cannot replace"/"cannot bind" 行。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/bgargoyle.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
