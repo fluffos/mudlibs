@@ -693,3 +693,20 @@ AGENTS.md §7.68 顶部的撤销说明。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 7 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). 55 live
+`replace_program(ROOM);` occurrences across 55 files: 52 standalone
+room-file occurrences (`open/cold/*.lpc`, `open/hall/jail/jail4.lpc`,
+`u/*` wizard-dir rooms) plus 3 string-builder-embedded occurrences in
+this lib's room-building tool, which is named `rmaker.lpc` (not
+`roommaker.lpc`) with 3 separate copies — `obj/rmaker.lpc`,
+`u/j/joel/obj/rmaker.lpc`, `u/a/anmy/obj/rmaker.lpc` — all fixed. The 8
+files actually named `roommaker.lpc` in this lib never had the bug
+(different, unrelated tool). One pre-existing already-`//`-commented
+instance (`u/i/ice/workroom.lpc`) left untouched. A full post-fix grep
+confirms 0 live occurrences remain. Verified via a clean native driver
+boot (zero new `debug.log` errors, port listening, killed by exact PID
+after ~8s).
