@@ -58,3 +58,14 @@
 新连线成功登录（顺带验证了 #3 的食物/饮水修复对已存在账号的自愈效
 果）。全程 `debug.log` 无运行时错误。驱动按精确 PID 结束；管理员
 存档已提交。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/inherit/room/room"`：删除 791 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），与 `jqxz2008`/
+`jyqxc`/`xiakexing3` 系列同一血统同一形状。`clone/misc/
+roommaker.lpc` 同样有两套模板——"造一间空房间"的 heredoc 本来干
+净，"克隆我所在的房间"命令的字符串拼接模板把同一枚多余的
+`replace_program(ROOM);` 烤进了每一个新克隆的房间，已同步修正。已
+用 `build-debug` 驱动干净启动验证（0 个新增编译错误，端口正常监
+听）；未做完整 §10.7 深度游玩测试。
