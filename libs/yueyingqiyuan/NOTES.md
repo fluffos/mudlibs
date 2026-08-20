@@ -924,3 +924,7 @@ scripts lived under the session scratchpad, not the repo).
 - `libs/yueyingqiyuan/work/d/death/npc/pang.lpc`
 - `libs/yueyingqiyuan/work/d/death/npc/bgargoyle.lpc`
 - `libs/yueyingqiyuan/work/d/death/npc/wgargoyle.lpc`
+
+## §7.100 sweep (2026-08-19)
+
+Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 369 live occurrences deleted: 365 via scripted sweep (`fix_710_room.py`), plus 4 hand-fixed roommaker-tool templates across 4 separate tool copies (`obj/roommaker.lpc`, `d/wiz/roommaker.lpc`, `u/misc/roommaker.lpc`, `u/stone/obj/roommaker.lpc` — all simple string-builder variant). 8 already-commented-out instances (incl. 2 in `u/wiz/citymaker/citymaker.lpc`) left untouched. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, port 40048 listening, zero new "cannot replace"/"cannot bind" debug.log lines.
