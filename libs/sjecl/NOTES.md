@@ -64,3 +64,13 @@ Execution aborted.`（eval 开销超限）报错，一次会话里出现了 15 �
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`§7.86` 复核：唯一 1 处命中确认为死代码，非误漏**：本档案早前的深度测试已经检查过全库唯一一处 `BULLETIN_BOARD` 命中（`adm/daemons/huanjing2003/temp/huanjing1_pro_b.lpc`），并核实过这份档案从未被引用/实例化，属于死代码，当时判断为§7.86 不适用、故意未改动。本次是跨库机械扫描，判定规则不区分"死代码/活代码"，顺手把这处也一并做了同样的无害删除（保留 `inherit`），不影响此前的死代码结论，仅记录在案。
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). Same lineage/shape as
+sibling libs `bxsj`/`bxsj1`: 24 live `replace_program(ROOM);`
+occurrences deleted (`d/wanshou/*.lpc`, `data/group/groom/*.lpc`,
+`d/cangzhou/dangpu.lpc`). No roommaker.lpc factory-bug variant.
+Verified via a clean native driver boot (zero new `debug.log` errors,
+port listening, killed by exact PID after ~8s).
