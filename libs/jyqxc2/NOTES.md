@@ -156,3 +156,14 @@ README 已记录的"18 个留言板受影响"的根因再现，但这次被 `upd
 新增未跟踪存档：`work/data/login/f/fluffos.o`、
 `work/data/user/f/fluffos.o`（管理员种子账号，按 AGENTS.md §1.5 约
 定提交）。测试用抛弃角色 `testchar`/黄蓉的存档已删除，未提交。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/inherit/room/room"`：删除 803 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），与手足档案
+`jyqxc`/`jqxz2008` 系列同一血统同一形状。`clone/misc/roommaker.lpc`
+同样有两套模板——"造一间空房间"的 heredoc 本来干净，"克隆我所在的
+房间"命令的字符串拼接模板把同一枚多余的 `replace_program(ROOM);`
+烤进了每一个新克隆的房间，已同步修正。已用 `build-debug` 驱动干
+净启动验证（0 个新增编译错误，端口正常监听）；未做完整 §10.7 深
+度游玩测试。
