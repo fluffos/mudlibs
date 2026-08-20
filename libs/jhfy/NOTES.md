@@ -795,3 +795,16 @@ ignored` 编译期警告（`inherit/char/master.lpc`、`feature/dealer.lpc`
 （`fluffos.o` 的 `last_on` 时间戳、临时 `data/board/kedian_b.o`）已全部
 撤销/删除，`git status` 干净（仅剩此前会话遗留、与本轮无关的
 `data/{login,user}/c/chenba.o`，原样未动）。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 4 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
