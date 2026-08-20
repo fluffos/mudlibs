@@ -712,3 +712,16 @@ Killed the driver by exact PID when done.
 Files modified this pass:
 - `libs/shzs/work/feature/edit.lpc` — dropped `private` from
   `input_line()`.
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). 10 live
+`replace_program(ROOM);` occurrences across 10 room files
+(`obj/void.lpc`, `d/zuichen/jinshedong.lpc`,
+`d/shiwang/yongdingmen.lpc`, `d/mohao/*.lpc` x4, `d/death/*.lpc` x3) —
+same fatal redundant-replace-after-inherit shape as the rest of the
+§7.100 family. No room-building tool exists in this lib. Fixed by
+deleting the redundant lines. Verified via a clean native driver boot
+(zero new `debug.log` errors, port listening, killed by exact PID after
+~8s).
