@@ -578,3 +578,7 @@ BIG5 font"→n 这一步），落地在此前保存的地点，`score`
   拼接变体）、`adm/daemons/groupd.lpc`、`cmds/debug/roommaker.lpc`。
 - 验证：真实 `build-debug` 驱动干净开机、端口正常监听，`debug.log` 中
   零 "cannot replace"/"cannot bind" 行。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/yanluo.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
