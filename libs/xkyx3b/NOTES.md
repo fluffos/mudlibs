@@ -222,3 +222,26 @@ NOTES.md round-three 章节里已经记录了这条线索）。修复：删除�
 `fluffos`/`Mud@2026` 登录后，`send`/`check`/`from`/`read` 全部给出
 正常的交互式提示（标题/内容/是否留底 y-n 询问、"没有这个编号的
 信件"等），不再是未知指令；`debug.log` 全程干净。
+
+## §7.100 sweep (2026-08-19): redundant `replace_program(ROOM);` landmine
+
+Same corpus-wide bug as documented at AGENTS.md §7.100: rooms
+inheriting `ROOM` (`/std/room`) had a redundant, harmful
+`replace_program(ROOM);` call right after `inherit ROOM;` in `create()`,
+setting a permanent "pending replace" flag that crashes the object the
+first time anything binds a closure to it. This lib had **1,452 live
+occurrences** (survey-ranked #90 of 166 candidates >=100, tied with
+sibling lib `xkyxciii`, both 侠客英雄传III but distinct archives/
+snapshots). Fixed with the sweep's binary-mode script
+(`fix_710_room.py`); `git diff --numstat` totals (0 insertions, 1452
+deletions) match the survey's live-occurrence count exactly. Like
+`xkyxciii`, this lib has no in-game room-building tool, so no
+factory-bug variant to fix. No `work/data/` room-source false-negative
+found. Verified via a clean `build-debug` boot (zero "cannot
+replace"/"cannot bind" `debug.log` lines, port 40036 listening) plus a
+live spot-check: no admin `fluffos` save currently exists in
+`data/login/`, so a fresh test account was registered through the full
+flow (id → confirm → Chinese name → password → email → gender → race)
+and landed at the new-player training room; `look`/`quit` both worked,
+`debug.log` stayed clean throughout. Test account's save directory
+deleted before committing.
