@@ -158,3 +158,16 @@ Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
 
 - 管理员 `fluffos` 的存档已提交（`data/{login,user}/f/fluffos/
   fluffos.o`，注意这份档案的嵌套路径）。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/std/room"`：删除 525 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），524 处脚本自动
+删除；另 1 处在本库房间建造工具 `obj/roommaker.lpc`"克隆我所在的
+房间"命令的字符串拼接模板里，与手足档案 `fy2`/`fy2qh` 同一形状，
+已同步手动修正。`work/data` 下未找到额外 `.lpc` 源文件（与
+`fy2`/`fy2qh` 不同，本库这里没有该变体）。修复后全库仅剩 3 处历史
+遗留的 `//`-注释掉实例，均确认无害、未改动。已用 `build-debug` 驱
+动干净启动验证（0 个新增编译错误，端口 40198 正常监听，
+`debug.log` 无新增 "cannot replace"/"cannot bind" 行）；未做完整
+§10.7 深度游玩测试。
