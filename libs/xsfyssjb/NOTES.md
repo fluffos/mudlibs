@@ -6,3 +6,12 @@
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 15 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 跨库扫描修复（`ROOM` 基类同款 `replace_program()` 致命形状）
+
+- 同款 `inherit ROOM; ... replace_program(ROOM);` 冗余自替换（AGENTS.md
+  §7.100）：`work/` 下 1,188 处存活匹配，全部标准独立行形式，脚本一次
+  性删除，无不规则残留。本库没有房间生成类工具（`roommaker`/
+  `makeroom` 均未找到），不涉及工厂模板修复。`data/` 下额外核查过，无
+  命中。验证：真实 debug 驱动干净编译启动、端口正常监听，`debug.log`
+  无新增 "cannot replace"/错误行。
