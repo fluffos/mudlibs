@@ -804,3 +804,7 @@ log` 全程干净，无新增编译错误。本 lib 注册流程为传统英文 
 （非 xfbhh/hhsj 那种 `ver1.0` 中文字段格式），用内建 `guest` 快速
 账号验证登录直达游戏世界，无报错。按精确 PID 结束驱动；测试产生的
 `mrtg` 存档增量已 `git checkout --` 还原。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/bai.lpc`, `d/death/npc/hei.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
