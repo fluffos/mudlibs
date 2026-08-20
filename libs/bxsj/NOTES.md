@@ -808,3 +808,18 @@ notes.
   for consistency (§7.112).
 - `work/d/death/gate.lpc` — `gate_run_active` guard, proactive hardening of
   the same class one room upstream.
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). 24 live
+`replace_program(ROOM);` occurrences across 24 files (`d/wanshou/*.lpc`,
+`data/group/groom/*.lpc`, `d/cangzhou/dangpu.lpc`) — same fatal
+redundant-replace-after-inherit shape as the rest of the §7.100 family.
+This lib's room-building tools (`clone/misc/roommaker.lpc`,
+`cmds/debug/roommaker.lpc`) never had the bug baked into their
+templates, so no factory-side fix needed. One pre-existing
+already-`//`-commented instance (`d/xueshan/jlshan.lpc`) left untouched.
+Fixed by deleting the redundant lines (binary-mode script, 24/24 matched
+`git diff --stat`). Verified via a clean native driver boot (zero new
+`debug.log` errors, port listening, killed by exact PID after ~8s).
