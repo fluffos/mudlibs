@@ -230,3 +230,7 @@ baby.lpc` 排除 8 处但修复其 1 处 `addn_temp`），`git diff --stat`：
 log` 全程干净，无新增编译错误。全新账号（`qintest779c`/角色名"秦
 测风"）走完注册流程，成功进入泥潭注册室并收到欢迎序列，符合 §10.1
 及格线。按精确 PID 结束驱动。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/bai.lpc`, `d/death/npc/hei.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
