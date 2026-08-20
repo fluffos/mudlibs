@@ -352,3 +352,15 @@ its wizard `update` command both still work; zero new debug.log errors.
   完工的内容功能（需要决定在哪些指令里补上 `check_mygift()` 调用，
   这是内容/设计判断，不是"明显写错的一行代码"），如实记录为观察，
   未作改动。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM STD_DIR "room/room"`（`STD_DIR` = `/system/std/`，宏
+名本身仍是字面量 `ROOM`，源码里的调用不受拼接影响）：删除 615 处
+多余的、独立成行的 `replace_program(ROOM);`（保留 `inherit
+ROOM;`），全部由脚本自动删除。本库没有任何在游戏内建造房间的工具
+（`roommaker`/`rmmaker` 等名称均未找到），因此没有"工厂"侧需要修
+复。修复后全库仅剩 11 处历史遗留的 `//`-注释掉实例，均确认无害、
+未改动。已用 `build-debug` 驱动干净启动验证（0 个新增编译错误，端
+口 40024 正常监听，`debug.log` 无新增 "cannot replace"/"cannot
+bind" 行）；未做完整 §10.7 深度游玩测试。
