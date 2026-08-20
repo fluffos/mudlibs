@@ -156,3 +156,15 @@ AGENTS.md §7.68 顶部的撤销说明。
 - `work/adm/simul_efun/file.lpc`
 - `work/cmds/app/update.lpc`
 - `work/clone/user/user.lpc`
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). Same lineage/shape as
+sibling libs `bxsj`/`sjecl`/`sjtx2`/`shujian2008`, plus an additional
+12-file `d/pk/turen*.lpc` cluster not present in those siblings: 36 live
+`replace_program(ROOM);` occurrences deleted (`d/wanshou/*.lpc`,
+`data/group/groom/*.lpc`, `d/cangzhou/dangpu.lpc`, `d/pk/turen*.lpc`).
+No roommaker.lpc factory-bug variant. Verified via a clean native driver
+boot (zero new `debug.log` errors, port listening, killed by exact PID
+after ~8s).
