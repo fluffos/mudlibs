@@ -928,3 +928,16 @@ scripts lived under the session scratchpad, not the repo).
 ## §7.100 sweep (2026-08-19)
 
 Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 369 live occurrences deleted: 365 via scripted sweep (`fix_710_room.py`), plus 4 hand-fixed roommaker-tool templates across 4 separate tool copies (`obj/roommaker.lpc`, `d/wiz/roommaker.lpc`, `u/misc/roommaker.lpc`, `u/stone/obj/roommaker.lpc` — all simple string-builder variant). 8 already-commented-out instances (incl. 2 in `u/wiz/citymaker/citymaker.lpc`) left untouched. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, port 40048 listening, zero new "cannot replace"/"cannot bind" debug.log lines.
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 4 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
