@@ -821,3 +821,31 @@ twice**:
 
 - `work/adm/simul_efun/file.lpc`
 - `work/adm/daemons/closed.lpc`
+
+## §7.100 sweep (2026-08-19): redundant `replace_program(ROOM);` landmine
+
+Same corpus-wide bug as `jhfy3`'s §7.100 finding (AGENTS.md): every room
+inheriting `ROOM` (`/std/room`) followed its `inherit ROOM;` with a
+redundant, harmful `replace_program(ROOM);` call in `create()`, setting a
+permanent "pending replace" flag that crashes the object the first time
+anything later binds a closure to it. This lib had **1,957 live
+occurrences** (survey-ranked #81 of 166 candidates >=100). Fixed with the
+sweep's binary-mode script (`fix_710_room.py`) plus 8 hand-fixed
+room-building-tool copies sharing the same bug baked into their own
+code-generation templates (`obj/roommaker.lpc`, `sjsh/obj/roommaker.lpc`,
+`sjsh/u/calvin/obj/roommaker.lpc`, `u/calvin/obj/roommaker.lpc`,
+`u/mery/obj/roommaker.lpc` — simple `str += "...replace_program(ROOM);..."`
+variant; `sjsh/u/koker/obj/teshu/roommaker.lpc`, `sjsh/u/qkl/roommaker.lpc`,
+`u/koker/obj/teshu/roommaker.lpc`, `u/qkl/roommaker.lpc` — `room_code`-
+prefixed 3-occurrence variant). Note: `u/calvin/obj/roommaker.lpc` and
+`sjsh/u/calvin/obj/roommaker.lpc` are two SEPARATE, non-symlinked files
+(the lib's `sjsh/` orphaned duplicate snapshot noted above) — both needed
+the fix independently, easy to miss one if only grepping the `sjsh/`
+prefix. `git diff --numstat` totals (17 insertions, 1957 deletions) match
+the survey's live-occurrence count exactly. Verified via a clean
+`build-debug` boot (zero "cannot replace"/"cannot bind" `debug.log` lines,
+port 40067 listening) plus a live admin login (`fluffos`/`Mud@2026`) —
+`look` at 南城客栈 and `quit` both worked normally. No `work/data/`
+false-negative room source found for this lib (only save `.o` files and
+unrelated content under `data/`). Incidental `fluffos.o` save-timestamp
+drift from the spot-check reverted before committing.
