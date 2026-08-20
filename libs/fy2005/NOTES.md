@@ -488,3 +488,16 @@ scavenger corpse, a panic-dropped starting-kit item, cloned test
 currency/weapon/armor consumed by the transactions themselves) were
 either consumed by the transactions or explicitly `dest`royed
 afterward. Driver killed by exact PID at session end.
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 3 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
