@@ -499,6 +499,206 @@ the bug. Fixed by deleting the redundant line. Verified via a clean
 native driver boot (zero new `debug.log` errors, port listening,
 killed by exact PID after ~8s).
 
+## Deep functional test round four (2026-08-20)
+
+Targeted re-test of the two things every prior round explicitly left
+unverified: a real death→respawn cycle, and a real `join` into a
+non-starting guild. Per the project's current scope rule, only pursued
+actual programming bugs (crash / `debug.log` error / stuck state) — not
+content or balance.
+
+**Method note**: both tests needed a wizard-controlled second connection
+alongside the test character, run as a two-socket Python script (not
+`tmux_mud.sh`/single-connection `mudclient.py`) so the admin account
+could `eval` state changes on a character that stayed connected and
+interactive throughout. Two real methodology traps hit and resolved
+along the way, worth flagging for whoever does this next on another lib:
+1. The `eval` command's underlying `_set()` (`std/object/prop_logic.lpc`)
+   has an intentional security guard that silently no-ops any `set()`
+   call from a `/open/`-rooted script onto a non-wizard living object's
+   properties (blocks `/open` sandboxes from writing player state
+   directly) — so `ob->set("hit_points", 0)` from `eval` does nothing,
+   with no error, no exception, `query()` afterward just returns the
+   unchanged old value. This is by design, not a bug. The correct way
+   to deal admin-driven damage is `ob->receive_damage(N)`, which is a
+   real gameplay API that mutates the property mapping directly from
+   the target's own context, bypassing that guard exactly as real
+   combat damage does — and it independently no-ops (also by design)
+   if the target is currently `linkdead` (`receive_damage()`'s own
+   guard), so the test character's socket must be kept open/connected
+   throughout, not closed between steps.
+2. A genuinely fresh (non-net-dead) login stops at the
+   `"[请按 RETURN 键继续]"` MOTD gate (`setup()`'s
+   `input_to("complete_setup", 2)`) before `complete_setup()` actually
+   places the character in a room — a *reconnect* (net-dead resume)
+   skips this entirely via a different code path
+   (`restart_heart()`/`"重新连线完毕"`), which is why earlier rounds'
+   sessions never hit this. A command sent into that still-armed
+   `input_to()` slot (e.g. `look`) gets silently consumed as the
+   RETURN-prompt's answer instead of dispatching as a real command, and
+   `complete_setup()` then places the character at their *default*
+   start room, silently overriding anything done to them (e.g. an
+   admin `move_player()` teleport) in between. This produced two
+   confusing false leads before being root-caused: an apparent "teleport
+   didn't stick" (character 's `join` replied "you're already a member"
+   because they'd been silently routed back to the adventurer guild,
+   their real default start room) and an apparent unexplained second
+   death (almost certainly the same mechanism misfiring on a different
+   test character, though not re-isolated as precisely — a clean,
+   admin-untouched 60-second silent-watch re-run with a fresh character
+   never reproduced any second death, so this is recorded as a
+   methodology artifact, not a mudlib bug). Fix for future sessions:
+   after a fresh (not reconnect) login, send one more blank line and
+   wait for the actual room description — not just the OKIP-check
+   line — before sending any other command or doing any admin-side
+   manipulation of that character.
+
+### Real bug found and fixed: `die()` crashes forever (never completes) when the character has no living last attacker
+
+`std/user.lpc`'s `die()` sets `killer = query("last_attacker"); if
+(!killer) killer = previous_object();` and then, in the un-fixed code,
+used `killer` in two places without checking it might still be `0`:
+```lpc
+// BEFORE
+if (!wizardp(this_object()) && killer->query("npc"))
+  ...
+if (this_object()->query_level() < 5 && userp(killer) && query("last_attacker")) {
+```
+`last_attacker` is only set by `std/body/attack.lpc`'s
+`receive_damage()` when the damage's `previous_object()` at the time of
+the call is itself a `living()` object — i.e. real melee/spell combat
+from another living creature. Any OTHER damage source (poison,
+bleeding, sickness, drowning/suffocation, desert exposure — all real,
+reachable status-effect conditions in `std/conditions/`, each calling
+`receive_damage()` from a non-living condition-daemon caller — or an
+admin-applied `receive_damage()` call) never sets `last_attacker`, and
+`previous_object()` *at the point `die()` itself runs* (called from
+`heart_beat()`→`continue_attack()`, with no calling object in that
+chain) is also `0`. `killer` then stays `int 0`, and `killer->query(...)`
+/`userp(killer)` both throw a driver-level `call_other`/efun-argument
+error **on this exact line, every single time**, since `continue_attack()`
+re-invokes `die()` on every subsequent `heart_beat()` tick as long as
+`hit_points < 1` — the crash never lets execution reach the
+`link_data("dead")` early-return guard further down (line 1009,
+*after* the crash site), so the character **never actually dies**: no
+corpse, no ghost, just an infinite repeating on-screen runtime-error
+spam and a permanently stuck negative-HP body. Reproduced live twice
+(once via the crash itself, once again confirming the SAME crash
+recurred one line further down after the first fix, until both call
+sites were guarded) using `receive_damage(9999)` via the `fluffos`
+admin account against a real, fully-connected test character (`蜘蛛精`/
+`testdieb`'s predecessor characters `夜寒霜`/`testmage`, `白骨精`/
+`testdie` — see method notes above for why an artificial admin damage
+source was needed to reach this branch, since ordinary NPC combat sets
+`last_attacker` correctly and never hits it). Confirmed byte-identical
+unguarded code in sibling `es1_win`'s `std/user.lpc` (same lineage,
+not yet fixed there — flagged for whoever next touches that lib).
+
+**Fix**: added `killer &&` short-circuit guards to both call sites,
+matching every other `killer`-using line in the same function (lines
+1012-1014, 1084, 1089-1095, 1109-1117 were already correctly guarded
+with `if (killer)` — only these two were missed):
+```lpc
+// AFTER
+if (!wizardp(this_object()) && killer && killer->query("npc"))
+  ...
+if (this_object()->query_level() < 5 && killer && userp(killer) && query("last_attacker")) {
+```
+
+**Live-verified end to end, twice, on a fresh driver boot with a fresh
+test character each time** (`testdie`, then `testdieb` — `testdie`'s
+run additionally included the admin `eval` diagnostic that reproduced
+the raw crash text on-screen pre-fix and confirmed its absence
+post-fix): `receive_damage(9999)` → `你死了。` → ghost creation → the
+full `black_wuchang`/黑无常 narrative (`death1` at +10s, `death2` at
++30s more) → `revive()` restoring the character to a real living body
+in `/d/noden/farwind/cemetery` (露天英雄纪念馆) with reduced stats
+(10/30 HP, matching the documented "skills reduced on death" mechanic)
+— zero crashes, zero new lines in `work/log/debug.log` or
+`work/log/log` throughout. `testdieb` (id `testdieb`, password
+`TestPassD2`, human female adventurer) is left parked alive in the
+cemetery room as evidence; `testdie` and the earlier `testmage`
+mage-guild character were cleaned up (redundant once `testdieb`/
+`testguild` cleanly demonstrated the same things without the
+methodology-artifact confusion).
+
+### Real guild join into a non-starting guild — verified twice (mage, healer)
+
+Code review in every prior round noted `std/guild.lpc`'s `do_join()` /
+each guild's own `join_player()` looked uniform across all 7 guilds but
+was never live-exercised for anything but the starting adventurer
+guild's already-a-member branch. This round completed real joins into
+**two** different non-starting guilds, both via a wizard `move_player()`
+teleport (`d/mage/tower/mage_guild`, `d/healer/building/healer_guild`)
+followed by the character's own real `join` command — matching the
+project's established "sect-joining needs wizard goto, not on-foot
+exploration" precedent (guild rooms aren't exit-reachable from the
+starting hall within a reasonable test budget):
+
+- **Mage guild** (`夜寒霜`/`testmage`, human female adventurer, since
+  cleaned up): `join` correctly triggered `d/mage/mage.lpc`'s
+  `join_player()` — race-check passed (human isn't in the
+  lizardman-only exclusion list), spellbook token moved to the
+  character, welcome text and guild-wide announcement both printed
+  ("拉修帝说: 欢迎加入魔法师公会..." / "[魔法师] 拉修帝 : 欢迎
+  夜寒霜(testmage) 正式加入我们的行列!"), and `score` afterward
+  correctly showed the class change ("人类魔法师", title "魔法仰慕者").
+- **Healer guild** (`紫霞仙子`/`testguild`, human female adventurer,
+  password `TestPassG1` — kept, parked in the healer guild room as
+  evidence): same mechanism, different guild — `d/healer/healer.lpc`'s
+  `join_player()` (race-check against a different exclusion list:
+  orc/lizardman/vampire/beholder, also passed for human) correctly
+  granted membership ("欢迎加入行医者公会..." / "[行医者] 刑老爹 :
+  欢迎 紫霞仙子(testguild) 正式加入我们的行列!"), `score` showed
+  "人类行医者" / title "草包看护生", and a follow-up admin `eval`
+  independently confirmed `ob->query("class")` returns `"healer"`.
+
+Both joins used the SAME `std/guild.lpc`→per-guild-file→`std/guild_ob.lpc`
+mechanism the prior rounds' code review predicted (the guild token
+object, moved into the player, sets `owner->set("class", class_name)`
+via `guild_ob.lpc`'s move hook) — this round's live tests confirm that
+prediction was correct, generalizing cleanly to at least 2 of the 5
+previously-unverified guilds (mage, healer). Knight/monk/thief/scholar
+remain code-reviewed-only, not live-verified, though there's no reason
+to expect them to differ given the shared mechanism.
+
+### Standing bug checklist sanity pass
+
+All checked via direct code read against the CURRENT `work/` tree
+(no live re-trigger needed for any of these — either already fixed, or
+confirmed the vulnerable shape was never present):
+
+- **§7.90** (eval-cost): `config.fluffos`'s `maximum evaluation cost`
+  confirmed still `5000000` (the round-one fix holds).
+- **§7.100** (`replace_program(ROOM)`): confirmed fixed per this file's
+  own dedicated section above; re-confirmed no new occurrences via a
+  fresh grep this round.
+- **§7.111** (`standard_trace()` null-object `file_name()`):
+  `adm/obj/master.lpc` already carries the guarded form
+  (`objectp(error["object"]) ? file_name(error["object"]) : "none
+  object"`) — was fixed in the corpus-wide sweep, still intact.
+- **§7.112** (`init()`-scheduled `call_out` duplicated by reconnect):
+  N/A — a corpus-wide grep for `call_out("death_stage"` (the pattern's
+  signature) across this lib's whole `work/` tree returns zero hits.
+- **§7.113** (netdead reconnect never restores `heart_beat`): confirmed
+  clean — `adm/daemons/logind.lpc`'s `reconnect()` calls
+  `body->restart_heart()`, and `std/user.lpc`'s `restart_heart()`
+  unconditionally calls `set_heart_beat(1)` in the correct
+  `this_object()` (player-body) context at the end of the function.
+- **§7.114** (`private` `input_to()` callback through an inherited
+  mixin): N/A — this lib's edit-flow mixin (`std/living/edit.lpc`) has
+  no `private input_line`-shaped function; a corpus grep for `private.*
+  input_line` across the whole `work/` tree returns zero hits.
+- **§7.115** (`QUEST` macro pointing at a non-existent file): N/A —
+  this lib's quest daemon macro is `QUEST_D` (`/adm/daemons/quest_d`,
+  a real, existing file), not the standalone `/std/quest` shape that
+  bug is specific to; confirmed via `grep` that no file in this lib
+  references a bare `QUEST` macro at all.
+- **§7.79** (bare 2-arg `addn`/`addn_temp`): N/A — this lib doesn't use
+  `addn`/`addn_temp` anywhere; `grep -rn "addn_temp(\|addn("` across
+  the whole `work/` tree (excluding the simul_efun shim's own
+  definition) returns zero hits.
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 同一血统（屠龙之战）。
