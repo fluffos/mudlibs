@@ -56,3 +56,13 @@
   过——按 §10.7 方法论要求诚实记录：这部分是"未 live 验证"，不是
   "已确认正常"。
 - **本次没有测试**：拜师/门派、商店、死亡/复活（原因见上）。
+
+## §7.100 跨库扫描修复（`ROOM` 基类同款 `replace_program()` 致命形状）
+
+- 同款 `inherit ROOM; ... replace_program(ROOM);` 冗余自替换（AGENTS.md
+  §7.100）：`work/` 下 1,183 处存活匹配。脚本删除了 1,180 处标准独立行；
+  另外 3 份房间生成工具（`obj/misc/roommaker.lpc`、`obj/obj/roommaker.lpc`、
+  `obj/obj/misc/roommaker.lpc`，字符串拼接变体，`str += "...replace_program
+  (ROOM);..."` 写死在生成模板里）手动修复——修复后新造的房间不会再继承这
+  个地雷。`data/` 下额外核查过，无命中。验证：真实 debug 驱动干净编译启
+  动、端口正常监听，`debug.log` 无新增 "cannot replace"/错误行。
