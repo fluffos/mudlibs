@@ -911,3 +911,109 @@ closed.lpc`，不受 §7.107 影响。
 ### ```§7.112``` residual-gap closure (2026-08-20)
 
 Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/yanluo.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
+
+## 深度功能测试第四轮 / Deep functional test round four (2026-08-20) — both previously-flagged gaps closed, both verified clean, no bug found
+
+Native `build-debug` driver, tianxia's own `config.fluffos`, one continuous
+`debug.log` watch (`log/debug.log`, baseline 227 lines) across the whole
+session. Reused the existing test character `linhaoran`/林浩然 (id
+`linhaoran`, password `TxTest2026#`) via `scripts` raw-socket sessions
+(a purpose-built `tx_client.py`, not `tmux_mud.sh`), reconnecting between
+short scripted segments per this project's standing practice, validating
+each response before sending the next command.
+
+### Gap 1 — real shop `list`/`mai` purchase: **VERIFIED, fully clean**
+
+`std/char/dealer.lpc` (the generic "mai"/"buy"+"list" mixin, `init()`
+registers both actions) gates `do_list`/`do_buy` on `is_day()` UNLESS
+the vendor object sets `"sell_all_day"` — `谪仙楼`'s 跑堂 (the only shop
+found in the prior round) doesn't set it, hence the earlier "打烊了"
+closure. Grepped all ~85 `F_DEALER`-inheriting NPCs corpus-wide for
+`sell_all_day`: 65 of them set it, including one in the immediate start
+zone — `d/changan/npc/weaponboss.lpc` (兵器坊老板, "本店全天营业，敬
+请随时光临" — literally advertises 24-hour business in its own greeting
+text), housed in `d/changan/weapony.lpc` (长安兵器坊), reachable from
+谪仙楼 in 10 moves (`west, north, east×7, north`) via the same 长安城
+road network mapped in round two.
+
+Live purchase, real character, real money: `score` before showed 298两
+20文信用点credit; `list` printed the real price table (匕首/dagger at
+五两白银); `mai bishou` → "你从兵器坊老板那里买下了一把匕首。"; `i`
+confirmed 匕首(Bishou) now in inventory; `score` after showed exactly
+293两20文 (5两 deducted, matching the listed price to the tael). This
+is the actual `do_buy()` code path in `std/char/dealer.lpc` (`player_pay()`
+→ `new(file)` → `move(me)`), not the coach-fare `player_pay()` call from
+round two — confirms the shop system itself, not just the currency
+plumbing underneath it. `debug.log`: zero new lines.
+
+### Gap 2 — real combat to death/respawn: **VERIFIED, fully clean, one real death+respawn cycle completed**
+
+Confirmed via direct code read (`cmds/std/kill.lpc`) before attempting
+live: `kill` has no fight-vs-`accept_fight`-style safety net at all —
+its only gates are `SAFE_ENV`, PROTECT_AGE (only relevant vs. other
+*players*), `NO_KILL`/`is_master`, busy/netdead/edit-mode checks, and
+`accept_kill()` (which `std/char/npc.lpc` implements to always return 1
+for an ordinary NPC, only adding flavor text/master-guard-pileup
+side-effects) — matching this session's established precedent that the
+`fight` auto-concede gate does not extend to `kill`. Went back to 长安
+武馆's 练功场 and used `kill mu ren` (the SAME 木人 training dummy that
+safely auto-conceded under `fight` in round two — confirmed
+`d/changan/npc/muren.lpc` has no `NO_KILL` flag) against the still-fresh,
+still-unarmed, still only-`dodge`-level-1 test character (combat_exp 100
+vs. 木人's 40000). Real combat ran automatically via `heart_beat` (no
+repeated `kill` spam needed) — a real damage sequence (bruises → welts →
+scratches → semi-conscious → "你的眼前一黑，接着什么也不知道了....") —
+and the character genuinely died: "你死了。" + a real death broadcast
+("【谣言】某人：林浩然被木人杀死了。"), moved to `DEATH_ROOM`
+(`/d/death/gate`, 鬼门关).
+
+Walked the real death-realm room chain north×3 (鬼门关→奈何桥→望乡亭→
+阎罗殿, `d/death/{gate,gateway,road1,road2}.lpc`) into `d/death/npc/
+yanluo.lpc`'s room, whose `init()` (guarded per the §7.112 fix
+documented immediately above — re-verified this fix is the version that
+actually ran, see below) started the real `death_stage()` `call_out`
+chain. All 4 stages fired in order, one real ~5s tick apart, with no
+duplication (confirming the reentry guard's `set_temp`/`delete_temp`
+pairing is intact and doesn't misfire): 阎罗王's cold stare → flipping
+through the『阴阳册』ledger → "你阳寿未尽，本王不能收留" → the final
+"你回去吧" + fog line, immediately followed by `reincarnate()` (real
+`gin`/`kee`/`sen` restored to half-max, `food`/`water` maxed) and a real
+`move()` to `revive_loc[0]` (`/d/changan/badroom`, 土地庙) — landed
+there correctly, `set_status_xuruo(30)` applied ("你感觉身体状况非常虚
+弱。" / "你感觉身体非常的虚弱，一点力气也使不出来了。。。" both fired,
+confirming the post-respawn debuff also ran for real). Post-respawn
+`score`: no longer shows "鬼魂" (ghost) in the age line, "你共死亡一次"
+correctly incremented, stats/hp bars correctly at half. A final clean
+`quit` saved the post-death, post-respawn state.
+
+`debug.log` monitored continuously through the ENTIRE sequence (shop
+purchase, real kill, death broadcast, the 4-stage `death_stage()` chain,
+`reincarnate()`, badroom landing, several reconnects, final `quit`) —
+stayed at the exact same 227-line boot baseline throughout, zero new
+lines. One incidental non-bug observation: `feature/damage.lpc`'s
+`die()` calls `DEATH_ROOM->start_death(this_object())` (`DEATH_ROOM` =
+`/d/death/gate`) but `start_death()` is never defined anywhere in the
+archive (`grep -rn start_death` finds only this one call site) — this
+call silently no-ops (FluffOS's default `call_other`-to-undefined-
+function behavior, confirmed by the zero `debug.log` growth through a
+real live death), so it has no observable effect and is not a bug by
+this project's own standing "no error signature ⇒ not a bug" rule; the
+real death-sequence trigger is entirely `d/death/npc/yanluo.lpc`'s
+`init()`, reached by simply walking into its room, which is what
+actually matters and is what this pass exercised.
+
+Test character `linhaoran`/林浩然 kept as further playthrough evidence
+(now: has died once, owns a 匕首/dagger bought at full price, resting at
+土地庙 in a temporarily weakened state, 293两20文 credit remaining).
+Saves: `work/data/user/l/linhaoran.o`, `work/data/login/l/linhaoran.o`.
+
+### Fast standard-checklist confirmation pass (no changes needed, all already correct)
+
+- **§7.90** (`config.fluffos` eval-cost): `maximum evaluation cost : 2000000` — already correct per the round-three note, unchanged.
+- **§7.100** (`replace_program(ROOM)`): `grep -rn "replace_program(ROOM)"` → 11 hits corpus-wide, every one already commented out (`//`) — zero live occurrences, confirmed still clean since the round-three §7.100 sweep.
+- **§7.111** (`file_name(error["object"])` null-guard): `adm/obj/master.lpc:206` already reads `objectp(error["object"]) ? file_name(error["object"]) : "(driver)"` — correctly guarded, unchanged.
+- **§7.112** (`death_stage()` reentrancy, every exit branch): only one file in the whole archive schedules a `death_stage()` `call_out` chain, `d/death/npc/yanluo.lpc` (fixed in the residual-gap closure documented immediately above this section). Re-read every exit branch by hand: the early `!ob || !present(ob)` return clears the guard when `ob` is non-null; the mid-sequence `++stage < sizeof(death_msg)` reschedule branch correctly does NOT clear the guard (by design — sequence still in progress); the final completion path clears the guard right after the `if/else`. All three exit paths handled correctly — and this is now also LIVE-verified (not just read), see Gap 2 above: exactly one clean 4-stage run, no duplicate firing.
+- **§7.79** (bare 2-arg `addn()`/`addn_temp()`): zero call sites of either function anywhere in this archive — not applicable to this lib.
+- **§7.108** (`reconnect()` calls `enable_commands()`): `obj/user/user.lpc`'s `reconnect()` (fixed in round three) still correctly calls `enable_commands()` as its first line — unchanged, and exercised live again this pass via the routine reconnects between test segments.
+
+No bugs found this round — both explicitly-flagged gaps from round two/three are now fully closed by direct live verification (not just design reasoning), and the standard checklist is a clean confirm-only pass.
