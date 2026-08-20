@@ -7995,6 +7995,45 @@ unexamined; a future session could lower the threshold if this bug
 shape is suspected on a specific below-threshold lib during unrelated
 work, but no further scheduled sweep is needed for this bug.
 
+**TAIL-SWEEP of the sub-threshold gap (2026-08-20)**: two libs
+encountered opportunistically during unrelated round-four testing
+(`gjzddmudda`, 96 occurrences/91 files; `jinyongwenzi`, 10 occurrences)
+both turned out to have this exact bug despite being below the
+survey's >=100 cutoff — suggesting the sub-threshold gap was worth a
+dedicated pass. Surveyed every lib in `libs/*/work` NOT already covered
+by the original 166-lib sweep, `gjzddmudda`/`jinyongwenzi`'s own fixes,
+or `jhfy3`'s standalone 11-batch backlog (which pre-dated and fed into
+the corpus-wide survey; confirmed 0 live occurrences remain there
+independently) — **25 libs** (noboot libs `dfgsitlzjwin`/`ds386`/`hy2`/
+`sgzmudsgz` excluded per standing scope decision). Every one of the 25
+had the bug — **100% hit rate**, confirming the sub-threshold gap was
+real, not a coincidence: `aoxiangtianji` (10), `bxsj` (24), `bxsj1`
+(24), `dfgs2` (48), `dfgsiiv13b` (30), `es1_win` (2), `esI` (1),
+`fyzfqyy` (40), `huoying` (7), `jh2006` (15), `kxkj1` (55), `mnhf`
+(61), `moniHuafu` (61), `qhxajh` (2), `shujian2008` (24), `shujian3`
+(36), `shzs` (10), `sjecl` (24), `sjtx2` (24), `xajh2` (2), `xo` (73),
+`yhyxcs` (1), `zhongjidiyu` (39), `zsdsj` (6, this lib's macro is
+`STANDARD_ROOM` not `ROOM`), `zzhj` (38). **Total: 657 additional live
+occurrences fixed** across 25 libs, bringing the grand total (original
+sweep + tail-sweep) to **191 libs, 349,729 occurrences**. Several
+`bxsj`/`sjecl`/`sjtx2`/`shujian2008`/`shujian3`/`jh2006` shared the same
+`data/group/groom/*.lpc` lineage cluster; `mnhf`/`moniHuafu` and
+`dfgs2`/`dfgsiiv13b` are each diverged-fork sibling pairs with the bug
+in the same file sets. Several room-building-tool factory copies fixed
+too (`dfgs2`, `dfgsiiv13b`, `fyzfqyy` x2, `huoying`, `kxkj1` x3 — this
+lib's tool is named `rmaker.lpc` not `roommaker.lpc`, `qhxajh`,
+`zhongjidiyu`, `zzhj`); several others confirmed clean (`bxsj`-family,
+`aoxiangtianji`, `mnhf`/`moniHuafu`, `shzs`, `xajh2`, `xo`, `yhyxcs`,
+`zsdsj` have no room-building tool at all). Every lib individually
+boot-verified with a real `build-debug` driver (clean compile, zero new
+"cannot replace" `debug.log` lines, port listening, killed by exact
+PID) and committed/pushed separately, one commit per lib via
+`git add -u`, with a brief NOTES.md addendum per lib. No incidental
+save-file drift introduced by this pass's own boot tests (pre-existing
+untracked drift in a few unrelated libs, from earlier sessions,
+confirmed by file timestamps and left untouched). The sub-threshold gap
+across the corpus is now fully closed.
+
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
 Found on `kxkjii2`'s §10.7 deep functional test (ES II/Annihilator
