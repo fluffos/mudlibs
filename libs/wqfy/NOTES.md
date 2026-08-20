@@ -294,3 +294,18 @@
   `qintestzz` 未动（早于本轮，且 `qintestrb`/`qintestww`/`qintestzz`
   已在 NOTES.md 前文中被指名引用为历史排查证据）。驱动进程测试结
   束后按精确 PID kill，未使用 `pkill -f`。
+
+## §7.100 跨库扫描修复（`ROOM` 基类同款 `replace_program()` 致命形状）
+
+- 同款 `inherit ROOM; ... replace_program(ROOM);` 冗余自替换（AGENTS.md
+  §7.100）：`work/` 下 1,095 处存活匹配。脚本删除了 1,090 处标准独立行；
+  另外 5 处房间生成工具的字符串拼接模板手动修复——`obj/wall.lpc`（这个
+  库的房间编辑器工具其实叫"wall.lpc"而非"roommaker.lpc"，命令名为
+  `mkroom`/`rset`/`connect`/`saveroom`；其 `mkroom` 用的 heredoc 模板本
+  身干净，只有 `do_saveroom()` 的字符串拼接模板有这个 bug）、
+  `d/wiz/xgchen/roommaker.lpc`（同一 bug 的独立副本）、
+  `cmds/adm/roommaker.lpc`（另一份独立管理员房间生成工具，3 处命中：
+  `mkroom` 命令的字符串拼接、`do_saveroom()` 里两条分支各一处）。`data/`
+  下额外核查过，无命中。验证：真实 debug 驱动干净编译启动、端口正常监
+  听，`debug.log` 无新增 "cannot replace"/错误行（仅有与本次修改无关
+  的既有 pragma/nosave 警告）。
