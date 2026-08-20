@@ -616,3 +616,13 @@ commit.
   (with forward declaration), `cat()` null-guard.
 - `work/adm/daemons/logind.lpc` — removed one `printf("%O\n", ob)` debug
   leak.
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/std/room"`：删除 662 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），全部由脚本自动
+删除，无任何历史遗留的 `//`-注释实例、无异常格式。本库没有任何在
+游戏内建造房间的工具（`roommaker`/`rmmaker` 等名称均未找到），因
+此没有"工厂"侧需要修复。已用 `build-debug` 驱动干净启动验证（0 个
+新增编译错误，端口 40090 正常监听，`debug.log` 无新增 "cannot
+replace"/"cannot bind" 行）；未做完整 §10.7 深度游玩测试。
