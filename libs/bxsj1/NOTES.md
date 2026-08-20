@@ -266,3 +266,14 @@ quit 验证的修复，在这份档案自己的存档数据下同样成立。
   跑去找一个够格的对手，或回程翻越到武馆重新用 `kill muren`/
   `suicide -f`）。如实标注为未覆盖，而非默认"和 bxsj 一样所以没问
   题"。
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). Sibling of `bxsj` (diverged
+fork, not byte-identical, but shares this exact bug in the same 24
+files). 24 live `replace_program(ROOM);` occurrences deleted
+(`d/wanshou/*.lpc`, `data/group/groom/*.lpc`,
+`d/cangzhou/dangpu.lpc`). No roommaker.lpc factory-bug variant. Verified
+via a clean native driver boot (zero new `debug.log` errors, port
+listening, killed by exact PID after ~8s).
