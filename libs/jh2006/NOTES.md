@@ -174,3 +174,15 @@ before commit.
 - `work/cmds/imm/update.lpc` — `environment(me)` null-check (§7.106
   path variant).
 - `work/adm/simul_efun/file.lpc` — `cat()` null-guard.
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). Same lineage/shape as
+`bxsj`/`sjecl`/`sjtx2`/`shujian2008`/`shujian3` (shared
+`data/group/groom/*.lpc` cluster), but a different room set: 15 live
+`replace_program(ROOM);` occurrences (`data/group/groom/*.lpc`,
+`d/city/dayuan.lpc`, `d/mr/hc2.lpc`/`hc3.lpc`/`hc4.lpc`,
+`d/kunlun/lang2.lpc`). No roommaker.lpc factory-bug variant. Verified
+via a clean native driver boot (zero new `debug.log` errors, port
+listening, killed by exact PID after ~8s).
