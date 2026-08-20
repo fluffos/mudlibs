@@ -562,3 +562,7 @@ Century/adm-single 家族（自定义 securityd ACL 表）。状态已从过时�
 - `work/adm/simul_efun/file.lpc`
 - `work/cmds/app/update.lpc`
 - `work/clone/user/user.lpc`
+
+## §7.100 sweep (2026-08-19)
+
+Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 378 live occurrences deleted: 374 via scripted sweep (`fix_710_room.py`), plus 4 hand-fixed irregular shapes identical in shape to sibling lib `sj` — `clone/misc/roommaker.lpc`'s string-builder, two copies of `d/fenghuang/fenghuang/taikong.lpc` (space before semicolon), and `d/huang/zoulang4.lpc` (two redundant calls on one CRLF line). 4 already-commented-out instances left untouched. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, port 40026 listening, zero new "cannot replace"/"cannot bind" debug.log lines.
