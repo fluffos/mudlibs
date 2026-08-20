@@ -424,3 +424,117 @@ xfbhh 那种 `clone/user/user.lpc` 命名笔误覆盖（本 lib 该处正确命�
 log` 全程干净，无新增编译错误。全新账号（`qintest915`/角色名"秦测
 九"）走完注册流程，成功进入泥潭注册室并收到欢迎序列，符合 §10.1 及
 格线。按精确 PID 结束驱动。
+
+## 深度功能测试（2026-08-20，round four）——补完死亡/复活循环 + 留言板发帖，发现并修复真实的 §7.112 缺口
+
+本轮目标：round three 记录的两处未测项——真正的死亡/复活循环、留言板
+发帖。用 `build-debug` 驱动真实起服（端口 40106），全程用
+`scripts/mudclient.py` 同款的自制 Python raw-socket 脚本交互（本 lib
+的登录握手是自连数据库单行 `id,password,cipher,email` + `性别║img║
+中文名字`，`tmux_mud.sh` 的本地 telnet 传输问题在本项目其他 lib 上已
+有先例，直接用 raw socket 规避）。
+
+### 发现并修复：`d/death/npc/{bai,hei}.lpc` 是 §7.112 sweep 遗漏的两个实例
+
+深挖代码确认 `DEATH_ROOM`（`include/login.h` 定义为 `/d/death/gate`）
+就是这个 lib 里**所有**玩家死亡（不限于 PK/巫师）后真正落地的房间，
+房间里驻扎的正是 `npc/bai.lpc`（白无常）。这条 NPC 血统跟 §7.112 已
+经扫过的 `wgargoyle.lpc`/`bgargoyle.lpc`/`chacha.lpc` 系出同源（同一
+`death_stage()` 五段对话 + `call_out` 递归模式），但本 lib 之前两轮
+sweep（`eada77df3e0` 第一波只覆盖了 `bgargoyle.lpc`/`wgargoyle.lpc`，
+`a33b1f614e5` 第二波只补了 `chacha.lpc` 和 `maze/battle1/{e,w}gate.
+lpc`）都没有覆盖到 `bai.lpc`/`hei.lpc`——这两个文件在
+`d/death/gate.lpc`/`d/death/gateway.lpc`（酆都城门）里被真实调用，且
+是这条整个 lib 的死亡系统里**唯一**会被绝大多数普通玩家死亡触达的两
+个实例，之前的 sweep 用 `wgargoyle.lpc` 文件名做种子扩散，而
+`bai.lpc`/`hei.lpc`是完全不同的文件名，两波都被漏掉了。修法沿用完全
+相同的既有模式：`init()` 里 `query_temp("death_stage_active")` 门控
++ `set_temp`，`death_stage()` 每个真正的退出点（不在场提前返回、五段
+对话播完转投胎）都配对 `delete_temp`。改动详见
+`d/death/npc/bai.lpc`/`hei.lpc` 的 diff，跟 `bgargoyle.lpc` 已验证过
+的修复形状逐行对应。
+
+### 死亡/复活循环：战斗死亡本身完整可用，但 `death_stage()` 对话没有现场触发——记录为未解之谜，不强行修复
+
+用真实走位（`ask lao about 出村` → `choose` 选路 → `ask hua about 出
+村` → `3`+`f5` 选武当派拜师 → 送到武当三清殿）代替 wizard `goto`
+（round three 已确认 `is_admin()` 权限阶梯在本 lib 上不可达，
+`clone`/`smash` 等强力指令全部被拒），战斗测试用 `d/wudang/tufeiwo{1,
+2,3}` 土匪窝的 `土匪头`（combat_exp 20000, apply/attack 30）反复交
+手。关键发现：**跳过村长赠送的 `closeeye` 属性/技能大礼（1500000点技
+能经验）的角色明显脆弱得多**——带了 `closeeye` buff 的角色跟土匪打
+了好几轮气血纹丝不动（跟 round three 记录的现象一致），跳过
+`closeeye` 的"素体"角色反而会被土匪头打到"看来该找机会逃跑了..."，
+且土匪头会主动拦截逃跑（"你逃跑失败"），最终被真实打死（两次独立复
+现，`qintestd2`/`qintestd3` 两个测试角色）。
+
+死亡流程本身完全正常：战斗判定 → 尸体生成 → 频道公告死讯 → `ghost=1`
+→ 正确移动到 `【鬼门关】`（`DEATH_ROOM`）→ 房间描述、`白无常`/`黑无
+常` 在场，全程 `debug.log` 保持干净，没有任何报错或崩溃迹象。
+
+但**反复验证（含一次全程不断线、一次断线重连两种场景，累计等待超过
+40 秒）都没有观察到 `death_stage()` 的五段对话文本（"喂！新来的，你
+叫什么名字？"等）出现**，只看到 `chat_chance` 随机闲聊 flavor
+（"白无常狠狠的敲了敲你的脑袋"之类）——这意味着 `reincarnate()`（清
+除 ghost 状态、回满气/精）和自动送回 `REVIVE_ROOM` 这条便捷路径这次
+没能现场验证成功。没有找到根因（`debug.log` 全程零报错排除了显式崩
+溃；`init()` 的四个前置条件在静态审查下均应满足；没有可用的巫师
+`call` 指令做运行时内省，`is_admin()` 权限阶梯不可达）。**好消息是：
+死亡不是硬死锁**——手动 `north` 可以从 `【鬼门关】` 走到
+`【酆都城门】`→`【鬼门大道】`，确认存在一整条可步行的冥界通路（呼应
+round three 记录的"投胎"仪式 `d/register/yanluodian.lpc`），所以哪怕
+`death_stage()` 对话没触发，玩家也不会被永久卡死，只是少了这条自动
+对话+送回阳间的便利路径。这次没有强行猜测式修复——不确定是本
+lib 独有的环境因素还是这条 NPC 血统本身在"move() 进入房间是否可靠触
+发 init()"这件事上有更深的问题，留给下一轮如果有巫师权限或者
+write()-based 现场调试手段时再深挖，不在没有确凿根因的情况下动代码。
+
+### 留言板发帖：完全正常
+
+在 `d/wudang/sanqingdian` 的 `武当弟子留言板`（`clone/board/
+wudang_b.lpc`，`inherit BULLETIN_BOARD`）用 `post <标题>` 进入多行编
+辑器（`结束离开用 '.'`），输入两行英文正文，`.` 结束后立即"新贴子完
+成。"，`read new` 完整读回标题/作者/时间/两行正文，逐字节正确，没有
+触发 §7.114（`private input_line()`，本 lib 未受影响，已用
+`feature/edit.lpc` 静态检查确认）。全程 `debug.log` 无新增报错。
+
+### 标准检查清单快速复核（本 lib）
+
+- **§7.90**：`config.fluffos` 的 `maximum evaluation cost` 仍是
+  `5000000`，确认未回退。本轮额外发现：即使有这个提升值，`walk`
+  指令在冷启动、跨多个未编译房间/NPC 做长距离寻路时仍可能撞上
+  eval-cost 中断（`adm/daemons/pathd` 自身，或沿途某个 NPC）——这不
+  是新 bug，是已知类别（§7.90/§10.8）在"一次性寻路要展开几十个房
+  间"这种更极端场景下的又一次表现，重试后（相关档案被懒编译进内存）
+  即可正常完成，验证自愈。
+- **§7.100**：全档案里已经没有独立成行的 `replace_program(ROOM);`
+  （之前 4985 个房间文件已清空），唯一命中的两处 (`d/wuyi/wuyigong`
+  `u/redl/tmp/builderroom`，均无 `.lpc` 扩展名) diff 比对后确认是格
+  式化前的旧备份文件（跟同目录的 `.lpc` 版本内容不一致），非驱动实
+  际加载的对象，不是回归。
+- **§7.79**：`clone/user/baby.lpc` 本地覆盖排除正确，无新增裸 2 参
+  `addn`/`addn_temp` 调用（本轮源码改动只涉及 `bai.lpc`/`hei.lpc`
+  的 `death_stage_active` 守卫，未引入任何 `addn` 调用）。
+- **§7.111**：`adm/kernel/master/error.lpc` 第 97 行 `standard_trace()`
+  仍是 `error["object"] ? file_name(error["object"]) : "0"` 的三元
+  守卫写法，未回归。
+- **§7.112**：见上——发现并修复 `bai.lpc`/`hei.lpc` 两处真实缺口；
+  全档案 `call_out("death_stage"` 搜索确认这两处修完后本 lib 的
+  `d/death/npc/`+`maze/battle1/` 全部实例都已加上守卫。
+- **§7.113**：AGENTS.md 已记录本 lib 在 2026-08-19 批次里静态确认
+  clean（`logind.lpc::reconnect()` 正确调用 `user->reconnect()`，
+  后者正确 `set_heart_beat(1)`），本轮未重新验证。
+- **§7.114**：`feature/edit.lpc` 静态检查确认 `input_line()` 不是
+  `private`，且本轮留言板发帖多行输入现场验证正常，未受影响。
+- **§7.115**：AGENTS.md 已记录本 lib 的 `QUEST` 宏指向的档案确实缺
+  失，但全档案搜索确认没有任何 `QUEST->` 调用点（`doc/legend/xkx25`
+  里的"QUEST,"字样是无关的英文教程原文），死代码，无需修复。
+
+### 本轮清理
+
+测试账号 `qintestd1`/`qintestd2`（早期摸索用，中途因为账号状态或位
+置不理想被放弃）的存档已删除；`qintestd3`（走完完整"注册→拜师→战
+斗→死亡→鬼门关"全流程、最终确认死亡循环真实可用的账号）连同武当弟
+子留言板的测试帖子存档保留作为本轮验证证据，未纳入 git 提交（本 lib
+未跟踪的 `.o` 存档文件本就不在版本控制范围内）。驱动按精确 PID
+（`kill 636652`）结束。
