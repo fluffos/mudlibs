@@ -227,3 +227,20 @@ bind" 新增日志行。按精确 PID 结束驱动；测试期间产生的
 `mrtg`（第三方流量统计）相关四个已跟踪存档文件漂移已
 `git checkout --` 还原，新建的 `wuji`/`qinteste` 存档本就是未跟踪状
 态，未纳入提交。
+
+## AGENTS.md §7.79 修复（2026-08-19）
+
+裸 `addn("prop", value)`（无第三参数）恒为静默无效果，同族
+（`xfbhh`/`hhsj`/`nitan170911`/`nitan6`/`nt6nitan6win`）共通问题，方
+法论/脚本详见 `xfbhh` NOTES.md 对应小节（同一 `fix_addn2.py`）。本
+lib `clone/user/user.lpc` 未发现命名笔误覆盖（正确命名为 `add`），
+只有 `clone/user/baby.lpc` 一处本地覆盖（覆盖 `addn` 未覆盖
+`addn_temp`），排除其 8 处 `addn(...)` 调用。591 处改写，`git diff
+--stat`：339 files changed, 591 insertions(+), 591 deletions(-)，加
+上排除的 8 处，591+8=599，与调查阶段统计精确吻合（`nitan6`/
+`nt6nitan6win` 数字完全一致）。
+
+验证：`build-debug` 驱动真实冷启动，端口 40186 正常监听，`debug.
+log` 全程干净，无新增编译错误。用内建 `guest` 快速账号验证登录直达
+游戏世界（"你连线进入nt6"），无报错。按精确 PID 结束驱动；测试产生
+的 `mrtg` 存档增量已 `git checkout --` 还原。
