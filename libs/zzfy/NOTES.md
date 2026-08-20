@@ -603,3 +603,36 @@ there too, rather than porting blind.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 34 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`/std/room`）在本档案 1,967 处房间文件的 `create()` 里
+紧跟 `inherit ROOM;` 之后又多余调用了一次 `replace_program(ROOM);`
+——AGENTS.md §7.100 记录的同一个休眠 bug。用 `fix_710_room.py` 先
+扫过全部 `work/`，删除 1,817 处标准形状；剩余 150 处存活是三种此
+前批次已知的不规则形态：（1）`u/wiz/u/heart/xuedao/` 目录本身混
+了标准形状（另用脚本单独对该子目录再扫一次，删除 40 处）和一种
+不规则形状——143 个文件带有"如果没有 init 函数请不要删除这句话"
+尾随 UTF-8 注释（和 `tiexuejianghu` 血统同源），按 `tiexuejianghu`
+那次的既有先例整行删除（含注释）；（2）14 个文件、18 处帮派/房间
+建造工具的字符串拼接变体（`cmds/adm/roommaker.lpc` 一份文件里就
+有 3 处不同写法、`d/wiz/xgchen/roommaker.lpc`、`obj/wall.lpc`、
+`u/wiz/u/panguan/{room,rmmaker}.lpc`），手工改成 `str += "...
+setup();\n}\n";`／`room_code += "...setup();\n}\n";`。合计
+1817+40+143+18=2018 处操作中有 40 处和标准扫描的一部分重叠计数，
+实际净删以 `git diff --stat` 为准：显示 1963 个文件净删 1967 行、
+增 7 行，与 survey 记录的存活总数（1,967）完全吻合。`work/data/`
+下没有真实 `.lpc` 源码命中。
+
+驱动干净启动（零新增编译错误、端口 40025 正常监听、`debug.log`
+无任何"cannot replace"/"cannot bind"行）。管理员 `fluffos`/
+`Mud@2026` 实机登录成功，`look`/`score`/`quit` 均正常。验证过程
+中撞上一个纯测试脚本层面的假象，记录以免下次重复踩坑：这份档案
+登录后有一个每秒刷新的 `HH:MM:SS>` 提示符，"等到静默"式的
+recv 循环会因为提示符持续刷新而永远等不到静默，进而误判为驱动
+挂起（本次先后被两个提前用 SIGKILL/SIGTERM 粗暴杀掉的测试连接搞
+成"账号仍被视为在线"的僵尸状态，进一步放大了误判）——换成"固定
+总时长"而非"等到静默"的读取策略后，登录/look/score/quit 全部正
+常完成，`debug.log` 全程干净，确认不是本次改动引入的回归，也不
+是真实的驱动 bug。管理员存档的时间戳漂移已用 `git checkout HEAD
+--` 还原，未提交。驱动按精确 PID 结束。
