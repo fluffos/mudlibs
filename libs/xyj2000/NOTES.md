@@ -44,3 +44,7 @@
   正常，不需要任何修复。
 - **本次没有测试**：拜师/门派、商店（时间主要花在追查/验证留言板
   bug 的完整范围上，留给后续深挖）。
+
+## §7.100 sweep (2026-08-19)
+
+Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 142 live occurrences deleted: 141 via scripted sweep (`fix_710_room.py`), plus 1 hand-fixed roommaker-tool template (`obj/roommaker.lpc`, simple string-builder variant). 1 already-commented-out instance left untouched. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, zero new "cannot replace"/"cannot bind" debug.log lines; confirmed serving via raw-socket connect on port 40155.
