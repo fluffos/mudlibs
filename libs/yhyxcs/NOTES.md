@@ -301,3 +301,12 @@ recursion note above). Killed the driver by exact PID when done.
 - `libs/yhyxcs/work/obj/user.lpc`
 - `libs/yhyxcs/work/adm/obj/master.lpc`
 - `libs/yhyxcs/work/adm/simul_efun/file.lpc`
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). 1 live
+`replace_program(ROOM);` occurrence in `d/test/temple.lpc`'s `create()`.
+No room-building tool exists in this lib. Fixed by deleting the
+redundant line. Verified via a clean native driver boot (zero new
+`debug.log` errors, port listening, killed by exact PID after ~8s).
