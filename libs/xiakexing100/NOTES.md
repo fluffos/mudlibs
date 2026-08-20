@@ -416,3 +416,16 @@ from` 追踪行、未使用局部变量），无运行时错误。驱动按精�
 `test1234` 不同，二者都在 NOTES 中留档过）登录，`目前权限：(admin)`
 确认，车马店→南大街→车马店多房间走访无误，`quit` 干净退出，全程
 无新增 "cannot replace"/"cannot bind" 日志行。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 4 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
