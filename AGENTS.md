@@ -7576,6 +7576,69 @@ Next up by impact: `shenmo` (1,957) and onward — see
 `candidates_ge100.tsv`/`FINDINGS.md` in the survey's scratchpad for
 the full ranked list.
 
+**Fix-phase batch 10 (2026-08-19), next 10 libs by impact**: continuing
+straight down the ranked list from batch 9 — `shenmo` through
+`xkyx3b` (ranks 81-90 of the >=100 list). Same method as batches 1-9.
+
+| lib | live occurrences deleted | roommaker copies fixed | commit |
+|---|---|---|---|
+| shenmo | 1,957 | 8 copies (`obj/roommaker.lpc`, `sjsh/obj/roommaker.lpc`, `sjsh/u/calvin/obj/roommaker.lpc`, `u/calvin/obj/roommaker.lpc` — separate non-symlinked file, `u/mery/obj/roommaker.lpc` simple variant; `sjsh/u/koker/obj/teshu/roommaker.lpc`, `sjsh/u/qkl/roommaker.lpc`, `u/koker/obj/teshu/roommaker.lpc`, `u/qkl/roommaker.lpc` `room_code`-prefixed 3-occurrence variant) | `0ede7617eba` |
+| wdxtym | 1,845 | 0 (this lib's `roommaker.lpc` template already generated rooms with the call pre-commented, never had the live factory bug) | `2fb55ae467d` |
+| xhcii | 1,798 | 1 (`clone/misc`, simple string-builder variant) | `370dcebf033` |
+| xkxz2 | 1,715 | 2 (`clone/misc`, `cmds/debug`, both simple string-builder variant) | `6a588a3e786` |
+| xkxc98sj | 1,715 | 2 (`clone/misc`, `cmds/debug`, sibling of `xkxz2`, same shape) | `4be1945ba70` |
+| njhhdxdes2hx | 1,703 | 2 tool copies (`obj/roommaker.lpc`, `obj/wizard/roommaker.lpc`) + a third, different-kind factory: `d/heimuya/midao/mud/room/flatroom.lpc`, a maze/area room-code generator whose `fprintf()` call baked the bug into every auto-generated maze room — plus 261 hand-fixed `d/road/*.lpc` files with a NEW irregular shape (`setup(); replace_program(ROOM);` sharing one line) | `e5302841c89` |
+| ldtx | 1,516 | 0 (tool template never had the bug) | `c8b30647ea9` (+ `da6226470d3` fixing an accidental `git add` of unrelated pre-existing untracked save files, see below) |
+| ldtxii | 1,516 | 0 (tool template never had the bug, except one occurrence inside its own heredoc that the script itself caught) | `545a3b1dc8f` |
+| xkyxciii | 1,452 | 0 (no room-building tool exists in this lib) | `6f127d86ee2` |
+| xkyx3b | 1,452 | 0 (no room-building tool exists in this lib) | `4f8090e6e01` |
+
+**Batch 10 total: 16,669 live occurrences deleted across 10 libs.**
+Running total after batches 1-10: **90 libs fixed, 302,294 live
+occurrences deleted** (285,625 + 16,669). Notable finds:
+`njhhdxdes2hx` surfaced this sweep's first NEW irregular shape since
+batch 8 (the shared-line `setup(); replace_program(ROOM);` variant,
+261 files) and its first THIRD kind of factory bug beyond
+`roommaker.lpc`-style tools — a maze/area room-code generator
+(`flatroom.lpc`) that writes complete new `.lpc` room files to disk,
+each one born with the bug already baked in via an `fprintf()` call
+emitting the redundant line; same one-line-deletion fix applied to the
+generator itself. `xkxz2`/`xkxc98sj` are a near-byte-identical sibling
+pair (2,242 differing files out of ~6,900, mostly `adm/daemons/`
+content, NOT a free pass) both fixed the same way after independent
+verification. `xkyxciii`/`xkyx3b` are two DISTINCT snapshots of the
+same "侠客英雄传III" game (different archives/ports) that both turned
+out to have no room-building tool at all, and both had no pre-existing
+admin save file in `data/login/` — verified via a fresh test-account
+registration through the full id→confirm→Chinese-name→password→
+email→gender→race flow instead of an existing admin login. `ldtx`/
+`ldtxii` (雄霸天下/LDJ lineage, GB/BIG5 encoding-selection login) both
+had room-building tools whose generated-room templates never included
+the redundant call to begin with — a genuine "never had this variant
+of the bug" case, not a missed fix. **Process note**: this batch's
+`ldtx` commit accidentally used a bare `git add libs/ldtx/work`,
+which swept up 5 pre-existing UNTRACKED player-save files (predating
+this session, unrelated to the fix) into the commit; caught via
+post-push review and corrected with an immediate follow-up commit
+(`git rm --cached`, restoring untracked status without deleting the
+files) — every subsequent lib in this batch used `git add -u` (updates
+tracked files only) plus an explicit `NOTES.md` add instead, and that
+discipline should carry forward to all future batches: never
+`git add <lib>/work` on a directory that might contain untracked
+save-data siblings. Also on `xkyxciii`, an `rm -rf` cleanup of a test
+account's save directory almost took a tracked `.donotdelete`
+placeholder file in the adjacent `data/login/s/` directory with it —
+caught via `git status` before committing and restored with
+`git restore`. All ten libs verified via a real `build-debug` driver
+boot (clean compile, port listening, zero new "cannot replace"/"cannot
+bind" `debug.log` lines) plus a live login/registration + look/quit
+spot-check each. **76 libs from the survey's >=100 list remain
+unfixed** (166 total >=100 candidates minus 90 now fixed). Next up by
+impact: `sanjieshenhua` (1,335), `kxkj`/`kxkjii2` (1,310 each),
+`xsfyssjb`/`fengyun434` (1,188 each), and onward — see
+`candidates_ge100.tsv`/`FINDINGS.md` in the survey's scratchpad for
+the full ranked list.
+
 ### 7.101 A room's `exits` mapping omits directions its own `valid_leave()` still has full logic for, making the shared movement dispatcher reject the command before `valid_leave()` ever runs — silently disabling this codebase's entire death-recovery mechanism
 
 Found on `kxkjii2`'s §10.7 deep functional test (ES II/Annihilator
