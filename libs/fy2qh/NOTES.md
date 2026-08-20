@@ -619,3 +619,18 @@ analyzed — nothing new to add this pass).
   (with forward declaration), `cat()` null-guard.
 - `work/adm/daemons/logind.lpc` — removed two `printf("%O\n", ob)` debug
   leaks (both name-confirmation branches).
+
+## §7.100 sweep fix (`ROOM` base-class redundant `replace_program()`)
+
+`#define ROOM "/std/room"`: deleted 525 redundant, live, standalone
+`replace_program(ROOM);` lines (kept `inherit ROOM;`) — 524 caught by
+the scripted sweep, plus 1 hand-fixed instance in this lib's
+room-building tool (`obj/roommaker.lpc`)'s "clone this room"
+string-builder template, same shape as sibling `fy2`. `work/data/`
+holds 85 real `.lpc` source files (per-account starting-equipment
+templates, same shape as `fy2`), independently checked and confirmed
+free of the bug pattern. 3 pre-existing `//`-commented instances
+remain untouched, confirmed harmless. Verified via a clean
+`build-debug` driver boot (0 new compile errors, port 40091 listening,
+zero new "cannot replace"/"cannot bind" `debug.log` lines); no full
+§10.7 gameplay walkthrough this pass.
