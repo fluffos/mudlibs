@@ -860,3 +860,14 @@ Re-tested against the freshly-rebuilt `build-debug/src/driver`（post
 状态导致指令被暂时阻塞）确认可正常重新编译。`log/debug.log` 时间
 戳全程未变化（`Aug 5`，早于本次会话，且文件本身为空），确认无新增
 未捕获运行期错误。驱动最终按精确 PID kill，`ps -p` 确认已退出。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/inherit/room/room"`：删除 824 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`），与手足档案
+`jqxz2008dlx` 同一血统同一形状。`clone/misc/roommaker.lpc` 同样有
+两套模板——"造一间空房间"的 heredoc 本来干净，"克隆我所在的房间"
+命令的字符串拼接模板把同一枚多余的 `replace_program(ROOM);` 烤进
+了每一个新克隆的房间，已同步修正。已用 `build-debug` 驱动干净启动
+验证（0 个新增编译错误，端口正常监听）；未做完整 §10.7 深度游玩
+测试。
