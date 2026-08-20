@@ -259,3 +259,7 @@ log` 全程干净，无新增编译错误。用内建 `guest` 快速账号验证
 录），无法用 `update` 现场触发这个懒加载 NPC 档案的重新编译，本次
 验证止于全新驱动进程干净冷启动（零新增编译错误）+ 修复内容与已证实
 正确的兄弟库版本逐字节比对一致，未做真正的游戏内触发验证。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/bai.lpc`, `d/death/npc/hei.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
