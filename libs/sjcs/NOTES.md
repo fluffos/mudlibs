@@ -195,3 +195,18 @@ removed.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 46 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/std/room"`（`include/globals_old.h` 也定义了同一
+宏值，但该文件未被任何源码 include，是死文件，未处理）：删除 479
+处多余的、独立成行的 `replace_program(ROOM);`（保留
+`inherit ROOM;`），475 处脚本自动删除；另有 2 份房间建造工具副本
+手动修正——`clone/misc/roommaker.lpc` 是标准的"两套模板"简单变体
+（1 处）；`obj/roommaker.lpc` 是"3 处出现"`room_code`/`str` 变体
+（一处 `room_code +=` 拼接 + `do_saveroom()` 里两条分支各一处，共
+3 处）。`work/data` 下未发现额外 `.lpc` 源文件。修复后全库仅剩 8
+处历史遗留的 `//`-注释掉实例，均确认无害、未改动。已用
+`build-debug` 驱动干净启动验证（0 个新增编译错误，端口 40097 正常
+监听，`debug.log` 无新增 "cannot replace"/"cannot bind" 行）；未做
+完整 §10.7 深度游玩测试。
