@@ -535,6 +535,79 @@ dtsl/llmud 血统的相关分支。
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 55 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
 
+## 深度功能测试（round four/五, AGENTS.md §10.7, 2026-08-20）：真实战斗→死亡→重生全链路验证
+
+本轮专门补上第二轮结尾 "Not reached this pass" 里悬而未决的战斗/死亡/重生
+链路。原文档担心新手礼包清不掉 `combat_exp` 门槛（10000-20000）而摸不到
+`qiecuo` 陪练，且 `fight` 指令对每个可及 NPC 都 `accept_fight()` 硬编码拒绝
+——但那全是 `fight`（安全切磋指令）的限制。重新读 `cmds/std/kill.lpc` 才发现
+**真正的杀伤性战斗走 `kill` 指令，其 `valid_kill()`（`cmds/std/valid_kill.h`）
+只限制玩家互杀（PK 冷却），对 NPC/野兽完全不设防**——`accept_kill`/
+`combat_exp` 门槛根本不适用于 `kill`。用 `fluffos`(admin) 账号 `goto
+/d/huashan/shanlu6` 站到一只野鸡(yeji)边上，`kill ji` 验证。
+
+**关键发现（非 bug，纯游戏机制）**：无技能状态下双方 `get_attack()` 恒为 0
+——`adm/daemons/combatd.lpc` 的 `get_attack()` 只有在学过名为 `dodge` 的技能
+或 `query("dodge")` 轻功列表非空时才会用身法加成，否则 `me_attack` 死锁在
+0，导致命中判定 `random(ap+vp) > vp*2/3 || vp*3 < ap` 在 `ap=vp=0` 时恒假
+——连续 100+ 回合、2 分钟实时对打双方 0 命中，纯属"完全没学过技能的两个人
+在互殴中谁都打不中谁"的真实力学结果，不是 bug（无编译错误/运行时错误/
+driver 拒绝，符合 AGENTS.md 判定标准）。用 `arch` 级 `setskill ji dodge
+300` 给野鸡技能（对应"用 admin 工具加速进战斗位置，但不绕过战斗本身"的授权
+范围）后，`kill ji` 立即在几回合内通过真实伤害/破防判定（`receive_wound`
+使 `eff_kee` 转负）杀死了 fluffos——`die()`→`DEATH_ROOM->start_death()`→
+移动到 `/d/death/gate`（鬼门关）→ 5 秒后房间自身 `init()`/`run()` 拉入
+`/d/death/gateway`（阎罗大殿，`d/death/npc/yanluo.lpc`）。
+
+**顺带验证了 §7.112 缺口修复（`d64ace0`，2026-08-18 提交，此前未在本文档
+记录）**：`yanluo.lpc`'s `init()` 现在有 `query_temp("in_death_stage")`
+守卫，防止 `enable_commands()`（每次 `reconnect()` 都会广播）叠加出第二条
+独立 `death_stage()` call_out 链。本轮实测（含一次断线重连穿过鬼门关房间）
+只观察到唯一一条完整的五段对话链（"喂新来的"→"兵荒马乱"→"翻账册"→"阳寿未
+尽"→"罢了罢了你走吧"），无重复/错乱叙事，`reincarnate()` 后正确按
+`combat_exp<20000` 分支送到 `/d/slwg/zoulang1`（石龙武馆走廊，而非
+REVIVE_ROOM）——修复在真实死亡流程下工作正常。
+
+**排查过一个疑似 bug、确认为无害死代码，未改动**：`feature/damage.lpc`
+`die()` 结尾 `DEATH_ROOM->start_death(this_object());`——全库搜索确认
+`start_death` 从未被定义在任何文件（`/d/death/gate.lpc` 本身没有这个函数，
+房间的死亡流程其实完全靠自己的 `init()`/`run()` call_out 完成，和
+`start_death` 无关）。担心这是每次玩家死亡都会触发的未定义函数调用，但两次
+实测死亡全程 `debug.log` 和玩家会话都**没有任何"Undefined function"报错或
+异常输出**——这是 MudOS/FluffOS 系语言的标准行为：通过 `->` 调用一个目标
+物件上根本不存在（未声明）的函数会静默返回 0，不会抛出可捕获的运行时错误
+（区别于"声明了原型但没有函数体"的情况）。没有编译错误/运行时错误/driver
+拒绝信号，按 AGENTS.md 判定标准不算 bug，是纯粹的死代码/冗余调用，未修改。
+
+**结论**：本轮是本库第一次真正打通"真实战斗指令 → 真实伤害判定 → 真实死亡
+→ 鬼魂对话 → 真实重生"全链路，全程用 `goto`/`setskill` 等合法 admin 工具
+加速就位，但战斗判定、伤害结算、死亡分支、重生房间选择全部走真实游戏逻辑，
+未绕过。`debug.log` 除已知的、与本次测试无关的 `/d/gaoli/npc/xiake` 背景
+daemon "Read access denied"（此前几轮已记录，job 系统内容缺口，非本次死亡
+链路触发）外无新增错误。测试角色为已有的 `fluffos` 管理员账号（复用而非新
+建，因死亡本身不需要新角色；确认 `env/immortal` 未设置，纯合法弱身位承受
+了真实死亡)。
+
+**标准清单核对**（全部通过，本库属于"已修复完好"一类）：
+- §7.90：`config.fluffos` `maximum evaluation cost : 5000000`——正确。
+- §7.100：`grep -rn "replace_program(ROOM)" work/` 全部落在注释行
+  （`//        replace_program(ROOM);`）或文档文件，无存活实例——延续上次
+  扫描修复的结论。
+- §7.111：真正被 `config.fluffos` 指向的 master 文件是 `adm/obj/master.lpc`
+  （非同名的死代码 `adm/master.lpc`），其 `standard_trace()` 已有
+  `objectp(error["object"]) ? file_name(...) : "(driver)"` 空值防护。
+- §7.112：见上——`yanluo.lpc` 已在两天前的 corpus 扫描中修复，本轮首次做了
+  真实死亡链路的现场复现验证。
+- §7.113：`obj/user.lpc` `net_dead()`/`reconnect()` 形状正确
+  （`set_heart_beat(0)`/`set_heart_beat(1)` 对称），延续第二轮结论。
+- §7.79：本库全文搜索 `addn(`/`addn_temp(` 零命中——不适用（未使用该
+  simul_efun）。
+
+测试结束后按精确 PID kill 掉 driver；`fluffos` 存档（`data/user/f/
+fluffos.o`、`data/login/f/fluffos.o`）与本轮死亡测试连带触碰的
+`data/orgroom/baling.o`（帮会/门派房间状态，战斗/重生流程的正常副作用）
+一并 `git add -u` 提交，均为合法游戏状态变化，非测试垃圾。
+
 ## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
 
 `#define ROOM "/std/room"`：删除 687 处多余的、独立成行的
