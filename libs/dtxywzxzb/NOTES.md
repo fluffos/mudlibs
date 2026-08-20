@@ -137,3 +137,7 @@ reverted before commit.
 - `work/adm/simul_efun/file.lpc` — `cat()` null-guard.
 - `work/adm/daemons/logind.lpc` — removed one `printf("%O\n", ob)` debug
   leak.
+
+## §7.100 sweep (2026-08-19)
+
+Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 235 live occurrences deleted: 234 via scripted sweep (`fix_710_room.py`), plus 1 hand-fixed roommaker-tool template (`obj/roommaker.lpc`, simple string-builder variant, same lineage as `xiyouji2006`/`xyj2006n`/`xyj2006zzzhx`). 6 already-commented-out instances left untouched. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, zero new "cannot replace"/"cannot bind" debug.log lines; confirmed serving via raw-socket connect showing the real login banner on port 40150. Pre-existing untracked debris (`data/zhangmen/zhangmen_{dapeng_mingwang,master_puti}.o`) confirmed left untouched.
