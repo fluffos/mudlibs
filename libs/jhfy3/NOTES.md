@@ -110,3 +110,16 @@ d/city/xxci1.lpc: cannot replace a program with function references, ignored.
 - **§7.115**（`QUEST` 宏指向缺失文件）：`include/globals.h` 的 `#define QUEST "/inherit/quest"` 对应的 `inherit/quest.lpc` 确实存在且内容完整（`quest_give`/`quest_ask`/`quest_kill`），不适用（本档案不是 aoxiangtianji 那种孤立个案）。
 
 **结论：本档案没有发现新 bug，第四轮补测的三个系统（拜师/购物/寄信）全部工作正常，标准积压清单六项复核全部通过。** 测试用账号 `shenqingyang` 的存档在测试结束后已删除，不留痕迹；`fluffos` 管理员账号的存档因正常使用（`last_on` 等字段）产生了预期内的小改动。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 4 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
