@@ -48,3 +48,36 @@
 - 留言板 `post` 已 live 验证：在武馆前院的"襄阳武馆留言板"发帖成
   功，"留言完毕"。
 - **本次没有测试**：帮派建板流程（原因见上）、门派拜师、商店。
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`/inherit/room/room`）在本档案 2,004 处房间文件的
+`create()` 里紧跟 `inherit ROOM;` 之后又多余调用了一次
+`replace_program(ROOM);`——AGENTS.md §7.100 记录的同一个休眠 bug。
+本档案就是 §7.100 条目本身引用的"`sje`-precedent"（bug 长在工厂
+里，不只是出货内容里）：不只 `clone/misc/roommaker.lpc` 一份房间
+建造工具，帮派管理指令集 `cmds/minister/*.lpc`（`accept`、`ally`、
+`resign`、`banish`、`declare`、`linkroom`、`mkroom`（2 处）、
+`addnpc`（2 处）、`add_action`、`add_desc`、`set_long`、
+`set_short`）、`cmds/king/build_bank.lpc`（2 处）、`cmds/adm/
+ra.lpc` 也全部把这个 bug 烤进了各自的房间字符串拼接模板里——一共
+14 个文件、18 处字符串拼接变体。用 `fix_710_room.py` 扫过
+`work/`，删除 1,976 处标准形状；`work/data/group/groom/` 下 10 个
+真实 `.lpc` 房间源文件（帮派废墟场景，`inherit ROOM;` 独立标准形
+状，被脚本默认的 `data/` 排除规则跳过）另外单独用同一脚本对该子
+目录扫过，删除 10 处；上述 18 处字符串拼接变体用一个小 Python 脚
+本（二进制模式，逐文件计数校验）批量替换成
+`str += "\n\tsetup();\n}\n";`。1976+10+18=2004，与survey记录的
+存活总数完全吻合；`git diff --stat` 显示 1998 个文件净删 2004
+行、增 18 行，同样吻合。`work/data/group/npc`、`work/data/group/
+obj` 下确认没有真实命中。
+
+驱动干净启动（零新增编译错误、端口 40146 正常监听、`debug.log`
+无任何"cannot replace"/"cannot bind"行）。本档案此前从未被真实注
+册过（只有 wizlist 里的 `fluffos (admin)` 条目，没有存档）——用完
+整注册流程（UTF-8 编码：BIG5 询问答 N、id、密码 `Mud2026A`、中文
+名"秦风"、天赋 0 随机+接受、邮箱、性别 m）创建，落地"门廊"，
+`look`/`score`/`quit` 均正常，全程 `debug.log` 保持干净。新建的
+管理员存档（`data/{login,user}/f/fluffos.o`）已提交，补全此前
+NOTES.md 记录过、但从未真正落地的管理员播种。驱动按精确 PID 结
+束。
