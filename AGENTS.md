@@ -9983,6 +9983,34 @@ applies: grep every `.lpc` file's `new()`/`carry_object()`/bare-`->`
 argument literals against the actual on-disk casing of files they
 reference, not just inside room `create()`s.
 
+**Confirmed instance hitting a vendor's `list` command, `mohuanshiji`'s
+round-four §10.7 re-test**: same class, two new wrinkles. First, the
+mismatch was at the DIRECTORY level, not just the filename — `clone/
+ARMOR/` (uppercase) on disk vs. every reference using lowercase `/clone/
+armor/...`, so even the few files inside that already had a correctly-cased
+lowercase basename (`fenghuang.lpc`, `hammer.lpc`) were still broken by the
+parent directory's case alone. Second, the crash site was
+`feature/vendor.lpc`'s `do_vendor_list()`: `goods[name[i]]->query("name")`
+on a `vendor_goods` mapping's string values, with no existence guard —
+this fires on the vendor NPC's `list` command, i.e. the very first thing
+any player does before buying anything at that shop, not gated behind a
+room's first-visit or a random branch. All 10 of one weapon-shop NPC's
+`vendor_goods` entries pointed at this broken directory, so `list` (and,
+had anyone gotten past it, `buy`/`value` too, via the identical unguarded
+`->` in `buy_object()`/`complete_trade()`) was 100% broken for every
+player, every time. Given the fix is mechanical and low-risk, extended the
+same on-disk-casing audit to the lib's ENTIRE `clone/` item tree (not just
+the one broken directory) by cross-referencing every `/clone/...` string
+literal in the corpus against actual on-disk filenames — found 31 more
+genuinely broken (referenced-but-wrong-case) item files across
+`clone/`, `clone/gift/`, `clone/bq/`, and `clone/mohuan/`, all `git mv`-
+renamed the same way. **Worth checking as a standing step on any future
+lib's `feature/vendor.lpc`-style shop test**: if `list` throws `*call_other()
+couldn't find object` instead of showing a price list, check the
+`vendor_goods` mapping's target paths against actual on-disk casing
+(including the containing directory's own case) before assuming it's a
+content gap.
+
 ### 8.16 A reconnect-kick branch re-arms `input_to()` with a wrong-typed/missing argument AND no player-visible prompt, so the player's very next arbitrary keystroke is silently misrouted into a completely different flow
 
 Found on `yxjh`'s deep functional test (§10.7), reproduced live via two

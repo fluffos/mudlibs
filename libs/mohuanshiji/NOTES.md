@@ -581,3 +581,148 @@ ES2 大家族的经典布景，唐僧、店小二、千里眼 NPC 驻场）出�
 ## §7.100 sweep (2026-08-19)
 
 Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 274 live occurrences deleted: 269 via scripted sweep (`fix_710_room.py`), plus 5 hand-fixed roommaker-tool occurrences across 3 tool copies (`clone/misc/roommaker.lpc`, `obj/roommaker.lpc` — simple variant; `cmds/wiz/roommaker.lpc` — "room_code"/`str` 3-occurrence variant). 7 already-commented-out instances left untouched. One occurrence NOT fixed: `d/city/center2.lpc` is already syntactically broken independent of this bug (unquoted strings like `set(short, 十字街头)`, stray `??` token, no semicolons at all in `create()`) — never compiles regardless, out of scope. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, port 40092 listening, zero new "cannot replace"/"cannot bind" debug.log lines. Pre-existing untracked test-account debris (`data/{login,user}/m/mhsj{dive,qin}.o`) confirmed left untouched.
+
+## Round-four re-test (2026-08-20): 拜师/留言板/当铺·兵器铺 + standing-checklist sanity pass
+
+Covered exactly the three areas round-two/round-three had explicitly left
+untested for time, plus a sanity re-check of the standing bug catalog
+items called out for this pass.
+
+**Checklist sanity pass** (all confirmed already correct/intact, no
+regressions, nothing new needed):
+- **§7.90** (eval-cost) — `config.fluffos` still has `maximum evaluation
+  cost : 5000000`, intact.
+- **§7.100** — re-confirmed intact (see sweep entry directly above).
+- **§7.111** (`standard_trace()`/`report_error()` unguarded
+  `file_name(error["object"])`) — both call sites in
+  `adm/obj/master.lpc` already have the `(undefinedp(error["object"]) ||
+  !error["object"]) ? "(none)" : file_name(error["object"])` guard from
+  the corpus sweep.
+- **§7.112** (`init()` `call_out` reconnect-duplication) — all 4
+  `d/death/npc/{wgargoyle,bgargoyle,pang,b}.lpc` death-desk NPCs already
+  guard with the `death_stage_active` temp flag.
+- **§7.113** (netdead reconnect losing `heart_beat`) — `obj/user.lpc`'s
+  `reconnect()` unconditionally does `set_heart_beat(1)`, and
+  `adm/daemons/logind.lpc`'s driver-invoked `reconnect()` calls
+  `user->reconnect()` unconditionally; correct lineage, no bug.
+- **§7.114** (`private` `input_to()` mixin callback) — `feature/edit.lpc`'s
+  `input_line()` is plain (not `private`); live-verified below with a
+  real multi-line board post.
+- **§7.115** (missing `QUEST` macro target) — `include/globals.h`'s
+  `QUEST` points at `/std/quest`, and `std/quest.lpc` genuinely exists in
+  this archive. Not applicable.
+- **§7.79** (bare 2-arg `addn`/`addn_temp`) — this lib has **zero**
+  `addn(`/`addn_temp(` call sites anywhere in the whole tree (grepped),
+  and no local `addn` definition either. Not applicable — this lib was
+  never in the affected lineage.
+
+**1. 拜师 (sect apprenticeship) — mechanism confirmed working (clean
+rejection).** Located the command (`cmds/std/apprentice.lpc`) and a
+reachable, no-existing-family-required sect master, 秦琼 (`d/jjf/npc/
+qinqiong.lpc`, in `d/jjf/keting`正厅). `apprentice qin` (id `qin`, not
+`qinqiong` — the alias list is `qin qiong`/`qin`/`shubao`/etc., space-
+separated multi-word ids only) correctly resolved the target and
+triggered `attempt_apprentice()`, which rejected on the admin test
+character's insufficient `combat_exp` (< 100000) with an in-character
+reason ("这位小兄弟还是先去跟本府家将打打基础吧！") — exactly the
+"reject with a sensible reason" clean-pass shape. Re-verified identical
+on a completely fresh driver boot. No crash, no `debug.log`/boot-log
+error either time.
+
+**2. 留言板 (board posting) — confirmed fully working.** `post board` at
+`南城客栈留言板` (`/obj/board/nancheng_b.lpc`, `inherit BULLETIN_BOARD`
+with no stray `replace_program()` — matches the already-applied §7.86/
+§7.100 fixes) entered the line-editor cleanly; two content lines plus a
+title line were all accepted (no "什么？" misroute on any line, ruling
+out the §7.114 shape), `.` ended the post with "留言完毕。", and `read 1
+board` immediately after showed the full multi-line content correctly
+saved with the right author/timestamp. Persisted correctly across a full
+driver restart. Test post removed afterward via the in-game `discard 1
+board` command (admin-authored, cleanly deletable) to leave the board
+back in its pre-test empty state — `data/board/` directory removed
+after, no residue.
+
+**3. 当铺 (pawnshop) / 兵器铺 (weapon shop) — REAL BUG FOUND AND FIXED.**
+
+`当铺` (`/d/city/dangpu.lpc`, `inherit HOCKSHOP`) worked cleanly:
+`value`/`pawn`/`sell`/`retrieve <stamp>` all round-tripped correctly on
+a cloned test weapon (典当 480 银, 卖断 640 银, 赎回 560 银 — sane,
+consistent conversion math each time). `list` correctly reported "当铺
+目前没有任何货物可卖" since this pawnshop has no `vendor_goods` of its
+own (by design — it only deals in player-pawned items, not a curated
+sale list).
+
+`兵器铺` (`/d/city/bingqipu.lpc`) crashed hard: `list` (i.e. simply
+browsing the shop's stock, the very first thing any player does before
+buying) threw an uncaught driver-level error on every single call:
+```
+执行时段错误：*call_other() couldn't find object '/clone/armor/whip'.
+程序：/feature/vendor.lpc 第 48 行
+```
+Root cause: `feature/vendor.lpc`'s `do_vendor_list()` does
+`goods[name[i]]->query("name")` on each `vendor_goods` string value
+directly (an implicit lazy-compile `call_other`), with no existence
+guard — and **every one of the vendor 萧萧's (`d/city/npc/xiaoxiao.lpc`)
+10 `vendor_goods` entries** pointed at `/clone/armor/<item>`, none of
+which resolved, because the whole directory on disk was
+`clone/ARMOR/` (uppercase) with 14 of its 21 item files ALSO carrying an
+uppercase basename (`WHIP.lpc`, `SWORD.lpc`, `MACE.lpc`, etc.) — the
+exact same "Windows-authored uppercase directory/filename vs. a
+lowercase path baked into the referencing code" shape this lib's own
+`adm/daemons/CHANNELD.lpc`-vs-`CHANNEL_D` bug already documented above,
+just one level up (a whole directory, not one file) and hitting a much
+more central, always-reachable code path (`list` in ANY shop using this
+NPC's item catalog) instead of a rarely-exercised daemon call site. This
+made the entire 兵器铺 permanently unusable for every player — `list`
+never worked, and `buy`/`value` on any of its 10 items would have hit
+the identical unguarded `->` call in `buy_object()`/`complete_trade()`
+the moment anyone tried.
+
+**Fix**: renamed `clone/ARMOR/` → `clone/armor/` and the 14
+uppercase-basename files inside it to lowercase (`bang.lpc`,
+`blade.lpc`, `dun.lpc`, `fork.lpc`, `jinjia.lpc`, `kui.lpc`, `mace.lpc`,
+`pao.lpc`, `pifeng.lpc`, `shoes.lpc`, `spear.lpc`, `staff.lpc`,
+`sword.lpc`, `whip.lpc`, `zhi.lpc`) — all via `git mv`, content
+untouched, matching every `/clone/armor/<lowercase-id>` reference
+already in the code (corpus-wide grep confirmed exact 1:1 coverage, no
+orphaned or newly-broken references either direction).
+
+**Extended sweep of the same bug class, whole `clone/` tree.** Given
+this was a real, live-reachable crash and the fix pattern is mechanical
+and low-risk, ran the same "uppercase-basename file/dir vs. a lowercase
+reference elsewhere in the corpus" check across all of `clone/` (not
+just `armor/`), cross-referencing every `/clone/...` string literal in
+every `.lpc`/`.h` file corpus-wide against the actual on-disk filenames.
+Found **31 more** genuinely-broken (referenced-but-case-mismatched)
+files, all suffering the identical fate — silent, unconditional
+`->query()`/`new()` crashes the moment anything actually touched them
+(NPC weapon-equip calls, gift-item grants, event/魔幻-item spawns):
+`clone/{dan,qinghong,jiasha,tiekui,yinjia,bi,dun}.lpc` (top-level),
+`clone/gift/{lingzhi,bingtang,xisuidan,xiandan}.lpc`,
+`clone/bq/bang.lpc`, and 18 files under `clone/mohuan/`
+(`{spear,qin,fork,armor,jindao,pifeng,staff,whip,cloth,shoes,shendan,
+sq,qingting,dun,mobang,axe,kui,sengxie,xiandan}.lpc`). All renamed the
+same way (`git mv`, content untouched). Re-ran the full corpus-wide
+scan afterward: **zero remaining case-mismatched `/clone/...`
+references** anywhere in the lib. (A separate, larger set of `/clone/...`
+references — `d/hen/`-adjacent weapon items, `d/wuguan/`'s
+`CLOTH_OB`/`WEAPON_OB` macro targets, a handful of `/clone/gift/` and
+`/clone/book/` paths — genuinely have no on-disk file under ANY case
+variant; left alone as pre-existing content gaps, not this bug.)
+
+**Verification**: live-tested end-to-end on a freshly rebooted driver
+(new PID, full recompile) — 兵器铺's `list` now shows all 10 weapons
+with correct prices, `buy mace from xiao` completed a real gold-for-item
+transaction (deducted the listed price, item appeared in inventory), and
+the full 当铺 `value`/`pawn`/`sell`/`retrieve` cycle was re-run
+end-to-end on the purchased item with correct currency math throughout.
+Zero errors in the boot log across both driver runs (pre-fix crash was
+player-visible in-session; post-fix, `list`/`buy` on this and every
+other renamed item path produced no error at all). Driver killed by
+exact PID (`kill -TERM`, not `pkill`) after testing. Admin account
+(`fluffos`) inventory/gold left in its post-test state (matches this
+lib's established convention of leaving the working admin seed account
+as a normal, actively-used account); the synthetic board test post and
+its resulting `data/board/` save file were both removed, and the only
+remaining untracked debris is the pre-existing `mhsj{dive,qin}` test
+account pair already documented above (left untouched).
