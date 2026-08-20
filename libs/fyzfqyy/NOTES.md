@@ -302,3 +302,21 @@ content-gap trace. Driver killed by exact PID after testing; incidental
 ### Files modified this pass
 
 - `work/adm/simul_efun/file.lpc` — `cat()` null-guard.
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). 40 live
+`replace_program(ROOM);` occurrences across 31 files: 26 standalone
+room-file/heredoc-template lines (real `.lpc` room files,
+`data/group/groom/*.lpc`, `feature/up.lpc`,
+`quest/kaifeng/qianyafang.lpc`) plus 14 string-builder-embedded
+occurrences (literal `\n  replace_program(ROOM);\n` escape sequences
+inside generated-code strings) across `data/group/obj/ling.lpc`,
+`data/group/obj/ling-pai.lpc`, a garbled-filename duplicate/backup of
+`ling.lpc` under `data/group/obj/`, and this lib's own room-building
+tools `u/island/obj/roommaker.lpc`/`u/island/obj/roommaker1.lpc` (two
+copies, both fixed — so newly-built rooms were inheriting the bug too).
+A full post-fix grep confirms 0 live occurrences remain. Verified via a
+clean native driver boot (zero new `debug.log` errors, port listening,
+killed by exact PID after ~8s).
