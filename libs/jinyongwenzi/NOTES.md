@@ -679,6 +679,194 @@ $HTTPS_PROXY/__agentproxy/status` 确认是策略拒绝而非临时故障），�
   现（起手绝学替代了拜师流程，见上）；商店与死亡系统留给后续测试覆
   盖，如实标注为未覆盖而非默认判定为正常。
 
+## Round-four re-test (2026-08-20): economy/shops, sect apprenticeship, death/resurrection
+
+Targeted the three areas the 2026-08-06 deep functional test explicitly left
+uncovered. Fresh `build-debug` driver boot, port 40083, tested via a raw
+Python telnet-negotiation-stripping socket script (two concurrent
+connections: a real registered player + the `fluffos` admin account, driven
+with `goto`/`summon`/`clone`/`give`/`smash`/`update`) rather than
+`tmux_mud.sh`, per this session's standing tooling preference.
+
+### Death/resurrection: WORKS CLEANLY, no bugs found
+
+Registered a fresh character (`jysidie`, 秦风肆), used the admin's `summon`
++ `smash` (`smash` calls `ob->die()` directly — a real death, not a scripted
+low-HP retreat) to kill it. Full cycle confirmed:
+- `score` immediately after death shows `死亡次数：一次` (deaths: 1) and
+  `上次遇害：被闪电劈死了` (last killed by lightning), stats reset to full
+  (精血/精力/气血/内力 all at max) — the revival-on-death behavior this
+  codebase uses (see "New findings" above: `START_ROOM` and `DEATH_ROOM`
+  are literally the *same room*, `/e/9/shanmen` = "第一关", by design —
+  death drops the character back into the opening prison-break level,
+  narratively "you wake up back at square one").
+- The room only lists `north` as an exit; walking `north` correctly moves
+  the character out into `殿前广场`, which immediately re-triggers the
+  documented prison-break combat encounter (`监狱第六代狱卒`) — confirms
+  the death→respawn→replay-the-opening loop is a real, working, repeatable
+  mechanic, not a soft-lock. No `debug.log` entries from this whole
+  sequence (only pre-existing harmless compile warnings).
+- `start_death()` is called on the numbered `DEATH_ROOMx` constants in
+  `feature/damage.lpc`'s `die()` but is **never defined anywhere** in the
+  archive — every one of those 10 call sites is silently a no-op (`call_other()`
+  to an undefined function returns 0 without error on this driver). Since
+  the actual room-move (`me->move(DEATH_ROOM)`) happens on the line before
+  and always succeeds regardless, this dead code doesn't block anything —
+  documented here as an observation, left untouched (matches the "no crash,
+  no debug.log line" bar for content vs. bug).
+
+### Sect apprenticeship (`bai`/`apprentice`): CONFIRMED PRESENT, coexists with the signature-skill starter
+
+Traditional sect-joining is NOT replaced/absent — `cmds/skill/apprentice.lpc`
+implements a full `bai <master>` / `apprentice <master>` flow (kneel-and-kowtow
+kowtow-to-join-family logic, `expell`/betrayal handling, generation tracking),
+and `adm/daemons/aliasd.lpc` maps `"bai": "apprentice"`. Found real sect-master
+candidate NPCs (`d/sld/npc/*.lpc` etc. carrying `set("family", ...)` /
+`family_name`) — not live-tested end-to-end this round (would need a wizard
+escort to a specific sect NPC plus meeting its family/generation
+prerequisites), but the code path is unambiguously wired and reachable; the
+signature-skill picker at character creation is an *additional* starter
+mechanic on top of this, not a replacement for it.
+
+### Economy/shops: found and fixed 2 real bugs; bank/pawnshop mechanism is present in code but unplaced (unreachable) in this snapshot
+
+**Architecture**: two parallel vendor mixins exist — `feature/dealer.lpc`
+(older, array-of-file-paths `vendor_goods`, buy/sell/value/list) and
+`feature/vendor.lpc` (`F_VENDOR`, array-of-`(["name":file,"number":count])`
+mappings `vendor_goods`, buy/list only — no player-facing `sell`, matching
+this session's now-familiar "buy-only shop, separate buyback/pawnshop NPC"
+design pattern, not a bug). A survey of every `F_DEALER`/`F_VENDOR` NPC file
+found **most of the 16 `F_DEALER` NPCs and several `F_VENDOR` NPCs are never
+referenced by any room's `"objects"` mapping anywhere in the archive** —
+orphaned content, unreachable in actual gameplay, not something to "fix" by
+inventing a placement (that would be authoring new world content, out of
+scope). Two `F_VENDOR` NPCs *are* genuinely room-placed and reachable:
+`d/hmy/pingding/npc/xiaoer2.lpc` (跑堂, in `d/hmy/pingding/xiaochidian.lpc`,
+food/drink) and `d/hmy/pingding/npc/huoji.lpc` (药铺伙计, in
+`d/hmy/pingding/yaopu.lpc`, medicine).
+
+**Bug #1 (real, fixed): `vendor_goods` declared as the wrong data shape.**
+`feature/vendor.lpc`'s `do_list()`/`do_buy()`/`is_vendor_good()` all do
+`if (arrayp(goods = query("vendor_goods")))` and then index
+`goods[i]["name"]`/`goods[i]["number"]` — expecting an ARRAY of one-entry
+MAPPINGS. `d/hmy/pingding/npc/xiaoer2.lpc` and `d/hmy/pingding/npc/huoji.lpc`
+instead set `vendor_goods` as a single MAPPING keyed by item path
+(`(["/d/city/obj/jitui": 11, ...])`), the shape `feature/dealer.lpc` uses,
+not `feature/vendor.lpc`'s — an apparent copy-paste from the older mixin's
+convention. `arrayp()` on a mapping is false, so `do_list`/`do_buy`/
+`is_vendor_good` all silently fall through with **zero output, not even a
+fail message** — a completely dead `list`/`buy` on two live, reachable,
+correctly-`add_action`-wired NPCs. (4 more `F_VENDOR` files elsewhere have
+the same wrong shape — `d/sld/npc/chuzi.lpc`, `d/dali/npc/mafu.lpc`,
+`d/taishan/npc/shangren.lpc` — but their `list`/`buy` `add_action()` calls
+are themselves commented out, so the shape bug is inert there; and
+`d/taishan/npc/xiao-fan.lpc`, which does have `buy` wired, is itself never
+room-placed — left untouched, no live impact.) **Fixed**: converted both
+`xiaoer2.lpc` and `huoji.lpc` to the correct
+`({ (["name":file,"number":count]), ... })` array-of-mappings shape.
+
+**Bug #2 (real, fixed, found only after fixing #1): `huoji.lpc` referenced
+3 nonexistent/wrong-path item files.** Once the shape was fixed, `do_list`/
+`do_buy` proceeded far enough to actually resolve each `vendor_goods` entry
+via `call_other()`-on-string-path — and 4 of `huoji.lpc`'s 6 entries pointed
+at files that don't exist: `__DIR__ "obj/jinchuang"` and `__DIR__
+"obj/yangjing"` (real items exist, just at `/clone/medicine/jinchuang.lpc`
+and `/clone/medicine/yangjing.lpc`, not under this NPC's own directory),
+`/clone/medicine/baiwei` and `/clone/medicine/baizhi` (real items exist at
+`/clone/medicine/drug/baiwei.lpc` / `drug/baizhi.lpc`, wrong subpath), and
+`/clone/medicine/badou` (searched the whole archive incl. raw source —
+**this item never existed anywhere**, not just misplaced; dropped the
+entry rather than inventing a substitute). Each bad entry produced a real,
+live `debug.log` "`*call_other() couldn't find object ...`" runtime error
+on every `list`/`buy` at this NPC — a driver-level error, squarely in
+scope to fix. **Fixed**: repointed jinchuang/yangjing to their real
+`/clone/medicine/` paths, repointed baiwei/baizhi to their real `drug/`
+subpath, dropped the phantom `badou` entry.
+
+**Live verification (both fixes, fresh driver boot, naturally room-spawned
+NPCs — not wizard-cloned instances, which lack the `startroom` property the
+room's own `make_inventory()` sets on spawn)**: registered `jyshopvi`
+(秦风捌), admin `summon`ed it to each shop, `clone`d + `give`-gifted gold.
+At 跑堂: `list` showed all 5 wares with real prices/stock; `buy jitui`
+completed a real purchase (money deducted, item received, "讨价还价"
+trade-skill XP awarded, inventory confirmed). At 药铺伙计: `list` showed
+all 5 (now-corrected) wares; `buy jin` (金创药) and `buy dan` (养精丹) both
+completed real purchases, confirmed via inventory + remaining coin/silver
+count. `debug.log` after the full session: zero runtime errors (only the
+routine boot-time compile warnings already documented above).
+
+**Bank/pawnshop (two-tier currency)**: `feature/banker.lpc` (shared mixin:
+`check`/`convert`/`deposit`/`withdraw`, a `balance` property separate from
+physical gold/silver/coin objects — the same two-tier-currency pattern
+already confirmed on several other libs this session) is well-formed code,
+hosted by `d/city/npc/old-qian.lpc` (银号/钱庄, `deposit`/`cun`,
+`withdraw`/`qu`) plus several sibling banker NPCs across other zones. **None
+of them are referenced by any room's `"objects"` mapping anywhere in the
+archive** — like most of the `F_DEALER` shops, the entire banking mechanic
+is orphaned/unplaced content in this snapshot, unreachable in actual
+gameplay even though the code itself looks sound. Not fixed (placing NPCs
+in the world is a content/design decision, not a bug fix); documented here
+as a genuine "untested because unreachable" finding rather than assumed
+fine.
+
+### Standing checklist sanity pass (this lib was NOT covered by either corpus sweep before this pass)
+
+- **§7.100** (redundant self-`replace_program(ROOM)` in `create()`,
+  poisoning future closure-binding on that object): **10 live occurrences
+  found and fixed** — all under `work/data/group/groom/*.lpc` (10 player
+  guild-hall/group-headquarters room files: `jiuer`, `nan`, `rabaggio`,
+  `llj`, `youyou`, `shaer`, `tomy`, `tiantian`, `xiongjj`, `leontt`), each
+  with the exact `inherit ROOM; ... setup(); replace_program(ROOM);` shape.
+  None currently contain a closure-creating call (no `create_door()`, no
+  `(:...:)`), so the replace always silently succeeds and sets the
+  permanent "pending replace" flag — a dormant landmine matching §7.100's
+  documented shape exactly. Fixed by deleting the redundant
+  `replace_program(ROOM);` line in all 10 files (kept `inherit ROOM;`).
+  Grepped `work/` afterward: 0 remaining occurrences.
+- **§7.79** (bare 2-arg `addn()`/`addn_temp()` self-targeting the wrong
+  object): **0 occurrences** — `grep -rn "addn("` across `work/` finds
+  nothing at all. Not applicable to this lib.
+- **§7.90** (eval-cost too low for this lineage's NPC-creation cost):
+  already fine — `config.fluffos` has `maximum evaluation cost : 50000000`,
+  well above the documented danger threshold.
+- **§7.111** (`standard_trace()` crashing on `file_name(error["object"])`
+  when the object is `0`): not applicable — this lib's
+  `adm/single/master.lpc::standard_trace()` uses `%O` mapping-print
+  formatting for `error["object"]`, never calls `file_name()` on it.
+- **§7.112** (`init()` unconditionally scheduling a `call_out()` chain,
+  duplicated by `enable_commands()` re-broadcast on reconnect): the one
+  file in this archive with the vulnerable-shaped death-stage chain,
+  `d/shaolin/npc/yu-zu2.lpc`, **already has the correct guard**
+  (`death_stage_active` temp flag checked before scheduling, cleared at
+  every exit point) — already fixed/clean, nothing to do. The other
+  candidate-named files present (`mengpo.lpc`, `bgargoyle.lpc`,
+  `wgargoyle.lpc`, `yanluo.lpc`) have no `init()`/`call_out` at all in this
+  snapshot (decorative NPCs only).
+- **§7.113** (netdead reconnect never restoring `heart_beat`): already
+  fine — `adm/daemons/logind.lpc::reconnect()` calls `user->reconnect()`,
+  and `clone/user/user.lpc::reconnect()` unconditionally does
+  `set_heart_beat(1)` on the player body itself — the known-correct
+  lineage shape.
+- **§7.114** (`private` `input_to()` recursive-callback mixin function
+  silently failing to re-arm when inherited): already fine —
+  `feature/edit.lpc`'s `input_line()` (the `F_EDIT` mixin inherited by
+  `inherit/char/char.lpc`, driving board post/mail/chfn) is declared
+  public, not `private`.
+- **§7.115** (`QUEST` macro pointing at a never-delivered file, crashing
+  `give`/`ask`): not applicable — no `QUEST` macro is defined anywhere in
+  this lib's `include/*.h`.
+
+### Cleanup
+
+All player test-account saves created this round (`jysidie`, `jyshopr`,
+`jyshoptw`, `jyshopvi`) removed from `work/data/{user,login}/j/` after
+verification. The `fluffos` admin account's own save files changed
+slightly (routine inventory/login-timestamp churn from using `clone`/
+`give`/`summon` during testing) — left as-is, matching this project's
+standing practice of not hand-editing the persistent admin account's save
+data between sessions. Driver killed by exact PID after testing (never
+`pkill -f`).
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 此前被错误标记为某个不存在于本项目任何档案的原始压缩包文件名的 duplicate_of；这里的内容其实是完全独立、可游玩的游戏（有自己的 -N 变体编号、自己的端口、自己的 README）——duplicate_of 已清除。
