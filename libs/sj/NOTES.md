@@ -239,3 +239,7 @@ REVIVE_ROOM（太空港口）。`debug.log`/`error.log` 全程干净。
   制造、铸剑等多个不相关的指令入口）。值得在其余库里也用
   `find . -type d` 找一遍是否有全大写的 `u/<WIZID>` 目录、同时又有
   代码以小写路径引用同名目录的情况。
+
+## §7.100 sweep (2026-08-19)
+
+Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 378 live occurrences deleted: 374 via scripted sweep (`fix_710_room.py`), plus 4 hand-fixed irregular shapes — `clone/misc/roommaker.lpc`'s string-builder ("clone the room I'm standing in" command), two byte-identical copies of `d/fenghuang/fenghuang/taikong.lpc` (space before semicolon, single-line file) under `d/` and `u/zhangm/`, and `d/huang/zoulang4.lpc` (two redundant calls on one CRLF line). Room-builder's heredoc "make an empty room" template was already clean. 4 already-commented-out instances left untouched. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, port 40127 listening, zero new "cannot replace"/"cannot bind" debug.log lines.
