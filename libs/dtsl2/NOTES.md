@@ -534,3 +534,18 @@ dtsl/llmud 血统的相关分支。
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BBS_BOARD`、`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 55 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/std/room"`：删除 687 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`）；686 处由脚本
+自动删除，另 1 处在 `obj/roommaker.lpc` 第 137 行——本库房间建造
+工具的"克隆我所在的房间"命令用字符串拼接
+`str += "\n\tsetup();\n\treplace_program(ROOM);\n}\n";` 把同一枚
+多余调用烤进了每一个新克隆的房间，已同步手动修正为
+`str += "\n\tsetup();\n}\n";`（该工具另一套"造一间空房间"heredoc
+模板本来就是干净的）。修复后全库仅剩 82 处历史遗留的
+`//`-注释掉实例，均确认无害、未改动。已用 `build-debug` 驱动干净
+启动验证（0 个新增编译错误，端口 40043 正常监听，`debug.log` 无
+新增 "cannot replace"/"cannot bind" 行）；未做完整 §10.7 深度
+游玩测试。
