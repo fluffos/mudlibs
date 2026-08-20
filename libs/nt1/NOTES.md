@@ -192,3 +192,7 @@ interrupted` 错误数保持为 0（此前第一次开机在类似时间窗口�
   text block"语法错误）——两个都用原始（修复前）文件单独复测确认是
   **预先存在**的问题，与本次改动无关。编译输出中零 "cannot replace"/
   "cannot bind" 警告。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/bai.lpc`, `d/death/npc/hei.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
