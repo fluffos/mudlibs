@@ -634,3 +634,7 @@ reverted before commit.
 把同一枚多余的 `replace_program(ROOM);` 烤进了每一个新克隆的房间，
 已同步修正。已用 `build-debug` 驱动干净启动验证（0 个新增编译错
 误，端口正常监听）；未做完整 §10.7 深度游玩测试。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/newgargoyle.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.

@@ -183,3 +183,7 @@ assure_file(string file);` 前向声明（因为 `assure_file()` 定义在
 ## §7.100 sweep (2026-08-19)
 
 Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 2124 live occurrences deleted: 2123 via scripted sweep (`fix_710_room.py`), plus 1 hand-fixed roommaker-tool template (`clone/misc/roommaker.lpc`, simple string-builder variant). ~284 already-commented-out instances left untouched. Checked `work/data/` (incl. `d/shenlong/data/`) for real `.lpc` source false-negatives per this batch's standing gotcha — none found. Verified via `build-debug` driver boot: clean compile, zero new "cannot replace"/"cannot bind" debug.log lines; confirmed serving via raw-socket connect on port 40140. Pre-existing untracked test-account debris confirmed left untouched.
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/wgargoyle1.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
