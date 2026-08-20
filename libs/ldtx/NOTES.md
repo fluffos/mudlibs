@@ -158,3 +158,28 @@ Century/adm-single 家族（shiji/shujian2008/xjcq2000/xkxz2/xiakexing100），�
 ### 未覆盖
 
 商店/购买、正式门派拜师、邮件系统本轮时间有限未继续深挖；本档案的开局区域是围绕客店/北大街/中央广场展开的城市地图，未继续往更远的地图区域探索。
+
+## §7.100 sweep (2026-08-19): redundant `replace_program(ROOM);` landmine
+
+Same corpus-wide bug as documented at AGENTS.md §7.100: rooms
+inheriting `ROOM` (`/inherit/room/room`) had a redundant, harmful
+`replace_program(ROOM);` call right after `inherit ROOM;` in `create()`,
+setting a permanent "pending replace" flag that crashes the object the
+first time anything binds a closure to it. This lib had **1,516 live
+occurrences** (survey-ranked #87 of 166 candidates >=100, tied with and
+sharing a lineage with `ldtxii`). Fixed with the sweep's binary-mode
+script (`fix_710_room.py`); `git diff --numstat` totals (0 insertions,
+1516 deletions) match the survey's live-occurrence count exactly. This
+lib's `clone/misc/roommaker.lpc` room-building tool never had the
+factory-bug variant at all — its generated-room code templates (both
+the `mkroom`-style heredoc and the `str +=` string-builder path) never
+included a `replace_program(ROOM)` call to begin with. No `work/data/`
+room-source false-negative found. Verified via a clean `build-debug`
+boot (zero "cannot replace"/"cannot bind" `debug.log` lines, port
+40105 listening) plus a live admin login (`fluffos`/`Mud@2026`, GB
+encoding selection, `Press Enter to Continue` banner) — entered the
+game world normally, `look`/`quit` both worked, `debug.log` stayed
+clean throughout. Incidental admin save-timestamp drift from the
+spot-check reverted before committing (pre-existing untracked
+`ldtxdive.o`/`ldtxqa.o`/`data/board/` save files left untouched, not
+part of this change).
