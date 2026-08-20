@@ -3094,6 +3094,35 @@ with `if (!mapp(skl)) return;`/an equivalent early-return guard;
 recompiled clean and re-verified live with a real zero-skill character
 that no longer crashes.
 
+**Third confirmed instance: `haiyang2`** (§10.7, round four, real sect
+apprenticeship + skill-learn test) — same `feature/skill.lpc` shape,
+but this time FIVE separate accessors on the same file all shared the
+bug (`query_skills()`, `query_learned()`, `query_skill_map()`,
+`query_skill_prepare()`, `query_wprepare()`), each returning its own raw
+never-initialized instance variable. Live-reachable via
+`kungfu/skill/bingxue-xinfa.lpc`'s `valid_learn()` doing an unguarded
+`keys(skl)` — any zero-skill player attempting to `xue` this skill would
+crash mid-command — plus 4 more real call sites across sect-condition
+and admin-tool files. Fixed at the accessor level (`mapp(x) ? x : ([])`
+on all 5 accessors), which closes every one of this file's ~164 call
+sites at once rather than patching each caller individually — a cleaner
+remedy than the per-call-site guards used on the first two instances,
+worth preferring when the accessor itself is editable.
+
+**This bug class has now been found independently on 3 separate
+lineages** (`xiakexing2017`, `jqxz2015`, `haiyang2`) via round-four
+testing, not a corpus sweep — crossing this project's own "3+
+independent lineages → next cycle should be a mechanical sweep"
+threshold (see the general sweep-trigger note near the top of this
+doc). The `feature/skill.lpc` shape specifically (`mapping
+query_skills() { return skills; }` or sibling accessors on the same
+file, never guarding the raw instance variable) is common enough across
+this corpus's shared lineages that a light corpus-wide grep sweep (`grep
+-rn 'return skills;\|return skill_map;\|return learned;' libs/*/work/feature/skill.lpc`-style,
+generalized to whatever accessor names each lineage uses) is likely
+worth running before relying on round-four testing to keep finding it
+one lib at a time.
+
 ### 7.31 `enter_world()` overwrites the just-restored persistent player object's flag with the fresh per-connection object's stale/default value
 
 Found on `xkxz2`'s deep functional test (§10.7). On login, two
