@@ -1052,3 +1052,7 @@ libs/*/work` 命中 140+ 个档案、覆盖相当一部分语料库（经由共�
 `debug.log` 全程干净。既有管理员账号 `fluffos`/`Mud@2026` 登录正常
 （落地沙滩，look/quit），全程无新增
 "cannot replace"/"cannot bind" 日志行。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `u/lara/wgargoyle.lpc`, `u/scatter/update/other/npc/wgargoyle.lpc`, `u/scatter/update/other/wgargoyle.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
