@@ -374,3 +374,7 @@ after verification.
 - **战斗（PVE 实战）、经济/商店**：**未覆盖**——本轮时间集中在验证
   emoted 崩溃的修复上，沙袋陪练已验证安全练习路径可用，未额外寻找可
   挑战的野外目标或商店交易流程。
+
+## §7.100 sweep (2026-08-19)
+
+Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 231 live occurrences deleted: 230 via scripted sweep (`fix_710_room.py`), plus 1 hand-fixed roommaker-tool template (`obj/roommaker.lpc`, simple string-builder variant). 3 already-commented-out instances left untouched. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, zero new "cannot replace"/"cannot bind" debug.log lines; confirmed serving via raw-socket connect on port 40033.
