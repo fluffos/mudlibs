@@ -887,3 +887,17 @@ ppl/score.lpc`（score 面板显示）、`cmds/std/npc/drink.lpc`（真正的
 修复本身所必需的真实游玩动作，不是误删；`fallencity1` 原本的
 `0/data`/`0/estate`/`0/map`/`info` 档案随占领流程转移/消失，
 `www/map/citymap_testcityfour_0.html` 等新档案随之生成。
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). This lib's room base class
+is `STANDARD_ROOM` (`/std/inherit/standard/standard_room.lpc`), not the
+usual `ROOM` macro (`ROOM` here is an unrelated integer constant in
+`map.h`). 6 live `replace_program(STANDARD_ROOM);` occurrences across
+6 quest room files (`quest/suphia_and_benjamin/room_s_*.lpc` x4,
+`quest/old_farmer/room_1.lpc`/`room_2.lpc`). No real room-building tool
+exists in this lib (only a static help-doc file happens to share the
+name). Fixed by deleting the redundant lines. Verified via a clean
+native driver boot (zero new `debug.log` errors, port listening, killed
+by exact PID after ~8s).
