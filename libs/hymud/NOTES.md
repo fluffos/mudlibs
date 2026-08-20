@@ -786,3 +786,16 @@ where each class was originally found, not in a new mechanism.
 `Mud@2026`，需要连续输入两次），在欢迎村一带往返走了十余个房间
 （`welcome`↔`qianzhuang`↔`dangpu`），`look`/`score`/`who` 均正常。
 未产生需要撤销的存档改动。驱动按精确 PID kill。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 5 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
