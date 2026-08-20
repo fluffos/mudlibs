@@ -36,3 +36,7 @@ WASM 修复：修好了 §8.1 GBK 字节区间 is_chinese()/check_legal_name() b
 ## §7.100 sweep (2026-08-19)
 
 Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 305 live occurrences deleted: 303 via scripted sweep (`fix_710_room.py`), plus 2 hand-fixed roommaker-tool templates (`clone/misc/roommaker.lpc`, `obj/roommaker.lpc` — both simple string-builder variant). 7 already-commented-out instances left untouched. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, port 40192 listening, zero new "cannot replace"/"cannot bind" debug.log lines. Pre-existing untracked test-account debris (`data/{login,user}/y/yszzdive.o`) confirmed left untouched by `git status` review before staging.
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/wgargoyle.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
