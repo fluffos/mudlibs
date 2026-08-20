@@ -232,3 +232,29 @@ NPC（`u/wiz/` 巫师个人目录不存在），不适用。
 `(admin)` 权限真正生效，第二次单独验证密码重连本身。均成功登录，
 存档数据一致。全程 `debug.log` 无运行时错误。驱动按精确 PID 结
 束；管理员存档（`data/{login,user}/f/fluffos/fluffos.o`）已提交。
+
+## §7.100 房间基类 replace_program() 扫尾修复（2026-08-19）
+
+`ROOM` 宏（`/std/room`）在本档案 1,967 处房间文件的 `create()` 里
+紧跟 `inherit ROOM;` 之后又多余调用了一次 `replace_program(ROOM);`
+——AGENTS.md §7.100 记录的同一个休眠 bug，和兄弟档案 `zzfy`（郑州
+风云同一血统，`fix_710_room.py` 标准扫描数字逐位吻合：1,817 标准
+形状 + 40 处 `u/wiz/u/heart/xuedao/` 子目录的规整形状）完全同源。
+剩余 150 处不规则存活形态也和 `zzfy` 完全一致：`u/wiz/u/heart/
+xuedao/` 下 143 个文件带有和 `tiexuejianghu` 血统同源的"如果没有
+init 函数请不要删除这句话"尾随 UTF-8 注释变体（按既有先例整行删
+除，含注释），以及 14 个文件、18 处帮派/房间建造工具字符串拼接
+变体（`cmds/adm/roommaker.lpc` 3 处、`d/wiz/xgchen/roommaker.lpc`、
+`obj/wall.lpc`、`u/wiz/u/panguan/{room,rmmaker}.lpc`），手工改成
+`str += "...setup();\n}\n";`／`room_code += "...setup();\n}\n";`。
+`git diff --stat` 显示 1963 个文件净删 1967 行、增 7 行，与
+survey 记录的存活总数完全吻合。`work/data/` 下没有真实 `.lpc`
+源码命中。
+
+驱动干净启动（零新增编译错误、端口 40120 正常监听、`debug.log`
+无任何"cannot replace"/"cannot bind"行）。管理员 `fluffos`/
+`Mud@2026` 实机登录成功（沿用固定总时长读取策略，绕开这份档案
+每秒刷新的 `HH:MM:SS>` 提示符），`look`/`score`/`quit` 均正常，
+落地"凤求凰客栈"（和兄弟档案 `zzfy` 相同的起始房间）。管理员存
+档的时间戳漂移已用 `git checkout HEAD --` 还原，未提交。驱动按精
+确 PID 结束。
