@@ -184,3 +184,7 @@ death()` 之后由 `d/death/npc/wgargoyle.lpc`（白无常）的 `init()` 排
 录后 `目前权限：(admin)` 正确显示，`update /d/fuzhou/npc/chess_
 player`、`update /obj/board/wizard_j` 两次写权限验证都成功（§1.5
 第 3 步的标准检查）。
+
+## §7.100 sweep (2026-08-19)
+
+Fixed the corpus-wide `inherit ROOM; ... replace_program(ROOM);` redundant-replace bug (AGENTS.md §7.100). 228 live occurrences deleted: 227 via scripted sweep (`fix_710_room.py`), plus 1 hand-fixed roommaker-tool template (`obj/roommaker.lpc`, simple string-builder variant). 23 already-commented-out instances left untouched. No real `.lpc` source found under `work/data/`. Verified via `build-debug` driver boot: clean compile, zero new "cannot replace"/"cannot bind" debug.log lines; confirmed serving via raw-socket connect on port 40134.
