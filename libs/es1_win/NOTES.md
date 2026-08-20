@@ -604,6 +604,38 @@ Both fixed by deleting the redundant line. Verified via a clean native
 driver boot (zero new `debug.log` errors, port listening, killed by
 exact PID after ~8s).
 
+## `die()` null-`killer` crash — ported from sibling `esI` (2026-08-20)
+
+`esI`'s round-four §10.7 deep test found a real crash in
+`std/user.lpc`'s `die()`: `killer` (set from `query("last_attacker")`,
+falling back to `previous_object()`) can end up `int 0` whenever a
+character dies from a source other than direct living-creature combat
+(poison/bleeding/sickness/drowning conditions, or an admin-applied
+`receive_damage()`) — two lines then call `killer->query("npc")` /
+`userp(killer)` unconditionally, throwing a driver-level error on
+every `heart_beat()` tick for as long as `hit_points < 1`, which means
+the character never actually finishes dying (no corpse, no ghost,
+stuck forever). Confirmed via `diff` that this lib's copy of the same
+two lines is byte-identical/unfixed. Ported the same fix verbatim
+(`killer &&` guards on both call sites, matching every other
+`killer`-using line in the function which was already correctly
+guarded):
+```lpc
+// BEFORE
+if (!wizardp(this_object()) && killer->query("npc"))
+if (this_object()->query_level() < 5 && userp(killer) && query("last_attacker")) {
+// AFTER
+if (!wizardp(this_object()) && killer && killer->query("npc"))
+if (this_object()->query_level() < 5 && killer && userp(killer) && query("last_attacker")) {
+```
+Sanity-checked here with a fresh native driver boot + `look`/`quit`
+smoke test (clean, zero new `debug.log` lines, killed by exact PID
+after) — not a full independent replay of this lib's own death/respawn
+flow, since `esI`'s pass already live-verified the fix's actual
+behavior end-to-end twice. Flagged here for whoever next does a
+round-four (or deeper) pass on this lib specifically, to do that full
+live verification in its own right.
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 东方故事基础版（蓝天）。
