@@ -216,3 +216,16 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40098 --timeout 20 --idle 1.2 \
   验证：真实 debug 驱动干净编译启动、端口正常监听，`debug.log` 无新增
   "cannot replace"/错误行；启动一次注册流程走到取名环节确认无崩溃（该库
   提示流程与其他库不同，未走完整注册，但编译验证已足够）。
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 3 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
