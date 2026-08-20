@@ -155,3 +155,25 @@ for FYTX"的落款），是同根不同支的独立分叉，不是逐字节拷�
 `quest.lpc` 内容已符合格式未改动）；§9 三个已知盲点（`::` 拆分、
 CJK 重新加空格、`case` 标签吞注释）逐一检查均为空，格式化后重启
 驱动+完整重跑一遍注册+死亡/复活流程确认无回归。
+
+## §7.100 sweep (2026-08-19): redundant `replace_program(ROOM);` landmine
+
+Same corpus-wide bug as documented at AGENTS.md §7.100: rooms
+inheriting `ROOM` (`/inherit/room/room`) had a redundant, harmful
+`replace_program(ROOM);` call right after `inherit ROOM;` in `create()`,
+setting a permanent "pending replace" flag that crashes the object the
+first time anything binds a closure to it. This lib had **1,715 live
+occurrences** (survey-ranked #85 of 166 candidates >=100, tied with and
+byte-similar to sibling lib `xkxz2` — same daemon-content lineage but
+NOT byte-identical, so verified independently rather than assuming a
+free pass). Fixed with the sweep's binary-mode script
+(`fix_710_room.py`) plus two hand-fixed room-building-tool copies
+(`clone/misc/roommaker.lpc`, `cmds/debug/roommaker.lpc`, same shape as
+`xkxz2`'s). `git diff --numstat` totals (2 insertions, 1715 deletions)
+match the survey's live-occurrence count exactly. No `work/data/`
+room-source false-negative found. Verified via a clean `build-debug`
+boot (zero "cannot replace"/"cannot bind" `debug.log` lines, port 40126
+listening) plus a live admin login (`fluffos`/`Mud@2026`, after
+answering the BIG5-font prompt with `n`) — `look`/`quit` both worked
+normally, `debug.log` stayed clean throughout. Incidental admin
+save-timestamp drift from the spot-check reverted before committing.
