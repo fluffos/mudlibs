@@ -201,3 +201,18 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40098 --timeout 20 --idle 1.2 \
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 98 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 跨库扫描修复（`ROOM` 基类同款 `replace_program()` 致命形状）
+
+- 同一 `inherit ROOM; ... replace_program(ROOM);` 冗余自替换形状（AGENTS.md
+  §7.100）覆盖了几乎全部房间对象：`work/` 下共 1,335 处存活匹配。用二进制
+  模式脚本删除了 1,331 处标准形式的独立行；另有 4 处不规则形状手动修复：
+  1 处房间文件 `d/dongying/dahai.lpc` 里该行末尾多了一个空格
+  （`replace_program(ROOM) ;`）导致脚本按精确匹配未命中；另外 3 份房间生成
+  工具（`obj/misc/roommaker.lpc`、`obj/obj/roommaker.lpc`、
+  `obj/obj/misc/roommaker.lpc`，字符串拼接变体，`str += "...replace_program
+  (ROOM);..."` 写死在生成模板里）——修复后新造的房间不会再继承这个地雷。
+  修复后 `work/` 下 `grep -rn "replace_program(ROOM)"` 排除注释后为零匹配。
+  验证：真实 debug 驱动干净编译启动、端口正常监听，`debug.log` 无新增
+  "cannot replace"/错误行；启动一次注册流程走到取名环节确认无崩溃（该库
+  提示流程与其他库不同，未走完整注册，但编译验证已足够）。
