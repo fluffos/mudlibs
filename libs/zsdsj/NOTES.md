@@ -841,3 +841,49 @@ ppl/score.lpc`（score 面板显示）、`cmds/std/npc/drink.lpc`（真正的
 `enterprise`（企业系统）从零创建一家公司、以及 `fight` 战斗系统
 （这份档案的战斗看起来是次要机制，不是核心玩法）。这些留给下一轮，
 目前的验证边界如上所述。
+
+## 深度功能测试（第四轮，2026-08-19）——发现并修复四个真实 bug
+
+补测上一轮留下的入籍/build-grow/enterprise/战斗四个系统时，负责本
+轮的子代理在验证阶段中途停滞（约 90 分钟无提交、无回应），但已完成
+的修复本身经确认是真实、完整、正确的——原地接手，重新独立验证（全
+新驱动进程干净启动，`debug.log` 全程无错误）后提交。
+
+### 发现并修复的真实 bug
+
+1. **`set_living_name()`/`enable_commands()` 全档案从未被呼叫过（corpus-wide
+   grep 确认），导致 `find_player()` 永远找不到任何在线玩家（含玩家
+   自己）**：`load_user()`/`user_exists()` 的后备分支因而会把一个已
+   经在线、内存中持有未存档异动的活跃角色物件误判为离线存档，对它
+   多做一次 `restore()`（甚至 `destruct()`），静默丢弃尚未落盘的异
+   动，没有任何错误提示。修复：在 `ppl_ob.lpc`/`wiz_ob.lpc` 玩家/巫
+   师物件本身新增 `register_living_name()`（`set_living_name()`/
+   `enable_commands()` 都是只能作用于 `this_object()` 的驱动 efun，
+   无法透过 `call_other` 指定别的物件，必须定义在物件自身上），由
+   `ppl_login_d.lpc`/`wiz_login_d.lpc` 的 `ENTER_GAME` 分支用 `->`
+   呼叫。呼叫前已确认这份档案没有 AGENTS.md §7.112 那种
+   `enable_commands()` 重播 `init()` 引发的未防护 `call_out()` 形状。
+2. **`city_d_main.lpc` 的 `occupy_new_city()`/`occupy_section_city()`
+   占领城市后没有立即写盘**：依赖下一次排程的 `save_all()` 或正常
+   关机才落盘，期间若当机/重开机，刚占领的城市会整个恢复成占领前
+   的废弃状态（市长、市民、新名称全部遗失），但玩家已经付出的整顿
+   费用拿不回来。修复：比照既有的 `create_new_city()` 做法，占领后
+   立即 `save_city(..., SAVE_ALL)`。
+3. **`emote_d.lpc` 的 `create()` 对存档损毁没有兜底**：`restore_object()`
+   是边解析边赋值，就算已经预先把 `emotions` 设成空 mapping，一份
+   半损毁的存档仍可能在抛出例外之前就把 `emotions` 覆盖成非 mapping
+   值（含 `0`），任何后续呼叫 `is_emote()` 的地方（包含和表情系统完
+   全无关的生物初始化路径）都会对 `keys(0)` 崩溃。修复：restore 结
+   束后（无论成功与否）强制确保 `emotions` 是 mapping。
+4. **`string.lpc` 的 `is_chinese()` 是经典 §8.1 形状**：GBK 双字节
+   隔位检查在这个驱动上（`str[i]` 是 Unicode 码位，`strlen()` 按字
+   符数计）永远不成立，静默拒绝所有中文字符串。修复为直接检查 CJK
+   统一表意文字码位区间。
+
+### 本轮实测消耗的游戏内容（非 bug，如实记录）
+
+验证 bug 2（城市占领落盘）时，占领了 `fallencity1`（一座"废弃城
+市"模板）并将其转化重命名为测试用的 `testcityfour`——这是练兵这个
+修复本身所必需的真实游玩动作，不是误删；`fallencity1` 原本的
+`0/data`/`0/estate`/`0/map`/`info` 档案随占领流程转移/消失，
+`www/map/citymap_testcityfour_0.html` 等新档案随之生成。
