@@ -831,3 +831,16 @@ All already fixed/clean from prior passes, reconfirmed this round without needin
 - **§7.112**: all 5 `death_stage()`-style functions in this lib (`d/death/npc/{pang,wgargoyle,b,bgargoyle}.lpc`, `u/sadboy/b.lpc`) checked branch-by-branch — every exit path (no-ob, not-ghost, hostile-non-ghost, low-max-stat, final reincarnate) correctly clears the `death_stage_active` temp guard before returning; the reschedule branch correctly leaves it set. No incomplete-branch gap found (unlike the `xajh2`/`hhsj`/`nt6nitan6win` instances found elsewhere this session). Live-confirmed working end-to-end by item 3 above.
 - **§7.79**: zero bare 2-arg `addn(`/`addn_temp(` calls found.
 - **§7.108**: `obj/user.lpc`'s `reconnect()` already calls `enable_commands()` (fixed in the round-two pass above).
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 4 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
