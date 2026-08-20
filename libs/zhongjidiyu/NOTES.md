@@ -798,3 +798,17 @@ clean.
 ## §7.86 跨库扫描修复（留言板 `post` 崩溃）
 
 - **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 43 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## §7.100 sub-threshold instance (2026-08-20)
+
+Found during the §7.100 tail-sweep (below the original 166-lib survey's
+>=100-occurrence threshold, never checked). 39 live
+`replace_program(ROOM);` occurrences across 38 files: 18
+`clone/megazine/*.lpc` rooms, `clone/misc/void.lpc`, a 12-file
+`d/pk/turen*.lpc` cluster, a 6-file `d/death/*.lpc` cluster, plus this
+lib's own room-building tool `clone/misc/roommaker.lpc` (both a
+standalone line and a separate string-builder template line, both
+fixed) — so newly-built rooms were inheriting the bug too. A full
+post-fix grep confirms 0 live occurrences remain. Verified via a clean
+native driver boot (zero new `debug.log` errors, port listening, killed
+by exact PID after ~8s).
