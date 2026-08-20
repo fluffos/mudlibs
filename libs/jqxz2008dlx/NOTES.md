@@ -699,3 +699,14 @@ PID kill，`ps -p` 确认已退出。
 
 （`data/{login,user}/s/shenten.o` 是此前会话遗留的未提交测试存档
 ——`Aug 5` mtime，早于本次会话，未受本轮任何操作影响，未触碰。）
+
+## §7.100 扫描修复（`ROOM` 基类多余 `replace_program()`）
+
+`#define ROOM "/inherit/room/room"`：删除 826 处多余的、独立成行的
+`replace_program(ROOM);`（保留 `inherit ROOM;`）。本库自带的房间
+建造工具 `clone/misc/roommaker.lpc`（与 `jqxz2008`/`jqxz2008std`
+同一血统的"寒山寺"结构）"造一间空房间"的 heredoc 模板本来就干净，
+但"克隆我所在的房间"命令的字符串拼接模板把同一枚多余的
+`replace_program(ROOM);` 烤进了每一个新克隆的房间，已同步修正。已
+用 `build-debug` 驱动干净启动验证（0 个新增编译错误，端口正常监
+听）；未做完整 §10.7 深度游玩测试。
