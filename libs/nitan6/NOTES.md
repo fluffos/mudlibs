@@ -821,3 +821,247 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Round-four (§10.7) deep-functional pass: combat/death, shop purchase, sect recruitment (2026-08-20)
+
+Full session targeting the three systems this lib's own history explicitly
+deprioritized in prior rounds. Native `build-debug` driver, several clean
+cold reboots throughout (each verified zero `debug.log` errors on boot),
+admin `fluffos`/`Mud@2026` used throughout via `wizlian`-granted stats/
+skills to reach test position quickly (per this task's own sanctioned
+"admin stat/skill grant" allowance) — no new test character created, no
+password newly recorded.
+
+### 1. Combat/death against a hostile NPC: major real bug found and fixed
+(damage was never actually applied — a 6th/7th/8th instance of this lib's
+already-well-documented F_DBASE bare-call bug); permanent death via `kill`
+not reached despite extensive live testing, root cause narrowed but not
+confidently classified as bug vs. design, left unfixed
+
+Used the real `kill` command (confirmed, per this session's own project-
+wide precedent, no gate against real danger for NPC targets) against
+`meipo` (媒婆, 北大街's matchmaker NPC, the same representative low-level
+NPC prior rounds used for safe `fight` sparring). First attempt: many
+rounds of both sides only ever "sizing up" (`guard_msg` flavor text),
+zero hits ever landing on either side despite `wizlian`-granted `str`/
+`unarmed`/etc. Traced via `adm/daemons/combatd.lpc`'s `fight()` →
+`do_attack()`: `query_action()` (same file) calls `me->reset_action()`
+when `query("actions", me)` is empty, then re-reads `query("actions",
+me)` — still empty, so `do_attack()`'s very first line (`action =
+query_action(me, flag); if (!action) return 0;`) silently no-ops on
+**every single combat round, for any character**. Root cause:
+`feature/attack.lpc` (F_ATTACK) is inherited as a SIBLING of F_DBASE by
+`char.lpc`, exactly like the already-documented `feature/name.lpc`/
+`feature/command.lpc`/`feature/apprentice.lpc` bug family — but this file
+had never been touched by any prior pass. `reset_action()`'s bare
+`set("actions", ...)`/`set("second_actions", ...)` calls (no
+`this_object()` redirect) silently wrote to the SIMUL_EFUN OBJECT's own
+shared dbase instead of the fighting character's own, so the "fix" attempt
+inside `query_action()` never actually took effect. Fixed with the
+standard `this_object()`/`me` redirect pattern throughout the whole file
+(not just the `reset_action()` call sites — `kill_ob()`/`want_kill()`/
+`select_opponent()`/`remove_all_enemy()`/`attack()` all had the same bare-
+call shape and were fixed too). Verified: after the fix + a fresh
+`update`+relogin (an ALREADY-LIVE object stays bound to its old compiled
+program — `update`ing the source alone does not retroactively rebind
+already-loaded instances, confirmed empirically this pass; a genuine
+`quit`+relogin, i.e. a fresh `new()`-cloned instance, was required each
+time to observe a fix's effect), `kill meipo` produced real, varied combat
+narration (hits, misses, dodges) on both sides.
+
+With real hits landing, a SECOND, even more consequential instance of the
+same bug surfaced: `feature/damage.lpc` (F_DAMAGE, via `inherit __DIR__
+"limb"`, itself uninherited) is ALSO a bare sibling of F_DBASE.
+`receive_damage()`/`receive_wound()` — the functions `do_attack()` calls
+via `victim->receive_damage("qi", damage, me)` to actually apply a landed
+hit's damage — had the identical bare `query(type)`/`set(type, ...)`
+shape at their core, so **landed hits produced correct damage narration
+text but the victim's real `qi`/`jing` never moved**: `meipo` visibly
+absorbed 20+ hits for hundreds of damage each while `look meipo` kept
+reporting "她看来身上并无丝毫伤痕" (no wounds at all). This is almost
+certainly why no prior round of this lib's testing ever reached combat/
+death — real damage simply never applied, at all, to anyone, ever. Fixed
+the whole file with the same redirect pattern (`receive_damage`/
+`receive_wound`/`receive_heal`/`receive_curing`/`receive_full`/
+`dps_count`/`record_dp`/`remove_dp`/`unconcious`/`revive`/`die`/
+`reincarnate`/`max_food_capacity`/`max_water_capacity`/`set_weak`/the
+non-mapping-reference parts of `heal_up`) — left `heal_up()`'s large
+`my = this_object()->query_entire_dbase()`-then-mutate-by-reference block
+untouched, since that's a real `->` call returning a live mapping
+reference, genuinely safe from this trap already. Verified: after this
+fix + fresh relogin, `meipo` correctly showed escalating wound-status
+flavor text (精力充沛 → ... → 已经陷入半昏迷状态，神智全失) and
+genuinely fell unconscious (`COMBAT_D->announce(ob, "unconcious")`'s
+"$N脚下一个不稳，跌在地上一动也不动了" text, confirmed only reachable
+from `feature/damage.lpc`'s own `unconcious()`) — the first time this
+lib's `qi`/`jing` combat resource pools have ever been observed to
+actually deplete from real combat.
+
+While investigating, `inherit/char/char.lpc` itself (where `heart_beat()`'s
+death-check logic lives) was checked too and is clean — it inherits
+F_DBASE directly, so its own bare calls correctly resolve locally; no fix
+needed there.
+
+**Permanent death not reached, root cause narrowed, left unfixed as an
+honest open question (not confidently a bug, see below)**: with the two
+fixes above, `meipo` cycled through real unconscious episodes repeatedly
+(7-10+ confirmed across two separate ~1-2 minute continuous `kill`
+sessions) but never reached the actual "扑在地上挣扎了几下...死了"
+(`"dead"` announce case) death text. Read `inherit/char/char.lpc`'s
+`heart_beat()` closely: it has TWO separate qi/jing threshold checks —
+(1) `eff_qi<0 || eff_jing<0 || qi< -max_qi/5 || jing< -max_jing/5` →
+correctly checks `killer->is_killing(...)` intent (real `kill`-command
+lethal path) before choosing `die()` vs `unconcious()`; (2) a lower-
+priority `qi<0 || jing<0` fallback that unconditionally calls
+`unconcious()` (never checks kill intent at all, since `living(me)` stays
+true right up until real death). Since `receive_damage()`'s "qi" floor-
+at-`-1` mechanic means plain `qi` crosses zero on nearly every hit (long
+before the much larger `eff_qi` wound-ceiling, only reduced by the
+rarer wound-type hits, ever does), block (2) appears to catch nearly
+every real depletion event first, resetting `qi` back to `0` via
+`unconcious()` before block (1)'s kill-aware death path is ever reached
+simultaneously with `eff_qi` also being negative. A temporary `log_file()`
+probe placed at block (1)'s entry (removed before finishing; briefly
+left `nosave/` missing on this lib, created it since several existing
+call sites already expect it) never fired even once across ~10 unconscious
+cycles, consistent with this theory. **Not fixed**: this needs a real
+design call (should block 2 also check kill intent? should `unconcious()`
+not reset plain `qi` so aggressively while `eff_qi` is still positive?)
+that a mechanical bare-call redirect fix doesn't answer, and — per this
+project's hard-won "pawnshop" precedent — "hard to actually kill things
+in normal combat" is at least plausible as intentional NPC/civilian
+toughness rather than a confirmed defect, so left untouched. Flagging
+concretely for a future pass with more session budget to spare on this
+one question: `inherit/char/char.lpc` lines ~97-118.
+
+Command input while in an active, ongoing `kill`-triggered auto-fight was
+also observed to be silently swallowed (no reply, no error, confirmed
+with completely passive commands like `look`/`score`/`i`) for the
+duration of combat — worth a dedicated look in a future pass, but not
+chased further here since it didn't block the two real fixes above (both
+verified via careful command sequencing around it) and might simply be
+this project's already-documented telnet/raw-socket-vs-real-client
+harness gap rather than a driver/mudlib bug.
+
+### 2. Shop purchase: verified working, no bug found
+
+`nitan170911`/this lib's own prior rounds both stopped at "correctly
+rejected for insufficient funds" (content, not a bug). This round funded
+a real purchase via the sanctioned admin path: `cmds/adm/gift.lpc`
+(`gift <id>`, gated by `(arch)` rank, not the separate `clone`-command
+`is_admin()`-only gate this lib's hardcoded superuser check blocks
+`fluffos` from — confirmed `clone`/`dest`/`smash` are all gated behind
+`me->is_admin()` literally hardcoded to `getuid()` ∈
+`{lonely, shulele, cqpkzaz}`, which no wizlist-granted "boss" account
+satisfies on this lib) granted `/clone/money/thousand-gold` ×3 among
+other items. `list`/`buy cloth` at 醉仙楼 (`d/city/zuixianlou`, NOT the
+`zuixianlou2` upstairs room prior rounds referenced) then correctly
+deducted 1 coin-equivalent and produced real change across all four
+denominations (coin/silver/gold/thousand-gold), and the `cloth` item was
+received. No bug found; `MONEY_D->player_pay()`'s denomination-breakdown
+math checked out exactly against the displayed post-purchase inventory.
+
+### 3. Sect recruitment (`bai`→`xue`): two real bugs found and fixed;
+full cycle completed live
+
+The readily-reachable Beggar Sect NPCs' rejection remains correctly
+identified as content (recruitment gated behind a real sect hall) —
+not re-investigated, matches `nitan170911`/`xuanjianlu`. Located a real
+recruiting master instead: `kungfu/class/huashan/yue-buqun.lpc` (岳不群,
+Huashan Sect leader), placed via `d/huashan/qunxianguan.lpc` (群仙观,
+directly reachable, no maze/gate). `attempt_apprentice()`/`do_recruit()`
+gate on gender≠female, `shen`≥20000, `huashan-neigong`/`huashan-sword`
+skill≥140 — granted via `wizlian` (shen/skill grants, the sanctioned
+fast-path).
+
+**Bug 1, fixed**: `do_recruit()`'s `recruit_apprentice()` override calls
+`this_object()->add("apprentice_availavble", -1)` — a typo'd property
+name (extra "av") that doesn't match the real `"apprentice_available"`
+property `attempt_apprentice()`/`reset()` actually read/write. Since
+`add()` on a never-before-set property just creates it fresh (per
+`feature/dbase.lpc`'s `add()` semantics), the real recruit-limit counter
+silently never decremented — the master's own dialogue ("老夫今天已经
+收了三个弟子，不想再收徒了", i.e. "already recruited 3 today") became
+permanently dead/unreachable code, an observably-broken intended state
+transition from a literal property-name typo (not a design/balance call —
+matches this project's strict in-scope bar). Same typo found and fixed
+in all 4 files sharing this exact recruiter-limit pattern: `kungfu/class/
+huashan/yue-buqun.lpc`, `feng-buping.lpc`, `yue-wife.lpc`, `kungfu/class/
+qingcheng/yu.lpc` (a narrow, self-contained grep sweep, not corpus-wide).
+
+**Bug 2, fixed, real compile-error blocker**: `update`ing `yue-buqun.lpc`
+cascaded into `/clone/misc/pin` (a hairpin weapon he `carry_object()`s in
+`create()`) failing to compile: `inherit/weapon/pin.lpc:47: Error: Bad
+type for argument 1 of to_chinese ( int vs string )`. Root cause: `inherit/
+item/item.lpc` (reached via `EQUIP`'s `inherit ITEM;`, which `pin.lpc`
+itself inherits via `inherit EQUIP;`) defines its OWN LOCAL
+`string to_chinese(int status)` (an item-rarity-tier→Chinese-name
+converter, unrelated purpose) — this locally-inherited definition
+SHADOWS the simul_efun `to_chinese(string)` (a generic English→Chinese-
+numeral-name converter) for every file that inherits `EQUIP`/`ITEM`, so
+`pin.lpc`'s dead-but-still-compiled `extra_long()` display code (calling
+`to_chinese(key)` where `key` is genuinely a string attribute-requirement
+name) resolved to the WRONG local function and failed to type-check —
+a hard compile error, not a driver bug (confirmed reproducible in
+isolation via direct `update` on the file alone). Same exact shape (same
+copy-pasted `extra_long()` block) independently confirmed in `inherit/
+weapon/xsword.lpc`. **Impact**: this silently broke `yue-buqun.lpc`'s own
+compile whenever anything in the dependency chain (his own `create()`,
+via `carry_object`) touched `/clone/misc/pin` — meaning **Huashan Sect's
+leader NPC never actually spawned in the game world at all**, on every
+boot, until fixed (same class of impact as this lib's earlier
+`nanxian.lpc` and `is_killing()` findings). Fixed by explicitly
+qualifying the intended simul_efun call as `("/adm/kernel/simul_efun")->
+to_chinese(key)` in both files (an `efun::to_chinese(...)` attempt was
+tried first and correctly rejected — `to_chinese` isn't a real driver
+efun on this build, only a simul_efun, so `efun::` doesn't reach it;
+explicit `call_other` to the simul_efun object is the correct
+disambiguation). Verified: `update` on both files now succeeds, and
+`goto /d/huashan/qunxianguan` confirms 岳不群 now genuinely spawns.
+
+**Full cycle verified live**: `bai yue buqun` → "你想要拜岳不群为师" →
+2s `attempt_apprentice`→`do_recruit` delay → "岳不群决定收你为弟子" →
+"恭喜您成为华山派的第十四代弟子" (14th generation). `score` before/after:
+`【门派】` changed from `普通百姓` to `华山派`, `【师承】` (master/
+lineage) correctly shows `岳不群` — a REAL, persisted family/master
+assignment via the genuine code path (not the earlier-documented
+location-flavor display quirk). `xue yue buqun huashan-neigong`
+correctly declined (skill already at the granted level, "你的华山内功
+功力已经是非同凡响了"). `xue yue buqun huashan-shenfa` (a skill NOT
+pre-granted, that he does teach per his own `set_skill` list) succeeded:
+8× "你的「华山身法」进步了！" skill-improvement messages, "你听了岳不群
+的指导，似乎有些心得" completion message — real skill acquisition via
+the genuine teaching mechanic, not a shortcut.
+
+### Standard checklist re-confirmation (spot-check only, per task scope)
+
+All items previously documented as already-applied to this lib re-
+confirmed still intact and not regressed by this pass's fixes: `§7.90`
+(`maximum evaluation cost` still `2000000`, unchanged, no
+`cost limit reached` hits in any boot log this session), `§7.100`
+(`grep -rl "replace_program(ROOM)"` hits are all inside `//`-commented
+dead code, matching the sweep's own documented exclusion — confirmed
+`d/huashan/qunxianguan.lpc` and every room visited this pass loaded and
+populated correctly), `§7.79`/`§7.108`/`§7.111`/`§7.30` — no fresh
+`Bad argument`/`array usercount`-class/uninitialized-mapping errors
+surfaced across this pass's several full cold boots and extended live
+sessions. Every cold boot this pass: zero `debug.log` errors.
+
+### Process/resource hygiene
+
+Several full driver restarts this pass (native `build-debug`, port
+40019) — deliberately re-booted clean after every functional fix to
+confirm each fix survives a REAL cold start (not just a live `update`,
+which — as documented above — does not retroactively rebind already-
+loaded object instances). Killed by exact PID each time, confirmed via
+`readlink -f /proc/<pid>/cwd` before each kill; several harness-side
+Python `mudsession.py` helper processes from earlier reconnects were
+also cleaned up by exact PID (never `pkill -f`). Tracked `data/daemon/
+mrtg*` churn reverted via `git checkout --`, matching this lib's own
+established precedent. Real gameplay-state file creation was kept: `fluffos`'s
+own save files (stat/skill grants used throughout this pass) and a new,
+previously-never-exercised `data/shop/*.o` (21 files — the city-wide
+shop daemon's first-ever persisted state, created by this pass's real
+`buy cloth` purchase). `nosave/` did not exist on this lib prior to this
+pass (created, empty, harmless — several existing call sites, e.g.
+`timed.lpc`'s crontab-failure logger, already expected it to exist).

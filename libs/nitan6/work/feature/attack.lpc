@@ -2,6 +2,27 @@
 // Written by Lonely@nitan.org
 // attack.c
 
+// feature/attack.lpc is inherited (as F_ATTACK) as a SIBLING of F_DBASE
+// by char.lpc, not the other way around -- it never inherits F_DBASE
+// itself. Every bare query()/query_temp()/set()/set_temp()/delete() call
+// in this file (no trailing `ob`/this_object() redirect) therefore hits
+// the same F_DBASE bare-call bootstrapping trap already fixed in
+// feature/name.lpc, feature/command.lpc, feature/apprentice.lpc,
+// feature/attribute.lpc, adm/daemons/databased.lpc, and adm/kernel/
+// simul_efun/message.lpc: unqualified calls resolve against the
+// SIMUL_EFUN OBJECT's own shared `dbase`, not this_object()'s own.
+// reset_action()'s bare `set("actions", ...)`/`set("second_actions",
+// ...)` calls were the most consequential instance: since they never
+// actually persisted to the fighting character's own dbase, `query(
+// "actions", me)` in adm/daemons/combatd.lpc's query_action() kept
+// finding nothing even after calling `me->reset_action()` to try to
+// fix it, so query_action() returned 0 and do_attack() silently
+// no-opped (`if (!action) return 0;`) on every single combat round --
+// confirmed live: a fresh character could `kill` an NPC and both sides
+// would loop the "sizing up" guard flavor text forever, no hit ever
+// landing, no HP ever moving, no error of any kind. Fixed with the
+// same `this_object()`/`me` redirect pattern as the other files.
+
 #pragma save_binary
 
 #include <ansi.h>
@@ -155,7 +176,7 @@ void kill_ob(object ob) {
     return;
   }
 
-  if (query_temp("owner") == ob) {
+  if (query_temp("owner", me) == ob) {
     tell_object(me, HIR "不能对你的主人下毒手。\n" NOR);
     return;
   }
@@ -175,7 +196,7 @@ void kill_ob(object ob) {
     if (!living(gob))
       continue;
 
-    if (gob->is_killing(query("id")))
+    if (gob->is_killing(query("id", me)))
       continue;
 
     tell_object(gob, HIR + ob->name(1) +
@@ -221,7 +242,7 @@ void kill_ob(object ob) {
         break;
     }
 
-    if (ob->is_want_kill(query("id")))
+    if (ob->is_want_kill(query("id", me)))
       gob->want_kill(me);
     else if (ob->can_learn_from())
       // For master, kill action cause "want_kill" to guarder
@@ -245,7 +266,7 @@ void want_kill(object ob) {
   if (is_killing(ob_id) ||
     is_want_kill(ob_id)) return;
 
-  if (ob->is_want_kill(query("id"))) return;
+  if (ob->is_want_kill(query("id", this_object()))) return;
   if (query_temp("in_pkd", ob)) return;
 
   env = environment(ob);
@@ -256,9 +277,9 @@ void want_kill(object ob) {
   want_kills += ({ ob_id });
   me = this_object();
   if (userp(ob) && !query("no_newbie", ob)) {
-    set("no_newbie", 1);
-    if (query("newbie")) {
-      delete("newbie");
+    set("no_newbie", 1, me);
+    if (query("newbie", me)) {
+      delete("newbie", me);
       tell_object(me, BLINK + HIR "\n由于你主动攻击其他玩家，所以取消对你的新手保护！\n\n" NOR);
     }
   }
@@ -305,7 +326,7 @@ object select_opponent() {
       return prefered;
   } else {
     enemy_selected = enemy;
-    if (stringp(target_name = query("env/target"))) {
+    if (stringp(target_name = query("env/target", this_object()))) {
       if (objectp(target = present(target_name, environment())))
         if (member_array(target, enemy) != -1)
           return target;
@@ -359,7 +380,7 @@ void remove_all_enemy(int force) {
     // if the fight is succeffully stopped, bcz the fight will start
     // again if our enemy keeping call COMBAT_D->fight() on us.
     if (objectp(enemy[i])) {
-      if (force || !enemy[i]->is_killing(query("id"))) {
+      if (force || !enemy[i]->is_killing(query("id", this_object()))) {
         enemy[i]->remove_enemy(this_object());
         enemy[i] = 0; ;
       }
@@ -462,7 +483,7 @@ void reset_action() {
   me = this_object();
   prepare = query_skill_prepare();
 
-  if (objectp(ob = query_temp("weapon")) && (ob->query("skill_type") != "throwing")) {
+  if (objectp(ob = query_temp("weapon", me)) && (ob->query("skill_type") != "throwing")) {
     type = query("skill_type", ob);
     if (type == "pin") type = "sword";
   }
@@ -471,7 +492,7 @@ void reset_action() {
     if (!prepare || sizeof(prepare) == 0) type = "unarmed";
     else if (sizeof(prepare) == 1) type = (keys(prepare))[0];
     else if (sizeof(prepare) == 2)
-      type = (keys(prepare))[query_temp("action_flag")];
+      type = (keys(prepare))[query_temp("action_flag", me)];
   }
 
   if (stringp(skill = query_skill_mapped(type)) &&
@@ -479,10 +500,10 @@ void reset_action() {
     // If using a mapped skill, call the skill daemon.
     if (ob)
       //set_action((: call_other, SKILL_D(skill), "query_action", me, ob :), 0);
-      set("actions", (: call_other, SKILL_D(skill), "query_action", me, ob :));
+      set("actions", (: call_other, SKILL_D(skill), "query_action", me, ob :), me);
     else
       //set_action((: call_other, SKILL_D(skill), "query_action" :), 0);
-      set("actions", (: call_other, SKILL_D(skill), "query_action" :));
+      set("actions", (: call_other, SKILL_D(skill), "query_action" :), me);
 
     if (current_skill != skill) {
       current_skill = skill;
@@ -492,10 +513,10 @@ void reset_action() {
     // Else, let weapon handle it.
     if (ob)
       //set_action(query("actions", ob), 0);
-      set("actions", query("actions", ob));
+      set("actions", query("actions", ob), me);
     else
       //set_action(default_object, default_function);
-      set("actions", query("default_actions"));
+      set("actions", query("default_actions", me), me);
 
     if (current_skill != skill) {
       current_skill = skill;
@@ -503,19 +524,19 @@ void reset_action() {
     }
   }
 
-  // 左手兵器        
-  if (objectp(ob = query_temp("secondary_weapon")) && (ob->query("skill_type") != "throwing")) {
+  // 左手兵器
+  if (objectp(ob = query_temp("secondary_weapon", me)) && (ob->query("skill_type") != "throwing")) {
     if (ob->query("skill_type") != type)  // 是否为不同种兵器
     {
       if (stringp(skill = query_skill_mapped(ob->query("skill_type"))) &&
         (int)query_skill(skill, 1) > 0)
-        set("second_actions", (: call_other, SKILL_D(skill), "query_action", me, ob :));
+        set("second_actions", (: call_other, SKILL_D(skill), "query_action", me, ob :), me);
       else
-        set("second_actions", query("actions", ob));
+        set("second_actions", query("actions", ob), me);
     } else
-      set("second_actions", 0);
+      set("second_actions", 0, me);
   } else
-    set("second_actions", 0);
+    set("second_actions", 0, me);
 }
 
 // this is called in heart_beat() to perform attack action.-- move to damage.c
@@ -526,7 +547,7 @@ int attack() {
 
   opponent = select_opponent();
   if (objectp(opponent)) {
-    set_temp("last_opponent", opponent);
+    set_temp("last_opponent", opponent, this_object());
     COMBAT_D->fight(this_object(), opponent);
     return 1;
   }
