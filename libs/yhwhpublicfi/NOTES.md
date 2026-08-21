@@ -282,3 +282,106 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 第四轮 §10.7 深测：死亡/复活闭环补测（2026-08-20）
+
+本轮专门补测上一轮（2026-08-07）明确标记"未验证实况"的死亡/复活
+循环——上次实战里角色在自动脱战机制（约 24-40 点伤害后主动撤离）
+介入前始终没有真正死过。这次先读代码理清了机制（不是靠继续苦练
+碰运气）：`feature/damage.lpc` 的 `unconcious()`（qi/jing < 0 时触发，
+`COMBAT_D->player_escape()` 郭靖救场，送去"郭府大厅"疗伤，不是真死）
+和 `die()`（eff_qi/eff_jing < 0，或没有 `player_escape` 接住时才真正
+执行）是两个独立分支——`player_escape()` 只有在"击晕者当前正在和你
+交战"这个条件成立时才会拦截，管理员 `smash` 指令（`cmds/arch/
+smash.lpc`）走的是 `receive_damage("qi",1,killer)` + `ob->die()` 直接
+调用，`killer` 不处于与目标的实际战斗状态，`player_escape()` 直接
+判 0 放行，所以 `smash <目标>` 是一条繁殖代价最低、完全合法（arch
+权限指令）的真死路径，不需要去找"打不过就跑"这个自动脱战机制的
+反例。
+
+**发现并修复的真 bug（不在死亡路径本身，而是新角色 `born` 流程里，
+测试过程中意外撞见）**：`adm/daemons/updated.lpc` 的 `born_player()`
+第 312 行 `get_dir("/kungfu/special/")`（不带通配符）会把
+`kungfu/special/` 目录下所有条目都列进来，包括 5 个从未清理掉的历史
+`.c.bak` 残留档（`guibian.c.bak`/`guimai.c.bak`/`qinzong.c.bak`/
+`shenyan.c.bak`/`tiandao.c.bak`——这 5 个的 `.lpc` 现役版本本来就在
+第 321 行的"转世特技排除名单"里，说明这些残留档正是该被排除的那批）。
+第 318 行 `sscanf(files[i], "%s.lpc", files[i])` 对不以 `.lpc` 结尾的
+档名（比如 `guibian.c.bak`）匹配失败，`files[i]` 保持原样不变，导致
+排除名单的字符串比较（`"guibian"` vs `"guibian.c.bak"`）对不上，这
+5 个残留档全部原样留在候选池里参与 `random()` 抽取特殊技能。一旦被
+抽中，`SPECIAL_D(special)->name()`（`#define SPECIAL_D(x)
+("/kungfu/special/" + x)`）呼叫 `/kungfu/special/guibian.c.bak` 这个
+不存在的物件，直接在 `born` 指令执行时炸出
+`*call_other() couldn't find object '/kungfu/special/guibian.c.bak'.`——
+实测第一次新建角色 `born` 就撞上了（约 5/28 的概率）。修复参考同一
+份档案里其它地方（`storyd.lpc`/`eventd.lpc`/`quest/explore.lpc`）已经
+在用的写法，把 `get_dir("/kungfu/special/")` 改成
+`get_dir("/kungfu/special/*.lpc")`，让通配符本身过滤掉非 `.lpc` 档
+案，不再依赖脆弱的 sscanf 后缀剥离。修复前后各完整跑了一次注册到
+`born` 的全流程验证：修复前必现上述崩溃；修复后新角色 `deathtest`
+干净通过 `born`，`debug.log` 零错误。
+
+**死亡/复活全流程实测（`deathtest` 新角色，均衡秉性由武林类型菜单
+随机分到"心狠手辣"）**：管理员 `fluffos` 账号对已完成投胎的
+`deathtest` 使用 `smash deathtest`（跨房间也能命中，`smash.lpc` 支持
+远程雷劈），角色立即"死了！"，`ghost=1`，`move(DEATH_ROOM)` 送入
+"鬼门关"（`/d/death/gate`）。房间内 `npc/bai.lpc`（白无常）的 `init()`
+在检测到 `previous_object()->is_ghost() && !wizardp(...)` 后自动排队
+`death_stage()` 五段对话（每 5 秒一句），全程无需玩家主动输入。最后
+一句"罢了罢了，你走吧"之后自动 `reincarnate()`（`ghost=0`，
+`eff_qi`/`eff_jing` 满血）、清空随身物品（`DROP_CMD->do_drop()` 逐件
+丢弃，实测复活后 `i` 显示"身上没有任何东西"）、`move(REVIVE_ROOM)`——
+`REVIVE_ROOM` 宏定义为 `/d/city/wumiao`（"武庙"），和 `help newbie`
+文档写的"死后从鬼门关复活回来，到扬州的武庙"**完全对得上**。复活后
+`score` 正确显示"你到目前为止总共到黑白无常那里串门一次"（死亡计数
+从 0 变 1）、"你最后一次是被雷劈死了"（死因文案正确），角色可以正常
+接受后续指令（`look`/`i` 均正常响应）。全程（含此前 `fluffos` 管理员
+账号自测的一次死亡+`recover`+`goto`手动归位）`debug.log` 零错误记录。
+
+（旁注：管理员账号 `wizardp(previous_object())` 为真时 `bai.lpc`/
+`hei.lpc` 的 `init()` 会直接 `return`，不会自动播放死亡对话——这是
+有意为之的设计（巫师不走凡人复活流程），不是 bug；用管理员账号
+`fluffos` 自测死亡路径时借 `recover`+`goto` 指令手动归位，不代表
+死亡对话本身对巫师账号是坏的。）
+
+**环境问题，非代码 bug，已在本地建目录但未提交**：`smash` 触发的
+`die()` 调用链（`combatd.lpc` 的 `killer_reward()` 第 1534 行）里有
+一处 `log_file("nosave/killrecord", ...)`，本仓库这份档案的
+`work/log/nosave/` 目录此前从未被创建过（`log/` 整体在 `.gitignore`
+里，不受版本控制，驱动启动时也不会自动建这个子目录——手足档案
+`zjdywzb`/`xkyxciii` 等的本地 `work/log/nosave/` 目录已经在，佐证这
+纯粹是运行环境搭建缺口，不是代码问题）。第一次触发时 `log_file()`
+因目录不存在直接报错，把整个 `die()` 调用链从 `killer_reward()` 那
+一行截断，角色被判定"死了"但从未真正进入 `ghost`/移动到死亡房间/清
+除随身物品——是一个值得记录的连带观察：`die()` 对 `log_file()` 失败
+没有任何防护，一旦该次写入失败（不管什么原因），死亡流程会卡在
+"喊了台词但状态没变"的半失败态，但这是运行环境问题触发的，不是这
+份代码本身的缺陷，`mkdir -p work/log/nosave` 后问题消失，未做代码
+改动。
+
+**标准检查清单快速核对结果（均确认干净，不重新推导）**：
+- §7.90（`config.fluffos` eval-cost）：`maximum evaluation cost :
+  5000000`，健康值，未改动。
+- §7.100（`replace_program(ROOM)`）：全档案 15 处命中全部是
+  `//` 注释掉的历史行或 `.c.bak` 备份档，无一处存活，确认此前的
+  跨库扫描修复在这份档案上完全生效。
+- §7.108（`reconnect()` 调用 `enable_commands()`）：
+  `clone/user/user.lpc` 第 281-287 行 `reconnect()` 第一行就是
+  `enable_commands()`，确认干净。
+- §7.111（`standard_trace()`）：`adm/single/master.lpc` 的
+  `standard_trace()`/`error_handler()` 本轮死亡测试过程中被真实的
+  `log_file()` 报错和 `killrecord` 目录缺失错误各触发过一次，现场
+  输出的错误堆栈格式完全正常（"执行时段错误：""程式：""物件："
+  "呼叫来自："），确认无需修复。
+- §7.112（`death_stage()` 重入守卫）：`d/death/npc/bai.lpc`（本轮
+  死亡测试实际触发的档案）连同 `hei.lpc`/`d/death22/npc/{bai,hei}.lpc`/
+  `bgargoyle.lpc`/`wgargoyle.lpc` 逐一读了完整源码，每个提前 return
+  分支和终态分支都正确配对 `set_temp`/`delete_temp`，本轮死亡测试是
+  这份档案第一次真实走完这条路径（此前从未有真实死亡触发过），实测
+  过程零重入/零残留 `death_stage_active` 现象。
+- §7.79（`addn()` 两参数）：全档案唯二 2 处命中都在
+  `cmds/skill/death.lpc` 里且已被注释掉，不适用。
+- §7.30（`feature/skill.lpc` 存取函式空 mapping 防护）：上一次
+  §7.30 语料库扫描已经对这份档案做过修复（见上一节），本轮未重新
+  验证。
