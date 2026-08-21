@@ -1069,3 +1069,127 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试第四轮 / Round-four deep functional test (2026-08-20) — resolving the two explicitly-flagged gaps
+
+Booted `build-debug` clean (zero errors), same `config.fluffos` (port
+40066). Two dual-connection Python socket scripts (one admin
+connection + one player connection, interleaved, no `tmux_mud.sh`)
+used to solve both previously-flagged timing/funding gaps with admin
+tools, per this pass's explicit instructions. `log/debug.log` for the
+whole session: zero `错误`/`crash`/`Fatal`/`denied`/`cannot`/`undefined`
+hits (the one compile error that appears in the raw log is my own
+typo in a scratch `eval` expression — `me()` isn't a real efun/simul_efun
+here — not a mudlib bug; corrected and re-ran).
+
+### Item 1 — 纪晓芙 (峨嵋派) sect-join: RESOLVED, real success, no bug found
+
+**Root cause of the original timing problem, now understood**: she is
+NOT room-reset-driven (confirmed: this config's `time to reset : 1800`
+is far too long to explain sub-2-second relocations). Her actual
+wander trigger is `kungfu/class/emei/ji.lpc`'s own `chat()` (heart_beat
+→ `chat()` → `stay_chance` decrements every tick → `random_move()`
+once it drops below 1), compounded by her `init()` unconditionally
+calling `set_heart_beat(1)` — since `init()` re-fires on her every time
+ANY living thing enters her current room (standard LPC semantics), a
+plain `set_heart_beat(0)` from admin gets silently undone the instant
+anyone (including the admin doing the catching) walks in, explaining
+why she kept relocating even with heart_beat nominally disabled.
+
+**Fix for the test session (not a code change)**: `eval
+find_living("ji xiaofu")->set("stay_chance", 1000)` (freezes her
+`random_move()` trigger regardless of `init()`/heart_beat state), then
+`eval find_living("ji xiaofu")->move("/d/city/guangchang")` to plant
+her in her canonical spawn room. She stayed put through the whole
+interaction. Restored afterward with `eval find_living("ji
+xiaofu")->set("stay_chance", 0)` so normal wandering resumes.
+
+**The real `bai`/recruit flow, exercised live** with the existing
+`qinfengw`/秦风武 character (male, no prior sect): `bai ji` alone
+completed the ENTIRE flow in one command — her `attempt_apprentice()`
+(defined via `#include "/kungfu/class/emei/sujia.h"`, not in `ji.lpc`
+itself — initially looked like a missing-function gap until the
+`#include` was found) ran synchronously, printed her in-character
+dialogue ("我们峨嵋派的功夫比较适合女弟子修习。既然小兄弟要学些强身
+健体的本领，就留在我这里吧。" — a gendered flavor line for a male
+applicant, not a rejection), then force-issued `recruit qinfengw` as
+herself, which matched `qinfengw`'s already-pending `bai` request and
+completed the apprenticeship in the same tick. **Verified via `score`**:
+title updated to "峨嵋派第五代弟子 秦风武" (her generation 4 + 1 = 5,
+correct), 【门派】(sect) = 峨嵋派, 【师承】(master) = 纪晓芙 — all
+correct. **No bug found** — the `bai`→`attempt_apprentice`→`recruit`
+round trip works exactly as designed; the earlier pass's inability to
+catch her was purely a scripted-testing timing limitation, now solved
+with the documented admin-freeze technique. Not touched: `sujia.h`,
+`ji.lpc`, `bai.lpc`, `recruit.lpc`, `feature/apprentice.lpc` — all
+read, all correct.
+
+### Item 2 — successful shop purchase: RESOLVED, real success, no bug found
+
+Used the sanctioned admin `clone`+`give` pattern for this lib's real
+coin object (`/clone/money/coin`, `COIN_OB`): admin `goto qinfengw`,
+`clone /clone/money/coin` (clones 1 into admin's own inventory,
+default `set_amount(1)` per `coin.lpc`'s `create()`), `eval
+present("coin", find_player("fluffos"))->set_amount(50)` (bumped to 50
+copper), `give qinfengw coin` — **first attempt silently failed**
+("对方不接受这样东西") because `qinfengw` was still netdead
+(`<断线中>`) from the previous test connection being closed without
+`quit`; `give.lpc`'s `do_give()` only auto-succeeds for `interactive()`
+targets, otherwise it tries an NPC-oriented `TASK_D->task_give()` /
+`accept_object()` path that a plain netdead player object doesn't
+implement. **Not a bug** — reconnected `qinfengw` properly (a real
+player would just be logged in) and the identical `give` command
+succeeded instantly ("你给秦风武五十文铜钱。").
+
+`qinfengw` then walked the real path from 中央广场 to 鲜花店
+(`north` → 客店, `west` → 客店, `west` → 鲜花店 — confirmed live, not
+guessed) and ran the real `list`/`buy` flow: `list` showed the correct
+14-item price sheet (情人草 = 十五文铜板/15 copper, matching
+`qingren_cao.lpc`'s `set("value", 15)`); `buy 1 qingren cao` succeeded
+("你向英莲买下一株情人草。"); **`i` confirmed both halves of the
+transaction**: exactly 35 copper remaining (50 − 15, correct
+deduction via `MONEY_D->player_pay()`) and the real item in inventory
+("一株情人草(Qingren cao)"). **No bug found** — `hua_girl.lpc`'s
+`do_buy()`/`MONEY_D->player_pay()` price/deduction/item-move logic is
+all correct; the only reason this was never reached before was the
+test character's lack of funds, now solved with a real admin-funded
+purchase per this pass's instructions.
+
+### Checklist sanity pass (fast, confirm-only — all already correct)
+
+- **§7.30**: `feature/skill.lpc`'s 4 accessors already carry the
+  `mapp(x) ? x : ([])` guard (read live file directly) — matches the
+  corpus sweep's claim.
+- **§7.100**: `grep -rn 'replace_program(ROOM)'` → 281 hits, ALL inside
+  `//`-commented-out lines (spot-checked 20+) — zero live occurrences,
+  matches the sweep's "0 遗留" claim.
+- **§7.111**: `adm/single/master.lpc`'s `standard_trace()` read live —
+  same safe shape as the earlier pass's excerpt, no new issue.
+- **§7.112**: this lib has no `chacha.lpc` anywhere (`find -iname
+  chacha.lpc` → zero hits) — the shared-file bug this session found on
+  4 sibling libs doesn't apply here; this lib's own §7.112 instances
+  (the `d/death/npc/{wgargoyle,bgargoyle,wgargoyle3}.lpc` sweep) were
+  already fixed in an earlier pass, not re-touched.
+- **§7.79**: `grep -n 'addn('` across `work/` → zero hits at all (this
+  lib doesn't use `addn()`) — not applicable.
+- **§7.90**: eval-cost-related daemons (`autosaved.lpc`, `taskd.lpc`,
+  `backupd.lpc`, `master.lpc`) exist and were exercised indirectly via
+  this whole live session with zero `maximum eval cost` hits in
+  `debug.log`.
+- **§7.108**: already fixed in the 2026-08-15 pass (`enable_commands()`
+  added to `clone/user/user.lpc`'s `reconnect()`) — not re-derived,
+  confirmed the line is still present.
+- **combatd.lpc `bounce`-division pattern**: `grep -n 'bounce'
+  work/adm/daemons/combatd.lpc` → zero hits. This lib's combat daemon
+  doesn't use a `bounce` variable/division-halving loop at all (its
+  equivalent retry loop at line 508 is `while (random(defense_factor) >
+  my["combat_exp"])`, a different shape) — the 4-sibling-lib bug from
+  this session does not apply here.
+
+### Files touched this pass
+
+None (no code changes — both gaps resolved as genuine successes, not
+bugs). Save-file churn only: `work/data/{login,user}/{f/fluffos,q/
+qinfengw}.o` (admin coin-clone + `qinfengw`'s new sect membership/
+inventory), `work/tmp/tmp_eval.lpc` (routine `eval`-command scratch
+file, already tracked from prior passes).
