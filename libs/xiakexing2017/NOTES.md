@@ -638,3 +638,223 @@ reverted before commit.
 ### ```§7.112``` residual-gap closure (2026-08-20)
 
 Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `d/death/npc/newgargoyle.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
+
+## 深度功能测试第四轮 / Deep functional test round four (2026-08-20)
+
+Resolved this lib's two remaining round-two/round-three "honesty notes — not verified live" gaps
+(sect apprenticeship completion and death/respawn) explicitly. Found and fixed one new,
+genuinely crash-causing bug in the process; the standard checklist re-confirm otherwise came
+back 100% clean (all prior fixes still present, matching the current code).
+
+### Item 1 — sect membership / `xue` skill learning: COMPLETED LIVE. New bug found and fixed: `adm/daemons/chinesed.lpc`'s bare `restore()` (no local `catch()`) let a pre-existing corrupted save silently abort `create()` before its own `mapping dict` variable could ever be (re-)guarded, crashing every real `xue`/`skills` command
+
+**File:line: `adm/daemons/chinesed.lpc:25-28` (pre-fix).**
+
+Re-examined the four `丐帮` teachers previously confirmed reachable without prior
+sect membership (`鲁有脚`/`彭有敬` at `d/city/pomiao`, `简长老` at
+`d/city/gbandao`, `苏国盛` — actually 洪七公's man `hong` — at `d/city/gbxiaowu`/`d/city/mishi`,
+though the latter two turn out to be gated behind `d/city/gbandao`'s own
+`valid_leave()` for non-members, so not actually reachable pre-membership either)
+and confirmed **none** of the pomiao/gbandao-reachable teachers can currently
+accept `qinfengxia`'s actual roll (`int` 26): `kungfu/class/gaibang/lu.lpc`
+rejects if `int>=25` (inverted from what a skim of the file names suggests —
+Lu wants *low*-int students), `peng.lpc` and `jian.lpc` are unconditional
+non-recruiters. This matches the round-two writeup's own conclusion, not a
+contradiction of it.
+
+Read the full `kungfu/class/gaibang/*.lpc` roster instead of stopping at the
+four already-tried teachers: `yu-hx.lpc` (余洪兴, 丐帮八袋弟子) accepts if
+`int>=25` — the *actual* NPC the original task brief's "int>=25 threshold"
+was describing, not `lu.lpc`. `qinfengxia`'s existing `int` 26 already
+satisfies it — **no stat grant was needed at all**, only physical access.
+`yu-hx.lpc` sits in `d/gaibang/underxx`, reachable in real play only via
+`d/city/pomiao`'s `dong` (树洞) passage, itself gated by
+`(fam=me->query("family")) && fam["family_name"]=="丐帮"` — i.e. the whole
+underground-tunnel teacher roster (`li-sh`, `liang`, `yu-hx`, `zuo-quan`,
+`ma-jw`, `he-bj`) is circularly locked behind already having a sect, so
+reaching it the "long way" isn't actually possible pre-membership either.
+Used the sanctioned admin-shortcut path instead: admin `goto
+/d/gaibang/underxx` (teleport the admin only, bypassing the tedious/circular
+travel gate, not any stat/security check) then admin `summon qinfengxia`
+(pulls the real character object to the admin's room via the ordinary
+`move()` mechanism — the same summon any admin could use in a real support
+situation) to physically place `qinfengxia` in the room without touching any
+stat. `bai yu`/`apprentice yu` then ran `yu-hx.lpc`'s real, unmodified
+`attempt_apprentice()` check against the character's real, roll-derived
+`int`, exactly like the four previously-tested teachers.
+
+- **Sect join itself worked correctly, first try, no bug**: `attempt_apprentice()`'s
+  `int>=25` branch matched, `recruit`/`class="beggar"` ran, `bai` completed —
+  "恭喜您成为丐帮的第二十代弟子。", `score` correctly showed
+  "丐帮第二十代弟子" and "你的师父是余洪兴。".
+- **`xue force from yu` crashed**, and so did the unrelated `skills` command
+  (which lists learned skills):
+  ```
+  执行时段错误：*Value being indexed is zero.
+  程式：/adm/daemons/chinesed.lpc 第 94 行
+  呼叫来自：/feature/command.lpc 的 command_hook() 第 55 行，物件： /clone/user/user#12 ("沈秋白")
+  呼叫来自：/cmds/skill/xue.lpc 的 main() 第 71 行，物件： /cmds/skill/xue
+  呼叫来自：/adm/obj/simul_efun.lpc 的 to_chinese() 第 6 行，物件： /adm/obj/simul_efun
+  呼叫来自：/adm/daemons/chinesed.lpc 的 chinese() 第 94 行，物件： /adm/daemons/chinesed
+  ```
+- **Root cause**: `chinesed.lpc` declares `mapping dict = ([]);` and its
+  `chinese(string str)` function does `dict[str]` unguarded. This lib's
+  `data/e2c_dict.o` is pre-existing corrupted binary garbage (confirmed —
+  raw non-text bytes, unchanged since the original archive-conversion
+  commit per `git log`/`git blame`, same class as the already-documented
+  `kedian_b` board corruption). `create()`'s bare `restore()` call (no local
+  `catch()`) means `restore_object()`'s mid-parse throw on that garbage
+  aborts the *entire rest of `create()`* — it's only caught one level up, by
+  `master.lpc`'s own `catch()` around `preload()`. The driver's
+  `restore_object()` clears `dict` to a raw `int 0` before it throws,
+  clobbering the `mapping dict = ([]);` declaration-time initializer, and
+  since the exception skips the rest of `create()`, nothing ever resets it.
+  Every later call to `chinese()` (reached via the widely-used
+  `to_chinese()` simul_efun, in turn called from `cmds/skill/xue.lpc` and
+  `cmds/skill/skills.lpc` on every single real `xue`/`skills` command) then
+  indexes a non-mapping and crashes. This is why *no* prior pass — despite
+  four correctly-diagnosed teacher rejections — had ever actually completed
+  a live `xue`: the moment a real recruit finally tried to learn a skill,
+  this crash fired, previously indistinguishable from "just didn't get far
+  enough" until this pass isolated it.
+- **Fix**: wrap the restore in a local `catch()` so the guard actually
+  executes regardless of whether the corrupted save throws:
+  ```lpc
+  // BEFORE:
+  void create() {
+    seteuid(getuid());
+    restore();
+  }
+  // AFTER:
+  void create() {
+    seteuid(getuid());
+    catch(restore());
+    if (!mapp(dict)) dict = ([]);
+  }
+  ```
+- **Verified**: fresh boot, real `bai yu` → `xue force from yu` → succeeded
+  ("你听了余洪兴的指导，似乎有些心得。你的「force」进步了！"), `skills`
+  correctly listed the learned `force` skill, repeated `xue` calls kept
+  succeeding, zero new `debug.log` errors (only the pre-existing
+  `chinesed`/`kedian_b` corrupted-save traces remain, both now genuinely
+  harmless since the crash they *actually* caused downstream is fixed).
+- **Files modified**: `work/adm/daemons/chinesed.lpc`.
+
+### Item 2 — death/respawn: COMPLETED LIVE, fully clean, no new bug found
+
+Real `kill liu` (matched 流氓头/Liumang-tou, the stronger of the two 流氓 NPCs
+at `d/city/guangchang` — the sect leader from item 1 helpfully teleported
+next to admin via `goto`+`summon` first, same sanctioned admin-positioning
+shortcut, no stat/skill grant needed since `qinfengxia`'s own base combat
+stats were already sufficient to lose realistically) against `qinfengxia`
+(freshly resurrected from the very apprenticeship test above, i.e. not a
+throwaway) ran a genuine, unmodified multi-round `kill`-command fight —
+confirmed no safe-sparring floor applies (`kill.lpc` has no analogous
+"stop at half health" logic, matching this session's 10+ other
+confirmations that `kill` vs. an NPC is unprotected) — and **the character
+actually died for real**, no `smash` shortcut needed:
+
+```
+你的眼前一黑，接著什么也不知道了....
+你死了。
+【谣言】某人：我看到沈秋白被流氓头杀死了。真是好惨。
+鬼门关 - ...
+  白无常(White gargoyle)
+```
+
+Confirms `inherit/char/char.lpc`'s two-stat wound model precisely matches
+this session's precedent on other libs: `eff_qi`/`eff_jing < 0` (mortal
+wound) → real `die()`; `qi`/`jing < 0` alone → `unconcious()`
+(non-lethal, `revive()`s later) — real `kill` combat clearly reached the
+former, not just the latter.
+
+Walked the full post-death cycle for real, no `NET_DEAD_TIMEOUT`-style
+acceleration needed (the whole sequence is only 5 real-time `call_out`
+stages × 5s ≈ 25s):
+
+- **Death-room transition**: moved to `/d/death/gate.lpc` (鬼门关) with
+  `白无常`/`d/death/npc/wgargoyle.lpc` present, exactly as
+  `feature/damage.lpc`'s `die()` prescribes (`this_object()->move(DEATH_ROOM);
+  DEATH_ROOM->start_death(this_object());`).
+- **One genuinely dead/no-op call noted, explicitly NOT a bug**:
+  `DEATH_ROOM->start_death(...)` calls a function that doesn't exist
+  anywhere in this lib (`grep -rn "start_death"` only finds the *call
+  site*, never a definition) — but per this driver's ordinary
+  `call_other()`-to-undefined-function semantics this silently returns 0,
+  no error, no crash, confirmed by a completely clean `debug.log` through
+  the entire death sequence. Per this project's own scope rule (no error
+  signature = not in scope), left alone — most likely a leftover
+  call from an earlier, since-refactored death-room design where
+  `start_death()` used to do something on the room object directly, now
+  superseded by `wgargoyle.lpc`'s own `init()`-triggered `death_stage()`
+  chain doing the actual work.
+- **`wgargoyle.lpc`'s `death_stage()` re-entry guard already correct** (not
+  part of the §7.112 gap closed above in this same file, that was
+  `newgargoyle.lpc` specifically): every exit path
+  (`!ob || !present(ob)` early-return, and the final post-dialogue branch)
+  correctly pairs `set_temp("death_stage_active", 1)` at `init()` with a
+  matching `delete_temp(...)` — spot-checked `bgargoyle.lpc` too (has an
+  extra "living intruder" branch, also correctly clears the guard) — all
+  three gargoyle files in `d/death/npc/` are clean.
+  Five real dialogue stages played out correctly
+  (character reconnected mid-sequence and the remaining stages continued
+  normally on reconnect, itself a minor confirmation that the
+  `call_out`-driven sequence doesn't depend on an open connection).
+- **`reincarnate()`/respawn**: after the 5th dialogue line, correctly
+  cleared the `death_stage_active` guard, called `ob->reincarnate()`
+  (`ghost=0`, `eff_jing`/`eff_qi` restored to max — confirmed via `score`
+  showing full 精/气 bars post-respawn), dropped inventory via
+  `DROP_CMD->do_drop()`, and moved the character to `REVIVE_ROOM`
+  (`/d/city/wumiao.lpc`, 武庙) — landed there correctly, `look`/`score`
+  both produced correct output, sect membership (`丐帮第二十代弟子`,
+  `你的师父是余洪兴`) survived death unharmed as expected (this lib's
+  design doesn't strip sect membership on death), zero new `debug.log`
+  errors across the entire death→dialogue→reincarnate→respawn cycle.
+- **No fix needed for item 2** — the only latent risk found
+  (`start_death()` calling a non-existent function) produces no observable
+  error under this driver's semantics, so it doesn't meet this project's
+  bug bar; noted for completeness only.
+
+### Standard checklist re-confirm (fast pass, all previously-fixed — no re-derivation needed)
+
+All came back clean, matching the code exactly (not merely assumed from the
+NOTES history):
+
+- **§7.90** (eval-cost): `config.fluffos` still `maximum evaluation cost :
+  5000000`.
+- **§7.100** (`ROOM` extra `replace_program()`): 0 live occurrences; the 41
+  `grep` hits remaining for the literal string are all inside `//`-commented
+  lines, confirming the original 818-site sweep is complete, not a residual
+  gap.
+- **§7.111** (`standard_trace()` null-object guard): `adm/obj/master.lpc`
+  still has `objectp(error["object"]) ? file_name(error["object"]) :
+  "(driver)"`.
+- **§7.112** (`death_stage()` reentrancy): all three `d/death/npc/*gargoyle.lpc`
+  files correctly guarded on every exit path (see item 2 above);
+  `newgargoyle.lpc`'s previously-closed gap (2026-08-20 entry above) still
+  holds.
+- **§7.79** (`addn()` 2-arg): 0 raw call sites remain in this lib.
+- **§7.108** (duplicate-login reconnect losing command dispatch):
+  `clone/user/user.lpc`'s `reconnect()` still starts with
+  `enable_commands();`.
+- **§7.30** (this lib's own original discovery instance — mapping accessor
+  defaulting to `int 0`): all four `feature/skill.lpc` accessors
+  (`query_skills`/`query_learned`/`query_skill_map`/`query_skill_prepare`)
+  still `mapp(x) ? x : ([])`-guarded.
+
+### Verification method
+
+Native `build-debug` driver, two concurrent telnet sessions (admin `fluffos`
++ test character `qinfengxia`), `debug.log` watched continuously via direct
+file reads after every command batch, not merely spot-checked at the end.
+Driver killed by exact PID after each restart (two restarts this pass: once
+to load the chinesed.lpc fix, once implicitly via the initial boot);
+`readlink -f /proc/<pid>/cwd` confirmed against this lib's own `work/`
+directory before every kill. `qinfengxia`'s and `fluffos`'s save-file
+timestamp churn is the only diff left in `work/data/` — both ended the
+session with a clean, in-game `quit`.
+
+### Files modified this pass
+
+- `work/adm/daemons/chinesed.lpc` — new fix (§10.7 item 1, `catch()` +
+  `mapp()` guard on `dict`).
