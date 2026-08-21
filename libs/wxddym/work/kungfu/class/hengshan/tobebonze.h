@@ -33,7 +33,7 @@ int do_kneel()
         me->delete_temp("pending/join_bonze");
         me->set("name", new_name);
         me->set("class", "bonze");
-        me->set("K_record",me->query("combat/PKS")+me->query("combat/MKS", me));
+        me->set("K_record",me->query("combat/PKS")+me->query("combat/MKS"));
         me->set("shen_record",me->query("shen"));
         me->set("shen", 0);
 

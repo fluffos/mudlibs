@@ -130,7 +130,7 @@ int waiting(object me)
                 call_out("do_back", 0, me);
         }
 
-        if( !objectp(fighter=present(query("assigned_fighter", me),environment(me))) )
+        if( !objectp(fighter=present(me->query("assigned_fighter"),environment(me))) )
         {
                 wait_time++;
                 call_out("waiting", 1, me);

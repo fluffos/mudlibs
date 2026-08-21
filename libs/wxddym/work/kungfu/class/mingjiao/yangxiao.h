@@ -230,7 +230,7 @@ int fighting(object me, object fighter, int count)
         if( !find_player(me->query("assigned_fighter")) ||
         !living(fighter) || fighter->query("qi") <= 1 )
         {
-                if( objectp(present(query("assigned_fighter", me),environment(me)))){
+                if( objectp(present(me->query("assigned_fighter"),environment(me)))){
                         fighter->delete_temp("fighting");
                         fighter->delete_temp("beat_count");
                 }
