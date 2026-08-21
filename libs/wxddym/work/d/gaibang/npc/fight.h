@@ -83,7 +83,7 @@ int accept_object(object ob, object obj)
             || (ob->query("family/beggarlvl") == 2
             && me->query("title") == "丐帮三袋弟子" )
             || (ob->query("family/beggarlvl") == 3
-            && me->query("title", me) == "丐帮四袋弟子" )
+            && me->query("title") == "丐帮四袋弟子" )
             || (ob->query("family/beggarlvl") == 4
             && me->query("title") == "丐帮五袋弟子" )
             || (ob->query("family/beggarlvl") == 5

@@ -595,7 +595,7 @@ int do_answer(string arg)
             command("say “如果到了就告诉我(answer here?)，真是很感谢你啊！”");
             remove_call_out("delete_me");
             call_out("delete_me",180); // 这个任务很简单啦，3分钟有够多的了
-            command("follow "+query("id", me));
+            command("follow "+me->query("id"));
             return 1;
         }
     }
@@ -603,7 +603,7 @@ int do_answer(string arg)
     if(arg == "byebye")
     {
         if(!query("following_id")) return notify_fail("还没答应她呢，就说拜拜！\n");
-        if( query("id", me) != query("following_id") )
+        if( me->query("id") != query("following_id") )
             return notify_fail("又不是你答应带她去的，你爱走便走么。\n");
 
         message_vision("$N挠了挠脑袋，对着"+query("name")+"说道：“我带不了你去了，就这样吧，我走了。”\n",me);
