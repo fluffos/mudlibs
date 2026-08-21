@@ -636,6 +636,81 @@ behavior end-to-end twice. Flagged here for whoever next does a
 round-four (or deeper) pass on this lib specifically, to do that full
 live verification in its own right.
 
+## Round-four (§10.7) deep test: net-dead-during-registration gap closed live (2026-08-21)
+
+Closed the one remaining explicitly-flagged gap from this lib's own
+NOTES.md: the `restart_heart()` net-dead-during-registration fix
+(`std/user.lpc:921-932`, the `else if (base_name(environment(...)) ==
+LINKDEAD_ROOM) { ... complete_setup(""); }` branch) had been
+code-confirmed present across two prior passes but never re-walked live
+end-to-end since the original fix/verification. Actually walked it this
+pass, with a fresh, full-budget session:
+
+- Booted native `build-debug` driver against this lib's own
+  `config.fluffos` (eval cost already at the fixed `5000000`, log
+  cleared first for a clean signal). Boots clean — only pre-existing
+  compile warnings, no fatal errors, "Initializations complete."
+- Registered a brand-new character (`caiyunshu`/蔡云舒, human female,
+  id `caiyunshu`, password set but redacted here per this project's
+  password-leak-prevention rule) via a raw Python socket script,
+  validating each server prompt before sending the next answer (English
+  login id → confirm-new-name → Chinese name → password/confirm →
+  gender → race → email → real name → MOTD), and **closed the
+  connection without answering** the final "`[请按 RETURN 键继续]`"
+  prompt — a real, clean TCP close simulating exactly the disconnect
+  point bug #1 originally described, not a `quit`.
+- Confirmed the pre-placement state directly from the save file:
+  `work/data/std/user_ob/human/c/caiyunshu.o` has **zero** occurrences
+  of `linkdead_room` (grepped) — i.e. this reproduces the exact
+  never-placed-yet precondition the fix targets, matching the original
+  bug report's root-cause analysis precisely.
+- Checked `log/debug.log`: zero new lines from the whole
+  registration-and-drop sequence (no crash, no error trace — a silent
+  drop, as expected).
+- Reconnected with a fresh socket, same login id + correct password:
+  landed correctly and immediately in `/d/adventurer/hall/adv_guild`
+  (冒险者公会, the real `START` room) with the normal
+  "重新连线完毕. 检查 IP Address 中... [OKIP]" reconnect banner — **not**
+  `/d/std/rooms/netdead` ("时间的缝隙"). `look` and `quit` both produced
+  correct, real output afterward. Zero new `debug.log` lines from the
+  entire reconnect-and-play sequence.
+- This is a genuine live pass/fail result, not a repeat of the original
+  reproduction: this run used a brand-new character never touched by
+  any prior pass, a fresh driver boot, and the current on-disk code —
+  the fix holds. Gap closed; no code change was needed since the fix
+  (present since the original 2026-07-24 pass) works correctly.
+- Driver killed by exact PID (confirmed `readlink -f
+  /proc/<pid>/cwd` == this lib's `work/` dir first) after testing. Only
+  new artifact: `caiyunshu`'s two save files (connection + user_ob),
+  kept as evidence per this lib's existing convention for prior test
+  characters.
+
+### Fast checklist pass: three newer session-wide findings, not applicable to this lib
+
+- **combatd.lpc `bounce`/division-by-zero** (found on 4 sibling libs
+  this session): `find libs/es1_win -iname "combatd.lpc"` — **no such
+  file exists anywhere in this lib.** This lineage (TMI/Discworld
+  family, per this lib's own already-documented "different lineage
+  architecture" note above) doesn't share the ES2/大唐-family combat
+  daemon shape the bug was found in. Not applicable.
+- **chacha.lpc `death_stage()` reentry-guard leak** (found on 4 more
+  sibling libs): `find libs/es1_win -iname "chacha.lpc"` — **no such
+  file exists anywhere in this lib** either. Same lineage-mismatch
+  reasoning; not applicable.
+- **§7.30 mapping-accessor `mapp(x) ? x : ([])` guard**: this lib's
+  actual skill-accessor equivalents, `std/living/stats.lpc` and
+  `std/living/stats_npc.lpc`, both declare `mapping query_skills()`.
+  Checked both directly — both already correctly guarded (a slightly
+  different but equivalent shape to the documented fix pattern):
+  ```lpc
+  mapping query_skills() {
+    if (!skills) return ([]);
+    else return copy(skills);
+  }
+  ```
+  identical in both files. No unguarded raw-variable return found.
+  Confirmed clean, no fix needed.
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 东方故事基础版（蓝天）。
