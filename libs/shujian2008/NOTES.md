@@ -417,7 +417,7 @@ correct. `debug.log` stayed clean.
 
 **2. Combat-to-death cycle — resolved, verified clean, three full real
 death/respawn cycles observed.** Created a fresh throwaway character
-(id `sjdthtst`, Chinese name 测死人, password `Sj2026Dth`) rather than
+(id `sjdthtst`, Chinese name 测死人, password redacted) rather than
 reusing the existing `qinshiyu` (whose `combat_exp: 1000000` from prior
 rounds made it far too strong for any real starting-zone threat to pose
 lethal danger). Confirmed `kill.lpc` has no safe-sparring-style gate
@@ -462,7 +462,7 @@ variable at all, a different lineage from the sibling libs where that
 bug was found.
 
 **Test character left behind:** id `sjdthtst`, Chinese name 测死人,
-password `Sj2026Dth` — 普通百姓 (unaffiliated commoner), empty
+password redacted — 普通百姓 (unaffiliated commoner), empty
 inventory, standing at 武馆前院, `死亡：一次`. Admin account `fluffos`
 also died once and reincarnated cleanly during this pass (a byproduct of
 the test snake's poison outliving the snake itself) — no lasting state
