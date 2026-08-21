@@ -967,3 +967,118 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试 round four（2026-08-20/21）：shop-purchase 缺口关闭 + 标准清单复核
+
+Closed this lib's own explicitly-flagged §10.7 gap ("Not verified live
+(honest gaps)": a completed, successful shop purchase). Booted
+`build-debug/src/driver` clean on port 40082 (PID 976088, killed by
+exact PID when done, verified gone via `ps`/`ss`). Used a raw Python
+socket script (two concurrent connections, each response read/printed
+and validated before the next command was sent).
+
+**Test character**: fresh id `qintestg`, Chinese name 秦八 (password
+redacted, not recorded in plaintext), registered end-to-end through the
+normal wizard, landing at 客店 with title 平民/普通百姓 — deliberately
+NOT a member of 丐帮 (confirmed via `score`: 【 平 民 】, not the
+【 叫化子 】 beggar title), so the existing beggar-forbidden-from-buying
+design gate does not apply to this character. Save files
+(`work/data/user/q/qintestg.o`, `work/data/login/q/qintestg.o`) left in
+place as evidence, matching this file's own established precedent for
+this test class.
+
+**Funding (sanctioned admin `clone`+`give` pattern)**: logged in
+separately as the pre-existing `fluffos`/(admin) account (already
+committed from an earlier pass), `goto`'d to the same room as
+`qintestg` (`/d/city/zuixianlou2`, the tea-house-district shop's upper
+floor), `clone /clone/money/coin` (this lib's actual copper-coin money
+object, `/clone/money/coin.lpc`, id `coin`/`coin_money`), `call
+coin->set_amount(500)` to bump it from its clone-default of 1 up to
+500, then `give qintestg coin` — `qintestg` received "五百文铜板" (500
+coins) live, confirmed via `i`.
+
+**The purchase itself**: `qintestg` walked to 醉仙楼二楼 (kedian → w →
+n → e → up), where the `冼老板`/Xian laoban F_DEALER NPC
+(`d/city/npc/xian.lpc`) sells `kaoya` (烤鸭/roast duck, `value` 150) via
+its `vendor_goods` list. `buy kaoya` succeeded on the first try:
+"你从冼老板那里买下了一只烤鸭。" Post-purchase `i` showed the received
+`烤鸭(Kaoya)` item AND the correct change, auto-converted to higher
+denominations by `moneyd.lpc`'s `player_pay()`: `三两白银(Silver)` (300)
++ `五十文铜板(Coin)` (50) = 350 = 500 − 150. Price deduction and item
+receipt both verified correct, live, not just by code review.
+**Verdict: this gap is now CLOSED — no bug found, `buy`'s code path
+(money check, `move()`, `call_out("enough_rest", 1)`) works exactly as
+the prior code-review pass predicted.** Zero new lines in `debug.log`
+across the whole session (confirmed by line-count before/after).
+
+### Fast standard-checklist confirmation pass (per NOTES.md task brief — confirm, don't re-derive)
+
+All of the following were already fixed/clean per this lib's own prior
+NOTES.md entries; this pass re-confirmed each by direct source read
+(and, where a fresh boot was already running, live behavior) rather
+than re-deriving from scratch:
+
+- **§7.90** (eval-cost): `config.fluffos`'s `maximum evaluation cost`
+  is already `5000000` (the documented remedy value, not the low
+  template default) — confirmed by direct read. No aborts observed
+  anywhere in this session's boot/registration/shop/walk sequence.
+- **§7.100** (`ROOM` base class redundant `replace_program()`):
+  already swept (824 sites, per this file's own earlier entry) —
+  spot-checked `d/city/zuixianlou2.lpc`/`xian.lpc` load cleanly with
+  zero related compile warnings.
+- **§7.111** (`standard_trace()` null-object crash): `adm/obj/
+  master.lpc:203` already reads `objectp(error["object"]) ?
+  file_name(error["object"]) : "(driver)"` — correctly guarded, not
+  the unconditional-`file_name()` broken shape.
+- **§7.112** (`death_stage()` reentrancy — every exit branch must clear
+  the reentry guard): checked all 4 files in this lib with a
+  `death_stage()`/`death_stage_active` pattern (`d/death/npc/
+  {newgargoyle,bgargoyle,wgargoyle}.lpc`, `d/shaolin/npc/yu-zu2.lpc}` —
+  no `chacha.lpc` exists in this lib). Read every branch of every one:
+  all 4 files clear `delete_temp("death_stage_active")` on EVERY real
+  exit path (the `!ob || !present(ob)` early-return, the final-stage
+  `reincarnate()` branch, and `bgargoyle.lpc`'s extra `!is_ghost()`
+  early-return) and correctly leave the guard SET (no clear) only on
+  the legitimate multi-stage in-progress `call_out()` re-arm branch.
+  Confirmed clean, no fix needed.
+- **§7.79** (`addn()`/`addn_temp()` 2-arg bug): zero occurrences of
+  `addn(` anywhere in this lib's `work/` tree (grepped) — not
+  applicable here.
+- **§7.108** (duplicate-login kick-out losing command dispatch):
+  `clone/user/user.lpc:110`'s `reconnect()` already starts with
+  `enable_commands();` — the documented fix, already applied
+  (confirmed by direct read; not the 162-lib sweep guessing, this
+  lib's `logind.lpc:220`'s `confirm_relogin()` does have the
+  `exec(old_link, ...)` kick-out shape that makes this fix relevant).
+- **combatd.lpc `bounce`-division bug** (found/fixed on 4 sibling libs
+  this session): `grep -n 'bounce' adm/daemons/combatd.lpc` returns
+  ZERO hits — this lib's `combatd.lpc` doesn't use a `bounce` variable
+  at all. Not applicable.
+- **`feature/attack.lpc`'s `reset_action()` F_DBASE bare-call check**
+  (checking for the `nitan6`-shape bug): `reset_action()` explicitly
+  does `me = this_object();` then calls bare `set("actions", ...)` —
+  since `me` IS `this_object()`, a bare (implicitly-self-targeting)
+  `set()` call is exactly correct here, not a missing redirect. No bug
+  — this function only ever needs to mutate its own dbase, never a
+  different object's.
+
+### Death/respawn live-verification status (per task's optional follow-up)
+
+Not a new gap: this lib's own 2026-07-24 §10.7 pass already verified a
+REAL combat death + corpse + ghost + reincarnation cycle live end-to-end
+(the `fluffos` admin character vs. a 黑无常/`bgargoyle.lpc` NPC at
+`/d/death/gateway`), documented above — no further action needed here.
+
+### Process notes
+
+Driver run from `libs/jqxz2008/` via `nohup ... & disown`, single boot
+for this whole pass (PID 976088), killed by exact PID after confirming
+`readlink -f /proc/976088/cwd` matched this lib's `work/` directory (no
+other libs' drivers were running concurrently this time). `fluffos`'s
+save picked up minor real-gameplay-state churn from this session (food/
+water values, `startroom` updated to `/d/city/wumiao` by that room's
+own documented — see bug #2 above — checkpoint-on-entry design, since
+the admin character was deliberately routed back there before `quit` to
+match its previously-documented resting spot) — left as-is, not
+reverted, since it reflects genuine state from real commands run, not
+timestamp-only churn.
