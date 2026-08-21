@@ -639,3 +639,98 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Round-four (§10.7), shop purchase gap — investigated, NOT resolved (2026-08-21)
+
+Narrowly-scoped follow-up dispatch, targeting only the round-three
+honest gap "Shop purchase / economy" above. Goal: use the project's
+sanctioned admin `clone`+`give` pattern (documented working on sibling
+libs, e.g. `xjcq2000`'s NOTES.md: `clone /clone/money/silver 60` as
+the `fluffos` admin, then `buy` at a real vendor) to fund a real
+purchase and verify price deduction + item receipt.
+
+**Blocked at the tooling level, not the game-logic level: this
+specific archive has NO admin object-manipulation command of any kind
+— no `clone`, `goto`, `eval`, `summon`, or `transfer`.** Confirmed via:
+- `include/command.h`'s `ADM_PATH` references six directories
+  (`/cmds/adm/`, `/cmds/arch/`, `/cmds/wiz/`, `/cmds/imm/`,
+  `/cmds/usr/`, `/cmds/std/`), but only `adm/`, `usr/`, `std/` (plus an
+  unrelated `debug/`) actually exist on disk — `cmds/arch/`,
+  `cmds/wiz/`, `cmds/imm/` are entirely absent.
+- `cmds/adm/`'s full 30-file contents (`cd`, `checkdup`, `checkleak`,
+  `chinese`, `cost`, `cpall`, `cp`, `dump`, `edemote`, `edit`, `ilist`,
+  `info`, `ls`, `mem`, `mkdir`, `mv`, `profile`, `qload`, `reboot`,
+  `reclaim`, `rehash`, `rmchinese`, `rmdir`, `rmhir`, `rm`, `sbfind`,
+  `shutdown`, `tail`, `uncon`, `update`) are all file/introspection
+  tools — none clone, move, or spawn objects. `cp.lpc` is a filesystem
+  copy (`cp(src, dst)`), not an object clone.
+- A tree-wide grep for `clone_object(`/`clone(`/`"clone"`/`"goto"`/
+  `"summon"`/`"transfer"` found zero command implementations anywhere
+  (the 3 `"clone"` string hits are all in bulletin-board comments —
+  `// To "load" the board, don't ever "clone" a bulletin board.` —
+  unrelated).
+- **Contrast with same-lineage siblings**: `zzfy` (#30) has
+  `cmds/arch/clone.lpc` AND `cmds/wiz/clone.lpc` plus
+  `cmds/imm/goto.lpc`; `fy2005` (#16) has `cmds/arch/clone.lpc` and
+  `cmds/wiz/goto.lpc`. Both share this lib's core engine
+  (`master.c`/`simul_efun.c`/`chinese.c`, per the lineage table at the
+  top of this file) but ship a wizard/arch command tier this specific
+  "collector's edition" archive never included — a genuine
+  content-completeness gap in the raw archive itself (same class as
+  the already-documented "9 legacy network daemons" and "4
+  missing-room boards" gaps above), not a driver-compat bug and not
+  something the conversion pipeline stripped.
+- No alternative admin code-execution path exists either: no
+  `compile_string`/`evaluate()`-based eval command, no `"!"`-prefixed
+  debug-eval hook in `obj/user.lpc`/`feature/command.lpc`, and the
+  driver itself (`fluffos/build-debug`) has no built-in eval-command
+  feature independent of the mudlib.
+
+Per this dispatch's own explicit scope guidance ("if you find yourself
+building elaborate test scaffolding... STOP and reconsider... report
+back and let the orchestrator decide"), did **not** add any new
+`.lpc` command file to work around this (would be new scaffolding, out
+of scope) and did **not** hand-edit a player save file to inject money
+(not the sanctioned pattern, and not attempted). The gap remains open;
+resolving it would require either accepting a save-file-edit
+workaround or an organic in-game earn path (e.g. `beg`, gated behind
+丐帮/Beggar-sect membership and a skill check — itself a multi-step
+setup beyond this dispatch's bound) as a future dispatch's explicit
+scope, not a `clone`+`give` shortcut, since that shortcut's
+prerequisite commands simply don't exist in this archive.
+
+### Fast standard-checklist pass (static, no live boot needed — no code changes resulted)
+
+All confirmed already clean/fixed on this lib's current code:
+- **§7.90** (eval-cost): `config.fluffos`'s `maximum evaluation cost`
+  already at the standard remedy value `5000000`.
+- **§7.100** (`ROOM` `replace_program()`): already fully swept per
+  AGENTS.md's own corpus table (662/662, 0 remaining — no
+  room-building tool exists on this lib to need a factory-side fix).
+- **§7.111** (`standard_trace()` null-object crash): `adm/obj/
+  master.lpc` already guards with `objectp(error["object"]) ?
+  file_name(error["object"]) : "(driver)"`.
+- **§7.79** (bare 2-arg `addn()`/`addn_temp()`): zero occurrences of
+  either call anywhere in the tree — not applicable to this lib.
+- **§7.108** (kick-out-duplicate-login leaves character command-dead):
+  `obj/user.lpc`'s `reconnect()` already calls `enable_commands()` as
+  its first statement.
+- **§7.30** (uninitialized-mapping accessor): already swept and fixed
+  this session (see the dated section immediately above).
+- **New "second shape" check** (`ldtx`-style `ob->query("family")
+  ["family_name"]` indexed without a `mapp()` guard): grepped every
+  `query("family")`-referencing file in the tree. `std/char/
+  master.lpc` and `feature/apprentice.lpc` (the two files owning the
+  actual sect-join logic) both guard with `mapp()` before indexing.
+  `cmds/std/recruit.lpc` line 71 (`family = ob->query("family");`
+  immediately followed by `family["family_name"]`) looked superficially
+  similar but is safe: it runs immediately after `me->
+  recruit_apprentice(ob)` on the same code path, which unconditionally
+  populates `ob`'s `"family"` mapping before this line executes — not
+  the same "never-initialized, no assignment guaranteed" shape as the
+  `ldtx` crash. No fix needed.
+
+No code was modified this pass; no new debug.log errors to check
+since no driver boot was performed (the checklist items above were all
+resolvable via static reads, and the shop-purchase task itself never
+reached a boot because the blocking discovery was made first).
