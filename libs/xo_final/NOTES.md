@@ -364,3 +364,113 @@ ROOM;`），全部由脚本自动删除。本库没有任何在游戏内建造�
 未改动。已用 `build-debug` 驱动干净启动验证（0 个新增编译错误，端
 口 40024 正常监听，`debug.log` 无新增 "cannot replace"/"cannot
 bind" 行）；未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试第二轮 / round-four §10.7 (2026-08-20)：真实战斗致死与重生
+
+补全上一轮（2026-08-07）明确标注为"未测试"的缺口——真实战斗导致死
+亡、进入地府、转世重生的完整闭环。角色 id `xodeath`，中文名死测生。
+
+### 测试方法
+
+`system/std/char/character.lpc` 的 `heart_beat()`（第 106 行）确认
+了本库的死亡触发模型与本 session 已测过的 `xyxy2`/`xajhxo` 同宗：
+`eff_kee`/`eff_sen`/`eff_gin`（不可自然恢复的"内伤"值，只被
+`receive_wound()` 扣减）任意一项 < 0 时直接 `die()`；`kee`/`sen`/
+`gin`（可恢复的"体力"值）< 0 则只是 `unconcious()`（安全，30+ 秒后
+`revive()`）——这正是 `duilian` 陪练"不会造成伤害"的设计基础
+（`duilian.lpc` 帮助文本明确写"对练不会造成伤害"，它走的是完全独
+立的 `duilian_ob()` 逻辑，根本不调用 `receive_wound()`）。
+
+用管理员账号 `fluffos`（本库已有的 (admin) 账号）通过
+`call xodeath->set("eff_kee",3)` 把测试角色的"内伤"值预先调到接近
+归零（正常新手默认 `max_kee`=165），再 `call
+xodeath->move("/d/place/newbie/lianwu_chang")` 把角色传送到新手练
+武场——这里除了安全的 `duilian` 指令外，也有可以真实 `kill` 的普通
+NPC「陪练」(`d/place/newbie/npc/pei_lian.lpc`，非"陪练"专属安全对
+象，未设 `no_die`/`no_fight`)。对 `kill peilian` 发起真实战斗（`kill.
+lpc` 会调用双方 `kill_ob()`，NPC 真实反击），几回合后一次「陪练」
+的真实命中（`receive_wound`）让 `eff_kee` 转负，下一次 `heart_beat`
+触发真死：「你满身血迹，再也支持不住，一头撞倒在地上，腿蹬了几
+下，眼见是活不成了。」——移动到 `DEATH_ROOM`
+（`/d/place/death/yellow1`，黄泉路）。
+
+之后角色（无携带物品，`i` 显示"你身上没有任何东西"）按黄泉路系列
+房间一路 `north` 走完全程：黄泉路→黄泉路(2)→鬼门关→酆都地府(1)→
+酆都地府(2)→阎罗大殿，在阎罗大殿遇到"查察司判官"（即
+`d/place/death/npc/chacha.lpc`）。该 NPC 的 `init()`→`check_rein()`
+（新角色 `age<=15` 自动满足条件）→`death_stage()` 五段式对话状态
+机在几次移动的间隔时间里自动跑完，最终 `reincarnate()` 清空 ghost
+标记、把角色传送到三个随机复活城市之一（本次是`魁星阁`/扬州），
+`score` 确认状态从"孤魂"变回"平民"，且"你经历过一次死亡"的死亡计
+数正确写入存档；`quit`/重新登录后死亡计数、门派/属性状态在真实的
+保存-加载周期后依然一致。全程 `debug.log` 保持完全空白，零错误。
+
+### §7.112 死亡状态机重入守卫——现场验证，确认干净
+
+按本 session 在 `xajh2`/`xajhxo` 上两次发现并修复的模式（
+`death_stage()` 某个出口分支没清 `death_stage_active` 重入守卫，
+把幽灵永久卡住），逐分支核对了本库仅有的两个同类状态机：
+
+- `d/place/death/npc/chacha.lpc` 的 `death_stage(ob, stage)`：三个
+  出口——`!ob||!present(ob)`（清后 return）、stage==4 且身上还有
+  物品（清后 return，提示"你先要把你身上的东西放下来"）、以及最终
+  完成分支（清后 `reincarnate()`）——全部正确清了
+  `death_stage_active`，没有任何遗漏分支。
+- `d/place/death/npc/mengpo.lpc` 的 `tea_give(ob, stage)`：同样两
+  个出口（`!ob||!present(ob)` 和最终发放"孟婆汤"完成分支）都正确
+  清了守卫。
+
+两个文件都是干净的，不是本库的实例——这次实测（含真实经过两个状
+态机）也没有触发任何卡死。
+
+### 标准检查清单快速过一遍（均确认已修好/本来就干净，不再重新推导）
+
+- **§7.90**（eval-cost）：`config.fluffos` 的 `maximum evaluation
+  cost` 已是 5000000000（远高于默认），本轮整段真实游玩（含跨文件
+  懒编译触发）零 eval-cost 相关 debug.log 错误。
+- **§7.100**（`ROOM` 多余 `replace_program()`）：`grep -rn
+  '^\s*replace_program(ROOM)' work` 命中 0（历史 615 处已在上一节
+  修复；`//`-注释掉的 11 处历史实例未受影响）。
+- **§7.111**（`standard_trace()`/`error_handler()` 对
+  `err["object"]` 为 0 的防护）：`secure/daemon/master.lpc` 的
+  `standard_trace()` 用 `%O` 格式化 `err["object"]`（对 0 安全），
+  `error_handler()` 调用 `file_name(err["object"])` 前已有
+  `if (err["object"])` 判空，本来就是安全写法。
+- **§7.112**：见上一节，现场验证干净。
+- **§7.79**（bare `addn()`/`addn_temp()` 2 参数）：已在 AGENTS.md
+  该节的排查阶段确认本库有真实的本地/继承 `addn`（
+  `system/feature/char/skill.lpc` 的 `set_wugong` 系是走正常函数
+  查找，不经过 simul_efun shim），bare 调用从未出问题，不在受影响
+  的 6 个库名单内。
+- **§7.108**（`reconnect()` 应调用 `enable_commands()`）：
+  `system/daemon/logind.lpc` 的 `reconnect()`→`user->reconnect()`
+  →`system/daemon/interactived.lpc` 的 `reconnect(who)`→
+  `who->setup()`（`character.lpc` 的 `setup()` 内部调用
+  `enable_player()`）——链路完整；本轮测试角色多次真实断线重连
+  （`quit`/重登录），每次重连后指令都立即可用，未观察到 §7.108 症
+  状。
+- **§7.30**（`mapping` 存取器返回未初始化 `int 0`）：
+  `system/feature/char/skill.lpc` 的 `query_jibie_map()` 等六个存
+  取器本身确实是裸 `return m_jibie;`（无 `mapp(x)?x:([])` 三元防
+  护），但逐一核对了全库所有调用点（`cmds/comm/{skills,display,
+  hide,enable,disable}.lpc`、`system/daemon/{skilld,npcd,combatd,
+  betrayd,giftd}.lpc`）——凡是玩家指令可达的路径全部在用之前用
+  `sizeof()`/`mapp()` 做了防护；仅存的两处未防护索引
+  （`combatd.lpc:1311` 的 `m_jibie[skill]`、`npcd.lpc:838` 的
+  `tell_skills()` 里 `keys(skills)`）在代码结构上只有当角色已经
+  学会并启用过至少一门武功时才可能触发——而那正好是
+  `set_wugong()`→`set_jibie()` 已经把 `m_jibie` 初始化成真实
+  mapping 的前提条件，二者互斥，理论上无法触发真实崩溃。本轮用全
+  新零武功角色实测 `score`/`skills`/真实战斗全程零 debug.log 报
+  错，验证了这个分析——按项目"只修有错误信号的 bug"的红线，未作
+  改动。
+- **`combatd.lpc` 的 `bounce` 除零模式**：`grep -rln bounce
+  work/system/daemon/*.lpc` 命中 0，本库没有这个变体。
+
+### 结论
+
+本轮唯一明确指派的缺口（真实战斗→死亡→地府→转世重生的完整闭环）
+已完整走通，全程零 `debug.log` 错误，未发现新 bug；标准检查清单
+七项全部确认干净/已修复。测试角色存档（`xodeath`）事后已清理，管
+理员 `fluffos` 及背景 NPC 存档因驱动运行产生的正常增量已随本次提
+交一并保存。
