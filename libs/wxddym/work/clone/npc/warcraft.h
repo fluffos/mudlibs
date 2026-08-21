@@ -48,7 +48,7 @@ void remove(string euid)
 int is_warcraft() { return 1; }
 int is_stay_in_room() { return 1; }
 
-int is_owner(object me) { return query_temp("owner") == query("id", me); }
+int is_owner(object me) { return query_temp("owner") == me->query("id"); }
 string chinese_s(mixed arg)
 {
       if (arg == "白虎")  return HIY "金" NOR;
@@ -154,7 +154,7 @@ string long()
 
 void init()
 {
-        if( query("id", this_player()) == query("owner") ) {
+        if( this_player()->query("id") == query("owner") ) {
                 add_action("do_modify", "modify");
                 add_action("do_teach", "teach");
                 add_action("do_shape", "shape");
@@ -743,7 +743,7 @@ int do_look(string target)
         if (! id(target))
                 return notify_fail("你要看什么？");
 
-        if (! stringp(msg = query("look_msg", ob)) ) return 1;
+        if (! stringp(msg = ob->query("look_msg")) ) return 1;
 
         message_sort(HIC + "\n" + msg + "\n" NOR, this_object());
 
@@ -762,7 +762,7 @@ int accept_ask(object who, string topic)
         if (! sizeof(topic))return 0;
 
         ob = this_object();
-        ans = query("answer", ob);
+        ans = ob->query("answer");
 
         if (! sizeof(ans))return 0;
 
@@ -787,7 +787,7 @@ mixed whichask()
         int i;
 
         ob = this_object();
-        ans = query("answer", ob);
+        ans = ob->query("answer");
 
         if (! sizeof(ans))return 0;
 
@@ -819,7 +819,7 @@ mixed answer_list()
         int i;
 
         ob = this_object();
-        ans = query("answer", ob);
+        ans = ob->query("answer");
 
         if (! sizeof(ans))return 0;
 
@@ -856,7 +856,7 @@ int delete_answer(int n)
 
         ob = this_object();
 
-        ans = query("answer", ob);
+        ans = ob->query("answer");
 
         if (! sizeof(ans)) return notify_fail("（A）无法删除该信息。\n");
 
