@@ -595,3 +595,110 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Round-four (§10.7) follow-up — closing the three explicitly-flagged gaps (2026-08-20)
+
+Native `build-debug` driver, fresh boot, `debug.log` wiped before boot
+and stayed **completely absent (zero errors) through the entire pass**
+— no compile/runtime errors from anything below. All three items from
+the "Explicitly not verified live" list closed:
+
+1. **Successful (funded) shop purchase — now verified, no bug.**
+   Logged in as admin `fluffos`, `goto /d/city/zahuopu`, `clone
+   /clone/money/silver 60` (auto-merges into a single "六十两白银"
+   stack per `COMBINED_ITEM`'s move()-time same-`base_name` merge),
+   `list` confirmed `皮背心` at 56两, `buy beixin` succeeded
+   ("你从杂货铺老板那里买下了最后一件皮背心。"), item appeared in
+   `i`. **First measurement looked like a bug** (money appeared to go
+   *up*, 60→64两, instead of down by 56) — root-caused via `call`
+   introspection (`call laoban->query_goods_value(...)` confirmed the
+   correct 5600-copper price; `call silver->query_amount()` confirmed
+   a single, non-duplicated money object) to a **test-methodology
+   artifact, not a real bug**: two separate `clone .../silver 60`
+   calls were issued across two different reconnects of the same
+   persistent admin character without checking inventory in between,
+   and `COMBINED_ITEM.move()`'s auto-merge silently combined them into
+   120 silver (12,000 copper) before the buy — 12,000 − 5,600 = 6,400
+   = "六十四两", exactly matching the observed number. A clean
+   second purchase on the same character, with a known starting
+   balance (6,400 copper) and no interleaved reconnect, deducted
+   *exactly* 5,600 copper (6,400 → 800, "八两") as expected. Price
+   deduction and item receipt both confirmed correct; **no code
+   change needed**. (Admin's test-acquired silver/beixin items were
+   left in inventory as evidence, consistent with other test-character
+   saves in this NOTES file; the resulting `data/*/f/fluffos.o` /
+   `u/deng/log` save-churn from this session was reverted via `git
+   checkout --` since no other file changed, per this project's
+   save-churn-avoidance convention.)
+2. **`d/wuguan/npc/muren.lpc` training dummy — now verified live,
+   clean.** `goto /d/wuguan/wuchang4` (one of the rooms that places
+   `npc/muren` per its `objects` mapping) reached the dummy directly.
+   `fight muren` produced a full multi-round turn-by-turn combat log
+   (`accept_fight()`'s stat-mirroring worked — evenly matched, neither
+   side landed early hits), self-halted via the safety net exactly
+   like the `liumang`/`girl` sparring already verified in the original
+   deep-functional pass ("看来该找机会逃跑了..." → auto-retreated to
+   the adjacent room). No crash, no `debug.log` output at all.
+3. **`d/honghua/npc/yuyutong.lpc`/`xutianhong.lpc` post-fix — now
+   verified live.** `xutianhong.lpc` **is** reachable through normal
+   navigation (`goto /d/honghua/goldroom2`, which lists
+   `/d/honghua/npc/xutianhong` in its `objects` mapping) — `look xu`
+   showed it spawned correctly, wearing "布衣(Cloth)" (confirms the
+   fixed self-targeted `carry_object("/d/honghua/cloth")->wear()` in
+   `create()` ran without error). **Correction to this file's own
+   earlier claim**: re-checked while here — `yuyutong.lpc` is **not
+   actually referenced by any room's `objects` mapping anywhere in
+   this lib** (`goldroom.lpc` only has a *commented-out* line for a
+   *different*, wizard-sandbox `xutianhong` copy at
+   `/u/ybl/honghua/npc/xutianhong`; a corpus-wide
+   `grep -rln 'npc/yuyutong'` outside the NPC file itself found
+   nothing) — it is orphaned/unreachable through ordinary play, not
+   merely "not reached this pass". Since the actual fixed code path
+   (the `create()`-time `carry_object(...)->wear()` call) fires
+   identically on `new()` regardless of how the object is
+   instantiated, live-verified it directly via admin
+   `clone /d/honghua/npc/yuyutong` in `goldroom2`: spawned cleanly,
+   `look yu` showed it correctly wearing "布衣(Cloth)" too, no crash,
+   no `debug.log` output. Fix confirmed to hold under live
+   instantiation; the orphaned-reachability finding is a documentation
+   correction, not a new bug (nothing crashes from an unreferenced
+   file existing on disk).
+
+### Standard checklist confirmation pass (fast, per §10.7 routine)
+
+- **§7.90** (eval-cost): `config.fluffos` already has `maximum
+  evaluation cost : 5000000` (not the low default) — confirmed
+  already fixed.
+- **§7.100**/**§7.86** (ROOM/board redundant `replace_program()`):
+  already swept per this file's own earlier entries; boot stayed
+  clean this pass too.
+- **§7.111** (`standard_trace()` unconditional `file_name()` on a
+  possibly-`0` `error["object"]`): not applicable to this lib's
+  shape — `adm/single/master.lpc`'s `standard_trace()` formats
+  `error["object"]` via `%O` in `sprintf`, never calls `file_name()`
+  on it directly, so the crash shape can't occur here.
+- **§7.108** (duplicate-login kick-reconnect leaves character command-
+  dead): this lib does have the `exec(old_link` shape
+  (`adm/daemons/logind.lpc:323`), but `clone/user/user.lpc`'s
+  `reconnect()` already starts with `enable_commands();` — already
+  fixed.
+- **§7.112** (`death_stage()` reentrancy): already closed per this
+  file's own 2026-08-20 entry above; `find ... -iname chacha.lpc`
+  under this lib returns nothing, so the specific shared-file shape
+  from the 4-lib session finding doesn't apply here.
+- **§7.79** (bare `addn()`/`addn_temp()` 2-arg): this lib is not one
+  of the 6 confirmed-affected libs in the corpus-wide sweep — not
+  applicable.
+- **§7.30** (uninitialized-mapping accessor guard): already applied
+  per this file's own entry directly above, confirmed present in
+  `feature/skill.lpc` (`mapp(skills) ? skills : ([])` etc.).
+- **combatd.lpc `bounce`-division pattern**: `grep -n bounce
+  adm/daemons/combatd.lpc` returns nothing — this lib's combat daemon
+  doesn't have the `bounce`-loop shape at all, not applicable.
+
+No new bugs found or fixed this pass — all three previously-flagged
+gaps closed as **verified clean** (one initially-alarming false
+alarm, fully root-caused to a test-methodology artifact rather than a
+real defect). The `/d/xingxiu/silk6` refcount-corruption root cause
+remains not further chased, per the task's stated lower-priority/
+budget guidance — still documented as-is above, nothing new to add.
