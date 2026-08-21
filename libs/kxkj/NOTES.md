@@ -756,3 +756,176 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试第四轮 / Deep functional test round four (2026-08-21) —
+## c_create/c_join 缺口补测
+
+第三轮把 `c_create`/`c_join` 判定为"合理的既有设计门槛...未做门槛测试"。本轮
+专门用两个全新的普通玩家账号（非巫师）把这条路径真正走通一次，同时顺带发
+现并修复了三个独立的真实程序性 bug（其中一个影响面很大，波及全库任何未在
+原始码里显式写 `.lpc` 后缀的出口）。
+
+### 修复的程序性 bug
+
+1. **`cmds/std/go.lpc`（严重，影响全库所有出口移动）**：第 42 行判断"目标
+   路径是否已经有 `.lpc` 后缀"时，切片长度写错——`exit[arg][sizeof(...)-2..
+   sizeof(...)-1]` 只取最后 **2** 个字元，却拿去和 4 字元的 `".lpc"` 比较，
+   永远不相等。后果不是"多余地""重复追加一次"这么简单：由于
+   `exit = env->query("exits")` 传回的是**房间物件内那个 mapping 的引用**，
+   `exit[arg] += ".lpc"` 会真的原地修改房间的 `exits` mapping、且**每次**
+   都会追加，不管上次追加过没有。凡是源码里 `exits` mapping 值没有显式写
+   `.lpc` 结尾的出口（很常见的写法，例如 `newhand.lpc` 的
+   `"enter": "/open/common/room/inn"`），第一次有人走这个方向时"侥幸"补上
+   一次 `.lpc` 能正常到达；但只要再有第二个人（甚至同一人重连后再走一次）
+   尝试同一个出口，就会变成 `...inn.lpc.lpc`、`...inn.lpc.lpc.lpc`……
+   `file_size()` 找不到这个不存在的路径，玩家会看到"这个方向云雾深锁, 无
+   法进入, 请通知 wiz!!"——**且这个 mapping 是房间的常驻实例数据，一旦第二
+   次出现问题就会在这次开机剩余时间内对所有玩家永久失效，直到重开机**。
+   现场用三个连续注册的全新角色复现：第一个角色（重连后）成功用
+   `enter` 从新手房抵达"狂想空间入口处"；第二、三个角色的同一条 `enter`
+   立刻失败；用 `eval`（(manager) 权限）直接读出该房间当时的 `exits["enter"]`
+   值确认为 `"/open/common/room/inn.lpc.lpc.lpc.lpc"`（4 次累加，与四次尝
+   试对应）。修复：把切片改成后 4 字元（`sizeof(...)-4..sizeof(...)-1`，
+   并加上 `sizeof(...)<4` 短字串防护），`update` 热更新后用 `eval` 手动把
+   受污染的活体 mapping 修回 `"/open/common/room/inn.lpc"`，随后新角色的
+   `enter` 恢复正常且不再继续污染（`lpcc --batch` 单独编译通过，`git
+   status` 复核无存档 churn）。
+   - **同一处切片错误的另外三个实例，一并修正**（均为纯粹的 2 vs 4 字元
+     写错，非本次修复的核心，但顺手扫到，风险极低）：
+     - `cmds/adm/update_dir.lpc`（管理员批量重编译某目录的工具）：
+       `if (files[i][0][len-2..len-1] != ".lpc") continue;` 永远为真，
+       这个指令其实对任何目录都是彻底的空操作，从未真正编译过任何档
+       案。改成 4 字元切片 + 短字串防护。
+     - `cmds/imm/ls.lpc`、`cmds/imm/lstree.lpc`（巫师用的目录列表工
+       具）：同样的比较错误纯属**外观**问题——`.lpc` 档案永远被归类
+       进"其他"颜色（洋红）而非应有的档案类型色，不影响任何功能。一并
+       改成 4 字元切片，保持三处修法一致。
+   - 全部 4 个文件用 `lpcc --batch` 单独编译验证通过（含既有的无害
+     unused-variable 警告），修复后重开一次全新驱动，`log/debug.log`
+     完全没有生成（零运行时错误）。
+2. **`cmds/clan/c_create.lpc`**：`CLANV_D->create_clanv(cid)`
+   （`/adm/daemons/clanvd.lpc`）这个函数**根本不存在**——只有一份从未合并
+   的巫师个人存档 `clanvd.acky`（不同的、不兼容的旧版帮派编号系统重写）里
+   才有同名函数。本驱动对 `->` 呼叫不存在的函式是静默返回 0、不报错（现场
+   用 `eval` 验证过），所以 `if (CLANV_D->create_clanv(cid))
+   ob->set("clan/name", cname);` 这个条件永远为假，导致**帮主自己的
+   `clan/name` 栏位从未真正被设过**（`CLAN_D` 自己的帮派登记表里的
+   `name` 字段不受影响，是分开设的，所以帮派本身显示正常，只有帮主个人
+   角色数据缺这个栏位）。这不只是"少显示一个名字"：`c_join.lpc` 判断
+   "对方是否已经加入其他帮派"用的正是 `ob->query("clan/name")`
+   （不是 `clan/id`），栏位缺失会让帮主的这项检查失真。修复：拿掉这个死
+   引用的判断式，`ob->set("clan/name", cname)` 改成无条件执行，与紧接着
+   的另外四个 `clan/*` 栏位写法一致。现场验证：修复前用 `eval` 直接呼叫
+   `CLANV_D->create_clanv(...)` 确认回传 0；修复后完整走一次 `c_create`，
+   `this_player()->query("clan")` 五个栏位（`id`/`name`/`rank`/`passwd`/
+   `title`）全部正确，`c_list` 也正确显示新帮派名称与帮主。
+3. **`adm/daemons/cland.lpc::clan_query()`**：紧邻的 `clan_set()`
+   （上面 8 行）对 `undefinedp(clans[clan])` 有防护，`clan_query()` 却没
+   有，两者本应对称。现场**真实触发过一次崩溃**（测试过程中一度出现
+   `/open/clan/<id>/` 目录先于 `CLAN_D` 数据登记存在的状态——细节见下方
+   c_create 小节——此时 `c_list` 会因为 `clans[clan][what]` 对不存在的
+   `clan` 键值做二次索引而崩溃：`执行时段错误: *Value being indexed is
+   zero. 程式: /adm/daemons/cland.lpc:165`）。修复：比照 `clan_set()`
+   的写法补上 `!undefinedp(clans[clan])` 防护，未命中时安全返回 0（与既
+   有"没有这个字段就是 0"的调用惯例一致）。`lpcc --batch` 编译通过，
+   `update` 热更新后复测 `c_list` 恢复正常。
+
+### c_create/c_join 缺口的最终结论
+
+用 `kxjtesta`/`kxjtestb`（两个全新注册的普通角色，密码从略）实测，过程中
+读代码 + 现场复现，理清楚了第三轮没深入看的两层机制：
+
+- **`c_create` 的 `!me->query("clan") || wiz_level(me) < 5` 门槛不是笔误，
+  是刻意设计**，且原因藏在 `adm/daemons/logind.lpc` 里一段带作者署名的注
+  释和代码（约 1043-1048 行）：
+  ```lpc
+  // 帮派wiz, 玩家总管才可以有帮派 by ACKY
+  if (!user) return;
+  if (wizardp(user))
+    if (user->query("id") != "acky" && user->query("id") != "bss" && user->query("id") != "cgy")
+      user->delete("clan");
+  if (!CLAN_D->have_clan(user->query("clan/id")))
+    user->delete("clan");
+  ```
+  也就是说：**任何巫师账号每次登入/重连都会被强制清空自己的 `clan/*`
+  数据，只有三个写死的账号 id（`acky`/`bss`/`cgy`，本档案里的原始开发者/
+  管理员 id，`cgy` 本人在既有存档里确实就是"恶魔城"帮的真实帮主）例外**。
+  `c_create` 要求呼叫者自己先有帮派数据，正是把"能开新帮"的权限锁定在这
+  三个特定管理员账号上（一个刻意的、极窄的管理员专属功能，不是给普通巫师
+  用的），可以反复开帮但不受一般巫师权限变动影响。这与档案里 5 个真实帮
+  派全部是原始存档自带内容（而非任何一次现场 `c_create` 产生）完全吻合。
+  现场把一个刚用 `promote`（游戏内建管理指令，账号 `fluffos`/(manager)
+  执行 `promote kxjtesta (admin)`）临时提升为 (admin) 的普通测试角色拿来
+  测试时，**两次独立重连都验证到这条清空逻辑确实会把 `kxjtesta` 的
+  `clan/*` 清空**（先用 `eval` 手动补上 `clan/id` 通过前置条件、验证
+  `c_create` 真的能跑通并生效，重连后再用 `eval` 复查，栏位又变回空）——
+  这不是巧合触发一次，是每次重连都必然发生，与源码逻辑完全对应，确认属
+  于既有设计，未做任何改动（这也是为什么第 2 项 bug 修复時仍然只用
+  `eval`——游戏内建的管理工具——去补足前置条件，而不是绕过或修改这条清
+  空逻辑本身：这是在满足一个真实的前置条件，不是在跳过一个安全检查）。
+- **`c_create` 命令本身完全能正确工作**（见上方 bug 2/3 的修复与验证）：
+  在同一个连线内用 `eval` 补上 `clan/id` 前置条件后，`c_create kxjtesta
+  测试帮壹 tstclan1` 成功创建了一个全新帮派，`CLAN_D->have_clan()`/
+  `clan_query()` 确认帮派数据正确登记，`kxjtesta` 自己的五个 `clan/*`
+  栏位全部正确。
+- **`c_join` 的邀请/接受双分支都验证通过**：`kxjtesta`（帮主, rank 1）在
+  同一房间对 `kxjtestb` 执行 `c_join kxjtestb`，走的是"邀请"分支
+  （"你诚挚地邀请秦风乙加入测试帮壹。"）；`kxjtestb` 执行
+  `c_join kxjtesta` 走"接受"分支（"妳决定加入测试帮壹。"）。事后用
+  `CLAN_D->clan_query("tstclan1","members")` 验证成员列表正确变成
+  `({"kxjtesta","kxjtestb"})`，`c_list` 里"测试帮壹"一行的人数栏也从 1
+  正确变成 2。全程零崩溃、零 `debug.log` 错误。
+- **一个真实的、与 bug 无关的内容缺口**（现场发现，未改动，如实记录）：
+  游戏内没有任何指令能创建一个全新帮派的实体房间目录
+  `/open/clan/<id>/room/hall.lpc`——`c_room_make`/`c_build` 都要求"你必须
+  已经站在自己帮派的地盘里"才能扩建，但地盘的第一个房间（`home` 指向的
+  `hall.lpc`）本身从未被任何在线指令写出过；`c_list`/`c_index` 依赖
+  `fs_clan()` 扫描 `/open/clan/` 底下的**真实目录**，所以一个刚
+  `c_create` 出来、还没有人手动建房间的帮派不会出现在 `c_list` 里。为了
+  验证 `c_list`/`c_index` 在有真实房间存在时能否正确显示（本轮任务的要
+  求），临时手写了一个最小的 `open/clan/tstclan1/room/hall.lpc`
+  测试用占位房间（验证完毕后已删除，未提交）；这证实了 5 个真实帮派的
+  地盘房间全部是原始档案自带内容、从未真正走过"纯指令创建"这条路——与上
+  一条"只有 acky/bss/cgy 能开新帮"的发现相互印证：新帮派的实体房间历史
+  上应该也是这三位管理员手动建档的，不是靠玩家指令自助完成的。判定为既
+  有内容缺口而非程序 bug（没有崩溃、没有报错，纯粹是"这个指令链条里少了
+  一环"），未新增任何代码去补造这个建房功能。
+
+### 标准清单快速核对（本 session 新发现，确认本库现状）
+
+- **`adm/daemons/combatd.lpc` 的 `bounce` 除以零崩溃（4 库确认过的
+  bug）**：`grep -n bounce` 全文件零命中，本库不受影响。
+- **`chacha.lpc` 的 `death_stage()` 重入锁泄漏（另 4 库确认过）**：
+  `find -iname chacha.lpc` 零命中，本库没有这个文件；本库自己的
+  `open/death/npc/bgargoyle.lpc` 等复活 NPC 已在 §7.112 残留缺口补丁中
+  单独确认修过（见上方 2026-08-20 小节），与此项无关。
+- **§7.30 `feature/skill.lpc` 未初始化 mapping 存取器防护**：复核确认已
+  有 `mapp(x) ? x : ([])` 防护（本 session 早前的 §7.30 语料库扫描已修
+  过），本轮未再改动。
+- **`nitan6`/`nt6` 血统的 F_DBASE 继承 bug（`feature/attack.lpc`/
+  `damage.lpc` 被当成与 dbase 基类平级的兄弟继承，导致裸 `query()`/
+  `set()` 静默失效）**：读 `std/char.lpc` 确认本库的继承写法是
+  `inherit F_DBASE; inherit F_ACTION; ... inherit F_ATTACK; ... inherit
+  F_DAMAGE; ...`——`F_DBASE` 与 `F_ATTACK`/`F_DAMAGE` 确实是平级（兄弟）
+  继承，但这正是 LPC 多重继承的标准/正确写法（同一个物件内所有直接
+  inherit 的函式表会合并进同一张扁平符号表，`F_ATTACK`/`F_DAMAGE` 内部
+  裸 `query()`/`set()` 调用会正常解析到 `F_DBASE` 提供的实作）；另外确
+  认 `feature/attack.lpc`/`feature/damage.lpc` 自己都没有定义会覆盖掉
+  `F_DBASE` 版本的同名 `query`/`set` 函式。属正常写法，非 bug；本库死
+  亡/复活、战斗（第一、二轮）等测试早已现场验证过这条链路真实可用，属
+  于任务描述里预判的"大概率是不相关血统"。
+
+### 进程卫生附注
+
+- 全程用了两次全新冷启动驱动（PID 各自独立，均按精确 PID kill，未用
+  `pkill`），第二次冷启动仅用于最终回归验证（`enter` 正常 + `c_list`
+  显示回原本的 5 个真实帮派、无崩溃）。
+- 测试期间产生的所有存档 churn 均已 `git checkout HEAD --`
+  还原或删除，未纳入提交：`adm/etc/wizlist`/`wizboss`（`promote` 写
+  入的临时提升记录）、`data/clan.o`（测试帮派数据）、
+  `data/user/f/fluffos.o`（活动时间戳 churn）、`data/user|login/k/
+  kxjtest{a,b,c,z}.o` 等全部测试角色存档（未跟踪，直接删除）、
+  `u/f/`、`u/k/`（`eval` 指令需要的巫师工作目录，测试用）、
+  `open/clan/tstclan1/`（测试用占位帮派房间，见上）。
+- 测试角色密码均已设置但不记录明文（`kxjtesta`/`kxjtestb` 等），仅以
+  账号 id 指代。
