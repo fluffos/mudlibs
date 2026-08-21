@@ -539,3 +539,105 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Round-four deep functional test (2026-08-20) — closed the two NOTES-flagged
+## travel-distance gaps, found and fixed a real combat-engine crash
+
+Picked up the two items the original 深度功能测试 pass explicitly disclosed
+as "read/designed correct but never live-reached due to travel distance
+on a fresh character" (safe-sparring against the real training dummy,
+and a real sect-join). Used admin `goto`/`call obj->move(path)` to
+close the distance rather than re-deriving anything already covered.
+
+**Item 1 — real safe-sparring against the actual training dummy: REACHED
+LIVE, found and fixed a genuine `combatd.lpc` crash.** Registered a
+fresh throwaway character (`sjpljy`/真实中文名「秦风演武」, birth family
+0), then admin `call sjpljy->move("/u/tian/shaolin/liangong1")`
+teleported it straight into the Shaolin 练功房 (the room `liangong1.lpc`
+that stocks 2 live clones of `u/tian/shaolin/npc/muren1.lpc`, the actual
+in-room dummy — `muren.lpc` itself, referenced in the original pass, is
+a same-shape but currently-unloaded sibling file; `muren1` is the one
+genuinely reachable and reset into this room). `kill muren` started a
+real fight. **This immediately (first exchange) tripped a genuine
+runtime crash, repeated 14 times across the fight** —
+`执行时段错误：*Division by zero` at `adm/daemons/combatd.lpc:628`, in
+`do_attack()`'s combat_exp "bounce" damage-reduction loop, called from
+the dummy's own `heart_beat()` → `feature/attack.lpc:attack()` →
+`combatd.lpc:fight()`. Root cause: `bounce` starts at
+`your["combat_exp"] + 1` and is halved (`bounce /= 2`, integer
+division) each loop iteration; once `bounce` reaches `1`, one more
+halving drives it to `0`, and the *next* loop-condition evaluation
+(`absorb_vic / bounce`) divides by that zero. This reliably fires
+whenever the attacker's own `combat_exp` is near its 0 default relative
+to the victim's `combat_exp` — exactly the shape of the SECOND dummy
+clone in the room (only the one actually targeted by `kill` gets its
+`combat_exp` mirrored via `accept_fight()`; the other clone's `heart_beat`
+still joins the fight and calls `do_attack()` with its own un-mirrored,
+near-zero `combat_exp`) — i.e. a fresh newbie sparring session, the
+exact scenario this test was verifying, crashes essentially every time
+in the untouched code. This is a real, crash-with-error-signature
+programming bug (an integer-division edge case), not content/balance —
+fixed by short-circuiting the loop once `bounce` is exhausted:
+`while (bounce > 0 && random(100) > absorb_vic / bounce)`. Verified: `update
+/adm/daemons/combatd.lpc` recompiled clean (`重新编译...：成功！`), then
+continued the SAME live fight (reconnected the test character, `kill
+muren` again) for many more rounds including the wimpy auto-flee
+trigger firing safely (`看来该找机会逃跑了...` → fled to `庭院`, 气血
+stayed 250/250 the whole time) — zero further `Division by zero` (or
+any other) errors in `debug.log` after the fix, versus 14 occurrences
+before it. **Files modified**: `adm/daemons/combatd.lpc` (1 line changed
++ comment).
+
+**Item 2 — real sect-join: REACHED LIVE, clean, no bug found.** Admin
+`call sjpljy->move("/d/wuhan/dragon_hall")` teleported the same test
+character to 海鲸帮总舵 (`d/wuhan/dragon_hall.lpc`, which loads
+`npc/master.lpc` — 余志枭/Yu Zhixiao). `apprentice master` → confirmed
+with `master` a second time (the standard `input_to` two-step
+`cmds/std/apprentice.lpc` flow) → completed for real: 余志枭 accepted
+unconditionally (not a `betrayer`), `recruit_apprentice()` fired,
+character's title changed to `海鲸帮记名弟子`, `score` now shows `你的师
+父是余志枭` and "第二代弟子", and the first quest (`将长剑找来给我`) was
+assigned exactly as `master.lpc`'s `recruit_apprentice()` codes it.
+`debug.log` stayed completely clean through this whole sequence — the
+`apprentice`/`recruit` mechanism itself has no bug, matching the
+original pass's by-inspection conclusion. No files modified for this
+item.
+
+**Item 3 — skill-teacher tuition follow-through: COMPLETED.** With
+budget remaining, closed out the previously-disclosed-incomplete 魏柄林
+tuition gate. Admin `call sjpljy->move("/d/shandong/ta/ta-shuju")` +
+`goto sjpljy` to join the character at 魏家书局, `clone /obj/money/silver`
++ `call silver->set_amount(3)` (value 300, above the `do_learnbook()`
+`ob->value() >= 200` gate), then — since `give` requires the recipient
+to be `interactive()` or accept via `accept_object()`, and a net-dead
+character satisfies neither — reconnected the test character first,
+THEN `give silver to sjpljy` from the admin side while it was live.
+Player-side `give silver to wei` triggered `wei.lpc`'s `accept_object()`
+(`"很好，你自己找位子坐下，准备上课"`), then `ask wei about study` ran
+the real `do_learnbook()` lesson end to end: `improve_skill("literate",
+...)`, `add("potential", 1)` (confirmed in `score`: 当前潜能 99 → 100),
+`delete_temp("can_learn")`. No errors, no crash — the gate and the
+lesson both work exactly as designed once genuinely reachable.
+
+**Standard checklist pass** (all previously-fixed items reconfirmed,
+none needed re-fixing): §7.90 `config.fluffos` eval-cost already
+`5000000`; §7.100 live `replace_program(ROOM);` grep → 0 hits; §7.111
+`standard_trace()` already has the `objectp(error["object"]) ?
+file_name(...) : "(driver)"` guard; §7.112 — read every exit branch of
+`death_stage()` in all 4 files touched by the earlier §7.24 fix
+(`wgargoyle.lpc`, `bgargoyle.lpc` have the guard/full reentrancy
+pattern; `inn1.lpc`/`yabian.lpc` never implemented `death_stage()` at
+all, so the guard doesn't apply to them) — every present/absent/final
+branch in both gargoyle files correctly clears
+`delete_temp("death_stage_active")` before returning or before the
+final revival `move()`, no gap; §7.79 `addn()` — 0 hits in this lib,
+not applicable; §7.108 `reconnect()` already calls `enable_commands()`
+(fixed in the 2026-08-15 round-two pass); §7.30 `feature/skill.lpc`
+accessors already carry the `mapp(x) ? x : ([])` guard (fixed in the
+sweep immediately above this section).
+
+Test character `sjpljy`/秦风演武 deleted from `work/data/{login,user}/s/`
+after testing, per convention. Driver killed by exact PID after
+confirming `cwd` matched this lib's `work/` directory. Admin `fluffos`
+save data shows only expected churn (silver clone/give, room location)
+from this pass.
