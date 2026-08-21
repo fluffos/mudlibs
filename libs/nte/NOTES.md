@@ -326,3 +326,195 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 2026-08-21 深度功能测试 / Deep functional test round-four (AGENTS.md §10.7)
+
+本轮补做上一轮 round-two 测试预算内没走到的三项真实游玩：真实战斗
+死亡/复活、真实商店购物、真实拜师门派（非 `copyskill` 捷径）。用既
+有巫师账号 `fluffos`（密码见上文，未变）和新注册的测试角色
+`nteqzco`（`秦紫辰`，密码已设置，此处不重复记录明文）。
+
+### 第六类 bug：`adm/simul_efun/file.lpc` 的 `log_file()` 未加
+`assure_file()` 守卫（AGENTS.md §7.11 实例）
+
+**本轮测试真实踩中，不是猜测。** 为准备商店购物测试，巫师账号
+`clone /clone/money/gold` 时直接崩出一段执行时段错误：
+
+```
+执行时段错误：*Wrong permissions for opening file /log/nosave/clone for append.
+"No such file or directory"
+物件：/adm/single/simul_efun
+呼叫来自：/cmds/wiz/clone.lpc 的 main() 第 76 行
+呼叫来自：/adm/single/simul_efun.lpc 的 log_file() 第 13 行
+```
+
+`adm/simul_efun/file.lpc` 的 `log_file()`（第 11-14 行）直接
+`write_file(LOG_DIR + file, text)`，完全没有目录守卫，而它自己的
+`assure_file()` 帮助函式（第 16-38 行）就定义在正下方，却从未被呼
+叫——AGENTS.md §7.11 已经记录过至少 6 个互不相关血统的同一拷贝粘
+贴形状（`xajhxo`/`zjmudhell`/`ldtx`/`jyqxc2013fwq` 等）。归档从未
+带上 `/log/nosave/` 目录（`.gitignore` 里 `libs/*/work/log/` 整棵
+子树都不追踪，纯属驱动运行期产物），所以任何触发 `log_file()` 的操
+作（`clone` 指令的审计记录只是第一个撞上的）都会抛出未捕获错误。
+修复（第 11-15 行）：
+
+```lpc
+void assure_file(string file);
+
+void log_file(string file, string text) {
+  seteuid(ROOT_UID);
+  assure_file(LOG_DIR + file);
+  write_file(LOG_DIR + file, text);
+}
+```
+
+**验证**：干净重启驱动（`debug.log` 543 行基线不变），巫师账号
+`clone /clone/money/gold` 不再报错，正常显示"黄金复制成功，放在你
+的物品栏。"。已提交（commit `4041d1f9ccb`）并推送。
+
+**观察项，本轮未确认/未修**：同一 `write_file(..., 1)`（覆写模式，
+AGENTS.md §7.11 记录过这个变体是硬抛错而不是优雅返回 0）硬编码形
+状还出现在 `d/city2/npc/liu.lpc`、`d/city2/song/obj/{bingfu,
+lingjian}.lpc`、`adm/daemons/ward.lpc`，全部写入
+`/quest/quest_jun/song/...` 系列路径——`work/quest/quest_jun/song/`
+目录在这份归档里确实不存在（`ls` 确认）。这是「宋朝守城/军粮」支线
+任务（`d/city2` 是另一个城区，不在扬州新手区），本轮未实际触发（未
+走到那条任务线），按项目一贯纪律不做未经现场复现的预防性修复，留
+给以后走到 `city2` 那条任务线时再确认/修。`toptend.lpc` 的排行榜
+写入路径（AGENTS.md §7.11 举过的另一个实例）本档案 `data/topten/`
+五个文件已经存在，未受影响。
+
+### 真实战斗 → 死亡 → 复活（非安全切磋）
+
+**流氓头（南大街 `/d/city/nandajie1`）只支持非致命切磋——真正会死人的目
+标是"财主大门"（`/d/city/caizhu`）的两只"大狼狗"（`wolfdog.lpc`）**：
+`attitude: peaceful` 但 `init()` 里对任何进入房间的 interactive 玩家无
+条件排 `call_out("kill_ob", 1, ob)`，真正会主动扑上来，且 `cmds/std/
+kill.lpc` 对 NPC 目标确认没有任何安全闸门（和本次会话其余 10+ 个已确认
+的同类库一致）——`kill wolf` 直接开打，不问玩家意愿。
+
+**先用巫师账号 `fluffos` 亲身撞了一次**（未预期，属于真实巧合）：`goto`
+到财主大门后，大狼狗自动发起攻击，`fluffos` 战斗数值偏低（管理员身份不
+等于战斗强度），几个回合后被真实打死——完整死亡文本链（"你的眼前一黑"→
+"你扑在地上挣扎了几下，腿一伸，口中喷出几口鲜血，死了！"）→ 正确传送到
+死亡结界"鬼门关"（`/d/death/gate`）。因为 `fluffos` 是巫师，`d/death/
+npc/bai.lpc`/`hei.lpc`（本档案自己上面 §7.112 补丁刚修过的那两个文件）
+的 `init()` 都显式跳过巫师（`wizardp(previous_object())` 为真时直接
+`return`），巫师复活改走另一对专门给巫师用的 NPC
+（`wgargoyle.lpc`/`bgargoyle.lpc`，条件相反，只在 `wizardp` 为真时触
+发）——**核对后发现这两个档案在全档案任何房间的 `objects` 映射里都从未
+被引用，是死代码**（`grep -rn` 全档案确认），巫师死后事实上卡在死亡结
+界里无法通过 NPC 触发复活（真正的出路是十殿阎罗 `yanluo.lpc` 的问答闯
+关小游戏，或孟婆汤 `mengpo.lpc` 需要 `combat_exp >= 1000000000` 的巫师
+专属高门槛，均为大型内容子系统，超出本轮验证范围，不影响任何真实玩家路
+径，未改代码）。
+
+**改用新注册的普通测试角色 `nteqzco` 正式补做这项测试**：走到财主大门
+`kill wolf`，完整真实战斗回合序列（无安全脱战），气血耗尽后同样真实死
+亡→传送鬼门关。这次角色不是巫师，`bai.lpc`（鬼门关的"白无常"）的
+`init()` 正常触发，`death_stage()` 五阶段对话（间隔 5 秒/次）现场逐条
+观察完整跑完，**这是本档案 §7.112 补丁（2026-08-20 才修的 `bai.lpc`/
+`hei.lpc` 补丁）第一次被真实死亡流程实际触发**——五个阶段每一个出口分
+支都正确调用了 `delete_temp("death_stage_active")`，没有卡死或重入，
+最终 `ob->reincarnate()` + 传送到 `REVIVE_ROOM`（武庙）成功落地，
+`score` 确认状态正常。中途因为验证 §7.11 修复而重启过一次驱动，测试角
+色当时刚好处于死亡对话流程中途，重连后存档位置卡在"鬼门关"→"酆都城
+门"（重启前的存档时间点，`clone/user/user.lpc` 的 `die()` 在
+`::die()` 后立刻 `save()`，但 `death_stage()` 复活时的位置变更本身不
+会主动存盘）——这是我们自己驱动重启造成的测试假象，不是代码 bug（没有
+任何错误讯号），继续沿死亡对话链往深处走，`hei.lpc`（酆都城门的"黑无
+常"）同一套五阶段对话也完整跑完，成功复活。全程 `debug.log` 复核干净，
+零新增错误。
+
+### 真实商店购物
+
+用巫师 `clone /clone/money/gold` + `give gold to nteqzco` 的既定资助模
+式（触发并修复了上面第六类 bug），给测试角色一两黄金（合一万文铜钱）。
+到"醉仙楼"（`/d/city/zuixianlou`）"店小二"（`xiaoer2.lpc`，真实
+`F_DEALER`/`vendor_goods` 商店）`buy baozi`：「你从店小二那里买下了一
+个包子。」价格五十文铜板，购买后 `i` 确认找零正确（一万文 → 九十九两
+白银 + 五十文铜钱 = 9950 文，换算无误），包子实物到手。全程无错误。
+
+### 真实拜师门派（非 `copyskill` 捷径）
+
+**修正上一轮 NOTES 的一个不准确表述**："拜师门派 NPC 都在扬州新手区以
+外的深山"——这只对"独孤求败/黄裳/魁花/南海神尼"这几个特定"7.90 到
+`to_int()` 复现"顺手查过的名字成立，不是全局结论。实际上有一个真正可拜
+（`attempt_apprentice()` 已实现、`permit_recruit()` 门槛很低）的门派招
+募 NPC 就在新手区city范围内：**丐帮的"空空儿"（`kungfu/class/gaibang/
+kongkong.lpc`），固定放置在"丽春院"（`/d/city/lichunyuan`，南大街东
+侧）**。他的 `attempt_apprentice()` 只检查 `permit_recruit()`（未曾背
+叛过丐帮、未同时拜过别的门派）——对全新角色直接通过，没有任何战斗力/声
+望门槛（相比之下 `kungfu/class/quanzhen/*.lpc`、`.../tangmen/tangfang.
+lpc` 等"全真七子"/"唐门"级别的招募 NPC 大多要求已有相当技能等级或声望，
+更适合已入门玩家的"晋阶"而非"新手首次拜师"）。
+
+`kongkong.lpc` 会 `random_move()` 到处游荡，第一次到访扑空（"你想拜谁
+为师？"——他人不在场），追过去几个房间也没追上；后来发现自己的命令用
+错了目标别名——`set_name("空空儿", ({"kong kong", "beggar", "qi gai",
+"kong"}))`，游戏内实际可用别名是"kong kong"（带空格）或"kong"，不是我
+最初尝试的无空格"kongkong"（纯属操作失误，不是 bug）。改用 `bai
+kong`，且巫师顺手 `clone` 了几个额外的"空空儿"副本帮忙"钉"在房间里避
+免再次扑空，最终 `bai kong` 成功：
+
+```
+你想要拜空空儿为师。
+空空儿说道：好吧，希望小兄弟能好好学习本门武功，将来在江湖中闯出一番作为。
+空空儿决定收你为弟子。
+你跪了下来向空空儿恭恭敬敬地磕了四个响头，叫道：「师父！」
+恭喜您成为丐帮的第二十代弟子。
+```
+
+`score` 确认门派/师承字段真实写入：【门派】丐帮、【师承】空空儿、称号
+"小叫化"/"丐帮第二十代传人"。全程无错误。
+
+### 标准检查清单快速过一遍（§7.90/§7.100/§7.111/§7.112/§7.79/§7.108/§7.30 + 4 个已收尾的跨库 grep 模式）
+
+全部干净，无新发现：
+
+- **§7.90**：本档案上一轮已经记录过随机任务系统修复后的 `Eval
+  interrupted` 冷启动噪音类别，本轮未见新增独立实例。
+- **§7.100**：全档案 `grep -rn 'replace_program(ROOM)'` 只命中一处
+  `d/heimuya/dating2.txt`（内容数据档案，非编译 `.lpc`，不受影响）。
+- **§7.111**：`adm/single/master.lpc` 的 `standard_trace()` 第 277 行
+  已经是 `error["object"] ? file_name(error["object"]) : "0"` 的守卫
+  形状，干净。
+- **§7.112**：`d/death/npc/{bai,hei,wgargoyle,bgargoyle}.lpc` 四个档
+  案的 `death_stage()` 每个出口分支都正确清理重入守卫（详见上文真实死
+  亡测试现场验证 `bai.lpc`/`hei.lpc`；`wgargoyle.lpc`/`bgargoyle.lpc`
+  代码本身也干净但是全档案未引用的死代码，见上文）。
+- **§7.79**：全档案没有任何裸 2 参数 `addn(` 呼叫，本条不适用。
+- **§7.108**：`clone/user/user.lpc` 的 `reconnect()` 第 397 行已经有
+  `enable_commands()`，干净。
+- **§7.30**：`feature/skill.lpc` 的 5 个 accessor 已经是 2026-08-20
+  当天早些时候的批次修复（`mapp(x) ? x : ([])`），干净。
+- 四个已在别处全收尾的跨库模式：`combatd.lpc` 的 `bounce` 除零
+  （grep 无命中）、`chacha.lpc`（`find` 无命中）、`natured.lpc` 的
+  `!userp(ob[i])) destruct(ob[i])` 僵尸物件模式（grep 无命中）、
+  `go.lpc` 的 `sizeof(exit[arg])` off-by-two（grep 无命中，现有形状
+  是正常的 `undefinedp(exit[arg])` 检查）——全部干净。
+
+### `force_quit()` 无确认删除 bug（上一轮第五类 bug）在 `ntii` 的核对结果：**未复现，`ntii` 本身是安全的**
+
+按上一轮 NOTES 留下的"AGENTS.md 新 bug class 候选"去核对 sibling
+`ntii` 的 `cmds/usr/quit.lpc`：`ntii` 的 `force_quit()`（第 165-189
+行）**从未呼叫 `UPDATE_D->remove_user()`**——只有 `save()` +
+`move(VOID_OB)` + `destruct(me)`，删除逻辑完全局限在交互式 `confirm()`
+分支（第 191 行起，仅在玩家显式输入 `y` 时才触发）。也就是说 `ntii` 这
+份档案的 `force_quit()`/`confirm()` 从一开始就是分离的两条独立逻辑，不
+像 `nte`（修复前）那样把两条路径的销毁逻辑合并复用——**这不是同一个
+bug 的另一个实例，是两份档案在这个函式上本来就是不同的代码形状**，
+`ntii` 自己的 NOTES.md 也没有任何相关记录（说明它从未需要修）。范围缩
+小：这个 bug class 候选在 `nte`/`ntii` 这对最近的 sibling 里只命中了
+`nte` 一份，未来如果要跨库扫这个模式，`ntii` 可以从候选列表里排除，但
+不代表其他更远的 ES2/Annihilator 血统档案同样安全，仍值得个别核实。
+
+### 本轮结论
+
+三项此前从未测试的真实游玩全部走通且验证正确：真实战斗死亡与复活（含
+`§7.112` 补丁第一次真实触发验证）、真实商店购物（价格/找零/实物到手）、
+真实拜师门派（非管理捷径，`bai kong` 完整走通，字段正确）。额外独立发
+现并修复第六类 bug：`log_file()` 缺 `assure_file()` 守卫
+（AGENTS.md §7.11 实例，已修复/验证/提交/推送）。标准检查清单全项通
+过，无新发现。顺手核对 `ntii` 的 `force_quit()`，确认该档案本来就是安
+全的代码形状，不需要移植修复。整体信心：高。
