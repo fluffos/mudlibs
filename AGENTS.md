@@ -5497,6 +5497,24 @@ were left unconfirmed (no local `addn` definition found in their own
 tree, small-to-negligible 2-arg-shaped call counts) — worth a future
 per-lib check but out of scope for this sweep.
 
+**All 7 now checked (2026-08-21)**: `wdxtym` has a real local/inherited
+`addn` (never broken, same category as `xo_final`/`zsdsj`). `wxddym` had
+`addn` completely undefined anywhere (not the misdirection bug — a hard
+compile-time crash on all ~67 files calling it, at every arity, plus
+`efun::addn()` at one call site that could never resolve through any
+shim) — fixed with a proper simul_efun shim, `efun::` prefix dropped at
+its one call site, and its 13 residual `ob->addn(...)` dot-call sites
+(unreachable by any shim — this driver's `call_other` has no simul_efun
+fallback) converted to call `feature/dbase.lpc`'s real `add()`/
+`add_temp()` directly instead. `hy5`/`hymud` compile clean as-is — a
+native/working `addn` resolves correctly there, not affected.
+`yanhuangwuhun`/`yhwhpublicfi`'s only 4 matches each are inside
+commented-out dead code (`cmds/skill/death.lpc`) — not live bugs.
+`shenmo` had the same undefined-`addn` crash as `wxddym`, scoped to a
+single file (`feature/ability.lpc`, 3 live call sites) — same shim fix
+applied, plus a second bug the crash had been masking on the same line
+(a §7.70-shape `query(prop, ob)` misuse, fixed to `me->query(prop)`).
+
 **Fix-pass correction (a second, more dangerous gap found mid-fix)**:
 applying the naive `addn(A, B)` → `this_object()->add(A, B)` transform
 to `xfbhh` corrupted `clone/user/user.lpc` — that file has a **real
