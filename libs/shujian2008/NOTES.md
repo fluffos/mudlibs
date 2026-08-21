@@ -387,6 +387,87 @@ Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guar
 
 Note: the touched header here (`death2.h`) turned out to be dead/unreferenced code in this lib -- the live NPCs (`yanluo.lpc`/`mengpo.lpc`/`pusa.lpc`) actually `#include` a sibling `death.h`, which was already guarded from an earlier fix. This edit is a harmless no-op; no live vulnerability existed in this lib for this file.
 
+## Round-four deep functional test (2026-08-20) — the two flagged gaps closed
+
+Targeted resolution of the two items explicitly deferred in the 2026-07-24
+深度功能测试 above ("Explicitly not verified live"). Booted natively
+(`/home/sunyc/src/fluffos/build-debug/src/driver`, PID confirmed against
+`work` before kill), watched `log/debug.log` live via a persistent Python
+telnet bridge (validated each response before sending the next command,
+no blind-fired script).
+
+**1. Shop purchase — resolved, verified clean.** The only literal `SHOP`-
+class room in the whole archive (`clone/shop/yangzhou_shop.lpc`, the
+Yangzhou room the prior round's note speculated about) turned out to be
+dead content by design: `owner: "VOID_SHOP"`, `shop_type: 0`, and its own
+`long` text says the shelves have sat empty for years, no one runs it —
+not a bug, just an unfinished/abandoned shop the archive shipped with.
+Real commerce in this lib is NPC-vendor-based (`feature/dealer.lpc` /
+per-NPC `do_buy`/`is_vendor_good` overrides, `add_action("do_buy",
+"buy")`), scattered across many city zones (`changan`, `hz`, `hmy`,
+`zhiye`, `sld`, `gb`, `village`, `hj` — not specifically Yangzhou).
+Used admin `goto /d/zhiye/yaodian1` (a pharmacy in 成都/Chengdu run by
+`d/zhiye/npc/yaodian-zhanggui.lpc`), `clone /clone/money/gold` (1 gold =
+10000 copper) for funding, `list` to see real prices, then `buy yangjing
+dan`: charged exactly 五十七两白银又五十文铜钱 (5750 copper, matching
+the listed price), inventory correctly went from 1 gold (10000) to 42
+silver + 50 coin (4250) and the character received "一颗养精丹
+(Yangjing dan)". Price deduction and item receipt both verified exactly
+correct. `debug.log` stayed clean.
+
+**2. Combat-to-death cycle — resolved, verified clean, three full real
+death/respawn cycles observed.** Created a fresh throwaway character
+(id `sjdthtst`, Chinese name 测死人, password `Sj2026Dth`) rather than
+reusing the existing `qinshiyu` (whose `combat_exp: 1000000` from prior
+rounds made it far too strong for any real starting-zone threat to pose
+lethal danger). Confirmed `kill.lpc` has no safe-sparring-style gate
+against real NPC targets (only PK-specific and `/d/wuguan/`-zone
+protections) — matches this session's cross-lib precedent. Admin-cloned
+a `/d/wuguan/npc/snake.lpc` (a real, weak, poison-on-hit wild animal)
+into the character's room purely to get combat started quickly (its own
+`init()` has a random auto-aggro chance); real, unmodified `hit_ob()`/
+poison-condition/`die()` code did the rest — no `smash`/forced `die()`
+call was needed this time, real mechanics alone produced a real death.
+Sequence observed, twice for the player and once (via poison DoT
+outliving the snake) for the admin account itself:
+`die()` (蛇毒发作死了 — snake venom took effect) → 鬼门关 (death
+gate/`DEATH_ROOM`) → a death-judge NPC (孟婆/Meng Po one time, 阎罗殿's
+转轮王/Wheel-Turning King another — confirming both `mengpo.lpc` and
+`yanluo.lpc`'s independently-`#include`d `death.h` guard chains work,
+consistent with the already-closed §7.112 gap noted below) →
+`death_stage()` dialogue chain → `reincarnate()` → respawn at
+`START_ROOM` (武馆前院, since `enter_wuguan` was set) with stats fully
+restored. `score` correctly recorded 死亡：一次／有效：一次 with 上次
+遇害：蛇毒发作死了 after each death. `debug.log` (341 lines total this
+session) had **zero** new `error`/`denied`/`bad argument`/`undefined
+function`/`divide` lines through all three death/respawn cycles — no
+new bug found by this test. Cleaned up by admin `smash`-ing the leftover
+snake once done (verified `die()` alone, not `smash`'s forced path, was
+what produced every death observed above).
+
+**Other checklist items** (fast sanity pass per task brief, all
+already fixed by earlier passes in this document, none re-derived):
+§7.90 (`maximum evaluation cost : 5000000`, confirmed in
+`config.fluffos`), §7.100 (only a commented-out
+`replace_program(ROOM)` leftover in `d/xueshan/jlshan.lpc`, not live),
+§7.111 (`standard_trace` present in `adm/single/master.lpc`), §7.112
+(`death_stage_active` guard confirmed present via `death.h` `#include`
+in all three of `mengpo.lpc`/`pusa.lpc`/`yanluo.lpc`, and exercised
+live twice above with zero reentry symptoms), §7.108
+(`enable_commands()` confirmed present in `clone/user/user.lpc`'s
+`reconnect()`), §7.30 (`feature/skill.lpc`'s accessors confirmed using
+the `mapp(x) ? x : ([])` guard pattern). No `combatd.lpc` `bounce`-
+variable §-shape bug found — this lib's `combatd.lpc` has no `bounce`
+variable at all, a different lineage from the sibling libs where that
+bug was found.
+
+**Test character left behind:** id `sjdthtst`, Chinese name 测死人,
+password `Sj2026Dth` — 普通百姓 (unaffiliated commoner), empty
+inventory, standing at 武馆前院, `死亡：一次`. Admin account `fluffos`
+also died once and reincarnated cleanly during this pass (a byproduct of
+the test snake's poison outliving the snake itself) — no lasting state
+issue.
+
 ## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
 
 Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
