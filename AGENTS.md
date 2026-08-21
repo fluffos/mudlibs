@@ -5492,6 +5492,38 @@ above (`wdxtym`, `wxddym`, `hy5`, `hymud`, `shenmo`, `yanhuangwuhun`,
 `yhwhpublicfi`) still need an independent per-lib shim check before any
 fix — do not assume they match this pattern.
 
+**`wxddym` checked (2026-08-21) — a distinct, more severe variant, now
+fixed**: unlike the 6 libs above, `wxddym` had *no* `addn`/`addn_temp`
+simul_efun shim anywhere in its tree at all (not a native driver efun
+in this build either), so every one of its ~67 files / ~143 call
+sites — bare AND explicit-target alike, at every arity — was a hard
+compile-time `Error: Undefined function addn`, not a silent
+misdirected write. Whole files (mostly `kungfu/class/`/`kungfu/skill/`
+effects, plus assorted room/NPC objects) failed to load outright.
+Also found `clone/npc/warcraft.h:609` using `efun::addn(prop, data)`
+— that explicit scope-resolution prefix bypasses simul_efun entirely
+and can never be fixed by adding a shim while the prefix remains.
+Fixed by adding the same proven shim shape to
+`adm/simul_efun/object.lpc` (delegating to `feature/dbase.lpc`'s
+`add()`/`add_temp()`) and dropping the `efun::` prefix at that one call
+site. Live-verified: simul_efun compiles clean, `haigu1.lpc` (the
+lib's own clean single-cause repro) now recompiles successfully, ~15
+more files across different tree areas show zero remaining "Undefined
+function addn" errors (several compile 100% clean end-to-end), and a
+live `clone` of `d/tiezhang/obj/haigu2.lpc` proves the shim's bare
+self-target form actually executes at runtime, not just type-checks.
+**Residual, deliberately left unfixed**: `ob->addn(...)`-style
+cross-object dot calls (as opposed to bare/direct calls) don't resolve
+through simul_efun at all in this driver — `call_other`/`apply_low` has
+no simul_efun fallback — so those sites compile clean but will still
+throw "Undefined function addn" the moment they actually execute,
+unless the target object independently defines its own `addn`. Full
+details and the live-test transcript are in `libs/wxddym/NOTES.md`.
+The remaining 6 unconfirmed libs (`wdxtym`, `hy5`, `hymud`, `shenmo`,
+`yanhuangwuhun`, `yhwhpublicfi`) still need their own independent check
+— don't assume either shape (§7.79's silent-misdirect or wxddym's
+hard-undefined) without verifying.
+
 ### 7.80 A filename-suffix-stripping slice is off by (suffix-length − 1) because `str[0..<n]` keeps `len-n+1` characters, not `len-n` — corpus-wide sweep completed, 15 libs fixed total
 
 Found on `nt1`'s §10.7 deep-dive: `adm/daemons/eventd.lpc` builds its

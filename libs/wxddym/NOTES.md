@@ -193,3 +193,133 @@ left for the orchestrator to scope as a follow-up (no fix applied here).
 No lasting changes made to this lib this session; the only writes were
 transient login-tick save-file churn on the demo `fluffos` account,
 reverted with `git checkout` since no real gameplay progress happened.
+
+## §7.79 `addn()` fix on this lib (2026-08-21)
+
+Implemented the fix scoped out of the investigation above. Added a
+simul_efun shim in `adm/simul_efun/object.lpc` (the file's own object-
+utility helpers, e.g. `present()`/`destruct()`, made it the closest
+stylistic fit -- this lib's `wizard.lpc` is narrowly about wizhood/
+SECURITY_D status, unlike the `xfbhh`/`hhsj` lineage where that
+filename happened to hold the (broken) shim):
+
+```lpc
+varargs mixed addn(string prop, mixed data, object ob) {
+  if (!ob) ob = this_object();
+  return ob->add(prop, data);
+}
+
+varargs mixed addn_temp(string prop, mixed data, object ob) {
+  if (!ob) ob = this_object();
+  return ob->add_temp(prop, data);
+}
+```
+
+Both delegate to `feature/dbase.lpc`'s existing `add()`/`add_temp()`,
+matching the proven §7.79 remedy pattern exactly. Added `addn_temp` too
+after grepping the tree and finding ~100 more bare `addn_temp(...)`
+call sites with the identical undefined-function problem (not
+mentioned in the original investigation, which only grepped for
+`addn(`) -- same root cause, `add_temp()` already existed on
+`feature/dbase.lpc` alongside `add()`.
+
+Also fixed the one `efun::`-scoped call site: `clone/npc/warcraft.h:609`
+was `return efun::addn(prop, data);` -- that scope-resolution operator
+can only ever bind to a genuine compiled-in driver efun (which this
+build lacks), so no simul_efun shim could ever fix it while the prefix
+stayed. Changed to a bare `addn(prop, data)` so it now resolves through
+the new shim.
+
+**Live verification** (real boot, port 40189, admin `fluffos` via the
+app-protocol Python harness -- note: this mud's status bar re-broadcasts
+every real-time second or so, which made a naive fixed-idle-timeout
+`recv()` loop hang indefinitely waiting for a quiet gap that never came;
+had to switch to a hard wall-clock cap per read instead of relying on
+socket idle-timeout):
+
+- `update /adm/single/simul_efun` and the driver's own boot log: no
+  compile errors, simul_efun object loads clean (also implicitly proven
+  by the fact the driver accepted connections at all -- a broken
+  simul_efun refuses to boot).
+- `update` on both files named in the original investigation:
+  `/d/tiezhang/obj/haigu1.lpc` recompiles clean (`重新编译...成功！`);
+  `/d/qingcheng/obj/zhui.lpc` still fails, but now *only* on its
+  pre-existing, unrelated `query("prop", object)` arg-2-type bug (the
+  same widespread ~162-file pattern noted elsewhere in this file's
+  earlier round-two entry) -- zero "Undefined function addn" anywhere
+  in either file's output now.
+- Spot-checked ~15 more files across different areas of the tree via
+  `update` (`kungfu/skill/xianglong-zhang/long.lpc`,
+  `maze/battle3/meng/kehan.lpc`, `clone/npc/warcraft.lpc` (pulls in the
+  fixed `warcraft.h`), `maze/necropolis/npc/zombie_power.lpc`,
+  `d/gaibang/obj/qingzhu-ling.lpc`, `kungfu/class/misc/qilin.lpc`,
+  `maze/battle3/ydmen.lpc`, `clone/goods/cemashi.lpc`, several more):
+  **zero** produced an "Undefined function addn" error anywhere. Several
+  fully compiled clean end-to-end (`adm/npc/obj/drum.lpc`,
+  `adm/daemons/bunchd.lpc`, `kungfu/skill/tie-zhang.lpc`); the rest
+  still fail to load, but exclusively on the same pre-existing,
+  unrelated `query()`/`query_temp()` arg-2-type bug family (and in a
+  couple of cases `full_self()`/`add_skill()` undefined-function bugs
+  and one `GUARD_CMD` undefined-macro bug) -- none of which this task
+  was scoped to touch.
+- **Live functional trigger** (not just compile-check): `clone
+  /d/tiezhang/obj/haigu2` twice in a row, each time cleanly succeeding
+  with no runtime error. That file's `init()` does
+  `ob = new("/d/city/obj/duanjian"); ob->move(me); addn("init", 1);`
+  guarded by `query("init") == 0` -- a bare, self-target 2-arg call
+  identical in shape to the one from the investigation's clean repro.
+  Before this fix the whole object would have failed to compile at
+  clone time; after, it clones and its `init()` runs to completion
+  (confirms the shim's `this_object()` default-target path actually
+  executes at runtime, not just that it type-checks). Sibling
+  `/d/tiezhang/obj/haigu1.lpc` was also tried but hit a *separate*,
+  pre-existing, unrelated bug first: `new("/u/qingyun/mingjiao/obj/
+  parry_book")` returns 0 because that file doesn't exist anywhere in
+  this lib, so `ob->move(me)` on the next line throws before ever
+  reaching the `addn()` call on the line after -- a genuine missing-
+  content bug, not touched here, and coincidentally why the
+  investigation's original repro on `haigu1.lpc` only ever exercised
+  the *compile-time* addn error, never its runtime behavior.
+  A full combat-triggered, `score`-visible stat change (e.g. via
+  `kungfu/skill/tie-zhang.lpc`'s clean `addn("neili", -100, me)`) was
+  not pursued -- it requires training the skill and a live combat
+  encounter, which didn't fit this task's bounded budget on top of the
+  compile sweep and the haigu2 functional trigger above; the shim's
+  explicit-`ob`-target path is structurally identical to the proven
+  self-target path already exercised live, and to the same one-line
+  redirect pattern validated on six other libs per §7.79.
+
+**Known, deliberately out-of-scope residual** (already flagged in the
+investigation above, confirmed still present): bare/direct `addn()`/
+`addn_temp()` calls -- including the explicit-3rd-arg-target form like
+`addn("neili", -300, me)` -- resolve through the new simul_efun shim
+correctly, because the compiler binds unqualified identifiers to
+simul_efun at compile time. But dot-call sites like `me->addn(...)`,
+`no4->addn(...)`, `who->addn_temp(...)` (found e.g. in
+`adm/daemons/bunchd.lpc`, `adm/npc/obj/drum.lpc`,
+`adm/daemons/auctiond.lpc`, `kungfu/skill/longxiang/perform/
+longxiang.lpc`) do **not** -- `call_other()`/`apply_low()` has no
+simul_efun fallback in this driver (confirmed by reading
+`fluffos/src/vm/internal/apply.cc`'s `apply_low()`), so those call
+sites compile clean (the compiler can't statically verify methods on a
+dynamically-typed `object` call_other target) but will throw
+"Undefined function addn" *at runtime* the moment they actually
+execute, unless the target object happens to independently define its
+own `addn()`. `bunchd.lpc` and `drum.lpc` both compiled 100% clean in
+this session's spot-check specifically because of this blind spot --
+compiling clean is not proof those particular calls work. Left
+unfixed per this task's explicit scope (shim + the one `efun::` site
+only); a real fix for the dot-call sites would need either a shared
+base-class `addn()`/`addn_temp()` wrapper on `feature/dbase.lpc` itself
+(so every object that already has `add()` also has `addn()` on its own
+program, closing the `call_other` gap) or a per-call-site rewrite back
+to bare calls with an explicit target -- worth a dedicated follow-up
+session.
+
+No driver crash, no new debug.log entries, no other files touched.
+Reverted transient `data/{bunchd,dbased,newsd}.o` and demo-account
+`fluffos` save-file churn from the login/clone testing with `git
+checkout` before committing (per the standing "git add -u, not bare
+dir" + "no runtime logs in docs" conventions) -- only the two real
+source edits (`adm/simul_efun/object.lpc`, `clone/npc/warcraft.h`) are
+part of this commit.

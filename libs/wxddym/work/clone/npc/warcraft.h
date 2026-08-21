@@ -606,7 +606,7 @@ mixed add(string prop, mixed data)
 
                 return set(prop, old + data);
         } else
-                return efun::addn(prop, data);
+                return addn(prop, data);
 }
 
 // 召唤接口
