@@ -179,3 +179,32 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Ported §10.7 go.lpc/clan fixes from sibling kxkj (2026-08-21)
+
+`cmds/std/go.lpc`, `cmds/adm/update_dir.lpc`, `cmds/imm/{ls,lstree}.lpc`,
+`cmds/clan/c_create.lpc`, and `adm/daemons/cland.lpc` all confirmed
+byte-identical (md5sum) to `kxkj`'s pre-fix copies. `kxkj`'s round-four
+§10.7 deep test found 4 real bugs:
+
+1. `go.lpc`'s `.lpc`-suffix check sliced only the last 2 characters
+   against the 4-character literal `".lpc"`, so it never matched and
+   always appended `.lpc` -- including to paths that already had it.
+   Since the exits mapping is held by reference, this permanently and
+   cumulatively corrupted any room's exit whose destination lacked a
+   literal `.lpc` suffix in source, breaking that exit for every player
+   after the first use until reboot -- a severe navigation-corrupting
+   bug. Same copy/paste bug in `update_dir.lpc` (made that admin
+   recompile tool a total no-op) and cosmetically in `ls.lpc`/`lstree.lpc`
+   (wrong file-type coloring).
+2. `c_create.lpc` called `CLANV_D->create_clanv()`, which doesn't exist
+   on the live daemon -- the silent undefined-function no-op meant a
+   clan founder's own `clan/name` property was never set.
+3. `cland.lpc`'s `clan_query()` lacked the `undefinedp()` guard its
+   sibling `clan_set()` has, crashing `c_list` with "Value being
+   indexed is zero" under a specific directory/data-entry mismatch.
+
+Ported all fixes directly from `kxkj`'s fixed files rather than
+re-deriving them. Compile-verified via `lpcc --batch` (not
+independently live-boot-tested on this lib -- the fixes were already
+proven live on `kxkj`).
