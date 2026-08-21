@@ -200,3 +200,146 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（§10.7，2026-08-21）：商店购买 + 门派拜师首次实测
+
+之前几轮测试（§7.86 扫描、2026-08-08 那轮深度测试、§7.100/§7.112/§7.30
+扫描）都验证过注册/移动/留言板/战斗死亡复活/`quit`重连，但商店购买和
+正式拜师流程一直没有真正跑过（2026-08-08 那轮 NOTES 里"未覆盖"一节明
+确记录了这一点）。这次原生驱动（`build-debug/src/driver`）+ 两个并行
+telnet 会话（一个测试角色、既有 `fluffos`(admin) 账号）补上这两项，并
+用真实 `kill` 指令对"中央广场"的"流氓头"重新走了一遍战斗/死亡/复活流
+程（与 2026-08-08 那轮结果一致，无回归）。
+
+### 1. 战斗与死亡复活：复测无回归
+
+新角色 `ldtxwyf`（中文名"石中玉"）对"流氓头"使用真实 `kill` 指令（非
+切磋指令），多回合真实攻防判定后被打倒昏迷，`look`/`score` 短暂返回
+"什麽？"（指令封锁），随后自动苏醒，`score` 显示"你共死亡：1 次"、
+"最后一次死于：[流氓头] 之手"，精/气从满格降到 2/16。全程 `debug.log`
+无异常。
+
+### 2. 商店购买：首次实测，通过
+
+用 `admin clone /clone/money/gold` + `give gold to <角色>` 的标准套路
+给测试角色注资（一两黄金＝10000 铜板），在开局房间"客店"内向既有的
+`d/city/npc/xiaoer.lpc`（店小二，`inherit F_VENDOR`＝`/feature/dealer.lpc`）
+执行 `buy huo`，成功买下"火把"（五两白银＝500），扣款后找零"九十五两
+白银"（10000-500=9500，换算白银单位正确），物品正确出现在角色物品栏。
+`debug.log` 全程无异常。
+
+### 3. 门派拜师：首次实测，发现并修复一个真实的执行时段崩溃（新增 6 个文件）
+
+用 `admin goto`+`summon` 把测试角色传送到少林寺广场（`d/shaolin/guangchang1w`），
+对"清为比丘"（`kungfu/class/shaolin/qing-wei.lpc`）执行 `bai qingwei`，
+`debug.log` 立即记录一条真实的执行时段崩溃：
+
+```
+执行时段错误：*Value being indexed is zero.
+程式：/kungfu/class/shaolin/qing-wei.lpc 第 74 行
+呼叫来自：/cmds/skill/bai.lpc 的 main() 第 106 行
+呼叫来自：/kungfu/class/shaolin/qing-wei.lpc 的 attempt_apprentice() 第 74 行
+```
+
+**根因**：`attempt_apprentice(object ob)` 里 `mapping ob_fam = ob->query("family");`
+对一个从未拜过师的新角色而言，`query("family")` 返回的是裸 `int 0`
+（不是 `mapp()` 检查过的空 `([])`），随后 `if (ob_fam["family_name"] == "少
+林派" && ...)` 不经任何 `mapp()` 守卫直接对这个 `int 0` 做下标索引，
+触发驱动级"Value being indexed is zero"。这意味着**任何全新角色第一次
+在这个 NPC 面前 `bai`，一定崩溃**——门派拜师这个核心玩法在这份档案里
+从代码提交以来大概率从未在这个 NPC 身上真正跑通过。
+
+**同一份坏代码的姊妹实例**：全档案 `grep`所有 `attempt_apprentice()`
+里出现 `ob_fam[` 下标的 24 个文件，绝大多数（少林/明教/峨嵋各支）已经
+用 `if (!(ob_fam = ob->query("family")) || ob_fam["family_name"] != "...")`
+这种"赋值同时判空、`||`短路"的写法正确守卫；但另外 6 个文件是同一处
+逻辑的裸下标变体，同样会在全新角色面前崩溃：
+
+- `kungfu/class/shaolin/qing-wei.lpc`（现场实测崩溃确认）
+- `kungfu/class/shaolin/qing-wu.lpc`（同一段代码逐字重复）
+- `d/quanzhen/npc/qiuchuji.lpc`（丘处机，全真教；`ob_fam["generation"]`
+  连 `family_name` 判断都没有，是这 6 个里最先执行到的一行，实测复现）
+- `d/quanzhen/npc/mayu.lpc`、`d/quanzhen/obj/mayu.lpc`（马钰，两份重复文件）
+- `d/quanzhen/npc/wangchuyi.lpc`（王处一）
+
+修复：统一在下标之前补一个 `mapp(ob_fam) &&` 短路守卫，与本档案其余
+安全写法保持同一防御性风格，不改变原有的"同门派、辈分不够"拒绝逻辑。
+现场重新用另一个全新角色（`xiaolong`/"小龙女"）对丘处机执行 `bai qiu`
+验证：不再崩溃，正确走到下一条资质检查（"六根清静...资质似乎不适合
+当道士"，因为膂力/根骨未达 30 的门槛，这是既有的、正常的游戏内拒绝
+逻辑，不是 bug）。用 `ldtxwyf` 对清为比丘重新 `bai qingwei` 验证：正
+常完成拜师，`score`/`goto` 均显示"少林派第四十一代弟子"称谓，无崩溃。
+
+**顺手修复同一个 `bai.lpc` 里紧邻的另一处已确认会崩溃的括号写反 bug**：
+`bai.lpc` 第 56 行原文 `me->query("family/master_id" == "feng qingyang")`
+——括号位置写反，实际变成对 `query()` 传入一个恒为 0 的布尔比较结果
+（`me->query(0)`），而不是比较查询结果字符串。这条分支只有当"师父一
+方先用 `recruit` 指令主动收徒、徒弟后用 `bai` 补礼"这个顺序（而不是
+本档案 203 处 `attempt_apprentice()` 里全部采用的"徒弟先 `bai`，NPC
+自动 `attempt_apprentice→recruit`"顺序）时才会走到；用 `qiangpo <师
+父NPC> to recruit <全新角色>` 强制模拟这个顺序，配合静态追踪
+`/feature/dbase.lpc` 的 `query(string prop, int raw)` 实现（`prop`
+为 `int 0` 时 `strsrch(prop, '/')` 必然抛"Bad argument 1"）确认这条
+分支一旦触发必定崩溃，但由于该分支要求一个真人巫师/门派掌门角色主
+动使用 `recruit` 指令，两次现场复现都因为测试脚本自身的时序问题
+（角色状态残留、新角色未过 15 分钟存档保护期）没能触发到这一具体路
+径本身。鉴于这是与已确认崩溃同一函数、同一提交范围内、语义上明显写
+反的逻辑错误（不是内容缺失），且修复风险极低，一并改成
+`ob->query("id") == "feng qingyang" || ob->query("name") == "风清扬"`
+（`ob` 才是即将成为新师父的一方，语义上也更正确）。这份档案里没有任
+何 NPC 叫"风清扬"/"feng qingyang"，所以这条分支本身的实际效果依旧是
+空操作，此次修复只消除潜在崩溃，不改变游戏内容。
+
+### 4. 顺手发现并修复的第三个真实崩溃：`d/city/npc/dog.lpc`（小白狗）问候函式参数不匹配
+
+在多次测试过程中 `debug.log` 反复出现：
+
+```
+执行时段错误：*Bad argument 1 to EFUN call_other()
+Expected: object, string, array,  Got: int(0).
+程式：/d/city/npc/dog.lpc 第 58 行
+呼叫来自：/d/city/npc/dog.lpc 的 greeting() 第 58 行
+```
+
+`init()` 用 `call_out("greeting", 1, ob)` 只传了一个参数（进入客店的
+玩家），但 `greeting(object who, object ob)` 的函式签名要两个参数，
+第二个 `ob` 因此永远是没绑定的 `int 0`。当 `who->query("gender") ==
+"女性"`（即女性角色进客店）时，紧接着 `if (ob->query("per") > 25)`
+对这个 `int 0` 做 `call_other()`，必然崩溃——**任何女性角色第一次进
+入开局房间"客店"，小白狗的问候 `call_out` 都会崩溃**。用女性角色
+`gongsun`（"公孙绿萼"）现场复现确认。修复：补 `objectp(ob) &&` 守卫。
+因为 `call_out` 本身的参数缺口没有配套的"礼物物件"创建逻辑（很可能
+是原作者裁剪掉的半成品功能，不是这次改动引入的），修复后女性角色进
+客店时这条"亲热"分支会被安全跳过而不是崩溃，符合"不凭空捏造缺失内
+容，只消除崩溃"的既定尺度；用另一个女性角色重新验证：干净无报错。
+
+### 标准巡检结果
+
+- §7.90（eval-cost）：`config.fluffos` 现为 5000000，全程无
+  `cost limit reached`。
+- §7.100（`replace_program(ROOM)`）：已在 2026-08-19 扫描修复，本轮
+  未见新增实例。
+- §7.111（`standard_trace()` 对 `error["object"]==0` 无守护调用
+  `file_name()`）：**本轮新发现，`adm/single/master.lpc` 第 197 行
+  是未修复的裸调用形态**，已修复为
+  `objectp(error["object"]) ? file_name(error["object"]) : "(driver)"`。
+- §7.112（`death_stage()` 重入守卫）：`d/death/npc/bgargoyle.lpc`、
+  `d/death/wgargoyle.lpc`、`d/death/npc/wgargoyle.lpc`、
+  `d/shaolin/npc/yu-zu2.lpc` 四个含 `death_stage` call_out 链的文件逐
+  一核对，所有出口分支均正确清理 `death_stage_active` 标记，干净。
+- §7.79（`addn()` 两参数变体）：全档案无 `addn()` 调用，不适用。
+- §7.108（重新连线指令封锁）：`clone/user/user.lpc` 的 `reconnect()`
+  已含 `enable_commands()`，早前已修复，本轮多次强制断线重连复测均正常。
+- §7.30（`feature/skill.lpc` 未初始化 mapping 存取器）：已在 2026-08-20
+  扫描修复，4 处存取器均已带 `mapp(x) ? x : ([])` 守卫，符合要求。
+- 4 个"本轮测试后期全库复查"具体形态（`combatd.lpc` 的 `bounce` 除零、
+  `chacha.lpc` 死亡重入泄漏、`natured.lpc` 的僵尸物件误判、`go.lpc` 的
+  `exit[arg]` 越界腐化）：均不适用——`combatd.lpc` 无 `bounce`、全档
+  案无 `chacha.lpc`、`natured.lpc` 无对应的 `destruct(ob[i])` 写法、
+  `go.lpc` 无 `sizeof(exit[arg]) - 2` 写法。
+
+### 未覆盖
+
+邮件系统、其余城市外的更远地图区域（大理/雪山/明教/桃花岛等支线内容）
+本轮仍未深入探索；商店/拜师验证仅覆盖各一个代表性 NPC（店小二、清为
+比丘/丘处机），未逐一走遍全档案数十个门派/商人 NPC。
