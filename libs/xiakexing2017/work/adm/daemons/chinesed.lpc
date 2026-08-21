@@ -24,7 +24,21 @@ void remove_translate(string key);
 
 void create() {
   seteuid(getuid());
-  restore();
+  // Pre-existing corrupted save data (raw binary garbage in
+  // data/e2c_dict.o, predating this session) makes restore_object()
+  // throw mid-parse; the driver's restore_object() clears `dict` to a
+  // raw `int 0` before the throw, clobbering the `mapping dict = ([]);`
+  // declaration-time initializer. Without a LOCAL catch() here, that
+  // throw aborts the rest of create() entirely -- it only gets caught
+  // one level up, by master.lpc's own catch() around preload() -- so a
+  // guard placed after a bare `restore();` call would never run. Every
+  // later call to chinese()/add_translate()/remove_translate()/
+  // dump_translate() then indexes a non-mapping and crashes ("*Value
+  // being indexed is zero.") -- reached from cmds/skill/xue.lpc's
+  // to_chinese() call on every real `xue`/`skills` command. Catch the
+  // throw locally so the guard below actually executes.
+  catch(restore());
+  if (!mapp(dict)) dict = ([]);
 }
 
 void remove() {
