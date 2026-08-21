@@ -472,3 +472,137 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试第四轮 / Round-four §10.7 test (2026-08-20): death/respawn gap resolved
+
+**Primary target: the one explicitly-flagged gap from the round-two deep
+test above ("Explicitly NOT verified live: Death/respawn — not
+reached").** Prior pass found real (non-scripted) combat against a weak
+level-2 wild NPC (`d/city/npc/dog.lpc`, 黑狗, in 西芫街) converged to a
+near-permanent stalemate with bare-fisted `unarmed` 1 — consistent with
+the newbie guide's own advice to buy a weapon first, not a bug, but left
+death/respawn genuinely unexercised.
+
+**Resolved: real death and full automatic reincarnation confirmed
+working end-to-end, twice independently, zero debug.log errors either
+time.** Rather than fight logistics (weapon shopping), used the
+session's standard sanctioned shortcut — admin `call`-based stat grants
+on the existing `linfeng` character (id `linfeng`, already representative
+from the round-two pass) to push a **real** `kill dog` fight to a
+genuine conclusion, per this session's precedent that `kill` has no
+NPC-target danger gate (confirmed by reading `cmds/std/kill.lpc`: the
+40-level PK gate only applies `userp(me) && userp(obj)`; for an NPC
+target `do_kill()` unconditionally calls `obj->kill_ob(me)`, i.e. the
+NPC always fights back for real once `kill`ed).
+
+Mechanism (traced from `feature/damage.lpc` and
+`adm/daemons/combatd.lpc`): ordinary combat reduces both `kee` (health,
+regenerates via `heal_up()`) and `eff_kee` (a separate, non-regenerating
+wound/damage-cap stat, only reduced when the attacker
+`is_killing()`, i.e. via a real `kill`, and floored at 1 point of wound
+per landing hit). `std/char.lpc::heart_beat()` checks `eff_kee < 0` FIRST
+on every tick → `die()` (unconditional, no unconsciousness stage); only
+if that's still non-negative does a separate `kee < 0` check fire
+`unconcious()` (a temporary faint + auto-revive, `t = random(100-con)+30`
+seconds later, with `kee` regenerating back up via `heal_up()` in the
+meantime — this is what the round-two pass's ~10-minute stalemate
+attempt was actually seeing, misread at the time as "no death path").
+To force the real branch: admin `call linfeng->set("eff_kee", <small
+positive number>)` right before a real `kill dog`, so the next landed
+wounding hit (guaranteed floor of 1 per `receive_wound()`) pushes
+`eff_kee` negative and `die()` fires unconditionally on the next tick,
+bypassing the recoverable-unconsciousness branch entirely.
+
+**Verified twice, independently:**
+1. First pass (accidental/unattended): admin lowered `eff_kee`, a real
+   `kill dog` fight produced one landed hit and the expected
+   `unconcious()` faint message ("你的眼前一黑，接着什么也不知道了");
+   watching stopped there per the original plan, but real time
+   continued to elapse in the background (heart_beat doesn't depend on
+   an open connection) — a later reconnect found the character already
+   fully cycled through: `is_ghost()` = 0, standing in
+   `d/ourhome/kedian.lpc` (`REVIVE_ROOM`, 荒郊小店), inventory emptied
+   (`lose_inventory()`, expected/documented design), money and base
+   stats intact (matches this lib's own login banner promise: "本泥潭
+   内，人物的金钱、潜能不会因死亡而有任何损失的").
+2. Second pass (directly observed): admin `powerup(1,1)`-healed the
+   character to full, teleported it directly to `/d/aolai/west1` via
+   `call linfeng->move(...)`, set `eff_kee` critically low again, issued
+   a fresh real `kill dog`, and reconnected partway through to catch the
+   fight live: same "结果造成轻微的伤势" → "半昏迷状态" →
+   "你的眼前一黑" sequence captured directly on-screen this time. Left
+   the world running unattended for several more minutes (heart_beat
+   keeps ticking headless) and reconnected again: character now standing
+   in 荒郊小店, room description confirms this is the dedicated
+   death/revival waystation (`生死之间留言板` — "Board Between Life and
+   Death" — is the room's actual board name), `score` shows 气血 status
+   "充沛" (fully recovered, not the "伤残" seen mid-recovery in pass 1),
+   `eff_kee` back to exactly `query_maxkee()` (1072, both reset by
+   `reincarnate()`+`powerup()` inside the judge NPC's dialogue chain),
+   `is_ghost()` = 0, and — the clinching evidence that the REAL `die()`
+   path executed rather than merely another faint — remaining lifespan
+   ticked down by exactly 1 (79/80 → 78/80), matching `die()`'s own
+   `life/life_time - 1` decrement, a field nothing else in this code
+   path touches. `debug.log` stayed at zero `执行时段错误`/`Fatal`/
+   `Too deep recursion` lines across the ENTIRE multi-stage test
+   (boot through final `quit`), confirming no crash anywhere in the
+   death → `DEATH_ROOM`(`阴阳界`) → judge NPC (`d/death/npc/pang.lpc`,
+   崔判官/崔珏) dialogue → `reincarnate()` → `REVIVE_ROOM` chain.
+   Also directly re-confirmed clean netdead/reconnect handling through
+   this: an abrupt disconnect mid-unconscious-state, and again
+   mid-post-death, both resumed correctly with no stranding, no
+   duplicate object, no error.
+3. Proactively checked the `combatd.lpc` `bounce`-division-by-zero bug
+   pattern flagged this session on `sjpl2`/`sjplii`/`sjplgfjxb`/`fy2mg`
+   (`while (... / bounce)` with `bounce /= 2` and no `bounce > 0`
+   guard): `grep -n bounce adm/daemons/combatd.lpc` — **zero matches**,
+   this lib's `combatd.lpc` is a different (unrelated) lineage, not
+   affected.
+
+No code changes were needed — this is a genuinely working, unmodified
+system; the round-two "not reached" note was a coverage gap in testing
+budget, not a latent bug. `linfeng`'s save state now reflects a
+completed death/reincarnation (empty inventory, position in 荒郊小店,
+78/80 remaining lifespan) — kept as-is per the "representative
+playthrough character" precedent rather than reset, since this is now
+arguably a MORE informative saved state (proves the full lifecycle
+works) than the pre-death one.
+
+### Standard checklist pass (fast confirm, all already fixed/clean)
+
+- **§7.90** (`config.fluffos` eval-cost): already `5000000` (fixed in
+  round three above). Confirmed, no change needed.
+- **§7.100** (live `replace_program(ROOM)`): `grep -rn
+  "replace_program(ROOM)" work --include="*.lpc"` → 8 hits, all already
+  `//`-commented out (matches the round-three §7.100 sweep note: "8
+  already-commented-out instances left untouched"). Zero live
+  occurrences.
+- **§7.111** (`standard_trace()`): only defined once, in
+  `adm/obj/master.lpc`, standard non-recursive shape (`error_handler()`
+  calls it once, no re-entry risk). Clean.
+- **§7.112** (`death_stage()` reentrancy): only one live instance,
+  `d/death/npc/pang.lpc` (the same judge NPC exercised live by this
+  round's own death test above). Already correctly guarded: `init()`
+  sets `death_stage_active` before the first `call_out`, and EVERY exit
+  branch of `death_stage()` clears it — the early `!ob->is_ghost()`
+  return, and the final branch after the message sequence completes
+  (the mid-sequence branch that re-arms another `call_out` correctly
+  does NOT clear the guard, since the cycle isn't done yet). No gap.
+- **§7.108** (`reconnect()` calls `enable_commands()`): `obj/user.lpc`'s
+  `reconnect()` already does this (fixed in round three above, and
+  re-exercised live by this round's own repeated netdead/reconnect
+  testing during the death cycle). Confirmed.
+- **§7.79** (`addn()` 2-arg): `grep -rn "addn(" work` → zero matches in
+  this lib. N/A.
+- **§7.30** (`feature/skill.lpc` uninitialized-mapping guard): all
+  relevant accessors (`query_skills()`, `query_learned()`,
+  `query_skill_map()`) already use the `mapp(x) ? x : ([])` guard
+  pattern (fixed in the 2026-08-20 corpus sweep above). Confirmed.
+
+### Secondary target (not attempted, budget spent on the primary gap)
+
+20级突破 puzzle dungeon and the 10-25级 loot dungeon: still not
+attempted this round either — the death/respawn investigation (two full
+cycles, real-time-gated) consumed this pass's full budget. Left for a
+future round; see the round-two notes above for the newbie-guide entry
+points.
