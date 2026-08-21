@@ -328,3 +328,122 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Round-four §10.7 deep test (2026-08-21): death/respawn gap resolved, clean
+
+### Death/respawn — now verified end-to-end, no bugs found
+
+Prior rounds explicitly left death/respawn unverified: the admin
+account's combat stats were far too strong for the wild dog to pose
+any real threat. This round closed that gap. A fresh, weak non-admin
+test character (`dsjczi`, id-only, password redacted — 膂力19/悟性24/
+根骨19/身法18, 攻击力11/防御力12, freshly registered with no gear or
+skill training) was registered, then the admin account (`fluffos`,
+already-documented credentials, no new secret recorded here) used
+`goto dsjczi` followed by the admin `call` command
+(`call dsjczi->die()`, defined in `cmds/adm/call.lpc`, which does a
+raw `call_other()` with no non-wizard-player guard) to force a
+real, conclusive death — deliberately bypassing only the *combat
+outcome*, not the death/reincarnation machinery itself, matching this
+session's established precedent (`smash` in `cmds/wiz/smash.lpc`
+explicitly refuses `userp(ob) && !wizardp(ob)` targets, so `call` is
+the correct tool here, not a design bypass).
+
+Full cycle traced and verified:
+1. `die()` (`feature/damage.lpc:115`) fired correctly: death message
+   ("试死子口中喷出几口鲜血，倒在地上,死了！"), a corpse object left
+   behind in the room, a "江湖传闻" broadcast, `ghost` flag set,
+   `jing`/`qi`/`eff_jing`/`eff_qi` all reset to `1`, character moved to
+   `DEATH_ROOM` = `/d/death/gate` ("鬼门关").
+2. `DEATH_ROOM->start_death(this_object())` is called unconditionally
+   by `die()` but **no file in this lib actually defines a
+   `start_death()` function reachable from `/d/death/gate`'s inherit
+   chain** (`grep -rl start_death` only turns up the call site itself
+   plus one unrelated NPC). This is a silent no-op (`call_other()` to a
+   nonexistent function returns `0` with no error, no debug.log entry,
+   no driver rejection) — per this project's standing scope rule, a
+   silent no-op with no error signature is not something to "fix"
+   speculatively, and it turns out to be harmless: the REAL
+   reincarnation trigger is a completely separate mechanism, see next
+   step.
+3. Moving into `/d/death/gate` broadcasts `init()` to the room's
+   `wgargoyle` NPC ("白无常", `d/death/npc/wgargoyle.lpc`), whose own
+   `init()` schedules a 5-stage `call_out("death_stage", 5, ...)`
+   interrogation sequence (guarded by a `death_stage_active` temp flag
+   against reconnect-duplication, per the AGENTS.md §7.112 pattern —
+   already correctly guarded here, see checklist section below). All 5
+   stages delivered correctly over ~25 seconds (verified via
+   `call dsjczi->query_temp("death_stage_active")` reading back `0`
+   and `call dsjczi->is_ghost()` reading back `0` after the sequence
+   completed).
+4. Final stage called `ob->reincarnate()` (`feature/damage.lpc:183`),
+   which cleared the `ghost` flag and restored `eff_jing`/`eff_qi` to
+   max, then (falling through, by design, into the same function body)
+   dropped all inventory and moved the character to `REVIVE_ROOM` =
+   `/d/city/wumiao` ("武庙").
+5. Re-logged in as `dsjczi` after the full cycle: reconnect banner
+   ("重新连线完毕"), `score` showed 你共死亡: 1 次 (death counter
+   incremented correctly), character correctly located in 武庙,
+   attack/defense stats visibly reduced post-death (intentional
+   penalty, not a bug), `look`/`quit` both worked normally.
+
+`log/debug.log` stayed clean throughout the entire sequence (checked
+before, during the ~25s `death_stage` wait, and after reconnect) — only
+ordinary first-touch lazy-compile `Warning:` lines from unrelated
+objects being loaded for the first time this boot, zero runtime
+errors, zero driver-level rejections. **No bug found or fixed this
+round** — the death/respawn gap flagged by prior rounds is now fully
+closed with a clean result.
+
+Cleanup: driver killed by exact PID (confirmed via
+`readlink -f /proc/<pid>/cwd` first), `data/{login,user}/f/fluffos.o`
+timestamp drift reverted via `git checkout HEAD`, test character
+`dsjczi`'s save files (`data/{login,user}/d/dsjczi.o`) deleted (not
+committed), `log/debug.log`/`log/boot.out` removed.
+
+### Fast standard-checklist sanity pass (grep + targeted read, all clean or already-fixed)
+
+- **§7.90** (eval-cost limit): already fixed in the 2026-08-08 round
+  (`config.fluffos` at `5000000`); reconfirmed present, not re-tested
+  live this round beyond the death-cycle session itself producing zero
+  `cost limit reached` hits.
+- **§7.100** (`ROOM` `replace_program()` landmine): already fixed
+  2026-08-19 (2,336 lines); not re-swept, no new instances expected.
+- **§7.111** (`standard_trace()` unguarded `file_name(error["object"])`):
+  `adm/obj/master.lpc:232` already has the
+  `objectp(error["object"]) ? file_name(...) : "<none>"` guard — clean.
+- **§7.112** (`death_stage()` reentrancy leak): all four live
+  `death_stage`-bearing files checked
+  (`d/death/npc/bgargoyle.lpc`, `d/death/npc/wgargoyle.lpc`,
+  `d/shaolin/npc/yu-zu2.lpc`) correctly set/clear a
+  `death_stage_active` temp-flag guard on every exit branch — clean,
+  and this round's live death test exercised `wgargoyle.lpc`'s guard
+  directly (see above). `d/death/wgargoyle.lpc` (older, non-`npc/`
+  copy) has `death_stage()` entirely commented out — confirmed dead
+  code, already classified as such in AGENTS.md §7.112's residual-gap
+  writeup.
+- **§7.108** (duplicate-login-kick reconnect losing `enable_commands()`):
+  `clone/user/user.lpc`'s `reconnect()` already unconditionally calls
+  `enable_commands()` first — clean, matches the corpus-wide fixed
+  shape.
+- **§7.79** (bare 2-arg `addn()`/`addn_temp()`): no `addn(` call sites
+  exist anywhere in this lib — not applicable.
+- **§7.30** (uninitialized-mapping accessor guard in `feature/skill.lpc`):
+  already fixed 2026-08-20 (4 accessors, `mapp(x) ? x : ([])`) — not
+  re-verified live this round.
+- **Shared-file bug shapes from this session's sweep candidates,
+  checked directly against this lib's actual code (none matched)**:
+  `adm/daemons/combatd.lpc` has no `bounce`-variable division-by-zero
+  loop (it does have an unrelated `while (random(defense_factor) >
+  my["combat_exp"]) { ...; defense_factor /= 2; }` combat-exp-scaling
+  loop, but `random()` of `0`/negative doesn't error on this driver and
+  the shape doesn't match the reported `x / bounce` division bug at
+  all — not the same issue, left alone); no `chacha.lpc` file exists in
+  this lib; `adm/daemons/natured.lpc` contains no `userp(`/
+  `interactive(` reference at all (the reported zombie-object line
+  isn't present in any form); `cmds/std/go.lpc` uses `mapp(exit =
+  env->query("exits")) || undefinedp(exit[arg])` for its exit-validity
+  check, not the reported `sizeof(exit[arg]) - 2` suffix-slice pattern
+  — not applicable. `feature/attack.lpc` exists but is a normal
+  per-character combat-application file, not an `F_DBASE`-sibling
+  inheritance shape — sanity-checked, no issue found.
