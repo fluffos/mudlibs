@@ -645,3 +645,125 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试第二轮（2026-08-21）：门派/拜师、经济/商店、真实战斗/死亡/复活 — 全部覆盖，未发现新 bug
+
+补上前一轮明确标注"未覆盖"的两个系统，以及从未真正测试过的"真实致死
+战斗 + 死亡/转生"流程。测试角色 id `qzhan`（中文名 秦战，密码已略去不
+记录），全程使用真实驱动（`~/src/fluffos/build-debug/src/driver`）、
+`config.fluffos`（`maximum evaluation cost` 已确认仍是 5000000，本轮
+高强度测试全程未再触发 eval-cost 中止，§7.90 修复保持有效）。
+
+### 1. 门派/拜师（原文档"未覆盖"）——真实测试通过
+
+找到方寸山三星洞第三代弟子`云清`(`d/lingtai/npc/yunqing.lpc`，房间
+`/d/lingtai/inside6`)——`attempt_apprentice()`没有任何前置条件，直接
+`recruit`，是全库里唯一无门槛收徒的师父，适合测试完整拜师链路。用
+`apprentice yun`（注意：其 id 数组是 `"yun qing"`/`"yun"`，不含
+`"yunqing"`，`apprentice yunqing`会因 `present()` 找不到目标而报错
+"你想拜谁为师？"——不是 bug，只是 NPC 自身的 id 词组里确实没有这个
+连写形式，其他别名同样能命中）。真实执行链路：`apprentice.lpc`里玩
+家先 `set_temp("pending/apprentice", ob)`再调用
+`ob->attempt_apprentice(me)`，NPC 内部 `command("recruit "+id)`，
+`recruit.lpc`里检查`ob->query_temp("pending/apprentice")==me`成立后
+调用`me->recruit_apprentice(ob)`——`feature/apprentice.lpc`里的
+`create_family`/`assign_apprentice`/`recruit_apprentice`全部有
+`mapp()`前置检查，没有踩到任务里提到的"ldtx 那种未加 mapp 保护直接
+下标 `family["family_name"]`"的第二种形状（`cmds/std/apprentice.lpc`
+第41行的`me->query("family/family_name")`用的是安全的路径查询语法，
+不是裸下标）。实测一次执行即完整完成拜师：称号从"普通百姓"变为
+"方寸山三星洞第四代弟子"，`score`正确显示"你的师父是云清"，
+`class`被设为`taoist`，`debug.log`全程零新增错误。
+
+### 2. 经济/商店（原文档"未覆盖"）——真实测试通过
+
+`d/city/npc/xiaowang.lpc`(小酒馆`/d/city/jiuguan`，`inherit F_VENDOR`)
+出售`jiuping`(粗磁酒瓶，1两银子=100文)。用管理员账号
+`clone /obj/money/silver` + `call silver_money->set_amount(5)` +
+`give silver to qzhan`（项目规定的合法管理员注资手法）给测试角色5两
+银子，然后玩家真实执行`buy jiuping from xiaoer`：正确扣除1两银子
+（5两→4两），正确收到"粗磁酒瓶"实物，`feature/vendor.lpc`里
+`ob->query("value")`（`ob`是字符串路径，LPC的
+`"path"->func()`语法糖，不是对字符串调用方法的 bug）工作正常，
+`debug.log`全程零新增错误（除既有的惰性编译警告）。
+
+### 3. 真实战斗→死亡→转生（原文档从未测试，仅测过 wimpy 安全脱战）
+
+依据任务里"kill 指令通常对 NPC 无战力门槛检查"的经验（本会话
+10+个库已验证），核实`cmds/std/valid_kill.h`确认属实——`valid_kill()`
+只检查`no_pk_time`（防止连续杀人的玩家间冷却），对 NPC 目标完全放
+行。进一步核实`feature/damage.lpc`的实际死亡判定逻辑：
+`receive_damage()`扣减`kee/sen/gin`（临时值，归零后触发`unconcious()`
+"昏迷"，会自动`revive()`，不是真死）；只有`receive_wound()`扣减
+`eff_kee/eff_sen/eff_gin`（永久性"内伤"）归负才会真正触发`die()`——
+而`adm/daemons/combatd.lpc`第466-472行只在`me->is_killing(victim)`
+（即用`kill`而非`fight`发起）且伤害超过护甲时才调用`receive_wound`，
+证实"safe spar vs. 真实kill有战力门槛差异"这条项目级经验在这份档案
+上同样成立、且能精确定位到代码层面的原因。
+
+实测：将秦战（刚拜师的初始角色，无技能）传送到朱雀大街疥顶小僧
+(`d/city/npc/jieding.lpc`，闪避/招架技能79，此前只做过安全"fight"陪
+练测试）身边，`wimpy 0`（禁用自动脱战）后`kill seng`——数回合内被
+连续命中要害，从"气喘嘘嘘"→"头重脚轻"→"半昏迷"→真实昏迷
+（"你的眼前一黑"）→**真实死亡**（"你死了"，全服谣言广播"秦战被疥顶
+小僧杀死了"）。角色正确移动到 `/d/death/gate.lpc`（"阴阳界"），遇到
+崔判官（`d/death/npc/pang.lpc`，即§7.112清单里已核对过 reentry guard
+的四个`death_stage()`实现之一），逐条完整走完5条`death_msg`台词，
+`death_stage_active`标记按代码路径应在最后一条消息后清除并调用
+`ob->reincarnate()`，实测该函数被真实调用——角色魂魄送回阳间，落地
+在"荒郊小店"，宗门称号（"方寸山三星洞第四代弟子"）在死亡/转生全程
+正确保留，气血值重置为极低值后按`heal_up()`自然恢复（非满血复活，
+符合死亡惩罚设计），潜能从99降为50（死亡惩罚，符合预期），随身物品
+（银子、酒瓶）因`reincarnate()`里的`command("drop all")`留在了阴阳界
+（無法找回，属于"死亡掉落"式的老派惩罚设计，不是 bug）。全程
+`debug.log`零 FATAL/SIGSEGV/Undefined function/Cannot replace 等错误
+信号，只有一贯的惰性编译未使用变量警告。
+
+**注**：`feature/damage.lpc`的`die()`函数里有一行
+`DEATH_ROOM->start_death(this_object())`——全库`grep`确认`start_death`
+这个函数从未被任何文件定义过（包括`std/room.lpc`），这是一次对未定
+义函数的`call_other`。实测证实驱动对这种调用静默返回0、不记录任何
+`debug.log`错误、不影响后续死亡/转生流程——不是一个需要修的 bug（无
+错误信号，符合项目"没有错误签名就是设计/无害遗留代码"的判定标准），
+但记录在此供后续如遇到类似"看起来像功能缺失但从未报错"的情况参考。
+
+### 附带核实：§7.108 重复登录踢人路径，真实触发测试通过
+
+标准清单里§7.108要求确认"踢出重复登录角色"路径不会导致新连线角色卡
+死收不到任何指令。之前的"netdead 后重连"测试路径（`get_passwd()`里
+`user->query_temp("netdead")`分支）本轮已在每个测试阶段间隔间接测试
+多次（每次开新 socket 连接前一个已断线），但§7.108 真正描述的是
+"仍在线时被顶号踢出"的`confirm_relogin()`分支，代码路径不同（走
+`exec(old_link,user)` + `destruct(old_link)` + `reconnect()`）。额外
+专门测试：保持连线A在线（未断线），开新连线C用同一账号登录，确认收
+到"您要将另一个连线中的相同人物赶出去，取而代之吗？"提示，回复`y`
+后连线A收到"有人从别处连线取代你所控制的人物"并被正常踢出，新连线C
+立即可执行`look`/`score`并有正常输出（未卡死），确认这份档案的
+`logind.lpc`已经是修复后的正确实现，不需要改动。
+
+### 标准清单复核结果汇总
+
+- §7.90（eval-cost）：已修复，本轮高强度测试全程未复现。
+- §7.100（ROOM replace_program）：此前已扫过（172处），未复查代码但
+  全程实测未见任何"cannot replace"/"cannot bind"错误。
+- §7.111（standard_trace file_name(0)）：源码确认三元判断保护已存在
+  （与 mhxy 血缘一致），未改动。
+- §7.112（death_stage reentry guard）：`d/death/npc/{b,bgargoyle,pang,
+  wgargoyle}.lpc`四个实现逐一读码确认每个退出分支都正确清除
+  `death_stage_active`标记，且`pang.lpc`本轮被真实死亡流程完整触发，
+  实测零异常。
+- §7.79/§7.108：`cmds/std/valid_kill.h`/`logind.lpc`确认无需改动
+  （§7.108见上方专项测试）。
+- §7.30 二次形状（`attempt_apprentice`裸下标`family["family_name"]`
+  未加`mapp`保护）：全库`attempt_apprentice`调用点及`feature/
+  apprentice.lpc`本体逐一确认均已有`mapp()`前置检查，未发现该形状。
+- 四个已在其他库确认关闭的 bug 模式，本库逐一核对均不存在：
+  `combatd.lpc`无`bounce`相关代码；全库无`chacha.lpc`文件；
+  `natured.lpc`无`if (!userp(ob[i])) destruct(ob[i])`模式（甚至无
+  `destruct`/`userp`调用）；`cmds/std/go.lpc`的`exit[arg]`用的是
+  `mapp(exit)`真值检查+`undefinedp(exit[arg])`，不是
+  `sizeof(exit[arg])`下标越界那种形状。
+
+**本轮结论**：门派/拜师、经济/商店、真实致死战斗/死亡/转生三大此前
+"未覆盖"或"从未测试"的系统均已通过真实端到端测试，零崩溃、零
+`debug.log`新增错误，未发现需要修复的代码缺陷。
