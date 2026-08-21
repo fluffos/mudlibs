@@ -206,3 +206,92 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## §10.7 深度功能测试第二轮（2026-08-21）：真正的战斗/死亡/复活、商店、拜师
+
+上一轮（2026-08-08）只走完了注册仪式（世外桃源→east→out），从未真正
+玩过游戏本体。本轮用管理员账号 `fluffos`（现场重连，账号早前登记）
+补测了战斗死亡复活、商店购买、拜师三项，外加一遍标准检查清单快速核
+实。全程用 `/home/sunyc/src/fluffos/build-debug/src/driver` 加载
+`config.fluffos`，`work/log/debug.log` 全程零 `Error`（只有大量正常
+的懒编译期 `Warning`，不是运行时报错）。
+
+- **战斗/死亡/复活：完整走通，未发现新 bug**。用管理员 `clone
+  /d/guanwai/npc/wolf` 在 `/d/guanwai/famu1`（伐木场，符合 wolf.lpc
+  `init()` 里 `outdoors` + `/d/guanwai/%*s` 的自动索敌条件）现场复
+  制了一只野狼，`kill wolf` 触发真实生死战（不是安全的 spar/fight，
+  印证了本次会话在其它档案上反复验证过的规律：`kill` 指令对 NPC 目
+  标没有任何安全闸门）。中途因为默认 `wimpy` 阈值触发自动逃跑，
+  `wimpy 0` 关闭后重新交战。追踪了完整的伤害链路：
+  `feature/damage.lpc` 的 `heart_beat()` 检查 `qi<0||jing<0` 时，如
+  果 `living(me)` 仍为真（角色还没被打晕）就调用 `unconcious()`（设
+  `qi`/`jing` 精确为 0，`disable_player()` 关闭指令能力，`living()`
+  随之变假，`call_out("revive", ...)` 排队苏醒）；由于 `kill.lpc`
+  对 NPC 目标会双向调用 `kill_ob()`（`me->kill_ob(obj)` 且
+  `obj->kill_ob(me)`），令野狼真正"想杀死"角色（`is_killing` 生
+  效），`combatd.lpc` 的脱离战斗判定（第 733 行）要求双方都不
+  `is_killing` 对方才会脱战，所以野狼在角色昏迷后不会停手，继续攻
+  击把 `qi` 打成负值——下一次 `heart_beat()` 时 `living(me)` 已经是
+  假，触发真正的 `die()`。现场日志：`你的眼前一黑，接著什么也不知
+  道了....` 后紧接着`你扑在地上挣扎了几下，腿一伸，口中喷出几口鲜
+  血，死了！`，角色被移动到 `DEATH_ROOM`（`/d/death/gate.lpc`，"鬼
+  门关"），`白无常`（`d/death/npc/wgargoyle.lpc`）的 `death_stage()`
+  五段对话按 5 秒间隔完整播放（`是ghost` 分支），最后
+  `reincarnate()` + `move("/d/city/guangchang")` 把角色送回泥潭广
+  场，之后 `qi`/`jing` 随心跳自然恢复。**§7.112 死亡阶段重入护栏
+  现场验证**：`wgargoyle.lpc`/`bgargoyle.lpc` 的 `death_stage()` 每
+  条 `return` 路径（不存在/离场、非鬼魂反杀、最终转生）都正确清了
+  `death_stage_active` 临时标记，只有"还在等下一段对话"的中间分支
+  不清（本来就该保留，等这次 `call_out` 链跑完再清），这次是本档案
+  第一次真正触发这段代码，行为和静态审查时的预期一致，没有发现遗
+  漏分支。全程 `debug.log` 零新增报错。
+- **商店购买：确认此前笔记记录的"无可用买卖指令"结论依然成立，不
+  是本次要修的 bug**。`feature/dealer.lpc` 里 `do_buy(string arg)`
+  函数本身逻辑完整（价格计算、`vendor_goods` 校验、`INPUTTXT` 二次
+  确认购买数量等都写得很完整），但全档案里没有任何地方真正调用它
+  ——唯一的调用点是 `adm/npc/youxun.lpc` 自己重载后再 `::do_buy()`
+  转发，属于该 NPC 自己内部的特例，不是通用绑定。逐一确认了三层可
+  能的绑定方式全部缺失：（1）`cmds/` 目录下没有 `buy.lpc`/
+  `list.lpc`/`sell.lpc`，也没有对应的 `.alias` 文件；（2）
+  `feature/command.lpc` 的 `command_hook()` 只通过
+  `find_command(verb)` 精确匹配 `cmds/` 里的真实文件，没有"扫描房
+  间内 NPC 是否认识这个动词"的兜底逻辑；（3）现场对着真实商人 NPC
+  `李阿婆`（`d/city/npc/liapo.lpc`，有 `vendor_goods`）连续尝试
+  `list`/`buy 1 苹果`/`buy apple`，全部只得到标准的"什么？"（未知
+  指令），不是报错，也没有触发任何 debug.log 记录——这正是这份档案
+  "核心系统改写、商店 UI 从未移植"血统关系的预期行为，没有错误签
+  名，按项目既定原则不算 bug，维持上一轮"手机客户端菜单协议触及不
+  到"的结论不变。
+- **拜师：完整走通，正确分配门派/称号，未发现新 bug**。用管理员
+  `clone /kungfu/class/gaibang/he-bj`（丐帮七袋弟子"何不净"）现场
+  复制到角色所在房间，`bai he` 触发真实拜师流程：`cmds/skill/
+  apprentice.lpc`（通过 `cmds/skill/bai.alias` 绑定到 `bai` 动词，
+  确认过这个绑定机制真实存在）核实双方状态后调用
+  `ob->attempt_apprentice(me)`；`he-bj.lpc` 的 `permit_recruit()`
+  （定义在 `gaibang.h`，判断没有背叛/没有其他门派）和自身的
+  `combat_exp > 120000` 上限检查（新角色 `combat_exp=0`，满足）都
+  通过，执行 `command("recruit " + id)`，`recruit_apprentice()`
+  正确写入 `family = { family_name: "丐帮", generation: 20,
+  master_id/master_name: 何不净, title: 七袋弟子 }`（师父是七袋，
+  角色排在第 20 代）。`score` 复核：`丐帮第二十代传人`、`师父：何
+  不净。`，字段全部正确。过程中顺带确认了 `permit_recruit()`/
+  `attempt_apprentice()` 分层设计在这份代码里是完整可用的（不是像
+  `d/city/npc/baibian.lpc` 那个"模仿玩家技能"的对练 NPC那样，虽然
+  调了 `create_family()` 但没有 `inherit F_MASTER`、没有定义
+  `attempt_apprentice()`，那个是死代码，不适合用来测试拜师——已经
+  在排查过程中确认，未使用它）。全程 `debug.log` 零新增报错。
+- **标准检查清单快速核实（本次全部确认已修复/不适用，未发现新问
+  题）**：§7.111（`master.lpc` 的 `standard_trace()` 第 230 行
+  `error["object"] ? file_name(error["object"]) : "0"` 已有三元防
+  护）；§7.108（`clone/user/user.lpc` 的 `reconnect()` 第一行就是
+  `enable_commands()`）；§7.30（`feature/skill.lpc` 5 个 accessor
+  的 `mapp(x) ? x : ([])` 防护逐行核实存在）；§7.79（全档案
+  `addn(` 零命中，不适用）；§7.100（此前已修复，本次未复查，沿用
+  之前记录）；本次会话额外指定核对的四个"已在其它档案全部关闭"的
+  corpus-wide 坑，逐一确认代码形状本身不存在，不是漏查而是真的不
+  适用：`adm/daemons/combatd.lpc` 无 `bounce` 相关代码、全档案没有
+  `chacha.lpc`、`adm/daemons/natured.lpc` 没有
+  `if (!userp(ob[i])) destruct(ob[i])` 这个具体写法、
+  `cmds/std/go.lpc` 没有 `sizeof(exit[arg])` 这个具体写法（它用的
+  是 `!mapp(exits)`/`undefinedp(exit[arg])` 检查，形状不同，不受
+  影响）。
