@@ -723,3 +723,130 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（§10.7，round four）：三个此前未实机测试的分支全部实测
+
+补齐本档案自己 NOTES.md 之前标记的"未继续测试的部分"——拜师
+（`bai`/`apprentice`）本身、商店购买、风清扬弟子叛出——三项全部用真
+实驱动、真实指令实机验证，全程 `debug.log` 保持空白（无新增
+`error:`/crash）。测试角色：`shensi`（沈肆，男，登记密码已略去不
+记录）。
+
+**标准检查清单快速确认（应已修复，仅确认不重新排查）**：
+- **§7.90**（eval-cost）：档案顶层 `config.fluffos`（实际开机用的
+  config，不是 `work/config.cfg`）`maximum evaluation cost` 已经是
+  `5000000`，`work/config.cfg` 里较低的 `300000` 是未使用的 legacy
+  副本。确认无需改动。
+- **§7.100**（`ROOM` 多余 `replace_program()`）：已在更早一轮修复
+  （见上方章节），本轮未重新排查。
+- **§7.111**（`standard_trace()` 对 `error["object"]==0` 崩溃）：
+  `adm/obj/master.lpc`/`adm/single/master.lpc` 都已经是
+  `objectp(error["object"]) ? file_name(error["object"]) : "(driver)"`
+  的正确写法。确认无需改动。
+- **§7.112**（`death_stage()` 重入保护）：`d/death/npc/
+  {newgargoyle,wgargoyle,bgargoyle}.lpc`、`d/shaolin/npc/yu-zu2.lpc`
+  逐一读过全部 `death_stage()` 函数体，每一个提前 `return` 的分支
+  （目标消失、非鬼魂反被杀、最终转生）都正确地先
+  `delete_temp("death_stage_active")` 再返回，没有发现遗漏的分支。
+  确认无需改动。
+- **§7.79**（裸 2 参数 `addn()`/`addn_temp()`）：全档案 `work/`
+  树内零命中，不适用。
+- **§7.108**（踢出重登录后指令失效）：`clone/user/user.lpc:110`
+  的 `reconnect()` 已经无条件在最前面 `enable_commands();`，修复已
+  存在。
+- **§7.30**（`feature/skill.lpc` 未初始化 mapping accessor）：见上
+  一节，本轮 corpus 扫描已覆盖。
+- **`combatd.lpc` 的 `bounce` 除零 bug**：`grep -n 'bounce'
+  adm/daemons/combatd.lpc` 零命中，这份档案的 `combatd.lpc` 根本没
+  有 `bounce` 变量，不适用。
+
+**1. 拜师（`bai`/`apprentice`）——已实机验证，多次成功，无崩溃，
+师承/头衔正确更新**：测试角色先在 `/d/huashan/buwei2` 对入门弟子路
+线的岳不群 `bai yue`（门槛低：`shen≥1000`+`query_int()≥25`），成功
+——`score` 确认"华山派第十四代弟子"，师父岳不群；随后移动到 `/d/
+huashan/houshan` 对风清扬 `bai feng`（门槛高：剑法/紫霞神功/身法/
+文学等技能≥130~150、`shen≥100000`、`query_int()≥41`、随机 `kar`
+检定），管理员用 `call shensi->set(...)`/`set_skill(...)` 赋予测试
+角色对应属性/技能后（任务允许的"管理员捷径进场景，真实指令走真实
+代码"手法），成功——`score` 确认"华山派第十三代弟子"，师父风清
+扬。全程无崩溃，`family_name`/`master_id`/头衔（第N代弟子）均正确
+更新，验证了本档案自己 NOTES.md 里之前只做过代码对照、从未实机触
+发过的 `bai.lpc`/`apprentice.lpc` 两处修复（§7.11 `assure_file()`
++ `stringp()` 判断、§7.9 类的括号错位修复）在真实驱动下运行正确。
+
+**2. 商店购买——已实机验证，价格扣除+实物到手全部正确**：`d/city/
+zahuopu.lpc`（杂货铺）用 `list`/`buy` 两个指令，NPC `杨永福`
+（`d/city/npc/yang.lpc`）用 `F_DEALER` 混入。管理员 `clone /clone/
+money/coin` + `call coin->set_amount(500)` + `give coin to shensi`
+（任务允许的"clone+give 该档案真实货币物件"标准手法，`give` 需要
+admin 和目标角色在同一房间才能成功，一开始漏了 `goto` 导致"这里没
+有这个活人"，补上 `goto /d/city/zahuopu` 后成功）给测试角色 500 文
+铜板；`list` 确认价目表，`buy budai`（麻布袋，标价一两白银=100文，
+注意商品的 `buy` 用的是 `set_name()` 里的别名"budai"，不是档案名
+"mabudai"，用错名字会被 `do_buy()` 正确拒绝为"你想买什么？"而非崩
+溃）购买成功，`i` 确认物品到手（麻布袋）且找零正确（四两白银，
+500-100=400=4两，数学验证一致）。无编译错误/运行时崩溃/`debug.log`
+报错。
+
+（过程中发现一个值得记录、但确认是设计而非 bug 的机制：`feature/
+dealer.lpc` 的 `do_buy()` 第一行就有 `if ((fam =
+this_player()->query("family")) && fam["family_name"] == "丐帮")
+return notify_fail("你是个穷叫化，买什麽东西！\n");`——丐帮弟子被
+硬性禁止在普通商店购物，这正是任务说明里"non-beggar test
+character"这条要求的真正来源。测试角色因为先做风清扬叛出测试而暂
+时加入了丐帮，商店测试前特意再实机 `bai yue` 一次把门派切回华山
+派，才能通过这道设计关卡；`notify_fail` 走的是正常拒绝路径，没有
+任何错误信号，按本 session 的 scope 纪律不作修改。）
+
+**3. 风清扬弟子叛出——已验证，真实触发，命中此前只做过代码对照的
+`apprentice.lpc` 修复分支**：读 `cmds/skill/apprentice.lpc`（第 55
+行 `if ((object)ob->query_temp("pending/recruit") == me)`，本档案
+自己 NOTES.md 记录的括号错位修复处）确认触发条件——目标已经对我方
+`pending/recruit`（即目标已经用 `recruit` 指令点名收我为徒、只等
+我回拜），且我方当前 `family/family_name` 与目标不同才会触发"背叛
+师门"文案；若我方当前 `family/master_id == "feng qingyang"`，还会
+额外命中一段读写 `/log/nosave/FENG` 计数文件的分支（本档案自己
+NOTES.md 记录的另一处 §7.11 `assure_file()` 修复，此前也只做过代
+码对照，从未实机跑过）。
+
+实测路径：先用管理员 `possess feng`+`recruit shensi`（这一步之所
+以能立即完成拜师而不是仅仅"挂起"，是因为测试角色此前有一次被风清
+扬本人 `attempt_apprentice()` 正常拒绝的 `bai feng` 尝试——即使被
+拒绝，`apprentice.lpc` 也已经在拒绝之前无条件地把
+`pending/apprentice` 挂在了测试角色身上，`recruit` 指令检测到这个
+挂起状态会直接完成拜师，不需要再走 `attempt_apprentice()` 的门槛
+检查），确认测试角色 `family/master_id` 变为 `"feng qingyang"`
+（`score` 显示"华山派第十三代弟子"，师父风清扬）。随后管理员移动测
+试角色到 `/d/gaibang/inhole`，`possess zuo`（左全，丐帮），执行
+`recruit shensi`——这次确认真正挂起（左全对测试角色还没有
+`pending/apprentice`）——输出"你想要收沈肆为弟子"，正确进入
+`recruit.lpc` 的"挂起"分支而非"立即完成"分支。退出附身后，测试角色
+真实执行 `bai zuo`：命中目标分支，输出"风清扬现在共有0个徒弟。"
+（确认 `/log/nosave/FENG` 被 `assure_file()` 正确建立且未崩溃，文
+件确认内容为"0"）、"你决定背叛师门，改投入左全门下！！"、"恭喜您成
+为丐帮的第二十代弟子。"——`family_name` 从"华山派"变为"丐帮"，
+`master_id` 从风清扬变为左全，`score` 确认师承信息正确更新。全程
+`debug.log` 保持空白。这是本档案自己 NOTES.md 明确记录"逐字节代码
+对照验证、未做实机测试"的两处修复（括号错位分支本身 + 嵌套的 FENG
+计数器写入）第一次真正被驱动执行到，确认运行时行为完全符合预期，
+没有发现新 bug。
+
+**测试方法论备注（供后续同引擎档案参考）**：`recruit` 指令的
+"挂起 pending/recruit" 分支只有在目标此前**没有**已经对我方挂起
+`pending/apprentice` 时才会触发；如果顺序反过来（我方已经因为一次
+被拒绝的 `bai` 挂起了 `pending/apprentice`），管理员 `possess` 目
+标后执行 `recruit` 会直接完成拜师（走 `recruit.lpc` 自己的分支），
+不会经过 `apprentice.lpc` 里那处待验证的 `pending/recruit` 分支
+——本轮测试头几次尝试就踩到了这个顺序问题（用 `call
+feng->recruit_apprentice(shensi)` 直接注入也不可行，`call` 指令的
+参数解析器只认字面量/带引号字符串，裸标识符 "shensi" 会被当成字符
+串传入触发 `call_other() couldn't find object 'shensi'` 运行时报
+错——这是 `call` 这个管理指令自身已知的语法限制，不是 mudlib
+bug），最终靠"先用一次会被拒绝的真实 `bai`（这一步真实无害地挂起
+了 `pending/apprentice`），再用管理员 `recruit` 补上"的顺序绕开，
+才干净地复现了目标分支。
+
+驱动进程按精确 PID 结束（`kill -TERM`，确认 cwd 匹配后操作），测试
+角色 `shensi`/管理员 `fluffos` 的存档增量（师承变化、`FENG` 计数器
+从 0 到 1、`fluffos.o` 的正常时间戳类增量）按既有约定一并提交，未
+触碰此前会话遗留、未提交的 `shenten.o`。
