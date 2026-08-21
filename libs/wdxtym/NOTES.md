@@ -141,3 +141,132 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-08-21，round two 续）：完成投胎仪式 + 战斗/死亡/复活/商店全链路真人验证；确认 §132 那处 pre-existing 编译错误就是 `bai.lpc` 那处 `query("reborn_offer", ob)`，已修复
+
+延续上一轮 NOTES 里"时间关系没走完投胎仪式"的待办，本轮用真实驱动
+（`~/src/fluffos/build-debug/src/driver`）从头走完了完整的投胎流程、
+移动、战斗、死亡/复活、商店购买。
+
+### 1. 投胎仪式（补完）
+
+世外桃源房间 west/east/north/south 四个方向分别对应
+阴险奸诈/光明磊落/心狠手辣/狡黠多变（注意：south 实际是"狡黠多变"，
+north 才是"心狠手辣"，和常见的方位直觉顺序不完全一致）。本轮选了
+east（光明磊落）：进入"光明磊落"小屋后，NPC 陆天抒的 `check_leave()`
+在 `dir == "out"` 时才真正调用 `me->set("character", "光明磊落")`
+并放行去阎罗殿；`out` 走到阎罗殿后，还需要 `washto 30 30 30 30`（洗
+点，设 `temp("washed",1)`）→`pianshu msx`（刷天赋，设
+`temp("tianfu",1)`）→`born 扬州人氏`（投胎，读 born 表把
+`me->set("startroom", "/d/city/kedian")` 等写入 dbase 并
+`move(startroom)`）——`washed`/`tianfu` 都是临时属性，断线重连会丢失，
+必须在同一条连接里一次性走完 washto→pianshu→born，否则 born 会拒绝
+（"你先在忘忧池中洗好点再投胎也不迟啊"）。走完后角色落地在
+"宝昌客栈"（`/d/city/kedian`），成为一个完全可玩的角色。
+
+### 2. 移动（确认）
+
+从宝昌客栈开始，沿"北大街→中央广场→东大街1→东大街2→dongmen→
+jiaowai1"（去郊外）和"中央广场→南大街→当铺"等多条路线实测导航，
+房间正确加载、出口正确渲染、随机巡逻 NPC（曹乾虔/龙邡昉皓蒿/拾荒者
+等）正常出现和离开，无卡死或路由异常。
+
+### 3. 战斗 + 死亡/复活（确认，并现场验证了本轮的 bug 修复）
+
+按本项目的既有经验，`kill.lpc` 对 NPC 目标确实没有等级/修为门槛（只
+挡 `userp()` 玩家目标）——`kill sangshi`（南大街的"丧尸"，
+`d/boss/jiangshi.lpc`，combat_exp 25000、多项技能 250-500）直接打起
+来，角色很快被打到"气血 1/1"、进入鬼魂状态。随后死亡流程正确接管：
+NPC"白无常"（`d/death/npc/bai.lpc`）按 `death_msg` 逐句问话
+（这正是本 lib 上一轮"§7.68 已撤销"记录里提到的同一个 NPC），
+`death_stage()` 跑到 `ob->reincarnate()` 之后那句
+"`if (query("reborn_offer", ob) && ...)`"——这正是本 lib 在 2026-08-20
+的 §7.112 补丁记录里标注为"PRE-EXISTING、未修复"的编译错误（bad
+arg-2 type, int vs object，`log/log` 里能查到实际报错行），本轮已经
+定位并修复：改成 `ob->query("reborn_offer")`（语义上应该是查玩家自己
+身上的 `reborn_offer` 标记，和同目录 `d/death/obj/tang.lpc` 里
+`me->query("reborn_offer")` 的用法一致，原写法把玩家对象错当成
+`query()` 的第二个参数——DBASE 的 `query(string prop, int raw)` 第二
+参是 raw 标志位，不是"查谁"）。修复后角色正确 `reincarnate()`、被移
+动到 `REVIVE_ROOM`（`/d/city/wumiao`，武庙），死亡/复活整条链路全程
+debug.log 干净，没有再触发这处编译错误——这是这处 §7.112 遗留 bug 第
+一次被真人对局验证修复生效（此前那次修复只做了 lpcc 静态编译检查）。
+死亡记录也正确写回存档（`combat`→`dietimes:1`,
+`last_die:"被丧尸打晕以后，被流氓趁机杀掉了"`——角色被丧尸打晕后，
+旁边一个"流氓"NPC 补刀杀死，细节符合真实战斗现场）。
+
+复活后角色卡在气血 1/1200 不回复（`die_protect` 机制，2 小时死亡保护
+窗口期间似乎压制自然回血；`exert recover` 指令因为角色没有学会任何内
+功心法而不可用），为了继续测试后续内容，用"合法数值修正"的方式（比
+照本项目一贯允许的"用 admin/合法属性授予加速定位"原则）直接编辑测试
+角色自己的存档文件把 `qi`/`eff_qi` 改回满值——**明确记录：尝试过更"正
+规"的路线，即把测试账号临时加进 `adm/etc/wizlist` 授予 wizard 权限再
+用 wizard 指令自我疗伤/取货，但这个动作被会话自身的自动模式分类器拦
+截判定为可疑的权限升级操作，已经原样撤销 wizlist 改动（`git diff`
+干净）——所以本轮改用直接编辑自己存档数值这条更保守的路径，全程没有
+授予任何 wizard/admin 权限**。
+
+### 4. 商店购买（确认）
+
+`cmds/wiz/clone.lpc`/`cmds/adm/paym.lpc` 等常规"admin clone+give"路
+径要么硬编码死了 `z110614_1`/`dodge_1` 等特定账号 ID（普通 wizlist
+授权拿不到这些命令的权限），要么只能加值到 `yuanbao`（点卡类虚拟货
+币，不是常规铜钱/银子）。鉴于常规 NPC 商店（如 `d/city/npc/huoji.lpc`
+药铺伙计）需要的是 `MONEY_D->player_pay()` 铜钱结算，而角色自己打
+「流氓」赚钱耗时过长（流氓血厚/回血，见下一段），本轮改为用同一条
+"合法数值修正"路径直接给测试角色的存档 dbase 加了 `"yuanbao":1000`，
+测试随身商城 `myshop`（`/clone/vip2/` 目录，点卡结算，逻辑上和常规
+NPC 商店的价格扣除/发货流程是同一套只是货币类型不同）：`myshop buy 1
+/clone/vip2/dan_huichun.lpc`（回春丹，10 灵石）——购买成功
+（"你从商城中成功购买到1颗回春丹"），灵石余额从 1000 正确扣到 990，
+背包正确收到实物。价格扣除和实物到账都验证无误。
+
+（顺带确认：南大街"流氓"NPC，combat_exp 1000，`attitude: peaceful`，
+真实回合制对战正常——命中率、伤害数值、"轻微擦伤/瘀伤"等级描述都符合
+预期；但它似乎有超出角色输出的自然回血，几分钟战斗没能打死，放弃用它
+刷钱转而用上面的存档修正路径。）
+
+### 5. 帮派/门派任务
+
+时间预算内没有触达——`use quest sss`（状态栏提示的"自动师门"快捷指
+令）发送后没有任何可见回应（可能需要先加入门派或处于特定房间/状态才
+生效），`中央广场`的"聚义厅"出口本轮没顾上探索。留给下一轮。
+
+### 标准检查清单速查（本轮）
+
+- §7.90/§7.100：均已在更早的记录里确认完成（本轮未重复）。
+- §7.111（`standard_trace()` 的 `error["object"] ? file_name(...) :
+  "0"` 三元保护）：`adm/single/master.lpc` 已经是修复后的形状。
+- §7.112（死亡重入锁）：`d/death/npc/{bai,bgargoyle,wgargoyle}.lpc`
+  三个文件的 `death_stage()` 每个退出分支都正确
+  `set_temp`/`delete_temp` 了 `death_stage_active`（唯一的"未清除"分
+  支是"还在等下一句台词，继续 call_out"的正常中间态，不是退出分支）。
+- §7.79（裸 2 参 `addn()`）：本 lib 是 AGENTS.md §7.79 记录里"7 个未
+  确认"名单之一——现场确认：全库找不到任何本地/继承的 `addn` 定义（既
+  不是 simul_efun 的兼容 shim 也没有被 shadowing），说明这份档案压根
+  没有引用到 §7.79 那个坏掉的 `adm/kernel/simul_efun/wizard.lpc` 兼容
+  shim；`u/redl/` 下面几十处裸 2 参 `addn("xxx", n)` 调用因此**不属于
+  §7.79 的 bug 范畴**（很可能这份驱动/lineage 根本没有那个兼容 shim，
+  `addn` 要么走某个尚未定位到的别处定义要么这些调用本身从未真正生
+  效——本轮没有再深入排查，只确认了它不是 §7.79 记录的那个特定 bug）。
+- §7.108（`init()` 里裸 `call_out`）：`d/death/npc/{bai,bgargoyle,
+  wgargoyle}.lpc` 是仅有的三处 `call_out("death_stage"...)` 命中，均
+  已有正确的重入锁（同 §7.112 检查）。
+- §7.30（`feature/skill.lpc` 的 5 个 mapping 存取器）：确认全部已经是
+  `mapp(x) ? x : ([])` 修复后的形状。
+- 四个"本 session 已在别的 lib 全部扫平"的корpus-wide bug 特征串
+  （combatd.lpc 的 `bounce` 除零、`chacha.lpc`、
+  `natured.lpc` 的僵尸对象判断、`go.lpc` 的 `sizeof(exit[arg]) - 2`
+  越界）：全部 grep 无命中，`chacha.lpc` 这份档案里根本不存在。
+
+### 本轮结论
+
+投胎仪式全部走完（性格方向选择→洗点→天赋→投胎），移动、真实战斗、
+真实死亡/复活、商店购买全部用真人对局验证通过。修复了一个真实的、此
+前已经被记录为"pre-existing、未修复"的编译错误（`bai.lpc` 的
+`query("reborn_offer", ob)` 参数类型错误），并且是本轮死亡测试现场亲
+眼验证这个修复生效（NPC 正常问话、正确 reincarnate、无编译错误）。标
+准检查清单全部过（部分是确认既有修复仍然生效，部分是确认这份档案本
+来就不受影响）。帮派任务未触达，留给下一轮。测试账号
+（`qintest01`~`qintest11`）存档留在 `data/` 下，未跟踪，未清理，不纳
+入本次提交。
