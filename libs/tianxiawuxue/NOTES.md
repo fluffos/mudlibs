@@ -836,6 +836,142 @@ changed，与预期精确吻合（0 处遗留匹配，全部干净）。
 （落地武庙，look/quit），全程无新增
 "cannot replace"/"cannot bind" 日志行。
 
+## Round-four §10.7 deep test: closing the 2 flagged gaps (2026-08-20)
+
+Targeted the exact 2 items the prior round-two pass explicitly left
+unverified (shop purchase, real combat to death/respawn), plus a fast
+checklist sanity pass. Native `build-debug` driver, two concurrent
+live telnet sessions (custom incrementally-flushing Python client,
+since the standard `mudclient.py` buffers its whole transcript until
+the connection closes and can't be watched mid-session or interleaved
+with a second connection) — one as the existing admin `fluffos`, one
+as a brand-new throwaway test character `qindtest`/秦斗 (per this
+session's "separate throwaway character, not a 'clean' representative
+one" precedent), used together so the admin could teleport the
+throwaway character via `eval` + `users()`/`file_name()` (`goto` only
+repositions the admin's own body, not another player's).
+
+### Gap 1 — real shop purchase: COMPLETED, works correctly, no bug
+
+Read `feature/dealer.lpc`'s `do_list()`/`do_buy()` (as the prior pass
+already had) and completed a live purchase this pass. Cloned
+`/clone/money/coin` onto `fluffos` via `eval` (had to split into two
+`eval` calls — `new(...)->move(this_player())` then a second
+`present("coin", this_player())->set_amount(500)`, since `set_amount()`
+is `void` and chaining it directly after `new()` in one expression
+made the following `->move()` call on eval's own return value fail
+with `*Bad argument 1 to EFUN call_other()`; this is a limitation of
+`eval`'s single-expression wrapper, not a mudlib bug), then `goto
+/d/city2/xidan` (one of the two rooms carrying the `xiaofan` vendor
+identified last pass) and `buy bingtang hulu`. **Result: exactly
+correct.** Before: 500 coin. Item price per `list`: 五十文钱 (50
+coin). After purchase: 50 coin + 4 silver (= 450 coin equivalent,
+500-50=450 ✓) in inventory, plus the purchased 糖葫芦(Bingtang hulu)
+item physically present. `debug.log` for the whole sequence: zero
+error/denied/undefined-function/bad-argument lines (only the
+pre-existing benign compiler warnings already documented above).
+
+### Gap 2 — real combat to death/respawn: COMPLETED, real death_stage() reincarnation chain exercised end-to-end, no bug
+
+Read `feature/damage.lpc`'s `die()`/`unconcious()`/`reincarnate()` and
+`cmds/std/kill.lpc` before attempting anything (per this session's
+established "the real `kill` command has no safety gate for NPC
+targets" precedent — confirmed true here too: `kill.lpc`'s `main()`
+has no `no_die`/attitude check at all before `me->kill_ob(obj);
+obj->kill_ob(me);`). Registered a fresh throwaway character
+(`qindtest`/秦斗, password `TxTest2026#`, unequipped, no skills,
+default rolled stats), then used the concurrent `fluffos` admin
+session's `eval filter(users(), (: $1->query("id")=="qindtest"
+:))[0]->move(load_object("/d/city2/aobai6"))` to teleport it directly
+into 鳌拜's (Aobai, a "满洲第一勇士" boss NPC, `attitude: aggressive`,
+`combat_exp: 4280000` — deliberately picked as a massive stat mismatch
+against a level-0 character to guarantee a real, fast death rather
+than an uncertain multi-round fight) bedroom, then sent `kill ao bai`
+from the `qindtest` session.
+
+**Real lethal combat, real death, and real reincarnation all ran
+correctly, unmodified, start to finish:**
+1. `kill ao bai` → immediately hit "这里不准战斗" (`no_fight` in the
+   room briefly) then real combat resolved — one exchange
+   (鳌拜's「天目昭辉」strike), "你受伤过重，已经有如风中残烛..." →
+   "你口中喷出几口鲜血，倒在地上,死了！" — a real death via
+   `feature/damage.lpc`'s `die()`.
+2. `die()`'s userp branch correctly fired: `ghost=1`,
+   `this_object()->move(DEATH_ROOM)`,
+   `DEATH_ROOM->start_death(this_object())` — landed at 鬼门关 (Ghost
+   Gate), the death-room, next to 白无常 (`d/death/npc/wgargoyle.lpc`
+   — one of the exact 3 files checked clean for the §7.112
+   `death_stage_active` reentrancy guard in this pass's checklist
+   section below, now exercised LIVE, not just statically).
+3. The full 5-stage `death_stage()` narration chain played out
+   correctly over ~25s real time (5s per `call_out`), each stage's
+   dialogue line printing once per tick, no duplication, no stall.
+4. Final stage correctly called `ob->reincarnate()` (clearing `ghost`,
+   restoring `eff_jing`/`eff_qi` to max) and `ob->move(REVIVE_ROOM)` —
+   landed at 武庙, one of the lib's own 4 known-good start rooms.
+5. `score` immediately after: "你共死亡：1 次" (death counter correctly
+   incremented from 0→1), `<精>`/`<气>` bars showing partial (not
+   full/not zero — correctly reduced post-revival, not a stale/broken
+   value), character fully interactive afterward (`look` rendered the
+   real 武庙 room correctly).
+
+`debug.log` across the entire kill → death → 5-stage narration →
+reincarnate → score sequence: **zero** new
+error/denied/undefined-function/bad-argument/recursion/segfault lines
+— only the same pre-existing benign compiler warnings already logged
+in this file. **No bug found or fixed — the death/reincarnation
+pipeline works correctly end-to-end on real, unmodified game logic.**
+
+Cleanup: both sessions `quit` cleanly (server-side ASCII farewell
+banner, clean disconnect). `fluffos`'s incidental inventory/location
+drift from this pass's `eval`/`goto` use reverted via `git checkout
+--`; the throwaway `qindtest` character's save files
+(`data/{login,user}/q/qindtest.o`) deleted (never meant to be kept);
+the `eval` command's scratch `tmp/` directory (recreated for this
+pass, same pre-existing gap the round-two pass already flagged as
+out-of-scope) removed again afterward. `git status` for this lib
+confirmed clean (no unintended save-file drift) before finishing.
+
+### Standard checklist sanity pass (confirm-only, no fixes needed)
+
+- **§7.90** (`config.fluffos` eval-cost): confirmed `5000000` (the
+  already-fixed value from the WASM-enablement pass above).
+- **§7.100** (`replace_program(ROOM);`): `grep -rn` across all `.lpc`
+  in `work/` found 79 hits, **all 79 confirmed commented out**
+  (`//	replace_program(ROOM);` style) — zero live occurrences, matching
+  the batch-five fix already recorded above.
+- **§7.111** (`file_name(error["object"])` null-guard): confirmed
+  present in the real `adm/obj/master.lpc` (line 228):
+  `objectp(error["object"]) ? file_name(error["object"]) : "<none>"`.
+- **§7.79** (bare 2-arg `addn()`): zero hits anywhere in `work/` —
+  not applicable to this lib.
+- **§7.108** (`reconnect()` calls `enable_commands()`): confirmed in
+  the REAL player class (`USER_OB` = `/clone/user/user`, per
+  `include/globals.h`) — `clone/user/user.lpc`'s `reconnect()` calls
+  `enable_commands(); set_heart_beat(1); ...` unconditionally, first
+  line. (Three other `reconnect()`-named functions exist elsewhere —
+  `clone/user/user_bak.lpc`, `clone/npc/user.lpc`,
+  `u/lonely/obj/user/user.lpc` — none of them is the live `USER_OB`.)
+- **§7.112** (`death_stage()` reentrancy): this lib's only 3 files
+  with `call_out("death_stage"` (`d/shaolin/npc/yu-zu2.lpc`,
+  `d/death/npc/bgargoyle.lpc`, `d/death/npc/wgargoyle.lpc`) all
+  already carry the `death_stage_active` temp-flag guard, and EVERY
+  exit branch of each file's `death_stage()` clears it (the
+  `!ob||!present(ob)` early-return branch, the `!is_ghost()`
+  hostile-revert branch, and the final `reincarnate()` branch all
+  call `delete_temp("death_stage_active")`; only the
+  still-in-progress `call_out("death_stage", 5, ob, stage)`
+  recursion branch correctly does NOT clear it). `wgargoyle.lpc` was
+  additionally exercised LIVE in Gap 2 above, not just read
+  statically — confirmed no duplicate/stuck narration in practice.
+- **§7.30** (uninitialized-mapping accessors): `feature/skill.lpc`'s
+  4 accessors (`query_skills`-family) all already have the
+  `mapp(x) ? x : ([])` guard, matching the corpus-wide sweep already
+  recorded above.
+
+All 7 checklist items: **already fixed / already clean, zero new
+fixes needed this pass.**
+
 ## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
 
 Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
