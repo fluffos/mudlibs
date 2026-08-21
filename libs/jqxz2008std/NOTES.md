@@ -884,3 +884,116 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Round-four (2026-08-20): shop-purchase gap resolved + standard checklist pass
+
+Targeted follow-up on this lib's own single explicitly-flagged §10.7 gap
+("A completed, successful shop purchase — never verified live", see
+above): the earlier test character organically joined the beggar sect
+(`feature/dealer.lpc:116-117` unconditionally rejects beggars at
+`buy`), so a fresh non-beggar character was needed, funded via the
+project's standard admin `clone`+`give` pattern for this lib's real
+money object.
+
+**Gap resolved — a real successful purchase, live, price deduction +
+item receipt both verified.** New test character (id `qinliushi`,
+Chinese name 秦六石, password redacted) registered natively, no sect
+join — a plain 平民. Native `build-debug` driver, port 40084. Admin
+`fluffos` (pre-existing, `Mud@2026`) used `goto qinliushi` to join the
+test character at 醉仙楼 (`d/city/zuixianlou`, the same food-stall shop
+the earlier rejection-path testing used — NPC 店小二/`d/city/npc/
+xiaoer2.lpc`, `F_DEALER`), then `clone /clone/money/coin` + `call
+coin->set_amount(500)` + `give coin to qinliushi`. `buy jitui` (烤鸡腿,
+listed at 八十文铜板/80) succeeded: `i` afterward shows 四两白银 + 二十
+文铜板 (400 + 20 = 420 = 500 − 80, exact) plus the 烤鸡腿 itself in
+inventory — both the price-deduction and item-receipt halves of the
+"honest gap" are now directly confirmed, not just inferred from the
+rejection paths. `log/debug.log` across the whole session (two logins,
+the admin gift, the purchase): exactly the two long-documented
+pre-existing intercepted restore errors (`chinesed` dict, `kedian_b`
+board) and zero new `error:`/uncaught lines.
+
+**Incidental finding, not a bug — confirms and extends the 2026-08-13
+round's own "wizard non-immunity to unconsciousness" observation**: the
+committed `fluffos` save (`work/data/user/f/fluffos.o`) was *already*
+sitting at `"qi":-1,"jing":0` (mortally wounded / unconscious,
+`disable_type` already set) before this round touched anything —
+apparently never fully healed after that earlier incident. Logging in
+re-triggered `inherit/char/char.lpc`'s `heart_beat()` → `unconcious()`
+(`qi < 0` check) immediately, which calls `disable_commands()` and
+blocks every add_action-based command (`goto`/`clone`/`call`/`give`,
+all "什么？") until `unconcious()`'s own `call_out("revive", ...)`
+fires 30–~108s later (`random(100-con)+30`, this account's `con` 22 →
+up to 108s) — confirmed by reading `feature/damage.lpc` directly, not
+guessed. Rather than waiting out that timer, reconnecting immediately
+worked instead: `adm/daemons/logind.lpc`'s netdead-reconnect path calls
+`clone/user/user.lpc`'s `reconnect()`, which (per the already-applied
+§7.108 fix on this lib) unconditionally calls `enable_commands()` —
+confirmed live, a fresh `fluffos` reconnect immediately after the
+unconscious episode had full command access again, no wait needed, and
+natural `heal_up()` regen over the session brought `qi`/`jing` from
+`-1`/`0` up to `14`/`14` by the end (still not full, but no longer
+disabled). This is a **strict improvement over the pre-existing
+committed save state**, not new damage caused by this round, so the
+resulting `fluffos.o` diff (healthier stats, last known location
+`/d/city/wumiao` from a `goto`) is committed alongside the new test
+character's saves, per this lib's own established convention (see the
+2026-08 round's `jqxz2015`-sibling precedent for the same `clone`+
+`give` shop test funding an admin's save diff being committed as a
+"normal increment," not reverted) — not a mudlib defect, just evidence
+that a previous session's admin-account "half-alive" state was never
+cleaned up and this round happened to walk through it and improve it.
+
+**Standard checklist pass (fast confirm-only, not re-derivation)**:
+- **§7.90** (eval-cost): `config.fluffos`'s `maximum evaluation cost`
+  already `5000000`. Confirmed, no action needed.
+- **§7.100** (`ROOM` extraneous `replace_program()`): re-grepped
+  lib-wide; all remaining `replace_program(ROOM)` hits are either
+  commented out (`//`) or inside `doc/build/room` (documentation text,
+  not code) — except one live-looking hit in `d/mingjiao/midao12`
+  (no `.lpc` extension), which turned out to be a stray pre-conversion
+  leftover duplicate of the already-correctly-fixed `d/mingjiao/
+  midao12.lpc` sitting next to it; the extensionless file is never
+  loaded by the driver (`inherit`/room-exit references always resolve
+  `midao12` → `midao12.lpc`), confirmed via direct `diff` against the
+  fixed `.lpc` sibling. No live gap.
+- **§7.111** (`standard_trace()` null-object guard): present in
+  `adm/obj/master.lpc:203` (`objectp(error["object"]) ? file_name(...)
+  : "(driver)"`). Confirmed, no action needed.
+- **§7.112** (`death_stage()` reentrancy-guard exit-branch coverage):
+  no `chacha.lpc` in this lib. Found and read all 4 files lib-wide with
+  a `call_out("death_stage"...)` pattern —
+  `d/death/npc/{newgargoyle,bgargoyle,wgargoyle}.lpc` and
+  `d/shaolin/npc/yu-zu2.lpc`. Every one of them clears
+  `death_stage_active` on every exit branch that actually terminates
+  the sequence (`!ob||!present(ob)`, the final non-recursing branch,
+  and — `bgargoyle` only — the `!is_ghost()` early-return branch); the
+  one branch that legitimately does NOT clear it (`call_out` a further
+  stage) is correctly still mid-sequence. No gap found.
+- **§7.79** (bare 2-arg `addn()`/`addn_temp()`): not applicable — zero
+  call sites of either function anywhere in this lib.
+- **§7.108** (kick-out reconnect leaves commands disabled): fix already
+  present in `clone/user/user.lpc`'s `reconnect()`
+  (`enable_commands()` unconditionally at the top) — and, per the
+  finding above, incidentally re-verified live this round via the
+  unconscious-admin reconnect.
+- **§7.30** (uninitialized-mapping accessors): re-confirmed all 4
+  `feature/skill.lpc` accessors still carry the `mapp(x) ? x : ([])`
+  guard from the corpus sweep above.
+- **combatd.lpc `bounce`-division pattern**: not applicable — no
+  `bounce` identifier anywhere in `adm/daemons/combatd.lpc` on this
+  lib.
+
+**Death/respawn cycle**: already verified live, not just this round —
+the 2026-07-25 §10.7 pass (see above) took the `fluffos` admin through
+a real fight-to-death against a 黑无常 NPC and the full corpse → ghost
+→ `/d/death/inn1.lpc` reincarnation-ritual chain, live, not
+code-reviewed. Re-checked that section of this file to confirm it
+wasn't a "mentioned but not exercised" case — it explicitly says
+"Real combat + death + corpse + ghost + reincarnation, end to end,
+live (not code-reviewed)" with a full step-by-step transcript
+description. Nothing further needed here.
+
+No new programming bugs found this round — this pass was scoped to
+closing the one explicitly-flagged gap plus a confirm-only checklist
+sweep, and both came back clean/already-fixed.
