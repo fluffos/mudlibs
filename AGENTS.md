@@ -9121,7 +9121,7 @@ if (!interactive(ob[i])) destruct(ob[i]);
 ```
 Re-verified with a fresh driver boot: reproduced the zombie again (uncleanly-dropped connection right after registration), let a full 270-second window pass (more than one full day-phase cycle), zero `debug.log` errors. The same character's next clean login/`look`/`score` also worked normally (no lingering "kick out old connection?" prompt, confirming the zombie was actually reaped this time instead of just silently erroring forever).
 
-**Scope note**: this specific `register_char()` "destruct a still-live connection without detaching it first" idiom, paired with `natured.lpc`'s `userp()`-gated cleanup, is shared verbatim by at least `xkx2001` (confirmed via `grep`, not yet fixed there) — this is the same codebase lineage as `bmxkx2001` per that lib's own NOTES.md. Worth a `grep -n 'if (!userp(ob\[i\])) destruct(ob\[i\]);' libs/*/work/adm/daemons/natured.lpc` corpus check in a future sweep; not run this session (round-four single-lib pass, not a sweep).
+**Scope note, closed same-session**: a corpus-wide `grep -n 'if (!userp(ob\[i\])) destruct(ob\[i\]);' libs/*/work/adm/daemons/natured.lpc` found 6 more libs sharing the exact identical vulnerable line (same follow-up `else ob[i]->move("/d/city/wumiao.lpc");` too): `jym`, `shenzhou`, `xkm`, `xkx2001`, `xuanjianlu`, `xkx2000zxb`. All 6 fixed the same way (`interactive()` instead of `userp()`), verified via `lpcc --batch`, committed individually and pushed — no further corpus check needed for this specific pattern.
 
 ---
 
