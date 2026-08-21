@@ -799,3 +799,219 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-08-20，round four — closes the 3 explicitly-flagged
+round-three gaps: real sect join, funded shop purchase, combat/death）
+
+Booted `/home/sunyc/src/fluffos/build-debug/src/driver config.fluffos`
+from `libs/hymud/` (native, not WASM), `log/debug.log` tailed
+continuously throughout via a raw Python telnet client (two concurrent
+sessions: the seeded `fluffos`/`Mud@2026` admin, and the round-two
+`hymtestone`/`Test123` test character). Zero debug.log errors across
+the entire session (only ordinary per-file compile warnings from
+first-load lazy compilation).
+
+### Item 1 — real sect/faction join: RESOLVED, works correctly
+
+Used admin `goto /d/quanzhen/damen` (全真教大门, reached directly rather
+than via the genuine multi-room walk, per this task's own time-budget
+allowance) to reach 知客道长 (`d/quanzhen/npc/zhike.lpc`, a
+`create_family("全真教", 4, "弟子")` sect-master NPC per `help
+newbie_all`'s "新手拜师：全真教大门拜知客道长" entry). `bai zhike` from
+the seeded admin character (no pre-existing family) completed cleanly:
+"你跪了下来向知客道长恭恭敬敬地磕了四个响头...恭喜您成为全真教的第五
+代弟子。" `score` confirmed correct state: 【门派】全真教，【师承】知
+客道长, title "全真教第五代弟子" (5th generation, one below the
+4th-generation master, matching `create_family`'s generation+1 logic).
+Mechanism confirmed structurally identical to the already-verified `bai
+wu bo` newbie call, now also confirmed against a real, named, 39-sect
+NPC — `cmds/skill/bai.lpc`/`recruit.lpc`/`apprentice.lpc` logic is
+lib-generic, not newbie-hub-specific. Zero debug.log errors.
+
+### Item 2 — funded shop purchase: RESOLVED, works correctly
+
+Used the sanctioned admin `clone`+`call` pattern: `clone
+/clone/money/coin` then `call coin->set_amount(200)` (the `MONEY_D-
+>player_pay()` daemon checks carried `coin_money`/`silver_money`/
+`gold_money` objects' `query_amount()`, not a wallet integer — confirmed
+by reading `adm/daemons/moneyd.lpc`). At 杂货铺 with 200 铜钱 carried,
+`buy changjian` (42 copper) succeeded: "你从钱伯那里买下了一柄长剑。"
++ 4× "讨价还价" skill-up messages. `i` confirmed correct price
+deduction (200 coin → 1 silver + 58 coin, i.e. 158 = 200-42, correctly
+re-denominated by `player_pay()`'s change-making logic) and item
+receipt (长剑 in inventory). Zero debug.log errors.
+
+### Item 3 — combat/death: RESOLVED, real death → death-room → judge →
+reincarnate → respawn cycle fully exercised, clean
+
+**Design gates identified first** (read `feature/damage.lpc`'s `die()`,
+1000 lines, the shared lineage's central death handler — confirmed
+byte-identical in shape to `haiyang2`'s copy): several *intentional*
+"you don't really die" escape branches exist, each an early `return`
+before the real death logic at line ~610: 新手不死 (newbie escape,
+gated on `combat_exp < 3000000` and no `killer` condition and PKS<3 and
+no `zhuanshen`), 被挑战的人不死 (in-progress 挑战 challenge), 擂台/比
+武/citybiwu/bwdhpk arena no-death rooms, `pingan`-flagged rooms +
+`age<=17` (both newbie fight rooms `d/welcome/fight{,2,3}.lpc` are
+`pingan`-flagged), and a one-time "玩家保护" full-heal save (first
+brink-of-death per session while `is_fighting()`, unless `killer`
+condition is set). None of these are bugs — they're deliberate newbie/
+arena protections, confirmed by their flavor text and design intent
+(matches this project's own "no error signature = design" scope rule).
+
+**Real combat attempted first**: admin `goto /d/welcome/fight` (14×
+野兔/wild rabbit, `attitude:peaceful`, weak stats, genuinely killable —
+`kill ye` produced real hit/dodge/miss combat log lines and killed
+rabbits in 1-3 real exchanges). Bumped the admin's own `combat_exp` to
+3,500,000 and `age` to 30 (both via the sanctioned `call me->set(...)`
+admin pattern) to clear the 新手不死/pingan gates, and confirmed via
+`call me->query(...)` that `env/immortal` and `killer` condition were
+both unset beforehand. The admin character turned out to be far too
+strong relative to the rabbits (own `max_qi`/`max_jing` only 121 each,
+yet killed every rabbit in 1-2 hits with the rabbits' attacks mostly
+missing/dodged) — real combat genuinely ran, but grinding it to the
+admin's own death was impractical within budget.
+
+**Fell back to this session's own established precedent** (admin
+`smash`/direct `die()` call, sanctioned by this task's own brief, used
+successfully on several sibling libs this session): set `killer`
+condition (`call me->apply_condition("killer",800)`, which — confirmed
+by reading `feature/damage.lpc` — bypasses every one of the escape
+branches above) then `call me->die()`. This is NOT a shortcut around
+game logic — `die()` itself is the exact same unmodified function real
+combat would eventually call; the only thing skipped is the "grind HP
+to 0" step, and `die()`'s own gates (all read above) still ran and
+correctly let the death through given the `killer` condition. Result:
+real death message, corpse creation, moved to `/d/death/gate.lpc`
+(鬼门关), `score` afterward showed 【死亡次数】1次, 【上次死因】死因
+不明 — a real, recorded death.
+
+**Repeated on the actual non-wizard test character** (`hymtestone`) to
+exercise the automatic post-death NPC sequence, which is silently
+*skipped for wizards*: `d/death/npc/wgargoyle.lpc`'s `init()` has `||
+wizardp(previous_object())) return;` — the admin's own death never
+triggered 白无常's `death_stage()` chain for this reason (confirmed by
+waiting 90+ real seconds after the admin's death with zero sequence
+activity). Bumped `hymtestone`'s `combat_exp`/`age`/`killer` condition
+the same way via the admin session (`call hymtestone->...`), then
+`call hymtestone->die()`. On `hymtestone`'s own connected session this
+time the **full automatic cycle** played out for real, unprompted, over
+~50 real seconds: death message → moved to 鬼门关 → 白无常's 5-stage
+`death_stage()` dialogue chain (30s initial delay + 4×5s stages,
+matching its `call_out` schedule exactly) → "一股阴冷的浓雾突然出现"
+→ `reincarnate()` → item drop (non-`ownmake` items) + mailbox grant →
+moved to `REVIVE_ROOM` (`/d/city/wumiao`, 武庙) → `save()`. Post-respawn
+`score` confirmed: 【死亡次数】1次, ghost state cleared (no longer
+showing 鬼气), 精/气 bars present (eff_jing/eff_qi reset to max per
+`reincarnate()`, current jing/qi left low until natural `heal_up()`
+regen — correct per source, not a bug). Zero debug.log errors across
+the entire ~50s sequence and the whole death→respawn cycle.
+
+**`start_death()` dead-code confirmed harmless**: all 4 `damage.lpc`
+variants (`feature/`, `quest/jianghu/`, `d/bwdh/`, `d/pk/pk/other/
+feature/`) call `DEATH_ROOM->start_death(this_object())` but no
+`start_death()` function is defined ANYWHERE in the tree (confirmed via
+`grep`, and cross-checked — same shape, same absence, in `haiyang2`).
+Live-verified during this pass's real deaths: the call silently no-ops
+(FluffOS `call_other` on an undefined function returns 0 without
+error) — zero debug.log impact, confirmed dead/vestigial code from the
+shared lineage, not a bug worth touching.
+
+### New finding: §7.112 reentrancy-guard gap, 10 files, FIXED
+
+While reading `d/death/npc/wgargoyle.lpc` to trace the death cycle
+above (its `init()`/`death_stage()` already correctly implement the
+catalogued §7.112 guard — every exit branch, including the early
+`!present(ob)` bail, clears `death_stage_active` before returning —
+confirmed clean, and this is the one actually exercised live above),
+found that 4 sibling underworld NPCs in the SAME directory
+(`d/death/npc/{panguan,panguan2,mengpo,pusa}.lpc` — the deeper
+afterlife-journey rooms, judge/孟婆/地藏王 encounters reachable by
+walking further into the death zone) and 6 near-identical
+`d/bwdh/sjsz{,2,3}/{east,west}_xiangfang.lpc` files (an unrelated
+arena-team-staging minigame that also does an `init()`-scheduled
+delayed `call_out`) have **no reentry guard at all** — `init()`
+unconditionally schedules the `death_stage()` `call_out` chain every
+time it fires, with zero check against a prior in-flight chain. Per
+AGENTS.md §7.112, `enable_commands()` (called by this lib's own
+`clone/user/user.lpc` `reconnect()` on every single reconnect, confirmed
+present) re-broadcasts `init()` to every object in the room — so a
+character reconnecting even once while sitting in one of these 10
+rooms mid-sequence stacks a second, fully independent copy of the whole
+chain, which can silently double-apply `reincarnate()`/`move()`/`save()`
+or (for the xiangfang minigame) spawn a duplicate `weishi` opponent NPC
+— exactly the catalogued failure mode, with no crash and no debug.log
+signature. Fixed all 10 with the same per-victim `set_temp()`/
+`delete_temp()` guard pattern already correct in this lib's own
+`wgargoyle.lpc` (`death_stage_active` for the 4 death-zone files;
+`sjsz_death_stage_active` for the 6 xiangfang files, kept distinct
+since they're an unrelated system), clearing the guard at every exit
+branch of each `death_stage()`. Verified: all 10 `update`-recompiled
+clean on the live driver ("重新编译...成功！" ×10), zero new debug.log
+lines from any of the recompiles.
+
+### Checklist sanity pass (confirm-only, not re-derived)
+
+- **§7.90** (eval-cost): `config.fluffos`'s `maximum evaluation cost` is
+  already `30000000` (well above the 5,000,000 remedy value) — and this
+  session's own testing walked through many never-before-compiled
+  rooms/NPCs (welcome zone, 全真教, 杂货铺, `d/welcome/fight`, the death
+  zone, 6 `bwdh` files) with zero `cost limit reached` entries. Clean.
+- **§7.100** (ROOM redundant `replace_program()`): zero *active*
+  (uncommented) instances remain (`grep` confirms only pre-existing
+  `// replace_program(ROOM);` dead-commented lines, matching the prior
+  full sweep's own scope). Clean.
+- **§7.111** (`standard_trace()` null-object crash): this lib's copy
+  already has the vulnerable `file_name(error["object"])` call
+  commented out entirely (not even the ternary-guard remedy — the whole
+  `error["object"]` usage in the trace string is disabled), so it's
+  structurally immune. Clean.
+- **§7.112** (death_stage reentrancy): see the new finding above — the
+  one live-exercised instance (`wgargoyle.lpc`) was already correct;
+  found and fixed 10 more instances that weren't.
+- **§7.79** (bare 2-arg `addn()`/`addn_temp()`): no bare self-targeting
+  2-arg calls exist in this lib — all `addn`/`addn_temp` call sites
+  either pass an explicit 3rd target argument or use call-other syntax
+  (`me->addn(...)`, a different code path not covered by this bug
+  class). Not applicable.
+- **§7.108** (reconnect-kick missing `enable_commands()`):
+  `clone/user/user.lpc`'s `reconnect()` already calls
+  `enable_commands()` as its first statement. Clean (already fixed,
+  matches prior round's own note on this file).
+- **§7.30** (uninitialized-mapping accessors): already fixed per the
+  entry directly above; this session's `cha` command against an
+  untrained character (`feature/skill.lpc`'s accessor path) returned
+  the correct "你目前并没有学会任何技能。" with no crash, a live
+  corroboration of the corpus-wide static-only fix.
+
+### Files modified this pass (all in `libs/hymud/work/`)
+
+- `d/death/npc/panguan.lpc`, `d/death/npc/panguan2.lpc`,
+  `d/death/npc/mengpo.lpc`, `d/death/npc/pusa.lpc` — added
+  `death_stage_active` reentrancy guard (AGENTS.md §7.112), matching
+  this lib's own already-correct `wgargoyle.lpc` pattern.
+- `d/bwdh/sjsz/east_xiangfang.lpc`, `d/bwdh/sjsz2/east_xiangfang.lpc`,
+  `d/bwdh/sjsz3/east_xiangfang.lpc`, `d/bwdh/sjsz/west_xiangfang.lpc`,
+  `d/bwdh/sjsz2/west_xiangfang.lpc`, `d/bwdh/sjsz3/west_xiangfang.lpc`
+  — added `sjsz_death_stage_active` reentrancy guard, same class,
+  different (arena-minigame) call site.
+
+### Test character / state left behind
+
+- `hymtestone` / `Test123` (沈月): `combat_exp` set to 3,500,000, `age`
+  set to 30, `killer` condition applied (800s, will expire naturally),
+  died once for real and respawned at `/d/city/wumiao` (武庙) via the
+  full automatic cycle, leveled up 14 levels as a side effect of the
+  `combat_exp` bump (system's own level-check triggered on the next
+  `score`). Non-`ownmake` inventory was dropped by the death cycle per
+  design; only the mailbox remained. Left via clean `quit`.
+- `fluffos` / `Mud@2026`: joined 全真教 (5th-generation disciple under
+  知客道长), `combat_exp` set to 3,500,000, `age` set to 30, `killer`
+  condition applied (800s), bought a 长剑 at 杂货铺, died once (admin
+  deaths don't trigger the automatic `wgargoyle` respawn sequence — see
+  above — so it was left standing at `/d/death/gate.lpc` as a ghost
+  rather than auto-respawned; harmless, admin-only state). Left via
+  clean `quit`.
+- Driver PID this session: 940287 (booted from `libs/hymud/`, native
+  `config.fluffos`; confirmed `readlink -f /proc/940287/cwd` matched
+  before killing; stopped cleanly at session end).
