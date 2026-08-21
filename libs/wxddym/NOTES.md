@@ -123,3 +123,73 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## §7.79 `addn()` investigation on this lib -- NOT the misdirected-write bug (2026-08-21)
+
+AGENTS.md §7.79 documents `addn("stat", delta)` bare 2-arg calls silently
+writing to the wrong object on the `xfbhh`/`hhsj`/`nitan170911`/`nitan6`/
+`nt6`/`nt6nitan6win` lineage, because those libs' `adm/kernel/simul_efun/
+wizard.lpc` defines a broken `addn` shim whose `this_object()` resolves to
+the simul_efun object. `wxddym` was flagged unconfirmed because it has no
+such shim anywhere in its tree (~67 files / ~143 call sites, mostly
+`kungfu/class/` and `kungfu/skill/`), so it was unclear whether `addn()`
+resolves to anything at all here.
+
+Live-driver test (real boot on port 40189, admin `fluffos`/`Mud@2026` via
+the app protocol, using the `update <file>` wizard command -- which forces
+a real compile via `call_other(file, "???")` -- to force-load individual
+`.lpc` files and read the compiler's own error text):
+
+- Confirmed via source grep first: no `addn` definition anywhere in the
+  simul_efun chain (`adm/single/simul_efun.lpc` includes 9 files under
+  `adm/simul_efun/`, none define `addn`), and no `addn` in fluffos'
+  own `src/packages/*/*.spec` efun tables -- so it isn't a native efun
+  in this driver build either.
+- Live compile of `/d/tiezhang/obj/haigu1.lpc` (a clean, isolated
+  bare-call site: `addn("init", 1);` in `init()`, no other bugs in the
+  file) produced a **hard compile-time error**, not a runtime
+  misdirect: `Error: Undefined function addn`, and the whole file then
+  fails to load (`*No program in object '/d/tiezhang/obj/haigu1'!`).
+  Any room/NPC that clones or references this object is broken outright,
+  not just the one stat write.
+- Live compile of `/d/qingcheng/obj/zhui.lpc` confirms this is not
+  limited to bare 2-arg calls: both `addn("count", -1);` (bare) and
+  `addn("neili", -300, me);` (explicit 3-arg target, the "correct" form
+  per the §7.79 remedy pattern) fail identically with `Undefined
+  function addn`. So in this lib `addn` is not a degraded/misdirected
+  efun -- it is completely absent, at every call arity.
+- `/kungfu/class/misc/jinlun-fawang.lpc` and `/kungfu/class/hengshan/
+  xian.lpc` also fail to compile, but carry additional *unrelated*
+  pre-existing bugs of their own (an undefined `full_self()`, a
+  `query("prop", object)` arg-2-type bug matching this file's own
+  earlier `query()` signature note above, and in `xian.lpc` an
+  `inherit F_MANAGER;` macro-not-a-string syntax error) -- so those two
+  are not clean single-cause reproductions, `haigu1.lpc`/`zhui.lpc` are.
+- Smoking gun for *why*: `clone/npc/warcraft.h:609` contains
+  `return efun::addn(prop, data);` -- explicit `efun::` scope
+  resolution, meaning whoever wrote this mudlib assumed `addn` was a
+  genuine **compiled-in driver efun**, not a mudlib-level function. The
+  `xfbhh`/`hhsj` lineage's `wizard.lpc` shim was almost certainly a
+  patch someone wrote for a driver build that lacked this efun -- but
+  the shim itself has the `this_object()` bug documented in §7.79. This
+  driver build (`fluffos/build-debug`) lacks the efun entirely and
+  `wxddym` never got an equivalent simul_efun shim, so every `addn()`
+  call site in this lib -- bare or explicit-target, `kungfu/` skill
+  effects or room objects like `haigu1.lpc`/`zhui.lpc`/`xiang.lpc` --
+  fails to compile and the containing file never loads.
+
+**Conclusion: this is scenario (a) from the investigation brief** -- a
+hard "Undefined function" failure, not the silent stat-misdirection
+shape from §7.79. It's also broader than a simple copy of the §7.79
+remedy would fix: `warcraft.h`'s `efun::addn(...)` call would still fail
+even with a working simul_efun `addn()` added (that scope operator
+specifically bypasses simul_efun), and cross-object calls like
+`no4->addn(...)`/`who->addn(...)`/`me->addn(...)` elsewhere in this lib
+depend on the *target* object defining its own `addn`, not the caller's.
+A real fix needs to enumerate all of: bare self-calls, explicit-target
+calls, cross-object `->addn()` calls, and the `efun::addn()` call in
+`warcraft.h`, and is out of scope for this investigation session --
+left for the orchestrator to scope as a follow-up (no fix applied here).
+No lasting changes made to this lib this session; the only writes were
+transient login-tick save-file churn on the demo `fluffos` account,
+reverted with `git checkout` since no real gameplay progress happened.
