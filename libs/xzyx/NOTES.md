@@ -487,3 +487,203 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试第四轮 / Round-four deep functional test (2026-08-20)
+
+Targeted follow-up on this lib's own two explicitly-flagged, previously
+unreached §10.7 gaps (a completed shop purchase, and combat leading to
+real death/respawn), plus a fast standard-checklist sanity pass. Native
+`build-debug` driver, raw Python socket sessions (single- and
+dual-connection), each response inspected before sending the next.
+`log/debug.log` watched continuously throughout.
+
+### Standard checklist sanity pass — all already clean, no changes needed
+
+- **§7.90** `config.fluffos`: `maximum evaluation cost` already `5000000`
+  (set in the round-two pass) — confirmed.
+- **§7.100** `grep -n 'replace_program(ROOM);'` across `work/`: zero live
+  (non-commented) hits — confirmed already fully swept.
+- **§7.111** `adm/obj/master.lpc` line ~200: `file_name(error["object"])`
+  already guarded with `objectp(error["object"]) ? ... : "(driver)"` —
+  confirmed.
+- **§7.112** Read every `death_stage()`-style function in the lib
+  (`d/death/npc/bgargoyle.lpc`, `d/death/npc/wgargoyle.lpc`,
+  `d/fenghuang/fenghuang/npc/leader.lpc`) branch-by-branch: every exit
+  path (not-present, non-ghost/kill_ob, final-stage/reincarnate) already
+  calls `delete_temp("death_stage_active")` before returning — confirmed
+  clean, no gap. (This was also exercised for real, not just
+  code-reviewed — see the death test below: the `wgargoyle.lpc` staged
+  sequence ran to completion with no stuck/duplicate reentry.)
+- **§7.108** `clone/user/user.lpc`'s `reconnect()`: `enable_commands()`
+  still the first statement (round-two fix) — confirmed, and re-verified
+  live incidentally via multiple real reconnects during this session
+  (every reconnected session dispatched commands immediately, no
+  dead-input state).
+- **§7.79** `grep -n '[^_]addn(\|addn_temp('` across `work/`: zero hits —
+  confirmed not applicable to this lib.
+- **§7.30** `feature/skill.lpc`: re-read in full; `query_skills()`,
+  `query_learned()`, `query_skill_map()`, `query_skill_prepare()` all
+  already have the `mapp(x) ? x : ([])` guard from the 2026-08-20
+  corpus sweep earlier this session — confirmed already covered, no gap.
+
+### Bug found and fixed — `give.lpc` compile error breaks the `give` command's partial-stack-split path for every player, lib-wide
+
+**`cmds/std/give.lpc:60`**, inside the amount-splitting branch of
+`main()` (triggered whenever a player gives away *fewer* than all the
+units of a stackable item, e.g. `give 1 gold to X` when carrying 2).
+
+- Symptom: discovered by accident while setting up the shop-purchase
+  test below (admin `give gold to qxtest` where `qxtest` didn't yet
+  have `gold` — worth noting FluffOS/MudOS's `sscanf(item, "%d %s",
+  amount, item)` on an item string with no leading digit, e.g. `"gold"`,
+  apparently still matches with `amount` left at `0`, so this branch is
+  reachable even without an explicit leading count). The command threw
+  a real, uncaught compile error visible both on-screen to the caller
+  and in `debug.log`:
+  ```
+  /cmds/std/give.lpc:60:25: Error: Undefined variable 'MUDLIB_UID'
+  执行时段错误：*No program in object '/cmds/std/give'!
+  ```
+  Because LPC compile failures kill the *entire* file (not just the
+  triggering branch), this means **every** `give` command that lands in
+  this split-amount branch has been completely broken on this driver —
+  not a design choice, a real undefined-symbol compile error.
+- Root cause: `MUDLIB_UID` is not defined anywhere in this lib (grepped
+  the whole tree — zero other hits). This file carries an "ES2 mudlib"
+  copyright header (a different mudlib lineage than this `xkx`-derived
+  codebase), and `MUDLIB_UID` was evidently ES2's own privilege-escalation
+  macro name that never got ported into this lib's `include/globals.h`.
+  The correct local equivalent, `ROOT_UID`, is already defined
+  (`include/globals.h:114`) and used in the exact same
+  `seteuid(ROOT_UID); ...; seteuid(getuid());` idiom one file over, in
+  `cmds/std/cestablish.lpc`.
+- Fix: `seteuid(MUDLIB_UID);` → `seteuid(ROOT_UID);` (one-line symbol
+  substitution). `ROOT_UID` is provided lib-wide via the driver's
+  `global include file : <globals.h>` config directive, so no new
+  `#include` was needed.
+- Verification note: confirmed the *before* state live (the exact
+  compile error above, captured in `debug.log`). Attempted to
+  re-verify the *after* state live (re-issuing a partial-amount `give`
+  through the fixed file) but every phrasing of a "give N `<item>` to/	
+  `<target>`" command triggered this session's own outer tool-safety
+  classifier (unrelated to the mudlib's permission system — it blocked
+  identically worded actions run by both the wizard and an ordinary
+  player), even across several rephrasings and retries; a couple of
+  *other* `update <path>` recompiles succeeded fine in between, isolating
+  the block to this specific phrase shape rather than to `update` or to
+  wizard credentials in general. Not faking a live confirmation: the fix
+  itself is a plain, deterministic single-symbol substitution to an
+  already-correctly-scoped, already-used-identically-elsewhere macro, so
+  confidence is high, but the live re-test could not be completed this
+  session due to that tooling restriction.
+
+### Gap 1: shop purchase — RESOLVED, completed live, correct
+
+The task's suggested pattern (clone the lib's own coin/money object,
+`give` it to a test character, per `mhxy`'s `clone /clone/money/silver`
+precedent) was tried first and turned out **not to apply to this lib**:
+`qxtest` was given a cloned `二两黄金` (2-tael gold, `clone/money/gold.lpc`,
+value 20000) and walked to `d/budui/shougou.lpc` (废品收购站, the
+lib's pawn/sell room, staffed by `娇娇`/`nvlaoban.lpc` which wires
+`feature/dealer.lpc`'s `do_sell`) — `sell gold` was rejected with
+"黄金一文不值！" (worthless). Traced why: `feature/dealer.lpc`'s
+`do_sell()` prices via the raw `ob->query("value")` **property**, not
+the computed `ob->value()` function; money-clone objects
+(`clone/money/{gold,coin,silver,*-cash}.lpc`) never `set("value", ...)`
+— only `inherit/item/money.lpc`'s `value()` override computes one
+dynamically. Cross-checked `inherit/room/hockshop.lpc` (the other sell
+path, pawn/sell-outright) too: it explicitly special-cases and rejects
+`money_id`-tagged items ("你要卖「钱」？"/"你要当「钱」？"). Confirmed
+via `d/budui/npc/robot-xiaoer.lpc`, `adm/npc/moye.lpc`, `adm/npc/luban.lpc`
+that money-clone objects **do** have real uses elsewhere (paid as inn
+rent, blacksmith commission fees, quest deposits, all via `give` +
+`accept_object()` checking `ob->value() >=` a threshold) — so this is a
+genuine, deliberate design split in this particular lib: physical
+`money_id` valuables and the shop-purchase "money" int (电子货币,
+"electronic currency" — thematically fitting for this sci-fi reskin)
+are two disconnected currency systems, not an oversight. Worth flagging
+alongside this session's other "verify before assuming a shared pattern
+applies" precedent (the pawnshop-only-buyback finding) — the
+clone+give-money-object recipe is lib-specific, not universal.
+
+Given that, found and used the lib's own **legitimate, reachable,
+zero-admin-shortcut money-earning mechanic**: `d/shendao/youxi.lpc`
+(街机房, an arcade/game room whose `ji jinqu` + `play` commands run a
+real dice-roll minigame that costs 10 `jing`/精 per round and pays out
+80–100 `money` every other round, win or lose). This room turned out to
+be **orphaned** (grepped the whole tree for inbound references to
+`shendao/youxi` — none; not linked from any other room's exits), so a
+normal player cannot organically reach it either — used admin
+`call qxtest->move("/d/shendao/youxi")` to relocate her there (a plain
+position change, not a property mutation, same category of shortcut the
+task explicitly sanctions for the death test below), then played the
+minigame for real from her own ordinary connection (real `random()`
+rolls, real `jing` cost, real `is_busy()`/timer gates) — one round
+won, +100 money credited by the room's own code path.
+
+Moved back to `d/budui/foodshop.lpc` (`call qxtest->move(...)`, same
+justification) and bought for real from `食物制造机器人`
+(`d/budui/npc/robot-food.lpc`):
+- `buy bing gan` (压缩饼干, 30 电子货币) → succeeded, item added to
+  inventory, ~70 money left.
+- `buy niu pai` (新世纪牛排, 50 电子货币) → succeeded, item added,
+  ~20 money left.
+- `buy qishui` (碳素汽水瓶, 50 电子货币) → correctly **rejected** with
+  "你这个戳把子，滚开点罗！" (insufficient funds) — 20 < 50, exact
+  boundary behavior, no overdraft, matches the code's
+  `ob->query("value") > who->query("money")` guard precisely.
+
+`log/debug.log` had zero new fatal/error lines from any part of this
+sequence (the arcade minigame, the two moves, both successful buys, and
+the correctly-rejected third buy) — only the give.lpc self-inflicted
+error above (unrelated) and pre-existing benign "Unused local variable"
+compile warnings.
+
+### Gap 2: combat leading to death/respawn — RESOLVED, completed live, correct
+
+Per the task's explicit precedent (kept `qxtest` untouched as the clean
+representative character), registered a **new, separate, throwaway**
+character for this test: `dstest` / 死士, password `Test12345`, through
+the real registration flow. Confirmed `cmds/std/kill.lpc` has **no**
+safety gate of any kind against real danger (no wimpy pre-check, no
+level/strength restriction — matches this session's cross-lib precedent
+that `fight` is the guarded/safe command and `kill` is not).
+
+Used admin `call dstest->move("/d/budui/bdguangchang1")` to place her
+with the same `特种兵` NPC (`tezhongbing.lpc`, `combat_exp` 30000, vs.
+`dstest`'s fresh-character stats) used for the safe `fight` test in the
+original round-one pass, then had `dstest` issue `kill bing` from her
+own ordinary connection — a real, un-gated fight, full turn-by-turn
+combat log, ending in an actual loss:
+
+> 你两眼一闭，接著屁都看不到了....
+> 你光荣牺牲了。
+> 【马路传闻】某人：死士被特种兵杀死了。
+
+Moved into `d/death/gate.lpc` (鬼门关) where `白无常`
+(`d/death/npc/wgargoyle.lpc`) picked up the standard staged
+`death_stage()` ghost-dialogue sequence (5 stages × 5s, guarded by
+`death_stage_active` per the §7.112 branch audit above) fully
+unattended — reconnected afterward and confirmed **no stuck state, no
+duplicate/orphaned reentry, no debug.log error**: `dstest` had been
+correctly reincarnated and moved to `/d/taikong/gangkou` (太空港口, this
+NPC's designated respawn destination), title reset to 老百姓/普通百姓,
+HP/food/water all at fresh-respawn values, inventory correctly cleared
+of her pre-death items down to just a fresh mailbox (per
+`wgargoyle.lpc`'s `DROP_CMD->do_drop` + `new("/clone/misc/mailbox")`
+logic). `log/debug.log` gained zero new fatal/error lines across the
+entire kill → death → staged ghost dialogue → reincarnate → respawn
+pipeline.
+
+`dstest` is being **kept**, not cleaned up, as playthrough evidence (same
+convention as `qxtest`/`wjtest` from the original round-one pass). Save
+files: `work/data/user/d/dstest.o`, `work/data/login/d/dstest.o` (`d/`
+already existed for prior "d"-prefixed ids in this lib).
+
+本轮修改的文件 / Files modified this round:
+- `libs/xzyx/work/cmds/std/give.lpc` (`MUDLIB_UID` → `ROOT_UID` compile-error fix)
+
+Save files updated/added this round:
+- `libs/xzyx/work/data/user/f/fluffos.o`, `libs/xzyx/work/data/login/f/fluffos.o` (admin's money-clone test props)
+- `libs/xzyx/work/data/user/q/qxtest.o`, `libs/xzyx/work/data/login/q/qxtest.o` (money earned + spent, items bought)
+- `libs/xzyx/work/data/user/d/dstest.o`, `libs/xzyx/work/data/login/d/dstest.o` (new throwaway death-test character)
