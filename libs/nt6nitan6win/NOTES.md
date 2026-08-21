@@ -281,3 +281,20 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Ported §10.7 combat F_DBASE fix from sibling nitan6 (2026-08-21)
+
+`feature/attack.lpc`/`feature/damage.lpc`/`feature/attribute.lpc` confirmed
+byte-identical (md5sum) to `nitan6`'s pre-fix copies. `nitan6`'s round-four
+§10.7 deep test found and fixed a severe bug: these files are inherited
+as siblings of F_DBASE by `char.lpc`, never inheriting F_DBASE themselves,
+so their bare `query()`/`set()`/`query_temp()`/`set_temp()` calls silently
+hit the shared simul_efun dbase instead of the fighting character's own —
+`reset_action()`'s broken `set("actions", ...)` meant `do_attack()`
+silently no-opped every combat round, and `receive_damage()`/
+`receive_wound()`'s broken calls meant landed hits never actually reduced
+qi/jing. **Combat never applied real damage on this lib.** Ported the
+identical fix (same `this_object()`/`me` redirect pattern) directly from
+`nitan6`'s fixed files rather than re-deriving it. Compile-verified via
+`lpcc --batch` (not live-boot-tested independently on this lib — the fix
+itself was already proven live on `nitan6`).
