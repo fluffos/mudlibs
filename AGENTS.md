@@ -3148,6 +3148,27 @@ concurrent duplicate didn't surface as an error) — recovered by
 diffing working-tree state against `git log` and committing each
 stranded fix individually. See `deep_test_agents_stall_on_background_waits`-style memory for the running tally of this stall pattern.
 
+**Note: the SECOND shape (call-site indexing, e.g. `ob->query("family")
+["family_name"]`) was NEVER covered by the above sweep** — that sweep
+only targeted the first shape (accessor functions returning a raw
+instance variable). The second shape got its first live confirmation
+on `ldtx` (§10.7 round four, 2026-08-21): `attempt_apprentice()`
+indexed `ob->query("family")["family_name"]` unguarded, crashing every
+fresh character's first-ever sect-join attempt (`query("family")`
+legitimately returns raw `0` for any player who's never joined a
+family). Fixed 6 unguarded instances on that lib alone (of 24
+`attempt_apprentice()`-shaped files, 18 already correctly guarded). A
+corpus-wide grep for this shape was attempted but is NOT precise enough
+to sweep blindly — a plain `["family_name"]` search returns 1000+ hits
+corpus-wide, overwhelmingly legitimate `set()` writes or already-guarded
+reads, and the vulnerable shape usually spans an intermediate local
+variable (`ob_fam = ob->query("family"); ... ob_fam["family_name"]`)
+rather than one inline chain, defeating a simple single-line grep. This
+is currently a single confirmed instance (not yet the 3+ independent
+lineages this project's sweep-trigger threshold calls for) — leaving it
+to keep surfacing via round-four testing rather than forcing an
+imprecise mechanical sweep; revisit if it's independently found again.
+
 ### 7.31 `enter_world()` overwrites the just-restored persistent player object's flag with the fresh per-connection object's stale/default value
 
 Found on `xkxz2`'s deep functional test (§10.7). On login, two
