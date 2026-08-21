@@ -295,3 +295,152 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（第四轮，2026-08-21）：离岛/拜师/留言板三项未覆盖范围全部补测
+
+第二轮的"未覆盖范围"明确列出三项：离岛乘船去中原、门派拜师、留言板
+具体内容阅读。本轮逐一实测，全部走通，另发现并修复两个真实 bug
+（一个是新发现的、之前从未记录过的 `natured.lpc` 僵尸对象崩溃，另
+一个是 §7.100 的漏网实例）。
+
+**1. 离岛（乘船去中原）——真实游戏机制走通，验证方法与 xuanjianlu
+先例一致：先读代码找出精确时序，再写定时脚本，而不是瞎猜或直接
+admin goto。**
+
+`d/xiakedao/shatan.lpc`（挂号后新手落脚的沙滩，也是离岛唯一起点）
+的 `check_trigger()`/`on_board()`/`arrive()`/`close_passage()` 四段
+`call_out` 链完整读了一遍，精确时序是：进入房间 1 秒后 `check_
+trigger()` 打开登船窗口（`exits/enter` 指向 `chuan.lpc`）→ 玩家有
+15 秒时间输入 `enter` 上船 → 上船后 20 秒（`on_board`→`arrive`）小
+船抵达中原沙滩 `shatan3.lpc`，`chuan` 的 `exits/out` 被设为
+`shatan3` → 这个"下船窗口"只维持 20 秒（`arrive`→`close_passage`），
+过期后又被摆渡回外海，需要等下一轮完整周期重新触发。写了一个
+Python 定时脚本（`enter` 在触发后~5秒内送出，`out` 在上船后~33秒
+时开始轮询），成功真实走完全程：`enter`→（等待）→"你正要下船，船
+家塞了点东西在你手中……"→ 落地中原 `沙滩`（`shatan3.lpc`，无渔夫、
+有"大车"NPC，与出发点视觉上刻意做成一样的房间名"沙滩"但内容不同，
+不是 bug）。中原一侧 `大车`（`d/xiakedao/obj/car.lpc`）的 `qu`/
+`hire`/`goto` 指令验证了真实江湖内容确实就在门后：扬州、杭州、泉
+州、泰山、少林、神龙塘沽口、武当、峨嵋、大理、西夏、华山、星宿、
+雪山、兰州、佛山，全部是真实可达的地图目的地（非占位/未完成）。
+额外用 `qu huashan` 实测坐了一趟马车（同样是 `call_out` 定时到站，
+无需赶窗口，40 秒后到），真实抵达"玉女峰"（华山主峰），确认目的
+地房间货真价实，不是空壳。全程真实指令通关，没有用 admin goto 作
+弊（唯一用到 admin 账号 `fluffos` 的地方是诊断阶段一次 `eval` 尝试
+把卡在船上的另一个测试角色挪回岸上，未采纳因为 `/tmp/tmp_eval.lpc`
+需要的 `work/tmp/` 目录本档案未转档，遂放弃该路径，改用重新注册一
+个干净测试角色的办法完整重跑）。
+
+**2. 门派拜师——`bai` 指令端到端验证，含一次成功的真实拜师。**
+
+侠客岛本岛的 `迎宾厅`（从沙滩 `north`→`north` 可达，偶尔会被"引路
+使"系统 NPC 强行拽去别处，重试几次即可到达）常驻一个"华山第十四代
+弟子 凌逍"（round-two 里差点把测试角色打死的那个 NPC，`combat_exp`
+120，`attitude peaceful` 不会主动攻击）。`bai lingxiao` 指令正确
+找到目标、检查 `family`，因为凌逍自己只是个弟子（非掌门），代码给
+出了合理的拒绝台词："要拜师，你得去拜我师父。"——这是刻意的游戏设
+计（凌逍这类岛上"介绍人"NPC 统一 `generation` 较低、title 是"弟
+子"，真正能收徒的"掌门"级 NPC 没有一个被摆在岛上，全部在中原对应
+门派本部），不是 bug。为了完整验证"正确的 family/title 赋值"，追
+加坐马车去华山，一路走到"客厅"找到"华山派第十三代掌门「君子剑」
+岳不群"（`d/huashan/npc/buqun.lpc`，`create_family("华山派", 13,
+"掌门")`），`bai yue` 一次成功："岳不群决定收你为弟子……恭喜您成为
+华山派的第十四代弟子。"`score` 确认 title 正确变为"华山派第十四代
+弟子"、`家门`字段显示"你的师父是岳不群"，两项赋值均正确，无崩溃。
+
+**3. 留言板内容读写——`post`/`list`/`read` 全流程走通，确认 §7.86
+的编译期修复在真实游玩下同样有效。**
+
+岛上真正挂载留言板对象（`d/xiakedao/obj/xkd_b.lpc`）的房间不是
+`ybting.lpc`（该文件里的引用是注释掉的死代码，之前误判过一次，浪
+费了几轮尝试），而是 `dadong.lpc`（"大山洞"，含义上对应"侠客洞"，
+"引路使"系统 NPC 在玩家滞留 `ybting` 太久时会明确提示"阁下请移驾
+到侠客洞中再发呆吧"，这本身印证了 dadong 才是设计上的目的地）。到
+达后 `post <标题>` 正确进入内建行编辑器（"结束离开用'.'……"），逐行
+输入正文、以单独一行`.`结束后提示"留言完毕"；`list` 正确显示新留
+言的标题/作者/时间戳；`read 1` 正确显示完整标题+正文，与实际输入
+内容逐字一致。全程无报错，确认 §7.86 的 `replace_program()` 修复
+不仅编译期干净，运行期 `post`/`read`/`list` 命令本身也完全正常。
+
+**发现并修复的真实 bug：**
+
+1. **新发现：`register_char()` 在活跃连线上直接 `destruct()`，留下
+   的僵尸对象让 `natured.lpc` 的日夜循环每次都崩溃——已新增
+   AGENTS.md §7.116。** 诊断过程见 §7.116 正文；简言之
+   `adm/daemons/regid.lpc`（挂号改密码流程）在玩家连线仍然存活时直
+   接 `destruct(body)`，如果客户端没有立刻干净 `quit` 就断线（"看到
+   新密码提示后客户端崩了"——这是提示文字本身邀请玩家做的下一步动
+   作），这个已销毁对象会永久残留：`userp()`（检查的是"历史上是否
+   连过线"这个一次性标记，不是"现在是否在线"）永远返回真，导致
+   `adm/daemons/natured.lpc` 的 `event_common()` 每隔一个昼夜周期
+   （本档案 240 秒）就会对它调用一次 `move()`，因为它已经没有
+   euid（`destruct()` 清空的），`move()` 内部的强制预编译
+   `call_other(dest,"???")` 必现"Can't load objects when no
+   effective user"运行时报错，永远不会自愈，永远重复。用一个真实
+   注册后不 `quit`直接断线的角色实测复现，跨两个完整周期反复报错；
+   一个正常 `quit` 的对照角色则完全没有这个问题。**修复**：把
+   `natured.lpc` 里的判断从 `userp(ob[i])`（历史标记）换成
+   `interactive(ob[i])`（真实在线状态），僵尸对象改为正确
+   `destruct()`（幂等，安全）。重启驱动后用同样"注册后不 quit 强行
+   断线"的手法复现，等满 270 秒（超过一整个周期）确认 `debug.log`
+   零报错，且该角色下次干净登录也不再触发"踢掉重复连线？"提示（证
+   实僵尸真的被回收了，不是巧合没踩中）。这个模式（`register_char()`
+   的 `destruct` 写法 + `natured.lpc` 的 `userp()` 判断）在同源的
+   `xkx2001` 里逐字相同（`grep` 确认，未修），值得未来做一次跨库
+   扫描，本次round-four单库测试未做。
+2. **§7.100 房间基类 `replace_program()` 漏网实例，2 处：**
+   本档案 2026-08-19 的 §7.100 扫尾修复自称"work/ 下 0 处存活残
+   留"，但那次扫描的脚本按 `.lpc` 后缀匹配文件，漏掉了两类非
+   `.lpc` 后缀的真实房间源码：
+   - `d/beijing/tulu.h`——26 个"土路"系列房间（`d/beijing/tulu_*.lpc`，
+     北京城门之间的野外道路网）共享的 `#include` 模板头文件，
+     `create()`（含 `replace_program(ROOM)`）写在 `.h` 里，`#include`
+     进每个 `.lpc` 后原样展开——这是**真实可达**的漏网实例（不是死
+     代码），只是因为藏在被 `#include` 的头文件里而不是独立 `.lpc`
+     文件里逃过了上一次的扫描。
+   - `d/forest/cl_bajiaoting`（无扩展名，是 `d/forest/clbajiaoting.lpc`
+     "八角亭"房间的一份孤立重名旧副本，`grep` 全档案确认没有任何
+     地方引用不带下划线的这个文件名，真正生效的 `clbajiaoting.lpc`
+     早已在上次扫尾里修好）——这份是**死代码**，但同一个已知致命
+     bug 形状既然要修，顺手一并清理，不留隐患。
+   两处均按标准修法删除多余的 `replace_program(ROOM)` 调用（保留
+   `inherit ROOM`），驱动重启后干净启动，无新增编译错误。
+
+**标准清单快速核对（大多数早已修复，仅确认未回归）：**
+§7.90（`maximum evaluation cost` 已是 5000000，达标）、§7.100（本
+轮发现并补上 2 处漏网实例，见上）、§7.111（`master.lpc` 里
+`standard_trace()` 唯一一处出现，属驱动框架文件非本档案自身逻辑，
+未见相关报错）、§7.108（`clone/user/user.lpc` 的 `reconnect()` 已
+含 `enable_commands()`，且本轮意外真实触发过一次"踢掉重复连线"场
+景，重连后指令立即正常，确认修复有效）、§7.79（无 `addn()` 2 参用
+法，不适用）、§7.30（`feature/skill.lpc` 4 个 accessor 均已带
+`mapp(x) ? x : ([])` 防御）、combatd.lpc 的 `bounce` 除零模式（本档
+案 `combatd.lpc` 里根本没有 `bounce` 相关代码，不适用）、
+`cmds/std/go.lpc` 的 `.lpc` 后缀切片越界 bug（无 `sizeof(exit[arg])`
+用法，不适用）。
+
+**死亡/复活 `death_stage()` 重入守卫逐文件核查：** 全档案 `grep`
+出 10 个含 `death_stage` 的文件。三个鬼差 NPC
+（`wgargoyle.lpc`/`wgargoyle1.lpc`/`bgargoyle.lpc`，round-two 修
+过 §7.68/§7.69 的那三个）和少林 `yu-zu2.lpc` 之外，另有 6 个
+`d/bwdh/sjsz{,2,3}/{east,west}_xiangfang.lpc`——逐一读了完整函数
+体：三个鬼差 NPC 的守卫形状正确（每个终止分支都清理
+`death_stage_active`，`!present(ob)` 分支正确重试而非放弃，与
+round-two 的修复一致，未回归）；6 个 `_xiangfang.lpc` 是"生死之
+战"活动房间的单次事件触发（进房 90 秋后分配队伍），不是幽灵复活
+循环，进入即在函数顶部无条件清理守卫，没有重入风险。**唯一的例
+外，但确认是死代码，不是需要修的 bug：** `d/shaolin/npc/yu-zu2.lpc`
+（"狱卒"，少林监狱场景）的 `death_stage()` 确实是 §7.68 那种"不在
+场就永久放弃"的旧形状（`if (!ob || !present(ob)) { ...; return; }`
+没有重试），但全档案 `grep` 确认这个文件从未被任何房间当作
+clone 目标引用过（真正被 `d/shaolin/jianyu1.lpc` 监狱房引用的是同
+目录下另一份不同代码的 `yu-zu.lpc`，无 `2` 后缀，逻辑完全不同、
+没有这个 bug）——`yu-zu2.lpc` 是孤立的未接线遗留文件，不会被驱动
+实际加载/触发，没有可观测的错误路径，按项目"没有错误信号就是设计
+不是 bug"的准则不做修改，仅记录在此以备日后万一被接上线时参考。
+
+**结论：** 第二轮标记的三项未覆盖范围全部真实验证通过。新发现并修
+复一个此前完全未记录的真实 bug（§7.116，natured.lpc 僵尸对象崩
+溃），以及一个 §7.100 的漏网实例（含一处非 `.lpc` 后缀导致脚本漏
+扫的真实可达实例）。全程测试中 `debug.log` 除上述两个已修复问题
+外无其它报错；测试角色存档已清理，不落入提交。

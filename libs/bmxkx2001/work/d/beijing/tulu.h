@@ -11,5 +11,4 @@ void create()
         set("cost", 10);
 
         setup();
-        replace_program(ROOM);
 }

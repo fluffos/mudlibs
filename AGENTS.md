@@ -9101,6 +9101,28 @@ Results:
 
 **Sweep status: COMPLETE.** All 80 real file-path `QUEST` macro instances corpus-wide surveyed; 1 real bug found, and it was already fixed in the commit that discovered this pattern before the sweep began. No new bugs, no new fixes needed this session. Documented here mainly so a future pass doesn't re-run the same 80-lib survey from scratch — the answer is stable unless a lib's archive is re-extracted from a different source dump.
 
+### 7.116 `userp()` is a permanent "was ever a real player" flag, not "is currently connected" — a natured/reset-style daemon that uses it to decide whether an orphaned living object is safe to `destruct()` will instead try to `move()` a destructed zombie and crash forever, every cycle
+
+**Found via `bmxkx2001`'s round-four `§10.7` test, specifically while exercising the island-registration flow's own "kick your old connection, issue a new password, force a reconnect" step** (`adm/daemons/regid.lpc`'s `register_char()`: `tell_object(body, "your new password is X"); body->set(...); body->save(); destruct(body);` on a `body` that is, at that exact moment, still the player's own live interactive connection). If the client doesn't immediately and cleanly `quit` before its socket actually closes (the ordinary "client crashed right after seeing the new-password message" case — exactly what the message itself invites the player to do), the destructed object survives as a zombie: `objectp()` still true, `environment()` cleared to 0, but critically **`userp()` also still returns true forever**, because FluffOS's `userp()` (`f_userp()` in `packages/core/efuns_main.cc`) just tests the object's `O_ONCE_INTERACTIVE` flag — a sticky bit set the first time an object was ever given a connection, never cleared by disconnect *or* by `destruct()`.
+
+`adm/daemons/natured.lpc`'s `event_common()` (called every in-game day-phase tick, here every 240 real seconds) walks `livings()` and, for any entry with no environment, does:
+```lpc
+if (!userp(ob[i])) destruct(ob[i]);
+else ob[i]->move("/d/city/wumiao.lpc");
+```
+The intent is clearly "a real connected player with no environment is a genuine emergency — rescue them; anything else with no environment is garbage — destruct it." But because `userp()` never turns back off, the zombie always takes the `move()` branch — and `move()` (`feature/move.lpc` line 66) does `call_other(dest, "???")` to force-load the destination file, which requires an effective user id. The zombie's euid was cleared along with everything else when it was destructed, so this throws `*Can't load objects when no effective user.` — uncaught, every single natured tick, forever, for as long as the driver runs. Confirmed live: registered a fresh character, let its connection drop uncleanly right after seeing the new-password prompt, and watched the identical error reprint in `debug.log` on at least two separate 240-second cycles with the driver otherwise idle. A control character that completed the same registration but sent an explicit `quit` first never zombified.
+
+**Fix**: use `interactive()` instead of `userp()` — `interactive()` (`f_interactive()`) checks the live connection pointer, not a sticky historical flag, so it correctly returns false for the zombie (routing it to `destruct()`, which is idempotent and harmless on an already-destructed object) while still correctly returning true for a genuinely-connected player who happens to have no environment (preserving the original rescue behavior for the case it was actually written for):
+```lpc
+// BEFORE:
+if (!userp(ob[i])) destruct(ob[i]);
+// AFTER:
+if (!interactive(ob[i])) destruct(ob[i]);
+```
+Re-verified with a fresh driver boot: reproduced the zombie again (uncleanly-dropped connection right after registration), let a full 270-second window pass (more than one full day-phase cycle), zero `debug.log` errors. The same character's next clean login/`look`/`score` also worked normally (no lingering "kick out old connection?" prompt, confirming the zombie was actually reaped this time instead of just silently erroring forever).
+
+**Scope note**: this specific `register_char()` "destruct a still-live connection without detaching it first" idiom, paired with `natured.lpc`'s `userp()`-gated cleanup, is shared verbatim by at least `xkx2001` (confirmed via `grep`, not yet fixed there) — this is the same codebase lineage as `bmxkx2001` per that lib's own NOTES.md. Worth a `grep -n 'if (!userp(ob\[i\])) destruct(ob\[i\]);' libs/*/work/adm/daemons/natured.lpc` corpus check in a future sweep; not run this session (round-four single-lib pass, not a sweep).
+
 ---
 
 ## 8. Login and registration flow bugs
