@@ -4972,6 +4972,72 @@ member per §11) — no other lib has shown this shape yet, but the
 detection grep above is generic enough to run on any lib during triage
 if a similar "Bad type for argument 2 of query" compile error surfaces.
 
+**SWEEP COMPLETE (2026-08-21).** Ran the dedicated systematic sweep this
+entry flagged. The scoping grep actually matched **172 files** (the
+"162" above undercounted slightly — corpus drift since the original
+pass), of which 161 were `.lpc` and 8 were `.h` fragments (plus one
+false match inside a plain log file, `log/log`, ignored — not code).
+Triaged all 161 `.lpc` candidates via `lpcc --batch` (fed only this
+candidate list, not the lib's full ~8k-file corpus, to keep the check
+fast and avoid the save-churn risk `scripts/lpcc_check.sh` carries on a
+whole-tree run): **94 failed with the exact documented "Bad type for
+argument 2 of query" signature; a further 26 failed with "Undefined
+function query"** instead — a different-looking but identical-root-cause
+symptom found in the `kungfu/skill/**` tree, where these skill scripts
+don't inherit anything defining the local `query()` at all, so *every*
+bare `query()` call in them is an outright undefined-function error, not
+merely a bad-argument-type one. **38 compiled clean as-is** — confirmed
+false positives (the flagged `me`/`ob`/etc. argument dodges the static
+check or genuinely isn't the object it looks like) and left untouched,
+per this project's "no error signature = no fix" rule. One file,
+`adm/daemons/skillsd1.lpc`, was skipped entirely: it has an unrelated,
+pre-existing illegal-character/encoding bug that kills compilation
+before the compiler ever reaches its `query()` misuse, and the reachable
+instances before that point compiled clean (so they're false positives
+too) — nothing here for this sweep to safely verify. Two files,
+`clone/goods/{moon,sun}.lpc`, were fixed on pattern-match confidence
+(textually identical to dozens of confirmed instances) but couldn't be
+verified via `lpcc --batch` either, both blocked by an unrelated missing
+`/inherit/item/tessera` file.
+
+**122 `.lpc` files fixed** (94 + 26 + the 2 unverified), **449 call
+sites** rewritten `query("prop", X)` → `X->query("prop")`, preserving
+whatever expression the property argument actually was (including
+string concatenation like `query("perform/" + pfname, me)`). Also fixed
+the analogous pattern in the 8 `.h` fragments (verified by compiling
+whichever `.lpc` file(s) `#include` each one, since `lpcc` can't check a
+fragment standalone) — **130 files total, 471 call sites**. Two files
+(`d/gaibang/npc/fight.h`, `maze/battle1/obj/walkie-talkie.lpc`) had
+pre-existing *partial* call-other forms with a stray leftover second
+argument (`me->query("title", me)`) that the mechanical regex briefly
+turned into a `me->me->query(...)` double-arrow artifact before manual
+correction — worth watching for on any future repeat of this fix
+pattern elsewhere. Deliberately left out of scope, matching the
+already-fixed instance's own note about not blindly generalizing:
+`query_temp()` calls with the identical shape (common in the same
+`kungfu/skill/**` files) are a textually-similar but formally different
+function and weren't part of this bug's documented definition; and
+several files have additional broken instances of this *exact* bug with
+object variables outside the five-name grep scope (`env[i]`, `inv[j]`,
+`player_list[i]`, `obj`, `target`, `weapon`, `bow`, `f_obj`, `monk`,
+etc.) — real bugs by the same logic, just not what this sweep's
+candidate list was scoped to catch; a follow-up with a broader grep
+could find more.
+
+Verified via `lpcc --batch`, before/after diff per file: every one of
+the 471 fixed call sites' specific error is confirmed gone in the
+post-fix recompile, **zero regressions** among the 38 already-passing
+files, and **zero new syntax errors** introduced anywhere. Also did a
+live driver boot as a spot-check (clean `Initializations complete`,
+empty `debug.log`, accepted a network connection, killed by exact PID
+after) — none of the touched files happen to be in this lib's preload
+list, so this confirms the driver still boots cleanly with all the
+changes loaded rather than exercising the fixed code paths directly;
+the `lpcc --batch` per-file verification remains the primary evidence
+for this sweep. Committed in 5 batches by directory
+(`kungfu/skill`+`cmds/skill`, `maze/battle3`+`battle1`, `kungfu/class`,
+`clone/**`, everything else), each pushed.
+
 ### 7.71 A `call_out()` is scheduled to a function whose entire body is commented out — no error, no dialogue, no progress, forever
 
 Found on `syxjl`'s §10.7 deep functional test, in the death system's
