@@ -16,8 +16,8 @@ int get_exp_rate()
                 if (! environment(user)) continue;
                 if (wizardp(user)) continue;
 
-                if( query("combat_exp", user)>max_exp )
-                        max_exp=query("combat_exp", user);
+                if( user->query("combat_exp")>max_exp )
+                        max_exp=user->query("combat_exp");
         }
 
         if (max_exp > 50000000) max_exp = 50000000;
@@ -44,9 +44,9 @@ void check_me(object me)
                 me = this_object();
         if (! me) return;
 
-        group=(query("eff_qi", me)-query("max_qi", me))/2000;
+        group=(me->query("eff_qi")-me->query("max_qi"))/2000;
         if (group < 1) group = 1;
-        set("qi",query("eff_qi",  me), me);
+        set("qi",me->query("eff_qi"), me);
         set_temp("warequest/group", (group+1), me);
         env = environment(me);
 
@@ -91,8 +91,8 @@ void check_me(object me)
         } else
         if( mapp(exits=query("exits", env) )
          && !query_temp("warequest/attack", me )
-         && query("qi", me)>query_temp("warequest/group", me)*200
-         && query("jing", me)>query_temp("warequest/group", me)*100 )
+         && me->query("qi")>query_temp("warequest/group", me)*200
+         && me->query("jing")>query_temp("warequest/group", me)*100 )
         {
                 dirs = keys(exits);
                 for (i = 0; i < sizeof(dirs); i++)
