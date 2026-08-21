@@ -2,6 +2,26 @@
 // attribute.c
 // Rewritten by Lonely@nitan.org
 
+// feature/attribute.lpc is inherited (as F_ATTRIBUTE) as a SIBLING of
+// F_DBASE by char.lpc, not the other way around -- it never inherits
+// F_DBASE itself. Every bare query()/query_temp() call in this file
+// (no trailing `ob` redirect) therefore hits the same F_DBASE bare-call
+// bootstrapping trap already fixed in feature/name.lpc, feature/
+// command.lpc, feature/apprentice.lpc, adm/daemons/databased.lpc, and
+// adm/kernel/simul_efun/message.lpc: unqualified calls resolve against
+// the SIMUL_EFUN OBJECT's own shared `dbase`, not this_object()'s own.
+// Since every one of this file's query_str()/query_int()/query_con()/
+// query_dex()/query_kar()/query_per() is always invoked via a real `->`
+// cross-object call (e.g. `me->query_int()`), this silently returned
+// near-zero combat/attribute stats for every character and crashed
+// cmds/skill/learn.lpc:141 (`jing_cost = 150 / (int)me->query_int() + 1`)
+// with a real *Division by zero* whenever query_int() legitimately
+// evaluated to exactly 0. Fixed with the same `this_object()` redirect
+// pattern as the other five files. query_skills()/query_skill() calls
+// below are untouched -- those are F_SKILL (feature/skill.lpc) member-
+// variable-backed, not F_DBASE-backed, so they aren't subject to this
+// trap.
+
 #include <skill.h>
 
 int query_str() {
@@ -10,12 +30,12 @@ int query_str() {
   int ability = 0;
   int lx = 0;
 
-  str = query("str");
-  str += query("ability1/str");
-  if (query("jingmai/finish"))
+  str = query("str", this_object());
+  str += query("ability1/str", this_object());
+  if (query("jingmai/finish", this_object()))
     str += ZHOUTIAN_D->query_jingmai_effect("str");
-  str += query("jingmai/str");
-  str += query_temp("apply/str");
+  str += query("jingmai/str", this_object());
+  str += query_temp("apply/str", this_object());
   if (!mapp(sk = query_skills()))
     return str;
   ability = (int)sk["unarmed"];
@@ -34,12 +54,12 @@ int query_int() {
   int str;
   int ability = 0;
 
-  str = query("int");
-  str += query("ability1/int");
-  if (query("jingmai/finish"))
+  str = query("int", this_object());
+  str += query("ability1/int", this_object());
+  if (query("jingmai/finish", this_object()))
     str += ZHOUTIAN_D->query_jingmai_effect("int");
-  str += query("jingmai/int");
-  str += query_temp("apply/int");
+  str += query("jingmai/int", this_object());
+  str += query_temp("apply/int", this_object());
   if (!mapp(sk = query_skills()))
     return str;
   ability = (int)sk["literate"];
@@ -51,12 +71,12 @@ int query_con() {
   int str;
   int ability = 0;
 
-  str = query("con");
-  str += query("ability1/con");
-  if (query("jingmai/finish"))
+  str = query("con", this_object());
+  str += query("ability1/con", this_object());
+  if (query("jingmai/finish", this_object()))
     str += ZHOUTIAN_D->query_jingmai_effect("con");
-  str += query("jingmai/con");
-  str += query_temp("apply/con");
+  str += query("jingmai/con", this_object());
+  str += query_temp("apply/con", this_object());
   if (!mapp(sk = query_skills()))
     return str;
   ability = (int)sk["force"];
@@ -69,12 +89,12 @@ int query_dex() {
   int ability = 0;
 
   //scale = (this_object()->query_encumbrance()*100)/this_object()->query_max_encumbrance();
-  str = query("dex");
-  str += query("ability1/dex");
-  if (query("jingmai/finish"))
+  str = query("dex", this_object());
+  str += query("ability1/dex", this_object());
+  if (query("jingmai/finish", this_object()))
     str += ZHOUTIAN_D->query_jingmai_effect("dex");
-  str += query("jingmai/dex");
-  str += query_temp("apply/dex") /* - (scale > 50 ? (scale-30)/10 : 0)*/;
+  str += query("jingmai/dex", this_object());
+  str += query_temp("apply/dex", this_object()) /* - (scale > 50 ? (scale-30)/10 : 0)*/;
   if (!mapp(sk = query_skills()))
     return str;
   ability = (int)sk["dodge"];
@@ -84,9 +104,9 @@ int query_dex() {
 int query_kar() {
   int buff;
 
-  if (query("jingmai/finish")) buff = ZHOUTIAN_D->query_jingmai_effect("kar");
-  else buff = query("jingmai/kar");
-  return (int)query("kar") + query("ability1/kar") + buff + query_temp("apply/kar");
+  if (query("jingmai/finish", this_object())) buff = ZHOUTIAN_D->query_jingmai_effect("kar");
+  else buff = query("jingmai/kar", this_object());
+  return (int)query("kar", this_object()) + query("ability1/kar", this_object()) + buff + query_temp("apply/kar", this_object());
 }
 
 int query_per() {
@@ -94,11 +114,11 @@ int query_per() {
   int age;
   int ac;
 
-  per = (int)query("per") + query_temp("apply/per");
-  if (query("special_skill/youth"))
+  per = (int)query("per", this_object()) + query_temp("apply/per", this_object());
+  if (query("special_skill/youth", this_object()))
     return per;
 
-  age = query("age");
+  age = query("age", this_object());
 
   ac = query_skill("art-cognize", 1);
   if (ac < 100) {
