@@ -382,3 +382,107 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试第二轮（§10.7，round-four，2026-08-21）— 真正打穿了战斗/死亡循环
+
+上一轮（见上方"深度功能测试（§10.7，本轮）"一节）被石龙武馆的等级
+门槛（`combat_exp < 20000` 才能从走廊往南出武馆，`d/slwg/zoulang1.lpc`
+的 `valid_leave()`）挡住，没能走到真正的野外战斗。这一轮延续 NOTES
+里给出的思路，先确认 `cmds/std/kill.lpc` 本身**没有**任何专门针对
+NPC 的战斗开关（和手足档案 dtsl2 一样；这里有的只是合理的 PK 相关
+门槛：房间 no_fight、骑马中、正带兵打仗、target_id 白名单、同帮会/
+结盟帮会互杀保护、`valid_kill.h`里的 PK 冷却——全部只在双方都是
+`userp()` 时才生效，对打 NPC 完全不受影响），然后用测试角色（id 见
+存档 `qincesi`，密码已略去）+ 直接编辑其存档文件补上
+`"combat_exp":25000`（满足武馆真实等级门槛的合法捷径，武馆内 `张教头`
+NPC 的"武艺"→`lianwu <项目>`→`task`训练循环本身也证实是真实可用、
+只是很慢的正规刷法，每轮约 10-15 秒得约 20-30 点经验，到 20000 点
+理论上要刷 800+ 轮）后，成功出武馆，一路（西大街→...→北门→官路
+系列→草地→高邮湖→树林→小溪）走到扬州北郊的真实野外（`d/yangzhoubei`
++ `d/outyang`）。
+
+**真实战斗验证**：在`小溪`(`d/yangzhoubei/xiaoxi1.lpc`)用`kill tu`
+攻击一只`野兔`(`npc/yetu.lpc`)，走完完整的多回合战斗（攻击/闪避/命中/
+昏迷/死亡尸体），全程消息正常、`debug.log`保持空白。
+
+**真实死亡验证（本轮最重要的结果）**：转往`山路`(`shanlu2.lpc`)找到
+更强的`强盗`(`npc/qiangdao.lpc`，`combat_exp`高达200000)，`kill dao`
+后几回合内被反杀，hp 打到负值，角色死亡→正确移动到`DEATH_ROOM`（鬼
+门关，`d/death/gate.lpc`一带）→再传送进`阎罗大殿`，`npc/yanluo.lpc`
+的`death_stage()`五阶段对话（阎罗王的一连串台词，每阶段 `call_out`
+5秒）完整跑完→`reincarnate()`→按角色`combat_exp>=20000`正确判定路
+线，被送到`REVIVE_ROOM`（`/d/yangzhou/hotel`，"有间客栈"，不是
+`zoulang1`也不是`JIANYU`）。全程`debug.log`保持空白，`score`/`look`
+复活后完全正常可玩（hp回满、combat_exp因为角色`age`只有10岁、
+`lose()`里`age>12`才扣经验的门槛没触发而保持25000点不变——这是刻意
+的新手死亡保护设计，不是 bug）。
+
+**顺带验证了§7.68撤销后的行为在真实死亡下依然正确**：测试过程中
+为了分批发指令，多次主动断线重连（在 5 秒一阶段的`death_stage()`
+call_out窗口期间断开又重连），这恰好模拟了"鬼魂在这几秒内暂时不在
+场"的场景。`npc/yanluo.lpc`的`death_stage()`本身已经带有专门的
+`in_death_stage`临时标记防重入锁（详见文件内联注释，是本档案自己
+之前某一轮已经补上的§7.112类修复，不是这一轮新做的），整个死亡对话
+链条没有出现重复叙述、没有双重结算死亡惩罚，`reincarnate()`只完整
+执行了一次——确认锁是有效的，且确认了这份档案自己另一个"看起来像但
+其实没有这个 bug"的`d/death/gate.lpc`（NOTES上一节记录过，其
+`death_stage()`只有单一的`if (!objectp(ob))`守卫、没有`!present()`
+分支，是假阳性）本身也确实完全没被触碰到——本轮走的是`npc/yanluo.lpc`
+这条不同的死亡对话路径。
+
+**跨库共享 bug 扫描**：按本轮任务单点名的四个已知跨库 bug 逐一排查，
+均不适用于本档案——`adm/daemons/combatd.lpc`里完全没有`bounce`相关
+代码（不是这个架构）；全档案没有`chacha.lpc`文件；
+`adm/daemons/natured.lpc`里没有`if (!userp(ob[i])) destruct(ob[i])`
+这一行；`cmds/std/go.lpc`里没有`sizeof(exit[arg])`这个写法（用的是
+`undefinedp(exit[arg])`判定，形状不同）。四个都确认不适用，未做任何
+改动。
+
+### 未继续测试的部分——已逐一销项
+
+1. **真实战斗和死亡/复活循环**：本轮已完整走通，见上。
+2. **邮件系统**：确认这份档案**根本没有**面向玩家的站内信/寄信功能
+   ——没有`mail`/`letter`类玩家指令，没有"邮局"房间，没有"寄信"动
+   词。`adm/daemons/sendmaild.lpc`是一个真实的出站 SMTP 邮件发送后
+   门（大概率是账号注册确认邮件用的基础设施），但全档案搜索没有任
+   何地方调用它——是完全未接入游戏逻辑的遗留代码，不是玩家可用的邮
+   件系统。此项无法测试，因为功能本身不存在，不是 bug。
+3. **门派/帮会系统**：分两套系统分别验证。(a) `apprentice`拜师指令
+   （门派）：用管理员账号（男性）在`d/luoyang/zhonggulou`向`候希白`
+   （花间派第五代传人）拜师，被正确以"你的相貌，唉，叫我怎么收你为
+   徒？"回绝——代码里确认是刻意的`gender=="女性"`门槛（花间派是原著
+   设定里的女性门派），无崩溃，`debug.log`干净，是有意的游戏设计。
+   (b) `enroll`加入帮会指令（势力）：向`海沙帮`帮主 NPC`韩盖天`
+   (`d/haisha/npc/bangzhu.lpc`)申请加入，被"我不是首领，你和我说没
+   用的"回绝。追查发现`adm/daemons/orgd.lpc`的`create()`会
+   `restore()`覆盖代码里`leader`数组的默认初值（原本应含六大帮派的
+   六个 NPC 首领 id），而持久化存档`work/data/orgd.o`里`leader`字段
+   是空数组`({})`——导致`is_leader()`对任何帮派都返回假，全库范围内
+   "向 NPC 帮主申请入帮"这条路径永久失效。追查了这个字段唯一的写入
+   路径：`adm/daemons/combatd.lpc`里，玩家在战斗中击败当前的帮派首
+   领（无论是 NPC 还是玩家）时会调用`ORG_D->del_leader()`把该帮派从
+   数组中移除、并把`shili/leader`转移给击败者——也就是说"六个帮派的
+   首领都已经被玩家夺权过"是这套机制下完全合理、可达的正常游戏历史
+   终态。核对了同血统的`dtsl`/`dtsl2`两个手足档案的`orgd.o`，
+   `leader`字段同样是逐字节一致的空数组`({})`，且此文件从最早的档案
+   转换提交起就已经是这个状态（非本轮或近期任何一轮引入）。没有编
+   译错误、没有崩溃、没有`debug.log`报错、没有驱动层拒绝——符合"没
+   有错误信号大概率是内容设计"的项目准则，加上三份独立档案状态完全
+   一致，判定为已归档的真实游戏历史状态，不是数据损坏，未做任何修
+   改。
+4. **迷题（任务）系统**：`quest`指令（显示已开放迷题列表/具体某个迷
+   题的提示文档）直接测试通过——列出全部迷题分类（含门派迷题分类），
+   查看具体一篇（长生诀）内容渲染正常，`debug.log`干净。
+   `adm/daemons/jobmond.lpc`（"任务监控系统"，扬州府衙一类可占领城
+   市的战斗任务播报后台）是纯被动的频道播报后台，没有玩家指令直接
+   调用它，本轮多次数小时的干净起服本身已经隐含验证了它不会主动抛
+   错。
+
+### 标准清单快速过一遍的结果
+
+§7.90（eval-cost）、§7.100（ROOM 多余 replace_program）、§7.111
+（standard_trace）、§7.112（death_stage 重入锁）、§7.79（addn 二参
+数）、§7.108、§7.30（`feature/skill.lpc`已有`mapp(x) ? x : ([])`
+守卫）——均为之前几轮/跨库扫描已处理完毕的项目，本轮没有发现新的
+遗漏实例。全程使用干净的 `build-debug` 驱动起服，从开服到测试结束
+`debug.log`全程零报错。
