@@ -734,3 +734,94 @@ No code was modified this pass; no new debug.log errors to check
 since no driver boot was performed (the checklist items above were all
 resolvable via static reads, and the shop-purchase task itself never
 reached a boot because the blocking discovery was made first).
+
+## Round-four (§10.7), combat progression to death/respawn — REACHED (2026-08-21)
+
+Narrowly-scoped follow-up dispatch, targeting only the round-three
+honest gap "Combat progression to death/respawn — not reached." No
+admin `clone`/`goto`/stat-grant exists on this lib (see the shop-gap
+entry above), so this pass reached a real lethal fight entirely
+through organic travel and the real `kill` command, using a raw
+Python telnet script (not `tmux_mud.sh`).
+
+- A fresh character (蒙古族/Mongol nationality, chosen at creation to
+  land at `start_loc[2]` = `/u/guanwai/inn`, one of `logind.lpc`'s 4
+  nation-keyed start rooms — this is a shorter route to the `guanwai`
+  outdoor zone than the default 汉族 start at `/d/fy/fqkhotel`) walked
+  the `octo1`→`octo14` street chain (`west, south, west, west, west,
+  west` reaches `octo6`, not `octo14` — the two rooms share near-
+  identical `long` text, which caused one misnavigation this pass; the
+  real chain is `octo1`→`octo2`→`octo3`→`octo4`→`octo5`→`octo6`→
+  `octo7`→`octo8`→`octo9`→`octo10`→`octo11`→`octo12`→`octo13`→`octo14`,
+  alternating `west`/`south`/`north`/`east` per each room's own
+  `exits` mapping — there is no shortcut).
+- First target, `疯狗`/crazy dog (`u/guanwai/npc/crazy_dog.lpc`,
+  `octo14`, `attitude: aggressive`, `str 26`, `apply/attack 15`): real
+  `kill dog` beat both room spawns cleanly with no visible damage taken
+  — this character's chargen combat stats (蒙古族: 攻击力/防御力 41/41)
+  were simply too strong for a low-tier street mob. Confirms
+  `kill.lpc`'s documented behavior (no PK-style gate for NPC targets —
+  only `no_fight`/`no_pk` room flags and a same-target self-suicide
+  check) matches this session's 10+-library precedent.
+- Needed a tougher target: `塔僧`/tower guard
+  (`u/guanwai/npc/towerguard1.lpc`/`towerguard2.lpc`, `topoftower`, one
+  `up` from `citygate`, itself reachable via `octostreet` off `octo1`).
+  Attitude is `"heroism"` (would refuse a `fight`-style spar and
+  wouldn't auto-initiate), but **`kill.lpc`'s NPC branch
+  unconditionally calls `obj->kill_ob(me)` regardless of the target's
+  `attitude`** — confirms this session's standing note that `attitude`
+  only gates auto-aggression/spar-acceptance, never a real `kill`
+  command's fight-back. `str 30`, `force 300`,
+  `unarmed`/`bloodystrike`/`parry` skill 50, `iron-cloth` 150 — real
+  named attacks (地狱似有门/苦海端无涯/佛云以杀止杀) landed hard, and
+  this character's default `env/wimpy` 50 correctly triggered
+  `GO_CMD->do_flee()` mid-fight (fled `topoftower`→`citygate`, took a
+  further hit from an aggressive `城卫`/city guard on the way,
+  fled again to `octostreet` — all still alive, 0 deaths).
+- Used the `wimpy` command (`cmds/usr/wimpy.lpc`, `wimpy 0`) to disable
+  the auto-flee threshold, then re-engaged the same tower guards.
+  Without the flee escape valve, sustained real wounds
+  (`receive_wound()`, not just `receive_damage()`, since `is_killing`
+  was set) correctly cascaded through `feature/damage.lpc`'s
+  `unconcious()` (the "你的眼前一黑，接著什麽也不知道了...." message,
+  `disable_player()`, `set_temp("block_msg/all", 1)`) straight through
+  to real `die()` while still unconscious — confirmed live: a follow-up
+  reconnect (the unconscious character couldn't take any further
+  commands, `disable_player()` correctly rejected `score`/`look` with
+  "什么？") found the character moved to **`/d/death/gate`
+  (鬼门关/"Ghost Gate", `DEATH_ROOM`)**, `score` showing "被杀了一次"
+  (killed once) and 攻击力/防御力 reduced 41/41 → 40/39 (matches
+  `COMBAT_D->victim_penalty()`), standing among `牛头`/`马面`
+  (ox-head/horse-face underworld guards) — the exact `die()` →
+  `DEATH_ROOM`/`start_death()` flow in `feature/damage.lpc` firing
+  correctly end-to-end for the first time on this lib.
+- `work/log/debug.log` never came into existence at all across the
+  entire pass (checked after killing the driver) — zero error-signature
+  lines through chargen, two full combat sequences, an unconscious
+  transition, and a real death/respawn move.
+
+### Fast standard-checklist pass
+
+- **§7.112-class death reentrancy**: this lib does **not** use the
+  `death_stage`-int-flag reentry-guard shape that pattern targets
+  (grepped `death_stage` tree-wide — the only 2 hits are an unrelated
+  dialogue-state variable in `d/death/npc/panguan.lpc`/`panguan2.lpc`,
+  a judge NPC's own local state, nothing to do with player death).
+  This lib's actual `die()` (`feature/damage.lpc`) achieves the same
+  no-reentry safety by a different, simpler mechanism: on death it
+  unconditionally resets `gin`/`eff_gin`/`kee`/`eff_kee`/`sen`/`eff_sen`
+  to `1` (positive) before moving the player to `DEATH_ROOM` — so the
+  `heart_beat()` guard clause that calls `die()` (triggered only when
+  `eff_kee`/`eff_sen`/`eff_gin` are negative) cannot re-fire on the
+  next tick. Confirmed live: no double-death message, no repeated
+  `DEATH_ROOM` moves, no debug.log error, across the observed
+  unconscious→die() transition. Not a bug — a structurally different
+  but equally sound reentrancy shape.
+
+No code was modified this pass (nothing needed fixing — combat, wimpy,
+unconscious, and death/respawn all worked exactly as coded). Test
+character `beidouxia`/北冥霜 was left at `DEATH_ROOM`
+(`/d/death/gate`) with 1 recorded death; its plaintext password is not
+recorded here per this project's standing convention. Driver killed by
+exact PID (1093280, confirmed via `readlink -f /proc/1093280/cwd` ==
+this lib's `work/` before killing) after testing.
