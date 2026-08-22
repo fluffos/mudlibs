@@ -976,3 +976,71 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试第三轮 / Deep functional test round three-plus-four (2026-08-21) — CLEAN PASS, no new bugs
+
+Round-two (2026-08-15, above) had explicitly flagged two gaps: no
+successful shop purchase completed live, and death/respawn not
+live-tested at all. This pass closes both, plus adds a first-ever live
+test of the mail system, and re-confirms the §7.108 reconnect fix and
+the corpus-wide §7.112 `death_stage()` reentrancy guard (already
+present in `d/death/npc/pang.lpc` via the earlier `7ff1b78860d` sweep
+commit — not previously exercised live on THIS lib). Native
+`build-debug` driver, existing character `shenqy`/沈青云 (still
+apprenticed to 秦富, `将军府第四代弟子`) plus admin `fluffos`.
+
+**Economy/shop purchase** (round-two's gap #1): the player-side economy
+is not a wallet integer — money is a physical carried item
+(`/obj/money/{coin,silver,gold,thousand-cash}`, `feature/finance.lpc`'s
+`can_afford()`/`pay_money()` scan `present("coin_money", me)` etc.).
+Granted `shenqy` 5000 coin via `clone /obj/money/coin` +
+`call coin->set_amount(5000)` + `give coin to shenqy` (admin). `buy
+huasheng from xiao er` then succeeded (`你向店小二买下一碟花生豆`),
+confirming the full economy code path (money-item detection, price
+deduction, item creation) works correctly. Note for future testers:
+`std/char/npc.lpc`'s `add_money(string type, int amount)` only exists
+on the **NPC** mixin, not the player one — `call shenqy->add_money(...)`
+returns `0` (no-op) on a real player object; the clone+give path above
+is the correct way to grant a player money live.
+
+**Death/respawn** (round-two's gap #2, now fully closed): `call
+shenqy->die()` (admin) triggered the complete cycle cleanly — corpse
+left behind, `die()`'s `DEATH_ROOM->start_death()` call is a benign
+undefined-function no-op (same shared-lineage artifact noted elsewhere
+in this project, confirmed harmless again here), player moved to
+`/d/death/gate` (阴阳界) as a ghost. `d/death/npc/pang.lpc`'s
+`death_stage()` ran its full 5-message, 25-second judge dialogue
+(`崔判官...`) via the **already-guarded** `death_stage_active` temp-flag
+pattern (§7.112 fix, present since the earlier corpus sweep) with zero
+reentrancy issues, then called `reincarnate()` and moved the player to
+`REVIVE_ROOM` (荒郊小店). `debug.log` clean throughout (grepped for
+non-warning lines across the whole session: zero hits). Potential
+(`潜能`) dropped from 99 to 50 as an intended death penalty
+(`COMBAT_D->victim_penalty()`); HP shown at 35/100 post-revive is
+correspondingly partial, not a crash artifact.
+
+**Mail system** (new — not covered by any prior pass on this lib):
+`obj/mailbox.lpc` itself is dead/orphaned content (not placed in any
+room's `objects` mapping, same class as round-two's noted `muren.lpc`
+gap) — the *live* entry point is `d/ourhome/npc/bigeye.lpc` (邮差
+千里眼/Bigeye, the NPC standing in the start room), whose `inquiry`
+mapping wires `"mail"`/`"信"`/`"收信"` etc. to `receive_mail()`, which
+clones a personal `MAILBOX_OB` into the player only when the player is
+physically standing in their own `startroom`. `ask bigeye about mail` →
+received a personal mailbox → `from` correctly reported empty → `mail
+fluffos` (compose flow: title → body → `.` to end → save-copy y/n) sent
+successfully, and admin `fluffos` got a real live notification
+(`千里眼跟您说：有您的信！快来一下！`). Full round-trip confirmed
+working, zero errors.
+
+**Reconnect** (spot-check re-verification of round-two's §7.108 fix,
+unmodified since `b24f99518c4`): disconnected `shenqy`'s telnet session
+uncleanly (killed the tmux pane) and reconnected fresh with the same
+id/password — `重新连线完毕`, `score` immediately showed full correct
+state (title, 潜能 50 matching the post-death value from this session).
+
+**Verdict**: no new bugs found this round — a clean confirmatory pass
+that closes both gaps round-two left open. Test character `shenqy`'s
+save state (money, death/revive location, mailbox) was left as-is per
+this project's standing convention of keeping test characters as
+representative playthrough evidence, not reset.
