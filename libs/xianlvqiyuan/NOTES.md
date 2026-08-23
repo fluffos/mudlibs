@@ -491,3 +491,66 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试第三/四轮 / Round-three/four deep functional test (2026-08-23)
+
+Full re-test against a native `build-debug` driver, closing the two gaps
+explicitly left unverified by the 2026-07-24 §10.7 pass (death/
+reincarnation and a completed shop purchase), and re-confirming the
+§7.100/§7.30 mechanical sweeps didn't regress anything live. One
+continuous `tmux_mud.sh` session plus a couple of short raw-socket
+probes; `work/log/log` (this lib's debug.log, named `log` not
+`debug.log` per its own runtime config) diffed after every phase.
+**Result: clean pass, zero new runtime errors anywhere, no code
+changes.**
+
+- **Registration**: same documented shape as before (`gb` → `no` →
+  `new` → English id `xlqyfor` → Chinese name `秦风` → password ×2 →
+  email → gender) completed cleanly. Confirmed the 2026-07-24
+  `printf("%O", ob)` leak fix still holds — no stray object-path line
+  between the Chinese-name prompt and the password prompt.
+- **Sect join & skill learning**: `apprentice zhang` (张果老,
+  十字街头, 2 moves from spawn) joined 五庄观 as 4th-generation
+  disciple; `learn force from zhang` correctly advanced 内功心法. No
+  errors.
+- **Combat and death/reincarnation — newly verified live (previously
+  documented as untested)**: `wimpy 0` (disabled auto-flee, unlike the
+  prior pass's `wimpy 70`), then `kill yitai` (二姨太, 鞋帽店) fought to
+  a real death: full HP-band narration down through 半昏迷/头重脚轻,
+  "你死了。", broadcast death message, transition to `阴阳界` (judge
+  崔珏). `score` there correctly showed 仙衔 as `【鬼魂】` with all
+  other state (sect, master, name) intact. After a short wait 崔珏
+  auto-revived the character ("命不该死...我这便送你还阳去吧") into
+  `荒郊小店`, a real, distinct revival room (not the `d/death/block.lpc`
+  "鸿蒙之外" limbo room read about but never reached in the prior pass —
+  that room is apparently reached by a different death path, not this
+  one). Movement, `score`, and further play all worked normally
+  post-revival — no stuck state, no corrupted `startroom`. Zero
+  `debug.log` growth across the entire fight-death-revival sequence.
+- **A completed shop purchase — newly verified live**: picked up
+  "二两银子" (a money item) lying on the ground in `荒郊野外` (just
+  south of the revival room), then `list` at the `荒郊小店` innkeeper
+  (店小二) and `buy jitui from xiao er` succeeded — inventory
+  afterward showed the item plus correctly-deducted change (2两 − 80文
+  = 1两20文 remaining, exact). Confirms the purchase-success path
+  (previously only the insufficient-funds rejection path had been
+  exercised) has no arithmetic or state bug.
+- **Clean quit**: real flavor-text quit sequence, connection closed
+  cleanly, zero new `debug.log` lines.
+- **Investigated, not a bug — tmux input-transmission artifact**: mid-
+  registration, sending the 3-character Chinese name `秦岚枫` over the
+  `tmux_mud.sh` session was rejected ("对不起，请您用「中文」取名字。")
+  even though `is_chinese()`/`check_legal_name()` (read directly) place
+  no special restriction on 3-character names and every individual
+  character (秦/岚/枫, all U+4E00–U+9FFF) passes the codepoint check.
+  Reproduced the *exact same* name over a fresh raw Python socket
+  connection immediately afterward and it was accepted cleanly through
+  to the password prompt — confirming this was a `tmux_mud.sh`/telnet
+  multi-byte-input transmission glitch (the project's own known
+  "tmux_mud.sh gotchas" class), not a driver or mudlib defect. No code
+  change made.
+
+No bugs found or fixed this pass. Test character (`xlqyfor`/`秦风`)
+and the leftover untracked save pair from the interrupted prior attempt
+(`xlqyrfa`, never played past the gift screen) were both removed after
+verification.
