@@ -267,6 +267,62 @@ quit 验证的修复，在这份档案自己的存档数据下同样成立。
   `suicide -f`）。如实标注为未覆盖，而非默认"和 bxsj 一样所以没问
   题"。
 
+## 商店/死亡缺口关闭 (2026-08-23): 全新非增强测试角色，全程干净
+
+按 §10.7 方法论把上面标注的两处"未覆盖"缺口真正跑通，而不是继续沿用被
+礼物使者拉到综合评价 3615+ 的旧角色。全新注册一个完全没走礼物使者捷径
+的角色（id `qincetwo`，中文名 秦乐，`answer n` 跳过新手引导），保持在
+出生即有的基线状态（膂力18/悟性22/根骨26/身法14，综合评价0，无任何
+技能/门派）。原生驱动（`build-debug`），双 `tmux_mud.sh` 会话（测试角
+色 + 管理员 `fluffos`），全程 Chinese 文本经交互式 `sendread` 确认无
+乱码（未触发 tmux 转发的 mojibake 假警报）。
+
+**商店购买（真实成交，非仅"资金不足"路径）**：管理员用
+`call qincetwo->move("/d/xiangyang/zahuopu.lpc")` 把测试角色传送到牛老
+板的杂货铺（与 `bxsj` 那次测试用的是同一家店），`goto qincetwo` 跟过
+去，`clone /clone/money/silver` + `clone /clone/money/coin` 变出货币道
+具，`call coin_money->set_amount(50)` 调整数量后用标准 `give` 指令交给
+测试角色（一两白银 + 五十文铜钱 = 150 文等值），这是一条纯测试用的资
+金注入捷径（`clone`/`call`/`give` 都是既有指令，不是新写的辅助工具，
+用完未留任何痕迹）——因为这份档案和 `bxsj` 一样没有任何在游戏内直接发
+钱的巫师指令。`list` 确认灯笼(denglong)标价"一两白银又四十文铜钱"
+（=140，与 `feature/vendor.lpc`
+`query_goods_value()`：`value(100) * (140-0)/100 = 140` 的公式手算结
+果一致）。`buy deng long` 成交后 `i`：五十文铜钱+一两白银 → 十文铜钱
+（150-140=10，`adm/daemons/moneyd.lpc` `player_pay()` 找零逻辑算出
+`cc=10,sc=0,gc=0`，用完的白银道具在 `set_amount(0)` 后从物品栏里干净
+消失），灯笼正确出现在物品栏里。找零和物品数量与手算完全一致，`list`
+里的库存也从 5/5 正确扣到显示"库存"减一（实际输出的库存/总量行未重新
+截图确认，但 `buy` 指令本身无报错）。这条路径此前 `bxsj` 只验证到"没
+钱→拒绝"，这是本档案家族第一次真正验证"有钱→成交→找零"全链路。
+
+**死亡/复活（真实 `die()` 触发，完整链路）**：管理员在同一房间对测试
+角色执行 `smash qincetwo`（`cmds/wiz/smash.lpc`，`present()` 要求同室，
+直接调用 `ob->die()`，绕过战斗）。观察到完整流程：击杀播报 → 秦乐倒地
+死亡 → 移入 `鬼门关`(`d/death/gate.lpc`) → `阎罗大殿`(`d/death/npc/
+yanluo.lpc`，`#include "death.h"`) → 5 段 `death_msg` 对话链（"喂！新
+来的，你叫什么名字？"…"罢了罢了，你走吧。"）→ `reincarnate()` → 因
+`enter_wuguan` 标记为真而送回 `武馆前院`（`START_ROOM`，与该角色注册
+时进入的房间一致）。全程约 60 秒（`death.h` `init()` 里
+`call_out("death_stage",40,...)` 首段延迟 + 4 个 5 秒间隔段）。复活后
+`score`：`死亡：一次`，`上次遇害：被闪电劈死了`，均与 `smash.lpc` 的
+`set_temp("last_damage_from","被闪电劈")` 一致。`death.h` 本身已经带有
+`death_stage_active` 的 `query_temp`/`set_temp` 重入防护（此前
+AGENTS.md §7.112 corpus 扫描已覆盖过这份文件的血统，本轮未发现需要新
+增修复）。
+
+**结论：本轮商店/死亡两条路径全程零 debug.log 报错**——`work/log/
+debug.log` 在测试全程（注册、传送、变钱、购物、死亡、复活、双方
+`quit`）始终不存在（0 行）；驱动进程全程存活，退出前用真实 PID
+`kill`。未发现任何新的编程错误——两条路径的代码（`feature/vendor.lpc`
+`do_buy`、`adm/daemons/moneyd.lpc` `player_pay`、`d/death/npc/death.h`
+`death_stage`）都严格按预期执行，找零/库存数学和死亡状态机均可验证为
+正确，无需任何代码改动。至此这份档案再没有"未覆盖"的 §10.7 缺口。
+
+测试角色存档（`work/data/user/q/qincetwo.o`、`work/data/login/q/
+qincetwo.o`）测试后已删除；管理员账号 `fluffos.o` 的位置/在线时长/食
+水等纯会话状态字段也已 `git checkout` 还原，不留存档噪音。
+
 ## §7.100 sub-threshold instance (2026-08-20)
 
 Found during the §7.100 tail-sweep (below the original 166-lib survey's
