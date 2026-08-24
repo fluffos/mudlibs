@@ -889,3 +889,116 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试补充 (2026-08-24): shop `buy` and 拜师 sect apprenticeship — the two flows every prior §10.7 pass on this lib had skipped
+
+Audited the full history above and confirmed neither a shop purchase nor
+a completed sect apprenticeship had ever been exercised on this lib,
+despite the newbie doc's own §3 sect-recommendation text implying a real
+system existed. Closed both gaps this pass, via two concurrent
+`scripts/tmux_mud.sh` sessions (admin + a fresh throwaway player
+`qinmaiwu`/秦买物, registered end-to-end same as the original pass) so
+the admin could `goto <player>` + `clone`/`give` money without needing
+`quit`-and-restore round-trips.
+
+### Shop purchase — found and fixed a real crash bug (vendor.lpc §-class, `list`/`buy` at ANY shop with a stale `vendor_goods` entry)
+
+`d/city/zahuopu.lpc` (扬州 杂货铺, reachable in 3 moves from the newbie
+start room: `kedian` → west → `beidajie1` → south → `guangchang` → east
+→ `dongdajie1` → south → `zahuopu`), NPC 杨永福 (`d/city/npc/yang.lpc`,
+`inherit F_VENDOR_SALE`). First `list` command thrown by a real player
+crashed outright: `这里发现了BUG，请用SOS告诉巫师。`
+
+`work/log/debug.log`:
+```
+执行时段错误：*call_other() couldn't find object '/u/xiha/fd'.
+程式：/feature/vendor_sale.lpc 第 149 行
+物件: /d/city/npc/yang#294
+呼叫来自：/feature/vendor_sale.lpc 的 do_vendor_list() 第 149 行
+```
+
+`yang.lpc`'s `vendor_goods` array lists `"/u/xiha/fd"` as its first
+entry — confirmed via the raw archive (`raw/socket/yxcs/u/xiha/` only
+ever shipped `workroom.c`, never an `fd.c`) that this file never
+existed at all, not a casing mismatch. `feature/vendor_sale.lpc`'s
+`is_vendor_good()`, `do_vendor_list()`, and (transitively, via
+`is_vendor_good()`) `do_vendor_buy()` all called methods directly on
+`vendor_goods` string entries with **no existence guard**, so this one
+dead reference broke `list` (and would have broken `buy` too, for
+anyone who managed to name it) for every player at this shop, every
+time — the exact class already cataloged in AGENTS.md's `mohuanshiji`
+precedent ("worth checking as a standing step on any future lib's
+`feature/vendor.lpc`-style shop test").
+
+Fix followed this codebase's own existing idiom for the identical
+problem in the sibling `feature/dealer.lpc` (`file_size(ob[i] +
+".lpc") > 1`, log the stale entry, skip it rather than crash) — added
+the same guard to all three loops/lookups in `feature/vendor_sale.lpc`
+(`is_vendor_good()`, and both loops inside `do_vendor_list()`),
+logging a `vendor_error` line instead of throwing. This is a
+missing-defensive-check programming bug (no existence check before an
+unconditional `->` call), not a content restoration — the dead
+`/u/xiha/fd` entry itself was left in `yang.lpc`'s `vendor_goods`
+array untouched, matching the give.lpc/ask.lpc `QUEST`-daemon
+precedent's remedy of guarding the call site rather than fabricating
+the missing target.
+
+Verified live after a driver restart: `list` now prints all 16 real
+items (skipping the dead entry silently), and `buy budai` (麻布袋，一
+两白银) correctly deducted exactly 1 tael from the player's 20-tael
+starting balance (二十两银子 → 十九两银子) and added `布袋(Budai)` to
+inventory — real purchase, correct change/inventory math confirmed
+end-to-end.
+
+### Sect apprenticeship (拜师) — clean pass, no bug found
+
+Full `recruit`/`apprentice` two-command handshake (`cmds/skill/
+recruit.lpc` + `cmds/skill/apprentice.lpc` + `feature/apprentice.lpc`'s
+`recruit_apprentice()`) read in full first. Picked 丐帮 (newbie doc's
+own §3 recommendation for 拳脚/unarmed fighters) — specifically 左全
+(`kungfu/class/gaibang/zuo-qu.lpc`, one of the 七袋弟子, reachable from
+`guangchang` via `enter shudong` → `/d/gaibang/inhole`) since his
+`attempt_apprentice()` only gates on `gender == "男性"` (the simplest
+of the gaibang roster's per-NPC stat/gender gates — siblings `he-bj`/
+`li-sh`/`ma-jw`/`yu-hx`/`liang` each gate on a different stat
+threshold, `jian`/`peng` refuse everyone outright).
+
+`apprentice zuo` (test char already male, 光明磊落 personality) →
+"你想要拜左全为师" → 左全 accepted immediately (no stat gate hit) →
+"你跪了下来向左全恭恭敬敬地磕了四个响头，叫道：「师父！」恭喜您成为
+丐帮的第二十代弟子。" `score` before vs. after: 头衔 changed 【布衣平
+民】→【叫 化 子】, 称谓 changed 普通百姓→丐帮第二十代弟子, 你的师傅
+changed 目前还没有→左全. Full apprenticeship mechanism (recruit/
+apprentice pending-state handshake, `family` mapping population,
+`assign_apprentice()` title generation) works correctly end-to-end —
+no bug found, clean pass.
+
+### Formatter note
+
+Could not run the §9 LPC formatter (`~/src/fluffos/tools/lpc-syntax/
+bin/format-corpus.mjs`) this pass — `node` is not installed/on `PATH`
+in this session's shell environment (checked `which node`, `nvm`,
+common install paths; none found). The `feature/vendor_sale.lpc` edit
+itself hand-matches the existing codebase's own indentation/brace
+style (copied directly from the sibling `feature/dealer.lpc` idiom, no
+`::`, `case`, or CJK-string edits involved, so the formatter's three
+known blind spots don't apply here regardless). Flagging for whichever
+future pass has a working `node` available: re-run the formatter on
+this one file and re-verify.
+
+### Testing setup note
+
+Two concurrent `scripts/tmux_mud.sh` sessions (admin `fluffos`, throwaway
+player `qinmaiwu`/秦买物) driven with only ASCII/pinyin commands past
+the initial Chinese-name registration step (done via a one-shot
+`scripts/mudclient.py` call first, per this project's standing
+tmux-mojibake caution) — no mojibake observed on the ASCII-only
+in-play commands, consistent with the false-alarm pattern being
+specific to multi-byte *input* during registration, not general
+gameplay. Test character's save file was never observed on disk under
+`data/user/q/`/`data/login/q/` despite `score`/reconnect showing
+correctly persisted state across the two tmux sessions — most likely a
+net-dead in-memory reattach rather than an actual disk restore (the
+first tmux session was never sent `quit`, just closed); nothing to
+clean up on disk either way since no `qinmaiwu.o` file exists. Driver
+killed by exact PID after testing; both tmux sessions stopped.
