@@ -74,3 +74,111 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试第二轮（2026-08-23）：死亡计数器、buy、拜师、大写目录死链、邮件系统
+
+用既有的 `fluffos` 账号（§10.7 深挖账号）通过原生驱动（端口 40173）+
+`scripts/tmux_mud.sh` 逐条核实 2026-08-08 那轮记录的「未覆盖」四项。
+本档案和刚测完的同源手足 `sjshwzb` 逐字节同源的核心文件集合完全一致
+（`combatd.lpc`/`weapon.h`/`std/room.lpc`/`d/nanhai/*`），所以本轮直接
+对照 `sjshwzb` 那轮的发现逐项复核，而不是从头盲测——多数命中的是同一
+血统里独立分叉演化出的同一个 bug。
+
+- **被杀害次数计数器（`combatd.lpc` `killer_reward()`）——本档案自己的
+  §10.7 深挖会话之前已经确认并修复（commit `74a85438aae`）**：这是
+  `sjshwzb` 那轮现场发现的 bug（`killer->add("PKS", 1);` 之后缺
+  `killer->add("PKD", 1); victim->add("DIE", 1);` 两行），因为两份
+  `combatd.lpc` 逐字节相同，直接比对确认后原样移植过来，无需重新调查。
+  本轮**现场复核**：`score` 基线"被杀害：0 次" → `kill xiaoseng`
+  致死疥顶小僧 → 判官崔珏送还阳 → 复活后 `score` 显示"被杀害：1 次"，
+  确认修复在真实驱动上生效，`debug.log` 全程无 `combatd` 相关报错。
+- **`list`/`buy` ——真实 bug，已修（新发现，`sjshwzb` 没有这一处）**：
+  南城客栈"店小二"（`d/city/npc/xiaoer.lpc`）的 `list` 指令
+  （`feature/vendor_sale.lpc`/`d/city/npc/xiaoer.lpc` 的
+  `do_vendor_list()`）现场执行时崩溃：`*No program in object
+  '/d/lingtai/obj/shengmao'!`（"三界神帽"，货架上第五项商品）。追查到
+  `d/lingtai/obj/shengmao.lpc` 第 8 行 `set_name( HIC "三界神帽 NOR ,
+  ({...}) );` ——"三界神帽"这个中文字符串字面量缺了闭合引号（正确形状
+  应为 `HIC "三界神帽" NOR`，对照同档案 `std/skill.lpc` 里
+  `HIC "举世无双" NOR` 等一致写法确认），导致后面的 ` NOR` 被吞进字符串、
+  再往后一路吞到下一个真正的引号（`"sheng mao"` 前那个），使编译器在
+  随后的 `set("unit", "顶")` 等语句处把已经是合法 UTF-8 的中文字节序列
+  当成裸源码字符解析，报 `Illegal character 0xe9` 等一串虚假的"非法字符"
+  错误，最终整个档案 `*No program in object*`——和 README 记载的
+  convertd.lpc"杂散非 UTF8 字节转义闭合引号"损坏是同一个根因类别（缺引号），
+  只是这次落在货物档案而不是转档脚本产物。**逐字节比对确认 `sjshwzb` 的
+  同名档案 `d/lingtai/obj/shengmao.lpc` 携带完全相同的缺引号损坏，同样
+  会在 `list` 时炸——是两份档案共同祖先里就存在的 bug，不是本次转档
+  引入的，但此前两轮 §10.7 测试都只测了 `list` 本身没崩（`sjshwzb`
+  那轮的货架里没炸到这一项，或没触发到 `list` 全量遍历），这是本档案
+  第一次真正命中并定位**。已在 `d/lingtai/obj/shengmao.lpc` 第 8 行
+  补回闭合引号。`lpcc --batch` 确认档案编译通过；驱动重启后现场复测
+  `list` 正常显示全部 12 项货物（含"三界神帽"），随后 `buy jitui from
+  xiaoer`（炸鸡腿，八十文钱）用 `clone` 一两银子（一百文）购买，找零
+  精确为"二十文钱"、炸鸡腿正确入包——找零/库存运算本身没有 bug。
+- **拜师（`apprentice`）流程已实测，正反两条路径都正常，无 bug**：
+  南海普陀山"大圣国师王菩萨"（`d/nanhai/npc/master.lpc`）对无门派角色
+  `apprentice pusa` 正确按战功/佛法门槛拒绝（"老夫不收外门弟子……"），
+  南门"赵神将"（`d/nanhai/npc/zhao.lpc`，`attempt_apprentice()` 的
+  `else` 分支对非本门弟子直接收徒、无门槛）`apprentice zhao` 成功拜师，
+  `score` 的"师承"字段正确显示"南海普陀山赵神将"。`feature/
+  apprentice.lpc`/`cmds/std/apprentice.lpc` 机制本身没有 bug；具体
+  门槛数值属于内容设计，未改动。（`sjshwzb` 用的是 `zuozhizhu.lpc`
+  这个不同的掌门 NPC，本档案没有 `d/swordman-map/` 这个区域，改用
+  同样具备"无条件收徒" `else` 分支的 `zhao.lpc`，效果等价。）
+- **大写目录死链——和 `sjshwzb` 完全同一血统的三层修复，已提前在
+  `apprentice` 测试前一并核实存在并修复**：`d/nanhai/npc/master.lpc`
+  的 `carry_object("/d/xuyi/obj/tianlong")->wield()` 会命中
+  `include/weapon.h` 缺失的 `HALBERD`/`F_HALBERD` 宏定义（对比同档案
+  其它 14 种武器类型都有对应宏），这本来会让 7 个现役戟类武器档案
+  （`d/xuyi/obj/tianlong.lpc` 等）编译期直接语法错误、`goto
+  /d/nanhai/xiaoshi` 现场必崩，挡住 `apprentice pusa` 的第一次测试。
+  比对 `sjshwzb` 那轮的诊断和修法（`weapon.h` 补
+  `#define HALBERD "/std/weapon/halberd"` /
+  `#define F_HALBERD "/std/weapon/_halberd"`）后原样移植过来，逐字节
+  相同问题。同时移植了 `std/room.lpc` 的 `make_inventory()` 防护
+  （`new()` 失败返回 0 时不再对 0 调用 `->move()`，改为 `if
+  (!objectp(ob)) return 0;`）和 `reset()` `case 1` 分支的
+  `objectp(ob[list[i]]) &&` 短路检查——`d/nanhai/zhulin0.lpc`（〖紫竹林〗）
+  的 `objects` 表里同样有 `__DIR__ "npc/tianji": 1` 指向不存在的小写
+  路径（真实文件是大写 `/d/youxia/NPC/TIANJI.C`），`goto
+  /d/nanhai/zhulin0` 复现过同一个 `Bad argument 1 to EFUN call_other()`
+  崩溃，修完后房间正常加载（缺失的 NPC 不出现，不崩）。`lpcc --batch`
+  批量复查（11568 个档案，11261 通过/307 失败）确认失败集里只有已知的
+  历史遗留死档案（`/d/nanhai/obj/tianlong` 等），没有新增回归。
+- **邮件系统（"千里眼" NPC）已实测，机制本身没有 bug，但发现一个值得
+  记录的"read"动词歧义（非崩溃，未改动）**：`d/ourhome/npc/bigeye.lpc`
+  的 `inquiry` 表把"mail"/"发信"/"收信"等关键词映射到
+  `send_mail()`/`receive_mail()`，`ask qianli yan about mail` 在
+  南城客栈里成功领到一个私人信箱（`obj/mailbox.lpc`，`千里眼`只在
+  `startroom` 里才发放）。`mail fluffos` 现场完整走完标题→正文
+  （`edit()`，`.` 结束）→是否留底稿（y）的流程，成功寄出（因为收件人
+  就是自己，`send_mail()` 的 `ppl && this_player()->visible(ppl)`
+  分支直接命中同一个信箱对象，`from`/`readmail 1` 都能看到 2 封信）。
+  **发现的歧义**：`obj/mailbox.lpc` 把 `do_read` 同时注册在 `"read"`
+  和 `"readmail"` 两个动词上（`add_action("do_read", "read");
+  add_action("do_read", "readmail");`），但南城客栈本身还有一块留言板
+  （`obj/board/nancheng_b.lpc`，继承 `BULLETIN_BOARD`）也注册了
+  `"read"` 动词；现场验证裸 `read 1` 命中的是留言板的 `do_read()`
+  （返回"留言板上目前没有任何留言。"）而不是信箱的，`readmail 1`
+  则正确显示信件内容——说明这个驱动/mudlib 的多对象同名动词搜索顺序里，
+  房间内其它对象（留言板）的 `add_action` 排在玩家自己随身物品（信箱）
+  前面。这不是崩溃、不是数据丢失（信件一直都在，只是要用没有歧义的
+  `readmail` 才能读到），而且 mailbox.lpc 自己已经预留了无歧义的
+  `readmail` 别名，符合"没有错误信号（崩溃/debug.log 报错/结构性
+  计数器失效）的多半是设计/边界情况"的既定判断标准，所以**未作为 bug
+  修复**，只记录在案，供后续如果要统一多对象动词优先级时参考。另外
+  确认了信箱是房间绑定的临时道具：一旦离开 `千里眼` 所在的
+  `startroom`（南城客栈），信箱会被自动收回（"你将信箱交回给邮差。"），
+  角色死亡时也会被强制收回（"你看到紫电仙人的信箱破空而去……"）——均
+  是既有设计，非 bug。测试产生的邮件数据（`data/mail/f/fluffos.o`）
+  在提交前已删除，不留存测试内容。
+- **管理员写权限、驱动重启持久化均已现场复核，与既有记录一致**：本轮
+  全程使用既有 `fluffos` (admin) 账号，`score` 显示"第 五 次连接"，
+  之前记录的〖重伤〗气血状态、门派/被杀害计数在跨会话/跨死亡后均正确
+  持久化。
+
+修复文件清单（本轮）：`d/lingtai/obj/shengmao.lpc`（缺引号，真实
+崩溃修复）、`include/weapon.h`（补 `HALBERD`/`F_HALBERD` 宏，移植自
+`sjshwzb`）、`std/room.lpc`（`make_inventory()`/`reset()` 空指针防护，
+移植自 `sjshwzb`）。工具调用数约 90 次，在预算范围内。
