@@ -284,3 +284,66 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## PK 战斗深度测试（2026-08-24）
+
+本轮任务原本列出商店购买/门派内技能学习/PK 战斗三项为"从未测试"，
+但复核第四轮记录（见上）后发现前两项其实已经在 round-four
+（2026-08-19）里完整验证通过（大理铁器铺/京城打铁铺 `list`/`buy`/
+`sell`，宋远桥收徒+`learn`）——本轮不再重复，预算全部集中在真正
+的空白：玩家对玩家（PK）战斗。
+
+用真实 `build-debug` 驱动 + admin（`fluffos`）+ 全新注册测试号
+（`pktesty`，注册流程改用 raw Python socket 而非
+`scripts/tmux_mud.sh`，因为中文名字节里偶尔含 `0xFF`，被 telnet
+客户端当成 IAC 转义序列吞掉，导致会话意外落入 telnet 本地命令模式
+——这正是任务说明里提到的已知 tmux 伪影，此次确认属实，用 python
+socket 全程 UTF-8 直连规避）。
+
+- **`no_fight` 房间正确挡下 PK**：新手殿堂/客店未设 `no_fight` 前，
+  `kill fluffos` 报错"这里不准战斗。"（欢迎室里）。
+- **新手保护正确挡下 PK**：两个测试号 `mud_age` 都很小（< 18000），
+  `cmds/std/kill.lpc` 第 62-64 行 `obj->query("mud_age") < 18000` 挡
+  下攻击，提示"你感到一丝内疚，手突然软了下来！"——这是文档化的新手
+  保护机制，不是 bug。用 admin `eval` 把双方 `mud_age` 临时调到
+  30000（纯测试用途，不是代码修复）验证挡阀确实是这个字段在起作用。
+- **`kill` 的"单方合意"握手机制验证通过**：`pktesty` 先对 `fluffos`
+  下 `kill`，`fluffos` 收到红字警告"如果你要和皮卡丘性命相搏，请你
+  也对这个人下一次 kill 指令。"并自动进入非致命对峙（`fight_ob`），
+  此时 `fluffos`未回敬 `kill` 前，`fluffos` 侧 `is_killing()` 为
+  false；`fluffos` 也下 `kill` 后转为双方真实计入 `killer` 表的互
+  杀状态。全程与 `cmds/std/kill.lpc`/`help kill` 文档描述一致。
+- **真实伤害/晕厥/苏醒循环验证通过**：`adm/daemons/combatd.lpc`
+  `do_attack()` 里状态提示逐级升级（气喘嘘嘘→十分疲惫→头重脚轻→半
+  昏迷→"眼前一黑，接著什么也不知道了"晕厥），晕厥后自动苏醒并恢复
+  战意（"愣了一愣，大叫「我宰了你！」"），期间 debug.log 全程无一
+  条运行时报错。用 admin `eval` 调用 `remove_all_killer()`/
+  `remove_all_enemy()` 停战收尾，双方 `quit` 干净退出（`pktesty` 昏
+  迷状态下第一次 `quit` 被吞掉，苏醒后重发一次即正常触发退出流程，
+  这是"忙碌/失去意识时指令被打断"的正常行为，不是 bug）。
+
+### 排查但判定为设计而非 bug：`do_attack()` 里"非 kill 情形也有极小
+真实创伤几率"的布尔表达式
+
+`combatd.lpc` 第 662-673 行判断是否造成"真实创伤"（`receive_wound`，
+区别于消耗性的 `qi` 伤害）的条件是
+`(me->is_killing(...) && P1) || P2`，其中 `P2`
+（`(!weapon)&&!random(7) || weapon&&!random(4)`）没有被
+`is_killing()` 卫护，意味着即使双方只是 `fight`（切磋，`help fight`
+明文写"这种形式的战斗纯粹是点到为止……不会真的受伤"）理论上也有约
+1/7（空手）或 1/4（持械）的几率触发真实创伤，字面上与 `fight`/
+`kill` 两条帮助文档的措辞矛盾。但这条 `combatd.lpc` 是 ES2 血统里
+逐字复制的共享文件——语料库里至少还有 `bmxkx2001`/`cctx`/`hy5`/
+`hy2000`/`jyqxc`/`jhfy`/`jhfy3` 等几十个互不相关的库带着完全相同的
+`!random(7)`/`!random(4)` 结构——分布如此广泛、结构一致（两个分支
+仅除数不同，不像是本库局部代码腐化），判定为 ES2 原始设计里"切磋
+也有极小意外受伤几率"的既有机制，帮助文档只是简化措辞，未在本库或
+任何其它库单独改动。
+
+### 结论
+
+三项任务清单里唯一的真正空白（PK 战斗）已完整验证：房间战斗禁制、
+新手年龄保护、`kill` 单方合意握手、真实伤害/晕厥循环，全部按设计工
+作，全程无 debug.log 报错，未发现新程序 bug。测试号 `pktesty` 存档
+（`data/login/p/pktesty.o`、`data/user/p/pktesty.o`）已在测试结束
+后删除。驱动进程按精确 PID kill，tmux 会话已停止。
