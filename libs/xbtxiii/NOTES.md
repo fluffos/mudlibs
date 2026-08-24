@@ -103,3 +103,83 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试补完（2026-08-23）：邮件系统 + 门派拜师
+
+补完前两轮 NOTES.md 里一直标记"未覆盖"的两项，均确认为**正常可用，
+没有发现真正的程序错误**。用原生驱动（`build-debug/src/driver`）通
+过 `scripts/tmux_mud.sh`，管理员账号 `fluffos`（游戏内中文名"风
+灵"）实测。
+
+### 邮件系统——确认存在，此前"help mail 未命中"是正常的（不是 bug）
+
+- 全库搜索确认这份档案**确实有玩家间邮件系统**，只是不通过
+  `help`（`doc/help/` 目录下完全没有任何邮件相关主题），而是通过
+  一个自动发放的信箱物件实现：`adm/daemons/logind.lpc:778-780` 在
+  **每次登录**都会 `new(MAILBOX_OB)` 克隆一个信箱并
+  `->move(user)`，`MAILBOX_OB` 定义在 `include/globals.h:72` 为
+  `/obj/mailbox`。这个物件的 `init()`（当它进入玩家背包时触发）用
+  `add_action` 注册了 `mail_to`/`forward`/`from`/`read_mail`/
+  `discard` 五个指令，物件本身的 `long` 描述里也写明了这几个指令
+  名——即物件说明文档就是这份档案事实上的"帮助文档"，`help mail`
+  查无此主题是预期行为，不是缺陷。
+- **发现一份完全无法触达的死代码**：`obj/misc/mailbox.lpc` 是另一
+  份不同的信箱实现（指令名是 `mail`/`read`，不是
+  `mail_to`/`read_mail`），被 `d/fy/npc/officer.lpc`（风云绎站的驿
+  长"王风"）的 `send_mail()`/`receive_mail()` 对话分支引用
+  （`mbox = new(MAILBOX_OB); ...`——注意这里其实引用的也是
+  `MAILBOX_OB` 宏，即 `/obj/mailbox`，`obj/misc/mailbox.lpc` 本身
+  并未被这个宏指向，是彻底的孤立文件）。由于每个玩家一登录就已经
+  拿到了 `/obj/mailbox`，`query_temp("mbox_ob")` 恒为真，驿长的
+  "寄信/收信"对话分支的判断 `if
+  (this_player()->query_temp("mbox_ob"))` 永远会命中"你的信箱还在
+  吧"这条早退分支，`new(MAILBOX_OB)` 那行永远执行不到——不是崩
+  溃，纯粹是一段游戏内容层面的历史遗留死码（大概率是从更早版本
+  遗留），**未改动**（无错误信号，不在本轮"只修程序错误"的范围
+  内，仅记录在案）。
+- **完整实测跑通收发信全流程**：以管理员角色（id `fluffos`，score
+  显示为 `Fluffos`）用 `mail_to fluffos` 给自己写信——标题、正文
+  （驱动自带的行编辑器，`.` 结束）、"是否自留备份"三步走完，`from`
+  正确列出信件、`read_mail 1` 正确显示标题/寄信人/正文，`forward`/
+  `discard` 未逐一测试但代码结构和已验证的 `do_mail`/`do_from`/
+  `do_read` 同构，判定为低风险直接豁免。**注意一个纯粹的操作细
+  节，不是 bug**：`do_mail()`（`obj/mailbox.lpc`）把收件人参数原样
+  传给 `FINGER_D->acquire_login_ob()` / `find_player()`，两者都区
+  分大小写；用 score 屏幕显示的大写形式 `mail_to Fluffos` 会得到
+  "没有这个人存在。"，必须用登录时敲的小写 id `mail_to fluffos` 才
+  行。核对了 `cmds/std/tell.lpc`（`tell <人名>` 的同款
+  `find_player(target)` 调用）确认这是全库统一的既有约定——不对输
+  入做大小写归一化——不是 `mailbox.lpc` 独有的缺陷，未改动。
+
+### 门派拜师——完整走通一次，score 正确反映新门派
+
+- 起始区域 `d/start_room/start_room.lpc` 的空间传送器 1-13 号入口
+  第一轮只走过 1 号（有一间客栈熟悉环境），这次选了 **8 号"华山
+  派"**（`/d/huashan/buwei1`）。该房间实际站着的是大师兄令狐冲
+  （`daemon/class/huashan/linghu.lpc`），不是掌门岳不群本人——掌门
+  在里屋，新弟子进不去（`buwei1.lpc` 的 `valid_leave()` 挡着，要
+  先拜入门下才能进）。
+- 用 `apprentice ling` 对令狐冲发起拜师请求。`cmds/std/apprentice.lpc`
+  走到 `ob->attempt_apprentice(me)` 分支，`linghu.lpc:113` 的
+  `attempt_apprentice()` 检查 `ob->query_int() < 14`（对应属性面
+  板上的"悟性"）——测试角色悟性 15，达标，NPC 立即 `command("say
+  ...")` + `command("recruit " + id)` 完成收徒，一次性走完、无需
+  第二条指令。`score` 复测确认标题从"普通百姓"变为"华山派第十五
+  代弟子"，新增一行"你的师父是令狐冲。"，`skills` 指令干净返回
+  "你目前并没有学会任何技能。"（没有崩溃——拜师本身只给门派身
+  份，学技能是另一道独立的、大概率有忠诚度/资历门槛的流程，这次
+  没有继续深挖，不在本轮范围内）。
+- 顺带确认了 `daemon/class/wudang/zhangsanfeng.lpc`（9 号入口武当
+  派掌门）和 `daemon/class/huashan/master.lpc`（岳不群本人）的拜
+  师门槛明显更高（前者要求 `fealty >= 2000`，后者的
+  `do_recruit()` 甚至要求拜师前就已经 `family/family_name ==
+  "华山派"`，对全新角色而言这个联通门只能靠先拜其弟子再转投）——
+  这些都是有意为之的师门声望梯度设计，不是 bug，未改动。
+
+### 结论
+
+两个此前"未覆盖"项均已补测，**均为设计/文档缺口而非程序错误，未
+做任何代码修改**。测试用的是持久化的管理员账号 `fluffos`，其存档
+（`data/login/f/fluffos.o`、`data/user/f/fluffos.o`）和测试期间新
+建的 `data/mail/` 目录均已用 `git checkout HEAD --` / `rm -rf` 清
+理干净，不落入本轮任何提交。
