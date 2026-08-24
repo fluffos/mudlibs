@@ -636,3 +636,87 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Round-four follow-up: combat / shop / sect apprenticeship (2026-08-24)
+
+Closed the three gaps flagged as "未覆盖" above. Walking exploration from
+the starting room again turned up nothing (the only exits are `north`
+into a short dead-end path, and `out` into a fogged teleport) — reachable
+hostile NPCs, a working shop, and the three real sect masters all live in
+completely separate map regions (`/d/dntg/hgs/*`, `/d/lingtai/*`) with no
+room-file path connecting them back to the start area, so this pass used
+the admin account's `goto` to reach them directly, per the task's
+"map-reading tools" allowance.
+
+- **Combat**: `goto`'d to `/d/dntg/hgs/dongnei` (水帘洞内) and fought
+  `混世魔王` (`attitude: "killer"`, one of the few genuinely aggressive
+  NPCs in this archive — most `d/dntg/hgs` NPCs are `"peaceful"`/
+  `"friendly"`). Combat ran to resolution (the under-powered admin lost
+  and was moved to a recovery inn with health restored) with zero new
+  lines in `debug.log` — confirmed clean, no bug.
+- **Shop/economy**: `吴家当铺` (`/d/dntg/hgs/pownshop`, `HOCKSHOP`/
+  `std/room/hockshop.lpc`). Cloned two `mujian` (木剑, value 100),
+  `sell`'d both for 50 copper each (matches the coded 50% sell price),
+  confirmed the shop's `list` then showed "木剑(mu jian)：一两白银：还
+  剩二柄" (100 = the item's real `value`, matches `do_buy`'s full-price
+  logic). Sell math, list math, and inventory bookkeeping all checked
+  out — no bug found.
+- **Sect apprenticeship — real bug found and fixed.** `std/char/
+  familymaster.lpc`'s `attempt_apprentice()` (the function every
+  NPC-initiated `apprentice <master>` call routes through, per
+  `cmds/std/apprentice.lpc`'s `else ob->attempt_apprentice(me)` branch)
+  had:
+  ```
+  if (who->query_family() != me->query_family()) {
+    ... "我不收外门弟子" (reject) ...
+  }
+  ```
+  `query_family()` returns `query("family/family_name")`, which is
+  `0`/undefined for any player who has never joined a sect — i.e.
+  **every single first-time applicant**, always. Since `0` never equals
+  the master's own family-name string, this check rejected 100% of
+  fresh apprenticeship attempts at all three of the archive's real,
+  reachable sect masters (`master yunyang`/方寸山三星洞,
+  `ma gu`/月宫, `tidu seng`/南海普陀山 — all three inherit
+  `FAMILYMASTER` directly and share this one broken method), making
+  organic/in-person sect-joining completely unreachable game-wide. This
+  is the same missing-existence-guard shape as AGENTS.md §7.117, just in
+  a different file than that sweep covered (`cmds/std/apprentice.lpc`
+  and `cmds/std/recruit.lpc` in this archive already had the correct
+  `who->query("family") && ...` guard — only `familymaster.lpc`'s
+  independent copy of the same check was missing it). The file's other
+  4 occurrences of the identical-looking `who->query_family() !=
+  me->query_family()` comparison (`expell_me`, `ask_mieyao`,
+  `rank_player`, `ask_equip`) were left untouched — those correctly gate
+  "must already be a member" actions, where rejecting a family-less
+  caller is the intended behavior.
+  - **Fix**: `if (who->query_family() && who->query_family() != me->query_family())`.
+  - **Verified live**: pre-fix, `apprentice master yunyang` (after using
+    admin privilege only to satisfy the unrelated `LEVEL_D->
+    can_apprentice()` level-100 gate, and the documented starting-room
+    gift NPC for `combat_exp`) reliably produced "我不收外门弟子，小兄
+    弟还是另寻他人吧！". After the fix + a full driver restart (an
+    in-place `update` of the file recompiles the blueprint but not
+    already-`clone()`d room NPC instances, so a hot-reload alone did
+    **not** pick up the fix — worth remembering for future spot-fixes
+    of files reached only through room-populated clones), the same
+    command produced "云阳真人决定收你为弟子" / "你跪了下来...磕了四
+    个响头" and `score` correctly showed 门派：`[方寸山三星洞]`,
+    师承：`[方寸山三星洞云阳真人]`, 职称: `方寸山三星洞第四代弟子`.
+  - Test-account pollution (the `level`/`family` properties set on the
+    admin account purely to reach/pass the prerequisite gates) was
+    reverted via `call me->delete("family")` / `call me->delete(
+    "level")` and saved before logging out; the granted skills/
+    combat_exp from the starting-room gift NPC were left as-is since
+    that gift is the documented, already-tested normal early-game path
+    and a prior session's `save()` already carried the same values.
+
+Driver-side observation (not a mudlib bug, noted for future testers of
+this specific archive): this lib's ~100 background `rzr` NPC objects
+create a genuinely heavy, **growing** memory/CPU load — an unconstrained
+boot reached ~21GB RSS (86% of a 23GB box) within ~14 minutes uptime,
+risking a real system OOM. A `ulimit -v` cap of 8GB was too tight (the
+driver aborted on `bad_alloc` under real background-NPC load); 18GB was
+sufficient for a short test session. Future testers of this lib should
+either boot under a generous `ulimit -v` or keep sessions short and
+watch `free -h`.
