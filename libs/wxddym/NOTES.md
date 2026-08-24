@@ -323,3 +323,135 @@ checkout` before committing (per the standing "git add -u, not bare
 dir" + "no runtime logs in docs" conventions) -- only the two real
 source edits (`adm/simul_efun/object.lpc`, `clone/npc/warcraft.h`) are
 part of this commit.
+
+## §10.7 round-three/four gap closure: 拜师 apprenticeship, map exploration, combat (2026-08-24)
+
+Closed the three gaps the earlier §10.7/round-two sessions left explicitly
+untested (see the round-two entry above): sect apprenticeship, real map
+exploration beyond the newbie-village starting room, and combat. Also
+specifically checked whether `bai.lpc`/`apprentice.lpc` needed the §7.117
+"first-time applicant has no family yet" guard, since this lib's
+`bai.lpc`/`apprentice.lpc` files had only been touched for the unrelated
+§7.70 `query()` arg-type bug this session, never audited for §7.117.
+
+**§7.117 check -- clean, no fix needed.** `feature/apprentice.lpc`'s
+`recruit_apprentice()` already guards the betrayer comparison with
+`family_name = ob->query("family/family_name"); if (family_name &&
+family_name != my_family["family_name"])` (existence-checked before
+comparing). `cmds/skill/apprentice.lpc` and `cmds/skill/recruit.lpc`
+(the interactive verb wrappers) both gate every family-name comparison
+behind `mapp(family) && ...`/`mapp(ob->query("family")) && ...`. All
+three already match the "correct" pattern from the AGENTS.md §7.117
+catalog. Confirmed live: a fresh, family-less character's apprenticeship
+completed cleanly with no false "背叛师门" rejection (see below).
+
+**Map exploration**: walked the newbie-village road network on foot
+(世界之树 -> 青石小路 -> 练武场 -> 后村小路 -> 后村山路 -> 乱石岗, and
+back), then used the admin `goto` wizard command to reach
+`/d/shushan/bingqiku` (蜀山派/Shushan-sect weapon hall, part of the
+`中原正道` righteous-sect network reachable from the main city map) and
+back to newbie-village combat rooms. No broken exits, no crashes.
+
+Noted but NOT fixed (no error signature, matches the existing "dead
+newbie-quest menu option" pattern already documented in this file's
+round-two entry): `d/newbie/npc/huabo.lpc`'s village-exit dialog
+(`ask hua about 出村`) only *displays* option "1" (leave to 扬州武庙) even
+though the underlying `get_select()`/`get_sel_fam()` code for option "2"
+(teleport to one of six family/宗族 entrance rooms) is still fully
+functional if invoked directly -- looks like an intentionally
+simplified/pruned menu, not a break. `d/newbie/npc/wubo.lpc` (the
+newbie-quest's own designated apprenticeship target, id `wu bo`/`wu`/
+`bo`) has its `attempt_apprentice()` override entirely commented out, so
+`bai wu` there leaves the offer permanently pending (the base
+`feature/apprentice.lpc` main-flow calls `ob->attempt_apprentice(me)`,
+which silently no-ops via this driver's call_other-to-missing-function
+behavior -- no error, just nothing happens). This makes the in-village
+"拜师" newbie-quest step (topic 107 in `laocunzhang.lpc`) permanently
+uncompletable as written, but it never surfaced as a crash or logged
+error, so per this project's "no error signature = design, not a bug"
+rule it's documented here rather than "fixed" -- worth flagging for a
+future content-focused pass, not a programming-bug sweep.
+
+**Apprenticeship -- works cleanly.** Used a real sect master instead:
+`kungfu/class/shushan/lingyunzi.lpc` (凌云子, 蜀山派/Shushan sect,
+reachable via `/d/shushan/bingqiku`), whose `attempt_apprentice()` calls
+`command("recruit " + ob->query("id"))` for a family-less applicant.
+`bai yunzi` (id must include the space-separated full alias, e.g.
+`bai wu bo`/`bai yunzi` -- bare concatenated ids like `bai wubo` don't
+match `present()`) on the demo `fluffos` account (previously family-less
+per the round-two entry) completed instantly and correctly: `score`
+went from 【门派】普通百姓/【师承】你还没有拜师 to 【门派】蜀山派/
+【师承】凌云子, title 蜀山派第四代弟子. No crash, no rejection, no
+§7.117-style false "背叛师门" -- consistent with the clean guard code
+found above.
+
+**Combat -- works cleanly, but confirms a real bug elsewhere.** The demo
+account's combat stats are effectively zero (战斗攻击力 1, 战斗伤害力 0
+-- an artifact of the round-two "投胎" reincarnation choices, not this
+task's concern) and `qi` (气血/HP) regen was capped below the 30%
+threshold `kill`/`fight`/`hit` all require (`cmds/std/kill.lpc:39`,
+`fight.lpc:29`, `hit.lpc:32`: `me->query("qi") < me->query("max_qi") *
+3/10` -- a legitimate anti-suicide safety gate, not a bug). `yun heal`
+topped `qi` over the threshold; `kill tu` (野兔/wild rabbit,
+`clone/quarry/tu`, present in numbers in several newbie-village rooms)
+then engaged combat cleanly: `看起来野兔想杀死你！`, the character's
+near-zero combat stats correctly triggered the auto-flee AI path
+(`看来该找机会逃跑了...`, moved rooms), repeated twice more with the
+same clean resolution. No crash, no debug.log error from the fight
+itself.
+
+**Real bug found and fixed: `feature/dbase.lpc`'s `add()` crashes on any
+non-interactive `add("potential", ...)`/`add("combat_exp", ...)`
+call.** While waiting (real-time, for `qi` to regen) for the combat
+test above, a genuine new runtime error appeared in `debug.log`:
+
+```
+执行时段错误：*Bad argument 1 to EFUN call_other()
+Expected: object, string, array,  Got: int(0).
+程式：/feature/dbase.lpc 第 81 行
+物件：/clone/user/user
+呼叫来自：/clone/user/user.lpc 的 reset() 第 83 行
+呼叫来自：/feature/dbase.lpc 的 add() 第 81 行
+```
+
+`feature/dbase.lpc`'s `add(string prop, mixed data)` (the core
+mapping-backed stat-write primitive nearly every object in this lib
+inherits via `F_DBASE`) does `object me; me = this_player();` and then,
+for `prop == "combat_exp" || prop == "potential"` specifically, calls
+`me->query_temp("last_eat/exp")` unconditionally to check for an active
+"just ate a food buff" exp/potential multiplier -- with no null check.
+`this_player()` is legitimately 0 whenever `add()` runs outside an
+interactive command context. `clone/user/user.lpc`'s own `reset()`
+(a driver-invoked lifecycle callback, not player-initiated) does exactly
+that: `add("potential", 1)` whenever `potential - learned_points < 100`
+-- a condition true for essentially every low-level/fresh character,
+including the demo account mid-testing. This is a real, previously
+undocumented crash bug (call_other on `int 0`, a driver-API-misuse
+pattern with a clean error signature), not a content/balance issue, and
+it fires on `reset()` for any qualifying character, not just this
+session's test account -- high blast radius since `add()` is the single
+shared stat-write primitive.
+
+Fix (one line, `feature/dbase.lpc` line 81):
+```lpc
+// BEFORE:
+    if (me->query_temp("last_eat/exp") > 1) {
+// AFTER:
+    if (me && me->query_temp("last_eat/exp") > 1) {
+```
+
+Verified: `lpcc --batch` full-tree compile check passes clean (`PASS
+/feature/dbase`); live `update /feature/dbase` on the running driver
+recompiled successfully (`重新编译 /feature/dbase.lpc：成功！`); a
+further ~115s idle wait with the fix loaded produced no recurrence of
+the error (the mudlib's own `debug.log` rotated mid-session so an exact
+before/after count wasn't directly comparable, but zero new occurrences
+appeared in the post-fix window against the same live triggers that
+produced one in a comparable pre-fix window).
+
+Committed: the `feature/dbase.lpc` fix, plus the demo `fluffos` account's
+real apprenticeship-and-combat progress (`data/{login,user}/f/fluffos.o`
+-- per the existing convention of keeping this account's genuine
+playthrough state). Reverted transient `data/newsd.o` churn. Driver
+killed by exact PID, no tmux session left running, no test characters
+created (all testing reused the existing demo `fluffos` admin account).
