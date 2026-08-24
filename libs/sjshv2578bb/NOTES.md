@@ -78,3 +78,64 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试第四轮（2026-08-23）— 补齐前一轮"未覆盖"的三项
+
+用真实驱动（`~/src/fluffos/build/src/driver`，端口 40125）通过 `scripts/tmux_mud.sh`
+补齐前一轮记录在"未覆盖"里的 `buy`/拜师/`WIZPWD` 校验分支三项，同时对照
+本 session 在 `sjshwzb`/`sjshwzjqb` 两个同家族手足档案上发现的两个真 bug
+做移植排查。
+
+- **combatd.lpc killer_reward() 的 PKD/DIE 缺失 bug——不适用，已确认排除**：`sjshwzb`/`sjshwzjqb`
+  上发现的"`killer->add("PKS", 1);` 之后缺 `killer->add("PKD", 1); victim->add("DIE", 1);`
+  两行，导致 score 的『被杀害』计数永远不增长"这个 bug 形状在本档案（`work/adm/daemons/combatd.lpc`
+  第 994-995 行）**本来就有** `victim->add("DIE", 1);`（只是没有紧跟着的 `killer->add("PKD", 1);`）。
+  进一步核对发现 `PKD` 这个统计键在全档案（含两个手足档案）都没有除 `combatd.lpc` 自身之外的
+  读取点——真正驱动 score 显示的是 `DIE`（普[..]位、总[..]位杀害计数），而本档案的 `cmds/usr/score.lpc`
+  『杀害记录』一行本身就只显示"杀害玩家：普[]黄[]总[]位，杀死敌人：[]位"，**根本不显示"被杀害"次数**
+  （和 sjshwzb 的 score 格式不同，本档案是独立的显示格式）。所以两个手足档案上那个"被杀害计数卡在 0"
+  的具体症状在本档案不存在——既没有对应的可见字段，DIE 计数本身也已经在正确递增。确认不需要移植修复。
+- **`d/lingtai/obj/shengmao.lpc` 未闭合字符串 bug——文件不存在，不适用**：本档案压根没有
+  `d/lingtai/obj/shengmao.lpc` 这个文件（`d/lingtai/` 目录下没有任何 `shengmao*` 文件），
+  不是"文件存在但字符串已经修好"，是这份快照原本就没有这个物品档案。无需处理。
+- **发现一个独立的、真实的 compile-crash bug（不在原始核对清单里，是本轮探索路上撞到的）：
+  `d/sea/npc/beast1.lpc` 有两处损坏，级联触发"天地劫"世界事件生成怪物时崩溃**——
+  在世界事件（"天地劫"，游戏内定时触发的门派沦陷剧情，会调用 `disasterd.lpc` 批量
+  `copy_npc()` 生成/搬运各地怪物）巡到东海龙宫附近时，现场触发了
+  `执行时段错误：*No program in object '/d/sea/npc/beast1'!`：
+  1. 文件末尾（第 75 行，`}` 闭合大括号之后）有两个孤立的 U+FFFD 替换字符（`\xef\xbf\xbd \xef\xbf\xbd`），
+     不在任何字符串或注释内，触发 `error: Illegal character 0xef` / `syntax error, unexpected invalid token`，
+     导致整个文件编译失败（"No program in object"）。这是一段游离在函数体外的纯垃圾字节，删掉不影响任何逻辑。
+  2. 修好（1）之后暴露出第二层：`set("race", "...")` 的值本身也被同一种编码损坏污染成
+     `\xd2\xb0`（GBK『野』）+ 两个 U+FFFD——`adm/daemons/chard.lpc` 的 `setup_char()` 对
+     `race` 做 `switch`，"人类"/"妖魔"/"野兽"是仅有的三个合法值，损坏后的字符串匹配不上任何
+     一个，落入 `default: error("Chard: undefined race " + race + ".\n")`，未被外层 `disasterd.lpc`
+     捕获，直接中断该 NPC 的 `create()`。凭『野』字前缀在"人类/妖魔/野兽"三选一里唯一对应
+     "野兽"（且该 NPC 本身就是 `d/sea/npc/beast1.lpc`——文件名和用途都指向"野兽"这个种族），
+     以及后续 `set("long", ...)` 等其它字段同样是同批次 GBK→UTF8 转换损坏的产物（未受影响，
+     因为在字符串内部，driver 不校验字符串内容合法性），判定这是可以安全、无歧义修复的编码
+     损坏，恢复为 `set("race", "野兽")`。两处都改完后 `update /d/sea/npc/beast1` 打印"成功！"，
+     不再有编译错误或运行时 `error()`。这是本 session 在同一份"游离字节+损坏字符串导致 switch/default
+     崩溃"这条 GBK 转 UTF8 损坏链路上遇到的一个新变体，和 group_note 记载的『3 份 CJK 重新加
+     空格损坏档案』是不同的损坏形态（那批是排版工具误插空格，这份是原始转码时替换字符残留）。
+     只修了这一个文件，未做全库同类扫描（时间有限，留给未来一轮）。
+- **`buy` 补测通过**：在〖荒郊小店〗对店小二（`d/ourhome/npc/xiaoer.lpc`，id 是 `xiao`/`xiao er`/
+  `waiter`，不是 `xiaoer`）克隆一个"白银"（`obj/money/silver.lpc`，`base_value` 100 文）后
+  `buy 1 jitui from xiao`，`list` 显示炸鸡腿单价 80 文，成交后 `i` 确认背包里多了『炸鸡腿』
+  和找零『二十文铜钱』（100-80=20，找零金额正确），无崩溃。测试后 `drop` 掉两件物品清理干净。
+- **拜师流程补测通过**：`d/shushan/tower.lpc`（镇妖塔）里的『蜀山剑派入门弟子 李逍遥』
+  （`d/shushan/npc/lxy.lpc`）`attempt_apprentice()` 无条件接受，`apprentice li` 后完整走完
+  "磕头拜师"对话，`score` 确认『师承』字段从『未入师门』变成『李逍遥』、职称栏也同步显示
+  『蜀山剑派第六代弟子』。未测试拒绝分支（本档案没找到一个"总是拒绝"的现成 NPC，
+  不影响判定——接受路径本身就是关键的可写状态变更，已验证正确落地）。
+- **`WIZPWD` 校验两个分支补测通过**：用 `fluffos` 账号 `wizpwd` 指令首次设定巫师密码
+  （`TestWiz123`，旧密码留空放行，因为当时 `wiz_password` 还未设置——`get_old_pass()`
+  对未设置密码的情况不做旧密码校验，符合预期）后，`quit -lovesjsh` 正常退出，用两条
+  独立连线分别验证：（a）故意输错密码→打印『密码错误！』随即断线；（b）输入正确密码
+  `TestWiz123`→打印『密码正确！』正常进入游戏。`crypt()` 比对分支本身没有 bug，
+  上一轮记录的『未设置时不再卡死』和这一轮补测的两个校验分支加起来，`WIZPWD` 全流程
+  已经完整覆盖。
+
+结论：本轮补测三项全部通过（`buy`、拜师、`WIZPWD` 两个校验分支），两个手足档案上
+的已知 bug 都确认不适用于本档案（一个是本档案本来就没有该 bug 症状，一个是文件根本
+不存在），额外发现并修复了 `d/sea/npc/beast1.lpc` 的双重编码损坏 compile-crash bug。
