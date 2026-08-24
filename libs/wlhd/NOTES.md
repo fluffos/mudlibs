@@ -199,3 +199,160 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## §10.7 deep functional test, round three (2026-08-24): closing the four gaps flagged by NOTES.md audit
+
+Prior passes never actually exercised death/revival, shop `buy`, sect
+apprenticeship, or a message-board `post`/read round trip. This pass
+closed all four, live, against a freshly-rebuilt `fluffos` driver
+(`build-debug/src/driver`, `src/fluffos` checkout at `1e74a758`).
+
+### Found and fixed: `securityd.lpc` `valid_read()` self-recursive infinite loop — hits EVERY non-rock/jerry login
+
+`adm/daemons/securityd.lpc`'s `valid_read(file, user, func)` has a
+trusted-caller bypass list (`sscanf(base_name(user), "/adm/daemons/%*s")
+|| ".../adm/etc/%*s" || ".../feature/%*s" || ".../inherit/%*s" ||
+".../include/%*s" || ".../cmds/%*s")` that lets system code read
+anything. It was **missing `/adm/obj/`** — the directory holding
+`master.lpc` and, critically, the special object the driver attributes
+every **simul_efun** call to (`base_name(user)` prints as
+`/adm/obj/simul_efun` for any call made from inside a simul_efun body).
+
+The deny branch a few lines below (for any non-rock/jerry player reading
+a path under `/log/`, `/u/rock/`, `/u/jerry/`, or `/u/kjh/`) calls
+`log_file("file/bug_read", ...)` to record the violation. `log_file()`
+(`adm/simul_efun/file.lpc`) calls `assure_file()`, which calls
+`file_size()` on that *same* `"/log/file/bug_read"` target path before
+writing it — and that `file_size()` call re-enters `valid_read()` with
+`user` = the simul_efun wrapper object. Because `/adm/obj/` wasn't in
+the trusted-caller list, that nested call takes the *same* deny branch
+again, logging the violation again, forever — a textbook
+self-recursive cycle, not just an incidentally-deep call chain — until
+the driver's call-depth limit aborts with `Too deep recursion.` This
+fires on **every single login by any account that isn't `rock`/`jerry`**
+(including the seeded admin, `fluffos`), because `clone/user/logind.lpc`'s
+own `enter_world()` unconditionally probes `file_size("/log/login/notice")`
+right before the "身份消息" banner — that first denied read starts the
+cycle. It's non-fatal (the driver's per-call catch absorbs it and login
+continues) but wastes real cycles on every login and floods the
+player's screen with ~35 repeated "警告：你不能操作这些目录下的文件。"
+lines before the "身份消息" banner appears — confirmed 100%
+reproducible across repeated fresh admin logins before the fix, and
+gone (clean login, zero `Too deep recursion` in `debug.log`) after
+adding `sscanf(base_name(user), "/adm/obj/%*s")` to the bypass list, on
+both the admin account and a fresh non-admin registration.
+
+### 1. Death/revival: clean, full cycle verified
+
+`admin call <id>->die()` shortcut used per this project's established
+pattern (registered a fresh non-admin test character, `wlhdtest`/
+`测试武林`, since the seeded admin's 240000/174000/218400 attack/dodge/
+defense make it unkillable via normal combat — and per AGENTS.md
+§10.7's item 6a, an admin/`wizardp()` account can also be silently
+excluded from the ghost-NPC flow by design, so a non-admin target is
+the correct choice regardless). `call wlhdtest->die()` triggered the
+real death sequence: "你大叫一声倒在地上，挣扎了几下，死了！" → moved to
+`鬼门关` (`d/death/npc/wgargoyle.lpc`'s room) → all 5 `death_msg` stages
+fired automatically via `call_out` over ~25s (no player input required,
+despite the flavor text reading like a question) → `reincarnate()` →
+moved to `REVIVE_ROOM` (`d/city/wumiao`). `score` afterward showed
+"你共死亡：1 次" and reduced `<精>`/`<气>` (expected death penalty), no
+`debug.log` errors. Confirms the §7.68 fix from an earlier pass
+(`bgargoyle`/`wgargoyle`'s retry-guard, later reverted per the
+2026-08-05 correction — see above) never actually needed the revert's
+concern to trigger: this is a clean single-pass `init()`/`call_out()`
+flow, no reentrancy hazard exercised.
+
+### 2. Shop `buy`: clean, correct change/inventory math
+
+`小贩` NPC (`d/village/npc/seller.lpc`, `feature/dealer.lpc`'s
+`do_buy()`) in `d/village/ehouse1`. Gave the test character 500 coin
+(admin `clone`d a `/clone/money/coin`, `set_amount(500)`, `give`'d it —
+note `give` requires `wizardp()` to bypass `no_give`, and requires the
+target to be genuinely `interactive()`, i.e. actually connected, not a
+stale disconnected body left in the room from a prior test connection).
+`buy stick` ("手杖", value 100) succeeded: "你向小贩买下一根手杖。", the
+item appeared in inventory, and the money correctly decremented by
+exactly 100 (500 coin → auto-consolidated display as "四两银子", i.e.
+400 remaining at the coin/silver conversion rate). No bug.
+
+### 3. Sect apprenticeship (拜师): clean, `score` reflects new sect
+
+`bai`/`apprentice` (`cmds/skill/apprentice.lpc`) against 欧阳不空
+(`d/tongchi/npc/ouyang.lpc`, 通吃帮 second-generation elder, whose
+`attempt_apprentice()` auto-accepts any non-`无性`-gender applicant via
+`command("recruit " + ...)`) — reached via admin `goto`/`summon` since
+the test character has no wizard-level travel shortcuts. Checked this
+lib's `apprentice.lpc`/`feature/apprentice.lpc` against the §7.117
+"betrayal check missing a first-timer guard" pattern flagged for this
+session: **not present here** — every family-name comparison is
+correctly guarded by `mapp(me->query("family"))`/`mapp(ob->query("family"))`
+before dereferencing, both in `apprentice.lpc` (line ~40) and
+`feature/apprentice.lpc`'s `recruit_apprentice()`/`is_apprentice_of()`.
+`bai ouyang` completed cleanly: "你跪了下来向欧阳不空恭恭敬敬地磕了四个
+响头，叫道：「师父！」恭喜您成为通吃帮的第三代弟子。" — `score`
+afterward showed 称谓 "通吃帮第三代弟子" and 师傅 "欧阳不空". No bug.
+
+**Note, first attempt used the seeded admin account and silently
+failed** (no error, no message, `bai ouyang` just printed "你想要拜欧阳
+不空为师。" and nothing further) — root-caused via temporary
+`debug_message()` instrumentation (removed before finishing) to
+`clone/user/user.lpc`'s `id()`: `if (this_player() &&
+!this_player()->visible(this_object())) return 0;` — an ordinary NPC
+(`this_player()` during the NPC's own `command("recruit ...")`) cannot
+`present()`-match an admin whose `env/invisibility` is set (which
+`logind.lpc` sets by default for every `wizardp()` login), so
+`recruit.lpc`'s `present(arg, environment(me))` never finds the admin
+at all. This is the same documented class as AGENTS.md §10.7 item 6a
+(admin accounts are deliberately invisible to ordinary NPC-driven
+interactions) — not a bug, just another reason to always keep a
+non-admin test character on hand.
+
+### 4. Message board `post`/read: clean round trip
+
+`post <title>` → line editor (`.` to save) → `read <num>` at 意见簿
+(`d/city/wumiao`'s board, `inherit/misc/bboard.lpc`). Full round trip
+(title + body, correct author/timestamp, board's unread/total counts
+incrementing) confirmed clean via a fresh raw Python socket connection.
+Test posts deleted afterward (`delete <num>`, works because the poster
+owns their own post) to leave the board exactly as before (11 posts).
+
+**Two test-tooling false alarms hit and resolved along the way (not
+mudlib bugs)**: (1) `scripts/tmux_mud.sh`'s multi-line send into the
+board's line editor tripped the local `telnet` client's own escape
+handling, dropping the session into a dead `telnet>` prompt — recovered
+by switching to a raw Python socket for this specific interaction
+(matches this session's guidance to cross-check `tmux_mud.sh` mojibake/
+corruption against a fresh raw socket, generalized here to a different
+tmux/telnet client-side artifact, same remedy). (2) The first raw-socket
+attempt used the wrong wire encoding (GBK) and produced mojibake
+("锟斤拷...") in the posted title/body — this lib's actual wire encoding
+is UTF-8 (confirmed by decoding the login banner correctly only under
+UTF-8); redone with the correct encoding and the round trip was clean.
+
+### Cleanup
+
+Test character `wlhdtest`/`测试武林` was **not** committed (its save
+files were deleted before finishing, per the driver's own built-in
+"logged in under 30 minutes → save deleted on quit" resource-saving
+rule — see below — plus a manual `rm` of the residual file after the
+final driver shutdown autosave). All incidental `data/` drift from this
+session (`fluffos`'s equipment/gold from normal play, `ccc`/`cscb`/
+`seven`/`area/*` background `heart_beat()` saves, the board's pure
+resave-reordering diff) was reverted via `git checkout` before
+committing — only the `securityd.lpc` fix is in the diff.
+
+### Observation (not a bug, documented for whoever next investigates `fluffos` account save/quit behavior)
+
+This session finally explains the "mysterious `fluffos.o` deletion after
+`quit`" flagged as unexplained in the 2026-08-19 §7.100 entry above:
+`cmds/usr/quit.lpc` has an explicit, intentional resource-saving rule —
+any account that has been logged in less than 30 minutes
+(`me->query("mud_age") < 1800`) gets **both** its `login/` and `user/`
+save files `rm()`'d on `quit`, with a player-facing warning message
+("注意：由于您这个ID登陆不到30分钟，系统为了节省资源不给予存档!")
+printed at the exact same time. This is deliberate design, not a bug —
+confirmed by the matching warning text and reproduced consistently
+every time a short session `quit`s. Not previously connected to the
+2026-08-19 observation because that pass didn't have a `quit` message
+correlated with the deletion in the same session.
