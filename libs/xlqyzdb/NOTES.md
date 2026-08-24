@@ -391,3 +391,98 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试补测：真实 PVE 战斗 + 商店买卖（2026-08-24）
+
+补齐上一轮标记为"未覆盖"的两项（真实野外战斗、`buy` 商店购买），
+使用管理员账号 `fluffos`。
+
+### 真实 PVE 战斗
+
+从起始房间〖南城客栈〗沿 `west/south/south/south/west/northwest/
+west/south` 到〖民居〗（`d/city/minju3.lpc`），`kill rat` 攻击非陪练
+性质的〖大老鼠(Rat)〗。战斗完整回合制展开（拳法/擒拿/腿法攻防轮流
+描述、命中/闪避判定、体力状态提示逐级下降），管理员角色自身未受
+训练、命中率极低，最终被大老鼠击杀——`你死了` → 传送到〖阴阳界〗
+死亡之门（`d/death/gate.lpc`）→ 判官崔珏对话 → 自动"命不该死"判定 →
+复活并传送到〖荒郊小店〗，随身携带的不值钱物品掉落一件（预期行
+为）。整个死亡→复活流程正确完成，未见任何崩溃或卡死；`debug.log`
+干净（唯一相关记录是下方 emoted 的已知一次性提示，见下）。结论：
+真实 PVE 战斗机制（含死亡与复活）功能正常，无程序 bug。
+
+### 商店买卖（`buy`/`sell`，董记当铺 `d/city/dangpu.lpc`）
+
+路径：起始房间 `west` → `west`（朱雀大街 → 董记当铺）。用 `clone`
+指令（管理员权限）复制一把〖铜锤〗（`value` 500）验证 `sell`/`buy`
+的金额与库存计算：
+
+- `value hammer` 正确报价"五两白银"（500），卖断价"二两白银又
+  五十文钱"（250，即 50%）。
+- `sell hammer` 后角色钱袋从"二两银子"变为"四两银子+五十文钱"，
+  与 2 两 + 2 两 50 文 = 4 两 50 文 完全吻合。
+- `list` 正确显示当铺库存新增"铜锤 x1"，价格与卖出价一致（五两
+  白银）。
+- 钱不够时 `buy hammer` 正确拒绝（"你没有足够的钱"），符合预期
+  （50% 亏损的当铺买卖机制，非 bug）。
+- 补足钱后 `buy hammer` 成功，"你向当铺买下一把铜锤"，钱袋从
+  "五两银子+五十文钱"（550）扣至"五十文钱"（50），扣款 500 分文
+  不差；`list` 随即显示"当铺目前没有任何货物可卖"（库存正确清零并
+  删除条目）。
+- 收尾把铜锤卖回当铺（验证库存/金额双向一致后清理测试痕迹），
+  `quit` 正常。
+
+结论：`sell`/`buy` 双向金额与库存计算均正确，无程序 bug。
+
+### 发现并修复的真实程序 bug：`log_file()` 未加 `assure_file()` 保护（AGENTS.md §7.11 已知模式的又一实例）
+
+- **症状**：测试商店买卖时用管理员 `clone` 指令复制物品，触发未捕获
+  的执行时段错误，`clone` 指令中途中止——`new(file)` 已创建物件，但
+  日志调用抛错后函数提前返回，物件从未被 `move()` 进玩家背包（孤儿
+  物件），`clone.lpc` 承诺的"复制成功，放在你的物品栏"提示也没有
+  出现：
+  ```
+  执行时段错误：*Wrong permissions for opening file /log/nosave/CLONE
+  for append. "No such file or directory"
+  程序：/adm/obj/simul_efun.lpc 第 17 行
+  呼叫来自：/cmds/imm/clone.lpc 的 main() 第 56 行
+  呼叫来自：/adm/obj/simul_efun.lpc 的 log_file() 第 17 行
+  ```
+- **根因**：`adm/simul_efun/file.lpc` 的 `log_file()` 是裸
+  `write_file(LOG_DIR + file, text)`，没有目录保护，而这份档案从未
+  打包 `/log/nosave/` 目录（`ls work/log` 确认不存在）；同一文件里
+  紧接着定义的 `assure_file()` 辅助函数完全没被用到——与 AGENTS.md
+  §7.11 记录的近乎通用的拷贝粘贴模式（已在 8+ 个互不相关的血统家族
+  独立确认）完全一致。这次的触发路径是管理员 `clone` 指令自己的审
+  计日志调用（`log_file("nosave/CLONE", ...)`），不是注册/死亡流程，
+  但属于同一 bug 类——任何调用 `log_file()` 的路径都会中招（`update`
+  热更新、`suicide` 等其它审计日志同理，均未逐一验证，但根因已在
+  单一共享函数层面修复，一次修复覆盖全部调用点）。
+- **修复**：套用 §7.11 已验证的标准修法，在 `log_file()` 内部加
+  `assure_file()` 保护（同时补上因文本顺序在前而需要的前向声明）：
+  ```lpc
+  void assure_file(string file);
+
+  void log_file(string file, string text) {
+    assure_file(LOG_DIR + file);
+    write_file(LOG_DIR + file, text);
+  }
+  ```
+  （文件：`adm/simul_efun/file.lpc`。）
+- **验证**：`simul_efun.lpc` 是 `#include` 拼接式写法（与 AGENTS.md
+  §7.11 记录的 `fy2005` 实例同形），driver-special object 无法热
+  `update`，重启驱动后生效。重启后同样的
+  `clone /d/obj/weapon/hammer/tongchui` 成功执行，正确提示"铜锤复制
+  成功，放在你的物品栏"并出现在背包里；随后完整走完上面的
+  `sell`/`buy` 流程验证。`log/nosave/` 目录被自动创建（driver 层面
+  `mkdir` 行为符合预期）。
+
+### 已知的一次性无害提示（非新 bug，确认此前修复仍然有效）
+
+`south`/`list` 等指令在每个驱动进程生命周期内第一次触发
+`/adm/daemons/emoted` 惰性加载时，仍然出现"错误讯息被拦截："开头的
+`restore_object(): Illegal mapping format` 提示（本轮死亡战斗与商
+店测试各触发一次，分属两个不同的驱动进程）。这与 2026-08-07 深度
+功能测试记录的 §7.87 修复（`emoted.lpc` 的 `catch(restore())`）预
+期行为完全一致——该提示不写入 `debug.log`（仅出现在玩家屏幕上，与
+此前记录的"底层真实错误文本从未被捕获"现象一致），且未阻断任何后
+续指令。确认修复仍然有效，非新问题。
