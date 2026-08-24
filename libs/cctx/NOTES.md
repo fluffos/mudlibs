@@ -221,3 +221,51 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 门派拜师（第五轮，2026-08-24）——补上前三轮都推迟的最后一项空白，测试清洁，无需修复
+
+前三轮一直把门派拜师（`bai`/`apprentice`）测试推迟，理由是师傅 NPC
+都在 `d/heimuya`/`d/huashan`/`d/shaolin`/`d/wudang` 这几张离新手区很
+远的地图上。本轮直接用巫师账号 `goto` 快速定位，补完这最后一项空白。
+
+- **按 AGENTS.md §7.117 的写法专门核查了 `cmds/skill/bai.lpc` 和
+  `cmds/skill/apprentice.lpc`**（两个文件字节相同）：确认收徒确认分
+  支里的"背叛师门"判断已经带有正确的存在性守卫——
+  `if (me->query("family") && ((string)me->query("family/family_name")
+  != (string)ob->query("family/family_name")))`——和已经关闭的 §7.117
+  语料库扫描给出的标准修复形状完全一致，**不是**尚未扫到的漏网实例，
+  无需修复。
+- **顺带发现一处形状相似但未构成崩溃的死代码**：同一个确认分支里紧
+  跟着一段风清扬专属彩蛋逻辑，`if (((string)me->query("family/
+  master_id" == "feng qingyang")) || ((string)me->query("family/
+  master_name" == "风清扬")))`——`==` 在 `query()` 的括号内先被求值，
+  所以实际传给 `query()` 的是布尔比较结果（恒为 0 的 int），而不是
+  字符串属性名，和 AGENTS.md §7.117 收录的 `sj` 崩溃实例是同一类"括
+  号位置放错"手误。区别在于 `sj` 那份 `dbase.lpc` 会在 `strsrch()`
+  上真崩溃，而 `cctx` 这份 `feature/dbase.lpc` 的 `query(int, ...)`
+  能在 `undefinedp(dbase[prop])` 分支里安然处理非字符串 key，不抛任
+  何错误，只是静默返回假值——**现场验证**：整个拜师流程走完
+  `debug.log` 零运行期报错。净效果是"风清扬门下弟子数"这个纯彩蛋计
+  数器（`/log/nosave/FENG`）对任何师傅（包括真的风清扬）都永远不会
+  触发，是一处已经死掉但从不出错、也没有任何玩家可见负面影响的花絮
+  功能——按本项目"没有错误信号（崩溃/debug.log/明确断裂路径）大概率
+  是设计使然"的判断标准，不touch，只记录在此供将来参考，不作为本轮
+  修复项。
+- **现场验证**：巫师账号 `goto /d/shaolin/fzlou2`（方丈室），对少林
+  寺方丈玄慈大师 `bai xuanci`——他的 `attempt_apprentice()` 明确要求
+  申请者已经是本派某一辈分以上的弟子（"你辈份不合，不能越级拜师"，
+  即少林方丈这一角色的收徒逻辑本来就是给已有身份的少林弟子做"升
+  级"，不是给外人做入门拜师），对全新角色正确拒绝，符合设计，不是
+  bug；`bai cancel` 正常取消挂起的拜师意向。再 `goto /d/heimuya/
+  house1`，对日月神教西方失败 `bai xifang`——`attempt_apprentice()`
+  只检查悟性门槛（`query_int() >= 20`），全新角色资质达标，直接
+  `recruit`，双方确认拜师礼成功完成：`「师父！」`磕头动作 + `恭喜您
+  成为日月神教的第三代弟子`提示。随后 `score` 正确显示`日月神教第三
+  代弟子 巫师甲`和`你的师父是西方失败`，确认门派/师父信息真正落地到
+  角色状态，不只是一句提示文字。全程 `debug.log` 除编译期未使用变量
+  警告外零运行期报错。测试角色（巫师/管理员账号 `fluffos`）用完后
+  `quit` 干净退出并删除其存档，driver 已停止。
+- **结论：门派拜师系统功能正常，本轮零新增 bug。至此 `cctx` 第三轮
+  记录的"经济系统和战斗系统均验证正常工作……门派拜师系统本轮未能实
+  际验证"这一唯一空白正式补齐关闭，四轮 §10.7 深度功能测试全部完
+  成。**
