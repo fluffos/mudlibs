@@ -66,3 +66,109 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试第二轮（2026-08-23）：死亡计数器、buy、拜师、大写目录死链
+
+用 `fluffos` 账号（既有 §10.7 深挖账号）通过原生驱动（端口 40113）+
+`scripts/tmux_mud.sh` 逐条核实 2026-08-08 那轮记录的四个未覆盖点。
+
+- **被杀害次数计数器——真实 bug，已修**：追查到 `score` 的"被杀害：%d
+  次"字段读的是 `my["DIE"]`，由 `killer_reward()`（`COMBAT_D->killer_reward`，
+  `#define COMBAT_D "/adm/daemons/combatd"`）在 `userp(victim)` 分支里
+  `victim->add("DIE", 1)` 递增。比对本仓库里两份几乎逐字节相同的
+  `combatd.lpc`（真正被加载的 `work/adm/daemons/combatd.lpc`，和一份从未
+  被任何 `#define` 引用、纯属历史遗留的死副本 `work/adm/combatd.lpc`）后
+  发现：活的那份在 `killer->add("PKS", 1);` 之后，缺了紧接着的两行
+  `killer->add("PKD", 1); victim->add("DIE", 1);`——死副本里这两行都在，
+  活的那份漏掉了，是一处结构性的语句缺失（不是设计选择：两个副本内容
+  几乎完全一致，只有这两行的差异，且 `PKD`/`DIE` 在 `score.lpc` 里都有
+  对应的读取展示位）。已在 `work/adm/daemons/combatd.lpc` 补回这两行。
+  现场验证：`score` 基线"被杀害：0 次"→ `goto` 朱雀大街对疥顶小僧
+  `kill xiaoseng` 致死 → 判官崔珏送还阳 → 复活后 `score` 显示"被杀害：
+  1 次"，`debug.log` 全程零 `combatd`/`killer_reward` 相关报错。驱动完整
+  重启后重新登录复核，计数器持久化正常（1 次未丢）。
+- **顺带发现：2026-08-08 那次提交的 commit message 声称修了但实际没有
+  落盘的两处旧 bug，本轮一并补上**：调查上面的 `combatd.lpc` 问题时，
+  用 `clone`（wizard 指令）测试环境触发了 `log_file()` 因为
+  `/log/nosave/` 目录不存在而崩溃——`git show`/`git log` 核实后确认，
+  commit `7787c8dddd8`（§7.11 assure_file 防护 + §7.34 logind.lpc 遗留
+  printf）的提交说明写了这两处改动，但 `git show <commit> -- work/adm/
+  simul_efun/file.lpc` 和 `-- work/adm/daemons/logind.lpc` 都是空 diff
+  ——文件从未真正被改过（大概率上一轮编辑完成后没有正确保存/加入
+  commit）。本轮已按 NOTES.md 原先描述的方案重新补上两处：
+  `adm/simul_efun/file.lpc` 的 `log_file()` 调用 `write_file()` 之前先
+  `assure_file(LOG_DIR + file);`；`adm/daemons/logind.lpc` 第 772 行的
+  裸 `printf("%O\n", ob);` 已删除。现场验证：`clone /obj/money/silver`
+  不再报错、正常放入物品栏；重新走一遍注册流程确认不再泄漏
+  `login#`/`obj/` 字样。
+- **`buy` 已实测，找零/库存运算正确**：南城客栈/荒郊小店的"店小二"
+  （`d/ourhome/npc/xiaoer.lpc`，继承 `F_VENDOR_SALE`）用的是
+  `cmds/std/buy.lpc` 的 `buy <物> from <人>` 语法（不是单纯的
+  `buy <物>`）。`clone /obj/money/silver`（一两银子＝100 文）后
+  `buy jitui from xiaoer`（炸鸡腿 80 文）成功，`i` 确认找零精确为
+  "二十文钱(Coin)"、炸鸡腿正确进入物品栏——`feature/finance.lpc` 的
+  `pay_money()` 熔铸找零逻辑运算正确，无 bug。
+- **拜师（`apprentice`/`bai`）流程已实测，正反两条路径都正常**：
+  `cmds/std/apprentice.lpc` 对无门派角色 `apprentice pusa`（南海普陀山
+  大圣国师王菩萨）正确按 `attempt_apprentice()` 里的战功/佛法门槛拒绝
+  （"老夫不收外门弟子……"，无崩溃）；随后用 admin 权限
+  `call me->set_temp("swordman/zuozhizhu",1)` 满足另一位掌门（青石街道
+  "打架专家 相乐佐之助"，`d/swordman-map/npc/zuozhizhu.lpc`）的收徒条件后
+  `apprentice xiangle` 成功拜师，`score` 的"师承"字段正确显示"剑客联盟
+  相乐佐之助"，`family`/`recruit_apprentice()` 链路（`feature/
+  apprentice.lpc`）运作正常。机制本身没有 bug；具体门槛（战功/佛法数值）
+  属于内容设计，未改动。
+- **大写目录死链——真实可复现崩溃，已修，且是一个可能覆盖全库的通用
+  修复**：`d/youxia/`（几乎整个区域是未转档的大写 `.C` 文件，和已知的
+  `d/SHAOLIN/` 同类）下有 `NPC`/`OBJ`/`BAGUA` 三个大写子目录。`d/youxia/
+  BAGUA`、`daemon/class/emei/MAHAYANA`、`u/piao/DAN` 三个目录在全库范围
+  内没有任何文件引用它们（连本目录内部互相引用都没有 grep 命中）——真正
+  死码，不可达，不是 bug，未处理。但 `d/nanhai/zhulin0.lpc`（〖紫竹林〗，
+  经 `d/nanhai/road4.lpc` 北向可达，`road4` 属于普陀山主线，可达）的
+  `objects` 里有 `__DIR__ "npc/tianji": 1`，指向不存在的 `/d/youxia/
+  npc/tianji`（实际文件是 `/d/youxia/NPC/TIANJI.C`，大写）——现场
+  `goto /d/nanhai/zhulin0` 复现崩溃：`Bad argument 1 to EFUN call_other()
+  ... Got: int(0)`，出在 `std/room.lpc` 第 18 行 `ob->move(this_object())`
+  （`make_inventory()` 对 `new()` 返回值零检查缺失，和已记录的 §8.15/
+  §7.99 carry_object() 是同一个 bug 类别，只是这次是房间 `objects`
+  预载而不是 NPC 随身物品）。`cmds/std/go.lpc`/`feature/move.lpc` 的
+  `_move()` 对 exits/`fly` 目的地已经有 `load_object()` 失败时的优雅
+  降级（"你要去的区域还没有连通。"/"move: destination unavailable."），
+  所以 `d/kaifeng/east1.lpc`（north exit 指向不存在的 `/d/youxia/
+  baiyun`，真实文件 `BAIYUN.C`）、`d/changan/seashore2.lpc`（north exit
+  指向不存在的 `/d/youxia/wanmei`）、`cmds/std/fly.lpc` 的 `wanmei`/
+  `shaolin` 目的地这几处大小写死链**不会崩溃**，只会提示"区域还没有
+  连通"——这几处不用动。真正会崩的只有 `objects` 预载这一类路径。已给
+  `std/room.lpc` 的 `make_inventory()` 加了 `if (!objectp(ob)) return 0;`
+  防护，并给 `reset()` 里 `case 1` 分支调用 `ob[list[i]]->is_character()`
+  之前加 `objectp(ob[list[i]]) &&` 短路检查（`default` 多实例分支本来就
+  靠 `!objectp()` 重试自愈，不用改）——这是通用防护，不止修 `zhulin0`
+  这一处，全库范围内任何房间 `objects` 里指向坏路径的条目都不会再让
+  `reset()` 整体崩溃。现场验证：驱动重启后 `goto /d/nanhai/zhulin0`
+  房间正常加载（缺失的 NPC 不出现，不崩），`debug.log` 无新增
+  `call_other`/`room.lpc` 报错。批量 `lpcc --batch` 复查（11654 个档案，
+  11343 通过/311 失败）确认失败集里没有新增回归——`/adm/combatd`、
+  `/adm/logind`、`/d/nanhai/obj/tianlong` 这几个失败条目都是与本轮改动
+  无关的、历史遗留、从未被任何 `#define` 或引用触达的死副本/孤立档案
+  （比对过 `git show` 确认改动前后这些文件本身没有被本轮改动碰过）。
+- **顺带修复：`/std/weapon/halberd.lpc`/`_halberd.lpc` 一直存在，但
+  `include/weapon.h` 从未给 `HALBERD`/`F_HALBERD` 定义宏**（对比同一
+  文件里 `SWORD`/`F_SWORD` 等其它 14 种武器类型都有对应宏）。全库 7 个
+  现役文件（`d/xuyi/obj/tianlong.lpc`〖大圣国师王菩萨的天龙戟〗、
+  `d/obj/weapon/halberd/{chubai,huaji,sanchaji,ji,muji,cuiling,halberd}
+  .lpc`）里的 `inherit HALBERD;` 因此从建库起就是编译期语法错误
+  （"unexpected L_IDENTIFIER, expecting L_STRING"），这几个文件全部
+  加载失败——`d/nanhai/npc/master.lpc`（南海普陀山大圣国师王菩萨）的
+  `create()` 末尾 `carry_object("/d/xuyi/obj/tianlong")->wield()` 因此
+  现场必崩（`goto /d/nanhai/xiaoshi` 直接复现）。是在追查上面的
+  `zhulin0` 崩溃时顺带发现的同类问题，不是本轮四个既定任务之一，但
+  同属"case 崩溃/编译错误"的编程 bug 范畴，且直接挡住了拜师流程的
+  第一次尝试（王菩萨所在房间进不去），所以一并修了：在 `weapon.h`
+  补上 `#define HALBERD "/std/weapon/halberd"` 和
+  `#define F_HALBERD "/std/weapon/_halberd"`（跟其它武器类型完全同一
+  命名规范）。修复后 7 个文件全部 `lpcc` 单独编译通过，`goto /d/nanhai/
+  xiaoshi` 房间干净加载、王菩萨正常佩戴天龙戟出场。`d/nanhai/obj/
+  tianlong.lpc`（同名但内容是"王府令牌"的另一份孤立档案，`inherit
+  HALBERD` 已被前人注释掉、全库无任何引用、不可达）依然编译失败
+  （缺 `set_name`/`setup` 等基础函数）——不是本轮改动导致，也不是活
+  内容，未处理。
