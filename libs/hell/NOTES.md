@@ -244,3 +244,41 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（第五轮，2026-08-24）——补完真实战斗测试，§10.7 收尾
+
+前四轮已验证注册投胎、拜师门派、经济系统均干净通过，唯独"战斗"一
+直只测过练功房木人（`clone/npc/mu-ren.lpc`），而它的 `accept_fight()`/
+`accept_hit()` 要求 `combat_exp>=12000`，全新角色永远打不过这道门
+槛——已在第二轮记录为内容/数值设计，不是 bug，但也意味着战斗机制
+本身从未被真正打通过一次。本轮专门找一个新手够得着的、真正会打的
+敌对 NPC 补上这一测试项。
+
+- 用既有巫师账号 `fluffos` 登录（跨轮次复用的管理/测试身份，非真
+  实玩家存档），`goto /d/city/nandajie1`（南大街，出生点客店往西
+  南方向不远，正常玩家步行可达）。
+- 该房间刷新 `d/city/npc/liumang.lpc`（流氓，`combat_exp=1000`，
+  `attitude="peaceful"`）与 `liumangtou.lpc`（流氓头，
+  `combat_exp=7000`）——都继承自 `inherit/char/npc.lpc` 的默认
+  `accept_fight()`/`accept_hit()`，没有像木人那样额外加
+  `combat_exp` 门槛判断，是真正"新手打得到"的敌对目标。
+- `kill liu mang`：NPC 正确应战（"流氓说道：好！小王八蛋，咱们就
+  一决生死！"），随后进入完整的拳脚交锋回合——双方轮流出招、命
+  中/闪避/格挡判定、疲劳提示（"你气喘嘘嘘"）全部正常触发，一路打
+  到角色体力耗尽后触发自动逃跑机制，遁光传送到附近的当铺
+  （`/d/city/dangpu`）脱离战斗——是一次完整、真实的战斗到"逃跑"
+  结局的闭环，不是卡在开场或者中途崩溃。
+- **`debug.log` 全程干净**：整场战斗期间只有既有的懒编译 `Unused
+  local variable`/`Unknown #pragma` 一类编译期噪音（这份档案启动
+  时一贯就有的背景噪音，跟这次测试无关），`grep -c
+  "^执行时段错误"` 结果为 0，没有任何 `Bad argument`/`Undefined
+  function`/崩溃堆栈。
+- 战斗结束后 `quit` 干净退出，无残留错误。测试造成的
+  `data/{login,user}/f/fluffos.o` 存档漂移（`fluffos` 战斗后的状
+  态变化）已用 `git checkout HEAD` 撤销，恢复到测试前的存档内容。
+
+**结论：战斗机制本身工作正常，没有发现程序 bug。** 木人门槛依旧
+是内容设计（维持第二轮结论不变），但这份档案的战斗系统现在已经用
+一个真正可达、真正会打的敌对 NPC 完整验证过一次真实交手到收尾。
+至此 `hell` 档案的注册、投胎、拜师、经济、战斗五大系统全部完成过
+至少一轮真实的端到端验证，§10.7 深度功能测试可以标记为完整收尾。
