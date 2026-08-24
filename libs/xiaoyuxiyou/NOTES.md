@@ -1054,3 +1054,80 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试第四轮 / Deep functional test round four (2026-08-23) — death/respawn and §7.112 reconnect-race live verification, clean pass
+
+Prior rounds (see round-two/round-three above) already fully verified
+registration, exploration, non-lethal `fight` combat, organic
+NPC-teacher skill learning, shop `list`/`buy` plumbing, and multiple
+netdead/reconnect cycles including a full ~616s soak. The two gaps
+explicitly left untested by those passes were **real death/respawn**
+and **AGENTS.md §7.112's death-room reconnect-reentrancy scenario**
+(this lib's `d/death/npc/pang.lpc` is one of the two named triggers for
+§7.112's "wave 2" corpus sweep, so it's worth confirming its fix holds
+up live on THIS lib specifically, not just by static grep). Native
+driver (`~/src/fluffos/build-debug/src/driver config.fluffos`), two
+raw-Python-socket test scripts (not `tmux_mud.sh`, to sidestep the
+known Chinese-name tmux-transmission false-alarm risk) driving two
+concurrent connections (a fresh player + the admin seed account
+`fluffos`/`Mud@2026`) each. Confirmed the driver/mudlib send and expect
+**UTF-8**, not GBK, over the wire regardless of the `gb`/`big5`
+encoding-selection prompt (`scripts/mudclient.py`'s own default
+encoding) — an early test attempt using `gb18030` produced readable-
+looking-but-actually-mojibake output and a spurious "请您用『中文』
+取名字" rejection; re-run with UTF-8 send/recv fixed it immediately,
+matching this file's own established `CONVERT_D->input()`-is-a-pure-
+passthrough finding above.
+
+**Death/respawn, forced via the established `call <id>->die()` admin
+pattern** (character `sidiez`/死测一, no gold/no way to reach a lethal
+NPC fight from the Aolai starting zone at level 1 per this file's own
+documented shop/sect zone-gate finding, so an admin-forced `die()` is
+the standard substitute this whole session's methodology already uses):
+`feature/damage.lpc`'s `die()` ran cleanly — inventory-drop skipped (no
+inventory), `combat_exp`/`daoxing` penalty math skipped (no killer),
+`life/life_time` decremented (`寿元 80→79`), moved to `DEATH_ROOM`
+(`/d/death/gate`, "阴阳界"), `DEATH_ROOM->start_death()` no-op'd
+silently as already documented elsewhere in this project (undefined
+function on this lib, benign shared-lineage artifact — confirmed
+harmless again here), `score` correctly showed 【鬼魂】(ghost) rank and
+reduced stat bars. No `debug.log` errors.
+
+**§7.112 live reconnect-race repro**: registered a second character
+(`sidiey`/死测二), force-killed her the same way, then **closed the
+raw socket immediately (simulating a netdead drop) ~1s after death,
+before `pang.lpc`'s `init()`-scheduled `call_out("death_stage", 5,
+...)` had fired even once**, and reconnected ~2s later — the exact
+`enable_commands()`-re-broadcasts-`init()` scenario §7.112 depends on.
+Outcome: the guard held. Exactly ONE `death_stage` sequence played out
+(all 5 stages' dialogue lines from 崔判官, no duplicates, no garbled
+interleaving), ending in a single correct move to `REVIVE_ROOM`
+("荒郊小店") with sane post-reincarnation stats (`kee`/`sen` at 1/4 max
+as coded, `寿元 79/80` correctly preserved from the death above — not
+double-decremented). `pang.lpc`'s existing
+`query_temp("death_stage_active")` guard (present before this pass —
+confirmed via a source read that it already matches the corpus-sweep
+fix shape, not something this pass had to add) is doing its job
+correctly under a real reconnect, not just by inspection. No
+`debug.log` errors from this run either.
+
+**Mail system**: `obj/mailbox.lpc` is a real, fully-implemented
+`mail`/`forward`/`read`/`readmail`/`dismail` object — but per `grep -rl
+mailbox d/`, the only placement in the whole tree is as a **purchasable
+item** (`大眼`/`bigeye` NPC's shop mapping in `d/ourhome/npc/bigeye.lpc`,
+`"mailbox": (: receive_mail :)`), gated behind the same
+`d/ourhome/`-zone-plus-gold combination this file's round-two section
+already documented as unreachable for a fresh, broke, level-1 Aolai
+character (no exit from Aolai below level 5, no starting gold, the
+"新手准备室" funding NPC is itself past that same gate). Consistent
+with the earlier documented shop/sect findings — not re-litigated as a
+new bug, just confirmed the same structural gate also covers mail.
+
+**Result: clean pass, no new bugs found.** `pang.lpc`'s §7.112 guard
+(inherited from the corpus-wide sweep, not touched this pass) held up
+under a genuine live reconnect race. No fixes applied this round; no
+commit needed. Two throwaway test-character saves (`sidiez`, `sidiey`)
+were deleted after the test (per this pass's own cleanup instruction,
+diverging from round-two's practice of leaving test characters as
+evidence — round-two's finds are already fully documented in prose
+above, so the saves themselves aren't load-bearing).
