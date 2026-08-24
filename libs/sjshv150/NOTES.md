@@ -77,3 +77,75 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试 round-four 补测（2026-08-24）——补齐先前"未覆盖"清单
+
+复用同家族已知的两个 bug 检查、以及先前 §10.7 记录里明确留下的三项
+"未覆盖"（`buy`/拜师/`WIZPWD` 两条校验分支），用 `build-debug/src/driver`
+（端口 40171）+ `scripts/tmux_mud.sh` 走了一轮针对性验证。
+
+- **已知 sibling bug #1（`combatd.lpc` `killer_reward()` 缺
+  `killer->add("PKD",1)`/`victim->add("DIE",1)`）——不适用**：
+  `work/adm/daemons/combatd.lpc` 第 866-868 行三行齐全，本档案没有这个
+  缺陷（可能这份档案的 combatd.lpc 版本比 sjshwzb/sjshwzjqb 那份新，或
+  从未被那次局部删除影响到）。
+
+- **已知 sibling bug #2（`d/lingtai/obj/shengmao.lpc` `set_name()`
+  未闭合字符串）——不适用**：本档案确实有这份档案（`work/d/lingtai/obj/
+  shengmao.lpc`），但第 7 行 `set_name(HIC "三界神帽" NOR, ({...}));`
+  字符串引号完整闭合，不是 sjshwzb/sjshwzjqb 那个坏版本。
+
+- **`buy`/商店购买流程——已测试，正常**：用 `clone` 给管理员测试角色
+  `fluffos` 变出 `/obj/money/silver`（一两银）后在〖三联书局〗
+  （`/d/city/bookstore`，老板孔方兄 `d/city/npc/bookseller.lpc`）
+  `buy xyjbook from kongfang`（单价一两银子，精确找零为零），成功买到
+  《西游记》，银子被正确扣光。再 `clone /obj/money/gold`（一两金=
+  10000 值）购买十两银子（1000 值）的〖刀法入门〗，找零验证：
+  10000-1000=9000 值 → 应得九十两银（90×100=9000），实测背包正确出现
+  「九十两银子」——找零换算完全正确。`list` 指令价目表显示也正常。
+  测试道具已在提交前用 `drop` 丢弃（房间有自动清除的绿色小精灵拾走，
+  不会残留在版本控制内）。
+
+- **门派拜师（apprentice/bai）——测出并修复了一个真实 bug（AGENTS.md
+  §7.117 同款）**：`cmds/std/apprentice.lpc` 第 62 行原本是
+  `if ((string)me->query("family/family_name") != (string)ob->query("family/family_name")) {`
+  ——这正是 AGENTS.md §7.117 记载的、跨 74+ 库确认过的"拜师确认分支缺
+  首次拜师existence guard"的标准坏形状：当一个从未入过任何门派的新手
+  角色被师父 `recruit` 后再用 `apprentice` 确认拜师时，`me->query
+  ("family/family_name")` 是空值，天然就"不等于"师父的门派名，导致代码
+  误判为"背叛旧门派转投他派"，本应是`else`分支的"正常拜师"礼却走进了
+  "背叛"分支（会清零 score、打上 betrayer 标记）。同一对指令的另一半
+  `cmds/std/recruit.lpc` 第 63 行早就有正确的 `(ob->query("family")) &&`
+  存在性守卫（还带注释"follow modified by elon 09-10-95 to fix a bug in
+  1st time recruit"）——证明这个修复曾经打在配对文件的一半上，另一半
+  （`apprentice.lpc`）漏掉了，和 AGENTS.md §7.117 描述的典型情形分毫不
+  差。修复：按 §7.117 既定写法加上同款守卫——
+  `if ((me->query("family")) && ((string)me->query("family/family_name") != (string)ob->query("family/family_name"))) {`。
+  **现场复现+验证**：clone 一个 `/d/city/npc/shubao`（秦琼，`将军府`
+  二代弟子，`attempt_apprentice()` 无条件接受）放在管理员测试角色
+  `fluffos` 所在房间，用 `call shubao->command("recruit fluffos")`
+  让秦琼先对我发起收徒（设置秦琼自己的 `pending/recruit`），这样后续
+  `apprentice shubao` 才会真正走到本档案原本有 bug 的那条"确认拜师"分
+  支（而不是走 `recruit.lpc` 那条本来就守卫正确的路径）。`update
+  /cmds/std/apprentice` 重编译成功后执行 `apprentice shubao`，输出
+  "你决定拜秦琼为师...恭喜您成为将军府的第三代弟子。"（正常拜师文案，
+  不是"决定投入...门下"的背叛文案），`score` 确认师承显示"将军府秦琼"、
+  `family` dbase 字段里没有出现 `betrayer` 标记、`combat_exp`/`score`
+  等属性也未被清零——修复确认生效。
+
+- **`WIZPWD` 校验成功/失败两条分支——已测试，均正常**（此前一轮只验证
+  过"未设置时不再卡死"这一条修复，这两条从未测过）：用
+  `fluffos`/`Mud@2027` 重新登录，先用 `wizpwd` 指令（提示文字用大写
+  `WIZPWD` 但实际指令是小写 `wizpwd`，纯粹是大小写不敏感，不是 bug）
+  首次设定 WIZ 密码为 `TestWiz123`；`quit` 后重新连线，`get_wizpwd()`
+  验证分支：（1）故意输入错误密码 `WrongPass`——正确显示"密码错误！
+  请重新输入你的ID和密码！"并要求重新走 id+密码流程（未直接进入游戏）；
+  （2）随后用正确的 `TestWiz123`——正确显示"密码正确！"并正常进入游戏
+  世界。两条分支的 `crypt()` 比对逻辑均按预期工作，没有发现新 bug。
+
+驱动全程 `debug.log`（`work/log/debug.log`）未生成任何内容（说明零次
+运行时错误/崩溃），`work/log/err.log` 只有既有的"Unused local
+variable"编译期警告，无新增编译错误。测试产生的一次性登录日志
+（`u/koker/files/EEDIT` 新增两行"fluffos(admin) sets/updates"审计记录）
+按既定套路保留，不算需要清理的临时产物。已停止 tmux 会话与本地
+`build-debug` 驱动进程。
