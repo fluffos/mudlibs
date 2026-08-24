@@ -208,3 +208,55 @@ Ported all fixes directly from `kxkj`'s fixed files rather than
 re-deriving them. Compile-verified via `lpcc --batch` (not
 independently live-boot-tested on this lib -- the fixes were already
 proven live on `kxkj`).
+
+## §10.7 shop purchase + sect apprenticeship (2026-08-24) -- both clean, no bugs found
+
+Two gaps flagged as never tested in this lib's history: `buy` at a
+`SHOP`-type store, and `apprentice` (拜师) at an NPC sect master.
+Live-boot tested with the (manager) `fluffos` account (real telnet
+disconnect afterward, save residue reverted via `git checkout` --
+this run only touched money/family/inventory scratch state, no
+persistent account change was intended).
+
+**Shop purchase (`/open/center/room/store.lpc`, 中央驿站商店)**: this
+lib's only `SHOP`-type stock (`std/room/shop.lpc`) starts genuinely
+empty (`sells = ([])`) -- there's no seeded starting inventory
+anywhere in the two `SHOP`-inheriting rooms found (`store.lpc`,
+`open/magic-manor/town/town20.lpc`); stock is populated entirely by
+players `sell`-ing items to the shop first, which the shop then
+resells. This is a real design (matches `do_list`'s own "在这你可以
+买到" empty-until-stocked framing), not a bug. Tested the full cycle
+with a cloned `/open/main/obj/sword.lpc` (base `value` 400): `sell
+sword` -> correctly priced at trade-skill-adjusted `(int)(400/400*
+(300+trade_lv))` = 301 (三银一文钱), item appears in `list` priced at
+face value 400 (四两银子) as expected. `buy sword` first correctly
+failed ("你身上没有足够的钱币买东西") when the player's cash (301)
+was less than the buy-side price `v/100*(230-trade_lv)` = 916;
+after topping up with a cloned gold coin (10301 total), `buy sword`
+succeeded, charged exactly 916 (九银十六文钱), left correct change
+(9385 = 九十三两银子 + 八十五文钱), moved the sword into inventory,
+and removed the now-fully-bought-out entry from `list`/`sells`. All
+change/inventory math checked out exactly; no crash, no double-spend,
+no stock-count mismatch.
+
+**Sect apprenticeship (`apprentice` / `cmds/std/apprentice.lpc` +
+`feature/apprentice.lpc`)**: checked this lib's `apprentice.lpc`
+against the AGENTS.md §7.117 "did you betray your old sect" pattern
+(unguarded `family_name` string comparison rejecting first-time
+applicants with no family yet) before testing live -- this file does
+**not** have that shape. Its only prior-membership check is `if
+(me->query("family")) { ... "决定背叛师门" ... }` (a plain existence
+check, correctly falsy for a fresh character with no `family` set
+yet), so it was never a §7.117 candidate and needed no fix. Live
+test: joined the `fighter` class (`join`, near
+`open/snow/npc/master_liu.lpc`/雪苍派 in 雪苍紫云宝殿,
+`/open/snow/room/room2`), then `apprentice master liu` -> NPC's
+`attempt_apprentice()` checked class match (`fighter`) and `str >=
+20` (both satisfied by a fresh character's defaults), immediately
+`recruit`-ed the player with no rejection or betrayal-check false
+positive. `score` afterward correctly showed `雪苍派第五代弟子`
+(5th-generation disciple) and `师父： 刘全书` (master: Liu Quanshu) --
+family/title assignment and generation-number formatting all correct.
+
+No programming bugs found in either area; both are clean. ~90 tool
+calls for this session (boot, both playthroughs, code review, cleanup).
