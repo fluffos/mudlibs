@@ -489,6 +489,100 @@ lib 独有的环境因素还是这条 NPC 血统本身在"move() 进入房间是
 发 init()"这件事上有更深的问题，留给下一轮如果有巫师权限或者
 write()-based 现场调试手段时再深挖，不在没有确凿根因的情况下动代码。
 
+### 死亡/复活循环，第二轮跟进：拿到了真正的巫师工具，但仍未现场复现死亡——is_admin() 之外发现了第二条独立的权限阻断根因
+
+本轮目标是拿到真正的巫师级现场调试手段（write()/log_file() 或
+`call`/`call_out_info()`），把上一轮"没有确凿根因不动代码"的死循环调
+查往前推一步。结果：拿到了部分巫师权限、缩小了根因范围、发现了一个
+此前未记录的独立 bug，但**这一轮仍然没能让测试角色真正走到"鬼魂站在
+【鬼门关】里"这一步**，所以 `death_stage()` 本身有没有触发依旧没有
+现场证据——比上一轮更清楚一点，但还是没有定论。
+
+- **`fluffos`（boss）巫师权限重新核实**：`update`（重新编译档案）和
+  `goto`（巫师瞬移）两个指令都只经过
+  `SECURITY_D->valid_grant(me, "(wizard)")` 这一道关卡（`(boss)` 在
+  `wiz_levels` 阶梯里天然大于 `(wizard)`），**不需要 `is_admin()`**，
+  现场验证两者都能正常使用（`update /d/death/npc/bai.lpc` 成功重新编
+  译；未实际使用 `goto` 但读代码确认门槛相同）。`is_admin()` 本身依
+  旧不可达（`admin_flag==21` 只能靠 `set_admin()` 设置，而
+  `set_admin()` 要求 `is_root(previous_object())`，全档案里没有任何
+  指令会以 root euid 调用它；硬编码的 `uuuu`/`iiii` 是原始服主账号，
+  不是我们能复现的身份）——这点和 round three 的结论一致，不是新发
+  现。
+- **新发现：`clone`/`call`/`smash` 被拒的根因比"is_admin() 不可达"更
+  深一层**——`data/securityd.o` 里确实存过
+  `site_privilege(["call":"all","clone":"all", ...])`，理论上即使没
+  有 `is_admin()`，这两个指令的权限判定分支（`cmds/arch/call.lpc`、
+  `cmds/wiz/clone.lpc` 里 `!me->is_admin()` 之后的
+  `switch(SECURITY_D->query_site_privilege(...))`，命中 `"all"` 时
+  直接放行）应该能生效。但 `adm/daemons/securityd.lpc::restore()` 对
+  `site_privilege` 有一个基于 `crypt()` 的完整性校验（用固定
+  `SEC_SEED` 累加所有键值算出一个校验和，跟存档里 `INTERMUD_MUD_NAME`
+  项存的哈希比对），**这份存档校验不过**——现场启动驱动后
+  `log/nosave/security` 立刻出现十几行 `site_privilege information
+  encrypted.`，`restore()` 在校验失败分支里把整个 `site_privilege`
+  清空成 `([])`。于是不管 `call`/`clone` 目标是谁，`switch` 都落进
+  `default` 分支，返回"你不能使用该命令。"/"你不能复制物品。"——跟
+  round three 记录的拒绝提示逐字对应。这份存档来自最初的
+  `mudlib.rar` 归档（`git log` 只有一次改名提交动过这个文件，早于本
+  项目任何一轮调查），推测是原始正式服上曾经用 `sp` 指令合法设置过
+  这个权限，但归档时的驱动/数据版本和现在重新编译的 fluffos 在
+  `crypt()` 细节上不完全一致，导致校验和对不上——**没有找到能在游戏
+  内合法修复它的路径**（`sp <class> <info>` 指令本身设置新值也要求
+  `me->is_admin()`，跟 `clone`/`call` 卡在同一堵墙后面），判断这是这
+  份归档快照的第二个真实限制（跟 `is_admin()` 不可达是两条独立但互相
+  加强的死路），不是本轮该动手修的 bug——不在游戏机制之外用文件级手
+  段绕过管理员权限校验。
+- **`bai.lpc`/`hei.lpc` 静态复查：结构上没有发现新问题**——两份文件
+  的 `init()`/`death_stage()` 早已是 `§7.112` 记录过的已修复形状
+  （`death_stage_active` 在 `init()` 里设置、在 `death_stage()` 的所
+  有真正退出点配对清除），`init()` 的四个前置条件（`previous_object()`
+  存在、`userp()`、`is_ghost()`、非 `wizardp()`）跟标准
+  `move_object()` 驱动语义（进入房间时，房间里每个 living 对象的
+  `init()` 都会以 `previous_object()==` 到访者的身份被调用一次，不需
+  要显式参数）吻合，没有发现类似 `zsdsj` 那种"驱动零参数调用
+  `init()` 却被当成需要参数解引用"的崩溃模式。为了现场验证到底是不
+  是真的触发，临时在 `bai.lpc` 的 `init()`/`death_stage()` 里加了
+  `log_file("nosave/deathstage_dbg", ...)` 探针，用巫师 `update` 指
+  令热编译生效——**但本轮测试角色始终没能真正走到"鬼魂站在
+  【鬼门关】"这一步**（见下），探针文件全程没有任何一行输出，说明失
+  败发生在更早的阶段（没能真正死亡），不能证明或证伪 `init()`/
+  `death_stage()` 本身的行为。已经把这段探针代码完整移除，`git diff`
+  确认 `bai.lpc` 恢复到跟上一次提交完全一致。
+- **本轮没能复现真实死亡，原因是测试工具问题，不是游戏机制问题**：
+  1) 用于自动化操作的裸 Python socket 脚本一开始用"读到空闲再返回"
+     的策略等待每条指令的响应，但本 lib 进入游戏世界后客户端会持续
+     收到一条每秒刷新一次的气血/状态提示行（形如
+     `012测试辛:100/100:...`），这条心跳式提示让"读到空闲"永远等不
+     到空闲，脚本卡死在 `washto` 之类的指令上——这正是已有笔记
+     `feedback_recv_loop_breaks_on_live_clock_prompt.md` 记录过的同
+     一个坑，本轮又踩了一次（后已改成硬性总时长上限，问题解决）；
+  2) 从武当三清殿（`d/wudang/sanqingdian`）走到"土匪头"所在的
+     `d/wudang/tufeiwo3` 需要精确的 20 步方向序列（先靠人工誊抄，中
+     间漏抄了一步 `northdown`，导致测试角色在山路上越走越偏，最终走
+     到不相关的"磨针井"/"藏经阁"，从未真正遇到"土匪头"）。已经用脚
+     本从各房间文件的 `exits` 字段做 BFS 重新算出并核对了完整正确路
+     径：`north, northdown, northdown, northdown, northdown, northup,
+     northdown, northup, northdown, northdown, northdown, northdown,
+     east, eastdown, eastdown, east, east, southup, south, east`（三
+     清殿 → 广场 → 紫霄门 → 十戒 → 十八盘 → 石梁 → 太子坡 → 山路一 →
+     好汉坡 → 五斗炕/... → 玉真宫 → 十戒一 → 玄岳门 → 蛇形岭三 → 剑劲
+     岩 → 蛇形岭二/一 → wdroad10 → tufeiwo1 → tufeiwo2 → tufeiwo3），
+     留给下一轮直接照抄使用，不用重新摸路。
+- **测试账号清理**：`qintestg1`/`qintestg3`（本轮反复摸索用，均未能
+  真正抵达"土匪头"或死亡）的存档已删除，未留痕迹。
+- **结论**：`death_stage()` 为什么现场没触发这个谜团**依旧没有解
+  开**，但排除范围比上一轮更精确了——`bai.lpc`/`hei.lpc` 的代码本身
+  静态审查没有发现明显 bug；管理员权限方面确认了 `update`/`goto` 这
+  类非 `is_admin()` 门槛的巫师工具是可用的，但 `call`（原本设想用来
+  做运行时内省，比如 `call_out_info()`）依旧被一个独立于
+  `is_admin()` 之外的 `site_privilege` 校验和损坏问题挡住，这条路线
+  在这份归档快照上被双重锁死。下一轮如果要继续深挖，建议：(1) 直接
+  复用上面标注的 20 步路径省下摸路时间；(2) 用带硬性总时长上限（而
+  不是"读到空闲"）的收发循环写自动化脚本，避免重蹈这次的坑；(3) 如
+  果这次的 `bai.lpc` 探针方案要重新启用，记得走完整条死亡流程再看探
+  针文件，而不是中途放弃。
+
 ### 留言板发帖：完全正常
 
 在 `d/wudang/sanqingdian` 的 `武当弟子留言板`（`clone/board/
