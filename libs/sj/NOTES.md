@@ -256,3 +256,98 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## §10.7 补测：真正的拜师流程（此前只测过拒绝分支）(2026-08-24)
+
+之前三轮 §10.7 测试都只验证过 `bai jingcha`（对一个没有门派的交通警
+察 NPC 拜师）被正确拒绝，从没有找到一个真正挂了门派属性的 NPC 走完
+整拜师流程。本轮找到 `d/ziyang/ziyanggong/npc/longjiyang.lpc`（紫阳
+派开山祖师龙霁阳，`create_family("紫阳派", 1, "开山祖师")`）作为测
+试目标，房间 `d/ziyang/ziyanggong/houdian` 的描述文字本身就写明"有
+很多慕名而来的人到这里来拜师"，确认是有意设计的拜师入口。
+
+`bai`/`apprentice`（两个指令实为同一份 `apprentice.c` 的字节级重复
+档案，`cmds/skill/bai.lpc` 与 `cmds/skill/apprentice.lpc`）支持两条
+路径：(A) 玩家先 `bai <师父>`，师父的 `attempt_apprentice()` 检查天
+资/技能门槛后主动喊 `recruit`；(B) 师父先对某玩家喊 `recruit`（设定
+`pending/recruit`），玩家再用 `apprentice <师父>` 接受。用管理员账号
+`fluffosb`（`setskill` 临时把 `force`/`zidian-ciyun`/`literate` 提到
+达标线以上）走通了路径 A，`score` 正确显示【师傅】及门派头衔，无异
+常。
+
+### 修复 1：路径 B 必现的运行时崩溃（`family/master_id`/`master_name`
+风清扬彩蛋分支括号写错位置）
+
+`apprentice.lpc`/`bai.lpc` 第 56-57 行（两份文件一字不差）：
+
+```c
+if ((object)ob->query_temp("pending/recruit") == me) {
+    if (((string)me->query("family/master_id" == "feng qingyang")) || ((string)me->query("family/master_name" == "风清扬"))) {
+```
+
+括号写错位置，`==` 被塞进了 `query()` 的参数列表内部，实际变成
+`me->query("family/master_id" == "feng qingyang")`——先比较两个字符串
+字面量（恒为假 `0`），再把 `0` 当 `prop` 参数传给 `query()`。
+`feature/dbase.lpc:37` 的 `query(string prop, int raw)` 对 `prop` 无
+条件调用 `strsrch(prop, '/')`，`prop` 是 `int 0` 时直接触发驱动层
+执行时错误 `*Bad argument 1 to strsrch(): Expected: string Got: 0.`。
+
+这不是从未被触发过的死代码：只要走路径 B（师父先 `recruit`，玩家后
+`apprentice`）就 100% 必现，把整条"师父主动招募"路径堵死——`bai
+jingcha` 那种"玩家先拜师"的路径（A）不经过这一行，是此前三轮测试
+从未发现这个 bug 的原因。
+
+现场复现：`force <师父NPC id> recruit <玩家id>` 让 NPC 先对一个全新
+注册、从未拜过师的测试玩家（`sectqa`/赵天行）发起招募，玩家执行
+`apprentice long` 立即原样触发上述执行时错误（错误信息直接广播给
+玩家，`command_hook()` 吞掉后指令视为失败但连接不断）。
+
+修复：把 `==` 移出 `query()` 的参数列表：
+
+```c
+if (((string)me->query("family/master_id") == "feng qingyang") || ((string)me->query("family/master_name") == "风清扬")) {
+```
+
+### 修复 2：路径 B 的"叛师"判定缺 `mapp()` 存在性检查（首次拜师会被
+误判为叛师）
+
+修复 1 解除崩溃后再往下看，紧接着的叛师检查：
+
+```c
+if ((string)me->query("family/family_name") != (string)ob->query("family/family_name")) {
+  return notify_fail("你现在不能叛师，还是先问问你们当家的吧！\n");
+} else ...
+```
+
+`me`（应征弟子的玩家）如果从未拜过师，`me->query("family/family_name")`
+返回 `undefined`（`(string)` cast 后是空串或 0），永远不等于师父的门
+派名，导致**从未拜过师的新玩家第一次接受招募也会被误判为"叛师"**，
+被硬拒绝。这正是本会话在其它库（wxddym 等）反复确认过的同一类 bug：
+比较双方门派名之前漏了判断"应征者是否已经有门派"这道存在性检查。姊
+妹档案 `cmds/skill/recruit.lpc`（路径 A 的对称实现）自己的注释就写
+着 `// follow modified by elon 09-10-95 to fix a bug in 1st time
+recruit`，其判定式正确地先守卫了 `(ob->query("family")) &&`——
+`bai.lpc`/`apprentice.lpc` 里对称的这一段却从未跟进同样的修法。
+
+修复（比照 `recruit.lpc` 已验证过的写法）：
+
+```c
+if (mapp(me->query("family")) && (string)me->query("family/family_name") != (string)ob->query("family/family_name")) {
+```
+
+**现场验证**：修复 1、2 都热更新（`update /cmds/skill/bai`、
+`update /cmds/skill/apprentice`）后，同一个从未拜过师的测试玩家
+`sectqa` 重新执行 `apprentice long`——`龙霁阳决定收你为弟子`，无崩
+溃、无误判叛师，`score` 正确显示〖师傅〗龙霁阳、称号"紫阳派第二代
+大哈哈"，【判师次数】保持零。清理：销毁测试用的 `龙霁阳` clone，
+`sectqa` 账号存档已删除（`work/data/{login,user}/s/sectqa.o`，未
+track，直接 rm），`fluffosb` 的临时技能/门派/称号/score 已用
+`call fluffosb->delete_skill(...)`/`delete("family")`/
+`delete("title")`/`set("score",0)` 复原并 save，驱动已停止。
+
+本轮改动文件：`work/cmds/skill/bai.lpc`、
+`work/cmds/skill/apprentice.lpc`（两处同形修复，逐字节相同的两份
+文件）。`lpcc_check.sh` 批量编译确认两份文件 PASS（全档案预先存在
+168/2660 处无关失败，与本次改动无关，未深究）；`~/src/fluffos` 的
+Node 格式化工具本次环境不可用（`node` 命令缺失），未运行 §9 格式化
+——改动本身极小（两处括号/一处存在性守卫），未引入格式问题。
