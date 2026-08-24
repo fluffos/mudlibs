@@ -784,3 +784,84 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## §10.7 gap closure pass (2026-08-24): shop purchase, apprenticeship, board
+
+Closed the three items flagged as genuinely open by the 2026-08-04 §10.7
+pass (`buy` never completing, apprenticeship never tested, board
+existence unresolved). Native driver, port 40074, via a one-off Python
+client reusing this lib's own crypt/ZJKEY handshake (same recipe
+documented above). Tested through the seeded admin account
+(`fluffos`/`Mud@2026`, wizard-tier `goto` used to reach each location
+instantly instead of walking) rather than a fresh registration, since
+none of the three mechanics below gate on `born`/registration state —
+confirmed by reading each code path first. All three came back clean;
+**no bugs found, nothing fixed**.
+
+1. **Successful shop purchase, with real money math**: `goto
+   /d/city/zuixianlou` ("醉仙楼", one of the two starting-town shops —
+   this is the specific room the earlier "迎宾楼" note was referring to,
+   NPC `店小二`/`xiao er`, `inherit F_DEALER` in `feature/dealer.lpc`).
+   `list` correctly showed 4 goods incl. `包子(baozi)` at 50 文.
+   `buy baozi from xiao er` before funding reproduced the known
+   insufficient-funds rejection. Funded via wizard `clone
+   /clone/money/coin 200` (200 文铜钱), then `buy baozi from xiao er`
+   succeeded: "你从店小二那里买下了一个包子。" Inventory after: baozi
+   present, money correctly re-denominated from 200 文铜钱 down to
+   一两白银 + 五十文铜钱 (150 文 = 200 - 50, split back into
+   silver+coin by `adm/daemons/moneyd.lpc`'s `player_pay()`) — change
+   math is correct. (Buying 2 at once correctly failed with "包子只能
+   一个一个的买。" — `baozi.lpc` isn't a combinable/stackable object,
+   content behavior not a bug.)
+2. **Sect/apprenticeship system: exists, distinct from the 偏属/命运
+   personality system, and works**. Real mechanic via `apprentice`/`bai`
+   command (`cmds/skill/apprentice.lpc` + `bai.alias`) and
+   `feature/apprentice.lpc` (`is_apprentice_of`/`recruit_apprentice`/
+   `create_family`, `family` mapping with `family_name`/`generation`/
+   `title`). Sect NPCs seed their own lineage via `create_family(...)`
+   in `create()` (e.g. `d/quanzhen/npc/zhangyuan.lpc` "掌园道长" —
+   全真教, generation 4) and each NPC decides in its own
+   `attempt_apprentice()` whether to accept (many refuse by design —
+   `d/baituo/npc/trainer.lpc` demands `born_family == "欧阳世家"`,
+   `d/xingxiu/npc/caihua.lpc`/`d/yanziwu/npc/bao.lpc` refuse
+   unconditionally — content, not a bug). `goto
+   /d/quanzhen/xiaohuayuan1` ("小花园") then `apprentice zhangyuan`
+   went through cleanly end to end: "掌园道长说道：好吧，我就收下你这
+   个徒弟了。" → "恭喜您成为全真教的第五代弟子。" `me->query("family")`
+   correctly populated. No sect-master NPC search was needed beyond
+   this one confirmed instance — the mechanism is generic and this is
+   enough to confirm it works.
+3. **Player-usable public message board: exists, was mis-diagnosed as
+   absent in the 2026-08-04 pass**. That pass only checked
+   `cmds/arch/board.lpc` (wizard-only, correctly ruled out) and whether
+   bare `inherit/misc/bboard` was mounted anywhere (correctly found not
+   mounted) — but missed the actual mechanism: `inherit/misc/bboard.lpc`
+   is the base class for **`clone/board/*.lpc`** (47 distinct board
+   objects), each a `BULLETIN_BOARD`-inheriting clone with its own
+   `board_id`/location, `foo()`'d directly into a room's `create()`
+   (e.g. `d/city/chaguan.lpc`'s `"/clone/board/player_b"->foo();`).
+   `player_b.lpc` ("江湖恩怨留言板", capacity 100) sits in `/d/city/
+   chaguan` ("春来茶馆"), one hop from the game's starting area, and is
+   visible in the room's object list to any player who looks. Its
+   `post`/`read`/`discard` commands are plain `add_action`s available
+   to everyone (only gated by `mud_age >= 1800`/`jing >= 50` for
+   non-wizards, both waived for `wiz_level(me) >= 1`, which is why the
+   admin account could exercise it directly). Live-tested: `goto
+   /d/city/chaguan` → `post 深度测试留言` → wrote one line → `.` to
+   finish → "留言完毕。" → `read new` → note rendered correctly with
+   title/author/timestamp. Of the 47 mounted boards, most others are
+   per-sect (`quanzhen_b`, `shaolin_b`, `wudang_b`, etc., also visible
+   as room objects — e.g. `/d/quanzhen/damen` lists "全真派弟子留言
+   板" — presumably gated to that sect's members by the individual
+   board's own logic, not inspected further since the general
+   player-facing case was already confirmed). **Conclusion: this lib
+   does have a real player-facing board; the design is "many small
+   boards scattered through the map, not one central `board` command."**
+
+Debug.log stayed completely empty (no `error:`/`Bad argument`/`No
+program`) across the whole session. Incidental save drift
+(`data/{login,user}/f/fluffos.o` from the admin login/purchase/
+apprentice test, `data/dbased.o` from ambient quest-daemon ticks, and
+the new `data/board/player_b.o` created by the test post) was reverted/
+removed before committing — admin account and world-state files are
+back to their pre-test committed contents.
