@@ -88,3 +88,80 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（第二轮补测，2026-08-23）——补齐此前未测的四项
+
+针对第二轮 NOTES 里明确标注"未覆盖范围"的四项，本轮逐一补测，全程
+用管理员账号 `fluffos`（Test1234）经 `goto` 直达各场景，真人指令驱动，
+非代码走查。
+
+**1. 拜师（这份档案没有传统武侠式的"门派"，但有对等机制）**：这份
+校园题材档案确实用 `apprentice <目标>` 指令实现和武侠 mudlib 一样的
+师徒/门派系统，只是包装成"班级/学生"而非"帮派"——在西教学楼向
+NPC「熔尸红」用 `apprentice rong` 成功拜师，`ob->attempt_apprentice()`
+→`recruit_apprentice()`→`re_rank()` 全链路走通，`score` 正确显示
+"华师附中第四十六届学生"称号。所以标题说的"拜师"是字面意义上的真
+实存在的机制，不是要另外找一个类比。
+
+**2. 读书系统**：图书馆一楼（`d/huafu/libzixi.lpc`）的 `zixi`/`read`
+指令验证通过——`improve_skill("literate", ...)` 累计进度，多次
+`zixi` 后触发"你的「读书识字」进步了！"，`start_busy()` 冷却门槛
+（"你还在自习之后的回味之中"）也生效。
+
+**3. 四种打工赚钱小游戏（`doc/help/hfjobs.txt` 列出的前四种，均已
+补测，全部走通）**：
+   - 单车楼看单车（`d/huafu/dclou.lpc`+`npc/laobo.lpc`）：`work` 指令
+     → 短暂"昏迷"状态几秒后清醒，拿到一块钱、经验，偶尔改善
+     unarmed 技能。
+   - 麦当劳洗盘子（`d/huafu/mdc.lpc`+`hguitai.lpc`+`chufang.lpc`+
+     `npc/fuwu3.lpc`(总管)+`npc/fuwu4.lpc`(服务员)）：`ask guan about
+     job`→`ask yuan about panzi`→（东行进厨房）`xi panzi`→（回餐厅）
+     `give panzi to guan`，全链路给薪水正确（本次拿了脏盘子数量对应
+     的银两）。注意：`mdc.lpc` 按模拟的"营业时间"会周期性
+     `kick_all()` 把非用餐的人赶到 `xjjicun`，这是设计好的餐厅打烊
+     机制，不是 bug，赶紧办完最后一步交易即可。
+   - 锦鲤池钓鱼（`d/huafu/jlchi.lpc`+`npc/laobo.lpc`）：`ask laobo
+     about fishing` 借到鱼竿，`diao yu` 成功钓鱼拿到银两/鱼获。
+     **顺带发现一个小 typo bug，已修复**：`jlchi.lpc` 的 `init()`
+     里 `add_action("do_fishing", "fighing")`——`fighing` 明显是
+     `fishing` 的拼写错误（同一行还注册了 `diao`/`钓` 两个可用的
+     同义词，唯独这个英文别名打错了字母顺序，导致这个本该可用的
+     英文同义词从未真正生效）。改成 `add_action("do_fishing",
+     "fishing")`，`update` 重编译后现场验证 `fishing yu` 可以正确
+     触发钓鱼。不影响已有的 `diao`/`钓` 路径，纯粹是补上一个死掉的
+     别名，不涉及数值/平衡。
+   - 钟楼扫楼梯（`d/huafu/zhonglou1.lpc`+`npc/tiguan.lpc`）：
+     `ask guan about 扫把` 拿到扫把，`sao di` 成功打扫（扣"精力"、
+     加学分/潜能），`give broom to guan` 正确回收扫把并清除
+     `clean_floor*` 临时标记。
+   - 第 5-7 种（值日/杀小流氓/电脑内部打病毒，`hfjobs.txt` 里编号
+     5-7）时间预算内未测，留给以后。
+
+**4. 完整走完一个已领取的寻物任务**：向聚清园 NPC「夜刻名」用
+`quest` 领到限时任务（先后拿到"『洗好的盘子』"这个目标——凑巧和
+打工小游戏3的产出重叠，用麦当劳洗盘子那条链路现造了一个交上去），
+`give <目标物> to ye` 正确判定 `quest["quest"]` 匹配、`task_time`
+未过期，发放学分/潜能奖励，`me->set("quest", 0)` 正确清空任务状态。
+
+**已知但未处理的悬空 exit（观察记录，不是本轮修复）**：驱动 stdout
+（非 `debug.log`，与 AGENTS.md §10.8 记录的同一现象）里两次刷出
+`执行时段错误：*call_other() couldn't find object
+'/d/huafu/xxiang'.`，触发点是 `d/huafu/hgate.lpc`（"华附后门"）的
+`south` exit 指向 `__DIR__ "xxiang"`，这个文件在整个档案里从未存在
+过（`d/huafu/` 目录下没有任何 `xiang` 相关文件，也没有 git 历史）。
+两次都是 NPC（`npc/trashcan#43`「金冬瓜」）在 `heart_beat()`→
+`do_flee()` 里试图往南逃跑触发的，`cmds/std/go.lpc` 本身已经用了
+AGENTS.md §9220 记录过的"先 `call_other(dest,"???")` 探测再
+`find_object()` 复查"防御写法，所以这个错误是可恢复的（NPC 逃跑失
+败，返回 `notify_fail`，不会崩溃、不会卡死任何指令），只是每次触
+发都会在驱动输出里留一条噪声。按 AGENTS.md §7.14 同类"悬空 exit"
+先例（`u/lxh/dufang.lpc` 那次的处理方式）：没有同名/改名文件之类
+的结构性证据支持"应该指向哪里"，所以照抄先例的做法——只记录，不
+瞎猜目标去乱改。
+
+全程 `debug.log`/驱动 stdout 除上述已知的可恢复 `xxiang` 噪声外零
+新增报错；`quit` 干净退出，退出前经验正确结算。测试用管理员账号
+`fluffos` 自身状态（家族、任务记录、金钱等）本轮做了较多改动并随
+存档一并提交——这是这份档案里可复用的标准巫师测试账号，历次深度
+测试都会累积游玩痕迹，属预期行为。此前"第二轮"测试注册的一次性角
+色 `mnhdive` 存档（未提交过的 untracked 文件）本轮已清理删除。
