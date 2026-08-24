@@ -4604,6 +4604,37 @@ directory at all — if not, expect this exact failure mode, and triage
 each distinct referenced basename individually (relocated vs. genuinely
 gone) rather than assuming either answer for the whole set.
 
+**Correction, found on `xiyouji2003`'s round-four §10.7 deep functional
+test: the "genuinely gone" bucket above was too conservative for this
+lib — `dashi.lpc`'s `/d/obj/weapon/staff/gangzhang` (钢杖) is NOT
+actually gone.** A THIRD outcome exists alongside "relocated to
+`d/city/obj/`" and "genuinely gone": relocated to the top-level, non-`d`
+generic object tree (`/obj/weapon/<type>/`, `/obj/cloth/`) that this
+lineage also ships as its "cloneable/`inherit`-base" item library. This
+lib's own `dashi.lpc` sat right next to the `/obj/weapon/staff/gangzhang.lpc`
+proof the whole time — same file, same `inherit SWORD`/`inherit CLUB`-
+style base class, same `set_name("钢杖", ...)` verbatim. The earlier
+caution above ("nothing confirms those are the SAME items rather than
+an unrelated later addition — left untouched rather than guessed") was
+right to demand verification, but wrong to stop there without actually
+doing it: checking `set_name()` on the top-level `/obj/...` candidate
+resolves the ambiguity exactly like the `d/city/obj/` case does. On
+`xiyouji2003`, running that check across every `/d/obj/weapon/` and
+`/d/obj/cloth/` reference (161 total across both categories) found **49
+with a byte-for-byte `set_name()`-verified match at the stripped
+`/obj/...` path** (just drop the leading `/d`) and 12 more at the
+already-known `/d/city/obj/` location — versus 100 still confirmed
+genuinely gone. Swept all 49 + 12 via the same binary-safe substitution
+pattern (`/d/obj/weapon/X` → `/obj/weapon/.../X`, `/d/obj/cloth/X` →
+`/d/city/obj/X`), 165 total replacements across 89 files, re-verified
+via `lpcc --batch` (pass count rose from 2322 to 2436 with zero new
+failures among the touched files — every remaining FAIL in a touched
+file traces to a separate, still-genuinely-missing item in the same
+`create()`). **Revised detection rule: before declaring a `/d/obj/`
+basename "genuinely gone," check the stripped `/obj/...` path too (not
+just `/d/city/obj/`), and confirm via `set_name()` — don't assume
+"unrelated later addition" without checking.**
+
 ---
 
 ### 7.67 A character-creation menu's displayed label doesn't match what selecting it actually assigns — copy-pasted from a sibling menu that numbers the same slot differently

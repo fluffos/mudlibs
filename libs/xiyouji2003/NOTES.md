@@ -703,3 +703,186 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Round-four gap-closing pass (2026-08-23): combat / learn / 拜师 / buy
+
+Closed the four items this lib's earlier round explicitly left
+"未覆盖" (code-reviewed only, never live-tested): the 土地 news-daemon
+pagination obstacle (`adm/daemons/newsd.lpc::auto_notice()`, a
+call_out-driven periodic broadcast to ANY connected player with unread
+news, not room-specific as the earlier round assumed) was worked around
+by auto-detecting its `未完继续...(ENTER 继续下一页，q 离开，b 前一页)`
+prompt and sending `q` to dismiss it before the next scripted command.
+
+**Real bug found and fixed — §7.66 addendum, 49+12 files, 165 sites**:
+while routing around the 土地 NPC, hit the exact §7.66 "missing `/d/obj/`
+shared-item tree" crash class on several DIFFERENT NPCs than the
+original pass covered (`youxia.lpc`'s `xijian` sword, `bing.lpc`'s
+`bingfu` uniform, `sengren.lpc`'s `sengyi`, etc.) — but this time also
+found that **`dashi.lpc`'s `/d/obj/weapon/staff/gangzhang`, previously
+declared "genuinely gone" in AGENTS.md §7.66, is NOT actually gone**: a
+byte-for-byte `set_name()`-verified match (`钢杖`) sits at
+`/obj/weapon/staff/gangzhang.lpc` — the top-level, non-`/d/`, generic
+weapon-class library this lineage also ships. Auditing every `/d/obj/`
+reference in the whole archive (161 unique path strings) against BOTH
+recovery locations (`/obj/...` with the leading `/d` stripped, and the
+already-known `/d/city/obj/...` relocation) found **49 more recoverable
+under `/obj/...`** and **12 more recoverable under `/d/city/obj/...`**
+beyond what the earlier pass had already fixed — all verified by
+matching `set_name()` between the broken reference and the candidate
+file before touching anything, never by filename alone. Swept via a
+binary-safe literal-string substitution (preserves each file's own
+line endings), 89 files / 165 replacements total. `lpcc --batch`
+before/after: **2322/277 (89.3%) → 2436/163 (93.7%)** with **zero new
+failures** among the touched files — every remaining FAIL in a touched
+file traces to a separate, still-genuinely-missing item in the same
+`create()` (e.g. `yulinjun.lpc` now compiles past its fixed
+`jingua` hammer but still fails on an unrelated, still-missing
+`/d/obj/armor/tongjia`). Full addendum with the detection-rule
+correction filed under AGENTS.md §7.66.
+
+**Combat (item 1) — CONFIRMED WORKING, live.** `fight <target>`/real
+combat both exercised. The `fight` "safe spar" path itself was blocked
+for the two nearest peaceful NPCs (`jieding`/`nukid` in `d/city/zhuque-e1`)
+by a related, ALREADY-documented, genuinely-unfixable content gap (see
+below) that also turned out to have a nastier consequence than the
+earlier round realized: `std/room/room.lpc`'s `make_inventory()` loop
+over a room's `objects` mapping has no per-entry error isolation, so
+ONE NPC's `create()` throwing (e.g. `jieding`'s `book-qujing` load)
+silently voids EVERY subsequent NPC in that same room's spawn list for
+the rest of the driver's uptime — `jieding` AND `nukid` both, even
+though `nukid` itself has no missing-content problem at all. Also
+confirmed this crash reproduces on every occasion the room falls out of
+the driver's live-object cache and gets recreated (not a true
+one-time-only cold-start cost as an earlier working theory this
+session assumed) — routing around it long-term isn't reliable; picking
+a target NPC with a verified-clean spawn chain is. Pivoted to `bing`
+(city guard, `d/city/npc/bing.lpc`, verified clean after the §7.66
+addendum fix above) at the west gate (`d/city/ximen`), reached via
+`goto` on the admin account: a full, real (non-spar — `bing`'s
+`can_speak` apparently false, so `fight` took the direct-`kill_ob()`
+branch) combat exchange ran to completion — multiple attack/defend
+rounds with real damage numbers on both sides, ending in the admin
+character's death. **Confirms the combat resolution mechanism itself
+works correctly, no crash in the fight/damage code path.**
+
+**NEW, severe content gap found via that same death — `/d/death/gate`
+(`DEATH_ROOM`) does not exist anywhere in this archive; EVERY player
+death crashes.** `feature/damage.lpc::die()`'s
+`this_object()->move(DEATH_ROOM); DEATH_ROOM->start_death(this_object());`
+(same unguarded shape already catalogued as AGENTS.md §7.96) throws
+`*call_other() couldn't find object '/d/death/gate'` on the second line
+— confirmed live via `debug.log`. This is the SAME root cause as the
+already-documented `/d/` zone gaps (only `d/city/` and `d/wiz/` survive
+in this snapshot at all — `d/death/` never shipped, and `grep -rl
+start_death` finds zero implementations anywhere in the archive), so
+per this lib's own established policy this is recorded as a genuine,
+unfixable-without-fabricating-content gap, NOT patched — there is no
+real death/resurrection room anywhere in the archive to route to
+instead. Worth flagging as more severe than it first looks: this is
+not the "benign shared-lineage no-op" shape noted elsewhere in this
+project's cross-lib findings (where `DEATH_ROOM` exists as an object
+but merely lacks a `start_death()` method) — here `DEATH_ROOM` doesn't
+resolve to an object AT ALL, so death is a hard crash on this specific
+snapshot, for every character, every time. **Side effect discovered the
+hard way**: the crash happens AFTER the standing 30-real-minute
+new-account retention window is what actually protects a save file
+across a disconnect (`cmds/usr/quit.lpc`'s `force_quit()`, gated on
+`me->query("mud_age") < 1800`, no `wizardp()` exemption despite an
+earlier session's note to the contrary) — combining a fresh sub-30-
+minute test session with this crash's abrupt link-loss cost the
+project's own persistent admin test account (`fluffos`) its save file
+twice this session. Re-registered a third time and left a background
+connection holding the line open past the 30-minute mark before
+`quit`-ing cleanly to re-establish it long-term (same credentials as
+before: id `fluffos`, password `Mud@2026`, wizard password `Wiz@2026`,
+granted via the pre-existing `adm/etc/wizlist` entry which was never
+touched). **Lesson for future sessions on this lib**: don't `fight`/
+force death on a short-lived test connection here — any real death
+crashes before `move()`/`start_death()` complete, and if that
+connection then also drops abnormally before 30 real minutes of total
+`mud_age`, the account is gone, wizard or not.
+
+**Skill learning (`learn`, item 2) — mechanism confirmed non-crashing,
+full success not reachable.** `learn <teacher> <skill>` against
+multiple live NPCs (`jieding`) consistently returned the correct,
+graceful `notify_fail` messages (`"你要向谁求教？"` when the teacher
+wasn't present/found, matching real room state each time) — no crash,
+no undefined-function trace, in any of several live attempts. Reading
+`cmds/std/learn.lpc` in full: the teacher-gate logic
+(`is_apprentice_of`/family-match/`recognize_apprentice`) is intact and
+consistent with the rest of this lineage. Completing an actual lesson
+requires an accepted apprenticeship first (see below), which this
+snapshot's surviving content cannot produce — same root cause, not a
+separate bug.
+
+**Sect/clan joining (拜师, item 3) — mechanism confirmed non-crashing,
+but genuinely unreachable in this snapshot's surviving content.**
+`apprentice <target>` was live-tested against `jieding` (correctly
+rejects: target has no `family`) and reaches the real accept/pending
+flow against a real family-holder. Traced the full accept path: when
+the target NPC is not itself a connected player, `cmds/std/
+apprentice.lpc` calls `ob->attempt_apprentice(me)` to let the NPC decide
+whether to accept — **and in this ENTIRE archive, `attempt_apprentice()`
+is defined in exactly ONE file, `d/city/npc/shubao.lpc` (秦琼,
+"将军府" sect master) — and that file is never placed in any room's
+`objects` list anywhere in the archive** (confirmed: `grep -rn
+'"shubao"'` outside its own file returns zero hits). Every OTHER
+family-holding NPC that IS actually reachable (`d/city/shangshu/npc/
+shangshu.lpc`, family "朝廷", confirmed reachable via `d/city/zhuque-e2`
+→ south → `shangshu/gate` → east → `yuan` → east → `keting`) has no
+`attempt_apprentice()` override, so `ob->attempt_apprentice(me)`
+call-others into nothing (silently returns 0, no crash — confirmed the
+non-crashing part live), and the player's request just sits in
+`pending/apprentice` forever with no NPC-side code path that will ever
+accept it. **This is content-authoring, not a shared-mixin bug**:
+checked sibling `xyj2000f` (closest relative per this lib's own lineage
+note above) — its `feature/apprentice.lpc` has NO default
+`attempt_apprentice()` either, and instead DOZENS of individual sect-
+master NPCs across `d/nanhai`, `d/xueshan`, `d/moon`, `d/qujing/*`,
+`d/lingtai`, `d/death`, `d/jjf`, `d/sky` each hand-author their own
+`attempt_apprentice()` with custom dialogue — confirming every reachable
+sect master is SUPPOSED to have one, hand-written per-NPC, and this
+snapshot's surviving city-zone content (only `d/city/`+`d/wiz/`, per
+the well-established missing-zone finding above) simply never included
+one for `shangshu` (or `d/city/misc/npc/bing.lpc`'s "将军府" family,
+or `d/city/quest/biao/npc/robber.lpc`'s, both also missing the
+override). Not fixed — adding a plausible `attempt_apprentice()` body
+to `shangshu.lpc` would mean inventing game-design content (what the
+NPC says, whether/how it decides to accept), which is exactly the kind
+of judgment call this lib's own standing scope policy prohibits.
+
+**Shop purchase (`buy`, item 4) — mechanism verified sound by code
+read; live purchase blocked by pre-existing content gaps on the
+specific vendors reached, not by any new bug.** Read `cmds/std/buy.lpc`
+and `feature/vendor.lpc` in full: price calculation, `can_afford()`
+gating, and the `owner->complete_trade(me, item)` item-transfer call are
+all internally consistent and call real, defined methods. Noted one
+harmless pre-existing dead call: `buy.lpc` line 98 calls
+`owner->compelete_trade(me, item)` (note the typo — extra `e`) AFTER
+the real `complete_trade()` already ran; this method is never defined
+anywhere in the archive, so it's a silent no-op call_other (confirmed:
+call_other on an undefined method returns 0 without crashing, same as
+the `attempt_apprentice()` case above) — not fixed, since it has zero
+observable effect on the transaction either way and "fixing" it would
+require guessing what a second, currently-nonexistent post-trade hook
+was originally meant to do. Live-tested `buy N from <vendor>` against
+three different vendor NPCs (`wangsao`/miantiao noodles, `cuihua`, and
+attempted `laowei`/`bag`): the first two both have a genuinely-missing
+`/d/obj/cloth/skirt` clothing item in their OWN `create()` (same §7.66
+class, confirmed in this session's miss-list, not fixable), which
+crashes their spawn before the vendor NPC ever exists to sell anything
+— correctly reproduces the "target not found" `notify_fail` on `buy`,
+no crash. Also confirmed a fresh, newly-registered character starts
+with zero money (`score` shows "钱庄存款：目前是个穷鬼" — "pauper"), so
+even a fully-reachable vendor would additionally need a funded test
+character to reach the actual `can_afford()`/payment code path — noted
+as unverified-live per this lib's own standing policy (§10.7 checklist
+item 6) rather than silently presented as fully tested. No item-
+processing/加工厂 mechanic exists anywhere in this archive at all
+(`grep -rl 加工厂` across all `.lpc`/`.h` files returns zero hits; the
+phrase only appears in `doc/help/master_job` and two `doc/help/story/*`
+narrative files, describing a mechanic near "泾水桥南" that has no
+corresponding room/NPC file anywhere in the snapshot) — genuine missing
+content, not a bug, consistent with this lib's other confirmed
+missing-zone findings.
