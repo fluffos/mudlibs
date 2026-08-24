@@ -739,3 +739,75 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Round-four re-verify (2026-08-24): re-ran 拜师/留言板/兵器铺, found and fixed a real §7.117 instance
+
+The task brief for this pass named the same three areas as the
+2026-08-20 entry above (拜师/留言板/当铺·兵器铺) — that entry already
+covers them and fixes the 兵器铺 case-mismatch crash. Re-verified all
+three live on a fresh driver boot before doing any new work, since the
+brief also asked to specifically check for AGENTS.md §7.117 (the
+`apprentice`/`bai`/`recruit` first-time-applicant guard gap, documented
+after the 08-20 pass) — which the 08-20 entry did not check for.
+
+**Re-confirmed clean, no regressions**: NPC-rejection path
+(`apprentice qin` at low `combat_exp`, exact same 秦琼/`d/jjf/keting`
+setup as before) still gives the same clean in-character rejection;
+board `post`/`read`/`discard` round-trip at 南城客栈留言板 still works
+end-to-end; 兵器铺's `list`/`buy` still work (`clone/armor/` stays
+lowercase, no case-mismatch regressions found anywhere under `clone/`).
+
+**Found and fixed a real §7.117 instance.** `cmds/std/apprentice.lpc`'s
+"the target already offered to recruit me, I'm confirming" branch (the
+`ob->query_temp("pending/recruit") == me` branch, entered when a player
+runs `apprentice <master>` a second time after the master's
+`attempt_apprentice()`/`recruit` accepted them) compared
+`me->query("family/family_name") != ob->query("family/family_name")`
+with **no guard for `me` having no family yet** — exactly the pattern
+in AGENTS.md §7.117. For any legitimate first-time apprentice (the
+overwhelmingly common case — everyone's first sect join goes through
+this exact code path), `me->query("family/family_name")` returns `0`
+(no family set), `(string)0` casts to `"0"`, which is never equal to
+the master's real family name, so the check always misfires into the
+"betray your old sect" branch: wrong flavor text (`$N决定投入$n门下`
+instead of the correct `$N决定拜$n为师`), plus `me->set("score", 0)`
+and `me->add("betrayer", 1)` incorrectly applied to a brand-new
+apprentice who never had a prior sect to betray.
+
+The sibling file `cmds/std/recruit.lpc` (the master's side of the same
+recruit/confirm transaction) already has the correct guard at its
+analogous check (line 63: `if ((ob->query("family")) && (...))`), with
+an explicit comment `// follow modified by elon 09-10-95 to fix a bug
+in 1st time recruit` acknowledging this exact bug class — the fix was
+applied once to `recruit.lpc` decades ago and never ported to its twin,
+`apprentice.lpc`. Matches the general §7.117 write-up's own observation
+about this exact half-fixed-pair shape.
+
+**Fix** (`cmds/std/apprentice.lpc`, in the recruit-confirm branch):
+```lpc
+// before:
+if ((string)me->query("family/family_name") != (string)ob->query("family/family_name")) {
+// after:
+if ((me->query("family")) && ((string)me->query("family/family_name") != (string)ob->query("family/family_name"))) {
+```
+
+**Live-verified end-to-end** on a fresh driver boot: bumped a
+family-less admin test character's `combat_exp` to 200000 (temporarily,
+via a throwaway wizard command created and removed within this
+session — not left behind), went to 秦琼 at `d/jjf/keting`, ran
+`apprentice qin` twice (first call triggers `attempt_apprentice()` ->
+NPC `recruit`s the player; second call is the player's confirm). Before
+the fix this would have shown the wrong "決定投入...門下" betrayal
+message and zeroed `score`; after the fix it correctly shows "秦琼决定
+收你为弟子。...恭喜您成为将军府的第三代弟子。", and `score` correctly
+shows `师承：将军府秦琼` / `将军府第三代弟子`. Reverted the test
+character's `family`/`title`/`betrayer`/`combat_exp`/`class` fields
+back to pristine afterward (also bought+destroyed one 兵器铺 item along
+the way while re-verifying the shop — correct gold deduction, 19→11
+两黄金 for an 8-两黄金 item — left the resulting gold balance as the
+account's normal post-test state, matching this lib's existing
+admin-account convention). `lpcc --batch` and a full driver reboot both
+clean after the fix, zero new debug.log errors. No corpus-wide sweep
+of this exact shape was attempted here (each instance needs hand
+verification per the general §7.117 write-up); left for a future
+dedicated sweep as already flagged there.
