@@ -253,3 +253,93 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Round-four gap closure: sect apprenticeship + shop/economy (2026-08-24)
+
+Closes the two items the 2026-08-06 §10.7 pass left explicitly
+untested (see that section above).
+
+### Sect apprenticeship
+
+No stationary, map-placed sect-master NPC exists in this archive's
+current room layout — `d/nanhai/npc/master.lpc` (玄智和尚, a bonze
+master of 山烟寺, `create_family("山烟寺", 26, "住持")`) is a fully
+functional recruiter NPC (`attempt_apprentice`/`do_recruit`/
+`recruit_apprentice`), but a corpus-wide grep found **zero** room files
+anywhere under `d/` that load it — same "written but never placed"
+shape as `d/obj/misc/muren.lpc` noted in the original pass. Used the
+admin account's `clone` wizard command to place it in 南城客栈 (the
+same technique implicitly endorsed by this round's task framing) as
+the practical way to reach it.
+
+**Found and fixed a real instance of AGENTS.md §7.117** (`bai.lpc`/
+`apprentice.lpc`'s "did you betray your old sect" check missing an
+existence guard for first-time applicants): `cmds/std/apprentice.lpc`
+line 59 had the exact dominant vulnerable form,
+`if ((string)me->query("family/family_name") != (string)ob->query("family/family_name"))`,
+with no guard on whether the applicant (`me`) already has a family.
+Its sibling `cmds/std/recruit.lpc` already carries the fix on its own
+matching branch (line 64, `if ((ob->query("family")) && ...)`, with
+the tell-tale `// follow modified by elon 09-10-95 to fix a bug in 1st
+time recruit` comment) — this lib was not part of the large corpus-wide
+§7.117 sweep (not matched by that session's grep), so it's a new,
+previously-uncaught instance of the same one-file-of-the-pair-missed
+gap already seen on `sjshv150`. Fixed identically to the documented
+remedy: `if (me->query("family") && (string)me->query("family/family_name")
+!= (string)ob->query("family/family_name"))`.
+- Confirmed via `lpcc --batch`: file compiles clean (not among this
+  lib's pre-existing 64 unrelated batch failures).
+- Confirmed live end-to-end via a full normal playthrough: registered
+  a fresh character, `ask master about 出家` → `kneel` (剃度, renamed,
+  `class` set to `bonze`) → `apprentice master` — completes via the
+  NPC's own `attempt_apprentice`/`recruit.lpc` path (already-guarded
+  sibling branch) and `score` correctly showed
+  `山烟寺第二十七代弟子 <name>` with `你的师父是玄智和尚`.
+- Separately, specifically exercised the buggy `apprentice.lpc`
+  branch itself (which the natural NPC-driven flow above does NOT
+  reach, since that NPC always recruits *after* the player calls
+  `apprentice` first): registered a second fresh, family-less
+  character, used the admin account's `call master->command("recruit
+  <id>")` to force the master to recruit first (bypassing
+  `attempt_apprentice`'s own class/gender gate, which is irrelevant to
+  the bug under test), then had the applicant confirm with `apprentice
+  master`. Before the fix this unconditionally took the "betrayed your
+  old sect" branch (wrongly, since a first-timer has no family to
+  betray) and would have zeroed score / set the `betrayer` flag; after
+  the fix it correctly took the normal "拜师" branch (`你决定拜玄智和
+  尚为师。`) with no betrayer flag, and `score` afterward showed clean
+  membership (`山烟寺第二十七代弟子 <name>`, no score reset).
+
+### Shop / economy
+
+Found a real, placed vendor NPC: `d/city/bookstore.lpc` loads
+`d/city/npc/bookseller.lpc` (孔方兄, `inherit F_VENDOR_SALE`), selling
+several books via `vendor_goods`. Tested with the admin account
+(`clone`d the vendor and some `/obj/money/silver` into the same room,
+`set_amount()` via `call` to fund the purchase):
+- `buy san from kongfang` (三字经, value 1000 = 10两银子): had exactly
+  10 两银子, spent all of it, received the book, zero coin objects
+  left over — correct exact-payment math.
+- `buy xyjbook from kongfang` (《西游记》, value 100 = 1两银子): had 15
+  两银子 (1500), paid 100, correctly received **14两银子** in change
+  (`pay_money()`'s gold/silver/coin decomposition of the 1400
+  remainder) plus the book — correct change-making math, not just
+  exact-payment.
+- No `debug.log` errors from either purchase.
+
+No programming bugs found in the shop/vendor path itself
+(`feature/vendor.lpc`/`vendor_sale.lpc`/`cmds/std/buy.lpc`) — the
+type-mismatch-looking `mixed buy_object(object who, object item)`
+override in `bookseller.lpc` (declared parameter type `object` but
+always actually passed a `string` item id from `cmds/std/buy.lpc`) is
+functionally harmless in this driver (no runtime type enforcement on
+dynamically-dispatched call args), so not treated as a bug per the
+scope rule (no crash, no error signature).
+
+### Cleanup
+
+Removed the two round-four test character saves (`xyjtc`/`xyjte`,
+untracked `.o` files under `work/data/{login,user}/x/`) and destroyed
+all admin-side clones (the two placed-for-testing NPCs, leftover
+money/book clones) before stopping the driver. `xyjtestb` (from the
+original 2026-08-06 pass, already tracked in git) was left untouched.
