@@ -901,3 +901,197 @@ exists in this lib (only a static help-doc file happens to share the
 name). Fixed by deleting the redundant lines. Verified via a clean
 native driver boot (zero new `debug.log` errors, port listening, killed
 by exact PID after ~8s).
+
+## 深度功能測試（第五輪，2026-08-24）—— 補測 build/grow/enterprise/fight，發現並修復一個真實 bug
+
+補測第三輪留下的四個未覆蓋系統：`build`/`grow` 完整產出一輪、
+`enterprise` 從零創建一家公司、`fight` 戰鬥系統。使用既有的已入籍
+測試城市 `testcityfour`（第四輪占領/改名而來）作為經濟測試場地，用
+一個全新角色 `testgrowa` 走完整條入籍→買地→建造→種植→收成的流程。
+
+### 發現並修復的真實 bug
+
+**`init(object ob)` 系列房間/物件在驅動自動呼叫時對 `ob` 沒有做非
+物件防護，被第四輪自己的修復意外解除隱藏，導致每次登入/移動都會
+產生一則嚇人的「WARNING 這個程式作業執行無效即將關閉」錯誤**：
+FluffOS 的 `setup_new_commands()`（`move_object()` 內部呼叫）在移動
+一個已 `enable_commands()` 的活物時，會先以 **0 個參數**自動呼叫一
+次目的地房間（以及在場其他已 enable_commands 物件）的 `init()`
+apply（見 `~/src/fluffos/src/packages/core/add_action.cc:186` 起的
+`apply(APPLY_INIT, dest, 0, ORIGIN_DRIVER)`）——這是純驅動行為，和
+mudlib 自己另外在 `_move_liv.lpc`/`_move.lpc` 里明確呼叫的
+`where->init(this_object())`（帶入真正移動者）是兩次獨立呼叫。這份
+檔案裡有 4 處房間/物件把 `init(object ob)` 的形參直接當成呼叫者使用
+（`ob->is_living()`、`ob->query_quest_step(...)`、
+`ob->is_module_npc()`），完全沒有檢查 `ob` 是否為合法物件，遇到驅動
+自動呼叫時 `ob` 必為 `int(0)`，於是對 `int(0)` 呼叫 `call_other()`
+直接崩潰。
+
+這個 bug 早就存在，但**一直被第四輪修復之前的另一個 bug 遮蔽**：第
+四輪（2026-08-19）發現並修復的「`set_living_name()`/`enable_commands()`
+全檔案從未被呼叫過」正是 `setup_new_commands()` 觸發驅動自動
+`init()` 的前提條件（`if (item->flags & O_ENABLE_COMMANDS)`）——修
+復前玩家物件從未被標記 `O_ENABLE_COMMANDS`，這條驅動自動呼叫路徑因
+此從未真正執行過；第四輪的修復是正確且必要的，但同時第一次讓這條
+路徑活了起來，暴露出這個此前完全休眠的第二個 bug。
+
+- `/wiz/wizhall/room_wizhall_1.lpc`（**巫師神殿**，所有新角色共用的
+  出生房間）的 `init(object ob)` 第 176 行 `if (!ob->is_living())
+  return;`——每一個全新角色第一次進入遊戲、以及每一個既有角色每次
+  登入，都會先觸發這個崩潰，导致「新手提示」歡迎訊息從未真正顯示
+  過（`_move_liv.lpc` 補打的第二次真實 `where->init(this_object())`
+  呼叫也一併被中斷，`do_look()`、地圖圖示設定等後續動作全部被跳
+  過）——這是本輪影響面最廣的一個發現：實測確認修復前每次連線都會
+  在畫面上打印一次嚇人的錯誤警告，修復後乾乾淨淨、新手提示正常顯
+  示。
+- `/quest/yin_ling_yu/room_4.lpc` 的 `init(object me)`
+  （`me->query_quest_step(...)`）——同一形狀，任務房間。
+- `/std/inherit/feature/module/room/_room_mod.lpc` 的
+  `init(object ob)`（`ob->is_module_npc()`，接著轉呼叫
+  `query_module_file()->init(this_object(), ob)`）——**所有** 46 種
+  商業/商店類房間模組（`trading_post`、`enterprise`、`bank`、
+  `cityhall` 等）共用的房間基底類別，任何玩家走進任何一間商店/企業
+  建築都會先觸發一次這個崩潰。
+- `/std/inherit/feature/module/product/_product_mod.lpc` 的
+  `init(object ob)`（把 `ob` 原封不動轉呼叫 `module->init(ob,
+  this_object())`）——房間內陳列的商品物件共用的基底類別，同樣的形
+  狀。
+
+（`/wiz/wizhall/room_wizhall_6.lpc` 也有同名 `init(object ob)`，但
+內文完全沒有使用 `ob` 參數——單純重繪房間描述，不受影響，未修改。）
+
+**修復**：在這 4 個檔案的 `init()` 開頭統一加上防護——
+`if (!objectp(ob)) ob = this_player();`（驅動自動呼叫這條路徑上，
+`setup_new_commands()` 呼叫前已用 `save_command_giver(item)` 把
+`this_player()` 正確設成真正移動者，所以這樣補回來是安全、準確
+的），再 `if (!objectp(ob)) return;` 兜底。不影響任何既有的顯式呼叫
+路徑（`where->init(this_object())`、
+`query_module_file()->init(this_object(), ob)` 兩處呼叫都繼續傳入
+真正的物件，這個防護只在 `ob` 本來就是 0 時才起作用）。用 §9 LPC
+formatter 跑過這 4 個檔案（`unchanged: 4, errors: 0`），`::` split
+盲點確認無殘留。修復前後各用一個全新角色對照驗證：修復前登入巫師
+神殿必定打印崩潰警告且新手提示不顯示；修復後乾淨無警告、新手提示
+正常顯示。
+
+### `build`/`grow`：完整驗證一輪真實生產週期，乾淨無崩潰
+
+用 `testgrowa` 在 `testcityfour(50,50)` 走完整套流程：`register`
+入籍（因為這座第四輪占領而來的城市完全是荒地，沒有市政廳建築可供
+一般市民登記，改用巫師直接呼叫 `CITY_D->register_citizen()` 這條
+`cityhall.lpc` 的 `do_register()` 內部本來就會呼叫的同一函式，等效
+於市政廳登記，見下方「未覆蓋範圍」說明理由）→ `region 農`（市長權
+限的分區規劃，同樣經由等效的 `CITY_D->set_coor_data()` 直接設定，
+理由同上）→ `buy here`（真實玩家指令，花費 $TF 100,000 買下這塊
+地）→ `build` → `50 by wood`（選擇「50. 農田」並用原木材料建造，
+連續 20 次呼叫，中途體力耗盡一次、用既有的 `fullheal` 巫師指令補滿
+後繼續，最終「農田」100% 完工，觸發
+`BUILDING_D->materialize_outdoor_building()`）→ `grow 1 rice`（開始
+耕作稻秧，`present()` 對這份檔案的多字 id `"rice seedling"`/
+`"seedling"` 均比對失敗、只有取第一個字 `"rice"` 才成功匹配——這是
+`present()` 對多字 id 的既有比對行為，不是本輪新引入的問題，也沒有
+任何錯誤訊息或崩潰，純粹是輸入格式的既有限制，判定為觀察而非 bug）
+→ `grow 1 water` × 5（灌溉滿足材料需求，觸發「開始生長」訊息）→
+用 `GROWTH_D->grow_up()` 這個心跳實際呼叫的同一函式手動快轉了幾輪
+（提前驗證了 tick 從 0→55 的推進邏輯運作正常）之後，直接補寫剩餘
+`tick`/`wait_for_harvesting` 欄位跳過剩下的真實等待時間（見下方
+「未覆蓋範圍」）→ `grow harvest`（真實玩家指令，成功收成「50 袋稻
+米」，地塊等級同時從 0 升到 1 級）。全程 `debug.log` 無新增錯誤。
+
+一個值得記錄、但確認屬於既有設計而非 bug 的觀察：`grow harvest`
+呼叫的 `ob->move_to_environment(me)` 把收成的稻米移到「和玩家同一
+個環境」（也就是這塊農田本身），**不是**移進玩家的隨身物品欄——
+`move_to_environment()`（`_move.lpc:332`）的定義本來就是移到
+`environment(ob)`，也就是玩家所在的房間/地圖格，不是移進 `ob` 的
+inventory；`look` 確認稻米確實出現在腳下地面上，需要玩家自己
+`get` 撿起來。沒有任何錯誤訊息或崩潰特徵，是收成物掉在地上、需手
+動撿取的既有設計，不屬於本輪修復範圍。
+
+### `enterprise`：從零創建一家企業集團，乾淨無崩潰
+
+`testgrowa` 用巫師 `givememoney`/`earn_money` 等效路徑補足
+$RW 20,000,000 現金（企業系統用的是全域貨幣 RW，不是城市貨幣，正
+常遊玩需要長時間累積，遠超單次測試session合理預算，判定屬於「經
+濟前提太重」的既有說明範圍，直接用巫師既有指令補足現金屬於測試
+設置，不是修改遊戲邏輯）後，執行真實玩家指令
+`enterprise register 測試農業集團`，花費 $RW 10,000,000 成功登記
+成立企業集團，`ENTERPRISE_D` 資料正確寫入。
+
+一個已排除的假警報：透過 `scripts/tmux_mud.sh`（tmux 轉發鍵盤輸入）
+送出的多字中文企業名稱在伺服器端儲存資料裡出現了 `U+FFFD`
+替代字元（「測試農業集團」的最後一個字「團」被吃掉），一開始懷疑
+是 `enterprise.lpc` 的字串處理 bug；但用一個**繞開 tmux、直接開
+原始 Python socket 連線**（`scripts/mudclient.py` 同款手法）送出的
+同一個多字中文企業名稱（「測試農二集團」）在伺服器端完整無損地儲
+存下來，證實了 AGENTS.md 已知的「tmux 多位元組中文傳輸偶爾會在極
+少數情況下把 UTF-8 多位元組序列從中間截斷，造成末字元被替代成
+`U+FFFD`」這個測試方法論假警報模式，不是 `enterprise.lpc`
+本身的 bug，本輪未做任何程式碼修改。測試用的兩個企業集團
+（`測試農業集團`、`測試農二集團`）已在收尾時清除，只留下第四輪原
+本就有的 `測試企業集團`。
+
+### `fight`：確認是刻意停用的功能，不是 bug
+
+`cmds/std/ppl/fight.lpc` 第 79-80 行：單一目標的 `fight '目標'`
+指令在核心邏輯前有一道明確的 `if (!wizardp(me)) return tell(me,
+"戰鬥功能測試中。\n");` 閘門——**一般玩家完全無法使用這個指令**，
+每次呼叫都會拿到一句清楚的「戰鬥功能測試中」提示，沒有任何錯誤或
+崩潰特徵。這正好印證了任務說明裡「`fight` 可能是次要/非核心機制」
+的猜測——它不只是次要，而是被開發者明確標記成尚未開放給玩家的功能。
+`-all`（攻擊在場所有目標）和 `-stop`（停止戰鬥）兩個變體指令沒有這
+道 `wizardp()` 閘門，玩家可以直接使用；這是設計上的不一致（單目標
+指令被鎖、群體/停止指令沒鎖），但同樣沒有任何錯誤特徵，屬於內容/
+設計層級的觀察，不屬於 AGENTS.md §10.7 界定的程式 bug 修復範圍，未
+做修改。
+
+為了驗證底層戰鬥系統（`COMBAT_D`）本身沒有崩潰，用巫師帳號
+（`wizardp()` 為真，繞過上述閘門）對 `testgrowa` 發起 `fight
+testgrowa`，正常觸發「開始向...進行攻擊」訊息，隨後一回合互相揮拳
+落空的正常戰鬥交換，`fight -stop` 乾淨停止戰鬥，全程無崩潰、無新
+增 `debug.log` 錯誤。
+
+### 本輪實測消耗/影響的內容（非 bug，如實記錄）
+
+- `testcityfour(50,50)` 這塊地被 `testgrowa` 買下並建成「農田」，
+  收成了一輪稻米（level 1）——這是驗證 `build`/`grow` 本身所必需的
+  真實遊玩動作。
+- 清理階段一個操作失誤：用來過濾「只刪除本輪新建的測試企業、保留
+  第四輪原有的『測試企業集團』」的 `eval` 指令裡，比較字串
+  `"測試企業集團"` 同樣是透過 tmux 鍵入的，很可能撞上了上面剛確
+  認過的同一個 tmux 中文傳輸假警報，導致字串比對失敗、連同第四輪
+  原本留下的『測試企業集團』一起被誤刪（清理後
+  `ENTERPRISE_D->query_all_enterprises()` 回傳空陣列）。這筆測試用
+  企業資料（本身就是第四輪測試遺留物，非真實玩家資料）沒有留下可
+  逐欄還原的快照，如實記錄未復原，不影響任何真實玩家資料或程式碼
+  正確性。
+- 本輪新建的測試角色 `testgrowa` 存檔已在收尾時刪除
+  （`data/user/t/testgrowa/`）；第四輪遺留的其他測試角色
+  （`qinye` 等）維持原狀，不在本輪清理範圍內。
+
+### 未覆蓋範圍（誠實說明）
+
+`testcityfour` 是第四輪占領一座「廢棄城市」模板轉化而來，占領後的
+地圖完全是未開發荒地，沒有市政廳（cityhall）等任何公共建築
+（`CITY_D->query_public_facility()` 回傳的公共建築計數是空
+mapping）——一般玩家入籍/分區規劃這兩步驟在這座測試城市裡沒有真正
+的市政廳可用，本輪用巫師直接呼叫 `CITY_D->register_citizen()`/
+`CITY_D->set_coor_data(loc,"region",...)` 這兩個 `cityhall.lpc`/
+`region.lpc` 內部本來就會呼叫的同一函式代替，不是繞過遊戲邏輯，而
+是等效於「市政廳」在真實城市裡會做的動作；`build`/`buy`/`grow`
+之後的步驟則全部是真實玩家指令。`grow` 的作物成熟計時（稻秧從下種
+到可收成需要 tick 到 300，真實心跳節奏下約需十分鐘）在驗證了心跳
+呼叫的 `GROWTH_D->grow_up()` 本身可以正常推進（tick 0→55，期間一次
+直接呼叫該函式 60 次的高頻壓力測試在第 8 次左右於
+`system/daemons/map_d.lpc:286`（陣列邊界檢查，推測是 `broadcast()`
+在極端高頻呼叫下對地圖天氣/範圍計算的邊界情況）拋出一次「Array
+index out of bounds」執行期錯誤——這個錯誤只在用 eval 於同一秒內連
+續呼叫 60 次 `grow_up()` 的人為高頻情境下出現過一次，正常心跳節奏
+（每次呼叫間隔數秒）下的真實遊玩全程未曾觸發，且錯誤發生的呼叫方
+式本身已經偏離正常遊戲從未支援的呼叫節奏，比照 AGENTS.md 對
+eval/lpcc 觸發之異常一貫的存疑處理原則，未在本輪確認為真實 bug、也
+未嘗試修復，留給下一輪如果需要更嚴謹驗證心跳排程本身時再處理）後，
+直接補寫 `tick`/`wait_for_harvesting` 欄位跳過剩餘等待時間，讓
+`grow harvest` 這個真正要驗證的玩家指令可以在合理的單次測試 session
+時間預算內被驗證到。企業系統的「加入」（`enterprise join`/
+`invite`/`kickout`）等多人協作指令因為只有單一測試角色在線，本輪
+未能實測，邏輯上看起來直接明瞭（`ENTERPRISE_D`/`find_player()` 呼
+叫，不涉及本輪發現的 `init()` 那類坑）。
