@@ -198,3 +198,93 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-08-24，round four）——补测商店购买 + 拜师成功链路，发现并修复动态任务系统的 `.c`/`.lpc` 转档崩溃
+
+重新审计本档案历史后发现两个此前从未真正测试过的缺口：商店购买
+（`buy`）从未测过真实交易，以及拜师此前只测过对非门派 NPC 的拒绝
+路径，从未走通过一次真正成功的拜师。本轮针对这两点补测，过程中
+额外发现并修复了一个真实的 PROGRAMMING bug。
+
+### 发现并修复的 PROGRAMMING bug
+
+**`adm/daemons/questd.lpc` 动态任务系统的 `.c`/`.lpc` WASM 转档遗留
+崩溃（`spread_quest()` 对 `new()` 失败无判空）**：`spread_quest()`
+第 111-112 行 `tar = new(quest); tar->set("value", 0);` 对
+`new(quest)` 的返回值没有做判空检查。`quest` 来自
+`d/obj/quest/dynamic_quest`/`dynamic_location` 两份数据文件，这两
+份文件里全部 218 条物件/房间路径都还是转档前的字面 `.c` 后缀（例
+如 `/d/obj/quest/tieluohan.c`），但转档后所有源码文件都已经改名成
+`.lpc`，导致 `new(quest)` 恒定加载失败返回 `0`，随即
+`tar->set(...)` 就是对整数 `0` 做 `call_other()`，触发
+`*Bad argument 1 to EFUN call_other()` 运行时崩溃。**实际触发路
+径确认**：这不是冷门代码——`cmds/std/give.lpc` 的 `do_give()` 每
+次 `give` 指令都会经 `/inherit/quest.lpc` 的 `quest_give()` 调用
+`"/adm/daemons/questd"->quest_reward(...)`，这是本次驱动会话里
+`questd.lpc` 第一次被字符串调用加载，触发它的 `create()` →
+`init_dynamic_quest(1)` → `spread_quest()`，在真实测试中一给玩家
+钱就当场崩溃、`give` 指令本身也被中断。`init_dynamic_quest(1)` 也
+会被 `adm/daemons/cron.lpc` 周期性调用（`already_spreaded(str, 1)`
+在硬刷新模式下恒定返回 0，不会跳过），意味着这条崩溃路径不需要
+玩家操作也会在每次冷启动后周期性复现，是这份档案里核心游戏机制
+（世界随机任务物品投放）事实上完全没有工作过的根因。**修复**：
+机械地把两份数据文件里所有以 `/` 开头、以 `.c` 结尾的路径行改成
+`.lpc`（`dynamic_quest` 30 行、`dynamic_location` 186 行），逐一
+核对转换后每条路径都能在档案里找到对应的真实 `.lpc` 文件（各 30/
+188 条中分别 30/152 条精确匹配成功）。**现场验证**：修复前用
+`give coin to <玩家>` 稳定复现崩溃（含完整调用栈，定位到
+`questd.lpc:112`）；直接用 `call` 指令传入 `.lpc` 路径调用
+`spread_quest()` 验证不崩溃且返回 1，确认根因；应用修复、重启全
+新驱动后，同样的 `give` 操作干净执行，`debug.log` 全程无新增运行
+时错误。
+
+**范围边界（未处理，判定为转档前就有的原始数据问题，非本次转档
+引入）**：`dynamic_location` 里另有 38 条路径就算换了 `.lpc` 后缀
+依然找不到对应文件——35 条是 `/d/quanzhou` 系列缺失路径分隔符的
+拼写错误（如 `/d/quanzhoubamboo.c` 应为 `/d/quanzhou/bamboo.c`）、
+`/d/baituo/ouyangfeng.c` 对应的房间文件本身在转档前就已经不存
+在、以及两条 `/d/xueshan/tulu2`/`tulu3` 从未带过任何后缀。逐一核
+对 2006 年原始 raw 源码（`raw/夕阳再现III/.../world/d/obj/quest/
+dynamic_location`）确认这三类问题字节对字节地在原始档案里就已经
+存在，不是转档引入的回归。而且这类"位置"路径加载失败时
+`spread_quest()` 里 `cur_obj` 会保持 `0`，函数体在
+`if (cur_obj) {...}` 保护下直接跳过、正常 `return 1`，不会崩溃
+（已用 `call questd->already_spreaded(...)` 验证同一对象的重复调
+用不产生异常）——按项目"只修程序错误，不动内容/原始数据"的口径
+未做改动，留档说明。
+
+### 商店购买（`buy`）——首次真实交易测试
+
+新注册测试角色 `xytestf`（中文名"浮浮六"，男性，落地"铁枪庙"，
+`/d/quanzhou/tieqiang`）没有任何随身现金（`logind.lpc` 的
+`init_new_player()` 只有女性角色会拿到 `money`——该属性其实是"钱
+庄存款"，`score` 里显示的银行余额，不是可花现金，与本次购买测试
+无关，是原始设计如此，不是 bug）。管理员用 `clone`/`call
+coin->set_amount(250)`/`give` 给测试角色 250 个铜板（同一操作过
+程正是上面撞见的 questd 崩溃发生的地方，验证过修复后干净执行）。
+角色移动到 `/d/quanzhou/zahuopu`（杂货铺，NPC `陈阿婆`，继承
+`F_DEALER`），`list` 正确列出五件货品及单价，`buy xiuhua zhen` 用
+250 个铜板买下一根标价"一两白银"（100 文）的绣花针：交易后 `i`
+显示扣款后找零为"一两银子 + 五十个铜板"（250-100=150，
+150/100=1 两银子余 50 文，找零算法正确），物品正确出现在背包
+里。购买流程本身（`feature/dealer.lpc` 的 `do_buy()`）逻辑正确，
+无需修复。
+
+### 拜师（`bai`）——首次成功链路测试
+
+此前只测过对无门派 NPC 的拒绝路径。本轮选定
+`d/city3/npc/chen.lpc`（丐帮成都分舵舵主陈玉林，`attempt_apprentice()`
+仅要求 `int < 25`，测试角色 `int` 为 24，满足条件）。移动测试角色
+到 `d/city3/ruin2`（丐帮分舵），执行 `bai chen`：陈玉林同意收徒、
+自动执行 `recruit`，角色下跪磕头，系统提示"恭喜您成为丐帮的第二
+十代弟子"。`score` 复核：头衔变为"叫化子"，称谓变为"丐帮第二十
+代弟子"，"你的师傅"字段正确显示"陈玉林"。`recruit_apprentice()`/
+`assign_apprentice()`（`feature/apprentice.lpc`）逻辑正确，无需
+修复。
+
+### 测试账号
+
+`xytestf`/`Test@2026`（新注册测试账号，测试完毕已 `quit` 并删除
+存档文件，未纳入提交）。管理员 `fluffos`/`Mud@2026` 因本轮临时持
+有的铜板道具及在线时间/食物饮水漂移，已用 `git checkout` 还原，
+未纳入提交。驱动两次启动均按精确 PID 结束。
