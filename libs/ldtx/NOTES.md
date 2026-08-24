@@ -343,3 +343,132 @@ Expected: object, string, array,  Got: int(0).
 邮件系统、其余城市外的更远地图区域（大理/雪山/明教/桃花岛等支线内容）
 本轮仍未深入探索；商店/拜师验证仅覆盖各一个代表性 NPC（店小二、清为
 比丘/丘处机），未逐一走遍全档案数十个门派/商人 NPC。
+
+## 深度功能测试（§10.7，2026-08-24）：邮件系统 + 大理/雪山/明教/桃花岛地图补测
+
+这次补上上一轮明确标记的两项未覆盖内容：玩家间邮件系统、开局城市以外
+的四个支线地图区域。原生驱动（`build-debug/src/driver`）+ 全新 Python
+socket 脚本（`scripts/mudclient.py`，规避 tmux 多字节传输失真的已知
+误报模式）实测。
+
+### 1. `cmds/skill/apprentice.lpc` 的 §7.117 姊妹文件缺口（真实崩溃，已修复）
+
+先按任务清单顺手复查 `bai`/`apprentice` 拜师指令族：`cmds/skill/
+bai.lpc` 的 §7.117 类"背叛师门"判断已在 2026-08-21 那轮修好（`ob->
+query("family")` 前有 `mapp()` 守卫），`cmds/skill/apprentice.lpc`
+是同目录下几乎逐字重复的姊妹文件（同一段 `main()`），但第 56 行仍是
+未修的原始写法：
+
+```
+if (((string)me->query("family/master_id" == "feng qingyang")) || ((string)me->query("family/master_name" == "风清扬"))) {
+```
+
+括号写反（`me->query("family/master_id" == ...)`，实际是对 `query()`
+传入一个恒为 0/1 的布尔比较结果），与 2026-08-21 那轮在 `bai.lpc` 里
+发现并修复的同一个 bug 一字不差，只是那一轮的修复没有同步应用到这个
+姊妹文件——与 AGENTS.md §7.117 记录的 `sjshv150` "姊妹文件漏改"缺口是
+同一类问题。按同样写法修复：
+
+```
+if (((string)ob->query("id") == "feng qingyang") || ((string)ob->query("name") == "风清扬")) {
+```
+
+`lpcc_check.sh` 编译确认 `/cmds/skill/apprentice` 通过（本档案 5960
+个文件里既有的 148 个失败与本次改动无关，改动前后失败总数不变）。
+
+### 2. 邮件系统：首次实测，功能完整，未发现 bug
+
+`clone/misc/mailbox.lpc`（信箱道具，`mail`/`forward`/`from`/
+`readmail`/`discard` 五个指令）在 `adm/daemons/logind.lpc` 第 731-732
+行每次登入都会自动 `new()` 一份塞进玩家物品栏（含离线玩家的"有你的
+信哟"到站提醒、`new_mail` 标记），是真实可达的核心功能，不是需要 NPC
+额外授予的隐藏内容。
+
+用两个全新角色实测端到端流程：`ldtxmt`（田伯光，在线）对离线的
+`ldtxml`（岳灵珊）执行 `mail ldtxml`，标题"问候一下"，正文通过内建
+行编辑器（`~q`/`.`/`~e` 语义与留言板编辑器一致）输入后选择不留副本，
+返回"Ok."确认发送成功（`send_mail()` 内部用 `FINGER_D->
+acquire_login_ob()` 找到收件人的登入档，因为对方离线所以走 `new
+(MAILBOX_OB)` 建立信箱、写信、`destruct()` 释放这条路径）。之后用
+`ldtxml` 重新登入，`from` 正确显示 1 封未读信件（寄信人"田伯光
+(ldtxmt)"），`readmail 1` 正确显示标题、寄信人、正文全文，编码无损、
+无乱码（用裸 socket 脚本交叉验证过，排除 tmux 多字节传输失真的已知
+误报模式）。全程 `debug.log` 无任何异常。未逐一测试 `forward`/
+`discard`，但 `receive_mail()`/`send_mail()`/`do_read()` 这条端到端
+主路径干净可用，判定为功能完整、无需修复的既有内容。
+
+### 3. 远地图区域：大理/雪山/明教/桃花岛，发现并修复一个真实的、几乎
+必现的执行时段崩溃
+
+用既有 `fluffos`(admin) 账号 `goto` 四个区域各自的入口房间（`/d/dali/
+yamen`衙门、`/d/xueshan/shanmen`雪山寺山门、`/d/mingjiao/shanmen`明
+教山门、`/d/taohua/damen`桃花山庄正门），逐一 `look` 并各走一两步验
+证出口，四个区域均正常加载、出口指向正确、无断链。
+
+但在明教山门 `east` 走进下一个房间时，`debug.log` 立即记录两条真实
+崩溃：
+
+```
+执行时段错误：*Value being indexed is zero.
+程式：/kungfu/class/mingjiao/weiyixiao.lpc 第 6 行
+呼叫来自：/kungfu/class/mingjiao/weiyixiao.lpc 的 greeting() 第 6 行
+
+执行时段错误：*Value being indexed is zero.
+程式：/d/mingjiao/npc/chengchaofeng.lpc 第 6 行
+呼叫来自：/d/mingjiao/npc/chengchaofeng.lpc 的 greeting() 第 6 行
+```
+
+**根因**：明教各级 NPC（法王级用 `fawang.h`，坛主/香主级用 `tanzhu.h`
+/`tangzhu.h`/`zhangqishi.h`/`menzhu.h` 等）都在文件末尾 `#include
+"mingjiao.h"`，这个共享头文件定义的 `greeting(object me, object ob)`
+在玩家走近时由 `call_out` 触发，里面直接对 `ob->query("party")` 的返
+回值做下标：
+
+```
+if ( ob->query("party")["party_name"] == HIG "明教" NOR )
+```
+
+任何从未加入过帮会/门派"party"的角色，`query("party")` 返回裸 `int
+0`（不是空 `([])`），对 `int 0` 做 `["party_name"]` 下标必然触发驱动
+级"Value being indexed is zero"——这意味着**任何普通新角色第一次走
+近任意一个明教 NPC 都会触发这个崩溃**（本档案的门派"party"系统与
+"family"拜师是两套独立的属性，绝大多数角色终身都不会有 `party`）。
+这个头文件在整份档案里有两份byte-identical 拷贝
+（`kungfu/class/mingjiao/mingjiao.h` 与 `d/mingjiao/npc/mingjiao.h`），
+通过 `fawang.h`/`shizhe.h`/`menzhu.h`/`zhangqishi.h`/`tanzhu.h`/
+`tangzhu.h` 六个中间头文件被 15+ 个明教 NPC 文件间接引入（青翼蝠王韦
+一笑、青龙坛主程嘲风等），覆盖面很广。
+
+修复：在下标前补 `mapp()` 守卫（两份拷贝同步修复）：
+
+```
+mapping party;
+if ( environment(ob) != environment(me) ) return;
+if ( !mapp(party = ob->query("party")) ) return;
+if ( party["party_name"] == HIG "明教" NOR ) {
+  if ( party["level"] < me->query("level"))
+    message_vision(..., me, ob );
+}
+```
+
+现场用一个刚注册、从未加入任何门派的角色重新走进明教山门并 `east`
+穿过程嘲风所在的房间验证：不再崩溃，`debug.log` 全程干净（只有既有
+的、与本次改动无关的启动期 `nosave` 声明警告）。
+
+顺带发现 `zhangqishi.h`/`tangzhu.h`（间接经由 `mingjiao.h`）里已经
+存在一个**编译期**失败（`HIG "明教" NOR` 这种宏与中文字符串字面量相
+邻拼接触发 `unexpected L_STRING` 语法错误），在本次改动前后都存在、
+不受影响——用 `git stash` 交叉核实过修复前该错误就已独立出现在
+`zhangqishi.h`（`yanyuan.lpc`/`tangyang.lpc`/`wensong.lpc` 等）里，
+是与本次运行时崩溃无关的既有内容缺口（148 个既有编译失败之一），未
+处理。
+
+### 标准巡检
+
+- `lpcc_check.sh` 全库编译：`total=5960 pass=5812 fail=148`，与本档
+  案既有基线完全一致，本次两处改动未引入新的编译失败、也未修掉任何
+  既有失败（`apprentice.lpc`/`mingjiao.h` 之前就在能编译的那 5812 个
+  里）。
+- 四个区域走查全程 `debug.log` 除上述明教崩溃外无其它异常；测试用角
+  色存档（`ldtxml`/`ldtxmt`/`ldtxgn`/`ldtxvf`）及产生的 `data/mail/`
+  目录已清理，`fluffos.o` 的巡检时间戳漂移已还原。
