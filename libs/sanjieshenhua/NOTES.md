@@ -229,3 +229,87 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（第三轮，2026-08-23）——补测商店购买/拜师/帮会
+
+本轮先核对了同批「三界神话」姊妹库（sjsh/sjshv150/sjshv2578bb/
+sjshwzb/sjshwzjqb）本次测试中发现的两个已知坏味道是否在本 lib
+重现：
+
+1. `adm/daemons/combatd.lpc` 的 `killer_reward()`：本 lib 在
+   `killer->add("PKS", 1);` 之后紧跟着就有
+   `victim->add("DIE",1);`（第 1004-1005 行），而 `score` 里"被杀
+   害"字段读的正是 `DIE`（`cmds/usr/score.lpc` 第 135-136 行）——
+   姊妹库缺的那两行这里本来就有，**不受影响，未发现同款 bug**。
+2. `d/lingtai/obj/shengmao.lpc` 的 `set_name()` 字符串完整闭合，
+   **不受影响**。
+
+随后补测了 NOTES.md 之前标记为"未覆盖范围"（商店购买、门派加入、
+帮会系统）的三项：
+
+### 1. 商店 `buy`——正常，未发现 bug
+
+`d/city/dangpu.lpc`（董记当铺）是空的 `HOCKSHOP`（要有人先
+`pawn`/`sell` 东西进去才有货），新号身上也没有初始钱财（游戏内
+提示本身就写"新手：没有钱怎么办？不要问巫师，向老玩家讨"，是
+设计如此，不是 bug）。改用 `回春药铺`（`/obj/boss/city_yang.lpc`，
+`F_VENDOR_SALE` 型真实店铺，卖金创药/混元丹/眼泪/清心散血丸）做
+测试：用 admin 帐号 `clone`+`give` 了六两白银（值 600）给测试号，
+`list` 显示"金创药(yao)：六两白银"，`buy yao from yang` 后 `i`
+显示白银消失、金创药精确到手一份——扣款金额与商品标价完全一致，
+没有找零误差也没有多扣/少扣。购买流程（`cmds/std/buy.lpc` 的
+`can_afford`/`pay_money`/`complete_trade`）工作正常。
+
+### 2. 门派拜师——正常，未发现 bug
+
+用 `南海普陀山`（`d/nanhai/npc/bonze.lpc`，无条件收徒的
+`attempt_apprentice()`）测试：`apprentice heshang` 后立即收徒成
+功，`score` 里"师承"从"还未曾拜师学艺"变为"南海普陀山和尚"，职
+称也正确显示"南海普陀山第四代弟子"。`cmds/std/apprentice.lpc` 的
+拜师逻辑工作正常。
+
+### 3. 帮会系统——发现两个问题，一个已修复，一个记录为已知限制
+
+本 lib 的"帮会"实际上是**两套互不相干、从未整合过的并行系统**：
+
+**(a) 旧的玩家互邀系统 `cmds/std/bang.lpc`**（`marks/帮派` 字
+段）——**发现并修复一个真实 typo bug**：两处 `ob->dellete_temp
+("pending/bang")` 把 `delete_temp` 拼错成了 `dellete_temp`（第
+48、63 行），这是一个未定义函数——只要 `bang with` 走到"双方都
+已入帮"或"邀请/申请成功"的分支就会触发运行时错误。已修正为
+`delete_temp`；`update /cmds/std/bang.lpc` 编译成功验证。**未能
+端到端活体验证该分支**，因为这套系统本身还有一个更大的问题：只
+有已经是"舵主"的人才能邀请别人入帮，而全库搜索"舵主"这个头衔，
+除了 `bang.lpc` 自己拿来比较之外，**没有任何代码路径会把这个头
+衔赋给任何角色**——也就是说全新开的档在这套系统里永远造不出第
+一个帮会，这个 bug 本身修复了但该系统仍然实际不可达，判断为设
+计/内容缺口而非可继续修的程序 bug。
+
+**(b) 新的 `club`/`club_master` 系统**（`cmds/usr/joinclub.lpc`
++ `cmds/skill/club/capprove.lpc` + `cmds/adm/setclub.lpc`）——
+**严重发现，未修复**：这三个文件全部依赖 `CLUB_D`
+(`/adm/daemons/clubd`)，但**这个守护进程文件在整个归档里根本不
+存在**（`work/` 和原始 `raw/` 都确认没有 `clubd.lpc`/`clubd.c`，
+不是转换时丢的，原始压缩包里就没有）。用两个全新普通玩家号实测
+`joinclub` 命令，触发了真实运行时错误，`debug.log` 记录：
+```
+执行时段错误：*call_other() couldn't find object '/adm/daemons/clubd'.
+程式：/cmds/usr/joinclub.lpc 第 20 行
+```
+玩家端看到的是引擎的通用兜底提示"你发现事情不大对了，但是又说
+不上来。"（没有崩溃、没有断线，但功能完全不可用）。`setclub`（管
+理员建帮命令）走的是同一个缺失的 `CLUB_D`，所以连管理员也没有
+办法手工建立第一个帮会来引导这套系统。**判断为超出"修 bug"范围
+未处理**：修复需要从零实现整个 `clubd.lpc` 守护进程（`find_
+player_club`/`add_club`/`set_member`/`set_club_leader` 等接
+口），这是补全一整块缺失内容而不是修正一个具体错误，原始设计细
+节（每帮的数据结构、持久化格式等）也无从考证，不属于本轮"只修
+真实程序 bug"的范围。记录在此供后续会话参考——**这个 lib 的帮会
+系统（无论新旧）对全新档案实际都是不可用的**，可以视为"三界神
+话"家族里未来检查同款 `CLUB_D` 缺失的一个信号。
+
+**清理**：测试用的两个全新角色（`sjbuya`/`沐买一`、`sjbuyc`/`沐
+买二`）测试完毕后均已 `suicide -f` 永久删除，`sjbuyc` 的存档因
+为断线在 30 秒倒计时完成前被中断，已手工删除
+`work/data/{login,user}/s/sjbuyc.o` 两个残留档案。管理号
+`fluffos` 的存档正常保留（是常驻管理账号，不是测试角色）。
