@@ -172,3 +172,89 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试补完：银行、赌场骰子、拜师 (2026-08-23)
+
+按上面第一轮"未覆盖范围"清单补测了银行存取款、赌场骰子小游戏、拜师
+三项，均为真人游玩（`fluffos`/`Mud2026Adm` 管理员账号）+ 新起的
+`build-debug` 驱动。
+
+### 发现并修复：AGENTS.md §7.30 第二形状（call-site indexing）在
+### ldtxii 里再现，6 处未防护崩溃点
+
+手足档案 `ldtx` 的 round-four 测试（AGENTS.md §7.30 结尾那段"Note:
+the SECOND shape ... currently a single confirmed instance"）已经记
+录过这个坑：`attempt_apprentice(object ob)` 里 `mapping ob_fam =
+ob->query("family")`——对从未拜过师的角色，`query("family")` 合法
+地返回裸 `int 0`，不是 `mapping`。凡是紧接着不加 `mapp()` 防护就
+直接 `ob_fam["xxx"]` 取值的写法，第一次被没有门派的角色 `bai` 都
+会崩溃。
+
+`ldtxii` 和 `ldtx` 同一血统（`work/` 内容基本相同，逐文件核对确
+认byte-identical的形状），先用 `grep -rn 'ob_fam\['` 扫过全部含
+`attempt_apprentice` 的候选文件，绝大多数已经有
+`if (!(ob_fam = ob->query("family")) || ob_fam["xxx"] != ...)`这种
+赋值+短路防护写法（安全），但下面 6 个文件和 `ldtx` 当时揪出来的
+一模一样，完全没有防护：
+
+- `kungfu/class/shaolin/qing-wei.lpc`
+- `kungfu/class/shaolin/qing-wu.lpc`
+- `d/quanzhen/obj/mayu.lpc`
+- `d/quanzhen/npc/mayu.lpc`
+- `d/quanzhen/npc/wangchuyi.lpc`
+- `d/quanzhen/npc/qiuchuji.lpc`
+
+修法和 `ldtx` 一致：`mapp(ob_fam) &&` 短路防护，单行改动，逐文件
+用 Python 字节级替换只动目标那一行（Edit 工具会顺手清掉同文件里
+其它行的行尾空格，产生大量无关噪音 diff，改用精确字节替换避免）。
+
+**Live 复现 + 修复验证**：`fluffos` 管理员账号从未拜过师（天然满
+足"没有门派"触发条件）。修复前无法测（本来就会崩），直接用修复后
+的驱动测：`goto /d/quanzhen/neishi` → `bai ma`（马钰，全真教）→
+被以"资质不适合当道士"婉拒，正常走 else 分支，无崩溃；`goto
+/d/shaolin/guangchang1w` → `bai qingwei`（清为比丘，少林派）→ 立
+即被收为俗家弟子，`score` 确认"称谓：少林派第四十一代弟子"、"你
+的师傅：清为比丘"，门派信息正确写入。全程 `debug.log` 未生成（零
+运行期报错）。
+
+### 银行（钱庄）存取款：干净，无 bug
+
+`/d/city/qianzhuang` 的 NPC `钱眼开`（`d/city/npc/qian.lpc`）：
+`deposit <数量> <货币> / cun`、`withdraw <数量> <货币> / qu`、
+`check / chazhang`。用管理员 `clone /clone/money/silver` 15 次（
+`COMBINED_ITEM`货币在同一环境内自动合并成一叠，验证了 clone 出的
+零散物件确实会自动堆叠），实测 `deposit 10 silver` → 钱庄存款显示
+十两白银、身上剩五两；`withdraw 5 silver` → 存款减为五两、
+`MONEY_D->pay_player`找零回来的五两和身上原有的五两自动合并成十
+两——金额换算全程正确。原本担心 `do_withdraw()`里
+`what = "/clone/money/" + what; ... what->query("base_value")`（把
+字符串重新赋值成文件路径后直接在字符串上做`->`调用）会不会是
+FluffOS 下的驱动误用崩溃点——**实测证明不是 bug**：这台驱动上
+`"路径字符串"->function()`会被当成隐式 load + call_other 正常执
+行，全程无报错，只是先记录下这处曾经怀疑过的写法，避免以后重复调
+查。
+
+### 赌场骰子小游戏：干净，无 bug（未测拱猪，理由见下）
+
+`/d/city/duchang` 描述"楼上是打拱猪的地方"，但拱猪
+（`inherit/room/pigroom.lpc`）是标准 4 人对战牌局（`sit
+<方位>`凑齐四家才能`deal`），单人管理员账号无法在测试时间内独立
+跑通一整局，且拱猪本身走的是纯积分（`pig_score`）机制，`pigroom.
+lpc`/`pigd.lpc` 里搜不到任何 `money`/`balance` 相关调用——它不是
+一个"钱进钱出"的赌局，和任务描述"验证金钱易手"对不上。改测
+`/d/city/dice1`（骰子厅，`npc/dice_thrower.lpc`星哥）的真实押注骰
+子游戏：`bet <种类> <银量>`，押"0 3"（3两银子压"小"）。30 秒开骰
++ 后续动画 call_out 链，等了约 45 秒完整看到摇骰结果（5,3,6=14点，
+"赔大吃小"，押"小"的这把输了），身上银两如实从十两扣到七两，金钱
+如约易手（虽然是输，符合任务里"win or lose 都算通过"的要求），全
+程无崩溃、无 `debug.log` 报错。
+
+### 清理
+
+- 管理员 `fluffos` 存档（`data/{login,user}/f/fluffos.o`）：本轮
+  测试留下的门派归属（少林派）、剩余七两白银属于正常游玩产生的状
+  态变化，按此前几轮的既定做法随存档一起提交，不做人为清零。
+- 未触碰此前遗留的未提交测试存档
+  `data/{login,user}/l/ldtdive.o`（`ldtx`-era 遗留，与本轮无关）。
+- 用于对照的 `lpcc_check.sh` 中间产物（`lpcc_fail.log`、
+  `lpcc_batch_raw.log`）测试后已删除，未提交。
