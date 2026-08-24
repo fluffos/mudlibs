@@ -59,6 +59,104 @@ niang`）打了一场完整的徒手格斗，修复 kongshou.lpc 前后各打一
 
 **未覆盖范围**：门派拜师、任务系统、留言板因时间原因未实测。
 
+## 深度功能测试补测：门派拜师、任务系统、留言板（2026-08-24）
+
+补测上一轮标记为"未覆盖"的三项。
+
+**内容缺口（已核实为真实存在、非阻断，未修复，与本档案已记载的
+man.lpc/waiter.lpc `BLADE_DIR`/`CLOTH_DIR` 缺失同类）**：这份"清华笑
+傲江湖"档案目前的整个游戏世界只有南阳一座城（`d/nanyang`，58 个房
+间/物件档），从未包含任何真正的"掌门"NPC 档案。`dating.lpc`（大厅）
+的门禁逻辑提到"过彦之""戴子奇"两个伏牛派弟子会拦人，`quest/funiu/
+quest0.lpc` 等任务数据档里"过彦之"也是任务发布者——但全档案（包括
+`raw/xo/lib` 原始转档）从未包含这两个 NPC 的任何档案。核对同源码库
+的姐妹档案 `xajhxo`（同一 XO/TMI-2/ES2/Falcon 家族）确认：那边"过
+彦之"等掌门 NPC 各自都实现了自己的 `attempt_apprentice()`（决定是
+否收徒的对话/条件判定），而 `system/std/char/master.lpc`（含
+`give_quest()`）这个"掌门"混入类是设计给具体掌门 NPC 主动 `inherit`
++ 手动 `add_action("give_quest","quest")` 用的——本档案里没有任何
+NPC 这样做，`create_family()` 全档案只有自己的定义、从未被任何地方
+调用过。也就是说门派拜师和任务系统在这份档案里都卡在同一个根因：
+掌门 NPC 内容本身缺失，不是代码逻辑的锅。
+
+用现有的管理员 `call`（`call <物件>-><函数>(<参数>)`，档案自带的合
+法工具）临时给"樊子发"（南阳商号老板 `d/nanyang/npc/boss.lpc`）挂
+上 `create_family("伏牛派",1,"掌门")`，跑通了 recruit→apprentice 的
+真实代码路径：`score` 正确显示"你已拜在伏牛派门下，是伏牛派的第二
+代弟子。你的师父是樊子发。"——机制本身没问题。任务系统同理，临时
+（测试完已改回）给 boss.lpc 加一行 `inherit
+"/system/std/char/master";` + `add_action("give_quest","quest")` +
+`create_family(...)`，验证 `give_quest()`/`quest` 指令端到端正常
+（接到"杀何三"任务、显示剩余时间、无崩溃）；任务文字里提到的"过彦
+之"是任务数据本身的角色名，与本次测试用的替身 NPC 无关，纯粹是测
+试环境产生的错位，不代表档案本身有问题。
+
+**发现并修复的四个真实 bug（都在这三项范围内，都有明确的错误信
+号，不是内容/设计问题）：**
+
+1. **留言板 `funiu_b`（`d/nanyang/obj/funiu_b.lpc`）的 `location`
+   写成 `/d/city/nanyang/xiangf1`，但这份档案的房间树根本没有
+   `city/` 这一层（真实路径是 `/d/nanyang/xiangf1`）**——`move()`
+   找不到目标房间直接静默失败，留言板永远飘在空间里，玩家在任何房
+   间都看不到它。已改成 `/d/nanyang/xiangf1`。
+2. **`xiangf1.lpc`（厢房，留言板所在房间）自己的 `create()` 里用
+   `call_other(__DIR__ "funiu_b", "???")` 来强制预载留言板，但
+   `funiu_b.lpc` 实际存在于 `obj/` 子目录下**——真实驱动跑起来会在
+   `create()` 里报 `*call_other() couldn't find object
+   '/d/nanyang/funiu_b'.`，而且这个未捕获错误发生在房间对象自己的
+   编译期初始化中，直接导致 `go north` 从"前院"进厢房失败（玩家卡
+   在原地），留言板房间整个不可达——比 bug 1 更严重，`lpcc --batch`
+   批量编译检查也测不出来（对照本项目已记载的"lpcc-vs-live-driver
+   artifact"套路：批量模式下只显示`Fail to load object`，没有具体
+   错误文本，必须用真实驱动开机复现才能看到完整 trace）。已改成
+   `call_other(__DIR__ "obj/funiu_b", "???")`；核对姐妹档案
+   `xajhxo` 里完全相同的 `xiangf1.lpc` 确认原本就是 `obj/funiu_b`
+   写法，本档案是转档时丢了这一段路径。
+3. **`system/std/bboard.lpc`/`jboard.lpc` 的 `setup()` 覆盖了父类
+   `ITEM`（`system/std/item.lpc`）的 `setup()`，但没有链式调用
+   `::setup()`，导致父类里的 `seteuid(getuid())` 从未执行**——直
+   接后果：留言板对象永远没有 euid，`post` 指令流程里的
+   `save_object()` 每次都因为
+   `securityd.lpc:valid_write()`权限判定失败而报
+   `*Denied write permission in save_object()`（trace 写入
+   `/log/runtime`），当前会话内 `post`/`read` 表面正常（数据只在
+   内存里），但驱动一重启所有留言就会全部丢失。已在两个文件的
+   `setup()` 开头补回 `seteuid(getuid());`，与 `system/std/
+   room.lpc`（同样是非 clone 的 `/d/` 常驻对象，也显式调用了同一
+   行）保持一致的既有约定。
+4. **即便留言板有了 euid，`save_object()` 仍然失败**：这份档案
+   `/d/` 目录下的对象（含留言板）编译期 uid 由
+   `secure/simul_efun/object.lpc` 的 `creator_file()` 统一赋成字面
+   量 `"Domain"`，不是 `ROOT_UID`；而 `securityd.lpc` 的
+   `trusted_write` 白名单里完全没有覆盖 `data/board` 这个子目录（也
+   不允许非 clone 对象凭 `"Domain"` euid 写 `/data/`），于是留言板
+   即使正确设了 euid 也过不了 `valid_write()`。已仿照同一映射里已
+   有的 `"quest"`/`"system/skill"` 这类按目录+euid 精确授权的写
+   法，新增 `"data/board": ({ "Domain" })` 一条。修复后重启驱动、
+   重新 `post`，`data/board/funiu_b.o` 正确落盘（无 `Denied write
+   permission` 报错），`log/catch`、`log/runtime` 全程无新增报错。
+5. **`cmds/verb/apprentice.lpc` 的"对方已经在等你收徒
+   （`pending/recruit`）"分支里，判断是否"背叛师门"时直接比较
+   `me->query("family/family_name") != ob->query("family/
+   family_name")`，没有先判断 `me` 是否真的已经有门派**——第一次拜
+   师（`me` 从未加入过任何门派）时 `me->query("family/family_name")`
+   返回 `0`，和目标门派名字符串必然不相等，于是被误判成"决定背叛师
+   门，改投入……门下！！"，实测复现（全新角色第一次拜伏牛派显示
+   "背叛"提词）。对照姐妹指令 `recruit.lpc` 里同样的逻辑分支，那边
+   正确地先用 `(ob->query("family")) &&` 做了守卫。已给
+   `apprentice.lpc` 补上同样的 `mapp(me->query("family")) &&` 守
+   卫；修复后重新用全新角色测试，正确显示"你决定拜樊子发为师。"。
+
+以上 5 处修复均已用 `lpcc_check.sh` 全库编译检查（407/413 通过，
+和修复前的已知失败集合一致，无新增回归）+ 真实 `build-debug/src/
+driver` 开机验证（`log/catch`、`log/room_log`、`log/runtime` 全程
+除已记载的 man.lpc/waiter.lpc 缺失装备目录外无其它报错）。§9 格式
+化工具对本次改动的 7 个文件跑过，`wouldChange=0`（已符合既有格
+式，无需改动）。测试用管理员临时挂在 boss.lpc 上的 `inherit
+master`/`create_family`/`add_action("give_quest",...)` 三行测试脚
+手架已在验证完毕后原样改回（`git diff` 确认改动前后字节相同）；
+测试角色 `qhtestox` 的存档、测试用留言板留言均已清理。
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 和 019（xo）、019-1（xo_final）同一个 XO/TMI-2/ES2/Falcon 代码库家族，任务/游戏内容不同。WASM 修复：（1）经典的 §8.1 GBK 字节区间 is_chinese()。（2）logind.lpc 的 check_legal_name() 长度界限没减半（(< 4)||(> 10)，对应字节数时代的写法，应为 (< 2)||(> 5) 以匹配它自己"2-5 个汉字"的提示）。（3）一处闭包形式的 input_to((: get_id :), ob) 在这个驱动下静默永远不会触发，已改成和同一档案里其它所有呼叫点一样的字符串形式 input_to("get_id", ob)。（4）§7.52 socket 精灵：从 secure/etc/preload 里移除了 /secure/daemon/ftpd（未定义的 socket efun，100+ 处呼叫点，没有非 socket 的外部呼叫者，太大不适合逐一掏空）。（5）§7.1 master.lpc 的 valid_read()/valid_write() 自举死锁——已记载的"崩溃成堆栈溢出"形态在这里不适用（这个构建的驱动把 load_object() 失败降级成一个被捕获的"Object cannot be loaded during compilation"而不是真的崩溃），所以这个 bug 表现成了一种静默的变体：securityd.lpc 自己的 create() 通过 read_file() 读取 wizlist 从未真正完成过，因为 securityd.lpc 自己永远无法编译完成（编译器需要读取自己的源码/#include/继承档案时的每一次嵌套读取都会递归回 valid_read()，每次都在还在编译中的状态下再次尝试 load_object(SECURITY_D)）——于是 wiz_status 永远是空的，包括 wizlist 文件里已有的账号在内，所有 id 都被判定成 (player)。previous_object()==securityd 这种特判方式对这个变体无效：在这些由编译触发的嵌套读取里，previous_object() 报告的永远是 master 自己，从来不是 securityd。已用标准的 §7.1 重入旗标修复（已作为 §7.1 新记录的一种症状补充进 AGENTS.md，因为原来的写法只覆盖了崩溃这一种形态）。（6）缺失的 libs/qhxajh/work/log/nosave 目录（§7.11，被 gitignore，未跟踪）导致 log_login() 的 log_file() 呼叫崩溃，静默破坏每一次注册的 get_gender()。另外把 config.fluffos 里的"maximum evaluation cost"从 700000 调高到 5000000000（原来极小的上限把预载拆成约 150 次各自被打断的恢复，耗时约 100 秒；这本身不是 bug，只是慢）。完整的注册（id→确认→中文名字→管理密码→确认→电子邮件→性别）→进入游戏→look→score→quit 修复后和格式化后都验证正常，管理员 id"fluffos"正确显示 (admin)。§9 格式化工具的三类盲点检查都干净（被标记的 CJK 间距字符串是转档之前就有的原作者内容，没有被这次 diff 改动）。
