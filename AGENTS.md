@@ -9291,6 +9291,34 @@ Re-verified with a fresh driver boot: reproduced the zombie again (uncleanly-dro
 
 **Scope note, closed same-session**: a corpus-wide `grep -n 'if (!userp(ob\[i\])) destruct(ob\[i\]);' libs/*/work/adm/daemons/natured.lpc` found 6 more libs sharing the exact identical vulnerable line (same follow-up `else ob[i]->move("/d/city/wumiao.lpc");` too): `jym`, `shenzhou`, `xkm`, `xkx2001`, `xuanjianlu`, `xkx2000zxb`. All 6 fixed the same way (`interactive()` instead of `userp()`), verified via `lpcc --batch`, committed individually and pushed — no further corpus check needed for this specific pattern.
 
+### 7.117 `bai.lpc`/`apprentice.lpc`'s "did you betray your old sect" check never guards against a first-time applicant having no family yet — wrongly rejects (or, with a co-located paren bug, crashes) a brand-new player's very first apprenticeship
+
+**Confirmed independently on 3 unrelated lib families this round of round-four testing** (`yszz`, `qhxajh`, `sj`) — crosses this project's own 3-lineage threshold for treating a bug as corpus-wide rather than a one-off, flagged here for a future dedicated sweep rather than blind-fixed immediately (the exact code shape varies enough per lib — see below — that a mechanical grep-and-replace risks wrong fixes; each confirmed instance so far needed hand verification against that lib's own `query()`/`family` accessor shape).
+
+**The bug**: in the "someone else has already offered to recruit me, I'm now confirming" branch of `apprentice`/`bai`, the code compares the applicant's *existing* family/master name against the recruiter's, to detect and block sect-switching without a formal "betray your old master" step. On all 3 confirmed libs, this comparison never checks whether the applicant has a family at all first — so for a legitimate first-time apprenticeship (a player-master `recruit`s someone who has never joined any sect, and the applicant then confirms with `apprentice`), the always-empty-vs-nonempty comparison evaluates as "different family" and wrongly fires the betrayal-rejection path, either silently blocking the join (and in at least one case, `sj`, zeroing part of the applicant's score) or crashing outright, depending on the exact accessor shape:
+
+```lpc
+// yszz / qhxajh shape (wrong rejection, no crash):
+if (me->query("family/family_name") != ob->query("family/family_name")) { ... "背叛师门" ... }
+// sj shape (crash, from a misplaced paren on the SAME line as the missing guard):
+if (me->query("family/master_id" == "feng qingyang")) { ... }  // == binds before query() sees it,
+                                                                 // so query(0) is called and crashes
+                                                                 // inside dbase.lpc's strsrch(prop, '/')
+```
+
+The sibling file `recruit.lpc` (the OTHER half of the same recruit/confirm pair — the master's side of the transaction) already has the correct guard on at least 2 of the 3 confirmed libs, sometimes with an explicit comment acknowledging the exact bug class ("fix a bug in 1st time recruit") — meaning the fix was applied once to one file of a matched pair and never ported to its sibling.
+
+**Fix, matching the already-correct sibling file's own pattern**: add an existence guard before the comparison —
+```lpc
+// AFTER:
+if (me->query("family") && me->query("family/family_name") != ob->query("family/family_name")) { ... }
+```
+(and, on `sj`, separately fix the misplaced parens so `query()` is actually called with the right arguments).
+
+**Confirmed instances so far**: `yszz` (`cmds/std/apprentice.lpc`), `qhxajh` (`cmds/verb/apprentice.lpc`), `sj` (`cmds/skill/bai.lpc` + `cmds/skill/apprentice.lpc`, byte-identical files, both needed the paren fix AND the guard). All 3 fixed and live-verified this round.
+
+**Not yet done**: a full corpus grep/triage pass (analogous to §7.70's `lpcc --batch` triage methodology) across every `bai.lpc`/`apprentice.lpc`/`recruit.lpc` in the corpus for this exact shape — flagged here as a worthwhile future sweep target, not executed yet.
+
 ---
 
 ## 8. Login and registration flow bugs
