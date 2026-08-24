@@ -15,7 +15,15 @@ int query_max_encumbrance() { return 100000000000; }
 object make_inventory(string file) {
   object ob;
 
-  ob = new(file);
+  // new() returns 0 for an ordinary missing file, but a compile-time
+  // problem in the target (e.g. an inherit of a file that doesn't
+  // exist) instead raises a runtime error right at this call -- catch()
+  // covers both cases (seen live: a handful of rooms reference
+  // wizard-home NPCs/items, or a weapon type whose /std/weapon/ base
+  // class, that aren't included in this archive) so we skip the
+  // chained calls below instead of crashing on call_other(0, ...).
+  catch(ob = new(file));
+  if (!objectp(ob)) return 0;
   ob->move(this_object());
   ob->set("startroom", base_name(this_object()));
   return ob;
@@ -60,6 +68,11 @@ void reset() {
     switch (ob_list[list[i]]) {
       case 1:
         if (!ob[list[i]]) ob[list[i]] = make_inventory(list[i]);
+        // make_inventory() returns 0 if the object file failed to load
+        // (e.g. missing content) -- skip the chained calls below rather
+        // than crash on a bad call_other(), matching how the "default"
+        // branch below already skips via its own continue.
+        if (!objectp(ob[list[i]])) break;
         if (environment(ob[list[i]]) != this_object()
           && ob[list[i]]->is_character()) {
           if (!ob[list[i]]->return_home(this_object()))

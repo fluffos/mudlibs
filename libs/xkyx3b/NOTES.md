@@ -200,6 +200,116 @@ fixing now since it's outside this pass's four-item scope).
 **未覆盖范围**：留言板内容、拜师、商店购买、种族差异（矮人/精灵/
 妖精/龙人/兽人五个非人类种族本轮未测）因时间原因未实测。
 
+## Round-four gap-closing pass: board/apprentice/shop/race (2026-08-24)
+
+Closed all four gaps flagged above. `scripts/tmux_mud.sh` hit its known
+telnet-escape-character artifact partway through the board test (a
+Chinese UTF-8 byte sequence tripped the *local* telnet client's `^]`
+command mode, not a mudlib bug) — switched to `scripts/mudclient.py`
+(raw socket, no local telnet interpretation) for the rest of the
+session, which had no such issue.
+
+- **Message board**: `post <title>` → in-line editor (end with `.`) →
+  `look`/`read <n>` all worked correctly on `/d/center/guangchang`'s
+  board (count went 15→16, title/author/body all round-tripped
+  correctly); cleaned up with `discard 16` afterward. Clean.
+- **Shop (`buy`)**: `/d/beginner/start3`'s waiter NPC (`F_VENDOR`
+  mixin) — granted admin 10 两白银 (1000 value) via `clone` + `call
+  ->set_amount()`, then `buy long sword` (id price 5 两白银/500):
+  correct item added to inventory, correct change left (500, i.e.
+  1000-500). `MONEY_D`'s change-making arithmetic in
+  `adm/daemons/moneyd.lpc` is correct. Clean.
+- **Sect apprenticeship (拜师)**: real master NPCs (`master-zhang`
+  武当派, `hong-qigong` 丐帮, etc.) all gate `attempt_apprentice()` on
+  skill levels far beyond what a fresh character has (50-150+), so
+  admin used `call me->set(...)`/`set_skill(...)` to satisfy
+  `master-zhang`'s requirement (`cps>=20`, `con>=25`, `int>=34`,
+  `taiji-sword>=50`, `taiji-force>=60`), then `apprentice zhang` from
+  `/d/wudangshan/wd-zl-4`: full flow worked end-to-end (NPC accepts,
+  auto-`recruit`s, kowtow messages, "恭喜您成为武当派的第二代弟子").
+  Reverted the admin's stats/skills/family/title back to pre-test
+  values afterward. Clean — no crash anywhere in the apprentice/recruit
+  code path.
+- **Non-human race creation**: fresh registration (id `xkyxraceb`, name
+  秦晓月, race `2`=精灵/Elf) all the way through `look`/`score`/`quit`.
+  `种族：精灵族` displayed correctly, title `精灵族普通百姓`, and all
+  eight base stats matched the elf stat block in `logind.lpc`'s
+  `init_new_player()` (`13,14,21,21,14,20,15,17`-shaped, ± the 0-2
+  random per-stat bonus `set_attribute()` adds) — no crash, no
+  mismapped stat. Test character's save deleted afterward.
+
+**Bug found and fixed (real crash, confirmed live in `debug.log`, not
+content)**: wandering NPCs (`巡捕`/`捕快`, `xun-bu`) periodically drift
+into rooms that haven't been visited yet, triggering that room's first
+`reset()` → `make_inventory()` for its `"objects"` mapping. A handful of
+rooms/NPCs reference files that don't exist in this archive:
+
+- `/u/bibi/hai`, `/u/bibi/baotu`, `/u/bibi/shounao`,
+  `/u/bibi/xiaoruer` — items/NPCs from a wizard's `/u/bibi/` home
+  directory not included in this archive (referenced from
+  `d/center/furen.lpc`, `d/center/zhu.lpc`,
+  `d/quanzhou/main-e2n3.lpc`'s `"objects"` mappings).
+- `/obj/weapon/ling` (铜铃) — compiles, but its own `inherit LING`
+  (`/std/weapon/ling`) doesn't exist anywhere under `std/weapon/`
+  (only sword/blade/axe/dagger/fork/hammer/multi/staff/stick/
+  throwing/whip base classes are present) — referenced from
+  `d/tianshigu/ts-dyl.lpc`.
+- `/u/bibi/yitian` (倚天剑) — same missing-home-dir shape, but reached
+  via an **unguarded chained call** instead of the `"objects"` mapping:
+  `d/wizard/npc/{shizhe,shenxian-shizhe}.lpc`'s `create()` does
+  `carry_object("/u/bibi/yitian")->wield();` — `carry_object()` already
+  guards its own `new()` and returns `0` for a missing file, but the
+  immediate `->wield()` chain on that `0` crashes anyway.
+
+Root cause in the shared code: `std/room.lpc`'s `make_inventory()` did
+`ob = new(file); ob->move(this_object());` with **no check that `new()`
+succeeded** — for an ordinary missing file this is `Bad argument 1 to
+EFUN call_other() ... Got: int(0)`, and for a file that exists but has
+a bad `inherit` (the `ling` case) `new()` itself throws
+(`Inherited file '.../ling' does not exist!`) rather than quietly
+returning 0. Fixed by wrapping the `new()` in `catch()` and returning 0
+on failure; `reset()`'s `case 1` branch (single-instance `"objects"`
+entries) also lacked the same "skip if the object didn't load" guard
+that the `default:` (multi-instance) branch already had via its
+`continue`, so added a matching `if (!objectp(...)) break;` there too.
+Also fixed the two `carry_object(...)->wield()` unguarded chains in
+`shizhe.lpc`/`shenxian-shizhe.lpc` directly (assign-then-check instead
+of chaining).
+
+Also fixed a **hard compile error** discovered via the same
+`lpcc_check.sh` pass, unrelated to the missing-`/u` pattern:
+`d/beijing2/zhang/npc/wife3.lpc`'s `create()` called
+`return_home("/beijing2/zhang/room7.lpc")` — a bare string — but
+`return_home(object home)` (this file even carries its own byte-for-byte
+copy of the parent `std/char/npc.lpc` implementation, doing nothing
+custom) requires an `object`. This is dead/erroneous leftover code (the
+NPC already manages its own coming-and-going via `goout()`/`do_return()`
+with hardcoded `move()` paths); the call has no effect on anything else
+in the file and its bad-type argument was a **hard compile failure**
+that took the whole NPC object (and by extension its room's `"objects"`
+entry) down. Removed the line.
+
+**Verification**: `scripts/lpcc_check.sh` pass count went from
+3116→**3142**/3178 (fail 62→**36**) purely from these fixes (no other
+changes) — the room-load crash was cascading into several other
+objects' compile counts. Live-boot spot check: fresh driver restart,
+visited `/d/center/furen`, `/d/center/zhu`, and
+`/d/wizard/guest_room` (where `shenxian-shizhe` really lives) directly
+— all load cleanly, `shenxian-shizhe`'s missing sword silently and
+correctly skipped (just wears the cloth, no crash). Zero new
+`执行时段错误` in `debug.log` from normal play afterward. (One
+artifact-only error was seen mid-session from `goto <bare npc file>`
+directly instantiating `shizhe.lpc` outside any room, so its `greeting()`
+→ `command("say ...")` hit a null `environment()` — not reachable in
+normal play since `shizhe.lpc` isn't placed in any room's `"objects"`
+mapping at all, and `shenxian-shizhe.lpc` (which is) works fine when
+visited the normal way.) Remaining `lpcc` failures are pre-existing,
+individually-untriaged content gaps (missing globals, syntax typos,
+plus the still-irreducible `/obj/weapon/ling` compile failure since
+its `/std/weapon/ling` base class was simply never included in this
+archive and authoring a new weapon-type class is out of this pass's
+scope).
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 状态已从过时的 limited 修正——这份档案自己的 README 和 group_note 里从未记录过任何缺陷说明，本轮重新测试也没有发现：管理员登录（fluffos/Mud@2026）干净正常，'目前权限：(admin)'，quit 正常。
