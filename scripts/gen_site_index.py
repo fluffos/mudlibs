@@ -355,6 +355,67 @@ FOOTER = {
 }
 
 
+def build_jsonld(status, lang, ui, numbers):
+    """schema.org structured data: a WebSite wrapping an ItemList of
+    every linked (non-noboot) game as a VideoGame entry. This is the
+    machine-readable twin of the human-facing cards -- search engines
+    and LLM agents that parse JSON-LD get clean, unambiguous entity
+    data (name/description/URL/genre) without needing to parse the
+    card markup or run the page's search JS. Kept lean (no images/
+    ratings/etc that don't exist) rather than padded out with
+    schema.org fields this project has no real data for."""
+    libs = status["libs"]
+    entries = sorted(
+        ((slug, info) for slug, info in libs.items() if info["status"] != "noboot"),
+        key=lambda kv: (numbers.get(kv[0], (9999, 0)), kv[0]))
+    items = []
+    for i, (slug, info) in enumerate(entries, start=1):
+        if lang == "en":
+            name = info.get("english_name") or info["name"]
+            desc = info.get("english_description") or info["description"]
+        else:
+            name = info["name"]
+            desc = info["description"]
+        items.append({
+            "@type": "ListItem",
+            "position": i,
+            "item": {
+                "@type": "VideoGame",
+                "name": name,
+                "description": desc,
+                "url": f"{SITE_URL}/{slug}/",
+                "genre": ["MUD", "Text Adventure", "RPG"],
+                "gamePlatform": "Web browser (WebAssembly)",
+                "playMode": "MultiPlayer",
+                "inLanguage": "zh-CN",
+                "isAccessibleForFree": True,
+            },
+        })
+    doc = {
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "WebSite",
+                "name": ui["site_name"],
+                "url": ui["self_url"],
+                "description": (info["description"] if False else None),
+                "inLanguage": ui["html_lang"],
+                "isAccessibleForFree": True,
+            },
+            {
+                "@type": "ItemList",
+                "name": ui["h1"],
+                "numberOfItems": len(items),
+                "itemListElement": items,
+            },
+        ],
+    }
+    # drop the placeholder None (kept the key above only for readability
+    # while writing this; schema.org tolerates a missing description)
+    doc["@graph"][0].pop("description", None)
+    return json.dumps(doc, ensure_ascii=False).replace("</", "<\\/")
+
+
 def render_index(status, commits, lang="zh"):
     ui = UI[lang]
     libs = status["libs"]
@@ -460,6 +521,7 @@ def render_index(status, commits, lang="zh"):
     meta_desc_attr = html.escape(meta_desc)
 
     other = "en" if lang == "zh" else "zh"
+    jsonld = build_jsonld(status, lang, ui, numbers)
 
     return f"""<!doctype html>
 <html lang="{ui['html_lang']}">
@@ -468,11 +530,13 @@ def render_index(status, commits, lang="zh"):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(page_title)}</title>
 <meta name="description" content="{meta_desc_attr}">
+<meta name="robots" content="index, follow">
 <link rel="canonical" href="{ui['self_url']}">
 <link rel="alternate" hreflang="zh-CN" href="{UI['zh']['self_url']}">
 <link rel="alternate" hreflang="en" href="{UI['en']['self_url']}">
 <link rel="alternate" hreflang="x-default" href="{UI['zh']['self_url']}">
 <link rel="alternate" type="text/plain" title="llms.txt" href="{SITE_URL}/llms.txt">
+<link rel="alternate" type="application/json" title="games.json" href="{SITE_URL}/games.json">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="{html.escape(ui['site_name'])}">
 <meta property="og:title" content="{html.escape(page_title)}">
@@ -482,6 +546,7 @@ def render_index(status, commits, lang="zh"):
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="{html.escape(page_title)}">
 <meta name="twitter:description" content="{meta_desc_attr}">
+<script type="application/ld+json">{jsonld}</script>
 <style>
   :root {{
     --bg: #0b0e14; --fg: #d5dbe5; --dim: #6b7484; --accent: #7aa2f7;
@@ -622,6 +687,45 @@ def render_index(status, commits, lang="zh"):
 """
 
 
+def render_games_json(status, commits):
+    """The structured-data twin of llms-full.txt: every linked
+    (non-noboot) game as a clean JSON object, one fetch away from the
+    whole catalog -- no HTML parsing, no JS execution required. This is
+    the same data the cards/llms-full.txt render from, just in the
+    shape an LLM agent or script would actually want to consume."""
+    libs = status["libs"]
+    numbers = load_numbers()
+    entries = sorted(
+        ((slug, info) for slug, info in libs.items() if info["status"] != "noboot"),
+        key=lambda kv: (numbers.get(kv[0], (9999, 0)), kv[0]))
+    games = []
+    for slug, info in entries:
+        admin_id, admin_pw = parse_admin(slug)
+        entry = commits.get(slug)
+        games.append({
+            "slug": slug,
+            "name": info["name"],
+            "english_name": info.get("english_name") or None,
+            "description": info["description"],
+            "english_description": info.get("english_description") or None,
+            "status": info["status"],
+            "url": f"{SITE_URL}/{slug}/",
+            "source_url": f"{REPO_URL}/tree/main/libs/{slug}",
+            "admin_id": admin_id,
+            "admin_password": admin_pw,
+            "last_changed_commit": entry.get("sha") if entry else None,
+            "last_changed_date": entry.get("date") if entry else None,
+        })
+    doc = {
+        "generated_from": "libs/*/meta.json + libs/*/README.md",
+        "site": SITE_URL,
+        "repo": REPO_URL,
+        "count": len(games),
+        "games": games,
+    }
+    return json.dumps(doc, ensure_ascii=False, indent=2) + "\n"
+
+
 def render_robots_txt():
     return f"""User-agent: *
 Allow: /
@@ -674,12 +778,13 @@ This project (fluffos/mudlibs) extracts, restores, and documents Chinese-languag
 
 - {n_total} total libraries: {n_play} fully playable in-browser, {n_lim} boot{'s' if n_lim == 1 else ''} but {'has' if n_lim == 1 else 'have'} a login/feature limitation (usually a missing browser-environment capability like `query_ip_number()`), {n_no} not yet bootable under WebAssembly (most still run natively).
 - Driver: [FluffOS](https://github.com/fluffos/fluffos), an actively-maintained LPMud/LPC driver, compiled to WebAssembly for in-browser play.
-- Language/setting: all games are Chinese-language LPC MUDs (泥潭), primarily wuxia (武侠) and xianxia (仙侠) themed.
+- Language/setting: all games are Chinese-language LPC MUDs (泥潭), primarily wuxia (武侠) and xianxia (仙侠) themed. Every game card and description exists in both Chinese ({SITE_URL}/) and English ({SITE_URL}/en/) -- this is a fully bilingual site, not a Chinese-only one with an English label.
 - Source code, restoration notes (AGENTS.md), and native-driver play instructions: [github.com/fluffos/mudlibs]({REPO_URL})
 
 ## Full game list
 
-See [llms-full.txt]({SITE_URL}/llms-full.txt) for every game: name, slug, status, and a one-line description.
+- [llms-full.txt]({SITE_URL}/llms-full.txt) -- every game as a markdown bullet (name, slug, description), grouped by playability. Best for reading.
+- [games.json]({SITE_URL}/games.json) -- the same catalog as structured JSON (slug, name, english_name, description, english_description, status, url, admin credentials, last-changed commit). Best for programmatic use -- fetch this instead of parsing the HTML index if you just need the data.
 
 ## Docs
 
@@ -767,9 +872,16 @@ def main():
     (out_dir / "robots.txt").write_text(render_robots_txt(), encoding="utf-8")
     (out_dir / "sitemap.xml").write_text(render_sitemap_xml(status),
                                           encoding="utf-8")
-    (out_dir / "llms.txt").write_text(render_llms_txt(status), encoding="utf-8")
+    llms_txt = render_llms_txt(status)
+    (out_dir / "llms.txt").write_text(llms_txt, encoding="utf-8")
+    # "llm.txt" (singular) as an alias -- the established convention
+    # (llmstxt.org) is "llms.txt", but some tooling/crawlers check the
+    # singular form; serving both costs nothing and only helps discovery.
+    (out_dir / "llm.txt").write_text(llms_txt, encoding="utf-8")
     (out_dir / "llms-full.txt").write_text(render_llms_full_txt(status),
                                             encoding="utf-8")
+    (out_dir / "games.json").write_text(render_games_json(status, commits),
+                                         encoding="utf-8")
 
     n_translated = sum(1 for info in status["libs"].values()
                         if info.get("english_description"))
@@ -778,7 +890,8 @@ def main():
     print(f"index written to {out_dir / 'index.html'} (zh) and {en_dir / 'index.html'} (en)")
     print(f"english translations: {n_translated}/{total} libs have a real "
           "english_description (rest fall back to Chinese on the EN page)")
-    print(f"robots.txt, sitemap.xml, llms.txt, llms-full.txt written to {out_dir}")
+    print(f"robots.txt, sitemap.xml, llms.txt, llm.txt, llms-full.txt, "
+          f"games.json written to {out_dir}")
 
 
 if __name__ == "__main__":
