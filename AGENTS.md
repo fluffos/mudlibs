@@ -462,6 +462,40 @@ gate in the lib's NOTES.md.
   the same class of test-only friction as the two gates above.
   (`sjshv150`.)
 
+#### (f) A bare `call_other()` to a not-yet-resident (but validly compilable) object can silently fail the whole calling function under WASM, where it transparently auto-loads natively
+
+Found on `nt7` (163): every WASM connection attempt failed `logon()`
+silently at the exact same point regardless of what was typed — driver
+log showed only `new_conn_handler: logon() on object clone/user/
+login#0 has failed, the user is disconnected.` (i.e. `safe_apply()`
+returned null), with ZERO LPC-level error/trace anywhere, so this
+doesn't look like any of (a)-(e) above and isn't caught by grepping for
+`socket_`/`pcre_`/`resolve(`/`uptime()`. Bisected by splicing temporary
+`write()` markers into `logon()`: execution reached
+`TIME_D->replace_ctime(time1)` and then just stopped — the target
+function's own body (confirmed with a marker at its very first line)
+never even started running. `TIME_D` (`adm/daemons/timed.lpc`) is
+preload-listed and compiles 100% clean during boot preload (no
+warnings, no errors) — but is NOT actually resident by the time of the
+very first connection (`find_object(TIME_D)` returns 0 there). A bare
+`call_other()` to a not-yet-loaded-but-compilable object is supposed to
+transparently trigger an implicit `load_object()` as part of normal
+`apply_low` resolution — and does, reliably, under the NATIVE driver —
+but under WASM this specific case silently killed the entire calling
+function instead. Fix (confirmed via bisection — an explicit load
+immediately before the call resolves it completely, and every
+following line executes normally afterward): force the load first,
+`if (!find_object(X)) catch(load_object(X));`, at the specific call
+site(s) actually exercised on the connection-time critical path. This
+looks like a genuine WASM-level driver gap (implicit compile-on-demand
+via call_other not reliable there under some condition not yet fully
+characterized — first-ever call to a preloaded-but-swapped-or-never-
+instantiated object, possibly), not a mudlib logic bug, but per this
+section's "mudlib-side guards are encouraged" policy it was fixed at
+the mudlib level rather than left for a driver fix. Don't preemptively
+guard every daemon call in a mega-lib against this — fix the specific
+site(s) a WASM re-test actually reproduces failing.
+
 ### 1.4 WASM triage playbook (per lib)
 
 Status lives in `libs/<slug>/meta.json`'s `wasm_status` field — the single
