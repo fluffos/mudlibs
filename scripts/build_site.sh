@@ -258,6 +258,8 @@ done
 for f in index.html robots.txt sitemap.xml llms.txt llms-full.txt; do
   cp "$CACHE_DIR/index-staging/$f" "$SITE_DIR/$f"
 done
+mkdir -p "$SITE_DIR/en"
+cp "$CACHE_DIR/index-staging/en/index.html" "$SITE_DIR/en/index.html"
 touch "$SITE_DIR/.nojekyll"
 
 # --- 9. summary --------------------------------------------------------------

@@ -146,6 +146,15 @@ def build_status_from_meta():
             "name": name,
             "status": status,
             "description": desc,
+            # Optional per-lib English translation, hand-authored into
+            # meta.json's "english_name"/"english_description" fields
+            # (see [[project_curator_mandate_site_i18n_seo]] in memory --
+            # this is an ongoing translation project, not expected to be
+            # complete for all libs at once). render_index(lang="en")
+            # falls back to the Chinese name/description when absent
+            # rather than blocking the English page on 100% coverage.
+            "english_name": entry.get("english_name", ""),
+            "english_description": entry.get("english_description", ""),
             "archive": entry.get("archive", ""),
             "archive_num": entry.get("number", ""),
             "port": entry.get("port", ""),
@@ -226,6 +235,55 @@ BADGE = {
     "noboot": ("❌", "不可启动", "无法在 WASM 驱动下启动"),
 }
 
+# Per-language UI chrome. Card content (name/description) is a separate
+# concern handled in render_index via info["english_name"]/
+# info["english_description"], which fall back to the Chinese text when
+# a lib's translation isn't written yet -- this dict is only the fixed
+# strings around the cards (search, filters, footer, etc.), which ARE
+# all translated up front since there's no per-lib data dependency.
+UI = {
+    "zh": {
+        "html_lang": "zh-CN", "og_locale": "zh_CN",
+        "page_title": "中文 MUD 博物馆 — 浏览器直接游玩",
+        "site_name": "中文 MUD 博物馆", "h1": "中文 MUD 博物馆",
+        "search_placeholder": "搜索游戏名 / 简介 / slug / 原始文件名 ……",
+        "filter_all": "全部", "filter_playable": "✅ 可玩",
+        "filter_limited": "⚠️ 受限", "filter_noboot": "❌ 不可启动",
+        "badge": {"playable": "可玩", "limited": "受限", "noboot": "不可启动"},
+        "admin_title": "内置管理员账号——用它登录即有巫师权限",
+        "admin_nopw": "无密码", "admin_pw_readme": "密码见 README",
+        "updated_label": "更新", "commit_title": "该游戏库最近一次改动的提交",
+        "source_label": "源码", "source_title": "该游戏库的源代码目录",
+        "footer_source": "源代码与修复记录", "footer_driver": "驱动",
+        "footer_copyright": "游戏内容版权归原作者所有,仅作历史保存用途。",
+        "lang_switch_label": "English", "lang_switch_href": f"{SITE_URL}/en/",
+        "untranslated_suffix": "",
+        "self_url": f"{SITE_URL}/",
+    },
+    "en": {
+        "html_lang": "en", "og_locale": "en_US",
+        "page_title": "Chinese MUD Museum — Play Instantly in Your Browser",
+        "site_name": "Chinese MUD Museum", "h1": "Chinese MUD Museum",
+        "search_placeholder": "Search by name / description / slug / archive filename…",
+        "filter_all": "All", "filter_playable": "✅ Playable",
+        "filter_limited": "⚠️ Limited", "filter_noboot": "❌ Won't boot",
+        "badge": {"playable": "Playable", "limited": "Limited",
+                  "noboot": "Won't boot"},
+        "admin_title": "Pre-seeded admin account — log in with it for full "
+                        "wizard privileges",
+        "admin_nopw": "no password", "admin_pw_readme": "password in README",
+        "updated_label": "Updated",
+        "commit_title": "Most recent commit that changed this library",
+        "source_label": "Source", "source_title": "Source directory for this library",
+        "footer_source": "Source & restoration notes", "footer_driver": "Driver",
+        "footer_copyright": "Game content copyright belongs to the original "
+                             "authors; preserved here for historical purposes only.",
+        "lang_switch_label": "中文", "lang_switch_href": f"{SITE_URL}/",
+        "untranslated_suffix": " (untranslated — showing original Chinese)",
+        "self_url": f"{SITE_URL}/en/",
+    },
+}
+
 
 def load_numbers():
     """slug -> sort key from scripts/lib_numbering.json's "NNN" / "NNN-M"
@@ -246,7 +304,59 @@ def load_numbers():
     return numbers
 
 
-def render_index(status, commits):
+# Longer prose blocks that don't fit the flat UI dict (they interpolate
+# per-page counts, and read more naturally as full paragraphs than as
+# reassembled fragments). {n_total}/{n_play}/{n_lim}/{n_no} are filled in
+# by render_index via str.format.
+INTRO = {
+    "zh": (
+        "    这里收藏了 {n_total} 个上世纪九十年代至今的中文 LPC MUD(泥潭)游戏库,\n"
+        '    均已修复并运行在 <a href="https://github.com/fluffos/fluffos"\n'
+        "    style=\"color:var(--accent)\">FluffOS</a> 驱动上。整个驱动通过 WebAssembly\n"
+        "    在你的浏览器里运行 —— 点击任意一款游戏,即可像当年 telnet 泥潭一样注册、\n"
+        "    登录、行走江湖。无需安装,无需服务器。每张卡片还标注了预置的管理员账号\n"
+        "    (🔑)——用它登录即可获得巫师权限,自由探索游戏世界与代码。"
+    ),
+    "en": (
+        "    This is an archive of {n_total} classic Chinese LPC MUD (mudlib) games\n"
+        "    dating back to the 1990s, restored and running on the\n"
+        '    <a href="https://github.com/fluffos/fluffos" style="color:var(--accent)">FluffOS</a>\n'
+        "    driver. The whole driver runs in your browser via WebAssembly — click any\n"
+        "    game and register, log in, and explore the world exactly as players did\n"
+        "    over telnet decades ago. No install, no server. Every card lists a\n"
+        "    pre-seeded admin account (🔑) for immediate wizard-level access to the\n"
+        "    game world and its source."
+    ),
+}
+STATS = {
+    "zh": (
+        "    <b>{n_play}</b> 款可完整游玩(✅) ·\n"
+        "    <b>{n_lim}</b> 款可启动但登录受限(⚠️,多为依赖 query_ip_number()\n"
+        "    等浏览器环境缺失能力) · <b>{n_no}</b> 款暂无法启动(❌)"
+    ),
+    "en": (
+        "    <b>{n_play}</b> fully playable (✅) ·\n"
+        "    <b>{n_lim}</b> boot but have a login/feature limitation (⚠️, usually a\n"
+        "    missing browser-environment capability like query_ip_number()) ·\n"
+        "    <b>{n_no}</b> not yet bootable in-browser (❌)"
+    ),
+}
+FOOTER = {
+    "zh": (
+        '    源代码与修复记录:<a href="https://github.com/fluffos/mudlibs">fluffos/mudlibs</a>\n'
+        '    · 驱动:<a href="https://github.com/fluffos/fluffos">FluffOS</a> (WebAssembly)\n'
+        "    · 游戏内容版权归原作者所有,仅作历史保存用途。"
+    ),
+    "en": (
+        '    Source & restoration notes: <a href="https://github.com/fluffos/mudlibs">fluffos/mudlibs</a>\n'
+        '    · Driver: <a href="https://github.com/fluffos/fluffos">FluffOS</a> (WebAssembly)\n'
+        "    · Game content copyright belongs to the original authors; preserved here for historical purposes only."
+    ),
+}
+
+
+def render_index(status, commits, lang="zh"):
+    ui = UI[lang]
     libs = status["libs"]
     counts = status["counts"]
     numbers = load_numbers()
@@ -262,9 +372,18 @@ def render_index(status, commits):
     cards = []
     for slug, info in entries:
         st = info["status"]
-        icon, label, _ = BADGE[st]
-        name = html.escape(info["name"])
-        desc = html.escape(info["description"])
+        icon = BADGE[st][0]
+        label = ui["badge"][st]
+        if lang == "en":
+            name_src = info.get("english_name") or info["name"]
+            desc_src = info.get("english_description") or info["description"]
+            desc_suffix = "" if info.get("english_description") else ui["untranslated_suffix"]
+        else:
+            name_src = info["name"]
+            desc_src = info["description"]
+            desc_suffix = ""
+        name = html.escape(name_src)
+        desc = html.escape(desc_src) + html.escape(desc_suffix)
         linked = st != "noboot"
         title_html = (f'<a class="play" href="{slug}/">{name}</a>' if linked
                       else name)
@@ -275,33 +394,33 @@ def render_index(status, commits):
             if admin_pw:
                 cred = f"{admin_id} / {admin_pw}"
             elif admin_pw == "":
-                cred = f"{admin_id}(无密码)"
+                cred = f"{admin_id}({ui['admin_nopw']})"
             else:
-                cred = f"{admin_id}(密码见 README)"
+                cred = f"{admin_id}({ui['admin_pw_readme']})"
             meta_bits.append(
-                '<span class="admin" title="内置管理员账号——用它登录即有'
-                f'巫师权限">🔑 {html.escape(cred)}</span>')
+                f'<span class="admin" title="{ui["admin_title"]}">'
+                f'🔑 {html.escape(cred)}</span>')
         entry = commits.get(slug)
         if entry:
             short = html.escape(entry["sha"][:7])
             day = html.escape(entry.get("date", "")[:10])
             meta_bits.append(
-                f'<span>更新 <a href="{REPO_URL}/commit/'
-                f'{html.escape(entry["sha"])}" title="该游戏库最近一次改动的'
-                f'提交">{short}</a> {day}</span>')
+                f'<span>{ui["updated_label"]} <a href="{REPO_URL}/commit/'
+                f'{html.escape(entry["sha"])}" title="{ui["commit_title"]}"'
+                f'>{short}</a> {day}</span>')
         meta_bits.append(
             f'<a href="{REPO_URL}/tree/main/libs/{html.escape(slug)}" '
-            'title="该游戏库的源代码目录">源码</a>')
+            f'title="{ui["source_title"]}">{ui["source_label"]}</a>')
         meta_html = ('<p class="meta">' + "\n    ".join(meta_bits) + '</p>')
 
         # Search should cover every field a visitor might type, not just the
         # visible slug/name/description text -- including fields that never
-        # render on the card at all (original archive filename, admin id).
-        # Building this as an explicit corpus (rather than relying on
-        # card.textContent) means search stays correct even if the visible
-        # markup changes later.
+        # render on the card at all (original archive filename, admin id,
+        # and -- on the English page -- both the Chinese AND English name/
+        # description, so a visitor typing either language finds the card).
         search_bits = [
             slug, info["name"], info["description"],
+            info.get("english_name", ""), info.get("english_description", ""),
             info.get("archive", ""), info.get("archive_num", ""),
             admin_id or "",
         ]
@@ -323,30 +442,43 @@ def render_index(status, commits):
     n_no = counts.get("noboot", 0)
     cards_html = "\n".join(cards)
 
-    page_title = "中文 MUD 博物馆 — 浏览器直接游玩"
-    meta_desc = (
-        f"收藏了 {n_total} 个上世纪九十年代至今的中文 LPC MUD(泥潭)游戏库,"
-        f"其中 {n_play} 款可在浏览器内通过 WebAssembly 完整游玩,无需安装、"
-        "无需服务器。每款游戏都标注了预置管理员账号,登录即有巫师权限。"
-        "A browser-playable archive of restored classic Chinese LPC MUD "
-        "(mudlib) games, running on the FluffOS driver via WebAssembly.")
+    page_title = ui["page_title"]
+    if lang == "en":
+        meta_desc = (
+            f"A browser-playable archive of {n_total} restored classic "
+            f"Chinese LPC MUD (mudlib) games from the 1990s onward, "
+            f"{n_play} of them fully playable via WebAssembly -- no "
+            "install, no server. Every game lists a pre-seeded admin "
+            "account for instant wizard access.")
+    else:
+        meta_desc = (
+            f"收藏了 {n_total} 个上世纪九十年代至今的中文 LPC MUD(泥潭)游戏库,"
+            f"其中 {n_play} 款可在浏览器内通过 WebAssembly 完整游玩,无需安装、"
+            "无需服务器。每款游戏都标注了预置管理员账号,登录即有巫师权限。"
+            "A browser-playable archive of restored classic Chinese LPC MUD "
+            "(mudlib) games, running on the FluffOS driver via WebAssembly.")
     meta_desc_attr = html.escape(meta_desc)
 
+    other = "en" if lang == "zh" else "zh"
+
     return f"""<!doctype html>
-<html lang="zh-CN">
+<html lang="{ui['html_lang']}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(page_title)}</title>
 <meta name="description" content="{meta_desc_attr}">
-<link rel="canonical" href="{SITE_URL}/">
+<link rel="canonical" href="{ui['self_url']}">
+<link rel="alternate" hreflang="zh-CN" href="{UI['zh']['self_url']}">
+<link rel="alternate" hreflang="en" href="{UI['en']['self_url']}">
+<link rel="alternate" hreflang="x-default" href="{UI['zh']['self_url']}">
 <link rel="alternate" type="text/plain" title="llms.txt" href="{SITE_URL}/llms.txt">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="中文 MUD 博物馆">
+<meta property="og:site_name" content="{html.escape(ui['site_name'])}">
 <meta property="og:title" content="{html.escape(page_title)}">
 <meta property="og:description" content="{meta_desc_attr}">
-<meta property="og:url" content="{SITE_URL}/">
-<meta property="og:locale" content="zh_CN">
+<meta property="og:url" content="{ui['self_url']}">
+<meta property="og:locale" content="{ui['og_locale']}">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="{html.escape(page_title)}">
 <meta name="twitter:description" content="{meta_desc_attr}">
@@ -425,39 +557,37 @@ def render_index(status, commits):
   .meta a:hover {{ text-decoration: underline; }}
   footer {{ margin-top: 32px; color: var(--dim); font-size: 12px; }}
   footer a {{ color: var(--accent); }}
+  .lang-switch {{
+    position: absolute; top: 24px; right: 16px; font-size: 13px;
+  }}
+  .lang-switch a {{ color: var(--accent); text-decoration: none; }}
+  .lang-switch a:hover {{ text-decoration: underline; }}
+  .wrap {{ position: relative; }}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>中文 MUD 博物馆</h1>
+  <p class="lang-switch"><a href="{ui['lang_switch_href']}">{html.escape(ui['lang_switch_label'])}</a></p>
+  <h1>{html.escape(ui['h1'])}</h1>
   <p class="intro">
-    这里收藏了 {n_total} 个上世纪九十年代至今的中文 LPC MUD(泥潭)游戏库,
-    均已修复并运行在 <a href="https://github.com/fluffos/fluffos"
-    style="color:var(--accent)">FluffOS</a> 驱动上。整个驱动通过 WebAssembly
-    在你的浏览器里运行 —— 点击任意一款游戏,即可像当年 telnet 泥潭一样注册、
-    登录、行走江湖。无需安装,无需服务器。每张卡片还标注了预置的管理员账号
-    (🔑)——用它登录即可获得巫师权限,自由探索游戏世界与代码。
+{INTRO[lang].format(n_total=n_total)}
   </p>
   <p class="stats">
-    <b>{n_play}</b> 款可完整游玩(✅) ·
-    <b>{n_lim}</b> 款可启动但登录受限(⚠️,多为依赖 query_ip_number()
-    等浏览器环境缺失能力) · <b>{n_no}</b> 款暂无法启动(❌)
+{STATS[lang].format(n_play=n_play, n_lim=n_lim, n_no=n_no)}
   </p>
   <div class="controls">
-    <input id="q" type="search" placeholder="搜索游戏名 / 简介 / slug / 原始文件名 ……"
+    <input id="q" type="search" placeholder="{html.escape(ui['search_placeholder'])}"
            autocomplete="off">
-    <button class="fbtn active" data-f="all">全部 {n_total}</button>
-    <button class="fbtn" data-f="playable">✅ 可玩 {n_play}</button>
-    <button class="fbtn" data-f="limited">⚠️ 受限 {n_lim}</button>
-    <button class="fbtn" data-f="noboot">❌ 不可启动 {n_no}</button>
+    <button class="fbtn active" data-f="all">{html.escape(ui['filter_all'])} {n_total}</button>
+    <button class="fbtn" data-f="playable">{html.escape(ui['filter_playable'])} {n_play}</button>
+    <button class="fbtn" data-f="limited">{html.escape(ui['filter_limited'])} {n_lim}</button>
+    <button class="fbtn" data-f="noboot">{html.escape(ui['filter_noboot'])} {n_no}</button>
   </div>
   <div class="grid" id="grid">
 {cards_html}
   </div>
   <footer>
-    源代码与修复记录:<a href="https://github.com/fluffos/mudlibs">fluffos/mudlibs</a>
-    · 驱动:<a href="https://github.com/fluffos/fluffos">FluffOS</a> (WebAssembly)
-    · 游戏内容版权归原作者所有,仅作历史保存用途。
+{FOOTER[lang]}
   </footer>
 </div>
 <script>
@@ -509,7 +639,10 @@ def render_sitemap_xml(status):
     slugs = sorted(
         (slug for slug, info in libs.items() if info["status"] != "noboot"),
         key=lambda s: (numbers.get(s, (9999, 0)), s))
-    urls = [f"  <url><loc>{SITE_URL}/</loc><changefreq>weekly</changefreq></url>"]
+    urls = [
+        f"  <url><loc>{SITE_URL}/</loc><changefreq>weekly</changefreq></url>",
+        f"  <url><loc>{SITE_URL}/en/</loc><changefreq>weekly</changefreq></url>",
+    ]
     for slug in slugs:
         urls.append(
             f"  <url><loc>{SITE_URL}/{html.escape(slug)}/</loc>"
@@ -625,7 +758,11 @@ def main():
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "index.html").write_text(render_index(status, commits),
+    (out_dir / "index.html").write_text(render_index(status, commits, lang="zh"),
+                                        encoding="utf-8")
+    en_dir = out_dir / "en"
+    en_dir.mkdir(parents=True, exist_ok=True)
+    (en_dir / "index.html").write_text(render_index(status, commits, lang="en"),
                                         encoding="utf-8")
     (out_dir / "robots.txt").write_text(render_robots_txt(), encoding="utf-8")
     (out_dir / "sitemap.xml").write_text(render_sitemap_xml(status),
@@ -634,9 +771,13 @@ def main():
     (out_dir / "llms-full.txt").write_text(render_llms_full_txt(status),
                                             encoding="utf-8")
 
+    n_translated = sum(1 for info in status["libs"].values()
+                        if info.get("english_description"))
     total = len(status["libs"])
     print(f"derived from meta.json: {total} libs -> {status['counts']}")
-    print(f"index written to {out_dir / 'index.html'}")
+    print(f"index written to {out_dir / 'index.html'} (zh) and {en_dir / 'index.html'} (en)")
+    print(f"english translations: {n_translated}/{total} libs have a real "
+          "english_description (rest fall back to Chinese on the EN page)")
     print(f"robots.txt, sitemap.xml, llms.txt, llms-full.txt written to {out_dir}")
 
 
