@@ -343,11 +343,11 @@ classes it's found.
 | 160 | `nightmare3` | Nightmare 3 | `git clone https://github.com/fluffos/nightmare3 (not a traditional archive file — a maintained, already FluffOS-adapted fork; mudlib root is the repo's lib/ directory)` | 40208 | native-boot verified, WASM pending |
 | 161 | `imud` | IMUD@FluffOS.v2019 | `git clone https://github.com/fluffos/imud (commit 6b232d4, cloned 2026-08-24)` | 40209 | WASM playable |
 | 162 | `sanguozhi` | 三国志 | `git clone https://github.com/fluffos/sanguozhi` | 40210 | WASM playable |
-| 163 | `nt7` | 王者归来 | `git clone https://github.com/fluffos/nt7` | 40211 | WASM playable |
+| 163 | `nt7` | 王者归来 | `git clone https://github.com/fluffos/nt7 (王者归来, "泥潭7" — already a UTF-8/FluffOS-v2019-adapted community fork, not a raw legacy archive)` | 40211 | WASM playable |
 | 164 | `lima` | Lima | `git clone https://github.com/fluffos/lima (HEAD dbcef2a, 2026-08-24)` | 40212 | partial (native only) |
-| 901 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | — | deprioritized |
-| 901-1 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | — | deprioritized |
-| 901-2 | `dw_fluffos_v3` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | — | deprioritized |
+| 901 | `discworld` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | 40206 | pending |
+| 901-1 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | — | deprioritized |
+| 901-2 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | — | deprioritized |
 | 902 | `tomud_vc` | TOMud VC++ 客户端源码 | `TOMud_VC源代码.rar` | — | not-mudlib |
 | 903 | `sanguowaizhuan` | 三国歪传 (Diku/Merc) | `三国歪传.rar` | — | not-mudlib |
 | 903-1 | `sgwcxz` | 三国歪传 (下载版) | `三国歪传下载.rar` | — | not-mudlib |
