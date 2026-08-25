@@ -1,0 +1,483 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/environment/environment.lpc";
+
+private object regionService = getService("region");
+
+private string *possibleEncounters = ({});
+private object *currentEncounters = ({});
+private string *possibleNonCombatEncounters = ({});
+private object *currentNonCombatEncounters = ({});
+private int timeUntilNextEncounter;
+private int isSpawningEncounters = 0;
+private mapping deferredRegion = 0;
+private string PathType = 0;
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask mapping getElementMapping(string type, string name, 
+    string location, mapping element, string state)
+{
+    object elementObj = load_object(name);
+    string elementName = elementObj->Name();
+
+    mapping *instance = filter(element[elementName], 
+        (: $1["description"] == $2 :), location);
+
+    return ([ sprintf("%s%s", name, (location ? "," + location : "")) :
+    ([
+        "type": type,
+        "state": state || "default",
+        "x-coordinate": instance[0]["x"],
+        "y-coordinate": instance[0]["y"],
+        "z-coordinate": instance[0]["z"],
+        "x-rotation": instance[0]["x-rotation"],
+        "y-rotation": instance[0]["y-rotation"],
+        "z-rotation": instance[0]["z-rotation"],
+    ]) ]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask mapping addRandomEnvironmentalElements(mapping elements, 
+    string state)
+{
+    mapping ret = ([]);
+
+    foreach(string feature in keys(elements["features"]))
+    {
+        foreach(string direction in elements["features"][feature])
+        {
+            addFeature(feature, direction, state);
+
+            ret += getElementMapping("feature", feature, direction,
+                 environmentalElements["feature"], state);
+        }
+    }
+
+    foreach(string item in keys(elements["items"]))
+    {
+        foreach(string direction in elements["items"][item])
+        {
+            addItem(item, direction, state);
+
+            ret += getElementMapping("item", item, direction,
+                 environmentalElements["item"], state);
+        }
+    }
+
+    if (member(elements, "shop"))
+    {
+        addShop(elements["shop"]);
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask varargs void addRandomObjects(mapping items, string state)
+{
+    foreach(string item in keys(items))
+    {
+        addObject(items[item], state);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask varargs void addRandomCreature(string *creatures, 
+    string state)
+{
+    if (sizeof(creatures))
+    {
+        possibleEncounters = creatures + ({});
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask varargs void addNonCombatCreature(
+    string *creatures, string state)
+{
+    if (sizeof(creatures))
+    {
+        possibleNonCombatEncounters = creatures + ({});
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void addGeneratedExits(mapping exits, string state)
+{
+    if (mapp(exits) && sizeof(exits))
+    {
+        foreach(string direction in keys(exits))
+        {
+            mapping exit = exits[direction];
+            PathType = exit["path type"];
+
+            if (member(exit, "door"))
+            {
+                addGeneratedExitWithDoor(direction, 
+                    exit["exit to"], 
+                    exit["region"], 
+                    exit["door"],
+                    exit["key"],
+                    state);
+            }
+            else
+            {
+                addGeneratedExit(direction, 
+                    exit["exit to"], 
+                    exit["region"], 
+                    state);
+            }
+
+            if (PathType)
+            {
+                addFeature(exit["path type"], direction, state);
+            }
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask mapping addGeneratedFeatures(mapping features, object region,
+    string state)
+{
+    mapping ret = ([]);
+
+    if (mapp(features) && member(features, "features"))
+    {
+        foreach(string direction in keys(features["features"]))
+        {
+            addFeature(features["features"][direction], direction, state);
+
+            ret += getElementMapping("feature", 
+                features["features"][direction],
+                direction, 
+                environmentalElements["feature"], 
+                state);
+        }
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask mapping addGeneratedStructures(mapping structures, mapping
+    data, object region, string state)
+{
+    mapping ret = ([]);
+
+    if (mapp(structures) && member(structures, "buildings") &&
+        sizeof(structures["buildings"]))
+    {
+        foreach(string direction in keys(structures["buildings"]))
+        {
+            mapping building = structures["buildings"][direction];
+
+            addGeneratedBuilding(building["building"],
+                direction,
+                building["exit to"],
+                building["region"]);
+
+            ret += getElementMapping("building",
+                building["building"],
+                direction,
+                environmentalElements["building"],
+                state);
+        }
+    }
+
+    if (mapp(data) && member(data, "buildings"))
+    {
+        mapping buildingsNoExit = filter(data["buildings"],
+            (: (member(keys(structures["buildings"]), $1) < 0) :));
+
+        foreach(string direction in keys(buildingsNoExit))
+        {
+            addBuilding(buildingsNoExit[direction],
+                direction, 0, state);
+
+            ret += getElementMapping("building",
+                buildingsNoExit[direction],
+                direction,
+                environmentalElements["building"],
+                state);
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void deferGenerateRegion(string direction, object region,
+    int *entryCoordinate, string exitCoordinate, string name, string state)
+{
+    deferredRegion = ([
+        "direction": direction,
+        "type": region->regionType(),
+        "x": region->xDimension(),
+        "y": region->yDimension(),
+        "exit coordinate": exitCoordinate,
+        "entry coordinate": entryCoordinate,
+        "name": name,
+        "state": state,
+        "source": region,
+    ]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs mapping generateEnvironment(mapping data, object region, 
+    string state)
+{
+    mapping ret = ([
+        "elements": ([])
+    ]);
+
+    if (!state)
+    {
+        state = "default";
+    }
+
+    if (mapp(data))
+    {
+        mapping roomData = regionService->generateRoomData(region, data);
+
+        if (roomData)
+        {
+            setRegion(region);
+            if (member(roomData, "terrain"))
+            {
+                setTerrain(roomData["terrain"]);
+
+                ret["elements"] += getElementMapping("terrain", 
+                    roomData["terrain"], "", environmentalElements["terrain"], 
+                    state);
+            }
+            else
+            {
+                setInterior(roomData["interior"]);
+
+                ret["elements"] += getElementMapping("interior", 
+                    roomData["interior"], "", environmentalElements["interior"],
+                    state);
+            }
+
+            setCoordinates(region, data["x"], data["y"]);
+            addGeneratedExits(roomData["exits"], state);
+
+            ret["elements"] += addGeneratedStructures(roomData, data, region, 
+                state);
+
+            ret["elements"] += member(data, "features") ?
+                addGeneratedFeatures(data, region, state) :
+                addRandomEnvironmentalElements(roomData, state);
+
+            addRandomObjects(filter(roomData["room objects"],
+                (: $2["type"] == "object" :)), state);
+
+            addRandomCreature(roomData["creatures"], state);
+
+            if (sizeof(roomData["non-combat creatures"]))
+            {
+                addNonCombatCreature(
+                    roomData["non-combat creatures"], state);
+            }
+
+            if (data["room type"] == "exit")
+            {
+                deferGenerateRegion(data["exit to"], 
+                    region,
+                    data["exit coordinates"],
+                    data["name"],
+                    sprintf("%s-%s-%s", 
+                        region->regionName(), 
+                        data["name"] || "none",
+                        data["exit to"] || "none"),
+                    state);
+
+                if (PathType)
+                {
+                    addFeature(PathType, data["exit to"], state);
+                }
+            }
+
+            ret["room objects"] = roomData["room objects"];
+        }
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void addEntryExit(string direction, string location)
+{
+    addExit(direction, location);
+
+    if (PathType)
+    {
+        addFeature(PathType, direction);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected void setUpNonCombatEncounter(object player)
+{
+    currentNonCombatEncounters = filter(currentNonCombatEncounters,
+        (: objectp($1) && (environment($1) == this_object()) :));
+
+    if (objectp(player) &&
+        sizeof(possibleNonCombatEncounters) &&
+        !sizeof(currentNonCombatEncounters))
+    {
+        object personaService = getService("persona");
+
+        int baseLevel = (objectp(getRegion()) && getRegion()->regionLevel()) ?
+            getRegion()->regionLevel() : player->effectiveLevel();
+
+        string name = possibleNonCombatEncounters[
+            random(sizeof(possibleNonCombatEncounters))];
+
+        int level = (objectp(getRegion()) && getRegion()->regionLevel()) ?
+            (baseLevel - 2 + random(5)) :
+            (baseLevel - 3 + random(7));
+
+        if (level < 1)
+        {
+            level = 1;
+        }
+
+        object npc = clone_object("/lib/realizations/npc.lpc");
+        npc->SetUpPersonaOfLevel(
+            personaService->getRandomPersona(name, level), level, 1);
+
+        npc->Gender(random(2) ? "female" : "male");
+        npc->addAlias(name);
+
+        if (npc->Race() == "deity")
+        {
+            npc->apparentRace("human");
+        }
+        npc->Name(capitalize(name));
+
+        currentNonCombatEncounters += ({ npc });
+        npc->move_object(this_object());
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected void setUpEncounter(object player)
+{
+    if (!isSpawningEncounters)
+    {
+        currentEncounters = filter(currentEncounters,
+            (: objectp($1) && (environment($1) == this_object()) :));
+
+        if (objectp(player) && (time() > timeUntilNextEncounter) &&
+            sizeof(possibleEncounters) && !sizeof(currentEncounters))
+        {
+            timeUntilNextEncounter = time() + 300;
+
+            object personaService = getService("persona");
+
+            int baseLevel = (objectp(getRegion()) && getRegion()->regionLevel()) ?
+                getRegion()->regionLevel() : player->effectiveLevel();
+
+            string *encounterList = personaService->filterEncountersForLevel(
+                possibleEncounters, baseLevel);
+            if (sizeof(encounterList))
+            {
+                string name = encounterList[random(sizeof(encounterList))];
+
+                int count = 1;
+                if (member(({ "outlaw", "ruffian", "undead", "timber wolf", "gray wolf",
+                    "red wolf", "coyote", "zombie", "skeleton" }), name) > -1)
+                {
+                    count = 1 + random(3);
+                }
+
+                currentEncounters = ({ });
+                isSpawningEncounters = 1;
+                for (int i = 0; i < count; i++)
+                {
+                    int level = (objectp(getRegion()) && getRegion()->regionLevel()) ?
+                        (baseLevel - 2 + random(5)) :
+                        (baseLevel - 5 + random(11));
+
+                    object encounter = clone_object("/lib/realizations/monster.lpc");
+                    encounter->SetUpPersonaOfLevel(
+                        personaService->getRandomPersona(name, level), level, 1);
+
+                    encounter->Gender(random(2) ? "female" : "male");
+                    encounter->addAlias(name);
+
+                    if (encounter->Race() == "deity")
+                    {
+                        encounter->apparentRace("human");
+                    }
+                    string realName = name;
+                    if (encounter->apparentRace() &&
+                        (member(({ "outlaw", "ruffian", "skeleton", "zombie" }), name) > -1))
+                    {
+                        realName = sprintf("%s (%s)", name,
+                            capitalize(encounter->apparentRace()));
+                    }
+                    encounter->Name(realName);
+                    encounter->setUpRandomEquipment(5 + (encounter->effectiveLevel() * 3));
+
+                    encounter->move_object(this_object());
+                    currentEncounters += ({ encounter });
+                }
+                isSpawningEncounters = 0;
+            }
+        }
+
+        setUpNonCombatEncounter(player);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void init()
+{
+    if (deferredRegion)
+    {
+        if (this_player())
+        {
+            tell_object(this_player(), configuration->decorate(
+                "Loading a new region into memory. Please wait...\n",
+                "exits", "environment", 
+                this_player()->colorConfiguration()));
+        }
+        object previousRegion = deferredRegion["source"];
+        string destinationDirection =
+            previousRegion->getEnterFromDirection(deferredRegion["direction"]);
+
+        object newRegion = addGeneratedRegion(deferredRegion["direction"],
+            deferredRegion["type"],
+            deferredRegion["x"],
+            deferredRegion["y"],
+            deferredRegion["entry coordinate"],
+            deferredRegion["name"],
+            deferredRegion["state"]);
+
+        newRegion->setEntryExit(deferredRegion["exit coordinate"],
+            previousRegion, deferredRegion["state"]);
+
+        newRegion->setPersistRegion(previousRegion->persistRegion());
+
+        deferredRegion = 0;
+    }
+
+    environment::init();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void updateEntryPoint(string direction, string entryPoint,
+    object region, string state)
+{
+    if (member(exits, state))
+    {
+        exits[state][direction] = ([
+            "region": region,
+            "destination": entryPoint
+        ]);
+    }
+}

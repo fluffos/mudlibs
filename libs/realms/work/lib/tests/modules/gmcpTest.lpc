@@ -1,0 +1,218 @@
+// *****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved.
+//                      See the accompanying LICENSE file for details.
+// *****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+#include "/sys/telnet.h"
+
+object Player;
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Player = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Player.Name("bob");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Player);
+}
+
+// ---------------------------------------------------------------------------
+// gmcpIsEnabled - default state and toggle
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void GmcpIsDisabledByDefault()
+{
+    ExpectFalse(Player.gmcpIsEnabled(),
+        "GMCP must be disabled before the client sends DO GMCP");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void GmcpIsEnabledAfterDoNegotiation()
+{
+    Player.enableGmcp();
+    ExpectTrue(Player.gmcpIsEnabled(),
+        "GMCP must be enabled after IAC DO GMCP");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void GmcpIsDisabledAfterDontNegotiation()
+{
+    Player.enableGmcp();
+    Player.telnetNegotiation(DONT, TELOPT_GMCP, 0);
+    ExpectFalse(Player.gmcpIsEnabled(),
+        "GMCP must be disabled after IAC DONT GMCP");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void UnrelatedTelnetOptionDoesNotEnableGmcp()
+{
+    Player.telnetNegotiation(DO, 1, 0);
+    ExpectFalse(Player.gmcpIsEnabled(),
+        "unrelated telnet option must not enable GMCP");
+}
+
+// ---------------------------------------------------------------------------
+// regionChangedTo / resetRegionTracking are NOT on the player
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void PlayerDoesNotExposeRegionChangedTo()
+{
+    ExpectFalse(function_exists("regionChangedTo", Player),
+        "regionChangedTo must not be on the player object");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PlayerDoesNotExposeResetRegionTracking()
+{
+    ExpectFalse(function_exists("resetRegionTracking", Player),
+        "resetRegionTracking must not be on the player object");
+}
+
+// ---------------------------------------------------------------------------
+// encodeOOBValue is NOT on the player
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void PlayerDoesNotExposeEncodeOOBValue()
+{
+    ExpectFalse(function_exists("encodeOOBValue", Player),
+        "encodeOOBValue must not be on the player object");
+}
+
+// ---------------------------------------------------------------------------
+// sendVitalsOutOfBand is NOT on the player
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void PlayerDoesNotExposeSendVitalsOutOfBand()
+{
+    ExpectFalse(function_exists("sendVitalsOutOfBand", Player),
+        "sendVitalsOutOfBand dead code must not be on the player object");
+}
+
+// ---------------------------------------------------------------------------
+// sendGmcp / sendOutOfBand
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void SendGmcpReturnsZeroWhenDisabled()
+{
+    ExpectEq(0, Player.sendGmcp("Char.Vitals", "{}"),
+        "sendGmcp returns 0 when GMCP is not enabled");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void SendGmcpEmitsFrameWhenEnabled()
+{
+    Player.enableGmcp();
+    int before = sizeof(Player.caughtGmcpFrames());
+    Player.sendGmcp("Char.Vitals", "{}");
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) > before,
+        "sendGmcp emits a frame when GMCP is enabled");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void SendGmcpFrameContainsPackageName()
+{
+    Player.enableGmcp();
+    Player.sendGmcp("Char.Vitals", "{\"x\":1}");
+    ExpectSubStringMatch("Char.Vitals", Player.caughtGmcp(),
+        "package name appears in the captured frame");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void SendGmcpFrameContainsJsonBody()
+{
+    Player.enableGmcp();
+    Player.sendGmcp("Test.Package", "{\"key\":\"val\"}");
+    ExpectSubStringMatch("\"key\"", Player.caughtGmcp(),
+        "JSON body appears in the captured frame");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void SendOutOfBandReturnsZeroWhenDisabled()
+{
+    ExpectEq(0, Player.sendOutOfBand("Char.Vitals", ([ "x": 1 ])),
+        "sendOutOfBand returns 0 when GMCP not enabled");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void SendOutOfBandEmitsFrameWhenEnabled()
+{
+    Player.enableGmcp();
+    int before = sizeof(Player.caughtGmcpFrames());
+    Player.sendOutOfBand("Char.Score", ([ "name": "bob" ]));
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) > before,
+        "sendOutOfBand emits a frame when GMCP is enabled");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void SendOutOfBandSerializesDataViaJsonService()
+{
+    Player.enableGmcp();
+    Player.sendOutOfBand("Char.Score", ([ "name": "bob" ]));
+    ExpectSubStringMatch("\"name\"", Player.caughtGmcp(),
+        "key from mapping appears in emitted frame");
+    ExpectSubStringMatch("\"bob\"", Player.caughtGmcp(),
+        "string value from mapping appears in emitted frame");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void SendOutOfBandDoesNotAcceptNonMappingData()
+{
+    Player.enableGmcp();
+    int before = sizeof(Player.caughtGmcpFrames());
+    Player.sendOutOfBand("Char.Score", 0);
+    ExpectEq(before, sizeof(Player.caughtGmcpFrames()),
+        "sendOutOfBand rejects non-mapping data");
+}
+
+// ---------------------------------------------------------------------------
+// subscriber lifecycle
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void EnableGmcpPushesInitialFrames()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) > 0,
+        "initial score/vitals/inventory frames pushed on GMCP enable");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DisableGmcpStopsSubsequentFrames()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    Player.telnetNegotiation(DONT, TELOPT_GMCP, 0);
+    int framesBefore = sizeof(Player.caughtGmcpFrames());
+    Player.hitPoints(50);
+    ExpectEq(framesBefore, sizeof(Player.caughtGmcpFrames()),
+        "no new frames emitted after GMCP disabled");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ReenablingGmcpPushesInitialFramesAgain()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    Player.telnetNegotiation(DONT, TELOPT_GMCP, 0);
+    int framesBefore = sizeof(Player.caughtGmcpFrames());
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) > framesBefore,
+        "re-enabling GMCP pushes fresh initial frames");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void SubnegotiationBodyIsAcceptedWithoutError()
+{
+    Player.enableGmcp();
+    string err = catch(Player.telnetNegotiation(SB, TELOPT_GMCP,
+        to_array("Core.Hello {}")));
+    ExpectEq(0, err,
+        "SB subnegotiation body is processed without throwing");
+}

@@ -1,0 +1,184 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/core/baseSelector.lpc";
+
+private string Location;
+private object SubselectorObj;
+private int justDisplayedStatus = 0;
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setLocation(string location)
+{
+    Location = location;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void InitializeSelector()
+{
+    AllowUndo = 0;
+    AllowAbort = 1;
+    Description = "Main Menu";
+    Type = "Vehicle Management";
+    Data = ([]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void setUpUserForSelection()
+{
+    object Service = getService("vehicleManagement");
+    if (Service)
+    {
+        Data = Service->getVehicleMenu(User, Location);
+    }
+    Data[to_string(sizeof(Data) + 1)] = ([
+        "name": "Exit Vehicle Management Menu",
+        "type": "exit",
+        "description": "This option lets you exit the vehicle management menu.\n",
+        "canShow": 1
+    ]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int processSelection(string selection)
+{
+    int ret = -1;
+    if (User)
+    {
+        ret = (Data[selection]["type"] == "exit") || (selection == "abort");
+
+        if (!ret && Data[selection]["canShow"])
+        {
+            string type = Data[selection]["type"];
+            ret = 0;
+
+            switch(type)
+            {
+                case "purchase":
+                {
+                    SubselectorObj = clone_object(
+                        "/lib/modules/domains/trading/selectors/vehiclePurchaseSelector.lpc");
+                    SubselectorObj->setLocation(Location);
+                    break;
+                }
+                case "view":
+                {
+                    object *vehicles = User->getVehiclesAtLocation(Location);
+                    foreach(object vehicle in vehicles)
+                    {
+                        if (objectp(vehicle))
+                        {
+                            tell_object(User, vehicle->getVehicleStatus(User));
+                        }
+                    }
+                    justDisplayedStatus = 1;
+                    ret = -1;
+                    break;
+                }
+                case "manage":
+                {
+                    object vehicle = Data[selection]["vehicle"];
+                    if (objectp(vehicle))
+                    {
+                        SubselectorObj = clone_object(
+                            "/lib/modules/domains/trading/selectors/vehicleEnhanceSelector.lpc");
+                        SubselectorObj->setLocation(Location);
+                        SubselectorObj->setVehicle(vehicle);
+                    }
+                    break;
+                }
+                case "repair":
+                {
+                    object vehicle = Data[selection]["vehicle"];
+                    int cost = Data[selection]["cost"];
+                    if (objectp(vehicle) && User->getCash() >= cost)
+                    {
+                        User->addCash(-cost);
+                        int max = vehicle->getMaxStructure();
+                        int current = vehicle->getCurrentStructure();
+                        vehicle->repair(max - current);
+                        string vehicleName = vehicle->query("name") ||
+                            "Vehicle";
+                        tell_object(User, configuration->decorate(
+                            sprintf("%s has been fully repaired for "
+                                "%d gold.", vehicleName, cost),
+                            "success", "quests",
+                            colorConfiguration) + "\n");
+                    }
+                    else
+                    {
+                        tell_object(User, configuration->decorate(
+                            "You cannot afford this repair.",
+                            "failure", "selector",
+                            colorConfiguration) + "\n");
+                    }
+                    setUpUserForSelection();
+                    tell_object(User, displayMessage());
+                    ret = -1;
+                    break;
+                }
+                case "sell":
+                {
+                    object vehicle = Data[selection]["vehicle"];
+                    int sellPrice = Data[selection]["sell price"];
+                    if (objectp(vehicle) &&
+                        vehicle->getUsedSpace() == 0)
+                    {
+                        string vehicleName = vehicle->query("name") ||
+                            "Vehicle";
+                        User->addCash(sellPrice);
+                        User->removeVehicle(vehicle);
+                        tell_object(User, configuration->decorate(
+                            sprintf("You sold %s for %d gold.",
+                                vehicleName, sellPrice),
+                            "success", "quests",
+                            colorConfiguration) + "\n");
+                    }
+                    else
+                    {
+                        tell_object(User, configuration->decorate(
+                            "Cannot sell this vehicle. Unload "
+                            "cargo first.",
+                            "failure", "selector",
+                            colorConfiguration) + "\n");
+                    }
+                    setUpUserForSelection();
+                    tell_object(User, displayMessage());
+                    ret = -1;
+                    break;
+                }
+            }
+
+            if (SubselectorObj)
+            {
+                SubselectorObj->move_object(User);
+                SubselectorObj->registerEvent(this_object());
+                SubselectorObj->initiateSelector(User);
+            }
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void onSelectorCompleted(object caller)
+{
+    if (User)
+    {
+        setUpUserForSelection();
+        tell_object(User, displayMessage());
+    }
+    caller->cleanUp();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int suppressMenuDisplay()
+{
+    int ret = objectp(SubselectorObj) || justDisplayedStatus;
+    if (justDisplayedStatus)
+    {
+        justDisplayedStatus = 0;
+    }
+    return ret;
+}

@@ -1,0 +1,180 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/commands/baseCommand.lpc";
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void SetupCommand()
+{
+    CommandType = "Wizard";
+    addCommandTemplate("cc [-r] [##Target##]");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void compileOneItem(string path, object initiator,
+    string colorConfiguration)
+{
+    object existingBlueprint;
+    // FluffOS PORT NOTE: LDMud's blueprint(path) (get/load the master
+    // object for a file, never a clone) doesn't exist on this driver --
+    // this driver's own load_object(path) already has that exact
+    // semantic (compiles/loads once, returns the blueprint; cloning is
+    // always a separate explicit clone_object() step), so it's a direct
+    // substitute here.
+    // FluffOS PORT NOTE: LDMud's `catch(expr; nolog)` form (a `;`-
+    // separated modifier suppressing the error-log entry) doesn't exist
+    // in this driver's grammar at all -- confirmed against
+    // compiler/internal/grammar.y, `catch` only accepts a bare
+    // parenthesized expr or a `{ }` block, so the trailing `; nolog` was
+    // a hard syntax error here ("syntax error, unexpected ';'"). Plain
+    // catch(expr) is a direct substitute; the only behavioral difference
+    // is a (harmless) error-log entry on failure. This same mechanical
+    // fix was applied corpus-wide (51 files, mostly /lib/tests/*.lpc
+    // unit-test files excluded from preload, plus 3 real gameplay files
+    // -- tradingService.lpc and buySelector.lpc's item-load catches).
+    catch (existingBlueprint = load_object(path));
+
+    object *objectsToMove = ({});
+
+    if (objectp(existingBlueprint))
+    {
+        objectsToMove = filter(all_inventory(existingBlueprint),
+            (: (member(inherit_list($1), "/lib/realizations/player.lpc") > -1) :));
+
+        foreach(object item in objectsToMove)
+        {
+            item->move_object("/secure/master.lpc");
+        }
+
+        destruct(existingBlueprint);
+    }
+
+    string logFile = "/log/log"; 
+
+    if (file_size(logFile))
+    {
+        rm(logFile);
+    }
+    tell_object(initiator, configuration->decorate(sprintf("Building: %s\n",
+        path), "message", "wizard commands", colorConfiguration));
+
+    string result = catch (existingBlueprint = load_object(path));
+
+    if (result)
+    {
+        result = configuration->decorate(result,
+                "error message", "wizard commands", colorConfiguration) +
+            configuration->decorate((read_file(logFile) || driver_info(-44)),
+                "error message", "wizard commands", colorConfiguration);
+
+        tell_object(initiator, result);
+        rm(logFile);
+    }
+    else if (existingBlueprint)
+    {
+        foreach(object item in objectsToMove)
+        {
+            item->move_object(existingBlueprint);
+            tell_object(item, configuration->decorate(
+                "Your environment has been recompiled.\n\n",
+                "error message", "wizard commands", colorConfiguration));
+            item->command("look");
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask varargs int compile(string path, object initiator, 
+    string colorConfiguration, int recurse)
+{
+    int ret = 0;
+
+    string directoryPath = path;
+    if (recurse && (file_size(path) == -2))
+    {
+        path += "/*";
+    }
+    else if ((file_size(path) < 0) && (path[sizeof(path)-2..] != ".lpc"))
+    {
+        path += ".lpc";
+    }
+
+    // FluffOS PORT NOTE: this driver's get_dir() (same as LDMud's) returns
+    // bare filenames, not full paths -- exclusion list switched to bare
+    // names; the recursion below rebuilds real paths from directoryPath
+    // instead of assuming get_dir() already returned one.
+    string *files = get_dir(path, 0x10) -
+        ({ ".", ".." });
+
+    if (!sizeof(files) || !initiator->hasReadAccess(path))
+    {
+        notify_fail("No file(s) matching that criteria could be found.\n");
+    }
+    else if (((sizeof(files) == 1) || !recurse) &&
+        (file_size(path) > -1))
+    {
+        ret = 1;
+        compileOneItem(path, initiator, colorConfiguration);
+    }
+    else if(recurse)
+    {
+        // FluffOS PORT NOTE: closures on this driver can't capture
+        // enclosing-function locals -- directoryPath is passed as a bound
+        // arg ($2) instead of referenced bare.
+        files = filter(files,
+            (: ($1[(sizeof($1)-2)..(sizeof($1)-1)] == ".lpc") ||
+                (file_size($2 + "/" + $1) == -2) :),
+            directoryPath);
+
+        foreach(string file in files)
+        {
+            ret += compile(directoryPath + "/" + file, initiator,
+                colorConfiguration, 1);
+        }
+    }
+    else
+    {
+        notify_fail("The -r flag must be supplied to recursively build.\n");
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int execute(string command, object initiator)
+{
+    int ret = 0;
+
+    if (canExecuteCommand(command) &&
+        initiator->hasExecuteAccess(regreplace(command, "([^-]+)( -r|)( |$)" +
+            getTargetString(initiator, command), "\\1", 1)))
+    {
+        string target = getTargetString(initiator, command);
+        if (!target || (target == ""))
+        {
+            if (sizeof(regexp(({ command }), "-r")))
+            {
+                target = initiator->pwd();
+            }
+            else if (environment(initiator))
+            {
+                target = regreplace(object_name(environment(initiator)),
+                    "^([^#]+)#*.*", "/\\1.lpc", 1);
+            }
+        }
+
+        string targetPath = initiator->hasReadAccess(target);
+
+        if (targetPath)
+        {
+            ret = compile(targetPath, initiator, 
+                initiator->colorConfiguration(),
+                sizeof(regexp(({ command }), "-r")), 0);
+        }
+        else
+        {
+            notify_fail("You do not have the read access for that.\n");
+        }
+    }
+    return ret;
+}

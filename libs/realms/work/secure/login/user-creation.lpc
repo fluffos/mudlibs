@@ -1,0 +1,117 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+#include "/sys/input_to.h"
+// FluffOS PORT NOTE: `inherit "/secure/login/core.lpc"` removed -- same
+// diamond-inherit fix as secure/login/menu-interactions.lpc, see that
+// file's own port note.
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void execNewPlayer(string password, string userName)
+{
+    printf("\n");
+    authenticationService->saveUser(userName, password, ipAddress);
+
+    object loginModule = load_object("/lib/modules/secure/login.lpc");
+    object player = loginModule->getPlayerObject(userName);
+
+    if (objectp(player))
+    {
+        player->setUserName(userName);
+        player->save();
+        exec(player, this_object());
+        // FluffOS PORT NOTE: see the matching, longer explanation in
+        // /secure/login/menu-interactions.lpc's execCharacter() -- this
+        // driver's add_action() silently no-ops unless current_object ==
+        // command_giver at call time, so player.lpc's create()-time
+        // add_action() (called before exec() above) never actually
+        // registered anything. Re-running addCommands() here, now that
+        // exec() has made player the real command_giver, is what makes
+        // "look"/every other command actually work for a newly created
+        // character.
+        player->addCommands();
+        addUser(player);
+
+        player->advertiseGmcp();
+
+        player->command("l");
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void execGuestPlayer()
+{
+    printf("\n");
+    object loginModule = load_object("/lib/modules/secure/login.lpc");
+    object player = loginModule->getPlayerObject("guest");
+
+    if (objectp(player))
+    {
+        exec(player, this_object());
+        // FluffOS PORT NOTE: same add_action()/command_giver fix as
+        // execNewPlayer() above.
+        player->addCommands();
+        addUser(player);
+
+        player->advertiseGmcp();
+
+        player->command("l");
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void confirmPassword(string confirmPassword, string password,
+    string userName)
+{
+    removeTimeout();
+
+    if (confirmPassword != password)
+    {
+        write("The entered passwords do not match. Please enter your password: ");
+        input_to("setPassword", INPUT_NOECHO | INPUT_IGNORE_BANG,
+            userName);
+    }
+    else
+    {
+        execNewPlayer(password, userName);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void setPassword(string password, string userName)
+{
+    removeTimeout();
+    write("Please confirm your password: ");
+    input_to("confirmPassword", INPUT_NOECHO | INPUT_IGNORE_BANG,
+        password, userName);
+    call_out("timeout", 90);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void confirmUserName(string confirmation, string userName)
+{
+    removeTimeout();
+    if (PORT->member(({ "n", "N", "no", "No", "NO" }), confirmation) > -1)
+    {
+        printf("OK, what user did you want to log in as? ");
+        input_to("getUserLogin", INPUT_IGNORE_BANG);
+        call_out("timeout", 90);
+    }
+    else
+    {
+        write("Please enter your password: ");
+        input_to("setPassword", INPUT_NOECHO | INPUT_IGNORE_BANG,
+            userName);
+        call_out("timeout", 90);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void createUser(string userName)
+{
+    removeTimeout();
+    printf("This appears to be a new user. Is that correct? (Y/n) ");
+    input_to("confirmUserName", INPUT_IGNORE_BANG, userName);
+    call_out("timeout", 90);
+}

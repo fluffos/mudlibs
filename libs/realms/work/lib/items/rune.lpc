@@ -1,0 +1,173 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/items/item.lpc";
+
+/////////////////////////////////////////////////////////////////////////////
+protected void Setup()
+{
+
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void create()
+{
+    item::create();
+    set("no steal", 1);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public int isRune()
+{
+    return 1;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public varargs int set(string element, mixed data)
+{
+    int ret = 0;
+
+    if (element && stringp(element))
+    {
+        switch (element)
+        {
+            case "rune type":
+            {
+                if (data && stringp(data) &&
+                    member(({ "power", "ward", "blade", "storm", "frost", "flame" }),
+                        data) > -1)
+                {
+                    itemData[element] = data;
+                    ret = 1;
+                }
+                else
+                {
+                    raise_error("Rune: 'rune type' must be one of: "
+                        "power, ward, blade, storm, frost, flame.\n");
+                }
+                break;
+            }
+            case "rune tier":
+            {
+                if (data && stringp(data) &&
+                    member(({ "basic", "elder", "ancient", "primal" }), data) > -1)
+                {
+                    itemData[element] = data;
+                    ret = 1;
+                }
+                else
+                {
+                    raise_error("Rune: 'rune tier' must be one of: "
+                        "basic, elder, ancient, primal.\n");
+                }
+                break;
+            }
+            default:
+            {
+                ret = item::set(element, data);
+            }
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public mixed query(string element)
+{
+    mixed ret = 0;
+
+    switch (element)
+    {
+        case "rune type":
+        case "rune tier":
+        {
+            ret = member(itemData, element) ? itemData[element] : 0;
+            break;
+        }
+        case "rune bonuses":
+        {
+            string *keys = filter(keys(itemData),
+                (: sizeof(regexp(({ $1 }), "^bonus ")) ||
+                   sizeof(regexp(({ $1 }), "^penalty to ")) ||
+                   sizeof(regexp(({ $1 }), "^rune enchantment ")) ||
+                   sizeof(regexp(({ $1 }), "^material ")) :));
+            ret = sizeof(keys) ? keys : 0;
+            break;
+        }
+        default:
+        {
+            ret = item::query(element);
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public string runeDescription()
+{
+    string ret = "";
+
+    string runeType = query("rune type");
+    string runeTier = query("rune tier");
+    string *bonuses = query("rune bonuses");
+
+    if (runeType && runeTier)
+    {
+        ret = sprintf("%s %s rune", capitalize(runeTier), runeType);
+    }
+
+    if (bonuses && pointerp(bonuses) && sizeof(bonuses))
+    {
+        string *parts = ({});
+        foreach (string bonus in bonuses)
+        {
+            int val = query(bonus);
+            if (val)
+            {
+                string sign = (val < 0) ? "-" : "+";
+                int absval = abs(val);
+                string display;
+
+                if (sizeof(regexp(({ bonus }), "^rune enchantment ")))
+                {
+                    string dmgType = regreplace(bonus,
+                        "^rune enchantment ", "", 1);
+                    display = sprintf("%s%d %s on-hit", sign, absval,
+                        capitalize(dmgType));
+                }
+                else if (sizeof(regexp(({ bonus }), "^material attack ")))
+                {
+                    string dmgType = regreplace(bonus,
+                        "^material attack ", "", 1);
+                    display = sprintf("%s%d %s (weapon)", sign, absval,
+                        capitalize(dmgType));
+                }
+                else if (bonus == "material attack rating")
+                {
+                    display = sprintf("%s%d attack rating (weapon)", sign,
+                        absval);
+                }
+                else if (sizeof(regexp(({ bonus }), "^material resist ")))
+                {
+                    string resType = regreplace(bonus,
+                        "^material resist ", "", 1);
+                    display = sprintf("%s%d resist %s (armor)", sign, absval,
+                        resType);
+                }
+                else
+                {
+                    string bonusName = regreplace(bonus,
+                        "^(bonus |penalty to )", "", 1);
+                    display = sprintf("%s%d %s", sign, absval, bonusName);
+                }
+                parts += ({ display });
+            }
+        }
+        if (sizeof(parts))
+        {
+            ret += sprintf(" (%s)", implode(parts, ", "));
+        }
+    }
+    return ret;
+}

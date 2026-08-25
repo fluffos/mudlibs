@@ -1,0 +1,258 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Player;
+object Selector;
+object Wagon;
+
+/////////////////////////////////////////////////////////////////////////////
+void Init()
+{
+    ignoreList += ({
+        "resetPlayerMessages",
+        "findOptionByText",
+        "setupWagon",
+        "createEventSelector",
+        "onSelectorCompleted"
+    });
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onSelectorCompleted(object caller)
+{
+    if (objectp(caller))
+    {
+        caller->cleanUp();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void setupWagon()
+{
+    Wagon = Player->addVehicle("wagon", "eledhel");
+    if (objectp(Wagon))
+    {
+        object vehicleService = getService("vehicle");
+        mapping blueprint =
+            vehicleService->queryVehicleBlueprint("wagon");
+        Wagon->initializeVehicle(blueprint);
+        Wagon->addCargo("grain", 3);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void createEventSelector(mapping routeInfo)
+{
+    if (objectp(Selector))
+    {
+        destruct(Selector);
+    }
+    Selector = clone_object(
+        "/lib/modules/domains/trading/selectors/travelEventSelector.lpc");
+    Selector->setVehicle(Wagon);
+    Selector->setRouteInfo(routeInfo);
+    Selector->setDestination("Hillgarath");
+    Selector->move_object(Player);
+    Selector->registerEvent(this_object());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Player = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Player->Name("eventtest");
+    Player->addCommands();
+    Player->colorConfiguration("none");
+    Player->charsetConfiguration("ascii");
+    Player->addPlayerHolding("eledhel trading post");
+    Player->initializeTrader();
+    Player->addCash(5000);
+
+    setupWagon();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    if (objectp(Selector))
+    {
+        destruct(Selector);
+    }
+    if (objectp(Player))
+    {
+        destruct(Player);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void resetPlayerMessages()
+{
+    if (Player && function_exists("resetCatchList", Player))
+    {
+        Player->resetCatchList();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private string findOptionByText(string searchText)
+{
+    string result = "0";
+    string message = Player->caughtMessage();
+    if (!message || message == "")
+    {
+        return result;
+    }
+    string *lines = explode(message, "\n");
+
+    foreach (string line in lines)
+    {
+        line = regreplace(line, "\x1B\\[[0-9;]*[A-Za-z]", "", 1);
+        if (sizeof(regexp(({ line }), searchText)))
+        {
+            result = regreplace(line,
+                "^[^0-9]*([0-9]+).*", "\\1", 1);
+            break;
+        }
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EventSelectorDisplaysEventDescription()
+{
+    createEventSelector(([
+        "type": "overland",
+        "days": 5,
+        "danger": 50
+    ]));
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string message = Player->caughtMessage();
+    ExpectSubStringMatch("Travel Event", message);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EventSelectorPresentsAtLeastOneChoice()
+{
+    createEventSelector(([
+        "type": "overland",
+        "days": 5,
+        "danger": 50
+    ]));
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string message = Player->caughtMessage();
+    int hasFight = sizeof(regexp(({ message }), "Fight"));
+    int hasFlee = sizeof(regexp(({ message }), "Flee"));
+    int hasBribe = sizeof(regexp(({ message }), "Bribe"));
+    int hasContinue = sizeof(regexp(({ message }), "Continue"));
+    ExpectTrue(hasFight || hasFlee || hasBribe || hasContinue,
+        "Event should present at least one action choice");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void FightOptionResolvesWithoutCrash()
+{
+    createEventSelector(([
+        "type": "overland",
+        "days": 3,
+        "danger": 80
+    ]));
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string fightOption = findOptionByText("Fight");
+    if (fightOption != "0")
+    {
+        resetPlayerMessages();
+        Player->command(fightOption);
+        string message = implode(Player->caughtMessages(), "\n");
+        ExpectTrue(sizeof(message) > 0,
+            "Fight should produce output");
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void FleeOptionResolvesWithoutCrash()
+{
+    createEventSelector(([
+        "type": "overland",
+        "days": 3,
+        "danger": 80
+    ]));
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string fleeOption = findOptionByText("Flee");
+    if (fleeOption != "0")
+    {
+        resetPlayerMessages();
+        Player->command(fleeOption);
+        string message = implode(Player->caughtMessages(), "\n");
+        ExpectTrue(sizeof(message) > 0,
+            "Flee should produce output");
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void BribeOptionDeductsCash()
+{
+    createEventSelector(([
+        "type": "overland",
+        "days": 3,
+        "danger": 80
+    ]));
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    int cashBefore = Player->getCash();
+    string bribeOption = findOptionByText("Bribe");
+    if (bribeOption != "0")
+    {
+        resetPlayerMessages();
+        Player->command(bribeOption);
+        ExpectTrue(Player->getCash() < cashBefore,
+            "Bribe should cost gold");
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ContinueOptionArrivesAtDestination()
+{
+    createEventSelector(([
+        "type": "overland",
+        "days": 3,
+        "danger": 10
+    ]));
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string continueOption = findOptionByText("Continue");
+    if (continueOption != "0")
+    {
+        resetPlayerMessages();
+        Player->command(continueOption);
+        string message = implode(Player->caughtMessages(), "\n");
+        ExpectSubStringMatch("arrive", message);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void MaritimeRouteCanTriggerPirates()
+{
+    createEventSelector(([
+        "type": "maritime",
+        "days": 5,
+        "danger": 50
+    ]));
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string message = Player->caughtMessage();
+    ExpectSubStringMatch("Travel Event", message);
+}

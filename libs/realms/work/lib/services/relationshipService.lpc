@@ -1,0 +1,297 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+
+private mapping relationshipStore = ([]);
+private mapping relationshipHistory = ([]);
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask string realizationKey(mixed actor)
+{
+    string ret = "";
+
+    if (objectp(actor))
+    {
+        string actorName = actor->Name() ? actor->Name() : "any";
+        ret = sprintf("%s#%s", program_name(actor), actorName);
+    }
+    else if (stringp(actor))
+    {
+        ret = actor;
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask mapping cloneRelationship(mapping relationship)
+{
+    mapping ret = relationship + ([]);
+
+    if (member(ret, "dimensions") && mapp(ret["dimensions"]))
+    {
+        ret["dimensions"] = ret["dimensions"] + ([]);
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask mapping cloneHistoryEntry(mapping entry)
+{
+    mapping ret = entry + ([]);
+
+    if (member(ret, "context") && mapp(ret["context"]))
+    {
+        ret["context"] = ret["context"] + ([]);
+    }
+    if (member(ret, "metadata") && mapp(ret["metadata"]))
+    {
+        ret["metadata"] = ret["metadata"] + ([]);
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void initializeRelationship(string source, string target)
+{
+    if (!member(relationshipStore, source))
+    {
+        relationshipStore[source] = ([]);
+    }
+    if (!member(relationshipStore[source], target))
+    {
+        relationshipStore[source][target] = ([
+            "source": source,
+            "target": target,
+            "dimensions": ([]),
+            "updated": 0
+        ]);
+    }
+
+    if (!member(relationshipHistory, source))
+    {
+        relationshipHistory[source] = ([]);
+    }
+    if (!member(relationshipHistory[source], target))
+    {
+        relationshipHistory[source][target] = ({ });
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void applyDimensionChanges(mapping relationship, mapping changes)
+{
+    foreach(string dimension in keys(changes))
+    {
+        if (!member(relationship["dimensions"], dimension))
+        {
+            relationship["dimensions"][dimension] = 0;
+        }
+        relationship["dimensions"][dimension] += to_int(changes[dimension]);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void addHistory(string source, string target, mapping changes,
+    mapping context, mapping metadata, mixed producer)
+{
+    foreach(string dimension in keys(changes))
+    {
+        relationshipHistory[source][target] += ({ ([
+            "source": source,
+            "target": target,
+            "dimension": dimension,
+            "delta": to_int(changes[dimension]),
+            "value": relationshipStore[source][target]["dimensions"][dimension],
+            "timestamp": time(),
+            "producer": realizationKey(producer),
+            "context": mapp(context) ? context + ([]) : ([]),
+            "metadata": mapp(metadata) ? metadata + ([]) : ([])
+        ]) });
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping updateRelationship(mixed source, mixed target,
+    mapping dimensionChanges, mapping context, mapping metadata,
+    mixed producer)
+{
+    mapping ret = ([]);
+    string sourceKey = realizationKey(source);
+    string targetKey = realizationKey(target);
+
+    if ((sourceKey != "") && (targetKey != "") && mapp(dimensionChanges) &&
+        sizeof(dimensionChanges))
+    {
+        initializeRelationship(sourceKey, targetKey);
+
+        mapping relationship = relationshipStore[sourceKey][targetKey];
+        applyDimensionChanges(relationship, dimensionChanges);
+        relationship["updated"] = time();
+
+        addHistory(sourceKey, targetKey, dimensionChanges,
+            context, metadata, producer);
+
+        ret = cloneRelationship(relationship);
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping seedRelationship(mixed source, mixed target,
+    mapping dimensions, int updated)
+{
+    mapping ret = ([]);
+    string sourceKey = realizationKey(source);
+    string targetKey = realizationKey(target);
+
+    if ((sourceKey != "") && (targetKey != ""))
+    {
+        initializeRelationship(sourceKey, targetKey);
+        relationshipStore[sourceKey][targetKey]["dimensions"] =
+            mapp(dimensions) ? dimensions + ([]) : ([]);
+        relationshipStore[sourceKey][targetKey]["updated"] =
+            intp(updated) ? updated : 0;
+
+        ret = cloneRelationship(relationshipStore[sourceKey][targetKey]);
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping relationshipToward(mixed source, mixed target)
+{
+    mapping ret = ([]);
+    string sourceKey = realizationKey(source);
+    string targetKey = realizationKey(target);
+
+    if ((sourceKey != "") && (targetKey != "") &&
+        member(relationshipStore, sourceKey) &&
+        member(relationshipStore[sourceKey], targetKey))
+    {
+        ret = cloneRelationship(relationshipStore[sourceKey][targetKey]);
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int relationshipDimensionToward(mixed source, mixed target,
+    string dimension)
+{
+    int ret = 0;
+    mapping relationship = relationshipToward(source, target);
+
+    if (mapp(relationship) && member(relationship, "dimensions") &&
+        member(relationship["dimensions"], dimension))
+    {
+        ret = to_int(relationship["dimensions"][dimension]);
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int hasRelationshipToward(mixed source, mixed target)
+{
+    return sizeof(relationshipToward(source, target));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping *queryRelationships(mixed source, mapping query)
+{
+    mapping *ret = ({ });
+    string sourceKey = realizationKey(source);
+
+    if ((sourceKey != "") && member(relationshipStore, sourceKey))
+    {
+        foreach(string target in keys(relationshipStore[sourceKey]))
+        {
+            mapping relationship = relationshipStore[sourceKey][target];
+            int matches = 1;
+
+            if (mapp(query) && sizeof(query))
+            {
+                foreach(string key in keys(query))
+                {
+                    if (key == "target")
+                    {
+                        matches = (relationship["target"] ==
+                            realizationKey(query[key]));
+                    }
+                    else if (member(relationship["dimensions"], key))
+                    {
+                        matches = (to_int(relationship["dimensions"][key]) >=
+                            to_int(query[key]));
+                    }
+                    else
+                    {
+                        matches = 0;
+                    }
+
+                    if (!matches)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if (matches)
+            {
+                ret += ({ cloneRelationship(relationship) });
+            }
+        }
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping *relationshipHistoryFor(mixed source, mixed target,
+    mapping query)
+{
+    mapping *ret = ({ });
+    string sourceKey = realizationKey(source);
+    string targetKey = realizationKey(target);
+
+    if ((sourceKey != "") && (targetKey != "") &&
+        member(relationshipHistory, sourceKey) &&
+        member(relationshipHistory[sourceKey], targetKey))
+    {
+        foreach(mapping entry in relationshipHistory[sourceKey][targetKey])
+        {
+            int matches = 1;
+
+            if (mapp(query) && sizeof(query))
+            {
+                foreach(string key in keys(query))
+                {
+                    if (!member(entry, key) || (entry[key] != query[key]))
+                    {
+                        matches = 0;
+                        break;
+                    }
+                }
+            }
+
+            if (matches)
+            {
+                ret += ({ cloneHistoryEntry(entry) });
+            }
+        }
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void reset()
+{
+    relationshipStore = ([]);
+    relationshipHistory = ([]);
+}

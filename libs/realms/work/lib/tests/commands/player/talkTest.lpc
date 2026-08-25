@@ -1,0 +1,109 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Player;
+object Target;
+
+/////////////////////////////////////////////////////////////////////////////
+void Init()
+{
+    setRestoreCaller(this_object());
+    object database = clone_object("/lib/tests/modules/secure/fakeDatabase.lpc");
+    database.PrepDatabase();
+
+    object dataAccess = clone_object("/lib/modules/secure/dataAccess.lpc");
+    dataAccess.savePlayerData(database.Gorthaur());
+
+    destruct(dataAccess);
+    destruct(database);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Player = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Player.Name("gorthaur");
+    Player.Race("human");
+    Player.create();
+
+    Target = clone_object("/lib/tests/support/conversations/testNPC.lpc");
+    Target.resetConversationState();
+    Target.create();
+
+    Player->move_object(this_object());
+    Target->move_object(this_object());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Player);
+    destruct(Target);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TalkToTargetInitiatesConversation()
+{
+    ExpectTrue(Player.executeCommand("talk to fred"));
+    ExpectSubStringMatch("We start talking for the first time.*1.*OK", 
+        implode(Player.caughtMessages(), " "));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TalkTargetInitiatesConversation()
+{
+    ExpectTrue(Player.executeCommand("talk fred"));
+    ExpectSubStringMatch("We start talking for the first time.*1.*OK",
+        implode(Player.caughtMessages(), " "));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TalkWithoutTargetInitiatesConversation()
+{
+    ExpectTrue(Player.executeCommand("talk"));
+    ExpectSubStringMatch("We start talking for the first time.*1.*OK",
+        implode(Player.caughtMessages(), " "));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RepeatWillRepeatConversation()
+{
+    ExpectTrue(Player.executeCommand("talk fred"));
+    ExpectSubStringMatch("We start talking for the first time.*1.*OK",
+        implode(Player.caughtMessages(), " "));
+
+    Player.resetCatchList();
+    ExpectFalse(Player.caughtMessage());
+    ExpectTrue(Player.executeCommand("repeat fred"));
+    ExpectSubStringMatch("We start talking for the first time.*1.*OK",
+        implode(Player.caughtMessages(), " "));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanTraverseConversationTree()
+{
+    Player->command("talk to fred");
+    ExpectSubStringMatch("We start talking for the first time.*1.*OK",
+        implode(Player.caughtMessages(), " "));
+
+    Player.resetCatchList();
+    Player->command("1");
+    ExpectSubStringMatch("Then let's talk", Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanTraverseConversationSecondTimeWithDifferentConversation()
+{
+    Player->command("talk to fred");
+    Player->command("1");
+    Player->command("1");
+    Player.resetCatchList();
+
+    Player->command("talk to fred");
+    Player->command("2");
+    ExpectSubStringMatch("A bitterly frigid chill emanates from the thing", 
+        implode(Player.caughtMessages(), " "));
+}

@@ -1,0 +1,252 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Player;
+object Selector;
+
+/////////////////////////////////////////////////////////////////////////////
+void Init()
+{
+    ignoreList += ({
+        "resetPlayerMessages",
+        "findOptionByText",
+        "setupPlayerForTravel",
+        "createConfirmSelector",
+        "onSelectorCompleted"
+    });
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onSelectorCompleted(object caller)
+{
+    if (objectp(caller))
+    {
+        caller->cleanUp();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void setupPlayerForTravel()
+{
+    Player->initializeTrader();
+    Player->addCash(5000);
+    Player->setCurrentLocation("eledhel");
+
+    object wagon = Player->addVehicle("wagon", "eledhel");
+    if (objectp(wagon))
+    {
+        object vehicleService = getService("vehicle");
+        mapping blueprint =
+            vehicleService->queryVehicleBlueprint("wagon");
+        wagon->initializeVehicle(blueprint);
+        wagon->addCargo("grain", 3);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void createConfirmSelector(string destination,
+    mapping routeInfo, int travelCost)
+{
+    if (objectp(Selector))
+    {
+        destruct(Selector);
+    }
+    Selector = clone_object(
+        "/lib/modules/domains/trading/selectors/travelConfirmSelector.lpc");
+    Selector->setDestination(destination);
+    Selector->setRouteInfo(routeInfo);
+    Selector->setTravelCost(travelCost);
+    Selector->move_object(Player);
+    Selector->registerEvent(this_object());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Player = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Player->Name("confirmtest");
+    Player->addCommands();
+    Player->colorConfiguration("none");
+    Player->charsetConfiguration("ascii");
+    Player->addPlayerHolding("eledhel trading post");
+
+    setupPlayerForTravel();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    if (objectp(Selector))
+    {
+        destruct(Selector);
+    }
+    if (objectp(Player))
+    {
+        destruct(Player);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void resetPlayerMessages()
+{
+    if (Player && function_exists("resetCatchList", Player))
+    {
+        Player->resetCatchList();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private string findOptionByText(string searchText)
+{
+    string result = "0";
+    string message = Player->caughtMessage();
+    if (!message || message == "")
+    {
+        return result;
+    }
+    string *lines = explode(message, "\n");
+
+    foreach (string line in lines)
+    {
+        line = regreplace(line, "\x1B\\[[0-9;]*[A-Za-z]", "", 1);
+        if (sizeof(regexp(({ line }), searchText)))
+        {
+            result = regreplace(line,
+                "^[^0-9]*([0-9]+).*", "\\1", 1);
+            break;
+        }
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ConfirmSelectorShowsDestinationAndCost()
+{
+    createConfirmSelector("Hillgarath", ([
+        "type": "overland",
+        "days": 5,
+        "danger": 20
+    ]), 250);
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string message = Player->caughtMessage();
+    ExpectSubStringMatch("Travel Confirmation", message);
+    ExpectSubStringMatch("Hillgarath", message);
+    ExpectSubStringMatch("250", message);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ConfirmSelectorShowsConfirmAndCancel()
+{
+    createConfirmSelector("Hillgarath", ([
+        "type": "overland",
+        "days": 5,
+        "danger": 20
+    ]), 250);
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string message = Player->caughtMessage();
+    ExpectSubStringMatch("Confirm Travel", message);
+    ExpectSubStringMatch("Cancel", message);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ConfirmingTravelDeductsCash()
+{
+    createConfirmSelector("Hillgarath", ([
+        "type": "overland",
+        "days": 5,
+        "danger": 0
+    ]), 250);
+    int initialCash = Player->getCash();
+
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string confirmOption = findOptionByText("Confirm Travel");
+    ExpectTrue(confirmOption != "0",
+        "Confirm option should be available");
+
+    resetPlayerMessages();
+    Player->command(confirmOption);
+
+    ExpectTrue(Player->getCash() < initialCash,
+        "Cash should be deducted after travel");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ConfirmingTravelUpdatesLocation()
+{
+    createConfirmSelector("Hillgarath", ([
+        "type": "overland",
+        "days": 5,
+        "danger": 0
+    ]), 250);
+
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string confirmOption = findOptionByText("Confirm Travel");
+    if (confirmOption != "0")
+    {
+        Player->command(confirmOption);
+
+        ExpectEq("Hillgarath", Player->getCurrentLocation(),
+            "Player location should update to destination");
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ConfirmingTravelMovesVehicle()
+{
+    int initialAtEledhel =
+        sizeof(Player->getVehiclesAtLocation("eledhel"));
+    ExpectTrue(initialAtEledhel > 0,
+        "Should have vehicles at eledhel before travel");
+
+    createConfirmSelector("Hillgarath", ([
+        "type": "overland",
+        "days": 5,
+        "danger": 0
+    ]), 250);
+
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string confirmOption = findOptionByText("Confirm Travel");
+    if (confirmOption != "0")
+    {
+        Player->command(confirmOption);
+
+        ExpectTrue(
+            sizeof(Player->getVehiclesAtLocation("Hillgarath")) > 0,
+            "Vehicle should be at destination after travel");
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CancellingTravelDoesNotDeductCash()
+{
+    createConfirmSelector("Hillgarath", ([
+        "type": "overland",
+        "days": 5,
+        "danger": 20
+    ]), 250);
+    int initialCash = Player->getCash();
+
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string cancelOption = findOptionByText("Cancel");
+    Player->command(cancelOption);
+
+    ExpectEq(initialCash, Player->getCash(),
+        "Cash should not change after cancel");
+    ExpectEq("eledhel", Player->getCurrentLocation(),
+        "Location should not change after cancel");
+}

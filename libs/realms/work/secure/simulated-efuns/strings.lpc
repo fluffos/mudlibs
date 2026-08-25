@@ -1,0 +1,215 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+
+// FluffOS PORT NOTE: upstream computed this from LDMud's own
+// __VERSION_MAJOR__/__VERSION_MINOR__/__VERSION_MICRO__ predefines (a
+// specific LDMud release known to have single-codepoint-per-character
+// UTF-8 string indexing) or a native text_width() efun. This driver
+// predefines only a single combined __VERSION__ string (not the
+// MAJOR/MINOR/MICRO split) and confirmed has no text_width() efun at all
+// -- so both upstream conditions are unreachable here and this always
+// returns false (this driver's own string indexing is byte-based, not
+// UTF-8-codepoint-aware -- see textWidth()'s ANSI-stripping fallback
+// below, the only caller, for the practical consequence).
+/////////////////////////////////////////////////////////////////////////////
+public nomask int unicodeIsSingleCharacter()
+{
+    return 0;
+}
+
+// FluffOS PORT NOTE: upstream's `#if ! __EFUN_DEFINED__(text_width)`
+// guard is always true on this driver (no native text_width() efun,
+// confirmed against packages/core/core.spec) -- the guard and its dead
+// `#else` branch were deleted rather than kept conditionally: using
+// `__EFUN_DEFINED__` inside an `inherit`ed fragment file (as this one is)
+// reproducibly hits an unrelated driver preprocessor bug on this build
+// ("Condition too complex") regardless of the function name checked --
+// see interactive-info.lpc's port note for the full repro/detail.
+/////////////////////////////////////////////////////////////////////////////
+public nomask int textWidth(string text)
+{
+    string *characters = explode(PORT->regreplace(text, "(\x1b[^m]+m)", "", 1), "");
+    return sizeof(characters);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string convertDataToString(mixed data)
+{
+    string ret = "";
+
+    if (objectp(data))
+    {
+        ret += PORT->program_name(data);
+    }
+    else if (pointerp(data) && sizeof(data))
+    {
+        ret += "({ ";
+        foreach(mixed element in data)
+        {
+            ret += convertDataToString(element) + ", ";
+        }
+        ret += "})";
+    }
+    else if (mapp(data))
+    {
+        ret += "([ ";
+        mixed *indices = keys(data);
+        foreach(mixed index in indices)
+        {
+            ret += convertDataToString(index) + ": " + 
+                convertDataToString(data[index]) + ", ";
+        }
+        ret += "])";
+    }
+    else
+    {
+        ret += PORT->to_string(data);
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string capitalizeAllWords(string stringToCapitalize)
+{
+    string *words = explode(stringToCapitalize, " ");
+    int size = sizeof(words);
+    for (int i = 0; i < size; i++)
+    {
+        words[i] = capitalize(words[i]);
+    }
+
+    return implode(words, " ");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask string formatColoredString(string data, int length)
+{
+    string ret = "";
+    string *splitString = 
+        PORT->regexplode(data, "(\x1b[[0-9;]+m|\n)");
+
+    string partialLine = "";
+    int lengthOfPartialLine = 0;
+    int sizeOfUnprintableCharacters = 0;
+
+    foreach(string item in splitString)
+    {
+        if (item == "\n")
+        {
+            ret += partialLine + item;
+            partialLine = "";
+            lengthOfPartialLine = 0;
+            sizeOfUnprintableCharacters = 0;
+        }
+        else if (sizeof(regexp(({ item }), "\x1b[[0-9;]+m")))
+        {
+            partialLine += item;
+            sizeOfUnprintableCharacters += sizeof(item);
+        }
+        else
+        {
+            lengthOfPartialLine += sizeof(item);
+            partialLine += item;
+        }
+
+        if (lengthOfPartialLine > length)
+        {
+            do
+            {
+                int initialIndex = length + sizeOfUnprintableCharacters - 1;
+                int stringIndex;
+
+                for (stringIndex = initialIndex;
+                    ((stringIndex > 0) && (initialIndex < sizeof(partialLine)) &&
+                    (partialLine[stringIndex] != ' '));
+                    stringIndex--);
+
+                if (stringIndex > 0)
+                {
+                    string additionalText = partialLine[0..(stringIndex - 1)];
+                    string sanitizedText = PORT->regreplace(additionalText,
+                        "(\x1b[[0-9;]+m)", "", 1);
+
+                    ret += additionalText + "\n";
+                    partialLine = partialLine[(stringIndex + 1)..];
+                    sizeOfUnprintableCharacters -= (sizeof(additionalText) - sizeof(sanitizedText));
+                    lengthOfPartialLine -= sizeof(sanitizedText);
+                }
+                else
+                {
+                    ret += partialLine;
+                    partialLine = "";
+                    lengthOfPartialLine = 0;
+                    sizeOfUnprintableCharacters = 0;
+                }
+            } while ((partialLine != "") && (lengthOfPartialLine > length));
+        }
+    }
+    return ret + partialLine;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs string format(string data, int length)
+{
+    string ret = "";
+
+    if (!intp(length) || length == 0)
+    {
+        length = 78;
+    }
+
+    if (!stringp(data))
+    {
+        data = PORT->to_string(data);
+    }
+
+    ret = (sizeof(regexp(({ data }), "\x1b[[0-9;]+m"))) ?
+        formatColoredString(data, length) :
+        (PORT->regreplace(sprintf("%=-*s", length, data), " *$", "", 1));
+
+    if ((sizeof(ret) > 0) && ret[sizeof(ret) - 1] != '\n')
+    {
+        ret += "\n";
+    }
+    return ret;
+}
+
+// FluffOS PORT NOTE: regreplace() moved to portability.lpc, called here via
+// the PORT macro (see /secure/auto.h and that file's own port note) --
+// this driver has no native efun::regreplace() to wrap.
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string lower_case(string str)
+{
+    return efun::lower_case(PORT->to_string(str));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string upper_case(string str)
+{
+    return efun::upper_case(PORT->to_string(str));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string process_string(string arg)
+{
+    return "Disabled\n";
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs string stringFromList(string *list, int isOr)
+{
+    string delimeter = isOr ? " or " : " and ";
+
+    string ret = implode(sort_array(list, (: $1 > $2 :)), 
+        (sizeof(list) == 2) ? delimeter : ", ");
+    return PORT->regreplace(ret, ", ([^,]+)$", ", " + delimeter + "\\1", 1);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs string convertToTextOfLength(string text, int length)
+{
+    return (sizeof(text) > length) ? (text[0..(length - 4)] + "...") : text;
+}

@@ -1,0 +1,466 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Player;
+object Member;
+object Service;
+
+/////////////////////////////////////////////////////////////////////////////
+void Init()
+{
+    setRestoreCaller(this_object());
+    object database = clone_object("/lib/tests/modules/secure/fakeDatabase.lpc");
+    database.PrepDatabase();
+    destruct(database);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Player = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Player.Name("bob");
+    Player.Race("human");
+    Player.Con(10);
+    Player.hitPoints(Player.maxHitPoints());
+    Player.addCommands();
+
+    Member = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Member.Name("Fred");
+
+    setUsers(({ Player, Member }));
+    Service = getService("party");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Player);
+    destruct(Member);
+    destruct(Service);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanCreateParty()
+{
+    Player->command("create party New Party");
+    ExpectEq("New Party", Player.partyName());
+    ExpectTrue(objectp(Player.getParty()));
+    ExpectEq("You have created a party: New Party\n", Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotCreatePartyWhenAlreadyInAParty()
+{
+    Player->command("create party First Party");
+    ExpectEq("First Party", Player.partyName());
+    Player->command("create party New Party");
+    ExpectEq("First Party", Player.partyName());
+    ExpectTrue(objectp(Player.getParty()));
+    ExpectEq("You are already in a party (First Party).\n"
+        "You must first leave it before joining another party.\n",
+        Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotCreatePartyWhenNoValueGiven()
+{
+    Player->command("create party");
+
+    ExpectFalse(objectp(Player.getParty()));
+    ExpectEq("What?\n", Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotLeavePartyWhenNotInAParty()
+{
+    Player->command("leave party");
+    ExpectEq("You are not currently in a party.\n", 
+        Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanLeaveParty()
+{
+    Player->command("create party Weasels");
+    ExpectTrue(objectp(Player.getParty()));
+
+    Player->command("leave party");
+    ExpectFalse(objectp(Player.getParty()));
+    ExpectSubStringMatch("Bob has left the party",
+        Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanDissolveParty()
+{
+    Player->command("create party Weasels");
+    ExpectTrue(objectp(Player.getParty()));
+    Player.getParty().joinParty(Member);
+    ExpectTrue(objectp(Member.getParty()));
+
+    Player->command("dissolve party");
+    ExpectFalse(objectp(Player.getParty()));
+    ExpectFalse(objectp(Member.getParty()));
+
+    ExpectEq("You have dissolved your party: Weasels\n",
+        Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotDissolvePartiesYouDoNotOwn()
+{
+    Player->command("create party Weasels");
+    ExpectTrue(objectp(Player.getParty()));
+    Player.getParty().joinParty(Member);
+    ExpectTrue(objectp(Member.getParty()));
+
+    Member->command("dissolve party");
+    ExpectTrue(objectp(Player.getParty()));
+    ExpectTrue(objectp(Member.getParty()));
+
+    ExpectEq("Only the creator of the party can dissolve it.\n",
+        Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanAddPartyMember()
+{
+    Player->command("create party Weasels");
+    ExpectTrue(objectp(Player.getParty()));
+    
+    Player->command("add party member fred");
+
+    ExpectTrue(Service.hasPendingPartyRequest(Member));
+
+    ExpectEq("You have added Fred to your party: Weasels\n",
+        Player.caughtMessage());
+    ExpectEq("You have a pending invite to join a party: Weasels (Bob)\n"
+        "Type 'accept party invite' to join this party.\n",
+        Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotAddPartyMemberWhenNotInParty()
+{
+    Player->command("add party member fred");
+
+    ExpectFalse(Service.hasPendingPartyRequest(Member));
+
+    ExpectEq("You must first create a party.\n",
+        Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotAddPartyMemberWhenPlayerDoesNotExist()
+{
+    Player->command("add party member earl");
+
+    ExpectEq("Could not find a player named Earl.\n",
+        Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotAddPartyMemberWhenTheyAreAlreadyInAParty()
+{
+    Player->command("create party Weasels");
+    Member->command("create party blarg");
+
+    Player->command("add party member fred");
+
+    ExpectEq("Fred is already in a party (blarg).\n"
+        "They must first leave it before joining another party.\n",
+        Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanAcceptPartyInvitation()
+{
+    Player->command("create party Weasels");
+    ExpectTrue(objectp(Player.getParty()));
+
+    Player->command("add party member fred");
+    ExpectFalse(objectp(Member.getParty()));
+    ExpectTrue(Service.hasPendingPartyRequest(Member));
+
+    Member->command("accept party invite");
+    ExpectTrue(objectp(Member.getParty()));
+
+    ExpectEq("You have joined the 'Weasels' party (Bob)\n",
+        Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void AcceptPartyInvitationFailsWhenNoInviteIsPending()
+{
+    Member->command("accept party invite");
+    ExpectFalse(objectp(Member.getParty()));
+
+    ExpectEq("You do not have a pending party invitation.\n",
+        Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanRemovePartyMember()
+{
+    Player->command("create party Weasels");
+    Player->command("add party member fred");
+    Member->command("accept party invite");
+    ExpectTrue(objectp(Member.getParty()));
+
+    Player->command("remove party member fred");
+    ExpectFalse(objectp(Member.getParty()));
+
+    ExpectSubStringMatch("Fred has been removed from the party",
+        Player.caughtMessage());
+    ExpectSubStringMatch("Fred has been removed from the party",
+        Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotRemovePartyMemberWhenNotCreator()
+{
+    Player->command("create party Weasels");
+    Player->command("add party member fred");
+    Member->command("accept party invite");
+    ExpectTrue(objectp(Member.getParty()));
+
+    Member->command("remove party member bob");
+    ExpectTrue(objectp(Player.getParty()));
+
+    ExpectEq("Only the party's creator/owner (Bob) can remove members.\n",
+        Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotRemoveNonexistantPartyMember()
+{
+    Player->command("create party Weasels");
+    Player->command("remove party member tantor the unclean");
+
+    ExpectEq("There is nobody named 'Tantor the unclean' in your party.\n",
+        Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanTalkOnPartyChannel()
+{
+    Player->command("create party Weasels");
+    Player->command("add party member fred");
+    Member->command("accept party invite");
+
+    Player->command("party Hi there!");
+    ExpectSubStringMatch("Weasels Bob.*Hi there!",
+        Player.caughtMessage());
+    ExpectSubStringMatch("Weasels Bob.*Hi there!",
+        Member.caughtMessage());
+
+    Member->command("party Bite me!");
+    ExpectSubStringMatch("Weasels Fred.*Bite me!",
+        Player.caughtMessage());
+    ExpectSubStringMatch("Weasels Fred.*Bite me!",
+        Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanFollowPartyMember()
+{
+    Player->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Member->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Player->command("create party Weasels");
+    Player->command("add party member fred");
+    Member->command("accept party invite");
+    ExpectTrue(objectp(Member.getParty()));
+
+    Player->command("follow party member fred");
+
+    ExpectSubStringMatch("Bob is now following Fred",
+        Player.caughtMessage());
+    ExpectSubStringMatch("Bob is now following Fred",
+        Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanNotFollowPartyMemberWhenNotPresent()
+{
+    Player->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Member->move_object("/lib/tests/support/environment/darkRoom.lpc");
+    Player->command("create party Weasels");
+    Player->command("add party member fred");
+    Member->command("accept party invite");
+    ExpectTrue(objectp(Member.getParty()));
+
+    Player.resetCatchList();
+    Member.resetCatchList();
+
+    Player->command("follow party member fred");
+
+    ExpectSubStringMatch("You must both be in the same location",
+        Player.caughtMessage());
+    ExpectEq(0, Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanNotFollowNonPartyMembers()
+{
+    Player->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Member->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Player->command("create party Weasels");
+
+    Player.resetCatchList();
+    Member.resetCatchList();
+
+    Player->command("follow party member fred");
+
+    ExpectSubStringMatch("There is nobody named 'Fred' in your party",
+        Player.caughtMessage());
+    ExpectEq(0, Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanNotFollowWhenNotInAParty()
+{
+    Player->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Member->move_object("/lib/tests/support/environment/startingRoom.lpc");
+
+    Player.resetCatchList();
+    Member.resetCatchList();
+
+    Player->command("follow party member fred");
+
+    ExpectSubStringMatch("You are not currently in a party",
+        Player.caughtMessage());
+    ExpectEq(0, Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanNotFollowPartyMemberWhenAlreadyFollowingSomeoneElse()
+{
+    Player->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Member->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Player->command("create party Weasels");
+    Player->command("add party member fred");
+    Member->command("accept party invite");
+    ExpectTrue(objectp(Member.getParty()));
+
+    Player->command("follow party member fred");
+
+    Player.resetCatchList();
+    Member.resetCatchList();
+
+    Player->command("follow party member fred");
+
+    ExpectSubStringMatch("You are currently following Fred.*"
+        "If you wish to follow someone else, stop following",
+        Player.caughtMessage());
+    ExpectEq(0, Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanStopFollowingPartyMemberYouAreFollowing()
+{
+    Player->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Member->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Player->command("create party Weasels");
+    Player->command("add party member fred");
+    Member->command("accept party invite");
+    ExpectTrue(objectp(Member.getParty()));
+
+    Player->command("follow party member fred");
+
+    Player.resetCatchList();
+    Member.resetCatchList();
+
+    Player->command("stop following party member");
+
+    ExpectSubStringMatch("Bob is no longer following Fred*",
+        Player.caughtMessage());
+    ExpectSubStringMatch("Bob is no longer following Fred*",
+        Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanUseStopFollowingToStopFollowingPartyMember()
+{
+    Player->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Member->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Player->command("create party Weasels");
+    Player->command("add party member fred");
+    Member->command("accept party invite");
+    ExpectTrue(objectp(Member.getParty()));
+
+    Player->command("follow party member fred");
+
+    Player.resetCatchList();
+    Member.resetCatchList();
+
+    Player->command("stop following");
+
+    ExpectSubStringMatch("Bob is no longer following Fred*",
+        Player.caughtMessage());
+    ExpectSubStringMatch("Bob is no longer following Fred*",
+        Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanNotStopFollowingWhenNotFollowingAnybodyy()
+{
+    Player->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Member->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Player->command("create party Weasels");
+    Player->command("add party member fred");
+    Member->command("accept party invite");
+    ExpectTrue(objectp(Member.getParty()));
+
+    Player.resetCatchList();
+    Member.resetCatchList();
+
+    Player->command("stop following party member");
+
+    ExpectSubStringMatch("You are not following anybody",
+        Player.caughtMessage());
+    ExpectEq(0, Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanNotStopFollowingWhenNotInParty()
+{
+    Player->move_object("/lib/tests/support/environment/startingRoom.lpc");
+    Member->move_object("/lib/tests/support/environment/startingRoom.lpc");
+
+    Player.resetCatchList();
+    Member.resetCatchList();
+
+    Player->command("stop following party member");
+
+    ExpectSubStringMatch("You are not currently in a party",
+        Player.caughtMessage());
+    ExpectEq(0, Member.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void MemberFollowsPartyLeader()
+{
+    object startingRoom = 
+        load_object("/lib/tests/support/environment/startingRoom.lpc");
+    object nextRoom = 
+        load_object("/lib/tests/support/environment/not-so-dark-room.lpc");
+
+    Player->move_object(startingRoom);
+    Member->move_object(startingRoom);
+    Player->command("create party Weasels");
+    Player->command("add party member fred");
+    Member->command("accept party invite");
+    ExpectTrue(objectp(Member.getParty()));
+
+    Member->command("follow party member bob");
+
+    ExpectEq(startingRoom, environment(Player));
+    ExpectEq(startingRoom, environment(Member));
+
+    Player->command("w");
+    ExpectEq(nextRoom, environment(Player));
+    ExpectEq(nextRoom, environment(Member));
+}

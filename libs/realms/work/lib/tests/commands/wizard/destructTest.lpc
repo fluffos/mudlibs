@@ -1,0 +1,90 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Wizard;
+object Room;
+
+/////////////////////////////////////////////////////////////////////////////
+void Init()
+{
+    setRestoreCaller(this_object());
+    object database = clone_object("/lib/tests/modules/secure/fakeDatabase.lpc");
+    database.PrepDatabase();
+
+    object dataAccess = clone_object("/lib/modules/secure/dataAccess.lpc");
+    dataAccess.savePlayerData(database.GetWizardOfLevel("creator"));
+
+    destruct(dataAccess);
+    destruct(database);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Room = clone_object("/lib/environment/environment.lpc");
+
+    Wizard = clone_object("/lib/realizations/wizard.lpc");
+    Wizard.restore("earl");
+    Wizard.addCommands();
+
+    Wizard->move_object(Room);
+    setUsers(({ Wizard }));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Wizard);
+    destruct(Room);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ExecuteRegexpIsNotGreedy()
+{
+    ExpectFalse(Wizard.executeCommand("cdest"), "cdest");
+    ExpectFalse(Wizard.executeCommand("destr"), "destr");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DestructOfExistingItemRemovesItFromInventory()
+{
+    object item = 
+        clone_object("/lib/instances/items/weapons/swords/long-sword.lpc");
+    item->move_object(Wizard);
+
+    ExpectEq(1, sizeof(all_inventory(Wizard)));
+    ExpectEq("/lib/instances/items/weapons/swords/long-sword.lpc", 
+        program_name(all_inventory(Wizard)[0]));
+    ExpectEq(1, Wizard.executeCommand("destruct sword"));
+    ExpectEq(0, sizeof(all_inventory(Wizard)));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DestructOfExistingItemRemovesItFromEnvironment()
+{
+    object item =
+        clone_object("/lib/instances/items/weapons/swords/long-sword.lpc");
+    item->move_object(Room);
+
+    ExpectEq(2, sizeof(all_inventory(Room)));
+    ExpectEq(1, Wizard.executeCommand("unmake sword"));
+    ExpectEq(1, sizeof(all_inventory(Room)));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DestructOfEnvironmentMovesCharacterBack()
+{
+    object item =
+        clone_object("/lib/instances/items/weapons/swords/long-sword.lpc");
+    item->move_object("/lib/environment/environment.lpc");
+    Wizard->move_object("/lib/environment/environment.lpc");
+
+    ExpectEq(({ Wizard, item }), all_inventory(load_object("/lib/environment/environment.lpc")));
+    ExpectEq(1, Wizard.executeCommand("dest /lib/environment/environment.lpc"));
+    
+    ExpectEq("/lib/environment/environment.lpc", environment(Wizard));
+    ExpectEq(({ Wizard }), all_inventory(load_object("/lib/environment/environment.lpc")));
+}

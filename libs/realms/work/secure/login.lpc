@@ -1,0 +1,200 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+// FluffOS PORT NOTE: these three were `inherit`ed in upstream (each of
+// menu-interactions.lpc/user-creation.lpc ALSO independently `inherit`ed
+// core.lpc, an LDMud `virtual inherit` diamond this driver doesn't
+// support -- see NOTES.md). Removing the redundant inherits from those
+// two files (done, see their own port notes) isn't enough by itself:
+// core.lpc's `protected`/`private` members (ipAddress,
+// authenticationService, removeTimeout(), etc) need to be genuinely
+// SHARED STATE on the one real login object, not calls to a separate
+// utility object (unlike the portability.lpc/PORT-> fix elsewhere in
+// this port, which was fine splitting into a separate object because it
+// only needed pure, stateless utility functions). #include instead of
+// inherit: pure text substitution, so all three end up as ordinary
+// same-file definitions sharing one real scope -- no inherit graph, no
+// diamond, and ipAddress/authenticationService genuinely shared between
+// all of login.lpc's own logic and what used to be three separate
+// programs. Confirmed no function-name collisions between the three
+// files before merging this way.
+#include "/secure/login/core.lpc"
+#include "/secure/login/menu-interactions.lpc"
+#include "/secure/login/user-creation.lpc"
+#include "/sys/input_to.h"
+#include "/sys/telnet.h"
+
+// FluffOS PORT NOTE: this driver has no binary_message() efun (LDMud-
+// specific) and no manual GMCP negotiation efun at all -- GMCP option
+// negotiation is handled internally by this driver's own send_gmcp()/
+// has_gmcp() efuns (see lib/modules/gmcp.lpc's matching port note).
+// Nothing manual is needed here at all; kept as a no-op stub only so
+// every call site elsewhere in this file doesn't need to change.
+/////////////////////////////////////////////////////////////////////////////
+private nomask void advertiseGmcp()
+{
+}
+
+private int totalAuthFailures = 0;
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void displayBanner()
+{
+    // FluffOS PORT NOTE: this driver's get_dir() (same as LDMud's) returns
+    // bare filenames, not full paths -- the exclusion list here already
+    // used bare names ("." not "/art/."), it was read_file() below that
+    // needed the "/art/" prefix rebuilt.
+    string *bannerArt = get_dir("/art/*", 0x10) -
+        ({ ".", "..", "README" });
+
+    if (sizeof(bannerArt))
+    {
+        write(read_file("/art/" + bannerArt[random(sizeof(bannerArt))]));
+    }
+
+    if (file_size("/secure/DISCLAIMER") > 0)
+    {
+        write(read_file("/secure/DISCLAIMER"));
+    }
+
+    printf("\nRealmsmud is running on LDMud %s\n\nType 'guest' as your login "
+        "name if you just want to look around.\n"
+        "Type 'who' is you would like to view the list of logged-in "
+        "users.\n\n", version());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void enterPassword(string password, string userName, 
+    int numberOfAttempts)
+{
+    if (password == "")
+    {
+        printf("No password supplied. Closing session.\n");
+        destruct(this_object());
+    }
+    else if (totalAuthFailures > 12)
+    {
+        authenticationService->temporarilyBanIP(ipAddress);
+        printf("Authentication for user '%s' repeatedly failed. "
+            "Goodbye.\n", userName);
+        destruct(this_object());
+    }
+    else
+    {
+        string authenticationStatus =
+            authenticationService->authenticateUser(userName, password);
+        switch (authenticationStatus)
+        {
+            case "authenticated":
+            {
+                removeTimeout();
+                displayMenu(userName, password);
+                break;
+            }
+            case "failed":
+            {
+                totalAuthFailures++;
+                printf("\nAuthentication for user '%s' failed. Please "
+                    "try again.\n", userName);
+                write("Please enter your password: ");
+                input_to("enterPassword", INPUT_NOECHO | INPUT_IGNORE_BANG,
+                    userName, numberOfAttempts + 1);
+                break;
+            }
+            default:
+            {
+                // Practically, this will not happen. It's only possible if
+                // a user is deleted between the call to getUserLogin and 
+                // enterPassword
+                totalAuthFailures++;
+                printf("User '%s' does not exist. Please try again.\n", 
+                    userName);
+                write("Please enter your login name: ");
+                input_to("getUserLogin", INPUT_IGNORE_BANG);
+                break;
+            }
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void getUserLogin(string userName)
+{
+    if (!authenticationService->addressTemporarilyBanished(ipAddress))
+    {
+        switch (userName)
+        {
+            case "who":
+            {
+                executeWhoCommand();
+                break;
+            }
+            case "":
+            case "quit":
+            {
+                printf("Login attempt aborted.\n");
+                destruct(this_object());
+                break;
+            }
+            case "guest":
+            {
+                execGuestPlayer();
+                break;
+            }
+            default:
+            {
+                userName = lower_case(userName);
+                if (authenticationService->userExists(userName))
+                {
+                    write("Please enter your password: ");
+                    input_to("enterPassword", INPUT_NOECHO | INPUT_IGNORE_BANG, 
+                        userName, 1);
+                }
+                else
+                {
+                    if (isValidUserName(userName))
+                    {
+                        createUser(userName);
+                    }
+                    else
+                    {
+                        write("Please enter your login name: ");
+                        input_to("getUserLogin", INPUT_IGNORE_BANG);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int logon()
+{
+    int wizardCount = sizeof(wizards());
+    int playerCount = sizeof(players());
+
+    ipAddress = query_ip_number(this_object());
+    displayBanner();
+
+    // Advertise GMCP early so capable clients enable it before gameplay; the
+    // negotiation state persists across exec() to the player object.
+    advertiseGmcp();
+
+    printf("There are %d wizards and %d mortals online.\n\n", wizardCount,
+        playerCount);
+
+    if (authenticationService->addressTemporarilyBanished(ipAddress))
+    {
+        printf(format("You IP address is currently banned from logging in "
+            "due to excessive failed login attempts or other nuisance "
+            "activity. Please try again later.\n", 78));
+    }
+    else
+    {
+        write("Please enter your login name: ");
+        input_to("getUserLogin", INPUT_IGNORE_BANG);
+        call_out("timeout", 90);
+    }
+    return 1;
+}

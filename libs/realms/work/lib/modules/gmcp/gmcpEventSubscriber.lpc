@@ -1,0 +1,454 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+#include "/lib/include/inventory.h"
+
+private nosave object player = 0;
+
+/////////////////////////////////////////////////////////////////////////////
+public void create()
+{
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void setPlayer(object who)
+{
+    player = who;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public object getPlayer()
+{
+    return player;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private mapping vitalsSnapshot(object player)
+{
+    return ([
+        "hitPoints": ([
+            "current": player->hitPoints(),
+            "max": player->maxHitPoints()
+        ]),
+        "spellPoints": ([
+            "current": player->spellPoints(),
+            "max": player->maxSpellPoints()
+        ]),
+        "staminaPoints": ([
+            "current": player->staminaPoints(),
+            "max": player->maxStaminaPoints()
+        ])
+    ]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private mapping attributesSnapshot(object player)
+{
+    mapping ret = ([]);
+
+    object attributeService = getService("attribute");
+    if (objectp(attributeService))
+    {
+        foreach (string attribute in attributeService->attributes())
+        {
+            int effective = player->attributeValue(attribute);
+            int base = player->attributeValue(attribute, 1);
+
+            ret[attribute] = ([
+                "value": effective,
+                "base": base,
+                "bonus": effective - base
+            ]);
+        }
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private mixed guildsSnapshot(object player)
+{
+    mixed ret = ({});
+
+    string *guilds = player->memberOfGuilds();
+    string primary = player->primaryGuild();
+
+    if (sizeof(guilds))
+    {
+        foreach (string guild in guilds)
+        {
+            ret += ({ ([
+                "name": guild,
+                "level": player->guildLevel(guild),
+                "experience": player->guildExperience(guild),
+                "experienceToNextLevel": player->experienceToNextLevel(guild),
+                "rank": player->guildRank(guild) || "",
+                "primary": (guild == primary) ? 1 : 0
+            ]) });
+        }
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private mapping weaponCombatSnapshot(object player, object weapon, string slot)
+{
+    mapping ret = 0;
+
+    if (objectp(weapon))
+    {
+        int attack = player->calculateAttack(0, weapon, 1);
+        int damage = player->calculateDamage(weapon, "physical", 1);
+        if (!damage)
+        {
+            damage = 1;
+        }
+
+        ret = ([
+            "slot": slot,
+            "name": weapon->query("short"),
+            "attackLow": attack - 25,
+            "attackHigh": attack + 75,
+            "damageLow": to_int(damage * 7.0 / 8.0),
+            "damageHigh": to_int(damage * 9.0 / 8.0)
+        ]);
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private mapping combatSnapshot(object player)
+{
+    mixed weapons = ({});
+
+    object primary = player->equipmentInSlot("wielded primary");
+    if (objectp(primary))
+    {
+        weapons += ({ weaponCombatSnapshot(player, primary, "wielded primary") });
+    }
+
+    object offhand = player->equipmentInSlot("wielded offhand");
+    if (objectp(offhand))
+    {
+        weapons += ({ weaponCombatSnapshot(player, offhand, "wielded offhand") });
+    }
+
+    int defend = player->calculateDefendAttack();
+    int soak = player->calculateSoakDamage("physical");
+
+    return ([
+        "weapons": weapons,
+        "defendAttackLow": defend - abs(defend / 2),
+        "defendAttackHigh": defend,
+        "soakLow": soak - abs(soak / 2),
+        "soakHigh": soak,
+        "encumberance": player->inventoryGetEncumberance()
+    ]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private string *equipSlotsForItem(object item)
+{
+    string *ret = ({});
+    int locations = item->query("equipment locations");
+
+    if (!intp(locations) || !locations)
+    {
+        return ret;
+    }
+
+    if ((locations & TwohandedWeapon) == TwohandedWeapon)
+    {
+        ret += ({ "wielded primary", "wielded offhand" });
+    }
+    else
+    {
+        if (locations & PrimaryWeapon)
+        {
+            ret += ({ "wielded primary" });
+        }
+        if (locations & OffhandWeapon)
+        {
+            ret += ({ "wielded offhand" });
+        }
+    }
+
+    if (locations & Cloak)      { ret += ({ "cloak" }); }
+    if (locations & Helmet)     { ret += ({ "helmet" }); }
+    if (locations & Amulet)     { ret += ({ "amulet" }); }
+    if (locations & Belt)       { ret += ({ "belt" }); }
+    if (locations & ArmGreaves) { ret += ({ "arm greaves" }); }
+    if (locations & LegGreaves) { ret += ({ "leg greaves" }); }
+    if (locations & Gloves)     { ret += ({ "gloves" }); }
+    if (locations & Bracers)    { ret += ({ "bracers" }); }
+    if (locations & Boots)      { ret += ({ "boots" }); }
+    if (locations & Armor)      { ret += ({ "armor" }); }
+    if (locations & Ring1)      { ret += ({ "ring 1" }); }
+    if (locations & Ring2)      { ret += ({ "ring 2" }); }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private mapping summarizeInventoryItem(object item, string slot)
+{
+    mapping ret = 0;
+
+    if (objectp(item))
+    {
+        string type = item->query("weapon type") ||
+            item->query("armor type") ||
+            item->query("instrument type") || "";
+
+        ret = ([
+            "name": item->query("name"),
+            "short": item->query("short"),
+            "type": type
+        ]);
+
+        if (stringp(slot))
+        {
+            ret["slot"] = slot;
+        }
+        else
+        {
+            string *equipSlots = equipSlotsForItem(item);
+            if (sizeof(equipSlots))
+            {
+                ret["equipSlots"] = equipSlots;
+            }
+        }
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void pushVitals()
+{
+    if (objectp(player) && function_exists("sendOutOfBand", player) &&
+        function_exists("hitPoints", player))
+    {
+        player->sendOutOfBand("Char.Vitals", vitalsSnapshot(player));
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void pushScore()
+{
+    if (objectp(player) && function_exists("sendOutOfBand", player) &&
+        function_exists("hitPoints", player))
+    {
+        string level = player->isRealizationOf("wizard") ?
+            capitalize(player->wizardLevel()) :
+            to_string(player->effectiveLevel());
+
+        mapping score = ([
+            "name": player->RealName(),
+            "title": player->Title(),
+            "level": level,
+            "experience": player->effectiveExperience(),
+            "gender": (player->Gender() || "male"),
+            "race": (player->Race() || ""),
+            "guilds": guildsSnapshot(player),
+            "attributes": attributesSnapshot(player),
+            "vitals": vitalsSnapshot(player),
+            "combat": combatSnapshot(player)
+        ]);
+
+        player->sendOutOfBand("Char.Score", score);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void pushInventory()
+{
+    if (objectp(player) && function_exists("sendOutOfBand", player) &&
+        function_exists("equipmentInSlot", player))
+    {
+        string *slots = ({ "armor", "cloak", "helmet", "amulet", "belt",
+            "arm greaves", "leg greaves", "gloves", "bracers", "boots",
+            "ring 1", "ring 2", "wielded primary", "wielded offhand" });
+
+        mapping equipped = ([]);
+        object *equippedObjects = ({});
+        foreach (string slot in slots)
+        {
+            object item = player->equipmentInSlot(slot);
+            if (objectp(item))
+            {
+                equipped[slot] = summarizeInventoryItem(item, slot);
+                if (member(equippedObjects, item) < 0)
+                {
+                    equippedObjects += ({ item });
+                }
+            }
+        }
+
+        mixed carried = ({});
+        object *allItems = filter(all_inventory(player),
+            (: (member(inherit_list($1),
+                    "/lib/items/modifierObject.lpc") < 0) &&
+               (member(equippedObjects, $1) < 0) &&
+               stringp($1->query("short")) :));
+
+        foreach (object item in allItems)
+        {
+            carried += ({ summarizeInventoryItem(item, 0) });
+        }
+
+        player->sendOutOfBand("Char.Inventory", ([
+            "equipped": equipped,
+            "carried": carried
+        ]));
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onHitPointsChanged(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushVitals();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onSpellPointsChanged(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushVitals();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onStaminaPointsChanged(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushVitals();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onEquip(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushScore();
+        pushInventory();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onUnequip(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushScore();
+        pushInventory();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onRegisterItem(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushInventory();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onUnregisterItem(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushInventory();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onAdvancedLevel(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushScore();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onAdvancedRank(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushScore();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onDemotedRank(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushScore();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onJoinGuild(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushScore();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onLeaveGuild(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushScore();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onRecalculating(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushScore();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onSkillAdvanced(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushScore();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onTraitAdded(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushScore();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onTraitRemoved(object caller, mixed data)
+{
+    if (objectp(caller) && caller == player)
+    {
+        pushScore();
+    }
+}

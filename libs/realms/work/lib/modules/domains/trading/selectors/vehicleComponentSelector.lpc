@@ -1,0 +1,466 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/core/baseSelector.lpc";
+
+private string Location;
+private string Slot;
+private string ComponentName;
+private mapping ConstructionData;
+private object SubselectorObj;
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setLocation(string location)
+{
+    Location = location;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setSlot(string slot)
+{
+    Slot = slot;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setComponentName(string name)
+{
+    ComponentName = name;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setConstructionData(mapping data)
+{
+    ConstructionData = data;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping getConstructionData()
+{
+    return ConstructionData + ([]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void InitializeSelector()
+{
+    AllowUndo = 0;
+    AllowAbort = 1;
+    SuppressColon = 1;
+    Description = "Component Construction";
+    Type = "Vehicle Enhancement";
+    Data = ([]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private string *getMaterialInfo()
+{
+    string *ret = ({});
+    object configDict = getService("configuration");
+    string colorConfig = User->colorConfiguration();
+
+    mapping component =
+        getService("vehicle")->queryComponent(ComponentName);
+
+    if (sizeof(component))
+    {
+        ret += ({
+            configDict->decorate(
+                sprintf("%-29s", "Component: " +
+                    (member(component, "display name") ?
+                        component["display name"] : ComponentName)),
+                "field header", "player domains", colorConfig)
+        });
+
+        if (member(component, "structure"))
+        {
+            ret += ({
+                configDict->decorate(
+                    sprintf("  Structure: %-17d", component["structure"]),
+                    "details", "selector", colorConfig)
+            });
+        }
+        if (member(component, "protection"))
+        {
+            ret += ({
+                configDict->decorate(
+                    sprintf("  Protection: %-16d", component["protection"]),
+                    "details", "selector", colorConfig)
+            });
+        }
+        if (member(component, "weight"))
+        {
+            ret += ({
+                configDict->decorate(
+                    sprintf("  Weight: %-20d", component["weight"]),
+                    "details", "selector", colorConfig)
+            });
+        }
+
+        if (member(component, "construction") &&
+            member(component["construction"], "duration"))
+        {
+            ret += ({
+                configDict->decorate(
+                    sprintf("  Build Time: %-16d",
+                        component["construction"]["duration"]),
+                    "details", "selector", colorConfig)
+            });
+        }
+
+        if (member(ConstructionData, "selected materials") &&
+            sizeof(ConstructionData["selected materials"]))
+        {
+            ret += ({
+                configDict->decorate(
+                    sprintf("%-29s", "Selected Materials:"),
+                    "heading", "player domains", colorConfig)
+            });
+            foreach (string section, string material
+                in ConstructionData["selected materials"])
+            {
+                ret += ({
+                    configDict->decorate(
+                        sprintf("  %s: %s", section, material),
+                        "details", "selector", colorConfig)
+                });
+            }
+        }
+
+        if (member(ConstructionData, "assigned workers") &&
+            sizeof(ConstructionData["assigned workers"]))
+        {
+            ret += ({
+                configDict->decorate(
+                    sprintf("%-29s", "Assigned Workers:"),
+                    "heading", "player domains", colorConfig)
+            });
+            foreach (string workerType, mixed workers
+                in ConstructionData["assigned workers"])
+            {
+                ret += ({
+                    configDict->decorate(
+                        sprintf("  %s: %d assigned",
+                            capitalize(workerType),
+                            pointerp(workers) ? sizeof(workers) :
+                                (intp(workers) ? workers : 0)),
+                        "details", "selector", colorConfig)
+                });
+            }
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private int canBeginConstruction()
+{
+    mapping component =
+        getService("vehicle")->queryComponent(ComponentName);
+
+    if (!sizeof(component) || !member(component, "construction"))
+    {
+        return 0;
+    }
+
+    mapping construction = component["construction"];
+
+    if (member(construction, "materials"))
+    {
+        foreach (string section in keys(construction["materials"]))
+        {
+            if (!member(ConstructionData, "selected materials") ||
+                !member(ConstructionData["selected materials"], section))
+            {
+                return 0;
+            }
+        }
+    }
+
+    if (member(construction, "workers"))
+    {
+        foreach (string workerType in keys(construction["workers"]))
+        {
+            if (!member(ConstructionData, "assigned workers") ||
+                !member(ConstructionData["assigned workers"], workerType))
+            {
+                return 0;
+            }
+        }
+    }
+
+    return 1;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void setUpUserForSelection()
+{
+    if (!mapp(ConstructionData))
+    {
+        ConstructionData = ([]);
+    }
+
+    object vehicleMgmt = getService("vehicleManagement");
+    mapping component =
+        getService("vehicle")->queryComponent(ComponentName);
+
+    string *infoLines = getMaterialInfo();
+    string *layoutLines = ({});
+    if (objectp(vehicleMgmt) && member(ConstructionData, "vehicle"))
+    {
+        layoutLines = vehicleMgmt->getVehicleLayout(
+            User, ConstructionData["vehicle"]);
+    }
+
+    Description = sprintf("Configure %s:\n",
+        member(component, "display name") ?
+            component["display name"] : ComponentName) +
+        configuration->decorate(
+            format(sprintf("Select materials and workers to "
+                "construct the %s for the %s slot.",
+                member(component, "display name") ?
+                    component["display name"] : ComponentName,
+                Slot), 78),
+            "description", "selector", colorConfiguration);
+
+    Data = ([]);
+    int counter = 1;
+
+    if (member(component, "construction") &&
+        member(component["construction"], "materials"))
+    {
+        mapping materials = component["construction"]["materials"];
+        foreach (string section in keys(materials))
+        {
+            string selectedMat = "";
+            if (member(ConstructionData, "selected materials") &&
+                member(ConstructionData["selected materials"], section))
+            {
+                selectedMat = ConstructionData["selected materials"][section];
+            }
+
+            Data[to_string(counter++)] = ([
+                "name": sprintf("%-23s",
+                    capitalize(section) +
+                    (selectedMat != "" ?
+                        sprintf(" (%s)", selectedMat) : "")),
+                "type": "material",
+                "material section": section,
+                "material requirements": materials[section],
+                "description": sprintf("Select the type of %s "
+                    "for this component.\n", section),
+                "canShow": 1
+            ]);
+        }
+    }
+
+    Data[to_string(counter++)] = ([
+        "name": sprintf("%-23s", "Select Workers"),
+        "type": "workers",
+        "description": "Assign workers to this construction project.\n",
+        "canShow": 1
+    ]);
+
+    Data[to_string(counter++)] = ([
+        "name": sprintf("%-23s", "Begin Construction"),
+        "type": "construct",
+        "is disabled": !canBeginConstruction(),
+        "description": "Begin construction of this component.\n",
+        "canShow": 1
+    ]);
+
+    Data[to_string(counter++)] = ([
+        "name": sprintf("%-23s", "Exit Component Menu"),
+        "type": "exit",
+        "description": "Return to the enhancement menu.\n",
+        "canShow": 1
+    ]);
+
+    int menuSize = sizeof(Data);
+    string *combinedInfo = ({});
+    int infoIdx = 0;
+    int layoutIdx = 0;
+
+    int maxLines = sizeof(infoLines);
+    if (sizeof(layoutLines) > maxLines)
+    {
+        maxLines = sizeof(layoutLines);
+    }
+
+    for (int i = 0; i < maxLines; i++)
+    {
+        string infoCol = (i < sizeof(infoLines)) ?
+            infoLines[i] : sprintf("%29s", "");
+        string layoutCol = (i < sizeof(layoutLines)) ?
+            layoutLines[i] : "";
+        combinedInfo += ({ sprintf("%s  %s", infoCol, layoutCol) });
+    }
+
+    string *firstSection = 0;
+    if (sizeof(combinedInfo) > menuSize)
+    {
+        int offset = sizeof(combinedInfo) - menuSize;
+        firstSection = combinedInfo[0..(offset - 1)];
+    }
+
+    int count = 1;
+    foreach (string key in sort_array(keys(Data),
+        (: to_int($1) > to_int($2) :)))
+    {
+        if (mapp(Data[key]))
+        {
+            int idx = count + (sizeof(combinedInfo) > menuSize ?
+                sizeof(combinedInfo) - menuSize : 0) - 1;
+
+            Data[key]["layout panel"] =
+                (idx < sizeof(combinedInfo)) ?
+                ("  " + combinedInfo[idx]) : "";
+
+            if (firstSection)
+            {
+                Data[key]["first section"] = firstSection;
+                firstSection = 0;
+            }
+        }
+        count++;
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected string choiceFormatter(string choice)
+{
+    string section = "";
+    if (member(Data[choice], "first section"))
+    {
+        string padding = (sizeof(Data) < 10) ? "" : " ";
+        foreach (string line in Data[choice]["first section"])
+        {
+            section += sprintf("%s%s\n", padding, line);
+        }
+    }
+
+    string choiceColor = (member(Data[choice], "is disabled") &&
+        Data[choice]["is disabled"]) ?
+        "choice disabled" : "choice enabled";
+
+    return section + sprintf("[%s]%s - %s%s%s",
+        configuration->decorate("%s", "number", "selector",
+            colorConfiguration),
+        padSelectionDisplay(choice),
+        configuration->decorate("%-23s", choiceColor, "selector",
+            colorConfiguration),
+        displayDetails(choice),
+        Data[choice]["layout panel"] || "");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask string displayDetails(string choice)
+{
+    string ret = "";
+    if (member(Data[choice], "is disabled") &&
+        Data[choice]["is disabled"] &&
+        (User->colorConfiguration() == "none"))
+    {
+        ret = sprintf("%-3s", "N/A");
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void onSelectorCompleted(object caller)
+{
+    if (User)
+    {
+        if (function_exists("selection", caller) &&
+            caller->selection())
+        {
+            if (!member(ConstructionData, "selected materials"))
+            {
+                ConstructionData["selected materials"] = ([]);
+            }
+            ConstructionData["selected materials"]
+                [caller->materialType()] = caller->selection();
+        }
+        else if (function_exists("getConstructionData", caller))
+        {
+            mapping workerData = caller->getConstructionData();
+            if (mapp(workerData) &&
+                member(workerData, "assigned workers"))
+            {
+                ConstructionData["assigned workers"] =
+                    workerData["assigned workers"];
+            }
+        }
+
+        setUpUserForSelection();
+        tell_object(User, displayMessage());
+    }
+    SubselectorObj = 0;
+    caller->cleanUp();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int processSelection(string selection)
+{
+    int ret = -1;
+    if (User)
+    {
+        string type = Data[selection]["type"];
+        ret = (type == "exit") || (selection == "abort");
+
+        if (!ret)
+        {
+            ret = 0;
+
+            if (type == "construct" && !Data[selection]["is disabled"])
+            {
+                ConstructionData["confirmed"] = 1;
+                ret = 1;
+            }
+            else if (type == "material")
+            {
+                SubselectorObj = clone_object(
+                    "/lib/modules/domains/trading/selectors/"
+                    "vehicleMaterialsSelector.lpc");
+                SubselectorObj->setLocation(Location);
+                SubselectorObj->setMaterialData(
+                    Data[selection]["material section"],
+                    Data[selection]["material requirements"]);
+
+                SubselectorObj->move_object(User);
+                SubselectorObj->registerEvent(this_object());
+                SubselectorObj->initiateSelector(User);
+            }
+            else if (type == "workers")
+            {
+                mapping component =
+                    getService("vehicle")->queryComponent(
+                        ComponentName);
+
+                if (sizeof(component) &&
+                    member(component, "construction") &&
+                    member(component["construction"], "workers"))
+                {
+                    SubselectorObj = clone_object(
+                        "/lib/modules/domains/trading/selectors/"
+                        "vehicleWorkerSelector.lpc");
+                    SubselectorObj->setLocation(Location);
+                    SubselectorObj->setWorkerRequirements(
+                        component["construction"]["workers"]);
+                    SubselectorObj->setConstructionData(
+                        ConstructionData);
+
+                    SubselectorObj->move_object(User);
+                    SubselectorObj->registerEvent(this_object());
+                    SubselectorObj->initiateSelector(User);
+                }
+            }
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int suppressMenuDisplay()
+{
+    return objectp(SubselectorObj);
+}

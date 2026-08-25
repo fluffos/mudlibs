@@ -1,0 +1,122 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+protected string initFile = "init/init_file";
+protected int ShouldAutoLoadCoreLib = 1;
+
+nosave int currentTime;
+
+// FluffOS PORT NOTE: LDMud's rusage() returns an int* array (index 0 =
+// user time, index 1 = system time, both ms); this driver's rusage()
+// returns an equivalent MAPPING instead (confirmed against
+// packages/core/efuns_main.cc's f_rusage(): "utime"/"stime" keys, same ms
+// units) -- same two values, different container type.
+/////////////////////////////////////////////////////////////////////////////
+private nomask varargs int executionTime(int previousTime)
+{
+    mapping timeAsMapping = rusage();
+    currentTime = timeAsMapping["utime"] + timeAsMapping["stime"];
+
+    return currentTime - previousTime;
+}
+
+// FluffOS PORT NOTE: this driver's real get_dir() always returns BARE
+// filenames, never the queried directory prefix (confirmed directly
+// against packages/core/file.cc's encode_stat(), which only ever encodes
+// de->d_name) -- same as upstream's own LDMud, per this codebase's OWN
+// call sites elsewhere that already expect bare names back (e.g.
+// lib/services/groups/baseGroup.lpc comparing get_dir() entries directly
+// against a bare "command.lpc"). This function, however, was written
+// assuming get_dir() entries ARE already full paths (recursing into
+// `file` directly via file_size(file)/a further get_dir(file + "/*", ...)
+// -- so it never actually recursed correctly on either driver as
+// originally written, since a bare "commands" (no leading "/lib/") isn't
+// a valid path at all). Rewritten to build full paths itself instead of
+// assuming get_dir() provides them: takes a directory PATH (not a
+// pre-listed array) and does its own listing + path-joining.
+/////////////////////////////////////////////////////////////////////////////
+protected nomask string *traverseDirectoryForSourceFiles(string dirPath)
+{
+    string *ret = ({});
+    string *entries = efun::get_dir(dirPath + "/*", 0x10) - ({ ".", ".." });
+
+    entries = filter(entries, (: !sizeof(regexp(({ $1 }), "tests")) :));
+
+    foreach(string entry in entries)
+    {
+        string fullPath = dirPath + "/" + entry;
+
+        if ((sizeof(entry) > 2) &&
+            (entry[(sizeof(entry) - 2)..(sizeof(entry) - 1)] == ".lpc"))
+        {
+            ret += ({ fullPath });
+        }
+        else if (file_size(fullPath) == -2)
+        {
+            ret += traverseDirectoryForSourceFiles(fullPath);
+        }
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask string *LoadCoreLib()
+{
+    string *ret = ({});
+    if (ShouldAutoLoadCoreLib)
+    {
+        ret = traverseDirectoryForSourceFiles("/lib");
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string *LoadInitFile(string initFile, string *exclusions)
+{
+    // FluffOS PORT NOTE: LDMud's string "-" operator (remove every
+    // occurrence of the right-hand substring) doesn't exist on this
+    // driver -- rebuilt with explode/implode.
+    string initFileData = implode(explode(read_file(initFile), "\r"), "");
+    return filter(explode(initFileData, "\n"),
+        (: ((sizeof($1) > 1) && ($1[0] != '#') && (member_array($1, $2) < 0)) :), exclusions);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string *epilog(int eflag)
+{
+    executionTime();
+    string *preloadFiles = ({});
+
+    if (!eflag)
+    {
+        preloadFiles = LoadCoreLib();
+
+        if (file_size(initFile) > 0)
+        {
+            preloadFiles += LoadInitFile(initFile, preloadFiles);
+        }
+    }
+    return preloadFiles;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void preload(string file)
+{
+    int previousTime = currentTime;
+
+    debug_message(sprintf("Compiling file: %s", file));
+    object compiledFile = load_object(file);
+
+    if (objectp(compiledFile) &&
+        function_exists("executeTests", compiledFile) &&
+        (file != "/lib/tests/framework/testFixture.lpc"))
+    {
+        catch (compiledFile->executeTests());
+    }
+
+    debug_message(sprintf(" -> built in %d ms.\n",
+        executionTime(previousTime)));
+}

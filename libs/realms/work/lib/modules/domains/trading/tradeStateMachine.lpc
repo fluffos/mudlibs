@@ -1,0 +1,133 @@
+inherit "/lib/core/stateMachine.lpc";
+
+/////////////////////////////////////////////////////////////////////////////
+public void SetupTaipanStates()
+{
+    addState("at port", "You are docked at a port and may trade, bank, or travel.");
+    addEntryAction("at port", "showTradingMenu");
+
+    addState("traveling", "You are traveling to another port.");
+    addEntryAction("traveling", "startTravel");
+    addTransition("at port", "traveling", "departPort");
+    addTransition("traveling", "at port", "arrivePort");
+
+    addState("random event", "A random event is occurring.");
+    addEntryAction("random event", "handleRandomEvent");
+    addTransition("traveling", "random event", "triggerEvent");
+
+    addState("battle", "You are engaged in a battle!");
+    addEntryAction("battle", "startSeaBattle");
+    addTransition("random event", "battle", "startBattle");
+    addTransition("battle", "traveling", "endBattle");
+
+    addFinalState("bankrupt", "You have gone bankrupt.", 0, "failure");
+    addEntryAction("bankrupt", "showBankruptcy");
+    addTransition("at port", "bankrupt", "bankrupt");
+
+    addFinalState("dead", "You have died at sea.", 0, "failure");
+    addEntryAction("dead", "showDeath");
+    addTransition("battle", "dead", "dead");
+
+    setInitialState("at port");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void showTradingMenu(object player)
+{
+    if (objectp(player))
+    {
+        object selector = clone_object(
+            "/lib/modules/domains/trading/selectors/tradingSelector.lpc");
+        selector->move_object(player);
+        selector->registerEvent(this_object());
+        selector->initiateSelector(player);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void startTravel(object player)
+{
+    if (objectp(player))
+    {
+        object env = environment(player);
+        if (env && function_exists("isPort", env) && env->isPort())
+        {
+            object selector = clone_object(
+                "/lib/modules/domains/trading/selectors/travelSelector.lpc");
+            selector->setPort(env);
+            selector->move_object(player);
+            selector->registerEvent(this_object());
+            selector->initiateSelector(player);
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void handleRandomEvent(object player)
+{
+    if (objectp(player))
+    {
+        object *vehicles = player->getVehicles();
+        if (sizeof(vehicles))
+        {
+            object vehicle = vehicles[0];
+            string dest = player->getCurrentLocation();
+            object selector = clone_object(
+                "/lib/modules/domains/trading/selectors/travelEventSelector.lpc");
+            selector->setVehicle(vehicle);
+            selector->setDestination(dest);
+            selector->setRouteInfo(([
+                "type": "overland",
+                "days": 1,
+                "danger": 20
+            ]));
+            selector->move_object(player);
+            selector->registerEvent(this_object());
+            selector->initiateSelector(player);
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void startSeaBattle(object player)
+{
+    // Combat is handled within travelEventSelector's fight/flee/bribe
+    // options. This entry point exists for future standalone battle
+    // encounters outside the travel flow.
+    if (objectp(player))
+    {
+        tell_object(player, "Battle commences!\n");
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void showBankruptcy(object player)
+{
+    if (objectp(player))
+    {
+        object configDict = getService("configuration");
+        string colorConfig = player->colorConfiguration();
+
+        tell_object(player, configDict->decorate(
+            sprintf("\nYour trading company has gone bankrupt.\n"
+                "Final Debt: %d gold.\n"
+                "Your trading career is over.\n",
+                player->getDebt()),
+            "failure", "selector", colorConfig));
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void showDeath(object player)
+{
+    if (objectp(player))
+    {
+        object configDict = getService("configuration");
+        string colorConfig = player->colorConfiguration();
+
+        tell_object(player, configDict->decorate(
+            "\nYou have perished during your travels.\n"
+            "Your trading legacy ends here.\n",
+            "failure", "selector", colorConfig));
+    }
+}

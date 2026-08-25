@@ -1,0 +1,297 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/core/baseSelector.lpc";
+
+private string Location;
+private object Vehicle;
+private string SlotType;
+private object SubselectorObj;
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setLocation(string location)
+{
+    Location = location;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setVehicle(object vehicle)
+{
+    Vehicle = vehicle;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setSlotType(string slotType)
+{
+    SlotType = slotType;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void InitializeSelector()
+{
+    AllowUndo = 0;
+    AllowAbort = 1;
+    SuppressColon = 1;
+    Description = "Enhance Vehicle";
+    Type = "Vehicle Enhancement";
+    Data = ([]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void setUpUserForSelection()
+{
+    object vehicleMgmt = getService("vehicleManagement");
+    if (vehicleMgmt && objectp(Vehicle))
+    {
+        vehicleMgmt->checkVehicleConstruction(Vehicle);
+
+        string *layoutLines =
+            vehicleMgmt->getVehicleLayout(User, Vehicle);
+
+        string vehicleName = Vehicle->query("name") || "Vehicle";
+
+        Description = sprintf("%s Enhancement:\n",
+            capitalize(vehicleName)) +
+            configuration->decorate(
+                format(sprintf("From this menu, you can upgrade "
+                    "and configure components for your %s.",
+                    vehicleName), 78),
+                "description", "selector", colorConfiguration);
+
+        mapping constructionStatus =
+            vehicleMgmt->getConstructionStatus(Vehicle);
+        if (sizeof(constructionStatus))
+        {
+            Description += "\n" +
+                configuration->decorate(
+                    "Components under construction:",
+                    "field header", "player domains",
+                    colorConfiguration);
+            foreach (string slot, mapping info
+                in constructionStatus)
+            {
+                string statusText;
+                if (info["complete"])
+                {
+                    statusText = "complete";
+                }
+                else
+                {
+                    statusText = sprintf("%d seconds remaining",
+                        info["time remaining"]);
+                }
+                Description += "\n" +
+                    configuration->decorate(
+                        sprintf("  %s (%s): %s",
+                            capitalize(slot),
+                            info["component"],
+                            statusText),
+                        "details", "selector",
+                        colorConfiguration);
+            }
+        }
+
+        Data = vehicleMgmt->getEnhancementMenu(User, Vehicle, SlotType);
+
+        Data[to_string(sizeof(Data) + 1)] = ([
+            "name": sprintf("%-23s", "Return to Vehicle Menu"),
+            "type": "exit",
+            "description": "This option returns you to the "
+                "main vehicle menu.\n",
+            "canShow": 1
+        ]);
+
+        string *vehicleInfo =
+            vehicleMgmt->getVehicleInfo(User, Vehicle);
+
+        string *details = vehicleInfo;
+
+        int menuSize = sizeof(Data);
+        int sectionSize = sizeof(details) + 1;
+        if (sectionSize < sizeof(layoutLines))
+        {
+            sectionSize = sizeof(layoutLines);
+        }
+
+        string *firstSection = ({});
+        for (int i = 0; i < sectionSize; i++)
+        {
+            string leftPart = (sizeof(details) > i) ?
+                details[i] : sprintf("%29s", "");
+            string rightPart = (sizeof(layoutLines) > i) ?
+                layoutLines[i] : "";
+
+            firstSection += ({ leftPart + rightPart });
+        }
+
+        string *entries = sort_array(keys(Data),
+            (: to_int($1) > to_int($2) :));
+
+        int count = 1;
+        foreach (string key in entries)
+        {
+            if (mapp(Data[key]))
+            {
+                int layoutIdx = count + sectionSize - 1;
+
+                Data[key]["layout panel"] =
+                    (layoutIdx < sizeof(layoutLines)) ?
+                    ("  " + layoutLines[layoutIdx]) : "";
+
+                if (firstSection)
+                {
+                    Data[key]["first section"] = firstSection;
+                    firstSection = 0;
+                }
+            }
+            count++;
+        }
+    }
+    else
+    {
+        Data = ([]);
+        Data["1"] = ([
+            "name": "Return to Vehicle Menu",
+            "type": "exit",
+            "description": "No vehicle selected.\n",
+            "canShow": 1
+        ]);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask string displayDetails(string choice)
+{
+    string ret = "";
+
+    if (member(Data[choice], "status"))
+    {
+        ret = configuration->decorate(
+            sprintf("%-6s", Data[choice]["status"]),
+            "selected", "selector", colorConfiguration);
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected string choiceFormatter(string choice)
+{
+    string section = "";
+    if (member(Data[choice], "first section"))
+    {
+        string padding = (sizeof(Data) < 10) ? "" : " ";
+        foreach (string line in Data[choice]["first section"])
+        {
+            section += sprintf("%s%s\n", padding, line);
+        }
+    }
+
+    string choiceColor = (member(Data[choice], "is disabled") &&
+        Data[choice]["is disabled"]) ?
+        "choice disabled" : "choice enabled";
+
+    return section + sprintf("[%s]%s - %s%s%s",
+        configuration->decorate("%s", "number", "selector",
+            colorConfiguration),
+        padSelectionDisplay(choice),
+        configuration->decorate("%-23s", choiceColor, "selector",
+            colorConfiguration),
+        displayDetails(choice),
+        Data[choice]["layout panel"] || "");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int processSelection(string selection)
+{
+    int ret = -1;
+    if (User)
+    {
+        string type = Data[selection]["type"];
+        ret = (type == "exit") || (selection == "abort");
+
+        if (!ret)
+        {
+            ret = 0;
+
+            if (type == "slot")
+            {
+                SlotType = Data[selection]["class"];
+                setUpUserForSelection();
+                tell_object(User, displayMessage());
+            }
+            else if (type == "install")
+            {
+                string component = Data[selection]["component"];
+                string slot = Data[selection]["slot"];
+
+                SubselectorObj = clone_object(
+                    "/lib/modules/domains/trading/selectors/"
+                    "vehicleComponentSelector.lpc");
+                SubselectorObj->setSlot(slot);
+                SubselectorObj->setComponentName(component);
+                SubselectorObj->setLocation(Location);
+                SubselectorObj->setConstructionData(([
+                    "vehicle": Vehicle,
+                    "slot": slot,
+                    "component": component,
+                ]));
+
+                SubselectorObj->move_object(User);
+                SubselectorObj->registerEvent(this_object());
+                SubselectorObj->initiateSelector(User);
+            }
+            else if (type == "crew")
+            {
+                SubselectorObj = clone_object(
+                    "/lib/modules/domains/trading/selectors/"
+                    "vehicleCrewSelector.lpc");
+                SubselectorObj->setLocation(Location);
+                SubselectorObj->setVehicle(Vehicle);
+
+                SubselectorObj->move_object(User);
+                SubselectorObj->registerEvent(this_object());
+                SubselectorObj->initiateSelector(User);
+            }
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void onSelectorCompleted(object caller)
+{
+    if (User)
+    {
+        if (function_exists("getConstructionData", caller))
+        {
+            mapping data = caller->getConstructionData();
+            if (mapp(data) && member(data, "confirmed") &&
+                data["confirmed"])
+            {
+                string slot = data["slot"];
+                string component = data["component"];
+
+                object vehicleMgmt = getService("vehicleManagement");
+                vehicleMgmt->installVehicleComponent(
+                    User, Vehicle, slot, component);
+
+                tell_object(User, configuration->decorate(
+                    sprintf("Construction of %s for the %s slot "
+                        "has begun.", component, slot),
+                    "success", "quests", colorConfiguration) + "\n");
+            }
+        }
+
+        SlotType = 0;
+        setUpUserForSelection();
+        tell_object(User, displayMessage());
+    }
+    caller->cleanUp();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int suppressMenuDisplay()
+{
+    return objectp(SubselectorObj);
+}

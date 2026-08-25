@@ -1,0 +1,87 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/core/baseSelector.lpc";
+
+private object SubselectorObj;
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void InitializeSelector()
+{
+    AllowUndo = 0;
+    AllowAbort = 1;
+    Description = "Main Menu";
+    Type = "Crafting";
+    Data = ([]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void setUpUserForSelection()
+{
+    object craftingService = getService("crafting");
+    if (craftingService)
+    {
+        Data = craftingService->getTopLevelCraftingMenu(User);
+    }
+    Data[to_string(sizeof(Data) + 1)] = ([
+        "name": "Exit Crafting Menu",
+        "type": "exit",
+        "description": "This option lets you exit the crafting menu.\n",
+        "canShow": 1
+    ]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int processSelection(string selection)
+{
+    int ret = -1;
+    if (User)
+    {
+        ret = (Data[selection]["type"] == "exit") || (selection == "abort");
+        if (!ret && Data[selection]["canShow"])
+        {
+            SubselectorObj = 
+                clone_object("/lib/modules/crafting/craftItemSelector.lpc");
+            SubselectorObj->setType(Data[selection]["selector"]);
+            SubselectorObj->move_object(User);
+            SubselectorObj->registerEvent(this_object());
+            SubselectorObj->initiateSelector(User);
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void onSelectorCompleted(object caller)
+{
+    if (User)
+    {
+        tell_object(User, displayMessage());
+    }
+    caller->cleanUp();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int suppressMenuDisplay()
+{
+    return objectp(SubselectorObj);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected string choiceFormatter(string choice)
+{
+    string displayText = configuration->decorate("%s", "choice enabled",
+        "selector", colorConfiguration);
+    if (!Data[choice]["canShow"])
+    {
+        displayText = configuration->decorate("%-40s ", "choice disabled",
+            "selector", colorConfiguration) +
+            configuration->decorate("(Missing Prerequisites)", "note", "selector",
+                colorConfiguration);
+    }
+
+    return sprintf("[%s]%s - %s%s",
+        configuration->decorate("%s", "number", "selector", colorConfiguration),
+        padSelectionDisplay(choice), displayText, displayDetails(choice));
+}

@@ -1,0 +1,93 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Corpse;
+object Victim;
+object Environment;
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Corpse = clone_object("/lib/items/corpse");
+
+    Victim = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Victim.Name("fred");
+    Victim.addMoney(236);
+    clone_object("/lib/instances/items/weapons/swords/long-sword.lpc")->move_object(Victim);
+    clone_object("/lib/instances/items/armor/medium-armor/chainmail.lpc")->move_object(Victim);
+    clone_object("/lib/instances/items/armor/accessories/amulet.lpc")->move_object(Victim);
+    clone_object("/lib/instances/items/drinks/beer/bock.lpc")->move_object(Victim);
+
+    Environment = load_object("/lib/tests/support/environment/fakeEnvironment.lpc");
+    Victim->move_object(Environment);
+    Corpse->move_object(Environment);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Victim);
+    destruct(Corpse);
+    destruct(Environment);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CorpseProperlySetUp()
+{
+    Corpse.corpseSetup(Victim);
+
+    ExpectSubStringMatch("corpse of Fred.*Weight.*18.*A pile of 236 coins.*"
+        "Amulet.*Bock Beer.*Chainmail.*Long sword",
+        Corpse.long(), "long() returns correct value");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CorpseDecays()
+{
+    getService("environment");
+
+    ToggleCallOutBypass();
+
+    Corpse.corpseSetup(Victim);
+    ExpectEq(({ "A flock of buzzards circle overhead, eyeing the corpse of Fred hungrily...\n",
+        "Buzzards fly away from the skeletonized remains of Fred.\n",
+        "Buzzards walk around the corpse of Fred, picking at it's flesh.\n",
+        "Several buzzards pull at the intestines of the corpse of Fred.\n",
+        }), Victim.caughtMessages());
+    ToggleCallOutBypass();
+
+    ExpectFalse(objectp(Corpse));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CorpseDoesNotGetUndroppableItems()
+{   
+    object sword = clone_object("/lib/instances/items/weapons/swords/spatha.lpc");
+    sword.set("undroppable", 1);
+    sword->move_object(Victim);
+
+    Corpse.corpseSetup(Victim);
+
+    ExpectSubStringMatch("corpse of Fred.*Weight.*18.*A pile of 236 coins.*"
+        "Amulet.*Bock Beer.*Chainmail.*Long sword",
+        Corpse.long(), "long() returns correct value");
+    ExpectEq(Victim, environment(sword));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CorpseDoesNotGetCursedItems()
+{
+    object sword = clone_object("/lib/instances/items/weapons/swords/spatha.lpc");
+    sword.set("cursed", (["equip message": "x", "failed unequip message": "y" ]));
+    sword->move_object(Victim);
+
+    Corpse.corpseSetup(Victim);
+
+    ExpectSubStringMatch("corpse of Fred.*Weight.*18.*A pile of 236 coins.*"
+        "Amulet.*Bock Beer.*Chainmail.*Long sword",
+        Corpse.long(), "long() returns correct value");
+    ExpectEq(Victim, environment(sword));
+}

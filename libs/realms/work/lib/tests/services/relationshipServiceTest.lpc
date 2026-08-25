@@ -1,0 +1,79 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Service;
+object Source;
+object Target;
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Service = clone_object("/lib/services/relationshipService.lpc");
+    Source = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Target = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+
+    Source.Name("gorthaur");
+    Target.Name("fred");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Source);
+    destruct(Target);
+    destruct(Service);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RelationshipUpdatesAreDirectional()
+{
+    Service.updateRelationship(Source, Target, ([ "trust": 5 ]), ([]), ([]),
+        "conversation.greet");
+
+    ExpectEq(5, Service.relationshipDimensionToward(Source, Target, "trust"));
+    ExpectEq(0, Service.relationshipDimensionToward(Target, Source, "trust"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RelationshipDimensionsAccumulate()
+{
+    Service.updateRelationship(Source, Target, ([ "trust": 3 ]), ([]), ([]),
+        "conversation.greet");
+    Service.updateRelationship(Source, Target, ([ "trust": 2, "respect": 1 ]),
+        ([]), ([]), "combat.rescue");
+
+    ExpectEq(5, Service.relationshipDimensionToward(Source, Target, "trust"));
+    ExpectEq(1, Service.relationshipDimensionToward(Source, Target, "respect"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void QueryRelationshipsReturnsMatchingDimensionThresholds()
+{
+    Service.updateRelationship(Source, Target, ([ "trust": 5, "respect": 2 ]),
+        ([]), ([]), "conversation.greet");
+
+    mapping *matches = Service.queryRelationships(Source,
+        ([ "trust": 4, "respect": 1 ]));
+
+    ExpectEq(1, sizeof(matches));
+    ExpectEq(5, matches[0]["dimensions"]["trust"]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RelationshipHistoryCapturesChanges()
+{
+    Service.updateRelationship(Source, Target, ([ "trust": 4 ]),
+        ([ "location": "inn" ]),
+        ([ "note": "first impression" ]),
+        "conversation.greet");
+
+    mapping *history = Service.relationshipHistoryFor(Source, Target, ([]));
+
+    ExpectEq(1, sizeof(history));
+    ExpectEq("trust", history[0]["dimension"]);
+    ExpectEq(4, history[0]["delta"]);
+    ExpectEq("conversation.greet", history[0]["producer"]);
+}

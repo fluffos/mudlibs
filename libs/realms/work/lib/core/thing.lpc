@@ -1,0 +1,155 @@
+//*****************************************************************************
+// Class: thing
+// File Name: thing.c
+//
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//
+// Description: Thing is the base object for all basic lib objects contained
+//              within the base Realms object library. It provides access to
+//              services and the message parser as well as integration
+//              with the various lib modules.
+//
+//*****************************************************************************
+private nosave string LibDirectory = "/lib";
+private nosave object MessageParser = 0;
+
+// FluffOS PORT NOTE: move_object()/command()/isIlluminated() (isIlluminated
+// was already `nomask` upstream; move_object()/command() are this port's
+// own additions, see their own notes below) were all downgraded from
+// `nomask` to plain `public` -- confirmed live: /lib/realizations/player.lpc
+// combines /lib/realizations/living.lpc (which reaches Thing at depth 3,
+// through its own ~13 sibling modules) together with ~10 of its OWN
+// directly-inherited modules (which reach Thing at depth 2) -- Thing
+// reachable at two different depths simultaneously is exactly the diamond
+// shape this driver rejects for `nomask` functions ("Illegal to redefine
+// 'nomask' function ..."), the same failure mode as
+// /secure/simulated-efuns/portability.lpc's original diamond (see that
+// file's port note) but here unavoidable without restructuring dozens of
+// module files, since Thing needs to be reachable from every one of them
+// for compile-time visibility. None of the ~30+ direct/indirect
+// subclasses in this codebase override any of these three names, so
+// losing `nomask`'s override-protection costs nothing in practice.
+
+
+// FluffOS PORT NOTE: this port's own addition, not part of upstream
+// RealmsMUD. LDMud's move_object(object item, object dest) is a free
+// function that moves ANY object; this driver's real move_object(dest)
+// efun only ever moves current_object() (the object whose own code is
+// executing) -- there's no way to move an arbitrary OTHER object with it
+// directly. This codebase called the LDMud free-function form at 1,270
+// call sites across 267 files, moving items, players, and NPCs (never
+// rooms/environment as the object being moved -- confirmed by inspection
+// of every this_object()-as-first-argument call site). Every one of
+// those call sites was mechanically rewritten from
+// `move_object(item, dest)` to `item->move_object(dest)` (a real
+// call_other) -- which only works because `move_object` is now a REAL
+// function defined here on Thing, the common base every item AND every
+// living (via /lib/modules/movement.lpc and /lib/modules/inventory.lpc,
+// both `inherit`ed into /lib/realizations/living.lpc) shares. A bare
+// call_other to an efun name with no matching user-defined function
+// silently no-ops on this driver (confirmed empirically: no error, but
+// the target object's environment() never actually changes) rather than
+// erroring, so this wrapper is not optional plumbing -- without it every
+// one of those 1,270 call sites would silently fail to move anything.
+public varargs int move_object(mixed dest)
+{
+    return efun::move_object(dest);
+}
+
+// FluffOS PORT NOTE: this port's own addition, not part of upstream
+// RealmsMUD. LDMud's command(string cmd, object actor) is a free function
+// that executes cmd AS actor; this driver's real command(cmd) efun has no
+// actor argument at all -- it executes AS current_object (confirmed
+// directly against packages/core/add_action.cc's f_command(): it calls
+// parse_command(buff, current_object), not this_player()). 1,683 call
+// sites across 111 files were mechanically rewritten from
+// `command(cmd, actor)` to `actor->command(cmd)` (a real call_other,
+// which correctly makes actor become current_object for the duration of
+// the call) -- this only works because command() is now a REAL function
+// defined here on Thing, same rationale/reach as move_object() above (a
+// bare call_other to an efun name with no matching user-defined function
+// silently no-ops rather than erroring on this driver). This is on the
+// critical path for login itself: secure/login/menu-interactions.lpc's
+// execCharacter() (and user-creation.lpc's equivalents) call
+// `player->command("l")` as the very last step of every login.
+public varargs int command(string cmd)
+{
+    return efun::command(cmd);
+}
+
+//-----------------------------------------------------------------------------
+// Method: has
+// Description: This method returns true if the Thing being queried has been
+//              integrated with one of the core library modules.
+//
+// Parameters: service - the module to check for
+//
+// Returns: true if this 'thing' uses the queried module
+//-----------------------------------------------------------------------------
+public int has(string service)
+{
+    int ret = 0;
+    
+    if(this_object() && service && stringp(service) && 
+        (member(inherit_list(this_object()), 
+            sprintf("%s/modules/%s.lpc", LibDirectory, service)) > -1))
+    {
+        ret = 1;
+    }
+    else if (this_object() && service && stringp(service) && 
+        (member(inherit_list(this_object()),
+        sprintf("%s/core/%s.lpc", LibDirectory, service)) > -1))
+    {
+        ret = 1;
+    }
+    return ret;
+}
+
+//-----------------------------------------------------------------------------
+// Method: getModule
+// Description: This method returns the module object for the queried service
+//              if it has been integrated with this instance of Thing.
+//
+// Parameters: service - the module to check for
+//
+// Returns: the module object if this 'thing' uses the queried module
+//-----------------------------------------------------------------------------
+protected object getModule(string service)
+{
+    object ret = 0;
+    if(has(service))
+    {
+        ret = this_object();
+    }
+    else if(this_object() && function_exists("isRealizationOf", this_object()))
+    {
+        ret = call_other(this_object(), "isRealizationOf", service);
+    }
+
+    return ret;
+}
+
+//-----------------------------------------------------------------------------
+// Method: getMessageParser
+// Description: This method returns the core lib message parser object. It will 
+//              load the message parser blueprint if it is not already loaded 
+//              by the driver.
+//
+// Returns: the core lib message parser object
+//-----------------------------------------------------------------------------
+protected object getMessageParser()
+{
+    if (!MessageParser)
+    {
+        MessageParser = 
+            load_object(sprintf("/%s/core/messageParser.lpc", LibDirectory));
+    }
+    return MessageParser;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public int isIlluminated()
+{
+    return environment() ? environment()->isIlluminated() : 10;
+}

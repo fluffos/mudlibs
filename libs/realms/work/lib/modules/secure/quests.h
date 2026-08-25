@@ -1,0 +1,75 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+#ifndef questsModule_h
+#define questsModule_h
+
+private nosave string BaseQuest = "/lib/modules/quests/questItem.lpc";
+
+private mapping quests = ([
+    // "path to quest object" : ([
+    //      "name": "<name>",
+    //      "state": "<state>",
+    //      "states completed": ({ list }),
+    //      "is active", true/false
+    //      "is completed", true/false
+    // ]),
+]);
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void loadQuests(mapping data, object persistence)
+{
+    if (isValidPersistenceObject(persistence))
+    {
+        quests = persistence->extractSavedMapping("quests", data);
+
+        if (sizeof(quests))
+        {
+            string *questList = keys(quests);
+            foreach(string quest in questList)
+            {
+                if (member(quests[quest], "states completed"))
+                {
+                    quests[quest]["states completed"] =
+                        explode(quests[quest]["states completed"],
+                            "##") - ({ "" });
+                }
+            }
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask mapping sendQuests()
+{
+    mapping ret = ([
+        "quests":([])
+    ]);
+
+    string *questList = keys(quests);
+    foreach(string quest in questList)
+    {
+        string *keys = keys(quests[quest]);
+        if (sizeof(keys))
+        {
+            ret["quests"][quest] = ([]);
+
+            foreach(string key in keys)
+            {
+                if (key == "states completed")
+                {
+                    ret["quests"][quest][key] = implode(
+                        quests[quest][key], "##");
+                }
+                else
+                {
+                    ret["quests"][quest][key] = quests[quest][key];
+                }
+            }
+        }
+    }
+    return ret;
+}
+
+#endif

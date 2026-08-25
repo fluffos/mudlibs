@@ -1,0 +1,134 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/secure/master/command-parser.lpc";
+inherit "/secure/master/connect.lpc";
+inherit "/secure/master/destruct.lpc";
+inherit "/secure/master/hooks.lpc";
+inherit "/secure/master/logging.lpc";
+inherit "/secure/master/preload.lpc";
+inherit "/secure/master/security.lpc";
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void inaugurate_master(int arg)
+{
+    addDriverHooks();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mixed get_master_uid()
+{
+    return 1;
+}
+
+// FluffOS PORT NOTE: this port's own addition, not part of upstream
+// RealmsMUD. This driver's uid/PACKAGE_UIDS bootstrap unconditionally
+// exit(-1)s if master doesn't define get_root_uid() (checked directly
+// against vm/internal/master.cc -- the "possibly the mudlib doesn't want
+// PACKAGE_UIDS" log line reads like an optional/soft warning but the code
+// path right below it is a hard exit) -- upstream never needed this since
+// this codebase's real access-control model is the path-pattern-based
+// isPriviledgedObject() check in security.lpc, not driver-level uid
+// inheritance (valid_read()/valid_write() both ignore their own `uid`
+// argument entirely). A single fixed root uid is sufficient since nothing
+// in this codebase's own logic actually branches on the uid value itself.
+/////////////////////////////////////////////////////////////////////////////
+public nomask string get_root_uid()
+{
+    return "ROOT";
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string get_bb_uid()
+{
+    return "BACKBONE";
+}
+
+// FluffOS PORT NOTE: this port's own addition, not part of upstream
+// RealmsMUD. valid_override() (approve efun:: overrides at compile time)
+// hard-errors "Invalid simulated efunction override" on any caller if the
+// master doesn't define it at all, or defines it but doesn't approve --
+// needed here because /secure/simulated-efuns/portability.lpc's own
+// implementations of several of this port's simul_efuns (get_dir(),
+// mkmapping(), etc) call the REAL underlying efun via efun:: from
+// underneath a same-named simul_efun (the one this file's own
+// simul_efun.lpc wrapper installs). Broad approval, matching this
+// project's own established pattern for this fix (see genesis's
+// master.lpc) -- nothing in this codebase relies on efun:: overrides
+// being restricted.
+/////////////////////////////////////////////////////////////////////////////
+public nomask int valid_override(string file, string name)
+{
+    return 1;
+}
+
+// FluffOS PORT NOTE: this port's own addition, not part of upstream
+// RealmsMUD. This driver's give_uid_to_object() (called on EVERY single
+// object load) unconditionally calls master::creator_file(path) to get
+// the uid to assign, and hard-errors AND DESTRUCTS the freshly-loaded
+// object if master doesn't define it at all (checked directly against
+// vm/internal/simulate.cc) -- a real functional bug, not just a log
+// warning, when missing: every object load throughout the whole codebase
+// was failing this way until this was added. Same single-fixed-uid
+// rationale as get_root_uid()/get_bb_uid() above (this codebase's real
+// access control is the path-based isPriviledgedObject() check, not
+// driver-level per-file uid ownership).
+/////////////////////////////////////////////////////////////////////////////
+public nomask string creator_file(string path)
+{
+    return "ROOT";
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int preventShadows()
+{
+    return 1;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string get_simul_efun()
+{
+    string simulEfunName = "/secure/simul_efun.lpc";
+    object simulEfun;
+    
+    string failure = catch(
+        simulEfun = load_object(simulEfunName)
+    );
+
+    if (failure)
+    {
+        printf("Failed to load simul_efun: %O\n", failure);
+        shutdown();
+        simulEfunName = 0;
+    }
+    else
+    {
+        simulEfun->start_simul_efun();
+    }
+
+    return simulEfunName;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void runtime_error(string error, string program, 
+    string currentObject, int line)
+{
+    if (this_player() && interactive(this_player()))
+    {
+        string message = "Your sensitive mind notices a wrongness in the "
+            "fabric of space.\n";
+
+        if (member(inherit_list(this_player()),
+            "/lib/realizations/wizard.lpc") > -1)
+        {
+            message = currentObject ?
+                sprintf("%s, program: %O, object: %O line %d\n",
+                    error, program, currentObject, line) : error;
+        }
+
+        catch (
+            write(message)
+        );
+    }
+}

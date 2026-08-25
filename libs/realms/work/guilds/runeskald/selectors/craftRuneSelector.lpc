@@ -1,0 +1,178 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/core/baseSelector.lpc";
+
+private object SubselectorObj;
+
+// Mapping of rune type research file - display name for each tier.
+// Each entry: ([ "tier": ..., "type": ..., "research": ... ])
+private string *RuneTypes = ({ "power", "ward", "blade", "storm", "frost", "flame" });
+
+private mapping TierResearch = ([
+    "basic":   "/guilds/runeskald/rune-crafting/root.lpc",
+    "elder":   "/guilds/runeskald/rune-crafting/elder-rune-crafting.lpc",
+    "ancient": "/guilds/runeskald/rune-crafting/ancient-rune-crafting.lpc",
+    "primal":  "/guilds/runeskald/rune-crafting/primal-rune-crafting.lpc",
+]);
+
+// Per-type research within each tier.
+private mapping TypeResearch = ([
+    "basic": ([
+        "power": "/guilds/runeskald/rune-crafting/basic-power-rune.lpc",
+        "ward":  "/guilds/runeskald/rune-crafting/basic-ward-rune.lpc",
+        "blade": "/guilds/runeskald/rune-crafting/basic-blade-rune.lpc",
+        "storm": "/guilds/runeskald/rune-crafting/basic-storm-rune.lpc",
+        "frost": "/guilds/runeskald/rune-crafting/basic-frost-rune.lpc",
+        "flame": "/guilds/runeskald/rune-crafting/basic-flame-rune.lpc",
+    ]),
+    "elder": ([
+        "power": "/guilds/runeskald/rune-crafting/elder-power-rune.lpc",
+        "ward":  "/guilds/runeskald/rune-crafting/elder-ward-rune.lpc",
+        "blade": "/guilds/runeskald/rune-crafting/elder-blade-rune.lpc",
+        "storm": "/guilds/runeskald/rune-crafting/elder-storm-rune.lpc",
+        "frost": "/guilds/runeskald/rune-crafting/elder-frost-rune.lpc",
+        "flame": "/guilds/runeskald/rune-crafting/elder-flame-rune.lpc",
+    ]),
+    "ancient": ([
+        "power": "/guilds/runeskald/rune-crafting/ancient-power-rune.lpc",
+        "ward":  "/guilds/runeskald/rune-crafting/ancient-ward-rune.lpc",
+        "blade": "/guilds/runeskald/rune-crafting/ancient-blade-rune.lpc",
+        "storm": "/guilds/runeskald/rune-crafting/ancient-storm-rune.lpc",
+        "frost": "/guilds/runeskald/rune-crafting/ancient-frost-rune.lpc",
+        "flame": "/guilds/runeskald/rune-crafting/ancient-flame-rune.lpc",
+    ]),
+    "primal": ([
+        "power": "/guilds/runeskald/rune-crafting/primal-power-rune.lpc",
+        "ward":  "/guilds/runeskald/rune-crafting/primal-ward-rune.lpc",
+        "blade": "/guilds/runeskald/rune-crafting/primal-blade-rune.lpc",
+        "storm": "/guilds/runeskald/rune-crafting/primal-storm-rune.lpc",
+        "frost": "/guilds/runeskald/rune-crafting/primal-frost-rune.lpc",
+        "flame": "/guilds/runeskald/rune-crafting/primal-flame-rune.lpc",
+    ]),
+]);
+
+private mapping TierEnchantSlots = ([
+    "basic":   1,
+    "elder":   2,
+    "ancient": 3,
+    "primal":  4,
+]);
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void InitializeSelector()
+{
+    AllowUndo = 0;
+    AllowAbort = 1;
+    NumColumns = 2;
+    Description = "Select a rune tier and type to craft";
+    Type = "Craft Rune";
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void setUpUserForSelection()
+{
+    Data = ([]);
+    int optionCount = 1;
+
+    string *tierOrder = ({ "basic", "elder", "ancient", "primal" });
+
+    foreach (string tier in tierOrder)
+    {
+        if (!User->isResearched(TierResearch[tier]))
+        {
+            continue;
+        }
+
+        foreach (string runeType in RuneTypes)
+        {
+            string typeResearch = TypeResearch[tier][runeType];
+            int known = User->isResearched(typeResearch);
+
+            Data[to_string(optionCount)] = ([
+                "name": sprintf("%s %s rune",
+                    capitalize(tier), capitalize(runeType)),
+                "description": sprintf("Carve a %s %s rune-stone. "
+                    "This rune can hold %d enchantment bonus%s.",
+                    tier, runeType, TierEnchantSlots[tier],
+                    TierEnchantSlots[tier] > 1 ? "es" : ""),
+                "tier": tier,
+                "type": runeType,
+                "is disabled": !known,
+                "canShow": 1,
+            ]);
+            optionCount++;
+        }
+    }
+
+    Data[to_string(optionCount)] = ([
+        "name": "Exit Craft Rune Menu",
+        "description": "This option exits the rune crafting menu.",
+        "type": "exit",
+        "canShow": 1,
+    ]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int processSelection(string selection)
+{
+    int ret = -1;
+    if (User)
+    {
+        ret = (Data[selection]["type"] == "exit") || (selection == "abort");
+        if (!ret && !Data[selection]["is disabled"])
+        {
+            SubselectorObj =
+                clone_object("/guilds/runeskald/selectors/craftRuneMaterialSelector.lpc");
+            SubselectorObj->setTier(Data[selection]["tier"]);
+            SubselectorObj->setRuneType(Data[selection]["type"]);
+            SubselectorObj->setMaxBonuses(TierEnchantSlots[Data[selection]["tier"]]);
+            SubselectorObj->move_object(User);
+            SubselectorObj->registerEvent(this_object());
+            SubselectorObj->initiateSelector(User);
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void onSelectorCompleted(object caller)
+{
+    if (User)
+    {
+        setUpUserForSelection();
+        tell_object(User, displayMessage());
+    }
+    caller->cleanUp();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int suppressMenuDisplay()
+{
+    return objectp(SubselectorObj);
+}
+/////////////////////////////////////////////////////////////////////////////
+protected string displayDetails(string choice)
+{
+    int useUnicode = User->charsetConfiguration() == "unicode";
+    string ret = (member(Data[choice], "is disabled") &&
+        Data[choice]["is disabled"]) ?
+        configuration->decorate(useUnicode ? " (\u2573)" : " (X)",
+            "choice disabled", "selector", colorConfiguration) : "    ";
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected string choiceFormatter(string choice)
+{
+    string displayType = (member(Data[choice], "is disabled") &&
+        Data[choice]["is disabled"]) ? "choice disabled" : "choice enabled";
+
+    return sprintf("    [%s]%s - %s%s",
+        configuration->decorate("%s", "number", "selector", colorConfiguration),
+        padSelectionDisplay(choice),
+        configuration->decorate("%-20s", displayType, "selector",
+            colorConfiguration),
+        displayDetails(choice));
+}

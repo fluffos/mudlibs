@@ -1,0 +1,300 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/core/baseSelector.lpc";
+
+private object SubselectorObj;
+private object TradingService;
+private object SelectedPort;
+private int justDisplayedStatus = 0;
+
+/////////////////////////////////////////////////////////////////////////////
+private void displayTradingStatus()
+{
+    mapping data = User->getTradingData();
+    string colorConfig = User->colorConfiguration();
+    object commandsService = getService("commands");
+    string charset = User->charsetConfiguration();
+
+    string statusDisplay =
+        commandsService->buildBanner(colorConfig, charset, "top",
+            sprintf("%s Trading Status", data["firm"]));
+
+    // Company information
+    statusDisplay += commandsService->banneredContent(colorConfig, charset,
+        configuration->decorate("Location: ", "field header", "research", colorConfig) +
+        configuration->decorate(data["location"], "field data", "research", colorConfig) +
+        configuration->decorate("        Date: ", "field header", "research", colorConfig) +
+        configuration->decorate(data["date"], "field data", "research", colorConfig));
+
+    // Financial status
+    statusDisplay += commandsService->banneredContent(colorConfig, charset,
+        configuration->decorate("Cash: ", "field header", "research", colorConfig) +
+        configuration->decorate(sprintf("%d gold", data["cash"]), "field data", "research", colorConfig) +
+        configuration->decorate("     Bank: ", "field header", "research", colorConfig) +
+        configuration->decorate(sprintf("%d gold", data["bank"]), "field data", "research", colorConfig) +
+        configuration->decorate("     Debt: ", "field header", "research", colorConfig) +
+        configuration->decorate(sprintf("%d gold", data["debt"]),
+            data["debt"] > 0 ? "penalty modifier" : "field data", "research", colorConfig));
+
+    // Vehicle information (updated for multiple vehicles)
+    object *vehicles = User->getVehicles();
+    if (sizeof(vehicles))
+    {
+        foreach(object vehicle in vehicles)
+        {
+            if (objectp(vehicle))
+            {
+                mapping blueprint = vehicle->getBlueprint();
+                statusDisplay += commandsService->banneredContent(colorConfig, charset,
+                    configuration->decorate(sprintf("Vehicle: %s", blueprint["type"]), "field header", "research", colorConfig) +
+                    configuration->decorate(sprintf("  Location: %s", blueprint["location"]), "field data", "research", colorConfig)
+                );
+                statusDisplay += commandsService->banneredContent(colorConfig, charset,
+                    configuration->decorate("Capacity: ", "field header", "research", colorConfig) +
+                    configuration->decorate(sprintf("%d/%d units", vehicle->getUsedSpace(), blueprint["capacity"]),
+                        "field data", "research", colorConfig) +
+                    configuration->decorate("     Protection: ", "field header", "research", colorConfig) +
+                    configuration->decorate(sprintf("%d", blueprint["protection"]), "field data", "research", colorConfig)
+                );
+            }
+        }
+    }
+    else
+    {
+        statusDisplay += commandsService->banneredContent(colorConfig, charset,
+            configuration->decorate("No vehicles owned.", "penalty modifier", "research", colorConfig));
+    }
+
+    statusDisplay += commandsService->buildBanner(colorConfig, charset, "bottom", "-");
+
+    tell_object(User, statusDisplay);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void InitializeSelector()
+{
+    AllowUndo = 0;
+    AllowAbort = 1;
+    Description = "Main Trading Menu";
+    Type = "Trading";
+    Data = ([]);
+
+    TradingService = getService("trading");
+    SelectedPort = 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void setUpUserForSelection()
+{
+    Data = ([]);
+    int counter = 1;
+
+    if (User->isBankrupt())
+    {
+        string colorConfig = User->colorConfiguration();
+        object commandsService = getService("commands");
+        string charset = User->charsetConfiguration();
+
+        string bankruptDisplay = commandsService->buildBanner(
+            colorConfig, charset, "top", "Bankruptcy");
+        bankruptDisplay += commandsService->banneredContent(
+            colorConfig, charset,
+            configuration->decorate(
+                "Your trading company has gone bankrupt! You have no "
+                "cash, no savings, no vehicles, and outstanding debt.",
+                "failure", "selector", colorConfig));
+        bankruptDisplay += commandsService->banneredContent(
+            colorConfig, charset,
+            configuration->decorate(
+                sprintf("Final Debt: %d gold", User->getDebt()),
+                "penalty modifier", "research", colorConfig));
+        bankruptDisplay += commandsService->buildBanner(
+            colorConfig, charset, "bottom", "-");
+        tell_object(User, bankruptDisplay);
+    }
+
+    Data[to_string(counter++)] = ([
+        "name": "View Company Status",
+        "type": "status",
+        "description": "Display your trading company's financial status, vehicle information, and current location.",
+        "canShow": 1
+    ]);
+    Data[to_string(counter++)] = ([
+        "name": "View Market Prices",
+        "type": "prices",
+        "description": "View current market prices for all goods at any port.",
+        "canShow": 1
+    ]);
+    Data[to_string(counter++)] = ([
+        "name": "Browse Contracts",
+        "type": "contracts",
+        "description": "View and accept trading contracts.",
+        "canShow": 1
+    ]);
+    Data[to_string(counter++)] = ([
+        "name": "Visit Bank",
+        "type": "bank",
+        "description": "Deposit, withdraw money, or manage loans.",
+        "canShow": 1
+    ]);
+    Data[to_string(counter++)] = ([
+        "name": "Select Port",
+        "type": "selectPort",
+        "description": "Choose a port to manage trading actions at that location.",
+        "canShow": 1
+    ]);
+    Data[to_string(counter++)] = ([
+        "name": "Manage Vehicles",
+        "type": "vehicles",
+        "description": "Purchase, upgrade, and manage your trading vehicles.",
+        "canShow": 1
+    ]);
+
+    if (User->canRetire())
+    {
+        Data[to_string(counter++)] = ([
+            "name": sprintf("Retire (%s)", User->getRetirementRating()),
+            "type": "retire",
+            "description": sprintf("End your trading career. Net worth: %d gold. "
+                "Rating: %s.",
+                User->getNetWorth(), User->getRetirementRating()),
+            "canShow": 1
+        ]);
+    }
+
+    Data[to_string(counter++)] = ([
+        "name": "Exit Trading Menu",
+        "type": "exit",
+        "description": "Close the trading interface.",
+        "canShow": 1
+    ]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int processSelection(string selection)
+{
+    int ret = -1;
+    if (User)
+    {
+        string selectionType = Data[selection]["type"];
+        ret = (selectionType == "exit");
+
+        if (!ret && Data[selection]["canShow"])
+        {
+            switch(selectionType)
+            {
+                case "status":
+                {
+                    displayTradingStatus();
+                    justDisplayedStatus = 1;
+                    ret = -1;
+                    break;
+                }
+                case "prices":
+                {
+                    SubselectorObj = clone_object("/lib/modules/domains/trading/selectors/marketPricesSelector.lpc");
+                    break;
+                }
+                case "contracts":
+                {
+                    SubselectorObj = clone_object("/lib/modules/domains/trading/selectors/contractsSelector.lpc");
+                    break;
+                }
+                case "bank":
+                {
+                    SubselectorObj = clone_object("/lib/modules/domains/trading/selectors/bankSelector.lpc");
+                    break;
+                }
+                case "selectPort":
+                {
+                    SubselectorObj = clone_object("/lib/modules/domains/trading/selectors/selectPortSelector.lpc");
+                    break;
+                }
+                case "vehicles":
+                {
+                    SubselectorObj = clone_object("/lib/modules/domains/trading/selectors/vehicleSelector.lpc");
+                    SubselectorObj->setLocation(User->getCurrentLocation());
+                    break;
+                }
+                case "retire":
+                {
+                    string colorConfig = User->colorConfiguration();
+                    object commandsService = getService("commands");
+                    string charset = User->charsetConfiguration();
+
+                    string retireDisplay = commandsService->buildBanner(
+                        colorConfig, charset, "top", "Retirement");
+                    retireDisplay += commandsService->banneredContent(
+                        colorConfig, charset,
+                        configuration->decorate(
+                            sprintf("Congratulations, %s!",
+                                User->getFirmName()),
+                            "success", "quests", colorConfig));
+                    retireDisplay += commandsService->banneredContent(
+                        colorConfig, charset,
+                        configuration->decorate(
+                            sprintf("Net Worth: %d gold",
+                                User->getNetWorth()),
+                            "field data", "research", colorConfig));
+                    retireDisplay += commandsService->banneredContent(
+                        colorConfig, charset,
+                        configuration->decorate(
+                            sprintf("Final Rating: %s",
+                                User->getRetirementRating()),
+                            "field header", "research", colorConfig));
+                    retireDisplay += commandsService->buildBanner(
+                        colorConfig, charset, "bottom", "-");
+
+                    tell_object(User, retireDisplay);
+                    ret = 1;
+                    break;
+                }
+            }
+
+            if (SubselectorObj)
+            {
+                SubselectorObj->move_object(User);
+                SubselectorObj->registerEvent(this_object());
+                SubselectorObj->initiateSelector(User);
+            }
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void onSelectorCompleted(object caller)
+{
+    if (User)
+    {
+        setUpUserForSelection();
+        tell_object(User, displayMessage());
+    }
+    caller->cleanUp();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int suppressMenuDisplay()
+{
+    int ret = objectp(SubselectorObj) || justDisplayedStatus;
+    if (justDisplayedStatus)
+    {
+        justDisplayedStatus = 0;
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected string choiceFormatter(string choice)
+{
+    string displayType = Data[choice]["canShow"] ? "choice enabled" : "choice disabled";
+
+    return sprintf("%s[%s]%s - %s%s",
+        (NumColumns < 3) ? "    " : "",
+        configuration->decorate("%s", "number", "selector", colorConfiguration),
+        padSelectionDisplay(choice),
+        configuration->decorate("%-30s", displayType, "selector", colorConfiguration),
+        displayDetails(choice));
+}

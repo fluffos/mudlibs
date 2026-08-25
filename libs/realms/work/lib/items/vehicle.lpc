@@ -1,0 +1,864 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/items/item.lpc";
+
+private object vehicleService;
+private int currentStructure = -1;
+object display = getService("configuration");
+
+/////////////////////////////////////////////////////////////////////////////
+protected void Setup()
+{
+    vehicleService = getService("vehicle");
+    if (!objectp(vehicleService))
+    {
+        raise_error("vehicle.c: Could not load vehicleService.\n");
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping getBlueprint()
+{
+    mapping result = ([]);
+    string type = query("vehicle type");
+    if (stringp(type) && objectp(vehicleService))
+    {
+        result = vehicleService->queryVehicleBlueprint(type);
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping getComponent(string slot)
+{
+    mapping result = ([]);
+    mapping components = query("components");
+    if (mapp(components) && member(components, slot))
+    {
+        string name = components[slot];
+        if (stringp(name) && objectp(vehicleService))
+        {
+            result = vehicleService->queryComponent(name);
+        }
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping getAllComponentsWithDetails()
+{
+    mapping result = ([]);
+    mapping components = query("components");
+    if (mapp(components) && objectp(vehicleService))
+    {
+        string *slots = keys(components);
+        foreach(string slot in slots)
+        {
+            string name = components[slot];
+            if (stringp(name))
+            {
+                result[slot] = vehicleService->queryComponent(name);
+            }
+            else
+            {
+                result[slot] = ([]);
+            }
+        }
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping getComponents()
+{
+    mapping result = ([]);
+    mapping components = query("components");
+    if (mapp(components))
+    {
+        result = components + ([]);
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string getLocation()
+{
+    string result = "";
+    string location = query("location");
+    if (stringp(location))
+    {
+        result = location;
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setLocation(string newLocation)
+{
+    if (stringp(newLocation))
+    {
+        set("location", newLocation);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping getCargo()
+{
+    mapping result = ([]);
+    mapping cargo = query("cargo");
+    if (mapp(cargo))
+    {
+        result = cargo + ([]);
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int getCargoQuantity(string item)
+{
+    int quantity = 0;
+    mapping cargo = query("cargo") || ([]);
+    if (item && stringp(item) && member(cargo, item))
+    {
+        quantity = cargo[item];
+    }
+    return quantity;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping getCrew()
+{
+    mapping result = ([]);
+    mapping crew = query("crew");
+    if (mapp(crew))
+    {
+        result = crew + ([]);
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setComponentMaterials(string slot,
+    mapping selectedMaterials)
+{
+    if (stringp(slot) && mapp(selectedMaterials))
+    {
+        mapping allMaterials =
+            query("component materials") || ([]);
+        allMaterials[slot] = selectedMaterials + ([]);
+        set("component materials", allMaterials);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping getComponentMaterials(string slot)
+{
+    mapping result = ([]);
+    mapping allMaterials = query("component materials");
+
+    if (mapp(allMaterials) && stringp(slot) &&
+        member(allMaterials, slot))
+    {
+        result = allMaterials[slot] + ([]);
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping getAllComponentMaterials()
+{
+    mapping result = ([]);
+    mapping allMaterials = query("component materials");
+
+    if (mapp(allMaterials))
+    {
+        result = allMaterials + ([]);
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int getMaxStructure()
+{
+    int structure = 0;
+    mapping blueprint = getBlueprint();
+    if (mapp(blueprint) && member(blueprint, "structure"))
+    {
+        structure = blueprint["structure"];
+    }
+    mapping components = query("components");
+    if (mapp(components))
+    {
+        foreach(string slot in keys(components))
+        {
+            mapping comp = getComponent(slot);
+            if (mapp(comp) && member(comp, "structure"))
+            {
+                structure += comp["structure"];
+            }
+        }
+    }
+    return structure;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int getCurrentStructure()
+{
+    if (currentStructure < 0)
+    {
+        currentStructure = getMaxStructure();
+    }
+    return currentStructure;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int getCapacity()
+{
+    int capacity = 0;
+    mapping blueprint = getBlueprint();
+    if (mapp(blueprint) && member(blueprint, "capacity"))
+    {
+        capacity = blueprint["capacity"];
+    }
+    mapping components = query("components");
+    if (mapp(components))
+    {
+        foreach(string slot in keys(components))
+        {
+            mapping comp = getComponent(slot);
+            if (mapp(comp) && member(comp, "capacity bonus"))
+            {
+                capacity += comp["capacity bonus"];
+            }
+        }
+    }
+    return capacity;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int getUsedSpace()
+{
+    int used = 0;
+    mapping cargo = query("cargo");
+    if (mapp(cargo))
+    {
+        foreach(string item in keys(cargo))
+        {
+            used += cargo[item];
+        }
+    }
+    return used;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int getFreeSpace()
+{
+    int result = getCapacity() - getUsedSpace();
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int getTradeProtection()
+{
+    int prot = 0;
+    mapping blueprint = getBlueprint();
+    if (mapp(blueprint) && member(blueprint, "protection"))
+    {
+        prot = blueprint["protection"];
+    }
+    mapping components = query("components");
+    if (mapp(components))
+    {
+        foreach(string slot in keys(components))
+        {
+            mapping comp = getComponent(slot);
+            if (mapp(comp) && member(comp, "protection"))
+            {
+                prot += comp["protection"];
+            }
+        }
+    }
+    return prot;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int getSpeed()
+{
+    int speed = 0;
+    mapping blueprint = getBlueprint();
+    if (mapp(blueprint) && member(blueprint, "base speed"))
+    {
+        speed = blueprint["base speed"];
+    }
+    mapping components = query("components");
+    if (mapp(components))
+    {
+        foreach(string slot in keys(components))
+        {
+            mapping comp = getComponent(slot);
+            if (mapp(comp) && member(comp, "speed bonus"))
+            {
+                speed += comp["speed bonus"];
+            }
+        }
+    }
+    return speed;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask mapping blueprintBaseStats()
+{
+    mapping result = (["structure": 0, "protection": 0, "speed": 0,
+        "capacity": 0, "weapon slots": 0, "defense slots": 0]);
+
+    mapping blueprint = getBlueprint();
+    if (mapp(blueprint))
+    {
+        if (member(blueprint, "structure"))
+        {
+            result["structure"] = blueprint["structure"];
+        }
+        if (member(blueprint, "protection"))
+        {
+            result["protection"] = blueprint["protection"];
+        }
+        if (member(blueprint, "base speed"))
+        {
+            result["speed"] = blueprint["base speed"];
+        }
+        if (member(blueprint, "capacity"))
+        {
+            result["capacity"] = blueprint["capacity"];
+        }
+
+        mapping slots = blueprint["slots"] || ([]);
+        foreach (string slot in keys(slots))
+        {
+            string slotType = slots[slot];
+            if (slotType == "weapon")
+            {
+                result["weapon slots"] += 1;
+            }
+            else if (slotType == "defense")
+            {
+                result["defense slots"] += 1;
+            }
+        }
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask mapping componentContributions()
+{
+    mapping totals = (["structure": 0, "protection": 0, "speed": 0,
+        "capacity": 0, "henchman": 0, "weapon slots": 0, "defense slots": 0]);
+
+    mapping components = query("components") || ([]);
+    if (!mapp(components))
+    {
+        return totals;
+    }
+
+    string *slots = keys(components);
+    foreach (string slot in slots)
+    {
+        string compId = components[slot];
+        string tmp = "";
+        if (!stringp(compId) || (sscanf(compId, "unbuilt %s", tmp) == 1))
+        {
+            continue;
+        }
+
+        mapping details = getComponent(slot);
+        if (!mapp(details))
+        {
+            continue;
+        }
+
+        if (member(details, "structure"))
+        {
+            totals["structure"] += details["structure"];
+        }
+        if (member(details, "protection"))
+        {
+            totals["protection"] += details["protection"];
+        }
+        if (member(details, "capacity bonus"))
+        {
+            totals["capacity"] += details["capacity bonus"];
+        }
+        if (member(details, "speed bonus"))
+        {
+            totals["speed"] += details["speed bonus"];
+        }
+        if (member(details, "henchman bonus"))
+        {
+            totals["henchman"] += details["henchman bonus"];
+        }
+        if (member(details, "weapon slots"))
+        {
+            totals["weapon slots"] += details["weapon slots"];
+        }
+        if (member(details, "defense slots"))
+        {
+            totals["defense slots"] += details["defense slots"];
+        }
+    }
+    return totals;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask mapping materialBonuses()
+{
+    mapping totals = (["structure": 0, "protection": 0, "speed": 0, "capacity": 0]);
+    object materialsService = getService("materials");
+    if (!objectp(materialsService))
+    {
+        return totals;
+    }
+
+    mapping components = query("components") || ([]);
+    if (!mapp(components))
+    {
+        return totals;
+    }
+
+    foreach (string slot in keys(components))
+    {
+        mapping slotMaterials = getComponentMaterials(slot);
+        if (!mapp(slotMaterials))
+        {
+            continue;
+        }
+        foreach (string matKey in keys(slotMaterials))
+        {
+            string matName = slotMaterials[matKey];
+            if (!stringp(matName))
+            {
+                continue;
+            }
+            mapping bonus = materialsService->getMaterialVehicleBonus(matName);
+            if (!mapp(bonus))
+            {
+                continue;
+            }
+            if (member(bonus, "structure"))
+            {
+                totals["structure"] += bonus["structure"];
+            }
+            if (member(bonus, "protection"))
+            {
+                totals["protection"] += bonus["protection"];
+            }
+            if (member(bonus, "speed"))
+            {
+                totals["speed"] += bonus["speed"];
+            }
+            if (member(bonus, "capacity"))
+            {
+                totals["capacity"] += bonus["capacity"];
+            }
+        }
+    }
+    return totals;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping getVehicleBonuses()
+{
+    // Delegate to smaller helpers to respect the long method rule.
+    mapping totals = blueprintBaseStats();
+    mapping componentTotals = componentContributions();
+    mapping materialTotals = materialBonuses();
+
+    foreach (string key in keys(componentTotals))
+    {
+        if (!member(totals, key))
+        {
+            totals[key] = 0;
+        }
+        totals[key] += componentTotals[key];
+    }
+
+    foreach (string key in keys(materialTotals))
+    {
+        if (!member(totals, key))
+        {
+            totals[key] = 0;
+        }
+        totals[key] += materialTotals[key];
+    }
+
+    return totals;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int getWeaponPower()
+{
+    int power = 0;
+    mapping components = query("components");
+    if (mapp(components))
+    {
+        foreach(string slot in keys(components))
+        {
+            mapping comp = getComponent(slot);
+            if (mapp(comp) && member(comp, "class") && comp["class"] == "weapon")
+            {
+                int weaponPower = comp["attack power"] || comp["weight"] || 0;
+                power += weaponPower;
+            }
+        }
+    }
+    return power;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int getDefense()
+{
+    int defense = getTradeProtection();
+    mapping components = query("components");
+    if (mapp(components))
+    {
+        foreach(string slot in keys(components))
+        {
+            mapping comp = getComponent(slot);
+            if (mapp(comp) && member(comp, "class") && comp["class"] == "defense")
+            {
+                int defenseBonus = comp["defense bonus"] || comp["protection"] || 0;
+                defense += defenseBonus;
+            }
+        }
+    }
+    return defense;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int getCrewRequirement()
+{
+    int required = 0;
+    mapping blueprint = getBlueprint();
+    if (mapp(blueprint) && member(blueprint, "crew required"))
+    {
+        required = blueprint["crew required"];
+    }
+    return required;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int installComponent(string slot, string componentName)
+{
+    int result = 0;
+    mapping components = query("components") || ([]);
+    if (objectp(vehicleService) && vehicleService->queryComponent(componentName))
+    {
+        components[slot] = componentName;
+        set("components", components);
+        result = 1;
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int removeComponent(string slot)
+{
+    int result = 0;
+    mapping components = query("components") || ([]);
+    mapping blueprint = getBlueprint();
+    
+    if (member(components, slot))
+    {
+        if (mapp(blueprint) && member(blueprint, "slots") && 
+            member(blueprint["slots"], slot))
+        {
+            string slotType = blueprint["slots"][slot];
+            components[slot] = sprintf("unbuilt %s", slotType);
+            set("components", components);
+            result = 1;
+        }
+        else
+        {
+            map_delete(components, slot);
+            set("components", components);
+            result = 1;
+        }
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int addCargo(string item, int quantity)
+{
+    int result = 0;
+    if (item && stringp(item) && quantity > 0 && getFreeSpace() >= quantity)
+    {
+        mapping cargo = query("cargo") || ([]);
+        if (!member(cargo, item))
+        {
+            cargo[item] = 0;
+        }
+        cargo[item] += quantity;
+        set("cargo", cargo);
+        result = 1;
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int removeCargo(string item, int quantity)
+{
+    int result = 0;
+    mapping cargo = query("cargo") || ([]);
+    if (item && stringp(item) && quantity > 0 && member(cargo, item) && cargo[item] >= quantity)
+    {
+        cargo[item] -= quantity;
+        if (cargo[item] <= 0)
+        {
+            map_delete(cargo, item);
+        }
+        set("cargo", cargo);
+        result = 1;
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void assignCrew(string role, object person)
+{
+    mapping crew = query("crew") || ([]);
+    if (role && objectp(person))
+    {
+        crew[role] = person;
+        set("crew", crew);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void removeCrew(string slot)
+{
+    mapping crew = query("crew") || ([]);
+    if (slot && member(crew, slot))
+    {
+        map_delete(crew, slot);
+        set("crew", crew);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void assignHenchman(string slot, string henchmanId)
+{
+    mapping crew = query("crew") || ([]);
+    if (slot && stringp(henchmanId))
+    {
+        crew[slot] = henchmanId;
+        set("crew", crew);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void unassignHenchman(string slot)
+{
+    removeCrew(slot);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int takeDamage(int amount)
+{
+    int actual = amount > 0 ? amount : 0;
+    int max = getMaxStructure();
+    if (currentStructure < 0)
+    {
+        currentStructure = max;
+    }
+    currentStructure -= actual;
+    if (currentStructure < 0)
+    {
+        currentStructure = 0;
+    }
+    return actual;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int repair(int amount)
+{
+    int max = getMaxStructure();
+    int actual = amount > 0 ? amount : 0;
+    if (currentStructure < 0)
+    {
+        currentStructure = max;
+    }
+    currentStructure += actual;
+    if (currentStructure > max)
+    {
+        currentStructure = max;
+    }
+    return actual;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int isDestroyed()
+{
+    int result = getCurrentStructure() <= 0;
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int attackVehicle(object target)
+{
+    int result = 0;
+    if (objectp(target) && function_exists("takeDamage", target))
+    {
+        int attackPower = getWeaponPower();
+        int defense = target->getDefense();
+        int damageDealt = attackPower - defense;
+        if (damageDealt < 1)
+        {
+            damageDealt = 1;
+        }
+        result = target->takeDamage(damageDealt);
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string displayVehicle(object player)
+{
+    string result = "Vehicle display not available.";
+    if (objectp(vehicleService))
+    {
+        result = vehicleService->visualizeVehicle(player, this_object());
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string getVehicleStatus(object player)
+{
+    string result = "Configuration service not available.";
+    string colorConfig = player ? player->colorConfiguration() : "none";
+    
+    if (display)
+    {
+        mapping blueprint = getBlueprint();
+        string vehicleName = blueprint["display name"] || query("vehicle type") || "Unknown Vehicle";
+        
+        result = display->decorate(sprintf("=== %s Status ===", vehicleName), 
+                                      "header", "vehicle", colorConfig) + "\n";
+        
+        result += display->decorate("Location: ", "field header", "vehicle", colorConfig) +
+                  display->decorate(getLocation(), "data", "vehicle", colorConfig) + "\n";
+        
+        int currentStr = getCurrentStructure();
+        int maxStr = getMaxStructure();
+        result += display->decorate("Structure: ", "field header", "vehicle", colorConfig) +
+                  display->decorate(sprintf("%d/%d", currentStr, maxStr), "data", "vehicle", colorConfig) + "\n";
+        
+        int usedSpace = getUsedSpace();
+        int totalCapacity = getCapacity();
+        result += display->decorate("Capacity: ", "field header", "vehicle", colorConfig) +
+                  display->decorate(sprintf("%d/%d units used", usedSpace, totalCapacity), "data", "vehicle", colorConfig) + "\n";
+        
+        result += display->decorate("Speed: ", "field header", "vehicle", colorConfig) +
+                  display->decorate(sprintf("%d", getSpeed()), "data", "vehicle", colorConfig) + "\n";
+        
+        result += display->decorate("Protection: ", "field header", "vehicle", colorConfig) +
+                  display->decorate(sprintf("%d", getTradeProtection()), "data", "vehicle", colorConfig) + "\n";
+        
+        mapping cargo = getCargo();
+        if (sizeof(cargo))
+        {
+            result += "\n" + display->decorate("Cargo:", "section header", "vehicle", colorConfig) + "\n";
+            foreach (string item in keys(cargo))
+            {
+                result += display->decorate(sprintf("  %s: %d units", item, cargo[item]), "data", "vehicle", colorConfig) + "\n";
+            }
+        }
+        
+        result += "\n" + displayVehicle(player);
+    }
+    
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void initializeVehicle(mapping blueprint)
+{
+    if (mapp(blueprint))
+    {
+        set("name", blueprint["display name"] || blueprint["type"]);
+        set("short", blueprint["display name"] || blueprint["type"]);
+        set("long", blueprint["default description"] || "A vehicle.");
+
+        mapping components = ([]);
+        if (member(blueprint, "slots"))
+        {
+            foreach (string slot in keys(blueprint["slots"]))
+            {
+                string slotType = blueprint["slots"][slot];
+                components[slot] = sprintf("unbuilt %s", slotType);
+            }
+        }
+        set("components", components);
+
+        set("cargo", ([]));
+        set("crew", ([]));
+
+        currentStructure = getMaxStructure();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs int set(string element, mixed data)
+{
+    int result = 0;
+    
+    switch (element)
+    {
+        case "vehicle type":
+        {
+            if (!data || !stringp(data) || !vehicleService->queryVehicleBlueprint(data))
+            {
+                raise_error("vehicle.c: Invalid or missing vehicle type.\n");
+            }
+            break;
+        }
+        case "location":
+        {
+            if (!data || !stringp(data))
+            {
+                raise_error("vehicle.c: Invalid or missing location.\n");
+            }
+            break;
+        }
+        case "components":
+        {
+            if (!mapp(data))
+            {
+                raise_error("vehicle.c: Components must be a mapping.\n");
+            }
+            break;
+        }
+        case "cargo":
+        case "crew":
+        {
+            if (!mapp(data))
+            {
+                data = ([]);
+            }
+            break;
+        }
+        case "current structure":
+        {
+            if (!intp(data) || data < 0)
+            {
+                data = getMaxStructure();
+            }
+            currentStructure = data;
+            break;
+        }
+    }
+    result = item::set(element, data);
+    return result;
+}

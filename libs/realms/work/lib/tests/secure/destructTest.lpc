@@ -1,0 +1,124 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+#include <functionlist.h>
+
+object Destruct;
+object Wizard;
+
+/////////////////////////////////////////////////////////////////////////////
+void Init()
+{
+    setRestoreCaller(this_object());
+    object database = clone_object("/lib/tests/modules/secure/fakeDatabase.lpc");
+    database.PrepDatabase();
+
+    object dataAccess = clone_object("/lib/modules/secure/dataAccess.lpc");
+    dataAccess.savePlayerData(database.GetWizardOfLevel("elder"));
+
+    destruct(dataAccess);
+    destruct(database);
+
+    string *functions = filter(
+        functionlist(this_object(), RETURN_FUNCTION_NAME),
+        (: sizeof(regexp(({ $1 }), "__inline")) :));
+
+    ignoreList += functions;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Destruct = clone_object("/lib/tests/support/master/securityHelper.lpc");
+    Wizard = clone_object("/lib/realizations/wizard.lpc");
+    Wizard.restore("earl");
+    setUsers(({ Wizard }));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Destruct);
+    destruct(Wizard);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void InteractiveObjectsAreMovedToSafety()
+{
+    Destruct.ToggleInteractive(Wizard);
+
+    object room = load_object("/lib/tests/support/environment/startingRoom.lpc");
+
+    Wizard->move_object(room);
+    ExpectEq(room, environment(Wizard));
+
+    Destruct.prepare_destruct(room);
+
+    ExpectEq(load_object("/secure/master.lpc"), environment(Wizard));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void NonInteractiveObjectsAreDestroyed()
+{
+    object room = load_object("/lib/tests/support/environment/startingRoom.lpc");
+
+    Wizard->move_object(room);
+    ExpectEq(room, environment(Wizard));
+
+    Destruct.prepare_destruct(room);
+
+    ExpectFalse(Wizard);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DestructTraversesNestedInventories()
+{
+    object room = load_object("/lib/tests/support/environment/startingRoom.lpc");
+
+    object item = clone_object("/lib/instances/items/weapons/swords/long-sword.lpc");
+    item->move_object(Wizard);
+
+    object material = clone_object("/lib/instances/items/materials/metal/iron.lpc");
+    material->move_object(item);
+
+    object item2 = clone_object("/lib/instances/items/weapons/swords/short-sword.lpc");
+    item2->move_object(room);
+
+    Wizard->move_object(room);
+    ExpectEq(room, environment(Wizard));
+
+    Destruct.prepare_destruct(room);
+
+    ExpectFalse(Wizard);
+    ExpectFalse(item);
+    ExpectFalse(item2);
+    ExpectFalse(material);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DestructDoesNotTraverseNestedInventoriesOfInteractiveObjects()
+{
+    Destruct.ToggleInteractive(Wizard);
+    object room = load_object("/lib/tests/support/environment/startingRoom.lpc");
+
+    object item = clone_object("/lib/instances/items/weapons/swords/long-sword.lpc");
+    item->move_object(Wizard);
+
+    object material = clone_object("/lib/instances/items/materials/metal/iron.lpc");
+    material->move_object(item);
+
+    object item2 = clone_object("/lib/instances/items/weapons/swords/short-sword.lpc");
+    item2->move_object(room);
+
+    Wizard->move_object(room);
+    ExpectEq(room, environment(Wizard));
+
+    Destruct.prepare_destruct(room);
+
+    ExpectTrue(Wizard);
+    ExpectTrue(item);
+    ExpectFalse(item2);
+    ExpectTrue(material);
+}

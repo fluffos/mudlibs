@@ -1,0 +1,84 @@
+//*****************************************************************************
+// FluffOS PORT: this port's own addition, not part of upstream RealmsMUD.
+//
+// connect()/disconnect()/convertString()/sanitizeString() used to live in
+// dataService.lpc, `inherit`ed (originally `virtual inherit`, an LDMud
+// diamond-resolution feature this driver doesn't have -- see NOTES.md) by
+// every one of the ~18 dataService subclasses (basicPlayerDataService.lpc,
+// guildDataService.lpc, etc), which are then all `inherit`ed together into
+// /lib/modules/secure/dataAccess.lpc. On this driver that combination hits
+// "Illegal to redefine 'nomask' function ..." -- confirmed NOT simply a
+// "same base at two different inherit depths" issue (dataAccess.lpc's own
+// redundant direct inherit of dataService.lpc was removed first, matching
+// the fix that worked for secure/login.lpc's identical-shaped diamond, but
+// this one kept failing regardless) and NOT explainable by anything found
+// checking the raw upstream source (every one of these dataService
+// subclasses uses the identical `virtual inherit` upstream, same as e.g.
+// lib/core/thing.lpc's ~23 sibling modules, which DOES tolerate the same
+// many-siblings-share-one-base shape fine) -- the exact trigger wasn't
+// fully root-caused given this port's time budget. Rather than keep
+// chasing it, moved to the same call_other-based pattern proven to work
+// for /secure/simulated-efuns/portability.lpc (see that file's own port
+// note for the two rejected alternatives) -- these four functions are
+// pure, stateless DB-connection helpers (no per-caller state), so calling
+// them on a separate real object instead of inheriting is safe. Every
+// dataService subclass's own `inherit ".../dataService.lpc"` was removed
+// and their calls rewritten to `DB_UTIL->connect()` etc (the DB_UTIL
+// macro, see /secure/auto.h).
+/////////////////////////////////////////////////////////////////////////////
+public nomask string convertString(string input)
+{
+    string ret = input;
+    if (!stringp(input))
+    {
+        ret = "";
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int connect()
+{
+    int ret = 0;
+
+    if (!sizeof(db_handles()))
+    {
+        ret = db_connect(RealmsDatabase());
+    }
+    else
+    {
+        ret = db_handles()[0];
+    }
+    if (db_error(ret))
+    {
+        getService("log")->log("DBERROR",
+            sprintf("%s:\n%s\n%s\nCall stack:%O\n", ctime(time()),
+            db_error(ret), "Connecting to database", caller_stack()));
+    }
+
+    if (ret)
+    {
+        db_exec(ret, "use " + RealmsDatabase() + ";");
+    }
+
+    while (db_fetch(ret));
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void disconnect(int handle)
+{
+    while(db_fetch(handle));
+    db_close(handle);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string sanitizeString(string value)
+{
+    if (!value)
+    {
+        value = "";
+    }
+
+    return db_conv_string(value);
+}

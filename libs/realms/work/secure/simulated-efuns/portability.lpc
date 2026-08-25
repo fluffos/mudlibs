@@ -1,0 +1,666 @@
+//*****************************************************************************
+// FluffOS PORT: this port's own addition, not part of upstream RealmsMUD.
+//
+// A handful of LDMud-only "efuns" this codebase uses pervasively (member(),
+// call_direct(), object_name(), program_name(), regreplace(), regexplode(),
+// strstr(), raise_error()) are implemented as real simul_efuns in
+// /secure/simul_efun.lpc's own body (thin wrappers that just forward to
+// this object -- see that file). That works fine for the other ~16,500
+// files in this codebase, which compile AFTER simul_efun.lpc has already
+// loaded and registered as the simul_efun provider -- but it does NOT
+// work for the handful of fragment files that are themselves `inherit`ed
+// INTO /secure/simul_efun.lpc, /secure/master.lpc, or /secure/login.lpc (a
+// chicken-and-egg bootstrapping restriction: while compiling those, the
+// simul_efun binding isn't active yet for their own inherited fragments,
+// and plain LPC inheritance only flows child<-parent, never sideways
+// between sibling fragments of the same aggregator).
+//
+// This is a normal, independently-loadable OBJECT (not an inherit or
+// #include target -- both were tried and rejected, see below), called via
+// plain call_other() (the PORT macro in /secure/auto.h) from the handful
+// of fragments that need these helpers before simul_efun.lpc itself is
+// ready. Two more-obvious-looking approaches don't work on this driver:
+//   - `inherit`ing this file from multiple sibling fragments that then
+//     get `inherit`ed together into one aggregator is an unsupported
+//     diamond shape here ("Illegal to redefine 'nomask' function ...") --
+//     this driver has no LDMud-style `virtual inherit` to resolve it (see
+//     NOTES.md: `virtual` isn't a keyword on this driver at all; every
+//     "virtual inherit" in this codebase was mechanically stripped down to
+//     plain "inherit" during this port).
+//   - `#include`ing a shared header of `private` helper functions looked
+//     like it should dodge the diamond (private functions aren't supposed
+//     to be part of an inherited public interface) but doesn't on this
+//     driver in practice: #include is pure text substitution, so each
+//     including fragment ends up DEFINING its own same-named function
+//     directly (not inheriting it) -- and two unrelated sibling fragments
+//     that both directly define the same nomask function name still
+//     conflict the same way once a common aggregator inherits both.
+// Plain call_other() to a real, separately-loaded object sidesteps both
+// problems entirely (no inherit relationship, no shared text at all).
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs int member(mixed collection, mixed elem, int start)
+{
+    if (mapp(collection))
+    {
+        return member_array(elem, keys(collection)) != -1;
+    }
+    if (pointerp(collection))
+    {
+        return member_array(elem, collection, start);
+    }
+    return -1;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: LDMud's mkmapping(keys[, values]) doesn't exist on
+// this driver at all -- builds a mapping from a keys array (values
+// default to 1 if a values array isn't given, or the corresponding
+// element of it if given). 19 call sites/17 files, almost all using the
+// 1-arg form purely as an array-dedup-via-mapping-keys idiom (build the
+// mapping, then immediately call keys() on it again).
+public nomask varargs mapping mkmapping(mixed *keysArr, mixed *valuesArr)
+{
+    mapping m = ([]);
+    int i;
+
+    for (i = 0; i < sizeof(keysArr); i++)
+    {
+        m[keysArr[i]] = valuesArr ? valuesArr[i] : 1;
+    }
+    return m;
+}
+
+// FluffOS PORT NOTE: LDMud's driver_info(int what) (query assorted driver
+// stats/state by numeric code) doesn't exist on this driver. Both call
+// sites in this codebase use driver_info(-44) (LDMud's "last compile
+// error trace" code) purely as a `|| "fallback text"` default when a log
+// file read comes up empty -- returning 0 here just means that fallback
+// text is always used instead of a genuine last-error trace, a
+// diagnostics-quality-of-life gap, not a functional one.
+/////////////////////////////////////////////////////////////////////////////
+public nomask mixed driver_info(int what)
+{
+    return 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs mixed call_direct(mixed ob, string func, mixed args...)
+{
+    return call_other(ob, func, args...);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: LDMud's to_string(mixed) doesn't exist on this driver
+// at all (this driver only has to_int()/to_float(), not a generic
+// stringifier) -- pervasive across this codebase (324 call sites/126
+// files). Originally implemented as a bare sprintf("%s", val), but this
+// driver's %s format ONLY accepts an actual string (plus a special-cased
+// literal 0, coerced to "0") -- unlike LDMud, ANY non-zero int/float
+// argument to %s is a hard runtime error here ("Incorrect argument to
+// type %s", confirmed live: this crashed displayCharacterOptions() in
+// /secure/login/menu-interactions.lpc, which does to_string(count) with
+// count as a real int, which in turn silently aborted the whole
+// displayMenu() call chain before it ever reached input_to() -- the
+// actual root cause of an apparently-unrelated symptom, a connection
+// that reached the character-selection menu text but then fell back to
+// the driver's own default command prompt instead of capturing the
+// selection). Dispatch on real type instead and use the type-appropriate
+// format specifier (or object_name() for objects, matching this driver's
+// own file_name()-based identity convention) so every value LDMud's
+// to_string() accepted still converts correctly here.
+public nomask string to_string(mixed val)
+{
+    if (stringp(val))
+    {
+        return val;
+    }
+    if (!val)
+    {
+        return "0";
+    }
+    if (intp(val))
+    {
+        return sprintf("%d", val);
+    }
+    if (floatp(val))
+    {
+        return sprintf("%f", val);
+    }
+    if (objectp(val))
+    {
+        return object_name(val);
+    }
+    return sprintf("%O", val);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: two fixes here, both confirmed live (not just
+// theorized):
+//   - guarded against a non-object/0 argument -- this driver's real
+//     file_name() hard-errors on one ("Bad argument 1 to file_name()"),
+//     unlike apparently-more-permissive LDMud behavior; object_name()/
+//     program_name() are called extremely widely across this codebase
+//     (109 files) including in several places on a possibly-already-0
+//     caller (e.g. previous_object() with no real caller, notably during
+//     this driver's own preload() -- this port's single most common
+//     preload-time error, 1,654 occurrences, before this guard).
+//   - this driver's real file_name() (unlike inherit_list(), and unlike
+//     LDMud's own object_name()/program_name()) returns the object's
+//     name WITHOUT the ".lpc" extension at all (confirmed directly
+//     against the driver's own object_t::obname field/otable_test.cc,
+//     e.g. "/realms/silenus#1" -- vs. inherit_list()'s program_t::filename,
+//     which DOES keep it, e.g. "/lib/realizations/wizard.lpc"). This
+//     codebase's own code universally assumes the LDMud convention
+//     (extension present) when comparing object_name()/program_name()
+//     results against a literal path -- e.g.
+//     secure/master/security/priviledgedObjects.lpc's whole
+//     canAccessDatabase() permission whitelist, checked on every single
+//     player save, silently denied every caller until this fix (each
+//     whitelist entry has ".lpc", the un-suffixed name compared against
+//     it could never match). Re-inserts ".lpc" before any "#<clone
+//     number>" suffix to restore that expected shape.
+public nomask string object_name(object ob)
+{
+    string name;
+    int hashPos;
+
+    if (!objectp(ob))
+    {
+        return 0;
+    }
+    name = efun::file_name(ob);
+    if (!name)
+    {
+        return name;
+    }
+
+    hashPos = strsrch(name, "#", 1);
+    if (hashPos == -1)
+    {
+        return name + ".lpc";
+    }
+    return name[0..(hashPos - 1)] + ".lpc" + name[hashPos..];
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: LDMud's strstr(big, small, start) doesn't exist on
+// this driver, and its `start` parameter means "begin searching AT this
+// index" -- this driver's own strsrch(big, small, flag) LOOKS like a
+// direct alias (same 3-arg shape) but its 3rd argument is something
+// completely different: a boolean DIRECTION flag ("search starting at
+// right" if set), not a position at all (confirmed against
+// packages/core/efuns_main.cc's f_strsrch()). A bare pass-through here
+// was a real, confirmed-live bug elsewhere in this port (see
+// regreplace()'s much longer port note above for the full story) --
+// fixed the same way: never hand `start` to strsrch() as its 3rd
+// argument. Slice off the part of `big` before `start` first (plain LPC
+// range indexing has real, unambiguous start-offset semantics) and
+// search that slice from its own beginning (flag 0, an ordinary forward
+// search), then add `start` back to the result.
+public nomask varargs int strstr(string big, mixed small, int start)
+{
+    int relativePos;
+
+    if (!start)
+    {
+        return efun::strsrch(big, small, 0);
+    }
+    if (start >= sizeof(big))
+    {
+        return -1;
+    }
+
+    relativePos = efun::strsrch(big[start..], small, 0);
+    return (relativePos == -1) ? -1 : (relativePos + start);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: LDMud's raise_error(string) doesn't exist on this
+// driver -- direct alias to this driver's own error(string) efun, which is
+// the same "abort the current call with a catchable runtime error" idiom
+// under a different name.
+public nomask void raise_error(string msg)
+{
+    efun::error(msg);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask string _regreplaceSubstitute(string replace, mixed *match)
+{
+    string result = "";
+    int i, len;
+
+    len = sizeof(replace);
+    for (i = 0; i < len; i++)
+    {
+        if ((replace[i] == '\\') && (i + 1 < len) &&
+            (replace[i + 1] >= '0') && (replace[i + 1] <= '9'))
+        {
+            int groupNum = replace[i + 1] - '0';
+            if (groupNum < sizeof(match))
+            {
+                result += match[groupNum];
+            }
+            i++;
+        }
+        else
+        {
+            result += replace[i..i];
+        }
+    }
+    return result;
+}
+
+// FluffOS PORT NOTE: this driver has no regreplace() efun at all
+// (LDMud-specific -- pervasive across this codebase, 557 call sites/155
+// files) -- rebuilt from scratch on top of this driver's PCRE package,
+// which has no direct equivalent (pcre_replace()/pcre_replace_callback()
+// only replace CAPTURED GROUPS within a single match, not "find pattern
+// globally, substitute a \N-backreference template across every match" the
+// way LDMud's regreplace() does). Implemented by getting every match (with
+// its captured groups) via pcre_match_all(), then re-locating each match's
+// position in the original string and splicing in the
+// backreference-substituted replacement. flags is only ever 0 or 1 across
+// this entire codebase (checked) -- bit 0 set means replace every match,
+// unset means only the first; no other LDMud regreplace() flag bit is
+// implemented since none are used here.
+// FluffOS PORT NOTE (confirmed live, real bug, not just a theoretical
+// "known limitation"): match re-location originally called this driver's
+// own strsrch(big, little, cursor), assuming the 3rd argument was a
+// START OFFSET to search from -- but this driver's real strsrch() (see
+// packages/core/efuns_main.cc's f_strsrch()) treats ANY non-zero 3rd
+// argument as a boolean DIRECTION flag ("search starting at right"), not
+// a position at all. So the first match (cursor==0, forward search) was
+// always found correctly, but every subsequent match search silently
+// flipped to a backward scan from the end of the whole string instead of
+// a forward scan from `cursor` -- producing a wrong position, and from
+// there a corrupted/truncated result. Confirmed live: this exact bug
+// broke /lib/commands/baseCommand.lpc's prepCommandRegExp() for any
+// command template with 3+ "[optional] [optional] [optional]" groups
+// (who/say/traits/skills/shout's command templates all have that shape),
+// producing malformed regexes with dangling, unmatched "]" characters
+// that then made ordinary gameplay commands like "look" hard-error with
+// "unexpected ]" the moment commandRegistry.lpc tried to match against
+// them -- i.e. one single-argument misunderstanding here was silently
+// breaking command dispatch for every player, corpus-wide, for any verb
+// whose own regexp pattern (built via this same regreplace() machinery)
+// happened to iterate after a broken one in the (unordered) command
+// mapping. Fixed by never passing a "start offset" to strsrch() at all:
+// slice the remaining unsearched tail of the string first (plain LPC
+// range indexing, unambiguous), then search from its own start (flag 0,
+// always a real forward search) and add `cursor` back to the result.
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs string regreplace(string inputString, string search,
+    string replace, int flags)
+{
+    mixed *matches;
+    string result;
+    int cursor;
+
+    if (!stringp(inputString) || !stringp(search))
+    {
+        raise_error(sprintf("*Bad arg to regreplace(%O, %O, %O, %O)\n",
+            inputString, search, replace, flags));
+    }
+
+    matches = pcre_match_all(inputString, search);
+    if (!pointerp(matches) || !sizeof(matches))
+    {
+        return inputString;
+    }
+
+    result = "";
+    cursor = 0;
+
+    foreach (mixed *match in matches)
+    {
+        string fullMatch = match[0];
+        int relativePos = strsrch(inputString[cursor..], fullMatch, 0);
+        int pos;
+
+        if (relativePos == -1)
+        {
+            continue;
+        }
+        pos = relativePos + cursor;
+
+        result += inputString[cursor..(pos - 1)];
+        result += _regreplaceSubstitute(replace, match);
+        cursor = pos + sizeof(fullMatch);
+
+        if (!(flags & 1))
+        {
+            break;
+        }
+    }
+    result += inputString[cursor..];
+    return result;
+}
+
+// FluffOS PORT NOTE: this driver has no regexplode() efun either (split a
+// string on a pattern while KEEPING the matched delimiters as their own
+// array elements, interleaved with the non-matched segments) -- built the
+// same way as regreplace() above, via pcre_match_all() for positions.
+// Same real strsrch()-3rd-argument-is-a-direction-flag-not-an-offset bug
+// as regreplace() above (see its longer port note) -- same fix: slice the
+// unsearched tail first and search that from its own start instead of
+// asking strsrch() to start from `cursor` itself.
+/////////////////////////////////////////////////////////////////////////////
+public nomask string *regexplode(string subject, string pattern)
+{
+    mixed *matches;
+    string *result;
+    int cursor;
+
+    if (!stringp(subject))
+    {
+        return ({});
+    }
+
+    matches = pcre_match_all(subject, pattern);
+    if (!pointerp(matches) || !sizeof(matches))
+    {
+        return ({ subject });
+    }
+
+    result = ({});
+    cursor = 0;
+
+    foreach (mixed *match in matches)
+    {
+        string fullMatch = match[0];
+        int relativePos = strsrch(subject[cursor..], fullMatch, 0);
+        int pos;
+
+        if (relativePos == -1)
+        {
+            continue;
+        }
+        pos = relativePos + cursor;
+
+        if (pos > cursor)
+        {
+            result += ({ subject[cursor..(pos - 1)] });
+        }
+        result += ({ fullMatch });
+        cursor = pos + sizeof(fullMatch);
+    }
+    if (cursor < sizeof(subject))
+    {
+        result += ({ subject[cursor..] });
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: LDMud's object_name()/program_name() are two separate
+// efuns (full unique instance path incl. "#<clone number>" vs. the base
+// file path without it); this driver collapses both into a single
+// file_name() efun. Built on top of object_name() above (which already
+// restores the ".lpc" extension file_name() itself omits -- see that
+// function's port note) rather than calling efun::file_name() directly,
+// so the ".lpc" fix applies here too; program_name() then strips a
+// trailing "#<digits>" clone suffix if present.
+public nomask string program_name(object ob)
+{
+    string name = object_name(ob);
+    return name ? regreplace(name, "#[0-9]+$", "", 1) : name;
+}
+
+// FluffOS PORT NOTE: LDMud's present_clone(string blueprint, object|void
+// env) doesn't exist on this driver -- unlike present(), which matches by
+// id() keyword, present_clone() matches by PROGRAM/blueprint path
+// regardless of id. Rebuilt directly: scans env's (default:
+// environment(this_player())) inventory for the first item whose
+// program_name() (base path, clone suffix already stripped, see above --
+// this is why this function is defined down here rather than up near the
+// other simple wrappers: this driver's compiler resolves a same-file
+// function call only against what's already been parsed so far) equals
+// the given blueprint path.
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs object present_clone(string blueprint, object env)
+{
+    object *items;
+    int i;
+
+    if (!env)
+    {
+        env = environment(this_player()) || this_player();
+    }
+    if (!objectp(env))
+    {
+        return 0;
+    }
+
+    items = all_inventory(env);
+    for (i = 0; i < sizeof(items); i++)
+    {
+        if (program_name(items[i]) == blueprint)
+        {
+            return items[i];
+        }
+    }
+    return 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: LDMud's save_value(mixed)/restore_value(string) --
+// serialize an arbitrary int/float/string/array/mapping value to a string
+// and back -- don't exist on this driver at all. This driver only has
+// save_object()/restore_object() (whole-object persistence to a named
+// file), not a "serialize one arbitrary value" primitive, and there's no
+// eval-a-string-as-LPC-literal facility either (checked core.spec) to
+// build restore_value() on top of. This was a REAL, confirmed-live
+// compile-blocking gap, not just a missing convenience: /lib/items/item.lpc
+// (the base class nearly every equippable/usable item in this game
+// inherits) uses save_value()/restore_value() for its bulk
+// query(itemObj, "all")/set(itemObj, "all", data) accessor (used by the
+// shop system to clone/restore an item's full property mapping), and an
+// undefined function is a hard compile error on this driver -- so without
+// this fix, item.lpc had NO PROGRAM AT ALL, which would have cascaded to
+// every single subclass of it failing to compile too. Implemented from
+// scratch: a small recursive serializer producing LPC-literal-shaped text
+// (({...}) for arrays, ([...]) for mappings, quoted strings, plain
+// int/float) and a matching hand-written recursive-descent parser to read
+// it back. Only needs to round-trip within this port (nothing else reads
+// this format), so it doesn't need to match LDMud's exact save_value()
+// grammar byte-for-byte -- just int/float/string/array/mapping, which is
+// everything item.lpc's own itemData actually contains.
+/////////////////////////////////////////////////////////////////////////////
+private nomask string _saveValueQuoteString(string s)
+{
+    string ret = "\"";
+    int i, len;
+
+    len = sizeof(s);
+    for (i = 0; i < len; i++)
+    {
+        string c = s[i..i];
+
+        if ((c == "\"") || (c == "\\"))
+        {
+            ret += "\\" + c;
+        }
+        else if (c == "\n")
+        {
+            ret += "\\n";
+        }
+        else
+        {
+            ret += c;
+        }
+    }
+    return ret + "\"";
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string save_value(mixed val)
+{
+    mixed *ks;
+    int i, sz;
+    string ret;
+
+    if (intp(val))
+    {
+        return sprintf("%d", val);
+    }
+    if (floatp(val))
+    {
+        return sprintf("%.17g", val);
+    }
+    if (stringp(val))
+    {
+        return _saveValueQuoteString(val);
+    }
+    if (pointerp(val))
+    {
+        ret = "({";
+        sz = sizeof(val);
+        for (i = 0; i < sz; i++)
+        {
+            if (i)
+            {
+                ret += ",";
+            }
+            ret += save_value(val[i]);
+        }
+        return ret + "})";
+    }
+    if (mapp(val))
+    {
+        ret = "([";
+        ks = keys(val);
+        sz = sizeof(ks);
+        for (i = 0; i < sz; i++)
+        {
+            if (i)
+            {
+                ret += ",";
+            }
+            ret += save_value(ks[i]) + ":" + save_value(val[ks[i]]);
+        }
+        return ret + "])";
+    }
+    return "0";
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Parses one value starting at s[pos..], returning ({ value, nextPos }).
+// Assumes text produced by save_value() above (no extraneous whitespace).
+private nomask mixed *_restoreValueParse(string s, int pos)
+{
+    int len;
+    string c;
+
+    len = sizeof(s);
+    if (pos >= len)
+    {
+        return ({ 0, pos });
+    }
+    c = s[pos..pos];
+
+    if (c == "\"")
+    {
+        string result = "";
+        pos++;
+        while ((pos < len) && (s[pos..pos] != "\""))
+        {
+            if ((s[pos..pos] == "\\") && (pos + 1 < len))
+            {
+                string esc = s[pos + 1..pos + 1];
+                result += (esc == "n") ? "\n" : esc;
+                pos += 2;
+            }
+            else
+            {
+                result += s[pos..pos];
+                pos++;
+            }
+        }
+        pos++;
+        return ({ result, pos });
+    }
+    else if ((c == "(") && (pos + 1 < len) && (s[pos + 1..pos + 1] == "{"))
+    {
+        mixed *arr = ({});
+
+        pos += 2;
+        while ((pos < len) &&
+            !((s[pos..pos] == "}") && (pos + 1 < len) && (s[pos + 1..pos + 1] == ")")))
+        {
+            mixed *parsed = _restoreValueParse(s, pos);
+            arr += ({ parsed[0] });
+            pos = parsed[1];
+            if ((pos < len) && (s[pos..pos] == ","))
+            {
+                pos++;
+            }
+        }
+        pos += 2;
+        return ({ arr, pos });
+    }
+    else if ((c == "(") && (pos + 1 < len) && (s[pos + 1..pos + 1] == "["))
+    {
+        mapping m = ([]);
+
+        pos += 2;
+        while ((pos < len) &&
+            !((s[pos..pos] == "]") && (pos + 1 < len) && (s[pos + 1..pos + 1] == ")")))
+        {
+            mixed *keyParsed = _restoreValueParse(s, pos);
+            mixed *valParsed;
+
+            pos = keyParsed[1];
+            if ((pos < len) && (s[pos..pos] == ":"))
+            {
+                pos++;
+            }
+            valParsed = _restoreValueParse(s, pos);
+            pos = valParsed[1];
+            m[keyParsed[0]] = valParsed[0];
+            if ((pos < len) && (s[pos..pos] == ","))
+            {
+                pos++;
+            }
+        }
+        pos += 2;
+        return ({ m, pos });
+    }
+    else
+    {
+        int start = pos;
+        int isFloat = 0;
+        string numStr;
+        mixed val;
+
+        if ((pos < len) && (s[pos..pos] == "-"))
+        {
+            pos++;
+        }
+        while ((pos < len) &&
+            (((s[pos..pos] >= "0") && (s[pos..pos] <= "9")) || (s[pos..pos] == ".")))
+        {
+            if (s[pos..pos] == ".")
+            {
+                isFloat = 1;
+            }
+            pos++;
+        }
+        numStr = s[start..(pos - 1)];
+        val = isFloat ? to_float(numStr) : to_int(numStr);
+        return ({ val, pos });
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mixed restore_value(string s)
+{
+    mixed *parsed;
+
+    if (!stringp(s) || (s == ""))
+    {
+        return 0;
+    }
+    parsed = _restoreValueParse(s, 0);
+    return parsed[0];
+}

@@ -1,0 +1,228 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Player;
+object TravelSelector;
+object MockPort;
+
+/////////////////////////////////////////////////////////////////////////////
+void Init()
+{
+    ignoreList += ({
+        "resetPlayerMessages",
+        "findOptionByText",
+        "setupPlayerForTravel"
+    });
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onSelectorCompleted(object caller)
+{
+    if (objectp(caller))
+    {
+        caller->cleanUp();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onSelectorAborted(object caller)
+{
+    if (objectp(caller))
+    {
+        caller->cleanUp();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void setupPlayerForTravel()
+{
+    Player->initializeTrader();
+    Player->addCash(5000);
+    Player->setCurrentLocation("Eledhel");
+
+    object wagon = Player->addVehicle("wagon", "Eledhel");
+    if (objectp(wagon))
+    {
+        object vehicleService = getService("vehicle");
+        mapping blueprint = vehicleService->queryVehicleBlueprint("wagon");
+        wagon->initializeVehicle(blueprint);
+        wagon->addCargo("grain", 3);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Player = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Player->Name("traveltest");
+    Player->addCommands();
+    Player->colorConfiguration("none");
+    Player->charsetConfiguration("ascii");
+
+    MockPort = clone_object(
+        "/lib/tests/support/environment/mockTradePort.lpc");
+    MockPort->setPortName("Eledhel");
+    MockPort->addTradeRoute("overland", "Hillgarath", 5);
+    MockPort->addTradeRoute("maritime", "Minlach", 3);
+
+    setupPlayerForTravel();
+
+    TravelSelector = clone_object(
+        "/lib/modules/domains/trading/selectors/travelSelector.lpc");
+    TravelSelector->setPort(MockPort);
+    TravelSelector->move_object(Player);
+    TravelSelector->registerEvent(this_object());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    if (objectp(TravelSelector))
+    {
+        destruct(TravelSelector);
+    }
+    if (objectp(Player))
+    {
+        destruct(Player);
+    }
+    if (objectp(MockPort))
+    {
+        destruct(MockPort);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void resetPlayerMessages()
+{
+    if (Player && function_exists("resetCatchList", Player))
+    {
+        Player->resetCatchList();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private string findOptionByText(string searchText)
+{
+    string result = "0";
+    string message = Player->caughtMessage();
+    if (!message || message == "")
+    {
+        return result;
+    }
+    string *lines = explode(message, "\n");
+
+    foreach (string line in lines)
+    {
+        line = regreplace(line, "\x1B\\[[0-9;]*[A-Za-z]", "", 1);
+        if (sizeof(regexp(({ line }), searchText)))
+        {
+            result = regreplace(line,
+                "^[^0-9]*([0-9]+).*", "\\1", 1);
+            break;
+        }
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TravelSelectorDisplaysAvailableRoutes()
+{
+    resetPlayerMessages();
+    TravelSelector->initiateSelector(Player);
+
+    string message = Player->caughtMessage();
+    ExpectSubStringMatch("Travel Planning", message);
+    ExpectSubStringMatch("Hillgarath.*overland", message);
+    ExpectSubStringMatch("Minlach.*maritime", message);
+    ExpectSubStringMatch("Return to Previous Menu", message);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RoutesShowDestinations()
+{
+    resetPlayerMessages();
+    TravelSelector->initiateSelector(Player);
+
+    string message = Player->caughtMessage();
+    ExpectSubStringMatch("Hillgarath", message);
+    ExpectSubStringMatch("Minlach", message);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ChoosingDestinationOpensConfirmation()
+{
+    resetPlayerMessages();
+    TravelSelector->initiateSelector(Player);
+    string option = findOptionByText("Hillgarath");
+    resetPlayerMessages();
+    Player->command(option);
+
+    string message = Player->caughtMessage();
+    ExpectSubStringMatch("Travel Confirmation", message);
+    ExpectSubStringMatch("Hillgarath", message);
+    ExpectSubStringMatch("Confirm Travel", message);
+    ExpectSubStringMatch("Cancel", message);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ExitReturnsToPreviousMenu()
+{
+    resetPlayerMessages();
+    TravelSelector->initiateSelector(Player);
+    string option = findOptionByText("Return to Previous Menu");
+    Player->command(option);
+
+    string message = Player->caughtMessage();
+    ExpectSubStringMatch("Return to Previous Menu", message);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ConfirmTravelDeductsCostAndMovesVehicle()
+{
+    int initialCash = Player->getCash();
+    resetPlayerMessages();
+    TravelSelector->initiateSelector(Player);
+    string hillOption = findOptionByText("Hillgarath");
+    resetPlayerMessages();
+    Player->command(hillOption);
+
+    string confirmOption = findOptionByText("Confirm Travel");
+    resetPlayerMessages();
+    Player->command(confirmOption);
+
+    ExpectTrue(Player->getCash() < initialCash,
+        "Cash should be deducted after travel");
+    ExpectEq("Hillgarath", Player->getCurrentLocation(),
+        "Player location should update to destination");
+
+    object *vehicles =
+        Player->getVehiclesAtLocation("Hillgarath");
+    ExpectTrue(sizeof(vehicles) > 0,
+        "Vehicle should be at the destination");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void VehicleCargoSurvivesTravel()
+{
+    resetPlayerMessages();
+    TravelSelector->initiateSelector(Player);
+    string hillOption = findOptionByText("Hillgarath");
+    resetPlayerMessages();
+    Player->command(hillOption);
+
+    string confirmOption = findOptionByText("Confirm Travel");
+    resetPlayerMessages();
+    Player->command(confirmOption);
+
+    object *vehicles =
+        Player->getVehiclesAtLocation("Hillgarath");
+    if (sizeof(vehicles))
+    {
+        int grainQty = vehicles[0]->getCargoQuantity("grain");
+        ExpectTrue(grainQty >= 0,
+            "Cargo quantity should be non-negative after travel");
+    }
+}

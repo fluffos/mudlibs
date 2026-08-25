@@ -1,0 +1,141 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+#pragma no_clone
+#pragma no_inherit
+
+private mapping priviledgedObjects = ([]);
+private nosave int initializing = 0;
+
+// FluffOS PORT NOTE: LDMud's get_dir() (same as this driver's) returns
+// BARE filenames, not full paths -- upstream's own exclusion list here
+// used full paths, so it never actually excluded anything on either
+// driver (confirmed: "." was still in the list this Initialize() was
+// iterating on this driver, until this fix). Switched the exclusion list
+// to bare names and build the full path when actually loading each entry.
+//
+// FluffOS PORT NOTE (re-entrancy guard): each load_object() call in the
+// loop below is itself a compile, which goes through valid_read() ->
+// hasPermission() -> (mapping still empty the first time) -> Initialize()
+// again, recursively -- and while one of these ~50 privilege-group files
+// is mid-compile, this driver refuses to load it a second time ("Object
+// cannot be loaded during compilation"), unlike (apparently) LDMud. The
+// `initializing` reentrancy flag short-circuits the recursive call
+// instead of letting it retrigger the whole loop (hasPermission() simply
+// denies -- isPriviledgedObject()'s own path-prefix check in
+// security.lpc's valid_read() already grants access to anything under
+// /secure/ anyway, which is every file this loop itself loads, so nothing
+// meaningful is actually lost by denying here).
+/////////////////////////////////////////////////////////////////////////////
+private nomask void Initialize()
+{
+    string *priviledgedList;
+
+    if (initializing)
+    {
+        return;
+    }
+    initializing = 1;
+
+    priviledgedList = get_dir("/secure/master/security/*", 0x10) -
+        ({ ".", "..", "priviledgedObjects.lpc", "priviledgeGroup.lpc" });
+
+    foreach(string priviledgeGroup in priviledgedList)
+    {
+        object priviledgedObject =
+            load_object("/secure/master/security/" + priviledgeGroup);
+        string name;
+
+        // FluffOS PORT NOTE: defensive guards added for this port -- a
+        // load_object() failure (0) or an empty/short name() would crash
+        // the whole preload chain (a bad call_other, or a bad [..] range
+        // on a too-short string) partway through this loop, silently
+        // leaving every subsequent entry unregistered too.
+        if (!objectp(priviledgedObject))
+        {
+            continue;
+        }
+
+        name = priviledgedObject->name();
+        if (!stringp(name) || (sizeof(name) < 2))
+        {
+            continue;
+        }
+
+        priviledgedObjects[name] = priviledgedObject;
+
+        if (name[sizeof(name) - 2..] != ".lpc")
+        {
+            priviledgedObjects[name + ".lpc"] = priviledgedObject;
+        }
+    }
+
+    initializing = 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int hasPermission(string path, string method, object caller,
+    string permissionType)
+{
+    int ret = 0;
+
+    if (!sizeof(priviledgedObjects))
+    {
+        Initialize();
+    }
+
+    // FluffOS PORT NOTE: guarded against a non-object/already-destructed
+    // caller -- object_name() returns 0 in that case (see its own port
+    // note), and regreplace(0, ...) would crash.
+    string key = objectp(caller) ?
+        regreplace(object_name(caller), "(#[0-9]+)", "", 1) : 0;
+    object permission;
+
+    if (member(priviledgedObjects, key) && objectp(priviledgedObjects[key]))
+    {
+        permission = priviledgedObjects[key];
+    }
+    else if (objectp(caller))
+    {
+        string *inheritedItems = inherit_list(caller);
+        foreach(string potentialItem in inheritedItems)
+        {
+            if (member(priviledgedObjects, potentialItem) &&
+                objectp(priviledgedObjects[potentialItem]) &&
+                priviledgedObjects[potentialItem]->inheritPermissions(method))
+            {
+                permission = priviledgedObjects[potentialItem];
+            }
+        }
+    }
+
+    if (permission)
+    {
+        switch (permissionType)
+        {
+            case "read":
+            {
+                ret = permission->hasReadAccess(path);
+                break;
+            }
+            case "write":
+            {
+                ret = permission->hasWriteAccess(path);
+                break;
+            }
+            default:
+            {
+                ret = 0;
+            }
+        }
+        ret &&= permission->hasExecuteAccess(method);
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int preventShadows()
+{
+    return 1;
+}

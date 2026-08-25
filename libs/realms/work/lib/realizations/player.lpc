@@ -1,0 +1,135 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/realizations/living.lpc";
+inherit "/lib/modules/guilds.lpc";
+inherit "/lib/modules/parties.lpc";
+inherit "/lib/modules/quests.lpc";
+inherit "/lib/modules/settings.lpc";
+inherit "/lib/modules/gmcp.lpc";
+inherit "/lib/modules/secure/persistence.lpc";
+inherit "/lib/modules/conversations.lpc";
+inherit "/lib/modules/crafting.lpc";
+inherit "/lib/modules/domains.lpc";
+inherit "/lib/modules/trader.lpc";
+
+private nosave object commandRegistry = 0;
+private nosave int timeForNextSave = 0;
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int isRealizationOfPlayer()
+{
+    return 1;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void addCommands()
+{
+    commandRegistry = load_object("/lib/commands/commandRegistry.lpc");
+    if(commandRegistry)
+    {
+        add_action("executeCommand", "", 2);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int executeCommand(string command)
+{
+    int ret = 0;
+
+    if(commandRegistry)
+    {
+        ret = commandRegistry->executeCommand(command, this_object());
+        if (!ret)
+        {
+            object researchService = getModule("research");
+
+            // FluffOS PORT NOTE: confirmed live -- this driver's
+            // call_other() hard-errors on a 0 target ("Bad argument 1 to
+            // EFUN call_other(): Expected: object, string, array, Got:
+            // int(0)") instead of silently no-oping the way a bare
+            // call_other-on-0 does elsewhere in this port. getModule()
+            // can genuinely return 0 here: this catch-all fires for every
+            // unrecognized input on a player object, including the very
+            // first character-creation selector prompt (input meant for
+            // a not-yet-fully-registered selector, before the research
+            // module/other services are initialized for a brand new
+            // character) -- guarded rather than assuming a service is
+            // always available by the time this runs.
+            if (objectp(researchService))
+            {
+                ret = researchService->researchCommand(command);
+            }
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void create()
+{
+    living::create();
+    addCommands();
+    set_heart_beat(1);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void removeInventory(object player)
+{
+    object *items = deep_inventory(player);
+    if (sizeof(items))
+    {
+        foreach(object item in items)
+        {
+            destruct(item);
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void checkForLinkDeath(object player)
+{
+    if ((member(users(), player) < 0) && !interactive(this_object()))
+    {
+        player->save();
+        removeInventory(player);
+        // FluffOS PORT NOTE: LDMud's bare unshadow() (remove any shadow on
+        // this_object()) doesn't exist on this driver -- its real
+        // remove_shadow(object) equivalent needs the explicit target.
+        remove_shadow(this_object());
+
+        if (environment(player))
+        {
+            say(sprintf("Link Death arrives on his black stallion and smashes "
+                "%s into nothingness!\n", player->Name()));
+        }
+
+        object channels = getService("channel");
+        if (channels && (this_object()->RealName() != ""))
+        {
+            channels->broadcastMessage("status", sprintf("%s (%s) has gone"
+                " link dead.\n", capitalize(this_object()->RealName()),
+                this_object()->queryProperty("IP address") || "???"), this_object());
+            channels->unregisterUser(this_object());
+        }
+        player->notifySynchronous("onLeavingGame");
+
+        destruct(player);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void heart_beat()
+{
+    living::heart_beat();
+
+    int currentTime = time();
+    if (currentTime >= timeForNextSave)
+    {
+        timeForNextSave = currentTime + 300;
+        this_object()->save();
+    }
+
+    checkForLinkDeath(this_object());
+}

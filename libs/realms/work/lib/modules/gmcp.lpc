@@ -1,0 +1,156 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/core/thing.lpc";
+#include "/sys/telnet.h"
+
+// Whether the connected client has enabled GMCP (sent IAC DO GMCP). Telnet
+// negotiation state lives on the connection, but the interactive object can be
+// swapped via exec(); we re-advertise and the flag is restored by the client's
+// DO response, so this is nosave and transient.
+private nosave int gmcpEnabled = 0;
+
+// The per-player GMCP event subscriber. Cloned on GMCP enable and destructed
+// on GMCP disable or player destruct. Kept nosave so it is never persisted and
+// always rebuilt fresh when the client re-negotiates.
+private nosave object gmcpSubscriber = 0;
+
+// FluffOS PORT NOTE: this driver has no binary_message() efun (LDMud-
+// specific -- write raw bytes to the connection). Upstream used it here
+// purely to hand-construct telnet IAC/SB/SE byte sequences for GMCP
+// negotiation and framing; this driver instead has real, higher-level
+// send_gmcp(string)/has_gmcp() efuns that handle the telnet-protocol
+// details internally (confirmed already in this project's `genesis`
+// port: send_gmcp() takes a single pre-formatted "Package.Sub {json}"
+// string). Gutted to a no-op -- nothing below calls this anymore
+// (sendGmcp() now calls efun::send_gmcp() directly, see below).
+/////////////////////////////////////////////////////////////////////////////
+protected int writeBytesToConnection(int *data)
+{
+    return 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int gmcpIsEnabled()
+{
+    return gmcpEnabled;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void setGmcpEnabled(int val)
+{
+    gmcpEnabled = val;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: rebuilt on this driver's native send_gmcp(string)
+// efun (see writeBytesToConnection()'s port note above) instead of
+// hand-building the raw IAC SB/SE frame -- send_gmcp() takes exactly the
+// "Package.Sub {json}" string this function was already constructing.
+public nomask int sendGmcp(string package, string json)
+{
+    int ret = 0;
+
+    if (gmcpEnabled && stringp(package) && stringp(json) &&
+        interactive(this_object()))
+    {
+        efun::send_gmcp(sprintf("%s %s", package, json));
+        ret = 1;
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int sendOutOfBand(string package, mapping data)
+{
+    int ret = 0;
+
+    if (stringp(package) && mapp(data))
+    {
+        ret = sendGmcp(package,
+            getService("messageEncoding")->encodeValue(data));
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: upstream manually sent the IAC WILL GMCP telnet
+// negotiation byte sequence here; this driver's send_gmcp()/has_gmcp()
+// efuns handle GMCP option negotiation internally (there is no manual
+// negotiation efun exposed at all) -- gutted to a no-op. has_gmcp() is
+// the actual portable way to check GMCP support on this driver.
+public nomask int advertiseGmcp()
+{
+    return has_gmcp() ? 1 : 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void receiveGmcp(string body)
+{
+    // Placeholder for future client->server packages.
+    // Intentionally a no-op for now beyond acknowledging enablement.
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void enableGmcpSubscriber()
+{
+    if (!objectp(gmcpSubscriber))
+    {
+        gmcpSubscriber = clone_object("/lib/modules/gmcp/gmcpEventSubscriber.lpc");
+    }
+    gmcpSubscriber->setPlayer(this_object());
+    this_object()->registerEvent(gmcpSubscriber);
+
+    gmcpSubscriber->pushScore();
+    gmcpSubscriber->pushVitals();
+    gmcpSubscriber->pushInventory();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void disableGmcpSubscriber()
+{
+    if (objectp(gmcpSubscriber))
+    {
+        this_object()->unregisterEvent(gmcpSubscriber);
+        destruct(gmcpSubscriber);
+    }
+    gmcpSubscriber = 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void pushEnvironmentSnapshots()
+{
+    object env = environment(this_object());
+
+    if (objectp(env) && function_exists("pushRoomSnapshot", env))
+    {
+        env->pushRegionSnapshotForViewer(this_object());
+        env->pushRoomSnapshot(this_object());
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void telnetNegotiation(int command, int option, int *data)
+{
+    if (option == TELOPT_GMCP)
+    {
+        if (command == DO)
+        {
+            gmcpEnabled = 1;
+            pushEnvironmentSnapshots();
+            enableGmcpSubscriber();
+        }
+        else if (command == DONT)
+        {
+            disableGmcpSubscriber();
+            gmcpEnabled = 0;
+        }
+        else if (command == SB && pointerp(data))
+        {
+            receiveGmcp(to_string(data));
+        }
+    }
+}

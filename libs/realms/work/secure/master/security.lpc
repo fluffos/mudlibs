@@ -1,0 +1,280 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+#include "/sys/interactive_info.h"
+
+private object priviledgedObjects = 
+    load_object("/secure/master/security/priviledgedObjects.lpc");
+private mapping accessCache = ([]);
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: `caller` can genuinely be 0 on this driver -- not
+// just a theoretical edge case, confirmed live: a raw driver-internal
+// load (e.g. master::connect()'s clone_object("/secure/login"), the very
+// first file access of every new connection, before any mudlib
+// "current_object" context exists) passes caller=0 to valid_read(). A
+// null caller here means the request came from the driver itself, not
+// from any mudlib object -- trusted by definition, same as this
+// function's existing path-prefix trust for anything under /secure/.
+// Without this, EVERY new connection failed immediately with "Read
+// access denied" trying to load secure/login.lpc itself.
+private int isPriviledgedObject(mixed caller)
+{
+    int ret = 0;
+
+    string name = 0;
+    if (!caller)
+    {
+        return 1;
+    }
+    else if (objectp(caller))
+    {
+        name = efun::file_name(caller);
+    }
+    else if (stringp(caller))
+    {
+        name = caller;
+    }
+
+    if (name && sizeof(regexp(({ name }), "^/*(lib/modules/secure|secure)")))
+    {
+        ret = 1;
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int valid_snoop(object snooper, object snoopee)
+{
+    return isPriviledgedObject(previous_object()) ||
+        (interactive(previous_object() &&
+            previous_object()->hasExecuteAccess("snoop")));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int valid_query_snoop(object caller)
+{
+    return isPriviledgedObject(previous_object()) || 
+        (interactive(previous_object() && 
+            previous_object()->hasExecuteAccess("query-snoop")));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int query_allow_shadow(object caller)
+{
+    int ret = !caller->preventShadows();
+
+    if (isPriviledgedObject(caller))
+    {
+        ret = 0;
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int valid_exec(string caller, object newObject, object oldObject)
+{
+    object callingObject = load_object(caller);
+    return objectp(callingObject) && isPriviledgedObject(callingObject);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int valid_trace(string name)
+{
+    return this_player() && interactive(this_player()) &&
+        interactive_info(this_player(), II_IP_NUMBER) &&
+        (member_array("/lib/realizations/wizard.lpc", inherit_list(this_player())) > -1) &&
+        (member_array("archwizard", this_player()->groups()) > -1);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask string sanitizePath(string path)
+{
+    string *traversePath = explode(path, "/") - ({ "." }) - ({ "" });
+
+    int depth = sizeof(traversePath);
+    if (depth > 0)
+    {
+        int i = 1;
+        // First pass, strip out any ".." except for the leading one.
+        // It's OK if this results in "/../../../blah"
+        while ((i != depth) && (depth > 0) && (i >= 0))
+        {
+            if (traversePath[i] == "..")
+            {
+                traversePath[i - 1 ..i] = ({ });
+                i--;
+                depth = sizeof(traversePath);
+            }
+            else
+            {
+                i++;
+            }
+        }
+        traversePath -= ({ ".." });
+    }
+
+    return "/" + implode(traversePath, "/");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask int userHasWriteAccess(string path)
+{
+    return this_player() && interactive(this_player()) &&
+        interactive_info(this_player(), II_IP_NUMBER) &&
+        this_player()->hasWriteAccess(path);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask int userHasReadAccess(string path)
+{
+    return this_player() && interactive(this_player()) &&
+        interactive_info(this_player(), II_IP_NUMBER) &&
+        this_player()->hasReadAccess(path);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask int isCachedValue(string path, string method, object caller,
+    string type)
+{
+    return member_array(sprintf("%O%O%O%O", type, path, method, caller), keys(accessCache)) != -1;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void pruneAccessCache()
+{
+    int pruneTime = time() - 60;
+
+    string *keysToRemove = filter(keys(accessCache),
+        (: $2[$1] < $3 :), accessCache, pruneTime);
+
+    foreach(string key in keysToRemove)
+    {
+        map_delete(accessCache, key);
+    }
+    call_out("pruneAccessCache", 60);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void resetAccessCache()
+{
+    accessCache = ([]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string valid_write(string path, string uid, string method, 
+    object caller)
+{
+    string sanitizedPath = 0;
+
+    if (isCachedValue(path, method, caller, "write") ||
+        isPriviledgedObject(caller) ||
+        userHasWriteAccess(path) ||
+        priviledgedObjects->hasPermission(path, method, caller, "write"))
+    {
+        sanitizedPath = sanitizePath(path);
+
+        string error = catch (
+            accessCache[sprintf("%O%O%O%O", "write", path, method, caller)] = 
+                time());
+
+        if (error)
+        {
+            resetAccessCache();
+        }
+    }
+
+    if (!stringp(sanitizedPath))
+    {
+        printf("Bad file name (master::valid_write): %O (%O), caller %O\n",
+            path, method, caller);
+    }
+    return sanitizedPath;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string valid_read(string path, string uid, string method,
+    object caller)
+{
+    string sanitizedPath = 0;
+
+    if (isCachedValue(path, method, caller, "read") ||
+        isPriviledgedObject(caller) ||
+        userHasReadAccess(path) ||
+        priviledgedObjects->hasPermission(path, method, caller, "read"))
+    {
+        sanitizedPath = sanitizePath(path);
+
+        string error = catch (
+            accessCache[sprintf("%O%O%O%O", "read", path, method, caller)] =
+            time());
+
+        if (error)
+        {
+            resetAccessCache();
+        }
+    }
+
+    if (!stringp(sanitizedPath))
+    {
+        printf("Bad file name (master::valid_read): %O (%O), caller %O\n",
+            path, method, caller);
+    }
+
+    return sanitizedPath;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int privilege_violation(string what, mixed who, mixed where, 
+    mixed argument)
+{
+    int ret = isPriviledgedObject(who) ? 1 : -1;
+
+    switch(what) 
+    {
+        case "call_out_info":
+        case "mysql": 
+        {
+            ret = 1;
+            break;
+        }
+        case "nomask simul_efun":
+        {
+            ret = (who == "/secure/simul_efun.lpc");
+            break;
+        }
+        case "input_to":
+        {
+            ret = (efun::strsrch(efun::file_name(who), "/secure/login#") == 0) ? 1 : -1;
+            break;
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: this driver's real db_connect() efun has no password
+// argument at all -- the driver instead calls master::valid_database(ob,
+// action, info) internally on every db_* operation, and for a "connect"
+// action a returned STRING becomes the password used to connect (see
+// this driver's packages/db/db.cc). LDMud's db_connect() took the
+// password directly as an argument from the caller (see
+// secure/simulated-efuns/database.lpc's db_connect() shim); this is the
+// equivalent trust boundary on this driver: only this codebase's own
+// vetted callers (isPriviledgedObject(), same check the rest of this file
+// uses) get the real password back, anything else is denied outright.
+// The password itself matches this port's local MySQL provisioning (see
+// NOTES.md) -- not a secret worth protecting in this context (a
+// throwaway local dev database), but kept as a real password value
+// rather than "no password" since that's what was actually provisioned.
+/////////////////////////////////////////////////////////////////////////////
+public nomask mixed valid_database(object ob, string action, mixed info)
+{
+    if (isPriviledgedObject(ob))
+    {
+        return "RealmsLibPw2026";
+    }
+    return 0;
+}

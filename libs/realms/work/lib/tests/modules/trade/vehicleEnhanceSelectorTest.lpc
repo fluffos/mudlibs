@@ -1,0 +1,371 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Player;
+object Selector;
+object Wagon;
+
+/////////////////////////////////////////////////////////////////////////////
+void Init()
+{
+    ignoreList += ({
+        "resetPlayerMessages",
+        "findOptionByText",
+        "setupWagon",
+        "onSelectorCompleted",
+        "stripColors"
+    });
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onSelectorCompleted(object caller)
+{
+    if (objectp(caller))
+    {
+        caller->cleanUp();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void setupWagon()
+{
+    Wagon = Player->addVehicle("wagon", "eledhel");
+    if (objectp(Wagon))
+    {
+        object vehicleService = getService("vehicle");
+        mapping blueprint =
+            vehicleService->queryVehicleBlueprint("wagon");
+        Wagon->initializeVehicle(blueprint);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Player = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Player->Name("enhancetest");
+    Player->addCommands();
+    Player->colorConfiguration("none");
+    Player->charsetConfiguration("ascii");
+    Player->addPlayerHolding("eledhel trading post");
+    Player->initializeTrader();
+    Player->addCash(10000);
+
+    setupWagon();
+
+    Selector = clone_object(
+        "/lib/modules/domains/trading/selectors/vehicleEnhanceSelector.lpc");
+    Selector->setLocation("eledhel");
+    Selector->setVehicle(Wagon);
+    Selector->move_object(Player);
+    Selector->registerEvent(this_object());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    if (objectp(Selector))
+    {
+        destruct(Selector);
+    }
+    if (objectp(Player))
+    {
+        destruct(Player);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void resetPlayerMessages()
+{
+    if (Player && function_exists("resetCatchList", Player))
+    {
+        Player->resetCatchList();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private string stripColors(string text)
+{
+    return regreplace(text, "\x1B\\[[0-9;]*[A-Za-z]", "", 1);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private string findOptionByText(string searchText)
+{
+    string result = "0";
+    string message = Player->caughtMessage();
+    if (!message || message == "")
+    {
+        return result;
+    }
+    string *lines = explode(message, "\n");
+
+    foreach (string line in lines)
+    {
+        line = stripColors(line);
+        if (sizeof(regexp(({ line }), searchText)))
+        {
+            result = regreplace(line,
+                "^[^0-9]*([0-9]+).*", "\\1", 1);
+            break;
+        }
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void WagonInitializesWithUnbuiltComponents()
+{
+    ExpectTrue(objectp(Wagon), "Wagon should be created");
+
+    mapping components = Wagon->getComponents();
+    ExpectEq("unbuilt frame", components["frame"]);
+    ExpectEq("unbuilt cargo", components["cargo1"]);
+    ExpectEq("unbuilt cargo", components["cargo2"]);
+    ExpectEq("unbuilt henchman", components["henchman"]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EnhanceMenuDisplaysCorrectly()
+{
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string message = stripColors(Player->caughtMessage());
+
+    ExpectEq("Vehicle Enhancement - Wagon Enhancement:\n"
+        "From this menu, you can upgrade and configure "
+        "components for your Wagon.\n\n"
+        "Stats:                         ......\n"
+        "    Capacity: 8               /------\\\n"
+        "    Speed: 2                 |........|\n"
+        "    Structure: 20            |........|\n"
+        "    Protection: 1            |        |\n"
+        "                              \\------/\n"
+        "Crew:                           O---O\n"
+        "    Henchman          -  0/1 \n"
+        "                             \n"
+        "[1] - Upgrade Cargo1         Unbuilt\n"
+        "[2] - Upgrade Cargo2         Unbuilt\n"
+        "[3] - Upgrade Frame          Unbuilt\n"
+        "[4] - Manage Crew            \n"
+        "[5] - Return to Vehicle Menu \n"
+        "You must select a number from 1 to 5.\n"
+        "Type 'exit' if you do not wish to make a selection "
+        "at this time.\n"
+        "For details on a given choice, type 'describe X' "
+        "(or '? X') where\nX is the option about which you "
+        "would like further details.\n",
+        message);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EnhanceMenuHasFiveOptions()
+{
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string message = stripColors(Player->caughtMessage());
+    ExpectTrue(strstr(message, "select a number from 1 to 5") >= 0);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ReturnOptionExitsEnhanceMenu()
+{
+    Selector->initiateSelector(Player);
+
+    string exitOption = findOptionByText("Return to Vehicle Menu");
+    ExpectTrue(to_int(exitOption) > 0,
+        "Should find Return option number");
+
+    resetPlayerMessages();
+    Player->command(exitOption);
+
+    string message = stripColors(Player->caughtMessage());
+    ExpectTrue(strstr(message, "Return to Vehicle Menu") >= 0);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void InstalledComponentShowsInLayout()
+{
+    Wagon->installComponent("frame", "basic wagon frame");
+
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string message = stripColors(Player->caughtMessage());
+
+    ExpectEq("Vehicle Enhancement - Wagon Enhancement:\n"
+        "From this menu, you can upgrade and configure "
+        "components for your Wagon.\n\n"
+        "Stats:                         Basic \n"
+        "    Capacity: 8               /------\\\n"
+        "    Speed: 2                 |........|\n"
+        "    Structure: 30            |........|\n"
+        "    Protection: 1            |        |\n"
+        "                              \\------/\n"
+        "Crew:                           O---O\n"
+        "    Henchman          -  0/1 \n"
+        "                             \n"
+        "[1] - Upgrade Cargo1         Unbuilt\n"
+        "[2] - Upgrade Cargo2         Unbuilt\n"
+        "[3] - Upgrade Frame          Basic Frame\n"
+        "[4] - Manage Crew            \n"
+        "[5] - Return to Vehicle Menu \n"
+        "You must select a number from 1 to 5.\n"
+        "Type 'exit' if you do not wish to make a selection "
+        "at this time.\n"
+        "For details on a given choice, type 'describe X' "
+        "(or '? X') where\nX is the option about which you "
+        "would like further details.\n",
+        message);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void SelectingSlotShowsAvailableComponents()
+{
+    Selector->initiateSelector(Player);
+
+    string frameOption = findOptionByText("Upgrade Frame");
+    ExpectTrue(to_int(frameOption) > 0,
+        "Should find Upgrade Frame option");
+
+    resetPlayerMessages();
+    Player->command(frameOption);
+
+    string message = stripColors(Player->caughtMessage());
+    ExpectTrue(strstr(message, "basic wagon frame") >= 0);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void InstalledComponentUpdatesSlotDisplay()
+{
+    Wagon->installComponent("cargo1", "wagon cargo bed");
+
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string message = stripColors(Player->caughtMessage());
+    ExpectTrue(strstr(message, "Upgrade Cargo1") >= 0);
+    ExpectTrue(strstr(message, "Upgrade Cargo2") >= 0);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RiverCatamaranDisplaysCorrectly()
+{
+    object cat = Player->addVehicle("river catamaran", "eledhel");
+
+    object vehicleService = getService("vehicle");
+    mapping blueprint = vehicleService->queryVehicleBlueprint("river catamaran");
+    cat->initializeVehicle(blueprint);
+
+    object sel = clone_object(
+        "/lib/modules/domains/trading/selectors/vehicleEnhanceSelector.lpc");
+    sel->setLocation("eledhel");
+    sel->setVehicle(cat);
+    sel->move_object(Player);
+    sel->registerEvent(this_object());
+
+    resetPlayerMessages();
+    sel->initiateSelector(Player);
+
+    string message = stripColors(Player->caughtMessage());
+
+    ExpectEq("Vehicle Enhancement - "
+        "River Catamaran Enhancement:\n"
+        "From this menu, you can upgrade and configure "
+        "components for your River\nCatamaran.\n\n"
+        "Stats:                          /------\\     /------\\\n"
+        "    Capacity: 4                | ...... |   |        |\n"
+        "    Speed: 8                   |........|===|........|\n"
+        "    Structure: 12              |........|===|........|\n"
+        "    Protection: 1               \\------/     \\------/\n"
+        "    Weapon slots: 1              ~~~~~~       ~~~~~~\n"
+        "    Defense slots: 1         \n"
+        "                             \n"
+        "Crew:                        \n"
+        "    Henchman          -  0/2 \n"
+        "                             \n"
+        "[1] - Upgrade Cargo1         Unbuilt\n"
+        "[2] - Upgrade Cargo2         Unbuilt\n"
+        "[3] - Upgrade Defense        Unbuilt\n"
+        "[4] - Upgrade Hull1          Unbuilt\n"
+        "[5] - Upgrade Hull2          Unbuilt\n"
+        "[6] - Upgrade Mast           Unbuilt\n"
+        "[7] - Upgrade Weapon         Unbuilt\n"
+        "[8] - Manage Crew            \n"
+        "[9] - Return to Vehicle Menu \n"
+        "You must select a number from 1 to 9.\n"
+        "Type 'exit' if you do not wish to make a selection "
+        "at this time.\n"
+        "For details on a given choice, type 'describe X' "
+        "(or '? X') where\nX is the option about which you "
+        "would like further details.\n",
+        message);
+
+    if (objectp(sel))
+    {
+        destruct(sel);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void BalingerDisplaysCorrectly()
+{
+    object bal = Player->addVehicle("balinger", "eledhel");
+
+    object vehicleService = getService("vehicle");
+    mapping blueprint = vehicleService->queryVehicleBlueprint("balinger");
+    bal->initializeVehicle(blueprint);
+
+    object sel = clone_object(
+        "/lib/modules/domains/trading/selectors/vehicleEnhanceSelector.lpc");
+    sel->setLocation("eledhel");
+    sel->setVehicle(bal);
+    sel->move_object(Player);
+    sel->registerEvent(this_object());
+
+    resetPlayerMessages();
+    sel->initiateSelector(Player);
+
+    string message = stripColors(Player->caughtMessage());
+
+    ExpectEq("Vehicle Enhancement - "
+        "Balinger Enhancement:\n"
+        "From this menu, you can upgrade and configure "
+        "components for your Balinger.\n\n"
+        "Stats:                             /----------------\\\n"
+        "    Capacity: 20                  |   ............   |\n"
+        "    Speed: 7                      |   ............   |\n"
+        "    Structure: 60                 |   ............   |\n"
+        "    Protection: 2                 |..................|\n"
+        "    Weapon slots: 1               |                  |\n"
+        "    Defense slots: 1              |                  |\n"
+        "                                   \\----------------/\n"
+        "Crew:                                ~~~~~~~~~~~~~~\n"
+        "    Henchman          -  0/4 \n"
+        "                             \n"
+        "[1] - Upgrade Cargo1         Unbuilt\n"
+        "[2] - Upgrade Cargo2         Unbuilt\n"
+        "[3] - Upgrade Defense        Unbuilt\n"
+        "[4] - Upgrade Hull           Unbuilt\n"
+        "[5] - Upgrade Mast1          Unbuilt\n"
+        "[6] - Upgrade Weapon         Unbuilt\n"
+        "[7] - Manage Crew            \n"
+        "[8] - Return to Vehicle Menu \n"
+        "You must select a number from 1 to 8.\n"
+        "Type 'exit' if you do not wish to make a selection "
+        "at this time.\n"
+        "For details on a given choice, type 'describe X' "
+        "(or '? X') where\nX is the option about which you "
+        "would like further details.\n",
+        message);
+
+    if (objectp(sel))
+    {
+        destruct(sel);
+    }
+}

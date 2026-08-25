@@ -1,0 +1,150 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Wizard;
+object Catch;
+object Room;
+
+/////////////////////////////////////////////////////////////////////////////
+void Init()
+{
+    setRestoreCaller(this_object());
+    object database = clone_object("/lib/tests/modules/secure/fakeDatabase.lpc");
+    database.PrepDatabase();
+
+    object dataAccess = clone_object("/lib/modules/secure/dataAccess.lpc");
+    dataAccess.savePlayerData(database.GetWizardOfLevel("creator"));
+
+    destruct(dataAccess);
+    destruct(database);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Room = clone_object("/lib/environment/environment.lpc");
+
+    Catch = clone_object("/lib/tests/support/services/catchShadow.lpc");
+    Wizard = clone_object("/lib/realizations/wizard.lpc");
+    Wizard.restore("earl");
+    Wizard.addCommands();
+    Catch.beginShadow(Wizard);
+
+    setUsers(({ Wizard }));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Catch);
+    destruct(Wizard);
+    destruct(Room);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ExecuteRegexpIsNotGreedy()
+{
+    ExpectFalse(Wizard.executeCommand("gshow"), "gshow");
+    ExpectFalse(Wizard.executeCommand("showr"), "showr");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanShowFileBasedLocation()
+{
+    ExpectTrue(Wizard.executeCommand("show /lib/tests/support/environment/toLocation.lpc"));
+    ExpectSubStringMatch("/lib/tests/support/environment/toLocation", Wizard.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanShowFileBasedLocationInCurrentDirectory()
+{
+    Wizard.pwd("/lib/tests/support/environment");
+    ExpectTrue(Wizard.executeCommand("show toLocation.lpc"));
+    ExpectSubStringMatch("/lib/tests/support/environment/toLocation", Wizard.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanShowFileBasedLocationWithoutDotCInCurrentDirectory()
+{
+    Wizard.pwd("/lib/tests/support/environment");
+    ExpectTrue(Wizard.executeCommand("show toLocation"));
+    ExpectSubStringMatch("/lib/tests/support/environment/toLocation", Wizard.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanShowEnvironmentWithItems()
+{
+    object player = clone_object("/lib/realizations/player.lpc");
+    player.restore("gorthaur");
+    player->move_object(load_object("/lib/tests/support/environment/toLocation.lpc"));
+    setUsers(({ Wizard, player }));
+
+    ExpectTrue(Wizard.executeCommand("show /lib/tests/support/environment/toLocation.lpc"));
+    ExpectSubStringMatch("/lib/tests/support/environment/toLocation.*lib/realizations/player#.*gorthaur",
+        Wizard.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanShowPlayer()
+{
+    object player = clone_object("/lib/realizations/player.lpc");
+    player.restore("gorthaur");
+    player->move_object(load_object("/lib/tests/support/environment/toLocation.lpc"));
+    setUsers(({ Wizard, player }));
+
+    ExpectTrue(Wizard.executeCommand("show gorthaur"));
+    ExpectSubStringMatch("/lib/realizations/player#.*gorthaur.*lib/tests/support/environment/toLocation", 
+        Wizard.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanShowPresentObject()
+{
+    object item = clone_object("/lib/instances/items/weapons/swords/long-sword.lpc");
+    Wizard->move_object(load_object("/lib/tests/support/environment/toLocation.lpc"));
+    item->move_object(load_object("/lib/tests/support/environment/toLocation.lpc"));
+
+    ExpectTrue(Wizard.executeCommand("show sword"));
+    ExpectSubStringMatch("/lib/instances/items/weapons/swords/long-sword#.*Long sword.*lib/tests/support/environment/toLocation",
+        Wizard.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanShowPresentObjectWithNestedItems()
+{
+    object player = clone_object("/lib/realizations/player.lpc");
+    player.restore("gorthaur");
+    player->move_object(load_object("/lib/tests/support/environment/toLocation.lpc"));
+    setUsers(({ Wizard, player }));
+
+    object subItem = clone_object("/lib/instances/items/armor/clothing/robes.lpc");
+    subItem->move_object(player);
+    subItem = clone_object("/lib/instances/items/weapons/swords/long-sword.lpc");
+    subItem->move_object(player);
+    subItem = clone_object("/lib/instances/items/armor/accessories/ring.lpc");
+    subItem->move_object(player);
+
+    ExpectTrue(Wizard.executeCommand("show gorthaur"));
+    ExpectSubStringMatch("/lib/realizations/player#.*gorthaur.*lib/tests/support/environment/toLocation.*ring.*lib/instances/items/weapons/swords/long-sword#.*Long sword.*robes",
+        Wizard.caughtMessage());
+}
+/////////////////////////////////////////////////////////////////////////////
+void CannotShowNonexistantPerson()
+{
+    ExpectFalse(Wizard.executeCommand("show george"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotShowNonexistantLocation()
+{
+    ExpectFalse(Wizard.executeCommand("show /bad/location.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotShowLocationWithNoReadAccess()
+{
+    ExpectFalse(Wizard.executeCommand("show /secure/toEnvironment.lpc"));
+}

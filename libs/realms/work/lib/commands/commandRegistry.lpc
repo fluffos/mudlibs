@@ -1,0 +1,222 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+private string PlayerCommands = "/lib/commands/player/*";
+private string WizardCommands = "/lib/commands/wizard/*";
+private string CannedEmotes = "/lib/commands/soul.lpc";
+private string BaseCommand = "/lib/commands/baseCommand.lpc";
+private string Wizard = "/lib/realizations/wizard.lpc";
+
+private mapping commands = ([]);
+private mapping commandTypes = ([]);
+
+private string *wizCommands = ({});
+private int IsInitialized = 0; 
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void registerCommandAsType(object commandObj,
+    string fullyQualifiedFile, string command)
+{
+    string commandType = commandObj->commandType();
+    if (!member(commandTypes, commandType))
+    {
+        commandTypes[commandType] = ([]);
+    }
+
+    string commandText = regreplace(command, "^([^[#]+) +[[#].*", "\\1", 1);
+    commandTypes[commandType][commandText] = fullyQualifiedFile;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: this driver's get_dir() (same as LDMud's) returns
+// bare filenames, not full paths -- fullyQualifiedFile here rebuilds the
+// real path from PlayerCommands's own directory instead of assuming
+// get_dir() already returned one (sprintf("/%s", command) on a bare
+// "look.lpc" produced the nonexistent "/look.lpc", silently registering
+// zero commands).
+// FluffOS PORT NOTE (defensive hardening, confirmed live): a single
+// broken command file (e.g. cp.lpc's now-fixed "Undefined function
+// copy_file" compile error) used to throw an UNCAUGHT "No program in
+// object" error the moment load_object() tried to use it -- and since
+// this whole loop runs inside commandRegistry.lpc's create(), which is
+// itself triggered from every player object's addCommands(), one broken
+// file anywhere in /lib/commands/{player,wizard}/ was aborting command
+// registration for EVERY login, not just breaking that one command (a
+// freshly logged-in character could reach the game but "look"/every
+// other command failed with the driver's default "What?" fail message).
+// Each per-file registration attempt is now wrapped in its own catch()
+// block so one broken file just gets skipped (logged via debug_message())
+// instead of taking down the whole registry.
+/////////////////////////////////////////////////////////////////////////////
+private nomask void registerPlayerCommands()
+{
+    string *commandFiles = get_dir(PlayerCommands, 0x10) -
+        ({ ".", ".." });
+
+    if(sizeof(commandFiles))
+    {
+        foreach(string command in commandFiles)
+        {
+            string fullyQualifiedFile = "/lib/commands/player/" + command;
+            string err;
+
+            if(file_size(fullyQualifiedFile))
+            {
+                err = catch
+                {
+                    object commandObj = load_object(fullyQualifiedFile);
+                    string *commandList = commandObj->commandList();
+                    foreach(string commandEntry in commandList)
+                    {
+                        commands[commandObj->commandRegExp(commandEntry)] = fullyQualifiedFile;
+                        registerCommandAsType(commandObj, fullyQualifiedFile, commandEntry);
+                    }
+                };
+
+                if (err)
+                {
+                    debug_message(sprintf("registerPlayerCommands: skipping "
+                        "broken command file %s: %s\n", fullyQualifiedFile, err));
+                }
+            }
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: same get_dir() bare-name fix and same defensive
+// per-file catch() as registerPlayerCommands() above.
+/////////////////////////////////////////////////////////////////////////////
+private nomask void registerWizardCommands()
+{
+    string *commandFiles = get_dir(WizardCommands, 0x10) -
+        ({ ".", ".." });
+
+    if (sizeof(commandFiles))
+    {
+        foreach(string command in commandFiles)
+        {
+            string fullyQualifiedFile = "/lib/commands/wizard/" + command;
+            string err;
+
+            if (file_size(fullyQualifiedFile))
+            {
+                err = catch
+                {
+                    object commandObj = load_object(fullyQualifiedFile);
+
+                    if (commandObj && (member(inherit_list(commandObj), BaseCommand) > -1) &&
+                        commandObj->commandRegExp(command))
+                    {
+                        string *commandList = commandObj->commandList();
+                        foreach(string commandEntry in commandList)
+                        {
+                            commands[commandObj->commandRegExp(commandEntry)] = fullyQualifiedFile;
+                            wizCommands += ({ commandObj->commandRegExp(commandEntry) });
+                            registerCommandAsType(commandObj, fullyQualifiedFile, commandEntry);
+                        }
+                    }
+                };
+
+                if (err)
+                {
+                    debug_message(sprintf("registerWizardCommands: skipping "
+                        "broken command file %s: %s\n", fullyQualifiedFile, err));
+                }
+            }
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int isInitialized()
+{
+    return IsInitialized;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void create()
+{
+    commands = ([]);
+    registerPlayerCommands();
+    registerWizardCommands();
+    IsInitialized = 1;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int executeCommand(string passedCommand, object initiator)
+{
+    int ret = 0;
+    string *commandList = keys(commands);
+
+    // FluffOS PORT NOTE: confirmed live, high-impact -- this driver's
+    // inherit_list() (see vm/internal/base/array.cc's inherit_list())
+    // returns only the files an object's program DIRECTLY inherits FROM;
+    // it never includes the object's own program/class itself. Upstream's
+    // `member(inherit_list(initiator), Wizard) > -1` idiom only makes
+    // sense if inherit_list() includes the queried object's own class
+    // (apparently true under LDMud) -- on this driver it never does, so
+    // this check was permanently -1 for EVERY wizard.lpc instance too
+    // (wizard.lpc doesn't inherit itself), meaning wizard-only commands
+    // were unreachable for every single account regardless of rank,
+    // including the account this port's own admin-account setup grants
+    // "owner" rank to. This exact same broken idiom recurs elsewhere in
+    // this codebase (e.g. who.lpc's wizard-listing filter) but this is
+    // the one confirmed to actually gate real functionality end-to-end;
+    // fixed here by also checking the object's own program_name()
+    // directly, which correctly matches a same-class instance.
+    if ((program_name(initiator) != Wizard) &&
+        (member(inherit_list(initiator), Wizard) < 0))
+    {
+        commandList -= wizCommands;
+    }
+    if(sizeof(commandList))
+    {
+        // FluffOS PORT NOTE: switched both regexp() calls here to
+        // pcre_match() -- same fix, same reason, as baseCommand.lpc's
+        // canExecuteCommand() (see its much longer port note): this
+        // driver's plain regexp() efun hard-caps at 10 capturing groups
+        // (NSUBEXP == 10 in packages/core/regexp.cc), and `command` here
+        // is a single command template's own compiled regex (built by
+        // commandRegExp(), which always wraps in one outer "(...)" too) --
+        // confirmed live that a single sufficiently complex template (the
+        // "'"/say command's -verb/-adverb/-language/-target/wildcard
+        // combo) reaches exactly 10 groups and errors ("too many ()"),
+        // which broke dispatch for every command alphabetically at or
+        // after the first broken one in this (unordered) mapping's
+        // iteration order -- not just one specific command, since the
+        // uncaught error aborts the whole executeCommand() call. The
+        // first regexp() (the leading '/:/= sigil check) is safe as
+        // written but switched too for consistency.
+        if (sizeof(pcre_match(({ passedCommand }), "^('|:|=)[^ ]")))
+        {
+            passedCommand = passedCommand[0..0] + " " + passedCommand[1..];
+        }
+        foreach(string command in commandList)
+        {
+            if(sizeof(pcre_match(({ passedCommand }), command)))
+            {
+                object commandObj = load_object(commands[command]);
+                if(commandObj)
+                {
+                    ret = commandObj->execute(passedCommand, initiator);
+                }
+                break;
+            }
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping getListOfCommands(object initiator)
+{
+    mapping commands = commandTypes + ([]);
+    if (member(inherit_list(initiator), Wizard) < 0)
+    {
+        commands = filter(commands, (: $1 != "Wizard" :));
+    }
+
+    return commands;
+}

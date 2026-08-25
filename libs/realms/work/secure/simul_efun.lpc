@@ -1,0 +1,189 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+#include "/sys/object_info.h"
+
+inherit "/secure/simulated-efuns/database.lpc";
+inherit "/secure/simulated-efuns/group-management.lpc";
+inherit "/secure/simulated-efuns/interactive-info.lpc";
+inherit "/secure/simulated-efuns/object-info.lpc";
+inherit "/secure/simulated-efuns/services.lpc";
+inherit "/secure/simulated-efuns/strings.lpc";
+inherit "/secure/simulated-efuns/users.lpc";
+//inherit "/secure/simulated-efuns/testing.lpc";
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void start_simul_efun()
+{
+
+}
+
+// This file is the actual simul_efun object, so these thin wrappers are
+// what makes member()/call_direct()/etc genuinely resolvable, as real
+// simul_efuns, from any of the ~16,500 other files in this codebase (a
+// bare unprefixed call falls back to a simul_efun only when the simul_efun
+// object defines it as a PUBLIC function). Each wrapper just forwards to
+// /secure/simulated-efuns/portability.lpc (the PORT macro, see
+// /secure/auto.h) via plain call_other() -- see that file's port note for
+// why a direct inherit/#include doesn't work for the small set of other
+// files that also need these before simul_efun.lpc itself is ready.
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs int member(mixed collection, mixed elem, int start)
+{
+    return PORT->member(collection, elem, start);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs mixed call_direct(mixed ob, string func, mixed args...)
+{
+    return PORT->call_direct(ob, func, args...);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string object_name(object ob)
+{
+    return PORT->object_name(ob);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string program_name(object ob)
+{
+    return PORT->program_name(ob);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs int strstr(string big, mixed small, int start)
+{
+    return PORT->strstr(big, small, start);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void raise_error(string msg)
+{
+    PORT->raise_error(msg);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs string regreplace(string inputString, string search,
+    string replace, int flags)
+{
+    return PORT->regreplace(inputString, search, replace, flags);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string *regexplode(string subject, string pattern)
+{
+    return PORT->regexplode(subject, pattern);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string to_string(mixed val)
+{
+    return PORT->to_string(val);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs mapping mkmapping(mixed *keysArr, mixed *valuesArr)
+{
+    return PORT->mkmapping(keysArr, valuesArr);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs object present_clone(string blueprint, object env)
+{
+    return PORT->present_clone(blueprint, env);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mixed driver_info(int what)
+{
+    return PORT->driver_info(what);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string save_value(mixed val)
+{
+    return PORT->save_value(val);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mixed restore_value(string s)
+{
+    return PORT->restore_value(s);
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string version()
+{
+    return regreplace(__VERSION__, "^([0-9]+.[0-9]+.[0-9]+).*$", "\\1", 1);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask object find_object(string objectName)
+{
+    return efun::find_object(objectName);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void shutdown()
+{
+    // FluffOS PORT NOTE: LDMud's db_handles() (enumerate every currently
+    // open db connection handle, to close orphans on shutdown) doesn't
+    // exist on this driver's db package (checked against
+    // packages/db/db.spec: only db_close/db_commit/db_connect/db_exec/
+    // db_fetch/db_rollback/db_status, no enumeration efun) -- this driver
+    // process exiting cleans up the underlying OS-level connections
+    // regardless, so this best-effort cleanup step is simply dropped
+    // rather than reimplemented (it was never load-bearing for a correct
+    // shutdown, only a tidiness nicety).
+    string previousObject = object_name(previous_object());
+
+    if (member(({ "/secure/master", "/lib/commands/wizard/reboot" }), 
+        previousObject) > -1)
+    {
+        efun::shutdown();
+    }
+    else if (this_player() && interactive(this_player()) &&
+        (member(inherit_list(this_player()),
+            "/lib/realizations/wizard.lpc") > -1) &&
+            (member(this_player()->groups(), "elder") > -1))
+        efun::shutdown();
+    return;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void set_environment(object ob)
+{
+}
+
+// FluffOS PORT NOTE: upstream only ever actually called the real
+// set_this_player() efun here when /secure/simulated-efuns/testing.lpc is
+// inherited into this object -- which it never is on this driver (that
+// inherit is commented out a few lines above, same as upstream ships it;
+// the whole testing/mocking framework is out of scope for this port, see
+// NOTES.md). So the condition was always false in practice even upstream,
+// and doubly so here since this driver has no set_this_player() efun at
+// all in a build with add_action() available (see moveHook()'s port note
+// in secure/master/hooks.lpc for the full explanation) -- simplified to a
+// genuine no-op rather than reimplementing an efun call that would never
+// have fired anyway.
+/////////////////////////////////////////////////////////////////////////////
+public nomask void set_this_player(object ob)
+{
+}
+
+// FluffOS PORT NOTE: upstream guarded enable_commands()/disable_commands()
+// with `#if ! __EFUN_DEFINED__(...)`, fallbacks for a driver lacking the
+// native efuns. Both ARE native efuns on this driver (confirmed against
+// packages/core/core.spec) -- so the guard is always false and the
+// fallback bodies are always-dead code, deleted rather than kept behind
+// the guard (see interactive-info.lpc's port note on why
+// `__EFUN_DEFINED__` is avoided in this port generally).
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int preventShadows()
+{
+    return 1;
+}

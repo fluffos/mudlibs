@@ -1,0 +1,274 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Door;
+object User;
+object Observer;
+object Service;
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Service = getService("environment");
+    Service.setYear(1);
+    Service.setDay(92);
+    Service.timeOfDay("noon");
+
+    Door = clone_object("/lib/environment/doors/door.lpc");
+
+    User = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    User.Name("Bob");
+    User.Gender("male");
+    User.Str(20);
+    User.Dex(20);
+    User.Con(20);
+    User.Int(20);
+    User.Wis(20);
+
+    User->move_object(this_object());
+
+    Observer = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Observer.Name("Henrietta");
+    Observer.Gender("female");
+    Observer->move_object(this_object());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(User);
+    destruct(Observer);
+    destruct(Door);
+    destruct(Service);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TypeReturnsDoor()
+{
+    ExpectEq("door", Door.Type());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DoorsWithoutLocksCannotBeLocked()
+{
+    ExpectFalse(Door.isLocked());
+    Door.lock(User);
+    ExpectFalse(Door.isLocked());
+    ExpectSubStringMatch("You try to lock the door but notice that it has no lock", 
+        User.caughtMessage());
+    ExpectSubStringMatch("Bob tries to lock the door but notices that it has no lock", 
+        Observer.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DoorsWithoutLocksCannotBeUnlocked()
+{
+    ExpectFalse(Door.isLocked());
+    Door.unlock(User);
+    ExpectFalse(Door.isLocked());
+    ExpectSubStringMatch("You try to unlock the door but notice that it has no lock",
+        User.caughtMessage());
+    ExpectSubStringMatch("Bob tries to unlock the door but notices that it has no lock",
+        Observer.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void LockedDoorsCannotBeUnlockedWithoutKey()
+{
+    Door.setKey("/lib/items/key.lpc");
+
+    ExpectTrue(Door.isLocked());
+    Door.unlock(User);
+    ExpectTrue(Door.isLocked());
+    ExpectSubStringMatch("You try to unlock the door but do not have the key",
+        User.caughtMessage());
+    ExpectSubStringMatch("Bob tries to unlock the door but does not have the key",
+        Observer.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void UnlockedDoorsCannotBeLockedWithoutKey()
+{
+    Door.setKey("/lib/items/key.lpc", 1);
+
+    ExpectFalse(Door.isLocked());
+    Door.lock(User);
+    ExpectFalse(Door.isLocked());
+    ExpectSubStringMatch("You try to lock the door but do not have the key",
+        User.caughtMessage());
+    ExpectSubStringMatch("Bob tries to lock the door but does not have the key",
+        Observer.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void LockedDoorsCanBeUnlocked()
+{
+    Door.setKey("/lib/items/key.lpc");
+    clone_object("/lib/items/key.lpc")->move_object(User);
+
+    ExpectTrue(Door.isLocked());
+    Door.unlock(User);
+    ExpectFalse(Door.isLocked());
+
+    ExpectSubStringMatch("You unlock the door",
+        User.caughtMessage());
+    ExpectSubStringMatch("Bob unlocks the door",
+        Observer.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void UnlockedDoorsCanBeLocked()
+{
+    Door.setKey("/lib/items/key.lpc", 1);
+    clone_object("/lib/items/key.lpc")->move_object(User);
+
+    ExpectFalse(Door.isLocked());
+    Door.lock(User);
+    ExpectTrue(Door.isLocked());
+
+    ExpectSubStringMatch("You lock the door",
+        User.caughtMessage());
+    ExpectSubStringMatch("Bob locks the door",
+        Observer.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void LockedMessageDisplayed()
+{
+    Door.displayLockedMessage(User);
+    ExpectSubStringMatch("You try to go through the door, but it is locked",
+        User.caughtMessage());
+    ExpectSubStringMatch("Bob tries to go through the door, but it is locked",
+        Observer.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void MoveMessageDisplayed()
+{
+    Door.displayMoveMessage(User, "north");
+    ExpectSubStringMatch("You go through the door to the north",
+        User.caughtMessage());
+    ExpectSubStringMatch("Bob goes through the door to the north",
+        Observer.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CloseMessageDisplayed()
+{
+    Door.displayCloseMessage(User);
+    ExpectSubStringMatch("The door closes",
+        User.caughtMessage());
+    ExpectSubStringMatch("The door closes",
+        Observer.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DoorLocksAtProperTime()
+{
+    Door.setKey("/lib/items/key.lpc", 1);
+    Door.setWhenLockActive("default", "midnight");
+    Door.setWhenLockActive("stuff", "noon");
+
+    ExpectFalse(Door.isLocked());
+
+    Door.currentState("stuff");
+    ExpectTrue(Door.isLocked());
+
+    Service.timeOfDay("midnight");
+    ExpectFalse(Door.isLocked());
+
+    Door.currentState("default");
+    ExpectTrue(Door.isLocked());
+
+    Service.timeOfDay("morning");
+    ExpectFalse(Door.isLocked());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DoorDoesNotLockOnTimeIfManipulated()
+{
+    Door.setKey("/lib/items/key.lpc");
+    clone_object("/lib/items/key.lpc")->move_object(User);
+
+    Door.setWhenLockActive("default", "midnight");
+
+    ExpectTrue(Door.isLocked());
+    Door.unlock(User);
+
+    Service.timeOfDay("midnight");
+    ExpectFalse(Door.isLocked());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DoorDoesNotUnlockOnTimeIfManipulated()
+{
+    Door.setKey("/lib/items/key.lpc", 1);
+    clone_object("/lib/items/key.lpc")->move_object(User);
+
+    Door.setWhenLockActive("default", "midnight");
+
+    ExpectFalse(Door.isLocked());
+    Door.lock(User);
+    ExpectTrue(Door.isLocked());
+
+    Service.timeOfDay("midnight");
+    ExpectTrue(Door.isLocked());
+
+    Service.timeOfDay("morning");
+    ExpectTrue(Door.isLocked());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotPickLockIfDoorNotLocked()
+{
+    Door.setKey("/lib/items/key.lpc", 1);
+    ExpectFalse(Door.isLocked());
+
+    Door.pickLock(User);
+    ExpectFalse(Door.isLocked());
+    ExpectSubStringMatch("You try to pick the lock of an already-unlocked door",
+        User.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotPickLockIfSkillTooLowForDoor()
+{
+    Door.setKey("/lib/items/key.lpc");
+    ExpectTrue(Door.isLocked());
+
+    Door.pickLock(User);
+    ExpectTrue(Door.isLocked());
+    ExpectSubStringMatch("You try to pick the door's lock but fail",
+        User.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanPickLock()
+{
+    User.addSkillPoints(100);
+    User.advanceSkill("open lock", 10);
+
+    ExpectEq(10, User.getSkill("open lock"));
+    Door.setKey("/lib/items/key.lpc");
+    ExpectTrue(Door.isLocked());
+
+    Door.pickLock(User);
+    ExpectFalse(Door.isLocked());
+    ExpectSubStringMatch("You pick the lock on the door",
+        User.caughtMessage());
+    ExpectSubStringMatch("Bob picks the lock on the door",
+        Observer.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanDestroyDoorThatIsBreakable()
+{
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotDamageDoorThatIsUnbreakable()
+{
+}

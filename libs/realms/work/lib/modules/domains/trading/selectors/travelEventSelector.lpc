@@ -1,0 +1,377 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/core/baseSelector.lpc";
+
+private object SubselectorObj;
+private object Vehicle;
+private mapping RouteInfo;
+private string Destination;
+private string EventType;
+private int EventDamage;
+private int EventLoot;
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setVehicle(object vehicle)
+{
+    Vehicle = vehicle;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setRouteInfo(mapping info)
+{
+    RouteInfo = info;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setDestination(string dest)
+{
+    Destination = dest;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private string rollEvent()
+{
+    int roll = random(100);
+    string routeType = RouteInfo["type"];
+
+    if (routeType == "maritime")
+    {
+        if (roll < 40) { return "pirates"; }
+        if (roll < 70) { return "storm"; }
+        if (roll < 85) { return "merchant"; }
+        return "flotsam";
+    }
+    else if (routeType == "river")
+    {
+        if (roll < 30) { return "bandits"; }
+        if (roll < 55) { return "storm"; }
+        if (roll < 80) { return "merchant"; }
+        return "flotsam";
+    }
+
+    if (roll < 45) { return "bandits"; }
+    if (roll < 65) { return "storm"; }
+    if (roll < 85) { return "merchant"; }
+    return "flotsam";
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private string getEventDescription()
+{
+    string desc = "";
+    object configDict = getService("configuration");
+    string colorConfig = User->colorConfiguration();
+
+    switch(EventType)
+    {
+        case "pirates":
+        {
+            desc = configDict->decorate(
+                "Sails on the horizon! Pirates bear down on your vessel, "
+                "weapons drawn and hungry for plunder. You must decide "
+                "quickly how to respond.",
+                "failure", "selector", colorConfig);
+            break;
+        }
+        case "bandits":
+        {
+            desc = configDict->decorate(
+                "Riders emerge from the treeline, blocking the road ahead. "
+                "Bandits, armed and bold, demand tribute or blood.",
+                "failure", "selector", colorConfig);
+            break;
+        }
+        case "storm":
+        {
+            int damage = 2 + random(RouteInfo["danger"] / 5);
+            int protection = Vehicle->getTradeProtection();
+            EventDamage = (damage > protection) ? (damage - protection) : 1;
+            Vehicle->takeDamage(EventDamage);
+
+            string stormType = (RouteInfo["type"] == "maritime") ?
+                "A violent squall" : "A fierce storm";
+
+            desc = configDict->decorate(
+                sprintf("%s strikes without warning! Wind and rain "
+                    "batter your %s. You suffer %d structural damage%s.",
+                    stormType,
+                    Vehicle->getBlueprint()["display name"],
+                    EventDamage,
+                    Vehicle->isDestroyed() ?
+                        " - your vehicle is wrecked!" :
+                        " but press onward"),
+                "warning", "selector", colorConfig);
+            break;
+        }
+        case "merchant":
+        {
+            desc = configDict->decorate(
+                "You encounter a friendly merchant caravan heading "
+                "the opposite direction. They offer to trade goods "
+                "at a fair price.",
+                "success", "quests", colorConfig);
+            break;
+        }
+        case "flotsam":
+        {
+            EventLoot = 50 + random(150);
+            User->addCash(EventLoot);
+
+            string findType = (RouteInfo["type"] == "maritime") ?
+                "Floating debris contains salvageable goods" :
+                "An abandoned cart by the roadside holds valuables";
+
+            desc = configDict->decorate(
+                sprintf("%s! You recover goods worth %d gold.",
+                    findType, EventLoot),
+                "success", "quests", colorConfig);
+            break;
+        }
+    }
+    return desc;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void InitializeSelector()
+{
+    AllowUndo = 0;
+    AllowAbort = 0;
+    SuppressColon = 1;
+    Description = "Travel Event";
+    Type = "Event";
+    Data = ([]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void setUpUserForSelection()
+{
+    EventType = rollEvent();
+    Data = ([]);
+    int counter = 1;
+
+    string eventDesc = getEventDescription();
+
+    Description = "Travel Event:\n" + eventDesc;
+
+    if (EventType == "pirates" || EventType == "bandits")
+    {
+        string enemyLabel = (EventType == "pirates") ? "pirates" : "bandits";
+
+        Data[to_string(counter++)] = ([
+            "name": sprintf("Fight the %s", enemyLabel),
+            "type": "fight",
+            "description": sprintf("Engage the %s in combat using your "
+                "vehicle's weapons and crew.", enemyLabel),
+            "canShow": 1
+        ]);
+        Data[to_string(counter++)] = ([
+            "name": sprintf("Flee from the %s", enemyLabel),
+            "type": "flee",
+            "description": sprintf("Attempt to outrun the %s. Faster "
+                "vehicles have a better chance.", enemyLabel),
+            "canShow": 1
+        ]);
+
+        int bribeCost = 100 + random(200) +
+            (RouteInfo["danger"] * 5);
+        Data[to_string(counter++)] = ([
+            "name": sprintf("Bribe the %s (%d gold)", enemyLabel,
+                bribeCost),
+            "type": "bribe",
+            "cost": bribeCost,
+            "description": sprintf("Pay %d gold to pass safely.",
+                bribeCost),
+            "canShow": (User->getCash() >= bribeCost)
+        ]);
+    }
+    else
+    {
+        Data[to_string(counter++)] = ([
+            "name": "Continue Journey",
+            "type": "continue",
+            "description": "Press onward to your destination.",
+            "canShow": 1
+        ]);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void resolveFight()
+{
+    object configDict = getService("configuration");
+    string colorConfig = User->colorConfiguration();
+
+    int attack = Vehicle->getWeaponPower() + random(5);
+    int defense = Vehicle->getDefense();
+    int enemyPower = 3 + random(RouteInfo["danger"] / 3);
+    int enemyDefense = 1 + random(RouteInfo["danger"] / 5);
+
+    int damageDealt = (attack > enemyDefense) ?
+        (attack - enemyDefense) : 1;
+    int damageTaken = (enemyPower > defense) ?
+        (enemyPower - defense) : 1;
+
+    Vehicle->takeDamage(damageTaken);
+    int loot = damageDealt * 20 + random(100);
+
+    if (Vehicle->isDestroyed())
+    {
+        tell_object(User, configDict->decorate(
+            sprintf("You fought bravely but your %s is destroyed! "
+                "You limp into %s with nothing but your life.",
+                Vehicle->getBlueprint()["display name"],
+                capitalize(Destination)),
+            "failure", "selector", colorConfig) + "\n");
+    }
+    else
+    {
+        User->addCash(loot);
+        User->addTradingExperience(25);
+        tell_object(User, configDict->decorate(
+            sprintf("Victory! You drove off the attackers, taking %d "
+                "damage but recovering %d gold in plunder.",
+                damageTaken, loot),
+            "success", "quests", colorConfig) + "\n");
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void resolveFlee()
+{
+    object configDict = getService("configuration");
+    string colorConfig = User->colorConfiguration();
+
+    int speed = Vehicle->getSpeed();
+    int fleeChance = 30 + (speed * 10);
+    int roll = random(100);
+
+    if (roll < fleeChance)
+    {
+        tell_object(User, configDict->decorate(
+            "You outpace the pursuers and escape unscathed!",
+            "success", "quests", colorConfig) + "\n");
+    }
+    else
+    {
+        int fleeDamage = 1 + random(RouteInfo["danger"] / 5);
+        int protection = Vehicle->getTradeProtection();
+        int actual = (fleeDamage > protection) ?
+            (fleeDamage - protection) : 1;
+        Vehicle->takeDamage(actual);
+
+        int cargoLost = 0;
+        mapping cargo = Vehicle->getCargo();
+        if (sizeof(cargo))
+        {
+            string *items = keys(cargo);
+            string lostItem = items[random(sizeof(items))];
+            int qty = cargo[lostItem];
+            cargoLost = 1 + random(qty / 2);
+            if (cargoLost > qty)
+            {
+                cargoLost = qty;
+            }
+            Vehicle->removeCargo(lostItem, cargoLost);
+        }
+
+        if (Vehicle->isDestroyed())
+        {
+            tell_object(User, configDict->decorate(
+                sprintf("Your %s breaks apart during the chase! "
+                    "You barely survive.",
+                    Vehicle->getBlueprint()["display name"]),
+                "failure", "selector", colorConfig) + "\n");
+        }
+        else
+        {
+            tell_object(User, configDict->decorate(
+                sprintf("You escape but take %d damage%s.",
+                    actual,
+                    cargoLost > 0 ?
+                        sprintf(" and lose %d units of cargo", cargoLost) :
+                        ""),
+                "warning", "selector", colorConfig) + "\n");
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void resolveBribe(int cost)
+{
+    object configDict = getService("configuration");
+    string colorConfig = User->colorConfiguration();
+
+    User->addCash(-cost);
+    tell_object(User, configDict->decorate(
+        sprintf("You hand over %d gold. The attackers nod and "
+            "let you pass without further trouble.", cost),
+        "description", "selector", colorConfig) + "\n");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int processSelection(string selection)
+{
+    int ret = -1;
+    if (User && Data[selection]["canShow"])
+    {
+        string type = Data[selection]["type"];
+
+        switch(type)
+        {
+            case "fight":
+            {
+                resolveFight();
+                ret = 1;
+                break;
+            }
+            case "flee":
+            {
+                resolveFlee();
+                ret = 1;
+                break;
+            }
+            case "bribe":
+            {
+                resolveBribe(Data[selection]["cost"]);
+                ret = 1;
+                break;
+            }
+            case "continue":
+            {
+                object configDict = getService("configuration");
+                tell_object(User, configDict->decorate(
+                    sprintf("You arrive at %s after %d days of travel.",
+                        capitalize(Destination), RouteInfo["days"]),
+                    "success", "quests",
+                    User->colorConfiguration()) + "\n");
+                ret = 1;
+                break;
+            }
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void onSelectorCompleted(object caller)
+{
+    caller->cleanUp();
+    notifySynchronous("onSelectorCompleted");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected string choiceFormatter(string choice)
+{
+    string displayType = Data[choice]["canShow"] ?
+        "choice enabled" : "choice disabled";
+
+    return sprintf("    [%s]%s - %s%s",
+        configuration->decorate("%s", "number", "selector",
+            colorConfiguration),
+        padSelectionDisplay(choice),
+        configuration->decorate("%-35s", displayType, "selector",
+            colorConfiguration),
+        displayDetails(choice));
+}

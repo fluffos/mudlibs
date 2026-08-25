@@ -1,0 +1,274 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+#include "/sys/input_to.h"
+// FluffOS PORT NOTE: `inherit "/secure/login/core.lpc"` removed -- this
+// driver has no LDMud-style `virtual inherit` (see NOTES.md), and
+// /secure/login.lpc (the only place this file is ever actually inherited
+// from) already inherits core.lpc directly itself, so this would have
+// been an unsupported diamond ("Illegal to redefine 'nomask' function
+// ...") the moment login.lpc combined both. This file is consequently no
+// longer standalone-compilable on its own (it references core.lpc's
+// members assuming a sibling inherit provides them) -- same accepted
+// "fragment, not a standalone compilation unit" category as several
+// other files in this port (see e.g. genesis's own NOTES.md for the same
+// pattern in an earlier port).
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void terminateWhoConnection()
+{
+    destruct(this_object());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask varargs void executeWhoCommand(int doNotDestruct)
+{
+    object whoCommand = load_object("/lib/commands/player/who.lpc");
+    whoCommand->execute("who", this_object());
+
+    if (!doNotDestruct)
+    {
+        call_out("terminateWhoConnection", 0);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void execCharacter(string characterName, string userName)
+{
+    printf("\n");
+    object loginModule = load_object("/lib/modules/secure/login.lpc");
+
+    pruneOtherCharacters(userName, characterName);
+    object player = loginModule->getPlayerObject(characterName);
+
+    if (objectp(player))
+    {
+        exec(player, this_object());
+        // FluffOS PORT NOTE: this driver's add_action() (see
+        // packages/core/add_action.cc) refuses to register a sentence
+        // unless `current_object == command_giver` (or an environment
+        // relation) AT THE MOMENT it's called -- it silently no-ops
+        // otherwise, no error at all. player.lpc's create() calls
+        // addCommands()->add_action() at object-creation time, which
+        // happens *before* exec() above ever runs, so command_giver is
+        // still the login object, not the new player -- every add_action()
+        // there was a silent no-op, and NO verb was ever actually
+        // registered. Confirmed live: a freshly logged-in character could
+        // reach the game but "look"/"score"/every other command just
+        // produced the driver's own default "What?" fail message forever
+        // (no add_action sentence existed to match against at all).
+        // exec() above calls this driver's replace_interactive(), which
+        // reassigns the C-level `command_giver` global to `player`
+        // immediately (confirmed against interactive.cc) -- so re-running
+        // addCommands() here, now that player IS command_giver, is what
+        // actually registers the catch-all "executeCommand" action. Same
+        // fix applied to user-creation.lpc's two equivalent call sites.
+        player->addCommands();
+        addUser(player);
+        configureCharset(player, player->charsetConfiguration());
+        player->resetCaches();
+
+        // Re-advertise GMCP from the now-active player object so a capable
+        // client (re)confirms the option against the object that will send it.
+        player->advertiseGmcp();
+
+        player->command("l");
+    }
+    else
+    {
+        destruct(this_object());
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void displayMenuChoices(mapping options)
+{
+    foreach(string option in sort_array(keys(options), (: $1 > $2 :)))
+    {
+        printf("    %s) %s\n", option, options[option]["text"]);
+    }
+    call_out("timeout", 90);
+    printf("\nYour selection: ");
+    input_to("processMenuInput", INPUT_IGNORE_BANG, options);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void confirmPasswordChange(string confirmPassword, string password,
+    mapping options)
+{
+    removeTimeout();
+
+    if (confirmPassword != password)
+    {
+        write("The entered passwords do not match. Please enter your password: ");
+        input_to("changePassword", INPUT_NOECHO | INPUT_IGNORE_BANG,
+            options);
+    }
+    else
+    {
+        authenticationService->saveUser(options["1"]["character"], password, 
+            ipAddress);
+        printf("\nYour password has been updated.\n\n");
+        displayMenuChoices(options);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void changePassword(string password, mapping options)
+{
+    removeTimeout();
+    write("Please confirm your password: ");
+    input_to("confirmPasswordChange", INPUT_NOECHO | INPUT_IGNORE_BANG,
+        password, options);
+    call_out("timeout", 90);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void getCharacterName(string name, mapping options)
+{
+    removeTimeout();
+
+    name = lower_case(name);
+    if (authenticationService->characterExists(name))
+    {
+        printf("A character named '%s' already exists. Please try again.\n",
+            name);
+        displayMenuChoices(options);
+    }
+    else
+    {
+        if (isValidUserName(name))
+        {
+            execCharacter(name, options["1"]["character"]);
+        }
+        else
+        {
+            write("That is not a valid character name.\n");
+            displayMenuChoices(options);
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void processMenuInput(string selection, mapping options)
+{
+    removeTimeout();
+
+    if (selection == "")
+    {
+        selection = "1";
+    }
+    if (PORT->member(options, selection))
+    {
+        switch (options[selection]["type"])
+        {
+            case "log in":
+            {
+                authenticationService->saveUser(options["1"]["character"], 
+                    options["1"]["password"], ipAddress);
+
+                execCharacter(options[selection]["character"], 
+                    options["1"]["character"]);
+                break;
+            }
+            case "create":
+            {
+                authenticationService->saveUser(options["1"]["character"],
+                    options["1"]["password"], ipAddress);
+
+                call_out("timeout", 90);
+                printf("By what name will your new character be known? ");
+                input_to("getCharacterName", INPUT_IGNORE_BANG,
+                    options);
+                break;
+            }
+            case "password":
+            {
+                call_out("timeout", 90);
+                printf("Please enter your new password: ");
+                input_to("changePassword", INPUT_NOECHO | INPUT_IGNORE_BANG,
+                    options);
+
+                break;
+            }
+            case "who":
+            {
+                executeWhoCommand(1);
+                printf("\n\n");
+                displayMenuChoices(options);
+                break;
+            }
+            case "log off":
+            {
+                destruct(this_object());
+                break;
+            }
+        }
+    }
+    else
+    {
+        displayMenuChoices(options);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask mapping displayCharacterOptions(string userName,
+    string password)
+{
+    mapping ret = ([
+        "1": ([ 
+            "text": sprintf("Log in with %s (Default)", capitalize(userName)),
+            "character": userName,
+            "type": "log in",
+            "password": password
+        ])
+    ]);
+
+    int count = 2;
+    string *characters = authenticationService->getCharacters(userName) -
+        ({ userName });
+
+    if (sizeof(characters) > 0)
+    {
+        foreach(string alternateCharacter in characters)
+        {
+            ret[to_string(count)] = ([
+                "text":sprintf("Log in with %s", 
+                    capitalize(alternateCharacter)),
+                "character" : alternateCharacter,
+                "type": "log in"
+            ]);
+            count++;
+        }
+    }
+    ret[to_string(count)] = ([
+        "text": "Create a new character",
+        "type": "create"
+    ]);
+    ret[to_string(count + 1)] = ([
+        "text": "Change your password",
+        "type" : "password"
+    ]);
+    ret[to_string(count + 2)] = ([
+        "text": "See who is currently playing",
+        "type" : "who"
+    ]);
+    ret[to_string(count + 3)] = ([
+        "text": "Log off",
+        "type" : "log off"
+    ]);
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void displayMenu(string userName, string password)
+{
+    removeTimeout();
+
+    printf("\n\nYou have the following login options:\n");
+    mapping options = displayCharacterOptions(userName, password);
+
+    displayMenuChoices(options);
+}

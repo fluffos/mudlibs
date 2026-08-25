@@ -1,0 +1,282 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Group;
+object Wizard;
+
+protected nosave int Unknown = 0x8;
+protected nosave int None = 0x0;
+protected nosave int Owner = 0x1;
+protected nosave int Write = 0x2;
+protected nosave int Read = 0x4;
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Group = clone_object("/lib/tests/support/services/groups/mockGroup.lpc");
+
+    Wizard = clone_object("/lib/realizations/wizard.lpc");
+    setUsers(({ Wizard }));
+
+    setCustomGroups(({ Group.group() }));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Wizard);
+    destruct(Group);
+    setCustomGroups(({}));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void InitCallsApplyGroupDetails()
+{
+    destruct(Group);
+    Group = clone_object("/lib/tests/support/services/groups/mockGroup.lpc");
+    ExpectTrue(Group.ApplyWasCalled(), "called");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void GroupReturnsUnqualifiedNameOfGroupFile()
+{
+    destruct(Group);
+    Group = clone_object("/lib/services/groups/baseGroup.lpc");
+    ExpectEq("baseGroup", Group.group());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void GroupsInIncorrectLocationWillNotReturnValidGroup()
+{
+    destruct(Group);
+    Group = clone_object("/lib/tests/support/groupInInvalidLocation.lpc");
+
+    ExpectEq(0, Group.group());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void SetNameModifiesTheGroupName()
+{
+    ExpectEq(0, Group.name());
+    Group.testSetName("Test Group");
+    ExpectEq("Test Group", Group.name());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void IsMemberOfReturnsFalseForNonInteractiveUsers()
+{
+    destruct(Group);
+    Group = clone_object("/lib/services/groups/apprentice.lpc");
+
+    setUsers(({  }));
+    ExpectFalse(Group.isMemberOf(Wizard));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void IsMemberOfReturnsTrueIfWizardInteractiveAndInGroup()
+{
+    destruct(Group);
+    Group = clone_object("/lib/services/groups/apprentice.lpc");
+    setCustomGroups(({ Group.group() }));
+
+    ExpectTrue(Group.isMemberOf(Wizard));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void IsMemberOfReturnsFalseIfWizardNotInGroup()
+{
+    destruct(Group);
+    Group = clone_object("/lib/services/groups/god.lpc");
+
+    ExpectFalse(Group.isMemberOf(Wizard));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void IsMemberOfReturnsFalseIfObjectNotAWizard()
+{
+    destruct(Group);
+    Group = clone_object("/lib/services/groups/player.lpc");
+
+    object user = clone_object("/lib/realizations/player.lpc");
+    setUsers(({ user, Wizard }));
+    ExpectFalse(Group.isMemberOf(user));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasReadAccessReturnsFalseIfPermissionNotSet()
+{
+    ExpectFalse(Group.hasReadAccess(Wizard, "/secure/master.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasReadAccessReturnsTrueForSpecificallySetPermission()
+{
+    Group.testAddPermission("/secure/master.lpc", Read);
+    ExpectTrue(Group.hasReadAccess(Wizard, "/secure/master.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasReadAccessReturnsTrueForDirectoryPermission()
+{
+    Group.testAddPermission("/secure", Read);
+    ExpectTrue(Group.hasReadAccess(Wizard, "/secure/master.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasReadAccessReturnsTrueForRecursedDirectoryPermission()
+{
+    Group.testAddPermission("/secure", Read);
+    ExpectTrue(Group.hasReadAccess(Wizard, "/secure/player/files/player.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasReadAccessReturnsCorrectlyIfRecursivePermissionRemoved()
+{
+    Group.testAddPermission("/secure", Read);
+    Group.testAddPermission("/secure/player", None);
+    ExpectFalse(Group.hasReadAccess(Wizard, "/secure/player/files/player.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasReadAccessReturnsCorrectlyForANYDirective()
+{
+    Group.testAddPermission("/guilds", Read);
+    Group.testAddPermission("/guilds/$ANY/stuff", None);
+    ExpectFalse(Group.hasReadAccess(Wizard, "/guilds/something/stuff/x.lpc"));
+    ExpectFalse(Group.hasReadAccess(Wizard, "/guilds/weasel/stuff/x.lpc"));
+    ExpectTrue(Group.hasReadAccess(Wizard, "/guilds/something/blarg/x.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasReadAccessReturnsCorrectlyForUSERDirective()
+{
+    Group.testAddPermission("/players/$USER", Read);
+    ExpectFalse(Group.hasReadAccess(Wizard, "/players/earl/thing.lpc"));
+    Wizard.Name("earl");
+    ExpectTrue(Group.hasReadAccess(Wizard, "/players/earl/thing.lpc"));
+    ExpectFalse(Group.hasReadAccess(Wizard, "/players/fred/thing.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasWriteAccessReturnsFalseIfPermissionNotSet()
+{
+    ExpectFalse(Group.hasWriteAccess(Wizard, "/secure/master.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasWriteAccessReturnsTrueForSpecificallySetPermission()
+{
+    Group.testAddPermission("/secure/master.lpc", Write);
+    ExpectTrue(Group.hasWriteAccess(Wizard, "/secure/master.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasWriteAccessReturnsTrueForDirectoryPermission()
+{
+    Group.testAddPermission("/secure", Write);
+    ExpectTrue(Group.hasWriteAccess(Wizard, "/secure/master.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasWriteAccessReturnsTrueForRecursedDirectoryPermission()
+{
+    Group.testAddPermission("/secure", Write);
+    ExpectTrue(Group.hasWriteAccess(Wizard, "/secure/player/files/player.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasWriteAccessReturnsCorrectlyIfRecursivePermissionRemoved()
+{
+    Group.testAddPermission("/secure", Write);
+    Group.testAddPermission("/secure/player", None);
+    ExpectFalse(Group.hasWriteAccess(Wizard, "/secure/player/files/player.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasWriteAccessReturnsCorrectlyForANYDirective()
+{
+    Group.testAddPermission("/guilds", Write);
+    Group.testAddPermission("/guilds/$ANY/stuff", None);
+    ExpectFalse(Group.hasWriteAccess(Wizard, "/guilds/something/stuff/x.lpc"));
+    ExpectFalse(Group.hasWriteAccess(Wizard, "/guilds/weasel/stuff/x.lpc"));
+    ExpectTrue(Group.hasWriteAccess(Wizard, "/guilds/something/blarg/x.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasWriteAccessReturnsCorrectlyForUSERDirective()
+{
+    Group.testAddPermission("/players/$USER", Write);
+    ExpectFalse(Group.hasWriteAccess(Wizard, "/players/earl/thing.lpc"));
+    Wizard.Name("earl");
+    ExpectTrue(Group.hasWriteAccess(Wizard, "/players/earl/thing.lpc"));
+    ExpectFalse(Group.hasWriteAccess(Wizard, "/players/fred/thing.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasOwnershipAccessReturnsFalseIfPermissionNotSet()
+{
+    ExpectFalse(Group.hasOwnershipAccess(Wizard, "/secure/master.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasOwnershipAccessReturnsTrueForSpecificallySetPermission()
+{
+    Group.testAddPermission("/secure/master.lpc", Read | Write | Owner);
+    ExpectTrue(Group.hasOwnershipAccess(Wizard, "/secure/master.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasOwnershipAccessReturnsTrueForDirectoryPermission()
+{
+    Group.testAddPermission("/secure", Read | Write | Owner);
+    ExpectTrue(Group.hasOwnershipAccess(Wizard, "/secure/master.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasOwnershipAccessReturnsTrueForRecursedDirectoryPermission()
+{
+    Group.testAddPermission("/secure", Read | Write | Owner);
+    ExpectTrue(Group.hasOwnershipAccess(Wizard, "/secure/player/files/player.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasOwnershipAccessReturnsCorrectlyIfRecursivePermissionRemoved()
+{
+    Group.testAddPermission("/secure", Read | Write | Owner);
+    Group.testAddPermission("/secure/player", None);
+    ExpectFalse(Group.hasOwnershipAccess(Wizard, "/secure/player/files/player.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasOwnershipAccessReturnsCorrectlyForANYDirective()
+{
+    Group.testAddPermission("/guilds", Read | Write | Owner);
+    Group.testAddPermission("/guilds/$ANY/stuff", None);
+    ExpectFalse(Group.hasOwnershipAccess(Wizard, "/guilds/something/stuff/x.lpc"));
+    ExpectFalse(Group.hasOwnershipAccess(Wizard, "/guilds/weasel/stuff/x.lpc"));
+    ExpectTrue(Group.hasOwnershipAccess(Wizard, "/guilds/something/blarg/x.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasOwnershipAccessReturnsCorrectlyForUSERDirective()
+{
+    Group.testAddPermission("/players/$USER", Read | Write | Owner);
+    ExpectFalse(Group.hasOwnershipAccess(Wizard, "/players/earl/thing.lpc"));
+    Wizard.Name("earl");
+    ExpectTrue(Group.hasOwnershipAccess(Wizard, "/players/earl/thing.lpc"));
+    ExpectFalse(Group.hasOwnershipAccess(Wizard, "/players/fred/thing.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanTraverseRelativePaths()
+{
+    string testFile = "/secure/player/./././../../secure/../secure/player/player.lpc";
+
+    ExpectFalse(Group.hasWriteAccess(Wizard, testFile));
+    Group.testAddPermission("/secure/player/player.lpc", Write);
+
+    ExpectTrue(Group.hasWriteAccess(Wizard, testFile));
+}

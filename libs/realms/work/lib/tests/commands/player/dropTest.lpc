@@ -1,0 +1,327 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+#include "/lib/include/inventory.h"
+#include "/sys/telnet.h"
+
+object Player;
+object Item;
+object Chainmail;
+object Weapon;
+object Room;
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Room = clone_object("/lib/environment/environment.lpc");
+
+    Player = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Player.Name("bob");
+    Player.addCommands();
+    Player.Str(10);
+    Player.Dex(10);
+    Player.Con(10);
+    Player.Int(10);
+    Player.Wis(10);
+    Player.hitPoints(Player.maxHitPoints());
+
+    Player->move_object(Room);
+
+    Item = clone_object("/lib/tests/support/items/testSword.lpc");
+    Item->move_object(Player);
+
+    Chainmail = clone_object("/lib/items/armor.lpc");
+    Chainmail.set("armor type", "chainmail");
+    Chainmail.set("name", "chainmail");
+    Chainmail.set("short", "a chainmail hauberk");
+    Chainmail.set("equipment locations", Armor);
+
+    Weapon = clone_object("/lib/items/weapon.lpc");
+    Weapon.set("weapon type", "long sword");
+    Weapon.set("name", "sword");
+    Weapon.set("short", "a long sword");
+    Weapon.set("aliases", ({ "sword" }));
+
+    Chainmail->move_object(Player);
+    Weapon->move_object(Player);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Weapon);
+    destruct(Chainmail);
+    destruct(Item);
+    destruct(Player);
+    destruct(Room);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ExecuteRegexpIsNotGreedy()
+{
+    ExpectFalse(Player.executeCommand("bedropify"), "bedropify");
+    ExpectFalse(Player.executeCommand("dropsy"), "dropsy");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DropMovesItemFromPersonToEnvironment()
+{
+    ExpectEq(1, sizeof(all_inventory(Room)));
+    ExpectTrue(Player.executeCommand("drop sword"));
+    ExpectEq(2, sizeof(all_inventory(Room)));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DropAllMovesAllMovableItemsFromPersonToEnvironment()
+{
+    ExpectEq(1, sizeof(all_inventory(Room)));
+    ExpectTrue(Player.executeCommand("drop all"));
+    ExpectEq(4, sizeof(all_inventory(Room)));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void AFlagDropsAllMovableItemsThatMatchId()
+{
+    ExpectEq(1, sizeof(all_inventory(Room)));
+    ExpectTrue(Player.executeCommand("drop -a sword"));
+    ExpectEq(3, sizeof(all_inventory(Room)));
+    ExpectTrue(present(Weapon, Room));
+    ExpectTrue(present(Item, Room));
+    ExpectTrue(present(Chainmail, Player));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void NoAFlagDropsOnlyTopMovableItemThatMatchesId()
+{
+    ExpectEq(1, sizeof(all_inventory(Room)));
+    ExpectTrue(Player.executeCommand("drop sword"));
+    ExpectEq(2, sizeof(all_inventory(Room)));
+    ExpectTrue(present(Weapon, Room));
+    ExpectTrue(present(Item, Player));
+    ExpectTrue(present(Chainmail, Player));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DropDoesNotDropEquippedItemsByDefault()
+{
+    Item.equip("sword");
+    Chainmail.equip("chainmail");
+
+    ExpectEq(1, sizeof(all_inventory(Room)));
+    ExpectTrue(Player.executeCommand("drop all"));
+    ExpectEq(2, sizeof(all_inventory(Room)));
+    ExpectTrue(present(Weapon, Room), "Weapon in room");
+    ExpectTrue(present(Item, Player), "Item on player");
+    ExpectTrue(present(Chainmail, Player), "Chainmail on player");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DropWithFFlagForcesDropOfEquippedItems()
+{
+    Item.equip("sword");
+    Chainmail.equip("chainmail");
+
+    ExpectEq(1, sizeof(all_inventory(Room)));
+    ExpectTrue(Player.executeCommand("drop -f all"));
+    ExpectEq(4, sizeof(all_inventory(Room)));
+    ExpectTrue(present(Weapon, Room), "Weapon in room");
+    ExpectTrue(present(Item, Room), "Item on player");
+    ExpectTrue(present(Chainmail, Room), "Chainmail on player");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DropWithFAndAFlagsForcesDropOfEquippedItemsOfProperType()
+{
+    Item.equip("sword");
+    Chainmail.equip("chainmail");
+
+    ExpectEq(1, sizeof(all_inventory(Room)));
+    ExpectTrue(Player.executeCommand("drop -a -f sword"));
+    ExpectEq(3, sizeof(all_inventory(Room)));
+    ExpectTrue(present(Weapon, Room), "Weapon in room");
+    ExpectTrue(present(Item, Room), "Item on player");
+    ExpectTrue(present(Chainmail, Player), "Chainmail on player");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DropWithAAndFFlagsReversedForcesDropOfEquippedItemsOfProperType()
+{
+    Item.equip("sword");
+    Chainmail.equip("chainmail");
+
+    ExpectEq(1, sizeof(all_inventory(Room)));
+    ExpectTrue(Player.executeCommand("drop -f -a sword"));
+    ExpectEq(3, sizeof(all_inventory(Room)));
+    ExpectTrue(present(Weapon, Room), "Weapon in room");
+    ExpectTrue(present(Item, Room), "Item on player");
+    ExpectTrue(present(Chainmail, Player), "Chainmail on player");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotDropZeroCoins()
+{
+    ExpectFalse(Player.executeCommand("drop 0 coins"));
+    ExpectFalse(present_clone("/lib/items/money.lpc", Room));
+    ExpectEq("You cannot drop 0 coins.\n", Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotDropMoreCoinsThanUserHas()
+{
+    Player.addMoney(100);
+    ExpectFalse(Player.executeCommand("drop 110 coins"));
+    ExpectFalse(present_clone("/lib/items/money.lpc", Room));
+    ExpectEq("You cannot drop 110 coins.\n", Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanDropAllCoins()
+{
+    Player.addMoney(100);
+    ExpectTrue(Player.executeCommand("drop all money"));
+    ExpectTrue(present_clone("/lib/items/money.lpc", Room));
+    ExpectEq(100, present_clone("/lib/items/money.lpc", Room).query("value"));
+    ExpectEq("You drop money.\n", Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanDropOneCoin()
+{
+    Player.addMoney(100);
+    ExpectTrue(Player.executeCommand("drop 1 coin"));
+    ExpectTrue(present_clone("/lib/items/money.lpc", Room));
+    ExpectEq(1, present_clone("/lib/items/money.lpc", Room).query("value"));
+    ExpectEq("You drop money.\n", Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanDropCoin()
+{
+    Player.addMoney(100);
+    ExpectTrue(Player.executeCommand("drop coin"));
+    ExpectTrue(present_clone("/lib/items/money.lpc", Room));
+    ExpectEq(1, present_clone("/lib/items/money.lpc", Room).query("value"));
+    ExpectEq("You drop money.\n", Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanDropSomeCoins()
+{
+    Player.addMoney(100);
+    ExpectTrue(Player.executeCommand("drop 25 coins"), "a");
+    ExpectTrue(present_clone("/lib/items/money.lpc", Room), "b");
+    ExpectEq(25, present_clone("/lib/items/money.lpc", Room).query("value"));
+    ExpectEq("You drop money.\n", Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanDropSomeMoney()
+{
+    Player.addMoney(100);
+    ExpectTrue(Player.executeCommand("drop 100 money"));
+    ExpectTrue(present_clone("/lib/items/money.lpc", Room));
+    ExpectEq(100, present_clone("/lib/items/money.lpc", Room).query("value"));
+    ExpectEq("You drop money.\n", Player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PlayersCannotDropItemsWithoutDropMethod()
+{
+    object player2 = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Player.Name("fred");
+
+    player2->move_object(Player);
+    ExpectFalse(Player.executeCommand("drop fred"));
+    ExpectFalse(present(player2, Room));
+
+    destruct(player2);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void WizardsCanDropItemsWithoutDropMethod()
+{
+    object player2 = clone_object("/lib/tests/support/services/mockWizard.lpc");
+    Player.Name("fred");
+
+    player2->move_object(Room);
+    Player->move_object(player2);
+
+    ExpectTrue(player2.executeCommand("drop fred"));
+    ExpectTrue(present(Player, Room));
+
+    destruct(player2);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void WizardsCanDropItemsById()
+{
+    object player2 = clone_object("/lib/tests/support/services/mockWizard.lpc");
+    Player.Name("fred");
+
+    player2->move_object(Room);
+    Player->move_object(player2);
+
+    ExpectTrue(player2.executeCommand("drop " + object_name(Player)));
+    ExpectTrue(present(Player, Room));
+
+    destruct(player2);
+}
+
+// ---------------------------------------------------------------------------
+// GMCP inventory push on drop
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void DropPushesGmcpInventoryUpdateWhenGmcpEnabled()
+{
+    ToggleCallOutBypass();
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    int before = sizeof(Player.caughtGmcpFrames());
+    Player.executeCommand("drop sword");
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) > before,
+        "dropping an item triggers at least one GMCP frame");
+    ExpectSubStringMatch("Char.Inventory", Player.caughtGmcp(),
+        "the triggered frame is Char.Inventory");
+    ToggleCallOutBypass();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DropDoesNotPushGmcpWhenGmcpNotEnabled()
+{
+    int before = sizeof(Player.caughtGmcpFrames());
+    Player.executeCommand("drop sword");
+    ExpectEq(before, sizeof(Player.caughtGmcpFrames()),
+        "no GMCP frame emitted when GMCP is not enabled");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DroppingEquippedItemPushesGmcpInventoryAndScore()
+{
+    ToggleCallOutBypass();
+    Chainmail.equip("armor");
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    int before = sizeof(Player.caughtGmcpFrames());
+    Player.executeCommand("drop -f chainmail");
+    int pushed = sizeof(Player.caughtGmcpFrames()) - before;
+    ExpectTrue(pushed >= 1,
+        "dropping equipped armor triggers GMCP push");
+    ToggleCallOutBypass();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DropEquippedItemWithoutFFlagShowsFailureMessage()
+{
+    destruct(Weapon);
+    Item.equip("sword");
+    ExpectTrue(Player.isEquipped(Item), "item equipped before drop");
+
+    Player.executeCommand("drop sword");
+    ExpectTrue(Player.isEquipped(Item), "item still equipped after drop without -f");
+    ExpectTrue(present(Item, Player), "item still in player inventory");
+    ExpectFalse(present(Item, Room), "item not in room");
+    ExpectSubStringMatch("You must unequip Sword of Weasels before dropping it", 
+        Player.caughtMessage());
+}

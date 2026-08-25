@@ -1,0 +1,354 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+private int hasBeenValidated = 0;
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int DatabaseVersion()
+{
+    return 12;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string RealmsDatabase()
+{
+    return "RealmsLib";
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int canAccessDatabase(object previous)
+{
+    string *programsWithPermission = ({ "/lib/realizations/player.lpc",
+        "/lib/realizations/wizard.lpc", "/lib/commands/player/save.lpc",
+        "/lib/commands/player/quit.lpc", "/secure/login.lpc",
+        "/lib/modules/secure/login.lpc", "/secure/master/user-management.lpc",
+        "/lib/modules/creation/initializePlayer.lpc",
+        "/secure/simulated-efuns/database.lpc" });
+
+    if (PORT->member(inherit_list(this_object()),
+        "/secure/simulated-efuns/testing.lpc") > -1)
+    {
+        object restoreCaller = PORT->call_direct(this_object(), "restoreCaller");
+        if (objectp(restoreCaller))
+        {
+            programsWithPermission += ({ PORT->program_name(restoreCaller) });
+        }
+        programsWithPermission += 
+            ({ "/lib/tests/support/services/mockPlayer.lpc" });
+    }
+    
+    return PORT->member(programsWithPermission, PORT->program_name(previous)) > -1;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int isValidPersistenceObject(object persistence)
+{
+    return PORT->member(({ "/lib/realizations/player.lpc",
+       "/lib/realizations/wizard.lpc" }), PORT->program_name(persistence)) > -1;
+}
+
+// FluffOS PORT NOTE: this driver's real db_exec(handle, query) returns
+// either an int (rows affected) on success OR the error message STRING
+// directly on failure -- there's no separate per-handle db_error() query
+// efun on this driver at all (LDMud has one; queried after the fact from
+// driver-side connection state). Rebuilt around that: the string case is
+// captured into lastDbError (below) so db_error(handle) still works for
+// every caller in this codebase that queries it separately after the
+// fact, same as before.
+private mapping lastDbError = ([]);
+private mapping dbFetchCursor = ([]);
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: LDMud's caller_stack() (the full previous_object()
+// call chain) doesn't exist on this driver under that name -- this
+// driver's own previous_object(-1) returns the same array. (Defined here,
+// ahead of its first use below -- this driver's compiler resolves a
+// same-file function call against what's already been parsed so far, not
+// the whole file, so a forward reference to a same-file function defined
+// later doesn't compile.)
+public nomask object *caller_stack()
+{
+    return efun::previous_object(-1);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: LDMud's db_conv_string() (escape a string for safe
+// embedding in a SQL string literal) doesn't exist on this driver --
+// reimplemented directly: backslash-escapes backslashes and single quotes,
+// the two characters that terminate/escape a MySQL string literal.
+public nomask string db_conv_string(string value)
+{
+    string result;
+    int i, len;
+
+    if (!stringp(value))
+    {
+        return value;
+    }
+
+    result = "";
+    len = sizeof(value);
+    for (i = 0; i < len; i++)
+    {
+        if ((value[i] == '\'') || (value[i] == '\\'))
+        {
+            result += "\\";
+        }
+        result += value[i..i];
+    }
+    return result;
+}
+
+// FluffOS PORT NOTE: this driver's real db_exec(handle, query) returns
+// either an int (rows affected) on success OR the error message STRING
+// directly on failure -- there's no separate per-handle db_error() query
+// efun on this driver at all (LDMud has one; queried after the fact from
+// driver-side connection state). Rebuilt around that: the string case is
+// captured into lastDbError so db_error(handle) still works for every
+// caller in this codebase that queries it separately after the fact, same
+// as before. Also resets dbFetchCursor (see db_fetch() below) since a new
+// query invalidates any in-progress row cursor on this handle.
+/////////////////////////////////////////////////////////////////////////////
+public nomask int db_exec(int dbHandle, string sqlQuery)
+{
+    map_delete(dbFetchCursor, dbHandle);
+
+    if (stringp(sqlQuery) &&
+        (sizeof(PORT->regreplace(sqlQuery, " ", "", 1)) > 1))
+    {
+        mixed result = efun::db_exec(dbHandle, sqlQuery);
+
+        if (stringp(result))
+        {
+            lastDbError[dbHandle] = result;
+            write_file("/log/DBERROR",
+                sprintf("%s:\n%s\n%s\nCall stack:%O\n", ctime(time()),
+                    result, sqlQuery, caller_stack()));
+        }
+        else
+        {
+            map_delete(lastDbError, dbHandle);
+        }
+    }
+    return dbHandle;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: LDMud's db_error(handle) efun doesn't exist on this
+// driver -- see db_exec() above for how the last error per handle is
+// captured instead.
+public nomask string db_error(int dbHandle)
+{
+    return lastDbError[dbHandle];
+}
+
+// FluffOS PORT NOTE: this driver's real db_fetch(handle, row) requires an
+// explicit row number (1-based; row 0 returns column names) -- LDMud's
+// db_fetch(handle) instead advances an internal cursor and returns
+// successive rows on each call, an empty array once exhausted, which is
+// the idiom every call site in this codebase (a `while (db_fetch(h));`
+// drain loop, or a single "the next/first row" call) relies on. Rebuilt
+// with an explicit per-handle row cursor.
+/////////////////////////////////////////////////////////////////////////////
+public nomask mixed db_fetch(int dbHandle)
+{
+    int row = (dbFetchCursor[dbHandle] || 0) + 1;
+    mixed result = efun::db_fetch(dbHandle, row);
+
+    if (pointerp(result) && sizeof(result))
+    {
+        dbFetchCursor[dbHandle] = row;
+    }
+    else
+    {
+        map_delete(dbFetchCursor, dbHandle);
+        // FluffOS PORT NOTE: this driver's db_fetch() returns an EMPTY
+        // ARRAY (({}))  -- not 0 -- both for "row out of range"/exhausted
+        // results AND for "no result set at all" (e.g. the preceding
+        // query failed because a table doesn't exist yet -- exactly the
+        // bootstrap case validateDatabase()/createDatabase() below are
+        // designed to detect and handle). This codebase's own calling
+        // code universally checks `!result || !result[0]`, assuming a
+        // falsy 0 for "no row" (as LDMud's db_fetch() apparently
+        // returns) -- an empty-but-truthy array made `result[0]` a hard
+        // "Array index out of bounds" crash instead, on literally the
+        // first-ever connect to a fresh, schema-less database. Normalized
+        // to 0 here so every caller's existing falsy check works as
+        // originally written.
+        result = 0;
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask void executeDatabaseScript(int dbHandle, string script)
+{
+    string *commands = explode(script, "##");
+    db_exec(dbHandle, "use " + db_conv_string(RealmsDatabase()) + ";");
+
+    foreach(string command in commands)
+    {
+        db_exec(dbHandle, command);
+
+        string error = db_error(dbHandle);
+        if (error)
+        {
+            PORT->raise_error(
+                sprintf("ERROR dataAccess - While executing: %s\n%s\n",
+                    command[0..((sizeof(command) > 78) ? 78 : (sizeof(command) - 1))], error));
+        }
+    }
+    while (db_fetch(dbHandle));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void createDatabase(int dbHandle)
+{
+    string dbScript =
+        read_file("/secure/simulated-efuns/database/initial/dropDBContents.sql") + 
+        read_file("/secure/simulated-efuns/database/initial/generateDB.sql");
+
+    db_exec(dbHandle, sprintf("show databases like '%s';", 
+        db_conv_string(RealmsDatabase())));
+
+    mixed result = db_fetch(dbHandle);
+    if (!result || !result[0])
+    {
+        PORT->raise_error("ERROR dataAccess: The Realms database does not exist.\n"
+            "Please create it using the following script from outside the MUD:\n"
+            "    '/secure/simulated-efuns/database/installDatabase'\n");
+    }
+
+    executeDatabaseScript(dbHandle, dbScript);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void migrateDatabase(int dbHandle, int currentVersion,
+    int requiredVersion)
+{
+    string migrationDir = "/secure/simulated-efuns/database/migrations/";
+
+    string *scripts = sort_array(efun::get_dir(migrationDir + "*.sql"), (: $1 > $2 :));
+
+    foreach(string scriptFile in scripts)
+    {
+        int version = to_int(PORT->regreplace(scriptFile, "([0-9]+)_.*", "\\1", 1));
+        if ((version <= requiredVersion) && (version > currentVersion))
+        {
+            string script = read_file(migrationDir + scriptFile);
+            executeDatabaseScript(dbHandle, script);
+
+            db_exec(dbHandle, sprintf(
+                "update versionInfo set id=%d where versionType='database';",
+                version));
+
+            mixed result = db_fetch(dbHandle);
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask varargs void validateDatabase(int dbHandle)
+{
+    string query = "select id from versionInfo "
+        "where versionType = 'database' order by id desc limit 1;";
+
+    db_exec(dbHandle, query);
+    mixed result = db_fetch(dbHandle);
+
+    if (result && result[0])
+    {
+        int currentVersion = to_int(result[0]);
+        int requiredVersion = DatabaseVersion();
+        if (currentVersion < requiredVersion)
+        {
+            migrateDatabase(dbHandle, currentVersion, requiredVersion);
+        }
+    }
+    else
+    {
+        createDatabase(dbHandle);
+        migrateDatabase(dbHandle, 1, DatabaseVersion());
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping availableRoles()
+{
+    object roleService = load_object("/lib/modules/secure/dataAccess.lpc");
+    return roleService->availableRoles();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int createRole(string newRole, string type)
+{
+    object roleService = load_object("/lib/modules/secure/dataAccess.lpc");
+    return roleService->addRole(newRole, type);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string addRoleToPlayer(object character, string newRole)
+{
+    string ret = 0;
+
+    if (objectp(character))
+    {
+        object roleService = load_object("/lib/modules/secure/dataAccess.lpc");
+        ret = roleService->addRoleToPlayer(character, newRole);
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int removeRoleFromPlayer(object character, string newRole)
+{
+    int ret = 0;
+
+    if (objectp(character))
+    {
+        object roleService = load_object("/lib/modules/secure/dataAccess.lpc");
+        ret = roleService->removeRoleFromPlayer(character, newRole);
+    }
+    return ret;
+}
+
+// FluffOS PORT NOTE: LDMud's db_connect(database, user, password) has a
+// completely different argument order/count from this driver's real
+// db_connect(host, database, user, type) -- and this driver has no
+// password argument to db_connect() at all: the password is instead
+// supplied out-of-band by the master object's valid_database() apply
+// (see secure/master/security.lpc's valid_database(), added for this
+// port), which the driver calls internally on every db_connect(). The
+// "type" 4th argument selects the backend (USE_MYSQL etc, compiled-in
+// constant on this driver's build) rather than LDMud's own compile-time
+// DEFAULT_DB -- omitted here so the driver's own compiled-in default is
+// used. Host is hardcoded to 127.0.0.1 (TCP, not "localhost"'s default
+// Unix-socket path, which this port's provisioning doesn't use -- see
+// NOTES.md for how the database is actually stood up for testing).
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs int db_connect(string database, string user,
+    string password)
+{
+    int handle = efun::db_connect("127.0.0.1", database, user || "realmslib");
+
+    if (!hasBeenValidated)
+    {
+        validateDatabase(handle);
+    }
+
+    return handle;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int db_close(int handle)
+{
+    return efun::db_close(handle);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int *db_handles()
+{
+    // disabled for security reasons
+    return ({});
+}

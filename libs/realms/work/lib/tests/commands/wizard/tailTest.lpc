@@ -1,0 +1,107 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Wizard;
+object Catch;
+
+/////////////////////////////////////////////////////////////////////////////
+void Init()
+{
+    setRestoreCaller(this_object());
+    object database = clone_object("/lib/tests/modules/secure/fakeDatabase.lpc");
+    database.PrepDatabase();
+
+    object dataAccess = clone_object("/lib/modules/secure/dataAccess.lpc");
+    dataAccess.savePlayerData(database.GetWizardOfLevel("admin"));
+
+    destruct(dataAccess);
+    destruct(database);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Catch = clone_object("/lib/tests/support/services/catchShadow.lpc");
+
+    Wizard = clone_object("/lib/realizations/wizard.lpc");
+    Wizard.restore("earl");
+    Wizard.addCommands();
+    Catch.beginShadow(Wizard);
+
+    setUsers(({ Wizard }));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Wizard);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ExecuteRegexpIsNotGreedy()
+{
+    ExpectFalse(Wizard.executeCommand("htail x y"), "htail");
+    ExpectFalse(Wizard.executeCommand("taild x y"), "taild");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TailDisplaysFirstFiveLinesOfFileByDefault()
+{
+    ExpectTrue(Wizard.executeCommand("tail /brokenFile.lpc"));
+
+    // This should only display the first five lines plus a blank line
+    ExpectEq("{\n  destruct(this_object());\n}\n\nint query_value() { return "
+        "money; }\n\nstring query_name() { return \"money\"; }\n", Wizard.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TailFailsWhenFileDoesNotExist()
+{
+    ExpectEq(-1, file_size("/players/earl/x"));
+    ExpectFalse(Wizard.executeCommand("tail /players/earl/x"));
+    ExpectSubStringMatch("The file '/players/earl/x' does not exist.", 
+        Wizard.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TailFailsWhenUserDoesNotHaveReadAccessToSource()
+{
+    ExpectFalse(Wizard.executeCommand("tail /secure/master.lpc"));
+    ExpectSubStringMatch("You do not have read access to '/secure/master.c'",
+        Wizard.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TailProperlyHandlesRelativePaths()
+{
+    copy_file("/brokenFile.lpc", "/players/earl/x");
+    Wizard->command("cd /players/earl");
+
+    ExpectTrue(Wizard.executeCommand("tail x"));
+    ExpectEq(8, sizeof(explode(Wizard.caughtMessage(), "\n")));
+    rm("/players/earl/x");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TailCanSpecifyNumberOfLinesToView()
+{
+    ExpectTrue(Wizard.executeCommand("tail -n20 /brokenFile.lpc"));
+    ExpectEq(20, sizeof(explode(Wizard.caughtMessage(), "\n")));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TailCanHaveSpaceBeforeNumberOfLines()
+{
+    ExpectTrue(Wizard.executeCommand("tail -n 25 /brokenFile.lpc"));
+    ExpectEq(25, sizeof(explode(Wizard.caughtMessage(), "\n")));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TailWillNotExceedTotalLines()
+{
+    ExpectTrue(Wizard.executeCommand("tail -n 200 /brokenFile.lpc"));
+    ExpectEq(108, sizeof(explode(Wizard.caughtMessage(), "\n")));
+}

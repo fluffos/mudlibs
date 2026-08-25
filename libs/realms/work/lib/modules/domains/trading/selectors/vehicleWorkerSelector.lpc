@@ -1,0 +1,251 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/core/baseSelector.lpc";
+
+private string Location;
+private mapping WorkerRequirements;
+private mapping ConstructionData;
+private object SubselectorObj;
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setLocation(string location)
+{
+    Location = location;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setWorkerRequirements(mapping requirements)
+{
+    WorkerRequirements = requirements;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setConstructionData(mapping data)
+{
+    ConstructionData = data + ([]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask mapping getConstructionData()
+{
+    return ConstructionData + ([]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void InitializeSelector()
+{
+    AllowUndo = 0;
+    AllowAbort = 1;
+    SuppressColon = 1;
+    Description = "Assign Workers";
+    Type = "Vehicle Enhancement";
+    Data = ([]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void setUpUserForSelection()
+{
+    string componentName = member(ConstructionData, "component") ?
+        ConstructionData["component"] : "component";
+
+    object vehicleMgmt = getService("vehicleManagement");
+    string workerInfo = "";
+    if (vehicleMgmt)
+    {
+        workerInfo = vehicleMgmt->getVehicleConstructionInfo(
+            User, componentName, ConstructionData);
+    }
+
+    Description = "Assign Workers:\n" +
+        configuration->decorate(
+            format(sprintf("From this menu, you can select "
+                "the workers who will construct the %s.",
+                componentName), 78),
+            "description", "selector", colorConfiguration);
+
+    if (workerInfo != "")
+    {
+        Description += "\n" + workerInfo;
+    }
+
+    Data = ([]);
+    int counter = 1;
+
+    if (mapp(WorkerRequirements))
+    {
+        foreach (string workerType, int qty
+            in WorkerRequirements)
+        {
+            int assigned = 0;
+            if (member(ConstructionData, "assigned workers") &&
+                member(ConstructionData["assigned workers"],
+                    workerType))
+            {
+                mixed workers =
+                    ConstructionData["assigned workers"][workerType];
+                assigned = pointerp(workers) ?
+                    sizeof(workers) : (intp(workers) ? workers : 0);
+            }
+
+            Data[to_string(counter++)] = ([
+                "name": sprintf("%-20s (%d of %d assigned)",
+                    capitalize(workerType), assigned, qty),
+                "type": workerType,
+                "quantity": qty,
+                "assigned": assigned,
+                "description": sprintf("Assign %s to this "
+                    "construction project.\n", workerType),
+                "canShow": 1
+            ]);
+        }
+    }
+
+    int allAssigned = 1;
+    if (mapp(WorkerRequirements))
+    {
+        foreach (string workerType, int qty
+            in WorkerRequirements)
+        {
+            if (!member(ConstructionData, "assigned workers") ||
+                !member(ConstructionData["assigned workers"],
+                    workerType))
+            {
+                allAssigned = 0;
+                break;
+            }
+        }
+    }
+
+    Data[to_string(counter++)] = ([
+        "name": "Confirm Worker Assignment",
+        "type": "confirm",
+        "is disabled": !allAssigned,
+        "description": "Confirm worker assignments and return.\n",
+        "canShow": 1
+    ]);
+
+    Data[to_string(counter++)] = ([
+        "name": "Exit Worker Assignment",
+        "type": "exit",
+        "description": "Return without making changes.\n",
+        "canShow": 1
+    ]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void onSelectorCompleted(object caller)
+{
+    if (User)
+    {
+        if (function_exists("WorkerType", caller) &&
+            function_exists("Selections", caller))
+        {
+            string workerType = caller->WorkerType();
+            mapping selections = caller->Selections();
+
+            if (stringp(workerType) && mapp(selections) &&
+                sizeof(selections))
+            {
+                if (!member(ConstructionData, "assigned workers"))
+                {
+                    ConstructionData["assigned workers"] = ([]);
+                }
+                ConstructionData["assigned workers"][workerType] =
+                    selections;
+            }
+        }
+        setUpUserForSelection();
+        tell_object(User, displayMessage());
+    }
+    SubselectorObj = 0;
+    caller->cleanUp();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected string choiceFormatter(string choice)
+{
+    string choiceColor = (member(Data[choice], "is disabled") &&
+        Data[choice]["is disabled"]) ?
+        "choice disabled" : "choice enabled";
+
+    return sprintf("[%s]%s - %s%s",
+        configuration->decorate("%s", "number", "selector",
+            colorConfiguration),
+        padSelectionDisplay(choice),
+        configuration->decorate("%-35s", choiceColor, "selector",
+            colorConfiguration),
+        displayDetails(choice));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask string displayDetails(string choice)
+{
+    if (member(Data[choice], "is disabled") &&
+        Data[choice]["is disabled"] &&
+        (User->colorConfiguration() == "none"))
+    {
+        return sprintf("%-3s", "N/A");
+    }
+    return "";
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int processSelection(string selection)
+{
+    int ret = -1;
+    if (User)
+    {
+        string type = Data[selection]["type"];
+        ret = (type == "exit") || (selection == "abort");
+
+        if (!ret)
+        {
+            if (!Data[selection]["is disabled"] &&
+                type == "confirm")
+            {
+                ret = 1;
+            }
+            else if (type != "confirm")
+            {
+                mapping component = ([]);
+                if (member(ConstructionData, "component"))
+                {
+                    component = getService("vehicle")->
+                        queryComponent(
+                            ConstructionData["component"]);
+                }
+
+                int duration = 200;
+                if (sizeof(component) &&
+                    member(component, "construction") &&
+                    member(component["construction"], "duration"))
+                {
+                    duration =
+                        component["construction"]["duration"];
+                }
+
+                SubselectorObj = clone_object(
+                    "/lib/modules/domains/trading/selectors/"
+                    "vehicleWorkerDetailSelector.lpc");
+                SubselectorObj->setWorkerType(type);
+                SubselectorObj->setQuantityNeeded(
+                    Data[selection]["quantity"]);
+                SubselectorObj->setDuration(duration);
+                SubselectorObj->setLocation(Location);
+
+                SubselectorObj->move_object(User);
+                SubselectorObj->registerEvent(this_object());
+                SubselectorObj->initiateSelector(User);
+            }
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int suppressMenuDisplay()
+{
+    return objectp(SubselectorObj);
+}

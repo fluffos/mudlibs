@@ -1,0 +1,174 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/core/baseSelector.lpc";
+
+private object SubselectorObj;
+private string RuneTier = 0;
+private string RuneType = 0;
+private int MaxBonuses = 1;
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setTier(string tier)
+{
+    RuneTier = tier;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setRuneType(string runeType)
+{
+    RuneType = runeType;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setMaxBonuses(int max)
+{
+    MaxBonuses = max;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void InitializeSelector()
+{
+    AllowUndo = 0;
+    AllowAbort = 1;
+    NumColumns = 2;
+    Data = ([]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask string getMaterialDescription(string materialName,
+    int quantity)
+{
+    object materialService = getService("materials");
+    string matClass = materialService->getMaterialTypeForMaterial(materialName);
+    return sprintf("A piece of %s %s suitable for carving runes.\n"
+        "You have %d on hand.", materialName, matClass, quantity);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void setUpUserForSelection()
+{
+    Data = ([]);
+
+    Type = sprintf("Select Material for %s %s Rune",
+        capitalize(RuneTier), capitalize(RuneType));
+    Description = sprintf("Choose the stone or crystal from which to carve "
+        "your %s %s rune. You must have at least one piece in your inventory.",
+        RuneTier, RuneType);
+
+    // Find all material.c objects of class "stone" or "crystal" in inventory.
+    object *inventory = filter(deep_inventory(User),
+        (: (member(inherit_list($1), "/lib/items/material.lpc") > -1) :));
+
+    // Aggregate by blueprint name and sum quantities.
+    mapping found = ([]);
+    object materialService = getService("materials");
+    foreach (object item in inventory)
+    {
+        string blueprint = item->query("blueprint");
+        if (!blueprint)
+        {
+            continue;
+        }
+        string matClass = materialService->getMaterialTypeForMaterial(blueprint);
+        if (matClass != "stone" && matClass != "crystal" && matClass != "skeletal")
+        {
+            continue;
+        }
+        if (!member(found, blueprint))
+        {
+            found[blueprint] = 0;
+        }
+        found[blueprint] += item->query("quantity");
+    }
+
+    int optionCount = 1;
+    string *sorted = sort_array(keys(found), (: $1 > $2 :));
+    foreach (string materialName in sorted)
+    {
+        Data[to_string(optionCount)] = ([
+            "name": capitalize(materialName),
+            "description": getMaterialDescription(materialName, found[materialName]),
+            "material": materialName,
+            "quantity": found[materialName],
+            "canShow": 1,
+        ]);
+        optionCount++;
+    }
+
+    if (!sizeof(found))
+    {
+        Data[to_string(optionCount)] = ([
+            "name": configuration->decorate("No suitable materials in inventory",
+                "failure", "selector", colorConfiguration),
+            "description": "You have no stone or crystal materials. "
+                "Obtain some before crafting a rune.",
+            "type": "none",
+            "canShow": 1,
+        ]);
+        optionCount++;
+    }
+
+    Data[to_string(optionCount)] = ([
+        "name": "Exit Material Selection",
+        "description": "This option returns to the rune selection menu.",
+        "type": "exit",
+        "canShow": 1,
+    ]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int processSelection(string selection)
+{
+    int ret = -1;
+    if (User)
+    {
+        string selType = member(Data[selection], "type") ?
+            Data[selection]["type"] : "";
+        ret = (selType == "exit") || (selection == "abort");
+        if (!ret && selType != "none" && selType != "exit" &&
+            member(Data[selection], "material"))
+        {
+            SubselectorObj =
+                clone_object("/guilds/runeskald/selectors/craftRuneBonusSelector.lpc");
+            SubselectorObj->setTier(RuneTier);
+            SubselectorObj->setRuneType(RuneType);
+            SubselectorObj->setMaterial(Data[selection]["material"]);
+            SubselectorObj->setMaxBonuses(MaxBonuses);
+            SubselectorObj->move_object(User);
+            SubselectorObj->registerEvent(this_object());
+            SubselectorObj->initiateSelector(User);
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void onSelectorCompleted(object caller)
+{
+    if (User)
+    {
+        notifySynchronous("onSelectorCompleted");
+    }
+    caller->cleanUp();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int suppressMenuDisplay()
+{
+    return objectp(SubselectorObj);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected string choiceFormatter(string choice)
+{
+    string displayType = (member(Data[choice], "type") &&
+        Data[choice]["type"] == "none") ? "choice disabled" : "choice enabled";
+
+    return sprintf("    [%s]%s - %s\n",
+        configuration->decorate("%s", "number", "selector", colorConfiguration),
+        padSelectionDisplay(choice),
+        configuration->decorate("%-30s", displayType, "selector",
+            colorConfiguration));
+}

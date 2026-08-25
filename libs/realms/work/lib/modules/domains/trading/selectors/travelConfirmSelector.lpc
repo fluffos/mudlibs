@@ -1,0 +1,260 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/core/baseSelector.lpc";
+
+private object SubselectorObj;
+private string Destination;
+private mapping RouteInfo;
+private int TravelCost;
+private object SelectedVehicle;
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setDestination(string dest)
+{
+    Destination = dest;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setRouteInfo(mapping info)
+{
+    RouteInfo = info;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void setTravelCost(int cost)
+{
+    TravelCost = cost;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void InitializeSelector()
+{
+    AllowUndo = 0;
+    AllowAbort = 1;
+    SuppressColon = 1;
+    Description = "Travel Confirmation";
+    Type = "Travel";
+    Data = ([]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void setUpUserForSelection()
+{
+    Data = ([]);
+    int counter = 1;
+
+    string portName = User->getCurrentLocation();
+    object *vehicles = User->getVehiclesAtLocation(portName);
+    object *compatible = ({});
+
+    foreach(object vehicle in vehicles)
+    {
+        if (objectp(vehicle))
+        {
+            mapping blueprint = vehicle->getBlueprint();
+            if (mapp(blueprint) && member(blueprint, "route type") &&
+                blueprint["route type"] == RouteInfo["type"])
+            {
+                compatible += ({ vehicle });
+            }
+        }
+    }
+
+    string vehicleDesc = "None available";
+    if (sizeof(compatible))
+    {
+        SelectedVehicle = compatible[0];
+        mapping bp = SelectedVehicle->getBlueprint();
+        vehicleDesc = sprintf("%s (Capacity: %d/%d, Protection: %d)",
+            bp["display name"],
+            SelectedVehicle->getUsedSpace(),
+            SelectedVehicle->getCapacity(),
+            SelectedVehicle->getTradeProtection());
+    }
+
+    Description = sprintf("Travel Confirmation:\n") +
+        configuration->decorate(
+            format(sprintf("Travel from %s to %s via %s route. "
+                "The journey will take %d days and cost %d gold. "
+                "Danger level: %d%%.\nVehicle: %s",
+                capitalize(User->getCurrentLocation()),
+                capitalize(Destination),
+                RouteInfo["type"],
+                RouteInfo["days"],
+                TravelCost,
+                RouteInfo["danger"],
+                vehicleDesc), 78),
+            "description", "selector", colorConfiguration);
+
+    Data[to_string(counter++)] = ([
+        "name": sprintf("Confirm Travel to %s", capitalize(Destination)),
+        "type": "confirm",
+        "description": sprintf("Begin the journey to %s. This will cost %d gold "
+            "and take %d days.", capitalize(Destination), TravelCost,
+            RouteInfo["days"]),
+        "canShow": (sizeof(compatible) > 0 && User->getCash() >= TravelCost)
+    ]);
+
+    if (sizeof(compatible) > 1)
+    {
+        foreach(object vehicle in compatible)
+        {
+            mapping bp = vehicle->getBlueprint();
+            Data[to_string(counter++)] = ([
+                "name": sprintf("Select %s", bp["display name"]),
+                "type": "select vehicle",
+                "vehicle": vehicle,
+                "description": sprintf("Use %s for this journey. "
+                    "Cargo: %d/%d, Protection: %d, Speed: %d",
+                    bp["display name"],
+                    vehicle->getUsedSpace(),
+                    vehicle->getCapacity(),
+                    vehicle->getTradeProtection(),
+                    vehicle->getSpeed()),
+                "canShow": 1
+            ]);
+        }
+    }
+
+    Data[to_string(counter++)] = ([
+        "name": "Cancel",
+        "type": "exit",
+        "description": "Cancel travel and return to the previous menu.",
+        "canShow": 1
+    ]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void checkContractCompletion()
+{
+    object tradingDict = getService("trading");
+    object configDict = getService("configuration");
+    string colorConfig = User->colorConfiguration();
+
+    mapping contracts = User->getActiveContracts();
+    if (!sizeof(contracts))
+    {
+        return;
+    }
+
+    string *contractIds = keys(contracts);
+    foreach(string id in contractIds)
+    {
+        mapping contract = contracts[id];
+        if (contract["destination"] == Destination)
+        {
+            int progress = tradingDict->calculateContractProgress(
+                User, contract);
+            if (progress >= 100)
+            {
+                int reward = contract["reward"];
+                User->addCash(reward);
+                User->completeContract(id);
+                User->addTradingExperience(50);
+
+                tell_object(User, configDict->decorate(
+                    sprintf("Contract '%s' completed! You earned %d gold.",
+                        contract["description"], reward),
+                    "success", "quests", colorConfig) + "\n");
+            }
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void executeTravel()
+{
+    object tradingDict = getService("trading");
+    object configDict = getService("configuration");
+    string colorConfig = User->colorConfiguration();
+
+    User->addCash(-TravelCost);
+
+    string previousLocation = User->getCurrentLocation();
+    SelectedVehicle->setLocation(Destination);
+    User->setCurrentLocation(Destination);
+
+    object envDict = getService("environment");
+    int travelMinutes = RouteInfo["days"] * 1440;
+    envDict->advanceTime(travelMinutes);
+
+    tell_object(User, configDict->decorate(
+        sprintf("You depart %s bound for %s. The %s route stretches "
+            "ahead...", capitalize(previousLocation),
+            capitalize(Destination), RouteInfo["type"]),
+        "description", "selector", colorConfig) + "\n");
+
+    int dangerRoll = random(100);
+    if (dangerRoll < RouteInfo["danger"])
+    {
+        SubselectorObj = clone_object(
+            "/lib/modules/domains/trading/selectors/travelEventSelector.lpc");
+        SubselectorObj->setVehicle(SelectedVehicle);
+        SubselectorObj->setRouteInfo(RouteInfo);
+        SubselectorObj->setDestination(Destination);
+        SubselectorObj->move_object(User);
+        SubselectorObj->registerEvent(this_object());
+        SubselectorObj->initiateSelector(User);
+    }
+    else
+    {
+        tell_object(User, configDict->decorate(
+            sprintf("After %d days of uneventful travel, you arrive "
+                "safely at %s.", RouteInfo["days"],
+                capitalize(Destination)),
+            "success", "quests", colorConfig) + "\n");
+
+        checkContractCompletion();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int processSelection(string selection)
+{
+    int ret = -1;
+    if (User)
+    {
+        string type = Data[selection]["type"];
+        ret = (type == "exit");
+
+        if (!ret && Data[selection]["canShow"])
+        {
+            switch(type)
+            {
+                case "confirm":
+                {
+                    if (objectp(SelectedVehicle))
+                    {
+                        executeTravel();
+                        ret = 1;
+                    }
+                    break;
+                }
+                case "select vehicle":
+                {
+                    SelectedVehicle = Data[selection]["vehicle"];
+                    setUpUserForSelection();
+                    tell_object(User, displayMessage());
+                    break;
+                }
+            }
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void onSelectorCompleted(object caller)
+{
+    checkContractCompletion();
+    caller->cleanUp();
+    notifySynchronous("onSelectorCompleted");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int suppressMenuDisplay()
+{
+    return objectp(SubselectorObj);
+}

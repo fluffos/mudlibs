@@ -1,0 +1,285 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+#include <functionlist.h>
+
+object Security;
+object Wizard;
+
+/////////////////////////////////////////////////////////////////////////////
+void Init()
+{
+    setRestoreCaller(this_object());
+    object database = clone_object("/lib/tests/modules/secure/fakeDatabase.lpc");
+    database.PrepDatabase();
+
+    object dataAccess = clone_object("/lib/modules/secure/dataAccess.lpc");
+    dataAccess.savePlayerData(database.GetWizardOfLevel("elder"));
+
+    destruct(dataAccess);
+    destruct(database);
+
+    string *functions = filter(
+        functionlist(this_object(), RETURN_FUNCTION_NAME),
+        (: sizeof(regexp(({ $1 }), "__inline")) :));
+
+    ignoreList += functions;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Security = clone_object("/lib/tests/support/master/securityHelper.lpc");
+    Wizard = clone_object("/lib/realizations/wizard.lpc");
+    Wizard.restore("earl");
+    setUsers(({ Wizard }));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Security);
+    destruct(Wizard);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PriviledgedObjectsCanExecuteWriteFunctions()
+{
+    string writePath = Security.valid_write("/secure/master.lpc", "fred", 
+        "write_file", load_object("/secure/master.lpc"));
+
+    ExpectEq("/secure/master.lpc", writePath);
+
+    writePath = Security.valid_write("/secure/master.lpc", "fred",
+        "write_file", load_object("/lib/modules/secure/persistence.lpc"));
+
+    ExpectEq("/secure/master.lpc", writePath);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void UnpriviledgedObjectsCannotExecuteWriteFunctions()
+{
+    object player = load_object("/lib/realizations/player.lpc");
+    set_this_player(player);
+    clone_object("/lib/tests/support/services/catchShadow.lpc").beginShadow(player);
+
+    string writePath = Security.valid_write("/secure/master.lpc", "fred",
+        "write_file", player);
+
+    ExpectFalse(writePath);
+    ExpectEq("Bad file name (master::valid_write): \"/secure/master.c\" "
+        "(\"write_file\"), caller /lib/realizations/player\n", 
+        player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void NonInteractiveWizardsHaveNoWriteAccess()
+{
+    set_this_player(Wizard);
+
+    ExpectEq(0, Security.valid_write("/lpmud.log", "earl",
+        "write_file", Wizard));
+
+    ExpectEq(0, Security.valid_write("/players/earl/x.lpc", "earl",
+        "write_file", Wizard));
+
+    ExpectEq(0, Security.valid_write("/lib/modules/secure/persistence.lpc", "earl",
+        "write_file", Wizard));
+
+    ExpectEq(0, Security.valid_write("/secure/master.lpc", "earl",
+        "write_file", Wizard));
+
+    ExpectEq(0, Security.valid_write("/areas/eledhel", "earl",
+        "rmdir", Wizard));
+
+    ExpectEq(0, Security.valid_write("/lib/realizations/player.lpc", "earl",
+        "copy_file", Wizard));
+
+    ExpectEq(0, Security.valid_write("/tutorial/temple/fred.lpc", "earl",
+        "write_file", Wizard));
+
+    ExpectEq(0, Security.valid_write("/guilds/stuff.lpc", "earl",
+        "write_file", Wizard));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void WizardsHaveAppropriateWriteAccess()
+{
+    set_this_player(Wizard);
+    Security.ToggleInteractive(Wizard);
+
+    ExpectEq("/lpmud.log", Security.valid_write("/lpmud.log", "earl",
+        "write_file", Wizard));
+
+    ExpectEq("/players/earl/x.lpc", Security.valid_write("/players/earl/x.lpc", "earl",
+        "write_file", Wizard));
+
+    ExpectEq(0, 
+        Security.valid_write("/lib/modules/secure/persistence.lpc", "earl",
+        "write_file", Wizard));
+
+    ExpectEq(0, Security.valid_write("/secure/master.lpc", "earl",
+        "write_file", Wizard));
+
+    ExpectEq("/areas/eledhel", Security.valid_write("/areas/eledhel", "earl",
+        "rmdir", Wizard));
+
+    ExpectEq(0, 
+        Security.valid_write("/lib/realizations/player.lpc", "earl",
+        "copy_file", Wizard));
+
+    ExpectEq("/tutorial/temple/fred.lpc", 
+        Security.valid_write("/tutorial/temple/fred.lpc", "earl",
+        "write_file", Wizard));
+
+    ExpectEq("/guilds/stuff.lpc", 
+        Security.valid_write("/guilds/stuff.lpc", "earl",
+        "write_file", Wizard));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PriviledgedEscalatedObjectsCanOnlyExecuteAuthorizedMethodsInEscaltedDirectories()
+{
+    object cpTest = load_object("/lib/tests/commands/wizard/cpTest.lpc");
+    set_this_player(cpTest);
+    clone_object("/lib/tests/support/services/catchShadow.lpc").beginShadow(cpTest);
+
+    ExpectFalse(Security.valid_write("/secure/master.lpc", "fred",
+        "write_file", cpTest));
+
+    ExpectEq("Bad file name (master::valid_write): \"/secure/master.c\" "
+        "(\"write_file\"), caller /lib/tests/commands/wizard/cpTest\n",
+        cpTest.caughtMessage());
+    cpTest.resetCatchList();
+
+    ExpectFalse(Security.valid_write("/secure/master.lpc", "fred",
+        "copy_file", cpTest));
+
+    ExpectEq("Bad file name (master::valid_write): \"/secure/master.c\" "
+        "(\"copy_file\"), caller /lib/tests/commands/wizard/cpTest\n",
+        cpTest.caughtMessage());
+    cpTest.resetCatchList();
+
+    ExpectFalse(Security.valid_write("/players/earl/blah.lpc", "fred",
+        "write_file", cpTest));
+
+    ExpectEq("Bad file name (master::valid_write): \"/players/earl/blah.c\" "
+        "(\"write_file\"), caller /lib/tests/commands/wizard/cpTest\n",
+        cpTest.caughtMessage());
+    cpTest.resetCatchList();
+
+    ExpectFalse(Security.valid_read("/players/earl", "fred",
+        "get_dir", cpTest));
+
+    ExpectEq("Bad file name (master::valid_read): \"/players/earl\" "
+        "(\"get_dir\"), caller /lib/tests/commands/wizard/cpTest\n",
+        cpTest.caughtMessage());
+    cpTest.resetCatchList();
+
+    ExpectEq("/players/earl/blah.lpc", Security.valid_write("/players/earl/blah.lpc", "fred",
+        "copy_file", cpTest));
+
+    ExpectEq(0, cpTest.caughtMessage());
+
+    ExpectEq("/players/earl/blah.lpc", Security.valid_read("/players/earl/blah.lpc", "fred",
+        "file_size", cpTest));
+
+    ExpectEq(0, cpTest.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PriviledgedObjectsCanExecuteReadFunctions()
+{
+    string readPath = Security.valid_write("/secure/master.lpc", "fred", 
+        "read_file", load_object("/secure/master.lpc"));
+
+    ExpectEq("/secure/master.lpc", readPath);
+
+    readPath = Security.valid_read("/secure/master.lpc", "fred",
+        "read_file", load_object("/lib/modules/secure/persistence.lpc"));
+
+    ExpectEq("/secure/master.lpc", readPath);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void UnpriviledgedObjectsCannotExecuteReadFunctions()
+{
+    object player = load_object("/lib/realizations/player.lpc");
+    set_this_player(player);
+    clone_object("/lib/tests/support/services/catchShadow.lpc").beginShadow(player);
+
+    string readPath = Security.valid_read("/secure/master.lpc", "fred",
+        "read_file", player);
+
+    ExpectFalse(readPath);
+    ExpectEq("Bad file name (master::valid_read): \"/secure/master.c\" "
+        "(\"read_file\"), caller /lib/realizations/player\n", 
+        player.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void NonInteractiveWizardsHaveNoReadAccess()
+{
+    set_this_player(Wizard);
+
+    ExpectEq(0, Security.valid_read("/lpmud.log", "earl",
+        "read_file", Wizard));
+
+    ExpectEq(0, Security.valid_read("/players/earl/x.lpc", "earl",
+        "read_file", Wizard));
+
+    ExpectEq(0, Security.valid_read("/lib/modules/secure/persistence.lpc", "earl",
+        "read_file", Wizard));
+
+    ExpectEq(0, Security.valid_read("/secure/master.lpc", "earl",
+        "read_file", Wizard));
+
+    ExpectEq(0, Security.valid_read("/areas/eledhel", "earl",
+        "get_dir", Wizard));
+
+    ExpectEq(0, Security.valid_read("/secure/master.lpc", "earl",
+        "file_size", Wizard));
+
+    ExpectEq(0, Security.valid_read("/tutorial/temple/fred.lpc", "earl",
+        "read_file", Wizard));
+
+    ExpectEq(0, Security.valid_read("/guilds/stuff.lpc", "earl",
+        "read_file", Wizard));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void WizardsHaveAppropriateReadAccess()
+{
+    set_this_player(Wizard);
+    Security.ToggleInteractive(Wizard);
+
+    ExpectEq("/lpmud.log", Security.valid_read("/lpmud.log", "earl",
+        "read_file", Wizard));
+
+    ExpectEq("/players/earl/x.lpc", Security.valid_read("/players/earl/x.lpc", "earl",
+        "read_file", Wizard));
+
+    ExpectEq(0, 
+        Security.valid_read("/lib/modules/secure/persistence.lpc", "earl",
+        "read_file", Wizard));
+
+    ExpectEq(0, Security.valid_read("/secure/master.lpc", "earl",
+        "read_file", Wizard));
+
+    ExpectEq("/areas/eledhel", Security.valid_read("/areas/eledhel", "earl",
+        "get_dir", Wizard));
+
+    ExpectEq("/lib/realizations/player.lpc", 
+        Security.valid_read("/lib/realizations/player.lpc", "earl",
+        "file_size", Wizard));
+
+    ExpectEq("/tutorial/temple/fred.lpc", 
+        Security.valid_read("/tutorial/temple/fred.lpc", "earl",
+        "read_file", Wizard));
+
+    ExpectEq("/guilds/stuff.lpc", 
+        Security.valid_read("/guilds/stuff.lpc", "earl",
+        "read_file", Wizard));
+}

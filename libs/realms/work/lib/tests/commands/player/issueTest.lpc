@@ -1,0 +1,133 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Wizard;
+object Player;
+object Catch;
+
+/////////////////////////////////////////////////////////////////////////////
+void Init()
+{
+    setRestoreCaller(this_object());
+    object database = clone_object("/lib/tests/modules/secure/fakeDatabase.lpc");
+    database.PrepDatabase();
+
+    object dataAccess = clone_object("/lib/modules/secure/dataAccess.lpc");
+    dataAccess.savePlayerData(database.GetWizardOfLevel("creator"));
+
+    destruct(dataAccess);
+    destruct(database);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    destruct(load_object("/lib/tests/support/environment/fakeEnvironment.lpc"));
+
+    Catch = clone_object("/lib/tests/support/services/catchShadow.lpc");
+
+    Wizard = clone_object("/lib/realizations/wizard.lpc");
+    Wizard.restore("earl");
+    Wizard.addCommands();
+    Catch.beginShadow(Wizard);
+
+    Player = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Player.Name("bob");
+    Player.Gender("male");
+    Player.addCommands();
+
+    Wizard->move_object("/lib/tests/support/environment/fakeEnvironment.lpc");
+    Player->move_object("/lib/tests/support/environment/fakeEnvironment.lpc");
+
+    setUsers(({ Wizard, Player }));
+
+    object channels = getService("channel");
+    channels.registerUser(Wizard);
+    channels.registerUser(Player);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Player);
+    destruct(Catch);
+    destruct(Wizard);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanLogIssue()
+{
+    Player->command("issue");
+
+    ExpectEq("\x1b[0;32;1mYour issue details have been logged.\n\x1b[0m",
+        Player.caughtMessage());
+    ExpectSubStringMatch("A new issue has been logged:.*Affected Object: "
+        "/lib/tests/support/environment/fakeEnvironment.c.*"
+        "Location: /lib/tests/support/environment/fakeEnvironment.c.*"
+        "Details: issue.*"
+        "Current trace data:.*",
+        Wizard.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanLogIssueWithComment()
+{
+    Player->command("issue -c I feel lonely. Talk to me.");
+
+    ExpectEq("\x1b[0;32;1mYour issue details have been logged.\n\x1b[0m",
+        Player.caughtMessage());
+    ExpectSubStringMatch("A new issue has been logged:.*Affected Object: "
+        "/lib/tests/support/environment/fakeEnvironment.c.*"
+        "Location: /lib/tests/support/environment/fakeEnvironment.c.*"
+        "Details: I feel lonely. Talk to me.*"
+        "Current trace data:.*",
+        Wizard.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanLogIssueOnTarget()
+{
+    catch (load_object("this/will/throw/an/error"));
+
+    object stuff = 
+        clone_object("/lib/instances/items/weapons/swords/long-sword.lpc");
+    stuff->move_object(Player);
+
+    Player->command("issue -t sword -c I feel lonely. Talk to me.");
+
+    ExpectEq("\x1b[0;32;1mYour issue details have been logged.\n\x1b[0m",
+        Player.caughtMessage());
+    ExpectSubStringMatch("A new issue has been logged:.*Affected Object: "
+        "/lib/instances/items/weapons/swords/long-sword.c.*"
+        "Location: /lib/tests/support/environment/fakeEnvironment.c.*"
+        "Details: I feel lonely. Talk to me.*"
+        "Current trace data:.*'CanLogIssueOnTarget' in "
+        "'lib/tests/commands/player/issueTest.*",
+        Wizard.caughtMessage());
+
+    destruct(stuff);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CanLogIssueWithTeleport()
+{
+    ExpectEq(load_object("/lib/tests/support/environment/fakeEnvironment.lpc"),
+        environment(Player));
+
+    Player->command("issue -teleport -c I feel lonely. Talk to me.");
+
+    ExpectEq(load_object(StartLocation()),
+        environment(Player));
+
+    ExpectEq("\x1b[0;32;1mYour issue details have been logged.\n\x1b[0m",
+        Player.caughtMessage());
+    ExpectSubStringMatch("A new issue has been logged:.*Affected Object: "
+        "/lib/tests/support/environment/fakeEnvironment.c.*"
+        "Location: /lib/tests/support/environment/fakeEnvironment.c.*"
+        "Details: I feel lonely. Talk to me.*"
+        "NOTE: Bob used teleport to safety.*",
+        Wizard.caughtMessage());
+}

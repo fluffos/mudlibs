@@ -1,0 +1,209 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Player;
+object Target;
+object Room;
+object AttackerEvents;
+object TargetEvents;
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Room = clone_object("/lib/environment/environment.lpc");
+
+    Player = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Player.Name("bob");
+    Player.addCommands();
+    Player.Str(10);
+    Player.Dex(10);
+    Player.Con(10);
+    Player.Int(10);
+    Player.Wis(10);
+    Player.hitPoints(Player.maxHitPoints());
+
+    Target = clone_object("/lib/realizations/monster.lpc");
+    Target.Name("fred");
+    Target.Con(10);
+    Target.hitPoints(Target.maxHitPoints());
+
+    Player->move_object(Room);
+    Target->move_object(Room);
+
+    AttackerEvents = clone_object("/lib/tests/support/events/killEventSubscriber.lpc");
+    Player.registerEvent(AttackerEvents);
+
+    TargetEvents = clone_object("/lib/tests/support/events/killEventSubscriber.lpc");
+    Target.registerEvent(TargetEvents);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(AttackerEvents);
+    destruct(TargetEvents);
+    destruct(Player);
+    destruct(Target);
+    destruct(Room);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ExecuteRegexpIsNotGreedy()
+{
+    ExpectFalse(Player.executeCommand("killl"), "killl");
+    ExpectFalse(Player.executeCommand("akill"), "akill");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void KillInitiatesCombat()
+{
+    ToggleCallOutBypass();
+    ExpectFalse(AttackerEvents.wasAttacker());
+    ExpectFalse(TargetEvents.wasAttacked());
+
+    ExpectTrue(Player.executeCommand("kill fred"));
+
+    ExpectTrue(AttackerEvents.wasAttacker());
+    ExpectTrue(TargetEvents.wasAttacked());
+    ExpectTrue(Player.isInCombatWith(Target));
+    ExpectTrue(Target.isInCombatWith(Player));
+    ToggleCallOutBypass();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void KillFailsForInvalidTarget()
+{
+    ExpectFalse(Player.executeCommand("kill henry"));
+    ExpectTrue(Player.executeCommand("kill fred"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void KillDoesNotInitiateCombatIfNeitherPlayerNorFoeOnKillList()
+{
+    destruct(Target);
+    Target = clone_object("/lib/realizations/player.lpc");
+    Target.Name("fred");
+    Target.registerEvent(TargetEvents);
+    Target->move_object(Room);
+
+    ExpectFalse(AttackerEvents.wasAttacker());
+    ExpectFalse(TargetEvents.wasAttacked());
+
+    ExpectFalse(Player.executeCommand("kill fred"));
+
+    ExpectFalse(AttackerEvents.wasAttacker());
+    ExpectFalse(TargetEvents.wasAttacked());
+    ExpectFalse(Player.isInCombatWith(Target));
+    ExpectFalse(Target.isInCombatWith(Player));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void KillDoesNotInitiateCombatIfPlayerButNotFoeOnKillList()
+{
+    destruct(Target);
+    Target = clone_object("/lib/realizations/player.lpc");
+    Target.Name("fred");
+    Target.registerEvent(TargetEvents);
+    Target->move_object(Room);
+
+    Player.toggleKillList();
+
+    ExpectFalse(AttackerEvents.wasAttacker());
+    ExpectFalse(TargetEvents.wasAttacked());
+
+    ExpectFalse(Player.executeCommand("kill fred"));
+
+    ExpectFalse(AttackerEvents.wasAttacker());
+    ExpectFalse(TargetEvents.wasAttacked());
+    ExpectFalse(Player.isInCombatWith(Target));
+    ExpectFalse(Target.isInCombatWith(Player));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void KillDoesNotInitiateCombatIfFoeButNotPlayerOnKillList()
+{
+    destruct(Target);
+    Target = clone_object("/lib/realizations/player.lpc");
+    Target.Name("fred");
+    Target.registerEvent(TargetEvents);
+    Target->move_object(Room);
+
+    Target.toggleKillList();
+
+    ExpectFalse(AttackerEvents.wasAttacker());
+    ExpectFalse(TargetEvents.wasAttacked());
+
+    ExpectFalse(Player.executeCommand("kill fred"));
+
+    ExpectFalse(AttackerEvents.wasAttacker());
+    ExpectFalse(TargetEvents.wasAttacked());
+    ExpectFalse(Player.isInCombatWith(Target));
+    ExpectFalse(Target.isInCombatWith(Player));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void KillInitiatesCombatIfFoeAndPlayerOnKillList()
+{
+    ToggleCallOutBypass();
+    destruct(Target);
+    Target = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Target.Name("fred");
+    Target.Con(20);
+    Target.hitPoints(Target.maxHitPoints());
+    Target.registerEvent(TargetEvents);
+    Target->move_object(Room);
+
+    Target.toggleKillList();
+    Player.toggleKillList();
+
+    ExpectFalse(AttackerEvents.wasAttacker());
+    ExpectFalse(TargetEvents.wasAttacked());
+
+    ExpectTrue(Player.executeCommand("kill fred"));
+
+    ExpectTrue(AttackerEvents.wasAttacker(), "was attacker event fired");
+    ExpectTrue(TargetEvents.wasAttacked(), "was attacked event fired");
+
+    ExpectTrue(Player.isInCombatWith(Target), "player isInCombatWith target");
+    ExpectTrue(Target.isInCombatWith(Player), "target isInCombatWith player");
+    ToggleCallOutBypass();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void KillDoesNotInitiateCombatIfTargetNotInEnvironmentWithPlayer()
+{
+    destruct(Target);
+    Target = clone_object("/lib/realizations/player.lpc");
+    Target.Name("fred");
+    Target.registerEvent(TargetEvents);
+
+    Target.toggleKillList();
+    Player.toggleKillList();
+
+    ExpectFalse(AttackerEvents.wasAttacker());
+    ExpectFalse(TargetEvents.wasAttacked());
+
+    ExpectFalse(Player.executeCommand("kill fred"));
+
+    ExpectFalse(AttackerEvents.wasAttacker());
+    ExpectFalse(TargetEvents.wasAttacked());
+    ExpectFalse(Player.isInCombatWith(Target));
+    ExpectFalse(Target.isInCombatWith(Player));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void KillDoesNotAllowCallsInRapidSuccession()
+{
+    ExpectTrue(Player.executeCommand("kill fred"));
+    ExpectTrue(Player.isInCombatWith(Target));
+    ExpectTrue(Target.isInCombatWith(Player));
+
+    ExpectFalse(Player.executeCommand("kill fred"));
+    ExpectFalse(Player.executeCommand("kill fred"));
+    ExpectFalse(Player.executeCommand("kill fred"));
+    ExpectTrue(Player.isInCombatWith(Target));
+    ExpectTrue(Target.isInCombatWith(Player));
+}

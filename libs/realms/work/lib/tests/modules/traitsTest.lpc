@@ -1,0 +1,687 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+#include "/lib/include/inventory.h"
+
+object Traits;
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Traits = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Traits.Name("Bob");
+    Traits.Str(20);
+    Traits.Int(20);
+    Traits.Dex(20);
+    Traits.Con(20);
+    Traits.Wis(20);
+    Traits.Chr(20);
+    Traits.hitPoints(Traits.maxHitPoints());
+    Traits.spellPoints(Traits.maxSpellPoints());
+    Traits.staminaPoints(Traits.maxStaminaPoints());
+    Traits.addSkillPoints(100);
+    Traits.advanceSkill("long sword", 5);
+
+    setUsers(({ Traits }));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Traits);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void AddTraitAddsTraitToUser()
+{
+    string trait = "/lib/tests/support/traits/testTrait.lpc";
+
+    ExpectFalse(Traits.isTraitOf(trait));
+    ExpectTrue(Traits.addTrait(trait));
+    ExpectEq(({ "Sword Boy" }), Traits.TraitNames());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CannotAddTraitTwice()
+{
+    string trait = "/lib/tests/support/traits/testTrait.lpc";
+
+    ExpectTrue(Traits.addTrait(trait));
+    ExpectFalse(Traits.addTrait(trait));
+    ExpectTrue(Traits.isTraitOf(trait));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitsResearchTreesReturnEmptyWhenNoTraitsHaveTrees()
+{
+    string trait = "/lib/tests/support/traits/testTraitWithoutResearch.lpc";
+
+    ExpectTrue(Traits.addTrait(trait));
+    ExpectEq(({}), Traits.traitsResearchTrees());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitsResearchTreesReturnsCorrectTrees()
+{
+    string trait = "/lib/tests/support/traits/testTraitWithResearchNoPrerequisites.lpc";
+
+    ExpectTrue(Traits.addTrait(trait));
+    ExpectEq(({ "/lib/tests/support/research/testResearchTreeNoPrerequisites.lpc" }), Traits.traitsResearchTrees());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitsResearchTreesDoesNotReturnTreesUntilPrerequisitesMet()
+{
+    string trait = "/lib/tests/support/traits/testTraitWithResearchThatHasPrerequisites.lpc";
+
+    ExpectTrue(Traits.addTrait(trait));
+    ExpectEq(({}), Traits.traitsResearchTrees());
+
+    Traits.addSkillPoints(100);
+    Traits.advanceSkill("long sword", 10);
+    ExpectEq(({ "/lib/tests/support/research/testResearchTree.lpc" }), Traits.traitsResearchTrees());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitsResearchTreesReturnsMultipleTrees()
+{
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTraitWithResearchThatHasPrerequisites.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTraitWithResearchNoPrerequisites.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTraitWithoutResearch.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTrait.lpc"));
+
+    Traits.addSkillPoints(100);
+    Traits.advanceSkill("long sword", 10);
+    ExpectEq(({ "/lib/tests/support/research/testResearchTree.lpc",
+                "/lib/tests/support/research/testResearchTreeNoPrerequisites.lpc" }),
+        Traits.traitsResearchTrees());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitsReturnsEmptyWhenNoTraitsHaveBeenAdded()
+{
+    ExpectEq(({}), Traits.Traits());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitsReturnsListOfTraits()
+{
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTraitWithoutResearch.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTrait.lpc"));
+    ExpectEq(({ "/lib/tests/support/traits/testTrait.lpc", 
+                "/lib/tests/support/traits/testTraitWithoutResearch.lpc" }),
+        Traits.Traits());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitsOfRootReturnsEmptyWhenNoTraitsHaveBeenAdded()
+{
+    ExpectEq(({}), Traits.TraitsOfRoot("blarg"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitsOfRootReturnsListOfTraits()
+{
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTraitWithoutResearch.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTrait.lpc"));
+    ExpectEq(({ "/lib/tests/support/traits/testTraitWithoutResearch.lpc" }),
+        Traits.TraitsOfRoot("mean"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitNamesReturnsEmptyWhenNoTraitsHaveBeenAdded()
+{
+    ExpectEq(({}), Traits.TraitNames());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitNamesReturnsListOfTraits()
+{
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTraitWithoutResearch.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTrait.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTraitWithResearchThatHasPrerequisites.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTraitWithResearchNoPrerequisites.lpc"));
+    ExpectEq(({ "Armsmaster", "Jerk", "Sword Boy", "Duelist" }), Traits.TraitNames());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void AddTraitFiresOnTraitAddedEvent()
+{
+    getService("environment");
+
+    ToggleCallOutBypass();
+    Traits.registerEvent(clone_object("/lib/tests/support/events/traitEventSubscriber.lpc"));
+    string err = catch (Traits.addTrait("/lib/tests/support/traits/testTrait.lpc"));
+    string expectedError = "*event handler: onTraitAdded called, data: /lib/tests/support/traits/testTrait.c, caller: /lib/tests/support/services/mockPlayer.lpc";
+
+    ExpectEq(expectedError, err, "The correct exception is thrown when setting invalid names");
+    ToggleCallOutBypass();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RemoveTraitReturnsFalseIfTraitNotPresent()
+{
+    ExpectFalse(Traits.removeTrait("/lib/tests/support/traits/testTrait.lpc"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RemoveTraitRemovesSpecifiedTrait()
+{
+    string trait = "/lib/tests/support/traits/testTrait.lpc";
+
+    ExpectTrue(Traits.addTrait(trait));
+    ExpectTrue(Traits.isTraitOf(trait));
+    ExpectTrue(Traits.removeTrait(trait));
+    ExpectFalse(Traits.isTraitOf(trait));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RemoveTraitFiresOnTraitRemovedEvent()
+{
+    getService("environment");
+
+    ToggleCallOutBypass();
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTrait.lpc"));
+
+    Traits.registerEvent(clone_object("/lib/tests/support/events/traitEventSubscriber.lpc"));
+    string err = catch (Traits.removeTrait("/lib/tests/support/traits/testTrait.lpc"));
+    string expectedError = "*event handler: onTraitRemoved called, data: /lib/tests/support/traits/testTrait.c, caller: /lib/tests/support/services/mockPlayer.lpc";
+
+    ExpectEq(expectedError, err, "The correct exception is thrown when setting invalid names");
+    ToggleCallOutBypass();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitSkillBonusesApplied()
+{
+    ExpectEq(5, Traits.getSkill("long sword"), "initial long sword skill");
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTrait.lpc"), "add trait");
+    ExpectEq(6, Traits.getSkill("long sword"), "after trait long sword skill");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitAttributeBonusesApplied()
+{
+    ExpectEq(20, Traits.Str(), "initial strength");
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTrait.lpc"), "add trait");
+    ExpectEq(22, Traits.Str(), "after trait strength");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void MultipleTraitsStackAttributeBonuses()
+{
+    ExpectEq(20, Traits.Str(), "initial strength");
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTrait.lpc"), "add trait");
+    ExpectTrue(Traits.addTrait("/lib/instances/traits/genetic/strong.lpc"), "add trait");
+    ExpectEq(24, Traits.Str(), "after trait strength");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void SetBonusAttackAddsExtraAttack()
+{
+    mapping *expectedAttacks = ({ (["attack type": "fire", "damage" : 15, "to hit" : 60]), (["attack type": "weapon"]), (["attack type": "weapon"]) });
+
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTrait.lpc"), "add test trait");
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTraitWithResearchNoPrerequisites.lpc"), "add trait");
+    ExpectEq(expectedAttacks, Traits.traitsExtraAttacks(), "traitsExtraAttacks returns the correct result");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void LimitedByEquipmentCorrectlyApplied()
+{
+    object room = clone_object("/lib/environment/environment");
+    Traits->move_object(room);
+
+    ExpectEq(5, Traits.getSkill("long sword"), "initial long sword skill");
+    ExpectEq(20, Traits.Str(), "initial strength");
+    ExpectEq(({}), Traits.traitsExtraAttacks(), "traitsExtraAttacks returns the correct result");
+
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testLimitedByEquipmentTrait.lpc"), "initiate research");
+    ExpectEq(5, Traits.getSkill("long sword"), "trait no weapon long sword skill");
+    ExpectEq(20, Traits.Str(), "trait no weapon strength");
+    ExpectEq(({}), Traits.traitsExtraAttacks(), "traitsExtraAttacks returns the correct result");
+
+    object weapon = clone_object("/lib/items/weapon");
+    weapon.set("name", "blah");
+    weapon.set("weapon type", "long sword");
+    weapon.set("equipment locations", OnehandedWeapon);
+    weapon->move_object(Traits);
+    ExpectTrue(weapon.equip("blah"), "weapon equip called");
+
+    ExpectEq(6, Traits.getSkill("long sword"), "trait with weapon long sword skill");
+    ExpectEq(22, Traits.Str(), "trait with weapon strength");
+    ExpectEq(({ (["attack type": "weapon"]) }), Traits.traitsExtraAttacks(), "traitsExtraAttacks returns the correct result");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void LimitedByOpponentBonusesCorrectlyApplied()
+{
+    object target = clone_object("/lib/realizations/player");
+    target.Name("Frank");
+    target.addAlias("frank");
+    target.Race("elf");
+    target.Str(20);
+    target.Int(20);
+    target.Dex(20);
+    target.Con(20);
+    target.Wis(20);
+    target.Chr(20);
+    object room = clone_object("/lib/environment/environment");
+    Traits->move_object(room);
+    target->move_object(room);
+
+    Traits.registerAttacker(target);
+
+    ExpectEq(5, Traits.getSkill("long sword"), "initial long sword skill");
+    ExpectEq(20, Traits.Str(), "initial strength");
+    ExpectEq(({}), Traits.traitsExtraAttacks(), "traitsExtraAttacks returns the correct result");
+
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testLimitedByOpponentTrait.lpc"), "initiate research");
+    ExpectEq(5, Traits.getSkill("long sword"), "after trait long sword skill");
+    ExpectEq(20, Traits.Str(), "after trait strength");
+    ExpectEq(({}), Traits.traitsExtraAttacks(), "traitsExtraAttacks returns the correct result");
+
+    target.Race("dwarf");
+    ExpectEq(6, Traits.getSkill("long sword"), "facing dwarf sword skill");
+    ExpectEq(22, Traits.Str(), "facing dwarf strength");
+    ExpectEq(({ (["attack type": "weapon"]) }), Traits.traitsExtraAttacks(), "traitsExtraAttacks returns the correct result");
+
+    destruct(target);
+    ExpectEq(5, Traits.getSkill("long sword"), "dwarf gone long sword skill");
+    ExpectEq(20, Traits.Str(), "dwarf gone strength");
+    ExpectEq(({}), Traits.traitsExtraAttacks(), "traitsExtraAttacks returns the correct result");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void LimitedByNearDeathBonusesCorrectlyApplied()
+{
+    destruct(Traits);
+    Traits = clone_object("/lib/realizations/player.lpc");
+    Traits.Name("Bob");
+    Traits.Str(20);
+    Traits.Int(20);
+    Traits.Dex(20);
+    Traits.Con(20);
+    Traits.Wis(20);
+    Traits.Chr(20);
+    Traits.addSkillPoints(100);
+    Traits.advanceSkill("long sword", 5);
+
+    ExpectEq(5, Traits.getSkill("long sword"), "initial long sword skill");
+    ExpectEq(20, Traits.Str(), "initial strength");
+    ExpectEq(({}), Traits.traitsExtraAttacks(), "traitsExtraAttacks returns the correct result");
+
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testLimitedByNearDeathTrait.lpc"), "initiate research");
+    ExpectEq(6, Traits.getSkill("long sword"), "near death sword skill");
+    ExpectEq(22, Traits.Str(), "near death strength");
+    ExpectEq(({ (["attack type": "weapon"]) }), Traits.traitsExtraAttacks(), "traitsExtraAttacks returns the correct result");
+
+    Traits.hitPoints(Traits.maxHitPoints());
+    ExpectEq(5, Traits.getSkill("long sword"), "dwarf gone long sword skill");
+    ExpectEq(20, Traits.Str(), "dwarf gone strength");
+    ExpectEq(({}), Traits.traitsExtraAttacks(), "traitsExtraAttacks returns the correct result");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void DefaultOpinionModifierIsZero()
+{
+    object target = clone_object("/lib/realizations/player");
+    ExpectEq(0, Traits.opinionModifier(target));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OpinionModifierIsModifiedPositivelyBySameRoot()
+{
+    object target = clone_object("/lib/realizations/player");
+    ExpectTrue(target.addTrait("/lib/tests/support/traits/testTrait.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTraitWithResearchNoPrerequisites.lpc"));
+    ExpectEq(5, Traits.opinionModifier(target));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OpinionModifierIsNotModifiedNegativelyByOppositeRoot()
+{
+    object target = clone_object("/lib/realizations/player");
+    ExpectTrue(target.addTrait("/lib/tests/support/traits/testTrait.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testLimitedByOpponentTrait.lpc"));
+    ExpectEq(-5, Traits.opinionModifier(target));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OpinionModifierIsModifiedByUnrelatedRoot()
+{
+    object target = clone_object("/lib/realizations/player");
+    ExpectTrue(target.addTrait("/lib/tests/support/traits/testNoOpposingRootTrait.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTraitWithoutResearch.lpc"));
+    ExpectEq(10, Traits.opinionModifier(target));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OpinionModifierHandlesMultipleTraitsWithoutApplyingSameModifierMoreThanOnce()
+{
+    object target = clone_object("/lib/realizations/player");
+    ExpectTrue(target.addTrait("/lib/tests/support/traits/testTrait.lpc"));
+    ExpectTrue(target.addTrait("/lib/tests/support/traits/testTraitWithResearchNoPrerequisites.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTrait.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testTraitWithResearchNoPrerequisites.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testLimitedByOpponentTrait.lpc"));
+    ExpectEq(5, Traits.opinionModifier(target));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void HasTraitOfRootReturnsCorrectlyForQueriedRoot()
+{
+    ExpectFalse(Traits.hasTraitOfRoot("disfigured"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testGeneticTrait.lpc"));
+    ExpectTrue(Traits.hasTraitOfRoot("disfigured"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testHealthTrait.lpc"));
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testPersonalityTrait.lpc"));
+    ExpectTrue(Traits.hasTraitOfRoot("disfigured"));
+    ExpectTrue(Traits.removeTrait("/lib/tests/support/traits/testGeneticTrait.lpc"));
+    ExpectTrue(Traits.hasTraitOfRoot("disfigured"));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitsWithDurationAreRemovedWhenTheyExpire()
+{
+    string trait = "/lib/tests/support/traits/testTraitWithDuration.lpc";
+
+    ExpectFalse(Traits.isTraitOf(trait), "trait initially not part of user");
+    ExpectTrue(Traits.addTrait(trait), "trait added");
+    ExpectTrue(Traits.isTraitOf(trait), "trait added");
+
+    Traits.agePlayer(10);
+    Traits.heart_beat();
+    ExpectFalse(Traits.isTraitOf(trait), "trait has expired");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitsWithExpireMessagesReportMessageToUserOnExpiry()
+{
+    string trait = "/lib/tests/support/traits/testTraitWithDuration.lpc";
+
+    ExpectTrue(Traits.addTrait(trait), "trait added");
+    ExpectFalse(Traits.caughtMessage());
+
+    Traits.agePlayer(10);
+    Traits.heart_beat();
+    ExpectEq("This is an expire message.", Traits.caughtMessage());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitsWithSustainedEffectAreRemovedWhenResearchNotSustained()
+{
+    string trait = "/lib/tests/support/traits/testTraitForSustainedResearch.lpc";
+    ExpectTrue(Traits.initiateResearch("/lib/tests/support/research/testSustainedTraitResearch.lpc"), "initiate research");
+
+    ExpectTrue(Traits.addTrait(trait), "trait added");
+    ExpectTrue(Traits.isTraitOf(trait), "trait added");
+
+    Traits.heart_beat();
+    ExpectFalse(Traits.isTraitOf(trait), "trait was removed");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitsWithSustainedEffectsAreNotRemovedWhenAssociatedResearchActive()
+{
+    string trait = "/lib/tests/support/traits/testTraitForSustainedResearch.lpc";
+    object room = clone_object("/lib/environment/environment");
+    Traits->move_object(room);
+
+    ExpectTrue(Traits.initiateResearch("/lib/tests/support/research/testSustainedTraitResearch.lpc"), "initiate research");
+    ExpectTrue(Traits.researchCommand("throw turnip"), "command used");
+
+    ExpectTrue(Traits.isTraitOf(trait), "trait is set on user");
+
+    Traits.heart_beat();
+    ExpectTrue(Traits.isTraitOf(trait), "trait has not been removed");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void TraitsWithSustainedEffectsAreRemovedAfterResearchInactivated()
+{
+    string trait = "/lib/tests/support/traits/testTraitForSustainedResearch.lpc";
+    object room = clone_object("/lib/environment/environment");
+    Traits->move_object(room);
+
+    ExpectTrue(Traits.initiateResearch("/lib/tests/support/research/testSustainedTraitResearch.lpc"), "initiate research");
+    ExpectTrue(Traits.researchCommand("throw turnip"), "command used");
+
+    ExpectTrue(Traits.isTraitOf(trait), "trait added");
+
+    Traits.heart_beat();
+    ExpectTrue(Traits.isTraitOf(trait), "trait has not been removed");
+
+    ExpectTrue(Traits.researchCommand("throw turnip"), "command used again");
+    Traits.heart_beat();
+    ExpectFalse(Traits.isTraitOf(trait), "trait has been removed");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CorrectEnchantmentsReturned()
+{
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/testEnchantmentTrait.lpc"), "initiate research");
+    ExpectEq((["electricity":5, "fire" : 2, "magical" : 1]),
+        Traits.traitsEnchantments());
+
+    ExpectTrue(Traits.addTrait("/lib/tests/support/traits/anotherEnchantmentTrait.lpc"), "initiate research");
+    ExpectEq((["electricity":5, "fire" : 6, "magical" : 1]),
+        Traits.traitsEnchantments());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EventHandlersSpecificationAcceptsArrayOfValidFunctions()
+{
+    object trait = load_object("/lib/tests/support/traits/traitWithCallback.lpc");
+    
+    ExpectTrue(trait.isValidTrait(), "trait with event handlers is valid");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EventHandlersSpecificationRejectsEmptyArray()
+{
+    object trait = clone_object("/lib/tests/support/traits/testTraitWithoutResearch.lpc");
+    
+    string err = catch (trait.addSpecification("event handlers", ({})));
+    ExpectSubStringMatch("must be an array of functions", err,
+        "empty array is rejected");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EventHandlersSpecificationRejectsNonArrayValue()
+{
+    object trait = clone_object("/lib/tests/support/traits/testTraitWithoutResearch.lpc");
+    
+    string err = catch (trait.addSpecification("event handlers", "onSomeEvent"));
+    ExpectSubStringMatch("must be an array of functions", err,
+        "string value is rejected");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EventHandlersSpecificationRejectsArrayWithInvalidFunctions()
+{
+    object trait = clone_object("/lib/tests/support/traits/testTraitWithoutResearch.lpc");
+    
+    string err = catch (trait.addSpecification("event handlers", 
+        ({ "nonExistentFunction" })));
+    ExpectSubStringMatch("must be an array of functions", err,
+        "array with non-existent function is rejected");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EventHandlersSpecificationRejectsArrayWithNonStringElements()
+{
+    object trait = clone_object("/lib/tests/support/traits/testTraitWithoutResearch.lpc");
+    
+    string err = catch (trait.addSpecification("event handlers", 
+        ({ 123, "someFunction" })));
+    ExpectSubStringMatch("must be an array of functions", err,
+        "array with non-string element is rejected");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void AddTraitWithEventHandlersRegistersTraitAsEventSubscriber()
+{
+    ToggleCallOutBypass();
+    
+    string trait = "/lib/tests/support/traits/testTraitWithEventHandler.lpc";
+    object traitObj = load_object(trait);
+    traitObj.resetEventCount();
+    
+    ExpectFalse(Traits.isTraitOf(trait), "trait not initially present");
+    ExpectTrue(Traits.addTrait(trait), "trait added");
+    ExpectTrue(Traits.isTraitOf(trait), "trait is now present");
+    
+    // Fire the custom event and verify the trait receives it
+    ExpectFalse(traitObj.eventWasCalled(), "event not called yet");
+    Traits.notify("onTestEvent", "test data");
+    ExpectTrue(traitObj.eventWasCalled(), "event was called after notify");
+    ExpectEq(1, traitObj.getEventCallCount(), "event called exactly once");
+    
+    ToggleCallOutBypass();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void AddTraitWithoutEventHandlersDoesNotRegisterAsEventSubscriber()
+{
+    string trait = "/lib/tests/support/traits/testTrait.lpc";
+    object traitObj = load_object(trait);
+    
+    // Verify this trait does not have event handlers
+    ExpectFalse(traitObj.query("event handlers"), 
+        "test trait does not have event handlers");
+    
+    ExpectTrue(Traits.addTrait(trait), "trait added");
+    ExpectTrue(Traits.isTraitOf(trait), "trait is present");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RemoveTraitWithEventHandlersUnregistersFromEvents()
+{
+    ToggleCallOutBypass();
+    
+    string trait = "/lib/tests/support/traits/testTraitWithEventHandler.lpc";
+    object traitObj = load_object(trait);
+    traitObj.resetEventCount();
+    
+    ExpectTrue(Traits.addTrait(trait), "trait added");
+    ExpectTrue(Traits.isTraitOf(trait), "trait is present");
+    
+    // Verify event works while trait is active
+    Traits.notify("onTestEvent", "test data");
+    ExpectEq(1, traitObj.getEventCallCount(), "event called once while trait active");
+    
+    ExpectTrue(Traits.removeTrait(trait), "trait removed");
+    ExpectFalse(Traits.isTraitOf(trait), "trait no longer present");
+    
+    // Verify event no longer reaches the trait after removal
+    traitObj.resetEventCount();
+    Traits.notify("onTestEvent", "test data");
+    ExpectEq(0, traitObj.getEventCallCount(), 
+        "event not called after trait removed");
+    
+    ToggleCallOutBypass();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RemoveTraitWithoutEventHandlersSucceeds()
+{
+    string trait = "/lib/tests/support/traits/testTrait.lpc";
+    
+    ExpectTrue(Traits.addTrait(trait), "trait added");
+    ExpectTrue(Traits.isTraitOf(trait), "trait is present");
+    
+    ExpectTrue(Traits.removeTrait(trait), "trait removed");
+    ExpectFalse(Traits.isTraitOf(trait), "trait no longer present");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CustomEventHandlersAreRegisteredWhenTraitAdded()
+{
+    ToggleCallOutBypass();
+    
+    string trait = "/lib/tests/support/traits/testTraitWithEventHandler.lpc";
+    object traitObj = load_object(trait);
+    traitObj.resetEventCount();
+    
+    ExpectTrue(Traits.addTrait(trait), "trait added");
+    
+    // The custom event handler should be registered and callable
+    // If registerEventHandler wasn't called, notify would silently fail
+    Traits.notify("onTestEvent", "custom event data");
+    ExpectTrue(traitObj.eventWasCalled(), 
+        "custom event handler was registered and called");
+    ExpectEq(Traits, traitObj.getLastCaller(),
+        "caller passed to event handler is correct");
+    
+    ToggleCallOutBypass();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void MultipleNotificationsCallEventHandlerMultipleTimes()
+{
+    ToggleCallOutBypass();
+    
+    string trait = "/lib/tests/support/traits/testTraitWithEventHandler.lpc";
+    object traitObj = load_object(trait);
+    traitObj.resetEventCount();
+    
+    ExpectTrue(Traits.addTrait(trait), "trait added");
+    
+    Traits.notify("onTestEvent", "first");
+    Traits.notify("onTestEvent", "second");
+    Traits.notify("onTestEvent", "third");
+    
+    ExpectEq(3, traitObj.getEventCallCount(), 
+        "event handler called for each notification");
+    
+    ToggleCallOutBypass();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ActiveShortDescriptionReturnsNullWhenNoFormTraitActive()
+{
+    object User = clone_object("/lib/realizations/player.lpc");
+    User.Name("Bob");
+    User.addAlias("bob");
+
+    ExpectEq(0, User.activeShortDescription(),
+        "activeShortDescription returns null when no form trait is active");
+
+    destruct(User);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ActiveShortDescriptionReturnsOverrideWhenFormTraitActive()
+{
+    object User = clone_object("/lib/realizations/player.lpc");
+    User.Name("Bob");
+    User.addAlias("bob");
+
+    User.addTrait("/lib/tests/support/traits/testTraitWithShortOverride.lpc");
+
+    ExpectEq("A massive bear", User.activeShortDescription(),
+        "activeShortDescription returns the override short description");
+
+    destruct(User);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ActiveShortDescriptionReturnsNullAfterFormTraitRemoved()
+{
+    object User = clone_object("/lib/realizations/player.lpc");
+    User.Name("Bob");
+    User.addAlias("bob");
+
+    User.addTrait("/lib/tests/support/traits/testTraitWithShortOverride.lpc");
+    ExpectEq("A massive bear", User.activeShortDescription(),
+        "activeShortDescription returns value while trait is active");
+
+    User.removeTrait("/lib/tests/support/traits/testTraitWithShortOverride.lpc");
+    ExpectEq(0, User.activeShortDescription(),
+        "activeShortDescription returns null after trait is removed");
+
+    destruct(User);
+}

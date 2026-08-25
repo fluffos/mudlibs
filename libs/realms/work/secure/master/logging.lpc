@@ -1,0 +1,86 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+private nomask object logService = 0;
+private nomask int logServiceLoadPending = 0;
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string get_wiz_name(string file)
+{
+    string ret = 0;
+    string wizardName, restOfPath;
+
+    if (sizeof(regexp(({ file }), "^/*players/[^/]/")))
+    {
+        ret = regreplace(file, "^/*players/([^/]+)/.*", "\\1", 1);
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: attempts the lazy logService load on a call_out(0)
+// instead of inline. See the (much longer) explanation on log_error()
+// below for why: a synchronous load_object() attempted from inside
+// log_error() -- even wrapped in catch() -- was NOT reliably caught when
+// log_error() fired as a compile_error()/compile_warning() callback in
+// the middle of an unrelated object's compile (confirmed live: this
+// driver's compiler.cc has a hard reentrancy guard, `error("Object
+// cannot be loaded during compilation.")`, and that error propagated
+// past the catch() as an uncaught top-level error rather than being
+// trapped -- apparently because it's raised from the compiler's own
+// C++ call stack, not a normal LPC VM instruction, so the usual
+// catch()/error-context machinery doesn't reliably see it here).
+// Deferring the load to the next server tick sidesteps the whole
+// problem: by the time this runs, whatever compile triggered the
+// original warning has long since finished, so there is no nested
+// compile_file() call for the guard to reject.
+private nomask void tryLoadLogService()
+{
+    logServiceLoadPending = 0;
+    if (!logService)
+    {
+        catch (logService = load_object("/secure/simul_efun.lpc")->getService("log"));
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: this is the master's compile_error()/compile_warning()
+// callback, so it can fire in the MIDDLE of compiling an unrelated object
+// (e.g. a "Redeclaration of global variable" warning while compiling
+// /lib/realizations/player.lpc during a player load) -- confirmed live.
+// The original lazy-load-and-cache-logService approach hard-crashed the
+// very first time it ran mid-compile: this driver refuses to load_object()
+// a brand-new object (logService.lpc had never been loaded yet) while
+// another compile is already in progress ("Object cannot be loaded during
+// compilation"), which aborted the whole call chain -- and since this
+// callback is reached from deep inside ordinary gameplay flows (loading a
+// player object recompiles its class chain, which can log compiler
+// warnings), that one uncaught error was silently swallowing entire
+// player-login attempts. The load is now deferred entirely (see
+// tryLoadLogService() above) -- log_error() itself never calls
+// load_object(), only schedules a one-shot call_out to try later and
+// falls back to debug_message() until logService is actually cached.
+public nomask void log_error(string file, string message)
+{
+    string logName = get_wiz_name(file);
+    if (!logName)
+    {
+        logName = "log";
+    }
+
+    if (!logService && !logServiceLoadPending)
+    {
+        logServiceLoadPending = 1;
+        call_out("tryLoadLogService", 0);
+    }
+
+    if (objectp(logService))
+    {
+        logService->log(logName, message);
+    }
+    else
+    {
+        debug_message(sprintf("[%s] %s\n", logName, message));
+    }
+}

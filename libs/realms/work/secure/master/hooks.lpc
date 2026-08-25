@@ -1,0 +1,105 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+#include "/sys/driver_hook.h"
+
+/////////////////////////////////////////////////////////////////////////////
+protected string includeDirectories(string includeFile, string currentFile)
+{
+    string ret = (file_size(includeFile) > 0) ? includeFile : 0;
+
+    if (!ret)
+    {
+        string *locations = ({ "/include", "/lib/include", "/sys" });
+        foreach(string location in locations)
+        {
+            string name = sprintf("%s/%s", location, includeFile);
+            if (file_size(name) > -1)
+            {
+                ret = name;
+                break;
+            }
+        }
+    }
+    return ret;
+}
+
+// FluffOS PORT NOTE: dead code -- was wired up as the H_MOVE_OBJECT0 driver
+// hook, which addDriverHooks() (above) no longer installs at all on this
+// driver (see that function's own port note: this driver's native
+// move_object() already calls init() the same way by default). Left
+// unreachable rather than deleted, in case a future maintainer wants the
+// exact original logic as reference; body emptied because it also called
+// efun::set_this_player() 4 times, which doesn't exist as a real efun on
+// this driver's build at all (only compiled in when add_action() is
+// UNAVAILABLE, per packages/core/core.spec's `#ifndef NO_ADD_ACTION` --
+// this codebase needs add_action(), so it's the mutually-exclusive branch
+// without set_this_player()) -- not worth reimplementing for genuinely
+// dead code.
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void moveHook(object item, object destination)
+{
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask mixed loadUIDs(string objectName, object previousObject)
+{
+    string uid = 0;
+
+    if (sizeof(regexp(({ objectName }), "^/*players")))
+    {
+        uid = regreplace(objectName, "^/*players/([^/]+)/.*", "\\1", 1);
+    }
+
+    if (!uid && previousObject)
+    {
+        uid = getuid(previousObject);
+    }
+    return uid ? uid : 1;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask mixed cloneUIDs(object blueprint, string name, 
+    object previousObject)
+{
+    return getuid(blueprint) || getuid(previousObject) || 1;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: this driver has no set_driver_hook()/H_* configurable
+// driver-hook mechanism at all (an LDMud-only feature -- FluffOS/MudOS-
+// lineage drivers use fixed, hardcoded applies instead). Gutted to a
+// no-op; each hook this codebase used to install is covered as follows:
+//   - H_MOVE_OBJECT0 (moveHook: call init() on the mover/others after a
+//     move) -- this driver's native move_object()/environment-change
+//     handling already calls init() the same way by default.
+//   - H_LOAD_UIDS/H_CLONE_UIDS (loadUIDs/cloneUIDs) -- this driver's own
+//     native uid-inheritance-on-clone model already approximates
+//     cloneUIDs's "inherit the blueprint's uid" behavior; there is no
+//     equivalent hook point to reinstall the load-time path/uid special
+//     case, a documented, minor gap (see NOTES.md).
+//   - H_CREATE_SUPER/H_CREATE_OB/H_CREATE_CLONE (call create()) and
+//     H_RESET/H_CLEAN_UP (call reset()/clean_up()) -- this driver already
+//     calls create()/reset()/clean_up() natively on every object by
+//     default; no hook needed.
+//   - H_MODIFY_COMMAND/H_MODIFY_COMMAND_FNAME (single-letter direction
+//     abbreviations n/s/e/w/...) -- no FluffOS equivalent hook; documented
+//     as a known content gap in NOTES.md rather than invented here.
+//   - H_NOTIFY_FAIL -- config.fluffos's "default fail message" directive
+//     already covers this natively.
+//   - H_TELNET_NEG (route GMCP telnet subnegotiation to
+//     telnetNegotiation()) -- this driver has its own native GMCP
+//     support (send_gmcp()); the explicit IAC WILL GMCP advertisement in
+//     secure/login.lpc still runs unconditionally via binary_message(),
+//     so basic GMCP capability advertisement still happens even without
+//     this hook wiring subnegotiation replies back to a per-object lfun.
+//   - H_INCLUDE_DIRS (includeDirectories(): search /include, /lib/include,
+//     /sys for a bare #include name) -- config.fluffos's static
+//     "include directories" list covers the same three paths.
+//   - H_AUTO_INCLUDE ("#pragma pedantic\n" on every compile) --
+//     config.fluffos's "global include file" (/secure/auto.h) carries the
+//     same #pragma pedantic now instead.
+protected nomask void addDriverHooks()
+{
+}

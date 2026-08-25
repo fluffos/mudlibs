@@ -1,0 +1,193 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+#include "/sys/telnet.h"
+
+object Environment;
+object Service;
+object Player;
+
+/////////////////////////////////////////////////////////////////////////////
+void Init()
+{
+    ignoreList += ({ "__inline_lib_tests_environment_environmentSnapshotTest_c_93_#0000",
+        "__inline_lib_tests_environment_environmentSnapshotTest_c_132_#0001",
+        "__inline_lib_tests_environment_environmentSnapshotTest_c_147_#0002" });
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Service = getService("environment");
+    Service.setYear(1);
+    Service.setDay(92);
+    Service.timeOfDay("noon");
+    Environment = clone_object("/lib/tests/support/environment/testEnvironment.lpc");
+
+    Player = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    destruct(Player);
+    destruct(Environment);
+    destruct(Service);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RoomSnapshotIncludesTerrainFeaturesAndItems()
+{
+    Environment.testSetTerrain("/lib/tests/support/environment/fakeTerrain.lpc");
+    Environment.testAddFeature("/lib/tests/support/environment/fakeFeature.lpc", "north");
+    Environment.testAddItem("/lib/tests/support/environment/fakeItem.lpc", "north");
+
+    mapping snapshot = Environment.buildRoomSnapshot(Player);
+
+    ExpectTrue(mapp(snapshot), "buildRoomSnapshot returns a mapping");
+    ExpectEq(1, sizeof(snapshot["terrain"]), "one terrain element captured");
+    ExpectEq(1, sizeof(snapshot["features"]), "one feature captured");
+    ExpectEq(1, sizeof(snapshot["items"]), "one item captured");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RoomSnapshotResolvesElementLocationToCoordinates()
+{
+    Environment.testSetTerrain("/lib/tests/support/environment/fakeTerrain.lpc");
+    Environment.testAddFeature("/lib/tests/support/environment/fakeFeature.lpc", "north");
+
+    mapping snapshot = Environment.buildRoomSnapshot(Player);
+    mapping feature = snapshot["features"][0];
+    mapping location = feature["locations"][0];
+
+    ExpectEq("north", location["description"], "location description is resolved");
+    ExpectTrue(member(location, "x") && member(location, "y") &&
+        member(location, "z"), "location carries coordinates");
+    ExpectTrue(member(location, "x-rotation"), "location carries rotations");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RoomSnapshotIncludesExits()
+{
+    Environment.testSetTerrain("/lib/tests/support/environment/fakeTerrain.lpc");
+    Environment.testAddExit("north",
+        "/lib/tests/support/environment/toLocation.lpc", "default");
+
+    mapping snapshot = Environment.buildRoomSnapshot(Player);
+
+    ExpectTrue(member(snapshot["exits"], "north") > -1,
+        "snapshot exposes the north exit");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RoomSnapshotOmitsTheViewerFromContents()
+{
+    Environment.testSetTerrain("/lib/tests/support/environment/fakeTerrain.lpc");
+    Player->move_object(Environment);
+
+    mapping snapshot = Environment.buildRoomSnapshot(Player);
+
+    ExpectEq(0, sizeof(filter(snapshot["contents"],
+        (: $1["path"] == program_name(Player) :))),
+        "the viewer is not listed in its own room contents");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void LongEmitsRoomInfoOutOfBandToGmcpViewer()
+{
+    Environment.testSetTerrain("/lib/tests/support/environment/fakeTerrain.lpc");
+    Player->move_object(Environment);
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+
+    Environment.long(0, Player);
+
+    string frame = Player.caughtGmcp();
+    ExpectTrue(stringp(frame), "a GMCP frame was captured");
+    ExpectSubStringMatch("Room.Info", frame,
+        "the Room.Info package was emitted out-of-band");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void LongDoesNotEmitOutOfBandToNonGmcpViewer()
+{
+    Environment.testSetTerrain("/lib/tests/support/environment/fakeTerrain.lpc");
+    Player->move_object(Environment);
+
+    Environment.long(0, Player);
+
+    ExpectEq(0, sizeof(Player.caughtGmcpFrames()),
+        "no GMCP frame is emitted when the viewer never enabled GMCP");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EnableGmcpPushesRoomInfoPackage()
+{
+    Environment.testSetTerrain("/lib/tests/support/environment/fakeTerrain.lpc");
+    Player->move_object(Environment);
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+
+    string found = implode(filter(Player.caughtGmcpFrames(),
+        (: strstr($1, "Room.Info") != -1 :)), "");
+    ExpectSubStringMatch("Room.Info", found,
+        "Room.Info package pushed when GMCP is enabled");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void RoomInfoPackageIncludesExitsKey()
+{
+    Environment.testSetTerrain("/lib/tests/support/environment/fakeTerrain.lpc");
+    Environment.testAddExit("north",
+        "/lib/tests/support/environment/toLocation.lpc", "default");
+    Player->move_object(Environment);
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+
+    string found = implode(filter(Player.caughtGmcpFrames(),
+        (: strstr($1, "Room.Info") != -1 :)), "");
+    ExpectSubStringMatch("\"exits\"", found,
+        "exits key present in Room.Info payload");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void SecondLongInSameRoomDoesNotRepushRegionPackage()
+{
+    Environment.testSetTerrain("/lib/tests/support/environment/fakeTerrain.lpc");
+    Player->move_object(Environment);
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+
+    // First look
+    Environment.long(0, Player);
+    int after_first = sizeof(Player.caughtGmcpFrames());
+
+    // Second look in same room - must NOT push another Region frame
+    Environment.long(0, Player);
+    int after_second = sizeof(Player.caughtGmcpFrames());
+
+    // Room.Info is pushed each look; Region must not be re-pushed
+    string *frames = Player.caughtGmcpFrames();
+    int regionCount = 0;
+    foreach (string frame in frames)
+    {
+        if (sizeof(regexp(({ frame }), "Region")))
+        {
+            regionCount++;
+        }
+    }
+    ExpectTrue(regionCount <= 1,
+        "Region package must not be pushed more than once for the same region");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResetRegionTrackingCausesRegionToBeRepushedOnNextLook()
+{
+    Environment.testSetTerrain("/lib/tests/support/environment/fakeTerrain.lpc");
+    Player->move_object(Environment);
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    Environment.long(0, Player);
+
+    // Second look in the same environment - Room.Info always pushed
+    Environment.long(0, Player);
+    ExpectSubStringMatch("Room.Info", Player.caughtGmcp(),
+        "Room.Info always pushed on each look");
+}

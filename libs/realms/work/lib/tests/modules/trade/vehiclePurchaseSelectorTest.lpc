@@ -1,0 +1,162 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/tests/framework/testFixture.lpc";
+
+object Player;
+object Selector;
+
+/////////////////////////////////////////////////////////////////////////////
+void Init()
+{
+    ignoreList += ({
+        "resetPlayerMessages",
+        "findOptionByText",
+        "onSelectorCompleted"
+    });
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public void onSelectorCompleted(object caller)
+{
+    if (objectp(caller))
+    {
+        caller->cleanUp();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void Setup()
+{
+    Selector = clone_object(
+        "/lib/modules/domains/trading/selectors/vehiclePurchaseSelector.lpc");
+    Selector->setLocation("eledhel");
+
+    Player = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    Player->Name("purchasetest");
+    Player->addCommands();
+    Player->colorConfiguration("none");
+    Player->charsetConfiguration("ascii");
+    Player->addPlayerHolding("eledhel trading post");
+    Player->initializeTrader();
+    Player->addCash(10000);
+
+    Selector->move_object(Player);
+    Selector->registerEvent(this_object());
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void CleanUp()
+{
+    if (objectp(Selector))
+    {
+        destruct(Selector);
+    }
+    if (objectp(Player))
+    {
+        destruct(Player);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private void resetPlayerMessages()
+{
+    if (Player && function_exists("resetCatchList", Player))
+    {
+        Player->resetCatchList();
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+private string findOptionByText(string searchText)
+{
+    string result = "0";
+    string message = Player->caughtMessage();
+    if (!message || message == "")
+    {
+        return result;
+    }
+    string *lines = explode(message, "\n");
+
+    foreach (string line in lines)
+    {
+        line = regreplace(line, "\x1B\\[[0-9;]*[A-Za-z]", "", 1);
+        if (sizeof(regexp(({ line }), searchText)))
+        {
+            result = regreplace(line,
+                "^[^0-9]*([0-9]+).*", "\\1", 1);
+            break;
+        }
+    }
+    return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PurchaseMenuDisplaysAvailableVehicles()
+{
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string message = Player->caughtMessage();
+    ExpectSubStringMatch("Purchase Vehicle", message);
+    ExpectSubStringMatch("Return to Vehicle Menu", message);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PurchaseMenuShowsCostsInGold()
+{
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string message = Player->caughtMessage();
+    ExpectSubStringMatch("gold", message);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PurchasingVehicleCreatesItAtLocation()
+{
+    int initialCount = sizeof(Player->getVehiclesAtLocation("eledhel"));
+    int initialCash = Player->getCash();
+
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string handcartOption = findOptionByText("Handcart");
+    resetPlayerMessages();
+    Player->command(handcartOption);
+
+    string message = implode(Player->caughtMessages(), "\n");
+    ExpectSubStringMatch("purchased", message);
+
+    int newCount = sizeof(Player->getVehiclesAtLocation("eledhel"));
+    ExpectTrue(newCount > initialCount,
+        "A new vehicle should exist at eledhel");
+    ExpectTrue(Player->getCash() < initialCash,
+        "Cash should be deducted");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PurchaseMenuShowsInsufficientFundsWhenBroke()
+{
+    Player->addCash(-Player->getCash());
+
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string message = Player->caughtMessage();
+    ExpectSubStringMatch("insufficient funds", message);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ReturnOptionExitsPurchaseMenu()
+{
+    resetPlayerMessages();
+    Selector->initiateSelector(Player);
+
+    string exitOption = findOptionByText("Return to Vehicle Menu");
+    Player->command(exitOption);
+
+    string message = Player->caughtMessage();
+    ExpectSubStringMatch("Return to Vehicle Menu", message);
+}

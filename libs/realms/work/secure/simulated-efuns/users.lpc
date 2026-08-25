@@ -1,0 +1,234 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+#include "/sys/configuration.h"
+
+private mapping livingObjects = ([]);
+private mapping players = ([]);
+private mapping wizards = ([]);
+private mapping guests = ([]);
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int interactive(object user)
+{
+    return (PORT->member(inherit_list(this_object()),
+        "/secure/simulated-efuns/testing.lpc") > -1) ? 
+        this_object()->testingInteractive() :
+        efun::interactive(user);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void addUser(object user)
+{
+    if (objectp(user) && interactive(user) && previous_object() &&
+        (interactive(previous_object()) ||
+            sizeof(regexp(({ PORT->program_name(previous_object()) }),
+                "^/*(lib/modules/secure|secure)"))))
+    {
+        if (PORT->member(inherit_list(user), "/lib/realizations/wizard.lpc") > -1)
+        {
+            wizards[lower_case(user->RealName())] = user;
+        }
+        else if (PORT->member(inherit_list(user), "/lib/realizations/player.lpc") > -1)
+        {
+            players[lower_case(user->RealName())] = user;
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void pruneLivingObjects()
+{
+    string *livingToPrune = filter(keys(livingObjects), 
+        (: !objectp($2[$1]) :), livingObjects);
+
+    foreach(string item in livingToPrune)
+    {
+        map_delete(livingObjects, item);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void addLiving(object creature)
+{
+    if ((PORT->member(inherit_list(creature), "/lib/realizations/wizard.lpc") > -1) ||
+        (PORT->member(inherit_list(creature), "/lib/realizations/player.lpc") > -1))
+    {
+        addUser(creature);
+    }
+    else if((PORT->member(inherit_list(creature), 
+        "/lib/realizations/living.lpc") > -1) && living(creature))
+    {
+        livingObjects[lower_case(creature->Name())] = creature;
+        call_out("pruneLivingObjects", 1);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask object findPlayer(string name)
+{
+    object ret = 0;
+    name = lower_case(name);
+
+    if (PORT->member(players, name))
+    {
+        if (objectp(players[name]) && interactive(players[name]))
+        {
+            ret = players[name];
+        }
+        else
+        {
+            map_delete(players, name);
+        }
+    }
+
+    if (!ret && PORT->member(wizards, name))
+    {
+        if (objectp(wizards[name]) && interactive(wizards[name]))
+        {
+            ret = wizards[name];
+        }
+        else
+        {
+            map_delete(wizards, name);
+        }
+    }
+
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask object findLiving(string name)
+{
+    name = lower_case(name);
+    object ret = findPlayer(name);
+
+    if (!ret && PORT->member(livingObjects, name))
+    {
+        if (objectp(livingObjects[name]))
+        {
+            ret = livingObjects[name];
+        }
+        else
+        {
+            pruneLivingObjects();
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask object *users()
+{
+    object *ret = filter(efun::users(),
+        (: !function_exists("isInvisibleToCaller", $1) ||
+            (function_exists("isInvisibleToCaller", $1) && $2 &&
+            !$1->isInvisibleToCaller($2)) :), previous_object());
+
+    if (PORT->member(inherit_list(this_object()),
+        "/secure/simulated-efuns/testing.lpc") > -1)
+    {
+        ret = PORT->call_direct(this_object(), "cannedUserList");
+    }
+    return ret - ({ 0 });
+} 
+
+/////////////////////////////////////////////////////////////////////////////
+private nomask object *usersFromMapping(mapping userMapping)
+{
+    object *ret = ({});
+
+    if (previous_object() && (PORT->member(inherit_list(previous_object()),
+        "/secure/login.lpc") > -1) && sizeof(userMapping))
+    {
+        ret = values(userMapping);
+    }
+    return ret - ({ 0 });
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask object *players()
+{
+    return usersFromMapping(players);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask object *wizards()
+{
+    return usersFromMapping(wizards);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask int removeCharacter(object character)
+{
+    object userManagement = load_object("/secure/master/user-management.lpc");
+
+    return userManagement ? userManagement->removeCharacter(character) : 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs int createWizard(string wizardName, string level)
+{
+    object userManagement = load_object("/secure/master/user-management.lpc");
+
+    return userManagement ?
+        userManagement->createWizard(wizardName, level) : 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask varargs int demoteWizardToPlayer(string wizardName)
+{
+    object userManagement = load_object("/secure/master/user-management.lpc");
+
+    return userManagement ?
+        userManagement->demoteWizardToPlayer(wizardName) : 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string StartLocation()
+{
+    return "/areas/eledhel/southern-city/12x2.lpc";
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask string getGuestName(object player)
+{
+    if (!sizeof(guests))
+    {
+        for (int i = 1; i < 100; i++)
+        {
+            guests[sprintf("guest%02d", i)] = 0;
+        }
+    }
+
+    string *possibleNames = sort_array(filter(keys(guests),
+        (: !objectp($2[$1]) :), guests), (: $1 > $2 :));
+
+    string guestName = sizeof(possibleNames) ? possibleNames[0] :
+        "guest";
+    guests[guestName] = player;
+
+    return guestName;
+}
+
+// FluffOS PORT NOTE: LDMud's configure_interactive(ob, IC_ENCODING, charset)
+// doesn't exist on this driver -- this driver's own set_encoding(string)
+// efun is the equivalent, but takes no object argument (it always acts on
+// the calling object), so it's invoked here via call_other() against
+// player instead of passing player as an argument.
+/////////////////////////////////////////////////////////////////////////////
+public nomask void configureCharset(object player, string charset)
+{
+    if (efun::interactive(player))
+    {
+        if (charset == "unicode")
+        {
+            player->set_encoding("UTF-8//TRANSLIT");
+        }
+        else
+        {
+            player->set_encoding("ISO8859-1//TRANSLIT");
+        }
+    }
+}

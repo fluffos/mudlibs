@@ -1,0 +1,118 @@
+//*****************************************************************************
+// Copyright (c) 2017-2026 - Allen Cummings, RealmsMUD, All rights reserved. See
+//                      the accompanying LICENSE file for details.
+//*****************************************************************************
+inherit "/lib/core/baseSelector.lpc";
+
+private object SubselectorObj;
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void InitializeSelector()
+{
+    AllowUndo = 0;
+    AllowAbort = 1;
+    NumColumns = 2;
+    Description = "Compose Songs Main Menu";
+    Type = "Song";
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask void setUpUserForSelection()
+{
+    Data = ([]);
+    mapping currentSongs = User->getOptionsForCompositeResearch(
+        "/guilds/bard/compositions/root.lpc");
+
+    int optionCount = 1;
+
+    if (sizeof(currentSongs))
+    {
+        string *keys = sort_array(keys(currentSongs), (: $1 > $2 :));
+        foreach(string song in keys)
+        {
+            Data[to_string(optionCount)] = ([
+                "name": sprintf("Modify '%s'", convertToTextOfLength(song, 20)),
+                "description": 
+                    getService("research")->getCompositeDescription(
+                        Type, song, currentSongs[song]),
+                "type": "modify",
+                "value": currentSongs[song] + ([ "name": song ])
+            ]);
+            optionCount++;
+        }
+    }
+    Data[to_string(optionCount)] = ([
+        "name": "Create New Song",
+        "description": "This option allows the bard to create a new "
+            "song that can be performed.",
+        "type": "create",
+        "value": ([])
+    ]);
+    Data[to_string(optionCount + 1)] = ([
+        "name": "Exit Song Menu",
+        "description": "This option leaves the song composition menu.",
+        "type": "exit",
+    ]);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int processSelection(string selection)
+{
+    int ret = -1;
+    if (User)
+    {
+        ret = (Data[selection]["type"] == "exit") || (selection == "abort");
+        if (!ret)
+        {
+            if (Data[selection]["type"] == "create")
+            {
+                SubselectorObj =
+                    clone_object("/guilds/bard/selectors/createSongSelector.lpc");
+                SubselectorObj->setType(Data[selection]["type"]);
+                SubselectorObj->setData(Data[selection]["value"]);
+                SubselectorObj->move_object(User);
+                SubselectorObj->registerEvent(this_object());
+                SubselectorObj->initiateSelector(User);
+            }
+            else
+            {
+                SubselectorObj =
+                    clone_object("/guilds/bard/selectors/editSongSelector.lpc");
+                SubselectorObj->setType(Data[selection]["type"]);
+                SubselectorObj->setData(Data[selection]["value"]);
+                SubselectorObj->move_object(User);
+                SubselectorObj->registerEvent(this_object());
+                SubselectorObj->initiateSelector(User);
+            }
+        }
+    }
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+public nomask void onSelectorCompleted(object caller)
+{
+    if (User)
+    {
+        setUpUserForSelection();
+        tell_object(User, displayMessage());
+    }
+    caller->cleanUp();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected nomask int suppressMenuDisplay()
+{
+    return objectp(SubselectorObj);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+protected string choiceFormatter(string choice)
+{
+    return sprintf("[%s]%s - %s%s",
+        configuration->decorate("%s", "number", "selector", colorConfiguration),
+        padSelectionDisplay(choice),
+        configuration->decorate("%-30s", "choice enabled", "selector", 
+            colorConfiguration),
+        " ");
+}
