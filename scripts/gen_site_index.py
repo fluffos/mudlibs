@@ -250,8 +250,8 @@ BADGE = {
 UI = {
     "zh": {
         "html_lang": "zh-CN", "og_locale": "zh_CN",
-        "page_title": "中文 MUD 博物馆 — 浏览器直接游玩",
-        "site_name": "中文 MUD 博物馆", "h1": "中文 MUD 博物馆",
+        "page_title": "LPC MUD 博物馆 — 浏览器直接游玩",
+        "site_name": "LPC MUD 博物馆", "h1": "LPC MUD 博物馆",
         "search_placeholder": "搜索游戏名 / 简介 / slug / 原始文件名 ……",
         "filter_all": "全部", "filter_playable": "✅ 可玩",
         "filter_limited": "⚠️ 受限", "filter_noboot": "❌ 不可启动",
@@ -269,8 +269,8 @@ UI = {
     },
     "en": {
         "html_lang": "en", "og_locale": "en_US",
-        "page_title": "Chinese MUD Museum — Play Instantly in Your Browser",
-        "site_name": "Chinese MUD Museum", "h1": "Chinese MUD Museum",
+        "page_title": "LPC MUD Museum — Play Instantly in Your Browser",
+        "site_name": "LPC MUD Museum", "h1": "LPC MUD Museum",
         "search_placeholder": "Search by name / description / slug / archive filename…",
         "filter_all": "All", "filter_playable": "✅ Playable",
         "filter_limited": "⚠️ Limited", "filter_noboot": "❌ Won't boot",
@@ -318,16 +318,19 @@ def load_numbers():
 # by render_index via str.format.
 INTRO = {
     "zh": (
-        "    这里收藏了 {n_total} 个上世纪九十年代至今的中文 LPC MUD(泥潭)游戏库,\n"
-        '    均已修复并运行在 <a href="https://github.com/fluffos/fluffos"\n'
+        "    这里收藏了 {n_total} 个上世纪九十年代至今的 LPC MUD(泥潭)游戏库,\n"
+        "    以中文武侠/仙侠题材为主,也收录了 Dead Souls、Discworld 等几款\n"
+        '    经典英文 mudlib。均已修复并运行在 <a href="https://github.com/fluffos/fluffos"\n'
         "    style=\"color:var(--accent)\">FluffOS</a> 驱动上。整个驱动通过 WebAssembly\n"
         "    在你的浏览器里运行 —— 点击任意一款游戏,即可像当年 telnet 泥潭一样注册、\n"
         "    登录、行走江湖。无需安装,无需服务器。每张卡片还标注了预置的管理员账号\n"
         "    (🔑)——用它登录即可获得巫师权限,自由探索游戏世界与代码。"
     ),
     "en": (
-        "    This is an archive of {n_total} classic Chinese LPC MUD (mudlib) games\n"
-        "    dating back to the 1990s, restored and running on the\n"
+        "    This is an archive of {n_total} classic LPC MUD (mudlib) games dating\n"
+        "    back to the 1990s — mostly Chinese-language wuxia/xianxia titles, plus a\n"
+        "    handful of landmark English-language mudlibs like Dead Souls and\n"
+        '    Discworld — restored and running on the\n'
         '    <a href="https://github.com/fluffos/fluffos" style="color:var(--accent)">FluffOS</a>\n'
         "    driver. The whole driver runs in your browser via WebAssembly — click any\n"
         "    game and register, log in, and explore the world exactly as players did\n"
@@ -519,16 +522,18 @@ def render_index(status, commits, lang="zh"):
     if lang == "en":
         meta_desc = (
             f"A browser-playable archive of {n_total} restored classic "
-            f"Chinese LPC MUD (mudlib) games from the 1990s onward, "
-            f"{n_play} of them fully playable via WebAssembly -- no "
-            "install, no server. Every game lists a pre-seeded admin "
-            "account for instant wizard access.")
+            f"LPC MUD (mudlib) games from the 1990s onward -- mostly "
+            f"Chinese-language, plus landmark English mudlibs like Dead "
+            f"Souls and Discworld -- {n_play} of them fully playable via "
+            "WebAssembly -- no install, no server. Every game lists a "
+            "pre-seeded admin account for instant wizard access.")
     else:
         meta_desc = (
-            f"收藏了 {n_total} 个上世纪九十年代至今的中文 LPC MUD(泥潭)游戏库,"
+            f"收藏了 {n_total} 个上世纪九十年代至今的 LPC MUD(泥潭)游戏库,"
+            f"以中文游戏为主,也收录了 Dead Souls、Discworld 等经典英文 mudlib,"
             f"其中 {n_play} 款可在浏览器内通过 WebAssembly 完整游玩,无需安装、"
             "无需服务器。每款游戏都标注了预置管理员账号,登录即有巫师权限。"
-            "A browser-playable archive of restored classic Chinese LPC MUD "
+            "A browser-playable archive of restored classic LPC MUD "
             "(mudlib) games, running on the FluffOS driver via WebAssembly.")
     meta_desc_attr = html.escape(meta_desc)
 
@@ -781,17 +786,17 @@ def render_llms_txt(status):
     n_play = counts.get("playable", 0)
     n_lim = counts.get("limited", 0)
     n_no = counts.get("noboot", 0)
-    return f"""# 中文 MUD 博物馆 (Chinese MUD Museum)
+    return f"""# LPC MUD 博物馆 (LPC MUD Museum)
 
-> A browser-playable archive of {n_total} restored classic Chinese LPC MUD (mudlib) games from the 1990s onward, running on the FluffOS driver compiled to WebAssembly -- no install, no server, click and play.
+> A browser-playable archive of {n_total} restored classic LPC MUD (mudlib) games from the 1990s onward, running on the FluffOS driver compiled to WebAssembly -- no install, no server, click and play.
 
-This project (fluffos/mudlibs) extracts, restores, and documents Chinese-language LPC mudlib archives -- mostly wuxia/xianxia titles, several based on Jin Yong novels -- fixing decades of bitrot (GBK/UTF-8 encoding bugs, dead code, driver incompatibilities, missing content) while preserving the original gameplay and source code. Every entry ships with a pre-seeded admin/wizard account (shown on its card, marked with 🔑) for immediate full-access exploration of the game world and its code, and a per-library NOTES.md documents every restoration change made.
+This project (fluffos/mudlibs) extracts, restores, and documents LPC mudlib archives -- mostly Chinese-language wuxia/xianxia titles, several based on Jin Yong novels, plus a growing set of landmark English-language mudlibs (Dead Souls, Discworld, and others) -- fixing decades of bitrot (GBK/UTF-8 encoding bugs, dead code, driver incompatibilities, missing content) while preserving the original gameplay and source code. Every entry ships with a pre-seeded admin/wizard account (shown on its card, marked with 🔑) for immediate full-access exploration of the game world and its code, and a per-library NOTES.md documents every restoration change made.
 
 ## Key facts
 
 - {n_total} total libraries: {n_play} fully playable in-browser, {n_lim} boot{'s' if n_lim == 1 else ''} but {'has' if n_lim == 1 else 'have'} a login/feature limitation (usually a missing browser-environment capability like `query_ip_number()`), {n_no} not yet bootable under WebAssembly (most still run natively).
 - Driver: [FluffOS](https://github.com/fluffos/fluffos), an actively-maintained LPMud/LPC driver, compiled to WebAssembly for in-browser play.
-- Language/setting: all games are Chinese-language LPC MUDs (泥潭), primarily wuxia (武侠) and xianxia (仙侠) themed. Every game card and description exists in both Chinese ({SITE_URL}/) and English ({SITE_URL}/en/) -- this is a fully bilingual site, not a Chinese-only one with an English label.
+- Language/setting: mostly Chinese-language LPC MUDs (泥潭), primarily wuxia (武侠) and xianxia (仙侠) themed, plus several classic English-language mudlib codebases (Dead Souls, Discworld, Nightmare, Lima). Every game card and description exists in both Chinese ({SITE_URL}/) and English ({SITE_URL}/en/) -- this is a fully bilingual site.
 - Source code, restoration notes (AGENTS.md), and native-driver play instructions: [github.com/fluffos/mudlibs]({REPO_URL})
 - Each game also has a standalone downloadable source ZIP (trimmed source tree, no need to clone the whole repo) linked from its card and from games.json's `source_zip_url` field, hosted as GitHub Release assets at {RELEASE_ZIPS_URL}/<slug>.zip
 
@@ -840,7 +845,7 @@ def render_llms_full_txt(status):
         sections.append("\n".join(lines))
 
     body = "\n\n".join(sections)
-    return f"""# 中文 MUD 博物馆 — full game list
+    return f"""# LPC MUD 博物馆 — full game list
 
 Companion to [llms.txt]({SITE_URL}/llms.txt). Every library in this archive, grouped by browser-playability. `noboot` entries link to nothing on the site itself (they're native-driver-only for now) but their source and restoration notes are still in the repo at `{REPO_URL}/tree/main/libs/<slug>`.
 
