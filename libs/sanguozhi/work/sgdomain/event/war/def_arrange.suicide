@@ -1,0 +1,259 @@
+// arrange_troop
+// curent troop curent item, default value wait time
+
+string auto_start_point(string p_area,string p_side);
+void man_input(string p_id,int t_id,string p_side);
+
+void def_arrange_left(int task_id)
+{
+   	string p_area, p_leader;
+   	object o_leader;
+	mapping troop;
+
+	p_area = TASK_D->get_task(task_id,"def_area");
+   	p_leader = TASK_D->get_task(task_id,"def_leader");
+   	o_leader = CHAR_D->find_char(p_leader);
+
+   	if( objectp(o_leader) ){
+		o_leader->simple_action("$N喝道：全体将士定要奋勇杀敌，$s自有重赏！\n");
+       		o_leader->simple_action("$N领将士进入战场。\n");
+   	}
+	TASK_D->set_task(task_id,"start_war","yes");
+
+	TASK_D->set_task(task_id,"def_stage","enter_warfield");
+	troop = TASK_D->get_task(task_id, "def_troop_left");
+	foreach(string tt in keys(troop)){
+                if( troop[tt] == 0 )map_delete(troop, tt);
+		if( tt == "commando") {
+			AREA_D->set_area(p_area,"population",
+				AREA_D->get_area(p_area,"population")+troop[tt]); 
+                                // commado is people
+			map_delete(troop, tt);
+		}
+        };
+	AREA_D->set_area(p_area, "troop", troop);
+
+	TASK_D->set_task(task_id,"msg_total_def_soldiers",
+		"防守方主帅："+CHAR_D->get_char(p_leader,"name")+
+		"。防守方总兵力："+chinese_number(TASK_D->get_task(task_id,"def_total_number")));
+
+}
+void put_def_troop(int task_id)
+{
+   	string p_area, p_room, p_nation, p_leader, p_general;
+   	object o_troop, o_leader,o_general;
+   	int total_soldier, t_id, p_m, p_t, *def_army;
+   	mixed tmp, pre_troop;
+	mapping troop;
+	array msg_def_party;
+	mapping msgs;
+	int def_total_number;
+
+   	p_area    = TASK_D->get_task(task_id,"def_area");
+   	pre_troop = TASK_D->get_task(task_id,"def_curent_arrange_troop");
+   	p_leader  = TASK_D->get_task(task_id,"def_leader");
+   	p_general = pre_troop["general"][0];
+   	o_leader  = CHAR_D->find_char(p_leader);
+   	o_general = CHAR_D->find_char(p_general);
+	troop	  = pre_troop["troop"];
+
+	foreach( string tt in keys(troop) )total_soldier+=troop[tt];
+	if( !total_soldier )return;
+
+   	if( (objectp(o_leader))&&(objectp(o_general)) ){
+		if( p_leader == p_general )
+			o_leader->simple_action("$N喝道：$s亲自带"+CHINESE_D->chinese_number(total_soldier)+"兵马出战！\n");
+		else {
+       			o_leader->targetted_action("$N喝道：$T何在？\n",o_general);
+       			o_general->simple_action("$N答道：$s在！\n");
+       			o_leader->targetted_action("$N对$T道：速点"+
+       				CHINESE_D->chinese_number(total_soldier)+"兵马出兵！\n",o_general);
+       			o_general->simple_action("$N答道：得令！\n");
+       			o_general->simple_action("$N领兵出发了。\n");
+		}
+   	}
+
+   	p_room = AREA_D->get_area(p_area,"path")+"warroom/"+pre_troop["position"];
+   	p_nation = AREA_D->get_area(p_area,"nation");
+   	o_troop = TROOP_D->new_troop(p_nation,pre_troop["general"],0,p_room);
+   	t_id = o_troop->get_id();
+
+
+
+   	if( TASK_D->get_task(task_id,"type") == TT_WAR || 
+		TASK_D->get_task(task_id,"type") == TT_TRAIN )
+	   	TROOP_D->set_troops(t_id,"source_area",p_area);
+   	TROOP_D->set_troops(t_id,"task_id",task_id);
+   	TROOP_D->set_troops(t_id,"side","d");
+
+   	def_army = TASK_D->get_task(task_id,"def_army");
+   	if( !sizeof(def_army) ) def_army=({});
+   	def_army+=({t_id});
+   	TASK_D->set_task(task_id,"def_army",def_army);
+
+   	p_m = AREA_D->get_area(p_area,"morale");
+
+	if(TASK_D->get_task(task_id,"type")==TT_WAR)
+	   	p_m +=20;
+
+   	p_t = AREA_D->get_area(p_area,"train");
+
+        tmp = TASK_D->get_task(task_id,"def_troop_left");
+
+
+
+	msg_def_party=TASK_D->get_task(task_id,"msg_def_party");
+	if(!arrayp(msg_def_party)) msg_def_party=({});
+	msgs=([]);
+	msgs["generals"]=pre_troop["general"];
+	msgs["troops"]=troop;
+	msg_def_party+=({msgs});
+	TASK_D->set_task(task_id,"msg_def_party",msg_def_party);
+
+
+	def_total_number=TASK_D->get_task(task_id,"def_total_number");
+ 	foreach(string tt in keys(troop) ){
+                tmp[tt] -= troop[tt];
+		def_total_number+=troop[tt];
+		if(!tmp[tt])
+			map_delete(tmp,tt);		
+
+		if(tt=="commando") // commando got 100 train and 200 morale
+                        TROOP_D->add_soldier(t_id,tt,troop[tt],200,100,30);
+		else
+                        TROOP_D->add_soldier(t_id,tt,troop[tt],p_m,p_t,30);
+        }; 
+
+	TASK_D->set_task(task_id,"def_total_number",def_total_number);
+        TASK_D->set_task(task_id,"def_troop_left",tmp);
+
+  	tmp = TASK_D->get_task(task_id,"def_general_left");
+  	tmp-=pre_troop["general"];
+  	TASK_D->set_task(task_id,"def_general_left",tmp);
+}
+mixed get_def_val(int task_id)
+{
+   	int p_troop,n_tmp;
+   	string p_stage, p_area;
+   	mixed tmp, tmp2;
+
+   	p_troop = TASK_D->get_task(task_id,"def_arrange_troop");
+   	p_stage = TASK_D->get_task(task_id,"def_arrange_step");
+   	p_area  = TASK_D->get_task(task_id,"def_area");
+
+   	switch(p_stage){
+      		case "general":
+        		tmp = TASK_D->get_task(task_id,"def_general_left");
+        		if(!sizeof(tmp)) return "";
+        		else return tmp[0];
+      		case "position":
+        		tmp = auto_start_point(p_area,"d");
+        		return tmp;
+      		case "newtroop":
+        		tmp = TASK_D->get_task(task_id,"def_general_left");
+        		if(!sizeof(tmp)) return -1;
+			tmp = TASK_D->get_task(task_id, "def_troop_left");
+			if(!sizeof(tmp)) return -1;
+
+        		else return 1;
+		default:
+			tmp = TASK_D->get_task(task_id,"def_troop_left");
+			if(!tmp[p_stage]) return -1;
+			tmp2=TASK_D->get_task(task_id,"def_general_left");
+			n_tmp=bmin(sizeof(tmp2),7-p_troop);
+			n_tmp=bmax(1,n_tmp);
+			n_tmp=tmp[p_stage]/n_tmp;
+			tmp=TASK_D->get_task(task_id,"def_curent_arrange_troop");
+			n_tmp=bmin(n_tmp,tmp["max_av_soldier"]);
+                        return n_tmp;
+   	}
+}
+void def_pre_arrange(int task_id,string def_area)
+{
+	int p_soldier, p_safe, p_people;
+        mapping troop;
+	string def_n;
+   	p_soldier=AREA_D->get_area(def_area,"soldier");
+	troop = AREA_D->get_area(def_area, "troop");
+	if(!mapp(troop)) troop=([]);
+	if(TASK_D->get_task(task_id,"type")==TT_WAR) {
+// if train no commando
+		p_people = AREA_D->get_area(def_area, "population");
+		p_people /=10;
+		p_safe=AREA_D->get_area(def_area,"safe");
+		p_people *=(p_safe+50);
+		p_people /=200;
+		def_n=AREA_D->get_area(def_area,"nation");
+		if(sizeof(AREA_D->check_area("nation",def_n))==1) {
+			p_people *=3;
+		}
+		p_people=bmin(p_people,20000);
+
+		troop["commando"] = p_people;
+		AREA_D->set_area(def_area, "population", 
+			AREA_D->get_area(def_area, "population")-p_people);
+	}
+	foreach(string tt in keys(troop)){
+                if( troop[tt] == 0 )map_delete(troop, tt);
+        };
+   	TASK_D->set_task(task_id,"max_soldier",p_soldier);
+   	TASK_D->set_task(task_id,"def_arrange_troop",0);
+  	TASK_D->set_task(task_id,"def_arrange_step","general");
+	TASK_D->set_task(task_id,"def_curent_arrange_troop",([]));
+	TASK_D->set_task(task_id,"def_troop_left", troop);
+   	return;
+}
+void def_arrange(int task_id)
+{
+   	string def_leader, def_area, p_leader, p_flyroom, p_short;
+   	string *def_party, *def_general_left;
+   	object o_char;
+	mixed tmp, def_curent_arrange_troop;
+
+   	def_leader = TASK_D->get_task(task_id,"def_leader");
+   	o_char = CHAR_D->find_char(def_leader);
+   	def_area = TASK_D->get_task(task_id,"def_area");
+   	p_leader = AREA_D->get_area(def_area,"leader");
+   	p_flyroom = AREA_D->get_area(def_area,"path")+AREA_D->get_area(def_area,"fly");
+   	p_short = load_object(p_flyroom)->short();
+
+   	if( objectp(o_char )){ 
+		o_char->simple_action("$N道：诸位将军、大人，速到"+p_short+"点将出兵，违令者，斩！！\n");
+      		o_char->simple_action("$N匆匆离开了。\n");
+      		CHAR_D->put_char(def_leader,p_flyroom);
+    		o_char->simple_action("$N来到了"+p_short+"。\n");
+   	}
+   	CHAR_D->put_char(def_leader,p_flyroom);
+
+   	def_party = TASK_D->get_task(task_id,"def_party");
+   	def_general_left = ({ });
+   	foreach(string p_id in def_party){
+      		if( (p_id!=def_leader)&&(p_id!=p_leader) ){
+         		o_char = CHAR_D->find_char(p_id);
+         		if(objectp(o_char)){
+           			o_char->simple_action("$N匆匆离开了。\n");
+           			CHAR_D->put_char(p_id,p_flyroom);
+           			o_char->simple_action("$N来到了"+p_short+"。\n");
+         		}
+         	CHAR_D->put_char(p_id,p_flyroom);
+         	def_general_left+=({p_id});
+      		}
+   	}
+   	TASK_D->set_task(task_id,"def_general_left",def_general_left);
+   	def_pre_arrange(task_id,def_area);
+	// Only one general 
+	if( !def_general_left || !sizeof(def_general_left) ){
+		tmp = TASK_D->get_task(task_id, "def_troop_left");
+		TASK_D->set_task(task_id,"def_arrange_step",keys(tmp)[0]);
+
+		def_curent_arrange_troop = ([ ]);
+		def_curent_arrange_troop["general"] = ({TASK_D->get_task(task_id,"def_leader")});
+		def_curent_arrange_troop["max_av_soldier"]=
+			WARAI_D->get_max_soldier(def_curent_arrange_troop["general"]);
+				// soldier type index begin from 0;
+		def_curent_arrange_troop["sd_idx"]=0;
+
+		TASK_D->set_task(task_id,"def_curent_arrange_troop",def_curent_arrange_troop);
+	};
+	new("/sgdomain/menu/warinput")->man_input(def_leader,task_id,"d");
+}

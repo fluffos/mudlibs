@@ -1,0 +1,9 @@
+#define M_HORSE_1 "/wiz/ljty/modules/m_horse.lpc"
+#define L_LOCKABLE "/wiz/ljty/obj/door/l_lockable.lpc"
+#define CHENGMEN_ROOM "/wiz/ljty/modules/chengmen_room.lpc"
+#define INDOOR_ROOM_TYPE 1
+#define M_USEABLE "/wiz/ljty/modules/m_useable.lpc"
+#define L_SECRET_DOOR "/wiz/ljty/obj/door/l_secret_door.lpc"
+#define L_HIDDEN_DOOR "/wiz/ljty/obj/door/l_hidden_door.lpc"
+#define L_DOOR "/wiz/ljty/obj/door/l_door.lpc"
+// #define M_VALUE "/sgdomain/modules/m_value.lpc"

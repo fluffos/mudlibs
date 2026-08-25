@@ -149,6 +149,7 @@ classes it's found.
 | 004-1 | `bxsj1` | 书剑·经典 (ShuJian Classic) | `bxsj1.rar` | 40005 | WASM playable |
 | 004-2 | `jinyongwenzi` | 金庸文字版 | `金庸文字版 (1).exe` | 40083 | WASM playable |
 | 005 | `chidi` | 江湖 I (Jianghu I) | `chidi.rar` | 40006 | WASM playable |
+| 006 | `ds386` | Dead Souls 3.8.6 | `006_ds386_ds3.8.6.zip` | 40205 | WASM playable |
 | 007 | `dtsl` | DTSL | `DTSL.7z` | 40008 | WASM playable |
 | 007-1 | `dtslmud` | 大唐双龙传（LLMUD） | `LLMUD(大唐双龙)v_0.11版.rar` | 40015 | WASM playable |
 | 007-2 | `dtsl2` | 大唐双龙 (DaTangShuangLong) | `大唐双龙.rar` | 40043 | WASM playable |
@@ -338,7 +339,11 @@ classes it's found.
 | 156-1 | `xyj42dup` | 西游记4.2 (dup) | `西游记4.2.rar` | — | not-mudlib |
 | 157 | `shujian3` | 书剑3 | `最新独立安卓客户端和书剑源码一键架站.zip` | 40200 | WASM playable |
 | 158 | `zjmudhell` | 指尖MUD | `指尖后端.7z` | 40204 | WASM playable |
+| 159 | `deadsouls_fluffos` | DeadSouls-FluffOS2019 | `git clone https://github.com/fluffos/dead-souls (commit 7c88ffba42fe782bf8c2c4787dbada51e28bfda2, cloned 2026-08-24)` | 40207 | WASM playable |
+| 160 | `nightmare3` | Nightmare 3 | `git clone https://github.com/fluffos/nightmare3 (not a traditional archive file — a maintained, already FluffOS-adapted fork; mudlib root is the repo's lib/ directory)` | 40208 | native-boot verified, WASM pending |
 | 161 | `imud` | IMUD@FluffOS.v2019 | `git clone https://github.com/fluffos/imud (commit 6b232d4, cloned 2026-08-24)` | 40209 | WASM playable |
+| 162 | `sanguozhi` | 三国志 | `git clone https://github.com/fluffos/sanguozhi` | 40210 | WASM playable |
+| 164 | `lima` | Lima | `git clone https://github.com/fluffos/lima (HEAD dbcef2a, 2026-08-24)` | 40212 | partial (native only) |
 | 901 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | — | deprioritized |
 | 901-1 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | — | deprioritized |
 | 901-2 | `dw_fluffos_v3` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | — | deprioritized |
