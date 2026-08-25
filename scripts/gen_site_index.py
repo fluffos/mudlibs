@@ -457,7 +457,10 @@ def render_index(status, commits, lang="zh"):
         name = html.escape(name_src)
         desc = html.escape(desc_src) + html.escape(desc_suffix)
         linked = st != "noboot"
-        title_html = (f'<a class="play" href="{slug}/">{name}</a>' if linked
+        # Absolute (site-root-relative) path -- the en page is served from
+        # /en/, so a plain "{slug}/" relative href would resolve to
+        # /en/{slug}/ (404) instead of the real play page at /{slug}/.
+        title_html = (f'<a class="play" href="/{slug}/">{name}</a>' if linked
                       else name)
 
         meta_bits = []
