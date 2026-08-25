@@ -78,6 +78,12 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 REPO_URL = "https://github.com/fluffos/mudlibs"
 SITE_URL = "https://mudlibs.fluffos.info"
+# Per-lib source ZIPs (scripts/make_source_zips.sh) live as assets on this
+# GitHub Release rather than in the Pages deploy itself -- 192 libs' worth
+# comes to ~2.3GB, which would roughly double the size of the already
+# ~2GB WASM site if bundled in. Releases are built for large binary
+# distribution and have no comparable size pressure.
+RELEASE_ZIPS_URL = f"{REPO_URL}/releases/download/source-zips"
 
 # libs/<slug>/meta.json's wasm_status enum -> the site's 3-tier badge.
 # "limited"/"password-protected" both mean "boots, but login is blocked or
@@ -254,6 +260,7 @@ UI = {
         "admin_nopw": "无密码", "admin_pw_readme": "密码见 README",
         "updated_label": "更新", "commit_title": "该游戏库最近一次改动的提交",
         "source_label": "源码", "source_title": "该游戏库的源代码目录",
+        "download_label": "下载 ZIP", "download_title": "下载这个游戏库的独立源码压缩包（无需克隆整个仓库）",
         "footer_source": "源代码与修复记录", "footer_driver": "驱动",
         "footer_copyright": "游戏内容版权归原作者所有,仅作历史保存用途。",
         "lang_switch_label": "English", "lang_switch_href": f"{SITE_URL}/en/",
@@ -275,6 +282,7 @@ UI = {
         "updated_label": "Updated",
         "commit_title": "Most recent commit that changed this library",
         "source_label": "Source", "source_title": "Source directory for this library",
+        "download_label": "Download ZIP", "download_title": "Download a standalone source archive for this library (no need to clone the whole repo)",
         "footer_source": "Source & restoration notes", "footer_driver": "Driver",
         "footer_copyright": "Game content copyright belongs to the original "
                              "authors; preserved here for historical purposes only.",
@@ -472,6 +480,10 @@ def render_index(status, commits, lang="zh"):
         meta_bits.append(
             f'<a href="{REPO_URL}/tree/main/libs/{html.escape(slug)}" '
             f'title="{ui["source_title"]}">{ui["source_label"]}</a>')
+        if linked:
+            meta_bits.append(
+                f'<a href="{RELEASE_ZIPS_URL}/{html.escape(slug)}.zip" '
+                f'title="{ui["download_title"]}">{ui["download_label"]}</a>')
         meta_html = ('<p class="meta">' + "\n    ".join(meta_bits) + '</p>')
 
         # Search should cover every field a visitor might type, not just the
@@ -711,6 +723,7 @@ def render_games_json(status, commits):
             "status": info["status"],
             "url": f"{SITE_URL}/{slug}/",
             "source_url": f"{REPO_URL}/tree/main/libs/{slug}",
+            "source_zip_url": f"{RELEASE_ZIPS_URL}/{slug}.zip",
             "admin_id": admin_id,
             "admin_password": admin_pw,
             "last_changed_commit": entry.get("sha") if entry else None,
@@ -780,6 +793,7 @@ This project (fluffos/mudlibs) extracts, restores, and documents Chinese-languag
 - Driver: [FluffOS](https://github.com/fluffos/fluffos), an actively-maintained LPMud/LPC driver, compiled to WebAssembly for in-browser play.
 - Language/setting: all games are Chinese-language LPC MUDs (泥潭), primarily wuxia (武侠) and xianxia (仙侠) themed. Every game card and description exists in both Chinese ({SITE_URL}/) and English ({SITE_URL}/en/) -- this is a fully bilingual site, not a Chinese-only one with an English label.
 - Source code, restoration notes (AGENTS.md), and native-driver play instructions: [github.com/fluffos/mudlibs]({REPO_URL})
+- Each game also has a standalone downloadable source ZIP (trimmed source tree, no need to clone the whole repo) linked from its card and from games.json's `source_zip_url` field, hosted as GitHub Release assets at {RELEASE_ZIPS_URL}/<slug>.zip
 
 ## Full game list
 
