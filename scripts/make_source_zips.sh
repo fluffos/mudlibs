@@ -12,9 +12,16 @@
 # every README documents) -- see pack_lib_for_web.sh's own comment for
 # why those stay.
 #
-# Usage: scripts/make_source_zips.sh <out_dir>
-#   <out_dir>  directory to write <slug>.zip into (one per packable lib
-#              -- same "has config.fluffos" gate gen_site_index.py uses)
+# Usage: scripts/make_source_zips.sh <out_dir> [slug ...]
+#   <out_dir>  directory to write <slug>.zip into
+#   [slug ...] optional: only zip these specific libs (e.g. from CI's
+#              "which libs changed since last publish" list -- see
+#              .github/workflows/pages.yml's release-zips step, which
+#              reuses build_site.sh's repacked_slugs output so this
+#              script doesn't need its own separate change-detection).
+#              Omit to zip every packable lib (the manual/full-refresh
+#              case -- same "has config.fluffos" gate gen_site_index.py
+#              uses, slug list from wasm_status.json).
 #
 # Requires: rsync, zip, python3.
 
@@ -23,17 +30,22 @@ set -euo pipefail
 SELF_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(cd "$SELF_DIR/.." && pwd)
 
-if [ $# -ne 1 ]; then
-  echo "usage: $0 <out_dir>" >&2
+if [ $# -lt 1 ]; then
+  echo "usage: $0 <out_dir> [slug ...]" >&2
   exit 2
 fi
 OUT_DIR=$1
+shift
 mkdir -p "$OUT_DIR"
 
-SLUGS=$(python3 -c "
+if [ $# -gt 0 ]; then
+  SLUGS="$*"
+else
+  SLUGS=$(python3 -c "
 import json
 d = json.load(open('$REPO_ROOT/scripts/wasm_status.json'))
 print('\n'.join(sorted(d['libs'].keys())))")
+fi
 
 # Same exclusion set as pack_lib_for_web.sh's EXCLUDES (kept in sync by
 # hand -- both scripts trim the same lib tree for two different outputs).
