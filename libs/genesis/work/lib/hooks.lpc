@@ -1,0 +1,122 @@
+/*
+ * This library can be inherited in an object which wishes to provide
+ * other objects with the possibility to listen in on various events
+ * without resorting to shadows.
+ *
+ */
+#include <stdproperties.h>
+
+nosave mapping hooks = ([ ]);
+
+/*
+ * Function name: add_hook
+ * Description  : Add a callback to the callback list
+ *                The callback function will be called with different arguments
+ *                depending on which hook its attached to.
+ *
+ *                Note that the callback function must be defined in the same
+ *                object which calls add_hook.
+ *
+ * Arguments    : string name - The hook name, usually defined in /sys/hooks.h
+ *                function callback - The callback function.
+ */
+/* FluffOS PORT NOTE: function_object() (get the object a function
+ * value belongs to) is a CD-driver efun with no FluffOS equivalent
+ * (this driver has no way to introspect an arbitrary function value's
+ * owning object from LPC at all -- same gap as function_name(), see
+ * std/room/exits.lpc's note). The ownership-verification check this
+ * guarded ("the callback must belong to the object registering it")
+ * is dropped entirely rather than approximated; this is a real loss of
+ * a safety check, not just an optimization, but there's no way to
+ * replicate it on this driver. */
+void
+add_hook(string name, function callback)
+{
+    if (!functionp(callback))
+        return;
+
+    if (!pointerp(hooks[name]))
+        hooks[name] = ({ });
+    hooks[name] |= ({ callback });
+}
+
+/*
+ * Function name: remove_hook
+ * Description  : Remove a hook from the provided hook name.
+ *                If an object is provided all functions which reside in that
+ *                object will be removed. This is often the safest way to do it
+ *                as comparison of function pointers is unreliable.
+ *
+ * Argument     : string - the hook name
+ *                object / function
+ *
+ */
+void
+remove_hook(string name, mixed callback)
+{
+    if (!hooks[name])
+        return;
+
+    if (functionp(callback))
+        hooks[name] -= ({ 0, callback });
+
+    /* FluffOS PORT NOTE: the object-based removal branch (remove every
+     * callback belonging to a given object) relied on function_object(),
+     * which doesn't exist on this driver (see the note on add_hook()
+     * above) -- dropped; only the function-pointer-based removal branch
+     * above still works. */
+}
+
+/*
+ * Function name: call_hook
+ * Description  : Calls all the function which have registered themselves
+ *                as listening to a specific hook.
+ *                Any runtime errors from the hooks will be caught.
+ *
+ * Example      : call_hook(HOOK_PLAYER_MOVED, source, dest);
+ *
+ * Arguments    : string  - The hook name
+ *                varargs - Any extra arguments to be included.
+ *                          These should be documented.
+ */
+/* FluffOS PORT NOTE: this driver's variadic-parameter grammar is
+ * `argument_list L_DOT_DOT_DOT` with NO comma between the named
+ * parameters and `...` (unlike the CD driver's `(string name, ...)`);
+ * dropped the comma. Also, unlike the CD driver's convention (where
+ * `...` always populates a hidden `argv` array regardless of the named
+ * parameters), this driver's variadic remainder is held by the LAST
+ * declared parameter itself -- so an explicit trailing array parameter
+ * is needed to hold the extra args separately from `name`. */
+void
+call_hook(string name, mixed *args ...)
+{
+    if (!hooks[name] || !sizeof(hooks[name]))
+        return;
+
+    /* FluffOS PORT NOTE: this driver only has the classic LPC
+     * catch(expr)/catch{stmts} EXPRESSION form -- no
+     * try{}catch(TYPE var){} statement form. */
+    mixed err = catch {
+        foreach (function callback in hooks[name])
+        {
+            if (!functionp(callback))
+            {
+                hooks[name] -= ({ callback });
+                continue;
+            }
+
+            (*callback)(args...);
+        }
+    };
+    if (err) {
+        write("Your sensitive mind notices a wrongness in the fabric of space.");
+
+        if (this_interactive()->query_wiz_level() ||
+            this_interactive()->query_prop(PLAYER_I_SEE_ERRORS))
+        {
+            this_interactive()->catch_tell("\n\n" + err + "\n");
+            return;
+        }
+    }
+}
+

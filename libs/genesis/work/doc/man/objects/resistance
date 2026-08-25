@@ -1,0 +1,329 @@
+
+Resistance properties
+=====================
+
+There are a number of resistance properties that deal exclusively with
+magic. There are two ways to use these magical resistance properties.
+
+They can be used directly, by being set in an object, living or dead,
+thus giving the object an inherent magical resistance.
+
+For example, a weapon might be protected against acid or fire. This
+could be achieved by setting the properties OBJ_I_RES_ACID and
+OBJ_I_RES_FIRE. There is no difference between protection against
+'magical' acid or fire and against 'natural' acid or fire, since in
+the game 'magic' is part of the nature of the world.
+
+Besides inherent magical resistance, there is magical resistance that
+one object bestows upon another one, for example a magical amulet might
+protect the wearer by increasing the wearer's magical resistance
+against one of more kinds of magical attacks. While inherent magical
+resistance is marked using the OBJ_I_RES_xxx properties, for indirect
+resistance the MAGIC_I_RES_xxx properties are used.
+
+This indirect magical resistance is defined in the protecting object.
+When the protection is activated, for example when the amulet either
+enters the inventory of someone or if someone starts wearing the
+amulet, the object pointer for the amulet has to be added to the list
+of magical effects in the protected object.
+
+This is achieved by calling
+
+    (void) target->add_magic_effect(amulet);
+
+where 'target' is an object pointer to the protected object, and
+'amulet' is an object pointer to the protecting object.
+
+The list of object pointers that protected an object can be queried
+using:
+
+    (object *) target->query_magic_effects();
+
+When the magical protection should end, for example because the amulet
+is dropped or removed, then the object pointer to the protecting object
+has to be removed from the list using:
+
+    (int) remove_magic_effect(amulet);
+
+The protecting object has to define a function
+(mixed) query_magic_protection(string prop, object what).
+
+Here 'prop' is the string for the name of the property of the magical
+resistance, eg MAGIC_I_RES_FIRE. If 'what' points to the protected
+object, and if 'prop' is MAGIC_I_RES_FIRE, then the function should
+return the magical resistance that the amulet bestows upon the wearer
+against fire.
+
+Indirect magical resistance can be either additive or non-additive. It
+is described by an array of integers: ({resistance value, additivity}).
+
+The resistance value is a percentage, and corresponds to the value used
+for inherent magical resistance. If the resistance value is 25 and a
+fire bolt inflicts 40 hit points damage, the actual damage would be
+30 hit points.
+
+If the additivity is true (1), then the resistance value will be added
+to the resistance values of other objects protecting the protected
+object against the same type of damage. If the additivity is false (0),
+then it will not be added, but considered seperately. The total
+indirect magical resistance will either be the sum of the resistance
+values of all additive effects or the maximum of the resistance values
+of the non-additive effects, whichever one is larger.
+
+So, if a player wears one object with a non-additive resistance of 30%,
+and four others that are additive and give a sum of 24%, the resistance
+will be 30%.
+
+The resistance values of additive effects are added by taking the
+product of (1 - resistance) for all additive effects.
+
+For example, if you have three objects with additive resistance on you,
+one with 30%, one with 20% and one with 25% additive resistance, then
+the result would be (1 - (1-0.3)*(1-0.2)*(1-0.25)) = 58%.
+
+Just look at it this way: the first object takes away 30% of the
+damage, so only 70% reach the second object, which takes away 20% of
+those. Then 56% of the damage reach the third object, which takes away
+25% of 56%, so that only 42% of the original damage reach you. So the
+three protecting objects all together removed 58% of the damage.
+
+The resistance is calculated by the function 
+int query_magic_res(string prop), defined in /std/object.c.
+
+The maximum resistance value for an additive resistance effect that an
+object can bestow on another is 40%. For a non-additive resistance
+effect this maximum is 75%. No object may protect another object,
+whether living or dead, more powerfully than this. As always, object
+with resistance values close to the limits given above should be rare
+and very hard to obtain!
+
+Example:
+
+/*
+ * example_ring.c
+ *
+ * An example of how to code objects bestowing magical resistance on
+ * other objects.
+ *
+ * by Rogon
+ */
+#pragma strict_types
+
+inherit "/std/armour.c";
+
+#include <stdproperties.h>
+#include <wa_types.h>
+
+void
+create_armour()
+{
+    set_name("ring");
+    set_adj(({"mithril", "ruby", }));
+    set_short("mithril ring inset with a ruby");
+    set_long("This is a mithril ring inset with a bright red ruby.\n");
+    add_item(({"ruby", "bright red ruby", "red ruby", "bright ruby", }),
+        "The ruby set into the mithril ring shines brightly red.\n"
+      + "It is firmly placed into the ring.\n");
+
+    set_default_armour(1, A_R_FINGER, 0, this_object());
+
+    add_prop(OBJ_I_WEIGHT,  50);
+    add_prop(OBJ_I_VOLUME,  10);
+
+    add_prop(OBJ_I_VALUE, 2 * 1728);
+
+    add_prop(MAGIC_AM_MAGIC, ({ 50, "divination" }));
+    add_prop(MAGIC_AM_ID_INFO, ({
+        "The ruby set into the ring shines with magical power.\n", 10,
+        "The ring has the power to protect whoever wields it.\n", 25,
+        "It was forged in the Second Age by Sauron the Great.\n", 40,
+        "It is one of the Rings of Power.\n", 60,
+        "It is one of the seven for the Dwarf-lords in the halls of "
+      + "stone.\n", 80, }));
+
+    add_prop(OBJ_S_WIZINFO,
+        "This is one of the seven rings of power that Sauron gave to "
+      + "the dwarves.\n"
+      + "It will protect the wearer against fire, water, and magic:\n"
+      + "magic resistance: MAGIC_I_RES_FIRE:  40, additive,\n"
+      + "magic resistance: MAGIC_I_RES_WATER: 20, additive,\n"
+      + "magic resistance: MAGIC_I_RES_MAGIC: 25, non-additive.\n");
+
+    // The ring itself cannot be harmed by fire and is protected against
+    // the element water and against magic in general.
+    add_prop(MAGIC_I_RES_FIRE,  100);
+    add_prop(MAGIC_I_RES_WATER,  50);
+    add_prop(MAGIC_I_RES_MAGIC,  90);
+}
+
+mixed
+query_magic_protection(string prop, object what)
+{
+    if (what == query_worn())
+    {
+        switch (prop)
+        {
+            case MAGIC_I_RES_FIRE:    return ({ 40, 1 });
+            case MAGIC_I_RES_WATER:   return ({ 20, 1 });
+            case MAGIC_I_RES_MAGIC:   return ({ 25, 0 });
+        }
+    }
+
+    return ::query_magic_protection(prop, what);
+}
+
+public mixed
+wear(object ob)
+{
+    object  tp = this_player();
+
+    // sanity checks.
+    if ((ob != this_object()) || (tp != environment(this_object())))
+        return -1;
+
+    tp->add_magic_effect(this_object());
+    return 0;
+}
+
+public mixed
+remove(object ob)
+{
+    object  tp = this_player();
+
+    // sanity checks.
+    if ((ob != this_object()) || (tp != query_worn()))
+        return -1;
+
+    if (!living(tp)) 
+        return 0;
+
+    tp->remove_magic_effect(this_object());
+    return 0;
+}
+
+How resistance is applied in practice
+=====================================
+How magic resistance is applied in practice isn't intuitive. There 
+are at least three stages of resistance checks that can impact the 
+damage output or success of a spell.
+
+First, the relevant MAGIC_I_RES_* is checked, which gives a flat 
+resistance (20% = 20%). If it fails this check, the spell fails. 
+Simples.
+
+If it passes this initial check, a secondary check is conducted at 
+80% of the resistance value to determine the penetration value of 
+the spell. If the check fails, the spell is set to 0 penetration, 
+and in effect negated. 
+
+If the secondary check succeeds the penetration of the spell is 
+reduced, impacting the damage output or effectiveness of the spell.
+
+So in effect the addition of magic resistance properties provides three 
+levels of benefit.
+
+It is important to take this into account when applying resistances to 
+creatures, magical item benefits, or guild abilities.
+
+The following table provides a guideline on the benefits of different 
+levels of MAGIC_I_RES_* property settings:
+
+
+MAGIC_I_RES_*  PEN       Chance for   Average      Efficiency   Effective 
+                         0 pen        Pen          in %         Resistance
+---------------------------------------------------------------------------
+0.0%           1446      0.0%         1446         100          0
+5.0%           1373.7    4.0%         1318.752     91.2         8.8
+10.0%          1301.4    8.0%         1197.288     82.8         17.2
+15.0%          1229.1    12.0%        1081.608     74.8         25.2
+20.0%          1156.8    16.0%        971.712      67.2         32.8
+25.0%          1084.5    20.0%        867.6        60           40
+30.0%          1012.2    24.0%        769.272      53.2         46.8
+35.0%          939.9     28.0%        676.728      46.8         53.2
+40.0%          867.6     32.0%        589.968      40.8         59.2
+45.0%          795.3     36.0%        508.992      35.2         64.8
+50.0%          723       40.0%        433.8        30           70
+55.0%          650.7     44.0%        364.392      25.2         74.8
+60.0%          578.4     48.0%        300.768      20.8         79.2
+65.0%          506.1     52.0%        242.928      16.8         83.2
+70.0%          433.8     56.0%        190.872      13.2         86.8
+75.0%          361.5     60.0%        144.6        10           90
+80.0%          289.2     64.0%        104.112      7.2          92.8
+85.0%          216.9     68.0%        69.408       4.8          95.2
+90.0%          144.6     72.0%        40.488       2.8          97.2
+95.0%          72.3      76.0%        17.352       1.2          98.8
+100.0%         0         80.0%        0            0            100
+
+
+Determining combat aid for guild resistance specials
+====================================================
+
+Spells that provide resistance protection are quite common, specials less
+so. Regardless, any guild ability that offers resistance protection will 
+have a combat aid cost applied to their guild's total combat aid cap 
+equating to 1% of combat aid per point of resistance offered.
+
+Only one magical damage type can be applied from a magical attack, so the 
+benefit of multiple resistance types technically do not stack when 
+determining the aid of specials or spells that provide multiple resistance.
+
+However this is not a balanced way of looking at resistances, and runs the
+risk of spells and specials providing blanket immunity across all forms
+at the same combat aid cost as targeted/tailored resistance options that 
+make players actually think about the damage types they are likely to face.
+
+So the following guidelines should be followed when incorporating resistance
+abilities to a guild and determining the combat aid benefit to be applied 
+towards the guild's combat aid cap:
+
+* For a guild special that isn't a spell, each point of form resistance costs 
+  1% combat aid.
+
+* Resistance spells must use the /d/Genesis/specials/std/spells/resistance.c
+  base spell as the spell template.
+
+* Up to three MAGIC_I_RES_* form resistances may be included in such a 
+  resistance spell for a combat aid cost of 1% per resistance point of the
+  highest MAGIC_I_RES_* form resistance offered by the spell.
+
+  So a resistance spell offering MAGIC_I_RES_FIRE of 15, MAGIC_I_RES_COLD of
+  14, and MAGIC_I_RES_POISON of 13 would have a combat aid benefit of 15%.
+
+* If the spell offers more than three MAGIC_I_RES_* resistances, an additional
+  combat aid multiple of x1.1 (i.e 10% extra) is applied for each of the 
+  additional spell form resistances over the original three.
+
+  So a resistance spell offering MAGIC_I_RES_FIRE, MAGIC_I_RES_COLD,
+  MAGIC_I_RES_POISON, MAGIC_I_RES_AIR, and MAGIC_I_RES_EARTH of 15 would have a 
+  combat aid benefit of 15% multipled by a factor of x1.2 (two additional
+  resistances over the base three), providing a combat aid benefit of 18%.
+
+* If the spell offers less than three MAGIC_I_RES_* form resistances, that
+  spell's combat aid is calculated at a multiple reduction of 1.1 (10%) per 
+  resistance less than the base three.
+
+  So a resistance spell offering only MAGIC_I_RES_FIRE at 15 will have an
+  effective combat aid benefit reduced by 20% (2 less resistances than the 
+  base three) for a combat aid of 12%, while a resistance spell that offers
+  both MAGIC_I_RES_FIRE and MAGIC_I_RES_AIR at 15 will have an effective
+  combat aid reduced by 10% (1 less resistance than the base three) for 
+  a combat aid of 13.5%.
+
+* As MAGIC_I_RES_MAGIC resistance provides resistance against all the forms
+  of which there are 14 (12 if you exclude *_MAGIC and *_IDENTIFY), this
+  resistance type is treated differently from individual forms when 
+  determining combat aid benefit. Every point of MAGIC_I_RES_MAGIC is counted
+  as 2% combat aid. This aid is cumulative with other form resistances 
+  offered.
+
+  So a resistance spell offering MAGIC_I_RES_MAGIC at 15 would have a combat
+  aid benefit of 30%.  A spell offering MAGIC_I_RES_MAGIC at 15 and 
+  MAGIC_I_RES_AIR at 15 would have a combat aid benefit of 42% (30% for the
+  *_RES_MAGIC component and 12% for the *_RES_AIR component).
+
+* Resistance spells shouldn't mix meta and physical resistances (i.e. 
+  physical being acid/cold/fire and meta being life/death etc), however this
+  guideline can be bent for appropriate thematic reasons. Any such spells
+  need to be approved by both the domain Liege and AoB.
+
+

@@ -1,0 +1,254 @@
+NAME
+	GMCP - GENERIC MUD COMMUNICATION PROTOCOL
+
+DESCRIPTION
+	This document describes the technical implementation of GMCP and lists
+	the packages supported and their content.
+
+GMCP Messages are formed of a package name, and an optional JSON payload
+separated by a space. Normally the mud client will handle the parsing and will
+provide the information in it's native format to the scripts. For specific
+details, look into the documentation of your mud-client. 
+
+Broadcasts are only sent when you are subscribed to the packages to which they
+belong. Packages names follow a parent.child format, which each level separated
+by a dot. If you subscribe to the Core package, you will receive all broadcasts
+for packages that start with Core, if you were to subscribe to Core.Subpackage,
+you would only get those and it's children.
+
+Package and message names are not case sensitive. JSON key names are case
+sensitive. In this document { } means a object/mapping, [ ] means an array.
+
+Core Broadcasts
+---------------
+Core.Goodbye
+
+    Send upon disconnect. Payload is a string detailing the reasons for the
+    disconnect.
+
+Char Broadcasts
+---------------
+Char.Created
+
+    Sent upon creation of a new character. It contains the name of the player.
+
+    Example: { "name" : "eowul" }
+
+Char.Login
+
+    Sent upon successful login. The uid is unlikely to change for a player,
+    but there are no guarantees given.
+    
+    Example: { "name" : "eowul", "uid" : <uid> }
+
+Char.StatusVars
+
+    Sent upon subscription to the Char package, contains and object as payload
+    where each key value pair contains the technical key (used in Char.Status)
+    and a text value containing a more humanly readable caption.
+
+    Example: { "level" : "Level", "race" : "Race" }
+
+Char.Status
+
+    Upon subscription to the Char package, an initial set of status variables
+    is sent. After this initial broadcast, subsequent broadcasts will only
+    contain changed variables. The values will be textual giving the same
+    information as available in the game.
+
+    Example: { "level" : "myth", "name" : "Eowul", "race" : "elf" }
+
+    At the time of writing, the following status variables are available:
+
+        name, level, gender, race, strength, constitution, discipline,
+        intelligence, dexterity or wisdom, alignment, mail
+
+Char.Team
+
+    This will send information about the team you are in. If you are not in
+    a team (anymore) it sends an empty package { }. The following info is sent:
+    
+    - leader  - the name of your leader, or "You" if you are the leader.
+    - members - the names of the members of the team. If you are a member,
+                it does not include yourself (only your team mates).
+    - follow  - "follow" or "stay", depending on the leader's instructions.
+
+    Example: { "leader" : "You", "members" : [ "Eowul" ], "follow" : "stay" }
+             { "leader" : "Eowul", "members" : [ ], "follow" : "follow" }
+
+Char.Vitals
+
+    Similar to the status broadcast, the initial broadcast will contain all
+    initial values, subsequent broadcasts include only the updated values.
+
+    Example: { "health" : "very hurt", "mana" : "in full vigour", ... }
+
+    Currently the following information is included in the vitals broadcast:
+
+        food, drink, fatigue, mana, health, intoxication
+
+Comm Broadcasts
+---------------
+Comm.Channel
+
+    This will send all communications by and to the player. The following
+    information is passed for each message:
+
+    line    - The line is the name of the communication channel or verb.
+    name    - The name or description of the sender of the message as perceived
+              by the player. It will give "You" for communication emitting from
+              the player.
+    body    - The message that is communicated (no newline).
+    message - The complete message as displayed in the game (no newline).
+
+    Example: { "line" : "say",
+               "name" : "You",
+	       "body" : "How are you?",
+               "message" : "You say: How are you?" }
+
+Room Broadcasts
+---------------
+Room.Info
+
+    This will send information about the environment the player is in. The
+    payload for each room is an object with the following keys:
+
+    id    - A unique identifier for the room. This will remain static as long
+            as the code of the room isn't moved.
+    short - The short description of the room.
+    exits - An array listing the exits of the room.
+    doors - An array listing the exits of the room reachable through a door.
+    x, y  - Coordinates of the room on the map. Omitted if the room isn't on
+            the map. Note x=0 will never happen, so you can test for that.
+	    The zoomx, zoomy are only given if there is a zoomed map.
+
+    Example: { "id" : "iX5PnH",
+               "short" : "A pond with a waterfall.",
+               "exits" : [ "up", "east" ],
+               "doors" : [ "north" ],
+               "x" : x, "y" : y, "zoomx" : zoomx, "zoomy" : zoomy }
+
+Room.Map
+
+    This package is sent when a player enters into a new map area. It contains
+    the map graphics and optionally the zoomed map graphics.
+
+    Example: { "map"  : "map graphics",
+               "zoom" : "zoomed map graphics" }
+
+Client commands
+---------------
+Core.Hello		
+
+    First message sent after GMCP has been negotiated. It sends the client name
+    and version.
+
+    Example: { "client" : "GMC", "version" : "1.0.1" }
+
+Core.Supports.Set 
+Core.Supports.Add
+Core.Supports.Remove
+
+    Commands to subscribe to the various broadcasts offered by the mudib (see
+    supported packages), the payload is an array with strings, containing the
+    packages and versions. 
+
+    Example: [ "Core 1", "Room 1" ]
+
+    If the version number is ommited, version 1 is assumed. The set command
+    replaces the previous list of subscribed packages. Add will adds the new
+    packages to the existing list, overwriting the version of existing modules
+    with the new one supplied (even if it is lower than the existing version).
+
+    You can unsubscribe from broadcasts using the Core.Supports.Remove command.
+    Version numbers are optional and will be ignored when supplied. 
+
+Core.Client
+
+    Informs the game about the size of the client text window. The keys are
+    height and width, and the values are the size in characters. These values
+    will override the in-game options for the duration of the session.
+
+    Example:  { "height" : 40, "width" : 80}
+
+Core.Options
+
+    Sets or unsets an option related to the gmcp protocol. The key is the
+    option name. For binary options, the values are "on" and "off".
+
+    npc_comms - send communication (speech) by NPC's in Comm.Channel
+
+    Example: { "npc_comms" : "off" }
+
+Core.Ping
+
+    Check to see if the server is still responding. A Core.Ping message will
+    be sent in reply, containing no payload.
+
+Char.Login
+
+    Only valid while no user is logged in. Contains an object as payload with
+    keys name and password. Upon successfull validation of the credentials, the
+    user is logged in.
+
+    Example: { "name" : "Eowul", "password" : "topsecret" }
+
+Char.Skills.Get
+
+    Request an up to date skill-list for the logged in player. Data is returned
+    based on the parameters given.
+
+    When no parameters are given, a list of all known skill-groups is returned
+    using the Char.Skills.Groups package and containing an array of strings as
+    the payload.
+
+    Char.Skills.Groups
+    Example: [ "General", "Weapon" ]
+
+    In order to get the skills for a specific group (or using 'All' to get all
+    available skills regardless of group), supply an object as the commmands
+    payload, using 'group' as key and the group name as value. This will return
+    a list of skills and their values through the Char.Skills.List package. The
+    payload is an object with the group name repeated with the 'group' key, and
+    the list of skills (another object) using the 'list' key.
+
+    Char.Skills.List 
+    Example: { "group" : "General",
+               "list" : { "appraise object" : 10, 
+                          "appraise value" : 15 } }
+
+    Unlike most other commands, the numerical value of the skill is returned as
+    there is a one to one mapping with it's textual counterpart.
+
+    Should you only be interested in the values of a single skill, you can
+    supply an object as payload with both a group and a name key, and the skill
+    data will be returned using the packagename, with an object as payload,
+    containing the group, name, info and value keys.
+
+    Char.Skills.Info
+    Example: { "group" : "General", "name" : "appraise object",
+               "info" : "appraise object", "skill" : 15 }
+
+Char.Vitals.Get
+
+    Request an up to date list of the possible levels for vitals. Data is
+    returned based on the parameters given.
+
+    When no parameters are given, a list of all supported vitals is returned
+    using the Char.Vitals.List package and containing an array of strings as
+    the payload.
+
+    Char.Vitals.List
+    Example: [ "health", "mana" ]
+
+    In order to get the levels for one more more vitals, it accepts a single
+    vital, an array of vitals or "All" to get the full list, which will be
+    sent with the package Char.Vitals.Levels. The payload is an object with
+    as keys the vitals, and an array of the levels as argument.
+
+    Char.Vitals.Levels
+    Example: { "health" : [ "death's door", ... "feeling very well" ],
+               "mana" : [ ... ] }
+
+SEE ALSO
+	gmcp, gmcp_tech_wiz

@@ -1,0 +1,288 @@
+This is a description of what the inheritable file /std/room.c contains
+and how to use it.
+
+The file contains both ordinary text and program excerpts of a room.
+Read EVERYTHING since explanatory text is given in the program parts
+as well.
+
+To begin with, a room is a special object in the sense that it is
+never meant to be cloned. It is always the master copy of the object
+that is used. This is not true with ordinary objects where the master
+copy is only used to make clones of. The most basic difference between
+the master copy and a clone is that the master copy can not be moved
+into other objects. The euid of the master copy is that of the author
+of the file, not the one who loaded it.
+
+A room should always begin with the statements:
+
+inherit "/std/room.c";
+ 
+#include <macros.h>
+#include <stdproperties.h>
+
+I will also make a few simple definitions to make life easier and 
+the text easier to read.
+
+#define BS(message)	break_string(message, 75)
+#define TP 		this_player()
+#define TO 		this_object()
+
+With this done, the room you make will be an "instance" of the
+standard room object with all the properties that comes along with it;
+pseudo-objects, exits etc.
+
+What you must do now is to define the standard room variables and
+settings.  The first function in the room should be create_room().
+This function is called when the room is first used; someone entering
+or a function in the room being called.
+
+The create_room() function should contain calls to 'add_prop',
+'set_short', 'set_long', 'add_item' and 'add_exit' and nothing much
+more. Natually, if you have special initializations to be done, this
+is a suitable place to put them.
+
+void
+create_room()
+{
+    /* 
+     * Start with the short name of the room
+     */
+    set_short("basic room");
+
+    /* 
+     * Now set the more extensive description, note that I begin with 
+     * one \n and end with two \n since I like a bit of space between the 
+     * description and the obvious exits when the text is displayed.
+     * The use of break_string will format the width suitably.
+     */
+    set_long(BS("\nThis is a basic example of how to use the /std/room.c file.\n\n"));
+
+    /* 
+     * Now add some pseudo objects, described later in the text.
+     *
+     * This 'object' will respond  both to the command 'look at table' and 
+     * 'look at small table'. You must remember that it will nott be seen when 
+     * someone types 'look' but only when specified explicitly. So, you must 
+     * be sure to mention these objects in the 'set_long' text for the player
+     * to be curious enough to look at them.
+     *
+     * Note also that I don't have any extra \n's in this text. This is an
+     * object, not a room.
+     * /
+    add_item(({ "table", "small table" }),
+	     BS("A pseudo object without actual physical presence in the room. In this case, a small table, suitable for dumping manuals on.\n"));
+
+    /*
+     * This object is a bit special since it will call the function
+     * "chair_func" when looked upon with a VBFC, Value By Function Call.
+     * Read the function to find out what it does.
+     */
+    add_item(({ "stool", "chair" }), "@@chair_func");
+
+    /*
+     * It is now time to add the exits from the room.
+     *
+     * The first string is the room that one moves to.
+     *
+     * The second string is the command to move that way.
+     *
+     * The third value is special; if the value is > 0 you simply
+     *     are not allowed to move in that direction. This usually
+     *     used in VBFC functions to determine passage. There is
+     *     a special example of that here. If the value is = 0
+     *     the player is simply moved there (default). If the
+     *     value is < 0, he is put in a "corridor" of linked,
+     *     cloned rooms, leading to the destination after the
+     *     given amount of rooms has been passed. This is meant
+     *     as a delay in certain directions.
+     *
+     * The fourth value is the cost in fatigue (default 1) when
+     *     the player leaves in that direction.
+     */
+
+    /* Ordinary exit */
+    add_exit("/d/Genesis/wiz/lpc", "lpc");
+    /* Heavy going */
+    add_exit("/d/Genesis/wiz/domain", "domain", 0, 5);
+    /* Be polite, and a bit uphill */
+    add_exit("/d/Genesis/wiz/idea", "idea", "@@idea_pass", 2);
+    /* A long way to go */
+    add_exit("/d/Genesis/wiz/entrance", "entrance", -4);
+
+    /*
+     * You should end by setting the MUD special properties for
+     * the room. Read the file /doc/man/properties/room if you want
+     * to make sure you have covered every alternative. The properties
+     * ROOM_I_LIGHT and ROOM_I_IS are by default set to 1, making the
+     * the object light (1) and defining it as a room. The room type
+     * property ROOM_I_TYPE is by default set to ROOM_NORMAL. Also,
+     * the default is that ROOM_I_INSIDE is 0, making the room an
+     * outdoors room, open to the sky.
+     *
+     * We want this room to be an inside room, so fix it.
+     */
+    add_prop(ROOM_I_INSIDE, 1);
+}
+
+string
+chair_func()
+{
+    /*
+     * Looking at the chair is the same thing as sitting down at it, but
+     * with a nasty little surprise hidden in the padding... We want both the
+     * person doing it as well as the surrounding spectators to know about
+     * this little event.
+     *
+     * The return value of this function is a string. That string is what
+     * is written to the player when he looks at the object, so do not
+     * return a numerical value here!
+     *
+     * NB! Do not EVER forget to add the extra code for met/nonmet in any
+     * code that you write. It is well worth the extra effort when you
+     * consider how much nicer the result gets. Besides, giving away the
+     * name of a previously unmet player ruins a lot of the effect we have
+     * been striving to accomplish.
+     *
+     * Another thing to be wary of is that the euid of this object during
+     * a VBFC is 0. This means that this object has _no_ rights for reading
+     * or writing. A typical problem is that one wants to clone an object
+     * in one of these calls. In order to succed with that you just have to
+     * set the euid to be that of the uid. In other words, add the line:
+     * seteuid(getuid(TO));
+     */
+
+    string ch_text;
+
+    ch_text = " sits down on the one chair in the room, but springs to " + TP->query_pronoun() + " feet again with a yelp of pain!\n";
+
+    say(({ BS(METNAME + ch_text), BS(ART_NONMETNAME + ch_text),
+	BS(UNSEEN_NAME + ch_text) }));
+
+    return BS("You see an ordinary chair with an exceptionally comfortable-looking seat-cover. You just _have_ to try it out. However, as you sit down, you discover that someone has left a needle in the padding... with a yelp of pain you jump up again.\n");
+}
+
+int
+idea_pass()
+{
+    /*
+     * Let him pass if he is polite. The function "query_dircmd()" returns
+     * any text written after the direction command. We let the player pass
+     * if he writes "idea please", otherwise not.
+     */
+
+    if (query_dircmd() == "please")
+	return 0;
+    
+    write("You didn't say the magic word!\n");
+    return 1;
+}
+
+
+This ends the room specific code, however, there are still lots of
+functions that can be used in conjunction with the room.
+
+Let's assume we have a shovel. When used, it creates an exit to another
+room, when used again it removes that exit. It also adds an extra
+description to the room while the hole exists.
+
+ The code would look like this:
+
+inherit "/std/object.c";
+ 
+#include <macros.h>
+#include <stdproperties.h>
+
+#define BS(message)	break_string(message, 75)
+#define TP 		this_player()
+#define TO 		this_object()
+
+void
+create_object()
+{
+    set_name("shovel");
+
+    set_long("A shovel of good make.\n");
+}
+
+void
+init()
+{
+    add_action("dig_it", "dig", 0);
+    ::init();
+}
+
+int
+dig_it()
+{
+    mixed exits;
+    int i, fill;
+    string mess;
+    object room;
+
+    room = environment(TP);
+
+    /*
+     * The function 'query_exit' returns all exits in a room. They are
+     * given in an array on the form:
+     * ({
+     *      "path1", "command1", "@@exitfun1",
+     *      "path2", "command2", "@@exitfun2",
+     *      ...
+     * })
+     */
+    exits = room->query_exit();
+
+    fill = 0;
+    for (i = 0 ; i < sizeof(exits) ; i += 3)
+    {
+	if (exits[i + 1] == "hole")
+	    fill = 1;
+    }
+
+    /*
+     * Fill the hole.
+     */
+    if (fill == 1)
+    {
+	mess = " rapidly fills the hole in the ground.\n";
+	write("You fill the hole in the ground.\n");
+	/*
+	 * The function 'remove_exit' removes the exit with the given
+	 * direction command.
+	 */
+	room->remove_exit("hole");
+	room->remove_my_desc();
+    }
+    else
+    {
+	mess = " rapidly digs a hole in the ground.\n";
+	write("You dig a hole in the ground.\n");
+	room->add_exit("/d/Genesis/wiz/post", "hole");
+	room->add_my_desc("\nSomeone has dug a hole in the ground... strange.\n\n");
+    }
+
+    say(({ BS(METNAME + mess), BS(ART_NONMETNAME + mess),
+	BS(UNSEEN_NAME + mess) }));
+    return 1;
+}
+
+There is a function for finding out the cost for walking to the given
+exits as well. The function 'query_tired_exits' returns an array with
+the tired values for all exits.
+
+Another useful function is 'query_desc' that will return all the added
+descriptions of a room on the form ({ desc1, obj1, desc2, obj2, ... }) 
+where objx is the object that added that particular description.
+
+The function 'change_my_desc' can change an existing added description,
+but will only change the first found. Something to remember if you have
+added more than one.
+
+I you wish that the obvious exists shouldn't be shown in the description
+of the room, you should call the function 'set_noshow_obvious' with
+the argument 1. To make them visible again, just call it again with the
+argument 0.
+
+
+If you still wonder about extra features in rooms you are welcome to
+read the actual code.

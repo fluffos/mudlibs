@@ -1,0 +1,407 @@
+/lib/area_handler
+=================
+
+General overview
+----------------
+
+The idea behind this object is that you sometimes have the need of
+creating a very large area, say a desert or an ocean, consisting of
+many very similar rooms. The trouble is of course that writing 100
+odd rooms is not a very popular topic neither with the administrators
+nor indeed with the poor sap who's supposed to do it. You might also
+want an easy solution to writing a castle or a town where a large part
+of the area consists of rooms that simply doesn't require a specialized
+object definition. With this object you can define a very big area
+with a relatively small number of actually loaded objects.
+
+You simply create an instance of this area handler and initialize it
+with a map of the area, a number of area descriptions and information
+about special exits and entry points.
+
+The area handler will then create and initalize a room as a player
+steps into it. The room will be kept active for a certain time
+depending on how much used it is and how long you allow it to be
+standing inactive. When it is abandoned, the room and the contents
+are destructed (the contents might be moved to a special room) and the
+position reused. In this way you will be able to manage a very large
+virtual area with a small number of active objects. For areas like
+deserts, savannah, targa and oceans this object is ideal.
+
+The object can NOT be cloned, the master object is used at all times
+since there's only intended to be ONE version of an active area at one
+time. The proper usage is described below, but basically it's handled
+by call_outs from rooms that connects to the virtual map.
+
+The map itself is initially read from the file you supply. The first
+time it's read it is converted to a new file with the same name but
+with a '.m' extension and saved in the same directory as the original
+map. It's therefore important that the map object has write priviliges
+in the map directory. The map will be reinitialized if you change the
+original map, but only then. The reason for using this special map is
+of course that the reworked map is much faster to use.
+
+Use the following functions to initialize the object. You must call
+most of the functions in order to make it work.
+
+Minimalistic concept
+--------------------
+
+The handler is written to be as cost-effective as possible. This means
+that it contains a lot of nifty features, but perhaps not all that you
+could think of. Those nifty features are in 99% of the cases only something
+that you'd use in a few rooms anyway, not in every room so please keep in
+mind that the rooms created by this object aren't supposed to stand out
+like beacons of coding proficiency. If you need something special, you
+make that as a room that you link into the map.
+
+The map
+-------
+
+The virtual map is built around a real one. You simply create an ascii
+map of the area you want using ed for example.
+
+WARNING! I know from personal experience that it is VERY easy to get
+carried away and create a huge map. It takes almost no time at all to
+map an entire domain, no matter the size. However, the map will be
+almost impossible to walk in. It becomes so large that getting lost is
+no trouble at all and it takes _ages_ to get anywhere. People will
+simply hate to walk in it no matter how much you enjoyed writing it.
+
+Due to this reason I've imposed a limit on the map so that it can not
+be larger than 75x75 characters. If the number 75 strikes you as a bit
+odd, remember that the standard screen-width _is_ 75 characters. It's
+nice to keep the object editable with ed, and besides... 75x75 is a
+hell of a big area to walk in...
+
+On the whole you should try to abandon any 'square' thinking. A map
+doesn't have to have every tiny position in the allotted aread meaning
+something. If you are making a winding path, just fill in the path +
+maybe two-three rooms on the side of the path - no more. Belive me
+when I say that there's nothing as frustrating as to fumble around in
+a mess of rooms that simply are just there without having a purpose.
+
+The map contains four kinds of directives: 
+
+1: Parameters to the area handler
+2: Map symbols
+3: Boundary symbols
+4: Comments
+
+1: You can give three parameters the area handler that will be read the
+   first time someone uses the map, i.e. tries to walk into it.
+
+   Parameters are given on the form '#<param> <argument>' and can be
+   given at any time in the map, though the locical place to put them
+   is on the top of the map. Mandatory parameters are marked with a '*'
+
+*  #NAME <name>     : This parameter names the map. That name will later
+                      be used as base filename when the map rooms are 
+ 		      created so DO NOT forget to specify this name. This
+		      name should NOT be called the same as the map file
+		      for reasons described later.
+
+*  #ROOMDIR <path>  : This parameter defines where the map rooms are
+		      stored when created. The path should simply be a 
+		      path to where the rooms should appear. I very much
+	              suggest that you define a unique directory for
+		      every map since it's good for debugging purposes
+		      to keep them apart. Apart from this you can keep
+		      them all in one directory.
+
+   #AREADIR <path>  : This parameter tells the handler where to find the
+		      two files preamble.c and postamble.c that makes up
+		      the beginning and end of the automatically generated
+		      rooms. The default setting is '/lib/std_area' but if
+		      want your own code, just reset them. 
+
+		      However! If you use your own rooms, make sure they
+		      do NOT contain any coordinte dependant information
+		      or any real time-consuming code. The idea of this
+		      area handler is to create lots of fairly simple
+		      rooms quickly. If you have a need for something
+		      more complicated, create a real room and add it to
+		      the map as an entry/exit point.
+
+   #TIMEOUT <time>  : This parameter defines how long a room will remain
+		      loaded while unvisited before it removes itself.
+		      Any kind of access to the room will reset the counter.
+		      The default setting is 30 minutes. The allowed
+		      interval is 10 to 120 minutes.
+
+   #TRASHCAN <path> : If you set this parameter to a room, all objects
+		      are found in the autogenerated rooms at timout time
+		      will be moved here. Usually it's not set which then
+		      results in the destruction of the objects.
+
+Normally rooms autoremove/destruct themselves after a certain time. 
+However, due to unforseen dumps and other accidents, they sometimes
+doesn't get removed. To deal with this, the area area handler tries to
+remove all files beginning with the mapname in the room directory when
+first invoked, so DO NOT put the actual map in the ROOMDIR directory
+if the filename of the map is the same as the mapname.
+
+2: You can use any signs or lower-case letters to make up the map. The
+   one limit being just lower-case lettes. The upper-case are used for
+   boundaries. A space is treated as an empty space where you can't go.
+   In this way you can create a map with any kind of appearence you wish,
+   it does not have to be rectangular and it might even consist of several
+   'islands' without any apparent connections.
+
+3: The boundary symbols are simply upper-case letters. Remember never to
+   put more than one instance of an ENTRY symbol in the map; the character
+   you use must be unique. However, it's possible to put several instances
+   of an EXIT symbol there. I know that I sound a bit confusing, let me try
+   to explain.
+
+   It's true that an entry point also is an exit point. However, an exit
+   point need not be an entry point. When a player moves _inside_ the
+   map, the area_handler looks up the symbol he's trying to move to and
+   moves him there. For this reason all boundary symbols must have a
+   defined exit room, a room where he will be moved when leaving the map.
+   So, in this case you can have several points that leads to the same
+   exit room simply by defining one, say 'X' and putting in several 'X's
+   in the map.
+
+   However, entering the map is done by a special call in the entry room.
+   There you send a request to the area handler to move the player to an
+   entry symbol in the map. The map is then scanned bottom-up, left-right
+   and the player is moved there. If there are several instances of that
+   symbol he will be moved to the first one found, and that might not be
+   what you intended. So, keep entry points singular but do as you please
+   with exit points.
+
+   A thing to remember is that non-euclidian maps are frowned upon by
+   us admins. We don't like rooms where you leave walking west but enter
+   in the other room from the north. Keep the maps straight! What the
+   mud particularly does NOT need is another bloody maze.
+
+4: Comments are simply any kind of text after a '#' that is not a parameter.
+   Remember to start the line with a '#' every time you want to make a
+   comment about something, otherwise the area handler will treat that
+   line as a string of map symbol directives.
+
+Entry points
+------------
+
+An entry point is simply a room with a special add_exit() directive.
+Assume that the area object is called '/d/Genesis/urpa/area.c', then
+if a move west should end up in the map on entry point 'Q' the proper
+add_exit() call should look like this:
+
+add_exit("", "west", "@@enter_map:/d/Genesis/urpa/area|Q@@");
+
+As you can see, the entering is done with a VBFC call to the area
+handler with the entry point as an argument.
+
+NOTA BENE!
+
+  You MUST enter the map using one of the cardinal directions 
+  'east', 'west', 'south' or 'north', if you try ANY other word like
+  'portal' or 'bridge' or 'castle' or whatever, it simply won't work.
+  This is due to the fact that you enter the map stepping FROM the
+  entry symbol into the map in the indicated direction. If you have
+  specified 'portal' the handler will have NO idea which direction
+  you are moving from the entry point. An error will be the result.
+
+The object that defines the entry point to the map needs to make
+sure that the area object is loaded. If it isn't the VBFC will fail.
+The easiest way to ensure this is to put these lines of code in
+the create_room() function before the add_exit() calls.
+
+    if (LOAD_ERR("/d/Genesis/urpa/area"))
+    {
+	write("Can't load map handler, please report immediately...\n");
+	return;
+    }
+
+Exit points
+-----------
+
+An exit point is simply a common room. You can use any room for this
+purpose, but it's logical that if you enter the map from a certain room
+you should be able to return there by simply going back. You define
+the exit points in the area handling object.
+
+The area handling object
+------------------------
+
+This object should be an instance of area_handler.c . Remember to
+include stdproperties.h in this file since you'll need that for the
+map definitions. The header should thus look like this:
+
+	inherit "/lib/area_handler";
+	#include <stdproperties.h>
+
+The area object needs to know where the map is. It will not work
+without a map of course. Use the following call to set it.
+
+	set_map(<map-path>);
+
+As I said before, do NOT use the same filename for the map as the
+mapname.  Ok, this isn't a problem if it resides in a directory
+different from the rooms, but just so that you don't make the mistake
+anyway, use a different name!
+
+Every map symbol needs a full definition, if you forget one of them
+the area handler will be unable to create that room and will issue an
+error message. The call looks like this:
+
+    add_desc(<symbol>, ({ ({ <room type>, <inside>, <light level>, <fatigue>}),
+		 	  ({ <short desc>,
+			     <long desc>,
+			     ... more long descs }),
+			  ({ <item list>, <item desc>,
+			      ... more item lists and descs }),
+			  ({ <object path>,
+			      ... more object paths }),
+			  <extra path> }) );
+
+Mandatory parameters are marked with a '*', the others can be omitted
+but you must give an empty ({}) at the proper location except for
+<extra path> that can be omitted entirely. 
+
+*<symbol>     : Here you simply put the symbol used in the map enclosed
+                within quotes, e.g. "x".
+
+*<room type>  : This is the room type as defined in stdproperties.h
+
+*<inside>     : This is simply a 0 or 1 denoting if the room is an
+		inside or outside room where 0 = outside and 1 = inside.
+
+*<light level>: Put the light level you want the room to be here.
+
+<fatigue>     : Put the fatigue cost here if you want any such cost for
+		moving out of this room. The cost will be applied in
+		all directions.
+
+*<short desc> : This is the short description the room will get.
+
+*<long desc>  : This is the long description the room will get. You can
+		add on as many of these as you want separated by commas.
+		When the room is created the area handler will pick on
+		of them randomly, but based on the coordinates of the
+		room so that you'll have several possible descriptions
+		of one type of room. However, since the coordinates are
+		figured into the random function you will always get the
+		same description for that coordinates.
+
+		The long descriptions given here should not contain any
+		newline or tab charactes as the string will be broken
+		with break_string automatically.
+
+		Do please do try to write long and varied descriptions.
+		Nothing is so boring as to enter an area that consists
+		entirely of 'You are standing on a field.'... Personally
+		I'd rather quit and reenter than try to cross such an
+		area and I bet most other people react in the same way.
+
+<item list>   : If you want to add some item descriptions in the rooms
+		this is where to do that. The area handler will simply
+		add all of them to the room. The item list can either
+		be just a string with the name of the item, or a list
+		of alternative item names, just as with the add_item
+		call.
+
+<item desc>   : This is where you put the description of the items you
+		specified in the item list.
+
+<object path> : If you want any objects automatically cloned, this is
+		where to put them. The room will then automatically 
+		clone the objects as it is loaded and place them in
+		the room. The room will also set the timeout of this
+		room to be the default clean_up time for the mudlib.
+
+<extra path>  : If you want some extra code added to this room, just
+		give the path to the file to appended here. However
+		again NEVER add coordinate dependant code to one of
+		these autogenerated rooms. If this parameter is given
+		the autogenerated room will make a call to the function 
+		create_extra() from create_room(). Put any additional
+		initialisations in that function.
+
+Every boundary (exit/entry) point also needs a full definition. Again,
+if you forget to specify one of them the player will be unable to
+enter the map in the specified location and an error message will be
+given. The call looks like this:
+
+	add_bound(<symbol>, <exit path>);
+
+<symbol>    : Here you simply put the symbol used in the map enclosed
+	      withing quotes, e.g. "R".
+
+<exit path> : Here you put the path to the room that corresponds to
+	      the exit point.
+
+Examples
+--------
+
+You will find a working example of the map in the following files:
+
+/doc/examples/area_handler/ah_map	; The map file
+/doc/examples/area_handler/ah_obj.c	; The area handling object
+/doc/examples/area_handler/ah_entry.c	; The entry point
+
+In this particular example one room is used for all entries/exits,
+naturally it shouldn't be that way.
+
+Errors
+------
+
+The area handler reports errors when they occur. In other words, you
+have to walk through all types of map symbols yourself in order to know
+that they work. Some errors are detected at compile-time, but only a
+few. Always make sure your map works by using it before letting mortals
+enter! It's easy to create a cul-de-sac with this tool, doing so is
+sloppy coding and you will be treated accordingly.
+
+Updating of a map
+-----------------
+
+If you have changed an entry/exit room:
+	Simple - just update the affected room.
+
+If you have changed the area_handler object:
+	Update the object, update AND remove all created rooms in the 
+	special room directory.
+
+If you have changed the map:
+	Remove the map file with the extension '.m' so that a new one can
+	be created, update the area_handler object, update AND remove all
+	created	rooms in the special room directory.
+
+If you remove rooms in the special room directory DO NOT FORGET to update
+them first. If you don't do that, the handler will find and use the rooms
+in memory - no the ones on disk.
+
+During this process - be sure that there are no mortals stuck in the rooms
+you remove and update... 
+
+Summary of no-nos
+=================
+
+Don't make the map too large. The imposed limit of 75x75 is too generous
+  as it is, but... we trust your good sense of proportions.
+
+Don't write non-euclidian rooms. Keep a north exit in one room a south entry
+  point in another.
+
+Don't write areas that consist of one type of room with one one-line
+  description... it's so utterly depressing... 
+
+Don't add coordinate sensitive code to the room. Add another map symbol if
+  you have the need for a special room.
+
+Don't forget to define all locations and all parameters.
+
+Don't connect entry-rooms to a map using ANY other direction than 'east',
+  'west', 'south' or 'north'.
+
+Last and most important: 
+
+            CHECK YOUR MAP OUT BEFORE ALLOWING A MORTAL TO ENTER!
+ FAILURE TO DO THIS MIGHT RESULT IN DISCIPLINARY ACTIONS BY THE ADMINISTRATION!
+
+
+Apart from that... have fun writing maps :)
+
+	/Mrpr

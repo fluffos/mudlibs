@@ -1,0 +1,853 @@
+/*
+ * /std/corpse.c
+ *
+ * This is a decaying corpse. It is created automatically
+ * when a player or monster die.
+ */
+
+#pragma save_binary
+#pragma strict_types
+
+inherit "/std/container";
+
+#include <cmdparse.h>
+#include <composite.h>
+#include <files.h>
+#include <language.h>
+#include <macros.h>
+#include <ss_types.h>
+#include <stdproperties.h>
+#include <wa_types.h>
+
+#define DECAY_TIME   20          /* times DECAY_UNIT == minutes */
+#define DECAY_LIMIT  3           /* times DECAY_UNIT == minutes */
+#define DECAY_UNIT   60.0        /* one minute */
+#define DECAY_FUN    "decay_fun" /* Name of the intermediate decay routine. */
+
+/* Prototypes */
+void decay_fun();
+void set_decay(int d);
+string short_func();
+string pshort_func();
+string long_func();
+
+/* Global variables. */
+int     decay;
+int     decay_id;
+string  met_name, nonmet_name, state_desc, pstate_desc;
+mixed   leftover_list;
+string  cause1, cause2;
+
+#if 0
+/*
+ * Function name: create_corpse
+ * Description  : Constructor. Define this routine to create your own corpse.
+ */
+void
+create_corpse()
+{
+}
+#endif
+
+/*
+ * Function name: create_container
+ * Description  : Constructor. Don't mask this routine, but define
+ *                create_corpse() instead.
+ */
+nomask void
+create_container()
+{
+    add_prop(OBJ_I_SEARCH_TIME, 2);
+    add_prop(OBJ_S_SEARCH_FUN, "search_for_leftovers");
+
+    set_short(short_func);
+    set_pshort(pshort_func);
+    set_long(long_func);
+    add_prop(CONT_I_WEIGHT, 50000);
+    add_prop(CONT_I_VOLUME, 50000);
+    add_prop(CONT_I_ATTACH, 1);
+    state_desc = "corpse of ";
+    pstate_desc = "corpses of ";
+
+    this_object()->create_corpse();
+    seteuid(getuid());
+
+    /* If the decay time is not set yet, set the default decay time.
+     * This automatically starts the decay alarm.
+     */
+    if (!decay)
+    {
+        set_decay(DECAY_TIME);
+    }
+}
+
+#if 0
+/*
+ * Function name: reset_corpse
+ * Description  : Reset routine. If you use this, also call enable_reset().
+ */
+void
+reset_corpse()
+{
+}
+#endif
+
+/*
+ * Function name: reset_container
+ * Description  : Reset routine. Don't mask this routine, but define
+ *                reset_corpse() instead.
+ */
+nomask void
+reset_container()
+{
+    this_object()->reset_corpse();
+}
+
+/*
+ * Function name: set_name
+ * Description  : Called upon construction of this corpse to set the name
+ *                of the diseased. It follows up with some additional names
+ *                such as 'remains', etc.
+ *                Do NOT call this routine more than once!
+ *                Use add_name() for additional names.
+ * Arguments    : string name - the name of the person who died.
+ */
+void
+set_name(string name)
+{
+    met_name = lower_case(name);
+    nonmet_name = previous_object()->query_nonmet_name();
+
+    ::set_name("corpse");
+    add_name("corpse of " + met_name);
+    add_name("remains");
+    add_name("remains of " + met_name);
+    if (nonmet_name)
+    {
+        add_name("corpse of " + nonmet_name);
+        add_name("remains of " + nonmet_name);
+    }
+}
+
+/*
+ * Function name: query_real_name
+ * Description  : Returns the lower case name of this corpse.
+ * Returns      : string - the lower case met name.
+ */
+string
+query_real_name()
+{
+    return met_name;
+}
+
+/*
+ * Function name: query_met_name
+ * Description  : Returns the met-name of this corpse. (capitalized)
+ * Returns      : string - the met name.
+ */
+string
+query_met_name()
+{
+    return capitalize(met_name);
+}
+
+/*
+ * Function name: query_nonmet_name
+ * Description  : Returns the nonmet name of this corpse.
+ * Returns      : string - the nonmet name.
+ */
+string
+query_nonmet_name()
+{
+    return nonmet_name;
+}
+
+/*
+ * Function name: set_state_desc
+ * Description  : Change the state description of the corpse. Normally this
+ *                is "corpse of " or "heap with decayed remains of ".
+ * Arguments    : string desc - the new state description.
+ */
+void
+set_state_desc(string desc)
+{
+    state_desc = desc;
+}
+
+/*
+ * Function name: query_state_desc
+ * Descritpion  : Returns the present state description.
+ * Returns      : string - the state description.
+ */
+string
+query_state_desc()
+{
+    return state_desc;
+}
+
+/*
+ * Function name: set_pstate_desc
+ * Description  : Change the plural state description of the corpse. Normally
+ *                this is "corpses of " or "heaps with decayed remains of ".
+ * Arguments    : string pdesc - the new plural state description.
+ */
+void
+set_pstate_desc(string pdesc)
+{
+    pstate_desc = pdesc;
+}
+
+/*
+ * Function name: query_pstate_desc
+ * Descritpion  : Returns the present plural state description.
+ * Returns      : string - the plural state description.
+ */
+string
+query_pstate_desc()
+{
+    return pstate_desc;
+}
+
+/*
+ * Function name: short_func
+ * Description  : Returns the short description of this object, based on
+ *                recognition of the corpse.
+ * Returns      : string - the short description.
+ */
+string
+short_func()
+{
+    object pob;
+
+    pob = vbfc_caller();
+    if (!pob || !interactive(pob) || pob == this_object())
+        pob = previous_object(-1);
+    if (!pob || !interactive(pob))
+        pob = this_player();
+    if (pob && pob->query_real_name() == lower_case(met_name))
+        return state_desc + "yourself";
+    else if (pob && pob->query_met(met_name))
+        return state_desc + capitalize(met_name);
+    else
+        return state_desc + LANG_ADDART(nonmet_name);
+}
+
+/*
+ * Function name: pshort_func
+ * Description  : Returns the plural short description of this object, based on
+ *                recognition of the corpse.
+ * Returns      : string - the plural short description.
+ */
+string
+pshort_func()
+{
+    object pob;
+
+    pob = vbfc_caller();
+    if (!pob || !interactive(pob) || pob == this_object())
+        pob = previous_object(-1);
+    if (!pob || !interactive(pob))
+        pob = this_player();
+    if (pob && pob->query_real_name() == lower_case(met_name))
+        return pstate_desc + "yourself";
+    else if (pob && pob->query_met(met_name))
+        return pstate_desc + capitalize(met_name);
+    else
+        return pstate_desc + LANG_PWORD(nonmet_name);
+}
+
+/*
+ * Function name: long_func
+ * Description  : Returns the long description of this object, based on
+ *                recognition of the corpse.
+ * Returns      : string - the long description.
+ */
+string
+long_func()
+{
+    object pob = vbfc_caller();
+    string cause;
+
+    if (!pob || !interactive(pob) || pob == this_object())
+        pob = this_player();
+
+    /* Attach cause of death (or rather, cause of most damage). */
+    cause = (strlen(cause1) ? (". " + cause1) : ".") + "\n";
+
+    if (pob->query_real_name() == lower_case(met_name))
+        return "This is your own dead body" + cause;
+    if (pob->query_met(met_name))
+        return "This is the dead body of " + capitalize(met_name) + cause;
+    else
+        return "This is the dead body of " +
+            LANG_ADDART(nonmet_name) + cause;
+}
+
+/*
+ * Function name: remove_object
+ * Description  : When the corpse is destructed, move the inventory into its
+ *                environment first.
+ */
+void
+remove_object()
+{
+    /* If we are destructed, move our inventory out. */
+    all_inventory(this_object())->move(environment(), 0);
+
+    ::remove_object();
+}
+
+/*
+ * Function name: move_out
+ * Description  : Filter function to move all inventory out of the object.
+ * Arguments    : object ob - the object to move out.
+ * Returns      : int 1/0 - if true, the object was moved out.
+ */
+nosave int
+move_out(object ob)
+{
+    return !ob->move(environment(this_object()));
+}
+
+/*
+ * Function name: make_leftover
+ * Description  : Called to create the leftover and move it to its destination.
+ * Arguments    : mixed leftovers - The leftover array.
+ *                object dest - the destination.
+ */
+void
+make_leftover(mixed leftovers, object dest)
+{
+    object obj;
+    int volume = 10;
+    int weight = 10;
+    int relweight = ((sizeof(leftovers) > 6) ? leftovers[6] : 0);
+
+    if (relweight)
+    {
+        volume = (relweight * query_prop(CONT_I_VOLUME)) / 1000;
+        weight = (relweight * query_prop(CONT_I_WEIGHT)) / 1000;
+    }
+
+    seteuid(getuid());
+
+    object room = environment();
+    while (objectp(environment(room)))
+    {
+        room = environment(room);
+    }
+
+    obj = clone_object(leftovers[0]);
+    obj->leftover_init(leftovers[1], query_prop(CORPSE_S_RACE));
+    obj->set_amount(weight);
+    obj->add_prop(HEAP_I_UNIT_VOLUME, volume);
+    obj->add_prop(OBJ_O_LOOTED_IN_ROOM, room);
+
+    if (obj->move(dest, 0) && living(dest))
+    {
+        write(LANG_THESHORT(obj) + " is too much to carry.\n");
+        obj->move(environment(), 1);
+    }
+}
+
+/*
+ * Function name: decay_remove
+ * Description  : Second stage of decay. Clone the leftovers and then destruct
+ *                the corpse.
+ */
+void
+decay_remove()
+{
+    int i, j, flag;
+
+    for (i = 0; i < sizeof(leftover_list); i++)
+    {
+        if (leftover_list[i][4])
+        {
+            for (j = 0 ; j < leftover_list[i][2] ; j++)
+            {
+                make_leftover(leftover_list[i], environment(this_object()));
+                flag = 1;
+            }
+        }
+    }
+
+    if (flag)
+    {
+        tell_room(environment(this_object()),
+            "The " + QSHORT(this_object()) +
+            " rapidly decays, leaving some sad remains behind.\n");
+    }
+
+    remove_object();
+}
+
+/*
+ * Function name: decay_fun
+ * Description  : First stage of decay. Decay to a heap of remains, and move
+ *                all inventory into the room. Then set the alarm for the
+ *                second stage.
+ */
+void
+decay_fun()
+{
+    object *ob;
+    string desc;
+    int i;
+
+    ob = filter(all_inventory(this_object()), move_out);
+    /* fix this to get singular/plural of 'appear' */
+    i = ((sizeof(ob) != 1) ? sizeof(ob) :
+         ((ob[0]->query_prop(HEAP_I_IS)) ? (int)ob[0]->num_heap() : 1));
+    if (strlen(desc = COMPOSITE_DEAD(ob)))
+    {
+        tell_room(environment(this_object()),
+            "As the " + QSHORT(this_object()) + " rapidly decays, " +
+            desc + " appear" +
+            ((i == 1 || desc == "something" || desc == "nothing") ? "s" : "") +
+            " from it.\n");
+    }
+    state_desc = "heap with decayed remains of ";
+    pstate_desc = "heaps with decayed remains of ";
+    add_name("heap");
+
+    /* Set the short decay limit so it will remove itself. */
+    set_decay(DECAY_LIMIT);
+}
+
+/*
+ * Function name: set_decay
+ * Description  : Sets the decay time in minutes. Preferably, only call this
+ *                routine from within create_corpse(), not externally. It will
+ *                reset the alarm time to the new decay time.
+ * Arguments    : int d - the decay time in minutes.
+ */
+void
+set_decay(int d)
+{
+    decay = d;
+
+    if (decay_id)
+    {
+        remove_alarm(decay_id);
+        decay_id = 0;
+    }
+    if (!decay)
+    {
+        return;
+    }
+
+    /* If we are too far away, do some decay first. */
+    if (decay > DECAY_LIMIT)
+    {
+        decay_id = set_alarm((to_float(decay - DECAY_LIMIT) * DECAY_UNIT), 0.0, decay_fun);
+    }
+    else
+    {
+        decay_id = set_alarm((to_float(decay) * DECAY_UNIT), 0.0, decay_remove);
+    }
+}
+
+/*
+ * Function name: query_decay
+ * Description  : Returns the (original) decay time in minutes.
+ * Returns      : int - the decay time in minutes.
+ */
+int
+query_decay()
+{
+    return decay;
+}
+
+/*
+ * Function name: query_decay_left
+ * Description  : Find out how much time (in seconds) there is left till the
+ *                corpse decays. Note: query_decay() returns minutes!
+ * Returns      : int - the decay time in seconds.
+ */
+int
+query_decay_left()
+{
+    mixed call;
+    int left;
+
+    /* If it is active, find out how much time left in the alarms. */
+    if (decay_id)
+    {
+        call = get_alarm(decay_id);
+        left = to_int(call[2]);
+        if (call[1] == DECAY_FUN)
+            left += (DECAY_LIMIT * to_int(DECAY_UNIT));
+        return left;
+    }
+
+    /* If we end up here, the decay has been stopped, so the answer will
+     * probably be 0. */
+    return decay * to_int(DECAY_UNIT);
+}
+
+/*
+ * Function name: query_race
+ * Description  : Find out the race of this corpse. It's in the property
+ *                CORPSE_S_RACE as well.
+ * Returns      : string - the race.
+ */
+string
+query_race()
+{
+    return query_prop(CORPSE_S_RACE);
+}
+
+/*
+ * Function name: appraise_object
+ * Description  : Called to appraise the object using the command thereto.
+ * Arguments    : int num - optional - if given, use this number. Otherwise
+ *                    use the appraise object skill of the player.
+ */
+void
+appraise_object(int num)
+{
+    write(this_object()->long(0, this_player()) +
+        (strlen(cause2) ? (cause2 + "\n") : "") + "\n");
+    write("You appraise that the weight is " + appraise_weight(num) +
+        " and you guess its volume is about " + appraise_volume(num) + ".\n");
+}
+
+/*
+ * Function name: set_damage
+ * Description  : Upon creation of the corpse, passes the information about
+ *                damage sustained by the lifeform, so that we may tell the
+ *                status of the corpse.
+ * Arguments    : mapping damage - ([ int damage type : int hitpoints ])
+ */
+public void
+set_damage(mapping damage)
+{
+    int maxdam, maxdt;
+
+    /* Find out the primary source of damage. */
+    foreach (int dt in m_indices(damage))
+    {
+        if (damage[dt] > maxdam)
+	{
+	    maxdt = dt;
+	}
+    }
+    switch(maxdt)
+    {
+    case W_IMPALE:
+        cause1 = "It looks pierced and stabbed."; break;
+    case W_SLASH:
+        cause1 = "It looks slashed and cut."; break;
+    case W_BLUDGEON:
+        cause1 = "It looks bruised and battered."; break;
+    case MAGIC_DT:
+        cause1 = "It looks damaged by arts of magic."; break;
+    case SS_ELEMENT_DEATH:
+        cause1 = "It looks damaged by death magic."; break;
+    case SS_ELEMENT_LIFE:
+        cause1 = "It looks damaged by life magic."; break;
+    case SS_ELEMENT_FIRE:
+        cause1 = "It looks damaged by fire magic."; break;
+    case SS_ELEMENT_AIR:
+        cause1 = "It looks damaged by air magic."; break;
+    case SS_ELEMENT_EARTH:
+        cause1 = "It looks damaged by earth magic."; break;
+    case SS_ELEMENT_WATER:
+        cause1 = "It looks damaged by water magic."; break;
+    }
+
+    /* Find out a secondary source of damage. */
+    map_delete(damage, maxdt);
+    maxdt = 0;
+    maxdam = 0;
+    foreach (int dt in m_indices(damage))
+    {
+        if (damage[dt] > maxdam)
+	{
+	    maxdt = dt;
+	}
+    }
+    switch(maxdt)
+    {
+    case W_IMPALE:
+        cause2 = "There are secondary stabs and jabs."; break;
+    case W_SLASH:
+        cause2 = "There are secondary slashes and cuts."; break;
+    case W_BLUDGEON:
+        cause2 = "There are secondary bruises."; break;
+    case MAGIC_DT:
+        cause2 = "There is secondary damage by arts of magic."; break;
+    case SS_ELEMENT_DEATH:
+        cause1 = "There is secondary damage by death magic."; break;
+    case SS_ELEMENT_LIFE:
+        cause1 = "There is secondary damage by life magic."; break;
+    case SS_ELEMENT_FIRE:
+        cause1 = "There is secondary damage by fire magic."; break;
+    case SS_ELEMENT_AIR:
+        cause1 = "There is secondary damage by air magic."; break;
+    case SS_ELEMENT_EARTH:
+        cause1 = "There is secondary damage by earth magic."; break;
+    case SS_ELEMENT_WATER:
+        cause1 = "There is secondary damage by water magic."; break;
+    }
+}
+
+/*
+ * Function name: set_leftover_list
+ * Description:   Sets the leftovers (at death) to the body.
+ *                The returned list should be an array of arrays, containing
+ *                the following entries:
+ *                  ({ ({ objpath, organ, nitems, vbfc, hard, cut, foodproc }), ... })
+ * Arguments:     mixed list - The leftover list to use.
+ */
+varargs public void
+set_leftover_list(mixed list)
+{
+    leftover_list = list;
+}
+
+/*
+ * Function name: query_leftover
+ * Description:   Return the leftover list. If an organ is specified, that
+ *                actual entry is looked for, otherwise, return the entire
+ *                list.
+ *                The returned list contains the following entries:
+ *                    ({ objpath, organ, nitems, vbfc, hard, cut})
+ * Arguments:     string organ - The organ to search for, or 0 to get the
+ *                    whole list.
+ *
+ * Notes:	  We now accept plural form matching. We use plural form
+ * 		  conversion because conversion to singular form does not
+ * 		  currently handle some words correctly, like "bones".
+ */
+varargs public mixed
+query_leftover(string organ)
+{
+    int i;
+
+    if (!sizeof(leftover_list))
+    {
+        return ({ });
+    }
+
+    if (!strlen(organ))
+    {
+        return leftover_list;
+    }
+
+    for (i = 0 ; i < sizeof(leftover_list) ; i++)
+    {
+        if ((leftover_list[i][1] == organ) ||
+	    (LANG_PWORD(leftover_list[i][1]) == organ))
+        {
+            return leftover_list[i];
+        }
+    }
+}
+
+/*
+ * Function name: remove_leftover
+ * Description:   Remove a leftover entry from a body.
+ * Arguments:     string organ - Which entry to remove.
+ * Returns:       1 - Ok, removed, 0 - Not found.
+ */
+public int
+remove_leftover(string organ)
+{
+    int i;
+
+    if (!sizeof(leftover_list))
+    {
+        return 0;
+    }
+
+    for (i = 0 ; i < sizeof(leftover_list) ; i++)
+    {
+        if (leftover_list[i][1] == organ)
+        {
+            leftover_list[i] = 0;
+        }
+    }
+    leftover_list = filter(leftover_list, pointerp);
+}
+
+/*
+ * Function name: get_leftover
+ * Description:   Get leftovers from the body.
+ * Arguments:     string arg - command-line argument.
+ * Returns:       int 1/0 - success/failure.
+ */
+public int
+get_leftover(string arg)
+{
+    mixed       corpses, leftovers;
+    object      *found, *weapons, theorgan;
+    int         i, slash, amount = 1;
+    string      organ, vb, fail;
+
+    if (this_player()->query_prop(TEMP_STDCORPSE_CHECKED))
+        return 0;
+
+    vb = query_verb();
+
+    notify_fail(capitalize(vb) + " what from what?\n");  /* access failure */
+    if (!arg)
+        return 0;
+
+    if (!parse_command(arg, environment(this_player()), "%s 'from' %i", organ, corpses) || !strlen(organ))
+        return 0;
+
+    found = VISIBLE_ACCESS(corpses, "find_corpse", this_object());
+
+    if (sizeof(found) != 1)
+    {
+        /* FluffOS PORT NOTE: see __delayed_remove_prop_bound()'s doc
+         * comment in secure/simul_efun.lpc. */
+        set_alarm(0.5, 0.0, (: __delayed_remove_prop_bound, this_player(), TEMP_STDCORPSE_CHECKED :));
+        this_player()->add_prop(TEMP_STDCORPSE_CHECKED, 1);
+        if (sizeof(found))
+            notify_fail("Please try to be more specific with what corpses you choose.\n");
+        else
+            notify_fail("There is no such corpse lying around here.\n");
+        return 0;
+    }
+    if (vb == "cut")
+    {
+        weapons = this_player()->query_weapon(-1);
+        for (i = 0 ; i < sizeof(weapons) ; i++)
+        {
+            if (weapons[i]->query_dt() & W_SLASH)
+            {
+                slash = 1;
+                break;
+            }
+        }
+        if (!slash)
+        {
+            notify_fail("Better find something sharper than that to cut with.\n");
+            return 0;
+        }
+    }
+
+    leftovers = query_leftover(organ);
+    if (!sizeof(leftovers) || leftovers[2] == 0)
+    {
+        notify_fail("There's no such thing to get from the " +
+	    this_object()->short(this_player()) + ".\n");
+        return 0;
+    }
+
+    if (leftovers[5] && !slash)
+    {
+        notify_fail("You can't just tear this loose, use a knife or " +
+            "something...\n");
+        return 0;
+    }
+
+    if (strlen(leftovers[3]))
+    {
+        fail = check_call(leftovers[3]);
+        if (strlen(fail))
+        {
+            notify_fail(fail + ".\n");
+            return 0;
+        }
+    }
+
+    if (leftovers[1] != organ)
+    {
+	organ = leftovers[1];
+	amount = leftovers[2];
+    }
+
+    for(i = 0; i < amount; i++)
+    {
+        make_leftover(leftovers, this_player());
+        if (--leftovers[2] == 0)
+            remove_leftover(organ);
+    }
+
+    if (i == 1)
+	organ = LANG_ADDART(organ);
+    else
+	organ = LANG_NUM2WORD(i) + " " + LANG_PWORD(organ);
+
+    say(QCTNAME(this_player()) + " " + vb + "s " + organ +
+        " from " + QSHORT(found[0]) + ".\n");
+    write("You " + vb + " " + organ + " from the " +
+        this_object()->short(this_player()) + ".\n");
+    return 1;
+}
+
+/*
+ * Function name: init
+ * Description  : Called to link the tear/cut commands to the player.
+ */
+void
+init()
+{
+    ::init();
+
+    add_action("get_leftover", "tear");
+    add_action("get_leftover", "cut");
+}
+
+/*
+ * Function name: find_corpse
+ * Description  : Support function for tear/cut command.
+ * Arguments    : object ob - the object to check.
+ * Returns      : int 1/0 - if true, it's a suitable corpse.
+ */
+public int
+find_corpse(object ob)
+{
+    if (IS_CORPSE_OBJECT(ob) &&
+        ((environment(ob) == this_player()) ||
+         (environment(ob) == environment(this_player()))))
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+/*
+ * Function name: search_for_leftovers
+ * Description:   This function is called when someone searches the corpse
+ *                as set up in create_container()
+ * Arguments:     player - The player searching
+ *                str    - If the player specifically said what to search for
+ * Returns:       A string describing what, if anything the player found.
+ */
+string
+search_for_leftovers(object player, string str)
+{
+    mixed left;
+    string *found;
+    int i;
+
+    left = query_leftover();
+    found = ({});
+
+    for (i = 0; i < sizeof(left); i++)
+    {
+        if (left[i][2] == 1)
+        {
+            found += ({ LANG_ADDART(left[i][1]) });
+        }
+        else if (left[i][2] > 1)
+        {
+            found += ({ LANG_WNUM(left[i][2]) + " " + LANG_PWORD(left[i][1]) });
+        }
+    }
+
+    if (sizeof(found) > 0)
+    {
+        return "After searching the " + this_object()->short(this_player()) +
+            " you believe you can tear out or cut off " +
+	    COMPOSITE_WORDS(found) + ".\n";
+    }
+
+    return "";
+}

@@ -1,0 +1,528 @@
+LPC MANUAL -- CLONING
+=====================
+
+Contents:
+
+    1. introduction
+    2. cloning in general
+    3. moving the object
+    4. where to clone from
+    5. arming npc's
+    6. army control
+
+
+1. INTRODUCTION
+===============
+
+This manual is about the cloning of objects from code. It deals with a
+number of cases in which you may want to clone objects and move them into a
+certain environment. Several systems are explained in here, some briefly,
+some in a verbose manner. This manual is not complete, nor does it pretend
+to be. There will always be different cases and people will argue with the
+systems suggested in here and prefer other ways of handling matters. That
+is perfectly fine. However, this manual offers some assistance for those
+not that experienced yet or maybe suggests something for contemplation for
+those who are.
+
+/Mercade
+
+
+2. CLONING IN GENERAL
+====================
+
+The purpose of cloning is to obtain a copy of an object. Normally you shall
+get a copy of the object and not the master object itself. Especially with
+NPC's it is sometimes useful to get the master copy itself, however, that
+does not make much of a difference. Rooms, however, are never cloned. The
+LPC-efun to get a clone of a certain object is (see 'man clone_object'):
+
+    object clone_object(string filename);
+
+In order to be allowed to clone something, the object originating the
+clone-statment must have an effective user-id [short: euid]. The user-id
+[uid] of the clone-copy will be set to the euid of the originating object.
+Confusing? Well, you may want to read 'man userids' for more information,
+but you may also settle for the lines of code to get yourself an euid ;-)
+
+    setuid();
+    seteuid(getuid());
+
+Sometimes you will see that the first line is omitted. That is also valid.
+For an explanation, I refer to the forementioned manual. The difference is
+subtle. In short it means that if you also execute the first command, the
+object will always set its uid to the name of the domain/wizard who is
+responsible for the code, and if you omit it, the uid of the object will
+remain at the euid of the object that cloned us. Time for an example.
+
+/*
+ * Function name: clone_axe
+ * Description  : This function clones an axe from the examples and returns
+ *                the objectpointer to it for further processing.
+ * Returns      : object - the objectpointer to the axe.
+ */
+object
+clone_axe()
+{
+    /* Since we want to clone something, we need to set our euid. Now, I
+     * always set the uid too, but that is not vital for the execution.
+     */
+    setuid();
+    seteuid(getuid());
+
+    /* Get a copy of the axe coded in the file /doc/examples/weapons/axe.c
+     * and return it as result of the function clone_axe() to the function
+     * that called us. We could also have assigned it to a variable for
+     * instance.
+     */
+    return clone_object("/doc/examples/weapons/axe");
+}
+
+
+3. MOVING THE OBJECT
+====================
+
+In the previous chapter, we have cloned ourselves an object, but what to do
+with it now? When an object is cloned, it floats around in the void, i.e.
+it does not have an environment, it is nowhere. Normally, we want to move
+the object into an environment. After cloning an NPC for instance, we move
+it into a room, or when we clone an axe, we move it into an NPC.
+
+In this series, I have also written a manual page on 'moving'. However,
+here I shall discuss the most important issues when moving objects after
+having cloned them. You are still encouraged to read the manual on 'moving'
+too.
+
+All objects include the lfun move() with the following parameters:
+
+    int move(mixed destination, mixed subloc);
+
+Living objects, in addition to move() include also the following function:
+
+    int move_living(string how, mixed destination, int dont_follow,
+                    int no_glance);
+
+In many cases, you clone a dead object with the direct purpose to move it
+into an NPC or something else. If that is the case, it would be a good idea
+to give the 1 as second argument to move. This will force the move without
+doing any tests. Obviously, if you design an NPC to carry/wield a certain
+axe, you should have made sure that the NPC can indeed carry that axe, so
+no checks have to be wasted to see if that is actually the case:
+
+    /* Remember not to forget to set the euid first. In the rest of this
+     * document, I'll assume that this is taken care of when I clone.
+     */
+    clone_object("/doc/examples/weapons/axe")->move(npc, 1);
+
+However, if you for instance have a smith selling axes, you shall have to
+make sure the player buying the axe can actually carry it (and if not, take
+the appropriate action).
+
+    axe = clone_object("/doc/examples/weapons/axe");
+
+    /* If move() returns a true value, it means something went wrong. */
+    if (axe->move(customer))
+    {
+        write("You cannot carry the " + axe->short() + ".\n");
+        /* Etcetera... */
+    }
+
+When cloning an NPC, things are a little more complicated, but the solution
+is remarkably simple. All move_living() does is (a) use the lfun move(),
+(b) print a nice message to the people watching the arrival and (c) adjust
+combat with the enemies the living was fighting before being moved. The
+messages can be written by hand appropriately and more efficiently than
+having it handled by move_living(). And since the living is just being
+created, there is no combat yet, so testing that is also a waste of CPU
+time. Note that auto-attacking etcetera is done from init_living(), a
+function that is always called, no matter how we move.
+
+So at this point, there is nothing prohibiting us from using the lfun
+move() rather than the lfun move_living() to move the living into the room
+after we have cloned it. Maybe things will change in the future, but that
+is not very likely. The conclusion is that even for NPC's we can easily use
+move() if we move the NPC directly after cloning:
+
+    object dwarf;
+
+    /* Here I assume we clone the living from a function in the room the
+     * NPC is intended to go to, so I use this_object() as destination.
+     * [Also, don't forget about the euid, remember?]
+     */
+    dwarf = clone_object("/doc/examples/npcs/dwarf");
+    dwarf->move(this_object(), 1);
+
+    /* And tell the people already in the room a nice message. */
+    tell_room(this_object(), QCNAME(dwarf) +
+        " barges into the room, searching for intruders.\n", dwarf);
+
+The classical (slow!) way of cloning and moving the NPC would be as
+follows. Observe that I use "something" as first argument to the lfun. This
+can be anything different from the official flags "M" and "X". The reason I
+am allowed to do this is that the dwarf only enters a room and the default
+message is "A dwarf arrives." no matter what 'how' is. If I wanted to have
+given a nice message, I would have used the construct from the previous
+example and only replace the lfun move() with move_living() and use "M" as
+first argument. Note too that both 'dont_follow' and 'no_glance' are true,
+meaning that no time is wasted on checks for a team that follows its leader
+or on the dwarf taking a look at the room. Even if this dwarf were to be
+the leader of a team, 'dont_follow' should be true since we come from the
+void after having been cloned, so it is not even possible for a team to
+follow.
+
+    /* Don't let the shortness of this example fool you. If you want
+     * anything different from the default arrival message, you have to use
+     * the same construct as the previous example.
+     */
+    clone_object("/doc/examples/npcs/dwarf")->move_living("something",
+        this_object(), 1, 1);
+
+
+4. WHERE TO CLONE FROM
+======================
+
+Basically, there are three moments at which objects are cloned. Those are:
+- when the environment is created;
+- when the environment is reset;
+- at request.
+
+Let's start with the last case since it is the easiest to deal with. With a
+request, I mean a specific trigger. For instance, when a player solves a
+major quest, he or she might be rewarded with a nice object. Also, when a
+player joins a guild, he or she usually gets a membership token that has to
+be cloned before it can be presented to the player. In these cases, the
+object is to be cloned from the function that is active, i.e. the join
+command or the function checking whether the quest is solved and that gives
+out the reward.
+
+Creation and reset are closely related to eachother, and therefore I shall
+discuss them together. Creation of a room occurs when someone first enters
+it. If an NPC should be in the room at that time, he should be cloned when
+the room is created. Also, if a room resets after some time, and the NPC is
+no longer in the room, the NPC might (and should!) be re-created.
+
+The reboot time of an LPMud is not static and the reboot interval can range
+from a few hours to several days. It bears witness of bad coding to not
+re-create NPC's at reset when the NPC is no longer present. Note that you
+do not have to re-create them every reset, but it is bad to wait until the
+next reboot to have something re-created. Atmospherically the reboots are
+not a part of the game, so nothing that influences mortal life should
+depend on them. "Punishing" the players by not re-creating a quest-master
+after he has been killed is not a good way to retalliate the killing of
+your beloved NPC.
+
+The previous paragraph is especially valid for NPC's, quests and items that
+are generally available for people, like the default stock of a shop or
+items lying about. It is not necessarily applicable to recursed cloning or
+dependant cloning. Those terms are best explained with an example. Suppose
+someone lost his wallet with a treasure map in it. Now, when the room is
+created, the wallet is cloned and the treasure map in it. However, when
+someone picks up the wallet, removes the treasure map from it and sells it,
+the next owner of the wallet should not find a map in it just because the
+wallet reset while being in the shop. Also, the map should not be cloned
+into the wallet at creation, for if the (empty) wallet recovers after a
+reboot, no map should be cloned into it just because the wallet was
+created. The best way to solve this is to have the map cloned into the
+wallet when the wallet is created and put on the road. See the following
+example of the reset_room() of the road. It is easiest to have reset_room()
+called at creation of the road too, to ensure that the wallet is in there.
+
+void
+reset_room()
+{
+    object wallet;
+
+    /* First we check whether the wallet has been taken from the room. The
+     * string "wallet_for_treasure_map" is a special add_name() to the
+     * wallet that should be rather unique. Using "wallet" is not a good
+     * idea since we still want this to work if someone else dropped his/
+     * her wallet here for some dubious reason.
+     */
+    if (!present("wallet_for_treasure_map"))
+    {
+        /* We are going to clone, so we need an euid. */
+        setuid();
+        seteuid(getuid());
+
+        /* We clone the wallet first and assign the object to a variable
+         * since we need to use it later. We move the wallet into the
+         * room (with force). Then we clone the treasure map and move it
+         * into the wallet instantly (with force).
+         */
+        wallet = clone_object("/doc/examples/obj/wallet");
+        wallet->move(this_object(), 1);
+        clone_object("/doc/examples/obj/treasure_map")->move(wallet, 1);
+    }
+}
+
+As attentive observer it might just have occured to you that if a player is
+in the room and he takes a second look, there suddenly is a wallet that he
+or she did not previously notice. There are three possible ways to handle
+this situation:
+- do nothing. So what if someone sees something new at a second look? When
+  you are in a room, you don't always automatically notice everything that
+  goes on or do you?
+- only clone the wallet if no interactive people are present in the room. I
+  shall give an example of that later in this manual;
+- give the people a message. In this example, if the road is a street in
+  the heart of the city, you might add a message about someone walking and
+  you noticing the loss of the wallet. Obviously, you cannot use this
+  particular reason if the road is an abandoned trail deep in the forest.
+  Use your imagination ;-)
+
+        /* An example of the message to the people in the room. */
+        tell_room(this_object(), "Someone in the crowd must have lost " +
+            "his wallet, since as the people in the street walk about, " +
+            "you suddenly become aware of one lying in the dirt.\n");
+
+Just as the map should not re-appear in the wallet after it has been taken
+out, NPC's should not re-clone their weapons as they reset, provided that
+reset has been enabled with enable_reset(). When the NPC has lost his/her
+weapons or any other object for one reason or another, it should not be
+magically recreated. Naturally, a sorceror might do magic as he pleases ;-)
+Use your common sense.
+
+Only when it is rather impossible for an object to be removed, it should be
+created at the creation of its environment. For instance, players cannot
+burn down the bulletin boards, so there is no need to check for their
+existance when the room is being reset. Also, those recursive objects or
+dependant creations should be handled at creation of their environment as
+explained in the previous paragraphs.
+
+5. ARMING NPC'S
+===============
+
+
+In the previous chapter, I mentioned NPC's being armed with their equipment
+when they are created. In livings it is possible to clone their armour and
+weapons from their create_monster() function, but it is impossible for them
+to wield/wear it using command() in the create_monster(). The reason for
+this is that until the creation process is completely finished, the living
+is not officially a living. The commands are not linked to them properly
+when stuff is cloned into them from create_monster(). For some obscure
+reason this does not always fail, but why risk a bug-hunt if we can easily
+avoid the trouble.
+
+Therefore it is better, not to say required, to create a separate function
+of which I have an example below. It is called arm_dwarf(). All this
+function does is clone the weapons and armour into the dwarf and force him
+to wield/wear it all using the lfun command().
+
+void
+arm_dwarf()
+{
+    setuid();
+    seteuid(getuid());
+
+    clone_object("/doc/examples/weapons/axe")->move(this_object(), 1);
+    clone_object("/doc/examples/armours/mail")->move(this_object(), 1);
+    clone_object("/doc/examples/armours/helmet")->move(this_object(), 1);
+
+    command("wield all");
+    command("wear all");
+}
+
+It regularly occurs that people use an alarm from create_monster() to this
+arm_dwarf() function in order to have it executed. Seqaction has also been
+used, but that is basically just an alarm with a different front. There are
+two drawbacks to using an alarm or seqaction and that is why they should
+not be used. (1) Alarms take relatively a lot of CPU time, so if they can
+be avoided, it is all the better and (2) the people in the room get all
+kinds of messages of the NPC('s) wielding/wearing their stuff. This is not
+only very silly (imagine a patrol-guard only who wears his gear when he
+encounters someone) and with five NPC's being cloned, the screens of the
+players will scroll with all those annoying messages.
+
+So, to avoid all these messages and to avoid wasting CPU-time, the
+following construct can be used. The function arm_dwarf() is called from
+the room right after the NPC is moved into the room. The order (arming
+first and moving later) is important since before the NPC is moved into the
+room, the wield/wear messages are lost in the void and not printed to
+possible spectators. The function reset_room() should be called from
+create_room() directly, i.e. without alarms, for the same reason as
+arm_dwarf() should be called directly. If reset_room() is called as part of
+the creation process, the NPC is already in the room before the player is
+first moved into it, so the NPC is waiting for him/her. When you are in a
+guarded, tower, it is very strange that all guards just arrive into the
+rooms when you walk into them.
+
+void
+reset_room()
+{
+    object dwarf;
+
+    /* Again, we first check whether the dwarf is not yet in the room. */
+    if (!present("dwarf_that_is_supposed_to_be_here"))
+    {
+        /* Yup, set the euid straight again. */
+        setuid();
+        seteuid(getuid());
+
+        /* First I clone him, then I arm him and finally he is moved into
+         * the room. Since we don't want the possible spectators to get
+         * wield/wear messages we arm him before moving him into the room.
+         * Since we use move_living() with an invalid argument it will
+         * display the default entrance message if the room is being reset
+         * while someone is looking.
+         */
+        dwarf = clone_object("/doc/examples/npcs/dwarf");
+        dwarf->arm_dwarf();
+        dwarf->move_living("something", this_object(), 1, 1);
+    }
+}
+
+
+6. ARMY CONTROL
+===============
+
+Army control is management of the number of NPC's that should be cloned
+into a room and the way of dealing with that number at a reset. There are
+several ways of cloning NPC's at reset. The particular way you choose
+depends on exactly what you are trying to do. People will be very likely to
+have different ways of doing this, which is fine since the following, just
+like the rest of this document includes only examples. Several cases are
+presented below:
+- monitor the NPC and move it back if it wandered to another room;
+- monitor the NPC and only replace it after it was removed;
+- replace the NPC's only if all have been removed;
+- monitor the NPC's and replace exactly only those that have been removed.
+
+Being removed in this sense means that the NPC is removed from memory, i.e.
+that it was destructed. This usually happens after the NPC gets killed. The
+small caveat in this is that the possible corpse of the NPC, which has a
+different objectpointer, still exists when the new NPC is cloned. However,
+you cannot expect everything to be perfect and keep the code neat and small
+at the same time. Remember that all nifty features cost extra memory and
+execution time.
+
+Apart from being removed from the game, you might want to do something if
+the NPC has moved out of the room, for instance when it ran from panic. If
+the shopkeeper is standing in front of his shop, trembling in his boots,
+you probably do not want a second shopkeeper to be cloned in the shop, so
+you might want to move the shopkeeper back into the shop and resume
+operation. For this kind of moving, it is easiest to use teleportation, but
+make sure you have some appropriate messages set, like 'the shopkeeper
+hurries back to his shop.' for mm_out and 'the shopkeeper arrives in a
+great hurry, apologizing for his absence.' as mm_in. The 'puff of smoke'
+messages are not very appealing in this kind of situation. An example of
+this will be merged with the example of the next case.
+
+Monitoring an NPC and only replacing it when it was actually removed,
+applies to relatively unique NPC's and to wandering NPC's. An example of a
+relatively unique NPC's would be the shopkeeper mentioned in the previous
+paragraph. Wandering NPC's are obvious. You might not want a new wandering
+herbmaster to be cloned just because the other one walked into a different
+room as intended.
+
+/* We keep a global objectpointer to the shopkeeper in the room that is
+ * responsible for him. The variable is declared 'static' because we do not
+ * ever want this variable to be saved to disk. It may be omitted though if
+ * you do not intend to save the variables defined in the shop.
+ */
+static object shopkeeper;
+
+void
+reset_room()
+{
+    /* If there is no objectpointer to the shopkeeper, there is no keeper,
+     * so we clone a new one, arm him and move him into the room.
+     */
+    if (!objectp(shopkeeper))
+    {
+        /* There it is again, we need an euid to be ablet to clone. */
+        setuid();
+        seteuid(getuid());
+
+        shopkeeper = clone_object("/doc/examples/npcs/shopkeeper");
+        shopkeeper->arm_shopkeeper();
+        shopkeeper->move(this_object(), 1);
+        tell_room(this_object(),
+            "The shopkeeper enters the shop from his private quarters.\n");
+    }
+    /* Else, we check whether the shopkeeper is in the room he is supposed
+     * to be in, and if not, move him back where he belongs. Note that this
+     * else clause only applies to NPC's that are not supposed to walk
+     * arround.
+     */
+    else if (environment(shopkeeper) != this_object())
+    {
+       shopkeeper->move_living("X", this_object(), 1, 1);
+    }
+}
+
+Now we can expand this for use with multiple NPC's by repeating the code
+for a single NPC. However, when the NPC's are alike, it is easier to use an
+array of objecpointers and use a loop to check whether they still exist.
+This checks several NPC's on an individual basis.
+
+/* Again use a global variable. This time, we allocate it when the room is
+ * loaded into memory. This way, we get an array of size MAX_CITIZENS with
+ * all elements set to 0 by default.
+ */
+static object *npcs = allocate(MAX_CITIZENS);
+
+void
+reset_room()
+{
+    int index;
+
+    /* Do this first, since we may need to clone. */
+    setuid();
+    seteuid(getuid());
+
+    /* Loop over all elements in the array. */
+    for(index = 0; index < MAX_CITIZENS; index++)
+    {
+        /* If a particular element of the array is not an objectpointer,
+         * that NPC has been removed, so clone a new one.
+         */
+        if (!objectp(npcs[index]))
+        {
+            npcs[index] = clone_object("/doc/examples/npcs/citizen");
+            npcs[index]->finish_citizen();
+            npcs[index]->move_living("something", this_object(), 1, 1);
+        }
+    }
+}
+
+This can also be done simpler. If you have one or more regular NPC's in a
+room, you may not need to keep track of their objectpointers or use any
+other form of bookkeeping to determine whether it is time to clone new
+NPC's. In the next example, the citizens in a street are only reloaded when
+all have left the room. This may be due to their death or any other reason.
+The exact number of citizens in the city doesn't matter much, as long as
+there are some about. An additional benefit is that a simple message about
+the arrival can be displayed without extra trouble. Note that in the
+previous example, each NPC was announced individually.
+
+void
+reset_room()
+{
+    object citizen;
+    int    index;
+
+    /* Just check whether all citizens have left the room (either by force
+     * or free will.
+     */
+    if (!present("dwarf_citizen_in_this_street"))
+    {
+        setuid();
+        seteuid(getuid());
+
+        /* In MAX_CITIZENS we have defined the number of people to clone
+         * when all have left. Use this simple loop to clone as many
+         * identical people. However, those NPC's do not need to be exactly
+         * same. They can use random to alter their descriptions for
+         * instance. This is a lot better for the memory than having two
+         * separate files for the brown-eyed and the blue-eyed citizen.
+         */
+        for(index = 1; index <= MAX_CITIZENS; index++)
+        {
+            citizen = clone_object("/doc/examples/npcs/citizen");
+            citizen->finish_citizen();
+            citizen->move(this_object(), 1);
+        }
+
+        /* Don't forget to give a nice message. */
+        tell_room(this_object(), "Some citizens just walked into view.\n");
+    }
+}

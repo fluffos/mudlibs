@@ -1,0 +1,193 @@
+RESTORATION OF LOST ITEMS
+=========================
+
+Due to whichever reason, players can lose autoloadable quest or guild items
+from their inventory. The purpose of this system is to enable players to
+restore those guild and quest items in a central place without requiring the
+intervention from the archwizard of players or domain wizards. Also, when a
+person loses many items, there is no need to travel to all locations offering
+restoration of a single item. The document contains the following paragraphs:
+
+1. Methodology and link with domains
+2. Finding out which items can be restored
+3. Restoring a single item
+4. Detailed example including code
+
+All domains are requested to implement these methods in order to allow players
+to restore items that are lost with the least amount of hassle for all parties
+concerned.
+
+1. Methodology and link with domains
+------------------------------------
+When a person goes to the office offering restorations, the following steps
+are carried out:
+1) Inquiry with all domains to see which items the person may be entitled to.
+2) Player selects which of the possible items (s)he wishes to have restored.
+3) Through the domains, the individual items are restored to the player.
+
+This method ensures that domains at all times keep control over which items
+can be restored to which players. Therefore, steps 1 and 3 require some small
+amounts of domain code. The interfaces to all domains are handled through the
+standard modile /d/Domain/domain_link also used for preloading, et cetera. For
+this reason, two interface routines are added to domain_link.c, namely:
+
+    public mapping query_restore_items(object player)
+    public int restore_item(object player, string item_code)
+
+The first routine is called to find out which items can be restored to a
+player. It is called once per domain per player. The second routine is called
+to actually restore an item to a player, it is called once per item to be
+restored. More details below and in the example. You are also invited to read
+the manuals "sman query_restore_items" and "sman restore_item".
+
+2. Finding out which items can be restored
+------------------------------------------
+
+The office must first find out which items can be restored for a player. This
+is done by calling the function
+
+    public mapping query_restore_items(object player)
+
+in each domain link. This routine takes a player object as argument and has to
+return a mapping with those items the player is entitled to, but hast lost.
+This means it has to check for each player individually which items the player
+lacks. The routine query_restore_items() is a silent function. It should not
+print any text to the player. The mapping looks as follows:
+
+    ([ (string) item_code : (string) description ])
+
+The item_code is an identifier that will be used to call restore_item(). It is
+not displayed to the player, and must be unique for all items. The description
+is a text displayed to the player that explains the item to be restored. It
+should be no more than 70 characters. An example of a returned mapping is:
+
+    ([ "Domain_rabbit_quest": "Lucky charm from Jack Rabbit quest.",
+       "Domain_myGuild_flag": "The Flag of the fuzzy myGuild warriors." ])
+
+The Lost & Found office will display the descriptions to the player and lets
+the player chose which items should be restored. After all, a player may not
+want all items back.
+
+The routine query_restore_items() should be a lean routine since all domains
+are queried in the same loop. This means that the information must be there
+by checking bits in the player, or another registry, and not read and parsed
+from a log of something like that.
+
+3. Restoring a single item
+--------------------------
+
+When the player has selected the items for restoration, the routine
+
+    public int restore_item(object player, string item_code)
+
+is called in the domain link for every item the player has selected. The
+routine takes a player object as argument, plus the item_code that was passed
+as index in the mapping from query_restore_items().
+
+The routine has to clone the item identified by item_code into the player and
+customise it when so required. In principle, this routine is only called when
+the items have been checked for restoration, but you are suggested to perform
+the check to see whether the player is entitled to the object. No text needs
+to be printed to the player inside this routine, except if there are specific
+instructions necessary to the player.
+
+The routine should return 1 when the restoration is succesful, else 0.
+
+4. Detailed example including code
+----------------------------------
+
+Implementation is to some extent a personal thing of the programmer. Here is a
+fully functional example. What I do in this example is make it a two stage
+imlementation. The domain_link code merely interfaces to the actual checks in
+the master objects related to the quest or guild. This keeps the domain_link
+code lean, and it keeps the quest or guild related code in one central place,
+namely the questmaster or guild repository.
+
+/* Code in domain_link.c */
+
+#define DONOR_BROOCH_ID "_OurMud_donor_brooch"
+
+/*
+ * Function name: query_restore_items
+ * Description  : Find out which items can be restored to a player in this
+ *                domain.
+ * Arguments    : object player - the player to test for.
+ * Returns      : mapping - the mapping with items that can be restored.
+ */
+public mapping
+query_restore_items(object player)
+{
+    /* Create an empty mapping. */
+    mapping items = ([ ]);
+
+    /* Check with the guild repository or quest master. If the player is
+     * entitled to the item, but doesn't have it, add the item to the mapping.
+     */
+    if (DONATION_MASTER->query_restore_brooch(player))
+    {
+        items[DONOR_BROOCH_ID] = "The toroid brooch given to donors.";
+    }
+
+    /* Return the mapping. */
+    return items;
+}
+
+/*
+ * Function name: restore_item
+ * Description  : Called to restore a single item into a player.
+ * Arguments    : object player - the player to which to restore an item.
+ *                string item - the code of the item to restore.
+ * Returns      : int 1/0 - success/failure.
+ */
+public int
+restore_item(object player, string item)
+{
+    switch(item)
+    {
+    /* If it's the string we are looking for, then let the quest master or
+     * guild repository handle it.
+     */
+    case DONOR_BROOCH_ID:
+        return DONATION_MASTER->restore_brooch(player);
+    }
+    return 0;
+}
+
+/* Code in the quest master or guild repository. */
+
+/*
+ * Function name: query_restore_brooch
+ * Description  : Called from domain_link.c to find out whether a player is
+ *                elegible for a brooch restoration.
+ * Arguments    : object player - the player to test.
+ * Returns      : int 1/0 - if true, the player is elegible for restoration.
+ */
+nomask public int
+query_restore_brooch(object player)
+{
+    string name = player->query_real_name();
+
+    /* Returns true if the person has no brooch on him, and has made a
+     * donation to the game.
+     */
+    return (!present(DONOR_BROOCH_ID, player) && donors[name]));
+}
+
+/*
+ * Function name: restore_brooch
+ * Description  : Called from domain_link.c to actually restore the brooch to
+ *                the player (but test elegibility first).
+ * Arguments    : object player - the player to give the brooch to.
+ * Returns      : int 1/0 - if true, the player got the brooch.
+ */
+nomask public int
+restore_brooch(object player)
+{
+    /* Test to be sure that the player is entitled. */
+    if (query_restore_brooch(player))
+    {
+        /* This returns the negation of the result from the move(). */
+        return !(clone_object(DONATION_BROOCH)->move(player, 1));
+    }
+    return 0;
+}

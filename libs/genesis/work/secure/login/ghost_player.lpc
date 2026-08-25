@@ -1,0 +1,123 @@
+/*
+ * /secure/login/ghost_player.c
+ *
+ * FluffOS PORT NOTE: this file (originally /d/Genesis/login/ghost_player,
+ * per config/sys/local.h's LOGIN_NEW_PLAYER/LOGIN_TEST_PLAYER macros --
+ * updated to point here, the same way ARMAGEDDON was updated) never
+ * shipped anywhere in the upstream repo at all -- unlike most of the
+ * missing-domain-content gaps documented elsewhere in this port (which
+ * are narrative/world content with graceful fallbacks already built
+ * into the surrounding code), this one is genuinely load-bearing
+ * *infrastructure*: secure/login.lpc clones this file and calls
+ * open_player()/enter_new_player() on it to create every new
+ * character, and secure/master.lpc's load_player()/save_player() gate
+ * EVERY player save/load on LOGIN_NEW_PLAYER->legal_player(), so
+ * without some real implementation here character creation --  and
+ * therefore save/load entirely -- is impossible.
+ *
+ * This is a minimal, functional bootstrap implementation (not a
+ * recreation of whatever richer race/stat-selection wizard the
+ * original surely had -- that content is lost along with the rest of
+ * the missing /d/Genesis domain). It hands off to std/player.lpc's own
+ * setup_player()/enter_game(), which already do the real work
+ * (name/race defaults, save-file creation, and -- since this repo has
+ * no starting rooms either -- std/player.lpc's own existing graceful
+ * "your start location is corrupt" fallback chain).
+ */
+
+#pragma save_binary
+#pragma strict_types
+
+inherit "/std/player";
+
+#include <macros.h>
+#include <std.h>
+
+/*
+ * Function name: enter_new_player
+ * Description  : Called by secure/login.lpc once a brand new character
+ *                has picked a name and confirmed a password. Finishes
+ *                setting up the player object and hands off to
+ *                std/player.lpc's enter_game() to actually place the
+ *                character in the game world.
+ * Arguments    : string name     - the new character's name.
+ *                string password - the already-crypt()ed password.
+ */
+public void
+enter_new_player(string name, string password)
+{
+    if (MASTER_OB(previous_object()) != LOGIN_OBJECT)
+    {
+        write("Bad login object: " + file_name(previous_object()) + "\n");
+        destruct();
+        return;
+    }
+
+    /* FluffOS PORT NOTE: the real character-creation wizard this
+     * bootstrap replaces (see this file's own doc comment above) would
+     * have set a race by having the player inherit a real race std
+     * file (e.g. /d/Genesis/race/human_std) -- none of those exist
+     * either, so race_name is left genuinely unset (""). setup_player()
+     * (called from enter_game() below) already calls reset_race_name()
+     * for mortals, but that's set_race_name(query_race()) -- a no-op
+     * re-assignment, not a real default -- so RACES[0] ("human") is set
+     * explicitly here instead, matching this mudlib's own "mortals
+     * should have one of the base races by default" comment. */
+    set_race_name(RACES[0]);
+    set_password(password);
+
+    /* FluffOS PORT NOTE: std/player.lpc's setup_player() (called from
+     * enter_game() below) aborts early -- silently skipping
+     * cmd_sec_reset() (which registers "quit"/"save"/etc.) and every
+     * later setup step -- unless SECURITY->load_player() succeeds,
+     * which requires restore_object() to find an existing playerfile.
+     * The real character-creation wizard this bootstrap replaces
+     * presumably did its own explicit save once the (now-missing)
+     * race/stat selection was done; do the same here with a first
+     * save before ever calling enter_game(), so setup_player()'s load
+     * has something real to restore. set_name() first since
+     * PLAYER_FILE()/query_real_name() need it and it would otherwise
+     * only happen inside setup_player() itself, after the save. */
+    set_name(name);
+    SECURITY->save_player();
+
+    enter_game(name, password);
+}
+
+/*
+ * Function name: legal_player
+ * Description  : Sanity check used by secure/master.lpc's
+ *                load_player()/save_player() (and std/player/
+ *                savevars_sec.lpc's set_player_file()) to verify an
+ *                object is a legitimate, non-destructed player object
+ *                before allowing it to be saved/loaded/set as someone's
+ *                active player file. The original's exact extra checks
+ *                (beyond "is this actually a player object") are lost
+ *                with the rest of the missing domain; kept permissive
+ *                rather than inventing stricter rules that might reject
+ *                otherwise-valid players.
+ * Arguments    : object ob - the object to check.
+ * Returns      : int 1/0 - true if ob may be treated as a player file.
+ */
+public nomask int
+legal_player(object ob)
+{
+    return objectp(ob) &&
+        (function_exists("create_living", ob) == PLAYER_OBJECT);
+}
+
+/*
+ * Function name: reincarnate_me
+ * Description  : Called by std/player/death_sec.lpc's reincarnate()
+ *                when a dead player is reincarnated. The original
+ *                reincarnation flow (guild/race-specific rebirth rules)
+ *                is lost with the rest of the missing domain; this
+ *                deliberately does nothing rather than invent rules --
+ *                death_sec.lpc's own ghost/second-life handling already
+ *                covers keeping the player object alive and playable.
+ */
+public void
+reincarnate_me()
+{
+    return;
+}

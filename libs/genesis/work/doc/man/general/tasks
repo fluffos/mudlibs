@@ -1,0 +1,333 @@
+INTRODUCTION
+
+The task system is intended to regularise the use of Skills in the CDlib
+based muds.  A task consists of a difficulty and a list of applicable skills
+and stats. Optionally, an opponent and an opponent's skill list may be 
+specified.
+
+Task functionality is supported through the function resolve_task() in
+the living object. It has the prototype:
+     nomask varargs int
+     resolve_task(int difficulty, int *skill_list,
+                  object opponent, int *opponent_skill_list)
+
+The wizard coding a task should follow this procedure:
+
+1. Define the task.  What is it exactly that is to be done?
+2. Assign a difficulty. Use the chart in this document to help you in 
+   determining the difficulty.
+3. Make a list of what skills and stats might possibly apply.
+   If the action is done to an opponent, decide what skills and stats 
+   oppose the action. Note that skill defines are of the form SS_<skill>,
+   but stat defines in tasks are of the form TS_<stat>, e.g., TS_INT.
+4. Combine the skills and stats if appropriate, using the min, max, and
+   average functionality.
+5. Implement it with a function call to resolve_task. Note that resolve_task
+   is defined in the living, so the call is usually of the form
+   this_player()->resolve_task(...). Resolve_task() will return a positive 
+   number if the player succeeds; 0 or negative indicates failure.
+
+Example:
+
+Task : to swim across a pond
+Stats : Con
+Skills : Swimming
+Difficulty : Routine
+
+#include <tasks.h>     /* For difficulty and stat defines */
+#include <ss_types.h>  /* For skill defines */
+
+/* This function could be used, for example, as the third argument to
+   an add_exit call. Players will succeed over 50% of the time */
+
+int
+block()
+{
+    if (this_player()->resolve_task(TASK_ROUTINE, ({TS_CON, SS_SWIMMING})) > 0)
+    {   /* Success */
+        write("You made it.\n");
+        return 0;
+    }
+
+    write("You try, but you just can't seem to keep your head above water.\n");
+        return 1;
+}
+
+
+A more complex example:
+
+Task : to pick a players pocket
+Thief : Dex, pickpocket
+Victim : Wis, awareness
+Difficulty : Difficult
+
+object victim;
+int success;
+
+success = this_player()->resolve_task(TASK_DIFFICULT, 
+                                      ({TS_DEX, SS_PICK_POCKET}),
+                                      victim, ({TS_WIS, SS_AWARENESS}));
+
+Reminders:
+ 1. Success > 0 implies success in both examples.  
+ 2. You must use TS_ on stats to get the proper stats.  Otherwise, you 
+    will get the weapon skill with the same number as the stat.
+
+CHOOSING A DIFFICULTY
+
+The 'difficulty' is any positive integer.  Normal values are defined in
+/sys/tasks.h to be:
+
+#define TASK_SIMPLE      200  /*(91.96%) */
+#define TASK_EASY        350
+#define TASK_ROUTINE     500  /*(50.00%) */
+#define TASK_HARD        650
+#define TASK_DIFFICULT   800  /*( 8.04%) */
+#define TASK_EXACTING    950
+#define TASK_FORMIDABLE 1100  /*(Need skills to even have a chance) */
+#define TASK_IMPOSSIBLE 1400  /*(Need even more skills to have a chance) */
+
+These levels are intended for use when no more than 2 skills or stats
+are used for modifiers.  For each extra skill or stat, 100 should be
+added.  Of course, a wizard may pick his own number, if it seems right
+to them.  However, using these constants should yield more consistent
+results.
+
+What follows is a chart of the probability of success for a given task for
+the standard difficulties versus the task modifier. The task modifier in
+the basic case is simply the sum of the skills and stats given in the
+2nd argument to resolve_task. Exactly how the task modifier is computed 
+is explained in the next section.
+
+MODIF SIMPLE   ROUTINE  DIFFICULT  FORMIDABLE  IMPOSSIBLE
+  0 |  91.96 |  49.90 |   8.04    |   0.00   |  0.00
+ 10 |  93.48 |  53.82 |   9.72    |   0.00   |  0.00
+ 20 |  94.85 |  57.59 |  11.57    |   0.00   |  0.00
+ 30 |  96.05 |  61.19 |  13.57    |   0.00   |  0.00
+ 40 |  97.10 |  64.64 |  15.74    |   0.00   |  0.00
+ 50 |  97.98 |  67.92 |  18.06    |   0.00   |  0.00
+ 60 |  98.70 |  71.04 |  20.54    |   0.08   |  0.00
+ 70 |  99.27 |  74.01 |  23.19    |   0.33   |  0.00
+ 80 |  99.67 |  76.81 |  25.99    |   0.73   |  0.00
+ 90 |  99.92 |  79.46 |  28.96    |   1.30   |  0.00
+100 | 100.00 |  81.94 |  32.08    |   2.02   |  0.00
+110 | 100.00 |  84.26 |  35.36    |   2.90   |  0.00
+120 | 100.00 |  86.43 |  38.81    |   3.95   |  0.00
+130 | 100.00 |  88.43 |  42.41    |   5.15   |  0.00
+140 | 100.00 |  90.28 |  46.18    |   6.52   |  0.00
+150 | 100.00 |  91.96 |  49.90    |   8.04   |  0.00
+160 | 100.00 |  93.48 |  53.82    |   9.72   |  0.00
+170 | 100.00 |  94.85 |  57.59    |  11.57   |  0.00
+180 | 100.00 |  96.05 |  61.19    |  13.57   |  0.00
+190 | 100.00 |  97.10 |  64.64    |  15.74   |  0.00
+200 | 100.00 |  97.98 |  67.92    |  18.06   |  0.00
+210 | 100.00 |  98.70 |  71.04    |  20.54   |  0.08
+220 | 100.00 |  99.27 |  74.01    |  23.19   |  0.33
+230 | 100.00 |  99.67 |  76.81    |  25.99   |  0.73
+240 | 100.00 |  99.92 |  79.46    |  28.96   |  1.30
+250 | 100.00 | 100.00 |  81.94    |  32.08   |  2.02
+260 | 100.00 | 100.00 |  84.26    |  35.36   |  2.90
+270 | 100.00 | 100.00 |  86.43    |  38.81   |  3.95
+280 | 100.00 | 100.00 |  88.43    |  42.41   |  5.15
+290 | 100.00 | 100.00 |  90.28    |  46.18   |  6.52
+300 | 100.00 | 100.00 |  91.96    |  49.90   |  8.04
+310 | 100.00 | 100.00 |  93.48    |  53.82   |  9.72
+320 | 100.00 | 100.00 |  94.85    |  57.59   | 11.57
+330 | 100.00 | 100.00 |  96.05    |  61.19   | 13.57
+340 | 100.00 | 100.00 |  97.10    |  64.64   | 15.74
+350 | 100.00 | 100.00 |  97.98    |  67.92   | 18.06
+360 | 100.00 | 100.00 |  98.70    |  71.04   | 20.54
+370 | 100.00 | 100.00 |  99.27    |  74.01   | 23.19
+380 | 100.00 | 100.00 |  99.67    |  76.81   | 25.99
+390 | 100.00 | 100.00 |  99.92    |  79.46   | 28.96
+400 | 100.00 | 100.00 | 100.00    |  81.94   | 32.08
+
+So, for the first example of swimming the pond, we see that a player with
+no stats or skills will succeed about 1/2 of the time, and a person with
+100 con and a superior guru at swimming will almost always succeed (the
+modifier equals 200).
+
+CHOOSING SKILLS AND STATS (TASK MODIFIER)
+
+A 'skill list' consists of a list of the skills and stats which affect the
+task at hand, possibly separated by some constants which tell how the 
+skills should be interpreted.  These constants are:
+
+SKILL_MIN    This signals the beginning of a sublist of skills and stats
+             for which the minimum value is used.  The list is terminated 
+             by SKILL_END.  
+SKILL_MAX    exactly the same, except that the maximum value is used.
+SKILL_AVG    the average value of the skills and stats listed is used.
+SKILL_WEIGHT the next value (or sublist) is weighted by this factor (percent)
+             (may not be used inside sublists, but applies _to_ a list)
+
+SKILL_END    This constant is used to terminate a sublist of skills.
+SKILL_VALUE  The next value is to be used as straight integer value. This is
+             just the next value, and not a sublist, so not terminated.
+
+Resolve_task is built to accommodate two stats or skills for the player, and
+two stats or skills for the opponent. If you use only one stat or skill, you
+should weight it with a SKILL_WEIGHT of 200 to get probabilities resembling
+the chart. If you use more than two stats or skills, the general rule is to
+add 100 to the difficulty for each additional stat to get similar percentages.
+This actually changes the probabilities for success quite a bit, so the amount
+of difficulty you add is best determined by experimentation, for what range
+of stats you want similar.
+
+As an illustration of this, consider the following table:
+
+SKILL   2 SKILLS   3 SKILLS   4 SKILLS
+  0  |  49.90   |  32.08   |  18.06
+  5  |  53.82   |  37.07   |  23.19
+ 10  |  57.59   |  42.41   |  28.96
+ 15  |  61.19   |  48.12   |  35.36
+ 20  |  64.64   |  53.82   |  42.41
+ 25  |  67.92   |  59.41   |  49.90
+ 30  |  71.04   |  64.64   |  57.59
+ 35  |  74.01   |  69.50   |  64.64
+ 40  |  76.81   |  74.01   |  71.04
+ 45  |  79.46   |  78.15   |  76.81
+ 50  |  81.94   |  81.94   |  81.94
+ 55  |  84.26   |  85.37   |  86.43
+ 60  |  86.43   |  88.43   |  90.28
+ 65  |  88.43   |  91.14   |  93.48
+ 70  |  90.28   |  93.48   |  96.05
+ 75  |  91.96   |  95.47   |  97.98
+ 80  |  93.48   |  97.10   |  99.27
+ 85  |  94.85   |  98.36   |  99.92
+ 90  |  96.05   |  99.27   | 100.00
+ 95  |  97.10   |  99.81   | 100.00
+100  |  97.98   | 100.00   | 100.00
+
+This table shows the percent chance of success for a ROUTINE task, with a
+varying number of skills, appropriately weighted. That is:
+
+column 1 is the skill.
+column 2 is the probability of success for a call to 
+         resolve_task(TASK_ROUTINE, ({ SKILL, SKILL })). This column is
+         identical to the chart above, but recognize that the modifier in
+         the first chart is double the skill value here.
+column 3 is the probability of success for a call to
+         resolve_task(TASK_ROUTINE + 100, ({ SKILL, SKILL, SKILL })).
+column 4 is the probability of success for a call to
+         resolve_task(TASK_ROUTINE + 200, ({ SKILL, SKILL, SKILL, SKILL })).
+
+Notice that the probabilities coincide for SKILL = 50, and are closest to
+each other when the skill is in this neighborhood.
+
+An example of a skill list using SKILL_WEIGHT and SKILL_MIN is:
+
+{
+    int *skill_list;
+    /*
+     * This yields a modifier of sword + 60*min(str,dex)/100
+     */
+    skill_list = ({ SS_SWORD, 
+        SKILL_WEIGHT, 60, SKILL_MIN, TS_STR, TS_DEX, SKILL_END});
+}
+
+As another example, let's say I have a spell my player wants to cast.  In the 
+spell code, I might check success with the following fragment.
+
+{
+    if(this_player()->resolve_task(TASK_DIFFICULT, 
+        ({SKILL_WEIGHT, 50, SS_SPELLCRAFT,
+          SKILL_WEIGHT, 90, SKILL_AVG, TS_WIS, TS_INT, SKILL_END, 
+          SS_FORM_CONJURATION,
+          SS_ELEMENT_FIRE})) > 0)
+    {
+        spell_succeeds();
+    }
+}  
+
+This creates a formula of:
+  (50*spellcraft + 90*average(wis,int) + 100*conjuration + 100*fire)/100
+
+Since this formula uses (roughly speaking) more than 2 skills without
+shifting the difficulty upward, the expected value of the modifier is
+higher, so the percentage chance of success is higher.
+
+THE RETURN VALUE OF RESOLVE_TASK
+
+The return value is expressed as a percentage above or below the
+original difficulty.  For example, suppose that the difficulty was
+1000.  If the number generated was 1500, the function would return 50.
+If the number generated was 500, the function would return -50.
+
+The exact function is
+   return value = 100*(RANDOM + MODIFIER - DIFFICULTY)/DIFFICULTY
+where:
+   RANDOM is the random variable described under TECHNICAL DETAILS.
+   MODIFIER and DIFFICULTY are as explained above and in TECHNICAL DETAILS.
+
+Interpreting this number is up to the individual wizard, but negative
+numbers and zero always imply failure; positive numbers, success.
+
+An example of how one might use the return value is the following:
+
+Task: To climb a cliff:
+Stats: Str, Dex
+Skills: Climbing
+Difficulty: Difficult
+
+int success;
+
+success = this_player()->resolve_task(TASK_ROUTINE,
+                                      ({ SS_CLIMB, SKILL_AVG, TS_STR, TS_DEX,
+                                         SKILL_END }));
+
+if (success > 0)
+{
+    /*  Success will occur for a player with relevant stats equal to 30
+        71% of the time, from the chart */
+    write("You scramble up the cliff.\n");
+}
+else if (success <= -50)
+{
+      /* A player with relevant stats equal to thirty will fail and the 
+         return value will be <= 50 about 3% of the time. We can figure
+         this by noting that for a return value less than -50, 
+         RANDOM + MODIFIER has to be less than 250, so for two stats of
+         30 this means RANDOM has to be less than 130, which is the
+         same has having stats equal to 185, which from the chart is
+         a little over 3% of the time (or about 10% of the failures). */
+
+      write("You climb up a little way, but suddenly lose your grip and " +
+            "fall to the ground!\n");
+      do_fall(this_player());
+}
+else
+{
+     /* When a player with relevant stats equal to thirty fails, the return
+        value will be above -50 the rest of the time */
+
+     write("You start to climb up, but it's tougher than you thought. " +
+           "You  slip and fall back down before you've made any progress.\n");
+     this_player()->heal_hp(-5);
+}
+
+TECHNICAL DETAILS
+
+To aid you in deciding what difficulty to make your task, some
+mathematical information on the way the system works is given.
+
+The system itself is quite simple.  An approximately normally
+distributed pseudo-random number ranging from 1 to 999 (bell shaped
+curve) is obtained by summing two random numbers.  The actual
+distribution is triangular.  The player's skills and stats add to this,
+while his opponent's subtract, yielding a net bonus.  The final number
+is compared with the difficulty.  If it is higher, the task succeeds.
+Otherwise, the task fails.
+
+You can consider the difficulty minus the net bonus to be the "true 
+difficulty", and then you can apply the following formula to determine 
+chance of success. The important thing to note in the below formula is
+that the base modifier is doubled when the chance is actually computed.
+This is a change over the way it used to be done, i.e. in the old way
+the true difficulty was (DIFFICULTY - (sum of skills and stats)),
+and now it is (DIFFICULTY - 2*(sum of skills and stats)).
+
+    pchance(x) = 0                             ;  x <= 0
+    pchance(x) = (2*x)*(2*x + 1)/5000          ;  0  < x <= 500
+    pchance(x) = 100 - pchance(1000 - x)       ; 500 < x <= 1000
+    pchance(x) = 100                           ;  x > 1000
