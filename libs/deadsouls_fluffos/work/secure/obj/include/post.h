@@ -1,0 +1,77 @@
+#ifndef __POST_H
+#define __POST_H
+
+private void restore_box(string folder);
+private void save_box();
+private void destruct_box(string str);
+private int valid_folder(string str);
+void start_post(string str);
+private void primary_prompt();
+private void secondary_prompt();
+varargs nosave private void postal_error(string str, string ind, mixed args);
+varargs nosave private void postal_success(string str, string ind, mixed args);
+varargs protected void indices(int x, string str);
+varargs protected void aliases(string str);
+varargs protected void options(string str);
+nosave private void help(string arg, string ind);
+private void index_menu();
+private void alias_menu();
+private void option_menu();
+private void help_menu(string ind);
+protected void index_cmd(string str);
+protected void alias_cmd(string str);
+protected void option_cmd(string str);
+protected void help_cmd(string str, string ind);
+private string postal_time(mixed val);
+private string header(mapping borg);
+protected void change_folder(string str);
+protected void next_folder(string str, string folder);
+protected void get_folder(string str);
+nosave private void delete_letter(string cmd, string args);
+protected void unread_delete(string str, int *milk);
+private void quit_box(string cmd);
+private void really_quit(string cmd);
+protected void confirm_quit(string str, string cmd);
+protected void confirm_delete(string str);
+nosave private void save_letter(string cmd, string args);
+protected void get_save_location(string str, mixed *vals);
+private void read_letter(int x);
+void end_read();
+nosave private void alias_members(string cmd, string args);
+protected void get_alias(string str, string cmd);
+protected void get_members(string str, string *args);
+nosave private void alias_creation(string cmd, string args);
+protected void get_alias_name(string str, string cmd);
+protected void get_new_alias_members(string str, string *args);
+private void list_alias(string str);
+private void save_options();
+private void change_option(int x);
+protected void really_change_option(string str, int x);
+private void reply(string str);
+protected void get_reply_confirm(string str);
+protected void get_reply_list(string str);
+private void query_reply_text();
+nosave private void forward_letter(string str, int flag);
+protected void get_forward_list(string str);
+protected void confirm_comments(string str);
+private string query_forward_text();
+protected void confirm_forward_abort(string str);
+private void send_letter(string *args);
+protected void get_to(string str);
+protected void get_subject(string str);
+protected void confirm_subject(string str);
+protected void get_cc(string str);
+void complete_send();
+private string query_signature();
+private void confirm_send();
+protected void handle_send_choice(string str);
+private void notify_send(string *failures);
+void incoming_mail();
+int order_box(mapping borg);
+void complete_send();
+void abort();
+void end_help();
+nosave private void help(string arg, string ind);
+
+#endif __POST_H
+
