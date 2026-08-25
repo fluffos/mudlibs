@@ -1,0 +1,86 @@
+#include <std.h>
+#include <daemons.h>
+#include <tell.h>
+
+inherit DAEMON;
+
+int cmd_tell(string str) {
+    string tell_msg, who, target, mud, msg;
+    object ob;
+
+    if (!str || sscanf(str,"%s %s",who,msg) != 2) {
+        notify_fail("usage: tell <player> <message>\n");
+        return 0;
+    }
+    if(sscanf(lower_case(who),"%s@%s",target,mud) == 2) {
+        if(!NETWORK_D->mud_exists(mud)) 
+          return notify_fail("That mud is not listed with "+mud_name()+".\n");
+        SERVICES_D->send_gtell(mud, target, msg);
+        return 1;
+    }
+    if(!(ob = find_player(who = lower_case(who))) &&
+      !(ob = find_living(who = lower_case(who)))) {
+        notify_fail(capitalize(who)+NOT_HERE+"\n");
+        return 0;
+    }
+    if(ob->query_invis() && creatorp(ob)) {
+        message("info", sprintf("%s%s", capitalize(who), NOT_HERE),
+          this_player());
+        message("tell", sprintf("%s is unaware of telling you: %s",
+          (string)this_player()->query_cap_name(), msg), ob);
+      ob->set_property("reply", (string)this_player()->query_name());
+        return 1;
+    }
+    if(ob->query_blocked("tell")) {
+        write(ob->query_cap_name()+" is currently blocking all tells.");
+        return 1;
+    }
+    if(ob->is_player() && !interactive(ob)) {
+        notify_fail(ob->query_cap_name()+" is link-dead and cannot hear you.\n");
+        return 0;
+    }
+    message("tell", (string)this_player()->query_cap_name() + " tells you: "+
+      msg, ob);
+    ob->set_property("reply", (string)this_player()->query_name());
+    message("tell", sprintf("You tell %s: %s", (string)ob->query_cap_name(),
+      msg), this_player());
+    if(!ob->is_player()) return 1;
+    if(query_idle(ob) > IDLE_TIME)
+      write(ob->query_cap_name() +
+          " is idle, and may not have been paying attention.");
+    if(in_edit(ob) || in_input(ob))
+      message("info", (string)ob->query_cap_name()+" is in edit and may "+
+        "not be in a position to respond.", this_player());
+    return 1;
+}
+
+void help() {
+    message("help",
+      "Syntax: <tell [player] [message]>\n"
+      "        <tell [player]@[mud] [message]>\n\n"
+      "Sends the message to the player named either on this mud if no "
+      "mud is specified, or to the player named on another mud when "
+      "another mud is specified.  For muds with more than one word in their "
+      "names, use . (periods) to take place of spaces.  Example: tell "
+      "descartes@realms.of.chaos hi\n\n"
+      "See also: say, shout, yell, emote", this_player()
+    );
+}
+
+string morse(string msg) {
+mapping __Morse;
+    string tmp;
+    int x, i;
+__Morse = ([ "a" : ".-", "b" : "-...", "c" : "-.-.",
+"d" : "-..", "e" : ".", "f" : "..-.", "g" : "--.", "h" : "....", "i" : "..",
+"j" : ".---", "k" : "-.-", "l" : ".-..", "m" : "--", "n" : "-.", "o" : "---", 
+"p" : ".--.", "q" : "--.-", "r" : " .-.", "s" : "...", "t" : "-", "u" : "..-", 
+"v" : "...-", "w" : ".--", "x" : "-..-", "y" : "-.--", "z" : "--..",
+"1" : ".----", "2" : "..---", "3" : "...--", "4" : "....-", "5" : ".....",
+"6" : " -....", "7" : "--...", "8" : "---..", "9" : "----.","0" : " -----" ]);
+    for(tmp = "", x = strlen(msg), i=0; i< x; i++) {
+        if(__Morse[msg[i..i]]) tmp += __Morse[msg[i..i]]+" ";
+        else tmp += msg[i..i]+ " ";
+    }
+    return tmp;
+}
