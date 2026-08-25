@@ -1,0 +1,110 @@
+/* identd - Dyraen */
+/* patches -- Hamlet.  Fixed it so VAXen will actually reply.
+                       Modifications so it can be built into the mudlib.
+*/
+
+#include <socket.h>
+
+#define END { call_out("destructo",0); return 0; }
+
+object tp, ob;
+string ip_num, iname;
+
+int do_ident(mixed name, object me) {
+int fd, err;
+
+  if (!name) END;
+  if (!"/secure/master"->query_lord(geteuid(me))) END;
+
+  if (objectp(name)) ob = name;
+  if (!ob)
+    ob = find_player(name);
+  if (!ob) END;
+  ip_num = query_ip_number(ob);
+  iname = ob->query_name();
+
+  tp = me;
+  if (!tp) END;
+
+  err = socket_create(STREAM, "read_cb", "close_cb");
+  if (err < 0) {
+    tp->do_efun_write("** Socket Create Error: "+socket_error(err)+".\n");
+    END;
+  }
+  fd = err;
+  err = socket_bind(fd, 0);
+  if (err < 0) {
+    tp->do_efun_write("** Socket Bind Error: "+socket_error(err)+".\n");
+    END;
+  }
+  err = socket_connect(fd, ip_num+" 113", "read_cb", "write_cb");
+  if (err < 0) {
+    tp->do_efun_write("** Socket Connect Error: "+socket_error(err)+".\n");
+    END;
+  }
+  call_out("destructo",40);
+  return 1;
+} /* do_ident() */
+
+void read_cb(int fd, string mess) {
+string *ret;
+string userid, hosttype;
+string junk;
+
+  mess = replace_string(mess,"\n","");
+  mess = replace_string(mess,"\r","");
+  ret = explode(mess," ");
+  if(sizeof(ret) == 9) {
+    userid = ret[8];
+    hosttype = ret[6];
+  }
+  /* Might be a nasty, nasty VAX */
+  else if(sscanf(mess,"%s:USERID:%s:%s",junk,hosttype,userid) == 3);
+    /* Do nothing, we just did what needed done :) */
+  else {  /* We have an unknown response format or something else screwy */
+    log_file("ident.errors","While identifying "+iname+" we got: "+
+             mess+"\n");
+  }
+  if (tp && interactive(tp) && iname && userid) {
+    tp->do_efun_write("\nInteractive: "+capitalize(iname)+" is "+
+                       userid+"@"+(query_ip_name(ob)?query_ip_name(ob):
+                       query_ip_number(ob))+" ("+hosttype+")\n");
+    socket_close(fd);
+  }
+  call_out("destructo",0);
+} /* read_cb() */
+
+void write_cb(int fd) {
+// int rport, i, j, k, err;
+  int k, err;
+
+  sscanf(explode(socket_address(ob)," ")[1],"%d",k);
+/*  Dunno what this stuff was for, but it doesn't seem needed with v21.7.
+    Maybe sockets weren't directly mapped before...  - Hamlet
+  i = k/256;
+  j = k%256;
+  rport = j*256+i;
+*/
+
+  if (!ob) {
+    socket_close(fd);
+    END;
+  }
+//   err = socket_write(fd, rport+",2001\n");
+  err = socket_write(fd, k+",2001\r\n");
+  if ((err <0) && tp) {
+    tp->do_efun_write("** Socket Write Error: "+socket_error(err)+".\n");
+    END;
+  }
+} /* write_cb() */
+
+void close_cb(int fd) {
+  if (tp) {
+    tp->do_efun_write("** No Identd Available.\n");
+    END;
+  }
+} /* close_cb() */
+
+void destructo() {
+  if (clonep(this_object())) destruct(this_object());
+} /* destructo() */

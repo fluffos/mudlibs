@@ -1,0 +1,7 @@
+#define ROOM "/d/newbie/elf/rooms/"
+#define FORESTROOM "/d/newbie/elf/rooms/forestroom"
+#define GLOOM "/d/newbie/elf/gloom/"
+#define WEAPON "/d/newbie/elf/items/weapons/"
+#define ARMOR "/d/newbie/elf/items/armours/"
+#define CHAR "/d/newbie/elf/chars/"
+#define HOSPITAL "/d/fr/wm_forest"

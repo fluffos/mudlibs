@@ -1,0 +1,9 @@
+#define SP_OBJECT 1
+#define SP_FUNC 2
+#define SP_PARAM 3
+#define S_OBJECT 0
+#define S_FUNC 1
+#define SP_NO_RNDS 0
+#define SPELL_ROOT "/std/spells"
+#define CLERIC_ROOT "/std/spells/cleric/"
+#define MAGE_ROOT "/std/spells/wizard/"

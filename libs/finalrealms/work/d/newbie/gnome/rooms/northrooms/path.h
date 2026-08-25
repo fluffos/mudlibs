@@ -1,0 +1,7 @@
+#define VALLEY "/d/newbie/gnome/rooms/"
+#define UNDER "/d/newbie/gnome/tunnels/"
+#define MISC "/d/newbie/gnome/items/"
+#define ARMOUR "/d/newbie/gnome/armour/"
+#define WEAPONS "/d/newbie/gnome/weapons/"
+#define NPC "/d/newbie/gnome/npcs/"
+#define NORTHRMS "/d/newbie/gnome/rooms/northrooms/"

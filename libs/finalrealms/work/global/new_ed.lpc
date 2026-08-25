@@ -1,0 +1,75 @@
+// Call this when we're done editing.
+private nosave function EndEditor;
+//nosave function EndEditor;
+
+// We can't tell how user exited ed(), so.
+nosave string EdExitType;
+
+// Editor code from Nanvaent <http://nanvaent.org/>
+//
+// Put this player into the editor.
+// This function starts an editor session for this player,
+// the file given is edited.
+//
+// @param  fn    The name of the file to edit.
+// @param  func  A function to call when the editor is exited.
+//
+/* FluffOS PORT NOTE: originally written against the "new" ed API
+ * (ed_start()/ed_cmd()/query_ed_mode()) which this driver BUILD does not
+ * expose (it was compiled with the older single-efun OLD_ED interface --
+ * confirmed via nm on the driver binary: f_ed() is present, f_ed_start()/
+ * f_ed_cmd() are not). Rewritten against the real ed() efun instead, which
+ * this driver handles entirely internally (once called, the driver itself
+ * takes over routing the player's raw input to the editor until it exits
+ * -- process_input()/write_prompt() are simply not invoked meanwhile, so
+ * the query_ed_mode()-based prompt/routing logic elsewhere in this file's
+ * sibling process_input.lpc/prompt.lpc never actually fires for a real
+ * ed() session under this driver; it's kept only as a defensive fallback,
+ * see secure/simul_efun/query_ed_mode.lpc).
+ *
+ * ed()'s exit-function argument is a plain STRING (a function *name* on
+ * the calling object), not a closure -- __ed_exit_dispatch() below is
+ * that string entry point, which then invokes the actual `function`
+ * closure callers of begin_editing() pass in (this codebase's existing
+ * calling convention, e.g. global/line_ed.lpc's `(: editor_finish_ed :)`),
+ * preserving the original API for every caller of begin_editing().
+ *
+ * One behavior lost: the original used ed_cmd("$a") right after starting
+ * to drop mortals (or anyone editing an empty file) straight into insert
+ * mode, skipping the ed command prompt. There's no LPC-level way to feed
+ * the just-started editor a synthetic command under the real ed() efun
+ * (no ed_cmd() equivalent), so that convenience is gone -- editing now
+ * always starts at ed's normal command prompt. Cosmetic only; "ed" is
+ * documented in global/line_ed.lpc as an opt-in advanced editor mode
+ * ("Please do not set your editor to ed unless you know what you are
+ * doing"), not the default player editing experience (that's the
+ * separate pure-LPC "menu"/"command" editors in global/line_ed.lpc,
+ * unaffected by any of this).
+ */
+varargs void begin_editing( string fn, function func )
+{
+    int restricted;
+
+    restricted = this_object()->query_creator() ? 0 : 1;
+
+    EndEditor = func;
+    ed( fn, "__ed_exit_dispatch", restricted );
+}
+
+// Real entry point passed to ed() as its exit-function name -- see the
+// PORT NOTE above. Dispatches to the closure begin_editing() was given.
+void __ed_exit_dispatch()
+{
+    function f;
+
+    f = EndEditor;
+    EndEditor = 0;
+    if ( f )
+        evaluate( f );
+}
+
+// Get the command used to exit the editor last.
+//
+// @return  The command. ie "q", "x" or "Q" usually.
+//
+string ed_exit_type() { return EdExitType; }

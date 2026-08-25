@@ -1,0 +1,86 @@
+This UDP port handling (Intermud) system was designed for muds using the
+Amylaar driver, but this release incorporates changes which allow it to run
+alongside the MudOS/CDudp systems on a Cdlib mud.
+This document describes how to install it onto your CD mud.
+
+NOTE: It is probably best to install this package in /d/Standard/obj rather
+      than /secure on CD muds for security purposes.
+
+  o Incoming udp packets should be directed to the function
+    receive_udp(sender, packet) in inetd.c. This is done by editting the file
+    /config/sys/local.h and changing the definition of UDP_MANAGER to the
+    pathname of the inetd.c. Define OLD_UDP_MANAGER to the old definition.
+    (probably /d/Standard/obj/udp or /d/Standard/std/udp for the newer mudlibs)
+
+  o You need to make sure that the old udp system has access to the udp lfuns
+    as well as the new one. This is done by changing the send_udp_message()
+    function in /secure/master.c as follows.
+    Change the if at the start of that function to
+    if (stringp(udp_manager) && (previous_object() == find_object(udp_manager)
+	|| previous_object() == find_object(OLD_UDP_MANAGER))
+
+  o You will need to make the inetd auto-loading at boot time. You do this
+    by adding the pathname of the inetd.c to the file /secure/preload.data
+
+  o Edit the config section of udp.h. This file should probably be placed in a
+    directory listed in your include path.
+    The definitions of LOCAL_NAME and LOCAL_UDP_PORT are probably best made
+    as follows.
+    #define LOCAL_NAME 		SECURITY->get_mud_name()
+    #define LOCAL_UDP_PORT	SECURITY->do_debug("udp_port")
+
+  o You may need to modify some of the definitions at the top of the inetd.c
+    file for your system, particularly if you are not using an Amylaar driver.
+    Changes for CD are indicated where appropriate and these should be used
+    if you are uncertain.
+
+  o Make any changes neccessary to the files supplied (as described below).
+
+  o Add your mud to the INETD_HOSTS file. (This is not strictly neccessary, but
+    is very useful for testing things by sending requests to your own mud).
+
+Your mud will need to be added to the host lists at other muds for the system
+to realise its full potential, but it will operate satisfactorily regardless.
+
+It is a good idea to test out the intermud system at your own site to iron out
+any problems you may encounter. You will need to write your own intermud
+commands for players to use, but the command files in the udp directory should
+give you some good examples of usage. Some example commands can be found in
+the examples directory.
+
+There is a command soul suitable for CDlib muds in the examples directory.
+Initially you should copy it to /cmd/wiz_cmd_inetd.c and edit 
+/cmd/wiz_cmd_keeper.c - Add "/cmd/wiz_cmd_inetd" to the soul list in that file
+and resave it. After updating, keepers will have full intermud commands which
+can be used for testing. When you have it up and running, you should define
+WIZ_CMD_INETD in /secure/std.h and add the soul to any command souls you wish
+to have access to the commands. 
+
+udp/who.c	Handles who requests from remote sites. The DATA field should
+		be a string containing the who information.
+
+udp/finger.c	DATA field should be a string containing the finger info.
+
+udp/channel.c	This handles all incoming channel messages. It uses the header
+		"CHANNEL" to identify the channel name, "CMD" to identify a
+		special command, and DATA for the message body.
+                The message is formatted and sent to all wizards on the mud.
+		Incoming messages can be blocked by setting earmuffs != 1.
+		This basic system relies on a function
+		receive_channel_msg(string channel, string msg) being defined
+		in all players who will receive the channel messages. It
+		should pass on any received messages to player as long as
+		'msg' != 0. It should return 1 if the player is listening to
+		the specified channel and 0 otherwise.
+		You will probably want to alter this module to incorporate it
+		into your local channel system or to make it more
+		user-friendly.
+
+udp/man.c	Handles remote man requests. The DATA field should be a string
+		containing the manual page or information.
+
+udp/query.c	Change the EMAIL #define to yourself (or a relevant email).
+
+udp/ftp.c	Define the FTP_ROOT_DIR as appropriate. You will need to make
+		sure this file has privilege to read (and write if PUTFILE is
+		defined) to files inside FTP_ROOT_DIR.

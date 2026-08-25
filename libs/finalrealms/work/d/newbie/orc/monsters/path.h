@@ -1,0 +1,5 @@
+#define ROOM "/d/newbie/orc/rooms/"
+#define CHAR "/d/newbie/orc/monsters/"
+#define WEAPON "/d/newbie/orc/items/weapons/"
+#define ARMOR "/d/newbie/orc/items/armors/"
+#define MISC "/d/newbie/orc/items/misc/"

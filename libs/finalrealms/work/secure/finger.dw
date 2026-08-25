@@ -1,0 +1,503 @@
+#include "mail.h"
+#include "finger.h"
+/* finger object.... */
+/* this object returns finger information about a given person.
+ */
+ 
+string title;
+string birth_day, where, cap_name;
+int last_log_on, time_on, creator, start_time;
+string email, real_name, home_dir, last_on_from;
+mapping aliases, map_prop;
+string guild_ob;
+
+string make_string(mixed *al) {
+  string str;
+
+  str = (string)"/global/alias"->alias_string(al);
+  sscanf(str, "%s $*$", str);
+  return replace(str, "@@", "@ @ ");
+} /* make_string() */
+
+
+string banish_finger(string name) {
+  string retval, time, ban_by;
+  string *file;
+
+  file = explode(read_file("/banish/"+name+".o"), "\n");
+  retval =  sprintf("%35-s%35-s\n", "Login name : "+name, "Real name : "+
+                            "Banished");
+  retval += "Not real many seconds old.\n";
+  retval += "No mail ever.\n";
+  retval += "No plan.\nNo future.\n";
+  if (this_player()->query_creator())
+    if (sizeof(file) == 3)
+      retval += implode(file, "\n")+"\n";
+    else
+      retval += "Banish info not in the correct format.\n";
+  return replace(retval, "@@", "@ @ ");
+} /* banish_finger() */
+
+string www_banish_finger(string name) {
+  string retval;
+
+  retval = "<b>Login name :</b>"+name+"<br><b>Real name :</b>"+
+                            "Banished<br>";
+  retval += "Not real many seconds old.<br>";
+  retval += "No mail ever.<br>";
+  retval += "No plan.<br>No future.<br>";
+  return retval;
+} /* www_banish_finger() */
+
+mixed *remote_banish_finger(string name) {
+  mixed *retval;
+
+  retval = allocate(9);
+  retval[0] = name;
+  retval[1] = "The titleless";
+  retval[2] = "Banished";
+  retval[3] = "none";
+  retval[4] = "";
+  retval[5] = -1;
+  retval[6] = 0;
+  retval[7] = 0;
+  retval[8] = "Not real many seconds old.\n"
+              "No mail ever.\n"
+              "No plan.\nNo future.\n";
+  return retval;
+}
+
+mixed *remote_domain_finger(string name) {
+  mixed *retval;
+  string master;
+
+  master = "/d/"+name+"/master";
+  retval = allocate(9);
+  retval[0] = name;
+  retval[1] = 0;
+  retval[2] = "The domain of "+name;
+  retval[3] = 0;
+  retval[4] = "";
+  retval[5] = -1;
+  retval[6] = 0;
+  retval[7] = 0;
+  retval[8] = "The lord of this domain is "+master->query_dom_lord()+".\n"+
+      "The current members of this domain are "+
+      implode((string *)master->query_members(), ", ")+".\n"+
+      (master->query_info()?(string)master->query_info():"")+
+      "It hasn't been idle, it just hasn't had a lunch break in years.\n";
+  return retval;
+}
+
+// added by Ceres for things that need to know when a player last logged in.
+int last_login(string name) {
+  object ob;
+
+  if ((ob = find_player(name)))
+    ob->save_me();
+  if (file_size("/banish/"+name+".o") > 0)
+    return 0;
+  
+  seteuid("Root");
+  if (file_size("/d/"+name) == -2)
+    return -1;
+  if (!"/secure/login"->test_user(name))
+    return -1;
+  title = 0; birth_day = 0; last_log_on = 0; time_on = 0; email = 0;
+  where = 0; real_name = 0; home_dir = 0; guild_ob  = 0; last_on_from = 0;
+  start_time = 0; aliases = ([ ]); map_prop = ([ ]); cap_name = 0;
+  restore_object("/players/"+name[0..0]+"/"+name);
+  return last_log_on;
+}
+
+string get_last_log() {
+    string retval;
+    int tmp_time, sec, min, hour, day;
+
+/* Should be a nice number.... */
+    tmp_time = time()-last_log_on;
+    if (!tmp_time) {
+      sec = min = hour = day = 0;
+    }
+    if (tmp_time < 60)
+      retval = tmp_time+" seconds ago.";
+    else if (tmp_time < 60*60) /* One minute */
+      retval = (tmp_time/60)+" minute"+(tmp_time<120?"":"s")+
+                (tmp_time%60?" and "+(tmp_time%60)+" second"+
+                             ((tmp_time%60 < 2)?"":"s"):"")+" ago.";
+    else if (tmp_time < 24*60*60) /* Hours... */
+      retval = (hour = tmp_time/(60*60))+" hour"+
+                (hour<2?"":"s")+((min = (tmp_time/60)%60)?" and "+min+
+                " minute"+(min<2?"":"s"):"")+" ago.";
+    else /* Days.... */
+      retval = (day = tmp_time/(24*60*60))+" day"+
+                (day<2?"":"s")+((hour = (tmp_time/(60*60))%24)?" and "+hour+
+                " hour"+(hour<2?"":"s"):"")+" ago."; 
+    return retval;
+}
+
+string get_additional_info(string name) {
+  string retval = "", *bing;
+  int i;
+
+  if(creator && CREATE)
+  {
+/* Find out which domains they are a member of... */
+    bing = get_dir("/d/");
+    for (i=0;i<sizeof(bing);i++)
+     if (file_size("/d/"+bing[i]) == -2)
+        if ((string)("/d/"+bing[i]+"/master")->query_dom_lord() == name) {
+          retval += "Is the lord of the "+ bing[ i ] +" domain.\n";
+        } else if (!("/d/"+bing[i]+"/master")->query_member(name)) {
+          bing = delete(bing, i, 1);
+          i--;
+        }
+    if (!sizeof(bing))
+      retval += "Not a member of any domain.\n";
+    else
+      retval += "A member of the "+implode(bing, ", ")+" domain"+
+                (sizeof(bing)>2?"s.\n":".\n");
+  }
+  if (start_time)
+    retval += "First logged on "+ctime(start_time)+".\n";
+  time_on = -time_on;
+  if (time_on > 86400)
+    retval += sprintf("%d days, ", time_on/86400);
+  if (time_on > 3600)
+    retval += sprintf("%d hours, ", (time_on/3600)%24);
+  retval += sprintf("%d minutes and %d seconds old.\n", (time_on/60)%60, time_on
+%60);
+  if (!mappingp(aliases))
+    aliases = ([ ]);
+  if (aliases[".project"])
+    retval += "Project:\n"+make_string(aliases[".project"])+"\n";
+  if (aliases[".plan"])
+    return replace(retval+"Plan:\n"+
+              implode(explode(make_string(aliases[".plan"]), ";"), "\n")+"\n",
+              "@@", "@ @ ");
+  return replace(retval+"No plan.\n", "@@", "@ @ ");
+}
+ 
+
+mixed *remote_finger(string name) {
+  mixed *retval;
+  object ob;
+
+  if ((ob = find_player(name)))
+    ob->save_me();
+  if (file_size("/banish/"+name+".o") > 0)
+    return remote_banish_finger(name); 
+  seteuid("Root");
+  if (file_size("/d/"+name) == -2)
+    return remote_domain_finger(name);
+  if (!"/secure/login"->test_user(name))
+     return 0;
+  title = 0;
+  birth_day = 0;
+  last_log_on = 0;
+  time_on = 0;
+  email = 0;
+  where = 0;
+  real_name = 0;
+  home_dir = 0;
+  guild_ob  = 0;
+  last_on_from = 0;
+  start_time = 0;
+  aliases = ([ ]);
+  map_prop = ([ ]);
+  cap_name = 0;
+  restore_object("/players/"+name[0..0]+"/"+name);
+
+  if (!cap_name)
+    cap_name = capitalize(name);
+  retval = allocate(9);
+  retval[0] = cap_name;
+  retval[1] = (title?cap_name+" the "+title:0);
+  retval[2] = (real_name?real_name:"???");
+  retval[3] = (email[0] == ':'?0:email);
+  retval[4] = (ob?ctime(last_log_on):get_last_log());
+  retval[5] = (ob?query_idle(ob):-1);
+  retval[6] = 0;
+  retval[7] = 0;
+  retval[8] = get_additional_info(name);
+  return retval;
+}
+
+string domain_finger(string name) {
+  string ret, master;
+
+  master = "/d/"+name+"/master";
+  ret = "The domain of "+name+".\n";
+  ret += "The lord of this domain is "+master->query_dom_lord()+".\n";
+  ret += "The current members of this domains are "+
+         implode((string *)master->query_members(), ", ")+".\n";
+  if (master->query_info())
+    ret += (string)master->query_info();
+  ret += "It hasn't been idle, it just hasn't had a lunch break in years.\n";
+  return replace(ret, "@@", "@ @ ");
+} /* domain_finger() */
+
+string finger_info(string name) {
+  string retval, nick, *bing, tmp;
+  object ob;
+  int i, width;
+
+  width = 80;
+  if ((ob = find_player(name)))
+    ob->save_me();
+  if (this_player()) {
+    nick = (string)this_player()->expand_nickname(name);
+    width = this_player()->query_cols();
+  }
+  if (nick)
+    name = nick;
+  if (file_size("/banish/"+name+".o") > 0)
+    return banish_finger(name);
+  seteuid("Root");
+  if (file_size("/d/"+name) == -2)
+    return domain_finger(name);
+  if (!"/secure/login"->test_user(name))
+     return 0;
+  title = 0;
+  birth_day = 0;
+  last_log_on = 0;
+  time_on = 0;
+  email = 0;
+  where = 0;
+  real_name = 0;
+  home_dir = 0;
+  guild_ob  = 0;
+  last_on_from = 0;
+  start_time = 0;
+  aliases = ([ ]);
+  map_prop = ([ ]);
+  cap_name = 0;
+  restore_object("/players/"+name[0..0]+"/"+name);
+
+  if (!cap_name)
+    cap_name = capitalize(name);
+
+  retval =  "%^BOLD%^"+
+            sprintf("%*-sReal name : %*-=s\n", (width-2)/2, "Login name : "+cap_name, 
+                                  (width-2)/2-12, (real_name?real_name:"???"));
+  if (email)
+    if (email[0] == ':') {
+      if ( "/secure/master"->valid_read( "/players/"+ name[ 0 .. 0 ] +"/"+
+            name, geteuid( this_player( 1 ) ) ) )
+        tmp = email;
+    } else
+      tmp = email;
+  if (birth_day)
+     retval += sprintf("%*-sEmail : %*-=s\n", (width-2)/2, 
+                       "Birthday : " + birth_day, (width-2)/2-8, tmp);
+  else if (tmp)
+     retval + sprintf("Email : %-*s\n", (width-2)/2-8, tmp);
+
+  if (home_dir)
+    retval += sprintf("%*-s", (width-2)/2, "Home directory : "+home_dir);
+  if (this_player(1)->query_creator() && guild_ob )
+    retval += "Is a member of the "+guild_ob->query_name()+" guild.\n";
+  else if (home_dir)
+    retval += "\n";
+  if(where)
+    retval += "Location : "+where+"\n";
+  if (stringp(map_prop["home page"]))
+    retval += "Home Page: "+map_prop["home page"]+"\n";
+  retval += "%^RESET%^";
+  if(creator && CREATE)
+  {
+/* Find out which domains they are a member of... */
+    bing = get_dir("/d/");
+    for (i=0;i<sizeof(bing);i++)
+     if (file_size("/d/"+bing[i]) == -2)
+        if ((string)("/d/"+bing[i]+"/master")->query_dom_lord() == name) {
+          retval += "Is the lord of the "+ bing[ i ] +" domain.\n";
+        } else if (!("/d/"+bing[i]+"/master")->query_member(name)) {
+          bing = delete(bing, i, 1);
+          i--;
+        }
+    if (!sizeof(bing))
+      retval += "Not a member of any domain.\n";
+    else
+      retval += "A member of the "+implode(bing, ", ")+" domain"+
+                (sizeof(bing)>2?"s.\n":".\n");
+  }
+  if (start_time)
+    retval += "First logged on "+ctime(start_time)+".\n";
+  time_on = -time_on;
+  if (time_on > 86400)
+    retval += sprintf("%d days, ", time_on/86400);
+  if (time_on > 3600)
+    retval += sprintf("%d hours, ", (time_on/3600)%24);
+  retval += sprintf("%d minutes and %d seconds old.\n", (time_on/60)%60, time_on%60);
+  if ((ob=find_living(name)))
+    retval += "On since "+ctime(last_log_on)+"\n";
+/*
+  else if (ob->query_hidden())
+    retval += "Last logged on"+ctime(last_log_on - 14400)+"\n";
+*/
+  else {
+    int tmp_time, sec, min, hour, day;
+
+/* Should be a nice number.... */
+    tmp_time = time()-last_log_on;
+    if (!tmp_time) {
+      sec = min = hour = day = 0;
+    }
+    if (tmp_time < 60)
+      retval += "Last logged on "+tmp_time+" seconds ago.\n";
+    else if (tmp_time < 60*60) /* One minute */
+      retval += "Last logged on "+(tmp_time/60)+" minute"+(tmp_time<120?"":"s")+
+                (tmp_time%60?" and "+(tmp_time%60)+" second"+
+                             ((tmp_time%60 < 2)?"":"s"):"")+" ago.\n";
+    else if (tmp_time < 24*60*60) /* Hours... */
+      retval += "Last logged on "+(hour = tmp_time/(60*60))+" hour"+
+                (hour<2?"":"s")+((min = (tmp_time/60)%60)?" and "+min+
+                " minute"+(min<2?"":"s"):"")+" ago.\n";
+    else /* Days.... */
+      retval += "Last logged on "+(day = tmp_time/(24*60*60))+" day"+
+                (day<2?"":"s")+((hour = (tmp_time/(60*60))%24)?" and "+hour+
+                " hour"+(hour<2?"":"s"):"")+" ago.\n";
+/*
+    retval += "Last logged on "+ctime(last_log_on)+"\n";
+ */
+  }
+  if (ob)
+    if (interactive(ob))
+      retval += "Idle for "+(query_idle(ob)/60)+" minutes and "+
+                            (query_idle(ob)%60)+" seconds.\n";
+    else
+      retval += "Net dead.\n";
+  if ( "/secure/master"->query_dom_lord( geteuid( this_player( 1 ) ) ) &&
+      last_on_from )
+    retval += last_on_from+"\n";
+   // retval += (string) MAILER->finger_mail(name);
+  if (!mappingp(aliases))
+    aliases = ([ ]);
+  if (aliases[".project"])
+    retval += "Project:\n"+make_string(aliases[".project"])+"\n";
+  if (aliases[".plan"])
+    return replace(retval+"Plan:\n"+
+              implode(explode(make_string(aliases[".plan"]), ";"), "\n")+"\n",
+              "@@", "@ @ ");
+  return replace(retval+"No plan.\n", "@@", "@ @ ");
+} /* finger_info() */
+
+string www_finger_info(string name) {
+  string retval, nick, *bing, *lords;
+  object ob;
+  int i;
+
+  if ((ob = find_player(name)))
+    ob->save_me();
+  if (file_size("/banish/"+name+".o") > 0)
+    return banish_finger(name);
+  seteuid("Root");
+  if (!"/secure/login"->test_user(name))
+     return 0;
+  title = 0;
+  birth_day = 0;
+  last_log_on = 0;
+  time_on = 0;
+  email = 0;
+  where = 0;
+  real_name = 0;
+  home_dir = 0;
+  guild_ob  = 0;
+  last_on_from = 0;
+  start_time = 0;
+  aliases = ([ ]);
+  restore_object("/players/"+name[0..0]+"/"+name);
+  retval =  "<b>Login name :</b> "+name+"<br><b>Real name :</b> "+
+                            (real_name?real_name:"???")+"<br>";
+  if (birth_day)
+     retval += "<b>Birthday :</b> " + birth_day + "<br>";
+  if (email)
+    if (email[0] != ':')
+      retval += "<b>Email :</b> <a href=\"mailto:"+email+"\">"+email+"</a><br>";
+  if (guild_ob)
+    retval += "<b>Member of :</b> "+guild_ob->query_name()+" guild.<br>";
+  if(where)
+    retval += "<b>Location :</b> "+where+"<br>";
+  if (stringp(map_prop["home page"]))
+    retval += "<b>Home Page :</b> <a href=\""+map_prop["home page"]+
+              "\">"+map_prop["home page"]+"</a><br>";
+/* Find out which domains they are a member of... */
+  if (creator) {
+    bing = get_dir("/d/");
+    lords = ({ });
+    for (i=0;i<sizeof(bing);i++)
+     if (file_size("/d/"+bing[i]) == -2) {
+        if ((string)("/d/"+bing[i]+"/master")->query_dom_lord() == name) {
+          lords += ({ "<a href=\"http:/finger.c?player="+bing[i]+"\">"+
+                      bing[i]+"</a>" });
+        }
+        if (!("/d/"+bing[i]+"/master")->query_member(name)) {
+          bing = delete(bing, i, 1);
+          i--;
+        } else
+          bing[i] = "<a href=\"http:/finger.c?player="+bing[i]+"\">"+
+                        bing[i]+"</a>" ;
+    }
+    if (sizeof(lords)) {
+      retval += "<b>Lord of :</b> "+implode(lords, ", ")+" domain"+
+                (sizeof(lords)>1?"s":"")+".<br>";
+    }
+    if (!sizeof(bing))
+      retval += "<i>Not a member of any domain.</i><br>";
+    else
+      retval += "<b>Member of :</b> "+implode(bing, ", ")+" domain"+
+                (sizeof(bing)>1?"s.<br>":".<br>");
+  }
+  if (start_time)
+    retval += "<b>First logged on :</b> "+ctime(start_time)+".<br>";
+  time_on = -time_on;
+  retval += "<b>Age : </b>";
+  if (time_on > 86400)
+    retval += sprintf("%d days, ", time_on/86400);
+  if (time_on > 3600)
+    retval += sprintf("%d hours, ", (time_on/3600)%24);
+  retval += sprintf("%d minutes and %d seconds old.<br>", 
+                     (time_on/60)%60, time_on%60);
+  if ((ob=find_living(name)))
+    retval += "<b>On since :</b> "+ctime(last_log_on)+"<br>";
+  else {
+    int tmp_time, sec, min, hour, day;
+
+/* Should be a nice number.... */
+    tmp_time = time()-last_log_on;
+    if (!tmp_time) {
+      sec = min = hour = day = 0;
+    }
+    if (tmp_time < 60)
+      retval += "<b>Last logged on :</b> "+tmp_time+" seconds ago.<br>";
+    else if (tmp_time < 60*60) /* One minute */
+      retval += "<b>Last logged on :</b> "+(tmp_time/60)+" minute"+(tmp_time<120?"":"s")+
+                (tmp_time%60?" and "+(tmp_time%60)+" second"+
+                             ((tmp_time%60 < 2)?"":"s"):"")+" ago.<br>";
+    else if (tmp_time < 24*60*60) /* Hours... */
+      retval += "<b>Last logged on :</b> "+(hour = tmp_time/(60*60))+" hour"+
+                (hour<2?"":"s")+((min = (tmp_time/60)%60)?" and "+min+
+                " minute"+(min<2?"":"s"):"")+" ago.<br>";
+    else /* Days.... */
+      retval += "<b>Last logged on :</b> "+(day = tmp_time/(24*60*60))+" day"+
+                (day<2?"":"s")+((hour = (tmp_time/(60*60))%24)?" and "+hour+
+                " hour"+(hour<2?"":"s"):"")+" ago.<br>";
+  }
+  if (ob)
+    if (interactive(ob))
+      retval += "<b>Idle for :</b> "+(query_idle(ob)/60)+" minutes and "+
+                            (query_idle(ob)%60)+" seconds.<br>";
+    else
+      retval += "<i>Net dead.</i><br>";
+   // retval += (string)MAILER->finger_mail(name)+"<br>";
+  if (!mappingp(aliases))
+    aliases = ([ ]);
+  if (aliases[".project"])
+    retval += "<b>Project:</b><br>"+make_string(aliases[".project"])+"<br>";
+  if (aliases[".plan"])
+    return replace(retval+"<b>Plan:</b><br>"+
+              implode(explode(make_string(aliases[".plan"]), ";"), "<br>")+"<br>",
+              "@@", "@ @ ");
+  return replace(retval+"<b>No plan.</b><br>", "@@", "@ @ ")+"<br>";
+} /* finger_info() */

@@ -1,0 +1,209 @@
+/* Standard domain master object
+ * Radix May 10, 1996
+ * Version 1.0
+ */
+/* Oringally bashed from DW I assume, cp'ed into each domain
+ * Cleaned up some, modified by god Baldrick for FRMud
+ * Hacked and made more secure - Hamlet 1996
+ * Cleaned up _alot_, added many new set_* functions and sub-dir
+   permissions, and made into /secure/dom/domain.c - Radix 1996
+ */
+ 
+int open_read, open_write;
+string DOM_LORD, DOMAIN;
+mapping read_perms, write_perms;
+string finger_info;
+mixed members;
+ 
+static void set_domain(string dom) { DOMAIN = dom; }
+static void set_domain_lord(string lord) { DOM_LORD = lord; }
+static void set_open_read(int i) { open_read = i; }
+static void set_open_write(int i) { open_write = i; }
+static void set_finger_info(string info) { finger_info = info; }
+static void set_read_perms(mapping i) { read_perms = i; }
+static void set_write_perms(mapping i) { write_perms = i; }
+
+int query_open_read() { return open_read; }
+int query_open_write() { return open_write; }
+int query_prevent_shadow() { return 1; }
+string query_dom_lord() { return DOM_LORD; }
+string query_info() { return finger_info; }
+ 
+void create() 
+{
+   int i;
+   mapping map;
+ 
+   members = ([ ]);
+   read_perms = ([ ]);
+   write_perms = ([ ]);
+   open_read = 1;
+   open_write = 0;
+   finger_info = "A domain of Final Realms, ask the Thane for info.\n";
+   seteuid("/secure/master"->creator_file(file_name(this_object())));
+   restore_object(file_name(this_object()), 1);
+   if (pointerp(members)) 
+   {
+      map = ([ ]);
+      for (i=0;i<sizeof(members);i++)
+         map[members[i]] = "No Project";
+      members = map;
+   }
+} /* create() */
+ 
+void dest_me() { destruct(this_object()); } 
+
+void save_me() {
+  seteuid("/secure/master"->get_root_uid());
+  save_object(file_name(this_object()), 1);
+  seteuid("/secure/master"->creator_file(file_name(this_object())));
+} /* save_me() */
+ 
+varargs int query_dom_manip(string euid) 
+{
+   if(!euid) euid = geteuid(this_player(1));
+   if((euid == query_dom_lord()) ||
+      (master()->query_lord(euid) &&
+      "/secure/master"->high_programmer(geteuid(this_player()))))
+     return 1;
+   if(lower_case(euid) == DOMAIN)  return 1;
+   return 0;
+}
+
+// Sub-dir permissions, called for both read and write mapping perms
+// returns 0 if access granted, 1 if not
+int query_restricted(mapping perms, string *path, string euid)
+{
+   string *checks, *step;
+   int i,j,caught;
+   mixed arr;
+   if(!sizeof(perms)) return 0;
+
+   checks = keys(perms);
+   for(i=0; i<sizeof(checks); i++)
+   {
+      step = explode(checks[i],"/");
+      if(sizeof(step) > sizeof(path))
+         continue;
+      caught = 0;
+      for(j=0; j<sizeof(step); j++)
+      {
+         if(step[j] != path[j]) break;
+         if(j == sizeof(step) -1) caught = 1;
+      }
+      if(!caught) continue;
+      // we have a match (I think!)
+      arr = perms[checks[i]];
+      if(intp(arr))
+      {
+         if(arr == 1 && !members[euid]) return 1;
+         if(arr == 2 && euid != query_dom_lord()) return 1;
+         return -1;
+      }
+      if(!stringp(arr) && sizeof(arr))
+         if(member_array(euid,arr) != -1) 
+           return -1;
+   }
+   return 0;
+}
+
+int valid_read(string *path, string euid, string funct) 
+{
+   int i;
+   if(query_dom_manip(euid))
+      return 1;
+   i = query_restricted(read_perms, path, euid);
+   if(i < 0) 
+      return 1;
+   if(i) 
+      return 0;
+   if(query_open_read())
+      return 1;
+   return (members[euid] != 0);
+}
+ 
+int valid_write(string *path, string euid, string funct) 
+{
+   int i;
+   if(query_open_write()) 
+      return 1;
+   if(query_dom_manip(euid))
+      return 1;
+   if(path[2]=="master" || path[2]=="master.c" || path[2]=="master.o")
+      return 0;
+   if(euid == "Dom: "+DOMAIN) 
+      return 1;
+   // Sub-Dir checks - Gives me a headache, Radix
+   i = query_restricted(write_perms, path, euid);
+   if(i < 0) 
+      return 1;
+   if(i) 
+      return 0;
+   return (members[euid] != 0);
+}
+ 
+/* please note the + ({ })... this is for security reasons.
+ */
+string *query_members() { return keys(members) + ({ }); }
+ 
+int add_member(string name) 
+{
+   if(!query_dom_manip(geteuid(this_player(1)))) return 0;
+   if(members[name]) return 0;
+   members[name] = "No Project";
+   save_me();
+   return 1;
+} /* add_member() */
+ 
+int remove_member(string name) 
+{
+   int i;
+   if(!query_dom_manip(geteuid(this_player(1)))) return 0;
+   if(!members[name]) return 0;
+   members = m_delete(members, name);
+   save_me();
+   return 1;
+} /* remove_member() */
+ 
+int set_project(string name, string pro) 
+{
+   if(!query_dom_manip(geteuid(this_player(1)))) return 0;
+   if(!members[name]) return 0;
+   if(!pro || pro == "") pro = "No Project";
+   members[name] = pro;
+   save_me();
+   return 1;
+} /* set_project() */
+ 
+int query_member(string name) 
+{
+   return !undefinedp(members[name]) || name == DOM_LORD;
+} /* query_member() */
+ 
+string query_project(string name) 
+{
+   if(!members[name])
+      return "project unset";
+   return members[name];
+} /* query_project() */
+ 
+void smart_log(string error, string where) 
+{
+   write_file("d/"+DOMAIN+"/player_reports", error);
+} /* smart_log() */
+ 
+string log_who(string where) 
+{
+   return DOM_LORD;
+} /* log_who() */
+ 
+string author_file(string *str) 
+{
+   switch (str[1]) 
+   {
+      case "fr" : 
+         return DOM_LORD;
+      default: return "baldrick";
+   }
+} /* author_file() */
+ 
