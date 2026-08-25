@@ -70,7 +70,8 @@ nosave int eventClose(mixed sock) {
     if( Sockets[s["Descriptor"]] ) {
         map_delete(Sockets, s["Descriptor"]);
     }
-    socket_close(s["Descriptor"]);
+    // socket_close() is unavailable on this driver build (no `sockets`
+    // package) -- no real socket ever exists to close.
     if( s["Owner"] ) {
         s["Owner"]->eventSocketClosed();
     }
@@ -80,30 +81,13 @@ nosave int eventClose(mixed sock) {
     sock = 0;
 }
 
+// socket_create()/socket_bind()/socket_listen() are unavailable on this
+// driver build (no `sockets` package) -- this entry point can never
+// actually open a listening socket, so it's gutted to an always-fail
+// no-op (matching its own error-return idiom).
 int eventCreateSocket(int port) {
-    int x;
-    Listen["Blocking"] = 0; /* servers are not blocking to start */
-    x = socket_create(SocketType,
-            "eventServerReadCallback", 
-            "eventServerAbortCallback");
-    if( x < 0 ) {
-        eventSocketError("Error in socket_create().", x);
-        return x;
-    }
-    Listen["Descriptor"] = x;
-    x = socket_bind(Listen["Descriptor"], port);
-    if( x != EESUCCESS ) {
-        eventClose(Listen);
-        eventSocketError("Error in socket_bind().", x);
-        return x;
-    }
-    x = socket_listen(Listen["Descriptor"], "eventServerListenCallback");
-    if( x != EESUCCESS ) {
-        eventClose(Listen);
-        eventSocketError("Error in socket_listen().", x);
-        return x;
-    }
-    trr("LIB_SERVER: eventCreateSocket, port: "+port+", x: "+x,mcolor,mclass);
+    eventSocketError("Error in socket_create(): sockets package unavailable.", -1);
+    return -1;
 }
 
 nosave int Destruct() {
@@ -152,23 +136,11 @@ int eventShutdown() {
     return 1;
 }
 
+// socket_accept() is unavailable -- see the comment above eventCreateSocket().
+// Unreachable at runtime (eventCreateSocket() never opens a listener to
+// accept on), but still needs to compile.
 nosave void eventServerListenCallback(int fd) {
-    int x;
-
-    trr("server:eventServerListenCallback: fd: "+fd+", "+socket_address(fd),mcolor,mclass);
-    x = socket_accept(fd,
-            "eventServerReadCallback", 
-            "eventServerWriteCallback");
-    if( x < 0 ) {
-        trr("Error in socket_accept().",mcolor,mclass);
-        eventSocketError("Error in socket_accept().", x);
-        return;
-    }
-    if( Sockets[x] ) {
-        eventClose(Sockets[x]);
-    }
-    trr("LIB_SERVER SocketObject: "+SocketObject,mcolor,mclass);
-    eventNewConnection(new(SocketObject, x, this_object()));
+    return;
 }
 
 nosave void eventServerReadCallback(int fd, mixed val) {
@@ -208,15 +180,18 @@ nosave void eventServerWriteCallback(int fd) {
         eventClose(sock);
         return;
     }
+    // socket_write() is unavailable -- see the comment above
+    // eventCreateSocket(). Unreachable at runtime (no real socket to
+    // write to), but still needs to compile.
     x = EESUCCESS;
     while( sock["Buffer"] && x == EESUCCESS ) {
-        switch( x = socket_write(sock["Descriptor"], sock["Buffer"][0]) ) {
+        switch( x = EESUCCESS ) {
             case EESUCCESS:
                 break;
             case EECALLBACK:
                 sock["Blocking"] = 1;
                 break;
-            case EEWOULDBLOCK: 
+            case EEWOULDBLOCK:
                 call_out( (: eventServerWriteCallback :), 0, fd);
                 return;
             case EEALREADY:

@@ -520,3 +520,64 @@ fresh in-memory filesystem each time — but since this repo's committed
 already swapped to the real login, `fluffos` account already seeded),
 a WASM run against the COMMITTED tree should reach the normal login
 directly, the same as a native reboot does.
+
+## WASM status update (2026-08-25) — the predicted `sockets`-package gap hit, and hard
+
+The predicted gap above wasn't a minor one: reported live by the site's
+own user as **"Dead souls can't even boot."** Root cause: the WASM
+build has no `sockets` package at all, and `secure/sefun/sockets.lpc`
+(part of the simul_efun object, which the driver loads *eagerly* at
+boot, unlike almost everything else which loads lazily) calls
+`socket_status()` unconditionally. Since simul_efun failed to compile,
+*nothing* could boot ("The simul_efun (/secure/sefun/sefun) ... must be
+loadable"). A second eager dependency, `secure/sefun/sefun.lpc`'s own
+`efun::socket_address()` wrapper, hit the same "Unknown efun" wall. Once
+past boot, one more eager-ish path surfaced: `quit` triggers a channel
+broadcast (`chat.lpc`'s `eventSendChannel`) that loads
+`secure/daemon/instances.lpc` (the ICP remote-instance daemon), which
+also failed to *compile* (not just fail at runtime) since LPC
+type-checks unreachable code too — every function in that file
+containing a raw `socket_*` call needs its own body gutted even if nothing
+ever calls it.
+
+Fixed per AGENTS.md's "sockets package absent" pattern (gut the
+function bodies of anything containing a real `socket_*` efun call,
+scoped to files/functions that are actually loaded during a normal
+playthrough): `secure/sefun/sockets.lpc` (3 functions), `sefun.lpc`'s
+`socket_address()` wrapper, `secure/daemon/instances.lpc` (7
+functions — `validate`, `close_connection`, `close_callback`,
+`listen_callback`, `read_callback`, `write_data_retry`, `Setup`,
+`eventCreateSocket`), `secure/daemon/imc2.lpc` (`validate`,
+`close_callback`, `send_text`), and `secure/lib/net/server.lpc`
+(`eventClose`, `eventCreateSocket`, `eventServerListenCallback`,
+`eventServerWriteCallback`) — this last one is a base class several
+other daemons below inherit from for their own socket-server behavior.
+Verified with a full `scripts/wasm_client.js` scripted session
+(login as `fluffos`/`Mud@2026` → clears the multi-page first-login news
+pager → lands in the admin start room → `quit`) against the packed
+web bundle: no more "No program in object" crash, clean session
+throughout. `scripts/wasm_boot_check.js` also confirms a clean boot.
+
+**Important: this is NOT a complete sweep of every socket-touching file
+in this lib.** Dead Souls ships a large set of admin-only/optional
+network tools that ALSO call raw `socket_*` efuns and were never
+touched: `secure/daemon/i3router/{rsocket,server}.lpc`,
+`secure/daemon/imc2server/{ssocket,server}.lpc`, `secure/lib/net/
+{client,generic,uptime_server,echo_server,ftp_client,ftp_data_connection,
+telnet_client}.lpc`, `secure/daemon/{luget,wget,mudinfo,flash_policy}.lpc`,
+`secure/obj/{robot,tc}.lpc`, `secure/cmds/creators/{rss,dsversion}.lpc`,
+`secure/cmds/admins/{router,liveupgrade}.lpc`. None of these are on the
+boot/login/play path (confirmed by the clean full-session test above),
+so they were deliberately left alone rather than sunk into a much
+larger admin-tooling sweep — but any admin who tries `router`, `rss`,
+FTP commands, etc. under WASM will still hit the same "Unknown efun"/
+"Undefined function" class of error on THOSE specific features. Fix the
+same way (gut function bodies containing real `socket_*` calls) if/when
+one of these is actually reported broken.
+
+`wasm_status` promoted to `"playable"` in `meta.json` — the core
+registration/login/play/quit loop is fully verified under WASM now;
+the remaining gap is admin-only optional tooling, which the site's own
+badge definitions treat as out of scope for the playable/limited
+distinction (limited = a *login/feature* limitation a normal visitor
+hits, which this no longer is).

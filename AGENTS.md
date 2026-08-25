@@ -4032,6 +4032,44 @@ to also check the same lib's `versiond.lpc` for the sibling
 `in_server()` pattern while there — it's cheap to check once already
 inside a lib's `messaged.lpc` fix.
 
+**New failure shape, WASM-specific and uniquely severe: the gap lands in
+simul_efun itself, which loads EAGERLY, not lazily.** Every case above
+is a lazily-loaded daemon — the compile failure only bites once
+something actually calls it, so the symptom is "one feature is broken"
+at worst. `ds386` (Dead Souls 3.8.6) hit a fundamentally worse version
+of this under the WASM build specifically (no `sockets` package there
+at all, unlike this lib's own NATIVE driver which has it — native
+testing had already passed clean and found none of this): its
+`secure/sefun/sockets.lpc` (part of the simul_efun object, which the
+driver loads eagerly at boot — the ONE thing that is never lazy) calls
+`socket_status()` unconditionally, and `secure/sefun/sefun.lpc` itself
+also directly wraps `efun::socket_address()`. Simul_efun failing to
+compile means the driver reports `*No program in object
+'/secure/sefun/sefun'! ... The simul_efun ... and master ... objects
+must be loadable` and refuses to boot AT ALL — reported live by a user
+as "Dead souls can't even boot," not a degraded/partial experience.
+Fixed with this section's standard remedy (gut the socket-touching
+function bodies), same as always — the only new lesson is **when
+auditing a NEW lib for a WASM pass, check the simul_efun file(s) for
+raw `socket_*` calls FIRST and specifically**, before anything else in
+this section's checklist, since a hit there is boot-fatal in a way a
+hit in an ordinary lazily-loaded daemon never is. Also hit on the same
+lib, one level less severe: `secure/daemon/instances.lpc` (an ICP
+remote-instance-tracking daemon) failed to compile the moment `quit`
+triggered a chat-channel broadcast that referenced it — a reminder that
+"lazy" can still mean "hit on the very first ordinary player action,"
+not just "only if an admin uses an obscure feature." Full writeup:
+[[project_curator_mandate_site_i18n_seo]] memory and `libs/ds386/
+NOTES.md`'s "WASM status update" section. Given Dead Souls' large
+bundled set of optional network tools (i3router, IMC2, FTP client/
+server, RSS, wget, echo/uptime servers, etc. — none on the boot/login/
+play path), this was fixed for the eager/near-eager cases only, not
+swept exhaustively; the same fix pattern applies to any of the rest if
+one is ever actually reported broken. Worth checking specifically on
+`discworld`/`deadsouls_fluffos`/`nightmare3`/`lima` (all still pending
+their own WASM pass as of 2026-08-25) since `deadsouls_fluffos` in
+particular is presumably the same codebase family.
+
 ### 7.53 A daemon's own defensive `seteuid(getuid())` silently resets a euid that `create()` deliberately set
 
 If a daemon's real uid never resolves (e.g. `master.lpc`'s
