@@ -675,6 +675,61 @@ grep -rn "efun::set(\|efun::query(\|efun::delete(" .                 # §7.15
 Plus the WASM-era standards: loopback-allow patch (§1.3b), legacy-gate
 bypass (§1.3e), admin seeding (§1.5).
 
+### 2.3 Onboarding an already-git-hosted, already-FluffOS-adapted source
+
+Not every entry starts as a raw legacy archive. `imud` (161,
+`git clone https://github.com/fluffos/imud`, the FluffOS project's own
+`imud.fluffos.info` demo) is the first of a different, lighter-weight
+class: a small modern repo that's already UTF-8, already builds under
+this driver, and needs no §4 encoding work. Lessons that will apply to
+the next one of these:
+
+- **Still run `scripts/convert_lib.sh`, don't hand-skip the rename.**
+  Even though the source was pure ASCII/UTF-8 already (0 lossy
+  conversions), it still shipped as `.c` (this driver resolves `.c`
+  exactly and extensionless-then-`.lpc`-then-`.c`, so the original
+  config's extensionless `master file : /secure/master` would have
+  quietly kept working without renaming) — but this project's whole
+  corpus is `.lpc` by convention, and the script's rename + literal-
+  `.c\"`-reference fixups (9 hits here) are cheap and safe to run
+  unconditionally rather than eyeballing whether they're "needed."
+- **A small repo can still have real dead code that fails
+  `lpcc_check.sh`.** 8 of 23 files failed standalone compilation
+  (`imud`'s bundled-but-never-`inherit`ed Intermud-3 extension modules —
+  `channel`/`tell`/`emoteto`/`who`/`finger`/`locate`/`oob`/`file`/`mail`,
+  referencing headers and daemons that don't exist in this stripped
+  repo). Verify non-loading via `grep` for the failing paths outside
+  their own files before writing them off — here every failure was
+  behind a commented-out `inherit` line in the one file that would have
+  loaded them, i.e. upstream's own disabled scaffolding, not a
+  regression from conversion. Don't spend time making dead code compile.
+- **"Boots and plays" can validly mean something much thinner than the
+  usual bar.** This lib has no login/registration, no player object
+  save data, and no rooms at all — `connect()` drops straight into an
+  anonymous session with exactly two commands. The §2 "definition of
+  done" (real Chinese name, `look`/`score`/`quit`) doesn't apply
+  mechanically; verify instead that every command the lib actually
+  implements produces correct output, and record clearly in NOTES.md
+  that the thin surface is the lib's real, intentional scope, not a
+  conversion failure. Similarly, §1.5's admin-account seeding is simply
+  N/A when there's no account/wizard-rank system to seed into — don't
+  force it.
+- **A source can have a genuine, intentional live-network side effect at
+  boot**, unlike literally every other lib in this corpus (which are
+  all sandboxed, no outbound connections). `imud`'s whole point is
+  demonstrating Intermud-3: booting it makes a real outbound socket
+  connection to the public `*i4` router and briefly registers this
+  host's public IP under the demo's name in the real, live I3 mudlist —
+  confirmed by seeing our own boot's entry come back in a live
+  `mudlist` command response. This is correct, intended behavior for
+  this specific lib (not a bug to patch away), but it means this lib
+  should NOT be swept into high-frequency automated re-boot loops
+  (§10.0-style long-sit scans, round-two/round-three re-test cron) the
+  way every other lib safely can be — each boot is a real network event
+  against a real third party. Flag this prominently in a lib's NOTES.md
+  the moment you notice a mudlib initiating outbound `socket_create()`/
+  `socket_connect()` at preload/`create()` time, not buried mid-file.
+
 ---
 
 ## 3. Archive extraction traps
