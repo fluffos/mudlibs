@@ -255,7 +255,9 @@ for slug in $SLUGS; do
   cp -al "$CACHE_DIR/packed/$slug" "$SITE_DIR/$slug" 2>/dev/null \
     || cp -a "$CACHE_DIR/packed/$slug" "$SITE_DIR/$slug"
 done
-cp "$CACHE_DIR/index-staging/index.html" "$SITE_DIR/index.html"
+for f in index.html robots.txt sitemap.xml llms.txt llms-full.txt; do
+  cp "$CACHE_DIR/index-staging/$f" "$SITE_DIR/$f"
+done
 touch "$SITE_DIR/.nojekyll"
 
 # --- 9. summary --------------------------------------------------------------

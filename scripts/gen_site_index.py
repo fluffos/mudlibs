@@ -48,6 +48,21 @@ Outputs:
                      build artifact for scripts/build_site.sh (which reads
                      it for the packable-slugs list) and for inspectability.
   <out>/index.html   the site index (default: site/index.html)
+  <out>/robots.txt   allow-all + sitemap pointer, for search crawlers.
+  <out>/sitemap.xml  the root index + every linked (non-noboot) lib's play
+                     page, so search engines can discover them without
+                     executing the index page's client-side search JS.
+  <out>/llms.txt     a concise, hand-readable-markdown overview for LLM
+                     agents/crawlers, per the llms.txt convention
+                     (llmstxt.org) -- what this site is, key facts, and
+                     links out (including to llms-full.txt) rather than a
+                     wall of content, since an agent that wants the full
+                     game list can follow that link.
+  <out>/llms-full.txt  the "full" companion the llms.txt convention
+                     expects: every linked lib as one markdown bullet
+                     (name, slug, status, description), generated fresh
+                     from the same meta.json/README data as the cards --
+                     no separate list to keep in sync by hand.
 
 Usage: python3 scripts/gen_site_index.py [--out DIR] [--commits FILE]
 """
@@ -62,6 +77,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 REPO_URL = "https://github.com/fluffos/mudlibs"
+SITE_URL = "https://mudlibs.fluffos.info"
 
 # libs/<slug>/meta.json's wasm_status enum -> the site's 3-tier badge.
 # "limited"/"password-protected" both mean "boots, but login is blocked or
@@ -307,12 +323,33 @@ def render_index(status, commits):
     n_no = counts.get("noboot", 0)
     cards_html = "\n".join(cards)
 
+    page_title = "中文 MUD 博物馆 — 浏览器直接游玩"
+    meta_desc = (
+        f"收藏了 {n_total} 个上世纪九十年代至今的中文 LPC MUD(泥潭)游戏库,"
+        f"其中 {n_play} 款可在浏览器内通过 WebAssembly 完整游玩,无需安装、"
+        "无需服务器。每款游戏都标注了预置管理员账号,登录即有巫师权限。"
+        "A browser-playable archive of restored classic Chinese LPC MUD "
+        "(mudlib) games, running on the FluffOS driver via WebAssembly.")
+    meta_desc_attr = html.escape(meta_desc)
+
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>中文 MUD 博物馆 — 浏览器直接游玩</title>
+<title>{html.escape(page_title)}</title>
+<meta name="description" content="{meta_desc_attr}">
+<link rel="canonical" href="{SITE_URL}/">
+<link rel="alternate" type="text/plain" title="llms.txt" href="{SITE_URL}/llms.txt">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="中文 MUD 博物馆">
+<meta property="og:title" content="{html.escape(page_title)}">
+<meta property="og:description" content="{meta_desc_attr}">
+<meta property="og:url" content="{SITE_URL}/">
+<meta property="og:locale" content="zh_CN">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{html.escape(page_title)}">
+<meta name="twitter:description" content="{meta_desc_attr}">
 <style>
   :root {{
     --bg: #0b0e14; --fg: #d5dbe5; --dim: #6b7484; --accent: #7aa2f7;
@@ -455,6 +492,110 @@ def render_index(status, commits):
 """
 
 
+def render_robots_txt():
+    return f"""User-agent: *
+Allow: /
+
+Sitemap: {SITE_URL}/sitemap.xml
+"""
+
+
+def render_sitemap_xml(status):
+    """Root index + every linked (non-noboot) lib's play page. noboot
+    entries have no page of their own (see render_index's `linked`
+    check) so they're excluded here too."""
+    libs = status["libs"]
+    numbers = load_numbers()
+    slugs = sorted(
+        (slug for slug, info in libs.items() if info["status"] != "noboot"),
+        key=lambda s: (numbers.get(s, (9999, 0)), s))
+    urls = [f"  <url><loc>{SITE_URL}/</loc><changefreq>weekly</changefreq></url>"]
+    for slug in slugs:
+        urls.append(
+            f"  <url><loc>{SITE_URL}/{html.escape(slug)}/</loc>"
+            "<changefreq>monthly</changefreq></url>")
+    body = "\n".join(urls)
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{body}
+</urlset>
+"""
+
+
+def render_llms_txt(status):
+    """Concise llms.txt (llmstxt.org convention): what this is, key
+    facts, and links out -- including to llms-full.txt for the
+    exhaustive per-game list, rather than inlining all of it here."""
+    counts = status["counts"]
+    n_total = len(status["libs"])
+    n_play = counts.get("playable", 0)
+    n_lim = counts.get("limited", 0)
+    n_no = counts.get("noboot", 0)
+    return f"""# 中文 MUD 博物馆 (Chinese MUD Museum)
+
+> A browser-playable archive of {n_total} restored classic Chinese LPC MUD (mudlib) games from the 1990s onward, running on the FluffOS driver compiled to WebAssembly -- no install, no server, click and play.
+
+This project (fluffos/mudlibs) extracts, restores, and documents Chinese-language LPC mudlib archives -- mostly wuxia/xianxia titles, several based on Jin Yong novels -- fixing decades of bitrot (GBK/UTF-8 encoding bugs, dead code, driver incompatibilities, missing content) while preserving the original gameplay and source code. Every entry ships with a pre-seeded admin/wizard account (shown on its card, marked with 🔑) for immediate full-access exploration of the game world and its code, and a per-library NOTES.md documents every restoration change made.
+
+## Key facts
+
+- {n_total} total libraries: {n_play} fully playable in-browser, {n_lim} boot{'s' if n_lim == 1 else ''} but {'has' if n_lim == 1 else 'have'} a login/feature limitation (usually a missing browser-environment capability like `query_ip_number()`), {n_no} not yet bootable under WebAssembly (most still run natively).
+- Driver: [FluffOS](https://github.com/fluffos/fluffos), an actively-maintained LPMud/LPC driver, compiled to WebAssembly for in-browser play.
+- Language/setting: all games are Chinese-language LPC MUDs (泥潭), primarily wuxia (武侠) and xianxia (仙侠) themed.
+- Source code, restoration notes (AGENTS.md), and native-driver play instructions: [github.com/fluffos/mudlibs]({REPO_URL})
+
+## Full game list
+
+See [llms-full.txt]({SITE_URL}/llms-full.txt) for every game: name, slug, status, and a one-line description.
+
+## Docs
+
+- [Project README]({REPO_URL}/blob/main/README.md)
+- [FluffOS driver](https://github.com/fluffos/fluffos)
+"""
+
+
+def render_llms_full_txt(status):
+    """The llms.txt convention's "full" companion: every linked lib as
+    one markdown bullet, grouped by status. Generated fresh from the
+    same meta.json/README data as the HTML cards -- no separate list to
+    keep in sync by hand."""
+    libs = status["libs"]
+    numbers = load_numbers()
+
+    def bullet(slug, info):
+        name = info["name"]
+        desc = info["description"]
+        line = f"- **{name}** (`{slug}`)"
+        if desc:
+            line += f" — {desc}"
+        return line
+
+    sections = []
+    for status_key, heading in (
+        ("playable", "## Fully playable (✅)"),
+        ("limited", "## Boots, login/feature limited (⚠️)"),
+        ("noboot", "## Not yet bootable in-browser (❌, native-only)"),
+    ):
+        entries = sorted(
+            ((slug, info) for slug, info in libs.items()
+             if info["status"] == status_key),
+            key=lambda kv: (numbers.get(kv[0], (9999, 0)), kv[0]))
+        if not entries:
+            continue
+        lines = [heading, ""]
+        lines.extend(bullet(slug, info) for slug, info in entries)
+        sections.append("\n".join(lines))
+
+    body = "\n\n".join(sections)
+    return f"""# 中文 MUD 博物馆 — full game list
+
+Companion to [llms.txt]({SITE_URL}/llms.txt). Every library in this archive, grouped by browser-playability. `noboot` entries link to nothing on the site itself (they're native-driver-only for now) but their source and restoration notes are still in the repo at `{REPO_URL}/tree/main/libs/<slug>`.
+
+{body}
+"""
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(REPO / "site"),
@@ -486,10 +627,17 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "index.html").write_text(render_index(status, commits),
                                         encoding="utf-8")
+    (out_dir / "robots.txt").write_text(render_robots_txt(), encoding="utf-8")
+    (out_dir / "sitemap.xml").write_text(render_sitemap_xml(status),
+                                          encoding="utf-8")
+    (out_dir / "llms.txt").write_text(render_llms_txt(status), encoding="utf-8")
+    (out_dir / "llms-full.txt").write_text(render_llms_full_txt(status),
+                                            encoding="utf-8")
 
     total = len(status["libs"])
     print(f"derived from meta.json: {total} libs -> {status['counts']}")
     print(f"index written to {out_dir / 'index.html'}")
+    print(f"robots.txt, sitemap.xml, llms.txt, llms-full.txt written to {out_dir}")
 
 
 if __name__ == "__main__":
