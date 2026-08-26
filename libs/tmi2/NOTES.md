@@ -170,7 +170,32 @@ the whole tree) before writing it off:
   live registration-to-gameplay session with zero entries in
   `/log/runtime` after the fixes in \S2.
 
-## 5. Status
+## 5. Live outbound network connection at boot (Intermud-3)
+
+Like `imud` (§2.3 in AGENTS.md), this lib has a genuine, intentional
+live-network side effect at boot, unlike almost every other lib in this
+corpus (which are all sandboxed with no outbound connections). `adm/
+daemons/network/I3.lpc` is preloaded at boot (via the live `channels`
+preload chain / first `check_router()` call) and connects out to a real,
+hardcoded public Intermud-3 router (`include/net/i3.h`:
+`I3_ROUTER "97.107.133.86 8787"`, `ROUTER_NAME "*dalet"`) using the real
+`socket_create()`/`socket_connect()` efuns in `adm/daemons/network/
+socket.lpc`. Confirmed live: booting this lib updates `adm/etc/I3.o`'s
+saved `mudlist_id`/`mudlist` fields with a real, current snapshot of the
+live public I3 mudlist (dozens of real other muds -- CoffeeMud, VargonMUD,
+CircleMUD-family servers, etc. -- with real IPs/ports), i.e. a real
+outbound connection and a real registration/mudlist exchange with a
+public third-party service, not a local-only simulation.
+
+This is correct, intended upstream behavior (not a bug introduced by this
+port), but it means **this lib should NOT be swept into high-frequency
+automated re-boot loops** (round-two/round-three-style long-sit scans,
+periodic re-verification passes) the way every other sandboxed lib in
+this corpus safely can be -- each boot is a real network event against a
+real third party's infrastructure. Treat this the same way `imud` is
+already flagged.
+
+## 6. Status
 
 Boots clean: zero compile errors, zero uncaught runtime errors in
 `log/runtime` across repeated fresh-driver boots. Full registration (a

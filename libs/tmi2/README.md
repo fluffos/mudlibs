@@ -75,6 +75,17 @@ character on this install), then given root file-group membership.
 Verified live: `update /cmds/wiz/_goto` and `update /adm/daemons/quota`
 both succeed ("Updated and loaded.").
 
+## Live network connection at boot
+
+Like `imud` in this collection, booting this lib makes a real outbound
+connection to the public Intermud-3 router network (a hardcoded router
+IP in `include/net/i3.h`) and exchanges a real mudlist/registration with
+it -- confirmed by seeing dozens of real other muds (with real IPs) come
+back in the saved I3 state after a boot. This is correct, intended
+upstream behavior, but means this lib should not be swept into
+high-frequency automated re-boot testing loops the way fully-sandboxed
+libs in this collection can be. See `NOTES.md` \S5.
+
 ## Status
 
 Boots clean: zero compile errors and zero uncaught runtime errors in
