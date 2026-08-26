@@ -211,7 +211,20 @@ password -> gender (`male`/`female`/`neuter`/`hermaphrodite`) -> race
 `shadow`/`ent`/`siren`/`skeleton`/`zombie`) -> email address (validated,
 `user@host` form required) -> real name -> drops into the game world.
 
-WASM status: not attempted this session (`wasm_status` left `""`).
+## WASM status update (2026-08-26, another session)
+
+Promoted `wasm_status` from `""` to `playable`. Same root-cause class
+as `ds386`/`discworld`/`deadsouls_fluffos`: `adm/simul_efun/
+dump_socket_status.lpc` (part of the eagerly-loaded simul_efun object)
+called `socket_status()` unconditionally, undefined on this driver
+build (no `sockets` package). Gutted to a safe stub (diagnostic admin
+tool only, not on the boot/login path). No other socket-related
+eager-load failures found. Verified with a scripted WASM session:
+login as `fluffos`/`FluffOS2026Admin`, arrival in the famous TMI-2 quad
+room with the correct description. `look`/`score`/`quit` weren't
+recaptured distinctly in this transcript (absorbed by the first-login
+news pager) but are already verified clean under native testing above
+and untouched by this fix.
 
 ## Local run
 
