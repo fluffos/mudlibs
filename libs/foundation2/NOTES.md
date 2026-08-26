@@ -306,6 +306,16 @@ were `creator_file()` traces from the `lpcc_check.sh` batch runs that share
 this lib's `log/` directory, not from the live driver -- confirmed by their
 file-modification time not advancing while the real driver was up).
 
-## WASM status
+## WASM status update (2026-08-26, another session)
 
-Not attempted this session -- `wasm_status` left `""`.
+Promoted `wasm_status` from `""` to `playable`. Same root-cause class
+as `ds386`/`discworld`/`deadsouls_fluffos`/`tmi2`: `secure/sefun/
+sefun.lpc`'s own `dump_socket_status()` (part of the eagerly-loaded
+simul_efun object) called `socket_status()` unconditionally, undefined
+on this driver build (no `sockets` package). Gutted to a safe stub
+(diagnostic admin tool only, not on the boot/login path). No other
+socket-related eager-load failures found. Verified with a scripted
+WASM session: login (`fluffos`/`Mud@2026`), arrival in the correct
+starting cavern room, and `inventory` producing correct output.
+`quit` wasn't recaptured distinctly in this transcript but is already
+verified clean under native testing above and untouched by this fix.
