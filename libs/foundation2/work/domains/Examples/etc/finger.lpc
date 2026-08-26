@@ -1,0 +1,50 @@
+/*    /domains/Examples/etc/finger.c
+ *    from the Foundation II LPC Library
+ *    an internet finger application (also in /secure/cmds/creator)
+ *    created by Descartes of Borg 950428
+ */
+
+#include <lib.h>
+
+inherit LIB_DAEMON;
+
+private nosave mapping Requests;
+
+void eventRead(string str);
+
+nosave void create() { 
+    daemon::create();
+    Requests = ([]);
+}
+
+mixed cmd(string args) {
+    string user, host;
+    object ob;
+
+    if( !args || args == "" ) return "Finger whom at where?";
+    if( sscanf(args, "%s@%s", user, host) != 2 ) {
+	if( sscanf(args, "@%s", host) ) user = "";
+	else return "Finger whom at where?";
+    }
+    ob = new(LIB_CLIENT);
+    ob->SetRead( (: eventRead :) );
+    ob->eventCreateSocket(host, 79);
+    ob->eventWrite(user);
+    Requests[ob] = ([ "who" : this_player(), "whom" : user, "host" : host ]);
+    message("system", "Finger sent to " + host + ".", this_player());
+    return 1;
+}
+
+void eventRead(string str) {
+    object ob;
+
+    ob = previous_object();
+    if( !Requests[ob] ) return;
+    if( !Requests[ob]["who"] ) {
+	map_delete(Requests, ob);
+	ob->eventDestruct();
+	return;
+    }
+    message("system", "Finger from " + Requests[ob]["host"] + ":\n" + str +
+	    "\n", Requests[ob]["who"]);
+}

@@ -1,0 +1,186 @@
+/*    /secure/obj/sefun.c
+ *    from Foundation II
+ *    the mud sefun object
+ *    created by Descartes of Borg 940213
+ */
+
+#include <daemons.h>
+#include <commands.h>
+#include <objects.h>
+#include <localtime.h>
+#include "sefun.h"
+
+#include "/secure/sefun/absolute_value.lpc"
+#include "/secure/sefun/base_name.lpc"
+#include "/secure/sefun/communications.lpc"
+#include "/secure/sefun/convert_name.lpc"
+#include "/secure/sefun/distinct_array.lpc"
+#include "/secure/sefun/ed_compat.lpc"
+#include "/secure/sefun/english.lpc"
+#include "/secure/sefun/events.lpc"
+#include "/secure/sefun/files.lpc"
+#include "/secure/sefun/format_page.lpc"
+#include "/secure/sefun/get_object.lpc"
+#include "/secure/sefun/identify.lpc"
+#include "/secure/sefun/interface.lpc"
+#include "/secure/sefun/load_object.lpc"
+#include "/secure/sefun/log_file.lpc"
+#include "/secure/sefun/mud_info.lpc"
+#include "/secure/sefun/ordinal.lpc"
+#include "/secure/sefun/path_file.lpc"
+#include "/secure/sefun/percent.lpc"
+#include "/secure/sefun/pointers.lpc"
+#include "/secure/sefun/absolute_path.lpc"
+#include "/secure/sefun/security.lpc"
+#include "/secure/sefun/strings.lpc"
+#include "/secure/sefun/to_object.lpc"
+#include "/secure/sefun/user_exists.lpc"
+#include "/secure/sefun/visible.lpc"
+
+int tail(string file) {
+    string str;
+    int diff;
+
+    diff = file_size(file);
+    if (diff < 0) return 0;
+
+    diff -= 1024;
+    if (diff < 0) diff = 0;
+    str = read_bytes(file, diff, 1024);
+    if (!str) return 0;
+    if (diff) str = str[strsrch(str, "\n")+1..];
+
+    write(str);
+
+    return 1;
+}
+
+string timestamp(){
+    string rawtz;
+    int *t, gmtoff, offset;
+
+    gmtoff = localtime(time())[LT_GMTOFF];
+
+    t = localtime(time());
+    return sprintf("%04d.%02d.%02d-%02d.%02d", t[LT_YEAR], (t[LT_MON])+1, t[LT_MDAY], t[LT_HOUR], t[LT_MIN]);
+}
+
+varargs string get_stack( int x) {
+    int i, s;
+    string list = "";
+    string *stack0 = call_stack(0);
+    string *stack1 = call_stack(1);
+    string *stack2 = call_stack(2);
+    for(i = 0, s = sizeof(stack1); i < s; i++){
+        list +="\n"+i+":"+identify(stack2[i])+"."+identify(stack1[i])+"."+identify(stack2[i]);
+    }
+
+    if(x){
+        list += "\n"+ identify(previous_object(-1));
+    }
+
+    return list;
+}
+
+void tc(string mess){
+    object crat = find_player("god");
+    string sauce = base_name((previous_object() || this_object()));
+    if(crat) tell_object(crat, sauce +": "+mess+"\n");
+    //if(crat) crat->receive_private_msg(sauce+": "+mess, PRIVATE_MSG);
+    debug_message(sauce +": "+mess);
+    flush_messages();
+}
+
+string dump_socket_status() {
+    string ret;
+    string *finalsocks, *sock_array = ({});
+    int i, quant = sizeof(socket_status());
+    for(i = 0; i < quant; i++){
+        sock_array += ({ socket_status(i) });
+    }
+    finalsocks = sock_array;
+
+    ret = @END
+Fd    State      Mode       Local Address          Remote Address
+--  ---------  --------  ---------------------  ---------------------
+END;
+
+    foreach (mixed *item in finalsocks) {
+        int memb = member_array(item, finalsocks);
+        ret += sprintf("%2d  %|9s  %|8s  %-21s  %-21s\n", memb, item[1], item[2], item[3], item[4]);
+    }
+
+    return ret;
+}
+
+int destruct(object ob) {
+    string *privs;
+    string tmp;
+   
+    if(previous_object(0) == ob) return efun::destruct(ob);
+    if(!(tmp = query_privs(previous_object(0)))) return 0;
+    if(member_array(PRIV_SECURE, explode(tmp, ":")) != -1)
+      return efun::destruct(ob);
+    privs = ({ file_privs(file_name(ob)) });
+    if((int)master()->valid_apply(({ "ASSIST" }) + privs))
+      return efun::destruct(ob);
+    else return 0;
+}
+    
+varargs void shutdown(int code) {
+    if(!((int)master()->valid_apply(({})))) return;
+    if(this_player())
+      log_file("shutdowns", (string)this_player()->GetCapName()+
+        " shutdown "+mud_name()+" at "+ctime(time())+"\n");
+    else log_file("shutdowns", "Game shutdown by "+
+      file_name(previous_object(0))+" at "+ctime(time())+"\n");
+    catch(NETWORK_D->send_shutdown());
+    efun::shutdown(code);
+}
+
+varargs object snoop(object who, object target) {
+    if(!target) return efun::snoop(who);
+    if(!creatorp(who)) return 0;
+    if(!((int)master()->valid_apply(({ "ASSIST" })))) {
+        if(!((int)target->query_snoopable())) return 0;
+        else return efun::snoop(who, target);
+    }
+    else if(member_group(target, PRIV_SECURE)) {
+        message("system", (string)who->GetCapName()+" is now snooping "
+          "you.", target);
+        return efun::snoop(who, target);
+    }
+    else return efun::snoop(who, target);
+}
+
+object query_snoop(object ob) {
+    if(!userp(previous_object(0))) return 0;
+    return efun::query_snoop(ob);
+}
+
+object query_snooping(object ob) {
+    if(!((int)master()->valid_apply(({})))) return 0;
+    else return efun::query_snooping(ob);
+}
+
+int exec(object target, object src) {
+    string tmp;
+
+    tmp = base_name(previous_object());
+    if(tmp != OB_LOGIN && tmp != CMD_ENCRE && tmp != CMD_DECRE) return 0;
+    return efun::exec(target, src);
+}
+
+void write(string str) {
+    if(this_player()) message("my_action", str, this_player());
+    else efun::write(str);
+}
+
+void set_privs(object ob, string str) { return; }
+
+void set_eval_limit(int x) {
+    if(previous_object() != master()) return;
+    efun::set_eval_limit(x);
+}
+
+#include "/secure/sefun/copy.lpc"

@@ -1,0 +1,346 @@
+/*  /daemon/soul.c
+ *  A central daemon to handle all soul commands issued via players
+ *  created by Blitz@NM-IVD (last edited Oct/9/95)
+*/
+ 
+#include <soul.h>
+ 
+inherit SOUL_ADVERBS;
+
+/* See the FluffOS PORT NOTE in include/soul.h -- moved here so the
+ * inherit above stays ahead of every global variable definition. */
+nosave string HelpPage = (
+ "Most of the following emotes can be combined with 'and' in any "
+ "order, which allows you to create some rather interesting "
+ "sentences.  However, some are unique and cannot be combined with "
+ "others.  Most emotes are set up to use adverbs, which you "
+ "can substitute with other adverbs ('emotehelp adverbs' for list). "
+ "Adverbs may be specified with a shortened prefix, but note that the "
+ "first match found in the pool will be used. (example: 'h' would "
+ "return handsomly, where 'hap' would return happily).  If you do not "
+ "wish for the default adverb to be displayed, enter '.' as the "
+ "adverb."
+ "\n\n"
+ "Syntax: smile br            : You smile broadly.\n"
+ "        smile blitz         : You smile happily at Blitz.\n"
+ "        smile blitz br      : You smile broadly at Blitz.\n"
+ "        smile blitz and ack : You smile happily at Blitz and ack.\n"
+ "\n");
+
+private mapping Soul;
+ 
+int GetEmoteHelp(string str);
+ 
+class SoulRec {
+  mixed *var, *message;
+  object *target;
+}
+ 
+nosave void create() {
+  object ob;
+  adverbs::create();
+  if( !file_exists(SaveFile + ".o") ) {
+    Soul = ([ ]);
+    if( catch(ob = load_object(FallBackFile)) ) return;
+    if( ob ) Soul = ob->GetSoulCommands();
+    if( sizeof(Soul) ) save_object(SaveFile);
+  }
+  else restore_object(SaveFile);
+}
+ 
+nosave object GetLiving(string str) {
+  object ob;
+  if( !str || str == "" ) return 0;
+  if( ( !ob = present(str, environment(this_player())) ) ||
+      ( hiddenp(ob) ) ||
+      ( ob->GetInvis() ) ) return 0;
+  return ob;
+}
+ 
+varargs nosave string
+Match(string action, string search, mixed extra) {
+  string *line = ({});
+  if( !sizeof(search) ) return 0;
+  if( !extra ) {
+    if( search == "." ) return "";
+    line = (Soul[action][ExtraAdverbs] || ({}) ) + GetAdverbs(search);
+  }
+  else if( arrayp(extra) ) line = extra;
+  if( !sizeof(line) ) return 0;
+  if( sizeof(line = regexp(line, "^"+search)) )
+    return line[0];
+  if( member_array("*", line) > -1 ) return search;
+  return 0;
+}
+ 
+private string MakeYourMessage(class SoulRec Emote) {
+  int i, flag, cnt;
+  object last_target, target;
+  mixed str, line;
+  string ret = "";
+  foreach(line in Emote->message) {
+    i = sizeof( str = line[0][0..] );
+    target = Emote->target[cnt];
+    while(i--) if( str[i][0] == '$' ) {
+      switch(str[i]) {
+      case "$N" : str[i] = (flag ? "" : "you"); flag = 1; break;
+      case "$A" : str[i] = (Emote->var[cnt][2] || ""); break;
+      case "$T" : if(target) {
+                    if(last_target == target)
+                      str[i] = objective(target);
+                      else str[i] = (string)target->GetName();
+                    last_target = target;
+                  } else str[i] = 0;
+                  break;
+      case "$TA" : if(target) {
+               if(last_target == target)
+                 str[i] = possessive(target); else
+                 str[i] = possessive_noun((string)target->GetName());
+             } else str[i] = 0;
+             break;
+      case "$TP" : str[i] = (target ? possessive(target) : "");  break;
+      case "$TO" : str[i] = (target ? objective(target) : ""); break;
+      case "$TR" : str[i] = (target ? reflexive(target) : ""); break;
+      case "$TN" : str[i] = (target ? nominative(target) : ""); break;
+      case "$NP" : str[i] = "your"; break;
+      case "$NO" : case "$NN" : str[i] = "you"; break;
+      case "$NR" : str[i] = "yourself"; break;
+      case "$X" : case "$*" : str[i] = (Emote->var[cnt][3] || "");
+                              break;
+      }
+    }
+    ret += implode(filter(str, (: sizeof :)), " ");
+    if(Emote->var[cnt][4]) ret += (string)Emote->var[cnt][4];
+    cnt++;
+  }
+  return (capitalize(ret) + ".");
+}
+ 
+private string MakeTheirMessage(class SoulRec Emote, object who) {
+  int i, flag, cnt;
+  object last_target, target;
+  mixed str, line;
+  string ret = "";
+ 
+  foreach(line in Emote->message) {
+    i = sizeof( str = line[1][0..] );
+    target = Emote->target[cnt];
+    while(i--) if( str[i][0] == '$' ) {
+      switch(str[i]) {
+      case "$N" : line[1][i] = str[i] =
+                  (flag ? "" : (string)this_player()->GetName());
+                  flag = 1; break;
+      case "$A" : line[1][i] = str[i] = (Emote->var[cnt][2] || ""); break;
+      case "$T" : if(target) {
+                    if(target == who) str[i] = "you"; else
+                    if(last_target == target)
+                      str[i] = objective(target);
+                      else str[i] = (string)target->GetName();
+                    last_target = target;
+                  } else str[i] = "";
+                  break;
+      case "$TA" : if(target) {
+                     if(target == who) str[i] = "your"; else
+                     if(last_target == target)
+                       str[i] = possessive(target); else
+                       str[i] = possessive_noun((string)target->GetName());
+                   } else str[i] = "";
+                   break;
+      case "$TN" : if(!target) str[i] = ""; else
+                   if(target == who) str[i] = "you"; else
+                   str[i] = nominative(target);
+                   break;
+      case "$TO" : if(!target) str[i] = ""; else
+                   if(target == who) str[i] = "you"; else
+                   str[i] = objective(target);
+                   break;
+      case "$TP" : if(!target) str[i] = ""; else
+                   if(target == who) str[i] = "your"; else
+                   str[i] = possessive(target);
+                   break;
+      case "$NP" : line[1][i] = str[i] = possessive(this_player()); break;
+      case "$NO" : line[1][i] = str[i] = objective(this_player()); break;
+      case "$NR" : line[1][i] = str[i] = reflexive(this_player()); break;
+      case "$NN" : line[1][i] = str[i] = nominative(this_player()); break;
+      case "$TR" : if(!target) str[i] = ""; else
+                   if(target == who) str[i] = "yourself"; else
+                   str[i] = reflexive(target);
+                   break;
+      case "$NA" : line[1][i] = str[1] =
+                    possessive_noun((string)this_player()->GetName());
+                   break;
+      case "$X" : case "$*" :
+        line[1][i] = str[i] = (Emote->var[cnt][3] || "");
+        break;
+      }
+    }
+    ret += implode(filter(str, (: sizeof :)), " ");
+    if(Emote->var[cnt][4]) ret += (string)Emote->var[cnt][4];
+    cnt++;
+  }
+  return (capitalize(ret) + ".");
+}
+ 
+nosave void DisplayMessages(class SoulRec Emote) {
+  object *obs, ob;
+  message("emote", MakeYourMessage(Emote), this_player() );
+  if( sizeof(obs = filter(distinct_array(Emote->target), (: $1 :))) )
+    foreach(ob in obs)
+      message("emote", MakeTheirMessage(Emote, ob), ob);
+  if( !obs ) obs = ({ });
+  message("emote", MakeTheirMessage(Emote, 0),
+          environment(this_player()), obs + ({ this_player() }) );
+}
+ 
+int do_cmd(string action, string arg) {
+  string *emotes, *var;
+  string feeling, tmp, tmp2;
+  mixed str;
+  int i, total;
+  class SoulRec Emote;
+ 
+  if(!Soul[action]) return 0;
+  if( !arg ) arg = "";
+  total = sizeof(emotes = explode(sprintf("%s %s", action, arg), " and "));
+  Emote = new(class SoulRec);
+  Emote->var = allocate(total);
+  Emote->target = Emote->var[0..];
+  Emote->message = Emote->var[0..];
+  foreach(feeling in emotes) {
+    if(sizeof(var = explode(feeling, " ")) > 4) {
+      var[3] = implode(var[3..], " ");
+      var = var[0..3] + ({ 0 });
+    } else var += allocate(5 - sizeof(var));
+    if(!Soul[ var[0] ]) {
+      message("emote", capitalize( var[0] )+" is not a valid feeling!",
+        this_player() );
+      return 1;
+    }
+    if( Soul[ var[0] ][DisableAnd] && (total>1) ) {
+      message("emote", capitalize(var[0])+" does not support "
+                       "the 'and' option.",
+        this_player() );
+      return 1;
+    }
+    if( !sizeof(var[1]) ) {
+      if(!str = Soul[ var[0] ][NoArgs] || Soul[ var[0] ][NoTarget] ) {
+        message("emote", capitalize(var[0])+" whom?", this_player());
+        return 1;
+      }
+    }
+    else
+    if( !Emote->target[i] = GetLiving(var[1]) ) {
+      if( !Soul[ var[0] ][NoTarget] ) {
+        message("emote", capitalize(var[0]) + " whom? ", this_player());
+        return 1;
+      }
+      var[3] = sizeof(var[3]) ? (var[2]+" "+var[3]) : var[2];
+      var[2] = var[1];
+      var[1] = 0;
+      str = Soul[ var[0] ][NoTarget];
+    }
+    else str = Soul[ var[0] ][Targeted];
+    if( Emote->target[i] == this_player() ) {
+     message("emote", "That would be silly.", this_player());
+     return 1;
+    }
+    tmp2 = tmp = 0;
+    if(!arrayp(str) || (sizeof(str) != 2)) {
+      notify_fail("You cannot "+var[0]+" like that!\n");
+      return 0;
+    }
+    if( sizeof(var[2]) ) {                            /* check for adverb */
+      if( !(tmp = Match(var[0], var[2])) ||           /* one word match? */
+          (sizeof(var[3]) &&                          /* >one word match? */
+           !tmp2 = Match(var[0], var[2]+" "+var[3])) )
+      {
+        var[3] = var[3] ? (var[2]+" "+var[3]) : var[2];  /* no match found */
+        var[2] = Soul[var[0]][ForceAdverb];              /* use forced */
+      } else {                                           /* adverb if any */
+        var[2] = tmp || tmp2;
+        if(tmp2) var[3] = 0;  /* since a adverb was matched using more */
+      }                       /* word, nullify extra var.. */
+    }
+    else var[2] = Soul[var[0]][ForceAdverb];
+    if( sizeof(var[3]) ) {
+      tmp = 0;
+      if( !Soul[ var[0] ][Locations] ) {
+        if(strsrch(str[1], "$*") == -1) {
+          notify_fail("You cannot "+var[0]+" like that!\n");
+          return 0;
+        }
+      } else {
+        if( Soul[var[0]][Preposition] &&
+            !strsrch(var[3], Soul[var[0]][Preposition]) )
+          var[3] = replace_string(var[3],
+                   Soul[var[0]][Preposition] + " ", "");
+        if( !tmp = Match(var[0], var[3], Soul[var[0]][Locations]) ) {
+          message("emote", "You cannot "+var[0]+" like that!", this_player());
+          return 1;
+        }
+        if( Soul[var[0]][Preposition] )
+          var[3] = sprintf("%s %s", Soul[var[0]][Preposition], tmp);
+          else var[3] = tmp;
+      }
+    } else
+    if( strsrch(str[1], "$X") > -1 && Soul[var[0]][ForceLocation] )
+      var[3] = Soul[var[0]][ForceLocation];
+    if( (total > 1) && i < (total-1) )
+      var[4] = ( i == (total-2) ? " and " : ", " );
+    Emote->var[i] = var[0..];  /* copy(var) */
+    Emote->message[i] = ({ explode(str[0], " "), explode(str[1], " ") });
+    var = allocate(5);
+    i++;
+  }
+  DisplayMessages(Emote);
+  return 1;
+}
+ 
+int AddEmote(string verb, mixed m) {
+  if( !archp(this_player()) ) return 0;
+  if( !mapp(m) ) {
+    error("Bad argument 1 to AddEmote.\n");
+    return 0;
+  }
+  Soul[verb] = copy(m);
+  save_object(SaveFile);
+  return 1;
+}
+ 
+int RemoveEmote(string verb) {
+  if( !archp(this_player()) ) return 0;
+  if( !Soul[verb] ) return 0;
+  map_delete(Soul, verb);
+  save_object(SaveFile);
+}
+ 
+mixed GetEmote(string verb) {
+  if(!Soul[verb]) return 0;
+  return copy(Soul[verb]);
+}
+ 
+string GetHelp(string str) {
+  string ret, var, search;
+  mixed tmp, sarray;
+  mapping AdverbPool = ([ ]);
+ 
+  if( sscanf(str, "%s %s", var, search) ) str = var;
+  if( str == "feelings" ) sarray = keys(Soul);
+  else if( str == "adverbs" ) {
+    sarray = ({});
+    AdverbPool = GetAdverbPool();
+    tmp = keys(AdverbPool);
+    foreach(var in tmp) sarray += AdverbPool[var];
+  }
+  else return 0;
+  if( search )
+    if(!sizeof(sarray = regexp(sarray, "^"+search))) return 0;
+  sarray = sort_array(sarray, 1);
+  ret = "[ %^CYAN%^"+capitalize(str)+" listing.  Matches found: "+sizeof(sarray)+"%^RESET%^ ]\n\n";
+  if( str == "feelings" )
+    ret += HelpPage;
+  ret += format_page(sarray, (str == "adverbs" ? 4 : 5));
+  if( str == "feelings" )
+    ret += "\nNote: \"help adverbs <search prefix>\" to see adverbs.\n";
+  return ret;
+}

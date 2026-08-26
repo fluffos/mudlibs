@@ -1,0 +1,190 @@
+/*  /lib/user/more.c
+    from Foundation II
+    inherited player functions for paging files and string arrays
+    created by Descartes of Borg 931204
+*/
+
+#include "more.h"
+
+nosave private mapping More;
+
+void create() { More = ([]); }
+
+varargs int more(mixed what, string cl, function endmore, mixed args) {
+    string *tmp;
+
+    if(!pointerp(what) && !stringp(what))
+      return notify_fail("Unknown file reference.\n");
+    if(More["lines"]) More = ([]);
+    if(!(More["class"] = cl)) More["class"] = "info";
+    if(!(More["screen"]=to_int((string)this_object()->GetEnvVar("LINES"))))
+      More["screen"] = 20;
+    if(stringp(what)) {
+        if(sizeof(tmp = (string *)this_object()->wild_card(what)) != 1)
+          return notify_fail("Ambiguous file reference.\n");
+        if(file_size(tmp[0]) < 1)
+          return notify_fail("Ambiguous file reference.\n");
+        More["total"] = sizeof(More["lines"] =
+          explode(read_file(tmp[0]), "\n"));
+    }
+    else if(pointerp(what))
+      More["total"] = sizeof(More["lines"] = what);
+    else return notify_fail("Illegal file reference.\n");
+    if(creatorp(this_object()) && tmp && tmp[0])
+      message(More["class"], "--==** "+tmp[0]+" **==--", this_object());
+    if(!More["total"]) {
+        More = ([]);
+        if( functionp(endmore) ) evaluate(endmore, args);
+        return 1;
+    }
+    More["current"] = 0;
+    if(functionp(endmore)) More["endfun"] = endmore;
+    More["args"] = args;
+    do_more(" ");
+    return 1;
+}
+
+nosave void do_more(string cmd) {
+    string args;
+    int i, x;
+
+    if(!cmd || cmd == "" || cmd == "\r" || cmd == "\n") cmd = " ";
+    if((x = strlen(cmd)) > 1) {
+        args = cmd[1..x-1];
+        cmd = cmd[0..0];
+    }
+    switch(cmd) {
+        case " ": break;
+        case "b": case "B":
+          More["current"] -= More["screen"]*2;
+          if(More["current"] < 0) More["current"] = 0;
+          break;
+        case "<": More["current"] = 0; break;
+        case ">": More["current"] = More["total"]-1; break;
+        case "/":
+          if(GetEnvVar("MORE") == "off") regexp_fwd(args);
+          else input_to("regexp_fwd");
+          return;
+        case "?":
+            if(GetEnvVar("MORE") == "off") regexp_bkwd(args);
+            else input_to("regexp_bkwd");
+            return;
+        case "n":
+          if(!More["regexp"] || More["regexp"] == "") {
+            message(More["class"], "\nNo previous search.", this_object());
+            if(GetEnvVar("MORE") == "off") input_to("do_more");
+            else get_char("do_more");
+            return;
+          }
+          if(More["regexp"][0] == '/')
+            regexp_fwd(More["regexp"][1..strlen(More["regexp"])-1]);
+          else regexp_bkwd(More["regexp"][1..strlen(More["regexp"])-1]);
+          return;
+        case "=":
+          message(More["class"], "\nCurrent line: "+
+            More["current"], this_object());
+          if(GetEnvVar("MORE") == "off") input_to("do_more");
+          else get_char("do_more");
+          return;
+        case "v": case "V":
+          message(More["class"], "\nNightmare Mudlib \"more\" "+
+            "version 2.1 by Descartes of Borg 931204.", this_object());
+          if(GetEnvVar("MORE") == "off") input_to("do_more");
+          else get_char("do_more");
+          return;
+        case "h": case "H":
+            do_help();
+            if(GetEnvVar("MORE") == "off") input_to("do_more");
+            else get_char("do_more");
+            return;
+        case "Q": case "q":
+          message(More["class"], "", this_object());
+          if( functionp(More["endfun"]) )
+            (*More["endfun"])(More["args"]);
+          More = ([]);
+          return;
+        default:
+          message(More["class"], "\nUnrecognized command.", this_object());
+          if(GetEnvVar("MORE") == "off") input_to("do_more");
+          else get_char("do_more");
+          return;
+    }
+    message(More["class"], "", this_object());
+    for(i=More["current"];
+      i<More["current"] + More["screen"]; i++) {
+        if(i>= More["total"]) {
+          if(functionp(More["endfun"]) )
+              (*More["endfun"])(More["args"]);
+          More = ([]);
+          return;
+        }
+        message(More["class"], More["lines"][i], this_object());
+    }
+    if((More["current"] = i) >= More["total"]) {
+        if(functionp(More["endfun"]) ) 
+            (*More["endfun"])(More["args"]);
+        More = ([]);
+        return;
+    }
+    More["current"] = i;
+    message("prompt", "%^B_WHITE%^BLACK%^--More-- ("+
+      to_int(percent(More["current"], More["total"]))+"%) ", this_object());
+    if(GetEnvVar("MORE") == "off") input_to("do_more");
+    else get_char("do_more");
+    return;
+}
+
+void do_help() {
+    message("Nhelp",
+      "Help for the \"more\" utility:\n\n"
+      "<spacebar> Display the next page of text.\n"
+      "B or b     Display the previous page of text.\n"
+      "<          Goto the beginning of the document.\n"
+      ">          Goto the end of the document.\n"
+      "=          Display the current line number.\n"
+      "/<exp>     Goto the next line with the expression <exp> in it.\n"
+      "?<exp>     Goto the previous line with the expression <exp> in it.\n"
+      "v or V     See the version information about this pager.\n"
+      "h or H     This help screen.\n"
+      "q or Q     Quit out of the pager.\n", this_object()
+    );
+}
+
+nosave void regexp_fwd(string str) {
+    string *matches;
+    int i;
+
+    More["regexp"] = "/"+str;
+    if(!sizeof(matches = regexp(More["lines"][More["current"]..More["total"]-1], str))) {
+        message(More["class"], "\nPattern not found.\n", this_object());
+        if(GetEnvVar("MORE") == "off") input_to("do_more");
+        else get_char("do_more");
+        return;
+    }
+    for(i=More["current"]; i<More["total"]; i++) {
+        if(More["lines"][i] != matches[0]) continue;
+        More["current"] = i;
+        break;
+    }
+    message(More["class"], "\nSkipping to line "+More["current"]+"...",
+      this_object());
+    do_more(" ");
+}
+
+nosave void regexp_bkwd(string str) {
+    string *matches;
+    int i;
+
+    More["regexp"] = "?"+str;
+    if(!sizeof(matches=regexp(More["lines"][0..More["current"]], str))) {
+        message(More["class"], "\nPattern not found.", this_object());
+        if(GetEnvVar("MORE") == "off") input_to("do_more");
+        else get_char("do_more");
+        return;
+    }
+    More["current"] = member_array(matches[0],More["lines"][0..More["current"]]);
+    message(More["class"], "\n...Backing up...", this_object());
+    do_more(" ");
+}
+
+string GetEnvVar(string val) { return 0; }

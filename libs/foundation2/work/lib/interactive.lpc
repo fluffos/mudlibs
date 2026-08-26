@@ -1,0 +1,401 @@
+/*    /lib/interactive.c
+ *    from the Foundation II LPC Library
+ *    an interactive object
+ *    created by Descartes of Borg 941001 for the Idea Exchange
+ *    modified for Foundation II 950210
+ */
+
+#include <lib.h>
+#include <daemons.h>
+#include <objects.h>
+#include <rooms.h>
+#include <origin.h>
+#include "interactive.h"
+
+inherit LIB_CONTAINER;
+inherit LIB_OBJECT;
+inherit LIB_MOVE;
+inherit LIB_AUTOSAVE;
+inherit LIB_FILES;
+inherit LIB_PAGER;
+inherit LIB_MESSAGES;
+inherit LIB_INTERFACE;
+
+private int Age, WhereBlock, Brief, LoginTime, BirthTime;
+private string Password, Email, RealName, Position;
+private mapping News;
+private nosave int LastAge, Setup;
+private nosave object NetDiedHere;
+private nosave mapping LastError;
+private nosave string *UserId;
+
+nosave void create() {
+    container::create();
+    object::create();
+    autosave::create();
+    messages::create();
+    interface::create();
+    Brief = 0;
+    Password = 0;
+    Email = 0;
+    RealName = 0;
+    Position = "citizen";
+    BirthTime = time();
+    LastAge = time();
+    News = ([]);
+    SetShort("$N the unaccomplished");
+}
+
+/* ***************  /lib/interactive.c modal functions  *************** */
+
+int CanGet(object ob) {
+    message("my_action", GetName() + " is a living being!", ob);
+    return 0;
+}
+
+/* ***************  /lib/interactive.c lfuns  *************** */
+int Setup() {
+    mapping mp;
+    string tmp;
+
+    if(Setup) return 0;
+    else Setup = 1;
+    set_living_name(GetKeyName());
+    interface::Setup();
+    add_action((: cmdQuit :), "quit");
+    LoginTime = time();
+    SetId(({}));
+    autosave::Setup();
+    call_out("save_player", 2, GetKeyName());
+    log_file("enter", GetCapName()+" (enter): "+ctime(time())+
+      " : "+query_ip_name(this_object())+"\n");
+    eventMove(ROOM_START);
+    if( !(tmp = GetMessage("login")) ) 
+      tmp = GetName() + " enters " + mud_name() + ".";
+    message("environment", tmp, environment(this_object()), ({this_object()}));
+    message("announce", "["+GetCapName()+" logs in]",
+      filter_array(users(), (: archp :)));
+    if(!catch(mp = (mapping)FOLDERS_D->mail_status(GetKeyName()))) {
+        if(mp["unread"]) {
+            message("login", "\n>>> "+mp["unread"] + " of your " + 
+              (mp["total"] == 1 ? mp["total"]+" letter is" :
+              mp["total"]+" letters remain") + " unread. <<<\n", 
+              this_object());
+        }
+    }
+    catch(NEWS_D->read_news());
+    return 1;
+}
+
+nosave void net_dead() {
+    interface::net_dead();
+    Age += time() - LastAge;
+    LastAge = time();
+    save_player(GetKeyName());
+    NetDiedHere = environment(this_object());
+    message("other_action", GetName()+" suddenly disappears into " +
+      "a sea of irreality.", environment(this_object()), ({ this_object() }));
+    message("announce", "["+GetCapName()+" goes net-dead]", 
+      filter_array(users(), (: archp :)));
+    eventMove(ROOM_FREEZER);
+    if(query_snoop(this_object()))
+      message("snoop", GetCapName()+" has gone net-dead.",
+        query_snoop(this_object()));
+}
+
+void restart_heart() {
+    string dead_ed;
+
+    interface::restart_heart();
+    LastAge = time();
+    message("system", "Reconnected.", this_object());
+    message("announce", "["+GetCapName()+" has rejoined "+mud_name()+"]",
+      filter(users(), (: archp :)));
+    if(NetDiedHere) eventMove(NetDiedHere);
+    else eventMove(ROOM_START);
+    message("environment", GetCapName()+" has rejoined this reality.",
+      environment(this_object()), ({ this_object() }));
+    NetDiedHere = 0;
+}
+
+void eventDescribeEnvironment(int brief) {
+    mapping mp;
+    object *obs;
+    object env;
+    mixed tmp;
+    string *shorts;
+    string desc, smell, sound;
+    int i, maxi;
+
+    if(!(env = environment(this_object()))) {
+        message("room_description", "You are nowhere.", this_object());
+        return;
+    }
+    if(!brief) {
+        desc = (string)env->GetLong();
+        if(functionp(tmp = (mixed)env->GetSmell("default")))
+          tmp = (string)(*tmp)("default");
+        smell = tmp;
+        if(functionp(tmp = (mixed)env->GetListen("default")))
+          tmp = (string)(*tmp)("default");
+        sound = tmp;
+    }
+    else desc = (string)env->GetShort();
+    if(desc) message("room_description", desc, this_object());
+    if(smell) message("smell", smell, this_object());
+    if(sound) message("sound", sound, this_object());
+    mp = ([]);
+    shorts = map(filter(all_inventory(env), 
+      (: !living($1) && !((int)$1->GetInvis(this_object())) :)), 
+      (: (string)$1->GetShort() :));
+    for(i=0, maxi = sizeof(shorts); i<maxi; i++) 
+      if( shorts[i] ) mp[shorts[i]]++;
+    maxi = sizeof(shorts = keys(mp));
+    for(i=0, desc = "%^MAGENTA%^"; i<maxi; i++) {
+	if( mp[shorts[i]] < 2 ) {
+	    if( !i ) desc += capitalize(shorts[i]) + "%^RESET%^MAGENTA%^";
+	    else desc += shorts[i] + "%^RESET%^MAGENTA%^";
+	}
+	else {
+	    if( !i ) desc += capitalize(consolidate(mp[shorts[i]],shorts[i])) +
+	      "%^RESET%^MAGENTA%^";
+	    else desc += consolidate(mp[shorts[i]], shorts[i]) +
+              "%^RESET%^MAGENTA%^";
+	}
+	if( i == maxi - 1 ) {
+	    if( maxi > 1 || mp[shorts[i]] >1 ) desc += " are here.%^RESET%^\n";
+	    else desc += " is here.%^RESET%^\n";
+	}
+	else if( i == maxi - 2 ) desc += ", and ";
+	else desc += ", ";
+    }
+    mp = ([]);
+    obs = filter(all_inventory(env), 
+      (: living($1) && !((int)$1->GetInvis(this_object())) :)) - 
+      ({ this_object() });
+    maxi = sizeof(shorts = map(obs, (: (string)$1->GetShort() :)));
+    for(i=0; i<maxi; i++) if(shorts[i]) mp[shorts[i]]++;
+    maxi = sizeof(shorts = keys(mp));
+    for(i=0; i<maxi; i++) {
+	if( i ) desc += "\n";
+	if( mp[shorts[i]] < 2 ) 
+          desc += "%^BOLD%^RED%^" +capitalize(shorts[i]) + "%^RESET%^";
+	else desc += "%^BOLD%^RED%^" + 
+          capitalize(consolidate(mp[shorts[i]],shorts[i]))+"%^RESET%^";
+    }
+    message("room_inventory", desc + "\n", this_object());
+}
+
+varargs int eventMoveLiving(mixed dest, string omsg, string imsg) {
+    object prev;
+    object *inv;
+    string *arr;
+    string chambre,going,temp1,temp2,temp3, msgclass;
+    int i, illum, bzbd, adj, tmp, ret;
+
+    prev = environment( this_object() );
+    chambre = file_name(prev);
+    if (stringp(dest)) {
+        if(dest[0] != '/') {
+            arr = explode(chambre, "/");
+            dest = "/"+implode(arr[0..sizeof(arr)-2], "/")+"/"+dest;
+        }
+    }
+    if( !eventMove(dest) ) {
+        message("system","You remain where you are.", this_object());
+        return 0;
+    }
+    inv = filter(all_inventory(prev), 
+      (: (!GetInvis($1) && living($1) && ($1 != this_object())) :));
+    msgclass = ((omsg && omsg != "") ? "leave" : "telout");
+    if( !omsg || omsg == "" ) omsg = GetMessage(msgclass = "telout");
+    else omsg = GetMessage(msgclass = "leave", omsg);
+    message(msgclass, omsg, inv);
+    inv = filter(all_inventory(environment()),
+      (: (!GetInvis($1) && living($1) && ($1 != this_object())) :));
+    if( (!imsg || imsg == "") && (!omsg || omsg == "") ) 
+      imsg = GetMessage(msgclass = "telin");
+    else imsg = GetMessage(msgclass = "come", imsg);
+    message(msgclass, imsg, inv);
+    eventDescribeEnvironment(GetBriefMode());
+    return 1;
+}
+
+int eventDestruct() {
+    object *inv;
+    int i;
+
+    autosave::eventDestruct();
+    interface::eventDestruct();
+    inv = filter(all_inventory(), (:($1 && (int)$1->CanDrop(this_object())):));
+    inv->eventMove(environment());
+    return object::eventDestruct();
+}
+
+int cmdQuit(string str) {
+    string tmp;
+
+    if( origin() != ORIGIN_LOCAL && ((int)master()->valid_apply( ({ GetKeyName() }) )) ) return 0;
+    message("system", "Please come back another time!", this_object());
+    save_player(GetKeyName());
+    tmp = GetMessage("logout") || (GetName() + " is gone from this reality!");
+    message("environment", tmp, environment(this_object()), ({this_object()}));
+    log_file("enter", GetCapName()+" (quit): "+ctime(time())+"\n");
+    message("announce", "["+GetCapName()+" quits]", filter(users(), (: archp :)));
+    eventDestruct();
+    return 1;
+}
+
+int GetAge() {
+    int x;
+
+    if(!interactive(this_object())) return Age;
+    x = time() - LastAge;
+    Age += x;
+    LastAge = time();
+    return Age;
+}
+
+int GetBirth() { return BirthTime; }
+
+string query_cwd() { return interface::query_cwd(); }
+
+void SetEmail(string str) {
+    if(!((int)master()->valid_apply(({ GetKeyName() })))) return;
+    Email = str;
+}
+
+string GetEmail() {
+    if(!((int)master()->valid_apply(({ GetKeyName() })))) return 0;
+    else return Email;
+}
+
+void SetId(string *bogus) {
+    int i;
+
+    if(UserId) return;
+    if(!GetCapName()) {
+        UserId = ({ GetKeyName() });
+        return;
+    }
+    UserId = ({ GetKeyName(), lower_case(GetCapName()) });
+    if((i=sizeof(bogus = explode(lower_case(GetCapName()), " "))) == 1)
+        return;
+    while(i--)
+        if(!user_exists(bogus[i])) UserId += ({ bogus[i] });
+}
+
+string *GetId() { return UserId; }
+
+int id(string str) {
+    if(!str) return 0;
+    else return member_array(lower_case(str), UserId) != -1;
+}
+
+int GetLoginTime() { return LoginTime; }
+
+varargs string GetLong(string str) { 
+    mapping counts;
+    string *inv;
+    int i;
+
+    str = GetShort() + "\n";
+    i = sizeof(inv = map(all_inventory(), (: (string)$1->GetShort() :)));
+    counts = ([]);
+    while(i--) counts[inv[i]]++;
+    i = sizeof(inv = keys(counts));
+    while(i--) str += consolidate(counts[inv[i]], inv[i]) + "\n";
+    return str;
+}
+
+void SetKeyName(string str) {
+    if( previous_object() != master() ) return;
+    object::SetKeyName(str);
+}
+
+string GetKeyName() { return object::GetKeyName(); }
+
+void SetNews(string type, int sz) { News[type] = sz; }
+
+int GetNews(string type) { return News[type]; }
+
+string SetPassword(string str) {
+    if(!((int)master()->valid_apply(({ GetKeyName() })))) return;
+    Password = str;
+    save_player(GetKeyName());
+    return Password;
+}
+
+string GetPassword() {
+    if(!((int)master()->valid_apply(({ GetKeyName() })))) return 0;
+    else return Password;
+}
+
+void SetPosition(string str) { Position = str; }
+
+string GetPosition() { return Position; }
+
+void SetRealName(string str) {
+    if(!((int)master()->valid_apply(({ GetKeyName() })))) return;
+    RealName = str;
+}
+
+string GetRealName() { return RealName; }
+
+string GetShort() {
+    string str;
+
+    str = object::GetShort(str);
+    if( !str) str = "$N the unaccomplished";
+    if(strsrch(str, "$N") == -1) str = "$N";
+    str = replace_string(str, "$N", GetName());
+    if( interactive(this_object()) ) return str;
+    else return str + " (net-dead)";
+}
+
+int SetBriefMode(int x) { return (Brief = x); }
+
+int GetBriefMode() { return Brief; }
+
+int SetWhereBlock() { return (WhereBlock = !WhereBlock); }
+
+int GetWhereBlock() { return WhereBlock; }
+
+string get_path() { 
+    log_file("get_path", identify(previous_object())+"\n");
+    return query_cwd();
+}
+
+void SetLastError(mapping m) {
+    if (previous_object() != master()) return;
+    LastError = m;
+}
+
+mapping GetLastError() {
+    string caller = file_name(previous_object());
+    if (caller[0..23] == "/secure/cmds/creator/dbx") return LastError;
+    error("Privilege Violation: " + caller);
+}
+
+string SetCapName(string str) { 
+    if( base_name(previous_object(0)) != OB_LOGIN ) return GetCapName();
+    return object::SetCapName(str);
+}
+
+string GetCapName() { return object::GetCapName(); }
+
+void move_or_destruct() {
+    (eventMove(ROOM_START) || eventMove(ROOM_VOID));
+}
+
+string SetShort(string str) {
+    if(strsrch(str, "$N") == -1) return GetShort();
+    else return object::SetShort(str);
+}
+
+string GetName() { return object::GetName(); }
+
+mixed *GetCommands() {
+    if( !((int)master()->valid_apply( ({ GetKeyName() }))) ) return ({});
+    return commands();
+}

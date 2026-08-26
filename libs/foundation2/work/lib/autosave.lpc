@@ -1,0 +1,92 @@
+/*    /lib/user/autosave.c 
+ *    from Foundation II 
+ *    object to save a player to file 
+ *    created by Descartes of Borg 940216 
+ */ 
+ 
+#include <config.h> 
+#include <dirs.h>
+#include <privs.h>
+#include "autosave.h" 
+ 
+private mixed *AutoLoad; 
+private int ItemsValue; 
+nosave private int LastSave; 
+ 
+void create() { 
+    AutoLoad = ({}); 
+    ItemsValue = 0; 
+    LastSave = time(); 
+} 
+ 
+int Setup() { 
+    object ob;
+    int i;
+
+    master()->create_save();
+    call_out( (: save_player, GetKeyName() :), 2 );
+    if(!(i = sizeof(AutoLoad))) return 1; 
+    while(i--) { 
+        if(sizeof(AutoLoad[i]) != 2) continue; 
+        if(!stringp(AutoLoad[i][0]) || !pointerp(AutoLoad[i][1])) continue; 
+        catch(ob = new(AutoLoad[i][0])); 
+        if(!ob) continue; 
+        ob->eventMove(this_object()); 
+        catch(ob->init_arg(AutoLoad[i][1]));     
+    } 
+    return 1;
+} 
+ 
+void heart_beat() { 
+    int x; 
+ 
+    if((x=time()) - LastSave < AUTOSAVE_TIME) return; 
+    LastSave = x;
+    save_player(GetKeyName()); 
+    if(!creatorp(this_object())) message("system", "Autosave.", this_object());
+} 
+ 
+nomask void save_player(string nom) { 
+    string file;
+
+    if(!nom || nom != GetKeyName()) return;
+    pre_save(); 
+    file = save_file(GetKeyName());
+    unguarded((: save_object, file :));
+} 
+ 
+void pre_save() { 
+    object *inv; 
+    mixed *tmp; 
+    int i; 
+ 
+    i = sizeof(inv = all_inventory(this_object())); 
+    ItemsValue = 0; 
+    AutoLoad = ({}); 
+    while(i--) { 
+        if(pointerp(tmp = (mixed *)inv[i]->query_auto_load())) { 
+            if(sizeof(tmp) == 2 && pointerp(tmp[1])) 
+              AutoLoad += ({ tmp }); 
+        } 
+        else ItemsValue += (int)inv[i]->GetValue(); 
+    } 
+} 
+ 
+nomask int restore_player(string nom) { 
+    string file;
+
+    if(previous_object(0) != master()) return 0;
+    file = save_file(nom);
+    return unguarded((: restore_object, file, 1 :));
+} 
+ 
+int eventDestruct() { 
+    object *inv; 
+    int i; 
+ 
+    i = sizeof(inv = all_inventory(this_object())); 
+    while(i--) if((mixed *)inv[i]->query_auto_load()) inv[i]->eventDestruct(); 
+} 
+ 
+string GetKeyName() { return 0; } 
+

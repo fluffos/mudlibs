@@ -1,0 +1,222 @@
+/*    /lib/door.c
+ *    from the Foundation II LPC Library
+ *    the standard door, window, rock object
+ *    created by Descartes of Borg 950410
+ *    with many thanks to Balack@Phoenix and Deathblade@ZorkMUD for their ideas
+ */
+
+#include <lib.h>
+#include "door.h"
+
+inherit LIB_DAEMON;
+
+private int Closed, Locked;
+private mapping Sides;
+
+/*  ***************  /lib/door.c driver applies  ***************  */
+
+nosave void create() {
+    daemon::create();
+    SetNoClean(1);
+    Sides = ([]);
+}
+
+/*  ***************  /lib/door.c events  **************  */
+
+/* eventOpen()
+ * object by - The room from which the door is being open
+ * object agent - The living thing responsible for it opening
+ *
+ * returns 1 on success, 0 on failure
+ *
+ * Used for actually opening the door
+ * Before calling this, you should check if the door is locked and
+ * check if it is already open so you can issue the appropriate messages
+ */
+
+varargs int eventOpen(object by, object agent) {
+    string *sides;
+    int i;
+
+    if( !GetClosed() || GetLocked() ) return 0;
+    i = sizeof(sides = keys(Sides));
+    while(i--) {
+	object *obs;
+	int j;
+
+	j = sizeof(obs = GetRooms(sides[i]));
+	while(j--) {
+	    if( obs[j] && obs[j] != by )
+              message("environment", capitalize(GetShort(sides[i])) +
+                " opens.", obs[j]);
+	}
+    }
+    SetClosed(0);
+    return 1;
+}
+
+/* eventClose()
+ * object by - the room from which the door is being closed
+ * object agent - the living things responsible for the closing
+ *
+ * returns 1 on success, 0 on failure
+ *
+ * Check to be certain the door is not already closed before calling so
+ * you may issue the appropriate message
+ */
+
+varargs int eventClose(object by, object agent) {
+    string *sides;
+    int i;
+
+    if( GetClosed() ) return 0;
+    i = sizeof(sides = keys(Sides));
+    while(i--) {
+	object *obs;
+	int j;
+
+	j = sizeof(obs = GetRooms(sides[i]));
+	while(j--) 
+	  if( obs[j] && obs[j] != by )
+            message("environment", capitalize(GetShort(sides[i])) +
+              " closes.", obs[j]);
+    }
+    SetClosed(1);
+    return 1;
+}
+
+/* eventLock()
+ * object by - the room from which the door is being locked
+ * object agent - the living thing responsible for the door locking
+ *
+ * returns 1 on success, 0 on failure
+ *
+ * Check to make sure the door is closed and unlocked before calling this
+ * Also check to see that the door is lockable from this side
+ * object by is required here
+ */
+
+varargs int eventLock(object by, object agent) {
+    string *sides;
+    int i;
+
+    if( !by || !GetClosed() || GetLocked() ) return 0;
+    if( !(i = sizeof(sides = keys(Sides))) ) return 0;
+    while(i--) {
+	if( member_array(by, Sides[sides[i]]["rooms"]) != -1) {
+	    if( !GetLockable(sides[i]) ) return 0;
+	    else return SetLocked(1); 
+	}
+    }
+    return 0;
+}
+
+/* eventUnlock()
+ * object by - the room from which the door is being unlocked
+ * object agent - the living thing responsible for the door unlocking
+ *
+ * returns 1 on success, 0 on failure
+ *
+ * Check to make sure the door is closed and locked before calling this
+ * Also check to see that the door is lockable from this side
+ * object by is required here
+ */
+
+varargs int eventUnlock(object by, object agent) {
+    string *sides;
+    int i;
+
+    if( !by || !GetClosed() || !GetLocked() ) return 0;
+    if( !(i = sizeof(sides = keys(Sides))) ) return 0;
+    while(i--) {
+	if( member_array(by, Sides[sides[i]]["rooms"]) != -1) {
+	    if( !GetLockable(sides[i]) ) return 0;
+	    else return !SetLocked(0); 
+	}
+    }
+    return 0;
+}
+
+/* eventRegisterSide()
+ * string side - directional exit identifying which side of the door this room
+ *               exits in
+ *
+ * returns 1 on success, 0 on failure
+ *
+ * never should be called manually
+ * this is called by SetDoor() in exits.c to tell the door there is a room
+ * which is observing it
+ */
+ 
+int eventRegisterSide(string side) {
+    int i;
+
+    if( !Sides[side] ) return 0;
+    Sides[side]["rooms"] = 
+      distinct_array(Sides[side]["rooms"] + ({ previous_object() }));
+    previous_object()->AddItem(GetId(side), (: GetLong($(side)) :));
+    return 1;
+}
+
+/*  **************  /lib/door.c data functions  **************  */
+
+nosave int SetClosed(int x) { return (Closed = x); }
+
+int GetClosed() { return Closed; }
+
+nosave int SetLocked(int x) { return (Locked = x); }
+
+int GetLocked() { return Locked; }
+
+mapping SetSide(string side, mapping mp) {
+    Sides[side] = mp;
+    Sides[side]["rooms"] = ({});
+    return mp;
+}
+
+int SetLockable(string side, int x) {
+    if( !Sides[side] ) Sides[side] = ([ "rooms" : ({}) ]);
+    return (Sides[side]["lockable"] = x); 
+}
+
+int GetLockable(string side) { return Sides[side]["lockable"]; }
+
+string SetId(string side, string id) { 
+    if( !Sides[side] ) Sides[side] = ([ "rooms" : ({}) ]);
+    else return (Sides[side]["id"] = id);
+}
+
+string GetId(string side) { return Sides[side]["id"]; }
+
+mixed SetShort(string side, mixed short) {
+    if( !Sides[side] ) Sides[side] = ([ "rooms" : ({}) ]);
+    else return (Sides[side]["short"] = short);
+}
+
+string GetShort(string side) {
+    if( stringp(Sides[side]["short"]) ) return Sides[side]["short"];
+    else return (string)evaluate(Sides[side]["short"], side);
+}
+
+mixed SetLong(string side, mixed long) {
+    if( !Sides[side] ) Sides[side] = ([ "rooms" : ({}) ]);
+    else return (Sides[side]["long"] = long); 
+}
+
+string GetLong(string side) {
+    string tmp;
+
+    if( GetClosed() ) tmp = "It is closed.";
+    else tmp = "It is open.";
+    if( stringp(Sides[side]["long"]) ) return Sides[side]["long"] + "\n" + tmp;
+    else return (string)evaluate(Sides[side]["long"], side);
+}
+
+string *SetKeys(string side, string *cles) {
+    if( !Sides[side] ) Sides[side] = ([ "rooms" : ({}) ]);
+    else return (Sides[side]["keys"] = cles); 
+}
+
+string *GetKeys(string side) { return Sides[side]["keys"]; }
+
+object *GetRooms(string side) { return Sides[side]["rooms"]; }

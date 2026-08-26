@@ -1,0 +1,176 @@
+/*    /lib/object.c
+ *    from the Foundation II LPC Library
+ *    object inherited by all tangible objects (ones with environments)
+ *    created by Descartes of Borg 940211
+ *    bug in properties fixed by Douglas Reay (Pallando @ many muds) 940601
+ *    eventMove() altered by Pallando, 940705
+ *    updated to NM IV lfun changes
+ */
+
+#include <lib.h>
+#include <daemons.h>
+#include <config.h>
+#include "object.h"
+
+inherit LIB_CLEAN;
+
+private string CapName;
+private mixed Short, Long, Read;
+private nosave string *Id, *Adjectives;
+private nosave string KeyName, Creator;
+private nosave mapping Properties;
+
+/***********           /lib/object.c driver applies         **********/
+
+nosave void create() {
+    object ob;
+
+    clean::create();
+    Properties = ([]);
+    Adjectives = ({});
+    Id = ({});
+    Creator = ( (ob = previous_object()) ? file_name(ob) : "Unknown" );
+}
+
+nosave void init() { /* nothing goes here... just for design purposes */ }
+
+void reset() { /* Nothing goes here... just for design purposes */ }
+
+int id(string str) {                                          
+    if(!str) return 0;                                        
+    if(!stringp(str)) error("Bad argument 1 to id().\n");     
+    return (member_array(lower_case(str), GetId()) != -1); 
+}
+      
+string *parse_command_id_list() { return GetId(); }
+
+string *parse_command_plural_id_list() { 
+    return map(GetId(), (: pluralize :)); 
+}
+                                                          
+string *parse_command_adjectiv_id_list() { return GetAdjectives(); }
+             
+/***********          /lib/object.c commands          **********/
+
+int cmdRead(string str) {
+    mixed val;
+
+    if( !str || !(val = GetRead(str)) ) return notify_fail("Read what?\n");
+    if( !id(str) ) return notify_fail("You do not notice that here!\n");
+    if( functionp(val) ) return (int)evaluate(val, str);
+    message("info", val, this_player());
+    message("other_action", sprintf("%s reads %s", 
+      (string)this_player()->GetName(), GetShort()),
+      environment(this_player()), ({ this_player() }));
+    return 1;
+}
+    
+/*  **********        /lib/object.c events          *********  */
+
+/*  ***************  /lib/object.c lfuns  *************** */
+
+nosave int Destruct() {    
+    object env;          
+    int x;               
+                         
+    if( env = environment() ) {                                         
+        env->eventReleaseObject(this_object());
+        if( !(x = clean::Destruct()) ) env->eventReceiveObject(this_object());
+        return x;                                                       
+    }
+    else return clean::Destruct(); 
+}                                                                       
+
+/***********      /lib/object.c data manipulation functions     ***********/
+
+void SetId(mixed val) {
+    if( stringp(val) ) val = ({ val });
+    else if( !pointerp(val) ) error("Bad argument 1 to SetId().\n");
+    Id = val;
+}
+
+string *GetId() { return (Id + ({ GetKeyName() })); }
+
+void SetAdjectives(mixed adjs) {
+    if( stringp(adjs) ) adjs = ({ adjs });
+    else if( !pointerp(adjs) ) error("Bad argument 1 to SetAdjectives().\n");
+    Adjectives = adjs;
+}
+
+string *GetAdjectives() { return Adjectives; }
+
+string SetKeyName(string nom) { 
+    if( !stringp(nom) ) error("Bad argument 1 to SetKeyName().\n");
+    KeyName = lower_case(nom);
+    if( !CapName ) CapName = capitalize(nom);
+    return KeyName;
+}
+
+string GetKeyName() { return KeyName; }
+
+string SetCapName(string str) {
+    if( !stringp(str) ) error("Bad argument 1 to SetCapName().\n");
+    else return (CapName = str);
+}
+
+string GetCapName() { return CapName; }
+
+string GetName() { return GetCapName(); }
+
+mixed SetShort(mixed val) {
+    if( !stringp(val) && !functionp(val) ) 
+      error("Bad argument 1 to SetShort().\n");
+    return (Short = val);
+}
+
+string GetShort() {
+    if( !Short ) return 0;
+    if( functionp(Short) ) return (string)evaluate(Short);
+    else return Short;
+}
+
+mixed SetLong(mixed val) {
+    if( !stringp(val) && !functionp(val) ) 
+      error("Bad argument 1 to SetLong().\n");
+    return (Long = val);
+}
+
+varargs string GetLong(string str) {
+    if( !Long ) return "";
+    if( functionp(Long) ) return (string)evaluate(Long, str);
+    else return Long;
+}
+
+varargs mixed SetRead(mixed val, mixed unused) {  
+    if( (stringp(unused) || functionp(unused)) && stringp(val) ) {
+	if(mapp(Read)) Read[val] = unused;
+	else Read = ([ val : unused ]);
+	return Read[val];
+    }
+    else return (Read = val);
+}
+
+varargs mixed GetRead(string str) { 
+    if( mapp(Read) ) return Read[str];
+    else return Read;
+}
+
+mapping SetProperties(mapping props) { return (Properties += props); }
+
+mapping GetProperties() { return Properties; }
+
+mixed SetProperty(string prop, mixed val) { return (Properties[prop] = val); }
+
+mixed GetProperty(string prop) { return Properties[prop]; }
+
+mixed AddProperty(string prop, mixed val) {
+    if( Properties[prop] ) Properties[prop] += val;
+    else Properties[prop] = val;
+    return Properties[prop];
+}
+
+int RemoveProperty(string prop) {
+    if( undefinedp(Properties[prop]) ) return 1;
+    else map_delete(Properties, prop);
+    return !Properties[prop];
+}

@@ -1,0 +1,66 @@
+#ifndef __SIMULEFUN_H
+#define __SIMULEFUN_H
+
+string absolute_path(string curr, string newf);
+int absolute_value(int x);
+string architecture();
+int archp(object ob);
+string arrange_string(string str, int x);
+string base_name(mixed val);
+string cardinal(int x);
+varargs string center(string str, int x);
+string consolidate(int x, string str);
+string convert_name(string str);
+varargs mixed convert_string(string str, int flag);
+varargs int creatorp(object ob);
+int destruct(object ob);
+int query_ed_mode();
+mixed *distinct_array(mixed *arr);
+varargs void event(string fun, int when, mixed *args, int reg);
+int event_pending(object ob);
+int exec(object target, object src);
+int file_exists(string str);
+string file_privs(string file);
+string format_page(string *items, int columns);
+varargs object get_object(string str, object player);
+varargs mixed get_objects(string str, object player, int no_arr);
+int hiddenp(object ob);
+string identify(mixed a);
+object load_object(string str);
+void log_file(string fl, string msg);
+int member_group(mixed who, string grp);
+string mud_name();
+string mudlib();
+string mudlib_version();
+string nominative(mixed val);
+string objective(mixed val);
+string ordinal(int x);
+mixed *path_file(mixed full_path);
+float percent(mixed numerator, mixed denominator);
+string pluralize(mixed single);
+string possessive(mixed val);
+string possessive_noun(mixed val);
+int query_host_port();
+object query_snoop(object snoopee);
+object query_snooping(object ob);
+string reflexive(mixed val);
+string save_file(string str);
+varargs void say(mixed str, object ob);
+void set_eval_limit(int x);
+void set_privs(object ob, string str);
+varargs void shout(mixed str, mixed exclude);
+varargs void shutdown(int code);
+varargs object snoop(object who, object target);
+string strip_colours(string str);
+void tell_object(object ob, mixed str);
+varargs void tell_room(object ob, mixed str, mixed exclude);
+object to_object(mixed target);
+mixed unguarded(function f);
+int user_exists(string str);
+string user_path(string name);
+string version();
+varargs int visible(object detectee_obj, object detector_obj);
+varargs string wrap(string str, int width);
+void write(string str);
+
+#endif /* __SIMULEFUN_H */

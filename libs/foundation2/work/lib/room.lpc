@@ -1,0 +1,163 @@
+/*    /lib/room.c
+ *    from the Foundation II LPC Library
+ *    the generic room object
+ *    created by Descartes of Borg 940711
+ *    modified for new inheritables structure 950208
+ */
+
+#include <lib.h>
+#include <rooms.h>
+#include <config.h>
+#include "room.h"
+
+inherit LIB_CONTAINER;
+inherit LIB_OBJECT;
+inherit LIB_EXITS;
+inherit LIB_ITEMS;
+
+private mapping Inventory;
+private nosave int ResetNumber;
+private nosave object *ExtraLongs;
+
+nosave void create() {
+    string *tmp;
+
+    object::create();
+    container::create();
+    exits::create();
+    items::create();
+    ResetNumber = 0;
+    ExtraLongs = ({});
+    Inventory = ([]);
+    reset();
+    if( replaceable(this_object()) ) {
+	tmp = inherit_list(this_object());
+	if( sizeof(tmp) == 1 ) replace_program(tmp[0]);
+    }
+}
+
+void reset() {
+    object::reset();
+    LoadInventory();
+    ResetNumber++;
+}
+
+nosave void init() {
+    object::init();
+    exits::init();
+}
+
+int id(string str) { return items::id(str); }
+
+/* ***************  /lib/room.c command functions  *************** */
+
+int cmdLook(string args) {
+    object ob;
+    string item;
+
+    if( args == "" || !args ) {
+	this_player()->eventDescribeEnvironment(0);
+	message("other_action", (string)this_player()->GetName() + 
+		" looks around.", this_object(), ({ this_player() }));
+	return 1;
+    }
+    if( sscanf(args, "at %s", item) == 1 ) args = item;
+    if( id(args) ) {
+	message("item_descriptions", GetLong(args), this_player());
+	message("other_action", (string)this_player()->GetName() +
+		" looks at the " + args + ".", this_object(), 
+		({ this_player() }));
+	return 1;
+    }
+    if( ob=present(args, this_player()) || ob = present(args, this_object()) ){
+	string str;
+
+	if( (int)ob->GetInvis(this_player()) ) 
+	  return notify_fail(DEFAULT_ITEM_MESSAGE "\n");
+	if( !(str = (string)ob->GetLong(args)) ) 
+	  return notify_fail(DEFAULT_ITEM_MESSAGE "\n");
+	message("item_description", str, this_player());
+	if( living(ob) ) {
+	  message("other_action", (string)this_player()->GetName() + 
+		  " looks you over.", ob);
+	  message("other_action", (string)this_player()->GetName() +
+		  " looks over " + (string)ob->GetName() + ".",
+		  this_object(), ({ ob, this_player() }));
+        }
+	else message("other_action", (string)this_player()->GetName() + 
+		     " looks over " + (string)ob->GetShort() + ".",
+		     this_object(), ({ this_player() }));
+	return 1;
+    }
+    return notify_fail(DEFAULT_ITEM_MESSAGE "\n");
+}
+    
+/***********          /lib/room.c events          ***********/
+
+int eventMove(mixed dest) { return 0; }
+
+/* ***************  /lib/room.c lfuns  *************** */
+
+nosave void LoadInventory() {
+    string *files, *borg;
+    int i;
+
+    borg = map(all_inventory(this_object()), (: base_name :));
+    i = sizeof(files = keys(Inventory));
+    while(i--) {
+	int x;
+
+	x = Inventory[files[i]] - 
+	  sizeof(filter(borg, (: $1 == $(files[i]) :)));
+	while(x--) new(files[i])->eventMove(this_object());
+    }
+}
+
+/***********      /lib/room.c data manipulation functions      **********/
+
+string SetShort(string str) { return object::SetShort(str); }
+
+string SetLong(string str) { return object::SetLong(str); }
+
+string GetShort() { return object::GetShort(); }
+
+varargs string GetLong(string str) {
+    string ret, tmp;
+    object ob;
+
+    if( str ) return items::GetLong(str);
+    else ret = object::GetLong();
+    if( !ret ) ret = "";
+    if( tmp = GetExtraLong() ) ret += GetExtraLong();
+    return ret;
+}
+
+object *AddExtraLong(object ob) { 
+    if(environment(ob) == this_object()) ExtraLongs += ({ ob });
+    return ExtraLongs;
+}
+
+nosave string GetExtraLong() {
+    function f;
+    string ret;
+    int i;
+
+    if( !sizeof(ExtraLongs) ) return 0;
+    ret = "";
+    ExtraLongs = filter(ExtraLongs, (: environment($1) == this_object() :));
+    i = sizeof(ExtraLongs);
+    while(i--) ret += "  " + (string)ExtraLongs[i]->GetAffectEnvironment();
+    return ret;
+}
+
+int GetResetNumber() { return ResetNumber; }
+ 
+string *GetId() { return items::GetId(); }
+
+mapping SetInventory(mapping mp) { 
+    Inventory = mp;
+    LoadInventory();
+    return Inventory;
+}
+
+mapping GetInventory() { return Inventory; }

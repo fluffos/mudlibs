@@ -1,0 +1,292 @@
+/*    /lib/room/exits.c
+ *    from the Foundation II LPC Library
+ *    handles players exiting from rooms
+ *    created by Descartes of Borg 940711
+ *    modified for new inheritance structure by Descartes 950208
+ */
+
+#include <rooms.h>
+#include "exits.h"
+
+nosave private mapping Exits, Enters, Doors;
+
+nosave void create() {
+    Exits = ([]);
+    Enters = ([]);
+    Doors = ([]);
+}
+
+nosave void init() {
+    /* go and enter are cached inside the user object */
+    //add_action( (: cmdLock :), "lock");
+    //add_action( (: cmdUnlock :), "unlock");
+    //add_action( (: cmdOpen :), "open");
+    //add_action( (: cmdClose :), ({ "close", "shut" }));
+}
+
+int cmdGo(string str) {
+    if( (int)this_player()->GetParalyzed() ) 
+      return notify_fail("You are unable to move.\n");
+    if( !Exits[str] ) return notify_fail("You go nowhere at all.\n");
+    if( Doors[str] && (int)Doors[str]->GetClosed() ) {
+	message("my_action", "You bump into " + 
+		(string)Doors[str]->GetShort(str) + ".", this_player());
+	return 1;
+    }
+    if( Exits[str]["pre"] && !((int)evaluate(Exits[str]["pre"], str)) )
+      return 1;
+    this_player()->eventMoveLiving(Exits[str]["room"], str);
+    if( Exits[str]["post"] ) evaluate(Exits[str]["post"], str);
+    return 1;
+}
+
+int cmdEnter(string str) {
+    if( (int)this_player()->GetParalyzed() )
+      return notify_fail("You are unable to move.\n");
+    if( !Enters[str] ) return notify_fail("You cannot enter that.\n");
+    if( Doors[str] && (int)Doors[str]->GetClosed() ) {
+	message("my_action", "You bump into " + 
+		(string)Doors[str]->GetShort(str) + ".", this_player());
+	return 1;
+    }
+    if( Enters[str]["pre"] && !((int)evaluate(Enters[str]["pre"], str)) )
+      return 1;
+    this_player()->eventMoveLiving(Enters[str]["room"], str);
+    if( Enters[str]["post"] ) evaluate(Enters[str]["post"], str);
+    return 1;
+}
+
+int cmdLock(string which) {
+    string *doors;
+    object ob;
+    string what;
+    int i;
+
+    if( !which || which == "" ) return 0;
+    if( !(i = sizeof(doors = keys(Doors))) ) return 0;
+    if( sscanf(which, "%s with %s", which, what) != 2 ) 
+      return notify_fail("Lock it with what?\n");
+    if( !(ob = present(what, this_player())) ) {
+	message("my_action", "You do not have any such thing.", this_player());
+	return 1;
+    }
+    while(i--) {
+	if( (string)Doors[doors[i]]->GetId(doors[i]) == which ) {
+	    if( sizeof((string *)ob->GetId() &
+		       (string *)Doors[doors[i]]->GetGeys(doors[i])) ) {
+		message("my_action", "That will not work on this lock.",
+			this_player());
+		return 1;
+	    }
+	    if( (int)Doors[doors[i]]->GetLocked() ) {
+		message("my_action", "It is already locked!", this_player());
+		return 1;
+	    }
+	    if( (int)Doors[doors[i]]->eventLock(this_object(), 
+						this_player()) ) return 1;
+	    else {
+		message("my_action", "You fail to lock it.", this_player());
+		return 1;
+	    }
+	}
+    }
+    return notify_fail("You see nothing here of that nature to lock.\n");
+}
+	
+int cmdUnlock(string which) {
+    string *doors;
+    object ob;
+    string what;
+    int i;
+
+    if( !which || which == "" ) return 0;
+    if( !(i = sizeof(doors = keys(Doors))) ) return 0;
+    if( sscanf(which, "%s with %s", which, what) != 2 ) 
+      return notify_fail("Unlock it with what?\n");
+    if( !(ob = present(what, this_player())) ) {
+	message("my_action", "You have no such thing!", this_player());
+	return 1;
+    }
+    while(i--) {
+	if( (string)Doors[doors[i]]->GetId(doors[i]) == which ) {
+	    if( sizeof((string *)ob->GetId() & 
+		       (string *)Doors[doors[i]]->GetGeys(doors[i])) ) {
+		message("my_action", "That will not work on this lock.",
+			this_player());
+		return 1;
+	    }
+	    if( !((int)Doors[doors[i]]->GetLocked()) ) {
+		message("my_action", "It is already unlocked!", this_player());
+		return 1;
+	    }
+	    if( (int)Doors[doors[i]]->eventUnlock(this_object(),
+						  this_player()) ) return 1;
+	    else {
+		message("my_action", "You fail to unlock it.", this_player());
+		return 1;
+	    }
+	}
+    }
+    return notify_fail("You see nothing here of that nature to unlock.\n");
+}
+
+int cmdOpen(string which) {
+    string *doors;
+    int i;
+
+    if( !which || which == "" ) return 0;
+    if( !(i = sizeof(doors = keys(Doors))) ) return 0;
+    while(i--) {
+	if( !((string)Doors[doors[i]]->GetId(doors[i]) == which) )
+	  continue;
+	if( (int)Doors[doors[i]]->GetLocked() ) {
+	    message("my_action", (string)Doors[doors[i]]->GetShort(doors[i]) +
+		    " is locked.", this_player());
+	    return 1;
+	}
+	if( !((int)Doors[doors[i]]->GetClosed()) ) {
+	    message("my_action", "It is already open.", this_player());
+	    return 1;
+	}
+	if( (int)Doors[doors[i]]->eventOpen(this_object(), this_player()) ) {
+	    message("my_action", "You open " + 
+		    (string)Doors[doors[i]]->GetShort(doors[i]) + ".",
+		    this_player());
+	    message("other_action", (string)this_player()->GetName() + 
+		    " opens " + (string)Doors[doors[i]]->GetShort(doors[i]) +
+		    ".", this_object(), ({ this_player() }));
+	    return 1;
+	}
+	else {
+	    message("my_action", "You fail to open it.", this_player());
+	    return 1;
+	}
+    }
+    return notify_fail("There is no such thing to be opened.\n");
+}
+	
+int cmdClose(string which) {
+    string *doors;
+    int i;
+
+    if( !which || which == "" ) return 0;
+    if( !(i = sizeof(doors = keys(Doors))) ) return 0;
+    while(i--) {
+	if( !((string)Doors[doors[i]]->GetId(doors[i]) == which) )
+	  continue;
+	if( (int)Doors[doors[i]]->GetClosed() ) {
+	    message("my_action", "It is already closed.", this_player());
+	    return 1;
+	}
+	if( (int)Doors[doors[i]]->eventClose(this_object(), this_player()) ) {
+	    message("my_action", "You close " +
+		    (string)Doors[doors[i]]->GetShort(doors[i]) + ".",
+		    this_player());
+	    message("other_action", (string)this_player()->GetName() + 
+		    " closes " + (string)Doors[doors[i]]->GetShort(doors[i]) +
+		    ".", this_object(), ({ this_player() }));
+	    return 1;
+	}
+	else {
+	    message("my_action", "You fail to close it.", this_player());
+	    return 1;
+	}
+    }
+    return notify_fail("There is no such thing to be closed.\n");
+}
+	
+mapping SetExits(mapping mp) {
+    mixed it;
+    string *cles;
+    int i;
+
+    Exits = ([]);
+    i = sizeof(cles = keys(mp));
+    while(i--) {
+	it = mp[cles[i]];
+	if( stringp(it) ) Exits[cles[i]] = ([ "room" : it ]);
+	else if( pointerp(it) ) {
+	    int j;
+
+	    if( (j = sizeof(it)) && stringp(it[0]) ) {
+		Exits[cles[i]] = ([ "room" : it[0] ]);
+		if (j > 1 && functionp(it[1])) {
+		    Exits[cles[i]]["pre"]=it[1];
+		    if( j>2 && functionp(it[2]) ) Exits[cles[i]]["post"]=it[2];
+		}
+	    }
+	}
+    }
+    return Exits;
+}
+
+varargs mapping AddExit(string dir, string dest, function pre, function post) {
+    if(!stringp(dir)) error("Bad argument 1 to AddExit().\n");
+    if(!stringp(dest)) error("Bad argument 2 to AddExit().\n");
+    Exits[dir] = ([ "room" : dest ]);
+    if( functionp(pre) ) Exits[dir]["pre"] = pre;
+    if( functionp(post) ) Exits[dir]["post"] = post;
+    return Exits[dir];
+}
+
+mapping RemoveExit(string dir) {
+    if(Exits[dir]) map_delete(Exits, dir);
+}
+
+string GetExit(string str) {
+    if(!Exits[str]) return 0;
+    else return Exits[str]["room"];
+}
+
+string *GetExits() { return keys(Exits); }
+
+mapping SetEnters(mapping mp) {
+    string *cles;
+    int i;
+
+    Enters = ([]);
+    i = sizeof(cles = keys(mp));
+    while(i--) Enters[cles[i]] = ([ "room": mp[cles[i]] ]);
+    return Enters;
+}
+
+varargs mapping AddEnter(string dir, string dest, function pre, function post) {
+    if( !stringp(dir) ) error("Bad argument 1 to AddEnter().\n");
+    if( !stringp(dest) ) error("Bad argument 2 to AddEnter().\n");
+    Enters[dir] = ([ "room" : dest ]);
+    if( functionp(pre) ) Enters[dir]["pre"] = pre;
+    if( functionp(post) ) Enters[dir]["post"] = post;
+}
+
+mapping RemoveEnter(string dir) { 
+    if( Enters[dir] ) map_delete(Enters, dir);
+    return Enters;
+}
+
+string GetEnter(string dir) {
+    if( !Enters[dir] ) return 0;
+    else return Enters[dir]["room"];
+}
+
+string *GetEnters() { return keys(Enters); }
+
+string SetDoor(string dir, string file) { 
+    file->eventRegisterSide(dir);
+    return (Doors[dir] = file); 
+}
+
+string GetDoor(string dir) { return Doors[dir]; }
+
+string *GetDoors() { return keys(Doors); }
+
+string GetDirection(string dest) {
+    string *cles;
+    int i;
+
+    i = sizeof(cles = keys(Exits));
+    while(i--) if(Exits[cles[i]]["room"] == dest) return "go "+cles[i];
+    i = sizeof(cles = keys(Enters));
+    while(i--) if(Enters[cles[i]]["room"] == dest) return "enter "+cles[i];
+    return 0;
+}
+

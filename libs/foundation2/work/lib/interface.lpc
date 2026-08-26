@@ -1,0 +1,178 @@
+/*    /lib/interface.c
+ *    from the Foundation II LPC Library
+ *    handles user interface issues
+ *    created by Descartes of Borg 950428
+ */
+
+#include <lib.h>
+#include <daemons.h>
+#include "interface.h"
+
+inherit LIB_CHAT;
+inherit LIB_COMMAND;
+inherit LIB_EDITOR;
+inherit LIB_NMSH;
+
+private string Terminal;
+private mapping Blocked;
+private int *Screen;
+private nosave int LogHarass;
+private nosave string Client;
+private nosave mapping TermInfo;
+
+nosave void create() {
+    chat::create();
+    command::create();
+    editor::create();
+    nmsh::create();
+    Terminal = "unknown";
+    Screen = ({ 80, 24 });
+    Blocked = ([]);
+}
+
+nosave string process_input(string str) {
+    if( (str = editor::process_input(str)) == "" ) return "";
+    else return nmsh::process_input(str);
+}
+
+nosave void terminal_type(string str) {
+    if( !stringp(str) ) return;
+    else SetTerminal(lower_case(str));
+}
+
+nosave void window_size(int width, int height) { SetScreen(width, height); }
+
+void receive_message(string msg_class, string msg) {
+    string *words;
+    int i, max;
+    string str, pre, post;
+    int x, do_wrap;
+
+    if( GetLogHarass() )
+      log_file("harass/" + GetKeyName(), strip_colours(msg) + "\n");
+    if( Client ) {
+        receive("<"+msg_class+">"+msg+"\n");
+        return;
+    }
+    x = GetScreen()[0];
+    if( msg_class[0] == 'N' ) msg_class = msg_class[1..];
+    else if( msg_class != "prompt" && msg_class != "editor" ) 
+      msg = wrap(msg,x );
+    if( msg_class == "snoop" ) {
+	receive(strip_colours(msg));
+	return;
+    }
+    if( msg_class == "editor" || msg_class == "system" || 
+       msg_class == "more" ) {
+        receive(msg);
+        return;
+    }
+    if( GetBlocked(msg_class) ) {
+	switch(msg_class) {
+            case "broadcast": case "more": case "help": case "smell":
+	    case "sound": case "my_action": case "other_action":
+            case "system": case "prompt": case "editor":
+	        break;
+   	    default: return;
+	}
+    }
+    msg = msg + "%^RESET%^";
+    switch(msg_class) {
+        case "smell": msg = "%^ORANGE%^"+msg; break;
+        case "sound": msg = "%^CYAN%^"+msg; break;
+        case "tell": 
+          if(sscanf(msg, "%s:%s", pre, post) == 2)
+            msg = "%^BOLD%^RED%^"+pre+":%^RESET%^"+post;
+        break;
+        case "shout":
+          if(sscanf(msg, "%s:%s", pre, post) == 2)
+            msg = "%^BOLD%^BLUE%^"+pre+":%^RESET%^"+post;
+          break;
+        case "come": case "leave": case "telout": case "telin":
+          msg = "%^BOLD%^GREEN%^"+msg; break;
+        case "living_item": msg = "%^BOLD%^RED%^"+msg; break;
+        case "inanimate_item": msg = "%^BOLD%^MAGENTA%^"+msg; break;
+    }
+    if( !TermInfo ) 
+      TermInfo = (mapping)TERMINAL_D->query_term_info(GetTerminal());
+    receive(terminal_colour(msg, TermInfo));
+}
+
+nosave void receive_snoop(string str) { receive_message("snoop", "%"+str); } 
+
+nosave string cache_commands(string str) {
+    if( nmsh::cache_commands(str) == "" ) return "";
+    else return chat::cache_commands(str);
+}
+
+int Setup() {
+    command::Setup();
+    nmsh::Setup();
+    TermInfo = (mapping)TERMINAL_D->query_term_info(Terminal);
+}
+
+int SetBlocked(string type) {
+    Blocked[type] = !Blocked[type];
+    message("system", "You are "+(Blocked[type] ? "now blocking" :
+      "no longer blocking")+" "+type+".", this_object());
+    return Blocked[type];
+}
+
+int GetBlocked(string type) { return (Blocked["all"] || Blocked[type]); }
+
+string SetClient(string str) {
+    if(base_name(previous_object()) != LIB_LOGIN) return Client;
+    return (Client = str);
+}
+
+string GetClient() { return Client; }
+
+int SetLogHarass(int x) {
+    string txt;
+
+    if( GetForced() || (this_player(1) != this_object()) ) return LogHarass;
+    if( LogHarass == x ) return LogHarass;
+    if( x ) {
+        txt = "**************** Start of Log *****************\n"+
+            "Time: " + ctime( time() ) + "\n";
+        if( environment( this_object() ) ) txt += "Place: " +
+            file_name( environment( this_object() ) ) + "\n";
+    } else {
+        txt = "**************** End of Log *****************\n"+
+            "Time: " + ctime( time() ) + "\n";
+    }
+    log_file("harass/" + GetKeyName(), txt);
+    return (LogHarass = x);
+}
+
+int GetLogHarass() { return LogHarass; }
+
+int *SetScreen(int width, int height) { 
+    if( !width || !height ) return Screen;
+    return (Screen = ({ width, height })); 
+}
+
+int *GetScreen() { return Screen; }
+
+string SetTerminal(string terminal) { 
+    switch( terminal ) {
+        case "iris-ansi-net": case "vt100": case "vt220": case "vt102":
+        case "vt300": 
+	    terminal = "ansi";
+	    break;
+	case "unknown": case "ansi": case "freedom": case "ansi-status":
+	case "xterm": 
+	    break;
+	default:
+	    log_file("terminals", "Unknown terminal type: " + terminal + "\n");
+	    terminal = Terminal;
+	    break;
+    }
+    if( terminal != Terminal ) 
+      TermInfo = (mapping)TERMINAL_D->query_term_info(terminal);
+    return Terminal = terminal;
+}
+
+string GetTerminal() { return Terminal; }
+
+string GetKeyName() { return 0; }

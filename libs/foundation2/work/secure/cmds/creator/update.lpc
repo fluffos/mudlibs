@@ -1,0 +1,103 @@
+/*    /secure/cmds/creator/update.c
+ *    from the Nightmare IV LPC Library
+ *    destroys an object then reloads it
+ *    created by Descartes of Borg 950330
+ */
+ 
+#include <lib.h>
+#include <rooms.h>
+ 
+inherit LIB_DAEMON;
+ 
+nosave void eventUpdate(string args);
+ 
+mixed cmd(string args) {
+    object *obs, ob;
+    string *files, *tmpfiles;
+    mixed tmp;
+    string file;
+    int i;
+ 
+    if( args == "" || !args ) {
+        if( !environment(this_player()) ) return "You have no environment.";
+        ob = environment(this_player());
+        tmp = "Updating environment (" + (file = file_name(ob)) + "): ";
+        i = sizeof(obs = all_inventory(ob));
+        while(i--) if( userp(obs[i]) ) obs[i]->eventMove(ROOM_VOID);
+        if( !((int)ob->eventDestruct()) ) destruct(ob);
+        if( !((int)this_player()->eventMove(file)) )
+          return tmp + "Error in reloading environment.";
+        i = sizeof(obs);
+        while(i--) if( obs[i] ) obs[i]->eventMove(environment(this_player()));
+        message("system", tmp + "Ok", this_player());
+        return 1;
+    }
+    tmpfiles = map(explode(args, " "),
+                   function(string x) {
+                     string tmp = (string)this_player()->query_cwd();
+                     /* FluffOS PORT NOTE: same rename-arithmetic bug
+                      * as eventUpdate() below (was x[<2..] for a
+                      * 2-char ".c" suffix) -- previously always true,
+                      * so ".lpc" got appended even to an argument
+                      * that already ended in ".lpc" (e.g. "update
+                      * foo.lpc" produced "foo.lpc.lpc", "File not
+                      * found").
+                      */
+                     if( x[<4..] != ".lpc" ) x = x + ".lpc";
+                     return absolute_path(tmp, x);
+                   });
+    tmpfiles = map(tmpfiles,
+                   (: ((file_size($1) == -2) ?
+                      (($1[<1] == '/') ? ($1 + "*.lpc") : ($1 + "/*.lpc")) : $1)
+                   :));
+    i = sizeof(tmpfiles);
+    files = ({});
+    while(i--) {
+      if( sizeof(tmp = (string *)this_player()->wild_card(tmpfiles[i])) )
+        files += tmp;
+        else message("error", tmpfiles[i] + ": File not found.",
+             this_player() );
+    }
+    i = sizeof(files);
+    while(i--) eventUpdate(files[i]);
+    return 1;
+}
+ 
+nosave void eventUpdate(string args) {
+    object ob;
+    string tmp;
+ 
+    /* FluffOS PORT NOTE: see lib/remote.lpc's identical fix -- this
+     * checked/stripped a trailing ".c" (2 chars) before this project's
+     * standard rename to ".lpc" (4 chars); the 2-char slice compared
+     * against the (already mechanically updated) 4-char literal is
+     * always false, so `update <file>.lpc` never stripped the
+     * extension. Same rename-arithmetic bug class as
+     * daemon/command.lpc.
+     */
+    if( args[<4..] == ".lpc" ) args = args[0..<5];
+    if( ob = find_object(args) ) {
+        if( tmp = catch( ob->eventDestruct()) )
+          message("system", args + ": error in eventDestruct()",this_player());
+        if( ob ) destruct(ob);
+        if( ob )
+          message("error", args + ": Failed to destruct old object.",
+                  this_player());
+    }
+    if( args == base_name(this_object()) ) {
+        message("system", "Cannot reload update after destruct.\n"
+                "It will be reloaded at next reference.", this_player());
+        return;
+    }
+    tmp = catch(call_other(args, "???"));
+    if( !tmp ) message("system", args + ": Ok", this_player());
+    else message("system", args + ": Error in update\n" + tmp, this_player());
+}
+ 
+void help() {
+    message("help", "Syntax: <update [file list]>\n\n"
+      "Destructs the master copy of the file named and then attempts "
+      "to reload a new version of it.\n\n",
+    this_player() );
+}
+ 

@@ -1,0 +1,291 @@
+/*    /lib/storage.c
+ *    from the Foundation II LPC Library
+ *    the standard object for storing things
+ *    created by Descartes of Borg 940212
+ */
+
+#include <lib.h>
+#include "storage.h"
+
+inherit LIB_CONTAINER;
+inherit LIB_ITEM;
+
+private int CanClose, CanLock;
+private string Key;
+nosave private int Closed, Locked;
+
+void create() {
+    container::create();
+    item::create();
+    CanClose = 0;
+    Closed = 0;
+}
+
+void init() {
+    item::init();
+    add_action((: cmdGet :), "get");
+    add_action((: cmdPut :), "put");
+    add_action((: cmdOpen :), "open");
+    add_action((: cmdClose :), "close");
+    add_action((: cmdLock :), "lock");
+    add_action((: cmdUnlock :), "unlock");
+}
+
+int cmdPut(string str) {
+    object ob;
+    string what, where;
+    int tmp;
+
+    if(!str) return 0;
+    if(sscanf(lower_case(str), "%s in %s", what, where) != 2) return 0;
+    if(present(where, environment(this_player())) != this_object() &&
+      present(where, this_player()) != this_object()) return 0;
+    if(!(ob = present(what, this_player()))) return 0;
+    if(ob == this_object()) {
+        message("my_action", "You cannot change the laws of physics.",
+          this_player());
+        return 1;
+    }
+    if(!((int)ob->CanPut(this_player()))) return 1;
+    if(!((int)ob->CanDrop(this_player()))) return 1;
+    if( !((int)ob->eventMove(this_object())) ) {
+        if(GetClosed()) 
+          message("my_action", sprintf("The %s is closed.", GetKeyName()),
+            this_player());
+        else message("my_action", "You cannot fit it in there.",this_player());
+        return 1;
+    }
+    message("my_action", "You put " + (string)ob->GetShort() + " into " +
+	    GetShort() + ".", this_player());
+    message("other_action", (string)this_player()->GetName() + " puts " +
+	    (string)ob->GetShort() + " into " + GetShort() + ".",
+	    environment(this_player()), ({ this_player() }));
+    return 1;
+}
+
+int cmdGet(string str) { 
+    object *things;
+    object ob;
+    string what, where;
+    int tmp, i;
+
+    if(!str) return 0;
+    if(sscanf(lower_case(str), "%s from %s", what, where) != 2) return 0;
+    if(present(where, environment(this_player())) != this_object() &&
+      present(where, this_player()) != this_object()) return 0;
+    if(what == "all")
+      i = sizeof(things = all_inventory(this_object()));
+    else if(!(ob = present(what, this_object()))) {
+        message("my_action", "There is no such thing in there!",this_player());
+        return 1;
+    }
+    else {
+        i = 1;
+        things = ({ ob });
+    }
+    if(GetClosed()) {
+        message("my_action", sprintf("%s is closed.", 
+          capitalize(GetShort())), this_player());
+        return 1;
+    }
+    while(i--) {
+        if( !((int)things[i]->CanGet(this_player())) ) continue;
+        message("my_action", sprintf("You get %s from %s.",
+          (string)things[i]->GetShort(), GetShort()), this_player());
+        message("other_action", sprintf("%s gets %s from %s.", 
+          (string)this_player()->GetName(), (string)things[i]->GetShort(),
+          GetShort()), environment(this_player()), ({this_player()}));
+        if( !((int)things[i]->eventMove(this_player())) ) {
+            message("my_action", "You cannot carry that!", this_player());
+            things[i]->eventMove(environment(this_player()));
+            message("other_action", sprintf("%s drops %s.", 
+              (string)this_player()->GetName(), (string)things[i]->GetShort()),
+              environment(this_player()), ({ this_player() }));
+        }
+    }
+    return 1;
+}
+
+int cmdOpen(string str) {
+    if(!str) return 0;
+    if(!GetCanClose()) return 0;
+    if(present(str =lower_case(str), this_player()) != this_object() &&
+      present(str, environment(this_player())) != this_object()) return 0;
+    if(!GetClosed()) {
+        message("my_action", "It is already open!", this_player());
+        return 1;
+    }
+    if(GetLocked()) {
+        message("my_action", "It is locked.", this_player());
+        return 1;
+    }
+    SetClosed(0);
+    message("my_action", sprintf("You open %s.", GetShort()),this_player());
+    message("other_action", sprintf("%s opens %s.", 
+      (string)this_player()->GetName(), GetShort()),
+      environment(this_player()), ({ this_player() }));
+    return 1;
+}
+
+int cmdClose(string str) {
+    if(!str || !GetCanClose()) return 0;
+    if(present(str =lower_case(str), this_player()) != this_object() &&
+      present(str, environment(this_player())) != this_object()) return 0;
+    if(GetClosed()) {
+        message("my_action", "It is already closed.", this_player());
+        return 1;
+    }
+    SetClosed(1);
+    message("my_action", sprintf("You close %s.", GetShort()),
+      this_player());
+    message("other_action", sprintf("%s closes %s.", 
+      (string)this_player()->GetName(), GetShort()),
+      environment(this_player()), ({ this_player() }));
+    return 1;
+}
+
+int cmdLock(string str) {
+    object ob;
+    string what;
+
+    if(!str || !GetCanClose() || !GetCanLock()) return 0;
+    if(Key) {
+        sscanf(str, "%s with %s", str, what);
+        if(!what || !(ob = present(what, this_player())))
+          return notify_fail("Lock it with what?\n");
+        else if(ob != present(Key, this_player()))
+          return notify_fail("It does not work.\n");
+    }
+    if(present(str = lower_case(str), this_player()) != this_object() &&
+      present(str, environment(this_player())) != this_object()) return 0;
+    if(!GetClosed()) {
+        message("my_action", "It must be closed before you can lock it.",
+          this_player());
+        return 1;
+    }
+    if(GetLocked()) {
+        message("my_action", "It is already locked!", this_player());
+        return 1;
+    }
+    message("my_action", sprintf("You lock %s.", GetShort()),
+      this_player());
+    message("other_action", sprintf("%s locks %s.", 
+      (string)this_player()->GetName(), GetShort()),
+      environment(this_player()), ({ this_player() }));  
+    SetLocked(1);
+    return 1;
+}
+
+int cmdUnlock(string str) {
+    object ob;
+    string what;
+
+    if(!str || !GetCanClose() || !GetCanLock()) return 0;
+    if(Key) {
+        sscanf(str, "%s with %s", str, what);
+        if(!what || !(ob = present(what, this_player())))
+          return notify_fail("Unlock it with what?\n");
+        else if(ob != present(Key, this_player())) 
+          return notify_fail("It does not work.\n");
+    }
+    if(!GetLocked()) {
+        message("my_action", "It is not locked.", this_player());
+        return 1;
+    }
+    SetLocked(0);
+    message("my_action", sprintf("You unlock %s.", GetShort()),
+      this_player());
+    message("other_action", sprintf("%s unlocks %s.", 
+      (string)this_player()->GetName(), GetShort()),
+      environment(this_player()), ({ this_player() }));
+    return 1;
+}
+
+int eventPickLock() {
+    if( !GetCanLock() ) return 0;
+    SetLocked( !GetLocked() );
+    return 1;
+}
+
+varargs string GetLong(string str) {
+    string tmp;
+
+    tmp = item::GetLong(str);
+    if(GetClosed()) tmp +="\nIt is closed.";
+    else {
+	object *obs;
+	string *shorts;
+	mapping mp;
+	string desc;
+	int i, maxi;
+
+	mp = ([]);
+	shorts = map(filter(all_inventory(), (: !living($1) && 
+				      !((int)$1->GetInvis(this_object())) :)), 
+		     (: (string)$1->GetShort() :));
+	for(i=0, maxi = sizeof(shorts); i<maxi; i++) 
+	  if( shorts[i] ) mp[shorts[i]]++;
+	maxi = sizeof(shorts = keys(mp));
+	for(i=0, desc = "%^MAGENTA%^"; i<maxi; i++) {
+	    if( mp[shorts[i]] < 2 ) {
+		if( !i ) desc += capitalize(shorts[i]) + "%^RESET%^MAGENTA%^";
+		else desc += shorts[i] + "%^RESET%^MAGENTA%^";
+	    }
+	    else {
+		if( !i ) 
+		  desc += capitalize(consolidate(mp[shorts[i]],shorts[i])) +
+		    "%^RESET%^MAGENTA%^";
+		else desc += consolidate(mp[shorts[i]], shorts[i]) +
+		  "%^RESET%^MAGENTA%^";
+	    }
+	    if( i == maxi - 1 ) {
+		if( maxi > 1 || mp[shorts[i]] >1 ) 
+		  desc += " are here.%^RESET%^\n";
+		else desc += " is here.%^RESET%^\n";
+	    }
+	    else if( i == maxi - 2 ) desc += ", and ";
+	    else desc += ", ";
+	}
+	mp = ([]);
+	obs = filter(all_inventory(), 
+		     (: living($1) && !((int)$1->GetInvis(this_player())) :))- 
+		       ({ this_object() });
+	maxi = sizeof(shorts = map(obs, (: (string)$1->GetShort() :)));
+	for(i=0; i<maxi; i++) if(shorts[i]) mp[shorts[i]]++;
+	maxi = sizeof(shorts = keys(mp));
+	for(i=0; i<maxi; i++) {
+	    if( i ) desc += "\n";
+	    if( mp[shorts[i]] < 2 ) 
+	      desc += "%^BOLD%^RED%^" +capitalize(shorts[i]) + "%^RESET%^";
+	    else desc += "%^BOLD%^RED%^" + 
+	      capitalize(consolidate(mp[shorts[i]],shorts[i]))+"%^RESET%^";
+	}
+	tmp += "\nContents:\n" + desc;
+    }
+    return tmp;
+}
+
+varargs int eventReceiveObject(object ob) {
+    if( GetClosed() ) return 0;
+    else return container::eventReceiveObject(ob);
+}
+
+void SetCanClose(int x) { CanClose = x; }
+
+int GetCanClose() { return CanClose; }
+
+void SetCanLock(int x) { CanLock = x; }
+
+int GetCanLock() { return CanLock; }
+
+void SetClosed(int x) { Closed = x; }
+
+int GetClosed() { return GetCanClose() && Closed; }
+
+void SetLocked(int x) { Locked = x; }
+
+int GetLocked() { return GetCanLock() && Locked; }
+
+void SetKey(string str) { Key = str; }
+
+string GetKey() { return Key; }

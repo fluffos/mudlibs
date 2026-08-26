@@ -1,0 +1,87 @@
+/*    /daemon/http.c
+ *    from the Nightmare IV LPC Library
+ *    an http daemon for WWW interfacing
+ *    created by Descartes of Borg 950429
+ */
+
+#ifndef __PACKAGE_SOCKETS__
+#error You should not try to load the http daemon without the sockets package
+#else
+
+#include <lib.h>
+#include <dirs.h>
+#include <network.h>
+#include "http.h"
+
+#define FILE_BAD_CMD     DIR_WWW_ERRORS "/badcmd.html"
+#define FILE_BAD_GATE    DIR_WWW_ERRORS "/badgate.html"
+#define FILE_NOT_FOUND   DIR_WWW_ERRORS "/notfound.html"
+
+inherit LIB_SERVER;
+
+nosave void create() {
+    server::create();
+    SetNoClean(1);
+    call_out( (: Setup :), 1);
+}
+
+nosave void Setup() {
+    if( eventCreateSocket(PORT_HTTP) < 0 ) {
+	if( this_object() ) Destruct();
+	return;
+    }
+}
+
+nosave void eventRead(int fd, string str) {
+    string tmp, cmd, args;
+
+    if( !str || str == "" ) {
+	eventWrite(fd, (tmp = read_file(FILE_BAD_CMD) ? tmp : ""), 1);
+	return;
+    }
+    tmp = explode(replace_string(str, "\r", ""), "\n")[0];
+    sscanf(tmp, "%s %s", cmd, args);
+    switch(lower_case(cmd)) {
+        case "get": eventGetFile(fd, args); return;
+	default: 
+            eventWrite(fd, (tmp = read_file(FILE_BAD_CMD) ? tmp : ""), 1);
+	    return;
+    }
+}
+
+private nosave void eventGetFile(int fd, string file) {
+    string *tmp, *parts;
+    mixed str;
+    string id, args;
+
+    file = (tmp = explode(file, " "))[0];
+    if( file[0] != '/' ) file = "/" + file;
+    parts = explode(file = absolute_path("/", file), "/");
+    if( !sizeof(parts) ) file = DIR_WWW "/index.html";
+    else if( parts[0][0] == '~' ) {
+	parts[0] = user_path(parts[0][1..]) + "/public_html";
+	file = implode(parts, "/");
+    }
+    if( strsrch(file, DIR_WWW) && strsrch(file, REALMS_DIRS) )
+      file = DIR_WWW + file;
+    if( file_size(file) == -2 ) file = file + "/index.html";
+    if( !strsrch(file, DIR_WWW_GATEWAYS) ) {
+	if( sscanf(file, DIR_WWW_GATEWAYS "/%s/%s", id, args) != 2 ) {
+	    args = 0;
+	    sscanf(file, DIR_WWW_GATEWAYS "/%s", id);
+	}
+	if( catch(str = (string)(DIR_WWW_GATEWAYS "/"+id)->gateway(args)) ) {
+	    eventWrite(fd, (str = read_file(FILE_BAD_GATE) ? str : ""), 1);
+	    return;
+	}
+	str = strip_colours(str);
+    }
+    else if( file_size(file) < 1 ) {
+	eventWrite(fd, (str = read_file(FILE_NOT_FOUND) ? str : ""), 1);
+	return;
+    }
+    else str = read_buffer(file);
+    eventWrite(fd, str, 1);
+}
+
+#endif /* __PACKAGE_SOCKETS__ */
