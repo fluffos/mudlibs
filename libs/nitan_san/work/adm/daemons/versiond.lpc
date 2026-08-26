@@ -221,37 +221,14 @@ protected void setup() {
 }
 
 // 提供版本服务
+// socket_create()/socket_bind()/socket_listen() are unavailable on this
+// driver build (no `sockets` package -- e.g. the WASM build). This is
+// the version-sync listener's entry point; gutted to a no-op so it
+// never attempts a real socket, per this project's established
+// "sockets package absent" pattern for a large multi-purpose daemon
+// where socket sync is only one of several bundled features.
 protected void in_server() {
-  int port;
-
-  // 这里是版本发布站点，在该端口上监听分站的请求
-  // 创建版本通讯的SOCKET
-  vfd = socket_create(STREAM_BINARY,
-    "in_read_callback",
-    "in_close_callback");
-
-  if (vfd < 0) {
-    log_file("version", sprintf("%s Failed to create socket.\n", log_time()));
-    return;
-  }
-
-  // 然后绑定SOCKET
-  port = __PORT__ + VERSION_PORT;
-
-  if (socket_bind(vfd, port) < 0) {
-    log_file("version", sprintf("%s Failed to bind socket.\n", log_time()));
-    socket_close(vfd);
-    return;
-  }
-
-  // 最后监听
-  if (socket_listen(vfd, "in_listen_callback") < 0) {
-    log_file("version", sprintf("%s Failed to listen to socket.\n", log_time()));
-    return;
-  }
-
-  // 初始化连接信息
-  socket_info = ([]);
+  return;
 }
 
 // 在本机上生成版本
@@ -793,51 +770,12 @@ int synchronize_version() {
   return 1;
 }
 
+// socket_create()/socket_connect() are unavailable on this driver build
+// (no `sockets` package) -- version-sync-with-another-mud is
+// categorically unavailable here, so this entry point always fails
+// cleanly rather than attempting a real socket.
 protected int connect_server() {
-  string addr, port;
-  int ret_val;
-
-  // 创建版本通讯的SOCKET
-  vfd = socket_create(STREAM_BINARY,
-    "syn_read_callback",
-    "syn_close_callback");
-
-  if (vfd < 0) {
-    log_file("version", sprintf("%s Failed to create socket.\n",
-      log_time()));
-    return notify_fail("无法创建SOCKET.\n");
-  }
-
-  // 初始化客户端信息
-  client_info = allocate(8);
-  client_info[STATUS] = STATUS_CONNECTING;
-  client_info[FILE_NAME] = 0;
-  client_info[FILE_POS] = 0;
-  client_info[FILE_SIZE] = 0;
-  client_info[RESULT_BUFFER] = "";
-  client_info[PENDING_WRITE] = ({});
-
-  if (sscanf(RELEASE_SERVER(), "%s %d", addr, port) != 2) {
-    log_file("version", sprintf("%s Bad address(%s) of server.\n",
-      log_time(), RELEASE_SERVER()));
-    return notify_fail("配置的版本服务器的地址不正确。\n");
-  }
-
-  // 生成版本服务器的连接地址
-  addr = sprintf("%s %d", addr, port + VERSION_PORT);
-
-  ret_val = socket_connect(vfd, addr,
-    "syn_read_callback",
-    "syn_write_callback");
-  if (ret_val != EESUCCESS) {
-    log_file("version", sprintf("%s Failed to connect server.\n",
-      log_time()));
-    return notify_fail("无法连接版本服务器。\n");
-  }
-
-  log_file("version", sprintf("%s connecting to server %s.\n",
-    log_time(), addr));
-  return 1;
+  return notify_fail("无法创建SOCKET.\n");
 }
 
 // 清除同步信息
@@ -848,12 +786,11 @@ int clear_syn_info() {
   if (previous_object() && !is_root(previous_object()))
     return 0;
 
-  // 服务器端：清除套接字的连接信息
+  // 服务器端：清除套接字的连接信息。socket_close() 在这台驱动上不可
+  // 用（没有 sockets package），但既然 socket_info 永远不会被真正
+  // 填充（见 in_server()），这里只需要清空记录即可。
   if (is_release_server()) {
     if (sizeof(socket_info) > 0) {
-      foreach (fd in keys(socket_info))
-        if (intp(fd)) socket_close(fd);
-
       socket_info = ([]);
       return 1;
     }
@@ -915,65 +852,15 @@ protected void syn_get_version_data() {
   send_command(vfd, "getver dbase");
 }
 
-// 向服务器端发送命令
+// socket_write() 在这台驱动上不可用（没有 sockets package）。
+// connect_server() 永远不会真正建立连接（见上文），所以这两个函数
+// 实际运行时不可达，但仍需要能编译通过。
 void send_command(int fd, string cmd) {
-  if (!fd)
-    // 检查当前连接的VFD
-    if (!(fd = vfd)) return;
-
-
-  cmd += "\n";
-  if (sizeof(client_info[PENDING_WRITE])) {
-    // 已经有阻塞需要发送的数据了，这次发送的数
-    // 据先阻塞
-    client_info[PENDING_WRITE] += ({ cmd });
-    return;
-  }
-
-  switch (socket_write(fd, cmd)) {
-    case EESUCCESS:
-    case EECALLBACK:
-      // 发送成功了
-      return;
-
-    case EEWOULDBLOCK:
-      // 发送数据阻塞
-      client_info[PENDING_WRITE] += ({ cmd });
-      call_out("syn_write_callback", 2, fd);
-      return;
-
-    default:
-      // 发送失败
-      client_info[PENDING_WRITE] += ({ cmd });
-      return;
-  }
+  return;
 }
 
-// 客户端发送阻塞的消息
 protected int send_client_pending_msg() {
-  string msg;
-
-  msg = client_info[PENDING_WRITE][0];
-  switch (socket_write(vfd, msg)) {
-    case EESUCCESS:
-      // 发送成功了
-      client_info[PENDING_WRITE] = client_info[PENDING_WRITE][1..<1];
-      return 0;
-
-    case EECALLBACK:
-      // 需要等待
-      client_info[PENDING_WRITE] = client_info[PENDING_WRITE][1..<1];
-      return -1;
-
-    case EEWOULDBLOCK:
-      // 发送数据阻塞
-      call_out("syn_write_callback", 2, vfd);
-      return -1;
-
-    default:
-      // 发送失败
-      return -1;
-  }
+  return -1;
 }
 
 // 同步时客户端连接的读回调函数
@@ -1447,7 +1334,10 @@ protected void syn_finish() {
 
   sys_info(sprintf("同步结束：版本状态 = %d", version_ok));
 
-  if (vfd) { socket_close(vfd); vfd = 0; }
+  // socket_close() 在这台驱动上不可用（没有 sockets package），但
+  // vfd 永远不会是一个真实的 socket（见 connect_server()），所以
+  // 这里只需要清空记录。
+  if (vfd) { vfd = 0; }
 
   client_info[STATUS] = STATUS_FINISHED;
   client_info[FILE_NAME] = 0;
@@ -1616,40 +1506,11 @@ protected void debug_info(string msg) {
   CHANNEL_D->do_channel(this_object(), "debug", msg);
 }
 
-// 版本发布站监听来自分站的请求
+// socket_accept()/socket_address()/socket_close() 在这台驱动上不可用
+// （没有 sockets package）。in_server() 从不真正创建监听 socket，
+// 所以这个回调永远不会被真正触发，但仍需要能编译通过。
 protected void in_listen_callback(int fd) {
-  int new_fd;
-  string address;
-  string ip;
-  int port;
-
-  if ((new_fd = socket_accept(fd, "in_read_callback",
-    "in_write_callback")) < 0)
-    // 没有成功的接收这个连接请求
-    return;
-
-  address = socket_address(new_fd);
-  if (!stringp(address) || sscanf(address, "%s %d", ip, port) != 2 ||
-    member_array(ip, AGENT_IP) == -1) {
-    // 这个地址没有经过授权
-    sys_info(sprintf("站点 %s 地址没有经过授权。",
-      stringp(address) ? address : "unknow"));
-    socket_close(new_fd);
-    return;
-  }
-
-  sys_info(sprintf("站点 %s 连接版本开始同步版本。", ip));
-
-  socket_info[new_fd] = allocate(8);
-  socket_info[new_fd][STATUS] = STATUS_LOGIN;
-  socket_info[new_fd][CMD_BUFFER] = "";
-  socket_info[new_fd][CMD_QUEUE] = ({});
-  socket_info[new_fd][PENDING_WRITE] = ({});
-  socket_info[new_fd][SUB_SITES] = "不详";
-
-  // 更新状态
-  socket_info[new_fd][STATUS] = STATUS_WAIT_COMMAND;
-  in_write_callback(new_fd);
+  return;
 }
 
 // 接受信息
@@ -1871,116 +1732,16 @@ void remove_mudlib() {
 }
 
 // 成功写入
+// socket_write() 在这台驱动上不可用（没有 sockets package）。
+// socket_info 永远不会被真正填充（见 in_listen_callback()），所以
+// 这个回调永远不会被真正触发，但仍需要能编译通过。
 protected void in_write_callback(int fd) {
-  buffer buf;
-  int pos, len;
-  int i;
-
-  for (i = 0; i < 32; i++) {
-    // 循环处理消息
-    reset_eval_cost();
-
-    // 已经处理完了？
-    if (!arrayp(socket_info[fd]))
-      // 是，这个不需要继续处理了
-      return;
-
-    // 如果有阻塞的普通消息，则我发送出去
-    while (sizeof(socket_info[fd][PENDING_WRITE])) {
-      // 有阻塞的消息，发送之
-      if (send_pending_msg(fd) != 0)
-        // 没有成功的发送，等待下一次发送
-        return;
-    }
-
-    // 根据当前的状态进行进一步处理
-    switch (socket_info[fd][STATUS]) {
-      case STATUS_SENDING:
-        // 正在发送文件
-        pos = socket_info[fd][FILE_POS];
-        len = socket_info[fd][FILE_SIZE] - pos;
-        if (len > FILE_BLOCK)
-          len = FILE_BLOCK;
-        if (len > 0) {
-          buf = read_buffer((string)socket_info[fd][FILE_NAME], pos, len);
-          if (sizeof(buf) != len)
-            // 读取没有完全成功？填写零发送。
-            buf = allocate_buffer(len);
-          // 判断这次操作的结果
-          switch (socket_write(fd, buf)) {
-            case EESUCCESS:
-              // 移动游标
-              pos += len;
-              break;
-
-            case EECALLBACK:
-              // 移动游标
-              pos += len;
-
-              // 等待CALLBACK，先不继续处理
-              socket_info[fd][FILE_POS] = pos;
-              return;
-
-            case EEWOULDBLOCK:
-              // 发送忙
-              call_out("in_write_callback", 2, fd);
-              return;
-
-            default:
-              // 发送失败，等待下次callback
-              return;
-          }
-        }
-
-        // 判断文件是否发送完毕
-        if ((socket_info[fd][FILE_POS] = pos) >=
-          socket_info[fd][FILE_SIZE]) {
-          // 文件已经发送完毕，更新状态
-          socket_info[fd][STATUS] = STATUS_WAIT_COMMAND;
-          if (!sizeof(socket_info[fd][CMD_QUEUE]))
-            // 已经没有待处理的命令了
-            return;
-
-          // 继续处理命令：为什么要用
-          // this_object() 进行呼叫？
-          // 这个是不能省略的，因为这
-          // 样其它部分的函数就可以根
-          // 据previous_object() 分辨
-          // 是否试运行在callback内。
-          this_object()->parse_cmd(fd);
-
-          // 继续，循环将会处理命令产生的结果
-        }
-
-        // 发送处理完毕
-        break;
-
-      default:
-        // 未定义状态，无操作
-        return;
-    }
-
-    // 一次处理(switch)完毕，循环继续处理
-  }
-
-  // 运行太久了
-  debug_info("向 SOCKET 写入数据太多，暂缓。");
-  call_out("in_write_callback", 1, fd);
+    return;
 }
 
-// 连接断开
+// 连接断开。socket_address() 在这台驱动上不可用（没有 sockets
+// package），但这个回调永远不会被真正触发（见 in_listen_callback()）。
 protected void in_close_callback(int fd) {
-  string address;
-
-  address = socket_address(fd);
-  if (stringp(address))
-    sscanf(address, "%s %*d", address);
-  else
-    address = "unknow";
-
-  sys_info(sprintf("站点 %s 和本站断开了连接。", address));
-
-  // 清除信息
   map_delete(socket_info, fd);
 }
 
@@ -2066,19 +1827,10 @@ protected void cmd_get(int fd, string arg) {
   send_file(fd, VERSION_DIR + arg, arg);
 }
 
-// 关闭连接
+// 关闭连接。socket_address() 在这台驱动上不可用（没有 sockets
+// package），但这个命令处理函数永远不会被真正触发。
 protected void cmd_close(int fd, string arg) {
-  string address;
-
-  address = socket_address(fd);
-  if (stringp(address))
-    sscanf(address, "%s %*d", address);
-  else
-    address = "unknow";
-
-  sys_info(sprintf("站点 %s 和本站同步完毕。", address));
-
-  send_result(fd, RESULT_FINISH "ok\n");
+  return;
 }
 
 // 向对方发送一个文件
@@ -2103,64 +1855,15 @@ protected void send_file(int fd, string file, string peer_name) {
     in_write_callback(fd);
 }
 
-// 发送阻塞的消息
+// socket_write() 在这台驱动上不可用（没有 sockets package）。
+// socket_info 永远不会被真正填充，所以这两个函数永远不会被真正触发，
+// 但仍需要能编译通过。
 protected int send_pending_msg(int fd) {
-  string result;
-
-  result = socket_info[fd][PENDING_WRITE][0];
-
-  switch (socket_write(fd, result)) {
-    case EESUCCESS:
-      // 发送成功了
-      socket_info[fd][PENDING_WRITE] = socket_info[fd][PENDING_WRITE][1..<1];
-      return 0;
-
-    case EECALLBACK:
-      // 需要等待
-      socket_info[fd][PENDING_WRITE] = socket_info[fd][PENDING_WRITE][1..<1];
-      return -1;
-
-    case EEWOULDBLOCK:
-      // 发送数据阻塞
-      call_out("in_write_callback", 2, fd);
-      return -1;
-
-    default:
-  }
+  return -1;
 }
 
-// 向对方发送一条结果信息
 protected int send_result(int fd, string msg) {
-  string result;
-
-  result = sprintf("%-" + (NORMAL_RESULT_LEN - 1) + "s.", msg);
-
-  if (sizeof(socket_info[fd][PENDING_WRITE])) {
-    // 已经有阻塞需要发送的数据了，这次发送的数
-    // 据先阻塞
-    socket_info[fd][PENDING_WRITE] += ({ result });
-    return -1;
-  }
-
-  switch (socket_write(fd, result)) {
-    case EESUCCESS:
-      // 发送成功了
-      return 0;
-
-    case EECALLBACK:
-      // 需要等待
-      // socket_info[fd][PENDING_WRITE] += ({ result });
-      return -1;
-
-    case EEWOULDBLOCK:
-      // 发送数据阻塞
-      socket_info[fd][PENDING_WRITE] += ({ result });
-      call_out("in_write_callback", 2, fd);
-      return -1;
-
-    default:
-      socket_close(fd);
-  }
+  return -1;
 }
 
 // 向对方发送一条错误信息
@@ -2183,10 +1886,10 @@ protected void send_version(int fd) {
   send_result(fd, sprintf(RESULT_VERSION "%d\n", ver));
 }
 
-// 去掉一个连接信息
+// 去掉一个连接信息。socket_close() 在这台驱动上不可用（没有
+// sockets package），但 fd 永远不会是一个真实的 socket。
 protected void remove_connection(int fd) {
   map_delete(socket_info, fd);
-  socket_close(fd);
 }
 
 // 为一个文件增加保证完整的鉴别ID

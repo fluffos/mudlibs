@@ -239,10 +239,34 @@ before staging.
 
 > 警告：对外公开架设前请务必修改这两个密码。
 
-## WASM
+## WASM status update (2026-08-25, another session)
 
-Not tested this pass (`wasm_status` left `""`, not invented) — no WASM
-pack/boot test was run. Given the byte-identical relationship to
-`nitan_san` (already confirmed `"wasm_status": "playable"`), a future
-WASM pass on this lib would very likely reach the same result, but that
-has not been independently verified here.
+Promoted `wasm_status` from `""` to `playable`. Hit a real, non-trivial
+bug the earlier prediction above didn't anticipate: `adm/daemons/
+versiond.lpc`'s `in_server()` (called from `create()`) unconditionally
+calls `socket_create()`/`socket_bind()`/`socket_listen()`, undefined on
+this driver build (no `sockets` package). Regular player logins never
+touch this file, but admin-rank login does (`logind.lpc`'s
+`catch(enter_world(ob, user))` around entry ends up loading it), and
+since the whole file fails to compile, the `catch()` fires and shows
+"你无法进入这个世界，可能你的档案出了一些问题" -- non-fatal (the
+player recovers into the normal room right after) but a real, visible
+defect on every admin login.
+
+Fixed per this project's established "sockets package absent" pattern
+for a large multi-purpose daemon (33 other files call into this one
+for non-socket functionality, so the whole file stays loadable — only
+the 11 functions actually touching a real `socket_*`/`socket_address()`
+call were gutted to no-ops/always-fail). Verified with a full scripted
+WASM session: login as `fluffos`/`Mud@2026`, no more crash/error,
+`look` reaching 巫师休息室 cleanly. `score`/`quit` weren't recaptured
+distinctly in this transcript but both are already thoroughly verified
+under native testing above (including both `quit` confirmation
+branches) and untouched by this fix.
+
+**This exact same bug was independently confirmed still present in
+`nitan_san`** (the sibling this lib is a confirmed duplicate of,
+byte-identical `versiond.lpc`) despite its `wasm_status` already being
+`playable` from an earlier pass — that pass never exercised an
+admin-rank login, so the crash went undetected. Patched `nitan_san`'s
+copy identically as part of this same pass; see its own NOTES.md.

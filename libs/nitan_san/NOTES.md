@@ -679,3 +679,28 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## WASM gap closure: versiond.lpc sockets crash on admin login (2026-08-25, another session)
+
+The lib's earlier WASM-enablement pass (above) promoted `wasm_status`
+to `playable` without ever logging in with an admin-rank account —
+`adm/daemons/versiond.lpc`'s `in_server()` (called from `create()`)
+calls `socket_create()`/`socket_bind()`/`socket_listen()`
+unconditionally, undefined on this driver build (no `sockets`
+package). Regular player logins never touch this file, but
+`logind.lpc`'s `catch(enter_world(ob, user))` around admin entry does
+end up loading it, and since the whole file fails to compile, the
+`catch()` fires and shows the player a scary (but non-fatal) "你无法
+进入这个世界" message before recovering into the normal room.
+
+Found and fixed via a sibling lib (`nitan3`, byte-identical
+`versiond.lpc`, onboarded as a confirmed duplicate of this lib) hitting
+the exact same crash during its own WASM verification pass. Patched
+this file identically (11 functions across the socket-server/client
+lifecycle gutted to no-ops/always-fail per this project's established
+"sockets package absent" pattern) and re-verified: admin login
+(`fluffos`/`Mud@2026`) now reaches 巫师休息室 cleanly with no error.
+
+**Lesson for future WASM passes**: "playable" from an earlier pass
+doesn't guarantee every login tier was exercised — an admin-only code
+path can hide a real crash that a player-only test never reaches.
