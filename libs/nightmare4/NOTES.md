@@ -9,7 +9,7 @@ Windows driver included together." Top level bundles a full
 `win32/driver.exe` alongside the actual mudlib -- all ignored per this
 project's convention (own driver build at `~/src/fluffos`). Mudlib root
 is the repo's `lib/` directory: 1018 raw files, 18MB. Slug `nightmare4`,
-number 931, port 40233.
+number 932, port 40234.
 
 ## 0. Confirmed genuinely distinct from `nightmare3`
 
