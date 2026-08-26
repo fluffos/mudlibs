@@ -303,10 +303,42 @@ lib 常用的 `update`）成功走到实际尝试编译的阶段（报
 
 ## WASM
 
-本 session 未做 WASM 通道测试——`~/src/fluffos/build-wasm/src/driver.js`
-在本次工作期间尚未构建完成（另一个并发 session 正在构建这个共享产
-物），且这个 native pass 本身已经是相当大的工作量。`meta.json` 的
-`wasm_status` 标记为 `pending`，留给下一轮。
+**2026-08-25 更新（另一次 session）**：真正跑通了 WASM 通道，`wasm_status`
+由 `""`（未测试）提升为 `playable`。用的是 CI 同款的预编译 WASM 驱动
+release（`fluffos/fluffos` 的 `*-wasm.zip`），配合
+`scripts/pack_lib_for_web.sh` + `scripts/wasm_boot_check.js` /
+`scripts/wasm_client.js` 本地复现。
+
+首次打包后驱动**完全无法启动**——simul_efun 是唯一"急切"（非懒惰）加载
+的对象，而它下面的 `secure/simul_efun/dump_socket_status.lpc` 无条件
+调用了这台驱动没有的 `socket_status()`（WASM 构建没有 `sockets`
+package），导致 `*No program in object '/secure/simul_efun/...'!`、
+整个驱动拒绝启动——和同一个 session 早些时候在 `ds386`（Dead Souls）
+上发现并修复的问题是同一类根因，详见 `AGENTS.md` §7.52 那条追记。
+按同样的套路把 `dump_socket_status()` 挖空成安全桩后，又连续撞上
+`compress` package 缺失的两处编译错误（`secure/master/
+create_dom_creator.lpc` 里 6 处 `compress_file()`/`uncompress_file()`
+闭包引用、`secure/login.lpc`/`obj/handlers/login_handler.lpc`/
+`global/player.lpc` 里 3 处 `compressedp()`），逐一挖空/常量化后驱动
+终于干净启动、能接到连接。
+
+完整验证：真实跑完一遍注册向导（含文档里提到的、服务端故意暂停
+~30 秒的条款确认环节——用 `wasm_client.js` 的 `--idle` 参数需要设得
+比这个暂停更长，否则 `yes` 会在暂停期间过早发出而落空，这是脚本
+本身的坑，不是驱动 bug），成功进入著名的 Discworld 圆形大厅，`look`
+输出与原生测试记录的房间描述完全一致，MCCP 提示（"You are logged in
+uncompressed!"）也正确出现（验证了 `check_mccp()` 的 `compressedp()`
+桩替换按预期工作），womble NPC 的环境对话正常播放。`quit` 本次因为
+womble 持续产生环境消息、脚本的 idle 检测一直"看不到真正的安静"而
+没能在这次转录里捕获到，但 `quit` 路径本身没有触碰任何 compress/
+socket 相关代码，原生测试已经完整验证过，不需要重复。
+
+另发现一个**非致命**的预加载期编译失败：`/net/daemon/board_thingy`
+（继承自 `/net/inherit/server.lpc`，一个 BBS/公告板网络监听服务）
+同样因为 `sockets` package 缺失而编译失败，但这不影响驱动整体启动
+（预加载会跳过失败的对象继续走），也不在登录/游玩路径上——按这个
+项目"只修必经路径，可选管理工具留作已知缺口"的既定做法，本次没有
+处理，留给以后如果真的有人报告这个 BBS 功能坏了再修。
 
 ## 本 session 的一个失误（如实记录）
 
