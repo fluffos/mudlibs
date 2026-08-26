@@ -394,4 +394,17 @@ genuine intended upstream functionality, but a real outbound network
 event against a real (near-certainly long-defunct) third party on
 every single boot.
 
-WASM status: not attempted this pass (`wasm_status` left `""`).
+## WASM status update (2026-08-26, another session)
+
+Promoted `wasm_status` from `""` to `playable`. Same by-now-routine
+eager-simul_efun sockets gap as several sibling libs from this same
+source: `secure/simul_efun/dump_socket_status.lpc` called
+`socket_status()` unconditionally. Gutted to a safe stub (diagnostic
+admin tool only, not on the boot/login path). Verified with a scripted
+WASM session: login (`fluffos`/`Sky@2026Pass`), arrival in `/room/
+tavern` with the correct description, and `score` producing correct
+stats output -- also confirms the earlier `add_action()`/`NO_ADD_ACTION`
+command-dispatcher fix carries over correctly to WASM (commands
+dispatch fine here, not swallowed). `quit` wasn't recaptured distinctly
+in this transcript but is already verified clean under native testing
+above.
