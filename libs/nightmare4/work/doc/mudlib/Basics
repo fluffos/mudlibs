@@ -1,0 +1,232 @@
+		     The Nightmare IV LPC Library
+			 Nightmare IV Basics
+		 written by Descartes of Borg 950421
+
+This document serves as an introduction into the way the Nightmare IV
+LPC Library functions.  Everyone should read this document, since no
+one has any experience with this library.  The Nightmare IV LPC
+Library is extremely different from previous Nightmare releases, and
+perhaps those having the hardest time understanding it may be those
+who fail to read documentation because of previous experience with
+previous versions of this library.  If this is your first time
+administrating any MUD, you need to be certain that you are familiar
+with all the concepts outlined in the LPC Textbooks LPC Basics and
+Intermediate LPC before you take on any tasks which require you to
+modify the mudlib. 
+
+I. The Master Object and Simul Efun Object
+The MudOS driver requires only two objects to exist in the mudlib: the
+master object and the simul efun object.  The file names do not matter
+so long as they are specified in the MudOS configuration file.  The
+content of the simul efun object does not matter either, as it can be
+an empty file.  The master object simply needs to have the function
+connect() defined in it in order to accept connections.
+
+For the Nightmare IV LPC Library, the master object can be found in
+/secure/daemon/master.c and the simul efun object in
+/secure/sefun/sefun.c.  The driver uses the master object as a sort of
+interface between the driver and mudlib.  By calling functions in the
+master object, the driver can allow the mudlib to make important
+decisions about such things as security, sockets, shadows, and so on.
+
+The simul efun object, on the other hand, lets the mudlib define its
+own efuns.  Remember that efuns are global functions compiled into the
+driver.  They are written in C, and therefore it is not possible to
+modify them from the mudlib level.  Functions in the simul efun object
+are treated much like efuns, but you can modify and add to them on the
+fly since they are part of the mudlib.  As a matter of fact, if you
+have a simul efun which is particularly nasty on the CPU, you can use
+MudOS' LPC->C feature to compile it to C and make it an efun.
+
+An important thing to remember about simul efuns is that the object
+which called the simul efun is considered the previous_object().
+Therefore, another way of looking at a simul efun is as if it were
+written ob_simul_efun->sefun_call().  In addition, you do not want to
+make any simul efun calls from the master object so that it can remain
+independent of the simul efun object in the event you change the simul
+efun object and make an error.
+
+With the Nightmare IV LPC Library, the simul efun object consists of a
+header file, /secure/sefun/sefun.h, which has prototype information
+for all simul efuns.  This header file allows you to call simul efuns
+from simul efuns without a danger of causing the simul efun object not
+to load.  In addition to the header file are a bunch of modular LPC
+files defining the code to groups of related simul efuns.  This allows
+you to write and test a new simul efun and know that it works before
+trying to use it in the simul efun object.  Finally, the simul efun
+object itself, /secure/sefun/sefun.c, consists of #include's of all
+those modular files.
+
+The sefun object also has some LPC code in it for something called
+efun overrides.  An efun override is where you redefine the behaviour
+of a MudOS efun.  The Nightmare IV master object only allows the simul
+efun object to perform efun overrides.
+
+II. Daemons
+The Nightmare IV LPC Library distinguishes among three types of
+objects: daemons, tangiable objects, and shared objects.  Tangiable
+objects are objects creators most often deal with.  They are things
+you clone.  They have environment and inventories and can move around.
+In addition to tangible objects, creators often deal with shared
+objects.  Shared objects are things like rooms and doors which do not
+move around, are never cloned, and uniquely serve as references which
+can be viewed from many different points of view.  For example, a room
+may be shared by four other rooms, all of which exit to it.  And doors
+are often shared between two rooms between which it exists.
+
+The final object type, daemons, are most often handled at the mudlib
+level.  A daemon has no inventory, no environment, and it never moves
+around.  In fact it is much like a shared object, except in that
+shared objects represent actual objects in the MUD environment (in
+other words, a door in fact represents a door).  A daemon, however,
+represents a common data set which may be shared by many objects
+across the MUD.  For example, the Nightmare IV command daemon keeps a
+list of all commands and where they are stored so that any object
+which needs this information can easily grab it.  Without that daemon,
+you would either have to store all of that information in every single
+object which needed it (nasty waste of RAM) or you have each object
+that needs that data recalculate it every time it needs it (very nasty
+on the CPU for something as common as issuing a command).
+
+The Nightmare IV LPC Library stores daemons in /daemon or
+/secure/daemon depending on what sort of access or protection the
+daemon requires.  Things which need no access, like the command
+daemon, are kept in /daemon, while things which require high security,
+like the postal daemons are in /secure/daemon.
+
+III. Library Objects
+The Nightmare IV LPC Library was designed to make wide and efficient
+use of object oriented principles in order to take full advantage of
+the benefits of the object oriented nature of LPC.  In addition,
+things were designed with the thought in mind that users of the mudlib
+will want to customize it.  The combat system is the best example of
+this principle in action, where combat functionality is separated from
+combat data.  This means you can retain the basic skill or stat system of
+the Nightmare IV LPC Library without using any the actual skills or
+stats.  Turning the combat system into a cyberpunk combat system
+should be as simple as rewriting the internals of the NM functions
+(leaving the function names in tact) in combat.c and adding some mods
+to race.c and class.c.
+
+One reason such plug and play is possible is due to the event driven
+nature of Nightmare IV.  In traditional combat systems, including the
+old Nightmare system, combat is proceedural.  This basically means you
+call a function to determine what happens in a combat round.  In an
+event driver system, everything which happens is broken down into
+distinct happenings called events.  For example, in the old Nightmare
+system, it would be very difficult to do something like create a
+shield of reversal which turns all damage back onto the attacker.
+What used to happen was simply that a player had a combat round during
+which the combat proceedures figured out what weapon class was being
+wielded, what armour class was being worn by the enemy, and what the
+difference is.  Now that is overly simplistic, but it does illustrate
+how difficult it would be to turn that attack around on the attacker.
+
+In an event driven system, a player object is at each step presented
+with something they are doing or something being done to them.  This
+gives them a chance to respond by to events which happen to them by in
+turn initiating their own chain of events.  In the above example, a
+player object receives a ReceiveDamage event.  Instead of taking the
+damage, the player object can instead turn around and turn that damage
+on the agent doing the damage.  For more details on each system of
+events, read the documentation on each system (for example, the Combat
+document).
+
+Nightmare IV library objects are therefore broken down into several
+classes of functions:
+
+1. driver applies
+Functions which get called by the driver for various reasons.
+
+2. command functions
+Functions which get called by the driver when a command is executed,
+normally referenced by an add_action() call.
+
+3. modal functions
+True or false functions which determine if an object is capable of
+doing something.  This allows you to determine if something is
+possible without actually trying to do it.
+
+4. events
+functions handling standard Nightmare IV events.
+
+5. data functions
+Also known as Set*() and Get*() functions.  These allow for data
+manipluation and retrieval by external objects.
+
+All Nightmare IV objects have header files which contain the
+prototypes for all functions defined in the object in question.  An
+easy way to search for the existence of a given function is to do a
+'grep' through all the header files.
+
+III. Inheritance Structre
+All Nightmare IV LPC Library objects inherit either directly or
+indirectly /lib/clean.c.  Directly, only /lib/daemon.c and
+/lib/object.c should ever inherit /lib/clean.c.  All other objects
+should at some point inherit object.c or daemon.c, where object.c is
+the root object for tangiable objects and daemon.c for daemon objects.
+Shared objects may end up inheriting either, but should always at some
+point inherit one or the other.
+
+It is beyond the scope of this document to detail the inheritance
+structure, since IMHO the only useful way to do it is graphically.
+Towards this end, point your web browser to:
+	http://nightmare.imaginary.com:1696/mudlib/inheritance.html
+
+IV. Commands
+Nightmare IVr2 introduced a radical nw way of handling mud commands,
+developed by ZorkMUD and implemented into the MudOS driver so that
+Lima, Nightmare, and other mudlibs could take advantage of it.  It is
+a system of natural language parsing.
+
+The theory behind it is that users should always be able to act in
+such a way that is consistent with their thinking.  People should
+never have to guess at syntax.  In addition, if you can do X here,
+should be able to do X there in exactly the same way unless it is
+considered a physical impossibility.
+
+For example, a common problem in LPMuds are things like rocks.  One
+creator will write a rock that you can throw at people.  Another will
+write a rock that you can carve with.  Imagine the confused newbie who
+tries to carve with the throwing rock and throw the carving rock!
+According to the above theory, you should be able to carve and throw
+both rocks.  In addition, it should be the same command syntax to
+throw both rocks.
+
+Nightmare implements these commands in the /verbs directory AND DOES
+NOT USE add_action().  No creators should ever write add_action()
+again.  Nightmare, in fact, would compile with NO_ADD_ACTION defined
+if it were not for a couple of historical quirks in the mudlib.  A
+verb defined in /verbs is available to all people everywhere.  You
+just specify which objects in the game a vrb can act on.  For example,
+if a person tries to carve with "a nasty orc", the verb *does*
+execute, but then it realizes "a nasty orc" is not the sort of thing
+with which one carves.  It then displays the appropriate error
+message.
+
+An advantage of this system is that you can always provide useful help
+when someone is having problems.  You can either let them know the
+approriate syntax for a verb, tell them the verb is not relevant to
+the situation, or direct the user to help if what they are typing
+makes absolutely no sense.  No one should ever see 'What?' again!
+
+The verb system is still buggy and completely undocumented.  It is
+recommended that you leave the /verbs directory alone until Nightmare
+V is released, which will have unbuggy versions of verbs with full
+documentation on how to add your own.
+
+You will also notice the existence of /cmds.  These exist for mostly
+creator style commands that require no complex parsing, or things that
+simply have no arguments.
+
+V. The World Wide Web
+There is not a hell of a lot to say here, as most of doing the world
+wide web stuff involves learning html.  It is an easy thing to learn,
+but others have documented it over and over much better than I could
+here.  The Nightmare IV LPC Library setup consists of the http daemon
+in /daemon/http.c, the gateway objects in /www/gateways, and the html
+files in the /www hierarchy.  You need no specific files other than
+index.html, which is the basic started html file.
+
+	Descartes of Borg
+	borg@imaginary.com

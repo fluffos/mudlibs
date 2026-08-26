@@ -1,0 +1,52 @@
+/*    /lib/editor.c
+ *    from the Nightmare IV LPC Library
+ *    mudlib based editor interface
+ *    created by Descartes of Borg 950406
+ */
+
+
+#include "include/editor.h"
+
+private nosave function EditCallback;
+
+nosave void create() {
+    EditCallback = 0;
+}
+
+// AGENTS.md-style driver-compat fix: this driver build was compiled with
+// __OLD_ED__ (see core.spec's OLD_ED/#else split), so only the OLD-style
+// `ed(file, exit_fn, restricted)` efun exists -- `ed_start()`/`ed_cmd()`/
+// `query_ed_mode()` (the "new" ed API this file originally targeted) are
+// simply not compiled into this build at all ("Undefined function" at
+// compile time, not a runtime gap). This matters far beyond just the `ed`
+// command: this file is inherited into the player body class (lib/body.lpc
+// -> lib/interactive.lpc), so the whole body object failed to COMPILE,
+// silently blocking every player from ever connecting.
+//
+// Under __OLD_ED__, the driver's own C-level input loop intercepts every
+// line of input directly for as long as an edit session is active,
+// completely bypassing input_to()/process_input() -- so the manual
+// ed_cmd()-per-line forwarding this file used to do in process_input() is
+// unreachable under this model, not something to reimplement. The driver
+// instead calls a named exit function on this object when the session
+// ends (see ed_exit() below), which is where EditCallback now fires.
+varargs void eventEdit(string file, function callback) {
+    EditCallback = callback;
+    ed(file, "ed_exit", !creatorp());
+}
+
+// Callback the driver invokes (on this_object()) when the OLD_ED session
+// started by eventEdit() above finishes -- replaces the old manual
+// "query_ed_mode()==-1" detection in process_input().
+void ed_exit() {
+    if( functionp(EditCallback) ) evaluate(EditCallback);
+    EditCallback = 0;
+}
+
+// Never actually invoked while a real OLD_ED session is active (the driver
+// intercepts input at the C level before process_input() runs -- see the
+// comment above); kept as a harmless passthrough so anything chaining
+// editor::process_input() keeps compiling and working unchanged.
+nosave string process_input(string str) {
+    return str;
+}
