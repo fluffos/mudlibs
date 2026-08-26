@@ -1,0 +1,1 @@
+({({"[at] <indirect:any-living>",}),({({"I'm forever blowing bubbles!","$mcname$ starts to blow bubbles.",0,}),0,}),({({"You blow bubbles at $hcname$.","$mcname$ blows bubbles at $hcname$.","$mcname$ blows bubbles at you.",0,0,0,}),0,}),})

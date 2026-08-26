@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),({({"B O N K !","$mcname$ goes B O N K !",0,}),0,}),({0,({"You bonk $hcname$ on the $arg$.","$mcname$ bonks $hcname$ on the $arg$.","$mcname$ bonks you on the $arg$.",({"head","arm","elk","cabbage",}),0,0,}),}),})

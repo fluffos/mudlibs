@@ -1,0 +1,1 @@
+({({"all over <indirect:any-living>","[on] <indirect:any-living>",}),({({"You start to dribble all over the front of your shirt.","$mcname$ starts to dribble all over the front of $mposs$ shirt.",0,}),0,}),({({"You start dribbling on $hcname$.","$mcname$ starts dribbling all over $hcname$.","$mcname$ starts dribbling all over your best shirt.",0,0,0,}),0,}),})

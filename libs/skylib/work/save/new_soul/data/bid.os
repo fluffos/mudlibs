@@ -1,0 +1,1 @@
+({({"<indirect:any-living> <string>","<indirect:any-living>",}),0,({({"You bid $hcname$ farewell.","$mcname$ bids $hcname$ farewell.","$mcname$ bids you farewell.",0,0,0,}),({"You bid $hcname$ $arg$.","$mcname$ bids $hcname$ $arg$.","$mcname$ bids you $arg$.",({"farewell","to stay","God Speed","to gather shells","#",}),0,0,}),}),})

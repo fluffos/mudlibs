@@ -1,0 +1,1 @@
+({({"[at] <indirect:any-living>",}),0,({({"You lay your head on $hcname$'s shoulder and snuggle up into $hposs$ arms.","$mcname$ lays $mposs$ head on $hcname$'s shoulder and sunggles up into $hposs$ arms.","$mcname$ lays $mposs$ head on your shoulder and snuggles up into your arms.",0,0,0,}),0,}),})

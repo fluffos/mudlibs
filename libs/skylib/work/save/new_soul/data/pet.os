@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),({({"You pet Goldie.","$mcname$ pets Goldie.",0,}),0,}),({({"You pet $hcname$.","$mcname$ pets $hcname$.","$mcname$ pets you.",0,0,0,}),0,}),})

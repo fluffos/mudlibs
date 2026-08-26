@@ -1,0 +1,1 @@
+({({"<indirect:any-living> <string>","<indirect:any-living>",}),0,({({"You chase $hcname$.","$mcname$ chases $hcname$.","$mcname$ chases you.",0,0,0,}),({"You chase $hcname$ $arg$.","$mcname$ chases $hcname$ $arg$.","$mcname$ chases you $arg$.",({"around the room","around the Disc","to the Counter Weight Continent and back",}),0,0,}),}),})

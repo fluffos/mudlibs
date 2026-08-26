@@ -1,0 +1,1 @@
+({({"[with] <indirect:any-living>",}),0,({({"You disagree with $hcname$.","$mcname$ disagrees with $hcname$.","$mcname$ disagrees with you.",0,0,0,}),0,}),})

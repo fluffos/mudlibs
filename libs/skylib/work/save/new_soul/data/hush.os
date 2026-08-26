@@ -1,0 +1,1 @@
+({({"<string> <indirect:any-living>","<indirect:any-living> <string>","<indirect:any-living>",}),0,({({"You hush $hcname$.","$mcname$ hushes $hcname$.","$mcname$ hushes you.",0,0,0,}),({"You hush $hcname$ $arg$.","$mcname$ hushes $hcname$ $arg$.","$mcname$ hushes you $arg$.",({"quickly","carefully","threateningly","nervously","for using such language","#",}),0,0,}),}),})

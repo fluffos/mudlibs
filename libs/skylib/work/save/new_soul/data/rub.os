@@ -1,0 +1,1 @@
+({({"<indirect:any-living>","<string>",}),({0,({"You rub your $arg$.","$mcname$ rubs $mposs$ $arg$.",0,({"hands together","eyes","tummy","nose","leg","arm","eyebrows","head",}),}),}),({({"You rub $hcname$ up the wrong way.","$mcname$ rubs $hcname$ up the wrong way.","$mcname$ rubs you up the wrong way.",0,0,0,}),0,}),})

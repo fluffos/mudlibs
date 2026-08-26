@@ -1,0 +1,1 @@
+({({"<string> <indirect:any-living>","<indirect:any-living> <string>","<indirect:any-living>",}),0,({({"You pity $hcname$.","$mcname$ pities $hcname$.","$mcname$ pities you.",0,0,0,}),({"You pity $hcname$ $arg$.","$mcname$ pities $hcname$ $arg$.","$mcname$ pities you $arg$.",({"#",}),0,0,}),}),})

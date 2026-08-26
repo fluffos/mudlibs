@@ -1,0 +1,111 @@
+/* grep command, trial out by Turrican for a commands daemon. */
+/* Added some safety checks -- Sin */
+
+#include <runtime_config.h>
+
+inherit COMMAND_BASE;
+
+int check_size(string s1, string s2, string tag)
+{       
+  if (strlen(s1) + strlen(s2) > get_config(__MAX_STRING_LENGTH__)) {
+#ifdef DEBUG
+    log_file("GREP_ERRORS",
+             sprintf("Grep of %s produced excessively large string\n", tag));
+#endif    
+    printf("Results are too big\n");
+    return 1;
+  }
+  return 0;
+}
+
+mixed cmd(string words) {
+  int i, j, size;
+  string found, output, pattern, *files, *lines, *match, temp;
+  
+  seteuid( geteuid( this_player() ) );
+  if ( !words || ( words == "" ) )
+    return notify_fail( "Syntax: grep <pattern> <files>\n" );
+  if ( sscanf( words, "%s %s", pattern, words ) != 2 )
+    return notify_fail( "Syntax: grep <pattern> <files>\n" );
+  files = this_player()->get_files( words );
+  if ( !sizeof( files )  )
+    return notify_fail( "File(s) "+ words +" not found.\n" );
+  output = "";
+  for ( i = 0; i < sizeof( files ); i++ ) {
+    found = "";
+    if ((size = file_size( files[ i ] )) > 0) {
+      if (size > get_config(__MAX_READ_FILE_SIZE__) ||
+          size > get_config(__MAX_STRING_LENGTH__)) {
+#ifdef letsnot
+            /* This is horribly slow. You really don't want this to happen
+              * since it freezes the mud as well. *sigh* */
+            j = 1;
+            while ((line = read_file(files[i], j++, 1)) != 0) {
+              if (regexp(({ line }), pattern) != ({}))
+                found += sprintf("%5d: %s", j-1, line);
+            }
+            if ( found != "" )
+              output += files[ i ] +"\n"+ found;
+            continue;
+#endif
+            temp = sprintf("File %s is too big.\n", files[i]);
+            if (check_size(output, temp, words))
+              return 1;
+            output += temp;
+            continue;
+          }
+      if (!read_bytes(files[i], 0, 1)) {
+#ifdef DEBUG
+        log_file("GREP_ERRORS", sprintf("File %s made grep barf.\n",
+                                        files[i]));
+#endif  
+        temp = sprintf("File %s is not an ASCII file.\n", files[i]);
+        if (check_size(output, temp, words))
+          return 1;
+        output += temp;
+        continue;
+      }
+      /* We can crash on the next line if the file contains more than
+       * get_config(__MAX_ARRAY_SIZE__) lines (currently 15,000).
+       * I don't really see a way to count the number of lines
+       * before calling explode.  But if there are too many lines,
+       * explode will crash the mud.  Looping on strsrch() seems to
+       * be excessively slow.  Leave this as an open bug until
+       * someone comes up with an idea. */
+      lines = explode(read_file(files[i]), "\n");
+
+      if (sizeof(lines) > get_config(__MAX_ARRAY_SIZE__) / 2) {
+#ifdef DEBUG
+        log_file("GREP_ERRORS",
+                 sprintf("File %s has too many lines to grep.\n",
+                         files[i]));
+#endif  
+        temp = sprintf("File %s is too big.\n", files[i]);
+        if (check_size(output, temp, words))
+          return 1;
+        output += temp;
+        continue;
+      }
+      match = regexp(lines, pattern, 1);
+      size = sizeof(match);
+
+      for (j = 0; j < size; j+=2) {
+        temp = sprintf("%5d: %s\n", match[j+1], match[j]);
+        if (check_size(found, temp, words))
+          return 1;
+        found += temp;
+      }
+      if ( found != "" ) {
+        temp = files[ i ] +"\n"+ found;
+        if (check_size(output, temp, words))
+          return 1;
+        output += temp;
+      }
+    }
+  }
+  if ( output != "" )
+    this_player()->more_string( output, "Grep" );
+  else
+    printf( "Pattern not found.\n" );
+  return 1;
+}

@@ -1,0 +1,1 @@
+({({"<string> <indirect:any-living>","<indirect:any-living> <string>","<indirect:any-living>",}),0,({({"You twirl $hcname$ round in circles.","$mcname$ twirls $hcname$ round in circles.","$mcname$ twirls you round in circles.",0,0,0,}),0,}),})

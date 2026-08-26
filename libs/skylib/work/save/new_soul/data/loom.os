@@ -1,0 +1,1 @@
+({({"[over] <indirect:any-living>",}),0,({({"You loom over $hcname$.","$mcname$ looms over $hcname$.","$mcname$ looms over you.",0,0,0,}),0,}),})

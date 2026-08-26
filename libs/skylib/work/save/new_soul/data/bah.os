@@ -1,0 +1,1 @@
+({({}),({({"You pause for a moment of reflection, and then exclaim 'Bah!'.","$mcname$ pauses for a moment of reflection, and then exclaims 'Bah!'.",0,}),0,}),0,})

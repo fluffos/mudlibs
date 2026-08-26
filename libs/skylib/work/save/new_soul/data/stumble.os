@@ -1,0 +1,1 @@
+({({"<string>",}),({({"You stumble around the room.","$mcname$ stumbles around the room.",0,}),0,}),0,})

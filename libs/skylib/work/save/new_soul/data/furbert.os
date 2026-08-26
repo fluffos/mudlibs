@@ -1,0 +1,1 @@
+({({"<string> <indirect:any-living>","<indirect:any-living> <string>","<indirect:any-living>",}),0,({0,({"You furbert $hcname$ $arg$.","$mcname$ furberts $hcname$ $arg$.","$mcname$ furberts you $arg$.",({"on the tummy","on the arm","on the foot","on the forehead","on the hand","on the leg","all over the body",}),0,0,}),}),})

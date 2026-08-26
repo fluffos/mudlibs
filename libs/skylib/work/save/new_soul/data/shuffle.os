@@ -1,0 +1,1 @@
+({({"<string> [at] <indirect:any-living>","[at] <indirect:any-living> <string>","[at] <indirect:any-living>","<string>",}),({({"You shuffle your feet in embarrassment.","$mcname$ shuffles $mposs$ feet in embarrassment.",0,}),0,}),({0,({"You shuffle $arg$ $hcname$.","$mcname$ shuffles $arg$ $hcname$.","$mcname$ shuffles $arg$ you.",({"away from","up to","towards",}),0,0,}),}),})

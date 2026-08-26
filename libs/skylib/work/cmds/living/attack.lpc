@@ -1,0 +1,1 @@
+inherit "/cmds/living/kill";

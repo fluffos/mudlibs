@@ -1,0 +1,1 @@
+({({"[over] <indirect:any-living> <string>","[over] <indirect:any-living>",}),0,({({"You tower over $hcname$.","$mcname$ towers over $hcname$.","$mcname$ towers over you.",0,0,0,}),({"You tower over $hcname$ $arg$.","$mcname$ towers over $hcname$ $arg$.","$mcname$ towers over you $arg$.",({"ominously","threateningly",}),0,0,}),}),})

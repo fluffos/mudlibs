@@ -1,0 +1,1 @@
+({({"<indirect:any-living> on the <string>","<indirect:any-living> [on] <string>","<string> <indirect:any-living>","<indirect:any-living>",}),0,({0,({"You pat $hcname$ on the $arg$.","$mcname$ pats $hcname$ on the $arg$.","$mcname$ pats you on the $arg$.",({"head","back","leg","arm","nose","bottom",}),0,0,}),}),})

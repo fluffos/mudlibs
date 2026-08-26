@@ -1,0 +1,1 @@
+({({"<string> [at] <indirect:any-living>","[at] <indirect:any-living> <string>","[at] <indirect:any-living>","<string>",}),({({"You wuzzle woozle.","$mcname$ wuzzle woozles.",0,}),0,}),({({"You wuzzle woozle at $hcname$.","$mcname$ wuzzle woozles at $hcname$.","$mcname$ wuzzle woozles at you.",0,0,0,}),0,}),})

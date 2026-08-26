@@ -1,0 +1,1 @@
+({({"<string> <indirect:any-living>","<indirect:any-living> <string>","<indirect:any-living>",}),0,({0,({"You absolve $hcname$ $arg$.","$mcname$ absolves $hcname$ $arg$.","$mcname$ absolves you $arg$.",({"from all blame","from all responsibility","from your sins","from everything","#",}),0,0,}),}),})

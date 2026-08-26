@@ -1,0 +1,1 @@
+({({"[at] <indirect:any-living>",}),({({"You swing an axe around wildly.","$mcname$ swings an axe around wildly.",0,}),0,}),({({"You casually walk up to $hcname$ and chop $hposs$ head off.","$mcname$ casually walks up to $hcname$ and chops $hposs$ head off.","$mcname$ casually walks up to you and chops your head off.",0,0,0,}),0,}),})

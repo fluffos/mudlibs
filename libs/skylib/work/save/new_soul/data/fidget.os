@@ -1,0 +1,1 @@
+({({"<indirect:any-living>","<string>",}),({({"You fidget.","$mcname$ fidgets.",0,}),({"You fidget $arg$.","$mcname$ fidgets $arg$.",0,({"nervously","#",}),}),}),({({"You fidget in $mhcname$ general direction.","$mcname$ fidgets in $mhcname$ general direction.","$mcname$ fidgets in your general direction.",0,0,0,}),0,}),})

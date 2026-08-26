@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),({({"You hope everyone has fun.","$mcname$ hopes everyone has fun.",0,}),0,}),({({"You hope $hcname$ has fun.","$mcname$ hopes $hcname$ has fun.","$mcname$ hopes you have fun.",0,0,0,}),0,}),})

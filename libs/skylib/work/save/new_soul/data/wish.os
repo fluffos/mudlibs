@@ -1,0 +1,1 @@
+({({"<string> <indirect:any-living>","<indirect:any-living> <string>","<indirect:any-living>",}),0,({0,({"You wish $hcname$ a happy $arg$.","$mcname$ wishes $hcname$ a happy $arg$.","$mcname$ wishes you a happy $arg$.",({"christmas","easter","birthday",}),0,0,"You wish $hcname$ $arg$.","$mcname$ wishes $hcname$ $arg$.","$mcname$ wishes you $arg$.",({"well",}),0,0,}),}),})

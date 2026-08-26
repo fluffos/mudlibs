@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),({({"You ignore the world.","$mcname$ ignores the world.",0,}),0,}),({({"You ignore $hcname$.","$mcname$ ignores $hcname$.","$mcname$ ignores you.",0,0,0,}),0,}),})

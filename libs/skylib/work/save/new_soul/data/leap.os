@@ -1,0 +1,1 @@
+({({"<string>",}),({({"You leap into the air.","$mcname$ leaps into the air.",0,}),({"You leap $arg$ into the air.","$mcname$ leaps $arg$ into the air.",0,({"longingly","excitedly","quickly","slowly","awkwardly","politely","quietly","noisily",}),}),}),0,})

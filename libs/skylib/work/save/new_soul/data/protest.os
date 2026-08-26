@@ -1,0 +1,1 @@
+({({"<string>",}),({({"You protest.","$mcname$ protests.",0,}),({"You protest $arg$.","$mcname$ protests $arg$.",0,({"vehemently","loudly","strongly","weakly","noisily","pointlessly","annoyingly","#",}),}),}),0,})

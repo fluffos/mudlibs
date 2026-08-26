@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),0,({({"You forgive $hcname$.","$mcname$ forgives $hcname$.","$mcname$ forgives you.",0,0,0,}),0,}),})

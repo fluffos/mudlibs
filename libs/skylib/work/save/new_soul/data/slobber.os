@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),({({"You slobber all over the place.","$mcname$ slobbers all over the place.",0,}),0,}),({({"You slobber all over $hcname$.","$mcname$ slobbers all over $hcname$.","$mcname$ slobbers all over you.",0,0,0,}),0,}),})

@@ -1,0 +1,1 @@
+({({"<string>",}),({0,({"You flex your $arg$.","$mcname$ flexes $mposs$ $arg$.",0,({"muscles","biceps","triceps","legs","brain","nose","ears",}),}),}),0,})

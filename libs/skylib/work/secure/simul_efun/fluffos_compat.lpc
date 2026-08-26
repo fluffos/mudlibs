@@ -1,0 +1,70 @@
+/**
+ * FluffOS driver-compat shims for this specific build (see NOTES.md).
+ *
+ * set_this_player() is a real driver efun ONLY on a NO_ADD_ACTION
+ * build -- the two are mutually exclusive in FluffOS's core.spec,
+ * because add_action()-based command dispatch and set_this_player()
+ * both want to own the driver's command_giver directly. This driver
+ * build compiles WITH add_action() (skylib barely uses it, but its
+ * own secure/simul_efun/add_action.lpc conditionally excludes itself
+ * via `#if !efun_defined(add_action)` for exactly this reason), so
+ * set_this_player() does not exist here as a real efun.
+ *
+ * A number of ordinary (unconditional, not #if-guarded) call sites
+ * across the mudlib -- std/living/living.lpc (NPC flee), std/npc.lpc,
+ * global/player/psoul.lpc, std/effects/ingested/{drunk,nausea}.lpc,
+ * std/effects/disease/common_cold.lpc, std/room/basic/door.lpc, and
+ * std/shops/player_shop/shop_front.lpc -- call set_this_player() bare,
+ * assuming it is always available. Without this shim those files fail
+ * to compile ("Undefined function set_this_player").
+ *
+ * This is a simul_efun (rather than living on /std/object, which
+ * would only help files that actually inherit it) specifically so it
+ * resolves from bare calls in every compilation unit, including ones
+ * like psoul.lpc that have no inherit path to /std/object at all.
+ *
+ * secure/simul_efun.lpc only inherits this file at all when
+ * `!efun_defined(set_this_player)` (i.e. exactly the driver
+ * configuration this shim targets), so no runtime check is needed
+ * here for the (mutually exclusive) case where a real efun exists.
+ *
+ * Reassigns the driver's actual command_giver by call_other-ing into
+ * the target object (current_object becomes that object for the
+ * duration of the call) and invoking the always-present native
+ * enable_commands() efun there, which sets command_giver =
+ * current_object as a side effect. __fluffos_become_command_giver
+ * lives on /std/object, the universal base every real game object
+ * ends up inheriting.
+ *
+ * The bare (no-arg) form of enable_commands() is used deliberately:
+ * passing an argument would also flip the "toggle_action" bit and
+ * re-run init() across environment/inventory, which is not part of
+ * what set_this_player() itself ever did.
+ */
+varargs void set_this_player( mixed ob ) {
+    if ( objectp(ob) )
+        ob->__fluffos_become_command_giver();
+} /* set_this_player() */
+
+/**
+ * _notify_fail()/query_notify_fail(): a mudlib-userland fail-message
+ * slot, distinct from the driver's own notify_fail()/"What?" handling.
+ * Skylib's own parser (global/player/new_parse.lpc, cmds/living/get.lpc,
+ * cmds/player/sea_rch.lpc, psoul.lpc, std/npc.lpc) sets and reads this
+ * back directly to build/compare its own failure text -- this was
+ * never a real efun on EITHER driver flavor (query_notify_fail isn't
+ * in FluffOS's efun table at all), so this pair belongs here
+ * unconditionally alongside set_this_player, not behind any
+ * efun_defined() check of its own. It normally lives in
+ * secure/simul_efun/add_action.lpc, which (like set_this_player) this
+ * driver's `#if !efun_defined(add_action)` guard excludes from the
+ * simul_efun object entirely.
+ */
+private nosave string _nf;
+
+varargs int _notify_fail( string mess ) {
+    _nf = mess;
+    return 0;
+} /* _notify_fail() */
+
+string query_notify_fail() { return _nf; }

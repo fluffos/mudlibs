@@ -1,0 +1,1 @@
+({({"[on] <indirect:any-living>",}),({({"You stand on your head.","$mcname$ stands on $mposs$ head.",0,}),0,}),({({"You stand on $mhcname$ head.","$mcname$ stands on $mhcname$ head.","$mcname$ stands on your head.",0,0,0,}),0,}),})

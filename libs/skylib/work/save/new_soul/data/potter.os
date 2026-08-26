@@ -1,0 +1,1 @@
+({({"[on] <indirect:any-living>",}),0,({({"You potter around $hcname$, looking slightly lost.","$mcname$ poutters around $hcname$, looking slightly lost.","$mcname$ potters around you, looking slighty lost.",0,0,0,}),0,}),})

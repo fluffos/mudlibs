@@ -1,0 +1,1 @@
+({({"[on] <indirect:any-living>","<string>",}),({0,({"You sob $arg$.","$mcname$ sobs $arg$.",0,({"quietly","loudly","despairingly","forlornly","happily","uncontrollably","completely","unexpectedly","silently","cheekily",}),}),}),({({"You sob on $mhcname$ shoulder.","$mcname$ sobs on $mhcname$ shoulder.","$mcname$ sobs on your shoulder.",0,0,0,}),0,}),})

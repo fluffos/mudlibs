@@ -1,0 +1,1 @@
+({({"[at] <indirect:any-living>","[in] <string>",}),({({"What's the problem?","$mcname$ frowns.",0,}),({"You frown in $arg$.","$mcname$ frowns in $arg$.",0,({"concentration","thought","anger","depression","like a cat","happily","#",}),}),}),({({"You frown at $hcname$.","$mcname$ frowns at $hcname$.","$mcname$ frowns at you.",0,0,0,}),0,}),})

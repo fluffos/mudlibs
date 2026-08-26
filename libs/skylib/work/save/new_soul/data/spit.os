@@ -1,0 +1,1 @@
+({({"[at] <indirect:any-living>",}),({({"You spit.","$mcname$ spits.",0,}),0,}),({({"You spit in $mhcname$ face.","$mcname$ spits in $mhcname$ face.","$mcname$ spits in your face.",0,0,0,}),0,}),})

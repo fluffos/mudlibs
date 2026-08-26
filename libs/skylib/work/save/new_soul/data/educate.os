@@ -1,0 +1,1 @@
+({({"<indirect:any-living> [about] <string>","<string> <indirect:any-living>",}),0,({0,({"You educate $hcname$ about $arg$.","$mcname$ educates $hcname$ about $arg$.","$mcname$ educates you about $arg$.",({"#",}),0,0,}),}),})

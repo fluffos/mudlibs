@@ -1,0 +1,1 @@
+({({"<string>",}),({({"You stretch.","$mcname$ stretches.",0,}),({"You stretch $arg$.","$mcname$ stretches $arg$.",0,({"lazily","slowly","seductively","carefully","excitedly","sleepily","sadly","happily","your legs","your arms","your eyebrows","languidly","#",}),}),}),0,})

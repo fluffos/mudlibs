@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),0,({({"You do a great impression of $hcname$ but just end up looking stupid.","$mcname$ does a great impression of $hcname$ but just ends up looking stupid.","$mcname$ does a great impression of you but just ends up looking stupid.",0,"laugh $mcname$",0,}),0,}),})

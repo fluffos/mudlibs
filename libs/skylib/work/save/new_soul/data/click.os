@@ -1,0 +1,1 @@
+({({}),({({"You click your fingers.","$mcname$ clicks $mposs$ fingers.",0,}),0,}),0,})

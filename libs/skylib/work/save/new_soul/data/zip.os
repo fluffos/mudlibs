@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),({({"You zip around the room.","$mcname$ zips around the room.",0,}),0,}),({({"You zip around $hcname$.","$mcname$ zips around $hcname$.","$mcname$ zips around you.",0,0,0,}),0,}),})

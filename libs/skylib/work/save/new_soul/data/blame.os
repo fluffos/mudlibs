@@ -1,0 +1,1 @@
+({({"<indirect:any-living> [for] <string>","<string> <indirect:any-living>","<indirect:any-living>",}),0,({({"You blame $hcname$.","$mcname$ blames $hcname$.","$mcname$ blames you.",0,0,0,}),({"You blame $hcname$ for $arg$.","$mcname$ blames $hcname$ for $arg$.","$mcname$ blames you for $arg$.",({"#",}),0,0,}),}),})

@@ -1,0 +1,1 @@
+({({"<string>",}),({0,({"You mosh $arg$ around the room.","$mcname$ moshes $arg$ around the room.",0,({"violently","angrily","carefully","thoughtfully","wonderingly","vigorously","insanely","loudly","like Trent",}),}),}),0,})

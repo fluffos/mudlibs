@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),0,({({"You bite off $mhcname$ kneecap and chew on it noisily, persuading $hobj$ to go bother someone else...","$mcname$ bites off $mhcname$ kneecap and chews on it noisily, persuading $hobj$ to go bother someone else...","$mcname$ bites off your kneecap and chews on it noisily, persuading you to go bother someone else...",0,0,0,}),0,}),})

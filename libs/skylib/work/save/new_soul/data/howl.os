@@ -1,0 +1,1 @@
+({({"at the <string>","<string>",}),({({"HOOOOOWWWWWWWWWLLLLLL!!","$mcname$ howls.",0,}),({"You HOOOOOWWWWWWWWWLLLLLL at the $arg$."," $mcname$ howls at the $arg$.",0,({"#",}),}),}),0,})

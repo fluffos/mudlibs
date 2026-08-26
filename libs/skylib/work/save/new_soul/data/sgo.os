@@ -1,0 +1,1 @@
+({({"<string> [at] <indirect:any-living>","[at] <indirect:any-living> <string>","<string>",}),({0,({"You go $arg$.","$mcname$ goes $arg$.",0,({"away","hmmm","Bing!","#",}),}),}),({0,({"You go $arg$ at $hcname$.","$mcname$ goes $arg$ at $hcname$.","$mcname$ goes $arg$ at you.",({"away","hmmm","Bing!","#",}),0,0,}),}),})

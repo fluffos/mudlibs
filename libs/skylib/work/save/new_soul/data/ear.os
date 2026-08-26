@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),0,({({"You cut off your ear and send it to $hcname$ as a token of your undying love.","$mcname$ cuts off an ear and sends it to $hcname$ as a token of $mposs$ undying love.","$mcname$ cuts off an ear and sends it to you as a token of $mposs$ undying love.",0,0,0,}),0,}),})

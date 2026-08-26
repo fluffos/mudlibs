@@ -1,0 +1,1 @@
+({({"[for] <indirect:any-living>","<string>",}),({0,({"You weep $arg$.","$mcname$ weeps $arg$.",0,({"unashamedly","sadly","uncontrollably",}),}),}),({({"You weep with $hcname$.","$mcname$ weeps with $hcname$.","$mcname$ weeps with you.",0,0,0,}),0,}),})

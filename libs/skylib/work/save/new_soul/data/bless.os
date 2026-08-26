@@ -1,0 +1,1 @@
+({({"<indirect:any-living> <string>","<indirect:any-living>",}),0,({({"You bless $hcname$.","$mcname$ blesses $hcname$.","$mcname$ blesses you.",0,0,0,}),({"You bless $hcname$ $arg$.","$mcname$ blesses $hcname$ $arg$.","$mcname$ blesses you $arg$.",({"benignly","hypocritically","in the name of Pishe","in the name of Pinkfish","with your frog","#",}),0,0,}),}),})

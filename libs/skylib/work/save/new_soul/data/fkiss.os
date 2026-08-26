@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),0,({({"You hold $hcname$ tightly kissing $hobj$ with fierce passion until your tongues meld in fire.","$mcname$ holds $hcname$ tightly kissing $hobj$ with fierce passion until their tongues meld in fire.","$mcname$ holds you tightly kissing you with fierce passion until your tongues meld in fire.",0,0,0,}),0,}),})

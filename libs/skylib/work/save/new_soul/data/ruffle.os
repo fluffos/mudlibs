@@ -1,0 +1,1 @@
+({({"<string> <indirect:any-living>","<indirect:any-living> <string>","<indirect:any-living>",}),0,({({"You ruffle $mhcname$ hair.","$mcname$ ruffles $mhcname$ hair.","$mcname$ ruffles your hair.",0,0,0,}),({"You ruffle $mhcname$ hair $arg$.","$mcname$ ruffles $mhcname$ hair $arg$.","$mcname$ ruffles your hair $arg$.",({"playfully","affectionately",}),0,0,}),}),})

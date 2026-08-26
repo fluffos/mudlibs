@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),0,({({"You give $hcname$ an indian burn.","$mcname$ gives $hcname$ an indian burn.","$mcname$ gives you an indian burn.",0,"scream in pain $mcname$",0,}),0,}),})

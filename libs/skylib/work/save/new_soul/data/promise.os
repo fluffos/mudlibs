@@ -1,0 +1,1 @@
+({({"<string> <indirect:any-living>","<indirect:any-living> <string>","<indirect:any-living>",}),0,({0,({"You promise $hcname$ $arg$.","$mcname$ promises $hcname$ something.","$mcname$ promises you $arg$.",({"#",}),0,0,}),}),})

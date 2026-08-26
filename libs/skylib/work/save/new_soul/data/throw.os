@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),0,({({"Hiyyyyaaa.","$mcname$ throws $hcname$ to the floor in a happy embrace.","$mcname$ throws you to the floor.",0,"smile hap at $mcname$",(["silent":"yes","default":"lie",]),}),0,}),})

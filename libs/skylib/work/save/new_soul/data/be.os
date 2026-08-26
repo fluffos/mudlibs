@@ -1,0 +1,1 @@
+({({"[at] <indirect:any-living>","<string>",}),({({"You appear to be about to type 'help essentials'.","$mcname$ appears to be about to type 'help essentials'.",0,}),({"You appear to be $arg$.","$mcname$ appears to be $arg$.",0,({"#",}),}),}),({({"You appear to be $hcname$.","$mcname$ appears to be $hcname$.","$mcname$ appears to be you.",0,0,0,}),0,}),})

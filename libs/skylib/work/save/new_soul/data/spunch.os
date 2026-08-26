@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),({({"You punch yourself.","$mcname$ punches $mobj$self.",0,}),0,}),({({"You punch $hcname$.","$mcname$ punches $hcname$.","$mcname$ punches you.",0,0,0,}),0,}),})

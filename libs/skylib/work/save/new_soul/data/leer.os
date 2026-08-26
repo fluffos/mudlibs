@@ -1,0 +1,1 @@
+({({"[at] <indirect:any-living>",}),({({"You leer at yourself.","$mcname$ leers at $mobj$self... hmmm, interesting....",0,}),0,}),({({"You leer at $hcname$.","$mcname$ leers at $hcname$.","$mcname$ leers at you.",0,0,0,}),0,}),})

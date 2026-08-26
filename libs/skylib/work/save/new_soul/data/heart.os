@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),0,({({"You devotedly hand your heart to $hcname$.","$mcname$ devotedly hands $mposs$ heart to $hcname$.","$mcname$ devotedly hands $mposs$ heart to you.",0,0,0,}),0,}),})

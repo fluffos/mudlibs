@@ -1,0 +1,1 @@
+({({"<string>",}),({({"You stamp your foot.","$mcname$ stamps $mposs$ foot.",0,}),({"You stamp your foot $arg$.","$mcname$ stamps $mposs$ foot $arg$.",0,({"angrily","impatiently","warningly","frighteningly","in frustration",}),}),}),0,})

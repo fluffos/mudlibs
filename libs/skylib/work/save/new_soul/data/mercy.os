@@ -1,0 +1,1 @@
+({({"[at] <indirect:any-living>",}),({({"You beg for mercy.","$mcname$ begs for mercy.",0,}),0,}),({({"You throw yourself down at $hposs$ feet and beg for mercy.","$mcname$ throws $mobj$self down at $hcname$'s feet and begs for mercy.","$mcname$ throws $mobj$self down at your feet and begs for mercy.",0,0,0,}),0,}),})

@@ -1,0 +1,1 @@
+({({"<string> <indirect:any-living>","<indirect:any-living> <string>","<indirect:any-living>",}),0,({0,({"You tweak $mhcname$ $arg$.","$mcname$ tweaks $mhcname$ $arg$.","$mcname$ tweaks your $arg$.",({"bottom","ear","arm","leg","nose","bits","eyebrow","arm","leg","thigh","elbow","cheeks","nose","ear","knee","#",}),0,0,}),}),})

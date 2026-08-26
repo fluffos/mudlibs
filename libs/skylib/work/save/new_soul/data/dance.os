@@ -1,0 +1,1 @@
+({({"[with] <indirect:any-living>",}),({({"You dance.","$mcname$ dances.",0,}),0,}),({({"You sweep $hcname$ across the dance floor.","$mcname$ sweeps $hcname$ across the dance floor.","$mcname$ sweeps you across the dance floor.",0,0,0,}),0,}),})

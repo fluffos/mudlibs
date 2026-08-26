@@ -1,0 +1,1 @@
+({({"[at] <indirect:any-living>","<string>",}),({0,({"You boggle at $arg$.","$mcname$ boggles at $arg$.",0,({"the concept","#",}),}),}),({({"You boggle at $hcname$.","$mcname$ boggles at $hcname$.","$mcname$ boggles at you.",0,0,0,}),0,}),})

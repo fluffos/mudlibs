@@ -1,0 +1,1 @@
+({({"<string> [to] <indirect:any-living>","[to] <indirect:any-living>",}),0,({0,({"You listen $arg$ to $hcname$.","$mcname$ listens $arg$ to $hcname$.","$mcname$ listens $arg$ to you.",({"intently","carefully","boredly","patiently","silently","rudely",}),0,0,}),}),})

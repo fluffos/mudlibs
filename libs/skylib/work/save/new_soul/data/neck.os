@@ -1,0 +1,1 @@
+({({"<indirect:any-living>",}),0,({({"You kiss $hcname$'s neck, brushing your lips softly against $hposs$ smooth skin.","$mcname$ brushes $mposs$ lips over $hcname$'s neck, making $hobj$ fall into ecstasy.","$mcname$ brushes $mposs$ lips over your neck, sending shivers of ecstasy all over you.",0,0,0,}),0,}),})

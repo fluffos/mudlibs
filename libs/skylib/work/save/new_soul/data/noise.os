@@ -1,0 +1,1 @@
+({({"<string>",}),({({"You make a funny noise.","$mcname$ makes a funny noise.",0,}),({"You make a $arg$ noise.","$mcname$ makes a $arg$ noise.",0,({"bungle","flurgle","zongle-wop","wop","whirr","burble","frog","moo","train","hairy","twisted","wap","pop","schwing","gong","koala","rat","mouse","chicken","womble","guppy","cow","rabbit","kangaroo","gumby","#",}),}),}),0,})

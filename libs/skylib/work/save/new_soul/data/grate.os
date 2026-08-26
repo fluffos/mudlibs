@@ -1,0 +1,1 @@
+({({"<string>",}),({0,({"You grate your teeth $arg$.","$mcname$ grates $mposs$ teeth $arg$.",0,({"in annoyance","noisily","seductively","in terror","together","annoyingly","suggestively","painfully","angrily",}),}),}),0,})

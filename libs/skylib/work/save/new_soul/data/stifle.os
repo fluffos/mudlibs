@@ -1,0 +1,1 @@
+({({}),({({"You stifle a giggle.","$mcname$ stifles a giggle.",0,}),0,}),0,})

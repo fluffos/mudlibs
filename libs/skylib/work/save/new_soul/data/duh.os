@@ -1,0 +1,1 @@
+({({}),({({"You scream \"Duh!\"","$mcname$ screams \"Duh!\"",0,}),0,}),0,})

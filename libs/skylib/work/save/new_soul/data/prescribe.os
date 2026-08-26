@@ -1,0 +1,1 @@
+({({"<string> <indirect:any-living>","<indirect:any-living> <string>","<indirect:any-living>",}),0,({0,({"You prescribe a dose of $arg$ for $hcname$.","$mcname$ prescribes a dose of $arg$ $hcname$.","$mcname$ prescribes a dose of $arg$ $hcname$.",({"dried frog pills","narcotics","#",}),0,0,}),}),})

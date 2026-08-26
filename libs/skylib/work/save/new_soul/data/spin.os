@@ -1,0 +1,1 @@
+({({"<string>",}),({0,({"You spin $arg$.","$mcname$ spins $arg$.",0,({"around like a top","about deliriously",}),}),}),0,})

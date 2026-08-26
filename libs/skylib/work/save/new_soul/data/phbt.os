@@ -1,0 +1,1 @@
+({({"<string> [at] <indirect:any-living>","[at] <indirect:any-living> <string>","[at] <indirect:any-living>","<string>",}),({({"You go: \"Phbttptblptt!\"","$mcname$ goes: \"Phbttptblptt!\"",0,}),0,}),({({"You go: \"Phbttptblptt!\" at $hcname$.","$mcname$ goes: \"Phbttptblptt!\" at $hcname$.","$mcname$ goes: \"Phbttptblptt!\" at you.",0,0,0,}),0,}),})

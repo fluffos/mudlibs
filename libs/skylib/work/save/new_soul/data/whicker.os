@@ -1,0 +1,1 @@
+({({}),({({"You whicker.","$mcname$ whickers.",0,}),({"You whicker $arg$.","$mcname$ whickers $arg$.",0,({"like a horse","gently","happily","slowly","stupidly","like a ball of string","back in black","like a stallion","with gusto","excitedly","unhappily","sadly","skitishly","#",}),}),}),0,})

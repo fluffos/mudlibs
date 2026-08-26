@@ -1,0 +1,1 @@
+({({"<string>",}),({({"You look puzzled.","$mcname$ looks puzzled.",0,}),({"You puzzle over $arg$.","$mcname$ puzzles over $arg$.",0,({"#",}),}),}),0,})

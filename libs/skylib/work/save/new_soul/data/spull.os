@@ -1,0 +1,1 @@
+({({"<string> <indirect:any-living>","<indirect:any-living> <string>","<indirect:any-living>",}),0,({0,({"You pull $hcname$ $arg$.","$mcname$ pulls $hcname$ $arg$.","$mcname$ pulls you $arg$.",({"over","under","away","along","around","up","down",}),0,0,}),}),})
