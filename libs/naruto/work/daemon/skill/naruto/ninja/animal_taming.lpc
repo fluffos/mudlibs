@@ -1,0 +1,376 @@
+/* animal_taming.c 忍術：馴獸之術 */
+
+#include <ansi.h>
+#define SKILL_NAME   "animal taming"
+#define SKILL_NAME_C "馴獸之術"
+#define SKILL_CLASS  "ninja"
+#define PET_FILE_PATH "/daemon/skill/naruto/ninja/obj/pet.lpc"
+
+inherit SKILL;
+
+void create()
+{
+seteuid(getuid());
+    DAEMON_D->register_skill_daemon(SKILL_NAME);
+}
+
+string query_class() { return SKILL_CLASS; }
+
+void skill_advanced(object me, string skill)
+{
+    int lv = me->query_skill(skill, 1);
+    switch( lv ) {
+    case 189: me->set_skill_require(skill, 1500000); break; // 關卡3 : 189升190
+    case 149: me->set_skill_require(skill, 1000000); break; // 關卡2 : 149升150
+    case  99: me->set_skill_require(skill, 500000);  break; // 關卡1 :  99升100
+    default:  me->set_skill_require(skill, lv*lv*5); break;
+    }
+}
+
+// 初始化寵物
+void setup_dog(object me, object pet)
+{
+/*
+    int lv;
+   
+    // 設定名字
+    if( me->query("pet/name") ) pet->set("name", me->query("pet/name"));
+    
+    // 設定ID
+    pet->set("id", me->query_id() + "'s dog");
+    
+    // 設定title
+    if( me->query("pet/title") ) pet->set("title", me->query("pet/title"));
+    
+    // 設定nickname
+    if( me->query("pet/nickname") ) pet->set("nickname", me->query("pet/nickname"));
+
+    // 設定long
+    if( me->query("pet/long") ) pet->set("long", me->query("pet/long"));
+    
+    // 設定food
+    if( me->query("pet/food") ) pet->food_gain(me->query("pet/food"));
+    
+    // 設定Level
+    if( me->query("pet/level") ) pet->set_level(me->query("pet/level"));
+    
+    // 設定exp
+    if( me->query("pet/exp") )
+        pet->exp_gain(me->query("pet/exp"));
+
+    lv = pet->query_level();
+    
+    // 依等級提升能力
+    pet->set_attr("str", lv*2);
+    pet->set_attr("con", lv*2);
+    pet->set_attr("dex", lv*2);
+    pet->set_attr("int", lv*2);
+    pet->set_stat_maximum("ap", lv*50);
+    pet->set_stat_maximum("hp", lv*50);
+    pet->set_stat_maximum("mp", lv*50);
+    pet->set_stat_current("ap", lv*50);
+    pet->set_stat_current("hp", lv*50);
+    pet->set_stat_current("mp", lv*50);
+    pet->set_skill("combat", lv*3);
+    pet->set_skill("parry", lv*3);
+    pet->set_skill("dodge", lv*3);
+    pet->set_skill("heavy hit", lv*3);
+    pet->set_skill("savage hit", lv*3);
+    pet->set_skill("continual hit", lv*3);
+    
+    pet->do_heal();
+
+    // 設定寵物目前狀態
+    // 只有當主人身上保留的值小於寵物最大值才會繼承，避免破表
+    if( me->query("pet/ap") < pet->query_stat_maximum("ap") ) pet->set_stat_current("ap", me->query("pet/ap"));
+    if( me->query("pet/hp") < pet->query_stat_maximum("hp") ) pet->set_stat_current("hp", me->query("pet/hp"));
+    if( me->query("pet/mp") < pet->query_stat_maximum("mp") ) pet->set_stat_current("mp", me->query("pet/mp"));
+*/
+}
+
+// 叫出忍犬函式
+void call_dog(object me)
+{
+    object pet;
+
+    if( objectp( pet = me->query_temp("pet") ) ) {
+        write("你的忍犬已經被你叫出來了...\n");
+        return;
+    }
+    
+    if( me->query_skill("animal taming", 1) <= 40 ) {
+        write("你的馴獸術必需大於40級才能使用這個指令。\n");
+        return;
+    }
+
+    // 擁有者消秏一些查克拉
+    if( me->query_stat("mp") < 20 ) {
+        write("你目前沒有足夠的查克拉來使用馴獸術。\n");
+        return;
+    }
+
+    pet = new(PET_FILE_PATH);
+    if( !objectp(pet) ) {
+        write("你似乎沒辦法呼叫你的忍犬出來...\n");
+        destruct(pet);
+        return;
+    }
+
+    message_vision(HIW"$N從褲襠裡掏出一支哨子吹了幾下，臉上露出滿足的笑容...\n"NOR, me);
+
+    // 初始化寵物狀態
+    // setup_dog(me, pet);
+    // 改為存檔方式，初始化即為取回存檔
+    // restore前後都要設owner, 因為restore後owner會不見
+    pet->set_owner(me);      //設定owner
+    pet->restore();
+    pet->restore_autoload();
+    pet->set_owner(me);      //設定owner
+    pet->reset_action();     //重新設定動作, 因restore後會不見
+
+    if( environment(me)->is_area() ) {
+        if( !area_move(environment(me), pet, me->query("area_info/x_axis"), me->query("area_info/y_axis")) ) {
+            write("你的忍犬出來後，又一溜煙地跑走了...\n");
+            destruct(pet);
+            return;
+        }
+    } else {
+        if( !pet->move(environment(me)) ) {
+            write("你的忍犬出來後，又一溜煙地跑走了...\n");
+            destruct(pet);
+            return;
+        }
+    }
+
+    if( me->query_skill("animal taming", 1) > 50 ) pet->set_leader(me);     //跟隨leader
+
+    me->set_temp("pet", pet);
+    
+    message_vision("$n一見到$N高興得跳來跳去「汪！汪！」叫...\n", me, pet);
+
+    me->damage_stat("mp", 20, me);
+    me->start_busy(3);
+
+    // 增加技能經驗
+    me->improve_skill("animal taming", 1);
+    me->improve_skill("ninja", 1);
+
+    if( me->query_skill("animal taming", 1) > 60 ) pet->guard_ob(me);       //保護leader
+    
+    return;
+}
+
+// 刪除寵物函式
+void destruct_dog(object me)
+{
+//    mapping petr=([]);
+    object pet;
+    
+    if( !objectp(pet = me->query_temp("pet")) ) {
+        write("你目前沒有叫出你的忍犬出來...\n");
+        return;
+    }
+    
+    if( pet->is_fighting() || pet->is_busy() ) {
+        write("你的忍犬似乎在忙些什麼，一時脫不了身...\n");
+        return;
+    }
+    
+    // 寵物狀態儲存
+    /* 改為存檔方式，不需要取回狀態
+    petr["name"] = pet->query("name");
+    petr["title"] = pet->query("title");
+    petr["nickname"] = pet->query("nickname");
+    petr["long"] = pet->query("long");
+    petr["exp"] = pet->query_exp();
+    petr["food"] = pet->query_food();
+    petr["level"] = pet->query_level();
+    petr["ap"] = pet->query_stat("ap");
+    petr["hp"] = pet->query_stat("hp");
+    petr["mp"] = pet->query_stat("mp");    
+    me->set("pet", petr);
+    */
+    pet->save_autoload();
+    pet->save();
+    pet->do_destruct();
+    me->delete_temp("pet");
+    
+    write("你的忍犬離開了。\n");
+    
+    return;
+}
+
+string status_color(int current, int max)
+{
+    int ratio = max ? (current * 100) / max : 100;
+
+    switch( ratio ) {
+        case  0..25: return HIR;
+        case 26..50: return HIM;
+        case 51..75: return HIY;
+        case 76..100: return HIG;
+        default: return HIC;
+    }
+}
+
+void show_state(object me)
+{
+    object pet;
+    string msg;
+    
+    if( !objectp(pet = me->query_temp("pet")) ) {
+        write("請先叫出你的忍犬。\n");
+        return;
+    }
+
+    if( me->query_skill("animal taming", 1) <= 20 ) {
+        write("你的馴獸術必需大於20級才能使用這個指令。\n");
+        return;
+    }
+
+    printf("[%s] 等級 %d  經驗值 %2.2f%s  食物量 %s%d/%d\n"NOR,
+        pet->query("name"),
+        pet->query("level"),
+        (pet->query_exp()*10.0 / (pet->query("level") * pet->query("level"))),
+        "%",
+        status_color(pet->query_food(), pet->query_food_maximum()),
+        pet->query_food(),
+        pet->query_food_maximum() );
+
+    return;
+}
+
+
+void feed_dog(object me, string item)
+{
+    int stuff, heal;
+    object food, pet;
+    
+    if( !objectp(pet = me->query_temp("pet")) ) {
+        write("請先叫出你的忍犬。\n");
+        return;
+    }
+    
+    if( me->query_skill("animal taming", 1) <= 30 ) {
+        write("你的馴獸術必需大於20級才能使用這個指令。\n");
+        return;
+    }
+
+    food = present(item, me);
+    if( !food ) food = present(item, environment(me));
+    if( !food ) {
+        write("這裡沒有這樣東西 ...\n");
+        return;
+    }
+
+    stuff = food->query("food_stuff");
+
+    if( !stuff ) {
+        write("這樣東西似乎不能吃...\n");
+        return;
+    }
+    
+    // 增加食物量
+    if( !pet->food_gain(stuff) ) {
+        write("你的忍犬已經吃不下任何東西了...\n");
+        return;
+    }
+
+    if( !food->stuff_ob(pet)) {
+        write("這樣東西似乎不能吃...\n");
+        return;
+    }
+
+    message_vision("$N吃下了一" + ( food->query("base_unit") ? food->query("base_unit") : food->query("unit") ) + "$n。\n", pet, food);
+    
+    food->add_amount(-1);
+    if( food->query_amount() <= 0 ) destruct(food);
+
+    // 吃東西會增加經驗值
+    pet->exp_gain(stuff);
+    
+    return;
+}
+
+void set_data(object me, string key, string value)
+{
+    object pet;
+    
+    if( !objectp(pet = me->query_temp("pet")) ) {
+        write("請先叫出你的忍犬。\n");
+        return;
+    }
+    
+    if( me->query_skill("animal taming", 1) <= 100 ) {
+        write("你的馴獸術必需大於100級才能使用這個指令。\n");
+        return;
+    }
+
+    if( key == "name" ) {
+        if( strlen(value) > 10 ) {
+            write("你只能為你的忍犬取五個中文字大小以內的名字。\n");
+            return;
+        }
+        write("你幫你的忍犬取名為 " +value + "。\n");
+        pet->set("name", value);
+        return;
+    }
+    
+    if( key == "title" ) {
+        if( strlen(value) > 14 ) {
+            write("你只能為你的忍犬取七個中文字大小以內的頭銜。\n");
+            return;
+        }
+        write("你幫你的忍犬的頭銜取為 " +value + "。\n");
+        pet->set("title", value);
+        return;
+    }
+
+    if( key == "nickname") {
+        if( strlen(value) > 14 ) {
+            write("你只能為你的忍犬取七個中文字大小以內的外號。\n");
+            return;
+        }
+        write("你幫你的忍犬的外號取為 " +value + "。\n");
+        pet->set("nickname", value);
+        return;
+    }
+    
+    if( key == "long") {
+        if( strlen(value) > 200 ) {
+            write("你只能為你的忍犬設定一百個中文字大小以內的描述。\n");
+            return;
+        }
+        write("你幫你的忍犬的描述設為 " +value + "。\n");
+        pet->set("long", value);
+        return;
+    }
+
+    write("你目前能改更忍犬的資訊有 name, title, nickname, long ...\n");
+    return;
+}
+
+// 使用絕招
+int perform_action(object me, string act, object target)
+{
+    string k, v;
+    if( !objectp(me) ) return 0;
+    if( me->is_busy() ) return notify_fail("你現在沒有空使用馴獸之術。\n");
+
+    if( me->query_skill("ninja", 1) < 20 ) return notify_fail("你的能力不足以使用這個技能。\n");
+
+    switch( act ) {
+        case     "call": call_dog(me); break;
+        case    "leave": destruct_dog(me); break;
+        case    "state": show_state(me); break;
+        default:
+            if( sscanf(act, "feed %s", k) == 1 ) {
+                feed_dog(me, k);
+            } else if( sscanf(act, "set %s %s", k, v) == 2 ) {
+                set_data(me, k, v);
+            } else return notify_fail("目前馴獸之術有 feed, call, leave, state, set 五種功\能。\n"); break;
+        break;
+    }
+    
+    return 1;
+}
