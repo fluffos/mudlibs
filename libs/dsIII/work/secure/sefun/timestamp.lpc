@@ -1,0 +1,35 @@
+#include <cfg.h>
+#include <daemons.h>
+#include <localtime.h>
+
+string *zones_cfg = explode((read_file(CFG_TIMEZONES)|| ""), "\n");
+
+varargs string timestamp(mixed tz){
+    string rawtz;
+    int *t, offset;
+
+    if(tz){
+        tz = upper_case(tz);
+        if(member_array(tz, zones_cfg) == -1) tz = 0;
+    }
+
+    if(!tz) rawtz = query_tz();
+    else rawtz = tz;
+    if(!rawtz) rawtz = upper_case(localtime(time())[LT_ZONE]);
+    // Guard against the driver's "Object cannot be loaded during
+    // compilation" error (AGENTS.md section 7.10): this simul_efun gets
+    // called from master.lpc's error_handler()/log_error() to build a
+    // timestamped trace line for the very FIRST compile warning of a
+    // fresh boot, long before /daemon/time has ever been loaded --
+    // calling TIME_D lazily right there would try to load it mid-compile
+    // of some unrelated preload file and re-enter the error handler.
+    // Skip the timezone-offset lookup (falls back to raw system time,
+    // same as never having timezone data at all) when the daemon isn't
+    // resident yet; every other, non-mid-compile call site is unaffected.
+    if(find_object(TIME_D)){
+        offset = TIME_D->GetOffset(rawtz);
+        offset += EXTRA_TIME_OFFSET;
+    }
+    t = localtime(time()+(offset*3600));
+    return sprintf("%04d.%02d.%02d-%02d.%02d,%02d", t[LT_YEAR], (t[LT_MON])+1, t[LT_MDAY], t[LT_HOUR], t[LT_MIN], t[LT_SEC]);
+}
