@@ -1,0 +1,235 @@
+中阶 LPC
+Descartes of Borg
+November 1993
+
+			第六章: 中级继承 (inheritance)
+
+6.1 基础继承
+
+在基础 LPC  课本中, 你学到 mudlib 如何藉由继承维持 mud  物件之间的一致
+性. 继承让 mud  管理人撰写所有的 mudlib 物件, 或某一种的 mudlib 物件都
+必须拥有的基本函式, 让你可以专心创作使物件独树一格的函式. 当你建造一个
+房间、武器、怪物时, 你使用一套早已替你写好的的函式, 并将它们让你的物件
+继承之. 以此方法, 所有 mud  中的物件可以依靠别的物件表现某种方式的行为.
+举个例, 玩家物件实际上依靠所有房间物件其中称为 query_long() 的一个函式
+以得知房间的叙述. 继承让你不用担心 query_long() 长得如何.
+
+当然, 这份课本会试着超越继承的基本知识, 让程式撰写人更了解 LPC  程式设
+计中, 继承如何运作. 目前还不需要深入高级区域程式码撰写人／初级 mudlib 
+程式撰写人要知道的细节. 本章会试着详细解释, 你继承一个物件时所发生的事.
+
+6.2 复制 (cloning) 与继承
+
+当一个档案第一次以一个物件被参考 (相对于读取档案的内容) , 游戏试着将档
+案载入记忆体, 并创造一个物件. 如果该物件成功载入记忆体, 它就成为主本
+(master copy) . 物件的主本可被复制, 但是不用作实际上的游戏物件. 主本用
+于支援游戏中任何的复制物件.
+
+主本是 mud LPC  程式撰写争辩的源头之一, 也就是要复制它还是继承它. 对房
+间来说就没有问题, 因为在游戏中每个房间物件应该只有一份. 所以你一般使用
+继承来创造房间. 很多 mud  管理人, 包括我自己在内, 鼓励创作人复制标准的
+怪物物件, 并从房间物件中设定之, 而不是让怪物分为单独的档案, 并继承标准
+怪物物件.
+
+如同我前述的部分, 每次一个档案被参考, 用于创造一个物件时, 一份主本就会
+被载入记忆体. 像是你做以下的事:
+
+void reset() {
+    object ob;
+    ob = new("/std/monster");
+      /* clone_object("/std/monster") some places */
+    ob->set_name("foo monster");
+    ... 其余的怪物设定程式码, 之后再将怪物搬入房间中 ...
+}
+
+driver  会寻找是否有一个称为 "/std/monster" 的主物件. 如果没有, 它就创
+造一个. 如果存在, 或已被创造出来, driver  就创造一个称为 
+"/std/monster#<编号>" 的复制物件. 如果此时是第一次参考 "/std/monster" ,
+结果会创造两个物件: 主物件和复制物件.
+
+另一方面, 让我们假设你在一个继承 "/std/monster" 的特殊怪物档案中的
+create()  里面, 已经做好所有的设定. 不从你房间复制标准怪物物件, 而你复
+制你自己的怪物档案. 如果标准怪物尚未载入, 因为你的怪物继承它, 所以载入
+之. 另外, 你档案的一个主本也被载入记忆体. 最后, 创造出一份你怪物的复制,
+并搬入你的房间. 总共游戏中增加了三个物件. 注意, 你无法轻易地使用主本做
+到这些. 举例来说, 如果你想做:
+
+    "/wizards/descartes/my_monster"->move(this_object());
+
+而非
+    new("/wizards/descartes/my_monster")->move(this_object());
+
+你会无法修改 "my_monster.c" 并更新它, 因为更新 (update) 指令摧毁一个物
+件现存的主版本. 在某些 mudlib 中, 它也载入新版本到记忆体中. 想像一下,
+玩家在战斗中杀得如火如荼的时候, 因为你更新档案让怪物消失无踪 !  此时他
+们的脸色可不好看.
+
+所以当你只是计划要复制时, 复制是一个有用的工具. 如果你对怪物并没有做什
+么特殊的事, 又不能藉由几个外界呼叫 (call other) 做到, 那你可以避免载入
+许多无用的主物件而节省了你 mud  的资源. 不过, 如果你计画要对一个物件增
+加一些功能 (撰写你自己的函式) 或是如果你有一个单独的设定多次重复使用
+ (你有一队完全一样的半兽人守卫, 所以你撰写一个特别的半兽人档案并复制之), 
+继承就相当有用. 
+
+6.3 更深入继承
+
+当 A  物件和 B  物件继承 C  物件, 三个物件全都有自己的一套资料, 而由 C
+物件共享一套函式定义. 另外, A 和 B  在它们个别的程式码中会有自己的函式
+定义. 因为本章余下的部分都需要范例说明, 我们使用以下的程式码. 在此别因
+为一些看起来没有意义的程式码而困扰.
+
+C 物件
+
+private string name, cap_name, short, long;
+private int setup;
+
+void set_name(string str);
+nomask string query_name();
+private int query_setup();
+static void unsetup();
+void set_short(string str);
+string query_short();
+void set_long(string str);
+string query_long();
+
+
+void set_name(string str) { 
+    if(!query_setup()) {
+        name = str;
+    setup = 1;
+}
+
+nomask string query_name() { return name; }
+
+private query_setup() { return setup; }
+
+static void unsetup() { setup = 0; }
+
+string query_cap_name() {
+    return (name ? capitalize(name) : ""); }
+}
+
+void set_short(string str) { short = str; }
+
+string query_short() { return short; }
+
+void set_long(string str) { long = str; }
+
+string query_long() { return str; }
+
+void create() { seteuid(getuid()); }
+
+B 物件
+
+inherit "/std/objectc";
+
+private int wc;
+
+void set_wc(int wc);
+int query_wc();
+int wieldweapon(string str);
+
+void create() { ::create(); }
+
+void init() {
+    if(environment(this_object()) == this_player())
+      add_action("wieldweapon", "wield");
+}
+
+void set_wc(int x) { wc = x; }
+
+int query_wc() { return wc; }
+
+int wieldweapon(string str) {
+    ... code for wielding the weapon ...
+}
+
+A 物件
+
+inherit "/std/objectc";
+
+int ghost;
+
+void create() { ::create(); }
+
+void change_name(string str) {
+    if(!((int)this_object()->is_player())) unsetup();
+    set_name(str);
+}
+
+string query_cap_name() {
+    if(ghost) return "A ghost";
+    else return ::query_cap_name();
+}
+
+你可以看到, C 物件被 A  物件和 B  物件继承. C 物件代表的是一个相当简化
+的基本物件, 而 B  也是相当简化的武器, A 是简化的活物件. 虽然我们有三个
+物件使用这些函式, 每一个函式在记忆体中只维持一份. 当然, 从 C  物件而来
+的变数在记忆体中有三份, 而 A  物件和 B  物件各有一份变数在记忆体中. 每
+一个物件有自己的资料.
+
+6.4 函式和变数标签 (label)
+
+注意, 以上的许多函式是以本文和基础课本中还未介绍过的标签处理之, 这些标
+签就是 static  (静态) 、private (私有)、nomask (不可遮盖) . 这些标签定
+义一个物件的资料和函式拥有特殊的特权. 你至今所使用的函式, 其预设的标签
+是 public  (公共).  只有某些 driver 预设如此, 有的 driver 并不支援标签.
+
+一个公共变数是物件宣告它之后, 其继承树之下的所有物件皆可使用之. 在 C  
+物件中的公共物件可以被 A  物件与 B  物件存取之. 同样, 公共函式在物件宣
+告它以后, 可以被继承树之下的所有物件呼叫之.
+
+相对于公共的是私有. 一个私有变数或函式只能由宣告它的物件内部参考之. 如
+果 A  物件或 B  物件试着参考 C  物件中的任何私有变数, 就会导致错误, 因
+为这些变数它们根本看不到, 或说因为它们有私有标签, 无法被继承物件使用.
+不过, 函式提供一个变数所没有的独特挑战. LPC 外部物件有能力藉由外界呼叫
+ (call other) 呼叫其他物件中的函式. 而私有标签无法防止外界呼叫.
+
+要防止外界呼叫, 函式要使用静态标签. 一个静态函式只能由完整的物件内部或
+driver  呼叫之. 我所谓的完整物件就是 A  物件可以呼叫它所继承 C  物件中
+的函式. 静态标签只防止外部的外界呼叫. 另外, this_object()->foo()  就算
+有静态标签, 也视为内部呼叫.
+
+既然变数无法由外部参考, 它们就不需要一个同效的标签. 某几行程式里, 有人
+决定要捣蛋, 并对变数使用静态标签以造成完全不同的意义. 更令人发狂的是,
+这标签在 C  程式语言里头一点意义也没有. 一个静态变数无法经由 
+save_object() 外部函式储存, 也无法由 restore_object() 还原. 自己试试.
+
+一般来说, 在一个公共函式中有一个私有变数是个很好的练习, 使用 query_*()
+函式读取继承变数的值, 并使用 set_*()、add_*() 和其他此类的函式改变这些
+值. 在撰写区域程式码时, 这实际上并不需要担心太多. 实际上的情形是, 撰写
+区域程式码并不需要本章所谈的任何东西. 不过, 要成为真正优秀的区域程式码
+撰写人, 你要有能力阅读 mudlib 程式码. 而 mudlib 程式码到处都是这些标签.
+所以你应该练习这些标签, 直到你可以阅读程式码, 并了解它为什么要以这种方
+式撰写, 还有它对继承这些程式码的物件有何意义.
+
+最后一个标签是不可遮盖, 因为继承的特性允许你重写早已定义的函式, 而不可
+遮盖的标签防止此情形发生. 举例来说, 你可以看到上述的 A  物件重写
+query_cap_name()  函式. 重写一个函式称为僭越 (override) 该函式. 最常见
+的函式僭越就像这样, 当我们的物件 (A 物件) 因为特殊的条件情况, 需要在特
+定情形下处理函式呼叫. 在 C  物件中, 因为了 A  物件可能是鬼魂而放入测试
+的程式码, 是一件很蠢的事. 所以, 我们在 A  物件中僭越 query_cap_name(), 
+测试该物件是否为鬼魂. 如果是, 我们改变其他物件询问其名字时所发生的事.
+如果不是鬼魂, 我们想回到普通的物件行为. 所以我们使用范围解析运算子 
+(scope resolution operator, ::) 呼叫继承版本的 query_cap_name() 函式,
+并传回它的值.
+
+一个不可遮盖函式无法经由继承或投影 (shadow) 僭越之. 投影是一种反向继承,
+将在高级 LPC  课本中详细介绍. 在上述的范例中, A 物件和 B  物件 (实际上,
+其他任何物件也不行) 无法僭越 query_name().  因为我们想让 query_name()
+作为物件唯一的鉴识函式, 我们不想让别人透过投影或继承欺骗我们. 所以此函
+式有不可遮盖标签.
+
+6.5 总结
+
+透过继承, 一个程式撰写人可以使用定义在其他物件中的函式, 以避免产生一堆
+相似而重复的物件, 并提高 mudlib 物件与物件行为的一致性. LPC 继承允许物
+件拥有极大的特权, 定义它们的资料如何被外部物件和继承它们的物件存取之.
+资料的安全性由 nomask、private、static  这些标签维持之. 
+
+另外, 一个程式码撰写人能藉由僭越, 改变非防护函式的功能. 甚至在僭越一个
+函式的过程中, 一个物件可以透过范围解析运算子存取原来的函式.
+
+Copyright (c) George Reese 1993
+
+译者: Spock of the Final Frontier	98.Jul.28.
