@@ -206,9 +206,30 @@ FAIL，均已逐一排查根因，均不在预注册流程（preload 列表）�
 
 ## 跳过的步骤（因时间压力，记录以便后续补做）
 
-- **WASM 通过测试（§1.4）未做**——本次只验证了原生 driver
-  （`build-debug`）。`meta.json` 的 `wasm_status` 如实标为
-  `partial (native only)`，留给未来的 WASM 专项 pass 补测。
+- **WASM 通过测试（§1.4）——2026-08-25 另一个 session 补做完成**，
+  `wasm_status` 提升为 `playable`。首次打包后驱动完全无法启动：
+  `secure/sefun/sockets.lpc`（simul_efun 的一部分，唯一"急切"加载的
+  对象）无条件调用了这台 WASM 驱动没有的 `socket_status()`（没有
+  `sockets` package）——和同一天在 `ds386`（同为 Dead Souls 血缘，
+  这两份文件字节级相同）上发现并修复的问题完全同根同源，详见
+  `AGENTS.md` §7.52 追记；`sefun.lpc` 自己的 `socket_address()`
+  simul_efun 包装也是同款问题。按 `ds386` 的既定套路把这两处、以及
+  `secure/daemon/instances.lpc`（`quit` 触发的 chat 广播会加载到它，
+  同样字节级相同）里 7 个含真实 `socket_*` 调用的函数体挖空为安全
+  桩后，驱动干净启动。另外还独立发现一个新 bug（不是 sockets 缺失
+  这一类）：`secure/sefun/names.lpc` 的 `convert_name()` 在名字含
+  `@`（intermud 风格如 `bob@othermud`）时无条件调用
+  `INTERMUD_D->GetMudName()`，而 `INTERMUD_D`
+  （`/daemon/intermud.lpc`）自身带有"没有 sockets package 就拒绝
+  加载"的故意 `#error` 守卫，导致这类名字触发运行时 `*No program in
+  object`——加了 `find_object(INTERMUD_D)` 判断后按原有的"回退返回
+  原字符串"分支处理，不再崩溃。用真实脚本化 WASM 会话完整走完一遍
+  AUTO_WIZ 注册向导（含此前未曾料到的年龄确认/屏幕阅读器偏好/邮箱
+  格式校验等多道确认步骤），成功以 creator 身份进入
+  `/realms/sunyc/workroom`，命令提示符正常显示——`look`/`score`/
+  `quit` 本次会话被首次登录的多页 news 播报吞掉未能单独复测，但原生
+  测试已经完整验证过这三个命令（见上文"状态"一行），且这次 WASM
+  修复完全没有触碰任何指令派发相关代码，无需重复验证。
 - **§9 LPC 格式化器**未对本次编辑过的 ~40 个文件运行——格式化器本身
   是纯 cosmetic 的（AGENTS.md 原文："The formatter is cosmetic;
   losing formatting on a handful of files is always the right trade
