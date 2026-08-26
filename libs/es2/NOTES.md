@@ -364,3 +364,19 @@ efun. Verified: login banner shows "目前权限：(admin)", `whoami` shows
 `User ID = fluffos`, and `update /adm/obj/master` succeeds ("master:
 loaded successfully. 重新编译 /adm/obj/master.lpc：成功！") — the
 canonical read+compile ACL check per AGENTS.md §1.5.
+
+## WASM status update (2026-08-25, another session)
+
+Promoted `wasm_status` from `""` to `playable` — booted clean on the
+first try, zero fixes needed (unlike several sibling libs onboarded
+the same day, e.g. `ds386`/`discworld`/`deadsouls_fluffos`, which all
+hit an eager-simul_efun `socket_status()` compile failure specific to
+the WASM build's missing `sockets` package). Verified with a real
+scripted WASM session: login as `fluffos`/`Mud@2026`, arrival at the
+documented 饮风客栈 with the 孙悟空 crossover NPC present and active,
+and `score` producing the full character sheet (stats, 精/气/神 bars,
+combat ratings) matching the native-tested output exactly. `quit`
+wasn't distinctly captured in this transcript (孙悟空's own ambient
+action lines kept the client's idle-detector from settling, the same
+issue seen testing `discworld`'s womble NPC) but is already verified
+clean under native testing above and untouched by anything WASM-specific.
