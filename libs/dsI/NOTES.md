@@ -472,4 +472,14 @@ player/creator verification path:
 
 ## 8. WASM pass
 
-Not run this session (`wasm_status` left `""` in `meta.json`).
+**Update (2026-08-26, another session)**: promoted `wasm_status` from
+`""` to `playable`. Booted clean on the first try, zero fixes needed --
+unlike most sibling libs from the recurring `dump_socket_status`-in-
+simul_efun pattern, this codebase apparently doesn't have that file (or
+never inherits it eagerly). Verified with a scripted WASM session:
+login (`fluffos`/`fluffwiz123`), the multi-page general/creator/admin
+news pager, and arrival in `/domains/default/room/start` with the
+correct room description. `look`/`score`/`quit` weren't recaptured
+distinctly in this transcript (absorbed by the news pager, same as the
+native testing initially hit -- see \S7) but are already verified clean
+under native testing above.
