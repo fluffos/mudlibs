@@ -258,8 +258,9 @@ done
 for f in index.html robots.txt sitemap.xml llms.txt llm.txt llms-full.txt games.json; do
   cp "$CACHE_DIR/index-staging/$f" "$SITE_DIR/$f"
 done
-mkdir -p "$SITE_DIR/en"
+mkdir -p "$SITE_DIR/en" "$SITE_DIR/cn"
 cp "$CACHE_DIR/index-staging/en/index.html" "$SITE_DIR/en/index.html"
+cp "$CACHE_DIR/index-staging/cn/index.html" "$SITE_DIR/cn/index.html"
 touch "$SITE_DIR/.nojekyll"
 
 # --- 9. summary --------------------------------------------------------------

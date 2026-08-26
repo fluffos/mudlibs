@@ -366,7 +366,7 @@ FOOTER = {
 }
 
 
-def build_jsonld(status, lang, ui, numbers):
+def build_jsonld(status, lang, ui, numbers, canonical_url=None):
     """schema.org structured data: a WebSite wrapping an ItemList of
     every linked (non-noboot) game as a VideoGame entry. This is the
     machine-readable twin of the human-facing cards -- search engines
@@ -408,7 +408,7 @@ def build_jsonld(status, lang, ui, numbers):
             {
                 "@type": "WebSite",
                 "name": ui["site_name"],
-                "url": ui["self_url"],
+                "url": canonical_url or ui["self_url"],
                 "description": (info["description"] if False else None),
                 "inLanguage": ui["html_lang"],
                 "isAccessibleForFree": True,
@@ -435,11 +435,17 @@ def _is_cjk_name(name):
     return any("一" <= ch <= "鿿" for ch in name)
 
 
-def render_index(status, commits, lang="zh"):
+def render_index(status, commits, lang="zh", canonical_url=None):
     ui = UI[lang]
     libs = status["libs"]
     counts = status["counts"]
     numbers = load_numbers()
+    # canonical_url lets a caller render this same page's content at a
+    # second URL (e.g. /cn/ mirroring /) without it competing with the
+    # real canonical URL for search ranking -- rel=canonical/og:url point
+    # back at canonical_url while hreflang still references the real zh/en
+    # canonical pair, so crawlers consolidate signal onto one URL per lang.
+    canonical_url = canonical_url or ui["self_url"]
     if lang == "en":
         # English-original libs (native name has no CJK) first, each group
         # keeping the existing catalog-number order within itself.
@@ -560,7 +566,7 @@ def render_index(status, commits, lang="zh"):
     meta_desc_attr = html.escape(meta_desc)
 
     other = "en" if lang == "zh" else "zh"
-    jsonld = build_jsonld(status, lang, ui, numbers)
+    jsonld = build_jsonld(status, lang, ui, numbers, canonical_url=canonical_url)
 
     return f"""<!doctype html>
 <html lang="{ui['html_lang']}">
@@ -570,7 +576,7 @@ def render_index(status, commits, lang="zh"):
 <title>{html.escape(page_title)}</title>
 <meta name="description" content="{meta_desc_attr}">
 <meta name="robots" content="index, follow">
-<link rel="canonical" href="{ui['self_url']}">
+<link rel="canonical" href="{canonical_url}">
 <link rel="alternate" hreflang="zh-CN" href="{UI['zh']['self_url']}">
 <link rel="alternate" hreflang="en" href="{UI['en']['self_url']}">
 <link rel="alternate" hreflang="x-default" href="{UI['zh']['self_url']}">
@@ -580,7 +586,7 @@ def render_index(status, commits, lang="zh"):
 <meta property="og:site_name" content="{html.escape(ui['site_name'])}">
 <meta property="og:title" content="{html.escape(page_title)}">
 <meta property="og:description" content="{meta_desc_attr}">
-<meta property="og:url" content="{ui['self_url']}">
+<meta property="og:url" content="{canonical_url}">
 <meta property="og:locale" content="{ui['og_locale']}">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="{html.escape(page_title)}">
@@ -910,6 +916,16 @@ def main():
     en_dir.mkdir(parents=True, exist_ok=True)
     (en_dir / "index.html").write_text(render_index(status, commits, lang="en"),
                                         encoding="utf-8")
+    # /cn/ mirrors / (an explicit Chinese-language path, requested
+    # alongside /en/) -- same content, but its canonical/og:url/JSON-LD
+    # point back at the real / so search engines consolidate ranking
+    # signal onto one URL instead of treating /cn/ as duplicate content.
+    cn_dir = out_dir / "cn"
+    cn_dir.mkdir(parents=True, exist_ok=True)
+    (cn_dir / "index.html").write_text(
+        render_index(status, commits, lang="zh",
+                     canonical_url=f"{SITE_URL}/"),
+        encoding="utf-8")
     (out_dir / "robots.txt").write_text(render_robots_txt(), encoding="utf-8")
     (out_dir / "sitemap.xml").write_text(render_sitemap_xml(status),
                                           encoding="utf-8")
