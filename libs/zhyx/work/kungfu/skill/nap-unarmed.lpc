@@ -1,0 +1,149 @@
+//nap-unarmed.c
+//Created by Kasumi
+
+#include <ansi.h>
+#include <combat.h>
+inherit SKILL;
+
+mapping *action = ({
+([      "action": "$N东倒西歪，猛然向$n攻出一招",
+        "force" : 500,
+        "attack": 400,
+        "dodge" : 200,
+        "parry" : 200,
+        "damage": 300,
+        "lvl"   : 0,
+        "damage_type" : "内伤"
+]),
+([      "action": "$N睡眼稀松，步伐踉跄，歪歪斜斜地向$n攻出一招",
+        "force" : 700,
+        "attack": 600,
+        "dodge" : 300,
+        "parry" : 300,
+        "damage": 800,
+        "lvl"   : 300,
+        "damage_type" : "内伤"
+]),
+});
+
+int valid_enable(string usage) { return usage == "unarmed" || usage == "parry"|| usage == "cuff"|| usage == "strike"|| usage == "hand"|| usage == "claw"; }
+
+int valid_learn(object me)
+{
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+                return notify_fail("练睡梦罗汉拳必须空手。\n");
+
+        if ((int)me->query_skill("force") < 500)
+                return notify_fail("你的内功火候不够，不能强行修习睡梦罗汉拳。\n");
+        
+        if ((int)me->query("max_neili") < 2500)
+                return notify_fail("你的内力还不够强，无法修习睡梦罗汉拳。\n");
+
+        if ((int)me->query_skill("unarmed", 1) < (int)me->query_skill("nap-unarmed", 1))
+                return notify_fail("你的基本拳脚火候水平有限，无法领会更高深的睡梦罗汉拳。\n");
+
+        return 1;
+}
+
+string query_skill_name(int level)
+{
+        int i;
+        for (i = sizeof(action); i > 0; i--)
+                if (level >= action[i - 1]["lvl"])
+                        return action[i - 1]["skill_name"];
+}
+
+mapping query_action(object me, object weapon)
+{
+        int i, level;
+        level = (int) me->query_skill("nap-unarmed", 1);
+        if (level < action[1]["lvl"])
+                return action[0];
+
+        return action[1];
+}
+
+int practice_skill(object me)
+{
+        if (me->query_temp("weapon") ||
+            me->query_temp("secondary_weapon"))
+                return notify_fail("你必须空手练习！\n");
+
+        if ((int)me->query("qi") < 300)
+                return notify_fail("你的体力太低了。\n");
+
+        if ((int)me->query("neili") < 300)
+                return notify_fail("你的内力不够练睡梦罗汉拳。\n");
+
+        me->receive_damage("qi", 200);
+        me->add("neili", -250);
+        return 1;
+}
+
+mixed hit_ob(object me, object victim, int damage_bonus)
+{        
+        int lvl;      
+        int i, ap, dpp, dpd; 
+        string type, msg, msg1; 
+        
+        lvl = me->query_skill("nap-unarmed", 1); 
+        
+        if (me->query("neili") < 1000 ||  me->query_skill_mapped("force") != "huimeng-xinfa"||  lvl < 300 )
+           return 0; 
+          
+        ap = me->query_skill("nap-unarmed",1); 
+        dpp = victim->query_skill("parry",1); 
+        dpd = victim->query_skill("dodge",1); 
+
+        
+        if(random(2)==0) 
+        {         
+                if (ap * 4 / 5 + random(ap) > dpp) 
+                { 
+                        me->add("neili", -100); 
+                        victim->receive_damage("qi", damage_bonus*3, me);
+                     
+                        msg1 = HIR "$N这一招貌似毫无准头，却出奇不意地击中$n胸口要穴，$n哇的吐出一口鲜血！\n" NOR;                        
+                        return msg1;
+                } 
+		}
+        else
+        {		 
+                if (ap * 3 / 4 + random(ap) > dpd && ! me->is_busy() && ! me->query_temp("nap-unarmed/lian")) 
+                {                       
+                        message_sort(HIY "\n$N" HIY "摇摇晃晃，东倒西歪，脚下步伐杂乱，双手乱舞，呼地攻出数招。\n" NOR, 
+                                     me, victim); 
+        
+                        me->add("neili", -300); 
+						
+						if (me->query_skill("count"))
+			             me->set_temp("count",1);
+	                    else
+			              me->set_skill("count", 300);
+           
+                        me->set_temp("nap-unarmed/lian", 1); 
+						me->add_temp("apply/attack", 200);
+						me->add_temp("apply/unarmed_damage", 200);
+                        for (i = 0; i < 7; i++) 
+                        { 
+                                if (! me->is_fighting(victim)) 
+                                        break; 
+                  
+                                if (! victim->is_busy() && random(2) == 1) 
+                                        victim->start_busy(1); 
+        
+                                COMBAT_D->do_attack(me, victim, 0, 0); 
+                        } 
+                        me->delete_temp("nap-unarmed/lian"); 
+						me->add_temp("apply/attack",-200);
+						me->add_temp("apply/unarmed_damage", -200);
+					  if (me->query_temp("count"))
+			           me->delete_temp("count");
+		               else
+			           me->delete_skill("count", 300);
+                 return;
+                } 
+                                        
+        } 
+}
+

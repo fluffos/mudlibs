@@ -1,0 +1,169 @@
+// xuannv-jian.c 玄女剑法 特殊属性九天玄女方可修习
+
+inherit SKILL;
+#include <ansi.h>
+
+mapping *action = ({
+([      "action":"$N倏的近前，身形快极，手中的$w戳向$n的$l",
+        "force" : 460,
+        "attack": 200,
+        "dodge" : 150,
+        "parry" : 40,
+        "damage": 300,
+        "damage_type":  "刺伤"
+]),
+([      "action":"$N扑向前来，身形如同鬼魅，令人难以捉摸，手中的$w忽的刺向$n的$l",
+        "force" : 490,
+        "attack": 185,
+        "dodge" : 160,
+        "parry" : 45,
+        "damage": 300,
+        "damage_type":  "刺伤"
+]),
+([      "action":"$N身形一转，$w刺出，直指$n的$l",
+        "force" : 465,
+        "attack": 210,
+        "dodge" : 180,
+        "parry" : 45,
+        "damage": 300,
+        "damage_type":  "刺伤"
+]),
+([      "action":"$N飘然远去，忽又进前，速度快的不可思议，$w如闪电般刺向$n的$l",
+        "force" : 480,
+        "attack": 190,
+        "dodge" : 195,
+        "parry" : 55,
+        "damage": 300,
+        "damage_type":  "刺伤"
+]),
+([      "action":"$N身体一晃，突然飞起一脚踢向$n的下阴，蓦的又收回，反手$w刺向$n的$l",
+        "force" : 500,
+        "attack": 220,
+        "dodge" : 180,
+        "parry" : 60,
+        "damage": 300,
+        "damage_type":  "刺伤"
+]),
+([      "action":"$N足下疾走，身形变幻莫测，突然一扬手，$w飞也似的插向$n的$l",
+        "force" : 520,
+        "attack": 260,
+        "dodge" : 195,
+        "parry" : 50,
+        "damage": 300,
+        "damage_type":  "刺伤"
+]),
+});
+
+int valid_enable(string usage) { return usage == "sword" 
+                                        || usage == "parry" 
+                                        || usage == "dodge"; }
+
+int valid_learn(object me)
+{
+        if (me->query("gender") != "女性")
+                return notify_fail("你练来练去觉得这个剑法还是适合女性练习！\n");
+
+        if ( ! me->query("special_skill/queen"))
+                return notify_fail("你不是九天玄女，无法修习玄女剑法。\n");
+  
+        if ((int)me->query_skill("dodge", 1) < 200)
+                  return notify_fail("你的基本轻功火候不到，无法学习玄女剑法。\n");
+
+        if ((int)me->query_skill("sword", 1) < 200)
+                return notify_fail("你的剑术功底不行，难以领会玄女剑法。\n");
+
+        if ((int)me->query("max_neili") < 2000)
+                return notify_fail("你的内力太差，无法学习玄女剑法。\n");
+
+	if ((int)me->query_skill("sword", 1) < (int)me->query_skill("xuannv-jian", 1))
+		return notify_fail("你的基本剑法水平有限，无法领会更高深的玄女剑法。\n");
+
+	if ((int)me->query_skill("dodge", 1) < (int)me->query_skill("xuannv-jian", 1))
+		return notify_fail("你的基本剑法水平有限，无法领会更高深的玄女剑法。\n");
+
+       if (me->query_skill("martial-cognize", 1) < me->query_skill("xuannv-jian", 1))
+                return notify_fail("你的武学修养不够，无法继续领会更"
+                                   "高深的玄女剑法。\n");
+
+        return 1;
+}
+
+int double_attack() { return 1; }
+
+mapping query_action(object me, object weapon)
+{
+        int i, level;
+        level = (int) me->query_skill("xuannv-jian", 1);
+        for (i = sizeof(action); i > 0; i--)
+                if (level > action[i-1]["lvl"])
+                        return action[NewRandom(i, 20, level/5)];
+
+}
+
+int practice_skill(object me)
+{
+    return notify_fail("玄女剑法博大精深，无法简单的通过练习进步。\n");
+      
+}
+
+mixed hit_ob(object me, object victim, int damage_bonus, int i, int attack_time)
+{
+        object weapon;
+        string name;
+        int ap, dp;
+
+        weapon = me->query_temp("weapon");
+
+        attack_time = (int)(me->query_skill("xuannv-jian", 1) / 40);
+
+        if (attack_time > 9)
+                attack_time = 9;
+
+        ap = me->query_skill("sword"); 
+        dp = victim->query_skill("dodge");
+
+        if (me->is_busy()
+           || ! living(victim)
+           || me->query("neili") < 200
+           || ap * 3 / 5 + random(ap) < dp
+           || me->query_temp("is_attacking")
+           || me->query_skill_mapped("sword") != "xuannv-jian"
+           || me->query_skill("xuannv-jian", 1) < 120)
+        	return 0;
+        
+        message_vision(HIW "\n霎那间，只见$N" HIW "手中" + weapon->name() + HIW "轻盈灵动"
+                       "，优美华丽，不带一丝尘俗之气，却将$n" HIW "攻得无暇反击！\n"
+                       NOR, me, victim);
+
+        me->set_temp("is_attacking", 1);
+        me->start_busy(1 + random(attack_time / 2));
+        me->add("neili", -attack_time * 20);
+        for (i = 0; i < attack_time; i++)
+        {
+                if (! me->is_fighting(victim))
+                        break;
+
+                if (! victim->is_busy() && random(2))
+                        victim->start_busy(1);
+
+                COMBAT_D->do_attack(me, victim, weapon, 0);
+        }
+
+        me->delete_temp("is_attacking");
+        return 1;
+}
+
+int difficult_level()
+{
+       if ( this_player()->query_skill("xuannv-jian", 1) > 300)
+       return 1500;
+       else   return 1000;
+}
+
+string perform_action_file(string action)
+{ 
+        if ( ! this_player()->query("special_skill/queen") )
+               return "不是九天玄女无法使用玄女剑法。";
+        return __DIR__"xuannv-jian/" + action;
+}
+
