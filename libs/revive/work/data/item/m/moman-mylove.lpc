@@ -1,0 +1,36 @@
+// ITEM Made by player(某人:moman) /data/item/m/moman-mylove.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Jan 30 16:38:47 2001
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;35m桃花[1;34m错[2;37;0m", ({ "mylove" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+
+[1;35m桃花[1;33m带雨千般艳，
+[1;37m柳絮[1;33m随风几度经。
+
+[1;37m这是一把[1;36m软剑。
+[2;37;0m
+剑柄上刻着一行小字：某人(moman)
+");
+	set("value", 1);
+	set("point", 181);
+	set("material", "magic stone");
+	set("wield_msg", "\n[1;37m$N凌空一指，[1;35m桃花[1;34m错[1;37m随手而出，声如龙吟，宛若银虹，耀眼闪亮。\n[2;37;0m\n");
+	set("unwield_msg", "\n[1;37m$N双手一合，银虹立隐，光芒敛聚，须臾之间，[1;35m桃花[1;34m错[1;37m消失无形。\n[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }
