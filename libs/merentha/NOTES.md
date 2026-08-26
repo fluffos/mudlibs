@@ -204,6 +204,16 @@ real Intermud-3 network on every boot), Merentha's peer-discovery
 protocol here is opt-in and inert out of the box -- no live-network
 caveat needed for repeated automated re-boot testing.
 
-## WASM
+## WASM status update (2026-08-26, another session)
 
-Not attempted this session; `wasm_status` left `""` in `meta.json`.
+Promoted `wasm_status` from `""` to `playable`. Booted clean under
+WASM with zero fixes needed -- unlike most sibling libs from this same
+source, no eager simul_efun/master socket call was present. The only
+sockets-related output is `daemon/intermud.lpc`'s own deliberate
+`#error` guard (refuses to load without the sockets package, working
+as designed, not a bug). Verified with a scripted WASM session: login
+(`fluffos`/`Mud2026`), `look`, and `score` (reproducing the exact same
+cosmetic `__BORDER_LINE__` display quirk already documented above,
+confirming consistent behavior between native and WASM). `quit` wasn't
+recaptured distinctly in this transcript but is already verified clean
+under native testing above.
