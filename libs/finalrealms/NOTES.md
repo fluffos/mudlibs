@@ -304,4 +304,27 @@ Zero uncaught runtime errors logged anywhere (`log/errors/*.err`,
 `d/{mudlib,vehicle,newbie,heaven}/log/debug.err`) across this whole
 session's boots and play-testing.
 
-WASM status: not attempted this session (`wasm_status` left `""`).
+## WASM status update (2026-08-25, another session)
+
+Promoted `wasm_status` from `""` to `playable`. Hit a genuine, real
+(non-test-artifact) bug: `secure/login.lpc`'s `logon()` has a hardcoded
+`if(uptime() < 20) { ... refuse connection ... }` startup-grace gate.
+This project's own WASM deployment boots a fresh in-browser instance
+per visitor, so EVERY real player would hit this on EVERY page load
+(not just an admin reconnecting moments after a manual reboot, which
+is what the check is actually for) -- per AGENTS.md's standing policy
+on legacy connection-time gates, bypassed for loopback:
+`query_ip_number(this_object()) != "127.0.0.1" && uptime() < 20`
+(current WASM builds correctly report `127.0.0.1`, confirmed via
+AGENTS.md's own IP-format section).
+
+Once past that, booted and played clean: login as `god`/`god`, `look`
+and `score` both producing correct output matching native testing.
+Also found (documented, not fixed -- non-blocking, same class as
+`ds386`'s optional network tools): `/net/identd.lpc` (an ident-protocol
+lookup daemon) fails to compile on connection due to `socket_error()`/
+`socket_address()` being undefined (no `sockets` package on this
+driver build) -- caught gracefully, game continues normally, not on
+the boot/login/play path. `quit` wasn't recaptured in this WASM
+transcript but is already verified clean under native testing above
+and untouched by either fix.
