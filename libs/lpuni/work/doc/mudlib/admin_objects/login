@@ -1,0 +1,177 @@
+ # Mudlib Documentation
+ 
+   File    : /adm/obj/login.c
+   Brief   : Handles logins of users
+   Author  : Tacitus @ LPUniversity
+   Date    : 06-Oct-06 
+   Updated : 06-Oct-06 
+   
+  I. Introduction
+ II. Walk through
+III. E-mail host verification
+ IV. Splash screen tokens
+  V. Lock down daemon
+ VI. relogin
+
+I. Introduction
+
+This document will discuss the implementation of the login object
+which currently resides in /adm/obj/login.c
+
+This object has a hook that is called when the login process is to
+being (generally called by the driver) and then will lead the
+user through a series of questions and/or prompts to authenticate the
+user or to create a new account.
+
+NOTE: This document was written late at night so it might not be so great <g>.
+
+II. Walk through
+
+The master object apply "connect" creates a new instance (a new
+copy) of the login object and returns it to the driver where it
+links the user connection to that object (ie. making the object
+interactive). After which, the driver will call the apply "logon".
+
+In the logon function, the login object displays a splash screen
+to the user (see section 4 for more information on splash screen
+token parsing) and asks the user to provide a username to being the
+authentication process. By default, the message LOGIN_MSG is displayed
+as the splash (which, by default is /adm/etc/login/splash).
+
+After the user has provided a username, if the account exists then it
+will ask for a password otherwise it will ask the user if they wish
+to create an account. An exception is if they supply "guest" as a username,
+in this case they will immedaitly be logged in to the "guest" account. 
+
+NEW USER:
+
+New users will be prompted for the following information by default:
+
+ * password (asked to enter twice for confirmation)
+ * The user's e-mail address
+ 
+If EMAIL_MUST_RESOLVE is defined then it will require that the hostname
+of the e-mail address provided resolve. This is disabled by default for
+obvisous reasons.
+
+Notes:
+
+- The user's e-mail address may not be <user>@localhost
+- The user's e-mail address must be in the format <username>@<hostname>
+- When entering the password, local echo is disabled.
+
+After the e-mail address has been collected succesfully, if the file
+/adm/etc/new_install exists then the user will be automatically made
+a developer with admin access (as well as setup their home directory).
+
+The file FLOGIN_NEWS (defined in /include/config.h) is displayed to the
+user. By default, this file is /adm/etc/login/first_login. This file
+is also parsed by the splash screen token parser.
+
+RETURNING USER:
+
+A returning user will be prompted for the following information by default:
+
+ * password
+ 
+The password they provide will be encrypted using their password and
+compared to the password on file. If they match, the user will be authenticated
+and the login process will continue. If they do not match, the user will
+be asked to try again. There is currently no limit to the number of times they
+may try (However, the login object will auto destruct in 60 seconds of
+conception if the user is not authenticated by that time). 
+
+After authenticating, if this user is already logged in then the option
+to displace (disconnect and take over the body) or to create a new instance
+is provided. 
+
+RETURNING USER + NEW USER:
+
+At this point, the login process for returning users and new users
+merge. If the user successfully logs in, the transaction is logged (this also
+applies to users logging in as the guest account).
+
+The file LOGIN_NEWS (defined in /include/config.h) is displayed to the user.
+By default this file is /adm/etc/login/motd. This file
+is also parsed by the splash screen token parser.
+
+After these steps have been completed, enterWorld is executed and final
+setup steps are taken such as transferring the user to the normal user
+object, calling setup in the body, establishing a link between user object
+and user body, and moving the user to a start location as follows:
+
+IF THE USER IS A DEVELOPER:
+
+And they have the environmental variable "start_location" set to
+"previous_location" then they will be returned to where they logged out.
+If the variable is set to a file, they will be moved to that object.
+Otherwise, they will be moved to their workroom.
+
+IF THE USER IS NOT A DEVELOPER:
+
+Then they will be moved to /areas/lpuni/entrance.c
+
+In both cases, if they do not have an environment after these steps
+then a last ditch attempt will be made to move them to /areas/lpuni/entrance.c
+
+After this point, the function enter_world in the user object is called
+and the login object is destructed.
+
+Notes:
+ - See efun documentation for "exec
+
+III. E-mail host verification
+
+If EMAIL_MUST_RESOLVE is defined then the login object will attempt
+to communicate with the address server to resolve the hostname
+of the provided e-mail address to an IP address (ie. attempt to foul
+attempts to provide fake e-mail addresses). This is disabled by default
+because it can be problematic because if the address server is not
+running (or you're running the mud on a machine that does not have
+internet access) then no new users can be created!
+
+IV. Splash screen tokens
+
+There are several files that are displayed to the user durring
+login (such as splash, motd, and flogin motd). Within these files,
+you may place "tokens" (special keywords if you will) that will
+be parsed at runtime before they are displayed. The function
+parseTokens in the login object handles this (and as such, it is
+very easy to add new tokens).
+
+By default, the following tokens exist:
+
+TOKEN           DESCRIPTION                   EXAMPLE
+------------------------------------------------------
+%mud_name       Mud's name                    LPUniversity 
+%cap_mud_name   Mud's name in all caps        LPUNIVERSITY
+%users          List of logged in users       Tacitus, Eugenides, and Vicore
+%date           Current date and time         Fri Oct  6 05:02:51 2006
+%open_status    OPEN_STATUS define            Mudlib Development
+%email          Admin e-mail address          cody.somerville@lpuni.org
+%lib_name       Mudlib's name                 LPUniMudlib
+%lib_version    Lib version                   Alpha-0610-R7
+
+V. Lock down daemon
+
+The LPUniversity has a very powerful lock down daemon.
+At the time of writing, the lock down daemon documentation
+has not been completed (though it would be in /doc/mudlib/daemons/ if 
+it were). Several checks to the lock down daemon are made throughout
+the login process (ie. to see if a name is banned, if an ip address
+is banned, if developers are locked out, if users are locked out, if
+only vip members can log in, if the guest account is disabled, etc. etc.)
+
+VI. relogin
+
+The login daemon has a function to allow for a user to relogin
+to the mud when they are already logged in. A command called "relogin"
+calls relogin() in the login object and it basically transfers (see
+man documentation for exec) the user back to the login object, destroys
+the old body (ie. logs them out) and starts the login process all over
+again.
+
+
+
+
+ 
