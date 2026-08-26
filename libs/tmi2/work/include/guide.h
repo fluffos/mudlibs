@@ -1,0 +1,5 @@
+#define CMD_ED_GUIDE "/cmds/xtra/_ed_guide"
+#define ED_GUIDE_OB  "/obj/ed_guide"
+#define GUIDE_OB     "/obj/guide"
+#define GUIDE_DATA   "/data/obj/guide"
+#define TEACHER_PAGE "start"

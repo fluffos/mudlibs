@@ -1,0 +1,104 @@
+ 
+//	File	:  /cmds/std/_tell.c
+//	Author	:  Various people (See tell daemon)
+//	94-11-12:  Pallando added interface to the Web tell gateway
+//
+//	Mudlib tell command.  Also allows intermud-tells.
+//      Added restrictions to guest for intermud 95-04-22 Leto
+// 	Added I3 tell support
+ 
+#include <net/http.h>
+#include <net/daemons.h>
+#include <mudlib.h>
+#include <switches.h>
+#include <net/i3.h>
+
+inherit DAEMON;
+
+#define SYNTAX	"Syntax: tell [who] [message]\n"
+/* If you change this, please change it also in /adm/daemons/ts.c */
+#define NH " is not on this mud."
+#define WWW_TELL (DIR_WWW_GATEWAYS "/tell")
+#define RESTRICT_GUEST
+ 
+int cmd_tell(string str) {
+    string tell_msg, who, msg, target, mud;
+    object ob, act_ob;
+    int emote;
+    
+    act_ob = previous_object();
+    
+    if( !str || sscanf( str, "%s %s", who, msg ) != 2 ) {
+    notify_fail( SYNTAX );
+    return 0;  }
+    
+    notify_fail( capitalize(who) + NH + "\n" );
+
+    if( sscanf( msg, ":emote %s", msg ) ) emote = 1;
+ 
+    if(sscanf(who, "%s@%s", target, mud) == 2) {
+	if( mud == "web" || mud == "Web" )
+	{
+	    WWW_TELL-> add_message( geteuid( act_ob ), target, msg );
+	    write( "Your message has been added to the buffer.\n" );
+	    return 1;
+	}
+#ifndef INTERMUD
+  notify_fail("Sorry, "+MUD_NAME+" doesn't support intermud.\n");
+  return 0;
+#endif INTERMUD
+
+#ifdef RESTRICT_GUEST
+   if ( geteuid( act_ob ) == "guest" ) {
+  notify_fail("Due to abuse, Guest is not allowed to use Intermud tells.\n");
+   return 0;
+}
+#endif RESTRICT_GUEST
+    write("Message sent - May take a while\n");
+    "/adm/daemons/network/I3/tell"->send_tell(this_player()->query("name"), this_player()->query("cap_name"), mud, target, msg);
+    return 1;  }
+ 
+    if( emote )
+	return notify_fail( "That format is available for "
+			"intermud tells only.\n" );
+
+    who = lower_case( who );
+ 
+    ob = find_player( who );
+ 
+    if(ob && ob->query("npc") && who != (string)ob->query("name") &&
+       !wizardp(act_ob))  return 0;
+ 
+    if(!ob) {
+ 
+	if(ob = find_living(who)) {
+// Added 16 Sep 93 by Ed Murphy (Guardian@TMI-2)
+write(identify(ob)+" "+identify(this_player())+"\n") ;
+          if(ob == this_player() ) {
+            write(wrap(sprintf("You tell yourself:  %s", msg)));
+            return 1;
+          }
+// end Guardian's hack
+	tell_object(ob, iwrap(act_ob->link_data("cap_name") + " tells you: " +
+		    msg) );
+	write( iwrap("You tell " + capitalize(who) + ": " + msg) );
+	ob->set("reply", act_ob->link_data("name"));
+	return 1;  }
+ 
+	return 0; }
+ 
+    
+    write( TS_D->tell_user(act_ob->link_data("name"), 0, who, msg) );
+ 
+return 1; }
+
+int help() {
+ 
+   write( SYNTAX + "\n" +
+    "This command allows a user to tell a message to another player or\n" +
+    "unique monster, no matter where they are located on the mud. It is\n" +
+    "also possible to tell users on another mud a message by using the\n" +
+    "@[mud] addition to the user's name (ie: tell watcher@tmi-2 Hi!).\n");
+ 
+return 1; }
+ 
