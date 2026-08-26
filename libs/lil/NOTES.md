@@ -194,4 +194,9 @@ is genuinely true here, not just advertised.
   as designed, stopping only at the one genuine driver-dialect gap
   (\S3), which is outside `command/tests.lpc`'s own `catch()` coverage
   (only `fail/`-directory loads are wrapped).
-- WASM: not attempted this pass (`wasm_status` left `""`).
+- **WASM status update (2026-08-26, another session)**: promoted to
+  `playable`. Booted clean with zero fixes needed, consistent with the
+  earlier confirmation that this lib has no real sockets/Intermud
+  dependency at all. Verified with a scripted WASM session: `who`
+  (correct output), `eval return 1+1;` (`Result = 2`), and `quit`
+  (clean `Bye.` disconnect).
