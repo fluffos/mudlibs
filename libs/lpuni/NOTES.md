@@ -261,6 +261,15 @@ on the final re-test boots).
 Verified live: `update <path>` (this project's canonical ACL/compile-
 permission check) against a real `adm/obj/master.lpc` file succeeds.
 
-## WASM status
+## WASM status update (2026-08-26, another session)
 
-Not attempted this session -- `wasm_status` left `""`.
+Promoted `wasm_status` from `""` to `playable`. Same by-now-routine
+eager-simul_efun sockets gap as several sibling libs from this same
+source: `adm/simul_efun/socket.lpc`'s `dump_socket_status()` called
+`socket_status()` unconditionally. Gutted to a safe stub (diagnostic
+admin tool only, not on the boot/login path). Verified with a full
+scripted WASM session: login (`fluffos`/`testpass123`), arrival in the
+correct starting workroom, channel auto-tuning, and a clean `quit`
+("Fluffos has left LPUniversity... Thank you for visiting
+LPUniversity") -- the full session, including `quit`, was captured
+distinctly this time.
