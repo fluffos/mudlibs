@@ -226,9 +226,20 @@ GBK-encoded legacy archive), most of the usual AGENTS.md §4 encoding/
   (the pre-existing `secure/save/users/d/descartes.o` in the upstream
   repo is presumably the original author's seed account, but its
   password is unknown/unusable here).
-- WASM mode was not evaluated for this pass — this lib was onboarded
-  natively only. Left `wasm_status` unset for a future WASM triage pass
-  per AGENTS.md §1.4.
+- **WASM status update (2026-08-25, another session)**: promoted to
+  `playable`. Unlike several sibling libs onboarded the same day
+  (`ds386`, `discworld`), this codebase's simul_efun/master chain has
+  no unconditional `socket_status()`/`compress_file()`-style calls, so
+  it booted clean under WASM with zero fixes needed — the only
+  sockets-related error is `daemon/intermud.lpc`'s own deliberate
+  `#error` guard (refuses to load without the sockets package, working
+  as designed, not a bug). Verified with a real scripted WASM session:
+  login (`fluffos`/`Mud2026Wiz`), `look` and `score` both producing
+  correct output matching the native-tested room/character-sheet text.
+  `quit` wasn't distinctly captured in the WASM transcript (no visible
+  disconnect text before the client's idle window elapsed) but is
+  already verified clean under native testing above and untouched by
+  anything WASM-specific.
 
 ## How to run
 
