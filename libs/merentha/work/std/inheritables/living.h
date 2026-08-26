@@ -1,0 +1,115 @@
+// Petrarch
+// Merentha Lib 1.0
+// living.h
+
+#ifndef __LIVING_H__
+#define __LIVING_H__
+
+int query_stat(string str);
+mapping query_nickname();
+mapping query_alias();
+void add_wielding(object ob);
+void remove_wielding(object ob);
+varargs mixed *query_wielding(object ob);
+void add_worn(object ob);
+void remove_worn(object ob);
+varargs mixed *query_worn(object ob);
+varargs mixed *query_worn_types(string str);
+int query_ac();
+void set_money(string type, int i);
+void add_money(string type, int amt);
+mixed query_money(string str);
+void set_limbs(string *limbs);
+string *query_limbs();
+int query_limb(string str);
+void set_vitals();
+void add_exp(int i);
+int query_exp();
+void set_stats(mapping stats);
+void set_stat(string stat, int x);
+int query_mass();
+mapping query_stats();
+int query_stat(string stat);
+int query_base_stat(string stat);
+void set_stat_bonuses(mapping args);
+void set_stat_bonus(string stat, int x);
+void add_stat_bonus(string stat, int x);
+int query_stat_bonus(string stat);
+void set_skills(mapping skills);
+void set_skill(string skill, int x);
+void set_skill_adjustment(string skill, int val);
+mapping query_skills();
+int query_skill_level(string skill);
+int query_skill_adjustment(string skill);
+int query_base_skill(string skill);
+void set_skill_bonus(string skill, int x);
+void add_skill_bonus(string skill, int x);
+void add_skill_points(string skill, int x);
+void add_skill_adj_points(string skill, int x);
+int query_skill_bonus(string skill);
+int query_skill_points(string skill);
+int query_skill_adj_points(string skill);
+void use_skill(string skill, int x);
+int force_me(string str);
+void set_max_hp(int i);
+void query_max_hp();
+void set_hp(int i);
+int query_hp();
+void add_hp(int i);
+void set_max_sp(int i);
+void query_max_sp();
+void set_sp(int i);
+int query_sp();
+void add_sp(int i);
+void set_max_mp(int i);
+void query_max_mp();
+void set_mp(int i);
+int query_mp();
+void add_mp(int i);
+void set_level(int i);
+int query_level();
+void heal(int i);
+void set_race(string str);
+string query_race();
+void set_gender(string str);
+string query_gender();
+string query_his_her();
+string query_him_her();
+string query_he_she();
+string query_his_hers();
+string query_he();
+string query_him();
+string query_his();
+void set_class(string str);
+void add_class(string str);
+string *query_classes();
+varargs string query_class(string _class);
+string health_description();
+string stamina_description();
+string query_long();
+void die(object ob);
+
+varargs void kill_ob(object ob, int i);
+varargs int kill_ok(object ob, int i);
+object *query_attackers();
+object *query_hunters();
+object query_current_attacker();
+void set_casting(int i);
+void set_casting_damage(int i);
+void set_magic_casting(string *str);
+int query_casting();
+int query_casting_damage();
+string *query_magic_casting();
+void set_special(int i);
+void set_special_damage(int i);
+void set_combat_special(string *str);
+int query_special();
+int query_special_damage();
+string *query_combat_special();
+void do_damage(int i);
+varargs void do_hit(int dam, object wep);
+void update_attackers();
+void do_combat();
+int is_living();
+
+#endif

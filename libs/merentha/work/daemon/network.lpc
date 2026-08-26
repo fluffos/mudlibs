@@ -1,0 +1,359 @@
+// Petrarch
+// Merentha Lib 1.0
+// network.c
+
+#include <daemons.h>
+#include <socket.h>
+#include <std.h>
+
+inherit DAEMON;
+string convert_map_to_string3(mapping str);
+
+mapping __MUDS=([]);
+nosave string *__Services=({"rcre_request","rcre_reply","ping_request","ping_reply","rwho_request","rfinger_request","rtell_request","rwho_reply","rfinger_reply","rtell_reply"});
+
+mapping query_mud_list() { return __MUDS; }
+
+mapping convert_string_to_map(string str) {
+    mapping tmp=([]);
+    string *parts=explode(str,"||M||");
+    string key, val;
+    int i=sizeof(parts);
+    while(i--) {
+        sscanf(parts[i], "%s:||:||:%s", key, val);
+        tmp[key]=val;
+    }
+    return tmp;
+}
+mapping convert_string_to_map2(string str) {
+    mapping tmp=([]);
+    string *parts=explode(str,"||MM||");
+    string key, val;
+    int i=sizeof(parts);
+    while(i--) {
+        sscanf(parts[i], "%s::||::||::%s", key, val);
+        tmp[key]=val;
+    }
+    return tmp;
+}
+mapping convert_string_to_map3(string str) {
+    mapping tmp=([]);
+    string *parts=explode(str,"||MMM||");
+    string key, val;
+    int i=sizeof(parts);
+    while(i--) {
+        sscanf(parts[i], "%s:::||:::||:::%s", key, val);
+        tmp[key]=val;
+    }
+    return tmp;
+}
+
+string convert_map_to_string(mapping str) {
+    string *k=keys(str);
+    string tmp="";
+    int i=sizeof(k);
+    while(i--) {
+        tmp+=k[i]+":||:||:"+str[k[i]];
+        if(i) tmp+="||M||";
+    }
+    return tmp;
+}
+string convert_map_to_string2(mapping str) {
+    string *k=keys(str);
+    string tmp="";
+    int i=sizeof(k);
+    while(i--) {
+        tmp+=k[i]+"::||::||::"+convert_map_to_string3(str[k[i]]);
+        if(i) tmp+="||MM||";
+    }
+    return tmp;
+}
+string convert_map_to_string3(mapping str) {
+    string *k=keys(str);
+    string tmp="";
+    int i=sizeof(k);
+    while(i--) {
+        tmp+=k[i]+":::||:::||:::"+str[k[i]];
+        if(i) tmp+="||MMM||";
+    }
+    return tmp;
+}
+
+void open_socket_to_send(string address, mapping message) {
+   string *args;
+    int s, error;
+
+   if(!message || !address) return;
+   if(message["args"] && stringp(message["args"])) {
+      args=explode(message["args"], "\n");
+      if(sizeof(args)>6) {
+        message["args"]=implode(args[0..5],"\n");
+        open_socket_to_send(address, message);
+        message["args"]=implode(args[6..<0],"\n");
+        open_socket_to_send(address, message);
+        return;
+      }
+   }
+
+    s = socket_create(DATAGRAM, "close_callback");
+    if (s < 0) {
+        log_file("network", "(osts) socket_create: "+socket_error(s)+"\n");
+        return;
+    }
+    log_file("network", "(osts) Created socket descriptor " + s + "\n");
+    error = socket_bind(s, 0);
+    if (error != EESUCCESS) {
+        log_file("network", "(osts) socket_bind: " + socket_error(error) + "\n");
+        socket_close(s);
+        return;
+    }
+    socket_write(s,convert_map_to_string(message), address);
+    socket_close(s);
+}
+
+varargs void read_callback(int s, mixed message, string host) {
+    string args, junk;
+
+    if(!message || !stringp(message)) {
+        log_file("network", "(rcb) Received non-message from socket: "+s+"\n");
+        return;
+    }
+    message=convert_string_to_map(message);
+    sscanf(socket_address(s), "%s %s", junk, args);
+    if(junk=="0.0.0.0") sscanf(host, "%s %s", junk, args);
+    if(mapp(message)) {
+        if(!message["name"]) { return; }
+        if(!message["service"] || member_array(message["service"],__Services)==-1) { return; }
+        __MUDS[message["name"]]=([
+          "name":message["name"],
+          "address":junk,
+          "udp_port":message["udp_port"],
+          "port":message["port"],
+          "mudlib":message["mudlib"],
+          "driver":message["driver"],
+          "pings":0,
+        ]);
+        args=call_other(this_object(),({message["service"],message}));
+        if(!args) { return; }
+        if(strsrch(message["service"],"_request")!=-1) {
+            open_socket_to_send(""+junk+" "+message["udp_port"],
+              (["name":mud_name(),
+                "port":query_host_port(),
+                "udp_port":MERENTHA_INTERMUD,
+                "mudlib":mudlib(),
+                "driver":driver(),
+                "remote_user":message["remote_user"],
+                "args":args,
+                "service":replace_string(message["service"],"_request","_reply"),
+              ]) );
+            return;
+        }
+    }
+}
+
+void close_callback(int s) {
+    log_file("network", "(ccb) Closed socket: "+s+"\n");
+}
+
+void create_main_socket() {
+    int s, error;
+
+    s = socket_create(DATAGRAM, "read_callback");
+    if (s < 0) {
+        log_file("network","(main) socket_create: "+socket_error(s)+"\n");
+        return;
+    }
+    log_file("network", "(main) Created socket descriptor " + s + "\n");
+
+    error = socket_bind(s, MERENTHA_INTERMUD);
+    if (error != EESUCCESS) {
+        log_file("network", "(main) socket_bind: " + socket_error(error) + "\n");
+        socket_close(s);
+        return;
+    }
+}
+
+void create() {
+    restore_object("/save/daemons/network");
+    call_out("create_main_socket", 0);
+    call_out("send_ping_request", 5);
+}
+
+void save_network() {
+    save_object("/save/daemons/network");
+}
+
+/************** SERVICES **************/
+string rwho_reply(mapping message) {
+    object player;
+    if(player=find_player(message["remote_user"]))
+        message("rwho", message["args"], player);
+    return 0;
+}
+
+string rfinger_reply(mapping message) {
+    object player;
+    if(player=find_player(message["remote_user"]))
+        message("rwho", message["args"], player);
+    return 0;
+}
+
+string rtell_reply(mapping message) {
+    object player;
+    if(player=find_player(message["remote_user"]))
+        message("rwho", message["args"], player);
+    return 0;
+}
+
+string ping_reply(mapping message) {
+    mapping remote_muds=convert_string_to_map2(message["args"]);
+    string *new_names, *old_names;
+    int i;
+    if(!remote_muds || !mapp(remote_muds)) return 0;
+    old_names=keys(__MUDS);
+    i=sizeof(new_names=keys(remote_muds));
+    while(i--) {
+        if(member_array(new_names[i], old_names)==-1 && lower_case(new_names[i])!=lower_case(mud_name()) && remote_muds["pings"]<MAX_PINGS) {
+            __MUDS[new_names[i]]=convert_string_to_map3(remote_muds[new_names[i]]);
+            old_names=keys(__MUDS);
+        }
+    }
+}
+
+string rwho_request(mapping message) {
+    string *u=users()->query_cap_name();
+    int i=to_int(message["screen_width"]);
+    if(!i) i=75;
+    return "\n"+border("%^RED%^"+format_page(u, 4, i-4),"rwho : "+mud_name(), i);
+}
+
+string rfinger_request(mapping message) {
+    int i=to_int(message["screen_width"]);
+    if(!i) i=75;
+    if(message["target"] && message["target"]!="0") return "\n"+FINGER_D->get_player_info(message["target"], i);
+    else return "\n"+FINGER_D->get_player_list(i);
+}
+
+string rtell_request(mapping message) {
+    object ob;
+    if(!ob=find_player(message["target"])) {
+        return ""+message["target"]+" could not be found in "+mud_name()+".";
+    }
+    message("communication",capitalize(message["remote_user"])+"@"+message["name"]+" tells you: "+message["args"], ob);
+    return ""+capitalize(message["target"])+" received your message.";
+}
+
+string rcre_request(mapping message) { 
+    CHAT_D->send_message(message["remote_user"],"intermer",message["args"]);
+    return 0; 
+}
+
+string ping_request(mapping message) { 
+    if(to_int(message["known_muds"])<sizeof(__MUDS)) return convert_map_to_string2(__MUDS);
+    return 0; 
+}
+
+string get_mud_address(string name) {
+    if(!__MUDS) return "0";
+    if(!__MUDS[name]) return 0;
+    return ""+__MUDS[name]["address"]+" "+__MUDS[name]["udp_port"];
+}
+
+varargs int send_rwho_request(string mud, string player, int width) {
+    string address=get_mud_address(mud);
+    if(!address) return notify_fail("No such MUD.\n");
+    if(address=="0") return notify_fail("No MUDs.\n");
+    open_socket_to_send(address, 
+      (["name":mud_name(),
+        "port":query_host_port(),
+        "udp_port":MERENTHA_INTERMUD,
+        "mudlib":mudlib(),
+        "driver":driver(),
+        "remote_user":player,
+        "screen_width":(width?width:75),
+        "service":"rwho_request",
+      ]) );
+    return 1;
+}
+
+varargs int send_finger_request(string mud, string player, string target, int width) {
+    string address=get_mud_address(mud);
+    if(!address) return notify_fail("No such MUD.\n");
+    if(address=="0") return notify_fail("No MUDs.\n");
+    open_socket_to_send(address,
+      (["name":mud_name(),
+        "port":query_host_port(),
+        "udp_port":MERENTHA_INTERMUD,
+        "mudlib":mudlib(),
+        "driver":driver(),
+        "remote_user":player,
+        "screen_width":(width?width:75),
+        "service":"rfinger_request",
+        "target":target,
+      ]) );
+    return 1;
+}
+
+int send_rtell_request(string mud, string player, string target, string message) {
+    string address=get_mud_address(replace_string(mud, ".", " "));
+    if(!address) return notify_fail("No such MUD.\n");
+    if(address=="0") return notify_fail("No MUDs.\n");
+    open_socket_to_send(address,
+      (["name":mud_name(),
+        "port":query_host_port(),
+        "mudlib":mudlib(),
+        "udp_port":MERENTHA_INTERMUD,
+        "driver":driver(),
+        "remote_user":player,
+        "service":"rtell_request",
+        "target":target,
+        "args":message,
+      ]) );
+    return 1;
+}
+
+int send_rcre_request(string player, string message) {
+    string address, *names;
+    int i=sizeof(names=keys(__MUDS));
+    while(i--) {
+        address=get_mud_address(names[i]);
+        if(!address) continue;
+        if(address=="0") continue;
+        open_socket_to_send(address,
+          (["name":mud_name(),
+            "port":query_host_port(),
+            "udp_port":MERENTHA_INTERMUD,
+            "mudlib":mudlib(),
+            "driver":driver(),
+            "remote_user":player+"@"+mud_name(),
+            "service":"rcre_request",
+            "args":message,
+          ]) );
+    }
+    return 1;
+}
+
+int send_ping_request() {
+    string address, *names;
+    int i=sizeof(names=keys(__MUDS));
+    while(i--) {
+        __MUDS[names[i]]["pings"]=__MUDS[names[i]]["pings"]+1;
+        if(to_int(__MUDS[names[i]]["pings"])>MAX_PINGS) map_delete(__MUDS,names[i]);
+        address=get_mud_address(names[i]);
+        if(!address) continue;
+        if(address=="0") continue;
+        open_socket_to_send(address,
+          (["name":mud_name(),
+            "port":query_host_port(),
+            "udp_port":MERENTHA_INTERMUD,
+            "mudlib":mudlib(),
+            "driver":driver(),
+            "service":"ping_request",
+            "known_muds":sizeof(__MUDS),
+          ]) );
+    }
+    call_out("save_network", 90);
+    call_out("send_ping_request", 900);
+    return 1;
+}
+

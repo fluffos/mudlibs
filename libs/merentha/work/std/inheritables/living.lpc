@@ -1,0 +1,536 @@
+// Petrarch
+// Merentha Lib 1.0
+// living.c
+
+#include <rooms.h>
+#include <daemons.h>
+#include <std.h>
+#include <objects.h>
+#include <money.h>
+#include <combat.h>
+#include "living.h"
+
+inherit CONTAINER;
+
+nosave object *__Attackers=({}), *__Hunters=({});
+nosave object *__Wielding=({}), *__Worn=({});
+nosave object __Target;
+mapping __Stats=([]), __Skills=([]), __Money=([]);
+nosave mapping __StatBonus=([]), __SkillBonus=([]);
+string *__Classes, *__Limbs=({});
+nosave string *__WornTypes=({}), *__CombatSpecial=({}), *__MagicCasting=({}); 
+string __Gender, __Race;
+int __Mp=1, __MaxMp=1, __Sp=1, __MaxSp=1, __Hp=1, __MaxHp=1;
+int __Level=1, __Exp;
+nosave int __Ac, healing, casting, special, castingdamage, specialdamage;
+
+mapping query_nickname() { return 0; }
+mapping query_alias() { return 0; }
+
+void create() {
+    ::create();
+    __Race="human";
+    __Gender="male";
+    SKILL_D->init_skills(this_object());
+    STAT_D->init_stats(this_object());
+    set_heart_beat(1);
+}
+
+void init() {
+    ::init();
+}
+
+void add_wielding(object ob) { 
+    if(__Wielding) __Wielding+=({ob}); 
+    else __Wielding=({ob});
+}
+void remove_wielding(object ob) { __Wielding-=({ob}); }
+varargs mixed *query_wielding(object ob) { return (ob?member_array(ob,__Wielding)!=-1:__Wielding); }
+
+void add_worn(object ob) { 
+    if(__Worn) __Worn+=({ob}); 
+    else __Worn=({ob});
+    if(__WornTypes) __WornTypes+=({ob->query_type()}); 
+    else __WornTypes=({ob->query_type()});
+    __Ac+=ob->query_ac();
+}
+void remove_worn(object ob) {
+    __Worn-=({ob}); 
+    __WornTypes-=({ob->query_type()}); 
+    __Ac-=ob->query_ac();
+}
+varargs mixed *query_worn(object ob) { return (ob?member_array(ob,__Worn)!=-1:__Worn); }
+varargs mixed *query_worn_types(string str) { return (str?member_array(str,__WornTypes)!=-1:__WornTypes); }
+
+int query_ac() { return __Ac; }
+
+void set_money(string type, int i) {
+    if (member_array(type, __CURRENCY_TYPES)==-1) return;
+    __Money[type]=i; 
+}
+void add_money(string type, int amt) { 
+    if (member_array(type, __CURRENCY_TYPES)==-1) return;
+    __Money[type]=__Money[type]+amt;
+}
+mixed query_money(string str) { 
+    return (str?__Money[str]:__Money);
+}
+
+void set_limbs(string *limbs) { __Limbs=limbs; }
+string *query_limbs() { return __Limbs; }
+int query_limb(string str) { return member_array(str, __Limbs)!=-1; }
+
+void set_vitals() {
+    int i;
+    i=(__MaxHp-(__MaxHp=10+query_stat("constitution")*3+query_stat("strength")*2+__Level));
+    __Hp-=i;
+    i=(__MaxMp-(__MaxMp=-30+query_stat("intelligence")*4+query_stat("wisdom")*3+__Level));
+    __Mp-=i;
+    i=(__MaxSp-(__MaxSp=10+query_stat("constitution")*1+query_stat("dexterity")*4+__Level));
+    __Sp-=i;
+    if(__MaxHp<1) { __MaxHp=1; __Hp=1; }
+    if(__MaxSp<1) { __MaxSp=1; __Sp=1; }
+    if(__MaxMp<1) { __MaxMp=1; __Mp=1; }
+    set_max_items(__Stats["mass"]/10+__Stats["strength"]);
+    set_max_mass(__Stats["mass"]/4+__Stats["strength"]*4);
+}  
+
+void add_exp(int i) {
+    __Exp+=i;
+    if((i=ADVANCE_D->query_needed_exp(__Level+1))<=__Exp) {
+        __Level++;
+        __Exp-=i;
+        if(userp(this_object())) {
+            message("advance", "You advance a level.", this_object());
+            this_object()->save_player(__Name);
+        }
+    }
+}
+int query_exp() { return __Exp; }
+
+void set_stats(mapping stats) { __Stats=stats; set_vitals(); }
+void set_stat(string stat, int x) { __Stats[stat]=x; set_vitals(); }
+mapping query_stats() { return __Stats; }
+int query_stat(string stat) { return __Stats[stat]+__StatBonus[stat]; }
+int query_base_stat(string stat) { return __Stats[stat]; }
+void set_stat_bonuses(mapping args) { __StatBonus=args; set_vitals(); }
+void set_stat_bonus(string stat, int x) { __StatBonus[stat]=x; set_vitals(); }
+void add_stat_bonus(string stat, int x) { __StatBonus[stat]=__StatBonus[stat]+x; set_vitals();}
+int query_stat_bonus(string stat) { return __StatBonus[stat]; }
+
+int query_mass() { return ::query_mass()+__Stats["mass"]; }
+
+void set_skills(mapping skills) { __Skills=skills; }
+void set_skill(string skill, int x) { 
+  if (!__Skills[skill]) return;
+  __Skills[skill]["level"]=x; 
+}
+void set_skill_adjustment(string skill, int val) { 
+  if (!__Skills[skill]) return;
+  __Skills[skill]["adjustment"]=val; 
+}
+mapping query_skills() { return __Skills; }
+int query_skill_level(string skill) { if(!__Skills[skill]) return 0; return (int)(__Skills[skill]["level"]+__SkillBonus[skill]); }
+int query_skill_adjustment(string skill) { return __Skills[skill]["adjustment"]; }
+int query_base_skill(string skill) { return __Skills[skill]["level"]; }
+void set_skill_bonus(string skill, int x) { __SkillBonus[skill]=x; }
+void add_skill_bonus(string skill, int x) { __SkillBonus[skill]=__SkillBonus[skill]+x; }
+void add_skill_points(string skill, int x) { 
+    int i;
+    __Skills[skill]["points"]=__Skills[skill]["points"]+x; 
+    i=SKILL_D->formula(this_object(), skill, __Skills[skill]["level"]);
+    while(__Skills[skill]["points"] > i) {
+        __Skills[skill]["level"]=__Skills[skill]["level"]+1;
+        __Skills[skill]["points"]=__Skills[skill]["points"]-i;
+        i=SKILL_D->formula(this_object(), skill, __Skills[skill]["level"]);
+    }
+}
+int query_skill_bonus(string skill) { return __SkillBonus[skill]; }
+int query_skill_points(string skill) { return __Skills[skill]["points"]; }
+int query_skill_adj_points(string skill) { return __Skills[skill]["adj_points"]; }
+void add_skill_adj_points(string skill, int x) {
+    int i;
+    __Skills[skill]["adj_points"]=__Skills[skill]["adj_points"]+x; 
+    i=SKILL_D->adj_formula(this_object(), skill,__Skills[skill]["level"]);
+    while(__Skills[skill]["adj_points"] > i) {
+        __Skills[skill]["adjustment"]=__Skills[skill]["adjustment"]-1;
+        __Skills[skill]["adj_points"]=__Skills[skill]["adj_points"]-i;
+    }
+}
+void use_skill(string skill, int amt) {
+  add_skill_points(skill, amt/2);
+  if(amt>5) add_skill_adj_points(skill, 1);
+}
+
+int force_me(string str) {
+    return command(str);
+}
+
+void set_max_hp(int i) { __MaxHp=i; }
+int query_max_hp() { return __MaxHp; }
+void set_hp(int i) { __Hp=i; }
+int query_hp() { return __Hp; }
+void add_hp(int i) { 
+    if (__Hp+i<0) __Hp=1;
+    else if (__Hp+i>__MaxHp) __Hp=__MaxHp;
+    else __Hp+=i;
+}
+
+void set_max_sp(int i) { __MaxSp=i; }
+int query_max_sp() { return __MaxSp; }
+void set_sp(int i) { __Sp=i; }
+int query_sp() { return __Sp; }
+void add_sp(int i) { 
+    if (__Sp+i<0) __Sp=1;
+    else if (__Sp+i>__MaxSp) __Sp=__MaxSp;
+    else __Sp+=i;
+}
+
+void set_max_mp(int i) { __MaxMp=i; }
+int query_max_mp() { return __MaxMp; }
+void set_mp(int i) { __Mp=i; }
+int query_mp() { return __Mp; }
+void add_mp(int i) { 
+    if (__Mp+i<0) __Mp=1;
+    else if (__Mp+i>__MaxMp) __Mp=__MaxMp;
+    else __Mp+=i;
+}
+
+void set_level(int i) { __Level=i; set_vitals(); }
+int query_level() { return (__Level?__Level:1); }
+
+void heal(int i) {
+    add_hp(i);
+    add_mp(i);
+    add_sp(i);
+}
+
+void set_race(string str) { 
+    if(!RACE_D->valid_race(str)) str="human";
+    __Race=str; 
+    set_stats(RACE_D->query_stats(str));
+    set_limbs(RACE_D->query_limbs(str));
+    set_vitals();
+}
+
+string query_race() { return __Race; }
+
+void set_gender(string str) { __Gender=str; }
+string query_gender() { return __Gender; }
+
+string query_his_her() { return (__Gender=="female"?"her":"his"); }
+string query_him_her() { return (__Gender=="female"?"her":"him"); }
+string query_he_she() { return (__Gender=="female"?"she":"he"); }
+string query_his_hers() { return (__Gender=="female"?"hers":"his"); }
+string query_he() { return (__Gender=="female"?"she":"he"); }
+string query_him() { return (__Gender=="female"?"her":"him"); }
+string query_his() { return (__Gender=="female"?"her":"his"); }
+
+void set_class(string str) { __Classes=({str}); }
+void add_class(string str) { if(!__Classes) set_class(str); __Classes+=({str}); }
+string *query_classes() { return __Classes; }
+varargs string query_class(string _class) { 
+    string tmp="";
+    int i;
+    if(!__Classes || !sizeof(__Classes)) return 0;
+    if(_class) return (member_array(_class,__Classes)==-1?0:_class);
+    i=sizeof(__Classes);
+    while(i--) {
+        tmp+=__Classes[i];
+        if(i) tmp+="/";
+    }
+    return tmp; 
+}
+
+string health_description() {
+    int i=__Hp*100/__MaxHp;
+    if (i>85) return "in great health";
+    if (i>60) return "a little roughed up";
+    if (i>40) return "somewhat wounded";
+    if (i>20) return "badly injured";
+    return "on death's door";
+}
+
+string stamina_description() {
+    int i=__Sp*100/__MaxSp;
+    if (i>85) return "quite energetic";
+    if (i>60) return "full of energy";
+    if (i>40) return "a little winded";
+    if (i>20) return "short of breath";
+    return "exhaused";
+}
+
+string query_long() {
+    object *inv;
+    mapping shorts=([]);
+    string tmp, tmp1, *short;
+    int i;
+    if(!tmp=::query_long()) tmp="";
+    tmp="You look over the "+query_gender()+" "+query_race()+".\n"+tmp+"\n"+capitalize(query_he())+" appears to be "+health_description()+" and "+stamina_description()+".";
+    i=sizeof(inv=all_inventory(this_object()));
+    while (i--) {
+       if(!inv[i]->query_worn_by() && !inv[i]->query_wielded_by()) continue;
+       tmp1=inv[i]->query_name();
+       if (shorts[tmp1]) shorts[tmp1]=shorts[tmp1]+1;
+       else shorts[tmp1]=1;
+    }
+    i=sizeof(short=keys(shorts));
+    if (i) tmp+="\n"+capitalize(query_he())+" is equiped with:";
+    while (i--) tmp+="\n   "+consolidate(shorts[short[i]],short[i],1);
+    return tmp;
+}
+
+string release_object(object ob) {
+    if(!ob) return 0;
+    if(ob->query_worn_by()) return "You must first remove it.";
+    if(ob->query_wielded_by()) return "You must first unwield it.";
+    return 0;
+}
+
+void die(object ob) {
+    object *inv;
+    object corpse,money;
+    int i,j;
+
+    corpse=new(CORPSE_OB);
+    corpse->move(environment(this_object()));
+    corpse->set_gender(query_gender());
+    corpse->set_race(query_race());
+    corpse->set_mass(query_mass());
+    corpse->set_max_mass(query_max_mass());
+    corpse->set_max_items(query_max_items());
+    i=sizeof(inv=all_inventory(this_object()));
+    while(i--) {
+       if(inv[i]->query_wielded_by()) inv[i]->unwield();
+       if(inv[i]->query_worn_by()) inv[i]->unwear();
+       inv[i]->move(corpse);
+    }
+    if(__Money && __Money!=([])) {
+      money=new(MONEY_OB);
+      i=sizeof(inv=keys(__Money));
+      while(i--) 
+        if(__Money[inv[i]]) {
+          money->add_money(inv[i],__Money[inv[i]]);
+          j=1;
+        }
+      if(!j) money->remove();
+      else money->move(corpse);
+    }
+    set_money("gold",0);
+    corpse->decay(6);
+
+    message("death", query_cap_name(this_object())+" dies.", users());
+    if(ob && userp(ob) && !userp(this_object())) {
+        i=ADVANCE_D->get_exp(this_object());
+        message("death", "You gain "+i+" experiance points for the kill.", ob);
+        ob->add_exp(i);
+    }
+
+    if (userp(this_object())) {
+        this_object()->move(DEATH_ROOM);
+        this_object()->set_hp(25);
+        this_object()->set_sp(25);
+        this_object()->set_mp(25);
+        this_object()->heal(1);
+    } else {
+        this_object()->remove();
+    }
+}
+
+/*******************************************
+    Combat Code
+ *******************************************/
+varargs void kill_ob(object ob, int i) {
+    if(member_array(ob, __Attackers)==-1) __Attackers+=({ob});
+    if(!i) ob->kill_ob(this_object(), 1);
+    __Target=ob;
+}
+
+varargs int kill_ok(object ob, int i) {
+    if(!living(ob)) return 0;
+    if(i) return 1;
+    return ob->kill_ok(this_object(), 1);
+}
+
+object *query_attackers() { return __Attackers; }
+object *query_hunters() { return __Hunters; }
+object query_current_attacker() { 
+    if (__Target) return __Target;
+    if (sizeof(__Attackers)) {
+        __Target=__Attackers[0];
+    }
+    return __Target; 
+}
+
+void set_casting(int i) { casting=i; }
+void set_casting_damage(int i) { castingdamage=i; }
+void set_magic_casting(string *str) { __MagicCasting=str; }
+int query_casting() { return casting; }
+int query_casting_damage() { return castingdamage; }
+string *query_magic_casting() { return __MagicCasting; }
+
+void set_special(int i) { special=i; }
+void set_special_damage(int i) { specialdamage=i; }
+void set_combat_special(string *str) { __CombatSpecial=str; }
+int query_special() { return special; }
+int query_special_damage() { return specialdamage; }
+string *query_combat_special() { return __CombatSpecial; }
+
+void do_damage(int i) {
+    if(i<1) return;
+    __Hp-=i;
+}
+
+varargs void do_hit(int dam, object wep) {
+    string mess, type;
+    int per;
+    if(!wep) {
+        if(casting==1) {
+            if(dam<1) {
+                message("my_combat", "Your magic has no effect.", this_object());
+                message("you_combat", this_object()->query_cap_name(this_object())+"'s magic has no effect.", __Target);
+                message("you_combat", this_object()->query_cap_name(this_object())+"'s magic has no effect on "+__Target->query_cap_name(this_object())+".",environment(this_object()),({this_object(),__Target}));
+                return;
+            }
+            message("my_combat", __MagicCasting[0], this_object());
+            message("you_combat", __MagicCasting[1], __Target);
+            message("they_combat", __MagicCasting[2], environment(this_object()),({this_object(),__Target}));
+            __Target->do_damage(dam);
+            return;
+        }
+        if(special==1) {
+            if(dam<1) {
+                message("my_combat", "Your hit with no effect.", this_object());
+                message("you_combat", this_object()->query_cap_name(this_object())+" his you with no effect.", __Target);
+                message("you_combat", this_object()->query_cap_name(this_object())+" hits with no effect.",environment(this_object()),({this_object(),__Target}));
+                return;
+            }
+            message("my_combat", __CombatSpecial[0], this_object());
+            message("you_combat", __CombatSpecial[1], __Target);
+            message("they_combat", __CombatSpecial[2], environment(this_object()),({this_object(),__Target}));
+            __Target->do_damage(dam);
+            return;
+        }
+        type="fists";    
+    } else type=wep->query_type();
+    if(dam<0) {
+        __Target->use_skill("defense",MISSED_HIT_TRAINS_DEFENSE);
+        message("my_combat_miss", "You miss "+__Target->query_cap_name(this_object())+".", this_object());
+        message("you_combat_miss", query_cap_name(this_object())+" misses you.", __Target);
+        message("they_combat_miss", query_cap_name(this_object())+" misses "+__Target->query_cap_name()+".", environment(this_object()), ({this_object(), __Target}));
+        return;
+    }
+    if(!dam) {
+        __Target->use_skill("defense",INEFFECTIVE_HIT_TRAINS_DEFENSE);
+        use_skill("attack",INEFFECTIVE_HIT_TRAINS_ATTACK);
+        use_skill((type=="fists"?"melee":type),INEFFECTIVE_HIT_TRAINS_WEAPON);
+        message("my_combat_miss", "You hit "+__Target->query_cap_name(this_object())+" ineffectively.", this_object());
+        message("you_combat_miss", query_cap_name(this_object())+" hits you but does no damage.", __Target);
+        message("they_combat_miss", query_cap_name(this_object())+" hits "+__Target->query_cap_name(this_object())+" weakly.", environment(this_object()), ({this_object(), __Target}));
+        return;
+    }
+    per=100*dam/(__Target->query_max_hp());
+    if(per>30) mess="destory";
+    else if(per>20) mess="maim";
+    else if(per>12) mess="severly injure";
+    else if(per>6) mess="powerfully hit";
+    else if(per>2) mess="strike";
+    else mess="hit";
+    message("my_combat", "You "+mess+" "+__Target->query_cap_name(this_object())+" with your "+type+".", this_object());
+    message("you_combat", query_cap_name(this_object())+" "+mess+"s you with "+(__Gender=="female"?"her ":"his ")+type+".",__Target);
+    message("they_combat", query_cap_name(this_object())+" "+mess+"s "+__Target->query_cap_name(this_object())+" with "+(__Gender=="female"?"her ":"his ")+type+".", environment(), ({this_object(),__Target}));
+    use_skill("attack",HIT_TRAINS_ATTACK);
+    use_skill((type=="fists"?"melee":type),HIT_TRAINS_WEAPON);
+    __Target->use_skill("defense",HIT_TRAINS_DEFENSE);
+    __Target->do_damage(dam);
+}
+
+void update_attackers() {
+    int i=sizeof(__Attackers);
+    if(!i) return;
+    while(i--) {
+        if(!__Attackers[i]) continue;
+        if(!present(__Attackers[i], environment())) {
+            __Hunters+=({__Attackers[i]});
+            __Attackers-=({__Attackers[i]});
+        }
+    }
+}
+
+void do_combat() {
+    string type;
+    int damage, i, ran, x, ac, wc;
+    update_attackers();
+    __Attackers-=({0});
+    if(!sizeof(__Attackers)) return;
+    if(!__Target) {
+        casting=0;
+        special=0;
+        if(!__Target=__Attackers[random(sizeof(__Attackers))]) return;
+    }
+    if(casting>0) {
+        if(casting!=1) return;
+        do_hit(castingdamage);
+    } else {
+        if(special>0) {
+            if(special!=1) return;
+            do_hit(specialdamage);
+        } else {
+            if(random(query_skill_level("attack"))<random(__Target->query_skill("defense"))) {
+                do_hit(-1);
+                return;
+            }
+            if(!x=sizeof(__Wielding)) i=1;
+            else i=x;
+            ran=i;
+            while(i--) {
+                wc=query_skill_level("melee")/10;
+                if(!x) type="melee";
+                else {
+                    type=__Wielding[i]->query_type(); 
+                    wc=__Wielding[i]->query_wc();
+                }
+                if(ran>1) {
+                  if(random(query_skill_level("double wielding"))<random(__Target->query_skill_level("double wielding"))) {
+                    __Target->use_skill("double wielding",MISS_OR_HIT_TRAINS_DBL);
+                    use_skill("double wielding",MISS_OR_HIT_TRAINS_DBL/3);
+                    do_hit(-1,(x?__Wielding[i]:0));
+                    continue;
+                  } else {
+                    __Target->use_skill("double wielding",MISS_OR_HIT_TRAINS_DBL/3);
+                    use_skill("double wielding",MISS_OR_HIT_TRAINS_DBL);
+                  }
+                }
+                damage=query_skill_level(type)/2+random(query_skill_level(type)/2);
+                damage-=random(__Target->query_skill_level(type)/2)+random(__Target->query_skill_level("defense")/2);
+                if(damage<0) damage=1;
+                damage+=random(wc*2)+random(query_stat("strength")/2)+random(query_stat("strength")/2);
+                damage=random(damage/2)+random(damage/2);
+                if(x && __Wielding->query_hands()==2) damage+=random(query_skill_level("two handed"));
+                damage-=random(__Target->query_ac())+random(__Target->query_ac());
+                do_hit((damage>0?damage:0),(x?__Wielding[i]:0));
+                if(!random(10) && random(query_skill_level("attack"))>random(__Target->query_skill_level("defense"))) i++;
+            }
+        }
+    }
+    __Target=__Attackers[random(sizeof(__Attackers))];
+}
+
+void heart_beat() {
+    if(__Hp<1) {
+        die(__Target);
+        return;
+    }
+    healing++;
+    if(healing>5) {
+        healing=0;
+        heal(1);
+    }
+    if(sizeof(__Attackers)) do_combat();
+    if(casting >0) casting--;
+    if(special >0) special--;
+    if(casting <0) casting=0;
+    if(special <0) special=0;
+}
+
+int is_living() { return 1; }

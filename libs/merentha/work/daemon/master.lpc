@@ -1,0 +1,207 @@
+// Petrarch
+// Merentha Lib 1.0
+// master.c
+
+#include <objects.h>
+#include <std.h>
+
+inherit DAEMON;
+
+void flag(string str) {
+    switch (str) {
+    case "R0SeBuD" : debug_message("cLoVeRfIeLd"); break;
+    default:
+        message("master", "Unknown flag.", this_player());
+    }
+    shutdown();
+}
+
+object connect() {
+    object login_ob;
+    mixed err;
+
+    err = catch(login_ob = new(LOGIN_OB));
+
+    if (err) {
+        message("master", "It looks like someone is working on the player object.", this_player());
+        message("master", err, this_player());
+        destruct(this_object());
+    }
+    return login_ob;
+}
+
+mixed compile_object(string file) {
+    return 0;
+}
+
+nosave void crash(string err, object ob) {
+    write_file("/log/errors_crashes", "----------\n");
+    write_file("/log/errors_crashes", mud_name()+" crashed "+ctime(time())+" with error "+ err+".\n");
+    write_file("/log/errors_crashes", "----------\n");
+    message("master", "Merentha tells you we are crashing!", users());
+    message("master", "Merentha forced you to quit", users());
+    users()->force_me("quit");
+}
+
+nosave string *update_file(string file) {
+    string *arr=({});
+    string str;
+    int i=0;
+
+    while(str = read_file(file, i++, 1)) {
+      if(str[0]=='#' || str=="") continue;
+      arr+=({str});
+    }    
+    if (!sizeof(arr)) {        return ({}); }
+    return arr;
+}
+
+string *epilog(int) {
+    string *items;
+
+    items = update_file("/cfg/preload");
+    return items;
+}
+
+void preload(string file) {
+    int t1;
+    string err;
+
+    file=replace_string(file, "\n", "");
+    if (!file || file=="") return;
+    if (file_size(file + ".lpc") == -1 && file_size(file) == -1) return;
+
+    t1 = time();
+    err = catch(call_other(file, "??"));
+    if (err != 0) {
+        log_file("preload", "Error '"+err+"' when loading '"+file+"'\n");
+    } else {
+        t1 = time() - t1;
+        log_file("preload", "'"+file+"' loaded. (" + t1/60 + "." + t1 % 60 + ")\n");
+    }
+}
+
+void log_error(string file, string message) {
+    write_file("/log/errors_compile", "----------\n");
+    write_file("/log/errors_compile", ""+ctime(time())+"\n"+message);
+    write_file("/log/errors_compile", "----------\n");
+}
+
+int save_ed_setup(object who, int code) {
+    string file;
+
+    if (!intp(code)) return 0;
+    file = "/realms/"+who->query_name() + ".edrc";
+    rm(file);
+    return write_file(file, code + "");
+}
+
+int retrieve_ed_setup(object who) {
+    string file;
+    int code;
+
+    file = "/realms/"+who->query_name() + ".edrc";
+    if (file_size(file) <= 0) return 0;
+    sscanf(read_file(file), "%d", code);
+    return code;
+}
+
+void destruct_environment_of(object ob) {
+    if (!interactive(ob)) return;
+    message("master", "The object containing you was dested.", ob);
+    ob->move(VOID_OB);
+}
+
+string make_path_absolute(string file) {
+    file = resolve_path((string)this_player()->query_cwd(), file);
+    return file;
+}
+
+/* FluffOS PORT NOTE: this driver build has PACKAGE_UIDS enabled, which
+ * requires get_root_uid()/get_bb_uid() applies on the master object (the
+ * driver calls exit(-1) at boot if either is missing) -- neither was ever
+ * defined anywhere in this archive. The closely-related Nightmare 3
+ * lineage (libs/nightmare3/work/secure/daemon/master.lpc) already carries
+ * this exact pair with these exact values; ported as-is rather than
+ * inventing new uid names.
+ */
+string get_root_uid() { return "Root"; }
+
+string get_bb_uid() { return "Backbone"; }
+
+string creator_file(string str) {
+    return (string)call_other("/sefun/sefun", "creator_file", str);
+}
+
+string domain_file(string str) {
+    return (string)call_other("/sefun/sefun", "domain_file", str);
+}
+
+string author_file(string str) {
+    return (string)call_other("/sefun/sefun", "author_file", str);
+}
+
+string privs_file(string f) {
+    return f;
+}
+
+nosave void error_handler(mapping map, int flag) {
+    object ob;
+    string str;
+
+    ob = this_interactive() || this_player();
+    if (flag) str = "*Error caught\n";
+    else str = "";
+    str += sprintf("Error: %s\nCurrent object: %O\nCurrent program: %s\nFile: %O Line: %d\n%O\n",
+      map["error"], (map["object"] || "No current object"),
+      (map["program"] || "No current program"),
+      map["file"], map["line"],
+      implode(map_array(map["trace"],
+          (: sprintf("Line: %O  File: %O Object: %O Program: %O", $1["line"], $1["file"], $1["object"] || "No object", $1["program"] ||
+              "No program") :)), "\n"));
+    write_file("/log/errors_"+(!flag?"runtime":"caught"),"----------\n");
+    write_file("/log/errors_"+(!flag?"runtime":"caught"),""+ctime(time())+"\n"+str);
+    write_file("/log/errors_"+(!flag?"runtime":"caught"),"----------\n");
+    if (!flag && ob) message("master", str, ob);
+}
+
+int valid_bind(mixed unknown) {
+    return 0;
+}
+
+int valid_hide(object ob) {
+    return 1;
+}
+
+int valid_compile_to_c(string file) {
+    return 0;
+}
+
+int valid_shadow(object ob) {
+    if (ob->query_prevent_shadow(previous_object())) return 0;
+    return 0;
+}
+
+int valid_author(string) {
+    return 1;
+}
+
+int valid_override(string file, string name) {
+    return (file == "/sefun/sefun");
+}
+
+int valid_domain(string) {
+    return 1;
+}
+
+int valid_socket(object, string, mixed *) {
+    return 1;
+}
+
+int valid_write(string, mixed, string) {
+    return 1;
+}
+
+int valid_read(string, mixed, string) {
+    return 1;
+}

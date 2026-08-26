@@ -1,0 +1,202 @@
+// Petrarch
+// Merentha Lib 1.0
+// help.c
+
+#include <std.h>
+
+inherit DAEMON;
+
+string *get_help_menu(string topic) {
+    string *topics;
+    int i;
+    if(!topic) topic="categories";
+    switch (topic) {
+    case "categories":
+        topics=({"abilities","actions","classes","commands","general","skills","spells","stats","races"});
+        if(this_player() && admin_p(this_player())) topics+=({"admin commands"});
+        return topics;
+        break;
+    case "admin commands":
+        i=sizeof(topics=get_dir("/cmds/admin/"));
+        while(i--) topics[i]=replace_string(topics[i], ".lpc", "");
+        return topics;
+        break;
+    case "commands":
+        i=sizeof(topics=get_dir("/cmds/player/"));
+        while(i--) topics[i]=replace_string(topics[i], ".lpc", "");
+        return topics;
+        break;
+    case "actions":
+        i=sizeof(topics=get_dir("/cmds/actions/"));
+        while(i--) topics[i]=replace_string(topics[i], ".lpc", "");
+        return topics;
+        break;
+    case "general":
+        return get_dir("/doc/help/general/");
+        break;
+    case "stats":
+        return get_dir("/doc/help/stats/");
+        break;
+    case "skills":
+        return get_dir("/doc/help/skills/");
+        break;
+    case "abilities":
+        i=sizeof(topics=get_dir("/cmds/abilities/"));
+        while(i--) topics[i]=replace_string(topics[i], ".lpc", "");
+        return topics;
+        break;
+    case "spells":
+        i=sizeof(topics=get_dir("/cmds/spells/"));
+        while(i--) topics[i]=replace_string(topics[i], ".lpc", "");
+        return topics;
+        break;
+    case "classes":
+        return get_dir("/doc/help/classes/");
+        break;
+    case "races":
+        return get_dir("/doc/help/races/");
+        break;
+    }
+    return ({});
+}
+
+void do_help(string topic, int x) {
+    string *topics;
+    int max,i;
+    if(!x) x=75;
+    if(!topic || topic=="" || topic=="main") topic="categories";
+    i=sizeof(topics=get_help_menu(topic));
+    while(i--) if(strlen(topics[i])>max) max=strlen(topics[i]);
+    max=to_int(x/(max+6));
+    this_player()->more(border("%^RED%^\
+Please select from the menu below a topic to get help on:\n\n"+
+        "%^GREEN%^"+format_page(topics,max,x-4)+"\n"+
+border(
+"%^ORANGE%^\
+<q> to quit\n\
+<main> to return to the main menu\n\
+<enter> to display topic menu\
+",0,37)
+,"Welcome to the "+mud_name()+" Help System",x), 0, 0, this_object(),"return_menu_topic", topic, x);
+    if(in_input(this_player())) return;
+    message("prompt", "%^GREEN%^Help Topic: ", this_player());
+    input_to("get_topic", topic, x);
+}
+
+void return_menu_topic(string topic, int x) {
+    message("prompt", "%^GREEN%^Help Topic: ", this_player());
+    input_to("get_topic", topic, x);
+}
+
+string colourize(string str) { 
+ str=replace_string(str, "Syntax:", "%^RED%^%^RESET%^%^RED%^Syntax:");
+ str=replace_string(str, "Examples:", "%^ORANGE%^%^RESET%^%^ORANGE%^Examples:");
+ str=replace_string(str, "\n\n", "\n%^GREEN%^\n");
+ str=replace_string(str, "See Also:", "%^BOLD%^%^WHITE%^See also:");
+ str=replace_string(str, "See also:", "%^BOLD%^%^WHITE%^See also:");
+ return str;
+}
+
+void get_topic(string topic, string category, int x) {
+    object cmd;
+    string help_file;
+    if(!topic || topic=="" || !category) {
+        do_help(category,x);
+        return;
+    }
+    if(topic=="main") {
+        do_help(0,x);
+        return;
+    }
+    if(topic=="q") return;
+    if(member_array(topic,get_help_menu(category))==-1) {
+        if(topic!="") message("help", "Topic "+topic+" not found in category "+category+".", this_player());
+        message("prompt", "%^GREEN%^Help Topic: ", this_player());
+        input_to("get_topic", category, x);
+        return;
+    }
+    if(category=="categories") {
+        do_help(topic,x);
+        return;
+    }
+    switch(category) {
+    case "admin commands":
+        if(cmd=load_object("/cmds/admin/"+topic)) help_file=cmd->help();
+        break;
+    case "actions":
+        if(cmd=load_object("/cmds/actions/"+topic)) help_file=cmd->help();
+        break;
+    case "commands":
+        if(cmd=load_object("/cmds/player/"+topic)) help_file=cmd->help();
+        break;
+    case "general":
+        if(file_exists("/doc/help/general/"+topic)) help_file=read_file("/doc/help/general/"+topic);
+        if(help_file) help_file="\n"+help_file;
+        break;
+    case "stats":
+        if(file_exists("/doc/help/stats/"+topic)) help_file=read_file("/doc/help/stats/"+topic);
+        if(help_file) help_file="\n"+help_file;
+        break;
+    case "skills":
+        if(file_exists("/doc/help/skills/"+topic)) help_file=read_file("/doc/help/skills/"+topic);
+        if(help_file) help_file="\n"+help_file;
+        break;
+    case "spells":
+        if(cmd=load_object("/cmds/spells/"+topic)) help_file=cmd->help();
+        break;
+    case "abilities":
+        if(cmd=load_object("/cmds/abilities/"+topic)) help_file=cmd->help();
+        break;
+    case "races":
+        if(file_exists("/doc/help/races/"+topic)) help_file=read_file("/doc/help/races/"+topic);
+        if(help_file) help_file="\n"+help_file;
+        break;
+    case "classes":
+        if(file_exists("/doc/help/classes/"+topic)) help_file=read_file("/doc/help/classes/"+topic);
+        if(help_file) help_file="\n"+help_file;
+        break;
+    }
+    if(!help_file) help_file="\nThe topic "+topic+" has no help file.";
+    this_player()->more(border("%^RED%^Topic: "+topic+colourize("\n"+help_file)+
+        "\n\n"+
+border("%^ORANGE%^<q> to quit\n\
+<main> to return to the main menu\n\
+<enter> to display topic menu\
+",0,37)
+,"Welcome to the "+mud_name()+" Help System",x),0 ,0, this_object(),
+"return_topic_more", category, x);
+    if(in_input(this_player())) return;
+    message("prompt", "%^GREEN%^Help Topic: ", this_player());
+    input_to("get_topic", category, x);
+}
+
+void return_topic_more(string category, int x) {
+    message("prompt", "%^GREEN%^Help Topic: ", this_player());
+    input_to("get_topic", category, x);
+}
+
+void get_help_file(string topic, int x) {
+    object ob;
+    string *dirs=({"/doc/help/general/","/doc/help/races/","/doc/help/classes/","/doc/help/stats/","/doc/help/skills/"});
+    string help_file;
+    int i;
+    if(!x) x=75;
+    i=sizeof(dirs);  
+    while(i--) 
+        if(file_exists(dirs[i]+topic)) {
+            this_player()->more(border(colourize("%^GREEN%^"+read_file(dirs[i]+topic)),mud_name()+" Help: "+topic,x));
+            return;
+        }
+    dirs=({"/cmds/player/","/cmds/abilities/","/cmds/spells/","/cmds/actions/"});
+    if(this_player() && admin_p(this_player())) dirs+=({"/cmds/admin/"});
+    i=sizeof(dirs);  
+    while(i--) 
+        if(file_exists(dirs[i]+topic+".lpc")) {
+            ob=load_object(dirs[i]+topic);
+            if(!help_file=ob->help()) help_file="No help available for topic: "+topic;
+            this_player()->more(border(colourize("%^RED%^"+help_file),mud_name()+" Help: "+topic,x));
+            return;
+        }
+    message("help", "Topic: "+topic+" could not be found in the help system.", this_player());
+}
+

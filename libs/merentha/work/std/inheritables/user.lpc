@@ -1,0 +1,301 @@
+// Petrarch
+// Merentha Lib 1.0
+// user.c
+
+#include <daemons.h>
+#include <std.h>
+#include <rooms.h>
+#include "user.h"
+
+inherit LIVING;
+
+mapping __Env=(["BRIEF":"0"]), __Nicknames=([]), __Aliases=([]);
+string *__Channels;
+string *__History=({});
+string __CWD;
+string __Position, __Password;
+string start_here;
+
+nosave int autosave;
+
+void create() {
+    ::create();
+    __Position="player";
+    __CWD="";
+    this_object()->init_aliases();
+}
+
+void init() {
+    ::init();
+    if (this_object() == this_player()) {
+        add_action("cmd_quit", "quit");
+        add_action("commandHook", "", 1);
+    }
+}
+
+varargs int commandHook(string arg) {
+    object cobj;
+    string *args, *paths;
+    string cmd_path, verb, com_cmd;
+    int i,j,k;
+
+    if(verb=query_verb()) {
+        com_cmd = verb+" "+(arg?arg:"");
+        if(verb[0..0]=="!") {
+            if(verb[1..1]=="!") com_cmd=__History[<1];
+            else if(sscanf(verb, "!%d", i)==1 && i>0 && i<16) com_cmd=__History[<(16-i)];
+            else {
+                i=sizeof(__History);
+                j=strlen(verb)-2;
+                while(i--) 
+                    if(sscanf(verb, "!%s",arg)==1 && verb[1..<1]==__History[i][0..j]) { 
+                        com_cmd=__History[i];
+                        break;
+                    }
+            }
+            message("command", com_cmd, this_object());
+        } 
+        if (member_array(verb, keys(__Aliases))!=-1) return command(__Aliases[verb]+" "+(arg?arg:""))+1;
+        __History+=({com_cmd});
+        args=explode(com_cmd," ");
+        verb=args[0];
+        if(sizeof(args)>1) arg=implode(args[1..<1]," "); else arg=0;
+        if(sizeof(__History)>15) __History=__History[<15..<1];
+        cmd_path=verb;
+    } else {
+        cmd_path = arg;
+        arg=0;
+    }
+
+    paths=({"/cmds/actions/", "/cmds/player/", "/cmds/abilities/", "/cmds/spells/"});
+    if(admin_p(this_object())) paths+=({"/cmds/admin/"});
+    i=sizeof(paths);
+    while(i--)
+        if(file_exists(paths[i]+cmd_path+".lpc"))
+            cobj = load_object(paths[i]+cmd_path);
+    if(__Nicknames && arg && verb && verb!="nickname") {
+        i=sizeof(args=explode(arg, " "));
+        j=sizeof(paths=keys(__Nicknames));
+        k=j;
+        while(i--) {
+            while(j--) if(args[i]==paths[j]) args[i]=__Nicknames[paths[j]];
+            j=k;
+        }
+        arg=implode(args, " ");
+    }
+    if (cobj) return (int)cobj->command(arg);
+    if (verb=="'") return "/cmds/actions/say"->command(arg);
+    if (verb==":") return "/cmds/actions/emote"->command(arg);
+    if (cobj=environment(this_object()))
+        if (member_array(verb, cobj->query_exits())!=-1) {
+            command("go "+verb);
+            return 1;
+        }
+    if(CHAT_D->send_message(this_object()->query_cap_name(),verb,arg)) return 1;
+    if(SOCIAL_D->get_message(verb+(arg?" "+arg:""))) return 1;
+    return 0;
+}
+
+void set_class(string str) {
+    living::set_class(str);
+}
+
+int move_player(mixed dest) {
+    object env=environment(this_object());
+    string *exits=({}), dir=".", odir=" an unknown direction.";
+    int i;
+
+    if(!move(dest)) {
+        if(env) {
+            i=sizeof(exits=env->query_exits());
+            while (i--)  
+                if (env->query_exit(exits[i])==file_name(find_object(dest))) { 
+                    dir=" "+exits[i]+".";
+                    switch(exits[i]) {
+                    case "north": odir=" the south."; break;
+                    case "south": odir=" the north."; break;
+                    case "east": odir=" the west."; break;
+                    case "west": odir=" the east."; break;
+                    case "northwest": odir=" the southeast."; break;
+                    case "northeast": odir=" the southwest."; break;
+                    case "southwest": odir=" the northeast."; break;
+                    case "southeast": odir=" the northwest."; break;
+                    case "up": odir=" below."; break;
+                    case "down": odir=" above."; break;
+                    case "enter": odir=" the entrance."; break;
+                    default: odir=" the "+exits[i]; break;
+                    }
+                }
+            message("move", this_object()->query_cap_name()+" leaves"+dir,env);
+        }
+               env=environment(this_object());
+        message("look", env->describe_room(!__Env["BRIEF"]),this_object());
+        message("move", this_object()->query_cap_name()+" enters from"+odir,env, this_object());
+    }
+    if(env) {
+        if(!env->query_property("no start")) start_here=file_name(env);
+    }
+}
+
+void display_welcome_messages() {
+    string tmp=" \n \n";
+    tmp+=" <<< Welcome to "+mud_name()+" >>> ";
+    if(admin_p(this_object())) tmp+="\n <<< You are logged in as an administrator >>> ";
+    if(__REBOOTING__) tmp+="\n <<< "+mud_name()+" is currently in the reboot cycle >>> ";
+    message("welcome", center(tmp), this_object());
+}
+
+void save_player(string name) {
+    autosave=0;
+    if(!name) name = query_name();
+    if(name!=query_name()) return;
+    save_object("/save/users/"+name[0..0]+"/"+name+".o",1);
+}
+
+void load_player(string name) {
+    if(!name) return;
+    restore_object("/save/users/"+name[0..0]+"/"+name+".o");
+}
+
+void heart_beat() {
+    ::heart_beat();
+    if(autosave>25) save_player(query_name());
+    autosave++;
+}
+
+void add_channels() {
+    __Channels=({"chat"});
+    if(admin_p(this_object())) __Channels+=({"intermer","imud_code","dchat","dead_test4"});
+    CHAT_D->register_channels(__Channels, this_object());
+}
+
+void setup() {
+    string err;
+    set_heart_beat(1);
+    set_living_name(query_name());
+    enable_commands();
+    add_action("cmd_quit", "quit");
+    add_action("commandHook", "", 1);
+
+    add_channels();
+
+    display_welcome_messages();
+
+    if(start_here) err=catch(call_other(start_here, "???"));
+    if(!start_here || err ) move(SETTER_ROOM);
+    else move(start_here);
+    command("look");
+}
+
+string query_position() { return __Position; }
+void set_position(string str) {
+    if(!this_player() || !admin_p(this_player())) return;
+    __Position=str;
+}
+
+void set_password(string str) { __Password=str; }
+string query_password() { return __Password; }
+
+void catch_tell(string str) { receive(str); }
+
+int id(string arg) { return (arg == query_name()) || living::id(arg); }
+
+string process_input(string arg) { return arg; }
+
+int cmd_quit() {
+    save_player(query_name());
+    remove();
+    return 1;
+}
+
+void receive_message(string msgclass, string msg) {
+    string pre, post;
+    msg=""+msg;
+    if(member_array(msgclass,({"prompt","system"}))==-1) msg+="\n";
+    switch (msgclass) {
+    case "move" : msg="%^BOLD%^%^GREEN%^"+msg;
+    case "advance" : msg="%^YELLOW%^"+msg; break;
+    case "communication" : 
+        if(sscanf(msg, "%s:%s", pre,post)==2) msg="%^BOLD%^%^CYAN%^"+pre+":%^RESET%^"+post;
+        break;
+    case "my_combat_miss" : 
+    case "you_combat_miss" : msg="%^GREEN%^"+msg; break;
+    case "my_combat" : msg="%^RED%^"+msg; break;
+    case "you_combat" : msg="%^ORANGE%^"+msg; break;
+    case "them_combat" : msg="%^BLUE%^"+msg; break;
+    }
+    if(this_object()->getenv("terminal")!="ansi") msg=strip_colours(msg);
+    else msg+="%^RESET%^";
+    msg=wrap(msg,getenv("SCREEN"));
+    receive(msg);
+}
+
+void net_dead() {
+    object env;
+    string here;
+    set_heart_beat(0);
+    if(env=environment(this_object())) {
+        message("inform", query_cap_name() + " goes link-dead.", environment(this_object()), this_object());
+        if (here=env->query_property("no linkdead")) {
+           move_object(here);
+           start_here=here;
+             message("inform", query_cap_name() + " goes link-dead.", environment(this_object()), this_object());
+        }
+    }
+}
+
+void reconnect() {
+    set_heart_beat(1);
+    message("inform", "Reconnected.", this_object());
+    message("inform", query_cap_name() + " has reconnected.", environment(this_object()), this_object());
+    force_me("look");
+}
+
+/*************** shell code ************/
+void init_aliases() { __Aliases=(["i":"inventory","u":"go up","d":"go down","o":"go out","l":"look","w":"go west","e":"go east","s":"go south","n":"go north","se":"go southeast","ne":"go northeast","sw":"go southwest","nw":"go northwest","who":"users"]); }
+void add_alias(string a, string b) { __Aliases[a]=b; }
+void remove_alias(string a) { map_delete(__Aliases,a); }
+varargs mixed query_alias(string a) { if(!a) return __Aliases; else return __Aliases[a]; }
+
+void init_nicknames() { __Nicknames=([]); }
+void add_nickname(string a, string b) { __Nicknames[a]=b; }
+void remove_nickname(string a) { map_delete(__Nicknames,a); }
+varargs mixed query_nickname(string a) { if(!a) return __Nicknames; else return __Nicknames[a]; }
+
+string *query_history() { return __History; }
+
+void setenv(string env, mixed arg) { __Env[env]=arg; }
+mixed getenv(string env) { 
+    if(!__Env) return 0; 
+    if(member_array(env, ({"SCREEN", "LINES"}))!=-1) return to_int(__Env[env]);
+    return __Env[env]; 
+}
+
+varargs void more(mixed input, int lines, int start, object return_object, string return_function, string topic, int x) {
+    if(!lines=getenv("LINES")) lines=18;
+    if(!start) start=0;
+    MORE_D->display(input, this_object(), lines, start, return_object, return_function, topic, x);
+}
+
+string write_prompt() {
+    if(admin_p(this_object())) receive(__CWD+" > ");
+    else receive("> ");
+}
+
+string query_cwd() { return (__CWD[<1..<1]=="/"?__CWD:__CWD+"/"); }
+int set_cwd(string dir) { 
+    int i;
+    if (dir[0..0]=="/") {
+        if(i=file_size(dir)!=-2) 
+            return notify_fail("Directory does not exist, or is file.\n");
+        else __CWD=dir;
+        return 1;
+    }
+    dir=query_cwd()+dir;
+    if(i=file_size(dir)!=-2) 
+        return notify_fail("Directory does not exist, or is file.\n");
+    else __CWD=dir;
+    return 1;
+}
+
+int is_user() { return 1;}
