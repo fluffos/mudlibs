@@ -1,0 +1,1117 @@
+/*
+ * File: /std/user.c
+ * The user body is from the TMI-2 lib. Part of the bodies project and
+ * implemented by Watcher@TMI-2 and Mobydick@TMI-2. The code contained
+ * in this object is heavily based on code found in the original user.c
+ *
+ * The relevant code headers follow:
+ * Original Authors: Sulam and Buddha @ The Mud Institute
+ * Many other people have added to this as well.
+ * This file has a long revision history dating back to the hideous
+ * mudlib.n and is now probably not at all the same.
+ * This file is part of the TMI distribution mudlib.
+ * Please keep this header with any code within.
+ *
+ * 94-11-09 Leto added Beek's error handler code
+ * 94-11-28 Leto added Beek's move_or code
+ * 94-11-30 Leto added receive_snoop
+ * 95-01-11 Blue modified receive_snoop slightly.
+ * 97-05-09 Cyanide, after much pain, finaly succeeded in overhauling
+ *          continue_attack and execute_attack.
+ * 97-05-22 Cyanide completed the attack code.
+ *          Added support for attacking resting victims and fighting in
+ *          the dark.
+ * 97-05-27 Cyanide killed a couple bugs in combat and added a busy check.
+ * 97-07-15 Cyanide added query_mass() to determine mass by strength
+ *          and size.
+ * 97-08-10 Cyanide moved query_level() to /std/user/levels.c
+ * 97-10-12 Cyanide TOTALLY redid damage messages and added a total of 9 
+ *          (count 'em: 9!) "miss" messages.  Just 1 was BORING! 
+ *          On this day he also added player vs. wizard start locations.
+ * 97-11-08 Cyanide THINKS he finalized the protectors dilemma.
+ * 97-01-06 Cyanide added support for the new MIN to move_player().
+ * 98-22-12 Cyanide made query_title show alignment only under special
+ *          circumstances. Also, on this day, Cyanide tweaked the 
+ *          reconnect things in setup() and complete_setup()
+ * 00-04-04 Cyanide repaired the recurring 'somewhere' in the MIN
+ *          messages. It was a difference between a .c and lack of.  
+ */
+
+#include <config.h>
+#include <login.h>
+#include <commands.h>
+#include <daemons.h>
+#include <net/daemons.h>
+#include <mudlib.h>
+#include <flock.h>
+#include <move.h>
+#include <money.h>
+#include <priv.h>
+#include <driver/origin.h>
+#include <uid.h>
+#include <switches.h>
+#include <messages.h>
+
+/*
+ * Some files are inherited by including user.h.
+ */
+#include <user.h>
+#include <user2.h>
+#include <logs.h>
+#include <body.h>
+#include <login_macros.h>
+
+
+// This is only needed for consistency_check.
+#include <channels.h>
+#include <domains.h>
+
+
+// For receive_snoop
+#include <ansi.h>
+
+inherit "/std/user/class.c";
+
+inherit LIVING ;
+
+// This is probably only a local hack.
+#ifndef CAP_NAME_MASTER_ONLY
+#  undef CAP_NAME
+#  undef LINK_CAP_NAME
+#  define CAP_NAME capitalize(query("name"))
+#  define LINK_CAP_NAME capitalize(link_data("name"))
+#endif
+
+#define TIME_TO_HEAL 20
+#define HALL "/d/Fooland/hall"
+
+// prototypes for local functions
+static varargs void complete_setup (string str);
+varargs void init_setup(int);
+void die();
+static int create_ghost();
+int coins_carried();
+void destroy_autoload_obj();
+varargs void execute_attack(int hit_mod, int dam_mod);
+void call_user_dump(string type);
+
+// Setup basic and command catch systems
+void basic_commands() {
+    add_action("quit", "quit");
+}
+
+static void init_commands() {
+    string path;
+
+    add_action( "cmd_hook", "", 1 );
+
+    path = query("PATH");
+
+    if (!path) {
+	if ( wizardp(this_object()) )
+	    path = NEW_WIZ_PATH;
+	else
+	    path = USER_CMDS;
+
+	set("PATH", path, MASTER_ONLY);
+    }
+}
+
+
+// Setup standard user command hook system.  This system interfaces
+// with the cmd bin system, the environment's exits, and feeling entries.
+
+nomask static int cmd_hook(string cmd) {
+    string file;
+    string verb;
+    int foo;
+    mapping before, after;
+
+    verb = query_verb();
+
+    if (environment() && environment()->valid_exit(verb)) {
+	verb = "go";
+	cmd = query_verb();
+    }
+
+    file = (string)CMD_D->find_cmd(verb, explode(query("PATH"), ":"));
+
+    if (file && file != "") {
+#ifdef PROFILING
+	before = rusage();
+#endif
+	foo = (int)call_other(file, "cmd_" + verb, cmd);
+
+#ifdef PROFILING
+	after = rusage();
+	"/adm/daemons/profile"->log_cmd(verb,before,after);
+#endif
+
+	return foo;
+    }
+
+    if (environment() && environment()->query("quiet"))
+	return 0;
+
+#ifdef PROFILING
+    before = rusage();
+#endif
+
+    foo = (int)EMOTE_D->parse(verb, cmd);
+
+    if (foo) {
+#ifdef PROFILING
+	after = rusage();
+	"/adm/daemons/profile"->log_cmd(verb,before,after);
+#endif
+	return foo;
+    }
+
+#ifdef PROFILING
+    before = rusage();
+#endif
+
+#ifndef INTERMUD
+    if (verb == "gwiz" || verb == "interwiz") {
+	printf("Sorry, %s does not support intermud.\n",capitalize(mud_name()));
+	return 1;
+    }
+#endif /* INTERMUD */
+
+    foo = (int) CHANNELS_D -> parse_channel( verb, cmd );
+
+#ifdef PROFILING
+    if ( foo ) {
+	after = rsuage();
+	"/adm/daemons/profile" -> log_cmd( verb, before, after );
+    }
+#endif
+
+    return foo;
+}
+
+/*
+ * This function protects the object from being shadowed for
+ * certain secure functions.
+ */
+nomask int query_prevent_shadow(object ob) {
+    mixed *protect;
+    int loop;
+
+    protect = ({ "catch_tell", "receive_message", "do_alias", "do_xverb",
+    "do_substitution", "process_input", "tsh",
+    "do_nickname", "receive_snoop" });
+
+    for (loop = sizeof(protect); loop--; )
+	if (function_exists(protect[loop], ob))  return 1;
+
+    return 0;
+}
+
+/*
+ * Move the player to another room. Give the appropriate
+ * message to on-lookers.
+ * The optional message describes the message to give when the player
+ * leaves.
+ */
+varargs int move_player(mixed dest, string message, string dir) {
+    string dirfrom;
+    object prev, *stuff;
+    int res, i, I;
+    mapping Exits;
+
+    prev = environment( this_object() );
+    if ( res = move(dest) != MOVE_OK ) {
+	message(MSG_INFO, "You remain where you are.\n", this_player());
+	return res;
+    }
+
+    if (environment() && wizardp(this_object()) && query("display_path"))
+	message(MSG_LOOK, sprintf("[%s]\n", file_name(environment())),
+	  this_object());
+
+    if (message == "SNEAK") {
+	set_temp("force_to_look", 1);
+	command("look");
+	set_temp("force_to_look", 0);
+	return 0;
+    }
+
+    if (!query("invisible")) {
+	Exits = environment()->query("exits");
+	if (!Exits) Exits = ([]);
+
+	I = member_array((file_name(prev)+".c"), values(Exits));
+	if (I==-1)
+	    I = member_array((file_name(prev)), values(Exits));
+
+	if (I!=-1) 
+	    dirfrom = keys(Exits)[I];
+	else
+	    dirfrom = "somewhere";
+
+	if (message == 0 || message == "") {
+
+	    if (dir && dir != "") {
+		message(MSG_MOVEMENT, (string)query_mout(dir) + "\n",
+		  prev, this_object());
+		message(MSG_MOVEMENT, (string)query_min(dirfrom) + "\n",
+		  environment(), this_object());
+	    } else {
+		message(MSG_MOVEMENT, (string)query_mmout() + "\n",
+		  prev, this_object());
+		message(MSG_MOVEMENT, (string)query_mmin() + "\n",
+		  environment(), this_object());
+	    }
+	} else {
+	    message(MSG_MOVEMENT, message + "\n", prev, this_object());
+	    message(MSG_MOVEMENT, (string)query_min(dirfrom) + "\n", environment(),
+	      this_object());
+	}
+    }
+
+    set_temp ("force_to_look", 1);
+    command("look");
+    set_temp("force_to_look", 0);
+
+
+    /*
+     * Follow/track mudlib support
+    */
+    if (!query("no_follow") && environment() != prev && prev){
+	stuff = all_inventory(prev);
+	for(i=0;i<(sizeof(stuff));i++){
+	    stuff[i]->follow_other(this_object(), environment(), dir);
+	}
+    }
+    return 0;
+}
+
+int clean_up_attackers() {
+    mixed *attackers_tmp;
+    int i;
+
+    attackers_tmp = ({ });
+
+    for (i = sizeof(attackers); i--; ) {
+	// If he's YOU - come to your senses.
+	if (attackers[i] == this_object() )
+	    continue;
+
+	// If he's dead, then forget about him entirely.
+	if (attackers[i] == 0 || !living(attackers[i]))
+	    continue;
+
+	// If he's not here, then forget about him.        
+	if (environment(attackers[i]) != environment(this_player()))
+	    continue;
+
+	// If he's a ghost, we've done enough to him already :)
+	if ((int)attackers[i]->query_ghost() == 1) continue;
+
+	// If we get this far, then we still want to be attacking him
+	attackers_tmp += ({ attackers[i] });
+    }
+
+    // Copy the tmp list over to the attackers list.
+    attackers = attackers_tmp;
+
+    if (sizeof(attackers_tmp) == 0)
+	any_attack = 0;
+
+    return any_attack;
+}
+
+// This function filters out the living objects who are listening
+// to the present battle.
+
+int filter_listening(object obj) {
+    if (sizeof(attackers)==0) return 0;
+    if (!obj) return 0;
+    if (obj == this_object() || obj == attackers[0])  return 0;
+    return living(obj);
+}
+
+
+// Valid_protect was the Holy Grail of protector errors.
+// You may worship Cyanide, 5 Nov 97, who converted all strings to
+// objects.
+// It filters dead or absent people from an array.
+
+int valid_protect (object foo) {
+    if (!foo) return 0 ;
+    if (environment(foo)!=environment(this_object())) return 0 ;
+    if ((int)foo->query("hit_points")<0) return 0 ;
+    if (foo == this_object()) return 0 ;
+    return 1 ;
+}
+
+void create() {
+
+    if (user_exists(getuid()))  return;
+
+    /*
+     * Until the user's name and id is set ... give it a temporary one.
+     */
+    set("name", "noname", MASTER_ONLY);
+    set("id", ({ "noname" }));
+
+    /*
+     * We set EUID of 0 so that the login daemon can export the proper
+     * UD onto the player. If you are running without AUTO_SETEUID, then
+     * this has no effect, but under auto-EUID-setting it's important.
+     * Also it makes it mildly harder for people to get themselves into
+     * trouble by cloning user.c.
+     */
+    seteuid(0);
+
+
+    /*
+     * there's some standard properties that need to be locked so that
+     * Joe Random Wizard can't break security by setting them on people
+     * who haven't used them yet.
+     */
+    set("npc", 0, LOCKED);
+    set("snoopable", 1, MASTER_ONLY);
+
+    set("short", "@@query_short");
+    set("cap_name", capitalize(query("name")), MASTER_ONLY);
+    set("title", "@@query_title", MASTER_ONLY);
+    set("linkdead", "@@query_linkdead");
+    set("age", 0, MASTER_ONLY);
+    set("ghost", 0, MASTER_ONLY);
+    set("shell", "none", MASTER_ONLY);
+    set("user", 1, MASTER_ONLY);
+    set("vision", "@@query_vision");
+    set("harass", 0, OWNER_ONLY);
+    set("natt", "@@query_natt", MASTER_ONLY);
+#ifdef NO_PKILL
+    set("no_attack", 1, OWNER_ONLY);
+#else
+    set("no_attack",0, OWNER_ONLY);
+#endif
+    alias = ([ ]);
+
+    /*
+     * Complete the standard user attribute settings.
+     */
+    set("max_cap", "@@query_max_cap", MASTER_ONLY);
+    set("mass", "@@query_mass", MASTER_ONLY);
+    set("time_to_heal", TIME_TO_HEAL);
+    set("short", "@@query_short");
+    set("channels", "", MASTER_ONLY);
+    set("email_visible", 0, OWNER_ONLY);
+    enable_commands();
+}
+
+void remove() {
+    string euid;
+    mixed *inv;
+    int loop;
+
+    if (previous_object()) {
+	euid = geteuid(previous_object());
+	if ( (euid != ROOT_UID) &&
+	  (euid != geteuid(this_object())) &&
+	  !adminp(euid) ) {
+	    message(MSG_SYSTEM, "You may not remove other players.\n",
+	      this_player());
+	    return;
+	}
+    }
+    free_locks(this_object());
+
+    save_data();
+    destroy_autoload_obj();
+
+    inv = all_inventory(this_object());
+    for (loop = sizeof(inv); loop--; )
+	if (inv[loop]->query("prevent_drop"))
+	    inv[loop]->remove();
+
+	//  CMWHO_D->remove_user(this_bject());
+    if (link)  link->remove();
+    living::remove();
+}
+
+static int in_de_quit_script;
+
+varargs int quit(string str) {
+    object *stuff, *inv, invis_ob;
+    int i, j;
+
+    if (!(origin() == ORIGIN_LOCAL || origin() == ORIGIN_DRIVER)
+      && geteuid(previous_object()) != ROOT_UID)
+	return 0;
+
+    if (str) {
+	notify_fail("Quit what?\n");
+	return 0;
+    }
+
+    /*
+     * If the #define is on, then save their location for starting next time.
+     */
+#ifdef REAPPEAR_AT_QUIT
+    if (environment(this_player())) {
+	set ("start_location", file_name(environment(this_player())));
+    } else {
+	set ("start_location", START);
+    }
+#endif
+
+    /*
+     * Free any outstanding file locks.
+     */
+    free_locks(this_object());
+
+    // Deregister with channel daemon
+#ifdef INTERMUD
+    CHANNELS_D->cleanup_user(this_object());
+#endif
+
+    /*
+     * Get rid of any party memberships.
+     */
+    //  check_team();
+    PARTY_D->check_party(this_object());
+
+    if ( wizardp( this_object() ) )   {
+	string quit_script; // Pallando 93-02-11
+
+	quit_script = user_path( query( "name" ) ) + ".quit";
+	if ( file_size( quit_script ) > 0 ) {
+	    if (in_de_quit_script++)
+		message(MSG_SYSTEM,
+		  "Oi, stupid! Don't put `quit' in your ~/.quit file\n",
+		  this_object());
+	    else
+		call_other( this_object(), "tsh", quit_script );
+	    in_de_quit_script = 0;
+	}
+    }
+
+    /*
+     * If the "harass" logging is still on, then turn it off.
+     */
+    if (query("harass") > 0 ) {
+	set("harass", 0);
+	message(MSG_INFO, "Harass Log turned off.\n", this_object());
+    }
+
+
+    /*
+     * If this is an invisible wizard, we let the invisibility stay on: but
+     * if it's a player who cast the invisibility spell, then we want him
+     * to be visible when he reappears.
+     * Unless he is a 25+ lvl thief which allows for kewl stuff!
+     */
+    if (!wizardp(this_object())){
+	if ((this_object()->query_level("thief")<24)){
+	    set("invisible", 0);
+	}
+    } else
+	command("home");
+
+    if (link) {
+	//      link->set("last_on", time());
+	link->set("ip", query_ip_name(this_object()));
+    }
+
+#ifdef QUIT_LOG
+    if (link)
+	log_file(QUIT_LOG, CAP_NAME + ": quit from " +
+	  query_ip_name(this_object()) + " [" +
+	  extract(ctime(time()), 4, 15) + "]\n");
+    else
+	log_file(QUIT_LOG, CAP_NAME +
+	  ": swept [" + extract(ctime(time()), 4, 15) + "]\n");
+#endif
+
+    /*
+     * First save the user's personal data.
+     */
+    save_data();
+
+    /*
+     * Then destroy autoloading inventory.
+     */
+    destroy_autoload_obj();
+
+    //object *inv;
+    //ilz put this in cause it wasnt getting rid of undroppable stuff
+
+    inv = all_inventory(this_object());
+    for (j = 0; j < sizeof(inv); j++)
+	if (inv[j]->query("prevent_drop"))
+	    inv[j]->remove();
+
+
+	// Now drop everything droppable on the user.
+
+    inv = all_inventory( this_object() );
+    inv = filter_array(inv, "inventory_check", this_object());
+
+    if (inv && sizeof(inv))  command("drop all");
+
+    /*
+     * Announce the departure of the user.
+     */
+    if (this_object() && visible(this_object()))
+	message(MSG_MOVEMENT, query("cap_name") + " left the game.\n",
+	  environment(), this_player());
+
+    if (this_object() && interactive(this_object()))
+	ANNOUNCE->announce_user(this_object(), 1);
+
+#ifdef LOGOUT_MSG
+    if (previous_object() == this_player() && this_player())
+	message(MSG_INFO, LOGOUT_MSG, this_object());
+#endif
+
+    /*
+     * Clean up a few loose ends before shutting down the user.
+     */
+    //  CMWHO_D->remove_user(this_object());
+    if (link)  link->remove();
+    living::remove();
+
+    return 1;
+}
+
+
+/*
+ * This function determines if the user has anything droppable
+ * when they quit the mud.
+ */
+static int inventory_check(object obj) {
+    if (obj->query_auto_load())  return 0;
+    if (!obj->query("short") || obj->query("prevent_drop"))  return 0;
+    return 1;
+}
+
+
+/*
+ * This procedure is called from the setup() function below.  It is
+ * basically here to check that existing users get whatever new settings
+ * they need to function in today's changing mudlib.
+ */
+void consistency_check() {
+    int i,j;
+    mapping doms, doms2;
+    string *domlist;
+
+    /*
+     * if you think everyone has been "fixed" then what you put here shoud
+     * moved to create() and taken out.
+     * right now it's empty because hopefully everyone has been updated.
+     */
+
+    if (!wizardp(TO)) set("snoopable", 1);
+    set("natt", "@@query_natt", MASTER_ONLY);
+    set("thac0", "@@query_thac0", MASTER_ONLY); 
+    set("mass", "@@query_mass", MASTER_ONLY);
+    set("max_cap", "@@query_max_cap", MASTER_ONLY);
+    if (query("base_ac") == 0) set ("base_ac", 10);		
+    set("magic_armor", ([]));
+    set ("armor_class", 10);
+    set("time_to_heal", TIME_TO_HEAL);
+    set ("stat", query("base_stat"));
+    set ("save", "@@query_save", MASTER_ONLY); 
+
+    set("size", query("SIZE") );
+    if (!wizardp(TO))
+	set("snoopable", 1, MASTER_ONLY);  
+    delete("protectors");
+    set("magical_defense", 0);
+    set("magical_offense", 0);
+    delete("roll");
+    delete("prevent_heal");
+
+    if (query("gang")) {
+	if (GANG_D->gang_exists((string)query("gang")) == 0) {
+	    tell_object(TO, "* Your gang no longer exists *\n");
+	    delete("gang");
+	}
+    }
+
+    // Leto added a check for 'leader'
+    // I'd really like to see this done at logoff time.....
+    if(query("leader")) delete("leader");
+    /*
+     * Added demotion from domains that no longer exist.  Blue, 950330.
+     */
+
+}
+
+/*
+ * This function is called when the player enters the game. It handles
+ * news displays, player positioning, and other initial user setups.
+ */
+void setup(int reconnect) {
+    string *news;
+    int i, s;
+
+    /*
+     * Check to see if the user body has a "name"
+     */
+    if (!query("name"))  return;
+    seteuid(getuid());
+
+    /*
+     * Initiate user shell setup protocal
+     */
+    init_setup(reconnect);
+
+    /*
+     * Display last logon and logonsite
+     */
+    if (link_data("last_on"))
+	message(MSG_INFO,
+	  sprintf("\nLast logon:  %s from %s.\n\n",
+	    ctime(link_data("last_on")), link_data("ip")),
+	  this_object());
+
+    /*
+     * Set termtype, info is in connection.c
+     */
+    set("termtype",query_link()->query("termtype"));
+
+    debug("Setup: Running the consistency check.\n");
+
+    consistency_check();  // A catch-all to upgrade old users
+
+    debug("Setup: Setting special flags and reading news.\n");
+
+    if (query("inactive"))   delete("inactive");
+
+    CHANNELS_D -> initialize_user();
+
+    if ( !query("cwd") ) set("cwd", "/doc");
+
+    /*
+     * Get the news from the news daemon and put it out line by line
+     * to avoid overloading one write output.
+     */
+    news = explode( (string)MSG_D->display_news(), "\n");
+
+    for (i = 0, s = sizeof(news); i < s; i++)
+	message(MSG_INFO, news[i] + "\n", this_object());
+
+    if (query("hushlogin")) { complete_setup(); return; }
+#ifdef NO_LOGIN_PAUSE
+    complete_setup();
+    return;
+#endif
+
+
+    if (query("busy"))
+	message(MSG_INFO, "\nYour busy flag is still on!\n", this_object());
+    if (query("hide"))
+	message(MSG_INFO, "You are still hidden. Not announced!\n",
+	  this_object());
+    message(MSG_INFO,
+      "Terminal type is "+query("termtype")+".\n\n"
+      "[Press ENTER to continue]  ",
+      this_object());
+
+    input_to("complete_setup",2, reconnect);
+
+    return;
+}
+
+/*
+ * Complete remainder of character setup after NEWS
+ * has been read by the entering player
+ */
+static varargs void complete_setup (string str, int reconnect) {
+    object ghost;
+    string temp;
+    mixed student_time;
+
+    /*
+     * This is here to permit an admin to shut down the game from the
+     * "Press ENTER to continue" prompt. Sometimes this is helpful if there
+     * is an object that is interfering with commands or otherwise wedging
+     * the game, but will go away if the game is reset. It's not a security
+     * problem because only admins can use it, nd they could just log in
+     * and use the shutdown command anyway...;)
+     */
+#ifdef SAFETY_SHUTDOWN
+    if (adminp(getuid(this_object()))) {
+	if (str=="shutdown") {
+	    CMD_SHUTDOWN->cmd_shutdown("0 because safety shutdown invoked.");
+	}
+    }
+#endif
+
+    message(MSG_INFO, "\n", this_object());
+
+    link->set("last_on", time());
+    link->set("ip", query_ip_name(this_object()));
+
+    set("reply", 0);
+    set("wreply", 0);
+
+    debug("Complete_setup: Moving to the start location.\n");
+
+    if (!reconnect) {
+	temp = getenv("START");
+	if (!(temp && stringp(temp) && move(temp) == MOVE_OK)) {
+	    temp = query("start_location");
+#ifdef REAPPEAR_AT_QUIT
+	    if (!(temp && stringp(temp) && move(temp) == MOVE_OK)) {
+		if (wizardp(this_object()) )
+		    move(START);
+		else
+		    move(WIZHALL);
+	    }
+#else
+	    if (wizardp(this_object()))
+		move(WIZHALL);
+	    else
+		move (START);
+#endif
+	    //   if (query("dying")) this_object()->move(DEATH_ROOM);   
+	}
+    }
+
+    call_out("save_me", 1);
+
+    ANNOUNCE->announce_user(this_object(), reconnect);
+
+    /*
+     * This is commented out because of a problem with socket handling
+     * by some versions of UNIX. Basically, if you make the call to USERID_D,
+     * then the driver will call back to the user's host machine and ask for
+     * the user's account name. Under some OS's (Ultrix and HP_UX to name two,
+     * but there may be more) if the query returns "Host is unreachable", eg if
+     * there is a firewall machine between the driver and the user's machine,
+     * then the driver will break the user's connection, and anyone from that machine
+     * will be unable to play the MUD.
+     * You can undefine this at your own risk, but you'll be cutting off anyone
+     * from a protected site, which means most .com addresses and a fair
+     * smattering of other hosts, if your OS behaves this way. TMI-2's host
+     * runs Ultrix, so we leave it commented out. A good 90% of hosts don't
+     * support the user name query protocol anyway, so we're not losing that
+     * much. It's your decision if you want to get the names of the other 10%
+     * of users, or leave it commented out...
+     */
+    //  USERID_D->query_userid();
+
+    debug("Complete_setup Checking to see if user is dead.\n");
+
+    if (link_data("dead")) {
+	ghost = create_ghost();
+	move( VOID );
+	set_temp("force_to_look", 1);
+	ghost->force_me("look");
+	set_temp("force_to_look", 0);
+	message(MSG_INFO, "\nYou suddenly realize that you are still a ghost.\n",
+	  ghost);
+	message(MSG_MOVEMENT, sprintf("%s enters the game.\n", query("cap_name")),
+	  environment(ghost), ({ ghost }));
+	remove();
+	return;
+    }
+
+    if (visible(this_object()))
+	message(MSG_MOVEMENT, query("cap_name") + " enters the game.\n",
+	  environment(), this_player());
+
+#ifdef LOGIN_LOG
+    log_file(LOGIN_LOG, CAP_NAME + ": logged in from " +
+      query_ip_name(this_object()) + " [" +
+      extract(ctime(time()), 4, 15) + "]\n");
+#endif
+
+    set_temp("force_to_look", 1);
+    command("look");
+    set_temp("force_to_look", 0);
+
+    student_time = STUDENT_D->query_time_left(query("name"));
+
+    if (student_time != -1) {
+	if (student_time<0)
+	    message(MSG_SYSTEM,
+	      sprintf("\n%s\n\n",
+		blink(" [WARNING:  Your time period as a student has"
+		  " ended.  You should copy any files\n"
+		  "  you want to keep using ftpd.  "
+		  "Type \"help ftpd\" if you need to.]")),
+	      this_object());
+	else
+	    message(MSG_SYSTEM,
+	      "\n [You have " + bold(format_time(student_time, 1)) +
+	      " left as a student]\n\n",
+	      this_object());
+    }
+
+// Put .login stuff here
+
+    debug("Complete_setup: Setup complete.\n");
+}
+
+/*
+ * This function is called cyclically to save the user data
+ * periodically, if AUTOSAVE is defined.
+ */
+static void autosave_user() {
+
+    remove_call_out("autosave_user");
+    call_out("autosave_user", AUTOSAVE);
+
+    if (!wizardp(this_object()))
+	message(MSG_INFO, "Autosave.\n", this_object());
+
+    save_me();
+}
+
+void heart_beat() {
+    int age;
+
+    continue_attack();
+    unblock_attack();
+    heal_up();
+
+
+
+#ifdef IDLE_DUMP
+    if (this_object() && interactive(this_object()) &&
+      !adminp(this_object())) {
+
+	if (query_idle(TO)==(IDLE_DUMP-(5*60)))
+	    tell_object(TO, wrap("If you idle for 5 more minutes, "+
+		"you'll be forced to quit.") );
+
+	if (query_idle(this_object()) > IDLE_DUMP)
+	    call_user_dump("idle");
+    }
+#endif
+
+    /*
+     * Add to the user's online age total.
+     */
+    age = query("age");
+
+    if (!query_temp("last_age_set"))
+	set_temp("last_age_set", time());
+
+    age += (time() - query_temp("last_age_set"));
+    set_temp("last_age_set", time());
+    ob_data["age"] = age;
+
+    if ((!member_group(geteuid(this_object()), "adminaccess")) &&
+      ((int)query("invisible")>2))
+	set("invisible", 2);
+
+    PROPERTY_D->fix_masscap(this_object());
+}
+
+
+/*
+ * This function returns whether the user is linkdead or not.
+ */
+nomask int query_linkdead() {  return !interactive(this_object());  }
+
+static
+void net_dead() {
+
+    save_data();
+    message(MSG_MOVEMENT,(string)query("cap_name") + " has gone net-dead.\n",
+      environment(), this_object());
+    //  check_team();
+    PARTY_D->check_party(this_object());
+    ANNOUNCE->announce_user(this_object(), 3);
+    //  CMWHO_D->remove_user(this_object());
+    set_heart_beat(0);
+
+    TO->set("restart_room", base_name(environment(TO)) );
+    TO->move(LINKROOM);
+
+#ifdef LINKDEAD_DUMP
+    call_out("call_user_dump", LINKDEAD_DUMP, "linkdead");
+#endif
+
+#ifdef NETDEAD_LOG
+    log_file(NETDEAD_LOG, LINK_CAP_NAME + ": net-dead from " +
+      query_ip_name(this_object()) + " [" +
+      extract(ctime(time()), 4, 15) + "]\n");
+#endif
+
+    link->remove();
+}
+
+void restart_heart() {
+    USERID_D->query_userid();
+    set_heart_beat(1);
+    set("inactive", 0);
+    remove_call_out("call_user_dump");
+
+    if (query("restart_room") &&
+      move((string)query("restart_room"))!=MOVE_OK)
+	move(VOID);
+    else
+	delete("restart_room");
+
+    message(MSG_MOVEMENT, query("cap_name")+" has reconnected.\n",
+      environment(), this_object());
+    message(MSG_MOVEMENT, "Reconnected.\n", this_object());
+    ANNOUNCE->announce_user(this_object(), 2);
+
+#ifdef RECONNECT_LOG
+    log_file(RECONNECT_LOG, CAP_NAME + ": reconnected from " +
+      query_ip_name(this_object()) + " [ " +
+      extract(ctime(time()), 4, 15) + "]\n");
+#endif
+}
+
+void call_user_dump(string type) {
+    if (this_player() && this_player() != this_object())  return;
+    message(MSG_SYSTEM, "\nSorry, you have idled too long.\n", this_object());
+
+    if (environment()) {
+	if (type == "linkdead")
+	    message(MSG_MOVEMENT,
+	      sprintf(
+		"Space warps and twists, sucking "
+		"%s into a nearby vortex.\n", query("cap_name")),
+	      environment(), this_object());
+	else
+	    message(MSG_MOVEMENT,
+	      sprintf("%s has idled too long.\n", query("cap_name")),
+	      environment(), this_object());
+    }
+
+    move("/d/Prime/Central/room/pawnshop");
+    message(MSG_MOVEMENT, "A spacial vortex opens up and "+
+      "spits out "+TO->query("cap_name")+".\n", environment(), TO);
+    command("sell all");
+    quit();
+}
+
+int set_xpv() {
+    return PROPERTY_D->calc_xpv(TO, 0);
+}
+
+string query_short() {
+    if (query("name") == "noname")  return "Noname";
+
+    if (!interactive(this_object()))
+	return ("An obsidian statue of "+query("title"));
+
+    if (query("inactive"))
+	return query("cap_name") + " is presently inactive";
+    else if (this_player() && attackers && sizeof(attackers) &&
+      (attackers[0]) && attackers[0]->query("name") &&
+      environment(this_player()) == environment(this_object()))
+	return query("cap_name") + " is attacking " +
+	capitalize((string)attackers[0]->query("name")) + ".";
+    else if (query_idle(this_object())>300) return query("title")+" (idle)";
+    return query("title");
+}
+
+string query_title() {
+    string str;
+    string tmp;
+
+    str = getenv( "TITLE" );
+    tmp = query("cap_name");
+    if (!tmp) tmp = "Noname";
+
+    if (!str) str = "$N the Unskilled Citizen ($A)" ;
+
+    if (strsrch(str, "$N") == -1) str = tmp + " " + str;
+    else str = replace_string(str, "$N", tmp);
+
+    if (query("invisible"))
+	tmp = "invisible";
+    else 
+	tmp = query_align();
+
+    if ( wizardp(TO) || wizardp(TP) ||
+      tmp=="invisible" || TP->query("know_align") )
+	str = replace_string(str, "$A", tmp);
+    else
+	str = replace_string(str, " ($A)", "");
+
+    return str;
+}
+
+/*
+ * not in use anymore?
+ */
+nomask void catch_msg(object source, string *msg) {
+    int i, s;
+
+    for (i = 0, s = sizeof(msg); i < s; i++)
+	receive(msg[i]);
+}
+
+void hide(int i) {
+    set_hide(i);
+}
+
+/*
+ * support for debugging an error that a user encounters during this login
+ */
+private static mapping last_error;
+
+void set_error(mapping m) {
+    if (previous_object() != master())
+	return;
+    last_error = m;
+}
+
+mapping query_error() {
+    if (file_name(previous_object()) == CMD_DBXFRAME ||
+      file_name(previous_object()) == CMD_DBXWHERE)
+	return last_error;
+    else
+	message(MSG_SYSTEM, "No permission to query error!", this_player());
+}
+
+/*
+ * this driver apply is called when the user's environment is being
+ * destructed; move the player to a safe place, or end up in limbo
+ */
+int move_or_destruct(object ob) {
+    object old_env = environment();
+
+
+    if (origin() != ORIGIN_DRIVER)  return 0; // I guess 0 Leto
+    if (!ob && old_env != find_object(VOID))
+	ob = find_object(VOID);
+    if (!ob && old_env != find_object(WIZHALL))
+	ob = find_object_or_load(WIZHALL);
+    if (!ob) {
+	/*
+	 * This is bad.  Try to save them anyway.
+	 */
+	ob = clone_object("/std/room");
+	if (!ob) {
+	    /*
+	     * we did our best ...
+	     */
+	    return 1;
+	}
+	ob->set_short("A Temporary room");
+	ob->set_long("Something really nasty happened.\n");
+	ob->set("light",1); // Nice to actually see the short and long;)
+    }
+    move(ob);
+    if (environment() == old_env) {
+	/*
+	 * we HAVE to move or we get dested.  Override weight checks etc
+	 */
+	move_object(ob); // Leto (no longer need to pass this_object as arg)
+    }
+    return 0;
+}
+
+int query_natt() {
+    return PROPERTY_D->query_natt( this_object() );
+}
+
+/* EOF */
+

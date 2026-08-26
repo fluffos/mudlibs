@@ -1,0 +1,132 @@
+// _equip.c
+// Command to equip armor
+// Mobydick@TMI-2, 9/17/92
+// 10 Oct 97  Cyanide added "equip all" option.
+// 12 Oct 97  Cyanide added size stuff's. If an armor's "size" value is more
+//            than one greater or less than the wearers, they'll get a failure
+//            message. "Size" of -1 will magically fit any wearer, and 0 or 
+//            undefined defaults to 6 (human-sized).
+
+#include <mudlib.h>
+
+int equip_func (object, int);
+
+inherit DAEMON ;
+
+int cmd_equip(string str, int silent) {
+    object obj, *stuff = all_inventory(this_player());
+    int i, num = 1, counter = 1;
+
+    if (!str || str == "") str = "all";
+    sscanf(str, "%s %d", str, num);
+
+    if (str=="all") {
+      counter = 0;
+      write("You attempt to equip everything.\n");
+	  for (i=0;i<sizeof(stuff);i++) {
+	    if (stuff[i]->query("armor_object"))
+          if (equip_func(stuff[i], silent))
+            counter++;
+      }
+      if (counter)
+        write(counter+" items equipped.\n");
+      else
+        write("You have nothing else you can equip.\n");
+    } else {
+      obj = present (str,this_player()) ;
+      if (!obj) {
+	    notify_fail ("You don't possess a "+str+".\n") ;
+	    return 1 ;
+	  }
+	  counter = 0;
+      for (i=0;i<sizeof(stuff);i++) {
+        if (stuff[i]->id(str)) counter++;
+	    if (counter==num) {
+	      equip_func(obj, silent);
+	      return 1;
+	    }
+      }
+    }
+
+    return 1;
+}
+
+int equip_func (object obj, int silent) {
+  mapping armor ;
+  object fwep, swep; 
+  string type, str;
+  int Class;
+
+  if (undefinedp(obj->query("armor_object"))) {
+    notify_fail ("That isn't armor.\n") ;
+    return 0 ;
+  }
+
+  Class = obj->query("armor") ;
+  if (obj->query("equipped")) {
+
+  // He's already equipping it. Tell him so.
+    write ("You are already equipping it!\n") ;
+    return 0 ;
+  }
+
+  Class = (int)obj->query("size");
+  if (!Class) {
+    obj->set("size", 6);
+    Class = 6;
+  }
+ 
+  if (Class == -1) {
+    write(wrap(capitalize(obj->query("short")) + " seems to magically "+
+      "size itself to fit you!"));
+  } else {
+    if (Class < (int)this_player()->query("size")-2) {
+      write("That armor is too small for you to use.\n");
+      return 0;
+      }
+    if (Class > (int)this_player()->query("size")+2) {
+      write("That armor is too large for you to use.\n");
+      return 0;
+    }
+  }
+
+  // If this is a shield, check his weapons and make sure he has a free arm.
+    type = obj->query("type") ;
+    if (type=="shield") {
+      fwep = this_player()->query("weapon1") ;
+      swep = this_player()->query("weapon2") ;
+	  if (swep) {
+	    write ("You can't use the shield and two weapons at the same time.\n") ;
+	    return 0 ;
+      }
+      if (fwep && (int)fwep->query("nosecond")==1) {
+	    write ("You must have a free arm to use the shield.\n") ;
+	    return 0 ;
+	  }
+    }
+    armor = this_player()->query("armor") ;
+    if (armor && member_array(type, keys(armor))!=-1) {
+	  write ("You are already wearing armor of type "+type+".\n");
+	  return 0 ;
+    }
+
+    if(!silent) {
+	  write ("You equip "+obj->query("short")+".\n") ;
+	  say (this_player()->query("cap_name")+" equips "+obj->query("short")+".\n") ;
+    }
+    this_player()->set("armor/"+type,obj->query("armor")) ;
+    this_player()->set("magic_armor/"+type,obj->query("bonus")) ;
+    obj->set("equipped",1) ;
+    str = obj->query("equip_func");
+    if(str)  call_other(obj, str);
+    this_player()->calc_armor_class() ;
+    return 1 ;
+}
+
+string help() {
+    return("Syntax: equip <armor>\n\n"+
+      "The equip command lets you wear armor. There are several types of armor\n"+
+      "(suit, shield, helmet, etc) and you may equip one of each type. Equipping\n"+
+      "a shield will prevent you from using two weapons, or a two-handed weapon.\n"+
+      "\nSee also: wield\n") ;
+}

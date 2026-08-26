@@ -1,0 +1,5 @@
+#define TD "/u/c/chronos/thunderdome/"
+#define SAVE_FILE TD+"data/td_d"
+#define TD_D TD+"td_d"
+#define OB_ROOM TD+"ob"
+#define TD_START TD+"start"

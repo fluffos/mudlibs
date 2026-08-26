@@ -1,0 +1,14 @@
+#define WIZ_PATH "/d/class/wizard/"
+
+#define MAGE WIZ_PATH+"general/"
+#define DIVINER WIZ_PATH+"diviner/"
+#define INVOKER WIZ_PATH+"invoker/"
+#define NECRO WIZ_PATH+"necromancer/"
+
+#define WIZARD_XP ({ 0, 0, 2500, 5000, 10000, 20000, 40000, 60000, \
+  90000, 135000, 250000, 375000, 750000, 1125000, 1500000, 1875000,\
+  2250000, 2625000, 3000000, 3375000, 3750000, 4225000, 4800000,   \
+  5475000, 6250000, 7125000, 8100000, 9175000, 10350000, 11625000,   \
+  12950000, 15000000 })
+
+#define WIZ_HP_ROLL random(4) + random(4) + 2

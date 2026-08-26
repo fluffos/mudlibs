@@ -1,0 +1,5 @@
+#define AROOM "/u/d/darkgoth/room/town/"
+#define WEAP "/u/d/darkgoth/room/town/item/"
+#define AITEM "/u/d/darkgoth/room/town/item/"
+#define ARM "/u/d/darkgoth/room/town/item/"
+#define MOM "/u/d/darkgoth/room/town/monster/"

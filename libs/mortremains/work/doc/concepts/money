@@ -1,0 +1,192 @@
+   This document explains how the various objects and commands in the
+MudOS mudlib that deal with money and value work.
+
+   The MudOS money system supports multiple coin types, and you can freely
+create coins of any type you want, as long as each type is identified by
+a unique string ("gold", "silver", etc.). This can be handy for quests or
+other applications where you want a unique coin type to be available. 
+   The amount of money a player has is stored in a property called "wealth."
+Wealth is a mapping, where the keys are the types of coins and the values
+are the amounts of each. Thus, the player's wealth might be:
+	([ "gold" : 100, "silver" : 50 ])
+if the player had 100 gold and 50 silver.
+   You can find out how much of a particular coin type the player has by
+calling query("wealth/<type>", eg query("wealth/gold") to find out how many
+gold he has. You can find out what kinds of coins he has by creating a
+mapping called foo, setting foo=query("wealth") and examining the keys
+of foo. You can look at the score command to see how this is done.
+
+   Piles of coins are clones of the standard object coins.c. When a player
+drops coins, or when coins are given to an NPC, a copy of coins.c is cloned
+and its two lfuns are called. These lfuns are set_type(), which sets the
+type (gold, silver, etc.) and set_number() which sets the number of coins
+in the pile. The coin's short description only reveals the type, and the
+long description only reveals the approximate number. If the player picks
+up the pile he can find out exactly how many are in it, or he can "count"
+the pile. When a coin pile is moved to a new environment, it scans that
+environment to see if another pile of the same type already exists. If it
+does, the piles are merged. The encumbrance of a pile of coins is equal to
+the number of coins in it. (This imposes the restriction that all coin types
+weigh the same amount.) Coins.c defines the "money" property as a recognition
+that the object is a pile of coins. Other objects should _not_ define this
+property unless they also define query_type() and query_number(), and are
+intended to be put into the player's purse rather than his inventory. (You
+should not need to do this except for special cases, however.)
+   The coin object redefines the move() function to handle two special
+cases. The first of these is the presence of another pile of coins in
+the destination of the same type. If a pile moves into a room containing
+another pile, the incoming pile adds its number to the number of the
+present pile and then deletes itself. This way, only one pile of coins of
+each type will ever exist in a given room.
+  Second, if the pile of coins is moving onto a player, we check to make
+sure he can carry the pile. If not, we return an error message. If he can,
+we add the coins to his wealth property, decrease his remaining capacity,
+and destruct the object.
+  The important point to get is that if you give a player money, you should
+do so by cloning the coins object, setting the type and number, and moving
+the coins onto the player. This will automatically take care of all the
+weight checks, and the object will destruct itself if the move is successful.
+When you take money away from a player, however, you should just decrease
+the wealth property and increase the capacity yourself, since he can't
+violate his weight restrictions this way. Examples of how to handle moving
+money to and away from a player are found in the shop and bank, and in the
+_get, _drop, and _give commands.
+  In particular, you shouldn't try to use the scroll or other wiztool
+to give yourself money: you don't want to try getting your encumbrance
+and so forth set properly. What you should do instead is clone off a copy
+of /obj/money_maker and use that to "vend" yourself some coins of your
+favorite type. They will appear in your current environment, and when you pick
+them up, all the property setting will be taken care of automatically. Be
+careful not to let this tool fall into player hands, though...
+
+   The relative value of different kinds of coins is controlled by a single
+file called coinvalue.c. Coinvalue.c keeps two reference arrays: one a list
+of the types of coins and the second an array of their relative values. The
+least valuable coin has value 1; each other coin has value equal to the
+number of least valuable coins for which it can be exchanged. The standard
+coinvalue.c comes with four coin types: platinum, gold, silver, and copper.
+Copper is the least valuable, having the value 1, and the other coins have
+values 1000, 100, and 10 respectively. Thus, 1 platinum = 10 gold = 100
+silver = 1000 copper. The standard object coinvalue.c has two lfuns, one of
+which returns the list of types and the other returns the value of a specific
+type. This file should be inherited by any object which may handle different
+kinds of coins; ie. banks, shops.
+   It is possible to have types of coins in the game which are not listed
+with coinvalue.c. The only problem you will have is that these types of
+coins cannot be converted into other kinds of coins, either to make change
+or to make purchases. However, you can still use them for exact change
+transactions. It is possible to have several different coinvalue.c files
+each with a different list of convertable coins: for example, one exchange
+might convert between gold and silver while another converted between
+gold and platinum. However, you must make sure that two coins exchange at
+exactly the same value in all versions of coinvalue.c, otherwise clever
+players can create infinite amounts of money by buying low and selling
+high at the two exchanges. The standard file exchange.c is an example
+money exchange.
+
+   The value of an object is controlled by the "value" property, which each
+item should set in its create procedure. Objects which have no value property
+or whose value is 0 cannot be sold in the standard shop. "value" is set to a
+two element array, the first element being the number of coins and the second
+being the type. For example, a sword worth 25 gold pieces should do this:
+    set ("value", ({ 25, "gold" }) ) ;
+The value of an object can be measured by calling query("value"), and
+checking the appropriate array element.
+   The file shop.c is an example shop. Each shop has its own local storeroom
+which is a clone of the file storeroom.c, and also hooks up to a central
+storeroom accessed by all shops. This reduces the number of objects you
+need to have in storerooms: common objects like torches and swords should
+be put in the common storeroom, which is the file warehouse.c. Warehouse.c
+defines a list of objects to be cloned into the central storeroom at each
+reset. In addition, to create variety each shop can also clone objects into
+its own local storeroom. To create specialty shops, you can disconnect the
+shop's access to the central storehouse and only access the local storeroom.
+Objects that are sold to the shop are stored in the local storeroom; this 
+means that they can only be bought from the store where they were sold.
+   The shop sells objects for a different value than it buys them for.
+The exact ration between the buy value and the sell value is stored in the
+global constant SHOP_SELL_FRAC which is set in /include/money.h. It comes
+set at 3/4 but you can set it to anything you want. If an object's value is
+stated in a convertable coin other than the lowest one (copper as the mudlib
+comes) then its sale value is calculated in the stated coin and some change
+in the next lower coin. For example, a sword worth 10 gold pieces can be
+sold to a shop for 7 gold pieces and 5 silver pieces. If the object's value
+is stated in copper or in an unlisted coin, then it sells at 3/4 of its 
+value in the stated coin (except that objects worth 1 copper do sell for
+1 copper, and objects worth 1 sludge (or other non-listed coin) sell for
+1 sludge.)
+   The shop will accept coinage other than exact change for purchasing items.
+Consider a player buying an object worth 35 gold pieces. First, the store
+will check to see if the player has 35 gold. If he does not, it next checks
+all higher-valued kinds of coins to see if the player can buy the object
+with either of two combinations: higher coin plus the minumum number of
+lower coin possible and higher coin plus all the player's lower coin. For
+example, in the above case, if the player has 27 gold, the shop will sell
+the sword if the player has 3 platinum and 5 gold, or if he has 1 platinum
+and 25 gold. It will NOT check for 2 platinum and 15 gold: this is one of
+two possibilities where a player may have enough coins to buy the object
+but the store won't sell it to him.
+   If none of the higher-valued coins make an exact change combination, the
+shop next tries the coins lower in value than the coin in which the object's
+value is stated. If the player has enough lower valued coins to make up his
+shortfall in the stated coin, the shop will sell it to him. In the above
+case, the shop will sell it to him for 27 gold and 80 silver, or for 27
+gold and 800 copper.
+   If the player cannot make exact change with lower-valued coins either,
+then the shop will again try higher-valued coins, this time using only the
+high-value coin and making change for the player. For example, if the player
+has 0 gold but has 6 platinum, at this stage the shop will sell it to him
+for 4 platinum and give him 5 gold in change.
+   If none of these methods work, the store will conclude that the player
+doesn't have enough money to buy the object. The other case in which this
+is wrong is if the player has a combination of two coins, not the stated
+coin, which enables him to buy the object. For example, the shop will not
+accept 3 platinum and 50 silver in payment for the 35 gold piece sword. The
+shop also will not detect combinations of three or more coins that would make
+the necessary amount, for example 2 platinum, 10 gold, 40 silver, and 100
+copper. Coders interested in extending the shop to handle these cases are
+invited to drop by TMI and chat with Mobydick, but are warned that the
+general solution to the problem is extremely difficult due to the large
+number of possible combinations adding up to N of cointype X in a system
+where the total number of coins is not predetermined.
+
+   Banking services are provided by the files bank.c and bank_card.c. Bank.c
+is a room which allows players to open bank accounts for a fee of 25 gold
+coins (you can easily change this), in return for which they receive a bank
+card. The bank also defines withdraw and deposit actions which allow players
+to add and subtract money to/from their account. The amount of money each
+player has is stored in the bank_card in the property "wealth" which is
+exactly like the player object property; a mapping of coin types and amounts.
+Thus, banks can also handle non-standard coins which are not listed in
+coinvalue.c. The bank card is autoloading and preserves the player's balance
+across logins. It also defines out the move procedure so that bank cards
+cannot be dropped or given away except by the owning player. It defines
+the balance command which shows the player his bank balance. This means that
+the player can check his balance anywhere in the mud: if you wish to restrict
+this so that balance can only be checked in the bank, take the balance
+function out of bank_card.c and put it into bank.c.
+   The bank will also handle the case of different coinages of equal value.
+If the player wants to withdraw 50 gold, the bank will permit this if the
+player has enough of any one type of coin in his account to match the amount,
+ie he may withdraw 50 gold if he has 5 platinum, 50 gold, 500 silver, or
+5000 copper. The bank as written will give the player 50 gold pieces regardless
+of which coin is stored in his account, but you can easily alter the code so
+that if he asks for 50 gold and has 5 platinum in his account he gets 
+platinum coins instead of gold, if you so desire. The bank does not handle
+the case of a player withdrawing 50 gold when he has 4 platinum and 100
+silver in the bank. Again, people in extending the bank's flexibility are
+invited to chat with Mobydick but the general solution is somewhat difficult.
+
+   Clever players can use the shop and the bank to change coins. For example,
+a player wishing to change 5 gold into silver can do this: deposit the 5
+gold in the bank, withdraw all his silver from the bank, then withdraw 50
+more silver from the bank. At the shop, he can drop his gold pieces, buy
+an object worth 5 gold for 50 silver, then sell it back for 5 gold. Thus,
+if you want to have the exchange charge a fee for changing coins, you need
+to have the bank charge for withdrawals and have the shop sell for less than
+full value, or you need to have the multi-coin features of the shop and bank
+removed; otherwise your exchange will not get much use as players figure out
+how to avoid paying the fee. The code for the shop and bank indicate which
+lines need to be deleted to remove the multi-coin function.
+
+   Comments and suggestions for improvement to Mobydick@TMI-2.

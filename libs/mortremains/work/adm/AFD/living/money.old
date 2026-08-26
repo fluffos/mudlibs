@@ -1,0 +1,124 @@
+
+/* File:    money.c
+// Creator: Grendel@tmi-2
+// When:    07-15-93
+// The file contains the following functions:
+// int coins_carried() - Retrun total coins carried.
+// int total_wealth()  - Returns wealth in lowest type. (copper)
+// int debit(type,amt) - Debit removes money from object.
+// int credit(type,amt)- Credits adds money to object. 
+// debit and credit return a 0 if unsuccessful.
+*/
+inherit COINVALUE;
+
+mixed query(string what);
+varargs int add(string what, mixed amt, int security);
+varargs int set(string what, mixed amt, int security);
+
+nomask int coins_carried() {
+        mapping wealth ;
+        string *types ;
+        int i, coins ;
+
+        coins = 0 ;
+        wealth = query("wealth") ;
+        if (!wealth || wealth==([])) return 0 ;
+        types = keys(wealth) ;
+        for (i=0;i<sizeof(types);i++) {
+          coins = coins + wealth[types[i]] ;
+        }
+        return coins ;
+} //end coins_carried
+
+nomask int total_wealth() {
+        mapping wealth ;
+        string *types ;
+        int i, coins ;
+
+        coins = 0 ;
+        wealth = query("wealth") ;
+        if (!wealth || wealth==([])) return 0 ;
+        types = keys(wealth) ;
+        for (i=0;i<sizeof(types);i++) {
+          coins = coins + wealth[types[i]]*coinvalue(types[i]) ;
+        }
+        return coins ;
+} //end total_wealth
+
+int credit(mapping coins)
+{
+    string *types;
+    int tot_coins,i;
+
+    types = keys(coins);
+
+    for(i=0;i<sizeof(types);i++) {
+        tot_coins += coins[types[i]];
+    } // count coins
+    if(tot_coins<=0 || query("capacity")< tot_coins )
+        return 0; // too many or invalid amount
+    for(i=0;i<sizeof(types);i++) {
+        add("capacity",-coins[types[i]]);
+        add("wealth/"+types[i],coins[types[i]]);
+    } // add coins
+    return 1;
+}
+
+int debit(mapping coins)
+{
+        int i,j,amtused,cpcost,*cvals;
+        string *types,*ctypes,*dtype;
+        mapping wealth ;
+
+        wealth = query("wealth");
+        types  = keys(wealth) ;
+        dtype  = keys(coins);
+        ctypes = cointypes();
+       cvals = coinvals();
+
+        for(i=0;i<sizeof(dtype);i++) {
+           cpcost += cvals[member_array(dtype[i],ctypes)]*coins[dtype[i]]; 
+        } // total copper cost
+
+       if (total_wealth()<cpcost) return 0;
+
+        //reduce asked for currencies first
+        for(i=0;i<sizeof(dtype);i++) {
+           amtused=coins[dtype[i]];
+           if (wealth[dtype[i]] < amtused) amtused=wealth[dtype[i]];
+           cpcost -= amtused*cvals[member_array(dtype[i],ctypes)]; 
+           add("capacity",amtused);
+           wealth[dtype[i]] -= amtused;
+        } 
+        
+        if(cpcost!=0) {
+
+        // now loop through the rest until paid
+        for (i=0;i<sizeof(ctypes);i++)
+        {
+          if(cpcost <0) { //break a large bill  
+                for(j=i;j<sizeof(ctypes);j++) {
+                  amtused = (-cpcost)/cvals[j];
+                  cpcost += amtused * cvals[j];
+                  add("capacity",-amtused);
+                  wealth[ctypes[j]] += amtused;
+                }
+          } 
+          if(cpcost==0) continue;
+          amtused = cpcost/cvals[i];
+          if (amtused * cvals[i] < cpcost) amtused++;
+          if (amtused > wealth[ctypes[i]]) amtused = wealth[ctypes[i]];
+          cpcost -= amtused * cvals[i];
+          add("capacity",amtused);
+          wealth[ctypes[i]] -= amtused;
+        } // main loop
+        } //if cpost !=0
+
+        // set new wealth
+        for (i=0;i<sizeof(ctypes);i++)
+        {
+          set("wealth/"+ctypes[i],wealth[ctypes[i]] );
+        }
+        return 1;
+}
+

@@ -1,0 +1,6 @@
+#define BASE "/d/Prime/HillVally/"
+#define RM BASE+"room/"
+#define WEAP BASE+"weap/"
+#define ARM BASE+"arm/"
+#define ITEM BASE+"item/"
+#define MON BASE+"mon/"

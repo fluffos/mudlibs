@@ -1,0 +1,6 @@
+#define JUNGLE "/d/Dark/Jungle/"
+#define ROOMS(x) JUNGLE + "jrooms/" + "x"
+#define MON(x) JUNGLE + "jmons/" + "x"
+#define OBJ(x) JUNGLE + "jobjs/" + "x"
+#define WEAPONS(x) JUNGLE + "jweapons/" + "x"
+#define ARM(x) JUNGLE+"jarmors/" + "x"

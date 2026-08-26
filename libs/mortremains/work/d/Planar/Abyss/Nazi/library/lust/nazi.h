@@ -1,0 +1,7 @@
+#define NAZI "/d/Planar/Abyss/Nazi/"
+#define NAZI_ROOM NAZI+"room/"
+#define LIBRARY NAZI+"library/"
+#define NAZI_MON NAZI+"mon/"
+#define NAZI_OBJ NAZI+"obj/"
+#define LUST LIBRARY+"lust/"
+#define POOL NAZI+"cyberparty/"

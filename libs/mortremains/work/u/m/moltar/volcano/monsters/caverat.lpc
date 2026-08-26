@@ -1,0 +1,23 @@
+inherit "/std/monster" ;
+void create () {
+ object ob1, ob2, ob3 ;
+::create() ;
+ seteuid(getuid()) ;
+set_level(5);
+set ("short", "Cave Rat") ;
+ set("long", "Big Mean rat with big pointy teeth.\n") ;
+set ("id", ({ "rat", "vermin" }) ) ;
+set ("capacity", 1000) ;
+set ("volume", 1000) ;
+set ("mass", 300) ;
+ set ("bulk", 25) ;
+ set_name("rat") ;
+enable_commands() ;
+set_living_name("Cave rat") ;
+ enable_commands() ;
+set("natt", 1);
+set ("damage", ({15, 35}));
+set ("armor_class", 3);
+set ("weapon_name", "teeth") ;
+ set_verbs( ({ "nip", "scratch", "bite" }) ) ;
+set("wealth", random(5) );

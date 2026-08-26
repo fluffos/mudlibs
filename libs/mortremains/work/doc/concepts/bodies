@@ -1,0 +1,87 @@
+The TMI-2 mudlib no longer has a single user object, as LP 3 mudlibs did.
+Instead, the old user object is divided into two objects, the connection
+object and the body object. The connection object holds information about
+the person playing the game: real name, email address, IP name, last on
+time, and wizard status. The body object holds information about the
+game character that person is playing: hit points, skills, possessions,
+wealth, and so on.
+The reason for using this new system is that it permits a user to switch
+game identities quickly and easily. Because information on the real person
+is kept seperately from the body, all that has to be done is to change the
+pointer pointing to the user's old body to the new body, and to exec the
+link into the new body.
+The TMI-2 mudlib comes with three available bodies: the standard user
+body, the standard monster body, and the ghost body. Death is now handled
+by a body swap, which is considerably more secure, more efficient, and
+more flexible than the old shadowing method. Wizards can also swap their
+connection into any available monster, making it possible for wizards to
+control NPC or real monsters. Swapping from one user into another is also
+made easier and more flexible with this system.
+You can add more bodies to the system simply by coding them. For example,
+you might code seperate bodies for each race in your game. This would
+permit you to customize any of the code found in the user object to each
+race: combat formulas, descriptions, communications, anything you like.
+Because you don't have to write switch statements, race-specific code
+can be written much more cleanly and will run much faster than can be done
+using the single user object method. You can also introduce any other kind
+of user differentiation you like. For example, you might code guilds using
+bodies, having a fighter body, a thief body, a magic-user body, etc.
+
+The core of the system is the connection object. When a new telnet link
+is received, the login daemon (/adm/daemons/logind.c) clones a new
+connection object and, after veryifying that the user has entered a
+correct password, swaps the user's connection into the connection object.
+The login daemon then locates the user's body file, restores it, sets the
+appropriate pointers, and execs the connection into the body.
+The connection object stores a pointer to the body in its "body" property.
+Similarly, the body stores a pointer called "link" which points back to
+the connection object. The function set_link() is used to set this pointer
+in the body object, and the function query_link() returns a copy of it.
+The function link_data() allows you to set a property in the connection
+object given a pointer to the body object. (This is done because the
+users() efun returns a pointer to the interactive object, which is always
+the body. Thus, usually one needs to access the connection object via the
+body, rather than the other way around.) The connection object saves its
+data to the file /data/std/connection/f/foo.o, where foo is the name of
+the user: the body object saves its data to /data/std/user/f/foo.o. The
+data saved is always that of the user body, rather than a monster or
+ghost body.
+Changing bodies is done with the switch_body() lfun defined in the connection
+object. First, you get a pointer to the new body, and set the "new_body"
+property in the connection object. Then you call switch_body(); the
+connection object resets the pointers appropriately, sets the EUID of the
+new body to that of the old body (for security's sake), and calls the
+exec() efun to swap the connection.
+Wizards can make use of the su command to change into a new user body,
+into the body of another user if they know the password, or into the
+body of a monster in the same room as themselves. The su command saves
+the old user body, creates the new user body (unless swapping into a
+monster), destroys the old user body, and transfers the connection into
+the new body. If the wizard is transferring into a new copy of his own
+body, then his items are transferred to the new body along with him.
+If the wizard is swapping out of a monster body, then instead of
+destroying the monster body, the monster is left behind, but it is now
+non-interactive. The wizard has the option of appearing in the same place
+as the new body, or in the start room.
+It is not possible for a player to tell whether a monster is inhabited
+by a wizard or not. Wizards inhabiting monsters will not appear to players
+on the who command - to wizards, they appears as "Foo is inhabiting an orc."
+Wizards inhabiting monsters are marked with [M] on the people command. All
+says and emotes coming from monsters are prefaced with the name of the
+monster and not the wizard; the tell command will work with either the
+wizard's name or the monster's name. All functions of monsters such as
+automatic motion and aggressiveness will continue to work when the monster
+is inhabited, so a wizard can inhabit an aggressive monster without needing
+to remember to attack anyone who enters the room, etc.
+Each body has its own cmd_hook function, which is responsible for
+controlling the command access of the various bodies, and its own
+process_input. Ghost bodies are limited to using the commands in /cmds/ghost;
+you can alter the powers of ghosts by copying commands into this directory
+or removing them. You can also have different versions of the same command
+in /cmds/std and /cmds/ghost: in the basic mudlib, ghosts can move through
+closed doors while users cannot, this being achieved by a change in the
+ghost's version of _go.c. Monsters can access /cmds/std if inhabited by
+non-wizards and may also access /cmds/file and /cmds/xtra if inhabited
+by wizards. In addition, some features such as nicknames and history
+processing are only available in the user body. (This is to ensure that
+wizards do spend _some_ time in their own bodies!)

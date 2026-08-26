@@ -1,0 +1,95 @@
+The TMI-2 mudlib comes with a daemon process that keeps track of a game
+calendar and time and game weather. The actual computing is done by the
+file /adm/daemons/weather_d.c. Several data files in /adm/etc define the
+configuration of the year and the weather patterns.
+The daemon keeps track of the current time and weather, and makes announcements
+to selected objects when they change. Any room may call the set_outside()
+lfun, defined in /std/room.c, to make itself an outdoor room. When the
+weather changes or the day phase changes, announcements are made to all
+outside rooms; in addition, when using the look command in an outdoor
+room the player will get information on the time and weather. Other objects
+can also request to receive the announcements by calling the function
+request_weather_notices(); they can use receive_message() to catch the
+announcements and respond accordingly. They can call cease_weather_notices()
+to be removed from the list of objects receiving announcements.
+The first thing the daemon does is keep track of the time of day and the
+position of the sun. The length of the day is defined in /include/weather_d.h
+and the day is divided into various phases. Each phase has four items
+associated with it, two integers and two strings. The first integer is the
+length of the phase in real seconds. The second integer is 1 if there is
+sunlight during this phase and 0 if not. The first string is the descrptive
+message to be printed when someone "looks" in an outdoor room during that
+phase (if the weather is clear: see below). The second string is the message
+to be printed at the end of the phase before changing to the next phase.
+The phase data is stored in /adm/etc/daytime.data. The default configuration
+is 8 phases: sunrise, morning, noon, afternoon, sunset, twilight, night,
+and dawn. The default day length is 7200 seconds or two hours of real time.
+There is light in all phases except night.
+The function change_phase() is called at create time and call_out's itself
+to initiate the next phase change. It updates the current phase and prints
+the phase change messages. The function query_current_day_phase() will
+return the look message of the current phase.
+The second thing the daemon does is keep track of the game time and date.
+The file weather_d.h defines START_DAY, START_MONTH, and START_YEAR, which
+are the beginning of time in game time, and START_GAME_TIME which is the
+time() value at which time began. The default start date is Day 1 of the
+first month of year 100. The default START_GAME_TIME is 63117000, which
+corresponds to 0:00:00 January 1 1993. When the daemon is created, it
+gets the current real time from the time() efun and sets the date and
+year appropriately. It also starts the daytime cycle at the appropriate
+moment: time is assumed to have begun at 0:00 game time on the start
+date, with the first day phase beginning at that time. Since sunrise
+is the first phase of day, this means that sunrise occurs each day at
+0:00 game time in the default mudlib. You can alter this by altering
+the order of the phases in daytime.data if you wish.
+The number of days in a month, and the number of months in a year, are
+determined by the file /adm/etc/month.data. The default year contains
+six months; one of 31 days, one of 29 days, and four of 30 days. Thus
+the default year is 180 days. You can changes the number of months, the
+names of the months, and their lengths in days by altering the month.data
+file.
+The function init_game_time() does the initialization of the calendar
+and the daytime phase. The function query_game_time() returns a string
+like the ctime() string giving the current game time.
+The third thing the daemon does is keep track of the phase of the phase
+of the moon. The file moon.data tracks the phases of the moon: each phase
+has an integer which is the number of days in that moon phase, and
+a string which is the message printed when the player looks at the
+night sky. At the end of each day, the change_phase() function calls
+do_day_end which changes the moon phase if necessary. The function
+query_current_moon_phase() returns the string describing the moon's
+current state.
+The fourth thing the daemon does is keep track of the weather. The
+daemon permits a certain number of weather states, eg. sunny, cloudy,
+rainy. With each state are associated 6 pieces of data. Three are
+messages: one is printed when the player looks at the sky, one is
+printed if the weather changes to that state from a state of better
+weather, and one is printed if the weather changes to that state from
+a worse state. The file is arranged from best weather states to worse
+weather states, so the "better" message is printed if coming from a
+weather state later in the file and the "worse" message if coming from
+earlier in the file. Two data are integers: one is the length of the
+state in real seconds and the other is 1 if this state is "inclement"
+and 0 if not. An inclement state is one where the sun and moon cannot
+be seen, ie completely cloudy. The last datum is an array of integers
+which represent the chance of changing from the given state into any
+other state, in the order given in the file. Thus, if there are three
+states, and the second state has datum:
+20 50 30
+then when the second state ends, there is a 20 percent chance to go to
+the first state, 50 percent to stay in the second state, and 30 percent
+to go to the third state. No messages are printed if the new state and old
+state are the same.
+The function change_weather() is called at create time and call_outs itself
+so that there is always one instance of it pending. It picks a random number
+from 1 to 100 and makes the appropriate state change based on that random
+number. The function query_current_weather() will return the string that
+describes the current weather state. The function query_weather_message(),
+which is used by the look command, returns a grand summary message which
+gives the day phase state if the weather is clear, the weather string,
+and the moon phase if it is nighttime. Usually you want to use
+this one rather than do the checks yourself.
+The function query_ambient_light() will check the weather and daytime and
+return 1 if there is outdooor light and 0 if not. There is always outdoor
+light in daytime: at nighttime there is outdoor light if the skies are clear,
+otherwise there is not light.

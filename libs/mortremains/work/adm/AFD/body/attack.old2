@@ -1,0 +1,523 @@
+/*
+// Program: /std/body/attack.c
+// Written mostly by Buddha@TMI
+// Originally based on the attack.c found in the mudlib.n,
+// many structural similarites may remain.
+// It is is a part of the TMI distribution mudlib.
+// Please retain this header if you use this file.
+// Much work was done in December of 1991.
+// revised 2-16-92 by Buddha
+// revised again 3-1-92 by Buddha
+// Rewritten to remove the LOC, and to update it for mudlib 0.9, by
+// Mobydick@TMI-2, 9-21-92
+// Added some stuff to make monsters remember and attack old opponents.
+// Mobydick, 2-3-93.
+// Added receive_damage() and receive_healing() systems, Watcher 3-27-93
+// (02-15-95) Added special damage types to the receive_damage() system.
+//
+*/
+ 
+
+// Basic structure:
+// The function kill_ob is used to initiate combat. The kill command calls
+// it in any monster or player entering combat, as do the combat spells and
+// other nastiness. It also turns on a monster's heartbeat if that is
+// necessary.
+// The heart_beat calls the continue_attack function. This function checks
+// to see if the monster is dead and if so, starts the death sequence. It
+// then checks the list of current opponents and removes any that are dead
+// or otherwise out of the MUD. Opponents that have left the room are moved
+// onto the "will_kill" list. It then checks to see if spellcasting or
+// other activity has blocked the attack. If not, it calls execute_attack
+// which does the actual attack against the first attacker on the list.
+// The functions continue_attack and execute_attack are defined seperately
+// in each body.
+// (05-29-96) Chronos finally added a header for all the changes that
+//            have been made to this file over the past 2 years. :)
+//  New - Alcohol system is in, drunk people stumble around and
+//  all that jazz.  Food system is in, you don't get hungry per se,
+//  but you do digest  (make room for more) .. Hit point monitoring
+// can be activated by setting monitor to 1 or 2 in user bodies.
+// On this actual day, Chronos rewrote the wimpy function, since
+// it was a piece of shit and was buggy.  Now it's cool.  Now I'm
+// cool.  Cool.
+
+#include <config.h>
+#include <stats.h>
+#include <healing.h>
+#include <mudlib.h>
+
+inherit SECURE_OBJECT ;
+ 
+// Prototypes for things that come in through the body object.
+
+varargs set(string prop, mixed arg, mixed security) ;
+static object *attackers, target, *will_attack; // wombled by buddha
+static int any_attack ;
+mixed link_data(string what);
+void heartbeat();
+ 
+static string qs ;
+private static int heal_time ;
+
+// These variables are used in execute_attack() but are declared here to get
+// around the limit on number of variables declared in the function. Kludge.
+
+static string *vb, *vb2 ;
+static int dmin, dmax, damage ;
+static string weapontype ;
+static int skill_improve_prob ;
+
+void run_away();
+int kill_ob (object victim) ;
+void set_verbs(string *verbs) ;
+void set_verbs2 (string *verbs) ;
+string *get_verb() ;
+void cease_all_attacks();
+void monitor();
+void continue_attack() ;
+void heal_up();
+
+// This function handles the damage calls from battle. It only accepts
+// positive damage calls. receive_healing() should be used for healing.
+ 
+int receive_damage(int damage, string type) {
+   int dam;
+   set ("last_attacker", previous_object()) ;
+   if (type) {
+     switch(type) {
+       case "fire":
+         if (query("race")=="troll") {
+           damage = damage * 4;
+           TO->command("scream in pain") ;
+          }
+         if (query("race") == "skaven") damage = damage + 5;
+         break;
+       case "cold" :
+         if (query("race") == "troll") damage = damage / 2;
+         if (query("race") == "skaven") damage = damage / 2;
+        break;
+       case "electricity" :
+         if (query("race") == "troll") damage = damage / 2;
+        break;
+       case "acid" :
+         if (query("race") == "troll") damage = damage * 2;
+         break;
+       case "magic" :
+         if (query("race") == "elf") damage = damage / 2 ;
+         if (query("race") == "drow") damage = damage /2 ;
+         if (query("race") == "dwarf") damage = damage / 2 ;
+        break;
+       case "poison" :
+         if (query("race") == "halfling") damage = damage / 2;
+         if (query("race")=="elf" || query("race")=="drow")
+           damage = damage * 3;
+         if (query("race")=="half-elf") damage = damage * 2;
+         if (query("race") == "skaven") damage = damage / 2;
+        break;
+       default:
+       break;
+   }
+  }
+   if(damage <= 0 || link_data("dead") || query("hit_points") < 0 ||
+      query("linkdead"))  return 0;
+ 
+/*
+This stuff is commented out because damage may come from non-living
+objects or from spell commands - it's hard to know for sure what
+object is the one that you want to attack.
+
+   if(!attackers || member_array(this_player(), attackers) == -1)
+
+      kill_ob(this_player());
+
+*/
+ 
+   dam = query("hit_points") - damage;
+   if(dam < 0)  dam = -1;
+
+   set("hit_points", dam);
+   this_object()->monitor();
+  dam = query("rest") ;
+  if (dam==2) {
+   tell_object(TO, "A sudden jolt of pain jerks you from your slumber!\n");
+  message("combat", TPN+" suddenly wakes up!\n", 
+   environment(TO), ({ TO }) ) ;
+  set("rest", 1) ;
+  TO->block_attack(4) ;
+  }
+  if (dam==1) {
+   tell_object(TO, "You scramble to stand up!\n") ;
+  message("combat", TPN+" scrambles to stand up!\n", 
+   environment(TO), ({ TO }) ) ;
+   delete("rest") ;
+  TO->block_attack(2) ;
+  }
+   return 1; 
+}
+ 
+// This function handles the healing calls from spells. It only accepts
+// positive healing calls.  receive_damage() should be used for damage.
+ 
+int receive_healing(int healing) {
+   int heal;
+ 
+   if(healing <= 0 || link_data("dead") || query("hit_points") < 0)
+        return 0;
+
+   heal = query("hit_points") + healing ;
+   if(heal > query("max_hp"))  heal = query("max_hp");
+     
+   set("hit_points", heal);
+   this_object()->monitor();
+   return 1;
+}
+ 
+
+// Added by Chronos 12-31-94, This function checks to see
+// if the player has hit point monitoring on, and if so, shows current
+// hp and sp.
+
+void monitor() {
+  
+  if (query("monitor") == 1) {
+
+/*  Chronos commented it all out.  Why not use existing code?
+    // Changed this to a tell_object(this_object()... So the player would get
+    // all their damage readouts.
+    tell_object(this_object(),
+  sprintf(" [ HP: %d / %d (%d%%)\tSP: %d / %d (%d%%) ]\n",
+       query("hit_points"),
+       query("max_hp"),
+       ((query("hit_points")*100)/query("max_hp")),
+       query("spell_points"),
+       query("max_sp"),
+       ((query("spell_points")*100)/query("max_sp"))));
+  */
+    command("hp");
+  } 
+  if ((int)query("monitor")==2 && this_object()->query_current_attacker())
+   command("hp");
+}
+
+// This function updates the object's AC. It got moved out of the
+// player object so monsters could have it too.
+
+// This function is used to prevent a player from attacking for a time.
+// Called by the wield command, the various spells, other places. Anything
+// a players does that should interfere with his combat should call this.
+
+void block_attack (int t) {
+
+        int i ;
+
+// If we're not in combat, then don't bother.
+        if (!any_attack) return ;
+/*
+#ifdef BLOCK_ATTACK
+*/
+        i = query("stop_attack") ;
+        set ("stop_attack",i+t/2) ;
+/*
+#endif
+*/
+}
+
+// This is called in the heart_beat to decrease the blocking time.
+
+void unblock_attack() {
+
+        int i ;
+
+        i = query("stop_attack")-1 ;
+        if (i>-1) set ("stop_attack",i) ;
+    if (query("spell_block")) add("spell_block", -1);
+// Let's make sure people get their sp back a little faster when they are out.
+   i = query("spell_points") ;
+  if (i<10) { i++; set("spell_points", i); this_object()->monitor(); }
+}
+
+// This function returns 1 if the player has stop_attack set and 0 if not.
+// It's probably a pretty stupid thing to use, since you should just query
+// stop_attack directly, but it's here if you want it.
+
+int player_busy() {
+        return query("stop_attack") ;
+}
+
+// This function is used to initialize various values.
+
+void init_attack() {
+   attackers = ({});
+}
+
+// This function returns the object at the top of the attackers list.
+
+object query_attacker() {
+        if(!attackers || !sizeof(attackers))  return 0;
+        return attackers[0] ;
+}
+
+// Remove dead or nonexisting objects out of the list of attackers.
+// Return true if there is still an attack going.
+
+/*
+// This is the 'kill' command. If the victim is not attacked yet,
+// then it is entered first into the list of victims. If it is already
+// in the list, then it is moved to the first entry.
+*/
+int kill_ob (object victim) {
+  int i;
+        if (userp(victim)){
+     if (userp(this_object()) && !victim->query("pk")) {
+       write("You may only attack players registered for player killing.\n");
+            return -1;
+                }
+  } 
+  // Chronos notes that it's odd to attack yourself.
+  if (victim == this_object()) return -1;
+   if(query("linkdead"))  return 0;
+ 
+   if (!attackers) {
+        init_attack() ;
+        attackers = ({ victim }) + attackers;
+        any_attack = 1;
+        set_heart_beat(1) ;
+      victim->kill_ob(this_object());
+      return 1;
+    }
+ 
+   i = member_array(victim, attackers);
+ 
+   if (i > -1) {
+         return 0;
+    }
+   attackers = ({ victim }) + attackers;
+   any_attack = 1;
+        set_heart_beat(1) ;
+   victim->kill_ob(this_object());
+   return 1;
+}
+
+// This is a default heart_beat for living objects. There's a player heart_beat
+// in user.c and a monster heart_beat in monster.c, both of which should
+// override this one.
+
+void heart_beat() {
+        unblock_attack() ;
+        continue_attack() ;
+}
+
+// Continue_attack is called from heart_beat in monster.c and user.c.
+// here is where we can try to see if we're dead or in combat.
+
+// Call this to erase the list of opponents to attack. This will NOT stop
+// them from attacking you again...  ;)
+
+void cease_all_attacks() {
+   attackers = ({});
+   any_attack = 0;
+}
+
+// Call this function to remove a specific user from the attack array.
+ 
+int remove_attacker(object obj) {
+   if(member_array(obj, attackers) != -1)  attackers -= ({ obj });
+return 1; }
+ 
+// This function returns the current target if there is one. The "current
+// target" could be in another room, or dead, and not cleaned out of the
+// list yet, so be reasonably careful with this.
+
+object query_current_attacker() {
+   if(sizeof(attackers) == 0)
+      return 0;
+   else
+      return attackers[0];
+}
+
+// This function returns the whole attackers list. Same caveat as above.
+
+object *query_attackers() {
+        if (sizeof(attackers)==0) {
+                return 0 ;
+        } else {
+                return attackers ;
+        }
+}
+
+// This lets a wimpy player or monster run away. Buddha got this part
+// working for the case of rooms with no exits. (Bad sign for the wimp.)
+
+void run_away() {
+
+        int wimpy ;
+        string direction ;
+        mapping womble ;
+
+
+   womble = environment(this_object())->query("exits") ;
+  if (!womble) {
+     tell_object(this_object(), 
+     "You try to flee, but there is nowhere to run!\n");
+   return ;
+  }
+   direction = this_player()->query("wimpydir") ;
+   if (!direction || !womble[direction]) {
+        direction = keys(womble)[random(sizeof(womble))] ;
+   }
+   tell_object(this_object(), 
+    "You flee to the "+direction+"!\n");
+   message("combat", this_object()->query("cap_name") +
+  " is running away!\n", environment(),
+  ({ this_object() }) );
+   this_player()->force_me("go "+direction);
+   return ;
+}
+
+// This function restores spell points and hit points to the player and
+// deals with his blood-alcohol level.
+// Drunkenness is handled as follows: 0 indicates sobriety. Positive
+// numbers indicate drunkenness, and diminish over time. When the player
+// reaches drunkenness of 1, we then set his drunkenness to -6, where
+// the negative number means hangover rather than drunkenness, and we
+// begin counting up until we reach 0, at which time he's sober again.
+
+void heal_up() {
+        int hp, sp, maxh, maxs, n ;
+    int time, dr, rate, monitor_flag, cap_name;
+
+monitor_flag = 0;
+// If he's a ghost we want to skip this entirely.
+        if (query("ghost")) return ;
+        heal_time = heal_time + 1 ;
+        time = query("time_to_heal") ;
+// If the healing rate wasn't set, then it's one hp/sp each 10 heartbeats.
+        if (time==0) time = 10 ;
+
+        dr = query("drunk") ;
+        if (dr){
+                if (!random(40)) {
+                        cap_name = query("cap_name");
+                        n = random(4);
+                        if (n == 0) {
+                                write("You hiccup.\n");
+                                say(cap_name+" hiccups.\n");
+                        } else if (n == 1) {
+                                write("You stumble.\n");
+                                say(cap_name+" seems to fall, but takes a step and recovers.\n");
+                        } else if (n == 2) {
+                                write("You feel drunk.\n");
+                                say(cap_name+" looks drunk.\n");
+                        } else if (n == 3) {
+                                write("You burp.\n");
+                                say(cap_name+" burps.\n");
+                        }
+                }
+        }
+// If drunkenness, put this line back in, and have sp and hp increase by
+// rate instead of by 1.
+// You could also put rate in but have it affected by things other than
+// alcohol, perhaps by food, by rest, or by magic spells.
+  rate = dr/5+1;
+  if (rate>6) rate = 6;
+  if (rate<1) rate = 1;
+  if ((int)this_object()->query_rest_status()==2)
+   rate += SLEEP_RATE ;
+  if ((int)this_object()->query_rest_status()==1)
+   rate += REST_RATE ;
+
+// Check to see if it's time to improve hits and spells.
+        if (heal_time>time) {
+                if(query("stuffed")) add("stuffed",-1);
+                if(query("soaked")) add("soaked",-1);
+                if (dr){
+
+                        switch (dr) {
+                                case -1 : { write("Your headache clears up.\n"); break;} 
+   case 1: {
+   write("You suddenly without reason get a throbbing headache.\n");
+   break ;
+  }
+                        }
+// If the player's drunk is 1, we send him into hangover land.
+   if (dr == 1) {
+  set("drunk", -4 ) ;
+  add("hit_points", -3 );
+  }
+// Dry him out, or fix his hangover, as needed.
+                        else if (dr>0) add("drunk", -1); 
+                        else if (dr<0) {
+                                add("drunk", 1); 
+                        }
+                }
+                hp = query("hit_points") ;
+                sp = query("spell_points") ;
+                maxh = query("max_hp") ;
+                maxs = query("max_sp") ;
+                heal_time = 0 ;
+
+                if (hp<maxh) {
+      set("hit_points", hp+rate);
+      hp = hp + rate;
+      monitor_flag = 1;
+                } 
+                if (hp > maxh) {
+                        set("hit_points", maxh) ;
+      hp = maxh;
+      monitor_flag = 1;
+                }
+                if (sp<maxs) {
+      set ("spell_points", sp+rate);
+      sp = sp + rate;
+      monitor_flag = 1;
+                } 
+                if (sp > maxs) {
+                        set ("spell_points", maxs) ;
+      sp = maxs;
+      monitor_flag = 1;
+                }
+    if (monitor_flag) monitor();
+        }
+
+}
+
+// The set_verbs function stores the list of verbs to be used when a player
+// or monster makes an attack, and conjugates the verbs by adding an "s" to
+// the end of each. You can use set_verbs2, below, to override this
+// conjugation if you need to.
+
+void set_verbs(string *verbs) {
+
+        int i ;
+        string w1, w2 ;
+
+        vb = verbs ;
+        vb2 = allocate(sizeof(vb)) ;
+        for (i=0;i<sizeof(verbs);i++) {
+                if (sscanf(verbs[i],"%s %s",w1,w2)==2) {
+                        vb2[i]=w1+"s "+w2 ;
+                } else {
+                        vb2[i]=verbs[i]+"s" ;
+                }
+        }
+}
+
+// This function is used to set the conjugated forms of the verbs. Use
+// this when one of the attack verbs is irregular: there are some monster
+// examples that do it.
+
+void set_verbs2 (string *verbs) {
+        vb2 = verbs ;
+}
+
+// The get_verb function returns a random verb from the list of verbs.
+// It returns bboth forms of the verb in a 2-element array.
+
+string *get_verb() {
+
+        int i ;
+
+        i = random(sizeof(vb)) ;
+        return ({ vb[i], vb2[i] }) ;
+}

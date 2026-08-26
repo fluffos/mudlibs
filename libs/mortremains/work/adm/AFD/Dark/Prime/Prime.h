@@ -1,0 +1,7 @@
+#define D_PRIME "/d/Dark/Prime"
+#define D_PRIMEO "/d/Dark/Prime/obj"
+#define D_PRIMER "/d/Dark/Prime/rooms"
+#define D_PRIMEM "/d/Dark/Prime/mon"
+#define D_PRIMEW D_PRIME+"/wiz"
+#define D_KELDROSR "/d/Dark/Keldros/rithik/rooms"
+#define D_DUEGNER "/d/Dark/Duegne/Forest"

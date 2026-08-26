@@ -1,0 +1,6 @@
+#define BASE_N "/u/p/panzergiest/"
+#define M_ROOM BASE_N+"room/"
+#define M_MON BASE_N+"mon/"
+#define M_OBJ BASE_N+"obj/"
+#define M_WEAP BASE_N+"weapon/"
+#define M_ARM BASE_N+"armor/"

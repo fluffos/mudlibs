@@ -1,0 +1,5 @@
+#define AROOM "/u/m/moltar/volcano/"
+#define WEAP "/u/m/moltar/volcano/items/"
+#define AITEM "/u/m/moltar/volcano/items/"
+#define MOM "/u/m/moltar/volcano/monsters/"
+#define ARM "/u/m/moltar/volcano/items/"

@@ -1,0 +1,10 @@
+#define ROOT "/u/b/brentin"
+#define ROOMS "/u/b/brentin/R"
+#define MOBS  "/u/b/brentin/M"
+#define OBJ   "/u/b/brentin/O"
+#define WORK  "/u/b/brentin/work"
+#define SKILLS "/u/b/brentin/S"
+#define TP    this_player()
+#define TO    this_object()
+#define TPQN  this_player()->query_name()
+#define TOQN  this_object()->query_name()

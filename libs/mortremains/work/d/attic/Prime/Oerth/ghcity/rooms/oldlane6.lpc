@@ -1,0 +1,23 @@
+#include <config.h>
+#include <mudlib.h>
+#include "oerth.h"
+
+inherit ROOM;
+
+void create()
+{
+  ::create();
+   // Inspiral fears Root euid.  94-08-18
+  seteuid( 0 );
+  set( "light", 1 );
+set("short", "Old Lane");
+  set( "long", @EndText
+This is Old Lane, it travels through the less
+populate section of The Old City.
+EndText
+  );
+  set( "exits", ([
+"north" : Oerth+"/rooms/crossstreet7",
+"south" : Oerth+"/rooms/oldlane5",
+  ]) );
+}
