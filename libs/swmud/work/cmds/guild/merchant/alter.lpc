@@ -1,0 +1,433 @@
+#include <flags.h>
+
+inherit M_INPUT;
+inherit VERB_OB;
+
+void alter(string type, object thing);
+void alter_name(object thing);
+void check_status(object thing);
+void assign_flag(int which, int state);
+int test_flag(int);
+
+void do_alter_wrd_of_obj(string type, object thing)
+{
+   object this_body = this_body();
+
+   if (thing->test_flag(F_ALTERED))
+   {
+      write("The " + thing->short() + " can no longer be altered.\n");
+
+      return;
+   }
+   else if (type == "weight")
+   {
+      if (thing->is_living())
+      {
+         if (thing == this_body)
+         {
+            write("If you want to lose weight, you should try diet and exercise instead of attempting to perform self-liposuction on yourself.\n");
+         }
+         else
+         {
+            write("If you think that " + thing->short() + " needs to lose weight, you could try getting " + thing->query_objective() + " a gym membership instead.\n");
+         }
+
+         return;
+      }
+      else if (thing->test_flag(F_ALTERED_WEIGHT))
+      {
+         write("The weight of " + thing->the_short() + " has already been altered.\n");
+
+         return;
+      }
+      else if (!thing->query_mass())
+      {
+         write(capitalize(thing->the_short()) + " already weighs close to nothing.\n");
+
+         return;
+      }
+      else if (thing->deny_alter_weight())
+      {
+         write("It seems impossible to alter the weight of " + thing->the_short() + ".\n");
+
+         return;
+      }
+   }
+   else if (type == "value")
+   {
+      if (thing->is_living())
+      {
+         if (thing == this_body)
+         {
+            write("If you really want to increase your self-worth, you could try doing things that help you grow as a person.\n");
+         }
+         else
+         {
+            write("Maybe if you ever cared to pay attention, you would realize just how valuable " + thing->short() + " really is.\n");
+         }
+
+         return;
+      }
+      else if (thing->test_flag(F_ALTERED_VALUE))
+      {
+         write("The value of " + thing->the_short() + " has already been altered.\n");
+
+         return;
+      }
+      else if (!thing->query_value())
+      {
+         write(capitalize(thing->the_short()) + " is already worthless enough.\n");
+
+         return;
+      }
+      else if (thing->deny_alter_value())
+      {
+         write("It seems impossible to alter the value of " + thing->the_short() + ".\n");
+
+         return;
+      }
+   }
+   else if (type == "capacity")
+   {
+      if (thing == this_body)
+      {
+         write("If you want to be able to carry more, you could try lifting weights instead.\n");
+
+         return;
+      }
+      else if (thing->test_flag(F_ALTERED_CAPACITY))
+      {
+         write("The capacity of " + thing->the_short() + " has already been altered.\n");
+
+         return;
+      }
+      else if (!thing->is_carry_container())
+      {
+         write(capitalize(thing->the_short()) + " is not a container.\n");
+
+         return;
+      }
+   }
+   else if (type == "name")
+   {
+      if (thing->is_living())
+      {
+         if (thing == this_body)
+         {
+            write("If you want to change your name, you'll have to fill out the proper forms.\n");
+         }
+         else
+         {
+            write("What's in a name? That which we call " + thing->a_short() + " by any other name would smell " + (thing->query_gender() == 2 ? "as sweet" : "just as bad") + ".\n");
+         }
+
+         return;
+      }
+      else if (sizeof(thing->query_id()) == 1)
+      {
+         write("There doesn't seem to be anything else to call " + thing->a_short() + ".\n");
+
+         return;
+      }
+   }
+
+   this_body->add_skill_delay(8);
+
+   if (type == "name")
+   {
+      alter_name(thing);
+
+      return;
+   }
+
+   if (this_body->test_skill("alter", this_body->query_guild_level("merchant") * 20))
+   {
+      alter(type, thing);
+   }
+   else
+   {
+      this_body->simple_action("$N $vfail to alter the " + type + " of " + thing->the_short() + ".\n");
+   }
+}
+
+void do_alter_obj(object thing)
+{
+   object this_body = this_body();
+
+   if (thing->is_living())
+   {
+      if (thing == this_body)
+      {
+         write("If you're unsure as to whether or not you've been altered, you should make an appointment with your doctor.\n");
+      }
+      else
+      {
+         write("You decide that whether or not " + thing->short() + " has been altered is between " + thing->query_objective() + " and " + thing->query_possessive() + " doctor.\n");
+      }
+
+      return;
+   }
+
+   this_body->add_skill_delay(2);
+
+   this_body->test_skill("alter", 1000 - (this_body->query_skill("alter") * 10));
+
+   if (this_body->query_skill("alter") > (random(500) - (this_body->query_guild_level("merchant") * 10)))
+   {
+      check_status(thing);
+   }
+   else
+   {
+      this_body()->my_action("$N $vfail to determine whether the $o has been altered.\n", thing);
+   }
+}
+
+void do_alter()
+{
+   write("Alter what?\n");
+}
+
+void alter(string type, object thing)
+{
+   object this_body = this_body();
+   int level = this_body->query_guild_level("merchant");
+   int rank = this_body->query_skill("alter") / 100;
+   int adjustment = (level * 5 / 10) + rank;
+
+   if (adjustment < 1)
+   {
+      adjustment = 1;
+   }
+
+   if (type == "capacity")
+   {
+      thing->set_max_capacity(thing->query_max_capacity() + to_int(ceil(thing->query_max_capacity() * adjustment / 100.0)));
+      thing->set_customize_record("altered capacity", this_body->short());
+      thing->assign_flag(F_ALTERED_CAPACITY, 1);
+   }
+   else if (type == "value")
+   {
+      thing->set_value(thing->query_value() + to_int(ceil(thing->query_value() * adjustment / 100.0)));
+      thing->set_customize_record("altered value", this_body->short());
+      thing->assign_flag(F_ALTERED_VALUE, 1);
+   }
+   else if (type == "weight")
+   {
+      thing->set_mass(thing->query_mass() - to_int(ceil(thing->query_mass() * adjustment / 100.0)));
+      thing->set_customize_record("altered weight", this_body->short());
+      thing->assign_flag(F_ALTERED_WEIGHT, 1);
+   }
+
+   if ((level + (rank * 5)) > random(100))
+   {
+      this_body->simple_action("$N $valter the " + type + " of " + thing->the_short() + ".\n");
+   }
+   else
+   {
+      thing->assign_flag(F_ALTERED, 1);
+
+      this_body->simple_action("$N $valter the " + type + " of " + thing->the_short() + ", and $vrealize that it cannot be altered any further.\n");
+   }
+}
+
+private void number_input(string *ids, object thing, string input)
+{
+   object this_body = this_body();
+   float level = this_body->query_guild_level("merchant");
+   int rank = to_int(floor(this_body->query_skill("alter") / 100.0));
+   int choice;
+
+   if (input == "q")
+   {
+      return;
+   }
+
+   choice = to_int(input) - 1;
+
+   if ((choice >= 0) && (choice < sizeof(ids)))
+   {
+      if (this_body->test_skill("alter", this_body->query_guild_level("merchant") * 10))
+      {
+         if ((level + (rank * 5)) > random(100))
+         {
+            write("You alter the name of " + thing->short() + " to " + ids[choice] + ".\n");
+            this_body->other_action("$N $valter the appearance of something.\n");
+         }
+         else
+         {
+            thing->assign_flag(F_ALTERED, 1);
+
+            write("You alter the name of " + thing->short() + " to " + ids[choice] + ", and realize that it cannot be altered any further.\n");
+            this_body->other_action("$N $valter the appearance of something, and $vrealize that it cannot be altered any further.\n");
+         }
+
+         thing->remove_id(ids[choice]);
+         thing->set_id(ids[choice]);
+      }
+      else
+      {
+         write("You fail to alter the name of " + thing->short() + " to " + ids[choice] + ".\n");
+         this_body->other_action("$N $vfail to alter the appearance of something.\n");
+      }
+   }
+}
+
+void alter_name(object thing)
+{
+   string *ids = thing->query_id();
+
+   if (thing->query_in_room_desc() && !thing->id(thing->query_in_room_desc()))
+   {
+      thing->set_id(thing->query_in_room_desc());
+
+      ids += thing->query_in_room_desc();
+   }
+
+   write("\nSelect the number for the desired name:\n\n");
+
+   for (int count = 0; count < sizeof(ids); count++)
+   {
+      write(sprintf("%2i: %s\n", (count + 1), ids[count]));
+   }
+
+   write("\nCurrent name: " + thing->short() + "\n");
+
+   modal_simple((: number_input, ids, thing :), "\nEnter blank or 'q' to cancel > ");
+}
+
+int generalize_elapsed_time(int time)
+{
+   if (time > 60)
+   {
+      if (time > 3600)
+      {
+         if (time > 86400)
+         {
+            return time / 86400 * 86400;
+         }
+
+         return time / 3600 * 3600;
+      }
+
+      return time / 60 * 60;
+   }
+
+   return time;
+}
+
+void check_status(object thing)
+{
+   string status = "";
+
+   if (thing->test_flag(F_ALTERED_WEIGHT) && thing->query_customize_record("altered weight"))
+   {
+      status += "The weight of " + thing->the_short() + " was altered by %^BOLD%^" + thing->query_customize_record("altered weight") + "%^RESET%^ about " + convert_time(generalize_elapsed_time(time() - thing->query_customize_time("altered weight")), 0) + " ago.\n";
+   }
+
+   if (thing->test_flag(F_ALTERED_VALUE) && thing->query_customize_record("altered value"))
+   {
+      status += "The value of " + thing->the_short() + " was altered by %^BOLD%^" + thing->query_customize_record("altered value") + "%^RESET%^ about " + convert_time(generalize_elapsed_time(time() - thing->query_customize_time("altered value")), 0) + " ago.\n";
+   }
+
+   if (thing->test_flag(F_ALTERED_CAPACITY) && thing->query_customize_record("altered capacity"))
+   {
+      status += "The capacity of " + thing->the_short() + " was altered by %^BOLD%^" + thing->query_customize_record("altered capacity") + "%^RESET%^ about " + convert_time(generalize_elapsed_time(time() - thing->query_customize_time("altered capacity")), 0) + " ago.\n";
+   }
+
+   if (thing->test_flag(F_ALTERED))
+   {
+      status += "You determine that " + thing->the_short() + " can no longer be altered.\n";
+   }
+   else
+   {
+      status += "You determine that " + thing->the_short() + " can still be altered.\n";
+   }
+
+   write(status);
+}
+
+mixed can_alter_wrd_of_obj(string type)
+{
+   object this_body = this_body();
+
+   if (this_body->query_guild_level("merchant"))
+   {
+      if (!this_body->has_learned_skill("altering " + type))
+      {
+         return "You have not learned how to alter the " + type + " of something.\n";
+      }
+      else if (this_body->get_target())
+      {
+         return "You are unable to alter something while in combat.\n";
+      }
+      else if (this_body->has_skill_delay())
+      {
+         return "You are too busy to alter something.\n";
+      }
+   }
+   else
+   {
+      return "Only merchants know how to alter something.\n";
+   }
+
+   return 1;
+}
+
+mixed can_alter_obj()
+{
+   object this_body = this_body();
+
+   if (this_body->query_guild_level("merchant"))
+   {
+      if (!this_body->has_learned_skill("altering"))
+      {
+         return "You have not learned how to determine whether something has been altered.\n";
+      }
+      else if (this_body->get_target())
+      {
+         return "You are unable to determine whether something has been altered while in combat.\n";
+      }
+      else if (this_body->has_skill_delay())
+      {
+         return "You are too busy to determine whether something has been altered.\n";
+      }
+   }
+   else
+   {
+      return "Only merchants know how to determine whether something has been altered.\n";
+   }
+
+   return 1;
+}
+
+mixed can_alter()
+{
+   object this_body = this_body();
+
+   if (this_body->query_guild_level("merchant"))
+   {
+      if (!this_body->has_learned_skill("altering"))
+      {
+         return "You have not learned how to alter something.\n";
+      }
+      else if (this_body->get_target())
+      {
+         return "You are unable to alter somethng while in combat.\n";
+      }
+      else if (this_body->has_skill_delay())
+      {
+         return "You are too busy to concentrate on altering something.\n";
+      }
+   }
+   else
+   {
+      return "Only merchants know how to alter something.\n";
+   }
+
+   return 1;
+}
+
+void create()
+{
+   add_rules( ({ "", "OBJ", "WRD of OBJ" }) );
+}

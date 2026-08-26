@@ -1,0 +1,252 @@
+#include <hooks.h>
+
+inherit VERB_OB;
+inherit M_EXIT;
+inherit M_MESSAGES;
+
+void perform_push(object thing, string direction, object destination);
+mixed can_do(object body);
+
+private mapping translations = ([ "n" : "north", "s" : "south", "e" : "east", "w" : "west", "ne" : "northeast", "nw" : "northwest", "se" : "southeast", "sw" : "southwest", "u" : "up", "d" : "down" ]);
+
+void do_fpush_obj_wrd(object thing, string direction)
+{
+   object this_body = this_body();
+
+   if (translations[direction]) { direction = translations[direction]; }
+
+   if (thing == this_body)
+   {
+      write("If you really want to push yourself, you could try that new Twi'lek Aerobics holovid.\n");
+   }
+   else if (thing->is_adversary())
+   {
+      if (translations[direction]) { direction = translations[direction]; }
+
+      if (member_array(direction, environment(this_body)->query_exit_directions(0)) > -1)
+      {
+         this_body->add_skill_delay(8);
+
+         perform_push(thing, direction, environment(this_body)->query_exit_destination(direction));
+      }
+      else
+      {
+         write("There doesn't seem to be an exit to the " + direction + ".\n");
+      }
+   }
+   else
+   {
+      write("You could find more important things to push around.\n");
+   }
+}
+
+void do_fpush_wrd_wrd(string target, string direction)
+{
+   object this_body = this_body();
+
+   if (translations[direction]) { direction = translations[direction]; }
+
+   if (member_array(direction, environment(this_body)->query_exit_directions(0)) == -1)
+   {
+      write("There doesn't seem to be an exit to the " + direction + ".\n");
+   }
+   else if (target == "all")
+   {
+      object *things = ({ });
+
+      foreach (object thing in all_inventory(environment(this_body)))
+      {
+         if ((thing != this_body) && thing->is_adversary())
+         {
+            things += ({ thing });
+         }
+      }
+
+      if (sizeof(things))
+      {
+         object destination = environment(this_body)->query_exit_destination(direction);
+
+         this_body->add_skill_delay(8 + ((sizeof(things) - 1) * 2));
+
+         foreach (object thing in things)
+         {
+            perform_push(thing, direction, environment(this_body)->query_exit_destination(direction));
+         }
+      }
+      else
+      {
+         write("There doesn't seem to be anything you can push here.\n");
+      }
+   }
+   else if (target == "targets")
+   {
+      object *targets = this_body->query_targets();
+
+      if (sizeof(targets))
+      {
+         object destination = environment(this_body)->query_exit_destination(direction);
+
+         this_body->add_skill_delay(8 + ((sizeof(targets) - 1) * 2));
+
+         foreach (object thing in targets)
+         {
+            perform_push(thing, direction, environment(this_body)->query_exit_destination(direction));
+         }
+      }
+      else
+      {
+         write("You don't seem to have any targets here.\n");
+      }
+   }
+   else
+   {
+      write("You don't know how to push \"" + target + "\" to the \"" + direction + "\".\n");
+   }
+}
+
+void do_fpush_wrd(string word)
+{
+   object this_body = this_body();
+   object target = this_body->query_target();
+
+   if (target)
+   {
+      if (translations[word]) { word = translations[word]; }
+
+      if (member_array(word, environment(this_body)->query_exit_directions(0)) > -1)
+      {
+         this_body->add_skill_delay(8);
+
+         perform_push(target, word, environment(this_body)->query_exit_destination(word));
+      }
+      else
+      {
+         write("There doesn't seem to be an exit to the " + word + ".\n");
+      }
+   }
+   else
+   {
+      write("You don't have a target to push in the direction \"" + word + "\".\n");
+   }
+}
+
+void do_fpush_obj(object thing)
+{
+   if (thing->is_adversary())
+   {
+      write("Push " + thing->the_short() + " to where?\n");
+   }
+   else
+   {
+      write("You could find more important things to push around.\n");
+   }
+}
+
+void do_fpush()
+{
+   write("Push who or what where?\n");
+}
+
+mixed can_fpush_obj_wrd()
+{
+   return can_do(this_body());
+}
+
+mixed can_fpush_wrd_wrd()
+{
+   return can_do(this_body());
+}
+
+mixed can_fpush_wrd()
+{
+   return can_do(this_body());
+}
+
+mixed can_fpush_obj()
+{
+   return can_do(this_body());
+}
+
+mixed can_fpush()
+{
+   return can_do(this_body());
+}
+
+mixed can_do(object body)
+{
+   if (body->query_guild_level("jedi"))
+   {
+      if (!body->has_learned_skill("force push"))
+      {
+         return "You have not learned how to push something with the Force.\n";
+      }
+      else if (body->has_skill_delay())
+      {
+         return "You are too busy to concentrate on pushing something.\n";
+      }
+   }
+   else
+   {
+      return "Only Jedi know how to use the Force to push something.\n";
+   }
+
+   return 1;
+}
+
+void perform_push(object thing, string direction, object destination)
+{
+   object this_body = this_body();
+
+   if (this_body->test_skill("force push", (this_body->query_guild_level("jedi") * 10) + (this_body->query_skill("telekinesis") / 100 * 30) - 300 + this_body->call_hooks("force_focus", HOOK_SUM)))
+   {
+      string enter_direction = "";
+
+      this_body->test_skill("telekinesis", (this_body->query_guild_level("jedi") * 5) + this_body->call_hooks("force_focus", HOOK_SUM));
+
+      this_body->targetted_action("$N $vpush $t to the " + direction + ".", thing);
+
+      thing->move(destination);
+
+      tell(thing, destination->long_without_object(thing));
+
+      foreach (string exit in destination->query_exit_directions())
+      {
+         if (destination->query_exit_destination(exit) == file_name(environment(this_body)))
+         {
+            enter_direction = exit;
+         }
+      }
+
+      if (strlen(enter_direction))
+      {
+         if (thing->is_body())
+         {
+            thing->other_action("%^PLAYER_MOVEMENT%^$N is pushed here from the " + enter_direction + ".%^RESET%^");
+         }
+         else
+         {
+            thing->other_action("$N is pushed here from the " + enter_direction + ".");
+         }
+      }
+      else
+      {
+         if (thing->is_body())
+         {
+            thing->other_action("%^PLAYER_MOVEMENT%^$N is pushed here from an unknown direction.%^RESET%^");
+         }
+         else
+         {
+            thing->other_action("$N is pushed here from an unknown direction.");
+         }
+      }
+   }
+   else
+   {
+      this_body->targetted_action("$N $vfail to push $t.", thing);
+   }
+}
+
+void create()
+{
+   add_rules( ({ "", "OBJ", "WRD", "OBJ WRD", "WRD WRD" }) );
+}
