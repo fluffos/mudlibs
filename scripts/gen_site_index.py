@@ -427,14 +427,33 @@ def build_jsonld(status, lang, ui, numbers):
     return json.dumps(doc, ensure_ascii=False).replace("</", "<\\/")
 
 
+def _is_cjk_name(name):
+    """True if a lib's native `name` contains CJK script -- used to boost
+    English-original libs to the top of the /en/ page (an English visitor
+    shouldn't have to scroll past ~190 Chinese-titled cards first). The zh
+    page's own order is untouched; this only ever affects lang="en"."""
+    return any("一" <= ch <= "鿿" for ch in name)
+
+
 def render_index(status, commits, lang="zh"):
     ui = UI[lang]
     libs = status["libs"]
     counts = status["counts"]
     numbers = load_numbers()
-    entries = sorted(
-        libs.items(),
-        key=lambda kv: (numbers.get(kv[0], (9999, 0)), kv[0]))
+    if lang == "en":
+        # English-original libs (native name has no CJK) first, each group
+        # keeping the existing catalog-number order within itself.
+        entries = sorted(
+            libs.items(),
+            key=lambda kv: (
+                _is_cjk_name(kv[1]["name"]),
+                numbers.get(kv[0], (9999, 0)),
+                kv[0],
+            ))
+    else:
+        entries = sorted(
+            libs.items(),
+            key=lambda kv: (numbers.get(kv[0], (9999, 0)), kv[0]))
 
     # Cards contain inner links (commit / source / play), so they cannot be
     # <a> elements themselves (nested anchors are invalid HTML and browsers
