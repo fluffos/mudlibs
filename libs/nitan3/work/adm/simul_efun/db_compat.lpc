@@ -1,0 +1,49 @@
+// db_compat.lpc
+//
+// Restores a couple of simul_efuns that this lib's code calls but that
+// were never actually defined anywhere in the raw archive (only ever
+// existed on whatever original server this mudlib ran on) -- see
+// AGENTS.md §15b for the general pattern, first catalogued on
+// nitan170911/nitan6 (same "NT/Lonely" lineage).
+//
+// - remove_ansi(str): strip ANSI escape codes from a string. Used by
+//   u/lonely/MySQLScheduled.c (a MySQL-sync scheduler, not on the
+//   registration-critical path, but cheap to restore correctly).
+// - db_affected(db): affected-row count after db_exec(). This driver's DB
+//   package has no real equivalent (db_exec() itself returns 0 for
+//   INSERT/UPDATE/DELETE -- no result set), and every call site already
+//   checks db_exec()'s own return value for the real success/failure
+//   signal, so a stub returning 1 (assume >=1 row affected) is a
+//   documented compromise, not a silent lie. adm/daemons/databased.lpc
+//   (preloaded) and u/lonely/mysqld.lpc both call this.
+
+string remove_ansi(string str) {
+  int i, len;
+  string result;
+
+  if (!stringp(str)) return str;
+
+  result = "";
+  len = strlen(str);
+  for (i = 0; i < len; i++) {
+    if (str[i] == 27) {
+      // skip the ESC and the rest of the CSI sequence,
+      // up through the terminating letter (matches the
+      // shape of this lib's own ansi.h color codes)
+      i++;
+      if (i < len && str[i] == '[') {
+        i++;
+        while (i < len && (str[i] < 'A' || str[i] > 'z'))
+          i++;
+      }
+      continue;
+    }
+    result += str[i..i];
+  }
+
+  return result;
+}
+
+int db_affected(mixed db) {
+  return 1;
+}
