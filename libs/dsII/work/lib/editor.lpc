@@ -1,0 +1,51 @@
+/*    /lib/editor.c
+ *    from the Dead Souls LPC Library
+ *    mudlib based editor interface
+ *    created by Descartes of Borg 950406
+ */
+
+
+#include "include/editor.h"
+
+private nosave function EditCallback;
+
+nosave void create() {
+    EditCallback = 0;
+}
+
+/* FluffOS PORT NOTE: this driver build defines OLD_ED (see
+ * secure/sefun/ed_compat.lpc) -- ed_start()/ed_cmd() don't exist as
+ * efuns here, only the old single-efun ed(fname, exitfn, restricted).
+ * Same fix as libs/dsI/work/lib/editor.lpc. Under OLD_ED the driver's
+ * own comm layer routes raw input straight to its C-level editor
+ * whenever an ed session is active (checked *before* the
+ * process_input() apply below is ever called), so this object no
+ * longer drives the edit loop itself -- it just starts the session and
+ * gets a callback (__ed_exit_dispatch(), by name, since the old ed()
+ * efun's exit-function argument is a plain string name, not a
+ * closure) when the driver ends it. One convenience is lost: the
+ * original used ed_cmd("$a") right after starting to drop
+ * mortals/empty-file edits straight into insert mode; there's no
+ * LPC-level way to feed the just-started real ed() session a
+ * synthetic command, so editing now always starts at ed's normal
+ * command prompt instead.
+ */
+varargs void eventEdit(string file, function callback) {
+    EditCallback = callback;
+    ed(file, "__ed_exit_dispatch", !creatorp());
+}
+
+void __ed_exit_dispatch() {
+    if( functionp(EditCallback) ) evaluate(EditCallback);
+    EditCallback = 0;
+}
+
+nosave string process_input(string str) {
+    /* Dead while an OLD_ED session is active (see above) -- kept only
+     * so callers/inherited code referencing it still compile/link.
+     */
+    if( query_ed_mode() == -1 ) return str;
+    if( str && str[0..0] == "!" && strlen(str) > 1 ) return str[1..];
+    return "";
+}
+

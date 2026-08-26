@@ -1,0 +1,242 @@
+/*    /lib/events/show.c
+ *    From the Dead Souls LPC Library
+ *    Responds to people looking at things on objects
+ *    Created by Descartes of Borg 930616
+ *    Version: @(#) look.c 1.8@(#)
+ *    Last modified: 96/12/31
+ */
+
+#include <function.h>
+#include <lib.h>
+#include <vision.h>
+
+private mixed   ExternalDesc = 0;
+private int     Invisible    = 0;
+//private mapping Items        = ([]);
+mapping Items        = ([]);
+
+// abstract methods
+string GetShort();
+// end abstract methods
+
+varargs string GetExternalDesc(object who) {
+    string openstate;
+
+    if(this_object()->CanClose()){
+	if(this_object()->GetClosed()) openstate = " It is closed.";
+	else openstate = " It is open.";
+    }
+    else openstate = "";
+
+    if( !ExternalDesc ) {
+	return "";
+    }
+    if( functionp(ExternalDesc) ) {
+	if( functionp(ExternalDesc) & FP_OWNER_DESTED ) {
+	    return "";
+	}
+	return evaluate(ExternalDesc, who);
+    }
+    else if( arrayp(ExternalDesc) ) {
+	return ExternalDesc[query_night()] + openstate;;
+    }
+    else {
+	return ExternalDesc + openstate;
+    }
+}
+
+mixed SetExternalDesc(mixed desc) {
+    return (ExternalDesc = desc);
+}
+
+varargs int GetInvis(object ob) {
+    if( !ob ) {
+	ob = (this_player() || previous_object());
+    }
+    if( functionp(Invisible) ) {
+	return evaluate(Invisible, ob);
+    }
+    else return Invisible;
+}
+
+mixed SetInvis(mixed val) {
+    if( !val || intp(val) ) {
+	if(!val || val == 0){
+	    Invisible = 0;
+	    if(sizeof(get_livings(environment(this_object()),2))){
+		foreach(object ob in get_livings(environment(this_object()),2)){
+		    ob->CheckEncounter();
+		}
+	    }
+	    return 1;
+	}
+	return (Invisible = val);
+    }
+    else if( functionp(val) && !Invisible ) {
+	return (Invisible = val);
+    }
+    else {
+	return Invisible;
+    }
+}
+
+varargs mixed AddItem(mixed item, mixed val) {
+    if( objectp(item) ) {
+	item->eventMove(this_object());
+	return 1;
+    }
+    if( functionp(val) || stringp(val) || arrayp(val) ) {
+	if( stringp(item) ) {
+	    Items[item] = val;
+	}
+	else if( arrayp(item) ) {
+	    map(item, (: AddItem($1, $(val)) :));
+	    return val;
+	}
+	else {
+	    error("Bad argument 1 to AddItem().\n");
+	}
+    }
+    else error("Bad argument 2 to AddItem().\n");
+    return (Items[item]);
+}
+
+varargs mixed GetItem(string item, object who) {
+    mixed val = mapping_member(Items, item);
+
+    if( !val ) {
+	return 0;
+    }
+    if( stringp(val) || arrayp(val)) {
+	return Items[val];
+    }
+    else if( functionp(val) ) {
+	if( functionp(val) & FP_OWNER_DESTED ) {
+	    return "An error occurred evaulating a function pointer.";
+	}
+	return evaluate(val, who, item);
+    }
+    else {
+	return 0;
+    }
+}
+
+string *GetItems() {
+    return keys(Items);
+}
+
+mapping GetItemsMap(){
+    return copy(Items);
+}
+
+mapping RemoveItem(mixed item) {
+    if( !stringp(item) ) {
+	if( !arrayp(item) ) {
+	    error("Bad argument 1 to RemoveItem().\n");
+	}
+	map(item, (: RemoveItem($1) :));
+	return Items;
+    }
+    map_delete(Items, item);
+    return Items;
+}
+
+mapping SetItems(mapping items) {
+    return (Items = copy(items));
+}
+
+varargs string GetLong(string str) {
+    if( str && Items[str] ) {
+	return GetItem(str);
+    }
+    else {
+	return GetExternalDesc();
+    }
+}
+
+/* FluffOS PORT NOTE: ExternalDesc/GetExternalDesc() above already
+ * support a function-valued or array-valued "long description" (see
+ * the functionp()/arrayp() branches in GetExternalDesc()) -- but
+ * SetLong()/SetExternalDesc() were both declared with a `string`-only
+ * parameter type, which this driver's stricter argument type-checking
+ * rejects at every real call site in this codebase that sets a
+ * closure-valued long description (17 sites across obj/ and
+ * domains/*, e.g. obj/portal.lpc's `SetLong((: eventShowPortal :))`).
+ * Widened to `mixed` to match what the getter side already supports
+ * and what the majority of real callers actually pass -- not a new
+ * feature, just correcting a too-narrow declared type. Same fix
+ * applied to the forward declarations in lib/include/room.h and
+ * lib/include/interactive.h.
+ */
+mixed SetLong(mixed str) {
+    return SetExternalDesc(str);
+}
+
+varargs mixed eventShow(object who, string component) {
+    string desc;
+
+    if( component ) {
+	component = remove_article(lower_case(component));
+	desc = GetItem(component, who);
+	environment(who)->eventPrint(who->GetName() + " looks at the " +
+	  component + " on " + GetShort() + ".",
+	  ({ who, this_object() }));
+    }
+    else {
+	desc = GetExternalDesc(who);
+	environment(who)->eventPrint(who->GetName() + " looks at " +
+	  GetShort() + ".",
+	  ({ who, this_object() }));
+    }
+
+    if((!inherits(LIB_SIT,this_object()) && !inherits(LIB_LIE,this_object())) ||
+      (!sizeof(this_object()->GetLiers()) && !sizeof(this_object()->GetSitters()))){
+	if(inherits(LIB_SURFACE,this_object()) ||
+	  this_object()->GetOpacity() < 33){
+	    who->eventPrint(desc);
+	    this_object()->eventShowInterior(who);
+	}
+	else who->eventPrint(desc);
+    }
+    else who->eventPrint(desc); 
+    return 1;
+}
+
+mixed direct_look_obj() {
+    object env = environment();
+
+    if( env != this_player() && env != environment(this_player()) ) {
+	return "#You can't get to it to look at it.";
+    }
+    return 1;
+}
+
+mixed direct_look_at_obj() {
+    return direct_look_obj();
+}
+
+mixed direct_look_at_obj_word_obj() {
+    return direct_look_obj();
+}
+
+mixed direct_look_at_str_on_obj(string str, object target) {
+    object dingus;
+    str = remove_article(lower_case(str));
+
+    if((inherits(LIB_SIT,target) && sizeof(target->GetSitters())) ||
+      (inherits(LIB_LIE,target) && sizeof(target->GetLiers()))){
+	write("There appears to be someone blocking your view.");
+	return 0;
+    }
+
+    if((inherits(LIB_SURFACE,target) || living(target)) && dingus = present(str, target)){
+	if(this_player()->GetEffectiveVision() == VISION_CLEAR){
+	    return dingus->GetExternalDesc();
+	}
+	else return "#You can't quite make out its details.";
+    }
+    if( !Items[str] ) {
+	return "#There is no " + str + " on " + GetShort() + ".";
+    }
+    return 1;
+}

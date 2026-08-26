@@ -1,0 +1,13 @@
+// This file written completely by Tim Johnson (Tim@TimMUD)
+
+nosave void remove_mud(string mudname){
+    if(connected_muds[mudname]){
+	trr("Cannot remove mud ["+mudname+"] because it is still online right now.\n");
+	return;
+    }
+    if(!mudinfo[mudname]){
+	trr("Cannot remove mud ["+mudname+"] because it is not in the mudinfo list.\n");
+	return;
+    }
+    map_delete(mudinfo, mudname);
+}

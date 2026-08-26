@@ -1,0 +1,95 @@
+/*    /secure/cmds/creator/lsed.c
+ *    from the Dead Souls LPC Library
+ *    an LPC scripted editor
+ *    created by Descartes of Borg 950407
+ */
+
+#include <lib.h>
+
+inherit LIB_DAEMON;
+
+nosave void LsedFile(string file, string *cmds, int num_cmds);
+
+mixed cmd(string args) {
+    string *files, *lines, *tmp;
+    string total, script, pwd;
+    int i, maxi, x;
+
+    if( args == "" || !args ) return "Syntax: <lsed [script] [filelist]>";
+    if( (maxi = sizeof(files = explode(args, " "))) == 1 )
+	return "You must specify the name of a file to run the script on.";
+    pwd = (string)this_player()->query_cwd();
+    script = absolute_path( pwd, files[0] );
+    files = files[1..];
+    maxi--;
+    for(i=0, tmp = ({}); i<maxi; i++) {
+	files[i] = absolute_path(pwd, files[i]);
+	tmp += (string *)this_player()->wild_card(files[i]);
+    }
+    maxi = sizeof(files = tmp);
+    if( !(total = read_file(script)) ) return "Failed to load script: "+script;
+    x = sizeof(lines = explode(total, "\n"));
+    for(i=0; i<maxi; i++){
+	int y;
+
+	y = file_size(files[i]);
+	if( y == -2 ) {
+	    message("system", "lsed: File " + files[i] + " is a directory.",
+	      this_player());
+	    continue;
+	}
+	else if( y == -1 ) {
+	    message("system", "lsed: File " + files[i] + " does not exist.",
+	      this_player());
+	    continue;
+	}
+	LsedFile(files[i], lines, x);
+    }
+    return 1;
+}
+
+/* FluffOS PORT NOTE: this driver build defines OLD_ED (see
+ * lib/editor.lpc / secure/sefun/ed_compat.lpc for the same gap), which
+ * only exposes the old interactive, callback-driven ed() efun -- input
+ * is routed straight from the driver's comm layer to its C-level
+ * editor while a session is active, with no LPC-level way to feed a
+ * running session commands programmatically one at a time and read
+ * back its output, which is exactly what this tool's whole design
+ * (batch-apply a script of editor commands non-interactively) needs.
+ * There is no equivalent shim for this under OLD_ED -- unlike
+ * query_ed_mode() (approximable via in_edit()) or a single ed()
+ * session (fire-and-forget with an exit callback), scripted
+ * command-by-command editing has no OLD_ED analogue at all. Left as a
+ * graceful unsupported-feature message rather than left uncompilable;
+ * this is a creator-only scripting convenience, not part of the core
+ * player/creator path this project's "definition of done" requires.
+ * Same fix as libs/dsI/work/secure/cmds/creators/lsed.lpc.
+ */
+nosave void LsedFile(string file, string *cmds, int num_cmds) {
+    message("system", "lsed: not supported on this driver build -- "
+	    "programmatic ed scripting requires the new ed_start()/"
+	    "ed_cmd()/query_ed_mode() API, and this build was compiled "
+	    "with OLD_ED (only the old interactive, single-session ed() "
+	    "efun is available). Use the interactive editor ('ed " + file +
+	    "') instead.", this_player());
+}
+
+void help() {
+    message("system", "Syntax: <lsed [script] [filelist]>\n\n"
+      "Allows you to perform editor commands on a file or set of files "
+      "from a script.  You simply write a script of editor commands "
+      "and save it to a file.  For example, say that you wanted to "
+      "change set_item_functions() to SetItems() and "
+      "set_search_function() to SetSearch() in every file in your home "
+      "directory.  You would write a script that looks like:\n\n"
+      "s/set_item_functions/SetItems/g\n"
+      "s/set_search_function/SetSearch/g\n\n"
+      "save it as convert.lsed, and then at the command line type: "
+      "\"lsed sconvert.lsed *\".  Keep in mind that the MudOS "
+      "driver will only let an execution thread run so long "
+      "before automatically terminating it with a too long evaluation "
+      "error, so avoid running lsed on a large number of files at "
+      "once.\n\n"
+      "See also: ed", this_player());
+}
+
