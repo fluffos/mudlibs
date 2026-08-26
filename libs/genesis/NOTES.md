@@ -445,3 +445,25 @@ permission error in a context with no real filesystem/euid setup) with
 driver artifact" pattern for this project; the real driver boot (which
 exercises the actual preload chain in the actual runtime environment)
 shows these compiling and loading cleanly.
+
+## WASM status (2026-08-25, another session)
+
+Promoted `wasm_status` from `""` to `playable`. `pack_lib_for_web.sh`
+initially failed outright (not a driver/compile issue): `doc/examples`
+and `doc/man/Genesis` were dangling symlinks pointing at
+`../d/Genesis/doc/...` -- the very game-world domain this archive never
+shipped (see above) -- and emscripten's `file_packager` errors out
+trying to `stat()` a broken symlink's target. Removed both (pure
+documentation symlinks, irrelevant to boot/play) rather than fixing
+their targets, since the domain they point at doesn't exist in this
+repo at all. Once packed, the driver booted clean under WASM with no
+further fixes needed. Verified with a real scripted WASM session:
+login as `fluffos`/`Mud@2026`, the documented start-location fallback
+firing correctly (no `/d/Genesis` domain to land in), a soul command
+(`smile`) dispatching correctly (confirming the `add_action()` bare-
+function-value fix carries over to the WASM build), and a clean `quit`
+("Saving Fluffos. Goodbye. Until next time."). One caught-and-logged
+(non-fatal) error during quit -- `call_other() couldn't find object
+'/d/Web/stats/webstats'` inside a `catch()` -- is the same class of
+graceful missing-domain-content fallback as the start-location one,
+not a new bug.
