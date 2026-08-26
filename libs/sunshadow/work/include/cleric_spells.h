@@ -1,0 +1,18 @@
+string * HEALS = ({"/cmds/spells/c/_cure_light_wounds.lpc",
+            "/cmds/spells/c/_cure_moderate_wounds.lpc",
+            "/cmds/spells/c/_cure_serious_wounds.lpc",
+            "/cmds/spells/c/_cure_critical_wounds.lpc",
+            "/cmds/spells/m/_mass_cure_light_wounds.lpc",
+            "/cmds/spells/h/_heal.lpc",
+            "/cmds/spells/m/_mass_cure_serious_wounds.lpc",
+            "/cmds/spells/m/_mass_cure_critical_wounds.lpc",
+            "/cmds/spells/m/_mass_heal.lpc"});
+string * HARMS = ({"/cmds/spells/c/_cause_light_wounds.lpc",
+            "/cmds/spells/c/_cause_moderate_wounds.lpc",
+            "/cmds/spells/c/_cause_serious_wounds.lpc",
+            "/cmds/spells/c/_cause_critical_wounds.lpc",
+            "/cmds/spells/m/_mass_cause_light_wounds.lpc",
+            "/cmds/spells/h/_harm.lpc",
+            "/cmds/spells/m/_mass_cause_serious_wounds.lpc",
+            "/cmds/spells/m/_mass_cause_critical_wounds.lpc",
+            "/cmds/spells/m/_mass_harm.lpc"});

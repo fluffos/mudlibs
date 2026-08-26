@@ -1,0 +1,6 @@
+#include "/d/shadow/room/shadow.h"
+#define BTUNNEL "/d/shadow/room/inherits/tunnel.lpc"
+#define TUNNEL "/d/shadow/room/mountain/"
+#define DDCAVE "/d/shadow/room/cave/inherit/regcave.lpc"
+#define CAVEDIR "/d/shadow/room/cave/"
+#define CAVERAT "/d/shadow/room/cave/inherit/regcave_rats.lpc"
