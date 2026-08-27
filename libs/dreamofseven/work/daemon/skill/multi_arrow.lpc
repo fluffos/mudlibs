@@ -1,0 +1,100 @@
+#include <weapon.h>
+#include <ansi.h>
+inherit SSERVER;
+inherit SKILL;
+int cast(object me, object target)
+{
+    int ma,in,sk,wis,cost,damage;
+    int lv,arrow;
+    int pow,time;
+    string who;
+    me=this_player();
+    if(!me)
+        me=this_object();
+    wis=this_player()->query("wis");
+    in=this_player()->query("int");
+    arrow=me->query_skill("multi_arrow",1);
+    sk=arrow/100;
+    ma=sk+1;
+    cost=sk*10+10;
+    pow=sk+1;
+
+    time=1+pow/3+random(1+pow/2+pow/5);
+    if(!target) target = offensive_target(me);
+    if(!target||!objectp(target = present(target, environment(me)))||target==me )
+        return notify_fail("你要對誰施展這個法術﹖\n");
+    if(!me->is_fighting())
+        return notify_fail("你要戰鬥中才能施此項法術喔!\n");
+    pow=sk+1;
+    if(!living(target) ) return notify_fail(HIY"這不是生物喔\n"NOR);
+    if(me->query_skill("arrow",1)<300)
+        return notify_fail("你的魔箭術技能太低了..\n");
+    if (arrow<1)
+        return notify_fail("你沒學過這這法術\n");
+    who =target->query("name");
+    if(target->query("hp")<0)
+        return notify_fail(who+"不是活的生物\n");
+    if(!living(target))
+        return notify_fail(who+"不是活的生物\n");
+    if(userp(target)&&userp(me))
+    {
+        lv =me->query("level");
+        if(lv<30) return notify_fail("你先把自已變強吧\n");
+        if(lv>target->query("level"))
+        {
+            if(target->query("level")<30)
+                return notify_fail("不能欺負還沒長大的小孩\n");}
+        else
+            return notify_fail("你不能欺負等級比你小的玩家\n");
+    }
+    if(me->query_temp("cast")) return notify_fail("你正在施法\n");
+    if( (int)me->query("mp") <  cost )
+        return notify_fail("你的魔力不夠。\n");
+    damage=300+random(200)+in*2;
+    damage=damage*time-target->query_temp("apply/armor");
+    if (damage<400)
+        damage=(50+random(50))*time;
+    me->add("magicexp",1+random(4));
+    me->add("mp", -cost);
+    message_vision(HIG"$N集中精神在$N的手上\n\n",me);
+    call_out("delay",2,target,me,damage,time,ma);
+    if ( me->is_fighting() ) me->start_busy(1);
+    me->start_busy(2);
+    return 1;
+}
+int delay(object target,object me,int damage,int time,int ma)
+{
+    int mlv,tlv,pow,lck;
+    int arrow,in,sk,wis,all;
+    in=me->query("int");
+    arrow=me->query_skill("multi_arrow",1);
+    sk=arrow/100;
+    pow=arrow/100+1;
+    all=2+pow/2+pow/5+pow/3;
+    mlv=me->query("level");
+    if(target)
+        tlv=target->query("level");
+    if(target)
+        lck=target->query("lck");
+    message_vision(HIG"數道微弱的光茫慢慢出現在$N雙手之間\n\n"
+                   +"光茫慢慢聚合形成"+all+"隻小小的魔箭\n\n"
+                   +"箭如風般向$n射去\n\n"NOR,me,target);
+    message_vision(HIG"$N來不及閃躲,被"+time+"隻的魔箭擊中,造成$N"+damage+
+                   "傷害力\n\n"NOR,target);
+    target->receive_damage("hp",damage, me);
+    if (arrow>99)
+    {
+        if(in<random(300))
+        {
+            if(me->query("magicexp")>pow)
+            {
+                me->improve_skill("multi_arrow",wis+random(10));
+                me->add("magicexp",-pow);
+            }
+        }
+    }
+    if(!me->is_fighting(target))
+        target->kill_ob(me);
+
+    me->set_temp("cast",0);
+}

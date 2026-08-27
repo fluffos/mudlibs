@@ -1,0 +1,152 @@
+【DS之技能及特攻編寫時需注意事項】
+
+
+以後有空skill要找我QC..
+
+裡面常常有問題.
+
+1. 不能練到死亡還不停.
+2. 施展特攻如果消耗hp也要注意會不會死
+3. 連續攻擊類的特攻請把 delay_attack 放到前面.
+4. 立即性的特攻可以不用 delay_attack 但限於單一攻擊, 且要start_busy
+5. 注意side_effect(call_out的相互干擾問題)
+
+da-fork 會對所有敵人連續攻擊..這不合理!!
+
+可以對所有敵人攻擊一次, 或是對單一敵人攻擊數次.
+
+就是不要對多目標連續攻擊. 
+
+如果一個room有很多mob, 這肯定會造成lag.
+
+
+
+1. === query("屬性") 與 query_屬性() 的差別 ===
+
+
+  以往習慣用query("屬性")的巫師要注意, query("str") 將只傳回人物基本的str
+屬性值(2~100), 但是卻不會加上法術或是裝備附加上去的屬性以及傷害的影響. 當
+我們在編寫技能(skill)或是裝備品的特攻以及怪物的特攻時要注意, 當我們要查詢
+玩家或mob 屬性時, 要改用query_str(), query_int() 等等的函式, 如此才會讓法
+術,內功或是裝備附加效果生效. 亦即, 只要是有用到計算上的屬性查問, 都必須用
+query_xxx(); 只有檢視命令(score)及屬性升級計算才會用到 query("屬性").
+
+  我們提供可用的函式如下: ( 定義於 /feature/attribute.c )
+  
+  int query_total_gift()	//傳回屬性總和
+  int query_damage()		//傳回物理性攻擊力
+  int query_armor()		//傳回物理性防禦力
+  int query_shield()		//傳回非物理性防禦力(魔法抵抗力)
+  int query_str()		//傳回STR(力量)值(包含附加效果)
+  int query_int()		//傳回INT(智慧)值(包含附加效果)
+  int query_dex()		//傳回DEX(敏捷)值(包含附加效果)
+  int query_con()		//傳回CON(體質)值(包含附加效果)
+
+[註:] 若有需要新增其他查詢函數請告知 admin.
+
+
+
+2. === 如何引用 COMBAT_D ===
+
+
+  COMBAT_D 就是 /adm/daemons/combatd.c 執行產生的物件. 這個物件提供一些與
+戰鬥有關的函式可供其他物件使用. 茲分別介紹如下.
+
+  □ void report_status(object ob, int effective)
+
+  用法: COMBAT_D->report_status(victim, 1);
+  
+  功能: 回報物件 victim  的狀態. 例如: $N 混身是血﹐已經奄奄一息了。
+        effective 可為任意值, 目前並無分別.
+        
+  □ int do_attack(object me, object victim, object weapon, int attack_type)
+  
+  用法:
+  
+   #include <combat.h>	// <== 注意! 若要用到do_attack一定要先加入此行.
+   
+   COMBAT_D->do_attack(me,victim,me->query_temp("weapon"), TYPE_BERSERK );
+
+  說明: 以狂暴攻擊(TYPE_BERSERK)模式用武器攻擊對方一次.
+  功能: 以指定的攻擊模式實施攻擊動作, 通常用於戰士之技能.( 如瘋狂攻擊, 必殺攻擊..)
+
+  補充: attack_type 用來定義攻擊模式. 由於模式資料定義於 /include/combat.h 
+        所以一定要先 #include <combat.h> . 目前可用的攻擊模式如下:
+  
+  TYPE_REGULAR		一般攻擊模式
+  TYPE_RIPOSTE		尚未使用
+  TYPE_QUICK		快速攻擊模式(命中率增加1/10, 用於精確之攻擊或是反擊)
+  TYPE_BERSERK		狂暴攻擊模式(命中率下降1/10, 用於連續但不精確之攻擊)
+  TYPE_HEAVY		必殺攻擊模式(必中, 且攻擊力為1.7倍)
+
+  
+	[註: 其餘函式請參閱 /adm/daemons/combatd.c ]
+
+
+
+3. === 傷害的影響 ===
+
+
+  傷害設定於temp("wound/[type]",[int])
+  	[type] 分別為 head , hand , foot , body 
+  	[int]  為0 到 100 的整數
+  
+  	說明如下:
+	
+	head: 影響技能效果. 當 head 受傷 100 % 時, 各項技能將減低至 1/10
+	hand: 影響命中率,   當 hand 受傷 100 % 時, 命中率將減低至 1/10
+	foot: 影響閃躲率,   當 foot 受傷 100 % 時, 閃躲率將減低至 1/10, 且可能無法移動.
+	body: 影響屬性效果, 當 body 受傷 100 % 時, 各項屬性將減低至 1/10
+
+  傷害可利用函式 int receive_wound() 給予, 或是函式 int receive_curing() 治療
+  
+  語法:
+	receive_wound(string type, int damage, object who)
+
+        receive_curing(string type, int heal)
+        
+  說明: type 可為 head , hand , foot , body 其中之一.
+        damage 為傷害度(0-100)
+        heal   為癒合度(0-100)
+        
+  用法:
+	victim->receive_wound("head",random(10),me);
+
+	使 victim 的頭部("head")受創, 創傷度為0-9的亂數, 給予傷害者為 me. (攻擊技能)
+
+	me->receive_curing("foot", 5 );
+  
+	使 me 腳部("foot")的創傷癒合 5 點. (用於醫療物品或是醫療技能)
+
+
+4. === 攻擊魔法需注意事項 ===
+
+
+若是攻擊性之spell skill. 
+請在傷害計算時 引用 victim->query_shield() 以參考對象之魔法防禦力
+
+基本上用 damage -= victim->query_shield();
+
+也可用
+
+     damage -= victim->query_shield()/2;
+     damage -= random(victim->query_shield()/2);
+
+    以上兩行來產生魔法防禦力的變化( 變化幅度為1/2 )
+
+
+5. === skill中 的 delay 寫法 ===
+
+call_out 與 me->start_call_out 與 me->skill_active
+
+如果是 延遲特攻的動作 用call_out 即可
+
+目前的skill大多有一特性 就是會有個 delay 函數
+每隔一段時間檢查玩家是否戰鬥 或是 運功紮馬 而減ap或是hp
+對於這一類 delay 函數則要用 me->skill_active 
+
+寫法可以自行參考 /daemon/skill/下 (如 horse-steps.c)
+有些我已經改正過了.
+
+
+_1999/7/21 by Luky in DS_

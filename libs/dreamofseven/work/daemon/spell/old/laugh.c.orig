@@ -1,0 +1,3 @@
+// laugh.c
+
+inherit SKILL;

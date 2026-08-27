@@ -1,0 +1,161 @@
+/* 金錢鏢法(money-dart) Advanced Thief 用技能
+ *
+ * By Tmr 2002/04/05
+ */
+
+
+#include <ansi.h>
+inherit SKILL;
+inherit SSERVER;
+
+mapping *action = ({
+                       ([
+                            "action": "$N力貫中指，憤力彈出一枚古幣，帶著呼呼風聲撞向$n"NOR"的$l！",
+                            "damage":                25,
+                            "money_cost" : 1,
+                            "attact_type":  "bar",
+                            "damage_type":  "撞傷",
+                        ]),
+                       ([
+                            "action": "$N左手連珠發似地，在一眨眼間射出三枚古幣，各由不同方位攻擊$n"NOR"的$l！",
+                            "damage":                15,
+                            "money_cost" : 3,
+                            "attact_type":  "bar",
+                            "damage_type":  "淤傷",
+                        ]),
+                       ([
+                            "action": "$N趁著戰鬥空檔中，先後彈出二枚古幣，分別攻擊$n"NOR"的雙眼及$l！",
+                            "damage":                20,
+                            "money_cost" : 2,
+                            "attact_type":  "bar",
+                            "damage_type":  "淤傷",
+                        ]),
+                       ([
+                            "action": "$N一眼瞧見$n"NOR"的空隙，射出一枚去勢奔騰的古幣，狠狠地射向$n"NOR"的$l及$l！",
+                            "damage":                30,
+                            "money_cost" : 1,
+                            "attact_type":  "bar",
+                            "damage_type":  "刺傷",
+                        ]),
+                   });
+
+int exert(object me, object target, string arg)
+{
+    string msg;
+    object weapon;
+    int damage;
+
+    weapon=me->query_temp("weapon");
+    if(arg=="off" )
+    {
+        if( me->query_skill_mapped("unarmed")!="money-dart")
+            return notify_fail("你並沒有使用「金錢鏢法」\n");
+        me->map_skill("unarmed");
+        me->reset_action();
+        write("技能「金錢鏢法」已取消。\n");
+        return 1;
+    }
+    if(weapon && weapon->query("skill_type")!="unarmed")
+        return notify_fail("你必須空手，才能使用「金錢鏢法」。\n");
+    if( me->is_ghost() )
+        return notify_fail("你已經死了，請快去復活吧。\n");
+    // 第二次exert
+    // 特攻：「漫天花雨」 損失 50 coin 傷敵
+    if(me->query_skill_mapped("unarmed")=="money-dart")
+        //return notify_fail("你已經在施展「金錢鏢法」。\n");
+    {
+        //非戰鬥中，也能使用
+        // if(!me->is_fighting(target) )
+        //      return notify_fail("你沒有在戰鬥中....\n");
+        if (me->query_skill("money-dart") < 60)
+            return notify_fail("你對於「金錢鏢法」的技能不夠熟練，無法使用「漫天花雨」。\n");
+        if(me->query("ap")<50)
+            return notify_fail("你目前的內勁不足。\n");
+        if( !target )
+            return notify_fail("你要攻擊誰？？\n");
+        if(!me->can_fight(target))
+            return me->can_fight(target);
+        if(!me->can_afford(50))
+            return notify_fail("你身上必須要有五十枚古幣才能使用絕技「漫天花雨」。\n");
+        message_vision(
+            HIG"$N"HIG"雙手挾起各數十枚古幣，施展「漫天花雨」，硬起心腸砸向"HIG"$n\n\n"
+            NOR,me,target);
+        damage=me->query_damage()+me->query_skill("money-dart");
+        // 增加素質對傷害的影響
+        damage = COMBAT_D->Merits_damage(me,target,damage,"bar");
+        damage=damage/2+random(damage/2);
+        damage-=target->query_armor();
+
+        if(damage>0 &&
+                ( random(100) < COMBAT_D->attack_factor(me,"staff")*10/15
+                  || random(100) > -COMBAT_D->dodge_factor(target,"dodge")
+                ) )
+        {
+            message_vision(NOR"$n"+NOR"閃躲不及，被數枚古幣擊中要害了。",me,target);
+            if(me->query_temp("apply/show_damage") || me->query_temp("show_damage") )
+                tell_object(me,HIY"("+damage+")"NOR);
+            if(target->query_temp("apply/show_damage") || target->query_temp("show_damage") )
+                tell_object(target,HIR"("+damage+")"NOR+" ("+target->query("hp")+"/"+target->query("max_hp")+")");
+            message_vision("\n",me,target);
+            COMBAT_D->report_status(target);
+            target->receive_damage("hp",damage,me);
+        }
+        else {  // 攻擊不中
+            message_vision(CYN"$N"+CYN"以快速的手法，把射來的古幣一枚一枚接了下來。\n" NOR,target);
+            target->receive_money(50);
+        }
+        me->receive_damage("ap",10+random(30));
+        me->receive_money(-50);
+        me->start_busy(2);
+        target->kill_ob(me);
+        return 1;
+    }
+    if(me->query("ap")<10 || me->query("hp")<10 )
+        return notify_fail("你的身體狀況無法使用「金錢鏢法」。\n");
+    // 身上的 古幣 必須要大於 100 枚
+    if(!me->can_afford(100))
+        return notify_fail("你身上必須要有一百枚古幣才能使用「金錢鏢法」。\n");
+    me->map_skill("unarmed", "money-dart");
+    me->reset_action();
+    message_vision(HIY "$N從懷中拿出數十枚古幣，準備使用「金錢鏢法」。\n"NOR,me);
+    me->receive_damage("ap",5);
+    me->start_busy(1);
+
+    return 1;
+}
+
+
+
+mapping query_action(object me, object weapon)
+{
+    int money_cost=0;
+    mapping act;
+    //使用那一招呢？
+    act=action[random(sizeof(action))];
+    //招式所花費的coin 數
+    money_cost=act["money_cost"];
+    // npc 不用coin 就能使用
+    if(!userp(me) )
+        return act;
+    //最少花一枚coin
+    if(!money_cost) money_cost=1;
+    if( !me->can_afford((money_cost+1)) )
+    {
+        me->map_skill("unarmed");
+        me->reset_action();
+        write("由於你身上的古幣已經快花完了，你無法再繼續使用「金錢鏢法」。\n");
+        me->add_busy(1);
+    }
+    me->receive_money(-money_cost);
+    return act;
+}
+
+int valid_learn(object me) {    return 1;   }
+
+int practice_skill(object me) { return 1; }
+
+int improve_limite(object ob)
+{
+    return 75 + ob->query_int();
+}
+

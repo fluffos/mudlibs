@@ -1,0 +1,164 @@
+//Update by Linjack 99/10/19
+/* 疾風門 ： 殘月心法(moon_force) 由 Cominging 於 1999/5/29 日所創 */
+// QC: Luky [10.21.1999] 開放實際測試.
+// Update by tmr 2000/1/16
+// Visit By Cominging 2000/1/16
+// Update By Tmr 2000/5/7 ( 新增 rewield )
+
+#include <ansi.h>
+inherit SKILL;
+inherit SSERVER;
+
+void delay(object me);
+void arc(object me,object target);
+void rewield(object target,object wp);
+
+int exert(object me,object target, string arg)
+{
+    int heal,reheal,sk,lv;
+    int p,max;
+    object weapon;
+
+    if( !arg || arg == "?" )
+    {
+        write(@SKILL_HELP
+
+      殘月心法使用方法:       exert moon_force <參數>
+      參數:
+              recover         消耗AP來回覆HP
+              moon-arc        將手臂上的內力化為月型氣勁震落敵人武器
+
+              SKILL_HELP);
+        return 1;
+    }
+
+    if( arg=="recover" )
+    {
+        if( me->query("ap") < 20 )
+            return notify_fail("你目前的狀況不佳，無法使用殘月心法。\n");
+        if( me->query_skill("moon_force") < 10 )
+            return notify_fail("你的殘月心法基礎不夠！\n");
+        heal= (int)me->query("max_hp");
+        if( me->query("hp") >= heal )
+            return notify_fail("你目前的生命狀況已經是極限了。\n");
+        if(heal>4000) heal = 4000 + ((heal-4000)/8);
+        sk = (int)me->query_skill("moon_force");
+        lv = (int)me->query("level");
+        if ( sk > 50 ) sk = 50 + ((sk-50)/2);
+        reheal = (heal / 20) + ((sk/5)*3) + random(9) + (lv/2);
+        me->receive_heal("hp",reheal);
+        me->receive_damage("ap",27 + reheal/7 + random(4));
+        me->improve_skill("moon_force",me->query("int")/8 + random(3));
+        me->improve_skill("force",me->query("int")/7 + random(3));
+        me->start_busy(2);
+        message_vision(HIR"$N一時間靜下心來，運氣點了身上各傷口旁的大穴。\n"NOR,me);
+        return 1;
+    }
+
+    if( arg=="moon-arc" )
+    {
+        if( !me->is_fighting() )
+            return notify_fail("你並沒有在戰鬥中。\n");
+        if( me->query_skill("moon_force") < 50 )
+            return notify_fail("你的技能不足，無法使用「弧月」。\n");
+        if( !target ) target = offensive_target(me);
+        if( !target ) return notify_fail("你要對誰使用「弧月」？\n");
+        weapon=target->query_temp("weapon");
+        if(!weapon)
+            return notify_fail("敵方並沒有拿武器，「弧月」無法發揮效用。\n");
+        if( me->query("hp") < 100 || me->query("ap") < 100)
+            return notify_fail("你的身體狀況不好。\n");
+
+        message_vision("\n$N雙手一合一分，隨空虛劃凝出一片「弧月」。\n"
+                       HIY "弧月似有生命一般，以快捷無倫的疾速攻向$n拿武器的雙手！！\n" NOR,me,target);
+
+        me->receive_damage("hp",30);
+        me->receive_damage("ap",50);
+        me->improve_skill("moon_force",me->query("int")/6 + random(4) );
+        me->improve_skill("force",me->query("int")/5 + random(4) );
+        me->start_busy(2);
+call_out((: arc,me,target:),1+random(2));
+        return 1;
+    }
+
+    else return notify_fail("殘月心法沒有這種功\能！\n");
+
+}
+
+void arc(object me,object target)
+{
+    object wp;
+    string type;
+    int t,m;
+    if(!me || !target ) return;
+
+    wp=target->query_temp("weapon");
+    if( !wp )
+    {
+        message_vision("「弧月」凌空轉了數圈，化成一陣輕煙消失了。",me);
+        return;
+    }
+    type = wp->query("skill_type");
+    t=target->query_skill(type)+target->query_str()+(wp->query_temp("durable")/25);
+    m=me->query_skill("dodge")+me->query_str()+(me->query_skill("moon_force")/3);
+    if( random(t) < random(m) && wp->unequip() )
+    {
+        message_vision(HIC "「鏘」地一聲響，弧月撞得$N脫落了手中的武器！！\n" NOR ,target);
+        target->start_busy(1);
+
+call_out((: rewield,target,wp:),120 );
+    }
+    else message_vision(CYN "「鏘」地一聲響，弧月一撞上$N手中的武器反而被震碎了！！\n" NOR,target);
+    return;
+}
+
+void rewield(object target,object wp)
+{
+    if( !wp || !target || userp(target) ) return;
+    if(environment(wp) != target ) return;
+    if( wp->wield() )
+        message_vision("弧月對於$N的效力漸減，$N裝備起$n。\n",target,wp);
+    return;
+}
+
+int valid_learn(object me)
+{
+    return 1;
+}
+
+int practice_skill(object me)
+{
+    return 1;
+}
+
+void skill_improved(object me) // 注意, 一個skill能增加的屬性總和以 5 為上限
+{
+    int b,c;
+    b = me->query_skill("moon_force",1);
+    c = me->query("skill/moon_force"); //luky
+
+    if( b % 20==19 && b > c)
+    {
+        if(random(2))
+        {
+            tell_object(me, HIR "你的動作由於領悟殘月心法有道而更加輕盈了。\n" NOR);
+            me->add("addition/dex", 1);
+        }
+        else
+        {
+            tell_object(me, HIR "你的體質由於領悟殘月心法有道而增強了。\n" NOR);
+            me->add("addition/con", 1);
+        }
+        me->set("skill/moon_force",b);
+    }
+    me->save();
+}
+
+int improve_limite(object ob)
+{
+    int a;
+    a=(ob->query("level")*3)+(ob->query_int()/2);
+    if( a > 90 && ob->query("level") < 26 ) a=100;
+    else if( a>100) a =120;
+    return a;
+}

@@ -1,0 +1,4 @@
+// ride.c
+
+inherit SKILL;
+

@@ -1,0 +1,148 @@
+/*      神武真火(god-fire)
+        Write  1999.10.3  Acme@DS
+        update 1999.10.15 更新者: Luky QCer: Luky
+        update 2000/4/7 -By Tmr-
+        update 2001/10/20 Acme@DS
+*/
+
+#include <ansi.h>
+inherit SSERVER;
+inherit SKILL;
+
+int cast_fire(object target,object me,int god_fire,int me_int);
+int cast_fires(object target,object me,int damage,int probit,int i);
+
+int cast(object me, object target)
+{
+        /* 變數說明
+                god_fire        使用者神武真火(god-fire)等級
+                me_int          使用者智慧(Int)
+                cost            施展法術耗損的魔力值(MP)
+                probit          成攻擊中命中率
+                damage          擊中後攻擊力
+        */
+        int god_fire,me_int,cost;
+
+        god_fire = me->query_spell("god-fire");
+        me_int = me->query_int();
+        cost = god_fire/3;
+
+        if( me==target )
+                return notify_fail("你想要對自已施法？\n");
+        if ( !target )
+                target = offensive_target(me);
+        if ( !target ) 
+                return notify_fail("你找不到可以施法的對像。\n");
+        if( me->query("mp") < cost )
+                return notify_fail("法力不足，無法施法。\n");
+        if( !me->is_fighting(target) )
+                return notify_fail("你並沒有和對方在戰鬥中。\n");
+        if( !me->can_fight(target))
+                return me->can_fight(target);
+
+        message_vision("$N雙手合十，喃喃自語道："HIW"「"HIG"天地合德，日月合明，四時合序，鬼神合火以滅敵。"HIW"」\n"NOR,me);
+
+        me->start_busy(1);
+        me->set_temp("is_busy",1);
+        me->receive_damage("mp",cost);
+        call_out( (:cast_fire,target,me,god_fire,me_int,cost:) , 1);
+        return 1;
+}
+
+int cast_fire(object target,object me,int god_fire,int me_int)
+{
+        int probit,damage;
+        if( !me ) return 0;                                     
+        me->delete_temp("is_busy");
+        if( !target ) return notify_fail("目標消失了。\n");      
+        if( environment(me) != environment(target) )       
+                return notify_fail("目標離開了你的施法範圍。\n");
+
+        damage = god_fire+random(me_int);
+        damage -= random(target->query_shield());
+        // 增加素質對傷害的影響
+        damage = COMBAT_D->Merits_damage(me,target,damage,"wit");
+
+        message_vision("\n突然$N手上烈焰衝天,祭起一道"HIW"『"HIR"神武真火"HIW"』"NOR"直燒向$n！！\n"NOR,me,target);
+
+        probit=me->query_temp("probit/god-fire");
+        probit+=me->query_spell("god-fire")+me->query_int();
+        probit-=random(target->query_skill("dodge")+target->query_dex());
+
+        if( probit > random(100) )
+        {
+                target->receive_damage("hp", damage, me ); 
+
+                message_vision(HIR"\t只見$N"HIR"閃躲不掉一道"HIW"『"HIR"神武真火"HIW"』"HIR"的攻勢，被燒得皮開肉綻！"NOR,target);
+
+                if( me->query_temp("apply/show_damage") || me->query_temp("show_damage") )
+                        tell_object(me,HIY"( 傷害: "+damage+")"NOR);
+                if( target->query_temp("apply/show_damage") || target->query_temp("show_damage") )
+                        tell_object(target,HIR"( 傷害: "+damage+")"NOR+" ("+target->query("hp")+"/"+target->query("max_hp")+")");
+                if(wizardp(me) && me->query("env/debug")) 
+                        tell_object(me,"(debug):  造成"+damage+"點傷害!!\n"); 
+
+                message_vision("\n",target);
+                COMBAT_D->report_status(target);         //顯示target狀態
+                me->improve_spell("god-fire",me_int+random(me->query("level")) );
+
+                if( probit > random(140)+1 && me->query("mp")>10 && god_fire > 59 )  //追擊
+                {
+                        me->set_temp("is_busy",1);
+                        me->set_temp("probit/god-fire",0);
+                        call_out( (:cast_fires,target,me,damage,probit,1:) , 1);
+                        return 1;
+                }
+        }
+        else
+        {
+                message_vision(GRN"\t只見$N"GRN"東閃西躲，好不容易躲開一道「神武真火」的猛烈攻勢。\n"NOR,target);
+                me->improve_spell("god-fire",random(me_int));
+                me->add_temp("probit/god-fire");        //如遲遲未能打中，則累加命中
+        }
+
+        if( !target->is_fighting(me) ) target->kill_ob(me);
+        if( !me->is_fighting(target) ) me->kill_ob(target);
+
+        return 1;
+}
+
+int cast_fires(object target,object me,int damage,int probit,int i)
+{
+        if( !me ) return 1;
+        me->delete_temp("is_busy");
+        if( !target ) return 1;
+        if( environment(me) != environment(target) ) return 1;
+        if( !me->can_fight(target)) return 1;
+        if( !me->is_fighting(target) ) return 1;
+
+        message_vision(HIW"剎那間！！$N"HIW"的背後出現數道"HIR"火龍"HIW"，飛騰而出，直衝向$n"HIR"！！\n"NOR,me,target);
+
+        if( probit > random(100) )
+        {
+                damage=damage*70/100;
+                target->receive_damage("hp",damage,me);  
+                message_vision(HIR"\t只見$N一時反應不過來，慘叫一聲，被火龍給吞噬了！！"NOR,target);
+
+                if( me->query_temp("apply/show_damage") || me->query_temp("show_damage") )
+                        tell_object(me,HIY"( 傷害: "+damage+")"NOR);
+                if( target->query_temp("apply/show_damage") || target->query_temp("show_damage") )
+                        tell_object(target,HIR"( 傷害: "+damage+")"NOR+" ("+target->query("hp")+"/"+target->query("max_hp")+")");
+                if(wizardp(me) && me->query("env/debug")) 
+                        tell_object(me,"(debug):  造成"+damage+"點傷害!!\n"); 
+
+                message_vision("\n",target);
+                COMBAT_D->report_status(target);         //顯示target狀態
+                me->improve_spell("god-fire",me->query("int"));
+
+                if( probit > random(180)+1 && i)
+                {
+                        me->set_temp("is_busy",1);
+                        call_out( (:cast_fires,target,me,damage,probit,0:) , 1);
+                        return 1;
+                }
+        }
+        else
+                message_vision(GRN"\t只見$N"GRN"踉蹌的閃過了火龍的追擊。\n"NOR,target);
+        return 1;
+}

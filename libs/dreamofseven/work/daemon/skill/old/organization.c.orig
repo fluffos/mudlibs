@@ -1,0 +1,4 @@
+// organization.c
+
+inherit SKILL;
+

@@ -1,0 +1,116 @@
+// sacrifice
+#include <ansi.h>
+inherit F_FINANCE;
+inherit F_VENDOR;
+inherit F_CLEAN_UP;
+int do_sac(object me,object ob,int world);
+void create() { seteuid(getuid()); }
+int main(object me, string str)
+{
+	object ob,*obs;
+	int j,k,time;
+	string name;
+        if(!str) return notify_fail("你要奉獻什麼東西給天神?\n");
+        time = me->money_type();
+	if(str == "all")
+	{
+	  obs = all_inventory(environment(me));
+	  k=sizeof(obs);
+	  if( k > 0)
+	  {
+	  	if( k > 10 ) k=10;
+	  	
+	  	for(j=0; j<k; j++)
+    	  	{
+    	   		//if( obs[j]->is_character() ) continue;
+    	   		if(!obs[j]) continue;
+    	   		if(obs[j]->query("money_id")) continue;
+        		if(living(obs[j])) continue;
+        		if(obs[j]->is_corpse() && obs[j]->query("owner_id")) continue;
+			if(obs[j]->query("no_sac") || obs[j]->query("no_get") || obs[j]->query("no_get") ) continue;
+    	   		do_sac(me,obs[j],time);
+  	  	}
+  	  }
+	  return 1;
+	}
+	
+        ob=present(str,environment(me));
+        if(!ob) return notify_fail("這個地方並沒有這項物品。\n");
+        if(ob==me)
+        {
+                message_vision("$N想將自己奉獻給天神，但是好像沒人理睬。\n",me);
+                return 1;
+        }
+        name=ob->name();
+        if(ob->query("money_id")) return notify_fail("天神是不接受金錢的。\n");
+        if(ob->is_corpse() && stringp(ob->query("owner_id")))
+                return notify_fail("你不能奉獻玩家的屍體給天神。\n");
+	if(ob->query("no_sac") || ob->query("no_get") || ob->query("board_id") )
+		return notify_fail("這個"+name+"無法奉獻。\n");
+        if(living(ob)) return notify_fail("除非"+name+"死了，否則別想!\n");
+        if(ob->query("equipped")) return notify_fail("你必需先將"+name+"解除裝備。\n");
+        
+        return do_sac(me,ob,time);
+}
+
+int do_sac(object me,object ob,int world)
+{
+	object *inv;
+	int money,i;
+	string obname;
+        if(ob->query("value")>10) money=random(10);
+        else money=ob->query("value");
+        if(money<1) money=1;
+        obname=ob->short();
+	if(userp(me)) 
+	{
+		if(world==3) message_vision("$N啟動環境淨化裝置將"+obname+"給淨化掉。\n",me);	
+		else message_vision("$N將"+obname+"奉獻給大地。\n",me);
+	}
+        else message_vision("$N挖了個洞將"+obname+"埋在土裡。\n",me);
+        
+/*        if(ob->query_max_encumbrance() && userp(me) && random(1000) < 1+(me->query("level")/12) && ob->query("level")>19)
+        {
+        	write(NOR"由於你為環境清潔所做的貢獻，系統特發給你一點特貢以資獎勵。"+NOR+"\n");
+        	me->add("award/totalvalue",1);
+        	log_file("award",
+		sprintf("%s(%s) award %s (%d) on %s because SAC(%s)\n", "系統", "Sac", me->name(1),1,
+			ctime(time()), obname) );
+        }
+        else */
+        if(userp(me))
+        {
+	        money = me->receive_money(money);
+	        if(money > 0)
+	        {
+	         if(world==3) write("你的電子幣點數增加了"+money+"個單位。\n");
+	         else write("你得到"+price_string(money,me->money_type())+"作為獎賞。\n");
+		}
+	}
+ 	if(ob->query_max_encumbrance()) //for corpse
+ 	{
+		inv = all_inventory(ob);
+		for(i=0; i<sizeof(inv); i++)
+   		{
+   			if(!inv[i]) continue;
+      			if(inv[i]->query("equipped")) inv[i]->unequip();
+                        if( !inv[i]->query("no_drop") && !inv[i]->query("no_put") ) inv[i]->move(environment(ob));
+   		}
+	}
+	
+        destruct(ob);
+        return 1;
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式: sacrifice <thing>
+
+當你有過多或不需要的物品，可以將它奉獻給天神。
+當然，你也會得到些許的回報。
+
+HELP
+);
+        return 1;
+}

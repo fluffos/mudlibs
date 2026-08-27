@@ -1,0 +1,233 @@
+// guild.c改自vendor.c
+#include <dbase.h>
+inherit ROOM;
+#include <ansi.h>
+#define STOREDROOM __DIR__"temp/rest"
+object stroom;
+void create()
+{
+set("light",1);
+set("short","[1;35m奧薇麗雅大飯店[m");
+set("long",@LONG
+
+  這裡是鎮民們最愛來的地方﹐雖然這裡的裝潢非常華麗﹐但
+價格卻十分合理。你看到牆上貼了一張告示[1;32m﹙[1;36mnote[1;32m﹚[0m。
+
+__      o
+◢_____/_\______                        /＊\\
+◤ @ = =   @= ◢   ,_____,______,  6   ///|＊\
+￣￣￣￣￣￣￣◤   T\  :.    -=- \_/\    _|_
+￣￣￣￣￣￣￣     I T============T /_   \_/
+                     I            I/||
+
+LONG
+);
+set("light",1);
+set("exits",([
+"north" : __DIR__"pearl_6",
+]));
+set("objects",([
+__DIR__"npc/ovelia": 1,
+__DIR__"npc/guest": 1,
+]));
+set("no_clean_up", 0);
+set("item_desc",([
+"note":@NOTE
+你可以打 list 來看看有什麼東西可以買來吃.
+NOTE
+,
+]));
+setup();
+ load_object(__DIR__"pearl_35");
+}
+
+void init()
+{
+add_action("do_vendor_list","list");
+ add_action("do_buy","buy");
+ add_action("do_supply","supply");
+}
+int do_vendor_list()
+{
+object *goods,stroom;
+mixed amount;
+string list, *name;
+int i,cost,level,maxlv;
+load_object(STOREDROOM);
+if(query_temp("stop"))
+return notify_fail("今天老闆身體不舒服,不營業了\n");
+	stroom=find_object(STOREDROOM);
+	goods = all_inventory(stroom);
+list = "你可以購買下列這些東西:           購買數量            錢 \n";   
+ list += "==========================================================\n";
+	for(i=0; i<sizeof(goods); i++)
+	          { 
+		list += sprintf("%-15s ﹕           %-7d          %-7d   \n",
+			goods[i]->short(),goods[i]->query("amount"),goods[i]->query("value")
+			 );
+			 }
+	write(list);
+	return 1;	
+}
+int do_buy(string arg)
+{
+int amount;
+object *goods,ob,ob2,npc,item;
+if(!arg) return 0;
+load_object(STOREDROOM);
+stroom=find_object(STOREDROOM);
+goods = all_inventory(stroom);
+this_player()->add_temp("cmds",1);
+if(sscanf(arg,"%d %s",amount,item)==2)
+{
+if(!objectp(ob=present(item,stroom)))
+return notify_fail("xxx\n");
+if(ob=present(item,stroom))
+{
+if(ob->query_amount()<1)
+return notify_fail("這種食物賣完了\n");
+if(this_player()->query("coin")<ob->query("value")*amount)
+return notify_fail("幹嘛....沒錢還敢來這裡買東西\n");
+if ( (ob->query_weight()*amount+this_player()->query_encumbrance())>this_player()->query_max_encumbrance() )
+return notify_fail("你的力量不夠,無法拿東西\n");
+ob2=new(base_name(ob));
+ob2->set_amount(amount);
+if(ob2->query_amount()>ob->query("amount"))
+return notify_fail("本店的貨沒這麼多\n");
+ob->add("amount",-amount);
+ob2->delete("secured");
+ob2->move(this_player());
+ob->delete("secured");
+ob->delete("no_sell");
+this_player()->add("coin",-ob->query("value")*amount);
+ this_player()->save();
+stroom->save();
+message_vision("$N買了"+ob->name()+"\n",this_player());
+}
+else return notify_fail("沒這種東西\n");
+return 1;
+}
+if(ob=present(arg,stroom))
+{
+if(ob->query("amount")<1)
+return notify_fail("今天很不巧都賣完了,希望你改天再來光臨\n");
+if ( (ob->query_weight()+this_player()->query_encumbrance())>this_player()->query_max_encumbrance() )   
+ return notify_fail("你的力量不夠,無法拿東西\n");
+ if(this_player()->query("coin")<ob->query("value"))
+return notify_fail("幹嘛....沒錢想吃霸王飯啊\n");
+if(query_temp("stop"))
+return notify_fail("今天老闆身體不舒服,不營業了\n");
+this_player()->add("coin",-ob->query("value"));
+message_vision("$N買了"+ob->name()+"\n",this_player());
+if(ob->query("amount"))
+ {
+ob2=new(base_name(ob));
+ob2->delete("secured");
+ob2->move(this_player());
+ob->add("amount",-1);
+}
+else 
+ob->move(this_player());
+stroom->save();
+this_player()->save();
+return 1;
+}
+else return notify_fail("你想要吃什菜啊\n");
+
+}
+int do_supply(string arg)
+{
+object *goods,ob,ob2,npc,obj;
+int valu,exp,v,lck;
+load_object(STOREDROOM);
+stroom=find_object(STOREDROOM);
+if(!arg) return notify_fail("你要補什麼貨\n");
+if(this_player()->query("class")!="worker")
+return notify_fail("你不能補貨\n");
+if(this_player()->query_temp("supply"))
+return notify_fail("你還在補貨\n");        
+this_player()->set_temp("supply",1);
+goods = all_inventory(stroom);
+if(obj=present(arg,this_player()))
+if(arg=="rice")
+{
+if(obj=present(arg,this_player()))
+if(!obj->query("supply"))
+return notify_fail("我們不收這東西\n");
+valu=obj->query("value");
+v=random(valu);
+valu=valu+v;
+valu=50+random(40);
+exp=obj->query("value");
+lck=this_player()->query("lck")*this_player()->query("level");
+exp=exp+lck/3+random(lck/2)+this_player()->query_skill("product",1);
+if(this_player()->query("lck")<random(this_player()->query("level")*10))
+exp=200+random(200);
+else
+exp=400+random(200);
+arg="rices";
+if(ob=present(arg,stroom))
+{
+if(ob->query("amount")>90)
+return notify_fail("目前不需要補貨了\n");
+ob2=new(base_name(ob));
+ob2->set("amount",1);
+ob->add("amount",2);
+ob->add("amount",10);
+
+message_vision("[1;32m$N從遠方送來"+obj->name()+"[1;32m獲得"+valu+"枚銅板的酬勞[0m\n",this_player());
+message_vision("[1;32m$N[1;32m在勞累的旅途中獲得"+exp+"點經驗值[0m\n",this_player());
+this_player()->add("coin",valu);
+this_player()->add("exp",exp);
+stroom->save();
+return 1;
+}
+}
+ if(obj=present(arg,this_player()))
+if(obj=present(arg,this_player()))
+if(arg=="corpse")
+{
+if(obj=present(arg,this_player()))
+if(!obj->query("supply"))
+return notify_fail("我們不收這東西\n");
+if(!obj)
+ return notify_fail("你身上沒有貨\n");
+valu=obj->query("value");
+v=random(valu);
+valu=65+random(55);
+valu=(int)valu;
+exp=obj->query("value");
+if(this_player()->query("lck")<random(this_player()->query("level")*10))
+exp=1100+random(1100);
+else
+exp=2200+random(1100);
+exp=exp/2+random(exp/2)+lck;
+exp=(int)exp;
+arg="meat";
+if(ob=present(arg,stroom))
+{
+if(ob->query("amount")>99)
+return notify_fail("目前不需要補貨了\n");
+message_vision("[1;32m$N從遠方送來"+obj->name()+"[1;32m獲得"+valu+"枚銅板的酬勞[0m\n",this_player());
+message_vision("[1;32m$N在勞累的旅途中獲得"+exp+"點經驗值[0m\n",this_player());
+this_player()->add("coin",valu);
+this_player()->add("exp",exp);
+if(ob=present(arg,stroom))
+if(ob->query("amount")<100)
+ {
+if(ob=present(arg,stroom))
+{
+if(ob->query("amount")>90)
+return notify_fail("目前不需要補貨了\n");
+ob->add("amount",10);
+}
+this_player()->save();
+stroom->save();
+destruct(obj);
+return 1;
+}
+return 1;
+}
+else return notify_fail("沒這種東西\n");
+}
+}

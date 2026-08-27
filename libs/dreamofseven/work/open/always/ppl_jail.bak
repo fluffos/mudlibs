@@ -1,0 +1,187 @@
+#include <ansi2.h>
+#include <room.h>
+inherit ROOM;
+
+void auto_free(object who,int sec);
+
+void create()
+{
+  set("short",HIM"禁閉室"NOR);
+  set("long",@LONG
+
+  這裡是星際間之究極監獄。會來到這的都是-- 玩MUD不守規定的人。
+  如果你想早點出獄，最好和巫師配合回答一些簡單的問題，如果自首
+  的話或許你可以獲得減刑喔!!勸你不要作怪，這裡的守備是非常森嚴
+  的。唉~~~呀~~~呀~~~~  好好反省吧!!! 耐心的等候巫師的判決吧!!
+
+       如果你需要救援【通知線上巫師求助請打 wiz_help】
+
+LONG
+);
+  set("light",1);
+  setup();
+  call_other("/obj/board/ppl_jail_b" , "???");
+  call_out("help_reborn",1);
+}
+
+void init()
+{
+  int time;
+  if(time=this_player()->query("putjail_time")) call_out("auto_free",5,this_player(),time-5);
+  if(wiz_level(this_player()) > wiz_level("(immortal)"))
+  {
+    tell_object(this_player(),BLINK+HIC"\n離開或釋放請用free <id>   用 timeup <秒數> 指令可以定時自動釋放.\n\n"NOR);
+    add_action("do_free", "free");
+    add_action("do_countdown","timeup");
+    return;
+  }
+  this_player()->set_temp("out_of_power",1);
+  add_action("do_action","",1);
+}
+
+int do_action()
+{
+  if ( (string)query_verb() == "post" )
+  { return 0; }
+  if ( (string)query_verb() == "discard" )
+  { return 0; }
+  if ( (string)query_verb() == "followup" )
+  { return 0; }
+  if ( (string)query_verb() == "inventory" )
+  { return 0; }
+  if ( (string)query_verb() == "look" )
+  { return 0; }
+  if ( (string)query_verb() == "say" )
+  { return 0; }
+  if ( (string)query_verb() == "score" )
+  { return 0; }
+  if ( (string)query_verb() == "wiz_help" )
+  {
+    call_out("help_me",1,this_player());
+    return 1;
+  }
+
+  write("Sorry, 在牢裡還是安份點好。"NOR""WHT"注意: 在這裡能用的指令只有:\n  i, l, say, sc, post, read, discard, followup, wiz_help\n"NOR);
+  return 1;
+}
+
+int help_me(object me)
+{
+  object *obs = users();
+  object ob = this_object();
+  int i;
+
+  if(!ob || !me) return 1;
+
+  if(!ob->query_temp("help_ok"))
+  {
+    write(HIR"Sorry, 這個指令還要再等些時候才能再用。\n"NOR);
+    return 1;
+  }
+
+  for(i=0;i<sizeof(obs);i++)
+    if( wiz_level(obs[i]) > 2 ) tell_object(obs[i],BEEP""HIW"\n"+
+  me->query("name")+"("+me->query("id")+")[坐牢中] 向你發出求助訊號！你有空的話就過去看看是怎麼回事吧！\n\n"NOR);
+
+  write(HIC"求助訊號己經發出去了，至於巫師會不會來，就要看你的造化了。\n"NOR);
+  ob->delete_temp("help_ok");
+  return 1;
+}
+
+int do_countdown(string str)
+{
+  object who;
+  int time;
+  string who_name;
+
+  if(!str) return notify_fail("timeup <who> <幾秒>\n");
+  if(sscanf(str,"%s %d",who_name,time)!=2) return notify_fail("timeup <who> <幾秒>\n");
+  if(!who=present(who_name,this_object())) return notify_fail("自動釋放誰?\n");
+  if(time < 179) return notify_fail("至少要關三分鐘!! (180秒)\n");
+  message_vision("$N將$n的監禁時間設定為"+(string)time+"秒。\n",this_player(),who);
+  who->set("putjail_time",time);
+  who->save();
+  call_out("auto_free",180,who,time-180);
+  return 1;
+}
+
+int do_free(string str)
+{
+  object ob,who,env;
+  string where;
+
+  ob = this_player();
+  if(!who=present(str,this_object())) return notify_fail("釋放誰?\n");
+  message_vision("$N將$n釋放了!\n",ob,who);
+  message("system","\n\n   "+who->name(1)+"出獄了, 希望他能改過自新, 下次不要再犯法了。\n\n",users());
+  where=who->query("putjail_position");
+  if(where)
+  {
+    env=load_object(where);
+    if(env && env!= this_object() )
+    {
+      message_vision("$N被傳送回"+env->query("short")+"了..\n",who);
+      who->move(env);
+    }
+    else who->move("/open/world2/anfernee/start/login");
+  }
+  else who->move("/open/world2/anfernee/start/login");
+
+  who->delete_temp("out_of_power");
+  who->delete("putjail_time");
+  who->delete("putjail_position");
+  who->save();
+  return 1;
+}
+
+void auto_free(object who,int sec)
+{
+  string where;
+  object env;
+  if(!who) return;
+  if(environment(who)!=this_object())
+  {
+    who->delete("putjail_position");
+    who->delete("putjail_time");
+    who->delete_temp("out_of_power");
+    return ;
+  }
+        
+  if(sec<1)
+  {
+    message("system","\n\n   "+who->name(1)+"出獄了, 希望他能改過自新, 下次不要再犯法了。\n\n",users());
+    where = who->query("putjail_position");
+    if(where) env=load_object(where);
+    if(env && env!=this_object())
+    {
+      who->move(env);
+    }
+    else who->move("/open/world2/anfernee/start/login");
+
+    who->delete_temp("out_of_power");
+    who->delete("putjail_position");
+    who->delete("putjail_time");
+    who->save();
+    return;
+  }
+  if( who->query_temp("netdead") == 1 )
+  {
+    remove_call_out("auto_free");
+    call_out("auto_free",300,who,sec);
+    return;
+  }
+  message_vision("$N的刑期還有"+sec+"秒.\n",who);
+  who->set("putjail_time",sec);
+  who->save();
+  if(sec>300) call_out("auto_free",300,who,sec-300);
+  else call_out("auto_free",sec,who,0);
+  return;
+}
+
+void help_reborn()
+{
+  this_object()->set_temp("help_ok",1);
+  remove_call_out("help_reborn");
+  if(this_object()) call_out("help_reborn",300);
+}
+

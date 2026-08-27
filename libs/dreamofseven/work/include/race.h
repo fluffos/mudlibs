@@ -1,0 +1,44 @@
+#ifndef __RACE__
+#define __RACE__
+
+#define ZERG_RACE	"/adm/daemons/race/zerg"
+#define PROTOSS_RACE	"/adm/daemons/race/protoss"
+#define HUMAN_RACE	"/adm/daemons/race/human"
+#define ROBOT_RACE	"/adm/daemons/race/robot"
+#define MONSTER_RACE	"/adm/daemons/race/monster"
+#define BEAST_RACE	"/adm/daemons/race/beast"
+#define MEDA_RACE	"/adm/daemons/race/meda"
+
+#define BASE_WEIGHT_DEFAULT 30000
+#define BASE_ENCUMBRANCE_DEFAULT 20000
+#define BASE_CAPACITY_DEFAULT 20
+
+#define BASE_WEIGHT_HUMAN 30000
+#define BASE_ENCUMBRANCE_HUMAN 20000
+#define BASE_CAPACITY_HUMAN 20
+
+#define BASE_WEIGHT_ZERG 16000
+#define BASE_ENCUMBRANCE_ZERG 30000
+#define BASE_CAPACITY_ZERG 15
+
+#define BASE_WEIGHT_PROTOSS 30000
+#define BASE_ENCUMBRANCE_PROTOSS 20000
+#define BASE_CAPACITY_PROTOSS 20
+
+#define BASE_WEIGHT_ROBOT 30000
+#define BASE_ENCUMBRANCE_ROBOT 20000
+#define BASE_CAPACITY_ROBOT 20
+
+#define BASE_WEIGHT_MONSTER 10000
+#define BASE_ENCUMBRANCE_MONSTER 20000
+#define BASE_CAPACITY_MONSTER 20
+
+#define BASE_WEIGHT_BEAST 2000
+#define BASE_ENCUMBRANCE_BEAST 10000
+#define BASE_CAPACITY_BEAST 10
+
+#define BASE_WEIGHT_MEDA 30000
+#define BASE_ENCUMBRANCE_MEDA 20000
+#define BASE_CAPACITY_MEDA 20
+
+#endif

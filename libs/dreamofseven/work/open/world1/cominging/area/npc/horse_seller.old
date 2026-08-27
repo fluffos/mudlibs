@@ -1,0 +1,189 @@
+// 2001.7.25 version
+// 新增horse->setting(id) 以識別馬主身分
+// 設定為每人只限買一匹馬
+// alickyuen@ds 2003.1.12
+#include <dbase.h>
+#include <ansi.h>
+inherit NPC;
+inherit F_VENDOR;
+
+void create()
+{
+        set_name("周詳連", ({ "horse seller" , "seller" }) );
+        set("long", @LONG
+
+在步靈城中連詳馬廄的主人，他正用心的照顧各種類的馬匹中。
+你可以問問他有賣那種馬(list)，或是向他購買各種品種的馬(buy)。
+    
+LONG
+        );
+        set("level", 10);
+        set("no_fight",1);
+        set("age",   50);
+        set("chat_chance", 1);
+        set("chat_msg", ({
+  (: command("say 最近真是閒呀..") :),
+  (: command("sigh") :),
+  (: command("say 不知道還會有客人上門否 ?") :),
+}) );
+        set("sell_list",([      
+                  "/open/world1/horse/horse1": 50,
+]));
+        setup();
+        add_money("coin",50);
+}
+
+void init()
+{
+        add_action("do_buy","buy");
+        add_action("do_list","list");
+}
+
+string item_list(object ob)
+{
+        int b;
+        b=ob->query("value");
+        return sprintf(" %7d ────────  %-26s",
+                b,ob->short()
+                );
+}
+
+int do_list(string arg)
+{
+        object goods,me;
+        mapping item;
+        string list, *file;
+        int i,*supply_cost,debug;
+        
+        me=this_player();
+
+        if(wizardp(me) && me->query("env/debug")) debug=1;
+                else debug=0;
+
+        if( ! mapp( item = query("sell_list") ) )
+        {
+                write("這位小販沒有物品列表！\n");
+                return 0;
+        }
+
+        file =  keys(item);
+        supply_cost = values(item);
+        list = "\n\n\n┌─────────────────────────────┐\n"
+                    +"│ 馬 價                          目前可以購買的馬種清單    │\n"
+                    +"└─────────────────────────────┘\n";
+        for( i=0 ; i<sizeof(file) ; i++)
+        {
+                goods = load_object(file[i]);
+                if(goods) list+= item_list(goods);
+                if(debug) list+= sprintf(GRN+" SP:(%3d)\n"+NOR,supply_cost[i]);
+                        else list+="\n";
+                list +="\n";
+        }
+        list +="\n";
+        if( i==0 ) return notify_fail(this_object()->query("name")+"對你說: 對不起唷..貨都賣完了。\n");
+        else {
+                tell_object(me,"\n");
+                me->start_more(list);
+        }
+        return 1;       
+}
+
+int do_buy(string arg)
+{
+        int valus,j,world;
+        object goods,ob,me;
+        string item,*file;
+        mapping items;
+        
+        items = query("sell_list");
+        me = this_player();
+
+        if( arg!="horse" ) return notify_fail("你要買什麼東西？\n");
+
+        file = keys(items);
+//      int *supply_cost;
+//      supply_cost = values(items);
+        goods = load_object(__DIR__"horse.c");
+        valus=goods->query("value");
+
+        if( !me->can_afford( valus ) )
+                return notify_fail("你身上的錢不夠。\n");
+
+        if( me->query("supply_point") < 50 )
+                return notify_fail(this_object()->name()+ "對"+ gender_self(me->query("gender")) + "說："+ gender_self(me->query("gender")) + "似乎買了太多東西了，請等一下再來買吧！\n");
+     if( !wizardp(me) && objectp(find_living("com_horse/"+me->query("id"))) )
+		return notify_fail(this_object()->name()+"說道：這位大俠，你不是已經買了一匹了嗎？\n又說道：最近馬貨短缺，我每人只賣一只啦。\n");
+        me->receive_money(-valus);
+	me->add("supply_point", -50);
+
+        world = me->money_type();
+        message_vision("$N花了 "+price_string(valus,me->money_type())+" 向$n買了一"+goods->query("unit")+goods->name()+"。\n", me , this_object() );
+
+        ob = new(__DIR__"horse.c");
+        call_out("buy1",0,me,ob);
+        call_out("buy2",7,me,ob);
+//      ob->move(environment(me));
+        me->save();
+        return 1;
+}
+
+void buy1(object me,object ob)
+{
+        message_vision("周詳連對$N說﹕$n是吧？請等會兒！\n",me,ob);
+        message_vision("周詳連對著馬舍拉開喉嚨吆喝道：來馬！\n",me);
+        return;
+}
+
+void buy2(object me,object ob)
+{
+        if( environment(me) != environment(this_object()) )
+        {
+                tell_object(me, HIY" [ " + this_object()->name() + "梢了個訊息給" + gender_self(me->query("gender")) + "：請至連詳馬廄\領馬(draw horse)吧 :) 謝謝您 ] \n"NOR);
+                me->add_temp("horse_seller", 1);
+                return;
+        }
+        message_vision("舍中的小二一路上哼著歌把$n給牽了出來。\n"
+                +"周詳連對$N說：客倌，您的$n來了！\n"
+                +"周詳連把剛從的馬舍牽出來的$n到$N面前。\n"
+                , me , ob );
+	if( ob->setting(me->query("id")) )
+	{
+		ob->move(environment(me));
+	}
+	else {
+		message_vision(HIR"$N說道：咦！出bug耶，請report或找Alickyuen吧。\n", this_object());
+	}
+        me->save();
+        return;
+}
+
+int do_draw(string arg)
+{
+        object me, horse;
+        int h;
+        me = this_player();
+
+        if( !arg || arg != "horse" ) return notify_fail("請用 draw horse 來領取你的馬。\n");
+        if( (h = me->query_temp("horse_seller") ) < 1 )
+        {
+                me->delete_temp("horse_seller");
+                return notify_fail(this_object()->name() + "對你說：客倌.. 好像您並沒有馬欠著喔。\n");
+        }
+
+        if( h > 10 )
+        {
+                write(this_object()->name()+"對你說：客倌, 我這一次只能領個 10 隻, 我先幫您領出來。\n");
+                h = 10;
+        }
+
+        for(int i=1;i<=h;i++)
+        {
+                horse = new(__DIR__"obj/obj25");
+                horse->move(environment(me));
+                message_vision(this_object()->name()+"對著$N說：客倌，您的$n來了！\n["+this_object()->name()+"把$n牽到$N面前。]\n", me, horse);
+        }
+
+        me->add_temp("horse_seller", -h);
+        return 1;
+}
+

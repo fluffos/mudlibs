@@ -1,0 +1,970 @@
+// 幫會信物
+// "level": 玩家在幫會中的等級(1~?)
+// 1: 一般幫眾 
+// 2: 護法 
+// 3: 堂主 
+// 4: 長老 
+// 5: 副幫主 (限1名)
+// 6: 幫主 (限1名)
+// "title": 幫會頭銜
+// "info1": 備用區1 (分堂名稱)
+// "info2": 備用區2
+// "info3": 備用區3
+// 大草原 - /open/world1/acme/area/lea3
+//燕赤霞說﹕ 可以在這個房間的long 加上你發現這裡的天空有一比平常大的月亮?? :P
+// 【閒聊】燕赤霞(Jawei)﹕族長 副族長 長老 旗主 族人
+// 【閒聊】龍蝦(Luky)﹕長老以上或是旗主以上
+// 【閒聊】燕赤霞(Jawei)﹕幹部我希望是都只有族長能升降...
+// 新月 滿月 闇月 半月
+// 新增2職務2指令by-alickyuen@ds- on 31-7-2001
+
+#include <ansi.h>
+#include <armor.h>
+#define CLUB_NAME "天地會"
+#define CLUB_ID "sky"
+#define CLUB_CHANNEL "sky"
+#define CLUB_MARK "ring of heaven and earth"
+inherit FINGER;
+private string *members_level = ({
+	"族客", //0
+	"幫眾", //1
+	"堂員", //2
+	"護法", //3
+	"堂主", // 4 by alickyuen@ds
+	"長老", // 5 by alickyuen@ds 
+	"舵主", //4->6 by alickyuen@ds
+	"總舵主", //5->7 by alickyuen@ds
+});
+void create()
+{
+	set_name(HIG"天地指環"NOR,({"ring of heaven and earth","ring","club_mark"}));
+	set_weight(600);
+	if( clonep() ) set_default_object(__FILE__);
+	else
+	{
+		set("material","steel");
+		set("club_id",CLUB_ID);
+		set("club",CLUB_NAME);
+		set("sub_club",({"天罡\堂","地剎堂","正雲堂","法旋堂","焯焰堂"}));
+		set("no_drop",1);
+		set("no_sell",1);
+		set("no_sac",1);
+		set("unit","只");
+		set("long",@LONG
+	
+此指環乃是天下名匠為天下會創幫，以天下會鎮幫之寶
+(天地指環)的外形組做成的，指環透射出碧綠色的光澤
+，令你贊嘆該名匠所花的心血。
+
+[關於天地會的其他說明請用<help sky>指令查詢。]
+LONG
+		);
+	}
+	set("value",0);
+	set("club_max_level",sizeof(members_level)-1);
+	set("armor_prop/shield", 1);
+	set("wear_msg", HIG"$N戴上了天地會鎮幫之寶－"+name()+HIG"的同時，瞬間從天霖聖澤傳出一道綠光，將神聖之氣傳入$N的體內！\n"NOR);
+	setup();
+}
+
+int query_autoload() { return 1; } //save_item
+
+void init()
+{
+ mapping info;
+ int level;
+ if(environment(this_object())!=this_player()) return;
+ level=CLUB_D->check_member(CLUB_ID,getuid(this_player()));
+ if(level==0)
+ {
+ 	if(wizardp(this_player()))
+ 	{
+ 		 info = ([
+		 "level": wiz_level(this_player()),
+		 "title": "天地會特級顧問  ",
+		 "info1": "無",
+		 "info2": ctime(time()),
+		 "info3": this_player()->name_id(1)
+		 ]);
+		 CLUB_D->add_member(CLUB_ID,getuid(this_player()),info);
+	}
+	else 
+	{
+ 		tell_object(this_player(),this_object()->name()+"突然從你身上飛出，漸漸消失在遠方。\n");
+ 		this_player()->delete("club");
+ 		destruct(this_object());
+ 		return;
+ 	}
+ }
+ switch(level)
+ {
+  case 7:
+		add_action("do_handover","handover");
+		add_action("do_lockleave","lockleave");
+		add_action("do_givepower","givepower");
+		add_action("no_suicide","suicide"); //防止自殺
+		add_action("do_subleader","subleader");
+		add_action("do_retire","retire");
+  case 6:
+  		add_action("do_listmember","listmember");
+  		add_action("do_accept","accept");
+//		add_action("do_kickout","kickout");
+  case 5:
+/*他的權限就只有...help sky                    │本輔助訊息        │族人
+sky <你的訊息>              │幫會專用頻道      │族人
+members                     │列出線上幫會成員  │族人 
+leaveclub                   │主動退出幫會      │族人
+kickout <人名>              │將某人逐出幫會    │舵主以上
+*/
+//		add_action("do_kickout","kickout");
+  case 4:
+/* 堂主的權限:
+powerup <人名> to <分堂名>│升級某人為護法
+powerdown<人名>               │撤除某人護法職位
+kickout <人名>              │將某人逐出幫會
+*/
+		add_action("do_kickout","kickout");
+		add_action("do_powerup","powerup");
+		add_action("do_powerdown","powerdown");
+  case 3:
+		add_action("do_include","include");
+		add_action("do_dismiss","dismiss");
+  case 2:
+  default:
+   		add_action("do_help","help");
+   		add_action("do_members","members");
+   		add_action("do_leaveclub","leaveclub");
+ }
+}
+
+int filter_members(object ppl,string *list)
+{
+        if( !environment(ppl) ) return 0;
+        if( member_array(getuid(ppl),list)!=-1 ) return 1;
+        return 0;
+}
+
+string show_level(object user)
+{
+ int level,rank;
+ mapping info;
+ string str;
+ if(wizardp(user)) return "【榮譽會員】天地會特級顧問  ";
+ level=user->query("level");
+ if(level>100) 	str = "【????????】";
+ else if(level<11)	str = "【第 "+chinese_number(level)+" 級】";
+ else if(level<21) 	str = "【第"+chinese_number(level)+"級】";
+ else if(level%10==0)   str = "【第"+chinese_number(level)+"級】";
+ else str = "【"+chinese_number(level)+"級】";
+ info=CLUB_D->query_member_info(CLUB_ID,getuid(user));
+ rank=info["level"];
+ switch(rank)
+ {
+ 	case 7: str+="天地會總舵主    "; break;
+ 	case 6: str+="天地會舵主      "; break;
+ 	case 5: str+="天地會長老      "; break;
+ 	case 4: str+=info["info1"]+"堂主      "; break;
+ 	case 3: str+=info["info1"]+"護法      "; break;
+  	case 2: str+=info["info1"]+"堂員      "; break;
+ 	default: str+="天地會一般幫眾  "; break;
+ }
+ return str;
+}
+
+int sort_member(object ob1, object ob2)
+{
+	int lv1,lv2;
+	lv1=CLUB_D->check_member(CLUB_ID,getuid(ob1));
+	lv2=CLUB_D->check_member(CLUB_ID,getuid(ob2));
+	if(lv1 == lv2) return (int)ob1->query("level") - (int)ob2->query("level");
+	else return (lv1 - lv2);
+}
+
+int do_members(string arg)
+{
+	object *users,me;
+	string str,*list;
+	int i,ppl_cnt,idle;
+	me=this_player();
+//	list=CLUB_D->club_members(CLUB_ID);
+//	users = filter_array( users(), "filter_members", this_object() ,list);
+	users = CLUB_D->find_online_members(CLUB_ID);
+	str = "◎ "+CLUB_NAME+": \n";
+	str += "─────────────────────────────────────\n";
+
+	users = sort_array(users, "sort_member", this_object());
+
+	ppl_cnt = 0;
+	i = sizeof(users);
+	while( i-- )
+	{
+			// Skip those users in login limbo.
+			if(!me->visible(users[i]) && wizardp(users[i])) continue;
+			str = sprintf("%s%12s%-16s %s(%s)",
+				str,
+				show_level(users[i]),
+				RANK_D->query_level(users[i]),
+				users[i]->name(1),
+				users[i]->query("id"),
+			);
+			if(users[i]->query_temp("killer")) str+=HIR" [殺人犯]"NOR;
+			idle=query_idle(users[i]);
+			if(users[i]->query_temp("invis")) str+=HIB"(隱形)"NOR;
+			if(users[i]->query_temp("hide")) str+=HBK"(躲藏)"NOR;
+			if(users[i]->query_temp("netdead")) str+=HIG"<斷線中>"NOR;
+			if(idle>60) str +=sprintf(HIY" (發呆%d分鐘)"NOR,idle/60);
+			str +=sprintf("\n"NOR);
+			ppl_cnt++;
+	}
+	str += "─────────────────────────────────────\n";
+	str = sprintf("%s目前共有 %d 位成員在線上.\n", str, ppl_cnt);
+	this_player()->start_more(str);
+	return 1;
+}
+
+int do_include(string arg)
+{
+	string sub;
+	object ob,me;
+	mapping me_info,ob_info;
+	me=this_player();
+	
+        if(!arg) return notify_fail("include <人名>\n");
+        else
+        {
+                ob = present(arg, environment(me));
+	        if(!ob) return notify_fail("這裡有這個人嗎﹖\n");
+		if(!userp(ob) || ob==me ) return notify_fail("這裡有這個人嗎﹖\n");
+		me_info=CLUB_D->query_member_info(CLUB_ID,getuid(me));
+		ob_info=CLUB_D->query_member_info(CLUB_ID,getuid(ob));
+		if(sizeof(ob_info))
+		{
+                        if(me_info["level"] != 3 && me_info["level"] != 4 ) return notify_fail("只有堂主和護法才能收堂員。\n");
+			if(!stringp(sub=me_info["info1"])) return notify_fail("只有護法能將幫眾收入分堂。\n");
+			if(ob_info["level"] != 1) return notify_fail("只有一般族人可以收入你的分堂。\n");
+			ob_info["level"]=2;
+			ob_info["info1"]=sub;
+			CLUB_D->set_member(CLUB_ID,getuid(ob),ob_info);
+		 	message_vision("$N將$n收入"+sub+", 並拍拍$n的肩膀說: 今後就看你的表現了。\n",me,ob);
+		 	ob->save();
+		 	return 1;
+		}
+		 else return notify_fail("對方並沒有加入"+CLUB_NAME+"。\n");
+	}
+	return 1;
+}
+
+int do_dismiss(string arg)
+{
+	string sub;
+	object ob,me;
+	mapping me_info,ob_info;
+	me=this_player();
+	
+        if(!arg) return notify_fail("dismiss <人名>\n");
+        else
+        {
+                ob = present(arg, environment(me));
+	        if(!ob) return notify_fail("這裡有這個人嗎﹖\n");
+		if(!userp(ob) || ob==me ) return notify_fail("這裡有這個人嗎﹖\n");
+		me_info=CLUB_D->query_member_info(CLUB_ID,getuid(me));
+		ob_info=CLUB_D->query_member_info(CLUB_ID,getuid(ob));		
+		if(sizeof(ob_info))
+		{
+			if(!sub=me_info["info1"] || me_info["level"]!=3 ) return notify_fail("只有護法能免除分堂成員職務。\n");
+			if(ob_info["level"] != 2 ) return notify_fail("對方並不屬於你的分堂。\n");
+			if(ob_info["info1"] != sub) return notify_fail("對方並不屬於你的分堂。\n");
+			ob_info["level"]=1;
+			ob_info["info1"]="無";
+			CLUB_D->set_member(CLUB_ID,getuid(ob),ob_info);
+		 	message_vision("$N解除了$n在"+sub+"的職務, 搖搖頭說: 又少了一個人才...真是可惜啊。\n",me,ob);
+		 	ob->save();
+		 	return 1;
+		}
+		 else return notify_fail("對方並沒有加入"+CLUB_NAME+"。\n");
+	}
+	return 1;
+}
+
+int do_powerup(string arg)
+{
+	string sub;
+	object ob,me;
+	mapping me_info,ob_info;
+	me=this_player();
+	
+        if(!arg) return notify_fail("powerup <人名>\n");
+        else
+        {
+                ob = present(arg, environment(me));
+	        if(!ob) return notify_fail("這裡有這個人嗎﹖\n");
+		if(!userp(ob) || ob==me ) return notify_fail("這裡有這個人嗎﹖\n");
+		me_info=CLUB_D->query_member_info(CLUB_ID,getuid(me));
+		ob_info=CLUB_D->query_member_info(CLUB_ID,getuid(ob));
+		if(sizeof(ob_info))
+		{
+			if(me_info["level"] != 4 ) return notify_fail("只有堂主能將幫眾升為護法。\n");
+			if(!stringp(sub=me_info["info1"])) return notify_fail("只有堂主能將幫眾升為護法。\n");
+			if(ob_info["level"] != 2) return notify_fail("只有幫眾可以被升為護法。\n");
+			ob_info["level"]=3;
+			ob_info["info1"]=sub;
+			CLUB_D->set_member(CLUB_ID,getuid(ob),ob_info);
+		 	message_vision("$N將$n收入"+sub+", 並拍拍$n的肩膀說: 今後就看你的表現了。\n",me,ob);
+		 	ob->save();
+		 	return 1;
+		}
+		 else return notify_fail("對方並沒有加入"+CLUB_NAME+"。\n");
+	}
+	return 1;
+}
+
+int do_powerdown(string arg)
+{
+	string sub;
+	object ob,me;
+	mapping me_info,ob_info;
+	me=this_player();
+	
+        if(!arg) return notify_fail("powerdown <人名>\n");
+        else
+        {
+                ob = present(arg, environment(me));
+	        if(!ob) return notify_fail("這裡有這個人嗎﹖\n");
+		if(!userp(ob) || ob==me ) return notify_fail("這裡有這個人嗎﹖\n");
+		me_info=CLUB_D->query_member_info(CLUB_ID,getuid(me));
+		ob_info=CLUB_D->query_member_info(CLUB_ID,getuid(ob));		
+		if(sizeof(ob_info))
+		{
+			if(!sub=me_info["info1"] || me_info["level"]!=4 ) return notify_fail("只有堂主能免除分堂護法職務。\n");
+			if(ob_info["level"] != 3 ) return notify_fail("對方並不屬於你的分堂。\n");
+			if(ob_info["info1"] != sub) return notify_fail("對方並不屬於你的分堂。\n");
+			ob_info["level"]=2;
+			CLUB_D->set_member(CLUB_ID,getuid(ob),ob_info);
+		 	message_vision("$N解除了$n在"+sub+"的職務, 搖搖頭說: 加油吧,還可以捲土重來。\n",me,ob);
+		 	ob->save();
+		 	return 1;
+		}
+		 else return notify_fail("對方並沒有加入"+CLUB_NAME+"。\n");
+	}
+	return 1;
+}
+
+//收人
+int do_accept(string arg)
+{
+	string *clubs;
+	object ob,mark,me;
+	mapping info;
+	me=this_player();
+        if(!arg) return notify_fail("你要讓誰加入"+CLUB_NAME+"﹖\n");
+        else
+        {
+                ob = present(arg, environment(me));
+	        if (!ob) return notify_fail("這裡有這個人嗎﹖\n");
+	        if(!userp(ob) || ob==me ) return notify_fail("這裡有這個人嗎﹖\n");
+		if(ob->query_temp("joinclub") != me->query("id") )
+		{
+			return notify_fail("對方並沒有向你申請入幫(joinclub).\n");
+		}
+		clubs=CLUB_D->find_player_club(getuid(ob));
+		if(sizeof(clubs)>0)
+		{
+			if(clubs[0]==CLUB_ID) return notify_fail("對方已經是"+CLUB_NAME+"的一份子了。\n");
+			else return notify_fail("對方已經加入了別的幫派。\n");
+		}
+		 else
+		{
+		 mark=new(base_name(this_object()));
+		 if(!mark) return notify_fail("幫會信物取得失敗。\n");
+		 if( !mark->can_move(ob) ) return notify_fail(ob->name(1)+"拿不動"+mark->query("name")+"。\n");
+		 message_vision("$N給了$n一"+mark->query("unit")+mark->query("name")+", 並隆重的迎接$n成為"+CLUB_NAME+"的一份子。\n",me,ob);
+		 info = ([
+		 "level": 1,
+		 "title": "天地會一般幫眾",
+		 "info1": "無",
+		 "info2": ctime(time()),
+		 "info3": me->name_id(1)
+		 ]);
+		 CLUB_D->add_member(CLUB_ID,getuid(ob),info);
+		 mark->move(ob);
+		 ob->add("channels", ({"sky"}));
+		 ob->save();
+		}
+	}
+	return 1;
+}
+
+int do_kickout(string arg)
+{
+	string *tuned_ch;
+	object ob,mark,me;
+	mapping me_info,ob_info;
+	me=this_player();
+	
+        if(!arg) return notify_fail("你要將誰踢出"+CLUB_NAME+"﹖\n");
+        else
+        {
+               ob = present(arg, environment(me));
+	        if (!ob)
+	        {
+	        	if(!CLUB_D->is_club_leader(me))	return notify_fail("這裡有這個人嗎﹖\n");
+	        	else {
+	        		write("[離線開除]:");
+	        		if(ob=find_player(arg)) return notify_fail("對方還在線上。\n");
+	        		if( CLUB_D->remove_member(CLUB_ID,arg) )
+	        		{
+	        			write("成功\開除了"+arg+"。\n");
+	        			return 1;
+	        		}
+	        		else return 0;
+	        	}
+	        }
+	        if(!userp(ob) || ob==me ) return notify_fail("這裡有這個人嗎﹖\n");
+		me_info=CLUB_D->query_member_info(CLUB_ID,getuid(me));
+		ob_info=CLUB_D->query_member_info(CLUB_ID,getuid(ob));	
+		
+		if(sizeof(ob_info))
+		{
+			if(ob_info["level"] >= me_info["level"])
+				return notify_fail("你不夠資格將對方踢出"+CLUB_NAME+"。\n");
+			if( wiz_level(ob) > wiz_level(me) && wizardp(ob))
+				return notify_fail("你不夠資格將對方踢出"+CLUB_NAME+"。\n");
+ 			tuned_ch = ob->query("channels");
+ 			if( pointerp(tuned_ch) && member_array(CLUB_CHANNEL, tuned_ch)!=-1 )
+ 			{
+ 				tuned_ch -= ({ CLUB_CHANNEL });
+				ob->set("channels", tuned_ch);
+ 			}
+			//ob->delete("club");
+			if(!mark=present(CLUB_MARK,ob))
+			{
+				write("幫會信物取得失敗。\n");
+			}
+			else
+			{
+ 				message_vision("$N沒收了$n的"+mark->query("name")+", 並強制$n退出"+CLUB_NAME+"。\n",me,ob);
+ 				destruct(mark);
+ 			}
+ 			CLUB_D->remove_member(CLUB_ID,getuid(ob));
+ 			ob->save();
+ 			return 1;
+		}
+		 else return notify_fail("對方並沒有加入"+CLUB_NAME+"。\n");
+	}
+	return 1;
+}
+
+int do_subleader(string arg)
+{
+	string id,sub;
+	object ob,me,mark;
+	mapping me_info,ob_info;
+	me=this_player();
+	
+        if(!arg) return notify_fail("subleader <人名> to <分堂名>\n");
+        else
+        {
+        	if( sscanf(arg, "%s to %s", id, sub)!=2 ) return notify_fail("subleader <人名> to <分堂名>\n");
+                ob = present(id, environment(me));
+	        if(!ob) return notify_fail("這裡有這個人嗎﹖\n");
+		if(!userp(ob) || ob==me ) return notify_fail("這裡有這個人嗎﹖\n");
+
+		me_info=CLUB_D->query_member_info(CLUB_ID,getuid(me));
+		ob_info=CLUB_D->query_member_info(CLUB_ID,getuid(ob));
+		
+		if(sizeof(ob_info))
+		{
+			if(ob_info["level"] > 2) return notify_fail("只有一般幫眾或是堂員可以成為堂主。\n");
+			if( (int) member_array(sub, query("sub_club"))<0 ) 
+				return notify_fail("目前可用的分堂有【天罡\堂】、【地剎堂】、【正雲堂】、【法旋堂】、【焯焰堂】。\n");
+			ob_info["level"]=4;
+			ob_info["info1"]=sub;
+			CLUB_D->set_member(CLUB_ID,getuid(ob),ob_info);
+			if(!mark=present(CLUB_MARK,ob))
+			{
+				write("幫會信物取得失敗。\n");
+			}
+			else
+			{
+	 			message_vision("$N將$n提昇為"+sub+"堂主, 並和$n握手勉勵一番。\n",me,ob);
+	 			mark->move(ob);
+	 		}
+	 		ob->save();
+	 		return 1;
+		}
+		 else return notify_fail("對方並沒有加入"+CLUB_NAME+"。\n");
+	}
+	return 1;
+}
+
+int do_retire(string arg)
+{
+	string sub;
+	object ob,me,mark;
+	mapping me_info,ob_info;
+	me=this_player();
+	
+        if(!arg) return notify_fail("retire <人名> \n");
+        else
+        {
+                ob = present(arg, environment(me));
+	        if(!ob) return notify_fail("這裡有這個人嗎﹖\n");
+		if(!userp(ob) || ob==me) return notify_fail("這裡有這個人嗎﹖\n");
+
+		me_info=CLUB_D->query_member_info(CLUB_ID,getuid(me));
+		ob_info=CLUB_D->query_member_info(CLUB_ID,getuid(ob));
+
+		if(sizeof(ob_info))
+		{
+			if(ob_info["level"] != 4) return notify_fail("對象並不是堂主。\n");
+			
+			sub=ob_info["info1"];
+			ob_info["level"]=1;
+			ob_info["info1"]="無";
+			CLUB_D->set_member(CLUB_ID,getuid(ob),ob_info);
+
+			if(!mark=present(CLUB_MARK,ob))
+			{
+				write("幫會信物取得失敗。\n");
+			}
+			else
+			{
+	 			message_vision("$N免除了$n的"+sub+"堂主職務。\n",me,ob);
+	 			mark->move(ob);
+	 		}
+	 		ob->save();
+	 		return 1;
+		}
+		 else return notify_fail("對方並沒有加入"+CLUB_NAME+"。\n");
+	}
+	return 1;
+}
+
+int do_givepower(string arg)
+{
+	string id,type,res;
+	int level;
+	object ob,me,mark;
+	mapping me_info,ob_info;
+	me=this_player();
+	
+        if(!arg) return notify_fail("givepower <人名> to <等級>\n");
+        else
+        {
+        	if( sscanf(arg, "%s to %d", id, level)!=2 ) return notify_fail("givepower <人名> to <等級>\n");
+                ob = present(id, environment(me));
+	        if(!ob) return notify_fail("這裡有這個人嗎﹖\n");
+		if(!userp(ob) || ob==me) return notify_fail("這裡有這個人嗎﹖\n");
+		
+		me_info=CLUB_D->query_member_info(CLUB_ID,getuid(me));
+		ob_info=CLUB_D->query_member_info(CLUB_ID,getuid(ob));
+		
+		if(sizeof(ob_info))
+		{
+			if(ob_info["level"] >= me_info["level"]) return notify_fail("你沒有資格改變對方的職務等級。\n");
+			if( wiz_level(ob) > wiz_level(me) && wizardp(ob))
+					return notify_fail("你沒有資格改變對方的職務等級。\n");
+			if(level >= me_info["level"])
+				return notify_fail("你沒有資格提昇對方的職務等級到這個等級。\n");
+			if(level == ob_info["level"])
+				return notify_fail("對方已經是"+(string)members_level[level]+"了。\n");
+			if(level > 7 || level < 1 )
+				return notify_fail("目前等級分為 <1:幫眾> <2:堂員> <3:護法> <4.堂主> <5.長老> <6:舵主> <7:總舵主> 。 \n");
+			if( level > ob_info["level"] )
+			{
+				type="提昇";
+				res ="並和$n握手勉勵一番";
+			}
+			else
+			{
+				type = "降";
+				res ="並拍拍$n的肩膀期勉$n能將功\折罪";
+			}
+			switch(level)
+			{
+				case 1:
+					ob_info["level"]=1;
+					ob_info["info1"]="無";
+		 			ob_info["info2"]=ctime(time());
+		 			ob_info["info3"]=me->name_id(1);
+					break;
+				case 2:
+					return notify_fail("此動作保留給護法專用指令include使用才能指定分堂。\n");
+					break;
+				case 3:
+					return notify_fail("此動作保留給堂主專用指令powerup使用才能指定分堂。\n");
+					break;
+				case 4:
+					return notify_fail("請使用subleader指令。\n");
+					break;
+				case 5:
+					ob_info["level"]=5;
+					ob_info["info1"]="無";
+		 			ob_info["info2"]=ctime(time());
+		 			ob_info["info3"]=me->name_id(1);
+					break;
+				case 6:
+					ob_info["level"]=6;
+					ob_info["info1"]="無";
+		 			ob_info["info2"]=ctime(time());
+		 			ob_info["info3"]=me->name_id(1);
+					break;
+				case 7:
+					return notify_fail("請用handover指令做指揮權移交。\n");
+					break;
+				default: return notify_fail("參數錯誤。\n");
+				
+			}
+			CLUB_D->set_member(CLUB_ID,getuid(ob),ob_info);
+			if(!mark=present(CLUB_MARK,ob))
+			{
+				write("幫會信物取得失敗。\n");
+			}
+			else
+			{
+				message_vision("$N將$n的職位等級"+type+"為"+(string)members_level[level]+"(等級"+(string)level+"), "+res+"。\n",me,ob);
+				mark->move(ob);
+			}
+			ob->save();
+			return 1;
+		}
+		 else return notify_fail("對方並沒有加入"+CLUB_NAME+"。\n");
+	}
+	return 1;
+}
+
+int do_handover(string arg)
+{
+	object ob,mark,me;
+	mapping me_info,ob_info;
+	me=this_player();
+        if(!arg) return notify_fail("你要將大權移交給誰﹖\n");
+        else
+        {
+                ob = present(arg, environment(me));
+	        if (!ob) return notify_fail("這裡有這個人嗎﹖\n");
+		if(!userp(ob) || ob==me) return notify_fail("這裡有這個人嗎﹖\n");
+		
+		if(CLUB_D->query_club_leader(CLUB_ID)!=getuid(me)) return notify_fail("你不是真正的幫會領導人。\n");
+		
+		me_info=CLUB_D->query_member_info(CLUB_ID,getuid(me));
+		ob_info=CLUB_D->query_member_info(CLUB_ID,getuid(ob));
+		if(sizeof(ob_info))
+		{
+		 	CLUB_D->set_club_leader(CLUB_ID,getuid(ob));
+		 	
+		 	ob_info["level"]=7;
+		 	ob_info["info1"]="無";
+		 	ob_info["info2"]=ctime(time());
+		 	ob_info["info3"]=me->name_id(1);
+		 	CLUB_D->set_member(CLUB_ID,getuid(ob),ob_info);
+			
+			me_info["level"]=6;
+		 	me_info["info1"]="無";
+		 	me_info["info2"]=ctime(time());
+		 	me_info["info3"]=me->name_id(1);
+			CLUB_D->set_member(CLUB_ID,getuid(me),me_info);
+		 	
+		 	mark=present(CLUB_MARK, me);
+		 	if(!mark)
+		 	{
+		 		write("幫會信物取得失敗。\n");
+			}
+			else
+			{
+				mark->move(me);
+			}
+			mark=present(CLUB_MARK, ob);
+		 	if(!mark)
+		 	{
+		 		write("幫會信物取得失敗。\n");
+			}
+			else
+			{
+				mark->move(ob);
+			}
+			message_vision("$N將"+CLUB_NAME+"的總指揮權移交給$n。\n",me,ob);
+			message( "channel:sky",CYN"【"+CLUB_NAME+"】"+me->name(1)+"("+capitalize(me->query("id"))+")將"+CLUB_NAME+"指揮權移交給"+ob->name(1)+"("+capitalize(ob->query("id"))+")。\n"NOR, users() );
+			ob->save();
+			me->save();
+			return 1;
+		}
+		 else return notify_fail("對方並不是"+CLUB_NAME+"的一份子。\n");
+	}
+	return 1;
+}
+
+int do_leaveclub(string arg)
+{
+	string *tuned_ch;
+	object mark,me;
+	me=this_player();
+	
+	if(CLUB_D->query_club_leader(CLUB_ID)==getuid(me))
+		return notify_fail("你必須先將大權轉移才能離開"+CLUB_NAME+"。\n");
+	if(CLUB_D->query_lockleave(CLUB_ID)==1) return notify_fail("本幫會禁止自請退幫。\n");
+	CLUB_D->remove_member(CLUB_ID,getuid(me));
+	message_vision("$N主動退出了"+CLUB_NAME+"。\n",me);
+	message( "channel:sky",CYN"【"+CLUB_NAME+"】"+me->name(1)+"("+capitalize(me->query("id"))+")主動退出了"+CLUB_NAME+"。\n"NOR, users() );
+	tuned_ch = me->query("channels");
+	if( pointerp(tuned_ch) && member_array(CLUB_CHANNEL, tuned_ch)!=-1 )
+	{
+			tuned_ch -= ({ CLUB_CHANNEL });
+			me->set("channels", tuned_ch);
+	}
+	me->delete("club");
+	if(!mark=present(CLUB_MARK,me))
+	{
+		write("幫會信物取得失敗。\n");
+	} else destruct(mark);
+	me->save();
+	return 1;
+}
+int do_lockleave(string arg)
+{
+	if(CLUB_D->query_club_leader(CLUB_ID)!=getuid(this_player())) return notify_fail("你不是真正的幫會領導人。\n");
+	if(arg=="on")
+	{
+		if(CLUB_D->query_lockleave(CLUB_ID)==1) return notify_fail("退幫限制已經開啟。\n");
+		CLUB_D->set_lockleave(CLUB_ID,1);
+		write("你將"+CLUB_NAME+"設定為不可退幫。\n");
+		return 1;
+	}
+	if(arg=="off")
+	{
+		if(CLUB_D->query_lockleave(CLUB_ID)==0) return notify_fail("退幫限制已經關閉。\n");
+		CLUB_D->set_lockleave(CLUB_ID,0);
+		write("你將"+CLUB_NAME+"設定為可以退幫。\n");
+		return 1;
+	}
+	return notify_fail("lockleave <on/off> \n");
+}
+int no_suicide(string arg)
+{
+	if(CLUB_D->query_club_leader(CLUB_ID)==getuid(this_player()))
+	{
+		write("身為"+CLUB_NAME+"高級長官, 交出指揮權之前不可輕生, 以免後繼無人。\n");
+		return 1;
+	}
+	return 0;
+}
+
+int do_listmember(string arg)
+{
+	string *list,*members,temp,output;
+	int i,j;
+	mapping club;
+	list=CLUB_D->club_members(CLUB_ID);
+	club=CLUB_D->query_club_record(CLUB_ID);
+	members=keys(club);
+	output="\n目前"+CLUB_NAME+"登記有案的成員有:\n";
+	if(arg=="long")
+	{
+		for(i=this_object()->query("club_max_level");i>0;i--)
+		{
+			for(j=0;j<sizeof(members);j++)
+			{
+				if(club[members[j]]["level"]==i) output=sprintf("%s %12s 幫會等級: %d\n",output,members[j],i);
+			}
+		}
+		output=sprintf("%s \n目前%s共計有: %d 名成員。\n",output,CLUB_NAME,sizeof(members));
+		write(output);
+		return 1;
+	}
+	temp=CLUB_D->query_club_leader(CLUB_ID);
+	output=sprintf("%s 領導人: %12s\n",output,temp);
+	list-=({temp});
+	output=sprintf("%s 其他:\n",output,temp);
+	output+=CLUB_D->show_club_members(CLUB_ID);
+	output=sprintf("%s目前%s共計有: %d 名成員。\n",output,CLUB_NAME,sizeof(members));
+	output+="\n [用listmember long 可以看到更完整的資料。]\n";
+	write(output);
+	return 1;
+}
+
+int do_help(string arg)
+{
+ if(arg=="sky")
+ {
+  write(@HELP
+
+       ╒════════════════════════════════╕
+       │                      幫會信物的輔助說明                        │
+       ├───────────────┬─────────┬──────┤
+       │  指令格式                    │說明              │權限        │
+       ├───────────────┼─────────┼──────┤
+       │  help sky                    │本輔助訊息        │族人        │
+       │  sky <你的訊息>              │幫會專用頻道      │族人        │
+       │  members                     │列出線上幫會成員  │族人        │
+       │  leaveclub                   │主動退出幫會      │族人        │
+       │  include <人名>              │將某人收入分堂    │護法堂主專用│
+       │  dismiss <人名>              │取消某人分堂職務  │護法堂主專用│
+       │  powerup <人名>              │升級某人為護法    │堂主專用    │
+       │  powerdown <人名>            │撤除某人護法職位  │堂主專用    │
+       │  kickout <人名>              │將某人逐出幫會    │堂主以上    │
+       │  accept <人名>               │讓某人加入幫會    │舵主以上    │
+       │  lockleave <on> <off>        │限制自行退幫      │總舵主      │
+       │  subleader <人名> to <分堂名>│升級某人為堂主    │總舵主      │
+       │  retire <人名>               │撤除某人堂主職位  │總舵主      │
+       │  givepower <人名> to <等級>  │改變某人的職位    │總舵主      │
+       │  handover <人名>             │掌門職務交接      │總舵主      │
+       │  listmember                  │幫會名冊          │舵主以上    │
+       └───────────────┴─────────┴──────┘
+     ◎ 使用 accept 指令必須對方先用 joinclub 指令申請才能生效。
+     ◎ 天地會目前有五個分堂:
+        【天罡堂】、【地剎堂】、【正雲堂】、【法旋堂】、【焯焰堂】。
+     ◎ 等級分為: <1:幫眾> <2:堂員> <3:護法> <4.堂主> <5.長老> <6:舵主> <7:總舵主> 。
+     ◎ 其他天地會的事務: <help sky_rule> , <help sky_story> 。
+HELP
+  );
+  return 1;
+  }
+  if(arg=="sky_rule")
+  {
+   this_player()->start_more(@RULE
+
+                               天地正法-初
+第一章：
+
+1．不可拿著EQ發呆或閒置(除了自己的SaveEQ外)，所以在發呆或閒置前，請將EQ放入各
+   置物箱中，EQ不分好壞，都必須歸放再發呆或閒置．
+2．各類的EQ放置之處：OnlyEQ放在RedAxe的寶箱裡，而其他EQ以放在天罡堂和RedAxe的
+   箱子為主，而充足時所多的EQ則請長老級成員整理並移轉到Green Sword的寶箱裡．
+3．EQ的來源由全體成員補充，以護法和堂主的責任最為重大，在一開始無狀態時每個成
+   員都不應不忘補充EQ為主．而放EQ的順序為天罡堂->Red Axea->Green Sword．
+4．嚴禁盜賣EQ，天地每個置物箱都有記錄系統，而請長老級以上的成員在每個星期二、
+   四，日重開前清查拿取記錄，有違反者交由舵主來予以處分，堂主與護法來執行。
+5．當置物箱裡EQ充足時可請堂主以上人員做規劃整理，例如把不必要或品質不良的EQ賣
+   掉，所得做為幫產．
+6．武器用完後不論狀況多少，都請拿去修理後在放回置物箱，以便保持EQ的使用品質．
+7‧護法以上禁止拿好EQ與only EQ idle被查出來拿一堆EQ但是沒用到..卻不肯讓出的話
+   以拿EQ發呆處分。
+
+第二章：
+
+．幫眾-新幫眾盡快找護法或堂主，升為該堂的堂員，受其堂管理，對應為：八極->天罡
+       堂，疾風->正雲堂，神武->焯焰堂，和尚->法旋堂，小偷->地剎堂，請尚未入堂
+       或入錯堂者盡快找堂主或護法調整．
+．堂員-堂員的本份為盡力練功變強，增加實力．
+．護法-護法的職責為帶領堂員練功，監督並且協助堂員．
+．堂主-負責管理其堂的堂員和護法，並盡力協助其堂的成員，以指導護法為主．
+．長老-長老基本上不管事務，長老多數為對幫會有重大貢獻者或有實力者，而在幫會重
+  大會議中　仍有投票權及提供意見和經驗等權利．
+．舵主-為幫會處理大小事務的領導者，例如招攬新成員和提供對幫會有益的提案建設，
+       進行裁決處分，維持幫會秩序並保護所有成員．舵主對堂主為輔導員身份，不需
+       干涉各堂事務，而是指導堂主怎麼管理各堂．
+．副總舵主-主要為總舵主分擔幫會重大事務。
+．總舵主-為幫會的最高領袖，與各幹部層級者共同維持整個幫會的運作，指派各級成員
+         工作，其命令為絕對但必須合情合理，負責與巫師進行重大工程．
+
+第三章：
+
+一、嚴格禁止跨幫
+
+      　  本幫幫員所擁有之所有角色，不可以加入其他幫派．同時也各位不要將自己
+     的角色借給他人使用．而要把角色送給他人時，必須Post在幫會的天地事務版公
+     佈，由長老以上同意並將之Kickout後才可送給他人。如送給同幫幫員，可以Post
+     在天地事務版，由舵主同意．另外禁止任意脫離本會，如自己脫離幫會，不要希望
+     本會重新收你，而有必要脫離時，必須Post在天地事務版經長老會議通過准許，始
+     可離開幫會．而離開幫會需繳交退幫費，退幫費的算法是堂員退幫Lv * 5 one、護
+     法退幫Lv * 10 one、堂主退幫Lv * 15 one、長老以上退幫Lv * 20 one，等繳完
+     費方可退幫。
+
+二、嚴禁主動PK其他玩家
+
+        　本幫幫員禁止PK其他玩家，但由本幫發出格殺令的例外。而所有PK我幫幫員
+     之玩家，應立即通知在線之護法以上人員，並將情況Post在天地事務版，內容必須
+     必須包括PKER ID和被PK者ID，而在線的幫員，應給予最大協助。而本幫將列出通
+     緝黑名單，我幫幫眾皆可除之。若被PK時，線上無護法以上可為之作證，則請被PK
+     之幫眾自行POST過程，事後經堂主或以上人員查證，亦將之列入通緝黑名單。除遭
+     受PK以外，本幫幫眾與他人的其他糾紛，必須Post在天地事務版由長老以上決定行
+     動，不可自行PK對方。
+
+第四章：
+
+有意加入本幫者，請先Mail Sk、Lv和保人名字給處理本職務的舵主，由舵主Post在天地
+事務版後由天地會成員提出意見，於三天內截止，三天一過，由總舵主或副總舵主同意後
+，請舵主以上在兩天內執行收人程序．而收人的條件如下：
+
+1．等級要在Lv15以上
+2．至少要有兩位保人
+3．練功狂為佳
+4．技能技巧不能太低
+5‧保人必須是加入天地會已超過一個月以上的人才有資格
+
+如果本幫成員有分身要進本幫的話請Post在天地事務版上並標示Lv並請舵主在兩天內決定
+，決定後在兩天內執行收人程序．而所有入幫的新成員請於天地留言板中Post自我介紹，
+並將Nick前加上$HIR$ψ$HIC$天地$HIR$ψ。
+
+第五章：
+
+．堂員拿EQ閒置降為幫眾為期兩個星期，護法降為堂員為期三個星期才可恢復原職，並罰
+  金10萬．堂主降至堂員為期一個月並罰金30萬，長老罰金50萬並降為幫眾一個月，舵主
+  以上暫不罰，但如果超過三次則降至幫眾兩個月並罰金100萬．
+．盜賣EQ者立即逐出本幫決不留情，並以長老以上決定是否通緝．
+．違反第三章第一條者將降至幫眾一個月，超過三次則逐出本幫．
+．違反第三章第二條者罰金10萬並降至幫眾一個月，第二次再犯就逐出本幫，由副總舵主
+  以上視況是否通緝。
+
+RULE
+);
+return 1;
+  }
+  if(arg=="sky_story")
+  {
+  this_player()->start_more(@SKY_PART
+
+	【天地會傳記和起源 】
+	  
+	    話說天下會創幫總陀主周伯通在拜訪古劍亭武林大會時，驚
+	聞【烏日國】的狂沙十鷲率兵襲擊向天關，武林大會上眾高手趕
+	往向天關救援。在離開古劍亭時，在場有一老前輩向周伯通走來
+	，而他就是古劍亭的主人 四靈劍王 冉紅塵，冉紅塵向周伯通說
+	到因覺得周伯通與其有緣，吩咐他在遲些日子，到天霖聖澤一遊
+	。而周伯通的好友李玟(Coco)因耳力驚人，雖然他在遠處，但依
+	然聽到一些斷斷續續的話。據李玟在武林大會後向同行之人所說
+	，當時冉紅塵向周伯通透露，在古劍亭東南二百里，有一名為天
+	霖聖澤的地方，數年前冉紅塵經過那處，發覺那處透射出奇異的
+	綠光，而因為當時冉紅塵要趕回古劍亭而無暇理會，所以就此不
+	放在心上。而在武林大會上，冉紅塵發覺周伯通身上隱約見到一
+	些碧綠色光澤，而且和冉紅塵當年在天霖聖澤見到的一樣，所以
+	指導周伯通前天霖聖澤，說不定會有意外收獲。
+	
+	李玟說到這處，就說因當時手上儲存著三把神武真火，因而精神
+	力大減，往後的對談就聽不清了．．．
+	    而在打敗烏日國眾兵後，周伯通和其伙伴覺得閑來無事，就
+	往天霖聖澤看看吧。同行的是周伯通年少時結識的好兄弟姐妹，
+	在各人呼應下，周伯通率令眾人前往天霖聖澤查個究竟....
+	在天霖聖澤十里外，各人也隱約見到天霖聖澤中心所發出的綠光
+	而眾人就向此綠光進發，途經之處環境清幽，各人走著走著，突
+	然間天地變色，像是天怒一樣....天空打下了數個旱雷，似在警
+	告各人不要繼續前進。
+	眾人是長年在江湖上行走的高手，當然不會被這雷聲嚇退。就在
+	此時，地下冒起了數十隻異獸，各人隨即運起自身絕學，周伯通
+	當先運起本門索極劍法，配合內功將內力凝聚於右臂之上，運起
+	五段連發技，而身旁好友李玟(Coco)和濱崎布(Ayumi)分別向東面
+	天霖聖澤中心殺去。李玟運起手上早以儲存的神武真火向異獸擲
+	去，而濱崎布也不輸前者，運起八極拳中的纏絲勁向異獸殺去。
+	
+	雖然眾人也是高手，但在苦戰中內力消耗得特別多，而異獸的威
+	力當真厲害，就在此時，眾人發覺同行之伙伴燕楠(Sevil)不見了
+	，就在各人疑惑時，聽到一異獸大叫一聲..鮮血濺了一地。原來
+	是燕楠用其神偷的絕技背刺正中異獸背心，令該異獸才發出殺豬
+	般的怪叫...
+	
+	眾人邊打邊進，到達了綠色光源之處，而異獸們也不敢靠近，眾
+	人才鬆了口氣。就在此時綠光大盛，眾人向那綠光中心一望，驚
+	見其中有一物，而此物就是發出綠光的原因。
+	周伯通向那物走去，各人立即叫嚷道不要走向不明的物質，但周
+	伯通就說到，那可能是冉紅塵前輩所說之物，當天冉紅塵前輩說
+	此物應該是由九天之外來到，實是一件異寶。
+	而在此後三年，眾人就在天城開門立戶，在天池附近開創了天下
+	顯赫有名的【天地會】，而在天霖聖澤獲得之物，就是天下會的
+	鎮幫之寶－ 天地指環 。
+
+SKY_PART
+);
+  return 1;	
+ }
+ return 0;
+}

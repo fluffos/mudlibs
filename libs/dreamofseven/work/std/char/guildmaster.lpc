@@ -1,0 +1,1053 @@
+// /std/char/guildmaster.c		Edit by shengsan@SD	1999.04.23
+// 版本: V1.20.00
+// 更新日期: 2007.02.27	修改人: Tmr
+// 1. 新增三階職業等級 (51~100級)
+// 2. 101~200 級預為四階職業等級
+// 3. 調整三階職業的經驗值計畫 (調降為主)
+//
+// 版本: V1.10.00
+// 更新日期: 2003.06.13	修改人: Shengsan@ms2.url.com.tw 修改代號: sV1
+// 1. 此版本主要是增加等級所作的調整
+// 2. 增加職業等級最高至 8 也就是最高等級為 200
+//
+// 版本: V1.04.00
+// code 第 221-224 行有關guild_gifts由Alickyuen在2003年1月4日修正
+// 注意事項:
+// 0. 修改此檔時, 未經 Shengsan 同意, 不得刪除或修改此檔.
+// 1. V1.02.00 版以後, 工會導師可以不用繼承此檔, 只要用將適當的函式引用即可.
+// 2. 工會導師要使用此檔內的函式, 此工會導師必須要有完整的職業歷程記錄
+//    也就是說, 玩家身上有的職業資料, NPC一樣也不能少, 其中包括:
+//    a. adv_class: x	x = 數值(1~2)
+//       此參數是說明此玩家或NPC目前的職業是第幾級, 1 就是第一級, 也就是最初
+//       的職業等級, 2 就是第二級, 依此類推...
+//    b. class1: x       x = 職業字串(英文)
+//       這是第一級職業的職業英文名稱, 不管此玩家或NPC目前為第幾級的職業, 這
+//       個參數一定要定義, 否則程式就不會正常工作... 記住, 職業歷程要完整...
+//    c. class2: x  x = 職業字串(英文)
+//       這是第二級職業的職業英文名稱...
+//
+// 3. 工會導師可以教授的技能列表
+//    其格式範例如下:
+//        set("guild_skills",([	// 難度, 等級1可學到的技能等級倍率, 上限
+//            "dodge"    : ({32,2,50}), //表示難度是32, 能學的等級是2*等級, 最高學習上限100
+//            "sword"    : ({40,2,50}),
+//            "makefood" : ({40,2,50}),
+//        ]) );
+//
+// 4. 如果想讓此工會導師只有單純的只是讓玩家學習技能, 而沒有加入工會的功
+//    能的話, 請加入下列設定至程式中:
+//        set("no_join", 1);
+//    特別提醒: 如果設 set("no_join",1) 的話, 任何人都可以學此導師的技能
+//              喔!!
+//
+// 5. 如果此工會導師有加入工會的功能, 在玩家成功加入工會的時候, 工會導師
+//    會發出訊息給全部的玩家看到, 如果要使用預設值就不必再加入其它參數;
+//    但是, 如果想要自己寫較有創意的訊息的話, 本繼承檔允許你加入最多三個
+//    訊息, 以取代原預設值, 方法如下:
+//    set("msg_guildclass0","訊息內容");
+//    set("msg_guildclass1","訊息內容");
+//    set("msg_guildclass2","訊息內容");
+//    至少要有 msg_guildclass0  的設定, 接下來的兩個可有可無, 完全按照你
+//    的需要, 值得一提的是訊息內容, 訊息內容如果有以 $  為開頭的字, 本繼
+//    承檔會用適當的字串來取代之, 請看以下說明:
+//    $N	: 加入工會者的名字
+//    $n	: 工會導師的名字
+//    $c	: 工會名稱(中文)
+//    目前只有三種字串可以取代, 如果需要更多的取代字串請通知 Shengsan
+//
+// 6. 如果要看參考範例請 more /u/s/shengsan/guild/bluemaster.c
+//
+// 7. 版本 V1.01.05 新功能:
+//    a. 如果 no_join 有設非 0 的值, 任何人都可以學此導師身上的技能
+//    b. 可以有條件的讓玩家加入工會, 用法如下:
+//       1. 不要加入 set("no_join",1);
+//       2. 加入限制條件:
+//          set("jointerm","條件字句");
+//          條件子句為: xx>數值    或    xx=數值    或    xx<數值
+//          如果條件成立就給予 join
+//       3. 如果條件不符, 你可以自訂要顯示的內容, 或用預設值也行.
+//          自訂的方法:
+//          set("jointerm_msg","訊息內容");
+//       4. 請參考範例 /u/s/shengsan/guild/bluemaster.c
+//
+// 8. 版本 V1.03.00 新增功能:
+//    a. 增加法術(spell)列表
+//    b. 向導師學習技能或法術要給錢
+//
+// 9. V1.04.00 之後不再限制名稱為工會...職業系統以組織為主...新增加了
+//    do_guild_join_with_no_message() 函式...這個函式只是把以前
+//    do_guild_join() 裡的訊息部分去掉改為傳回一個適當的數值...
+//    傳回值的意義如下:
+//     1: 成功	0: 導師的程式寫錯
+//    -1: 玩家已經加入其他組織
+//    -2: 玩家已經加入了與導師同級或更高級的組織
+//    -3: 玩家目前的組織並不適合加入本組織
+//    -4: 玩家等級不夠
+//    -5: 玩家的 termstr 並沒有大於 termnum 值
+//    -6: 玩家的 termstr 並沒有等於 termnum 值
+//    -7: 玩家的 termstr 並沒有小於 termnum 值
+//    -8: 玩家輸入的組織錯誤或沒有輸入要加入的組織名
+//    一樣...範例寫在 /u/s/shengsan/npc/bluemaster.c
+//
+// 現金改用存款
+//
+#include <dbase.h>
+#include <mudlib.h>
+#include <ansi.h>
+#include <combat.h>
+
+string sol_class(object ob, int adv);
+void guild_shout(object ob, object me, string msg);
+int art_count(int attr);
+int exp_count(int level,int base,int degree);
+int guildgift_count(int ppllv,int value);
+int total_guildgift(int *guildgift);
+string guild_rank(object me);
+
+void create()
+{
+    seteuid(getuid());
+}
+
+int do_advance_check(object ob, object me ) {
+
+    //++ sV1
+    if((int)ob->query("adv_class")==1 && me->query("class1"))
+    {
+        if(ob->query("class1") && me->query("class1")!=ob->query("class1"))
+        {
+            write(ob->name()+"說: 你已經加入了別的職業門派了。\n");
+            return 1;
+        }
+    }
+
+    if((int)ob->query("adv_class")==2 && me->query("class2"))
+    {
+        if(ob->query("class2") && me->query("class2")!=ob->query("class2"))
+        {
+            write(ob->name()+"說: 你已經加入了別的職業門派了。\n");
+            return 1;
+        }
+    }
+
+
+    if((int)ob->query("adv_class")==3 && !me->query("class3"))
+    {
+        // 三階 51~100 級 - tmr
+        write(ob->name()+"說: 你還沒有轉入三階職業。\n");
+        return 1;
+    }
+
+    if((int)ob->query("adv_class") < 3 && me->query("class3"))
+    {
+        // 三階 51~100 級 - tmr
+        write(ob->name()+"說: 我已經無法再給你進一步的指導了。\n");
+        return 1;
+    }
+
+    if((int)ob->query("adv_class") != 4 && me->query("class4"))
+    {
+        write(ob->name()+"說: 我已經無法再給你進一步的指導了。\n");
+        return 1;
+    }
+
+    if((int)ob->query("adv_class")==4 && !me->query("class4"))
+    {
+        // 三階 101~200 級 - tmr
+        write(ob->name()+"說: 你還沒有轉入四階職業。\n");
+        return 1;
+    }
+
+	if( ob->query("adv_class") > 0 ) return 0;
+
+    if(me->query("adv_class")>0 && me->query("class1") != "adventurer") {
+        write(ob->name()+"說: 很抱歉，我只幫助尚未加入任何職業門派的新進冒險者。\n");
+        return 1;
+    }
+
+    return 0;
+}
+
+// 戰藝
+int advance_level_art_cost(int level) {
+    if( level <= 50 ) return 0;
+    return 1000; // 固定1000戰藝
+
+}
+
+// 聲望需求
+int advance_level_popu_cost(int level) {
+    if( level <= 50 ) return 0;
+    return level*10;
+}
+
+// advance level
+int do_advance_level(object ob, object me) {
+    int levels, needexp;
+
+    string guild_rank;
+
+    levels = me->query("level");
+
+        if( levels >= 25 && me->query("adv_class") <= 1  // 只支援到50級
+        || levels >= 50 && me->query("adv_class") <= 2  // 只支援到50級
+             || levels >= 100 && me->query("adv_class") <= 3  // 100級
+            || levels >= 200 )    // 200級
+
+
+	{
+        write("你尚未轉職之前，就只能這樣了。\n");
+        return 1;
+    }
+
+    //sV1 50
+    if( levels >= MAX_PPL_ACTION_LEVEL )
+    {
+        write("你的等級已經到達上限了！\n");
+        return 1;
+    }
+
+    needexp = exp_count(levels,levels,14);
+
+    if( me->query("exp") < needexp )
+    {
+        write("你的經驗值需要至少("+needexp+")才能升級！\n");
+        return 1;
+    }
+
+    if( me->query("war_art") < advance_level_art_cost(levels) )
+    {
+        write("你的戰鬥藝術需要至少("+advance_level_art_cost(levels)+")才能升級！\n");
+        return 1;
+    }
+
+    if( me->query("popularity") < advance_level_popu_cost(levels) )
+    {
+        write("你的聲望要至少("+advance_level_popu_cost(levels)+")才能升級！\n");
+        return 1;
+    }
+
+    if( !me->query("adv_class") && levels > 4 )
+    {
+        if(me->query_temp("AdvWithoutClass"))
+        {
+            me->set("adv_class",1);
+            me->set("class1","adventurer");
+            me->set("guild_gifts",({5,5,5,5}));
+            me->delete_temp("AdvWithoutClass");
+        }
+        else
+        {
+            write(HIC+"警告: 再升一級你可能將無法加入其它職業門派！\n\n"+NOR+"[如確定要升級請再打一次升級指令。]\n\n");
+            me->set_temp("AdvWithoutClass",1);
+            return 1;
+        }
+    }
+
+    me->add("exp", -needexp);
+    me->add("war_art", -advance_level_art_cost(levels));
+    me->add("popularity", -advance_level_popu_cost(levels));
+
+    me->add("level", 1);
+    ob->advance_cost(me, "level");
+
+    // 由巫師自行寫Rank
+    if(!guild_rank = ob->guild_rank(me) || guild_rank=="")
+        guild_rank = "==沒有Rank資訊==";
+
+    me->set("guild_rank",guild_rank);
+    tell_object(me,"你將等級提昇至 第"
+                + CHINESE_D->chinese_number(me->query("level")) +"級！\n");
+
+    // 51~100級，每升一級有2點天賦
+    if(me->query("level") > 50 )
+        me->add("gifts", 2);
+
+    me->set("heart_modify",1);
+    me->heart_beat();
+    me->save();
+    return 1;
+}
+
+// 戰藝
+int advance_attr_art_cost(int level, int attr) {
+    if( level <= 50 ) return 0;
+    return attr*100;
+}
+
+// 聲望需求
+int advance_attr_popu_cost(int level, int attr) {
+    if( level <= 50 ) return 0;
+
+    return attr*10;
+}
+
+
+int getAttrType(string attr) {
+    switch(attr)
+    {
+    case "str" : return 0;
+    case "con" : return 1;
+    case "int" : return 2;
+    case "dex" : return 3;
+    }
+    return 0;
+}
+
+int do_advance_attr(object ob, object me, string attr) {
+    int levels;
+    int *ppl_guildgift;
+     int needexp, maxgift;
+
+    levels = me->query("level");
+
+    // 由於使用guild_gift系統, 故將單一屬性上限取消以guild_gift作用.
+    //if(  ( me->query(arg) >= me->query("level")*2 )
+    //  || ( me->query_total_gift() > me->query("level")*5 + 8 ) )
+    if(me->query_total_gift() > levels*5 + 8)
+    {
+        write("你的屬性總和已經到達等級上限了！\n");
+        return 1;
+    }
+
+    if( levels>4 )
+    {
+         if( me->query("class1") == "adventurer" ) ppl_guildgift = ob->query("guild_gifts");
+         else ppl_guildgift = me->query("guild_gifts");
+
+        //ppl_guildgift = me->query("guild_gifts");
+        //以上由alickyuen更正,2003年1月4日.
+        if( total_guildgift(ppl_guildgift) != 20 )
+        {
+            write("你的職業屬性分配表錯誤，請聯絡線上巫師處理！\n");
+            return 1;
+        }
+        maxgift = guildgift_count(levels, ppl_guildgift[getAttrType(attr)]);
+        if( me->query(attr) >= maxgift )
+        {
+            write("你的"+to_chinese(attr)+"已經到達極限了，請先升級後再來提昇屬性。\n");
+            return 1;
+        }
+    }
+
+    needexp = exp_count(levels,me->query(attr),7);	// (needexp = (attribut+1)*7)^2
+    if(me->query("exp") < needexp)
+    {
+        write("你需要 "+needexp+" 點經驗值才能提昇"+to_chinese(attr)+"！\n");
+        return 1;
+    }
+
+    if( me->query("war_art") < advance_attr_art_cost(levels,me->query(attr)) )
+    {
+        write("你的戰鬥藝術需要至少("+advance_attr_art_cost(levels,me->query(attr))+")才能升級！\n");
+        return 1;
+    }
+
+    if( me->query("popularity") < advance_attr_popu_cost(levels,me->query(attr)) )
+    {
+        write("你的聲望要至少("+advance_attr_popu_cost(levels,me->query(attr) )+")才能升級！\n");
+        return 1;
+    }
+
+    me->add("exp", -needexp);
+    me->add("war_art", -advance_attr_art_cost(levels,me->query(attr)));
+    me->add("popularity", -advance_attr_popu_cost(levels,me->query(attr)));
+	me->add(attr,1);
+
+    ob->advance_cost(me, attr);
+    me->set("heart_modify",1);
+    me->heart_beat();
+    tell_object(me,"你的"+to_chinese(attr)+"提升了。\n");
+
+	return 1;
+}
+
+int do_advance(object ob, object me, string arg)
+{
+    int levels;
+    int allgifts;
+
+    levels = me->query("level");
+    allgifts=me->query_total_gift();
+
+
+    // advance 的合法性檢查
+    if( do_advance_check(ob, me) ) return 1;
+
+    if( !me->query("adv_class") && levels > 4 )
+    {
+        if(!arg || arg == "level")
+        {
+            write("你沒有職業就不能升級或加屬性囉！\n");
+            return 1;
+        }
+
+        if(allgifts>32)
+        {
+            write("你沒有職業就不能再加屬性囉！\n");
+            return 1;
+        }
+    }
+
+
+	if(!arg) {
+	    write("指令格式：advance [level | str | con | int | dex]\n");
+	    return 1;
+	}
+
+    // advance level
+    if( arg == "level" )
+        return do_advance_level(ob, me);
+
+    // advance attr
+    if( arg == "str" || arg == "con" || arg == "int" || arg == "dex" )
+        return do_advance_attr(ob, me, arg);
+
+    write("指令格式：advance [level | str | con | int | dex]\n");
+    return 1;
+}
+
+int exp_count(int level,int base,int degree)
+{
+    int exp;
+
+    if(level>75)
+    {
+        exp = (base+16);
+        return exp*exp*exp*(degree+8);
+    }
+
+    if(level>50)
+    {
+        exp = (base+4);
+        return exp*exp*exp*(degree+2);
+    }
+
+    if(level>25)
+    {
+        exp = (base+1);
+        return exp*exp*exp*degree;
+    }
+
+    // default 1~25
+    exp = (base+1)*degree;
+    return exp*exp;
+}
+
+int guildgift_count(int ppllv,int value)	// (ppllv*10+ppllv*wizstr)/10
+{						// = ppllv + (ppllv*wizstr)/10
+    int gift;
+    gift = ppllv*value/10;
+    gift += ppllv;
+    if((ppllv*value)%10) gift+=1; //餘數進位
+    return gift;
+}
+
+int total_guildgift(int *guildgift)		// 計算屬性分配表總和
+{
+    return	guildgift[0]+guildgift[1]+guildgift[2]+guildgift[3];
+}
+
+int set_guildgift(object me,int *guildgift)
+{
+    me->set("guild_gifts", guildgift);
+    return 1;
+}
+
+int do_skill_list(object ob, object me, string arg)
+{
+    mapping skills;
+    mixed cost1;
+    string playerclass, guildclass, list, *name;
+    int i,cost,level,maxlv,price;
+
+    guildclass = sol_class(ob,0);
+    playerclass= sol_class(me,0);
+
+    if( !mapp(skills = ob->query("guild_skills")) )
+    {
+        tell_object(me,"這位導師沒有技能列表！\n");
+        return 1;
+    }
+    name = keys(skills);
+    cost1 = values(skills);
+    /* 開放所有玩家查閱, 以便參考是否要加入. Luky
+    	if( playerclass != guildclass && !ob->query("no_join"))
+    	{
+    		if( !me->query("no_check_class") && !ob->query("no_check_class") )
+    		{
+    			tell_object(me,HIW"這邊的技能"+to_chinese(guildclass)+"才能查看。\n"NOR);
+    		}
+    		return 1;
+    	}
+    */
+    list = HIR"\n╔══════════════════════════════════════╗\n"NOR;
+    list += HIR"║"HIC"技  能  名  稱                   "HIG"經驗值需求   "HIB"學費需求  "HIY"目前等級 / 最高等級"HIR" ║\n"NOR;
+    list += HIR"╚══════════════════════════════════════╝\n"NOR;
+    for(i=0; i<sizeof(name); i++)
+    {
+        if(cost1[i][1]<1) cost1[i][1]=2;	// 設定 maxlv 的倍數(為什麼要固定2呢? 不解..)
+        maxlv = me->query("level")*cost1[i][1];  // maxlv=level的倍數
+        if(maxlv >= cost1[i][2]) maxlv=cost1[i][2];
+        level = me->query_skill(name[i],1);
+        // 後面那個1(非0) 是表示原來的值,不設原值會除2
+        cost =(level*level*cost1[i][0])/50;
+        price=(level*level*cost1[i][0])/70;
+        list += sprintf("  "HIC"%-34s"HIG"%-9d   "HIB"%-9d      "HIY"%3d / %-3d\n"NOR,
+                        to_chinese(name[i])+"("+name[i]+")",cost,price,level,maxlv);
+    }
+    tell_object(me,list);
+    return 1;
+}
+
+
+int do_skill_train(object ob, object me, string argx)
+{
+      mapping skills;
+    mixed cost1;
+        string playerclass, guildclass, *name, bank;
+    int i,cost,level,maxlv,value,time;
+
+    guildclass = sol_class(ob,0);
+    playerclass= sol_class(me,0);
+
+    if(!mapp(skills = ob->query("guild_skills")) )
+    {
+        write("這位導師沒有技能列表！\n");
+        return 1;
+    }
+    if(!argx)
+    {
+        write(HIC"想訓練啥技能??\n"NOR);
+        return 1;
+    }
+    if( playerclass != guildclass && !ob->query("no_join"))
+    {
+        write(HIW"這邊是"+to_chinese(guildclass)+"專用的訓練場。\n"NOR);
+        return 1;
+    }
+    if(!ob->query("guild_skills/" +argx) )
+    {
+        write("看清楚﹗這裡沒那種技能。\n");
+        return 1;
+    }
+    name = keys(skills);
+    cost1 = values(skills);
+    for(i=0; i<sizeof(name); i++)
+    {
+        if(argx==name[i])
+        {
+            if(cost1[i][1]<1) cost1[i][1]=2;	// 設定 maxlv 的倍數
+            maxlv = me->query("level")*cost1[i][1];  // maxlv=level的倍數
+            level = me->query_skill(argx,1);
+            if(level >= maxlv || level >= cost1[i][2])
+            {
+                write("你的"+to_chinese(argx)+"已經到這裡的最高級了\n");
+                return 1;
+            }
+            cost =level*level*cost1[i][0]/50;
+            if(me->query("exp") < cost)
+            {
+                write("你經驗不夠了\n");
+                return 1;
+            }
+            value = level*level*cost1[i][0]/70;
+            /*		if( me->can_afford(value)!=1 )
+            		{
+            			write("你帶的錢不夠喔！\n");
+            			return 1;
+            		}
+            */
+            time=me->money_type();
+            if(time==2) bank="bank/now";
+            else if(time==3) bank="bank/future";
+            else bank="bank/past";
+            if(me->query(bank)<value)
+            {
+                write("你的存款不夠喔！\n");
+                return 1;
+            }
+            if(level >= SKILL_D(argx)->improve_limite(me) )
+            {
+                write("這個技能你只能學到此等級！\n");
+                return 1;
+            }
+            //me->receive_money(-value);
+            me->add(bank,-value);
+            message_vision("$N花了"+F_VENDOR->price_string(value,me->money_type())+"學習"+to_chinese(argx)+"。\n",me);
+            me->add_skill(argx);
+            me->add("exp",-cost);
+            ob->train_skill_cost(me,argx);
+        }
+    }
+    return 1;
+}
+/*
+ *
+ *
+ */
+int do_spell_list(object ob, object me, string arg)
+{
+    mapping spells;
+    mixed cost1;
+    string playerclass, guildclass, list, *name;
+    int i,cost,level,maxlv,price;
+
+    guildclass = sol_class(ob,0);
+    playerclass= sol_class(me,0);
+
+    if( !mapp(spells = ob->query("guild_spells")) )
+    {
+        tell_object(me,"這位導師沒有法術列表！\n");
+        return 1;
+    }
+    name = keys(spells);
+    cost1 = values(spells);
+
+    /* 開放所有玩家查閱, 以便參考是否要加入.
+    	if( playerclass != guildclass && !ob->query("no_join"))
+    	{
+    		if( !me->query("no_check_class") && !ob->query("no_check_class"))
+    		{
+    			tell_object(me,HIW"這邊的法術是"+to_chinese(guildclass)+"才能查看。\n"NOR);
+    		}
+    		return 1;
+    	}
+    */
+    list = HIR"\n╔══════════════════════════════════════╗\n"NOR;
+    list += HIR"║"HIC"法  術  名  稱                   "HIG"經驗值需求   "HIB"學費需求  "HIY"目前等級 / 最高等級"HIR" ║\n"NOR;
+    list += HIR"╚══════════════════════════════════════╝\n"NOR;
+    for(i=0; i<sizeof(name); i++)
+    {
+        if(cost1[i][1]<1) cost1[i][1]=2;	// 設定 maxlv 的倍數
+        maxlv = me->query("level")*cost1[i][1];  // maxlv=level的倍數
+        if(maxlv >= cost1[i][2]) maxlv=cost1[i][2];
+        level = me->query_spell(name[i],1);
+        // 後面那個1(非0) 是表示原來的值,不設原值會除2
+        cost =level*level*cost1[i][0]/50;
+        price=(level*level*cost1[i][0])/70;
+        list += sprintf("  "HIC"%-34s"HIG"%-9d   "HIB"%-9d      "HIY"%3d / %-3d\n"NOR,
+                        to_chinese(name[i])+"("+name[i]+")",cost,price,level,maxlv);
+    }
+    tell_object(me,list);
+    return 1;
+}
+
+
+int do_spell_train(object ob, object me, string argx)
+{
+      mapping spells;
+    mixed cost1;
+     string playerclass, guildclass, *name,bank;
+    int i,cost,level,maxlv,value,time;
+
+    guildclass = sol_class(ob,0);
+    playerclass= sol_class(me,0);
+    if(!mapp(spells = ob->query("guild_spells")) )
+    {
+        write("這位導師沒有法術列表！\n");
+        return 0;
+    }
+    if(!argx)
+    {
+        write(HIC"想訓練啥法術??\n"NOR);
+        return 1;
+    }
+    if( playerclass != guildclass && !ob->query("no_join"))
+    {
+        write(HIW"這邊是"+to_chinese(guildclass)+"專用的訓練場。\n"NOR);
+        return 1;
+    }
+    if(!ob->query("guild_spells/" +argx) )
+    {
+        write("看清楚﹗這裡沒那種法術。\n");
+        return 1;
+    }
+    name = keys(spells);
+    cost1 = values(spells);
+    for(i=0; i<sizeof(name); i++)
+    {
+        if(argx==name[i])
+        {
+            if(cost1[i][1]<1) cost1[i][1]=2;	// 設定 maxlv 的倍數
+            maxlv = me->query("level")*cost1[i][1];  // maxlv=level的倍數
+            level = me->query_spell(argx,1);
+            if(level >= maxlv || level >= cost1[i][2])
+            {
+                write("你的"+to_chinese(argx)+"已經到這裡的最高級了\n");
+                return 1;
+            }
+            cost =level*level*cost1[i][0]/50;
+            if(me->query("exp") < cost)
+            {
+                write("你經驗不夠了！\n");
+                return 1;
+            }
+            value = level*level*cost1[i][0]/70;
+            time=me->money_type();
+            if(time==2) bank="bank/now";
+            else if(time==3) bank="bank/future";
+            else bank="bank/past";
+            if(me->query(bank)<value)
+            {
+                write("你的存款不夠喔！\n");
+                return 1;
+            }
+            if(level >= SPELL_D(argx)->improve_limite(me) )
+            {
+                write("這個法術你只能學到此等級！\n");
+                return 1;
+            }
+            me->add(bank,-value);
+            message_vision("$N花了"+F_VENDOR->price_string(value,me->money_type())+"學習"+to_chinese(argx)+"。\n",me);
+            me->add_spell(argx);
+            me->add("exp",-cost);
+            ob->train_spell_cost(me,argx);
+        }
+    }
+    return 1;
+}
+
+
+int do_guild_join(object ob, object me, string arg)
+{
+    int *master_guildgift;
+    int clevel, termnum;
+      string playerclass, guildclass, msg, termstr;
+
+    if(!ob->query("adv_class"))
+    {
+        write("這個NPC並沒有轉職等級記錄，請通知巫師為你解決。\n");
+        return 0;
+    }
+
+    if(!me->query("adv_class"))
+    {
+        me->set("adv_class",0);
+    }
+
+    guildclass = sol_class(ob,0);
+    playerclass= sol_class(me,0);
+
+    master_guildgift = ob->query("guild_gifts");
+    if( total_guildgift(master_guildgift) != 20 )
+    {
+        write("這位導師的屬性分配表錯誤，請聯絡線上巫師！\n");
+        return 1;
+    }
+
+    switch(ob->query("adv_class")) {
+    case 1 : clevel = 1;  break;
+        //++ sV1
+    case 2 : clevel = 25;  break;
+    case 3 : clevel = 50;  break;
+    case 4 : clevel = 75;  break;
+    case 5 : clevel = 100;  break;
+    case 6 : clevel = 125;  break;
+    case 7 : clevel = 150;  break;
+    case 8 : clevel = 175;  break;
+    case 9 : clevel = 200;  break;
+        //-- sV1
+    default: clevel = MAX_PPL_ACTION_LEVEL; break;//sV1 //25
+    }
+
+    if( arg && arg == guildclass )
+    {
+        if( playerclass == guildclass )
+        {
+            write(HIY"你已經加入"+to_chinese(guildclass)+"其他組織了！\n"NOR);
+            return 1;
+        }
+        if( me->query("adv_class") >= ob->query("adv_class")
+                && playerclass != guildclass)
+        {
+            write(HIY"抱歉，你已經加入與我們同級或更高級的"+to_chinese(playerclass)+"組織了！\n"NOR);
+            return 1;
+        }
+        if( playerclass != sol_class(ob,ob->query("adv_class")-1)
+                && me->query("adv_class")!=0 )
+        {
+            write(HIY"只有"
+                  +to_chinese(sol_class(ob,ob->query("adv_class")-1))
+                  +"能加入"+to_chinese(guildclass)+"！\n"NOR);
+            return 1;
+        }
+        if( me->query("level") < clevel)
+        {
+            write(HIY"以你目前的等級並不能在組織內轉職，請你升到"
+                  +clevel+"級後再來吧！\n"NOR);
+            return 1;
+        }
+        //
+        if( !ob->query("no_join") && ob->query("jointerm") )
+        {
+            if( sscanf(ob->query("jointerm"),"%s>%d", termstr, termnum)==2 )
+            {
+                if(me->query(termstr)<=termnum)
+                    if( stringp(msg = ob->query("jointerm_msg")) )
+                    { message("guild_nojoin", msg, me); return 1; }
+                    else
+                    {
+                        write(HIY"你的"+termstr+"值不足以加入本組織喔！\n"NOR);
+                        return 1;
+                    }
+            }
+            else if( sscanf(ob->query("jointerm"),"%s=%d", termstr, termnum)==2 )
+            {
+                if(me->query(termstr)!=termnum)
+                    if( stringp(msg = ob->query("jointerm_msg")) )
+                    { message("guild_nojoin", msg, me); return 1; }
+                    else
+                    {
+                        write(HIY"你的"+termstr+"值不足以加入本組織喔！\n"NOR);
+                        return 1;
+                    }
+            }
+            else if( sscanf(ob->query("jointerm"),"%s<%d", termstr, termnum)==2 )
+            {
+                if(me->query(termstr)>=termnum)
+                    if( stringp(msg = ob->query("jointerm_msg")) )
+                    { message("guild_nojoin", msg, me); return 1; }
+                    else
+                    {
+                        write(HIY"你的"+termstr+"值不足以加入本組織喔！\n"NOR);
+                        return 1;
+                    }
+            }
+            else { write(HIY"此工會導師的程式語法錯誤！\n"NOR); return 1; }
+        }
+
+        me->set("adv_class",ob->query("adv_class"));
+        me->set_element(ob->query_element());
+        switch(ob->query("adv_class")) {
+        case 1 : me->set("class1",guildclass);
+            set_guildgift(me,master_guildgift);// 只有在加入第一級集團才有設定屬性分配表
+            break;
+        case 2 : me->set("class2",guildclass); break;
+            //++ sV1
+        case 3 : me->set("class3",guildclass); break;
+        case 4 : me->set("class4",guildclass); break;
+        case 5 : me->set("class5",guildclass); break;
+        case 6 : me->set("class6",guildclass); break;
+        case 7 : me->set("class7",guildclass); break;
+        case 8 : me->set("class8",guildclass); break;
+        case 9 : me->set("class9",guildclass); break;
+            //-- sV1
+        default  :
+        }
+
+        if( !stringp(msg = ob->query("msg_guildclass0")) )
+        {
+            shout("\n"
+                  HIW"歡迎"+me->query("name")+"加入"+to_chinese(guildclass)+"組織﹗﹗﹗\n"NOR
+                  HIC"從今日起，"+me->query("name")+"即是"+to_chinese(guildclass)+"組織的一份子。\n"NOR
+                  HIC"希望你以後能名揚天下...替我們"+to_chinese(guildclass)+"組織爭光。\n"NOR,me);
+            message("msg",
+                    HIW"歡迎"+me->query("name")+"加入"+to_chinese(guildclass)+"組織﹗﹗﹗\n"NOR
+                    HIC"從今日起，"+me->query("name")+"即是"+to_chinese(guildclass)+"組織的一份子。\n"NOR
+                    HIC"希望你以後能名揚天下...替我們"+to_chinese(guildclass)+"組織爭光。\n"NOR,me);
+        }
+        else
+        {
+            guild_shout(ob,me,msg);
+            if( stringp(msg = ob->query("msg_guildclass1")) )
+                guild_shout(ob,me,msg);
+            if( stringp(msg = ob->query("msg_guildclass2")) )
+                guild_shout(ob,me,msg);
+            msg = "\n";
+            guild_shout(ob,me,msg);
+        }
+
+    }
+    else
+    {
+        write(HIY"你到底要加入組織嗎？看清楚我是"+to_chinese(guildclass)+"耶！\n"+NOR
+              +HIM+"如果要加入我們的話請 join "+guildclass+"。\n"NOR);
+    }
+
+    return 1;
+}
+
+int do_guild_join_with_no_message(object ob, object me, string arg)
+{
+    int *master_guildgift;
+    int clevel, termnum;
+      string playerclass, guildclass, msg, termstr;
+
+    if(!ob->query("adv_class"))
+    {
+        write("這個NPC並沒有轉職等級記錄，請通知巫師為你解決。\n");
+        return 0;
+    }
+    if(!me->query("adv_class"))
+    {
+        //		write("你並沒有轉職等級記錄，請通知巫師為你解決。\n");
+        //		return 0;
+        me->set("adv_class",0);
+    }
+
+    master_guildgift = ob->query("guild_gifts");
+    if( total_guildgift(master_guildgift) != 20 )
+    {
+        write("這位導師的屬性分配表錯誤，請聯絡線上巫師！\n");
+        return 0;
+    }
+
+
+    guildclass = sol_class(ob, 0);
+    playerclass= sol_class(me, 0);
+
+    switch(ob->query("adv_class")) {
+    case 1 : clevel = 1;  break;
+    case 2 : clevel = 25;  break;
+    case 3 : clevel = 50;  break;
+    case 4 : clevel = 100;  break;
+    case 5 : clevel = 200;  break;
+    default: clevel = MAX_PPL_ACTION_LEVEL; break;//sV1 //25
+    }
+
+    if( arg && arg == guildclass )
+    {
+        if( playerclass == guildclass )
+        {
+            // 玩家已經加入這個組織
+            return -1;
+        }
+
+        if( me->query("adv_class") >= ob->query("adv_class")
+                && playerclass != guildclass)
+        {
+            // 玩家已經加入了與導師同級或更高級的組織
+            return -2;
+        }
+
+        if( playerclass != sol_class(ob, ob->query("adv_class")-1)
+                && me->query("adv_class")!=0 )
+        {
+            // 玩家目前所加入的組織並不是該組織認可的組織
+            // 也就是說他目前的組織並不適合加入該組織
+            return -3;
+        }
+
+        if( me->query("level") < clevel)
+        {
+            // 玩家等級不夠
+            return -4;
+        }
+
+        //
+        if( !ob->query("no_join") && ob->query("jointerm") )
+        {
+            if( sscanf(ob->query("jointerm"),"%s>%d", termstr, termnum)==2 )
+            {
+                if(me->query(termstr)<=termnum)
+                    if( stringp(msg = ob->query("jointerm_msg")) )
+                    { message("guild_nojoin", msg, me); return 1; }
+                    else
+                    {
+                        // 玩家的 termstr 並沒有大於 termnum 值
+                        return -5;
+                    }
+            }
+            else if( sscanf(ob->query("jointerm"),"%s=%d", termstr, termnum)==2 )
+            {
+                if(me->query(termstr)!=termnum)
+                    if( stringp(msg = ob->query("jointerm_msg")) )
+                    { message("guild_nojoin", msg, me); return 1; }
+                    else
+                    {
+                        // 玩家的 termstr 並沒有等於 termnum 值
+                        return -6;
+                    }
+            }
+            else if( sscanf(ob->query("jointerm"),"%s<%d", termstr, termnum)==2 )
+            {
+                if(me->query(termstr)>=termnum)
+                    if( stringp(msg = ob->query("jointerm_msg")) )
+                    { message("guild_nojoin", msg, me); return 1; }
+                    else
+                    {
+                        // 玩家的 termstr 並沒有小於 termnum 值
+                        return -7;
+                    }
+            }
+            else { write(HIY"此工會導師的程式語法錯誤！\n"NOR); return 0; }
+        }
+
+        me->set("adv_class",ob->query("adv_class"));
+        me->set_element(ob->query_element());
+        switch(ob->query("adv_class")) {
+        case 1 : me->set("class1",guildclass);
+            set_guildgift(me,master_guildgift);// 只有在加入第一級集團才有設定屬性分配表
+            break;
+        case 2 : me->set("class2",guildclass); break;
+            //++ sV1
+        case 3 : me->set("class3",guildclass); break;
+        case 4 : me->set("class4",guildclass); break;
+        case 5 : me->set("class5",guildclass); break;
+        case 6 : me->set("class6",guildclass); break;
+        case 7 : me->set("class7",guildclass); break;
+        case 8 : me->set("class8",guildclass); break;
+        case 9 : me->set("class9",guildclass); break;
+            //-- sV1
+        default  :
+        }
+
+    }
+    else
+    {
+        // 玩家輸入的組織錯誤或沒有輸入要加入的組織名
+        return -8;
+        //		write(HIY"你到底要加入工會嗎？看清楚我是"+to_chinese(guildclass)+"耶！\n"+NOR
+        //	              +HIM+"如果要加入我們的話請 join "+guildclass+"。\n"NOR);
+    }
+
+    return 1;
+}
+
+string sol_class(object ob, int adv)
+{
+    string guildclass;
+
+    if( adv > ob->query("adv_class") )
+        return "";
+    if(!ob->query("adv_class"))
+        return "";
+
+    if((ob->query("adv_class") == 1 && !adv) || adv == 1)
+        return guildclass = ob->query("class1");
+
+        if((ob->query("adv_class") == 2 && !adv) || adv == 2)
+        return guildclass = ob->query("class2");
+
+     // 2 階以上，以 2 階算
+    if( ob->query("adv_class") > 2 )
+        return  ob->query("class3");
+
+
+    return "";
+}
+void guild_shout(object ob, object me, string msg)
+{
+    string my_name, master_name, master_class;
+    string str1;
+
+    my_name      = me->query("name");
+    master_name  = ob->query("name");
+    master_class = to_chinese(sol_class(ob,0));
+
+    // N: 自己的名字 n: 導師的名字 c: 導師的職業
+    str1 = replace_string(msg,  "$N", my_name);
+    str1 = replace_string(str1, "$n", master_name);
+    str1 = replace_string(str1, "$c", master_class);
+
+    message("guild_shout", str1, users(), me);
+    message("guild_shout", str1, me);
+
+}
+
+
+int is_master()
+{
+    return 1;
+}

@@ -1,0 +1,126 @@
+// 神殺訣 god-kill edit -By Tmr-  2000/4/8 
+
+#include <ansi.h>
+inherit SSERVER;
+inherit SKILL;
+
+int attack(object target,object me);
+
+int cast(object me, object target)
+{
+        int inn,sk,cost;
+        if(!me) me=this_player();
+        inn=me->query_int();
+        sk =me->query_spell("god-kill");
+        cost=(sk*5+inn*3)/8;
+
+        if ( environment(me)->query("no_cast"))
+                return notify_fail("這裡不能施法。\n");
+        if ( (int)me->query("mp") < cost )
+                return notify_fail("你的法力不夠。\n");
+        if ( inn < 40)
+                return notify_fail("你似乎記不起「神殺訣」的咒文。\n");
+        if ( !me->is_fighting() )
+                return notify_fail("你並沒有在戰鬥中。\n");
+        if ( !target )          target = offensive_target(me);
+        if ( !target )          return notify_fail("你找不到可以施法的對像。\n");
+        if ( target == me )     return notify_fail("試試用suicide 比較快。\n");
+        if(!me->is_fighting(target) )
+                return notify_fail("你並沒有和對方在戰鬥中。\n");
+
+         message_vision(HIG
+         "$N默唸「神祝禱篇」之「神殺」訣：\n\n" NOR
+         +HIM    "      「血刃浮沉戍上遊，披頭五鬼在辰求。」\n" NOR
+         +HIM    "      「天哭逆數起於午，凡占切忌動當頭。」\n" NOR,me);
+
+        me->start_busy(2); //施法動作時間
+        me->receive_damage("mp",cost); //施法扣MP
+        me->set_temp("power_cast",1+sk/33);
+        call_out( (:attack,target,me:),2);
+        return 1;
+}
+
+
+int attack(object target,object me)
+{
+        int sk,inn,damage,shield,wound,td;
+        string msg;
+        if(!me) return 1;
+        if(!target) 
+                return notify_fail("目標消失了。\n");      
+        if( environment(me) != environment(target) )           
+                return notify_fail("目標離開了你的施法範圍。\n");
+        if(!me->query_temp("power_cast") || me->query_temp("power_cast") < 1) 
+        {
+        message_vision(HIW"$N"HIW"因為受到創傷而亂了思緒, 無法順利施展法術。\n"NOR,me);
+        return 1;
+        }
+
+        me->delete_temp("power_cast");
+
+        inn =me->query_int();
+        sk  =me->query_spell("god-kill");
+        shield=target->query_shield();
+
+        damage = (sk*2+inn)/2;
+        damage -= shield -random(shield/2);
+        damage = COMBAT_D->Merits_damage(me,target,damage,"wit");
+        wound=damage/20;                        //基本wound 受傷程度
+        if( wound > 5) wound =5;
+
+        td=-COMBAT_D->dodge_factor(target,"dodge")*10/15;
+        td+=target->query_int()/2;  //閃躲率看int成份不太高
+
+        msg = HIY "$N雙手結卬，低念數聲，驅使「血刃」";
+        if( sk > 50 ) msg+= "，「披頭」";
+        if( sk > 70 ) msg+= "，「天哭」";
+        msg += "急攻向$n！！\n\n" NOR;
+        message_vision(msg,me,target);
+
+        if( damage > 0 && random(sk+inn/2) > random(td) )  //命中看int成份不高
+        {
+        message_vision(MAG"血刃殺手中剝血刃直砍橫劈十三刀，砍向$n"MAG"頭部要害！！" NOR,me,target);
+        if( random( sk+inn/2 ) > random(td) ) {
+        target->receive_damage("hp",damage);    //最初受傷
+        if(me->query_temp("apply/show_damage") || me->query_temp("show_damage") )
+                tell_object(me,HIY"("+damage+")"NOR);
+        if(target->query_temp("apply/show_damage") || target->query_temp("show_damage") )
+                tell_object(target,HIR"("+damage+")"NOR+" ("+target->query("hp")+"/"+target->query("max_hp")+")");
+        message_vision("\n",target);
+        COMBAT_D->report_status(target);         //顯示target狀態
+        }
+        else    message_vision("\n$n"NOR"驚險地避開了這一擊。\n"NOR,me,target);
+
+        if(sk > 50) {
+        message_vision(MAG"披頭殺揮舞手上二把奪魂匕，七七四十九式連往$n"MAG"下盤各要害招呼！！\n" NOR,me,target);
+        if( random( sk+inn/2 ) > random(td*3/2)) 
+                target->start_busy(2);
+        else    message_vision("$n"NOR"驚險地避開了這一擊。\n"NOR,me,target);
+        }
+
+        if(sk > 70) {
+        message_vision(MAG"天哭殺氣運手上穿骨槍，十成力道刺向$n"MAG"胸口要穴！！"NOR,me,target);
+        if( random( sk+inn ) > random(td*2) )
+        {
+
+        if( target->query("wound/body") > 30 ) {  //限制wound 上限
+                damage=damage/3+random(damage);
+                target->receive_damage("hp",damage );
+                if(me->query_temp("apply/show_damage") || me->query_temp("show_damage") )
+                        tell_object(me,HIY"("+damage+")"NOR);
+                if(target->query_temp("apply/show_damage") || target->query_temp("show_damage") )
+                        tell_object(target,HIR"("+damage+")"NOR+" ("+target->query("hp")+"/"+target->query("max_hp")+")");
+                message_vision("\n",target);
+                COMBAT_D->report_status(target);         //顯示target狀態        
+        }
+        else { target->receive_wound("body",wound);     message_vision("\n",target); }
+        }
+        else    message_vision("\n$n"NOR"驚險地避開了這一擊。\n"NOR,me,target);
+        }
+
+        me->improve_spell("god-benison",1+inn+random(inn/2)); 
+        }
+        else    message_vision("$n"NOR"驚險地避開了這一擊。\n"NOR,me,target);
+
+        return 1;
+}

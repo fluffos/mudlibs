@@ -1,0 +1,320 @@
+// 凌雲寺-Advance Skill V1.0
+// 如來九式-Buddha-Skill
+// -By Tmr 2002/01/18-
+//      一：佛光初現 （buddha_emerge）-busy 1 target 2 busy
+//      二：金頂佛燈 （buddha_light）- damage 1 target
+//      三：佛動山河 （buddha_sensation) - damage 4 target
+//      四：佛問迦藍 （buddha_examine)
+// 重構 2006/06/04
+
+#include <ansi.h>
+
+inherit SKILL;
+inherit SSERVER;
+
+int do_emerge(object me,int sk_lv);
+int do_light(object me,int sk_lv);
+void light_delay(object me,int sk_lv);
+int do_sensation(object me,int sk_lv);
+void sensation_delay(object me,int sk_lv);
+void sensation_delay2(object me,int sk_lv);
+int do_examine(object me,int sk_lv);
+void examine_delay(object me,int sk_lv);
+
+void addexp(object me) {
+    me->improve_skill("buddha-skill",1+random(me->query_int()/2));
+}
+
+void show_damage(object me, object target, int damage) {
+    if(me->query_temp("apply/show_damage") || me->query_temp("show_damage") )
+        tell_object(me,HIY"("+damage+")"NOR);
+    if(target->query_temp("apply/show_damage") || target->query_temp("show_damage") )
+        tell_object(target,HIR"("+damage+")"NOR+" ("+target->query("hp")+"/"+target->query("max_hp")+")");
+    message_vision("\n",me,target);
+    COMBAT_D->report_status(target);
+}
+
+int check_use(object me)
+{
+    object weapon;
+    weapon=me->query_temp("weapon");
+
+    if( !me || !me->is_fighting() )         return 1;
+    if( me->is_busy() )
+    {
+        message_vision(CYN "($N正忙著手忙腳亂，無法專心使用「如來九式」。)\n"NOR,me);
+        return 1;
+    }
+
+    // 沒有使用無塵杖法
+    if( me->query_skill_mapped("staff")!="wuchen-staff")
+        return 1;
+    // 沒有使用武器
+    if(!weapon)
+        return 1;
+    // 武器不是「杖法(Staff)」類
+    if(weapon->query("skill_type")!="staff")
+        return 1;
+    // Ok!
+    return 0;
+}
+
+int exert(object me, object target, string arg)
+{
+    string msg;
+
+    int sk_lv=me->query_skill("buddha-skill",1);
+
+    if(check_use(me))
+        return notify_fail("使用「如來九式」，必須搭配「無塵杖法」。\n");
+
+    if(me->query("evil")>-200)
+        return notify_fail("你心中惡根未除，無法使用「如來九式」。\n");
+    if(!me->is_fighting())
+    {
+        me->delete_temp("exert_buddha_skill");
+        return notify_fail("你並沒有在戰鬥中。\n");
+    }
+    if(me->is_busy() || me->query_temp("exert_buddha_skill") )
+        return notify_fail("你正忙著，無法施展特攻。\n");
+
+    switch(arg)
+    {
+    case "buddha-emerge":           // 佛光初現
+        if(sk_lv<20) return notify_fail("你還無法施展出「佛光初現」。\n");
+        do_emerge(me,sk_lv);
+        break;
+    case "buddha-light":            // 金頂佛燈
+        if(sk_lv<50) return notify_fail("你還無法施展出「金頂佛燈」。\n");
+        do_light(me,sk_lv);
+        break;
+    case "buddha-sensation":        // 佛動山河
+        if(sk_lv<70) return notify_fail("你還無法施展出「佛動山河」。\n");
+        do_sensation(me,sk_lv);
+        break;
+    case "buddha-examine":          // 佛問伽藍
+        if(sk_lv<90) return notify_fail("你還無法施展出「佛問伽藍」。\n");
+        return notify_fail("你還無法施展出「佛問伽藍」。\n");
+        break;
+    default:
+        if(!target || target==me)
+            return notify_fail("「如來九式」並沒有此式，請參照help buddha-skill。\n");
+        break;
+
+    }
+    return 1;
+}
+
+// 佛光初現  busy 3 target 2 around
+// sk_lv 20 ->max 1 target
+// sk_lv 30 ->max 2 target
+// sk_lv 40 ->max 3 target
+int do_emerge(object me,int sk_lv)
+{
+    object target;
+    int sk;
+    int cost = 20;
+    if(me->query("ap") < cost )
+        return notify_fail("你的內勁不夠了！！");
+
+    if( !target ) target = offensive_target(me);
+    if( !target || !me->can_fight(target) ) {
+        tell_object(me,"你並沒有可以攻擊的對像。\n");
+        return 1;
+    }
+
+    if(!me->can_fight( target ))  //　是否可攻擊此對手
+        return notify_fail("你無法攻擊目前的敵人。\n");;
+
+    message_vision(YEL "$N催運無上梵功\內勁，運杖畫出卍字起手勢，一聲大喝向前推出卍字氣牆攻向$n"YEL"！！\n" NOR
+                   /*
+                                       +NOR YEL "\n\t卍" +HIY "　佛　"+NOR YEL "卍" + HIY "  光　"
+                                       +NOR YEL "卍" +HIY "  初  "+NOR YEL "卍" + HIY "  現　"
+                                       +NOR YEL "卍\n\n" NOR, 
+                   */
+                   ,me, target);
+    addexp(me);
+    me->start_busy(1);
+    me->receive_damage("ap", cost);
+
+    sk = me->query_skill("buddha-skill",1);
+    if( sk > random(250) ) {
+        message_vision(HIR "$n"HIR"被氣牆撞的東倒西歪，暫時無法出手攻擊了！\n"NOR, me, target);
+        target->add_busy(2);
+    } else {
+        message_vision(CYN "$n"CYN"僥倖地躲過了佛光初現的攻擊...\n"NOR, me, target);
+        target->add_busy(2);
+    }
+}
+
+// 金頂佛燈 - Damage 1 target
+int do_light(object me,int sk_lv)
+{
+    int cost = 30;
+    if(me->query("ap") < cost )
+    {
+        tell_object(me,"你的內勁不夠了！！\n");
+        return 0;
+    }
+
+    me->receive_damage("ap",cost);
+    message_vision(HIM "$N右杖左掌地結起金頂佛印，身周彷彿幻化起聖潔綺麗的琉璃佛燈，不斷盤旋！！\n" NOR ,me);
+    me->start_busy(1);
+    addexp(me);
+    me->set_temp("exert_buddha_skill",1);
+    call_out("light_delay",1,me,sk_lv);
+}
+
+void light_delay(object me,int sk_lv)
+{
+    object target;
+    string msg="";
+    int damage;
+
+    me->delete_temp("exert_buddha_skill");
+
+    if( check_use(me)==1 ) return ;
+
+    if( !target ) target = offensive_target(me);
+    if( !target || !me->can_fight(target) )
+    {
+        tell_object(me,"你並沒有可以攻擊的對像。\n");
+        return ;
+    }
+
+    //msg=HIM "\n\t「　金　頂　佛　燈」\n" NOR;
+    msg+= HIW "$N幻化成如來形相，駕馭一把碧綠剔透的"HIG"琉璃法杖"HIW"，挾風雷之勢攻向$n！！\n" NOR;
+    message_vision(msg,me,target);
+
+    damage = me->query_skill("buddha-skill") + me->query_int();
+    damage -= random(target->query_shield());
+    damage = COMBAT_D->Merits_damage(me, target, damage,"bio");
+    if(damage>0 &&
+            ( random(100) < COMBAT_D->attack_factor(me,"staff")*10/15 // 攻擊命中
+              || random(100) > -COMBAT_D->dodge_factor(target,"dodge")
+            )
+      )     // 敵人閃躲不及
+    {
+        message_vision(RED"$n"+RED "被此招狠狠地擊中胸口要害！！",me,target);
+        target->receive_damage("hp",damage, me);
+        show_damage(me, target, damage);
+    }
+    else {  // 攻擊不中
+        if(damage <=0)  {
+            message_vision(HIG"$n"+HIG "雖然被此招擊中了，但並沒有造成明顯的傷害。\n" NOR ,me,target);
+        } else {
+            message_vision(HIG"$n"+HIG "輕巧地躲開了攻擊。\n" NOR,me,target);
+        }
+    }
+
+}
+
+// 佛動山河-attack 3 npc
+int do_sensation(object me,int sk_lv)
+{
+    int cost = 100;
+
+    if(me->query("hp") < 300 ) {
+        tell_object(me,"你的身體狀態不理想，無法使用「佛動山河」。\n");
+        return 0;
+    }
+
+    if(me->query("ap") < cost )
+    {
+        tell_object(me,"你的內勁不夠了！！\n");
+        return 0;
+    }
+
+    addexp(me);
+    me->receive_damage("ap",cost);
+
+    message_vision(HIW
+                   "$N陡地一躍十丈，手結佛印高舉擎天，準備施展如來九式第三式「佛動山河」！！\n" NOR
+                   ,me     );
+    me->start_busy(1);
+    me->set_temp("exert_buddha_skill", 2);
+    call_out("sensation_delay", 1, me,sk_lv);
+}
+
+void sensation_delay(object me,int sk_lv)
+{
+    message_vision(HIC
+                   "$N不斷地吸引九天之氣，把大自然強大的力量匯聚於身軀上！！\n" NOR
+                   ,me     );
+    me->start_busy(1);
+    me->set_temp("exert_buddha_skill", 2);
+    call_out("sensation_delay2",1,me,sk_lv);
+
+}
+
+void sensation_delay2(object me,int sk_lv)
+{
+    object *targets;
+    string msg="";
+    int i,max_target=4;
+    int damage;
+    me->delete_temp("exert_buddha_skill");
+
+    if( check_use(me)==1 )  return ;
+
+    if( !arrayp(targets = me->query_enemy()) )
+    {
+        message_vision( GRN "\n$N並沒有可以攻擊的對像，一身力量全都消散而去了。\n"
+                        NOR,me);
+        return ;
+    }
+
+    message_vision( HIR "\n$N蓄勁已足，使出全身集聚的力量從高空上衝向敵人陣地！！\n" NOR
+                    ,me);
+
+    if(sizeof(targets) <4) max_target=sizeof(targets);
+
+    for(i=0;i<max_target;i++)
+    {
+        if(!me->can_fight(targets[i]))  //　是否可攻擊此對手
+            continue;
+        damage = me->query_skill("buddha-skill") + me->query_int();
+        damage -= random(targets[i]->query_shield());
+        damage = COMBAT_D->Merits_damage(me, targets[i], damage,"bio");
+
+        // 增加素質對傷害的影響
+        if(damage>0 &&
+                ( random(100) < COMBAT_D->attack_factor(me,"staff")*10/15 // 攻擊命中
+                  || random(100) > -COMBAT_D->dodge_factor(targets[i],"dodge")
+                )
+          )     // 敵人閃躲不及
+        {
+            targets[i]->receive_damage("hp",damage, me);
+            message_vision(RED"$n"+RED "被雷罡\電殛震的全身劇抖，看來受傷不輕！！",me,targets[i]);
+            if(me->query_temp("apply/show_damage") || me->query_temp("show_damage") )
+                tell_object(me,HIY"("+damage+")"NOR);
+            if(targets[i]->query_temp("apply/show_damage") || targets[i]->query_temp("show_damage") )
+                tell_object(targets[i],HIR"("+damage+")"NOR+" ("+targets[i]->query("hp")+"/"+targets[i]->query("max_hp")+")");
+            message_vision("\n",me,targets[i]);
+            COMBAT_D->report_status(targets[i]);
+        }
+        else {  // 攻擊不中
+            if(damage <=0)  {
+                message_vision(HIG"$n"+HIG "雖然被此招擊中了，但並沒有造成明顯的傷害。\n" NOR ,me,targets[i]);
+            } else {
+                message_vision(HIG"$n"+HIG "千鈞一髮地躲開了攻擊。\n" NOR,me,targets[i]);
+            }
+        }
+
+    }
+}
+
+int do_examine(object me,int sk_lv) {}
+void examine_delay(object me,int sk_lv) {}
+
+int valid_learn(object me,int sk_lv) {    return 1;       }
+
+int practice_skill(object me,int sk_lv) { return 1; }
+
+/*
+mapping query_action(object me, object weapon)
+{
+        return action[random(sizeof(action))];
+}
+*/
+

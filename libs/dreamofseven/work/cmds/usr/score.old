@@ -1,0 +1,134 @@
+// score.c
+#include <ansi.h>
+#include <combat.h>
+
+
+inherit F_CLEAN_UP;
+
+string status_color(int current, int max);
+string date_string(int date);
+
+void create() { seteuid(ROOT_UID); }
+
+int main(object me, string arg)
+{
+        object ob;
+        mapping my;
+        string line, str, skill_type;
+        string ridon;
+        object weapon;
+        int attack_points, dodge_points, parry_points;
+
+        seteuid(getuid(me));
+
+        if(!arg)
+                ob = me;
+        else if (wizardp(me)) {
+                ob = present(arg, environment(me));
+                if (!ob) ob = find_player(arg);
+                if (!ob) ob = find_living(arg);
+                if (!ob) return notify_fail("你要察看誰的狀態﹖\n");
+        } else
+                return notify_fail("只有巫師能察看別人的狀態。\n");
+/*--------------------------------------------------------------------------*/
+        my = ob->query_entire_dbase();  //做資料轉換.
+
+line = sprintf( "%s" NOR "%s\n\n", RANK_D->query_rank(ob), ob->short(1) );
+line += sprintf(
+HIM" 等級 %2d 級"HIB"   年齡 %2d 歲"HIY"   性別 %-2s\n"NOR,
+ ob->query("level"),
+ ob->query("age"),
+ ob->query("gender"),
+  //CHINESE_D->chinese_date(((int)ob->query("birthday") - 14*365*24*60) * 60)
+                 );
+
+/*-------------------------------------------------------------*/
+        if( objectp(weapon = ob->query_temp("weapon")) )
+                skill_type = weapon->query("skill_type");
+        else
+skill_type = "unarmed";
+ attack_points = COMBAT_D->skill_power(ob, skill_type, SKILL_USAGE_ATTACK);
+ parry_points = COMBAT_D->skill_power(ob, skill_type, SKILL_USAGE_DEFENSE);
+ dodge_points = COMBAT_D->skill_power(ob, "dodge", SKILL_USAGE_DEFENSE);
+
+ line += sprintf("\n"
+HIY" 力量(STR)：%-3d"NOR"     生命(HP)：%s%4d/%4d\n"NOR
+HIY" 體質(CON)：%-3d"NOR"     體力(MP)：%s%4d/%4d\n"NOR
+HIY" 智慧(INT)：%-3d"NOR"     戰鬥熟練度：%d\n"NOR
+HIY" 敏捷(DEX)：%-3d"NOR"     經  驗  值：%d\n"NOR
+"			             \n"NOR
+" 武器攻擊力：%-3d          命中率：%-3d\n"NOR
+" 防具防禦力：%-3d          閃躲率：%-3d\n"NOR,
+ 
+ob->query_str(),
+status_color(my["hp"], my["max_hp"]), my["hp"], my["max_hp"],
+ob->query_con(),
+status_color(my["mp"],my["max_mp"]),my["mp"],my["max_mp"],
+ob->query_int(),
+ob->query("combat_exp"),
+ob->query_dex(),
+ob->query("exp"),
+ob->query_temp("apply/damage"),
+attack_points/50+ob->query_temp("apply/hit"),		//ob->query_temp("apply/hit"),
+ob->query_armor(),	//參考 /feature/attribute.c
+(dodge_points + (weapon? parry_points: (parry_points/10)))/50//ob->query_temp("apply/dodge"),
+);
+
+ line += sprintf(
+CYN"\n 目前已殺了 "HIY"%d"NOR+CYN" 個小白爛 ﹐其中有 "HIR"%d"NOR+CYN" 位玩家\n\n"NOR
+,my["MKS"] + my["PKS"], my["PKS"]);
+
+// line += sprintf(" 醫 療 經 驗﹕ %s%d\n" NOR,HIG,ob->query("healexp") );
+//line += sprintf(" 魔 法 經 驗﹕ %s%d\n" NOR,HIG,ob->query("magicexp"));
+if(me->query("platinum")<1 && me->query("gold")<1 && me->query("silver")<1 && me->query("coin")<1 )
+{
+write(line);
+return 1;
+}
+else
+{
+if(me->query("platinum")>0)
+line +=sprintf(" 白金:%d\n",ob->query("platinum"));
+if(me->query("gold")>0) line+=sprintf(" 金幣:%d\n",ob->query("gold"));
+if(me->query("silver")>0) line+=sprintf(" 銀幣:%d\n",ob->query("silver"));
+if(me->query("coin")>0) line+=sprintf(" 銅板:%d\n",ob->query("coin"));
+write(line);
+return 1;
+}
+  line += sprintf(HIW" 狀態: %s \n",HIW"正常"NOR);
+        write(line);
+return 1;
+}
+
+string status_color(int current, int max)
+{
+        int percent;
+
+        if( max ) percent = current * 100 / max;
+        else percent = 100;
+        if( percent > 100 ) return HIC;
+        if( percent >= 90 ) return HIG;
+        if( percent >= 60 ) return HIY;
+        if( percent >= 30 ) return YEL;
+        if( percent >= 10 ) return HIR;
+        return RED;
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : sc
+           sc <對象名稱>                   (巫師專用)
+
+這個指令可以顯示你(妳)或指定對象(含怪物)的基本資料。
+基本資料的設定請參閱 'help setup'。
+
+為了避免玩家為了「天賦」的數值而反覆創造人物﹐因此限定只有在綜合評價達到
+100 以上的玩家或巫師才看得到天賦狀況。
+
+see also : hp
+HELP
+    );
+    return 1;
+}
+

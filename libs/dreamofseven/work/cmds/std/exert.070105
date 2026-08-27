@@ -1,0 +1,86 @@
+// cast.c
+// 把所有query_skill()-> query_learn(),為免player死到變0 後不能使用技能.
+// by alickyuen on 24-08-2002
+
+#include <skill.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+        string spells, spl, trg, file;
+        object target,env;
+        
+        seteuid(getuid());
+        if(me->is_ghost()) return notify_fail(" 你現在還是鬼魂吧。\n");
+        if( me->is_busy() || me->is_block() )
+                return notify_fail("( 你上一個動作還沒有完成﹐不能施展技能或武功\。)\n");
+
+        if( environment(me)->query("no_exert") )
+                return notify_fail("這裡不准使用特殊技能。\n");
+
+        if( !arg ) return notify_fail("指令格式﹕exert <技能或武學> [on <目標>]或[at <方向>]\n");
+        if( sscanf(arg, "%s on %s", spl, trg)==2 )
+        {
+                target = present(trg, environment(me));
+                if( !target ) target = present(trg, me);
+
+                if( !target ) return notify_fail("這裡沒有 " + trg + "。\n");
+                sscanf(spl, "%s %s", spl, trg);
+                // add by alick@2006jan to fix bug by using "on" function
+        }
+        else  if( sscanf(arg, "%s at %s", spl, trg)==2 )
+        {
+                 env = environment(me);
+                 if(stringp(file = env->query("exits/"+trg)))
+                 {
+                  target = load_object(file);
+
+                  spl = replace_string( spl, " ", "_");
+                  if( me->query_learn(spl) > 0 || me->query_skill(spl) )
+//                  if( me->query_skill(spl) > 0 )
+                  return (int)SKILL_D(spl)->cast_skill_dir(me, spl, target, trg);
+                        else return notify_fail("你還沒學過此技能或武學。("+spl+")\n");
+                 } else return notify_fail("這個方向不能施展技能或武學。("+spl+")\n");
+        }
+        else 
+        {
+                if( sscanf(arg, "%s %s", spl, trg)!=2 )
+                {
+                 spl = arg;
+                 target = 0;
+                }
+        }
+
+        spl = replace_string( spl, " ", "_");
+        arg = replace_string( arg, " ", "_");
+//        if( me->query_skill(spl) > 0 )
+        if( me->query_learn(spl) > 0 || me->query_skill(spl) )
+                return (int)SKILL_D(spl)->cast_skill(me, spl, target, trg);
+        else
+        {
+                if(sscanf(arg, "%s_off", spl)==1) { arg=spl; trg="off"; }
+//                if(me->query_skill(arg) > 0)
+                  if( me->query_learn(arg) > 0 || me->query_skill(arg) )
+                {
+                        return (int)SKILL_D(arg)->cast_skill(me, arg, target, trg);
+                }
+        }
+        return notify_fail("你還沒學過此技能或武功\。("+spl+")\n");
+}
+
+int help (object me)
+{
+        write(@HELP
+指令格式﹕exert <技能或武學> [on <施展對象>]或[at <施展方向>]
+ 
+使用技能﹐你必需要指定<武學或技能名稱>﹐<對象>及<方向>的需要與否
+則視技能之功能而定。
+
+在你施展某一個武功或技能之前﹐你必須學過此武學或是技能。
+ 
+HELP
+        );
+        return 1;
+}
+

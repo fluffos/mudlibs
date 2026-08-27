@@ -1,0 +1,3 @@
+// berserk.c
+
+inherit SKILL;

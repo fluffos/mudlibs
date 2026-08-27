@@ -1,0 +1,368 @@
+// Tmr refactoring/調整強度 2006/11/25
+// 加上指極劍陣的影響 - tmr
+
+#include <ansi2.h>
+#define SKILL_NAME "北斗七星劍訣"
+        
+inherit SKILL;
+inherit SSERVER;
+
+void delay_0(object me);
+void stop_delay(object me);
+
+mapping *action = ({
+                       ([
+                            "action": "$N屈劍一指，內力潛進劍中，使出「"HIC"天樞式"NOR"」劍招，劍招狠狠的斗直直進",
+                            "damage":   25,  //這個是傷害強化的百分比 , 不是傷害點數
+                            "attack":   10,
+                            "attact_type":  "bio",  // 設定技能的攻擊種類 // 生物(bio) 獸性(bar) 魔法(wit)心靈(sou)科技(tec)
+                            "damage_type":  "刺傷",
+                        ]),
+                       ([
+                            "action": "$N提劍虛點七下劍芒，狀似北斗七星，層層包住$n，趁機抽劍一擊，一招"HIC"「天璇式"NOR"」戳向$n的$l",
+                            "damage":   15,
+                            "dodge":    -5,
+                            "delay":    1,
+                            "attack_type":      "bio",
+                            "damage_type":      "刺傷",
+                        ]),
+                       ([
+                            "action": "$N隱身潛進，突然出現在$n身旁，對$n$l刺出一劍「"HIC"天璣式"NOR"」",
+                            "damage":   18,
+                            "delay":    2,
+                            "attack_type":      "bio",
+                            "damage_type":      "刺傷",
+                        ]),
+                       ([
+                            "action": "$N使出劍招勇猛的「"HIC"天權式"NOR"」，對$n的$l連刺出三劍，一劍比一劍還強",
+                            "damage":   25,
+                            "delay":    2,
+                            "attack_type":      "bio",
+                            "damage_type":      "刺傷",
+                        ]),
+                       ([
+                            "action": "$N運氣於臂，手上的劍突然嗡嗡作響，氣勢驟升，對$n的$l使出一招「"HIC"玉衡式"NOR"」"NOR,
+                            "damage":   30,
+                            "attack_type":      "bio",
+                            "damage_type":      "刺傷",
+                        ]),
+                       ([
+                            "action": "$N使出「"HIC"開陽式"NOR"」，手中$w"NOR"暴出劍雨，借劍雨的反照，瞞閉$n的眼睛，接著對$n的$l刺出一劍",
+                            "damage":   30,
+                            "attack_type":      "bio",
+                            "damage_type":      "刺傷",
+                        ]),
+                       ([
+                            "action": "$N「"HIC"搖光式"NOR"」一出，手中$w"NOR"暴起一團光雨，激射全場，教$n完全不知道這一劍會由何方攻來",
+                            "damage":   30,
+                            "attack_type":      "bio",
+                            "damage_type":      "刺傷",
+                        ]) ,                          
+                           });
+
+int cast_skill(object me,string a, object target, string arg)
+{
+    int sk, force, w_force;
+    int total_damage;
+    int target_armor, me_damage, target_dodge, me_dex, sum_damage, g,damage;
+    object weapon, *attack_targets;
+    object field; // 劍陣
+    string msg;
+
+    if( arg=="off" )
+    {
+        if( me->query_skill_mapped("sword")!="star-sword" )
+            return notify_fail("你並沒有在用"SKILL_NAME"喔！\n");
+        me->map_skill("sword");
+        me->reset_action();
+        write("你停止使用"SKILL_NAME"了。\n");
+        return 1;
+    }
+
+    if( me->query("ap") < 30 )
+        return notify_fail("你身體的狀況還不能使用"SKILL_NAME"。\n");
+
+    if( me->query_skill("sorgi_sword") < 70 ) return notify_fail("你的索極劍法還不夠純熟，不能使"SKILL_NAME"，否則將易走火入魔！\n");
+
+    weapon = me->query_temp("weapon");
+    if( !weapon ) return notify_fail("你必須要拿劍才能使用。\n");
+    if( weapon->query("skill_type")!="sword" )
+        return notify_fail("你必須要拿劍才能使用。\n");
+
+    if( arg == "?" || arg == "help" ) {
+        tell_object(me, SKILL_NAME + "的功\能有 劍雨(rain) 劍氣(vigor) 劍心通明(brightly_heart)。\n" NOR);
+        return 1;
+    }
+ 
+    if( me->query_skill_mapped("sword") == "star-sword" )
+    {
+        if( !target ) target = offensive_target(me);
+        if( !target ) return notify_fail("你沒有可以攻擊的目標。\n"); // 改 by cominging
+        if( !me->can_fight(target) ) return me->can_fight(target);
+
+            sk = me->query_skill("star-sword");
+            force = me->query_skill("force");
+            w_force = me->query_skill("moon_force");
+
+        target_armor = target->query_armor();
+        target_dodge = target->query_skill("dodge")/3 + random(target->query_dex()/4);
+        
+        me_dex = me->query_dex() * 3;
+        me_damage = me->query_damage() + w_force/4 + sk/3;
+        me_damage = me_damage + random(me_damage/4);
+        
+        sum_damage = me_damage - target_armor/2 - random(target_armor/2);
+        // qc section
+       // if(wizardp(me)) tell_object(me,sprintf("  me_damage=%-d  sum_damage=%-d\n",me_damage,sum_damage));
+        // end of qc section
+
+        if( arg == "rain" )
+        {
+            if( !me->is_fighting(target) ) me->kill_ob(target);
+            if( !target->is_fighting(me) ) target->kill_ob(me);
+            if( me->is_busy() ) return notify_fail("你正忙著，沒有空攻擊。\n");
+            if( me->query_skill("star-sword") < 30 )
+                return notify_fail("你的"SKILL_NAME"需要30級才能使用「劍雨(rain)」。\n");
+            
+            message_vision( HIC "\n$N催動劍氣，劍雨立即像千千萬萬的螢火蟲，或似燈蛾撲火般往$n"HIC"飛擁過去！！\n" NOR, me, target);
+            me->receive_damage("ap", 50);
+            me->start_busy(1);
+            if( random(me_dex) > random(target_dodge) )
+            {
+                   sum_damage = me->query_damage()*2 + sk/3 - random(target_armor/2) - target_armor/2;
+                    if( sum_damage < 1 ) sum_damage = 10;
+                sum_damage = COMBAT_D->Merits_damage(me, target, sum_damage, "bio");
+                
+                target->receive_damage("hp", sum_damage, me);
+                message_vision(HIR"$n"HIR"躲不開漫天撲來的劍法，身上數處要害中劍，噴出數口鮮血。"NOR, me, target);
+
+                me->improve_skill("star-sword", random(me->query_int()) );
+                me->improve_skill("sword", random(me->query_int()) );
+                weapon->attack(); // wp 損壞率 add by wilfred
+            }
+            else
+            {
+                message_vision(CYN"可是$n"CYN"感受到了$N的各招各式，一一化解掉了。"NOR, me, target);
+                sum_damage = 0;
+            }
+            if( me->query_temp("apply/show_damage") || me->query_temp("show_damage") )
+                message_vision(HIY" ("+ HIR + sum_damage + HIY")"NOR" \n\n"NOR, me);
+            else message_vision("\n\n", me);
+            COMBAT_D->report_status(target);
+            return 1;
+        }
+
+        if( arg == "vigor" )
+        {
+            if( !me->is_fighting(target) ) me->kill_ob(target);
+            if( !target->is_fighting(me) ) target->kill_ob(me);
+            message_vision(HIY "\n$N手中"+weapon->query("name") + HIY "發出氣勁急旋時獨有的嗤嗤激響，漫布在全場每一寸空間裡。\n\n"NOR, me, target);
+            message_vision(HIG "$n"HIG"生出錯覺，就若$N"HIG"捨下了其它人，全力向自己攻來。\n"NOR, me, target);
+            
+            if( random(target->query_dex()) < random(me->query_dex()*3/2) )
+            {
+                message_vision(CYN"$N"CYN"一時之間完全不知道如何反應。\n"NOR, target);
+                                weapon->attack(); // wp 損壞率 add by wilfred
+                if( sk < 30 ) target->start_busy( 1) ;
+                if( sk > 30 && sk < 60 ) target->start_busy( 2 );
+                if( sk > 60 && sk < 90 ) target->start_busy( 3 );
+                if( sk >= 90 ) {
+                    target->receive_damage("hp", me->query_damage()/3, me);
+                    message_vision(HIR"$N"HIR"身心受創，竟中了不輕的內傷！"NOR, target);
+                   target->start_busy(3);
+                }
+                if( me->query_temp("apply/show_damage") || me->query_temp("show_damage") )
+                    message_vision(HIY" ("+ HIR + me->query_damage()/3 + HIY")"NOR" \n"NOR, me);
+                else message_vision("\n", me);
+                COMBAT_D->report_status(target);
+            }
+            else
+            {
+                message_vision(CYN "但是$N"CYN"的直覺將他拉回現實，躲開了這次的攻擊。\n"NOR,target);
+                me->add_busy(random(2));
+            }
+            me->receive_damage("ap", 60);
+            me->start_busy(1);
+            return 1;
+        }
+
+        if( arg == "brightly_heart" )
+        {
+            if( me->query("level") < 35 )
+                return notify_fail("你角色的等級需要３５級。\n");
+            if( me->query_skill("moon_force") < 90 )
+                return notify_fail("你的殘月心法需要９０級。\n");
+            if( me->query_skill("star-sword") < 90 )
+                return notify_fail("你的"SKILL_NAME"需要９０級。\n");
+            if( me->is_busy() )
+                return notify_fail("你還在忙！\n");
+            if( !me->is_fighting() )
+                return notify_fail("你沒在打架, 所以不能用劍氣！\n");
+            if( !arrayp(attack_targets = me->query_enemy()) )
+                return notify_fail("你沒有可以攻擊的對象。\n");
+            if( me->query("ap") < 200 )
+                return notify_fail("你的內勁不足，無法使用劍心通明。\n");
+            if( me->query_temp("wind_brightly_heart") )
+                return notify_fail("你短時間內還無法使用劍心通明。\n");
+            msg =  HIW "\n$N"HIW"劍心通明瞬間擊出七劍，「鏗鏘」聲不絕如縷\忽輕忽重，但無論或輕或重，\n"
+                        "每一劍均把$n"HIW"緊緊吸啜著，教$n"HIW"無法抽身後退！！！\n\n" NOR;
+            message_vision( msg, me, target);
+                        if( objectp(field = present("_INDICATE_KNACK_FIELD_", environment(me))) ) {
+                                // 劍陣 - 七劍合一劍
+                message_vision( HIG"$n"HIG"配合$N"HIG"的劍心通明，發出有如"HIY"龍吟虎嘯"HIG"般的巨響。\n"NOR, me, field);
+                total_damage = 0;
+                   for(g=0;g<7;g++) {
+                        if(  target->is_busy() || random( target->query_dex() ) < random( me->query_dex()*2 ) + 15 ) {
+                            damage = me->query_damage()/2 + random(w_force/4);
+                                                        damage += field->query("damage") * field->query("power")/100;  // 劍陣額外攻擊力
+                            damage = COMBAT_D->Merits_damage(me, target, damage , "bio");
+                            total_damage += damage;
+                                    message_vision(HIC"$N"HIC"抵擋不住被狠狠刺中要害，全身十二條經脈都受到重劍！\n"NOR,target);
+                        } else {
+                            message_vision(YEL"$N"YEL"躲過了這一劍！\n"NOR,target );
+                            target->start_busy(1);
+                        }
+                                }
+                                if(total_damage>0) { // 造成傷害
+                                        message_vision(HIR"無形劍氣在$N"HIR"體內經脈流竄，造成嚴重的內傷(" + total_damage +")！\n"NOR,target);
+                    target->receive_damage("hp", total_damage , me);
+                    COMBAT_D->report_status(target);
+                  }
+               } else {
+                                // 無劍陣 - 七劍分開打
+                   for(g=0;g<7;g++) {
+                        if(  target->is_busy() || random( target->query_dex() ) < random( me->query_dex()*2 ) + 15 ) {
+                            damage = me->query_damage()/2 + random(w_force/4);
+                            damage = COMBAT_D->Merits_damage(me, target, damage , "bio");
+                            if( random( target->query_skill("force")/2 ) > random(force) ) {
+                                damage /= 2;
+                                message_vision(CYN"$N"CYN"奮力迎擊，硬是接下了這一劍！"HIR" ("HIW+damage+HIR")"NOR,target);
+                                target->receive_damage("hp", damage, me);
+                                COMBAT_D->report_status(target);
+                            } else {
+                                target->receive_damage("hp", damage , me);
+                                message_vision(HIC"$N"HIC"不及抵擋，被這一劍刺中要害！"HIR" ("HIW+damage+HIR")"NOR,target);
+                                COMBAT_D->report_status(target);
+                            }
+                        } else {
+                            message_vision(YEL"$N"YEL"躲過了這一劍！\n"NOR,target );
+                            target->start_busy(1);
+                        }
+                  }
+            }
+            me->start_busy(2);
+                        me->receive_damage("ap", 60);
+            weapon->attack(); // wp 損壞率 
+            target->start_busy(1);
+            message_vision("\n",me);
+            me->set_temp("wind_brightly_heart", 1);
+            call_out("stop_delay", 12 , me);
+            return 1;
+                        }
+        }
+if( !me->skill_active( "star-sword",(: call_other, __FILE__, "delay_0", me :), 6) )
+        return notify_fail("你結束"SKILL_NAME"的動作還沒完成！\n");
+
+    message_vision(HIY"$N眼觀四方﹐耳聽八方﹐心凝意在﹐漸漸體會"SKILL_NAME"！\n"NOR,me);
+    me->map_skill("sword", "star-sword");
+    me->receive_damage("ap", 10);
+    me->reset_action();
+    me->start_busy(1);
+    return 1;
+}
+
+void delay_0(object me)
+{
+    object me_weapon;
+
+    if( !me ) return;
+
+    me_weapon=me->query_temp( "weapon" );
+
+    if( !me_weapon || me_weapon->query("skill_type") != "sword" )
+    {
+        me->map_skill("sword");
+        me->reset_action();
+        return;
+    }
+
+    if( me->query_skill_mapped("sword")!="star-sword" ) return;
+
+    if( me->query("ap") < 10 )
+    {
+        me->map_skill("sword");
+        me->reset_action();
+        tell_object(me, "你的體力不夠，無法繼續使用"SKILL_NAME"了。\n");
+        return ;
+    }
+
+    if( me->is_fighting() ) me->receive_damage("ap", 7);
+
+me->skill_active( "star-sword",(: call_other, __FILE__, "delay_0", me :), 6);
+}
+
+void stop_delay(object me)
+{
+    if( !me ) return;
+    me->delete_temp("wind_brightly_heart");
+    tell_object(me, "你又恢復劍心通明了。\n");
+}
+
+int valid_learn(object me)
+{
+    return 1;
+}
+
+/*
+mapping query_action(object me, object weapon)
+{
+        if( me->query_skill("star-sword") == 100 && !me->query_skill("sevenstar-sword"))
+        {
+                if( random(me->query("level")) == random(me->query_skill("star-sword")) )
+                {
+                        me->set_skill("sevenstar-sword", 1);
+                        tell_object(me, HIW+BEEP"\n你受到了啟發，練成了新技能-[昴七星劍義 (sevenstar-sword)]。\n\n"NOR);
+                }
+        }
+        return action[random(sizeof(action))];
+}
+*/
+
+int practice_skill(object me)
+{
+    return 1;
+}
+
+int improve_limite(object ob)
+{
+
+    return 100;
+}
+/*
+void skill_improved(object me)
+{
+        if( me->query_skill("sevenstar-sword") )
+        if( me->query_skill("sevenstar-sword") )
+        {
+                me->set_skill("sevenstar-sword", me->query_skill("sevenstar-sword")-1 );
+              tell_object(me, HIW"因為你練回"SKILL_NAME"，所以你不小心忘記了一部份的昴七星劍義。\n\n"NOR);
+        }
+}
+*/
+mapping query_action(object me, object weapon)
+{
+/*
+    if( me->query_skill("star-sword") == 100 && !me->query_skill("sorsin_force"))
+    {
+        if( random(me->query("level")) == random(me->query_skill("star-sword")) )
+        {
+            me->set_skill("sorsin_force", 1);
+            tell_object(me, HIW"你突然領悟到"SKILL_NAME"的奧祕，與索極劍法及殘月心法融會貫通，創造出新的武學[索星奧義(Sorsin_force)]。\n\n"NOR);
+        }
+    }
+*/
+
+    return action[random(sizeof(action))];
+}
+
+

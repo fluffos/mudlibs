@@ -1,0 +1,3 @@
+// bow.c
+
+inherit SKILL;

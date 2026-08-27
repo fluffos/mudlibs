@@ -1,0 +1,184 @@
+/* 投票箱 write by whatup 2003/06/26 */
+//rewrite by promise@DS
+#include <ansi.h>
+
+inherit F_SAVE;
+inherit ITEM;
+
+private void enter_vote(string arg,int num,int);
+string query_short();
+int open_vote(string);
+void create()
+{
+        set_name(HIC"２００３年ＤＳ第一版投票機器"NOR,({ "vote machine","vote","machine"}));
+        set("no_get",1);
+        set("no_sac",1);
+        set("value",10000000000);
+        
+        restore();
+        set("short",(:query_short:));
+}
+void init()
+{
+        if(wiz_level(this_player())>0 )
+        {
+                add_action("add_vote","add_vote");
+                add_action("reset_vote","reset_vote");  
+                add_action("open_vote","open_vote");
+        }
+
+        if(query("mode")==2 ) return ;
+        if(query("vote_data/stop_time") && query("vote_data/stop_time")<time())
+        {
+                open_vote("");
+                return ;
+        }
+        add_action("vote","vote");
+}
+int save()
+{
+        if(!clonep()) ::save();
+}
+string query_save_file()
+{
+        return DATA_DIR"votebox";
+}
+int reset_vote()
+{
+        delete("vote_data");
+        delete("vote_user");
+        delete("vote");
+        delete("mode");
+        write("重置完成！\n");
+        save();
+        return 1;
+}
+// 新增一個新的投票
+int add_vote(string arg)
+{
+        object me=this_player();
+        int num,i,day;
+        string long;
+        if(wiz_level(me)<6 )
+                return 0;
+        if(query("vote_data")) 
+                return notify_fail("現在投票正在進行中！\n");
+        if(!arg || sscanf(arg,"%d %d %s",num,day,long)!=3)
+                return notify_fail("add_vote <選票數> <天數> <說明>\n");
+        if(num < 1 )
+                return notify_fail("選票數最少要有一個！\n");
+        if(day > 7 || day < 1)
+            return notify_fail("天數只能 1 - 7天！\n");
+        set("vote_data/long",long);
+        set("vote_data/start_time",time());
+        // 預設一天就開票
+        set("vote_data/stop_time",time() + day * 86400);
+        set("mode",1);
+        i=0;
+        write("請輸入第 "+(i+1)+" 張選票的說明：");
+        input_to((:enter_vote:),1,num,i);
+        return 1;
+        
+}
+void enter_vote(string arg,int num,int i)
+{
+        if(!arg) {
+                write("一定要輸入東西，請再來一次：");
+                input_to((:enter_vote:),1,num);
+                return ;
+        }
+        set("vote/"+i,arg);
+        if(num==1) 
+        {
+                write("完成了！\n");
+                save();
+                return ;
+        }
+        
+        i++;
+        num--;
+        write("請輸入第 "+(i+1)+" 張選票的說明：");
+        input_to((:enter_vote:),1,num,i);
+        
+}
+string extra_long()
+{
+        string str;
+
+        if(!query("vote")) return "現在沒有任何的投票！";
+        if(query("mode") == 2)
+        {
+                return "投票結果如下:\n"+query("vote_data/final");;
+        }
+         str= sprintf("投票說明：
+        %s
+",query("vote_data/long") );
+        foreach( string num in sort_array(keys(query("vote")),1))
+        {
+                if(num == query("vote_user/"+getuid(this_player()))) str += HIW"◎"NOR;
+                else str += "  ";
+                str += sprintf("  [%s] %s\n",num,query("vote/"+num));
+        }
+        str += "\n\t還有 "+ FINGER_D->age_string(query("vote_data/stop_time")-time())+ " 就開票了，敬請期待！\n";
+        return str;
+}
+string query_short()
+{
+        object me=this_player();
+        if(query("mode")==2)
+        {
+                return name()+ "(" + capitalize(query("id")) + ")／ 投票結束、共 "+sizeof(query("vote_user"))+" 人投票";
+        }
+        if(query("mode")==1)
+        {
+                string str;
+                str = (query("vote_user/"+me->query("id")))?"你已經投票了":HIR"你尚末投票"NOR;
+                return name()+ "(" + capitalize(query("id")) + ")／ "+sizeof(query("vote_user"))+" 人已投票 - "+str;
+        }
+        if(query("mode")==0)
+        {
+                return name()+ "(" + capitalize(query("id")) + ")／目前沒有任何投票";
+        }
+}
+int vote(string arg)
+{
+        
+        if(query("mode")!=1) return 1;
+        if(query("vote_user/"+getuid(this_player()))) return notify_fail("你已經投過了哦！\n");
+        if(!arg) return notify_fail("你要投那一個？\n");
+        if(!query("vote/"+arg)) return notify_fail("沒有這一個選項哦！\n");
+        set("vote_user/"+getuid(this_player()),arg);
+        save();
+        message_vision("$N投入神聖的一票了！\n",this_player());
+        return 1;
+}
+int open_vote(string arg)
+{
+        mapping fin;
+        string *votes;
+        string str;
+        
+        if(wiz_level(this_player())<6 )
+                return 0;       
+                
+        fin = allocate_mapping(sizeof(query("vote")));
+        votes = values(query("vote_user"));
+        str = query("vote_data/long")+"\n結果如下： \n";
+        
+        foreach(arg in keys(query("vote")))
+        {
+                fin[arg] = sizeof(filter_array(votes,(: $1 == $2:),arg));
+        }
+        votes = sort_array(keys(fin),1);
+        foreach(arg in votes)
+        {
+                str += sprintf("[%s] %-30s 有 %-3d 張票\n",arg,query("vote/"+arg),fin[votes[to_int(arg)]]);
+        }
+        set("mode",2);
+        set("vote_data/final",str);
+        write("開票成功！\n");          
+        write("最後結果為\n"+str);
+        save();
+        return 1;
+}
+

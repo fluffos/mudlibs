@@ -1,0 +1,360 @@
+//標準摸彩商人繼承檔	- by Luky -
+//
+//	只要NPC繼承此檔, 即可利用以下方式變成摸彩店老闆
+//
+// void init() 
+// {
+//   ::init();
+//   add_action("do_list","list");
+//   add_action("do_buy" ,"buy");
+//   add_action("do_reward","reward");
+// }
+// 
+//  1. 這裡的 do_list,do_buy是固定的, 但是後面的指令字串(list,buy,reward)可以自訂.
+//  2. 人物需要設定物品清單, 清單為 mapping 型式, 格式為 "檔名" : <消耗補給點數>
+//     檔名不用加".c", 玩家的補給點數上限為 <人物等級*20> . 消耗後會自動慢慢增加至上限.
+//        set("sell_list",([	
+//            TICKET   : 10, //表示每買一張彩卷會扣10點補給點數
+//        ]) );
+//  5. 可用指令參數:
+//		"  看貨品目錄請用 <list>   "
+//		"  要買東西用 <buy 東西> <buy 獎卷編號 ticket> "
+//		"  要換獎用 <reward>
+//
+//  6. 自訂獎品:
+//        set("gift_file",({	
+//         "特獎檔案",
+//         "頭獎檔案",
+//         "二獎檔案",
+//         "三獎檔案",
+//         "四獎檔案",
+//         "五獎檔案",
+//         "六獎檔案",
+//         "七獎檔案",
+//         "八獎檔案",
+//        }) );
+//
+//
+//
+#include <dbase.h>
+#include <ansi.h>
+inherit F_VENDOR;
+string args;
+
+void create()
+{
+	seteuid(getuid());
+}
+
+string item_desc(object ob)
+{
+	if(ob->is_ticket()) return HIC+"彩卷"+NOR;
+	else if(ob->query("skill_type")) return HIG+"武器"+NOR;
+	else if(ob->query("armor_type")) return HIY+"防具"+NOR;
+	else if(ob->query("heal_hp") || ob->query("heal_mp") || ob->query("heal_ap")) return HIC+"回復"+NOR;
+	else if(ob->is_food()) return HIM"食物"NOR;	// by shengsan
+	else return "道具";
+}
+
+string item_list(object ob)
+{
+	   return sprintf("%8d .............. %4s  %-26s",
+	   ob->query("value"),item_desc(ob),ob->short()
+	   );
+}
+
+int do_list(string arg)
+{
+	object goods,me;
+	mapping item;
+	string list, *file;
+	int i,*supply_cost,debug;
+	
+	me=this_player();
+	
+	if(wizardp(me) && me->query("env/debug")) debug=1;
+		else debug=0;
+	
+	if(!mapp(item = query("sell_list")) )
+	{
+		write("這位獎卷商人沒有物品列表！\n");
+		return 0;
+	}
+	file =  keys(item);
+	supply_cost = values(item);
+	list = "\n\n┌───────────────────────────┐\n";
+	list +="│ 價 錢                種類  目前可以購買的貨品清單    │\n";   
+	list +="└───────────────────────────┘\n";
+	for(i=0; i<sizeof(file); i++)
+	{
+	    goods = load_object(file[i]);
+	    if(goods)
+	    {
+	    	list+= item_list(goods);
+	    	if(goods->is_ticket() && !LOTTERY_D->can_buy_ticket()) list+= "<已售完>";
+	        if(debug) list+= sprintf(GRN+" SP:(%3d)\n"+NOR,supply_cost[i]);
+	    	else list+="\n";
+	    }
+	}
+	list +="\n";
+	if(i==0) return notify_fail(this_object()->query("name")+"對你說: 對不起唷..貨都賣完了。\n");
+	else me->start_more(list);
+	return 1;	
+}
+
+int do_buy(string arg)
+{
+	int amount,valus,i,j,*supply_cost,world,number;
+	object goods,ob,me;
+	string item,*file;
+	mapping items;
+
+	me=this_player();
+	if(!arg) return notify_fail("你要買什麼東西？\n");
+	if(sscanf(arg,"%d %s",amount,item)!=2)
+	{
+	  amount=1;
+	  item = arg;
+	  if(item=="ticket")
+	  {
+  		amount=LOTTERY_D->find_ticket_num();
+  		if(amount==0) return notify_fail("本期的彩卷已經全部賣完了!\n");
+	  }
+	}
+	if(!mapp(items = query("sell_list")) )
+	{
+		write("這位小販沒有物品列表！\n");
+		return 0;
+	}
+	
+
+	file =  keys(items);
+	supply_cost = values(items);
+	for(i=0; i<sizeof(file); i++)
+	{
+	    goods = load_object(file[i]);
+	    if(goods)
+	    {
+	    	if(goods->id(item))
+	    	{
+	    	 if(goods->is_ticket())
+	    	 {
+	    	 	if(!me->can_afford(goods->query("value")))
+		 		return notify_fail("你身上的錢不夠。\n");
+	    	 	if( (goods->query_weight()+me->query_encumbrance())>me->query_max_encumbrance() )
+ 				return notify_fail("你拿不動這麼多東西。\n");
+		 	 if( (int)me->query_capacity() + (int)goods->query("volume") > (int)me->query_max_capacity() )
+ 			return notify_fail("你身上放不下這麼多東西。\n");
+		 	if( me->query("supply_point") < supply_cost[i])
+		 		return notify_fail(this_object()->query("name")+"對你說: 你已經買了不少東西了..還是等過一會兒再來買吧.. 。\n");
+	    	 	if( amount < 1 || amount > LOTTERY_D->query_max_ticket() ) return notify_fail("沒有這個號碼喔。\n");
+	    	 	if(!LOTTERY_D->can_buy_ticket()) return notify_fail("本期彩卷已經全部賣完了。\n");
+	    	  	if(!LOTTERY_D->add_ticket_number(amount)) return notify_fail((string)amount+"號的彩卷已經賣掉了。\n");
+	    	  	
+	    	  	valus=goods->query("value");
+	    	 	me->receive_money(-valus);
+	    	 	me->add("supply_point",-supply_cost[i]);
+	    	 	world = me->money_type();
+	  		if(world!=3) 
+	  		message_vision("$N花了"+price_string(valus,me->money_type())+"向$n買了一張"+
+	    	 	  		amount+"號的"+goods->name()+"。\n",me,this_object());
+	  		else message_vision("$N花了"+valus+"個單位的電子幣向$n買了一張"
+	    	 	  		+amount+"號的"+goods->name()+"。\n",me,this_object());
+	    	  	ob = new(file[i]);
+	    	  	if(me->query_encumbrance() + ob->weight() > (int)me->query_max_encumbrance()) ob->move(environment(me));
+	    	  	else ob->move(me);
+
+	    	  	LOTTERY_D->add_super_jack_pot(random(30)+10);
+	    	  	LOTTERY_D->release_ticket();
+	    	  	ob->set("time",LOTTERY_D->query_times()+1);
+	    	  	ob->set("number",amount);
+	    	  	ob->set("no_sell",1);
+
+	    	 	me->save();
+	    	 	return 1;
+	    	 }
+	    	 else
+	    	 {
+	    	 	
+	    	 	if(!me->can_afford(goods->query("value")*amount))
+		 		return notify_fail("你身上的錢不夠。\n");
+		 	if( (goods->query_weight()*amount+me->query_encumbrance())>me->query_max_encumbrance() )
+ 				return notify_fail("你拿不動這麼多東西。\n");
+		 	if( me->query("supply_point") < supply_cost[i]*amount)
+		 		return notify_fail(this_object()->query("name")+"對你說: 你已經買了不少東西了..還是等過一會兒再來買吧.. 。\n");
+	    	 	if( amount < 1 ) return notify_fail("至少要買一個吧。\n");
+	    	 	valus=goods->query("value")*amount;
+	    	 	me->receive_money(-valus);
+	    	 	me->add("supply_point",-supply_cost[i]*amount);
+	    	 	world = me->money_type();
+	  		if(world!=3) message_vision("$N花了"+price_string(valus,me->money_type())+"向$n買了"+
+	    	 	  		chinese_number(amount)+goods->query("unit")+goods->name()+"。\n",me,this_object());
+	  		else message_vision("$N花了"+valus+"個單位的電子幣向$n買了"+
+	    	 	  		chinese_number(amount)+goods->query("unit")+goods->name()+"。\n",me,this_object());
+
+	    	 	for(j=0;j<amount;j++)
+	    	 	{
+	    	  		ob = new(file[i]);
+	    	  		if(ob->is_character()) ob->move(environment(me));
+	    	  		else 	ob->move(me);
+	    	  		me->save();
+	    	 	}
+	    	 	return 1;
+	    	 }
+	    	}
+	    }
+	}
+
+	return notify_fail(this_object()->query("name")+"沒有賣這種東西。\n");
+	
+}
+
+int do_reward(string arg)
+{
+	object *ticket,me,gift;
+	int i,k=0,exp,flag,rank,check;
+	string where,str="",*file;
+	me=this_player();
+	ticket=all_inventory(me);
+	if(sizeof(ticket)<1)
+		return notify_fail("你並沒有彩卷可以對獎。\n");
+	if(!file=query("gift_file")) return notify_fail(this_object()->name()+"並不提供兌獎服務。\n");
+	rank = sizeof("gift_file");
+	switch(me->money_type())
+	{
+		case 1: where="bank/past"; break;
+		case 2: where="bank/now"; break;
+		case 3: where="bank/future"; break;
+		default: where="bank/past"; break;
+	}
+	for(i=0;i<sizeof(ticket);i++)
+	{
+		if(!ticket[i]->is_ticket() || !ticket[i]->query("number")) continue;
+		k++;
+		if(k==1) str+="$N拿了一些彩卷給$n。\n$n熟練的一張張翻看著。\n";
+		check = LOTTERY_D->query_lottery(ticket[i]->query("number"),ticket[i]->query("time"));
+		switch(check)
+		{
+			case -2:
+				str+=YEL"$n搖搖頭說: 這張彩卷現在不可以對獎喔。\n"NOR;
+				break;
+			case -1:
+				//message_vision(YEL"$N搖搖頭說: 這張彩卷已經過期了喔。\n"NOR"$N用力把彩卷給撕掉了。\n",this_object());
+				destruct(ticket[i]);
+				break;
+			case 0:
+				//message_vision(YEL"$N搖搖頭說: 這張彩卷並沒有中獎, 希望你下次的運氣會比較好。\n"NOR"$N用力把彩卷給撕掉了。\n",this_object());
+				destruct(ticket[i]);
+				break;
+			case 1:
+				str+=YEL"$n拿起其中一張彩卷點點頭說: 這張中了安慰獎。\n"NOR;
+				destruct(ticket[i]);
+				exp=50+random(50);
+				me->add("exp",exp);
+				str+="$N得到了"+(string)exp+"點經驗值。\n";
+				break;
+			case 2:
+				str+=YEL"$n拿起其中一張彩卷點點頭說: 恭喜您中了頭獎。\n"NOR;
+				flag++;
+				message("system",sprintf(HIC+"\n【彩卷中心】恭喜%s幸運的中了第%d期的頭獎。\n"NOR,me->name(1),LOTTERY_D->query_times()),users());
+				RECORD_D->add_temp_record(sprintf(HIC"[中獎] 幸運的%s中了第%d期的頭獎，獎卷編號:%d。[%s]\n",me->name(1),ticket[i]->query("time"),ticket[i]->query("number"),ctime(time())) );
+				break;
+			case 3:
+				str+=YEL"$n拿起其中一張彩卷點點頭說: 恭喜您中了二獎。\n"NOR;
+				flag++;
+				message("system",sprintf(HIC+"\n【彩卷中心】恭喜%s幸運的中了第%d期的二獎。\n"NOR,me->name(1),LOTTERY_D->query_times()),users());
+				RECORD_D->add_temp_record(sprintf(HIC"[中獎] 幸運的%s中了第%d期的二獎，獎卷編號:%d。[%s]\n",me->name(1),ticket[i]->query("time"),ticket[i]->query("number"),ctime(time())) );
+				break;
+			case 4:
+				str+=YEL"$n拿起其中一張彩卷點點頭說: 恭喜您中了三獎。\n"NOR;
+				flag++;
+				message("system",sprintf(HIC+"\n【彩卷中心】恭喜%s幸運的中了第%d期的三獎。\n"NOR,me->name(1),LOTTERY_D->query_times()),users());
+				RECORD_D->add_temp_record(sprintf(HIC"[中獎] 幸運的%s中了第%d期的三獎，獎卷編號:%d。[%s]\n",me->name(1),ticket[i]->query("time"),ticket[i]->query("number"),ctime(time())) );
+				break;
+			case 5:
+				str+=YEL"$n拿起其中一張彩卷點點頭說: 恭喜您中了四獎。\n"NOR;
+				flag++;
+				message("system",sprintf(HIC+"\n【彩卷中心】恭喜%s幸運的中了第%d期的四獎。\n"NOR,me->name(1),LOTTERY_D->query_times()),users());
+				RECORD_D->add_temp_record(sprintf(HIC"[中獎] 幸運的%s中了第%d期的四獎，獎卷編號:%d。[%s]\n",me->name(1),ticket[i]->query("time"),ticket[i]->query("number"),ctime(time())) );
+				break;
+			case 6:
+				str+=YEL"$n拿起其中一張彩卷點點頭說: 恭喜您中了五獎。\n"NOR;
+				flag++;
+				message("system",sprintf(HIC+"\n【彩卷中心】恭喜%s幸運的中了第%d期的五獎。\n"NOR,me->name(1),LOTTERY_D->query_times()),users());
+				RECORD_D->add_temp_record(sprintf(HIC"[中獎] 幸運的%s中了第%d期的五獎，獎卷編號:%d。[%s]\n",me->name(1),ticket[i]->query("time"),ticket[i]->query("number"),ctime(time())) );
+				break;
+			case 7:
+				str+=YEL"$n拿起其中一張彩卷點點頭說: 恭喜您中了六獎。\n"NOR;
+				flag++;
+				message("system",sprintf(HIC+"\n【彩卷中心】恭喜%s幸運的中了第%d期的六獎。\n"NOR,me->name(1),LOTTERY_D->query_times()),users());
+				RECORD_D->add_temp_record(sprintf(HIC"[中獎] 幸運的%s中了第%d期的六獎，獎卷編號:%d。[%s]\n",me->name(1),ticket[i]->query("time"),ticket[i]->query("number"),ctime(time())) );
+				break;
+			case 8:
+				str+=YEL"$n拿起其中一張彩卷點點頭說: 恭喜您中了七獎。\n"NOR;
+				flag++;
+				message("system",sprintf(HIC+"\n【彩卷中心】恭喜%s幸運的中了第%d期的七獎。\n"NOR,me->name(1),LOTTERY_D->query_times()),users());
+				RECORD_D->add_temp_record(sprintf(HIC"[中獎] 幸運的%s中了第%d期的七獎，獎卷編號:%d。[%s]\n",me->name(1),ticket[i]->query("time"),ticket[i]->query("number"),ctime(time())) );
+				break;
+			case 9:
+				str+=YEL"$n拿起其中一張彩卷點點頭說: 恭喜您中了八獎。\n"NOR;
+				flag++;
+				message("system",sprintf(HIC+"\n【彩卷中心】恭喜%s幸運的中了第%d期的八獎。\n"NOR,me->name(1),LOTTERY_D->query_times()),users());
+				RECORD_D->add_temp_record(sprintf(HIC"[中獎] 幸運的%s中了第%d期的八獎，獎卷編號:%d。[%s]\n",me->name(1),ticket[i]->query("time"),ticket[i]->query("number"),ctime(time())) );
+				break;
+			case 10:
+				str+=YEL"$n嚇了一跳, 斷斷續續的說:"HIC"天哪～～  $N...您中了..超...超級大獎！！ \n"NOR;
+				flag++;
+				message("system",sprintf(HIC+"\n【彩卷中心】恭喜%s幸運的中了第%d期的超級大獎。\n"NOR,me->name(1),LOTTERY_D->query_times()),users());
+				RECORD_D->add_temp_record(sprintf(HIC"[中獎] 幸運的%s中了第%d期"HIY"超級大獎"HIC"，獎卷編號:%d。[%s]\n",me->name(1),ticket[i]->query("time"),ticket[i]->query("number"),ctime(time())) );
+				destruct(ticket[i]);
+				exp=LOTTERY_D->query_super_jack_pot();
+				me->add("exp",exp);
+				str+="$N得到了"+(string)exp+"點經驗值。\n";
+				LOTTERY_D->clean_super_jack_pot();
+				if(rank>0)
+				{
+					gift=new(file[0]);
+					str+="$N得到獎品: "+gift->short(1)+"。\n";
+					if(!gift->can_move(me)) gift->move(environment(me));
+	    	  			else gift->move(me);
+				}
+				break;
+			default: 
+			//message_vision(YEL"$n搖搖頭說: $N, 你這張彩卷是假的ㄟ...\n"NOR"$n用力把彩卷給撕掉了。\n",me,this_object());
+			destruct(ticket[i]);
+		}
+		if( check > 1 && check < 10 )
+		{
+			exp=(10-check)*1000+random((10-check)*1000);
+			me->add(where,exp);
+			str+="$N得到了"+(string)exp+"的獎金。(存至戶頭)\n";
+			if(rank > (check-1))
+			{
+				gift=new(file[check-1]);
+				str+="$N得到獎品: "+gift->short(1)+"。\n";
+				if(!gift->can_move(me)) gift->move(environment(me));
+	    			else gift->move(me);
+			}
+			destruct(ticket[i]);
+		}
+	}
+	if(k<1)	return notify_fail("你並沒有彩卷可以對獎。\n");
+	else
+	{
+		if(!flag)
+		{
+			str+="\n $n拍拍$N的肩膀說: 很可惜, 這些獎卷都沒有中大獎, 希望你下次運氣會好一點!!\n";
+			message_vision(str,me,this_object());
+			return 1;
+		}
+		str += "\n $n把其他沒中的獎卷處理掉之後, 高興的和$N握手祝賀。\n\n";
+		message_vision(str,me,this_object());
+	}
+	return 1;
+}
+
+
+int is_lottery_npc()
+{
+	return 1;
+}

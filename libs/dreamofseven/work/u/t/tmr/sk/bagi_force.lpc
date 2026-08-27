@@ -1,0 +1,210 @@
+//Adv_八極門：八極內功(bagi_force)  
+//八極門評比：
+//        攻擊    防禦    輔助    醫療    牽制
+//        10       2       3       1       4
+
+#include <ansi.h>
+inherit SKILL;
+
+void delay(object me);
+void armor(object me,int effect);
+void power_up(object me,int effect);
+
+int exert(object me,object target, string arg)
+{
+	int force,bagi_force,heal;
+
+	force=me->query_skill("force",2);
+	bagi_force=me->query_skill("bagi_force",2);
+	heal=(force+bagi_force)/2;
+
+	if(me->is_busy() )
+		return notify_fail("你正忙著.....\n");
+	if(me->is_ghost() )
+		return notify_fail("復活要緊哦...\n");
+
+	if(arg=="off" && me->query_skill_mapped("force")=="bagi_force")
+	{
+		message_vision("$N站起身來，結束了「八極內功\」的修煉。\n",me);
+		me->delete_temp("is_busy/bagi_force");
+		me->map_skill("force");
+		return 1;
+	}
+	if(arg=="off")
+		return notify_fail("你並沒有修練「八極內功\」。\n");	
+	if(!arg)
+	{
+	if( me->query_skill_mapped("force")=="bagi_force" )
+		return notify_fail("你已正在修煉八極內功\了。\n");
+	if(me->query("hp") < 8 || me->query("ap") < 8 )
+		return notify_fail("你目前的身體狀況不好，無法修煉八極內功\。\n");
+	if(me->is_fighting() ) 
+		return notify_fail("你正忙著打架，沒空修煉八極內功\。\n");
+ 
+	message_vision(HIB "$N盤膝坐了下來，開始修煉起八極內功\。\n" NOR,me);
+	me->receive_damage("hp",4);
+	me->receive_damage("ap",4);
+	me->set_temp("is_busy/bagi_force","你正在修煉八極內功\，暫時不能移動。");
+	me->map_skill("force","bagi_force");
+	me->start_busy(2);
+        me->skill_active( "bagi_force",(: call_other, __FILE__, "delay", me:), 2);
+	return 1;
+	}
+
+//療傷功能，扣ap 補 hp ，引用評比 醫療 1
+	if(arg=="heal" )
+ 	{
+	if(me->is_busy() )
+		return notify_fail("你正忙著....\n");
+	if(me->query("ap") < heal/3 ) 
+		return notify_fail("你目前的身體狀況，不能使用療傷功能。\n");
+	message_vision(HIR "$N運息提氣療傷，隨即吐出了體內的瘀血。\n" NOR,me);
+	me->receive_damage("ap",heal/3);
+
+// fighting 中 {heal*(2/3) } 
+// 引用評比 輔助 4
+	if (me->is_fighting() ) me->receive_heal("hp",heal*(2/3) );
+	else me->receive_heal("hp",heal);
+
+	me->start_busy(1);
+	me->improve_skill("bagi_force",me->query_con()/4 );
+	return 1;
+	}
+
+//「八極勁擋」 引用評比 防禦 2
+	if(arg=="armor")
+	{
+	if (bagi_force< 30 )
+		return notify_fail("你的八極心法不夠，無法施展「八極勁擋」。 \n");
+	if(me->query("ap") < 120 )
+		return notify_fail("你目前的狀態無法施展「八極勁擋」。\n");
+	if(me->query_temp("bagi_force/armor")==1)
+		return notify_fail("你已經在施展「八極勁擋」。\n");
+	if(me->is_busy() )
+		return notify_fail("你正忙著...\n");
+
+	message_vision(HIG "$N馬步一坐，運使體內的纏絲勁遂繞著身體形成一道氣勁。 \n" NOR,me);
+	me->add_temp("apply/armor", heal/3);
+	me->improve_skill("bagi_force",me->query_con()/4 );
+	me->receive_damage("ap",100);
+	me->set_temp("bagi_force/armor",1);
+	me->start_busy(2);
+        me->skill_active( "bagi_force",(: call_other, __FILE__, "armor", me,heal/3:), 300);
+	return 1;
+	}
+	
+//八震訣 引用評比 攻擊力 10 輔助 3
+	if(arg=="power_up")
+	{
+	if (bagi_force< 50 )
+		return notify_fail("你的八極心法不夠，無法施展「八震訣」。 \n");
+	if(me->query("ap") < 70  || me->query("hp")<120 )
+		return notify_fail("你目前的狀態無法施展「八震訣」。\n");
+	if(me->query_temp("bagi_force/power_up")==1)
+		return notify_fail("你已經在施展「八震訣」。\n");
+	if(me->is_busy() )
+		return notify_fail("你正忙著......\n");
+
+	message_vision(HIY "$N施展八極不傳之密「八震訣」，登時全身肌肉暴起！！ \n" NOR,me);
+	me->add_temp("apply/damage", heal/2 );
+	me->improve_skill("bagi_force",me->query_con()/4 );
+	me->receive_damage("hp",100);
+	me->receive_damage("ap",50);
+	me->set_temp("bagi_force/power_up",1);
+	me->start_busy(2);
+        me->skill_active( "bagi_force",(: call_other, __FILE__, "power_up", me,heal/2:), 300);
+	return 1;
+	}
+	
+
+	return notify_fail("八極內功\有heal,armor,power_up 等功\能。\n");
+
+}
+
+void armor(object me,int effect)
+{
+	if(!me) return;
+	if(!me->query_temp("bagi_force/armor") ) return;
+	message_vision(HIG "$N身子一抖，散去了八極護身氣勁。\n"NOR,me);
+	me->add_temp("apply/armor",-effect);
+	me->delete_temp("bagi_force/armor");
+	return;
+}
+
+void power_up(object me,int effect)
+{
+	if(!me) return;
+	if(!me->query_temp("bagi_force/power_up") ) return;
+	message_vision(HIG "$N一聲低嘯，渾身暴起的肌肉恢復了平常的狀態。\n"NOR,me);
+	me->add_temp("apply/damage",-effect);
+	me->delete_temp("bagi_force/power_up");
+	return;
+}
+
+void delay(object me)
+{
+	if ( !me 
+	||   !me->query_temp("is_busy/bagi_force")
+	||   me->query_skill_mapped("force")!="bagi_force"
+	||    me->is_fighting() )
+	{
+		me->map_skill("bagi_force");
+		return;
+	}
+
+	if(me->query("hp") < 8 || me->query("ap") < 8 )        
+	{
+		message_vision("$N站起身來，結束了「八極內功\」的修煉。\n",me);
+		me->delete_temp("is_busy/bagi_force");
+		me->map_skill("bagi_force");
+		return;
+	}	
+
+	//bagi_force 80 大關 (十萬exp)
+	if (me->query_skill("bagi_force",1)==80)
+	{
+	me->add("bagi/bagi_force",me->query_con()/3+random(me->query_int()/4)  );
+		if (me->query("bagi/bagi_force")>100000 ) {
+		tell_object(me,HIW "經過長年的修煉，你的八極內功\更上一層了！\n" NOR );
+		tell_object(me,HIY "你的體質和力量提高了！\n" NOR );
+		me->add("addition/str", 1);
+		me->add("addition/con", 1);
+		me->set_skill("bagi_force",81);
+		me->delete("bagi/bagi_force");
+		}
+	}
+	else {
+		me->improve_skill("bagi_force",me->query_con()/3+random(me->query_int()/4)  );
+		me->improve_skill("force",me->query_con()/3+random(me->query_int()/4)  );
+	}
+
+	me->receive_damage("hp",8);
+	me->receive_damage("ap",8);
+	me->set_temp("is_busy/bagi_force","你正在修煉八極內功\，暫時不能移動。");
+	me->map_skill("force","bagi_force");
+        me->skill_active( "bagi_force",(: call_other, __FILE__, "delay", me:), 2);
+	return;
+}
+
+int valid_learn(object me)
+{
+	return 1;
+}
+
+int practice_skill(object me)
+{
+	return 1;
+}
+
+void skill_improved(object me)
+{
+        int a;
+        a = me->query_skill("bagi_force", 1);
+	if( a % 5==0 && random(a*2) > random(a*3) )
+	{
+		tell_object(me,HIY "你的體質和力量提高了！\n" NOR );
+		me->add("addition/str", 1);
+		me->add("addition/con", 1);
+	}
+	return;
+}

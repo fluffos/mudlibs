@@ -1,0 +1,3 @@
+//agriculture
+
+inherit SKILL;

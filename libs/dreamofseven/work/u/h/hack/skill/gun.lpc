@@ -1,0 +1,3 @@
+// gun.c
+
+inherit SKILL;

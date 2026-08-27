@@ -1,0 +1,171 @@
+// vehicle.c
+// 船艦;運載工具;車輛;飛行器;太空火箭
+
+#include <dbase.h>
+#include <move.h>
+#include <name.h>
+#include <command.h>
+
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+inherit F_MOVE;
+inherit F_NAME;
+
+varargs string short(int raw)
+{
+	string str;
+	str=::short(raw);
+	if(this_object() == environment(this_player()) && stringp(str) ) str = replace_string( str,this_object()->query("name"),this_object()->query("short"));
+	return str;
+}
+
+void setup()
+{
+	seteuid(getuid());
+	if(!stringp(this_object()->query("unit")))
+		this_object()->set("unit","台");
+	if(!this_object()->query("unit"))
+		this_object()->set("v_level",1);	// 預設為第一層船艦
+}
+
+int enter_vehicle(object me)
+{
+	object obj;
+	obj = this_object();
+	
+	if( me->query("in_vehicle") > this_object()->query("v_level") )	// 檢查是否已經進入船艦了
+	{
+		write("阿？你要進入哪裡？。\n");
+		return 0;
+	}
+	if(!me->can_move(obj))	// 檢查是否可移動
+	{
+		write("你沒有辦法進入 "+obj->query("name")+" 裡。\n");
+		return 0;
+	}
+	else if( me->move(obj) )	// 執行移動
+	{
+		me->add("in_vehicle",1);	// 增加自己在船艦中的層數
+		message_vision( sprintf("$N進入 %s 了。\n",obj->query("name")), me );
+	}
+	else
+	{
+		write("你就是沒有辦法進入 "+obj->query("name")+" 裡。\n");
+		return 0;
+	}
+		
+	return 1;
+}
+
+int leave_vehicle(object me)
+{
+	object env,obj,me_env;
+	obj = this_object();
+	env = environment(obj);
+	me_env = environment(me);
+	if(!me_env->is_vehicle())
+	{
+		return 0;
+	}
+	if(!me->can_move(env))
+	{
+		return notify_fail("你沒有辦法離開 "+obj->query("name")+" 耶。\n");
+	}
+	else if( me->move(env) )
+		message_vision( sprintf("$N離開 %s 了。\n",obj->query("name")), me );
+	else
+		return notify_fail("你就是沒有辦法離開 "+obj->query("name")+" 耶。\n");
+		
+	me->add("in_vehicle",-1);
+	return 1;
+}
+
+string look_out(string arg)	// 查看船艦外的景物
+{
+	string outline;
+	object env, obj;
+	
+	obj = this_object();
+	env = environment(obj);
+	LOOK_CMD->main(this_object(),arg);
+	
+	return outline;
+}
+
+mapping default_dirs = ([
+	"north":		"北",
+	"south":		"南",
+	"east":			"東",
+	"west":			"西",
+	"northup":		"北邊",
+	"southup":		"南邊",
+	"eastup":		"東邊",
+	"westup":		"西邊",
+	"northdown":		"北邊",
+	"southdown":		"南邊",
+	"eastdown":		"東邊",
+	"westdown":		"西邊",
+	"northeast":		"東北",
+	"northwest":		"西北",
+	"southeast":		"東南",
+	"southwest":		"西南",
+	"up":			"上",
+	"down":			"下",
+	"enter":		"內",
+	"out":			"外",
+]);
+
+int v_go(string arg)	// 船艦移動
+{
+	object thisob,obj,env,me;
+	mapping exit=([ ]),h_exit=([ ]);
+	string dest,dir;
+	
+	thisob = this_object();
+	me = this_player();
+	
+	env = environment(thisob);
+	exit = env->query("exits");
+	h_exit = env->query("hide_exits");
+	
+	if( mapp(exit) && !undefinedp(exit[arg]) );
+        else
+        if( !mapp(h_exit) || undefinedp(h_exit[arg]) )
+        {
+        	if( query_verb()=="go")
+        	{
+	    		write("這個方向沒有出路。\n");
+	    		return 0;
+	    	}
+                else
+                        { write("lalalal\n");return 0; }
+        }
+        if(!mapp(exit)) dest = h_exit[arg];
+        else
+        if( !exit[arg]) dest = h_exit[arg];
+        else dest = exit[arg];
+        if( !(obj = find_object(dest)) ) call_other(dest, "???");
+        if( !(obj = find_object(dest)) ) {write("無法移動。\n");return 0;}
+        if( !env->valid_leave(me, arg) ) {write(".........\n");return 0;}
+        if( !undefinedp(default_dirs[arg]) )
+                dir = default_dirs[arg];
+        else
+                dir = arg;
+                
+        if( !this_object()->move(obj) )
+        {
+        	write("移動失敗...\n");
+        	return 0;
+        }
+        
+        write("順利移動到 "+obj->query("short")+" 了...\n");
+	return 1;
+}
+
+int v_search()
+{
+	return 1;
+}
+
+
+int is_vehicle() { return 1; }

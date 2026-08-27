@@ -1,0 +1,107 @@
+#include <ansi.h>
+
+inherit NPC;
+
+string *color = ({ HIM, HIW, RED, GRN, YEL, BLU, MAG, CYN,WHT, HIW });
+
+void speak_message(object me, string arg, int flag,string *songs,int);
+void speak_end(int flag);
+
+void create()
+{
+	set_name(GRN"青樓女子"NOR, ({ "wandering geisha","geisha" }) );
+	set("long",
+		"　　平常在樓層之上觀看風景的一個青樓女子，她一臉憂愁的樣子\n"
+		"，似乎有著無限的煩惱，拿起她手中的那個箏，不時的彈起那弦，\n"
+		"鼓起一陣陣的傷感與悲傷，旁邊的牆上貼著些可以請她唱的歌。\n");
+	set("level", 23);
+	set("age", 20+random(10));
+	set("gender","女性");
+
+	set("chat_chance", 6);
+	set("chat_msg", ({
+  this_object()->name(1)+"望著窗口向遠方嘆了口氣。\n",
+  this_object()->name(1)+"喃喃自道: 自古多情空於恨，此恨綿綿無絕期。\n",
+  this_object()->name(1)+"拿起手中的箏，兢兢開始彈了起來。\n",
+  (: command,"say 月光暗色淡，余心往鄉歸。" :),
+  (: command,"say 不知何處是予家，處處是天下。" :),
+  this_object()->name(1)+"臉色凝了一會兒，然後嘆了一口氣。\n",
+}));
+	set("chat_chance_combat", 12);
+	set("chat_msg_combat", ({
+  (: command,"sigh man" :),
+  (: command,"say 何苦呢～" :),
+  (: command,"say 若苦之於我心也....:(" :),
+}));
+	set("talk_reply","您想聽什麼歌呢? 打singing no.<編號>點首歌吧。");
+	setup();
+	carry_object(__DIR__"wp/zithern.lpc")->wield();
+	carry_object(__DIR__"eq/s_cloth.lpc")->wear();
+}
+
+void init()
+{
+	add_action("do_sing","singing");
+}
+
+string query_color()
+{
+	return color[random(sizeof(color))];
+}
+
+void speak_end(object me)
+{
+	CHANNEL_D->do_channel(this_object(),"music","謝謝您的欣賞, 謝謝.");
+	this_object()->delete_temp("busy");
+	this_object()->delete("no_fight");
+}
+
+void speak_message(object me, string arg, int flag,string *songs,int test)
+{
+	object *user = users();
+	if( flag > sizeof(songs) -1 )
+	{
+		call_out("speak_end", 0,me);
+		return;
+	}
+	if( test==1 )
+		CHANNEL_D->do_channel(this_object(),"music",me->name(1)+"點撥了一首歌.....");
+	CHANNEL_D->do_channel(this_object(),"music",query_color()+songs[flag]+NOR);
+	call_out("speak_message", 4+random(3) , me, arg, flag + 1,songs,2);
+}
+
+int do_sing(string arg)
+{
+	string *songs, file_w,n_s,*a;
+	int c;
+	object me;
+
+	me = this_player();
+
+	if( query_temp("busy") )
+		return notify_fail(" 有人在點了喔 ! \n");
+	if( me->query_temp("have_singing" ) )
+		return notify_fail(" 你已經點過了喔！\n");
+    if( this_player()->is_fighting() || this_object()->is_fighting() )
+        return notify_fail("現在不方便點歌吧！\n");
+	if( !arg || sscanf(arg,"no.%d",c)!=1 )
+		return notify_fail("你想要點那首歌曲呢？(singing no.<第幾個>)\n");
+	if( !read_file(__DIR__"song_info/song_info.s") ) return notify_fail("載入檔案失敗!!\n");
+	
+	a = explode(read_file(__DIR__"song_info/song_info.s"),":");
+	if( c > sizeof(a) ) return notify_fail("沒這首吧？\n");
+	
+	n_s = a[c-1];
+
+	write(HIR"點撥歌曲：第 "+c+" 首。\n"NOR);
+
+	if( !read_file(n_s)
+	||	!arrayp(songs = explode(read_file(n_s) , "(n)")))
+		return notify_fail(HIR"載入失敗！！\n"NOR);
+
+	me->set_temp("have_singing",1);
+	this_object()->set_temp("busy",1);
+	this_object()->set("no_fight",1);
+	call_out("speak_message", 1, me, arg,0,songs,1);
+	return 1;
+}
