@@ -9736,6 +9736,54 @@ crashes past the XP threshold; `vender()`'s fix verified by direct code
 inspection of the now-integer-only arithmetic path, live economy testing
 not reached this pass — see `libs/ninetears/NOTES.md`).
 
+**Third confirmed instance, PARAMETER shape rather than return shape:
+`ds386`'s own §10.7 round-two deep-test (2026-08-27), the lineage
+MASTER file this whole section's `ds386`/`dsI`/`dsII`/`dsIII`/
+`dshakkard`/`deadsouls_fluffos` sibling sweep is diffed against.**
+`lib/player.lpc`'s `eventRevive()` (the death→resurrection handler
+called on literally every player death) computes post-revival health
+and magic as `-(GetMaxHealthPoints() * PERCENT_HP)` /
+`-(GetMaxMagicPoints() * PERCENT_MP)`, where `PERCENT_HP`/`PERCENT_MP`
+are `#define`d float fractions (`0.70`/`0.95`) — a real float
+expression — and passes it straight into `AddHealthPoints(int x, ...)`
+/`AddMagicPoints(int x)`, both of which declare their parameter `int`.
+This is the SAME underlying driver gap as the rest of this section (a
+declared `int` type never coerces a runtime float) but hits at the
+CALL-ARGUMENT boundary rather than a `return` statement: the driver's
+static compile-time type table treats `float`-into-`int` as a
+compatible call (unlike, say, `mapping` into `mixed *`), so this
+compiles with zero warning, and the runtime float value flows straight
+into `HealthPoints`/`MagicPoints` (both `private int` fields in
+`lib/body.lpc`) via `HealthPoints += x`, permanently corrupting the
+field into a float from the very first death onward. Reproduced live:
+an admin-`eval`-forced `eventDie()` on a fresh test character, followed
+by `regenerate`, displayed `hp: 123.000000/410` in the status bar and
+`Health: 123.000000/410` in `stat` — undeniable proof `HealthPoints`
+had become a float (the sibling `MagicPoints` call happened to hit the
+function's own `< 1` clamp-to-literal-`0` branch this run and so
+stayed clean by coincidence, not by any real type safety). A third
+call in the same block, `AddStaminaPoints(-(GetMaxStaminaPoints() *
+PERCENT_SP))`, is NOT affected — `AddStaminaPoints()` declares its
+parameter `mixed` and the backing field `StaminaPoints` is genuinely
+`float` by design, so no cast is needed there. **Fix**: wrap the two
+float expressions in `to_int()` before the call —
+`AddMagicPoints(to_int(-(GetMaxMagicPoints() * PERCENT_MP)))` /
+`AddHealthPoints(to_int(-(GetMaxHealthPoints() * PERCENT_HP)))` —
+mirroring the SAME file's own already-correct sibling three lines
+earlier (`subexpee = to_int(expee * PERCENT_XP);`). Verified live
+post-fix: the identical eval-kill-then-`regenerate` sequence now shows
+a clean `hp: 123/410` with no decimal, `debug.log` clean throughout
+both the pre-fix reproduction and the post-fix verification (no crash
+either way — this is a silent corruption, not a thrown error, exactly
+per this section's usual shape). **Flagged for the sibling sweep**:
+since `ds386` is the lineage MASTER every other Dead-Souls-3.x member
+was diffed against, check `dsI`/`dsII`/`dsIII`/`dshakkard`/
+`deadsouls_fluffos`'s own `lib/player.lpc`-equivalent `eventRevive()`
+for the identical `AddHealthPoints`/`AddMagicPoints` call shape next
+time one of them gets touched — `dsIII` already got the ORIGINAL
+`secure/sefun/economy.lpc` return-value variant of this section fixed,
+but that fix does not cover this distinct parameter-boundary shape.
+
 ### 7.123 A bare `identifier = (mapping-or-array-literal);` statement at file scope, outside any function, is not a valid initializer on this driver — the compiler misparses it as an attempted global-variable redeclaration with no inferable type, hard-failing the whole file's compile with zero runtime symptom beyond "this daemon has no program"
 
 Some archives' authors used a MudOS/LDMud convention where a global is first `declared` bare (`nosave mapping foo;`), then given its real value via an ordinary-looking top-level assignment statement later in the same file (`foo = ([...]);`, entirely outside `create()` or any other function) — legal on some drivers as a one-time init-on-load statement. On this driver it is not: any bare `IDENT = EXPR;` appearing outside a function body is parsed as a type-less re-declaration attempt of `IDENT`, which the compiler reports as `error: Type mismatch ( unknown vs <realtype> ) when initializing IDENT` plus a `warning: Redeclaration of global variable`, and the whole file fails to compile. Because the file simply never gets a program, every caller sees only `*No program in object '/path/to/file'!` at the call site — no indication at all that the ROOT problem is this specific statement shape, and (per §10.7's `bxsj`-lesson pattern) the resulting missing functionality can be totally silent if the failing call is itself uncaught and the caller doesn't check its own error path.

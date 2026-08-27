@@ -608,3 +608,268 @@ decimal, and the raw save file after `save` showed
 bought a bottle of water from Lars (2 silver) and confirmed the
 post-purchase balance (`"silver":71`) stayed a clean integer. No
 runtime errors in `debug.log` through either transaction.
+
+## Deep functional test (round two, 2026-08-27)
+
+Full §10.7 pass — the first complete round-two playthrough on this lib
+(prior work above was onboarding-tier verification plus the one
+narrow §7.121 currency fix). One continuous session via a raw Python
+telnet-negotiation-stripping socket script (`scripts/mudclient.py`,
+plus a small two-connection variant in the scratchpad for the
+admin-assisted death test), against `~/src/fluffos/build-debug/src/
+driver config.fluffos`. Read the shipped Player's Handbook
+(`doc/help/players/handbook`, `read chapter N in handbook` in-game)
+first for the intended test path: newbie mansion for early leveling,
+Otik's general store, Zoe the banker, Dirk for level-advance, Herkimer
+for spells, Clepius' healer's guild.
+
+Admin account `fluffos`/`Mud@2026` (already seeded per onboarding
+above) logs in fine, no password-policy drift found (unlike `dsII`'s
+documented deviation). Registered a fresh English test character,
+`Qintestds`, through the full flow: name → confirm → age gate (13+) →
+screen-reader prompt → password/confirm → gender → email → **race
+selection** (`pick human` — confirms this lineage's per-lib convention
+the task brief called out) → news pager → landed in the start room
+wearing a t-shirt and jeans. `look`/`score`/`i` all correct at every
+step (register, first move, after a kill, after death/revival, after
+quit/reconnect).
+
+**Full playthrough**: found the shipped "safe sparring" mechanism is
+admin/`TEST`-group-only (`domains/default/npc/dummy.lpc` in
+`domains/default/room/arena.lpc`, gated by `CanReceive()` — "Creator
+staff only, sorry" for an ordinary player) — this lineage has no
+player-facing spar/duel command at all, so real combat testing used
+the handbook-recommended newbie mansion instead. Reached it via the
+handbook's own "if you had a ladder..." puzzle (get the ladder from
+the gardener's shack west of the mansion, carry it to Mansion
+Exterior, `drop ladder`, `climb ladder` → in through the unlocked
+second-story window — the ground-floor door needs a "mansion key"
+that isn't placed anywhere reachable, confirmed intentional puzzle
+content, not a bug). Fought a rat in the mansion kitchen bare-handed
+for a while (low accuracy, but a real fight: dodges/misses/limb
+severing/skill-ups all fired correctly, zero `debug.log` errors across
+the whole exchange), then switched to a butcher knife from the kitchen
+rack and killed it cleanly (`Rat dies.`, XP gain 450→351-needed,
+confirmed via `score`). Shop-tested at Otik's general store (`list`,
+`buy N from otik`) and re-verified the §7.121 currency fix holds for a
+brand-new character (`stat` showed `Money on hand: 62 silver` /
+`net worth of 6 gold` — clean integers, no float, after a real
+purchase). `quit` produced a clean disconnect message and
+`debug.log` grep showed nothing (`sed` from the pre-quit line count
+onward, ignoring lazy-compile warnings — zero error/`No error
+handler` lines); reconnected after a real ~70s wall-clock gap and
+confirmed full state persisted (inventory, XP, position all intact,
+"Reconnected." shown — this lineage's reconnect path, not a fresh
+login, since the driver correctly recognizes an in-progress or
+recently-quit account by name+password rather than requiring a brand
+new registration each time).
+
+**Severe bug found and fixed — the death/revival heal corrupts
+`HealthPoints`/`MagicPoints` into floats, every single death,
+`AGENTS.md` §7.121 class (new parameter-boundary variant)**:
+`lib/player.lpc:260-262`, inside `eventRevive()`:
+```lpc
+AddMagicPoints(-(GetMaxMagicPoints() * PERCENT_MP));
+AddStaminaPoints(-(GetMaxStaminaPoints() * PERCENT_SP));
+AddHealthPoints(-(GetMaxHealthPoints() * PERCENT_HP));
+```
+`PERCENT_MP`/`PERCENT_HP` are `#define`d floats (`0.95`/`0.70`,
+`lib/player.lpc:19-22`), so `GetMaxHealthPoints() * PERCENT_HP` is a
+float expression — but `AddHealthPoints(int x, ...)` and
+`AddMagicPoints(int x)` (`lib/body.lpc:1671`/`1747`) both declare
+their parameter `int`, and this driver's declared-`int` typing never
+coerces a runtime float (the same gap the `reference_lpc_int_cast_is_
+compile_time_only` memory and this project's whole §7.121 catalog
+document — just hitting a call ARGUMENT instead of a `return`
+statement this time, which the compiler's own static compatibility
+table treats as a legal float→int call with zero warning). The
+corrupted value flows straight into `HealthPoints`/`MagicPoints`
+(`lib/body.lpc:39`, both `private int`) via `HealthPoints += x`,
+permanently turning the field into a float from the very first death
+onward. **Reproduced live** with a two-socket harness (Qintestds
+connected + `fluffos` admin `eval object x = find_player("qintestds");
+x->eventDie("the admin eval");` in a second session) — pre-fix,
+`regenerate` produced `hp: 123.000000/410` in the status bar and
+`Health: 123.000000/410` in `stat`, undeniable float corruption
+(`MagicPoints` happened to hit the function's own `< 1` clamp-to-
+literal-`0` branch this run and looked clean by coincidence, not by
+any real type safety — confirmed by reading the code, not just the
+one lucky run). **Fixed** by wrapping both float expressions in
+`to_int()`, mirroring the same function's own already-correct
+`subexpee = to_int(expee * PERCENT_XP);` three lines earlier:
+```lpc
+AddMagicPoints(to_int(-(GetMaxMagicPoints() * PERCENT_MP)));
+AddStaminaPoints(-(GetMaxStaminaPoints() * PERCENT_SP));
+AddHealthPoints(to_int(-(GetMaxHealthPoints() * PERCENT_HP)));
+```
+(`AddStaminaPoints()` is untouched — it declares `mixed x` and the
+backing `StaminaPoints` field is genuinely `float` by design, so no
+cast is needed or wanted there.) **Verified live post-fix**: rebooted,
+repeated the identical eval-kill-then-`regenerate` sequence on the
+same (already-once-corrupted) `Qintestds` — `hp: 123/410` and
+`Health: 123/410`, both clean integers, no more `.000000`; `debug.log`
+clean throughout both the pre-fix repro and the post-fix verification
+(this is a silent-corruption bug, not a thrown error, so a clean log
+was expected either way — the status-bar/`stat` decimal display is the
+only visible symptom). Added as a new confirmed instance under
+`AGENTS.md` §7.121 (the currency-float class) rather than a new
+section, since it's the identical root mechanism just at a call-
+argument boundary instead of a `return`. **Flagged for the sibling
+sweep**: since `ds386` is the lineage MASTER, `dsI`/`dsII`/`dsIII`/
+`dshakkard`/`deadsouls_fluffos` should each have their own
+`eventRevive()`-equivalent checked for the identical
+`AddHealthPoints`/`AddMagicPoints` call shape — `dsIII`'s existing
+§7.121 fix only covers the ORIGINAL `secure/sefun/economy.lpc`
+return-value variant, not this distinct parameter-boundary one, so it
+is very likely still present on every other lineage member.
+
+**Confirmed §7.141 (MudOS-era `replace_program()` fold) present and
+fixed, exactly as predicted by the task brief's `dsI` cross-reference**:
+`lib/std/room.lpc`'s `create()` ended with the identical
+`replaceable(this_object()) && !GetNoReplace()` → `inherit_list()` →
+`sizeof(tmp)==1` → `replace_program(tmp[0])` fold as `dsI`'s already-
+documented instance, and the SAME file's `eventHearTalk()` (`TALK_AREA`
+case, reached by ordinary `say`/`ask`/`tell` with area-wide range)
+builds a real closure (`filter(all_inventory(), (: $1->is_living() &&
+$1 != $(who) :))`) — the exact unsafe combination `dsI`'s writeup
+warns about, since this driver defers `replace_program()`'s effect to
+a periodic 5-minute backend sweep instead of applying it synchronously,
+crashing any closure creation on a freshly-loaded trivial room for its
+first ~5 minutes after load. Fixed identically to `dsI`: removed the
+`replace_program()` call and its guard from `create()` entirely (pure
+memory micro-optimization, no functional effect once applied);
+`SetNoReplace()`/`GetNoReplace()` left in place as harmless now-unused
+API. Not independently re-reproduced with a fresh-boot timing race
+this pass (the `dsI` reproduction is already on record and the fix is
+mechanically identical), but confirmed the fixed file still compiles
+and boots clean, and ordinary `say` in the start room worked
+immediately after a fresh boot in this session's testing above with
+zero delay/crash.
+
+**Confirmed a second instance of the nightmare4-lineage "Wimpy
+fraction vs. percentage" bug (AGENTS.md's nightmare4 §7.124-class
+writeup — recurring shape flagged by the task brief, same file
+family)**: `lib/combat.lpc:65` initialized `private int Wimpy` (line
+31) with `Wimpy = 0.20;` — a fraction, not the percentage every real
+caller uses (`cmds/players/wimpy.lpc`'s range-1-30 validator,
+`secure/lib/connect.lpc:887`'s `SetWimpy(20)` at character creation,
+every stock NPC's `SetWimpy(50..100)`). Since `Wimpy` is declared
+`int`, the float literal is corrupted; the runtime auto-flee
+comparison in `eventReceiveDamage()`
+(`if( Wimpy < percent(hp, GetMaxHealthPoints()) ) return x;` — only
+flees when this is FALSE) is true for virtually every nonzero health
+percentage against a `0.20` numerator, so the safety net was
+effectively dead for every character from creation until the player
+manually ran `wimpy N`. A second, dependent bug rode along exactly as
+in the `nightmare4` writeup: `SetWimpy`/`GetWimpy`
+(`lib/combat.lpc:326-332`) were declared to return `float` rather than
+`int`, matching the buggy fractional value instead of the field's own
+declaration and every real caller's integer convention. **Fixed**:
+`Wimpy = 0.20;` → `Wimpy = 20;`, and `float SetWimpy(float
+wimpy)`/`float GetWimpy()` → `int SetWimpy(int wimpy)`/`int
+GetWimpy()`. Verified live: the brand-new `Qintestds` character's very
+first `score`/`wimpy` command (no save/restore cycle needed, unlike
+`nightmare4` where a stray restore-time truncation partially masked
+the second bug pre-fix) showed `Percentage: 20%` — a clean integer
+from the moment of character creation. This confirms `nightmare4`'s
+already-catalogued §7.124-class shape (fraction-vs-percentage literal)
+recurs verbatim in the Dead-Souls-3.x lineage too, not just the
+Nightmare-derived family `nightmare4` belongs to — flagged for the
+sibling sweep (`dsI`/`dsII`/`dsIII`/`dshakkard`/`deadsouls_fluffos`)
+since `lib/combat.lpc` is core, shared engine code.
+
+**Minor duplication bug found and fixed, §7.112-class shape (no
+re-entry guard on an `init()`-scheduled `call_out()` chain), adapted
+to a non-death context**: `domains/town/npc/beggar.lpc`'s `init()`
+(fired on every room entry, not just reconnect — this lineage's
+reconnect path does not call `enable_commands()`/re-broadcast `init()`
+at all, confirmed by reading `secure/lib/connect.lpc`'s
+`eventReEnterGame()`, so the trigger here is ordinary repeated room
+entry/exit rather than the classic reconnect-race) checks
+`!present("town map", this_player())` before spawning a new map clone
+and scheduling `call_out((: GiveMap, this_player() :), 4)` — but that
+"already has one" check only runs at SCHEDULE time. Two room entries
+within the 4-second delay window stack two independent `GiveMap()`
+calls, and `GiveMap()` itself never re-checked presence before handing
+over a map, so a player who entered/left/re-entered quickly (or, in
+the pre-`enable_commands()`-fix-confirmed-inapplicable case, an
+architecture where reconnect DID re-trigger `init()`) could receive
+two "small map of the town" items instead of one. **Fixed**: added
+the same `!present("town map",ob)` guard directly inside `GiveMap()`
+(`domains/town/npc/beggar.lpc:87-92`), so the delivery-time check
+matches the schedule-time intent. **Verified live**: `s`/`n`/`s`/`n`
+through the beggar's room (Saquivor Road) in quick succession
+correctly produced exactly ONE "Take this, brother..." map delivery
+followed by two "Beggar shrugs" (the surplus scheduled `GiveMap()`
+calls correctly declining to re-give, thanks to the new guard) — final
+`i` showed exactly one "A small map of the town". Low severity (a
+free, non-progression-critical item), but a genuine reentrancy/
+programming bug matching an explicitly-flagged cross-cutting pattern,
+not a design question, so fixed per scope.
+
+**All other standing cross-cutting patterns checked and confirmed
+clean** (grepped systematically, not just spot-checked): **§8.3a**
+(private call_out/input_to/add_action-dispatch-target demoted across
+an inherit boundary) — a Python AST-ish grep for every `private`-
+declared function name against every `call_out("NAME"`/
+`input_to("NAME"`/`add_action("NAME"`/`set_alarm(...,"NAME"` site in
+the whole `work/` tree found only two coincidental same-name,
+same-file (no inherit boundary crossed) false positives (`help` in
+`secure/obj/post.lpc`, `idle_time_out` in the FTP daemons) — no real
+instance. **§7.112** (NPC `init()` call_out chain, no re-entry guard)
+— the canonical `death_stage()`/reincarnation-NPC shape this pattern
+was named for doesn't exist in this lineage at all (no
+`d/death/npc/wgargoyle.lpc`-style content); the one adjacent shape
+found (`beggar.lpc`, above) was fixed. **§7.122** (class-object
+autoload duplication) — `compute_autoload_array()`/
+`destroy_autoload_obj()`/`load_autoload_obj()` don't exist anywhere in
+this codebase; not applicable. **§7.126** (stale pre-rename `.c`
+extension baked into door/area save DATA via a `file_path()` helper)
+— no `file_path()` helper and no `__DIR__...".c"` pattern in any real
+`.lpc`/save file (one hit, in `doc/std/server.txt`, is example
+documentation text, not compiled code). **§7.129** (`tell_room()`/
+`message()` wrapper forwarding an omitted exclude arg as literal `0`)
+— this lineage's `tell_room()` (`secure/sefun/communications.lpc`)
+forwards to the mudlib's own `eventPrint()`, which explicitly handles
+an omitted/zero `arg3`, not the raw `message()` efun directly; grepped
+every real 4-argument `message()` call site in the codebase and found
+none passing a possibly-`0` variable in the exclude position (all
+either omit it entirely or pass a real object/array). **§7.130**
+(unconditional `query_idle()` after already-detected non-interactive)
+— `lib/interactive.lpc`'s `heart_beat()` calls `query_idle()`
+unconditionally, but this codebase has a REAL, driver-invoked
+`net_dead()` apply (confirmed via `~/src/fluffos/src/tests/
+test_lpc.cc`'s own net_dead teardown tests) and `lib/player.lpc`'s
+`net_dead()` override calls `set_heart_beat(0)` synchronously as part
+of that apply — heart_beat is disabled before any further tick can
+run the unconditional `query_idle()` line, so the ninetears-class
+window doesn't exist here. **§7.131** (`find_living()`/`find_player()`
+with no `set_living_name()`) — `set_living_name()` is called from both
+`lib/interactive.lpc` and `lib/npc.lpc`; not applicable. **§7.132**
+(`map()`-over-a-mapping bound to the wrong arg) — every `map()` call
+site in the codebase operates over an array (`all_inventory()`,
+`keys(...)`, `GetStats()`/`GetSkills()`/`GetCurrencies()`, etc.), none
+over a bare mapping variable; not applicable. **§7.133** (disconnect
+apply never defined) — `net_dead()` IS defined and IS a real
+driver-invoked apply on this codebase (see §7.130 above); not
+applicable. **§7.134** (accumulator field defaults to `0` instead of
+`({})`/`([])`) — `lib/events/look.lpc`'s `Items` mapping and every
+comparable accumulator checked are initialized inline at declaration;
+not applicable. **§7.135**/§7.30 (accessor missing sibling's lazy-init
+guard) — no gap found in the files checked. **§7.136** (soul-stripping
+leaves no basic verbs) — this lineage dispatches verbs directly via
+`daemon/command.lpc`/`add_action`-equivalent, no soul-command system
+at all; not applicable. Given the scope of this pass, §7.135 in
+particular was only spot-checked rather than exhaustively swept across
+every accessor family in the codebase — flagged honestly rather than
+claimed as fully exhaustive.
+
+**Sanity checks before commit**: `grep -h '"port"' libs/*/meta.json |
+grep -oE '[0-9]{5}' | sort -n | uniq -c | awk '$1>1'` prints nothing.
+Throwaway test character (`Qintestds`) and all incidental save-file
+churn from this session's boots (player list, IMC2/intermud state,
+mudinfo, preload class/race/soul/stargate/voting saves, RELEASE_NOTES
+refetch) reverted/removed before commit, keeping only the seeded
+`fluffos` admin account and the four genuine source fixes
+(`lib/std/room.lpc`, `lib/combat.lpc`, `lib/player.lpc`,
+`domains/town/npc/beggar.lpc`).
