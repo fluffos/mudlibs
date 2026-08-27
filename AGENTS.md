@@ -10747,6 +10747,148 @@ condition and check whether a *runtime* signal (an actually-native
 sentinel might actually be the integer `0` rather than an empty
 string — this driver does not treat `0` and `""` as equal.
 
+### 7.139 A mudlib's own colour/ANSI-tag translation system lives entirely inside `catch_tell()`/`receive_message()`, but this driver only calls that apply for interactive players when the `"interactive catch tell"` runtime config option is turned on — left at this driver's default (off), `write()`/`tell_object()` bypass it completely via `add_message()`, so every single `%^TAG%^`-style colour marker the mudlib ever writes renders as literal text, forever, for every player
+
+Found on `lpuni`'s (`libs/lpuni`) §10.7 round-two deep functional test.
+`std/user/mobile.lpc`'s `catch_tell()`/`receive_message()` calls
+`/adm/daemons/ansi_parser.lpc`'s `parse_pinkfish()` to turn this
+mudlib's `%^BOLD%^`/`%^RED%^`/etc. markup into real ANSI escape codes
+(or strip it, if the player's `colour` env setting is off) — but
+`write()`'s actual implementation on this driver
+(`do_write()`→`print_svalue()`→`tell_object()` in
+`vm/internal/simulate.cc`) only routes through `catch_tell()` when the
+runtime config int `__RC_INTERACTIVE_CATCH_TELL__` (config file key
+`"interactive catch tell"`) is non-zero; otherwise, for any interactive
+object, it calls `add_message()` directly, bypassing `catch_tell()`
+entirely. This project's converted `config.fluffos` never set the key
+at all (defaulting to the driver's own `0`), so **every** login banner,
+room description, and command output rendered with the literal
+`%^TAG%^` text still in it instead of colour — confirmed live over a
+raw telnet client both before and after the fix (before: literal
+`%^BOLD%^Hello And Welcome to...%^RESET%^`; after: real `\x1b[1m`/etc.
+escape sequences). The archive's OWN bundled FluffOS 2.9-ds2.07 build
+config, `local_options.lpuni`, explicitly turns this flag ON
+(`#define INTERACTIVE_CATCH_TELL`, overriding the generic template's
+`#undef`) — proving the original authors built and shipped this exact
+mudlib requiring the option, not merely tolerating it.
+
+**Fix**: add `interactive catch tell : 1` to `config.fluffos`. No LPC
+change needed. Verified live: identical registration/room-description
+output now shows real ANSI escapes instead of literal pinkfish tags.
+
+**How to apply generally**: any mudlib whose own colour/markup
+translation lives inside `catch_tell()`/`receive_message()` (rather
+than being applied by a `write()`-family wrapper simul_efun before the
+text ever reaches the real efun) depends on this option — check the
+archive's own original driver build config
+(`local_options.<name>`/`options.h`) for `INTERACTIVE_CATCH_TELL`
+before assuming this driver's default of off is correct for it. A
+quick live symptom check: register over a raw (non-mudclient.py)
+telnet/socket client and look for literal `%^TAG%^` (or an
+archive-specific equivalent marker) instead of real colour in the very
+first banner — reproduces in seconds and needs no source reading.
+
+### 7.140 A master `valid_read()`/access-control apply attributes the CURRENTLY CONNECTED PLAYER's own privileges to the compiler's driver-mandated global-include-file injection (`func == "include"`), instead of recognizing it as a compile-time-only, non-player-facing read — so the FIRST regular (non-admin) player to trigger any not-yet-compiled file's lazy compile during ordinary play permanently fails that compile with `"Cannot #include ..."`/`"No program in object"`, for the whole rest of the boot
+
+Found on `lpuni`'s (`libs/lpuni`) §10.7 round-two deep functional
+test, and closely coupled with a second bug in the same code path (see
+below). This driver auto-injects the configured `"global include
+file"` (here `adm/include/global.h`, which itself `#include`s
+`mudlib.h`/`ansi.h`) into the START of every single file as it
+compiles, via the exact same `check_valid_path()`→
+`master_ob->valid_read(file, master_ob, "include")` gate a real
+`#include` directive uses (confirmed against
+`compiler/internal/lexer_utils.cc`'s `lpc_lex_handle_include()`/
+`inc_open()`). `adm/obj/master/valid.lpc`'s `valid_read()` resolves its
+access-check identity as `query_privs(this_interactive())` whenever
+`this_interactive()` is set — which is exactly right for a REAL
+player-facing file read (e.g. "can this player read this OTHER
+player's private file"), but wrong for this compiler-internal
+`func=="include"` call, since `/adm/` is admin-only in
+`/adm/etc/access` and an ordinary registered player is never a member
+of the `admin` group. Confirmed live with debug tracing
+(`adm/obj/master/valid.lpc`'s own `#define DEBUG`): the SAME
+`adm/include/global.h` include resolved with `Name: [master]` (always
+granted) whenever `this_interactive()` happened to still reflect a
+privileged actor at that moment (e.g. the automatic `look` triggered
+from inside `login.lpc`'s own `enterWorld()`, before the connection's
+effective identity is what a normal in-game command sees), but
+resolved with `Name: <the player's own login name>` (denied, since
+`/adm/` has no entry for that name or any group they belong to) the
+moment the SAME file's `#include` chain was needed later, from inside
+genuine `commandHook()`-dispatched play. A failed `#include` aborts
+the WHOLE compile, not just the diagnostic — reproduced live 100% of
+the time on a fresh boot + fresh non-admin registration: the very
+first never-yet-compiled command that player tried (`inventory`,
+`help`) failed with `/cmds/std/inventory.lpc:1:1: error: Cannot
+#include global.h` followed by cascading `Undefined variable`
+errors for every macro global.h would have defined, then `*No
+program in object '/cmds/std/inventory'!` on every subsequent
+attempt to load that file for the rest of the boot (by ANY player,
+not just the one who triggered it) — a single unlucky regular player
+being first to type an unused command permanently breaks it
+mudlib-wide until reboot.
+
+**A second, closely related bug found investigating the above**:
+`adm/obj/login.lpc`'s `idle_email()` only created a new account's
+`/home/<letter>/<name>/` directory (and copied their dev workroom +
+linked their journal) inside the `if(file_exists("/adm/etc/new_install"))`
+block — a flag that is deleted after granting the very FIRST
+registrant admin rights, so it is true exactly once per install.
+Every other newly registered account was left with **no home
+directory at all**, and `adm/obj/master.lpc`'s `log_error()`
+apply — the driver's own compile-diagnostic callback, invoked for
+warnings as well as real errors — unconditionally
+`write_file()`s into that (nonexistent) directory, throwing "Wrong
+permissions... No such file or directory" from deep inside whatever
+file happened to be mid-compile (observed live: the first lazy
+compile of `/obj/mudlib/mail_clients/mail_client.lpc`, triggered from
+every `enter_world()`'s own new-mail check, emits 27 benign "Illegal
+to declare nosave function" warnings — the routine `static`→`nosave`
+conversion fallout already documented in §4.3 — and every one of them
+threw for a homeless player). This is a second, independent way to
+corrupt an in-progress compile for the same reason as the primary bug
+above, and made the primary bug easier to trigger in practice (a
+homeless regular player hits it on effectively their first
+mail-check, before they ever type a real command).
+
+**Fix (two parts, both applied)**:
+1. `adm/obj/master/valid.lpc`'s `valid_read()`: added `if(func ==
+   "include") return 1;` alongside the function's existing
+   `func == "file_size"`/`func == "restore_object"` exemptions (the
+   same established pattern in the same function) — a compile-time
+   header injection is not player-facing content and must never be
+   gated by whichever player happens to be connected.
+2. `adm/obj/login.lpc`'s `idle_email()`: hoisted the
+   `mkdir`/workroom-copy/journal-link lines OUT of the
+   `if(file_exists("/adm/etc/new_install"))` block so every new
+   account gets a home directory, not just the first; kept the actual
+   admin-rights-granting lines (`add_path`, `security_editor`,
+   `rm("/adm/etc/new_install")`) inside the original gate, unchanged.
+   As a belt-and-suspenders defensive measure (in case any future
+   account is ever missing its home directory for some other reason),
+   also guarded `master.lpc`'s `log_error()` write with a
+   `directory_exists()` check before the `write_file()` call.
+
+Verified live: fresh non-admin registrations (multiple, on fresh
+boots) can now successfully run `inventory`/`help`/`get`/`drop`/`say`/
+movement as their very first commands, with zero compile errors and
+zero entries in the mudlib's own error log (`log/log`).
+
+**How to apply generally**: any archive whose master `valid_read()`
+resolves its access identity from `this_interactive()`/`this_player()`
+rather than from the actual object being read/compiled is suspect —
+check whether it special-cases `func=="include"` (or whatever this
+driver's exact function-name convention is for a given operation)
+before assuming an ACL that's correct for genuine save-file/content
+reads is also correct for the compiler's own bookkeeping reads. A
+live reproduction needs nothing but a completely fresh, never-before-
+tried non-admin registration on a freshly booted (never-compiled)
+lib — an admin/wiz test account (this project's usual first move) can
+mask this indefinitely, since a privileged account's own privs happen
+to satisfy the same access-control check that silently fails for
+everyone else.
+
 ---
 
 ## 8. Login and registration flow bugs

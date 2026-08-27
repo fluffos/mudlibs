@@ -273,3 +273,123 @@ correct starting workroom, channel auto-tuning, and a clean `quit`
 ("Fluffos has left LPUniversity... Thank you for visiting
 LPUniversity") -- the full session, including `quit`, was captured
 distinctly this time.
+
+## Deep functional test (round two, 2026-08-27)
+
+Full §10.7 methodology pass -- this lib had never had one before (only
+the onboarding-tier verification above). Read `doc/FAQ` and
+`doc/general/commands` first (this lib has no dedicated newbie-help
+command output beyond `help`/`help <topic>`); confirmed via source
+read and live play that this is a genuinely thin teaching base like
+`genesis`/`foundation2`, not a full game: no combat, no stats, no
+skills/sects, no shops, no death/respawn -- so those parts of the
+standard checklist are honestly N/A here, not skipped. One continuous
+session: booted `~/src/fluffos/build-debug/src/driver config.fluffos`
+from `libs/lpuni/`, registered several fresh English-named non-admin
+characters one after another on fresh boots (a raw Python socket
+client, not `tmux_mud.sh`) to isolate two bugs below, tested
+`look`/`inventory`/`get`/`drop`/`say`/movement/`help`/`who`/`news`/
+`mail`(admin-only)/`finger`/`uptime`/`version`/`mudlist`, `quit`,
+grepped the mudlib's own error log (`log/log`, this codebase's
+`error_handler()` target -- confirmed empty/absent after every clean
+session), then reconnected after a genuine ~90s wall-clock gap and
+confirmed a fresh, non-"reconnect-to-body" login with state (last
+login time, correct starting room) intact. Found and fixed two severe,
+previously-undiscovered bugs, both filed as new AGENTS.md entries
+(neither is a pre-existing numbered class):
+
+- **AGENTS.md §7.139 -- the entire pinkfish/ANSI colour system was
+  dead for every player.** `write()` on this driver only routes
+  through `catch_tell()`/`receive_message()` (where
+  `ansi_parser.lpc`'s `parse_pinkfish()` lives) when the runtime
+  config int `"interactive catch tell"` is non-zero; left at this
+  driver's default (unset/`0`), every `%^TAG%^` marker this mudlib
+  ever writes -- the login banner, every room description, every
+  command's output -- rendered as literal text instead of colour, for
+  every player, forever. The archive's OWN bundled FluffOS
+  2.9-ds2.07 build config (`raw/lpuni_fluffos_v1/fluffos-2.9-ds2.07/
+  local_options.lpuni`) explicitly turns this flag ON, proving the
+  original authors built and shipped this exact mudlib requiring it.
+  Fixed by adding `interactive catch tell : 1` to `config.fluffos`
+  (no LPC change). Verified live over a raw telnet client: before the
+  fix, the connect banner read literally
+  `%^BOLD%^Hello And Welcome to...%^RESET%^`; after, it's real ANSI
+  escape sequences (`\x1b[1m...\x1b[0;37;40m`).
+- **AGENTS.md §7.140 -- a fresh non-admin player's first use of any
+  not-yet-compiled command could permanently break that command for
+  the whole boot.** Root cause split two ways, both fixed:
+  1. `adm/obj/master/valid.lpc`'s `valid_read()` resolves its access
+     identity from `this_interactive()` (the CONNECTED player), which
+     is correct for real content reads but wrong for this driver's
+     `func=="include"` calls -- the mandatory auto-injection of the
+     configured global include file (`adm/include/global.h`) into
+     the START of every single compiled file. Since `/adm/` is
+     admin-only in `/adm/etc/access`, a regular player's own identity
+     got denied reading it, aborting the ENTIRE compile (not just a
+     diagnostic) of whatever command they were the first to try.
+     Fixed by adding `if(func == "include") return 1;` alongside the
+     function's existing `file_size`/`restore_object` exemptions
+     (same established pattern, same function).
+  2. `adm/obj/login.lpc`'s `idle_email()` only created a new
+     account's `/home/<letter>/<name>/` directory (dev workroom copy
+     + journal link) inside the one-time `/adm/etc/new_install`
+     first-admin-grant block -- every subsequent registrant got NO
+     home directory at all. `adm/obj/master.lpc`'s `log_error()`
+     (the driver's compile-diagnostic callback, called for warnings
+     too, e.g. the routine 27 "Illegal to declare nosave function"
+     warnings from `mail_client.lpc`'s first lazy compile on any
+     login's new-mail check) unconditionally `write_file()`s into
+     that directory, throwing mid-compile for every homeless player.
+     Fixed by hoisting the home-dir/workroom/journal setup out of the
+     `new_install` gate so every account gets one (kept the actual
+     admin-grant lines -- `add_path`, `security_editor`,
+     `rm("/adm/etc/new_install")` -- inside the original gate,
+     unchanged); also added a `directory_exists()` guard around
+     `log_error()`'s `write_file()` as a defensive belt-and-suspenders
+     measure.
+  Reproduced live, deterministically, on repeated fresh boots before
+  the fix: a brand-new non-admin registration's very first
+  `inventory`/`help` command failed with `Cannot #include global.h` +
+  cascading `Undefined variable` errors, then `*No program in object
+  '/cmds/std/inventory'!` on every later attempt (by ANY player) for
+  the rest of that boot. After both fixes: multiple fresh non-admin
+  registrations (`grace`, `harper`, etc.) ran
+  `inventory`/`help`/`get`/`say`/movement cleanly as their very first
+  commands, with zero entries in `log/log`.
+- Checked all other standing cross-cutting patterns explicitly
+  (§7.121 float-in-int, §8.3a private-demoted dispatch function,
+  §7.112 unguarded NPC `init()` call_out chain, §7.122
+  reconnect/class duplication, §7.123 bare file-scope mapping/array
+  statement, §7.124 fraction-vs-percentage, §7.126 stale `.c`
+  extension in `.o` saves, §7.129 `tell_room()`/`message()` wrapper
+  omitted-arg-as-0, §7.130 post-non-interactive liveness check,
+  §7.131 `find_living()`/`find_player()` without `set_living_name()`,
+  §7.132 `map()`-over-mapping wrong-arg binding, §7.133 undefined
+  disconnect apply, §7.134 field defaulting to `0` not `({})`, §7.135
+  accessor missing a sibling's lazy-init guard, §7.137 `"$verb"`
+  quicktyper bypass) -- all confirmed genuinely not applicable to this
+  lib (no floats anywhere in the codebase; no percentage/stat fields
+  at all, matching the "no combat/stats system" finding from
+  onboarding; `set_living_name()` correctly called in both
+  `mobile.lpc` and `npc.lpc`; `net_dead()` is defined and exercised;
+  no inventory/equipment marker-item system to duplicate on
+  reconnect; no `map()`-over-mapping call sites anywhere, only
+  over-array; no `command("$...")` call sites anywhere) rather than
+  silently skipped -- except the two real, confirmed, fixed bugs
+  above (§7.140's first half is itself a new instance of the general
+  "basic commands silently broken for a fresh character" class the
+  `genesis` precedent warned about, though the actual mechanism here
+  --  a master ACL misattributing the compiler's own read -- is novel
+  enough to file as its own entry rather than folding into an
+  existing one).
+- Ran the §9 LPC formatter on all three touched files
+  (`adm/obj/login.lpc`, `adm/obj/master.lpc`,
+  `adm/obj/master/valid.lpc`); zero errors, all three self-check
+  blind spots (`::`-split, `case`+comment merge, CJK/escape
+  re-spacing) grepped clean; re-booted and re-ran the full
+  registration + command playthrough after formatting to confirm no
+  regression.
+- Cleaned up all throwaway test-character saves/home-dirs/journal
+  links (several fresh registrations used to isolate the two bugs
+  above) before committing, keeping only the seeded `fluffos` admin
+  account.
