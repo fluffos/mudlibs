@@ -408,3 +408,126 @@ missing files" policy:
 This archive is small (774 files, 3.8MB). `lpcc_check.sh`'s batch sweep
 was run under a `ps -o rss=` watch the whole time; peak RSS stayed under
 4MB throughout (finished in under 4 seconds both times it was run).
+
+## 12. Deep functional test (round two, AGENTS.md §10.7)
+
+One continuous session (a raw Python socket client against
+`~/src/fluffos/build-debug/src/driver config.fluffos`), covering the
+newbie `GETTING_STARTED` flow end-to-end plus the mandatory
+restart-and-reconnect verification. `root`'s password from the
+onboarding pass was not recorded anywhere retrievable, so its saved
+`connection.o`/`body.o` were backed up and reset to force a fresh
+registration; **`root`'s current password for future testing is
+`RootPass2026!`** (documenting this now so the next tester doesn't hit
+the same gap).
+
+### Found and fixed: `sprintf()` missing its `%s` argument in
+    `obj/clone/monster.lpc`'s `die()` -- crashed every undead-monster kill
+
+```lpc
+tell_room(environment(this_object()),
+	  sprintf("%s turns to dust before your eyes.\n"));
+```
+
+`sprintf()` with a `%s` directive and zero arguments throws a driver
+runtime error ("Not enough arguments to sprintf") on every call --
+this fires unconditionally whenever any `monster.lpc` instance with
+`undead` set dies, a real driver-API misuse (efun argument-count
+mismatch), not a content/balance question. Fixed by passing the
+monster's own name:
+
+```lpc
+tell_room(environment(this_object()),
+	  sprintf("%s turns to dust before your eyes.\n",
+		  query_cap_name()));
+```
+
+Verified live via `eval`: cloned a `/obj/clone/monster`, named it,
+`set_undead()`, then `die()` -- correct message ("Testzombie2 turns to
+dust before your eyes.") printed, monster's inventory dropped, object
+destructed, no runtime-error trace in `log/errors/runtime` or
+`log/debug`. (An earlier attempt in the same session hit the driver's
+"Bad argument 1 to EFUN call_other()" trace inside
+`security_d.lpc`'s `eval_unguarded()` -- root-caused to a test-script
+mistake, not a mudlib bug: `present()` searches an object's `id()`
+list, set by `set_name()`, not the capitalized `set_cap_name()` string
+used in the first attempt's search term.)
+
+### Registration, privilege commands, and reconnect verification
+
+- `root` (bootstrap account, see §GETTING_STARTED) logged in,
+  `look`/`score`/`i` all correct.
+- A fresh non-admin registration (`walker`) went through the full
+  username/password+verify/cap-name/email/real-name/gender flow,
+  reached `/d/base/start`, and `look`/`score`/`i`/`help`/`west`/`east`
+  all worked. `help` prints the general player help file correctly.
+- As `root`: `mkwiz walker`, `addmem walker Admin`, `chmem adm walker
+  Admin` all succeeded (`lswiz`/`lsdom`/`lspriv` confirmed the new
+  wizard/admin state); logging in as `walker` afterward showed the
+  wizard-only `nmsh` shell features (`cd`/`pwd`/`ls` against real
+  mudlib paths) working correctly -- `CurrentWorkingDirectory` in
+  `adm/obj/clone/shells/nmsh.lpc`'s `shell_init()` is only initialized
+  `if(wizardp(owner))`, so a non-wizard's `pwd`/`cwd` prints a bare
+  `0` (the field's un-set default value concatenated into
+  `write(...+"\n")`) instead of a path -- this is `cmd/wiz/pwd.lpc`
+  being reachable at all by a non-wizard (no ACL gate on the command
+  itself, just on what it can usefully show), not a crash, and not
+  fixed: `pwd`/`cd`/`ls` are documented wizard-only tools in this
+  lib's own UNIX-flavored design (`GETTING_STARTED`'s "Wizard:"
+  command list), and a non-wizard genuinely has no filesystem cwd
+  concept to report. Left as an observation, not a bug, per this
+  pass's design-vs-programming boundary.
+- **Two full quit-and-reconnect cycles**, the second across a genuine
+  driver process kill+restart (not just a same-process reconnect):
+  `root` logged back in with `RootPass2026!` both times, reaching the
+  same room with saved state (`score`/`i` correct), confirming the
+  onboarding pass's crypt()-salt fix (§7 in this file) still holds.
+  `log/debug` stayed warning-only (compile-warning noise plus the
+  intentional `log_error()`-shows-every-diagnostic behavior already
+  documented in §9) across every boot and quit in this pass --
+  grepped after each `quit`, not just eyeballed.
+
+### Thirteen standing cross-cutting patterns, explicitly checked
+
+Eight were already confirmed clean during onboarding (§10 above):
+§7.121 float-in-declared-int, §8.3a private dispatch-target, §7.123
+bare file-scope initializer, §7.124 fraction/percentage mismatch,
+§7.126 stale `.c`-extension save data, §7.129 `tell_room`/`message`
+omitted-arg-as-0, §7.130 unconditional post-non-interactive liveness
+check, §7.131 `find_living`/`find_player` registration. This pass
+additionally checked the five newer ones:
+
+- **§7.122** (class/marker-item duplication on disconnect/reconnect):
+  N/A -- this lib has no starting-equipment/quest-item-granting system
+  at all (confirmed via `login_d.lpc`'s `player_enter_world()` --
+  it only creates the body/shell objects themselves via `new()`, never
+  clones any game item). Nothing for this pattern to duplicate.
+- **§7.132** (`map()` over a mapping bound to the wrong arg count): no
+  instance found. Corpus-wide grep for every `map(` call site shows
+  every one operating on an array (a `sort_array()`/`filter()`/
+  `explode()`/`keys()`/`values()` result, or a literal `object *`),
+  never a bare mapping passed directly.
+- **§7.133** (`net_dead()`-class apply never defined): not applicable
+  here -- `adm/obj/clone/user.lpc:218` DOES define `net_dead()` (see
+  §6 above for its own, separately-documented `__OLD_ED__` gap);
+  confirmed present and reachable, not a silent no-op.
+- **§7.134** (array/mapping field defaulting to `0` instead of `({})`/
+  `([])`): `user.lpc`'s `channels`/`aliases`/`env_vars`/`msgbuf`
+  fields are all explicitly zeroed to their empty-collection form in
+  `initialize()` (called on every fresh `new()`) before
+  `restore_player()` ever runs, so a genuinely new character never
+  sees a bare `0` on these fields.
+- **§7.135** (accessor missing a lazy-init guard, often crashing
+  `quit()`): `quit.lpc`/`net_dead()`/`save`'s call paths were all
+  exercised live, repeatedly, across every test character and both
+  reconnect cycles with zero crashes.
+
+### Verification character/state left as evidence
+
+`root` (password `RootPass2026!`, documented above) is the only
+account left in the saved data after this pass -- the throwaway
+`walker` (promoted wizard/Admin-domain member) and its wizard home
+directory, plus the runtime-only `adm/data/security.o` domain/priv
+save it created, were deleted before committing so `security_d.lpc`
+falls back to its pristine `create()` defaults (root-only admin) on
+next boot, matching the state this lib shipped in.
