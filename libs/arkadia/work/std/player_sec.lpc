@@ -679,6 +679,57 @@ actual_linkdeath()
 }
 
 /*
+ * Function name: net_dead
+ * Description  : FluffOS PORT NOTE -- this is the actual boot-bridge
+ *                entry point for link death on this driver. The
+ *                original CD driver notified the game of a lost
+ *                connection (both a clean quit AND a real link death)
+ *                by calling a `remove_interactive(object ob, int
+ *                linkdied)' apply on the MASTER object -- which is
+ *                exactly the function SECURITY (this file's own sibling
+ *                secure/master.lpc) already implements, matching this
+ *                codebase's entire linkdie()/actual_linkdeath()/statue
+ *                conversion chain below. FluffOS instead calls a
+ *                `net_dead()' apply directly on the PLAYER OBJECT
+ *                itself, with zero arguments, and only when the
+ *                connection is lost WITHOUT the object having already
+ *                been destructed (a plain `quit' already destructs
+ *                itself via cmd_sec.lpc's own quit(), so the driver
+ *                never fires this apply for an orderly quit -- see
+ *                remove_interactive() in FluffOS's own comm.cc, the
+ *                `if (!dested) ... safe_apply(APPLY_NET_DEAD, ...)'
+ *                guard). Since nothing in this whole codebase ever
+ *                defined `net_dead()' before this fix, EVERY abrupt
+ *                disconnect (closed client, dropped network, etc.) was
+ *                silently a no-op: linkdie()/actual_linkdeath() never
+ *                ran, is_linkdead stayed 0 forever (producing a bogus
+ *                "you lost your connection for 20692 days" on the next
+ *                reconnect, since query_linkdead() defaults to 0 and
+ *                `time() - 0' is the whole Unix epoch), the player was
+ *                never turned into a statue (`places[ob]' in
+ *                d/Standard/obj/statue.lpc never populated, producing
+ *                "Couldn't locate the location where you link died."
+ *                on the next reconnect and then crashing on the
+ *                separate `object roomob = ob->query_default_start_
+ *                location();' type-mismatch bug fixed alongside this
+ *                one), and the disconnected player object was simply
+ *                abandoned in whatever room it last stood in, with no
+ *                notification to anyone and no cleanup of any kind.
+ *                Bridged the same way as this project's other
+ *                driver-vs-mudlib apply-name mismatches (compare
+ *                secure/master.lpc's own epilog()/start_boot() bridge):
+ *                forward straight to the master's existing, already-
+ *                correct remove_interactive() with linkdied=1, exactly
+ *                matching what the original CD driver would have
+ *                called directly.
+ */
+nomask void
+net_dead()
+{
+    SECURITY->remove_interactive(this_object(), 1);
+}
+
+/*
  * Function name: linkdie
  * Description  : When a player linkdies, this function is called.
  */

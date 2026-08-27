@@ -296,3 +296,361 @@ differently for a real player.
   registration/gameplay testing (checked via `ss`/process inspection
   during and after boot; no `socket_create`/`socket_connect` call sites
   found anywhere in the source either).
+
+## 8. Deep functional test (round two) -- 2026-08-27
+
+One continuous session per AGENTS.md §10.7: read `?wprowadzenie`/
+`?trening` first, registered multiple real Polish characters through
+the full flow (name/password/6-case declension/email), exercised
+`spojrz`/`stan`/`inwentarz` at every state change, tested `zakoncz`
+(quit) with a `debug.log` grep before and after, and reconnected both
+within the same driver process (to exercise the still-live "revive"
+code path) and after killing and restarting the driver (to exercise a
+genuine cold restore). Admin login re-verified: `fluffos`/`Mud@2026x`
+still authenticates and shows the keeper-only "Mistrz" title.
+
+Four new, previously-undetected, live-reproduced bugs found and fixed
+this pass -- all invisible to the original onboarding's shorter smoke
+test for the same reason every §10.7 bug is: none of them can surface
+without either a long wall-clock wait, a genuine abrupt disconnect, an
+actual `quit`, or a look at a room with no dynamic content, none of
+which a boot-watch or a brief registration walkthrough exercises.
+
+### 8.1 `do_decay()` map()-over-mapping argument mismatch (AGENTS.md §7.132)
+
+`secure/master/fob.lpc`'s `decay_exp()` (`m_domains = map(m_domains,
+do_decay);`, called from `check_memory()` on a ~900-second
+`reset_master()` alarm) crashed with `*String index out of bounds`
+every time the alarm actually fired, because `do_decay(mixed *darr)`
+only declares ONE parameter but this driver's `map()` over a MAPPING
+always calls the function with `(key, value)` -- so `darr` silently
+bound to the domain NAME (a string), not its data array. Caught live
+on a real boot: the very first `reset_master()` tick after boot
+crashed with the trace showing the string `"Standarc"` -- a byte-by-
+byte corrupted `"Standard"`, decremented one character at a time by
+`do_decay()`'s own arithmetic running against string bytes instead of
+array elements, right up until an index walked past the string's
+length. **Fix**: `do_decay(mixed *darr)` -> `do_decay(string dname,
+mixed *darr)`. Verified live: after the fix, a full driver restart and
+a second real 900+ second wait produced ZERO `do_decay`/`fob.lpc`
+crashes in `debug.log` (confirmed by letting the final verification
+driver run past the alarm interval before killing it -- see the
+verification section below).
+
+**Sibling check**: `libs/genesis` (the English-language ancestor this
+port is a fork of) has the byte-identical bug in its own
+`secure/master/fob.lpc`. Fixed there too; not exercised through a real
+900-second alarm on that repo (it ships no domain content, so
+`m_domains` never accumulates real decay-able data), verified only via
+a boot-and-kill compile check. See `libs/genesis/NOTES.md`.
+
+### 8.2 Missing `net_dead()` boot bridge + a companion type-mismatch crash (AGENTS.md §7.133)
+
+The single most impactful finding this pass. `secure/master.lpc`
+implements `remove_interactive(object ob, int linkdied)`, documented
+as "Called from GD if a player logs out or goes linkdead" -- the
+classic-driver convention of the game driver notifying the MASTER
+object of every disconnect. This driver does no such thing: its own
+disconnect teardown (`src/comm.cc`) calls a `net_dead()` apply
+directly on the DISCONNECTING PLAYER OBJECT, with zero arguments, and
+ONLY when the object hasn't already been destructed (an orderly `quit`
+already destructs itself first, so the apply never fires for a clean
+quit -- only for a genuine abrupt disconnect). A codebase-wide grep
+found **zero** `net_dead` references anywhere in this mudlib: every
+single abrupt disconnect was a complete, silent no-op. Confirmed live
+via `debug_message()` instrumentation (since removed) that
+`remove_interactive()` was NEVER once invoked across multiple raw
+socket-close-and-reconnect cycles pre-fix.
+
+The downstream symptom that led to this: reconnecting to a
+disconnected character reported `"Straciles polaczenie na 20692 dni 14
+godzin ... sekund"` ("You lost your connection for 20692 days...") --
+`time() - query_linkdead()` computed against a `query_linkdead()` that
+had never once been set (defaulting to `0`, the Unix epoch), followed
+by `"Couldn't locate the location where you link died. Moving you to
+your start location."`, since the statue-conversion mapping
+(`d/Standard/obj/statue.lpc`'s `places[ob]`) was never populated
+either.
+
+**Fix**, added to `std/player_sec.lpc` alongside this codebase's own
+`linkdie()`/`revive()`/`actual_linkdeath()`:
+```lpc
+nomask void
+net_dead()
+{
+    SECURITY->remove_interactive(this_object(), 1);
+}
+```
+Verified live via `debug_message()` tracing (confirmed the apply now
+fires on a raw socket close) and via observed behavior change: before
+the fix, a disconnected character's object was silently abandoned in
+memory forever (still alive, still not destructed, no cleanup of any
+kind attempted); after the fix, `remove_interactive()` now genuinely
+runs every time.
+
+**A second, closely-related crash surfaced once this bridge started
+working**: `d/Standard/obj/statue.lpc`'s `revive()` declares `object
+roomob;`, and its own fallback path (reached when the original
+link-death location can't be found) did `roomob =
+ob->query_default_start_location();` -- a function that returns a
+STRING, not an object (exactly like this same function's OTHER,
+correctly-handled `stringp(room)` branch a few lines above, which
+correctly resolves it via `find_object()`). Assigning a string
+straight into a strictly-typed `object` local threw `*Trying to put
+string in object` uncaught, aborting `revive()` before it ever reached
+the actual `move_living()` call or the `places[]`/alarm cleanup at the
+end of the function. **Fix**: resolve `start_loc` through
+`find_object()` (with the same lazy-compile retry the sibling branch
+above it already uses) before the assignment.
+
+**Honest caveat on live verification depth**: this mudlib's own
+"become an embodied player" pipeline is unreachable as shipped (see
+§5.2 above, a pre-existing, out-of-scope content gap, unchanged by
+this pass) -- every test character, including the seeded admin
+account, remains permanently classed as `/d/Standard/login/ghost_player`,
+which is ALSO this codebase's own `LOGIN_NEW_PLAYER` constant (the
+throwaway swap-dummy class used transiently during login handoff).
+`remove_interactive()`'s own first guard (`if (master_ob ==
+LOGIN_OBJECT || master_ob == LOGIN_NEW_PLAYER || ...) { ob->
+remove_object(); return; }`) therefore ALWAYS takes the "just discard,
+no linkdeath tracking" branch for every character in this snapshot --
+by design, correct for a not-yet-embodied ghost, but universal here
+only because of the separate embodiment gap. This means: the
+`net_dead()` bridge fix itself IS fully live-verified (confirmed via
+tracing that it now fires, and that `remove_interactive()` now
+genuinely runs instead of doing nothing), but the deeper
+`linkdie()`/`actual_linkdeath()`/statue-conversion/`revive()` chain
+(including the `roomob` type-mismatch fix) could NOT be exercised
+end-to-end through real play this pass, since no test character can
+ever leave ghost state to take that branch. Both fixes are verified
+via direct code reading, a clean compile, and a clean boot; the
+`revive()` fix specifically mirrors an already-proven-correct pattern
+two lines above it in the same function. A future pass that either
+fixes the embodiment gap or synthesizes an embodied test object
+directly (e.g. via a temporary `eval`-equivalent, not available here
+since wizard command souls are equally gated behind embodiment) should
+re-verify the full chain live.
+
+### 8.3 Uninitialized `room_descs` breaking every room's `look` (AGENTS.md §7.134)
+
+`std/room/description.lpc`'s `room_descs` (a per-room list of extra
+descriptions dynamically contributed by present items via
+`add_my_desc()`) was declared `nosave mixed room_descs;` with no
+initializer. `long()` -- the function that runs on literally every
+single `look`/glance at any room -- unconditionally opens with `while
+((index = member_array(0, room_descs)) >= 0) { ... }`, and this
+driver's `member_array()` requires a real string or array for its
+second argument; called against a bare `0` it threw `*Bad argument 2
+to member_array() Expected: string or array Got: 0` uncaught,
+aborting `long()` immediately -- before ever returning the room's own
+already-fully-built flavor text (sitting one local variable away) or
+letting the caller append the exit list. Since `add_my_desc()` is an
+opt-in feature only a minority of items ever call, this crashed on
+essentially every look at every ordinary room, game-wide, from the
+very first boot -- reproduced live: pre-fix, `spojrz` in the starting
+hall (`d/Standard/login/sala`) printed only the bare room path
+(`/d/Standard/login/sala`) and nothing else, no flavor text, no exit
+list.
+
+**Fix**: `nosave mixed room_descs;` -> `nosave mixed room_descs =
+({});`, fully behavior-preserving (verified against `add_my_desc()`'s
+own `if (!room_descs) ... else room_descs = room_descs + (...)` logic,
+which produces an identical result starting from `({})` as from `0`
+regardless of whether an empty array is itself truthy or falsy on this
+driver). Verified live: after the fix, `spojrz` in the same room
+prints the full flavor text AND `"Jest tutaj jedno widoczne wyjscie:
+poludnie."`, both on first arrival and on every repeat look; confirmed
+across two different rooms (`sala` and its southern neighbor).
+
+**Sibling check**: `libs/genesis` has the byte-identical bug in its
+own `std/room/description.lpc`. Fixed there too (not live-exercised on
+that repo -- it ships no domain content -- verified via a boot-and-kill
+compile check only). See `libs/genesis/NOTES.md`.
+
+### 8.4 `query_list_temp_start()` missing its siblings' lazy-init guard, breaking `quit()` entirely (AGENTS.md §7.135)
+
+The textbook `bxsj`-style silent quit crash this project's own §10.7
+methodology was written around. `zakoncz` (quit) looked completely
+normal pre-fix -- a bare prompt with no error -- but `debug.log` showed
+`std/player/cmd_sec.lpc`'s `quit()` crashing uncaught inside its own
+`check_recover_loc()` call with `*Bad type argument to +. Had int and
+array`, meaning `quit()` aborted before ever reaching `save_me()` or
+the player's actual removal from the game: the character was silently
+NEVER saved and NEVER removed on every single quit, on a fresh boot,
+until some other code path happened to touch `temp_locations` first.
+
+Root cause: `secure/master.lpc`'s `temp_locations` global has three
+consumer/mutator functions that all correctly lazy-default it
+(`check_temp_start_loc()`, `add_temp_start_loc()`,
+`remove_temp_start_loc()`, all doing `if (!temp_locations)
+temp_locations = TEMP_STARTING_PLACES;`) -- except the plain query
+function, `query_list_temp_start()`, which just returned
+`secure_var(temp_locations)` with no guard. Nothing in a normal login
+path calls any of the guarded functions (only a rare explicit
+temporary-start-location override does), so `temp_locations` stays a
+raw, never-assigned `0` for the life of a fresh boot. `sibling
+def_locations`/`query_list_def_start()` happens to be safe only
+because `enter_game()` unconditionally calls `check_def_start_loc()`
+(which DOES have the guard) as an unrelated side effect on every
+login -- `check_recover_loc()`'s `SECURITY->query_list_temp_start() +
+SECURITY->query_list_def_start()` therefore always combined a raw `0`
+with a real array, crashing every time.
+
+**Fix**: added the identical guard to `query_list_temp_start()`, and
+defensively to `query_list_def_start()` too (since its own safety was
+accidental, not guaranteed). Verified live end-to-end on the `fluffos`
+admin account: `zakoncz` now prints `"Nagrywam postac."` and completes
+cleanly (zero `debug.log` errors), and a subsequent reconnect shows
+the correct, just-updated `"Ostatnie logowanie"` timestamp and host
+(`"Cz, 27 VIII 2026, 07:56:24 z hosta: localhost"`, replacing the
+stale `"Sr, 31 XII 1969, 16:00:00"` default every account had shown in
+every earlier test this session, itself evidence this bug had silently
+prevented a real quit-save from ever succeeding before).
+
+### 8.5 Minor: dangling alarm on a destructed login-flow helper object (not in AGENTS.md -- low severity, single instance)
+
+`d/Standard/login/set_cechy.lpc` (a transient "/wybieracz/" helper
+clone driving the trait/appearance-selection Q&A through a chain of
+self-rearming `set_alarm(..., (: akcja :))` calls) could be destructed
+(several `remove_object()` call sites in the file) while one of its
+own alarms was still outstanding, producing `*Owner (.../set_cechy#N)
+of function pointer is destructed` uncaught the next time that alarm
+fired -- cosmetic only (a stopped typewriter-reveal effect on an
+object that no longer exists, logged once, no gameplay impact, does
+not accumulate), but a genuine dangling-timer bug. **Fix**: added a
+`remove_object()` override that calls `remove_alarm(alarm_id)` before
+deferring to `::remove_object()`, closing every one of this file's
+several destruction paths through one choke point.
+
+**Left unfixed, documented only**: an apparently-identical shape was
+also observed once for `/secure/login#N` (`*Owner (/secure/login#13)
+of function pointer is destructed"`, same `__alarm_fire()` site).
+`secure/login.lpc` already carries the SAME lazy-cleanup idiom
+correctly at roughly a dozen call sites (`remove_alarm(time_out_alarm)`
+before nearly every handoff/exit point) -- this looks like a single
+narrow edge case in an otherwise carefully-guarded state machine, and
+given the low (cosmetic-only) severity plus the risk of a subtle
+regression in a heavily-alarm-managed login flow I did not have time
+to fully trace this session, it was left as an honest observation
+rather than a guessed fix. Worth a closer look in a future pass if it
+recurs.
+
+### 8.6 Eight standing cross-cutting patterns (§7.121/§8.3a/§7.122/§7.123/§7.124/§7.126/§7.129/§7.130) -- all checked systematically, confirmed clean
+
+- **§7.121** (float arithmetic in a declared-`int` function): checked
+  every shop/bank/economy file (`lib/shop.lpc`'s `query_buy_price()`/
+  `query_sell_price()`, `sys/global/money.lpc`, `std/coins.lpc`) --
+  all pure integer arithmetic throughout, no float locals, no bare
+  `(int)` casts on a computed (rather than passed-through) value.
+  Clean.
+- **§8.3a** (`private` command-dispatch/callback function demoted via
+  inheritance): grepped every `private nomask` declaration codebase-
+  wide against `add_action`/`call_out`/`set_alarm` usage AND against
+  whether the declaring file is ever actually `inherit`ed elsewhere.
+  Only one real inheritance case exists (`std/board.lpc` ->
+  `d/Standard/lib/common_master.lpc`): its `add_action`-registered
+  functions (`list_notes`/`new_msg`/etc.) are all `public nomask`, and
+  its `private nomask` helpers (`load_headers` etc.) are only ever
+  reached via internal calls or a bare-identifier `set_alarm(...,
+  load_headers)` closure (bound at compile time within the SAME
+  defining file, immune to the string-based-dispatch demotion this
+  bug class depends on) -- never `add_action`/`call_out` by name.
+  `secure/armageddon.lpc`'s `private nomask` functions ARE inherited
+  (into `d/Standard/obj/armageddon.lpc`) and driven via
+  `set_alarm(..., shutdown_dodelay)`, the same safe bare-closure
+  shape. `cmd/wiz/normal/{files,edit}.lpc` and
+  `cmd/wiz/apprentice/communication.lpc`'s `private nomask` functions
+  are never `add_action`/`call_out` targets at all (plain internal
+  calls only), and none of those three files are ever inherited
+  anywhere -- also moot in practice since they sit in the pre-existing,
+  already-documented non-compiling wizard-tool cluster (section 7
+  above). Clean.
+- **§7.122** (autoload class-object duplication on reconnect): this
+  engine's architecture differs fundamentally from the TMI-2 lineage
+  this bug class was found on -- `save_object()` here does not
+  independently serialize inventory sub-objects (confirmed by reading
+  `std/object.lpc`/`std/container.lpc`), so there is no redundant
+  double-capture for `load_auto_obj()` to duplicate against. Also,
+  `load_auto_obj()` is only ever called from `enter_game()`, itself
+  only reached when `start_player()` clones fresh from disk
+  (`!environment(ob)`); the "already-live, just reconnecting"
+  path (`start_player2()`'s `revive()`/`fixup_screen()` branches) never
+  calls `enter_game()` again. No re-invocation path exists. Clean.
+- **§7.123** (bare top-level `IDENT = (...)` statement): corpus-wide
+  grep for the pattern found zero matches anywhere in the codebase.
+  Clean.
+- **§7.124** (percentage-scale threshold initialized as a 0.0-1.0
+  fraction): `std/living/savevars.lpc`'s `is_whimpy`/`std/living/
+  combat.lpc`'s consumer are plain `int` throughout with no float
+  literal anywhere in the whimpy code path; default `0` (off until a
+  player explicitly opts in via `set_whimpy()`) is correct, intentional
+  design, not a bug. Clean.
+- **§7.126** (stale pre-`.c` extension in a saved door/exit
+  reference): this engine has no coordinate-grid AREA/door-data
+  persistence mechanism at all (unlike the ES2/Neolith "Annihilator"
+  lineage this bug class was found on) -- rooms are individual `.lpc`
+  files with ordinary `add_exit()` calls, and a corpus-wide
+  `load_object()` grep found no call sites fed from saved mapping/
+  dbase data anywhere. Not applicable to this engine family.
+- **§7.129** (`tell_room()` forwarding an omitted optional argument as
+  a literal `int(0)` to the `message()` efun): this codebase's
+  `tell_room()`/`tell_roombb()`/`say()` (`secure/simul_efun.lpc`) are
+  all implemented via `catch_msg()` on a filtered `all_inventory()`
+  list, never touching the raw `message()` efun at all -- structurally
+  immune to this bug class. Also specifically checked (per this task's
+  own brief, since `genesis`'s sibling `es1` had this bug):
+  `include/compress_obj.h` (the `es1`-specific `__FILE__`-misuse
+  pattern) does not exist anywhere in this codebase. Clean.
+- **§7.130** (`query_idle()` called unconditionally on a path reached
+  only after the object was already found non-interactive): this
+  lineage's own `heart_beat()` (`std/living/heart_beat.lpc`) is a
+  complete no-op (`HEART_NEEDED` is `#undef`'d) -- net-death handling
+  runs entirely through the `net_dead()` apply/statue mechanism fixed
+  in §8.2 above, never an inline `heart_beat()` check. No matching
+  call-after-branch shape exists anywhere in the codebase. Clean.
+
+### 8.7 Shop/economy/combat/guild -- still unreachable, unchanged from onboarding
+
+Confirmed again this pass, not newly investigated: the pre-existing
+"become an embodied player" gap (§5.2 above) still blocks every real
+gameplay system gated behind embodiment. A fresh registration this
+pass reached only the race-selection ghost-state rooms (`sala.lpc` and
+its unnamed southern "gallery" neighbor -- both now showing full
+descriptions thanks to the §8.3 fix above), where `stan`/`inwentarz`
+both correctly respond `"To nie jest mozliwe w tym miejscu."` -- ghost-
+state command restrictions, not a bug. Shop/economy, combat, and guild/
+skill acquisition remain explicitly UNVERIFIED this pass (stated
+honestly per this project's own testing standard), same root cause as
+originally documented, not something this pass's driver-bugs-only
+scope permits fixing.
+
+### 8.8 Verification summary
+
+- Real driver boot (`~/src/fluffos/build-debug/src/driver
+  config.fluffos`): clean boot after every fix, zero new compile
+  errors in any edited file, same 5 pre-existing known-cluster preload
+  failures as onboarding (unrelated, unchanged).
+- Full register -> 6-case declension Q&A -> email -> arrival cycle
+  re-verified multiple times with distinct real Polish names
+  (`tomasz`, `marek`, `roberta`), including the already-documented
+  redundant second Q&A (§5.1, confirmed still present, unfixed,
+  content gap not a bug).
+- `zakoncz` (quit) -> `debug.log` grep -> reconnect verified clean and
+  correct end-to-end on the `fluffos` admin account (see §8.4).
+- A genuine abrupt disconnect (raw socket close, no `quit`) and
+  same-driver-process reconnect verified `net_dead()` now fires (see
+  §8.2); a driver restart-and-reconnect cycle (this satisfies AGENTS.md
+  7.120) also re-verified the admin account's `Mud@2026x` password and
+  keeper-rank recognition still work correctly.
+- `do_decay()`/`decay_exp()` fix verified by letting the FINAL
+  verification driver run for a full 47 minutes (well past the
+  ~900-second/15-minute `reset_master()` alarm interval, giving it
+  several ticks' worth of margin, not just one) before killing it by
+  exact PID: zero `fob.lpc`/`do_decay`/`String index out of bounds`
+  entries appeared in `debug.log` across that whole window (pre-fix,
+  the very first such tick crashed reliably on a fresh boot).
+- All throwaway test characters (`robert`, `roberta`, `marek`,
+  `tomasz`) deleted before commit; only the seeded `fluffos` admin
+  account and the pre-existing archived `root.o.backup` remain.
+- No outbound network connections observed at any point this pass
+  either (spot-checked via `ss` during active testing).

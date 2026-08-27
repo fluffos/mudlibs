@@ -10245,6 +10245,265 @@ prompt) is exactly the kind of code this project's line-coverage-blind
 boot/compile checks never reach, and is worth deliberately exercising
 live rather than assumed clean by analogy to the main login path.
 
+### 7.132 A CD-driver-era function written for `map()`-over-a-mapping's classic single-argument calling convention silently binds to the mapping KEY instead of its VALUE on this driver, which always calls the mapped function with `(key, value)`
+
+Found via `arkadia`'s §10.7 round-two deep functional test (a live boot
+crash, not a code-review guess). `secure/master/fob.lpc`'s
+`decay_exp()` — called periodically from `check_memory()`, itself on a
+~900-second `reset_master()` alarm, to let accumulated domain
+experience decay over time — does `m_domains = map(m_domains,
+do_decay);`, where `m_domains` is a `domain-name-string -> data-array`
+mapping. `do_decay()` is declared `nosave mixed *do_decay(mixed
+*darr)` — a single parameter, matching the classic CD-driver
+convention (map-over-a-mapping calls the function with the VALUE
+alone). This driver's own `map_mapping()` (see
+`src/vm/internal/base/mapping.cc`) always pushes BOTH the key and the
+value and calls the function with `(key, value)` — two real arguments,
+regardless of how many the callee declares. Since a driver-side call
+with more actual arguments than declared parameters simply binds the
+declared ones and drops the rest, `do_decay()`'s only parameter
+(`darr`) silently received the domain NAME (a string) instead of its
+data array. Every indexing operation inside `do_decay()` (`darr[FOB_DOM_QXP]`
+etc.) then ran against a STRING, arithmetic-decrementing individual
+characters in place until an index walked past the string's own
+length, at which point it crashed with "*String index out of bounds"
+— reproduced live as a domain name silently mutating one character per
+decay tick (`"Standard"` → `"Standarc"` after a single tick) immediately
+before the crash. Because this only fires once real domain data has
+been loaded AND the ~900-second alarm has actually ticked, it is
+invisible to any short boot-watch or brief interactive session — only
+a real long-sit test (or, as here, reading a debug.log line that
+happened to span a boot old enough to reach it) surfaces it at all.
+
+**Fix**: add the missing leading key parameter matching this driver's
+real calling convention: `do_decay(mixed *darr)` → `do_decay(string
+dname, mixed *darr)`, using only the second (real data) parameter in
+the body. This is a one-line, behavior-preserving signature change —
+verified live via a full driver restart and confirming `decay_exp()`
+no longer crashes.
+
+**Confirmed second instance, sibling engine**: `genesis`
+(`libs/genesis`), the English-language ancestor engine `arkadia` is a
+Polish-language fork of — byte-identical `do_decay()`/`decay_exp()` in
+its own `secure/master/fob.lpc`. Fixed identically; not exercised
+through a live 900-second alarm on that repo specifically (it ships no
+domain content, so `m_domains` never accumulates real data to decay),
+verified only via a boot-and-kill compile check. **How to apply
+generally**: any archive porting a mapping-processing helper function
+from a classic/CD-family driver is suspect if it declares fewer
+parameters than 2 for a callback ultimately reached via `map()` on a
+MAPPING (as opposed to an array, where this driver's single-value
+convention already matches the classic one) — check every such
+callback's real parameter count against what the body actually
+indexes/uses, not just whether it compiles clean.
+
+### 7.133 A classic-driver mudlib's master-level `remove_interactive(ob, linkdied)` disconnect-notification apply is never called by this driver at all — it calls a `net_dead()` apply directly on the PLAYER OBJECT instead, so if the mudlib never defines that function, EVERY abrupt disconnect is a complete no-op
+
+Found via `arkadia`'s §10.7 round-two deep functional test. This
+CD-driver/Genesis-lineage mudlib's `secure/master.lpc` implements a
+`remove_interactive(object ob, int linkdied)` function with a doc
+comment reading "Called from GD if a player logs out or goes
+linkdead" — matching the classic driver's own convention of notifying
+the MASTER object of every disconnect. This driver's disconnect
+teardown path (`src/comm.cc`'s own `remove_interactive()` C function)
+does nothing of the kind: for an abrupt disconnect where the object
+was not already destructed, it calls `safe_apply(APPLY_NET_DEAD, ob,
+0, ORIGIN_DRIVER)` — a `net_dead()` apply with ZERO arguments, called
+directly on the disconnecting PLAYER OBJECT, never on the master at
+all (confirmed by reading the driver's own C source and its test
+fixtures, `src/tests/test_lpc.cc`, which define `void net_dead() {
+... }` directly on a test object). A codebase-wide grep found **zero**
+`net_dead` references anywhere in this mudlib — meaning every single
+abrupt disconnect (closed client, dropped network, anything short of
+an explicit `quit`) was a complete, silent no-op: `linkdie()` never
+ran, the player was never turned into a statue, `is_linkdead` never
+got set (defaulting to 0 forever), and the disconnected object was
+simply abandoned in memory with its heart_beat still running,
+forever, invisible to `debug.log` since nothing even attempted to run
+and fail. The downstream symptom that surfaced this: reconnecting to
+a previously-disconnected character reported "Straciles polaczenie na
+20692 dni..." ("You lost your connection for 20692 days...") — `time()
+- query_linkdead()` computed against a `query_linkdead()` that had
+never once returned anything but its `0` default, i.e. the whole Unix
+epoch — followed by "Couldn't locate the location where you link
+died," since the statue-mechanism's own `places[ob]` mapping had never
+been populated either.
+
+**Fix**: define the missing bridge, forwarding to the master's own
+already-correct handler exactly as the classic driver would have
+called it directly:
+```lpc
+nomask void
+net_dead()
+{
+    SECURITY->remove_interactive(this_object(), 1);
+}
+```
+placed on the player class (`std/player_sec.lpc`, alongside this
+codebase's own `linkdie()`/`revive()`/`actual_linkdeath()`). Verified
+live via `debug_message()` instrumentation confirming the apply now
+fires on a raw socket close, and via the master's own
+`remove_interactive()` now actually running (previously provably never
+invoked at all). **A closely-related, second crash surfaced once this
+bridge started working**: `d/Standard/obj/statue.lpc`'s `revive()`
+declares `object roomob;` but its own fallback path (reached when the
+original link-death location can't be found) did `roomob =
+ob->query_default_start_location();` — a function that returns a
+STRING (a bare file path, exactly like this same function's OTHER,
+correctly-handled `stringp(room)` branch a few lines above, which
+correctly calls `find_object()` on it) — assigning a string straight
+into a strictly-typed `object` local threw "*Trying to put string in
+object" uncaught, aborting `revive()` before it ever reached the
+actual `move_living()` call or the `places[]`/alarm cleanup at the end
+of the function. Fixed by resolving it through `find_object()` (with
+the same lazy-compile retry the sibling branch already uses) before
+the assignment, exactly mirroring the existing pattern two lines above
+it in the same function.
+
+**How to apply generally**: any archive whose own `secure/master.lpc`
+(or equivalent) implements a `remove_interactive`/`disconnect`/
+`linkdie`-notification function with a doc comment claiming the GAME
+DRIVER calls it directly is suspect on this driver — grep the whole
+codebase for `net_dead` (this driver's real apply name) and confirm
+something actually forwards to the classic-style master function if
+one exists; a zero-hit result on a codebase that clearly has real
+linkdeath-handling machinery sitting unused is the tell, in the same
+spirit as §7.131's `set_living_name()` check for `find_living()`/
+`find_player()`. Once the bridge is added, exercise it with a REAL
+abrupt disconnect (a raw socket close, not a `quit`) and reconnect in
+the same driver session — a same-session reconnect is the only way to
+catch both the missing-bridge symptom itself and any downstream
+type-mismatch bug the newly-reachable code path exposes, exactly as
+happened here.
+
+### 7.134 A base room/container class's "extra descriptions contributed by present items" accumulator is declared with no initializer, so `member_array()`'s own strict type check crashes on EVERY room that never populates it — silently truncating that room's entire description on every single look, project-wide
+
+Found via `arkadia`'s §10.7 round-two deep functional test — the very
+first `look` after logging in printed only the room's bare file-path
+identifier and nothing else (no flavor text, no exit list), with zero
+player-visible error. `std/room/description.lpc`'s `room_descs` (a
+per-room list of `({ contributing_object, extra_text })` pairs added
+dynamically by present items via `add_my_desc()`) was declared `nosave
+mixed room_descs;` with no initializer, defaulting to `0`. Its own
+`long()` function — the ONE function that runs on every single look,
+regardless of whether the room ever received a dynamic extra
+description — unconditionally opens with `while ((index =
+member_array(0, room_descs)) >= 0) { ... }`, a cleanup pass meant to
+prune stale entries left by since-destructed contributors. This
+driver's `member_array()` requires its second argument to be a real
+string or array; called against a bare `0` it throws "*Bad argument 2
+to member_array() Expected: string or array Got: 0" uncaught,
+aborting `long()` immediately — before the function ever reaches its
+own already-fully-built description string sitting one local variable
+away, and before the room's exit list (built by a separate function
+downstream in the same describe-the-room chain) ever gets appended.
+Since `add_my_desc()` is an opt-in feature only a minority of items
+ever call, the OVERWHELMING majority of rooms in any game built on
+this base class never touch `room_descs` at all, meaning this crashed
+on essentially every look at every ordinary room, game-wide, from the
+very first boot — exactly the kind of whole-class-of-content failure
+this project's §7.30-style "uninitialized array/mapping global" theme
+keeps finding, but notable here for how central the affected function
+is (a room's OWN base-class look handler, not a leaf content file).
+
+**Fix**: initialize the declaration to an empty array —
+`nosave mixed room_descs = ({});` — which every consumer in the file
+(`member_array()`, `pointerp()`, `sizeof()`, `exclude_array()`) handles
+safely, and is fully behavior-preserving: `add_my_desc()`'s own
+`if (!room_descs) room_descs = (...); else room_descs = room_descs +
+(...);` produces an identical result starting from `({})` as it did
+from `0` regardless of whether an empty array is itself truthy or
+falsy on this driver. Verified live: a room with no dynamic extra
+descriptions now prints its full flavor text AND exit list on every
+look, both immediately after login and on repeat visits.
+
+**Confirmed second instance, sibling engine**: `genesis`
+(`libs/genesis`) — byte-identical declaration and crash site in its
+own `std/room/description.lpc`. Fixed identically; not exercised
+live on that repo (it ships no domain content — no real rooms to walk
+into — see its own NOTES.md), verified only via a boot-and-kill
+compile check. **How to apply generally**: any base room/container
+class with an "extra description contributed by present items"
+accumulator (grep for `add_my_desc`/`add_room_desc`-style setters
+paired with a `member_array`/`sizeof`/`pointerp` consumer in the SAME
+class's own describe-the-room path) is worth checking for a bare,
+uninitialized declaration — the tell is the setter already carrying an
+`if (!X) X = (...)` guard while the room-description-building consumer
+function has no equivalent guard of its own before its first use of
+`X` each call.
+
+### 7.135 One accessor in a family of functions sharing a lazily-initialized global omits the exact same "default it if never set" guard every sibling accessor/mutator consistently applies — so the first-ever call to it, deep inside the single most universal player action there is, returns a raw uninitialized `int` where every caller expects an array, silently breaking that action for every player on every fresh boot
+
+Found via `arkadia`'s §10.7 round-two deep functional test, and the
+textbook example of the exact "bxsj-style silent quit crash" this
+whole section's own methodology (§10.7) was written to catch: `quit`
+looked completely normal (a bare `> ` prompt, no error, no unusual
+message) with nothing to suggest anything had gone wrong. `secure/
+master.lpc` declares `private string *def_locations, *temp_locations;`
+with no initializer, and consistently guards EVERY OTHER
+consumer/mutator of `temp_locations` with the exact same lazy-default
+idiom (`if (!temp_locations) temp_locations = TEMP_STARTING_PLACES;`,
+present in `check_temp_start_loc()`, `add_temp_start_loc()`, and
+`remove_temp_start_loc()`) — except its own plain query function,
+`query_list_temp_start()`, which just does a bare `return
+secure_var(temp_locations);` with no guard at all. Nothing in a normal
+login path ever calls one of the GUARDED consumers (`check_temp_start_
+loc()` only runs for the rare case of an explicit temporary start-
+location override), so `temp_locations` stays a raw, never-assigned
+`0` for the entire life of a fresh boot on any ordinary character's
+path — while its sibling `def_locations` (returned by the otherwise-
+identical, also-unguarded `query_list_def_start()`) reliably IS a real
+array by the same point, because `enter_game()` unconditionally calls
+`check_def_start_loc()`, which carries its OWN guard, as a completely
+unrelated side effect. `std/player/cmd_sec.lpc`'s `check_recover_loc()`
+— called from `quit()`, on literally every character's every quit —
+does `list = SECURITY->query_list_temp_start() + SECURITY->
+query_list_def_start();`, and `0 + array` threw "*Bad type argument to
++. Had int and array" uncaught, aborting `quit()` before it ever
+reached `save_me()` or the player's actual removal from the game.
+Reproduced live: `zakoncz` (this lib's quit command) printed nothing
+but a bare prompt with no confirmation message at all, the character
+was never saved (a subsequent reconnect showed the stale pre-fix
+"last login" timestamp, not the just-attempted session), and the
+player object was left abandoned in-game, un-destructed, exactly as
+described in this section's own opening `bxsj` precedent.
+
+**Fix**: add the identical guard this file's own established idiom
+already applies to the very same variable everywhere else it's
+touched:
+```lpc
+public string *
+query_list_temp_start()
+{
+    if (!temp_locations)
+        temp_locations = TEMP_STARTING_PLACES;
+    return secure_var(temp_locations);
+}
+```
+and, defensively, the equivalent guard on the currently-only-
+accidentally-safe `query_list_def_start()` too, since it relies on
+`enter_game()` happening to call a sibling function first rather than
+guaranteeing its own precondition. Verified live: `zakoncz` now prints
+"Nagrywam postac." and completes normally, and a subsequent reconnect
+shows the correct, just-updated "Ostatnie logowanie" timestamp and
+host, confirming the save-then-remove path this bug had been silently
+skipping now actually runs.
+
+**How to apply generally**: whenever a `master.lpc`-style singleton
+exposes MULTIPLE accessor/mutator functions over the same lazily-
+initialized global, and some of them carry a `if (!X) X = DEFAULT`
+guard while others don't, check every unguarded one for a real call
+path that can be reached BEFORE any guarded sibling ever runs — the
+most dangerous shape is exactly this one, where a plain read-only
+query function is the ONE consumer with no guard, and it happens to
+feed into an operation (here, `+`) that fails loudly only when the
+uninitialized value's TYPE mismatches whatever else is being combined
+with it, rather than merely producing an empty/zero result. A single
+continuous play session that never reaches a wizard-only management
+command for the guarded variable (temp starting locations, in this
+case) will never trigger the guard at all, making this exactly the
+class of bug invisible to anything short of an actual played `quit`.
+
 ---
 
 ## 8. Login and registration flow bugs

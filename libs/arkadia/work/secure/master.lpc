@@ -2172,7 +2172,7 @@ mark_quit(object player)
  * Arguments    : object ob    - the player that leaves the game.
  *                int linkdead - true if the player linkdied.
  */
-nosave void 
+nosave void
 remove_interactive(object ob, int linkdied)
 {
     string master_ob;
@@ -2726,12 +2726,50 @@ add_temp_start_loc(string str)
 public string *
 query_list_def_start()
 {
+    /* Same lazy-default guard already used by this file's other
+     * def_locations consumers (add/remove_def_start_loc(),
+     * check_def_start_loc()) -- see query_list_temp_start() below for
+     * why this matters, even though in practice def_locations is
+     * almost always already set by the time this runs (every
+     * enter_game() calls check_def_start_loc(), which carries the same
+     * guard). Kept here too for the same robustness, not because a
+     * live crash was traced through this exact one.
+     */
+    if (!def_locations)
+        def_locations = STARTING_PLACES;
     return secure_var(def_locations);
 }
 
 public string *
 query_list_temp_start()
 {
+    /* FluffOS PORT NOTE / live bug fix: every sibling temp_locations
+     * consumer in this file (check_temp_start_loc(), add_temp_start_loc(),
+     * remove_temp_start_loc()) lazily defaults temp_locations to
+     * TEMP_STARTING_PLACES the first time it's touched -- this one
+     * function didn't, and it is the ONE consumer that runs
+     * unconditionally on the single most common player action there
+     * is: std/player/cmd_sec.lpc's check_recover_loc() (called from
+     * quit()) does `query_list_temp_start() + query_list_def_start()'.
+     * Since nothing in a normal login path ever calls
+     * check_temp_start_loc() (only a rare temp-start-location override
+     * does), temp_locations stays a raw, never-assigned `0' for the
+     * entire life of a fresh boot unless a wizard explicitly manages
+     * temp starting locations -- while def_locations is already a real
+     * array by the time quit() runs (enter_game() always calls
+     * check_def_start_loc(), which has its own lazy-default guard).
+     * `0 + array' threw "*Bad type argument to +. Had int and array"
+     * uncaught, aborting quit() before it ever reached save_me() or
+     * the actual object removal: EVERY quit, by EVERY character, on a
+     * freshly booted driver, silently failed to save or remove the
+     * player at all (the player-visible symptom is indistinguishable
+     * from a normal quit -- a bare "> " prompt with no error -- exactly
+     * this project's own established §10.7 "bxsj-style" silent-quit-
+     * crash shape). Reproduced live and fixed with the identical guard
+     * this file already uses for the same variable everywhere else.
+     */
+    if (!temp_locations)
+        temp_locations = TEMP_STARTING_PLACES;
     return secure_var(temp_locations);
 }
 

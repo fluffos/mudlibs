@@ -467,3 +467,44 @@ function-value fix carries over to the WASM build), and a clean `quit`
 '/d/Web/stats/webstats'` inside a `catch()` -- is the same class of
 graceful missing-domain-content fallback as the start-location one,
 not a new bug.
+
+## Two sibling bugs ported over verbatim from arkadia's §10.7 pass (2026-08-27)
+
+`arkadia` (`libs/arkadia`) is a direct Polish-localization fork of this
+exact engine, and its own round-two deep functional test (a real,
+played session, unlike this lib's own short WASM smoke test above)
+found two live crashes in files byte-identical between the two ports.
+Both are confirmed present here via direct code reading and a real
+boot-and-kill compile check (no domain content exists in this repo to
+drive a full interactive repro the way arkadia's own `NOTES.md` does):
+
+1. **`secure/master/fob.lpc`'s `do_decay()`** was declared to take a
+   single `mixed *darr` parameter, but `decay_exp()` (called
+   periodically from `check_memory()`, itself on a ~900-second
+   `reset_master()` alarm) invokes it via `map(m_domains, do_decay)` --
+   this driver's `map()` over a MAPPING always calls its function with
+   `(key, value)`, not `value` alone, so the one declared parameter
+   silently bound to the domain NAME (a string) instead of its data
+   array, corrupting the domain name character-by-character on every
+   decay tick and eventually crashing with "*String index out of
+   bounds" once the walk ran past the string's own length. Fixed by
+   adding the missing leading `string dname` parameter, exactly as in
+   arkadia. See `libs/arkadia/NOTES.md` and AGENTS.md §7.132 for the
+   full live repro (reproduced there against real bootstrap domain
+   data, since this repo's own `m_domains` never gets populated with
+   anything given it ships no domain content at all).
+2. **`std/room/description.lpc`'s `room_descs` global** was declared
+   `nosave mixed room_descs;` with no initializer (defaulting to `0`),
+   but `long()` unconditionally calls `member_array(0, room_descs)` on
+   every single room look/glance -- for any room that never called
+   `add_my_desc()` (the vast majority), this threw "*Bad argument 2 to
+   member_array() Expected: string or array Got: 0" uncaught, silently
+   truncating that room's entire description. Fixed with a `= ({})`
+   initializer, identical to arkadia's fix. See AGENTS.md §7.133.
+
+Neither fix was exercised through a live interactive session on THIS
+repo specifically (there is no real room/domain content here to walk
+into), only via a real driver boot-and-kill compile check confirming
+both files still compile clean; a future deep-functional pass on any
+lib that eventually builds real content atop this engine (or a WASM
+re-test of this repo itself) should re-verify live.
