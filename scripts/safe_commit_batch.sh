@@ -102,7 +102,7 @@ for p in "${extra_paths[@]}"; do
   git add "$p"
 done
 
-staged=$(git diff --cached --name-only)
+staged=$(git -c core.quotePath=false diff --cached --name-only)
 if [ -z "$staged" ]; then
   echo "error: nothing staged for slugs: ${slugs[*]} (already committed, or no changes present?)" >&2
   git reset >/dev/null
