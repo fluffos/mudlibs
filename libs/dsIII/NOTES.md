@@ -436,3 +436,231 @@ gutted per that lib's WASM notes) applies here too -- this archive's
 `secure/sefun/sockets.lpc` is very likely byte-identical to `ds386`'s
 pre-fix copy, so the same gut-the-function-bodies treatment would
 probably be needed before this lib could boot under WASM at all.
+
+## 深度功能测试 / Deep functional test (round two, AGENTS.md §10.7)
+
+First real *playthrough* pass on this lib (prior sessions only verified
+registration + `look`/`score`/`quit` + the admin install wizard, per
+section 5 above). Played a full, continuous session as an ordinary new
+player on the native driver (`build-debug`), using a second admin
+connection only for a controlled death test at the end. This is also
+the first lib in the Dead Souls lineage (`dsI`/`dsII`/`ds386`/
+`dshakkard`/`deadsouls_fluffos`) to get a §10.7 pass -- none of the
+siblings have a "深度功能测试" heading in their own `NOTES.md` yet, so
+the bug found below (and its fix pattern) should be checked against
+all of them, not just this archive.
+
+**Newbie path**: `read chapter 1 in handbook` (repeated through
+"chapter N" for the whole book) is this lib's own onboarding doc.
+Chapter 4 spells out the intended early game explicitly: level up on
+weak monsters in "the newbie mansion" (reached from the village, past
+a newbie-only gate guard and a locked mansion door -- the real way in
+for a level-1 character is external: grab the ladder from the
+gardener's shack west of the mansion, drop it under the mansion's
+open second-floor window, and `climb ladder`/`enter window`), sell
+loot to a shopkeeper (this archive's actual town vendors are James at
+the Healers' Guild and Lars at the pub -- the handbook's own "Otik"
+example is stock Dead Souls boilerplate text, not hand-tailored to
+this archive's actual NPC names, a content detail, not a bug), bank
+with Zoe, and eventually join a class (fighter/mage/cleric/thief) via
+a guild NPC once a gating quest (Orcslayer) is done.
+
+Test character: id `Qintestds`, ASCII name (per this archive's own
+strict `A-Z a-z ' -` name-charset validation, same as `ds386`'s and
+this archive's own admin-install testing in section 5 -- a Chinese
+name is out of scope here by design), password `Abc12345`, human
+Explorer -- **kept** (not cleaned up) as a representative playthrough
+character, currently a ghost-then-regenerated corpse sitting in "The
+start room" at half HP/MP/SP after the controlled death test below.
+Save file: `work/secure/save/players/q/qintestds.o`.
+
+### Bug found and fixed
+
+**Silver/gold/every other in-game currency silently turns into a
+float the first time it passes through ANY currency-exchange
+calculation, corrupting the player's `Currency` mapping permanently --
+`secure/sefun/economy.lpc`'s `query_base_value()`/`query_value()`/
+`query_base_rate()`/`query_player_money()`, plus one sibling miss in
+`lib/teller.lpc`'s `eventExchange()` and one in `lib/props/value.lpc`'s
+`SetBaseCost()`.**
+
+- Symptom: reproduced live buying a 2-silver bottle of water from Lars
+  (the pub keeper) with `buy water from lars`. The very next attempt to
+  learn a spell from Herkimer (`ask herkimer to teach light`) printed:
+  `"Light costs 100 silver and you only have 88.000000."` -- a raw
+  float leaking into player-facing text instead of a clean integer
+  silver count. Confirmed at the data level too: after a `save`, the
+  raw player file literally contains `Currency
+  (["silver":88.000000,...])` -- not a display bug, the stored balance
+  itself is now a float and stays that way forever (every future
+  addition/subtraction against an already-float mapping value stays a
+  float in this dialect, since a declared `int` type is compile-time
+  only and never coerces an assignment -- see this project's own
+  `reference_lpc_int_cast_is_compile_time_only` precedent and the
+  `quest_times_percent_operator` corpus sweep for the identical class
+  of bug in other libs).
+- Root cause, traced end to end: `lib/std/barkeep.lpc`'s
+  `eventSell()` (invoked by every `buy X from <barkeep NPC>`) does
+  `x = query_value(ob->GetBaseCost(), query_base_currency(),
+  GetLocalCurrency()); ... who->AddCurrency(GetLocalCurrency(), -x);`.
+  `query_value()` and its helper `query_base_value()`
+  (`secure/sefun/economy.lpc:59-70` before the fix) are both declared
+  to return `int`, but their bodies do real floating-point exchange-rate
+  math (`amount * rate`, `baseval / rate`, where `rate` always comes
+  from `ECONOMY_D->__Query(type,"rate")`, a value the economy daemon
+  stores and returns as a genuine `float`) and return that float
+  **without ever calling `to_int()`** -- unlike their own two sibling
+  functions in the exact same file, `currency_mass()` and
+  `currency_value()`, which already correctly wrap their return in
+  `to_int()`. Once a float slips into `x`, `AddCurrency(string type,
+  int amount)` stores it straight into the `Currency` mapping
+  (`lib/currency.lpc`'s `Currency[type] += amount`), permanently
+  changing that currency's runtime type for the rest of the character's
+  life. The bank's currency-exchange command
+  (`lib/teller.lpc:227-229`, `ask zoe to exchange N x for y`) has the
+  identical gap on its own separate line -- `i = val / currency_rate(str2);`
+  -- missing a `to_int()` that the very next line in the same function
+  (`charge = to_int(i / (100 / GetExchangeFee()));`) already has, so it
+  independently reintroduces the same corruption even with
+  `economy.lpc` fixed. `lib/props/value.lpc`'s `SetBaseCost(string
+  currency, int amount)` two-argument form (used pervasively for
+  pricing items, e.g. `SetBaseCost("silver", 10)` in dozens of files)
+  has the same gap at its own point of origin: `Cost = i * rate;` with
+  no `to_int()`, contaminating an item's *listed* price before it ever
+  reaches a vendor transaction.
+- Fix: added `to_int()` around the return value of `query_base_rate()`,
+  `query_player_money()` (also switched its internal accumulator `x`
+  from a lying `int` to an honest `float` that only gets truncated at
+  the very end, for clarity), `query_base_value()`, and `query_value()`
+  in `secure/sefun/economy.lpc`; wrapped `lib/teller.lpc`'s
+  `i = val / currency_rate(str2);` in `to_int()`; wrapped
+  `lib/props/value.lpc`'s `Cost = i * rate;` in `to_int()`. Every fix
+  matches the `to_int()`-wrapping convention already established by
+  sibling functions in the very same files -- this is closing an
+  inconsistency the original code already knew the pattern for, not
+  inventing a new one.
+- Verified: rebuilt nothing (LPC-only change), ran the `lpc-syntax`
+  formatter on all three touched files (all three §9 blind-spot checks
+  came back clean), rebooted the native driver, reconnected as
+  `Qintestds`. The character's pre-existing `silver` balance is still
+  shown as `63.000000` in the raw save file after the fix -- **expected
+  and left as-is**: the fix stops NEW corruption, it cannot retroactively
+  un-float a value already written to a save file (that would need a
+  one-time data migration, out of scope for a programming-bug fix).
+  Proved the fix actually works by exercising a brand-new currency the
+  character had never held: opened a bank account with Zoe and did
+  `ask zoe to exchange 20 silver for gold` (the exact previously-broken
+  `eventExchange()` path) -- after a `save`, the raw player file shows
+  `"gold":2` with **no decimal point**, next to the still-float legacy
+  `"silver":63.000000` in the very same mapping literal, proving the
+  fix closes the corruption at its source. `log/debug.log` stayed clean
+  (no compile/runtime errors) through the whole sequence.
+- **Sibling libs to check**: `ds386`, `dsI`, `dsII`, `dshakkard`, and
+  `deadsouls_fluffos` share this same Dead Souls Object Library
+  codebase and, per this archive's own section 1 lineage analysis, are
+  very likely to have byte-identical or near-identical copies of
+  `secure/sefun/economy.lpc`, `lib/teller.lpc`, and
+  `lib/props/value.lpc` -- worth a quick `diff` check and the same
+  three-line fix on all of them the next time any gets a §10.7 pass or
+  economy-focused re-test.
+
+### What was tested and confirmed working
+
+- **Registration**: full flow (name -> confirm -> age gate -> password
+  + confirm -> gender -> email, validated -- a blank/malformed first
+  attempt correctly re-prompts -- -> race pick, `list`/`pick human`) --
+  landed in "The start room" with the starting Player's Handbook,
+  t-shirt, and jeans, `score` and `i` both correct immediately after.
+- **Movement/exploration**: the default domain's start room only has a
+  `down` exit into the `campus` domain (LPC University, a separate
+  builder-tutorial zone) -- this is `SetNoModify(1)`-locked, deliberate
+  content structure, not a bug. Walked from there through campus,
+  across "University Square", north along a connecting path into the
+  actual `town` domain (village intersection, Saquivor Road, the
+  mansion), and confirmed door/`open door` mechanics, a `climb
+  ladder`/`enter window` alternate-entry puzzle (the mansion's front
+  door is locked and needs a key; the intended level-1 route is
+  external, via a ladder retrieved from the gardener's shack), and a
+  newbie-only gate-guard bypass (`PreExit()` in
+  `domains/town/room/gate.lpc`, correctly let a level-1 character
+  "sneak past" with a flavor message).
+- **Combat**: no player-reachable safe-sparring dummy exists in this
+  archive (`domains/default/npc/dummy.lpc` sits in a creator-only
+  `arena` room gated by `CanReceive()`; `domains/campus/npc/dummy.lpc`
+  is never placed in any room at all -- both are inert example content,
+  not a bug, just not wired up for ordinary players). Fell back to the
+  handbook's own recommended weak target: rats in the mansion kitchen
+  (`domains/town/room/mansion_room7.lpc`, `SetLevel(1)`,
+  `SetMaxHealthPoints(10)`). A full `kill rat` fight ran cleanly for
+  several dozen exchanges (both sides mostly missing at level 1,
+  unarmed -- slow but correct, matches the handbook's own explanation
+  of skill-based to-hit), correctly updated `melee attack`/`melee
+  defense` skill percentages in `stat` from use, and `ignore all` +
+  moving away correctly disengaged without further loss once clear of
+  the room.
+- **Skill/class acquisition, two paths**: asked Herkimer (the Mages'
+  Guild guildmaster) directly `to join` -- correctly refused pending
+  the Orcslayer quest (`"First you must prove yourself worthy..."`,
+  `herkimer.lpc`'s `JoinGuild()`). Asked him `to teach light` (the
+  organic, no-guild-required spell-purchase path) -- correctly gated on
+  affordability, which is exactly the interaction that surfaced the
+  currency bug above.
+- **Shop/economy**: bought a claritin pill (10 silver) from James at
+  the Healers' Guild and a bottle of water (2 silver) from Lars at the
+  pub -- both transactions correctly moved the item and deducted
+  silver, `i`/inventory updated immediately. Opened a bank account with
+  Zoe (`ask zoe for account`, 5-silver minimum deposit) and successfully
+  exchanged currency (`ask zoe to exchange 20 silver for gold`) -- see
+  the bug section above for what this surfaced and how it was verified
+  fixed.
+- **Death/respawn**: no reachable-in-budget wild monster could kill a
+  420-HP level-1 character in reasonable real time (the rat fight above
+  shows just how low the to-hit rates are at level 1), so this was
+  triggered directly and deliberately via the seeded admin account
+  (`fluffos`/`Mud@2026`) on a second connection: `eval object ob =
+  find_player("qintestds"); return ob->eventDie("test smash");` against
+  the **non-admin** test character (never the admin's own body, which
+  would hit `lib/creator.lpc`'s wizard-exempt `eventDie()` override
+  instead and prove nothing). Confirmed the full cycle live: death
+  message + ASCII "YOU ARE DEAD!" art, `score` correctly showed
+  `Qintestds the ghost`, `undead` race, and reduced max MP while dead;
+  `regenerate` correctly rematerialized the character at roughly half
+  HP/MP/SP, applied the expected XP penalty (50 -> 38, `score`'s
+  "more experience points to advance" figure moved from 450 to 462
+  accordingly), and dropped the character back at the same default
+  "start room" respawn point. `log/debug.log` stayed clean through the
+  whole death/regenerate sequence.
+- **`quit` / debug.log / reconnect after a real gap**: `quit` produced
+  the correct "Please come back another time!" message and clean
+  worn-item-removal text; `log/debug.log` showed zero errors immediately
+  after (this project's own §7.16/§10.7 lesson: a clean-looking `quit`
+  message does not by itself prove nothing broke server-side -- checked
+  anyway, and it really was clean here). Waited a genuine 90-second
+  wall-clock gap, reconnected with the same login/password, and landed
+  back exactly where the character had quit (First Village Bank, same
+  worn items re-equipped), with `score` correctly reflecting realistic
+  additional food/drink decay over the elapsed real time.
+
+### Minor observation, not fixed (cosmetic, not a programming bug)
+
+`domains/town/room/mansion_uhall1.lpc` (and likely other rooms using
+the same `window`-as-exit idiom) defines `"window"` as BOTH a raw
+`SetExits()` key and a `SetEnters()` entry. The room's own
+`GenerateObviousExits()`-generated text lists `"window"` as if it were
+a plain bare-word direction right alongside `down`/`west`/`east`/`south`
+(`"Obvious exits: down, west, east, window, south, enter window"`), but
+typing bare `window` actually fails (`"There is no go window here."`)
+-- only `enter window` (or, per `verbs/rooms/go.lpc`'s own help text,
+presumably `go window`) actually works. Root cause: `lib/nmsh.lpc`'s
+bare-word-to-`"go "`-command pre-aliasing only covers the fixed
+classic-cardinal-direction set (n/s/e/w/ne/nw/se/sw/u/d/out), never
+arbitrary custom exit names, while `lib/std/room.lpc`'s
+`GenerateObviousExits()` blindly `implode()`s every raw exit key into
+the display text regardless of whether it's bare-word-usable. This
+looks like it would affect every room in the whole Dead Souls lineage
+that names a custom exit outside the cardinal set (not something
+introduced by this archive), and it's misleading-but-harmless UI text,
+not a crash or wrong efun call -- documented here per the project's own
+scope discipline (`ERR_THERE_IS_NO` is a normal, non-fatal parser
+rejection, not a bug signature) rather than "fixed" by guessing at what
+the room author actually intended.
