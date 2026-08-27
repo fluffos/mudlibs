@@ -530,3 +530,264 @@ content reachable from within world1), not a conversion artifact.
   documented above are worth a wider sweep in any future deep-testing
   pass on this lib, now that a missing spawn safely degrades instead
   of crashing the containing room.
+
+## 深度功能測試（§10.7 round two, 2026-08-27）
+
+One continuous session with a fresh Chinese-named character (`shenzhi`
+/ 沈知, human, male), following `doc/help/newbie/newbie1`'s own
+described test path (free-drink refill points, `slist`/`train`/
+`advance`/`level` for skills, the "master" sect-teacher alias route).
+Two real programming bugs found and fixed live; one design-shaped
+finding documented but left untouched; the seven standing
+cross-cutting patterns (§7.121/§8.3a/§7.122/§7.123/§7.124/§7.126/
+§7.128) checked systematically, one confirmed hit (§7.126, new
+variant, also added to that AGENTS.md entry's "confirmed instances").
+
+### Bug 1 (fixed): `printf("%O", ob)` debug leftover leaked a raw object reference to every new player during registration
+
+`adm/daemons/logind.lpc`'s `get_name()` (the Chinese-name-acceptance
+handler, called for every single character creation) had a stray
+`printf("%O\n", ob);` immediately after validating the name — present
+byte-for-byte in the raw pre-conversion archive (`raw/ds/ds/adm/
+daemons/logind.c:435`), so this is a pre-existing authorial debug
+leftover, not a conversion artifact. Reproduced live: right after
+typing a Chinese name, the client received a literal `/obj/login#4`
+line before the password prompt — meaningless and slightly alarming
+internal-object-reference noise shown to every brand-new player,
+serving no game purpose. Fixed by deleting the one line; verified live
+that the password prompt now follows immediately with no extraneous
+output.
+
+### Bug 2 (fixed, SEVERE): starting room's `newbie` exit was unreachable for every real player due to an operator-precedence typo
+
+`open/world1/tmr/area/hotel.lpc`'s `valid_leave()`:
+```lpc
+// BEFORE:
+if( dir=="newbie" || dir=="bug" && !userp(me))
+        return notify_fail("那裡只有玩家才能進去。\n");
+```
+`&&` binds tighter than `||` on this driver (standard C-family
+precedence), so this parses as `dir=="newbie" || (dir=="bug" &&
+!userp(me))` — meaning the `newbie` branch is **blocked
+unconditionally, for every player and every NPC alike**, regardless of
+`userp(me)`, while the clearly-intended logic (per the very next line's
+own `dir=="newbie"` branch, and per two sibling files in this same
+archive that implement the identical "only real players may use this
+exit" gate) was `(dir=="newbie" || dir=="bug") && !userp(me)` — block
+only non-player wanderers, let real players through. Confirmed via
+`grep -rn 'dir==.*||.*dir==.*&&.*userp'`: `u/s/suez/port/port_21.lpc`
+and `u/s/suez/port/port_06.lpc` both correctly parenthesize the same
+shape (`(dir=="east"||dir=="south") && !userp(me)`), making this an
+isolated authorial typo on this one file, not a lineage-wide pattern.
+
+Reproduced live: a brand-new player at the starting room 朝天樓 typing
+`newbie` got **zero output and no movement** (see Bug 3/observation
+below for why the failure was silent rather than showing the
+"only players may enter" message) — the entire tutorial "新手教室"
+room (two teaching books plus a help sign, the ONLY place `doc/help/
+newbie/newbie1` tells brand-new players to start) was completely
+unreachable for every player, from this codebase's first-ever
+character onward. Fixed by adding the missing parentheses; verified
+live post-fix: a real (non-wizard) test character typing `newbie` from
+朝天樓 now correctly moves to `open/world1/tmr/area/school/school1`
+("新手教室") and can read both books.
+
+### Observation (NOT fixed, authorial pre-existing design choice): `cmds/std/go.lpc` discards every blocked exit's `notify_fail()` message
+
+Both `stringp(dest)` and `objectp(dest)` branches of `go.lpc`'s `main()`
+do:
+```lpc
+if( !env->valid_leave(me, arg) ) return 1; // alick return 0->1
+```
+On this (and any standard LPC-family) driver, an `add_action`-registered
+handler returning a nonzero int tells the driver "handled, don't show
+the stored `notify_fail()` message" — so every `valid_leave()` rejection
+anywhere in this entire codebase (walls, locked doors, the
+newbie/bug-only gate above, sect-specific area gates, etc.) fails
+completely silently: no movement, no error text, nothing. Confirmed
+present byte-for-byte in the raw pre-conversion archive
+(`raw/ds/ds/cmds/std/go.c:104,118`, same `// alick return 0->1` comment)
+— a deliberate, already-commented authorial change from the more usual
+`return 0`, not a conversion regression. Left untouched per this
+project's scope boundary: a plausible reason for the trade-off exists
+(preventing the driver's `safe_parse_command()` fallback from re-trying
+OTHER handlers registered under the same direction-word verb after a
+blocked move — a `return 0` would fall through to those instead of
+stopping cleanly), and reversing it site-wide would be a broad,
+speculative behavioral change with no way to verify it doesn't break
+something else this large archive relies on. Documented here as an
+honest observation per the "when unsure, document and leave it" rule,
+not fixed.
+
+### Seven standing cross-cutting patterns — one confirmed hit (§7.126), six clean
+
+- **§7.121** (float arithmetic in a declared-`int` function): checked
+  `adm/daemons/bankd.lpc` (the only real economy/exchange-rate daemon),
+  `cmds/usr/exchange.lpc`, and did a repo-wide grep for
+  `IDENT = 0\.[0-9]+;` assigned to money/exp/rate-shaped fields — no
+  hits. `bankd.lpc`'s own interest-rate math (`bank_amount["past"] *
+  ratio / 100`) is pure integer arithmetic throughout (and is dead code
+  besides — `clockd.lpc`'s call to `interest_receive()` has been
+  commented out by the original author since before conversion). Clean.
+- **§8.3a** (`private`-declared dispatch/callback function demoted on
+  inherit): the central dispatcher (`feature/command.lpc`'s
+  `command_hook`) is declared `protected nomask`, not `private nomask`
+  — `protected` is not subject to the DECL_HIDDEN-on-inherit demotion
+  this pattern describes, so no bug. A repo-wide grep for `private
+  nomask` (or bare `private` in `feature/`/`std/`/`adm/daemons/`) found
+  only `adm/daemons/network/socket.lpc`'s five callback functions,
+  which are self-referential closures bound within that same
+  never-inherited file — not at risk. Clean.
+- **§7.122** (TMI-2-style autoload item duplication): grepped for
+  `compute_autoload_array`/`destroy_autoload_obj`/`load_autoload_obj`
+  — zero hits anywhere in the tree. This ES2/Annihilator-lineage
+  codebase doesn't use that mechanism at all (its `set("auto_load",
+  1)`-style per-item flag, seen on `std/equip.lpc` etc., is the
+  ordinary driver-level auto-clone-on-login convention, a different and
+  unrelated mechanism). Not applicable.
+- **§7.123** (bare file-scope `IDENT = (...)`  statement): grepped for
+  `^IDENT = (` patterns repo-wide; every hit (`obj/cch.lpc`,
+  `u/w/whoami/red-envelope.lpc`, `u/w/whoami/Qoldman.lpc`, several
+  `u/l/luky/pearl/pearl_*.lpc` files, a handful of unindented
+  `damage=(...)` lines) was hand-verified to sit inside a real function
+  body (this codebase frequently doesn't indent function-body code),
+  none at true file scope. Clean.
+- **§7.124** (0.0-1.0 fraction where an int 0-100 percentage was meant):
+  checked the `wimpy` auto-flee threshold end-to-end (`std/char.lpc`,
+  `cmds/std/wimpy.lpc`, and every NPC `set("wimpy", N)` call site) —
+  all integers, all consistent, no fractional literal anywhere. No
+  other percentage/threshold field with a suspicious `= 0\.NN;`
+  assignment turned up in a repo-wide grep. Clean.
+- **§7.126** (stale `.c` extension in `.o` save data feeding
+  `load_object()`): **CONFIRMED, FIXED** — see "New bug class" below
+  (a new variant of this existing AGENTS.md entry; the entry itself has
+  been extended with this instance rather than adding a new number).
+- **§7.128** (`process_input()` returning a string when the lib never
+  really uses `add_action`): `feature/alias.lpc`'s `process_input()`
+  does return a string (alias-expanded or raw), but this codebase DOES
+  register real verbs via the driver's native `add_action()`
+  (`feature/command.lpc`'s `add_action("command_hook", "", 1)` plus
+  every individual `cmds/*/*.lpc` file) — this is the CORRECT, intended
+  contract for a lib built around `add_action`, not the anti-pattern
+  §7.128 describes (which only bites a lib that bypasses `add_action`
+  entirely). Confirmed no stray "什麼？"-after-every-command artifact
+  during the whole live session. Clean/not applicable.
+- **Residual `file_size(...+".c")`/filename-slice sweep**: repeated the
+  onboarding-session's search post-fix — zero remaining hits anywhere
+  in the tree (the only remaining literal `".c"` string in any `.lpc`
+  file is inside our own new `resolve_location()` helper below).
+
+### New bug class confirmed (extends existing AGENTS.md §7.126, no new number): `adm/daemons/bankd.lpc`'s club "location" field
+
+Two of this lib's four shipped club-bank save files (`data/club_bank/
+god.o`, `data/club_bank/dragon.o`) store their physical bank-room path
+with the stale pre-conversion `.c` extension baked in
+(`"location":"/open/world1/god_club/bank.c"`), while the other two
+("moon", "sky") were already extensionless in the raw archive and are
+unaffected — proof the field is meant to be extensionless. `bankd.lpc`
+reads this value straight into `load_object(dbase["location"])->
+create()` in two places: `clear_data()` (reachable live via a player's
+own `clear <deposit|withdraw>` command in `std/room/club_bank.lpc`,
+AND automatically whenever `do_save()`'s bank-log string grows past
+1200 characters during ordinary deposit/withdraw activity) and the
+disabled `interest_receive()`. For the "god"/"dragon" clubs this would
+throw ("Applying a function… on a destructed or non-object") the very
+next time either path fires. Fixed with a small helper mirroring the
+project's standard §7.126 fix shape:
+```lpc
+string resolve_location(string dir)
+{
+        if( stringp(dir) && strlen(dir) > 2 && dir[strlen(dir)-2..] == ".c" )
+                dir = dir[0..strlen(dir)-3];
+        return dir;
+}
+```
+...used at both `load_object(dbase["location"])` call sites. See
+AGENTS.md §7.126's now-extended entry for the general lesson (a plain
+literal path stored in save-file `dbase` data is just as susceptible
+as a macro-placeholder AREA-engine value — the mechanism differs but
+the root cause and fix shape are identical).
+
+### Sect join, skill training, combat — all verified clean
+
+- **Sect join** (organic path only; no separate admin shortcut command
+  exists in this codebase): 李書文 (`open/world1/tmr/area/s_house.lpc`,
+  the 八極門 sect teacher) requires `join 八極門` → `speak 劈掛參八極，
+  英雄歎莫及` (a password phrase carved into the room's own wall
+  plaque, discoverable via `look`) → `join 八極門` again. Verified live
+  end-to-end on the admin test account: `score`'s title correctly
+  changed from `【 大 神 】` to `八極門第七代俠客`, matching
+  `create_family("八極門",7,"俠客")`.
+- **Skill training**: `slist`/`train <skill>`/`level`/`advance <stat>`
+  all verified live and correctly reflected in subsequent `slist`/
+  `score` output (no float-display corruption, no silent no-op).
+- **Combat**: `kill` on a low-level "peaceful"-attitude wild NPC
+  (旅客/Traveler at 朝天湖, whose own `accept_fight()` unconditionally
+  refuses a formal duel but does not block a direct `kill`, matching
+  this project's well-documented cross-lib `kill`-bypasses-safety-gate
+  finding) produced normal two-way damage, several live skill-ups
+  (`unarmed`/`dodge`/`combat`), and a clean NPC death with a corpse
+  object — no crash, no `debug.log` signal. No lib-specific safe-spar
+  mechanism (dummy/strawman) was found to exist in this codebase
+  (grepped for one before falling back to a wild NPC, per methodology
+  step 3). Player-death/resurrection was not reached live this session
+  (budget); left as an explicit gap rather than silently skipped.
+
+### Quit / relogin persistence — verified clean, with a methodology note
+
+A real `quit` → reconnect cycle (character `shenzhi`, `train sword` →
+`slist` confirms level 1 → `quit` → reconnect on the SAME driver
+process → `slist` still shows level 1) confirms save/restore across a
+genuine quit is correct. `debug.log` grepped after every single `quit`
+throughout the whole session (registration, sect join, skill training,
+combat, multiple reconnects): **zero fatal errors, zero "Fail to load
+object", zero uncaught-error traces** — only the pre-existing benign
+lazy-compile warnings already noted at onboarding (stray-backslash
+`\` escape-sequence warnings, one unused-variable warning).
+
+Room position is intentionally reset to `START_ROOM_PAST`
+(`/open/world1/tmr/area/hotel`, `include/login.h`) on every `quit`
+regardless of where the player currently is (`cmds/std/quit.lpc`'s
+unconditional `me->set("startroom", START_ROOM_PAST)`) — confirmed
+this is deliberate, pre-existing design (an "always return to the inn"
+convention), not a bug, since the very same file also independently
+calls `me->save()` correctly.
+
+**Methodology note for future sessions on this lib (or any lib)**: a
+mid-playtest driver restart (needed here to pick up the two live-coded
+fixes above) destroys any in-memory progress made since the character's
+last real `save()`/`quit` — this produced a confusing false alarm
+mid-session (a trained skill appeared to have been silently wiped by
+`quit`+relogin) that was fully explained by the driver restart having
+happened *between* the training and the eventual clean quit, not by
+any bug in the save/restore path itself. Confirmed by re-running the
+exact same train→quit→relogin sequence with no restart in between,
+which persisted correctly. Always redo a clean, no-restart-in-between
+save/quit/relogin cycle before trusting a persistence verdict if a
+driver restart happened anywhere in the preceding session.
+
+### Confirmed content gap (NOT fixed, per project policy)
+
+- `doc/help/newbie/newbie1` explicitly tells new players to run `help
+  start_1` for sect explanations ("關於門派，請參考help start_1"), but
+  no such help topic exists anywhere in the archive (`help start_1`
+  returns "沒有針對這項主題的說明文件。"; `find doc/help -iname
+  '*start_1*'` returns nothing). Pre-existing upstream documentation
+  gap, not a conversion artifact (the raw archive has no such file
+  either); not fabricated.
+
+### Test/verification housekeeping
+
+- Test character `shenzhi`/沈知 fully deleted (`data/user/s/
+  shenzhi.o`, `data/login/s/shenzhi.o`) before finishing.
+- Admin account `fluffos`/`Mud@2026` picked up incidental state during
+  the sect-join/combat speed-tests above (used as the fast-travel
+  account via `goto`, since walking the ~35-step alias path to the
+  sect teacher was impractical within budget) — re-seeded fresh
+  (deleted and re-registered) to restore the clean baseline documented
+  at onboarding: level 1, 777 exp, no `class1`, human/male, `(admin)`
+  wizlist status reverified live post-reseed.
+- `libs/dreamofseven/work/data/record.o` and `.../data/usrlist` show
+  routine boot-churn diffs (uptime/cmds-per-second display caches) from
+  the several reboots this session required; committed alongside, no
+  action needed (matches this project's standard save-churn precedent).
