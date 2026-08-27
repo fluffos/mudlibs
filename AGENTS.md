@@ -9784,6 +9784,21 @@ time one of them gets touched — `dsIII` already got the ORIGINAL
 `secure/sefun/economy.lpc` return-value variant of this section fixed,
 but that fix does not cover this distinct parameter-boundary shape.
 
+**Sibling sweep completed (2026-08-27)**: checked all five flagged
+libs' own `eventRevive()`. `dshakkard` and `deadsouls_fluffos` share
+the identical `PERCENT_MP`/`PERCENT_HP` float-`#define` scheme and had
+the same bug — fixed identically with `to_int()` wraps, verified live
+on both (`dshakkard`: `hp: 120/400 mp: 0/780` post-fix, raw save
+`HealthPoints 120`/`MagicPoints 0`; `deadsouls_fluffos`: `hp: 111/370
+mp: 23/460` post-fix, raw save `HealthPoints 111`/`MagicPoints 23` —
+both clean integers, no float, in either save file). `dsI`, `dsII`,
+and `dsIII` are all confirmed NOT AFFECTED — none of the three ever
+adopted the `PERCENT_MP`/`PERCENT_HP` scheme; their `eventRevive()`
+heals HP/MP/SP back with plain integer division (`GetMaxHealthPoints()
+/2`-style), which never produces a float in the first place. This
+closes the sibling-sweep flag for all five previously-unchecked
+lineage members.
+
 ### 7.123 A bare `identifier = (mapping-or-array-literal);` statement at file scope, outside any function, is not a valid initializer on this driver — the compiler misparses it as an attempted global-variable redeclaration with no inferable type, hard-failing the whole file's compile with zero runtime symptom beyond "this daemon has no program"
 
 Some archives' authors used a MudOS/LDMud convention where a global is first `declared` bare (`nosave mapping foo;`), then given its real value via an ordinary-looking top-level assignment statement later in the same file (`foo = ([...]);`, entirely outside `create()` or any other function) — legal on some drivers as a one-time init-on-load statement. On this driver it is not: any bare `IDENT = EXPR;` appearing outside a function body is parsed as a type-less re-declaration attempt of `IDENT`, which the compiler reports as `error: Type mismatch ( unknown vs <realtype> ) when initializing IDENT` plus a `warning: Redeclaration of global variable`, and the whole file fails to compile. Because the file simply never gets a program, every caller sees only `*No program in object '/path/to/file'!` at the call site — no indication at all that the ROOT problem is this specific statement shape, and (per §10.7's `bxsj`-lesson pattern) the resulting missing functionality can be totally silent if the failing call is itself uncaught and the caller doesn't check its own error path.
@@ -9822,6 +9837,30 @@ did before) — see `libs/dsI/NOTES.md` §10.2 for the full write-up.
 Worth a quick `grep -n 'Wimpy = 0\.' lib/combat.lpc` (or whatever the
 lib's own path is) on any other untested Nightmare/Dead-Souls-lineage
 sibling next time one gets a §10.7 pass.
+
+**Sibling sweep completed (2026-08-27) across the separate Dead Souls
+3.x lineage** (`ds386`/`dsIII`/`dshakkard`/`deadsouls_fluffos` — a
+different, later codebase from the `dsI`/`nightmare4` Nightmare-IV
+lineage above, but sharing the identical `lib/combat.lpc` `Wimpy`
+field name and byte-identical buggy literal): all four had the exact
+same `Wimpy = 0.20;` plus `float SetWimpy`/`float GetWimpy` mistyping.
+Fixed identically in all four; verified live on `ds386` (this
+sub-lineage's own original finder), `dsIII`, `dshakkard`, and
+`deadsouls_fluffos` — each fresh-character `wimpy` command reports the
+clean integer `"Percentage: 20%"` post-fix. `dsI` (this separate
+lineage's own earlier generation) was independently found and fixed by
+its own prior `§10.7` pass before this sweep. `dsII`, however, was
+NOT actually fixed despite its own NOTES.md's §7.124 checklist item
+reading "no new candidate found... left unconfirmed either way" — a
+direct code check during this sweep found the identical byte-for-byte
+`Wimpy = 0.20;`/`float SetWimpy`/`float GetWimpy` bug still present and
+live; fixed and verified the same way (`wimpy` -> `"Percentage: 20%"`).
+This closes the Wimpy-shape check across every currently-onboarded
+Dead Souls variant in the corpus — and is a reminder that a prior
+pass's own "unconfirmed"/"no candidate found" language is not the same
+as a verified-clean result; re-check the actual code, not just the
+summary, when a sibling sweep's premise assumes a lib is already
+handled.
 
 ### 7.125 A shared `enter_world()` unconditionally sets the "has the player registered their recovery email" flag to true a few lines before the function's OWN later code checks that exact flag — permanently defeating every gate keyed on it, from the very first character ever created
 
@@ -11028,6 +11067,20 @@ Nightmare-lineage libs that share `lib/std/room.lpc`'s ancestry
 (`ds386`, `dsII`, `dshakkard`, `deadsouls_fluffos` — check each one's
 own `room.lpc`-equivalent `create()` for the same `replace_program()`
 shape next time one gets touched).
+
+**Sibling sweep completed (2026-08-27)**: `ds386`, `dsII`, `dsIII`,
+`dshakkard`, and `deadsouls_fluffos` all had the identical fold in
+`lib/std/room.lpc`'s `create()` — all fixed identically (fold removed
+entirely, `SetNoReplace()`/`GetNoReplace()` left as unused API). Note:
+`dsII`'s own earlier §10.7 round-two pass had NOT actually found or
+fixed this (its NOTES.md left several other checklist items
+"unconfirmed" without specifically grepping `replace_program(` in
+`lib/std/room.lpc`) — verify a sibling's own prior-pass writeup against
+the actual current code rather than trusting its summary language at
+face value, exactly as happened here. `dsII`'s fix verified live: a
+fresh boot's `say` command worked with zero crash at ~26 seconds
+post-boot (squarely inside the ~5-minute vulnerable window). This
+closes out every lib in this section's original candidate list.
 
 ### 7.142 A hardcoded room-exit path missing a directory segment silently lands on a virtual-object engine's own auto-manufactured DUPLICATE instance instead of throwing — invisible to any boot/compile check, and to a casual `look`, because the destination technically resolves
 
