@@ -289,3 +289,44 @@ silver for gold` — printed a clean `2 gold` with no decimal, and the
 raw save file after `save` showed `Currency
 (["silver":186,"gold":2,])` — both integers, no float. `log/debug.log`
 stayed clean through the whole sequence.
+
+## Sibling sweep of ds386's round-two `eventRevive()`/room.lpc/combat.lpc/beggar.lpc bugs (2026-08-27)
+
+Per `ds386/NOTES.md`'s "Deep functional test (round two, 2026-08-27)"
+section, checked the four flagged bug shapes here. All four present
+and fixed identically:
+
+- **Bug #1, SEVERE (`eventRevive()` float corruption, AGENTS.md
+  §7.121 class -- a distinct call-argument-boundary variant from the
+  return-value one this lib already fixed above)**: `lib/player.lpc`'s
+  `eventRevive()` fed `GetMaxMagicPoints() * PERCENT_MP` /
+  `GetMaxHealthPoints() * PERCENT_HP` (float expressions) into
+  `AddMagicPoints(int x)`/`AddHealthPoints(int x, ...)`, corrupting
+  `MagicPoints`/`HealthPoints` into floats on every player death.
+  **Fixed** by wrapping both in `to_int()`, matching `ds386`'s fix
+  exactly. **Verified live**: registered a fresh AUTO_WIZ creator
+  character (`Qintestdfx`), ran `eval object x =
+  find_player("qintestdfx"); x->eventDie("test");` then `regenerate`
+  -- post-fix status bar showed `hp: 111/370  mp: 23/460`, clean
+  integers; `save` confirmed the raw save file has plain integer
+  `HealthPoints 111` / `MagicPoints 23` lines, no float.
+- **Bug #2 (`replace_program()` fold, AGENTS.md §7.141)**: same
+  MudOS-era fold present in `lib/std/room.lpc`'s `create()` (`protected
+  void create()` variant here rather than `nosave void create()`, same
+  fold body otherwise). Removed it entirely, identical to
+  `ds386`/`dsI`/`dsIII`/`dshakkard`.
+- **Bug #3 (`Wimpy` fraction-vs-percentage, AGENTS.md §7.124 class)**:
+  `lib/combat.lpc:65` had `Wimpy = 0.20;` plus `float SetWimpy`/`float
+  GetWimpy`. Fixed to `Wimpy = 20;` and `int SetWimpy`/`int GetWimpy`.
+  **Verified live**: `wimpy` command on the same fresh character
+  showed `Percentage: 20%`, a clean integer from creation.
+- **Bug #4 (`GiveMap()` reentrancy, `domains/town/npc/beggar.lpc`)**:
+  same missing delivery-time `!present("town map",ob)` guard. Fixed
+  identically to `ds386`.
+
+Committed only the four source-file fixes plus the new `Qintestdfx`
+test-creator account's realm/save files (following this lib's own
+precedent of keeping test-creator accounts, e.g. `Qintestdsf` above);
+`RELEASE_NOTES_HTTP`/daemon-state save churn from booting the driver
+was reverted first, not committed. Killed the test driver by exact
+PID when done.

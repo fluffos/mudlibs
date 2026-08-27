@@ -62,7 +62,7 @@ protected void create(){
     fNextRound = 0;
     cParalyzed = 0;
     tNextRound = ROUND_UNDEFINED;
-    Wimpy = 0.20;
+    Wimpy = 20;
     WimpyCommand = "go out";
 }
 
@@ -323,11 +323,11 @@ int GetBaseStatLevel(string stat){
     return race::GetBaseStatLevel(stat);
 }
 
-float SetWimpy(float wimpy){
+int SetWimpy(int wimpy){
     return (Wimpy = wimpy);
 }
 
-float GetWimpy(){
+int GetWimpy(){
     return Wimpy;
 }
 

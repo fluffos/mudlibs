@@ -257,9 +257,9 @@ varargs void eventRevive(int nopenalty){
     NewBody(GetRace());
     eventCompleteHeal(GetMaxHealthPoints());
     SetSpecialTarget( ({}) );
-    AddMagicPoints(-(GetMaxMagicPoints() * PERCENT_MP));
+    AddMagicPoints(to_int(-(GetMaxMagicPoints() * PERCENT_MP)));
     AddStaminaPoints(-(GetMaxStaminaPoints() * PERCENT_SP));
-    AddHealthPoints(-(GetMaxHealthPoints() * PERCENT_HP));
+    AddHealthPoints(to_int(-(GetMaxHealthPoints() * PERCENT_HP)));
     if(this_object()->GetLead()){
         int shots = this_object()->GetLead("gunshot_wounds");
         if(shots) this_object()->AddLead("gunshot_wounds", -shots);
