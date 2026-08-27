@@ -508,3 +508,332 @@ into), only via a real driver boot-and-kill compile check confirming
 both files still compile clean; a future deep-functional pass on any
 lib that eventually builds real content atop this engine (or a WASM
 re-test of this repo itself) should re-verify live.
+
+## Deep functional test (round two), 2026-08-27
+
+One continuous session per AGENTS.md §10.7. This lib had never had a
+full round-two playthrough before (confirmed via this file having no
+"深度功能测试"/dated round-two heading), only the original onboarding
+verification plus the two sibling-fix ports above (immediately
+re-verified live, see below). Registered real English-named
+characters (`Tamsworth`, `Zebulon`, `Wendlebury`, each deleted before
+committing) through the full `new` -> name -> confirm -> password ->
+confirm flow, exercised `look`/`stats`/`vitals`/`health`/`i`/`smile`
+at every state change, tested `quit` with a `debug.log` grep before
+and after every session, and reconnected both immediately and after a
+real wall-clock gap. Admin login re-verified: `fluffos`/`Mud@2026`
+(no `x`-suffix quirk needed here, unlike `arkadia`) still authenticates
+and shows `WIZ_KEEPER` rank. No newbie-help file exists to read first
+(this repo's own `doc/man/general/INTRO` is a wizard LPC-coding
+tutorial, not player-facing help — expected, given no domain content
+ships at all); the intended "test path" is simply the bootstrap
+landing room itself.
+
+Six new, previously-undetected, live-reproduced bugs found and fixed
+this pass, plus the two already-ported sibling fixes re-confirmed
+live where this repo's content-free nature allows it, plus one
+genuinely unresolved observation documented honestly rather than
+guessed at.
+
+### Re-verification of the two already-ported sibling fixes
+
+- **`do_decay()` (AGENTS.md §7.132)**: confirmed present
+  (`secure/master/fob.lpc`'s `do_decay(string dname, mixed *darr)`).
+  Still not live-exercisable here (`m_domains` never accumulates real
+  data with no domain content), verified via boot-and-kill compile
+  check only, unchanged from the original port note.
+- **`room_descs` (AGENTS.md §7.134)**: confirmed present
+  (`std/room/description.lpc`'s `nosave mixed room_descs = ({});`).
+  Same live-exercise limitation as above (no real rooms to walk into
+  besides the one bootstrap room, which itself never calls
+  `add_my_desc()`) — but the bootstrap room's own `look` was exercised
+  extensively this pass and never crashed, consistent with the fix.
+
+### 1. `check_valid_startloc()` calling two SECURITY functions that don't exist anywhere in this codebase — every mortal quit silently treated as "not a recoverable location" (AGENTS.md §7.135's write-up, different architecture than the arkadia original)
+
+`std/player/cmd_sec.lpc:134` (`quit()`'s own inventory-drop gate) called
+`IN_ARRAY(env, SECURITY->query_list_def_start())` /
+`SECURITY->query_list_temp_start())` — functions that exist NOWHERE in
+this codebase (already flagged, but left unfixed, in this file's own
+§2 "documented CD-driver graceful degradation" section, because the
+`member_array()` leniency shim happens to absorb the resulting
+undefined-function-call fallout as a graceful `-1` rather than a
+crash). **Fix**: swapped to the real, already-existing
+`VALID_DEF_START_LOCATION()`/`VALID_TEMP_START_LOCATION()` macros
+(`sys/files.h`), which wrap `sys/global/filepath.lpc`'s real
+`valid_def_start_location()`/`valid_temp_start_location()` functions.
+This is the closest genesis analogue to arkadia's own §7.135 finding
+(both are about `quit()`'s inventory-drop gate silently
+misclassifying a legitimate location) — but the ROOT CAUSE differs:
+arkadia's was a missing lazy-init guard on one sibling accessor out of
+several; genesis's `sys/global/filepath.lpc` initializes its
+equivalent globals eagerly in `create()` (no lazy-guard shape to be
+missing at all) and the actual bug was a wrong callee entirely.
+Verified live: standing in the bootstrap room and quitting no longer
+silently treats it as non-recoverable.
+
+### 2. `DEF_STARTING_PLACES` never updated to include the one real starting room this port has — "SERIOUS PROBLEM with your start location" printed on literally every mortal login
+
+`config/sys/local.h`'s `DEF_STARTING_PLACES` (used by
+`sys/global/filepath.lpc` to validate a mortal's
+`default_start_location`) still lists only the five original
+`/d/Genesis/start/<race>/...` paths — none of which exist in this
+repo. `std/player/savevars_sec.lpc`'s `set_default_start_location()`
+requires `VALID_DEF_START_LOCATION()` for any non-wizard, so it
+silently rejected the only real starting room this port added
+(`/secure/login/bootstrap_room`, per `RACESTART`) on every single
+mortal login — `enter_game()`'s first `try_start_location()` attempt
+always failed as a result (the accessor never actually got updated),
+printing `"SERIOUS PROBLEM with your start location. You revert to
+your default racial start location."` before falling through to the
+racial-default fallback (`query_def_start()`, called directly,
+bypassing the broken accessor), which happened to still succeed.
+**Fix**: added `/secure/login/bootstrap_room` to `DEF_STARTING_PLACES`,
+exactly the same "let login work" rationale already used for
+`WIZ_ROOM`/`RACESTART` in the same file. Verified live: a fresh mortal
+character's login no longer shows the SERIOUS PROBLEM message at all.
+
+**Residual, wizard-only**: wizards bypass `set_default_start_location()`'s
+validation entirely (`query_wiz_level()` is checked first), so this
+specific fix does not change their path — see the unresolved
+observation below for why the seeded admin account still shows this
+message every login despite having a correctly-saved
+`default_start_location` on disk.
+
+### 3. Missing basic player command souls — no mortal OR wizard could `look`, `get`, `drop`, `say`, or use ANY ordinary verb (AGENTS.md §7.136, new entry)
+
+The headline bug this pass. See AGENTS.md §7.136 for the full
+technical write-up (root cause, the `raw/secure/proto_char.o` evidence
+trail, and the fix). Summary: `setup_player()` strips a mortal's
+entire `cmdsoul_list` on every login relying on the (missing) race
+content to grant the real set back; nothing does, so
+`load_command_souls()` fell back to the NPC-shaped `NPC_SOULS`
+default, which is missing every ordinary player verb soul. Fixed with
+a new `DEFAULT_PLAYER_SOULS` constant (`secure/auto.h`), sourced
+directly from this repo's own shipped `raw/secure/proto_char.o`,
+reseeded for both mortals and wizards. Verified live: a freshly
+registered mortal (`Tamsworth`/`Zebulon`/`Wendlebury`, all three
+tested) and the previously-broken seeded admin account (`fluffos`)
+both now have working `look`/`i`/`stats`/`smile`/every ordinary verb.
+
+### 4. `command("$...")` — CD-driver quicktyper-bypass convention with no equivalent on this driver, 13 silently-dead call sites (AGENTS.md §7.137, new entry)
+
+See AGENTS.md §7.137 for the full write-up. Summary:
+`doc/man/efun/command` documents a leading `"$"` as "bypass the
+quicktyper" — this driver's real `command()` has no such handling at
+all, so every `command("$verb ...")` call site silently dispatched a
+literal, nonexistent `"$verb"` and always failed. Found because the
+very first `look` after every login (`start_player()`'s
+`command("$look")`) always silently failed. Swept all 13 call sites
+(`std/player.lpc`, `std/living/possess.lpc`, `std/living/move.lpc`,
+`std/player/cmd_sec.lpc`'s `quit()` drop calls,
+`std/launch_weapon.lpc`, `cmd/live/things.lpc`,
+`cmd/std/tracer_tool.lpc`, `cmd/live/thief.lpc` x5,
+`cmd/wiz/arch.lpc`), stripping the leading `"$"` — confirmed safe
+since this codebase's own quicktyper's alias-interception hook,
+`modify_command()`, is itself dead code on this driver (never called,
+zero references in driver source), so there was no alias-interference
+risk to preserve. Verified live: the login auto-look now correctly
+shows the room description immediately, with no manual `look` needed.
+
+### 5. `move_living()`'s magic-map notification: unguarded `call_other()` on a `0` object on EVERY successful move, project-wide
+
+`std/player.lpc`'s `move_living()` override notifies a "magic map"
+item of every successful move (`!result` means success, per this
+function's own return-value convention) via `magic_map->
+notify_new_room(to_dest)`, where `magic_map` is set from
+`present(MAGIC_MAP_ID)` — but never falls back to anything if no such
+item is present (true for every move in this content-free repo, since
+no magic map item ships anywhere). This driver's `call_other()` hard-
+errors on a plain `int(0)` target ("Bad argument 1 to EFUN
+call_other()") rather than degrading gracefully — unlike several
+other missing-item call sites elsewhere in this port, this one had no
+`objectp()` guard. Confirmed live: logged in `debug.log` on literally
+the first move of a brand new character's registration, and every
+move after, project-wide (the existing `catch()` suppressed the crash
+but not the log noise). **Fix**: added an `objectp(magic_map)` guard
+before the call, matching the same pattern already used pervasively
+elsewhere in this port for other missing-item call sites.
+
+### 6. `quit()`'s own skill-decay alarm outliving the just-destructed player object — a guaranteed dangling-alarm error on every mortal quit
+
+`std/player/cmd_sec.lpc`'s `save_me()` (called from `quit()` right
+before the player object is destructed) schedules `set_alarm(1.0, 0.0,
+decay_skills)` whenever `query_skill_decay()` is true — which it
+always is after the very first login, since `setup_player()`'s
+`setup_skill_decay()` unconditionally sets `do_skill_decay = 1` for
+every mortal. `quit()` then immediately calls
+`this_object()->remove_object()`, destructing the player one second
+before that alarm fires — producing `"*Owner (.../ghost_player#N) of
+function pointer is destructed"`, uncaught, in `debug.log`, on
+literally every single mortal quit. Same underlying shape as
+`arkadia`'s own AGENTS.md-documented dangling-alarm finding (§8.5
+there), but on the universal player-quit path instead of a peripheral
+login helper, and reproducible on every quit rather than an edge case
+— **not yet in AGENTS.md as its own numbered entry**, since it's a
+single narrow instance so far, not (yet) confirmed on a second lib;
+worth promoting to a numbered cross-cutting entry if it recurs.
+**Fix**: added `skill_decay_alarm` (with `query_skill_decay_alarm()`/
+`set_skill_decay_alarm()` accessors, needed because
+`std/player/cmd_sec.lpc` is a text-`#include`d fragment positioned
+ABOVE this variable's own declaration in `std/player.lpc`, so a bare
+reference to it is "Undefined variable" at compile time) to track the
+outstanding alarm id, and a `remove_object()` override that cancels it
+before deferring to `::remove_object()` — a single destruction choke
+point that also covers any OTHER removal path, not just `quit()`.
+Verified live: a full driver restart, fresh mortal registration,
+`quit()`, and `debug.log` grep immediately after shows ZERO dangling-
+alarm errors (only the two already-documented, benign missing-content
+catch()-wrapped errors remain: `/d/Genesis/cmd/misc` at object
+creation time, `/d/Web/stats/webstats` on quit).
+
+### Unresolved observation: `login_time`/`login_from`/(for wizards only) `default_start_location` never actually restore from a correctly-saved value, despite `restore_object()` reporting success
+
+Confirmed live, root cause NOT confirmed within this pass's time
+budget — documented honestly per this project's own testing standard
+rather than guessed at. Symptom: every single login (fresh or
+returning, mortal or wizard) prints `"Last login at: Wed Dec 31
+16:00:00 1969"` / `"Last login from: 0"` — the Unix epoch defaults —
+even immediately after a session that demonstrably `set_login_time()`/
+`set_login_from()`'d real values and saved cleanly (confirmed via
+direct inspection of the `.o` file on disk: `login_time
+1787852608`/`login_from "localhost"` are genuinely present and
+correct). Added temporary `write()` debug instrumentation directly
+after `load_player()`'s own `ret = restore_object(PLAYER_FILE(pl_name))`
+call (removed before committing) and confirmed: `restore_object()`
+returns `1` (success) but `query_default_start_location()`/
+`query_login_from()`/`query_login_time()` are ALREADY empty/`0`
+immediately afterward, on the SAME line, before any other code has a
+chance to touch them.
+
+This is NOT visible on mortal accounts for `default_start_location`
+specifically, because `enter_game()`'s own logic unconditionally
+resets that ONE field for non-wizards regardless of what restore
+produced (masking the failure) — it stays visible for `login_time`/
+`login_from` on EVERY account (nothing resets those) and for
+`default_start_location` on wizard accounts specifically (the reset
+path is `!query_wiz_level()`-gated). This is why the seeded admin
+account (`fluffos`) still shows the "SERIOUS PROBLEM with your start
+location" message on every single login even after fix #2 above — the
+`.o` file's `default_start_location` is correct, but never actually
+gets restored into the live object before the check runs.
+
+Best working hypothesis (NOT confirmed as the actual mechanism):
+`std/player/savevars_sec.lpc` declares `default_start_location` as the
+7th name in a single long comma-separated `private string a, b, c,
+...;` statement, following several fields (`player_file`, `path`,
+`mailaddr`, `adj_desc`) that are never set for a plain bootstrapped
+character and therefore never appear as lines in the saved file at
+all (this driver's `save_object()` omits fields still at their
+compile-time default) — a "sparse" middle of that declaration list.
+`login_from`/`login_time` sit in similarly-shaped later declarations.
+Every field BEFORE the first gap (`name`, `password`) restores
+correctly; every field tested AFTER a gap does not. This is consistent
+with (but not proven to be) a `#pragma save_binary` restore-side
+quirk on this driver where a sparse/gapped save file causes later
+name-keyed lines to misalign against the variable table — as opposed
+to a bug in this port's own code, since the `.o` file's own content is
+unremarkable, well-formed, and byte-for-byte what a human would expect
+to see.
+
+**Why this is flagged as an observation rather than "fixed"**: (a) no
+gameplay-relevant data loss was ever observed — `race_name`,
+`cmdsoul_list`, `learn_pref`, `acc_exp` (all declared in a DIFFERENT
+file, `std/living/savevars.lpc`, the base class rather than the
+player-specific fragment) restore correctly and consistently across
+every tested session; (b) the affected fields are cosmetic/display-only
+(a "Last login" banner) except for the wizard-only SERIOUS PROBLEM
+message, which is itself harmless and self-healing via the existing
+fallback chain; (c) `arkadia` (the sibling engine, byte-identical
+`savevars_sec.lpc`) does not report this same symptom in its own
+NOTES.md after its own §7.135 fix, suggesting this may be specific to
+some other, not-yet-identified difference in genesis's own file
+layout or save history rather than a generic engine/driver bug —
+guessing at a fix here risks a worse, harder-to-diagnose regression
+than leaving it alone. Worth a focused follow-up pass specifically
+tracing `restore_object()`'s behavior against a deliberately
+constructed minimal test object with the same "sparse gap in a
+multi-variable declaration" shape.
+
+### Standing cross-cutting patterns checked systematically
+
+- **§7.121** (float arithmetic in a declared-`int` function without
+  `to_int()`): checked `std/living/combat.lpc` (6 float literals, all
+  on the correctly `float`-typed `speed`/`query_speed()`, no int-typed
+  function ever computes with them), `lib/trade.lpc`, `std/coins.lpc`
+  (zero float literals in either). Clean.
+- **§8.3a** (`private`-declared dispatch/callback function silently
+  demoted via inheritance): grepped every `private nomask` file
+  codebase-wide against real inheritance + `add_action`/`call_out`/
+  `set_alarm` string-dispatch targets. `std/launch_weapon.lpc` (real
+  inheritance: `std/bow.lpc`) and `std/projectile.lpc` (real
+  inheritance: `std/arrow.lpc`) both checked in detail — their
+  `add_action()`-registered verb handlers (`shoot`/`aim`/`fire`/
+  `unload`/`select`/`secondary_wep_cmd`) are all `public`/unmarked, not
+  `private`; the actual `private` functions in those files are
+  internal helpers (`parse_aim`, `parse_select`, `setup_sane`, etc.)
+  only ever reached via bare same-file internal calls, never
+  string-dispatch. Clean.
+- **§7.112** (NPC/death-related `init()` unconditionally scheduling a
+  call_out chain with no re-entry guard): `std/monster.lpc`/
+  `std/creature.lpc` have no `init()`/`set_alarm`/`call_out` of their
+  own at all (inherit the shared `std/living.lpc` one, which only adds
+  movement commands), and `std/player/death_sec.lpc` has none either
+  — this engine's death/NPC architecture doesn't use this shape at
+  all. Not applicable.
+- **§7.122** (class/marker-item duplication on disconnect/reconnect):
+  same architectural reasoning as `arkadia`'s own clean check (no
+  independent inventory-object save/reload duplication in
+  `std/object.lpc`/`std/container.lpc`, and `load_auto_obj()` is only
+  ever reached from a fresh clone's `enter_game()`, never a live
+  reconnect). Clean.
+- **§7.123** (bare file-scope `IDENT = (...)` statement): corpus-wide
+  grep for a true top-level (column-0) assignment found zero matches
+  anywhere in this codebase. Clean.
+- **§7.124** (fraction-vs-percentage threshold mismatch): no
+  percentage-scale threshold field found with a float literal
+  initializer anywhere in the combat/whimpy code path. Clean.
+- **§7.126** (stale pre-`.c` extension in `.o` save data): this engine
+  has no coordinate-grid AREA/door-data persistence mechanism at all —
+  same conclusion as `arkadia`. Not applicable.
+- **§7.129** (`tell_room()`/`message()` wrapper forwarding an omitted
+  argument as literal `0`): `secure/simul_efun.lpc`'s `tell_room()`/
+  `say()` are implemented via `catch_msg()` on a filtered
+  `all_inventory()` list; a codebase-wide grep for the raw `message()`
+  efun found zero call sites anywhere. Clean.
+- **§7.130** (unconditional liveness-check call after already-detected
+  non-interactivity): `std/living/heart_beat.lpc`'s `HEART_NEEDED` is
+  `#undef`'d — heart_beat() is a complete no-op in this engine, same
+  as `arkadia`. Clean.
+- **§7.131** (`find_living()`/`find_player()` requiring explicit
+  `set_living_name()` registration): `std/player.lpc`'s
+  `setup_player()` correctly calls `set_living_name(pl_name)`. Clean.
+
+### Shop/economy/combat/guild — unreachable, unchanged from onboarding
+
+Same as `arkadia`'s own honest disclosure: this repo ships no domain
+content at all, so shop/economy, combat, and guild/skill acquisition
+remain explicitly UNVERIFIED this pass — not something this pass's
+driver-bugs-only scope permits fixing, and there is no real content
+anywhere in this repo to reach them through. The bootstrap landing
+room (`secure/login/bootstrap_room.lpc`) is the only room; no NPCs, no
+items, no shops exist to test against.
+
+### Verification summary
+
+- Real driver boot (`~/src/fluffos/build-debug/src/driver
+  config.fluffos`) — clean compile, zero errors, only pre-existing
+  `cmd/std/tracer_tool.lpc` warnings unrelated to this pass.
+- Live registration/login/quit/reconnect cycle tested on three
+  throwaway mortal characters (`Tamsworth`, `Zebulon`, `Wendlebury` —
+  all deleted before committing) and the seeded admin account
+  (`fluffos`/`Mud@2026`, still authenticates, `WIZ_KEEPER` rank
+  confirmed via `stats`).
+- `debug.log` grepped after every single quit; only the two
+  already-documented, benign, `catch()`-wrapped missing-content errors
+  remain (`/d/Genesis/cmd/misc` at object-creation time,
+  `/d/Web/stats/webstats` on quit) — zero new/unexpected errors after
+  all six fixes above.
+- Port-uniqueness sanity check (`grep -h '"port"' libs/*/meta.json |
+  grep -oE '[0-9]{5}' | sort -n | uniq -c | awk '$1>1'`) — clean,
+  no output.

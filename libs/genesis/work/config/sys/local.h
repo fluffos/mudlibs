@@ -127,12 +127,28 @@
  *
  * This array contains all the places that are acknowledged starting places
  * by default.
+ *
+ * FluffOS PORT NOTE: all five original entries are missing /d/Genesis
+ * domain content (see RACESTART above) -- none of them exist in this
+ * repo at all, so std/player/savevars_sec.lpc's set_default_start_location()
+ * (which requires VALID_DEF_START_LOCATION() for any non-wizard) silently
+ * rejected the only real starting room this port has
+ * (/secure/login/bootstrap_room, per RACESTART) on every single mortal
+ * login. Confirmed live: enter_game()'s first try_start_location() call
+ * always failed as a result (default_start_location was never actually
+ * set), printing the scary-but-otherwise-harmless "SERIOUS PROBLEM with
+ * your start location" message on every login before falling through to
+ * the racial-default fallback (query_def_start(), called directly,
+ * bypassing the broken accessor) which happened to still succeed. Added
+ * the bootstrap room here too, exactly like WIZ_ROOM below -- "let login
+ * work correctly", not invented content.
  */
 #define DEF_STARTING_PLACES ({ "/d/Genesis/start/human/town/church", \
 			       "/d/Genesis/start/goblin/caverns/quarters", \
    			       "/d/Genesis/start/elf/room/begin", \
 			       "/d/Genesis/start/hobbit/v/church", \
-			       "/d/Genesis/start/dwarf/lvl1/temple"})
+			       "/d/Genesis/start/dwarf/lvl1/temple", \
+			       "/secure/login/bootstrap_room"})
 #define TEMP_STARTING_PLACES ({ })
 
 /*

@@ -130,6 +130,60 @@
 #endif
 
 /*
+ * DEFAULT_PLAYER_SOULS
+ *
+ * FluffOS PORT NOTE: std/player.lpc's setup_player() unconditionally
+ * strips a mortal's ENTIRE cmdsoul_list on every single login ("Non
+ * wizards should not have a lot of souls"), relying on something else
+ * to grant the real, curated per-race set back -- in the original,
+ * unported game this was almost certainly done by the (missing, see
+ * \S6) race std files as part of embodying a player. With no race std
+ * content in this repo at all, every mortal's cmdsoul_list stayed
+ * permanently empty after this strip, so std/living/cmdhooks.lpc's
+ * load_command_souls() (shared with NPCs) fell back to NPC_SOULS --
+ * correct for an actual mobile, wrong for a player: it grants only
+ * "/cmd/std/soul_cmd" (a real file) plus "/d/Genesis/cmd/misc" (missing
+ * domain content, logged as "Yikes, baaad soul" on every command), and
+ * omits every basic player verb soul (look/get/drop/inventory/say/
+ * emote/etc.) entirely -- confirmed live: a freshly registered mortal
+ * ("Tamsworth") could not even "look". Rather than invent a soul list,
+ * this is taken directly from this repo's own shipped
+ * raw/secure/proto_char.o (the original mudlib's new-character
+ * template save), whose real cmdsoul_list is:
+ * ({"/d/Genesis/cmd/soul_cmd_ghost","/d/Genesis/cmd/misc_cmd_ghost",
+ * "/d/Genesis/cmd/double","/cmd/live/info","/cmd/live/items",
+ * "/cmd/live/magic","/cmd/live/social","/cmd/live/speech",
+ * "/cmd/live/state","/cmd/live/thief","/cmd/live/things"}) -- with the
+ * three /d/Genesis/cmd/ ghost/double entries dropped (missing domain
+ * content, and specific to the separate not-yet-embodied "ghost"
+ * pre-race-selection phase this port's bootstrap skips entirely, see
+ * secure/login/ghost_player.lpc) and the remaining eight real,
+ * confirmed-present /cmd/live/ files kept as-is. One substitution:
+ * "/d/Genesis/cmd/soul_cmd_ghost" -- per cmd/std/soul_cmd.lpc's own doc
+ * comment ("the basic soul that is meant to be inherited by the
+ * race-specific souls... contains the basic emotions for players") --
+ * is a ghost-restricted wrapper around exactly the same base emote
+ * soul NPC_SOULS already loads standalone for NPCs
+ * ("/cmd/std/soul_cmd", confirming it works loaded directly); swapped
+ * in here so embodied mortals keep basic emotes (smile, wave, etc.)
+ * too, rather than losing them outright for want of the missing ghost
+ * wrapper.
+ */
+#ifndef DEFAULT_PLAYER_SOULS
+#define DEFAULT_PLAYER_SOULS ({ \
+    "/cmd/std/soul_cmd", \
+    "/cmd/live/info", \
+    "/cmd/live/items", \
+    "/cmd/live/magic", \
+    "/cmd/live/social", \
+    "/cmd/live/speech", \
+    "/cmd/live/state", \
+    "/cmd/live/thief", \
+    "/cmd/live/things", \
+    })
+#endif
+
+/*
  * RACESTATMOD
  *
  * FluffOS PORT NOTE: another missing domain-content mapping (per-race,

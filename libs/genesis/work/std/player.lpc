@@ -48,6 +48,7 @@ inherit "/std/living";
 private nosave int    ld_alarm;    /* The alarm used when a player linkdies. */
 #ifndef NO_SKILL_DECAY
 private nosave int do_skill_decay = 0; /* Flag to control skill decay */
+private nosave int skill_decay_alarm;  /* Outstanding decay_skills() alarm id, if any. */
 #endif NO_SKILL_DECAY
 private nosave object magic_map;  /* the magic map object. */
 
@@ -270,7 +271,27 @@ move_living(string how, mixed to_dest, int dont_follow, int no_glance)
         {
 	    magic_map = present(MAGIC_MAP_ID);
         }
-        catch(magic_map->notify_new_room(to_dest));
+
+        /* FluffOS PORT NOTE: no magic map item ships with this
+         * content-free repo (see NOTES.md), so magic_map above never
+         * resolves to a real object -- unlike several other missing-
+         * content call_other() sites elsewhere in this port, this one
+         * had no objectp() guard, and this driver's call_other() hard-
+         * errors on a plain int(0) target ("Bad argument 1 to EFUN
+         * call_other() Expected: object, string, array, Got: int(0)")
+         * instead of degrading gracefully. Confirmed live: logged on
+         * literally every single successful move_living() (including a
+         * brand new character's very first move into the game), since
+         * !result means the move SUCCEEDED (see this function's own
+         * doc comment / std/living/move.lpc's move_living() return
+         * value convention: 0 = success) -- the pre-existing catch()
+         * suppressed the crash but not the debug.log noise. Guarded
+         * the same way every other missing-item call_other() site in
+         * this port already is. */
+        if (objectp(magic_map))
+        {
+            catch(magic_map->notify_new_room(to_dest));
+        }
     }
 
     return result;
@@ -287,7 +308,74 @@ setup_skill_decay()
         return;
 
     do_skill_decay = 1;
-    set_alarm(90.0, 0.0, decay_skills);
+    if (skill_decay_alarm)
+    {
+        remove_alarm(skill_decay_alarm);
+    }
+    skill_decay_alarm = set_alarm(90.0, 0.0, decay_skills);
+}
+
+/*
+ * Function name: query_skill_decay_alarm / set_skill_decay_alarm
+ * Description  : Accessors for skill_decay_alarm, needed because
+ *                std/player/cmd_sec.lpc (a text-included fragment of
+ *                this file, but included ABOVE this variable's own
+ *                declaration) also needs to read/update it from
+ *                save_me() -- a bare reference to the raw variable from
+ *                there is "Undefined variable" at compile time given
+ *                the textual #include ordering, so this goes through
+ *                ordinary prototyped functions instead, exactly like
+ *                query_skill_decay()/decay_skills() already do for the
+ *                same reason (see cmd_sec.lpc's own prototype block).
+ */
+public nomask int
+query_skill_decay_alarm()
+{
+    return skill_decay_alarm;
+}
+
+public nomask void
+set_skill_decay_alarm(int id)
+{
+    skill_decay_alarm = id;
+}
+
+/*
+ * Function name: remove_object
+ * Description  : FluffOS PORT NOTE: without this override, the
+ *                skill-decay alarm scheduled by setup_skill_decay()
+ *                (every mortal login) or save_me() (std/player/
+ *                cmd_sec.lpc, every save -- including the one quit()
+ *                itself does right before destructing the player) can
+ *                easily still be outstanding when the player object is
+ *                destructed: quit() saves (which (re)schedules a
+ *                1-second decay_skills() alarm whenever
+ *                query_skill_decay() is true, which it always is after
+ *                the very first login) and then immediately destructs
+ *                the player, so the alarm fires 1 second later on an
+ *                already-destructed object. Confirmed live: every
+ *                mortal "quit" logged "*Owner (.../ghost_player#N) of
+ *                function pointer is destructed" in debug.log one
+ *                second afterwards, uncaught (non-fatal, but a genuine
+ *                dangling-alarm bug -- same shape as arkadia's own
+ *                AGENTS.md-documented dangling-alarm finding, but on
+ *                the core player-quit path instead of a peripheral
+ *                login helper, and reproducible on every single mortal
+ *                quit rather than an edge case). Cancelling the alarm
+ *                at this one destruction choke point (also reached by
+ *                any other removal path, not just quit()) fixes it for
+ *                all of them.
+ */
+public void
+remove_object()
+{
+    if (skill_decay_alarm)
+    {
+        remove_alarm(skill_decay_alarm);
+        skill_decay_alarm = 0;
+    }
+
+    ::remove_object();
 }
 #endif NO_SKILL_DECAY
 
@@ -698,6 +786,32 @@ setup_player(string pl_name)
         }
     }
 
+    /* FluffOS PORT NOTE: see DEFAULT_PLAYER_SOULS in secure/auto.h --
+     * without a race std file to grant a player's real command souls
+     * (either fresh, or back after the mortal-only strip above),
+     * cmdsoul_list stayed permanently empty and std/living/cmdhooks.lpc's
+     * load_command_souls() fell back to the NPC-only NPC_SOULS default,
+     * leaving every player without even "look". This is NOT limited to
+     * mortals: wiz_souls/tool_souls (loaded separately, just below) only
+     * ever contain wizard-only administrative commands -- a wizard needs
+     * this same basic verb set too, and confirmed live still lacked it
+     * even after the mortal-only fix above (the seeded admin account,
+     * `fluffos`, still hit "Yikes, baaad soul: /d/Genesis/cmd/misc" and
+     * "look" -> "What?" on every login). Reseed for everyone, mortal or
+     * wizard, if it isn't already set to something real -- checked via
+     * "/cmd/live/things" specifically present, rather than a bare
+     * sizeof() check, because any account played before this fix
+     * existed already has the OLD broken NPC_SOULS fallback
+     * permanently persisted to its own save file (confirmed on
+     * `fluffos` itself: cmdsoul_list ({"/cmd/std/soul_cmd",
+     * "/d/Genesis/cmd/misc"}) saved to disk from an earlier session) --
+     * that list is non-empty, so a plain "is it empty" check would
+     * never repair it. */
+    if (member_array("/cmd/live/things", query_cmdsoul_list()) < 0)
+    {
+        update_cmdsoul_list(DEFAULT_PLAYER_SOULS);
+    }
+
     /* Get the autoloading shadows and the autoloading objects. Start the
      * recovery with a little alarm to make it safe. */
     load_auto_shadows();
@@ -725,7 +839,22 @@ start_player()
 {
     /* Get the soul commands */
     this_object()->load_command_souls();
-    command("$look");
+    /* FluffOS PORT NOTE: doc/man/efun/command documents a leading "$" as
+     * a CD-driver-only convention meaning "bypass the quicktyper's alias
+     * expansion" -- this driver's real command()/parse_command() has no
+     * such handling at all (and separately, this codebase's own
+     * quicktyper relies on a modify_command() apply that this driver
+     * never calls in the first place, so the "$" was never even needed
+     * here to begin with). Left in, "$look" is dispatched as a literal,
+     * nonexistent verb and always fails silently with "What?" -- hit for
+     * real: this call, at the very first login of every new/returning
+     * player, silently swallowed the intended auto-look-on-arrival.
+     * Stripped here and at every other command("$...") call site
+     * (std/living/possess.lpc, std/living/move.lpc,
+     * std/player/cmd_sec.lpc's quit() drop calls, std/launch_weapon.lpc,
+     * cmd/live/things.lpc, cmd/std/tracer_tool.lpc, cmd/live/thief.lpc,
+     * cmd/wiz/arch.lpc). */
+    command("look");
     say(QCNAME(this_object()) + " enters the realms.\n");
 }
 
@@ -1054,6 +1183,34 @@ actual_linkdeath()
     tell_room(environment(), LD_STATUE_TURN(this_object()), ({ }) );
 #endif OWN_STATUE
 #endif STATUE_WHEN_LINKDEAD
+}
+
+/*
+ * Function name: net_dead
+ * Description  : FluffOS PORT NOTE: unlike the CD driver, this driver
+ *                does NOT call SECURITY's remove_interactive() directly
+ *                on player logout/linkdeath (see the doc comment on
+ *                secure/master.lpc's remove_interactive(), which still
+ *                describes the CD-driver convention verbatim: "Called
+ *                from GD if a player logs out or goes linkdead"). This
+ *                driver's own disconnect teardown (src/comm.cc) instead
+ *                applies net_dead() directly on the disconnecting
+ *                player object, with no arguments, and only when that
+ *                object hasn't already destructed itself (an orderly
+ *                quit() already does that, so this never fires for a
+ *                clean quit -- only for a genuine abrupt disconnect).
+ *                Without this bridge, remove_interactive() was never
+ *                once invoked by any real disconnect: QUEUE->dequeue(),
+ *                the wizard linkdeath notification, and this codebase's
+ *                own linkdie()/statue-conversion flow were all silently
+ *                dead on every net-death (see AGENTS.md §7.133; the
+ *                identical gap was found and fixed the same way on the
+ *                `arkadia` sibling engine first).
+ */
+nomask void
+net_dead()
+{
+    SECURITY->remove_interactive(this_object(), 1);
 }
 
 /*

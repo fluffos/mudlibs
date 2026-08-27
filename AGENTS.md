@@ -10360,6 +10360,22 @@ the same lazy-compile retry the sibling branch already uses) before
 the assignment, exactly mirroring the existing pattern two lines above
 it in the same function.
 
+**Confirmed second instance, sibling engine**: `genesis`
+(`libs/genesis`), the English-language ancestor engine `arkadia` is a
+Polish-language fork of — the exact same `remove_interactive()` doc
+comment ("Called from GD if a player logs out or goes linkdead") in
+its own `secure/master.lpc`, and the same zero-hit `net_dead` grep.
+Fixed identically (the bridge placed directly on `std/player.lpc`,
+this engine's own player class not having a separate `player_sec.lpc`
+file); this repo's own `OWN_STATUE` statue-conversion feature is
+`#ifdef`-gated off and no statue file ships at all (see its own
+NOTES.md), so the second, closely-related `roomob` type-mismatch crash
+does not apply here — confirmed via a repo-wide grep for
+`query_default_start_location()` assigned into an `object`-typed
+local, zero matches. Verified only via a boot-and-kill compile check,
+not a live abrupt-disconnect repro (no real room/domain content in
+this repo to reconnect into meaningfully).
+
 **How to apply generally**: any archive whose own `secure/master.lpc`
 (or equivalent) implements a `remove_interactive`/`disconnect`/
 `linkdie`-notification function with a doc comment claiming the GAME
@@ -10503,6 +10519,141 @@ continuous play session that never reaches a wizard-only management
 command for the guarded variable (temp starting locations, in this
 case) will never trigger the guard at all, making this exactly the
 class of bug invisible to anything short of an actual played `quit`.
+
+**Checked on sibling engine `genesis`, different architecture, not
+applicable as-is — but an analogous quit-path bug found and fixed
+instead**: `genesis`'s equivalent starting-location machinery lives in
+a completely different file, `sys/global/filepath.lpc`, which
+initializes `def_start_locations`/`temp_start_locations` EAGERLY in
+its own `create()` (always populated before any query, no lazy-guard
+shape to be missing) — this specific bug class genuinely does not
+apply there. However, the same quit-path (`std/player/cmd_sec.lpc`'s
+`check_valid_startloc()`, called from `quit()` on every single mortal
+quit to decide whether inventory should be dropped) called
+`SECURITY->query_list_def_start()`/`SECURITY->query_list_temp_start()`
+— two functions that exist NOWHERE in this codebase at all (already
+flagged as a known pre-existing bug in this repo's own onboarding
+notes, but left unfixed there because a member_array() leniency shim
+happened to absorb the resulting undefined-function-call's fallout
+rather than crash). Fixed at the actual call site: swapped to the
+already-existing `VALID_DEF_START_LOCATION()`/
+`VALID_TEMP_START_LOCATION()` macros (`sys/files.h`) that wrap the real
+`FPATH_FILENAME->valid_def_start_location()`/
+`valid_temp_start_location()` functions this codebase actually ships.
+Verified live: `check_valid_startloc()` now correctly recognizes the
+bootstrap landing room as a valid recoverable location instead of
+silently always returning "not a valid start location" for every
+mortal quit.
+
+### 7.136 A classic-driver mudlib's "strip a mortal's command souls back down, rely on the (missing) race content to re-grant the real set" design leaves EVERY player — mortal or wizard — with no basic verb souls at all once the race content is gone, so `look`/`get`/`drop`/`say`/every ordinary command silently fails project-wide
+
+Found on `genesis`'s (`libs/genesis`) §10.7 round-two deep functional
+test — a freshly registered mortal character could not even `look`:
+typing it produced only `"Yikes, baaad soul: /d/Genesis/cmd/misc"`
+(a separate, already-documented missing-content gap) followed by
+`"What?"`. Root cause: `std/living/cmdhooks.lpc`'s
+`load_command_souls()` (shared by players AND NPCs) falls back to the
+engine's `NPC_SOULS` constant (correct for an actual mobile) whenever
+a living's own `cmdsoul_list` is empty — and `std/player.lpc`'s
+`setup_player()` unconditionally WIPES a mortal's entire
+`cmdsoul_list` on every single login ("Non wizards should not have a
+lot of souls"), relying on something else to grant the real, curated
+per-race set back before the player ever acts. In the original,
+fully-shipped game this re-grant was almost certainly done by the
+per-race std file as part of embodying a player (a common CD-driver
+idiom); with no race content in this repo at all (see this project's
+own missing-domain-content notes), `cmdsoul_list` stayed permanently
+empty after the strip, and `load_command_souls()`'s NPC-shaped
+fallback silently took over for every player, mortal or wizard —
+`NPC_SOULS` here is only `({"/cmd/std/soul_cmd",
+"/d/Genesis/cmd/misc"})`, omitting every ordinary player verb soul
+(`/cmd/live/things`, `social`, `speech`, `state`, `thief`, `items`,
+`info`, `magic`) entirely. Confirmed this is NOT limited to mortals:
+a wizard's `wiz_souls`/`tool_souls` (loaded separately) only ever
+contain wizard-ONLY administrative commands, never the basic verb set
+— the project's own seeded admin account hit the identical
+`"look"` -> `"What?"` failure.
+
+**Fix**: rather than invent a soul list, this port's own shipped
+`raw/secure/proto_char.o` (the original mudlib's new-character
+template save, carried along in the archive but never wired into the
+actual login flow) gives the real answer directly — its own
+`cmdsoul_list` is
+`({"/d/Genesis/cmd/soul_cmd_ghost","/d/Genesis/cmd/misc_cmd_ghost","/d/Genesis/cmd/double","/cmd/live/info","/cmd/live/items","/cmd/live/magic","/cmd/live/social","/cmd/live/speech","/cmd/live/state","/cmd/live/thief","/cmd/live/things"})`.
+Defined a `DEFAULT_PLAYER_SOULS` constant with the three
+`/d/Genesis/cmd/*_ghost`/`double` entries dropped (missing domain
+content, specific to a separate not-yet-embodied "ghost" phase this
+port's minimal registration bootstrap skips entirely) and
+`/d/Genesis/cmd/soul_cmd_ghost` replaced with the real, confirmed-
+present `/cmd/std/soul_cmd` (per that file's own doc comment, "the
+basic soul that is meant to be inherited by the race-specific souls…
+contains the basic emotions for players" — a non-ghost substitute
+providing the same emotes). Reseeded in `setup_player()`, for BOTH
+wizards and mortals, right after the existing strip logic — guarded
+with `member_array("/cmd/live/things", query_cmdsoul_list()) < 0`
+rather than a bare `sizeof()` check, because any account already
+played before this fix has the OLD broken NPC_SOULS-derived list
+permanently persisted to its own save file (non-empty, so a plain
+emptiness check would never repair it). Verified live: a fresh mortal
+character and the previously-broken seeded admin wizard account both
+now have working `look`/`i`/`stats`/`smile`/every ordinary verb.
+
+**How to apply generally**: any CD-driver-lineage mudlib missing its
+race/domain content is suspect for this same gap — grep the shared
+`load_command_souls()`-equivalent for an NPC-shaped fallback constant,
+then check whether ANYTHING besides that fallback ever populates a
+mortal's own persistent command-soul list; a `raw/secure/proto_char*`-
+style new-character template file in the original archive (if one
+survived extraction) is the most reliable, non-invented source for
+what the real default should have been, exactly as it was here.
+
+### 7.137 `doc/man/efun/command`'s own documented CD-driver convention — prefix a `command()` call with `"$"` to bypass the quicktyper's alias expansion — has no equivalent on this driver at all, so every `command("$verb ...")` call site silently dispatches a literal, nonexistent `"$verb"` command and always fails
+
+Found on `genesis`'s (`libs/genesis`) §10.7 round-two deep functional
+test: a brand new character's very first `look` — issued
+automatically by `std/player.lpc`'s `start_player()` via
+`command("$look")`, right after login — silently failed with
+`"What?"` every single time, masking the fact that the room actually
+did have a real, working description underneath. This driver's real
+`command()`/`parse_command()` has no special handling for a leading
+`"$"` whatsoever (confirmed against the driver source) — unlike the
+classic driver, where it specifically meant "skip the quicktyper's
+alias/nickname substitution so a player's own alias for this verb
+can't hijack a game-forced command" (`command("$smile")` in that
+efun's own doc example). Left in, the literal string `"$look"` is
+parsed as an ordinary, nonexistent verb and fails exactly like any
+other unrecognized command — no crash, no log entry, just a silently
+swallowed forced action. Confirmed a codebase-wide sweep found 13 such
+call sites, several on far more consequential paths than the login
+auto-look: `std/player/cmd_sec.lpc`'s `quit()` (`command("$drop
+...")`, dropping non-recoverable items before the player object is
+destructed), `std/living/move.lpc` (repeating a movement command for
+followers), `std/launch_weapon.lpc` (reloading/firing a ranged
+weapon), and `cmd/live/thief.lpc` (an NPC's forced `say`/`kill`
+reaction to being caught stealing) — every one of them silently
+inert.
+
+**Fix**: this codebase's own quicktyper (`std/player/quicktyper.lpc`)
+turned out to be moot regardless — its alias-interception hook,
+`modify_command()`, is a classic-driver apply this driver never calls
+at all (confirmed: zero references in the driver source), so it is
+already fully dead code independent of this bug, meaning there is no
+alias-interference risk to preserve. Simply stripped the leading
+`"$"` at all 13 call sites (`command("$look")` ->
+`command("look")`, etc.) — this driver's own `command()` then
+dispatches the real verb exactly as intended. Verified live: the
+login auto-look now correctly shows the room's full description with
+no manual `look` needed.
+
+**How to apply generally**: any CD-driver-lineage mudlib is suspect —
+grep for `command("$` (and any `"$" + variable`-built command string)
+codebase-wide; every hit is dead on arrival on this driver unless
+first stripped of its leading `"$"`. Worth checking whether the
+target codebase's own quicktyper/`modify_command()`-style alias hook
+is itself reachable at all before assuming stripping the `"$"` is
+risk-free — if a real, driver-invoked alias-interception mechanism
+does exist, a forced game command bypassing player aliases might need
+a different mitigation than a bare string strip.
 
 ---
 
