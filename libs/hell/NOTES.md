@@ -282,3 +282,51 @@ functionally re-tested live on this lib.
 一个真正可达、真正会打的敌对 NPC 完整验证过一次真实交手到收尾。
 至此 `hell` 档案的注册、投胎、拜师、经济、战斗五大系统全部完成过
 至少一轮真实的端到端验证，§10.7 深度功能测试可以标记为完整收尾。
+
+## AGENTS.md §8.3a variant fix (2026-08-27): `feature/action.lpc::eval_function()` and `inherit/item/combined.lpc::destruct_me()` wrongly `private`
+
+Targeted follow-up from `libs/revive`'s own deep-test pass (its NOTES.md
+"§8.3a variant confirmed" section), which flagged that its sibling
+`revive`/`zjdyaryl`/`xuanjianlu` lineage carries the same `private`
+mixin-function demotion bug beyond `command_hook`, and specifically
+named `hell` and `zjmudhell` as still carrying it unfixed. Confirmed
+present here byte-identical to the `revive` shape:
+
+- `feature/action.lpc::start_call_out()` does `call_out("eval_function",
+  delay, ...)`, but `eval_function` was declared `private`. `F_ACTION`
+  is inherited into `inherit/char/char.lpc` -> `clone/user/user.lpc`
+  (the player body), so this driver's `private` -> `DECL_HIDDEN`
+  demotion on inherit silently no-ops every `start_call_out()`-based
+  delayed callback game-wide: kungfu temporary-condition effects
+  (`kungfu/special/{agile,hatred,power}.lpc`), sleep/meditation wakeup
+  (`cmds/std/sleep.lpc`, `cmds/skill/jingzuo.lpc`), room-cart arrival,
+  combat's own `continue_attack` (`adm/daemons/combatd.lpc`), etc.
+- `inherit/item/combined.lpc::set_amount(0)` does `call_out(
+  "destruct_me", 0)` to self-destruct an emptied stackable item, but
+  `destruct_me` was `private`. `COMBINED_ITEM` is inherited by
+  `inherit/item/money.lpc`, `inherit/weapon/throwing.lpc`,
+  `inherit/medicine/powder.lpc` and several `clone/*` items — every
+  coin/thrown-weapon/medicine-powder stack reduced to zero would
+  silently linger forever instead of self-destructing.
+
+**Fix** (matching the established `revive`/`§8.3a` pattern exactly):
+dropped `private` from both declarations, function bodies unchanged.
+
+**Verified live** (native `build-debug` driver, port 40114, exact-PID
+kill between reboots): before the fix, `sleep` in a `sleep_room`
+(`/d/guanwai/xiuxishi`) printed "你往床上一躺，开始睡觉。不一会儿，
+你就进入了梦乡。" and then genuinely never woke the character up (no
+`wakeup()` message even after 6+ idle seconds) — a live-reproduced
+instance of `start_call_out()`'s `call_out("eval_function", ...)`
+silently failing. After the fix, the identical `sleep` sequence
+correctly fired `wakeup()` within its 1-2s delay window ("你一觉醒
+来，只觉精力充沛。该活动一下了。"). `debug.log` clean of any
+`执行时段错误`/`Bad argument` both before and after (the bug fails
+silently, it doesn't throw). Incidental `data/newsd.o` and
+`data/user/f/fluffos.o` save drift from the test login reverted via
+`git checkout` before committing.
+
+`destruct_me()` not independently live-repro'd this session (would
+require driving a coin/material stack down to exactly zero via item
+commands) — fix rests on the identical fixed-in-place `eval_function`
+mechanism and the established `revive`/`demonangel` precedent.
