@@ -10981,6 +10981,68 @@ Nightmare-lineage libs that share `lib/std/room.lpc`'s ancestry
 own `room.lpc`-equivalent `create()` for the same `replace_program()`
 shape next time one gets touched).
 
+### 7.142 A hardcoded room-exit path missing a directory segment silently lands on a virtual-object engine's own auto-manufactured DUPLICATE instance instead of throwing — invisible to any boot/compile check, and to a casual `look`, because the destination technically resolves
+
+Found via `tmi2`'s (TMI-2, the historic base engine) §10.7 deep
+functional test, while specifically checking for `mortremains`-style
+broken exits (a sibling TMI-2 archive whose own deep-test found ~95%
+of room exits broken by an unrelated filename-slice bug). `d/Fooland/
+tower2.lpc` (the vampire NPC's coffin room)'s `exits` mapping has
+`"window" : "/d/grid/9,14.grid.lpc"` — every other reference to this
+same coordinate-grid engine's rooms anywhere else in the codebase
+(dozens of them) correctly uses the `/d/grid/rooms/X,Y.grid` form; this
+one is missing the `rooms/` path segment. Confirmed via the raw archive
+that this exact typo predates this project's `.c`->`.lpc` conversion
+entirely (`"/d/grid/9,14.grid.c"` in the original 1990s source) — the
+conversion just carried it forward untouched, the same as it did for
+every correct reference.
+
+The reason this doesn't manifest as an obvious "room not found"
+failure: this engine's virtual-object mechanism
+(`adm/daemons/virtual_d.lpc`'s `compile_object()`, reached via the
+master's own `compile_object()` apply on any path the driver can't
+resolve normally) intercepts ANY path matching the registered `/d/
+grid/*` virtual pattern and dynamically manufactures a brand-new room
+instance there, regardless of whether the exact directory structure
+matches the "real" one. So a typo'd path like this doesn't fail to
+load — it succeeds, but produces a freshly-manufactured DUPLICATE
+instance of that grid cell, completely disconnected from the
+canonical, shared instance every other correct exit in the game
+actually uses. Live impact here: the vampire NPC's own `move_player()`
+override unconditionally routes every departure from its coffin room
+through this exact broken exit (regardless of which direction its own
+random-wander logic actually picked), so every time it tries to leave
+its coffin at night, it silently lands in this orphaned pocket
+dimension instead of the real, shared grid mesh other wandering NPCs
+and players share.
+
+**Fix**: correct the path to match the convention every sibling
+reference uses — `"/d/grid/9,14.grid.lpc"` -> `"/d/grid/rooms/
+9,14.grid"`. Verified live: `eval find_object_or_load(...)` on the
+broken string returned `OBJ(/d/grid/9,14.grid)` (the orphaned instance)
+before the fix; after `update`ing the file, forcing the vampire to
+night-state and calling its `move_around()` repeatedly via `eval`
+correctly landed it in the real `OBJ(/d/grid/rooms/9,14.grid)` and
+onward through the genuine grid network.
+
+**How to apply generally**: any lib built on a virtual-object /
+coordinate-grid room engine (a master-level `compile_object()` hook
+that pattern-matches a path prefix and manufactures a room dynamically,
+rather than requiring the exact file to exist) is a case where a
+plain, `file_exists()`-style broken-exit check will produce a FALSE
+NEGATIVE — the virtual mechanism will happily "resolve" a typo'd path
+into a new, disconnected instance instead of failing loudly. Detecting
+this class requires comparing a suspect exit's literal string against
+the convention every OTHER reference to the same virtual namespace
+uses (a missing path segment, an extra/wrong literal extension, etc.),
+not just checking whether `find_object_or_load()` returns something —
+it always will. `mortremains` (the sibling TMI-2 archive, same base
+engine) does not use this particular coordinate-grid mechanism, so this
+specific instance doesn't transfer there, but any other TMI-2/Falcon-
+lineage lib shipping the same `/d/grid/` engine (grep for `adm/
+daemons/virtual_d.lpc`/`std/virtual/compile.lpc`) is worth the same
+exit-convention cross-check.
+
 ---
 
 ## 8. Login and registration flow bugs
