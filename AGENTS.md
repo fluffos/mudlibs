@@ -9448,6 +9448,22 @@ if (me->query("family") && me->query("family/family_name") != ob->query("family/
 
 **Post-sweep gap found on `sjshv150` (2026-08-24, during its own §10.7 round-four pass, not caught by the corpus sweep above)**: `cmds/std/apprentice.lpc` had the exact dominant vulnerable form (no guard); its sibling `cmds/std/recruit.lpc` already had the correct guard (with the same "fix a bug in 1st time recruit" comment noted as the general pattern above). Fixed identically and live-verified: cloned an unconditional-accept recruiter NPC (`d/city/npc/shubao.lpc`), used `call shubao->command("recruit fluffos")` to set the NPC's own `pending/recruit` first (so the confirm actually exercises `apprentice.lpc`'s buggy branch rather than `recruit.lpc`'s already-guarded one), then `apprentice shubao` — before the fix this would have wrongly fired the "betray your old sect" path for this brand-new, family-less character; after the fix it correctly completed a normal first-time 拜师 (`score`/`family` showed the new sect with no `betrayer` flag or score reset). Worth re-checking any other not-yet-catalogued/newly-added lib for this same one-file-of-the-pair-missed-the-fix gap rather than assuming the sweep's file list was exhaustive.
 
+### 7.118 A `.c`->`.lpc` filename-slice arithmetic bug — hardcoded 2-character-extension math left over from the archive's original naming — recurs across command-dispatch tables AND boot-time header generators; confirmed on 5+ unrelated libs in one day (2026-08-26)
+
+Many archives register commands, verbs, spells, or macro headers by taking a directory listing and slicing a fixed number of characters off each filename to strip the extension — e.g. `path[1..strlen(path)-3]` to strip a 2-character `.c`. This project's standard conversion renames every source file `.c`->`.lpc` (a 4-character extension), so any such hardcoded slice silently keeps the LAST TWO characters of the real basename instead of removing the extension, corrupting every single derived name it touches. There is no compile error and often no crash — the dispatch table or header just gets populated with garbage keys, so this is invisible in `lpcc_check.sh` and even in a clean boot's `debug.log`; it only shows up as "every command fails" or "every macro is undefined" once a real player tries to do anything, and needs live `debug_message()`/instrumentation tracing to actually locate.
+
+**Confirmed instances, same day**: `sunshadow`'s `daemon/command.lpc` command-dispatch table (corrupted every ordinary verb — `look`, `score`, `say`, ... — into garbage, the single blocker that took longest to find in that port); `nightmare4`, where this was the DOMINANT recurring bug class across the entire command/verb/spell/help dispatch architecture, swept across ~15 files, not an isolated instance; `residuum`'s `secure/daemon/command.lpc` `D_COMMAND` registry (same shape, `"look.lpc"` keyed as `"look.l"`); `revivalworld`'s `creator.lpc` boot-time `#define`-header generator, where the SAME bug class silently wiped four generated headers (`daemon.h`, `feature.h`, `inherit.h`, `condition.h`) to empty stubs on every single boot, cascading into ~800 unrelated-looking batch-compile failures since nearly every macro in that codebase came from those headers. `dsI` (earlier in the session) had the same class in its own command-dispatch table, 16 sites.
+
+**How to apply**: on any new archive, grep for slice/substring arithmetic against filenames from a `get_dir()`/directory-listing result — anything shaped like `name[..strlen(name)-N]` or `name[0..<N]` where `N` is a small literal (2-5) is suspect. Check it EARLY (before the full compile/boot cycle) on: (1) the command-dispatch table (`command.lpc`/`command_d.lpc`/equivalent — breaks 100% of gameplay), (2) any boot-time code that programmatically generates `#include`d headers or macro tables from a file listing (breaks compilation everywhere, looks like hundreds of unrelated bugs), (3) help/spell/skill registries built the same way. Fix by making the slice extension-agnostic (e.g. `explode(name, ".")[0]`, or slicing to the last `.` rather than a hardcoded offset) rather than hardcoding the new extension's length, since a lib could ship files with yet another naming convention.
+
+### 7.119 `master.lpc`'s runtime warning-vs-error filter checks for a capitalized `"Warning"` string, but this driver emits lowercase `"warning:"` — every compile WARNING (not error) gets broadcast to the connected player as a hard-error notice, sometimes repeatedly per room entry
+
+A near-relative of §7.103 (which covers the same "warnings reach the player" symptom via a MISSING filter entirely) — here the lib actually HAS a filter, but it's matching the wrong case. `log_error()`/the error-handler's classification check does something like `strsrch(msg, "Warning") != -1` to decide "route this to the log only, not the player," but this driver's actual compiler emits lowercase `warning:` (not `Warning`), so the check never matches and every routine compile warning — extremely common, e.g. an unused local variable in a base class every room inherits — gets shown to the player as if it were a fatal error. `zhyx` showed this up to 19 times in a row on a single fresh room entry before being fixed. Confirmed independently on `zhyx` and `naruto` (a from-scratch-lineage sibling sharing base-engine ancestry) same day — 2 unrelated Chinese-wuxia-family archives in one session, worth checking by default on any future onboard of this family. **Fix**: match the actual lowercase string the driver emits (case-insensitive match is safer still), or better, check the driver's real classification (an error vs. a warning callback distinction) if the master apply signature exposes one, rather than string-sniffing the message text at all.
+
+### 7.120 A character-save integrity/security helper shipped as a permanent no-op placeholder — silently locks every player out of their own saved character after the very first driver restart
+
+`revive`'s `calc_sec_id()` (a per-save checksum/salt function referenced by the login-restore path to detect save tampering) was never actually implemented in the shipped archive — a stub that always returns the same constant regardless of input. This doesn't affect a single continuous session at all, since the in-memory value matches whatever the stub always returns — the bug only manifests on the very first login attempt AFTER a driver restart, when the check runs against the saved-to-disk value for the first time and finds it doesn't correspond to anything my real input, permanently denying that player's own saved character. **This class of bug is easy to miss during onboarding testing** because a single boot-register-play-quit-reconnect cycle within the same driver process never exercises it — the fix (in `revive`'s case, restoring the missing `crypt()`-salt gating already correctly implemented in a sibling lib of the same lineage, `hell`) was only found and confirmed via a deliberate driver-restart-and-reconnect test. **How to apply**: for any archive with a save-integrity/checksum/security-id mechanism, don't consider verification complete after one continuous session — do at least one explicit stop-the-driver, restart-it, reconnect-with-a-previously-registered-account cycle before signing off, specifically because this exact failure mode is invisible without it.
+
 ---
 
 ## 8. Login and registration flow bugs
@@ -10754,6 +10770,29 @@ raising it.
   ANY sweep, kill it if RSS balloons — on mega-libs the boot +
   interactive test is the sufficient verification gate; the sweep is
   nice-to-have.
+- **A specific, now well-confirmed root cause for the memory-balloon
+  case above (2026-08-26, `sunshadow`)**: when a small, widely-inherited
+  base class (this codebase's `std/Object.lpc`/`std/container.lpc`-
+  equivalent) has a genuine compile error, the driver appears to
+  re-attempt compiling/loading that large broken file from scratch for
+  EVERY single dependent file in the batch — leaking memory each time,
+  across potentially thousands of files. `sunshadow`'s sweep hit 17.4GB
+  RSS with the host down to 201MB free (an exact repeat of the earlier
+  §7.110-adjacent OOM-crash-and-hard-reset incident) before being killed
+  by PID; fixing ONE broken base class wasn't even enough — the re-run
+  leaked at nearly the identical rate because a SECOND, independent base
+  class (`std/container.lpc`) had its own unrelated compile error.
+  **Discipline that reliably avoids this** (confirmed clean, well under
+  3GB RSS, on every lib that followed it the same day — `zhyx`,
+  `naruto`, `mortremains`, `revive`, `residuum`, `revivalworld`, `es1`):
+  before ever running the full `lpcc_check.sh` batch sweep on a new
+  archive, first compile the small set of core base classes
+  individually/directly and get ALL of them to a clean compile — don't
+  assume fixing the first one you find is sufficient. Only then run the
+  full batch sweep once. If a full sweep must be run before that's
+  confirmed, actively poll `ps -o rss= -p <pid>` every 15-20s for the
+  first several minutes and kill by exact PID immediately past ~10GB —
+  do not wait for a hard OOM to confirm the pattern.
 - `valid_override` needs the 3-arg signature
   (`valid_override(file, name, main_file)`) for `#include`d simul_efun
   fragments — apply on sight when reading master (mostly an lpcc-noise
@@ -10812,6 +10851,21 @@ bisection if the slowdown reproduces on an uninstrumented build too.
   and the coordinating session verifying each agent's key claims
   against the actual tree (fix present, exclusions applied, no
   lingering driver process) before committing.
+- **Two concurrent onboarding agents can independently pick the exact
+  same "next free" `port`/`number` in a new lib's `meta.json`**, since
+  neither can see the other's not-yet-landed commit — happened for real
+  (`zhyx` and `nightmare4` both landed on port 40233/number 931 the same
+  day). Cheap to catch mechanically after the fact:
+  `grep -h '"port"' libs/*/meta.json | grep -oE '[0-9]{5}' | sort -n | uniq -c | awk '$1>1'`
+  (same pattern for `"number"`) — run this routinely whenever two
+  onboarding agents finish close together, not just when something
+  looks wrong. Fix by bumping whichever landed second to a fresh value
+  in its `meta.json` AND `config.fluffos` (both embed the port) and any
+  mention in its `README.md`/`NOTES.md`, then re-commit. Better: have
+  each onboarding agent re-run the same collision check itself
+  immediately before its OWN final commit (not just when it starts) —
+  this fully prevented the collision on every onboard dispatched with
+  that instruction afterward the same day.
 - **`git checkout <rev> -- <path>` STAGES the restored content by
   design.** In a multi-agent working tree this contaminates someone
   else's in-progress commit with your restored files. Use
