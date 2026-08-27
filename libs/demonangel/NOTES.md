@@ -369,3 +369,238 @@ dead code, deliberately-disabled subsystems, or genuine pre-existing
 content gaps documented above (10 of them are the same already-known
 `adm/daemons/network/` tree as es2) -- none affect the live, reachable
 game.
+
+## 深度功能测试 / Deep functional test (round two, AGENTS.md §10.7)
+
+First genuinely hands-on *playthrough* pass (the earlier "done" status
+above only ever verified registration + `look`/`score`/`who`/`say`/
+`whoami`/relogin/`quit`, never real gameplay: movement, class/skill
+acquisition, combat, economy, or death). One continuous session on the
+native driver (`~/src/fluffos/build-debug/src/driver config.fluffos`),
+a raw Python socket client throughout, plus a second admin connection
+for teleporting (`goto`) to distant content and for a controlled death
+test.
+
+**Newbie path**: no `help newbie`/`help intro` topic exists
+(`doc/help/topics` itself is missing too, so even bare `help` prints
+nothing useful) -- a genuine content gap, not a bug, left as-is per
+scope. Learned the real onboarding shape by reading source instead:
+register lands in `/d/gourd/gourd_recall` (中央广场) as a generic "冒险者"
+(Adventurer); the actual class system is `d/gourd/choice_class.lpc`
+(职业介绍所, reached `north`/`north`/`north`/`west` from the start
+room) -- `list` shows 魔法师/战士/牧师, `advance <职业>` locks it in
+once. No traditional wuxia master-disciple/sect system is reachable
+anywhere in this archive: `feature/apprentice.lpc`'s `recruit_apprentice()`
+API exists but is **never called from anywhere else in the tree** --
+this game's actual family/social system (`swear`/`adopt`/`marry`, per
+`doc/help/family`) is unrelated (marriage/kinship, not martial
+apprenticeship), and skill advancement past the initial class pick
+runs through the 王国 (kingdom) economy instead (buildable
+`magic_tower`/`trainyard`/`hero_guild` rooms, gated behind kingdom
+gold/room-count thresholds `cmds/min/build.lpc` enforces) -- confirmed
+this is intentional world design, not a missing feature, and left
+untouched.
+
+Test character: id `qinlong`, 秦龙 (male, 战士 after class pick),
+password `Test@2026` -- kept as a representative playthrough character
+(save files `work/data/login/q/qinlong.o`, `work/data/user/q/qinlong.o`).
+Admin account `fluffos`/`Mud@2026` (per this lib's existing seeding)
+used for `goto` teleports and the death test.
+
+### Bug 1: `private nomask command_hook` and 15 sibling `private`-callback functions across the ES2-inherited codebase -- AGENTS.md §8.3a's class, not previously swept on this lib
+
+`feature/command.lpc`'s central dispatcher was declared `private nomask
+int command_hook(string arg)`, registered via `add_action("command_hook",
+"", 1)` in the SAME file's `enable_player()`. `command.lpc` is
+`inherit`ed into `std/char.lpc` (the base class for both `obj/user.lpc`
+and every NPC), which demotes the inherited `private` function to
+`DECL_HIDDEN` on this driver -- `add_action`'s later efun-origin
+dispatch then hard-refuses to call it (`apply() with insufficient
+permission: ... function: command_hook, origin: efun, needs: private,
+has: hidden`), reproduced live in `driver_stdout.log` during ordinary
+play (triggered from an internal `command()`-style self-call, not a
+directly-typed command -- matches this bug class's documented "typed
+commands can still look fine" caveat exactly).
+
+A full repo-wide grep (private-function-name declared in the same file
+as an `add_action("name"` or `call_out("name"` registration of that
+exact name) found **8 more affected files, 16 functions total**, all
+genuinely `inherit`ed elsewhere (verified each has a real `inherit`
+site, not dead/unused):
+
+| File | Function(s) | Registered via |
+|---|---|---|
+| `feature/command.lpc` | `command_hook` | `add_action` (the confirmed-live crash above) |
+| `feature/action.lpc` | `eval_function` | `call_out`, from `start_call_out()` -- the shared delayed-effect primitive documented in AGENTS.md for `xuanjianlu`/`zjdyaryl`; **confirmed dead in this specific archive** (`start_call_out()` itself has zero callers anywhere in the tree), fixed anyway for consistency with the sibling pattern in case a future skill/drug file starts using it |
+| `std/item/combined.lpc` | `destruct_me` | commented-out `call_out("destruct_me", 0)` -- **not currently live**: the real code path calls `destruct_me()` directly (`if (v == 0) destruct_me();`), a normal same-file call unaffected by this bug class. Fixed anyway since the dead `call_out` line is right there as a latent trap (this base class is inherited by `std/money.lpc`, i.e. every coin in the game, plus several potions/weapons) |
+| `std/room/furnace.lpc` | `do_load`, `furnace_count_msg`, `furnace_drop`, `do_charge`, `charge_furnace` | `add_action`/`call_out` (魔力炉, inherited by `open/sky/19.lpc`, `24.lpc`) |
+| `std/room/misc_shop.lpc` | `do_list`, `do_buy` | `add_action` (杂货店, inherited by `open/sky/28.lpc`, `71.lpc`) |
+| `std/room/herb_shop.lpc` | `do_list`, `do_buy` | `add_action` (药店, inherited by `open/sky/30.lpc`, `31.lpc`, `70.lpc`) |
+| `std/room/magic_tower.lpc` | `do_list`, `do_study` | `add_action` (法术研习营, inherited by `open/sky/36.lpc`, `73.lpc`) |
+| `std/bboard.lpc` | `do_post`, `do_discard`, `do_followup` | `add_action` (see Bug 2 below -- these compound with the redundant `replace_program()` bug on every board) |
+| `std/jboard.lpc` | `do_followup` | `add_action` (`obj/board/wizard_j.lpc`) |
+
+Fix, identical everywhere: drop `private`, keep any other modifiers
+(`nomask`, etc.) -- these functions are never meant to be player-typed
+verbs themselves, so exposing them as ordinary (non-private) functions
+adds no real capability. Left alone (confirmed genuinely unaffected,
+since this driver only demotes `private`-in-an-*inherited* file, not a
+`private` function declared directly in a file nobody else `inherit`s):
+`obj/user.lpc`'s `user_dump` (net-dead timeout, `USER_OB` is a leaf,
+nothing inherits `obj/user.lpc`), and three other leaf files with the
+same shape (`obj/npc/demogorgon.lpc`'s `countdown`, `d/gourd/
+gourd_recall.lpc`'s `do_relax`, `cmds/npc/suicide.lpc`'s
+`slow_suicide`) -- all confirmed via `grep -rn "inherit.*<name>"` to
+have zero inheriting files anywhere in the tree.
+
+Verified live post-fix: `buy bean` at `/open/sky/28` (misc_shop),
+`charge furnace` at `/open/sky/19` (furnace, call_out path), `kill
+girl`/movement/class-advance (command_hook path) all worked with zero
+`insufficient permission` lines in `driver_stdout.log` across the whole
+session -- see the sections below for the actual playthrough these
+were exercised in.
+
+**Sibling libs to check**: `es2`, `haiyang2`, `xkx2001`, `es1_win`,
+`rzrmud`, `xo` share this codebase family; `xkx2001`/`rzrmud` already
+have their own §10.7 passes and may or may not have hit this
+independently -- worth a `grep -rn 'private.*command_hook'` sweep plus
+the same same-file `add_action`/`call_out` cross-check across all six,
+since this session found it recurs in non-`command_hook` functions too
+(the furnace/shop/board pattern above), not just the one function
+AGENTS.md's existing §8.3a catalog already tracks by name.
+
+### Bug 2 (AGENTS.md §7.86's class, confirmed on a 4th codebase lineage): every bulletin board redundantly self-`replace_program()`s its own already-`inherit`ed class, permanently crashing `post`/`followup`
+
+Reproduced live, first try, on a completely fresh boot: `post <title>`
+at the very first board a player meets (`obj/board/gourd_recall.lpc`,
+the board sitting in the start room) crashed instantly --
+
+```
+执行时段错误：*cannot bind an lfun fp to an object with a pending replace_program()
+程式：/std/bboard.lpc 第 107 行, 物件: /obj/board/gourd_recall
+呼叫来自：/std/bboard.lpc 的 do_post() 第 107 行，物件： /obj/board/gourd_recall ("留言板")
+```
+
+Exact match for AGENTS.md §7.86 (previously seen on `xhcii`, `zxty`,
+`hy2000`, `xyj2000` -- three unrelated ES2/金庸/西游记 lineages, now a
+4th, independent DA/es2 lineage). Root cause identical: every board
+file does `inherit BULLETIN_BOARD;` (giving it `do_post`'s `this_player()
+->edit((: done_post, this_player(), note :))` closure-creation code
+directly) **and then also** calls `replace_program(BULLETIN_BOARD)` in
+its own `create()` -- completely redundant since the class is already
+directly inherited, and actively harmful on this driver: the object's
+"replace program pending" flag is set the moment `replace_program()`
+runs and is never observed to clear, so `do_post()`'s and
+`do_followup()`'s attempt to bind an unbound lfun closure (`done_post`,
+implicitly bound to `this_object()`, the board itself) fails forever,
+for the lifetime of that board object. `do_read()`/`list`/`look` all
+work fine (no closure involved), which is exactly why the earlier
+onboarding smoke-test pass never caught it -- a board looks completely
+healthy right up until someone actually tries to write something.
+
+Found and fixed in **all 13 real board instances plus the in-game
+builder's own code-generation template**:
+
+- `obj/board/{taoist_b,common_b,wizard_b,gourd_recall,dancer_b,bonze_b,
+  gourd_lpc,gourd_bug,query_b,swordsman_b,fighter_b,bor_board}.lpc`
+  (12 files, all `inherit BULLETIN_BOARD;` + redundant
+  `replace_program(BULLETIN_BOARD);`)
+- `open/sky/data/sky15.lpc` (same shape, a kingdom-built board)
+- `obj/board/wizard_j.lpc` (same shape but the `JBOARD`-equivalent
+  class, `inherit "/std/jboard";` + `replace_program("/std/jboard")`)
+- `cmds/min/build.lpc`'s `make_base_post_office()` -- this is the
+  **code generator** the in-game `build` wizard/king command uses to
+  write a brand new kingdom post-office board file; its string template
+  emitted the exact same buggy `inherit BULLETIN_BOARD;` +
+  `replace_program(BULLETIN_BOARD);` pair, so every future
+  kingdom-built board would reproduce this crash forever even after
+  fixing the 13 existing files. Fixed by dropping the generated
+  `replace_program(BULLETIN_BOARD);\n}` line from the template (now
+  just closes with `}`), with a comment explaining why, so it does not
+  get silently re-added by a future edit. Also checked and confirmed
+  clean: the *generic* room-builder path (`make_room()`, the
+  `case "board":` branch of `build <type> <direction>`) inherits a
+  different, unaffected class (`BOARD` = `/std/room/board`, a thin ROOM
+  wrapper that just `load_object()`s the real board from kingdom data
+  -- itself only `inherit ROOM;` + `replace_program(ROOM)`, and `ROOM`
+  never creates a self-bound closure, so this half of the generator was
+  never broken).
+
+Verified live, before and after: before the fix, `post <title>` crashed
+exactly as above on a completely fresh boot (first command tried).
+After the fix (all 13 files + the template, LPC formatter run, fresh
+reboot), `post 深度测试标题2` / `Test body...` / `.` on the exact same
+board opened the editor normally, printed "留言完毕", and `read 2`
+confirmed the new post saved with correct author/timestamp/body;
+`followup 2` / body / `.` on the same message also completed cleanly
+("留言完毕"). Zero `insufficient permission`/`cannot bind` lines in
+`driver_stdout.log` for the rest of the session.
+
+**Also checked and confirmed NOT affected by the general
+`inherit X; ... replace_program(X);` redundant-idiom shape** (grepped
+all 107 files in this archive using `replace_program()`, cross-checked
+each against its own `inherit` line): dozens of `open/sky/*.lpc` room
+files redundantly self-`replace_program()` the exact same way for
+`ROOM`, `SHOP`, `TAVERN`, `ARMORY`, `SMITH`, `GATE`, `BANK`, `CHURCH`,
+`STABLE`, `PORT`, `PET_SHOP`, `WEDDING`, `SWEAR`, `POST_OFFICE`,
+`HERO_GUILD`, `BARRACKS`, `TRAINYARD`, `ACTIONROOM` -- but none of
+those base classes ever create a self-bound `(:` closure anywhere in
+their own code (confirmed by grep), so the "pending" flag never
+actually gets exercised for them and they are not currently broken.
+Left untouched (removing a redundant-but-harmless call on ~90 working
+files would be pure churn, out of scope for a bug-fix pass) -- flagged
+here in case a future pass adds an editor/closure-using command to any
+of these classes, since the same landmine is sitting there dormant.
+
+**Sibling libs to check**: same recommendation as AGENTS.md §7.86
+itself -- any ES2-derived lib with a `BULLETIN_BOARD`/`bboard.lpc`-style
+board class is worth a one-line grep
+(`grep -rln 'inherit BULLETIN_BOARD' | xargs grep -l 'replace_program(BULLETIN_BOARD)'`)
+before assuming its own `post` command works.
+
+### What was tested and confirmed working
+
+- **Registration + class pick**: real Chinese name (秦龙), landed in
+  `/d/gourd/gourd_recall`; real navigation (`north`×3, `west`) to
+  `/d/gourd/choice_class`, `list` showed the three classes, `advance
+  战士` succeeded, `score` immediately reflected "战士" instead of
+  "冒险者".
+- **Combat**: no dedicated safe-sparring dummy exists in this archive
+  (`std/char/npc.lpc`'s generic `accept_fight()` only declines a
+  "friendly"-attitude NPC, or any NPC when the attacker isn't near-full
+  health -- there's no stat-copying training-dummy mechanism to find).
+  Used the low-level, clearly-harmless "小美女" (阿宝) NPC standing in
+  the start room itself (level 1, `int 3`/`dex 2`, no weapon) -- `kill
+  girl` fought to a real, harmless standstill (both sides level 1
+  unarmed, 0 damage exchanged either way, matching design), `flee`
+  correctly disengaged. Zero errors.
+- **Shop/economy**: `list`/`buy bean` at the misc_shop (`/open/sky/28`)
+  completed correctly (gold deducted, item received, confirmed via
+  `i`). Full-tree grep for `float` in any currency-adjacent code
+  (`feature/finance.lpc`, `feature/dbase.lpc`, `std/money.lpc`,
+  `std/char.lpc`) found **zero float usage anywhere** -- the only
+  `float` declaration in the whole archive is an unrelated wizard `mem`
+  command. The §7.121-class bug (an `int`-declared function doing real
+  float math with no `to_int()`) **does not exist in this lib** --
+  every money/exp function (`can_afford`, `pay_money`, `deposit_bank`,
+  `withdraw_bank`, `got_money`, bank `deposit`/`withdraw`/`transfer`) is
+  pure integer arithmetic throughout.
+- **Quit / relogin persistence**: `quit` produced the normal "欢迎下次
+  再来！" with zero new lines in `driver_stdout.log`; waited a real
+  ~90-second wall-clock gap, reconnected with the same id+password --
+  logged back in cleanly (no re-registration prompt) with the class
+  change ("战士") correctly persisted.
+- **Death / respawn**: no wild monster was worth risking for a real
+  kill at level 1 (everything nearby trades 0 damage), so used the
+  documented admin-forced-death pattern (`smash <target>` →
+  `ob->die()` directly) on `qinlong` while genuinely net-dead
+  (disconnected, not `quit`) from the earlier combat test -- `秦龙死了`
+  printed with zero errors, a corpse ("秦龙的尸体") was left in
+  `gourd_recall`, and after the ~13-15 second `delay_move_recall`
+  `call_out` fired, reconnecting showed the character alive again at
+  the start room with HP 31/39 (79%) and MP 30/25 (120%, from `die()`'s
+  hardcoded `set("mp", 30)` intentionally exceeding a level-1 character's
+  25 max -- a deliberate flat respawn value in the source, not a
+  driver-API misuse, left untouched per scope). Confirms this lib's
+  simpler (no ghost-stage, no `DEATH_ROOM->start_death()`) death flow
+  works correctly end to end, including the net-dead-body edge case.

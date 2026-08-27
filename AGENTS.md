@@ -6254,9 +6254,25 @@ turned out to affect a SECOND, differently-named board base class --
 `inherit BBS_BOARD;` + `replace_program(BBS_BOARD);` instead; confirmed
 `bbsboard.lpc`'s own `do_postnews()` has the identical
 `ob->edit((: done_postnews, ... :))` closure-creation shape driving the
-same crash). Treat this as a near-universal copy-paste idiom across
-this whole generation of ES2-derived codebases -- check EVERY class a
-board-like object inherits for a matching redundant
+same crash). **A 4th confirmed lineage, `demonangel`'s own §10.7 deep
+functional test**: byte-identical shape on all 13 of its board files
+(`inherit BULLETIN_BOARD;` + `replace_program(BULLETIN_BOARD);`) plus,
+notably, in the in-game builder's own code-generation template
+(`cmds/min/build.lpc`'s `make_base_post_office()`, which writes new
+kingdom post-office boards from a string template) -- fixed the
+generator too so future player-built boards stop reproducing the bug,
+not just the pre-existing files. Also confirmed on this pass: the
+general `inherit X; ... replace_program(X);` redundant idiom is often
+used for MANY other non-board classes in the same archive (ROOM, SHOP,
+ARMORY, etc.) without being broken, because those classes never create
+a self-bound `(:` closure -- the redundant call only actually bites
+whichever specific class's own code path tries to bind an unbound lfun
+closure to itself, so grep for `(:\s*\w+\s*,` (no explicit target
+object) inside the base class itself before concluding a given
+redundant-`replace_program()` instance is or isn't live. Treat this as
+a near-universal copy-paste idiom across this whole generation of
+ES2-derived codebases -- check EVERY class a board-like object inherits
+for a matching redundant
 `replace_program()`, not just the most common `BULLETIN_BOARD` name.
 
 **Don't stop at grepping static `.lpc` files.** Found on `sje`'s §10.7
@@ -9594,7 +9610,18 @@ recurring during deep-testing (2026-08-03): `fys`, `fyzfqyy`,
 `njhhdxdes2hx`, `nt1`, `shujian3`, `sj`, `sje`, `sjecl`, `tianxia`,
 `wxddym`, `xjcq2000`, `xkm`, `xkx100`, `xkx2000zxb`, `xkx2017`,
 `xkxc98sj`, `xkxyb`, `xkyx3b`, `xkyxciii`, `yhwhpublicfi`, `yxsj`,
-`yxzsj`, `zjdy2008wzb`, `zjdywzb`, `zjmudhell` (30 libs, one commit).
+`yxzsj`, `zjdy2008wzb`, `zjdywzb`, `zjmudhell` (30 libs, one commit),
+and `demonangel` (found via its own §10.7 deep functional test --
+also the first instance where the SAME demotion was found live-broken
+in 8 sibling files beyond `command_hook` itself, all sharing the
+identical "`private` function in a mixin file registered via
+`add_action`/`call_out` in that same file" shape: `feature/action.lpc`'s
+`eval_function`, `std/item/combined.lpc`'s `destruct_me`, `std/room/
+furnace.lpc` (5 functions), `std/room/misc_shop.lpc`, `std/room/
+herb_shop.lpc`, `std/room/magic_tower.lpc`, `std/bboard.lpc` (3
+functions), `std/jboard.lpc` -- see `libs/demonangel/NOTES.md`'s own
+write-up for the full per-file table and which ones were confirmed
+live-triggered vs. fixed proactively for consistency).
 The sweep grepped every lib for `private.*command_hook`, found 109
 hits across 81 libs, then filtered hard before touching anything: 48
 of those hits were leftover false positives (an explanatory comment
