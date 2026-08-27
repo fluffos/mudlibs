@@ -1163,3 +1163,222 @@ test character `qinwudang`'s save files (`data/login/q/qinwudang.o`,
 `data/user/q/qinwudang.o`) deleted, not committed. `git status --short`
 confirmed clean except the one intentional `feature/skill.lpc` fix before
 committing.
+
+## Round five deep functional test (2026-08-27, AGENTS.md §10.7, new driver + 13-pattern sweep)
+
+Follow-up pass on the freshly-rebuilt driver, focused on the 13 newly
+catalogued cross-cutting bug shapes (§7.121/§8.3a/§7.122/§7.123/§7.124/
+§7.126/§7.129/§7.130/§7.131/§7.132/§7.133/§7.134/§7.135) plus one more
+full continuous playthrough (registration → exploration → safe-spar →
+sect-recruiter gate → real combat → quit/debug.log/reconnect-after-real-
+gap). Rounds two/three/four (above) already delivered full live coverage
+of sect apprenticeship+`xue`, shop purchase, and a complete organic
+combat-death-reincarnation cycle, so this round did not repeat those in
+full — it re-confirmed general soundness post-fix and went deep only on
+the newly catalogued patterns.
+
+### Bug found and fixed: 4th confirmed instance of AGENTS.md's uninitialized-mapping-accessor class (this lib's own §7.30 sibling shape, but on `F_DBASE` itself), matches §7.135's "one accessor missing the sibling guard" fingerprint
+
+`feature/dbase.lpc` is this lib's core per-object property store (`set()`/
+`query()`/`delete()`/`add()` on a `mapping dbase;` with no initializer).
+Every real accessor/mutator consistently guards the uninitialized case —
+`set()` does `if (!mapp(dbase)) dbase = ([]);`, `query()`/`delete()` do
+`if (!mapp(dbase)) return 0;` — **except `query_entire_dbase()`, which
+did a bare `return dbase;`** with no guard at all (and the parallel
+`tmp_dbase`/`query_entire_temp_dbase()` pair had the identical gap).
+`query_entire_dbase()` is used at 90+ call sites project-wide, including
+the core combat daemon (`adm/daemons/combatd.lpc`), `score`/`hp`
+commands, and `inherit/char/char.lpc`'s own `heart_beat()` — any of which
+indexing the bare `0` this would return (e.g. `my["eff_qi"]`) would throw
+a hard "indexing a value that is not an array/mapping" error.
+
+**Practically unreachable in this specific lib**, confirmed by reading
+every real call path: `dbase` gets lazily created by the very first
+`set()` call, and every object that ever reaches `query_entire_dbase()`
+(a real player mid-registration, or an NPC inside `CHAR_D->setup_char()`)
+has already had at least one `set()` run on it first (registration writes
+stats immediately; `setup_char()` calls the race-specific `setup_human()`/
+`setup_beast()`/`setup_monster()`, which itself calls `set()`, before ever
+querying `query_entire_dbase()`). No live crash was reproduced or
+expected under ordinary play. Fixed anyway, following this session's own
+established §7.30 remedy and the explicit "worth checking for a bare,
+uninitialized declaration" guidance under §7.134/§7.135 in AGENTS.md,
+since it costs nothing and closes the class for any future caller that
+doesn't share this lib's own "always `set()` before `query_entire_dbase()`"
+invariant:
+
+```lpc
+// feature/dbase.lpc
+mapping query_entire_dbase() {
+  return mapp(dbase) ? dbase : ([]);
+}
+mapping query_entire_temp_dbase() {
+  return mapp(tmp_dbase) ? tmp_dbase : ([]);
+}
+```
+
+Verified: driver rebuilds clean, and the live playthrough below (which
+exercises `score`/`hp`/combat, all real `query_entire_dbase()` callers)
+ran with zero `debug.log` errors after the fix.
+
+### Empirical finding: §7.121/§7.124-shaped "declared `int`, computed via float arithmetic, no `to_int()`" is NOT a live bug on this codebase+driver combination — verified by direct test, not assumed
+
+This lib's ES-lineage skill/level-curve code has a widespread recurring
+idiom, `level = ceil(pow(exper * 10.0, 0.333333));` into a declared-`int`
+local (12+ files: `quest/menpaijob/baituo/qiandan.lpc`,
+`d/wudang/sanqingdian.lpc`, `d/feitian/shulin{,1,2,3,4}.lpc`,
+`d/shaolin/wuchang.lpc`, `cmds/usr/hp.lpc`/`cmds/imm/hpt.lpc`,
+`adm/daemons/chard.lpc`, etc.) and two skill files
+(`kungfu/skill/fengyun-shou/foguang.lpc`,
+`kungfu/skill/taiji-quan/zhenup.lpc`) that do `int damage; ...; damage *=
+at;` where `at` is a `float` ratio — the exact shape flagged by §7.121/
+§7.124 on other libs (`nightmare4`, `ninetears`, `dsIII`). Rather than
+pattern-match and "fix" ~14 files by inspection, this was verified
+directly against the live driver: a throwaway test file
+(`/tmp_test_random.lpc`, compiled via `update`, exercised via the admin
+`call` command, deleted before committing) confirmed that **on this
+project's current FluffOS build, assigning/returning a float value
+through a declared-`int` local, global, function-return, or compound
+`*=` target is silently truncated to a real integer at the point of
+assignment/return** — e.g. `int test3() { float x = 100.0/3.0; return
+x; }` returned `33` (not a float, not `33.333333`), and `int damage=100;
+damage *= 3.5;` produced `300` (i.e. the float operand itself gets
+truncated toward int before the multiply — `100*(int)3.5`), and a
+`random(damage/2)` call immediately downstream of that same contaminated
+`damage` did **not** crash. Live `hp`/`score` output on a real freshly
+registered character also showed clean integer values (`潜能...上限
+[50000]`, no stray `.000000`). This is a materially different result
+from the (int)-cast-is-compile-time-only reference note and from the
+other libs' confirmed §7.121/§7.124 instances — most likely because
+those bugs involved a **field assigned a float literal directly with no
+arithmetic** (a compile-time-foldable constant) combined with a
+declared-`float` setter/getter pair that re-widened the value after the
+fact, a combination not present anywhere in `haiyang2`. **Conclusion:
+checked thoroughly, not applicable here** — left untouched. Worth
+re-verifying with the same direct-eval technique (not just code reading)
+before "fixing" this idiom on any ES-family sibling, since the fix would
+be a no-op change on a driver where this already doesn't crash.
+
+### §7.122 (autoload/class-marker duplication on reconnect) — checked, structurally NOT vulnerable, and confirmed live
+
+`feature/autoload.lpc` is this lib's own version of the TMI-2-style
+"reconstruct untracked-but-persistent items on login" mechanism (also
+used by real money objects — `inherit/item/money.lpc` defines
+`query_autoload()` too, so a duplication bug here would double actual
+currency, not just class-marker trinkets). Unlike the confirmed-buggy
+`mortremains`/`tmi2`/`es1` shape, `restore_autoload()` here **does**
+self-guard: `if (!pointerp(autoload)) return;` at the top, and
+`clean_up_autoload()` (called at the end of every `restore_autoload()`)
+sets `autoload = 0`, so a second call before a fresh `save_autoload()`
+repopulates it is a guaranteed no-op. Traced every real call site of
+`setup()`/`restore_autoload()`: `clone/user/user.lpc`'s `reconnect()`
+(the net-dead-recovery path) never calls `setup()` at all — confirmed by
+reading it directly, matching round two/three's own independent finding
+that a real reconnect lands the player back in their pre-disconnect room
+with zero re-initialization. `adm/daemons/logind.lpc`'s own
+`reconnect()` likewise only calls `user->reconnect()`, never
+`user->setup()`. The only other `setup()` call site touching a live
+player body is `cmds/usr/quit.lpc`'s "return from a possessed body"
+branch (`link_ob->is_character()`), an unrelated niche mechanic, not the
+ordinary reconnect path.
+
+**Verified live** with the admin account (`fluffos`): cloned one
+`/clone/family/jade` marker item and one `/clone/money/gold` (both
+`query_autoload()`-tracked) into inventory, then (1) a real `quit` +
+fresh relogin — inventory showed exactly 1 jade + 1 gold, not 2; (2) an
+abrupt disconnect (killed the raw socket process, no `quit` sent) +
+reconnect — `fluffos`'s own low `combat_exp` triggered the fast
+1-second `user_dump(DUMP_NET_DEAD)` force-quit-and-save path (same
+mechanic round two documented), landing on a genuinely fresh
+`restore()`+`setup()` cycle on relogin — inventory again showed exactly
+1 jade + 1 gold. No duplication in either case. **Not applicable** —
+this lib's self-clearing guard already closes the exact gap `es1` (its
+own direct ancestor!) was found vulnerable to; worth noting for the
+wider ES-family sweep that this specific fork does NOT need the
+`es1`/`tmi2`/`mortremains` fix.
+
+### Remaining 10 patterns — checked, not applicable (no live/structural instance found)
+
+- **§8.3a** (`private nomask command_hook`): the live `feature/command.lpc`
+  already has `private` commented out (fixed in round two's own §7.28
+  pass); `feature/commandhell.lpc` has the raw `private` form but zero
+  `inherit` references anywhere in the tree (confirmed dead, same as the
+  established `commandbak.lpc`/`command2.lpc` precedent elsewhere in this
+  project). Nothing live to fix.
+- **§7.123** (bare file-scope `IDENT = (...);` killing a compile): grepped
+  for the exact shape tree-wide; the only 3 hits are legitimate
+  multi-declarator statements (`mapping tiles = allocate_mapping(2),
+  cchar = ([...]);` and `private mapping B2G_Cache = ([]), G2B_Cache =
+  ([]);`) — real declarations with a type keyword earlier in the same
+  statement, not the buggy bare-reassignment shape. Zero real instances.
+- **§7.126** (stale pre-`.lpc` extension in AREA save data via a
+  `__DIR__`-style macro placeholder): this lib has no coordinate-grid
+  `AREA`/`std/area/map.lpc`-style world framework at all — ordinary
+  discrete room files throughout. Not applicable.
+- **§7.129** (`tell_room()` wrapper forwarding omitted `exclude` as literal
+  `0`): already fixed pre-session per this lib's own `§15s` code comment
+  in `adm/simul_efun/message.lpc` (both `tell_room()` and `shout()`),
+  matching AGENTS.md's own "ES2-family corpus sweep (2026-08-27)" note
+  that lists `haiyang2` among the libs already fixed before this pass.
+  Re-confirmed by reading the live file.
+- **§7.130** (net-dead heart_beat calling `query_idle()` unconditionally
+  after already-detected non-interactivity): `inherit/char/char.lpc`'s
+  `heart_beat()` correctly guards with `if (!interactive(this_object()))
+  return;` immediately before its only `query_idle()` call. Not
+  applicable.
+- **§7.131** (`find_living()`/`find_player()` needing `set_living_name()`):
+  the live `feature/command.lpc`'s `enable_player()` already calls
+  `set_living_name(query("id"))`/`set_living_name(query("name"))`. Not
+  applicable.
+- **§7.132** (`map()`-over-a-mapping bound to the wrong argument): zero
+  `map()`-over-a-mapping call sites anywhere in the tree (confirmed via
+  `grep -rn "= map("` — no hits at all). Not applicable.
+- **§7.133** (`net_dead()` apply never defined): `clone/user/user.lpc`
+  defines `private void net_dead()` and it is reachable (confirmed live
+  via the abrupt-disconnect test above, which exercised this exact code
+  path). Not applicable.
+- **§7.134** (uninitialized "extra descriptions from present items"
+  accumulator crashing every room's `long()`): this lib has no
+  `add_my_desc()`/`room_descs`-style mechanism at all. Not applicable.
+- **§7.135**: see the `feature/dbase.lpc` fix above — the one real
+  instance found this round.
+
+### Live playthrough summary
+
+New test character `qintester`/秦测风 (3-character Chinese name,
+gift `0`/random, password `Test123`, matching this lib's documented
+password policy). One continuous session: registration → `look`/
+`score`/`i` (clean) → `wg`→`north`→`west`→`west` to 西练武场 →
+`da muren zhuang` safe-sparring (学习潜力 99→100, confirmed via `score`
+before/after) → `bai xingxiu dizi` sect-recruiter gate (correctly
+rejected, matching round two) → clean `quit` (debug.log grepped
+immediately after: **no `log/debug.log` file exists at all**, i.e. zero
+runtime errors logged this entire session) → real wall-clock gap
+(~5 minutes) → reconnect: landed in the correct saved `startroom`
+(welcome room), `score` showed 学习潜力=100 persisted correctly → admin
+`summon`ed into `/d/city/nandajie1` and fought the real (not
+admin-boosted) `小混混`/hunhun (`combat_exp` 200 vs. a brand-new
+character) — lost the fight, correctly caught by the documented
+"新手不死" newbie-protection rescue (`combat_exp < 2,500,000`, white-light
+rescue to `/d/pingan/guangchang`, `上次死因` stayed "无" since a rescue
+isn't a real death) — confirmed via `score` post-rescue. `log/debug.log`
+still did not exist after the combat sequence — zero errors end to end.
+
+### Process hygiene
+
+Native driver, port 40057, PID 1708062 (confirmed via `readlink -f
+/proc/1708062/cwd` before every teleport/call action and immediately
+before the final kill). Three raw-socket Python sessions used throughout
+(admin `fluffos`/`Mud@2026`, test character `qintester`, plus a brief
+second admin reconnect to exercise the abrupt-disconnect autoload test);
+all quit cleanly before the driver was killed by exact PID. The
+throwaway `/tmp_test_random.lpc` diagnostic file (used only for the
+§7.121/§7.124 empirical test above) was deleted before committing — `git
+status` never showed it as untracked at commit time. Runtime churn from
+testing (`data/login/f/fluffos.o`, `data/user/f/fluffos.o`,
+`data/npc/menpai.o`/`menpai1.o` — the same unrelated periodic
+sect-of-the-day daemon effect prior rounds noted) reverted via `git
+checkout`; test character `qintester`'s save files
+(`data/login/q/qintester.o`, `data/user/q/qintester.o`) deleted, not
+committed. `git status --short` confirmed clean except the one
+intentional `feature/dbase.lpc` fix before committing.
