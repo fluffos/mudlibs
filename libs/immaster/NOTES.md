@@ -253,3 +253,157 @@ about 6 weeks of active commits in mid-2020. Documented here explicitly,
 per the standing project rule, so a future re-check doesn't mistake
 "just rooms to explore, nothing to fight or pick up" for a bug needing a
 fix: it is this archive's real, final, intentionally-thin state.
+
+## 6. Deep functional test (round two, 2026-08-27)
+
+Full §10.7 methodology pass: one continuous raw-socket session, booted
+`~/src/fluffos/build-debug/src/driver config.fluffos` from
+`libs/immaster/` (killed by exact PID when done, never `pkill`).
+
+### 6.1 Bug found and fixed: typo'd exit key breaks reciprocal navigation
+
+`game/world/tutorial/trail2.lpc`'s `exits` mapping used the key
+`"northest"` where every other room in this 13-room map, the sibling
+room `trail1.lpc` (`"northeast": WORLD_DIR"/tutorial/pool"`), and this
+engine's own canonical direction table
+(`ext/mudcore/cmds/player/go.lpc`'s `default_dirs`/`r_dirs` mappings,
+which enumerate `northeast` as a real direction with `southwest` as its
+reciprocal, and `ext/mudcore/system/daemons/command_d.lpc`'s
+`default_aliases` `"ne":"go northeast"`) all use `northeast`. Since this
+engine's `go.lpc` looks up the exact input string as a mapping key
+(`exit[arg]`, `undefinedp` gate), typing the semantically-correct
+`northeast` from `trail2` failed with the driver's generic
+`什么？` (unknown-command) fallback, while only the typo'd `northest`
+actually worked — silently breaking the `trail1<->trail2` direction
+symmetry every other room pair in the map observes (e.g.
+`stream`/`cliff` use `east`/`west`, `forest`/`backyard` use
+`southup`/`northdown`, etc.). This is a plain one-character-off literal
+typo (an "obviously wrong variable/string reference"), not a
+content/design call — the fix doesn't invent anything, it restores the
+one convention the rest of the file's own siblings already follow.
+
+**Fix**: `"northest"` -> `"northeast"` in `trail2.lpc`'s `exits`
+mapping (one line). **Verified live**: teleported a wizard test
+character into `trail2` via `eval`, confirmed pre-fix that
+`northeast` produced `什么？` while `northest` moved to `trail1`;
+applied the fix, reloaded the room live with the wizard `update`
+command (no reboot needed), and confirmed `northeast` now correctly
+moves `trail2`->`trail1` and `southwest` moves back, matching
+`trail1`'s own already-correct exit keys.
+
+Not treated as a new AGENTS.md numbered bug class: unlike the
+7 standing cross-cutting patterns checked below, this is a single
+idiosyncratic literal-string typo local to one file, not a
+generalizable engine-level shape likely to recur verbatim in unrelated
+codebases.
+
+### 6.2 Observations documented, left untouched (content/design, not bugs)
+
+- **The `trail1`/`trail2`/`pool`/`waterfall`/`tomb` sub-cluster (5 of
+  the archive's 13 rooms) has no inbound exit from the rest of the map
+  at all**, even after the 6.1 fix. Full exit-graph audit (every
+  `set("exits", ...)` in `game/world/tutorial/*.lpc`): the reachable
+  hub (`start_room`, `courtyard`, `treehouse`, `backyard`, `forest`,
+  `stream`, `cliff`, `cave_entrance`, `cave`) never links directly to
+  any of the 5 cluster rooms, and the cluster's own only edge back out
+  (`trail2`'s `"south": START_ROOM`) is one-way — nothing in
+  `start_room` (only `north`/`south`) or any other hub room points
+  into `trail1`/`trail2`. `pool.lpc`'s own room text
+  ("不妨潜水下去看看。(dive)") strongly implies the intended entry
+  point was a `dive` command from some other body of water, but no
+  `dive` command exists anywhere in the tree (`find . -iname '*dive*'`:
+  zero hits) — genuinely unimplemented, not merely mis-wired. Also
+  considered: `cliff.lpc`'s own text explicitly describes looking down
+  at a waterfall and lake from that exact spot
+  ("溪水顺势而下，竟是一道瀑布...是波光粼粼的湖水"), which reads like
+  a natural place for a missing `down` exit into `waterfall`/`pool` —
+  but deciding whether that's the right fix (and to which room,
+  `waterfall` or `pool`) is a content/design judgment call this pass
+  does not make. **Left as an honest observation, not fixed** — adding
+  a new exit would be inventing the missing connection rather than
+  correcting a demonstrably-wrong one, squarely outside this pass's
+  scope. This matches the project's own framing (immaster's README:
+  "ongoing... as a learning project", 6 weeks of commits before it
+  stopped) of a real, unfinished work in progress.
+- `ext/mudcore/system/daemons/command_d.lpc`'s `default_aliases`
+  includes `"i":"inventory"` and `"l":"look"` as MudCore engine-level
+  defaults; `look` resolves (a real `cmds/player/look.lpc` exists) but
+  `inventory` does not (no such command file anywhere in either
+  immaster or MudCore), so typing `i` alone falls through to the
+  generic `什么？`. Consistent with this archive's own documented
+  zero-items/zero-inventory-system scope (§5 above) — not a bug to fix
+  without inventing an inventory system this content layer was never
+  given.
+
+### 6.3 The seven standing cross-cutting patterns: all checked, all clean
+
+Grepped both immaster's own content and the merged MudCore engine tree
+for each of the 7 patterns called out for every lib this round:
+
+- **§7.121** (float arithmetic in a declared-`int` function, no
+  `to_int()`): only one `float`-typed function anywhere in the tree,
+  `ext/mudcore/system/kernel/simul_efun/graph_draw.lpc`'s
+  `graph_draw()` (a progress-bar-drawing helper) — it already uses
+  `to_float()`/`to_int()` correctly internally, and is dead code (zero
+  callers anywhere in immaster or MudCore). Clean.
+- **§8.3a** (`private`-declared dispatch/callback/`call_out`-target
+  function silently demoted after being inherited elsewhere): the one
+  real `add_action` site
+  (`ext/mudcore/inherit/command.lpc`'s `command_hook`) is already
+  correctly `nomask int command_hook(string arg)`, not `private`. All
+  4 real `call_out()` targets in the whole tree (`loadall`,
+  `select_day_phase`, `time_out`, `user_dest`) are declared plain
+  `void`/`int`, none `private`. `ext/mudcore/inherit/message.lpc`'s two
+  `private` pagination functions (`step_more`/`more_process`) are only
+  ever invoked via same-file closures (`(: step_more, ... :)` passed to
+  `input_to()`), which resolve at compile time and aren't subject to
+  this demotion. Clean.
+- **§7.122** (autoload/class-marker duplication mechanism):
+  `grep -rl "autoload\|auto_load"` across the whole tree returns zero
+  hits — no such mechanism exists in this codebase at all. N/A.
+- **§7.123** (bare file-scope `IDENT = (...)` statement): checked with
+  a column-zero anchored grep
+  (`^[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*(\(\[|\(\{)`) across every `.lpc`
+  file — zero hits. Every `mapping`/`array` literal assignment found by
+  a looser grep is indented inside a function body. Clean.
+- **§7.124** (0.0-1.0 fraction vs. 0-100 percent field mismatch): no
+  `float`-typed threshold/rate fields and no `= 0\.[0-9]+;` literals
+  anywhere outside the one dead `graph_draw()` helper (which correctly
+  uses fractions internally for its own unrelated bar-width math, not a
+  threshold field). N/A — no economy/threshold system exists in this
+  archive at all (matches §5's documented no-items/no-combat scope).
+- **§7.126** (stale pre-`.c`-to-`.lpc` extension surviving in `.o` save
+  data via a macro-placeholder path): the only door mechanism
+  (`ext/mudcore/inherit/room.lpc`'s `create_door`/`open_door`/
+  `close_door`) resolves destinations straight from the room's own
+  `exits` mapping (plain `WORLD_DIR"..."`-prefixed literals, no macro
+  substitution, no stored extension at all) and is never actually
+  invoked by any file under `game/world/tutorial/` — no doors exist in
+  this content. No `.o` save file anywhere in the tree contains a
+  `.c"` reference (checked directly). N/A.
+- **§7.129** (`tell_room()`/`message()` wrapper forwarding an omitted
+  optional arg as a literal `int(0)`): the one candidate wrapper,
+  `ext/mudcore/system/kernel/simul_efun/message.lpc`'s commented-out
+  `tell_room()`, is entirely dead code — every real `tell_room()` call
+  site in the tree resolves straight to the driver's native efun.
+  Every real `message()` call site either passes a real 3-argument
+  call with the 4th genuinely omitted (not a defaulted `varargs` value)
+  or, in `boardcast()`/`msg()`, explicitly guards the `varargs`
+  `exclude` parameter with `arrayp()` before ever using it and always
+  normalizes it to a real array (`(exclude || ({})) + (...)`) before
+  the final `message()` call. Clean.
+
+### 6.4 Save/restore and account/wizard flow: re-confirmed briefly
+
+Per the task instructions, did not redo the full onboarding
+investigation (already verified in §3 above) — just re-confirmed: a
+`teamug` registration, full 13-room movement sweep (including
+teleporting via the wizard `eval` command into the otherwise-
+unreachable `trail1`/`trail2`/`pool`/`waterfall`/`tomb` cluster to
+exercise those rooms' own exit logic), `quit`, a real `kill` + restart
+of the driver process, and reconnect with the same ID/password —
+password check, `restore()`, and the `teamug`-grants-wizard rule all
+worked identically post-restart. `log/debug.log` (created fresh each
+boot per this project's own `.gitignore`) stayed completely empty
+across the whole multi-session test — zero uncaught errors of any
+kind.
