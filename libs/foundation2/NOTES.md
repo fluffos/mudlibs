@@ -319,3 +319,152 @@ WASM session: login (`fluffos`/`Mud@2026`), arrival in the correct
 starting cavern room, and `inventory` producing correct output.
 `quit` wasn't recaptured distinctly in this transcript but is already
 verified clean under native testing above and untouched by this fix.
+
+## 深度功能测试（round two, 2026-08-27）
+
+Full §10.7 continuous playthrough against the native debug driver
+(`~/src/fluffos/build-debug/src/driver config.fluffos`), never done
+for this lib before (only the original onboarding-tier boot/play pass
+in \S6/\S "WASM status update" above). This is a genuinely minimal
+engine (no combat/limbs/stats/score, one small starting room with no
+working exits -- see \S3), so the test surface is: login/registration,
+`look`/`inventory`, save, mail (IIPS), `who`, `quit`+reconnect, and a
+systematic grep sweep for every standing cross-cutting bug class
+tracked in `AGENTS.md` (\S7.121-\S7.135, \S8.3a).
+
+**Playthrough** (admin `fluffos`/`Mud@2026`, plus a throwaway English
+test character `Aldric`, cleaned up before commit): full first-boot
+admin login and a brand-new registration (name -> confirm -> password
+-> confirm -> gender -> display name -> email -> real name -> news
+screen -> world) both landed cleanly in `/domains/Standard/center`
+with correct `look`/`inventory` output. `save`, the `mail` command
+(IIPS letter reader, empty folder, clean `q`-driven exit), and `who`
+all worked correctly. `quit` printed the normal "Please come back
+another time!" with zero `log/runtime` growth; reconnected after a
+real multi-minute wall-clock gap and got a genuinely fresh `Setup()`
+run (not a `"Reconnected."` link-restore), landing back in the same
+room with the same empty inventory -- no state loss, no duplication.
+Confirmed (per \S3) that the starting room's own pool-spawning code is
+commented out in `domains/Standard/center.lpc`'s `create()`, and even
+if it were re-enabled both pool destinations are dead ends (one points
+at a non-existent `/domains/Discussion/MudOS`, the other at
+`domains/School/room/entrance` -- one of the already-documented
+incompatible-API School files that doesn't compile) -- so the starting
+cavern legitimately has zero working exits; this is pre-existing
+content/archive state, not something introduced by this port, and not
+a programming bug to invent a fix for.
+
+**Cross-cutting pattern sweep** -- grepped systematically for every
+class in AGENTS.md \S7.121-\S7.135 and \S8.3a. Confirmed genuinely not
+applicable/structurally clean on this lib for: \S7.121 (only float
+usage in the whole tree is `secure/sefun/percent.lpc`'s own correctly-
+`float`-declared `percent()`), \S8.3a (zero `private` command-dispatch/
+call_out-target functions anywhere -- every `add_action`/`call_out`
+target checked is a plain public/`nomask` function), \S7.112 (no NPCs
+at all outside the non-compiling `domains/Examples/npc`), \S7.122
+(`lib/autosave.lpc`'s `AutoLoad` item-reload mechanism is correctly
+gated by `lib/interactive.lpc`'s own `Setup` re-entry guard --
+`net_dead()`/reconnect via `boot_copy()` never re-invokes `Setup()` at
+all, so the autoload-on-Setup path only ever runs once per genuinely
+fresh login), \S7.123 (the one raw grep hit,
+`secure/cmds/player/tell.lpc:109`'s `morse()` local variable
+assignment, is inside a function body, not file scope -- false
+positive), \S7.124 (no percentage/threshold fields of this shape exist
+at all -- no combat/wimpy system), \S7.126 (no coordinate-area door
+save-data of this shape), \S7.129 (`secure/sefun/communications.lpc`'s
+`tell_room()`/`say()`/`shout()` wrappers all explicitly convert a
+falsy/omitted `exclude` to `({})` before forwarding to `message()` --
+already safe, unlike the buggy `es1` shape this class describes),
+\S7.130 (disconnect handling goes through the `net_dead()` apply
+directly, no `heart_beat()`-based `query_idle()` polling anywhere),
+\S7.131 (`lib/interactive.lpc:63` calls `set_living_name(GetKeyName())`
+inside `Setup()`, and `find_player()`/`find_living()` lookups were
+directly exercised live via `secure/lib/login.lpc`'s own reconnect-
+detection and `secure/cmds/creator/call.lpc`/`whisper`/`tell` --
+already confirmed working), \S7.132 (no `map()` over a mapping
+anywhere in the tree -- every `map()` call site targets an array),
+\S7.133 (`net_dead()` -- the correct apply name for this driver -- is
+genuinely defined in `lib/interactive.lpc`/`lib/creator.lpc`/
+`lib/chat.lpc`), \S7.134 (`lib/room.lpc`'s own "extra descriptions
+contributed by present items" accumulator, `ExtraLongs`, IS
+initialized at its declaration site in `create()` -- structurally the
+same feature class as the `arkadia`/`genesis` bug but already safe
+here), \S7.135 (checked every lazily-guarded global family found via
+grep -- `lib/nmsh.lpc`'s `Nicknames`/`Aliases`/`Xverbs`,
+`lib/access.lpc`'s `__ReadAccess`/`__WriteAccess`,
+`secure/daemon/master.lpc`'s `Groups`/`ReadAccess`/`WriteAccess`,
+`daemon/banish.lpc`'s `__Names`/`__TmpBanish`/etc. -- every one is
+unconditionally initialized in its own file's `create()`, not merely
+guarded lazily per-accessor, so there's no "one accessor forgot the
+guard" gap to find).
+
+**New bug found and fixed**: `secure/daemon/events.lpc` (the reboot-
+warning/scheduled-event daemon, `EVENTS_D`) defines `GetEvents()` and
+`GetRebootInterval()` as its real query accessors, but two OTHER files
+call a same-purpose function under a different name that is never
+defined anywhere in the whole tree: `cmds/creator/events.lpc`'s `cmd()`
+(the player-facing `events <wizard>` command, reachable by any
+arch/creator) called `EVENTS_D->query_events()` at its second branch
+(the `events` command's first branch, no argument, already correctly
+calls `GetEvents()` -- so this is an internal naming inconsistency
+within the SAME file, not a guess), and `secure/sefun/events.lpc`'s
+(dead, uncalled) `event_pending()` made the identical mistake. This
+predates this project's port entirely -- confirmed via `raw/
+foundation2_fluffos_v1/lib/{cmds/creator,secure/sefun}/events.c`, the
+pristine 1990s archive already has this exact mismatch, byte for byte.
+On this driver, a call to an undefined function via `->` returns a
+bare `int(0)`, and `(mapping)0`'s cast is a no-op (this driver's
+`(type)` casts are compile-time hints only, see the `reference_lpc_
+int_cast_is_compile_time_only` note) -- so `mp` stayed `int(0)`, and
+the very next line's `keys(mp)` crashed uncaught: **reproduced live**,
+`events somebody` as the seeded `fluffos` admin threw `*Bad argument 1
+to keys() Expected: mapping Got: 0` (`log/runtime`, `/cmds/creator/
+events` line 36), aborting the command with no player-facing
+indication beyond the raw driver error text. **Fix**: both call sites
+changed from `EVENTS_D->query_events()` to `EVENTS_D->GetEvents()`,
+matching the daemon's own real, only accessor and the working sibling
+branch already right above it in the same file
+(`cmds/creator/events.lpc:35`, `secure/sefun/events.lpc:16`). Verified
+live post-fix: `events somebody` now correctly prints "somebody
+doesn't have any events pending." with zero `log/runtime` growth; a
+full re-boot-and-retest after running the \S9 LPC formatter on both
+touched files (all three formatter blind-spots checked clean: no `::`
+mis-split, no case/comment merge -- neither file has a `switch`, no
+CJK/escape re-spacing) reconfirmed the fix.
+
+**Related gap found, NOT fixed (documented per this section's own
+"when unsure, don't guess" rule)**: `cmds/player/nextreboot.lpc` (a
+real, reachable player command) calls `EVENTS_D->query_next_reboot()`,
+which also does not exist anywhere in the tree -- and unlike
+`query_events()`, there is no matching same-purpose sibling function
+to redirect it to (`GetRebootInterval()` only returns the configured
+*interval* in hours, not an absolute next-reboot timestamp). This
+doesn't crash (the undefined-function call_other returns `0` and the
+command just prints a bogus "Wed Dec 31 16:00:00 1969 PST" instead --
+confirmed live), but fixing it correctly would mean inventing new
+bookkeeping (e.g. tracking mud-start time and deriving `boot_time +
+RebootInterval*3600`) rather than just correcting a mistaken function
+name, and the entire auto-reboot subsystem it would report on is
+already dormant by original-archive design: `secure/daemon/
+events.lpc`'s own `eventPollEvents()` self-rescheduling poll loop --
+the only code path that ever checks `uptime() > RebootInterval*3600`
+and triggers `eventReboot()` -- is never started at all, because its
+sole `call_out((: eventPollEvents :), 60)` in `create()` is commented
+out. Confirmed via `raw/foundation2_fluffos_v1/lib/secure/daemon/
+events.c` that this `call_out` was ALREADY commented out in the
+pristine 1990s archive, not something broken by this port. Left
+untouched as a pre-existing, structurally dormant feature gap rather
+than guessed at. (A third, related latent bug in the same dead
+subsystem, also pre-existing and also left untouched: `secure/sefun/
+events.lpc`'s `event()` wrapper calls `EVENTS_D->AddEvent(f, when,
+reg)` with 3 arguments of the wrong types against `AddEvent()`'s real
+6-parameter `(string c, string s, string f, mixed *a, int w, int r)`
+signature -- but `event()` itself is never called by anything anywhere
+in the tree, so this is unreachable dead code, not a live crash.)
+
+**Evidence left in place**: the seeded admin account
+`secure/save/creators/f/fluffos.o` (age/login-time counters naturally
+advanced by this session's repeated logins). The throwaway test
+character `Aldric` (`secure/save/creators/a/aldric.o`,
+`secure/save/postal/a/aldric/`) was deleted before committing, per
+this project's standing cleanup convention.
