@@ -394,3 +394,264 @@ for an automated reboot loop.
 - **Full deep §10.7-style playthrough / WASM pass**: out of scope for
   this onboarding session per the task brief (native boot +
   registration verification only).
+
+## 深度功能測試（§10.7 round two, 2026-08-27）
+
+Full continuous playthrough per AGENTS.md §10.7: registered a real test
+character (`qinfengf` / 秦風德, deleted before commit), tested
+look/score/inventory/who/whoami through several state changes (post-
+register, post-village-join, post-combat), village join, safe-sparring
+combat, quit/relogin persistence (twice, including a real reconnect
+after several minutes of intervening investigation work). Admin account
+`fluffos`/`Mud@2026` re-verified working (login, wizard room-path
+suffix, no password-policy issue). Two real, severe programming bugs
+found and fixed live; the five standing cross-cutting patterns
+(§7.121/§8.3a/§7.122/§7.123/§7.124) were checked systematically, one
+more (benign) §8.3a instance found and fixed, the rest confirmed clean.
+
+### Bug 1 — §8.1 length-gate variant: `is_chinese()`'s `strlen(str)>=2` tail-slice gate rejected every odd-length Chinese name
+
+`adm/simul_efun/chinese.lpc`'s `is_chinese(str) { if( strlen(str)>=2 &&
+str[0] > 160 ) return 1; return 0; }` is the exact length-gate variant
+already documented in AGENTS.md §8.1 (found previously on `dfgsiiv13b`).
+`adm/daemons/logind.lpc`'s `check_legal_name()` calls it on a *tail
+slice* of the candidate name at every even byte-position
+(`is_chinese(name[i..<0])`, a GBK-byte-era idiom meaning "is there a
+full 2-byte hanzi starting here") — under this driver's per-codepoint
+`strlen()`, the LAST character's tail slice is always exactly 1
+character long, so `strlen(str)>=2` is false and `is_chinese()` always
+returns 0 for it whenever that lands on an even loop index, i.e.
+whenever the name's total character count is **odd**. Confirmed live:
+a 2-character name (`秦楓`) registered fine, but a 3-character name
+(`秦風德`) was rejected every time with "對不起，請您用「中文」取名字。"
+— exactly the "some lengths work, some don't, no obvious pattern from
+one test name" symptom AGENTS.md §8.1 warns about. This also explains
+why the *onboarding* session's own registration verification missed it
+entirely: all 4 of its test names (`秦風`/`秦楓`/`秦雪`/`浮浮`) happened
+to be 2 characters long.
+
+**Fix** (`adm/simul_efun/chinese.lpc`), per §8.1's documented remedy —
+drop the length requirement, check only the first character's codepoint
+range regardless of the slice's total length:
+```lpc
+int is_chinese(string str)
+{
+    if( !strlen(str) ) return 0;
+    return str[0] >= 0x4e00 && str[0] <= 0x9fff;
+}
+```
+Verified live: a fresh 3-char-name registration (`王小明`) and a
+5-char one both now succeed; a 2-char name still works as before.
+`is_chinese()`'s two other call sites (`chinese.lpc`'s own
+`break_chinese_string()`, `channeld.lpc`'s emote-detection) also pass
+tail-slices or whole strings — the first-character-only check is
+correct for all of them.
+
+**Sibling check**: `huoying` (byte-identical `master.lpc`) is worth a
+quick grep for the same `is_chinese()`/`check_legal_name()` shape if it
+is ever deep-tested, though its own NOTES.md describes it as having no
+built-out game content beyond the bootstrap wizard room, so this may
+never be exercised there.
+
+### Bug 2 — new bug class, added as AGENTS.md §7.126: two independent driver-incompatibility bugs together made the ENTIRE built-out game world (not just the tutorial hub) unreachable from a fresh registration
+
+Found by trying to walk from the starting room (`世界巫師神殿`) to
+anywhere else. Two separate, compounding bugs, both fixed:
+
+**2a — `command_hook`'s movement gate rejected any non-`string` exit
+value, silently blocking the bare compass word the room itself
+advertises.** `feature/char/command.lpc`'s central dispatcher only
+routes a bare direction word (e.g. `east`) to `/cmds/std/go.lpc` when
+`stringp(environment()->query("exits/" + verb))` is true:
+```lpc
+else if( (verb != "go") && environment()
+         &&	stringp(environment()->query("exits/" + verb))
+         &&	GO_CMD->main(this_object(), verb) )
+```
+But an "exit into a coordinate-based AREA" is legitimately authored as
+a **mapping** (`{"filename":..., "x_axis":N, "y_axis":N}`) — used by
+180+ room files in this archive, e.g. `world/area/wizard/propose.lpc`'s
+own `"east"` exit — and `go.lpc`'s `do_room_move()` already fully
+supports and correctly resolves that shape. The `stringp()` gate
+rejected it outright, so typing the *exact word the room's own `look`
+listing shows* (`這裡明顯的出口是 west 和 east。`) produced the
+driver's generic unrecognized-command fallback (`config.fluffos`'s
+`default fail message`, which happens to be in Simplified Chinese —
+initially mistaken for a mudlib string, traced to the driver's
+`__DEFAULT_FAIL_MESSAGE__` config value via `strings` + a grep of
+`add_action.cc`'s `notify_no_command()`) with **zero indication the
+real problem was a type check**, not a missing exit. The single-letter
+alias route (`e` → `aliasd.lpc` → `go east`) happened to bypass this
+gate entirely (`verb=="go"` skips the branch), which is why the
+onboarding session's registration test — which never left the starting
+room via a coordinate-based exit — never hit this.
+
+**Fix**: accept any defined exit value, matching `go.lpc`'s own type
+handling, instead of requiring a string:
+```lpc
+else if( (verb != "go") && environment()
+         &&	environment()->query("exits/" + verb)
+         &&	GO_CMD->main(this_object(), verb) )
+```
+
+**2b — NEW BUG CLASS (added as AGENTS.md §7.126): stale `.c` extensions baked into `.o` save-file DATA (not source) for every coordinate-AREA room-exit door, surviving this project's own `.c`→`.lpc` rename.** Even after fixing 2a, walking onto
+several of the wizard-temple AREA's own door tiles (e.g. the free
+`transfer` room that is the *sole* route from the tutorial hub to
+`muye`/`whale_island`/`sifa_isle`) still failed with a generic "這個方
+向的出口有問題，請通知管理者來處理" error. Root cause: `std/area/map.lpc`'s
+`valid_leave()` resolves a door tile's `room_exit`/`area_exit` value
+through the AREA's own `file_path()` helper (substituting the
+`__DIR__`/`_DIR_*_` macro placeholders these values are stored with),
+then calls `load_object()` on the result — but the **stored value
+itself** still carries a literal `.c` extension from before this
+archive's `.c`→`.lpc` conversion (e.g. `"__DIR__transfer.c"` resolves
+to `/world/area/wizard/transfer.c`, but the real file is now
+`transfer.lpc`). Unlike the original MudOS driver (`.c`/`.lpc`
+interchangeable), this driver resolves an explicit extension exactly,
+so `load_object()` silently returns 0 and `valid_leave()` rejects the
+move. **This is not confined to one room** — a corpus grep across every
+`world/area/**/*.o` file found **210 affected save files / ~969 stale
+`.c` references** to `room_exit`/`area_exit`/`filename` values,
+spanning virtually every built-out domain (`muye`, `whale_island`,
+`sifa_isle`, `four_wheel_tower`, `god_forest`, `sand_hole`, etc.) — in
+practice this made the ENTIRE hand-built game world beyond the
+tutorial-area's plain-string exits unreachable via ordinary movement,
+since the free `transfer` teleport hub (the game's own documented
+"level 1 is free" route out of the tutorial area) was itself one of
+the broken doors.
+
+This is a distinct class from AGENTS.md §4.2 item 2 ("bare paths in
+plain-text data files") — that class is a literal, static path string;
+this one is a macro-style placeholder (`"__DIR__foo.c"`) resolved at
+runtime through a custom substitution function, which is why it wasn't
+caught by `convert_lib.sh`'s source-only `.c`-reference fixups (`.o`
+save data is out of scope for that sweep) or by any live `look`/short
+single-room registration test. **Fix** — patch the single choke point
+both `room_exit` and `area_exit` resolution flow through
+(`std/area/map.lpc`'s `file_path()`), stripping a trailing bare `.c`
+after the macro substitutions:
+```lpc
+if( strlen(dir) > 2 && dir[strlen(dir)-2..] == ".c" )
+    dir = dir[0..strlen(dir)-3];
+```
+This transparently fixes all 210 affected `.o` files without touching
+any of them directly (`.lpc`-suffixed values are unaffected — `.lpc`'s
+last two characters are `pc`, never matching the check). Verified live:
+`load_object()` on `transfer`'s resolved path now succeeds (confirmed
+via a direct `eval`), and a test character walking `east` from
+`world/area/wizard/propose.lpc` — previously blocked by bug 2a — now
+correctly lands in the `wizard.lpc` AREA at the exact coordinate the
+room's own exit mapping specifies; from there the character reached
+`muye` village (via an `eval`-assisted reposition, since the coordinate
+grid's own live-redrawing ANSI map view made scripted multi-step
+compass-walk timing unreliable for further live confirmation — see
+"Not fully confirmed live" below), joined the 木葉 (Muye) village via
+`say 加入` to 伊魯卡 (confirmed: title changed to `木葉村成員`), and
+fought the safe practice dummy (`world/npc/stake.lpc`, `no_combat`/
+`no_defend`/`no_evade`, commented-out `receive_damage()` — this
+archive's own designated §10.7 "safe sparring mechanism") via `fight
+stake` with real damage messages and energy-point cost, confirmed
+persisting across quit/relogin.
+
+**Added as new AGENTS.md entry `### 7.126`** (this is a materially
+different mechanism from every existing `.c`/`.lpc`-rename catalog
+entry in §4.2 — data-embedded macro placeholders resolved by a custom
+per-lib function, not a literal path) — flagged there for a corpus-wide
+check on any other archive using a similar coordinate-AREA engine with
+a `__DIR__`-substitution-style save format (this ES2/Neolith lineage's
+`std/area/map.lpc` in particular — `huoying`, `zhyx`, `yanhuangwuhun`,
+`demonangel`, `es2`, `haiyang2` are the already-identified siblings,
+though most have far smaller or no built-out AREA-grid game worlds so
+the blast radius will vary; worth a `grep -c '\.c"' world/area/**/*.o`
+sanity check on each before assuming it's unaffected).
+
+### Standing cross-cutting patterns (§7.121/§8.3a/§7.122/§7.123/§7.124) — checked explicitly
+
+- **§7.121 (float economy math declared `int`)**: not found. Checked
+  every currency/shop file (`std/money.lpc`, `adm/daemons/exchanged.lpc`,
+  `std/room/hockshop.lpc`, all 6 `bank.lpc` variants) — all arithmetic
+  is plain integer, no float division/multiplication anywhere in a
+  value/price/cost computation. `adm/daemons/combatd.lpc`'s
+  `normalDistribution()` does real float math but is correctly declared
+  `float` throughout (not a false instance).
+- **§8.3a (`private` demoted after inheritance, blocking `add_action`)**
+  — **one confirmed, fixed instance**: `feature/char/command.lpc`'s
+  `cmd_quit()`/`cmd_update()` (both `add_action`-registered as `"quit"`/
+  `"update"` fallbacks in the same file's `init_command()`) were
+  declared `private int`, and this file is inherited into `std/char.lpc`
+  → the player body, the exact §8.3a shape (`command_hook` itself was
+  already correctly `protected nomask`, not `private` — no issue
+  there). **Zero live impact confirmed**: both are explicitly documented
+  in their own comments as *fallbacks* ("萬一 quit 指令壞掉時，備用的
+  quit"), and the real "quit"/"update" verbs are handled by
+  `command_hook`'s own `find_command()`-based dispatch to the real
+  `QUIT_CMD`/`/cmds/wiz/update.lpc` regardless — confirmed live via
+  every `quit` in this session working correctly. Fixed anyway (dropped
+  `private`, zero behavior change to the working path) so the
+  documented "backup if the real command breaks" intent actually works
+  if it's ever needed. A second `private`-heavy file, `adm/obj/mailbox.lpc`,
+  was checked and is **not** an instance — it is loaded standalone
+  (never inherited via `include/globals.h`'s `MAILBOX_OB`), so its
+  `add_action` calls register against the same file that declares the
+  `private` functions — no inheritance boundary, no demotion.
+- **§7.122 (autoload-style item duplication)** — investigated in
+  depth, **confirmed NOT vulnerable**, unlike the TMI-2-lineage cases.
+  This archive's `feature/user/autoload.lpc` (`save_autoload()`/
+  `restore_autoload()`, also reused for ninja-pet persistence in
+  `daemon/skill/naruto/ninja/{animal_taming,obj/pet}.lpc`) has the same
+  *shape* (`restore_autoload()` unconditionally `new()`s every item
+  with no "already present" guard) but not the same *precondition*:
+  (1) this driver's `feature/save.lpc` wraps the raw `save_object()`/
+  `restore_object()` efuns, which — unlike the TMI-2 port — never
+  independently serialize inventory sub-objects at all, so there is no
+  "baked into inventory twice" vector; (2) `restore_autoload()`'s only
+  two call sites (`obj/user.lpc`'s `setup()`, called exactly once from
+  `logind.lpc`'s `enter_world()`; `animal_taming.lpc`'s `call_dog()`,
+  guarded against re-summoning over an already-live pet via
+  `me->query_temp("pet")`) both run on a freshly-`new()`d object with
+  guaranteed-empty inventory, and the net-dead/force-takeover reconnect
+  paths (`logind.lpc`'s `reconnect()`) never re-call `setup()` on an
+  already-live body. No fix needed; documented here since it's exactly
+  the shape the pattern describes and is worth ruling out explicitly
+  rather than skipping.
+- **§7.123 (bare file-scope `IDENT = (...)` statement)**: not found.
+  The only two matches for the detection grep
+  (`^[a-zA-Z_][a-zA-Z0-9_]* = \(\[|\(\{`) are `std/area.lpc`'s
+  `LOO = ({}); icon = ([]);` (inside `save()`) and
+  `world/item/cchess.lpc`'s `TABLE = ([...`(inside `init_tab()`) — both
+  genuinely inside a function body, just zero-indented.
+- **§7.124 (fraction vs. percentage unit mismatch)**: not found. The
+  only percentage-threshold mechanism in this archive (`cmds/usr/wimpy.lpc`'s
+  auto-flee `wimpy <stat> at <ratio>`, backed by `feature/statistic.lpc`'s
+  `st_notify` mapping) is `int`-typed end to end with no shipped default
+  (0 = off until a player opts in) and its one runtime comparison
+  (`st_current[type]*100/query_stat_maximum(type) < st_notify[type]`)
+  correctly compares two same-unit 0-100 integer percentages. No
+  `= 0.N;` literal assigned to an `int`-declared field anywhere in the
+  corpus (checked via `grep -E '= 0\.[0-9]+;'` corpus-wide).
+
+### Not fully confirmed live
+
+- **Skill training was reached but gated by content, not a bug**: `train
+  <skill> from ka` at the 木葉忍者學校 correctly reports "你必須要有
+  陣營「muye」的聲望才能進行訓練" (village-reputation requirement beyond
+  simple membership) — a legitimate, internally-consistent design gate
+  (matches the newbie-help-documented reputation/quest system), not a
+  bug; not pursued further per this project's content/design scope
+  boundary.
+- Reaching `muye` village and the practice-dummy room used an
+  `eval`-assisted reposition (moving the already-registered test
+  character directly via a second, admin-privileged connection) rather
+  than a pure scripted compass walk, because the coordinate-AREA's own
+  live-refreshing ANSI map view made a purely scripted multi-step
+  walk's timing unreliable to interpret (repeated identical `--send`
+  lines sometimes landed differently than expected against the
+  redrawing screen) — this is a test-tooling limitation, not a
+  suspected bug; the two real bugs above (2a/2b) were independently
+  confirmed via direct `eval` calls to the exact functions involved,
+  not dependent on the flaky manual-walk timing.
+- Deeper economy/shop and death/respawn flows: not reached live this
+  session (time budget went to the movement-blocking bugs, which were
+  higher severity — the entire built-out world was unreachable before
+  the fix, which is a precondition for testing everything downstream of
+  it).
