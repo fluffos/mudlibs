@@ -1,0 +1,1 @@
+inherit CORE_VIRTUAL_D;

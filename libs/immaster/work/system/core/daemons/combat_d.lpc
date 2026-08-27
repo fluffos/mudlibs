@@ -1,0 +1,1 @@
+inherit CORE_COMBAT_D;
