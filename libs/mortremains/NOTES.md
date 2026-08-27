@@ -509,3 +509,269 @@ outbound network event, even if the far end is currently unreachable.
   found live, but the code path and hardcoded target address are real
   and documented regardless.
 - WASM status: not attempted (`wasm_status` left `""` per task scope).
+
+## 深度功能测试 / Deep functional test (round two, AGENTS.md \S10.7)
+
+First real *playthrough* pass on this lib (the onboarding session above
+only verified registration + `look`/`score`/`who`/`quit` + the admin
+promotion). Read `help newbie` first (points at "the fellow in the
+center of town" for starter equipment/leaflet/map, and `help classes`
+names Alucard at the Intersection as the class-hall directory), then
+played a full, continuous session as a real English-named character
+(`Bramwell`) on the native driver, using a second admin connection
+(`fluffos`/`Mud@2026`) only for `update`s and diagnosis. Found and
+fixed four independent, severe, live-blocking bugs plus one duplication
+bug -- collectively the newbie helper, ~95% of ordinary room-to-room
+movement, and two of the five advertised class halls were all
+unreachable before this pass, none of it visible to `lpcc_check.sh`,
+a clean boot, or the earlier registration-only smoke test.
+
+### 1. `cmds/std/_go.lpc`'s extension-check slice is 2 characters, not 4 -- blocks essentially every ordinary room exit whose destination path literal already includes `.lpc`
+
+The single most severe bug found in this pass. `cmd_go()` (the
+function underlying every directional movement command -- `north`,
+`east`, etc. all alias to `go <dir>`) does:
+
+```lpc
+fn = exits[dir];
+if (fn[<2..<1] != ".lpc") {
+    fn += ".lpc";
+}
+if (file_exists(fn)) {
+    to = find_object_or_load( exits[dir] );
+    ...
+```
+
+`fn[<2..<1]` is only the LAST TWO characters of the path, which can
+never equal the 4-character string `".lpc"` -- so the append always
+fires. If the room author's own `exits` mapping literal already ends
+in `.lpc` (confirmed the overwhelming majority convention in this
+archive: 4597 grepped exit-value literals include `.lpc` explicitly,
+vs. 225 that don't), `fn` becomes a doubled `...lpc.lpc` path that
+`file_exists()` correctly reports as missing, so `cmd_go()` prints
+"The mists of creation are still active in that direction" and the
+move silently fails -- indistinguishable from an actually-unbuilt
+room. Reproduced live: moving `east` from the very first room
+(`startroom.lpc`'s only non-wizard-gated exit, to
+`d/Prime/Central/room/road0_0.lpc`, the Intersection) failed this way
+immediately after registration; `south` from the same room happened to
+work only because it points at `WIZHALL` (`/d/Ancients/rooms/wizrm`,
+no `.lpc` suffix in the macro) and is wizard-gated besides, which is
+exactly why this was invisible to the earlier onboarding pass (it
+never actually walked a second room).
+
+This is very likely a **port-introduced regression, not a pre-existing
+1997 bug**: the archive's real extension was `.c`, and this project's
+own `convert_lib.sh` does a blanket literal `".c"`->`".lpc"` string
+rewrite as a normal part of conversion (per \S2 above, "9208 literal
+`.c\"` references fixed"). The original line was almost certainly
+`fn[<2..<1] != ".c"` -- a correct 2-character check against the
+original 2-character extension -- and the automated rewrite updated
+the string literal but had no way to know it also needed to update the
+slice-length arithmetic next to it. This is the exact bug class
+catalogued in AGENTS.md \S7.118 ("hardcoded 2-character-extension math
+left over from the archive's original naming"), just manifesting as an
+"always append a redundant extension" checking bug rather than that
+section's "always corrupt a derived key" stripping bug -- worth adding
+to that section's watch-list shape. (A cosmetically-identical but
+functionally harmless sibling of this exact slice-vs-literal-length
+mismatch was already documented pre-existing in this same lib's own
+\S11, in `cmds/object/_update.lpc` -- that one predates conversion and
+never bit because players conventionally omit the extension when
+typing `update`.)
+
+**Fix**: `fn[<2..<1]` -> `fn[<4..<1]` (the last 4 characters,
+correctly matching the 4-character `.lpc` string). Verified live:
+after `update /cmds/std/_go`, `east` from the Intersection correctly
+loaded and entered `road0_0.lpc`, and the entire pit-fighter-guild
+navigation route below (10 more moves) worked cleanly end to end.
+
+### 2. Newbie-helper NPC `u/c/chronos/alucard.lpc` -- and, as a direct consequence, the room that clones him -- both failed to load at all
+
+`Alucard` is the exact NPC `help newbie`/`help classes` point players
+at for starter equipment and class-hall directions, cloned into
+`d/Prime/Central/room/road0_0.lpc` ("the Intersection", one room east
+of the start room) via `reset()`. His file has the classic \S5
+"inherit after global variables" defect (`string *PUNC;` declared
+before `inherit MONSTER;`), the exact same bug class as 4 other
+individually-fixed instances documented in \S5 above. What's new here:
+because `road0_0.lpc`'s own `create()`/`reset()` calls
+`clone_object("/u/c/chronos/alucard.lpc")`, and this driver propagates
+an inherited file's compile error up through the caller, **the room
+itself failed to compile and load** (confirmed identical in
+`lpcc_fail.log`) -- so this one `inherit`-ordering typo alone took out
+both the newbie helper AND the entire Intersection room (compounding
+with bug \S1 above, since bug \S1's "mists of creation" symptom was
+the FIRST thing masking this one until \S1 was fixed and `east`
+actually attempted to load the destination).
+
+**Fix**: moved `inherit MONSTER;` above `string *PUNC;` (same pattern
+as \S5). Verified live end to end: after `update`ing both the file and
+the room, `Bramwell` walked east into the Intersection, `Alucard` was
+present, `say help` triggered his `process_say()`/`help()` handler,
+and he handed over the real starter kit (`boots`, `leaflet`, `bat`,
+`armour` clones) exactly as the newbie doc promises.
+
+### 3. Two of the five class halls Alucard advertises had the identical \S5 defect, blocking `join` entirely
+
+`d/class/warrior/pit_fighter/rooms/pitfighterguild.lpc` and
+`d/class/warrior/Sharpshooter/room/SS_guild.lpc` -- two independently
+copy-pasted files sharing the same header comment ("Pit pit fighter's
+guild ilz code ... Cyanide corrupted this room") -- both declare
+`mapping skills = ([]); mapping min_levels = ([]); int *v_skills, ...`
+before `inherit GUILD;`. Reproduced live: walking the pit-fighter-guild
+route Alucard gives ("5 south, 2 east, 2 south, and 1 west" from the
+Intersection) hit `*No program in object
+'/d/class/warrior/pit_fighter/rooms/pitfighterguild'!` on the final
+step. Per AGENTS.md \S6.4/this lib's own \S11 guidance (fix
+shared-root-cause bugs found live, don't blanket-sweep the ~200
+scattered non-preloaded instances), both were fixed individually since
+they sit directly on the newbie class-acquisition path this pass is
+meant to exercise -- the other three halls Alucard mentions (mages,
+thieves, priests) do NOT have this defect (checked via `lpcc_fail.log`
+before touching anything).
+
+**Fix**: reordered `inherit GUILD;` above the global variable block in
+both files (same pattern as \S5/\S2 above). Verified live: `Bramwell`
+(strength 15, meets the pit fighter's `base_stat/strength >= 10` gate)
+successfully `join`ed, title changed to "Cage Cleaner"/"Level 1 Pit
+fighter", and received "A Pit Fighter's Scars" (the class marker
+item). The Temple of Talos (priest hall, 2e/1s from the Intersection)
+was also reached and correctly, gracefully rejected `join` for not
+being chaotic evil -- confirming the rejection path itself works fine
+and this is content gating, not a bug.
+
+### 4. `d/class/rogue/obj/dummy.lpc` (this lib's own safe-sparring/backstab-testing dummy) had a broken array literal, AND a crash-on-clone bug hiding behind it
+
+This file's own `long` description ("This is a dummy to test you
+backstab out on ... type halt to stop your onslaught") makes clear
+intent: a zero-risk training target (`execute_attack()` is hardcoded
+to always return 0, so it can never actually hurt a player), matching
+AGENTS.md \S10.7 point 3's "find the lib's own safe-sparring mechanism"
+guidance. It failed to compile at all: `set("damage", ({ 0 )} );` has
+`)` and `}` swapped (should be `({ 0 }) )`), cascading into further
+spurious errors on every line after it in the same function. Fixed the
+bracket swap -- but doing so exposed a SECOND, real bug underneath:
+`adm/daemons/catalog_d.lpc`'s `get_level()` (which every wizard
+`clone` invocation runs automatically, to register the new monster in
+the summoning catalog) does
+`counter = ((int *)wep->query("damage"))[1];` -- unconditionally
+indexing element 1 of the `"damage"` array. Every other monster in
+this codebase sets `"damage"` as a 2-element `({min, max})` array
+(confirmed via `alucard.lpc`'s `({3, 30})` and the real combat-damage
+code in `std/body/attack.lpc`, which reads both `damrange[0]` and
+`damrange[1]`) -- but `dummy.lpc`'s array had only ONE element even
+after the bracket fix, so cloning it live threw `*Array index out of
+bounds.` (reproduced: `clone /d/class/rogue/obj/dummy` as admin,
+confirmed via `/log/runtime`'s stack trace pointing at
+`catalog_d.lpc:187` <- `cmd_clone` <- `cmd_hook`).
+
+**Fix**: `({ 0 })` -> `({ 0, 0 })`, matching the universal 2-element
+convention and the object's own intent (a target that deals zero
+damage either way). Verified live: `clone /d/class/rogue/obj/dummy`
+succeeded cleanly after the fix (correctly auto-cataloged, no error),
+and a full live fight (`kill dummy`) confirmed the safe-sparring
+guarantee end to end -- every one of the dummy's attacks reported
+"does nothing to you" while its `receive_damage()` correctly echoed
+back each hit's damage ("Dummy screeches: You just did N points of
+bludgeoning damage"), with zero crashes and zero risk to the player
+across dozens of combat rounds.
+
+(Separately, `dummy.lpc`'s own `long` text tells players to "type halt
+to stop your onslaught" -- `halt` is in fact a **wizard-only** command
+(`cmds/wiz/_halt.lpc`; no player-facing equivalent exists,
+`cmds/std`/`cmds/object` have no `_halt`/`_flee`/`_stop`). An ordinary
+player typing `halt` gets a plain `What?`. This is pre-existing 1997
+flavor-text content, not something the port touched, and fixing it
+would mean either adding a new player command or rewriting the
+dummy's documentation -- a content/behavior decision, not a
+programming bug, so left alone and just noted here per the task's
+scope boundary.)
+
+### 5. Class-marker items ("A Pit Fighter's Scars") permanently duplicate across disconnect/reconnect cycles -- new AGENTS.md \S7.122
+
+Found by accident while doing the required \S10.7 step-5
+quit-then-relogin check: `Bramwell`'s `i` after a real quit-and-relogin
+cycle showed **five** copies of "A Pit Fighter's Scars" (only one was
+ever legitimately granted, via a single `join`). Root-caused and fixed
+-- full writeup, including why the fix targets the reload side rather
+than reordering the save/destroy calls, is in AGENTS.md \S7.122 (new
+entry, since this exact `auto_load`/`compute_autoload_array`/
+`destroy_autoload_obj`/`load_autoload_obj` mechanism is verbatim
+shared TMI-2 lineage code per its own header credit to "Truilkan@TMI",
+and is a plausible sibling-check candidate for any other TMI-2-based
+lib in this corpus). One-line summary: `std/user.lpc`'s quit paths
+save the character (baking any carried auto-load item into the normal
+serialized inventory) before removing that item from inventory, and
+`net_dead()` never removes it at all -- so a subsequent full restore
+recreates the item twice (once from the leftover inventory data, once
+from the separate `auto_load` re-clone list), with no dedup) on either
+side. Fixed in `std/user/autoload.lpc`'s `load_autoload_obj()` by
+skipping any `auto_load` entry whose `base_name()` already matches an
+object already present in inventory. Verified live: a further clean
+quit-and-relogin on the already-corrupted `Bramwell` character held
+steady at 5 copies (did not grow to 6) after the fix landed --
+confirms no further duplication, though the fix does not retroactively
+clean up the pre-existing 5 (left as visible evidence on the test
+character rather than hand-edited away).
+
+### 6. Currency/economy check (per this pass's mandate to watch for the \S7.121 float-corruption shape)
+
+Checked `std/shop.lpc`, `std/bank.lpc`, `std/coins.lpc`, `std/pub.lpc`,
+`std/buy_only_shop.lpc`, `std/container.lpc`, and
+`adm/daemons/gang_d.lpc` (every file referencing `credits`/`price`/
+`cost`/`gold`) for the \S7.121 shape (a function doing real float
+arithmetic but declared to return `int` with no `to_int()`). **Clean**
+-- this lib's economy code is plain-integer throughout with no float
+arithmetic anywhere in the money path; `std/shop.lpc`'s
+`get_ob_value()` in particular already guards every branch
+(`intp()`/`mapp()`/`pointerp()` checks) before returning. No instance
+of this bug class found.
+
+### 7. Verification performed
+
+- Full continuous playthrough as `Bramwell` (male human, pit fighter):
+  register -> `look`/`score`/`i` at the start room -> navigate to the
+  Intersection (bug \S1) -> meet Alucard and receive starter equipment
+  (bug \S2) -> navigate to the Temple of Talos (correctly, gracefully
+  rejected -- content gating, not a bug) -> navigate to the Pit
+  Fighter Class Hall (bug \S3) -> `join` (received class marker item)
+  -> `score`/`i` confirming the class, title, and item -> live combat
+  against the fixed training dummy (bug \S4), including a `score`
+  mid-combat showing "is attacking Dummy" state -> `quit` (mid-combat,
+  correctly dropped non-wielded unequipped items) -> `debug.log`/
+  `log/runtime`/`log/log` grepped clean after every fix and after the
+  quit -> reconnected after a real wall-clock gap, confirmed a genuine
+  fresh restore (full news splash + "Last logon" banner, not a silent
+  same-session reattach) with class/stats/credits all correctly
+  persisted -- but also surfaced bug \S5 (item duplication) this way.
+- Distinguished the two reconnect variants explicitly per \S10.7 point
+  5's own warning: several intermediate reconnects during testing
+  showed the bare `Reconnected.\n` single-line response (a live/
+  interactive session reattach), while the post-quit reconnect showed
+  the full news/banner sequence (a genuine `restore_object()`) --
+  confirmed this distinction actually matters for this lib (only the
+  latter path is where bug \S5 accumulates further duplicates).
+- Shop/economy: code-reviewed only (bug \S6 above) -- did not reach a
+  live shop transaction with real gold in this pass; stated explicitly
+  as unverified-live per \S10.7 point 6, not silently presented as
+  tested.
+- Death/respawn: **not reached live** in this pass (budget went to the
+  five bugs above instead) -- stated explicitly as unverified-live per
+  \S10.7 point 6.
+- Admin `update` used to hot-load every fix above without a full
+  reboot; each fix's live effect was independently confirmed (a room
+  becoming enterable, an NPC appearing and responding, a `join`
+  succeeding, a `clone` no longer crashing, a duplicate count no
+  longer growing) rather than just trusting a clean recompile.
+- Test characters left as evidence: `Bramwell` (pit fighter, the main
+  playthrough character, 5 duplicate scars pre-fix visible as
+  evidence), plus several earlier fresh-name attempts
+  (`Wrenmoor`/`Corvasel`/`Dorrick`/`Halvard`/`Perrin`) left in various
+  partial-registration or early-exploration states as ordinary
+  incidental test debris from iterating on the navigation script.
+- No new fatal errors in `log/debug.log`/`log/runtime`/`log/log` from
+  any of the above beyond the ones being actively diagnosed and fixed.
+- Driver killed cleanly by exact PID after this pass; no automated
+  reboot loop was set up, consistent with \S12's standing caution
+  about this lib's genuine outbound I3 connection attempt at boot.

@@ -23,11 +23,12 @@ void load_autoload_obj()
 {
     string file;
     mixed item, argument;
-    object ob;
-    int j, limit;
+    object ob, *inv;
+    int j, limit, k, already;
 
     DEBUG("    Loading autoload in "+TO->query("cap_name")+"\n");
     limit = (auto_load) ? sizeof(auto_load) : 0;
+    inv = all_inventory(this_object());
     for (j = 0; j < limit; j++) {
 	item = auto_load[j];
 	argument = 0;
@@ -40,6 +41,20 @@ void load_autoload_obj()
 	else
 	    continue;
 	if (file) {
+	    // Guard against re-cloning an autoload item that is already
+	    // present (e.g. because it was also captured by a normal
+	    // save_object() of this object's inventory before
+	    // destroy_autoload_obj() had a chance to strip it out --
+	    // see AGENTS.md on save_data()/destroy_autoload_obj() ordering).
+	    already = 0;
+	    for (k = 0; k < sizeof(inv); k++) {
+		if (inv[k] && base_name(inv[k]) == file) {
+		    already = 1;
+		    break;
+		}
+	    }
+	    if (already) continue;
+
 	    if (file_size(file + ".lpc") <= 0 ||
 	      catch(call_other(file, "?")) ||
 	      catch(ob=clone_object(file))) {
@@ -50,6 +65,7 @@ void load_autoload_obj()
 		if (argument)
 		    call_other(ob, "init_arg", argument);
 		ob->move(this_object());
+		inv += ({ ob });
 	    }
 	}
     }
