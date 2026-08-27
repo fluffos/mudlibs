@@ -9998,6 +9998,23 @@ Next §10.7/sweep pass on `hell` or `zjmudhell` should apply the
 identical one-line-each fix (drop `private`, keep `nomask` where
 present) rather than rediscover it from scratch.
 
+**Fifth and sixth confirmed instances: `hell` and `zjmudhell` themselves
+(2026-08-27), closing out the "next pass" note above.** Same two files,
+same two functions, both `private`, confirmed live on `hell`: before
+the fix, `sleep` in a `sleep_room` printed the fall-asleep message and
+then genuinely never called `wakeup()` (no message even after 6+ idle
+seconds, `debug.log` stayed silent since the failure is silent, not an
+error). After dropping `private` from both `eval_function()` and
+`destruct_me()`, the identical `sleep` sequence correctly woke the
+character within its delay window. `zjmudhell` (byte-identical source)
+verified post-fix only, via its own custom mobile-app crypt-challenge
+login protocol, with the same `sleep`→`wakeup()` result. Both fixed and
+pushed (see each lib's own NOTES.md for the full per-lib writeup).
+`hellxg` re-confirmed genuinely not applicable: its `raw/` archive is
+only an 8-file partial patch overlay (never onboarded into a `work/`
+tree at all, no `meta.json`/`config.fluffos`), containing neither
+`feature/action.lpc` nor `inherit/item/combined.lpc` — nothing to fix.
+
 #### 8.3b Dead command-indexer sscanf
 
 `commandd.lpc`-style daemons rebuild their command table filtering
