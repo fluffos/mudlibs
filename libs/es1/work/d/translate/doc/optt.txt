@@ -1,0 +1,322 @@
+HELP!!!! ELON..
+我...好像翻出来了.. 但是很多专有名词都是我乱编的 :p 尤其最後都有
+点语无伦次了.....(太多咖啡因)
+Elon .. Mad, .. or someone.. 拜托 帮我改一下...不是在 board 上, do it
+under your directory.... I feel.. 好无力.. poor Chinese.. :(
+Just posting here .. 1 so that people might fix it for me,
+2 so that someone might actually read my 翻译 :P *giggle*
+
+::::::::::::::
+/doc/lpc/optimizing_code
+::::::::::::::
+
+   一个提升 LPC 速度的简介
+ (特别针对 MudOS 0.9.x 与其变化型)
+
+     Written by Luke Mewburn <zak@rmit.edu.au>
+     Translated to Chinese by Devianth <davidwu@uclink.berkeley.edu>
+
+     Version: 1.2.1
+     Date: 10.30.94
+
+0. 简介
+
+    我会写这份文件是因为我发现 LPmud 有走向更复杂, 更玩家化的趋势。
+这不是问题, 问题是 LPC 处理的方式(程式是一段处理完才处理下一段), 写
+得不好的程式会使部份或整个 mud 慢下来。
+    所以, 我决定找出最有效率来解决问题的方法并整理出来。我假设读者有
+一些程式设计的经验, 特别是 C 或是 LPC。 但, 因 driver 越来越不同的趋
+势, 此文件可能无法正确地保证非 MudOS drivers
+(例: Amylaar 的3.2@22 driver)。
+
+    在例子中, 假设下列的解释:
+int i, j, max, bitfield;
+object *list;
+string *arr, name;
+
+    和 C 一样, LPC 支援 `动态配置' 的概念。也就是说, driver 只会在程式
+需要时、才配置记忆体 (用完後除去配置)。和 C 不同的、LPC 会自动除去用完
+不用的记忆体配置(当没有程式指向此资料) - 这叫做`垃圾收集'。字串、矩阵、
+和 mapping 都是`动态'处理的。
+
+    虽然动态配置对於结构化程式很有帮助、但它会吃去些 CPU time。此文件的
+一个目的就是让你知道如何有效地利用动态配置。
+
+一. 一般问题
+
+    在我开始介绍各个加速的方法之前、我先提提一些大家所该知道写程式的
+原则。
+
+    第一个是`电脑花 80% 的时间执行 20% 的程式", 又称为 `80/20'原则 (有时
+叫 75/25 或 90/10)。 这个经证实的事实可以有效的帮助你写 LPC。不要把时间
+花在提高每一行程式的效率 - 没那种时间。集中在几段执行次数较多的地方像是
+FOR 回圈等等。
+
+    第二点是正确的问题解决方式。经常一个复杂的解决方式其实只需要一个较
+简单的方式。当处理少数的资料时, 一个简单的方式会比较有效率。但是有时偷
+懒的写程式方式执行时会较慢。
+
+    现在多数的(或全部的) drivers 没有更高级的 LPC 效率增加方法 (像
+re-writing 和 loop strength-reduction 指令) 你还是可以用较聪明的
+程式写法。
+
+    一个好的增效方式是把一段重复执行的程式或函数拿出回圈外。一个最明显
+的例子就是 w用来做回圈跳出状况的 `sizeof(arr)'。其他可能的状况包括在回
+圈每执行一次回圈中所呼叫一个函数的传回值都一样 -- 解决的方法是在回圈前
+先把此函数的传回值存入一个临时变数。 例:
+
+for ( i = 0; i < max ; i++)
+    if ( list[i] == some_condition )
+do_something_with( list[i], this_player()->query("name") );
+    
+    假设 name 是不变的
+
+name = this_player()->query("name");
+for ( i = 0; i < max ; i++)
+    if ( list[i] == some_condition )
+do_something_with( list[i], name );
+
+    一个固定的和好读的程式写法虽然不会加快执行速度, 但可加速 debug
+或改程式。不同的人有不同的格式观念、选一个固定和适合你的写程式的格
+式会有很大的帮助。
+
+2. 资料型别
+
+    LPC 至少有下列资料型别: int(整数), string(字串), object(物件),
+mixed(混合), mapping, 还有这些型别的矩阵。一些资料型别的使用摘记:
+
+2.1. INT(整数) 这段我看得懂, 但我翻不出来 :P 
+
+The integer data type is very efficient to use, as no dynamic
+allocation required to use it.  By using bitfields (e.g, hand-coded
+with #defines, (simulating ANSI c's enum's)), you can store a variety
+of flags information as well. This latter use is much faster than
+storing information of bit size, as long as you only need 32 bits.
+Example code to manipulate integer bit fields follows (assuming that
+VALUE is 1, 2, 4, 8, etc):
+
+bitfield |= VALUE;// set bit VALUE
+bitfield &= ~VALUE;// reset bit VALUE
+bitfield & VALUE// test bit VALUE
+
+If you want to set bit n, replace VALUE with (1 << n).
+
+
+2.2. STRINGS(字串)
+
+    字串是最常用的资料型别、但它需要动态配置。恒字串(像单纯的 'write'
+指令) 是被存於一个 "字串表" 、所以重复使用时不需要更多的记忆体。但累
+积字串(有 + 记号的)编辑时需要很多 CPU time - 每"加"一段字就要配置记
+忆体一次。一个常见的写程式的方式看起来如下:
+
+write("这是森林\n" +
+      "一片无聊毙的森林\n" +
+      "你开始想睡觉了。\n");
+
+    好、这个呢, 是最 _坏_ 的写恒字串的方法 - 编辑时又慢, 又浪费记忆体。
+注, 在 MudOS 0.9.15 中, 可以不用写这个 "+" - 但是结果是相同的, 每加一段
+字串、就要动态配置一次记忆体。请用以下的方法:
+
+write("\
+这是森林\n\
+一片无聊毙的森林\n\
+你开始想睡觉了。\n\
+");
+
+    这样子, 字串会被一次全部储存。在不哽住文字处理的情况下你大约可以写
+下一整页的文字。将你的文章分段至这个长度, 并用另一个 write 叙述。
+
+    注: 注意, \ 後到 end of line 之间不能有空白号, 文字处理会看不懂。
+
+    更新: 自 MudOS 0.9.14.3 後, 恒字串的设定新加了一个符号 - `@'、所以
+    以上可简化为:
+
+write( @ENDMESSAGE
+这是森林
+一片无聊毙的森林
+你开始想睡觉了。
+ENDMESSAGE
+);
+
+    (这个 'ENDMESSAGE' 可为任何不出现於文体本身的字串、并且一定要独立
+出现在新的一行里、不然它不会被当作 'end of message' 的符号。
+注亦: 'ENDMESSAGE' 前後都不能有空白号。
+
+    另一个低效率的程式写法::
+
+write("你的名字是 " + this_player()->query("name") + "\n" +
+" 你的等级是 " + this_player()->query("level") + "\n");
+
+    如果你的 driver 支援 printf(), 用以下的写法:
+
+printf("你的名字是 %s\n 你的等级是 %d\n",
+    this_player->query("name"), this_player->query("level") );
+
+
+    当然还有许许多多类似的情况, 不过你应该懂了吧。
+
+    但是, 别搞错了, 有时累积字串还是必要的, 所以呢, 不要想尽一些
+又长又臭的办法来回避它 (弄不好, 比累积法更慢)。
+
+2.3. FLOATS(浮点, 就是含小数点的啦)
+
+    在 0.9.5 driver 中, 加入了浮点资料形式。可用 'float' 来宣告(同在
+C 里的 "double" type)
+
+    也有像 cos, sin, (和类似的运算), ln, 和 sqrt (平方根) 的运算函数
+。这种资料形式可以在编辑暂时跳过, 但我看不出来有什麽关系。
+
+    浮点的运算比整数慢、所以能用整数运算时尽量不要用浮点运算。需要用
+到浮点运算时, 尽量先把它们算出来以回避重复的运算(这点对於任何程式都通)。
+
+2.4. ARRAYS(矩阵) 注:这段我看不太懂...too sleepy..
+
+    矩阵是非常有用的, 但是和字串相同, 不当的使用会造成低效率的程式。
+    一个在回圈内有增加或除掉项目的回圈通常是较慢的。解决的方法是适当
+的运用记忆体预先配置。
+
+摘自 TMI-2 的 /adm/daemons/cmd_d.c :
+
+bin_ls = get_dir(path + "/");
+result = ({ });
+for (i = 0; i < sizeof(bin_ls); i++) {
+            if(sscanf(bin_ls[i], "_%s.c", tmp) == 1)
+result += ({ tmp });
+        }
+        cmd_table[path]=result;
+    
+    这里, 并不是所有的项目都有"选"到。而是修改过後才放到矩阵中的。
+    用下面的方法:
+
+bin_ls = get_dir(path + "/");
+i = sizeof(bin_ls);
+result = allocate(i);
+j = 0;
+while (i--) {// see below for why `while' is used
+            if(sscanf(bin_ls[i], "_%s.c", tmp) == 1)
+               result[j++] = tmp;
+        }
+        cmd_table[path]=result[0..j-1];
+
+    注亦 sizeof(bin_ls) 是不变的, 然後, 才把需要的项目加入, 最後
+才把结果放到适当大小的矩阵中(用 [0..j-1])。
+
+    [ Note, in previous versions of this document, I recommended that
+the filter_array() efun to be used - unfortunately, due to function
+???eerh.. 好像少了什麽..???
+
+    预先配置最大的优点就是 在用预先配置时, 处理时间和项目数目呈线性正比、
+而用 += 的矩阵处理和处理时间增加成 exponential(我不行了)。
+
+2.5. MAPPINGS
+
+    Mapping 就是连接性的矩阵 - 能用基本资料形式(int, string, 或 object)
+来做指标的资料结构。以资料结构来说, 它通常比矩阵来的有效率, 并可以用来
+模仿 C 里的`structs'叙述。
+
+    基於 mapping 内部处理的方式, 预先配置的 mapping 比较有效率。这
+在你已知道 mapping 项目的多寡约为 x (还可以加)并且不减低於 x 时最为显
+著。(就是说, 使用 map_delete 在一个 x 项目的 mapping 时, 它不会把记忆
+体释放回系统(原作写得不清不楚))
+
+    一个常见的预先配置方法可在 emote daemon 或像 /std/user (或
+/obj/player) 里的标准物件中找到。对於前者, 如果你已知有约 200 项项目,
+不要用下列方法:
+
+emotemap = ([ ]);
+    
+    改用:
+
+emotemap = allocate_mapping( 200 );
+
+
+
+3. CONTROL FLOW & LOOPING (完全不懂 :P)
+
+    在一个完整的 LPC 程式中, 有各种方法来使程式流程的控制(经测试和回圈
+结构的一部份)变得更有效率。
+
+3.1. WHILE
+
+    最简化的(在简化程式方面)回圈方式: 例:
+
+list = users();
+for ( i = 0 ; i < sizeof(list) ; i++ )
+    do_something_with_item( list[i] );
+    
+    虽简化, 但效率不高, 特别是 sizeof(list) 被重复的呼叫, 运算(请
+看一般问题)。如果 i 增加的顺序有关系, 用下面的方式:
+
+max = sizeof(list);// slight performance gain
+i = -1;
+while ( ++i < max )//evaluate and increment at same time
+    do_something_with_item(list[i]);
+    
+    如果 i 的顺序没有关系, 下面是最快的方式:
+
+i = sizeof(list);
+while (i--)
+    do_something_with_item(list[i]);
+    
+    这是所谓的 '基本状况 while 回圈'。和下面的回圈或其他的 while
+回圈没什麽不同, 但还是有少许利益。
+
+for ( i = sizeof(list) ; i-- ; )   ;
+
+
+3.2. FOR
+    
+    一个最常见的回圈结构, 对在你每次都要在回圈最後做一个复杂的状况
+运算较有用。如果只是简单的指数增加或减少, 用`while'比较好。
+
+    对於结束状况就复杂的例子:
+
+for ( initialise ; test ; final ) {
+    main body
+}
+
+比以下`清楚'
+
+initialise
+while ( test ) {
+    main body
+    final
+}
+    
+
+3.3. SWITCH
+
+    在可许的情况下, 应用`switch' 叙述 instead of(shit..what's the
+Chinese for instead???) `if-then-else-...'结构, switch 叙述需在 driver
+内效率化。不论如何, 至少程式看起来比较乾净。
+    用 switch 的例一个优点是 `状况范围' 的支援(一个 C 没有的特色)。
+如果你的测试设定如下面的范围:
+
+case 1:  case 2:  case 3:
+
+可用以下代替:
+
+case 1..3:
+
+可能较为有效率(至字少较好打)
+
+4. 总结
+
+    我确定这份文件中一定有错误, 但, 人非剩闲 :P
+
+    The following people asked questions, provided suggestions, etc for
+version 1.1:
+    @TMI-2:Blackthorn, Mobydick, Square, Alexus, Amylaar, Darin
+    @Ivory.tower:Telsin, Vampyr
+    @Underdark:Cynic, Brian
+
+Luke [Zak].
+
+
+
+Translater's note.. do not include..
+
+eerrrh.. 我翻得十分十分不好.....中文程度太低了..need revision from
+someone..Dame... 英翻中对我来说.....好吃力.... 我不敢相信.. 居然要
+翻英汉字典找中文...还是一些很简单的英文..just don't remember the Chinese
+counterpart.

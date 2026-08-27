@@ -1,0 +1,1 @@
+// replace_program(ROOM); -- disabled: on this driver, this redundant self-replace with the room's own already-inherited ROOM parent class (AGENTS.md §7.100 pattern) triggers a runaway 'Nesting call_out(0) level limit exceeded' crash via room.lpc's own call_out("reset",0) in create(). See NOTES.md.

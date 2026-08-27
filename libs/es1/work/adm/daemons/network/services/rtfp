@@ -1,0 +1,95 @@
+/* File    : gtell.c
+ * Creator : Pinkfish@Discworld
+ *         : Grendel@Tmi-2
+ * When    : 93-08-15
+ *
+ * This file is part of the tmi mudlib.  Please keep this header intact.
+ *
+ * This protocol is used to convey intermud tells.
+ */
+#include <mudlib.h>
+#include <uid.h>
+#include <net/dns.h>
+#include <net/macros.h>
+#include <net/daemons.h>
+#include <net/unite_muds.h>
+
+inherit DAEMON;
+
+void send_file( string mud, string msg )
+{
+  mapping minfo;
+  
+  if( !ACCESS_CHECK( previous_object() ) ) return;
+  
+//  if( mud == Mud_name() || !geteuid( source ) ) return;
+  
+  minfo = ( mapping ) DNS_MASTER -> query_mud_info( mud );
+  if( !minfo )
+    return;
+  
+  msg = replace_string( msg, "|", " \b|" );
+  msg = replace_string( msg, "@", " \b@" );
+  DNS_MASTER -> send_udp( minfo["HOSTADDRESS"], minfo["PORTUDP"],
+    "@@@" + RFTP +
+    "||NAME:" + Mud_name() +
+    "||PORTUDP:" + udp_port() +
+    "||MSG:" + msg + "@@@\n" );
+}
+
+void incoming_request( mapping info )
+{
+  mapping minfo;
+  object pl;
+  string reply,file_name,data;
+  
+  if( info["NAME"] && info["PORTUDP"] )
+  {
+// dont want to transfer to ourselves
+    if( info["NAME"] == Mud_name() )
+      return;
+// check data is correct or not ..
+	if ( sscanf(info["MSG"],"%s####%s",file_name,data) !=2)
+		return ;
+    
+// get our info about the sender, ping them if we don't have any
+    minfo = ( mapping ) DNS_MASTER -> query_mud_info( info["NAME"] );
+    if( !minfo || !DNS_MASTER -> dns_mudp( info["NAME"] ) )
+      PING_Q -> send_ping_q( info["HOSTADDRESS"], info["PORTUDP"] );
+// check file from unite muds or not ?
+	if ( member_array(info["HOSTADDRESS"]+" "+info["PORTUDP"],UNITE_MUDS) ==-1)
+		return ;
+    
+    if( minfo && minfo["HOSTADDRESS"] != info["HOSTADDRESS"] )
+    { /* Its been faked! */
+      dns_log( "network/dns_fake", "RFTP: " + 
+        "(" + info["HOSTADDRESS"] + ") trying to save file to"
+        + file_name + "\n" );
+/*
+      DNS_MASTER -> send_udp( minfo["HOSTADDRESS"], minfo["PORTUDP"],
+        "@@@" + DNS_WARNING +
+        "||MSG: Faked gtell message " + info["WIZFROM"] +
+        "@" + info["NAME"] + "> " + info["WIZTO"] +
+        " " + info["MSG"] +
+        "||FAKEHOST:" + info["name"] +
+        "@@@\n" );
+*/
+      return;
+    }
+	tell_object(find_player("ruby"),
+		sprintf("receive data from %s : \nfile : %s\n%s\n",
+			info["HOSTADDRESS"],file_name,data) 
+	);
+/*
+    reply = ( string ) TS_D -> tell_user( info["WIZFROM"], info["NAME"],
+      info["WIZTO"], info["MSG"] );
+    
+    
+    ( SERVICES_PATH + "affirmation_a" ) -> send_affirmation_a( info["HOSTADDRESS"],
+      info["PORTUDP"], "Gtell@" + Mud_name(),
+      info["WIZFROM"], reply, "gtell" );
+*/
+  } //if (info["NAME"] && info["PORTUDP"])
+}
+
+
