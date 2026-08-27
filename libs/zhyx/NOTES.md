@@ -439,3 +439,273 @@ other yh2003-family lib already in this collection.
   side effect is an extra reason to be deliberate about how often this
   lib gets rebooted in any future automated long-sit/WASM-enablement
   pass.
+
+## 深度功能测试（round two, AGENTS.md §10.7）— 2026-08-27
+
+First live *playthrough* pass (prior session only verified registration
++ `look`/`score`/`quit`/admin-install, per the sections above). Read
+`doc/help/newbie` and `doc/help/yxt_newbie` first — the intended path is
+register → walk to one of 4 personality NPCs off 世外桃源 (東/西/南/北)
+→ `out` to commit → 阎罗殿 → `wash` (reroll stats) → `born <中文地名>`
+→ real starting room; `fight` is the built-in safe-sparring command
+("点到为止，因此只会消耗体力，不会真的受伤"); teacher/sect join is
+`bai <NPC>`, gated on the NPC's own willingness ("很多师父不轻意收徒");
+new-player stat gift is `ask zhyx_boss about 天赋` + `add <stat>`.
+Played a continuous session as two fresh characters (`qintestb`,
+female, kept as the representative test character; `qintesta`, used to
+find/verify the bugs below, then deleted) on the native driver
+(`build-debug`), plus targeted admin-`eval` probes for the death/PvP
+path that a level-1, mostly-miss-everything character can't reliably
+reach live in reasonable real time. Booted/rebooted the driver 6 times
+across this pass (`log/error_handler`/`log/log_error` are append-only
+across restarts, not truncated — a `wc -l` diff plus checking a
+process's own start time via `stat`/`ps` was needed more than once to
+tell a genuinely-new crash from a stale leftover entry near the tail).
+
+### Bug 1 (new class, AGENTS.md §7.125): the email-registration gate is permanently dead from the very first character ever created
+
+`adm/daemons/logind.lpc`'s `enter_world()` — which runs on EVERY login,
+not just character creation — does an unconditional
+`user->set("registered", 1); //user->set("born",1);` a few lines before
+its OWN later `if (!user->query("registered")) ...` checks, right after
+the unrelated starting-clothing block. This permanently defeats:
+`d/register/entry.lpc`'s `valid_leave()` ("you must `register <email>`
+before leaving 世外桃源") and `adm/daemons/channeld.lpc`'s "you must
+register before using channels" gate. Reproduced live: a brand-new
+`qintesta` walked `east` out of the starting room with zero email ever
+registered — no rejection, no crash, just silent success. Root-caused
+by temporarily deleting the statement and confirming a fresh character
+was then correctly blocked ("你还不快注册？") until `register <email>`
++ `decide` were actually run against 水笙, then correctly let through
+afterward. **Fix**: deleted the premature `user->set("registered", 1);`
+from `enter_world()` (`adm/daemons/logind.lpc:959`) — the real, correct
+place this flag gets set, `d/register/npc/shuisheng.lpc`'s
+`do_decide()`, was already there and always correct, just permanently
+short-circuited. Verified with a second full fresh registration
+(`qintestb`) post-fix: blocked from leaving pre-registration, walks
+free immediately after `register`+`decide`. See AGENTS.md §7.125 for
+the generalized writeup and the sibling libs worth checking
+(`yanhuangwuhun`/`yhwhckdm`/`yhyxs`/`yhwhpublicfi`, same lineage,
+likely same `enter_world()` shape).
+
+### Bug 2 (extends AGENTS.md §7.12): the onboarding-time message()/tell_room() fix was silently dead code for the wrapper's own internal callers
+
+The onboarding session already added the standard `if (exclude)
+efun::message(...) else efun::message(...)` guard inside
+`adm/simul_efun/message.lpc`'s local `message()` override, and it was
+verified working for its own original repro (`CHANNEL_D->do_channel()`
+at boot). This pass hit the *exact same* `*Bad argument 4 to EFUN
+message() Expected: object, array, Got: int(0)` crash again, live,
+reproducibly, from plain ambient gameplay (`clone/misc/corpse.lpc`'s
+`decay()` calling a bare 2-arg `tell_room(env, msg)` on its own 60s/30s
+`call_out` timer — no player action needed at all). Root cause,
+isolated via three direct `eval` tests: on this driver, an unqualified
+call to an identifier that is ALSO a genuine hard efun (`message` is a
+real FluffOS efun) resolves to the hard efun, not to a same-named local
+function, **specifically when the call is made from within the very
+file/object that defines that local function** — `tell_room()` lives in
+the SAME FILE as the guarded `message()`, so its own internal
+`message("tell_room", str, ob, exclude)` statement was binding straight
+to the hard efun the whole time, completely bypassing the "already
+fixed" guard sitting a few dozen lines below it. Every EXTERNAL caller
+of `message(...)`/`tell_room(...)` elsewhere in the mudlib was and is
+correctly routed through the guard (confirmed: an identical bare call
+from a plain `eval`, i.e. a different object, worked fine) — this trap
+is narrowly about the wrapper file's own internal self-calls.
+`message_system()` and `shout()` in the same file had the identical
+bare-self-call shape with their own literal/falsy 4th argument
+(`all_interactive(), 0` and `this_player()` respectively, the latter
+frequently 0 in the NPC-death-event contexts several NPCs actually call
+`shout()` from) and got the same fix pre-emptively, even though only
+`tell_room()`'s instance was live-reproduced. **Fix**: qualified all
+three internal self-calls with `efun::` explicitly (verified this
+correctly bypasses the same-object shadowing, alongside a call_other
+`find_object(SIMUL_EFUN)->message(...)` which also worked), keeping the
+exact same exclude-guard logic:
+```lpc
+varargs void tell_room(mixed ob, string str, object *exclude)
+{
+    if (! ob) return;
+    if (exclude)
+        efun::message("tell_room", str, ob, exclude);
+    else
+        efun::message("tell_room", str, ob);
+}
+```
+Verified live post-fix on a completely fresh driver boot (to rule out
+stale-log false positives from a still-shutting-down prior driver
+process, which briefly looked like the fix had failed before the
+timing was untangled): `tell_room()`, `message_system()`, and `shout()`
+all now execute cleanly via direct `eval`, and zero new
+`log/error_handler` entries for this signature appeared across a full
+fresh boot + registration + combat + shop + gift session afterward.
+See AGENTS.md §7.12's new addendum for the general lesson (verify a
+`message()`/`tell_room()` fix by testing the shared wrapper's OWN
+internal helpers directly, not just the originally-reported repro path)
+— worth a quick `eval tell_room(some_room, "test\n")` sanity check on
+any other lib that received this project's standard §7.12 fix.
+
+### Bug 3 (extends AGENTS.md §7.11): live PvP kills silently corrupt killer/victim combat-tracking state forever
+
+`adm/daemons/combatd.lpc::killer_reward()`'s player-vs-player branch
+calls `log_file("nosave/killrecord", ...)` — a directory (`/log/nosave/`)
+this archive's shipped `work/` tree never contains — immediately BEFORE
+`killer->remove_killer(victim);` in the same `if` block. Confirmed via a
+controlled admin-triggered kill (`eval` calling `ob->die(ob)` against
+the test character, since no level-1-reachable live opponent could
+realistically kill a fresh character in test-session time) that this
+throws uncaught (`*Wrong permissions for opening file
+/log/nosave/killrecord for append. "No such file or directory"`),
+aborting the rest of the block — `remove_killer()` never runs, so every
+real PvP kill leaves the killer's `killer`/`want_kills` tracking on the
+victim and the victim in the killer's `enemy` list forever. This is the
+same `log_file()`/`assure_file()` gap already cataloged extensively in
+AGENTS.md §7.11 (`adm/simul_efun/file.lpc`'s `log_file()` was a bare
+`write_file(LOG_DIR + file, text)` with its own correct, already-defined
+`assure_file()` helper sitting unused two functions below it) — same
+family of `combatd.lpc::killer_reward()` instance already documented for
+`jyqxc2013fwq` (that one broke the death/resurrection transition itself,
+worse blast radius; this one corrupts combat state instead, since this
+lib's own death-room move happens earlier in `die()`, unaffected).
+**Fixed at the shared wrapper** rather than only the one call site:
+added `assure_file(LOG_DIR + file);` inside `log_file()` itself (plus
+the one-line forward declaration this driver needs since `assure_file()`
+is defined textually after `log_file()`), closing the identical latent
+gap for every other `log_file()` call into a never-shipped subdirectory
+project-wide in one fix — grepping `log_file("<dir>/...` call sites
+against `find work/log -type d` turned up at least `job/` (雪山 burning
+quest logging), `test/` (神龙教 PK/force-join records), and `voting/`
+(`polld.lpc`) as other genuinely-referenced-but-never-shipped
+subdirectories that this same fix now protects, not just `nosave/`.
+Verified live on a completely fresh boot with NONE of these directories
+pre-existing on disk: `log_file("nosave/killrecord", ...)` and
+`log_file("job/xueshan", ...)` both auto-created their target
+directories on first use and succeeded with zero error. (Note: `log/`
+is entirely gitignored project-wide as driver-recreated runtime state —
+`libs/*/work/log/` in the top-level `.gitignore` — so this fix
+deliberately lives in code, not as a committed placeholder directory;
+a bare `mkdir` workaround tried earlier in this session would not have
+survived a fresh checkout.)
+
+### Confirmed clean (checked, cross-cutting bug classes from other libs' deep-test passes)
+
+- **§7.121-style currency float corruption**: not applicable. This
+  lib's economy (`feature/banker.lpc`'s `do_check`/`do_convert`/
+  `do_deposit`/`do_withdraw`, `clone/money/*.lpc`'s `base_value`) is
+  pure integer denomination math (`base_value` values are plain
+  literals like `1`/`100`/`10000`) — no exchange-rate float anywhere in
+  the currency path.
+- **§8.3a `private command_hook`**: `feature/command.lpc` (the one
+  actually inherited into the player body via the `COMMAND` macro)
+  correctly declares `protected nomask int command_hook(string arg)`.
+  A second, unrelated `feature/command1.lpc` DOES have the exact buggy
+  `private nomask int command_hook(...)` shape, but it's dead code —
+  zero files inherit it anywhere in the tree (grepped for
+  `COMMAND1`/`command1"` and found nothing) — left alone as an inert
+  archive artifact, not a live bug.
+- **§7.122-style class-item duplication on reconnect**: no
+  `auto_load`/`compute_autoload_array`/TMI-2-style mechanism exists in
+  this codebase at all (grepped, zero hits) — not applicable in the
+  general sense. Did specifically check the one candidate that looked
+  suspicious on paper: `enter_world()` unconditionally clones and
+  `move()`s a `/clone/misc/fly` "新手飞行包" into inventory every login
+  while `age < 16` (no `present()` guard visible in the source). Tested
+  live across a real quit + reconnect cycle expecting to find
+  duplicates — found exactly ONE copy both times, no accumulation. Did
+  not fully root-cause why (a `no_drop`/`no_get`/`no_put` item like this
+  may not round-trip through ordinary `save_object()`/`restore_object()`
+  the way ordinary inventory does, so each login's fresh clone may be
+  the only copy that ever really persists), but the live test is
+  unambiguous: this is NOT a reproducible duplication bug on this lib,
+  despite superficially matching the §7.122 shape. Documented here so a
+  future pass doesn't waste time re-suspecting it without re-testing.
+
+### What else was tested and confirmed working
+
+- **Registration → personality → born**, twice, full flow, both genders
+  (`qintesta` male "光明磊落", `qintestb` female): id/surname/given-name
+  → 2 passwords → role-type → gender → 世外桃源 → `register`+`decide`
+  → walk to a personality NPC (陆天抒, east) → `out` → 阎罗殿 → `wash`
+  → `born 扬州人氏` → landed in 武庙 with starting cloth/shoes/fly bag,
+  `look`/`score`/`i` all correct at every step.
+- **Combat (safe-sparring)**: `fight <NPC>` against 流氓头 (a weak
+  street NPC near 中央广场) ran several dozen non-lethal exchanges,
+  correctly self-terminated once 气/精 dropped low (no `halt` needed),
+  awarded 潜能 without ever risking real death — matches the newbie
+  doc's own description of `fight` exactly.
+- **Skill/sect acquisition**: organic route tested via `bai <丐帮一袋
+  弟子>` (found via 中央广场's `enter dong` → 树洞内部, matching the
+  newbie doc's "丐帮在扬州城里，易于寻找" note) — correctly returned a
+  pending "对方还没有答应" state rather than an immediate accept/crash,
+  consistent with the doc's own "很多师父不轻意收徒" description; did
+  not force acceptance (would require deciding game-balance timing, out
+  of scope). New-player gift route: `ask zhyx_boss about 天赋` →
+  `add str` correctly granted and applied one of the 6 free stat
+  points, `score` reflected it immediately.
+- **Shop/economy**: `list`/`buy jitui` at 醉仙楼 correctly rejected an
+  impoverished character ("店小二冷笑道：穷光蛋，一边呆着去！") rather
+  than crashing or silently succeeding — matches `score`'s own "你目前
+  没有存款" for a level-1 character with no money yet; a real successful
+  purchase was not reached live (would need actual gold, out of budget
+  for this pass) but the rejection path itself is now confirmed clean
+  post-Bug-3-fix (the same `log_file()` gap could plausibly have hit a
+  shop/economy log path too, though none was actually reached live).
+- **Death/respawn**: reached via a controlled admin `eval` (`ob->die(ob)`
+  against the non-admin `qintestb`/`qintesta` test characters, never the
+  admin's own body) rather than a live kill, since no level-1-reachable
+  opponent could realistically kill a fresh character within this
+  session's time budget — this is the path that surfaced Bug 3 above.
+  Did not additionally verify the full reincarnate/revive-room cycle
+  live (out of budget after the Bug 3 investigation); worth a follow-up
+  pass with a genuinely lethal opponent or a longer session.
+- **`quit` → `log/error_handler`/`log/log_error` grep → reconnect after
+  a real ~65s wall-clock gap**: done twice (once pre-fix on `qintesta`,
+  once post-all-fixes on `qintestb`). Both times: clean "这样东西不能
+  随意丢弃"(fly bag, expected — `no_drop`, harmless) + "欢迎下次再来！"
+  on quit, zero new fatal signatures in either log immediately after,
+  and a genuine reconnect after the wait landed back with correct
+  persisted state (`score`/`i` matching pre-quit exactly).
+- **Outbound network / long-sit caveat**: not re-tested this pass
+  (out of scope for a §10.7 playthrough) — the onboarding session's
+  `dns_master.lpc` UDP finding stands; this lib should still not be
+  swept into high-frequency automated reboot loops.
+
+### Minor observation, not fixed (deployment/logging quirk, not a clear LPC bug)
+
+`adm/daemons/cleard.lpc`'s `auto_clear()` (a 30-minute recurring
+`call_out`) does `cp("/log/debug.log", "/driver/system.log")`
+unconditionally, and `log/debug.log` does not exist in this project's
+own way of running the driver (this project redirects the driver's
+stdout to an external file via its own `nohup .../driver config.fluffos
+> some.log` convention, rather than relying on the mudlib's internal
+`debug log file` config value ever actually being written to inside
+the mudlib tree) — so this `cp()` throws "lstat failed" every 30
+minutes, harmlessly (nothing else in `auto_clear()` depends on its
+result). Left as-is: fixing it would mean guessing whether this
+project's own driver-invocation convention should change, or whether
+the mudlib should stop assuming a `log/debug.log` inside its own tree,
+either of which is a judgment call beyond "make the code's own already-
+intended logic work," not a clear-cut programming bug.
+
+### Test character / evidence
+
+`qintestb` (female, 光明磊落, 扬州人氏) kept as the representative
+playthrough character — registered, born, has the new-player gift's
+6 free stat points applied (`add str` used), visited 醉仙楼, survived
+a real quit+reconnect cycle. Save files: `work/data/user/q/qintestb.o`,
+`work/data/login/q/qintestb.o`. `qintesta` (used to find/verify Bugs
+1-3) deleted after use, per convention. Admin account (`fluffos`/
+`Mud@2026`) untouched, still seeded from the onboarding session.
+
+### Not run this session (round two)
+
+- **LPC formatter (§9)**: `node` still not available in this
+  environment (`command not found: node`). All edits this round
+  (`adm/daemons/logind.lpc`, `adm/simul_efun/message.lpc`,
+  `adm/simul_efun/file.lpc`) were small, manually reviewed against
+  surrounding style. Worth a formatter pass in a future session with
+  `node` available.
+- **A live (non-admin-triggered) death/reincarnate/revive cycle** and
+  **a real gold-funded shop purchase**: both would need either a much
+  longer session or a deliberately-outmatched fight; documented above
+  as unverified-live rather than silently presented as tested.

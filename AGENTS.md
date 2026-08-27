@@ -2103,6 +2103,37 @@ Two independent traps in the same apply:
   revive) runs; check for any unguarded `write_file()`/`log_file()` call
   textually BEFORE that transition in the same function, not just at
   the login/registration boundary this bug class was first found at.
+- **Yet another `combatd.lpc::killer_reward()` instance, this time a
+  live PvP state-corruption bug rather than a death-loop: `zhyx`'s
+  round-two §10.7 deep functional test.** Same shared-wrapper shape as
+  the two entries above (an unguarded `log_file()` sitting right next
+  to its own already-correct, unused `assure_file()` helper in
+  `adm/simul_efun/file.lpc`), but the missing directory here was
+  `/log/nosave/` reached via `log_file("nosave/killrecord", ...)` inside
+  `killer_reward()`'s player-vs-player branch, and the two lines the
+  crash prevented from running were `killer->remove_killer(victim);`
+  plus a "spouse mourns" notification — not the death/resurrection
+  transition itself (this lib's actual death-room move happens earlier
+  in `die()`, unaffected). Consequence: every real PvP kill left the
+  killer's stale `killer`/`want_kills`/`enemy` tracking on the victim
+  forever, since `remove_killer()` never ran to clear it. Confirmed live
+  via a controlled admin-triggered kill (`ob->die(ob)`) reproducing the
+  exact `*Wrong permissions for opening file /log/nosave/killrecord for
+  append. "No such file or directory"` trace. **Fixed at the shared
+  `log_file()` wrapper itself** (`adm/simul_efun/file.lpc`), not just the
+  one `killer_reward()` call site — `assure_file(LOG_DIR + file);`
+  added immediately before `log_file()`'s own `write_file()` call, plus
+  the one-line forward declaration this driver needs since
+  `assure_file()` is defined textually after `log_file()` in the same
+  file. This closes the identical latent gap for every OTHER
+  `log_file()` call into a never-shipped subdirectory across the whole
+  archive in one fix (confirmed at least `job/`, `test/`, and `voting/`
+  are also referenced by content files this way) rather than only the
+  one call site a specific playthrough happened to exercise — prefer
+  this shared-wrapper-level fix over a point-fix whenever the gap is in
+  a genuinely shared `log_file()`/`write_file()` utility function, since
+  a per-call-site fix leaves every sibling call site with the same
+  latent gap until its own turn to crash arrives.
 - **Widest-blast-radius instance yet, `xkyxciii`'s deep functional test
   (§10.7): hits EVERY new character, not a conditional/rare path.**
   `logind.lpc::enter_world()` has an anomaly-detection block — if
@@ -2223,6 +2254,69 @@ this same pass never hit any OTHER instance of this bug among the 80+
 2-argument `tell_room()` call sites in the lib. Any lib carrying this
 `tell_room()` shape should be treated as carrying a live crash risk, not
 just an annoyance, until the wrapper is fixed.
+
+**New root-cause nuance, found on `zhyx`'s round-two §10.7 deep-test
+(2026-08-27): the standard "guard the exclude arg inside `message()`"
+fix can be silently ineffective for the wrapper's OWN internal
+self-calls, even though it correctly protects every other caller in the
+mudlib.** `zhyx` had ALREADY received this project's own standard fix
+at onboarding time (an `if (exclude) efun::message(...4 args...); else
+efun::message(...3 args...);` guard inside `adm/simul_efun/message.lpc`'s
+local `message()` override) — and it was verified working for the
+onboarding session's own repro path. But a live §10.7 playthrough still
+hit the exact same `*Bad argument 4 to EFUN message() Expected: object,
+array, Got: int(0)` crash, reproducibly, from `clone/misc/corpse.lpc`'s
+`decay()` calling nothing more exotic than a plain 2-arg
+`tell_room(env, msg)`. Root cause: **on this driver, an unqualified call
+to an identifier that also names a genuine hard efun (`message` is a
+real FluffOS efun) resolves to the hard efun, not to a same-named local
+function, WHEN the call is made from within the very file/object that
+defines that local function** — confirmed by three direct `eval` tests:
+(1) a bare `tell_room(ob, str)` from a totally different object (a
+plain `eval`) correctly reached the guarded local `message()` override,
+no crash; (2) that exact same 2-arg shape called through `tell_room()`
+itself (which lives in the SAME FILE as the guarded `message()`) crashed
+every time; (3) explicitly calling the local override via
+`find_object(SIMUL_EFUN)->message(...)` (a call_other, forcing
+unambiguous dispatch) worked perfectly. So `tell_room()`'s own internal
+`message("tell_room", str, ob, exclude)` statement — and this file's
+`message_system()` and `shout()`, which have the identical
+bare-self-call shape with their own literal/falsy 4th argument — were
+ALL still hitting the hard efun directly, completely bypassing the
+"already fixed" guard function sitting a few dozen lines below them in
+the same file, for the ENTIRE lifetime of the fix. Every ordinary
+EXTERNAL mudlib caller of `message(...)`/`tell_room()`/`shout()`
+(the overwhelming majority of call sites) is unaffected and correctly
+routed through the guard — this narrow trap only bites the wrapper
+file's own internal cross-calls between its own same-named-as-efun
+functions. **Fix**: inside the wrapper file itself, never call a
+same-named-as-a-hard-efun sibling function bare — qualify explicitly
+with `efun::` (or call through `this_object()->name(...)`, a call_other,
+which also correctly dispatches) and apply the exact same
+falsy-4th-arg guard at that qualified call site:
+```lpc
+varargs void tell_room(mixed ob, string str, object *exclude)
+{
+    if (! ob) return;
+    if (exclude)
+        efun::message("tell_room", str, ob, exclude);
+    else
+        efun::message("tell_room", str, ob);
+}
+```
+Confirmed severity is NOT hypothetical here either: this crash is
+reachable from ambient, player-independent activity (any corpse decaying
+on its own `call_out` timer), not just a rare edge case. **When
+verifying a fix for this bug class, do not stop at confirming the
+originally-reported repro path works — separately test the shared
+wrapper's OWN internal helper functions (`tell_room`/`shout`/
+`message_system`/anything else in the same file that calls a bare
+same-named-as-efun sibling) directly via `eval`, since a fix that's
+correct in isolation can still be dead code for exactly the callers that
+matter most.** Any other lib in this project that received the standard
+§7.12 fix (grep NOTES.md for this bug's writeup) is worth a quick
+`eval tell_room(some_room, "test\n")` sanity check — the fix looking
+right on paper doesn't guarantee it's reachable.
 
 ### 7.13 Booby traps: phone-home license checks and self-destructs
 
@@ -9511,6 +9605,29 @@ This is a crash-free, boot-invisible, compile-clean bug — nothing about it sho
 Found via a §10.7 deep-test playthrough of `nightmare4`. `lib/combat.lpc` declares `private int Wimpy;` (the auto-flee-at-low-health threshold) and every other consumer in the codebase — `cmds/players/wimpy.lpc` (the player-facing `wimpy PERCENTAGE` command, range 1-30) and `cmds/players/score.lpc` — treats it strictly as an integer percentage (e.g. `wimpy on` sets it to the literal `23`). But `create()` initializes it with `Wimpy = 0.20;` — a fraction, not a percentage — and the runtime comparison in `eventReceiveDamage()` is `if( Wimpy < percent(hp, GetMaxHealthPoints()) ) return x;` (only `call_out(eventWimpy)`, i.e. actually flee, when this is false). Since `percent()` returns an integer 0-100, `0.20` is smaller than virtually every nonzero percentage a living character can have, so this comparison is true almost unconditionally — the auto-flee safety net is effectively dead for every single character from the moment they're created, with zero compile error and zero crash (this is a variant of §7.121's "declared `int`, fed a float, no runtime coercion" shape, but here the corruption is a **unit/scale mismatch on a constant literal** rather than an unconverted arithmetic result — a fraction where an integer percentage was meant). A second, dependent bug rode along: `SetWimpy()`/`GetWimpy()` were declared to return `float` (matching the buggy fractional value) rather than `int` (matching the field's own declaration and every real caller's usage) — once the threshold is a genuine nonzero value, this declared-`float` return silently upgrades a real integer into a widened float on return, and callers' own `(int)` casts (already known to be compile-time-only on this driver, see the `reference_lpc_int_cast_is_compile_time_only` entry) don't convert it back, corrupting the player-facing `wimpy` command's own percentage display (`"Percentage: 20.000000%"` instead of `"20%"`) even after the primary fix. **Fix**: `Wimpy = 0.20;` → `Wimpy = 20;`, and `float SetWimpy(float wimpy)`/`float GetWimpy()` → `int SetWimpy(int wimpy)`/`int GetWimpy()`, matching the field's declared type and its only real calling convention. Verified live: a brand-new character's bare `wimpy` command now reports `"Percentage: 20%"` (was "wimpy turned off" pre-fix, since a save/restore cycle happens to truncate the stray float back to int 0 on this driver — see `libs/nightmare4/NOTES.md` for why both the pre-restore and post-restore paths were independently broken), and a direct `eval` check of the exact runtime comparison (`Wimpy < percent(hp, max)` at 15% vs. 50% simulated health) now correctly returns "flee" only below the 20% threshold.
 
 **How to apply generally**: any threshold/limit/rate field that has TWO different unit conventions plausible for the same 0-N range (a 0.0-1.0 fraction vs. a 0-100 integer percentage, or similarly a per-mille vs. percent, or seconds vs. game-ticks) is worth checking for a literal that used the wrong one, especially when the field's declared type doesn't match the literal's own apparent type (an `int`-declared field assigned a value with a decimal point is an near-certain tell) — grep for `= 0\.[0-9]+;` assignments to fields whose declared type is `int`, then check every other real caller's actual value range to determine which unit is truly intended before "fixing" it, since guessing the wrong direction would silently make the safety net over-eager instead of dead.
+
+### 7.125 A shared `enter_world()` unconditionally sets the "has the player registered their recovery email" flag to true a few lines before the function's OWN later code checks that exact flag — permanently defeating every gate keyed on it, from the very first character ever created
+
+Found via a §10.7 round-two deep-test playthrough of `zhyx` (yh2003/ES2 lineage). `adm/daemons/logind.lpc`'s `enter_world(object ob, object user, int silent)` runs on EVERY successful login — brand-new character creation (called directly from `get_gender()`) AND every ordinary returning-player login (`check_ok()` → `enter_world()`; only the separate net-dead `reconnect()` path skips it) — and, right after the block that hands out starting clothing (completely unrelated to registration), does an unconditional `user->set("registered", 1); //user->set("born",1);` before the function's own subsequent logic:
+
+```lpc
+if (!silent)
+{
+    if (!user->query("registered"))
+        color_cat(UNREG_MOTD);
+    else
+        color_cat(MOTD);
+    ...
+    if (!user->query("registered") || !stringp(user->query("character")))
+    {
+        ...
+        user->set("startroom", REGISTER_ROOM);
+    }
+```
+
+Because `registered` was just forced to `1` two lines above, `!user->query("registered")` can never be true again after a character's very first `enter_world()` call — dead code for the rest of that character's life. This lib gates two real, separate, intentional mechanics on that same flag: `d/register/entry.lpc`'s `valid_leave()` (the starting-room NPC's "you must `register <email>` before you can leave" requirement, spelled out in the newbie help text) and `adm/daemons/channeld.lpc`'s channel-command gate ("你必须在注册以后才能够使用各种频道。"). Reproduced live: a freshly created character could walk out of the starting room in any direction (`east`/`west`/`north`/`south`) with ZERO email ever registered, no rejection message, no crash — the entire "register your recovery email first" flow described to every new player was unenforceable from the project's first-ever character onward. Root-caused by temporarily removing the `enter_world()` statement and confirming a fresh character was THEN correctly blocked at the room exit ("你还不快注册？") until `register <email>` + `decide` were actually run, then correctly allowed to leave afterward. **Fix**: delete the premature `user->set("registered", 1);` from `enter_world()` — the correct, sole place that flag is meant to be set is `d/register/npc/shuisheng.lpc`'s `do_decide()`, which already does `me->set("registered", 1);` at the moment the player actually confirms their typed email, and was always there, just permanently short-circuited by the earlier duplicate. Verified live post-fix: a new character is blocked from leaving the register room until `register`+`decide`, and gets through cleanly afterward; an already-corrupted pre-fix save (permanently `registered=1` with no real email on file) is not retroactively repaired by this fix, matching this project's usual policy of stopping new corruption rather than reaching into player data.
+
+**How to apply generally**: when a lib gates something ("must register first", "must confirm email first", "must accept EULA first") on a boolean/flag property, grep every `set(FLAG, 1)` write against that property name, not just the one inside the command that's supposed to set it — a duplicate, earlier, unconditional write anywhere in the shared login/connect chain (very often innocently placed near unrelated per-login setup like starting equipment, exactly as here) silently neuters the gate forever, with no crash and no compile error to find it by. This shape is a `logind.lpc`/`enter_world()`-family bug, not a WASM- or engine-specific one, so it's worth a quick grep on any other yh2003/ES2-lineage sibling (`yanhuangwuhun`, `yhwhckdm`, `yhyxs`, `yhwhpublicfi`) the next time one gets a §10.7 pass — check whether their own `enter_world()`/equivalent has the identical premature `set("registered", 1)` (or whatever the lib's own flag is named) ahead of a same-named dead check.
 
 ---
 

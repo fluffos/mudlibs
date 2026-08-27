@@ -321,12 +321,42 @@ void tell_object(object ob, string str)
 
 varargs void tell_room(mixed ob, string str, object *exclude)
 {
-    if (ob) message("tell_room", str, ob, exclude);
+    // Bare `message(...)` from HERE binds straight to the hard EFUN
+    // message() (not to this very file's own guarded message()
+    // override below), because on this driver an unqualified call to
+    // an identifier that also names a hard efun always resolves to
+    // the hard efun when made from *within the simul_efun object's
+    // own file* -- the local override only shadows the efun for
+    // OTHER objects' calls (confirmed live: an external caller's bare
+    // message(...) correctly reaches the guarded override below, but
+    // this function's own bare call never did). So the `if (exclude)`
+    // guard added below for the §7.12-class message()/tell_room()
+    // 4th-argument bug never actually ran for tell_room()'s own
+    // callers -- every single 2-arg tell_room(ob, str) call anywhere
+    // in the mudlib (an extremely common idiom -- corpse decay, death
+    // announcements, etc.) still crashed exactly as before. Route
+    // through explicit efun:: qualification so the same guard logic
+    // actually executes here too.
+    if (! ob) return;
+    if (exclude)
+        efun::message("tell_room", str, ob, exclude);
+    else
+        efun::message("tell_room", str, ob);
 }
 
 void shout(string str)
 {
-    message("shout", str, users(), this_player());
+    // Same same-object bare-`message(...)` trap as tell_room() and
+    // message_system() above: this_player() is 0 in plenty of real
+    // call contexts shout() is used from (an NPC's own death/event
+    // handler firing outside any interactive command, e.g. the
+    // guangmingding-battle NPCs' death shouts), and a bare int 0 for
+    // the 4th ("exclude") argument crashes the hard efun the exact
+    // same way an omitted tell_room() exclude did.
+    if (this_player())
+        efun::message("shout", str, users(), this_player());
+    else
+        efun::message("shout", str, users());
 }
 
 void write(string str)
@@ -446,8 +476,13 @@ void message(mixed arg, string message, mixed target, mixed exclude)
 
 void message_system(string message)
 {
-    message("system", HIW "\n【系统提示】" + message + "\n" NOR,
-                all_interactive(), 0);
+    // Same same-object bare-`message(...)`-binds-to-the-hard-efun
+    // trap as tell_room() above -- and the same 4th-arg bug shape
+    // (a literal int 0 "exclude" that isn't object|object*). No
+    // caller of message_system() ever needs to exclude anyone from
+    // an all_interactive() broadcast, so just drop the argument.
+    efun::message("system", HIW "\n【系统提示】" + message + "\n" NOR,
+                all_interactive());
 }
 
 int notify_fail(string msg)
