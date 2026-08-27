@@ -10655,6 +10655,98 @@ risk-free — if a real, driver-invoked alias-interception mechanism
 does exist, a forced game command bypassing player aliases might need
 a different mitigation than a bare string strip.
 
+### 7.138 A `notify_fail()`/`query_verb()` compatibility wrapper picks its branch by "does the native efun exist" (a *build-flavor* check) instead of "is a native `add_action()` dispatch actually active right now" (a *runtime* check) — so on a driver that has the efun but whose mudlib barely uses real `add_action()`, hundreds of custom fail messages silently collapse into the driver's generic `"What?"`
+
+Found on `skylib`'s §10.7 round-two deep functional test.
+`secure/simul_efun/modified_efuns.lpc`'s own `notify_fail(mixed
+stuff)` — the function every ordinary call site in the mudlib actually
+reaches via a bare `notify_fail(...)` call — ends with:
+
+```
+#if efun_defined(notify_fail)
+    return efun::notify_fail( stuff );
+#else
+    return _notify_fail( stuff );
+#endif
+```
+
+The intent is "if this driver build has the real native `notify_fail()`
+efun, defer to it (it works together with genuine `add_action()`
+dispatch); otherwise use this mudlib's own `_notify_fail()`/
+`query_notify_fail()` userland fail-message slot (the one this
+mudlib's *own* parser actually reads back to display a custom
+message)." That's the right idea, but `efun_defined()` only proves the
+driver *build* has the efun — it says nothing about whether the
+*current call* is happening inside a genuine native-dispatched
+command. On a driver that compiles with `add_action()` but whose
+mudlib (like this one, a Discworld/Nightmare-lineage archive whose own
+command dispatch — `cmdAll()`/`new_parser()` — never uses real
+`add_action()` for ordinary player verbs) almost never actually
+routes through the native path, the `#if` branch is taken
+*unconditionally*, silently writing into the native efun's
+`default_err_message` field, which the mudlib's own dispatcher never
+reads — so every "soft fail with a helpful explanation" call site
+falls through to the parser's own hardcoded generic `"What?"` instead
+of the real message. Scale: 570 bare `notify_fail(` call sites
+mudlib-wide (effectively every non-trivial player command). Reproduced
+live: newbie-help-documented bare `rows`/`cols` (no argument) and
+`term` (both the bare form and `term network`) all printed `"What?"`
+instead of their own documented messages; a sibling command using the
+same `{a|b|c}` pattern grammar but *not* calling `notify_fail()`
+worked fine, isolating the cause to this one function.
+
+**Fix**: replace the build-flavor check with a runtime one, using
+`efun::query_verb()` (which only returns non-empty from genuinely
+`add_action()`-dispatched code — confirmed against
+`add_action.cc`'s `f_query_verb()`) to decide the branch instead of
+`efun_defined()` alone:
+
+```
+#if efun_defined(notify_fail)
+    if( efun::query_verb() )
+        return efun::notify_fail( stuff );
+#endif
+    return _notify_fail( stuff );
+```
+
+This preserves the native path for the rare call sites that really do
+run under genuine `add_action()` dispatch, while correctly falling
+through to the mudlib's own slot for everything else. A companion
+compile-time gotcha: if `_notify_fail`'s forward declaration is itself
+`#if !efun_defined(add_action)`-guarded (i.e. only ever visible on the
+*other* driver flavor), making it reachable unconditionally like this
+requires hoisting the prototype out from under that guard too, or the
+whole simul_efun object fails to compile at all (`Undefined function
+_notify_fail` → `No program in object` → driver-fatal, since the
+simul_efun object is required to boot).
+
+**A second, related bug of the identical shape found on the SAME
+call**, while verifying this fix (`query_verb()`'s own body, a few
+lines above `notify_fail()` in the same file): it checked `verb != ""`
+to decide "is there a real native verb," but the native `query_verb()`
+efun returns the **integer** `0` — not the empty string `""` — when no
+native verb is active (`add_action.cc`: `if (!last_verb)
+push_number(0);`). Since `0 != ""` is true for two different types,
+this check was satisfied by the wrong condition and returned the raw
+integer `0` instead of falling through to the mudlib's own tracked
+current verb, corrupting any player-facing message built by
+concatenating `query_verb()`'s result into a string (e.g. `"Syntax:
+"+query_verb()+" <term_type>"` rendered as `"Syntax: 0 <term_type>"`).
+Fix: normalize a non-string result to `""` before the comparison
+(`if( !stringp(verb) ) verb = "";`).
+
+**How to apply generally**: any mudlib that defines its own
+`notify_fail()`/`query_verb()` (or similar) compatibility wrapper
+gated by `#if efun_defined(X)` is suspect whenever the underlying
+codebase's *own* command dispatch doesn't universally rely on real
+`add_action()` — grep for the wrapper's own `#if efun_defined(...)`
+condition and check whether a *runtime* signal (an actually-native
+`query_verb()`/similar probe) would give a different answer than the
+*build-flavor* check in the cases that matter. Also watch for `!=
+""`-style string comparisons anywhere a native efun's "nothing here"
+sentinel might actually be the integer `0` rather than an empty
+string — this driver does not treat `0` and `""` as equal.
+
 ---
 
 ## 8. Login and registration flow bugs

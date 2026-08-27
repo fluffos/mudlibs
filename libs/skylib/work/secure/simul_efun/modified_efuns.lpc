@@ -19,8 +19,16 @@ string back_trace();
 void event(mixed,string,mixed ...);
 #endif
 
+/* Forward declaration only -- the real implementation lives in
+ * /secure/simul_efun/fluffos_compat.lpc (NO_ADD_ACTION flavor) or
+ * /secure/simul_efun/add_action.lpc (add_action flavor), whichever this
+ * driver build actually inherits. Needed unconditionally (not just under
+ * the !efun_defined(add_action) guard below) because this file's own
+ * notify_fail() wrapper now calls it on both driver flavors -- see the
+ * comment on notify_fail() itself. */
+varargs int _notify_fail(string);
+
 #if !efun_defined(add_action)
-int _notify_fail(string);
 int living(object ob);
 object find_player(string);
 #endif
@@ -352,6 +360,22 @@ string query_verb() {
     verb = "";
 #endif
 
+    /* The native efun returns the *integer* 0 (not "") when there is no
+     * currently-active native add_action() verb -- see
+     * f_query_verb()/add_action.cc ("if (!last_verb) push_number(0)").
+     * Since almost every command on this mudlib is dispatched through
+     * its own new_parser chain rather than real add_action() (see
+     * NOTES.md), that is the overwhelmingly common case here, and an
+     * un-normalized int 0 both fails the "verb != \"\"" string check
+     * below (0 != "" is true for two different types) and gets handed
+     * back to callers that concatenate it straight into player-facing
+     * text (e.g. "Syntax: "+query_verb()+...", rendering literally as
+     * "Syntax: 0 ..."). Normalize to "" first so the check -- and the
+     * fallback to this mudlib's own tracked current verb below -- both
+     * work as originally intended. */
+    if( !stringp(verb) )
+        verb = "";
+
     return ( verb != "" || !objectp( TP ) ? verb :
             (string)TP->query_current_verb() );
 
@@ -477,10 +501,18 @@ int notify_fail( mixed stuff ) {
     stuff = (string)TP->fix_string( stuff );
 
 #if efun_defined(notify_fail)
-    return efun::notify_fail( stuff );
-#else
-    return _notify_fail( stuff );
+    /* On a driver that has the native efun (this one), only defer to it
+     * when the CURRENT command is genuinely being dispatched through the
+     * driver's own native add_action() (efun::query_verb() only returns
+     * non-empty inside that context) -- almost everything in this mudlib
+     * instead goes through its own new_parser/cmdAll dispatch chain (see
+     * NOTES.md's "core bug" writeup), which never consults the native
+     * efun's default_err_message at all, so calling it there would
+     * silently discard the fail message instead of showing it. */
+    if( efun::query_verb() )
+        return efun::notify_fail( stuff );
 #endif
+    return _notify_fail( stuff );
 
 } /* notify_fail() */
 
