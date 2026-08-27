@@ -3016,6 +3016,44 @@ referenced-but-undefined feature macro, a deleted board object) to make
 the compile succeed — that's a real archive gap (§13), not a conversion
 bug; only make the crash degrade gracefully.
 
+**Variant confirmed one level down, not just the shared room helper:
+`revive`'s §10.7 round-two deep functional test.** Fixing the SHARED
+population helper (the pattern above) doesn't catch every call site —
+an individual NPC/quest-object's own `create()`/`init_quest()` can make
+the identical unguarded `new()`/`carry_object()` → method-call chain
+directly, bypassing the shared helper's fix entirely. Two live-
+confirmed shapes in the same archive: (1) `d/register/npc/diyun.lpc::
+create()` did `carry_object("/d/city/obj/cloth.lpc")->wear();` with no
+`objectp()` check — `/d/city` was a domain this stripped archive never
+shipped, so `carry_object()` correctly returned `0`, and dot-calling
+`->wear()` on it threw `*Bad argument 1 to EFUN call_other() ... Got:
+int(0)` straight to the connecting player's screen on literally every
+new character's first move out of the registration room (the NPC is
+spawned via the room's own ad-hoc `valid_leave()`-triggered `new()`,
+not via `reset()`/`make_inventory()`, so the already-fixed shared
+helper never protected this path). Three sibling files had the exact
+same shape against the exact same missing domain (`adm/npc/
+youxun.lpc`, `clone/npc/meng-zhu.lpc` — 2 sites, `clone/megazine/room/
+npc/mm.lpc`), fixed identically. (2) `clone/quest/{search,judge}.lpc::
+init_quest()` (`npc1 = new(CLASS_D("generate") + "/questnpc"); ...
+npc1->set_temp(...)`) and `clone/quest/shen.lpc`'s single-`npc`
+equivalent — `CLASS_D("generate")` pointed at a THIRD missing content
+subtree (`/kungfu/class/generate/`, distinct from `/kungfu/skill/`),
+and this one fired **ambiently**, unprompted, from the quest daemon's
+own `heart_beat()`, spamming `debug.log` with a fresh uncaught error
+every cycle from the moment of boot — no player action needed at all,
+making this the most operationally noisy variant found so far. Fix in
+both shapes: same as the general case, add the missing `objectp()`
+check before the chained method call (self-destructing via the
+function's own existing "can't proceed" idiom where one already
+exists, as in the quest case). **How to apply generally**: when
+auditing a room's shared population helper for this bug class, also
+grep the SAME lib for other `new(...)->`/`carry_object(...)->`/
+`load_object(...)->` chains with no `objectp()`/`stringp()` guard in
+between, especially inside individual NPC/quest-object `create()`/
+`init_*()` functions — the shared-helper fix and the individual-file
+fix are independent and neither substitutes for the other.
+
 ### 7.26 A `file_owner()` path-depth off-by-one misattributes nested wizard content, crashing `log_error()`'s write on any compile diagnostic
 
 Found on `mhxy`'s deep functional test (§10.7). Related to §7.10 (both
@@ -9644,6 +9682,59 @@ This transparently fixes every affected `.o` file without touching any of them d
 
 **How to apply generally**: any lib whose AREA/coordinate-grid engine stores room-exit destinations as data (not source) is worth a `grep -c '\.c"' world/area/**/*.o`-style corpus check for stale extensions surviving the `.c`→`.lpc` rename, independent of whatever `convert_lib.sh` already did to the *source* files — the tell is a custom `file_path()`/path-substitution helper method on the AREA base class that takes a macro-placeholder string and resolves it at runtime, rather than `load_object()` being called on a literal string straight out of source. `naruto`'s siblings in the same ES2/Neolith "Annihilator" AREA-engine lineage (`huoying`, `zhyx`, `yanhuangwuhun`, `demonangel`, `es2`, `haiyang2`) are the most likely candidates to check next, though several of them (`huoying` especially) have far smaller or no built-out AREA-grid game worlds, so the blast radius will vary lib to lib.
 
+### 7.127 A shared per-object wrapper declares a narrower parameter type than every real caller actually uses, so this driver's strict compile-time type check rejects EVERY caller and the whole content class silently fails to compile
+
+Found via `revive`'s §10.7 round-two deep functional test. This
+codebase's quest-object base class (`inherit/misc/quest.lpc`) declared
+a thin per-object wrapper as `void set_information(string key, string
+info)`, forwarding to a daemon (`adm/daemons/questd.lpc`) whose own
+matching function already correctly declares the same parameter as
+`mixed info` — but 5 of the 6 real quest-type files in the archive
+(`clone/quest/{shen,supply,explore,search,judge}.lpc`, everything
+except a plain-string outlier and one separately content-gapped file)
+call the wrapper with a **function pointer** as the second argument
+(`set_information(NPC1_NAME, (: ask_npc1 :))`), so an NPC's dynamic
+in-game answer can be computed lazily instead of being a fixed string
+— clearly the INTENDED, universal calling convention for this wrapper,
+not a one-off misuse. Because this driver enforces declared parameter
+types strictly at compile time (`error: Bad type for argument 2 of
+set_information ( string vs function )`), and the wrapper's own
+declaration was narrower than literally every real call site, all 5
+quest-type files failed to compile entirely — invisible in a batch
+`lpcc` sweep only insofar as the individual FAIL entries look like
+ordinary unrelated compile errors until you notice they all point at
+the same one-line culprit in a shared base file. Worse, because the
+quest daemon's own `heart_beat()` tries to instantiate one of these
+quest types on an ambient timer with no player action required, the
+resulting `*No program in object '...'!` fired unprompted, repeatedly,
+forever, from the moment of boot.
+
+**Fix**: widen the wrapper's declared parameter type to match its own
+daemon-side counterpart and every real caller — `void
+set_information(string key, mixed info)`. A one-line, purely-
+mechanical type-widening; it doesn't invent or change any quest
+content, it just lets already-shipped quest code actually compile.
+Verified via `lpcc --batch`: all 5 previously-failing quest files
+flipped to PASS, the untouched 6th (already content-gapped for an
+unrelated reason) correctly remained FAIL, and a live reboot showed
+zero further ambient `heart_beat`-driven compile errors in `debug.log`
+across several idle minutes.
+
+**How to apply generally**: when a shared wrapper/forwarding function
+sits between a daemon (or other central authority) and many individual
+content files, and the daemon's own version of the same logical
+parameter is declared wider (typically `mixed`) than the wrapper's, check
+whether ANY real caller actually needs the wider type before assuming
+the narrower declaration is correct — a compile failure shared by
+several-but-not-all sibling content files of the same TYPE (quest
+objects, shop items, skill effects, etc.) is a strong tell that the
+common shape they all use is legitimate and the thin wrapper is simply
+wrong, rather than every one of them independently misusing the API.
+This is a distinct shape from §7.121 (a function's own RETURN type
+being too narrow for its own internal arithmetic) — here the bug is a
+function's PARAMETER type being narrower than how every real caller
+invokes it.
+
 ---
 
 ## 8. Login and registration flow bugs
@@ -9878,6 +9969,34 @@ the same lib's `clone/questob/letter.lpc` (declares an identical
 confirmed live-triggered — the proactive grep for `private NAME` +
 `call_out("NAME"` in the same file catches these even when a live
 reproduction isn't easy to force.
+
+**Fourth confirmed instance: `revive`'s §10.7 round-two deep functional
+test** — the SAME "Doing Lu hell" lineage as `xuanjianlu`/`zjdyaryl`
+above (a much smaller, "engine only" GitHub release of the same
+codebase), and byte-for-byte the same two files/function names again:
+`feature/action.lpc::eval_function()` (used by `start_call_out()`, the
+sole delayed-callback primitive this whole codebase uses for anything
+that must survive the calling object being destructed mid-delay —
+kungfu temporary-condition effects, sleep/meditation wakeup, room-cart
+arrival, combat's `continue_attack`, `steal`'s completion, `makelove`'s
+`do_over`, several quest-daemon callbacks) and `inherit/item/
+combined.lpc::destruct_me()` (a stackable item — money, most
+impactfully — spent to exactly 0 never actually self-destructs).
+Fixed identically (drop `private`, keep the body unchanged); not
+independently live-reproduced this session (this archive's stripped-
+down shipped content has no reachable `sleep_room` and no `eval`-
+equivalent wizard command to force a synthetic repro), but given three
+prior confirmed live instances of this exact two-file/two-function
+shape in the same lineage, the fix was applied proactively rather than
+left as an observation. **Checked the other three libs sharing this exact lineage in this
+collection**: `hell` and `zjmudhell` both still carry BOTH functions
+`private`, byte-for-byte the same shape, in the exact same two files
+(`feature/action.lpc`/`inherit/item/combined.lpc`) — confirmed
+unfixed, not yet ported. `hellxg` has neither file at that path at all
+(a different internal layout — not checked further this session).
+Next §10.7/sweep pass on `hell` or `zjmudhell` should apply the
+identical one-line-each fix (drop `private`, keep `nomask` where
+present) rather than rediscover it from scratch.
 
 #### 8.3b Dead command-indexer sscanf
 

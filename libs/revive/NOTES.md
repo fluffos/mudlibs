@@ -472,3 +472,393 @@ failure or an accidental subset.
   `versiond` real-network side effects are an extra reason to be
   deliberate about how often this lib gets rebooted in any future
   automated long-sit/WASM-enablement pass.
+
+## 2026-08-27 深度功能测试 / Deep functional test (round two, §10.7)
+
+Read `help/newbie` first (registration -> pick personality via `out` in
+one of 4 rooms -> `wash` for stats -> `born <地名>` into the world).
+Ran a real, continuous session with a fresh Chinese-named test
+character (surname/given-name 秦/石, then 秦/言 for a second,
+never-born control character used for the restart/reconnect check),
+plus the seeded `fluffos`/`Mud@2026` admin for `goto`-based exploration
+of the two non-register domains. Native `build-debug` driver, port
+40236, one lib at a time, killed by exact PID between reboots.
+
+### SEVERE, confirmed live: every new player's first move out of the
+registration room threw an uncaught driver error (`d/register/npc/
+diyun.lpc`'s unguarded `carry_object()->wear()`)
+
+`d/register/npc/diyun.lpc::create()` (the "狄云" NPC who sees new
+players off at the register-room exit) did:
+```lpc
+carry_object("/d/city/obj/cloth.lpc")->wear();
+```
+`/d/city` is one of the ~51 domains this stripped archive never
+shipped (already documented above), so `carry_object()` (`inherit/
+char/npc.lpc`) correctly returns `0` on the missing file -- but the
+call site immediately dot-calls `->wear()` on that `0` with no
+`objectp()` guard, which the driver rejects as `*Bad argument 1 to
+EFUN call_other() Expected: object, string, array, Got: int(0)`.
+Reproduced live: a freshly-registered character's very first `east`
+(or any exit) out of `/d/register/entry` triggered `d/register/
+entry.lpc::valid_leave()`'s own ad-hoc `new(__DIR__"npc/diyun")` (not
+the room's normal `make_inventory()`-populated `objects` list, so the
+onboarding session's `make_inventory()` `catch()` fix -- which only
+covers population via `reset()` -- never protected this path), which
+ran `diyun`'s `create()` uncaught, dumping a full driver stack trace
+straight to the connecting player:
+```
+执行时段错误：*Bad argument 1 to EFUN call_other()
+程式：/d/register/npc/diyun.lpc 第 16 行
+```
+This is universal -- every single player who successfully registers
+and decides hits it on their first move, though it's non-fatal (the
+error is swallowed after being printed and the move itself still
+succeeds; `diyun` just has no visible clothes afterward). **Fix**
+(same shape as the onboarding `make_inventory()` fix, §7.25 family --
+guard the call, don't fabricate the missing content):
+```lpc
+object cloth;
+...
+if (objectp(cloth = carry_object("/d/city/obj/cloth.lpc")))
+        cloth->wear();
+```
+Verified live post-fix: `east` out of `/d/register/entry` now prints
+only "狄云对你一抱拳，道：人生路全靠自己走，朋友走好！" with zero
+error trace, across a fresh boot.
+
+**Same exact unguarded `carry_object(missing)->wear()/->wield()` shape
+found and fixed at 3 sibling call sites** (grepped every `carry_object(
+...)->` call site in the tree, cross-checked which referenced targets
+are actually missing in this archive vs. real, shipped `/clone/...`
+items -- most of the ~30 hits are fine, these 3 aren't):
+- `adm/npc/youxun.lpc` (`carry_object("d/city/obj/cloth")->wear()`) --
+  not reachable in normal play (its home city is missing) but crashes
+  the instant anything clones/loads it (confirmed via a scoped `lpcc`
+  run: post-fix it correctly falls through to the already-documented,
+  separate "kungfu/skill/ doesn't exist" content gap instead).
+- `clone/npc/meng-zhu.lpc` (2 sites: `/d/shaolin/obj/changjian` +
+  `/d/city/obj/cloth`, plus a 3rd/4th site in the `restore()`-branch
+  using a saved `weapon`/`armor` path that could equally be stale) --
+  same treatment, same post-fix fallback to the skill-content gap.
+- `clone/megazine/room/npc/mm.lpc` (`/d/city/npc/obj/qunzi`) -- this
+  one now compiles and loads 100% clean post-fix (no residual content
+  gap behind it).
+
+All 4 fixes verified via a scoped `lpcc --batch` run before and after
+(diyun and mm flipped FAIL->PASS cleanly; youxun/meng-zhu flipped from
+the `wear()`-crash FAIL to the pre-existing, correctly-untouched
+`*F_SKILL: No such skill` FAIL) and a full `lpcc_check.sh` sweep
+(1081/1169 -> 1087/1169, zero new failures anywhere else). **Likely to
+recur in `hell`/`hellxg`/`zjmudhell`**: this is boilerplate NPC-dressing
+code copied across many files in this lineage; those siblings ship the
+full city content so their own `carry_object()` targets probably
+resolve, but it's worth a quick grep of `carry_object(...)->` there too
+in case any of *their* target paths are themselves stale/renamed.
+
+### SEVERE, confirmed via `lpcc`: the entire quest subsystem (5 of 6
+quest-type files) failed to compile -- a shared wrapper's parameter
+type didn't match how every real caller used it
+
+`inherit/misc/quest.lpc::set_information(string key, string info)` --
+but `clone/quest/{shen,supply,explore,search,judge}.lpc` (every quest
+type except the already-content-gapped `girl.lpc` and the plain
+`avoid.lpc`) call it with a **function pointer** as the second
+argument (`set_information(NPC1_NAME, (: ask_npc1 :))`, etc.) so an
+NPC's own name/id can trigger a dynamic answer instead of a fixed
+string. The underlying daemon side (`adm/daemons/questd.lpc::
+set_information(object qob, string key, mixed info)`) already declares
+`info` as `mixed` and handles this fine -- only the thin per-quest-
+object wrapper in `quest.lpc` had the wrong, narrower `string`
+declaration, which this driver enforces strictly at compile time:
+```
+error: Bad type for argument 2 of set_information ( string vs function )
+```
+Since EVERY quest-type file needs this call, all 5 real quest classes
+failed to compile entirely, and the quest daemon's own `heart_beat()`-
+driven `start_quest()` (an ambient, ~15-minute-interval background
+process, ran unprompted mid-session) threw a fresh uncaught `*No
+program in object '/clone/quest/search'!` (and identically for the
+other 4) every time it tried to spin one up -- caught by the driver's
+error handler so it didn't crash the mud, but it silently broke 100%
+of this stripped archive's quest content and spammed `debug.log`
+forever. **Fix**: widen the one declaration to match its own daemon
+counterpart and every real caller:
+```lpc
+void set_information(string key, mixed info)
+```
+Verified via `lpcc --batch`: all 6 quest files (`shen`, `supply`,
+`explore`, `search`, `judge`, `avoid`) now PASS; `girl.lpc` still fails
+on its own, separate, already-documented undefined-variable content
+gap (untouched, correctly). This is a narrow shared-file type-
+declaration bug, not a content decision -- fixing it doesn't invent
+any of the missing quest content, it just lets the existing quest
+*code* run instead of refusing to compile.
+
+**Companion fix, found via the same ambient heart_beat error**:
+`adm/daemons/quest/{supply,explore}.lpc::start_quest()` both do
+`env = get_object(room); ...present(rcv_npcs[room], env)...` with no
+`objectp(env)` check -- since `rcv_npcs`' keys are real, well-formed
+room paths but every single one of them lives in a domain this
+archive never shipped (`/d/city3`, `/d/dali`, `/d/changan`, `/d/city`,
+`/d/beijing`, `/d/shaolin`, `/d/suzhou`, `/d/hangzhou`, `/d/fuzhou`,
+`/d/quanzhou`, `/d/lingzhou` -- a pure content gap, not a code bug),
+`get_object()` always returns a non-object, and `present(x, 0)` throws
+`*Bad argument 2 to present() Expected: object Got: 0`, also caught
+but also spamming `debug.log` every ~heart_beat forever. Fixed with a
+one-line `! objectp(env)` guard added to each, mirroring the
+already-fixed `quest/girl.lpc` sibling (which coincidentally can't
+even reach this line, since it fails to compile first on its own
+undefined-variable gap). `adm/daemons/quest/{judge,search,shen}.lpc`
+use a different, already-guarded room-selection shape and needed no
+change at THIS call site -- but see the next finding, which hit all
+three of them at a different call site.
+
+**Second content gap uncovered by the same `set_information()` fix,
+in the very next line the fix unblocked**: once the quest files could
+actually compile, letting the daemon's `heart_beat()` reach past the
+old compile failure, `clone/quest/{search,judge}.lpc::init_quest()`
+(`npc1 = new(CLASS_D("generate") + "/questnpc"); ... npc1->set_temp(
+...)`) and `clone/quest/shen.lpc::init_quest()` (same shape, single
+`npc`/`"/shennpc"`) immediately hit a FRESH ambient uncaught error,
+live, unprompted, within the very next heart_beat cycle after the
+reboot:
+```
+执行时段错误：*Bad argument 1 to EFUN call_other()
+Expected: object, string, array,  Got: int(0).
+程式：/clone/quest/search.lpc 第 67 行
+```
+Root cause: `CLASS_D("generate")` expands to `/kungfu/class/generate`,
+and this WHOLE directory -- not just `/kungfu/skill/`, a separate,
+already-documented gap -- never shipped in this stripped archive
+(confirmed: `find . -path "*kungfu/class*"` returns nothing at all).
+`new()` on the missing `.../questnpc`/`.../shennpc` template correctly
+returns `0` (per the onboarding session's `virtuald.lpc` fix), but
+none of the three call sites checked before dot-calling `->set_temp()`
+on the result -- the exact same missing-guard shape as the `carry_
+object()->wear()` family above, just one more content-gap directory
+deep. **Fix**, same established pattern (guard + self-destruct via the
+function's own pre-existing "can't proceed" idiom, already used one
+branch up in the very same functions for the "item already claimed by
+another quest" case):
+```lpc
+npc1 = new(CLASS_D("generate") + "/questnpc");
+npc2 = new(CLASS_D("generate") + "/questnpc");
+if (! objectp(npc1) || ! objectp(npc2))
+{
+        destruct(this_object());
+        return;
+}
+```
+(single-`npc` variant for `shen.lpc`). Verified via `lpcc --batch`
+(all 3 still PASS) and live: rebooted again, let the driver idle
+through 3+ heart_beat cycles (supply/explore/search/judge/shen all
+fire on their own timers), `debug.log` grepped clean of any `执行时段
+错误`/`*`-prefixed runtime error for the whole idle window post-fix.
+
+**`/kungfu/class/generate/` is a third, previously-undocumented missing
+content subtree** (distinct from `/kungfu/skill/`), also referenced
+unguarded by `adm/daemons/questd.lpc` (`receiver.lpc`, `killed.lpc` --
+the letter-delivery and bounty-quest NPC generators) and `adm/daemons/
+npcd.lpc` (`chinese`/`japanese`/`european`/`indian` generic-NPC
+templates). Those 6 additional call sites were deliberately **left
+unfixed**: unlike the 3 quest-heart_beat sites above, none of them are
+reachable via any live path in this archive -- they only fire from
+inside quest-giver dialogue that no NPC in the 3 shipped domains
+actually offers, so fixing them would be speculative hardening against
+an unreachable trigger rather than a live, in-scope bug, and the
+missing-content directory itself is the same well-established
+"don't fabricate content" boundary as `/kungfu/skill/`. Flagged here so
+a future session doesn't have to rediscover the same gap from scratch,
+and doesn't mistake "reachable via heart_beat" for "reachable at all"
+when triaging which of a batch of similar-looking call sites are worth
+fixing.
+
+### §8.3a variant confirmed: two more `private` mixin functions
+dispatched by name via `call_out()`, not just `add_action()`
+
+Grepped every `private`-declared function in the tree against same-
+file `call_out("name", ...)` / `add_action("name", ...)` call sites,
+then filtered out the (majority) false positives where the private
+function lives in a standalone daemon/NPC/command file that's never
+`inherit`ed into a different top-level body (for those, the driver's
+own internal dispatch on `this_object()` never crosses the
+private/DECL_HIDDEN boundary, so there's no bug). Two real, live mixin
+instances remained, **both already named verbatim in this project's
+own §8.3a catalog as confirmed `demonangel` sibling instances** of the
+exact same class:
+- `feature/action.lpc::start_call_out()` does
+  `call_out("eval_function", delay, fun)`, but `eval_function` was
+  `private`. `feature/action.lpc` is `F_ACTION`, inherited by
+  `inherit/char/char.lpc` (`CHARACTER`), inherited by `clone/user/
+  user.lpc` -- i.e. the actual player body. `start_call_out()` is the
+  ONLY delayed-callback primitive used throughout this codebase for
+  anything that must survive the calling object being destructed
+  mid-delay (its own header comment explains why): kungfu temporary-
+  condition effects (`kungfu/special/{agile,hatred,power}.lpc`'s
+  `remove_effect`), sleep/meditation wakeup (`cmds/std/sleep.lpc`,
+  `cmds/skill/jingzuo.lpc`), room-cart arrival (`inherit/room/
+  trans.lpc`), combat's own `continue_attack` (`adm/daemons/
+  combatd.lpc`, 6 sites), `steal`'s completion, `makelove`'s
+  `do_over`, the quest daemon's own follow-up callbacks, and several
+  more -- a very wide, central blast radius, though not independently
+  live-reproduced this session (no reachable room in this stripped
+  archive has `sleep_room` set, and there's no `eval`-equivalent
+  wizard command to force a synthetic repro; the fix rests on the
+  identical, already-proven-live `demonangel` precedent plus a clean
+  `lpcc` recompile).
+- `inherit/item/combined.lpc::set_amount(0)` does `call_out(
+  "destruct_me", 0)` to self-destruct an emptied stackable item
+  (money down to 0, a depleted material stack, etc.), but `destruct_me`
+  was `private`. `COMBINED_ITEM` is inherited by `inherit/item/
+  money.lpc`, `inherit/weapon/throwing.lpc`, `inherit/medicine/
+  powder.lpc` and several `clone/misc/*.lpc` items -- meaning every
+  coin/silver/gold object, thrown weapon, medicine powder, etc. that
+  ever gets reduced to a zero count would silently never self-destruct
+  and instead linger as an inert zero-quantity husk forever.
+
+**Fix** (both, matching the established pattern): drop `private`, keep
+the function otherwise unchanged --
+```lpc
+// feature/action.lpc
+void eval_function(function fun) { evaluate(fun); }
+// inherit/item/combined.lpc
+void destruct_me() { destruct(this_object()); }
+```
+Verified via `lpcc --batch`: no regressions (all previously-passing
+files affected by either inherit chain still pass). **Likely to recur
+in `hell`/`hellxg`/`zjmudhell`**: `feature/action.lpc` and `inherit/
+item/combined.lpc` read as core, shared engine files in this lineage
+(not stripped-archive-specific content), so this exact
+`start_call_out`/`eval_function` and `combined_item`/`destruct_me`
+shape is a strong candidate to check on those 3 siblings the next time
+any of them gets a §10.7 pass -- grep `private.*eval_function` and
+`private.*destruct_me` directly.
+
+### Confirmed clean (all six standing cross-cutting patterns checked)
+
+- **§7.121** (float-arithmetic function declared `int`, no
+  `to_int()`): no currency/economy function in this lib does real
+  float math -- `inherit/item/money.lpc::value()`, `feature/
+  banker.lpc::do_convert()`, and `feature/dealer.lpc` all use plain
+  integer division/multiplication throughout; every `base_value` is a
+  literal integer. Clean.
+- **§8.3a** (`private` mixin function dispatched by name): the
+  already-fixed `command_hook` instance holds (confirmed live --
+  `d/register/npc/lu.lpc`'s `command("chat ...")` on personality
+  selection worked with zero error). Two NEW instances found and
+  fixed this session, see above. A full grep of every other `private`
+  function against same-file `call_out`/`add_action` targets found no
+  further live (inherited-mixin) instances -- the remaining ~25 hits
+  are all standalone daemon/NPC/command files, correctly unaffected.
+- **§7.122** (autoload-class marker-item duplication): this codebase
+  has no `compute_autoload_array`/`destroy_autoload_obj`/
+  `load_autoload_obj`/`query_auto_load` mechanism at all (grepped,
+  zero hits) -- not applicable to this lineage.
+- **§7.123** (bare file-scope `IDENT = (...)` statement): grepped for
+  a column-zero `IDENT = ([`/`({` pattern across every `.lpc` file --
+  zero hits (every match found was properly indented, i.e. inside a
+  function body). Clean.
+- **§7.124** (0.0-1.0 fraction vs. 0-100 percentage threshold): `wimpy`
+  (the auto-flee threshold, `inherit/char/char.lpc` + `cmds/usr/
+  wimpy.lpc`) defaults to plain integer `0` and is set/compared as a
+  0-100 percentage throughout, matching its own field type
+  consistently -- no float-literal mismatch anywhere. Grepped the
+  whole tree for `= 0\.[0-9]+;` assigned to an `int`-declared field:
+  zero hits. Clean.
+- **§7.126** (stale pre-`.lpc` extension in a door/exit save-file
+  macro-placeholder resolved by a custom `file_path()`-style helper):
+  this codebase has no coordinate-grid `AREA`/`file_path()` engine at
+  all -- rooms use plain hard string exits, resolved directly by
+  `load_object()`, no macro substitution layer. The one place a stale
+  `.c` extension WAS found in persisted data (`data/dbased.o`'s
+  `/d/huashan/ziqitai` entry, `"test":"/data/room/doing/xiaoyuan.c"`)
+  is dead, unreachable data -- `/d/huashan` is itself one of the ~51
+  missing domains in this stripped archive, so this exact save-file
+  entry can never actually be loaded/hit regardless of the stale
+  extension; confirmed via `inherit/room/room.lpc` never consuming any
+  dbase-stored `"exits"` data at all for exit resolution in this
+  archive. Not a live bug, not fixed.
+
+### Registration / personality / born / quit-reconnect -- all confirmed
+working correctly (post-fixes)
+
+Full continuous session with `秦石` (male, 光明磊落 personality via
+the east-room NPC 陆天抒, matching the newbie-help-documented flow
+exactly): register -> decide -> `out` of the east personality room ->
+arrived at 阎罗殿 (`d/register/yanluodian.lpc`) -> `wash` (rolled
+str/int/con/dex 19/22/19/20) -> `born 扬州人氏` correctly failed
+gracefully ("牛头一呆，搔搔头说：怎么好像有问题...", the
+already-documented `/d/city` content gap, zero crash) -> `score`/`i`
+both rendered a full, sensible status display (age 14, personality,
+starting clothes from account creation) despite the failed born.
+`quit` was clean both times tested (dropped the now-worthless newbie
+book, correct farewell message), `debug.log` grepped after each quit
+(clean both times, post-fix). A second, never-`wash`ed/never-`born`
+control character (`秦言`) was registered specifically to verify the
+onboarding session's `calc_sec_id()` restart-lockout fix still holds
+after this session's edits: registered -> `decide` -> `quit` -> driver
+killed by exact PID and rebooted -> reconnected after the restart ->
+correctly restored into `/d/register/entry` with the right "上次光临"
+timestamp and pre-birth `score` message -> `quit` cleanly again. The
+fix holds.
+
+**One notable downstream interaction, not a new bug**: `d/register/
+yanluodian.lpc::do_born()` sets `me->set("startroom", dest)` *before*
+checking whether the destination object actually loaded, so a failed
+born (this archive's universal case, since every `born` target is a
+missing domain) still permanently records a nonexistent `startroom`.
+A player in this state who later `quit`s and reconnects will hit
+`logind.lpc::enter_world()`'s own `catch(load_object(startroom))`
+failing (a SEPARATE, already-existing catch from the onboarding
+session, working exactly as designed) and land in the graceful "你无
+法进入这个世界" fallback message with no environment, rather than
+back in the register room -- reproduced live on `秦石` post-fix-boot.
+This is a downstream consequence of the well-documented, deliberately-
+untouched missing-city-domains content gap (not a new code bug: the
+existing catch already prevents a crash, and there is no live-
+reachable `born` target in this archive that would ever leave a
+character in this state on a fully-built release), so left as-is --
+flagged here only so a future session doesn't mistake it for a new
+regression.
+
+### Combat / skill / sect / shop / death-respawn: **not reachable
+live in this stripped archive** -- content gap, not a code bug
+
+Confirmed via direct testing that `born` cannot succeed for ANY of the
+18 listed destinations (every single one targets a domain this
+archive never shipped: `/d/city`, `/d/guanwai`, `/d/beijing`, `/d/
+taishan`, `/d/changan`, `/d/shaolin`, `/d/xingxiu`, `/d/xiangyang`,
+`/d/suzhou`, `/d/hangzhou`, `/d/fuzhou`, `/d/city3`, `/d/dali`, `/d/
+foshan`, `/d/baituo`, `/d/yanziwu`, or the intentionally-disabled `0`
+placeholders for 蒙古/黔中), so a player can never leave the register
+domain through the game's own intended path. The only other two
+shipped domains (`d/death`, `d/pk`) were explored directly via admin
+`goto` instead:
+- `d/pk` (`entry`/`ready`/`turen1-12`) is a scheduled PK-tournament
+  arena (`乌老大`/`wu laoda` signs players up for an uptime-gated
+  "屠人大赛" event, matching the `story/master.lpc`-style 24-hour-gate
+  pattern already documented above) -- no safe-sparring dummy exists
+  here or anywhere else in the shipped content (grepped `accept_fight`
+  project-wide: the only hit outside `inherit/char/{fighter,npc,
+  punisher,challenger}.lpc`'s shared base logic is `cmds/std/
+  fight.lpc`, the "较量" command documented in `help newbie` itself --
+  but it requires a real opposing character, and the only NPCs in the
+  3 shipped domains are non-combative dialogue/quest-giver roles).
+- `d/death` (`gate`/`gateway`/`road1-3`/`inn1-2`/`block`) is the
+  ghost-gate/resurrection domain matching `help newbie`'s own
+  description. All rooms load and render cleanly via `goto`. Its two
+  guard NPCs (`黑无常`/`bgargoyle`, `白无常`/`wgargoyle`) hit the
+  already-documented "`kungfu/skill/` doesn't exist" content gap
+  (`*F_SKILL: No such skill (dodge)`) inside their own `create()` --
+  correctly swallowed by the onboarding session's `make_inventory()`
+  `catch()` fix, so the room still loads fine, just without the NPC
+  present. Both gate rooms are `no_fight` zones (confirmed via `kill`
+  returning "这里不准战斗。").
+
+Net: skill/sect acquisition, real combat, shop/economy, and death/
+respawn are **all unreachable via any live path in this archive** --
+not a testing gap, a genuine, already-well-documented content gap (no
+`kungfu/skill/` tree, no sect NPCs, no shops, no city domains at all
+survive in this "engine only" release). This was verified directly
+this session rather than assumed from the onboarding notes.
