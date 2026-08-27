@@ -328,3 +328,353 @@ driver build) -- caught gracefully, game continues normally, not on
 the boot/login/play path. `quit` wasn't recaptured in this WASM
 transcript but is already verified clean under native testing above
 and untouched by either fix.
+
+## 5. Deep functional test (round two, 2026-08-27)
+
+First full §10.7 round-two pass on this lib (confirmed via grep: no prior
+`深度功能测试`/dated round-two heading existed). One continuous session,
+English-named test characters per this lib's own naming convention
+(`quillfrost`, `brackenfell`, plus throwaway `testerbrave`/`brytewind`
+during earlier diagnosis -- all four deleted from `players/` before this
+commit, keeping only the seeded `god` account). Booted
+`~/src/fluffos/build-debug/src/driver config.fluffos` repeatedly via a raw
+Python socket client; killed each instance by exact PID when done.
+
+**Newbie help read first**: `help advance` (skill-training syntax) and
+`help fighter` (guild locations/requirements) -- confirmed guild training
+(`advance <skill>`) is gated on physically being inside a guild hall, not
+available from the open newbie zone, matching the help text's own
+"Location: various" framing; not a bug, just meant travel wasn't budgeted
+this pass (see "not reached" list at the end).
+
+Six real, confirmed, and fixed bugs, found in this order:
+
+### 5.1 `room/raceroom.lpc`: every new character of every race was funneled into a generic admin/coding-school hub instead of their own race's fully-built starting room, and permanently got zero starting equipment
+
+`do_become()`'s success branch had `startplace = "/room/entryroom.lpc";`
+(with the ORIGINAL, correct `me->move("/room/start/"+race);` commented out
+immediately above it) followed unconditionally by
+`startplace->add_equipment();`. `/room/entryroom.lpc` (an
+FR:Illumitech-branded admin/mudlib-coding-instruction hub, exits only to a
+meeting-room and post office) never defines `add_equipment()`, so that
+call_other silently no-op'd -- and since `entryroom.lpc` has NO exit into
+any of the 12 fully-built `d/newbie/<race>/` zones this project's own
+onboarding notes describe, EVERY new character was also permanently cut
+off from all of that content. `room/start/<race>.lpc` (all 12 races have
+one) is a real, still-fully-implemented starting room with its own
+`add_equipment()` (or, for drow/duergar, `add_clone()` calls directly in
+`setup()`) AND a real exit into that race's own newbie zone -- confirmed
+this predates the port (byte-identical in `raw/mudlib/room/raceroom.c`),
+not something this project's conversion introduced. **Fix**: restored
+`startplace = "/room/start/"+race;` (this project's usual
+scope: a hardcoded override + wrong call_other target defeating an
+already-fully-implemented feature, not a content/design call -- the
+original commented-out line proves the intended behavior). Verified live:
+a fresh `human` character now lands in "Human entry room" (a real cottage
+room with `leave`/`south`/`west` exits, `leave` reaching
+`d/newbie/human/rooms/t05.lpc`) instead of the generic hall, `look`
+correctly shows "Torch. Cloak. Dagger." lying on the floor, and `get
+all`/`i` correctly picks them up ("Carrying: Dagger. Cloak. Two Torches."
+-- the extra torch is leftover from repeat testing in the same shared
+room instance, not a bug).
+
+### 5.2 `obj/misc/torch.lpc`: a broken comment (`/` where `/*` was meant) hard-failed this file's compile, silently breaking every race's starting-equipment torch (and any other torch clone) project-wide
+
+Line 43: `/ Will try add_action` (missing the second `*`) -- a genuine
+pre-existing archive bug (confirmed present in `raw/mudlib`), not a
+porting artifact; it was already a known FAIL in this lib's own
+`lpcc_fail.log` from onboarding but wasn't reachable/prioritized then.
+This is exactly why 5.1's `add_equipment()` fix alone wasn't enough: even
+with routing fixed, `clone_object("/baseobs/misc/torch")` (called from
+EVERY race's `add_equipment()`) returned 0, throwing "Bad argument 1 to
+EFUN call_other()" the moment it tried `boo->move(this_object())` on the
+failed clone. **Fix**: restored the missing `*`. Same missing-star typo
+also found and fixed in `obj/misc/book.lpc` (6 sites, an otherwise
+unreferenced/dead file, fixed for completeness), `d/heaven/heaven/
+meeting.lpc`, and `room/admin/site_control.lpc` (reachable via
+`d/heaven/heaven/admin3.lpc`) -- a corpus-wide `grep -n '); / [a-z]'`
+sweep found no further live instances. Added as new AGENTS.md §7.146
+(a genuinely new bug class, not covered by any existing entry). Verified
+live: `update /baseobs/misc/torch` now compiles clean; the full 5.1
+equipment flow above is the live end-to-end proof.
+
+### 5.3 `global/player.lpc` `heart_beat()`: an abrupt disconnect crashed with an uncaught runtime error on every single heartbeat tick, forever (or until a delayed self-quit eventually finished) -- AGENTS.md §7.130, new confirmed instance with an added nuance
+
+The old inline idle-kick `else` block had been commented out at some point
+in this codebase's history, but the comment's own boundaries left
+`last_command = time() - query_idle(this_object());` stranded INSIDE the
+`if (!interactive(this_object()))` branch instead of removing/relocating
+it -- an interactive-only efun called unconditionally on a path already
+known to be non-interactive. Reproduced live via a genuine abrupt TCP
+close (no `quit` sent): `log/errors/no_object.err` immediately began
+accumulating "*Bad argument 1 to interactive() Expected: object Got: 0."
+entries (see 5.3a below for why it's `interactive()`, not `query_idle()`,
+in the final fixed version) roughly once per heart_beat tick, indefinitely
+-- this project's own scattered leftover test-character disconnects from
+earlier in this exact session had already been silently spamming this
+error the whole time before it was noticed. **Fix**: guard with
+`interactive(this_object())`, matching AGENTS.md §7.130's established
+pattern exactly.
+
+**5.3a -- second-order crash the naive §7.130 fix exposed**: guarding with
+only `interactive(this_object())` was not sufficient here. This lib's
+`quit()` calls `really_quit()` SYNCHRONOUSLY (immediate `dest_me()`) for a
+non-fighting player, so the vulnerable line can be reached in the SAME
+heart_beat() tick as the object's own destruction -- and `this_object()`
+reads back as literal `int 0` once already destructed, so `interactive(0)`
+itself THROWS rather than returning false, reproducing an equivalent
+crash one line downstream. **Fix**: added an `objectp()` guard ahead of
+`interactive()`. Verified live: a fresh abrupt-disconnect repro, left
+running across a 20+ second wait (multiple heartbeat ticks), produced
+zero further errors, and the netdead body was confirmed reaped (`who`
+correctly shows only currently-connected players, the disconnected body
+no longer lingers). Extended AGENTS.md §7.130 with this nuance.
+
+### 5.4 `baseobs/monsters/healer.lpc` / ~20 race raiserooms: the entire death/resurrection ("raise") mechanic was silently broken for every race except the one using this NPC base's own default name -- new AGENTS.md §7.144
+
+`healer.lpc`'s `setup()` unconditionally self-named via `set_name("james")`
+at clone time; `/obj/monster.lpc`'s `set_name()` is a one-shot setter
+(no-ops once `name` is already non-default). ~20 per-race raiseroom files
+clone this SAME base object once as a persistent "nurse" NPC and then try
+`helper->set_name(<real name>)` in their own `reset()` (e.g.
+`d/newbie/human/rooms/v05.lpc` renames it to "june") -- every such rename
+was a complete no-op, so `find_match(nurs, this_object())`/`find_living()`
+lookups keyed on the intended name permanently failed, even though the
+NPC was visibly present under that display name (`set_short()` isn't
+gated the same way). Root-caused live via `debug_message()` tracing
+(`log_file()` would have needed elevated euid this room's object doesn't
+have -- see AGENTS.md §7.129's own note on this exact gotcha). Confirmed
+via grep: 20 raiserooms across the whole newbie-zone corpus clone
+`baseobs/monsters/healer.lpc`; at least 12 rename it to something other
+than "james" (`d/newbie/newliz/rooms/raiserm.lpc`, `newelf/rooms/
+raiseroom.lpc`, `newken/rooms/raiseroom.lpc`, `elf/rooms/raiseroom.lpc`,
+`human/rooms/v05.lpc`, `half-elf/rooms/castle/d1.lpc`, `dwarf/{newrooms/
+raiserm28,rooms/raiserm25}.lpc`, `new_halfelf/rooms/h1.lpc`, `guests/
+rooms/raiseroom.lpc`, `lizard/rooms/raiserm.lpc`, `halfling/rooms/
+raiseroom.lpc`) and were all affected. **Fix**: removed the self-naming
+`set_name("james")` call from `healer.lpc`'s own `setup()`; the one caller
+that relies on the "james" default without ever renaming it
+(`std/raiseroom.lpc`'s `do_raise()`, which clones a disposable, never-
+looked-up-by-name temporary priest) now explicitly calls
+`priest->set_name("james")` itself. Verified live end-to-end on the human
+zone: a test character (`quillfrost`) was killed by the "june" NPC, walked
+(as a ghost) to the raiseroom, and `raise me` now correctly runs the full
+sequence -- "The healer raises his hands...", "You reappear in a more
+solid form.", "Saving...", the full nurse/priest dialogue -- and a
+subsequent `score` shows the character alive again with real HP. Before
+the fix, `raise me` produced zero output and left the character
+permanently dead.
+
+### 5.5 Five race-zone shops: `buy`/`sell` were completely dead (silent no-ops) because a broken "is the shopkeeper here" pre-check was wired as a direct verb override instead of through the base class's own dedicated hook -- new AGENTS.md §7.145
+
+`std/shop.lpc` (the shared shop base) exposes `set_open_condition(mixed)`
+specifically so a subclass can gate `buy()`/`sell()`/`list()`/`value()`/
+`browse()` (all of which check it internally via `test_open()`) on a
+custom precondition. `d/newbie/human/rooms/v02.lpc` (and 4 siblings:
+`newelf/rooms/shop.lpc`, `newliz/rooms/shop.lpc`, `newken/rooms/
+shop.lpc`, `halfling/rooms/shop.lpc`) each wrote a `do_check()` matching
+that exact 0/1 contract, with the correct `set_open_condition("do_check")`
+call sitting right there in `setup()` -- but COMMENTED OUT, replaced with
+`add_action("do_check","buy"); add_action("do_check","sell");` in
+`init()`. Since a subclass's own `init()` registrations are tried before
+an inherited base class's same-verb registration, `do_check()` always won
+and, since it `return(1)`s unconditionally whenever the shopkeeper is
+merely present, completely swallowed every `buy`/`sell` (silent success,
+nothing exchanged) -- `std/shop.lpc`'s real `buy()`/`sell()` never ran at
+all. `d/newbie/half-elf/rooms/town/b3.lpc` has the identical broken shape
+but already fully commented out (dead, unreachable) -- left untouched.
+Root-caused live via `debug_message()` tracing after noticing `list`
+worked (not registered via the broken `do_check` at all) while `buy`/
+`sell`/`value` all produced zero output. **Fix**: deleted the shadowing
+`add_action` pair, restored the commented-out `set_open_condition
+("do_check")` call, in all 5 live-affected files.
+
+**5.5a -- second, independent bug this one was hiding behind**:
+`newelf/rooms/shop.lpc`'s `do_check()` checked `present("Old woman")`, but
+this room's actual shopkeeper NPC (`chars/geldon.lpc`) is named "geldon"
+-- a copy-paste leftover from the generic "Old woman" shop template used
+elsewhere. Fixed the string to match. `newliz/rooms/shop.lpc` and
+`newken/rooms/shop.lpc` clone/reference a shopkeeper NPC that doesn't
+actually exist in this archive at all (`d/newbie/newliz/npcs/woman.lpc`
+is missing; `newken/rooms/shop.lpc` never clones anyone) -- a genuine,
+pre-existing missing-NPC CONTENT gap, left untouched per this project's
+scope (documented with a code comment at each site); both shops will now
+correctly and honestly report "shopkeeper not present" instead of
+silently doing nothing, which is the right outcome for a real content
+gap.
+
+**5.5b -- a second, ALSO independent case-sensitivity bug, found only
+after 5.5's fix made it newly visible**: `v02.lpc`'s (and the other
+"Old woman" shops') `present("Old woman")` used the NPC's capitalized
+DISPLAY name (`set_short()`), not its actual lowercase `id()`/`name`
+(`set_name("old woman")`) -- `id()` on this driver
+(`std/basic/id.lpc`) is a plain case-sensitive `==` compare, so even after
+5.5's dispatch fix, EVERY shop command (including `list`/`value`/`browse`,
+which don't go through `do_check` directly but do share the `test_open()`
+gate) reported "shop closed" until this string was lowercased to match.
+Fixed in `v02.lpc` and `halfling/rooms/shop.lpc` (the two live shops using
+the real "old woman" NPC). Verified live, full end-to-end transaction on
+`d/newbie/human/rooms/v02.lpc` (admin-granted test funds via `call
+adjust_money(50,"silver") @brackenfell`): `list` shows real stock,
+`buy torch` -> "You buy a Torch for 7 copper coins." with correct
+inventory/purse updates, `value torch` -> "The Torch is valued at 5 copper
+coins.", `sell torch` -> "You sell a Torch for 5 copper coins." with
+correct purse update. Before either fix: all four silently did nothing.
+
+### Observed, NOT fixed -- native `add_action`-registered command failures are silently swallowed somewhere in this lib's custom command-queue dispatch, distinct from and not fully root-caused
+
+While diagnosing 5.4/5.5, repeatedly observed that when a command
+registered via a NATIVE `add_action()` call (not a `cmds/`-directory file
+dispatched through `CMD_HANDLER`) fails its own internal check and calls
+`notify_fail("...")` before `return 0` (e.g. `raise bob` with no such
+target, `value`/`sell` for an item not carried), NEITHER that
+`notify_fail()` message NOR the driver's generic default fail message
+displays at all -- total silence, no crash, nothing in any error log.
+Meanwhile `notify_fail()`-based failures on `cmds/`-directory commands
+(`cmds/player/kill.lpc`'s "Alas, your etherealness has little effect..."
+when dead) display correctly. Traced as far as confirming
+`std/living/action_queue.lpc`'s custom per-tick dispatcher (`command(
+curr_act)`, called from `aq_add()`/`action_check()` rather than the
+driver's own top-level `process_user_command()`) is the architecture
+involved, and that this driver's own C source (`parse_command()` /
+`user_parser()` / `notify_no_command()`) SHOULD still display either
+message given how `command_giver` is threaded through `save_command_giver()`/
+`restore_command_giver()` around the raw `command()` efun -- but could not
+pin down why it empirically doesn't, within this pass's time budget.
+**Does not block real functionality**: every SUCCESS path through this
+same native-`add_action` mechanism (5.4/5.5's fixes, `kill`'s actual
+attack) displays its own output correctly; this is specifically about
+missing FEEDBACK TEXT on certain failure paths, not a functional
+blocker. Documented here rather than guessed at or "fixed" blind, per
+this project's own standing policy -- flagged for whoever next does a
+deep dive on this lib (or a driver-level `command()`/`command_giver`
+investigation) to pick up.
+
+### Standing cross-cutting patterns checked systematically (grep + targeted live tests)
+
+- **§7.121** (float arithmetic in a declared-`int` economy function): the
+  entire money system (`obj/handlers/money_handler.lpc`,
+  `std/shop.lpc`'s `scaled_value()`/`PAY_RATES`) is pure integer
+  arithmetic throughout -- confirmed clean, no float anywhere in the
+  currency path.
+- **§8.3a** (`private` command-dispatch/callback function silently
+  demoted once inherited): a script cross-referencing every
+  `add_action("fn", "verb")` target against a `private`-declared
+  function of the same name in the same file found zero matches --
+  confirmed clean (this codebase doesn't use a single central
+  `private nomask command_hook` idiom at all).
+- **§7.112** (NPC `init()` unconditionally scheduling a `call_out()`
+  chain with no re-entry guard): found 18 files with `init()`+`call_out`,
+  all are simple one-shot "greeting" messages (a duplicate on reconnect
+  would at most double-print a greeting line), none matches the
+  death/reincarnation multi-stage state-corruption shape this pattern
+  is about -- confirmed not applicable here (this lib's own death flow
+  uses a completely different, NPC-command-driven `raise`/`do_raising()`
+  mechanism, see 5.4).
+- **§7.118** (`.c`->`.lpc` filename-slice arithmetic): grepped for both
+  the hardcoded-offset-slice shape and the `+".c"` literal-concatenation
+  variant -- zero hits, confirmed clean.
+- **§7.122** (autoload/class-item duplication on reconnect): grepped for
+  `query_auto_load`/`auto_load`/`compute_autoload_array`-style
+  mechanisms -- none exist in this archive at all (no TMI-2/Nightmare-
+  style reload-on-login system); confirmed not applicable.
+- **§7.123** (bare file-scope `IDENT = (...)` statement): grepped for
+  the shape corpus-wide -- zero real instances (the one syntactic match,
+  `net/intermud3/cmds/tell.lpc`'s `morse()`, is a normal local-variable
+  assignment inside a function, not file scope).
+- **§7.126** (stale pre-`.c`-to-`.lpc` extension in `.o` save data):
+  this project's own onboarding NOTES.md (§2) already flagged this
+  exact gap in a handful of individual shop `.o` save files as a
+  known, deliberately-deferred, low-impact item -- re-confirmed still
+  present and still low-impact (per-room shop inventory, not the boot
+  path); not re-investigated further this pass, no new instances found
+  beyond what onboarding already documented.
+- **§7.129** (`tell_room()` wrapper forwarding omitted `exclude` as
+  literal `0`): `secure/simul_efun/modified_efuns.lpc`'s `tell_room()`
+  uses `event()` (a `call_other`-based dispatcher), not the strict
+  `message()` efun -- confirmed a structurally different, safe
+  mechanism; `event_say()`'s own `pointerp(avoid)`/`avoid ==
+  this_object()` guard already handles a bare `0` correctly.
+- **§7.130**: confirmed instance, see 5.3/5.3a above.
+- **§7.131** (`find_living()`/`find_player()` needing `set_living_name()`
+  registration): confirmed ALREADY correctly called, twice
+  (`global/player.lpc`'s `start_player()` and `set_name()`) --
+  not the bug shape here (though a structurally adjacent bug, §7.144,
+  was found and is new).
+- **§7.132** (`map()`-over-mapping wrong-argument binding): grepped for
+  the shape -- zero hits, this codebase doesn't appear to use `map()`
+  over mappings in a way that would trigger this.
+- **§7.133** (classic-driver `remove_interactive()` never bridged to
+  this driver's real `net_dead()` apply): this lib's disconnect handling
+  is inline in `heart_beat()` (the §7.130 shape, not a separate
+  `net_dead()`/`remove_interactive()` split) -- confirmed not
+  applicable, no dead `remove_interactive()` doc-comment/mechanism
+  found anywhere.
+- **§7.134/§7.135** (lazy-init/empty-accumulator guard missing):
+  confirmed instance, see the new AGENTS.md §7.134 addendum
+  (`obj/handlers/align_tracker.lpc`).
+- **§7.136** (command-soul stripping with no re-grant path): not
+  applicable -- this codebase's command architecture (native
+  `add_action` everywhere, `soul_commands()` etc. called unconditionally
+  from `start_player()`) doesn't use a race-content-gated soul-granting
+  design at all.
+- **§7.141** (MudOS-era `replace_program()` fold crashing on a pending-
+  replace closure creation): FOUND a live instance of the fold itself
+  (`std/room.lpc`'s `create()`, identical `replaceable()`+
+  `inherit_list()`+`sizeof==1` shape) -- but traced its ENTIRE class
+  hierarchy (`std/basic/{light,property,cute_look,desc}.lpc`,
+  `std/senses.lpc`, `std/add_clone.lpc`) and found zero closure/function-
+  pointer creation anywhere in it, unlike the `dsI` precedent's
+  `eventHearTalk()` filter closure. Live-tested directly: `say`/`ask` in
+  a genuinely trivial (`inherit "/std/room"` only) room within the first
+  ~160 seconds of a fresh boot (squarely inside the vulnerable window)
+  produced zero "pending replace_program()" errors. Left the fold in
+  place -- confirmed-clean, not a live bug in this codebase, per this
+  project's "verify empirically before fixing a pattern-matched bug"
+  policy; documented here rather than removed speculatively.
+- **§7.143** (`force_me()`+`add_action` NPC self-dispatch failing for
+  room-`reset()`-spawned NPCs): `force_me()` is never called anywhere in
+  this entire archive -- confirmed not applicable, the mechanism this
+  pattern depends on doesn't exist here.
+
+### Combat, quit/reconnect, shop -- what was and wasn't reached live
+
+- **Combat**: no dedicated safe-sparring mechanism exists in this
+  archive (no "dummy"/"practice" NPC found anywhere) -- used a genuinely
+  weak wild newbie-zone monster instead (`d/newbie/human/monsters/
+  cat.lpc`, level 3-6, `set_wimpy(10)`) per the methodology's documented
+  fallback. A level-0 character (1 max HP) died to it almost
+  immediately -- confirmed this is intended difficulty (help text
+  explicitly frames level 0 as needing guild training before real
+  combat), not a bug. A second combat test (`kill june`, an NPC with
+  real HP) played out a full multi-round fight to death and back through
+  a full resurrection (5.4).
+- **Skill/guild training**: `advance <skill>` confirmed gated on
+  physical guild-hall presence (matches `help advance`/`help fighter`);
+  not reached live this pass (would require travel this session's time
+  budget didn't cover) -- documented here as explicitly unverified-live
+  rather than silently skipped.
+- **Quit / debug.log / reconnect**: this lib has no `debug.log` at all
+  (its own error handler, `secure/master/error_handler.lpc`, routes
+  everything to `log/errors/<domain>.err` instead -- the `debug.log`
+  write path is explicitly commented out there); checked `log/errors/*`
+  after every `quit` throughout this pass, not just once. `quit` while
+  dead (a ghost, mid-testing) was confirmed to correctly persist across
+  a real reconnect after a wall-clock gap -- reconnecting showed the
+  same disembodied-spirit state rather than silently reviving or
+  corrupting the character.
+- **Shop/economy**: fully reached and live-tested end-to-end, see 5.5.
+- **Death/respawn**: fully reached and live-tested end-to-end, see 5.4.
+
+Six files' fixes verified via targeted `lpcc` single-file/room compiles
+plus full native driver boots (repeated ~13 times across this session,
+each killed by exact PID); zero compile regressions, zero new runtime
+errors in `log/errors/*` across the final clean boot's full test replay.
+Throwaway test characters (`testerbrave`, `brytewind`, `quillfrost`,
+`brackenfell`) deleted from `players/` before commit; only the seeded
+`god` account's own incidental save-state drift (last-login timestamp,
+playtime) and normal daemon/shop aggregate-stat drift (`save/
+timekeeper.o`, `d/newbie/human/rooms/v02.o`'s sales counters, a
+freshly-created `save/death.o` from this session's first-ever kills)
+were left as ordinary collateral of live testing, matching this
+project's usual convention.
