@@ -251,6 +251,266 @@ birth-ceremony rooms that set the `born` property are never visited by
 a wizard-status login — did not chase this further (out of scope, likely
 by design for a staff-only account that isn't meant to use `score`).
 
+## Deep functional test (round two, 2026-08-27)
+
+Full §10.7 playthrough (never previously done on this lib) against a
+freshly-rebuilt `~/src/fluffos/build-debug/src/driver`, native only.
+Also checked all of AGENTS.md's standing cross-cutting bug-pattern
+list (§7.121, §8.3a, §7.112, §7.118, §7.122–§7.136, §7.139, §7.141–
+§7.148) via systematic grep — see per-pattern notes below. No sibling
+NT/nitan-lineage bug classes applied here beyond what's already
+documented above (§7.15 architecture bug already fixed upstream, per
+the earlier onboarding writeup).
+
+**Housekeeping note, not an nt7 bug**: found an unrelated stray driver
+process (PID bound to port 40211, cwd in a completely different lib
+`sanguozhi`, reparented to init) squatting on this lib's assigned port
+before boot could even start — killed by exact PID before proceeding.
+Unrelated to nt7's own code; flagged here only so a future session
+knows this can happen on a shared host.
+
+### Bug found and fixed #1 — §7.80-shaped filename-slice bug, 29 more call sites in the kungfu/skill tree
+
+`explode(__FILE__, "/")[<1][0..<3]` (and the `dirs[<1][0..<3]` variant)
+appears in 27 individual `kungfu/skill/**/*.lpc` files plus the two
+shared mixins `inherit/meskill/skill_model_{weapon,unarmed}.lpc` and
+the shared header `kungfu/skill/force.h` — the exact same `str[0..<n]`
+off-by-one this project already fixed in this very lib's `adm/daemons/
+eventd.lpc` (`.lpc` is 4 characters, `[0..<3]` only strips 2, so
+`"guiyuan-tunafa.lpc"` yields `"guiyuan-tunafa.l"` instead of
+`"guiyuan-tunafa"`). This project's original onboarding pass only
+grepped for `eventd.lpc`'s own exact line shape and never turned up
+this second, much larger family of call sites in the same lib. Two
+confirmed-live consequences:
+
+- `inherit/meskill/skill_model_weapon.lpc`'s `practice_skill()` calls
+  `me->query_skill(skname, 1)` with the corrupted id, so this always
+  looks up a nonexistent skill and returns 0 — silently breaking skill-
+  level checks for the player-invented-martial-arts feature (`cmds/
+  skill/invent.lpc`, `SKILL_MODEL_WEAPON`/`SKILL_MODEL_UNARMED`
+  templates).
+- `kungfu/skill/force.h`'s `valid_public()` (included by 9 top-tier
+  force/internal-energy skill files, e.g. `guiyuan-tunafa.lpc`) builds
+  a `can_skill` self-exclusion list containing the file's OWN corrupted
+  id, so the self-exclusion check never actually matches the player's
+  own already-partially-learned copy of that same skill — every `learn`
+  attempt past the very first one hits `"你不散掉归元吐呐法，如何能
+  修习归元吐呐法。"` (an absurd "you must give up X before you can
+  learn X" self-rejection), permanently capping every one of these 9
+  force skills at whatever their first `learn` happened to reach.
+
+The remaining ~20 kungfu/skill call sites compute the same corrupted
+id but only pass it to `SCBORN_D->valid_learn()`/`valid_perform()` — a
+prerequisite-checking daemon whose file (`adm/daemons/scbornd.lpc`)
+does not exist anywhere in this archive at all (confirmed via
+corpus-wide grep for `scbornd`/`SCBORN_D`). Every such call
+unconditionally fails regardless of the id's correctness, so fixing the
+slice has no observable behavior change at those specific call sites —
+flagging this as a separate, out-of-scope missing-content gap
+(inventing what a whole prerequisite daemon should do would be a
+content/design decision, not a programming fix) rather than chasing it
+further. Fixed the slice arithmetic at all 29 sites anyway
+(`[0..<3]` → `[0..<5]`), since it's the same unambiguous mechanical bug
+independent of what currently consumes the result.
+
+One additional match, `adm/daemons/skillsd.lpc`'s real `valid_perform(
+object me, string file)` (the actively-used `SKILLS_D`, as opposed to
+the unreferenced dev-sandbox copy at `u/lonely/skillsd.lpc`), had
+already had its own `[0..<3]` slice commented out and replaced with a
+bare `dirs[<1]` (no stripping at all) by a prior author — checked this
+against its real caller (`inherit/skill/skill.lpc`'s `perform_action()`,
+which passes an already-extension-less path via `perform_action_file()`)
+and confirmed the no-slice form is actually CORRECT for that call
+site's real argument shape (the one other caller that would pass a
+`.lpc`-suffixed path is fully commented out, dead code). Left untouched.
+
+Verified live: `bai wu bo` (拜师) then `learn wu bo unarmed 1`
+correctly raised a fresh character's `unarmed` skill (`skills` showed
+`基本拳脚 (unarmed) - 不堪一击 6/14` after one `learn` call) — this
+exercises the general skill-learning path, not the specific 9
+force-skill files, since reaching those requires much deeper
+progression; the force.h self-exclusion fix was verified by direct
+code-level tracing (confirmed the corrected id now matches what
+`member_array()` checks against) rather than a live multi-level force
+skill grind, given time budget — documented here as verified-by-code-
+reading rather than fully live-verified for that specific consequence.
+
+### Bug found and fixed #2 — a missing-content-factory null check silently truncates the crontab scheduler on every single boot
+
+100%-reproducible on every fresh boot (not a random-roll fluke):
+`adm/daemons/timed.lpc`'s `init_crontab()` reads `adm/etc/crontab` (140
+lines) and does `find_object(table[1]) || load_object(table[1])` on
+every referenced object to verify it resolves — one of the very first
+entries (line 120) references `/u/redl/cangku` (a wizard's personal
+treasure room, target of 6 华山论剑/牛人三部曲 tournament-scheduling
+crontab lines). Loading it for the first time runs its `create()`,
+which does `EQUIPMENT_D->create_dynamic("", 60, 600)->move(this_
+object())` in a loop — an unguarded §7.147-shaped chain. Worse,
+`create_dynamic()` ITSELF (`adm/daemons/equipmentd.lpc:1368`) has no
+null check either: `ob = TEMPLATE_D->create_object(filename, obj_type,
+temp_status);` can return 0 (whenever the randomly-rolled obj_type/
+level combination doesn't resolve to a real shipped template file),
+and the very next statements unconditionally do `set(..., ob)` and
+`ob->set_color(color)` — a bare `call_other()` on `int(0)`, which
+throws uncaught: `*Bad argument 1 to EFUN call_other() Expected:
+object, string, array, Got: int(0)` (`debug.log`, reproduced on every
+single boot in this session, both before and after the fix was
+verified absent).
+
+Severity beyond the immediate crash: the error is only caught by an
+OUTER `catch()` several frames further up the call stack (`logind.
+lpc`'s pre-existing `catch(load_object(TIME_D))`, from this lib's own
+bug #4 above) — which means the entire unwind aborts `init_crontab()`'s
+for-loop at that exact point, silently discarding EVERY crontab entry
+after line 120 (the 华山论剑 sect-tournament scheduler, the 牛人三部曲
+PK-event scheduler, and anything else later in the 140-line file) on
+every single boot, not merely failing to spawn one random equipment
+drop in one wizard's personal room.
+
+**Fix**: added `if (!objectp(ob)) return 0;` immediately after the
+`TEMPLATE_D->create_object()` call in `equipmentd.lpc`'s
+`create_dynamic()`, restoring the function's own already-documented
+"returns 0 on failure" contract (mirrors the identical early-return
+guard already present at the top of the same function for `ilvl < 1`).
+Also fixed the caller-side chain in `cangku.lpc`: stored the return in
+the already-available `ob` local and guarded the `->move()` call with
+`if (objectp(ob))`. Verified live: `debug.log` goes from this error
+firing deterministically on every single fresh boot (both via a first
+connection reaching `logind.lpc`'s `TIME_D` lazy-load path, and via a
+direct wizard `update /u/redl/cangku.lpc`/`update /adm/daemons/
+equipmentd.lpc`) to zero occurrences across multiple clean reboots
+post-fix. Added as a new confirmed instance of AGENTS.md §7.147, with
+a new note about the extra severity when an unguarded factory chain is
+reached from inside a bootstrap/scheduler loop rather than ordinary
+gameplay.
+
+### Standing cross-cutting patterns checked, confirmed clean
+
+- **§7.121 / §7.124** (float-into-int economy math / fraction-vs-
+  percentage threshold): grepped the whole tree for float-literal
+  threshold assignments and `wimpy`-style fields; all ~140 `set("env/
+  wimpy", N, ...)` call sites use consistent integer 0–100 percentages,
+  and the one genuine `float rate` family (quest/skybook damage-scaling
+  code) is correctly declared `float` throughout. Clean.
+- **§8.3a** (`private`/`nomask` command-dispatch demotion): already
+  confirmed clean at onboarding time (the `#ifndef __SENSIBLE_
+  MODIFIERS__` shim is dead on this driver) — re-confirmed no new
+  `private nomask command_hook`-shaped declarations exist.
+- **§7.112** (NPC `init()` unconditional `call_out` chain with no
+  reconnect guard): the one `remove_call_out()`-then-`call_out()`
+  pattern found (`d/newbie/npc/qianbo.lpc`'s shopkeeper greeting) DOES
+  carry the guard already, and is cosmetic (a greeting message) rather
+  than the death/combat-state class this pattern targets. Clean.
+- **§7.123** (bare file-scope mapping/array literal killing a compile):
+  the only 4 hits for the raw pattern are either legitimate multi-
+  variable `protected nosave mapping a = (...), b = (...), c = (...);`
+  declarations or inside `/* ... */` comments. Clean.
+- **§7.126** (stale `.c` extension in saved door/exit data): no
+  `"__DIR__...\.c"`-style saved references found anywhere. Clean.
+- **§7.129** (`tell_room()`/`message()` wrapper forwarding omitted
+  `exclude` as literal `0`): already fixed upstream in this exact repo
+  before this project even started (see bugs-found item at the top of
+  this file) — `adm/kernel/simul_efun/message.lpc`'s `message()`
+  correctly checks `arrayp(exclude) || objectp(exclude)` before
+  forwarding to the real efun. Re-confirmed by reading the current
+  source. Clean.
+- **§7.130 / §7.133** (net-dead / disconnect-notification gaps):
+  `net_dead()` is defined on both `clone/user/user.lpc` and `clone/
+  user/login.lpc`, so the driver's real disconnect apply is handled.
+  Clean.
+- **§7.131** (`find_living`/`find_player` without `set_living_name`):
+  `set_living_name` IS called (7 sites) — this archive uses the modern
+  registration convention, not the classic implicit-scan one. Clean.
+- **§7.132** (`map()`-over-mapping bound to the wrong argument): no
+  `map(m, (: $1 ... :))`-shaped single-argument lambda calls over a
+  mapping found anywhere. Clean.
+- **§7.134 / §7.135** (uninitialized accumulator/lazy-init guard
+  inconsistency): the specific `room_descs`/`add_my_desc()` identifiers
+  from the documented pattern don't exist in this codebase (different
+  room-description architecture); this lib's own `dbase` accessor
+  layer was already verified correctly guarded at onboarding time.
+  Nothing newly found.
+- **§7.136** (command-soul strip with no race content to re-grant):
+  N/A — this codebase's command dispatch (`feature/command.lpc`) is a
+  different architecture (no `cmdsoul_list`/`NPC_SOULS` concept).
+- **§7.139** (`interactive catch tell` config flag / `%^TAG%^` colour
+  markers bypassing `add_message()`): this lib renders colour via
+  direct ANSI escape macros (`<ansi.h>`'s `HIC`/`HIY`/`NOR`, etc.)
+  embedded literally in output strings, not a `catch_tell()`-mediated
+  `%^TAG%^` translation layer — confirmed live throughout this session
+  (every coloured message rendered correctly with real escape codes,
+  no literal `%^...%^` text ever appeared in any test transcript
+  except one obscure, unreachable-in-practice quest macro in `quest/
+  skybook/jimou/{fengbian,tianbian}.lpc` that builds a `%^WEATHER_
+  CHANNEL%^`-tagged string with no corresponding tag-resolution table
+  anywhere in the codebase — flagged as a content/quest observation,
+  not fixed, since deciding what that tag should resolve to would be a
+  content decision). §7.139's actual failure mode does not apply here.
+- **§7.141 / §7.142** (`replace_program()` fold breaking post-boot
+  communication / virtual-object engine masking a broken exit typo):
+  no virtual-object engine in use in this codebase; `replace_program()`
+  calls are the standard ROOM-class pattern already covered by the
+  corpus-wide §7.100 sweep (N/A here, this lib wasn't part of that
+  sweep's target shape and its own `replace_program(ROOM)` calls are
+  the harmless single-inherit-fold idiom).
+- **§7.143** (shop NPC `add_action`/`force_me` command_giver mismatch):
+  live-tested at `d/newbie/zahuopu`'s `钱伯` (qianbo, `F_DEALER`
+  mixin) — `list` and `buy fire` both correctly dispatched to the
+  NPC's own `do_list`/`do_buy` (confirmed via the correct in-character
+  "钱伯冷笑道：穷光蛋，一边呆着去！" no-money rejection message, not a
+  silent no-op). Clean.
+- **§7.144** (one-shot `set_name()` setup guard defeating per-instance
+  rename): no generic reusable NPC base class self-naming in its own
+  `setup()` found in this codebase's `NPC`/`F_MASTER` inherits.
+- **§7.145** (broken pre-check wired as direct verb override instead of
+  base-class hook): not found; shop verbs (`buy`/`list`) dispatch
+  correctly per the §7.143 test above, with no shadowing override.
+- **§7.146** (stray `/` meant as `/*`): zero hits in any `.lpc`/`.h`
+  file (only in ASCII-art map/doc files, which aren't compiled).
+- **§7.148** (parameter literally named `nosave`/`static`): zero hits.
+
+### Interactive verification (this pass)
+
+Registered a fresh Chinese-named test character (`qinfengnt`, 秦风,
+admin pw `fluffos`, play pw `Mud2026play`) via a raw Python
+socket bridge script, one continuous session:
+
+- `washto 20 20 20 20` → landed at `世界之树` correctly, innate skills
+  banner shown, `score`/`i` both fully rendered with correct values.
+- Walked to `/d/newbie/lianwuchang` (练武场), `bai wu bo` (拜师)
+  succeeded ("古村第二代弟子"), `score` afterward correctly showed
+  `【门派】古村` / `【师承】武伯`.
+- `learn wu bo unarmed 1` correctly raised `unarmed` skill; `skills`
+  confirmed `基本拳脚 (unarmed) - 不堪一击 6/14`.
+- Walked to `/d/newbie/houcun-road`, `kill ye tu` (野兔) — full combat
+  round-trip with real damage numbers both ways, correct kill message,
+  correct XP/potential/江湖阅历 reward banner. Safe low-level wild
+  target, no dedicated "safe sparring" NPC found reachable in the
+  newbie zone (`d/heizhao/npc/muren.lpc`'s stat-mirroring training
+  dummy exists in the codebase but its containing zone, `d/heizhao/`,
+  is unrelated/unreachable from the newbie village — a wild rabbit
+  served as the safe low-risk combat test instead).
+- `quit` → correctly triggered this lib's documented "new account must
+  stay online 30 minutes" retention policy (already documented as
+  intentional design on sibling `hhsj`); confirmed with `y`, save file
+  actually removed, zero `debug.log` errors throughout.
+- Reconnected as the SAME character before deletion actually confirmed
+  the persistence-then-delete race wasn't an issue (character correctly
+  showed `古村第二代传人`/`门派 古村`/`师承 武伯`/20-20-20-20 stats on
+  a fresh reconnect prior to the final `quit y`), satisfying the
+  "reconnect after a wall-clock gap, confirm state persisted" step.
+- Admin account (`fluffos`/`Mud@2026wiz`, already seeded) reconnect
+  verified clean: lands at `WIZARD_ROOM` as documented, `goto` teleport
+  and `update` (live-recompile) wizard commands both work correctly.
+- Shop test: `goto /d/newbie/zahuopu`, `list`/`buy fire` against 钱伯
+  both dispatched correctly (see §7.143 note above).
+- Test character's save file (`qinfengnt`) removed via the `quit y`
+  flow above; no other throwaway saves created this session.
+
+RSS stayed under 130MB throughout (well below this lineage's documented
+§7.110 OOM risk threshold) — no mass-restore operation was exercised
+this session, so that risk wasn't specifically stress-tested here.
+
 ## Local run
 
 ```

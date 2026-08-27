@@ -6023,6 +6023,48 @@ spot-verified via a clean reboot producing zero `couldn't find object`
 lines in `debug.log`, confirming the fix live rather than assuming
 correctness from the diff alone.
 
+**New call-site shape, same arithmetic bug, found on `nt7`'s §10.7
+round-two deep-test (2026-08-27) — 16th library, and a much larger
+single-library blast radius than any prior instance.** Not
+`eventd.lpc`'s event-list stripping this time: 29 separate call sites
+across `kungfu/skill/**/*.lpc` (individual martial-arts move/force
+files) and two shared mixins (`inherit/meskill/skill_model_{weapon,
+unarmed}.lpc`) use `explode(__FILE__, "/")[<1][0..<3]` to derive the
+file's own skill id from its path (e.g. `"guiyuan-tunafa.lpc"` should
+yield `"guiyuan-tunafa"`) for use as a `query_skill()`/`can_perform/`
+mapping key and in player-facing messages — same off-by-one, since
+`.lpc` is 4 characters and `[0..<3]` only strips 2. Confirmed live
+impact on the two shared mixins (`inherit/meskill/skill_model_weapon.
+lpc`'s `practice_skill()` calls `me->query_skill(skname, 1)` with the
+corrupted id, always returning 0 and silently breaking skill-level
+lookups for the player-invented-martial-arts feature reachable via
+`cmds/skill/invent.lpc`) and on `kungfu/skill/force.h` (included by 9
+top-tier force/internal-energy skill files' `valid_learn()`/`valid_
+public()` gate: the corrupted self-id defeats the function's own
+self-exclusion check meant to let a player keep practicing a force
+skill they already partially know, producing an absurd "you must give
+up X before you can learn X" self-rejection on every subsequent
+`learn` past the first). The remaining ~20 kungfu/skill call sites
+compute the same corrupted id but only feed it to a nonexistent daemon
+(`SCBORN_D`, a pre-req-checking daemon whose file was never shipped in
+this archive at all — a separate, out-of-scope missing-content gap
+that happens to make those particular call sites currently behaviorally
+moot regardless of the slice bug) — fixed anyway since the slicing
+itself is the same unambiguous arithmetic bug independent of what
+consumes its result, consistent with this project's practice of fixing
+the mechanical bug even where a second, unrelated gap currently masks
+its full impact. Fix: `[0..<3]` → `[0..<5]`, all 29 sites (one already-
+correct spot in `adm/daemons/skillsd.lpc`'s `valid_perform()` — which
+takes an extension-LESS path from its dominant caller convention and
+had already had its own `[0..<3]` slice removed entirely rather than
+fixed — was left untouched after confirming its current no-slice form
+is actually correct for that call site's real argument shape). Verified
+live: a fresh boot's `debug.log` unaffected either way (this bug has no
+error signature, just silently-wrong string values), so verification
+was via direct in-game skill-learning tests plus reading each mixin's
+only consumer to confirm the corrected id now matches the `can_perform/`
+mapping's own key convention.
+
 ### 7.81 A shared base file's own method signature is narrower than the daemon it forwards to, breaking every content file that relies on the daemon's wider contract — corpus-wide sweep completed, 16 libs fixed total
 
 Found alongside §7.80 on the same `nt1` deep-dive:
@@ -11284,6 +11326,8 @@ Found via `discworld`'s §10.7 round-two deep-test. `obj/handlers/armoury.lpc`'s
 **Fix**: at each call site, store the factory's return in a local variable and guard the `->move()` (or whatever the chained call is) behind an `if`, e.g. `object rags = ARMOURY->request_item("dirty rags", 30); if (rags) { rags->move(this_object()); }` — behavior-preserving when the item exists, silently skips (instead of crashing) when it doesn't. This is the same defensive-guard shape already applied earlier in this same lib's onboarding to `obj/handlers/armoury.lpc`'s own `walk_directory()` (a `get_dir()`-returns-0-on-missing-directory variant) — a general instance of "a function's own documented missing-content fallback value reaches an unguarded call chain at the use site" rather than a fresh bug shape. Left untouched: a tutorial/example NPC in the `d/learning/` teaching sandbox that uses the identical idiom deliberately to teach it, and prose documentation files — neither is real gameplay content.
 
 **How to apply generally**: grep any lib for `FACTORY_OBJECT->some_factory_function(...)->` (a chained call with no assignment in between) where the factory function's own doc comment or `if (!thing) return 0;`-shaped body promises a possible `0`/falsy return for "not found"/"missing" cases — every such chain is a latent crash waiting for its specific named item/room/NPC to be among whatever content the archive happens not to ship. This is most likely to matter on any archive already flagged with a missing-content-directory gap (§7.6-class), since that is exactly the condition that turns a theoretical gap into a live crash.
+
+**Confirmed instance, and a new severity wrinkle, on `nt7`'s §10.7 round-two deep-test.** `adm/daemons/equipmentd.lpc`'s `create_dynamic()` builds a filename from a randomly-selected item category, calls `TEMPLATE_D->create_object(filename, obj_type, temp_status)`, and — with NO null check at all, not even a chained call, just a bare unconditional `ob->set_color(color)` three statements later — crashes with `*Bad argument 1 to EFUN call_other() Expected: object, string, array, Got: int(0)` whenever the randomly-picked category/level combination doesn't resolve to a real shipped template file. The severity wrinkle: this specific `create_dynamic()` call is reached from `/u/redl/cangku.lpc`'s `create()` (`EQUIPMENT_D->create_dynamic("", 60, 600)->move(this_object())`, itself a second, unguarded instance of the exact §7.147 chain shape), which in turn is reached from `adm/daemons/timed.lpc`'s `init_crontab()` — the SAME `find_object(table[1]) || load_object(table[1])` line that checks every single entry in `adm/etc/crontab` is resolvable. Since `/u/redl/cangku` is one of the very first crontab entries (line 120 of 140), the uncaught runtime error — caught only by an outer `catch()` several frames further up the call stack (`logind.lpc`'s existing `catch(load_object(TIME_D))` from this lib's own bug #4, see this lib's NOTES.md) — unwinds the ENTIRE `init_crontab()` for-loop at that exact point, silently discarding every later crontab entry in the file (a 华山论剑 sect-tournament scheduler and a 牛人三部曲 PK-event scheduler among them) on every single boot, not just failing to spawn the one random equipment drop. **Fix**: added `if (!objectp(ob)) return 0;` immediately after the `TEMPLATE_D->create_object()` call in `create_dynamic()` (restoring the function's own documented "returns 0 on failure" contract), plus the standard store-then-guard fix at the `cangku.lpc` call site. Verified live: a fresh boot's `debug.log` goes from this error firing on literally every boot (deterministic, not random-roll-dependent, since the crontab scan runs unconditionally) to zero occurrences. **Generalizes the "how to apply" note above**: when hunting for this shape, an unguarded factory chain reached from a bootstrap/scheduler loop (crontab initialization, a preload list, any `foreach`-over-config-entries pattern) is MORE severe than one reached from ordinary gameplay, because a single missing-content miss silently truncates every later entry in that same loop, not just the one triggering call site — worth flagging as its own grep target (`find_object(X) || load_object(X)`-style loops over a static list) on any lib being deep-tested.
 
 ### 7.148 A function parameter literally named `nosave` (or `static`) — this driver's own `L_TYPE_MODIFIER` keywords, not just ordinary identifiers — hard-fails the whole file's compile with a parser error that gives no hint the parameter name itself is the problem
 
