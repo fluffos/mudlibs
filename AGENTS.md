@@ -10922,7 +10922,14 @@ bisection if the slowdown reproduces on an uninstrumented build too.
   before it's actually ready to land (stages, validates, prints the
   diff, unstages, no commit/push). This formalizes — and should fully
   replace — manually re-deriving "what belongs to this batch" from
-  `git status` output.
+  `git status` output. **Fixed 2026-08-26**: its allowed-prefix check
+  used to false-positive-reject legitimate non-ASCII filenames (`git
+  diff --cached --name-only` octal-escapes them by default —
+  `core.quotePath` — which broke the prefix glob match); now runs with
+  `-c core.quotePath=false`. If a future onboard still sees a spurious
+  "staged content outside this batch's owned paths" rejection on a
+  Chinese/non-ASCII-named file, that's a sign this fix regressed, not a
+  reason to rename the file.
   **Caveat**: the script's per-slug staging is `git add libs/<slug>/`
   — a real directory add, which happily sweeps up any deferred/
   excluded runtime-save content sitting untracked under that lib
