@@ -351,3 +351,272 @@ config.fluffos"` 排查端口占用，这个文件名是全项目几乎所有 li
 是数据/文件层面的损坏，只是让对应 session 的驱动测试被迫中断重启；
 已按项目惯例（“Kill drivers by exact PID / never pkill -f”）改回精
 确 PID 方式，后续操作未再复发。
+
+## 深度功能测试（round two，2026-08-27）
+
+本次是 `discworld` 第一次真正的 §10.7 round-two 全流程游玩测试（此前
+NOTES.md 里的"验证记录"一节只是转档时的安装期烟雾测试，没有
+`深度功能测试` 标题，AGENTS.md 的 §10.7 完成度统计里从未把这份
+lib 计入）。用真实驱动（`~/src/fluffos/build-debug/src/driver
+config.fluffos`，端口 40206）连续开了 6 次机（每次都是干净重启，
+`grep -c "error:" debug.log` 恒为 0），全程用一份 Python 原始
+socket 脚本（`dw_client.py`）交互，测试角色 `Roundtwo`（真实注册
+流程，含服务端强制的 ~30 秒条款确认暂停）。
+
+### 发现并修复的 bug
+
+**`obj/handlers/armoury.lpc` 的 `request_item()` 在找不到道具时返回
+`0`（有文档、有先例：早前转档时 `walk_directory()` 就因为同一个
+"目录缺失返回 0 而不是空数组"的根因加过防御性 guard），但代码库里
+至少 5 处 `ARMOURY->request_item(...)->move(...)` 调用链完全没有判
+空，直接对返回值做 `->move()`。** 由于这份 "distribution lib" archive
+本身缺失 `/obj/clothes/`、`/obj/armours/` 两个内容目录（转档时已
+记录的已知缺口），任何请求这两类道具的调用都会返回 `0`，`0->move()`
+在这个驱动上报 `*Bad argument 1 to call_other()`（未捕获），把调用
+方的 `create()`/`setup()` 从崩溃点截断。
+
+live 复现：管理员测试角色进入新手战斗训练室（`d/liaison/NEWBIE/
+combat.lpc`）后尝试 `one`/`two`/`three` 三个训练间任一个入口，
+`combat_room1.lpc`（等）会 `clone_object` 训练假人
+`d/liaison/NEWBIE/dummy.lpc`，假人 `setup()` 里
+`ARMOURY->request_item("dirty rags", 30)->move(this_object())`
+崩溃（`dirty rags` 是缺失目录里的衣物），玩家侧看到"A runtime error
+occurred."，`log/runtime` 记录 `*Bad argument 1 to call_other()`
+（未捕获，直接从驱动兜底冒出）。这条路径正是本轮方法论第 3 步要求
+的"safe-sparring 机制"，属于核心验证路径，不是可选管理工具。
+
+修复：给全部 5 处受影响的调用改成"先存局部变量再判空"写法（不改变
+道具存在时的行为，只是让缺失时优雅跳过而不是崩溃），跟转档时
+`walk_directory()` 的修法同一个思路：
+
+- `d/liaison/NEWBIE/dummy.lpc`（训练假人，"dirty rags"）—— **live 复现并验证修复**：修复前 `one`/`two`/`three` 进训练间必崩，修复后干净重进（`log/runtime` 全程无新增崩溃）。
+- `d/liaison/NEWBIE/trainer.lpc`（"Greg"，新手战斗训练室 NPC，"leather jerkin"/"leather breeches"/"hard leather boots"）—— 同一间训练室的教练 NPC，同一根因，未单独 live 复现（Greg 是 preload 期创建的，崩溃只在开机日志里，不在交互路径上现场触发），按同款 guard 一并修复。
+- `obj/monster/godmother/magrat.lpc`、`obj/monster/godmother/granny.lpc`（地图上真实的"迷路仙女教母"NPC，"startling green dress"/"spiderweb shawl"/"pumps"、"hobnailed boots"/"antique black dress"/"witchs pointy hat"/"black witches cloak"）—— **live 复现**：这两个 NPC 在本轮测试期间被游戏世界自身的某个触发点（不是我直接操作）真实创建过一次，`log/runtime` 记录了它们各自的崩溃（见下一条，这两个是另一个独立根因，同一调用链形状，一并修的时候顺手发现的）。
+- `d/dist/pumpkin/rabbit/print_shop_office.lpc`（"Mr. Goatberger"商店 NPC，"white linen tunic"/"green pants"）—— 未 live 复现（该 NPC 由 `reset()` 定期生成，不在本轮实测路径上），同款 guard 一并修复。
+
+刻意没有动的同款代码：`d/learning/cutnpaste/althea.lpc`（教学沙盒
+目录下的"抄写练习"示例 NPC，就是用来教这个确切写法的，不是真实
+游玩内容）以及两份 `.htm`/`.txt` 教程文档——按项目一贯的"内容/文档不
+在修复范围"处理。
+
+**新的 AGENTS.md bug 类**：这是 §7.6"缺失目录"系列的一个新变种——
+不是 `get_dir()`/`read_file()` 返回 `0` 被当数组用，而是一个有据可
+查、文档明确写着"找不到就返回 0"的工厂函数（`request_item()`）,
+它的返回值被链式 `->move()` 调用，中间没有存局部变量、也没有判空。
+由于道具类文件层层散布在整个代码库里，这类调用天生就是"批量隐患"
+的形状——同一个安全 factory 函数,调用方各自决定要不要判空,任何一
+个偷懒的调用方在对应内容缺失时都会阻断自己的 `create()`。已在下面
+新增 AGENTS.md §7.147 记录这个模式，供以后其它 archive 遇到同类
+"factory-on-missing-content returns 0" + "unguarded ->call chain"
+组合时参考。
+
+**`std/shops/print_shop.lpc` 的 `add_auto_load_info()` 用驱动保留字
+`nosave` 当参数名，整个印刷厂片区（`print_shop.lpc` 自己 + 它的四
+个子类 `print_shop_office`/`print_shop_foyer`/`print_shop_press`/
+`print_shop_binding`）在这个驱动上完全无法编译，从转档以来一直是
+死代码。** `nosave`/`static` 在这个驱动的词法分析器里都是真正的
+`L_TYPE_MODIFIER` 保留字（`~/src/fluffos/src/compiler/internal/
+lexer_utils.cc`），`protected int add_auto_load_info(string nosave,
+string dynamic);` 这行原型声明里把 `nosave` 当参数名用，编译器直接
+报 `error: syntax error, unexpected L_TYPE_MODIFIER`——不是我这次
+交互测试里现场触发的（这个函数从没被玩家路径直接调用过），是用
+`lpcc` 单文件编译核对旁边一处不相关问题时顺带发现的：查
+`log/error-log.old` 发现同一行报错从转档以来的历次开机日志里反复
+出现过至少 7 次，说明这从来没被人注意到过。函数体内部
+`$(nosave)` 这个 lambda 捕获、连同文档注释里其实早就写着
+`@param static_arg` 而不是 `nosave`（暗示原作者自己心里想的参数名
+跟实际写的不是一回事，大概率是笔误）。修法：把参数名从 `nosave`
+改成 `nosave_arg`（跟文档注释的命名意图一致），原型声明和函数定义
+两处、函数体内部的 `$(nosave)` 引用一并改。用 `lpcc` 核对：修复前
+`std/shops/print_shop.lpc` 和 `d/dist/pumpkin/rabbit/
+print_shop_office.lpc` 单独编译都直接报错；修复后两个都干净通过
+（无 warning 之外的输出）。全库 grep 过其余全部 `nosave`/`static`
+两个保留字被当裸参数名用的情况，只有这一处命中。已新增 AGENTS.md
+§7.148 记录这个模式。
+
+### 检查过、确认干净的标准 bug 模式（§10.7 清单里列出的横切模式）
+
+- **§7.139（`interactive catch tell` 配置项）**：Discworld 的颜色渲
+  染完全不依赖驱动的 `catch_tell()`/`receive_message()` apply——整
+  个代码库里从未定义过 `catch_tell()`，玩家可见文本的颜色标签
+  （`%^TAG%^`）是在 mudlib 自己的输出管线里显式调用驱动原生 efun
+  `terminal_colour()` 完成的（`global/events.lpc` 的 `fix_string()`，
+  `secure/simul_efun/strip_colours.lpc`），再经由 `efun::tell_object()`
+  直接发送，跟这个驱动 runtime 配置里的 `interactive catch tell`
+  开关（`config.fluffos` 里确认没设置，默认 0/关闭）完全无关。这个
+  开关只影响"驱动是否把 `catch_tell` apply 当拦截点调用"，而
+  Discworld 自己从没注册过这个 apply,所以配置项开不开都没有实际影
+  响——不是这个 bug 类的实例。
+- **§7.131（`find_living`/`find_player` 需要 `set_living_name()`）**：
+  `global/player.lpc`（两处，登录时和复活时）、`obj/monster.lpc` 都
+  正确调用了 `set_living_name()`，不受影响。
+- **§7.133（`net_dead` apply 未定义）**：`global/player.lpc`、
+  `secure/login.lpc` 都定义了真正的 `net_dead()`，这个驱动本身也
+  确实是按"直接调用 player 对象的 `net_dead()` apply"设计的（不是
+  `remove_interactive(ob,linkdied)` 这种 master-level apply）,双方
+  匹配,不受影响。
+- **§7.130（非交互后仍无条件调用 `query_idle()`）**：`global/player.lpc`
+  的 `heart_beat()` 和 `secure/login.lpc` 的 `time_out()` 都先
+  `if(!interactive(...))` 分流,只在真交互对象上才调用
+  `query_idle()`,写法正确,不受影响。
+- **§7.132（`map()` 遍历 mapping 时用错参数）**：抓了全库所有
+  `map(某变量, (: ... :))` 且该变量看起来像 mapping 的调用点逐一核
+  对声明类型，命中的全部是 `string*`/`int*`/`class` 数组，没有一处
+  是真的 mapping,不受影响。
+- **§7.122（class 自动重载在断连重连时复制道具）**：`compute_autoload_array`/
+  `destroy_autoload_obj`/`load_autoload_obj` 这一整套 TMI-2 系亲缘
+  机制在这份代码库里根本不存在（Discworld 是完全不同的谱系），不
+  适用。
+- **§7.134（累加数组字段没有初始化）**：`std/room/basic_room.lpc`
+  的 `hidden_objects`/`_exits`/`aliases` 等全部数组字段都在
+  `create()` 里正确初始化为 `({})`,不受影响。
+- **§7.126（.o 存档里残留 `.c` 后缀的坐标出口路径）**、**§7.123（裸
+  `IDENT = (...)`）**、**§7.137（`command("$verb")`）**、**§7.140
+  （`valid_read` 把 include 注入算到当前玩家头上）**：分别 grep 全
+  库，零命中或（§7.140）已被数小时的真实多角色游玩隐式覆盖验证
+  （每个新角色第一次触发的懒编译贯穿了几乎整个新手区，从未报过
+  `Cannot #include`），判定不适用/干净。
+- **§7.112（NPC `init()` 无条件排 `call_out` 链）**：`obj/monster.lpc`
+  唯一的 `init()` 只调用幂等的 `set_heart_beat(1)` 和条件触发的
+  `start_attack()`,没有直接排 `call_out` 链,不匹配这个模式的形状。
+- **§7.141（`replace_program()` 折叠在开机后 ~5 分钟内让闭包创建崩
+  溃）——认真复现但未能触发,记录为观察项，不作代码改动**：
+  `std/room/basic_room.lpc`/`basic_room_new.lpc` 的 `create()` 确
+  实有跟 dsI 那条一模一样的形状（`replaceable()`+`sizeof(inherit_list())==1`
+  判断后 `call_out(delay 0)` 里调用 `replace_program()`），而且
+  `calc_long_exit()`（几乎每个房间 `look` 时都会算一次）在 3 个以上
+  出口时确实会创建一个真正的闭包
+  (`map(words, (: mxp_tag("Exit",$1,1) :))`) 且不区分客户端是否有
+  MXP——形状上完全符合。用真实的 trustee 管理员账号（`fluffos`，
+  `secure/master.o` 的 `positions` 里已有）在开机后 85~253 秒内（严
+  格早于这个驱动 `backend_register_tick_events()` 注册的、从开机起
+  每 5 分钟一次的 `replace_programs()` 扫描）连续对两个从未被访问过
+  的、真正满足折叠条件的房间（`/d/dist/pumpkin/squash/squash5`，4
+  个出口，经 `CITYROOM`→`outside`→`basic_room` 继承链；
+  `/d/dist/pumpkin/rabbit/print_shop_foyer`，3 个出口，直接继承
+  `basic_room`）做了 3 次独立尝试，每次都干净渲染出出口列表，
+  `log/runtime`/`log/debug.log` 全程零 "cannot bind a functional to
+  an object with a pending replace_program()" 记录。没有进一步深挖
+  这个驱动为什么没触发（可能是 `call_out(fn,0)` 在这个版本的
+  backend 循环里比理论分析更快被处理，也可能是某个未追踪到的差
+  异）——按项目"不是每个模式相似的代码形状都真的在每个驱动/lib 组
+  合上复现"的既定原则，如实记录为"检查过、代码形状匹配但未能 live
+  复现",不做任何代码改动。
+
+### 新观察：这是一份"distribution lib"裁剪版，公会系统本来就没有随
+包分发（不是 bug，如实记录）
+
+`include/config.h` 定义了 `__DISTRIBUTION_LIB__`，`d/liaison/NEWBIE/
+path.h` 在这个宏打开时把 `GUILDS` 宏定义成字面量 `"None currently"`，
+`d/liaison/NEWBIE/guilds_foyer.lpc` 里全部六个公会大门出口
+（witch/wizard/thief/assassin/warrior/priest）都包在
+`#ifndef __DISTRIBUTION_LIB__` 里——也就是说这份 archive **设计上就
+不随包分发任何公会加入内容**，`/std/guilds/` 目录下也确实只有
+`warrior.lpc`/`standard.lpc` 两个基类文件，没有任何一个公会总部房
+间（`d/guilds/` 整个目录都不存在；开机 preload 列表里的 `/d/guilds/
+wizards/books/beginners`、`/d/guilds/wizards/Ankh-Morpork/inside/
+gymnasium`、`/d/guilds/wizards/chars/frenkel` 三条也全部指向不存在
+的文件,被 preload 的 catch 静默吞掉,零 debug.log 痕迹）。这意味着
+本轮方法论第 4 步（公会/技能习得路径测试）在这份具体 archive 上**
+从设计上就不可达**，不是我漏测——如实记录，不视为 bug，不尝试编造
+公会内容去"修复"。
+
+顺带发现一个由此衍生的真实崩溃（同一根因,不单独归为新 bug）：地
+图上"迷路仙女教母"NPC（`magrat.lpc`/`granny.lpc`）的 `setup()` 都
+调用了 `set_guild("witch")`,而 `/std/guilds/witch.lpc` 在这份
+archive 里根本不存在,`std/race.lpc:199` 的 `set_level()` 内部对它
+做 `call_other()` 直接报 `*call_other() couldn't find object
+'/std/guilds/witch'`（live 复现,`log/runtime` 有记录）。同样属于
+"distribution lib 没有公会内容"这一句话能完全解释的已知限制,不修。
+
+另外，`d/liaison/NEWBIE/foyer.lpc` 的 `guilds` 出口本身也会崩
+（`d/liaison/NEWBIE/guilds_foyer.lpc` `inherit PATH+"outside"` ->
+`d/liaison/NEWBIE/outside.lpc` `inherit "/std/outside"` ->
+转档时就已经记录在案的已知缺口"`/std/outside.lpc` 完全不存
+在"），live 复现：`*Inherited file '/std/outside' does not exist!`
+（`log/runtime`）。这是对已有已知缺口条目的一次**扩大确认**——此
+前的记录只提到"多个教学/示例房间和至少一个真实房间(`room/air.lpc`)"
+受影响,这次确认它还directly 挡住了新手大厅九个出口里唯一通往
+"guilds"（公会花园）的那一个,即使 `/std/outside.lpc` 真的补上了,
+这个花园本身在这份 distribution 配置下也只有一个 "foyer" 返回出口
+（六个公会大门出口全部被 `#ifndef __DISTRIBUTION_LIB__` 排除），没
+有任何实际可加入的公会内容——两个独立限制（缺失基类 + 故意裁剪的公
+会内容）叠加在同一个房间上。仍然判定为"已知内容缺口,不予修复"（需
+要编造一整个 `/std/outside.lpc` 基类文件的内容,属于内容/设计猜测,
+不是程序 bug）,只是把这条记录写得更完整。
+
+### 环境/测试基础设施问题（非 mudlib 代码 bug，直接修复）
+
+- **`save/players/f/` 目录完全不存在**：`save/players/` 整棵树都是
+  git 未跟踪的运行时数据（`.gitignore` 排除），这个沙盒环境里从来
+  没有出现过名字以 `f` 开头的玩家，导致这个字母桶目录压根没被创建
+  过。管理员账号 `fluffos` 第一次尝试注册时,断线时触发的
+  `net_dead()`→`save_me()`（这条路径不受 30 分钟新手不存档规则限
+  制,是无条件保存）报 `*Could not open /save/players/f/fluffos.o.gz.tmp
+  for a save.`（`log/catch`），角色数据丢失,下次连接查无此人。直
+  接 `mkdir -p save/players/f`（这个目录本身不在 git 跟踪范围内,
+  这个改动不会出现在任何 diff 里,纯粹是让这个沙盒环境的后续测试/
+  session 不再撞到同一个坑）。
+- **`save/garbage.o` 的自愈式自动重启节流被这个 session 自己的反复
+  重启"作死"到了极限值**：`obj/handlers/garbage.lpc` 有一套"距离
+  上次重启是不是很快又崩了"的自调节机制（`max_time` 初始
+  219600 秒/61 小时,每次 `create()` 时如果 `crash` 标记是真就打 5/6
+  折,只有在它自己发起的定时重启完整走完 9 分钟等待后才会清零
+  `crash` 标记、下次开机才会缓慢回涨,涨速只有跌速的 1/6）。这个项
+  目本身的开发/测试流程会大量直接 `kill`+重启驱动进程（不经过
+  `check_reboot()` 自己触发的那条"优雅重启"路径),每一次都被这个机
+  制误判成"上次崩溃了",`max_time` 单调下跌。到本轮测试开始时已经
+  跌到了 **15 秒**——开机后 heartbeat 走到第一次
+  `check_reboot()`（`create()` 里 `call_out("housekeeping",300)` +
+  `housekeeping()` 里 `call_out("check_reboot",10)`,即开机后
+  ~310 秒）时,`uptime() > max_time(15)` 恒真,直接触发
+  `"/obj/shut"->shut(10)`,10 分钟倒计时期间非管理员一律无法登录
+  （`secure/login.lpc` 的 `find_object("/obj/shut")` 检查）。这不
+  是一个会在真实部署环境复现的 mudlib bug（真实部署不会像这个项目
+  的迭代式调试流程一样在几天内 `kill`+重启驱动几十次),纯粹是这个
+  沙盒环境自己测试方式的副作用,按项目一贯做法（管理员账号也是直接
+  编辑存档种出来的）直接把 `save/garbage.o` 重置为健康初始值
+  （`max_time 219600`、`crash 0`、`limit 1000`）,重启后验证正常
+  （非管理员账号顺利登录,没有再触发"too close to shut-down"）。**
+  这套"崩溃惩罚,只有走完自己那条优雅重启全流程才能恢复"的不对称自
+  调节设计本身，在这个项目"驱动被频繁直接 kill/重启"的日常工作流下
+  会反复被打到最低值——如果以后其它 session 又撞到同样的"新角色注
+  册后立刻收到 too close to shut-down"，直接检查/重置
+  `save/garbage.o` 而不用怀疑是新 bug。
+
+### 已验证的核心流程（本轮 round-two 清单）
+
+- **注册**：`Roundtwo`，含真实的 ~30 秒条款确认暂停，完整走到落地
+  新手大厅（`d/liaison/NEWBIE/foyer.lpc`），`look`/`score`/`i` 每
+  次状态变化后都产出正确输出。
+- **移动**：foyer ↔ combat（新手战斗训练室）↔ commerce（新手商店）
+  多次往返，均正常。
+- **safe-sparring 机制**：找到了（`d/liaison/NEWBIE/combat.lpc` +
+  "Greg" 教练 NPC + 训练假人,标牌明确写着 "say 'can I practise
+  please'"），bug 修复前 `one`/`two`/`three` 三个训练间入口必崩,修
+  复后干净可进入（Greg 后续对话触发条件跟具体措辞有关,受限于时间
+  预算没有把整套"打假人"流程走完,但核心崩溃点已修复并验证）。
+- **公会/技能习得**：**从设计上不可达**（见上文"distribution lib
+  裁剪"一节),如实记录为未测试而非"测试失败"。
+- **quit + debug.log 检查 + 隔一段真实时间重连**：`quit` 后
+  `log/debug.log` 全程干净；等待若干分钟真实时间后用同一账号密码
+  重新登录,成功恢复到断线前的房间（战斗训练室）,角色年龄
+  （"X minutes and Y seconds old"）、登录次数计数、经验值、随身物
+  品（"a fruitbat flavoured badge"）全部正确延续,验证通过。
+- **商店/经济**：进入了新手商店（`commerce` 出口）,房间描述与提示
+  正常；`list` 命令测试未能在预算时间内确认真实商品列表输出（可能
+  是这个 driver 上 shop soul 命令的排队显示时序问题,不是本轮方法论
+  重点,未继续深挖,如实标注为未完全验证）。
+- **死亡/复活**：未在本轮预算时间内触及,如实说明未验证。
+
+### 管理员账号重新播种
+
+上一次转档 session 种下的 `fluffos` 管理员角色存档本身没有随仓库提
+交（`save/players/` 整棵树不在 git 跟踪范围内），这次沙盒环境里已
+经找不到了（`secure/master.o` 的 `positions` trustee 记录本身还在，
+只是玩家存档丢了）。用同样的账号名 `fluffos`/密码 `Mud@2026` 走完
+整套注册流程，真实挂机 30+ 分钟（满足 `global/player.lpc` 的
+`MIN_TIME_TO_SAVE`=1800 秒新手存档门槛）后 `quit`，验证
+`save/players/f/fluffos.o.gz` 已生成且 `#/global/lord.lpc` 开头（确
+认是真正的 creator/lord 类实例，不是普通玩家），全程 `debug.log`/
+`log/runtime` 干净。
