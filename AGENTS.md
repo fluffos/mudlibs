@@ -2418,7 +2418,29 @@ host" these traps were aimed at.
 - **`__FILE__` in an `#include`d fragment** expands to the FRAGMENT's
   path, not the includer — misattributed runtime errors by the hundred.
   Replace with `file_name(this_object())`. (`xlqy_early`,
-  `longyunmeng`.)
+  `longyunmeng`.) **Confirmed instance with a different correct
+  replacement, `es1`** (§10.7 round-two): `include/compress_obj.h`, a
+  bare-statement fragment `#include`d directly inside `create()` by 44
+  separate "simple item" files (bandages, torches, maps, spellbooks,
+  bank cards, etc.), does `if(clonep(this_object())) { set_default_ob
+  (__FILE__); return; }` intending to point a clone at its own
+  un-cloned master copy (which alone ran the item's real `create()` and
+  holds the real property values) so `query()` can transparently fall
+  back to it for any property the clone doesn't set locally — but
+  `__FILE__` resolved to `/include/compress_obj.h` on every clone,
+  producing `*call_other() couldn't find object '/include/
+  compress_obj.h'` on the first `query()` of any unset property (e.g.
+  `prevent_drop`/`query_auto_load()` on death — see `std/user.lpc`'s
+  `die()` — or a shop `list`/`buy` on any of the 44 affected items).
+  Here `file_name(this_object())` would have been actively WRONG (it
+  includes the clone's own `#nnn` suffix, making `default_ob` point
+  back at the clone itself and infinite-loop through `query()`); the
+  correct fix was `base_name(this_object())` (strips the clone suffix,
+  resolving to the real, persistent master/blueprint object). **When
+  applying this fix elsewhere, check what the fragment's `__FILE__`
+  was actually trying to name** — the includer's own live identity
+  (`file_name`) and the includer's un-cloned master file (`base_name`)
+  are both plausible intents and only one is correct per call site.
 - **check_config-style driver self-checks** inherited into
   simul_efun/master `error()` on stale MudOS `#ifdef` assumptions
   (`__PRIVS__` vs `PACKAGE_UIDS` assumed exclusive). Disable just the
@@ -9692,6 +9714,8 @@ This is a crash-free, boot-invisible, compile-clean bug — nothing about it sho
 
 **Confirmed second instance: `tmi2`** (checked 2026-08-27). Byte-for-byte the same unguarded-clone shape in `std/user/autoload.lpc`'s `load_autoload_obj()`, live-reproduced (an admin `eval` call to `load_autoload_obj()` on a body already carrying one `/std/bank_card` cloned a second, then a third) and fixed with the identical inventory-snapshot idempotency guard. Two things differed from `mortremains`, worth noting for future sibling checks rather than assuming the repro transfers verbatim: (1) `tmi2`'s plain `save_object()` does not independently serialize inventory sub-objects (confirmed via the raw save file), so the "baked into inventory before `destroy_autoload_obj()` runs" half of the original repro doesn't apply here — but the live trigger turned out to be `adm/daemons/logind.lpc`'s force-takeover path (`exec_old_copy()`) re-calling `setup()`/`load_autoload_obj()` on an *already-live* body when a same-account login arrives from a different source IP while the old session is still interactive, which is enough on its own since the root-cause function is identical; (2) because nothing else bakes in a redundant inventory copy, `tmi2`'s fix turned out to be fully self-healing on the very next restore even against an already-corrupted save file (unlike `mortremains`'s fix, which explicitly does not retroactively clean up pre-existing duplicates) — a difference in each port's save mechanics, not in the fix itself. See `libs/tmi2/NOTES.md` for the full repro and verification.
 
+**Confirmed third instance: `es1`** (§10.7 round-two, checked 2026-08-27) — the ES-family's own direct ancestor codebase, not previously suspected of TMI-2 lineage given its wuxia-sounding name and D&D-style content. `std/user/autoload.lpc` carries the exact same file header ("adapted from 2.4.5 code by Truilkan@TMI") and the identical unguarded-clone shape in `load_autoload_obj()`. Confirmed both structurally (the quit path's `remove()` calls `save_me()` at line 410 before `destroy_autoload_obj()` at line 414; `net_dead()` calls `save_data()` and never calls `destroy_autoload_obj()` at all — real marker items exist and use this mechanism: `std/cards/bank_card.lpc`, `obj/amulet.lpc`, `obj/tools/{memopad,staff}.lpc`, wedding rings) and live (a bank card given to the admin test account, then carried through both a real `quit`→relogin cycle and two direct repeat `eval` calls to `load_autoload_obj()`, held steady at exactly 1 copy after the identical inventory-snapshot idempotency guard was applied — before the fix, a manual trace confirmed the unconditional clone loop had no such guard). Fixed identically. Given `es1` is the literal common ancestor of `es2`/`haiyang2`/`demonangel`/`xkx2001`/`rzrmud`/`xo`/`zhyx`/`naruto`/`es1_win`, and it turns out to share this base-library lineage with the TMI-2-descended libs too, **`es1_win`** (near-byte-identical sibling, see `libs/es1/NOTES.md`'s own onboarding comparison) is a near-certain candidate for the same bug and worth checking directly rather than assuming the later ES2-family mixin rewrite dropped this mechanism entirely.
+
 ### 7.124 A percentage-scale threshold field (declared and universally consumed elsewhere as an integer 0-100) is initialized with a 0.0-1.0 fraction literal instead, silently disabling the safety mechanism it gates for every character until it's manually reconfigured
 
 Found via a §10.7 deep-test playthrough of `nightmare4`. `lib/combat.lpc` declares `private int Wimpy;` (the auto-flee-at-low-health threshold) and every other consumer in the codebase — `cmds/players/wimpy.lpc` (the player-facing `wimpy PERCENTAGE` command, range 1-30) and `cmds/players/score.lpc` — treats it strictly as an integer percentage (e.g. `wimpy on` sets it to the literal `23`). But `create()` initializes it with `Wimpy = 0.20;` — a fraction, not a percentage — and the runtime comparison in `eventReceiveDamage()` is `if( Wimpy < percent(hp, GetMaxHealthPoints()) ) return x;` (only `call_out(eventWimpy)`, i.e. actually flee, when this is false). Since `percent()` returns an integer 0-100, `0.20` is smaller than virtually every nonzero percentage a living character can have, so this comparison is true almost unconditionally — the auto-flee safety net is effectively dead for every single character from the moment they're created, with zero compile error and zero crash (this is a variant of §7.121's "declared `int`, fed a float, no runtime coercion" shape, but here the corruption is a **unit/scale mismatch on a constant literal** rather than an unconverted arithmetic result — a fraction where an integer percentage was meant). A second, dependent bug rode along: `SetWimpy()`/`GetWimpy()` were declared to return `float` (matching the buggy fractional value) rather than `int` (matching the field's own declaration and every real caller's usage) — once the threshold is a genuine nonzero value, this declared-`float` return silently upgrades a real integer into a widened float on return, and callers' own `(int)` casts (already known to be compile-time-only on this driver, see the `reference_lpc_int_cast_is_compile_time_only` entry) don't convert it back, corrupting the player-facing `wimpy` command's own percentage display (`"Percentage: 20.000000%"` instead of `"20%"`) even after the primary fix. **Fix**: `Wimpy = 0.20;` → `Wimpy = 20;`, and `float SetWimpy(float wimpy)`/`float GetWimpy()` → `int SetWimpy(int wimpy)`/`int GetWimpy()`, matching the field's declared type and its only real calling convention. Verified live: a brand-new character's bare `wimpy` command now reports `"Percentage: 20%"` (was "wimpy turned off" pre-fix, since a save/restore cycle happens to truncate the stray float back to int 0 on this driver — see `libs/nightmare4/NOTES.md` for why both the pre-restore and post-restore paths were independently broken), and a direct `eval` check of the exact runtime comparison (`Wimpy < percent(hp, max)` at 15% vs. 50% simulated health) now correctly returns "flee" only below the 20% threshold.
@@ -9849,6 +9873,102 @@ message is easy to miss in a quick manual test if it's short/generic
 enough to read as a plausible last line of legitimate output, and only
 stands out once you notice it recurring after literally every command
 type, including ones that clearly succeeded.
+
+### 7.129 A shared `tell_room()` simul_efun wrapper passes its optional, omitted `exclude` parameter straight through to the `message()` efun as a bare `int(0)` — this driver's `message()` requires that argument to be genuinely absent (`void`) or an object/array, so EVERY 2-argument call site (dozens across the codebase, including the core death sequence) crashes uncaught
+
+Found via `es1`'s §10.7 round-two deep functional test, root-caused only
+after a live death repeatedly looked "successful" (a ghost was visibly
+created, `你死了` printed normally) but never progressed any further —
+no death-god NPC encounter, no auto-revival, and the same character
+kept re-appearing in the `KILLS` log and re-spawning fresh corpses every
+heartbeat tick forever. `adm/simul_efun/tell_room.lpc` is declared
+`varargs void tell_room(mixed room, mixed msg, mixed exclude)` and
+unconditionally forwards all three parameters to the `message()` efun:
+`message("tell_room", msg, room, exclude);`. This driver's own
+`message()` spec declares its 4th parameter as `void | object |
+object *` — it accepts the argument being genuinely OMITTED, or a real
+object/array, but not an explicit integer. Since an un-supplied
+`varargs` parameter in LPC defaults to `int 0` (not to "no argument
+passed"), every 2-argument call site (`tell_room(room, "text")`, no
+exclude) crashed with `*Bad argument 4 to EFUN message() Expected:
+object, array, Got: int(0)` — including, critically, `std/body.lpc`'s
+own `create_ghost()`, whose ordinary "a white shadow rises from the
+corpse" room announcement is a bare 2-argument `tell_room(old, "...")`
+called from EVERY player death. Because this runtime error is never
+caught anywhere in the call chain (`create_ghost()` ← `die()` ←
+`continue_attack()` ← `heart_beat()`), it aborts the entire death
+sequence: the newly-created ghost object is left dangling (already
+`new()`'d and half-initialized, but never returned to `die()`, so the
+death-god NPC's `start_death()` and the final `call_out("remove", 0)`
+that destroys the old body never run), and since the dying body's own
+`ob_data["ghost"]` flag was never set (only the orphaned ghost got
+that), `continue_attack()`'s `hit_points < 1 && !ob_data["ghost"]`
+guard stays permanently true — `die()` re-fires on the SAME already-
+"dead" body on every subsequent heartbeat tick, forever, each time
+re-running the corpse/wealth-transfer logic (reproduced live: a single
+test death left 5-6 duplicate corpses and repeated `KILLS`-log entries
+accumulating every ~9 seconds) and crashing again at the identical
+line. Root-caused with `debug_message()`-based tracing (the usual
+`log_file()` diagnostic approach is a dead end here — see the note
+below) that pinpointed the exact crash site, then confirmed directly
+via `eval`: `tell_room(some_room, "text")` (2 args) crashed with the
+exact signature above; `tell_room(some_room, "text", this_player())`
+(3 args) worked fine.
+
+A `grep -rn 'tell_room([a-zA-Z_()]*, *"'` across `es1`'s tree found
+dozens more 2-argument call sites in ordinary room/NPC/item content
+(cave-in traps, statue-awakening sequences, an NPC vanishing in smoke,
+etc.) that share the identical crash, invisible until whichever specific
+story beat actually fires.
+
+**Fix** — patch the single shared wrapper to only forward the 4th
+argument when a real exclude value was actually given:
+```lpc
+varargs void tell_room(mixed room, mixed msg, mixed exclude)
+{
+	if( stringp(msg) ) {
+        if( !room || !objectp(room) ) return;
+		if( exclude )
+			message( "tell_room", msg, room, exclude );
+		else
+			message( "tell_room", msg, room );
+		return;
+	}
+    error("Tell_room: Message must be a string.\n");
+}
+```
+This is a one-file fix that transparently repairs every 2-argument call
+site project-wide without touching any of them. Verified live: after the
+fix, a full register→move→shop→combat→death sequence played out
+end-to-end for the first time — the death-god NPC ("黑无常") encounter,
+the bridge scene, the ~40-second automatic revival timer chain, and a
+full character restoration (real body, correct stats, correct
+inventory) at the cemetery, with zero runtime errors for the whole
+session; both the 2-arg and 3-arg (with a real exclude) forms were
+independently re-verified via `eval` post-fix.
+
+**Diagnostic-tooling gotcha worth recording**: `log_file()` calls added
+for tracing silently no-op when the calling object's euid lacks write
+access to the log directory (a player body's or a domain NPC's euid,
+not root/admin) — no error, just nothing written, which looks
+identical to "this code path was never reached" and cost real time to
+rule out. `debug_message()` (an efun that always writes straight to
+the driver's own stdout regardless of euid) is the correct tool for
+tracing inside arbitrary non-privileged objects; reserve `log_file()`
+diagnostics for daemons/simul_efun that already run with elevated euid.
+
+**How to apply generally**: any shared `tell_room`/`tell_object`/similar
+message-broadcast wrapper that declares an optional trailing parameter
+and forwards it unconditionally to a stricter driver efun is suspect —
+check the efun's own `.spec` parameter types (a `void | object |
+object *`-shaped parameter never accepts a bare `int`) against what an
+omitted `varargs` parameter actually defaults to (`0`, not absence).
+This is the same root shape as §7.127 (a wrapper's own declared/assumed
+type is narrower — or here, differently-shaped — than what a real
+caller needs), but manifests as a crash on the *convenience* (fewer-
+argument) call form rather than on every call site uniformly, which is
+what let it hide in `es1` behind an apparently-normal `你死了` message
+for who knows how long.
 
 ---
 

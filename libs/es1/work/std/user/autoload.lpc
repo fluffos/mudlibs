@@ -24,9 +24,24 @@ void load_autoload_obj()
 {
 	string file;
 	mixed item, argument;
-	object ob;
-	int j, limit;
-   
+	object ob, *inv;
+	int j, k, limit, already;
+
+	// AGENTS.md 7.122 fix: save_data() (std/user/save.lpc) calls
+	// compute_autoload_array() -- which bakes each carried autoload
+	// item's path into `auto_load` -- immediately before
+	// save_object(), so the item is *also* captured as ordinary
+	// inventory data by that same save. On the quit path
+	// (std/user.lpc's remove()) destroy_autoload_obj() only runs
+	// AFTER save_me(), and net_dead() never calls it at all, so a
+	// restore can bring the item back twice: once from plain
+	// inventory restore, once from this function unconditionally
+	// cloning every auto_load entry below. Guard against that by
+	// skipping any entry whose base_name already matches something
+	// already carried, making this idempotent regardless of how the
+	// save file got into a redundant state.
+	inv = all_inventory(this_object());
+
 	limit = (auto_load) ? sizeof(auto_load) : 0;
 	for( j=0; j<limit; j++ ) {
 		item = auto_load[j];
@@ -40,6 +55,14 @@ void load_autoload_obj()
 		else
 			continue;
 		if (file) {
+			already = 0;
+			for( k=0; k<sizeof(inv); k++ ) {
+				if (base_name(inv[k]) == base_name(file)) {
+					already = 1;
+					break;
+				}
+			}
+			if (already) continue;
 			if (catch(call_other(file,"?")) || catch(ob=clone_object(file))) {
 				ob = 0;
 				write("Unable to autoload: " + file + "\n");
@@ -48,6 +71,7 @@ void load_autoload_obj()
 				if (argument)
 					call_other(ob, "init_arg", argument);
 				ob->move(this_object());
+				inv += ({ ob });
 			}
 		}
 	}

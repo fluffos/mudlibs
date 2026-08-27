@@ -468,3 +468,249 @@ upper bound including this batch-mode noise, not a precise count of
 genuinely-broken files; most of the individually-diagnosed content-
 tree-drift items in the "Not fixed" section above were confirmed via
 single-file `lpcc` runs specifically because of this caveat.
+
+## Deep functional test (round two) — 2026-08-27
+
+Full continuous playthrough per AGENTS.md §10.7: registered a fresh
+English-named character (`Questorix`, later several more throwaway
+characters as earlier ones got stranded testing death), full
+race/gender flow, `look`/`score`/`i` at every state change, shop visit,
+combat against `d/noden/farwind/monster/traveller.lpc` (level 7, the
+shop's ambient NPC — no dedicated safe-sparring/training-dummy
+mechanism exists in this codebase, confirmed via a `accept_fight`/
+stat-copy-loop grep; `train <skill>` in `d/adventurer/adv_trainer.lpc`
+requires exploration points a fresh character doesn't have), several
+full deaths, `quit`+relogin, and the six standing cross-cutting bug
+patterns (§7.121/§8.3a/§7.122/§7.123/§7.124/§7.126). Found and fixed
+**four real programming bugs**, the most severe of which (a corpus-wide
+`tell_room()` crash) completely broke the death/revival system for
+every player from this archive's very first boot. Admin account
+`fluffos`/`Mud@2026` (already seeded from the initial onboarding pass)
+used throughout; all throwaway test-character saves (`questorix`,
+`quillbramble`, `diagtester`, `diagtwo`, `diagthree`, `willowfen`) were
+deleted before committing, and a bank card cloned onto `fluffos` for
+the autoload test was removed and the account `quit` cleanly.
+
+### Bug 1 (SEVERE, new AGENTS.md §7.129) — `tell_room()`'s omitted `exclude` argument crashes as `int(0)`, silently breaking the ENTIRE death/revival system from first boot
+
+`adm/simul_efun/tell_room.lpc` forwarded its optional 3rd parameter
+unconditionally to `message()`: `message("tell_room", msg, room,
+exclude)`. This driver's `message()` declares that 4th parameter
+`void | object | object *` — it accepts the argument being genuinely
+*absent*, or a real object/array, but not a literal `int`. Since an
+omitted `varargs` parameter in LPC defaults to `int 0` (not to "no
+argument"), every 2-argument `tell_room(room, msg)` call site crashed
+with `*Bad argument 4 to EFUN message() Expected: object, array, Got:
+int(0)`. `std/body.lpc`'s own `create_ghost()` — called from EVERY
+player death — makes exactly this 2-arg call for its "a white shadow
+rises from the corpse" room announcement, so **every single death in
+this codebase crashed, uncaught, at that exact point**, from the very
+first boot of this archive.
+
+The practical effect, reproduced live: the crash aborts the entire
+call chain (`create_ghost()` ← `die()` ← `continue_attack()` ←
+`heart_beat()`), so the new ghost object — already `new()`'d,
+half-initialized, and left dangling in the game world — never gets
+returned to `die()`, so the death-god NPC encounter (`std/user.lpc`'s
+`DEATH->start_death(ghost)`, `/d/abyss/hell/monster/black_wuchang.lpc`)
+and the final `call_out("remove", 0)` that destroys the old body NEVER
+RUN. Because the dying body's own `ob_data["ghost"]` flag was never
+set (only the orphaned ghost object got it), `continue_attack()`'s
+`hit_points < 1 && !ob_data["ghost"]` guard stays true forever —
+`die()` re-fires on the SAME already-"dead" body on every subsequent
+heartbeat tick, re-running corpse creation and wealth transfer each
+time and crashing again at the identical line. A single test death
+left 5-6 duplicate corpses in the shop and repeated `KILLS`-log entries
+accumulating every ~9 seconds, forever, with the player stuck looking
+at an inert "ghost" that never got dragged into the death-god sequence
+described in the game's own room flavor text. Zero visible symptom
+beyond "你死了" printing normally — no crash message reaches the
+player, `debug.log`/driver stdout is the only place this ever surfaced
+(and even that required `debug_message()`-based tracing rather than
+`log_file()`, since `log_file()` calls made from a player-body/domain-
+NPC euid context silently no-op with no error — see the AGENTS.md
+§7.129 entry for the full diagnostic trail and root-cause method).
+
+A `grep -rnE 'tell_room\([a-zA-Z_()]*, *"'` across the whole tree found
+dozens more 2-argument call sites in ordinary content (cave-in traps in
+`d/noden/elf/elf/elf2.lpc`, a statue awakening in `d/island/monster/
+holy_knight.lpc`, an NPC vanishing in `d/thief/hall/monsters/
+pickering.lpc`, etc.) sharing the identical crash, each invisible until
+its specific story beat actually fires.
+
+**Fix**: `adm/simul_efun/tell_room.lpc` now only forwards the 4th
+argument to `message()` when a real `exclude` value was given:
+```lpc
+if( exclude )
+	message( "tell_room", msg, room, exclude );
+else
+	message( "tell_room", msg, room );
+```
+One-file fix, transparently repairs every 2-argument call site
+project-wide. **Verified live end-to-end** (test character
+`Willowfen`): after the fix, a full death sequence played out
+correctly for the first time — the "黑无常" (Black Wuchang, death-god)
+encounter and dialogue, the drag to "奈何桥" (Naihe Bridge), the
+~40-second automatic revival timer chain (`death1`→`death2` in
+`black_wuchang.lpc`), and a full character restoration (real body,
+correct stats `10/30`, correct starting item) at "露天英雄纪念馆"
+(the cemetery) — with zero runtime errors for the whole session. Both
+the 2-arg and 3-arg (with a real exclude, confirmed the exclude target
+still correctly doesn't see their own message) forms were independently
+re-verified via `eval` post-fix.
+
+### Bug 2 (SEVERE, extends AGENTS.md §7.14's `__FILE__`-in-fragment class) — `include/compress_obj.h`'s clone/master default-object pattern resolves to its own header path, crashing `query()` for any unset property on 44 shared "simple item" files
+
+`include/compress_obj.h` (`#include`d directly inside `create()`, not
+inherited, by 44 files: bandages, torches, maps, spellbooks, bank
+cards, potions, weapons, etc.) does `if(clonep(this_object())) {
+set_default_ob(__FILE__); return; }`, intending to point a clone at its
+own un-cloned master/blueprint copy (which alone ran the item's real
+`create()` and holds the actual property values) so `query()` can fall
+back to it for any property the clone itself never sets. But `__FILE__`
+in an `#include`d fragment expands to the FRAGMENT's own path, not the
+includer's (a general trap, AGENTS.md §7.14) — every clone's
+`default_ob` ended up literally `"/include/compress_obj.h"`, so the
+FIRST `query()` of any property the clone doesn't set locally (e.g.
+`prevent_drop`/`query_auto_load()`, both checked on every player death
+in `std/user.lpc`'s `die()`; or a shop `list`/`buy`/inventory-display
+of any of the 44 affected items) crashed with `*call_other() couldn't
+find object '/include/compress_obj.h'`. Reproduced live via an
+admin-cloned `/std/cards/bank_card` (a compress_obj.h user):
+`query_short()`/`balance` both crashed pre-fix, and the trashcan/
+shop's own `torch`/`bandage`/`map` stock items would have hit the
+identical crash on first purchase or death, given they use the same
+header.
+
+**Fix**: `set_default_ob(__FILE__)` → `set_default_ob(base_name
+(this_object()))`. Note this is a DIFFERENT correct replacement than
+§7.14's usual `file_name(this_object())` — that form includes the
+clone's own `#nnn` suffix, which here would make `default_ob` point
+back at the clone ITSELF, infinite-looping through `query()`. The
+correct fix depends on what the fragment's `__FILE__` was actually
+trying to name (documented generally in the AGENTS.md §7.14 update).
+Verified live post-fix: the same admin-cloned bank card's
+`query_short()`/`balance` both work correctly, and a full `quit`+
+relogin cycle carrying it showed no crash and no duplication (also
+verifies Bug 4 below).
+
+### Bug 3 (confirmed 3rd instance of AGENTS.md §7.122) — `std/user/autoload.lpc`'s unguarded `load_autoload_obj()` duplicates every carried marker item across abrupt-disconnect/quit-then-restore cycles
+
+This file's own header credits "Truilkan@TMI" — `es1` turns out to
+share this exact TMI-2-lineage save/autoload mechanism with `mortremains`
+and `tmi2` (already-documented §7.122 instances), despite its
+completely different D&D/English-registration content and no other
+visible TMI-2 branding. `std/user.lpc`'s quit path (`remove()`) calls
+`save_me()` (line 410, which runs `compute_autoload_array()` before
+`save_object()`, baking any carried marker item into ordinary inventory
+data) BEFORE `destroy_autoload_obj()` (line 414); `net_dead()` (abrupt
+disconnect) calls `save_data()` and never calls
+`destroy_autoload_obj()` at all. `load_autoload_obj()` (run from every
+login via `std/body.lpc`'s `init_setup()`) then unconditionally clones
+one more copy of every `auto_load` entry with no check for whether a
+matching item is already present. Real marker items using this
+mechanism: `std/cards/{bank_card,credit_card}.lpc`, `obj/amulet.lpc`,
+`obj/tools/{memopad,staff,scroll}.lpc`, `obj/shells/shsh.lpc`, wedding
+rings under `d/noden/farwind/wedding_obj/` and `d/std/wedding_object/`.
+
+**Fix**: added the same inventory-snapshot idempotency guard used for
+`mortremains`/`tmi2` — `load_autoload_obj()` now skips cloning any
+`auto_load` entry whose `base_name()` already matches an item already
+carried. Verified live on the admin test account (`fluffos`): cloned a
+`/std/cards/bank_card`, carried it through a real `quit`→relogin cycle
+(exercising the `save_me()`-before-`destroy_autoload_obj()` gap) and
+then two direct repeat `eval` calls to `load_autoload_obj()` (the
+`tmi2`-style direct-call verification) — held steady at exactly 1 copy
+throughout, with `i`/`balance` both correct.
+
+**Family relevance**: since `es1` is the direct ancestor of `es2`/
+`haiyang2`/`demonangel`/`xkx2001`/`rzrmud`/`xo`/`zhyx`/`naruto`, and
+turns out to share TMI-2-lineage base-library code most of its ES2-era
+descendants likely replaced with their own `feature/`-mixin
+architecture, this specific bug is NOT expected to recur in that later
+family (their `feature/` directories don't exist yet in this snapshot
+at all — see "What this is" above). The much stronger sibling
+candidate is **`es1_win`**, the near-byte-identical separate archive of
+this same pre-ES2 codebase already onboarded in this project (see the
+"Comparison against es2" section above) — worth a direct check.
+
+### Bug 4 (minor, obviously-wrong-macro) — a newly-created ghost is placed in the wrong room, using the login-room macro instead of the dedicated ghost-destination macro
+
+`std/body.lpc`'s `create_ghost()` moves a fresh ghost with
+`ghost->move(START)` inside an `#ifdef GHOST_START_LOCATION` block —
+but `START` (`/d/adventurer/hall/adv_guild`, the ordinary new-player
+login room, from `config.h`) is a completely different macro than
+`GHOST_START_LOCATION` (`/d/noden/farwind/cemetery`, from `body.h`,
+defined specifically for this purpose). The two lines directly above,
+commented out, already used the correct macro
+(`ghost->move(GHOST_START_LOCATION)`) — this reads as a debug-era
+substitution that was never reverted. Low practical impact once Bug 1
+is fixed, since the death-god NPC's `start_death()` unconditionally
+drags the ghost to a third location (the Naihe Bridge) immediately
+afterward regardless of where it started, but still an unambiguous
+wrong-constant bug worth fixing on its own merits. **Fix**:
+`ghost->move(START)` → `ghost->move(GHOST_START_LOCATION)`.
+
+### Minor hygiene fixes (return-type mismatches, compiler warnings only, no observed runtime effect)
+
+While tracing Bug 1, the compiler's own warnings surfaced two
+forward-declaration/definition return-type mismatches predating this
+session, both harmless in practice (the mismatch never actually
+corrupted a returned value in any reproduced scenario — Bug 1's
+`ghost=0` symptom traced to the pre-existing `if(!link) return 0`
+early-exit on a repeated `die()` call, not to type coercion) but worth
+correcting for hygiene since they're compiler-flagged declaration
+mismatches, the same class as AGENTS.md §7.127: `std/user.lpc`'s and
+`std/npc.lpc`'s forward declarations of `create_ghost()` said `int`/
+`protected int`; the real definition in `std/body.lpc` returns
+`object`. Similarly `std/body.lpc`'s own forward declaration of
+`save_data()` said `void`; the real definition (`std/user/save.lpc`)
+and `std/ghost.lpc`'s override both return `int`. Fixed all three
+declarations to match their real definitions. (Left `u/m/moon/user.lpc`
+— a wizard's personal home-directory fork of `std/user.lpc` — with its
+own copy of the same mismatch untouched, matching this project's usual
+treatment of wizard-workspace scratch content.)
+
+### Six standing cross-cutting bug patterns — checked, clean
+
+- **§7.121** (float arithmetic in a declared-`int` economy function):
+  no `query_base_value`/`query_base_rate`/exchange-rate-shaped function
+  found; grepped `= 0\.[0-9]+;` assignments to `int`-declared fields
+  project-wide — no hits.
+- **§8.3a** (`private`-declared dispatch/callback function silently
+  demoted on inheritance): this codebase predates the `feature/
+  command.lpc` mixin-dispatch architecture entirely (confirmed in the
+  original onboarding NOTES above) — grepped `command_hook` and `private
+  nomask` project-wide, zero hits of either. Not applicable to this
+  archive's architecture.
+- **§7.122**: confirmed present and fixed — see Bug 3 above.
+- **§7.123** (bare top-level `IDENT = (...)` statement outside any
+  function): grepped for the pattern project-wide, zero hits.
+- **§7.124** (0.0-1.0 fraction literal assigned to a 0-100-scale
+  `int`-declared threshold field): grepped `= 0\.[0-9]+;` project-wide
+  (same sweep as §7.121) — no hits.
+- **§7.126** (stale pre-`.lpc` `.c` extension in a coordinate-AREA's
+  save-file door data): this codebase has no coordinate-grid `AREA`/
+  `map.lpc` engine at all (rooms are individually-authored `.lpc`
+  files with literal `exits` mappings, not a shared grid-data class) —
+  not applicable to this archive's architecture.
+
+### Interactive test state left as evidence
+
+Admin account `fluffos`/`Mud@2026`, clean (no test items carried,
+clean `quit`). No throwaway test-character saves remain (all deleted
+per this project's clean-up policy). The fix for Bug 1 was verified
+against a real, complete death-to-revival cycle on a fresh throwaway
+character (`Willowfen`) before that save was deleted; the full
+transcript (registration → shop → combat → death → death-god encounter
+→ bridge → automatic revival → correct restored stats/inventory) is
+summarized above and was captured live via a raw Python socket test
+script with the connection held open across the full ~60-second
+revival timer window (closing the connection early, simulating an
+abrupt disconnect, was itself how Bug 3's `net_dead()`-without-
+`destroy_autoload_obj()` gap and one red herring around a `link=NONE`
+race were distinguished from the real, connection-independent Bug 1
+root cause — the `link` field turned out to populate correctly under
+normal held-open-connection conditions, ruling out a suspected
+connection-race explanation for the stalled death sequence before the
+real `tell_room()` crash was found).
