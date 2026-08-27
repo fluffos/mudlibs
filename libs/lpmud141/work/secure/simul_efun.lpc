@@ -1,0 +1,208 @@
+/*
+ * simul_efun.lpc -- authored from scratch for this port.
+ *
+ * This archive's original driver had a small, closed set of built-in
+ * language keywords (see lexical.l's F_* token table) with no equivalent
+ * on FluffOS. Two are bridged here as simul_efuns, faithfully reproducing
+ * the original C implementation (simulate.c) using standard FluffOS efuns
+ * only -- no new content or game logic invented, see NOTES.md for the
+ * full inventory and reasoning for each. The `add_action()`/`add_verb()`
+ * two-call idiom (this driver's dominant command-registration style, used
+ * ~300 times) is NOT handled here -- it was mechanically merged into
+ * single two-argument add_action() calls across the whole tree instead,
+ * since FluffOS's add_action() already requires the verb as a real
+ * argument (see NOTES.md).
+ */
+
+#define PLAYER_DIR "/players"
+#define INIT_FILE  "/room/init_file"
+#define DEFAULT_CASTLE "/room/def_castle.lpc"
+
+/*
+ * resolve_ob(x) -- helper for the move_object() driver-compat fix (see
+ * NOTES.md). This archive's original driver's own find_object() silently
+ * fell back to load_object() when a named destination wasn't already
+ * compiled/resident (simulate.c: "ob = find_object2(str); if (ob) return
+ * ob; return load_object(str);"). FluffOS's real find_object() efun does
+ * NOT do that (compile-on-demand is load_object()'s job only), so every
+ * `X->move_object("some/room")` call where "some/room" hasn't been
+ * touched yet throws "move_object failed: could not find destination"
+ * the first time any code moves something into a not-yet-loaded room --
+ * universal across this codebase, since every room reference is by bare
+ * path. This restores the original find-or-load semantics for any
+ * string destination passed to move_object() (see the mechanical
+ * A->move_object(resolve_ob(B)) rewrite applied tree-wide).
+ */
+mixed resolve_ob(mixed x) {
+  object o;
+  if (!stringp(x)) return x;
+  o = find_object(x);
+  if (!o) o = load_object(x);
+  return o;
+}
+
+/*
+ * transfer(ob, dest) -- simulate.c's F_TRANSFER was a plain
+ * move_object(item, destination) under a different name (dest may be an
+ * object or a string to be resolved via find_object()).
+ */
+varargs int transfer(object ob, mixed dest) {
+  if (stringp(dest)) {
+    object d = find_object(dest);
+    if (!d) d = load_object(dest);
+    dest = d;
+  }
+  if (!ob || !dest) return -1;
+  ob->move_object(dest);
+  return 0;
+}
+
+/*
+ * log_file(name, text) -- simulate.c's log_file() appended `text` to
+ * "log/<name>" (rejecting names with slashes or ".."/over 30 chars).
+ * write_file() on this driver already appends by default.
+ */
+void log_file(string file, string str) {
+  if (!file || !str) return;
+  if (strsrch(file, "/") != -1 || strsrch(file, "\\") != -1 ||
+      file[0] == '.' || strlen(file) > 30) {
+    return;
+  }
+  write_file("/log/" + file, str);
+}
+
+/*
+ * cat(path) -- simulate.c's print_file() wrote the raw file contents to
+ * the calling player.
+ */
+void cat(string path) {
+  string data;
+  if (!path) return;
+  data = read_file(path);
+  if (data) write(data);
+}
+
+/*
+ * ls(path) -- simulate.c's list_files() wrote a directory listing to the
+ * calling player. get_dir() is this driver's equivalent of the classic
+ * list_files().
+ */
+void ls(string path) {
+  mixed *entries;
+  int i;
+
+  if (!path || path == "") path = ".";
+  entries = get_dir(path + (path[strlen(path) - 1] == '/' ? "*" : "/*"));
+  if (!entries || sizeof(entries) == 0) {
+    write("No files.\n");
+    return;
+  }
+  for (i = 0; i < sizeof(entries); i++) {
+    write(entries[i] + "\n");
+  }
+}
+
+/*
+ * people() -- simulate.c's people() (comment-dated "5/10/90 - version to
+ * deal with invisibility") walked every interactive object and printed
+ * "<ip>  <name>  <room>" via query_level()/query_real_name()/
+ * query_invis() applies on the player object itself -- all genuine,
+ * pre-existing functions on obj/player.lpc, called here the same way via
+ * call_other() rather than the original's internal apply().
+ */
+void people() {
+  object *users_list = users();
+  int level_of_user, i;
+  mixed lvl;
+
+  lvl = call_other(this_player(), "query_level", 0);
+  level_of_user = intp(lvl) ? lvl : 0;
+
+  for (i = 0; i < sizeof(users_list); i++) {
+    object ob = users_list[i];
+    string pname;
+    mixed invis;
+    string label;
+
+    if (!ob || !environment(ob)) continue;
+    pname = call_other(ob, "query_real_name", 0);
+    if (!stringp(pname)) continue;
+    invis = call_other(ob, "query_invis", level_of_user);
+    if (!intp(invis)) continue;
+    if (invis >= 100) continue;
+
+    if (invis == 0) {
+      label = capitalize(pname);
+    } else if (invis < 0) {
+      label = sprintf("(%s)  %d", capitalize(pname), -invis);
+    } else {
+      label = "Someone";
+    }
+    write(sprintf("%-25s %s  %s\n", query_ip_name(ob), label,
+      file_name(environment(ob))));
+  }
+}
+
+/*
+ * create_wizard(owner) -- simulate.c's create_wizard() mkdir'd
+ * players/<owner>/, wrote a castle.c combining a NAME/DEST #define header
+ * with the contents of DEFAULT_CASTLE (room/def_castle.c), appended the
+ * new file's path to room/init_file so it preloads on future boots, and
+ * returned the new file's path (the caller move_object()s that path,
+ * relying on the driver's own implicit find_object()/load_object()
+ * fallback for a string argument). Faithful re-implementation using only
+ * standard efuns; DEFAULT_CASTLE is a real file already shipped in this
+ * archive, not new content.
+ */
+mixed create_wizard(string owner) {
+  object owner_ob;
+  string dir, path, header, castle_src;
+
+  owner_ob = find_player(owner);
+  if (!owner_ob) return 0;
+
+  if (file_size(PLAYER_DIR) != -2) mkdir(PLAYER_DIR);
+  dir = PLAYER_DIR + "/" + owner;
+  if (file_size(dir) == -2) return 0; /* already has a castle */
+  mkdir(dir);
+
+  path = dir + "/castle.lpc";
+  header = "#define NAME \"" + owner + "\"\n#define DEST \"" +
+    file_name(environment(owner_ob)) + "\"\n";
+  write_file(path, header, 1); /* overwrite/create */
+
+  castle_src = read_file(DEFAULT_CASTLE);
+  if (castle_src) write_file(path, castle_src);
+
+  write_file(INIT_FILE, dir + "/castle\n");
+  return dir + "/castle";
+}
+
+/*
+ * add_worth(amount, [ob]) -- simulate.c's F_ADD_WORTH fed a per-wizard
+ * "total_worth" counter kept purely inside the driver's own internal
+ * wiz_list struct (not exposed to the mudlib at all, and only ever
+ * displayed by the equally-unreplicated wizlist() report). No mudlib-
+ * visible equivalent exists to wire this up to; safe no-op (see NOTES.md).
+ */
+varargs void add_worth(int amount, object ob) {
+}
+
+/*
+ * wizlist() -- simulate.c's F_WIZLIST report walked the driver's internal
+ * wiz_list (per-wizard score/rank bookkeeping, populated by add_worth()
+ * above), which this port has no data for. Honest stub rather than a
+ * fabricated scoreboard.
+ */
+void wizlist() {
+  write("Wizlist is not available in this port (no wizard-worth tracking; see NOTES.md).\n");
+}
+
+/*
+ * localcmd() -- simulate.c's print_local_commands() walked the calling
+ * player's/environment's driver-internal sentence (add_action) list,
+ * which is not introspectable from LPC on this driver. Honest stub.
+ */
+void localcmd() {
+  write("Local command listing is not available in this port (see NOTES.md).\n");
+}

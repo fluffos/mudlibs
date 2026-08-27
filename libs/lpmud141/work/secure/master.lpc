@@ -1,0 +1,115 @@
+/*
+ * master.lpc -- authored from scratch for this port.
+ *
+ * This archive's own original driver (a classic, pre-master-object 1990s
+ * LPMud -- see NOTES.md) has NO concept of a master object anywhere in its
+ * ~15,000 lines of driver C source: no ACL applies, no get_root_uid(), no
+ * uid/euid model at all. Its `new_player()` (comm1.c) hardcodes
+ * `clone_object("obj/player")` and applies `logon()` on it directly, and
+ * `backend()` hardcodes loading `room/init_file`'s listed objects at boot.
+ *
+ * FluffOS unconditionally requires a master object (a `master file` config
+ * directive, PACKAGE_UIDS applies, connect()/preload() at boot, etc.), so
+ * this file exists purely to bridge that gap -- it reproduces exactly the
+ * two hardcoded driver behaviors described above and nothing else. No
+ * mudlib content file was changed to accommodate this; every object here
+ * is genuinely new, minimal driver glue.
+ */
+
+#define PLAYER_OB "/obj/player"
+#define INIT_FILE "/room/init_file"
+#define VOID_OB   "/room/void"
+
+/* ---- PACKAGE_UIDS (required by this driver build) ---- */
+/* This codebase has no uid/security model at all -- every object gets the
+ * same single trust level, matching the original archive's own (complete
+ * lack of an) ACL. */
+string get_root_uid() { return "root"; }
+string get_bb_uid() { return "root"; }
+
+/* ---- file permissions ---- */
+/* No valid_read()/valid_write() ACL existed in the original codebase either
+ * (it relied on real OS file permissions for wizards editing files outside
+ * the mud, not a mudlib-level check) -- permissive, matching that. */
+int valid_read(string file, object src, string func) { return 1; }
+int valid_write(string file, object src, string func) { return 1; }
+int valid_socket(object ob, string act, mixed dest) { return 1; }
+int valid_seteuid(object ob, string euid) { return 1; }
+int valid_hide(object ob) { return 1; }
+int valid_shadow(object ob) { return 1; }
+int valid_override(string file, string efun_name, string src) { return 1; }
+
+/* ---- connect: replaces comm1.c's hardcoded clone_object("obj/player") ---- */
+object connect() {
+  object ob;
+
+  if (catch(ob = clone_object(PLAYER_OB))) {
+    return 0;
+  }
+  return ob;
+}
+
+/* ---- preload: replaces backend.c's load_first_objects() ---- */
+private nomask void preload(string file) {
+  catch(load_object(file));
+}
+
+/* epilog() return value drives the driver's preload loop (one master->
+ * preload(file) apply per entry). Reproduces load_first_objects()'s exact
+ * behavior: always load room/void first, then every non-comment, non-blank
+ * line of room/init_file, in order (comment lines conventionally list
+ * castle files added later by create_wizard() -- read live off disk on
+ * every boot so newly-created wizard castles keep preloading across
+ * restarts, exactly like the original fopen()-per-boot behavior). */
+string *epilog(int eflag) {
+  string *files;
+  string data;
+  int i;
+
+  files = ({ VOID_OB });
+  if (file_size(INIT_FILE) > 0) {
+    data = read_file(INIT_FILE);
+    if (data) {
+      string *lines = explode(data, "\n");
+      for (i = 0; i < sizeof(lines); i++) {
+        string line = lines[i];
+        if (!line || line == "" || line[0] == '#') continue;
+        files += ({ line });
+      }
+    }
+  }
+  return files;
+}
+
+/* ---- misc required/expected applies ---- */
+void flag(string arg) {
+  write_file("/log/debug.log", "flag: " + arg + "\n");
+}
+
+int privs_file(string file) { return 1; }
+mixed *heart_beat_info() { return ({}); }
+
+/* ---- error logging ---- */
+void log_error(string file, string msg) {
+  write_file("/log/compile", msg);
+}
+
+string error_handler(mapping mp, int caught) {
+  string ret;
+  object bad_ob;
+
+  ret = ctime(time()) + "\n" + mp["error"];
+  if (objectp(mp["object"])) {
+    bad_ob = mp["object"];
+    ret += "Object: " + file_name(bad_ob);
+  } else {
+    ret += "Object: <none>";
+  }
+  ret += sprintf(" at %s:%d\n", mp["file"], mp["line"]);
+  write_file("/log/" + (caught ? "log_catch" : "log"), ret + "\n");
+  return 0;
+}
+
+string creator_file(string file) { return "root"; }
+string domain_file(string file) { return "root"; }
+string author_file(string file) { return "root"; }
