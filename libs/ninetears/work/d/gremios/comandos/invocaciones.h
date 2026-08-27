@@ -1,0 +1,8 @@
+#define OBJECT "/d/gremios/comandos/invocaciones/invocacion_object.lpc"
+#define DIABLILLO "/d/gremios/comandos/invocaciones/diablillo.lpc"
+#define DRETCH "/d/gremios/comandos/invocaciones/dretch.lpc"
+#define HEZROU "/d/gremios/comandos/invocaciones/hezrou.lpc"
+#define BEBILITH "/d/gremios/comandos/invocaciones/bebilith.lpc"
+#define GLABREZU "/d/gremios/comandos/invocaciones/glabrezu.lpc"
+#define BALOR "/d/gremios/comandos/invocaciones/balor.lpc"
+#define DUNKELHEIT "/d/gremios/comandos/invocaciones/dunkelheit.lpc"

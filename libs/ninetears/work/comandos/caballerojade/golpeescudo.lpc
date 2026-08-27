@@ -1,0 +1,101 @@
+//.oO JaDe Oo.  Febrero'03
+
+inherit "/std/comando";
+
+#define ECOST 15
+//#define NOM codazo
+
+object me;	
+object enemy;
+	
+void setup() {
+	poner_ayuda("\n\n"
+    "Nombre del Comando: Golpe de Escudo\n"
+    "Coste en Pg: "+ECOST+"\n"
+    "Sintaxis: golpeescudo <objetivo>\n"
+    "Descripción: \n"
+    "Has pensado que un escudo puede ser útil "
+    "para algo más que parar los golpes? En efecto, "
+    "utilizar tu escudo como ataque en lugar de defensa "
+    "puede salvar más de una situación.\n\n");
+ 	gasta_energia(0); 
+	impedir_movimiento("Detienes la maniobra al moverte.\n");
+	poner_retardo(0);
+}
+
+
+int precondiciones(){
+	string argu;
+
+		me=query_ejecutor();	
+	::precondiciones();
+	argu=query_argumento();
+	//precondiciones al golpe
+	if(me->query_dead()){
+		return notify_fail("Los muertos no pueden usar escudos...\n");
+	}
+	if(me->query_timed_property("golpe_done")){
+		return notify_fail("Tus articulaciones no aguantarían otro impacto de ese calibre.\n");
+	}	
+	if(me->query_timed_property("Com_GuerFaeleen_Doing")){ //haciendo algun otro comando
+		return notify_fail("Dos ataques a la vez? Naaah...\n");
+	}
+	if(me->query_ep()<ECOST){
+			return notify_fail("A duras penas puedes sostener tu escudo, imagínate intentar golpear con él.\n");
+	}
+	if (!argu || strcmp(argu,"")==0 ){
+		return notify_fail("Sintaxis: golpeescudo <victima>.\n");
+	}		
+	if(strcmp(argu,"all")==0 || strcmp(argu,"todos")==0 || strcmp(argu,"todo")==0){
+		return notify_fail("Sólo tienes un escudo, por tanto sólo puedes golpear a un enemigo.\n");
+	}
+	//GASTAMOS EPS!!!!!!
+	me->adjust_ep(-ECOST);	
+	if(sizeof(find_match(argu,ENV(me)))){
+		 enemy=find_match(argu,ENV(me))[0];
+	}else{
+		return notify_fail("Intentas golpear a tu enemigo, pero no parece estar aquí.\n");
+	}					
+	if(enemy->query_hidden()){
+		return notify_fail("Intentas golpear a tu enemigo, pero no parece estar aquí.\n");
+	}
+	if(enemy->query_dead()){
+		return notify_fail("Tu golpe atraviesa el espiritu de "+enemy->QCN+" sin que este se entere de nada.\n");
+	}
+	if(enemy==me){
+		return notify_fail("Casi te dislocas un hombro al realizar un movimiento tan estúpido.\n");
+	}
+	
+	if (me->query_property("noguild")||me->query_pacify_spell()||enemy->query_pacify_spell()) {
+		return notify_fail("Algo te impide realizar el golpe.\n");
+	}
+	//A partir de aki a esperar para reintentar
+	me->add_timed_property("golpe_done",1,8);
+	return 1;
+}
+
+int efecto(string nose, object tampoco){
+		int opAt, opDef;
+		string nomAt,nomDef;
+	::efecto();			
+	//ok, vamos a meterle		
+	//jur jur, esto hay ke mirarlo bien, pk aun no he fallado ni un codazo xDD	
+	opAt=me->query_level()+me->query_dex()+20;	
+	opAt*=(250-me->query_thac0());
+	opDef=enemy->query_level()+enemy->query_dex();
+	opDef*=(100-enemy->query_total_ac());	
+	nomAt=me->QCN;
+	nomDef=enemy->QCN;
+	if(random(opAt)>random(opDef)){
+		tell_room(ENV(me),nomAt+" golpea hábilmente a "+nomDef+" haciéndole perder el equilibrio.\n",({me,enemy}));
+		tell_object(me,"Con un diestro movimiento golpeas a "+nomDef+ " con tu escudo, haciéndole perder el equilibrio.\n");
+		tell_object(enemy,nomAt+" te golpea hábilmente con su escudo, haciéndote perder el equilibrio.\n");
+		enemy->adjust_hp(-(random(15)+me->query_level()+10),me);
+	}else{
+		tell_room(ENV(me),nomDef+ "consigue esquivar el hábil golpe de "+nomAt+"!\n",({me,enemy}));
+		tell_object(enemy,"Consigues esquivar el golpe que "+nomAt+" intentaba contra ti!\n");
+		tell_object(me,"Tu enemigo es más hábil de lo que parecía y ha conseguido esquivar tu golpe!\n");
+	}
+	enemy->attack_by(me);
+	return 1;
+}

@@ -1,0 +1,6 @@
+#define ANDUAR "/w/aokromes/camino_real/"
+#define NPCS "/w/aokromes/camino_real/npcs/"
+#define BASEMONSTER "/baseobs/monsters/"
+#define CARRETERA "/w/aokromes/carretera/rooms/"
+#define SENDA "/w/aokromes/senda/rooms/"
+#define CANTERA "/w/aokromes/cantera/camino/"

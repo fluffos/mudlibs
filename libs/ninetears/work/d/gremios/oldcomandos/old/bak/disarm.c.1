@@ -1,0 +1,161 @@
+ 
+/* Rage '94 - disarm cmd for fighters */
+/* Redone '95, Rage */
+
+#include "tweaks.h"
+int chance(string str);
+
+int disarm(string str)
+{
+
+ object *ob, tar;
+ int i;
+ int hold;
+
+ hold = 0;    /* gets set to 1 in the loop if target holds any weapons */
+
+ if (!str) {
+  notify_fail("Disarm whom?\n");  /* no string, no dude */
+  return 0;
+ }
+ 
+ str = lower_case(str);
+
+if (str == ((string)this_player()->query_name())) {
+notify_fail("You dare not disarm yourself.\n");
+return 0;
+}
+str = (string)this_player()->expand_nickname(str);
+ 
+ if (!(tar = find_living(str))) { 
+    notify_fail("Can only disarm living stuff.\n");
+    return 0;
+ }
+ 
+ tar = find_living(str);
+
+ if (!tar) {
+capitalize(str);
+  notify_fail(str+ " is not logged in.\n");  /* Should this be here?? */
+  return 0;
+ }
+
+ if (!(present(str, environment(this_player())))) {
+  notify_fail(tar->query_cap_name()+ " is not here.\n");
+  return 0;
+ }
+
+if ((int)this_player()->query_timed_property("dis") == 1)
+{
+notify_fail("The tactical part of your brain needs a bit of recovery before you"
+ " can disarm again.\n");
+return 0;
+}
+if ((int)this_player()->query_gp() < GPCOST_DISARM) {
+notify_fail("Sorry, not enough guildpoints to disarm.\n");
+return 0;
+}
+if ((int)this_player()->query_hp() < (int)this_player()->query_max_hp() / 2)
+{
+notify_fail("You are too tired to disarm.\n");
+return 0;
+}
+ob = (mixed *) tar->query_held_ob();
+
+ for (i=0; i<sizeof(ob); i++) {
+  
+if ((int)tar->is_weapon(ob[i]) == 1)
+   {
+this_player()->adjust_gp(- (GPCOST_DISARM));
+this_player()->add_timed_property("dis", 1, HBLOCKOUT_DISARM);
+
+if (chance(str) == 1)
+    {             /* success */
+     write ("You strike "+ tar->query_cap_name()+ "'s "+
+         ob[i]->query_short()+ " to the ground.\n");
+tell_room(environment(tar), this_player()->query_cap_name()+ " strikes "+
+        tar->query_cap_name()+ "'s "+
+ob[i]->query_short()+ " to the ground.\n", ({ tar, this_player() }));
+     tell_object(tar, this_player()->query_cap_name()+ " strikes your "+  
+        ob[i]->query_short()+ " to the ground.\n");
+        ob[i]->move(environment(tar));
+          
+          if (random(100) > 94) {
+            write (ob[i]->query_short()+ " is destroyed by the blow.\n");
+tell_room(tar, ob[i]->query_short()+ " is destroyed by the blow.\n", ({tar, this_player() }));
+            tell_object(tar, ob[i]->query_short()+ " is destroyed " 
+                "by the blow.\n");
+            ob[i]->dest_me();
+                }
+        
+        hold = 1;
+        break;
+    }
+
+   else {                   /* failure */
+     write ("You fail to strike "+ tar->query_cap_name()+ "'s "+
+        ob[i]->query_short()+ " to the ground.\n");
+tell_room(tar, this_player()->query_cap_name()+ " fails to strike "+
+        tar->query_cap_name()+ "'s "+
+ob[i]->query_short()+ " to the ground.\n", ({ tar, this_player() }));
+     tell_object(tar, this_player()->query_cap_name()+ " fails "
+        "to strike your "+  
+        ob[i]->query_short()+ " to the ground.\n");
+        hold = 1;
+        break;
+   }
+
+  
+  }
+
+
+}
+
+
+  if (hold != 1) {    /* ooops, your target wasn't holding any weps */
+   notify_fail (tar->query_cap_name()+ " is not holding any weapons.\n"); 
+   return 0;
+  }
+
+return 1;
+}
+
+
+int chance(string str)
+{
+ int def, att;
+object ob;
+
+
+ob = find_living(str);
+
+ /*
+ Calculate attackers chance of success
+ str*2 + dex + level + random 10 
+ did this way to make it more viewable...
+ */
+
+ att = ((int)this_player()->query_str() * 2);
+ att += (int)this_player()->query_dex();
+ att += ((int)this_player()->query_level() + random(10));
+ 
+ def = ((int)ob->query_dex() * 2);
+ def += (int)ob->query_str();
+ def += ((int)ob->query_level() + random(10));
+
+ if (def > att + 10) ob->adjust_xp(50);
+ if (att > def + 10) this_player()->adjust_xp(50);
+ 
+ if (def > att + 20) ob->adjust_xp(50);
+ if (att > def + 20) this_player()->adjust_xp(50);
+
+ /* 
+ Above grants some xps if a defender or attacker did something great...
+ Note that the all the IFs are run... calculation > 20 more than opponent 
+ gives 100xp, calculation > 10 more gives 50xp
+ */
+
+ if (att > def) return 1;
+ else return 0;
+
+}

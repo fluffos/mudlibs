@@ -1,0 +1,177 @@
+inherit "/std/guild";
+
+#define SPELL_TABLE "/table/spell_table"
+
+int query_skill_cost(string skill)
+{
+    return 6;
+}
+
+void setup()
+{
+    set_name("mago de agband");
+    set_short("Mago de Agband");
+    set_long(
+      "Mages are the most powerful magic-users on "
+      "Magisk Jord.  Their power lays in quickness of thought "
+      "and powerful spells rather than hand to hand fighting "
+      "ability.  They favor the power of  the Arcane and have "
+      "no desire for the 'barbaric' forms of combat.\n"); 
+    reset_get();
+	add_guild_command("fix", 1);
+	add_guild_command("meditar", 1);
+}
+void create()
+{
+    ::create();
+}
+
+int query_advance_cost() { return  500; }
+int query_xp_cost()      { return 2500; }
+//int query_dice()         { return 6;    }
+int query_hp_dice(object myp) { return 2; }
+int query_hp_min(object myp) { return 2; }
+int query_gp_dice(object myp) { return 6; }
+int query_gp_min(object myp) { return 20; }
+int query_thac0_step()   { return 2;    }
+string query_main_skill() {return "int";}
+
+int query_legal_race(string race) {
+    switch(race) {
+    case "dwarf":
+    case "halfling":
+    case "lizard-man":
+    case "half-orc":
+//	case "drow":
+    case "orc": return 0;
+    default       :return 1;
+    }
+}
+
+string query_spell_directory() { return "/d/gremios/hechizos/mago/"; }
+
+int query_legal_weapon(string type)
+{
+    switch(type)
+    {
+    case "dagger":
+    case "dirk":
+    case "dart":
+    case "quarterstaff":
+    case "staff":
+    case "sling":
+    case "knife":
+    case "twohanded_staff":
+	return 1;
+    default: return 0;
+    }
+}
+
+int query_legal_armour(string type)
+{
+    switch(type)
+    {
+    case "robe":
+    case "boots":
+    case "shoes":
+    case "bracers":
+    case "cloak":
+    case "ring":
+    case "amulet":
+    case "pendant":
+    case "necklace":
+    case "cape":
+    case "slippers":
+    case "leather":
+    case "belt":
+	return 1;
+    default:
+	return 0;
+    }
+}
+
+int query_dual_wield_penalty(object me, object w1, object w2)
+{
+    return 50;
+}
+
+/*
+void set_gp(object ob)
+{ ob->set_max_gp(level+(int)ob->query_int()); }
+
+void set_hp(object ob)
+{ ob->set_max_hp(query_dice()*level); }
+int query_see_magic()
+{
+  return 1;
+} 
+*/
+void on_death(object player, object killer) {
+	if (player->query_mirror_spell())
+		player->destruct_mirror_shadow();
+}
+
+// int query_bing()    { return 1;    } PA KE KONIO ES ESTO? ORIGINALMENTE NO VENIA, ESTA COGIDO DE GREMIO GUERRERO
+
+string query_title(object ob) {
+	if (ob->query_gender() == 1) {
+		switch(ob->query_level()) {
+			case 0..10:
+				return "Aprendiz de Mago";
+			case 11..15:
+				return "Iniciado de la Magia";
+			case 16..20:
+				return "Hechicero de las Artes Magicas";
+			case 21..25:
+				return "Senyor de las Artes Magicas";
+			case 26..30:
+				return "Archimago de las Artes Arcanas";
+			case 31..35:
+				return "Mago del Primer Circulo";
+			case 36..40:
+				return "Hechicero de las Siete Esferas";
+			case 41..45:
+				return "Protector de la Quinta Esencia";
+			case 46..50:
+				return "Guardian del Portal Magico";
+			case 51..55:
+				return "%^BOLD%^%^MAGENTA%^Acidificador %^RESET%^de %^YELLOW%^Cohortes%^RESET%^";
+			case 56..60:
+				return "%^BOLD%^%^YELLOW%^Regente %^RESET%^del %^BOLD%^%^BLACK%^Portal %^BLUE%^Magico%^RESET%^";
+			case 61..1000:
+				return "%^BOLD%^%^GREEN%^Maestro Supremo %^RESET%^de las %^BOLD%^%^GREEN%^Artes Arcanas%^RESET%^";
+			default:
+				return "Mago de Agband Erroneo";
+		}
+	}
+	else {
+		switch(ob->query_level()) {
+			case 0..10:
+				return "Aprendiz de Mago";
+			case 11..15:
+				return "Iniciada de la Magia";
+			case 16..20:
+				return "Hechicera de las Artes Magicas";
+			case 21..25:
+				return "Senyora de las Artes Magicas";
+			case 26..30:
+				return "Archimaga de las Artes Arcanas";
+			case 31..35:
+				return "Maga del Primer Circulo";
+			case 36..40:
+				return "Hechicera de las Siete Esferas";
+			case 41..45:
+				return "Protectora de la Quinta Esencia";
+			case 46..50:
+				return "Guardiana del Portal Magico";
+			case 51..55:
+				return "%^BOLD%^%^MAGENTA%^Acidificadora %^RESET%^de %^YELLOW%^Cohortes%^RESET%^";
+			case 56..60:
+				return "%^BOLD%^%^YELLOW%^Regente %^RESET%^del %^BOLD%^%^BLACK%^Portal %^BLUE%^Magico%^RESET%^";
+			case 61..1000:
+				return "%^BOLD%^%^GREEN%^Maestra Suprema %^RESET%^de las %^BOLD%^%^GREEN%^Artes Arcanas%^RESET%^";
+			default:
+				return "Maga de Agband Erronea";
+		}
+	}
+}

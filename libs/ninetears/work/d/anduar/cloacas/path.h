@@ -1,0 +1,35 @@
+#define ABASE "/d/anduar/anduar/"
+#define BASE "/d/anduar/"
+#define ROOMS ABASE+"rooms/"
+#define GUERREROS "/d/oficios/guerreros/normal/rooms/"
+#define LADRONES "/d/oficios/ladrones/rooms/"
+#define FIGHTERS GUERREROS
+#define NPC BASE+"npcs/"
+#define BICHOS NPC
+#define BASEMONSTER "/baseobs/monsters/"
+#define OBJETOS BASE+"objetos/"
+#define BASEWEAPONS "/baseobs/weapons/"
+#define BASEARMOURS "/baseobs/armours/"
+#define CARRETERA BASE+"carretera/rooms/"
+#define SENDA BASE+"senda/rooms/"
+#define BOSQUE "/d/orgoth/rooms/"
+#define ARBRE BASE+"bosque/rooms/"
+#define CIENAGAS "/d/orgoth/cienagas/rooms/"
+#define CLOACAS BASE+"cloacas/rooms/"
+#define CLOACABICHO BASE+"cloacas/bichos/"
+#define TIEMPO 200
+#define CATACUMBAS BASE+"catacumbas/rooms/"
+#define NIVEL2 BASE+"cloacas/nivel2/"
+
+
+#define TEMP 25  
+#define N  "norte"
+#define S  "sur"
+#define E  "este"
+#define O  "oeste"
+#define SE "sudeste"
+#define SO "sudoeste"
+#define NE "noreste"
+#define NO "noroeste"
+#define AR "arriba"
+#define AB "abajo"

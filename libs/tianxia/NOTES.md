@@ -14,6 +14,14 @@ source tree at `raw/mud/MudOS/`, entirely ignored per this project's
 standing policy — mudlib root is nested at `raw/mud/tx/`. ~7,741 raw
 files, 5,786 `.lpc`/`.h` files after the `.c`→`.lpc` rename.
 
+**2026-08-26 addendum**: a separate onboarding pass considered
+`git clone https://github.com/MudRen/txmud` ("天下MUD") as a candidate
+new title and got as far as cloning it before a sanity check confirmed
+it is this exact same codebase (identical `master.c` ACL mappings,
+identical 47-entry `d/` domain list, near-identical `wiz/` wizard
+list — see AGENTS.md §11's duplicate-archive log for the full diff
+summary). Not re-onboarded; no `libs/txmud/` created.
+
 ## Fixes applied
 
 1. **AGENTS.md §15h, with a twist — TWO separate Chinese-detection

@@ -1,0 +1,7 @@
+#define WEASEL "/d/gremios/comandos/animals/weasel.lpc"
+#define HAWK "/d/gremios/comandos/animals/hawk.lpc"
+#define WOLF "/d/gremios/comandos/animals/wolf.lpc"
+#define BOAR "/d/gremios/comandos/animals/boar.lpc"
+#define TIGER "/d/gremios/comandos/animals/tiger.lpc"
+#define BEAR "/d/gremios/comandos/animals/bear.lpc"
+#define OBJECT "/d/gremios/comandos/animals/animal_object.lpc"

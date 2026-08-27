@@ -1,0 +1,1 @@
+#define PALACIO "/w/vulvac/palacio/"

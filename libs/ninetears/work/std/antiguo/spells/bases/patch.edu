@@ -1,0 +1,95 @@
+// Traducido por Lummen 28-7-97
+// Modificado por Guldan Jun'98
+
+#include <spells.h>
+
+#define	ABS(i)		MAX(i,-i)
+
+// Variables Globales
+mapping environment_mods;
+
+// Prototipos
+int	fix_damage(object,object,int);
+int	wrong_alignment(object);
+int	punish_align(object);
+object	check_melee_protector(object,object);
+void	set_environment_mods(mapping);
+mapping	query_environment_mods();
+int	implement_environment_mods(object,int);
+
+// Implementacion
+void set_environment_mods(mapping m)
+{
+  environment_mods=copy(m);
+}
+
+mapping query_environment_mods()
+{
+  return environment_mods;
+}
+
+int implement_environment_mods(object caster,int damage)
+{
+  string location=ENV(caster)->QP("location");
+  int adj;
+
+  if (!location || !environment_mods || undefinedp(environment_mods[location])) return damage;
+  adj=environment_mods[location];
+  if (!adj) tell_object(caster,"Tu hechizo no tiene ningun efecto!\n");
+  else if (adj<100) tell_object(caster,"Tu hechizo parece que no funciona tan bien como de costumbre.\n");
+  else if (adj>100) tell_object(caster,"Tu hechizo parece funcionar mejor que de costumbre.\n");
+  return damage*adj/100;
+}  
+
+int fix_damage(object caster,object target,int damage)
+{
+  int tmp=target->query_align()*damage;
+
+  if ( (caster->QGN()=="paladin" && tmp>0) ||
+       (caster->QGN()=="antipaladin" && tmp<0) ||
+       wrong_alignment(caster) )
+  {
+    punish_align(caster);
+    return 0;
+  }
+
+  tmp=ABS(damage);
+  tmp+=tmp*caster->query_spell_bonus()/100+caster->query_magic_bonus();
+  if (damage<0) tmp=-tmp;
+  return implement_environment_mods(caster,tmp);
+}
+
+int wrong_alignment(object ob)
+{
+  switch (ob->QGN())
+  {
+    case "paladin":
+      return (ob->query_align()>0);
+    case "antipaladin":
+      return (ob->query_align()<0);
+  }
+  return 0;
+}
+
+int punish_align(object ob)
+{
+  tell_object(ob,"Te sientes un ser desgraciadamente impuro, perdiendo "
+      "toda la confianza que tenias en ti mismo.\n");
+  ob->set_xp(0);
+  return 1;
+}
+
+object check_melee_protector(object victim, object doer)
+{
+  object prot=victim->query_protector();
+
+  if (prot && (ENV(prot)==ENV(victim)) && (prot->query_protect_valid(doer,victim)))
+  {
+    tell_object(prot,"Proteges "+victim->QCN+" del ataque.\n");
+    tell_object(victim,prot->QCN+" te protege valientemente.\n");
+    tell_object(doer,prot->QCN+" se interpone en la linea de tu objetivo sufriendo tu ataque!\n");
+    tell_room(ENV(victim),prot->QCN+" protege valientemente a "+victim->QCN+" del ataque de "+doer->QCN+".\n",({doer,victim,prot}));
+    return prot;
+  }
+  return victim;
+}

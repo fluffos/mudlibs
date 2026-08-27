@@ -1,0 +1,1 @@
+#define ROOMRING "/room/plaza/"

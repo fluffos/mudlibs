@@ -1,0 +1,1 @@
+#define SHIELDCITY "players"

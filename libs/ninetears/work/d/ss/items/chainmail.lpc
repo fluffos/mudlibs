@@ -1,0 +1,1 @@
+inherit "/baseobs/armours/chainmail";

@@ -1,0 +1,1 @@
+#define STORAGE "/std/vaults/"

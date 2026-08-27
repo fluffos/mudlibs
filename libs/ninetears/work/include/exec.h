@@ -1,0 +1,6 @@
+#define TP this_player()
+#define TO this_object()
+#define ENV(XXX) environment(XXX)
+#define QP(XXX) query_property(XXX)
+#define QTP(XXX) query_timed_property(XXX)
+#define QSP(XXX) query_static_property(XXX)

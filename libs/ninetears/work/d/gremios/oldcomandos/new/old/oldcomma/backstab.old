@@ -1,0 +1,186 @@
+/* Backstab, made by someone, fixed by a gazillion immortals since it was born.
+ * latest fix by Taniwha, Manshoon and Baldrick, dec '95
+ */
+
+int already_attacking(object victim)
+{
+   int i;
+   object *list;
+   list = (object *)victim->query_attacker_list();
+   for(i = 0; i < sizeof(list); i++)
+   {
+      if(list[i] == this_player() ) return 1;
+   }
+   return 0;
+}
+
+int backstab_damage(object victim, object weapon)
+{
+
+/* Backstab damage is based upon level and dexterity of the attacker.
+   A random element is added which equals the prev calculated dam.
+   Which piercing weapon that is used has no effect. After all backstabbing
+   is a skill, eh?    -Manshoon 14 Dec -94    */
+   
+  
+   int lvl;
+   int dam;
+   lvl = this_player()->query_level();
+   dam = this_player()->query_dex();
+   if (dam>20) dam = 20; // hmm, anyone out there with super dex?
+   			 // Well, it won't help them, he he
+   if (lvl < 15)
+   	dam *= (2 + lvl/2);
+   else if (lvl < 19)
+   	dam *= (5 + lvl/3);
+   
+   dam /= 10;
+   dam += random(dam);  // Backstab surely needs random element    
+   /* Baldrick; Ijust don't like players able to hit for more than
+    * its own HP.
+    */
+   if (dam > this_player()->query_max_hp())
+     dam = this_player()->query_max_hp();
+   return(dam);
+   
+}
+
+int sense_check(object victim)
+{
+	int sense;
+	int moi;
+	if(this_player()->query_hide_shadow())
+		return 1;  // Sensed if not hidden
+		
+	if( victim->query_property("sense_life") )
+		return 1;  // add prop sen_life to npc's that you want
+			   // to be immune to backstabs.
+	
+	sense = victim->query_int() + victim->query_wis();
+	sense += victim->query_level();
+	sense = random(sense);  // yeah, I like randomness.
+	
+	moi = this_player()->query_level() + this_player()->query_dex();
+	
+	if(moi < sense)
+		return 1;  // You're sensed
+	return 0;
+}
+
+int backstab(string str) 
+{
+   int skill,s1,i;
+   int damage, cost;
+   object me;
+   object *weap;
+   object *vlist;
+   object victim;
+   string vname, aname, wname;  //victim name, attacker name, weapon name
+   
+   me = this_player();
+   if (!str)
+   {
+      notify_fail("Better find a target first....\n");
+      return 0;
+   }
+
+   weap = (object *)this_player()->query_weapons_wielded();
+   vlist = find_match(str,environment(this_player()));
+   if(!sizeof(vlist))
+   {
+            notify_fail("Backstab who ?\n");
+            return 0;
+   }
+    victim = vlist[0];
+   if(victim == me)
+   {
+      notify_fail("You sit down and rest, pondering about how you can "
+      		"backstab yourself.\n");
+      return 0;
+   }
+   
+   damage = 0;
+   for (i=0;i<sizeof(weap);i++)
+   {
+      if((int)weap[i]->query_attack_type() == 3) /* same as dagger, pierce */
+      {
+         damage += backstab_damage(weap[i],victim);
+      }
+      else
+      {
+      	 notify_fail("Backstab with a "+weap[i]->query_short()+" ?\n");
+	 return 0;
+      }
+   }
+	// making these to clear up the code for you. (yes you!)
+
+   // Fix by !Aragorn
+   if (!sizeof(weap)) {
+      notify_fail("Need a wielded weapon for this action...\n");
+      return 0;
+   }
+
+   
+    // fix by !Aragorn
+    if (i>=sizeof(weap)) i=0;
+
+   wname = weap[i]->query_short();
+   vname = victim->query_short();
+   aname = this_player()->query_short();   
+
+ if( me->query_gp() < me->query_level())
+  {
+	notify_fail("Your adrenaline pumps to much for you to backstab again.\n");
+	return 0;
+  }	
+   if(already_attacking(victim))
+   {
+      notify_fail("Backstab someone you're fighting?!\n");
+      return 0;
+   }
+   
+
+/*  OK, Gonna try add some chance for the victim to sense the backstab here.
+    Idea is that it should be fairly hard to sense a backstab, and to protect
+    mages and clerics somewhat I will include wis and int into the test so they
+    get a higher chance of avoiding a backstab than a dumb fighter.  -Manshoon  */
+    
+    if(sense_check(victim))
+    	{
+    	  write("Oh bugger, "+vname+" seems to have sensed your intentions!\n");
+ 	}
+ 	
+    else {   	  
+  
+      victim->adjust_hp(-damage);
+      cost = me->query_level();
+      me->adjust_gp(-cost);
+      tell_object(victim,"You scream in pain as "+aname+" places a "+wname+
+      			 " in your back!\nThat really did hurt!\n");
+      
+tell_room(environment(this_player()), vname+" screams in pain as "+aname+" places a"+
+   wname+" in "+victim->query_possessive()+" back!\n",
+   ({ this_player(), victim }) );
+  
+tell_object(this_player(),vname+" makes a strange sound as you place a "+wname+" in "+
+      		victim->query_possessive()+" back!\n");
+	
+      // Removed the bit that wrote out the damage done.....
+      }
+   victim->attack_by(this_player()); 
+   return 1;
+}
+
+string help(string str) {
+  return
+"Syntax: backstab <person>\n\n"
+"Backstab is based on your level and dextirity. "
+"Your victim has a chance of sensing the backstab and thus avoiding "
+"it based on his level, wisdom and intelligence. "
+"Wether you are successful or not, the victim will attack you.\n\n"
+"You need a piercing weapon to be able to backstab and you must be hidden.\n"
+"The cost is level dependent.\n\n"
+"Example\n"
+"> backstab merchant\n";
+}
+

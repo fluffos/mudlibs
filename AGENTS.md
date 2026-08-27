@@ -11249,6 +11249,32 @@ content repacks like `Naruto.rar`/`huoying`) — they share their
 sibling's number in `lib_numbering.json` (`duplicate_of` field) and
 were never processed separately.
 
+**`MudRen/txmud` (GitHub, cloned 2026-08-26 for a would-be onboarding
+pass) turned out to be the SAME "天下MUD" codebase as the already-
+onboarded `tianxia` (034, sourced from a `天下.tar.gz` archive),
+caught by the pipeline's own pre-onboarding sanity check rather than
+the original duplicate-check pass** (an earlier research pass had
+flagged it "genuinely new," apparently without diffing content against
+`tianxia` specifically). Confirmed via direct comparison, not just
+title similarity: both `adm/obj/master.c`/`master.lpc` open with the
+identical `// master.c` / `// Modified by Find.` header and byte-
+identical `trusted_read`/`exclude_read`/`no_hide` ACL mappings
+(same odd per-wizard directory grants — `d/huashan`→`aiai`,
+`d/jinghai`→`zling`, `d/gaibang`→`tag`, `d/tangmen`→`qifan`, etc.,
+modulo whitespace reflow from this project's own formatter having
+already touched `tianxia`'s copy); `d/`'s 47 domain subdirectories are
+identical name-for-name between the two archives; `wiz/`'s wizard
+directories match except `tianxia`'s copy has 2 extra
+(`cherry`/`louth`) — consistent with `tianxia` being a slightly later
+or more complete snapshot of the same author's ("Find") tree rather
+than an independent fork. No `libs/txmud/` directory was created;
+per the standing "byte-identical duplicates were never processed
+separately" convention above, this is logged here only, with no
+`duplicate_of` meta.json entry (no lib was ever registered under this
+slug/number to begin with). Worth remembering for any future pass that
+independently rediscovers `MudRen/txmud`: it is `tianxia`, not a new
+title.
+
 **`jyqxc` (086, archive `金庸群侠传 (1).rar`) / `jyqxc2` (087, archive
 `金庸群侠传.rar`) turned out to be a 15th instance of this same
 "browser `(1)` duplicate download" shape that the original dedup pass

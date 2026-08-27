@@ -1,0 +1,8 @@
+#define OBJECT "/comandos/shaman/invocaciones/invocacion_object.lpc"
+#define DIABLILLO "/comandos/shaman/invocaciones/diablillo.lpc"
+#define DRETCH "/comandos/shaman/invocaciones/dretch.lpc"
+#define HEZROU "/comandos/shaman/invocaciones/hezrou.lpc"
+#define BEBILITH "/comandos/shaman/invocaciones/bebilith.lpc"
+#define GLABREZU "/comandos/shaman/invocaciones/glabrezu.lpc"
+#define BALOR "/comandos/shaman/invocaciones/balor.lpc"
+#define DUNKELHEIT "/comandos/shaman/invocaciones/dunkelheit.lpc"

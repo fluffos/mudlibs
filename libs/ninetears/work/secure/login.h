@@ -1,0 +1,17 @@
+#define REBOOT_TOO_SOON "La Realidad esta a punto de ser destruida!\n"
+#define REBOOT_AT ({ "La Realidad sera destruida en ", " minutos.\n" })
+#define JUST_REBOOTED "Los Dioses estan aun creando la Realidad, espera un poco.\n"
+#define MUD_FULL "Hay demasiadas almas en Driade, espera un poco.\n"
+#define TIME_SHORT "De acuerdo, por ahora no tomaras forma en la Realidad.\n"
+#define ENTER_NAME "Cual sera tu nombre en Ninetears? "
+#define NOT_PROPER_NAME "No intentes tongarnos, listillo.\n"
+#define ENTER_PASSWORD "Introduce tu password: "
+#define NEW_PLAYER "Tu alma comienza a formarse de la nada...\n"
+#define COME_BACK "Hasta otra!\n"
+#define TOO_MANY_RETRIES "Vuelve pronto!\n"
+#define ENTER_PASSWORD_AGAIN "Pon tu password otra vez: "
+#define GUEST_ENTER_NAME "Que nombre usaras durante la visita? "
+#define GUEST_OUT COME_BACK
+#define TIME_OUT "\nTu alma se disipa lentamente hasta salir de la Realidad.\n"
+#define LOADING_PLAYER "Tu alma toma consciencia de la Realidad...\n"
+#define WHO_HANDLER "/obj/handlers/who"

@@ -1,0 +1,254 @@
+
+#define BARD "/d/gremios/assassin"
+#define WIZARD "/d/gremios/general_mage"
+#define THIEF "/d/gremios/thief"
+#define CLERIC "/d/gremios/cleric"
+#define FIGHTER "/d/gremios/fighter"
+
+inherit "/std/room";
+// Newbie guild, Free and it bases your throws on the guild that approximates
+// your stats
+int clean_up_room(int flag) { return 1; }
+object find_guild(object player);
+int calc_xp(object guild, int lvl);
+
+/* bALdrick was here.
+ * Taniwha followed
+ * take a guess at what guild they may end up in and use that for XP calcs
+*/
+
+object board;
+
+
+#define my_race_ob this_player()->query_race_ob()
+
+
+void setup()
+{
+  set_short("A guild Room");
+  set_long("Its a guild room.\n");
+}
+
+void reset() {
+  if(!board) {
+    board = clone_object("/obj/misc/board");
+    board->set_datafile("playerinfo");
+    board->move(this_object());
+  }
+   ::reset();
+}
+
+void dest_me() {
+  if(board)
+    board->dest_me();
+  ::dest_me();
+}
+
+int do_info(string str)
+{
+    write(
+    "Welcome to your guild.\n You can advance here for free "
+    "once you obtain the required experience at each level.\n"
+    "Once you reach level 5 you will have to find your way "
+    "out into the big wide world and join another guild "
+    "to advance further.\n"
+    "Advance to level 1 requires no XP, but you may wish "
+    "to consider using the \"rearrange\" command first. "
+    "Your stats rolls here are influenced by your current "
+    "stats based on a best guess of which guild they would "
+    "be suited for in later life.\n"
+    "Note that there is no long term advantage in the stats "
+    "rolls gained here, after time they will tend to approach "
+    "the average for your final guild.\n"
+    "Not all the guilds outside here will be easy "
+    "to find, however most of the basic guilds are "
+    "represented in Daggerford and Banefall.\n"
+    );
+    return 1;
+}
+int do_cost(string str)
+{
+    int lvl,total_xp;
+    object guild;
+    lvl = (int)this_player()->query_level();
+    guild=find_guild(this_player());
+    switch(lvl)
+    {
+    case 0:
+        write("It will cost you nothing to advance to level 1.\n"
+        "You may want to read the \"info\" first however.\n");
+        return 1;
+    break;
+    case 1..4:
+        //total_xp = calc_xp(guild,lvl);
+	total_xp = 3000;
+        write("It will cost you "+total_xp+" XP to advance here.\n");
+   break;
+   default:
+       write("You can advance no further here, time to find your "
+       "way out into the wide world adventurer.\n");
+   break;
+   }
+   return 1;
+}
+
+
+
+void init() {
+  ::init();
+   this_object()->add_property("no_undead",1);
+  add_action("do_advance", "ad*vance");
+  add_action("do_advance", "av*anzar");
+  add_action("do_info", "inf*o");
+  add_action("do_cost", "cos*te");
+	add_action("do_pafuera", "paf*uera");
+} /* init() */
+
+// Oh joy, Oh bliss, try to work out what sort of rolls they should get
+// a couple of points , this doesn't need to be great, just close enough
+// to give them an edge
+// Also if you don't re-arrange you'll probably get fighter like stats
+// This may give mages who arrange late an edge, their subsequent rolls
+// will suck tho. so eventually it works out.
+
+object find_guild(object player)
+{
+   int str,cha,xint,con,wis,dex;
+    object guild;
+    string gname;
+// ignore con, it's universal
+    str = player->query_str();
+    dex = player->query_dex();
+    xint = player->query_int();
+    wis = player->query_wis();
+    cha = player->query_cha();
+//    con = player->query_con();
+    if( (cha > dex) &&(cha > xint) && (cha > wis) && (cha > str) )
+    {
+        gname = BARD;
+    }
+      else if( (xint > dex) &&  (xint > cha)&& (xint >wis) && (xint >str) )
+    {
+        gname = WIZARD;
+    }
+    else if( (wis > dex) && (wis > cha) && (wis > xint) && (wis > str) )
+    {
+        gname = CLERIC;
+    }
+    else if( dex > str)
+    {
+        gname = THIEF;
+    }
+    else gname = FIGHTER;
+    if(this_player()->query_creator())
+    {
+        write("Base guild is "+gname+"\n");
+    }
+    guild = find_object(gname);
+    if(!guild) guild = new(gname);
+    return guild;
+}
+
+int calc_xp(object guild,int lvl)
+{
+   int i,xp_cost;
+  float xp;
+  
+  xp_cost = (int)guild->query_xp_cost();  /* How much xp/lvl it will cost */
+  xp = xp_cost;
+  /* This function is exponential, I think it can be done easier..*/
+
+  for (i=2;i<=lvl;i++)
+  {
+    switch(i)
+    {
+    case 0..5:
+      xp *= 1.9;
+    break;
+    case 6..10:
+      xp *= 1.5;
+    break;
+    default:
+      xp *= 1.1;
+    break;
+    }
+  }
+
+  xp_cost = xp;
+  return xp_cost;
+}
+
+// no deberia estar aki, pero de momentoooo...
+void quiero_una_casa(object pl)
+{
+	string casa;
+
+	casa = ({"thalack", "ul-ilindith", "veldrin"})[random(3)];
+	pl->set_race_group_ob("/std/race_groups/"+casa);
+	tell_object(pl, "Has nacido en la sociedad drow.\nA partir de "
+	"ahora eres un miembro de pleno derecho de la Casa de "+ CAP(casa) +
+	".\n");
+}
+
+// UEEEE xD
+int do_pafuera()
+{
+	if (this_player()->query_level() < 5) {
+		notify_fail("Aun no tienes suficiente categoria para salir.\n");
+		return 0;
+	}
+	tell_room(ENV(TP), TP->query_short() + " desaparece misteriosamente, parece que le ha llegado su hora.\n", TP);
+	tell_object(TP, "Tyrael se te aparece ante tus narices.\n\n"
+		"Tyrael te agarra de las orejas y notas que pierdes contacto con el suelo, para acto seguido recuperarlo.\n\nDonde estas?\n");
+	this_player()->move("/room/entryroom.c");
+	if (TP->query_race() == "drow")
+		call_out("quiero_una_casa", 6, TP);
+	return 1;
+}
+
+int do_advance() 
+{
+  int cost,i,lvl,total_xp;
+  object guild;
+
+	if (!TP->query_property("stats_rearranged")) {
+		notify_fail("No estaria de mas que ajustaras antes.\n");
+		return 0;
+	}
+  lvl = (int)this_player()->query_level();
+  guild=find_guild(this_player()); /* al no estar los guilds ahora mismo, no rula */
+  switch(lvl)
+  {
+  case 0:
+    total_xp = 0;
+  break;
+  case 1..4:
+    //total_xp = calc_xp(guild,lvl); NO RULA AUN
+    total_xp = 3000; // xD
+    if(((int)this_player()->query_xp()) < (total_xp+1))
+    {
+      notify_fail("Your lack of experience prevents you from advancing.\n");
+      return 0;
+    }
+  break;
+  default:
+     write("No puedes avanzar mas aqui, hora de buscar tus aventuras "
+    "en el exterior.\n"
+	"Usa el comando 'pafuera' y saldras al mundo exterior.\n");
+    return 1;
+  break;
+  }
+  this_player()->adjust_level(1);
+  this_player()->adjust_xp(-total_xp);
+  /* Ok, calculate the new (if new) THAC0 here: */
+  //if (!(lvl % (int)guild->query_thac0_step()) ) AUN NO RULA
+         this_player()->adjust_thac0(-1);
+  write("Avanzas en tu conocimiento a nivel "+(lvl+1)+".\n"
+	"Recuerda que *POR AHORA* debes usar el comando "
+	"'pafuera' para salir de aqui una vez seas de nivel 5.\n");
+  say(this_player()->query_cap_name()+" avanza "+
+  this_player()->query_possessive()+" nivel.\n");
+  this_player()->save();
+  guild = 0;
+  return 1;
+} /* do_advance() */

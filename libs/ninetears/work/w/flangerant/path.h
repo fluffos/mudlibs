@@ -1,0 +1,5 @@
+#define ROOMGRAN "/d/faeleen/rooms/grandhum/"
+#define OBJ "/d/faeleen/obj/"
+#define NPC "/d/faeleen/npc/"
+#define ROOMORM "/d/faeleen/rooms/ormerod/"
+#define CIUDAD "/d/faeleen/rooms/ciudad/"

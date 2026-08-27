@@ -1,0 +1,165 @@
+#include "tweaks.h"
+
+#define LOCK_PROP "hunting"
+// Damage gets cut anyway
+#define HUNT_LOCKOUT 10
+
+/** hunt.c by Taniwha, with a spot of help from Ilmryn. **/
+/** This is a very nasty attack command, designed for the rangers guild
+    ONLY. 
+*/
+
+static int already_attacking(object me,object victim)
+{
+  if(member_array(me,victim->query_attacker_list()) != -1) 
+    return 1;
+  if(member_array(me,victim->query_call_outed()) != -1) 
+    return 1;
+  return 0;
+}
+
+
+string * races = ({ "human","elf","drow","dwarf","duergar","lizard-man",
+		  "gnome","half-elf","halfling","half-orc" });
+		  
+string  * nraces = ({ "giant","dragon","troll" });
+
+int hunt_damage(object weapon,object me,object victim)
+{
+  int lvl;
+  int dam;
+
+  dam = (int)weapon->query_damage_roll()+ (int)me->query_damage_bonus();
+  lvl = (int)me->query_level()/2 + 1;
+  dam = dam*lvl;
+// Temporray hack.
+  dam = random(dam)/2 + random(dam)/2 + random(dam)/3 + 1;
+
+  // Cap at current hp and min at level 
+  dam = (dam < lvl ? lvl : dam);
+
+  if(dam > (int)victim->query_max_hp() ) 
+    dam = (int)victim->query_max_hp()+1;
+  if(member_array(victim->query_race(),races) >= 0) 
+     dam /= 3;
+  if(member_array(victim->query_race(),nraces) >= 0) 
+     dam = (dam * 2);
+  if(!environment(me)->query_outside())
+     dam /= 2;
+  if(already_attacking(me,victim))
+     dam /= 3;     	    
+
+  dam = (dam > me->query_hp() ? me->query_hp() : dam);
+  return dam;
+}
+
+int hunt(string str,object x) 
+{
+  int i;
+  int gp_cost;
+  int damage;
+  object me;
+  object aweap;
+  object *weap;
+  object *vlist;
+  object victim;
+
+  if(x) 
+    me = x;  
+  else 
+    me = this_player();
+
+  str = me->expand_nickname(str);
+
+  if (!str)
+  {
+    tell_object(me,"You are you trying to hunt?\n");
+    return 1;
+  }
+
+  weap = (object *)me->query_held_ob();
+  aweap = 0;
+  if ( weap[0] ) 
+    aweap=weap[0];
+  else if ( weap[1] ) 
+    aweap=weap[1];
+  else aweap=0;
+
+  vlist = find_match(str,environment(me));
+  if(!sizeof(vlist))
+  {
+    tell_object(me,"The woods do starnge things to a person ...  "
+      "Try someone that is here.\n");
+    return 1;
+  }
+
+  victim = vlist[0];
+  if(victim == me)
+  {
+    tell_object(me,"hunting yourself yourself?  Yes, you may be slow enough to "
+      "not notice..\n");
+    return 1;
+  }
+  if( victim->query_dead() || !living(victim) )
+  {
+    tell_object(me,"You hunt "+victim->query_cap_name()+".\n"
+      "For a challenge, try something alive next time.\n");
+    return 1;
+  }
+  gp_cost = (int)me->query_level() * 2;
+  if(gp_cost > 25) 
+    gp_cost = 25;
+  if((int)me->adjust_gp(-gp_cost) == -1)
+  {
+    tell_object(me,"You don't have enough energy to hunt! "
+      "Try again later.\n");
+    return 1;
+  }
+
+  if (!aweap)
+  {
+    tell_object(me," with what?\n");
+    return 1;
+  }
+  if(me->query_property(LOCK_PROP))
+  {
+    tell_object(me, "You can't line up a good shot yet.\n");
+    return 1;
+  }
+  me->add_timed_property(LOCK_PROP,100,HUNT_LOCKOUT);
+
+	
+  damage = hunt_damage(aweap,me,victim);
+
+  if( (int)victim->query_property("sense_life"))
+  {
+    tell_object(me,"Your intended victim seems to have spotted you "
+      "readying your weapons, perhaps running may be a good idea. ?\n");
+    tell_object(victim,"You spot "+me->query_cap_name()+" eyeing you "
+      "speculatively.\nYou ready your weapons and attack in a burst of "
+      "fury!\n");
+    victim->attack_by(me);
+    return  1;
+  }
+
+    // Fake event trigger for "special" weapons - Radix
+    aweap->event_ambush(damage,me,victim);
+    victim->adjust_hp(-damage, me);
+    me->add_timed_property("guildsuc",1,2);
+    tell_object(victim,(string)me->query_cap_name()+" leaps at you "
+      "and attacks suddenly.\n");
+    tell_object(me,"You catch "+(string)victim->query_cap_name()+
+      " flat footed with unexpected attack.\n");
+  victim->attack_by(me);
+  return 1;
+}
+
+string help(string str) 
+{
+  return
+    "\nSyntax: hunt <person>\n\n"
+    "Hunt is based on a Rangers skills at stalking animals. "
+    "For this reason it's less effective against his normal prey and "
+    "is more effective in a rangers natural environment. "
+    "\n\n";
+}

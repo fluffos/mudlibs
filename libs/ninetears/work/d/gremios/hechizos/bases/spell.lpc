@@ -1,0 +1,665 @@
+// Traducido por Lummen 16-8-97
+// Modificado por Guldan Jul'98
+// Tyrael - Oct '01 - Severos bugs fixed en relacion
+// a hechizos de area, nicks "all", etc.
+    
+#include <spells.h>
+inherit BASES+"tipos";
+inherit BASES+"patch";
+
+string spell_name;		// nombre
+mixed  sphere;			// esfera o esfera
+string help_desc;		// descripcion
+string help_extras;		// descripcion extra
+string target_type;		// tipo de objetivo (none,item,caster,one,many,all)
+string* property_checks;	// propiedades que evitan el hechizo
+int casting_time;		// tiempo de formulacion (hbs)
+int gp_cost;			// coste en gps (para mayor);
+int spell_level;		// nivel (del hechizo)
+int spell_range;		// rango
+int line_of_sight_needed;	// if line of sight is needed during casting
+int on_ghost=0;			// si se permite el hechizo en espiritus
+int clvl;			// nivel del caster
+/* The following can be either function names or other strings.
+ * If they are function names then that function will get called during
+ * the corresponding round of casting.  If they are strings then they
+ * shall just be output during that round of casting.  (Yes in both
+ * cases they are strings you idiot, but we check if they are functions
+ * with function_exists).  For functions the format of the function should
+ * be:
+ *    int function(object caster, mixed target, mixed out, int time, int quiet)
+ *      - caster is the caster of the spell
+ *      - target is 0, a single target object or an array of target objects
+ *        note all of these are in range of the spell during this round
+ *      - out is either 0, a single target or an array of targets that are now
+ *        out of range of the caster.
+ *      - time is the number of the round of casting we are performing 
+ *      - quiet is whether the spell is being actually cast or not
+ *        ('not' being, of course, from a wand or something)
+ */
+mixed* round;                   // what happens during various rounds
+
+
+
+
+void set_spell_name(string str)
+{
+  spell_name = str;
+}
+
+void set_sphere(mixed str)
+{
+  if (pointerp(str)) sphere+=str;
+  else if (str && stringp(str)) sphere+=({str});
+}
+
+void set_school(mixed str)
+{
+  if (pointerp(str)) sphere+=str;
+  else if (str && stringp(str)) sphere+=({str});
+}
+
+/*
+void set_sphere(mixed str)
+{
+  int i,j=0;
+  string tmp=file_name(TO);
+
+  if (strsrch(tmp,CLERIC_ROOT) && strsrch(tmp,DRUID_ROOT)) sphere=0;
+  else if (pointerp(str))
+  {
+    if (sizeof(str))
+    {
+      for (i=0;i<sizeof(str);i++)
+        if (TP->query_sphere(str[i])>TP->query_sphere(str[j])) j=i;
+      sphere = str[j];
+    }
+    else sphere=0;
+  }
+  else sphere=str;
+}
+
+void set_school(mixed str)
+{
+  int i,j=0;
+  string tmp=file_name(TO);
+
+  if (strsrch(tmp,MAGE_ROOT) && strsrch(tmp,BARD_ROOT)) school=0;
+  else if (pointerp(str))
+  {
+    if (sizeof(str))
+    {
+      for (i=0;i<sizeof(str);i++)
+        if (TP->query_sphere(str[i])>TP->query_sphere(str[j])) j=i;
+      school = str[j];
+    }
+    else school=0;
+  }
+  else school=str;
+}
+*/
+
+string query_sphere()
+{
+  int i,j=0;
+
+  if (pointerp(sphere))
+  {
+    if (sizeof(sphere))
+    {
+      for (i=0;i<sizeof(sphere);i++)
+        if (TP->query_sphere(sphere[i])>TP->query_sphere(sphere[j])) j=i;
+      return sphere[j];
+    }
+    else return "";
+  }
+  return sphere;
+}
+
+void set_help_desc(string str)
+{
+  help_desc = str;
+}
+
+void set_help_extras(string str)
+{
+  help_extras = str;
+}
+
+void set_casting_time(int i)
+{
+  casting_time = i;
+}
+
+void set_gp_cost(int i)
+{
+  // Guldan: Paso del coste que le quieran poner =)
+  gp_cost=MAX(i,spell_level);	// Minimo coste para un hechizo nivel (mayor)
+}
+
+int query_gp_cost()
+{
+  switch (spell_level)
+  {
+    case 1:
+      gp_cost=4;
+      break;
+    case 2:
+      gp_cost=6;
+      break;
+    case 3:
+      gp_cost=10;
+      break;
+    case 4:
+      gp_cost=15;
+      break;
+    case 5:
+      gp_cost=22;
+      break;
+    case 6:
+      gp_cost=30;
+      break;
+    case 7:
+      gp_cost=40;
+      break;
+    case 8:
+      gp_cost=50;
+      break;
+    case 9:
+      gp_cost=60;
+      break;
+    default:
+      gp_cost=spell_level*100;
+  }
+
+  switch (TP->query_sphere(query_sphere()))
+  {
+    case 1:	// Menor
+      break;
+    case 2:	// Neutral
+      gp_cost/=2;
+      break;
+    case 3:	// Mayor
+      gp_cost/=3;
+  }
+  return gp_cost;
+}
+
+void set_spell_level(int i)
+{
+  spell_level = i;
+}
+
+void set_range(int i)
+{
+  spell_range = i;
+}
+
+void set_line_of_sight_needed(int i)
+{
+  line_of_sight_needed = i;
+}
+
+void add_property_to_check(string str)
+{
+  property_checks+=({str});
+}
+
+void set_target_type(string str)
+{
+  target_type = str;
+}
+
+void set_rounds(mixed* p)
+{
+  if (sizeof(p)!=casting_time)
+    write("Este hechizo tiene un bug en tiempo de formulacion, habla con alguien.\n");
+  round = p;
+}
+
+void allow_on_ghosts(int sino)
+{
+  on_ghost = sino;
+}
+
+int query_allowed_on_ghosts()
+{
+  return on_ghost;
+}
+
+create()
+{
+  spell_name = "Hechizo con BUG";
+  sphere = ({});
+  spell_level = 0;
+  target_type = "bug";
+  spell_range = 0;
+  line_of_sight_needed = 0;
+  property_checks = ({"casting","nocast","passed out"});
+  help_desc = "Este hechizo tiene un BUG.\n";
+  help_extras = 0;
+  casting_time = 0;
+  gp_cost = 666;
+  round = ({});
+  seteuid("/secure/master"->creator_file(file_name(TO)));
+  TO->setup();
+}
+
+mixed stats()
+{
+  return ({ "Spell_name", spell_name, 
+    "Sphere", sphere, 
+    "Spell_level", spell_level, 
+    "Target_type", target_type,
+    "Range", spell_range,
+    "Line_of_sight_needed", line_of_sight_needed,
+    "Property_checks", property_checks,
+    "Help_desc", help_desc,
+    "Help_extras", help_extras,
+    "Casting_time", casting_time,
+    "Gp_cost", query_gp_cost(),
+    "Round", round,
+  });
+} 
+
+string help() 
+{
+  string tmp=file_name(TO);
+
+  string ret="\nNombre del Hechizo: "+spell_name;
+  if (strsrch(tmp,CLERIC_ROOT) && strsrch(tmp,DRUID_ROOT)) ret+="\nEsfera: ";
+  if (strsrch(tmp,MAGE_ROOT) && strsrch(tmp,BARD_ROOT)) ret+="\nEscuela: ";
+  ret+=capitalize(query_sphere());
+  ret+="\nNivel: "+spell_level;
+  ret+="\nRango: "+spell_range;
+  if (line_of_sight_needed) ret+=" (Se necesita ver al objetivo)";
+  ret+="\nCoste en Pg: "+query_gp_cost();
+  if (help_extras) ret+="\n"+help_extras;
+  ret+="\nDescripcion: "+help_desc;
+  ret+="\n";
+  return ret;
+}
+
+void end_spell_now(object ob)
+{
+  ob->remove_spell_effect(spell_name);
+}
+
+int cast_spell(string str, object who, int quiet)
+{
+  mixed ob,exstr;
+  object caster=who?who:TP;
+  int i,j,formulando_all = 0;
+
+  clvl=caster->QP("cast_level");
+  if (!clvl) clvl=caster->QL;
+  if (clvl<1)
+  {
+    notify_fail("Aun no estas preparado para formular hechizos.\n");
+    return 0;
+  }
+
+  if (caster->QP("inaudible"))
+  {
+    caster->RSP("inaudible");
+    quiet=1;
+  }
+
+  if (caster->QP(file_name(TO)))
+  {
+    notify_fail("No puedes volver a formular este hechizo hasta que no "
+      "pase un tiempo.\n");
+    return 0;
+  }
+
+  if (interactive(caster))
+  {
+    caster->ATP(file_name(TO),1,4);
+    if (!DEBUG(caster) && strsrch(file_name(TO),SPELL_ROOT))
+    {
+      tell_object(caster,"Los mortales no pueden usar este hechizo.\n");
+      return 1;
+    }
+	// Tyrael - Oct '01
+    // str=caster->expand_nickname(str); para permitir nicks a npcs
+  }
+  str=caster->expand_nickname(str); // permite a npcs nicks
+	if (str == "all" || str == "todo" || str == "todos")
+		formulando_all = 1;
+
+  if (ENV(caster)->QP("nocast"))
+  {
+    tell_object(caster,MSG_NO_PUEDO);
+    return 1;
+  }
+
+  if (caster->query_spell_effect(query_sphere()) || caster->query_spell_effect("spell"))
+  {
+    tell_object(caster,"Ya estas formulando un hechizo.\n");
+    return 1; 
+  }
+
+  for (i=0;i<sizeof(property_checks);i++)
+    if (caster->QP(property_checks[i]))
+    {
+      tell_object(caster,MSG_NO_PUEDO);
+      return 1;
+    }
+
+  // This allows some extra, customizable checks here.
+  if (function_exists("extra_checks",TO) && (stringp(exstr=TO->extra_checks(str,caster))))
+  {
+    tell_object(caster,exstr);
+    return 1;
+  }
+
+  caster->ATP("casting",1,3-POWER);
+
+/*
+  ob=find_target(caster,str,target_type);
+
+  if (!ob && target_type!="none")
+  {
+    tell_object(caster,MSG_NO_TARGET);
+    return 1;
+  }
+*/
+
+// *****************************************************************
+    ob = 0;
+    if (target_type == "one") 
+    {
+	// Tyrael - Oct '01
+	// meter hechizos all con target one
+	// 1.- que sea un random de los que hay en la room
+	// 2.- que NO aparezca el nombre del formulador
+	if (formulando_all) {
+		// nueva func, find_one_random_match, se busca
+		// otro si sale el del ultimo parametro o uno
+		// de sus npcs q dependen d el (aranyas,animales...)
+		ob=find_one_random_match(str,ENV(caster), caster);
+	}
+	else {
+      		ob=find_one_match(str,ENV(caster));
+	}
+      if (DEBUG(caster)) tell_object(caster,"\nII:El objeto es: "+
+	((ob) ? file_name(ob) : "ninguno")+" "+str+".\n");
+      if (ob && ob->query_hide_shadow()) ob=0; // Taniwha 1996 
+    }
+    else if (target_type == "many") ob=find_unique_match(str,ENV(caster));
+    else if (target_type == "item")
+    {
+        ob=find_one_match(str,caster);
+        if (!objectp(ob)) ob=find_one_match(str,ENV(caster));
+    }
+    else if(target_type == "pass") ob=str;
+    if (((target_type == "one" || target_type == "item") && !ob ) ||
+       (target_type == "many" && !sizeof(ob) ))
+    {
+        tell_object(caster, "No parece que haya nadie aqui con ese nombre.\n");
+        caster->adjust_gp(-1);
+        return 1;
+    }
+// *********************************************************************
+
+  if (caster->adjust_gp(-query_gp_cost())<0)
+  {
+    tell_object(caster,"Estas fatigado mentalmente para formular el hechizo.\n");
+    return 1;
+  }
+
+  caster->add_spell_effect(casting_time,"spell",spell_name,TO,"hb_spell",({ob,quiet,ENV(caster)}));
+
+  if (!quiet)
+  {
+    tell_object(caster,"Comienzas a formular el hechizo "+spell_name+".\n");
+    tell_room(ENV(caster),caster->QCN+" comienza a formular un hechizo.\n",caster);
+  }
+  else tell_object(caster,"Comienzas a cantar, pero las palabras parecen desaparecer al salir de tus labios.\n");
+
+	//caster->add_static_property("casting"); // para el combate
+		// se kita tras llamar a do_spell_effects
+	
+  // AKI TIENES EL PQ DE LOS HECHIZOS INSTANT!!! - Tyrael flipando - Jun'02
+  if ( caster->query_property("instant") ||
+  	(random(caster->QL+caster->query_cha()*POWER) > random(50*spell_level)
+       && !caster->QP("SPELL_EXTRA")) )
+  {
+    caster->ATP("SPELL_EXTRA",1,4-POWER);
+    caster->do_spell_effects(0);
+  }
+  return 1;
+}
+
+int hb_spell(object caster, mixed *params, int time)
+{
+  int which_round,quiet,ret,i;
+  mixed target,out_of_range=0,mess;
+
+	if (caster->query_dead()) {
+		// bien, se supone que al formular, la accion comprueba
+		// ke no estemos muertos antes de pasar control
+		// a este handler. Pero ahora que nos tenemos el control
+		// podemos haber muerto y seguir formulando cual
+		// campeones, BUG evitado aki.
+			//tell_object(caster, "Vaia, muerto formulando, que gei...\n");
+		    call_out("end_spell_now",0,caster);
+			return 0;
+	}
+
+  if (caster->QP("nocast") || ENV(caster)->QP("nocast"))
+  {
+    tell_object(caster,"No puedes seguir formulando el hechizo por ahora.\n");
+	// mmm yo diria ke hay q quitar el spell_effect o pasan cosas feas
+    call_out("end_spell_now",0,caster);
+    return 0;
+  }
+
+  if ((target_type!="none") && ENV(caster)!=params[2])
+  {
+    tell_object(caster,"Tu movimiento ha destruido el hechizo.\n");
+    caster->adjust_gp(-1);
+    call_out("end_spell_now",0,caster);
+    return 0;
+  }
+
+  which_round = casting_time - time;
+  target = params[0];
+  quiet = params[1];
+  mess = round[which_round];
+
+// *************************************************************************************
+/*
+  switch (target_type)
+  {
+    case "pass":
+    case "none":
+    case "caster":
+      break;
+    case "item":
+      if (target) if ((ENV(target)!=caster) && (ENV(target)!=ENV(caster))) target=0;
+      break;
+    case "one":
+      if (target)
+      {
+        if ( (line_of_sight_needed && !RANGE_HANDLER->check_line_of_sight(caster,target,spell_range)) || (!RANGE_HANDLER->check_in_range(caster,target,spell_range)))
+        {
+          out_of_range=target;
+          tell_room(ENV(caster),"Opss, "+target->QCN+" esta fuera de rango.\n");
+          target = 0;
+        }
+      }
+      break;
+    case "many":
+      out_of_range=({});
+      for (i=0;i<sizeof(target);i++)
+        if ((line_of_sight_needed && !RANGE_HANDLER->check_line_of_sight(caster,target[i],spell_range)) || (!RANGE_HANDLER->check_in_range(caster,target[i],spell_range)))
+	{
+	  out_of_range+=({target[i]});
+	  target=delete(target,i,1);
+	}
+      break;
+    case "all":
+      out_of_range=({});
+      break;
+    default:
+      write("The targeting on this spell is broken. Tell someone.\n");
+      return 0;
+  }
+
+  switch (target_type)
+  {
+    case "all":
+    case "many":
+    case "one":
+    case "item":
+    case "pass":
+      if (sizeof(target)) break;
+      tell_object(caster,MSG_NO_TARGET);
+      tell_room("\nspell.c: hb_spell\n");
+      return 0;
+  }
+*/
+// *********************************************************************
+    switch( target_type )
+    {
+    case "pass":
+    case "none":
+        out_of_range = 0;
+        break;
+    case "item":
+        out_of_range = 0;
+        if ( target )
+            if ( ENV(target) != caster && 
+              ENV(target) != ENV(caster) )
+                target = 0;
+        break;
+    case "one":
+        out_of_range = 0;
+        if(target)
+        {
+            if ( !living(target) )
+            {
+                out_of_range = 0;
+                target = 0;
+            }
+            else if ( ( line_of_sight_needed && 
+                !RANGE_HANDLER->check_line_of_sight( caster, target, spell_range ) )
+              || ( !RANGE_HANDLER->check_in_range( caster, target, spell_range )) )
+            {
+                out_of_range = target;
+                target = 0;
+            }
+        }
+        break;
+    case "many":
+        out_of_range = ({ });
+        target=target-({ caster });
+        for (i=sizeof(target)-1; i>=0; i-- )
+            if ( !target[i] || !living(target[i]) )
+                target = delete(target, i, 1);
+            else if (( line_of_sight_needed &&
+                !RANGE_HANDLER->check_line_of_sight(caster, target[i], spell_range))
+              || ( !RANGE_HANDLER->check_in_range(caster, target[i], spell_range)))
+            {
+                out_of_range += ({ target[i] });
+                target = delete(target, i, 1);
+            }
+        break;
+    case "all":
+    case "todo":
+	case "todos":
+        out_of_range = ({ });
+        target = all_inventory(ENV(caster));
+        if ( !target )
+            target = ({ });
+        target=target-({ caster });
+        for ( i=sizeof(target)-1; i>=0; i-- )
+            if ( !living(target[i]) )
+                target = delete(target, i, 1);
+        break;
+    default:
+        write("El hechizo calcula mal tu objetivo. Diselo a alguien.\n");
+        return 0;
+    }
+
+  // Comprobamos que no sea invulnerable al hechizo.
+  if (pointerp(target))
+  {
+    for (i=sizeof(target)-1;i>=0;i--)
+      if (target[i]->QP("invulnerable_hechizos")>=spell_level)
+      {
+        tell_object(caster,target[i]->QCN+" es invulnerable a tu hechizo.\n");
+        tell_object(target[i],"El hechizo de "+caster->QCN+" no tiene ningun "
+          "efecto en ti!\n");
+        tell_room(ENV(caster),"El hechizo de "+caster->QCN+" no tiene ningun "
+          "efecto en "+target[i]->QCN+"!\n",({caster,target[i]}));
+        target=delete(target,i,1);
+      }
+      else if (DEBUG(caster)) tell_object(caster,"Invul: "+target[i]->QP("invulnerable_hechizos")+
+        "\tSpell: "+spell_level+"\n");
+    if (!sizeof(target))
+    {
+      tell_object(caster,"Opss, parece que tu hechizo se ha quedado sin objetivos.\n");
+      tell_room(ENV(caster),caster->QCN+" para de formular un hechizo.\n",caster);
+      return 0;
+    }
+  }
+  else if (objectp(target))
+  {
+    if (target->QP("invulnerable_hechizos")>spell_level)
+    {
+      tell_object(caster,target->QCN+" es invulnerable a tu hechizo.\n");
+      tell_object(target,"El hechizo de "+caster->QCN+" no tiene ningun "
+        "efecto en ti!\n");
+      tell_room(ENV(caster),"El hechizo de "+caster->QCN+" no tiene ningun "
+        "efecto en "+target->QCN+"!\n",({caster,target}));
+      target=0;
+    }
+    if (!target)
+    {
+      tell_object(caster,"Opss, parece que tu hechizo se ha quedado sin objetivos.\n");
+      tell_room(ENV(caster),caster->QCN+" para de formular un hechizo.\n",caster);
+      return 0;
+    }
+  }
+
+  // Now we call functions or what have you.
+  if (stringp(mess))
+  {
+    if (function_exists(mess,TO))
+    {
+      // the string is a function name, call the function
+      ret=call_other(TO,mess,caster,target,out_of_range,which_round,quiet);
+      if (ret<0 && !quiet)
+      {
+        // This means we must give the buggers their gp back. *scowl*
+	// a few bugs. Easier to NOT refund GP for now. Multipel round damage spells, holy storm etc.
+	// caster->adjust_gp(query_gp_cost());
+	// Taniwha, remove it if it failed.
+	// caster->remove_spell_effect(spell_name);
+      }
+    }
+    else
+    {
+      // the string is a casting message to caster only.
+      if (!quiet) tell_object(caster,ret);
+      ret = 0;
+    }
+  }
+
+  else if (pointerp(mess))
+  {
+    // we have a set of casting messages
+    ret = 0;
+    if (quiet) return ret;
+    if (sizeof(mess)>=2)
+    {
+      tell_object(caster,mess[0]);
+      tell_room(ENV(caster),mess[1],caster);
+    }
+    else tell_room(ENV(caster),"Este hechizo tiene un error, notificalo a alguien.\n");
+  }
+  else write("Este hechizo tiene el round action invalido. Notificalo a alguien.\n");
+  return ret;
+}

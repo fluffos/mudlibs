@@ -1,0 +1,5 @@
+#define REAL "/w/aokromes/camino_real/"
+#define BASEWEAPONS "/baseobs/weapons/"
+#define BASEARMOURS "/baseobs/armours/"
+#define NPCS "/w/aokromes/cantera/npcs/"
+#define CANTERA "/w/aokromes/cantera/camino/"

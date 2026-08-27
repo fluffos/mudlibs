@@ -1,0 +1,144 @@
+ 
+/*** Haste ***/
+/*** By Wonderflug ***/
+ 
+#include "tweaks.h"
+ 
+#define HASTE_COST 10
+#define HASTE_DURATION_LEVEL 1
+#define HASTE_SHADOW "/std/spells/bards/hste_sh.c"
+ 
+#define SP_NAME "Haste"
+#define GP_COST HASTE_COST
+#define ALREADY_CASTING "cast"
+#define save_type "spells"
+ 
+inherit "/std/spells/patch.c";
+object shadow;
+ 
+void make_spell(object caster, object target, int duration);
+ 
+string help() {
+       return
+       "\n\n"+
+       "Spell Name: "+SP_NAME+"\n"+
+       "School: \n"+
+       "Level: 4th\n"+
+       "Gp Cost: "+GP_COST+"\n"+
+       "Description: \n"+
+        "  This spell alters time for the target.  In particular, it "+
+        "will be able to attack twice as often, and any spells cast on "+
+        "it will last shorter than normal.  The effects last one "+
+        "round per 2 levels of the caster.  \n\n";
+}
+ 
+int cast_spell(string str, object caster)
+{
+  int cost;
+  int new_count;
+  int duration, level, duration_bon;
+  int i;
+  object target, my_caster;
+ 
+  if (caster)
+        my_caster = caster;
+  else
+  {
+        my_caster = this_player();
+        str = (string)my_caster->expand_nickname(str);
+  }
+ 
+ 
+  if (my_caster->query_timed_property(ALREADY_CASTING))
+  {
+        tell_object(my_caster,"You are already casting a spell.\n");
+        return 1;
+  }
+  if ((int)my_caster->query_gp() < GP_COST )
+  {
+        tell_object(my_caster,"You can't sing another note.  You should "+
+          "rest a bit first.\n");
+        return 1;
+  }
+ 
+  level = (int)my_caster->query_level();
+ 
+  duration = (level*HASTE_DURATION_LEVEL);
+ 
+  tell_object(my_caster,"You start to cast "+SP_NAME+".\n");
+  tell_room(environment(my_caster), my_caster->query_cap_name()+
+        " begins to cast a spell.\n",
+        my_caster);
+ 
+  my_caster->add_timed_property(ALREADY_CASTING,3,1);
+  my_caster->adjust_gp(-GP_COST);
+  call_out("make_spell",3,my_caster,str,duration);
+  return 1;
+}
+ 
+void make_spell( object caster, object str, int duration )
+{
+  object* ob;
+  object target;
+  int j;
+ 
+  ob = find_match(str, environment(caster));
+  if (!sizeof(ob))
+  {
+        tell_object(caster, "There is nobody of that name here.\n");
+        return 1;
+  }
+  target = ob[0];
+ 
+/* Destruct any current slow */
+  if ( target->query_slow_spell() )
+  {
+        target->dispell_time_spell();
+        return 1;
+  }
+ 
+/* Check for a haste or other (TBD) time spell */
+  if ( target->query_time_spell() )
+  {
+        tell_object(caster, "Your target is already Hasted.\n");
+        return 1;
+  }
+ 
+/* Don't want these two at once I don't think.  */
+  if ( target->query_hold_spell() || target->query_pacify_spell() )
+  {
+        tell_object(caster, "You cannot Haste that target right now.\n");
+        return 1;
+  }
+ 
+  tell_room(environment(caster), caster->query_cap_name()+
+    " sings:\n\n"+
+    "   Step lively, on your feet, important business must we meet;\n"+
+    "   Run on, run ho, unto the Sword Sea by the morrow.\n"+
+    "   If Sherif rises from his bed, then he'll know just what we did;\n"+
+    "   Then his daughter and his sheep we'll join in sorrow.\n\n",
+    caster);
+  tell_object(caster,
+    "You sing:\n\n"+
+    "   Step lively, on your feet, important business must we meet;\n"+
+    "   Run on, run ho, unto the Sword Sea by the morrow.\n"+
+    "   If Sherif rises from his bed, then he'll know just what we did;\n"+
+    "   Then his daughter and his sheep we'll join in sorrow.\n\n"+
+    "You haste "+
+        target->query_cap_name()+".\n");
+  tell_object(target, "You feel your pulse quicken and you seem to "+
+        "be moving much faster than you were.\n");
+tell_room(environment(caster),
+    caster->query_cap_name()+" finishes a spell with a gesture at "+
+    target->query_cap_name()+
+      ", and "+target->query_possessive()+" movements speed up.\n",
+      ({ caster, target}) );
+ 
+  j = duration;
+  target->add_timed_property("haste_on", 1, j);
+ 
+  shadow = clone_object(HASTE_SHADOW);
+  shadow->setup_shadow(target);
+ 
+  return GP_COST;
+}

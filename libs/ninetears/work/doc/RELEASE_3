@@ -1,0 +1,196 @@
+Comments on FR-LIB R3
+
+There are substantial changes to the spell code. Mainly in terms of
+cleaning up common tests and obtaining consistancy and fewer bugs.
+In general it shouldn't cause compatibility problems.
+ACTION REQUIRED: None expected.
+
+/baseobs/XXXX
+Major changes, mainly cleanups. i.e. /baseobs/scrolls /baseobs/wands
+You may have some domainn items needing path changes.
+ACTION REQUIRED: A few path changes MAY be required..
+
+Items/wear/wield
+Major changes and cleanups of "magical" effects when wearing/wielding,
+"cursed" equipment is now possible, as well as a number of other effects
+in /obj/handlers/item_handler.c.
+There are fairly important checks in there to ensure just wearing/wielding
+won't kill players. Don't laugh, it happened and wasted a lot of admin time.
+Note that to work, many of these use
+add_timed_property("effect",value,a_long_time)
+added in setup().
+This is an efficiency thing, it allows you to have effects which are permanent
+or which wear off after some time (days of playing time) if you add the
+property in some other manner.
+
+Also special wield/wear messages which wear off when the effect does.
+
+Also restrictions on groups of players who can wear/wield equip.
+
+I'd recommend that you stick with this method for "special effects" on
+items. It's clean and easilly maintained.
+
+Major change. int set_in_use(int state). It now returns 1 if it succeded.
+Note that set_in_use() is largely "handlerized" and that having
+set_in_use() carelessly masked in domain code will cause problems now.
+It's all related to the above changes.
+ACTION REQUIRED: If Items won't wear/wield correctly, check for masked
+     set_in_use().
+
+Containers/Money.
+Fixed a few encumberane related bugs.
+ACTION REQUIRED: Overloaded players may have problems till they lose some
+equip. In some cases they may need help with getting equip OUT of backpacks.
+player.c
+Limits of 40 items on players. ALSO a test to prevent immort coded items
+getting into the hands of players. I'd recommend you keep the limit, it
+may be silly but it'll save your players being mobile rubbish trucks.
+IMHO 40 items is too high anyway. But it's easy to change.
+int test_add() around line 80 or so.
+ACTION REQUIRED: As above.
+
+monster.c
+Large chunks moved to a handler. /obj/handlers/monster_hand.c
+The only effect on domain code here was a few monsters that used to have
+calls to expand_string() internally.
+It needs to be MONSTER_HAND->expand_string() NB. some minor parameter
+changes as well.
+This allowed us to "improve" the message handling in monsters without
+gross code bloat.
+We'll probably add actions in chats at a later date.
+
+The combat decision code was also moved into here, you can now set up
+conditional attacks based on race/guild and/or relationship to a
+particular deity.
+
+add_hated(string type,string or string * group) auto-attack these dudes
+add_loved(string type,string or string * group) don't auto-attack thse guys,
+        you like them
+
+ACTION REQUIRED: expand_string() fixes may be needed. You may want to start
+using add_hated() add_loved()
+BUGS: add_hated()/add_loved() actually replace any existing entries. But you
+can add groups hated on the basis of race/guild/deity one after another.
+All GUILD hatreds etc should be done within one call.
+
+More docs in the local man pages.
+In particular man properties / reserved is worth skimming through.
+
+domain master.c's
+/secure/domain has an inheritable base master.c file.
+Cleaner operation.
+N.B. Blocks thanes from editing their own master.c's since getting this
+wrong CAN lock up the MUD.
+
+Ranged weapons.
+These work mostly, but mistarget NPC's with the same name. A fix is being
+worked on now. /obj/weapons/ranged.
+The code to make monsters respond sensibly hasn't been added to monster.c
+yet either. A minor problem here.
+
+Note: this covers the higlights. There may be other problems.
+
+Channels/Intermud3/Main/Dev site channels
+It's there, it breaks easilly. But it no longer fills the debug logs
+updating /global/do_chat.c usually kicks the main/dev_site link
+back into life.
+Interdrivel needs a .o or needs to be seeded with a call so
+it'll find a server.
+
+Commands.
+Quite a few commands were externalized. And I removed shout from
+builders here. 
+ACTION REQUIRED: If you crash things lots, putting exec/call back into the lord object might be a good thing.
+
+NEWER DRIVERS.
+22vxx drivers.
+We are working on this now. There are some fairly major things
+to fix. Most of THIS lib will work. A few things still fail badly.
+Hints. 
+void func() { return 1; } BAD
+void func() { return; } GOOD
+You can't declare variables BEFORE you inherit files, got us in a few
+places.
+You may need to move ALL global variables to before any functions
+in files. Some of /global is a bit messy.
+Global variables with the same name in different files within the same
+object gets nasty.
+
+Basically, use the driver shipped with the lib. Or get used to pain.
+
+
+Taniwha 23 January 1997
+------------------------------------------------------------------------
+
+We've done alot of work concerning domain items, rooms, and monsters.
+Bascially I've tried to get all the massive information that is being
+tracked in /obj/handlers/* and made them easier to use with the
+info command.  It is seriously lacking in completeness, real life has
+gotten in the way.  Here's a quick description of the various handlers:
+
+/obj/handlers/item_handler.c
+   As Taniwha has already noted elsewhere, most of the "work" done
+   to standardize item effects has been moved here.
+
+/obj/handlers/item_info.c
+   Massive storage of all items cloned in the domains.
+   Can be accessed by the command: 
+      info -d <domain> <armour|weapon|scroll|wand|container>
+   This will give a list of items existing in the <domain>.
+   Example: info -d ss weapon
+    Will list all weapons in the SS domain.
+   Two notes, this is far from being complete.  Scrolls and Wands
+   haven't been done and a known problem exists when one file is 
+   created and cloned in one directory, then moved to another.  It will
+   have both extries in the info command.  Needs a maintenance option
+   for Thanes or equivalent.
+
+   Also note the "QC" and "QC by" columns.  Not completely coded but
+   in the works.. should be easy to maintain QCed tables for objects
+   and possibly not allowing unQCed objects into players' hands.
+   
+   Comment being just that, various ways will exist for items to obtain
+   comments about their location and other QC info the admins of the MUD
+   may need.
+
+   Command: info <item>  Will give more specific information about <item>
+
+/obj/handlers/death.c
+   This controls your kill XP of monsters.  Basically limiting the
+   existence of "xp factories."  I thought this up but the coder was
+   dragged off and shot in the head with a tombstone labeled Anirudh.
+   Useful info command is: info -k <domain>
+   This will list ratios and such for <domain> as WHERE things
+   are being killed.  If the 2nd column has more than 1000 as a 
+   number, you'll need to check out why so much is being killed.  
+   Note:  Directories that have had a very _few_ number of players in
+          in them or just once or twice, _may_ have a very inaccurate
+          high number here, so don't jump to conclusions.  check it out.
+   Also note, if the first column is greater than 1.0, then your
+   domain is doing "good" in that it is taking MORE XP from the
+   players than it is giving out.  (ie, the 1st column is ratio of 
+   xp given out to ratio taken)
+
+/obj/handlers/timekeeper.c
+   Made by Anirudh, this actually keeps a running total of time played
+   by players.  Several hooks called from player.c  This keeps the
+   new shop and pawn shop code accurate.  Also used by the death
+   (kill xp) handler quite heavily.
+
+/obj/handlers/align_tracker.c
+    Made by Anirudh, you'd be better off typing "help alignment"
+    for this  things reason for existence.
+
+/obj/handlers/pk.c
+   Called from the death handler when both objects are interactives,
+   this keeps alot of statistics about the player killers.  
+   Seperates guild, group, and race groups into categories.  The
+   info command is:   info -p <player>
+   NOTE:  Awful output, not finished  (:
+          (but quite useful nonetheless)
+
+
+Within a few months, I should be able to finish everything 
+I set out to do here.  
+
+Radix, January 1997

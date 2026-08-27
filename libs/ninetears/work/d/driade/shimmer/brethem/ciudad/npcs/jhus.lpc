@@ -1,0 +1,38 @@
+/* By Shimmer */
+
+#define CREATOR "shimmer";
+
+#include "../../../path.h"
+
+inherit "/obj/monster";
+
+void setup() {
+      object objeto;
+      set_name("Jhus");
+      set_short("Jhus el Pirata");
+      set_al(-60);
+      set_gender(1);
+      set_main_plural("varios hombres parecidos a Jhus el Pirata");
+      add_alias("jhus");
+      add_plural("jhuses");
+      set_race_ob("/std/races/humano");
+      set_level(25+random(5));
+      set_wimpy(10);
+      set_random_stats(12, 18);
+      set_long("Es el tabernero del Refugio, un antiguo marinero que se gano el apodo "
+               "de -el Pirata- gracias al parche que lleva en el ojo derecho y a su aspecto "
+               "tosco y descuidado.\n");
+      set_aggressive(0);
+      adjust_money(random(100), "silver");
+
+
+
+      ::init_equip();
+}
+
+
+void attack_by(object atacante)
+{
+   atacante->add_timed_property("guardias_brethem", 1, 300);
+   return ::attack_by(atacante);
+}
