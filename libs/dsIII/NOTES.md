@@ -664,3 +664,57 @@ not a crash or wrong efun call -- documented here per the project's own
 scope discipline (`ERR_THERE_IS_NO` is a normal, non-fatal parser
 rejection, not a bug signature) rather than "fixed" by guessing at what
 the room author actually intended.
+
+## Sibling sweep of ds386's round-two `eventRevive()`/room.lpc/combat.lpc/beggar.lpc bugs (2026-08-27)
+
+`ds386`'s own round-two deep-functional-test pass (this NOTES.md's own
+sibling file) found and fixed four bugs and flagged all of them for a
+sweep across the whole Dead Souls 3.x lineage: (1) `SEVERE`
+`eventRevive()` feeding float arithmetic into `AddHealthPoints()`/
+`AddMagicPoints()`'s `int` parameters (AGENTS.md §7.121 class), (2) the
+MudOS-era `replace_program()` fold in `lib/std/room.lpc`'s `create()`
+(AGENTS.md §7.141), (3) the `Wimpy` fraction-vs-percentage bug in
+`lib/combat.lpc` (AGENTS.md §7.124 class), and (4) a minor `GiveMap()`
+reentrancy gap in `domains/town/npc/beggar.lpc`. Checked all four here:
+
+- **Bug #1 (`eventRevive()` float corruption): NOT PRESENT, confirmed
+  clean.** `lib/player.lpc`'s `eventRevive()` heals back HP/MP/SP via
+  plain integer division (`AddMagicPoints(-(GetMaxMagicPoints()/2))`,
+  `AddStaminaPoints(-(GetMaxStaminaPoints()/2))`,
+  `AddHealthPoints(-(GetMaxHealthPoints()/2))`) -- this codebase never
+  adopted the `PERCENT_MP`/`PERCENT_HP` float-`#define` percentage
+  scheme `ds386`/`dshakkard`/`deadsouls_fluffos` use here, so there is
+  no float expression feeding the `int` parameters at all. No fix
+  needed.
+- **Bug #2 (`replace_program()` fold in `lib/std/room.lpc`): PRESENT,
+  fixed identically to `ds386`/`dsI`.** Removed the
+  `replaceable(this_object()) && !GetNoReplace()` → `inherit_list()` →
+  `replace_program(tmp[0])` fold from `create()` entirely (pure memory
+  micro-optimization, no functional effect once applied since this
+  driver defers `replace_program()`'s effect to a periodic backend
+  sweep, which crashes any closure built on a freshly-loaded room, e.g.
+  `eventHearTalk()`'s `TALK_AREA` filter, for roughly its first 5
+  minutes). `SetNoReplace()`/`GetNoReplace()` left in place as harmless
+  now-unused API.
+- **Bug #3 (`Wimpy` fraction-vs-percentage): PRESENT, fixed identically
+  to `ds386`.** `lib/combat.lpc:65` had `Wimpy = 0.20;` (declared
+  `private int Wimpy`, so the float literal silently truncated) instead
+  of `Wimpy = 20;`, plus `SetWimpy`/`GetWimpy` mistyped `float` instead
+  of `int`. Fixed both. **Verified live**: booted
+  (`~/src/fluffos/build-debug/src/driver config.fluffos` from
+  `libs/dsIII/`), logged in as the existing admin account
+  (`fluffos`/`Mud@2026`), ran `wimpy` -> `Percentage: 20%`, a clean
+  integer.
+- **Bug #4 (`GiveMap()` reentrancy in `domains/town/npc/beggar.lpc`):
+  PRESENT, fixed identically to `ds386`.** Added the same
+  `!present("town map",ob)` delivery-time re-check inside `GiveMap()`
+  that already existed at schedule-time in `init()`.
+
+**Verified live end-to-end**: fresh boot compiled clean (zero new
+errors in `log/debug.log`, only the same pre-existing benign warning
+classes already catalogued), `say hello world` worked immediately with
+no crash, and `wimpy` showed the fixed `20%`. Killed the test driver by
+exact PID when done.
+
+Source pattern for all four checks: `ds386/NOTES.md`'s "Deep
+functional test (round two, 2026-08-27)" section.
