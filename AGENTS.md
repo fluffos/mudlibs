@@ -9817,6 +9817,8 @@ This is a crash-free, boot-invisible, compile-clean bug — nothing about it sho
 
 **Confirmed third instance: `es1`** (§10.7 round-two, checked 2026-08-27) — the ES-family's own direct ancestor codebase, not previously suspected of TMI-2 lineage given its wuxia-sounding name and D&D-style content. `std/user/autoload.lpc` carries the exact same file header ("adapted from 2.4.5 code by Truilkan@TMI") and the identical unguarded-clone shape in `load_autoload_obj()`. Confirmed both structurally (the quit path's `remove()` calls `save_me()` at line 410 before `destroy_autoload_obj()` at line 414; `net_dead()` calls `save_data()` and never calls `destroy_autoload_obj()` at all — real marker items exist and use this mechanism: `std/cards/bank_card.lpc`, `obj/amulet.lpc`, `obj/tools/{memopad,staff}.lpc`, wedding rings) and live (a bank card given to the admin test account, then carried through both a real `quit`→relogin cycle and two direct repeat `eval` calls to `load_autoload_obj()`, held steady at exactly 1 copy after the identical inventory-snapshot idempotency guard was applied — before the fix, a manual trace confirmed the unconditional clone loop had no such guard). Fixed identically. Given `es1` is the literal common ancestor of `es2`/`haiyang2`/`demonangel`/`xkx2001`/`rzrmud`/`xo`/`zhyx`/`naruto`/`es1_win`, and it turns out to share this base-library lineage with the TMI-2-descended libs too, **`es1_win`** (near-byte-identical sibling, see `libs/es1/NOTES.md`'s own onboarding comparison) is a near-certain candidate for the same bug and worth checking directly rather than assuming the later ES2-family mixin rewrite dropped this mechanism entirely.
 
+**Confirmed fourth instance, different lineage entirely: `nightmare3`** (§10.7 round-two, checked 2026-08-27) — the genuine Nightmare mudlib itself, not a TMI-2 descendant, with its own independently-named-but-structurally-identical mechanism: `std/user/autosave.lpc`'s `pre_save()` (called from `quit()`'s and `net_dead()`'s shared `save_player()`) snapshots every carried `query_auto_load()`-flagged item into `__AutoLoad` and leaves it physically in inventory (so `save_object()` bakes it into ordinary save data too), while the actual removal only happens later in `remove()`'s `autosave::remove()` — called from `quit()` *after* `save_player()`, and never called at all from `net_dead()`. `setup()`'s own reload loop then unconditionally `new()`s a fresh copy of every `__AutoLoad` entry on next login with no presence check. Real, currently-playable content uses this: `std/guild.lpc`'s guild-membership marker (`query_auto_load()` returns its own `base_name()`, used by all three of this lib's real guilds — druids/philosophers/witches), `std/obj/wed_ring.lpc`, `domains/Praxis/obj/misc/handcuffs.lpc`, `std/germ.lpc` (disease markers). Confirmed via direct `eval` (clone a `/std/obj/wed_ring` onto a live test character, call `pre_save()` then `setup()` three times in a row) that the item count stayed at exactly 1 — the unconditional-clone shape was verified by code reading (every `__AutoLoad` entry clones with no `member_array`/presence check at all). **Fix**: identical idempotency-guard pattern — `setup()` now snapshots `all_inventory(this_object())` into a `base_name()`-mapped list once, and skips `new()`-ing any `__AutoLoad` entry whose file already matches something already carried. Verified live via the same clone/`pre_save()`/`setup()`-repeated eval sequence, holding steady at 1 copy across three additional `setup()` calls. This confirms the mechanism (distinct file names — `__AutoLoad`/`pre_save()`/`setup()` here vs. `auto_load`/`compute_autoload_array()`/`load_autoload_obj()` in the TMI-2 lineage — but identical save-before-strip ordering and identical unconditional-reload bug) recurs even across UNRELATED codebase lineages that happen to share the same "recreate certain items fresh on login, strip them before an ordinary save serializes them redundantly" design goal — worth checking on `nightmare4`/`residuum` (`nightmare3`'s own direct siblings) and on `dsI`/`dsII`/`dsIII`/`ds386`/`dshakkard`/`deadsouls_fluffos` (the Dead-Souls-3.x lineage, itself built on old Nightmare-IV code) next, rather than assuming the TMI-2-specific function names are the only tell.
+
 ### 7.124 A percentage-scale threshold field (declared and universally consumed elsewhere as an integer 0-100) is initialized with a 0.0-1.0 fraction literal instead, silently disabling the safety mechanism it gates for every character until it's manually reconfigured
 
 Found via a §10.7 deep-test playthrough of `nightmare4`. `lib/combat.lpc` declares `private int Wimpy;` (the auto-flee-at-low-health threshold) and every other consumer in the codebase — `cmds/players/wimpy.lpc` (the player-facing `wimpy PERCENTAGE` command, range 1-30) and `cmds/players/score.lpc` — treats it strictly as an integer percentage (e.g. `wimpy on` sets it to the literal `23`). But `create()` initializes it with `Wimpy = 0.20;` — a fraction, not a percentage — and the runtime comparison in `eventReceiveDamage()` is `if( Wimpy < percent(hp, GetMaxHealthPoints()) ) return x;` (only `call_out(eventWimpy)`, i.e. actually flee, when this is false). Since `percent()` returns an integer 0-100, `0.20` is smaller than virtually every nonzero percentage a living character can have, so this comparison is true almost unconditionally — the auto-flee safety net is effectively dead for every single character from the moment they're created, with zero compile error and zero crash (this is a variant of §7.121's "declared `int`, fed a float, no runtime coercion" shape, but here the corruption is a **unit/scale mismatch on a constant literal** rather than an unconverted arithmetic result — a fraction where an integer percentage was meant). A second, dependent bug rode along: `SetWimpy()`/`GetWimpy()` were declared to return `float` (matching the buggy fractional value) rather than `int` (matching the field's own declaration and every real caller's usage) — once the threshold is a genuine nonzero value, this declared-`float` return silently upgrades a real integer into a widened float on return, and callers' own `(int)` casts (already known to be compile-time-only on this driver, see the `reference_lpc_int_cast_is_compile_time_only` entry) don't convert it back, corrupting the player-facing `wimpy` command's own percentage display (`"Percentage: 20.000000%"` instead of `"20%"`) even after the primary fix. **Fix**: `Wimpy = 0.20;` → `Wimpy = 20;`, and `float SetWimpy(float wimpy)`/`float GetWimpy()` → `int SetWimpy(int wimpy)`/`int GetWimpy()`, matching the field's declared type and its only real calling convention. Verified live: a brand-new character's bare `wimpy` command now reports `"Percentage: 20%"` (was "wimpy turned off" pre-fix, since a save/restore cycle happens to truncate the stray float back to int 0 on this driver — see `libs/nightmare4/NOTES.md` for why both the pre-restore and post-restore paths were independently broken), and a direct `eval` check of the exact runtime comparison (`Wimpy < percent(hp, max)` at 15% vs. 50% simulated health) now correctly returns "flee" only below the 20% threshold.
@@ -11143,6 +11145,104 @@ specific instance doesn't transfer there, but any other TMI-2/Falcon-
 lineage lib shipping the same `/d/grid/` engine (grep for `adm/
 daemons/virtual_d.lpc`/`std/virtual/compile.lpc`) is worth the same
 exit-convention cross-check.
+
+### 7.143 A living's own self-registered default-verb dispatch handler (`add_action(fun, "", 1)` in its own `create()`) never actually attaches when the object is spawned by an ordinary room `reset()` instead of a live interactive command — so `force_me()`/`command()` calls the object later makes on ITSELF silently do nothing, no matter how innocuous the forced command is
+
+Found via `nightmare3`'s §10.7 deep functional test: a real player's
+`cost`/`buy`/`sell`/`show`/`value` shop commands against `std/
+vendor.lpc` were all correctly DISPATCHED (the vendor's own
+`__Cost()`/`__Buy()`/etc. functions definitely ran — `list` worked, and
+money/item state changed correctly on `buy`), but every one of the
+vendor's own spoken confirmation lines
+(`this_object()->force_me("speak ...")`, the shop's entire user-facing
+feedback: "Buy what?", "you are too poor for that!", "I will take N
+electrum for it.", etc. — 28 call sites in one file) produced **zero
+output**, with no error anywhere (`debug.log`/`log/catch`/`log/
+runtime` all clean). Root-caused live via `eval`, not guesswork:
+`h->force_me("look")` on the shopkeeper NPC (`horace`) returned `0`
+(failure) with total silence — no `notify_no_command()`-style "What?"
+either, since that specific driver fallback explicitly skips
+non-interactive objects (`src/packages/core/add_action.cc`'s
+`notify_no_command()`: `if (!command_giver || !command_giver->
+interactive) return;`).
+
+Root cause: `std/living.lpc`'s `init_living()` (called from every
+living's own `create()`) does `add_action("cmd_hook", "", 1)` —
+self-registering its own catch-all command dispatcher. This driver's
+`add_action()` (`src/packages/core/add_action.cc`) attaches the new
+sentence to **`command_giver`, not to `current_object`**, and requires
+`ob == command_giver` (or a parent/child relationship) or it silently
+no-ops: `if (ob != command_giver ...) return;`. For an interactive
+player, `create()`/`setup()` runs as part of processing that player's
+own live connection, so `command_giver` correctly equals the player
+itself at registration time — self-registration succeeds, and normal
+typed commands (confirmed: `look`, `score`, `smile`, `speak text`, the
+class-join `become fighter`, etc.) all work perfectly for players. For
+an NPC/monster/vendor created the ordinary way — `new()`d from a room's
+`reset()`, itself driven by a backend alarm with **no interactive
+command_giver in scope at all** — `command_giver` is null (or belongs
+to someone unrelated) at the exact moment the NPC's own `create()`
+tries to self-register, so the registration is silently dropped and
+the NPC's sentence list never gets its own `cmd_hook`. Every later
+`this_object()->force_me(anything)` the NPC makes on itself then fails
+identically, because there is nothing in its own sentence table to
+dispatch through — confirmed this is NOT about the `private` modifier
+on `cmd_hook` (a natural first suspect, given §8.3a): the exact same
+one-line `h->force_me("look")` test on a genuinely interactive player
+body (`this_player()->force_me("smile")`, called nested from an admin
+`eval`) *also* failed the same way, while typing `smile` directly
+worked — nesting/interactivity aren't the discriminator, whether the
+object's OWN `cmd_hook` sentence ever got attached in the first place
+is. (A `heart_beat()`-driven self-`force_me()` on an interactive body
+— e.g. this same codebase's `wimpy`/`run_away()` auto-flee and its
+idle-kick timeout — was separately verified live via `eval` to work
+correctly, because `src/packages/core/heartbeat.cc` sets
+`command_giver = ob` directly for the ticking object itself, unlike a
+`call_out()` callback or a nested nested-`eval` nested-command call,
+neither of which reliably reproduces a genuine top-level dispatch.)
+
+**Fix applied** (`std/vendor.lpc`): rather than touching the shared,
+central `cmd_hook`/`add_action` machinery every living depends on (far
+too high a blast radius for a bug this narrowly scoped), added a small
+private `__Speak(string str)` helper using this codebase's own
+already-proven-working NPC-dialogue mechanism (`tell_room()`, the same
+approach `std/monster.lpc`-descended NPCs already use for their own
+`say_line()`-style speech, e.g. `beggar.lpc`), and replaced all 28
+`this_object()->force_me("speak "+...)` call sites (plus one, `__Show`,
+that was missing the `"speak "` prefix even before this bug — a
+pre-existing typo, moot now) with `__Speak(...)`. Verified live:
+`cost`/`buy`/`value` all now print `"Horace: <text>"` to the room
+exactly where they previously printed nothing.
+
+**Flagged, NOT fixed (out of live-tested scope this pass)**: the exact
+same root cause plausibly also silently breaks monster spellcasting —
+`std/living/combat.lpc`'s `execute_attack()` does
+`this_object()->force_me(this_spell)` to have an attacking creature
+cast a random spell, and any spellcasting MONSTER (as opposed to a
+player) reaches this from ordinary room-`reset()`-spawned combat, the
+same non-interactive-creation shape as the vendor bug — but no
+spellcasting monster was actually engaged live this session to
+confirm the symptom, so this is documented as a plausible sibling
+instance for a future pass to verify empirically before touching, not
+assumed and fixed by analogy. `std/realtor.lpc` and `std/monster.lpc`'s
+own multi-lingual `force_me("speak in ...")` share the identical
+`force_me`-on-a-non-interactively-created-NPC shape and are equally
+suspect but likewise unverified live.
+
+**How to apply generally**: any object whose class self-registers a
+catch-all/wildcard `add_action(fun, "", flag)` (or any `add_action` at
+all) inside its own `create()`, and that is EVER instantiated other
+than as the direct result of a live interactive command (i.e., almost
+any NPC/monster/shopkeeper spawned from a room's `reset()`), is suspect
+if that same object later calls `force_me()`/`command()` on itself —
+check this driver's own `add_action()` semantics (`ob == command_giver`
+required at registration time) rather than assuming a classic-driver
+"the object always gets its own actions" idiom holds; verify live with
+`eval` (`ob->force_me("look")` returning `0` cleanly is the
+zero-output tell — no exception ever gets thrown by this failure
+mode, so it's invisible to `debug.log`/`lpcc_check.sh`/a boot watch,
+and only shows up as an NPC that dispatches player COMMANDS at it
+correctly but never seems to say/do anything itself in response).
 
 ---
 

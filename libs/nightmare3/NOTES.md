@@ -256,3 +256,247 @@ chars) → confirm password → gender (`male`/`female`) → display name
 lands in a race-selection limbo room; `read list` shows valid races,
 `pick <race>` (e.g. `pick human`) finishes character creation and
 drops the new player into Praxis's Monument Square starting room.
+
+## Deep functional test, round two (2026-08-27, AGENTS.md §10.7)
+
+One continuous session against `~/src/fluffos/build-debug/src/driver`, a
+raw Python socket bridge (a small FIFO-fed persistent-connection script,
+not `tmux_mud.sh`), plus a separate admin (`fluffos`/`Mud2026Wiz`)
+connection for `eval`-based root-causing. This lib had never had a
+round-two pass despite `nightmare4` and `residuum` (same family) both
+already being done — per the task brief, checked `nightmare4`'s own
+round-two write-up for the exact bug shapes to look for here first.
+Registered a real character (`Brandmoor`, human) through the full
+name→password→gender→email→race-pick flow described above, then walked
+`look`/`score`/`i` after every state change: after registration, after
+the first move (`go south`), after joining the fighter class (`become
+fighter` at `fighter_join`), after real combat, after death/respawn,
+and after a real quit+reconnect (30s real wall-clock gap).
+
+**Four real bugs found and fixed**, all silent — zero compile error,
+zero crash, invisible to `lpcc_check.sh` and to a clean boot:
+
+1. **`domains/Praxis/setter.lpc`'s `pick()`** called `this_player()->
+   new_body()` *before* `do_rolls()` ever populated the character's real
+   `stats` mapping. `new_body()` derives every starting current value
+   (`set_hp()`, `set_sp()`, `set_mp()`) from `query_stats()`, which is
+   still all-zero at that point (`stats = ([])` from `init_stats()`, no
+   roll yet) — while `do_rolls()`'s own `set_stats()` side effect
+   *does* separately fix up the MAX fields (`max_hp`/`max_sp`/`magic
+   max points`) for each real rolled stat. The result: every fresh
+   character's current `sp` got `set_sp(0)` (dexterity was 0 at that
+   instant), and the very first `add_sp(-1)` call (fired unconditionally
+   by ordinary movement in `std/user.lpc`'s `move_player()`) hit
+   `add_sp()`'s own "was this ever initialized?" guard
+   (`if(!player_data["general"]["sp"]) set_sp(x)`) — since a legitimately
+   zero `sp` reads as falsy, this branch treats the delta `-1` as an
+   absolute new value and sets `sp` directly to **-1**, not `max_sp - 1`.
+   Reproduced live pre-fix: `Thornwick` (human) showed `25 (160) health
+   points, -1 (56) stamina points` after nothing but registering and
+   taking a single step — every fresh character starts materially
+   broken (both a nonsensical negative "current" stat display and a
+   starting HP baseline computed from zero-constitution instead of the
+   real rolled value). **Fix**: moved the `new_body()` call to run right
+   before the final `move_player(ROOM_START)`, i.e. after `do_rolls()`
+   has populated real stats — behavior-preserving (nothing between the
+   two calls in `pick()` reads `stats`/hp/sp/mp). Verified live:
+   `Brandmoor` (registered post-fix) showed a sane `73 (170) health
+   points, 10 (77) stamina points` immediately after character creation,
+   and correctly negative `sp` values later during real combat (a
+   legitimate fatigue mechanic, `add_sp()`'s own documented floor is
+   -200 — confirmed this is intentional design, not something to
+   "fix" further, by reading every `add_sp()` call site).
+
+2. **`std/vendor.lpc`'s entire buy/sell/cost/value/show feedback** was
+   completely silent — written up as new AGENTS.md **§7.143**. Every one
+   of the 28 `this_object()->force_me("speak "+...)` call sites (the
+   shopkeeper's own spoken responses — "Buy what?", "you are too poor
+   for that!", "I will take N electrum for it.", etc.) produced zero
+   output, even though the underlying `cost`/`buy`/`sell`/`value`/`show`
+   commands themselves dispatched and worked correctly (money/item
+   state changed, `list` printed fine). Root cause: `std/living.lpc`'s
+   self-registered `add_action("cmd_hook", "", 1)` (every living's own
+   catch-all command dispatcher) only actually attaches when this
+   driver's `add_action()` requirement `ob == command_giver` holds at
+   registration time — true for an interactive player (registering
+   during their own live login), never true for an NPC/vendor `new()`d
+   from an ordinary room `reset()` (no live command_giver in scope at
+   all). See §7.143 for the full root-cause writeup (including how this
+   was distinguished live from a `private`-modifier issue, and why
+   `wimpy`'s own `force_me()`-based auto-flee is unaffected — it runs
+   from `heart_beat()` on the PLAYER's own already-correctly-registered
+   body, a materially different driver code path). **Fix**: added a
+   `__Speak(string str)` helper using this codebase's own proven-working
+   `tell_room()`-based NPC dialogue idiom (the same shape
+   `std/monster.lpc`-descended NPCs like the beggar already use for
+   `say_line()`), and replaced every `force_me("speak ...")` call site
+   with it (also fixing a pre-existing, now-moot typo: `__Show`'s own
+   "no argument" message was missing the `"speak "` prefix even before
+   this bug). Verified live: `cost vial` → `"Horace: Brandmoor, I will
+   take 1 electrum for it."`; `buy vial` while broke → `"Horace:
+   Brandmoor, you are too poor for that!"`; bare `buy` → `"Horace: Buy
+   what?"` — all previously silent, all now correct. **Not fixed, only
+   flagged** (§7.143's own writeup): `std/living/combat.lpc`'s
+   `execute_attack()` (`this_object()->force_me(this_spell)`, a
+   spellcasting creature's own random-spell trigger) and
+   `std/realtor.lpc`/`std/monster.lpc`'s multi-lingual
+   `force_me("speak in ...")` share the identical shape and are equally
+   suspect, but no spellcasting monster was actually engaged live this
+   session to confirm the symptom before touching that code.
+
+3. **`std/user/autosave.lpc`'s `setup()`** unconditionally `new()`s a
+   fresh copy of every `query_auto_load()`-flagged item on every login,
+   with no check for whether a matching item is already present — a
+   confirmed fourth instance of the already-documented **§7.122** "class
+   object auto-reload duplicates a carried marker item" bug class,
+   this time in the genuine Nightmare codebase rather than a TMI-2
+   descendant (distinct function names, `pre_save()`/`__AutoLoad`
+   instead of `compute_autoload_array()`/`auto_load`, but the identical
+   save-before-strip ordering: `quit()`/`net_dead()` both reach
+   `save_player()` → `pre_save()` — which snapshots carried auto-load
+   items into `__AutoLoad` while leaving them physically in inventory,
+   so `save_object()` bakes them in redundantly — *before* `quit()`'s
+   later `remove()` → `autosave::remove()` ever strips them back out,
+   and `net_dead()` never calls that stripping step at all). Real,
+   currently-playable content is affected: `std/guild.lpc`'s
+   guild-membership marker (used by all three of this lib's real
+   guilds — druids/philosophers/witches, per `doc/help/user/guilds`),
+   `std/obj/wed_ring.lpc`, `domains/Praxis/obj/misc/handcuffs.lpc`,
+   `std/germ.lpc` (disease markers). See §7.122's own updated entry for
+   the full write-up. **Fix**: identical idempotency-guard pattern to
+   the three prior instances — `setup()` now snapshots
+   `all_inventory(this_object())` into a `base_name()`-mapped list once
+   before its reload loop, skipping any `__AutoLoad` entry whose file
+   already matches something already carried. Verified live via direct
+   `eval` (clone a `/std/obj/wed_ring` onto the admin test account,
+   `pre_save()` then `setup()` three times in a row) — held steady at
+   exactly 1 ring throughout, confirming the guard works; the
+   underlying unconditional-clone shape was independently confirmed by
+   reading the pre-fix code (no `member_array`/presence check existed
+   at all). Flagged for a follow-up sibling check: `nightmare4`/
+   `residuum` (this lib's own direct siblings) and the Dead-Souls-3.x
+   lineage (built on old Nightmare-IV code) next.
+
+4. **Missing runtime directory `daemon/save/votes/`** — `daemon/
+   voting.lpc`'s `create()` does `restore_object(VOTE_SAVE)` (`"/daemon/
+   save/votes/daemon"`) unconditionally; the directory didn't exist at
+   all (a *different* path from `secure/save/votes/`, which this lib's
+   own onboarding-time NOTES.md item 14 already created — this is a
+   second, previously-missed instance of the exact same "missing
+   runtime directory" class documented there). Since `VOTING_D` is
+   lazily loaded on first reference, and `domains/Praxis/{fighter,
+   cleric,mage,rogue,kataan,monk}_hall.lpc` **all six** class halls'
+   shared `receive_objects()` call `VOTING_D->is_time_to_vote()`
+   unconditionally on every object moved into them, the very first
+   attempt by anyone to walk into ANY class hall crashed with
+   `*restore_object: read permission denied: /daemon/save/votes/
+   daemon.o.` uncaught inside `create()` — aborting the whole `move()`
+   and leaving the player stuck outside with "You remain where you
+   are." **Every single class hall in the game — the core "learn
+   skills/train/advance" location for every one of the 5 playable
+   classes plus the kataan variant — was completely unreachable** until
+   this was fixed. **Fix**: created the missing directory (`mkdir -p
+   daemon/save/votes`). Verified live: `go up` from `fighter_join` now
+   reaches "Welcome to the inner sanctum of the Hall of Fighters!"
+   cleanly. **Known remaining cosmetic wrinkle, not fixed**: since
+   `daemon/save/votes/daemon.o` itself only gets created once a real
+   election is ever held (`save_object()` is never called from
+   `create()`, only from the actual voting functions), the *very first*
+   `VOTING_D` touch after any fresh boot still prints the same raw
+   `*restore_object: read permission denied` line to whichever player's
+   login happens to trigger it (harmless — caught, non-blocking, and
+   does not recur for the rest of that boot) — a `try`/`catch` around
+   that one `restore_object()` call in `create()` would be the fully
+   clean fix, but wasn't made since the actual functional blocker (six
+   unreachable class halls) is already resolved and this residual is
+   cosmetic-only. **Also worth flagging generally**: neither this
+   directory nor any of the ones created at onboarding time (item 14 —
+   `secure/save/votes`, `log/watch`, `secure/tmp`, etc.) are tracked in
+   git at all (`git ls-files` returns nothing for any of them, confirmed
+   for several) — git cannot track an empty directory, and none of them
+   ever had a placeholder file committed. This means a truly fresh
+   `git clone` of this repo would silently lose ALL of onboarding's
+   item-14 directory fixes and reintroduce those exact crashes, not
+   just this session's `daemon/save/votes` — worth a dedicated pass
+   (add a tracked placeholder file to each) if this lib is ever
+   re-cloned/re-deployed from git rather than tested in-place.
+
+**All standing cross-cutting bug patterns checked explicitly, systematic
+grep sweep against every §-numbered pattern from AGENTS.md's own
+standing list**: §7.118 (the filename-slice class) was already this
+lib's dominant onboarding-time bug (item 13 above) and was re-verified
+clean by the fact that every ordinary command (`look`/`score`/`i`/
+`go`/`become`/`kill`/`pray`/`wimpy`/`quit`) worked correctly all session;
+§8.3a (`private nomask command_hook`) checked and confirmed NOT the
+shape present here — `cmd_hook` dispatch works correctly for real
+players (exhaustively proven live while chasing the §7.143 bug above);
+§7.112 (unconditional `init()` call_out chain, no re-entry guard) —
+`std/monster.lpc`'s `create()`/`init()` schedule no `call_out()` at all,
+not applicable; §7.121 (float arithmetic in a declared-`int`
+function/param) — no matches on a targeted `= 0\.[0-9]` grep against
+`int`-declared fields; §7.124 (Wimpy fraction-vs-percentage) — checked
+`std/living/combat.lpc`'s own `wimpy` mechanism directly (this lineage
+generation implements it completely differently from `nightmare4`'s
+buggy version: a plain `int wimpy` field, `set_wimpy(23)` on `wimpy on`,
+a clean `(hp*100)/max_hp < wimpy` percentage comparison) — confirmed
+clean, no fraction-literal bug present; §7.122 — found and fixed, see
+finding 3 above; §7.123 (bare file-scope mapping/array assignment) — one
+grep hit (`secure/cmds/mortal/_tell.lpc`'s `__Morse = ([...])`),
+hand-verified as a local variable inside `morse()`, not file scope, same
+false-positive shape already documented for `nightmare4`; §7.126 (stale
+`.c` extension surviving in `.o` save data) — corpus-wide grep for
+`\.c"` inside `.o` files found zero hits; §7.129 (a `tell_room()`
+wrapper forwarding an omitted arg as `0`) — no custom `tell_room()`
+wrapper exists at all, every caller uses the driver efun directly, not
+applicable; §7.130 (`query_idle()` called after non-interactive already
+detected) — `std/user.lpc`'s `heart_beat()` already returns immediately
+on `!interactive(this_object())` before its own `query_idle()` call
+later in the same function, confirmed correctly guarded; §7.131
+(`find_living()`/`find_player()` needing `set_living_name()`) — called
+correctly in both `std/user.lpc` and `std/monster.lpc`; §7.132 (`map()`
+over a mapping bound to the wrong arg) — every `map()` call in the
+codebase operates on an array (`users()`, `keys(...)`), never a bare
+mapping, not applicable; §7.133 (`net_dead()` never defined) — defined
+correctly in `std/user.lpc`; §7.134 (uninitialized `room_descs`-style
+accumulator crashing `member_array(0, X)`) — zero `member_array(0,`
+call sites anywhere; §7.135/§7.30 (a lazy-init accessor missing its
+sibling's guard) — this lib's starting-location machinery is
+architecturally different (no `def_locations`/`temp_locations`-style
+mechanism at all) and the `quit` path was independently verified live
+(clean, no crash, correct save/restore) so no live instance of this
+shape was found; §7.136 (a required setup step silently never granted)
+— `become fighter` correctly re-granted the full class skill table live
+(verified via `skills` before/after); §7.141 (MudOS-era `replace_program`
+timing crash) — zero `replace_program()` calls anywhere in this
+codebase, not applicable.
+
+**Combat/economy/death coverage**: engaged `domains/Praxis/obj/mon/
+beggar.lpc` (level 4, the same weak non-aggressive NPC nightmare4's own
+round-two pass used) for a live fight — turned out to be a genuinely
+hard, nearly-unwinnable matchup for a fresh level-1 character (every
+attack landed "ineffectively", HP dropped steadily from 73 to death with
+no real damage dealt back) rather than the "safe sparring" it appeared
+to be; this is a content/difficulty-balance observation, not something
+fixed, per this project's scope discipline (no error signature, just an
+unfavorable but internally-consistent combat roll). The resulting death
+→ `pray` at the Praxis monastery → full revival cycle was exercised for
+real and confirmed clean (correct HP/SP/MP reset, empty inventory
+preserved, no duplicate corpses or repeat death loop). Shop economy
+(`cost`/`buy`/`value` at Horace's supply shop) tested live and is where
+finding 2 above was found and fixed. A genuine `quit` → `debug.log`/
+`log/catch` grep (clean, no new uncaught errors beyond the
+already-documented, non-blocking `daemon/voting` cosmetic message and a
+pre-existing, gracefully-caught beggar-wandering-into-a-nonexistent-room
+content gap, `/domains/Under/entry`, left untouched as out-of-scope
+content) → a real 30-second wall-clock gap → reconnect cycle confirmed
+full state persistence (hp/sp/mp, class title, skill table all matched
+exactly pre-quit, landing back at the fighter's `setenv("start", ...)`
+location rather than the exact last room — expected, intentional
+class-hall-restart design, not a bug).
+
+Sanity-checked the port-uniqueness invariant
+(`grep -h '"port"' libs/*/meta.json | grep -oE '[0-9]{5}' | sort -n |
+uniq -c | awk '$1>1'`) printed nothing before committing. Test character
+`Brandmoor` and the admin's own throwaway test items were cleaned up
+before committing, keeping only the pre-existing seeded `fluffos` admin
+account.

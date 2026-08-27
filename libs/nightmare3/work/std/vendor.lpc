@@ -44,6 +44,20 @@ void create() {
     __ItemTypes = ({ "weapon" });
 }
 
+/* std/living.lpc's force_me()/command() dispatch only works when this
+   object already has its own cmd_hook sentence registered, which never
+   happens for a vendor cloned from a room's reset() (no live
+   command_giver at creation time to satisfy add_action()'s own
+   requirements) -- so this_object()->force_me("speak ...") silently
+   does nothing for every vendor NPC (confirmed live: horace's
+   cost/buy/sell/show/value responses were all completely silent).
+   Speak the line directly to the room instead, the same proven-working
+   way std/monster.lpc's own say_line()-style dialogue already does. */
+private void __Speak(string str) {
+  tell_room(environment(this_object()), query_cap_name()+": "+str+"\n",
+    ({}));
+}
+
 int __Buy(string str) {
   object ob;
   string tmp;
@@ -53,12 +67,12 @@ int __Buy(string str) {
     __Eco["storage object"] = load_object(__Eco["storage file"]);
   if(!(x = __CheckDiscrimination())) return 1;
   if(!str) {
-    this_object()->force_me("speak Buy what?");
+    __Speak("Buy what?");
     return 1;
   }
   if(!(ob = present(str, __Eco["storage object"])) &&
      !(ob = parse_objects(__Eco["storage object"]))) {
-    this_object()->force_me("speak I have nothing like that to sell.");
+    __Speak("I have nothing like that to sell.");
     return 1;
   }
   if(__Costs[tmp = (string)this_player()->query_name()])
@@ -74,11 +88,11 @@ int __Buy(string str) {
     val = worth;
   }
   if((int)this_player()->query_money(__Eco["currency"]) < val) {
-    this_object()->force_me("speak "+(string)this_player()->query_cap_name()+
+    __Speak((string)this_player()->query_cap_name()+
 			    ", you are too poor for that!");
     return 1;
   }
-  this_object()->force_me("speak Here is your "+str+" for "+val+" "+
+  __Speak("Here is your "+str+" for "+val+" "+
 			  __Eco["currency"]+"!");
   message("other_action", query_cap_name()+" hands "+
 	  (string)this_player()->query_cap_name()+" "+
@@ -104,19 +118,19 @@ int __Sell(string str) {
 
   if(!(x = __CheckDiscrimination())) return 1;
   if(!str) {
-    this_object()->force_me("speak Sell what?");
+    __Speak("Sell what?");
     return 1;
   }
   if(!__Eco["storage object"])
     __Eco["storage object"] = load_object(__Eco["storage file"]);
   if(sizeof(all_inventory(__Eco["storage object"])) >= MAX_ITEMS) {
-    this_object()->force_me("speak I cannot get rid of what I have "
+    __Speak("I cannot get rid of what I have "
 			    "to sell right now!");
     return 1;
   }
   if(str == "all") return __SellAll();
   if(!(ob = present(str, this_player()))) {
-    this_object()->force_me("speak You do not have that to sell!");
+    __Speak("You do not have that to sell!");
     return 1;
   }
   if(member_array((string)ob->query_vendor_type(), query_item_types()) == -1) {
@@ -124,7 +138,7 @@ int __Sell(string str) {
        with the "magic item" property */
     if(!(ob->query_property("magic item") &&
 	 member_array("magic", query_item_types()) != -1)) {
-      this_object()->force_me(sprintf("speak I do not buy %s goods.",
+      __Speak(sprintf("I do not buy %s goods.",
 				      (string)ob->query_vendor_type()));
       return 1;
     }
@@ -133,12 +147,12 @@ int __Sell(string str) {
     worth = __Values[tmp][ob];
   if(!worth) {
     if(!(worth = (int)ob->query("value"))) {
-      this_object()->force_me("speak That thing is worthless.");
+      __Speak("That thing is worthless.");
       return 1;
     }
     if(worth < (val = value_bargaining(this_player(), worth))) val = worth;
     if(val > 2000) {
-      this_object()->force_me("speak I am low on money.");
+      __Speak("I am low on money.");
       val = 1000 + random(1000);
     }
     val = convert(val);
@@ -172,14 +186,14 @@ int __Show(string str) {
 
   if(!__CheckDiscrimination()) return 1;
   if(!str) {
-    this_object()->force_me("Show you what?");
+    __Speak("Show you what?");
     return 1;
   }
   if(!__Eco["storage object"])
     __Eco["storage object"] = load_object(__Eco["storage file"]);
   if(!(ob = present(str, __Eco["storage object"])) &&
      !(ob = parse_objects(__Eco["storage object"]))) {
-    this_object()->force_me("speak I do not have that here to show you.");
+    __Speak("I do not have that here to show you.");
     return 1;
   }
   message("other_action", query_cap_name()+" shows you "+
@@ -195,13 +209,13 @@ int __List(string str) {
 
   if(!__CheckDiscrimination()) return 1;
   if(!__Eco["storage object"]) {
-    this_object()->force_me("speak I have nothing to sell right now.");
+    __Speak("I have nothing to sell right now.");
     return 1;
   }
   i = sizeof(inv = filter_array(all_inventory(__Eco["storage object"]),
 				"filter_list", this_object(), str));
   if(!i) {
-    this_object()->force_me("speak I have nothing like that to sell.");
+    __Speak("I have nothing like that to sell.");
     return 1;
   }
   message("info", arrange_string("Item", 55) +
@@ -223,12 +237,12 @@ int __Value(string str) {
 
   if(!__CheckDiscrimination()) return 1;
   if(!str) {
-    this_object()->force_me("speak The value of what?");
+    __Speak("The value of what?");
     return 1;
   }
   if(!(ob = present(str, this_player()))) {
     if(!(ob = parse_objects(this_player(), str))) {
-      this_object()->force_me("speak You don't have that!");
+      __Speak("You don't have that!");
       return 1;
     }
   }
@@ -237,23 +251,23 @@ int __Value(string str) {
 	  ({this_object(),this_player()}));
   if(__Values[tmp=(string)this_player()->query_name()] &&
      __Values[tmp][ob]) {
-    this_object()->force_me("speak You have my offer!");
+    __Speak("You have my offer!");
     return 1;
   }
   if(!(worth = (int)ob->query("value"))) {
-    this_object()->force_me("speak That thing is worthless!");
+    __Speak("That thing is worthless!");
     return 1;
   }
   if(worth < (val = value_bargaining(this_player(), worth))) val = worth;
   if(val > 2000) {
-    this_object()->force_me("speak I am low on money.");
+    __Speak("I am low on money.");
     val = 1000 + random(1000);
   }
   val = convert(val);
   if(!__Values[tmp]) __Values[tmp] = ([]);
   __Values[tmp][ob] = val;
   if(cn == "Someone") cn = "Invisible person";
-  this_object()->force_me("speak "+cn+", I will offer you "+val+" "+
+  __Speak(cn+", I will offer you "+val+" "+
 			  __Eco["currency"]+" for it.");
   return 1;
 }
@@ -267,19 +281,19 @@ int __Cost(string str) {
     __Eco["storage object"] = load_object(__Eco["storage file"]);
   if(!__CheckDiscrimination()) return 1;
   if(!str) {
-    this_object()->force_me("speak The cost of what?");
+    __Speak("The cost of what?");
     return 1;
   }
   if(!(ob = present(str, __Eco["storage object"])) &&
      !(ob = parse_objects(__Eco["storage object"], str))) {
-    this_object()->force_me("speak I do not have any "+str+" to sell.");
+    __Speak("I do not have any "+str+" to sell.");
     return 1;
   }
   message("other_action", (cn=(string)this_player()->query_cap_name())+
 	  "asks about the cost of an item for sale.",
 	  environment(this_object()), ({ this_object(), this_player() }));
   if(__Costs[tmp = (string)this_player()->query_name()] && __Costs[tmp][ob]) {
-    this_object()->force_me("speak I will charge no less!");
+    __Speak("I will charge no less!");
     return 1;
   }
   if(!(worth = (int)ob->query("value"))) worth = 1;
@@ -288,7 +302,7 @@ int __Cost(string str) {
   if(!__Costs[tmp]) __Costs[tmp] = ([]);
   __Costs[tmp][ob] = val;
   if(cn == "Someone") cn == "Invisible person";
-  this_object()->force_me("speak "+cn+", I will take "+val+" "+
+  __Speak(cn+", I will take "+val+" "+
 			  __Eco["currency"]+" for it.");
   return 1;
 }
@@ -316,18 +330,18 @@ protected  int __SellAll() {
 
   total = 0;
   if(!(i = sizeof(inv = all_inventory(this_player())))) {
-    this_object()->force_me("speak You have nothing to sell!");
+    __Speak("You have nothing to sell!");
     return 1;
   }
   while(i--) {
     if(!(worth = (int)inv[i]->query("value"))) {
-      this_object()->force_me("speak "+(string)inv[i]->query_short()+
+      __Speak((string)inv[i]->query_short()+
 			      " is worthless.");
       continue;
     }
     if(member_array((string)inv[i]->query_vendor_type(),
 		    query_item_types()) == -1) {
-      this_object()->force_me(sprintf("speak %s is a %s item, and "
+      __Speak(sprintf("%s is a %s item, and "
 				      "I do not buy those.",
 				      (string)inv[i]->query_short(),
 				      (string)inv[i]->query_vendor_type()));
@@ -348,10 +362,10 @@ protected  int __SellAll() {
     else inv[i]->move(__Eco["storage object"]);
   }
   if(total)
-    this_object()->force_me(sprintf("speak Your total comes to %d %s.",
+    __Speak(sprintf("Your total comes to %d %s.",
 				    total, __Eco["currency"]));
   /* Kalinash 1-14-94 */
-  this_object()->force_me("speak Thank you for your business!");
+  __Speak("Thank you for your business!");
   return 1;
 }
 
@@ -391,14 +405,14 @@ protected  int __CheckDiscrimination() {
   if(__Discriminate["class"] &&
      member_array((string)this_player()->query_class(),
 		  __Discriminate["class"]) == -1) {
-    this_object()->force_me("speak I do not do business with people "
+    __Speak("I do not do business with people "
 			    "like you.");
     return 0;
   }
   if(__Discriminate["race"] &&
      member_array((string)this_player()->query_class(),
 		  __Discriminate["race"]) == -1) {
-    this_object()->force_me("speak I do not do business with people "
+    __Speak("I do not do business with people "
 			    "like you.");
     return 0;
   }
@@ -407,7 +421,7 @@ protected  int __CheckDiscrimination() {
       if(x < (tmp = (int)this_player()->query_lang_prof
 	      (__Discriminate["language"][i]))) x = tmp;
     if(!x) {
-      this_object()->force_me("speak I do not understand you.");
+      __Speak("I do not understand you.");
       return 0;
     }
     return x;

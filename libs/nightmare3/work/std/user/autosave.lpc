@@ -23,16 +23,28 @@ void create() {
 }
 
 void setup() {
-    object ob;
+    object ob, *inv;
+    string *have;
     int i;
 
     master()->create_save();
     call_out("save_player", 2, query_name());
     convert_auto();
     if(!(i = sizeof(__AutoLoad))) return;
+    /* quit()/net_dead() both call save_player() (which bakes every
+       carried auto_load item into ordinary inventory data via
+       pre_save()) BEFORE remove()'s autosave::remove() ever strips
+       those same items back out -- so a save can catch the item BOTH
+       as regular restored inventory AND as an __AutoLoad entry. Guard
+       against unconditionally re-cloning one that's already present
+       (e.g. from restore_object()) so a real quit/reconnect cycle
+       can't duplicate a guild-membership marker/wedding ring/etc. */
+    inv = all_inventory(this_object());
+    have = map(inv, (: base_name :));
     while(i--) {
         if(sizeof(__AutoLoad[i]) != 2) continue;
         if(!stringp(__AutoLoad[i][0]) || !pointerp(__AutoLoad[i][1])) continue;
+        if(member_array(__AutoLoad[i][0], have) != -1) continue;
         catch(ob = new(__AutoLoad[i][0]));
         if(!ob) continue;
         ob->move(this_object());
