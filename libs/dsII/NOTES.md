@@ -608,7 +608,29 @@ Reception`. No new entries in any per-directory `log/errors/*` file or
   project-wide; not reintroduced.
 - **§7.124** (fraction-vs-percentage threshold): no new candidate
   found; not specifically re-derivable via grep, left unconfirmed
-  either way (no live symptom observed).
+  either way (no live symptom observed). **CORRECTION (2026-08-27,
+  ds386 sibling sweep)**: this was wrong -- a direct grep of
+  `lib/combat.lpc` (not run during the original pass above) found the
+  identical `Wimpy = 0.20;` fraction-literal bug byte-for-byte, plus
+  the same `float SetWimpy`/`float GetWimpy` mistyping, still present
+  and live. Fixed: `Wimpy = 0.20;` -> `Wimpy = 20;`,
+  `float SetWimpy(float wimpy)`/`float GetWimpy()` -> `int
+  SetWimpy(int wimpy)`/`int GetWimpy()`. Verified live: booted, logged
+  in as the seeded admin (`fluffos`/`fluffwiz123` -- see §11's own
+  credential-drift note, NOT `Mud@2026`), ran `wimpy` ->
+  `Percentage: 20%`, a clean integer.
+- **§7.141** (MudOS-era `replace_program()` fold, sibling sweep off
+  `ds386`'s round-two pass, added 2026-08-27): not checked in the
+  original pass above (predates that AGENTS.md entry's own discovery
+  on `dsI`). A direct check found `lib/std/room.lpc`'s `create()` has
+  the identical fold (`replaceable(this_object()) && !GetNoReplace()`
+  -> `inherit_list()` -> `replace_program(tmp[0])`), and the same
+  file's `eventHearTalk()` builds real `filter()` closures over
+  `all_inventory()` -- the exact unsafe combination. Fixed identically
+  to `dsI`/`ds386`: removed the fold from `create()` entirely.
+  Verified live: booted, and `say hello world` (as the logged-in admin)
+  worked with zero crash at ~26 seconds post-boot -- squarely inside
+  the ~5-minute window where this bug would otherwise have fired.
 - **§7.126** (stale `.c` extension in `.o` save data): the §3.4 sweep
   already covered every filename-slice site at the source level; no
   live symptom seen (all door/exit loads during the playthrough
@@ -677,3 +699,17 @@ gender-prompt retry in this session's own history) and three older
 leftover test saves from the original §10 currency-fix session
 (`Qintwo`/`Qintestdsb`/`Qintest`) were all deleted before commit,
 leaving only the seeded `fluffos` admin account.
+
+## Sibling-sweep check for ds386's round-two `eventRevive()` float bug (2026-08-27)
+
+`ds386/NOTES.md`'s round-two pass found a NEW `AGENTS.md` §7.121-class
+bug not covered by this lib's own earlier currency-float fix (§10
+above): `eventRevive()` feeding float arithmetic (`GetMaxHealthPoints()
+* PERCENT_HP`-style expressions) into `AddHealthPoints()`/
+`AddMagicPoints()`'s `int` parameters. Checked this lib's own
+`lib/player.lpc:eventRevive()` specifically for that shape: **not
+present**. All three heal-back calls here (`AddMagicPoints`,
+`AddStaminaPoints`, `AddHealthPoints`) use plain integer division
+(`-(GetMaxMagicPoints()/2)` etc.) — no `PERCENT_MP`/`PERCENT_HP` float
+`#define`s exist anywhere in this file. No fix needed; confirmed clean
+by reading the code.
