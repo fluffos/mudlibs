@@ -531,3 +531,66 @@ directory, plus the runtime-only `adm/data/security.o` domain/priv
 save it created, were deleted before committing so `security_d.lpc`
 falls back to its pristine `create()` defaults (root-only admin) on
 next boot, matching the state this lib shipped in.
+
+## 13. Round-two follow-up: `ls` crash for non-wizards, plus an
+    independent cross-check of §12
+
+This session dispatched a research subagent mid-pass (originally scoped
+to just extracting the AGENTS.md §7.121-135/§8.3a pattern definitions)
+that ended up independently re-running this exact §10.7 pass itself in
+parallel on the same lib -- same driver, overlapping connections (a
+stray "Walker" registration and a mid-session `quit` visible in this
+session's own test transcripts), converging on the identical `root`
+password and the identical `sprintf()` fix in `obj/clone/monster.lpc`
+documented in §12 above, which it committed first (`62e0d51659c`).
+Confirmed via `git log`/`git show` that no work was lost or
+double-applied; this section is a genuine follow-up, not a redo.
+
+One item in §12's writeup benefits from a small correction: the
+non-wizard `pwd`/`ls`/`cwd` gap was described there as "not a crash".
+That's true for `pwd` (bare `cmd/wiz/pwd.lpc` prints a literal `0`,
+since `int + string` concatenation doesn't error on this driver) but
+NOT true for `ls`: a non-wizard's bare `ls` (no filespec) hit `do_ls()`
+in `adm/cmd/wiz/ls.lpc:88`, which called `file_size(dir)` on `dir`
+still holding its uninitialized int `0` value (the same
+`this_player()->query_cwd()`-returns-unset root cause documented in
+§12 -- `nmsh.lpc`'s `shell_init()` only sets `CurrentWorkingDirectory`
+`if(wizardp(owner))`) -- confirmed live, freshly reproduced against a
+brand-new non-wizard registration (`morgan`), with the driver's own
+`log/errors/runtime` capturing `**Bad argument 1 to file_size()
+Expected: string Got: 0.` This is a real, unguarded crash (the player
+sees a bare `runtime: error: Check /log/errors/runtime for more
+information.` with no listing at all), not a graceful degraded
+message, and squarely a "missing `stringp()` guard" case per this
+project's own §10.7 scope boundary -- independent of whatever the
+correct answer turns out to be on the separate, genuinely-uncertain
+question §12 already flagged (whether non-wizards are meant to have
+real filesystem-navigation commands at all in this lib's design, which
+this fix does NOT attempt to resolve either way).
+
+Fixed with a narrow guard in `do_ls()`, added right after path
+resolution:
+```lpc
+if( !stringp(dir) )
+  return write("ls: unable to resolve current directory.\n");
+```
+This only changes the failure mode from a raw driver crash to a clean
+one-line message; it does not touch `wizardp()` gating, ACL behavior,
+or grant non-wizards any new capability. Verified live: fresh
+non-wizard registration (`morgan`) hit the exact same code path
+post-fix and got the clean message instead of a crash;
+`log/errors/runtime` did not grow (stayed at 413 lines, unchanged from
+before the test); `log/debug` stayed warning-only. `morgan`'s test save
+was deleted before committing, along with a leftover `testuser.o`
+save/connection pair from the original onboarding pass (§1-11) that
+had never been cleaned up -- `root` remains the only saved account.
+
+The other wiz-only file commands sharing the same
+`RESOLVE_PATH`/`file_size()` shape (`rm`, `rmdir`, `cp`, `mv`, `du`,
+`cat`, `head`, `tail`, `more`, `touch`) all require an explicit
+filename/path argument rather than defaulting to the bare, no-arg
+`do_ls(0, ...)` shape that triggers this specific crash, and an
+absolute path argument bypasses `query_cwd()` entirely -- not
+independently re-verified live one by one this pass, but flagged here
+in case a future relative-path-as-non-wizard test surfaces the same
+shape elsewhere in this file family.
