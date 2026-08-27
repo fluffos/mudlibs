@@ -666,7 +666,21 @@ string error_handler(mapping mp, int caught) {
                     "occurred to " + 
                     this_player(1)->GetCapName()+".");
             rlog = "-----\n" +timestamp()+ ": "+this_player(1)->GetCapName()+"\n";
-            rlog += load_object("/secure/cmds/creators/dbxwhere")->cmd(this_player(1)->GetKeyName());
+            // error_handler() can be re-entered while the driver is still
+            // mid-compile of some unrelated file (e.g. this very call is
+            // itself reporting a caught log_error() write_file() failure
+            // that happened during that compile). load_object() is illegal
+            // in that window and throws "Object cannot be loaded during
+            // compilation." -- since that throw would otherwise escape
+            // uncaught from inside error_handler() itself, it re-enters the
+            // mudlib error-report chain on the very same line every time,
+            // an unbounded retry loop that never resolves (see AGENTS.md
+            // section 7.60's identical load-mid-compile pattern, and this
+            // same file's find_object(WEB_SESSIONS_D) guard above). Catch it
+            // and degrade gracefully instead, same as that precedent.
+            if( catch(rlog += load_object("/secure/cmds/creators/dbxwhere")
+                    ->cmd(this_player(1)->GetKeyName())) )
+                rlog += "(dbxwhere unavailable -- driver mid-compile)\n";
             rlog += flat_map(this_player()->GetLastError())+"\n-----\n";
             unguarded( (: write_file("/log/player_errors", rlog) :) );
         }

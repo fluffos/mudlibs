@@ -411,47 +411,123 @@ same edit already live-verified working on `ds386`, `dsII`, and
 wrapping), this is considered sufficiently verified without a live
 transaction.
 
-## 9. Found but NOT fully fixed (out of scope for the currency sweep): `enter town` crashes the driver into an infinite error-handler loop
+## 9. `enter town` infinite error-handler recursion — ROOT-CAUSED AND FIXED
 
-While trying to reach the bank to verify §8 above, `enter town` from
-the start room triggers a genuine, severe bug: the driver enters an
-infinite `"Error in error handler: *Object cannot be loaded during
+Follow-up dedicated pass (2026-08-27) to the blocker flagged below (originally
+found while verifying §8's currency fix). Confirmed the crash is real and
+reproduced it directly by booting the real driver and walking an ordinary
+(non-creator) test character through registration into `enter town`: the
+driver logged `"Error in error handler: *Object cannot be loaded during
+compilation."` thousands of times a second and pinned a CPU core, matching
+the original report exactly (a stale `work/log/debug.log` from that repro
+alone grew to **8.9 million lines**).
+
+**The directory-vs-file theory below was a correct but incomplete diagnosis.**
+`log/errors/daemon` (and 20 sibling top-level names) really were
+directory-shaped where the runtime error path wants a plain file, and that
+*is* the event that first triggers the crash — but the actual bug that turns
+one failed log write into an *unbounded* crash is in
+`secure/daemon/master.lpc`'s own `error_handler()`, at the exact line the
+crash trace names:
+
+```lpc
+rlog += load_object("/secure/cmds/creators/dbxwhere")->cmd(this_player(1)->GetKeyName());
+```
+
+Full chain: some file (in the reproduced case, a file under `/secure/`) emits
+an ordinary compile warning ("Illegal to declare nosave function" — the same
+harmless `nosave`-on-a-function idiom already catalogued elsewhere in this
+codebase family as a non-bug) while the driver is compiling it, mid-compile,
+as part of a lazy load triggered by an ordinary player action.
+`master.lpc`'s `log_error()` apply handles that warning and does
+`catch(write_file(DIR_ERROR_LOGS "/" + nom, ...))` — if `DIR_ERROR_LOGS "/" +
+nom` is a directory (the `log/errors/daemon`-shape bug), `write_file()`
+throws `"Wrong permissions for opening file ... Is a directory"` inside that
+`catch()`. FluffOS still reports even a *caught* runtime error to
+`master->error_handler(mp, 1)` for logging purposes. `error_handler()` sees
+`this_player(1)` set to the ordinary player who triggered the lazy compile,
+and — since they're not a creator — falls into the branch that builds an
+admin-facing incident report, including an UNGUARDED
+`load_object("/secure/cmds/creators/dbxwhere")` (an admin debug command,
+essentially never already-loaded for an ordinary player's session). Since the
+driver is *still* mid-compile at this point, that `load_object()` itself
+throws `"Object cannot be loaded during compilation."` — from inside
+`error_handler()` itself, uncaught. This re-enters the same mudlib
+error-report path, which lands right back on the same `load_object()` line,
+which fails the same way again — the driver's own re-entrancy counter bounds
+any *single* burst to a handful of frames, but nothing stops the *next*
+triggering event (the still-uncompiled file being touched again by the next
+heartbeat/command) from restarting the whole cycle immediately, which is
+what produces the observed effectively-infinite CPU-pinning loop. This is
+the exact same "load-mid-compile" driver-compat class already documented in
+`AGENTS.md` §7.60 (and already fixed once, elsewhere in this very function,
+for `WEB_SESSIONS_D`, by checking `find_object()` before assuming an object
+is loaded) — `dbxwhere` was simply the one call in this file that hadn't
+gotten that same guard.
+
+**Fix** (`secure/daemon/master.lpc`, `error_handler()`): wrapped the
+`dbxwhere` lookup+call in `catch()`, degrading to a plain placeholder string
+when it fails instead of letting the throw escape `error_handler()` itself:
+
+```lpc
+if( catch(rlog += load_object("/secure/cmds/creators/dbxwhere")
+        ->cmd(this_player(1)->GetKeyName())) )
+    rlog += "(dbxwhere unavailable -- driver mid-compile)\n";
+```
+
+This is a real driver-compat/programming bug fix (an unguarded call-other
+that can throw during a well-known illegal window), not a content change.
+
+**Also converted every remaining directory-shaped `log/errors/<name>` entry
+to a plain empty file** (the 21 named in the original diagnosis below,
+`cfg cmds doc domains estates ftp include lib log news obj open powers
+realms save secure shadows std tmp verbs www` — `daemon`/`town`/`campus`/
+`default`/`Praxis`/`Ylsrim`/`fluffos` had already self-healed into files
+from earlier boots). This directory is gitignored (`.gitignore:24`), so this
+change is local-only and does not affect a fresh checkout or get committed —
+but it removes the *triggering* event entirely for this local checkout, on
+top of the real code fix which removes the ability for that trigger (or any
+future one shaped like it) to cascade into a crash.
+
+**Verification**: killed the stale driver process, booted fresh
+(`Initializations complete`, zero fatal errors), registered a brand-new
+ordinary player (`Bugtestchartwo`, via a raw Python socket client — the
+existing admin account bypasses the buggy branch entirely since creators
+take a different, always-safe code path in the same function, so a fresh
+non-creator registration was required to actually exercise the fix), and
+walked: start room -> `enter town` -> `look` -> `north` (into an NPC-populated
+room, "a dirty beggar" who spoke and gave an item) -> `look` -> `south` ->
+`look` -> `score` -> `quit`. Every step produced correct, clean output with
+**zero runtime-error messages** and the driver's own log
+(`driver_stdout.log`, this run's actual live console/debug output — this
+driver's `debug.log` file target is unused in non-daemon mode) had zero
+`Error in error handler`/`Object cannot be loaded`/`Wrong permissions`/
+`runtime error` lines anywhere. Confirmed the driver process stayed at
+single-digit-to-teens CPU (idle-normal, not pinned) throughout, and killed it
+cleanly by exact PID afterward. Before this fix, the identical
+registration-then-`enter town` sequence reproducibly hit the crash within
+one or two commands of entering town.
+
+Test-only side effects (the ad hoc player saves, `RELEASE_NOTES_HTTP`'s
+autoexec-refetched content, IMC2/vote/save-daemon state touched by the test
+sessions) were reverted/removed before committing, per this project's
+standing convention of not shipping test-session churn — the only committed
+change is the `master.lpc` fix itself.
+
+---
+
+*(Original diagnosis, kept for reference — see above for the completed
+root-cause and fix.)* While trying to reach the bank to verify §8 above,
+`enter town` from the start room triggers a genuine, severe bug: the driver
+enters an infinite `"Error in error handler: *Object cannot be loaded during
 compilation."` recursion (`error_handler()` calling itself via
-`/secure/cmds/creators/dbxwhere`'s own `load_object()` attempt while
-already mid-compile) and pins one CPU core indefinitely until killed.
-Root-caused to `log/errors/daemon` being **a directory** (containing a
-`foo.txt` placeholder) rather than a plain file — the very first error
-the driver tries to log after any runtime error anywhere hits `"Wrong
-permissions for opening file /log/errors/daemon for append.\n\"Is a
-directory\""`, and logging *that* failure recurses forever. This is a
-side effect of \S4's own `log/errors/<every top-level dir>` directory
-scaffolding (needed at the time purely so `lpcc_check.sh`'s COMPILE-time
-warning writes wouldn't fail with "No such file or directory" — since
-`work/log` is gitignored project-wide, `.gitignore:24`
-`libs/*/work/**/log`, and never shipped by ds-hakkard's own upstream
-repo either, see \S1/\S4): the driver's RUNTIME error_handler wants a
-plain file at that exact path for several of the same top-level names
-(`daemon`, plus the domain names `campus`/`town`/`default`/`Praxis`/
-`Ylsrim`, all of which had already self-healed into plain files from a
-prior boot's successful runtime write — `daemon` alone apparently never
-got hit until this session's `enter town` test). Every OTHER top-level
-name (`cfg cmds doc domains estates ftp include lib log news obj open
-powers realms save secure shadows std tmp verbs www`) is still a
-directory-with-`foo.txt` as of this writing and could plausibly trigger
-the identical crash the first time any runtime error happens to target
-one of those categories.
-
-Converted `log/errors/daemon` to a plain empty file locally (this
-directory is gitignored, so the change is not part of any commit and
-does not affect a fresh checkout), which should fix the specific
-`enter town` crash reproduced above, but this was **not re-verified
-with a fresh live boot** — after killing two runaway driver processes
-for this lib in one session, held off on spawning a third to avoid
-repeated resource-heavy boot/crash/kill cycles for a bug outside this
-task's scope. **Left otherwise unfixed** — this is a filesystem-shape
-issue unrelated to the narrow currency-arithmetic sweep this session
-was scoped to (see `AGENTS.md` §7.121 and its sibling-sweep note);
-flagging here for a future dedicated pass, which should convert every
-remaining directory-shaped entry under `log/errors/` back to a plain
-file (matching `ds386`/`dsII`/`dsIII`/`deadsouls_fluffos`'s convention)
-and re-verify a full live boot + town-domain walkthrough.
+`/secure/cmds/creators/dbxwhere`'s own `load_object()` attempt while already
+mid-compile) and pins one CPU core indefinitely until killed. Root-caused to
+`log/errors/daemon` being **a directory** (containing a `foo.txt`
+placeholder) rather than a plain file — the very first error the driver
+tries to log after any runtime error anywhere hits `"Wrong permissions for
+opening file /log/errors/daemon for append.\n\"Is a directory\""`, and
+logging *that* failure recurses forever. Every OTHER top-level name was, at
+the time, still a directory-with-`foo.txt` and could plausibly trigger the
+identical crash the first time any runtime error happened to target one of
+those categories.
