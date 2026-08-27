@@ -604,3 +604,30 @@ before assuming its own `post` command works.
   driver-API misuse, left untouched per scope). Confirms this lib's
   simpler (no ghost-stage, no `DEATH_ROOM->start_death()`) death flow
   works correctly end to end, including the net-dead-body edge case.
+
+### ES2-family cross-check (2026-08-27): AGENTS.md §7.129 `tell_room()` bug found and fixed — NOT on the core death path, but real elsewhere
+
+Following up on `es1`'s severe §7.129 find (a shared `tell_room()`
+wrapper forwards its omitted `exclude` arg to `message()` as a literal
+`int(0)`, which this driver's `message()` rejects), checked this direct
+ES2-family descendant. This lib's core `die()` (`feature/damage.lpc`)
+uses `message_vision()`, not `tell_room()`, for its death announcement
+— explaining why the earlier §10.7 deep-test pass above (which did
+reach a real death) never tripped this bug. But `adm/simul_efun/
+message.lpc`'s `tell_room(ob, str, exclude)` still unconditionally
+forwarded the bare, defaulted `exclude` straight to `message()`, and
+two real 2-argument call sites exist: `obj/user.lpc`'s `user_dump()`
+(the disconnect-timeout and idle-timeout auto-kick announcements) and
+`adm/daemons/chard.lpc`'s corpse-decay heartbeat daemon (the "一阵风吹
+过，把X化成骨灰吹散了" message). Both would have crashed uncaught the
+first time either fired. **Fix**: `message("tell_room", str, ob,
+exclude)` → `message("tell_room", str, ob, exclude || ({}))`, identical
+pattern to `es1`/`es2`/`haiyang2`/etc. Verified live: cloned a throwaway
+`/std/item`-based test object, called its own `test_2arg()`/
+`test_3arg()` wrapper functions via the wizard `call` command post-fix
+— both the 2-arg and 3-arg `tell_room()` forms completed with no crash
+(`TESTMSG_2ARG_OK`/`TESTMSG_3ARG_OK` both printed); pre-fix the 2-arg
+form would have thrown `*Bad argument 4 to EFUN message()`. Test object
+deleted before commit. `include/compress_obj.h` (the sibling §7.14
+bug from the same `es1` finding) does not exist anywhere in this
+lib's tree — not applicable.
