@@ -246,3 +246,427 @@ appeared during testing, both fixed.
   protocol). The fixes above target every bug that surfaced on the actual
   registration/character-creation/basic-command path, not a full-corpus
   clean compile.
+
+## 深度功能测试 / Deep functional test (round two, AGENTS.md §10.7)
+
+First genuine hands-on *playthrough* pass on the real driver (the earlier
+"Verification" section above only exercised registration through the
+15-stage creation wizard, tutorial-skip, and `look`/`score`/`who`/`say`/
+`quit` -- never a continuous session with real movement, combat, skill
+acquisition, or economy). One continuous session on
+`~/src/fluffos/build-debug/src/driver`, a raw Python socket client
+throughout (a persistent background process reading commands from a
+named pipe, since a single Python invocation per command would have lost
+in-progress creation-wizard/`input_to()` state across reconnects), plus a
+second connection for a `fluffos`/`Mud@2026` admin account (registered
+fresh through the normal flow -- this lib had never been seeded before;
+granted via directly editing the freshly-registered save file's
+`position` field to `"Admin"`, matching the exact string `std/user.lpc`'s
+`enable_wizard()` gate checks, since the in-game `set_position()` path to
+grant a non-mortal position itself requires calling from an existing
+wizard's own `_xmote`/`_avmaker` command -- a chicken-and-egg the data-edit
+sidesteps, per AGENTS.md §1.5's own guidance to prefer editing the save
+data over the code).
+
+**Newbie path**: `help newbie` and the community-authored
+`doc/help/user/newbie_tutorial` (a step-by-step guide to a wood-elf
+fighter, explicitly recommending `sweepingblow`/`impale` as the first
+feats to buy) gave a clear, well-signposted test path: register, land in
+the Offestry newbie tutorial, `skip` it, reach the town square, then
+travel west/northwest to "the keep" to fight xvarts for early XP.
+
+Test character: `Testwind`, a wood-elf fighter (soldier style),
+password `Test@2026` -- kept as a representative playthrough character.
+A second throwaway character (`Feattest`, a random saurian fighter) was
+registered specifically to verify the feat-acquisition fix on a clean
+slate, uncontaminated by the counter-desync the live bug left on
+`Testwind`'s save (see Bug 3 below); both are left in place as evidence.
+
+### Bug 1: a bare top-level `IDENT = (mapping-or-array-literal);` statement outside any function is not a valid initializer on this driver -- broke `look` in every outdoor room, game-wide, plus two spells and the `rumors` command (new AGENTS.md §7.123)
+
+`adm/daemon/astronomy_d.lpc` declared `nosave mapping moons;` (and
+siblings `moonstate`/`moonphase`/`moonorbit`, plus two globals never even
+declared at all, `moonvisibility`/`moonillumination`) and then assigned
+their real values via ordinary-looking top-level statements later in the
+same file, outside `create()` -- a MudOS/LDMud-era convention this
+driver does not support: a bare `IDENT = EXPR;` outside a function is
+parsed as a type-less attempt to *redeclare* the global, producing
+`error: Type mismatch ( unknown vs mapping ) when initializing moons`
+and leaving the whole file uncompiled. Since
+`adm/simul_efun/total_light.lpc`'s `total_light()` -- called from every
+single `look`/room-entry via `describe_current_room()` ->
+`light_blind()` -> `light_blind_remote()` -- calls
+`ASTRONOMY_D->query_eclipse()` unconditionally and uncaught, every
+outdoor `look` in the entire game silently printed nothing past the
+point of failure (no room description, no exits, no items) from the very
+first fresh boot. Reproduced live: a fresh character's very first `look`
+at the Offestry town square (an outdoor room) printed only a blank
+`-> ` prompt.
+
+Fixed by merging the bare declaration and its later top-level assignment
+into a single proper declaration-with-initializer inside `create()`
+(this file already had one), and adding the two missing declarations:
+
+```lpc
+nosave mapping moons;
+nosave mapping moonstate, moonphase, moonorbit, moonvisibility, moonillumination;
+nosave string* moonphases;
+int in_eclipse;
+
+void create()
+{
+    seteuid(getuid());
+    moons = (["sera" : "...", "tyrannos" : "..."]);
+    moonphase = ([...]);
+    moonvisibility = ([...]);
+    moonillumination = (["sera":1, "tyrannos":0]);
+    moonphases = ({ "new", ... });
+}
+```
+
+Fixing this then exposed a second, previously-masked compile error in
+the same file (`int query_moon_illumination(moon){` -- a parameter with
+no declared type, which this driver rejects outright), fixed to
+`string moon`.
+
+**Three more independent instances of the exact same shape, found the
+same session** (see new AGENTS.md §7.123 for the general pattern and
+detection heuristic): `cmds/mortal/_rumors.lpc` (`arealist`/`areas` --
+broke the `rumors` command referenced by the game's own
+`doc/help/user/newbie` text, "`<rumors>` will tell you where people are
+currently congregating"), and two mage/magus spells,
+`cmds/spells/e/_elemental_aura.lpc` and `_elemental_body_i.lpc`
+(`shortmap`/`colormap`/`elementmap`). All fixed the same way (merge
+declaration+initializer into one statement). A targeted grep
+(`^[a-zA-Z_][a-zA-Z0-9_]* = (\(\[|\(\{|\(:)` at column 0) found 18
+candidate files corpus-wide; 14 were false positives (unindented code
+inside a function, or inside a large `/* ... */` block of example
+output/pseudocode) -- each hand-verified against its actual brace
+context before deciding. A full corpus-wide sweep for this exact shape
+was NOT attempted given the archive's 43,147-file size and this
+project's standing memory-safety caution around full `lpcc_check.sh`
+batch runs on this lib (see "Known gaps" below); the 4 confirmed
+instances were all found via this one targeted grep pass plus whatever
+the live playthrough itself happened to touch.
+
+Verified live, before/after: before the fix, `look` in the Offestry town
+square printed nothing past the prompt; after, it renders the full room
+description, exits, and NPC list correctly. `rumors` now lists nearby
+areas by level range instead of failing outright.
+
+### Bug 2: `daemon/help.lpc` called an undefined `topic_dir()` (a typo for its own `topics_dir()`) -- broke `help` completely, for every player, from the very first boot
+
+`daemon/help.lpc`'s `query_topics()` has one `case` per help category,
+all calling the same local helper `topics_dir(DIR)` -- except
+`case "*bloodlines"`, which calls `topic_dir(DIR_BLOODLINES_HELP+"/")`
+(missing the `s`), an undefined function. This is a hard compile error
+on this driver (`error: Undefined function topic_dir`), so
+`daemon/help.lpc` itself never compiled, and `cmds/mortal/_help.lpc`
+(the `help` command) failed every single invocation with
+`*No program in object '/daemon/help'!` -- reproduced live: bare `help`,
+`help newbie`, `help spar`, `help combat` all printed nothing at all,
+game-wide, for every player, from the very first boot. Fixed the typo
+(`topic_dir` -> `topics_dir`). While in the same function, also fixed an
+adjacent `if(sizeof(statdata) && statdata[0] = myhold[i])` (a stray `=`
+where `==` was clearly intended, in the `*spells`/`*feats` category's
+file-validity filter -- an always-true condition that silently made the
+filter a no-op, listing every directory entry rather than only the
+stat-verified ones).
+
+Verified live: `help` now renders the full category/topic menu; `help
+*bloodlines` lists its 12 sub-topics; `help feats` renders its full
+help text.
+
+### Bug 3: `daemon/feat_d.lpc`'s directory scan used the exact §7.118 filename-slice bug already documented for this lib's own `daemon/command.lpc` -- silently disabled the ENTIRE feat/combat-technique system for every class in the game
+
+The single most severe finding this session (see the extended
+AGENTS.md §7.118 writeup for the full mechanism). `build_feat_list()`
+scans every category folder under the feats directory and decides
+whether each filename ends in `.lpc` with
+`strsrch(files[y], ".lpc") != (strlen(files[y]) - 2)` -- correct only
+for a 2-character `.c` extension, and since this port's mechanical
+rename lengthened every extension to `.lpc` (4 characters), this check
+is now false for every single file, so `continue` (skip) fires on
+literally every feat file in the archive. `__ALL_FEATS` was permanently
+empty, `is_feat()` returned false for every feat name in the game, and
+`add_feat()` silently no-op'd on every `feats add`/`feats <type> <feat>`
+call -- while the confirmation handler (`confirm_add_type()` in
+`cmds/mortal/_feats.lpc`) prints "Congratulations, you have successfully
+added..." UNCONDITIONALLY, never checking whether the daemon call
+actually succeeded, so the player sees a convincing fake-success message
+every time. Downstream, `std/living.lpc`'s central command dispatcher
+gates every `/cmds/feats/*` verb behind `FEATS_D->usable_feat()`, so
+every feat-granting command (including the game's own tutorial-
+recommended `sweepingblow`) failed with the driver's generic "Why?"
+default-fail message, indistinguishable from a nonexistent command. This
+hits EVERY new character immediately: the automatic class-granted
+feats every fighter/etc. receives at creation (light/medium/heavy armor
+proficiency, shield/simple/martial weapon proficiency) were also
+silently invisible to `feats known`/`has_feat()`/`usable_feat()`, even
+though the "Adding fighter class levelling feat: ..." messages print
+correctly during character creation.
+
+Root-caused live via temporary `debug_message()` instrumentation in
+`add_feat()` (note: this driver's `debug_message()` writes to the
+driver's own stdout/stderr, NOT `debug.log` -- a real trap during
+tracing) after ruling out `has_feat()`, `__FEAT_DATA` storage-key
+mapping, and a first (wrong) theory that `query_player_feats()` was
+missing a `"martial"` bucket read (it wasn't -- `"martial"`-type feats
+are intentionally aliased to the pre-existing `"bonus"` bucket via
+`get_feats()`/`set_feats()`'s own `case "martial": ... query_bonus_feats()`
+mapping, already correctly read back; a would-be fix was drafted then
+reverted once the real root cause -- `is_feat()` returning false because
+`build_feat_list()` never populated `__ALL_FEATS` at all -- was found).
+
+Fixed identically to §7.118's established extension-agnostic pattern:
+
+```lpc
+if (strlen(files[y]) < 4 || files[y][strlen(files[y]) - 4..] != ".lpc") {
+    continue;
+}
+```
+
+Fixing the scan then made `build_feat_list()` actually attempt to
+compile all ~130 feat files under `cmds/feats/` for the first time ever
+-- surfacing a second wave of ~25 files with their own independent,
+ordinary compile bugs that had simply never been reached before. All
+fixed, same session (grouped by shape, not per-file since most repeat):
+
+- **Undefined `m_indices()`** (the MudOS alias for `keys()`, not an efun
+  on this driver): `cmds/feats/a/_animal_companion.lpc`,
+  `_arcane_bond.lpc`, `p/_pact_bond.lpc`, `p/_primal_companion.lpc` (4
+  files, identical `implode(m_indices(valid_types), ",")` site) -> `keys()`.
+- **`TYPE *a, b`/`TYPE a, *b` declaration-binding typos** (this
+  archive's recurring class, already documented in this file's §8):
+  `a/_augment_arrow.lpc` (`object weapons;` used as an array throughout
+  -> `object *weapons`), `d/_defenders_presence.lpc` and
+  `r/_radiant_aura.lpc` (`object* party=({}), healed=({});` -- `healed`
+  silently scalar -> `*healed`), `j/_judgement.lpc` (`object inv;` used
+  as an array -> `object *inv`), `s/_shapeshift.lpc`
+  (`string myrace="",subrace="",oksubraces=({});` -> `*oksubraces`),
+  `s/_swipe.lpc` (`object wielded;` -> `object *wielded`, plus a real
+  logic bug found in the same line, see below), `obj/inspiration.lpc`
+  (`object * diffout, diffin;` -> `*diffout, *diffin`).
+- **`mapping` declared but assigned an array (`keys()`'s return)**:
+  `c/_counterspell.lpc` and `p/_primal_scar.lpc` (`mapping available;`
+  used with `pointerp`/`sizeof`/`available[i]` throughout -> `string
+  *available`).
+- **Stray `return N;` inside a `void`-declared function** (the same
+  class already fixed repeatedly during this lib's original onboarding,
+  §8 below): `d/_dazzling_display.lpc` (2 sites), `e/_enchant.lpc` (6
+  sites, one revealed only after the first 5 were fixed and the
+  function's tail became reachable), `s/_scribe.lpc` (7 sites, same
+  reveal-in-waves pattern), `s/_shield_of_whirling_steel.lpc` (2),
+  `s/_spinning_kick.lpc`, `w/_whirl.lpc`, `obj/flee.lpc`
+  (`return remove();` inside `void execute_attack()` -> `{ remove();
+  return; }`), `r/_resilient_arcana.lpc` (`return ::remove();` inside a
+  `void remove()` override -- fixed to bare `::remove();`, matching the
+  exact convention already used by two sibling overrides in this same
+  codebase, `obj/judgement.lpc` and `obj/inspiration.lpc`, both of which
+  already call `::remove();` as a bare statement).
+- **One-off logic/argument bugs, each independently confirmed**:
+  `c/_channel.lpc` (`attackers = attackers[i];` inside a `for` loop
+  clearly meant to assign the singular `attacker` variable -- a real,
+  distinct variable already declared two lines above -- fixed to
+  `attacker = attackers[i];`; left unfixed this would have destructively
+  overwritten the loop's own iteration array on every pass); `d/
+  _dirty_trick.lpc` (`int bonus, effect, sickened;` where `sickened` is
+  assigned `load_object(...)` and called via `->` -- an `object`, not an
+  `int` -- split into its own `object sickened;`); `g/_greater_rage.lpc`
+  (`set_required_for("mighty rage");` passing a bare string where the
+  function requires `string*` -- wrapped `({ "mighty rage" })`); `i/
+  _impale.lpc` (`strsrch(type, "pierc" == -1)` -- a misplaced
+  parenthesis comparing the literal `"pierc"` to `-1` instead of
+  comparing `strsrch(...)`'s result, permanently mis-scoring weapon
+  damage type -- fixed to `strsrch(type, "pierc") == -1`); `s/_swipe.lpc`
+  (beyond the array-declaration fix above, `if (!sizeof(wielded) == 1)`
+  -- operator-precedence bug parsing as `(!sizeof(wielded)) == 1`, so the
+  "you must be wielding a single one-handed weapon" gate only fired when
+  wielding NOTHING, never when dual-wielding or empty-handed as intended
+  -- fixed to `sizeof(wielded) != 1`); `obj/inspiration.lpc` (3 calls to
+  `inspire_ally(ally, dir)` omitting the function's required 3rd
+  `changeflag` argument -- this driver enforces exact non-`varargs` arg
+  counts -- added the `0` default at each call site, matching this same
+  lib's own established `daemon/chat.lpc` fix for the identical shape).
+
+Verified live end-to-end on a fresh throwaway character (`Feattest`,
+uncontaminated by `Testwind`'s pre-fix state): `feats known`
+immediately after creation correctly lists all six automatic class
+proficiencies; `feats martial sweepingblow` (`yes` to confirm) reports
+success AND the `sweepingblow` command itself now actually runs (reaches
+its own two-handed-weapon gameplay check, instead of the driver's
+generic "Why?"); `feats known` afterward correctly shows `Sweepingblow`
+under `TwoHandedWeapons`. `Testwind`'s own two attempts to add
+`sweepingblow` (one before the fix, one shortly after, before this was
+traced) both consumed the character's one-time "2 free martial bonus
+feats" allowance via the `bonus_feats_gained` counter (which increments
+unconditionally in `add_my_feat()`, independent of whether the feat
+actually persisted) without ever storing the feat -- `Testwind` is left
+in this state intentionally, as evidence of the pre-fix bug's exact
+failure mode (a permanently fake-successful, resource-consuming, no-op
+grant); a live wizard could restore the two consumed slots via
+`ob->set_bonus_feats_gained(0)` if this character is ever used for
+further testing, but that's a data-repair decision left to a human, not
+made here.
+
+### Bug 4: `d/laerad/mon/anti.lpc` (a level-22 mid-game boss NPC) failed to load at all, cascading from a stray `(string)` cast and several `void`-declared functions with stray `return 1;`/`return N;`, transitively taking down two dependent item files with it
+
+Found while spot-checking a `daemon/quests_mid` background quest-daemon
+reference in `debug.log` (`*No program in object
+'/d/laerad/mon/anti'!`) during otherwise-unrelated testing --
+`init()`'s aggro check cast `query_level()`'s int return to `(string)`
+before comparing it against int literals (`(string)TP->query_level() >
+18`), a hard type-mismatch error on this driver; `heart_beat()` and
+`bolt()` were both declared `void` with several `return 1;` sites.
+Compiling this one NPC file transitively attempted to load everything
+its own `create()` clones (`new("/d/laerad/obj/lstealer")`, etc.),
+surfacing two more independent bugs in the same load chain:
+`d/laerad/obj/lstealer.lpc`'s `void save_me(string file){return 1;}` (a
+deliberate no-op override to prevent this unique weapon from
+auto-loading on restore, per its own header comment -- but declared
+`void` while the base `std/Object.lpc`'s real `save_me()` returns `int`
+and IS consumed by callers elsewhere, e.g. `std/bag_logic.lpc`'s
+`j = inv[x]->save_me(fname);` -- fixed by widening to `int save_me(...)`,
+preserving the intended no-op behavior exactly). Fixed the cast (removed
+the stray `(string)`), the stray returns (changed to bare `return;` in
+the two `void` functions), and the `lstealer.lpc` return type. This NPC
+and its unique weapon are now reachable/loadable, though not personally
+fought live this session (a level-22 boss well above a level-1 newbie
+test character's reach) -- fix verified via a clean `lpcc --batch`
+single-file compile only, not a live encounter.
+
+### Bug 5: `daemon/virtual_room_d.lpc`'s player-room save/registration function was declared `void` but its ONE caller (`cmds/mortal/_save.lpc`) captures its return value -- broke the `save` command's virtual/player-built-room persistence path
+
+`register_virtual_room()` computes and `return`s a `save_name` string,
+but was declared `varargs void register_virtual_room(...)` -- the
+identical bug already present (and left commented-out, itself with the
+same `void`+`return save_name;` mismatch) in an EARLIER, abandoned
+version of the same function directly above it in the file, suggesting
+this was never actually fixed across a "recode" the file's own comment
+describes ("attempting to recode to account for moving/linked virtual
+rooms - Saide, April 2017"). `cmds/mortal/_save.lpc`'s only call site,
+`file = "/daemon/virtual_room_d.lpc"->register_virtual_room(...)`,
+needs that return value. Fixed by widening the declared return type to
+`string` (matching the function's own `return save_name;`) and changing
+its one early bare `return;` (for an invalid-object guard) to `return 0;`
+to satisfy the new non-void signature.
+
+### Bug 6: the general store's stock list was silently empty (`"I have nothing on hand."`) because two unrelated shared item classes it stocks failed to compile -- masked behind a generic, plausible-sounding shop message
+
+Reached via the newbie tutorial's own recommended first stop ("s;w from
+offestry center to get to the general store"). `list` at the Offestry
+general store (`Odds and Ends`) printed only "I have nothing on hand." --
+a message that reads as ordinary content (an understocked shop), not an
+error, and would have been easy to accept as intentional. `debug.log`
+told a different story: `d/common/obj/misc/book.lpc` and `d/common/obj/
+misc/canvas.lpc` (two shared "writable item" classes this shop stocks,
+alongside sacks/lanterns/tools/rope) both failed to compile, so the
+shop's stock-loading silently skipped every reference to either.
+
+- **`book.lpc`**: four `void`-declared functions (`set_stuff()`,
+  `set_author()`, and the `case "title":` branch of a switch inside
+  another) had stray `return 1;` sites, fixed to bare `return;`; a local
+  variable-declaration line `string *chap_keys=({}),*page_keys=({}),
+  new_keys=({}),tmp;` had the same `TYPE *a, b` binding typo as several
+  feat files above (`new_keys` silently scalar despite being assigned
+  `keys(...)` and indexed as an array) -- fixed to `*new_keys`.
+- **`canvas.lpc`**: `end_long()` was called at line 73 but defined
+  (with no forward declaration, and with NO declared return type at
+  all -- a bare `end_long(object tp, string long) { ... }`) at line 86 --
+  this driver's single-pass-per-file compiler treats that as calling an
+  undefined function. Added a `void end_long(object tp, string long);`
+  forward declaration and gave the definition itself an explicit `void`
+  return type. This then surfaced a second bug: two SAME-OBJECT direct
+  calls to `query_long()` with zero arguments, but the inherited
+  `std/Object.lpc`'s `query_long(string str)` requires exactly one --
+  fine when called via `->` `call_other` elsewhere in this same
+  codebase (loosely checked), but a hard compile error for a same-object
+  direct call (statically checked). Fixed both sites to `query_long("")`,
+  matching this exact codebase's own established convention for the
+  "give me the whole description" case (`std/bag_logic.lpc`'s
+  `container::query_long("");`).
+
+While tracing this, also found and fixed the SAME already-known,
+already-partially-fixed potion bug class from this lib's own original
+`§8` "Smaller one-off compile bugs" list (`void new_do_effect(...)` with
+stray `return 1;` -- previously fixed only in
+`d/common/obj/potion/advanced_heal.lpc`, apparently never swept across
+its siblings): `healing.lpc`, `newbie_healing.lpc`, `epic_heal.lpc`,
+`full_heal.lpc`, `legendary_heal.lpc`, `extra_heal.lpc` (6 more files,
+identical shape, all fixed the same way). These weren't stock items in
+this particular shop, but were caught by a quick sibling-file grep
+(`awk '/^void new_do_effect/,/^}/' file | grep 'return 1;'`) run
+immediately after finding the first instance, per this project's
+standing "a bug found once has usually been copy-pasted" heuristic.
+
+Verified live: the Offestry general store's `list` now shows all 16
+real stock items (belt pouches, lanterns, rope, tools, the canvas, the
+book, etc.) instead of "I have nothing on hand." A further, unrelated
+`*No program in object '/d/common/obj/sheath/sheath_inherit'!` surfaced
+in `debug.log` from a DIFFERENT background subsystem (a weapon-sheath
+randomizer) while re-testing the shop -- confirmed not to block the shop
+list itself, and left unfixed as a deliberate stopping point: this
+43,147-file live archive has effectively unbounded further
+transitively-reachable compile bugs in its shared item library once
+lpcc actually starts reaching previously-dead code paths (the same
+mechanism as Bug 3's "second wave"), and chasing every one of them is
+out of scope for a single §10.7 pass — flagged here for whoever next
+works this lib, not chased further.
+
+### What was tested and confirmed working (Testwind's playthrough)
+
+- **Registration + full 15-stage creation wizard** (class, gender, race,
+  subrace, template, age, stat rolling via `recommended`, body type,
+  hair/eye color, language, alignment, deity, class special), tutorial
+  `skip`, landing in Offestry town square.
+- **`look`/`score`/`i` at every major state change**: after register
+  (post-Bug-1-fix, renders correctly), after first move, after gaining a
+  feat, after combat, after quit/relogin.
+- **Combat**: no dedicated PvP-safe sparring/training-dummy mechanism
+  reachable from the newbie zone within this session's travel budget
+  (the game's real training-dummy room, `d/shadow/coliseum/`, is in a
+  different city, `Shadow`, not the newbie town `Offestry` -- reaching
+  it would have required either significant travel or admin `goto`,
+  which this lib's freshly-seeded admin account was used for other
+  verification instead). Used the newbie-tutorial-recommended "keep"
+  area's xvarts instead (level ~1, low threat) -- fought and killed two
+  separate xvarts across two sessions with normal hit/miss/damage/death/
+  corpse mechanics and correct XP gain (58, then another for a running
+  total of 290), no `debug.log` errors during either fight.
+- **Skill/feat acquisition**: `feats allowed`/`feats known`/`feats
+  martial <feat>` (with its `yes` confirmation flow) all now function
+  correctly post-Bug-3-fix, verified on a completely fresh character
+  (see Bug 3 above for the full before/after).
+- **`quit`, `debug.log` grep, then reconnect after a real wall-clock
+  gap**: `Testwind` was quit and reconnected across 4 separate real
+  driver-restart-and-reconnect cycles over the course of this session
+  (each time a fix required a fresh boot to test); state (level, exp,
+  HP, feats-known-counter, room position) persisted correctly across
+  every cycle; `debug.log` was clean of error-level output at every
+  `quit` (only routine compile warnings from unrelated lazily-loaded
+  objects).
+- **Economy**: reached the Offestry general store and confirmed its
+  full stock list renders (see Bug 6); did not complete an actual
+  purchase live since `Testwind` never accumulated any gold during this
+  session's limited combat.
+
+### Known gaps -- honestly unverified, not invented or guessed at
+
+- **Death/resurrection**: NOT reached live this session. `Testwind`
+  never dropped below ~50% HP fighting single newbie-zone xvarts, and
+  deliberately seeking out a lethal fight (or using an admin `smash`/
+  `die()` to force it) was not attempted given the time already spent on
+  the six compile-bug chains above. Left as explicitly unverified rather
+  than silently skipped.
+- A full corpus-wide sweep for the §7.123 top-level-bare-assignment bug
+  class (Bug 1) was NOT attempted (see Bug 1's own note on why) -- the
+  four instances found are everything this session's targeted grep plus
+  live playthrough happened to surface, not a proof of completeness.
+- `Node.js` is not installed in this environment, so the required §9 LPC
+  formatter pass (`format-corpus.mjs`) could not be run on any of the
+  ~35 files touched this session. All edits were made by hand, matching
+  each file's existing indentation/brace style as closely as possible;
+  a formatter pass (plus the three documented post-format blind-spot
+  checks) should be run on these files by whoever next has `node`
+  available, before considering this pass's formatting fully compliant
+  with the project's own §9 requirement.
