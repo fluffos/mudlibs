@@ -10779,6 +10779,41 @@ character within its delay window. `zjmudhell` (byte-identical source)
 verified post-fix only, via its own custom mobile-app crypt-challenge
 login protocol, with the same `sleep`→`wakeup()` result. Both fixed and
 pushed (see each lib's own NOTES.md for the full per-lib writeup).
+
+**Seventh confirmed instance: `xkx2001`'s own §10.7 standing-pattern
+audit (2026-08-27)**, a third independent lineage carrying this exact
+two-file/two-function shape ("ES II → XKX", distinct from the "Doing Lu
+hell" lineage above) — `feature/action.lpc::eval_function()` (the
+`start_call_out()` target, ~66 files across this archive's kungfu-skill
+tree depend on it for buff/DoT/timed-status callbacks) and
+`inherit/item/combined.lpc::destruct_me()` (every gold/silver/coin
+object in the game inherits this via `inherit/item/money.lpc` with no
+local override, so spending currency to exactly 0 orphaned a permanent
+`VOID_OB` clone every time, pre-fix). A third, smaller-blast-radius
+instance of the identical `destruct_me()` shape was also found and
+fixed in a non-shared per-area mixin, `d/xueshan/inherit/
+liquid_content.lpc` (inherited by one item file, `d/xueshan/obj/
+suyou.lpc`) — the first instance in this bug class found outside the
+two canonical `feature/action.lpc`/`inherit(or std)/item/combined.lpc`
+files, confirming the same copy-pasted "stackable item spent to 0"
+mixin shape can recur in a lib's own bespoke area code too, not just
+the shared engine files. All three fixed identically (drop `private`).
+Live-verified via the seeded admin account and `eval`: (1)
+`this_player()->start_call_out((: debug_message("...") :), 1)` returned
+`Result = 1` and the debug marker printed to the driver's own stdout
+~1s later with zero `insufficient permission` lines in `debug.log`; (2)
+a cloned `/clone/money/coin` moved onto the admin body, then
+`set_amount(0)`'d — `all_inventory(load_object("/clone/misc/void"))`
+read size 1 immediately after (the orphaned clone awaiting its
+`call_out`) and size 0 three real seconds later (fired, destructed),
+`debug.log` clean throughout. See `libs/xkx2001/NOTES.md` for the full
+writeup, including the sweep methodology used to rule out every other
+`private`-declared function in the archive (grep `private ... NAME(` +
+`call_out("NAME"`/`add_action("NAME"` in the same file, then filter to
+only those whose file is genuinely `inherit`ed by a *different* file —
+the bug requires crossing an inheritance boundary, so a private
+function whose only caller is the same standalone leaf/clone object
+that declares it is unaffected).
 `hellxg` re-confirmed genuinely not applicable: its `raw/` archive is
 only an 8-file partial patch overlay (never onboarded into a `work/`
 tree at all, no `meta.json`/`config.fluffos`), containing neither

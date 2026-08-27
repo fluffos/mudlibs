@@ -579,3 +579,205 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Deep functional test (round two), standing cross-cutting pattern audit (this session)
+
+The earlier "深度功能测试 / Deep functional test (round two)" section above
+(commit `148389b7af4`) already did the full hands-on playthrough this
+project's §10.7 methodology calls for (registration, organic skill
+learning, safe sparring, sect-contact attempt, quit/reconnect,
+disconnect handling, admin re-verification) and found/fixed the
+`longx.lpc` double-`call_out` driver segfault. This pass did **not**
+repeat that playthrough (redoing it would just duplicate already-solid,
+still-current evidence); instead it audited this lib specifically
+against every standing cross-cutting bug-pattern class documented in
+AGENTS.md as of 2026-08-27 (§7.121/§7.122/§7.123/§7.124/§7.126/§7.129
+through §7.135, §8.3a, plus the `wimpy`/`env-wimpy` dbase-key check),
+since most of those entries post-date the July pass and had never been
+checked against this specific lib. Native driver
+(`~/src/fluffos/build-debug/src/driver config.fluffos`),
+`scripts/mudclient.py`, admin account `fluffos`/`Mud@2026`.
+
+### Bug found and fixed: §8.3a `private`-demotion, THREE more instances in this lib (new confirmed instances of an existing AGENTS.md class)
+
+This exact "ES II → XKX" lineage is independently on record in AGENTS.md
+§8.3a as having this bug in `xuanjianlu`, `zjdyaryl`, `revive` and
+(via a from-scratch discovery) `demonangel` — always in the same two
+file/function shapes (`feature/action.lpc`'s `eval_function()`,
+`std|inherit/item/combined.lpc`'s `destruct_me()`). `xkx2001` turned out
+to carry the identical, previously-unchecked bug in all three places it
+can occur in this archive:
+
+1. **`feature/action.lpc:70`** — `private void eval_function(function
+   fun) { evaluate(fun); }`, the sole callback target of
+   `start_call_out()` (the shared "temporary condition recovery
+   call_out" primitive; grep found **66 files** calling
+   `start_call_out()`, almost entirely `kungfu/skill/*.lpc` buff/DoT/
+   timed-status effects). `feature/action.lpc` is inherited into every
+   character via `inherit/char/char.lpc`'s `inherit F_ACTION;`, so
+   `eval_function` becomes `DECL_HIDDEN` once inherited and every
+   `start_call_out()`-scheduled callback across all 66 files would
+   silently fail to fire (`apply() with insufficient permission ...
+   needs: private, has: hidden`) the moment it actually fired, well
+   after the triggering action itself looked completely normal —
+   exactly the failure mode AGENTS.md's write-up describes.
+2. **`inherit/item/combined.lpc:19`** — `private void destruct_me() {
+   destruct(this_object()); }`, the sole callback target of
+   `set_amount()`'s `v==0` branch (`::move(VOID_OB);
+   call_out("destruct_me", 1);`). `inherit/item/money.lpc` (the base of
+   every gold/silver/coin object in the game) inherits `COMBINED_ITEM`
+   and does **not** define its own `destruct_me`, so this is the exact
+   "money spent to exactly 0 orphans a permanent VOID_OB clone" shape
+   called out for `xuanjianlu` — every time any player's coin/silver/
+   gold stack hits exactly 0 (an everyday shopping event), the spent
+   currency object would move to `VOID_OB` and then leak there forever
+   instead of actually destructing.
+3. **`d/xueshan/inherit/liquid_content.lpc:26`** — byte-identical
+   `private void destruct_me()` / `set_amount()` shape, inherited by
+   `d/xueshan/obj/suyou.lpc` (a liquid-container item) with no local
+   override — same leak class, smaller blast radius (one item file).
+
+**Fix**: dropped `private` from all three (kept every other qualifier;
+none of the three needed `nomask` since nothing else in the codebase
+overrides them). Mechanical, one-line-per-file, behavior-preserving —
+matches the standard remedy already established for this exact bug
+class.
+
+**Live-verified, both distinct call_out target shapes, via the seeded
+admin account**:
+- `eval_function`: `eval
+  this_player()->start_call_out((: debug_message("XKX2001_EVAL_FUNCTION_TEST_OK\n") :), 1)`
+  returned `Result = 1` (scheduled), and the marker string
+  `XKX2001_EVAL_FUNCTION_TEST_OK` appeared in the driver's own stdout
+  ~1s later with **zero** `insufficient permission` lines in
+  `debug.log` — confirms the previously-private, now-public
+  `eval_function` is reachable by `call_out()` once inherited into a
+  live player body.
+- `destruct_me`: cloned `/clone/money/coin`, moved it onto the admin
+  body, confirmed present via `i`; `present("coin_money",
+  this_player())->set_amount(0)` immediately moved it out of inventory;
+  `sizeof(all_inventory(load_object("/clone/misc/void")))` read `1`
+  right after (the orphaned coin sitting in `VOID_OB` awaiting its
+  `call_out`) and `0` after a further 3-second real wait (the fixed
+  `destruct_me()` fired and actually destructed it) — `debug.log`
+  stayed free of `insufficient permission` throughout. Did not
+  separately re-run this exact repro against `liquid_content.lpc`
+  (identical code shape, already proven correct via `combined.lpc`);
+  confirmed only that the file still compiles clean post-fix.
+
+**Sweep methodology for future sibling checks**: grepped every
+`private\s+(?:nomask\s+)?(?:varargs\s+)?TYPE NAME(` declaration in the
+whole archive against `call_out("NAME"`/`add_action("NAME"` occurring
+in the *same* file, then hand-filtered the ~50 raw hits down to
+real instances by checking whether that file is ever `inherit`ed by a
+*different* file (the DECL_HIDDEN-on-inherit bug only bites across an
+inheritance boundary — a `private` function whose only caller is the
+same standalone leaf/clone object that declares it, e.g. dozens of
+`go_home`/`remove_effect`/`destruct_me`-in-their-own-weapon-file
+patterns found in this same grep, is unaffected and was correctly left
+alone). `feature/command.lpc`'s `command_hook` itself was independently
+re-checked and is **not** private here (`nomask int command_hook`) —
+already correct, unlike the sibling libs where that specific function
+needed the fix.
+
+### Everything else audited this pass: confirmed clean, no fix needed
+
+- **§7.122 (autoload/marker-item duplication on disconnect/reconnect)**:
+  this lib's own mechanism (`feature/autoload.lpc`'s
+  `save_autoload()`/`restore_autoload()`, ES2-lineage naming, not the
+  TMI-2 `compute_autoload_array`/`load_autoload_obj` naming that the
+  original AGENTS.md §7.122 bug was found under, despite `xkx2001`
+  being listed as an `es1` descendant worth checking) is **not**
+  vulnerable to the TMI-2-style double-storage bug: `feature/save.lpc`'s
+  `save()` is a bare `save_object(file)` (the native efun, which never
+  serializes inventory sub-objects at all — no redundant "baked into
+  ordinary inventory data" copy exists for this lib the way it does in
+  the TMI-2 lineage's own custom recursive save), and the `autoload`
+  variable is synchronously zeroed (`clean_up_autoload()`) immediately
+  after every single consumption, both on the save side
+  (`clone/user/user.lpc`'s `save()`) and the restore side
+  (`restore_autoload()`'s own tail call) — so a stray re-entrant
+  `setup()` call (checked every call site: `logind.lpc`'s
+  `enter_world()`, and the admin-only `promote`/`award`/`cloneusr`
+  commands) either operates on a brand-new empty-inventory clone or
+  finds `autoload` already back to `0` (`pointerp(0)` false, immediate
+  return) and is a safe no-op either way. `reconnect()` (the real
+  net-dead recovery path) never calls `setup()` at all. Traced every
+  `->restore()` call site in the archive; none of them call `restore()`
+  on an already-live/online object (all target either a fresh
+  `new(...)` dummy/LOGIN_OB clone or bail out early via a `present()`/
+  `find_player()` online-check first).
+- **`wimpy`/`env-wimpy` dbase-key mismatch**: re-verified clean —
+  `cmds/usr/wimpy.lpc` (the player command) and `inherit/char/char.lpc`
+  `heart_beat()` (the real consumer) both consistently use
+  `"env/wimpy"`. Noted, but NOT fixed as it's a narrow, single-NPC
+  content quirk rather than the systemic pattern being checked for: two
+  NPC files (`d/city/npc/maskman.lpc`, `d/huashan/npc/maskman.lpc`) call
+  `set("wimpy", 30)` (wrong key, dead write, that one NPC just never
+  auto-flees) — cosmetic/content-only, in scope boundary territory
+  (could be an intentional "this masked-man boss fights to the death"
+  design choice), left untouched per this project's programming-bugs
+  only mandate.
+- **§7.121 (float arithmetic in declared-`int` function)**: no
+  int-declared field/function anywhere in the money/finance path
+  (`feature/finance.lpc`'s `can_afford()`/`pay_money()`) uses float math
+  at all — pure integer arithmetic throughout. The only stray
+  `= 0.N;` float-literal assignments found archive-wide
+  (`d/taohua/obj/taomu(-)?jian.lpc`'s `gain3`) are to a `float`-declared
+  variable, not an `int` one — not an instance of this class (and any
+  balance question about the clamp value itself is a content judgment,
+  out of scope).
+- **§7.123 (bare file-scope `IDENT = (...)` statement)**: grepped for
+  the shape archive-wide; every hit found is inside a function body
+  (`create()`/`reset()`/etc.), never a genuine top-level/file-scope
+  statement.
+- **§7.124 (fraction-vs-percentage threshold mismatch)**: `env/wimpy`
+  and every other percentage-shaped threshold field checked use
+  consistent 0-100 integer literals throughout; no `0.NN` fraction
+  literal assigned to a percentage-typed field found.
+- **§7.126 (stale pre-`.lpc` `.c` extension in `.o` save data)**: this
+  lib has no macro-placeholder/coordinate-AREA door-storage mechanism at
+  all (`file_path()`-style runtime path reconstruction from save data
+  doesn't exist in this archive) — not applicable.
+- **§7.130 (unconditional liveness-check call after non-interactivity
+  already detected)**: `inherit/char/char.lpc`'s `heart_beat()` has an
+  explicit `if (!interactive(this_object())) return;` guard strictly
+  BEFORE its own `query_idle()` call a few lines later — correctly
+  ordered, not the buggy shape.
+- **§7.131 (`find_living`/`find_player` needing `set_living_name`
+  registration)**: `feature/command.lpc` (inherited into every
+  character) calls `set_living_name(query("id") || query("name"))` for
+  every character — registration is real and universal; not applicable.
+- **§7.132 (`map()`-over-mapping wrong-argument binding)**: no
+  `map(mapping, function)` call site exists anywhere in the archive
+  (only unrelated `query_skill_map()`-named accessors and a
+  coordinate-grid `genmap.lpc`) — not applicable.
+- **§7.133 (disconnect-notification apply never defined)**: this driver
+  calls `net_dead()` on the player object directly (not a master-level
+  `remove_interactive()` apply), and `clone/user/user.lpc` defines a
+  real, working `net_dead()`/`reconnect()` pair (already confirmed
+  working in the July pass's "Also verified working" section above) —
+  not applicable.
+- **§7.134/§7.135 (uninitialized-array field / accessor missing a
+  lazy-init guard sibling has)**: the concrete instances of this general
+  shape in this archive (`feature/skill.lpc`'s 4 uninitialized-mapping
+  accessors) were already found and fixed in the earlier §7.30 sweep
+  (see above, commit `fa23db1fa2e`); no further un-guarded
+  sibling-accessor gaps found on a fresh look at that file or its
+  neighbors.
+
+### Live verification summary
+
+Clean boot (native driver, zero compile errors/warnings-as-errors,
+zero `debug.log` fatal/segfault lines across the whole session).
+Logged in as `fluffos`/`Mud@2026` (`目前权限：(admin)` confirmed),
+landed correctly at the 沙滩 starting room. Ran the two live repros
+above (`eval_function` via `start_call_out`, `destruct_me` via a
+coin spent to 0) with `debug.log` clean throughout, then `quit`
+cleanly. No test-character saves were created this pass (all testing
+used the existing seeded admin account plus throwaway `new()`-cloned
+test objects that self-destructed or were never saved); no additional
+save-file cleanup needed beyond reverting the admin account's own
+login-timestamp/hunger-tick save drift from this session's testing
+(`git checkout HEAD --` on `work/data/{login,user}/f/fluffos.o`) and
+removing the disposable `work/tmp/tmp_eval.lpc` eval scratch file.
