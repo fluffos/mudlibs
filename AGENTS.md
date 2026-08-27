@@ -10936,6 +10936,27 @@ bisection if the slowdown reproduces on an uninstrumented build too.
   instead of the whole slug. For any lib with a known deferred-content
   history (check its NOTES.md / earlier commit messages), stage exact
   paths by hand rather than trusting the blanket per-slug add.
+- **The same hazard `safe_commit_batch.sh` exists for also hits plain
+  individually-dispatched onboarding agents that never call it** — the
+  shared-index race isn't specific to a formal "batch sweep," it's
+  inherent to any two concurrent `git add <path> && git commit`
+  sequences on one working tree. Confirmed for real (2026-08-26): agent
+  A ran a plain `git add AGENTS.md libs/tianxia/NOTES.md && git commit`
+  while agent B's fully-finished `git add libs/ninetears/...` (a
+  separate, unrelated onboarding) was sitting staged but not yet
+  committed — A's `.git/index.lock` wait resolved right into B's
+  staged index state, so A's commit silently absorbed and landed all
+  27,079 of B's files under A's own commit message/authorship. No data
+  was lost (B's content was complete and correct, it just landed under
+  the wrong commit), but the history is now confusing (no
+  self-explanatory "Onboard ninetears" commit exists). Since this
+  session dispatches individual onboarding agents concurrently as a
+  matter of course (not a formal batch run), **every onboarding
+  agent's final commit should go through `scripts/safe_commit_batch.sh
+  <own-slug> -- <msg-file>` rather than a bare `git add`/`git commit`
+  pair**, specifically because its index-reset-then-verify step would
+  have caught (refused) exactly this cross-contamination before it
+  landed. Don't reserve that script for "batch sweeps" only.
 - **Publishing: normal `git push origin main`.** This worktree tracks
   `origin/main` (`github.com/fluffos/mudlibs`) directly. `archives/`
   is gitignored — the original archive files live there locally for
