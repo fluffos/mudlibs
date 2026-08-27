@@ -226,6 +226,72 @@ recaptured distinctly in this transcript (absorbed by the first-login
 news pager) but are already verified clean under native testing above
 and untouched by this fix.
 
+## §7.122 sibling check: `load_autoload_obj()` class-marker duplication (2026-08-27)
+
+Targeted check (not a full §10.7 pass), prompted by AGENTS.md §7.122
+finding the exact same `compute_autoload_array()`/`destroy_autoload_obj()`/
+`load_autoload_obj()` mechanism duplicating class-marker items in
+`mortremains` (another TMI-2 1.4alpha-descended lib -- both this file's
+own header and `mortremains`'s credit "Truilkan@TMI" verbatim, confirming
+the shared lineage §7.122 flagged as a plausible sibling).
+
+**Found and fixed the same defect, live-confirmed.** `std/user/autoload.lpc`'s
+`load_autoload_obj()` unconditionally cloned a fresh copy of every
+`auto_load` entry with no check for whether a matching item was already
+present in inventory -- byte-for-byte the same unguarded-clone shape as
+`mortremains`. Reproduced live via the admin `eval` command (`/cmds/file/
+_eval.lpc`) on a real bank card (`/std/bank_card`, this lib's own
+`query_auto_load()`-marked class item, normally granted via `open account`
+at the bank): calling `this_player()->load_autoload_obj()` twice in a row
+on an already-carrying body cloned two more copies (1 -> 2 -> 3), and the
+mechanism compounds on every abrupt disconnect too -- `net_dead()` (this
+lib's own abrupt-disconnect handler, `std/user.lpc:1302`) calls
+`save_data()` (which calls `compute_autoload_array()`, re-scanning
+*current* inventory) but never calls `destroy_autoload_obj()`, so each
+net-dead event appends another duplicate-looking entry to the saved
+`auto_load` array for every physical copy currently held. Confirmed the
+live trigger path differs slightly from `mortremains` (whose bug surfaces
+across an abrupt-disconnect-then-full-restore cycle): here it's most
+directly reachable via `adm/daemons/logind.lpc`'s force-takeover path
+(`exec_old_copy()`, line ~397-400) re-calling `setup()` -- and hence
+`load_autoload_obj()` -- on an **already-live** body object when a same-account
+login arrives from a different source IP while the old session is still
+interactive; the root-cause function itself is identical either way. Also
+confirmed (unlike `mortremains`) that this driver's plain `save_object()`
+does **not** independently serialize inventory sub-objects here -- checked
+the raw save file (`data/std/user/f/fluffos.o`) before and after
+reproducing the bug and only ever saw the `auto_load` array grow, never a
+separately-serialized copy of the card's own properties -- so the specific
+"baked into inventory before destroy runs" half of `mortremains`'s repro
+doesn't apply verbatim to this port, but the reload-side defect
+(`load_autoload_obj()`'s missing idempotency check) is the same bug and
+fires from a real, independently-confirmed live path regardless.
+
+**Fix applied** (identical pattern to `mortremains`'s AGENTS.md §7.122
+fix): `load_autoload_obj()` now snapshots `all_inventory(this_object())`
+before the clone loop and skips any `auto_load` entry whose `base_name()`
+already matches an object already present, appending each newly-cloned
+item to that same snapshot so later entries in the same call also see it.
+Verified live end to end: pre-fix, two successive `eval`-triggered
+`load_autoload_obj()` calls took the bank card from 1 -> 2 -> 3 copies,
+and the resulting abrupt-disconnect churn (during testing) left the saved
+`auto_load` array at 9 duplicate-looking entries (one appended per
+`net_dead()` while 9 physical copies were briefly held). Post-fix, on a
+genuine fresh driver boot + restore against that same corrupted save file,
+`load_autoload_obj()` correctly collapsed back down to exactly 1 physical
+card (the first `auto_load` entry clones it, the remaining 8 are
+recognized as already-present and skipped), and three further
+`eval`-triggered re-invocations of `load_autoload_obj()` on the live body
+held steady at 1 -- confirming the guard is idempotent under repeated
+calls, including from a starting state the pre-fix bug had already
+corrupted (this port's save mechanism made a full self-heal possible here,
+unlike `mortremains`'s note that its fix "does not retroactively clean up
+saves already corrupted before it landed" -- a difference in how each
+port's save file happens to be structured, not in the fix itself).
+
+Driver killed cleanly by exact PID after verification, both before and
+after the fix.
+
 ## Local run
 
 ```
