@@ -631,3 +631,34 @@ form would have thrown `*Bad argument 4 to EFUN message()`. Test object
 deleted before commit. `include/compress_obj.h` (the sibling §7.14
 bug from the same `es1` finding) does not exist anywhere in this
 lib's tree — not applicable.
+
+### ES2-family sibling sweep (2026-08-27): `wimpy` dbase-key mismatch found and fixed — same shape as `es2`'s finding
+
+Following up on `es2`'s NOTES.md finding (its `cmds/usr/wimpy.lpc`
+read/wrote dbase key `"wimpy"` while the only real consumer,
+`std/char.lpc`'s `heart_beat()` auto-flee check, read `"env/wimpy"`
+instead — a silent, permanent no-op for the player-facing `wimpy`
+command), checked this direct ES2-lineage sibling and found the exact
+same bug. `cmds/usr/wimpy.lpc` read/wrote `me->query("wimpy")` /
+`me->set("wimpy", wmp)` (no `env/` prefix), while `std/char.lpc`'s
+`heart_beat()` reads `wimpy_ratio = (int)query("env/wimpy")` for its
+HP-based auto-flee check, and this lib's own NPC templates
+(`obj/example/ghost.lpc`, `obj/example/drooler.lpc`) already correctly
+set `"env/wimpy"` in their own `create()`. Fixed identically to `es2`:
+changed both the read and write in `wimpy.lpc` to use `"env/wimpy"`.
+Live-verified: booted the driver, logged in as the seeded `fluffos`
+admin account, ran `wimpy 30`, and confirmed the resulting save file
+persists `"env":(["wimpy":30,])` under the player's dbase — matching
+exactly what `heart_beat()` reads, where pre-fix it would have written
+to a top-level `"wimpy"` key nothing ever consumed. (Two other files —
+`open/test/npc/0.lpc`/`open/sky/npc/0.lpc` setting `"wimpy",0` on
+throwaway test NPCs, and `cmds/min/set_mob.lpc`'s admin diagnostic
+display of `dbase["wimpy"]` — also reference the bare key, but neither
+is a functional consumer of the player auto-flee setting, so left
+untouched.) Checked the sibling ES-family libs `haiyang2`, `xkx2001`,
+`bmxkx2001`, `rzrmud`, `xo`/`xo_final`, `zhyx`, and `naruto` for the
+same shape: all clean (setter and getter already agree on the same
+key, or — `xo`/`xo_final`'s generic `set wimpy N` command and
+`naruto`'s per-stat `set_stat_notify`/`query_stat_notify` mechanism —
+use a different, internally-consistent implementation shape entirely).
+`demonangel` was the only lib in the family carrying the bug.
