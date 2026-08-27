@@ -1,0 +1,51 @@
+inherit STD_COMMAND;
+
+void create() {
+    ::create();
+    set_syntax("test -b(rief) -c(overage) [file]");
+    set_help_text("The test command is used to run the tests of a file, if they exist.");
+}
+
+void command(string input, mapping flags) {
+    if (input == "all") {
+        message("action", "Running all tests...", this_user());
+        D_TEST->run(([
+            "brief": flags["brief"] || flags["b"],
+            "coverage": flags["coverage"] || flags["c"],
+        ]));
+    } else if (input == "coverage") {
+        D_TEST->analyze_coverage();
+    } else if (input) {
+        string test;
+
+        if (input[0] != '/' && input[0] != '~' && input[0] != '^') {
+            input = this_user()->query_variable("cwd") + "/" + input;
+        }
+        input = sanitize_path(input);
+        // .lpc is 4 chars: the guard needs [<4..] (this driver's
+        // convert_lib.sh rewrote the old ".c"-suffix guard's literal
+        // string to ".lpc" but left the slice widths at their old
+        // 2-char values, so [<2..] == ".lpc" could never be true again,
+        // silently disabling the strip -- AGENTS.md's "guard-then-strip
+        // pair" fallout of the .c->.lpc rename).
+        if (input[<4..] == ".lpc") {
+            input = input[0..<5];
+        }
+        test = input + ".test.lpc";
+        if (file_size(test) > 0) {
+            D_TEST->process_file(test, ([
+                "brief": flags["brief"] || flags["b"],
+                "coverage": flags["coverage"] || flags["c"],
+                "reset": 1
+            ]));
+        } else {
+            message(
+                "action",
+                "Unable to find test file for " + input + ".",
+                this_user()
+            );
+        }
+    } else {
+        message("action", "Test what?", this_user());
+    }
+}

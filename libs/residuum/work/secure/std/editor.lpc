@@ -1,0 +1,92 @@
+/**
+ * Clone-per-session wrapper around the FluffOS `ed` line editor.
+ *
+ * Usage: `new(STD_EDITOR)->editor_start(file, endFn)`
+ *
+ * The object self-destructs when the edit session ends (or the connection
+ * drops). `query_ed_setup` / `set_ed_setup` are driver applies that proxy
+ * the user's ed configuration flags through to the user object.
+ */
+
+nosave private function __EndFn;
+/** @type {STD_USER} __User */
+nosave private object __User;
+// Set once the driver calls our ed_exit() callback (see below) -- this
+// build's ed session state lives entirely inside the driver under
+// __OLD_ED__ (no query_ed_mode() to poll), so this flag is the only way
+// clean_up() can tell whether a session is still active.
+nosave private int __EdDone;
+
+/**
+ * Start the line editor on a file, calling endFn when the session closes.
+ *
+ * @param {string} file - path to the file to edit
+ * @param {function} endFn - optional callback invoked after a clean exit
+ */
+void editor_start(string file, function endFn) {
+    __EndFn = endFn;
+    __User = this_user();
+    // This driver build was compiled with __OLD_ED__ -- only the single
+    // old-style `ed()` efun exists (ed_start()/ed_cmd()/query_ed_mode() are
+    // undefined here). Under __OLD_ED__ the driver's C-level input loop
+    // intercepts every keystroke directly for the whole ed session,
+    // bypassing process_input()/input_to() entirely, and calls the named
+    // exit function (ed_exit(), below) on this object once the session
+    // ends -- there is no equivalent of the new API's per-keystroke
+    // ed_cmd() callback to drive manually, so the old query_prompt()/
+    // editor_input() closures this file used to register via
+    // __User->input_push() are gone too (nothing else calls them, and the
+    // driver draws its own ed prompt for the session's whole duration
+    // either way). `0` for restricted matches this file's original
+    // `ed_start(file, 0)` (unrestricted).
+    ed(file, "ed_exit", 0);
+}
+
+/**
+ * Driver callback: invoked on this object when the ed session started by
+ * editor_start() ends (old-ed exit function, see editor_start() above).
+ */
+void ed_exit() {
+    __EdDone = 1;
+    if (__EndFn) {
+        evaluate(__EndFn);
+    }
+    destruct();
+}
+
+/* ----- ed setup ----- */
+
+/**
+ * Query the user's ed setup flags.
+ *
+ * @returns {int} the setup bitmask stored on the user object
+ */
+int query_ed_setup() {
+    return __User->query_ed_setup();
+}
+
+/**
+ * Set the user's ed setup flags.
+ *
+ * @param {int} code - setup bitmask to store on the user object
+ */
+void set_ed_setup(int code) {
+    __User->set_ed_setup(code);
+}
+
+/* ----- applies ----- */
+
+/**
+ * Driver clean_up apply. Destructs the editor if ed has exited; returns 1 to
+ * keep the object alive while an edit session is still active.
+ *
+ * @returns {int} 0 when destructed, 1 when kept alive
+ */
+int clean_up(mixed args...) {
+    if (__EdDone) {
+        destruct();
+        return !this_object();
+    } else {
+        return 1;
+    }
+}

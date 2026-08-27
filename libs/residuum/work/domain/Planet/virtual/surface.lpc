@@ -1,0 +1,140 @@
+#include <planet.h>
+
+#define PI 3.141592653589793
+#define PIx2 6.283185307179586
+
+inherit M_CLEAN;
+
+int is_virtual_room() { return 1; }
+
+/* ----- setup virtual room ----- */
+
+mapping __PCache = ([]);   // Permutation Cache
+
+// per-type player-facing wording for enterable structures
+nosave private mapping __StructureMeta = ([
+    "crashed_ship": ([
+        "enter": "wreck",
+        "desc": "The hull of a crashed ship juts from the ground nearby, a breach in its side wide enough to enter.",
+    ]),
+    "ruin": ([
+        "enter": "ruins",
+        "desc": "Crumbling ruins stand close by, a dark entrance yawning open to any who would enter.",
+    ]),
+]);
+
+/**
+ * set up this virtual room for a planet surface.
+ *
+ * @param {"/domain/Planet/virtual/room/base/terrain.lpc"} room
+ */
+void setup_room(object room) {
+    string name;
+    int x, y;
+    mapping planet, noise;
+    string biome;
+
+    name = room->query_property("name");
+    x = room->query_property("x");
+    y = room->query_property("y");
+
+    planet = D_PLANET->query_planet(name);
+
+    if (!__PCache[planet["name"]]) {
+        __PCache[planet["name"]] = noise_generate_permutation_simplex(planet["name"]);
+    }
+
+    noise = D_PLANET->query_noise(
+        __PCache[planet["name"]],
+        planet["size"],
+        x,
+        y,
+        planet["heightFactor"],
+        planet["humidityFactor"],
+        planet["heatFactor"]
+    );
+    room->set_property("level", noise["level"]);
+    room->set_property("height", to_int(noise["height"] * 100));
+    room->set_property("heat", to_int(noise["heat"] * 100));
+    room->set_property("humidity", to_int(noise["humidity"] * 100));
+    if (noise["resource"]) {
+        room->set_property("resource", noise["resource"]);
+    }
+
+    biome = planet["biome"] || D_PLANET->query_biome(
+        noise["height"],
+        noise["heat"],
+        noise["humidity"]
+    );
+    room->set_property("biome", biome);
+}
+
+/**
+ * Add exits to the room, wrapping around from len-1 to 0 and vice-versa.
+ *
+ * @param {"/domain/Planet/virtual/room/base/terrain.lpc"} room
+ * @param planet the planet's attributes
+ * @param x integer longitude coordinate
+ * @param y integer latitude coordinate
+ */
+void setup_exits(object room, mapping planet, int x, int y) {
+    string path;
+    string name;
+    int size, xw, xe, yn, ys;
+    mapping structure, meta;
+
+    name = planet["name"];
+    size = planet["size"];
+
+    path = PLANET_V_ROOM + "surface/" + name;
+    xw = x > 0 ? x - 1 : size - 1;
+    xe = x + 1 < size ? x + 1 : 0;
+    yn = y > 0 ? y - 1 : size - 1;
+    ys = y + 1 < size ? y + 1 : 0;
+
+    room->set_exit("northwest", path + "/" + xw + "." + yn + ".lpc");
+    room->set_exit("north", path + "/" + x + "." + yn + ".lpc");
+    room->set_exit("northeast", path + "/" + xe + "." + yn + ".lpc");
+    room->set_exit("west", path + "/" + xw + "." + y + ".lpc");
+    room->set_exit("east", path + "/" + xe + "." + y + ".lpc");
+    room->set_exit("southwest", path + "/" + xw + "." + ys + ".lpc");
+    room->set_exit("south", path + "/" + x + "." + ys + ".lpc");
+    room->set_exit("southeast", path + "/" + xe + "." + ys + ".lpc");
+
+    // seed-derived structures
+    structure = D_PLANET->query_structure(name, x, y);
+    if (structure) {
+        meta = __StructureMeta[structure["type"]];
+        room->set_exit(
+            "enter " + meta["enter"],
+            PLANET_V_ROOM + "interior/" + structure["type"] + "/" + name + "." + x + "." + y + "/entrance.lpc"
+        );
+        room->add_terrain_override(meta["desc"]);
+    }
+}
+
+/* ----- called by master::compile_object ----- */
+
+object virtual_create(string path) {
+    string name;
+    int x, y;
+    mapping planet;
+    object room;
+
+    if (sscanf(path, PLANET_V_ROOM + "surface/%s/%d.%d", name, x, y) != 3) {
+        return 0;
+    }
+
+    planet = D_PLANET->query_planet(name);
+    room = new(PLANET_V_ROOM + "base/terrain.lpc");
+    room->set_property("name", name);
+    room->set_property("x", x);
+    room->set_property("y", y);
+
+    setup_room(room);
+    room->update_descriptions();
+    room->update_resource();
+    setup_exits(room, planet, x, y);
+
+    return room;
+}
