@@ -9698,6 +9698,44 @@ Found via a §10.7 deep-test playthrough of `dsIII` (Dead Souls 3.0): `secure/se
 
 **Flagged for a sibling sweep**: this is the Dead Souls 3.x lineage (`ds386`, `dsI`, `dsII`, `dsIII`, `dshakkard`, `deadsouls_fluffos` all share core engine files) — not yet checked on the others as of this writing, but likely present given how deep in shared `secure/sefun/` this function lives. **How to apply generally**: any economy/currency/stat-computation function that does real arithmetic (especially division, which is the common source of a stray float) but is declared to return `int` is suspect — grep for the function's own return statements for a bare arithmetic expression with no `to_int()`/`(int)` wrapper that would actually matter at runtime, and check every caller for the same gap independently, since a fix at the source doesn't retroactively repair already-corrupted saved data or a caller with its own parallel copy of the same missing conversion.
 
+**Two more confirmed instances, unrelated lineage: `ninetears`** (FR
+3.4 base, §10.7 round-two). (1) `global/player.lpc`'s
+`int ajustar_xp_necesaria(float xp, int lvl)` — the core "how much XP
+does the next level cost" curve, called from both the `avanzar`
+(level-up) command and the `score` command's XP progress bar — applies
+a real per-level multiplier (`xp *= 1.9`/`1.5`/`1.1`) then does
+`return (int)xp;` (the no-op cast). This didn't just silently corrupt a
+stat — it crashed outright: `score`'s progress-bar code does
+`(...)[ajuste/25]` (an array index) on a value derived from this
+function's genuinely-float return, and this driver's array indexing
+requires a real integer, throwing `*Array indexes must be integers.`
+uncaught on literally every `score` command past a certain XP-required
+threshold (confirmed live via `debug.log`: `xp` held
+`318760.221947` at the crash site) — visible in play as the `score`
+output truncating mid-command and a spurious generic
+"unrecognized command" fallback line appended after it. The SAME float
+return, consumed at a second call site (`do_advance_level()`'s
+`total_xp = ajustar_xp_necesaria(xp,lvl);`, an `int`-declared local),
+would have silently corrupted every level-up's XP deduction into a
+float exactly per this section's usual shape had the crash at the
+other call site not surfaced it first. Fixed with `return to_int(xp);`.
+(2) `std/tienda.lpc`'s `vender()` (the shared shop-sell command used by
+36 real in-game shops) computes a "price drops the more of this item
+you've already sold" market-saturation factor as `float ajuste2` (a
+compounding `*= 1.1` per unit already sold), then does
+`ajuste=ajuste/(int)ajuste2;` (again the no-op cast, contaminating the
+`int ajuste` local with a real float, then accumulated into `int
+dinero` and handed to the money-array constructor) — every sibling
+percentage adjustment in the SAME file (race/class/guild/alignment
+price modifiers, `validar_transaccion()`) correctly stays pure-integer
+arithmetic (`ajuste*razas[i+1]/100` etc.), making this one float-typed
+local a clear one-off outlier rather than the file's normal idiom.
+Fixed with `ajuste=to_int(ajuste/ajuste2);`. Both verified via `lpcc`
+single-file compile (clean) and a live reboot (`score` no longer
+crashes past the XP threshold; `vender()`'s fix verified by direct code
+inspection of the now-integer-only arithmetic path, live economy testing
+not reached this pass — see `libs/ninetears/NOTES.md`).
+
 ### 7.123 A bare `identifier = (mapping-or-array-literal);` statement at file scope, outside any function, is not a valid initializer on this driver — the compiler misparses it as an attempted global-variable redeclaration with no inferable type, hard-failing the whole file's compile with zero runtime symptom beyond "this daemon has no program"
 
 Some archives' authors used a MudOS/LDMud convention where a global is first `declared` bare (`nosave mapping foo;`), then given its real value via an ordinary-looking top-level assignment statement later in the same file (`foo = ([...]);`, entirely outside `create()` or any other function) — legal on some drivers as a one-time init-on-load statement. On this driver it is not: any bare `IDENT = EXPR;` appearing outside a function body is parsed as a type-less re-declaration attempt of `IDENT`, which the compiler reports as `error: Type mismatch ( unknown vs <realtype> ) when initializing IDENT` plus a `warning: Redeclaration of global variable`, and the whole file fails to compile. Because the file simply never gets a program, every caller sees only `*No program in object '/path/to/file'!` at the call site — no indication at all that the ROOT problem is this specific statement shape, and (per §10.7's `bxsj`-lesson pattern) the resulting missing functionality can be totally silent if the failing call is itself uncaught and the caller doesn't check its own error path.
@@ -9761,6 +9799,33 @@ This transparently fixes every affected `.o` file without touching any of them d
 **How to apply generally**: any lib whose AREA/coordinate-grid engine stores room-exit destinations as data (not source) is worth a `grep -c '\.c"' world/area/**/*.o`-style corpus check for stale extensions surviving the `.c`→`.lpc` rename, independent of whatever `convert_lib.sh` already did to the *source* files — the tell is a custom `file_path()`/path-substitution helper method on the AREA base class that takes a macro-placeholder string and resolves it at runtime, rather than `load_object()` being called on a literal string straight out of source. `naruto`'s siblings in the same ES2/Neolith "Annihilator" AREA-engine lineage (`huoying`, `zhyx`, `yanhuangwuhun`, `demonangel`, `es2`, `haiyang2`) are the most likely candidates to check next, though several of them (`huoying` especially) have far smaller or no built-out AREA-grid game worlds, so the blast radius will vary lib to lib.
 
 **Confirmed sibling variant (no macro placeholder, plain literal instead): `dreamofseven`** (found via its own §10.7 round-two deep-test). `adm/daemons/bankd.lpc` (a distant-ES2 club-bank daemon, unrelated to `naruto`'s AREA-grid lineage) saves each club's physical bank-room path verbatim into its own `.o` dbase (`set("location", place)`, no macro substitution at all), then reads it straight back with `load_object(dbase["location"])` in two live call sites — `clear_data()` (reachable both via `do_save()`'s automatic log-overflow cleanup at 1200 characters AND a player-facing `clear <deposit|withdraw>` command in `std/room/club_bank.lpc`) and the disabled `interest_receive()`. A corpus check of the four shipped `data/club_bank/*.o` files found exactly the same half-and-half split this bug class always produces: two clubs ("god", "dragon") had the stale pre-conversion `"...bank.c"` value baked in from before this project's `.c`→`.lpc` rename, while two others ("moon", "sky") were already extensionless and unaffected — direct proof the field is meant to be extensionless and that `convert_lib.sh`'s source-only sed pass (by design) never touches `.o` save data. Confirms the general lesson extends past AREA/coordinate-grid engines specifically: **any `load_object()` call fed a string pulled out of a `dbase`/save-file mapping is worth checking for a stale `.c` tail, regardless of whether the storing mechanism uses a macro placeholder or a plain literal** — the macro-placeholder shape just happens to be what hides it from a casual source read (a literal is at least grep-able in the source's own `set(...)` call sites, but the *value itself* still only lives in `.o` data either way). Fixed with the same choke-point strip-the-trailing-`.c` pattern, added as a small `resolve_location()` helper wrapping both `load_object()` call sites in `bankd.lpc`.
+
+**Confirmed third instance, a non-AREA/non-bank shape: `ninetears`**
+(FR 3.4 base, §10.7 round-two). This lib's `race_ob`/`guild_ob`/
+`clase_ob`/`group_ob`/`race_group_ob` (`global/guild-race.lpc`) are
+ordinary extensionless path strings used as indirect object references
+(`guild_ob->start_player(this_object())`, resolved by the driver like a
+plain `call_other()`) — every `set_*_ob()` setter always persists them
+extensionless, and a corpus check of ~250 such fields across every
+`players/*/*.o` save file found exactly one exception:
+`players/d/drakzten.o`'s `guild_ob "/rol/gremios/khurgar.c"` — a
+literal stale pre-conversion `.c` suffix (the file is
+`rol/gremios/khurgar.lpc` now), silently breaking every
+`guild_ob->method()` call for that one restored player. Confirms the
+class extends to a THIRD shape beyond AREA-door macros and bank-room
+literals: a plain scalar "which guild/race/class object am I" reference
+field with no macro substitution and no daemon-side dbase at all, just
+an ordinary player-save global variable. **Fix**: rather than editing
+the one affected save file directly (this project's usual policy — the
+mechanism should self-heal, not the data), added a
+`strip_stale_c_ext()`/`normalizar_referencias_ob()` choke point in
+`global/guild-race.lpc`, called once right after `restore_object()` in
+`move_player_to_start()`, normalizing all five fields on every login
+regardless of how a given save got into a stale-extension state.
+Verified via `lpcc` (clean compile) and a live reboot; not re-verified
+against the specific `drakzten` account live this pass (a low-traffic
+historical character, not the seeded admin/test account), but the fix
+is exercised by every normal login's restore path.
 
 ### 7.127 A shared per-object wrapper declares a narrower parameter type than every real caller actually uses, so this driver's strict compile-time type check rejects EVERY caller and the whole content class silently fails to compile
 
@@ -10003,6 +10068,70 @@ cleanly post-fix. `include/compress_obj.h` (the sibling §7.14 bug)
 does not exist anywhere outside `es1`/`es1_win` in this family — the
 later ES2-era `feature/`-mixin architecture the rest of these forks
 use never carried that header over.
+
+### 7.130 A player body's own net-dead detection inside `heart_beat()` calls `query_idle()` unconditionally on a path taken only AFTER the object has already been found non-interactive, crashing every single heartbeat tick forever and permanently preventing the delayed self-quit it just scheduled from ever completing
+
+Found via `ninetears`'s §10.7 round-two deep functional test (a live
+abrupt-disconnect test, not a code-review guess). `global/player.lpc`'s
+`heart_beat()` has its own inline net-dead handler (this codebase has no
+separate `net_dead()` apply at all — every player body checks
+`!interactive(this_object())` itself, every tick):
+
+```lpc
+if (!interactive(this_object())) {
+    ...
+    this_object()->quit();          // <- schedules a DELAYED call_out,
+    }                                //    does not destruct synchronously
+else {
+    ... idle-timeout warnings, all also using query_idle() ...
+    }
+last_command = time() - query_idle(TO);   // <- runs on BOTH paths
+```
+
+`quit()` for a non-fighting body doesn't destruct anything itself — it
+does `call_out("salida_pausada", query_level()/10)` and returns
+immediately, so execution falls through past the `if`/`else` to the
+final unconditional `last_command = time() - query_idle(TO);` line
+*in the same heart_beat() call*, calling the native `query_idle()` efun
+on an object already confirmed non-interactive one line earlier. This
+throws `*query_idle() of non-interactive object.` — uncaught, since
+`heart_beat()` has no wrapping `catch()` — so `really_quit()` (the
+function `salida_pausada()`'s delayed call was heading towards, which
+does the actual `dest_me()`) never runs. The object survives, still has
+its heart_beat active, and the IDENTICAL crash refires on literally the
+next tick, forever: reproduced live via a raw abrupt TCP disconnect
+(socket closed with no `quit` sent) — `debug.log` immediately began
+logging `No error handler for error: *query_idle() of non-interactive
+object.` at this exact line, repeating once per heartbeat indefinitely
+across dozens of already-orphaned player-object instances left over
+from nothing more than ordinary reconnect-testing earlier in the same
+session (`/global/player#2`, `#5`, `#9`, `#13`, `#26`, `#39`, `#63`,
+...) — a genuine per-disconnect resource leak, not a cosmetic log-spam
+issue, since the leaked object keeps its heart_beat (and thus keeps
+compiling/running) forever.
+
+**Fix**: guard the final line with the same `interactive()` check the
+rest of the function already uses for everything else idle-related:
+`if (interactive(TO)) last_command = time() - query_idle(TO);` — a
+one-line, behavior-preserving change, since `last_command` has exactly
+one other reader in the whole file and it's only ever meaningful while
+the body is connected. Verified live: after the fix, the identical raw
+abrupt-disconnect repro produced zero `query_idle()` errors in
+`debug.log` across a 15-second wait (many heartbeat ticks), and the
+disconnected body was confirmed gone from the live game (`donde
+<name>` — this lib's `whereis` command — returned "Donde esta quien?",
+i.e. not found) instead of lingering as an ever-crashing ghost object.
+
+**How to apply generally**: any player-body `heart_beat()` that
+implements its own inline "player went non-interactive" handling
+(rather than relying on a separate `net_dead()` apply) is worth
+checking for code *after* that branch — not just inside it — that calls
+an interactive-only efun (`query_idle()`, `query_ip_name()`,
+`query_ip_number()`, `snoop()`, etc.) unconditionally on
+`this_object()`/`TO`, since the non-interactive branch's own cleanup is
+very often a delayed `call_out()` rather than an immediate `dest_me()`,
+leaving a window where the rest of the SAME heart_beat() call still
+executes against an object it just determined is no longer interactive.
 
 ---
 
@@ -10283,6 +10412,40 @@ pushed (see each lib's own NOTES.md for the full per-lib writeup).
 only an 8-file partial patch overlay (never onboarded into a `work/`
 tree at all, no `meta.json`/`config.fluffos`), containing neither
 `feature/action.lpc` nor `inherit/item/combined.lpc` — nothing to fix.
+
+**New instance shape, `ninetears`** (FR 3.4 base, §10.7 round-two): the
+demotion doesn't require a plain single `inherit` this time. `global/
+player.lpc`'s `do_refresh()` (the `refresh` wizard command) does
+`input_to("refresh2")`, and `refresh2` was declared
+`private nomask int refresh2(string str)` in that SAME file — fine for
+an ordinary `/global/player` clone, where both functions live in the
+one file with no inherit boundary at all. But this codebase's admin
+body classes (`/global/god`→`lord`→`thane`→`patron`→`regente`→
+`creator`) never inherit `/global/player` directly — `/global/
+wiz_file_comm.lpc` (which `creator.lpc` DOES genuinely `inherit`)
+textually `#include`s the whole of `/global/player.lpc`'s source, so
+`refresh2` ends up declared `private` inside `wiz_file_comm.lpc`'s own
+compiled program, which every admin rank then inherits for real. Since
+`do_refresh()`'s own gate (`if(!this_object()->query_creator()) { ...
+return 1; }`) means this command is only ever functional for exactly
+the population that crosses this extra inherit boundary, the bug hits
+100% of the accounts it's meant to work for and 0% of the accounts
+that never reach `input_to("refresh2")` at all. Reproduced live: an
+admin's `refresh me` → `y`/`n`/any text produced **zero output
+whatsoever** (not even `refresh2`'s own "Pardon? I do not understand"
+retry message) — the pending `input_to()` consumes the line but can't
+resolve the hidden function, silently swallowing it. Fixed identically
+(drop `private`, keep `nomask`); verified live post-fix: `refresh me`
+→ `n` now correctly prints "Ok, not refreshing." **How to apply
+generally**: the demotion boundary isn't always a literal `inherit
+"file";` line naming the file the `private` function was written in —
+a textual `#include` of a whole `.lpc` file (not just a `.h`) followed
+by a real `inherit` of THAT includer file one level up produces the
+exact same DECL_HIDDEN-crossing-an-inherit-boundary shape, just with
+an extra layer of indirection between where the function is physically
+typed and where the fatal inherit actually happens — grep for
+`#include ".*\.lpc"` (not just `.h`) as an additional place this class
+can hide.
 
 #### 8.3b Dead command-indexer sscanf
 

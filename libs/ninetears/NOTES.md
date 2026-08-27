@@ -453,3 +453,244 @@ file, so they never load unless a wizard manually does so in-game.
 - Outbound-network check performed (\S10) -- none found; one inbound FTP
   listener on a hardcoded port documented (\S9).
 - WASM status: not attempted (`wasm_status` left `""` per task scope).
+
+## 深度功能测试（§10.7 round two, 2026-08-27)
+
+Full one-continuous-session playthrough per AGENTS.md §10.7, on top of
+the onboarding-time smoke test in §11 above. Booted
+`~/src/fluffos/build-debug/src/driver config.fluffos` from
+`libs/ninetears/`, drove it with raw Python socket scripts (the blank
+warm-up line is still fatal here per the onboarding note -- start
+straight with the character name).
+
+### What was tested
+
+- **Newbie help**: `doc/helpdir/nuevo` turned out to be a wizard news
+  bulletin, not player-facing help -- the real onboarding text is
+  `room/raceroom.lpc`'s own birth dialogue (`nacer`), read directly
+  from source to learn the test path: race (12 options) -> class (up
+  to 5 per race) -> alignment (9-point axis) -> a point-buy stat screen
+  (`sumar`/`restar caracteristica numero`, `aceptar`, `reiniciar`) ->
+  a final y/n confirmation.
+- **Full registration through birth**, one continuous session: menu
+  flow (name `testespa`, confirm, password `Mud@2026`/confirm, gender
+  `h`) -> landed in "Plano Inmaterial" -> `nacer` -> Humano/Guerrero/
+  Legal Bueno/16 FUE,14 DES,15 CON,18 INT,14 SAB,8 CAR -> confirmed --
+  landed in a real starting room with auto-equipped starting gear
+  ("Cota y espada larga"), not a void/error state.
+- `look`/`score`/`i` at every major state change (post-register,
+  post-birth, post-combat, post-quit/relogin) per the checklist --
+  see the two `score`-crash bugs below, found exactly this way.
+- **Combat and death/respawn**: exercised for real, though via an
+  unintended trigger rather than a deliberately-found "safe spar" --
+  an admin `call move(...) testespa` teleport landed the test character
+  directly inside `d/gremios/rooms/khurgars/guildroom`, whose
+  guardian NPC (Tharak) attacks any non-duergar `living()` on
+  `event_enter()` (`d/gremios/npcs/tharak.lpc`) regardless of
+  membership status -- this is a real, intentional induction-gate/
+  trespasser design (several human `khurgar` members exist in the
+  archived player saves, so humans clearly CAN join; my teleport just
+  skipped whatever the intended non-hostile approach is, most likely
+  entering via the room's own "hall" antechamber or talking to Tharak
+  before crossing into the practice hall). Produced a real death (HP
+  to 0, ghost creation, "El alma de Testespa..." sequence, landed as a
+  spirit) and real combat numeric output (varied hit descriptions,
+  damage numbers) -- functional combat and the death-transition message
+  chain both confirmed working code-wise. **Left as an honest, untouched
+  observation, not a fix**: the resulting ghost kept reflexively
+  fighting Tharak (auto-retaliating, "Haces 0 hp's de danyo desarmado")
+  across a `quit`+relogin cycle, never reaching whichever full
+  death-god/resurrection sequence this lib has, instead of the ghost
+  either fleeing or the guard disengaging a spirit that can't truly be
+  re-killed. This could plausibly be `event_enter()` missing a
+  `query_dead()`/ghost check, but I did not confirm it against a
+  *non*-teleported natural death (the only path that reached this state
+  was my own artificial teleport into a hostile-by-design room), so
+  per the scope note in the task brief ("verify a fix doesn't have side
+  effects" / "no error signature = design") this is documented, not
+  touched. A throwaway test character reaching real death organically
+  (rather than via forced teleport into an induction gate) would be
+  needed to tell design from bug here -- left for a future pass.
+- **`quit`, grep `debug.log`, reconnect after a real gap**: done twice,
+  for two different reasons -- (1) an explicit `quit` while the ghost
+  was still "fighting" (`really_quit()`'s combat-aware branch,
+  `call_out("really_quit", query_level()*foo)`, correctly reported
+  "Estas en peleas, tardara un poco." and grabbed/saved first); (2) a
+  **raw abrupt TCP disconnect with no `quit` sent at all**, specifically
+  to exercise this lib's inline net-dead handling (it has no separate
+  `net_dead()` apply -- see the new §7.130 bug below, found exactly
+  this way) -- confirmed `debug.log` went from spamming one crash per
+  heartbeat tick indefinitely to completely clean across a 15-second
+  wait (many ticks) after the fix, and the orphaned body was confirmed
+  actually gone from the live game afterwards (`donde testespa` ->
+  "Donde esta quien?", not found) instead of lingering forever.
+- **Admin verification**: the `fluffos`/`Mud@2026` account seeded at
+  onboarding still logs in correctly post-driver-restart (special
+  immortal banner, `creator 1`/`app_creator 1` preserved in its own
+  save file across the whole session) and still has working
+  wizard commands (`stat <name>`, `call fn(...) target`) confirmed live.
+  The `;<expr>` eval shortcut (`parse_frogs`, verb pattern `;*`) did
+  NOT work in either `; expr` or `;expr` form during this pass (fell
+  through to the generic unrecognized-command message both times) --
+  not chased further since `call` covers the same need and this is a
+  convenience tool, not a player-facing feature; flagged here in case
+  a future pass wants to root-cause it.
+
+### The seven standing cross-cutting bug patterns -- checked explicitly
+
+- **§7.121** (float arithmetic in a declared-`int` function, no
+  `to_int()`): **found and fixed, two independent instances** --
+  `global/player.lpc`'s `ajustar_xp_necesaria()` (crashed `score` with
+  `*Array indexes must be integers.` past a nonzero XP-required
+  threshold, and would have silently corrupted every level-up's XP
+  deduction into a float too) and `std/tienda.lpc`'s `vender()`
+  (a per-sale "already sold N of these, discount the price" factor,
+  the sole float-typed local in a file whose every sibling percentage
+  adjustment correctly stays pure-integer). Both used the no-op
+  `(int)xp` cast instead of `to_int(xp)`; both fixed. See AGENTS.md
+  §7.121's now-extended writeup for the full detail.
+- **§8.3a** (`private`-declared dispatch/callback/call_out function
+  demoted via inheritance): **found and fixed, one instance**, a new
+  variant shape -- `refresh2()` (the `refresh me` wizard command's
+  y/n confirmation callback) is declared in `global/player.lpc`, which
+  gets pasted via a textual `#include` into `global/wiz_file_comm.lpc`
+  -- which every admin rank (`god`/`lord`/`thane`/`patron`/`regente`/
+  `creator`) genuinely `inherit`s. Since `do_refresh()`'s own gate means
+  this command only ever runs for admin accounts, the bug hit 100% of
+  its intended users. Reproduced live (zero output on any response to
+  `refresh me`, not even the function's own "Pardon?" retry message);
+  fixed by dropping `private` (kept `nomask`); verified live post-fix.
+  See AGENTS.md §8.3a's extended writeup.
+- **§7.122** (autoload-style class/marker-item duplication on
+  disconnect/reconnect): **checked, structurally different, not
+  vulnerable.** This is an FR 3.4 base, not TMI-2 -- its own
+  `global/auto_load.lpc` (`create_auto_load()`/`load_auto_load()`) is a
+  different, unrelated mechanism (no `query_auto_load`/
+  `compute_autoload_array`/`destroy_autoload_obj` naming at all). Traced
+  the full save/reload lifecycle: `really_quit()` calls `save_me()`
+  (which snapshots `all_inventory()` into the `auto_load` string array)
+  BEFORE destructing every auto-load-flagged item, matching the
+  documented-safe ordering; `do_load_auto()` (which calls
+  `load_auto_load()`) is scheduled exactly once per genuine
+  `move_player_to_start()` call, and the force-reconnect-while-still-
+  connected path (`secure/login.lpc`'s `try_throw_out()`) re-execs the
+  connection onto the SAME existing live body object rather than
+  cloning a fresh one, so `do_load_auto()` never double-fires on one
+  body. No live duplication reproduced or expected from this mechanism.
+- **§7.123** (bare `IDENT = (...);` at file scope killing a file's
+  compile): **one apparent hit, confirmed FALSE POSITIVE.**
+  `table/soul_data.lpc` (`global_adj`/`soul_data`, the social-command
+  "soul" data table) shows exactly this error shape
+  (`Type mismatch ( unknown vs string/mapping ) when initializing
+  IDENT`) when `lpcc_check.sh`'s batch sweep compiles it as a standalone
+  file -- but it is textually `#include`d INSIDE `obj/handlers/soul.lpc`'s
+  own `create()` function body (between the `{` and `}`), where
+  `global_adj`/`soul_data` are already properly declared earlier in the
+  same file, so the assignments are ordinary in-function statements in
+  their real compilation context. Confirmed via the batch log itself:
+  `/obj/handlers/soul.lpc` (the file that actually loads at runtime)
+  shows a clean `PASS`, zero errors -- this is the
+  "lpcc compiles every file standalone, including mixin fragments that
+  only work when included/inherited into a real container" artifact
+  already documented in this lib's own onboarding NOTES.md §5b, not a
+  real bug. Left untouched.
+- **§7.124** (fraction-vs-percentage unit mismatch on a threshold
+  field): **checked, clean.** Grepped for `= 0\.[0-9]+;` assignments to
+  `int`-declared fields; zero hits outside dead/`antiguo` content. Also
+  specifically checked `wimpy` (the auto-flee threshold, `std/living/
+  health.lpc`) since it's exactly this shape's classic victim elsewhere
+  in the corpus -- consistently declared and used as an integer
+  percentage 0-100 everywhere (`wimpy > 100`, `hp < max_hp*wimpy/100`,
+  `(100-wimpy)*i/100`), no fractional literal found.
+- **§7.126** (stale pre-`.c`-rename extension in saved door/location
+  data): **found and fixed, one confirmed instance, a third distinct
+  shape for this bug class.** Not an AREA/coordinate-grid engine (this
+  lib doesn't have one) and not a bank-daemon dbase (this lib's
+  `std/bank.lpc` never calls `load_object()`) -- instead, a plain
+  player-save scalar field. `global/guild-race.lpc`'s `race_ob`/
+  `guild_ob`/`clase_ob`/`group_ob`/`race_group_ob` are ordinary
+  extensionless path strings used as indirect object references
+  (`guild_ob->start_player(...)`); every setter always persists them
+  extensionless (confirmed: ~250 such fields across every
+  `players/*/*.o` in the archive, all extensionless except one).
+  `players/d/drakzten.o`'s `guild_ob` was `"/rol/gremios/khurgar.c"`
+  (the file is `khurgar.lpc` now) -- a real pre-existing archive
+  artifact from before this project's own `.c`->`.lpc` rename, since
+  `.o` save data is out of scope for `convert_lib.sh`'s source-only sed
+  pass. Fixed at the mechanism, not the data: added
+  `strip_stale_c_ext()`/`normalizar_referencias_ob()` in
+  `global/guild-race.lpc`, called once right after `restore_object()`
+  in `move_player_to_start()`, so any current or future save with this
+  shape self-heals on next login. See AGENTS.md §7.126's extended
+  writeup for the general "any scalar object-reference save field, not
+  just AREA doors or bank dbases" lesson this confirms.
+- **§7.129** (`tell_room()`/`message()` wrapper forwarding an omitted
+  arg as a literal `0`): **checked, clean, different mechanism
+  entirely.** This lib's own `tell_room()` simul_efun
+  (`secure/simul_efun/modified_efuns.lpc`) never touches the native
+  `message()` efun at all -- it calls `event(ob, "say", str, avoid)`,
+  a completely different lib-internal broadcast dispatcher
+  (`secure/simul_efun.lpc`'s `event()`, itself just a `call_other`
+  loop over `"event_"+tipo`). The real consumer, `event_say()`
+  (`global/events.lpc`), correctly type-checks its `avoid` parameter
+  (`pointerp(avoid) ? member_array(...) : avoid == this_object()`)
+  before using it, so an omitted/int-0 `avoid` is handled safely with
+  no crash. No `message()` call site anywhere in the codebase was found
+  passing a bare 2-argument call where a 3rd/4th positional argument
+  would matter to the driver's own strict `void|object|object*` check.
+
+### New bug found outside the seven standing patterns
+
+- **AGENTS.md §7.130 (new entry)**: `global/player.lpc`'s
+  `heart_beat()` implements this lib's ENTIRE net-dead handling inline
+  (no separate `net_dead()` apply exists anywhere in the codebase) --
+  and its own unconditional `last_command = time() - query_idle(TO);`,
+  meant only for the interactive/idle-warning branch, ran on BOTH
+  branches, including right after the `!interactive(this_object())`
+  branch's own `quit()` call (which only schedules a delayed
+  `call_out`, not an immediate `dest_me()`). This crashed
+  `*query_idle() of non-interactive object.` uncaught on literally
+  every heartbeat tick for a disconnected player, forever, since the
+  crash pre-empted `really_quit()` from ever running -- a genuine
+  resource leak (the orphaned object keeps running/compiling forever),
+  not just log spam. Found via a real raw-socket abrupt-disconnect
+  test (not a code-review guess): `debug.log` showed the identical
+  crash recurring against 7+ already-orphaned player-object instances
+  left over from nothing more than ordinary earlier reconnect-testing
+  in the same session. Fixed with a one-line `interactive()` guard;
+  verified both by a clean `debug.log` across many ticks post-fix and
+  by confirming the disconnected body was actually destructed
+  (`donde testespa` -> not found, instead of an ever-crashing ghost).
+
+### Fixes applied (summary, file:line)
+
+1. `global/player.lpc`, `ajustar_xp_necesaria()`: `return (int)xp;` ->
+   `return to_int(xp);` (§7.121).
+2. `std/tienda.lpc`, `vender()`: `ajuste=ajuste/(int)ajuste2;` ->
+   `ajuste=to_int(ajuste/ajuste2);` (§7.121).
+3. `global/player.lpc`, `heart_beat()`: `last_command = time() -
+   query_idle(TO);` -> `if (interactive(TO)) last_command = time() -
+   query_idle(TO);` (new AGENTS.md §7.130).
+4. `global/player.lpc`, `refresh2()`: dropped `private` (kept
+   `nomask`) (§8.3a).
+5. `global/guild-race.lpc`: added `strip_stale_c_ext()`/
+   `normalizar_referencias_ob()`, called from `global/player.lpc`'s
+   `move_player_to_start()` right after `restore_object()` (§7.126).
+
+All five changes verified via `lpcc` single-file compile (clean, only
+the same pre-existing harmless `global/player.lpc` redeclaration
+warnings) both before and after running the §9 LPC formatter on the
+three touched files (`global/player.lpc`, `global/guild-race.lpc`,
+`std/tienda.lpc`) -- checked all three of §9's known formatter blind
+spots (`::`-split, `case`+`//`-comment merge, unbalanced-quote
+re-spacing) with zero hits -- and via a full live reboot + re-test of
+every fix (`score`, `refresh me`, the abrupt-disconnect repro) after
+formatting.
+
+### Test character cleanup
+
+`testespa` (Humano Guerrero, the character used for the birth-flow,
+combat/death, and quit/reconnect tests) was removed
+(`players/t/testespa.o` deleted) before committing, per this project's
+throwaway-test-character policy. Only the seeded admin account
+(`fluffos`) remains in `players/`.
