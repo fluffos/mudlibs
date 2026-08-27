@@ -380,3 +380,136 @@ wasn't distinctly captured in this transcript (孙悟空's own ambient
 action lines kept the client's idle-detector from settling, the same
 issue seen testing `discworld`'s womble NPC) but is already verified
 clean under native testing above and untouched by anything WASM-specific.
+
+## Deep functional test (round two, AGENTS.md §10.7, 2026-08-27)
+
+Prior work on this lib had only ever run a basic boot/registration smoke
+test (see "Interactive test result" above) plus the narrow §7.129
+sibling-sweep fix (item 8 in "Config / driver-compat fixes"). This pass
+is the first FULL §10.7 playthrough: registration → look/score/i at
+every state change → movement → sect join (`apprentice`) → skill
+learning (`learn`) → safe combat (`fight`) → a full death/revival cycle
+→ `quit` + `debug.log` check → reconnect after a real wall-clock gap,
+plus an explicit systematic grep for all thirteen standing cross-cutting
+bug patterns (§7.121/§8.3a/§7.122/§7.123/§7.124/§7.126/§7.129/§7.130/
+§7.131/§7.132/§7.133/§7.134/§7.135). Test character: `qinfeng`/秦风二
+(`Test@2026`), joined 封山剑派 (Fengshan sword sect) under 柳淳风,
+learned `sword` to skill level 2-3, went through a full `smash`-induced
+death → 白无常 ghost dialogue → reincarnation → revive-room cycle, then
+quit cleanly — save files removed post-test, only the seeded
+`fluffos`/秦风 admin account remains. Four bugs found and fixed:
+
+1. **§8.3a, `feature/command.lpc`'s `command_hook`** — declared
+   `private nomask int command_hook(string arg)`, registered via
+   `add_action("command_hook", "", 1)` in the same file's
+   `enable_player()`, but `feature/command.lpc` is `inherit`ed into
+   `std/char.lpc` (the base of `obj/user.lpc` AND every NPC) — the
+   textbook §8.3a shape, already confirmed broken the same way on 4
+   sibling ES2-lineage libs (`demonangel`, `xuanjianlu`, etc.) but never
+   checked on `es2` itself. Fixed: dropped `private`, kept `nomask`.
+2. **§8.3a variant, `std/item/combined.lpc`'s `destruct_me`** — also
+   declared `private`, and inherited by `std/money.lpc` (every coin in
+   the game), `std/medicine/{pill,powder}.lpc`, `std/weapon/throwing.lpc`,
+   and several `obj/`/`d/` content items. Unlike the sibling `demonangel`
+   instance of this exact file (where the `call_out("destruct_me", ...)`
+   call site was dead/commented-out), **here it is live**:
+   `set_amount()` does `if( v==0 ) call_out("destruct_me", 1);` — reached
+   whenever a stacked item (most commonly money) is reduced to zero
+   (spending your last coin, dropping/combining stacks down to 0).
+   Fixed identically: dropped `private`, kept `nomask`.
+3. **New bug, not a prior AGENTS.md class — dbase key mismatch silently
+   disables the `wimpy` auto-flee safety net for every player, forever**:
+   `cmds/usr/wimpy.lpc` (the player-facing `wimpy [<percentage>]`
+   command) reads and writes the dbase key `"wimpy"` — but the ONLY
+   consumer of the auto-flee threshold, `std/char.lpc`'s `heart_beat()`
+   (`wimpy_ratio = (int)query("env/wimpy")`), and every NPC's own
+   `create()` (`set("env/wimpy", N)`, ~30 files), all use the key
+   `"env/wimpy"` instead. These are two entirely separate dbase entries
+   on this driver's `feature/dbase.lpc`/treemap — running `wimpy 30` as
+   a player set `"wimpy"=30`, which nothing ever reads, while
+   `"env/wimpy"` stayed permanently unset (`0`) for every player
+   character ever created, so `heart_beat()`'s
+   `intp(wimpy_ratio = query("env/wimpy")) && wimpy_ratio > 0` guard was
+   always false and the auto-flee branch never ran — the player-facing
+   command was a complete, silent no-op from the very first player who
+   ever typed it. Fixed by changing both the read and write in
+   `wimpy.lpc` to use `"env/wimpy"`, matching every other consumer.
+   Live-verified: after `wimpy 30`, a `fight` against a training-hall
+   NPC (武馆弟子) correctly triggered an auto-flee/retreat line
+   ("你向後一纵，躬身做揖说道...") once damage pushed a stat below the
+   30% threshold — this did NOT happen pre-fix in code inspection terms
+   (the key was never read) — and the save file correctly persisted
+   `"env":(["wimpy":30,])`. **Flagged for a sibling sweep**: since this
+   is the ES2 codebase's own `feature/dbase.lpc`/`env/` naming
+   convention (not something `es1` shares — `es1` uses a different stat
+   system entirely), check `haiyang2`/`demonangel`/`xkx2001`/`rzrmud`/
+   `xo`/`zhyx`/`naruto` (the later ES2-derived family) for the same
+   `cmds/usr/wimpy.lpc` vs. `env/wimpy` key mismatch — grep each for
+   `query("wimpy")`/`set("wimpy"` (no `env/` prefix) outside of
+   `std/char.lpc`'s own correctly-prefixed reads.
+4. **AGENTS.md §7.112 class, `d/death/npc/{wgargoyle,bgargoyle}.lpc`** —
+   both NPCs' `init()` unconditionally schedules a 5-stage
+   `call_out("death_stage", ...)` narrative chain (ghost dialogue →
+   `reincarnate()` → move to `REVIVE_ROOM`) with no re-entry guard. This
+   is the exact, previously corpus-swept (150+ libs) §7.112 pattern
+   under its most common filenames, but `es2` was never part of either
+   sweep wave. Fixed with the same `death_stage_active` `set_temp()`/
+   `delete_temp()` guard already applied to sibling `haiyang2`'s copy of
+   this same file (see AGENTS.md §7.112's reference implementation),
+   adapted to each file's own exit points (`bgargoyle.lpc` has an extra
+   "not actually a ghost yet, attack them" branch that also needed the
+   flag cleared). Live-verified via a full `smash`→ghost→`白无常`
+   dialogue→`reincarnate()`→`REVIVE_ROOM`(城隍庙) cycle with zero
+   `debug.log`/driver-log errors throughout.
+
+**Confirmed clean (checked, no fix needed)**:
+- §7.121/§7.124 (float-in-int / fraction-vs-percentage): no `int`-typed
+  economy/threshold function found doing unconverted float arithmetic;
+  the two `float count`/`count_total` locals in `feature/attack.lpc`'s
+  `biwu_ob()` and `cmds/std/biwu.lpc`'s `start_biwu()` are a deliberate
+  fractional extra-turn accumulator inside a `void` function, not a
+  narrow-return-type bug.
+- §7.122 (autoload duplication): `es2` has its own from-scratch
+  `feature/autoload.lpc` (`save_autoload()`/`restore_autoload()`,
+  NOT the TMI-2 `compute_autoload_array()`/`destroy_autoload_obj()`/
+  `load_autoload_obj()` lineage `es1` shares with TMI-2-descended libs)
+  — this driver's plain `save_object()` never serializes physical
+  inventory contents at all, so there is no "captured twice" pathway:
+  the autoload list is the ONLY mechanism that ever recreates a marked
+  item, called exactly once per `setup()`, and ordinary reconnect
+  (`obj/user.lpc`'s `reconnect()`, `adm/daemons/logind.lpc`'s
+  `reconnect()`) never calls `setup()`/`enable_commands()` again — traced
+  the full login/reconnect code path to confirm no double-`restore_autoload()`
+  call site exists.
+- §7.123 (bare file-scope `IDENT = (...)`): none found via manual
+  inspection of every `nosave TYPE ident;`-then-bare-assignment
+  candidate.
+- §7.126 (stale `.c` extension in `.o` save data): `es2` has no
+  AREA/coordinate-grid engine and only 3 `.o` files total outside
+  player saves (no corpus of exit-storing dbase files to be affected).
+- §7.130 (unconditional `query_idle()` after non-interactive branch):
+  `std/char.lpc`'s `heart_beat()` correctly guards its `query_idle()`
+  call with `if( !interactive(this_object()) ) return;` one line
+  earlier — no unconditional post-branch call found.
+- §7.131 (`find_living`/`find_player` without `set_living_name()`):
+  `feature/command.lpc`'s `enable_player()` calls `set_living_name()`
+  on every login, and `adm/daemons/logind.lpc`'s `find_body()` uses
+  `find_player()` with a `children(USER_OB)`/`getuid()` fallback — a
+  modern master-object-era design, not the classic per-call-scan
+  archetype this bug class targets.
+- §7.132 (`map()`-over-mapping wrong-arg binding): no `map()` call over
+  a mapping with a single-parameter callback found in the tree.
+- §7.133 (`net_dead()` never defined): both `obj/login.lpc` and
+  `obj/user.lpc` define `net_dead()` (the latter `private`, but
+  `obj/user.lpc` is a leaf nothing else `inherit`s, so the §8.3a
+  demotion doesn't apply — confirmed via a live abrupt-disconnect
+  reconnect test, "重新连线完毕" printed correctly every time).
+- §7.134/§7.135 (uninitialized-default accumulator/accessor): no new
+  instances found beyond the `std/room.lpc` `make_inventory()` guard
+  already fixed at onboarding time (item 6 in "Config / driver-compat
+  fixes" above).
+
+Verified via `scripts/lpcc_check.sh` (same 21 pre-existing FAILs as
+before this pass — all previously-documented dead/gapped content, zero
+new regressions) and a full native driver boot + the playthrough above,
+with zero `debug.log`/driver-stdout errors across the whole session.
