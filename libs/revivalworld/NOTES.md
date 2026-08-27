@@ -519,3 +519,308 @@ of these ship in a fresh git checkout):
   structurally-identical wizard commands do was not tracked down
   further; worth a future look if snoop/wizard-monitoring functionality
   is ever needed.
+
+## 深度功能測試（round two, 2026-08-27）
+
+Full AGENTS.md §10.7 pass: newbie-help read, one continuous live session
+(raw Python socket scripts against `~/src/fluffos/build-debug/src/driver`
+on port 40238, native, not WASM), registration through a fresh
+non-wizard character (`qinfeng`/`TestPass123`, deleted before
+committing -- see cleanup note below), movement into the coordinate map,
+`quit`/`debug.log` grep/wall-clock gap/relogin, and a systematic grep
+sweep for all six standing cross-cutting patterns (§7.121/§8.3a/§7.122/
+§7.123/§7.124/§7.126). Two real bugs found and fixed; the economy/
+stock-market systems specifically (the task's stated priority for this
+lib) turned out to be unreachable live for a reason that is itself
+documented below, not a bug.
+
+### Bug 1 (new AGENTS.md §7.11 bullet): missing `city/fallencity1/0/room/` directory crashed `restore_all_data()` on every boot, which cascaded into a permanent 5-minute cron crash loop
+
+`system/daemons/city_d_main.lpc::restore_all_data()` (called from
+`city_d.lpc::create()`, on the preload list) does `foreach(roomfile in
+get_dir(CITY_NUM_ROOM(city,num)))` to load each city section's built
+"module rooms". `city/fallencity1/0/room/` doesn't exist in the shipped
+archive (a fresh/never-built-on section has zero rooms, and git can't
+track an empty directory), so `get_dir()` returned `0` and the `foreach`
+threw `Bad argument 2 to foreach Expected: array Got: 0` at
+`city_d_main.lpc:2794`, confirmed live via `log/system/preload`
+(`載入 /system/daemons/city_d.lpc 時發生錯誤`). Two compounding
+symptoms, both confirmed via `log/catch`:
+1. `system_d.lpc`'s `distributed_preload()` catches the `load_object()`
+   failure, logs it, and just drops `city_d` from the preload list
+   (no retry) -- but a LATER pass over the same list (the
+   `/system/daemons/` wildcard entry, which legitimately re-lists
+   `city_d.lpc` alongside its own earlier "must load first" explicit
+   listing, per `system/kernel/etc/preload`'s own comment) found the
+   already-partially-created `city_d` object via `find_object()` and
+   treated that as success -- masking the failure from a casual glance
+   at the preload log (the SECOND `載入` line for `city_d.lpc` has no
+   error after it, even though the object never finished initializing).
+2. The crash happened BEFORE `restore_all_data()`'s own tail call to
+   `assign_cities_num()`, which is the ONLY place that populates
+   `sort_save_list` (a mapping used by `time_distributed_save()`, a
+   `*/5 * * * * *` cron job, "每五分鐘城市資料分散儲存"). With
+   `sort_save_list` left at its default `0` (not even an empty
+   mapping), every single firing of that cron thereafter threw `Value
+   being indexed is zero.` on `sort_save_list[++number]` at
+   `city_d_main.lpc:369` -- confirmed live in `log/catch`, a fresh entry
+   every 5 minutes, forever, for the rest of the boot's uptime.
+
+**Fix**: `mkdir -p city/fallencity1/0/room/` plus a `.gitkeep`
+placeholder (git can't track an empty directory, so without a
+placeholder file this fix wouldn't survive a fresh `git clone` --
+re-checked and found the SAME gap on three other directories already
+`mkdir -p`'d during this lib's original onboarding session,
+`data/bug/`, `area/`, `www/map/`: all three exist in the current local
+working tree but were never actually committed as tracked content, so a
+fresh checkout would hit the identical missing-directory crashes this
+session already fixed once. Added `.gitkeep` to all four.) Verified
+live: a full reboot after the fix showed a clean `log/system/preload`
+entry for `city_d.lpc` (no error line) and `log/catch` stayed
+completely empty through a full registration → movement → `quit` →
+relogin session (previously it reliably grew a new entry every 5
+minutes from the cron alone). See AGENTS.md §7.11's new bullet for the
+general "get_dir() on a missing directory returns 0, not an empty
+array, and a crash mid-init-function can leave a LATER global
+permanently unset" pattern.
+
+### Bug 2 (new AGENTS.md §7.128): `process_input()` returning the input string (instead of a nonzero int) made the driver's own "unknown command" fallback fire after EVERY player command, forever
+
+Confirmed live on a completely clean, crash-free session: `look`,
+`score`, `i`, `help`, and `command wizard` all produced their correct
+real output, immediately followed by a spurious extra line reading
+`什么？` ("what?") on its own. Root-caused via `config.fluffos`'s
+`default fail message : 什么？` directive (a `grep` for the literal text
+across the whole `work/` tree found it nowhere in any `.lpc` file, only
+in this project's own generated driver config -- the first clue this
+was a driver-level mechanism, not a stray mudlib string) plus
+`~/src/fluffos/src/comm.cc`'s `process_input()` C function, which
+inspects the LPC-level `process_input()` apply's return value to decide
+whether to ALSO run the driver's OWN native `add_action()`-based command
+parser on the input: a returned `string` re-parses that exact string
+through the (empty, in this lib's case) native action table; a returned
+`0`/falsy number falls through to parsing the ORIGINAL raw input
+instead; only a genuine non-zero `int` skips the native parser
+entirely. `revivalworld` builds a complete custom dispatch of its own
+(`std/inherit/feature/living/usr/_input_usr.lpc` → `_command_usr.lpc`'s
+`evaluate_command()`, invoked via `evaluate()` on a captured function
+pointer) and never once calls the real `add_action()` efun anywhere in
+the whole codebase (confirmed: the codebase defines its OWN, differently
+-signatured, same-named `add_action(object, mapping)` LOCAL method in
+`_action_usr.lpc`/`_action_npc.lpc` that shadows the efun everywhere --
+every "add_action(...)" call site in the tree is calling this local
+method, not the driver's). But `_input_usr.lpc::process_input()`, after
+fully handling the command itself via `process_command()`, ended every
+one of its 6 return statements with `return input;` -- the single worst
+choice, since it explicitly asks the driver to re-parse the very string
+it just finished handling against a command table with zero real verbs
+on it, guaranteeing the driver's own fallback fires. **Fix**: changed
+all 6 `return input;` inside `process_input()` to `return 1;` (verified
+via `comm.cc` that this is the ONLY return shape that fully skips
+`safe_parse_command()` -- a bare `return 0;` does NOT work, since `0` is
+still a valid `T_NUMBER` svalue and the driver's own check is
+specifically `ret->type != T_NUMBER || !ret->u.number`). Verified: `lpcc
+--batch` PASS on the edited file, then a full live session (register →
+`south`/`look`/`score`/`i`/`skill`/`quest`/`help` → `quit` → wait →
+relogin → `look`) showed the trailing message gone from literally every
+reply, `log/catch`/`log/run` stayed empty throughout. See AGENTS.md
+§7.128 for the general pattern (any mudlib with its own full command
+dispatch that shadows/never-calls the real `add_action()` needs
+`process_input()` to return a genuine non-zero int on every
+already-handled path).
+
+### Economy/stock-market systems: confirmed unreachable live in this specific save snapshot, and why -- not a bug
+
+This lib's shipped world has exactly one city, `fallencity1`, and its
+raw persisted save data (`city/fallencity1/info`) has `"fallen":1` and
+`"name":"廢棄都市"` (literally "Abandoned City") baked in directly --
+this is the ACTUAL captured state of the original live server at
+archival time (zero citizens, zero government, zero assets), not a
+runtime bug introduced by conversion or by the missing-directory fix
+above. `cmds/std/ppl/occupy.lpc`'s "found a new city on the ruins of a
+fallen one" flow is the ONLY way to un-fall a city, and it costs
+`OCCUPY_MONEY` = $RW 100,000,000 (`system/daemons/city_d_main.lpc`),
+completely unreachable for a brand-new character who starts with
+literally zero currency and no citizenship (citizenship itself, and the
+starting-money/land-deed grant that comes with it, requires physically
+registering at a functioning CityHall -- which doesn't exist in a fallen
+city). This blocks the ENTIRE land/production-chain/stock-market loop
+from a fresh player with no external funding, through any normal
+in-game path, in this exact save snapshot.
+
+I also confirmed, while investigating whether the seeded `fluffos`
+admin account could be used to bootstrap around this (e.g. via the
+wizard-only `givememoney` command), that **wizard-level commands are
+completely unavailable to ANY account connecting through this lib's
+single consolidated port, including the seeded admin account** -- a
+materially bigger consequence than this file's existing "Known
+limitation" note above (written during onboarding) currently states.
+Root cause, traced end-to-end: `system/daemons/virtual_d.lpc`'s
+`compile_object()` hook decides `WIZ_OB` vs `PPL_OB` for a restoring
+player body via `SECURE_D->is_wizard(id) &&
+(call_stack(1)[3]==load_object(WIZ_LOGIN_D) ||
+call_stack(1)[3]==load_object(LOGIN_D))` -- but a RETURNING player
+logging in through the ordinary port takes `ppl_login_d.lpc`'s OLD_PLAYER
+branch, which calls the shared `load_user()` simul_efun directly; the
+immediate caller frame at that point is `ppl_login_d` itself, which is
+neither `WIZ_LOGIN_D` nor plain `LOGIN_D`, so the condition is never
+true and `PPL_OB` is always chosen regardless of `SECURE_D` admin
+status. Confirmed live and directly (not just by inference): `fluffos`'s
+own save file header reads `#/system/object/ppl_ob.lpc`, and both
+`givememoney $RW 100000000` and `command wizard`/an arbitrary
+wizard-only verb came back `沒有「X」這個指令` (command not found) --
+`wizardp(this_object())` never becomes true for this account through
+this port, because `enable_wizard()` only ever gets called from
+`_command_wiz.lpc`'s `enable_interactive()`, which only a `WIZ_OB`
+inherits. `SECURE_D`'s file-permission ACL (used for e.g. `SECURE_D`
+checks gating file edits) is genuinely unaffected, since that's a
+separate, account-keyed mapping -- but essentially every in-game wizard
+COMMAND (`givememoney`, and by the same mechanism every other
+`cmds/std/wiz/*.lpc`/`cmds/std/adm/*.lpc` file) is unusable through the
+single real port. This is a direct, if more severe than previously
+described, consequence of this lib's ALREADY-DECIDED onboarding-time
+port-consolidation tradeoff (`include/login.h`'s hardcoded 3-port
+architecture collapsed onto one port) -- not a new/separate bug, and not
+something this pass changed, since re-opening that architecture
+decision is out of scope for a deep-test pass. Flagging for whoever
+next needs in-game wizard-command access on this lib: the reliable
+workaround this session used successfully is direct persisted-save-file
+edits (as onboarding already did for `secure_d.lpc`'s `wizards`
+mapping), not `givememoney`/other in-game wizard commands.
+
+Given the above, the economic loop was exercised as far as is reachable
+by an ordinary new character with the shipped starting resources:
+registration, `score`/`i` (both empty/zero as expected for a brand-new
+character with no city), movement into the `fallencity1` coordinate map
+(confirmed working -- landed at `(50,50)`, "荒地"/wasteland, saw the
+"廢棄都市"/"第一都市" map labels), `skill` (correctly reports "你目前沒
+有學習任何技能"), `quest` (correctly reports "你尚未完成任何任務"),
+`help topics` (pager works, `<数字>`/`B`/`Q` navigation not separately
+exercised beyond confirming the pager itself renders and advances).
+Land purchase, `build`, production chains (`grow`/`collect`/`order`),
+enterprise/business ownership, and the stock market (`std/module/room/
+stock.lpc`'s `list`/`buy`/`sell`) were NOT reachable live and are
+UNVERIFIED beyond the source-level review already on record above (the
+onboarding session's port/database/simul_efun restoration work, all of
+which the stock-market code correctly builds on -- `count()`'s
+string-arithmetic money handling, `to_int()`-wrapped share-price-to-cost
+conversions, etc. -- but none of that was exercised through an actual
+live `buy`/`sell` transaction this session). If this lib's world state
+ever needs the economy live-tested end-to-end, the practical path is a
+direct persisted-save-file edit granting a test character enough $RW to
+`occupy city`, or restoring from an earlier, non-fallen snapshot of the
+same city if one exists upstream.
+
+### Six standing cross-cutting patterns (§7.121/§8.3a/§7.122/§7.123/§7.124/§7.126): checked, no live instances found
+
+- **§7.121 (float-into-declared-int, especially economic functions)**:
+  swept every economy-adjacent file (`money_d.lpc`, `exchange_d.lpc`,
+  `estate_d.lpc`, `enterprise_d.lpc`, `city_d_main.lpc`, `tax_d.lpc`,
+  `stock.lpc`, `bank.lpc`) plus a scripted whole-tree scan for
+  `int`-declared functions returning an expression built from a
+  `float`-typed local/param or a bare decimal literal with no
+  `to_int()`/`(int)` wrap. This lib is unusually well-defended against
+  this exact class BY DESIGN: all real player currency is stored and
+  moved as `string` decimal values via the ported `count(a,op,b)`
+  arbitrary-precision-arithmetic simul_efun (`rw_compat.lpc`), which
+  itself does `to_int()` on both operands before computing -- and
+  `big_number_check()` (the gate every `spend_money()`/`earn_money()`
+  call funnels through) explicitly REJECTS a float value outright
+  (returns 0) rather than silently accepting and corrupting it. One
+  borderline, but genuinely dead, instance found: `exchange_d.lpc`'s
+  `int compare(unit1,money1,op,unit2,money2)` returns
+  `count(count(money1,"*",ex1), op, count(money2,"*",ex2))`, and
+  `count()` returns a STRING (not an int) whenever `op` is one of
+  `+`/`-`/`*`/`/`/`%` rather than a comparison operator -- a real
+  declared-int-vs-actual-string mismatch if ever called with an
+  arithmetic `op` -- but `compare()` has ZERO callers anywhere in the
+  codebase (confirmed via `grep -rn 'EXCHANGE_D->compare\|->compare('`
+  across the whole tree); every real currency-exchange call site
+  (`bank.lpc`'s teller, `estate_d.lpc`'s cross-city asset totals) uses
+  the sibling `convert()` function instead, which is correctly declared
+  `string`. Left untouched per this project's confirmed-dead-code
+  policy (documenting, not fixing, code with zero live callers).
+- **§8.3a (`private` command-dispatch demotion)**: does not apply to
+  this codebase's architecture. Every `cmds/**/*.lpc` file declares its
+  own handler as `private void command(...)`/`private void
+  do_command(...)`, but dispatch never goes through the driver's native
+  `add_action()` at all -- see Bug 2 above for the full mechanism
+  (`_command.lpc`'s `query_fp()` returns a function-pointer LITERAL
+  created inside the object's own code, `(: do_command($1,$2) :)`,
+  invoked later via `evaluate()`, not a driver-level `add_action`
+  external dispatch that would be subject to the `private`→
+  `DECL_HIDDEN` demotion this pattern normally catches). Confirmed live
+  by the fact every single player command actually worked throughout
+  this whole test session.
+- **§7.122 (autoload/class-item duplication on reconnect)**: no
+  `auto_load`/`compute_autoload_array`/`destroy_autoload_obj`/
+  `load_autoload_obj` mechanism (or any equivalent "regenerate this item
+  on next login separately from normal inventory restore" pattern)
+  exists anywhere in this codebase (`grep` for all four TMI-2-lineage
+  symbol names returned nothing) -- this is an RWlib-original codebase,
+  not TMI-2-descended, and doesn't have this class of mechanism at all.
+- **§7.123 (bare file-scope `IDENT = (...)` statement)**: a scripted
+  brace-depth-aware scan of every `.lpc` file for a bare
+  `IDENT = (...)`-shaped statement outside any function found zero real
+  instances (the only matches were inside `doc/v22doc/`'s bundled C
+  reference documentation, not real LPC).
+- **§7.124 (percentage-threshold 0.0-1.0-vs-0-100 literal mismatch)**:
+  no `wimpy`/auto-flee safety mechanism exists in this codebase at all
+  (matches the task brief's own expectation that this economic-sim lib
+  may lack a traditional combat safety net) -- `combat/handler/
+  unarm.lpc` is confirmed dead (needs a nonexistent `combat.h`, zero
+  references, per the onboarding session's own finding above), and a
+  `fight` command exists for PvP but isn't gated by any percentage
+  threshold of this shape. A targeted grep for `= 0\.[0-9]+;` assigned
+  to an `int`-declared field found zero matches anywhere in `work/`.
+- **§7.126 (stale pre-`.lpc` `.c` extension in a coordinate-AREA's saved
+  door/exit data)**: this lib's map/movement system is NOT the
+  macro-placeholder-resolved-at-runtime AREA-class engine this pattern
+  targets (no `__DIR__`-in-save-data / custom `file_path()` door
+  resolver anywhere -- the `__DIR__` occurrences found by an initial
+  grep are all this driver's own compile-time `__DIR__` builtin macro
+  used in ordinary `inherit __DIR__"foo.lpc";` statements, unrelated).
+  Two harmless, pre-existing, non-gameplay-affecting stale-`.c`
+  references WERE found in two of the three pre-existing seed accounts'
+  own save data (`data/user/c/clode/data.o`'s `last_title_screen`
+  property, `data/user/m/msr/data.o`'s `current_work/file` wizard-editor
+  bookmark) -- traced both to confirm neither is ever passed to
+  `load_object()` (one is a plain string-equality comparison used only
+  to decide whether to reprint a map legend once; the other is a
+  wizard's "resume last edited file" convenience whose target file
+  doesn't even exist under either extension). Left untouched: this is
+  pre-existing player(-equivalent) save data, not source, and the
+  observed effect is purely cosmetic (one extra legend printout /
+  editor "no such file" on next use), not a functional break -- fixing
+  it would mean reaching into already-kept seed-account data for no
+  live-observable benefit.
+
+### Persistence verified
+
+A full `quit` (clean exit via the `quit` command, not a timeout/
+disconnect) correctly showed this lib's own quit flavor text ("你本次共
+連線了十三秒" + a poem + "你離開遊戲了") and a subsequent relogin
+restored the exact same map coordinate (`(50,50)`, confirmed both via
+the live `look` output and directly via the raw save file's
+`quit_place` field, `({49,49,0,"fallencity1",0,0,...})` from an earlier
+net-dead-timeout disconnect in the same test run -- confirming both the
+clean-quit AND the abrupt-disconnect save paths persist location
+correctly). `log/catch` and `log/run` stayed empty across the entire
+session, both before and after the two fixes above (i.e. the
+process_input fix didn't need the missing-directory fix to be verified,
+and vice versa -- independently confirmed).
+
+### Cleanup and verification before commit
+
+Test character `qinfeng` (created for this session) was fully removed
+before committing: `data/user/q/qinfeng/` deleted, and its residual
+entries in `system/kernel/data/password.o`/`password.o_backup` (the
+crypt hash) and `data/daemon/money.o` (an empty `moneydata["qinfeng"]`
+entry, created merely by existing as a registered citizen-less
+character, never funded) removed by hand, restoring those two files
+byte-for-byte to their pre-session state. Only the three original seed
+accounts (`clode`, `msr`) plus the seeded `fluffos`/`Mud@2026` admin
+account remain. `lpcc --batch` re-confirmed the single edited file
+(`_input_usr.lpc`) compiles clean. The
+`grep -h '"port"' libs/*/meta.json | ...` duplicate-port sanity check
+(per task instructions) printed nothing before committing.

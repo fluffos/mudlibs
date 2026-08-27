@@ -2213,6 +2213,60 @@ unaffected, only visible via `debug.log`.
   hot-`update`d (driver-special object, `update` threw `*No program in
   object`) — required a full driver restart to pick up the fix, unlike
   the `inherit`-based instances above.
+- **New variant, `revivalworld`'s §10.7 round-two deep functional test:
+  `get_dir()` on a missing directory returns `0` (not an empty array),
+  and a bare `foreach(x in get_dir(missing_dir))` throws `Bad argument 2
+  to foreach Expected: array Got: 0` — and because the throwing call sat
+  partway through a larger initialization function, code AFTER it in
+  that same function never ran, permanently leaving a DIFFERENT global
+  uninitialized and creating a second, independent, recurring crash.**
+  `system/daemons/city_d_main.lpc::restore_all_data()` loads each
+  city/section's data, then does `foreach(roomfile in
+  get_dir(CITY_NUM_ROOM(city,num)))` to load that section's built
+  "module rooms" — but the shipped archive's `city/<id>/<num>/room/`
+  directory doesn't exist for a section with nothing built in it yet (a
+  fresh/newly-founded city has zero constructed buildings, and git
+  doesn't track empty directories), so this crashed on the very first
+  boot, inside a preload daemon's own `create()`
+  (`system/daemons/system_d.lpc`'s `distributed_preload()` catches the
+  `load_object()` failure and just logs it, silently dropping `city_d`
+  from the preload list without retrying). The crash happened BEFORE
+  `restore_all_data()`'s own final `assign_cities_num()` call (which
+  populates a `sort_save_list` mapping used only by a `*/5 * * * * *`
+  cron, `time_distributed_save()`), so `sort_save_list` stayed
+  permanently `0` (never even an empty mapping) — every single firing of
+  that 5-minute cron thereafter threw `Value being indexed is zero.` on
+  `sort_save_list[++number]`, forever, for the rest of the boot's
+  uptime. A LATER preload pass (the `/system/daemons/` wildcard
+  directory entry, which independently re-lists `city_d.lpc` alongside
+  its own earlier explicit "must load first" listing — normal,
+  intentional double-listing for load-order control, see
+  `system/kernel/etc/preload`'s own comment) found the partially-broken
+  `city_d` object already loaded via `find_object()` and treated that as
+  success, masking the underlying failure from a casual "did city_d load
+  OK" check. **Fix**: `mkdir -p` the missing `room/` directory (plus a
+  `.gitkeep` placeholder file, since git can't track an empty directory
+  — three OTHER already-known-missing directories in this same lib,
+  `data/bug/`, `area/`, `www/map/`, were also found to have been
+  `mkdir -p`'d during onboarding but never actually committed for
+  exactly this reason: an empty directory with no tracked file inside it
+  silently vanishes on a fresh `git clone`, re-creating the identical
+  crash for the next person to boot this lib from scratch). Verified
+  live: a fresh reboot after the fix showed a clean
+  `log/system/preload` entry for `city_d.lpc` with no error line, and
+  `log/catch` stayed completely empty through a full registration/
+  movement/quit/relogin session (previously it reliably grew a new
+  entry every 5 minutes from the `time_distributed_save()` cron alone).
+  **How to apply generally**: `get_dir()` returning `0` instead of an
+  empty array for a missing/inaccessible directory is a distinct crash
+  shape from the write-side failures cataloged elsewhere in this
+  section — grep for a bare `foreach(x in get_dir(...))` (no
+  `mapp()`/`arrayp()`/`||({})` guard) in any function that ALSO sets a
+  global used elsewhere AFTER the loop in the same function; a crash
+  early in a multi-step init function can leave a much later, seemingly
+  unrelated global permanently unset, and the resulting second symptom
+  (here, a recurring cron crash) can be mistaken for an unrelated bug if
+  you don't trace it back to the same root init failure.
 
 ### 7.12 Shared message/wrapper argument bugs
 
@@ -9734,6 +9788,67 @@ This is a distinct shape from §7.121 (a function's own RETURN type
 being too narrow for its own internal arithmetic) — here the bug is a
 function's PARAMETER type being narrower than how every real caller
 invokes it.
+
+### 7.128 A mudlib that builds its own complete command dispatch (never using the driver's native `add_action()` at all) still returns the raw input string from `process_input()` — the driver re-parses that string through its own empty action table and appends its own "unknown command" fallback message after EVERY single command, forever
+
+Found via `revivalworld`'s §10.7 round-two deep functional test. This
+FluffOS-family driver's `process_user_command()` (`src/comm.cc`) applies
+`process_input()` on the interactive object and then inspects the
+*return value* to decide whether to ALSO run its own native
+`add_action()`-based command parser (`safe_parse_command()`) on the raw
+input: returning a `string` re-parses that string through the native
+table; returning `0`/a falsy number ALSO falls through to
+`safe_parse_command(user_command, ...)` on the ORIGINAL raw input (only
+a genuinely non-zero integer return skips it entirely). `revivalworld`
+builds a complete custom dispatch of its own
+(`std/inherit/feature/living/usr/_command_usr.lpc`'s
+`evaluate_command()`/`process_command()`, invoked via `evaluate()` on a
+function pointer, never `add_action()`) and its own local method named
+`add_action(object, mapping)` (a same-named, different-signature
+mudlib-level function that shadows/masks the native efun) — the driver's
+own `add_action()` efun is never actually called anywhere in the whole
+codebase. But `_input_usr.lpc`'s `process_input()`, after fully handling
+the command itself, ended every single code path with `return input;` —
+the single worst choice for this driver's contract, since it explicitly
+asks the driver to re-parse the exact string it just handled against a
+command table that has ZERO real verbs registered on it. The result:
+this driver's own `config.fluffos` `default fail message` (`什么？`,
+"what?") gets appended after the real output of EVERY player command —
+`look`, `score`, `i`, `help`, all of them — from a brand-new character's
+very first command onward, for every player, forever, with zero crash
+and zero `debug.log` signal (confirmed live: reproduced on `look`/
+`score`/`i`/`help`, and confirmed the string genuinely comes from the
+driver's config directive, not mudlib source — a `grep` for the literal
+text across the whole `work/` tree finds it nowhere in any `.lpc` file,
+only in the project's own generated `config.fluffos`, which is what
+first pointed at the driver-level mechanism rather than a stray mudlib
+string). **Fix**: change every `return input;` inside
+`process_input()` to `return 1;` (a real non-zero int) — verified via
+`src/comm.cc`'s exact branch logic that this is the ONLY return shape
+that fully skips `safe_parse_command()`; a bare `return 0;` does NOT
+work (0 is still a valid `T_NUMBER` svalue with `!ret->u.number` true,
+which the driver treats as "no useful string, fall through to the raw
+input" — same as returning nothing at all). Verified live: a full
+register→move→`look`/`score`/`i`→`quit`→relogin→`look` session showed
+the spurious trailing message gone from every single reply, and
+`log/catch`/`log/run` stayed empty across the whole session.
+
+**How to apply generally**: any mudlib whose interactive body inherits
+its OWN full command-dispatch mixin (a custom `process_command()`/
+`evaluate_command()` that never calls the native `add_action()` efun —
+check for a same-named LOCAL `add_action(...)` method with a different
+signature as the tell, since that shadows the efun everywhere in the
+codebase without an obvious "we bypass add_action" comment) needs its
+`process_input()` to return a genuine non-zero `int`, not the transformed
+input string, on every path where it has already handled the command
+itself — check the driver's own `process_input`/`safe_parse_command`
+interaction (`src/comm.cc` in this project's FluffOS checkout) before
+assuming a `return input;`-shaped function is harmless just because it
+compiles clean and the visible reply looks correct; the extra fallback
+message is easy to miss in a quick manual test if it's short/generic
+enough to read as a plausible last line of legitimate output, and only
+stands out once you notice it recurring after literally every command
+type, including ones that clearly succeeded.
 
 ---
 
