@@ -531,3 +531,43 @@ logging *that* failure recurses forever. Every OTHER top-level name was, at
 the time, still a directory-with-`foo.txt` and could plausibly trigger the
 identical crash the first time any runtime error happened to target one of
 those categories.
+
+## Sibling sweep of ds386's round-two `eventRevive()`/room.lpc/combat.lpc/beggar.lpc bugs (2026-08-27)
+
+Per `ds386/NOTES.md`'s "Deep functional test (round two, 2026-08-27)"
+section (the reference master for this whole lineage), checked all four
+flagged bug shapes here. All four were present and fixed identically:
+
+- **Bug #1, SEVERE (`eventRevive()` float corruption, AGENTS.md
+  §7.121 class)**: `lib/player.lpc`'s `eventRevive()` fed
+  `GetMaxMagicPoints() * PERCENT_MP` / `GetMaxHealthPoints() *
+  PERCENT_HP` (float expressions, `PERCENT_MP`/`PERCENT_HP` being
+  `0.95`/`0.70` `#define`s) directly into `AddMagicPoints(int x)`/
+  `AddHealthPoints(int x, ...)`, corrupting `MagicPoints`/
+  `HealthPoints` into floats on every single player death. **Fixed**
+  by wrapping both in `to_int()`, matching `ds386`'s fix exactly
+  (`AddStaminaPoints()` left untouched -- its backing field is
+  genuinely `float` by design). **Verified live**: booted, logged in
+  as admin (`fluffos`/`Mud@2026`), ran `eval object x =
+  find_player("fluffos"); x->eventDie("test");` then `regenerate` --
+  post-fix status bar showed `hp: 120/400  mp: 0/780`, clean integers;
+  `save` confirmed the raw save file has plain integer
+  `HealthPoints 120` / `MagicPoints 0` lines, no float.
+- **Bug #2 (`replace_program()` fold, AGENTS.md §7.141)**: same
+  MudOS-era fold present in `lib/std/room.lpc`'s `create()`. Removed
+  it entirely, identical to `ds386`/`dsI`/`dsIII`.
+- **Bug #3 (`Wimpy` fraction-vs-percentage, AGENTS.md §7.124 class)**:
+  `lib/combat.lpc:65` had `Wimpy = 0.20;` plus `float SetWimpy`/`float
+  GetWimpy`. Fixed to `Wimpy = 20;` and `int SetWimpy`/`int GetWimpy`.
+  **Verified live**: `wimpy` command showed `Percentage: 20%`, a clean
+  integer.
+- **Bug #4 (`GiveMap()` reentrancy, `domains/town/npc/beggar.lpc`)**:
+  same missing delivery-time `!present("town map",ob)` guard. Fixed
+  identically to `ds386`.
+
+Following this lib's own standing convention noted above, only the
+four source-file fixes plus the admin account's post-test save state
+were committed -- `RELEASE_NOTES_HTTP`/IMC2/vote/daemon-state test
+churn and a stray `secure/tmp/*_CMD_EVAL_TMP_FILE.lpc` scratch file
+were reverted/removed first. Killed the test driver by exact PID when
+done.
