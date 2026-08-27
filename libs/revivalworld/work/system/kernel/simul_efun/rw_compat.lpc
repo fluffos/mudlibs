@@ -1,0 +1,514 @@
+/* This program is a part of RW mudlib
+ * See /doc/help/copyright for more info
+ -----------------------------------------
+ * File   : rw_compat.c
+ * Author : (added during FluffOS onboarding, not original RW content)
+ * Note   : This lib was originally built against a heavily custom-patched
+ *          MudOS driver (see the .c files under
+ *          /doc/driver/modify/source_files/packages/ for the original
+ *          C source of the patches). This driver
+ *          (stock FluffOS) does not have any of those patches compiled
+ *          in, so every function they used to provide as a real driver
+ *          efun is restored here as a simul_efun, ported from the
+ *          documented/archived C source as faithfully as practical.
+ * Included by Simul_Efun Object
+ -----------------------------------------
+ */
+
+// ---------------------------------------------------------------------
+// "database" package (doc/driver/modify/source_files/packages/database.c)
+// -----------------------------------------------------------------------
+// set()/query()/delete()/set_temp()/query_temp()/delete_temp()/addn()/
+// addn_temp() were real driver efuns operating (via reflection on the
+// CALLING object's own "database"/"temp_database" global mapping
+// variable) as a "/"-separated-path nested-property store. The real,
+// per-object implementation now lives in
+// /std/inherit/feature/object/_database.lpc (inherited by
+// standard_object/standard_room/standard_npc/interactive/
+// bulletin_board/standard_maproom -- i.e. virtually everything), where a
+// bare call from an object that inherits it resolves locally via normal
+// LPC function binding, matching the original semantics exactly
+// (including the 3-arg trailing-`ob` redirect, which now becomes a
+// plain `ob->query(...)`/`ob->set(...)` call to the same local
+// implementation on that other object).
+//
+// These simul_efun-level fallbacks fire far more often than "an object
+// with no dbase" -- this driver's bare-call function binding does NOT
+// look across a composite object's OTHER, sibling-inherited programs:
+// a file like _reset_room.lpc (which does not itself `inherit
+// DATABASE;`, only ends up alongside it because standard_room.lpc
+// inherits both) has its own bare `query(...)`/`delete(...)` calls
+// resolved against what ITS OWN compilation unit can see, which does
+// NOT include DATABASE's methods -- so they fall through to here even
+// though the actual composite object (e.g. a real room) very much has
+// a working local database. (First caught live: every room's
+// reset_objects() -- ubiquitous, present on every standard_room --
+// throwing "delete() ... object has no dbase" the first time ANY room
+// with temp_objects reset, which is most of them.)
+//
+// Fixed by re-dispatching through `previous_object()` (the object
+// whose code actually made the bare call, NOT this_object(), which
+// inside a simul_efun is always the simul_efun itself) via a real `->`
+// call, which DOES use full dynamic dispatch against that object's
+// complete composite method table and so correctly reaches
+// _database.lpc's methods when they exist anywhere in its inherit
+// tree. Guarded with function_exists() to only redirect when a genuine
+// local method exists there (it returns 0 for a name only resolvable
+// through this very simul_efun, and the defining file's path
+// otherwise) -- otherwise this degrades exactly like the original
+// driver efun did for a true no-dbase object: query()/query_temp()
+// return 0, set()/delete()/addn() (and _temp variants) error.
+
+varargs mixed query(string prop, object ob)
+{
+	object target = ob || previous_object();
+	if( target && target != this_object() && function_exists("query", target) )
+		return target->query(prop);
+	return 0;
+}
+
+varargs mixed query_temp(string prop, object ob)
+{
+	object target = ob || previous_object();
+	if( target && target != this_object() && function_exists("query_temp", target) )
+		return target->query_temp(prop);
+	return 0;
+}
+
+varargs mixed set(string prop, mixed val, object ob)
+{
+	object target = ob || previous_object();
+	if( target && target != this_object() && function_exists("set", target) )
+		return target->set(prop, val);
+	error(sprintf("(set) %O object has no dbase.\n", target));
+}
+
+varargs mixed set_temp(string prop, mixed val, object ob)
+{
+	object target = ob || previous_object();
+	if( target && target != this_object() && function_exists("set_temp", target) )
+		return target->set_temp(prop, val);
+	error(sprintf("(set_temp) %O object has no dbase.\n", target));
+}
+
+varargs void delete(string prop, object ob)
+{
+	object target = ob || previous_object();
+	if( target && target != this_object() && function_exists("delete", target) )
+	{
+		target->delete(prop);
+		return;
+	}
+	error(sprintf("(delete) %O object has no dbase.\n", target));
+}
+
+varargs void delete_temp(string prop, object ob)
+{
+	object target = ob || previous_object();
+	if( target && target != this_object() && function_exists("delete_temp", target) )
+	{
+		target->delete_temp(prop);
+		return;
+	}
+	error(sprintf("(delete_temp) %O object has no dbase.\n", target));
+}
+
+varargs mixed addn(string prop, mixed val, object ob)
+{
+	object target = ob || previous_object();
+	if( target && target != this_object() && function_exists("addn", target) )
+		return target->addn(prop, val);
+	error(sprintf("(addn) %O object has no dbase.\n", target));
+}
+
+varargs mixed addn_temp(string prop, mixed val, object ob)
+{
+	object target = ob || previous_object();
+	if( target && target != this_object() && function_exists("addn_temp", target) )
+		return target->addn_temp(prop, val);
+	error(sprintf("(addn_temp) %O object has no dbase.\n", target));
+}
+
+// ---------------------------------------------------------------------
+// "ansi" package (doc/driver/modify/source_files/packages/ansi.c)
+// ---------------------------------------------------------------------
+
+private nosave string *rw_ansi_code = ({
+	"$NOR$","$BLK$","$RED$","$GRN$","$YEL$","$BLU$","$MAG$","$CYN$","$WHT$",
+	"$HIR$","$HIG$","$HIY$","$HIB$","$HIM$","$HIC$","$HIW$",
+	"$HBBLK$","$HBRED$","$HBGRN$","$HBYEL$","$HBBLU$","$HBMAG$","$HBCYN$","$HBWHT$",
+	"$BBLK$","$BRED$","$BGRN$","$BYEL$","$BBLU$","$BMAG$","$BCYN$","$BWHT$",
+	"$BOLD$","$BLINK$","$HIREV$" });
+
+private nosave string *rw_ansi_color = ({
+	"\e[m","\e[30m","\e[31m","\e[32m","\e[33m","\e[34m","\e[35m","\e[36m","\e[1;30m",
+	"\e[1;31m","\e[1;32m","\e[1;33m","\e[1;34m","\e[1;35m","\e[1;36m","\e[1;37m",
+	"\e[40;1m","\e[41;1m","\e[42;1m","\e[43;1m","\e[44;1m","\e[45;1m","\e[46;1m","\e[47;1m",
+	"\e[40m","\e[41m","\e[42m","\e[43m","\e[44m","\e[45m","\e[46m","\e[47m",
+	"\e[1m","\e[5m","\e[1;7m" });
+
+// Converts $XXX$ color markers to real ANSI escapes, and strips other
+// raw control characters (except newline). Ported from f_ansi().
+//
+// Builds the result as a list of slices/pieces joined with implode()
+// rather than repeated `ret += ...` -- appending one character at a
+// time via += is O(n) per append on this driver (each += reallocates
+// and copies the whole string so far), making a naive char-by-char
+// loop O(n^2) overall. That quadratic blowup is exactly what made a
+// real preloaded daemon (html_d.lpc, building a whole HTML page through
+// these functions) time out a 30-second eval-cost limit during
+// testing; collecting runs between "special" characters and joining
+// once at the end keeps this O(n).
+string ansi(string str)
+{
+	int i, j, len, matched, start;
+	string *parts;
+
+	if( !str ) return str;
+
+	parts = ({});
+	len = strlen(str);
+	start = 0;
+	i = 0;
+	while( i < len )
+	{
+		if( str[i] < 32 && str[i] != '\n' )
+		{
+			if( i > start ) parts += ({ str[start..i-1] });
+			i++;
+			start = i;
+			continue;
+		}
+
+		matched = 0;
+		if( str[i] == '$' )
+		{
+			for( j = 0; j < sizeof(rw_ansi_code); j++ )
+			{
+				int clen = strlen(rw_ansi_code[j]);
+				if( i + clen <= len && str[i..i+clen-1] == rw_ansi_code[j] )
+				{
+					if( i > start ) parts += ({ str[start..i-1] });
+					parts += ({ rw_ansi_color[j] });
+					i += clen;
+					start = i;
+					matched = 1;
+					break;
+				}
+			}
+		}
+
+		if( !matched )
+			i++;
+	}
+	if( i > start ) parts += ({ str[start..i-1] });
+
+	return implode(parts, "");
+}
+
+// Collapses back-to-back ANSI escapes with nothing rendered between them
+// down to just the last one (e.g. "\e[31m\e[32mfoo" -> "\e[32mfoo") --
+// a correctness-preserving simplification of f_kill_repeat_ansi()'s
+// documented purpose (its real implementation runs a full table-based
+// "rally_ansi" merge across the WHOLE string, not just adjacent-code
+// runs, but the visible result -- what color a following character
+// actually renders in -- is identical either way; every call site
+// found in this codebase uses it purely cosmetically on already-built
+// display strings, e.g. `kill_repeat_ansi(name + NOR)` guarding against
+// a redundant color-reset when `name` might already end in one).
+string kill_repeat_ansi(string str)
+{
+	int i, j, k, m, len, start;
+	string *parts, last;
+
+	if( !str ) return str;
+
+	len = strlen(str);
+	parts = ({});
+	start = 0;
+	i = 0;
+	while( i < len )
+	{
+		if( str[i] == 27 && i + 1 < len && str[i+1] == '[' )
+		{
+			j = i + 2;
+			while( j < len && ((str[j] >= '0' && str[j] <= '9') || str[j] == ';') )
+				j++;
+			if( j < len && str[j] == 'm' )
+			{
+				if( i > start ) parts += ({ str[start..i-1] });
+
+				// drop the previous piece if it was ITSELF an
+				// escape with nothing rendered since (adjacent
+				// codes with nothing between them -- only the
+				// last one matters)
+				if( sizeof(parts) )
+				{
+					last = parts[<1];
+					k = strlen(last);
+					if( k >= 3 && last[k-1] == 'm' && last[0] == 27 && last[1] == '[' )
+					{
+						m = k - 2;
+						while( m >= 2 && ((last[m] >= '0' && last[m] <= '9') || last[m] == ';') )
+							m--;
+						if( m == 1 )
+							parts = parts[0..<2];
+					}
+				}
+
+				parts += ({ str[i..j] });
+				i = j + 1;
+				start = i;
+				continue;
+			}
+		}
+		i++;
+	}
+	if( i > start ) parts += ({ str[start..i-1] });
+
+	return implode(parts, "");
+}
+
+// Strips real ANSI escapes (\e[...m). Ported from f_remove_ansi().
+string remove_ansi(string str)
+{
+	int i, j, len, start;
+	string *parts;
+
+	if( !str ) return str;
+
+	len = strlen(str);
+	parts = ({});
+	start = 0;
+	i = 0;
+	while( i < len )
+	{
+		if( str[i] == 27 && i + 1 < len && str[i+1] == '[' )
+		{
+			j = i + 2;
+			while( j < len && ((str[j] >= '0' && str[j] <= '9') || str[j] == ';') )
+				j++;
+			if( j < len && str[j] == 'm' )
+			{
+				if( i > start ) parts += ({ str[start..i-1] });
+				i = j + 1;
+				start = i;
+				continue;
+			}
+		}
+		i++;
+	}
+	if( i > start ) parts += ({ str[start..i-1] });
+
+	return implode(parts, "");
+}
+
+// Visible length excluding ANSI escapes. Ported from f_noansi_strlen().
+int noansi_strlen(string str)
+{
+	if( !str ) return 0;
+	return strlen(remove_ansi(str));
+}
+
+// ---------------------------------------------------------------------
+// "arith_operator" package
+// (doc/driver/modify/source_files/packages/arith_operator.c)
+// ---------------------------------------------------------------------
+// count(a, op, b): arbitrary-precision decimal-string arithmetic and
+// comparison, written for old 32-bit MudOS where money/score values
+// could overflow a native int. This driver's native `int` is a real
+// 64-bit signed integer, more than enough range for anything this lib
+// actually stores (confirmed by reading the call sites -- ordinary
+// in-game currency/quantity values, never anything close to 2^63), so
+// this is reimplemented with plain native int arithmetic rather than
+// porting the original by-hand decimal-digit algorithm.
+varargs mixed count(mixed a, string op, mixed b)
+{
+	int na, nb;
+
+	na = intp(a) ? a : to_int(a);
+	nb = intp(b) ? b : to_int(b);
+
+	switch( op )
+	{
+		case "+": return sprintf("%d", na + nb);
+		case "-": return sprintf("%d", na - nb);
+		case "*": return sprintf("%d", na * nb);
+		case "/": return nb ? sprintf("%d", na / nb) : "0";
+		case "%": return nb ? sprintf("%d", na % nb) : "0";
+		case "<": return na < nb;
+		case ">": return na > nb;
+		case "<=": return na <= nb;
+		case ">=": return na >= nb;
+		case "==": return na == nb;
+		case "!=": return na != nb;
+		default: return 0;
+	}
+}
+
+// ---------------------------------------------------------------------
+// Returns just the ANSI color-code portion of a string, discarding
+// every plain-text/glyph character (a bare no-op "\e[m" reset
+// contributes nothing either) -- used in this codebase to carry a map
+// tile's background color forward onto a new overlay glyph (see
+// city_d_main.lpc's player-marker-on-map-tile call sites). Ported from
+// f_ansi_part(), minus its extra "drop a redundant leading '0' digit"
+// byte-level optimization (cosmetic-only on any real ANSI terminal,
+// e.g. "\e[0;35m" vs "\e[;35m" render identically -- not worth
+// reproducing exactly).
+string ansi_part(string str)
+{
+	int i, j, len;
+	string ret;
+
+	if( !str ) return str;
+
+	len = strlen(str);
+	ret = "";
+	i = 0;
+	while( i < len )
+	{
+		if( str[i] == 27 && i + 1 < len && str[i+1] == '[' )
+		{
+			j = i + 2;
+			while( j < len && ((str[j] >= '0' && str[j] <= '9') || str[j] == ';') )
+				j++;
+			if( j < len && str[j] == 'm' )
+			{
+				if( j > i + 2 )
+					ret += str[i..j];
+				i = j + 1;
+				continue;
+			}
+		}
+		i++;
+	}
+
+	return ret;
+}
+
+// "chinese" package (doc/driver/modify/source_files/packages/chinese.c)
+// ---------------------------------------------------------------------
+
+// cwrap(str, width, blanks): word-wrap for display, counting each CJK
+// character as width 2 and everything else as width 1, and passing
+// existing ANSI escapes through uncounted. Ported from f_cwrap(), but
+// adapted from BIG5-lead-byte detection to Unicode-codepoint detection
+// since this driver's strings are UTF-8/codepoint-indexed, not raw
+// BIG5/GBK bytes.
+varargs string cwrap(string str, int width, int blanks)
+{
+	int i, j, len, w, c, start;
+	string *parts;
+
+	if( !str ) return str;
+
+	if( width < 2 ) width = 64;
+	if( undefinedp(blanks) ) blanks = 4;
+	if( blanks < 0 ) blanks = 0;
+	if( width - blanks < 2 ) { width = 64; blanks = 4; }
+
+	len = strlen(str);
+	if( len < blanks ) blanks = 0;
+
+	parts = ({});
+	if( blanks ) parts += ({ sprintf("%-*s", blanks, "") });
+
+	w = 0;
+	start = 0;
+	i = 0;
+	while( i < len )
+	{
+		if( str[i] == '\n' )
+		{
+			if( i > start ) parts += ({ str[start..i-1] });
+			i++;
+			start = i;
+			continue;
+		}
+
+		if( str[i] == 27 && i + 1 < len && str[i+1] == '[' )
+		{
+			j = i + 2;
+			while( j < len && ((str[j] >= '0' && str[j] <= '9') || str[j] == ';') )
+				j++;
+			if( j < len && str[j] == 'm' )
+			{
+				if( i > start ) parts += ({ str[start..i-1] });
+				parts += ({ str[i..j] });
+				i = j + 1;
+				start = i;
+				continue;
+			}
+		}
+
+		c = str[i];
+		w += (c >= 0x2e80) ? 2 : 1;
+		i++;
+
+		if( w >= width )
+		{
+			parts += ({ str[start..i-1], "\n" });
+			start = i;
+			w = 0;
+		}
+	}
+	if( i > start ) parts += ({ str[start..i-1] });
+
+	return implode(parts, "");
+}
+
+// B2G()/G2B()/bg5cc() did raw-byte BIG5<->GBK re-encoding and a BIG5
+// backslash-second-byte workaround. Both only make sense against raw
+// single/double-byte BIG5 or GBK byte streams; this whole lib (and this
+// driver) now works exclusively in UTF-8/Unicode codepoints, so there
+// is no byte-level encoding left to convert. Restored as no-ops
+// (passthrough) rather than fabricating a codepoint-level GBK<->BIG5
+// transliteration table that was never part of this codebase -- every
+// call site is gated behind an opt-in "encode/gb" player preference
+// (default off) or the (non-functional, see NOTES.md) Intermud-2
+// daemon, so this does not affect normal registration/gameplay.
+string B2G(string str) { return str; }
+string G2B(string str) { return str; }
+string bg5cc(string str) { return str; }
+
+// ---------------------------------------------------------------------
+// "contrib" package additions
+// (doc/driver/modify/source_files/packages/contrib.c)
+// ---------------------------------------------------------------------
+
+// remove_fringe_blanks(): strip leading/trailing whitespace.
+string remove_fringe_blanks(string str)
+{
+	if( !str ) return str;
+	return trim(str);
+}
+
+// set_this_player(): this driver only compiles this efun in when built
+// with NO_ADD_ACTION (this build isn't -- it uses the classic
+// add_action() world, where this_player() is instead managed entirely
+// by the driver itself around real connection input). This codebase's
+// own custom command dispatch (process_command()/command_d.lpc) is
+// built around this_object(), not this_player() -- confirmed by
+// reading _command_usr.lpc, the shared base every "cmd" implementation
+// funnels through, which never calls this_player() at all -- so a
+// no-op is safe for the call site that matters most (_input_usr.lpc's
+// process_input(), the entry point for every real player command:
+// this_player() is already correctly bound to the connection by the
+// driver itself before process_input() is ever entered, making that
+// call redundant on this driver regardless). The only real gap this
+// leaves is the handful of NPC/labor/mahjong-AI call sites that use
+// set_this_player() to make a non-interactive object act as the
+// current actor for one forced command -- narrow, since only a literal
+// this_player() reference inside that specific command's own
+// implementation (rare; e.g. "look me") would resolve to the wrong
+// object during exactly those forced-command paths.
+void set_this_player(mixed ob) { }
+
+// remove_input_to(): cancel an object's pending input_to(). This
+// driver has no equivalent public efun; the one call site
+// (login_d.lpc, on a connection that is timing out and about to be
+// disconnected anyway) tolerates this being a no-op -- worst case a
+// stale input_to callback lingers slightly past its original intent on
+// an already-disconnecting object.
+void remove_input_to(object ob) { }

@@ -1,0 +1,298 @@
+/* This program is a part of RW mudlib
+ * See /doc/help/copyright for more info
+ -----------------------------------------
+ * File   : _database.c
+ * Author : Clode@RevivalWorld
+ * Date   : 2000-12-29
+ * Note   : 資料庫系統
+ * Update :
+ *  o 2001-03-24 Clode 原有 Functions 已全改用 External Functions
+ *
+ -----------------------------------------
+ */
+
+// 長存資料庫
+private mapping database = allocate_mapping(0);
+// 暫存資料庫
+private nosave mapping temp_database = allocate_mapping(0);
+
+mapping query_database()
+{
+	return copy(database);
+}
+
+mapping query_temp_database()
+{
+	return copy(temp_database);
+}
+
+void set_temp_database(mapping tdb)
+{
+	if( !mapp(tdb) ) return;
+
+	temp_database = copy(tdb);
+}
+	
+varargs int set_shadow_ob(object ob)
+{
+	if( clonep() ) 
+	{
+		set("shadow_ob", ob || load_object(base_name(this_object())));
+		return 1;
+	}
+	return 0;
+}
+
+object query_shadow_ob()
+{
+	return database["shadow_ob"];
+}
+
+// -----------------------------------------------------------------------
+// set()/query()/delete()/set_temp()/query_temp()/delete_temp()/addn()/
+// addn_temp() -- restored as real local functions here. These used to be
+// real driver efuns (see /doc/driver/modify/source_files/packages/
+// database.c, F_SET/F_QUERY/F_DELETE/F_ADDN and the _temp variants):
+// each walked a "/"-separated path into this object's own `database`/
+// `temp_database` mapping via C-level reflection on the CALLING
+// object. This driver (stock FluffOS) has no such patch, so the
+// equivalent is implemented directly as inherited LPC methods: since
+// nearly every object in this lib (standard_object/standard_room/
+// standard_npc/interactive/bulletin_board/standard_maproom) inherits
+// this file, a bare call from inside any of them now binds to this
+// local implementation via ordinary LPC method dispatch instead of C
+// reflection -- same net effect. The trailing optional `ob` argument
+// (the original's 3-arg form) redirects to a DIFFERENT object's own
+// database the same way the original did, just via a plain `ob->
+// query(...)`/`ob->set(...)` call instead of C-level reflection.
+// (See AGENTS.md 7.15 for the same fix shape on a different lineage.)
+//
+// A simul_efun-level fallback with the same signatures exists in
+// /system/kernel/simul_efun/rw_compat.lpc for the rare object that does
+// NOT inherit this file.
+
+private string *rw_dbpath(string prop)
+{
+	string *raw, *out;
+	int i;
+
+	raw = explode(prop, "/");
+	out = ({});
+	for( i = 0; i < sizeof(raw); i++ )
+		if( strlen(raw[i]) )
+			out += ({ raw[i] });
+	return out;
+}
+
+varargs mixed query(string prop, object ob)
+{
+	string *parts;
+	mixed value;
+	mapping map;
+	int i, n;
+
+	if( ob && ob != this_object() )
+		return ob->query(prop);
+
+	if( mapp(database) && objectp(database["shadow_ob"]) && database["shadow_ob"] != this_object() )
+		return database["shadow_ob"]->query(prop);
+
+	parts = rw_dbpath(prop);
+	n = sizeof(parts);
+	if( !n ) return 0;
+
+	map = database;
+	for( i = 0; i < n; i++ )
+	{
+		if( !mapp(map) ) return 0;
+		value = map[parts[i]];
+		if( i == n - 1 ) return value;
+		map = value;
+	}
+	return 0;
+}
+
+varargs mixed query_temp(string prop, object ob)
+{
+	string *parts;
+	mixed value;
+	mapping map;
+	int i, n;
+
+	if( ob && ob != this_object() )
+		return ob->query_temp(prop);
+
+	parts = rw_dbpath(prop);
+	n = sizeof(parts);
+	if( !n ) return 0;
+
+	map = temp_database;
+	for( i = 0; i < n; i++ )
+	{
+		if( !mapp(map) ) return 0;
+		value = map[parts[i]];
+		if( i == n - 1 ) return value;
+		map = value;
+	}
+	return 0;
+}
+
+varargs mixed set(string prop, mixed val, object ob)
+{
+	string *parts;
+	mapping map;
+	int i, n;
+
+	if( ob && ob != this_object() )
+		return ob->set(prop, val);
+
+	parts = rw_dbpath(prop);
+	n = sizeof(parts);
+	if( !n ) return val;
+
+	if( !mapp(database) ) database = allocate_mapping(0);
+	map = database;
+	for( i = 0; i < n - 1; i++ )
+	{
+		if( !mapp(map[parts[i]]) )
+			map[parts[i]] = allocate_mapping(0);
+		map = map[parts[i]];
+	}
+	map[parts[n-1]] = val;
+	return val;
+}
+
+varargs mixed set_temp(string prop, mixed val, object ob)
+{
+	string *parts;
+	mapping map;
+	int i, n;
+
+	if( ob && ob != this_object() )
+		return ob->set_temp(prop, val);
+
+	parts = rw_dbpath(prop);
+	n = sizeof(parts);
+	if( !n ) return val;
+
+	if( !mapp(temp_database) ) temp_database = allocate_mapping(0);
+	map = temp_database;
+	for( i = 0; i < n - 1; i++ )
+	{
+		if( !mapp(map[parts[i]]) )
+			map[parts[i]] = allocate_mapping(0);
+		map = map[parts[i]];
+	}
+	map[parts[n-1]] = val;
+	return val;
+}
+
+varargs void delete(string prop, object ob)
+{
+	string *parts;
+	mapping map;
+	int i, n;
+
+	if( ob && ob != this_object() )
+	{
+		ob->delete(prop);
+		return;
+	}
+
+	parts = rw_dbpath(prop);
+	n = sizeof(parts);
+	if( !n || !mapp(database) ) return;
+
+	map = database;
+	for( i = 0; i < n - 1; i++ )
+	{
+		if( !mapp(map[parts[i]]) ) return;
+		map = map[parts[i]];
+	}
+	map_delete(map, parts[n-1]);
+}
+
+varargs void delete_temp(string prop, object ob)
+{
+	string *parts;
+	mapping map;
+	int i, n;
+
+	if( ob && ob != this_object() )
+	{
+		ob->delete_temp(prop);
+		return;
+	}
+
+	parts = rw_dbpath(prop);
+	n = sizeof(parts);
+	if( !n || !mapp(temp_database) ) return;
+
+	map = temp_database;
+	for( i = 0; i < n - 1; i++ )
+	{
+		if( !mapp(map[parts[i]]) ) return;
+		map = map[parts[i]];
+	}
+	map_delete(map, parts[n-1]);
+}
+
+varargs mixed addn(string prop, mixed val, object ob)
+{
+	string *parts;
+	mapping map;
+	int i, n;
+	mixed cur;
+
+	if( ob && ob != this_object() )
+		return ob->addn(prop, val);
+
+	parts = rw_dbpath(prop);
+	n = sizeof(parts);
+	if( !n ) return val;
+
+	if( !mapp(database) ) database = allocate_mapping(0);
+	map = database;
+	for( i = 0; i < n - 1; i++ )
+	{
+		if( !mapp(map[parts[i]]) )
+			map[parts[i]] = allocate_mapping(0);
+		map = map[parts[i]];
+	}
+	cur = map[parts[n-1]];
+	if( !intp(cur) )
+		map[parts[n-1]] = val;
+	else
+		map[parts[n-1]] = cur + val;
+	return map[parts[n-1]];
+}
+
+varargs mixed addn_temp(string prop, mixed val, object ob)
+{
+	string *parts;
+	mapping map;
+	int i, n;
+	mixed cur;
+
+	if( ob && ob != this_object() )
+		return ob->addn_temp(prop, val);
+
+	parts = rw_dbpath(prop);
+	n = sizeof(parts);
+	if( !n ) return val;
+
+	if( !mapp(temp_database) ) temp_database = allocate_mapping(0);
+	map = temp_database;
+	for( i = 0; i < n - 1; i++ )
+	{
+		if( !mapp(map[parts[i]]) )
+			map[parts[i]] = allocate_mapping(0);
+		map = map[parts[i]];
+	}
+	cur = map[parts[n-1]];
+	if( !intp(cur) )
+		map[parts[n-1]] = val;
+	else
+		map[parts[n-1]] = cur + val;
+	return map[parts[n-1]];
+}
