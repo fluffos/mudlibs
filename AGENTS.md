@@ -9760,6 +9760,21 @@ Found via a §10.7 deep-test playthrough of `nightmare4`. `lib/combat.lpc` decla
 
 **How to apply generally**: any threshold/limit/rate field that has TWO different unit conventions plausible for the same 0-N range (a 0.0-1.0 fraction vs. a 0-100 integer percentage, or similarly a per-mille vs. percent, or seconds vs. game-ticks) is worth checking for a literal that used the wrong one, especially when the field's declared type doesn't match the literal's own apparent type (an `int`-declared field assigned a value with a decimal point is an near-certain tell) — grep for `= 0\.[0-9]+;` assignments to fields whose declared type is `int`, then check every other real caller's actual value range to determine which unit is truly intended before "fixing" it, since guessing the wrong direction would silently make the safety net over-eager instead of dead.
 
+**Second confirmed instance, `dsI`'s own §10.7 deep functional test:**
+`lib/combat.lpc`'s `private int Wimpy;` had the exact same buggy
+literal (`Wimpy = 0.20;`) as the original `nightmare4` finding above —
+`dsI` and `nightmare4` are close, independently-converted siblings in
+the same Nightmare-lineage `combat.lpc` ancestry, so the identical
+byte-for-byte bug (down to the same secondary `float`-return-type
+mismatch on `SetWimpy()`/`GetWimpy()`) surviving into both is
+unsurprising. Same fix, same verification method (live: default
+`wimpy` display went from `"20.000000%"` to `"20%"`, and a forced-low-
+HP `attack` now genuinely triggers the flee where it silently never
+did before) — see `libs/dsI/NOTES.md` §10.2 for the full write-up.
+Worth a quick `grep -n 'Wimpy = 0\.' lib/combat.lpc` (or whatever the
+lib's own path is) on any other untested Nightmare/Dead-Souls-lineage
+sibling next time one gets a §10.7 pass.
+
 ### 7.125 A shared `enter_world()` unconditionally sets the "has the player registered their recovery email" flag to true a few lines before the function's OWN later code checks that exact flag — permanently defeating every gate keyed on it, from the very first character ever created
 
 Found via a §10.7 round-two deep-test playthrough of `zhyx` (yh2003/ES2 lineage). `adm/daemons/logind.lpc`'s `enter_world(object ob, object user, int silent)` runs on EVERY successful login — brand-new character creation (called directly from `get_gender()`) AND every ordinary returning-player login (`check_ok()` → `enter_world()`; only the separate net-dead `reconnect()` path skips it) — and, right after the block that hands out starting clothing (completely unrelated to registration), does an unconditional `user->set("registered", 1); //user->set("born",1);` before the function's own subsequent logic:
@@ -10888,6 +10903,83 @@ lib — an admin/wiz test account (this project's usual first move) can
 mask this indefinitely, since a privileged account's own privs happen
 to satisfy the same access-control check that silently fails for
 everyone else.
+
+### 7.141 A MudOS-era "fold a single-inherit object's program into its
+one parent program" memory optimization crashes any closure creation
+on that object for its first several minutes after loading, because
+this driver defers `replace_program()`'s effect to a periodic sweep
+instead of applying it before the current command finishes
+
+Found on `dsI`'s (Dead Souls I, Nightmare-IV-lineage) §10.7 deep
+functional test. `lib/std/room.lpc`'s `create()` ends with:
+
+```c
+if( replaceable(this_object()) && !GetNoReplace() ) {
+    string *tmp = inherit_list(this_object());
+    if( sizeof(tmp) == 1 ) {
+        replace_program(tmp[0]);
+    }
+}
+```
+
+— a real, working memory optimization for any room that does nothing
+but `inherit LIB_ROOM;` and its own `create()`: since such a room adds
+no methods of its own beyond what it inherited, its compiled program
+can be safely swapped for the (already-loaded, shared) single parent
+program once `create()` finishes, saving the memory of a near-duplicate
+bytecode blob. The *end state* is correct on this driver too — the
+bug is purely in the *timing*. `replace_program()`'s actual effect is
+deferred until this driver's periodic `remove_destructed_objects()` /
+`replace_programs()` backend sweep
+(`~/src/fluffos/src/vm/internal/vm.cc`'s `remove_destructed_objects()`,
+scheduled every 5 minutes from boot by
+`backend_register_tick_events()` in `~/src/fluffos/src/backend.cc`) —
+NOT synchronously at the end of the current command the way an
+original-era MudOS applied it. Until that sweep runs, the object sits
+in a "pending replace" state, and the driver hard-errors the moment
+anything tries to create a closure/function-pointer while executing
+in that object: `"cannot bind a functional to an object with a
+pending replace_program()"`
+(`~/src/fluffos/src/vm/internal/base/function.cc`'s
+`make_functional_funp()`). `lib/std/room.lpc`'s own `eventHearTalk()`
+(the `TALK_LOCAL` case, reached by ordinary `say`/`ask`/`tell`) builds
+exactly such a closure (`filter(all_inventory(), (:
+(int)$1->is_living() && $1 != $(who) :))`) — so on `dsI`, the very
+first room every new player lands in
+(`/domains/default/room/start`, a bare `inherit LIB_ROOM;` room)
+crashed on **any** speech heard in it for roughly the first 5 minutes
+after boot (i.e. essentially every fresh boot's first few minutes of
+play), recovering on its own once the periodic sweep fired. Confirmed
+live: an `ask`/`say` within ~1 minute of boot reliably crashed
+(caught, but visible to the player as "A runtime error occurred, use
+'bug -r' to report it" and logged to `log/runtime`); the identical
+command 5+ minutes after boot worked cleanly with zero log entries.
+**Fix**: removed the `replace_program()` call (and its
+`inherit_list()`/`sizeof(tmp)==1` guard) from `create()` entirely —
+it's a pure memory micro-optimization with no functional effect once
+applied, so dropping it just means ordinary rooms keep their own
+(tiny) compiled program instead of being folded into the shared
+parent one. `SetNoReplace()`/`GetNoReplace()` (the archive's own
+existing per-room opt-out, already used by one virtual-room class)
+are left in place as harmless now-unused API — no other call site
+depends on the fold having happened.
+
+**How to apply generally**: grep any lib for `replace_program(` — a
+single call site is typical, usually gated behind exactly this
+`inherit_list()`/`sizeof(...)==1` "am I trivial enough to fold" check
+in a room, container, or other frequently-instantiated base class from
+the MudOS/Nightmare/Dead-Souls lineage. If found, check whether ANY
+method on that class (or a class inheriting it) creates a closure/
+function-pointer literal (`(: ... :)`, `function(...) {...}`) that
+could execute before this driver's periodic sweep has a chance to run
+— if so, the fold is live-unsafe on this driver and should simply be
+removed, exactly as here, rather than reworked to avoid the closure
+(the closure is normal, correct code; the fold is the incompatible
+part). This is a strong candidate to affect other Dead-Souls/
+Nightmare-lineage libs that share `lib/std/room.lpc`'s ancestry
+(`ds386`, `dsII`, `dshakkard`, `deadsouls_fluffos` — check each one's
+own `room.lpc`-equivalent `create()` for the same `replace_program()`
+shape next time one gets touched).
 
 ---
 

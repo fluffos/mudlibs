@@ -507,3 +507,268 @@ correctly present — no gap. `lib/props/value.lpc` has no `SetBaseCost()`
 or any currency-rate math at all. **Checked, confirmed not applicable**
 — this lib's economy code predates the buggy function shapes entirely,
 so no fix was needed or made.
+
+## 10. Deep functional test (round two, §10.7)
+
+Full continuous playthrough via a raw Python socket script against
+`~/src/fluffos/build-debug/src/driver`, admin account `fluffos`/
+`fluffwiz123` (per §5 above). This lib had never had a round-two pass
+before this session. Two real programming bugs found and fixed live;
+everything else checked came back clean.
+
+### 10.1 `lib/std/room.lpc`'s single-inherit `replace_program()` "fold"
+optimization crashes ANY speech (`say`/`ask`/`tell`) in a just-loaded
+room for its first ~5 minutes, driver-wide, on every simple room
+
+`create()` ended with:
+
+```c
+if( replaceable(this_object()) && !GetNoReplace() ) {
+    string *tmp= inherit_list(this_object());
+    if( sizeof(tmp) == 1 ) {
+        replace_program(tmp[0]);
+    }
+}
+```
+
+— a classic MudOS-era memory optimization: a room that only does
+`inherit LIB_ROOM;` and adds nothing but its own `create()` gets its
+compiled program folded into the single shared base-class program once
+`create()` finishes, since nothing else in it is ever called again.
+This still works correctly on this driver in the end state, but the
+*timing* doesn't: `replace_program()`'s effect is deferred to this
+driver's periodic `remove_destructed_objects()`/`replace_programs()`
+sweep, which only runs **every 5 minutes** from boot
+(`backend_register_tick_events()` in `~/src/fluffos/src/backend.cc`),
+not after every command the way an original-era MudOS did. Any object
+with a pending replace sits in a "cannot bind a functional to an
+object with a pending replace_program()" state
+(`vm/internal/base/function.cc`'s `make_functional_funp()`) until that
+sweep fires — and `lib/std/room.lpc`'s own `eventHearTalk()`
+(`TALK_LOCAL` case) builds a `filter()` closure
+(`(: (int)$1->is_living() && $1 != $(who) :)`) on the room object
+itself. Since `/domains/default/room/start` (the very first room every
+new player lands in) is exactly this shape (bare `inherit LIB_ROOM;`),
+**every single `say`/`ask`/`tell` heard in that room during its first
+~5 minutes after being loaded (i.e. essentially every fresh boot)
+hard-crashes** with that error, caught only as a generic "A runtime
+error occurred, use 'bug -r' to report it" for the speaker. Confirmed
+live: a fresh `ask <anyone> to <anything>` in the start room within
+~1 minute of boot reliably crashed (`log/runtime`), and the identical
+command 5+ minutes after boot worked cleanly. **Fixed** by dropping the
+`replace_program()` call from `lib/std/room.lpc`'s `create()` entirely
+— it is purely a memory micro-optimization with no functional
+consequence once it lands, so removing it just means ordinary rooms
+keep their own (tiny, already-compiled) program instead of being
+folded into the shared one; `SetNoReplace()`/`GetNoReplace()` are left
+in place as harmless now-unused API. Verified live: `say`/`ask`
+immediately after a fresh boot (well inside the old 5-minute window)
+now work cleanly with zero `log/runtime` entries. This is a new bug
+shape — not a match for any existing AGENTS.md `§7.*` entry — added as
+a new entry (see AGENTS.md for the number) since `replace_program()`'s
+"fold a single-inherit object into its parent program" idiom is a
+generic MudOS/Nightmare/Dead-Souls-era pattern likely to recur in
+sibling libs that never got a §10.7 pass yet.
+
+### 10.2 `lib/combat.lpc`: `Wimpy` auto-flee threshold initialized as a
+0.0-1.0 fraction into a declared-`int` field — an exact instance of
+AGENTS.md §7.124 (previously found on `nightmare4`, a close sibling of
+this very lib's own "closer to Nightmare IV" lineage)
+
+`private int Wimpy;` was initialized in `create()` with `Wimpy = 0.20;`
+— a fraction, not the 0-100 percentage that `percent()`,
+`cmds/players/wimpy.lpc` (`wimpy on` sets `23`, caps user input at
+`30`), and the runtime check itself (`Wimpy < percent(hp, max)` in
+`eventReceiveDamage()`) all consistently expect. This driver silently
+truncates a float assigned to a declared-`int` variable at the point
+of assignment (confirmed directly via `eval int x; x = 0.20; return
+x;` → `0`), so `Wimpy` was actually `0` for every character from
+`create()` onward — and `eventReceiveDamage()`'s very first line,
+`if( !Wimpy ) return x;`, meant the entire auto-flee-at-low-health
+safety net was **silently dead for every character, from the very
+first one ever created, with zero compile error and zero crash** —
+exactly AGENTS.md §7.124's shape, byte-for-byte the same buggy literal
+(`Wimpy = 0.20;`) as the already-documented `nightmare4` instance.
+`SetWimpy(float wimpy)`/`float GetWimpy()` carried the same secondary
+mismatch `nightmare4` had too: declared to return `float` instead of
+`int` (matching the field's own real type and its only real callers),
+which meant a nonzero value round-tripped through a real float on
+return, corrupting the player-facing `wimpy` command's own percentage
+display (`"Percentage: 20.000000%"` instead of `"20%"`, confirmed live
+pre-fix). **Fix**, identical in shape to `nightmare4`'s: `Wimpy = 0.20;`
+→ `Wimpy = 20;`, and `float SetWimpy(float wimpy)`/`float GetWimpy()` →
+`int SetWimpy(int wimpy)`/`int GetWimpy()`. Verified live end-to-end,
+not just the default value: a fresh character's bare `wimpy` command
+now reports `"Percentage: 20%"` (was `"Percentage: 20.000000%"`
+pre-fix, the exact `nightmare4`-shaped display corruption), and a
+direct test — spawn a cloned `traveller` NPC, cut the test character's
+HP to 58/390 (~15%, below the 20% threshold) via `eval`, then
+`attack traveller` — now correctly triggers the auto-flee: the
+character was moved out of the room entirely (fled from
+`/domains/default/room/start` to `/domains/Ylsrim/room/bazaar` via
+`eventWimpy()`'s "go out" → fallback-to-any-valid-exit logic) after
+taking one more hit, surviving at 49/390 hp instead of continuing to
+fight to death. Pre-fix, this exact sequence would never have fled at
+all (`Wimpy` being `0` short-circuits the check unconditionally).
+Extended AGENTS.md §7.124's "confirmed instances" note rather than
+adding a new entry, since this is the identical bug shape on a lineage
+sibling of the lib §7.124 was originally found on.
+
+### 10.3 Full playthrough coverage (all confirmed clean except the two
+bugs above)
+
+- **Registration + race selection**: registered `Testwind`
+  (English name, human, male fighter) through the full
+  `secure/lib/connect.lpc` flow (name → confirm → password → confirm
+  → gender → display name → email → real name → race `list`/`pick`).
+  Clean throughout.
+- **Newbie help**: `news/newbie` is an empty placeholder file (no
+  actual newbie-help content shipped in this archive) — the intended
+  test path had to be reconstructed from room descriptions and NPC
+  `long` text instead (this is what led to `domains/Ylsrim`'s fighter
+  hall / Roshd Burlyneck NPC as the class-join path).
+- **Movement**: full navigation `start` → `bazaar` → `kaliid4` →
+  `kaliid5` → `fighter_hall`, and `bazaar` → `s_bazaar`. Directions
+  only work as `go <word>` or the single-letter aliases
+  (`n`/`s`/`e`/`w`/`u`/`d`/`ne`/`nw`/`se`/`sw`, from
+  `lib/nmsh.lpc`'s `Aliases` mapping) — a bare full word like `north`
+  is NOT itself a command (no `add_action("north", ...)` anywhere;
+  only `go.lpc`'s `SetRules("STR", "into STR")` and the single-letter
+  aliases exist). Confirmed this is the actual shipped design (not a
+  bug) by reading `lib/nmsh.lpc` directly — flagging here only because
+  an early test round mis-typed bare directions and initially looked
+  like a broken movement system before the aliasing scheme was found.
+- **Class join**: `domains/Ylsrim/npc/fighter.lpc` (Roshd Burlyneck,
+  `LIB_LEADER`) via `ask roshd to join fighters` — works correctly
+  (`ask X about Y` is NOT supported by this codebase's `ask` verb,
+  since it has no `"about"`-stripping rule in `SetRules()`; the
+  NPC's own description text literally says `ask him to "join
+  fighters"`, i.e. the `LIV to STR` rule, which is the one that
+  actually calls `eventAsk()` — `LIV STR` alone just speaks the
+  sentence audibly with no NPC response). `score`/title correctly
+  updated `Newbie Wanderer` → `Newbie Fighter`, `Human Commoner` →
+  `Human Fighter`. `ask roshd to describe fighters` silently produces
+  no visible output beyond the player's own echoed line — traced to
+  `lib/leader.lpc`'s `eventPreview()` paging
+  `DIR_CLASS_HELP "/" + GetClass()` (`/doc/help/classes/fighter`),
+  which doesn't exist anywhere in this archive (`doc/` only ships
+  `CHANGES`/`README`, no `help/` subtree at all) — genuine missing
+  content, not a code bug (`eventPage()` on a missing file returns
+  `"File not found."` as a string that `eventPreview()` never prints).
+  Left as-is per this project's standing rule against inventing
+  content.
+- **No safe-sparring mechanism exists in this lib** (grepped for
+  `spar`/`practice`/`dummy`-as-training-target — `lib/std/dummy.lpc`
+  is an unrelated hidden-scenery-item base class, not a combat
+  target). Used the domain's own placed wandering `traveller` NPC
+  (level 5, `domains/Ylsrim/room/s_bazaar`) as the weakest reachable
+  live opponent instead — `domains/Ylsrim/npc/balrog.lpc` (level 8,
+  the domain's other low-level NPC) turns out to be dead/orphaned
+  content: grepped the whole tree and it is never placed by any room
+  or `SetInventory()` anywhere, only referenced by its own file and by
+  `secure/cfg/races/balrog` (a playable-race entry, not a placement).
+- **Combat**: `attack <target>` engages normally, exchanges
+  proper damage messages, correct `hp`/`mp`/`sp` status-bar updates,
+  skill-improvement messages ("You are a bit more adept with your
+  melee attack/defense"), and resolves cleanly (traveller wandered off
+  mid-fight per its own `SetWander(25)`, ending combat with no
+  crash — `GetInCombat()` correctly returned to `0` afterward).
+- **Death/resurrection**: this lib's death model is a **two-stage
+  "become a ghost, then regenerate" system**, not permanent one-shot
+  death. `body::eventDie()` toggles `GetUndead()` as a side effect
+  (`SetUndead(!GetUndead())`); a mortal's first death flips it to `1`
+  and routes through `player::eventDie()`'s `else` branch (message,
+  `NewBody()`, half-heal, move to `ROOM_DEATH`
+  `/domains/default/room/death`) — confirmed live via `eval
+  ...->eventDie()`: correct "Consciousness passes from you..." message,
+  landed in "Off the mortal coil", `score` correctly showed "the
+  ghost"/"level 1 undead Human Fighter". The death room's `regenerate`
+  command correctly calls `eventRevive()` + moves back to
+  `ROOM_START`, confirmed live: `score` afterward correctly showed
+  the character alive again ("the unaccomplished", no longer
+  "undead"). **This subsystem is NOT silently broken here** (unlike
+  the sibling `es1` finding flagged in this session's task brief) —
+  full death→ghost→regenerate cycle verified live end to end.
+  - A **second** `eventDie()` while already undead flips the flag back
+    to `0` (mortal) and takes the `if(!GetUndead())` branch, which
+    calls `eventDestroyUndead(agent)` — initially suspected as an
+    undefined-function crash (same shape as the wxddym/shenmo `addn()`
+    class of bug from this session's earlier sweeps), but on closer
+    reading `lib/player.lpc:116` DOES define it, just as a permanently
+    **empty stub** (`nosave void eventDestroyUndead(object agent) {
+    }`). Confirmed live: a second forced death produces no crash and
+    no visible effect at all beyond the title reverting from "the
+    ghost" to "the unaccomplished" — this looks like an intentional
+    "permanent death" hook that was simply never implemented in this
+    archive. Left as an **observed content/design gap, not fixed**
+    (deciding what permanent death should actually do is exactly the
+    kind of content/design judgment call this project's scope
+    excludes) — documented here rather than guessed at.
+  - The death room's alternate `wander` command (an admitted secondary
+    path alongside `regenerate`) moves to
+    `/domains/campus/room/admissns`, a room from a `campus` domain
+    this archive never shipped (only `default`/`Ylsrim` exist here) —
+    `eventMoveLiving()` handles the missing destination gracefully
+    (`eventMove()`'s own `find_object`/`catch(call_other(...))` fallback
+    returns `0` cleanly), so this is a soft no-op ("You remain where
+    you are") rather than a crash. Missing content, not a fix-worthy
+    bug.
+- **`get`/`drop`**: work correctly (verified with a cloned
+  `/domains/Ylsrim/etc/pole`).
+- **Shop/economy**: `buy ITEM from VENDOR` / `sell ITEM to VENDOR`
+  verbs exist and route correctly to `lib/std/vendor.lpc`'s
+  `eventSell()`/`eventShowItem()`, but a live end-to-end transaction
+  was **not reachable this session**: the shops (`max`/armourer,
+  `shiela`/weapon vendor) are day/night-gated
+  (`domains/Ylsrim/room/armoury.lpc`'s `CheckOpen()` destructs the
+  vendor NPC entirely at night) and this session's test window landed
+  during in-game night both times it reached the armoury — confirmed
+  this is the shop's own intentional day/night design (not a bug) by
+  reading `CheckOpen()` directly. Separately, `armoury_storage.lpc`/
+  `weaponry_storage.lpc` (the `SetStorageRoom()` targets `eventSell()`
+  reads stock from) ship with **no preset `SetInventory()`** at all —
+  so even during the day, `buy` would report "I have nothing like
+  that to sell" until a player first sells something there, or an
+  admin stocks it by hand. This looks like the intended
+  "vendors buy your loot, no premade retail stock" design for this
+  minimal example domain, not a missing-content bug, but is flagged
+  here as **not fully verified live** (economy testing performed;
+  the buy/sell code paths were read and are structurally sound, but
+  a real day-side purchase was never actually completed).
+- **`quit` + `debug.log`/`log/runtime` grep + reconnect after a real
+  wall-clock gap**: `quit` prints the normal "Please come back another
+  time!" every time; `debug.log` stayed empty and `log/runtime`'s line
+  count did not change across every quit/reconnect cycle in this
+  session (checked after each one, not just once). Reconnected after
+  a real ~60+ second gap (not simulated) mid-session: `score`/`i`/
+  `look` all correctly reflected the exact pre-quit state (title,
+  class, room, inventory).
+- **Standing cross-cutting bug-pattern sweep** (§7.121 float-in-int,
+  §8.3a `private`+`add_action`/`call_out` demotion, §7.112 unguarded
+  `init()` call_out chains, §7.122 autoload duplication, §7.123 bare
+  file-scope assignment, §7.126 stale-`.c` door data, §7.129
+  `tell_room()`/`message()` literal-`0` exclude, §7.130 unconditional
+  `query_idle()`, §7.131 `find_living()`/`find_player()` registration,
+  §7.132 `map()`-over-mapping argument binding, §7.133 undefined
+  disconnect apply, §7.134 uninitialized array field, §7.135/§7.30
+  missing lazy-init guard): grepped for every one of these shapes
+  explicitly. All came back clean/not-applicable in this codebase
+  except §7.124 (already covered in §10.2 above) — see the commit's
+  companion AGENTS.md edit for the one-line summary of what was
+  checked for each. Notably, this codebase's collections are
+  overwhelmingly eagerly initialized in `create()` (`Quests = ({});`,
+  `Exits = ([]);`, `DummyItems = ({});`, etc.) rather than relying on
+  a lazy-init-on-first-access idiom, so the whole §7.30/§7.135 family
+  of bugs doesn't really have the right shape to occur here in the
+  first place. `find_living()`/`set_living_name()` (§7.131) is
+  correctly wired (`lib/npc.lpc`/`lib/interactive.lpc` both call
+  `set_living_name()`), confirmed live via `eval find_player(...)`
+  working correctly throughout every test above.
+
+### 10.4 Test character cleanup
+
+All throwaway test-character saves (`Testwind`, `Wimpycheck`,
+`Wimpye2e` — the last one never actually completed registration) were
+deleted before committing, per this project's standing convention —
+only the seeded `fluffos` admin account (`secure/save/creators/f/
+fluffos.o`) remains under `secure/save/`.
