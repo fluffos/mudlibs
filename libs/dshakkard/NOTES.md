@@ -378,3 +378,80 @@ same `sockets`-package-dependent `secure/sefun/sockets.lpc` codebase as
 `ds386`, a future WASM pass should expect to need the same
 gut-the-function-bodies treatment `ds386`'s own WASM notes describe
 before this lib can boot under WASM at all.
+
+## 8. Sibling sweep of the dsIII §7.121 currency-float bug — confirmed present, fixed
+
+`AGENTS.md` §7.121 documents a currency/economy bug found in `dsIII`
+(the Dead Souls 3.x lineage's shared `secure/sefun/economy.lpc`):
+`query_base_rate()`, `query_player_money()`, `query_base_value()`, and
+`query_value()` do real floating-point exchange-rate math internally
+but are declared to return `int` with no `to_int()` on the actual
+return, silently corrupting player currency into a float on every
+buy/sell/exchange. `ds-hakkard` shares this exact file byte-for-byte
+with `ds386`/pre-fix `dsIII` and had the identical gap, plus the same
+two sibling misses: `lib/teller.lpc`'s `eventExchange()` (`i = val /
+currency_rate(str2);`) and `lib/props/value.lpc`'s `SetBaseCost()`
+(`Cost = i * rate;`). Fixed identically (wrapped all four
+`economy.lpc` returns plus both call sites in `to_int()`).
+
+Verification here was **compile-only, not a full live transaction**:
+attempting to reach the bank (`enter town` from the start room, the
+same path used to verify `ds386`) hits a severe, unrelated,
+pre-existing bug that makes the entire town domain unreachable — see
+§9 below. Instead, verified the fix with `lpcc --batch` compiling the
+three touched files directly (`/secure/sefun/economy`, `/lib/teller`,
+`/lib/props/value`) against this lib's own `config.fluffos`: all three
+`PASS`, no new errors introduced (only pre-existing, unrelated `nosave`
+declaration warnings). `secure/sefun/economy.lpc` is also a
+simul_efun file the driver compiles unconditionally at every boot, and
+both the very first plain boot and the boot used for this check
+compiled it clean with zero errors. Given the fix is byte-for-byte the
+same edit already live-verified working on `ds386`, `dsII`, and
+`deadsouls_fluffos` (identical code shape, identical `to_int()`
+wrapping), this is considered sufficiently verified without a live
+transaction.
+
+## 9. Found but NOT fully fixed (out of scope for the currency sweep): `enter town` crashes the driver into an infinite error-handler loop
+
+While trying to reach the bank to verify §8 above, `enter town` from
+the start room triggers a genuine, severe bug: the driver enters an
+infinite `"Error in error handler: *Object cannot be loaded during
+compilation."` recursion (`error_handler()` calling itself via
+`/secure/cmds/creators/dbxwhere`'s own `load_object()` attempt while
+already mid-compile) and pins one CPU core indefinitely until killed.
+Root-caused to `log/errors/daemon` being **a directory** (containing a
+`foo.txt` placeholder) rather than a plain file — the very first error
+the driver tries to log after any runtime error anywhere hits `"Wrong
+permissions for opening file /log/errors/daemon for append.\n\"Is a
+directory\""`, and logging *that* failure recurses forever. This is a
+side effect of \S4's own `log/errors/<every top-level dir>` directory
+scaffolding (needed at the time purely so `lpcc_check.sh`'s COMPILE-time
+warning writes wouldn't fail with "No such file or directory" — since
+`work/log` is gitignored project-wide, `.gitignore:24`
+`libs/*/work/**/log`, and never shipped by ds-hakkard's own upstream
+repo either, see \S1/\S4): the driver's RUNTIME error_handler wants a
+plain file at that exact path for several of the same top-level names
+(`daemon`, plus the domain names `campus`/`town`/`default`/`Praxis`/
+`Ylsrim`, all of which had already self-healed into plain files from a
+prior boot's successful runtime write — `daemon` alone apparently never
+got hit until this session's `enter town` test). Every OTHER top-level
+name (`cfg cmds doc domains estates ftp include lib log news obj open
+powers realms save secure shadows std tmp verbs www`) is still a
+directory-with-`foo.txt` as of this writing and could plausibly trigger
+the identical crash the first time any runtime error happens to target
+one of those categories.
+
+Converted `log/errors/daemon` to a plain empty file locally (this
+directory is gitignored, so the change is not part of any commit and
+does not affect a fresh checkout), which should fix the specific
+`enter town` crash reproduced above, but this was **not re-verified
+with a fresh live boot** — after killing two runaway driver processes
+for this lib in one session, held off on spawning a third to avoid
+repeated resource-heavy boot/crash/kill cycles for a bug outside this
+task's scope. **Left otherwise unfixed** — this is a filesystem-shape
+issue unrelated to the narrow currency-arithmetic sweep this session
+was scoped to (see `AGENTS.md` §7.121 and its sibling-sweep note);
+flagging here for a future dedicated pass, which should convert every
+remaining directory-shaped entry under `log/errors/` back to a plain
+file (matching `ds386`/`dsII`/`dsIII`/`deadsouls_fluffos`'s convention)
+and re-verify a full live boot + town-domain walkthrough.

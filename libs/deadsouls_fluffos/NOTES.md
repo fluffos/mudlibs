@@ -258,3 +258,34 @@ FAIL，均已逐一排查根因，均不在预注册流程（preload 列表）�
   `secure/cfg/ip_unrestrict.cfg` 也已经是 `127.0.0.1`,
   `secure/cfg/ip_blacklist.cfg` 为空——这是上游仓库自带的本地开发
   友好配置，未额外打 §1.3b 风格的 loopback-allow 补丁。
+
+## Sibling sweep of the dsIII §7.121 currency-float bug — confirmed present, fixed
+
+`AGENTS.md` §7.121 documents a currency/economy bug found in `dsIII`
+(the Dead Souls 3.x lineage's shared `secure/sefun/economy.lpc`):
+`query_base_rate()`, `query_player_money()`, `query_base_value()`, and
+`query_value()` do real floating-point exchange-rate math internally
+but are declared to return `int` with no `to_int()` on the actual
+return, silently corrupting player currency into a float on every
+buy/sell/exchange (a declared `int` return type is compile-time only
+on this driver and never coerces a runtime float). `deadsouls_fluffos`
+shares this exact file byte-for-byte with `ds386`/pre-fix `dsIII` and
+had the identical gap, plus the same two sibling misses: `lib/teller.lpc`'s
+`eventExchange()` (`i = val / currency_rate(str2);`) and
+`lib/props/value.lpc`'s `SetBaseCost()` (`Cost = i * rate;`).
+
+Fixed by wrapping all four `secure/sefun/economy.lpc` returns in
+`to_int()` (matching the convention already used by the file's own
+`currency_mass()`/`currency_value()`), plus the two call sites, exactly
+mirroring `dsIII`'s fix. Verified live with a fresh AUTO_WIZ creator
+character (`Qintestdsf`), which let the check be done with `eval` as
+well as a real transaction rather than navigating the whole map: `eval
+return query_value(23, "silver", "gold");` and a `typeof()` check both
+confirmed a clean `int` result (no residual float), and `SetBaseCost()`
+tested the same way. Then teleported (`goto
+/domains/town/room/bank`) to Zoe, opened a bank account, gave the
+character 100 silver via `AddCurrency`, and did `ask zoe to exchange 23
+silver for gold` — printed a clean `2 gold` with no decimal, and the
+raw save file after `save` showed `Currency
+(["silver":186,"gold":2,])` — both integers, no float. `log/debug.log`
+stayed clean through the whole sequence.

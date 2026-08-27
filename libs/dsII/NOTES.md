@@ -426,3 +426,33 @@ content gaps (see \S7).
 ## 9. WASM pass
 
 Not yet attempted this session (`wasm_status` left `""`).
+
+## 10. Sibling sweep of the dsIII §7.121 currency-float bug — confirmed present, fixed
+
+`AGENTS.md` §7.121 documents a currency/economy bug found in `dsIII`
+(the Dead Souls 3.x lineage's shared `secure/sefun/economy.lpc`):
+`query_base_rate()`, `query_player_money()`, `query_base_value()`, and
+`query_value()` do real floating-point exchange-rate math internally
+but are declared to return `int` with no `to_int()` on the actual
+return, silently corrupting player currency into a float on every
+buy/sell/exchange (a declared `int` return type is compile-time only
+on this driver and never coerces a runtime float). This lib's own,
+independently-evolved `secure/sefun/economy.lpc` has the identical
+logic shape (same 4 functions, same missing `to_int()`s), plus the
+same two sibling misses `dsIII` found: `lib/teller.lpc`'s
+`eventExchange()` (`i = val / currency_rate(str2);`, with an earlier
+correctly-`to_int()`-wrapped line even commented out right above it)
+and `lib/props/value.lpc`'s `SetBaseCost()` (`Cost = i * rate;`).
+
+Fixed by wrapping all four `secure/sefun/economy.lpc` returns in
+`to_int()` (matching the convention already used by the file's own
+`currency_mass()`/`currency_value()`), plus the two call sites, exactly
+mirroring `dsIII`'s fix. Verified live: registered a fresh test
+character (`Qintestdsb`), navigated from the campus starting area
+(`LPC University Reception` -> corridor -> corridor3 -> foyer ->
+University Square -> north path x2 -> South/main Saquivor Road) to the
+First Village Bank, opened an account with Zoe and did `ask zoe to
+exchange 20 silver for gold` — printed a clean `2 gold` with no
+decimal, and the raw save file after `save` showed `Currency
+(["silver":59,"gold":2,])` — both integers, no float. `log/debug.log`
+stayed clean through the transaction.

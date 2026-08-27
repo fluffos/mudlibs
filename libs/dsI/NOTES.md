@@ -483,3 +483,27 @@ correct room description. `look`/`score`/`quit` weren't recaptured
 distinctly in this transcript (absorbed by the news pager, same as the
 native testing initially hit -- see \S7) but are already verified clean
 under native testing above.
+
+## 9. Sibling sweep of the dsIII §7.121 currency-float bug — NOT APPLICABLE, this lib doesn't have the affected functions
+
+`AGENTS.md` §7.121 documents a currency/economy bug in `dsIII` (the
+Dead Souls 3.x lineage's shared `secure/sefun/economy.lpc`):
+`query_base_rate()`/`query_player_money()`/`query_base_value()`/
+`query_value()` do real floating-point exchange-rate math but are
+declared `int` with no `to_int()` on the return, flagged for a sibling
+sweep across `ds386`/`dsI`/`dsII`/`dshakkard`/`deadsouls_fluffos`.
+
+This lib's `secure/sefun/economy.lpc` is a much smaller, earlier
+Nightmare-IV-era file — it only defines `currency_rate()`,
+`currency_inflation()`, `currency_mass()`, `currency_value()`, and
+`mud_currencies()` (all already correctly `to_int()`-wrapped where they
+return `int`). The four suspect functions (`query_base_rate()`,
+`query_player_money()`, `query_base_value()`, `query_value()`) don't
+exist anywhere in this archive (`grep -rn` across the whole tree found
+zero matches), and `lib/teller.lpc`'s `eventExchange()` computes its
+own exchange amount inline (`val = amount / currency_rate(str1); ... i
+= to_int(val * currency_rate(str2));`) with the `to_int()` already
+correctly present — no gap. `lib/props/value.lpc` has no `SetBaseCost()`
+or any currency-rate math at all. **Checked, confirmed not applicable**
+— this lib's economy code predates the buggy function shapes entirely,
+so no fix was needed or made.

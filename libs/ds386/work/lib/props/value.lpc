@@ -79,7 +79,7 @@ varargs mixed SetBaseCost(mixed arg, int i){
         base = query_base_rate();
         rate = ECONOMY_D->__Query(arg,"rate");
 
-        Cost = i * rate;
+        Cost = to_int(i * rate);
 
     }
     return Cost;

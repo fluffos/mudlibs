@@ -229,7 +229,7 @@ int eventExchange(object who, int amount, string str1, string str2){
     }
     val = query_base_value(str1,amount);
     x = to_int( (amount * 0.01) + amount );
-    i = val / currency_rate(str2);
+    i = to_int( val / currency_rate(str2) );
     if( GetExchangeFee() )
         charge = to_int(i / (100 / GetExchangeFee()));
     else charge = 0;

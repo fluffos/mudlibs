@@ -581,3 +581,30 @@ the remaining gap is admin-only optional tooling, which the site's own
 badge definitions treat as out of scope for the playable/limited
 distinction (limited = a *login/feature* limitation a normal visitor
 hits, which this no longer is).
+
+### Sibling sweep of the dsIII §7.121 currency-float bug — confirmed present, fixed
+
+`AGENTS.md` §7.121 documents a currency/economy bug found in `dsIII`
+(the Dead Souls 3.x lineage's shared `secure/sefun/economy.lpc`):
+`query_base_rate()`, `query_player_money()`, `query_base_value()`, and
+`query_value()` do real floating-point exchange-rate math internally
+but are declared to return `int` with no `to_int()` on the actual
+return, silently corrupting player currency into a float on every
+buy/sell/exchange (a declared `int` return type is compile-time only
+on this driver and never coerces a runtime float). `ds386` shares this
+exact file byte-for-byte with the pre-fix `dsIII` and had the identical
+gap, plus the same two sibling misses `dsIII` found: `lib/teller.lpc`'s
+`eventExchange()` (`i = val / currency_rate(str2);`) and
+`lib/props/value.lpc`'s `SetBaseCost()` (`Cost = i * rate;`).
+
+Fixed by wrapping all four `secure/sefun/economy.lpc` returns in
+`to_int()` (matching the convention already used by the file's own
+`currency_mass()`/`currency_value()`), plus the two call sites, exactly
+mirroring `dsIII`'s fix. Verified live: registered a fresh test
+character (`Qintestdsa`), opened a bank account with Zoe and did `ask
+zoe to exchange 20 silver for gold` — printed a clean `2 gold` with no
+decimal, and the raw save file after `save` showed
+`Currency (["silver":73,"gold":2,])` — both integers, no float. Also
+bought a bottle of water from Lars (2 silver) and confirmed the
+post-purchase balance (`"silver":71`) stayed a clean integer. No
+runtime errors in `debug.log` through either transaction.

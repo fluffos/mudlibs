@@ -39,13 +39,14 @@ string query_base_currency(){
 }
 
 int query_base_rate(){
-    return ECONOMY_D->__Query(query_base_currency(),"rate");
+    return to_int(ECONOMY_D->__Query(query_base_currency(),"rate"));
 }
 
 int query_player_money(object who) {
     string *monies;
-    int base, x;
-    x = 0;
+    int base;
+    float x;
+    x = 0.0;
     monies = ECONOMY_D->__QueryCurrencies();
     base = ECONOMY_D->__Query(query_base_currency(),"rate");
     foreach(string currency in monies){
@@ -53,20 +54,20 @@ int query_player_money(object who) {
         rate = base/ECONOMY_D->__Query(currency,"rate");
         x += who->GetCurrency(currency) * rate;
     }
-    return x;
+    return to_int(x);
 }
 
 int query_base_value(string currency, int amount){
     float rate;
     rate = ECONOMY_D->__Query(currency,"rate");
-    return amount * rate;
+    return to_int(amount * rate);
 }
 
 int query_value(int amount,string from_currency, string to_currency){
     int rate, baseval;
     rate = ECONOMY_D->__Query(to_currency,"rate");
     baseval = query_base_value( from_currency, amount );
-    return baseval / rate;
+    return to_int(baseval / rate);
 }
 
 
