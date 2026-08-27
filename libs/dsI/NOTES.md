@@ -772,3 +772,17 @@ All throwaway test-character saves (`Testwind`, `Wimpycheck`,
 deleted before committing, per this project's standing convention —
 only the seeded `fluffos` admin account (`secure/save/creators/f/
 fluffos.o`) remains under `secure/save/`.
+
+### 10.5 Sibling-sweep check for ds386's round-two `eventRevive()` float bug (2026-08-27)
+
+`ds386/NOTES.md`'s round-two pass found a NEW `AGENTS.md` §7.121-class
+bug not covered by this lib's own §10.2/§7.124 Wimpy fix: `eventRevive()`
+feeding float arithmetic (`GetMaxHealthPoints() * PERCENT_HP`-style
+expressions) into `AddHealthPoints()`/`AddMagicPoints()`'s `int`
+parameters. Checked this lib's own `lib/player.lpc:eventRevive()`
+specifically for that shape: **not present**. This codebase's
+`eventRevive()` only calls `eventCompleteHeal(GetMaxHealthPoints())`
+(a full heal, no arithmetic) for HP and `AddMagicPoints(-(GetMaxMagicPoints()/2))`
+for MP — plain integer division, no `PERCENT_MP`/`PERCENT_HP` float
+`#define`s exist anywhere in this file. No fix needed; confirmed clean
+by reading the code (no live re-test required for a no-op finding).
