@@ -67,6 +67,29 @@ try_throw_out(str)
     ob = environment(other_copy);
     if (call_other(other_copy, "quit")) {
 	restore_object("players/" + name);
+	/*
+	 * restore_object() with no explicit noclear argument (this driver's
+	 * default) first resets EVERY declared variable on this object to
+	 * its default, then applies only what the save file can actually
+	 * hold -- object references were never in scope to be saved, so
+	 * `myself` and `soul` both come out of this as 0, even though they
+	 * were validly set (in logon2() and just above, respectively)
+	 * moments ago. logon2() already re-sets `myself` right after its
+	 * own restore_object() call for the exact same reason ("Don't do
+	 * this before the restore!") -- this path needs the same treatment,
+	 * or the very next line's `myself->move_object(...)` in
+	 * move_player_to_start() crashes with "Bad argument 1 to EFUN
+	 * call_other() ... Got: int(0)" and the player is left with no
+	 * environment at all. The wizard/plain soul clone made by
+	 * `soul("on")` above is still physically here (restore_object()
+	 * only clears variables, not real inventory) -- it just needs its
+	 * reference re-attached the same way soul("on") originally set it.
+	 */
+	myself = this_player();
+	if (level > 19)
+	    soul = present("wiz_soul", myself);
+	else
+	    soul = present("soul", myself);
 	write("Points restored from the other object.\n");
     }
     else
@@ -99,6 +122,9 @@ logon2(str) {
      * Don't do this before the restore !
      */
     name = str;			/* Must be here for a new player. */
+    /* Registering our own set_living_name() happens later, in
+     * move_player_to_start()'s already-playing check -- see the comment
+     * there for why it must not happen before that check runs. */
     myself = this_player();
     if (query_invis(0)>= SOMEONE)
 	cap_name = "Someone";
@@ -955,20 +981,31 @@ move_player_to_start(where) {
     string tmp_name;
     /*
      * See if we are already playing.
-     * We must blank our own name, or we could find ourselves !
+     * The original archive found itself by blanking its own `name` before
+     * searching, since the classic driver's find_player() re-derives a
+     * candidate's name from id()/query_name() on every call, and a blanked
+     * name never matches. This driver's find_player()/find_living() instead
+     * match a name registered once via set_living_name() (see NOTES.md) --
+     * blanking the local `name` variable has no effect on that separate
+     * registration. Worse, since set_living_name() just inserts at the head
+     * of a same-name hash chain rather than replacing any existing entry, a
+     * self-registration made *before* this search would itself be the
+     * first (and only reachable) hit, permanently hiding any real earlier
+     * copy behind it. So self is instead kept OUT of the living-name table
+     * until after this check has run -- set_living_name() is called below,
+     * once we know we're not a duplicate, rather than back in logon2().
      */
     tmp_name = name;
-    name = 0;
     other_copy = find_player(tmp_name);
     if (!other_copy)
 	other_copy = find_player("ghost of " + tmp_name);
-    name = tmp_name;
     if (other_copy) {
 	write("You are already playing !\n");
 	write("Throw the other copy out ? ");
 	input_to("try_throw_out");
 	return;
     }
+    set_living_name(name);
     cat("/NEWS");
     if (where)
 	myself->move_object(resolve_ob(where));

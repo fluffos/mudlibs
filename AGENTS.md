@@ -10133,6 +10133,118 @@ very often a delayed `call_out()` rather than an immediate `dest_me()`,
 leaving a window where the rest of the SAME heart_beat() call still
 executes against an object it just determined is no longer interactive.
 
+### 7.131 A pre-master-object archive's `find_living()`/`find_player()` call sites assume the classic driver's per-call `id()`/`query_name()` scan; this driver instead requires an explicit, one-time `set_living_name()` registration that nothing in the archive ever makes, so every by-name lookup silently returns nobody, ever
+
+Found via `lpmud141`'s §10.7 round-two deep functional test (LPmud
+1.4.1-A, the pre-master-object historic reference mudlib — see its own
+NOTES.md §0 for why this archive predates so much later-standard
+driver infrastructure). This driver's own classic C source
+(`object.c`'s `find_living_object()`/`find_player()`) walks **every**
+live object with `enable_commands` set and calls that object's own
+`id()` LFUN (plus `is_player()` for the player-only variant) to test
+for a name match — a live, per-call scan with no separate registration
+step at all. FluffOS's `find_living()`/`find_player()` efuns work
+completely differently: they do a hashed lookup keyed on a name that
+must have been registered once via the `set_living_name()` efun, which
+nothing in this archive ever calls (confirmed via a corpus-wide grep:
+zero `set_living_name` hits anywhere in the mudlib). The result: both
+efuns silently return `0` for every name, forever, archive-wide —
+dozens of real call sites depend on this working, dead on arrival:
+`obj/player.lpc`'s own `tell`/`whisper` commands ("No player with that
+name." for literally anyone), the "already playing / throw the other
+copy out" duplicate-login guard in `move_player_to_start()`, EVERY
+wizard-soul command that targets a player or NPC by name
+(`heal`/`stat`/`trans`(teleport)/`goto`/`promote`/`snoop`/`at`/`echo_to`
+in `obj/wiz_soul.lpc`), `secure/simul_efun.lpc`'s own from-scratch
+`create_wizard()` (its `find_player(owner)` lookup of the requesting
+wizard always fails, so the whole castle-creation flow is unreachable),
+mail delivery to an online player in `room/post.lpc`, the wand's
+`obj/wand.lpc` zap target, and a live puzzle mechanic in
+`room/alley.lpc`'s Trixie NPC (giving her a corpse/item silently no-ops
+instead of returning/de-frogging, since `transfer(obj,
+find_living(lower_case(who)))` resolves its destination to `0`). No
+crash, no compile error, no `debug.log` signal at all — every one of
+these just quietly does nothing, exactly the class of bug this
+project's methodology is built to catch only through a live, played
+session, not a code review or a boot watch.
+
+**Fix**: register the name at the same point the archive already
+establishes it for a living object — `obj/player.lpc`'s `logon2()` and
+`obj/monster.lpc`/`obj/monster.talk.lpc`'s shared `set_name(n)`
+function (the two general-purpose NPC base classes every actual live
+monster in this archive clones and configures through) — via
+`set_living_name(name)`/`set_living_name(n)` right after the `name`
+variable itself is set. **A second-order trap in the exact same fix**:
+`move_player_to_start()`'s own duplicate-login guard tries to exclude
+itself from its own `find_player()` search by literally reproducing the
+original archive's trick — temporarily blanking the local `name`
+variable before searching, then restoring it — since that is genuinely
+how the *classic* driver's per-call `id()`-based scan avoids
+self-matching. It does nothing at all against this driver's hashed
+registration (blanking an LPC variable doesn't touch the separate
+`living_name` C-struct field), so naively adding `set_living_name()` in
+`logon2()` made every single login find *itself* as "already playing"
+(confirmed live: a brand-new character got the duplicate-login prompt
+on its own very first connection) — worse, since `set_living_name()`
+inserts at the head of a same-name hash chain rather than replacing any
+existing registration, self ends up as the *only reachable* match,
+permanently hiding any real pre-existing duplicate behind it. The
+correct fix is to defer the new registration until *after* the
+duplicate check has run and found nothing: `set_living_name()` moved
+out of `logon2()` and into `move_player_to_start()`, called only once
+`other_copy` is confirmed absent.
+
+**A third bug, only reachable once the first two fixes made the
+"already playing" flow reachable for the first time in this project's
+history**: `try_throw_out()` (the confirm-yes handler for that flow)
+calls `restore_object("players/" + name)` with no `noclear` argument —
+this driver's default `restore_object()` first resets **every**
+declared variable on the object to its type default, then applies only
+what the save file actually holds. Since object-type variables were
+never in scope to be saved in the first place, `myself` (already set,
+correctly, moments earlier in `logon2()`) and `soul` (just set by this
+same function's own preceding `soul("on")` call) both come back as `0`
+— and the very next line, `move_player_to_start()`'s
+`myself->move_object(resolve_ob(where))`, crashes with `*Bad argument 1
+to EFUN call_other() ... Got: int(0)`, leaving the surviving body with
+no environment at all (reproduced live: `look` reported "It is too
+dark." — not because the room was dark, but because
+`environment(this_object())` was `0`, so `set_light(0)`'s "walk up to
+the top-level container" query had nowhere to walk and read the
+querying object's own always-zero light count instead).
+`logon2()` already carries an explicit comment about this exact
+driver behavior ("Don't do this before the restore!") for its own,
+earlier `restore_object()` call — `try_throw_out()`'s later one needed
+the identical treatment and didn't have it. **Fix**: re-set `myself =
+this_player();` immediately after that `restore_object()` call, and
+re-attach `soul` via `present("wiz_soul"|"soul", myself)` (the clone is
+still physically there — `restore_object()` only clears *variables*,
+never real inventory — it just lost its only reference). Verified live:
+a full register → disconnect-without-quit → reconnect → "already
+playing" → "y" (throw out) → `look` (fully lit, no longer "too dark")
+→ `score` → `soul on` ("You already have one.", confirming the
+soul reference was correctly re-attached rather than silently
+duplicated) → `quit` → reconnect sequence, plus a separate two-socket
+`tell` test confirming cross-player name lookup now actually works.
+
+**How to apply generally**: any archive whose bundled original driver
+predates the master-object era (see this project's other pre-1998-ish
+onboarded libs) is worth a `grep -rn set_living_name` sanity check
+before trusting `find_living()`/`find_player()` to work at all — a
+zero-hit result on a codebase that DOES call `find_living`/`find_player`
+elsewhere is the tell. When adding the registration, check every
+existing self-exclusion trick in duplicate-login-style code for exactly
+this driver's swap in matching semantics (per-call scan → one-time
+hash registration) before assuming the original guard logic still
+applies unchanged, and check every `restore_object()` call for an
+object-type variable used on the very next line afterward, not just the
+one immediately following the object's *own* initial login restore —
+a rarely-exercised secondary restore path (a duplicate-login merge, a
+character-transfer/rename tool, anything gated behind a "yes/confirm"
+prompt) is exactly the kind of code this project's line-coverage-blind
+boot/compile checks never reach, and is worth deliberately exercising
+live rather than assumed clean by analogy to the main login path.
+
 ---
 
 ## 8. Login and registration flow bugs

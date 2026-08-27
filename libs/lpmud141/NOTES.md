@@ -374,3 +374,196 @@ config.fluffos`, run from `libs/lpmud141/` (required -- `log directory :
   soul/emote commands, basic combat, wizard tools. Left exactly as
   shipped -- no new rooms, NPCs, or commands invented, per this
   project's standing rule.
+
+## 9. Deep functional test (round two, 2026-08-27)
+
+One continuous session against a live `~/src/fluffos/build-debug/src/driver
+config.fluffos`, raw Python `socket` scripts (no `tmux_mud.sh`), following
+AGENTS.md §10.7's methodology plus the seven standing cross-cutting bug
+patterns (§7.121/§8.3a/§7.122/§7.123/§7.124/§7.126/§7.129).
+
+### 9.1 Standing cross-cutting patterns: all clean
+
+- **§7.121** (float in a declared-`int` function): `grep -rn '\bfloat\b'`
+  across the whole `work/` tree returns zero hits -- this codebase never
+  uses `float` at all.
+- **§8.3a** (`private` demoted to `DECL_HIDDEN`, breaking `add_action`
+  dispatch): the only `private` hit in the whole tree is
+  `secure/master.lpc`'s `private nomask void preload(string file)` -- a
+  MASTER APPLY, invoked by the driver via `apply_master_ob()` with
+  `ORIGIN_DRIVER`, which this driver's own `apply_low()` maps to a
+  `DECL_HIDDEN` permission requirement (confirmed by reading
+  `~/src/fluffos/src/vm/internal/apply.cc`) -- `private` (`DECL_PRIVATE`,
+  a strictly higher bit value) passes that check fine. Not the §8.3a shape
+  at all (that class is specifically about `add_action`/`call_out`-style
+  *external* dispatch onto an inherited `private` function).
+- **§7.122** (autoload/class-item duplication on reconnect): this
+  archive's own analogous mechanism is `obj/player.lpc`'s
+  `auto_load`/`compute_auto_str()`/`load_auto_obj()` (used for exactly one
+  real marker item, `obj/shout_curse.lpc`, a "can't shout" curse).
+  Manually traced every call path (fresh login, existing-player login,
+  and the "already playing / throw the other copy out" merge flow) and
+  confirmed this driver's plain `save_object()` does NOT independently
+  serialize carried inventory the way the TMI-2-lineage bug's driver
+  did, and `load_auto_obj()` is only ever reached on a genuine `where==0`
+  fresh-placement login, never on the merge path -- no duplication found,
+  confirmed clean by code trace (not live-reproduced, since the shipped
+  archive has exactly one auto-load item type and reproducing a real
+  cursed character was out of scope for this pass).
+- **§7.123** (bare file-scope `IDENT = (...)` statement): zero hits from
+  `grep -rnE '^[A-Za-z_][A-Za-z0-9_]* *= *[\(\[]'` across `work/`.
+- **§7.124** (percentage/fraction unit-mismatch literal): zero hits from
+  `grep -rnE '= *0\.[0-9]+;'` -- consistent with there being no `float`
+  usage at all in this codebase.
+- **§7.126** (stale pre-`.c`-to-`.lpc` extension in `.o` door/save data):
+  N/A -- this archive has no AREA/coordinate-grid engine and no
+  `.o`-stored room-exit mechanism at all; every exit is a literal string
+  in source (`room/std.h`'s `*_EXIT` macros). `room/init_file` (a
+  plain-text preload listing, not `.o` data) DOES still list its five
+  entries with a stale `.c` suffix (`obj/player.c`, `obj/soul.c`, etc.) --
+  confirmed harmless: `secure/master.lpc`'s `epilog()`/`preload()` reads
+  this file verbatim and `catch(load_object(file))`s each line, and a
+  live boot shows all five loading with zero entries in
+  `log/log_catch`/`log/log`, confirming `load_object()` on this driver
+  correctly resolves a `.c`-suffixed path to the real `.lpc` file.
+- **§7.129** (`tell_room()` wrapper forwarding a defaulted `0` `exclude`
+  arg into `message()`): N/A -- `secure/simul_efun.lpc` defines no
+  `tell_room()` wrapper at all; every `tell_room()` call site in the
+  archive (`obj/chat.lpc`, `obj/door.lpc`, `obj/wiz_soul.lpc`,
+  `room/sub/door_trap.lpc`) resolves to the real native efun directly,
+  which already handles an omitted 3rd argument correctly.
+
+### 9.2 Re-examined `secure/master.lpc`/`secure/simul_efun.lpc`: no missed edge cases
+
+Re-read both files in full against this pass's own findings. `preload()`
+being `private` is intentional and correct (see §9.1 above, not a
+missed §8.3a case). `error_handler()` still has the `objectp()` guard
+and `sprintf("%s:%d", ...)` fix documented in the onboarding NOTES (§2);
+no new issue found there. `resolve_ob()`/`transfer()`/`create_wizard()`
+in `simul_efun.lpc` were re-checked line by line while root-causing §9.3
+below -- `create_wizard()`'s own `find_player(owner)` call was found to
+be silently dead (see §9.3), but the function itself is otherwise
+correct once that dependency works.
+
+### 9.3 New finding: `find_living()`/`find_player()` never matched anything, archive-wide -- fixed (also filed as AGENTS.md §7.131)
+
+**Bug**: this driver's `find_living()`/`find_player()` require an
+explicit, one-time `set_living_name()` registration (a hashed lookup) --
+completely unlike the archive's own original driver, whose
+`find_living_object()`/`find_player()` (`object.c`) scan every live
+object and call its own `id()` LFUN per search, with no registration
+step at all. Since nothing in this archive ever called
+`set_living_name()` (confirmed: zero hits, `grep -rn set_living_name`),
+both efuns silently returned `0` for every name, always -- no crash, no
+compile error, no `debug.log` signal.
+
+**Blast radius** (all confirmed dead before the fix, all confirmed
+working after): `obj/player.lpc`'s `tell`/`whisper` commands (always
+"No player with that name."); the "already playing / throw the other
+copy out" duplicate-login guard in `move_player_to_start()` (completely
+unreachable -- reconnecting under the same name while an old,
+disconnected-but-undestructed body was still alive silently created a
+SECOND live body with the same name, sharing the same save file, rather
+than ever prompting to merge them -- reproduced live: two simultaneous
+"Dualaa"/"Dualbb"-named bodies visible in the same room after a plain
+reconnect); every `obj/wiz_soul.lpc` wizard command that targets a
+player/NPC by name (`heal`, `stat`, `trans`/teleport, `goto`, `promote`,
+`snoop`, `at`, `echo_to`); `secure/simul_efun.lpc`'s own
+`create_wizard()` (`find_player(owner)` always fails, so the entire
+from-scratch castle-creation flow -- see NOTES.md's own onboarding
+writeup -- was unreachable); `room/post.lpc`'s online-mail delivery;
+`obj/wand.lpc`'s zap target; and `room/alley.lpc`'s Trixie NPC give-back
+puzzle (`transfer(obj, find_living(lower_case(who)))` silently resolved
+to a no-op). `room/vill_road2.lpc`'s/`new.vill_road2.lpc`'s "harry" NPC
+and every room/NPC's own `!living(x)`-guarded respawn-on-reset check
+were confirmed UNAFFECTED in practice (`harry` is preprocessor-disabled
+via `#define HARRY 0` in the live room, and `new.vill_road2.lpc` is a
+dead/unreferenced draft file; every respawn guard already has its own
+redundant local-object-variable check that doesn't depend on
+`find_living()` at all).
+
+**Fix** (3 files, `obj/player.lpc`/`obj/monster.lpc`/`obj/monster.talk.lpc`):
+`set_living_name(n)` added to the two general-purpose NPC classes'
+shared `set_name(n)` function, and to the player body -- but NOT simply
+inlined into `logon2()` where `name` itself is set, because of a
+second-order trap that only surfaces once the primary fix makes
+`find_player()` matches possible at all: the ORIGINAL `move_player_to_start()`
+excludes self from its own "already playing" search by temporarily
+blanking the local `name` variable (correct on the classic per-call-scan
+driver; a no-op against this driver's separate hashed registration), and
+`set_living_name()` inserts at the HEAD of a same-name hash chain rather
+than replacing an existing entry -- so a self-registration made before
+the search made every single login (including a brand-new character's
+very first one) find *itself* and report "You are already playing!".
+Fixed by deferring `set_living_name(name)` in `player.lpc` until
+`move_player_to_start()` has already confirmed no live duplicate exists
+(self excluded by simple absence from the table, not by a name-blanking
+trick that no longer does anything).
+
+**Third bug found only once the above two were live-reachable for the
+first time in this project's testing**: `try_throw_out()`'s own
+`restore_object("players/" + name)` call (its default, no-`noclear`
+form) resets EVERY declared variable on the object first, then applies
+only what the save file can hold -- since object-type variables were
+never in scope to save, this wiped both `myself` (set moments earlier in
+`logon2()`) and `soul` (set moments earlier by this same function's own
+`soul("on")` call) back to `0`. The very next line,
+`move_player_to_start()`'s `myself->move_object(resolve_ob(where))`,
+then crashed with `*Bad argument 1 to EFUN call_other() ... Got:
+int(0)` (confirmed in `work/log/log`), leaving the surviving body with
+no environment at all -- reproduced live as `look` reporting "It is too
+dark." (not a real lighting bug: `set_light(0)`'s "walk up to the
+top-level environment" query had no environment to walk up to).
+`logon2()` already has an explicit comment about this exact driver
+behavior for its own earlier `restore_object()` call ("Don't do this
+before the restore!") -- `try_throw_out()`'s later one just didn't carry
+the same treatment. Fixed by re-setting `myself = this_player();` and
+re-attaching `soul` via `present("wiz_soul"|"soul", myself)` (the
+already-cloned soul object is still physically present -- restore_object()
+never touches real inventory, only declared variables) right after that
+`restore_object()` call.
+
+**Verified live, full sequence**: register a fresh character -> `look`
+(lit, full description) -> disconnect without `quit` (leaving the body
+alive, un-destructed) -> reconnect under the same name -> "You are
+already playing! Throw the other copy out ?" now correctly fires (it
+never did before this fix) -> `y` -> `look` (fully lit, not "too dark")
+-> `score` (correct restored stats) -> `soul on` ("You already have
+one.", confirming the soul reference was correctly re-attached to the
+already-present clone rather than silently duplicating it) -> `quit` ->
+reconnect one more time (ordinary, no false "already playing", correct
+restored data). Separately, a two-socket simultaneous-connection test
+confirmed `tell <name> <msg>` now actually delivers across two live
+players (previously always "No player with that name."). `debug.log`
+and `work/log/{log,log_catch,compile}` checked clean (zero errors)
+across the entire sequence, both before and after the fix (the crash
+this fixes writes to `work/log/log` via `master.lpc`'s own
+`error_handler()`, not `debug.log`).
+
+Combat (a fresh character vs. `room/yard.lpc`'s beggar NPC, using the
+free "small knife" in the same room) exercised cleanly post-fix: gradual
+HP exchange on both sides, normal `experience`/`hit_point` progression
+via repeated `score` checks, no anomalies. An earlier same-session
+combat run (before these fixes landed) had shown one character die
+after only 1-2 visible incoming hits from a weak (`weapon_class 3`,
+unarmed) NPC -- root-caused to exactly this bug: rapid manual reconnect
+testing under the SAME character name (with the "already playing" guard
+dead) had left multiple simultaneous same-named bodies alive, and the
+specific body that then fought the beggar was very likely a corrupted
+one carrying stale state from the same `myself`/`soul`-clearing failure
+mode above, not a separate combat bug -- not independently reproduced
+after the fix, and combat itself behaves correctly in every post-fix
+test.
+
+**Test-harness note**: `work/players/` was found containing only the
+original archive's own shipped `guest.o` (`raw/mudlib/players/guest.o`,
+level 2, "Guest" character with 397 experience, matching a real prior
+session on the original driver) -- accidentally deleted mid-session
+during test-character cleanup, then restored from `raw/` and confirmed
+still loads correctly (this driver's plain-text save format parses the
+classic driver's own save file without any conversion needed -- a
+requirement of the `guest` login path, since `obj/player.lpc`'s own
+`logon2()` special-cases an empty password specifically for that
+account). All other test characters created during this pass were
+deleted afterward (not committed) per this project's `git add -u`
+convention for avoiding test-save clutter.
