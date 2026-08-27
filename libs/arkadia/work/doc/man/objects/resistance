@@ -1,0 +1,216 @@
+
+Resistance properties
+=====================
+
+There are a number of resistance properties that deal exclusively with
+magic. There are two ways to use these magical resistance properties.
+
+They can be used directly, by being set in an object, living or dead,
+thus giving the object an inherent magical resistance.
+
+For example, a weapon might be protected against acid or fire. This
+could be achieved by setting the properties OBJ_I_RES_ACID and
+OBJ_I_RES_FIRE. There is no difference between protection against
+'magical' acid or fire and against 'natural' acid or fire, since in
+the game 'magic' is part of the nature of the world.
+
+Besides inherent magical resistance, there is magical resistance that
+one object bestows upon another one, for example a magical amulet might
+protect the wearer by increasing the wearer's magical resistance
+against one of more kinds of magical attacks. While inherent magical
+resistance is marked using the OBJ_I_RES_xxx properties, for indirect
+resistance the MAGIC_I_RES_xxx properties are used.
+
+This indirect magical resistance is defined in the protecting object.
+When the protection is activated, for example when the amulet either
+enters the inventory of someone or if someone starts wearing the
+amulet, the object pointer for the amulet has to be added to the list
+of magical effects in the protected object.
+
+This is achieved by calling
+
+    (void) target->add_magic_effect(amulet);
+
+where 'target' is an object pointer to the protected object, and
+'amulet' is an object pointer to the protecting object.
+
+The list of object pointers that protected an object can be queried
+using:
+
+    (object *) target->query_magic_effects();
+
+When the magical protection should end, for example because the amulet
+is dropped or removed, then the object pointer to the protecting object
+has to be removed from the list using:
+
+    (int) remove_magic_effect(amulet);
+
+The protecting object has to define a function
+(mixed) query_magic_protection(string prop, object what).
+
+Here 'prop' is the string for the name of the property of the magical
+resistance, eg MAGIC_I_RES_FIRE. If 'what' points to the protected
+object, and if 'prop' is MAGIC_I_RES_FIRE, then the function should
+return the magical resistance that the amulet bestows upon the wearer
+against fire.
+
+Indirect magical resistance can be either additive or non-additive. It
+is described by an array of integers: ({resistance value, additivity}).
+
+The resistance value is a percentage, and corresponds to the value used
+for inherent magical resistance. If the resistance value is 25 and a
+fire bolt inflicts 40 hit points damage, the actual damage would be
+30 hit points.
+
+If the additivity is true (1), then the resistance value will be added
+to the resistance values of other objects protecting the protected
+object against the same type of damage. If the additivity is false (0),
+then it will not be added, but considered seperately. The total
+indirect magical resistance will either be the sum of the resistance
+values of all additive effects or the maximum of the resistance values
+of the non-additive effects, whichever one is larger.
+
+So, if a player wears one object with a non-additive resistance of 30%,
+and four others that are additive and give a sum of 24%, the resistance
+will be 30%.
+
+The resistance values of additive effects are added by taking the
+product of (1 - resistance) for all additive effects.
+
+For example, if you have three objects with additive resistance on you,
+one with 30%, one with 20% and one with 25% additive resistance, then
+the result would be (1 - (1-0.3)*(1-0.2)*(1-0.25)) = 58%.
+
+Just look at it this way: the first object takes away 30% of the
+damage, so only 70% reach the second object, which takes away 20% of
+those. Then 56% of the damage reach the third object, which takes away
+25% of 56%, so that only 42% of the original damage reach you. So the
+three protecting objects all together removed 58% of the damage.
+
+The resistance is calculated by the function 
+int query_magic_res(string prop), defined in /std/object.c.
+
+The maximum resistance value for an additive resistance effect that an
+object can bestow on another is 40%. For a non-additive resistance
+effect this maximum is 75%. No object may protect another object,
+whether living or dead, more powerfully than this. As always, object
+with resistance values close to the limits given above should be rare
+and very hard to obtain!
+
+Example:
+
+/*
+ * example_ring.c
+ *
+ * An example of how to code objects bestowing magical resistance on
+ * other objects.
+ *
+ * by Rogon
+ */
+#pragma strict_types
+
+inherit "/std/armour.c";
+
+#include <stdproperties.h>
+#include <wa_types.h>
+
+void
+create_armour()
+{
+    set_name("ring");
+    set_adj(({"mithril", "ruby", }));
+    set_short("mithril ring inset with a ruby");
+    set_long("This is a mithril ring inset with a bright red ruby.\n");
+    add_item(({"ruby", "bright red ruby", "red ruby", "bright ruby", }),
+        "The ruby set into the mithril ring shines brightly red.\n"
+      + "It is firmly placed into the ring.\n");
+
+    set_default_armour(1, A_R_FINGER, 0, this_object());
+
+    add_prop(OBJ_I_WEIGHT,  50);
+    add_prop(OBJ_I_VOLUME,  10);
+
+    add_prop(OBJ_I_VALUE, 2 * 1728);
+
+    add_prop(MAGIC_AM_MAGIC, ({ 50, "divination" }));
+    add_prop(MAGIC_AM_ID_INFO, ({
+        "The ruby set into the ring shines with magical power.\n", 10,
+        "The ring has the power to protect whoever wields it.\n", 25,
+        "It was forged in the Second Age by Sauron the Great.\n", 40,
+        "It is one of the Rings of Power.\n", 60,
+        "It is one of the seven for the Dwarf-lords in the halls of "
+      + "stone.\n", 80, }));
+
+    add_prop(OBJ_S_WIZINFO,
+        "This is one of the seven rings of power that Sauron gave to "
+      + "the dwarves.\n"
+      + "It will protect the wearer against fire, water, and magic:\n"
+      + "magic resistance: MAGIC_I_RES_FIRE:  40, additive,\n"
+      + "magic resistance: MAGIC_I_RES_WATER: 20, additive,\n"
+      + "magic resistance: MAGIC_I_RES_MAGIC: 25, non-additive.\n");
+
+    // The ring itself cannot be harmed by fire and is protected against
+    // the element water and against magic in general.
+    add_prop(MAGIC_I_RES_FIRE,  100);
+    add_prop(MAGIC_I_RES_WATER,  50);
+    add_prop(MAGIC_I_RES_MAGIC,  90);
+}
+
+mixed
+query_magic_protection(string prop, object what)
+{
+    if (what == query_worn())
+    {
+        switch (prop)
+        {
+            case MAGIC_I_RES_FIRE:    return ({ 40, 1 });
+            case MAGIC_I_RES_WATER:   return ({ 20, 1 });
+            case MAGIC_I_RES_MAGIC:   return ({ 25, 0 });
+        }
+    }
+
+    return ::query_magic_protection(prop, what);
+}
+
+public mixed
+wear(object ob)
+{
+    object  tp = this_player();
+
+    // sanity checks.
+    if ((ob != this_object()) || (tp != environment(this_object())))
+        return -1;
+
+    tp->add_magic_effect(this_object());
+    return 0;
+}
+
+public mixed
+remove(object ob)
+{
+    object  tp = this_player();
+
+    // sanity checks.
+    if ((ob != this_object()) || (tp != query_worn()))
+        return -1;
+
+    if (!living(tp)) 
+        return 0;
+
+    tp->remove_magic_effect(this_object());
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

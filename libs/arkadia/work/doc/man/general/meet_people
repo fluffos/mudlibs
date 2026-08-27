@@ -1,0 +1,140 @@
+
+This document describes how people learn each others names in 3.0. This is
+basically a social function of the game but it adds to the realism too.
+
+
+Background
+==========
+
+In earlier versions of LPmud, the names of all players were known to all other
+players. This gave an indication as to if a character met in the game were
+actually a player or just an NPC. NPC's could of course mask themselves as
+players by giving themselves a name, it was still not very good. Why would I
+know all these names? Where all the characters in the game wearing nametags
+or what?
+
+In 3.0 the concept of races is introduced for the players. In earlier versions
+race has only been an NPC attribute. All players have been human, if anything.
+The race of a character is assumed directly visible, this might not be true
+in every concievable case, it is a simplification, although a much better one 
+than that everyones name is always known.
+
+If however I meet a character, and we exchange names, we have been introduced.
+When I meet him next time I will most likely recognise him and therefor I will
+know his name. 
+
+
+Characters met, introduced and remembered
+=========================================
+
+Too keep track of which players should be introduced by name and which should
+be introduced by race all players must hold lists of who they have been
+introduced too. These lists must somehow be limited to save memory. This is
+how it is stored in 3.0:
+
+	- There is one list of people who have introduced themselves to you.
+	- There is one list of people who you have chosen to remember.
+
+The maximum size of both lists depend on your 'INT' stat. When you log out
+only the 'remember'-list is saved. Wizards do not have such lists, they always
+know the name of all players. 
+
+When you meet a character you can introduce yourself and be stored in that
+characters 'introduce'-list. Only if he chooses to remember you and gives the
+command: "remember <yourname>", will you be stored in his 'remember'-list.
+
+
+Consequences for say and tell_room
+==================================
+
+As these functions are used to tell something to a group of players, they are
+gravely affected by the fact that the message will be dependant on the
+reciever. As an example: "Lars takes two apples from the box.", this message
+is dependant upon if I know Lars or not. In a room with five people, two of
+them should maybe have: "The human takes two apples from the box.", instead.
+
+The simple solution is of course not to use say and tell_room, but instead tell
+each player separately the correct message. Say and tell_room has however been
+changed to support these kind of reciever dependant messages.
+
+There is in fact two ways of solving the problem and both is implemented:
+
+	- Send two alternative messages to say/tell_room
+	- Use the concept of 'value by function call'.
+
+The first is the fastest, although it will not solve all concievable cases.
+The second is somewhat complex and timeconsuming, it will however always work.
+
+To use the first alternative you simply do:
+
+	say( ({ "Message including name", "Message not including name" }) );
+
+OBS! You can now use a third argument to say. People who can't see you will
+get this message. More on that in the end of this file. /Nick
+
+In some cases this will not work, example: "Fatty gives two apples to Lars."
+To solve this the second alternative must be used. In this the message is sent
+to each reciever by a call to 'catch_msg'. This function replaces any
+occurences of a 'value by function call' description in the string with the
+returned value.
+
+For the first example above you would do:
+
+	say( "@@query_name takes two apples from the box." );
+
+The second would be a little tougher:
+
+	say( "@@query_name:" + file_name(fatty_player) + " gives two apples " +
+	     " to @@query_name:" + file_name(lars_player));
+
+	Where fatty_player and lars_player are two variables you have defined
+	holding object pointers to these player objects.
+
+This gets complicated and to simplify things a set of macros is defined in
+"/sys/macros.h". The above example would be:
+
+  say( QCTNAME(fatty_player) + " gives two apples to " + QTNAME(lars_player));
+
+These are the most usefull macros:
+
+    #define QMET(func, ob) "@@"+func+":"+file_name(ob)+"@@"
+    #define QSHORT(ob) QMET("short", ob)
+    #define QNAME(ob) QMET("query_art_name",ob)
+
+    /*
+     * QCNAME is the same as QNAME except that it returns a capital A or An
+     */
+    #define QCNAME(ob) QMET("query_Art_name",ob)
+    /*
+     * QTNAME is the same as QNAME except that it returns 'the'
+     */
+    #define QTNAME(ob) QMET("query_the_name",ob)
+    /*
+     * QCTNAME is the same as QTNAME except that it returns a capital 'The'
+     */
+    #define QCTNAME(ob) QMET("query_The_name",ob)
+
+To use the above macros you must do:
+
+    #include "/sys/macros.h"
+
+For details of how 'value by function call' works, look at the function 
+'check_call' in /std/object. 
+
+
+For more extensions to the simulated efun say see 'sman say'.
+
+
+
+
+Unseen messages
+===============
+
+As stated above you can use an array as first argument in say(). If you make
+it an array of three messages the third message will be sent to people who
+can't see you. If the third message is "" then the person wouldn't notice
+anything. Like, if you smile to someone who is blind, he wouldn't notice it.
+The macros above will return 'Someone' as name if the reciever cannot see
+the sender.
+
+

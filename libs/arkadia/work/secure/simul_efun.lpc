@@ -1,0 +1,2571 @@
+/*
+ * /secure/simul_efun.c
+ *
+ * This file holds all the simulated efuns. These are called as if they were
+ * inherited in all objects. 
+ *
+ * It is managed with a hidden call_other() though so the functions will
+ * not appear as true internal functions in objects.
+ */
+
+/* We must use the absolute path here because SECURITY is not loaded yet
+ * when we load this module.
+ */
+#include "/sys/filter_funs.h"
+#include "/sys/std.h"
+
+#pragma no_clone
+#pragma no_inherit
+#pragma resident
+#pragma strict_types
+
+/* Define this if you have CFUN's turned on. If not, then LPC functions will
+ * be used rather than CFUN implementations in the gamedriver.
+ */
+#define CFUN
+/* FluffOS PORT NOTE: CFUN gates this file's "efun-shell" call sites
+ * (`funcname(args) = "native_name";` -- a CD-driver-only alias syntax
+ * this driver's compiler rejects). Every CFUN-guarded function already
+ * has a complete plain-LPC #else fallback written by upstream for
+ * exactly this "CFUN turned off" case, so undef it here rather than
+ * porting the efun-shell syntax itself. */
+#undef CFUN
+#define SLVTHRC_LOG(str) \
+    ("/d/Wiz/silvathraec/private/say_logger"->log_say(str))
+
+/* Prototypes */
+varargs string getuid(object ob);
+int atoi(string num);
+int seteuid(string str);
+
+nomask varargs void dump_array(mixed a, string tab);
+nomask varargs void dump_mapping(mapping m, string tab);
+nosave void dump_elem(mixed sak, string tab);
+
+/*
+ * FluffOS PORT NOTE: set_auth()/query_auth() are real gamedriver efuns on
+ * the original CD gamedriver (this codebase's native driver, per
+ * MUDLIB_VERSION "CDpl.01.00") but do not exist at all on FluffOS -- its
+ * native uid model is the simpler MudOS-style single-string uid/euid pair
+ * (real geteuid()/seteuid()/export_uid() efuns, which this codebase's own
+ * getuid()/geteuid()/seteuid()/setuid()/export_uid() below shadow anyway,
+ * since they're defined as real functions in this file), not the CD
+ * driver's arbitrary freely-settable "uid:euid" string pair per object.
+ * This whole codebase relies on being able to set BOTH fields of that
+ * pair explicitly (e.g. set_auth(ob, "#:root")), which FluffOS's native
+ * efuns of the same name can't express. Shim set_auth()/query_auth() here
+ * as simul_efuns backed by a private object-keyed mapping, matching the
+ * CD driver's semantics exactly rather than trying to map them onto
+ * FluffOS's native uid model. Caveat: entries for destructed objects are
+ * never pruned (no destruct callback wired up) -- a harmless slow leak
+ * over very long uptimes, not a functional bug; see NOTES.md.
+ */
+private mapping auth_map = ([]);
+
+/* FluffOS PORT NOTE: the CD gamedriver automatically assigns every
+ * object a REAL uid (= the creator of its own source file) the moment
+ * it's created, with no LPC-level action required -- callers throughout
+ * this codebase (most directly secure/login.lpc's logon(), which does a
+ * bare seteuid(creator(this_object())) with no preceding setuid() call)
+ * rely on that guarantee. Our auth_map simul_efun shim has no way to
+ * hook the driver's own object-creation sequence, so a brand-new
+ * object's entry is simply absent until something calls set_auth() on
+ * it -- confirmed live: this crashed secure/login.lpc's logon() as
+ * "uid=0 euid=0" even immediately after its own seteuid(creator(...))
+ * call, because valid_seteuid()'s permission checks all key off the
+ * CALLER's *current* uid, and an entirely-unset uid ("0", not "root")
+ * fails every one of them, denying the very seteuid() call that was
+ * trying to establish it -- silently breaking every single login
+ * attempt's very first player-file restore_object(). Lazily compute the
+ * CD driver's real default (creator of the object's own file, euid
+ * left "0"/unset) here instead of a bare "0:0" whenever no explicit
+ * set_auth() has run yet, so getuid()/valid_seteuid() see the same
+ * answer the CD driver would have given automatically. */
+string
+query_auth(object ob)
+{
+    string owner;
+
+    if (!ob)
+        return "0:0";
+    if (auth_map[ob])
+        return auth_map[ob];
+    owner = SECURITY->creator_object(ob);
+    return (owner ? owner : "0") + ":0";
+}
+
+void
+set_auth(object ob, string value)
+{
+    if (!ob)
+        return;
+    auth_map[ob] = value;
+}
+
+/*
+ * Called by master on startup to get correct uids
+ */
+void
+fixeuid()
+{
+    set_auth(this_object(), "root:root");
+}
+
+/*
+ * No one is allowed to shadow the simulated efuns
+ */
+int 
+query_prevent_shadow()
+{
+    return 1;
+}
+
+/************************************************************************
+ *
+ * EFUN SHELLS
+ *
+ * These are here for reasons of compatibility and comfort
+ *
+ */
+
+/* FluffOS PORT NOTE: was "void write(mixed data) = \"write\";" -- the
+ * CD-driver efun-shell alias syntax ("funcname(args) = \"native_name\";")
+ * isn't valid on FluffOS. write(mixed) is already a real native efun
+ * here with the same signature, so the alias is simply redundant --
+ * dropped rather than ported. */
+
+void
+tell_object(object liveob, string message) 
+{
+    liveob->catch_tell(message);
+}
+
+nosave string
+getnames(object ob)
+{
+    return ob->query_real_name();
+}
+
+/*
+ * FluffOS PORT NOTE: m_indexes()/m_sizeof()/m_values()/m_delete() are
+ * classic CD-driver mapping efuns with no FluffOS equivalent of the same
+ * name (this driver has keys()/sizeof()/values()/map_delete() instead,
+ * none of which tolerate a non-mapping argument the way this mudlib's own
+ * doc/man/efun/m_indexes et al. document: "if an integer is given as
+ * argument, 0 is returned"). Shimmed here as real simul_efuns rather than
+ * left to the driver's real (stricter) efuns of a different name, since
+ * several call sites throughout this codebase rely on the documented
+ * graceful-degradation behavior for a not-yet-populated ("still 0")
+ * mapping variable.
+ */
+mixed *
+m_indexes(mixed arg)
+{
+    if (!mapp(arg))
+        return 0;
+    return keys(arg);
+}
+
+mixed *
+m_values(mixed arg)
+{
+    if (!mapp(arg))
+        return 0;
+    return values(arg);
+}
+
+int
+m_sizeof(mixed arg)
+{
+    if (!mapp(arg))
+        return 0;
+    return sizeof(arg);
+}
+
+mapping
+m_delete(mixed map, mixed index)
+{
+    mapping copy;
+
+    if (!mapp(map))
+        return 0;
+    copy = map + ([]);
+    map_delete(copy, index);
+    return copy;
+}
+
+/*
+ * Function name: m_indices
+ * Description  : Here it is Dworkin, for all language purists...
+ *                Obviously the proper plural for "index" is "indices" and
+ *                not "indexes" as the author of this efun thought.
+ * Arguments    : mixed arg - the argument for the efun m_indexes()
+ * Returns      : mixed - the return value from the efun m_indexes().
+ */
+mixed
+m_indices(mixed arg)
+{
+    return m_indexes(arg);
+}
+
+
+/* FluffOS PORT NOTE: extract() (doc/man/efun/extract -- "get a subpart
+ * of a string. Both 'start' and 'to' are positions in 'str'; a negative
+ * position counts from the end. If start >= to (after resolving
+ * negatives), or the subpart falls entirely outside the string, an
+ * empty string is returned. If only 'start' is given, extract to the
+ * end of 'str'.") is a CD-driver efun with no FluffOS equivalent;
+ * implemented as a real simul_efun (rather than hand-converting each of
+ * the ~40 call sites to raw slice syntax) since getting the negative-
+ * index/empty-string edge cases exactly right at every site by hand is
+ * its own bug class (see AGENTS.md \S7.80's off-by-one slice-arithmetic
+ * family). No call site in this codebase omits BOTH position arguments,
+ * so a distinguishable sentinel default for 'to' alone (rather than a
+ * true varargs argument count) is enough to detect "not given".
+ */
+#define __EXTRACT_TO_OMITTED (-2000000000)
+varargs string
+extract(string str, int start, int to : (: __EXTRACT_TO_OMITTED :))
+{
+    int len;
+
+    if (!stringp(str))
+        return str;
+
+    len = strlen(str);
+
+    if (start < 0)
+        start += len;
+    if (to == __EXTRACT_TO_OMITTED)
+        to = len - 1;
+    else if (to < 0)
+        to += len;
+
+    if (start < 0)
+        start = 0;
+    if (to >= len)
+        to = len - 1;
+    if (start > to)
+        return "";
+
+    return str[start..to];
+}
+
+/* FluffOS PORT NOTE: restore_map()/save_map() (load/save a whole mapping
+ * to a file, in a save_object()-compatible ".o" format) are CD-driver
+ * efuns with no FluffOS equivalent. FluffOS's nearest primitives are
+ * save_variable()/restore_variable() (generic value<->string
+ * serialization, a different on-disk format -- not byte-compatible with
+ * the CD driver's format, but moot here: this is a fresh install with no
+ * legacy save data to migrate). Shimmed as simul_efuns so the several
+ * call sites across the mudlib (wizard playerfile patching, etc.) don't
+ * each need editing individually. */
+mapping
+restore_map(string filename)
+{
+    string data;
+    mixed v;
+
+    data = read_file(filename + ".o");
+    if (!data)
+        return ([]);
+    v = restore_variable(data);
+    return mapp(v) ? v : ([]);
+}
+
+void
+save_map(mapping map, string filename)
+{
+    write_file(filename + ".o", save_variable(map), 1);
+}
+
+/* FluffOS PORT NOTE: write_socket() (write directly to the calling
+ * object's own connection, bypassing message/VBFC filtering -- used
+ * pervasively throughout secure/login.lpc's whole registration flow,
+ * ~100+ sites, plus application_player.lpc/gameinfo_player.lpc/
+ * std/living.lpc) is a CD-driver efun with no FluffOS equivalent of the
+ * same name; this driver's real write() efun already does exactly this
+ * (writes to current_object()'s own connection) since every call site
+ * here calls it directly (not through a simul_efun's hidden
+ * call_other), so it's a straight alias. */
+void
+write_socket(mixed msg)
+{
+    write(msg);
+}
+
+/* FluffOS PORT NOTE: set_screen_width() (configure the CD driver's own
+ * automatic line-wrap width for this connection) has no FluffOS
+ * equivalent -- this driver doesn't do automatic line-wrapping at all.
+ * Shimmed as a no-op; the mudlib tracks the width itself in its own
+ * player property (used for its own break_string()-based wrapping)
+ * regardless of whether this call does anything. */
+void
+set_screen_width(int width)
+{
+}
+
+/* FluffOS PORT NOTE: mappingp() is a CD-driver name for this driver's
+ * real mapp() efun -- shimmed as a plain alias since 32 files across
+ * this codebase call it by the old name. */
+int
+mappingp(mixed arg)
+{
+    return mapp(arg);
+}
+
+/* FluffOS PORT NOTE: ftoa() (float-to-string) is a CD-driver efun with
+ * no FluffOS equivalent; sprintf("%f", ...) is the real efun's own
+ * float-formatting verb. */
+string
+ftoa(float f)
+{
+    return sprintf("%f", f);
+}
+
+/* FluffOS PORT NOTE: ftoi()/itof() (float<->int conversion) are
+ * CD-driver names for this driver's real to_int()/to_float() efuns --
+ * shimmed as plain aliases since ~16 files across this codebase call
+ * them by the old name. */
+int
+ftoi(mixed f)
+{
+    return to_int(f);
+}
+
+float
+itof(mixed i)
+{
+    return to_float(i);
+}
+
+/* FluffOS PORT NOTE: set_alarm()/remove_alarm()/get_alarm()/
+ * get_all_alarms() are CD-driver timer efuns with no FluffOS equivalent.
+ * FluffOS's nearest primitive is call_out() (one-shot only, no built-in
+ * repeat interval), so these are shimmed on top of it: set_alarm's own
+ * repeat is implemented by having the fired callback reschedule itself
+ * via call_out() again. An alarm's identity is a small integer id handed
+ * out ourselves (matching the CD driver's "returns an alarm id"
+ * contract), mapped internally to the underlying call_out() handle so
+ * remove_alarm() can cancel it.
+ *
+ * get_alarm()/get_all_alarms() must return the exact 5-element shape
+ * this archive's own doc/man/efun/get_all_alarms documents --
+ * ({ id, function_name, time_left, repeat_time, args }) -- because
+ * std/object.lpc's own enable_reset()/reset() scan get_all_alarms() for
+ * a previously-scheduled "reset" alarm by NAME (calls[index][1] ==
+ * "reset") before scheduling a new one; returning bare ids (an earlier,
+ * incomplete version of this shim) crashed every single room's very
+ * first reset with "Cannot index value of type 'int'." The function's
+ * name is recovered via sprintf("%O", func) -- this driver has no
+ * function_name()-style introspection efun, but its sprintf('%O', ...)
+ * internally calls the same C-level function_name() the driver uses for
+ * debug output (packages/core/sprintf.cc), rendering a bare/unbound
+ * local function reference as "(: funcname :)"; parsed back out here.
+ * A function reference with bound arguments (e.g. our own internal
+ * closures) renders as "(: funcname, arg1, ... :)" and correctly
+ * extracts just the name too. time_left is approximated from the
+ * absolute fire time recorded at schedule/reschedule time (this driver
+ * doesn't expose a call_out's remaining time directly either).
+ */
+private int __alarm_next_id = 1;
+private mapping __alarms = ([]);  /* id -> ({ callout_handle, repeat, func, fire_time }) */
+
+private string
+__alarm_func_name(function f)
+{
+    string s;
+
+    s = sprintf("%O", f);
+    if (sscanf(s, "(: %s :)", s) != 1)
+        return "";
+    sscanf(s, "%s,", s);
+    return s;
+}
+
+private void
+__alarm_fire(int id)
+{
+    mixed *entry;
+    function func;
+    float repeat;
+
+    entry = __alarms[id];
+    if (!entry)
+        return;
+
+    func = entry[2];
+    repeat = entry[1];
+
+    if (repeat > 0.0)
+    {
+        __alarms[id][0] = call_out((: __alarm_fire, id :), repeat);
+        __alarms[id][3] = time() + repeat;
+    }
+    else
+        map_delete(__alarms, id);
+
+    (*func)();
+}
+
+int
+set_alarm(float delay, float repeat, function func)
+{
+    int id;
+    mixed handle;
+
+    id = __alarm_next_id++;
+    handle = call_out((: __alarm_fire, id :), delay);
+    __alarms[id] = ({ handle, repeat, func, time() + delay });
+    return id;
+}
+
+void
+remove_alarm(int id)
+{
+    mixed *entry;
+
+    entry = __alarms[id];
+    if (!entry)
+        return;
+    remove_call_out(entry[0]);
+    map_delete(__alarms, id);
+}
+
+mixed *
+get_alarm(int id)
+{
+    mixed *entry;
+
+    entry = __alarms[id];
+    if (!entry)
+        return 0;
+    return ({ id, __alarm_func_name(entry[2]), to_float(entry[3] - time()),
+        entry[1], ({}) });
+}
+
+mixed *
+get_all_alarms()
+{
+    mixed *ids;
+    int i;
+    mixed *result;
+
+    ids = keys(__alarms);
+    result = allocate(sizeof(ids));
+    for (i = 0; i < sizeof(ids); i++)
+        result[i] = get_alarm(ids[i]);
+    return result;
+}
+
+/* FluffOS PORT NOTE: break_string() (word-wrap-ish hard break every
+ * `len` characters, with an optional per-line indent) is another
+ * CD-driver efun with no FluffOS equivalent. Ported verbatim from the
+ * sibling `genesis` port of this same engine family. */
+varargs mixed
+break_string(mixed str, int len, mixed indent)
+{
+    string result;
+    string pad;
+    int pos, n;
+
+    if (!stringp(str))
+        return 0;
+    if (len < 1)
+        return str;
+
+    pad = stringp(indent) ? indent : "";
+
+    result = "";
+    n = strlen(str);
+    pos = 0;
+    while (pos < n)
+    {
+        if (pos)
+        {
+            if (!stringp(indent) && intp(indent) && indent > 0)
+                result += "\n" + sprintf("%-*s", indent, "");
+            else
+                result += pad + "\n";
+        }
+        result += str[pos..(pos + len - 1 > n - 1 ? n - 1 : pos + len - 1)];
+        pos += len;
+    }
+    return result;
+}
+
+/* FluffOS PORT NOTE: set_this_player() (retarget what this_player()
+ * returns for the rest of the current command execution) is used
+ * pervasively (18 files) but this driver build has F_SET_THIS_PLAYER
+ * excluded (confirmed: the real efun is listed in
+ * packages/core/core.spec but its implementation in efuns_main.cc is
+ * behind "#ifdef F_SET_THIS_PLAYER", and this exact driver build
+ * reports "Undefined function set_this_player" -- the same finding
+ * already confirmed independently on the sibling `genesis` port of this
+ * engine family, including a from-scratch single-file repro there).
+ * There's no way to fake this_player()-context switching from pure LPC
+ * (this_player() reflects real driver-side command execution state), so
+ * this is shimmed as a documented no-op rather than something fixable
+ * here -- every call site keeps running without crashing, just without
+ * this_player() actually shifting for its duration. See NOTES.md. */
+void
+set_this_player(mixed ob)
+{
+}
+
+/* FluffOS PORT NOTE: readable_string() (replace non-printable
+ * characters with '.') is a CD-driver efun with no FluffOS
+ * equivalent. */
+string
+readable_string(string str)
+{
+    int i, n;
+    int c;
+    string result;
+
+    if (!stringp(str))
+        return str;
+
+    result = str;
+    n = strlen(str);
+    for (i = 0; i < n; i++)
+    {
+        c = str[i];
+        if (c < 32 || c >= 127)
+            result[i] = '.';
+    }
+    return result;
+}
+
+/* FluffOS PORT NOTE: calling_object(n) (walk the call chain n levels
+ * back: 0 = immediate caller, -1 = caller's caller, -2 = one further,
+ * etc.) is a CD-driver efun. It is NOT simply an alias for this
+ * driver's own previous_object(n) despite both being MudOS-lineage
+ * "walk the call chain" primitives -- previous_object(n) here only
+ * supports n>=1 with a DIFFERENT indexing convention for the single-
+ * object form, and specifically aliases n==-1 to an entirely different
+ * efun, all_previous_objects() (returns the WHOLE chain as an array,
+ * confirmed via packages/core/efuns_main.cc's f_previous_object() --
+ * "i == -1" is a dedicated branch building an array, never a single
+ * object). Every -1/-2/etc. call site in this codebase (~20 of them,
+ * e.g. secure/master/fob.lpc's bookkeep_exp()) called the REAL
+ * previous_object(-1)/-2 efun directly expecting a single object back,
+ * which instead silently returned an array -- confirmed live: crashed
+ * a brand new character's very first add_exp() with "Trying to put
+ * array in object", aborting registration after the password/
+ * declension steps had already completed. Route ALL such call sites
+ * through this helper (mechanical sweep: previous_object(-N) ->
+ * calling_object(-N)) instead, which gets the real chain via
+ * all_previous_objects() and indexes it with the CD driver's own
+ * documented convention (0 = index 0 = immediate caller, -1 = index 1,
+ * -2 = index 2, ...). */
+varargs object
+calling_object(int previous_count)
+{
+    object *chain;
+    int idx;
+
+    if (previous_count > 0)
+        return previous_object(previous_count);
+
+    idx = -previous_count;
+    chain = all_previous_objects();
+    if (idx < 0 || idx >= sizeof(chain))
+        return 0;
+    return chain[idx];
+}
+
+/* FluffOS PORT NOTE: calling_program()/calling_function() (like
+ * calling_object() above, walk the call chain n levels back) have no
+ * direct FluffOS equivalent, but FluffOS's call_stack(mode) efun exposes
+ * the same information as parallel arrays (mode 0: program names, mode
+ * 2: function names, index 0 = self, 1 = immediate caller, 2 = caller's
+ * caller, ...), so these translate previous_count (0 or negative) into
+ * that indexing. Ported verbatim from the sibling `genesis` port of this
+ * same engine family. */
+varargs string
+calling_program(int previous_count)
+{
+    mixed *stack;
+    int idx;
+
+    stack = call_stack(0);
+    idx = 1 - previous_count;
+    if (idx < 0 || idx >= sizeof(stack))
+        return 0;
+    return stack[idx];
+}
+
+varargs string
+calling_function(int previous_count)
+{
+    mixed *stack;
+    int idx;
+
+    stack = call_stack(2);
+    idx = 1 - previous_count;
+    if (idx < 0 || idx >= sizeof(stack))
+        return 0;
+    return stack[idx];
+}
+
+/* FluffOS PORT NOTE: object_time() (when an object was created) is a
+ * CD-driver efun; FluffOS doesn't track per-object creation timestamps
+ * at all. The one call site (secure/master.lpc's query_start_time()
+ * fallback, already commented upstream as "will be wrong if the master
+ * has been updated") just wants an approximate boot time, so this
+ * returns the current time -- called once, early, memoized by the
+ * caller, close enough for its "best-effort fallback" role. */
+int
+object_time(object ob)
+{
+    return time();
+}
+
+/* FluffOS PORT NOTE: this driver's real random() efun takes a single
+ * int argument only -- the CD driver's random(range, seed) 2-arg
+ * seeded-random variant has no equivalent (there's no way to seed this
+ * driver's PRNG per-call). Shadows the real efun with a simul_efun of
+ * the same name that accepts (and silently ignores) the extra seed
+ * argument, bypassing to the real efun via efun::random() for the
+ * actual random draw -- confirmed dead/unused-in-effect on the sibling
+ * `genesis` port of this engine family (its one caller never even
+ * passed a seed), and ~18 call sites here do pass one, but always as an
+ * attempt at determinism/variety this driver's real random() already
+ * provides on its own. */
+varargs int
+random(int range, mixed seed)
+{
+    return efun::random(range);
+}
+
+/* FluffOS PORT NOTE: rnd() (a random FLOAT in [0.0, 1.0)) is a CD-driver
+ * efun; this driver's random() only produces ints. Scale a wide integer
+ * range down to [0.0, 1.0). */
+float
+rnd()
+{
+    return to_float(efun::random(1000000)) / 1000000.0;
+}
+
+/* FluffOS PORT NOTE: mkfunction(func, ob) (build a function pointer to
+ * ob's method "func", or to the CALLER's own method when ob is omitted)
+ * is a CD-driver efun; this driver's `(: expr :)` closure literal can
+ * only reference a statically-known function NAME token, never an
+ * arbitrary runtime (object, string) pair -- so there's no way to build
+ * the requested closure directly. call_other(ob, func) is this driver's
+ * own primitive for dynamically-named dispatch (the same mechanism
+ * `->funcname()` compiles down to), so route through a small bound
+ * dispatcher closure instead. */
+private mixed
+__mkfunction_dispatch(object ob, string func)
+{
+    return call_other(ob, func);
+}
+
+varargs mixed
+mkfunction(string func, mixed ob)
+{
+    object target = objectp(ob) ? ob : previous_object();
+
+    return (: __mkfunction_dispatch, target, func :);
+}
+
+/* FluffOS PORT NOTE: process_value()/process_string() (CD-driver VBFC
+ * "value by function call" support: pattern
+ * "@@function[:filename][|arg1|arg2|...]@@", replaced by calling
+ * filename->function(arg1, ...), defaulting to previous_object() when no
+ * filename is given and to master's get_vbfc_object() when the
+ * `security` flag is set) have no FluffOS equivalent. This mudlib's
+ * whole "met/unmet description" and "VBFC-settable long description"
+ * conventions rely on these, so they're reimplemented here rather than
+ * left as gaps. Ported verbatim from the sibling `genesis` port of this
+ * same engine family. */
+varargs mixed
+process_value(string calldesc, int security)
+{
+    string func, file;
+    string *parts, *args;
+    object ob;
+
+    if (!stringp(calldesc))
+        return 0;
+
+    parts = explode(calldesc, "|");
+    func = parts[0];
+    args = parts[1..];
+
+    if (sscanf(func, "%s:%s", func, file) != 2)
+        file = 0;
+
+    if (file)
+        ob = find_object(file);
+    else
+        ob = security ? SECURITY->get_vbfc_object() : previous_object();
+
+    if (!objectp(ob))
+        return 0;
+
+    return call_other(ob, func, args...);
+}
+
+varargs string
+process_string(string str, int security)
+{
+    string result;
+    int i, j, n, found;
+    mixed val;
+
+    if (!stringp(str))
+        return str;
+
+    result = "";
+    n = strlen(str);
+    i = 0;
+    while (i < n)
+    {
+        if (str[i] == '@' && i + 1 < n && str[i+1] == '@')
+        {
+            j = i + 2;
+            found = 0;
+            while (j + 1 < n)
+            {
+                if (str[j] == '@' && str[j+1] == '@')
+                {
+                    found = 1;
+                    break;
+                }
+                j++;
+            }
+            if (!found)
+            {
+                result += str[i..];
+                break;
+            }
+            if (j == i + 2)
+            {
+                /* "@@@@" -- literal escape for a single @. */
+                result += "@";
+                i = j + 2;
+                continue;
+            }
+            val = process_value(str[(i+2)..(j-1)], security);
+            if (stringp(val))
+                result += val;
+            else
+                result += str[i..(j+1)];
+            i = j + 2;
+        }
+        else
+        {
+            result += str[i..i];
+            i++;
+        }
+    }
+    return result;
+}
+
+/* FluffOS PORT NOTE (documented content-quality gap, not a driver-compat
+ * shim like the rest of this file): oblicz_przym() ("generate an
+ * adjective inflected for a given [Polish grammatical] case, gender,
+ * number") was a NATIVE, C-level efun on this archive's own original CD
+ * gamedriver fork -- per its own doc/man/efun/oblicz_przym, "very widely
+ * used in the mudlib" (~85 call sites: coins, armour, food, weapons,
+ * herbs, and more). Its actual Polish-declension logic lived entirely in
+ * the (lost) driver C source, never in any shipped .c/.lpc file, so
+ * unlike every other shim in this file it can't be ported from a known
+ * algorithm -- full Polish adjective declension (7 cases x 3 genders x 2
+ * numbers, with real morphological rules and exceptions) would be
+ * inventing substantial new linguistic content this project has no
+ * source for, not restoring a driver-compat gap. Rather than leave every
+ * call site a hard crash, this returns the correct NOMINATIVE base form
+ * (singular "lp" or plural "lmn", chosen by "liczba") and ignores case
+ * ("przyp") / gender ("rodzaj") agreement -- grammatically imperfect
+ * Polish (adjectives won't always agree with the noun they describe) but
+ * functional and non-crashing. See NOTES.md. */
+varargs string
+oblicz_przym(string lp, string lmn, int przyp, int rodzaj, int liczba)
+{
+    return liczba ? lmn : lp;
+}
+
+/* FluffOS PORT NOTE: mkmapping() (build a mapping by pairing up two
+ * arrays index-by-index, or, when one side is an int instead of an
+ * array, use an incrementing counter for that side) is a CD-driver efun
+ * with no FluffOS equivalent. Ported verbatim from the sibling `genesis`
+ * port of this same engine family. */
+mapping
+mkmapping(mixed index, mixed value)
+{
+    mapping result;
+    int i, n;
+
+    result = ([]);
+
+    if (pointerp(index) && pointerp(value))
+    {
+        n = sizeof(index) < sizeof(value) ? sizeof(index) : sizeof(value);
+        for (i = 0; i < n; i++)
+            result[index[i]] = value[i];
+        return result;
+    }
+
+    if (pointerp(index))
+    {
+        n = sizeof(index);
+        for (i = 0; i < n; i++)
+            result[index[i]] = i;
+        return result;
+    }
+
+    if (pointerp(value))
+    {
+        n = sizeof(value);
+        for (i = 0; i < n; i++)
+            result[i] = value[i];
+        return result;
+    }
+
+    return result;
+}
+
+/* FluffOS PORT NOTE: call_otherv(ob, func, argarray) is a CD-driver
+ * efun with no FluffOS equivalent; this driver's array-spread call
+ * syntax does the same job directly. */
+mixed
+call_otherv(mixed ob, string func, mixed *args)
+{
+    return call_other(ob, func, args...);
+}
+
+/* FluffOS PORT NOTE: tail() (write the last ~1080 bytes of a file to
+ * this_player(), starting on a new line) is a CD-driver efun with no
+ * FluffOS equivalent. Ported verbatim from the sibling `genesis` port. */
+int
+tail(string filename)
+{
+    string data;
+    int len;
+
+    if (file_size(filename) < 0)
+        return 0;
+
+    data = read_file(filename);
+    if (!data)
+        return 0;
+
+    len = strlen(data);
+    if (len > 1080)
+        data = data[(len - 1080)..];
+
+    if (strlen(data) && data[0..0] != "\n")
+        write("\n");
+    write(data);
+    return 1;
+}
+
+/* FluffOS PORT NOTE: object_clones(master_ob) (list every currently-
+ * loaded CLONE of a given master/blueprint object) is a CD-driver efun;
+ * FluffOS has no generic "enumerate every loaded object" introspection
+ * primitive at all (not even for a single blueprint's clones), and there
+ * is no way to retrofit one without hooking every clone_object() call
+ * site mudlib-wide. The one caller in this codebase (cmd/live/info.lpc's
+ * "wiesci" command, a non-critical player info command) uses this only
+ * to locate an already-placed board clone by searching its inventory-
+ * environment; an empty result degrades that one lookup gracefully
+ * (falls through to its own "no such board found" path) rather than
+ * crashing. */
+object *
+object_clones(object master_ob)
+{
+    return ({});
+}
+
+/* FluffOS PORT NOTE: val2str() (a human-readable string dump of an
+ * arbitrary LPC value, for logging) is a CD-driver efun with no FluffOS
+ * equivalent; sprintf("%O", ...) is this driver's own value-dump
+ * verb. */
+string
+val2str(mixed val)
+{
+    return sprintf("%O", val);
+}
+
+/* FluffOS PORT NOTE: query_ip_ident() (the RFC 1413 ident-protocol
+ * username reported by the connecting client's own machine) has no
+ * FluffOS equivalent -- this driver's socket layer never performs an
+ * ident lookup at all, so there is no username to report. Always
+ * returning "" is the honest answer (matches how the CD driver itself
+ * behaves whenever no ident response was received). */
+string
+query_ip_ident(object ob)
+{
+    return "";
+}
+
+/*
+ * Function name: slice_array
+ * Description:   Return a portion of a given array
+ * Arguments:     mixed a - an array
+ *                int f   - The index at which to start.  If less
+ *                          than zero, it is set to 0.
+ *                int t   - the index at which to end.  If greater
+ *                          or equal to the size of 'a', it is
+ *                          set to sizeof(a) - 1.
+ * Returns:       mixed   - The portion of array 'a', starting at
+ *                          'f' and ending at 't'.
+ */
+/* FluffOS PORT NOTE: wildmatch() (shell-glob-style pattern matching:
+ * '*' any run of chars, '?' any one char, '[xyz]'/'[^xyz]' character
+ * classes, '\c' literal c) is a CD-driver efun; FluffOS has no glob
+ * matcher, only regexp(). Translate the glob pattern to an anchored ERE
+ * and delegate to regexp(). Ported verbatim from the sibling `genesis`
+ * port of this same engine family (secure/simul_efun.lpc). */
+int
+wildmatch(string pattern, mixed subject)
+{
+    string re, c;
+    int i, j, n;
+
+    if (!stringp(subject))
+        return 0;
+
+    re = "^";
+    n = strlen(pattern);
+    for (i = 0; i < n; i++)
+    {
+        c = pattern[i..i];
+        if (c == "\\" && i + 1 < n)
+        {
+            re += "\\" + pattern[i+1..i+1];
+            i++;
+        }
+        else if (c == "*")
+            re += ".*";
+        else if (c == "?")
+            re += ".";
+        else if (c == "[")
+        {
+            re += "[";
+            j = i + 1;
+            if (j < n && pattern[j..j] == "^")
+            {
+                re += "^";
+                j++;
+            }
+            while (j < n && pattern[j..j] != "]")
+            {
+                re += pattern[j..j];
+                j++;
+            }
+            if (j < n)
+                re += "]";
+            i = j;
+        }
+        else if (member_array(c, ({ ".", "+", "(", ")", "{", "}", "|", "^", "$" })) != -1)
+            re += "\\" + c;
+        else
+            re += c;
+    }
+    re += "$";
+
+    return regexp(subject, re);
+}
+
+/* FluffOS PORT NOTE: helper for sys/filter_funs.h's FILTER_IS_SEEN macro
+ * -- was `filter((x), (l)->check_seen)`, a bare "function value from
+ * another object" reference this driver doesn't support. `(: expr :)`
+ * closures also can't reliably capture a macro PARAMETER (as opposed to
+ * a real local variable) at every expansion site, so this needs a real
+ * bound-argument helper rather than an inline closure. */
+int
+check_seen_bound(object l, object ob)
+{
+    return l->check_seen(ob);
+}
+
+/* FluffOS PORT NOTE: helpers for sys/filter_funs.h's FILTER_CAN_SEE/
+ * FILTER_GENDER/FILTER_RACE macros -- these were first ported as
+ * inline `(: (g) == ($1)->query_gender() :)`-style closures (matching
+ * the sibling `genesis` port of this same engine family), but that
+ * broke the moment a real call site passed a genuine LOCAL variable for
+ * the macro's second argument (confirmed live: cmd/live/social.lpc's
+ * FILTER_CAN_SEE(odbiorcy, przedstawiany), "Illegal to use local
+ * variable in functional") -- macro parameters that resolve to a real
+ * enclosing-function local need the same bound-argument-helper
+ * treatment as check_seen_bound() above, not an inline closure. */
+int
+check_seen_bound2(object l, object elem)
+{
+    return elem->check_seen(l);
+}
+
+int
+query_gender_eq_bound(mixed g, object ob)
+{
+    return g == ob->query_gender();
+}
+
+int
+query_race_eq_bound(mixed r, object ob)
+{
+    return r == ob->query_race_name();
+}
+
+/* FluffOS PORT NOTE: file_time() (last-modified time of a file) is
+ * another CD-driver efun with no FluffOS equivalent -- but get_dir(path,
+ * -1) returns ({ ({ name, size, mtime }) }) for a single-file (non-
+ * wildcard, non-directory) path, giving us mtime at info[0][2]. */
+int
+file_time(string path)
+{
+    mixed *info;
+
+    info = get_dir(path, -1);
+    if (!pointerp(info) || !sizeof(info) || !pointerp(info[0]) ||
+        sizeof(info[0]) < 3)
+        return 0;
+    return info[0][2];
+}
+
+/* FluffOS PORT NOTE: debug() (a broad driver-introspection/admin
+ * multiplexer efun: debug("mud_port"), debug("version"),
+ * debug("destroy", ob), debug("malloc"), debug("shutdown"), etc.) is
+ * CD-driver-only; FluffOS has no equivalent at all. Subcommands with a
+ * real FluffOS efun equivalent are implemented for real (mud_port,
+ * version, destroy, shutdown); the rest return type-safe stub values
+ * (0 / "" / ({}) / ([])) rather than erroring, so callers don't crash --
+ * they just see empty/zero data for introspection features this driver
+ * has no data source for. See NOTES.md.
+ */
+varargs mixed
+debug(string icmd, mixed a1, mixed a2, mixed a3)
+{
+    switch (icmd)
+    {
+    case "mud_port":
+        return __PORT__;
+
+    case "udp_port":
+        return 0;
+
+    case "version":
+        return __VERSION__;
+
+    case "destroy":
+        if (objectp(a1))
+            destruct(a1);
+        return 0;
+
+    case "shutdown":
+        shutdown();
+        return 0;
+
+    case "set_swap":
+    case "send_udp":
+    case "mudstatus":
+    case "ob_flags":
+        return 0;
+
+    case "load_average":
+        return "0.00, 0.00, 0.00";
+
+    case "malloc":
+        return "";
+
+    case "trace":
+    case "traceprefix":
+    case "object_cpu":
+        return 0;
+
+    case "profile_timebase":
+        return 0.0;
+
+    case "object_info":
+        return "";
+
+    case "functionlist":
+    case "inherit_list":
+    case "getprofile":
+    case "getprofile_avg":
+    case "top_functions":
+        return ({});
+
+    case "get_variables":
+        return ([]);
+
+    default:
+        return 0;
+    }
+}
+
+mixed
+slice_array(mixed a, int f, int t)
+{
+    if (f < 0)
+	f = 0;
+    if (t >= sizeof(a))
+	t = sizeof(a) - 1;
+    if (f > t)
+	return ({});
+    return (pointerp(a)) ? a[f..t] : 0;
+}
+
+
+nosave string 
+slice_cmds(mixed *ar)
+{
+    return ar[0];
+}
+
+/*
+ * Function name: get_localcmd
+ * Description:   Returns an array of commands (excluding soul commands)
+ *                available to an object.
+ * Arguments:     mixed ob - the object for which you want a command list
+ * Returns:       string * - an array of command names
+ */
+varargs string *
+get_localcmd(mixed ob : (: previous_object() :))
+{
+    if (!objectp(ob))
+        return ({});
+
+    /* FluffOS PORT NOTE: was "commands(ob)" -- see the PORT NOTE on
+     * std/object.lpc's query_local_cmd_list() for why the real commands()
+     * efun can't be pointed at an arbitrary object from inside a
+     * simul_efun. */
+    return map(ob->query_local_cmd_list(), slice_cmds);
+}
+
+void 
+localcmd()
+{
+    this_player()->catch_tell(implode(get_localcmd(previous_object()), " ") + "\n");
+}
+
+#ifdef CFUN
+varargs int
+cat_file(string file, int start, int len) = "cat_file";
+
+varargs int
+cat(string file, int start, int len)
+{
+    string euid, slask;
+    int ret;
+
+    sscanf(query_auth(previous_object()), "%s:%s", slask, euid);
+
+    set_auth(this_object(), "#:" + euid);
+    ret = cat_file(file, start, len);
+    set_auth(this_object(), "#:root");
+    return ret;
+}
+
+#else
+/* FluffOS PORT NOTE: was "cat(string file ...)" -- this driver has no
+ * implicit "argv" auto-array the way old MudOS did; the remainder of a
+ * varargs call is only captured if the LAST declared parameter before
+ * "..." is itself an array, so it needs to be named explicitly here. */
+varargs int
+cat(string file, mixed *argv ...)
+{
+    string *lines;
+    int i;
+    string euid, slask;
+
+    sscanf(query_auth(previous_object()), "%s:%s", slask, euid);
+
+    set_auth(this_object(), "#:" + euid);
+
+    switch(sizeof(argv))
+    {
+    case 0:
+        slask ="" + read_file(file);
+        break;
+    case 1:
+        slask = "" + read_file(file, argv[0]);
+        break;
+    case 2:
+        slask = "" + read_file(file, argv[0], argv[1]);
+        break;
+    default:
+        set_auth(this_object(), "#:" + "root");
+        throw("Too many arguments to cat.");
+        break;
+    }
+    set_auth(this_object(), "#:" + "root");
+    lines = explode(slask, "\n");
+    this_player()->catch_tell(slask);
+    // Kludge warning!!!
+    return (sizeof(lines) == 1 && strlen(lines[0]) <= 3) ? 0 : sizeof(lines);
+}
+#endif CFUN
+
+/*
+ * Function name: exclude_array
+ * Description:   Deletes a section of an array
+ * Arguments:     arr: The array
+ *		  from: Index from which to delete elements
+ *		  to: Last index to be deleted.
+ * Returns:
+ */
+public mixed
+exclude_array(mixed arr, int from, int to)
+{
+    mixed a,b;
+    if (!pointerp(arr))
+	return 0;
+    
+    if (from > sizeof(arr))
+	from = sizeof(arr);
+    a = (from <= 0 ? ({}) : arr[0 .. from - 1]);
+
+    if (to < 0)
+	to = 0;
+    b = (to >= sizeof(arr) - 1 ? ({}) : arr[to + 1 .. sizeof(arr) - 1]);
+
+    return a + b;
+}
+
+/*
+ * Function name: inventory
+ * Description:   Zwraca wskaznik do obiektu o podanym numerze w ekwipunku
+ *		  podanego obiektu. Funkcja korzysta z efunkcji 
+ *		  all_inventory().
+ * Argumenty: mixed ob  - obiekt o ktorego zawartosc chodzi. Domyslnie 
+ * 		   	  previous_object()
+ *	      mixed num - numer obiektu do pobrania. Powinien to byc integer,
+ *			  wskazujacy na index obiektu w tablicy, jaka zwraca
+ *			  all_inventory(ob).
+ * Funkcja zwraca:
+ *	      object    - Element o numerze num z ekwipunku obiektu.
+ */
+varargs nomask object
+inventory(mixed ob, mixed num)
+{
+    object         *inv;
+
+    if (!objectp(ob))
+    {
+	if (intp(ob))
+	    num = ob;
+	ob = previous_object();
+    }
+
+    inv = all_inventory(ob);
+
+    if ((num <= sizeof(inv)) && (num >= 0))
+	return inv[num];
+    else
+	return 0;
+}
+
+/*
+ * Function name: all_environment
+ * Description:   Gives an array of all containers which an object is in, i.e.
+ *		  match in matchbox in bigbox in chest in room, would for the
+ *		  match give: matchbox, bigbox, chest, room
+ * Arguments:     ob: The object
+ * Returns:       The array of containers.
+ */
+nomask object *
+all_environment(object ob)
+{
+    object         *r;
+
+    if (!ob || !environment(ob))
+	return 0;
+    if (!environment(environment(ob)))
+	return ({ environment(ob)  });
+
+    r = ({ ob = environment(ob) });
+
+    while (environment(ob))
+	r = r + ({ ob = environment(ob)  });
+    return r;
+}
+
+/*
+ * query_xverb should return the part of the verb that had to be filled in
+ * when an add_action("xxx", "yyyyy", 1) was executed.
+ * Until we get a GD implementation it will simply return query_verb().
+ */
+nomask          string
+query_xverb()
+{
+    return query_verb();
+}
+
+#ifdef CFUN
+nosave nomask mixed
+sort(mixed arr, function lfunc) = "sort";
+
+varargs nomask mixed
+sort_array(mixed arr, mixed lfunc, object obj)
+{
+    if (stringp(lfunc)) {
+	if (!obj)
+	    obj = previous_object();
+	lfunc = mkfunction(lfunc, obj);
+    }
+    return sort(arr, lfunc);
+}
+#else
+/*
+ * Macros and forward declarations for the sort function(s)
+ */
+
+/*
+ * MTHRESH is the smallest partition for which we compare for a median
+ * value instead of using the middle value.
+ */
+#define	MTHRESH	6
+
+/*
+ * THRESH is the minimum number of entries in a partition for continued
+ * partitioning.
+ */
+#define	THRESH	4
+
+/*
+ * Make comparison of elements a bit easier to read
+ */
+#define	compar(a, b)	call_other(obj, lfunc, arr[a], arr[b])
+
+/*
+ * Swap two array elements
+ */
+#define	SWAP(a, b) { \
+	elem = arr[a]; \
+	arr[a] = arr[b]; \
+	arr[b] = elem; \
+    }
+
+/*
+ * Knuth, Vol. 3, page 116, Algorithm Q, step b, argues that a single pass
+ * of straight insertion sort after partitioning is complete is better than
+ * sorting each small partition as it is created.  This isn't correct in this
+ * implementation because comparisons require at least one (and often two)
+ * function calls and are likely to be the dominating expense of the sort.
+ * Doing a final insertion sort does more comparisons than are necessary
+ * because it compares the "edges" and medians of the partitions which are
+ * known to be already sorted.
+ *
+ * This is also the reasoning behind selecting a small THRESH value (see
+ * Knuth, page 122, equation 26), since the quicksort algorithm does less
+ * comparisons than the insertion sort.
+ */
+#define	SORT(bot, n) { \
+	if (n > 1) \
+	    if (n == 2) \
+	    { \
+		  t1 = bot + 1; \
+		  if (compar(t1, bot) < 0) \
+		      SWAP(t1, bot); \
+	    } \
+	    else \
+		arr = insertion_sort(arr, bot, bot + n - 1, lfunc, obj); \
+    }
+
+nosave mixed
+quick_sort(mixed arr, int orig_bot, int orig_top, string lfunc, object obj);
+nosave mixed
+insertion_sort(mixed arr, int orig_bot, int orig_top, string lfunc, object obj);
+
+public varargs void log_file(string file, string text, int csize);
+
+/*
+ * Function name:  	sort_array
+ * Description:		Sorts the elements of an array
+ * Arguments:		arr: The array to be sorted
+ *			lfunc: (optional) Function taking two arguments
+ *			       and returns negative value if arg1 < arg2,
+ *			       zero if arg1 == arg2 and positive if
+ *			       arg1 > arg2.
+ *			       Default: Compare arguments directly
+ *			obj: (optional) Object defining above function.
+ *			     Default: this_object()
+ *
+ */
+varargs nomask mixed
+sort_array(mixed arr, string lfunc, object obj)
+{
+
+    if (sizeof(arr) < 2)
+	return arr;
+
+    if (!lfunc)
+    {
+	lfunc = "sort_compare";
+	obj = this_object();
+    }
+    else if (!obj)
+	obj = previous_object();
+
+    if (sizeof(arr) >= THRESH)
+	return quick_sort(arr, 0, sizeof(arr) - 1, lfunc, obj);
+    else
+	return insertion_sort(arr, 0, sizeof(arr) - 1, lfunc, obj);
+}
+
+nosave mixed
+quick_sort(mixed arr, int orig_bot, int orig_top, string lfunc, object obj)
+{
+    mixed elem;
+    int   top, bot, mid, nmemb, bsv, t1, t2, n1, n2, skipit;
+
+    nmemb = orig_top - orig_bot + 1;
+    bot = orig_bot;
+
+    /*
+     * bot and nmemb must be set
+     */
+    for (;;) {
+	/*
+	 * Find middle and top elements
+	 */
+	mid = bot + (nmemb >> 1);
+	top = bot + nmemb - 1;
+
+	/*
+	 * Find the median of the first, last and middle element (see Knuth,
+	 * Vol. 3, page 123, Eq. 28).  This test order gets the equalities
+	 * right.
+	 */
+	if (nmemb >= MTHRESH)
+	{
+	    n1 = compar(bot, mid);
+	    n2 = compar(mid, top);
+	    if (n1 < 0 && n2 > 0)
+		t1 = compar(bot, top) < 0 ? top : bot;
+	    else if (n1 > 0 && n2 < 0)
+		t1 = compar(bot, top) > 0 ? top : bot;
+	    else
+		t1 = mid;
+	    if (t1 != mid)
+	    {
+		SWAP(t1, mid);
+		mid--;
+	    }
+	}
+
+	/*
+	 * Standard quicksort, Knuth, Vol. 3, page 116, Algorithm Q.
+	 */
+
+#define	didswap	n1
+#define	newbot	t1
+#define	replace	t2
+
+	didswap = 0;
+	for (bsv = bot ;;)
+	{
+	    for (; bot < mid && compar(bot, mid) <= 0 ; bot++)
+		;
+	    skipit = 0;
+	    while (top > mid)
+	    {
+		if (compar(mid, top) <= 0)
+		{
+		    top--;
+		    continue;
+		}
+		newbot = bot + 1;		/* value of bot after swap */
+		if (bot == mid)			/* top <-> mid, mid == top */
+		    replace = mid = top;
+		else				/* bot <-> top */
+		{
+		    replace = top;
+		    top--;
+		}
+		skipit = 1;
+		break;
+	    }
+	    if (!skipit)
+	    {
+		if (bot == mid)
+		    break;
+
+		/*
+		 * bot <-> mid, mid == bot
+		 */
+		replace = mid;
+		newbot = mid = bot;		/* value of bot after swap */
+		top--;
+	    }
+	    SWAP(bot, replace);
+	    bot = newbot;
+	    didswap = 1;
+	}
+
+	/*
+	 * Quicksort behaves badly in the presence of data which is already
+	 * sorted (see Knuth, Vol. 3, page 119) going from O N lg N to O N^2.
+	 * To avoid this worst case behavior, if a re-partitioning occurs
+	 * without swapping any elements, it is not further partitioned and
+	 * is insert sorted.  This wins big with almost sorted data sets and
+	 * only loses if the data set is very strangely partitioned.  A fix
+	 * for those data sets would be to return prematurely if the insertion
+	 * sort routine is forced to make an excessive number of swaps, and
+	 * continue the partitioning.
+	 */
+	if (!didswap)
+	    return insertion_sort(arr, bsv, bsv + nmemb - 1, lfunc, obj);
+
+#undef	didswap
+#undef	newbot
+#undef	replace
+
+#define	nlower	n1
+#define	nupper	n2
+
+	bot = bsv;
+	nlower = mid - bot;			/* size of lower partition */
+	mid++;
+	nupper = nmemb - nlower - 1;		/* size of upper partition */
+
+	if (nlower > nupper)
+	{
+	    if (nupper >= THRESH)
+		arr = quick_sort(arr, mid, mid + nupper - 1, lfunc, obj);
+	    else
+	    {
+		SORT(mid, nupper);
+		if (nlower < THRESH)
+		{
+		    SORT(bot, nlower);
+		    return arr;
+		}
+	    }
+	    nmemb = nlower;
+	}
+	else
+	{
+	    if (nlower >= THRESH)
+		arr = quick_sort(arr, bot, bot + nlower - 1, lfunc, obj);
+	    else
+	    {
+		SORT(bot, nlower);
+		if (nupper < THRESH)
+		{
+		    SORT(mid, nupper);
+		    return arr;
+		}
+	    }
+	    bot = mid;
+	    nmemb = nupper;
+
+#undef	nupper
+#undef	nlower
+	}
+    }
+}
+
+nosave mixed
+insertion_sort(mixed arr, int bot, int orig_top, string lfunc, object obj)
+{
+    mixed elem;
+    int   top, t1, t2, nmemb;
+
+    nmemb = orig_top - bot + 1;
+
+    /*
+     * A simple insertion sort (see Knuth, Vol. 3, page 81, Algorithm
+     * S).  Insertion sort has the same worst case as most simple sorts
+     * (O N^2).  It gets used here because it is (O N) in the case of
+     * sorted data.
+     */
+    top = bot + nmemb;
+    for (t1 = bot + 1 ; t1 < top ;)
+    {
+	for (t2 = t1 ; --t2 >= bot && compar(t1, t2) < 0 ;)
+	    ;
+	if (t1 != ++t2)
+	{
+	    SWAP(t1, t2);
+	}
+	else
+	    t1++;
+    }
+    return arr;
+}
+
+int
+sort_compare(mixed elem1, mixed elem2)
+{
+    if (intp(elem1) && intp(elem2))
+	return elem1 - elem2;
+    if (stringp(elem1) && intp(elem2))
+	elem2 = "" + elem2;
+    if (stringp(elem2) && intp(elem1))
+	elem1 = "" + elem1;
+    if (elem1 < elem2)
+	return -1;
+    else if (elem1 > elem2)
+	return 1;
+    return 0;
+}
+#endif CFUN
+
+/*
+ *
+ * These are the LPC backwardscompatible simulated efuns.
+ *
+ */
+
+/*
+ * Function name: getuid
+ * Description:   Returns the uid of an object.
+ * Arguments:     object ob - the object to get the uid for.  If not
+ *                            specified, previous_object() is used.
+ * Returns:       string - the object's uid.
+ */
+varargs string
+getuid(object ob : (: previous_object() :))
+{
+    string uid = explode(query_auth(ob),":")[0];
+    return (uid == "0" ? 0 : uid);
+}
+
+/*
+ * Function name: geteuid
+ * Description:   Returns the euid of an object
+ * Arguments:     object ob - the object to get the euid for.  If not
+ *                            specified, previous_object() is used.
+ * Returns:       string - the object's euid.
+ */
+varargs mixed
+geteuid(object ob : (: previous_object() :))
+{
+    string euid = explode(query_auth(ob),":")[1];
+    return (euid == "0" ? 0 : euid);
+}
+
+/*
+ * Function name: export_uid
+ * Description:   Sets the euid of one object to the uid of previous_object().
+ *                This can only be done if the euid of the object is 0.
+ * Arguments:     object ob - the object to set the euid for
+ */
+void
+export_uid(object ob)
+{
+    string euid, euid2;
+    euid = explode(query_auth(ob),":")[1];
+    euid2 = explode(query_auth(previous_object()), ":")[1];
+    if (euid2 == "0")
+	throw("Illegal to export euid 0");
+    if (euid == "0")
+        /* FluffOS PORT NOTE: was "euid2 + \":#\"" -- "#" was meant as a
+         * "leave the other field alone" placeholder, but getuid()/geteuid()
+         * never resolve "#" back to anything (only "0" means unset), so it
+         * permanently corrupted ob's own euid to the literal string "#" on
+         * every export_uid() call. Preserve ob's existing (already known,
+         * per the guard above, to be "0"/unset) euid instead. */
+        set_auth(ob, euid2 + ":" + euid);
+}
+
+/*
+ * Function name: seteuid
+ * Description:   set the euid of previous_object() to a given userid
+ * Arguments:     string str - the userid
+ * Returns:       int 1 / 0 - euid could be set / euid could not be set
+ */
+int
+seteuid(string str)
+{
+    string uid = explode(query_auth(previous_object()),":")[0];
+    string euid = explode(query_auth(previous_object()),":")[1];
+
+    if (str && str != euid)
+	if (!SECURITY->valid_seteuid(previous_object(), str))
+	    return 0;
+    /* FluffOS PORT NOTE: was "set_auth(previous_object(), \"#:\" + ...)",
+     * permanently corrupting the uid field to the unresolvable placeholder
+     * "#" on every call (getuid()/geteuid() only special-case "0" as
+     * unset). Preserve the real uid field instead. */
+    set_auth(previous_object(), uid + ":" + (str ? str : "0"));
+    return 1;
+}
+
+/*
+ * Function name: setuid
+ * Description:   set the uid of previous_object() to its creator
+ */
+void
+setuid()
+{
+    /* FluffOS PORT NOTE: was "... + \":#\"", permanently corrupting the
+     * euid field to the unresolvable placeholder "#" on every call
+     * (getuid()/geteuid() only ever special-case "0" as unset). Reset
+     * euid to "0" (genuinely unset) instead, matching the CD driver: the
+     * standard "setuid(); seteuid(getuid());" idiom used throughout this
+     * codebase is what promotes it to a real euid right afterward. */
+    set_auth(previous_object(),
+             SECURITY->creator_object(previous_object()) + ":0");
+}
+
+/*
+ * Function name: interactive
+ * Description  : Find out whether an object is an interactive player or not.
+ * Arguments    : object ob - the object to check, defaults to this_object()
+ *                            when omitted.
+ * Returns      : int - 1/0 - interactive or not.
+ */
+varargs int 
+interactive(object ob : (: previous_object() :))
+{
+    return (objectp(ob) && stringp(query_ip_number(ob)));
+}
+
+/*
+ * Function name: atoi
+ * Description  : This converts a string into a number.
+ * Arguments    : string num - the string to convert.
+ * Returns      : int - the corresponding number, or 0.
+ */
+int
+atoi(string num)
+{
+    int inum;
+
+    if (sscanf(num, "%d", inum) == 1)
+	return inum;
+    else
+	return 0;
+}
+
+/*
+ * Function name: ls
+ * Description:   Lists files in a directory
+ * Arguments:     path: The filepath
+ "                mode: Mode of ls search.
+ */
+void 
+ls(string path, string mode)
+{
+    string	*files, *slices, a, b, *items, *foobar, tme;
+    int		i, j, ml, size;
+
+    this_object()->seteuid(geteuid(previous_object()));
+
+    if (!strlen(path))
+    {
+	path = "/*";
+    }
+    else if (sscanf(path + "dummy", "%s*%s", a, b) != 2)
+    {
+	if (strlen(path))
+	{ 
+	    if (path[strlen(path) - 1] == '/')
+		path += "*";
+	    else
+		path += "/*";
+	}
+	else
+	    path = "/*";
+    }
+
+    if (!sizeof(files = get_dir(path)))
+    {
+	this_player()->catch_tell("No files in: " + path + "\n");
+	return;
+    }
+
+    slices = explode(path + "/", "/");
+    path = implode(slices[0..sizeof(slices) - 2], "/");
+
+    if (files[0] == ".")
+	if (files[1] == "..")
+	    files = files[2..sizeof(files) - 1];
+	else
+	    files = files[1..sizeof(files) - 1];
+    else
+	if (files[0] == "..")
+	    files = files[1..sizeof(files) - 1];
+	
+    items = files + ({});
+
+    /* 
+     * First do information retreival. 
+     */
+    for (j = 0 ; j < strlen(mode) ; j++)
+    {
+	switch (mode[j])
+	{
+	case 'l':
+	    items = ({});
+	    for (i = 0 ; i < sizeof(files) ; i++)
+	    {
+		if ((size = file_size(path + "/" + files[i])) == -2)
+		{
+		    items += ({ "d " });
+		    size = 512;
+		}
+		else if (find_object(path + "/" + files[i]))
+		    items += ({ "* " });
+		else
+		    items += ({ "- " });
+		
+		tme = efun::ctime(file_time(path + "/" + files[i]));
+		tme = tme[4..9] + tme[19..23] + tme[10..15];
+
+		items[i] += sprintf("%-20s%10d  %s", files[i], size, tme);
+	    }
+	    ml = 1;
+	    break;
+
+	case 't':
+	case 'r':
+	    /* Do sorting/rearranging later */
+	    break;
+	    
+	case 'F':
+	    for (i = 0; i < sizeof(items); i++)
+	    {
+		if (file_size(path + "/" + files[i]) == -2)
+		    items[i] += "/";
+		else if (find_object(path + "/" + files[i]))
+		    items[i] += "*";
+	    }
+	    
+	    ml = 0;
+	    break;
+
+	default:
+	    this_player()->catch_tell("Unknown flag: \"" + mode[j..j+1] + "\".\n");
+	}
+    }
+
+    /* 
+     * Now do sorting.
+     */
+    for (j = 0 ; j < strlen(mode) ; j++)
+    {
+	switch (mode[j])
+	{
+	case 't':
+	    slices = ({});
+	    for (i = 0 ; i < sizeof(files) ; i++)
+		slices += ({ "" + file_time(path + "/" + files[i]) + ":" + i });
+	    sort_array(slices, "ls_sort_t", this_object());
+	    foobar = items + ({});
+	    items = ({ });
+	    for (i = 0 ; i < sizeof(files) ; i++)
+	    {
+		items += ({ foobar[atoi(explode(slices[i], ":")[1])] });
+	    }
+	    break;
+
+	default:
+	    break;
+	}
+    }
+
+
+    /*
+     * Check for reverse ordering.
+     */
+    for (j = 0 ; j < strlen(mode) ; j++)
+    {
+	switch (mode[j])
+	{
+	case 'r':
+	    slices = items;
+	    items = ({});
+	    for (i = sizeof(slices) - 1 ; i >= 0 ; i--)
+		items += ({ slices[i] });
+	    break;
+
+	default:
+	    break;
+	}
+    }
+
+    if (ml)
+    {
+	for (i = 0 ; i < sizeof(items) ; i++)
+	    this_player()->catch_tell(items[i] + "\n");
+    }
+    else
+	this_player()->catch_tell(sprintf("%-*#s\n", 76, implode(items, "\n")));
+	
+}
+
+int
+ls_sort_t(string item1, string item2)
+{
+    return atoi(explode(item2, ":")[0]) - atoi(explode(item1, ":")[0]);
+}
+
+//#ifdef CFUN
+#ifdef 0		/* Zamienic pozniej z poprzednim wierszem... */
+public varargs void
+tell_room(mixed room, mixed str, mixed oblist : (: 0 :),
+	  object from_player : (: this_player() :)) = "tell_room";
+#else
+/*
+ * Nazwa funkcji : tell_room
+ * Opis          : Wyswietla wiadomosc istotom w danej lokacji.
+ * Argumenty     : room: Lokacja.
+ *                 str: Tekst do wyswietlenia, przekazywany adresatom za
+ *                      posrednictwem funkcji catch_msg(). Moze zawierac VBFC.
+ *                 oblist: Jej elementom tekst nie bedzie przekazany.
+ */
+varargs public void
+tell_room(mixed room, mixed str, mixed oblist : (: ({}) :))
+{
+    if (stringp(room))
+        room = find_object(room);
+
+    if (room)
+    {
+        if (objectp(oblist))
+        {
+            SLVTHRC_LOG("oblist = " + file_name(oblist));
+            oblist = ({oblist});
+        }
+
+        FILTER_LIVE(all_inventory(room) + ({room}) - oblist)->catch_msg(str);
+    }
+}
+//#endif CFUN
+#endif 0		/* Zamienic pozniej z poprzednim wierszem... */
+
+/*
+ * Nazwa funkcji : tell_roombb
+ * Opis          : Wyswietla wiadomosc istotom, ktore widza w danej lokacji,
+ *                 a takze, opcjonalnie, widza podana osobe.
+ * Argumenty     : room: Lokacja.
+ *                 str: Tekst do wyswietlenia, przekazywany adresatom za
+ *                      posrednictwem funkcji catch_msg(). Moze zawierac VBFC.
+ *                 oblist: Jej elementom tekst nie bedzie przekazany.
+ *                 seen: Opcjonalnie, obiekt ktory musza widziec widzowie.
+ */
+varargs public void
+tell_roombb(mixed room, string str, mixed oblist : (: 0 :), object seen : (: 0 :))
+{
+    if (stringp(room))
+        room = find_object(room);
+        
+    if (objectp(oblist))
+        oblist = ({ oblist });
+    else if (!pointerp(oblist))
+        oblist = ({ });
+
+    if (room)
+    {
+        object *plist = all_inventory(room) + ({room});
+
+        /* can_see_in_room jest prawdziwe tylko dla livingow */
+        if (seen)
+            FILTER_IS_SEEN(seen, FILTER_CAN_SEE_IN_ROOM(plist
+              - (object *)oblist))->catch_msg(str);
+        else
+            FILTER_CAN_SEE_IN_ROOM(plist - (object *)oblist)->catch_msg(str);
+     }
+}
+
+//#ifndef CFUN
+#ifndef 0		/* Zamienic pozniej z poprzednim wierszem... */
+/*
+ * Nazwa funkcji : say
+ * Opis          : Wyswietla wiadomosc istotom w tej samej lokacji co
+ *                 this_player().
+ * Argumenty     : str: Tekst do wyswietlenia, przekazywany adresatom za
+ *                      posrednictwem funkcji catch_msg(). Moze zawierac VBFC.
+ *                 oblist: Jej elementom tekst nie bedzie przekazany -
+ *                         standardowo this_playerowi().
+ */
+varargs public void
+say(mixed str, mixed oblist : (: ({this_player()}) :))
+{
+    object tp = this_player();
+    object env = environment(tp);
+
+    if (env)
+        tell_room(env, str, oblist);
+
+    tell_room(tp, str, oblist);
+}
+#else
+public varargs void
+say(mixed str, mixed oblist) = "say";
+//#endif CFUN
+#endif 0		/* Zamienic pozniej z poprzednim wierszem... */
+
+/*
+ * Nazwa funkcji : saybb
+ * Opis          : Wyswietla wiadomosc istotom, ktore widza this_playera().
+ * Argumenty     : str: Tekst do wyswietlenia, przekazywany adresatom za
+ *                      posrednictwem funkcji catch_msg(). Moze zawierac VBFC.
+ *                 oblist: Jej elementom tekst nie bedzie przekazany -
+ *                         standardowo this_playerowi().
+ */
+varargs public void
+saybb(mixed str, mixed oblist : (: ({this_player()}) :))
+{
+    object tp = this_player();
+    object env = environment(tp);
+
+    if (objectp(oblist))
+        oblist = ({ oblist });
+    else if (!pointerp(oblist))
+        oblist = ({ tp });
+
+    if (env)
+        tell_roombb(env, str, oblist, tp);
+        
+    tell_roombb(tp, str, oblist, tp);
+}
+
+/*
+ * Function name: log_file
+ * Description:   Logs a message in the creators ~/log/ subdir in a given
+ *		  file.
+ * 		  
+ * 		  The optional argument 'csize' controls the cycling size
+ * 		  of the log. If the argument is == 0 the default cycle
+ * 		  size is used, if the argument is == -1 the maximum cycle
+ * 		  size is used, if a positive integer is given, that cycle
+ * 		  size is used provided that it is less or equal to the
+ * 		  maximum cycle size.
+ * 		  
+ * Arguments:     file: The filename.
+ *		  text: The text to add to the file
+ * 		  csize: The cycle size, if any (optional)
+ */
+public varargs void
+log_file(string file, string text, int csize)
+{
+    mixed           path,
+                    oldeuid,
+                    cr;
+    string 	    *split, fnam;
+    int 	    il, fsize, msize, dsize;
+
+    cr = SECURITY->creator_object(previous_object());
+
+    /* Let backbone objects log things in /log */
+    if (cr == SECURITY->get_bb_uid())
+    {
+	path = "/log";
+	cr = SECURITY->get_root_uid();
+    }
+    else
+    {
+	path = SECURITY->query_wiz_path(cr) + "/log";
+    }
+    
+    /* We swap to the userid of the user trying to do log_file */
+    oldeuid = geteuid(this_object());
+    this_object()->seteuid(cr);
+
+    if (file_size(path) != -2)
+    {
+	/* We must create the path
+        */
+	split = explode(path + "/", "/");
+    
+	for (fnam = "", il = 0; il < sizeof(split); il++)
+	{
+	    fnam += "/" + split[il];
+	    if (file_size(fnam) == -1)
+		mkdir(fnam);
+	    else if (file_size(fnam) > 0)
+	    {
+		this_object()->seteuid(oldeuid);
+		return;
+	    }
+	}
+    }
+
+    file = path + "/" + file;
+
+#ifdef CYCLIC_LOG_SIZE
+
+    fsize = file_size(file);
+    msize = CYCLIC_LOG_SIZE[cr];
+    dsize = CYCLIC_LOG_SIZE[0];
+
+    if (csize > 0)
+	msize = ((csize > msize && msize > 0) 
+	    ? (msize ? msize : csize)
+	    : csize);
+
+    if (csize == 0)
+	msize = (msize ? msize : dsize);
+
+    if (csize < 0)
+	msize = (msize == 0 ? dsize : msize);
+
+    if (msize > 0 && fsize > msize)
+	rename(file, file + ".old");
+
+#endif /* CYCLIC_LOG_SIZE */
+
+    write_file(file, text);
+    this_object()->seteuid(oldeuid);
+}
+
+mapping dni_tygodnia = ([ "Thu" : "Cz", "Fri" : "Pt", "Sat" : "So", 
+    "Sun" : "N", "Mon" : "Pn", "Tue" : "Wt", "Wed" : "Sr" ]);
+mapping miesiace = ([ "Jan" : "I", "Feb" : "II", "Mar" : "III", 
+    "Apr" : "IV", "May" : "V", "Jun" : "VI", "Jul" : "VII", "Aug" : "VIII",
+    "Sep" : "IX", "Oct" : "X", "Nov" : "XI", "Dec" : "XII" ]);
+
+/*
+ * Nazwa funkcji : ctime
+ * Opis          : Zwraca dokladna date w formie opisowej, pobierajac
+ *		   ilosc sekund, jaka uplynela od 1 stycznia 1970 roku.
+ * Argumenty     : int time - wspomniana ilosc sekund.
+ *		   int zwarta_forma - jesli wartosc rozna od 0,
+ *			zwracana jest data bez spacji, wymuszanych
+ *			przez rozna czastki miesiaca. 
+ * Funkcja zwraca: Date w formie opisowej. Przyklad:
+ *		     ctime(866380339) zwraca " N,   15 VI 1997, 15:12:19",
+ *		     ctime(871000000) zwraca " N,  8 VIII 1997, 02:26:40"
+ *		     ctime(866380339, 1) zas "N, 15 VI 1997, 15:12:19"
+ */
+varargs public string
+ctime(int time, int zwarta_forma : (: 0 :))
+{
+    string dzien_tyg, miesiac, godzina, minuta, sekunda, str;
+    int dzien, rok;
+    
+    sscanf(efun::ctime(time), "%s %s %d %s:%s:%s %d",
+        dzien_tyg, miesiac, dzien, godzina, minuta, sekunda, rok);
+        
+    dzien_tyg = dni_tygodnia[dzien_tyg];
+    miesiac = miesiace[miesiac];
+    
+    str = dzien + " " + miesiac;
+    
+    if (!zwarta_forma)
+        str = sprintf("%2s, %7s %d, %s:%s:%s", dzien_tyg, 
+            str, rok, godzina, minuta, sekunda);
+    else
+        str =sprintf("%s, %s %d, %s:%s:%s", dzien_tyg, str, rok, godzina,
+            minuta, sekunda);
+    
+    return str;
+}
+
+/************************************************************************
+ *
+ * PSEUDO EFUNS
+ *
+ * Functions below are useful but should probably not be made into efuns.
+ * They are here because they are very practical and often used.
+ */
+
+/*
+ * Function name: creator
+ * Description:   Get the name of the creator of an object or file
+ *                (see creator_object() and creator_file())
+ * Arguments:     mixed ob - The object or filename for which to
+ *                           get the creator
+ * Returns:       string - The creator name
+ */
+public string 
+creator(mixed ob)
+{
+    if (objectp(ob))
+	return (string) SECURITY->creator_object(ob);
+    else
+	return (string) SECURITY->creator_file(ob);
+}
+
+/*
+ * Function name: domain
+ * Description:   Get the name of an object's domain (see domain_object())
+ * Arguments:     object ob - the object for which to get the domain
+ * Returns:       string - the domain name
+ */
+public string 
+domain(object ob)
+{
+    return (string) SECURITY->domain_object(ob);
+}
+
+/*
+ * Function name: strchar
+ * Description:   Convert an integer from 0 to 255 to its corresponding
+ *                letter.
+ * Arguments:     int x - the integer to convert
+ * Returns:       string - the corresponding letter.
+ */
+public string
+strchar(int x) 
+{
+    if (x >=0 && x < 256)
+	return 
+	    ("?        \t\n\r  " +
+	     "                " +
+	     " !\"#$%&'()*+,-./0123456789:;<=>?" +
+	     "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_" +
+	     "`abcdefghijklmnopqrstuvwxyz{|}~^?")[x..x];
+    else
+	return " ";
+}
+
+/*
+ * Function name: type_name
+ * Description  : This function will return the type of a variable in string
+ *                form.
+ * Arguments    : mixed etwas - the variable to type.
+ * Returns      : string - the name of the type.
+ */
+nosave string 
+type_name(mixed etwas)
+{
+    if (intp(etwas))
+	return "int";
+    else if (floatp(etwas))
+	return "float";
+    else if (stringp(etwas))
+	return "string";
+    else if (objectp(etwas))
+	return "object";
+    else if (pointerp(etwas))
+	return "array";
+    else if (mappingp(etwas))
+	return "mapping";
+#ifdef _FUNCTION
+    else if (functionp(etwas))
+	return "function";
+#endif _FUNCTION
+    return "!UNKNOWN!";
+}
+
+/*
+ * Function name: dump_array
+ * Description:   Dumps a variable with write() for debugging purposes.
+ * Arguments:     a: Anything including an array
+ */
+nomask varargs void
+dump_array(mixed a, string tab)
+{
+    int             n,
+                    m;
+    mixed 	    ix, val;
+
+    if (!tab)
+	tab = "";
+    if (!pointerp(a) && !mappingp(a))
+    {
+	dump_elem(a, tab);
+	return;
+    }
+    else if (pointerp(a))
+    {
+	this_player()->catch_tell("(Array)\n");
+	m = sizeof(a);
+	n = 0;
+	while (n < m)
+	{
+	    this_player()->catch_tell(tab + "[" + n + "] = ");
+	    dump_elem(a[n], tab);
+	    n += 1;
+	}
+    }
+    else /* Mappingp */
+	dump_mapping(a, tab);
+}
+
+/*
+ * Function name: dump_mapping
+ * Description:   Dumps a variable with write() for debugging purposes.
+ * Arguments:     a: Anything including an array
+ */
+nomask varargs void
+dump_mapping(mapping m, string tab)
+{
+    mixed *d;
+    int i, s;
+    string dval, val;
+
+    if (!tab)
+	tab = "";
+
+    d = m_indexes(m);
+    s = sizeof(d);
+    this_player()->catch_tell("(Mapping) ([\n");
+    for(i = 0; i < s; i++) {
+	if (intp(d[i]))
+	    dval = "(int)" + d[i];
+
+	if (floatp(d[i]))
+	    dval = "(float)" + ftoa(d[i]);
+
+	if (stringp(d[i]))
+	    dval = "\"" + d[i] + "\"";
+
+	if (objectp(d[i]))
+	    dval = file_name(d[i]);
+
+	if (pointerp(d[i]))
+	    dval = "(array:" + sizeof(d[i]) + ")";
+
+	if (mappingp(d[i]))
+	    dval = "(mapping:" + m_sizeof(d[i]) + ")";
+#ifdef _FUNCTION
+	if (functionp(d[i]))
+	    dval = sprintf("%O", d[i]);
+
+	if (functionp(m[d[i]]))
+	    val = sprintf("%O", m[d[i]]);
+#endif _FUNCTION
+	
+	if (intp(m[d[i]]))
+	    val = "(int)" + m[d[i]];
+
+	if (floatp(m[d[i]]))
+	    val = "(float)" + ftoa(m[d[i]]);
+
+	if (stringp(m[d[i]]))
+	    val = "\"" + m[d[i]] + "\"";
+
+	if (objectp(m[d[i]]))
+	    val = file_name(m[d[i]]);
+
+	if (pointerp(m[d[i]]))
+	    val = "(array:" + sizeof(m[d[i]]) + ")";
+
+	if (mappingp(m[d[i]]))
+	    val = "(mapping:" + m_sizeof(m[d[i]]) + ")";
+
+	this_player()->catch_tell(tab + dval + ":" + val + "\n");
+
+	if (pointerp(d[i]))
+	    dump_array(d[i]);
+
+	if (pointerp(m[d[i]]))
+	    dump_array(m[d[i]]);
+
+	if (mappingp(d[i]))
+	    dump_mapping(d[i], tab + "   ");
+
+	if (mappingp(m[d[i]]))
+	    dump_mapping(m[d[i]], tab + "   ");
+    }
+    this_player()->catch_tell("])\n");
+}
+
+/*
+ * Function name: inherit_list
+ * Description:   Returns the inherit list of an object.
+ * Arguments:     ob - the object to list.
+ */
+nomask string *
+inherit_list(object ob)
+{
+    return SECURITY->do_debug("inherit_list", ob);
+}
+
+nosave nomask void
+dump_elem(mixed sak, string tab)
+{
+    if (pointerp(sak))
+    {
+	dump_array(sak, tab + "   ");
+    }
+    else if (mappingp(sak))
+    {
+	dump_mapping(sak, tab + "   ");
+    }
+    else
+    {
+	this_player()->catch_tell("(" + type_name(sak) + ") ");
+	if (objectp(sak))
+	    this_player()->catch_tell(file_name(sak));
+	else if (floatp(sak))
+	    this_player()->catch_tell(ftoa(sak));
+	else
+	    this_player()->catch_tell(sprintf("%O",sak));
+    }
+    this_player()->catch_tell("\n");
+}
+
+/*
+ * Function:    secure_var
+ * Description: Return a secure copy of the given variable
+ * Arguments:   var - the variable
+ * Returns:     the secured copy
+ */
+mixed
+secure_var(mixed var)
+{
+    if (pointerp(var) ||
+	mappingp(var))
+    {
+	return map(var, secure_var);
+    }
+    return var;
+}
+
+#ifdef _FUNCTION
+/*
+ * Function name: composite_util
+ * Description  : Returns the composition of function f applied to the result
+ *                of function g applied on variable x.
+ * Arguments    : function f - the outer function in the composition.
+ *                function g - the inner function in the composition.
+ *                mixed x    - the argument to perform the functions on.
+ * Returns      : mixed - the result of the composition.
+ */
+nosave mixed 
+compose_util(function f, function g, mixed x)
+{
+    return f(g(x));
+}
+
+/*
+ * Function name: compose
+ * Description:   The returns the composition of two functions
+ *                (in the mathematical sense).  So if
+ *                h = compose(f,g)  then  h(x) == f(g(x))
+ * Arguments:     f, g: the functions to compose.
+ * Returns:       a function which is the composition of f and g.
+ */
+function
+compose(function f, function g)
+{
+    return (: compose_util, f,g :);
+}
+
+/*
+ * Function name: apply_array
+ * Description:   apply a function to an array of arguments
+ * Arguments:     f: the function, v: the array
+ * Returns:       f(v1,...vn) if v=({v1,...vn})
+ */
+mixed
+applyv(function f, mixed *v)
+{
+    function g = papplyv(f, v);
+    return g();
+}
+
+/*
+ * Function name: for_each
+ * Description:   For each of the elements in the array 'elements', for_each
+ *                calls func with it as as parameter.
+ *                This is the same functionality as the efun map, but without
+ *                the return value.
+ * Arguments:     mixed elements      (the array/mapping of elements to use)
+ *                function func       (the function to recieve the elements)
+ */
+void
+for_each(mixed elements, function func)
+{
+    int i;
+    int sz;
+    mixed arr;
+
+    arr = elements;
+    if (mappingp(elements))
+        arr = m_values(elements);
+    sz = sizeof(arr);
+    for(i = 0; i < sz; i++)
+        func(arr[i]);
+}
+
+/*
+ * Function name: constant
+ * Description:   returns the first argument and ignores the second
+ * Arguments:     x, y
+ * Returns:       x
+ */
+mixed
+constant(mixed x, mixed y)
+{
+    return x;
+}
+
+/*
+ * Function name: identity
+ * Description:   returns its argument unmodified
+ * Arguments:     x
+ * Returns:       x
+ */
+mixed
+identity(mixed x)
+{
+    return x;
+}
+
+
+/*
+ * Function name: not
+ * Description:   returns the locigal inverse of the argument
+ * Arguments:     x
+ * Returns:       !x
+ */
+int 
+not(mixed x)
+{
+    return !x;
+}
+
+/*
+ * Function name: mkcompare_util
+ * Description:   Compare two items and return a value meaningful for
+ *                sort_array() (that is, 1, 0, or -1).
+ * Arguments:     function f            - If specified, the comparison values
+ *                                        will be derived by calling this
+ *                                        function rather than simply comparing
+ *                                        items directly.
+ *                function compare_func - A function that determines how the
+ *                                        items will be compared.  This is
+ *                                        typically &operator(<)().
+ *                mixed x               - The first item to compare.
+ *                mixed y               - The second item to compare.
+ * Returns:       1, 0, or -1, as determined by compare_func
+ */
+int
+mkcompare_util(function f, function compare_fun, mixed x, mixed y)
+{
+    if (f)
+    {
+    	x = f(x);
+    	y = f(y);
+    }
+
+    if (compare_fun(x, y))
+    {
+        return -1;
+    }
+
+    if (compare_fun(y, x))
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+/*
+ * Function name: mkcompare
+ * Description:   Takes a normal comparison function, like < and returns a
+ *                pointer to the mkcompare_util() function, which is suitable
+ *                for use with sort_array().
+ *                See mkcompare_util() above.
+ * Arguments:     function f - an optional function pointer argument.  If
+ *                             specified, the comparison will be done on the
+ *                             values derived from this function.  If not
+ *                             specified, the objects to be sorted will be
+ *                             compared directly.
+ *                function compare_fun - This function determines how the
+ *                                       sorted items are to be compared.  It
+ *                                       defaults to &operator(<)().
+ * Returns:       A function pointer useful with sort_array().
+ */
+varargs function
+mkcompare(function f, function compare_fun : (: &operator(<)() :))
+{
+    return (: mkcompare_util, f, compare_fun :);
+}
+
+#endif _FUNCTION

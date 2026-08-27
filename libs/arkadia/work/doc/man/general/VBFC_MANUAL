@@ -1,0 +1,250 @@
+Value By Function Call (VBFC)
+=============================
+
+Introduction
+============
+
+The value of a variable is static by nature, first you set the variable
+and later you use the variable in functions etcetera. Many times you must
+set a variable with a value, though you are not sure yet what the value
+should be, or maybe the value should depend on some other things. The big
+difference between setting a variable or calling a set_ function with
+VBFC is that normally the value gets determined when the value is set,
+though with VBFC it is determined when it is queried.
+
+Let me give two examples. Both examples will be elaborated on below. You
+are recommended to read both examples for they contain information that
+is not in any other part of this document. The first example is writing
+text. If a player says something, the message is the same, though not
+every gets the same string printed on his/her terminal since the met/
+nonmet system influences what each player gets. If I say something, one
+player might know me and see "Mercade says: Hi!" whereas someone else may
+not know me and gets "The friendly dour dwarf wizard says: Hi!"
+
+The second is a mirror. You must use set_long() in create_object to set
+the long description to something. However, every time someone examines
+the mirror, (s)he should get a personal description of the mirror and
+his/her image. This is the second type of use for VBFC. We set the long
+description to something, but the actual value gets determined when it is
+needed and not sooner.
+
+/Mercade
+
+Syntax
+======
+
+VBFC always is a string and its format is:
+
+"@@function[:filename][|argument1[|argument2[|argument...]]]@@"
+
+As you can see, the filename and arguments are optional. If no filename
+is used, this_object() will be taken by default. Note that the arguments
+in VBFC can only be of type string, integers that you add to the string
+are automatically converted to string.
+
+The rather free concept of VBFC means that virtually every function in
+every object can be valled with almost any parameters. Now you also know
+why you cannot say @@. If you try to do so, you shall notice that it is
+replaced with a single @. This is done to ensure that speech is never
+evaluated as if it were VBFC.
+
+The VBFC-string will be evaluated the following way:
+
+call_other(file, function, argument1, argument2, ...)
+
+This means that VBFC cannot be used to access a function that is declared
+private or static. (see "man access_classes")
+
+Evaluating VBFC
+===============
+
+VBFC is not automatically applied to everything. There are special
+functions you have to call to get it evaluated. Such evaluation is
+already incorporated in the following functions:
+
+- query_prop(), so you can do add_prop(property, "@@function@@") and when
+  the property is checked, the VBFC is evaluated
+- long() and short(), so you can do set_short("@@function@@"). See the
+  second example below
+- write()
+- catch_msg(), _only_ if the argument if of type string and not if it is
+  of type string*. In that case, it is supposed to have been solved
+  already and the different elements of the string* are used with respect
+  to met/nonmet.
+- say() and tell_room(), _only_ is the argument is of type string and not
+  if the argument is of type string*. See catch_msg()
+- add_exit(), on the first, third and fourth argument. A magic portal
+  might for instance random send a player to two possible rooms with
+  add_exit("@@which_room@@", "portal", 0, 5)
+
+If you have an object and you want to support/use VBFC on it yourself,
+you should use the function
+
+mixed check_call(string argument_to_evaluate, object who_is_calling)
+
+to evaluate it. The first argument is the string that (possibly) contains
+VBFC. If it does not contain any VBFC format, it will be returned
+unchanged. The second parameter is optional and should contain the
+object who wants to know the answer since many times, VBFC is used to
+give a different message to several people with one command. See the
+first example below.
+
+Warnings/Suggestions related to VBFC
+====================================
+
+Comparing VBFC with normal (static) code, we can conclude that VBFC is a
+lot slower than static code or a set value. Therefore you should not use
+VBFC if it is not necessary to do so. It is never necessary to have VBFC-
+code evaluated directly in a check_call("@@function:filename|argument@@")
+construct. Rather than doing so, you should call the function directly.
+
+The first example below will show that QCTNAME() and alike macros are
+calls with VBFC construct. Therefore we can conclude that those macros
+are in fact wasteful when it comes to using them with catch_msg() or
+write() since the necessary function can be called directly.
+
+target->catch_msg(QCTNAME(actor) + " hits you.");
+
+might be replaced by the quicker
+
+target->catch_msg(actor->query_The_name(target) + " hits you.);
+
+which gives the same result, though is quicker since there is no VBFC to
+evaluate. Even though QCTNAME is obviously easier to type, speed is
+something we have to be very careful with for the host computer has
+enough to evaluate as it is. However, you may choose to use QCTNAME
+anyway if you are coding.
+
+Example 1: speech
+=================
+
+Speech, or more general: all player-related actions, are submitted to the
+met/nonmet system. Lets take the little sentence from the introduction.
+Every player in the room should get "<name> says: Hi!", but <name> is not
+the same for every player.
+
+Obviously, we could get a list of all players in our room and check for
+each of them individually, but that would take a lot of code each time
+and it would not be speedy nor effective. A quicker and more efficient
+way of doing this is send the (same) message to each player and let the
+players check whether they know us or not.
+
+Again, we do not want to evaluate the value first and then use it, we
+want to use the variable first, and give it a value later. That is why we
+use VBFC. Lets assume that I type the command "say Hi!" and that the
+function communicate() is called when he give the command. In that case,
+the variable text gets the value "Hi!".
+
+int
+communicate(string text)
+{
+    say(QCTNAME(this_player()) + " says: " + text);
+    write("Ok.");
+    return 1;
+}
+
+Honestly speaking the "says" part is VBFC too in normal communication,
+giving each race his/her own impression of the sound another race
+produces. To another dwarf, a dwarf "says" things, though a human thinks
+dwarves "shout" constantly :-( So if we do it without VBFC, we should
+not only make a check for the name for each individual, we should check
+their racesound too.
+
+The macro QCTNAME(this_player()) is replaced with the following before
+the code is compiled and we recognize the VBFC format:
+
+"@@" + "query_The_name" + ":" + file_name(this_player()) + "@@"
+
+Since file_name() also returns the instance number of an object, the
+call_other will be made to the right player and not just to any dwarf who
+happens to be logged in. Lets assume my basic filename and instance
+number are /std/dwarf#1234. Now every receiving player gets the following
+text sent as parameter to catch_msg() by the efun say():
+
+"@@query_The_name:/std/dwarf#1234@@ says: Hi!"
+
+which the receiving player will interpret as the follwing call:
+
+call_other("/std/dwarf#1234", "query_The_name") + " says: Hi!"
+
+Since query_The_name() for every caller returns an individual answer when
+called, every player now got to see my name if they knew me or my nonmet
+description if I have had not been introduced earlier.
+
+One might argue that now every receiver checks the name of the person who
+speaks the same amount of checks has to be made when compating it to a
+system not using VBFC since for every player you _have_ to make a check
+to differ between met and nonmet, whoever makes the check. This is true,
+though it is rather hard to make general code to differ on the senders
+side for all kinds of messages, whereas on the side of the receiver, it
+is very easy to make general evaluation code.
+
+Example 2: a mirror
+===================
+
+If you make a mirror and someone examines the mirror, every player should
+get his/her personal description. Below in this file I put the short
+version of a mirror. The whole example is in /doc/examples/obj/mirror.c
+and taking a look at it is worth while ;-)
+
+In the example we use VBFC in set_long, so each time the long description
+of the object is needed (ie, some examines it), the call to the function
+mirror_description() is made to get an accurate description of what you
+see in the mirror.
+
+inherit "/std/object";
+
+#include <language.h>
+
+/*
+ * This function is called to initialize the mirror.
+ */
+void
+create_object()
+{
+    set_name("mirror");
+    set_adj("small");
+/*
+ * Here we use VBFC to set the long description. Every time someone
+ * examines the mirror, the function mirror_description() is called to
+ * get a description to fit the player who looks at it.
+ */
+    set_long("@@mirror_description@@");
+}
+
+/*
+ * This function will return the nonmet description of the player who
+ * looks at the mirror.
+ */
+string
+mirror_description()
+{
+    return break_string("You look into the mirror and see yourself, " +
+	LANG_ADDART(this_player()->query_nonmet_name()) + ".", 75) + "\n";
+}
+
+/*
+ * end of code example 2.
+ */
+
+Warning related to example 2:
+
+People who have examined the mudlib might have discovered that a call to
+the function long() in an object is made to get its long description and
+they might _think_ that they can do the same things by just redefining
+the function long() in the object with exactly the contents that are now
+in mirror_description(). This is NOT a good thing to do for the following
+reasons:
+- several basic object types, for instance armours, weapons, containers,
+  receptacles, torches and livings, have status information automatically
+  attached to the long description. If you redefine long(), this
+  information gets lost, or if you add a call to ::long(), it might end
+  up a place where it gets ugly.
+- all descriptions that are added to the object with add_item() are lost.
+- several basic object types, for instance rooms, heaps and livings, use
+  the value set by set_long() in their code. Not setting a set_long(),
+  but using long() instead might result in objects without description!
+- it is not smart to think that you can redefine long() since your object
+  does not comply to either of the above three cases. The list of reasons
+  is not complete, but should be sufficient enough to refrain you from
+  using long().

@@ -1,0 +1,188 @@
+LPC MANUAL --- KEEPING
+======================
+
+Contents:
+
+    1. introduction
+    2. implementation
+    3. recovery
+    4. keepability together with other OBJ_M_NO_SELL functionality
+
+
+1. INTRODUCTION
+===============
+
+This manual is about making objects 'keepable'. This means that mortals
+have the ability to set or reset the OBJ_M_NO_SELL property of the object
+in order to signal that they do not want to sell that particular object.
+This is especially useful to allow players to type 'sell all' and not sell
+items they need other than wielded or worn items. There is global support
+for keep now and this manual describes how. In addition to that, the fourth
+paragraph will a solution if you want to use this general keep system
+together with a dynamic OBJ_M_NO_SELL property.
+
+/Mercade
+
+
+2. IMPLEMENTATION
+=================
+
+Making an object keepable is very simple. All you have to do is inherit the
+module /lib/keep.c into the object along with the standard /std/object.c,
+/std/torch.c or whatever. [For recoverable objects, see also paragraph 3.]
+
+    inherit "/lib/keep";
+
+By default objects inheriting this module will not have the keep protection
+set. In order to set the protection at creation, the following function
+should be called from the create_whatever function.
+
+    set_keep();   or   set_keep(1);
+
+Notice that if set_keep() is called without argument, it will default to 1,
+ergo setting the protection. To remove the protection, call:
+
+    set_keep(0);   or   remove_keep();
+
+Finally, I would like to give you a general warning about making objects
+keepable:
+
+    If an object should not be sellable at all, either because it does not
+    have a value, or because it has its own OBJ_M_NO_SELL permanently set
+    to a value should _not_ be made keepable!
+
+
+3. RECOVERY
+===========
+
+When an object is keepable and recoverable, it would be nice if the keep
+status is recovered too. The functions string query_keep_recover() to query
+the keep status and void init_keep_recover(string arg) to set the keep
+status again have been added to the module to do this. As example, I shall
+include the recovery functions for a standard torch in this manual.
+
+/*
+ * Function name: query_recover
+ * Description  : This function is called to get the recover string.
+ * Returns      : string - the recover string.
+ */
+string
+query_recover()
+{
+    /* To compose the recover string we start with the filename of this
+     * object, MASTER, defined in <macros.h>, we add the colon and then we
+     * add the torch recover information and the keep recover information.
+     */
+    return MASTER + ":" + query_torch_recover() + query_keep_recover();
+}
+
+/*
+ * Function name: init_recover
+ * Description  : This function is called to restore the recover string.
+ * Arguments    : string arg - the recovery information.
+ */
+void
+init_recover(string arg)
+{
+    /* Restore the torch recover information. */
+    init_torch_recover(arg);
+
+    /* Restore the keep recover information. */
+    init_keep_recover(arg);
+}
+
+
+4. KEEPABILITY TOGETHER WITH OTHER OBJ_M_NO_SELL FUNCTIONALITY
+==============================================================
+
+It is conceivable that you have an object that has a dynamic OBJ_M_NO_SELL
+property. An example of this for instance is a wallet in which players can
+carry money. As service to the players we add an OBJ_M_NO_SELL property to
+the object with VBFC. If the player tries to sell the wallet while it
+contains coins, the wallet rejects being sold. If it is empty, we allow it
+to be sold.
+
+So far no problems, but now we also want the wallet to be keepable. If we
+just make it keepable by using the above procedure, the private use of the
+property will be lost if the OBJ_M_NO_SELL property is removed. What we do
+is the following. If the object is keep protected, we use the normal keep
+protection from the keep module since if the wallet is keep protected it
+does not matter whether it is filled or empty. However, when the keep
+protection is removed, we do not remove the property altogether, but
+replace it with your own special VBFC.
+
+To do this, we need to mask two functions, set_keep() and query_keep(), and
+we also need our own function containing the VBFC for our own protection
+function. Below I shall give an example of these functions.
+
+
+/* We define the VBFC string for our own function. */
+#define MY_OBJ_M_NO_SELL "@@my_obj_m_no_sell@@"
+
+/*
+ * Function name: set_keep
+ * Description  : This function is a mask of the set_keep(). If the keep
+ *                protection is set, we set it, but if it is removed, we
+ *                do not remove the property, but set our own.
+ * Arguments    : int keep - 1 - set the keep protection. [default]
+ *                           0 - remove the keep protection. If we do this,
+ *                               we rather set our own protection.
+ */
+void
+set_keep(int keep = 1)
+{
+    if (keep)
+    {
+        /* Keep protection is being set, let the normal code handle it. */
+        ::set_keep(keep);
+    }
+    else
+    {
+        /* The normal code would now remove the property, but we rather
+         * set our own VBFC function as argument to the property.
+         */
+        this_object()->add_prop(OBJ_M_NO_SELL, MY_OBJ_M_NO_SELL);
+    }
+}
+
+/*
+ * Function name: query_keep
+ * Description  : Since we changed the set function, we must also change
+ *                the query function. The existance of the property is no
+ *                longer enough to be sure that the keep protection is
+ *                indeed active. Therefore we mask this function too.
+ * Returns      : int 1/0 - true if this object is keep-protected.
+ */
+int
+query_keep()
+{
+    /* If the real value of the setting of the property is our VBFC
+     * function, this means that the keep protection is not active. Since
+     * we need to know when it _is_ active, we check for not equal.
+     */
+    return (query_prop_setting(OBJ_M_NO_SELL) != MY_OBJ_M_NO_SELL);
+}
+
+/*
+ * Function name: my_obj_m_no_sell
+ * Description  : This function is the VBFC that is called when the keep
+ *                protection is not active. We use it to test whether the
+ *                wallet contains any money and if so, reject the wallet
+ *                from being sold.
+ * Returns      : mixed - a string with a fail message if the wallet may
+                          not be sold (i.e. it is not empty).
+ *                      - 0 if the wallet may be sold.
+ */
+mixed
+my_obj_m_no_sell()
+{
+    /* If there is something in the wallet, we do not allow the player to
+     * sell it to prevent loss of property.
+     */
+    if (sizeof(all_inventory()))
+    {
+        return "You should empty the " + short() + " before selling it.\n";
+    }
+
+    return 0;
+}
