@@ -9972,6 +9972,38 @@ argument) call form rather than on every call site uniformly, which is
 what let it hide in `es1` behind an apparently-normal `你死了` message
 for who knows how long.
 
+**ES2-family corpus sweep (2026-08-27)**: checked every direct
+descendant of `es1` for this same shape. **Already fixed pre-session**
+(own `exclude || ({})`-shaped guard, either via an earlier QA pass or
+correct from that fork's original author): `es2`, `haiyang2` (§15s),
+`xkx2001`, `bmxkx2001` (§15s), `rzrmud`, `xo`, `xo_final`, `es1_win`
+(§7.12, byte-identical `tell_room.lpc` ported from `es1` itself —
+`es1_win` also already carries the sibling §7.14 `compress_obj.h` fix,
+`base_name(this_object())`). `zhyx` was likewise already fixed, with
+the added wrinkle that a bare `message(...)` call *from inside the
+simul_efun object's own file* binds to the hard EFUN directly rather
+than to that file's own overridden `message()` — the guard has to be
+written using explicit `efun::message(...)` there for it to actually
+run. **Newly found and fixed this pass**: `demonangel` and `naruto`
+both still had the raw unconditional `message("tell_room", str, ob,
+exclude)` forward with no guard at all. Neither library's core `die()`
+path uses `tell_room()` for its death announcement (both use
+`message_vision()` instead), which is exactly why each library's own
+earlier full §10.7 deep-test pass — which did reach a real death —
+never tripped this bug; the real crash sites were elsewhere:
+`demonangel`'s disconnect/idle-timeout auto-kick (`obj/user.lpc`) and
+corpse-decay daemon (`adm/daemons/chard.lpc`), and `naruto`'s ordinary
+net-dead disconnect announcement (`obj/user.lpc`'s `net_dead()`) —
+the latter meaning every abrupt disconnect on that lib crashed
+uncaught pre-fix. Both fixed with the identical `exclude || ({})`
+guard and verified live (`demonangel` via a throwaway cloned test
+object's `call`-invoked methods; `naruto` via its own genuine `eval`
+admin command) — both the 2-arg and 3-arg `tell_room()` forms complete
+cleanly post-fix. `include/compress_obj.h` (the sibling §7.14 bug)
+does not exist anywhere outside `es1`/`es1_win` in this family — the
+later ES2-era `feature/`-mixin architecture the rest of these forks
+use never carried that header over.
+
 ---
 
 ## 8. Login and registration flow bugs
