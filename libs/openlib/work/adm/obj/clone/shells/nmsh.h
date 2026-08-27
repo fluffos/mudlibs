@@ -1,0 +1,11 @@
+string query_cwd();
+private nosave int set_cwd(string str);
+private nosave void pushd(string str);
+private nosave string popd();
+nomask nosave void process_request(string request, string xtra);
+nomask private nosave string do_history(string str);
+nomask private nosave string do_nickname(string str);
+nomask private nosave string do_alias(string str);
+nomask private nosave void add_history_cmd(string str);
+void reset_prompt();
+void reset_history();

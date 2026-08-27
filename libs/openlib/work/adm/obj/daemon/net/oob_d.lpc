@@ -1,0 +1,495 @@
+//  -*- LPC -*-
+// oob_d.c:  OOB superserver for I3
+//
+// Copyright (C) 1996 Tim McIntosh (tmcintos@dm.imaginary.com)
+//
+// This program is part of the OpenLib Mudlib distribution; it
+// is free software; you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published
+// by the Free Software Foundation; either version 2 of the License,
+// or (at your option) any later version.
+// 
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+// 
+// If you acquired this program as part of the OpenLib Mudlib
+// distribution, you should have received a copy of the GNU
+// General Public License in the file /doc/GPL; if not,
+// write to the Free Software Foundation, Inc., 675 Mass Ave,
+// Cambridge, MA 02139, USA.
+//
+// created 12.8.95 by Tim@Dysfunctional Mud
+//
+// 22 Jun 1996 (Tim) Modified w.r.t. TCP_SERVER
+//
+// This object maintains a queue of outgoing packets and also handles
+// incoming connections for OOB services.
+
+#include <mudlib.h>
+#include <origin.h>
+#include <net/config.h>
+#include <net/daemons.h>
+#include <net/network.h>
+#include "oob_d.h"
+
+inherit TCP_SERVER;
+
+nosave mapping manual_end;         // manual_end[mud] == 1 for manual oob_end
+nosave mapping clients;            // clients connected to other muds
+nosave mapping connections;        // connections to server
+nosave int listening;              // listening for connections
+
+element* packet_q;                 // outgoing packet queue (saved)
+
+#define CONNECTION(x) ((class conn) connections[x])
+
+void
+create()
+{
+  ::create();
+
+  packet_q = ({});
+  restore_object(SAVE_OOB_D);
+  clients = ([]);
+  connections = ([]);
+  manual_end = ([]);
+#if 0
+  /*
+   * start outgoing queue
+   */
+  call_out("eventFlushQueue", TIME_TO_ADVANCE);
+#endif
+}
+
+int
+remove()
+{
+  foreach(int fd, object c in clients) {
+    if( !destruct(c) )
+      log_file(OOB_D_LOG,
+	       sprintf("remove: couldn't destruct client object %O.\n", c));
+  }
+
+#if 0
+  remove_call_out("eventFlushQueue");
+#endif
+  remove_call_out("eventSendPackets");
+  remove_call_out("ClientConnect");
+  save_object(SAVE_OOB_D);
+}
+
+void
+open_oob_port()
+{
+  if( file_name(previous_object()) != SERVICES_D || listening) return;
+
+  connections = ([]);
+
+  if( (listening = eventListenSocket(PORT_OOB, MUD)) < 0 ) {
+    log_file(OOB_D_LOG, "Couldn't create socket for server.\n");
+    if( this_object() ) destruct(this_object());
+  } else log_file(OOB_D_LOG, "opening oob port\n");
+}
+
+void
+close_oob_port()
+{
+  if( file_name(previous_object()) != AUTH_D || !listening ) return;
+
+  log_file(OOB_D_LOG, "closing oob port\n");
+  socket_close(listening);
+  listening = 0;
+}
+
+private void
+// I think this works, since we use a function ptr to access it -- Tim
+eventSocketClosed(int fd)
+{
+#ifdef DEBUG
+  DEBUG( sprintf("Socket fd=(%d) closed.\n", fd) );
+#endif
+  if( clients[fd] ) map_delete(clients, fd);
+  map_delete(connections, fd);
+}
+
+private void
+eventWrite(int fd, mixed* packet)
+{
+#ifdef DEBUG
+  DEBUG( sprintf("evWrite(%d, %O)\n", fd, packet) );
+#endif
+
+  if( clients[fd] )
+    ((object) clients[fd])->eventWrite(packet);
+  else
+    server::eventWrite(fd, packet);
+}
+
+private void
+eventRead(int fd, mixed val)
+{
+  mixed* packet = (mixed*) val;
+
+  if(!packet || !sizeof(packet)) {
+    // ERROR when implemented
+    return;
+  }
+
+#ifdef DEBUG
+  DEBUG( sprintf("evRead(%d, %O)\n", fd, packet) );
+#endif
+
+  /*
+   * Check if we're talking to a new client.  If we are, and the
+   * 1st packet they're sending us isn't an oob-begin, we ignore it.
+   */
+  if( !CONNECTION(fd) ) {
+    if(packet[0] != "oob-begin") {
+      // ERROR when implemented
+      return;
+    } else {
+      CONNECTION(fd) = new(class conn);
+    }
+  }
+
+  /*
+   * Here are the guts of the whole protocol.  Depending on what packet
+   * we get, we call a function in SERVICES_D to handle it.
+   */
+  switch(packet[0]) {
+    case "oob-begin":
+      /*
+       * If we're getting this from the client it means we're ready to go
+       */
+      if( clients[fd] ) {
+	eventSendPackets(fd, CONNECTION(fd)->mudname);
+	break;
+      }
+      /*
+       * New connection has just been made
+       * Do authentication (if wanted)
+       * Call cleanup_keys() in authd to close port if no pending connections
+       */
+      CONNECTION(fd)->mudname = packet[1];
+      CONNECTION(fd)->auth = AUTH_D->authenticate_mud(packet[1], packet[3]);
+      AUTH_D->cleanup_keys();
+      /*
+       * If auth fails we shut it down now
+       */
+      if( packet[2] && !CONNECTION(fd)->auth ) socket_close(fd);
+      /*
+       * Ready for transfer
+       */
+      eventWrite(fd, ({ "oob-begin", mud_name(), 0, 0 }));
+      break;
+    case "oob-end":
+      eventReceiveOOBEnd(fd, packet[1]);
+      break;
+    case "mail":                        /* sends mail-ack back */
+      if(!CONNECTION(fd)->auth) {
+	// ERROR not authenticated
+	break;
+      }
+      SERVICES_D->eventReceiveMail(CONNECTION(fd)->mudname, packet);
+      break;
+    case "mail-ack":                    /* take note they acknowledged */
+      SERVICES_D->eventReceiveMailAck(packet);
+      break;
+    case "file-list-req":               /* sends file-list-reply back */
+      if(!CONNECTION(fd)->auth) {
+	// ERROR not authenticated
+	break;
+      }
+      SERVICES_D->eventReceiveFileListRequest(packet);
+      break;
+    case "file-list-reply":             /* decode file-list-reply packet */
+      SERVICES_D->eventReceiveFileListReply(CONNECTION(fd)->mudname, packet);
+      break;
+    case "file-get-req":                /* sends file-get-reply back */
+      if(!CONNECTION(fd)->auth) {
+	// ERROR not authenticated
+	break;
+      }
+      SERVICES_D->eventReceiveFileGetRequest(packet);
+      break;
+    case "file-get-reply":              /* decode file-get-reply packet */
+      SERVICES_D->eventReceiveFileGetReply(packet);
+      break;
+    case "file-put":                    /* sends file-put-ack back */
+      if(!CONNECTION(fd)->auth) {
+	// ERROR not authenticated
+	break;
+      }
+      SERVICES_D->eventReceiveFilePut(packet);
+      break;
+    case "file-put-ack":                /* take note they acknowledged */
+      SERVICES_D->eventReceiveFilePutAck(packet);
+      break;
+    case "error":                       /* decode error packet */
+      SERVICES_D->eventReceiveError(packet);
+      break;
+    default:
+  }
+}
+
+private void
+eventReceiveOOBEnd(int fd, string mudname)
+{
+  /*
+   * Now we can send more packets if we want to
+   */
+  if( clients[fd] ) {
+    if( !PacketsInQueue(mudname) ) {
+#ifdef DEBUG
+      DEBUG( sprintf("evRcvOOBEnd(%d, %s)(client)\n", fd, mudname) );
+#endif
+      /*
+       * out of packets
+       * If this client is to disconnect automatically, do so
+       * otherwise, loop waiting for more packets to send
+       */
+      if( !manual_end[CONNECTION(fd)->mudname] )
+	clients[fd]->CloseSocket();
+      else
+	call_out("eventWaitForPackets", 2, fd, mudname);
+    } else
+      eventSendPackets(fd, mudname);      // got more packets to deliver
+  } else {
+#ifdef DEBUG
+    DEBUG( sprintf("evRcvOOBEnd(%d, %s)(server)\n", fd, mudname) );
+#endif
+    eventSendPackets(fd, mudname);
+  }
+}
+
+private void
+eventWaitForPackets(int fd, string target_mudname)
+{
+#ifdef DEBUG
+  DEBUG( sprintf("evWaitPkts(%d, %s)\n", fd, target_mudname) );
+#endif
+  /*
+   * We're done if we've been waiting and this goes to zero
+   */
+  if( !manual_end[target_mudname] ) {
+    if( PacketsInQueue(target_mudname) )
+      eventSendPackets(fd, target_mudname);
+    else
+      clients[fd]->CloseSocket();
+    return;
+  }
+
+  if( !PacketsInQueue(target_mudname) )
+    call_out("eventWaitForPackets", 2, fd, target_mudname);
+  else 
+    eventSendPackets(fd, target_mudname);
+}
+
+private void
+eventSendPackets(int fd, string target_mudname)
+{
+  element entry = GetMudFromQueue(target_mudname);
+
+#ifdef DEBUG
+  DEBUG( sprintf("evSndPkts(%d, %s)\n", fd, target_mudname) );
+#endif
+  
+  if(!entry || !sizeof( entry->val )) {
+    /*
+     * no more packets to deliver
+     */
+    eventWrite(fd, ({ "oob-end", mud_name() }));   // no more packets
+  } else {
+    /*
+     * Take 1 packet from this mud's queue and send it out
+     */
+    eventWrite( fd, (mixed*) entry->val[0] );
+    entry->val = entry->val[1..];
+
+    call_out("eventSendPackets", 1, fd, target_mudname);
+  }
+}
+
+// POST: returns a pointer to the element with key 'mudname' if it is in
+// the queue, otherwise returns 0
+private element
+GetMudFromQueue(string mudname)
+{
+  int i = sizeof(packet_q) - 1;
+
+  while( i >= 0 ) {
+    if( packet_q[i]->key == mudname ) return packet_q[i];
+    i--;
+  }
+  return 0;
+}
+
+private int
+PacketsInQueue(string mudname)
+{
+  element e = GetMudFromQueue(mudname);
+
+  return (e && sizeof(e->val));
+}
+
+// PRE: mudname is an existing mud in the form returned by
+//      INTERMUD_D->GetMudName(name)
+//      and packet need not go out immediately
+void
+OOBQueuePacket(string mudname, mixed* packet)
+{
+  element elt = GetMudFromQueue(mudname);
+
+  if( !elt ) {
+    elt = new(element);                 // setup new queue
+    elt->key = mudname;
+    elt->val = ({ packet });
+    packet_q += ({ elt });
+  } else {
+    elt->val += ({ packet });           // add to existing queue
+  }
+
+  if( !IsConnected(mudname) )           // Connect if not connected
+    OOBBegin(mudname, 1, 0);    
+}
+
+void
+OOBSendPacket(string mudname, mixed* packet)
+{
+  int fd;
+
+  if( origin() != ORIGIN_LOCAL && file_name(previous_object()) != SERVICES_D )
+    return;
+
+  if( !(fd = IsConnected(mudname)) ) return;
+
+  eventWrite(fd, packet);
+}
+
+/*
+ * returns fd of connected mud 0 if not connected
+ */
+private int
+IsConnected(string mud)
+{
+  foreach(int key, class conn val in connections)
+    if( val->mudname == mud ) return key;
+
+  return 0;
+}
+
+#if 0
+private void
+eventFlushQueue()
+{
+  foreach(element mudentry in packet_q) {
+    if( !sizeof(mudentry->val) ) continue;
+    OOBBegin(mudentry->key, 1, 0);
+  }
+  /*
+   * Call out next queue flush
+   */
+  call_out("eventFlushQueue", TIME_TO_ADVANCE);
+}
+#endif
+
+private void
+ClientConnect(string mud, string address, int port, function fail, int waiting)
+{
+  object client;
+  int skey, fd;
+
+  /*
+   * loop until we get authentication -- 20 second timeout
+   */
+  if( !(skey = AUTH_D->get_session_key(mud)) ) {
+    if( waiting < 10 ) {
+      call_out("ClientConnect", 2, mud, address, port, fail, ++waiting);
+    } else {
+      log_file(OOB_D_LOG, sprintf("Connect to %s timed out.\n", mud));
+      evaluate(fail, sprintf("Connect to %s timed out.", mud));
+    }
+    return;
+  }
+
+  /*
+   * create new client object
+   */
+  client = new(TCP_CLIENT);
+  client->SetSocketType(MUD);
+  client->SetDestructOnClose(1);
+
+  if( (fd = client->eventCreateSocket(address, port)) > 0 ) {
+    class conn connection = new(class conn);
+    
+    client->SetRead((: eventRead, fd :));
+    client->SetSocketClose((: eventSocketClosed, fd :));
+    connection->mudname = mud;                   // where we're connected to
+    connection->auth = 1;                        // always authorized here
+    CONNECTION(fd) = connection;                 // stick client into mapping
+    clients[fd] = client;                     // client object into client map
+    /*
+     * Initiate communication with remote mud
+     */
+    eventWrite(fd, ({ "oob-begin",
+		      mud_name(),
+		      1,         // always using authorization for now
+		      skey }) );
+  } else {
+    log_file(OOB_D_LOG, sprintf("CC: client connect to %s failed.\n", mud) );
+    /*
+     * retry connect in 4 seconds
+     */
+    if( client ) destruct(client);
+    call_out("ClientConnect", 4, mud, address, port, fail, ++waiting);
+    return;
+  }
+}
+
+void
+OOBEnd(string mud)
+{
+  if( !(mud = INTERMUD_D->GetMudName(mud)) ) return;
+
+  map_delete(manual_end, mud);
+}
+
+void
+OOBBegin(string mud, int auto_end_oob, function on_fail)
+{
+  mapping mudlist = INTERMUD_D->GetMudList();
+  string addr;
+  int port;
+
+  if( !(mud = INTERMUD_D->GetMudName(mud)) ) {
+    evaluate(on_fail, sprintf("No such mud %s", mud));
+    return;
+  }
+
+  addr = mudlist[mud][1];
+  port = mudlist[mud][3];
+
+  if( !auto_end_oob ) manual_end[mud] = 1;
+
+  if( IsConnected(mud) ) return;
+
+#ifdef DEBUG
+    DEBUG( sprintf("OOBBegin: connecting: mud=%s\n", mud) );
+#endif
+
+  /*
+   * Authenticate and connect
+   */
+  SERVICES_D->eventSendAuthRequest(mud);
+  // give peer some time
+  call_out("ClientConnect", 2, mud, addr, port, on_fail, 0);
+}
+
+#ifdef DEBUG
+mapping dump_clients() { return clients; }
+mapping dump_conns() { return connections; }
+mapping dump_manual_end() { return manual_end; }
+element* dump_queue() { return copy(packet_q); }
+#endif
