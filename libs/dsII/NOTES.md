@@ -456,3 +456,224 @@ exchange 20 silver for gold` — printed a clean `2 gold` with no
 decimal, and the raw save file after `save` showed `Currency
 (["silver":59,"gold":2,])` — both integers, no float. `log/debug.log`
 stayed clean through the transaction.
+
+## 11. Deep functional test (round two, per AGENTS.md §10.7)
+
+One continuous session, `~/src/fluffos/build-debug/src/driver
+config.fluffos` from `libs/dsII/`, a raw Python socket client (two
+concurrent connections: a fresh non-admin character for the main
+playthrough, plus the seeded admin for the safe-sparring/death test —
+see §10.7's own `hy2000` precedent for why an admin-account death
+sequence can be a false negative). Admin credential note: the
+project-standard `fluffos`/`Mud@2026` login does NOT work on this
+lib's seeded account — the working password is the one actually used
+at onboarding (§6 above), `fluffwiz123`. Confirmed the account's own
+password policy (`secure/lib/connect.real`'s `CreatePassword()`,
+`strlen(pass) < 5`) would have accepted `Mud@2026` fine; this is
+ordinary credential drift (same class as `xkm` in AGENTS.md's §7.7x
+credential-drift sweep), not a bug — left the account as originally
+seeded rather than resetting it.
+
+**Registered a fresh English-named character** (`Ericlang`, human,
+male) through the full flow: name → confirm → password → confirm →
+gender → display name (default) → email → real name (blank) → `list`
+→ `pick human`. Landed at `LPC University Reception` (`campus`
+domain) with a starting t-shirt, jeans, and a Player's Handbook item.
+`look`/`score`/`i` all correct after registration, after the first
+`north` move (through a closed door — `open door` then `north` worked
+correctly), and after `activate bot`/`next tip` (Jennybot's newbie
+orientation script, plays cleanly).
+
+**`help newbie` is broken** (pre-existing archive content gap, not a
+porting bug — left unfixed): `cmds/players/newbie.lpc`'s `eventNoob()`
+does `this_player()->eventPage("/doc/help/players/handbook")`, but
+`doc/help/players/` is a genuinely **empty directory in the raw
+archive itself** (`raw/dsII/lib/doc/help/players/`, dated Nov 2006,
+confirmed via `ls` — not a conversion-sweep casualty). `eventPage()`
+(`lib/pager.lpc`) correctly returns the string `"File not found."` on
+a missing path, but the call site discards the return value (as does
+nearly every other direct-path `eventPage()` caller across this
+codebase, e.g. `realms/*/workroom.lpc`'s `/news/hints.txt` calls) —
+consistent, codebase-wide convention, not a one-off typo. Net visible
+effect: typing `help newbie` prints only the red
+"WHAT A NEW PLAYER SHOULD KNOW" header and then silently does
+nothing. The physical "Player's Handbook" item every new character
+carries (`domains/default/obj/handbook.lpc`) is unaffected and works
+correctly (`read index in handbook`, `read chapter N in handbook`).
+Since fixing this would mean either writing the missing handbook
+content (a content/design call, out of scope) or guessing at a
+different intended source file, documented here rather than touched.
+
+**Safe-sparring mechanism**: `domains/default/npc/dummy.lpc` /
+`domains/campus/npc/dummy.lpc` — a `SetPacifist(1)`, 9000-HP "training
+dummy" whose `eventReceiveDamage()` narrates the exact damage event
+(agent/type/raw damage/limb) then immediately heals back the damage
+just taken (`AddHealthPoints(damdiff+1)`), so it never dies and never
+fights back. Lives in `/domains/default/room/arena` off the
+Creators'-Hall-only `wiz_corr1` test-labs corridor — not reachable by
+an ordinary player's normal overworld navigation (this is the
+project's own admin/creator combat-testing fixture, same idea as
+`bxsj`'s training dummy but gated behind wizard-only rooms here).
+Tested live as admin `fluffos` (`goto /domains/default/room/arena`,
+`kill dummy`): several rounds of real melee (`GetHealthClass`
+proc-text varied naturally — "totally miss", "completely miss",
+"swing... connect with thin air", one real hit landing "raw damage is
+2... Actual damage done: 2"), the dummy's damage-report/self-heal
+logic fired every single hit with zero errors in `log/errors/*` or
+`log/runtime`. Confirmed clean.
+
+**Class/skill acquisition**: only one class-join path exists in this
+generation (no admin shortcut command found in
+`secure/cmds/admins/admintool.lpc` or elsewhere) — the organic
+`lib/leader.lpc` "ask LEADER to join" mechanism. Walked `Ericlang`
+from campus reception to the town Mages' Guild (`corridor` → `west`
+→ `north` → `north` → `north` → `north` → `west` → `south`) and did
+`ask herkimer to join`: correctly quest-gated ("Help my brother Leo
+find the Orcslayer..." — internally consistent content design, not a
+bug, left alone). Spell purchase path (`lib/teacher.lpc`'s commercial
+teaching, via `ask herkimer to teach buffer`) correctly reported
+insufficient silver ("Buffer costs 200 silver and you only have
+119") and correctly pointed at the bank for currency exchange — this
+is the same `teach`/training-point/commercial-fee logic already
+`§7.121`-fixed at onboarding; re-confirmed no float leakage anywhere
+in this path either.
+
+**Economy / currency-fix re-verification** (different test character
+than the original §10 fix, confirms the fix generalizes): opened a
+First Village Bank account (`request account from zoe`, auto-deposited
+5 silver), then `ask zoe to exchange 20 silver for gold` → "You
+exchange 20 silver for 2 gold" (clean integer). Raw save afterward:
+`Currency (["silver":94,"gold":2,])` — both plain integers, no float,
+matching the §10 fix.
+
+**Combat + death/respawn (the subsystem sibling Dead-Souls-lineage
+libs have broken before) — confirmed CLEAN.** Used `eval` on the
+admin connection (`object p = find_player("ericlang");
+p->eventDie(this_player());`) to force a real death with a genuine
+living agent (avoiding a test-artifact false read from an
+agent-less kill): "SYSTEM Fluffos has slain Ericlang", clean
+`NewBody()`/corpse-drop/`ROOM_DEATH` move sequence, landed in the
+single shared `/domains/default/room/death` room ("Off the mortal
+coil... YOU ARE DEAD!"), inventory and carried currency correctly
+transferred out (death drops your stuff — internally consistent
+design, not a bug). `score` showed the expected "the ghost", "level 1
+undead". Typing `regenerate` in the death room correctly called
+`eventRevive()` + `eventMoveLiving(ROOM_START)`: rematerialized at
+half max HP/MP/SP at `LPC University Reception`, `score` back to a
+normal (non-ghost) state. Zero errors in any `log/errors/*` file or
+`log/runtime` through the whole sequence — this generation's simple
+"die → death room → type regenerate → revive at start" flow (no
+NPC-driven `death_stage()` chain at all) has no reentrancy surface for
+the §7.112-class bug to live in.
+
+**`quit` → `debug.log` grep → reconnect after a real ~100s wall-clock
+gap — confirmed clean.** `quit` produced the normal "Please come back
+another time!" and a real connection close (not a silent/net-dead
+retention skip — `secure/lib/connect.real`'s reconnect logic only
+special-cases an actual net-dead `find_player()` hit, which a real
+`quit` clears). Reconnecting after the gap required the full
+name+password prompt sequence again (not a resumed session), and
+landed back in the same room with the same (post-death, pre-quit)
+character state: level 1, human, broke, at `LPC University
+Reception`. No new entries in any per-directory `log/errors/*` file or
+`log/runtime` from either the quit or the reconnect.
+
+**Cross-cutting bug-pattern checklist (§7.121/§8.3a/§7.112/§7.122-
+§7.140), checked explicitly, all confirmed clean or not applicable**:
+
+- **§7.121** (float-returning `int` function): re-verified live above
+  (already fixed at onboarding, §10) — still holds.
+- **§8.3a** (`private` command-dispatch/callback/call_out-target
+  function silently demoted once inherited): grepped every `private`
+  function declaration in the tree (153 candidates) against every
+  `add_action()`/`call_out()`/`input_to()` string-callback target
+  found in the codebase (94 + 32 names respectively) — zero overlap.
+  The one `private` function that IS also a `call_out()` target,
+  `secure/lib/net/ftp.lpc`'s `idle_time_out()`, is safe: `ftp.lpc` is
+  never inherited by anything (confirmed via a repo-wide grep for
+  `inherit.*ftp`/`LIB_FTP`) and is never instantiated by any command
+  or preload anywhere in the tree — genuinely dead/unreachable code,
+  not a live bug. This lib's central dispatch (`lib/command.lpc`'s
+  `add_action((: cmdAll :), "", 1)`) uses a bound closure, not a
+  string, and `cmdAll` itself isn't `private` anyway — not exposed to
+  this bug class at all.
+- **§7.112** (NPC `init()` unconditional call_out chain, no
+  re-entry guard): N/A — this generation's death flow (see above) has
+  no NPC-driven `death_stage()`-style chain to begin with.
+- **§7.122** (class-item duplication on disconnect/reconnect): no
+  `compute_autoload_array()`/`destroy_autoload_obj()`-style autoload
+  mechanism exists anywhere in this codebase.
+- **§7.123** (bare file-scope `IDENT = (...)` killing compile): the
+  full compile sweep (1401/1407 files, §6) already rules this out
+  project-wide; not reintroduced.
+- **§7.124** (fraction-vs-percentage threshold): no new candidate
+  found; not specifically re-derivable via grep, left unconfirmed
+  either way (no live symptom observed).
+- **§7.126** (stale `.c` extension in `.o` save data): the §3.4 sweep
+  already covered every filename-slice site at the source level; no
+  live symptom seen (all door/exit loads during the playthrough
+  resolved correctly).
+- **§7.129** (`tell_room()` wrapper forwarding omitted `exclude` as
+  literal `0`): `secure/sefun/communications.lpc`'s `tell_room()`
+  dispatches through this codebase's own hand-rolled
+  `eventPrint()` chain (`lib/std/room.lpc`), not the driver's native
+  `message()` efun — and `eventPrint()` explicitly branches on
+  `!arg3` before ever treating it as an exclude list. Confirmed clean
+  by design, and live-exercised with zero errors during the death
+  sequence's own `message()` calls (a different, correctly-typed call
+  path).
+- **§7.130** (unconditional liveness check post-non-interactive):
+  no matching shape found in `net_dead()`/heartbeat code.
+- **§7.131** (`find_living()`/`find_player()` needing
+  `set_living_name()`): both `lib/interactive.lpc` (players) and
+  `lib/npc.lpc` (NPCs) call `set_living_name()` correctly — and
+  `find_player("ericlang")` was live-exercised successfully via `eval`
+  during the death test above.
+- **§7.132** (`map()`-over-mapping bound to the wrong argument):
+  every `map(x, (: ... $1 ... :))` call site in the tree operates on
+  an array-typed variable (checked the ones using the classic
+  single-arg `$1` convention specifically, e.g. `lib/persist.lpc`'s
+  `Saved` is `mixed *`), never a mapping. Not applicable.
+- **§7.133** (disconnect-notification apply never defined): `net_dead()`
+  is defined and chained correctly through
+  `chat`/`interactive`/`player`/`creator`.
+- **§7.134** (field defaulting to `0` instead of `({})`): no live
+  symptom observed (no truncated room descriptions, no
+  `member_array()`-type crashes) during the playthrough.
+- **§7.135/§7.30** (accessor missing lazy-init): no live symptom
+  observed.
+- **§7.136** (setup step silently ungranted due to missing archive
+  content): the closest match is the `help newbie` gap documented
+  above, which is a help-text/doc gap, not a granted-verb/ability
+  gap — players get full normal command access from character
+  creation.
+- **§7.139** (colour translation needs `"interactive catch tell"`):
+  N/A by construction — this codebase's `write()` simul_efun
+  (`secure/sefun/sefun.lpc`) routes everything through
+  `message("my_action", str, this_player())`, and the driver's
+  `message()` efun (`do_message()` in `vm/internal/simulate.cc`)
+  always calls `receive_message()`/`eventPrint()` directly for
+  interactive listeners regardless of that runtime-config flag —
+  confirmed by reading the driver source, not just guessing from the
+  mudlib side. `eventPrint()` (`lib/interface.lpc`) itself calls the
+  `terminal_colour()` efun on the raw `%^TAG%^` markup before it ever
+  reaches `receive()`/the socket. No literal `%^TAG%^` was seen
+  anywhere in the whole live session (confirmed real ANSI escapes
+  throughout).
+- **§7.140** (compiler global-include attributed to the connected
+  player): `secure/daemon/master.lpc`'s `valid_read()`/`check_access()`
+  never calls `this_interactive()` at all (grepped, zero hits) — it
+  resolves identity via `previous_object(-1)` (the real call stack),
+  architecturally different from the `this_interactive()`-based bug
+  this pattern describes. Not applicable.
+
+**Overall: clean pass.** No new programming bugs found beyond the
+one pre-existing content gap documented above (`help newbie`, left
+unfixed per the content/programming scope boundary). The §7.121
+currency fix re-verified live with a second, independent character.
+Test characters `Ericlang`/`Testcarlin` (an aborted first registration
+attempt merged into a real account mid-session — see the messy
+gender-prompt retry in this session's own history) and three older
+leftover test saves from the original §10 currency-fix session
+(`Qintwo`/`Qintestdsb`/`Qintest`) were all deleted before commit,
+leaving only the seeded `fluffos` admin account.
