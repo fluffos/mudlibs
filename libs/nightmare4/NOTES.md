@@ -402,3 +402,191 @@ elsewhere in this collection.
 ## 13. WASM status
 
 Not attempted (`wasm_status` left `""` per task scope).
+
+## 14. Deep functional test, round two (2026-08-27, AGENTS.md §10.7)
+
+One continuous session against `~/src/fluffos/build-debug/src/driver`, a
+raw Python socket client (no `tmux_mud.sh`), plus a separate admin
+(`fluffos`/`Mud@2026`) connection for `eval`-based verification.
+Registered two full new characters through the real menu-driven flow
+(name -- rejects any digit, letters/`'`/`-` only, 2-15 chars --
+confirm y/n, password x2, gender `male`/`female` spelled out in full,
+display name, email requiring a real `user@host` shape, optional real
+name, then `list`/`pick RACE`), landed in Ylsrim's bazaar both times.
+Walked bazaar -> n (Kaliid Road) -> w (Kaliid Road near the Fighters'
+Hall) -> enter hall -> n (through the oak door) to reach Roshd
+Burlyneck, used `ask roshd to describe fighters` then `ask roshd to
+join fighters` -- class join works exactly as documented (`score`
+correctly flips from "Newbie Wanderer ... Drifter" to "Newbie Fighter
+... Fighter", `skills` populates the fighter's primary/secondary/other
+skill table from a clean zero baseline). Tested the pub economy path
+(`enter pub` -> `ask lars to list` -> correct menu response "I
+currently supply ale for 3747." -> `ask lars to serve ale` -> correctly
+rejected with "You do not have that much in electrum" for a broke new
+character -- no crash, `GetCost()` already correctly uses `to_int()`).
+Confirmed the bare command forms (`list`, `serve ale` typed directly,
+without `ask lars to`) are NOT valid verbs in this codebase at all --
+`SetCommandResponses()` is only ever dispatched from `eventAsk()`, so
+every NPC "command" here is really an `ask NPC to VERB` sentence; this
+is the correct, intended dispatch shape (confirmed by reading
+`lib/sentient.lpc`), not a missing-verb bug.
+
+**Two real bugs found and fixed** (both silent -- zero compile error,
+zero crash, invisible to `lpcc_check.sh` and to a clean boot):
+
+1. **`lib/currency.lpc`'s `GetNetWorth()`** -- declared to return `int`
+   but its body sums `amt / tmp` (a `float currency_rate()` divisor)
+   into a `float net_worth` local and returned that float bare, with
+   no `to_int()` -- the exact §7.121 shape (declared `int`, real float
+   value, no runtime coercion on this driver). Live caller
+   `lib/living.lpc:479`'s `eventSteal()` assigns the result straight
+   into a declared-`int amt` used for `random(7*amt)`/`random(amt)`/
+   `AddStatPoints("coordination", random(amt))` in the stealing-skill
+   training path -- not just the cosmetic `cmds/creators/stat.lpc`
+   "net worth" display. Fixed: `return net_worth;` -> `return
+   to_int(net_worth);`. Verified live via admin `eval`:
+   `ob->AddCurrency("gold", 37); ob->GetNetWorth()` now returns a real
+   `int` (`intp()` true), previously would have been a bare float.
+   (`lib/mayor.lpc`'s near-identical `int cost = (currency_rate(...) *
+   Tax);` shape at lines 27/49 was checked and left alone -- `Tax`
+   defaults to `0` and nothing in this archive snapshot ever inherits
+   `lib/mayor.lpc` at all, confirmed by a corpus-wide `inherit`
+   grep, so it's genuinely dead/unreachable code, not a live bug.)
+
+2. **`lib/combat.lpc`'s `Wimpy` field** (the auto-flee-at-low-health
+   safety threshold) -- a brand NEW bug class, written up as AGENTS.md
+   §7.124. `private int Wimpy;` is initialized in `create()` with
+   `Wimpy = 0.20;` (a bare fraction), but every real consumer in this
+   codebase (`cmds/players/wimpy.lpc`'s player-facing `wimpy
+   PERCENTAGE` command, `cmds/players/score.lpc`) treats it strictly as
+   an **integer percentage 0-100** (`wimpy on` sets it to the literal
+   `23`). The runtime gate in `eventReceiveDamage()`,
+   `if( Wimpy < percent(hp, GetMaxHealthPoints()) ) return x;` (skip
+   fleeing when true), is therefore comparing `0.20` against an integer
+   0-100 -- true for virtually every nonzero health percentage, so the
+   auto-flee safety net was **silently dead for every character from
+   character creation**, until the player manually ran `wimpy
+   NUMBER` themselves. `SetWimpy()`/`GetWimpy()` were also declared to
+   return `float` (matching the buggy literal) instead of `int`
+   (matching the field's own declaration and every real caller) -- a
+   second, dependent bug: once a real nonzero integer sits in `Wimpy`,
+   the declared-`float` return silently widens it, and callers' `(int)`
+   casts (compile-time-only on this driver, see
+   `reference_lpc_int_cast_is_compile_time_only`) don't convert it back,
+   corrupting the player-facing display (`"Percentage: 20.000000%"`
+   instead of `"20%"`). Fixed both: `Wimpy = 0.20;` -> `Wimpy = 20;`,
+   and `float SetWimpy(float wimpy)`/`float GetWimpy()` -> `int
+   SetWimpy(int wimpy)`/`int GetWimpy()`.
+
+   Verified live in two independent ways: (a) a brand-new character
+   (`freshtwo`) created strictly after the fix shows `score`'s mood
+   line as "You are feeling wimpy." and the bare `wimpy` command
+   correctly prints `"Percentage: 20%\nCommand: go out"` (a
+   pre-existing character, `wanderling`, created before the fix still
+   shows "You have wimpy turned off" -- expected, the fix does not
+   retroactively repair an already-corrupted save, same caveat as
+   §7.121/§7.122); this held after a full quit/reconnect cycle, so the
+   fixed default survives a real save/restore round-trip, not just the
+   in-memory session. (b) an admin `eval` directly exercised the exact
+   comparison used in `eventReceiveDamage()` against `freshtwo`'s real
+   `GetMaxHealthPoints()`: simulated 15%-health now correctly evaluates
+   to "should flee", simulated 50%-health correctly evaluates to
+   "should not flee" -- both were "should not flee" before the fix,
+   confirming the safety net was unconditionally dead, not just
+   mis-tuned.
+
+   **Live combat against a real hostile was not reached** in this
+   session: this archive's Ylsrim example domain ships exactly one
+   NPC weak enough for a level-1 test character to safely engage
+   (`domains/Ylsrim/npc/traveller.lpc`, level 5, non-aggressive,
+   `s_bazaar`'s `SetInventory` spawns it via `unique(file, 1)`) --
+   every other domain NPC (`max`/`shiela`, level 15 shopkeepers;
+   `lars`, level 12 barkeep; `roshd`/`priest`, level 45 class leaders)
+   is far too strong for a fair fight, and `domains/Ylsrim/npc/
+   balrog.lpc` (an "example simple NPC" file) is never actually placed
+   in any room at all (confirmed by grep -- dead/template content, not
+   reachable). The traveller itself turned out to be blocked by its
+   own **intended rarity design**, not a bug: `daemon/unique.lpc`'s
+   `GetUniqueCopy()` enforces an `86400 * rare` second real-world
+   cooldown between spawns (`rare=1` here, i.e. 24 real hours), and
+   `save/unique.o` already had a timestamp from this lib's own
+   onboarding-time testing less than a day old, so `unique()` correctly
+   returned `0` (confirmed live via `eval`: `unique(fn,1)` returns 0,
+   `catch()` shows no error) and the NPC legitimately could not
+   respawn yet -- this is the same "ghost absence is often a feature"
+   shape documented elsewhere in this project, not a bug to patch
+   around. Given the risk of permanently disrupting a shared shopkeeper
+   NPC (or the same 24h-cooldown unique mechanism) for an incremental
+   confirmation, combat plumbing was instead verified end-to-end via
+   the two eval checks above (b) rather than a live fight; a full live
+   fight (and the death/respawn cycle) is flagged here as **not
+   verified live**, an honest gap rather than a silent skip, should a
+   future session have more wall-clock room (or catch the traveller's
+   cooldown window) to complete it.
+
+**All four known cross-cutting bug patterns checked explicitly**:
+
+- **§7.121 currency float-into-int**: found and fixed (`GetNetWorth()`
+  above); every other money-handling function in
+  `lib/currency.lpc`/`lib/std/barkeep.lpc`/`lib/std/vendor.lpc`/
+  `lib/teller.lpc`/`secure/sefun/economy.lpc` already correctly wraps
+  its float arithmetic in `to_int()`/`to_float()` at every call site
+  checked.
+- **§8.3a `private` command-dispatch demotion**: not applicable to
+  this codebase's architecture at all -- there is no `command_hook`
+  mechanism; ordinary commands dispatch through `daemon/command.lpc`
+  (already fixed for the §7.118 filename-slice bug at onboarding) and
+  NPC "commands" dispatch only through `eventAsk()`. A script-driven
+  check for the general shape (a `private` function referenced by
+  string name from `add_action()`/`call_out()` within the same file,
+  the `demonangel`-class pattern) found zero matches anywhere in the
+  corpus.
+- **§7.122 class/marker-item duplication on reconnect**: not
+  applicable -- no `auto_load`/`compute_autoload_array`/
+  `load_autoload_obj`-style reload mechanism exists anywhere in this
+  codebase (confirmed by grep); `lib/player.lpc`'s `class quest
+  *Quests`/`class death *Deaths` fields are tracking data, not
+  physical reloadable items.
+- **§7.123 bare file-scope assignment**: one heuristic grep hit
+  corpus-wide (`secure/cmds/players/tell.lpc:101`'s `__Morse = ([...
+  ]);`), hand-verified as a false positive -- it's a local variable
+  inside the `morse()` function body, not file scope, and the file
+  compiles and works correctly.
+
+**Systematic re-check of the §7.118 filename-slice class** (this
+lib's dominant bug at onboarding, ~15 files): every remaining
+`[0..<N]`/`[<N..]`/`strlen(x)-N`-shaped slice in the corpus was
+individually triaged. All were confirmed to be doing something else
+entirely (stripping a trailing `/` one character at a time regardless
+of length in `secure/lib/file.lpc`, dropping the last word of a
+`explode(str," ")` array in `daemon/chat.lpc`/`secure/obj/post.lpc`,
+dropping the last array element in `secure/daemon/bboard.lpc`,
+singularizing an English category name for an error message in
+`daemon/help.lpc`, trimming an appended `/` sentinel character in
+`secure/cmds/creators/grant.lpc`) -- no further live instances of the
+dominant onboarding-time bug class remained.
+
+**Test characters left as evidence**: `wanderling` (pre-fix,
+demonstrates the "wimpy turned off" post-restore symptom), `freshtwo`
+(post-fix, level 1 human, joined the fighter class, correctly shows
+`wimpy` at 20%/"go out"). `freshbie`/`freshbie2`/`grimtest`/
+`grimtest2`/`freshtwo`-style throwaway registration retries with typos
+were not all cleaned up; harmless partial/duplicate throwaway accounts
+from mid-flow registration mistakes (invalid name/email formats
+rejected before a character object was ever created) are not
+persisted at all by this mudlib's own registration flow, so no
+additional cleanup was needed beyond what's listed here.
+
+**Sibling note for `nightmare3`/`residuum`**: check both for the same
+`Wimpy = 0.20`-style fraction-vs-percentage literal shape in their own
+combat/status mixins if they share this lineage's `lib/combat.lpc`
+ancestry -- `residuum` is already known (per §7.118's own writeup) to
+share the identical filename-slice dispatch bug with `nightmare4`, so
+its combat internals are a plausible direct copy too.
+
+Driver killed by exact PID after each reboot (never `pkill -f`); the
+Intermud-3 outbound connection noted in §12 was observed reaching
+`ESTABLISHED` again on each of the three reboots this session, exactly
+as before -- no change in that behavior, and the session stayed well
+within a small number of manual reboots rather than any automated
+loop.
