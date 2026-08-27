@@ -309,3 +309,86 @@ Lima 自己的安全模型是"能力（capability）+ 领域（domain）"式的�
 `[announce]` 频道正确广播离线消息，回到用户菜单，`debug.log` 全程
 无报错）。管理员账号额外验证 `update`/`admtool`。整个流程干净、无
 崩溃、无静默失败。
+
+## 附录（2026-08-26）：`limalib/lima`（"modernized LIMA" fork）调查结论 —— 负面结果，未新建 lib
+
+外部研究提到一个 GitHub 仓库 `limalib/lima`（<https://github.com/limalib/lima>，
+自称 "Updated, maintained, modernized LIMA mudlib updated to run latest
+FluffOS driver. Kept in the original LIMA spirit."，官网
+limamudlib.dev，文档 docs.limamudlib.dev，HEAD `eb25dc6`，2025-10-27），
+怀疑这个"现代化"分支是否已经从根本上摆脱了 §7.46 记录的驱动编译期开关
+冲突（本条目上文已经用的那五项：`NO_LIGHT`/`NO_ADD_ACTION`/`NO_WIZARDS`/
+`undef OLD_ED`/`undef PACKAGE_UIDS`）。本次任务专门验证了这一点——
+**结论：没有，问题原样保留，`limalib/lima` 和 `libs/lima` 用的
+`fluffos/lima` 一样，需要同一套专用驱动才能启动，不构成新的可独立
+onboard 的 lib，因此本次只写这条负面结论，不新建 `libs/<slug>/` 目录。**
+
+### 验证过程
+
+1. **代码血缘对比**：`limalib/lima` 和本 lib 来源的 `fluffos/lima`
+   是两个独立的 GitHub 组织下的仓库（`limalib/lima` 的
+   `defaultBranchRef`/`parent` 显示不是 `fluffos/lima` 的 fork），
+   但目录结构和核心文件几乎一致——两边的 `secure/check_config.c`
+   逐行 diff 下来，**除了版权头文字和版本号字符串（"MudOS"→"FluffOS"、
+   `config.lima`→`config.mud`）之外，`need()` 检查列表完全相同**，
+   证明是同一 LIMA 血缘的演进版本，不是独立重写。文件数
+   `limalib/lima` 1534 个 vs `fluffos/lima` 1969 个（前者砍掉了不少
+   demo 内容，新增了 `obj/admtool`、`obj/tasktool`、`std/race`、
+   `cmds/guild` 等框架性目录），属于同一代码库的功能增补/精简，
+   不是从零重写的替代架构。
+2. **直接读 `limalib/lima` 自带的 `lib/secure/check_config.c`**——
+   这就是 LIMA 系 mudlib 用来拒绝在不兼容驱动上启动的自检文件。
+   除了沿用 §7.46 记录的五项（`NO_LIGHT`/`NO_ADD_ACTION`/`NO_WIZARDS`/
+   `undef OLD_ED`/`undef PACKAGE_UIDS`），还新增了几项检查
+   （`SANE_EXPLODE_STRING` 需定义、`CAST_CALL_OTHERS` 需未定义、
+   `OLD_RANGE_BEHAVIOR` 需未定义、`MUDLIB_ERROR_HANDLER` 需定义、
+   `ARRAY_RESERVED_WORD` 需未定义、`PACKAGE_CONTRIB`/`PACKAGE_PARSER`
+   需定义）——但这些新增项本项目共享驱动（`~/src/fluffos/build-debug`）
+   原本就满足，不构成新的冲突点；**真正冲突的仍然是那五项经典要求，
+   一个字都没变。**
+3. **实测启动**：用本项目的 `scripts/convert_lib.sh` 把
+   `limalib/lima` 的 `lib/` 转成 `.lpc`（UTF-8 源码，1407 文件已是
+   UTF-8、0 需要转码，127 个二进制文件跳过，行为和 `fluffos/lima`
+   转换时几乎一样），配上一份仿照本 lib `config.fluffos` 改路径/端口
+   的临时配置，直接用**本项目共享的标准驱动**
+   （`~/src/fluffos/build-debug/src/driver`，未加任何特殊 flag）尝试
+   启动——`simul_efun`/`master` 加载阶段立即被 `check_config.lpc`
+   的 `create()` 用 `error()` 中止，实际报错文本：
+
+   ```
+   *Bad driver configuration:
+   **********************************************************
+   * You have incorrectly compiled the FluffOS driver. This  *
+   * driver is not compatible with the LIMA mudlib.   Please *
+   * make the following changes to 'local_options' ) in the  *
+   * driver source, and recompile.                           *
+   **********************************************************
+   #define NO_LIGHT is required for LIMA libs.
+   #define NO_ADD_ACTION is required for LIMA libs.
+   #define NO_WIZARDS is required for LIMA libs.
+   #undef OLD_ED is required for LIMA libs.
+   #undef PACKAGE_UIDS is required for LIMA libs.
+   **********************************************************
+   The simul_efun (/secure/simul_efun) and master (/secure/master) objects must be loadable.
+   ```
+
+   和 §7.46/本 lib 上文记录的 `fluffos/lima` 症状完全一致——不是
+   "modernized" 架构层面移除了这个假设，只是版本号/驱动兼容性提示文字
+   更新了而已（README 里"modernized"、"run latest FluffOS driver"
+   说的是能跟着最新版 fluffos 驱动源码（`adm/dist/fluffos` 子模块跟踪
+   `fluffos/fluffos.git`）编译，而不是摆脱 `NO_LIGHT`/`NO_ADD_ACTION`/
+   `NO_WIZARDS`/`OLD_ED`/`PACKAGE_UIDS` 这套架构假设）。
+
+### 有用的推论（供未来参考）
+
+`limalib/lima` 要求的五项和本 lib 已经解决的 `fluffos/lima` 要求
+**完全相同**，所以本 session 已经建好的
+`~/src/fluffos-lima/build-debug`（worktree，见上文"§7.46 的后续"一节）
+理论上不需要任何改动就能同时满足 `limalib/lima` 的 `check_config.c`——
+如果未来真的要把 `limalib/lima` 也收进本项目（例如作为它自己独立的
+lib，因为它的功能集/demo 内容和 `fluffos/lima` 已经有实质差异，不是
+纯粹的重复），可以直接复用这个驱动 worktree，不必重新摸索 flag 组合。
+但这次任务的范围只是回答"是否解决了驱动 flag 冲突"这一个问题，
+结论是否定的，所以没有走完整的 onboard 流程（没有 `convert_lib.sh`
+之后的编译修复循环、没有真实注册验证、没有分配 `number`/`port`、
+没有新建 `libs/<slug>/` 目录）。
