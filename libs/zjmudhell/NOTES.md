@@ -295,3 +295,38 @@ functionally re-tested live on this lib.
   `cmds/std/go.lpc` 没有 `sizeof(exit[arg])` 这个具体写法（它用的
   是 `!mapp(exits)`/`undefinedp(exit[arg])` 检查，形状不同，不受
   影响）。
+
+## AGENTS.md §8.3a variant fix (2026-08-27): `feature/action.lpc::eval_function()` and `inherit/item/combined.lpc::destruct_me()` wrongly `private`
+
+Same targeted follow-up as `libs/hell` (see that lib's NOTES.md entry
+of the same date for the full writeup) — `libs/revive`'s own §8.3a
+deep-test finding explicitly named `zjmudhell` as a sibling in the
+`hell`/"Doing" lineage still carrying this bug. Confirmed present here,
+byte-identical file layout and content to `hell`:
+
+- `feature/action.lpc::start_call_out()`'s `call_out("eval_function",
+  ...)` was blocked by a `private`-declared `eval_function()`, inherited
+  into the player body via `inherit/char/char.lpc` -> `clone/user/
+  user.lpc` — silently no-ops every delayed-callback effect/sleep/combat
+  mechanism using `start_call_out()`.
+- `inherit/item/combined.lpc::set_amount(0)`'s `call_out("destruct_me",
+  0)` was blocked the same way, affecting every `COMBINED_ITEM`
+  descendant (money, thrown weapons, medicine powders, etc.).
+
+**Fix**: dropped `private` from both declarations (function bodies
+unchanged), matching the established `revive`/`hell`/`§8.3a` pattern.
+
+**Verified live**: native `build-debug` driver, port 40204, using this
+lib's custom mobile-app crypt-challenge login protocol (`ZJKEY`-based
+handshake per this lib's own earlier §7.14 fix notes) to log in as the
+existing `fluffos`/`Mud@2026` admin account. `goto`'d to the
+`sleep_room` `/d/guanwai/xiuxishi` and ran `sleep`: with the fix in
+place, `wakeup()` fired correctly within its `12 + random(10)` second
+delay window ("你迷迷糊糊的睁开双眼，爬了起来。"), confirming
+`start_call_out()`/`eval_function()` actually dispatches post-fix.
+(Not independently re-tested with `private` restored on this lib —
+`hell`'s identical before/after test already demonstrated the failure
+mode live, and this lib's source was byte-identical before the fix.)
+`debug.log` clean of any `执行时段错误`/`Bad argument` post-fix.
+Incidental `data/user/f/fluffos.o` save drift from the test login
+reverted via `git checkout` before committing.
