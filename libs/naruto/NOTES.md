@@ -655,3 +655,28 @@ sanity check on each before assuming it's unaffected).
   higher severity — the entire built-out world was unreachable before
   the fix, which is a precondition for testing everything downstream of
   it).
+
+### ES2-family cross-check (2026-08-27): AGENTS.md §7.129 `tell_room()` bug found and fixed — NOT on the core death path, but real elsewhere
+
+Following up on `es1`'s severe §7.129 find (a shared `tell_room()`
+wrapper forwards its omitted `exclude` arg to `message()` as a literal
+`int(0)`, which this driver's `message()` rejects), checked this direct
+ES2-family descendant. `std/char.lpc`'s core `die()` uses
+`message_vision()`, not `tell_room()`, for its death announcement —
+explaining why this bug went unreported before, despite this lib
+already having real bugs found and fixed earlier in this same
+document. But `adm/simul_efun/message.lpc`'s `tell_room(ob, str,
+exclude)` still unconditionally forwarded the bare, defaulted
+`exclude` straight to `message()`, and a real 2-argument call site
+exists in `obj/user.lpc`'s `net_dead()` (the "時空一陣波動...瞬間由這個
+世界消失" announcement made on every abrupt disconnect when the
+player isn't inside an area-room). This would have crashed uncaught on
+every ordinary net-dead disconnect. **Fix**: `message("tell_room",
+str, ob, exclude)` → `message("tell_room", str, ob, exclude ||
+({}))`, identical pattern to `es1`/`es2`/`haiyang2`/etc. Verified live
+using this lib's own `cmds/adm/eval.lpc` (a genuine `eval` command,
+unlike most siblings): post-fix, `eval tell_room(environment(me),
+"TESTMSG_2ARG_OK\n"); return 1;` and the 3-arg form both completed
+with no crash. `include/compress_obj.h` (the sibling §7.14 bug from
+the same `es1` finding) does not exist anywhere in this lib's tree —
+not applicable.
