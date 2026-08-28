@@ -60,7 +60,14 @@ Intermud-3, and an automatic `dead-souls.net` RELEASE_NOTES fetch) --
 same caveat as `ds386`/`dsIII`: do not sweep this lib into
 high-frequency automated re-boot loops.
 
-WASM status: not yet attempted (`wasm_status` left `""`).
+WASM status: **playable**. Full admin login (`fluffos`/`Mud@2026`) and a
+fresh new-player registration (8-race pick, age gate, email validation)
+both verified clean end-to-end (`look`/`score`/`update`/`quit`) via
+`scripts/wasm_client.js`. The same `sockets`-package-absent gap
+`ds386`'s WASM pass already fixed was mostly inherited for free (shared
+`secure/` tree); one remaining `secure/daemon/imc2.lpc` compile gap is
+identical to `ds386`'s own current state and doesn't block boot/login/
+play -- see `NOTES.md`'s "WASM bring-up (2026-08-27)" section.
 
 ## Local run
 

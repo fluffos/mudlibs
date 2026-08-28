@@ -571,3 +571,95 @@ were committed -- `RELEASE_NOTES_HTTP`/IMC2/vote/daemon-state test
 churn and a stray `secure/tmp/*_CMD_EVAL_TMP_FILE.lpc` scratch file
 were reverted/removed first. Killed the test driver by exact PID when
 done.
+
+## WASM bring-up (2026-08-27) -- `wasm_status` promoted to `playable`
+
+First WASM-sandbox pass for this lib (`meta.json`'s `wasm_status` was
+still `""` going in -- native verification above never touched the WASM
+side). `~/src/fluffos/build-wasm/src/fluffos.js`/`.wasm` were already
+built on this machine; `node` itself needed `~/.local/opt/node/bin` on
+`PATH` (not on the default `PATH` in this shell, unlike the `ds386`
+session's environment which had no `node` at all).
+
+As predicted by this lib's own `meta.json` group_note and
+`ds386`/`dsIII`'s precedent, this is the exact same Dead Souls 3.8.6
+`sockets`-package-absent gap `ds386`'s own 2026-08-25 WASM pass already
+diagnosed and fixed -- and since this port's entire `secure/` tree was
+copied wholesale from `ds386`'s OWN already-WASM-fixed copy (see this
+lib's onboarding section above), the fix mostly came for free:
+`secure/sefun/sockets.lpc`, `sefun.lpc`'s `socket_address()` wrapper,
+`secure/daemon/instances.lpc`, and `secure/lib/net/server.lpc` are all
+byte-identical to `ds386`'s post-fix copies and loaded/compiled clean
+under WASM with zero changes needed here. Confirmed via
+`node scripts/wasm_client.js ~/src/fluffos/build-wasm/src libs/dshakkard`:
+simul_efun and the master object both load cleanly (no "must be
+loadable" fatal, unlike `ds386`'s pre-fix state), so the driver boots
+all the way to the login prompt.
+
+**One gap remains, and it's the same one `ds386` itself still has** (a
+byte-for-byte diff of `secure/daemon/imc2.lpc` between the two libs
+returns nothing): a handful of functions inside `secure/daemon/imc2.lpc`
+(the IMC2 chat-network client) that `ds386`'s own 2026-08-25 fix pass
+did not reach still call raw `socket_status()`/`socket_close()`/
+`socket_create()`/`socket_error()` (lines 633-712, e.g. the
+router-connect routine) and fail to *compile* under WASM (`Undefined
+function socket_status`, etc.), same as `daemon/intermud.lpc`'s own
+deliberate `#error "You should not try and load ... with no sockets
+package"` self-guard. Since this is identical, in the identical file,
+to `ds386`'s own current committed state -- and `ds386` is already
+`playable` with this exact gap present and undocumented as a
+per-lib issue (its own fix notes call out the incomplete sweep only for
+the admin-tooling files, not `imc2.lpc`'s own remaining functions) --
+this was left alone here too rather than diverging from the reference
+lineage's accepted baseline: **both preload-time compile failures are
+non-fatal** (the driver logs the error and simply proceeds without the
+daemon, exactly like any other absent-daemon case in AGENTS.md §1.3c)
+and neither the IMC2 nor the Intermud-3 outbound connection can
+possibly matter under WASM anyway, since WASM has no sockets at all --
+this isn't a regression from anything native play relies on.
+
+Verified the full flow clean end-to-end via `wasm_client.js` against the
+committed `work/` tree (already past the one-time installer --
+`secure/lib/connect.lpc` was already swapped to the real login object
+and `fluffos`/`Mud@2026` already seeded per the onboarding pass above,
+so a WASM run reaches the normal login directly, same precedent as
+`ds386`):
+
+1. **Admin login** (`fluffos` / `Mud@2026`): password prompt -> three
+   `Press <return> to continue:` news pagers (general/creator/admin
+   news, one more than `ds386` hit since this lib's admin account also
+   gets creator news) -> lands in `/domains/default/room/start` with
+   the queued `.profile` commands (`people`/`uptime`/`boards`) firing
+   correctly. Explicit `look`, `score` (correct level-1 Human Explorer
+   sheet), and `update` (`/domains/default/room/start: Ok`) all produced
+   correct output; `quit` cleanly disconnected
+   ("Please come back another time!" + a `[Fluffos quits ds-hakkard]"`
+   connections-channel message).
+2. **Fresh new-player registration**, to also cover the
+   first-boot-installer-flavored flow this lib is documented for
+   natively: name (`Qinwtestd`, this lineage's strict `A-Z a-z ' -`
+   charset) -> confirm -> age gate -> screen-reader prompt (`n`) ->
+   password/confirm -> gender (`male`) -> email (validated; a blank
+   first attempt correctly rejected and re-prompted, matching the
+   native test) -> `pick human` (8-race list, identical set to native)
+   -> two more news pagers -> landed in "The start room" (the `default`
+   domain's ASCII-art entry point) with a correct `hp/mp/sp` status bar.
+   `look`/`score` (`Qinwtestd the unaccomplished`, level 1 Human
+   Explorer) both correct; `quit` cleanly disconnected and removed worn
+   equipment on the way out.
+
+Both flows produced zero uncaught runtime errors and no disconnects
+other than the deliberate `quit`. Since `wasm_client.js` boots a fresh
+in-memory MEMFS copy of `work/` per run and never writes back to the
+host filesystem, none of this session's test characters or pager state
+touched the committed tree (`git status` after both runs: clean) --
+nothing needed reverting, unlike the native-driver testing sessions
+above.
+
+`wasm_status` promoted from `""` to **`"playable"`** in `meta.json`: the
+core registration/login/play/quit loop is fully verified under WASM,
+matching the bar `ds386`/`dsIII` were promoted at. The remaining
+`imc2.lpc` compile gap is the same pre-existing, shared-lineage,
+admin/network-tooling-only limitation already accepted as out of scope
+for the playable/limited distinction on `ds386` itself -- not something
+this port introduced, and not on the boot/login/play path.
