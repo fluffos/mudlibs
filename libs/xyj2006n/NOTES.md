@@ -196,3 +196,37 @@ Verified `grep -h '"port"' libs/*/meta.json | grep -oE '[0-9]{5}' | sort
 killed by exact PID after testing; test character's save files deleted,
 only the seeded `fluffos` admin account save files remain under
 `work/data/{login,user}/f/`.
+
+**Targeted follow-up (AGENTS.md §7.154 sibling check)**: `xyj2006zzzhx`'s
+NOTES.md (round-two deep test) had explicitly flagged `xyj2006n`'s
+`cmds/std/look.lpc:410` as byte-for-byte the same unfixed
+`present("fire", this_player())`-with-no-null-check line documented in
+AGENTS.md §7.154. Confirmed identical here: `feature/move.lpc::remove()`
+(called on every `destruct()`) calls `LOOK_CMD->look_room(me, ob,
+query("env/brief"))` whenever an object leaves a non-living, non-
+character environment (line 283), and `look_room()`'s outdoor exit-
+listing block unconditionally evaluated `present("fire",
+this_player())` before checking whether `this_player()` was even an
+object. Reproduced live on a fresh boot two independent ways: (1) the
+real production path — waited for `adm/daemons/natured.lpc`'s
+boot-persistent `update_day_phase()` call_out chain to reach its
+`event_dawn()` phase, which `destruct()`s the outdoor 钟馗(Zhong kui)/
+青霞仙子(Qingxia xianzi) NPCs spawned at midnight; `debug.log` recorded
+`*Bad argument 2 to present() Expected: object Got: 0` at
+`cmds/std/look.lpc:410` via
+`natured.lpc:event_dawn()`→`destruct()`→`move.lpc:remove()`→
+`look_room()`, exactly matching the zzzhx trace shape (and a bonus
+third instance via `/std/room.lpc::reset()` destructing a decayed
+corpse the same way); (2) a synthetic `set_heart_beat(1)` harness
+object (heart_beat calls are a reliable way to get `this_player()==0`
+outside a live command, confirmed via `log_file()`) that cloned a
+corpse into an outdoor room and called `decay(3)` from `heart_beat()`
+— crashed identically. Applied the identical fix from `xyj2006zzzhx`:
+added an `objectp(this_player())` short-circuit guard before the
+`present()`/`wizardp()` calls. Rebooted fresh and reran the same
+`set_heart_beat()` harness (confirmed `this_player()==0` at the
+`decay(3)` call site via the same `log_file()` check) — zero
+`present()` crashes in `debug.log` afterward; the torch/wizard check is
+now cleanly skipped instead of throwing when there's no player in
+context. Test harness file and its log were removed before commit;
+only `cmds/std/look.lpc` changed.

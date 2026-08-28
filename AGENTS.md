@@ -12084,12 +12084,24 @@ if (env->query("outdoors") &&
 Verified live post-fix: two full quit/reconnect cycles plus a repeat
 of the same corpse-decay/day-phase conditions produced zero further
 `present()` crashes in `debug.log`. **Confirmed instances**:
-`xyj2006zzzhx` (`cmds/std/look.lpc:410`); `xyj2006n`'s own
-`cmds/std/look.lpc:410` carries the byte-for-byte identical
-unfixed line (same lineage, not yet re-tested against this specific
-gap — check it and any other `西游记`/`xyj*` sibling with a
-`present("fire", this_player())` grep hit before assuming a fresh
-find is isolated).
+`xyj2006zzzhx` (`cmds/std/look.lpc:410`); **second confirmed instance
+and fix, `xyj2006n`** (same `cmds/std/look.lpc:410`, byte-for-byte
+identical unfixed line, same lineage) — reproduced live two independent
+ways on a fresh boot: the real production path (waited for
+`adm/daemons/natured.lpc`'s boot-persistent `update_day_phase()`
+call_out chain to reach `event_dawn()`, which `destruct()`s the outdoor
+钟馗/青霞仙子 NPCs, hitting `*Bad argument 2 to present()` at
+`cmds/std/look.lpc:410` via the identical `natured.lpc`→`destruct()`→
+`move.lpc:remove()`→`look_room()` chain, plus a bonus third instance
+via `/std/room.lpc::reset()` destructing a decayed corpse the same
+way) and a synthetic `set_heart_beat(1)` harness (heart_beat calls
+reliably give `this_player()==0` outside a live command) that cloned a
+corpse into an outdoor room and called `decay(3)` from `heart_beat()`.
+Applied the identical `objectp(this_player())` guard; rebooted fresh
+and reran the same harness (`this_player()==0` reconfirmed via
+`log_file()`) — zero `present()` crashes afterward. Check any other
+`西游记`/`xyj*` sibling with a `present("fire", this_player())` grep
+hit before assuming a fresh find is isolated.
 
 ---
 
