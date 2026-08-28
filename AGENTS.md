@@ -2120,6 +2120,29 @@ Two independent traps in the same apply:
   as defense-in-depth, since a second, unrelated bug in the same
   function (`topten_add()`'s `sscanf` array-argument slip, new §7.54
   instance below) was ALSO capable of aborting this exact call chain.
+- **Third confirmed instance of the `topten_save()` shape (throwing
+  variant), `xyj2006zzzhx`'s deep functional test (§10.7).** Same
+  `adm/daemons/toptend.lpc::topten_save()` doing `write_file(f_name,
+  str, 1)` into a never-shipped `/data/topten/` directory, same
+  hard-throw failure mode as `xixingzhanji`'s instance above (this
+  lib's `debug.log` showed the identical `*Wrong permissions for
+  opening file /data/topten/rich.o for overwrite. "No such file or
+  directory"` trace, twice, both times originating from
+  `enter_world()`→`topten_checkplayer()`→`topten_add()`→
+  `topten_save()`). Milder blast radius than `xixingzhanji` here
+  specifically because `topten_checkplayer()` is called textually
+  AFTER this lib's own `user->move(startroom)` in `enter_world()`, so
+  the throw only ever aborted the trailing QQ-notify/`caishen`-check/
+  `pkgame` tail of `enter_world()`, never the room-entry itself — but
+  it fired on every single login (new or returning), silently and
+  permanently disabling all eleven leaderboards. Same fix
+  (`assure_file(f_name);` inserted immediately before the
+  `write_file()` call in `topten_save()`). Verified live: a fresh
+  `get_passwd()`-path login post-fix produced zero `debug.log` entries.
+  Reinforces the standing lesson — `topten_save()`'s exact shape is now
+  confirmed in three independent, unrelated lineages; check it
+  immediately on any new `西游记`/Tomud-family §10.7 pass rather than
+  waiting to trip over it.
 - **Third+ independent confirmation in the same 夕阳再现/XYZX lineage:
   `xajhzcjh`'s deep functional test (§10.7).** Identical shape to
   `xajhxo` above, down to the exact call site (`logind.lpc`'s
@@ -11992,6 +12015,61 @@ is the fastest way to confirm which shape is correct.
 shape as `yxsj` (same ES2/`daniel` lineage, different snapshot). Same
 fix applied. Verified live: `project <title>` followed by `read new`
 correctly displayed the just-posted note post-fix.
+
+### 7.154 A shared room-description routine's "is it too dark to see the exits" check calls `present("fire", this_player())` unconditionally, but `this_player()` is legitimately `0` whenever the routine runs from a background `call_out()` instead of a live command — crashing every autonomous corpse-decay/day-phase-change event in every outdoor room, forever
+
+Found on `xyj2006zzzhx`'s §10.7 round-two deep-test. `cmds/std/
+look.lpc::look_room()` is called not just from the `look` command
+itself, but also from `feature/move.lpc::remove()` (fired by every
+`destruct()`, so it can show a room's remaining occupants that an
+object just left) and from `adm/daemons/natured.lpc::event_dawn()`
+(fired on the driver's own day/night cycle heartbeat). Neither of
+those two callers is a live player command, so `this_player()` is `0`
+in both. `look_room()`'s exit-listing block reads:
+
+```lpc
+if (env->query("outdoors") &&
+  !present("fire", this_player()) &&
+  !wizardp(this_player()) &&
+  (...it's currently one of the "too dark to see" night hours...))
+```
+
+`present()` requires its 2nd argument to be an object — passing `0`
+throws `*Bad argument 2 to present()` uncaught. Reproduced live
+repeatedly within the first two minutes of a fresh boot, with zero
+player action involved: every `obj/corpse.lpc::decay()` call reaching
+its final "turn to dust and `destruct()`" phase in an outdoor room
+during a 子/丑/寅/亥-hour window crashed the same way (5 corpses in
+one short session), and the driver's own nightly `natured.lpc`
+`event_dawn()`→`update_day_phase()` tick hit the identical crash via
+the same `remove()`→`look_room()` chain when it happened to destruct
+an NPC standing outdoors at the time. Because the crash fires from a
+`call_out()`, not a command, it is invisible to any interactive
+playtest that doesn't happen to overlap a decay/dawn event during
+those specific night hours — a `debug.log` grep after normal play is
+the only way to catch it. **Fix**: guard the whole block on
+`objectp(this_player())` before touching `present()`/`wizardp()`, so
+the torch-check (which only ever makes sense for an actual connected
+viewer) is skipped instead of crashing when there's no player in
+context:
+
+```lpc
+if (env->query("outdoors") &&
+  objectp(this_player()) &&
+  !present("fire", this_player()) &&
+  !wizardp(this_player()) &&
+  (...))
+```
+
+Verified live post-fix: two full quit/reconnect cycles plus a repeat
+of the same corpse-decay/day-phase conditions produced zero further
+`present()` crashes in `debug.log`. **Confirmed instances**:
+`xyj2006zzzhx` (`cmds/std/look.lpc:410`); `xyj2006n`'s own
+`cmds/std/look.lpc:410` carries the byte-for-byte identical
+unfixed line (same lineage, not yet re-tested against this specific
+gap — check it and any other `西游记`/`xyj*` sibling with a
+`present("fire", this_player())` grep hit before assuming a fresh
+find is isolated).
 
 ---
 
