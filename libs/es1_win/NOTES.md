@@ -711,6 +711,39 @@ pass, with a fresh, full-budget session:
   identical in both files. No unguarded raw-variable return found.
   Confirmed clean, no fix needed.
 
+## §7.122 sibling-sweep fix: unconditional autoload-marker reclone on net_dead (2026-08-28)
+
+Flagged in AGENTS.md's §7.122 entry as a "near-certain candidate" — `es1`
+is `es1_win`'s literal direct ancestor/near-byte-identical sibling
+(shared "东方故事" lineage), and `es1` itself was already confirmed and
+fixed for this exact bug on its own §10.7 round-two pass. Checked
+directly rather than assumed: `work/std/user/autoload.lpc`'s
+`load_autoload_obj()` was indeed byte-for-byte the same vulnerable
+TMI-2-lineage code (`// autoload.c: adapted from 2.4.5 code by
+Truilkan@TMI`) — unconditionally clones every entry in `auto_load[]` on
+login with no presence check. Confirmed the same triggering ordering as
+`es1`: `std/user.lpc`'s `remove()` (clean quit path) calls `save_me()`
+*before* `destroy_autoload_obj()`, and `net_dead()` (abrupt-disconnect
+path) calls `save_data()` but never calls `destroy_autoload_obj()` at
+all — so an abrupt disconnect bakes every carried autoload-marker item
+(bank cards, rings, disease/guild markers, etc.) into the ordinary save
+data AND leaves it physically in inventory, and the next login's
+`load_autoload_obj()` then clones a second copy on top with no guard,
+duplicating without bound across repeated net_dead cycles.
+
+Fixed by porting `es1`'s exact proven remedy verbatim (adapted only to
+this file's own K&R brace style): `load_autoload_obj()` now snapshots
+`all_inventory(this_object())` once, and skips cloning any `auto_load`
+entry whose `base_name()` already matches something already carried,
+appending each freshly-cloned object to that same tracking array so
+duplicate entries within one `auto_load` array can't double-clone
+either. Verified via a clean native driver boot (`Initializations
+complete`, port 40009 listening, zero new compile errors/warnings
+introduced) — not independently live-reproduced with a real net_dead
+cycle on this specific lib (the fix is a verbatim port of an already
+live-verified remedy from the literal ancestor codebase, not a novel
+fix needing its own from-scratch reproduction).
+
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 东方故事基础版（蓝天）。
