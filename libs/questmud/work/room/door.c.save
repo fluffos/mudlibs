@@ -1,0 +1,201 @@
+mapping dir, file, code, link_room, desc, door_label;
+mapping open, locked, door_id;
+
+door_reset() {
+  dir = ([ ]);
+  file = ([ ]);
+  code = ([ ]);
+  link_room = ([ ]);
+  desc = ([ ]);
+  door_label = ([ ]);
+  open = ([ ]);
+  locked = ([ ]);
+  door_id = ([ ]);
+}
+
+set_locked(arg,num) { locked[num] = arg; }
+
+query_door_locked(num) { return locked[num]; }
+
+set_open(arg,num) { open[num] = arg; }
+
+query_door_open(num) { return open[num]; }
+
+random_door_code(num) {
+    string str;
+    int i;
+    str = "";
+    while(i < 3) {
+      str = str + random(10);
+      i += 1;
+    }
+    code[num] = str;
+    if (link_room[num]) { call_other(link_room[num], "set_door_code", code[num]); }
+}
+
+set_door_code(str, num) { code[num] = str; }
+
+query_door_code(num) { return code[num]; }
+
+set_door_link(str, num) { link_room[num] = str; }
+
+set_door_desc(str,num) { desc[num] = str; }
+
+set_door_label(str,num) { door_label[num] = str; }
+
+door_label(num) {
+  if (door_label[num]) { return "labelled '"+door_label[num]+"' "; }
+  return "";
+}
+
+query_door_desc(num) {
+  if (desc[num]) { return desc[num]; }
+  return "";
+}
+
+door_long_desc(num) {
+  write("This");
+  if (desc[num]) write(" "+desc[num]);
+  write(" door ");
+  if (door_label[num]) { write("labelled '"+door_label[num]+"' "); }
+  if (locked[num]) { write("is locked.\n"); }
+  if (open[num]) { write("is open.\n"); }
+  else { write("is closed.\n"); }
+  write("It leads to the "+dir[num]+".\n");
+  write("Available door commands:\n");
+  write("  open door\n");
+  write("  close door\n");
+  write("  lock door with key\n");
+  write("  unlock door with key\n");
+}
+
+
+door_init() {
+  add_action("open", "open");
+  add_action("close", "close");
+  add_action("lock", "lock");
+  add_action("unlock", "unlock");
+/*  add_action("move_by_door", dir); */
+}
+
+set_door_dir(str, path, num) {
+  dir[num] = str;  
+  file[num] = path;
+}
+
+query_door_dir(num) { return dir[num]; }
+
+query_door_file(num) { return file[num]; }
+
+/*
+move_by_door() {
+  string str;
+  if (!open) { return; }
+  str = dir+"#"+file;
+  this_player()->move_player(str);
+  return 1;
+}
+*/
+
+open(string str) {
+  int num;
+  if (!sscanf(str, "door %d",num)) {
+     if (str != "door") { return 0; }
+  }
+  if (!num) {
+     num = 1;
+     while(!dir[num]) { num += 1; }
+  }
+  if (open[num]) { write("The door is already open.\n"); return 1; }
+  if (locked[num]) { write("The door is locked.\n"); return 1; }
+  write("You open the door.\n");
+  open[num] = 1;
+  if (link_room[num]) call_other(link_room[num], "door_opened",num);
+  add_exit(dir[num], file[num]);
+  return 1;
+}
+
+door_opened(num) {
+  tell_room(this_object(), "The door opens.\n");
+  open[num] = 1;
+  add_exit(dir[num],file[num]);
+  return 1;
+}
+
+close(str) {
+  int num;
+  if (!sscanf(str, "door %d",num)) {
+     if (str != "door") { return 0; }
+  }
+  if (!num) { num = 1; }
+  if (!open[num]) { write("The door is already closed.\n"); return 1; }
+  write("You close the door.\n");
+  open[num] = 0;
+  remove_exit(dir[num]);
+  if (link_room[num]) call_other(link_room[num], "door_closed", num);
+  return 1;
+}
+
+door_closed(num) {
+  tell_room(this_object(), "The door is closed.\n");
+  open[num] = 0;
+  tell_room(this_object(), "The door is closed.\n");
+  remove_exit(dir[num]);
+  return 1;
+}
+
+lock(arg) {
+  string str;
+  object ob;
+  if (!arg) { return; }
+  if (!sscanf(arg, "door with %s", str)) { 
+        write("Lock door with what?\n");    
+        return 1; 
+  }
+  ob = present(str, this_player());
+  if (!ob) { write("You don't have a '"+str+"'.\n"); return 1; }
+  if (!ob->query_key_code()) { write("That is not a key.\n"); return 1; }
+  if (ob->query_key_code() != query_door_code()) {
+        write("The key does not fit.\n");
+        return 1;
+  }
+  if (locked) { write("The door is already locked.\n"); return 1; }
+  write("You lock the door.\n");
+  locked = 1;
+  if (link_room) call_other(link_room, "door_locked");
+  return 1;
+}
+
+door_locked() {
+  tell_room(this_object(), "You hear someone locking the door.\n");
+  locked = 1;
+  return 1;
+}
+
+unlock(arg) {
+  string str;
+  object ob;
+  if (!arg) { return; }
+  if (!sscanf(arg, "door with %s", str)) { 
+        write("Unlock door with what?\n");    
+        return 1; 
+  }
+  ob = present(str, this_player());
+  if (!ob) { write("You don't have a '"+str+"'.\n"); return 1; }
+  if (!ob->query_key_code()) { write("That is not a key.\n"); return 1; }
+  if (ob->query_key_code() != query_door_code()) {
+        write("The key does not fit.\n");
+        return 1;
+  }
+  if (!locked) { write("The door is not locked.\n"); return 1; }
+  write("You unlock the door.\n");
+  locked = 0;
+  if (link_room) call_other(link_room, "door_locked");
+  return 1;
+}
+
+door_unlocked() {
+  tell_room(this_object(), "You hear someone unlocking the door.\n");
+  locked = 0;
+  return 1;
+}

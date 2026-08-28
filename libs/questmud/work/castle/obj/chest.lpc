@@ -1,0 +1,575 @@
+#define    MAX_EQ  10
+#define    SAVEDIR "/data/castle/chest/"
+#define DEBUG
+nosave int locked, open, jammed;
+nosave int current, count;
+nosave int local_weight;
+nosave int state, value;
+int combo, sealed, ruined;
+string id,file;
+string items;
+string label;
+string last_user_name;
+
+mixed reset(mixed arg) {
+  
+  count = 0;
+    
+  id = 0;
+
+  if(arg) return;
+  current = random(10000)+1;
+  local_weight = 40;
+  if(combo) locked = 1;
+  if(file)restore_object(file);
+  
+}
+
+mixed debug_write(string str) {
+#ifdef DEBUG
+    tell_object(find_player("astarel"),str);
+#endif
+  return;
+}
+
+mixed do_forcing(mixed obj) {
+  int what, delay;
+  object dummy;
+
+  if(state == 0) {
+    write("You have been distracted too much and abort your work with the chest.\n");
+    destruct(present("forcedummy"));
+    value = 0;
+  }
+
+  if(state == 1) {
+    if(!present("forcedummy")) {
+      state = 0;
+      return 1;
+      remove_call_out("do_forcing");
+    }
+
+    if(!present(lower_case(present("forcedummy")->who()))) {
+      state = 0;
+      destruct(present("forcedummy"));
+      return 1;
+    }
+
+    else {
+      delay = random(10)+(5000/this_player()->query_str());
+      call_out("do_forcing", 10, obj);
+    }
+  }
+
+  if(state == 2) {
+    say("Sealings of "+short()+" give away finally.\n");
+    sealed = 0;
+    open = 1;
+    ruined = 1;
+    combo = 0;
+    destruct(present("forcedummy"));
+    environment(this_object())->create_chest_file();
+    environment(this_object())->save_room();
+  write_file("/data/castle/chest_force_open", ctime()+": "+this_player()->query_name()+"("+this_player()->query_level()+") finished force opening "+short()+" in '"+environment(this_player())->query_path()+"'\n");
+  return 1;
+  }
+
+  if(!present(obj, environment(this_player())) && state == 1) {
+    write("You peer around suspiciously, and could swear there was a chest before you moment ago.\n");
+    state = 0;
+    return 1;
+  }
+
+  if(present("forcedummy")) {
+    if(!present(lower_case(present("forcedummy")->who()))) destruct(present("forcedummy"));
+  }
+
+  if(state == 0) return 1;
+  what = random(100)+value;
+
+  switch(what) {
+  case 0..90:
+    write("The sealing holds fast, but you continue working anyway.\n");
+    break;
+  case 91..120:
+    write("You chip away small bits of metal.\n");
+    say("Small chips of metal fly, as "+capitalize(this_player()->query_name())+" works on chest.\n");
+    value++;
+    break;
+  case 121..140:
+    write("Metal banding bends and moans, as your job ruthlessly progresses.\n");
+    say("Sounds of bending metal remind you of "+capitalize(this_player()->query_name())+" working.\n");
+    value += 3;
+    break;
+  case 141..180:
+    write("Small part of the sealing snaps loose.\n");
+    say("Chest gives away A loud 'Snap'\n");
+    value += 7;
+    break;
+  default:
+    write("You grin wickedly as last of the sealings gives away with a loud 'clang'.\n");
+    say(capitalize(this_player()->query_name())+" grins wickedly as last of the bandings give away.\n");
+    state = 2;
+  }
+}
+
+mixed begin_force_open(mixed arg) {
+  object ob, dummy;
+
+  if(!arg) {
+    write("force <item>");
+    return 1;
+  }
+
+  if(present(arg) != this_object()) return;
+
+  if(present("forcedummy")) {
+    write(present("forcedummy")->who()+" is allready working here.\n");
+    return 1;
+  }
+
+  debug_write("debug: continuing with force\n");
+
+  if(this_player()->query_str() < 100) {
+    write("You consider it for a moment, but quickly come into conclusion that this job requires someone with more muscle.\n");
+    return 1;
+  }
+
+  if(!sealed) {
+    write(short()+" is not sealed to the ground, you don't need to force it free.\n");
+    return 1;
+  }
+
+  write("You start breaking the chests's sealing. This could take a while...\n");
+  say(capitalize(this_player()->query_name())+" starts working on chests sealing.\n");
+  dummy = clone_object("/castle/obj/force_dummy");
+  dummy->set_who(capitalize(this_player()->query_name()));
+  dummy->move_object(environment(this_player()));
+  state = 1;
+  ob = present(arg);
+  call_out("do_forcing", 5, ob);;
+  write_file("/data/castle/chest_force_open", ctime()+": "+this_player()->query_name()+"("+this_player()->query_level()+") started to force open "+short()+" in '"+environment(this_player())->query_path()+"'\n");
+  return 1;
+}
+
+mixed force_set_combo(mixed arg) {
+  combo = arg;
+  locked = 1;
+  sealed = 1;
+}
+
+mixed set_label(mixed arg) {
+  label = arg;
+}
+
+mixed set_combo(mixed arg) {
+  int num;
+  string str;
+
+  if(!arg) {
+    write("Usage: recode <chest> to <num>\n Note: (num) can have any number of digits from range of 1-7.\n");
+    return 1;
+  }
+  if(sscanf(arg, "%s to %d", str, num) != 2) {
+    write("Usage: recode <chest> to <num>\n Note: (num) can have any number of digits from range of 1-7.\n");
+    return 1;
+  }
+  if(!str || present(str) != this_object()) return;
+  if(num>=10000000 || num<=0) {
+    write("Too many numbers, the lock can't contain more than 7 digits\n");
+    return 1;
+  }
+  /*
+  if(!open && !sealed) {
+    write("Chest must be open and sealed.\n");
+    return 1;
+  }
+  */
+  if(!open && sealed) {
+  	write("Chest must be open and unsealed!\n");
+  return 1;
+}
+
+  combo = num;
+  write("You set chests code to '"+combo+"'\n");
+  return 1;
+}
+
+mixed can_put_and_get(mixed str) {
+  object obs;
+
+  if(open) { // && sizeof(obs = all_inventory(this_object())) <= 11) {
+    if(sizeof(obs = all_inventory(this_object())) > 10) {
+      obs[10]->move_object(environment(this_object()));
+      write("Chest is too full, and something falls out.\n");
+      say("Something drops out of the chest.\n");
+    }
+    return 1;
+  }
+}
+
+mixed add_weight(mixed i) {
+  return 1;
+}
+
+mixed query_weight() { return local_weight; }
+
+mixed set_path(mixed arg) {
+  file = arg;
+}
+
+mixed clone_eq() {
+  int i;
+  if(file) restore_object(file);
+  else return 1;
+  while(i<sizeof(items)) {
+    if(items[i] && file_size("/"+items[i]+".lpc") != -1) {
+      clone_object(items[i])->move_object(this_object());
+    }
+    i += 1;
+  }
+  items = allocate(MAX_EQ);
+  if(file) save_object(file);
+}
+
+mixed save_eq() {
+  int i, tmp;
+  string str;
+  object ob;
+  items = allocate(MAX_EQ);
+  ob = all_inventory(this_object());
+  while(i<sizeof(ob) && i < MAX_EQ) {
+    str = file_name(ob[i]);
+    write(i+": str @ save: "+str+"\n");
+    if(str) sscanf(str,"%s#%d",str,tmp);
+    items[i] = str;
+    destruct(ob[i]);
+    i += 1;
+  }
+  debug_write("saving chest "+file+"\n");
+  if(file) save_object(file);
+}
+
+mixed seal(mixed arg) {
+	
+	int number,tmp;
+	string this_room;
+	
+	
+	
+  if(!arg) {
+    write("Usage: seal <chest>\n");
+    return 1;
+  }
+  if(present(arg) != this_object()) return;
+  if(!open) {
+    write("You must open it first.\n");
+    return 1;
+  }
+
+  if(!combo) {
+  	write("You have to set the code first, DUMBASS!\n");
+  	return 1;
+}
+
+  if(sealed) {
+    write(short()+" is already secured on the floor.\n");
+    return 1;
+  }
+  if(environment(this_object())->is_saveable() != 1) {
+    write("Chests are for castles only.\n");
+    return 1;
+  }
+
+  write("You secure "+short()+" in the floor.\n");
+  sealed = 1;
+  
+  // Lets define new, free id.
+  //id = 0;
+  count = 0;
+  this_room = file_name(environment(this_object()));
+  sscanf(this_room, "/data/castle/castle_%d/room%d",number,tmp);
+  tell_object(find_player("astarel"),"DEBUG :: number:"+number+" count:"+count+" ["+this_room+"]\n");
+  while(file_size("/data/castle/castle_"+number+"/chest_"+count+".o") != -1) {
+  	tell_object(find_player("astarel"),"DEBUG: number:"+number+" count:"+count+"\n");
+    count += 1;
+  }
+  tell_object(find_player("astarel"),"DEBUG -- "+count+"\n");
+  // and yet, lets add 1 more.
+  if(count != 0) id = count;
+  
+  environment(this_object())->create_chest_file();
+  environment(this_object())->save_room();
+  return 1;
+}
+
+mixed de_seal(mixed arg) {
+	
+	int number,tmp;
+	string this_room;
+	
+	
+  if(!arg) {
+    write("Usage: unseal <chest>\n");
+    return 1;
+  }
+  if(present(arg) != this_object()) return;
+  if(!open) {
+    write("You must open it first.\n");
+    return 1;
+  }
+  if(!sealed) {
+    write(short()+" is not sealed on the floor.\n");
+    return 1;
+  }
+
+  write("You remove sealing from "+short()+".\n");
+  sealed = 0;
+  
+  this_room = file_name(environment(this_object()));
+  sscanf(this_room, "/data/castle/castle_%d/room%d",number,tmp);
+  rm("/data/castle/castle_"+number+"/chest_"+id);
+  environment(this_object())->create_chest_file();
+  environment(this_object())->save_room();
+  return 1;
+}
+
+mixed turn(mixed arg) {
+  string str;
+  int num;
+  if(sscanf(arg, "%s to %d", str, num) != 2) {
+    write("Usage: turn <chest> to <num>\n");
+    return;
+  }
+  if(num>=10000000 || num<=0) {
+    write("Too many numbers, the lock can't contain more than 7 digits\n");
+    return 1;
+  }
+  if(!str || present(str) != this_object()) return;
+  if(jammed) {
+    write("The lock is jammed.. wait for a while.\n");
+    return 1;
+  }
+  if(open) {
+    write("Chest is allready open.\n");
+    return 1;
+  }
+
+  write("You start operating the number.\n");
+  call_out("attempt", 10, num);
+  return 1;
+}
+
+mixed attempt(mixed i) {
+  current = i;
+  if(i == combo) {
+    write("The lock clicks open with a sharp sound.\n");
+    locked = 0;
+    return 1;
+  }
+  if(combo) {
+    write("The chest refuses to open.\n");
+    jammed = 1;
+    call_out("stop_jam", 22);
+    return 1;
+  }
+}
+
+mixed stop_jam() { jammed = 0; }
+
+mixed get() {
+  if(!sealed && open && sizeof(all_inventory(this_object())) == 0) {
+    if(environment(this_object())->is_saveable()) environment(this_object())->save_room();
+    return 1;
+  }
+  if(sealed) {
+    write("This chest is sealed tightly to the floor, there's no way you can take it.\n");
+    return 0;
+  }
+  if(sizeof(all_inventory(this_object())) != 0) {
+    write("You must empty it first.\n");
+    return 0;
+  }
+}
+
+mixed close(mixed arg) {
+  string dummy;
+  int tempid;
+
+  if(sscanf(arg, "ches%s", dummy) != 1) {
+    if(arg != label) return;
+  }
+  if(!arg || present(arg) != this_object()) return;
+  if(!open) {
+    write(short()+" is already closed.\n");
+    return 1;
+  }
+  if(!combo) {
+    write("No code set. Use 'recode' to set code.\n");
+    return 1;
+  }
+  if(!sealed) {
+    write("The sealing mechanism blocks chest from closing. Seal it first.\n");
+    return 1;
+  }
+  write("You close "+short()+".\n");
+  open = 0;
+  locked = 1;
+  last_user_name = this_player()->query_name();
+  current = random(10000)+1;
+  tempid = environment(this_object())->add_chest(id, combo, label);
+  //if(id == 0) id = tempid;
+  file = environment(this_object())->give_me_path()+"/chest_"+id;
+  save_eq();
+  return 1;
+}
+
+mixed open(mixed arg) {
+  string dummy;
+
+  if(!arg) {
+    write("Usage: open <chest>\n");
+    return 1;
+  }
+  if(sscanf(arg, "ches%s", dummy) != 1) {
+    if(arg != label) return;
+  }
+  if(present(arg) != this_object()) return;
+
+  if(open) {
+    write(short()+" is already open.\n");
+    return 1;
+  }
+
+  if(!combo) {
+    write("Without a code, you open "+short()+" easily.\n");
+    open = 1;
+    clone_eq();
+    return 1;
+  }
+
+  if(this_player()->query_name() == last_user_name) {
+  	write("You open "+short()+".\n");
+  	say(capitalize(this_player()->query_name())+" opens "+short()+".\n");
+  	open = 1;
+  	clone_eq();
+  	return 1;
+}
+
+  
+  if(locked) {
+    write(short()+" is locked.\n");
+    return 1;
+  }
+  write("You open "+short()+".\n");
+  say(capitalize(this_player()->query_name())+" opens "+short()+".\n");
+  open = 1;
+  clone_eq();
+  return 1;
+}
+
+mixed short() {
+  string str;
+  str = "Small chest";
+  if(label == 0 || label == "0") str = str;
+  else str = str+" labeled '"+label+"'";
+  if(open) str += " (open)";
+  else if(!locked) str += " (unlocked)";
+  if(ruined) str += " (ruined)";
+  return str;
+}
+
+mixed long() {
+  object ob;
+  int i;
+  write(short()+".\n");
+  if(!open) return;
+  write("Code is set at: "+combo+"\n");
+  ob = all_inventory(this_object());
+  while(i<sizeof(ob)) {
+    if(ob[i]) write(ob[i]->short()+".\n");
+    i += 1;
+  }
+}
+
+mixed query_id() {
+  return id;
+}
+
+mixed query_code() {
+  return combo;
+}
+
+mixed query_sealed() {
+  return sealed;
+}
+
+mixed force_set_id(mixed iidee, mixed tempfile) {
+  file = tempfile;
+  id = iidee;
+}
+
+mixed id(mixed str) {
+  if((str == "chest") || (str == label)) return 1;
+}
+
+mixed query_label() {
+  return label;
+}
+
+mixed label(mixed arg) {
+  object obj;
+  string str,tmp;
+
+  if(!arg) return;
+  if(sscanf(arg, "%s as %s", tmp, str) != 2) {
+    write("Usage: label <chest> as <label>\n");
+    return 1;
+  }
+  if(present(lower_case(tmp)) != this_object()) return;
+  if(!open) {
+    write("You must open "+short()+" first.\n");
+    return 1;
+  }
+  label = lower_case(str);
+  write("Ok.\n");
+  return 1;
+}
+
+mixed info(mixed arg) {
+  if(!arg) {
+    write("Usage: info <chest>\n");
+    return 1;
+  }
+  if(present(arg) != this_object()) return;
+
+  if(this_player()->query_wiz()) {
+    write("Chest ID: "+id+"\n");
+    write("Chest's datafile: "+file+"\n");
+    write("Chest's last-user: "+last_user_name+"\n");
+  }
+  write(short()+"\n");
+  if(sealed) write("It is sealed to the ground.\n");
+  if(combo && open) write("It's lock is set to '"+combo+"'.\n");
+  else write("It has no code set.\n");
+  return 1;
+}
+
+mixed init() {
+  add_action("turn", "turn");
+  add_action("open", "open");
+  add_action("close", "close");
+  add_action("seal", "seal");
+  add_action("de_seal", "unseal");
+  add_action("label", "label");
+  add_action("set_combo", "recode");
+  add_action("info", "info");
+  add_action("begin_force_open", "force");
+}
+
+string query_last_user_name() { return last_user_name; }
+mixed set_last_user_name(string str) { last_user_name = str; }
+
+mixed restore_chest() {
+	restore_object(file);
+}

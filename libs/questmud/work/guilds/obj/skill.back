@@ -1,0 +1,117 @@
+#define SKILLDIR "/guilds/skills/"
+
+string skill, target, arg, skill_name;
+
+drop() { return 1; }
+
+start_skill(str) {
+  string word;
+  int time,agility,tmp;
+  if(sscanf(str,"%s at %s", skill, target) != 2)
+    skill = str;
+
+  if (!this_player()->query_skills(skill)) {
+    write("You don't know such a skill.\n");
+    interrupt_skill();
+    return 0;
+  }
+  skill_name = skill;
+  while(sscanf(skill, "%s %s", skill, word) == 2) {
+    skill = skill +"_"+ word;
+  }
+  if(file_size(SKILLDIR+skill+".c") == -1) {
+    write("That skill is automatically in use.\n");
+    interrupt_skill();
+    return 1;
+  }
+  if (!skill) {
+    write("ERROR! No skill to resolve.\n");
+    interrupt_skill();
+    return 1;
+  }
+  time = call_other(SKILLDIR + skill, "get_time", 0);
+  if(!time) {
+    write("No such skill.\n");
+    return 1;
+  }
+  if (this_player()->query_stunned()) {
+      write("You are stunned and unable to use skills.\n");
+      interrupt_skill();
+      return 1;
+  }
+  /* rundissa 2 sekkaa (joku bugaa) */
+  time = time * 2;
+  if(call_other(SKILLDIR+""+skill+".c", "query_type") == "offensive") {
+  write("You start concentrating on the offensive skill.\n");
+  say(this_player()->query_name()+" starts concentrating on the offensive skill.\n");
+  } else {
+  say(this_player()->query_name()+" starts concentrating on the skill.\n");
+  write("You start concentrating on the skill.\n");
+  }
+
+  if(this_player()->query_tester() || this_player()->query_wiz())
+        write("Skill duration: "+(time/2)+" rounds.\n");
+  agility = this_player()->query_skills("agility");
+  if(agility) {
+  tmp = time;
+  time -= time * (agility-random(3)) / 200;
+  if(tmp != time)
+  write("Your agility helps you to perform the skill in less time.\n");
+  }
+  call_out("resolve_skill", time);
+  return 1;
+}
+
+get_ep_cost(string arg) {
+  string word;
+  int pros, cost, endurance;
+  while(sscanf(arg, "%s %s", arg, word) == 2) {
+    arg = arg +"_"+ word;
+  }
+  if(file_size(SKILLDIR+arg+".c") == -1) {
+    return 0;
+  }
+  pros = call_other(SKILLDIR+arg, "ep_cost");
+  cost = this_player()->query_max_ep() * pros / 100;
+
+  if(cost) {
+    endurance = this_player()->query_skills("endurance");
+    cost -= endurance / 15;
+    if(cost > 20) cost = 20 + ( (cost-20) * (100-endurance/5) /100 );
+    if(cost < 1) cost = 1;
+  }
+
+
+  return cost;
+}
+
+resolve_skill() {
+  object ob;
+  string tmp, extra_str;
+  int cost;
+
+  this_player()->lited("You are prepared to do the skill."); write("\n");
+  cost = get_ep_cost(skill);
+  if(this_player()->query_ep() < cost) {
+    write("You don't have enough strength to complete this skill.\n");
+    interrupt_skill();
+    return 1;
+  }
+  this_player()->reduce_ep(cost);
+  /* Fail or not. (2x check for suffeli) */
+  if (this_player()->query_skills(skill_name) > random(110) ||
+        this_player()->query_skills(skill_name) > random(110)) {
+    call_other(SKILLDIR + skill, "resolve_skill", target);
+  }
+  else {
+    call_other(SKILLDIR + skill, "fail_skill", target);
+  }
+  interrupt_skill();
+  return 1;
+}
+
+interrupt_skill() {
+  remove_call_out("resolve_skill");
+  if (this_object()) { destruct(this_object()); }
+  return 1;
+}

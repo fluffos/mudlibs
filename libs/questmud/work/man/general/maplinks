@@ -1,0 +1,197 @@
+Introduction
+============
+
+This text describes how to link a domain to the global map. For general
+information on the map see 'maps'.
+
+NOTE
+	This documentation is tentative as the map system is being developed.
+	This is however how the prototype works.
+NOTE
+
+Domains are linked to the map with a 'maplink manager'.
+The mapmanager serves two purposes:
+
+	1 - In the preload phase, an area of the global map is reserved
+	    as belonging to the domain. This is done by the map manager.
+
+	2 - The map manager must handle all players entering
+	    any part of the reserved area.
+
+
+Reserving an area
+=================
+
+All domains usually have a 'preload' file. Such as '/d/Genesis/preload.c'
+This file usually inherits '/std/domain_link.c'. The preload file is loaded
+upon startup of the game, in the preload phase. There is a function to use,
+in the preload file, to tell /secure/master that the domain wants to link
+itself to the map. (see /std/domain_link.c)
+
+         set_mapmanager("/d/Domain/common/maplink");
+
+This 'maplink' object should inherit "/std/map/manager" which defines
+all necessary routines for managing the domains part of the global map.
+Your typical /d/Domain/common/maplink.c file would look like:
+
+  inherit "/std/map/manager";
+
+  void 
+  create_map_manager()
+  {
+	add_single("x123y456", "/d/Domain/terrain/whatever");
+	add_single("x123y457", "/d/Domain/terrain/whatever");
+	add_single("x123y458", "/d/Domain/terrain/whatever");
+
+	set_box(321, 654, 
+	        	({ 
+				".n.."
+				".nn."
+				".n.."
+			}),
+			([
+				  "n" : "/d/Domain/terrain/hills"
+				  "." : "/d/Domain/terrain/water"
+			])
+		);
+  }	
+
+This will reserve the area on the map with coordinates:
+
+	     656  -+-----------+
+   Y-coord         |           |
+	     654  -+-----------+ 
+		   |           |
+		  321         324
+                      X-coord
+
+With the additional single maplocations as added by 'add_single'.
+
+
+Managing an area
+================
+
+When an area is reserved the map managing code in /secure/master expects
+to ask the domains map manager what terrain file to use for a specific
+coordinate. 
+
+The map manager is asked to supply so called 'terrain files' for each
+coordinate that the domain has reserved. The information needed to do
+that is what you give with the 'set_box' and 'add_single' calls above.
+
+When the map manager has supplied the terrainfile the following file will
+typically be created under /d/Genesis/map:
+
+    A file called 'xnnnn.mynnnn.m' with the following contents:
+
+	inherit "your_terrainfile";
+	
+	create_mapsquare(int wlx, int wly, int slx, int sly) 
+	{ 
+	   ::create_mapsquare(wlx, wly, slx, sly);
+	}
+
+It will still be up to the domain to create and code each terrainfile though.
+The terrainfile should inherit '/std/mapsquare.c' for it to work properly.
+
+When a player enter this room you will get the coordinates both for
+the maplocation (wlx, wly) and for the sublocation within the maplocation
+(slx, sly) through the call to your function 'create_mapsquare'.
+
+Your terrainfile will look rather similar to a room and in fact
+std/mapsquare does inherit std/room
+
+However the terrainfile is not one room but many and the differences
+if any is up to you to supply.
+
+This is specifically true when adding exits. You will probably only
+want to add an exit to one of your normal rooms in a specific 
+coordinate not in all locations with the same terrain.
+
+Examples of terrain files can be found under /d/Genesis/terrain/*
+
+
+Sublocation exceptions
+======================
+
+/std/mapsquare.c supports exceptions within the maplocation. This means 
+that you can give a path to a normal room that will be linked to a
+specific sublocation. This is done with a call on the form:
+
+    set_exceptions(({ "x.4y.4", "/d/Genesis/start/elf/glade" }));
+
+You can have any number of exceptions in the array. Note though that when
+giving the coordinate, only the sublocation should be given.
+
+This makes people walking on the map entering the specific sublocation
+be redirected to the normal room. How to go from the normal room to the
+map, see below
+
+NOTE
+	The sublocation room is still created and loaded. Players are moved
+	into the object, but code in /std/mapsquare merely sees to it that
+	players are immediately	transported into the normal room instead.
+NOTE
+
+
+Transportation to a maproom
+===========================
+
+Above is described how to get from the global map into one of your normal
+rooms. How then to add exits out onto the map?
+
+This is much more simple. The add_exit() uses VBFC and could look like:
+
+	add_exit("@@map_file|x1234.4y5678.6@@", "north", 0);
+
+This gives you the possibility to add exits to any location in the map. It
+is recommended only to add exits to maplocations within your domain or
+bordering it.
+
+For wizards the normal 'goto' command has been extended to allow direct
+teleportation to any location on the map. The format is 'goto xnnn.mynnn.m'
+Typical example: 'goto x186.2y554.4'
+
+
+Relevant commands and other miscellaneus stuff
+==============================================
+
+With the command 'mapdomains' you will get a list of the domains linked to 
+the map, their map manager and the managed coordinates.
+ 
+When you 'take over' an area of the map you can effectively change its looks
+entirely. Maps made for mortals and other information retrieved from the
+global map database might therefore be erroneous. The terrain information
+might be totally different from what you actually use.
+
+You are therefore recommended to use the 'remap' command if neccessary and
+change the map database so as to approximately fit your terrain. A perfect
+fit might be impossible, there is only 31 terrain types in the standard map
+and you might have any number within your area. Approximate at best, a
+'silver grass field' might be remapped as 'plains' or perhaps 
+'lightvegetation'. 
+
+The standard terrain types are found in /config/sys/map_defines.h
+
+
+Transportation on and through the map
+=====================================
+
+There is a lot of rooms generated in the map. Each maplocation has 9x9
+sublocation and each sublocation is 300x300m. This translates to a lot
+of rooms to walk through if one is to get from one domain to another.
+
+Transportation systems are being developed, until ready the old portals
+and normal exits between the domains will have to remain. In time these
+will be obsolete and should be removed unless a teleportation portal
+is motivated in itself.
+
+
+BUGS and DEVELOPMENT
+====================
+
+	The limit of one box and a number of single locations might 
+	change. It will not be unlimited though.
+
+	As said above transportation is being developed. Specifically
+	ships, caravans, roads and rivers.

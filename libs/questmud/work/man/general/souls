@@ -1,0 +1,163 @@
+This document describes how to write a command soul.
+
+Definition of command soul
+==========================
+
+A command soul is an object that isn't loaded directly into a player,
+but is linked to him in order to give him an extended set of commands.
+The commands aren't added using add_action but instead the command
+parsing is done inside the souls themselves. The intention of using a
+soul is to have an easily changeable command-defining object for more
+than one person to use. 
+
+There are two types of command souls; ordinary "souls" and tool souls.
+The ordinary soul will define commands that needs no special priviliges 
+while the tool souls gain the rights of the user before executing a 
+command. There is no difference in the souls as such however, the user
+need only to know how to add the soul to his set of souls, if to add it
+as a tool soul or as an ordinary command soul.
+
+How to write a soul
+===================
+
+The soul may not contain any global variables because of the way it 
+functions. The same soul is used by all players. If you HAVE to have
+a global variable you can set a property in the player for that use, 
+but please try to avoid doing that.
+
+The soul must inherit "/cmd/std/command_driver" in order to work. This
+file contains the function for identifying and executing the given
+command.
+
+New versions of souls
+=====================
+
+Some special considerations must be taken when changing the filename
+used for a specific soul. Upgrades done in the file itself are simple,
+but if you want to use a completely different file there is a problem
+with all .o files that holds the old name.
+
+Therefore the old file must hold the function, replace_soul() typically:
+
+replace_soul()
+{
+	return "/new/upgraded/soul"
+}
+
+It can also return an array of new souls to replace the old one with. 
+That array can even hold the old soul as one of its members. Thereby
+not deleteing it from use, only adding more souls if the first is 
+used.
+
+
+*********************************************************************
+* THE FOLLOWING IS OSOLETE AND SHOULD BE CHANGED PLEASE LOOK AT THE *
+* CODE IN THE MEANTIME                                              *
+*********************************************************************
+	
+The soul must contain the following functions:
+
+string get_soul_id()
+mapping query_cmdlist()
+
+The function get_soul_id() should return the lowercase name of the
+soul. Try to keep the name short and to the point since it is used in
+the command "allcmd".
+
+The function query_cmdlist() should return a mapping of verb:function
+
+The function query_tool_soul() or query_cmd_soul() must be defined
+and return 1 when called for the approprite type of soul.
+
+The rest of the soul file should simply be the functions you want to
+define. These functions must return 1 when a command has been executed
+in any way (successfully or not) or 0 if it proved that the command
+given was not intended for this soul. For example, if you have a
+command "shake" that expects the argument "hands with xxx" in order to
+allow someone to shake hands with someone. If the first argument is
+anything else than "hands" the function should return 0 since the
+player probably meant "shake my head in disagreement". However, if the
+player "xxx" wasn't present and you wrote a message to that effect you
+should return 1 since the command was intended to be the one you
+defined.
+
+A nice way to generate fail messages in the event that the command
+indeed was the only one defined with that command verb is to use
+"notify_fail()".
+
+Here is a short example of the previously discussed command soul.
+
+/* Example of command soul */
+
+inherit "/cmd/std/command_driver";
+
+string
+get_soul_id()
+{
+    return "mycommands";
+}
+
+int
+query_cmd_soul()
+{
+    return 1;
+}
+
+mapping
+query_cmdlist()
+{
+    return ([ "shake_hands":"shake", "hello":"hi" });
+}
+
+int
+shake_hands(string arg)
+{
+    string *argv;
+    object shakee;
+	
+    if (!strlen(arg))
+    {
+	notify_fail("Shake hands with whom?\n");
+	return 0;
+    }
+    
+    argv = explode(arg, " ");
+
+    if (argv[0] != "hands")
+    {
+	notify_fail("Shake what?\n");
+	return 0;
+    }
+
+    if (sizeof(argv) != 3 || argv[1] != "with")
+    {
+	notify_fail("Sorry, I don't understand what you want to shake.\n");
+	return 0;
+    }
+
+    if (!(shakee = present(argv[2])) && living(shakee))
+    {
+	write("Sorry, no " + argv[2] + " here to shake hands with.\n");
+	return 1;
+    }
+
+    say(QCTNAME(this_interactive()) + " shakes hands with " + QTNAME(shakee) + ".\n", ({ this_interactive(), shakee }));
+    
+    shakee->catch_msg(QCTNAME(this_interactive()) + " shakes your hand.\n");
+    write("You shake hands with " + QTNAME(shakee) + ".\n");
+    return 1;
+}
+
+int 
+hello()
+{
+    say(QCTNAME(this_interactive()) + " says hi.\n", this_interactive());
+    write("You say hi.\n");
+    return 1;
+}
+
+/* End of example */
+
+For other examples on command souls see /cmd/live/* and
+/cmd/std/soul_cmd.c. For example on a tool soul see /cmd/std/tracer_tool.c
+

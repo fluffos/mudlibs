@@ -1,0 +1,311 @@
+//New mastery system -- Rag
+//Coded to prevent abuse of old mastery system
+//and to add some difficulty to gaining masteries
+//Started coding 17.11.2003
+//Mastery_d is basicly ready, 22.11.2003
+//Now I have to code all the skills and spells...
+
+//After 10 hours of coding, the masteries are
+//ready, --Rag 23.11.2003
+
+//I should also also some more diversity
+//to some masteries with calling_files
+
+//With offensive masteries, the target must be a monster
+
+/* Masteries:
+Fighter skills:		Offensive maneuvers	done
+Mage:			Offensive spellcasting	done
+Mage/abju elements:	Dangerous <element>	done
+Abju prots:		Knowledge of shielding	done
+Abju vulns:		Knowledge of weaknesses	done
+Healing:		Holy faith		done
+Psi for bigger mobs:	Expanded mind		done
+Psi for dam/spcost:	Power of the mind	done
+Necro:			Mastery of dark arts	done
+
+Warlock mastery is still under consideration
+since I don't know much about that guild
+*/
+
+//Artists have a slightly different mastery system
+//You have to check the mastery ARTISTS times
+//to increase the mastery, no random stuff
+#define SAVEFILE "/data/artists"
+#define ARTISTS 300
+
+//Mappings for different artist-masteries
+mapping body;
+mapping elements;
+mapping mind;
+
+void reset(status arg) {
+	if(arg) return;
+	if(!restore_object(SAVEFILE)) {
+		body = ([]);
+		elements = ([]);
+		mind = ([]);
+		save_object(SAVEFILE);
+        }
+}
+
+//Returns the value of mastery and checks is the object
+//gains more masteries
+//Arguments: name of mastery, object with mastery, target
+
+int mastery(string mastery, object ob, object target) {
+	int mastery_level, ob_level, target_level, bonus, m_check;
+	string calling_file, second_caller, element, tmp, tname;
+
+	//NPCs don't have masteries
+	if(ob->query_npc()) return 0;
+	if(!mastery || !ob) return 0;
+
+	mastery_level = ob->query_mastery()[mastery];
+	ob_level = ob->query_level();
+
+	//No need to check any futher
+        if (mastery_level == 100) return mastery_level;
+
+	//You would get crazy results from the wizards' levels
+	if (target && target->query_wiz()) return mastery_level;
+
+	target_level = 0;
+	tname = "";
+	if(target) {
+		target_level = target->query_level();
+		tname = target->query_name();
+	}
+
+	calling_file = file_name(previous_object());
+
+	second_caller = "";
+	if(previous_object(1)) {
+		second_caller = file_name(previous_object(1));
+	}
+
+        if(ob->query_tester() || ob->query_wiz()) {
+		tell_object(ob,mastery+" "+tname+"\n");
+		tell_object(ob,calling_file+" "+second_caller+"\n");
+	}
+
+
+//Melee skills
+	if(mastery == "Offensive maneuvers") {
+
+		if(!target) return mastery_level;
+		if(!target->query_npc()) return mastery_level;
+		if(target_level < ob_level / 10) return mastery_level;
+
+		bonus = 0;
+		if(calling_file == "/guilds/skills/strike") bonus = 20;
+		if(calling_file == "/guilds/skills/tremendous_blow") bonus = 40;
+		//This because you have a chance to do treme with strike
+		if(second_caller == "/guilds/skills/strike") bonus = 30;
+		if(calling_file == "/guilds/skills/battlecry") bonus = 30;
+
+		m_check = mastery_level*2+130-bonus-target_level*2+ob_level/10;
+                if(!m_check) m_check = 1;
+	}
+
+//General mage mastery
+	if(mastery == "Offensive spellcasting") {
+
+                if(!target) return mastery_level;
+                if(!target->query_npc()) return mastery_level;
+                if(target_level < ob_level / 10) return mastery_level;
+
+		bonus = 0;
+		if(calling_file == "/guilds/obj/area_resolve") bonus = 20;
+
+		m_check = mastery_level*2+175-bonus-target_level*2+ob_level/10;
+		if(!m_check) m_check = 1;
+	}
+
+//Elemental
+	if(sscanf(mastery,"Dangerous %s",element)) {
+
+                if(!target) return mastery_level;
+                if(!target->query_npc() && calling_file != "/guilds/spell_obj/protection") return mastery_level;
+                if(target_level < ob_level / 10) return mastery_level;
+
+		bonus = 0;
+		if(calling_file == "/guilds/obj/area_resolve") bonus = 50;
+		if(calling_file == "/guilds/spell_obj/protection") bonus = 20;
+
+		m_check = mastery_level*2+200-bonus-target_level*2+ob_level/10;
+                if(!m_check) m_check = 1;
+	}
+
+//Healing
+	if(mastery == "Holy faith") {
+
+		if(target == ob) return mastery_level;
+		if(!target) return mastery_level;
+		if(!target->query_npc()) {
+			if(query_idle(target) > 60) return mastery_level;
+		} else {
+			if(target_level < ob_level / 10) return mastery_level;
+		}
+
+		bonus = 0;
+		if(sscanf(calling_file,"/guilds/spells/channel/_chl_%s_les",tmp)) bonus = 10;
+		if(sscanf(calling_file,"/guilds/spells/channel/_chl_%s_mar",tmp)) bonus = 20;
+		if(sscanf(second_caller,"/guilds/spells/channel/_chl_%s_les",tmp)) bonus = 10;
+                if(sscanf(second_caller,"/guilds/spells/channel/_chl_%s_mar",tmp)) bonus = 20;
+		if(sscanf(second_caller,"/guilds/spells/channel/_chl_kfq_%s",tmp)) bonus = -50;
+
+		m_check = mastery_level*2+150-bonus-target_level*2+ob_level/10;
+                if(!m_check) m_check = 1;
+	}
+
+//Protection
+	if(mastery == "Knowledge of shielding") {
+
+		if(target == ob) return mastery_level;
+                if(!target) return mastery_level;
+		if(!target->query_npc()) {
+	                if(query_idle(target) > 60) return mastery_level;
+		} else {
+			if(target_level < ob_level / 10) return mastery_level;
+		}
+
+		bonus = 0;
+                if(sscanf(calling_file,"/guilds/spells/abjuration/_kyo_%s_dio",tmp)) bonus = 20;
+                if(sscanf(calling_file,"/guilds/spells/abjuration/_kyo_%s_yed",tmp)) bonus = 20;
+
+
+		m_check = mastery_level*2+150-bonus;
+                if(!m_check) m_check = 1;
+	}
+
+//Vulns
+	if(mastery == "Knowledge of weaknesses") {
+
+                if(!target) return mastery_level;
+                if(!target->query_npc()) return mastery_level;
+                if(target_level < ob_level / 10) return mastery_level;
+
+		m_check = mastery_level*2+100-target_level*2+ob_level/10;
+                if(!m_check) m_check = 1;
+	}
+
+//Psi
+	if(mastery == "Expanded mind") {
+
+		if(target && !target->query_npc()) return mastery_level;
+                if(target && target_level < ob_level / 10) return mastery_level;
+
+		bonus = 0;
+		if(calling_file == "/guilds/skills/mental_expansion") bonus = 30;
+		if(calling_file == "/guilds/psi/specials/psicombat") bonus = -70;
+
+		m_check = mastery_level*2+90-bonus-target_level*2+ob_level/10;
+                if(!m_check) m_check = 1;
+	}
+
+//Psi
+	if(mastery == "Power of the mind") {
+
+                if(calling_file == "/guilds/psi/specials/psicombat") bonus = -70;
+
+		m_check = mastery_level*2+70-bonus-target_level*2+ob_level/10;
+		if(!m_check) m_check = 1;
+	}
+
+//Necro 
+	if(mastery == "Mastery of dark arts") {
+
+                bonus = 0;
+                if(sscanf(calling_file,"/guilds/spells/necromancy/_doo_%s_moo",tmp)) bonus = 20;
+                if(sscanf(calling_file,"/guilds/spells/necromancy/_doo_%s_muu",tmp)) bonus = 40;
+
+
+		m_check = mastery_level*2+175-bonus-target_level*2+ob_level/10;
+                if(!m_check) m_check = 1;
+	}
+
+//Martial arts masteries
+	if(mastery == "Mastery of body focusing") {
+
+                if(!target) return mastery_level;
+                if(!target->query_npc()) return mastery_level;
+                if(target_level < ob_level / 10) return mastery_level;
+
+		if(body[ob->query_name()]) {
+			body[ob->query_name()]++;
+		} else {
+			body += ([ (string) ob->query_name() : (int) 1 ]);
+		}
+		if(body[ob->query_name()] > ARTISTS) {
+			mastery_level++;
+	                ob->set_mastery(mastery,mastery_level);
+			body[ob->query_name()] = 1;
+		}
+                save_object(SAVEFILE);
+		return mastery_level;
+	}			
+
+        if(mastery == "Mastery of mind focusing") {
+
+                if(!target) return mastery_level;
+		if(!target->query_npc())
+	                if(query_idle(target) > 60) return mastery_level;
+
+                if(mind[ob->query_name()]) {
+                        mind[ob->query_name()]++;
+                } else {
+                        mind += ([ (string) ob->query_name() : (int) 1 ]);
+                }
+                if(mind[ob->query_name()] > ARTISTS) {
+                        mastery_level++;
+                        ob->set_mastery(mastery,mastery_level);
+                        mind[ob->query_name()] = 1;
+                }
+                save_object(SAVEFILE);
+                return mastery_level;
+        }
+
+        if(mastery == "Mastery of elements") {
+                if(elements[ob->query_name()]) {
+                        elements[ob->query_name()]++;
+                } else {
+                        elements += ([ (string) ob->query_name() : (int) 1 ]);
+                }
+                if(elements[ob->query_name()] > ARTISTS) {
+                        mastery_level++;
+                        ob->set_mastery(mastery,mastery_level);
+                        elements[ob->query_name()] = 1;
+                }
+                save_object(SAVEFILE);
+                return mastery_level;
+        }
+
+
+//Warlock? increase the power of demons
+
+	//If the mastery doesn't excist
+	if(!m_check) return 0;
+
+	if(m_check < 0) m_check = 0;
+
+	//Bonus for rebirthers
+	if(ob->query_rebirth()) {
+		m_check = m_check * 2 / (ob->query_rebirth() + 2);
+	}
+
+	if(ob->query_tester() || ob->query_wiz()) tell_object(ob,m_check+"\n");
+
+	if(!random(m_check)) {
+		mastery_level++;
+		ob->set_mastery(mastery,mastery_level);
+	}
+	return mastery_level;
+}
+
+int query_mastery(string mastery, object ob) {
+	if(!mastery || !ob) return 0;
+	if(ob->query_npc()) return 0;
+
+	return ob->query_mastery()[mastery];
+}

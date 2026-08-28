@@ -1,0 +1,1062 @@
+/*
+ * This is a mudlib file. Copy it to /secure/simul_efun.c, or
+ * wherever the get_simul_efun() in master.c says.
+ * The functions defined in this file should only be replacements of efuns
+ * no longer supported. Don't use these functions any longer, use the
+ * replacement instead.
+ */
+
+/*
+  simul_efun.c
+*/
+#define MAX_LOG_SIZE 50000
+
+#define BACKBONE_WIZINFO_SIZE 5
+
+#define LIVING_NAME 3
+#define NAME_LIVING 4
+
+/* FluffOS port note (questmud): wizlist.h/erq.h dropped -- no
+ * wizlist_info()/extra_wizinfo or erq package on this driver. See
+ * NOTES.md and secure/master.lpc's own port-note comments. */
+
+#pragma strong_types
+#pragma save_types
+#define MASTER "secure/master"
+
+//////////////////////////////////////////////
+// Replacements for obsolete functions ++C ///
+//////////////////////////////////////////////
+
+/* LDMud's bare member() (array-index-or-mapping-presence, argument
+ * order (arr, elem)) doesn't exist on this driver at all; FluffOS
+ * already has a real member_array(elem, arr) efun with the same
+ * contract this wrapper wants, so just fall through to it (efun::
+ * bypasses this very simul_efun, avoiding self-recursion). */
+int member_array(mixed elem, mixed arr) {
+  return efun::member_array(elem, arr);
+}
+
+/* Generic member() used ~70x across this mudlib (both array-index
+ * lookups and mapping-key presence checks, the LDMud overload). */
+mixed member(mixed what, mixed elem) {
+  if (mapp(what)) return what[elem] != 0;
+  return efun::member_array(elem, what);
+}
+
+/* cat(file, start, num) is a genuine LDMud built-in efun (print a
+ * chunk of a file's lines) with no FluffOS equivalent at all -- 582
+ * call sites across this mudlib, including the very first login
+ * banner (obj/player.lpc printing /WELCOME) and the "more"-style
+ * pager (even_more()/cat_file()), so this had to be a real
+ * implementation, not a stub. Returns 0 on failure (missing file, or
+ * start past EOF), else the number of lines actually printed --
+ * matches every call site's `== 0`/truthiness check. */
+varargs int cat(string file, int start, int num) {
+    string content;
+    string *lines;
+    int total, from, to;
+
+    if (!file) return 0;
+    content = read_file(file);
+    if (!content) return 0;
+    if (strlen(content) && content[strlen(content)-1] == '\n')
+        content = content[0..<2];
+    lines = explode(content, "\n");
+    total = sizeof(lines);
+    from = start ? start : 1;
+    if (from < 1) from = 1;
+    if (from > total) return 0;
+    to = num ? from + num - 1 : total;
+    if (to > total) to = total;
+    write(implode(lines[from-1..to-1], "\n") + "\n");
+    return to - from + 1;
+}
+
+string extract(string st, int from, int to) {
+  return st[from..to];
+}
+
+int m_sizeof(mapping map) {
+  return sizeof(map);
+}
+
+mixed *filter_array(mixed *arr, mapping map, mixed extra) {
+  return filter(arr, map, extra);
+}
+
+/* LDMud's real efun is object_name(); this driver's real efun is the
+ * older MudOS name file_name() instead -- object_name() doesn't exist
+ * here at all (confirmed: zero hits anywhere in this project's whole
+ * onboarded corpus/AGENTS.md, a genuinely new efun-naming gap, unlike
+ * every other MudOS-lineage lib onboarded so far). This mudlib
+ * originally aliased file_name() -> object_name() (i.e. assumed
+ * object_name was the real one); flipped to alias the other way, so
+ * every file_name() call elsewhere in this mudlib keeps working
+ * (falls through to the real efun untouched) and object_name() becomes
+ * the new compat shim for the handful of LDMud-native call sites
+ * (secure/master.lpc, this file's own geteuid(), one wizard test
+ * file). */
+/* to_string(mixed) is genuinely used 64x across this mudlib (int/float
+ * -> string) and isn't a real efun on this driver (to_int() exists,
+ * to_string() doesn't). This driver's `+` operator already coerces
+ * int/float onto a string (confirmed widely elsewhere in this mudlib,
+ * e.g. "text: "+some_int+"\n" compiles and runs fine), so string
+ * concatenation with "" is a safe, simple implementation. */
+/* set_modify_command(ob) was the LDMud API for registering a per-
+ * object H_MODIFY_COMMAND_FNAME hook (direction abbreviations like
+ * "n"->"north"); that whole driver_hook mechanism doesn't exist on
+ * this driver (see secure/master.lpc's inaugurate_master() port-note)
+ * and isn't a real efun either. Cosmetic (players can still type the
+ * full direction name), so a no-op is a safe stub. */
+void set_modify_command(mixed ob) {
+}
+
+/* tail(file) is a genuine LDMud efun (print the LAST few lines of a
+ * file) with no FluffOS equivalent -- reimplemented in pure LPC per
+ * AGENTS.md's own cataloged fix for this exact efun-naming gap
+ * (section 6.2). Matches cat()'s truthy/falsy return contract. */
+int tail(string file) {
+    string content;
+    string *lines;
+    int total, from;
+
+    if (!file) return 0;
+    content = read_file(file);
+    if (!content) return 0;
+    if (strlen(content) && content[strlen(content)-1] == '\n')
+        content = content[0..<2];
+    lines = explode(content, "\n");
+    total = sizeof(lines);
+    from = total > 10 ? total - 10 : 0;
+    write(implode(lines[from..total-1], "\n") + "\n");
+    return 1;
+}
+
+/* unshadow() (bare, meaning "remove every shadow currently overlaying
+ * this_object()") is a real LDMud efun with no FluffOS equivalent --
+ * FluffOS only has shadow()/query_shadowing() to walk the chain. This
+ * mudlib's spell/status-effect system (haste, shield, heal_resist,
+ * stat_boost, ...) shadows the target for the effect's duration, so
+ * this needed a real implementation, not a stub. Destructs each
+ * shadow layer (these are single-purpose ephemeral effect objects
+ * with no other purpose once removed) rather than merely unlinking,
+ * matching how master.lpc's own prepare_destruct() already tears down
+ * a shadow chain on this driver. */
+void unshadow() {
+    object sh, next;
+    for (sh = shadow(this_object(), 0); sh; sh = next) {
+        next = shadow(sh, 0);
+        destruct(sh);
+    }
+}
+
+/* strstr(haystack, needle, start) is LDMud's real efun (used 24x
+ * across this mudlib); this driver's equivalent is strsrch() with the
+ * same (string, string|int, int start) contract and -1-on-not-found
+ * return, so a direct passthrough alias is safe. */
+varargs int strstr(string haystack, mixed needle, int start) {
+    return strsrch(haystack, needle, start);
+}
+
+string to_string(mixed x) {
+    return "" + x;
+}
+
+string object_name(object ob) {
+  return efun::file_name(ob);
+}
+
+/////////////////////////////////////////////////////
+// End of Replacements for obsolete functions ++C ///
+/////////////////////////////////////////////////////
+
+/*
+ * new efun to force string length by adding empty spaces 
+ * ..or cutting it //Celtron
+ */
+string force_string_length(string str, int set_length) {
+  string spaces;
+  int spacelength;
+  spaces = "                                                               ";
+
+  if(strlen(str) >= set_length)
+    return str[0..(set_length-1)];
+
+  spacelength = set_length - strlen(str);
+  if(spacelength > strlen(spaces)) spacelength = strlen(spaces);
+  str = str + spaces[0..(spacelength-1)];
+  return str;  
+}
+
+/*
+ * The ls() function is no longer needed, as get_dir() can do the same
+ * work.
+ */
+void ls(string path) {
+    int max, i, len, tmp;
+    int trunc_flag;
+    mixed *dir;
+    /* set_this_object() removed: not a FluffOS efun. Bare simul_efun
+     * calls already execute with this_object()/current_object left as
+     * the ORIGINAL caller (unlike LDMud, where a simul_efun is a real
+     * object and this trick was needed to fake that). */
+    dir = get_dir (path,3);
+#if defined(COMPAT_FLAG) && 0
+    if (path[0] == '/')
+      path = path[1:];
+    if (path != "")
+      path += "/";
+#else
+    if (path != "/")
+	path += "/";
+#endif
+    if (!dir) {
+        write("No such directory.\n");
+        return;
+    }
+    if (sizeof(dir) > 999)
+    {
+        dir = dir[0..998];
+        trunc_flag = 1;
+    }
+    for(i = sizeof(dir); i--; ) {
+        if(dir[i--] == -2)
+            dir[i]+="/";
+        len = strlen(dir[i]);
+        if (len > max)
+            max = len;
+    }
+    ++max;
+    if (max > 79)
+        max = 79;
+    for (i=0; i < sizeof(dir); i+=2) {
+	string name;
+            name = dir[i];
+	tmp = strlen(name);
+	if (len + tmp > 79) {
+	    len = 0;
+	    write("\n");
+	}
+	write(name);
+        if (len + max > 79) {
+            write("\n");
+            len = 0;
+        } else {
+	  string spaces = " ";//                                                                               ";
+	  for(int si=0; si < 80-max+tmp; si++)
+	    spaces = spaces + " ";
+	  write(spaces);
+	  len += max;
+        }
+    }
+    write("\n");
+    if (trunc_flag) write("***TRUNCATED***\n");
+}
+
+int file_time(string path)
+{
+    mixed *v;
+
+    /* set_this_object() removed: not a FluffOS efun. Bare simul_efun
+     * calls already execute with this_object()/current_object left as
+     * the ORIGINAL caller (unlike LDMud, where a simul_efun is a real
+     * object and this trick was needed to fake that). */
+    if (sizeof(v=get_dir(path,4))) return v[0];
+}
+
+
+mixed valid_write(string str, object caller) {
+  string who, file, owner,tmp, current_path;
+  int Wiza, i;
+  object ob;
+
+  if(!caller) return 0;
+  Wiza = caller->query_wiz();
+  current_path = caller->query_current_path();
+  i = strlen(str) - 1;
+  while(i>0) {
+    if (str[i] == '.' && str[i-1] == '.') {
+      write("Illegal to have '..' in path.\n");
+      return 0;
+    }
+    i -= 1;
+  }
+
+  if (str[0] != '/') {
+    if (current_path && current_path != "/" && current_path != "")
+      str = "/" + current_path + "/" + str;
+    else
+      str = "/" + str;
+  }
+
+  /* keys to the houses around city */
+  if(sscanf(str, "/room/houses/keys/%s", tmp) == 1 && !Wiza && interactive(caller)) return str;
+
+  // As requested by Rag -Nalle 
+  if(str == "/log/WARLOCK") return str;
+
+  // Requested by Astarel -N
+  if(str[0..16] == "/data/stronghold/") return str;
+
+
+  /* data write access: locker, bank, spellbook etc */
+  if(!Wiza && sscanf(str, "/data/%s", file) == 1 && interactive(caller) )
+    return str;
+
+  if(str[0..10] == "/data/news/" && previous_object() && object_name(previous_object()) == "/daemons/news_d")
+	return str;
+
+  if(!Wiza) return 0;
+
+// Nimikohtaset accessit (write)
+
+  if(caller->query_real_name() == "rimber" && str[0..14] == "/guilds/warlock") return str;
+
+  /* /wizards/.. */
+  owner = lower_case(caller->query_name());
+  if (sscanf(str, "/wizards/%s/", who) == 1 && owner == who)
+    return str;
+  if (sscanf(str, "/wizards/%s/%s", who, file) == 2) {
+    ob = clone_object("obj/player.lpc");
+    if (!ob->restore_player(who) && Wiza >= 3 || Wiza >= 3 && ob->query_wiz() < 5 || who == owner)
+      return str;
+    destruct(ob);
+    return 0;
+  }
+
+  
+  if(Wiza == 1) return 0;
+
+  if (sscanf(str, "/world/%s", file) == 1) {
+    if(sscanf(file, "out/%s", file) == 1 && Wiza < 3)
+      return 0;
+    return str;
+  }
+  if (sscanf(str, "/doc/%s", file) == 1)
+    return str;
+
+  if(Wiza == 2) return 0;
+
+  if (sscanf(str, "/guilds/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/cmds/std/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/room/houses/%s", file) == 1)
+    return str;
+
+  if(Wiza == 3) return 0;
+
+  if (sscanf(str, "/cmds/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/daemons/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/data/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/log/%s", file) == 1)
+    return str;
+
+    if (sscanf(str, "/stronghold/%s", file) == 1)
+      return str;
+    if (sscanf(str, "/castle/%s", file) == 1)
+      return str;
+    if (sscanf(str, "/obj/%s", file) == 1)
+      return str;
+    if (sscanf(str, "/room/%s", file) == 1)
+      return str;
+    if (sscanf(str, "/hakemukset/%s", file) == 1)
+      return str;
+
+  if(Wiza != 5) return 0;
+  return str;
+}   
+
+
+mixed valid_read(string path, object caller) {
+  string who, file, tmp1, str, current_path;
+  int i, Wiza;
+  object ob;
+
+  if(caller) {
+    Wiza = caller->query_wiz();
+    current_path = caller->query_current_path();
+  }
+  i = strlen(path) - 1;
+  while(i>0) {
+    if (path[i] == '.' && path[i-1] == '.') {
+      write("Illegal to have '..' in path.\n");
+      return 0;
+    }
+    i -= 1;
+  }
+  /* if you have write access, then you have read access too */
+  file = valid_write(path, caller);
+  if (file) return file;  
+
+  str = path;
+  switch(str) {
+    case "/world/city/map":
+    case "/world/city/map.house":
+    case "/log/SHOUT":
+    case "/log/INFO":
+    case "/log/WIZINFO":
+    case "/NEWS":
+    case "/WIZNEWS":
+    case "/WIZLOCKED":
+    case "/WELCOME":
+    case "/WELCOME2":
+    case "/WELCOME3": return str;
+  }
+  if (str[0] != '/') {
+    if (current_path && current_path != "/" && current_path != "")
+      str = "/" + current_path + "/" + str;
+    else   
+      str = "/" + str;
+  }
+  /* start validate */
+  ob = previous_object();
+  if(ob && object_name(ob) == "/daemons/guildrank_d" && sscanf(str, "/guilds/%s", tmp1) == 1)
+    return str;
+
+  if (sscanf(str, "/banish/%s", tmp1) == 1)
+    return str;
+  if (sscanf(str, "/doc/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/daemons/fortune/data/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/room/ambush/monster_descs/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/guilds/spell_descs/%s", file) == 1)
+    return str;
+
+  /* full read access */
+  if (Wiza == 4 || Wiza == 5) { return str; }
+
+  if(!Wiza) return 0;
+
+  if(sscanf(str, "/%s/%s", who, file) != 2 && sscanf(str, "/%s", file) == 1)
+    return str;
+
+  if (sscanf(str, "/wizards/%s/%s", who, file) == 2) {
+    ob = clone_object("obj/player.lpc");
+    if (!ob->restore_player(who) || ob->query_wiz() <= Wiza+1)
+      return str;
+    destruct(ob);
+    return 0;
+  } else if (sscanf(str, "/wizards/%s", file) == 1) {
+    return str;
+  }
+ 
+  if (sscanf(str, "/world/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/log/%s", file) == 1) {
+    if(lower_case(file) == file || Wiza >= 3)
+      return str;
+    return 0;
+  }
+
+  if(Wiza == 1) return 0;
+
+  if (sscanf(str, "/data/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/cmds/std/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/cmds/wiz/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/guilds/%s", file) == 1)
+    return str;
+
+  if(Wiza == 2) return 0;
+
+  if (sscanf(str, "/cmds/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/daemons/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/castle/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/room/%s", file) == 1)
+    return str;
+
+  if(Wiza == 3) return 0;
+  /* t鋒鋘 ei kukaan p滗se ellei oo illegal wiz //Celtron */
+  return 0;
+
+  if (sscanf(str, "/obj/%s", file) == 1)
+    return str;
+  if (sscanf(str, "/players/%s", file) == 1)
+    return str;
+}
+
+mixed read_bytes(string filename, mixed fromchar, mixed numchar) {
+  if ( valid_read(filename, this_player()) ) {
+    return efun::read_bytes(filename, fromchar, numchar);
+  }
+  return 0;
+}
+
+string create_wizard(string owner, string domain)
+{
+    mixed result;
+
+    /* set_this_object() removed: not a FluffOS efun. Bare simul_efun
+     * calls already execute with this_object()/current_object left as
+     * the ORIGINAL caller (unlike LDMud, where a simul_efun is a real
+     * object and this trick was needed to fake that). */
+    result =
+      (mixed)MASTER->master_create_wizard(owner, domain, previous_object());
+    if (stringp(result)) return result;
+    return 0;
+}
+
+varargs void log_file(string file, string str, int no_send_to_chan )
+{
+    string object_name;
+    int *st;
+
+    object_name = "/log/" + file;
+    if ( sizeof(st = get_dir(object_name,2) ) && st[0] > MAX_LOG_SIZE) {
+	catch(rename(object_name, object_name + ".old")); /* No panic if failure */
+    }
+    /* set_this_object() removed: not a FluffOS efun. Bare simul_efun
+     * calls already execute with this_object()/current_object left as
+     * the ORIGINAL caller (unlike LDMud, where a simul_efun is a real
+     * object and this trick was needed to fake that). */
+    write_file(object_name, str);
+    /* say log msg on channel. goes through buffer so bugging channels don't crash the system // Celtron */
+    if(no_send_to_chan) return;
+    "/daemons/log_buffer_d"->add_buffer(object_name+"|"+str);
+}
+
+void localcmd() {
+    /* query_actions() (LDMud: list every verb currently add_action()-ed
+     * onto a player, for local-room command introspection) has no
+     * FluffOS equivalent efun -- stubbed. */
+    write("(command list introspection is not available under this driver)\n");
+}
+/*
+mixed *unique_array(mixed *arr,string func,mixed skipnum) {
+    mixed *al, last;
+    int i, j, k, *ordinals;
+
+    if (sizeof(arr) < 32) return efun::unique_array(arr, func, skipnum);
+    for (ordinals = allocate(i = sizeof(arr)); i--; )
+	ordinals[i] = i;
+    al = order_alist(map_objects(arr, func), ordinals, (ordinals=0,arr));
+    arr = al[2];
+    ordinals = al[1];
+    al = al[0];
+    if (k = i = sizeof(al)) {
+	for (last = al[j = --i]; i--; ) {
+	    if (al[i] != last) {
+		if (last != skipnum) {
+		    arr[--k] = arr[i+1..j];
+		    ordinals[k] = ordinals[j];
+		}
+		last = al[j = i];
+	    }
+	}
+	if (last != skipnum) {
+	    arr[--k] = arr[0..j];
+	    ordinals[k] = ordinals[j];
+	}
+    }
+    return order_alist(ordinals[k..], arr[k..])[1];
+}
+*/
+mixed snoop(object snooper, object snoopee) {
+    /* LDMud's snoop() returns an int status code (-1/0/1); this
+     * driver's snoop() returns the snooped object on success, 0 on
+     * failure -- another dialect gap, fixed by switching result's
+     * type and reading its truth value directly (loses the distinct
+     * "Busy." vs "Failed." wording FluffOS's own return doesn't
+     * distinguish). */
+    object result;
+
+    if (snoopee && query_snoop(snoopee)) {
+        write("Busy. Snooped by "+query_snoop(snoopee)->query_name()+"\n");
+        return 0;
+    }
+    result = snoopee ? efun::snoop(snooper, snoopee)
+                     : efun::snoop(snooper);
+    if (!result) {
+        write("Failed.\n");
+        return 0;
+    }
+    write("Ok.\n");
+    return result;
+}
+
+/* You can remove this simul_efun if you have no objects in your mudlib that
+ * use process_string in notify_fail, or if you change them to use closures.
+ */
+void notify_fail(mixed message) {
+    /* The "@@...@@" process_string()-in-notify_fail lazy-closure path
+     * (LDMud lambda/bind_lambda/funcall, none of which exist here) is
+     * dropped: grepped the whole mudlib for notify_fail(...@@...) call
+     * sites and found zero -- nothing actually used it. */
+    efun::notify_fail(message);
+}
+
+string version() {
+    return __VERSION__;
+}
+
+string query_host_name() {
+    /* __HOST_NAME__ isn't a predefine on this driver (no equivalent
+     * found at all); this is cosmetic (a few player-info screens), so
+     * just name the mud itself rather than a real host. */
+    return "questmud";
+}
+
+/* On LDMud, m_delete() was a real driver efun (non-mutating: returns a
+ * NEW mapping with the key removed), so this mudlib's own version of
+ * it shipped commented out. FluffOS has no m_delete efun at all --
+ * only map_delete(), which is void/in-place (mutates its argument, no
+ * return value) -- the classic MudOS/LDMud map_delete() dialect gap
+ * documented project-wide in AGENTS.md. 35 files across this mudlib
+ * (obj/player.lpc, several daemons, ...) call m_delete() expecting the
+ * old non-mutating LDMud contract, so re-enable this simul_efun
+ * (uncommented) as the compat shim, copying via mapping `+` (FluffOS
+ * has no copy_mapping() either) before deleting from the copy. */
+mapping m_delete(mapping m, mixed key) {
+    mapping copy = m + ([]);
+    efun::map_delete(copy, key);
+    return copy;
+}
+
+nomask void shutdown() {
+  string file;
+  file = object_name(previous_object());
+  if (file == "/obj/timer" ||
+      file == "/secure/master") {
+    efun::shutdown();
+  }
+}        
+
+mixed command(string cmd, object called) {
+  /* This driver's real command() efun takes only the command string
+   * and always executes as this_player() -- no second "run as" object
+   * argument, and (unlike LDMud) no set_this_player() efun to fake one
+   * either: it only exists on a build with add_action DISABLED, the
+   * opposite of this one (confirmed via core.spec's #ifndef
+   * NO_ADD_ACTION guard). So this can only actually run as the real
+   * this_player() of the current connection. That matches the
+   * overwhelming majority of call sites already (they pass their own
+   * this_object(), which already IS this_player() at that point --
+   * doc/misc/player.lpc, doc/misc/living.lpc, etc.); the one known
+   * divergent caller is obj/party.lpc's follow-mechanic (running a
+   * movement command as OTHER party members), which will now only
+   * affect this_player() -- a real, documented limitation rather than
+   * an invented workaround. */
+  if(!cmd) return 0;
+  if(called && called->query_wiz()) {
+    if(!interactive(previous_object()) || called->query_wiz() > this_player()->query_wiz())
+      return 0;
+  }
+  return efun::command(cmd);
+} 
+
+nomask void set_this_player() {}
+
+void wizlist(string name) {
+    /* Driver-tracked command-count/eval-cost scoreboard: relied on
+     * wizlist_info() plus the WL_* index constants from wizlist.h,
+     * neither of which exist on FluffOS (no wizlist_info() efun at
+     * all). Not reconstructable from data this driver tracks, so this
+     * is a graceful stub rather than a real port -- see NOTES.md. */
+    write("The wizard scoreboard is not available under this driver.\n");
+}
+
+void shout(string s) {
+    object *u;
+    int i;
+
+    u = users();
+    for (i = 0; i < sizeof(u); i++) {
+        if (environment(u[i]) && u[i] != this_player())
+            tell_object(u[i], s); /* s is already a string; to_string() isn't a FluffOS efun */
+    }
+}
+
+/* Initialized directly (not left to start_simul_efun() below) --
+ * master::get_simul_efun() (which called start_simul_efun() on this
+ * object) is an LDMud-only master apply not in this driver's applies
+ * table at all, so it's never invoked; without a global initializer
+ * these stayed the LPC-default int 0, and the very first
+ * find_player()/find_living() call ("Value being indexed is zero")
+ * crashed every single character's own password-confirmation step,
+ * a few calls into move_player_to_start3() -- totally blocking
+ * registration. */
+mapping living_name_m = ([]), name_living_m = ([]);
+
+void start_simul_efun() {
+    /* Original persisted living_name_m/name_living_m across a live
+     * `update` of this very file via get_extra_wizinfo()/
+     * set_extra_wizinfo() (neither exists on FluffOS). Simplified to
+     * plain reinitialize-if-unset: only loses the accumulated
+     * find_living()/find_player() name index across a live recompile
+     * of secure/simul_efun.lpc, not across an ordinary boot. */
+    if (!living_name_m) living_name_m = ([]);
+    if (!name_living_m) name_living_m = ([]);
+    if (find_call_out("clean_simul_efun") < 0)
+	call_out("clean_simul_efun", 1800);
+    this_object()->start_simul_efun_dr();
+}
+
+nosave void clean_name_living_m(string *keys, int left) {
+    int i, j;
+    mixed a;
+
+    if (left) {
+	if (pointerp(a = name_living_m[keys[--left]]) && member(a, 0)>= 0) {
+	    i = sizeof(a);
+	    do {
+		if (a[--i])
+		    a[<++j] = a[i];
+	    } while (i);
+	    name_living_m[keys[left]] = a = j > 1 ? a[<j..] : a[<1];
+	}
+	if (!a)
+	    efun::map_delete(name_living_m, keys[left]);
+	call_out("clean_name_living_m", 1, keys, left);
+    }
+}
+
+nosave void clean_simul_efun() {
+    /* There might be destructed objects as keys. */
+    keys(living_name_m);
+    remove_call_out("clean_simul_efun");
+    if (find_call_out("clean_name_living_m") < 0) {
+	call_out(
+	  "clean_name_living_m",
+	  1,
+	  keys(name_living_m),
+	  sizeof(name_living_m)
+	);
+    }
+    call_out("clean_simul_efun", 3600);
+}
+
+/* disable symbol_function('set_living_name, SIMUL_EFUN_OBJECT) */
+// protected void set_living_name(string name) {
+void set_living_name(string name) {
+    string old;
+    mixed a;
+    int i;
+
+    if (old = living_name_m[previous_object()]) {
+	if (pointerp(a = name_living_m[old])) {
+	    a[member(a, previous_object())] = 0;
+	} else {
+	    efun::map_delete(name_living_m, old);
+	}
+    }
+    living_name_m[previous_object()] = name;
+    if (a = name_living_m[name]) {
+	if (!pointerp(a)) {
+	    name_living_m[name] = ({a, previous_object()});
+	    return;
+	}
+	/* Try to reallocate entry from destructed object */
+	if ((i = member(a, 0)) >= 0) {
+	    a[i] = previous_object();
+	    return;
+	}
+	name_living_m[name] = a + ({previous_object()});
+	return;
+    }
+    name_living_m[name] = previous_object();
+}
+
+object find_living(string name) {
+    mixed *a, r;
+    int i;
+
+    if (pointerp(r = name_living_m[name])) {
+	if ( !living(r = (a = r)[0])) {
+	    for (i = sizeof(a); --i;) {
+		if (living(a[<i])) {
+		    r = a[<i];
+		    a[<i] = a[0];
+		    return a[0] = r;
+		}
+	    }
+	}
+	return r;
+    }
+    return living(r) && r;
+}
+
+object find_player(string name) {
+    mixed *a, r;
+    int i;
+
+    if (pointerp(r = name_living_m[name])) {
+	if ( !(r = (a = r)[0]) || !interactive(r)) {
+	    for (i = sizeof(a); --i;) {
+		if (a[<i] && interactive(a[<i])) {
+		    r = a[<i];
+		    a[<i] = a[0];
+		    return a[0] = r;
+		}
+	    }
+	    return 0;
+	}
+	return r;
+    }
+    return r && interactive(r) && r;
+}
+
+
+// Added by Celtron for LDMUD
+
+string geteuid(object ob) {
+  string str, wiz_name;
+
+  str = object_name(ob);
+  if(sscanf(str, "/wizards/%s/%s", wiz_name, str) != 2) {
+    return "Questlib";
+  }
+  return "wizard "+wiz_name;
+}
+
+void cindent(string name)
+{
+    /* Wizard dev-tool: shells out to an external "indent" formatter via
+     * the erq package (send_erq()/ERQ_FORK), which doesn't exist on
+     * this driver -- only ever called from wizards/siki's own sandbox
+     * copy of this file, not the live one. Stubbed. */
+    write("cindent is not available under this driver.\n");
+}
+
+/*
+ * Function name: exclude_array
+ * Description:   Deletes a section of an array
+ * Arguments:     arr: The array
+ *		  from: Index from which to delete elements
+ *		  to: Last index to be deleted.
+ * Returns:       
+ */
+public mixed *
+exclude_array(mixed *arr, int from, int to)
+{
+    return arr[0..from-1] + arr[to+1..sizeof(arr)];
+}
+
+
+/*
+ * Function name: exclude_element
+ * Description:   deletes an element from an array
+ * Arguments:     arr: the array
+ *                from: index of the element to remove from the array
+ * Returns:       first element of the array, or -1 if failed.
+ * Warning:       elements in the array will have been reshuffled somewhat.
+ */
+/*
+public mixed * exclude_element (mixed *arr, int index) {
+        arr[index] = arr[0];
+        return slice_array (arr, 1, sizeof (arr));
+}
+*/
+
+/*************************************************************************/
+
+/* Efun: all_environment() */
+
+/*
+ * Function name: all_environment
+ * Description:   Gives an array of all containers which an object is in, i.e.
+ *		  match in matchbox in bigbox in chest in room, would for the
+ *		  match give: matchbox, bigbox, chest, room 
+ * Arguments:     ob: The object
+ * Returns:       The array of containers.
+ */
+public object *
+all_environment(object ob)
+{
+  object *r;
+  
+  if (!ob || !environment(ob)) return 0;
+  if (!environment(environment(ob)))
+      return ({ environment(ob) });
+  r = ({ ob = environment(ob) });
+  while (environment(ob))
+      r = r + ({ ob = environment(ob) });
+  return r;
+}
+
+/*************************************************************************/
+
+/* Efuns: break_string() and update_actions()
+*/
+
+nosave int gCol;
+
+/*
+ * Function name: break_string
+ * Description:   Breaks a continous string without newlines into a string
+ *		  with newlines inserted at regular intervalls replacing spaces
+ *		  Each newline separeted string can be indented with a given
+ *		  number of spaces.
+ * Arguments:     str: Original message
+ *		  width: The total maximum width of each line.
+ *		  indent: (optional) How many spaces to indent with.
+ * Returns:       A string with newline separated strings
+ */
+public varargs string
+break_string(string str, int width, int indent)
+{
+    mixed *brkarg;
+    string indstr;
+
+    if (indent) {
+      string spaces = "                                                                                ";
+	//indstr = extract("                                                                                ", 0, indent-1);
+      indstr = spaces[indent-1..-1];
+    }
+    else {
+	indstr = "";
+     }
+    gCol = indent;
+    brkarg = ({ width, indstr });
+
+    return str;  
+    //return indstr + 
+    //  implode(to_array(explode(str+" "," "),"brk",this_object(),brkarg," "));
+}
+
+nosave string brk(string word, mixed *width_indstr)
+{
+    int width;
+    string indstr;
+
+    width = width_indstr[0];
+    indstr = width_indstr[1];
+    if ((strlen(word)+gCol) > width) {
+	gCol = strlen(indstr) + strlen(word) + 1;
+	return "\n" + indstr + word;
+    }
+    else {
+	gCol += strlen(word) + 1;
+	return word;
+    }
+}    
+
+/*
+ * Function name:   update_actions
+ * Description:     Updates this_objects actions in all living objects
+ */
+public void
+update_actions()
+{
+  int objs;
+
+  if (environment(previous_object()))
+    previous_object()->move(environment(previous_object()),1);
+  filter(all_inventory(previous_object()),"move_inv",previous_object());
+}
+
+nosave void move_inv(object ob) { if (living(ob)) ob->move(previous_object(),1); }
+
+/*************************************************************************/
+
+
+/* Functions below are useful but should probably not be made into efuns
+*/
+
+/* creator()/domain() are used throughout this mudlib (obj/player.lpc's
+ * reset(), logon2(), etc.) as an "is this a wizard's own ad-hoc clone,
+ * not a normal system-created object" guard: `if (creator(ob))
+ * destruct(ob);`. Under real euid tracking every object always has
+ * SOME uid (this driver's master::creator_file() must always return a
+ * real string, never LDMud's original int-0/1 "no special uid"
+ * sentinel -- see secure/master.lpc's own port-note comment), so a
+ * bare getuid() passthrough made creator() truthy for EVERY object,
+ * including perfectly legitimate clone_object("obj/player") calls
+ * from master::connect() -- every single new connection's player
+ * object was destructing itself immediately in reset(), the actual
+ * root cause behind "*No program in object '/obj/player'!" on every
+ * connect attempt. Filter out the backbone/system uid so only a real
+ * per-wizard uid counts as "creator". */
+string creator(object ob) {
+    string uid = (string)getuid(ob);
+    return (uid && uid != (string)MASTER->get_bb_uid()) ? uid : 0;
+}
+string domain(object ob) {
+    string uid = (string)getuid(ob);
+    return (uid && uid != (string)MASTER->get_bb_uid()) ? uid : 0;
+}
+
+/*
+string creator(object ob) { return (string)SECURITY->creator_object(ob); }
+string domain(object ob) { return (string)SECURITY->domain_object(ob); }
+*/
+
+nosave void dump_elem(mixed sak, string tab);
+
+/*
+ * Function name: dump_array
+ * Description:   Dumps a variable with write() for debugging purposes.
+ * Arguments:     a: Anything including an array
+ */
+public varargs void 
+dump_array(mixed *a, string tab)
+{
+  int n,m;
+
+  if (!tab) tab = "";
+  if (!pointerp(a)) {
+    write(a); return;
+  }
+  else write("\n");
+  m=sizeof(a);
+  n=0;
+  while (n<m) {
+    write(tab+"["+n+"] = "); dump_elem(a[n],tab); n+=1;
+  }
+}
+
+int is_clone(mixed ob) {
+    return objectp(ob) && member(object_name(ob), '#') >= 0;
+}
+
+nosave void dump_elem(mixed sak, string tab)
+{
+  if (pointerp(sak)) {
+    write("Array: \n"); dump_array(sak,tab+"   ");
+  }
+  else write(sak);
+  write("\n");
+}
+
+#if 0
+/*
+ * The old 'slice_array' is no longer needed. Use range argument inside
+ * a pair of brackets instead.
+ */
+mixed *slice_array(mixed *arr, int from, int to) {
+    return arr[from..to];
+}
+
+#endif
+
+object *find_all_living(string name) {
+  object ob, *all;
+  int i;
+
+  /* Original used an unbound_lambda(#'set_living_name) closure so it
+   * could bind it fresh to each object in turn; a direct call_other
+   * does exactly the same thing without needing closures at all. */
+  for(all = ({}),i = 0; (ob = find_living(name)) && i < 45; i++) {
+    //if(member_array(ob, all) != -1) break;
+    all += ({ ob, });
+    ob->set_living_name("DUMMY");
+  }
+  for(i = sizeof(all); i--; ) {
+    all[i]->set_living_name(name);
+  }
+  return all;
+}
+
+
+

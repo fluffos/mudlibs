@@ -1,0 +1,184 @@
+//#define DEBUG
+#define LOC_D "/castle/obj/castle_location_d"
+#define castle_info "/data/castle/castle_info"
+#define owner_list "/data/castle/owner_list"
+#define OUTMAP "/room/out/outmap"
+
+string id;
+
+get() { return 1; }
+
+drop() { return 1; }
+
+short() {  
+  string str;
+  str = "Small cube";
+  return str;
+}
+  
+long() {
+  if(this_player()->query_wiz() < 3) write("Small cube, aparently it has some obscure purpose.\n");
+  else write(short() + " - the might of castles resides inside this one.. Try 'castle help'\n");
+}
+
+set_id(arg) {
+  if(!id) {
+    id = arg;
+  }
+}
+
+setmark(arg) {
+  int ax, ay;
+  string mark;
+
+  if(!arg) return;
+  sscanf(arg, "%d %d %s", ax, ay, mark);
+  write("reseting "+ax+", "+ay+"\n");
+  OUTMAP->set_special_mark(ax, ay, mark);
+  OUTMAP->reset_special_marks();
+  LOC_D->reset_special_marks();
+  return 1;
+}
+
+castle_rem_loc(arg) {
+  if(!arg) return;
+  LOC_D->remove_castle_location(arg);
+  return 1;
+}
+
+money(arg) {
+  object ob;
+
+  if(!arg) {
+    write(this_player()->query_money(3)+"\n");
+    return 1;
+  }
+  if(!ob = find_player(arg)) {
+    write("No such player\n");
+    return 1;
+  }
+  write("Money: "+ob->query_money(3)+"\n");
+  write("Bank : "+ob->query_money_in_bank(1)+"\n");
+  return 1;
+}
+
+avgmoney(arg) {
+  string *money, *list, bigname;
+  int i, sum, total, biggest, count;
+
+  list = explode(read_file("/wizards/archsin/misc/moneyinbank.txt"), "\n");
+  //  sort = allocate(sizeof(list));
+
+  for(i=0; i<sizeof(list); i++) {
+    money = explode(list[i], ":");
+    sscanf(money[1], "tin %d", sum);
+    total += sum;
+    count++;
+    if(sum > biggest) { 
+      biggest = sum;
+      sscanf(money[0], "%s.o", bigname);
+    }
+  }
+  //  sort_array(sort, "is_greater");
+  
+  write("Total of "+count+" players accounted with total of "+total+" tin.\n");
+  write("Average gold per player: "+total/count+"\n");
+  write("Richest is: "+bigname+" with "+biggest+" tin.\n");
+  return 1;
+}
+
+id(str) { if(str == "cube" || str == "creator") return 1; }
+
+castle(arg) {
+  string command, clist, *ctemp, owner;
+  int rem_id, num, i, castle_id, x, y;
+
+  if(this_player()->query_wiz() < 3) return 0;
+
+  if(arg) {
+    if(sscanf(arg, "%s %d", command, num) != 2) {
+      sscanf(arg, "%s", command);
+    }
+  }
+  else { write("Try 'castle help'\n"); return 1; }
+  switch(command) {
+  case "help":
+    write("You can use this small cube to control castle creation.\n");
+    write("  Usage: 'castle <command> <param>'\n");
+    write("  Usage: 'buy <item>' item can be either 'chest' or 'figurine'\n\n");
+    write("  commands: create <type>, remove <id>\n");
+    break;
+  case "create":
+    castle_id = call_other("/castle/obj/castle_code", "go_create", num);
+    if(this_player()->query_wiz()) write("ID: "+castle_id+", path: /data/castle/castle_"+castle_id+"\n");
+    write("Castle created.\n");
+    write_file(castle_info, this_player()->query_level()+";"+capitalize(this_player()->query_name())+";"+castle_id+";"+ctime()+";cost\n");
+    break;
+  case "remove":
+    rem_id = call_other(LOC_D, "query_castle_id", this_player()->query_x(), this_player()->query_y());
+    if(rem_id == 0) {
+      write("No castle here!\n");
+      return 1;
+    }
+    clist = explode(read_file(owner_list), "\n");
+    for(i=0; i<sizeof(clist); i++) {
+      ctemp = explode(clist[i], ":");
+      write("debug: id from LOC_D: "+rem_id+", id from file: "+clist[1]+"\n");
+      write("debug: this_player(): "+this_player()->query_name()+", lc(owner) from file: "+lower_case(clist[0])+"\n");
+      if(clist[1] == id) {
+	write("debug: id's match\n");
+	if(this_player()->query_name() == lower_case(owner)) {
+	  write("owners match also, proseeding with remove\n");
+	  remdir(num);
+	  // remember to uncomment
+	  //	  call_other(LOC_D, "remove_castle_location", this_player()->query_x(), this_player()->query_y());
+	}
+      }
+    }
+    break;
+  default:
+    write("Try 'castle help'\n");
+  }
+  return 1;
+}
+
+buy_chest(arg) {
+  object chest;
+  
+  if(!this_player()->query_wiz()) return 0;
+
+  if(!arg) return;
+  if(arg != "chest" && arg != "figurine") return;
+  if(arg == "chest") chest = clone_object("/castle/obj/chest");
+  else if(arg == "figurine") chest = clone_object("/castle/obj/castle_guard_figurine");
+  else return 0;
+  move_object(chest, this_player());
+  write("Ok.\n");
+  //  write("a chest drops from heaven, nearly missing your toes ;)\nYou hastily grab it before others can, since you'r the one who paid for it.");
+  return 1;
+}
+
+remdir(id) {
+  string list, dir;
+  int i;
+
+  if(id == 0) return 0;
+
+  dir = "/data/castle/castle_"+id+"/";
+
+  list = get_dir(dir);
+  for(i=0; i<sizeof(list); i++) {
+    rm(dir+list[i]);
+  }
+  rmdir(dir);
+  return 1;
+}
+
+init() {
+  add_action("castle", "cas");
+  add_action("buy_chest", "buy");
+  add_action("setmark", "setmark");
+  add_action("money", "money");
+  add_action("avgmoney", "avgmoney");
+  add_action("castle_rem_loc", "remove");
+}

@@ -1,0 +1,1076 @@
+#pragma strong_types
+
+#define INIT_FILE "/obj/init_file"
+#define SIMUL_EFUN_FILE "/secure/simul_efun"
+
+/* FluffOS port note (questmud, §2 pipeline): the original LDMud master
+ * relied entirely on set_driver_hook()/closures (driver_hook.h,
+ * functionlist.h, erq.h) to install create()/reset()/uid-loading
+ * behavior. FluffOS has none of that machinery -- it hardcodes the
+ * equivalent behavior (auto-calling create()/reset(), calling
+ * creator_file() for uid assignment, etc.) directly, so the hook
+ * installation below is both unsupported AND unnecessary. See
+ * inaugurate_master() and NOTES.md for the full writeup. */
+
+#define NO_NATIVE_MODE
+
+/* NATIVE_MODE deliberately never defined on this driver: the original
+ * gate used __EFUN_DEFINED__(), an LDMud-only preprocessor builtin
+ * this driver doesn't have. NO_NATIVE_MODE was already unconditionally
+ * set above (matching this driver's compat-style master anyway), so
+ * the #if it used to guard always evaluated false here regardless. */
+
+#undef STRICT_EUIDS
+#undef __STRICT_EUIDS__
+
+int get_master_uid(void);
+
+/*
+ * MOVE THIS FILE TO /obj/master.c ! ( /secure/master //Celtron )
+ *
+ * This is the LPmud master object, used from version 3.0.
+ * It is the second object loaded after void.c.
+ * Everything written with 'write()' at startup will be printed on
+ * stdout.
+ * 1.  reset() will be called first.
+ * 2. flag() will be called once for every argument to the flag -f
+ * 	supplied to 'parse'.
+ * 3. epilog() will be called.
+ * 4. The game will enter multiuser mode, and enable log in.
+ *
+ * This version of master.c is specifically designed to be used with mudlib
+ * 2.4.6 or earlier. The master.c for mudlib 3.0 will be supplied with
+ * that source.
+ *
+ * One thing is different in the file access permission system in game
+ * driver 3.0. The master object can read and write any file.
+ * That means that all occurences of such
+ * manipulations below must be carefully garded against calls from
+ * elsewhere. Always make a comment at the start of a function that is doing
+ * such things, to make it easy for other to quickly assert security.
+ * The master object can of course not access files above the mudlib
+ * directory.
+ */
+
+/* For native mode, #define DEFAULT_REPLACE_PROGRAM if you want programs
+ * that only redefined create() to be replaced automatically.
+ */
+
+#define BACKBONE_WIZINFO_SIZE 5
+#define MUDWHO_INDEX 1
+/* #define MUDWHO */
+
+#ifdef MUDWHO
+#define MUDWHO_SERVER "134.2.62.161"
+#define MUDWHOPORT 6888
+#define MUDWHO_NAME "TestNase"
+#define MUDWHO_PASSWORD mudwho_password /* stored in /secure/mudwho-password */
+#define MUDWHO_REFRESH_TIME 100
+/* QUOTE_PERCENT needs new explode() to work right on leading/trailing '%' */
+#define QUOTE_PERCENT(s) (implode(explode((s), "%"), "%%"))
+string mudwho_ping;
+private mapping mudwho_info = ([]);
+closure send_mudwho_info;
+private string mudwho_password;
+
+void send_mudwho_info() {
+    send_imp(MUDWHO_SERVER, MUDWHOPORT, sprintf(mudwho_ping, time()));
+    walk_mapping(mudwho_info, send_mudwho_info);
+    call_out("send_mudwho_info", MUDWHO_REFRESH_TIME);
+}
+
+void adjust_mudwho(object ob) {
+    if (ob && interactive(ob)) {
+        if (mudwho_info[ob][<5..] == "login") {
+            mudwho_info[ob][<5..] = ob->query_real_name()[0..24];
+            send_imp(MUDWHO_SERVER, MUDWHOPORT, mudwho_info[ob]);
+        }
+    }
+}
+
+
+void disconnect(object ob) {
+    send_imp(MUDWHO_SERVER, MUDWHOPORT,
+      "Z\t" + implode(explode(mudwho_info[ob], "\t")[1..4],"\t"));
+}
+
+#endif /* MUDWHO */
+
+
+string get_bb_uid() { return "Backbone"; }
+
+/* FluffOS has no PACKAGE_UIDS-independent get_root_uid(); the original
+ * LDMud master used get_master_uid() (an int) instead. Add the real
+ * FluffOS apply -- required (fatal exit at boot without it, since this
+ * driver build has PACKAGE_UIDS on). */
+string get_root_uid() { return "ROOT"; }
+
+/* wiz_decay()/save_wiz_file()/the WIZLIST scoreboard all depended on
+ * wizlist_info()/set_extra_wizinfo()/get_extra_wizinfo(), none of which
+ * exist as FluffOS efuns -- dropped. Nothing outside secure/ referenced
+ * these (checked via grep), so this is a self-contained removal. See
+ * NOTES.md. */
+
+mixed creator_file(string object_name);
+string *define_include_dirs();
+
+/* inaugurate_master() is an LDMud-only driver apply (not called by
+ * FluffOS at all -- not in this driver's master applies table) whose
+ * entire body existed to install driver_hook()s. FluffOS already
+ * hardcodes every one of those behaviors without any hook:
+ *   - H_CREATE_SUPER/H_CREATE_OB/H_CREATE_CLONE -> "create"/"reset":
+ *     FluffOS always calls create() on load/clone and reset() on the
+ *     normal reset cycle, unconditionally.
+ *   - H_LOAD_UIDS/H_CLONE_UIDS -> creator_file()/get_bb_uid(): FluffOS
+ *     calls master::creator_file() (a real apply, still defined below)
+ *     for exactly this purpose, and inherits euid from the creating
+ *     object otherwise -- see packages/uids/uids.cc.
+ *   - H_MOVE_OBJECT0: FluffOS's move_object() efun already has this
+ *     init()-calling behavior built in natively.
+ *   - H_RESET/H_CLEAN_UP -> "reset"/"clean_up": automatic, as above.
+ *   - H_MODIFY_COMMAND(_FNAME)/H_NOTIFY_FAIL/H_INCLUDE_DIRS: cosmetic
+ *     (direction abbreviations, fail message, include search path);
+ *     the fail message and include path are set via config.fluffos
+ *     instead ("default fail message", "include directories").
+ * Left as a no-op stub since nothing calls it. */
+void inaugurate_master(int arg)
+{
+}
+
+int get_master_uid() { return 1; }
+
+mixed current_time;
+
+string *epilog(int eflag) {
+    if (eflag) return ({});
+    debug_message(sprintf("Loading init file %s\n", INIT_FILE));
+    current_time = rusage();
+    current_time = current_time[0] + current_time[1];
+    return explode(read_file(INIT_FILE), "\n");
+}
+
+void preload(string file) {
+    int last_time;
+
+    if (strlen(file) && file[0] != '#') {
+        last_time = current_time;
+        debug_message(sprintf("Preloading: %s", file));
+        call_other(file, "");
+        current_time = rusage();
+        current_time = current_time[0] + current_time[1];
+        debug_message(sprintf(" %.2f\n", (current_time - last_time)/1000.));
+    }
+}
+
+/* save_wiz_file()/WIZLIST relied on wizlist_info(), which does not
+ * exist as a FluffOS efun -- dropped, see the get_bb_uid() comment
+ * above. */
+
+void notify_shutdown() {
+    object *u;
+    int i;
+
+    if (previous_object() && previous_object() != this_object() ||
+        previous_object() && previous_object() != find_object(SIMUL_EFUN_FILE) )
+      return;
+
+    u = users();
+    for (i = 0; i < sizeof(u); i++)
+        tell_object(u[i], "Game driver shouts: LPmud shutting down immediately.\n");
+#ifdef MUDWHO
+    send_imp(MUDWHO_SERVER, MUDWHOPORT,
+      sprintf("D\t%.20s\t%.20s\t%.20s",
+        MUDWHO_NAME, MUDWHO_PASSWORD, MUDWHO_NAME
+      )
+    );
+#endif /* MUDWHO */
+}
+
+// Added by C to enable object loading and cloning
+/* Needed for any efun::name(...) call appearing OUTSIDE secure/
+ * simul_efun.lpc itself: this apply gates the compiler's "efun::"
+ * override syntax (compiler/internal/grammar_rules_exprs.cc's
+ * rule_efun_override()), and with no valid_override() defined at all
+ * it silently DENIES every one once master is loaded (a NULL master
+ * apply -> master_approved() returns 0) -- confirmed live as
+ * "Invalid simulated efunction override" the first time an
+ * efun::move_object() call (obj/living.lpc's move_object() wrapper,
+ * see its own comment) compiled lazily during actual play, well after
+ * boot. secure/simul_efun.lpc's own many efun:: calls never hit this
+ * because they compile at boot before master_ob is set (the
+ * "no master yet" bootstrap-allow case) -- this apply covers every
+ * other file. Same permissive policy as this master's other gates. */
+int valid_override(string calling_file, string identifier, string caller) {
+  return 1;
+}
+
+int valid_seteuid(string uid) {
+  return 1;
+}
+
+/*
+ * To test a new function xx in object yy, do
+ * parse "-fcall yy xx arg" "-fshutdown"
+ */
+void flag(string str) {
+    string file, arg;
+    int num_arg;
+
+    if (sscanf(str, "for %d", num_arg) == 1) {
+	write("Got : " + catch(this_object()->xx(num_arg)) + "\n");
+	return;
+    }
+    if (str == "shutdown") {
+	shutdown();
+	return;
+    }
+    /*  tamako sen crashas?
+    if (sscanf(str, "dhrystone %d", arg) == 1) {
+	call_other("wizards/lars/dry", "main", arg);
+	return;
+    }
+    */
+    if (sscanf(str, "echo %s", arg) == 1) {
+	write(arg + "\n");
+	return;
+    }
+    if (sscanf(str, "call %s %s", file, arg) == 2) {
+	arg = (string)call_other(file, arg);
+	write("Got " + arg + " back.\n");
+	return;
+    }
+    write("master: Unknown flag " + str + "\n");
+}
+
+/*
+ * This function is called every time a player connects.
+ * input_to() can't be called from here.
+ */
+
+#define BANISH_D "/room/banish_d"
+
+object connect() {
+    object ob;
+    string ret;
+
+    write("Connected...");
+/*
+if((int)BANISH_D->query_ban_site_time(query_ip_number(this_player())) > 0) {
+  if((int)BANISH_D->query_ban_site_time(query_ip_number(this_player())) < time()) {
+    BANISH_D->unbanish_site(query_ip_number(this_player()));
+  }
+}
+*/
+
+
+/* ban site code in player.c //Celtron */
+
+//#if 0
+    ret = (string)catch(ob = clone_object("obj/player"));
+//#else
+//    ob = clone_object("obj/player");
+//#endif
+    write("\n");
+    if (ret) {
+	write(ret + "\n");
+	return 0;
+    }
+#ifdef MUDWHO
+    mudwho_info[ob] =
+      sprintf("A\t%.20s\t%.20s\t%.20s\t%.20s\t%:010d\t0\tlogin",
+        MUDWHO_NAME, MUDWHO_PASSWORD, MUDWHO_NAME,
+        explode(object_name(ob), "#")[<1] + "@" MUDWHO_NAME, time()
+      )
+    ;
+#endif /* MUDWHO */
+    return ob;
+}
+
+int xx(int arg)
+{
+    return 1/arg;
+}
+
+/*
+ * This function is called for a wizard that has dropped a castle.
+ * The argument is the file name of the object that called create_wizard().
+ * Verify that this object is allowed to do this call.
+ */
+int verify_create_wizard(object ob) {
+    int dummy;
+
+    if (sscanf(object_name(ob), "room/port_castle#%d", dummy) == 1
+      || sscanf(object_name(ob), "global/port_castle#%d", dummy) == 1)
+	return 1;
+    return 0;
+}
+
+/*
+ * Get the owner of a file. This is called from the game driver, so as
+ * to be able to know which wizard should have the error.
+ */
+string get_wiz_name(string file) {
+    string name, rest;
+
+    if (sscanf(file, "wizards/%s/%s", name, rest) == 2) {
+	return name;
+    }
+    return 0;
+}
+
+/*
+ * Write a compile time error message into a log file. The error occured in
+ * the object 'file', giving the error message 'message'.
+ */
+void log_error(string file, string message)
+{
+    string name;
+
+    name = get_wiz_name(file);
+    if (name == 0)
+	name = "log";
+    write_file("/log/"+name, message);
+}
+
+int query_player_level(string what);
+
+void runtime_error(string error,string program,string current_object, int line)
+{
+  if (this_player() && query_ip_number(this_player())) {
+    catch( write(
+	query_player_level("error messages") ?
+	    current_object ?
+		error +
+		"program: " + program +
+		", object: " + current_object +
+		" line " + line + "\n"
+	    :
+		error
+	:
+	    "Your sensitive mind notices a wrongness in the fabric of space.\n"
+    ) );
+    this_player()->write_error_log("#"+error+", program: " + program +
+                ", object: " + current_object +
+                " line " + line + "\n");
+  }
+}
+
+int heart_beat_error(
+    object heart_beat,
+    string error,
+    string program,
+    string current_object,
+    int line)
+{
+    if ( query_ip_number(heart_beat) ) {
+	tell_object(
+	  heart_beat,
+	  "Game driver tells you: You have no heart beat !\n"
+	);
+    }
+    return 0; /* Don't restart */
+}
+
+/* save_ed_setup and restore_ed_setup are called by the ed to maintain
+   individual options settings. These functions are located in the master
+   object so that the local gods can decide what strategy they want to use.
+   suggestions:
+	A setup file for every wizard.
+		advantages:	transparent to the user
+				independent of wizard count
+		disadvantage:	extra file access at ed invocation
+	An array in the master object, wizards are searched by member_array
+		advantage:	easy to implement
+		disadvantage:	performance degradation with high wizard counts
+	An AVL-tree to access wizards by name
+		advantage:	can fit any need
+		disadvantage:	hard to implement, will need more overhead on
+				small and medium muds than it can ever make
+				good by lg(wizcount) complexity
+	Dedicated flags in every wizard object, inherited from /obj/living
+		advantages:	easy to implement ( as shown here)
+				independent of wizard count
+				Will also work for nonm-wizards.
+		disadvantage:	care has to be taken to avoid collision with
+				other uses of the /obj/living flags.          */
+
+#if 1 /* Dedicated flags not used. A save file method is used below */
+
+#define FIRST_ED_FLAG 0 /* adjust this value so that no flags are clobbered */
+#define NUM_ED_FLAGS 12
+int save_ed_setup(object wiz, int setup) {
+    int mask,i;
+
+    for (mask=1,i=FIRST_ED_FLAG;i<FIRST_ED_FLAG+NUM_ED_FLAGS;mask<<=1,i++) {
+	if ( setup & mask ) wiz->set_flag(i);
+	else wiz->clear_flag(i);
+    }
+    return 1; /* function is defined, success */
+}
+
+int retrieve_ed_setup(object wiz) {
+    int i,setup;
+
+    for(i=FIRST_ED_FLAG+NUM_ED_FLAGS;i>FIRST_ED_FLAG;) {
+	setup+=setup+wiz->test_flag(--i);
+    }
+    return setup;
+}
+
+#else
+
+/*
+ * The wizard object 'who' wants to save his ed setup. It is saved in the
+ * file /wizards/wiz_name/.edrc . A test should be added to make sure it is
+ * a call from a wizard.
+ *
+ * Don't care to prevent unauthorized access of this file. Only make sure
+ * that a number is given as argument.
+ */
+int save_ed_setup(object who, int code) {
+    string file;
+
+    if (!intp(code))
+	return 0;
+    file = "/wizards/" + lower_case((string)who->query_name()) + "/.edrc";
+    rm(file);
+    return write_file(file, code + "");
+}
+
+/*
+ * Retrieve the ed setup. No meaning to defend this file read from
+ * unauthorized access.
+ */
+int retrieve_ed_setup(object who) {
+    string file;
+    int code;
+
+    file = "/wizards/" + lower_case((string)who->query_name()) + "/.edrc";
+    if (file_size(file) <= 0)
+	return 0;
+    sscanf(read_file(file), "%d", code);
+    return code;
+}
+#endif
+
+/*
+ * Create a home dritectory and a castle for a new wizard. It is called
+ * automatically from create_wizard(). We don't use the 'domain' info.
+ * The create_wizard() efun is not really needed any longer, as a call
+ * could be done to this function directly.
+ *
+ * This function can create directories and files in /players. It is
+ * garded from calls from the wrong places.
+ */
+string master_create_wizard(string owner, string domain, object caller) {
+    string def_castle;
+    string dest, castle, wizard;
+    object player;
+
+    /* find_player() is a simul_efun. Resolve it at run time. */
+    /* find_player() is a simul_efun; resolve it via call_other so this
+     * compiles regardless of simul_efun-binding timing for master.lpc
+     * (LDMud used symbol_function()/funcall() for the same reason). */
+    player = (object)call_other(SIMUL_EFUN_FILE, "find_player", owner);
+    if (!player)
+	return 0;
+    if (!verify_create_wizard(caller)) {
+	tell_object(player, "That is an illegal attempt!\n");
+	return 0;
+    }
+    if (caller != previous_object()) {
+	tell_object(player, "Faked call!\n");
+	return 0;
+    }
+    wizard = "/wizards/" + owner;
+    castle = "/wizards/" + owner + "/castle.lpc";
+    if (file_size(wizard) == -1) {
+	tell_object(player, "You now have a home directory: " +
+		    wizard + "\n");
+	mkdir(wizard);
+    }
+    dest = object_name(environment(player));
+    def_castle = "#define NAME \"" + owner + "\"\n#define DEST \"" +
+	dest + "\"\n" + read_file("/room/def_castle.lpc");
+    if (file_size(castle) > 0) {
+	tell_object(player, "You already had a castle !\n");
+    } else {
+	/* The master object can do this ! */
+	if (write_file(castle, def_castle)) {
+	    tell_object(player, "You now have a castle: " + castle + "\n");
+	    //if (!write_file("/room/init_file", extract(castle, 1) + "\n"))
+	//	tell_object(player, "It couldn't be loaded automatically!\n");
+	} else {
+	    tell_object(player, "Failed to make castle for you!\n");
+	}
+    }
+    return castle;
+}
+
+/*
+ * When an object is destructed, this function is called with every
+ * item in that room. We get the chance to save players !
+ */
+void destruct_environment_of(object ob) {
+    mixed error;
+
+    if (!interactive(ob))
+	return;
+    tell_object(ob, "Everything you see is disolved. Luckily, you are transported somewhere...\n");
+    if (error = catch(ob->move_player("is transfered#room/void"))) {
+	write(error);
+	/* This driver's move_object() is 1-arg (moves this_object());
+	 * call it as a method on the target instead of passing it. */
+	if (error = catch(ob->move_object("room/void"))) {
+	    object new_player;
+
+	    write(error);
+	    new_player = clone_object("obj/player");
+	    if (!function_exists("replace_player", new_player)) {
+		destruct(new_player);
+		return;
+	    }
+	    exec(new_player, ob);
+	    if (error = catch(new_player->replace_player(ob, "room/void"))) {
+		write(error);
+	    }
+	}
+    }
+}
+
+/*
+ * Define where the '#include' statement is supposed to search for files.
+ * "." will automatically be searched first, followed in order as given
+ * below. The path should contain a '%s', which will be replaced by the file
+ * searched for.
+ */
+string *define_include_dirs() {
+    return ({"/room/%s", "/sys/%s"});
+}
+
+/*
+ * The master object is asked if it is ok to shadow object ob. Use
+ * previous_object() to find out who is asking.
+ *
+ * In this example, we allow shadowing as long as the victim object
+ * hasn't denied it with a query_prevent_shadow() returning 1.
+ */
+int query_allow_shadow(object ob) {
+    /* shadowing query_wiz is not allowed */
+    if(function_exists("query_wiz",previous_object())) return 0;
+    if(function_exists("query_level",previous_object())) return 0;
+    if(function_exists("query_real_name",previous_object())) return 0;
+
+    if(function_exists("query_name",previous_object()) && ob->query_wiz()) return 0;
+    if(function_exists("short",previous_object()) && ob->query_wiz()) return 0;
+    return !ob->query_prevent_shadow(previous_object());
+}
+
+/*
+ * Default language functions used by parse_command() in non -o mode
+ */
+string *parse_command_id_list()
+{
+    return ({ "one", "thing" });
+}
+
+string *parse_command_plural_id_list()
+{
+    return ({ "ones", "things", "them" });
+}
+
+string *parse_command_adjectiv_id_list()
+{
+    return ({ "iffish" });
+}
+
+string *parse_command_prepos_list()
+{
+    return ({ "in", "on", "under", "behind", "beside" });
+}
+
+string parse_command_all_word()
+{
+    return "all";
+}
+
+/*
+ * Give a file name for edit preferences to be saved in.
+ */
+string get_ed_buffer_save_file_name(string file) {
+    string *file_ar;
+    string path;
+
+    path = "/wizards/"+this_player()->query_real_name()+"/.dead_ed_files";
+    if (file_size(path) == -1) {
+        mkdir(path);
+    }
+    file_ar=explode(file,"/");
+    file=file_ar[sizeof(file_ar)-1];
+    return path+"/"+file;
+}
+
+/* amylaar: allow to change simul_efun_file without editing patchlevel.h *
+#ifndef SIMUL_EFUN_FILE
+    * the definition should be compatible with filename(). *
+  #define SIMUL_EFUN_FILE "secure/simul_efun"
+#endif
+*/
+
+#ifndef SPARE_SIMUL_EFUN_FILE
+#define SPARE_SIMUL_EFUN_FILE "secure/spare_simul_efun"
+#endif
+/*
+ * Give a path to a simul_efun file. Observe that it is a string returned,
+ * not an object. But the object has to be loaded here. Return 0 if this
+ * feature isn't wanted.
+ */
+string get_simul_efun() {
+    string fname;
+    string error;
+
+    fname = SIMUL_EFUN_FILE ;
+    if (error = catch(fname->start_simul_efun())) {
+	write("Failed to load " + fname + "\n");
+	write("error message :"+error+"\n");
+	fname = SPARE_SIMUL_EFUN_FILE ;
+	if (error = catch(fname->start_simul_efun())) {
+	    write("Failed to load " + fname + "\n");
+	    write("error message :"+error+"\n");
+	    shutdown();
+	    return 0;
+	}
+    }
+    return fname;
+}
+
+/*
+ * There are several occasions when the game driver wants to check if
+ * a player has permission to specific things.
+ *
+ * These types are implemented so far:
+ * "error messages":	If the player is allowed to see runtime error
+ *			messages.
+ * "trace":		If the player is allowed to use tracing.
+ * "wizard":		Is the player considered at least a "minimal" wizard ?
+ * "error messages":	Is the player allowed to get run time error messages ?
+ */
+int query_player_level(string what) {
+    int level, wizard_level;
+
+    if (this_player() == 0)
+	return 0;
+    level = (int)this_player()->query_level();
+    wizard_level = (int)this_player()->query_wiz();
+/* Old:	wizard_level >= 1; (did not work) */
+    switch(what) {
+    case "wizard":
+	return wizard_level >= 1;
+    case "error messages":
+	return wizard_level >= 1 || this_player()->query_tester() || !this_player()->query_level();
+    case "trace":
+	return wizard_level >= 4;
+    }
+    return -1;
+}
+
+/*
+ * Function name:   valid_exec
+ * Description:     Checks if a certain 'program' has the right to use exec()
+ * Arguments:       name: Name of the 'program' that attempts to use exec()
+ *                        Note that this is different from file_name(),
+ *                        Programname is what 'function_exists' returns.
+ *                  NOTE, the absence of a leading slash in the name.
+ * Returns:         True if exec() is allowed.
+ */
+int valid_exec(string name, object ob, object obfrom) {
+    switch(name) {
+      case "secure/login.lpc":
+      case "secure/master.lpc":
+	if (!interactive(ob)) {
+#ifdef MUDWHO
+	    if (interactive(obfrom)) {
+		mudwho_info[ob] = mudwho_info[obfrom];
+		efun::m_delete(mudwho_info, obfrom);
+		call_out("adjust_mudwho", 0, ob);
+	    }
+#endif /* MUDWHO */
+        }
+    }
+    if(!interactive(ob) && ob->query_name() == obfrom->query_name() && ob->query_wiz() == obfrom->query_wiz())
+      return 1;
+    return 0;
+}
+
+mixed valid_write(string path, string eff_user, string call_fun, object caller)
+{
+    string user;
+
+    switch ( call_fun ) {
+        case "save_object":
+	    if ( user = previous_object()->query_real_name() ) {
+		if ( path[ 0 .. strlen(user)+7 ] == "players/" + user &&
+		     sscanf(path, ".%s", user) == 0)
+			return path;
+	    } else {
+		user = object_name(previous_object());
+		if ( user[0..4] == "/obj/"  ||
+		     user[0..5] == "/room/" ||
+		     user[0..12] == "/world/shops/" ||
+		     user[0..8] == "/daemons/" ||
+		     user[0..14] == "/cmds/std/_mail" ||
+		     user[0..23] == "/wizards/nalle/daemons/" ||
+		     user[0..11] == "/guilds/obj/" ||
+		     user[0..18] == "/data/castle/castle" ||
+		     user[0..16] == "/data/stronghold/" ||
+		     user[0..7] ==  "/castle/" ||
+		     user[0..11] == "/stronghold/" ||
+		     user[0..4] == "/std/"  )
+			return path;
+	    }
+        default:
+            return 0; /* deny access */
+	case "write_file":
+            if (caller == this_object()) return 1;
+
+            user = object_name(previous_object());
+            if(user[0..7] == "/castle/" && path[0..12] == "/data/castle/")
+		return path;
+	    
+	    if(path[0..4] == "/log/" && !(
+	      sizeof(regexp(({path[5..34]}), "/")) ||
+	      path[5] == '.' ||
+	      strlen(path) > 35
+	    ) ) {
+	        return path;
+	    }
+	    break;
+	case "ed_start":
+	    if (path[0] != '/')
+		path = "/"+path;
+	    break;
+	case "do_rename":
+	    if((object_name(caller) == SIMUL_EFUN_FILE ||
+		object_name(caller) == SPARE_SIMUL_EFUN_FILE) &&
+	     path[0..4] == "/log/" && !(
+	      sizeof(regexp(({path[5..34]}), "/")) ||
+	      path[5] == '.' ||
+	      strlen(path) > 35
+	    ) ) {
+		return 1;
+	    }
+	case "mkdir":
+	  user = object_name(previous_object());
+	  if(user[0..6] == "/castle/") return path;
+	  break;
+	case "rmdir":
+	case "write_bytes":
+	case "remove_file":
+            if (caller == this_object()) return 1;
+	case "cindent":
+	    break;
+	}
+    /* set_this_object(caller) removed: not a FluffOS efun, and this_object()
+     * inside the callee's own frame is unaffected by it anyway. */
+    if( this_player() && query_ip_number(this_player()) ) {
+	path = (string)SIMUL_EFUN_FILE->valid_write(path, this_player()); 
+	if (!path) { 
+	    write("Sorry, write access denied.\n");
+	    return 0;
+	}
+	if (!stringp(path)) {
+	    write("Bad file name.\n");
+	    return 0;
+	}
+	return path;
+    }
+    path = (string)SIMUL_EFUN_FILE->valid_write(path, this_player()); 
+    if (stringp(path))
+	return path;
+    /* else return 0, denying access */
+}
+
+mixed valid_read(string path, string eff_user, string call_fun, object caller)
+{
+    string user;
+
+    switch ( call_fun ) {
+	/* "load_object"/"recompile_object": FluffOS's own object-loading
+	 * path (vm/internal/simulate.cc) checks valid_read with this
+	 * call_fun before compiling ANY .lpc file -- LDMud never routed
+	 * object compilation through valid_read() at all (a different,
+	 * driver-internal mechanism there), so this mudlib's original
+	 * valid_read() switch never had a case for it. Without one, every
+	 * single object load/preload was silently denied ("Read access
+	 * denied", masking every "obj/living"/"obj/monster"/... preload
+	 * line with no further explanation) -- the single most severe
+	 * blocker found porting this lib. Same permissive policy as the
+	 * read_file/read_bytes/file_size cases below. */
+	case "load_object":
+	case "recompile_object":
+	/* "include": every #include resolution also runs through
+	 * valid_read (compiler/internal/lexer_utils.cc) -- without this
+	 * case EVERY SINGLE #include across the whole mudlib silently
+	 * failed ("Cannot #include ansi.h"/"living.h"/etc. even for
+	 * files sitting right next to their own headers), which in turn
+	 * cascaded into hundreds of secondary "Undefined variable"/
+	 * syntax errors from the missing macros -- by far the single
+	 * highest-impact fix in this whole port. */
+	case "include":
+	case "restore_object": return 1;
+	case "ed_start":
+	    if ( previous_object() && previous_object() != this_player() )
+		return 0;
+	    if (!path) {
+		/* "jump to file with last compile error" ed convenience --
+		 * get_error_file() isn't a real function anywhere in this
+		 * mudlib (LDMud built-in with no FluffOS equivalent); the
+		 * feature was already dead under the original driver too. */
+		write("No error.\n");
+		return 0;
+	    }
+	    if (path[0] != '/')
+		path = "/"+path;
+	case "read_file":
+	case "read_bytes":
+	case "file_size":
+	  //return extract(path,1); /* allow valid read access to everyone */
+	  return path;
+	  break;
+	case "get_dir":
+	case "do_rename":
+	    if (caller == this_object()) return 1;
+	case "tail":
+	case "print_file":
+	case "make_path_absolute": /* internal use, see below */
+	    /* set_this_object(caller) removed -- see valid_write() above. */
+	    if( this_player() && query_ip_number(this_player()) ) {
+	        path = (string)SIMUL_EFUN_FILE->valid_read(path, this_player());
+		if (!path) { 
+		   /* write("Sorry, read access denied.\n"); */
+	    	    return 0;
+		}
+	        if (!stringp(path)) {
+	            write("Bad file name.\n");
+	            return 0;
+	        }
+	        return path;
+	    }
+	    path = (string)SIMUL_EFUN_FILE->valid_read(path, this_player());
+	    if (stringp(path))
+	        return path;
+	    return 0;
+    }
+    /* if a case failed to return a value or the caller function wasn't
+     * recognized, we come here.
+     * The default returned zero indicates deny of access.
+     */
+    return 0;
+}
+
+mixed make_path_absolute(string path) {
+    return valid_read(path,0,"make_path_absolute", this_player());
+}
+
+/* This driver (unlike LDMud) hard-requires creator_file() to always
+ * return a real uid STRING (packages/uids/set_uid(): any non-string
+ * return -- including a bare int 0 or 1 meaning "no special uid" in
+ * the original -- fatally destructs the object being loaded with
+ * "Illegal object to load: return value of master::creator_file() was
+ * not a string", even though the object compiled cleanly moments
+ * earlier). Confirmed to hit nearly every non-`wizards/`-owned file in
+ * this mudlib (obj/timer, obj/wizlist, room/house_shop_d,
+ * daemons/mastery_d, ...) the moment each one got past its own compile
+ * errors -- would have silently killed almost the entire non-wizard
+ * portion of the mudlib. Fixed by falling back to get_bb_uid()
+ * (matching what get_bb_uid() itself is already for) everywhere the
+ * original returned a bare int or fell off the end of the function. */
+mixed creator_file(string object_name)
+{
+    string wiz_name;
+    string start, trailer;
+
+    if(!object_name) return get_bb_uid();
+    if ( sscanf(object_name, "wizards/%s", wiz_name) == 1 ||
+         sscanf(object_name, "/wizards/%s", wiz_name) == 1) {
+        if ( sscanf(wiz_name, "%s/%s", start, trailer) == 2 )
+	    /* file names with // are illegal -> no special uid */
+            return strlen(start) ? start : get_bb_uid();
+        return wiz_name;
+    }
+    /* no creator, but legal (includes the original's ftp/open fall-
+     * through, which previously returned nothing at all). */
+    return get_bb_uid();
+}
+
+void move_or_destruct(object what, object to)
+/* An error in this function can be very nasty. Note that unlimited recursion
+ * is likely to cause errors when environments are deeply nested
+ */
+{
+#ifdef COMPAT_FLAG
+    int res;
+    do {
+        if (catch(what->move_object(to) )) res = 5;
+        if ( !(res && what) ) return;
+    } while( (res == 1 || res == 4 || res == 5) && (to = environment(to)) );
+#else /* !COMPAT_FLAG */
+//    if ( !catch( what->move(to, 1) ) ) return;
+    /* This driver's move_object() is 1-arg (moves this_object()). */
+    if ( !catch( what->move_object(to) ) ) return;
+
+#endif /*COMPAT_FLAG */
+    
+    /*
+     * Failed to move the object. Then, it is destroyed.
+     */
+    destruct(what);
+}
+
+int valid_snoop(object snooper, object snoopee) {
+#ifdef NATIVE_MODE
+    if (!geteuid(previous_object()))
+	return 0;
+#endif
+    if(snooper && snoopee) {
+      if(snooper->query_wiz() < 2 || snoopee->query_wiz() >= snooper->query_wiz()) return 0;
+    }
+    if (object_name(previous_object()) == get_simul_efun())
+        return 1;
+}
+
+int valid_query_snoop(object wiz) {
+    return this_player()->query_wiz() >= 2;
+}
+
+#ifdef COMPAT_FLAG
+mixed *prepare_destruct1(object ob) {
+    object super;
+
+    super = environment(ob);
+    if (super) {
+	mixed error, *errors;
+	mixed weight;
+	object me;
+
+	me = this_object();
+	set_this_object(ob);
+	errors = ({});
+	if ( living(ob) ) {
+	    if (error = catch(super->exit(ob),0))
+		errors = ({"exit"+": "+error});
+	}
+	if ( error = catch((weight = (mixed)ob->query_weight()),0) ) {
+	    set_this_object(me);
+	    return ({"query_weight"+": "+error}) + errors;
+	}
+	if (weight && intp(weight)) {
+	    if (error = catch(super->add_weight(-weight),0)) {
+		set_this_object(me);
+		return ({"add_weight"+": "+error}) + errors;
+	    }
+	}
+	set_this_object(me);
+    }
+    return ({});
+}
+#endif /* COMPAT_FLAG */
+
+mixed prepare_destruct(object ob) {
+    object super;
+    mixed *errors;
+    int i;
+    object sh, next;
+
+#if 6 * 7 != 42 || 6 * 9 == 42
+    return "Preprocessor error";
+#endif
+
+    if (!query_shadowing(ob)) for (sh = shadow(ob, 0); sh; sh = next) {
+	next = shadow(sh, 0);
+	/* LDMud called unshadow(sh) here before destruct(); FluffOS has no
+	 * such efun and destruct() already unlinks the shadow chain. */
+	destruct(sh);
+    }
+#ifdef COMPAT_FLAG
+    errors = prepare_destruct1(ob);
+    for(i = sizeof(errors); i--; ) {
+	write(errors[i]);
+    }
+#endif /* COMPAT_FLAG */
+    if(ob->query_wiz() == 5 && previous_object()) {
+      if(previous_object()->query_wiz() == 5 || previous_object() == this_object()) {
+        tell_object(ob, "Destructed by: "+previous_object()->query_name()+"\n");
+      } else {
+        tell_object(ob, "Destruct attempt by: "+this_player()->query_name()+"\n");
+        return 1;
+      }
+    }
+    super = environment(ob);
+    if (!super) {
+	object item;
+
+	while ( item = first_inventory(ob) ) {
+	    destruct_environment_of(item);
+	    if (item && environment(item) == ob) destruct(item);
+	}
+    } else {
+	while ( first_inventory(ob) )
+	    move_or_destruct(first_inventory(ob), super);
+    }
+
+#ifdef MUDWHO
+    if (interactive(ob)) disconnect(ob);
+#endif /* MUDWHO */
+    return 0; /* success */
+}
+
+/* privilege_violation is called when objects try to do illegal things,
+ * or files being compiled request a privileged efun.
+ *
+ * return values: 
+ *   1: The caller/file is allowed to use the privilege.
+ *   0: The caller was probably misleaded; try to fix the error.
+ *  -1: A real privilege violation. Handle it as error.
+ */
+int privilege_violation(string what, mixed who, mixed where, mixed how) {
+    switch(what) {
+      case "nomask simul_efun":
+	if (who == SIMUL_EFUN_FILE || who == SPARE_SIMUL_EFUN_FILE ||
+	    who == find_object(SIMUL_EFUN_FILE) || who == find_object(SPARE_SIMUL_EFUN_FILE) ) {
+	    return 1;
+	}
+	return -1;
+      case "set_extra_wizinfo":
+      case "get_extra_wizinfo": /* needed in start_simul_efun() */
+	if (who == find_object(SIMUL_EFUN_FILE) ||
+	    who == find_object(SPARE_SIMUL_EFUN_FILE) )
+	{
+	    return 1;
+	}
+	return -1;
+      /* "erq" case removed: no erq package on this driver (erq.h's
+       * ERQ_* constants don't exist here), and privilege_violation()
+       * itself is an LDMud-only apply FluffOS never calls anyway. */
+      case "input to":
+        return 1; /* C */
+      default:
+	return -1; /* Make this violation an error */
+    }
+  return 0;
+}
+
+void slow_shut_down(int minutes) {
+  /* nada //Celtron */
+}
+
+void dangling_lfun_closure() {
+    error("dangling lfun closure\n");
+}
+
+void remove_player(object victim) {
+    catch(victim->quit());
+    if (victim)
+	destruct(victim);
+}
+

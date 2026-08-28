@@ -12416,6 +12416,96 @@ same nominally-shared variable from yet another file remains at risk
 and needs its own case-by-case check or the same file-colocation
 treatment.
 
+### 7.158 First LDMud-lineage lib onboarded (`questmud`) — a whole cluster of architecture-level gaps, not just dialect differences; the worst one (`X->move_object(Y)` silently no-ops) fails with NO error at all
+
+Every classic-LPMud lib onboarded before this one was MudOS-lineage,
+close enough to this project's FluffOS target that porting was mostly
+small efun/dialect fixes (already cataloged in earlier sections).
+`questmud`'s original driver was **LDMud**, which shares LPC syntax at
+a surface level but diverges sharply in master-object/driver-hook
+architecture. Found and fixed as a cluster (full detail in `libs/
+questmud/NOTES.md` §2); recorded here because every one of these will
+recur verbatim on any future LDMud-sourced archive, not just this lib:
+
+- **`master::valid_read()` never having a case for the `"load_object"`/
+  `"recompile_object"`/`"include"` `call_fun` values**: this driver
+  routes literally every object compile and every `#include`
+  resolution through `master::valid_read(path, uid, call_fun, caller)`
+  with these three values (confirmed via `vm/internal/simulate.cc` and
+  `compiler/internal/lexer_utils.cc`) — LDMud never routes compilation
+  through `valid_read()` at all, so an LDMud-authored master's switch
+  simply has no case for them and falls through to deny-by-default,
+  silently blocking **every single object load and every `#include` in
+  the entire mudlib** from the very first boot. Add explicit
+  `case "load_object": case "recompile_object": case "include": return 1;`
+  (alongside whatever the file's existing read policy already allows)
+  to any LDMud-sourced `master.lpc` before doing anything else.
+- **`master::creator_file()` returning a bare int for "ordinary,
+  no special creator" instead of a real uid string**: this driver's uid
+  system (`packages/uids/uids.cc`) hard-requires a string return always;
+  a bare `1`/`0` (LDMud's own valid sentinel) fatally destructs the
+  object *right after it compiled cleanly*, with the misleading message
+  `"Illegal object to load: return value of master::creator_file() was
+  not a string"`. Fix: return the backbone/system uid string in that
+  branch, never a bare int.
+- **A player-object security guard built on `creator()`** (a common
+  pattern: "if this object looks like a wizard's own hand-cloned copy of
+  the player class rather than one made by the real login flow,
+  self-destruct") **can flip permanently true once `creator_file()`
+  above is fixed**, because now *every* object — including perfectly
+  ordinary logins — has a real, always-truthy uid. If a lib does this,
+  its own `creator()`/`domain()` helper must explicitly exempt the
+  backbone/system uid, not just check truthiness.
+- **`efun::name(...)` override calls anywhere outside the file
+  `secure/simul_efun.lpc` itself require `master::valid_override()`**,
+  which an LDMud-authored master typically never defines (LDMud doesn't
+  gate this the same way). `simul_efun.lpc`'s own internal `efun::`
+  calls are unaffected (they compile before `master_ob` is even set, so
+  they hit the "no master yet" bootstrap-allow path) — but the instant
+  any *other* file in the mudlib is given a real function that itself
+  calls `efun::something(...)` (a natural thing to write once you're
+  overriding a same-named efun elsewhere, see the `move_object` fix
+  just below), it fails to compile with `"Invalid simulated efunction
+  override"` until a permissive `valid_override()` is added to the
+  master.
+- **FluffOS's `reset()` apply is scheduled/lazy, not synchronous
+  immediately after `create()` like LDMud's**: even with the
+  `"lazy resets"` config flag turned on, individual daemons whose other
+  functions assume `reset()`-populated state (a mapping, an array) can
+  still be touched before their own first `reset()` has actually run,
+  crashing with `"Value being indexed is zero."` Case-by-case fix
+  needed per daemon (an explicit `create() { reset(0); }`, or — if that
+  itself cascades into a *different* crash because the daemon's
+  `reset()` assumes a live player context that doesn't exist yet at
+  boot time — initializing the relevant globals directly at
+  declaration instead of forcing the full `reset()` chain).
+- **The single worst finding, with zero error output of any kind**:
+  this driver's `move_object()` efun is 1-argument (moves
+  `this_object()` only), unlike LDMud/older-MudOS's 2-argument
+  `move_object(item, dest)`. This project's own established mechanical
+  fix for that exact dialect gap — rewrite `move_object(A, B)` as
+  `A->move_object(B)` — is **silently wrong** whenever `A` is not
+  already `this_object()` at the call site, because this driver's
+  `call_other()` **never falls back to a same-named efun** when the
+  target object has no matching user-defined LPC function of its own;
+  it just returns `0`, no exception, no `catch()`-visible error, and
+  the calling code's own control flow continues completely normally.
+  Concretely: `myself->move_object(dest)` from inside `myself`'s own
+  registration code looked like it worked (no thrown error) but
+  `environment(myself)` stayed `0` afterward, silently breaking every
+  `add_action()`/`init()`-based room command downstream for that
+  player, while a bare `move_object(dest)` call from the same file
+  worked correctly. **Any archive where the `move_object(A,B)` ->
+  `A->move_object(B)` mechanical rewrite has been applied needs a real
+  `move_object(dest) { return efun::move_object(dest); }` method added
+  to whatever base class the rewritten call sites' targets actually are
+  — this does NOT happen automatically just because the rewritten call
+  compiles and runs without error.** Diagnosed only by instrumenting
+  with `debug_message()` + `catch()` around the call and comparing
+  `environment()` before/after; a plain compile-sweep or read-through
+  would never surface this, since nothing about it looks wrong until
+  you check the actual runtime effect.
+
 ---
 
 ## 8. Login and registration flow bugs

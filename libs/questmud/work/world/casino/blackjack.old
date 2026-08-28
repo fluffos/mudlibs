@@ -1,0 +1,230 @@
+inherit "room/room";
+
+mapping bets;
+mapping cards;
+mapping players;
+int game, done;
+
+stay() {
+  if(!cards[this_player()->query_name()]) {
+    write("You are not in game.\n");
+    return 1;
+  }
+  if(players[this_player()->query_name()]) {
+    write("You have already made that clear.\n");
+    return 1;
+  }
+  players += ([ this_player()->query_name():(int)check_value(this_player()->query_name()) ]);
+  done += 1;
+  if(done == sizeof(m_indices(bets))) {
+    finish();
+  }
+  return 1;
+}
+
+finish() {
+  int i,o;
+  object ob;
+  string names;
+  if(sizeof(m_indices(bets)) == 0) {
+    end_round();
+  }
+  i = check_value("dealer");
+  /* teko aly */
+  while (i > 0 && i <16) {
+    deal_card("dealer");
+    i = check_value("dealer");
+  }
+  /* end of aly */
+  names = m_indices(bets);
+  tell_room(this_object(), "The dealer has: "+i+".\n");
+  while(o<sizeof(names)) {
+    if(players[names[o]] > i) {
+      tell_room(this_object(), names[o]+" won "+bets[names[o]]*2+" bronzes.\n");
+      ob = present(lower_case(names[o]), this_object());
+      if(!ob) {
+        tell_room(this_object(), "..but because he's not here, the casino keeps his reward.\n");
+      } else {
+        ob->add_money(bets[names[o]]*2, 3);
+      }
+    } else {
+      tell_room(this_object(), names[o]+" lost his bet. ("+players[names[o]]+")\n");
+    }
+    o += 1;
+  }
+  end_round();
+}
+
+end_round() {
+  done = 0;
+  game = 0;
+  players = ([ ]);
+  bets = ([ ]);
+  cards = ([ ]);
+}
+
+hit() {
+  string card;
+  if(!cards[this_player()->query_name()]) {
+    write("You are not in game.\n");
+    return 1;
+  }
+  if(players[this_player()->query_name()]) {
+    write("You have finished already.\n");
+    return 1;
+  }
+  deal_card(this_player()->query_name());
+  check_value(this_player()->query_name());
+  return 1;
+}  
+
+check_value(name) {
+  int i,value;
+  string tmp, card;
+  tmp = cards[name];
+  while(sscanf(tmp,"%s %s",card,tmp) == 2) {
+    if(sscanf(extract(card, 1, 1), "%d", i) == 1) {
+      value += i;
+    } else {
+      value += 10;
+    }
+  }
+  card = tmp;
+    if(sscanf(extract(card, 1, 1), "%d", i) == 1) {
+      value += i;
+    } else {
+      value += 10;
+    }
+  if(value > 21) {
+    tell_room(this_object(), name+" is out of the game. ("+value+") \n");
+    cards -= ([ name ]);
+    bets -= ([ name ]);
+    if(sizeof(m_indices(bets)) == 0) {
+      end_round();
+    }
+    return 0;
+  }
+  return value;
+}
+
+deal(arg) {
+  int i;
+  string names;
+  names = m_indices(bets);
+  while(i<sizeof(names)) {
+    deal_card(names[i]);
+    i += 1;
+  }
+  if(!arg) { deal(1); return; }
+  deal_card("dealer");
+  return 1;
+}
+
+deal_card(name) {
+  string card;
+  card = get_card();
+  tell_room(this_object(), card+" is dealt to "+name+".\n");
+  if(cards[name] != 0) card = card +" "+cards[name];
+  cards -= ([ name ]);
+  cards += ([ name:card ]);
+  return 1;
+}
+get_card() {
+  string card;
+  int i;
+  i = random(4);
+  if(i==0) card = "c"; /*club*/
+  if(i==1) card = "s"; /*spade*/
+  if(i==2) card = "h"; /*hearts*/
+  if(i==3) card = "d"; /*diamonds*/
+  i = random(13)+1;
+  if(i==1) card += "A";
+  if(i==13) card += "K";
+  if(i==12) card += "Q";
+  if(i==11) card += "J";
+  if(i>1&&i<11) card += i;
+  return card;
+}
+
+bet(str) {
+  int i;
+  if(!str) return;
+  sscanf(str,"%d",i);
+  if(this_player()->query_money(3) < i) {
+    write("You don't have enough bronzes.\n");
+    return 1;
+  }
+  if(game) {
+    write("There is a game going on.. wait for a while.\n");
+    return 1;
+  }
+  if(i < 100 || i > 500000) {
+    write("Usage: bet <100-500000>\n");
+    return 1;
+  }
+  this_player()->reduce_money(i,3);
+  write("You bet "+i+" bronzes.\n");
+  bets += ([ this_player()->query_name():i ]);
+  check_deal();
+  return 1;
+}
+
+check_deal() {
+  object ob;
+  int i;
+  ob = all_inventory(this_object());
+  while(i<sizeof(ob)) {
+    if(living(ob[i]) && !ob[i]->query_npc()) {
+      if(!bets[ob[i]->query_name()]) return;
+    }
+    i += 1;
+  }
+  game = 1;
+  call_out("deal", 0);
+}
+
+rules() {
+  write("The idea of the game is to get the sum of your cards as close to 21 as possible.\n");
+  write("If the sum goes over 21, the player is out of the game.\n");
+  write("Cards 2-10 are equal to their number. J,Q and K are equal to 10 and A is 1 or 11.\n");
+  write("The sum of your cards is compared to the sum of dealers cards. The bigger sum wins.\n");
+  write("If you and dealer have the same sum, the dealer wins.\n");
+  write("Available commands:\n");
+  write("	bet <100-500000> (bronze coins)\n");
+  write("	cards (shows your cards)\n");
+  write("	hit (ask for a card)\n");
+  write("	stay (tells the dealer that you don't want anymore cards)\n");
+  return 1;
+}
+
+init() {
+  ::init();
+  add_action("cards", "cards");
+  add_action("bet", "bet");
+  add_action("rules", "rules");
+  add_action("stay", "stay");
+  add_action("hit", "hit");
+}
+
+cards() {
+  if(cards[this_player()->query_name()]) {
+    write("You have: "+cards[this_player()->query_name()]+".\n");
+  } else {
+    write("You are not in game.\n");
+  }
+  return 1;
+}
+
+reset(arg) {
+  if(arg) return;
+  short_desc = "The blackjack room";
+  long_desc = "This is a dim room. Thick smoke hangs on the air.\n"+
+	"There is a table in the middle of the room.\n"+
+	"You recognize the game going on as some sort of a blackjack variation.\n"+
+	"If you want to join the game, see the 'rules'.\n";
+  add_exit("west", "/world/casino/middleroom");
+  players = ([ ]);
+  bets = ([ ]);
+  cards = ([ ]);
+}
+

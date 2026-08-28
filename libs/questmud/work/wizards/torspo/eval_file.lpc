@@ -1,0 +1,3 @@
+mixed eval() {
+shutdown();
+}

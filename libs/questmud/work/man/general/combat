@@ -1,0 +1,255 @@
+
+This file documents the principles behind the combat system. Specific
+details of weapon and armour class values are found in ('weapon' and 'armour')
+
+
+Basics
+------
+
+Combat is managed automatically when initialized by a 'kill' command. As long
+as the parties engaged in combat is in the same location the fight continues.
+If one part leaves the other will attack the 'fleer' on sight, ie next time
+they are in the same location. 
+
+I may choose any object in the game as an enemy by attacking it. Animate ones
+will fight back and inanimate will very likely take no notice. It is possible
+though to give 'breakable' stuff such as glass cages, doors etc. hitpoints,
+armour classes etc, and let them be fought.
+
+All animate objects can do one round of fighting each heartbeat.
+
+
+Generic combat elements
+-----------------------
+
+There are two generic elements for all combat:
+
+	- Attacks
+               Each heartbeat an animate object can make a certain number
+	       of attacks on its current enemy. 
+	- Hitlocations
+               An object can be divided into hitlocations with independant
+	       vulnerability. 
+
+For more complicated creatures there is also a concept of combat tools. Each
+tool occupies a so called, 'tool slot'. A creature can only have one tool for
+each of its 'tool slots'. The tools are divided into two cathegories:
+
+	- Weapon tools
+		These aid attacks, both the chance to hit and the capability
+		to make damage. One attack can only be aided by one weapon,
+	 	however, one weapon can aid many attacks.
+	- Armour tools
+		These affect the effective ac for one or many hitlocations of
+		a creature. Armours can aid one or many hit locations and one
+		hit location can be aided by one or many armours.
+
+Note that both weapons and armours compete for the 'tool slots'. This means
+for example that if a knife takes the 'right hand'-slot then a shield meant
+to be held in the right hand can not be used.
+
+For most creatures, these attack lists and hitlocation lists can be configured 
+almost arbitrarily.  For humanoid creatures such as players and npc's, there
+is a specific set of attacks and hitlocations predefined. In addition, for 
+players and player emulating monsters it is not possible to add any more
+attacks or hitlocations.
+
+
+Implementation
+--------------
+
+The combat system is implemented outside the actual living object in a
+special 'combat object' which is linked to the living object and never
+moved into an environment. It does NOT shadow the living object.
+
+It is possible for a living object to decide what file to use as combat object,
+all combat objects must however inherit '/std/combat/cbase' which is the
+generic external combat object.
+
+The specific details for configuring humanoids and creatures are given in
+'humanoid_combat' and 'creature_combat'.
+
+The generic combat as implemented in /std/combat/cbase is described below:
+
+   Attacks (attacks are kept in a list of maximum 10 elements)
+	
+	Each attack is characterized by five values:
+
+	      att_id:    Specific id, for humanoids W_RIGHT etc
+              wchit:     Weapon class 'to hit'
+              wcpen:     Weapon class penetration
+	      dt:        Damage type
+              %use:      Chance of use each turn
+
+         The attack id is essentially only a label. It is used to reference
+	 a specific attack and can be any integer value. For humanoids it
+	 is however predefined to be hands and feet (see /sys/wa_types.h).
+
+         wchit, wcpen and damage type are parameters documented in 'weapon'.
+	 
+         The %use is a parameter that gives the chance that the living object
+	 will use this attack a specific round. This can be used to let for
+	 example a dragon attack with 'breath' one time out of five (%use = 20)
+
+   Hitlocations (hitlocations are kept in a list of maximum 10 elements)
+	
+	Each hitlocation is characterized by four values:
+	
+              hit_id:    Specific id, for humanoids, A_TORSO, A_HEAD etc
+	      ac:        The ac's for each damagetype
+	      %hit:      The chance that a hit will hit this location
+	      desc:      String describing this hitlocation, ie "head", "tail"
+ 
+         The hitloc. id is essentially only a label. It is used to reference
+	 a specific hitlocation and can be any integer value. For humanoids it
+	 is however predefined to be the humanoid body parts. (/sys/wa_types.h)
+
+	 ac can be either an array or a single value. If it is a single value
+	 than that is the ac for all damage types. (see 'armour')
+
+	 The sum of %hit for all hitlocations should be 100. %hit is used
+         to determine the chance that a specific hit on the object will hit
+	 a given location. 
+
+	 The hitdescription is a string describing the hitlocation. This
+	 string is sent to the combat message generator in the attacker or
+	 the attackers weapon.
+
+
+One round of fighting  (found in heart_beat() in /std/combat/cbase.c)
+---------------------
+
+This is a short description of the combat 'protocol'. Note that this is 
+initialized from the heart_beat in the combat object, not the living object.
+This will ensure that combat continues even if the heart_beat in a living
+object for some reason ceases to work.
+
+	1) Ensure that we have a valid enemy. This includes checking
+           for ghost, linkdeath, run away enemy etc.
+
+	2) For each attack that gets done, due to %use, do:
+
+		- Find out if the attack hits the enemy.
+		  Two calls are made and must return true:
+			cb_try_hit(attack_id)
+			     Something inherent to this attack can make
+			     it fail. Perhaps a weapon which only works
+			     one time out of three.
+			cb_tohit(attack_id, wchit, enemy)
+			     This decides if this attack succeeds against
+			     a specific enemy. Size, weight, dexterity and
+			     other factors can make a difference here.
+
+		- Tell the enemy that it was hit by calling:
+**			enemy->hit_me(wcpen, damtype, myself, attack_id)
+		    If the 'to hit' failed above then hit_me is still called
+		    but with wcpen == -1, indicating a miss.
+
+                - With the result returned from the above call, generate
+		  combat messages by calling:
+		    cb_did_hit(attack_id, hitlocdesc, %hurt, enemy)
+
+		- Check on the enemy if it still has hitpoints left by:
+**			enemy->query_hp()
+		  If the enemy has no hitpoints left then call:
+**			enemy->do_die(myself)
+		  and break of the round of attacks.
+	       
+	3) Decrease our fatigue with one. If we are too tired then decrease
+	   our hit points.
+
+**	4) If the enemy not worth fighting, ie gone or enemy->query_ghost()
+	   then swap to another enemy.
+
+Note that all cb_ calls are internal to the combat object.
+For specific hooks see 'humanoid_combat' and  'creature_combat'
+
+Note the '**'. To make an object which it is possible to 'fight', you need
+these four functions: 
+
+	- hit_me(), should return ({  %hurt, "hitloc description" })
+	- query_hp(), should return 0 if the object is 'dead'
+	- do_die() Do whatever when 'killed'. No return value.
+	- query_ghost() should return 1 if object has been 'killed', but still
+	  remains for some reason.
+
+Note also that the normal 'kill name' will not start combat with a nonliving
+object. To initialize combat the object must call:
+	
+	- player->attack_object(this_object())
+
+This could simply be done in a normal 'add_action' routine as a result from,
+say the command 'bash door'. 
+
+
+Interesting properties
+=====================
+
+LIVE_AS_ATTACK_FUMBLE	- If you use this prop the fighting living will 
+			  fumble its attacks.
+
+LIVE_I_ATTACK_DELAY	- Delay an attack xx rounds
+
+LIVE_O_SPELL_ATTACK	- If you have special attacks this prop is good to use
+
+LIVE_I_QUICKNESS	- Affects how quickly the living is fighting
+
+
+Notifying functions
+===================
+
+notify_you_kill_me(who) - If someone killed <who> then this function will be
+			  called in the killer. an easy way to detect if your
+			  mobile killed someone.
+
+notify_enemy_gone(ob)   - <ob> Used to be our enemy to fight but it's not
+			  possible to fight <ob> any more. <ob> might have
+			  been killed by someone else or perhaps fled the
+			  fight?
+
+
+Special attacks to mobiles
+==========================
+
+If you make a mobile and you want it to have some special attacks, like
+a tiger jumping on a player, you can always define special_attack()
+in that mobile. A typical special attack function looks like this:
+
+int
+special_attack(object enemy)
+{
+    object me;
+    mixed* hitresult;
+    string how;
+
+    me = this_object();
+
+    /* We don't want the tiger to attack this way each round */
+    if (random(10))
+        return 0;                         /* Continue with the attack. */
+
+    hitresult = enemy->hit_me(20 + random(30), W_IMPALE, me, -1);
+    how = " without effect";
+    if (hitresult[0] > 0)                 /* hitresult[0] yields the % hurt. */
+        how == "";
+    if (hitresult[0] > 10)
+        how = " hard";
+    if (hitresult[0] > 20)
+        how = " very hard";
+
+    me->catch_msg("You leap into your opponent's throut!\n" +
+                  capitalize(enemy->query_pronoun()) + " is hit" +
+                  how + ".\n");
+    enemy->catch_msg(QCTNAME(me) + " leaps into your throut!\n" +
+                     "You are hit" + how + ".\n");
+    tell_watcher(QCTNAME(me) + " leaps into " + QTNAME(enemy) + "!\n" +
+                 capitalize(enemy->query_pronoun()) + " is hit" +
+                 how + ".\n", enemy);
+
+    if (enemy->query_hp() <= 0)
+        enemy->do_die(me);
+
+    return 1; /*  Important! Returning 1 means this round was a special
+	       *  attack round, don't use normal attacks too. */
+}
+
