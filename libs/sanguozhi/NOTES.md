@@ -311,3 +311,359 @@ access.o`'s `wizards`/`privileges` mapping, which already listed
 `fluffos` before this session — the previous upstream-repo session
 seeded it; this session completed the loop by actually registering the
 player account through the normal flow, per AGENTS.md §1.5 step 1).
+
+## 深度功能测试（round two, 2026-08-27）
+
+Full continuous playthrough per AGENTS.md §10.7: registered two fresh
+non-wizard Chinese-named test characters (`qintcf`/云飞策,
+`qinver`/云飞验— both deleted before commit, see below), plus a
+throwaway account (`qintcer`/云飞测) specifically to exercise the
+first-ever-admin bootstrap path (also deleted after use). Covered
+newbie help (`help newbie`/`help starts`), movement through 巫师大厅
+→ 草庐 → 华阴村 (`小村中心`/`厨房`/`帐房`/`前庭`/`前院`), the full
+砍柴 (chopwoods) job cycle (`ask chu niang about job` → `chop woods
+with kanchai dao` ×20+ → `ask chu niang about pay` → the 智慧测试
+quiz), `score`/`i` at every state change, `admtool`, `quit` +
+`debug.log` grep (empty/clean both times — no error ever logged the
+entire session) + reconnect after a real wall-clock gap (state
+persisted correctly: same stats, same room). `fight`'s own help text
+states it can never kill (`没有 kill`, only NPC-replica duels) and
+requires having already `settle`d into a role — a multi-step prereq
+not reached this pass; documented here as unverified-live rather than
+silently skipped. Craftsman/shop commerce (`ask <匠人> about
+list/order/good`, see `help order`) is dialogue-driven
+(`add_question()`/`special_answer()`, same mechanism as the already-
+live-verified 厨娘/chuniang job-pay dialogue), architecturally
+distinct from the `add_action(fun,"",1)`+`force_me()` shape §7.143
+warns about — that shape doesn't exist anywhere in this codebase
+(`force_me()` only appears in `trans/cmds/` wizard-shell tools, an
+unrelated "force another session to run a command" feature), so the
+NPC-shop check required by this pass is satisfied by architecture
+review plus the live-verified chuniang dialogue exchange.
+
+### SEVERE — the "auto-Admin the first wizard" bootstrap can never
+actually promote anyone, so it fires on literally EVERY new
+registration forever, and `adminp()`/`admtool`'s `[大神]`-tier
+commands were unusable by anyone (including the seeded `fluffos`
+account) until fixed this session
+
+`secure/user/sw_body.lpc`'s `new_user_ready()` (run once per account,
+right after registration finishes) has:
+```lpc
+/* auto-Admin the first wizard if there are no Admins */
+{
+    string * members = SECURE_D->query_domain_members("Admin");
+    if ( !sizeof(members) )
+    {
+        ...
+        unguarded(1, (: SECURE_D->add_domain_member("Admin",
+                        $(query_userid()), 1) :));
+    }
+}
+```
+`add_domain_member()` (`secure/daemons/secure_d.lpc`) requires the
+domain to already exist (`if (!domains[domain]) return ERR_NODOMAIN;`)
+— but **nothing anywhere in this entire mudlib ever calls
+`SECURE_D->create_domain("Admin")` (or any case of it)**, confirmed via
+a whole-tree grep. So this `add_domain_member()` call fails silently
+every single time (its error return is never checked), `domains["Admin"]`
+never gets created, `query_domain_members("Admin")` stays permanently
+empty, and the `!sizeof(members)` "am I the first admin?" check is
+therefore true on literally every account creation — not just the
+first. Confirmed live: registering `qintcf` right after this session's
+fix, once `qintcer` (registered under the OLD code) had already
+"become" the phantom admin, correctly did NOT re-trigger the bootstrap
+message (branch `2`, non-admin `set_privilege()`), whereas `qintcer`
+saw the misleading "你自动成为 Admin，记得用 admtool" message but
+`adminp("qintcer")` was actually **false** — confirmed by testing
+`fluffos` (the seeded standard admin account, already `wizardp()==1`
+via a hand-seeded `data/secure/access.o` from a prior session) live via
+`admtool`'s `d` (region-management) menu: `c admin` (create a domain,
+a `[大神]`-only op) failed with `Error: 权力不足` (insufficient
+privilege) BEFORE the fix — `fluffos` was a wizard but never a real
+Admin, despite the game claiming otherwise at registration. `adminp()`
+(`secure/simul_efun/userfuncs.lpc`) is used to gate `admtool`'s
+`[大神]` items, `trans/obj/admtool/{user,money}.lpc`, `votetool.lpc`,
+channel/news moderation, `wizlist`, `finger_d`/`ftp_d`, and more — all
+silently root-privilege-less for the entire history of this
+installation except via the one hardcoded `m == "mudren"` test bypass
+already in `adminp()`.
+
+**Root cause is a domain-name mismatch, not (only) a missing
+`create_domain()` call**: every consumer in this bootstrap path
+(`sw_body.lpc`, `userfuncs.lpc`) uses `"Admin"` (capital A), but
+`SECURE_D->create_domain()` (the only sanctioned way to create one)
+`lower_case()`s the name **before** storing it (and `admtool`'s own
+`/trans/obj/admtool/domain.lpc` wrapper independently already
+lower-cases user input before calling `SECURE_D->create_domain()`,
+confirming lowercase is this codebase's established convention) — so
+even adding a `create_domain("Admin")` call up front would create
+`domains["admin"]`, still not matching the literal `"Admin"` key
+`add_domain_member()`/`query_domain_members()` look up (neither of
+which normalizes case on their own). **Fix**: changed both
+`secure/user/sw_body.lpc` (the bootstrap block — added a
+`create_domain("admin")` call before `add_domain_member()`, since
+nothing else ever creates it) and `secure/simul_efun/userfuncs.lpc`'s
+`adminp()` to use lowercase `"admin"` consistently, matching
+`create_domain()`/`admtool`'s own convention. `create_domain()` on an
+already-existing domain returns a harmless "already exists" error
+string that's correctly ignored (matching how `add_domain_member()`'s
+own return was already being ignored).
+
+**Verified live, end to end, after the fix**: registered `qintcer` →
+became the real first Admin (`data/secure/access.o` afterward:
+`domains (["admin":(["qintcer":2,])])`) → logged in as `qintcer`,
+used `admtool`'s `d` menu's `a fluffos admin` to add the seeded
+`fluffos` account as an `admin` member too → reconnected as `fluffos`
+→ `admtool`'s `d` → `c ztest` (create a real `[大神]`-gated domain)
+**succeeded** (`区域建成`), `l` listed it, `d ztest` deleted it cleanly
+— proving `fluffos` now has genuine root/Admin privilege for the first
+time in this installation's history. Registered a THIRD fresh account
+(`qintcf`) after the fix and confirmed it correctly did **not**
+re-trigger the bootstrap (since `domains["admin"]` was non-empty by
+then) — restoring the intended "only the very first ever admin" 
+semantics instead of firing on every single registration. Cleaned up
+afterward: removed `qintcer` from the `admin` domain via `admtool`
+(`r qintcer admin`, run as the now-legitimate `fluffos` admin) before
+deleting its player-save files, leaving `fluffos` as the sole `admin`
+domain member (`domains (["admin":(["fluffos":1,])])` in the final
+`data/secure/access.o`).
+
+Files: `secure/user/sw_body.lpc` (bootstrap block), `secure/simul_efun/
+userfuncs.lpc` (`adminp()`). New AGENTS.md bug-class entry needed (not
+a prior-numbered pattern) — see the corpus doc.
+
+### §7.121-class (int declared, float-literal arithmetic, no
+`to_int()`) — 19 confirmed instances across the entire `sgdomain/jimou/`
+national-warfare stratagem subsystem, plus 2 more in the 献帝/Emperor
+Xian NPC's reputation-penalty code
+
+Systemic, not a one-off: every file in `sgdomain/jimou/` that computes
+a stratagem's success/damage roll multiplies an `int`-declared local by
+a bare float literal (`1.2`, `1.5`, `1.8`, `2.5`, `0.3`, `0.4`, `0.75`,
+...) with no `to_int()`/`(int)`-that-actually-works, then feeds the
+result straight into `random()` (an `int`-only efun) or into
+`WARAI_D->kill_troop()`/`chinese_number()`/`apply_condition()`. Same
+underlying driver gap as every other §7.121 instance already cataloged
+project-wide (a declared `int` type does not coerce a runtime float on
+this driver) — confirmed the worst-case downstream sink here is
+`random()`, whose C implementation (`f_random()` in
+`efuns_main.cc`) reads `sp->u.number` directly with **no type check at
+all**, so a float-tainted argument is read as whatever bit pattern its
+`double` happens to have reinterpreted as an integer — undefined/
+garbage results, not a clean type error, and with no runtime symptom
+to grep for. `sgdomain/jimou/shidu.lpc`'s "施毒" (poison) stratagem is
+the worst offender: its float-taint (`e_skill *1.2`) is **unconditional
+on every single use**, not gated behind any "if" a real playthrough
+might rarely miss.
+
+Fixed by wrapping every such expression in `to_int()` at the exact
+point its result is assigned to the `int`-declared sink (preserving
+the real float arithmetic through intermediate steps, only truncating
+where the LPC type system actually requires it — same pattern as every
+other confirmed §7.121 fix project-wide):
+- `kill = kill*2 - kill1*1.2;` → `kill = to_int(kill*2 - kill1*1.2);`
+  (`jbsj.lpc`, `jbhj.lpc`, `luoshi.lpc`, `neihong.lpc`, `huangbao.lpc`,
+  `fakeorder.lpc`, `shoushi.lpc` [`*1.8`], `jiedu.lpc` [`*1.8`],
+  `shidu.lpc` [different expression, same shape]) — 9 files, the value
+  that's about to hit `random()`.
+- `e_skill = e_skill + 1.5*CHAR_D->get_skill(who,"chenzhuo");` →
+  wrapped in `to_int()` (`jbsj.lpc`, `jbhj.lpc`, `luoshi.lpc`,
+  `neihong.lpc` [2 sites — also had a bare `*1.5` a few lines above],
+  `huangbao.lpc`, `shidu.lpc`) — 7 sites.
+- `damage = <rate-or-literal-involving float expr>;` → wrapped in
+  `to_int()` (`jbsj.lpc` ×2, `jbhj.lpc`, `luoshi.lpc`, `neihong.lpc`
+  ×3, `huangbao.lpc`, `zhanbu.lpc`, `shidu.lpc`) — 9 sites.
+- `hunluan.lpc` ("混乱"/confusion stratagem) had a distinct shape: two
+  LOCAL multiplier constants (`x=1.8; z=1.5;`) were declared `int`
+  right alongside their float literal initializers — changed their
+  declared type to `float` (they're pure intermediate weights, never
+  themselves fed to an int-only sink) instead of `to_int()`-truncating
+  them at assignment, which would have flattened the intended 1.8 vs
+  1.5 asymmetric weighting down to 1:1 and silently changed the
+  stratagem's balance; `kill = kill*x - kill1*y;` (the actual sink)
+  got the usual `to_int()` wrap.
+- `sgdomain/npc/king.lpc` **and** its live sibling
+  `sgdomain/event/ev_king/king.lpc` (献帝/Emperor Xian — the
+  `sgdomain/npc/` copy turned out to be dead/unreferenced by any real
+  room, `grep -rl` finds zero hits; `sgdomain/event/ev_king/king.lpc`
+  IS referenced by `a/changan/ca_czx.lpc` and
+  `sgdomain/area/emp/dadi.lpc`, so both were fixed anyway since they're
+  byte-identical on this bug): `repd= 0.2*t_money;` (a reputation
+  penalty for rudely declining an imperial summons) — `repd`/`rep` are
+  both `int`, and `rep -= repd` permanently corrupts the persisted
+  `CHAR_D->set_char(n_id,"reputation",rep)` value into a float, same
+  shape as the AGENTS.md §7.121 catalog's own headline example.
+  Fixed: `repd = to_int(0.2*t_money);`.
+
+Checked the remaining 12 files in `sgdomain/jimou/` (`chenzhuo`,
+`dantiao`, `fenfa`, `fengbian`, `guwu`, `jiaoma`, `luanshe`, `maifu`,
+`qibing`, `scout`, `sugong`, `tianbian`) — none use `float` or any
+decimal literal at all, confirmed clean. Not live-reproduced end-to-end
+(reaching real national-warfare combat requires troops/nation office,
+out of reach for a level-1 newbie in one session) — fixed on strong,
+already-corpus-confirmed pattern match per AGENTS.md §7.121's own
+"how to apply generally" guidance, verified only via code review +
+clean `lpcc`/formatter passes, not a live repro. Flagged honestly as
+such rather than claimed as live-verified.
+
+### §7.118-class (`.c`→`.lpc` filename-slice-arithmetic leftovers) — 2
+new instances beyond the corpus already fixed at onboarding time
+
+- `trans/cmds/dir.lpc`'s wizard `ls`/`dir` colorizer:
+  `if (file[<2..] == ".lpc")` — a 2-character slice can never equal
+  the 4-character string `".lpc"`, so `.lpc` files never get the
+  "code" color in a directory listing (`.h`/`.o`, both genuinely
+  2-char extensions, work correctly right next to it — the exact
+  differential that flags this as the familiar leftover-from-`.c`
+  pattern, not a design choice). Cosmetic only, wizard-only tool
+  (confirmed non-wizard players get "没有 dir/ls 这个命令" — this
+  lives in `trans/cmds/`, outside the normal player verb set). Fixed:
+  `[<2..]` → `[<4..]`.
+- `daemons/doc_d.lpc`'s incremental autodoc scanner:
+  `item[0][<2..<1] == ".lpc"` — same shape (a 2-char slice compared to
+  a 4-char string, always false), meaning the "which changed `.lpc`
+  files need their autodoc regenerated" scan never actually found any
+  file to update. Wizard-tool-only (autodoc generation), not
+  player-facing. Fixed: `[<2..<1]` → `[<4..<1]`.
+
+Also found and fixed one **unrelated** off-by-slice-bound bug while
+grepping for the above, same broad "wrong slice bounds" shape but not
+a `.c`→`.lpc` migration artifact: `cmds/player/help.lpc` (the actual
+live `help` command every player uses) had
+`if(ret[<3..<1]!="\n") ret+="\n";` — comparing the LAST 3 CHARACTERS of
+the help text to the 1-character string `"\n"`, which can never be
+equal, so the condition is a tautology and `help` **always** appended
+an extra trailing blank line, even to text that already ended in one.
+Every other trailing-newline check in this codebase
+(`secure/master.lpc`, `secure/daemons/lpscript_d.lpc`,
+`daemons/imud/channel.lpc`, `std/modules/m_react.lpc`) consistently
+uses the correct single-index idiom `str[<1] == '\n'` — confirming this
+was a typo, not an intentional different check. Fixed to match:
+`if(ret[<1]!='\n') ret+="\n";`.
+
+### Confirmed clean / not applicable (systematic grep sweep of every
+standing cross-cutting pattern requested for this pass)
+
+- **§7.112** (unconditional `init()` call_out chain, no re-entry
+  guard): no `init()`/`call_out()` combination found on any NPC in
+  `sgdomain/npc/` or elsewhere; this lib's combat/death architecture is
+  Lima-native, not the ES2 `heart_beat()`-chain shape this pattern was
+  cataloged from.
+- **§8.3a** (`private nomask command_hook` demoted once inherited):
+  this is a Lima/TMI-2 mudlib, not ES2 — no `command_hook`-shaped
+  central dispatch function exists; grepped every `private nomask`
+  declaration or a mixin file registering itself via
+  `add_action`/`call_out` and found none matching the shape. Also
+  independently confirmed live: `look`/`score`/`i`/`ask`/`chop`/
+  `admtool`/`quit`/`help`/`who`/`update` all dispatch correctly.
+- **§7.122** (class/marker autoload duplication): the
+  `compute_autoload_array()`/`destroy_autoload_obj()`/
+  `load_autoload_obj()` mechanism doesn't exist anywhere in this
+  codebase.
+- **§7.123** (bare file-scope `IDENT = (...);` killing a compile): grep
+  found several superficially-matching zero-indent lines, but every one
+  is inside a function body (just unindented legacy style), not
+  genuine file scope — confirmed via context read on each hit
+  (`sgdomain/menu/votetool.lpc`, `daemons/relation_d.lpc`,
+  `daemons/fate_d.lpc`).
+- **§7.124** (percentage field initialized as a 0.0-1.0 fraction): no
+  matching threshold/rate-gate field found; the two `repd=0.2*t_money`
+  hits under this search turned out to be §7.121 instances instead
+  (fixed above).
+- **§7.126** (stale `.c` extension in `__DIR__`-based save data): no
+  live `.lpc` file references a `__DIR__"foo.c"`-style path; the only
+  hits are in non-compiled sibling files (`.listen`, a numbered `.1`
+  backup).
+- **§7.129** (`tell_room()` wrapper passing omitted `exclude` to
+  `message()` as bare `0`): `tell_room()` in this codebase is a
+  deliberate hard `error()` stub (`secure/simul_efun/overrides.lpc`,
+  "Use tell_environment() or tell_from_inside() instead") — never
+  calls `message()` at all. The real message-delivery chain
+  (`tell()`/`tell_environment()`/`tell_from_inside()` in
+  `secure/simul_efun/tell.lpc`) routes through `receive_*_msg()`
+  LPC-level body methods, not a direct `message()` efun call; the only
+  direct `message()` efun call sites in the whole tree are in two
+  personal wizard-homedir files (`wiz/emperor/ask.lpc`,
+  `wiz/yue/obj/jia.lpc`), not core infrastructure, and both pass
+  explicit arguments.
+- **§7.130** (`query_idle()` called unconditionally post-non-interactive
+  in `heart_beat()`): the only `query_idle()` call sites are cosmetic
+  (a `score`/`who` idle-time display string), not part of any
+  heart_beat-driven net-dead detection; this lib's net-dead handling is
+  the §7.133-style direct `net_dead()` apply instead (see next item).
+- **§7.131** (`find_living()`/`find_player()` needing
+  `set_living_name()`): both are deliberately disabled in this codebase
+  (`secure/simul_efun/overrides.lpc`: `error("find_player() is
+  obsolete. Use find_body() instead")`; `std/living.lpc`'s own comment:
+  "find_living() doesn't exist") — a fully-wired-up, already-tested-
+  working replacement (`find_user()`/`find_body()`, confirmed live
+  throughout this session), not an archive that assumes the classic
+  apply still works.
+- **§7.132** (`map()`-over-mapping bound to the key instead of value):
+  every `map()` call found in `sgdomain/`/`daemons/`/`std/`/`secure/`
+  operates on a genuine array (`string*`), not a mapping — checked each
+  candidate's declared type individually.
+- **§7.133** (disconnect-notification apply never defined): `net_dead()`
+  IS defined, in `secure/user.lpc` (the actual `USER_OB` connection
+  object the driver's apply targets) — confirmed indirectly via this
+  session's own clean quit/reconnect cycle (a `私 nomask` qualifier
+  wouldn't block a driver-level apply anyway, only LPC-level external
+  dispatch like `add_action`).
+- **§7.134** (extra-desc accumulator array with no `({})` default):
+  every room navigated this session (village center, kitchen, front
+  hall/courtyard, 草庐, etc.) rendered its full description with no
+  truncation or error.
+- **§7.135/§7.30** (accessor missing a `mapp()`/lazy-init guard): spot-
+  checked the central `CHAR_D->get_char()`/`sgdomain/modules/
+  m_skills.lpc` skill-map accessors — `sg_skills`/`skill_map` are both
+  initialized inline (`= ([]);`) at declaration, and `set_sg_skill()`
+  already has a proper `!mapp(sg_skills)` guard elsewhere in the same
+  file; no bare-uninitialized-mapping-return path found.
+- **§7.136** (command souls stripped, race content missing):
+  `look`/`get`/`i`/`say`(disabled by design, see below)/`ask`/`chop`
+  all worked correctly throughout an extended live session — command
+  dispatch is not broken project-wide.
+- **§7.139** (interactive-catch-tell config off, breaking `%^TAG%^`
+  colour rendering): confirmed working correctly — every session
+  transcript this pass shows real ANSI escape sequences
+  (`\x1b[1;36m` etc.), not literal `%^...%^` text.
+- **§7.141** (MudOS-era `replace_program()` fold): `replace_program()`
+  only appears in one personal wizard-homedir file
+  (`wiz/lei/room/startroom.lpc`) and the help doc — never in live game
+  content.
+- **§7.142** (virtual-object engine manufacturing a disconnected
+  duplicate room for a broken exit typo): this lib DOES use a
+  `compile_object()`-based virtual-object engine (`secure/master.lpc`,
+  walking up the directory tree calling `virtual_create()`), actively
+  used by several real systems (`sgdomain/base/base_server.lpc`'s
+  coordinate-grid city areas, `sgdomain/home/home_server.lpc`,
+  `a/area_server.lpc`, `sgdomain/modules/{char_server,troop}.lpc`).
+  Exhaustively auditing every hardcoded exit path against this engine's
+  expected `area/file/room` argument shape for a missing-segment typo
+  is beyond this pass's time budget — flagged honestly as **not
+  exhaustively checked**, unlike the fully-covered patterns above,
+  rather than claimed clean.
+- **§7.144** (one-shot `set_name()` guard defeating per-instance
+  rename): `std/living.lpc`'s `set_name()` has no such guard — it
+  correctly removes the old id before adding the new one, re-callable
+  at any time.
+- **§7.145** (shop verb shadowed by a direct `add_action` override):
+  this lib's commerce system is entirely dialogue-driven (`ask X about
+  Y`), not `add_action`-based — the pattern doesn't apply
+  architecturally (see the NPC-shop paragraph above).
+- **§7.146** (broken `/`-instead-of-`/*` comment): no confirmed
+  instance found in live `.lpc` content; the original conversion
+  session's `lpcc_check.sh` sweep (285→documented-remainder failures)
+  would have caught any compile-fatal case, and this pass's own grep
+  turned up only ASCII-art string literals as false positives.
+
+## Cleanup
+
+All three throwaway test characters (`qintcer`, `qintcf`, `qinver`) and
+their save files (`data/players/q/`, `data/pshells/q/`, `data/links/q/`,
+`data/wshells/`) were removed before commit. `qintcer` was first
+cleanly removed from the `admin` domain via `admtool` (run as the
+now-legitimate `fluffos` admin) so the final `data/secure/access.o`
+state has `fluffos` as the sole real Admin, matching this project's
+standing seeded-admin convention.

@@ -9726,6 +9726,20 @@ Many archives register commands, verbs, spells, or macro headers by taking a dir
 
 **A distinct, more dangerous variant of the same family**: rather than a slice, `dreamofseven` (same week) had TWO independent sites doing `file_size(file + ".c") == -1` (or an equivalent bare `+".c"` string-literal concatenation) as an existence/gate check — `adm/obj/master.lpc`'s `preload()` apply gated EVERY preload attempt behind it (after the `.c`->`.lpc` rename this would have made every preloaded daemon — securityd, virtuald, logind, chinesed, etc. — silently never load, zero compile errors anywhere), and the central `new_ob()` NPC/item-spawning wrapper (100+ call sites across skill/spell/char/bank/room code) had the identical shape, which would have silently broken virtually all room/NPC population site-wide. This is more dangerous than the dispatch-table variant above precisely because there's no garbage-key symptom to notice — the gated code just silently never runs, with no error signature at all; only caught here by directly inspecting `convert_lib.sh`'s own sed-rewrite output before ever booting. **Also grep for `+".c"` / `file_size(... + ".c")`-shaped literal-extension concatenation by default**, not just slice arithmetic — now confirmed in 2 independent sites in one lib.
 
+**Two more confirmed instances, `sanguozhi`'s §10.7 round-two deep-test
+(2026-08-27, on top of that lib's own onboarding-time fixes to
+`secure/daemons/{cmd_d,quest_d,spell_d,troop_type_d}.lpc`)**, this time
+as a filename-extension COMPARISON rather than a strip: `trans/cmds/
+dir.lpc`'s wizard `ls`/`dir` colorizer did `if (file[<2..] == ".lpc")`
+— a 2-character slice can never equal the 4-character string, so
+`.lpc` files silently never got the "code" color while `.h`/`.o`
+(genuine 2-char extensions) right next to it worked correctly, the
+same tell-tale differential as every other instance of this class.
+`daemons/doc_d.lpc`'s incremental autodoc scanner had the identical
+shape (`item[0][<2..<1] == ".lpc"`), meaning its "which changed `.lpc`
+files need regenerating" check never found anything. Both wizard-tool-
+only, both fixed by widening the slice to 4 characters.
+
 ### 7.119 `master.lpc`'s runtime warning-vs-error filter checks for a capitalized `"Warning"` string, but this driver emits lowercase `"warning:"` — every compile WARNING (not error) gets broadcast to the connected player as a hard-error notice, sometimes repeatedly per room entry
 
 A near-relative of §7.103 (which covers the same "warnings reach the player" symptom via a MISSING filter entirely) — here the lib actually HAS a filter, but it's matching the wrong case. `log_error()`/the error-handler's classification check does something like `strsrch(msg, "Warning") != -1` to decide "route this to the log only, not the player," but this driver's actual compiler emits lowercase `warning:` (not `Warning`), so the check never matches and every routine compile warning — extremely common, e.g. an unused local variable in a base class every room inherits — gets shown to the player as if it were a fatal error. `zhyx` showed this up to 19 times in a row on a single fresh room entry before being fixed. Confirmed independently on `zhyx` and `naruto` (a from-scratch-lineage sibling sharing base-engine ancestry) same day — 2 unrelated Chinese-wuxia-family archives in one session, worth checking by default on any future onboard of this family. **Fix**: match the actual lowercase string the driver emits (case-insensitive match is safer still), or better, check the driver's real classification (an error vs. a warning callback distinction) if the master apply signature exposes one, rather than string-sniffing the message text at all.
@@ -9840,6 +9854,42 @@ heals HP/MP/SP back with plain integer division (`GetMaxHealthPoints()
 /2`-style), which never produces a float in the first place. This
 closes the sibling-sweep flag for all five previously-unchecked
 lineage members.
+
+**Fourth confirmed instance, unrelated lineage and unrelated engine
+family: `sanguozhi`'s §10.7 round-two deep-test (2026-08-27)** — 19
+sites across `sgdomain/jimou/` (a national-warfare "stratagem" combat
+subsystem: `jbsj`/`jbhj`/`luoshi`/`neihong`/`huangbao`/`fakeorder`/
+`shoushi`/`jiedu`/`zhanbu`/`shidu`/`hunluan`, 11 files) plus 2 more in
+献帝/Emperor Xian's reputation-penalty code
+(`sgdomain/npc/king.lpc`/`sgdomain/event/ev_king/king.lpc`, byte-
+identical siblings). Every site multiplies an `int`-declared local by a
+bare float literal (`1.2`/`1.5`/`1.8`/`2.5`/`0.3`/`0.4`/`0.75`/`0.2`)
+with no working truncation, then feeds the tainted value into
+`random()` (an `int`-only efun) or a daemon call expecting a real int
+(`kill_troop()`/`chinese_number()`/`apply_condition()`/`set_char(...,
+"reputation", ...)`). Worth recording as a distinct escalation of this
+section's severity: this driver's `f_random()` (`src/packages/core/
+efuns_main.cc`) reads `sp->u.number` with **no type check at all** —
+handing it a float-tainted argument reinterprets the `double`'s bit
+pattern as an integer, silently returning garbage rather than throwing
+a clean type error (unlike `ninetears`'s array-index crash above, this
+shape has NO crash symptom to grep for at all, live or in `debug.log`
+— purely silent numeric corruption, confirmed only via code-path
+tracing, not a live repro). One file (`hunluan.lpc`) had a variant
+shape worth noting: two local weighting constants were declared `int`
+right next to their own float-literal initializers
+(`int x,...; x=1.8;`) — fixed by changing their DECLARED type to
+`float` instead of `to_int()`-truncating at assignment, since
+truncating immediately would have flattened the author's intended
+asymmetric weighting (1.8 vs 1.5) down to 1:1 and silently changed
+game balance; only the final sink assignment (`kill = to_int(kill*x -
+kill1*y);`) needed the usual truncation. See `libs/sanguozhi/NOTES.md`
+for the full per-file breakdown. Not live-reproduced (reaching real
+national-warfare combat requires a settled role, troops, and a nation
+office — out of reach for a level-1 newbie in one session); fixed on
+this section's own "how to apply generally" pattern-match guidance and
+verified via code review, clean `lpcc`, and a clean formatter pass
+only — flagged honestly as such.
 
 ### 7.123 A bare `identifier = (mapping-or-array-literal);` statement at file scope, outside any function, is not a valid initializer on this driver — the compiler misparses it as an attempted global-variable redeclaration with no inferable type, hard-failing the whole file's compile with zero runtime symptom beyond "this daemon has no program"
 
@@ -11337,6 +11387,71 @@ Found via `discworld`'s §10.7 round-two deep-test, while single-file `lpcc`-che
 
 **How to apply generally**: grep any lib for a parameter (or local variable) literally named `nosave` or `static` — `\(\s*(string|int|mixed|object|float|mapping)\s+(nosave|static)\b` and the comma-separated equivalent — since both are `L_TYPE_MODIFIER` keywords on this driver regardless of position. `private`/`public`/`protected`/`nomask`/`varargs` are the other common LPC type-modifier keywords worth the same check if a similar "used as an ordinary identifier" report ever surfaces. This is a single-file, self-contained compile failure (unlike the `.c`→`.lpc` rename fallout documented elsewhere in this project) — no cross-file coordination needed to fix it once found, but it is very easy to miss on a large lib since a boot log full of hundreds of ordinary warnings buries one silent "this file/zone never compiled" line unless something specifically re-checks that exact file.
 
+### 7.149 A "promote the very first-ever admin" bootstrap, gated on a domain-membership count that can never become nonzero, silently re-fires on EVERY new registration forever instead of once — because nothing ever creates the domain being checked, and/or the check and the creator disagree on its exact case
+
+Found on `sanguozhi`'s §10.7 round-two deep-test. `secure/user/
+sw_body.lpc`'s `new_user_ready()` (Lima mudlib base) has: "auto-Admin
+the first wizard if there are no Admins" — `if
+(!sizeof(SECURE_D->query_domain_members("Admin"))) { ...
+unguarded(1, (: SECURE_D->add_domain_member("Admin", id, 1) :)); }`.
+`add_domain_member()` requires the named domain to already exist
+(returns an ignored error string otherwise) — but nothing anywhere in
+the whole mudlib ever calls `SECURE_D->create_domain("Admin")` (or any
+case of it), confirmed via a whole-tree grep, so the domain never gets
+created and the `add_domain_member()` call fails silently, every time,
+forever. Net effect: the "am I the very first admin?" check is true on
+literally every single account creation, not just the first — every
+new player sees a false "你自动成为 Admin" (you've automatically
+become Admin) promise that never actually takes effect, and
+`adminp()`/whatever privilege-tier gate depends on that domain's
+membership (here: `admtool`'s `[大神]`-marked super-admin commands,
+`money`/`user` admin tools, vote/news/channel moderation, `wizlist`)
+stays permanently unusable to real staff — even a hand-seeded "this
+account is the project's standing admin" wizard account (`wizardp()`
+true) was still `adminp()` **false**, confirmed live via `admtool`'s
+domain-creation command failing `Error: 权力不足` (insufficient
+privilege) despite the seed.
+
+**A second, compounding trap even after adding the missing
+`create_domain()` call**: if the domain-creation helper normalizes
+case (e.g. `lower_case()`s the name before storing, as this driver's
+own `valid_domain_name()`-then-lowercase idiom does, and as this
+codebase's own `admtool` wrapper independently already does before
+calling `SECURE_D->create_domain()`) while the bootstrap/check code
+uses a different literal case (`"Admin"` vs `"admin"`), the domain gets
+created under one key while every lookup checks a DIFFERENT key —
+still silently broken, just for a subtler reason than "never created
+at all". Both the domain's existence AND its exact case need auditing
+together, not just one or the other.
+
+**Fix**: make the bootstrap create the domain (tolerating "already
+exists") immediately before adding the first member to it, and audit
+every consumer of that domain name for consistent case — pick whatever
+case this codebase's OWN domain-creation helper actually normalizes to
+(check for an existing `lower_case()`/similar call in the create path)
+and use that same case everywhere, not the case a comment or the
+in-game message text happens to use. Verified live end-to-end on
+`sanguozhi`: a fresh account correctly became the real first Admin
+(persisted in the domain-membership save data), a SECOND account
+registered afterward correctly did NOT re-trigger the bootstrap
+(restoring the intended one-time semantics), and the hand-seeded
+project-standard admin account gained genuine root privilege for the
+first time in the installation's history once explicitly added to the
+now-real domain via the in-game admin tool.
+
+**How to apply generally**: on any Lima/TMI-2-lineage mudlib (or any
+codebase with a similar "auto-promote the first admin, gated on an
+empty group/domain/list" bootstrap), grep for the exact domain/group
+name string used in the gating check (`query_domain_members`/
+equivalent) and confirm (a) something actually calls the creator
+function for that exact name at some point in the codebase, and (b)
+every consumer uses the identical case/normalization the creator
+itself applies. A misleadingly-successful in-game message ("you are
+now Admin") is not evidence the underlying privilege grant actually
+worked — verify by exercising an actual privilege-gated action (here,
+`admtool`'s domain-creation command) as the account that was supposedly
+just promoted.
+
 ---
 
 ## 8. Login and registration flow bugs
@@ -11402,6 +11517,35 @@ never mark registration verified until a REAL Chinese name (e.g. 秦风)
 has been sent through the flow and accepted into the NEXT stage.** The
 bug shipped undetected in 21 libs precisely because testing stopped at
 "reaches the name prompt".
+
+**Same root cause, a different subsystem entirely: `sanguozhi`'s §10.7
+round-two deep-test (2026-08-27)**. `daemons/hzk2asc_d.lpc` — a
+Chinese-bitmap-font-to-ASCII-art renderer used to draw a decorative
+banner for the newbie 打工/智慧测试 (job-quiz) minigame every single
+new player hits — reconstructs a GBK "quadrant/weight" font-file byte
+offset directly from `s[j]`/`s[j+1]` (`rec =
+((s[j]-0xa1)*94+s[j+1]-0xa1)*size`), correct only when `s[j]` is a raw
+GBK lead/trail BYTE. On this driver those are full Unicode codepoints,
+so the offset math is nonsense and the loop also reads one character
+past the end of the string on its last iteration (silently returning
+`0` rather than erroring) — confirmed live via the literal fallback
+string this file returns when its own internal sanity check fails:
+"金丝雀====== BUG ======" printed directly in front of the player,
+mid-quiz. Distinct from every `is_chinese()`/name-length variant
+above in that it isn't a validation gate silently rejecting/accepting
+the wrong strings — it's a byte-oriented LOOKUP into a binary font
+file, so the fix isn't a codepoint-range check but would need a real
+Unicode→GBK reverse-encoding table this mudlib doesn't have anywhere;
+out of scope to build one. Minimal fix applied: return the plain
+string instead of the "BUG" placeholder in the failure branches
+(matching how the caller already handles a non-array return) — stops
+the literal "BUG" leak without pretending the underlying bitmap
+rendering works, which it fundamentally can't without that missing
+table. See `libs/sanguozhi/NOTES.md` for the full trace. Worth
+checking on sight for any OTHER lib shipping a similar "render Chinese
+text via a raw `HZK16`/`HZK24`-style font bitmap file" feature — the
+byte-vs-codepoint mismatch is the same as every other §8.1 instance,
+just applied to font-glyph lookup instead of name validation.
 
 ### 8.2 Flow shapes vary — read the callbacks, not the prompts
 
