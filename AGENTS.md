@@ -2499,6 +2499,25 @@ unaffected, only visible via `debug.log`.
   `slow_suicide()` account-deletion path and `adm/daemons/toptend.lpc`'s
   own separate `assure_file()` gap (see §7.11's `topten_save()` entry
   above for this exact lib).
+- **`xsfyssjb`'s §10.7 round-two deep functional test (2026-08-27):
+  identical shape/fix, same file (`adm/simul_efun/file.lpc`), same
+  missing `/log/nosave/` directory** (this lib is a documented "true
+  source sibling" of `fysjmb`/`wqfy` — see its own `meta.json`
+  `english_description` — so this is the same lineage's `call.lpc`
+  bug, not a coincidence). Live-triggered by the single most routine
+  admin debugging action there is — `call shenmu->add_money("coin",
+  5000)`, used to fund this pass's shop-purchase test — which threw the
+  uncaught `*Wrong permissions ... "No such file or directory"` from
+  `call.lpc`'s own `log_file("nosave/CALL_PLAYER", ...)` audit call
+  BEFORE the requested `call_other()` ever ran, meaning the admin
+  `call` command was silently a complete no-op against every player
+  target on this lib (confirmed: the target's inventory was unchanged
+  after the "successful"-looking error trace). Fixed identically
+  (`assure_file(LOG_DIR + file);` forward-declared before
+  `log_file()`). Verified live: the same `call` command completed
+  cleanly post-fix, actually mutated the target's inventory this time,
+  and `/log/nosave/CALL_PLAYER` was created on demand with the expected
+  audit line.
 
 ### 7.12 Shared message/wrapper argument bugs
 
@@ -9197,6 +9216,17 @@ exact byte-identical unguarded line in this lib's own
 message + "\n");`). Fixed with the identical `strsrch(message,
 "warning:") == -1` guard.
 
+**Confirmed instance, `xsfyssjb`'s §10.7 round-two deep functional test
+(2026-08-27):** the exact byte-identical unguarded line in this lib's
+own `adm/obj/master.lpc` (`if (this_player(1))
+efun::write("编译时段错误：" + message + "\n");`). Reproduced live: a
+fresh registration followed by ordinary `look`/`score`/`i` triggered
+several `编译时段错误：...warning: Unused local variable 'x'`-style
+dumps as `cmds/std/look.lpc`/`cmds/usr/inventory.lpc`/`std/char/
+master.lpc` were lazily compiled for the first time. Fixed with the
+identical `strsrch(message, "warning:") == -1` guard; verified live
+(same register→look→score→i sequence, zero warning dumps post-fix).
+
 ### 7.104 A new-account "must stay online 30 minutes or your account is revocable" policy's AUTOMATIC (netdead-timeout) cleanup path silently deletes the account with no confirmation, even though the INTERACTIVE quit path for the exact same policy requires an explicit y/n
 
 Found on `nte`'s §10.7 round-two deep functional test (nitan/ES2-family
@@ -12102,6 +12132,73 @@ and reran the same harness (`this_player()==0` reconfirmed via
 `log_file()`) — zero `present()` crashes afterward. Check any other
 `西游记`/`xyj*` sibling with a `present("fire", this_player())` grep
 hit before assuming a fresh find is isolated.
+
+### 7.155 A netdead-reconnect handler overwrites the resident player's `link_ob` temp with the fresh connection object, but — unlike the sibling "someone else is already playing this ID, kick them out" code path a few lines away in the same file — never `destruct()`s the STALE `link_ob` from the session that just went netdead, leaking one `/obj/login`-class object per disconnect-then-reconnect cycle for the life of the driver
+
+Found on `xsfyssjb`'s §10.7 round-two deep-test, during the mandated
+two-reconnect-cycle check for §7.150-style leaks. `adm/daemons/
+logind.lpc`'s `get_passwd()` branches three ways once a returning ID's
+password checks out: (a) no resident body exists → `make_body()` a
+fresh one; (b) a resident body exists and is genuinely still connected
+→ `confirm_relogin()`, which correctly does
+`old_link = user->query_temp("link_ob"); if (old_link) { exec(old_link,
+user); destruct(old_link); }` before installing the new one; (c) a
+resident body exists but is netdead → `reconnect(ob, user)`. Only the
+third path skipped the destruct:
+
+```lpc
+varargs void reconnect(object ob, object user, int silent)
+{
+        user->set_temp("link_ob", ob);
+        ob->set_temp("body_ob", user);
+        exec(user, ob);
+        ...
+```
+
+`ob` here is a brand-new `/obj/login` clone created for this connection
+attempt; `user->query_temp("link_ob")` at entry still points at the
+PREVIOUS session's now-orphaned login object (which stays alive
+holding `body_ob` pointing back at `user`, since nothing else ever
+destructs it either — `/obj/login::time_out()`'s own self-cleanup
+call_out explicitly no-ops via `if (objectp(query_temp("body_ob")))
+return;`). The old object is simply dropped on the floor, unreferenced
+but never destructed, on every single non-`quit` disconnect-then-
+reconnect a player makes for the rest of the driver's uptime. Milder
+than the classic §7.150 shape in this case only because this
+particular `/obj/login` carries no `heart_beat` (so it doesn't also
+spam stale `save()`s over real data) — but it is still a genuine,
+unbounded per-reconnect object leak with a directly analogous root
+cause (a stale hand-off reference dropped instead of destructed) and
+the identical fix already sitting a few lines away in the same file.
+Fix: mirror `confirm_relogin()`'s pattern inside `reconnect()` itself:
+
+```lpc
+varargs void reconnect(object ob, object user, int silent)
+{
+        object old_link;
+        old_link = user->query_temp("link_ob");
+        if( old_link && old_link != ob )
+                destruct(old_link);
+        user->set_temp("link_ob", ob);
+        ob->set_temp("body_ob", user);
+        exec(user, ob);
+        ...
+```
+
+Verified live: two consecutive abrupt-disconnect-then-reconnect cycles
+on the same character produced clean `重新连线完毕` reconnects with no
+`debug.log` errors from the added `destruct()`, and `find_player()`/
+`call`/`tell` continued to resolve the character correctly afterward
+(this driver keeps `set_living_name()` registration on the resident
+body object itself, not on the login shadow, so — unlike §7.152 — this
+particular lib's `find_player()` was never actually at risk here; only
+the leaked shadow object was the bug). Detection pattern: any
+`reconnect()`/"restore a netdead session" handler that reassigns a
+`link_ob`/`old_body`/similar hand-off temp should be diffed against its
+own lib's "kick out the currently-connected duplicate" code path (they
+almost always live within a few dozen lines of each other and one of
+the two usually gets the destruct right) — a mismatch between the two
+is the tell.
 
 ---
 
