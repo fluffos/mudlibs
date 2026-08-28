@@ -1,0 +1,168 @@
+/* Do not remove the headers from this file! see /USAGE for more info. */
+
+#include <combat_modules.h>
+
+private nosave int attack_speed = 1;
+
+int query_level();
+int query_weapon_class();
+
+void set_attack_speed(int speed)
+{
+   if(speed < 1)
+      return;
+
+   attack_speed = speed > MAX_ATTACK_SPEED ? MAX_ATTACK_SPEED : speed;
+}
+
+int query_attack_speed()
+{
+   return attack_speed;
+}
+
+int base_chance_to_be_hit()
+{
+   return 50;
+}
+
+int base_chance_to_hit(object target)
+{
+   return 50;
+}
+
+int base_disarm_chance(object target)
+{
+   return query_level();
+}
+
+int disarm_chance(object target)
+{
+   return base_disarm_chance(target) - target->base_disarm_chance(this_object());
+}
+
+int calculate_damage(object weapon, object target)
+{
+  /* This is the old code. Apparently, if you have a weapon (i.e. the "weapon"
+     pointer is non-zero, then you want to roll damage between the weapon
+     class and the level of the player. Otherwise, just add the player's own
+     weapon class with his level.
+
+   if (weapon)
+      return random(weapon->query_weapon_class() + query_level()) + 1;
+   else
+      return random(query_weapon_class() + query_level()) + 1;
+  */
+
+  // If the weapon wielded is not the same as the attacker
+
+  int dmg_done = 0;
+  mapping damage = weapon->query_dmg();
+  mixed* indices = keys(damage);
+  mixed* values = values(damage);
+  int size = this_object()->get_size();
+  int strength = this_object()->get_str();
+  int weapon_weight = weapon->get_weight();
+  int stam = this_object()->query_stamina();
+
+  // This loop runs once for each DAMAGE TYPE in the mapping
+  for (int i=0; i < sizeof(damage); i++)
+    {
+      // This loop runs once for each DIE in the DAMAGE TYPE
+      for (int j=0; j < values[i][0]; j++)
+	{
+	  // Roll the dice and add the damage to the total
+	  dmg_done += random(values[i][1]) + 1;
+	}
+      
+      // Add in the constant for this DAMAGE TYPE
+      dmg_done += values[i][2];
+    }
+
+  // Debugging code
+  /*
+    write("Weapon skill: " + weapon->query_weapon_skill() + "\n");
+    write(weapon->short() + ": " + dmg_done + "\n");
+  */
+
+  dmg_done = dmg_done * (size + strength) / 100;
+  if (stam == 0)
+    dmg_done = dmg_done / 2;
+
+  // Debugging code
+  /*
+    write("modified dmg: " + dmg_done + "\n");
+  */
+
+  return dmg_done;
+}
+
+int chance_to_hit(object weapon, object target)
+{
+  /* This is the old code of the function:
+
+   if(weapon == this_object())    // if(!weapon)
+      return (target->base_chance_to_be_hit() + 50);
+   else
+      return (target->base_chance_to_be_hit() + weapon->chance_to_hit(target)
+             + 50);
+  */
+
+  string appropriate_skill = weapon->query_weapon_skill();
+  int skill_level = this_object()->query_skills()[appropriate_skill];
+  int agi = this_object()->get_agi();
+  int dodge_level = target->query_skills()["dodge"];
+  int spd = target->get_spd();
+  int att_composite = (agi + 25) * skill_level;
+  int def_composite = (spd + 25) * dodge_level;
+  int att_size = this_object()->get_size();
+  int def_size = target->get_size();
+  int chance = (att_composite * 100) / (att_composite + def_composite + 1);
+  int stam = this_object()->wind_us(weapon->get_weight() / 100);
+  
+  // If no weapon (hence the weapon pointer points to the character)
+  // we still need to use up some stamina, and not based upon the 
+  // weight of the character.
+  this_object()->wind_us(1);
+
+  // Debugging code
+  /*
+    write("Chance: " + chance + "\n");
+  */
+
+  chance = (att_composite * 100 * def_size) /
+    ((att_composite * def_size) + (def_composite * att_size) + 1);
+
+  if (stam == 0)
+    chance = chance / 2;
+
+  // Debugging code
+  /*
+    write("modified chance: " + chance + "\n");
+  */
+
+  // Check for successful skill increase of weapon skill.
+  // 1% chance for check weapon skill increase.
+  if (random(5000) + 1 < this_object()->get_ntl())
+    {
+    
+      // There is a percent chance equal to the 100 - current weapon
+      // skill level for an increase at this point.
+      if (random(100) + 1 < 100 - skill_level)
+	{
+	  this_object()->increase_skill(appropriate_skill, 1);
+	  if (appropriate_skill != "hand to hand")
+	    write("You have become better with " + appropriate_skill +
+		  " weapons! (" +
+		  this_object()->query_skills()[appropriate_skill] +
+		  ")\n");
+	  else
+	    write("You have become better at " + appropriate_skill +
+		  " combat! (" +
+		  this_object()->query_skills()[appropriate_skill] +
+		  ")\n");
+	}
+    }
+
+  return chance;
+}
+

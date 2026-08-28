@@ -4206,17 +4206,45 @@ function` errors for anything the (never-loaded) global include would
 have defined. Fix: `find work/ -iname "global*.h"` and point the config
 line at whatever's actually there. (`sgzmudsgz`.)
 
-### 7.46 A mudlib built on the LIMA codebase demands driver compile flags this project's shared build doesn't have
+### 7.46 A mudlib built on the LIMA codebase demands driver compile flags this project's shared build doesn't have — RESOLVED, not out of scope
 
 LIMA-derived mudlibs ship their own `check_config.lpc` self-test that
 refuses to boot unless the driver was compiled with a specific flag set
-(`NO_LIGHT`, `NO_ADD_ACTION`, `NO_WIZARDS`, `ARRAY_RESERVED_WORD`,
-`undef OLD_ED`, `undef PACKAGE_UIDS`) — incompatible with every other
-mudlib in this collection, which need the opposite. Not fixable at the
-mudlib-source level; would require a second, separately-compiled driver
-binary just for LIMA libs. Out of scope for now — file as `noboot` with
-the specific flag list from the error message (useful if this is ever
-revisited). (`sgzmudsgz`, 三国志MUD.)
+(`NO_LIGHT`, `NO_ADD_ACTION`, `NO_WIZARDS`, `undef OLD_ED`,
+`undef PACKAGE_UIDS`, plus `ARRAY_RESERVED_WORD` in EITHER direction
+depending on the specific LIMA snapshot — see below) — incompatible with
+every other mudlib in this collection, which need the opposite. This was
+originally judged "not fixable at the mudlib-source level... out of
+scope for now" (case: `sgzmudsgz`, 三国志MUD, since purged as permanently
+out of scope for unrelated reasons) — **that verdict is stale.** A
+second, separately-compiled driver binary is exactly the fix, and it's
+cheap: a `git worktree add` off the same `~/src/fluffos` source tree
+(shares the object database, independent working files/build dir), a
+handful of `src/local_options` flag flips, `-DPACKAGE_UIDS=OFF` at
+`cmake` time, then `cmake --build ... --target driver lpcc`. First done
+for `libs/lima` (`~/src/fluffos-lima`) and reused/replicated for
+`libs/wilderness` (`~/src/fluffos-wilderness`, a SEPARATE worktree — see
+below for why one binary can't serve both). ~5-10 minutes one-time per
+distinct flag combination, and the worktree is reusable indefinitely
+afterward for that lib (and any future lib needing the identical
+combination). `scripts/lpcc_check.sh`'s `LPCC` path is now overridable
+via an `LPCC=` environment variable for exactly this case (was
+hardcoded to the shared default driver's `lpcc`).
+
+**`ARRAY_RESERVED_WORD` can point EITHER way depending on the LIMA
+snapshot's own vintage — check each `check_config.lpc` individually,
+don't assume the direction from a prior lib.** `libs/lima` (a
+2026-era `fluffos/lima` fork) requires it `#undef`ined;
+`libs/wilderness` (an independent, ~2000-era snapshot of the same base
+codebase) requires it `#define`d — confirmed by diffing both
+`check_config.lpc`s line-by-line, where this was the ONLY substantive
+difference in the whole flag list. These two requirements are mutually
+exclusive on one binary, so `libs/lima`'s existing `~/src/fluffos-lima`
+worktree could not be reused for `libs/wilderness` — a second, separate
+worktree was needed. If a THIRD LIMA-lineage archive ever shows up,
+check its own `check_config.lpc`'s `ARRAY_RESERVED_WORD` direction
+before assuming either existing worktree fits; reuse whichever one
+matches, or clone a third if neither does.
 
 ### 7.47 `origin()` returns a STRING on this driver, not the old int bitmask
 

@@ -1,0 +1,425 @@
+/* Do not remove the headers from this file! see /USAGE for more info. */
+
+/*
+** bodystats.c -- body statistics (characteristics)
+** 950813, Deathblade: created.
+** 000501, Kesrin: Modified for point-based creation.
+*/
+
+#include <classes.h>
+#include <hooks.h>
+inherit "/secure/modules/m_input.c";
+
+private inherit CLASS_STATMODS;
+
+varargs void modal_push(function input_func,
+                        mixed prompt,
+                        int secure,
+                        function return_to_func);
+varargs void modal_func(function input_func,
+                        mixed prompt,
+                        int secure);
+void modal_pop();
+mixed call_hooks(string, int);
+
+
+// Temp variables to hold the body attributes for creation.
+int str;
+int end;
+int agi;
+int spd;
+int ntl;
+int ins;
+int wit;
+int wil;
+int size;
+int edgecount;
+int bluntcount;
+int piercecount;
+int dodgecount;
+int handcount;
+
+void set_attributes(int strength, int endurance, int agility, int speed,
+		    int intelligence, int insight, int wit2, int willpower,
+		    int size2)
+{
+  str = strength;
+  end = endurance;
+  agi = agility;
+  spd = speed;
+  ntl = intelligence;
+  ins = insight;
+  wit = wit2;
+  wil = willpower;
+  size = size2;
+}
+
+nomask int get_str()
+{ return str; }
+
+nomask int get_end()
+{ return end; }
+
+nomask int get_agi()
+{ return agi; }
+
+nomask int get_spd()
+{ return spd; }
+
+nomask int get_ntl()
+{ return ntl; }
+
+nomask int get_ins()
+{ return ins; }
+
+nomask int get_wit()
+{ return wit; }
+
+nomask int get_wil()
+{ return wil; }
+
+nomask int get_size()
+{ return size; }
+
+/*
+** Character creation stuff
+**
+** query_roll_mods() may be overriden by subclasses to provide for changes
+**   in the statistics generation.
+**
+** init_stats() may only be called once (admins may call whenever)
+*/
+
+// Quick function to turn a string into integers (reads ASCII codes)
+protected nomask int int_parse(string input) {
+
+  int strsize = strlen(input);
+  int value;
+  int power;
+  for(int i = 0; i<strsize; i++) {
+    if((input[i]) != 58) {
+      power = 1;
+      for(int j = 0; j < (strsize - i - 1); j++)
+        power *= 10;
+      value += ((input[i] - 48) * power);
+    }
+  }
+
+  return value;
+}
+
+nomask void compute_skills() {
+
+  this_body()->set_skill("edged", (edgecount * 3));
+  this_body()->set_skill("blunt", (bluntcount * 3));
+  this_body()->set_skill("dodge", (dodgecount * 3));
+  this_body()->set_skill("pierce", (piercecount * 3));
+  this_body()->set_skill("hand to hand", (handcount * 3));
+}
+
+nomask void skill_test(int choice) {
+  switch(choice) {
+  case 2:
+    write("\nAfter dealing with the ruffian in your particular fashion, \n" +
+	  " you continue down the street.  A large boar, escaped from a\n" +
+	  "nearby pen, comes charging down the street right at you!\n" +
+	  "Do you:\n"+
+	  "A.) Leap on top of the boar, and ride him through town\n"+
+	  "B.) Face down the boar, and whack him across the nose with a stick\n" +
+	  "C.) Leap to the side into a nearby hay stack\n" +
+	  "D.) Grab your spear and make pig-on-a-stick\n" +
+	  "E.) Brace yourself, and stop the boar with a well-timed kick to the throat\n");
+    break;
+  case 3:
+    write("\nThe excitement from the episode with the boar has made you hungry.  Travelling\n" +
+	  " to a local tavern, you order:\n" +
+	  "A.) A filet mignon, thick and requiring lots of effort to cut through\n" +
+	  "B.) Meat.  Rare.  VERY rare.\n" +
+	  "C.) A heaping garden salad\n" +
+	  "D.) Shish-Kabobs\n" +
+	  "E.) Rice.  LOTS of rice.\n");
+    break;
+  case 4:
+    write("\nNow that dinner is done, you head home.  Once there, do you:\n" +
+	  "A.) Immediately see to the oiling and care of your weapons\n" +
+	  "B.) Beat your husband/wife, angry about having a bad day\n" +
+	  "C.) Go out back and practice walking the rope in the yard\n" +
+	  "D.) Challenge your kid to a game of darts\n" +
+	  "E.) Head into the back room and practice with your training dummy\n");
+    break;
+  case 5:
+    write("\nAh, the beginning of another day!  What's on the agenda for today?\n" +
+	  "A.) Oh, the usual...duels, swinging from chandeliers, all that...\n" +
+	  "B.) Back to sweat off the pounds at the forge, hammering away\n" +
+	  "C.) Time to don the cap & bells and return to the Lord's court...\n" +
+	  "D.) Spearfishing -- your favorite sport!\n" +
+	  "E.) It's been a while since you've been in a good bar brawl...\n");
+    break;
+  case 6:
+    write("\nAnd last...if you could have any weapon in the world, what would it be?\n" +
+	  "A.) A flaming longsword of fiery wrath\n" +
+	  "B.) A big, heavy hammer.  With spikes.\n" +
+	  "C.) Bolas are nice....\n" +
+	  "D.) A nice sharp dagger is all you need\n" +
+	  "E.) Weapons?  Bleh.  Who needs 'em?\n");
+    break;
+  }
+  return;
+}
+
+nomask varargs void do_skills(int count, string state) {
+  switch(lower_case(state)) {
+  case "init":
+    write("Calling init");
+    skill_test(count);
+    modal_push((: do_skills, (count + 1) :), "Your Choice? ");
+    break;
+  case "a":
+    edgecount += 1;
+    if(count < 6) {
+      skill_test(count+1);
+      modal_func((: do_skills, (count + 1) :), "Your Choice? ");
+    }
+    else {
+      compute_skills();
+      modal_pop();
+      return;
+    }
+    break;
+  case "b":
+    bluntcount += 1;
+    if(count < 6) {
+      skill_test(count + 1);
+      modal_func((: do_skills, (count + 1) :), "Your Choice? ");
+    }
+    else {
+      compute_skills();
+      modal_pop();
+      return;
+    }
+
+    break;
+  case "c":
+    dodgecount += 1;
+    if(count < 6) {
+      skill_test(count +1);
+      modal_func((: do_skills, (count + 1) :), "Your Choice? ");
+    }
+    else {
+      compute_skills();
+      modal_pop();
+      return;
+    }
+
+    break;
+  case "d":
+    piercecount += 1;
+    if(count < 6) {
+      skill_test(count+1);
+      modal_func((: do_skills, (count + 1) :), "Your Choice? ");
+    }
+    else {
+      compute_skills();
+      modal_pop();
+      return;
+    }
+    break;
+  case "e":
+    handcount += 1;
+    if(count < 6) {
+      skill_test(count+1);
+      modal_func((: do_skills, (count + 1) :), "Your Choice? ");
+    }
+    else {
+      compute_skills();
+      modal_pop();
+      return;
+    }
+    break;
+  default:
+    write("Please choose a valid selection.\n");
+    modal_func((: do_skills, (count) :), "Your Choice? ");
+    break;
+  }
+}
+
+nomask varargs void set_stats(string state, string arg) {
+
+  int value;
+
+  switch(state) {
+  case "init":
+    write("\nBefore we let you loose into the world, you must set \n" +
+	  " your character attributes.  You have a total of 400 points \n" +
+	  " to spend.  Each attribute (there are 8) must be between 30 "
+	  + "and 70.\n");
+    modal_push((: set_stats, "str" :), "Strength: ");
+    break;
+
+  case "str":
+    value = int_parse(arg);
+    if(value < 30 || value > 70) {
+      write("Please choose a number that is in bounds.\n");
+      modal_func((: set_stats, "str" :), "Strength: ");
+    }
+    else {
+      str = value;
+      write("You have " + (400 - str) + " points left.\n");
+      modal_func((: set_stats, "end" :), "Endurance: ");
+    }
+    break;
+
+  case "end":
+    value = int_parse(arg);
+    if(value < 30 || value > 70) {
+      write("Please choose a number that is in bounds.\n");
+      modal_func((: set_stats, "end" :), "Endurance: ");
+    }
+    else {
+      end = value;
+      write("You have " + (400-str-end) + " points left.\n");
+      modal_func((: set_stats, "agi" :), "Agility: ");
+    }
+    break;
+
+  case "agi":
+    value = int_parse(arg);
+    if(value < 30 || value > 70) {
+      write("Please choose a number that is in bounds.\n");
+      modal_func((: set_stats, "agi" :), "Agility: ");
+    }
+    else {
+      agi = value;
+      write("You have " + (400-str-end-agi) + " points left.\n");
+      modal_func((: set_stats, "spd" :), "Speed: ");
+    }
+    break;
+
+  case "spd":
+    value = int_parse(arg);
+    if(value < 30 || value > 70) {
+      write("Please choose a number that is in bounds.\n");
+      modal_func((: set_stats, "spd" :), "Speed: ");
+    }
+    else {
+      spd = value;
+      write("You have " + (400-str-end-agi-spd) + " points left.\n");
+      modal_func((: set_stats, "ntl" :), "Intellect: ");
+    }
+    break;
+
+  case "ntl":
+    value = int_parse(arg);
+    if(value < 30 || value > 70) {
+      write("Please choose a number that is in bounds.\n");
+      modal_func((: set_stats, "ntl" :), "Intellect: ");
+    }
+    else {
+      ntl = value;
+      write("You have " + (400-str-end-agi-spd-ntl) + " points left.\n");
+      modal_func((: set_stats, "ins" :), "Insight: ");
+    }
+    break;
+
+  case "ins":
+    value = int_parse(arg);
+    if(value < 30 || value > 70) {
+      write("Please choose a number that is in bounds.\n");
+      modal_func((: set_stats, "ins" :), "Insight: ");
+    }
+    else {
+      ins = value;
+      write("You have " + (400- str-end-agi-spd-ntl-ins) + " points left.\n");
+      modal_func((: set_stats, "wit" :), "Wits: ");
+    }
+    break;
+
+  case "wit":
+    value = int_parse(arg);
+    if(value < 30 || value > 70) {
+      write("Please choose a number that is in bounds.\n");
+      modal_func((: set_stats, "wit" :), "Wits: ");
+    }
+    else {
+      wit = value;
+      write("You have " + (400-str-end-agi-spd-ntl-ins-wit) + 
+	    " points left.\n");
+      modal_func((: set_stats, "wil" :), "Willpower: ");
+    }
+    break;
+
+  case "wil":
+    value = int_parse(arg);
+    if(value < 30 || value > 70) {
+      write("Please choose a number that is in bounds.\n");
+      modal_func((: set_stats, "wil" :), "Willpower ");
+    }
+    else {
+      wil = value;
+    }
+    
+    if((str+end+agi+spd+ntl+ins+wit+wil) != 400) {
+      write("Your attributes do not add to 400.  Try again, genius.\n");
+      modal_func((: set_stats, "str" :), "Strength: ");
+    }
+
+    else {
+      write("Now, you must choose your size.  Sizes range from 40 to 60 " +
+	    "keraf (50 keraf is about 5'8).\n");
+      modal_func((: set_stats, "size" :), "Size: ");
+    }
+    break;
+
+  case "size":
+    value = int_parse(arg);
+    if(value < 40 || value > 60) {
+      write("Please choose a value that is in range.\n");
+      modal_func((: set_stats, "size" :), "Size: ");
+    }
+    
+    else {
+      size = value;
+      modal_pop();
+      this_body()->set_max_health((size + end) / 4);
+      this_body()->set_max_stamina(end + wil);
+      write("\nNow we'll ask you a few short questions about your character.\n"+
+	    "  Answer how you think your character would -- there's no\n" +
+	    " wrong or right to these, unlike most tests!\n");
+      write("\nYou are walking down the street in your home town when you see\n" +
+	    " a local ruffian bullying a bread vendor.  Do you:\n"+
+	    "A.) Draw your rapier and threaten the ruffian\n" +
+	    "B.) Walk up behind the ruffian and whack him with your mug\n" +
+	    "C.) Leave him alone -- it's his business, not yours!\n" +
+	    "D.) Throw a big rock at the ruffian's head\n"
+	    "E.) Grab the ruffian's arm and pin it behind his back\n");
+      modal_push((: do_skills, 1 :), "Your Choice? ");
+      return;
+    }
+    break;
+  }
+}
+
+class stat_roll_mods query_roll_mods()
+{
+    // should be overloaded
+    return new(class stat_roll_mods);
+}
+
+//:FUNCTION init_stats
+//Rolls the stats for the first time, based on the proper racial adjustments.
+//Admins can call this to reinitialize a player's stats (for example, in the
+//case of abysmally horrific (near minimum) rolls.
+nomask void init_stats()
+{
+
+  set_stats("init");
+
+}
+/*
+** Object inheriting this module should be sure to call this.
+*/
+void create()
+{
+
+}
+

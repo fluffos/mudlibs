@@ -9,7 +9,7 @@
 # Usage: lpcc_check.sh libs/<slug>/config.fluffos libs/<slug>/work [pattern]
 set -uo pipefail
 
-LPCC=~/src/fluffos/build-debug/src/lpcc
+LPCC="${LPCC:-$HOME/src/fluffos/build-debug/src/lpcc}"
 CONFIG="$1"
 WORK="$2"
 
