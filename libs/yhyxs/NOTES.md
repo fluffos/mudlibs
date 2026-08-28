@@ -846,3 +846,21 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## §7.125 sibling-sweep fix: premature `set("registered", 1)` defeats the registration gate (2026-08-28)
+
+Flagged in AGENTS.md §7.125 as a sibling worth checking (originally
+found on `zhyx`, same yh2003/ES2 lineage). Confirmed byte-identical:
+`adm/daemons/logind.lpc`'s `enter_world()` unconditionally ran
+`user->set("registered", 1); //user->set("born",1);` right after
+handing out starting clothing, on every login — permanently
+short-circuiting the register-room's exit gate and channeld's
+registration check from a character's first-ever login onward, since
+`d/register/npc/shuisheng.lpc`'s `do_decide()` (the correct, sole
+place this flag should be set, confirmed present and correct in this
+lib too) could never matter — the flag was already permanently `1`
+before the player ever got a chance to register. Fixed by deleting the
+premature line in `enter_world()`. Verified via a clean native driver
+boot only (not an independent live walk-out-of-the-room reproduction
+on this specific lib — the bug shape and remedy are a verbatim port of
+an already live-verified fix from the shared-lineage sibling `zhyx`).
