@@ -31,3 +31,97 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-08-27，round two, AGENTS.md §10.7）
+
+一次连续的真人视角游玩会话，用真实的原始 socket 脚本（非 tmux_mud.sh）
+完成：注册中文角色苏晓雪(tstsnow) → 乘马车赶到华阳 → 徒步穿越 5+
+个房间抵达浣花剑庐 → `ask jia ding about 拜师` 由家丁带路入庐 →
+`bai li` 拜虎组组长李子木为师，正式成为"浣花剑派第六代弟子、虎组
+组员" → `learn li force` 学艺成功 → 前往少林寺"穷武房"(kfroom_5)
+用木人练功桩安全对练 11 轮，最终因反复测试而阵亡成"鬼魂" → 干净
+`quit` 后 grep debug.log（全程无任何 error）→ driver 完整重启后
+reconnect，确认角色属性、门派归属、师父、已学技能、位置全部正确
+持久化。管理员账号也按 NOTES 记录的 fluffos/Mud@2026 重新走完整注册
+流程验证（此前的 WASM 阶段存档并未留存在这份 work/ 树里），确认
+"目前权限：(admin)"，落地在巫师公会。
+
+发现并修复了 6 类程序性 bug（按 AGENTS.md 标准清单逐项排查后确认）：
+
+1. **注册流程 debug 遗留 `printf("%O\n", ob)` 泄漏内部对象引用**
+   （`adm/daemons/logind.lpc`/`logind1.lpc`/`logind2.lpc` 的
+   `get_name()`，仅 `logind.lpc` 是 `LOGIN_D` 实际生效的档案，另两份
+   是历史快照但一并修正保持一致）：每一个新注册玩家在设定中文名字
+   之后，正式提示"请设定您的临时密码"之前，都会先看到一行裸露的
+   `/clone/user/login#N` 内部对象路径。已删除该行调试语句。
+
+2. **`inherit/skill/skill.lpc` 基类 `valid_learn()` 声明 0 参数，
+   但全库 93/94 个技能档案（含 `kungfu/skill/force.lpc`）都用 1 参数
+   `valid_learn(object me)` 覆写**：`force.lpc` 是唯一残留 0 参数版本
+   的档案。这个不一致触发驱动的"Number of arguments... disagrees
+   with previous definition"编译警告，且该警告会直接印在**触发首次
+   编译的那个玩家自己的屏幕上**（`learn <师父> <功夫>` 第一次真正
+   延迟编译某个技能档案时）。已将基类和 `force.lpc` 都统一成 1 参数
+   形式；driver 重启后确认警告消失。
+
+3. **AGENTS.md §7.11**：`adm/simul_efun/file.lpc` 的 `log_file()`
+   没有调用同档案里现成的 `assure_file()`，本库从未随档发过
+   `log/nosave/` 目录。已加上 `assure_file(LOG_DIR + file);`（连同
+   一个前向声明，因为 `assure_file()` 定义在 `log_file()` 之后）。
+   详见 AGENTS.md §7.11 新增条目。
+
+4. **AGENTS.md §7.112 新实例**：`d/shaolin/kfroom_5.lpc`/`kfroom_6.lpc`
+   （少林"穷武房"11 轮木人机关阵，每轮实发 `combat_exp`/`potential`）
+   的 `init()` 完全没有防重入保护；`kfroom_1`~`4` 虽然有一次性入场
+   旗标但没有"本轮正在进行中"的防护。已用真实的断线-重连复现实验
+   （非清洁 `quit`，模拟真实掉线）确认修复前会在重连时叠加第二条
+   完整的机关阵调用链（重复触发"机关开动了"横幅），修复后不再重复。
+   6 个档案均已修正并用 `update` 热编译验证。详见 AGENTS.md §7.112
+   新增段落。
+
+5. **`feature/dealer.lpc` 的 `do_list()` 用整个键数组当映射下标**
+   （`j = tmp[goods];` 应为 `j = tmp[goods[i]];`），导致**全库所有
+   商人的 `list` 指令永远把实际持有的商品数量显示成 0**（在华阳
+   打铁铺·刘铁匠现场确认："0件布衣" → 修复后 "1件布衣"，实际持有
+   数量全程未变）。这是一处全新的、AGENTS.md 尚未收录的 bug 形状，
+   已作为 §7.151 新增条目登记。
+
+6. **AGENTS.md §7.86 新实例**：`d/kunming/dangpu.lpc`（当铺房间）和
+   `d/kunming/obj/dpm.lpc`（当铺柜台）都是 `inherit SR_DANGPU;` 之后
+   又多余调用一次 `replace_program(SR_DANGPU);`——本库先前的
+   `ROOM`/`BULLETIN_BOARD` 专项扫描没有覆盖这个宏，属于漏网实例。
+   已删除两处多余调用；`dangpu.lpc`（真正会被载入的房间）经
+   `update` 验证编译干净。`dpm.lpc` 经全库搜索确认是**从未被任何地方
+   引用的死代码**，且本身还带一个与这次修复无关的既存编译错误
+   （`set_name()` 未定义，因为 `SR_DANGPU` 的祖先链里没有提供这个
+   函数的物品/角色基类）——因为不可达且需要猜测原作者想再继承哪个
+   基类，此项按"存疑不动"处理，只作为观察记录，未修复。
+
+7. **AGENTS.md §7.152（新增条目）**：`clone/user/user.lpc` 的
+   `reconnect()` 会正确恢复 `heart_beat`、清除 `netdead` 旗标，但
+   **从未重新调用 `set_living_name()`**（不同于建号时 `enable_player()`
+   会做的事）。用两个 socket 的隔离复现实验确认：任何玩家只要有过
+   一次掉线重连（哪怕只隔 1.5 秒），在该次连线剩余时间内，
+   `find_player()`/`find_living()` 驱动的所有功能都会找不到这个人——
+   已现场验证 `tell <名字> ...`（真实玩家指令）和管理员 `call
+   <名字>->...`（调试工具）两者都会报错"没有这个人"/"找不到指定的
+   物件"，即使该角色明显在线、可以正常收发指令。已在 `reconnect()`
+   开头补上与 `enable_player()` 相同的 `set_living_name()` 调用；
+   干净重启后重新做同样的断线-重连复现实验，`tell` 恢复正常。**排查
+   过程中的一个误报**：清洁 `quit` 后立刻（10 秒内）重新登录同一个
+   ID 会被本库自己的防灌水机制拒绝（`get_passwd()` 里"你距上次退出
+   仅 N tick"的检查，`adm/daemons/logind.lpc` 明确写出的既有设计），
+   一开始误以为是另一个 bug，等够 10 秒以上再测就确认这是正常行为。
+
+**结算与清理**：测试角色（tstsnow、以及排查过程中另建的 freshzz）
+的存档和相关一次性 daemon 运行时状态（`emaild.o`、`data/SaveRoom/`）
+已在提交前删除，只保留播种的 fluffos 管理员存档。`grep -h '"port"'`
+端口唯一性检查、LPC 格式化工具（16 个改动档案，0 written/0 errors，
+说明本次改动本身已符合格式规范）均已过。
+
+**留给后续测试 `xxcqii2`（同属小雪初晴系列，很可能共享同一份引擎
+代码）的排查清单**：以上 7 类里第 3～5、7 项（`log_file()`/
+`assure_file()`、`kfroom_*` 防重入、`dealer.lpc` 的 `do_list()` 下标、
+`reconnect()` 缺 `set_living_name()`）都基于共享 mixin/feature 档案，
+如果 `xxcqii2` 复用了同一份代码，大概率会有同样的问题，建议优先
+核对这几个档案。

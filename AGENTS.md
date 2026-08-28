@@ -2267,6 +2267,22 @@ unaffected, only visible via `debug.log`.
   unrelated global permanently unset, and the resulting second symptom
   (here, a recurring cron crash) can be mistaken for an unrelated bug if
   you don't trace it back to the same root init failure.
+- **Confirmed again on `xxcqii`'s §10.7 round-two deep-test**:
+  `adm/simul_efun/file.lpc`'s `log_file()` was a bare `write_file(LOG_DIR
+  + file, text)` with the file's own `assure_file()` helper defined two
+  functions below, unused for this purpose (the exact "guard sitting
+  right next to itself, unused" shape already documented above as a
+  near-universal copy-paste idiom). Live-triggered via the admin `call`
+  command's own `log_file("nosave/CALL_PLAYER", ...)` audit line
+  (`*Wrong permissions for opening file /log/nosave/CALL_PLAYER for
+  append. "No such file or directory"`) — this lib's `/log/nosave/`
+  directory was never shipped, confirmed absent in the raw archive too
+  (not a conversion-loss). Fixed with `assure_file(LOG_DIR + file);`
+  immediately before the `write_file()` call, plus a forward
+  declaration (`void assure_file(string file);`) since `assure_file()`
+  is defined later in the same file. Verified live: the identical
+  `call` audit-log write that previously threw now succeeds, and
+  `log/nosave/` is auto-created on demand.
 
 ### 7.12 Shared message/wrapper argument bugs
 
@@ -6569,6 +6585,26 @@ real file) after the redundant call was removed -- cosmetic only, the
 save/restore mapping data is unaffected and `restore()` doesn't
 validate that header strictly.
 
+**New confirmed instance, different macro (not `BULLETIN_BOARD`/`ROOM`):
+`xxcqii`'s §10.7 round-two deep-test.** `d/kunming/dangpu.lpc` (a
+pawnshop room) and its counter item `d/kunming/obj/dpm.lpc` both had
+`inherit SR_DANGPU;` (`#define SR_DANGPU "/inherit/Save/dangpu"`, a
+dealer/save mixin, distinct from this lib's own already-swept
+`BULLETIN_BOARD`/`ROOM` instances) immediately followed by a redundant
+`replace_program(SR_DANGPU);` in `create()` — missed by this lib's own
+earlier corpus-wide `ROOM`/`BULLETIN_BOARD` sweeps since neither
+targeted this macro. Fixed by deleting both redundant calls (kept
+`inherit`). `dangpu.lpc` (the live, reachable room) verified via
+`update` hot-reload: clean recompile. `dpm.lpc` turned out to be
+dead/unreferenced code (confirmed via a whole-tree grep for any
+`new()`/path reference to it — none found) carrying its own unrelated,
+pre-existing compile error (`set_name()` undefined, since none of
+`SR_DANGPU`'s own ancestry provides it) that predates and is
+independent of the `replace_program()` fix — left as an observation in
+`libs/xxcqii/NOTES.md` rather than "fixed", since nothing ever loads
+this file and correcting its inheritance would require guessing which
+item/NPC base class it was originally meant to also carry.
+
 ---
 
 ### 7.87 A save file exceeding the driver's configured "maximum read file size" makes `restore()` THROW instead of failing gracefully, and the throw happens during a lazy first-load with no error ever reaching `debug.log` — corpus-wide sweep completed, 165 libs fixed total
@@ -9593,6 +9629,32 @@ FluffOS re-broadcasts `init()` to every object in a room whenever `enable_comman
 
 Verification: `lpcc --batch` per-lib targeted compiles (just the touched objects, not a full-corpus sweep) for all 39 libs, plus one live driver boot (`zitengzhan`, clean boot + accepted a telnet connection, killed by exact PID after). `nt1` was `lpcc`-only per its standing §7.110 OOM caution, and passed clean. One lib (`kxkj1`) showed a flaky, non-reproducible `lpcc` eval-cost trip on unrelated preload objects (`adm/obj/master`, `adm/daemons/race/human`) across repeated runs, including on the UNCHANGED original file — confirmed as the documented `lpcc` batch-mode artifact (see lesson (4) above), not a regression from this fix. Committed and pushed per-lib (`git add` scoped to each lib's own touched files, never a bare `-u`, since this session's repo already carried unrelated pre-existing uncommitted save-state drift on `hhsj` from before this task started, which was left untouched); each lib's `NOTES.md` got a short addendum. Combined with the original ~270-lib two-wave sweep (some overlap in the newly-touched 39 with libs already partly fixed there), this brings the corpus total for this bug class to roughly **300+ libs with at least one file fixed**. Given this is now the SECOND time independent round-four testing has found a residual gap after a sweep was declared "final," a third occurrence should probably be treated as a sign this bug's true fix belongs in a shared base class (e.g. a `death_stage()` mixin all these NPCs inherit) rather than a per-file patch repeated indefinitely — flagging that idea here for whoever hits this next, not acting on it now since it would mean rewriting working per-file logic across an already-large fixed set for a purely structural win.
 
+**New confirmed instance, non-death-themed variant (matching lesson
+(5) above): `xxcqii`'s §10.7 round-two deep-test.** `d/shaolin/kfroom_5.lpc`/
+`kfroom_6.lpc` (a training-hall "机关阵" gauntlet: entering unconditionally
+schedules an 11-wave `combat_go()` chain via `init()`, granting real
+`combat_exp`/`potential` per wave) had ZERO re-entry guard at all —
+worse than the usual death_stage shape, since here even a same-room
+re-`init()` from an ordinary reconnect (not just a duplicate-tracking
+race) would stack a second full reward chain. Live-confirmed with an
+isolated netdead-then-reconnect repro (abrupt socket close mid-gauntlet,
+reconnect ~1.5s later): before the fix, "一走进始武房...机关开动了"
+(the wave-1 announcement) fired again on reconnect; after adding a
+`me`+`environment(me)` temp-flag guard (set before scheduling, cleared
+at both the success branch and the "player fled" early-return branch)
+mirroring this section's established fix shape, the identical repro
+produced no duplicate wave-1 announcement — the original chain simply
+continued uninterrupted. Sibling `kfroom_1`–`4` in the same directory
+had a *different*, narrower gap: they already gate `combat_go()` behind
+a legitimate one-time entry flag set by the room's own teacher NPC
+(`kungfu/class/shaolin/tianpeng.lpc`), but that SAME flag being still
+`1` while a wave is mid-flight means a reconnect during an active
+gauntlet run (not merely standing in the room) would still restart a
+second chain — fixed with an additional `_running` sub-flag scoped
+just to "chain currently executing," cleared at the same two exit
+points. All 6 files verified via `update` hot-reload (clean recompile).
+Not yet checked on sibling `xxcqii2`.
+
 ### 7.113 A netdead reconnect never restores `heart_beat`, so any player who has EVER had one dropped connection can silently never heal past the reincarnation threshold and dies permanently — a crash-free, corpus-hidden soft-lock
 
 **Found via `shzs`'s round-three §10.7 deep test**, by actually pushing a PK-combat-then-death-then-reincarnation playthrough further than earlier rounds had reached. The architecture split responsible: `obj/user.lpc` typically defines TWO reconnect-adjacent applies — a `net_dead()` (fired when the connection drops) that calls `set_heart_beat(0)` to stop the now-disconnected body from ticking, and a `reconnect()` (fired when the SAME character logs back in) that is supposed to restore it. In `shzs`, the `obj/user.lpc` copy of `reconnect()` has the textbook-correct shape (restores heart_beat) — but it's **dead code**, never actually invoked; the REAL reconnect path is `adm/daemons/logind.lpc`'s own `reconnect()`, which never restores `heart_beat` at all.
@@ -11528,6 +11590,88 @@ whatever it's about to discard. A throwaway object of a "living" class
 in this kind of engine is never inert by default — it inherits
 whatever autonomous behavior (heartbeats, `reset()`, `init()`
 side-effects) the class grants everything, playable or not.
+
+### 7.151 A shared dealer/vendor `do_list()` tallies each stocked item's quantity into a mapping keyed by filename, then prints the count by indexing that mapping with the whole KEY ARRAY instead of the loop's current key — every shop's inventory listing shows a quantity of 0 for every physically-carried item, forever
+
+Found on `xxcqii`'s §10.7 round-two deep-test, `feature/dealer.lpc`'s
+`do_list()` (the `buy`/`sell`/`list`/`value` shop mixin inherited by
+39 vendor NPCs across the lib, confirmed live at 华阳打铁铺/刘铁匠).
+The function correctly tallies same-item counts into a mapping
+(`tmp[str]++` keyed by each carried item's `base_name()`), then loops
+over `goods = keys(tmp)` to print each line — but the print loop reads
+the count back with `j = tmp[goods];` instead of `j = tmp[goods[i]];`:
+indexing a mapping with the entire array of keys (rather than the
+current element) never matches any real key, so `j` silently evaluates
+to `0` on every iteration. Symptom in play: `list` at any shop shows
+every stocked item with a `%d` quantity prefix, and that number is
+always `0` regardless of true stock (confirmed live: 布衣/cloth showed
+"0件布衣" before the fix, "1件布衣" after, with the actual carried
+count unchanged throughout) — cosmetic only for items sold via the
+separate `vendor_goods` template array (those print with no count
+field at all and were unaffected), but wrong for every item whose
+stock is tracked by the vendor's own `all_inventory()`. Fix: `j =
+tmp[goods[i]];`. Detect: grep any `do_list()`/inventory-tally loop for
+`mapping[array_variable]` (an array literal or a `keys()`-derived
+array used directly as a mapping subscript, instead of `array[i]`
+inside its own enumerating `for` loop) — the driver accepts this
+silently (an array is a legal, just-never-matching, mapping key) so it
+produces no compile error and no runtime error, only a permanently
+wrong displayed value. Verified live via `update` hot-reload + a
+fresh `list` command pre/post-fix on the same running vendor object.
+Not yet checked on sibling `xxcqii2` (same 小雪初晴 series, likely
+shares this exact `feature/dealer.lpc` file) — flagged for whoever
+tests that lib next.
+
+### 7.152 A player body's `reconnect()` restores `heart_beat`/clears the netdead flag but never re-registers `set_living_name()` the way the initial-login `enable_player()` path does — so `find_player()`/`find_living()`-driven features (`tell`, admin `call`, presumably PK-by-name and mail delivery) silently can't find ANY player for the rest of that session after their very first dropped connection
+
+Found on `xxcqii`'s §10.7 round-two deep-test. `clone/user/user.lpc`
+defines two disconnect-adjacent applies: `net_dead()` (stops the
+heartbeat, marks `netdead`, schedules a delayed auto-`quit`) and
+`reconnect()` (called by `LOGIN_D`'s own `reconnect(ob, user)` once a
+returning connection is matched to an existing netdead body via
+`exec(user, ob)`). `reconnect()` correctly does `enable_commands()`,
+`set_heart_beat(1)`, and clears the `netdead` temp flag — but unlike
+`feature/command.lpc`'s `enable_player()` (called once, at original
+character creation, which does `set_living_name(query("id"))` before
+its own `enable_commands()`), `reconnect()` never re-registers the
+living name. Confirmed live with an isolated two-socket repro: log in
+as a real character, abruptly close the socket (simulating a dropped
+connection, not a clean `quit`), reconnect within ~1.5s as the same
+character (exercises `reconnect()`, confirmed via `ulist` showing the
+same persistent object and `ulist`'s raw `ok->query("id")` matching),
+then from a second, admin connection: `tell <name> hi` fails with
+"没有这个人....。" and `call <name>->query(...)` fails with "找不到
+指定的物件" — even though the target object is definitively
+interactive, correctly named, and receiving/echoing normal commands in
+the same instant. The SAME character, after a full clean `quit` and a
+fresh login past this lib's own 10-second anti-flood re-login cooldown
+(a real, intentional, unrelated feature — see `get_passwd()`'s "你距
+上次退出仅 N tick" check — do not mistake a too-fast automated test
+hitting THIS gate for a second bug, as an early pass in this session's
+own testing briefly did), works perfectly, confirming `enable_player()`'s
+one-time registration is sound and the gap is specific to the
+reconnect path. Fix: prepend `reconnect()` with the same
+`if (stringp(query("id"))) set_living_name(query("id")); else
+set_living_name(query("name"));` that `enable_player()` already uses.
+Verified live: after the fix (and a fresh driver boot to clear any
+per-boot function-consistency caching), the identical abrupt-
+disconnect-then-reconnect repro left `tell <name> hi` working
+correctly. This is a distinct root cause from §7.131 (which is about a
+name NEVER being registered at all) — here the FIRST registration is
+correct and the gap is specifically the reconnect path's own omission
+of the same step, a one-line, easy-to-miss asymmetry between two
+call sites that are supposed to leave an object in the same state.
+**How to apply generally**: in any mudlib with a distinct `reconnect()`
+apply (as opposed to always routing back through the same "enable a
+player" helper used at creation), diff the two functions for every
+side effect the creation path performs — `set_living_name()` is the
+one most likely to be silently dropped, since a missing heartbeat or
+missing `enable_commands()` would be immediately, loudly obvious
+(the player couldn't act at all), while a missing living-name
+registration produces no player-visible symptom whatsoever unless
+someone specifically tries to reference that character by name from
+elsewhere. Not yet checked on sibling `xxcqii2` — flagged for whoever
+tests that lib next.
 
 ---
 
