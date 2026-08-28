@@ -11454,6 +11454,83 @@ just promoted.
 
 ---
 
+### 7.150 A login handler creates a throwaway `LIVING`/player clone purely to verify a password, then discards the reference without destructing it when an already-resident (link-dead) copy is reused instead — since `LIVING`'s own `create()` unconditionally starts every clone's `heart_beat()`, the orphan keeps ticking forever and, once its own "autosave every N ticks" counter passes threshold, spams `save_player()` with a stale, frozen snapshot over the real character's save file on every single subsequent heartbeat — permanently and repeatedly reverting real playtime with zero error, crash, or warning
+
+Found on `merentha`'s §10.7 round-two deep-test, `std/login/login.lpc`.
+`check_password(passwd)` does `__User=new(USER);
+catch(__User->load_player(__Name));` purely to `restore_object()` the
+save file and compare the password hash — a completely standard
+"peek at the file before you know whether to trust it" pattern. The
+bug is what happens to that clone next: in `query_password()` and
+`query_override()`, whenever `find_player(player_name(__Name))`
+finds an EXISTING in-memory copy of the character (the ordinary,
+extremely common "reconnecting to a link-dead body after a dropped
+connection" path — not an edge case, the normal case for any player
+whose client ever disconnects without typing `quit`), the code does
+`__User=find_player(...)`, silently overwriting the local variable
+that held the just-created verification clone. The clone itself is
+never destructed. Since `std/inheritables/living.lpc`'s `create()`
+unconditionally calls `set_heart_beat(1);` for every single clone of
+that class — with no distinction between "a real playable character"
+and "a scratch object I made to check one field" — the orphaned clone
+keeps ticking indefinitely. `std/inheritables/user.lpc`'s own
+`heart_beat()` does `if(autosave>25) save_player(query_name());
+autosave++;` — once the counter passes 25 (roughly 25 real seconds on
+this driver's 1000ms heartbeat), it saves on **every subsequent tick,
+forever**, using whatever fields `restore_object()` populated at the
+single moment the orphan was created and never again — a bug-for-bug
+identical `__Name`, so it silently overwrites the REAL, currently
+progressing character's save file with an ever-more-stale frozen copy,
+once per second, for as long as the driver runs. A single character
+who reconnects (uncleanly) more than a handful of times accumulates
+one such orphan per reconnect, all racing to stomp the same file;
+verified live via `objects()`: after normal play spanning several
+raw-socket reconnects, six independent `/std/inheritables/user`
+clones all shared the same character name, five of them ticking with
+heart_beat active and zero relationship to any interactive session.
+Symptom in play: a character's level, class, gold, and skills that
+were clearly, visibly earned in one session (confirmed via `score`
+mid-session) are silently gone — reverted to an earlier, sometimes
+much earlier, snapshot — the next time anyone looks, with no error
+ever printed anywhere, including `debug.log`. Distinguish from an
+ordinary "autosave just hasn't run yet" report: here the *correct*
+save (from a clean `quit`, which itself works fine and does correctly
+destruct the real object) gets overwritten again within about a
+second by a still-ticking orphan, so the corruption is continuous and
+un-outrunnable by waiting longer, not a one-time near-miss.
+
+**Fix**: destruct the orphaned verification clone at every point the
+code is about to discard it in favor of a different object — i.e.,
+immediately before each `__User=find_player(...)` reassignment:
+`if(__User && __User!=find_player(player_name(__Name)))
+destruct(__User);` — plus, for defense in depth, a `net_dead()` apply
+on the login handler itself that destructs `__User` (if set) should
+the connection drop while still mid-password-prompt, a case the two
+call-site fixes alone don't cover. Verified live: before the fix,
+three consecutive unclean (raw-socket) reconnects to the same
+character produced three additional ticking orphans (`objects()` count
+climbing 1→2→3→4 for that name); after the fix, the identical
+reconnect sequence repeated four times in a row left exactly one
+object for that name throughout, and letting real wall-clock time pass
+the ~25-tick autosave threshold (with two more unclean reconnects
+mixed in) confirmed the save file kept reflecting genuine, current
+character state rather than reverting.
+
+**How to apply generally**: any codebase where (a) `LIVING`'s own
+`create()` starts a heartbeat unconditionally for every clone
+regardless of purpose, AND (b) a login/auth handler clones that same
+class just to inspect saved fields (a password hash, a ban flag,
+anything read via `restore_object()`) before deciding whether to keep
+using that particular object — grep the login/auth path for
+`new(<player-class>)` followed by a later conditional reassignment of
+the same variable, and confirm every such reassignment destructs
+whatever it's about to discard. A throwaway object of a "living" class
+in this kind of engine is never inert by default — it inherits
+whatever autonomous behavior (heartbeats, `reset()`, `init()`
+side-effects) the class grants everything, playable or not.
+
+---
+
 ## 8. Login and registration flow bugs
 
 Registration is where restoration succeeds or fails: it exercises the

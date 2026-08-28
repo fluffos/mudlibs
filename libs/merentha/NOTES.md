@@ -217,3 +217,235 @@ cosmetic `__BORDER_LINE__` display quirk already documented above,
 confirming consistent behavior between native and WASM). `quit` wasn't
 recaptured distinctly in this transcript but is already verified clean
 under native testing above.
+
+## Deep functional test (round two), 2026-08-27
+
+Full continuous playthrough per AGENTS.md §10.7, against
+`~/src/fluffos/build-debug/src/driver` booted from `libs/merentha/`.
+Read `doc/news/welcome`, `doc/CLASSES`, `doc/SKILLS`, and the in-game
+`help` menu first; the intended path is: register -> land in the
+race-selection room -> `become <gender> <race>` -> an optional
+personality-quiz room (`begin`, five multiple-choice questions that
+nudge starting skills) -> Cabeiri square (guild halls, a supply shop).
+Registered a real English-named test character (`Corwin`, later also
+`Aldric`/`Brannor`/`Delwyn` as throwaways) via a raw Python socket
+script; `look`/`score`/`i` checked after registration, after
+`become`, after guild sign-up, after combat, and after every
+quit/reconnect cycle.
+
+### SEVERE bug found and fixed: orphaned password-check clone leaks a
+live heartbeat that silently corrupts every character's save data on
+reconnect
+
+New AGENTS.md entry **§7.150** (full writeup there). Summary:
+`std/login/login.lpc`'s `check_password()` clones a throwaway
+`new(USER)` object purely to `restore_object()` the save file and
+compare the password hash. Whenever a player reconnects to an
+already-resident (link-dead) copy of their character -- the completely
+ordinary case of a client disconnecting without typing `quit` -- both
+`query_password()` and `query_override()` reassign the local `__User`
+variable to the found live object, silently discarding the reference
+to the just-created verification clone **without destructing it**.
+`std/inheritables/living.lpc`'s `create()` unconditionally does
+`set_heart_beat(1);` for every clone of the class with no "is this a
+real playable character or a scratch object" distinction, so the
+orphan keeps ticking forever. `std/inheritables/user.lpc`'s
+`heart_beat()` does `if(autosave>25) save_player(query_name());
+autosave++;` -- once the tick counter passes 25 (~25 real seconds),
+the orphan saves **every subsequent tick, forever**, using the single,
+increasingly-stale snapshot it loaded at creation time, overwriting
+the real, currently-live character's save file under the identical
+name. Every unclean reconnect (a dropped connection, the normal
+failure mode for any real client) leaks one more such orphan, all
+racing to stomp the same file.
+
+Caught live, not by code review: repeated `score`/`sign up`/combat
+progress on a real test character (level 1 "child" -> fighter,
+level 2, after killing the `helper` NPC) visibly vanished from the
+save file within about a second of a clean `quit` -- the quit's own
+save was correct, but a still-ticking orphan from several reconnects
+earlier immediately overwrote it. Confirmed the exact mechanism via
+the admin account's `eval` command and the `objects()`/
+`query_heart_beat()` efuns: after ordinary play spanning six
+reconnect attempts, **six** independent `/std/inheritables/user`
+clones shared the name `aldric`, five of them still ticking with no
+relationship to any interactive session.
+
+**Fix** (`std/login/login.lpc`): destruct the orphaned clone
+immediately before each of the two `__User=find_player(...)`
+reassignments (`if(__User && __User!=find_player(player_name(__Name)))
+destruct(__User);`), plus a new `net_dead()` apply on the login
+handler itself that destructs `__User` if a connection drops while
+still mid-password-prompt (a case the two call-site fixes don't cover
+on their own).
+
+**Verified live, end-to-end**, with a fresh `corwin` test character:
+- Before the fix: 3 consecutive unclean (raw-socket) reconnects to the
+  same still-resident character produced 3 additional ticking orphans
+  (`objects()` count for that name climbed 1 -> 4).
+- After the fix: the identical reconnect sequence, repeated across
+  4 separate connections, left exactly **1** object for that name
+  throughout (`corwin_count=1` every time, via admin `eval`).
+- Waited past the ~25-tick autosave threshold with 2 more unclean
+  reconnects mixed in, then inspected `save/users/c/corwin.o` directly:
+  correctly showed the real, current character state (`female elf`,
+  100 gold), not a reverted snapshot.
+- `quit` itself was independently confirmed correct throughout (it
+  always destructed the real object properly) -- the visible
+  "progress reverted" symptom was entirely caused by a LATER orphan's
+  autosave overwriting quit's own correct save, which is why it was
+  initially easy to misdiagnose as `quit` itself being broken.
+- Full boot + a fresh multi-character session re-run cleanly after the
+  fix, zero new compile warnings/errors introduced (`std/login/
+  login.lpc` was already compiling with several pre-existing, harmless
+  "prototype disagrees" warnings from its own forward declarations;
+  unchanged by this fix).
+
+### Secondary fix: seeded admin account was missing its `/realms/`
+directory, silently breaking the `eval` admin command
+
+Per this file's own "Admin account seeding" section above, `fluffos`
+was promoted to admin by hand-editing its save file directly (since
+`set_position()` is itself gated behind `admin_p()` -- the standard
+chicken-and-egg bootstrap problem for a lib with no working
+auto-promote-first-admin mechanism, and merentha genuinely has none,
+so §7.149 does not apply here). The *normal* promotion path,
+`cmds/admin/promote.lpc`, also does `mkdir("/realms/"+ob->query_name());`
+as its last step -- since the hand-edit skipped this, `fluffos` was
+missing `/realms/fluffos/`, and `cmds/admin/eval.lpc` (which
+`write_file()`s a scratch `.lpc` into that directory on every use)
+failed outright: `Error: *Wrong permissions for opening file
+/realms/fluffos/eval.lpc for append. "No such file or directory"`.
+Every OTHER admin command tested (`update`, `score`, `stat`, `call`)
+worked correctly with full privileges -- this was specifically an
+`eval`-only gap from an incomplete manual seed, not a broader §7.149-
+style "admin promotion doesn't actually work" problem. Fixed by
+creating the missing directory (`mkdir -p work/realms/fluffos`,
+matching what `promote.lpc` itself would have done); verified `eval`
+works correctly afterward (used extensively for the diagnosis above).
+
+### Cross-cutting bug-pattern sweep (§7.80/118, §7.121, §8.3a, §7.112,
+§7.122-149): clean
+
+Grepped systematically for every standing pattern from the current
+AGENTS.md checklist. None present in this lib:
+- No `explode(__FILE__,...)` filename-slicing anywhere (§7.80/§7.118).
+- No `private`-declared functions at all in the tree (§8.3a moot --
+  only a few `private` *variables* exist, all correctly used).
+- No death/NPC `init()` scheduling an unguarded `call_out` chain
+  (§7.112) -- player death is a simple synchronous `die()` that moves
+  to `DEATH_ROOM` and restores partial HP/SP/MP, no call_out at all.
+- No class/marker-item duplication mechanism on reconnect (§7.122) --
+  `reconnect()` only re-arms the heartbeat and does a `force_me("look")`.
+- No bare file-scope `IDENT = (...)` statements (§7.123).
+- No percent/fraction threshold fields analogous to §7.124's `Wimpy`
+  shape (no wimpy/auto-flee mechanism exists in this lib at all).
+- No `.c`-suffixed references baked into `.o` save data (§7.126) --
+  the historical `log/errors_compile` etc. entries referencing
+  `.c` paths are pre-existing 2003-era archive content, not live.
+- No custom `message()`/`tell_room()` wrapper exists at all (§7.129) --
+  every call site uses the driver's own `message()` efun directly.
+- No `query_idle()`-after-non-interactive shape in `heart_beat()`
+  (§7.130) -- this lib uses a real `net_dead()` apply, not inline
+  heart_beat-based liveness polling.
+- `find_living()`/`find_player()` usage (`cmds/admin/call.lpc`,
+  `stat.lpc`) always tries `present()` in the current room FIRST, so
+  the admin tools work correctly for any NPC actually present; NPCs
+  never call `set_living_name()` so a cross-room `find_living()`
+  lookup by name would fail for them specifically (falls through to
+  "could not find them") -- a minor completeness gap in admin tooling,
+  not a live-play-breaking bug, left as an observation (§7.131-shaped
+  but not actually exercised by anything in normal play).
+- No `map()`-over-a-mapping misuse (§7.132) -- the few `map()` calls
+  all operate over arrays (`keys(...)`), correctly bound.
+- `net_dead()` IS defined (§7.133 does not apply) -- see the new
+  §7.150 finding above, which is about lifecycle of a *different*
+  object, not this apply being undefined.
+- No array/mapping field defaulting to bare `0` with a missing
+  guard at its use sites (§7.134/§7.135/§7.30) -- `living.lpc`'s
+  `__Classes`/`user.lpc`'s `__Channels` have no initializer (default
+  `0`), but every real accessor (`query_class()`, `add_class()`)
+  already guards with `!__Classes`; `query_classes()` returns the raw
+  value but has no callers anywhere in the tree.
+- No one-shot setup guard defeating a per-instance setup call (§7.144).
+- No broken pre-check wired as a verb override instead of a base-class
+  hook (§7.145).
+- No broken `/`-for-`/*` comments (§7.146).
+- No reserved-keyword parameter names, e.g. `nosave` (§7.148).
+- §7.121 (float arithmetic in an `int`-declared function/parameter):
+  `daemon/advance.lpc`'s `query_needed_exp(int l)` does assign float
+  results (`l*33.0/25`, `(l+6)*1.5`) into `int`-declared locals
+  mid-formula -- but unlike every confirmed §7.121 instance, the
+  function's own final `return to_int(b);` already converts correctly,
+  and the intermediate float-into-int values are only ever consumed by
+  further pure-float arithmetic in the same expression (never fed to
+  an efun requiring a true int, e.g. array indexing or `random()`),
+  so no observable corruption or crash results. Left unfixed as a
+  cosmetic type-declaration mismatch, not a functional bug -- confirmed
+  by direct reasoning through every use of the affected locals, not
+  just pattern-matching the shape.
+- `random()` call sites (`std/inheritables/living.lpc`'s combat code,
+  `cmds/spells/fireball.lpc`, `cmds/abilities/swing.lpc`) all take
+  genuinely-int `query_skill_level()`/`query_stat()`-derived
+  arguments; no float ever reaches `random()`.
+
+### Observations, NOT fixed (content/design judgment calls)
+
+- `domains/ROOMS/setter2.lpc`'s personality-quiz `alter_skills()`,
+  question 5 ("where would you go on vacation?"), answers "a" and "b":
+  `tp->set_skill("survival", tp->query_base_skill("swimming")+10);`
+  reads `swimming`'s base level to set `survival`'s level (rather than
+  reading `survival`'s own base), and never calls
+  `set_skill_adjustment("survival", ...)` the way every other quiz
+  answer's skill bumps do for their own skills. This has the shape of
+  a copy-paste slip (every other question/answer branch in the same
+  function is internally consistent: read a skill's own base, bump it,
+  set its own adjustment) but produces no crash, no type error, and no
+  wildly-out-of-range value -- just a plausible, if probably
+  unintended, coupling between two skills' starting values. Since
+  distinguishing "typo" from "the author wanted these two skills
+  linked" requires a content judgment call this project's scope
+  explicitly excludes, left untouched and documented here per the
+  "no error signature = design" standing rule.
+- No dedicated safe-sparring mechanism exists in this lib at all (no
+  `accept_fight()` override, no training dummy) -- confirmed via a
+  whole-tree grep for `spar`/`dummy`/`accept_fight`, zero hits. The
+  only combat-capable NPC anywhere in the shipped map is
+  `domains/obj/monsters/helper.lpc` ("Helper", level 5, wields a
+  sword, explicitly described in its own source comment as "also
+  serves the purpose of being a monster example") -- used as the
+  combat test target for lack of any better-suited alternative; a
+  fresh level-1 character reliably won the fight and leveled up.
+- The shipped map is intentionally minimal: 9 rooms total (Cabeiri
+  square + 4 sub-squares + 4 guild/shop halls), one shopkeeper NPC
+  (`Simon`), one example monster (`Helper`) -- consistent with this
+  being an engine/framework release rather than a finished game world,
+  matching this file's existing provenance notes. Shop economy (buy/
+  sell/value/list, `Simon`'s dispatch on the room rather than the NPC
+  itself so no §7.143 command_giver mismatch is possible) and guild
+  sign-up (`fighter_hall`'s `sign up` command) both verified working
+  correctly live.
+- Driver-launch quirk, not a mudlib bug: this driver's
+  `reset_debug_message_fp()` (opens `<log directory>/debug.log`) runs
+  BEFORE the `chdir()` into the configured mudlib directory, so
+  launching `driver config.fluffos` from `libs/merentha/` (as directed)
+  rather than from `libs/merentha/work/` itself causes the *literal*
+  `debug.log` file to never actually receive this session's output
+  (the open fails silently against the wrong relative path at that
+  point in boot) -- `errors_compile`/`login_passed`/etc. under
+  `work/log/` DO update correctly since those are written after the
+  `chdir()`. `debug_message()` always echoes to stdout regardless, so
+  capturing the driver's own stdout (already this project's standing
+  practice per §10.8) still catches everything `debug.log` would have;
+  no fatal errors or crashes appeared in stdout across the full test
+  session.
+
+### Test evidence left in place
+
+Seeded admin `fluffos`/`Mud2026` (verified live: admin-only prompt,
+`/cmds/admin/` command path, `update`, `stat`, `call`, and now `eval`
+all working). All throwaway test characters (`corwin`, `aldric`,
+`brannor`, `delwyn`) and their save files were deleted before this
+commit; `git status` shows only the `std/login/login.lpc` fix and the
+new (now non-empty, via a leftover diagnostic `eval.lpc` matching the
+existing `realms/petrarch/` precedent) `realms/fluffos/` directory.
