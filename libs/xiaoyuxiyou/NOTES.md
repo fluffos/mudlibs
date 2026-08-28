@@ -1131,3 +1131,25 @@ were deleted after the test (per this pass's own cleanup instruction,
 diverging from round-two's practice of leaving test characters as
 evidence — round-two's finds are already fully documented in prose
 above, so the saves themselves aren't load-bearing).
+
+## AGENTS.md §7.156 regression fix (2026-08-27, sibling-lineage sweep)
+
+Found live on sibling lib `xyxyutf8`'s round-two deep test, then
+confirmed by a corpus-wide grep sweep for the pattern across every lib
+that received the original §7.30 accessor fix: `cmds/std/learn.lpc`'s
+`if (!skills || !mapp(skills)) me->set_skill(skill, 1); else
+skills[skill] = my_skill;` re-derives "never initialized" from
+`query_skills()`'s return shape, but `feature/skill.lpc`'s own §7.30 fix
+(`return mapp(skills) ? skills : ([]);`) means that check is now always
+false for a brand-new character -- the `else` branch runs and mutates a
+fresh, disconnected empty mapping instead of the character's real
+internal state. The success message and potential-point deduction still
+fire, but the skill itself is silently discarded: every player's
+first-ever learned skill was affected. `set_skill()` in this lib already
+handles both the never-initialized and already-populated cases
+correctly (checks `!mapp(skills)` against the real instance variable),
+so the fix is to always call it with the final value instead of
+re-deriving the branch caller-side. Verified via `lpcc --batch` (single
+file compile, PASS) -- not re-tested with a full live playthrough this
+pass, since the fix is a mechanical port of the exact fix already
+verified live on `xyxyutf8`. See AGENTS.md §7.156.
