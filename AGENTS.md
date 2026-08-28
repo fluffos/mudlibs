@@ -12200,6 +12200,71 @@ almost always live within a few dozen lines of each other and one of
 the two usually gets the destruct right) — a mismatch between the two
 is the tell.
 
+### 7.156 Applying the standard §7.30 accessor fix (`return mapp(x) ? x : ([])`) can silently defeat a CALLER that relied on the raw falsy return to detect "never initialized" — the very first skill a fresh character learns is deducted and reported as a success, but never actually saved
+
+Found on `xyxyutf8`'s §10.7 round-two deep-test (2026-08-27), and a
+direct consequence of the exact `feature/skill.lpc` fix §7.30 itself
+prescribes — this is not a new independent bug shape, it is a
+regression RISK inherent in that fix whenever a caller elsewhere in the
+same lib was written to distinguish "truly uninitialized" from "an
+empty-but-real mapping" by checking the accessor's return value for
+falsiness. `cmds/std/learn.lpc`'s NPC-teacher `learn` command does
+exactly that:
+
+```lpc
+skills = me->query_skills();
+...
+if (!skills || !mapp(skills))
+  me->set_skill(skill, 1);
+else skills[skill] = my_skill;
+```
+
+Before the §7.30 fix, `query_skills()` on a brand-new character
+returned the raw uninitialized instance variable (`int 0`), so
+`!skills` was true and the correct branch (`set_skill()`, which
+properly assigns the mapping back onto the object) ran. AFTER the
+accessor is patched to `return mapp(skills) ? skills : ([]);` (the
+§7.30 remedy), a brand-new character's `query_skills()` call instead
+returns a fresh, valid, but completely DISCONNECTED empty mapping —
+`!skills` and `!mapp(skills)` are now both false, so the `else` branch
+runs, mutating that throwaway local copy instead of the character's
+real internal `skills` variable. The player sees every expected success
+signal (`你听了...的指导，似乎有些心得。`, the potential deduction, the
+`你的「...」升至 1 级` level line) and the potential cost is genuinely
+subtracted — but the skill itself is silently discarded, never written
+back to the object, never saved. Reproduced live: a fresh character's
+very first `learn unarmed from <teacher>` printed a full success
+sequence, yet an immediate `skills` (and a raw grep of the resulting
+`.o` save file) showed no skill at all, on that connection AND after a
+clean reconnect. Since every player's first-ever learned skill is
+exactly the case this hits, this silently breaks skill acquisition for
+100% of new characters on an affected lib, not an edge case.
+
+Fix: don't have the caller re-derive "was this ever initialized" from
+the accessor's return shape at all — `set_skill()` already handles both
+the never-initialized and already-populated cases correctly (it does
+its own `!mapp(skills)` check against the REAL instance variable, not a
+caller-local copy), so just always call it with the intended final
+value:
+
+```lpc
+// AFTER:
+me->set_skill(skill, my_skill);
+```
+
+**Detection / standing risk for the whole §7.30 corpus sweep (178
+libs)**: any lib that received the mechanical §7.30 accessor fix should
+be re-checked for a caller matching this exact shape — `X =
+ob->query_<mapping-field>(); if (!X || !mapp(X)) <proper-init-call>;
+else X[key] = value;` — grep each such accessor's callers (not just the
+accessor itself) for a bare `!X`/`!mapp(X)` branch that falls through to
+directly mutating the query result rather than calling a real setter.
+This one instance was found and fixed individually; a corpus-wide sweep
+for the pattern has NOT been run yet as of this writing — flagged here
+so the next lib (or a dedicated sweep) checks for it rather than
+assuming §7.30's original fix was side-effect-free everywhere it was
+mechanically applied.
+
 ---
 
 ## 8. Login and registration flow bugs
@@ -12294,6 +12359,69 @@ checking on sight for any OTHER lib shipping a similar "render Chinese
 text via a raw `HZK16`/`HZK24`-style font bitmap file" feature — the
 byte-vs-codepoint mismatch is the same as every other §8.1 instance,
 just applied to font-glyph lookup instead of name validation.
+
+**Yet another shape, this time in the word-wrap/line-reflow plumbing
+itself, not a validation gate or lookup table: `xyxyutf8`'s §10.7
+round-two deep-test (2026-08-27)**. `adm/simul_efun/message.lpc`'s
+`sort_string(input, width, prefix)` — the shared word-wrap routine used
+by nearly every text-output path (room `long` descriptions via
+`cmds/std/look.lpc`, `message_vision()`, `tell_room()`, `tell_object()`,
+`say()`, etc. — 9 call sites in this one file alone) — walks the string
+one index at a time and, on hitting what it thinks is "the lead byte of
+a 2-byte GBK wide character" (`input[i] > 160`), appends it and then
+skips an EXTRA index (`i++` on top of the `for` loop's own increment,
+plus `len += 2` for the double display-width) before continuing. That
+extra `i++` was correct back when `input[i]` was a raw GBK byte (a wide
+char occupied 2 indices, so the second `i++` skipped the character's
+second byte) — on this driver `input[i]` is a Unicode CODEPOINT, so
+`input[i..i]` already yields one whole, complete Chinese character, and
+the extra `i++` instead unconditionally discards the VERY NEXT
+character after every single wide char processed. For any string that
+is mostly/entirely Chinese (which nearly every `long`/`say`/broadcast
+message in this genre is), the visible result is a clean, mechanical
+"keep one character, drop the next one" pattern all the way through —
+easy to mistake for a transport/telnet-encoding bug (`set_encoding()`
+was the first, wrong, hypothesis here — ruled out by reproducing the
+exact same corruption with `set_encoding()` never called at all) rather
+than a compile-clean, silently-wrong wrapping function. Confirmed via a
+`strlen()`/`%O` isolation test: a hardcoded 13-character string literal
+correctly reported `strlen()==13` (proving the in-memory value was
+never touched) while a `call`-invoked `%O` print of the SAME string
+showed only 7 surviving characters — proving the corruption happens at
+the sort_string()/output-wrapping layer, not compile time. Fix: drop
+only the extra `i++`, keep the `len += 2` width accounting (a wide char
+genuinely occupies 2 display columns for wrapping-math purposes, that
+part was never wrong):
+
+```lpc
+// BEFORE:
+if (input[i] > 160) {
+  result += input[i..i];
+  i++;
+  len += 2;
+  continue;
+}
+// AFTER:
+if (input[i] > 160) {
+  result += input[i..i];
+  len += 2;
+  continue;
+}
+```
+
+Verified live: the exact same room description that previously arrived
+as "这就傲国有的馆是年大来富所" now arrives byte-for-byte (character-
+for-character) identical to the room's own source text, correctly
+word-wrapped at the intended column width. Detection: grep any
+`sort_string`/`word_wrap`/similarly-named shared formatting routine for
+an `i++`/index-advance INSIDE a `str[i] > 160`-style wide-char branch,
+in addition to the enclosing loop's own increment — the double-advance
+inside the branch is the tell, distinct from the `i % 2`/sliding-window/
+sharding shapes above which are validation-only and don't touch a
+shared OUTPUT path. Worth checking on sight for any lib whose room
+descriptions or broadcast text render with an "every other character
+missing" look — that visual signature is unique to this exact bug and
+is easy to misdiagnose as encoding/connection trouble instead.
 
 ### 8.2 Flow shapes vary — read the callbacks, not the prompts
 

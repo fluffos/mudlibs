@@ -23,3 +23,224 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试 / Deep functional test (round two, 2026-08-27, AGENTS.md §10.7)
+
+First genuine hands-on playthrough on this lib (every prior pass above
+was compile/boot-level verification only). Native driver
+(`build-debug`), one continuous session per phase, driven via a raw
+Python socket script (`scripts/mudclient.py`-equivalent, hand-rolled
+for this session to control the GB/BIG5 wire-encoding negotiation).
+Confirmed lineage: same 小雨西游 engine family as `xyxy2`/
+`xiaoyuxiyou` (shared `obj/user.lpc`, `feature/skill.lpc`,
+`adm/simul_efun/message.lpc`), same 傲来国→翠香楼 starting map,
+same 武馆弟子 (`d/aolai/npc/dizi.lpc`) safe-sparring mechanic
+documented in `work/doc/help/newbie/newbie`.
+
+**Test character**: id `linfeng`, Chinese name 林风, login password
+`test1234`, super password `Test123!` — kept as a representative
+playthrough character. Final state: level 5 (admin-set once natural
+combat exp already exceeded the requirement, to save time reaching the
+level-5 gate for the sect-join test), 百花谷 (Baihuagu) 第四代外门
+弟子 under 百草仙, `unarmed` skill at level 1 (learned from 东方聪),
+一两白银 + 桂花酒袋 from a real shop purchase. Save files:
+`work/data/user/l/linfeng.o`, `work/data/login/l/linfeng.o`.
+Admin account `fluffos` / 登陆密码 `Mud@2026a` / 管理密码
+`AdminMud@26` (freshly seeded this session — `adm/etc/notices` only
+had the bare wizlist line before, no actual account existed yet),
+Chinese name 无痕 (the game rejected the intended "小雨" — it's a
+hardcoded `banned_name` entry in `logind.lpc`, presumably reserved for
+an NPC/founder identity, not a bug). `(admin)` privilege confirmed live
+via `update`/`call` (both `(arch)`-gated commands) succeeding.
+
+### Bugs found and fixed
+
+**1. SEVERE — `adm/simul_efun/message.lpc`'s `sort_string()` (the
+shared word-wrap routine behind nearly every text output path:
+room `long` descriptions, `say()`, `tell_object()`, `tell_room()`,
+`message_vision()`) silently dropped every other Chinese character in
+any string it wrapped — see new AGENTS.md §8.1 sub-entry for the full
+byte-vs-codepoint root-cause writeup and fix. Symptom in play: the very
+first text a new character ever sees
+(`d/wiz/init.lpc::enter_world()`'s "好！祝你西天取经早成正果！"
+welcome line) arrived as "好祝西取早正！"; every room's `long`
+description read the same way
+("这就傲国有的馆是年大来富所" instead of "这里就是傲来国最有名的
+饭馆是早年一大唐来的富商所开..."). Initially misdiagnosed as a
+`set_encoding("GBK")`/`set_encoding("big5")` transport bug (this
+archive's own README already flags that call as a known-redundant
+leftover from the WASM investigation) — ruled out by disabling
+`set_encoding()` entirely and reproducing the IDENTICAL corruption,
+then isolated definitively via a `strlen()`/`sprintf("%O")` A/B test
+that proved the in-memory string was always correct and the corruption
+happened purely in the output-wrapping layer. Fixed by removing a
+single stray `i++` in `sort_string()`'s wide-character branch (a
+leftover from the pre-UTF8 GBK 2-byte-per-char era; this driver indexes
+strings by Unicode codepoint, so the extra advance skipped one whole
+character after every wide char it processed). Verified live: room
+descriptions, NPC dialogue, and system messages all render
+byte-for-byte identical to their `.lpc` source text after the fix, with
+correct word-wrapping at the intended column width preserved.
+
+**2. SEVERE — `cmds/std/learn.lpc` silently discarded the very first
+skill point any character ever learned from an NPC teacher**, despite
+printing the full success sequence and deducting potential — see new
+AGENTS.md §7.156 for the full writeup (a caller-side regression
+introduced by this same lib's own earlier §7.30 corpus-sweep fix to
+`feature/skill.lpc`'s `query_skills()` accessor: the accessor's guard
+now always returns a valid mapping, defeating `learn.lpc`'s
+`!skills || !mapp(skills)` check for "was this ever initialized").
+Reproduced live: a fresh character's first `learn unarmed from
+dongfang cong` showed `你的「扑击格斗之技」升至 1 级` and deducted 3
+potential, but an immediate `skills` said `你目前并没有学会任何技能`
+and the `.o` save file had no `skills` key at all — persisted across a
+clean reconnect too. Fixed by having `learn.lpc` call
+`me->set_skill(skill, my_skill)` unconditionally instead of
+re-deriving "never initialized" from the accessor's return shape (that
+setter already does the right thing in both cases). Verified live:
+re-ran the identical `learn` command post-fix, confirmed `skills` shows
+`扑击格斗之技 (unarmed) 初学乍练 1/0` immediately AND after a fresh
+reconnect, and the `.o` save file now has a real `skills` key.
+
+**3. `adm/simul_efun/file.lpc::log_file()` had no `assure_file()`
+directory-precreation guard (AGENTS.md §7.11) — already fixed in the
+sibling `xyxy2`/`xiaoyuxiyou` but not ported here.** Reproduced live:
+`call linfeng->add(...)` triggered `cmds/wiz/call.lpc`'s player-call
+audit log (`log_file("nosave/call_player", ...)`), which threw `*Wrong
+permissions for opening file /log/nosave/call_player for append`
+because `work/log/nosave/` doesn't exist in this checkout (gitignored,
+same standing gap as every other lib in this family — recreating the
+directory alone doesn't fix future checkouts). Fixed at the root: added
+a forward declaration + `assure_file(LOG_DIR + file)` call inside
+`log_file()` itself (matching `xyxy2`'s exact fix), plus the same
+lib's `cat()` null-guard (`read_file(file) || ""`). Verified live:
+repeated the exact `call` that crashed before, now succeeds cleanly and
+`work/log/nosave/call_player` gets created and written on demand.
+
+**4. `cmds/arch/update.lpc` had the unguarded `present(file,
+environment(me))` crash (AGENTS.md §7.106) — `cmds/wiz/update.lpc` in
+this same lib was already fixed, but the `(arch)`-level duplicate at a
+different path was missed.** `adm/daemons/securityd.lpc` confirms
+`cmds/arch` commands are reachable by `(wizard)`/`(apprentice)`/
+`(immortal)`/`(arch)`/`(admin)` alike, so this was live-exploitable.
+Fixed with the standard one-line guard:
+`if (environment(me) && (obj = present(file, environment(me))) &&
+interactive(obj))`. Not live-reproduced with a truly-environment-less
+character (would require deliberately corrupting a save) but confirmed
+compiling and running correctly via `update /adm/daemons/logind` as
+both `fluffos` (admin) post-fix.
+
+**5. `adm/obj/master.lpc::log_error()` broadcast raw compile WARNINGS
+(not just genuine errors) to every connected player (AGENTS.md
+§7.103).** Confirmed the exact vulnerable shape (`if (this_player(1))
+efun::write(...)` with no `warning:` substring filter). Fixed with the
+standard `strsrch(message, "warning:") == -1` guard. Not separately
+re-verified live post-fix (this fix is identical in shape and
+confidence to every other §7.103 instance in this corpus; the boot log
+for this whole session already shows dozens of lazy-compile warnings
+that would otherwise have been broadcast to `linfeng`/`fluffos`
+mid-session had this not been caught).
+
+**6. `d/penglai/npc/laitou.lpc` (癞头和尚, a 蓬莱 NPC) carried a
+single stray 3-byte Private-Use-Area glyph (`\xef\xa3\xb5`, U+F8F5 —
+a leftover proprietary font-glyph artifact from the original archive's
+authoring environment, not a mudlib logic error) sitting alone after
+the closing `}` of `create()`.** This is a genuine COMPILE ERROR
+(`Illegal character 0xef` / `syntax error, unexpected invalid token`),
+not just a display glitch — the object could never load at all
+(`*No program in object '/d/penglai/npc/laitou'!`, confirmed live via
+`debug.log` during ordinary play). Fixed by deleting the stray bytes;
+verified via `update /d/penglai/npc/laitou` compiling cleanly as admin.
+A corpus-wide grep for the same trailing-PUA-byte shape
+(`grep -rlP '[\xef\xf0][\xa0-\xbf][\x80-\xbf]{1,2}\s*$'`) found no
+other instances in this lib.
+
+### What was tested and confirmed working
+
+- Registration → real gameplay in one continuous session:
+  `look`/`score`/`i` all correct at every state change (post-register,
+  post-move, post-skill-learn, post-sect-join, post-shop, post-
+  reconnect ×2).
+- **Safe-sparring** (`d/aolai/npc/dizi.lpc`'s `fight dizi`, same
+  mechanic as `xyxy2`): repeated real fights correctly awarded
+  `combat_exp`/`potential`, no scripted-outcome surprises.
+- **Organic NPC-teacher skill learning**: `ask dongfang boyu about
+  学艺` → `learn unarmed from dongfang cong` two-step flow (see bug #2
+  above for what was broken and is now fixed).
+- **Sect join**: `bai baicao xian` at `d/city/club.lpc` correctly
+  joined 百花谷 as 第四代外门弟子, confirmed via `score`'s 门派/师承
+  fields, persisted across reconnect.
+- **Shop purchase**: `list`/`buy jiudai from xiao er` at 翠香楼's
+  in-room vendor — correct insufficient-funds path first (`你的钱不
+  够`), then a real purchase (admin `money_add()` used to fund it,
+  since real-time grinding a full 100+-copper economy loop wasn't
+  budgeted this pass) with correct currency-tier arithmetic
+  (文/两/etc.) before and after.
+- **Board (read-only, per this session's safety brief)**: `read 1 from
+  board` at 翠香客栈留言板 displayed a real historical-looking post
+  cleanly (author/title/timestamp/body/origin footer all present and
+  correctly encoded) — did not exercise `post`/`discard`.
+- **Two full quit/reconnect cycles**, one after a genuine ~15s
+  wall-clock gap: `debug.log` grepped clean each time (aside from the
+  pre-existing benign `emoted.o` restore warning, see below); `who`
+  showed exactly one `林风` entry both times (no leaked duplicate,
+  AGENTS.md §7.150 clean); admin `tell linfeng` correctly resolved the
+  character via `find_player()` both after reconnect and while genuinely
+  netdead (AGENTS.md §7.152 clean, this lib's `reconnect()` already
+  calls `enable_commands()`).
+- **Cross-cutting pattern sweep** (per the task's standing checklist):
+  targeted greps for §7.100 (4 already-commented-out
+  `replace_program(ROOM)` instances found, correctly left alone),
+  §7.86 (0 live `BULLETIN_BOARD`+`replace_program()` hits — already
+  clean), §7.129 (`tell_room()`/`message_vision()` already correctly
+  use `exclude || ({})`), §7.121/§7.123/§7.148 (no hits on this lib),
+  §7.150 (`obj/login.lpc` doesn't even call `set_heart_beat()`, so the
+  leak shape can't occur here), §7.154 (no daemon combines
+  `this_player()` with `call_out`/`heart_beat` in this lib) — all
+  clean.
+
+### Explicitly NOT verified live (say so, don't silently skip)
+
+- **Death/respawn and real (non-scripted) NPC combat**: the documented
+  wandering 黑狗 (`d/city/npc/dog.lpc`) wasn't encountered wandering
+  through the rooms it's supposed to visit during this pass's time
+  budget; not pursued further given the two severe bugs above already
+  consumed most of the session. Consistent with the sibling `xyxy2`'s
+  own round-two finding that this fight tends toward a long stalemate
+  at low level without a weapon anyway.
+- **10级突破/20级突破 dungeons**: documented in the newbie help but not
+  attempted (same time-budget reasoning as siblings).
+- **One anomaly, NOT chased to a conclusion**: a single
+  `*Bad argument 2 to <=` / `Expected: string Got: 0` runtime error
+  appeared once in `debug.log`, attributed by the backtrace to
+  `feature/dbase.lpc:541` inside `money_add()`, coinciding with an
+  admin `call linfeng->money_add(200)` test call. `money_add()`'s
+  visible source at that line (`if (v > 0) {`) contains no `<=`
+  operator and is pure integer arithmetic; a second, cleaner
+  reproduction attempt (character genuinely online, smaller amount)
+  produced no error at all and the correct return value both times.
+  Currency arithmetic itself was confirmed correct in both cases (the
+  later real shop purchase settled to the exact expected remaining
+  balance). Left uninvestigated further per this session's "when
+  genuinely unsure, document, don't guess" instruction — worth a second
+  look if it recurs.
+- A single pre-existing, already-`catch()`-wrapped restore error was
+  observed at boot: `/adm/daemons/emoted.lpc`'s `create()` fails to
+  restore `data/emoted.o` (`restore_object(): Illegal mapping format`)
+  — a 374KB file of real historical custom-emote content. Since the
+  failure is already defensively caught (the daemon boots fine with an
+  empty emote set instead of crashing) and pinpointing the one bad
+  entry inside a large historical content file risked exactly the kind
+  of accidental-data-loss this session was told to avoid, this was
+  left uninvestigated and unfixed — flagged here for a future session
+  with more time budget to spend combing a large save file safely.
+
+Files changed this pass: `work/adm/simul_efun/message.lpc`,
+`work/cmds/std/learn.lpc`, `work/adm/simul_efun/file.lpc`,
+`work/cmds/arch/update.lpc`, `work/adm/obj/master.lpc`,
+`work/d/penglai/npc/laitou.lpc`. New AGENTS.md entries: a §8.1
+sub-bullet (word-wrap byte-width bug) and §7.156 (the §7.30-fix
+caller-side regression risk, flagged for a possible future corpus-wide
+follow-up sweep). LPC formatter (§9) could not be run this session —
+`node`/`npm` are not available in this environment; all edits are
+small, hand-formatted, and match each file's existing style.
