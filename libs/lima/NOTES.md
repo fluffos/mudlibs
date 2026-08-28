@@ -392,3 +392,195 @@ lib，因为它的功能集/demo 内容和 `fluffos/lima` 已经有实质差异�
 结论是否定的，所以没有走完整的 onboard 流程（没有 `convert_lib.sh`
 之后的编译修复循环、没有真实注册验证、没有分配 `number`/`port`、
 没有新建 `libs/<slug>/` 目录）。
+
+## 深度功能测试 / Deep functional test (2026-08-27, §10.7)
+
+这个 lib 之前只做过"能启动/编译"级别的验证（见上文"定义完成的验证
+记录"一节）——本轮是第一次按 AGENTS.md §10.7 的方法论做一次真正连续
+的真人playthrough（真实注册 → 探索 → 战斗 → 门派/公会交互 →
+quit/隔一段真实时间后重连 → 查日志），用专用的 `~/src/fluffos-lima`
+worktree 驱动（已存在，直接复用，未重新编译）。
+
+Lima 本身是 FluffOS 官方的框架/演示 mudlib，不是一款有完整门派/任务
+系统的"游戏"——`help newbie` 就是原版英文 Zork 式通用教程，核心可测
+系统是：注册/建角、`AUTO_WIZ`巫师身份、导航、`skills`（战斗中自动
+熟练度成长）、`kill`战斗、`GUILD_GUARD`门禁、`talk to`NPC 对话、
+`quests`、`quit`/重连。测试角色：账号 `TestHero`/`TestPass123`，角色
+`Aidan`（human），全程走过注册六项资料 → 建角（种族选择）→ `s`选中 →
+`p`进入游戏，落地 Grand Hall；另建了一个非管理员的 `questfinal`/
+`Rowan` 角色专门复测下面的 bug 修复（确认不是只有先前角色的残留状态
+碰巧绕过了问题）——**两个测试账号连同它们的存档在验证完成后都已按本
+项目惯例清理**（`data/players/{a,r}/`、`data/links/{t,q}/`、以及
+`GUILD_D` 因这次测试而首次落盘的 `data/daemons/guild.o`），只保留种子
+`fluffos` 管理员账号；`data/secure/{access,access_backup}.o`、
+`data/secure/LOG`、`data/daemons/last_login.o`、`data/news/*`
+里因登录/公会daemon初始化产生的残留字段也已用 `git checkout`
+还原，最终 `git status` 只剩两处真实代码改动。
+
+### 发现并修复的真实 bug
+
+**1. `std/guild_guard.lpc` 的 `handle_blocks()` 对一个从未真正被
+`GUILD_D` 定义过的公会名，会把驱动的未捕获 `error()` 直接甩给玩家，
+导致"从被公会守卫挡住的房间试图离开"这个完全普通的移动动作每次必
+崩溃。**
+
+- 复现路径：Grand Hall 向南进入 `domains/std/Monster_Room`（这个房间
+  的 hint 文本自己写着"This room is often used to test combat system
+  mechanics"，是官方给的战斗测试区），房间里的 `guild_guard`
+  （`domains/std/Monster_Room.lpc:13`，`set_objects((["/domains/std/
+  guild_guard":({"sorcery"})]))`）挡住唯一的北向出口，要求"sorcery"
+  公会成员身份。而 `data/config/guild-spec`/`stock-guilds`
+  只是示例数据文件，从未被任何 preload/create() 调用
+  `GUILD_D->define_from_file()` 加载，所以"sorcery"这个公会在
+  `GUILD_D` 里根本不存在。任何角色（无论是先打赢了这个 5 HP 的守卫，
+  还是干脆直接走）只要尝试往北走，`guild_guard.lpc:22`
+  的`GUILD_D->query_guild_allies(guard_for)`就会一路调用到
+  `daemons/guild_d.lpc:269` 的 `guild_check()`——这个函数对不存在的
+  公会名统一 `error("Non-existant guild - " + name + ".\n")`，而
+  `handle_blocks()` 完全没有 catch 这个调用。结果：一个真实的、未捕获
+  的驱动错误，栈顶层展开后还级联出第二个无关错误
+  （`/cmds/verbs/go.lpc` 报 `Parse accepted, but no do_* function found
+  in object /cmds/verbs/go!`，是第一个错误把 `do_go_str()`
+  的执行流打断后遗留的状态不一致）。玩家因为 `AUTO_WIZ`
+  默认订阅了 errors 频道，会直接在自己的终端上看到两段完整的驱动栈
+  跟踪——比"你被挡住了"这种正常游戏反馈严重得多的失败模式。
+- 对照：同一个文件里 `query_member_guild()`（`std/body/guilds.lpc`）
+  对一个不存在的公会名已经优雅地返回 `0`（"不是成员"），说明
+  `handle_blocks()` 本来的意图就是"公会不存在=当作没有这层关系"，
+  只是它调用 `query_guild_allies()` 时漏做了同样的防御。
+- 修复：给 `GUILD_D->query_guild_allies(guard_for)` 这次调用套一层
+  `catch()`，出错时把 `allies` 当作空数组 `({})` 处理（等价于"这个
+  公会没有盟友"），而不是让错误继续向上传播。不改变
+  `guild_d.lpc`本身任何一个 `guild_check()`
+  的行为（它对公会管理类接口——比如 `set_guild_title()`——保持严格报错
+  仍然合理，那些接口本来就该假设调用者知道公会存在），只在这个
+  "查询式、应该能对不存在的东西安全返回"的调用点做防御。
+- 验证：`Aidan`（打赢过守卫）和全新角色 `Rowan`（完全没打过架，直接
+  走）两条路径分别复测——修复前两者都在 `north` 时触发上述两段完整
+  错误栈；修复后（真实重启驱动生效，LPC 改动无需重新编译 C++）两条
+  路径都只剩一条**可控**的信息性日志（`[errors]` 频道仍会显示
+  "Non-existant guild - sorcery."，因为 `mudlib error handler : 1`
+  这套配置下即使 `catch()` 吞掉的错误也会记录/广播给订阅了 errors
+  频道的账号，这是这套 mudlib 自己一贯的调试可见性设计，不是本次改动
+  引入的噪音），玩家实际收到的是预期的游戏反馈："The a guard pushes
+  you back. \"Guild members only\", she growls."——移动被正确拒绝，
+  而不是崩溃。（旁注：这条拒绝消息本身有个"The" + "$n"→"a guard"
+  重复冠词的措辞小瑕疵，`set_block_action("The $n $vpush $t
+  back...")`——纯文案问题，不影响功能，按本项目"内容/设计不确定就不
+  动"的原则只记录不修改。）
+- **§9 格式化器**：按流程对这两个改动过的文件跑了一次 §9 LPC
+  formatter，`guild_guard.lpc` 结果正常，但 `guild_d.lpc`
+  触发了一个新的格式化器盲点——`class guild_defn { ... }`
+  这种带内联注释的多字段 struct 体被错误地压扁成一整行后，格式化器的
+  花括号配对状态发生错位，导致后面几十个完全无关的函数
+  （`belongs_to`/`check_previous`/`guild_add`/… 一直到文件结尾）被
+  级联误加了一层缩进（本身是纯空白改动，语法仍然合法，但 diff 膨胀到
+  1700+ 行，完全掩盖了这次两行真实修复的意图，且没有信心排除格式化器
+  在别处发生了真正的语义级损坏）。按 AGENTS.md §9 "遇到盲点用 `git
+  checkout` 整个文件回滚，不要手工修补格式化器的输出"的既定处理方式，
+  `git checkout` 回滚了两个文件的格式化结果，手工原样重新应用了上面
+  两处最小 diff（未跑格式化器），保留这两个文件原有的缩进风格不变。
+  这是这个格式化器的一个新盲点实例（多字段 `class` struct 体 +
+  内联注释导致花括号跟踪状态错位），值得以后遇到 `class` 定义密集的
+  文件时留意，但由于 Lima 是本语料库里唯一一个用这种框架的 lib，暂不
+  在 AGENTS.md §9 补充通用条目。
+
+**2. `daemons/guild_d.lpc` 的 `load_missions()`/`load_favors()`
+两个函数在 `GUILD_D` 第一次被懒加载时必定崩溃，因为它们引用的两个
+目录在这个仓库里根本不存在——修复 #1 直接触发并暴露了这个第二层
+bug。**
+
+- 上面 #1 的 `catch()` 第一次真正把 `GUILD_D` 加载进内存时（此前没有
+  任何 preload 项引用过它），`GUILD_D::create()`
+  （`daemons/guild_d.lpc:115`）依次调用
+  `load_missions()`/`load_favors()`。`load_missions()` 用
+  `get_dir(MISSION_DIR "*.lpc")`（`MISSION_DIR` =
+  `/domains/common/mission/`）取文件名列表，但这个仓库压根没有
+  `domains/common/` 这个目录——`get_dir()` 对一个不存在的目录返回的是
+  `0`，不是空数组 `({})`，紧接着的 `foreach (string item in files)`
+  直接报 `*Bad argument 2 to foreach Expected: array Got: 0.`，把整个
+  `GUILD_D` 的 `create()` 炸掉（`load_favors()` 用
+  `FAVOR_DIR`=`/domains/common/favor/`，同一目录也不存在，是完全相同
+  的第二处实例）。这正是 AGENTS.md 里已经归档过的"`get_dir()`
+  对不存在目录返回 `0` 而非空数组"经典坑（见 AGENTS.md 相关条目），
+  这次是它在 Lima 自己的核心 daemon 代码（不是某个具体 domain 的示例
+  内容）里的一个新实例，而不是需要单独立项的新 bug 类别，故未新增
+  AGENTS.md 条目，仅在此交叉引用。
+- 修复：`load_missions()`/`load_favors()` 各加一行
+  `if (!files) files = ({});`，`get_dir()` 返回目录存在但为空时本来就
+  已经是 `({})`，这个 guard 只处理目录整个不存在的那一种情况，行为上
+  完全是"这两类内容还没人往这仓库里加"的空操作，不是猜测应该往里面
+  放什么。
+- 验证：修复后重启驱动，`GUILD_D`
+  第一次被上面 #1 的调用路径懒加载时不再报 `Bad argument 2 to
+  foreach`，`load_missions()`/`load_favors()` 静默返回，`GUILD_D`
+  正常初始化并落盘一份全新的 `data/daemons/guild.o`（测试完成后已
+  按惯例清理，不提交这份纯测试产物）。
+
+### 测试覆盖：干净通过的部分
+
+- **注册 + 建角**：`TestHero`（id/密码/性别/邮箱/真实姓名/推荐来源
+  六项资料全走完，未提前用回车跳过任何一项）→ `c`
+  建角选人类种族 → `Aidan`；账号存档确认落在
+  `data/links/t/testhero.o`（不是`data/players/`——这个 mudlib
+  的登录账号和角色身体是两套分开的存档体系，前者由
+  `secure/user.lpc` 的 `save_me()` 写 `/data/links/`，后者由角色 body
+  对象自己的 `save_me()` 写 `/data/players/`，两者都验证过存在且内容
+  正确）。
+- **移动/探索**：Grand Hall（`domains/std/Wizroom.lpc`）→ 通过 `enter
+  portal`（不是方向指令，是一个 `set_objects()` 里挂的可交互物体）
+  到 `domains/std/rooms/beach/Sandy_Beach`（原版自带的"pirate"主题
+  演示解谜区，房间自身的告示牌明确写着"DON'T USE THIS AREA ON YOUR
+  MUD!!! ... providing this area as an example only"——确认是有意的
+  示例内容而非未完成的真实新手区，用 `wade in ocean` 这类挂在物体上
+  的 `EXIT_OBJ` 方法而非方向指令才能继续深入，属于教学向导航技巧的
+  演示，未强行走完整个九房间解谜，仅验证了它的存在/可达/告示牌文案
+  与源码一致）；`goto`（巫师传送指令，`AUTO_WIZ`
+  下人人可用）验证可用，用于在 Grand Hall/Monster Room
+  间快速往返，不构成绕过测试的问题——纯粹是这个 lib 本来就把每个
+  角色都当巫师对待的既定设计。
+- **战斗**：`kill guard`（Monster Room 的 5-max-health 门禁守卫）——
+  真实回合制近战，命中/闪避/擒摔/致残（"You cannot use your right arm
+  anymore"）描述文本随机生成、伤害正确累加到躯干/四肢分区 HP、`skills`
+  面板确认 Combat/Defense/Melee/Unarmed 技能百分比确实随着战斗行为
+  自动增长（"熟能生巧"机制，符合 `cmds/player/skills.lpc`
+  自己文档注释里的说明）。角色是巫师身份，重伤到"If you were mortal,
+  you would now no longer be mortal"后自动免疫真死——符合 §10.7
+  checklist 里"用 wizard 身份角色测试战斗更安全"的既定经验。
+- **公会/门禁交互**：详见上面两处 bug 修复；修复后确认"没有对应公会
+  成员身份时被礼貌拒绝，而不是崩溃"这一行为在两个独立角色
+  （`Aidan`/`Rowan`）上一致。
+- **NPC 对话**：`talk to greeter`——进入带编号选项的对话树（数字选
+  Hello!/What do you do?/Where do I get LIMA?/...），驱动侧数字菜单
+  分派正确。
+- **`quests`**：正确列出"pirate"/"Pirate"两个可见任务及步骤数/状态
+  （与 Sandy Beach 演示区的 `sand_with_treasure.lpc` 埋的
+  `QUEST_D->grant_points()` 调用对应）。
+- **`quit` → 用户菜单 → `q` 完全断开 → 真实等待 75 秒 → 重新连接**：
+  `quit`游戏内指令正确回到用户菜单并广播"has left Lima Mud"；`q`
+  从用户菜单彻底断开后 `ss -tn`
+  确认端口上无残留连接（干净断开，非半开连接）；75 秒真实等待后
+  用 `s`→`p` 重新进入游戏，角色状态（位置 Grand Hall、属性、之前战斗
+  造成的创伤已自然恢复）全部正确保留，`log/runtime`
+  行数在等待前后一致（无新增错误）。debug.log 在这次驱动的启动方式
+  下本来就是死的（AGENTS.md §10.9 已归档的通用现象——`log directory :
+  /log` 相对驱动启动时的 cwd 解析，chdir 前就 fopen
+  失败，此后整个进程生命周期都不会再重试）；这个 lib 真正在用、也
+  确实工作正常的错误日志是 `work/log/runtime`（配合 `errors`
+  频道），本轮两处 bug 的完整驱动栈跟踪都是从这个文件里读到的确认
+  证据，等待前后的行数比对也是拿它做的。
+- **管理员账号**：`fluffos`/`Mud@2026` 重新登录验证，`who`
+  显示`Role: Admin`，状态与此前"管理员账号播种"一节记录的验证结果
+  一致，未发现回归。
+
+### 已知但未修的观察项（不确定是否算 bug，按惯例只记录不改）
+
+- `guild_guard.lpc` 的默认拒绝文案 `"The $n $vpush $t back..."` 对
+  `set_name("guard")` 这类没有专有名词、走"a guard"泛指格式的对象会
+  拼出"The a guard pushes you back"这种双重冠词——纯粹的英语措辞小
+  瑕疵，不影响任何功能判定，本次未改动。
+- Sandy Beach 的九房间"pirate"演示解谜区本身明确标注"不要在你的
+  mud 上使用"，本轮只验证了可达性/告示牌文案/`wade in
+  ocean`这一个非方向性出口的存在，未强行走完整个解谜链（含
+  `dig`挖出宝箱的完整 8 次交互序列）——按 §10.7 checklist
+  第 6 条的原则，明确记录为"内容探索深度不足"而非"已知损坏"。
