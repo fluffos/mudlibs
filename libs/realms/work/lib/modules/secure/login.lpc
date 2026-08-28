@@ -49,6 +49,35 @@ private nomask object checkIfPlayerObjectExists(string name)
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// FluffOS PORT NOTE: `ret->restore(name)` (and the wizard-only
+// `ret->updateLoginTime()`) used to happen right here, inside object
+// creation -- i.e. BEFORE the caller's `exec(player, this_object())` ever
+// runs. `restore()` (lib/modules/secure/persistence.lpc) synchronously
+// fires either onRestoreSucceeded, onCreationIncomplete, or (for a
+// genuinely brand-new character) onRestoreFailed -- and onRestoreFailed
+// is exactly what starts the 11-step character-creation wizard
+// (lib/modules/creation/initializePlayer.lpc's onRestoreFailed(), which
+// clone_object()s the first selector and calls tell_object()/input_to()
+// on the new player). Confirmed live: this driver's tell_object() falls
+// back to tell_npc()/catch_tell() (see vm/internal/simulate.cc) for any
+// object whose `interactive` flag isn't set yet, and the new player
+// object's `interactive` flag isn't set until exec() runs -- so every one
+// of the wizard's prompts was silently swallowed, its input_to() was
+// registered against a not-yet-interactive object, and the game just fell
+// through to a normal (pre-exec, still-broken-in-the-exact-same-way)
+// onRestoreSucceeded/movePlayerToStart -- landing every single new
+// character in the game world with a completely blank, uninitialized
+// character (Race "Unknown", every attribute 0, no skills/traits/guild)
+// and no way to ever run character creation. Same underlying "driver
+// state (command_giver/interactive) isn't what a create()-time call
+// assumes it is" class of bug as this file's own already-documented
+// add_action()/command_giver fix (see NOTES.md section 7) -- just hitting
+// tell_object()/input_to() instead of add_action(). Fixed the same way:
+// object creation no longer calls restore() itself; callers now call the
+// new restorePlayerObject() below AFTER exec() has made the player
+// actually interactive. See secure/login/user-creation.lpc's
+// execNewPlayer()/execGuestPlayer() and secure/login/menu-interactions.lpc's
+// execCharacter() for the three updated call sites.
 private nomask object loadNewPlayerObject(string name)
 {
     object ret = 0;
@@ -72,8 +101,6 @@ private nomask object loadNewPlayerObject(string name)
             ret = clone_object("/lib/realizations/wizard.lpc");
             ret->registerEvent(clone_object(
                 "/lib/modules/creation/initializePlayer.lpc"));
-            ret->restore(name);
-            ret->updateLoginTime();
             break;
         }
         default:
@@ -81,12 +108,31 @@ private nomask object loadNewPlayerObject(string name)
             ret = clone_object("/lib/realizations/player.lpc");
             ret->registerEvent(clone_object(
                 "/lib/modules/creation/initializePlayer.lpc"));
-            ret->restore(name);
 
             break;
         }
     }
     return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Restores a player's saved data (or, for a genuinely new character,
+// triggers character creation) -- see loadNewPlayerObject()'s port note
+// above for why this MUST be called only after the player object is
+// already exec()'d/interactive, never during creation. `program_name()`
+// (not `inherit_list()`) is used for the wizard-type check -- this
+// driver's inherit_list() never includes an object's own class (see
+// NOTES.md section 9), so `member(inherit_list(player),
+// "/lib/realizations/wizard.lpc")` would always be -1 even for a genuine
+// wizard.lpc instance.
+/////////////////////////////////////////////////////////////////////////////
+public nomask void restorePlayerObject(object player, string name)
+{
+    player->restore(name);
+    if (program_name(player) == "/lib/realizations/wizard.lpc")
+    {
+        player->updateLoginTime();
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////

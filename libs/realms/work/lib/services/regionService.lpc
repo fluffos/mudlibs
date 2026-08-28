@@ -366,12 +366,18 @@ public nomask mapping getBuildingLayout(string size)
 }
 
 /////////////////////////////////////////////////////////////////////////////
-public nomask mapping getMapDecorator(string class, string size, string type,
-    string color)
+// FluffOS PORT NOTE: renamed the `class` parameter to `decoratorClass` --
+// this driver's grammar reserves `class` as a keyword (LPC struct/class
+// definitions), so using it as a plain identifier is a hard syntax error
+// here ("syntax error, unexpected L_CLASS"), confirmed live via lpcc.
+// Only the parameter/local identifier changes; the "class" mapping key
+// string literals below are untouched (those were never the problem).
+public nomask mapping getMapDecorator(string decoratorClass, string size,
+    string type, string color)
 {
     mapping ret = 0;
 
-    switch (class)
+    switch (decoratorClass)
     {
         case "building":
         {
@@ -387,7 +393,7 @@ public nomask mapping getMapDecorator(string class, string size, string type,
     if (ret)
     {
         ret["color"] = color;
-        ret["class"] = class;
+        ret["class"] = decoratorClass;
         ret["type"] = type;
         ret["size"] = size;
     }
@@ -480,17 +486,34 @@ private nomask string getSectionWithColor(string colorConfiguration,
 }
 
 /////////////////////////////////////////////////////////////////////////////
-public nomask string **getMapIcon(object region, string name, 
-    string colorConfiguration, string charset)
+// FluffOS PORT NOTE: return/local types here were originally `string **`
+// (an array-of-arrays-of-string). This driver's type grammar has no
+// nested-array type at all -- `optional_star` (compiler/internal/
+// grammar.y) is a single bit, so `type **` is a hard syntax error
+// EVERYWHERE it appears (return types, params, and local declarations
+// alike, confirmed via a from-scratch minimal repro with lpcc), not
+// something specific to this function. Fixed by declaring these as
+// `mixed *` instead: the type annotation is compile-time-only (this
+// driver doesn't distinguish "array of string" from "array of array of
+// string" at runtime), so this has no behavioral effect -- the values
+// themselves are still built/read as real nested arrays via `({ ({ ...
+// }) })` literals and `foo[x][y]` indexing, unchanged. This is a
+// corpus-wide pattern (44 files under this lib alone use `**`, mostly
+// the /areas/tol-dhurath/temple-interior/*.lpc room-level `customIcon()`
+// overrides plus this file and domain.lpc) -- only the two call sites
+// on the region-generation critical path (this file, domain.lpc) were
+// fixed this session; the temple-interior room files are unrelated
+// hand-built game content, not swept here (see NOTES.md).
+public nomask mixed *getMapIcon(object region, string name, string colorConfiguration, string charset)
 {
-    string **ret = ({ ({ " ", " ", " " }),
+    mixed *ret = ({ ({ " ", " ", " " }),
         ({ " ", " ", " " }),
         ({ " ", " ", " " }) });
 
-    if (member(MapIcons, name) && 
+    if (member(MapIcons, name) &&
         member(MapIcons[name]["colors"], colorConfiguration))
     {
-        string **icon = (charset == "unicode") ?
+        mixed *icon = (charset == "unicode") ?
             MapIcons[name]["unicode"] : MapIcons[name]["ascii"];
 
         for (int x = 0; x < 3; x++)

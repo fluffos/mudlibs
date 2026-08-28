@@ -114,9 +114,14 @@ private mixed *getPatchParameters(string command, object initiator)
         parameters = ({ });
         foreach(mixed parameter in paramList)
         {
-            if (to_object(parameter))
+            // FluffOS PORT NOTE: this driver has no to_object() efun at
+            // all (confirmed against core.spec) -- LDMud's to_object(str)
+            // resolves an existing, already-loaded object by name without
+            // loading a fresh copy, which is exactly find_object(str, 0)
+            // here (core.spec: `find_object(string, int default: 0)`).
+            if (find_object(parameter, 0))
             {
-                parameters += ({ to_object(parameter) });
+                parameters += ({ find_object(parameter, 0) });
             }
             else if (sizeof(regexp(({ parameter }), "[0-9]*\\.[0-9]+")))
             {
@@ -154,7 +159,21 @@ public nomask int execute(string command, object initiator)
                 tell_object(initiator, sprintf("Function '%s' found in %O.\n",
                     methodName, target));
 
-                mixed output = apply((: call_other :), target, methodName, parameters);
+                // FluffOS PORT NOTE: this driver has neither apply() nor
+                // a closure-based call_other() efun override (confirmed
+                // against core.spec) -- but it does support spreading an
+                // array as trailing call arguments via the `arr...`
+                // syntax (compiler/internal/grammar.y's spread_expr),
+                // which is the direct equivalent of LDMud's apply()
+                // treating a final array argument as the spread argument
+                // list. `parameters` can legitimately be 0 (no -v flag
+                // given, see getPatchParameters() above) rather than an
+                // array, so it's normalized to an empty array first --
+                // spreading ({}) correctly calls with zero extra args,
+                // matching the original apply() call's behavior when
+                // parameters was 0.
+                mixed *callParameters = pointerp(parameters) ? parameters : ({});
+                mixed output = call_other(target, methodName, callParameters...);
 
                 tell_object(initiator, sprintf("Returned: %s\n",
                     convertDataToString(output)));

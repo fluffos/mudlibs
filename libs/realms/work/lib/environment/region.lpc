@@ -11,6 +11,59 @@ inherit "/lib/environment/modules/regions/map.lpc";
 private int setupCompleted = 0;
 private int manualRegion = 0;
 
+// FluffOS PORT NOTE: this driver gives each independent `inherit` of the
+// same base program its OWN separate copy of that program's instance
+// variables rather than sharing one (confirmed against
+// compiler/internal/compiler.cc's define_variable(): a name collision
+// from a second inherit path is handled by silently allocating a NEW
+// variable slot and repointing the symbol table at it -- "the nasty
+// idiots have two variables of the same name in the same object" is the
+// driver's own comment -- not by reusing the first slot). This file
+// inherits /lib/environment/modules/regions/core.lpc (which declares
+// `grid`) both directly AND indirectly through generate-region.lpc,
+// persist-region.lpc, and map.lpc (each of which also inherits core.lpc
+// directly) -- a real diamond, now legal here since core.lpc's functions
+// were already de-nomasked (see core.lpc's own port note), but the
+// `grid` variable itself still silently fragments into a separate
+// physical slot per file that inherits core.lpc, one of which is
+// whatever slot THIS file's own setCoordinate()/create() below end up
+// bound to. generate-region.lpc's own createEmptyGrid() (called from
+// setCoordinate() below) initializes a DIFFERENT slot -- confirmed live:
+// "Value being indexed is zero" at `grid[x][y] = (...)` on the very
+// first setCoordinate() call in any hand-authored region.lpc-based area
+// (e.g. /areas/eledhel/southern-city/southern-city.lpc, this lib's own
+// StartLocation() chain) even though createEmptyGrid() had already run
+// moments earlier and reported no error. Overriding createEmptyGrid()
+// here (identical body to generate-region.lpc's) guarantees it's
+// compiled in the same file as -- and therefore shares the same `grid`
+// slot as -- setCoordinate()/create() below, which is what actually
+// fixes it (LPC function dispatch is virtual, so this override also
+// correctly takes over generate-region.lpc's own internal calls to
+// createEmptyGrid() during procedural generation). A full fix for the
+// underlying variable-fragmentation class of bug would need the same
+// "shared object instead of shared inherit" restructuring already used
+// elsewhere in this port for an analogous problem (see NOTES.md section
+// 2's dataServiceUtil.lpc writeup) applied across this whole ~20-file
+// regions/ directory -- flagged as a residual gap, not attempted here.
+protected void createEmptyGrid(int x, int y)
+{
+    for (int i = 0; i < x; i++)
+    {
+        grid[i] = ([]);
+        for (int j = 0; j < y; j++)
+        {
+            grid[i][j] = ([
+                "x": i,
+                "y": j,
+                "room type": "none",
+                "is placed": 0,
+                "exits": ([]),
+                "environment": 0
+            ]);
+        }
+    }
+}
+
 /////////////////////////////////////////////////////////////////////////////
 public nomask void asManualRegion()
 {

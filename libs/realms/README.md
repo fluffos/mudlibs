@@ -94,12 +94,19 @@ summary).
 ## Registration flow
 
 Login name (letters/apostrophe/hyphen only) -> confirm new user (`y`/`n`) ->
-password -> confirm password -> in. The very first character ever
-registered against a fresh database is automatically granted the game's top
-`owner` rank (upstream's own design, not a port addition) and, on their
-*next* login, presented with the 11-step character creation wizard
-(color/charset/minimap/gender/race/subrace/hair/eye/attribute/skills/trait
-selectors, each a numbered menu).
+password -> confirm password -> in, immediately presented with the 11-step
+character creation wizard (color/charset/minimap/gender/race/subrace/hair/
+eye/attribute/skills/trait selectors, each a numbered menu) -- **not** on
+a delayed "next login" as an earlier draft of this file assumed; see
+NOTES.md section 14 for why that earlier assumption was untested and
+wrong (the wizard never actually ran at all until this session's fixes).
+Any login whose saved character data is still incomplete (including one
+where the player deliberately skipped trait selection) re-triggers the
+full wizard from scratch on the next login too -- this is
+`validatePlayerData()`'s own intentional design, not a bug. The very first
+character ever registered against a fresh database is automatically
+granted the game's top `owner` rank (upstream's own design, not a port
+addition).
 
 ## Admin account
 
@@ -113,28 +120,50 @@ selectors, each a numbered menu).
   was created, so this account's rank was set directly rather than relying
   on that one-time bootstrap).
 
-Verified live: `fluffos` logs in, is a genuine `/lib/realizations/wizard.lpc`
-instance (confirmed via `program_name()`), and plays the core game
-(`look`/`quit`) normally. **Not fully verified**: actual wizard *command*
-execution (`ls`, `pwd`, `cc`, ...) additionally requires passing
-`baseGroup.lpc`'s file-permission-group checks (`hasExecuteAccess()` via
-`groupObjects()`/`isMemberOf()`) -- these loaded without any driver-level
-error, but this session ran out of time to trace why they still deny
-access for a rank that should have full permissions. Flagged as a residual
-gap, not a confirmed driver bug (see NOTES.md).
+The `fluffos` account itself was created during onboarding against that
+session's own MySQL instance (session-local/throwaway, see "Local run"
+below) and does not exist in a freshly re-provisioned database -- the
+account was re-created as `cepheus` (the automatic first-registrant
+`owner` grant) during this session's own deep functional test pass
+instead. **Wizard command *execution* (`ls`, `pwd`, `cc`, ...) is
+confirmed still denied for the `owner` rank** even after a real, fixed bug
+in this exact chain (`baseGroup.lpc`'s `group()` matched the wrong file
+extension, see NOTES.md section 14) -- everything downstream of that fix
+checks out structurally (group registration, command-list wizard-stripping
+logic) but access is still denied by something not yet pinned down. Flagged
+as an open residual gap, not a confirmed driver bug (see NOTES.md section
+14 for the full trace).
 
 ## Status
 
-Boots clean. New-user registration, the full 11-step character creation
-flow, landing in the real game world, `look` (producing genuine room
-output), and `quit` (saving the character) were all verified end-to-end
-across multiple fresh accounts with a real driver session and a raw socket
-client, with zero uncaught runtime errors on the tested path. `score`'s
-weapon-stat display can still hit a null-service `call_other()` error for a
-character with no inventory module integrated -- documented, not fixed (see
-NOTES.md). Two pre-existing files (`/lib/services/regionService.lpc`,
-`/lib/commands/wizard/patch.lpc`) still fail to compile from unrelated
-upstream issues; neither is on the tested critical path.
+Boots clean. A real §10.7 deep functional test pass (see NOTES.md section
+14) found and fixed a severe, previously-undiscovered chain of bugs: **the
+11-step character-creation wizard had never actually worked for any
+character** (a `restore()`-before-`exec()` timing bug plus a missing
+`thing.lpc` inherit on the base selector class), and **character
+persistence had never actually worked either** (`getPlayerInfo()` never
+included a `"name"` key, which every save silently required; separately,
+`has()`/`getModule()` used a shallow `inherit_list()` that missed 11 of 15
+per-character data services entirely). Both are now fixed and verified
+end-to-end: registered a fresh account, completed the real 11-step wizard,
+confirmed populated stats via `score`, `quit`, verified the saved row
+directly in MySQL, and reconnected after a real gap to confirm the
+character restores correctly with **no** re-triggered wizard. Along the
+way, fixing the character-creation wizard's own live minimap-demo step
+surfaced that `/lib/environment/environment.lpc` (the base class for
+*every room in the game*, including this lib's own `StartLocation()`) had
+never successfully compiled either, due to a wide diamond-inheritance
+`nomask` conflict plus several instances of this driver's lack of a
+nested-array (`type **`) type; both swept and fixed across the affected
+files (see NOTES.md for the full file list). `score`'s combat-math display
+hit two more instances of the already-documented null-`getModule
+("inventory")` guard gap (now fixed, matching the one instance fixed
+during onboarding). Wizard `patch.lpc` now compiles clean (`to_object`/
+`apply`, neither exists on this driver, replaced with `find_object()`/
+`arr...` spread) but could not be live-tested given the still-open wizard
+command-execution gap above. Real combat, guild-joining, and skill/trait
+*advancement* (as opposed to display) were not reached this session --
+flagged as unverified-live, not silently presented as tested.
 
 WASM status: not attempted this session (`wasm_status` left `""`).
 

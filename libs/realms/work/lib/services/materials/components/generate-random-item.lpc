@@ -49,7 +49,24 @@ private nomask varargs string *getListOfBlueprints(string type, string subtype,
         directory = regreplace(directory, " ", "-", 1);
         directory = regreplace(directory, "'", "", 1);
 
-        itemBlueprints = get_dir(directory + "*", 0x10) - 
+        // FluffOS PORT NOTE: get_dir() on this driver returns bare
+        // filenames, never full paths (confirmed against NOTES.md
+        // section 2) -- the original `- ({ directory + ".", directory +
+        // ".." })` subtraction was already a no-op here (bare "."/".."
+        // never match a full-path string), but more importantly every
+        // bare filename returned then got used AS-IS by
+        // getRandomItemOfType() below (file_size()/clone_object() with no
+        // directory prefix), which silently resolved nothing and made
+        // every item-generation call that reached this branch return 0.
+        // Confirmed live via a shop's item generation crashing with "Bad
+        // argument 1 to EFUN call_other()" (item == 0) the moment any
+        // shop rolled a random (non-explicitly-listed) item. Fixed by
+        // re-prepending `directory` to each bare filename -- 0x10 does
+        // NOT exclude "."/".." on this driver either (confirmed live via
+        // a direct get_dir() dump), so the exclusion subtraction is kept,
+        // just built against the now-correctly-prefixed full paths.
+        itemBlueprints = map(get_dir(directory + "*", 0x10),
+            (: $2 + $1 :), directory) -
             ({ directory + ".", directory + ".." });
     }
     return itemBlueprints;

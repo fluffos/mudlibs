@@ -17,8 +17,22 @@ private nomask string *getLayoutRow(string row)
 {
     string colorString = 0;
 
-    string *ret = regexplode(row, "(\x1b[^m]+m)*(\xe2..|.)(\x1b.0m|)") - 
-        ({ "" });
+    // FluffOS PORT NOTE: this driver's compiler validates every string
+    // LITERAL as well-formed UTF-8 and rejects one that isn't -- a bare
+    // `\xe2` byte (a 3-byte UTF-8 lead byte, here meant to byte-match the
+    // first byte of a box-drawing/symbol glyph) is invalid UTF-8 on its
+    // own (it needs 2 continuation bytes, which aren't and can't be part
+    // of this literal -- the following `..` are regex wildcard dots, not
+    // literal continuation bytes). Confirmed live ("error: Invalid UTF8
+    // codepoint in string literal"), and this was blocking real gameplay
+    // -- generateIconsForDomain() (below) is reached from ordinary
+    // character creation (minimapSelector's live starting-room demo).
+    // Fixed by building the raw byte at runtime via sprintf("%c", ...)
+    // instead of embedding it in a literal -- only compile-time literals
+    // get UTF-8-validated, not runtime-constructed strings -- same
+    // pattern, same regex semantics, no behavior change.
+    string *ret = regexplode(row, "(\x1b[^m]+m)*(" + sprintf("%c", 0xe2) +
+        "..|.)(\x1b.0m|)") - ({ "" });
 
     for (int i = 0; i < sizeof(ret); i++)
     {
@@ -115,7 +129,9 @@ public nomask void loadDomain(object user, string domainName)
 }
 
 /////////////////////////////////////////////////////////////////////////////
-public nomask string **getDomainMapIcon(string location)
+// FluffOS PORT NOTE: `string **` -> `mixed *`, same fix and same reason
+// as regionService.lpc's getMapIcon() -- see that file's port note.
+public nomask mixed *getDomainMapIcon(string location)
 {
     return (member(mapIcons, location)) ? mapIcons[location] : 
         ({ ({ " ", " ", " " }),

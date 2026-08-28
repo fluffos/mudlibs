@@ -5,8 +5,17 @@
 #ifndef regionTypes_h
 #define regionTypes_h
 
-#include "/lib//services/regions/terrain.h"
-#include "/lib//services/regions/trees.h"
+// FluffOS PORT NOTE: this driver's #include path resolution does not
+// collapse a doubled "//" the way a normal filesystem path lookup would
+// -- confirmed live via lpcc ("error: Cannot #include
+// /lib//services/regions/terrain.h"). The original double-slash paths
+// here (an upstream typo, harmless under whatever LDMud-style resolution
+// tolerated it) made both headers fail to load, which cascaded into
+// "Undefined variable 'Trees'"/"'Terrain'" below and left
+// regionService.lpc (and everything that depends on it, including the
+// wizard `generate region` command) with no compiled program at all.
+#include "/lib/services/regions/terrain.h"
+#include "/lib/services/regions/trees.h"
 
 protected mapping RegionTypes = ([
     "forest": ([

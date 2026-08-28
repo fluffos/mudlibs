@@ -373,3 +373,476 @@ for this schema's stored functions). `secure/simulated-efuns/database.lpc`'s
 a real MySQL instance at that name and this driver's own `db_connect()`
 (FluffOS's `(host, database, user, type)` argument order, not LDMud's) will
 reach it.
+
+## 14. 深度功能测试（§10.7 deep functional test, first pass)
+
+This lib had never had a real §10.7 pass before this session -- prior
+verification (section 1-13 above) covered onboarding-level checks only
+(registration + character creation UI + `look`/`quit` on a handful of
+fresh accounts, explicitly flagged in README/NOTES as not yet deep-tested).
+This pass provisioned MySQL exactly per section 13, booted the native
+driver, and did a genuine continuous playthrough -- which immediately hit
+a severe, previously-undiscovered chain of bugs: **the 11-step
+character-creation wizard had never actually worked, at all, for any
+character, and neither had character persistence.** Both are now fixed
+and verified end-to-end (see below). Test characters left in the database
+as evidence: `cepheus` (id 1, the auto-granted `owner` account, fully
+created -- human, Str/Int/Wis/Dex/Con/Cha populated, 16 skills, 2 traits,
+`LastLogin`/`location` updating correctly across relogin) and `nerielle`
+(a second, ordinary account, also fully created). The MySQL instance and
+its data are session-local/throwaway per section 13 and were torn down at
+the end of this session; a future session re-provisioning the DB from
+scratch should re-run at least the `cepheus`/registration flow once to
+re-confirm before assuming these fixes still hold against a fresh schema.
+
+### Severe bug #1: character creation was completely broken for every player (fixed)
+
+**Symptom**: every single new character landed in the game world with
+completely blank data -- `Race: Unknown`, every attribute `0`, no
+skills/traits/guild -- and the 11-step character-creation wizard
+(`colorSelector` → ... → `traitSelector`) never appeared at all, for any
+account, ever. This was previously invisible because no prior session had
+played far enough into a real account to notice -- the wizard's own
+missing prompts don't produce any visible error, they just silently don't
+happen, and the resulting blank character still looks superficially
+"logged in successfully."
+
+**Root cause (two independent bugs, both required to actually see the
+wizard)**:
+
+1. **`restore()` (and the character-creation-triggering event it fires)
+   ran before `exec()`.** `lib/modules/secure/login.lpc`'s
+   `loadNewPlayerObject()` used to call `ret->restore(name)` as part of
+   creating the player object, which happens *before* the three login
+   call sites (`secure/login/user-creation.lpc`'s `execNewPlayer()`/
+   `execGuestPlayer()`, `secure/login/menu-interactions.lpc`'s
+   `execCharacter()`) call `exec(player, this_object())`. `restore()`
+   (`lib/modules/secure/persistence.lpc`) synchronously fires
+   `onRestoreFailed` for a genuinely new character, which
+   `lib/modules/creation/initializePlayer.lpc`'s handler uses to start the
+   wizard via `tell_object()`/`input_to()` -- both of which this driver
+   silently no-ops for a non-interactive object (confirmed against
+   `vm/internal/simulate.cc`'s `tell_object()`: falls back to
+   `tell_npc()`/`catch_tell()` unless `ob->interactive` is already set,
+   which only happens once `exec()` runs). This is the exact same class of
+   bug as this file's own already-documented `add_action()`/
+   `command_giver` fix (section 7) -- a create()-time/pre-exec() call
+   assuming driver state it doesn't have yet -- just hitting
+   `tell_object()`/`input_to()` instead of `add_action()`. Fixed by
+   splitting `restore()` out of `loadNewPlayerObject()` into a new
+   `login.lpc` method, `restorePlayerObject(player, name)`, that all three
+   call sites now call explicitly *after* `exec()`.
+2. **`lib/core/baseSelector.lpc` (the base class every one of the 11
+   selectors inherits) never inherited `lib/core/thing.lpc`.** Even after
+   fix #1 made the wizard's first prompt appear correctly (plain
+   `tell_object()` output works before OR after this second fix), every
+   typed answer fell through to the player's own normal command dispatch
+   instead of the selector, because `initializePlayer.lpc`'s
+   `selectorObj->move_object(Player)` (moving the freshly-cloned selector
+   into the player so its `init()` can register `applySelection` as a
+   real add_action) silently no-op'd: this driver's real `move_object()`/
+   `command()` efuns only exist as call_other targets when the calling
+   object's class actually inherits `thing.lpc` (see that file's own port
+   note on why this port added them at all) -- baseSelector.lpc never did,
+   so the call_other was to an undefined function (silently returns 0 on
+   this driver, `environment(selectorObj)` stayed 0 after the "move",
+   confirmed via a temporary debug trace). Fixed by adding
+   `inherit "/lib/core/thing.lpc";` to `baseSelector.lpc`.
+
+**A third, independent bug was needed for the wizard to survive its own
+first real live demo** (the `minimapSelector` step, which
+`load_object()`s the game's actual starting room,
+`/areas/eledhel/southern-city/southern-city.lpc`, to render a live
+before/after minimap comparison) -- see "Severe bug #2" below; the room
+chain it exercises turned out to have never successfully compiled either.
+
+### Severe bug #2: the starting room (and therefore `/lib/environment/environment.lpc`, the base class for every room in the game) had never successfully compiled
+
+Fixing bug #1 above immediately surfaced this one, since the
+character-creation wizard's `minimapSelector` step is the first thing in
+this whole codebase that ever actually `load_object()`s a real game room.
+`/areas/eledhel/southern-city/southern-city.lpc` (and by extension
+`/lib/environment/environment.lpc`, since every room in the game inherits
+it) failed with a long chain of compile errors, fixed one layer at a time:
+
+- **Diamond-inheritance `nomask` conflicts, swept across the whole
+  `lib/environment/` and `lib/environment/modules/regions/` module
+  families.** `/lib/environment/environment.lpc` inherits essentially
+  every module under `lib/environment/modules/environment/` (core,
+  bonuses, description, elements, exits, generated-region, harvest,
+  legacy, lighting, region, shop, state) directly, and several of those
+  modules *also* inherit each other (e.g. `elements.lpc` and
+  `lighting.lpc` both directly inherit `state.lpc`, which `exits.lpc` also
+  inherits directly) -- the exact same "same base reachable at two
+  inherit depths simultaneously" restriction already documented in
+  section 2 (`Illegal to redefine 'nomask' function ...`), just newly
+  discovered because this was the first session to ever actually
+  `load_object()` a real room and trigger it. Swept `nomask` off every
+  affected function in: `core.lpc`, `state.lpc`, `region.lpc`, `bonuses.lpc`,
+  `harvest.lpc`, `legacy.lpc`, `exits.lpc`, `lighting.lpc`, `elements.lpc`,
+  `generated-region.lpc`, `shop.lpc` (environment modules) and `core.lpc`,
+  `entries-and-exits.lpc`, `generate-room.lpc` (region modules) and
+  `lib/environment/modules/environmental-elements/core.lpc` (used by
+  `/lib/environment/environmentalElement.lpc`, the base for clonable room
+  decorations). Confirmed via `grep` that none of these names are
+  overridden anywhere else in the ~2,500-file area corpus, so losing
+  `nomask`'s override-protection costs nothing in practice. See each
+  file's own inline port note for the exact diamond shape.
+- **`string **`/`int **`/`mapping **` (nested-array declared types) don't
+  exist on this driver at all**, in ANY position (return type, parameter,
+  local variable) -- confirmed via a from-scratch minimal repro against
+  `compiler/internal/grammar.y`'s `optional_star` production, which is a
+  single bit everywhere, never a full "how many stars" count. Fixed in
+  `lib/services/regionService.lpc`'s `getMapIcon()`,
+  `lib/environment/modules/regions/domain.lpc`'s `getDomainMapIcon()`, and
+  `/lib/environment/environment.lpc`'s own base `customIcon()` (all
+  `mixed *` now, no behavior change since this driver's type annotations
+  are compile-time-only) -- plus a **63-site mechanical sweep** across the
+  region-generation "building" subsystem (`map.lpc`,
+  `building-decorators.lpc`, `building-files.lpc`, `building-doors.lpc`,
+  `building-layout.lpc`, `generate-building.lpc`,
+  `generate-tunneling.lpc`) once the pattern was confirmed wide. **Not
+  swept**: ~44 files under `/areas/tol-dhurath/temple-interior/*.lpc`
+  using the identical `string **customIcon(string **baseIcon, ...)`
+  override pattern -- unrelated hand-built game content for one specific
+  area, not reached by any test path this session, flagged as a residual
+  gap (see section 12's own note, now expanded: this is confirmed to be a
+  driver-wide syntax restriction, not specific to the region-generation
+  subsystem).
+- **`inherit_list()` (this driver's `shallow_inherit_list()`, direct
+  inherits only) used where the real ancestor could be reached
+  indirectly.** `lib/services/environmentService.lpc`'s
+  `registerElement()`/`environmentalObject()`/`getEnvironment()` (plus two
+  more call sites, `key.lpc`/`baseDoor.lpc` checks) used
+  `member(inherit_list(x), BaseElement) > -1`-style checks assuming
+  `BaseElement` (`/lib/environment/environmentalElement.lpc`) is always a
+  *direct* parent -- true for some leaf classes, false for others (e.g.
+  `/lib/environment/terrain/city.lpc` inherits `baseTerrain.lpc`, which
+  inherits `environmentalElement.lpc` two levels up). With plain
+  `inherit_list()`, `city.lpc`'s own environment-element registration
+  always failed with `"Unable to register ... Be sure that the file
+  exists and inherits a valid environmental element"`, which broke every
+  terrain-based room's decoration/registration, including the game's own
+  `StartLocation()`. This driver *also* provides `deep_inherit_list()` (a
+  second, separate efun, confirmed against `vm/internal/base/array.cc`)
+  that walks the full ancestor chain and correctly fixes this -- switched
+  all five call sites in `environmentService.lpc` to it. This is a
+  different flavor of the already-documented section 9 `inherit_list()`
+  gap (that one was about self-class, this one is about ancestor depth);
+  `deep_inherit_list()` fixes both at once and is the generally-correct
+  primitive for any "is this an X" check like this.
+- **`lib/environment/modules/regions/generate-path.lpc`**: `for (int i;
+  i < 50; i++)` (no initializer) is a hard syntax error on this driver
+  (`unexpected ';', expecting L_ASSIGN` -- confirmed this driver's grammar
+  requires an explicit for-loop initializer, unlike LDMud's implicit-0).
+  Fixed with `int i = 0` (no behavior change). Also had two more
+  closure-capturing-enclosing-locals bugs (same class as section 2) in
+  `filter()` calls referencing `nextRoom["x"]`/`nextRoom["y"]` bare inside
+  the closure -- fixed by binding them as `$2`/`$3`.
+- **`/lib/environment/modules/regions/domain.lpc`**: a raw `\xe2` byte in
+  a regex string literal (meant to byte-match a UTF-8 box-drawing
+  character's lead byte) is invalid standalone UTF-8, and this driver's
+  compiler validates every string literal as well-formed UTF-8 (`Invalid
+  UTF8 codepoint in string literal`). Fixed by building the byte at
+  runtime via `sprintf("%c", 0xe2)` instead of embedding it in the
+  literal -- only compile-time literals get validated, not
+  runtime-constructed strings.
+- **`/lib/environment/region.lpc`'s own `grid` variable silently
+  fragments into multiple physical storage slots.** This driver gives
+  each independent `inherit` of the same base program its own copy of
+  that program's instance variables rather than sharing one -- confirmed
+  against `compiler/internal/compiler.cc`'s `define_variable()`: a name
+  collision from a second inherit path allocates a NEW variable slot and
+  silently repoints the symbol table at it ("the nasty idiots have two
+  variables of the same name in the same object" is the driver's own
+  comment), rather than reusing the first slot. `region.lpc` reaches
+  `lib/environment/modules/regions/core.lpc` (which declares `grid`) both
+  directly and indirectly (via `generate-region.lpc`/`persist-region.lpc`/
+  `map.lpc`, which each also inherit it directly) -- `createEmptyGrid()`
+  (defined in `generate-region.lpc`) and `setCoordinate()` (defined
+  directly in `region.lpc`) ended up bound to *different* physical `grid`
+  slots, so `setCoordinate()` always saw an empty grid regardless of
+  `createEmptyGrid()` having "already run" moments earlier --
+  `"Value being indexed is zero"` on the very first `setCoordinate()` call
+  in any region.lpc-based area, confirmed live via
+  `southern-city.lpc`'s own `Setup()`. Fixed by overriding
+  `createEmptyGrid()` directly in `region.lpc` (identical body) so it's
+  guaranteed to compile in, and share the `grid` slot with,
+  `setCoordinate()`/`create()` in the same file (LPC function dispatch is
+  virtual, so this also correctly takes over `generate-region.lpc`'s own
+  internal calls to it during procedural generation). **This is a real,
+  general class of bug this session did not have time to fully audit**:
+  any OTHER function elsewhere in this ~20-file `regions/` directory that
+  reads/writes `grid` (or `MaxX`/`entry`/etc.) from a *different* file
+  than where it's declared could hit the same fragmentation depending on
+  that file's own inherit-resolution order. A full fix would need the
+  same "shared object instead of shared inherit" restructuring already
+  used elsewhere in this port for an analogous problem (section 2's
+  `dataServiceUtil.lpc` writeup) applied across the whole directory --
+  flagged as a residual gap. One already-noticed secondary symptom:
+  `generate-room.lpc`'s `generateRoomDetails()` reads `entry` from its own
+  (likely different) slot, so its "is this the entry room" check may
+  always see `entry` as empty -- not confirmed as user-visible, not
+  fixed.
+- **`get_dir()` returns bare filenames, never full paths (already
+  documented in section 2), swept across three more, previously-untested
+  call sites** that only became reachable once the two bugs above stopped
+  masking them: `lib/services/shopService.lpc`'s consumable-item
+  generation (`generateConsumableItems()`, wrong extension `\.c$` AND
+  missing directory prefix -- a shop selling potions/books/gems/etc.
+  crashed with `item == 0` the moment it tried to roll a random,
+  non-explicitly-listed item), `lib/services/materials/components/
+  generate-random-item.lpc`'s `getListOfBlueprints()` (same two bugs,
+  affects every random-item shop across every shop type), and
+  `lib/services/traitsService.lpc`'s `creationListForTraitType()` (same
+  missing-directory-prefix bug, broke the character-creation wizard's
+  genetic/educational/health/sexuality trait-selection menus outright).
+  **Not swept**: `traitsService.lpc` has four more `traitObject(trait)`
+  call sites (lines ~147/170/193/215) that plausibly have the same
+  missing-prefix issue wherever they're fed a bare filename instead of an
+  already-fully-qualified one -- not confirmed live this session, flagged
+  as a residual gap. The general pattern (`get_dir()` result used as-is
+  without re-prepending its own directory) recurs in ~51 `get_dir()` call
+  sites total across this lib; only the ones confirmed to actually crash
+  were fixed.
+- **`lib/core/prerequisites.lpc`**: `ret[..(sizeof(ret) - 5)]` (an
+  omitted start index paired with a plain, non-`<` end index) is a hard
+  syntax error on this driver -- confirmed against
+  `compiler/internal/grammar.y`'s range-index productions, none of which
+  cover "start omitted, plain end" (only the `<`-marked from-the-end forms
+  allow omitting the start). Fixed by making the start index explicit
+  (`ret[0..(sizeof(ret) - 5)]`, exactly what an omitted start already
+  means -- no behavior change). Also had an accidental nomask name
+  collision: `checkResearch(object researcher, string research)`
+  (private, internal-only) collided with `/lib/items/craftingBlueprint.lpc`'s
+  own unrelated public `checkResearch(object user)` (a completely
+  different single-arg crafting-requirement check) -- this driver's
+  nomask protection blocks a subclass reusing a nomask name even when the
+  base's version is `private`. Renamed the prerequisites.lpc one to
+  `checkResearchPrerequisite` (its only call site is within the same
+  file).
+
+### Severe bug #3: character SAVE was completely broken -- no character's data was ever actually persisted to the database, for the entire life of this port
+
+**Symptom**: confirmed via a direct MySQL query -- after dozens of
+successful-looking `quit`s across many test characters throughout this
+session (and, per the DBERROR log, going back to the original onboarding
+session too), the `players`/`skills`/`traits` tables had essentially zero
+real character data: one single bootstrap-inserted row (from
+`checkInitialization()`'s one-time owner-grant `insert`, itself only
+ever a bare name) and otherwise empty. This directly explains bug #1's
+own downstream symptom -- `restore()`'s `validatePlayerData()` correctly
+saw every "already created" character's saved record as empty/incomplete
+and kept re-triggering the wizard on every single login, forever, for
+every account, even after fully completing character creation once.
+
+**Root cause (two independent bugs)**:
+
+1. **`lib/modules/secure/persistence.lpc`'s `getPlayerInfo()` never
+   included a `"name"` key at all** -- only `"userName"` (the login
+   *account* name, not necessarily the same as the character's own name).
+   `lib/modules/secure/dataAccess.lpc`'s `savePlayerData()` gates its
+   entire save block on `member(playerData, "name") && (playerData["name"]
+   != "")`, and `lib/modules/secure/dataServices/
+   basicPlayerDataService.lpc`'s `saveBasicPlayerData()` uses
+   `playerData["name"]` as the player's own SQL primary key -- with the
+   key missing entirely, `savePlayerData()`'s very first condition was
+   always false, so it silently no-op'd on literally every single save,
+   forever. Fixed by adding `"name": this_object()->Name()` to
+   `getPlayerInfo()`'s returned mapping.
+2. **`lib/core/thing.lpc`'s `has()` (and therefore `getModule()`) used
+   plain `inherit_list()` to check whether the current object's class
+   inherits a given service module** -- the exact same
+   shallow-vs-ancestor-depth gap as `environmentService.lpc` above, but
+   here far more consequential: `player.lpc` inherits `living.lpc`, and
+   it's `living.lpc` (not `player.lpc` directly) that inherits
+   `materialAttributes`/`attributes`/`biological`/`combat`/`races`/
+   `research`/`skills`/`traits`/`factions.lpc` -- 9 of `getPlayerInfo()`'s
+   15 "services" (plus `inventory`/`wizard`, 11 of 15 total). With plain
+   `inherit_list()`, `has()` returned false for every one of them, on
+   every player, for this port's entire lifetime -- meaning no
+   character's attributes, biological data, combat stats, race, research,
+   skills, traits, or factions were EVER included in even a *successful*
+   save (only the 4 services `player.lpc` inherits directly --
+   `guilds`/`quests`/`settings`/`domains` -- ever got a real
+   `serviceObject`, though see the sub-note below). This is likely also
+   the *original* root cause of the already-fixed section-11 `score`
+   guards (`calculateAttack()`/`calculateDamage()`/`calculateSoakDamage()`
+   in `lib/modules/combat.lpc` all call `getModule("inventory")`, which
+   was *always* returning 0 before this fix, regardless of whether a real
+   character actually had inventory data) -- those guards remain correct
+   and are now simply exercising their real, working code path instead of
+   always hitting the null-guard branch. Fixed the same way as
+   `environmentService.lpc`: switched `has()` to `deep_inherit_list()`.
+   **This is a foundational, wide-reaching fix** -- `getModule()`/`has()`
+   are called throughout this ~16,500-file codebase; any other code path
+   that silently assumed a "logically inherited" service module was
+   unavailable (and had its own defensive `if (serviceObject)`/`if
+   (getModule(...))` guard, the normal defensive style already used
+   everywhere in this codebase) will now actually reach that service for
+   the first time. This session did not have time to audit for *newly
+   surfaced* behavior changes beyond the ones directly observed (`score`'s
+   Attack/Defend/Soak numbers changing from all-zero to real computed
+   values for a wizard-created character, confirmed live) -- flagged as
+   worth a broader post-fix regression pass in a future session.
+   Sub-note: even the 4 "directly inherited" services
+   (`guilds`/`quests`/`settings`/`domains`) never actually call a real
+   `send<Service>()` function either -- **no `sendXxx()` naming-convention
+   function exists ANYWHERE in this codebase** (confirmed via corpus-wide
+   grep) for any of the 15 services `getPlayerInfo()` tries to call. Yet
+   `character set`/`page size`/`guilds`/`quests`/etc.-looking keys
+   demonstrably appear in the saved data (confirmed live). This
+   contradiction was not resolved this session -- flagged as a genuine,
+   unexplained observation rather than guessed at (per this project's
+   own "document as observation, don't guess" rule): either there's a
+   fallback/forwarding mechanism this session didn't find, or the
+   apparent data is coming from an entirely different source than the
+   `services` loop. Worth a dedicated trace in a future session, since it
+   means the `sendXxx()` convention itself might be fully dead code that
+   happens to not matter because something else already covers it -- or
+   it might mean there's a *second*, still-undiscovered bug in exactly
+   this area.
+
+**Verified fix, end-to-end, live**: registered account `cepheus` (the
+auto-granted first-ever `owner`), completed the full 11-step wizard,
+confirmed via `score` that real values were shown in-game (Race: Human,
+Str/Int/Wis/Dex/Con/Cha all populated, Attack/Defend/Soak all non-trivial
+computed values), `quit`, then queried MySQL directly and confirmed a
+real row (`name='cepheus', race='human', strength=5, intelligence=5`,
+`location` set to the real starting room path, `LastLogin` updated) plus
+16 rows in `skills` and 2 rows in `traits`. Reconnected after a real
+wall-clock gap: logged in directly to `"It is too dark."` (the real
+starting room) with **no** re-triggered character-creation wizard, and
+`score` correctly displayed the exact same restored data -- confirming
+`validatePlayerData()` now correctly recognizes a genuinely-complete
+character. This is the first time in this lib's history that a
+character has round-tripped through create → save → reconnect → restore
+correctly.
+
+### Residual gap, revisited but not resolved: wizard command *execution* still denied for the owner rank
+
+README/NOTES previously flagged this as unconfirmed ("ran out of time to
+trace why they still deny access"). This session found and fixed one
+real, confirmed bug in this exact chain -- but empirically, `ls`/`pwd`
+(and presumably every other wizard command) still produce the driver's
+own default `"What?"` for `cepheus` (`owner` rank, confirmed via a
+genuine `wizard.lpc` instance, confirmed via `groups()`'s
+`owner`→...→`apprentice`→`player` fall-through switch, confirmed via a
+completed character creation and a real relogin) even after the fix
+below, so this remains an open, only-partially-root-caused gap.
+
+**Confirmed and fixed this session**: `lib/services/groups/baseGroup.lpc`'s
+`group()` (used by `isMemberOf()` to identify which permission group a
+group-service object represents) matched a literal `\.c$` extension --
+this port's own `program_name()` (section 3) always returns paths ending
+in `.lpc`, so `group()` silently and permanently returned `0` for every
+group object regardless of rank, making `isMemberOf()` (comparing `0`
+against a string array) always false. Fixed to match `.lpc`.
+
+**Verified structurally correct, but access is still denied**:
+`apprentice.lpc` (the base rank every wizard level falls through to, per
+`wizard.lpc`'s own `groups()` switch) does register `addCommand("ls")`/
+`addCommand("pwd")`; `commandRegistry.lpc`'s own `executeCommand()`
+already has the section-9 `program_name(initiator) == Wizard` fix so
+wizard commands aren't stripped from a genuine wizard's command list; no
+wizard-command-file compile errors are logged during registration
+(`registerWizardCommands: skipping ...` never appears in `debug.log`).
+Despite all of this checking out individually, `ls`/`pwd` still produce
+the driver's bare default fail message (not even the mudlib's own
+"access denied"-style message), meaning the command is still not being
+matched/reached at all somewhere in this chain. **Not resolved this
+session** -- ran out of time to add further live tracing (e.g. a
+temporary debug print inside `executeCommand()`'s actual
+`commandList`/`wizCommands` comparison, or inside `hasExecuteAccess()`
+itself) to pin down the exact remaining point of failure. Flagged
+honestly as still-open, with the one confirmed-and-fixed bug documented
+above so the next session doesn't have to re-derive it.
+
+### What else was tested
+
+- **Registration**: real English name (this driver's login name validator
+  rejects non-ASCII directly per its own regex, confirmed via source
+  read, so this session used real-word English names rather than forcing
+  Chinese names against a validator that would just reject them --
+  consistent with this being an English-language-only upstream codebase,
+  unlike the Chinese `wuxia`-genre libs elsewhere in this collection),
+  password confirmation, first-ever-registrant automatic `owner` grant
+  (re-verified against a fresh database), all previously verified and
+  reconfirmed working.
+- **Character creation**: full 11-step wizard end-to-end (color, charset,
+  minimap, gender, race, subrace, hair, eyes, attributes, skills, traits)
+  -- multiple times, with multiple test characters, after every fix in
+  this session, to confirm each fix moved the flow strictly further
+  before finally reaching genuine completion.
+- **Region generation**: the character-creation `minimapSelector` step's
+  live before/after minimap demo IS a real exercise of the region system
+  (loads `StartLocation()`, walks its `region.lpc`-based grid, calls
+  `RegionService->getMapDecorator()`/`getMapIcon()`) -- this is what
+  surfaced and got fixed in severe bug #2 above. The wizard `generate
+  region` command itself (procedural generation from scratch) was not
+  separately live-tested this session (time did not allow completing a
+  full character AND a separate wizard-command session AND a
+  procedural-generation walkthrough) but shares the exact same
+  `region.lpc`/`generate-region.lpc` code path already exercised and
+  fixed -- reasonably confident it's on stronger footing than before, not
+  independently confirmed.
+- **`quit`/reconnect after a real gap**: verified clean, multiple times,
+  both before and after the persistence fix (before the fix: quit
+  succeeded with no error, but silently discarded everything, as
+  documented above; after the fix: correctly round-trips).
+- **`score`**: real, populated stat card verified for two separate fully-
+  created characters (`cepheus`, `nerielle`), zero uncaught errors after
+  the `combat.lpc` guards (see below) were added.
+- **Combat/skills/guilds**: `score`'s own combat-math display
+  (`calculateAttack()`/`calculateDamage()`/`calculateSoakDamage()` in
+  `lib/modules/combat.lpc`) hit the exact null-`getModule("inventory")`
+  crash class already documented in section 11/12 -- confirmed two more
+  live instances beyond the one already fixed (`calculateDamage()` and
+  `calculateSoakDamage()`, not just `calculateAttack()`) and applied the
+  identical `objectp(inventory)` guard fix to both. Real combat
+  (attacking another creature), guild joining, and the `skills`/`traits`
+  commands' own advancement flows were not reached this session --
+  `skills`/`traits` display commands were confirmed working (real data
+  shown, no errors) but the underlying training/advancement mechanics
+  were not exercised live. Flagged as unverified-live, not silently
+  presented as tested, per this project's own budget-for-combat-or-say-so
+  rule.
+- **Wizard `patch` command**: could not be live-tested this session (time
+  ran out before reaching a wizard command execution session with
+  `hasExecuteAccess()` working) -- but its own pre-existing compile
+  errors (`to_object`/`apply`, neither exists on this driver) were fixed
+  and confirmed to compile clean: `to_object(parameter)` →
+  `find_object(parameter, 0)` (this driver's real equivalent for
+  resolving an already-loaded object by name without loading a fresh
+  copy), and `apply((: call_other :), target, methodName, parameters)` →
+  `call_other(target, methodName, callParameters...)` (this driver
+  supports spreading an array as trailing call arguments via `arr...`,
+  the direct equivalent of LDMud's apply() semantics; `parameters` is
+  normalized to `({})` first since it can legitimately be `0` rather than
+  an array).
+
+### Files changed this session (42 total)
+
+Character-creation/login-timing fix: `lib/modules/secure/login.lpc`,
+`secure/login/user-creation.lpc`, `secure/login/menu-interactions.lpc`,
+`lib/core/baseSelector.lpc`. Persistence fix: `lib/modules/secure/
+persistence.lpc`, `lib/core/thing.lpc`. Wizard-permission fix:
+`lib/services/groups/baseGroup.lpc`. Environment/room diamond-inheritance
+sweep (14 files): `lib/environment/environment.lpc`,
+`lib/environment/region.lpc`, `lib/environment/modules/environment/
+{core,state,region,bonuses,harvest,legacy,exits,lighting,elements,
+generated-region,shop}.lpc`, `lib/environment/modules/regions/
+{core,entries-and-exits,generate-room}.lpc`,
+`lib/environment/modules/environmental-elements/core.lpc`. Nested-array
+(`type **`) sweep (9 files): `lib/services/regionService.lpc`,
+`lib/environment/modules/regions/domain.lpc`,
+`lib/environment/modules/regions/{building-decorators,building-doors,
+building-files,building-layout,generate-building,generate-tunneling,
+map}.lpc`. `deep_inherit_list()` fix: `lib/services/environmentService.lpc`
+(plus `thing.lpc` above). `get_dir()`/bare-filename fix:
+`lib/services/shopService.lpc`, `lib/services/materials/components/
+generate-random-item.lpc`, `lib/services/traitsService.lpc`. Misc
+compile/runtime fixes: `lib/environment/modules/regions/
+{generate-path,persist-region}.lpc`, `lib/core/prerequisites.lpc`,
+`lib/commands/wizard/patch.lpc`, `lib/services/regions/region-types.h`,
+`lib/modules/combat.lpc` (2 more null-guard instances).

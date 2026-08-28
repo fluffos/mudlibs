@@ -12288,6 +12288,81 @@ new independent discovery.
 
 ---
 
+### 7.157 A base class inherited via more than one independent `inherit` path in the same object gets a SEPARATE physical copy of each colliding instance variable per path — fixing the already-documented `nomask`-diamond compile error is not enough by itself; two functions that both "obviously" touch the same variable can silently read/write two different variables if they were compiled reaching that declaration through different inherit chains
+
+Found on `realms`'s first-ever §10.7 pass (2026-08-28), while chasing why
+`/lib/environment/region.lpc`'s `setCoordinate()` threw `"Value being
+indexed is zero"` on the very first room registration in any
+hand-authored, `region.lpc`-based area — *after* already fixing the
+`Illegal to redefine 'nomask' function` diamond-inheritance errors this
+same file's dependency graph produced (the already-documented §2-class
+fix: strip `nomask` from a function reachable via two inherit depths at
+once). Stripping `nomask` makes the FUNCTIONS resolve correctly (LPC
+function dispatch is virtual/deduplicated across a diamond), but this
+driver does **not** do the same deduplication for plain instance
+**variables**: confirmed against `compiler/internal/compiler.cc`'s
+`define_variable()` — a name collision from a second inherit path calls
+`yywarn("Redeclaration of global variable '%s'.")` and then allocates a
+**new** variable slot, repointing the symbol table at it for whatever
+code compiles from that point forward, rather than reusing the first
+declaration's slot ("the nasty idiots have two variables of the same
+name in the same object" is the driver's own source comment for this
+case). Concretely: `region.lpc` inherits `lib/environment/modules/
+regions/core.lpc` (which declares `grid`) both directly AND indirectly,
+through three siblings (`generate-region.lpc`/`persist-region.lpc`/
+`map.lpc`) that each *also* inherit `core.lpc` directly — a real,
+legal-once-nomask-is-fixed diamond. `createEmptyGrid()` (defined in
+`generate-region.lpc`) populated `grid` for the loop's own file-local
+binding of that variable; `setCoordinate()` (defined directly in
+`region.lpc`) read a *different* physical `grid` — whichever slot was
+live by the time `region.lpc`'s own body got compiled, which in this
+inherit-order (`core, domain, generate-region, persist-region, map`) is
+neither the original core.lpc declaration nor generate-region.lpc's
+view of it. The result: `createEmptyGrid()` genuinely runs, genuinely
+populates *a* `grid`, and the immediately-following `setCoordinate()`
+call still sees an empty one — no warning distinguishes this at the
+call site, only the "Redeclaration of global variable" compile-time
+warning (easy to dismiss as cosmetic, since it doesn't block
+compilation) hints anything is wrong. This is the same general shape as
+the driver's own doc-noted per-diamond-path variable duplication for
+`save_object()` sanity (`DECL_NOSAVE` gets forced onto every
+redeclaration after the first) — it is intentional/known driver
+behavior, not a bug in the driver itself, but it is an easy trap for a
+mudlib author (or a porting session) that treats "diamond inheritance
+is now legal" as "diamond inheritance now behaves like a single shared
+base class."
+
+**How to detect**: any file compiling multiple `Redeclaration of global
+variable` warnings for the SAME name it also reads/writes matters —
+don't dismiss them as cosmetic once the underlying diamond shape is
+confirmed real (two+ independent `inherit` statements, in different
+files, ultimately reaching the same base). If a function that
+"obviously" mutates shared state (per the base class's own contract)
+doesn't seem to have any effect on a sibling function's later read of
+that same nominal variable, suspect this before assuming a logic bug in
+either function.
+
+**Fix pattern applied here**: rather than the fully-correct but invasive
+fix (convert the shared base into a real `call_other()`-target singleton
+object instead of a shared `inherit` — the same "shared object instead
+of shared inherit" restructuring this project's own `dataServiceUtil.lpc`
+precedent already uses for an analogous problem, see the `wxddym`/§2
+history), the minimal fix for one confirmed-live call-site pair is to
+**override** the writer function directly in the same file as the
+reader, with an identical body — this guarantees both are compiled
+against the same variable-slot binding (LPC function dispatch is
+virtual, so this override also transparently takes over any OTHER
+caller's use of the same function name elsewhere in the diamond,
+including internal calls from the sibling file that used to own it).
+This is a targeted patch for the one instance actually confirmed to
+crash live, not a general fix for the underlying class of bug — any
+other function elsewhere in the same diamond that also reads/writes the
+same nominally-shared variable from yet another file remains at risk
+and needs its own case-by-case check or the same file-colocation
+treatment.
+
+---
+
 ## 8. Login and registration flow bugs
 
 Registration is where restoration succeeds or fails: it exercises the

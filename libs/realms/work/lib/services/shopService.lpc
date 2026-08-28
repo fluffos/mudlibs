@@ -428,15 +428,42 @@ public nomask varargs void generateConsumableItems(object shop,
 
         int numItems = shop->randomItemsToGenerate();
 
+        // FluffOS PORT NOTE: two compounding bugs here, both confirmed
+        // live (a hard "Bad argument 1 to EFUN call_other()" -- item ==
+        // 0 -- the moment any shop selling consumables was set up, e.g.
+        // /areas/eledhel/southern-city/7x6.lpc's book shop):
+        //  1. `\.c$` matched this codebase's old/upstream ".c" file
+        //     extension convention; this port's real files all end in
+        //     ".lpc", so the filter matched nothing and every random
+        //     item pick indexed into an effectively-broken list.
+        //  2. get_dir() on this driver returns bare filenames (no
+        //     directory), confirmed against NOTES.md section 2 -- the
+        //     original code passed those bare names straight to
+        //     clone_object() with no directory prefix, which silently
+        //     returned 0 (a nonexistent relative path) rather than
+        //     erroring by itself; only became visible once fix #1 let a
+        //     real filename through.
+        // Fixed by matching the real ".lpc" extension and re-prepending
+        // the base directory before clone_object().
+        // `consumables[type]["base dir"]` is a get_dir()-style glob
+        // ("/lib/instances/items/books/*"), not a literal directory path
+        // -- strip the trailing "*" to get a real prefix to reattach to
+        // get_dir()'s bare filenames. Also, `consumables[type]["permanent"]`
+        // holds FULL paths while get_dir() gives bare filenames -- the
+        // duplicate-exclusion check needs the same baseDir prefix added
+        // ($3 below) before comparing, or it can never match and never
+        // actually excludes anything.
+        string globDir = consumables[type]["base dir"];
+        string baseDir = globDir[0..(sizeof(globDir) - 2)];
         string *itemBlueprints =
-            filter(get_dir(consumables[type]["base dir"], 0x10),
-            (: sizeof(regexp(({ $1 }), "\.c$")) && (member($2, $1) == -1) :), 
-                consumables[type]["permanent"]);
+            filter(get_dir(globDir, 0x10),
+            (: sizeof(regexp(({ $1 }), "\\.lpc$")) && (member($2, $3 + $1) == -1) :),
+                consumables[type]["permanent"], baseDir);
 
         for (int i = 0; i < numItems; i++)
         {
-            object item = 
-                clone_object(itemBlueprints[random(sizeof(itemBlueprints))]);
+            object item = clone_object(baseDir +
+                itemBlueprints[random(sizeof(itemBlueprints))]);
 
             item->identify();
             item->set("quantity", 10 + random(16));
@@ -536,11 +563,20 @@ private string generateItemSummary(mapping summary, string colorConfiguration)
 public nomask mapping getBuyItemDetailsForType(object user, object store, 
     string type, string subtype)
 {
+    // FluffOS PORT NOTE: LDMud's filter_indices(mapping, closure, ...)
+    // doesn't exist on this driver at all (confirmed against core.spec --
+    // only plain filter()/filter_mapping exist). Rewritten to filter
+    // keys(inventory) as a real array instead -- the closure's own body
+    // (which already takes the key as $1 and the whole mapping as a bound
+    // $2, exactly what an array-filter needs) didn't have to change at
+    // all, just the container being filtered and the removal of the now-
+    // redundant keys() wrapper around the result (filtering an array
+    // already returns an array).
     mapping inventory = store->storeInventory();
-    string *itemList = keys(filter_indices(inventory,
-        (: (($2[$1]["type"] == $3) && 
-           (($4 == "all") || ($2[$1]["subType"] == $4))) :), 
-            inventory, type, subtype));
+    string *itemList = filter(keys(inventory),
+        (: (($2[$1]["type"] == $3) &&
+           (($4 == "all") || ($2[$1]["subType"] == $4))) :),
+            inventory, type, subtype);
     mapping ret = ([]);
 
     if (sizeof(itemList))

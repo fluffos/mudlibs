@@ -8,6 +8,27 @@
 #include "/lib/services/environment/moon-phases.h"
 #include "/lib/modules/secure/environment.h"
 
+// FluffOS PORT NOTE: every "is this object descended from class X" check
+// in this file was changed from `inherit_list()` (aliased to this
+// driver's `shallow_inherit_list()`, direct inherits only) to
+// `deep_inherit_list()` -- a second, separate efun this driver also
+// provides (confirmed against vm/internal/base/array.cc and core.spec)
+// that walks the FULL ancestor chain, matching the semantics upstream's
+// LDMud-style `inherit_list(x)` idiom actually assumed. `inherit_list()`
+// alone is only correct when X is a DIRECT parent; several real classes
+// here reach BaseElement/BaseEnvironment/etc. through an intermediate
+// base class (confirmed live: /lib/environment/terrain/city.lpc inherits
+// /lib/environment/terrain/baseTerrain.lpc, which inherits
+// environmentalElement.lpc two levels up -- with plain `inherit_list()`,
+// city.lpc's own registration always failed with "Unable to register ...
+// Be sure that the file exists and inherits a valid environmental
+// element", breaking every terrain-based room's element registration,
+// including the game's own StartLocation()). This is a different flavor
+// of the same general "this driver's inherit_list() isn't upstream's"
+// gap already documented in NOTES.md section 9 (that one was about
+// self-class, not ancestor depth) -- `deep_inherit_list()` fixes both at
+// once and is the more broadly correct primitive for any "is-a" check
+// like this.
 private string BaseEnvironment = "/lib/environment/environment.lpc";
 private string BaseElement = "/lib/environment/environmentalElement.lpc";
 private string currentSeason;
@@ -82,7 +103,7 @@ public nomask object getEnvironment(string location)
     {
         ret = getEnvironmentObject(location);
 
-        if (!ret || (member(inherit_list(ret), BaseEnvironment) < 0))
+        if (!ret || (member(deep_inherit_list(ret), BaseEnvironment) < 0))
         {
             ret = 0;
         }
@@ -99,7 +120,7 @@ public nomask object environmentalObject(string element)
         (file_size(elementList[element]) > 0))
     {
         ret = getEnvironmentObject(elementList[element]);
-        if (member(inherit_list(ret), BaseElement) < 0)
+        if (member(deep_inherit_list(ret), BaseElement) < 0)
         {
             ret = 0;
         }
@@ -143,7 +164,7 @@ public nomask varargs int registerElement(string location, string type)
         element->Setup();
 
         if (element && objectp(element) &&
-            (member(inherit_list(element), BaseElement) > -1) &&
+            (member(deep_inherit_list(element), BaseElement) > -1) &&
             element->Name() && !member(elementList, element->Name()))
         {
             ret = 1;
@@ -561,7 +582,7 @@ public nomask int isValidKey(string key)
         if (file_size(key) > 0)
         {
             object keyObj = load_object(key);
-            ret = member(inherit_list(keyObj), "/lib/items/key.lpc") > -1;
+            ret = member(deep_inherit_list(keyObj), "/lib/items/key.lpc") > -1;
 
             if (!ret)
             {
@@ -586,7 +607,7 @@ public nomask object getDoor(string door)
     {
         ret = clone_object(door);
 
-        if (member(inherit_list(ret), "/lib/environment/doors/baseDoor.lpc") < 0)
+        if (member(deep_inherit_list(ret), "/lib/environment/doors/baseDoor.lpc") < 0)
         {
             raise_error(sprintf("ERROR in environment.c: '%s' is not a "
                 "valid door object.\n", door));
