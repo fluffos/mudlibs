@@ -12609,6 +12609,106 @@ required live playthrough, which is the standing justification in this
 project for never treating a clean compile sweep as sufficient
 verification on its own.
 
+### 7.160 `majik4` (the same author's 1999 successor to `majik3`) — a genuinely missing NATIVE driver-package efun blocked EVERY character from ever entering the game world at all, fixed with a deliberately-labeled minimal LPC stub rather than reimplementing the real algorithm
+
+`majik4` is a from-scratch, more mature engine than `majik3`: a
+grid-based ("roguelike") world instead of room objects, and a custom
+plain-text-but-structured wire protocol (`<command-code>:<datalen>:
+<data>\n` frames, `include/mcp.h`) driving a dedicated graphical
+client rather than a normal telnet command line — even login itself
+goes through this framing (`CMD_LOGIN_NAME`/`CMD_LOGIN_PASS`). This is
+NOT a WASM-only limitation the way `zjdyzj`'s handshake is (§ intro) —
+it is fully scriptable over a plain socket once the frame format is
+understood (confirmed via a raw Python client that logs in, selects a
+race, receives the map/object frames, walks into a real hand-built
+room with its own description and NPCs, and quits cleanly with the
+game's own y/N confirmation flow) — but a few genuine bring-up issues
+were specific to this lib:
+
+- **`secure/master.lpc` had NO `get_root_uid()`/`get_bb_uid()`/
+  `creator_file()` at all** (unlike `majik3`'s sibling `secure/
+  secure.lpc`) — this driver's `PACKAGE_UIDS` build hard-`exit(-1)`s at
+  boot without the first two, and every single object load logs (and,
+  during `lpcc_check.sh`, cascades into) a `No function creator_file()
+  defined!` error without the third. Fixed with the same flat
+  "everyone is Root" stub as `majik3`/`openlib`/`nightmare3`/
+  `nightmare4`/`residuum` — `valid_read()`/`valid_write()` were
+  deliberately left undefined, since this driver's `check_valid_path()`
+  (`packages/core/file.cc`) treats an ABSENT master apply as "allow,
+  unchanged path" (only an explicit `0` return denies), unlike
+  `get_root_uid()`, which is unconditionally required whenever
+  `PACKAGE_UIDS` is on.
+- **The archive shipped with no `lib/log/` directory at all** (`majik3`'s
+  own raw archive had one, empty but present; `majik4`'s did not) —
+  every `write_file("/log/...")`/`log_file(...)` call in this lib's own
+  `secure/simul_efun.lpc`/`secure/player.lpc` (including one at the very
+  top of `process_input()`, so EVERY single line of input from EVERY
+  player) throws `Wrong permissions for opening file ... No such file or
+  directory`. `mkdir -p work/log` (and `work/binaries`, same absence)
+  before the first boot, per the standing convention already catalogued
+  in this file for other libs' missing-runtime-directory crashes.
+- **The real, structural blocker**: `secure/player.lpc`'s `CMD_START`
+  handler unconditionally falls back every new (or otherwise
+  location-less) character's `start` variable to `/world/worldmap` —
+  and `world/worldmap.lpc`'s own map-loading function calls
+  `generate_map(options, 100, 100)`, a function that does not exist
+  ANYWHERE in this codebase as LPC. Per the archive's own README.1st
+  build instructions (`cp /majik/server/bin/majik_mapgen.c packages/`)
+  and `bin/majik_mapgen_spec.c`'s own efun prototype declaration
+  (`string *generate_map(string, int, int);`), this was a **native MudOS
+  C driver package** — written in C rather than LPC specifically for
+  performance, per the author's own `doc/mapgen.txt` design notes on
+  the cost of procedural terrain blending — that this project's FluffOS
+  build does not compile in and has no equivalent for. Without it,
+  `world/worldmap.lpc` fails to compile at all, and literally no
+  character can ever be positioned into the game world (confirmed via a
+  live playthrough: race selection completes, then the very next
+  `CMD_START` throws `No program in object '/world/worldmap'!` and the
+  session is stuck permanently in limbo). Unlike the `add_monster()`/
+  `set_no_weight()` class of gaps in `majik3` (§7.159 above — genuinely
+  unfinished content with no reference implementation to restore), this
+  one has a clear, if C-only, reference behind it, and its total absence
+  wasn't a "the author never finished this" gap — it's a "this project's
+  driver doesn't build the required native extension" gap, so a
+  compatibility stub was justified: a `generate_map()` simul_efun
+  (`secure/simul_efun.lpc`) that parses the packed `options` string just
+  far enough to pick ONE terrain character (highest total corner
+  probability) and fills the whole requested grid with it via
+  `allocate(h, row)`. This is explicitly NOT a reimplementation of the
+  real blended/randomized terrain algorithm (that stays out of scope as
+  real game-design/content work) — it exists purely so the game is
+  enterable and playable at all, with visibly flat, undetailed
+  wilderness tiles instead of the original's smooth terrain transitions.
+  Document this distinction explicitly in a lib's NOTES.md whenever a
+  missing native-package efun gets a stub rather than a real port: a
+  stub that lets the mudlib boot and play is a legitimate bring-up fix
+  even when a full, faithful reimplementation would not be.
+- **Two independent one-character typos**, both plain programming bugs
+  unrelated to the above: `command/mortal/throw.lpc`'s `if(ob->
+  query_range() & RANG_THROWN))` (one extra closing paren — hard compile
+  syntax error) and `world/bral_gaur/genwords.lpc`'s `#define
+  NUM_LETTERS NUM_VOCALS + NUM_CONS` referencing an undefined
+  `NUM_VOCALS` when the file's own very next line up defines
+  `NUM_VOWELS` (the Finnish author's own native-language false friend —
+  "vokaali" — almost certainly the source of the typo, per the same
+  author's real Finnish-language content elsewhere in this lib's
+  `world/bral_gaur/` conlang vocabulary files). Both fixed as ordinary
+  one-line corrections.
+- **A real-time, non-instant command-processing model** worth knowing
+  before assuming a lib is unresponsive: `inherit/living.lpc`'s
+  `heart_beat()` only drains ONE queued player command per tick when an
+  accumulating `speed_count` (incremented by a flat `MAX_SPEED`,
+  `include/living.h`, per tick) exceeds the character's own
+  `query_speed()` — with the two exactly equal at a fresh character's
+  default speed, this takes a MINIMUM of two heartbeat intervals (this
+  lib's `heartbeat interval msec : 3000` -> ~6+ seconds) per command,
+  and back-to-back commands compound linearly. A scripted test sending
+  commands with only 2-4 second gaps between them will see stale/absent
+  responses that look like a hang or a dropped command but are neither
+  — confirmed by simply waiting longer (a `quit`/`quit y` confirmation
+  round-trip that looked stuck at a 15-second total budget completed
+  cleanly, prompt and all, at ~20 seconds).
+
 ---
 
 ## 8. Login and registration flow bugs
