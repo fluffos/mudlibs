@@ -436,6 +436,7 @@ classes it's found.
 | 949 | `wilderness` | Wilderness | `https://www.cs.hmc.edu/~jhsu/wilderness/wlib051100.tar.gz (dated May 2000, "compatible with MudOS driver v22.2a21")` | 40251 | native-boot verified, WASM pending |
 | 950 | `majik3` | Majik 3 | `git clone https://github.com/tleino/majik3 (commit 3e8b11711b91ea9c8249f738d1038703c8452019, cloned 2026-08-28); mudlib root is the repo's lib/ directory -- COPYING, README.1st, bin/, and webclient/ at the repo top level were not part of the mudlib and were not converted` | 40252 | native-boot verified, WASM pending |
 | 951 | `majik4` | Majik 4 | `git clone https://github.com/tleino/majik4 (commit b24efafe0b53c5b3433f421751e29442cee1262b, cloned 2026-08-28); mudlib root is the repo's lib/ directory -- bin/, COPYING, doc/, README.1st, TODO, and template/ at the repo top level were not part of the mudlib and were not converted` | 40253 | native-boot verified, WASM pending |
+| 953 | `rifts2` | RiftsMUD2 | `git clone https://github.com/tsathoqqua/RiftsMUD2 (cloned 2026-08-28); mudlib root is the repo's mudlib/ directory -- build/, docker-compose.yml, Dockerfile, local_options/local_options.h, and mud.sh at the repo top level were not part of the mudlib and were not converted` | 40255 | native-boot verified, WASM pending |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout

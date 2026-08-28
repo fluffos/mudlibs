@@ -10208,6 +10208,23 @@ shape (`item[0][<2..<1] == ".lpc"`), meaning its "which changed `.lpc`
 files need regenerating" check never found anything. Both wizard-tool-
 only, both fixed by widening the slice to 4 characters.
 
+**Another confirmed instance, `rifts2` (2026-08-28 onboarding)**: the
+classic dispatch-table shape, `daemon/command.lpc`'s `rehash()` —
+`choses[j] = choses[j][1..strlen(choses[j])-3];` turned every command
+filename (`_look.lpc`, `_score.lpc`, ...) into a garbage key one
+character too long (`"look.l"`, `"score.l"`, ...) instead of the real
+verb, so `find_cmd()` could never match anything registered this way.
+Blast radius here was total: this lib's `quit`/`accept`/`decline` are
+the only verbs registered by direct `add_action()` rather than through
+this dispatch table, so literally every OTHER command — `look`,
+`score`, `inventory`, `who`, `say`, `help`, all of it — silently fell
+through to the generic `"What?"` fail message for every player, from
+the very first boot. Fixed identically to the established pattern
+(`strlen(...)-5` for the 4-character `.lpc` extension, with a comment
+explaining why); verified live end-to-end (a fresh character's `look`/
+`score`/`inventory`/`who`/`say`/`quit` all producing correct output
+post-fix, where every one of them returned `"What?"` before it).
+
 ### 7.119 `master.lpc`'s runtime warning-vs-error filter checks for a capitalized `"Warning"` string, but this driver emits lowercase `"warning:"` — every compile WARNING (not error) gets broadcast to the connected player as a hard-error notice, sometimes repeatedly per room entry
 
 A near-relative of §7.103 (which covers the same "warnings reach the player" symptom via a MISSING filter entirely) — here the lib actually HAS a filter, but it's matching the wrong case. `log_error()`/the error-handler's classification check does something like `strsrch(msg, "Warning") != -1` to decide "route this to the log only, not the player," but this driver's actual compiler emits lowercase `warning:` (not `Warning`), so the check never matches and every routine compile warning — extremely common, e.g. an unused local variable in a base class every room inherits — gets shown to the player as if it were a fatal error. `zhyx` showed this up to 19 times in a row on a single fresh room entry before being fixed. Confirmed independently on `zhyx` and `naruto` (a from-scratch-lineage sibling sharing base-engine ancestry) same day — 2 unrelated Chinese-wuxia-family archives in one session, worth checking by default on any future onboard of this family. **Fix**: match the actual lowercase string the driver emits (case-insensitive match is safer still), or better, check the driver's real classification (an error vs. a warning callback distinction) if the master apply signature exposes one, rather than string-sniffing the message text at all.
@@ -14120,6 +14137,125 @@ project uses this `imud_d.c`-style socket protocol stack or the
 "deliver 0 for connection-established" convention — logged here for
 completeness per the project's own bug-writeup standard, not as a
 sweep candidate.
+
+### 8.19 A new-password confirmation dialogue's two "reject and re-prompt" branches both fall through into the success code below them because neither has a `return`, so a too-short password or a mismatched confirmation gets a re-prompt message printed AND is silently accepted/overwritten by whatever the player types on their very next line
+
+Found onboarding `rifts2` (`tsathoqqua/RiftsMUD2`, a DarkeLIB-derived
+Rifts-setting mudlib), in `adm/obj/login.lpc`'s brand-new-character
+password setup, `new_pass(string str)`:
+
+```lpc
+nosave void new_pass(string str){
+    tmp = str;
+    if (strlen(tmp)<5) {
+	message("login","Your new password must have more than 5 characters.\n",this_object());
+	message("login","Re-enter new password:",this_object());
+	input_to("new_pass");
+    }
+    printf("\nAgain:");
+    input_to("npass2");
+ }
+
+nomask nosave void npass2(string pass) {
+    if (pass != tmp) {
+        message("logon","\nThe passwords must match.\n",this_object());
+	message("logon","Re-enter new password:",this_object());
+	input_to("new_pass");
+    }
+
+    __Player->set_password(pass);
+    message("logon","\nPassword set!\n",this_object());
+    ...
+```
+
+Both `if` blocks register a fresh `input_to("new_pass")` to make the
+player retype the password — but neither block `return`s, so execution
+falls straight through into the unconditional code below on the SAME
+call: `new_pass()` always follows up with `printf("\nAgain:");
+input_to("npass2")` even after rejecting a too-short password (silently
+clobbering the `new_pass` registration it just made, so the player's
+next line — the password they were told to re-enter — gets routed to
+`npass2` as a CONFIRMATION of the rejected short password instead), and
+`npass2()` always executes `__Player->set_password(pass);
+message(...,"Password set!"...)` even after printing "The passwords
+must match" — so a genuinely mismatched confirmation still gets
+accepted and saved (using whatever was typed as the second, mismatched
+entry), while ALSO leaving a stray `new_pass` `input_to` registration
+that the driver silently drops since `npass2`'s own trailing code moves
+the player on to the gender prompt in the same breath. Net effect:
+neither rejection path in this dialogue actually protects anything —
+a too-short password gets an extra "Again:" prompt bolted onto its
+rejection message but is then confirmable and acceptable as-is, and a
+mismatched confirmation is reported as an error yet saved anyway. This
+runs for every single new character registered on the lib, silently,
+with no error signature in `debug.log` (both branches complete without
+throwing — it's a pure control-flow logic bug, not a crash).
+
+Fix: add `return;` at the end of both `if` blocks, so a rejected
+password/confirmation genuinely stops there and waits for the
+re-prompted `new_pass` input instead of also running the unconditional
+code meant only for the accepted-on-first-try case. Verified live:
+before the fix, typing a 3-character password followed immediately by
+retyping the same 3-character string got "Password set!" (should have
+been rejected as too short); after the fix, the same sequence correctly
+re-prompts for a valid password and only accepts one meeting both the
+length AND match requirements, confirmed across multiple full
+registration playthroughs.
+
+### 8.20 A character-creation room's ONLY command that ever moves a new player out of it into the real starting room is commented out of its own `init()`, so every single new character who finishes race/occupation selection is permanently stuck in the character generator forever
+
+Found onboarding `rifts2` — `d/standard/setter.lpc` (`ROOM_SETTER`,
+"This is the Character generator") is where every brand-new character
+lands right after registration to `pick <race>` and `choose` an
+occupation. Its `init()`:
+
+```lpc
+void init()
+{
+  ::init();
+  this_player()->setenv("SCORE", "off");
+  this_player()->set("in creation", 1);
+  this_player()->set_catch("off");
+  //add_action("read", "read");
+  //add_action("set_ansi", "ready");
+  add_action("pick_race", "pick");
+  add_action("choose_occ","choose");
+}
+```
+
+`set_ansi()`/`set_ansi_two()` (an ANSI-color capability check) is the
+ONLY function anywhere in this codebase that ever calls
+`this_player()->move(ROOM_NEWBIE)` (`ROOM_NEWBIE` is `/d/standard/
+square`, the real game's starting room) for a character still `in
+creation` — but its trigger, `add_action("set_ansi", "ready")`, is
+commented out, so the `ready` command doesn't exist at all. `pick`
+(race) and `choose` (occupation) both work and update the character's
+stats/SDC correctly, but neither of them — nor anything else reachable
+from this room — ever moves the player anywhere. A brand-new character
+who successfully picks a race and an occupation is left in the
+character generator permanently: every subsequent `look` just re-prints
+the same "type pick/choose" room description forever, with "There are
+no obvious exits" (confirmed live: `score` still shows 0 PPE and no
+progress is possible; nothing else in the room grants an exit or a
+second way out). This is more severe than a typical post-registration
+content gap because it blocks 100% of new characters from ever reaching
+the actual game world, not just a specific race/build — it would have
+made this lib completely unplayable for any real player working through
+the front door.
+
+Fix: re-enable the commented-out
+`add_action("set_ansi", "ready");` line. Verified live end-to-end: a
+fresh character registered, picked a race, kept rolled attributes,
+chose the one available occupation (Coalition Grunt), then typed
+`ready` — got the ANSI color-check prompt, answered `n`, and landed
+correctly in `/d/standard/square` ("You're in the city center square...
+two obvious exits: world and east"), with `look`/`score`/`inventory`/
+`say`/`quit` all working normally from there. Reproduced identically
+across three independent fresh registrations. The sibling commented-out
+line (`//add_action("read", "read");`) was left alone — `help races`
+already covers the same information reachably, so that one line looks
+like genuinely-superseded dead code rather than a second instance of
+this bug.
 
 ---
 

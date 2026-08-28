@@ -1,0 +1,6 @@
+#define CQN ((string)caster->query_cap_name())
+#define TQN ((string)at->query_cap_name())
+#define TN ((string)at->query_name())
+#define CN ((string)caster->query_name())
+#define EC (environment(caster))
+#define ET (environment(at))

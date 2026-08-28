@@ -1,0 +1,1 @@
+(["locker_1":(["obj_0":"/std/diewarzau/obj/misc/sextant",]),])
