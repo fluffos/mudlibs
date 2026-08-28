@@ -1,0 +1,8 @@
+#define MAX_FLOOR 200000
+#define MIN_FLOOR -200000
+
+#define MAX_WATER MAX_FLOOR
+#define DEFAULT_FLOOR 100000
+
+#define MIN_DIM 1
+#define MAX_DIM 1000

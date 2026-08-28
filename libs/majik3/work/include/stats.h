@@ -1,0 +1,10 @@
+#define S_STR           0
+#define S_DEX           1
+#define S_AGI           2
+#define S_CON           3
+#define S_INT           4
+#define S_WIS           5
+#define S_POW           6
+#define S_CHA           7
+#define S_SIZ           8
+#define S_STU           9

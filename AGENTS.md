@@ -12506,6 +12506,109 @@ recur verbatim on any future LDMud-sourced archive, not just this lib:
   would never surface this, since nothing about it looks wrong until
   you check the actual runtime effect.
 
+### 7.159 First English-language MudOS lib pair from a single hobbyist author (`majik3`/`majik4`) — a hardcoded personal wizard-home-directory path left in SHIPPED, README-advertised content is a real fixable bug; the same shape pointing at content that was never archived at all is not
+
+`majik3` (`tleino/majik3` on GitHub, a 1998 MudOS v22.1b22 alpha
+snapshot) is the first lib in this corpus where a large fraction of
+`lpcc_check.sh` compile failures traced back to `inherit`/`add_exit`/
+`clone_object()` paths hardcoded to a wizard's personal directory
+(`/home/madrid/agriculture/...`, `/home/mordoc/...`, `/home/yorkaturr/
+...`) instead of the shared `/world/...` tree — a normal MudOS
+convention (wizards develop under their own home dir, then "install" a
+copy to the shared world) where this particular backup was taken
+mid-move. Two genuinely different outcomes hide behind the identical
+symptom (`Cannot #include ...`/`Fail to load object`, target path under
+`/home/<wizard>/`), and only a `find` for the referenced basename
+elsewhere in the tree tells them apart:
+
+- **The real file exists at a different, shared path** — e.g.
+  `world/agriculture/guild/rooms/mill_farm2.lpc` (a real, shipped room —
+  the archive's own README brags "you could grow carrots, make money and
+  do some exploring") had `inherit
+  "/home/madrid/agriculture/farm_room.lpc";`, but the actual, maintained
+  `farm_room.lpc` lives at `world/agriculture/farm_room.lpc` — confirmed
+  by diffing it against the `/home/madrid/`-referencing sibling snapshot
+  under the lib's own orphaned `world/agriculture/old/` tree (older,
+  cruder, still `/home/madrid/`-broken, and NOT referenced from anywhere
+  live — safe to leave alone). This is a genuine, mechanically-fixable
+  path bug: a corpus-wide `sed 's#/home/madrid/agriculture/#/world/
+  agriculture/#g'` across every live (non-`old/`) file fixed 47 files in
+  one pass, including the exact `test_farm`/`test_farm1`/`test_farm2`
+  rooms the README specifically advertises — confirmed live afterward by
+  `goto`-ing there as a seeded admin and seeing "You are standing in a
+  vast farmland for a crop of strawberry" render correctly, which was a
+  hard compile failure before the fix. One single-file variant of the
+  same shape (`world/madrid_temple/rooms/altar.lpc`'s
+  `ob->move("/home/madrid/madrid_temple/rooms/treasure_room.lpc")`) also
+  had a same-named real file one directory further down and got the
+  same one-line fix.
+- **The file never existed anywhere in the shipped archive at all** —
+  e.g. `command/mortal/finger.lpc`/`uptime.lpc`'s `#include
+  "/home/mordoc/include/time.lpc"` (defining `format_time()`),
+  `obj/skill/animal_extrusion.lpc`'s `#include
+  "/home/yorkaturr/guilds/witches/ingredient.h"`, and
+  `command/immortal/hearye.lpc`'s `/home/project/areas/courthouse/
+  path.h` — a `find . -iname <basename>` across the WHOLE tree comes back
+  completely empty for these. This is a wizard's personal directory that
+  was simply never included in this particular backup snapshot (same
+  class as `openlib`'s "references the original author's own
+  never-shipped personal test items under his own `/u/` wizard
+  directory," AGENTS.md §2.3's onboarding notes) — there is no correct
+  target to repoint the reference at, so per this project's content/
+  design scope boundary, leave it and document it, don't invent a
+  replacement implementation.
+
+**A third, unrelated-looking failure shape turned out to share one root
+cause worth checking whenever a batch-compile failure shows NO error or
+warning text at all, just a bare `Fail to load object` line**: this
+driver's LPC compiler does not hard-error on a call to a function that
+is neither declared locally nor a real efun (e.g. `add_monster(...)`,
+`set_no_weight()`, `set_no_condition()` — called across ~25+ room/item
+files in this lib's forest/hilltop/halfling/welf/cult zones, but never
+implemented ANYWHERE in the codebase, not as a local function, not as a
+simul_efun, not as a driver efun in this build). The call compiles
+clean; the failure only surfaces as an uncaught runtime "Undefined
+function called: X" in `log/runtime` the moment the object is actually
+instantiated (`create()`/`create_room()` runs it) — `lpcc_check.sh`'s
+batch harness swallows that runtime error's text and just reports the
+bare "Fail to load object" with none of the diagnostic lines a real
+compile error would show. Confirmed via this lib's own `log/runtime`
+after a live boot+playthrough, not from the compile-sweep log alone.
+Per this archive's own README ("the state of Majik at the time was
+alpha testing, not playable at all, except you could grow carrots, make
+money and do some exploring"), this is confirmed genuinely unfinished
+content from the snapshot's actual development state — not a
+conversion regression — so it was documented in `libs/majik3/NOTES.md`
+and left unfixed, matching the openlib precedent above. The same
+"Fail to load object, zero error text" signature is also produced by an
+`inherit GRIDMAP;` where `GRIDMAP` is never `#define`d anywhere (two
+zone files, an abandoned early prototype of the roguelike/gridmap
+engine this same author's own README says motivated the *next* project,
+`majik4`) — same diagnosis method, same "genuinely unfinished, not a
+bug" conclusion.
+
+**A fourth, much narrower bug found the same way (a live playthrough
+catching a runtime error a compile sweep can't see at all)**: this
+lib's shared `say()` simul_efun (`secure/simul_efun.lpc`) builds a
+proper exclude-list array `ob2` from its optional second argument, then
+correctly passes `ob2` to the SECOND of its two `message()` calls but
+passes the raw, unprocessed (and, for every call site in this lib that
+omits the optional argument, `int 0`) parameter `ob` to the FIRST —
+`message()`'s exclude-list argument requires an object or array, so
+every `say()` call with no explicit second argument (which includes
+`command/mortal/quit.lpc`'s own `say(name + " falls asleep.\n")`, i.e.
+**every single player quit**) threw a live, player-visible "You have
+found a bug. Please report it." on top of the normal quit message,
+confirmed reproducible before the fix and gone after. One-line fix:
+use `ob2` on both `message()` calls, matching the pattern the second
+call already establishes. Neither this bug nor the wizard-home-path
+class above showed up in `lpcc_check.sh` at all (both are pure runtime
+logic bugs the batch compile-only harness can't exercise) — found only
+by actually registering a character and running `quit` during the
+required live playthrough, which is the standing justification in this
+project for never treating a clean compile sweep as sufficient
+verification on its own.
+
 ---
 
 ## 8. Login and registration flow bugs
