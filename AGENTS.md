@@ -2389,6 +2389,24 @@ unaffected, only visible via `debug.log`.
   time (verified instead via a clean `lpcc --batch` compile plus static
   read of the fixed function), since this pass's live-testing budget
   went to the other 6 flagged bug shapes on this sibling.
+- **`xyj2006n`'s §10.7 round-two deep functional test (2026-08-27):
+  identical shape, same file (`adm/simul_efun/file.lpc`), higher blast
+  radius than usual.** Same bare `write_file(LOG_DIR + file, text)`
+  with the file's own `assure_file()` helper defined later, unused —
+  live-triggered the same way (`call ceshiwyz->add("money",1000)`'s own
+  `log_file("nosave/CALL_PLAYER", ...)` audit line threw the identical
+  `*Wrong permissions ... "No such file or directory"` into the admin's
+  screen, aborting the whole `call`). Since this is the project-wide
+  simul_efun `log_file()`, the missing `/log/nosave/` directory also
+  sat directly in the real account-deletion path: `cmds/usr/suicide.lpc`'s
+  `slow_suicide()` calls the same `log_file("nosave/SUICIDE", ...)`
+  line BEFORE any of its actual deletion logic, so the player-facing
+  `suicide -f` command the game's own welcome banner tells players to
+  use for cleaning up unused accounts would have hit the identical
+  uncaught error and aborted before deleting anything. Fixed
+  identically (`assure_file(LOG_DIR + file);` plus the forward
+  declaration). Verified live: the same `call` command now completes
+  cleanly and `/log/nosave/CALL_PLAYER` is created on demand.
 
 ### 7.12 Shared message/wrapper argument bugs
 
@@ -9046,6 +9064,18 @@ every ordinary player is seeing raw compiler warning spam on ordinary
 lazy-compiles, not just genuine errors. Cheap to confirm live: register
 a fresh character and watch for `"编译时段错误：...warning:"`-prefixed
 lines appearing unprompted during normal movement.
+
+**Confirmed instance, `xyj2006n`'s §10.7 round-two deep functional
+test (2026-08-27):** the exact byte-identical unguarded line in this
+lib's own `adm/obj/master.lpc` (`if (this_player(1))
+efun::write("编译时段错误：" + message + "\n");`). Reproduced live: a
+fresh registration followed by ordinary `look`/`score`/`i` each
+triggered several `编译时段错误：...warning: Unused local variable
+'x'`-style dumps as `cmds/std/look.lpc`/`cmds/std/score.lpc`/
+`cmds/usr/inventory.lpc` were lazily compiled for the first time.
+Fixed with the identical `strsrch(message, "warning:") == -1` guard;
+verified live (same register→look→score→i sequence, zero warning
+dumps post-fix).
 
 ### 7.104 A new-account "must stay online 30 minutes or your account is revocable" policy's AUTOMATIC (netdead-timeout) cleanup path silently deletes the account with no confirmation, even though the INTERACTIVE quit path for the exact same policy requires an explicit y/n
 
