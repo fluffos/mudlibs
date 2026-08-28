@@ -1041,6 +1041,33 @@ if `raw/` ends up empty. Known traps:
   genuine embedded CRLF before assuming either alone explains the
   corruption — fixing one without the other can silently trade one
   parse failure for a different, quieter one.
+  **Third confirmed instance on `xyj451`'s §10.7 round-two deep
+  functional test** (already UTF-8, so purely the embedded-CRLF half of
+  this pattern, not the GBK half): two persistent NPC `.o` saves —
+  `data/npc/boss/xiaoxiao.o` and `data/npc/meng-zhu.o` — carry a real
+  `\r\n` pair inside their `"long"` description string (confirmed
+  byte-identical in the pristine `raw/` archive, so pre-existing in the
+  original Windows-era save, not introduced by this project's
+  conversion). Reproduced live: an admin `goto
+  /d/city/bingqipu`/`/d/suburb/xkx/taishan/fengchan` (forcing each
+  room's `reset()`/`make_inventory()` to restore its NPC) threw an
+  uncaught `执行时段错误：*restore_object(): Illegal file format - 1`
+  straight to `debug.log`, silently leaving that NPC un-populated in
+  its room for any player who walked in — this specific pair is also
+  reachable through ordinary wandering NPC movement (an unrelated NPC,
+  `张果老`, triggered `xiaoxiao`'s crash just by walking into her
+  room), not just a wizard's deliberate `goto`. Fixed both with the
+  same quote-aware CRLF→CR collapse described above. Note:
+  `data/npc/boss/` is covered by this project's own
+  `libs/*/work/data/npc/boss/` `.gitignore` rule (treated as ephemeral
+  boss-respawn churn, not shipped content) — `xiaoxiao.o`'s fix is
+  therefore untracked/local-only (harmless to leave fixed, just won't
+  survive a fresh re-extraction), while `meng-zhu.o` sits one directory
+  up (`data/npc/`, not `.../npc/boss/`) and so IS tracked and part of
+  the real commit. When triaging a future lib's `data/npc/` or
+  `data/npc/boss/` saves for this pattern, don't skip the `boss/`
+  subtree just because it's gitignored — the crash it causes during
+  live play is exactly as real, only the fix's persistence differs.
 
 ### 4.2 The `.c` → `.lpc` rename and its long tail of fallout
 
@@ -2425,6 +2452,17 @@ unaffected, only visible via `debug.log`.
   identically (`assure_file(LOG_DIR + file);` plus the forward
   declaration). Verified live: the same `call` command now completes
   cleanly and `/log/nosave/CALL_PLAYER` is created on demand.
+- **`xyj451`'s §10.7 round-two deep functional test (2026-08-27):
+  identical shape/fix, same `xyj4.5`-lineage sibling as `xyj2006n`
+  above, same file (`adm/simul_efun/file.lpc`), same missing
+  `/log/nosave/` directory and same `suicide.lpc`/`call.lpc` blast
+  radius.** Live-triggered the same way (admin `call
+  wukongce->add("money",5000)` — used to fund a shop-purchase test for
+  this pass's playthrough — threw the identical uncaught `*Wrong
+  permissions ... "No such file or directory"` before the fix). Fixed
+  identically (`assure_file(LOG_DIR + file);` forward-declared before
+  `log_file()`). Verified live: the same `call` command completed
+  cleanly post-fix and `/log/nosave/CALL_PLAYER` was created on demand.
 
 ### 7.12 Shared message/wrapper argument bugs
 
@@ -9094,6 +9132,27 @@ triggered several `编译时段错误：...warning: Unused local variable
 Fixed with the identical `strsrch(message, "warning:") == -1` guard;
 verified live (same register→look→score→i sequence, zero warning
 dumps post-fix).
+
+**Confirmed instance, `xyj451`'s §10.7 round-two deep functional test
+(2026-08-27), narrower variant restricted to wizards only:** this
+`xyj4.5`-lineage sibling's `master.lpc` already gates the raw dump
+behind `wizardp(this_player(1))` (ordinary players get the generic
+`__DEFAULT_ERROR_MESSAGE__` instead), so the original §7.103 "every
+ordinary player" blast radius doesn't fully apply here — but the same
+missing warning/error distinction still means every WIZARD (including
+the seeded admin account) sees plain compile warnings mislabeled as
+`"编译时段错误："` (compile-stage ERROR) on ordinary lazy-compiles.
+Reproduced live: registering/logging in as the admin and running
+`look`/`score`/`i` each dumped `编译时段错误：...warning: Unused local
+variable 'x'`-style text for `cmds/std/look.lpc`/`cmds/std/score.lpc`/
+`cmds/usr/inventory.lpc`. Fixed by adding the same `strsrch(message,
+"warning:") == -1` guard inside the existing `wizardp(...)` branch
+(the non-wizard branch was already unaffected and left untouched).
+Verified live via a fresh driver restart (this lib's `master.lpc` is
+only compiled once at boot, so the fix could not be observed without
+restarting): the same admin register→look→score→i sequence produced
+zero warning dumps post-fix, while the warnings still landed in
+`debug.log` for wizards to find later.
 
 ### 7.104 A new-account "must stay online 30 minutes or your account is revocable" policy's AUTOMATIC (netdead-timeout) cleanup path silently deletes the account with no confirmation, even though the INTERACTIVE quit path for the exact same policy requires an explicit y/n
 
