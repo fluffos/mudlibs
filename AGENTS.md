@@ -2486,6 +2486,19 @@ unaffected, only visible via `debug.log`.
   identically (`assure_file(LOG_DIR + file);` forward-declared before
   `log_file()`). Verified live: the same `call` command completed
   cleanly post-fix and `/log/nosave/CALL_PLAYER` was created on demand.
+- **`xyj2006zzzhx`'s §10.7 round-two deep functional test (2026-08-27):
+  identical shape/fix, same file (`adm/simul_efun/file.lpc`), same
+  missing `/log/nosave/` directory, near-identical sibling of
+  `xyj2006n` above (per its own onboarding notes, "identical file
+  structure and bugs").** Live-triggered via admin `call 阿凯哥哥->
+  query("name")` (a wizard NPC-inspection debug command). Fixed
+  identically (`assure_file(LOG_DIR + file);` forward-declared before
+  `log_file()`). Verified live: `/log/nosave/CALL_NPC` was created on
+  demand with the expected audit line, and this project-wide simul_efun
+  fix transparently also covers `cmds/usr/suicide.lpc`'s
+  `slow_suicide()` account-deletion path and `adm/daemons/toptend.lpc`'s
+  own separate `assure_file()` gap (see §7.11's `topten_save()` entry
+  above for this exact lib).
 
 ### 7.12 Shared message/wrapper argument bugs
 
@@ -9176,6 +9189,13 @@ only compiled once at boot, so the fix could not be observed without
 restarting): the same admin register→look→score→i sequence produced
 zero warning dumps post-fix, while the warnings still landed in
 `debug.log` for wizards to find later.
+
+**Confirmed instance, `xyj2006zzzhx`'s §10.7 round-two deep functional
+test (2026-08-27), same lineage as `xyj2006n`/`xyj451` above:** the
+exact byte-identical unguarded line in this lib's own
+`adm/obj/master.lpc` (`if (this_player(1)) efun::write("编译时段错误：" +
+message + "\n");`). Fixed with the identical `strsrch(message,
+"warning:") == -1` guard.
 
 ### 7.104 A new-account "must stay online 30 minutes or your account is revocable" policy's AUTOMATIC (netdead-timeout) cleanup path silently deletes the account with no confirmation, even though the INTERACTIVE quit path for the exact same policy requires an explicit y/n
 
