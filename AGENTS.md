@@ -2379,6 +2379,16 @@ unaffected, only visible via `debug.log`.
   is defined later in the same file. Verified live: the identical
   `call` audit-log write that previously threw now succeeds, and
   `log/nosave/` is auto-created on demand.
+- **Sibling `xxcqii2` (same 小雪初晴 series, shared-mixin check after
+  `xxcqii`'s round-two test): identical shape confirmed.**
+  `adm/simul_efun/file.lpc`'s `log_file()` was the same bare
+  `write_file(LOG_DIR + file, text)` with `assure_file()` already
+  defined later in the same file, unused. Fixed identically
+  (`assure_file(LOG_DIR + file);` plus the forward declaration). Not
+  independently live-triggered via the admin `call` audit path this
+  time (verified instead via a clean `lpcc --batch` compile plus static
+  read of the fixed function), since this pass's live-testing budget
+  went to the other 6 flagged bug shapes on this sibling.
 
 ### 7.12 Shared message/wrapper argument bugs
 
@@ -6701,6 +6711,18 @@ independent of the `replace_program()` fix — left as an observation in
 this file and correcting its inheritance would require guessing which
 item/NPC base class it was originally meant to also carry.
 
+**Sibling `xxcqii2`, same `SR_DANGPU` shape, confirmed identical.**
+After `xxcqii`'s round-two test flagged its shared-mixin files for a
+sibling check, `d/kunming/dangpu.lpc` and `d/kunming/obj/dpm.lpc` on
+`xxcqii2` had the exact same `inherit SR_DANGPU;` +
+`replace_program(SR_DANGPU);` redundancy. Fixed identically (deleted
+both redundant calls). `dangpu.lpc` verified via a clean `lpcc --batch`
+compile; `dpm.lpc` is dead/unreferenced code here too (confirmed via a
+whole-tree grep, same as `xxcqii`) with the same unrelated pre-existing
+`set_name()` undefined-function error inherited from `SR_DANGPU`'s
+ancestry — left as an observation, not fixed, for the same reason as
+`xxcqii`.
+
 **Another confirmed instance, a literal string path instead of any
 macro: `yxsj`'s §10.7 round-two deep-test.** `obj/board/wizard_j.lpc`
 (a wizard-only "job progress report" board, `/d/wiz/jobroom`) had
@@ -9768,7 +9790,21 @@ gauntlet run (not merely standing in the room) would still restart a
 second chain — fixed with an additional `_running` sub-flag scoped
 just to "chain currently executing," cleared at the same two exit
 points. All 6 files verified via `update` hot-reload (clean recompile).
-Not yet checked on sibling `xxcqii2`.
+
+**Sibling `xxcqii2`, confirmed identical, fixed and live-verified.**
+All 6 `d/shaolin/kfroom_1.lpc`–`kfroom_6.lpc` files had the exact same
+two shapes (`kfroom_5`/`kfroom_6` with zero guard at all,
+`kfroom_1`–`4` with only the one-time entry flag and no
+mid-gauntlet-`_running` guard) and were fixed identically. Live-
+verified with a real netdead-then-reconnect repro (admin `call
+me->move(...)` teleport into `kfroom_5` to bypass the temple's
+front-gate NPC guard, which blocks any non-少林-affiliated character
+from walking there in-character — a live driver boot, real socket
+disconnect/reconnect, not a shortcut around the actual bug): the
+wave-1 announcement ("一走进始武房...机关开动了") appeared exactly once
+in the whole session (`grep -c` on the transcript), combat continued
+seamlessly across the reconnect with no duplicate reward chain, and no
+new `debug.log` errors appeared.
 
 ### 7.113 A netdead reconnect never restores `heart_beat`, so any player who has EVER had one dropped connection can silently never heal past the reincarnation threshold and dies permanently — a crash-free, corpus-hidden soft-lock
 
@@ -11733,9 +11769,15 @@ silently (an array is a legal, just-never-matching, mapping key) so it
 produces no compile error and no runtime error, only a permanently
 wrong displayed value. Verified live via `update` hot-reload + a
 fresh `list` command pre/post-fix on the same running vendor object.
-Not yet checked on sibling `xxcqii2` (same 小雪初晴 series, likely
-shares this exact `feature/dealer.lpc` file) — flagged for whoever
-tests that lib next.
+
+**Sibling `xxcqii2`, confirmed identical, fixed and live-verified.**
+Same exact `j = tmp[goods];` bug in the same `feature/dealer.lpc` file
+(the two archives share this mixin byte-for-byte). Fixed identically
+(`j = tmp[goods[i]];`). Verified live on a fresh registration + travel
+to 韦鸭毛's 杂货铺 (`d/bianliang/npc/wei.lpc`, a `carry_object()`-based
+vendor reachable a few rooms from the newbie start room): `list`
+correctly showed "1件布衣" for the one cloth item the NPC actually
+carries, matching `xxcqii`'s live-confirmed fix.
 
 ### 7.152 A player body's `reconnect()` restores `heart_beat`/clears the netdead flag but never re-registers `set_living_name()` the way the initial-login `enable_player()` path does — so `find_player()`/`find_living()`-driven features (`tell`, admin `call`, presumably PK-by-name and mail delivery) silently can't find ANY player for the rest of that session after their very first dropped connection
 
@@ -11785,8 +11827,16 @@ missing `enable_commands()` would be immediately, loudly obvious
 (the player couldn't act at all), while a missing living-name
 registration produces no player-visible symptom whatsoever unless
 someone specifically tries to reference that character by name from
-elsewhere. Not yet checked on sibling `xxcqii2` — flagged for whoever
-tests that lib next.
+elsewhere.
+
+**Sibling `xxcqii2`, confirmed identical, fixed and live-verified.**
+Same `clone/user/user.lpc` `reconnect()` missing `set_living_name()`.
+Fixed identically. Verified with a live two-socket repro (abrupt raw
+socket close mid-session, reconnect ~2s later as the same character):
+a second player's `tell <id> ...` (matched by `id`, not the Chinese
+display name — `find_player()` resolves on the registered living name)
+reached the reconnected character immediately, with no "没有这个人"
+failure.
 
 ### 7.153 A `read new`/`read next` branch computes the target index but doesn't `return` or chain into an `else`, so the very next unconditional numeric-parse check re-parses the same non-numeric `"new"`/`"next"` argument, overwrites the already-correct index, and always fails
 

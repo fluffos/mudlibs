@@ -34,3 +34,77 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 针对性排查：xxcqii 的 §10.7 round-two 7 类 bug 逐项核对（2026-08-27）
+
+来源：`libs/xxcqii/NOTES.md`"深度功能测试（2026-08-27，round two,
+AGENTS.md §10.7）"一节记录的 7 类 bug（同属小雪初晴系列，共享同一份
+引擎代码）。逐一在本档案（`xxcqii2`）里定位对应档案并核对，7 类全部
+存在，已全部按 `xxcqii` 的原始修复方式逐字修正：
+
+1. **注册流程 debug 遗留 `printf("%O\n", ob)`**：`adm/daemons/
+   logind.lpc`/`logind1.lpc`/`logind2.lpc` 的 `get_name()` 三份都有，
+   已全部删除该行。用真实 socket 脚本连续注册一个新角色验证：设定
+   中文名字之后到"请设定您的临时密码"提示之间，不再出现任何裸露的
+   `/clone/user/loginXXX` 内部对象路径。
+
+2. **`valid_learn()` 0/1 参数签名不一致**：`inherit/skill/skill.lpc`
+   基类是 0 参数，`kungfu/skill/force.lpc` 也是 0 参数（本档案的
+   93+ 个其它技能档案都是 1 参数），和 `xxcqii` 完全同型。两处都改成
+   `int valid_learn(object me) { return 1; }`。用 `lpcc --batch` 单独
+   编译 `/kungfu/skill/force` 验证：干净通过，无"Number of
+   arguments...disagrees with previous definition"警告（driver 完整
+   启动日志里也未见此警告）。
+
+3. **AGENTS.md §7.11 实例**：`adm/simul_efun/file.lpc` 的
+   `log_file()` 没有调用同档案里已有的 `assure_file()`，已加上
+   `assure_file(LOG_DIR + file);`（连同前向声明）。本次未走管理员
+   `call` 审计日志路径现场触发（测试预算用在了其余 6 类上），改用
+   `lpcc --batch` 编译干净 + 静态核对修复后的函数体确认。已在
+   AGENTS.md §7.11 补充条目。
+
+4. **AGENTS.md §7.112 实例**：`d/shaolin/kfroom_1.lpc`~`kfroom_6.lpc`
+   六个档案的形状和 `xxcqii` 完全一致——`kfroom_5`/`kfroom_6` 的
+   `init()` 完全没有防重入保护，`kfroom_1`~`4` 只有一次性入场旗标、
+   没有"本轮机关阵正在进行中"的防护。六个档案均按 `xxcqii` 的原始
+   补丁逐字修正。由于少林寺前山门广场的守门僧（`d/shaolin/
+   guangchang1.lpc`的`valid_leave()`）会拦下所有非"少林派"归属的
+   角色（"这位施主请回罢，本寺不接待俗人"），无法靠纯步行到达
+   `kfroom_5`，改用临时管理员账号（往 `adm/etc/wizlist` 追加一行、
+   重启 driver 生效、验证完毕后已恢复原始档案内容，未保留）执行
+   `call me->move("/d/shaolin/kfroom_5")` 直接传送进入——传送本身
+   只是绕过 RP 前置任务，机关阵触发/断线/重连的验证路径和真实玩家
+   完全一致。真实断线-重连复现实验（`socket.close()`模拟真实掉线，
+   非清洁 `quit`）确认："一走进始武房...机关开动了"这句开场白在整个
+   会话里只出现了 1 次（`grep -c` 核实），重连后机关阵继续原有进度
+   （斗志数值连续下降），没有叠加第二条奖励链。
+
+5. **AGENTS.md §7.151 实例**：`feature/dealer.lpc` 的 `do_list()`
+   同样是 `j=tmp[goods];`（应为 `j=tmp[goods[i]];`），已修正。现场用
+   `d/bianliang/npc/wei.lpc`（韦鸭毛，杂货铺，`carry_object()`带一件
+   布衣，从新手初始房间往东、北、东三步可达）验证：`list` 命令修复后
+   正确显示"1件布衣"（该 NPC 实际只带一件）。
+
+6. **AGENTS.md §7.86 实例**：`d/kunming/dangpu.lpc`/`d/kunming/obj/
+   dpm.lpc` 都有 `inherit SR_DANGPU;` 之后多余的
+   `replace_program(SR_DANGPU);`，已删除两处。`dangpu.lpc` 经
+   `lpcc --batch` 编译干净；`dpm.lpc` 全档案搜索确认同样是从未被
+   引用的死代码，且带有与本次修复无关的既存编译错误
+   （`set_name()` 未定义，`SR_DANGPU` 祖先链没有提供），按"存疑不动"
+   处理，不修复，仅记录。
+
+7. **AGENTS.md §7.152 实例**：`clone/user/user.lpc` 的 `reconnect()`
+   同样缺少 `set_living_name()`，已在函数开头补上与 `xxcqii` 相同的
+   两行。用真实双 socket 复现实验验证：角色 A 断线（`socket.close()`
+   不发 quit）后在约 2 秒内重连，角色 B 立刻 `tell <A的id> ...`
+   （注意用 id 而非中文名——`find_player()`按注册的 living name 也就
+   是 id 匹配），A 端正常收到消息，未出现"没有这个人"报错。
+
+**结算与清理**：测试角色（tstsnowc/d/f/g/h 等，含临时管理员
+tstsnowf）的存档、`adm/etc/wizlist` 的临时追加行均已在提交前删除/
+还原；`adm/etc/users`（访客计数器）因真实注册流程自然增长，比照
+`xxcqii` 原提交的先例保留未回滚。`lpcc --batch` 全库编译检查：
+3034 个档案里 2932 通过、102 失败——除已知的 `d/kunming/obj/dpm`
+（见上方第 6 类，预先已知且与本次修复无关）外，其余失败与本次
+7 处改动的档案均无交集，属于本库既有的历史遗留问题。`grep -h
+'"port"'` 端口唯一性检查已过。
