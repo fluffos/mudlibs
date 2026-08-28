@@ -12252,18 +12252,39 @@ value:
 me->set_skill(skill, my_skill);
 ```
 
-**Detection / standing risk for the whole §7.30 corpus sweep (178
-libs)**: any lib that received the mechanical §7.30 accessor fix should
-be re-checked for a caller matching this exact shape — `X =
+**Corpus sweep CLOSED (2026-08-27)**: checked all 194 libs whose
+NOTES.md references §7.30 for a caller matching this exact shape — `X =
 ob->query_<mapping-field>(); if (!X || !mapp(X)) <proper-init-call>;
-else X[key] = value;` — grep each such accessor's callers (not just the
-accessor itself) for a bare `!X`/`!mapp(X)` branch that falls through to
-directly mutating the query result rather than calling a real setter.
-This one instance was found and fixed individually; a corpus-wide sweep
-for the pattern has NOT been run yet as of this writing — flagged here
-so the next lib (or a dedicated sweep) checks for it rather than
-assuming §7.30's original fix was side-effect-free everywhere it was
-mechanically applied.
+else X[key] = value;`. Methodology: mechanical `grep -n "!mapp("` across
+every candidate lib's `work/` tree (42,753 raw hits), narrowed to the
+syntactic shape `!X || !mapp(X)` (or reversed) on one line (1,726),
+then narrowed again to only lines where `X` was assigned a few lines
+earlier from a `->query_` accessor call AND an `else` branch within a
+few lines mutates `X[key]` directly (7 candidates). Manually verified
+each of those 7 against the real setter's implementation before
+touching anything (per this project's "verify before applying"
+convention) — 5 were false alarms (`query_temp()`-backed mappings, or
+an explicit write-back after the if/else, neither of which share this
+bug's caller/callee-copy disconnection), leaving exactly **2 real
+hits**: `xiaoyuxiyou` and `xyxy2`, `xyxyutf8`'s two sibling libs, which
+share `feature/skill.lpc` and `cmds/std/learn.lpc` byte-for-byte with
+the already-fixed `xyxyutf8`. Both received the identical fix already
+verified live on `xyxyutf8` (call `set_skill()` unconditionally with
+the final value instead of re-deriving the branch caller-side),
+verified via a scoped `lpcc --batch` single-file compile (PASS on
+both), and committed individually.
+
+**Conclusion**: despite the "could affect any of 178 libs" framing this
+section originally carried, the actual risk turned out to be confined
+to this one 3-way sibling lineage rather than a broad corpus-wide
+regression — most libs' own `learn`-equivalent command either doesn't
+re-derive the falsy check this way, or writes back through the real
+setter/instance variable regardless. The general risk shape (any caller
+of a §7.30-patched accessor that treats a falsy/non-mapping return as
+its only "never initialized" signal) remains real and worth checking
+case-by-case on any lib sharing a skill/mapping-accessor lineage not yet
+covered here, but does not need re-sweeping wholesale again absent a
+new independent discovery.
 
 ---
 
