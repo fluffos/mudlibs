@@ -13610,6 +13610,66 @@ from being reached in the first place for this specific trigger — a
 save file existed immediately after registration, before any reconnect
 was attempted.
 
+### 8.18 A socket read-callback correctly detects a non-array "connection established" signal message, logs it, but forgets to `return` — falls through into indexing that same non-array value on the very next line, throwing a caught-but-real runtime error on literally every single connection
+
+Found on `imud`'s §10.7 deep functional test (round two, 2026-08-27) —
+this lib is FluffOS's own official Intermud-3 demo mudlib (no
+accounts/rooms/combat; see its README/NOTES.md), so the standard §10.7
+checklist doesn't apply and was adapted to "boot the real driver,
+exercise every real command including the one that opens a genuine
+outbound socket to the public I3 router, and check the runtime-error
+log on every pass" instead. `secure/imud/socket.lpc`'s
+`release_callback()` — invoked right after a new outbound connection is
+established — deliberately calls
+`catch(evaluate(read_func, this_object(), 0))` to hand its caller a
+literal integer `0` as a "new connection, no data yet" signal (see the
+function's own comment). The caller, `secure/imud/imud.lpc`'s
+`handle_router_read(object socket, mixed *message)`, correctly checks
+`if (!arrayp(message)) { debug_message(...); }` for exactly this case
+— but the block has no `return`, so execution falls straight through
+into `if (message[0] != "mudlist")` on the next line, indexing the
+integer `0` and throwing `*Value being indexed is zero.` every time.
+**Invisible to `debug.log` and to any player-visible symptom** —
+`socket.lpc`'s own `read_callback()` wraps the whole call in `catch()`,
+so nothing crashes or misbehaves; `mudlist` still returns real,
+correct I3 network data. The only place this ever surfaces is the
+mudlib's own separate runtime-error log
+(`work/log/log_catch`/`work/log/log`, written by
+`secure/master/error.lpc`'s `error_handler()` — a different file from
+`log/debug.log`, which this class of caught error never touches at
+all). Confirmed 100% reproducible: present in every one of 5
+independently-checked boots (4 preserved from this lib's original
+2026-08-24 conversion pass, plus a fresh reproduction this session
+before the fix).
+
+Fix: add the missing `return;` right after the `debug_message()` call
+in the `!arrayp(message)` branch — a non-array message can't be
+meaningfully dispatched by anything below that line anyway, so
+returning early changes nothing about how any real I3 protocol message
+(`mudlist`/`startup-reply`/`error`/unrecognized-type bounce) is
+handled. Verified live: cleared both runtime-error log files, killed
+and rebooted the native driver fresh — zero entries in either log file
+after boot, and after a full client pass (connect, `mudlist` — real
+data, ~160+ muds — unknown command fallback, `update`, `update` with
+no argument, and a further ~50s idle period) both logs remained empty.
+Re-ran the WASM build's client script as well; behavior unchanged from
+before the fix (the WASM build has no `sockets` package at all, so this
+exact code path is never reached there — pre-existing, documented,
+unrelated limitation).
+
+Generalization: this is the general "a `!typep()` guard clause logs the
+anomaly but doesn't stop execution, so the very next line dereferences
+the same untyped value anyway" shape — the same family as the
+`objectp()`/`stringp()` guard-omission bugs cataloged throughout §7/§8,
+just triggered by a callback contract (an efun-facing socket layer
+signaling "no data yet" with a bare `0` instead of an empty array) that
+is specific to this lib's Intermud-3 socket implementation. Not
+expected to recur elsewhere in this corpus — no other lib in this
+project uses this `imud_d.c`-style socket protocol stack or the
+"deliver 0 for connection-established" convention — logged here for
+completeness per the project's own bug-writeup standard, not as a
+sweep candidate.
+
 ---
 
 ## 9. LPC formatter (`~/src/fluffos/tools/lpc-syntax/`) — required checks

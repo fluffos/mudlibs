@@ -136,6 +136,113 @@ WASM 环境天然拿不到公网 socket 的必然结果，无法用 mudlib 侧�
 修复，也符合 §1.3c 里"sockets 包缺失导致的功能整体缺席，按 playable
 处理"的既有先例）。
 
+## 深度功能测试 / Deep functional test（round two, 2026-08-27）
+
+标准 §10.7 round-two checklist（注册→移动→人物信息→战斗→门派/技能→
+quit-重连）在这个 lib 上整体不适用——见上面「这个 lib 到底是什么」：没有
+账号系统、没有房间地图、没有战斗/技能/门派，`connect()` 直接丢进匿名
+`secure/user.c` 会话。本轮把同一条原则（不要只读源码就假设能用，实际
+连上一个真跑着的驱动，把每一个真实功能都点一遍）适配成这个 lib 实际
+拥有的东西：**boot 真实原生驱动 → 用真实 socket 客户端把两个命令
+（`mudlist`/`update`）连同未知命令兜底都跑一遍 → 每次都检查
+`log/debug.log` 以外的运行时错误日志**（`work/log/log`/`work/log/log_catch`，
+由 `secure/master/error.lpc` 的 `error_handler()` 写入，不是
+`log/debug.log`——这两套日志此前没有被本 lib 的记录明确区分过，见下）。
+
+### Bug found and fixed
+
+**`secure/imud/imud.lpc:144-146`（`handle_router_read()`）——检测到非
+数组消息后没有 `return`，继续往下执行 `message[0]`，在真实驱动上
+**每次启动、每次 I3 socket 建立连接都 100% 必现**一次被捕获的运行时
+错误。**
+
+- 症状：`work/log/log_catch`（`catch()`住的运行时错误，由
+  `error_handler(mp, caught=1)` 写入——与 `log/debug.log` 是两个不同的
+  日志文件，`log/debug.log` 完全不会记录这类被 `catch()` 吞掉的错误）
+  在**每一次**原生驱动启动后都立刻多出一条：
+  ```
+  *Value being indexed is zero.
+  Object: /secure/imud/imud at line 148
+  'read_callback' at /secure/imud/socket#0 at line 94
+  'CATCH' at /secure/imud/socket#0 at line 94
+  'handle_router_read' at /secure/imud/imud at line 148
+  ```
+  对连接过程完全不可见——`mudlist` 照常返回真实数据、欢迎语正常、玩家
+  侧没有任何异常——只有翻这个专门的运行时错误日志才能看到。用今天之前
+  遗留在 `work/log/log_catch` 里的历史记录核实过：2026-08-24 那次首次
+  转换测试的 4 次启动（22:22/22:23/22:24/22:34）**每一次都留了同一条
+  错误**，说明这不是偶发，是从这个 lib 转换进本项目那天起就一直存在、
+  每次启动必现的问题，只是此前的验证轮次没有检查过这个日志文件。
+- 根因：`secure/imud/socket.lpc` 的 `release_callback()`（接受一个新
+  出站连接后）故意调用 `catch(evaluate(read_func, this_object(), 0))`——
+  用整数 `0` 作为 message 参数，通知上层"新连接建立了"（见该函数自带
+  注释 "Deliver a 0 indicating a new connection"）。`imud.lpc` 的
+  `handle_router_read(object socket, mixed *message)` 在第 144 行用
+  `!arrayp(message)` 正确识别出了这种情况并 `debug_message()` 记录了
+  一行 "Unknown message: 0"，但**忘了在这条分支里 `return`**，于是
+  第 148 行 `if (message[0] != "mudlist")` 紧接着对整数 `0` 做下标
+  访问，触发 "Value being indexed is zero" 运行时错误。因为
+  `socket.lpc:94` 的 `read_callback()` 本身把整个调用包在
+  `catch(evaluate(read_func, ...))` 里，这个错误被吞掉、不传播、不
+  影响后续任何功能——`mudlist`/`update` 全部正常工作（NOTES.md 上一次
+  记录的"干净启动"结论在功能层面依然成立）——但这是一个真实的、
+  100% 可复现的、`missing return after a stringp()/arrayp() guard`
+  类型的驱动 API 误用，完全符合 §10.7 scope 里"missing
+  `objectp()`/`stringp()` 一类的守卫"这一类。
+- 修复：在 `!arrayp(message)` 分支里补上 `return;`：
+  ```lpc
+  if (!arrayp(message)) {
+    debug_message(sprintf("Unknown message: %O", message));
+    return;
+  }
+  ```
+  message 本来就不是数组时，后面所有依赖 `message[0..]` 下标访问的
+  分发逻辑都没有意义，提前返回是唯一合理的行为，不改变任何真实 I3
+  协议消息（`mudlist`/`startup-reply`/`error`/未知类型转发错误包）的
+  处理路径。
+- 验证：修复前，`rm` 干净两个日志文件后重新 boot 原生驱动，
+  `work/log/log_catch` 立刻出现上述同一条错误（第 5 次独立复现，
+  加上历史记录里的 4 次，共 5/5 次启动必现）。应用修复、`kill` 掉进程、
+  重新 `boot` 一次全新驱动实例后：`work/log/log_catch`/`work/log/log`
+  两个文件启动后仅剩时间戳头，**没有任何错误记录**；随后用真实 socket
+  客户端跑了一遍连接 → 欢迎语/IMUD STAT 块 → `mudlist`（真实返回
+  "166 matches out of 166 muds. 106 are UP."，能看到 FluffOS/LDMud/
+  CoffeeMud/Dead Souls 等真实在线的 MUD）→ 未知命令 `foobar`（正确
+  兜底 "What?"）→ `update /secure/commands/mudlist`（正确 "Done."）→
+  `update`（无参数，正确 "update what?"）→ 运行约 50 秒的空闲观察期，
+  两个错误日志文件全程保持空白，`log/debug.log` 无 FATAL。另外用
+  `node scripts/wasm_client.js ~/src/fluffos/build-wasm/src libs/imud
+  --send "" --send "mudlist" --send "quit"` 重新跑了一遍 WASM 构建，
+  行为与此前记录一致（`socket_address`/`socket_write` 编译失败被
+  `catch()` 优雅吸收，`mudlist` 返回空列表而不是崩溃），确认这次修复
+  没有引入任何 WASM 侧回归。
+
+### `debug.log` 里一条无害噪音，记录但不修
+
+真实 I3 路由器在握手完成后，会在没有请求的情况下主动推送一条
+`chanlist-reply` 消息（属于 channel 扩展协议，本 lib 的
+`secure/imud/imud.lpc` 只 `inherit` 了 `daemon_data`/`reconnect`/
+`mudlist` 三个模块，channel 模块本来就被上游仓库自己注释掉，见
+「这个 lib 到底是什么」一节）。`handle_router_read()` 对着这条未知
+类型的消息按设计正确地回了一个 `"error"`/`"unk-type"` 错误包给路由器，
+但真实路由器又回了一句 `(<- *i4) not-imp: Unknown command sent to
+router: error`——路由器自己不接受把 `"error"` 类型的包直接发给它本身
+（只接受它转发给别的 mud 的场景）。这是"演示 lib 只启用了三个协议
+模块、面对一个真实的、期望更完整协议栈的生产路由器"这一既定设计事实
+自然产生的协议噪音，不改变任何行为，两次干净启动（含修复前后）都能
+在 `log/debug.log` 里看到，判定为"design"，不修。
+
+### 结论
+
+本轮修复了一个真实的、每次启动必现的运行时守卫缺失 bug（`imud.lpc`
+`handle_router_read()` 的 `return` 缺失），修复前对玩家侧完全无感知，
+只在专门的运行时错误日志（`work/log/log`/`work/log/log_catch`，与
+`log/debug.log` 是不同文件）里可见——这本身也印证了 AGENTS.md §10.7
+"quit 的可见输出正常不代表服务端没有静默出错"这条方法论在这个只有两个
+命令的极简 demo 上依然成立。除此之外，这个 lib 唯一有实质内容的功能
+（`mudlist` 真实连公网 I3 网络）本轮再次原生实测确认工作正常，`update`
+命令、未知命令兜底、~50 秒空闲期、WASM 构建全部无新发现。
+
 ## 管理员账号
 
 不适用，见 README「管理员账号」小节——没有账号系统，无法播种。

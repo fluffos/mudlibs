@@ -143,6 +143,7 @@ private nomask void handle_router_read(object socket, mixed * message)
 {
   if (!arrayp(message)) {
     debug_message(sprintf("Unknown message: %O", message));
+    return;
   }
 
   if (message[0]!= "mudlist")
