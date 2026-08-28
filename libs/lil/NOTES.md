@@ -200,3 +200,100 @@ is genuinely true here, not just advertised.
   dependency at all. Verified with a scripted WASM session: `who`
   (correct output), `eval return 1+1;` (`Result = 2`), and `quit`
   (clean `Bye.` disconnect).
+
+## 9. Deep functional test (round two, 2026-08-27)
+
+The standard §10.7 round-two checklist (register -> move -> score ->
+combat -> sect/skill -> quit-reconnect) does not apply here for the
+same reason given throughout this file: no accounts, no rooms, no
+combat, no skills/sects. This pass re-applies the same underlying
+principle -- actually exercise the lib live against a freshly booted
+driver, rather than just re-reading source and assuming it still works
+-- to everything this lib actually has: its ~10 primitive commands and
+the bundled self-test suite.
+
+- Fresh native boot (`~/src/fluffos/build-debug/src/driver
+  config.fluffos`, launched the standard `cd libs/lil && ...` way):
+  clean start, port 40226 listening, zero fatal errors.
+- Raw socket session, single connection: banner + auto-assigned name
+  (`stuf1`); `who` lists the session correctly; `eval return 1+1;` ->
+  `Result = 2`; `eval return "abc"+"def";` -> `Result = "abcdef"`;
+  `eval return sizeof((({1,2,3})));` -> `Result = 3`; `update
+  /single/tests` (silently succeeds -- matches `command/update.lpc`'s
+  own source, which never `write()`s on the success path); `quit` ->
+  clean `Bye.`.
+- Two simultaneous connections: `say` correctly broadcasts to the
+  *other* session only, never echoing back to the speaker (the native
+  `say()` efun's own designed behavior -- `command/say.lpc`'s
+  `#ifdef __NO_ENVIRONMENT__ #define say(x) shout(x) #endif` branch
+  never fires here since that macro isn't defined, per the boot
+  predefine dump in \S5), and `quit` correctly announces "stufN leaves
+  this reality." to the remaining session.
+- `ed`/`dest`/`rm`, end to end, not just entering/exiting: `ed
+  /tmp_ed_scratch.lpc` -> append mode (`a`) -> wrote a one-line
+  function body -> `w` (driver echoed back "1 lines 25 bytes",
+  confirming the write actually happened) -> `q`; then `eval return
+  "/tmp_ed_scratch"->foo();` correctly compiled and ran the file just
+  written through `ed` (`Result = 42`); `dest /tmp_ed_scratch`
+  correctly destructed the clone (`find_object` back to `0`
+  afterward); `rm /tmp_ed_scratch.lpc` correctly deleted the file
+  (`file_size` back to `-1` afterward). This exercises \S5's
+  `__OLD_ED__` old-style `ed(file)` branch genuinely end to end (write
+  + load + call + destruct + delete), not merely confirming the branch
+  compiles and opens a `:` prompt.
+- Self-test suite, live, again: `eval "/command/tests"->main("");`
+  walks the entire `single/tests/` tree and dies at exactly the same
+  place documented in \S3 (`single/tests/compiler/succeed.lpc`'s `##`
+  token-paste), with the identical compiler error text as the original
+  conversion-time pass -- confirms the one known driver-dialect gap is
+  still the only blocker and nothing has regressed since.
+- `shutdown`: cleanly exits the whole driver process (port stops
+  listening, process gone, no crash/traceback) -- the one primitive
+  command not previously exercised live in \S8's list.
+
+### Methodology finding: `work/log/debug.log` never receives new content for the rest of a native boot's life, root-caused
+
+While re-testing, `work/log/debug.log` stayed byte-for-byte identical
+(`git diff` empty) across this entire session -- including past the
+self-test suite's own uncaught compiler-error crash above, which is
+exactly the kind of event `debug.log` exists to catch. Root-caused by
+reading the driver source (`~/src/fluffos/src/mainlib.cc` +
+`src/base/internal/log.cc`): `init_main()` calls
+`reset_debug_message_fp()` -- which `fopen()`s the config's `log
+directory` value after stripping *every* leading `/` (so this lib's
+`/log` becomes the bare relative path `log/debug.log`) -- **before**
+it `chdir()`s into the mudlib's execution root, and never calls it
+again afterward for the rest of that process's life. Launched the
+standard way this whole project always uses (`cd libs/lil &&
+.../driver config.fluffos`), the driver's cwd at that moment is
+`libs/lil/` (the lib's top directory), not `libs/lil/work/` (the real
+mudlib root) -- so `log/debug.log` resolves to `libs/lil/log/debug.log`,
+a directory that has never existed (the real, tracked log lives at
+`libs/lil/work/log/debug.log`). The `fopen()` fails, prints the
+already-known-cosmetic line documented corpus-wide in AGENTS.md \S10.0
+(`Unable to open log file: "log/debug.log", error: "No such file or
+directory"`), and then -- the part not previously spelled out -- the
+file handle stays null and is **never retried after the `chdir()`**,
+so every subsequent `debug_message()` call (i.e. every uncaught
+runtime error for the rest of that process's life) silently goes
+nowhere durable. Confirmed empirically here: the self-test suite's
+uncaught `##`-paste compiler error appeared verbatim in the driver's
+own captured stdout but left zero trace in `work/log/debug.log`. Not a
+`lil`-specific bug -- it's a genuine driver-level ordering bug
+(`reset_debug_message_fp()` called pre-`chdir()` with no post-`chdir()`
+retry) that affects every lib in this corpus booted the standard way,
+described here because this is where it was root-caused; see AGENTS.md
+\S10.9 for the corpus-wide methodology note and why it isn't patched
+in-place this session.
+
+### Result: clean pass, no new mudlib bugs
+
+Every primitive command and the bundled self-test suite behave exactly
+as documented in \S1-\S8 above, live, on a fresh driver, across two
+concurrent sessions and a clean `shutdown` -- no crashes, no
+unexpected stdout errors beyond the one already-documented
+driver-dialect gap (\S3). Nothing to fix at the mudlib level; this
+pass exists to confirm the original conversion-time findings are still
+accurate under this project's round-two live-testing bar, and it
+found one new (driver-level, not mudlib-level) methodology gap along
+the way, documented above and cross-referenced into AGENTS.md.

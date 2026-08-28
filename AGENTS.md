@@ -14225,6 +14225,58 @@ dedicated driver-level investigation (ASan/valgrind against a long-sit
 soak) in the `~/src/fluffos` checkout itself, rather than continuing to
 treat each new occurrence as a per-lib mudlib finding.
 
+### 10.9 `debug.log` is silently DEAD for the rest of a native boot's life whenever the driver is launched the standard way — root cause found on `lil`
+
+Root-caused while deep-testing `lil` (§10.7 — a non-game MudOS
+testsuite base, see its own NOTES.md §9 for the full writeup) by
+reading `~/src/fluffos/src/mainlib.cc` + `src/base/internal/log.cc`.
+`init_main()` calls `reset_debug_message_fp()` — which `fopen()`s the
+config's `log directory` value after stripping *every* leading `/`
+(so an absolute-looking value like `/log` becomes the bare *relative*
+path `log/debug.log`) — **before** it `chdir()`s into the mudlib's
+execution root, and never calls it again afterward, for the rest of
+that process's life. Under this project's own universal boot
+convention (`cd libs/<slug> && ~/src/fluffos/build-debug/src/driver
+config.fluffos` — §1 step 7, and every lib's own README "Local run"
+section), the driver's cwd at that moment is the *lib's top directory*
+(`libs/<slug>/`), not its mudlib root (`libs/<slug>/work/`) — so
+`log/debug.log` resolves to `libs/<slug>/log/debug.log`, a path that
+doesn't exist (the real, tracked log lives at
+`libs/<slug>/work/log/debug.log`). The `fopen()` fails, prints the
+single already-known-cosmetic line documented in §10.0 (`Unable to
+open log file: "log/debug.log", error: "No such file or directory"`),
+and then — the part not previously spelled out — **every subsequent
+runtime-error `debug_message()` call for that whole process silently
+goes nowhere durable, for the rest of its life**, because the file
+handle stays null and is never retried post-`chdir()`. Confirmed
+empirically on `lil`: triggered a real, uncaught runtime error (its
+own known `##`-token-paste compiler failure) mid-session and confirmed
+via `git diff` that `work/log/debug.log` was not touched by even one
+byte, while the exact same error appeared verbatim in the driver's own
+captured stdout.
+
+**Practical fallout, and why this matters for every past and future
+§10.7 pass**: any lib whose native `work/log/debug.log` looks
+suspiciously stale/unchanged across a testing session is not
+automatic proof the session was clean — it may just mean this bug ate
+every error that would otherwise have gone there. This retroactively
+explains a symptom already noted without being root-caused elsewhere
+in this file (§7.76 on `fys`: "`debug.log` showed nothing; the failure
+only surfaced in the driver's own captured stdout"). Capturing the
+driver's own stdout (`nohup ... > driver_stdout.log`, per §10.8's own
+rule) was already this project's de facto practice — this section just
+explains *why* that practice is load-bearing rather than optional
+redundancy: **always capture and grep the driver's own stdout in
+addition to `debug.log`** for every native-boot test session; treating
+a quiet `debug.log` alone as "no errors happened" is not a safe
+inference under this launch convention. Not patched here — this is a
+genuine driver-level ordering bug in `~/src/fluffos/src/mainlib.cc`'s
+`init_main()` (call `reset_debug_message_fp()` after `chdir()`, or add
+a second call post-`chdir()`), flagged for a human maintainer decision
+on whether to PR a fix upstream (per this project's established
+fluffos/fluffos PR workflow) rather than patched unilaterally
+mid-testing-session.
+
 ---
 
 ## 11. Lineage map — who shares code with whom
