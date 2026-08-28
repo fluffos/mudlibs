@@ -1,0 +1,5 @@
+#define SO_DIR "/domains/westwood/areas/starvingorcs/"
+#define SO_NPC SO_DIR "npc/"
+#define SO_OBJ SO_DIR "obj/"
+#define SO_ROOM SO_DIR "room/"
+#define AREAEXIT "/domains/westwood/virtual/soleilroad/0,11"

@@ -1,0 +1,7 @@
+#define ARMOUR_CLOTH       (1 << 1)
+#define ARMOUR_LEATHER     (1 << 2)
+#define ARMOUR_REINFORCED  (1 << 3)
+#define ARMOUR_NATURAL     (1 << 4)
+#define ARMOUR_CHAIN       (1 << 5)
+#define ARMOUR_PLATE       (1 << 6)
+#define ARMOUR_HEAVY_PLATE (1 << 7)

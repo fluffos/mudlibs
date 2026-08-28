@@ -1,0 +1,7 @@
+#define MANSION_DIR    "/domains/valley/areas/mansion/"
+#define MANSION_NPC    MANSION_DIR "npc/"
+#define CLEARING_NPC   MANSION_DIR "npc/"
+#define PASTURE_NPC    MANSION_DIR "npc/"
+#define MOAT_NPC       MANSION_DIR "npc/"
+#define MANSION_OBJ    MANSION_DIR "obj/"
+#define MANSION_ROOMS  MANSION_DIR "rooms/"

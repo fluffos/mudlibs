@@ -1,0 +1,6 @@
+#define DIR_LISHT    "/domains/xandria/towns/lisht/"
+#define LISHT_ROOM   DIR_LISHT "room/"
+#define LISHT_NPC    DIR_LISHT "npc/"
+#define LISHT_OBJ    DIR_LISHT "obj/"
+#define LISHT_SAVE   DIR_LISHT "save/"
+#define PHARAOH_D    LISHT_OBJ "pharaoh_d"

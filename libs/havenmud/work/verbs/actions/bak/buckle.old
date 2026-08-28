@@ -1,0 +1,131 @@
+#include <lib.h>
+#include <damage_types.h>
+#include <armour_types.h>
+#include <vision.h>
+inherit LIB_ACTION;
+
+static void create() {
+  ::create();
+  SetVerb("buckle");
+  SetRules("LIV", "");
+  SetHelp("Not content to cower behind a gilded shield, a novice "
+    "swashbuckler can bash at his opponents weapon, attempting to "
+    "shatter it. It is obviously difficult to perform this manuever "
+    "without holding a shield in one of your hands.");
+  SetStaminaCost(30);
+  SetRequiredWeapon("shield"); //shield is not a weapon type. things should be overridden so this doesn't tgo fubar
+  SetRequiredSkills( ([
+"swashbuckling" : 50,
+    ]) );
+}
+
+// overriding this to not require a weapon.
+mixed CanAction(object who) {
+  if (who->GetStaminaPoints() < StaminaCost) {
+    return "You are too tired.";
+  }
+  if (who->GetParalyzed()) {
+    return "You are paralyzed.";
+  }
+  if (who->GetSleeping()) {
+    return "You are asleep.";
+  }
+  foreach(string s in keys(RequiredSkills)) {
+    if (who->GetSkillLevel(s) < RequiredSkills[s]) {
+      return "You are not proficient enough in " + s + " to perform that action.";
+    }
+  }
+
+  return 1;
+}
+
+
+mixed can_buckle() {
+  if (!this_player()->GetInCombat()) { return "buckle who?"; }
+  return CanAction(this_player());
+}
+
+mixed can_buckle_liv() {
+  return CanAction(this_player());
+}
+
+mixed do_buckle_liv(object target) {
+  return eventAction(this_player(), target);
+}
+
+mixed do_buckle() {
+  return do_buckle_liv(this_player()->GetCurrentEnemy());
+}
+
+int eventAttack(object who, object target) {
+  int result, damage;
+  object weapon, buckler;
+  object *pretties;
+  
+  if (!target) debug("Buckle found no target!");
+  
+  if (who->GetTestChar()) debug("buckling");
+  if (!target->GetWielded()) {
+    who->eventPrint(target->GetKeyName() + "has nothing for you to smash!");
+  }
+  weapon = target->GetWielded( random(sizeof(target->GetWielded())) );
+  if (who->GetTestChar()) debug("looping thru inventory for shield");
+  pretties = who->GetWorn();
+
+  // this check really should be in can_act or do_act, but that's hard and I'm lazy.
+  foreach (object *limb in pretties) {
+    foreach (object pretty in limb) {
+      if (pretty->GetArmourType() == A_SHIELD) {
+        if (pretty->GetWorn()[0]!="left arm" && pretty->GetWorn()[0]!="right arm") {
+          buckler = pretty;
+
+        }
+      }
+    }
+  }
+
+  if (!buckler) {
+    if (who->GetTestChar()) debug("ain't no shield");
+    who->eventPrint("You must have a shield in hand to do this!");
+    send_messages( ({ "lurch","seem" }), "$agent_name%^CYAN%^ $agent_verb%^RESET%^ "
+      "menacingly towards $target_name, but $agent_verb to have forgotten something!",
+      who, target, environment(who));
+    return 0;
+  }
+
+  result = GetHit(who,target);
+
+  if (who->GetTestChar()) debug("thrust sendmessage");
+  send_messages( ({ "thrust" }),
+    "$agent_name%^BOLD%^CYAN%^ $agent_verb%^RESET%^ $agent_possessive shield at "
+      "$target_possessive_noun weapon!",
+    who, target, environment(who));
+
+  if (result == -1) {
+  if (who->GetTestChar()) debug("fumble sendmessage");
+    send_messages( ({ "sieze","bring" }), "$target_name $target_verb the opportunity, and "
+      "$target_verb $target_possessive weapon %^CYAN%^crashing%^RESET%^ down on "
+      "$agent_possessive_noun shield.",
+      who, target, environment(who));
+    buckler->eventDeteriorate(weapon->GetDamageType());
+    return 1;
+  }
+  if (result = 0) {
+  if (who->GetTestChar()) debug("miss sendmessage");
+    send_messages( ({ "knock" }),
+      "$agent_name %^CYAN%^$agent_verb%^RESET%^ $target_possessive_noun weapon "
+      "away harmlessly.",
+      who, target, environment(who));
+    return 1;
+  }
+
+  if (who->GetTestChar()) debug("hit sendmessage");
+  // blow has landed
+  send_messages("",
+    "$agent_possessive_noun shield connects with $target_possessive_noun weapon with "
+    "a loud %^BOLD%^CYAN%^buckle!%^RESET%^",
+    who, target, environment(who) );
+  weapon->eventDeteriorate(BLUNT);
+  return 1;
+}
+

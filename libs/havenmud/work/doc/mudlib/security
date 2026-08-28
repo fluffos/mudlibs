@@ -1,0 +1,180 @@
+
+                                   Security
+                                       
+   The _Nightmare Object Library_ uses a security system based on
+   something called _stack security_. In this system, objects have a set
+   of privileges and files a set of protections. The mudlib handles the
+   question of whether a given object can access a given file based on
+   the object's privileges and the file's protections. Actually, it
+   checks the privileges of the entire _call stack_ to see if an
+   operation may be performed. This document explains what a call stack
+   is, how privileges are assigned to objects, how protections are
+   assigned to files, and how the whole system works together.
+   
+The Call Stack
+
+   Each time one object calls a method in another object, that object is
+   added to the call stack. A call stack starts in one of the following
+   ways:
+     * A user issues a command
+     * An object's heart_beat() is called by the driver
+     * A call_out() method is called by the driver
+       
+   A typical call stack might look somthing like:
+driver calls process input for new input: ({ })
+user object calls command daemon: ({ user })
+processing returns to user objects: ({})
+user object calls command object: ({ user })
+command object tries to delete a file: ({ command_object, user })
+processing returns to command object: ({ user })
+processing returns to user object: ({})
+processing ends
+
+   The call stack is thus all objects which have been involved in
+   processing up to this point. Your code can access the call stack using
+   the _MudOS_ _previous_object()_ and _all_previous_objects()_ efuns.
+   _previous_object()_ gives you the last object on the call stack if
+   there is any. _previous_object(-1)_ and _all_previous_objects()_
+   (_all_previous_objects()_ is just a synonym for _pevious_object(-1)_)
+   give you the entire call stack as an array of objects.
+   
+Object Privileges
+
+   Each mud object has one or more privileges associated with it. The
+   _Nightmare Object Library_ defines privileges in the
+   "/secure/include/privs.h" file. When an object is created, the driver
+   calls _privs_file()_ in the master object in order to allow the mudlib
+   to assign privileges to an object. The _Nightmare Object Library_ in
+   turn calls the simul efun _file_privs()_ which determines what
+   privileges an object may be assigned.
+   
+   The _Nightmare Object Library_ assigns privileges to an object based
+   on its object name. One reason for doing this is because you _never_
+   want to give an object privileges greater than the protection on its
+   source file. If you give an object coming from "/dir/file.c" global
+   privileges but minimal protection, an object which could write to
+   "/dir/file.c" woudld, by extension, have global privileges. This is
+   because that object could overwrite "/dir/file.c" with malicious
+   source code that uses the object privs of "/dir/file" to do damage.
+   
+   User objects are actually allowed multiple privs. Their privs string
+   is a ":" separated list of privs. For example, an admin might have the
+   privs "descartes:SECURE". Every user object has at least their user
+   name. Users with greater accss may have additional privs. Extra privs
+   can be assigned to a user via the "/secure/cfg/groups.cfg" file. This
+   file lists privs along with the name of users having those privs.
+   
+   The groups file takes the following format:
+# Names are added to this file to determine groups.
+# Groups should be named in all caps.
+# The format is:
+# (GROUP) name1:name2
+
+(SECURE) descartes:kalinash:lassondra:rush:billgates
+(ASSIST) descartes:rush
+
+File Protections
+
+   _Nightmare_ specifies two types of object protections:
+    1. read protection
+    2. write protection
+       
+   Matching these two types of protection are two configuration files
+   which specify which privs may have read or write access to a file. The
+   file "/secure/cfg/read.cfg" specifies which privs may read a specific
+   file. The file "/secure/cfg/write.cfg", on the other hand, specifies
+   which privs are required in order to write to a given file. Because
+   you more often than not would like to associate protection with a
+   whole directory rather than a individual files, these configuration
+   files will allow you to specify protections by directory.
+   
+   Read access by default is granted. The "/secure/cfg/read.cfg" file is
+   thus used to _restrict_ access to files. If you specify a directory,
+   then an object must have the named privs in order to read something
+   from that directory. Any directory without an entry, however, will
+   grant read access to anyone requesting it.
+   
+   In contrast to read accss, write access is denied by default. The
+   "/secure/cfg/write.cfg" file is used to _grant_ access to files. If
+   you do not specify a directory, write access will be denied to
+   everyone except _SECURE_. _SECURE_ is granted any access it desires at
+   any time regardless of what the configuration files state.
+   
+   The read protection configuration file takes the following format:
+# Directories and their protection should be entered here.
+# The format is:
+# (/dir) GROUP1:GROUP2
+
+(/realms/) ASSIST
+(/secure/etc/) ASSIST
+(/secure/save/) ASSIST
+
+   The write protection configuration file takes the following format:
+# Directories and their protection should be entered here.
+# The format is:
+# (/dir) GROUP1:GROUP2
+
+(/cfg/) ASSIST
+(/cmds/) ASSIST
+(/daemon/) ASSIST
+(/doc/) ASSIST
+(/domains/) ASSIST
+(/estates/) ASSIST:MUDLIBPRIV
+(/ftp/) all
+(/include/) ASSIST
+(/log/errors/) all
+(/log/personal/) all
+(/log/reports/) all
+(/news/) ASSIST
+(/obj/) ASSIST
+(/realms/) ASSIST:CMDS
+(/save/) MUDLIBPRIV:ASSIST
+(/secure/save/) ASSIST
+(/tmp/) all
+(/verbs/) ASSIST
+(/www/) ASSIST
+
+How File Operations Are Handled
+
+   So far, I have only discussed the privs of individual objects. As I
+   mentioned in the beginning, however, the _Nightmare_ system is stack
+   based. Whenever any file operation is attempted, the driver calls
+   either _valid_read()_ or _valid_write()_ in the master object to see
+   if that file access is allowed. The _Nightmare_ master object checks
+   the privs of the entire call stack at that point against the
+   protections of the file being accessed.
+   
+   For file operations, the master object checks to see if any one object
+   is too weak to read or write against the protections for the file in
+   question. If any object in the call stack is too weak, the operation
+   fails. If they all have the privs required to read or write to that
+   file, then it succeeds.
+   
+Unguarded Operations
+
+   Sometimes you do not want an operation to be subject to these strict
+   call stack checks. For example, a creator might want to create a wand
+   that logs information to the creators home directory. Under stack
+   security, however, any such attempt will fail since players using the
+   wand do not have access to that creators home directory. What the
+   creator really wants is for the logging to be done using only the
+   wand's privs.
+   
+   _Nightmare_ provides a simul efun, _unguarded()_, that allows you to
+   signal that only the privs of the current object should be used for
+   file operations. The code for the wand might look like:
+
+void log_use() {
+    unguarded((: write_file, "/realms/descartes/log",
+                 sprintf("%O", environment()) + " used the wand." :));
+}
+
+   The argument to unguarded is a function pointer that provides the
+   specific operation which should occur in an unguarded manner. When the
+   _unguarded()_ simul efun executes this function, only the wand's privs
+   will be checked against the log file's protections.
+   
+   Unguarded file operations should only be performed in extremely rare
+   cimrcumstances where you fully understand the implications of a less
+   secure object spoofing a call. Never ever use _this_player()_ as a
+   means of securing any operation.

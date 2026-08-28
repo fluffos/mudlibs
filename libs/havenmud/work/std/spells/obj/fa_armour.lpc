@@ -1,0 +1,117 @@
+/*
+ * Conjured ARmour for the frost armour spell
+ * frost armour spell declared armour type, class adjectives blahblah
+ * this file only contains functions and magic id property
+
+ */
+#include <lib.h>
+#include <armour_types.h>
+#include <armour_class.h>
+#include <size.h>
+#include <damage_types.h>
+inherit LIB_ARMOUR;
+
+int eventMelt();
+
+nosave void create() {
+  armour::create();
+  SetKeyName("frost armour");
+  // will be overridden
+  SetShort("a bit of frost");
+  SetLong("A thick coating of frost and ice. It seems unnaturally flexible "
+    "for the material involved, yet it gathers and hardens when struck.");
+
+  SetId(({ "frost_armour" }));
+
+  SetMass(10);
+  SetMaterial(({ "natural" }));
+  SetProperty("history",
+    "This smells like necromancy, and recent at that. While moderately "
+    "uncomfortable it's probably not harmful, nor worth anything.");
+  SetProperty("magic",
+    "Magically forged by a necromancer directly upon the skin of the wearer, "
+    "this conjured armour will fade once removed. It will resist frost and "
+    "fear fire."
+  );
+  SetProtectionBonus(COLD, 5);
+  SetRepairDifficulty(10);
+  SetSize(SIZE_MEDIUM);
+  SetValue(0);
+  //call_out( (: SetupFrostArmour :), 0 );
+  // MaxDamagePoints, DamagePoints?
+  AddSave(({ "Size", "ArmourClass", "ArmourType", "ExternalDesc", "Short", "Id" }));
+  set_heart_beat(120);
+}
+
+// every two minutes, deteriorate
+void heart_beat() {
+  if (environment() && playerp(environment())) {
+    eventDeteriorate(MAGIC);  // can't be HEAT or it'll dest entirely
+  }
+}
+
+// resist frost deterioriation
+// should maybe heal some when taking frost damage.
+void eventDeteriorate(int DamageType) {
+  object env = environment();
+  object room;
+
+  if (!env) {
+    // there really should be an environment, but
+    // torch code has this
+    return;
+  }
+  room = environment(env);
+
+  // TODO: something bad with fire.
+  // fuckit let's melt
+  if (DamageType & HEAT) {
+    call_out((: eventMelt :), 0);
+  }
+
+  // deteriorate normally if not cold damage
+  if (!(DamageType & COLD)) {
+
+    armour::eventDeteriorate(DamageType);
+    // dests the item if it's too worn out.
+    if (this_object()->GetDeterioration() >= 10) {
+      call_out((: eventMelt :), 0);
+    }
+    return;
+  }
+
+  // shield is held, send message to room and wielder
+  if (room) {
+    room->eventPrint(possessive_noun(env) + " " + GetKeyName()
+      + " %^RED%^resists%^RESET%^ the frigid attack.", ({ env }));
+    env->eventPrint("Your " + GetKeyName() +
+      " %^RED%^resists%^RESET%^ the frigid attack.");
+  } else {
+    // shield is not held. send message to room
+    env->eventPrint(capitalize(GetShort()) +
+      "  %^RED%^resists%^RESET%^ the frigid attack.");
+  }
+}
+
+varargs mixed eventUnequip(object who) {
+  mixed tmp = ::eventUnequip(who);
+  if (tmp != 1) {
+    return tmp;
+  }
+  call_out((: eventMelt :), 0);
+  return 1;
+}
+
+int eventMelt() {
+  object wearer;
+  object env;
+  if (environment()) {
+    wearer = environment();
+    if (environment(wearer)) {
+      env = environment(wearer);
+    }
+    send_messages("", "$agent_possessive_noun " + GetKeyName() +
+      " melts away!", wearer, this_object(), env);
+  }
+  eventDestruct();
+}

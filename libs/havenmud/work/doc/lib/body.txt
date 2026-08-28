@@ -1,0 +1,390 @@
+                          The Body Inheritable
+                          written by Zaxan@Haven
+
+This document details the different functions in the Nightmare IV LPC
+Library's body inheritable. This document is divided into
+many sections. Each section explains a different type of function
+in the lib inheritable.
+
+The following is the header of the body inheritable with what it
+includes, inherits, and its definitions:
+
+****************************************************************************
+#include <lib.h>
+#include <daemons.h>
+#include <function.h>
+#include <medium.h>
+#include <position.h>
+#include <armour_types.h>
+#include <damage_types.h>
+#include <magic_protection.h>
+#include "include/body.h"
+
+inherit LIB_REPUTATION;
+inherit LIB_UNDEAD;
+
+#define COLLAPSE_AT            10.0
+****************************************************************************
+
+           ************************************************
+                     Part 1: Modal Methods Section
+           ************************************************
+
+mixed CanRemoveItem(object ob);
+This function defines that the player can remove an item from itself.
+It always returns a 1.
+
+           ************************************************
+                        Part 2: Events Section
+           ************************************************
+
+mixed eventChangePosition(int position);
+This function is used to change the position that the player is in. Valid
+types are POSITION_STANDING, POSITION_SITTING, POSITION_LAYING, and
+POSITION_FLYING. A successful change will return a message, a number
+for the different position types (int position, all defined in
+/include/position.h) and will return a 1 for the function success. A failure
+results in the return of a 0.
+
+private void checkCollapse();
+When a player collapses this function constantly checks whether the player 
+is still weak enough to stay collapsed. First it finds the percent of the 
+player's health points to the player's max health points. If it is lower 
+than the COLLAPSE_AT value defined in the header of /lib/body.c, the player 
+will become paralyzed and it will check it again. Otherwise, it will say 
+that the player feels some strength returning, and they will be able to 
+perform actions again.
+
+int eventCollapse();
+When this function gets called, it paralyzes the player and initiates the
+checkCollapse() function. If the player's position is already 
+POSITION_LYING, it will end the function and let checkCollapse() do the
+work. Otherwise, it will send a message to the player saying that they've
+collapsed and then it will set the player's position to POSITION_LYING.
+
+void eventCheckHealing();
+This function is the main function that controls the regeneration of the
+player and the affects of sleeping, alcohol, food, drink, and caffeine
+on the player. It also controls the depletion of alcohol, food, drink, and
+caffeine in the player.
+
+void eventCompleteHeal(int x);
+This function will heal the player in the amount specified over all parts
+of their body. This include Health, Magic, and Stamina Points, as well as
+on all limbs.
+
+mixed eventFall();
+When this function takes affect, the player will either die automatically,
+or receive a lot of damage (which might make them die anyway). It depends
+if the environment they are in has a GetGround() or not. if GetGround()
+returns a 0, the player falls into a deep abyss and automatically dies.
+If there is a GetGround(), the player will fall from the sky onto the ground
+and receive BLUNT damage to all limbs.
+
+varargs int eventHealDamage(int x, int internal, mixed limbs);
+This function is for all healing actions on the body. The x number is
+the amount of damage being healed. It cannot be a negative number. The 
+internal number is the damage flag, valid arguments are 0 and 1.
+The mixed limbs is the limb or the limbs affected by the heal event.
+The internal and limbs default to 0. If the internal flag is set
+then overall health is healed. If limbs are specified then the
+specified limbs are healed. If the internal flag is not set and no limbs
+are given, it will heal both overall body and overall limbs. This will 
+return the total amount of healing done or a -1 if something goes wrong.
+
+varargs int eventReceiveDamage(object agent, int type, int x, int internal,
+			       mixed limbs);
+This function is for the handling of all damage events which happens to
+the player's body. The agent is the living object that is responsible
+for the damage occuring to the player. The type is the damage types
+being done. The x integer is the amount of damage occuring, negative 
+numbers are illegal. The internal number is the damage flag, valid arguments
+are 0 and 1. And the mixed limbs are the limbs that will receive this
+damage. The internal and limbs both default to 0. Everything else is
+required. Note that internal damage is not affected by worn armour. This
+will return the amount of damage the player received.
+
+int eventCheckProtection(object agent, int type, int damage);
+This function cycles through any of the magic protection found on the
+player. It reduces the damage accordingly. The agent is the object doing
+the damage. The type is the type of damage done. The damage number is the
+original number of damage to be done to the player. This returns the 
+modified damage amount.
+
+mixed eventReceiveThrow(object who, object what);
+This function determines if the player being attacked will be able to
+catch a projectile thrown at them from their enemy. If so, they will
+retain the item for future use. If not, they will receive the proper
+amount of damage. Who is the player's current enemy and object what is
+the object being thrown at the player.
+
+varargs int eventDie(object agent);
+This function controls what happens when a player dies. The agent is the
+agent that is responsible for the death of this player. It is optional.
+This function also controls moving all of the items (unless they have
+SetRetainOnDeath()) to a new corpse of the player and places piles of
+money in the environment() of the player killed.
+
+int eventRemoveItem(object ob);
+This function is responsible for when a player removes a worn or wielded
+item. The ob is the object that is being removed. It will return a 1 on
+success, 0 on failure.
+
+int eventWear(object ob, mixed limbs);
+This function marks the limbs as having armour on them or a wielded
+item on them. The object ob is the item being worn and the mixed limbs
+are the limb(s) they are being worn on.
+
+void eventCheckStatus();
+This function will print different messages to the player depending
+on how hungry they are, thirsty, how much poison they have in
+their body, etc, to give them clues that they need to do
+something about it.
+
+           ************************************************
+                  Part 3: Data Manipulation Functions
+           ************************************************
+
+void NewBody(string race);
+This is the function that is responsible for setting the entire body
+of a player up. The string race is the race name of the player. It grabs
+all of the configuration data from the right file and sticks it into here,
+settings limbs, fingers, etc. Without a race, the player has a torso
+made of "ooze" and things just don't work out right. =)
+
+mixed CanWear(object armour, string *limbs);
+This functions checks to see if a particular piece of armour can be
+worn by the player. Object armour is the piece of armour being checked
+and string *limbs are the limbs on which the armour wants to be worn.
+It returns a 1 on a successful check, and a 0 on a failure for any
+reason.
+
+varargs int AddLimb(string limb, string parent, int classes, int *armours);
+This function will add the specified limb to the body. String limb is the
+name of the limb being added. String parent is the parent limb - what it
+is attatched to. Int classes is the class of the limb being added. 1 is
+the strongest (torso), the higher the number, the weaker. Finally, int
+*armours is the types of armours which can be worn on that limb. Classes
+defaults to 1 and armours defaults to an empty array. It returns a 1 on
+success, 0 on failure.
+
+int RestoreLimb(string limb);
+This function will re-add a limb that is missing from the body. If the
+limb has never existed on the body, it will fail. The string limb is the
+name of the limb that is to be restored. It returns a 1 on success, 0
+on failure.
+
+int DestLimb(string limb);
+This function will remove a limb from the limbs mapping. It will not
+show up as missing as it completely removes it from the body. Removing the
+torso is not allowed. String limb is the limb to be completely removed from
+the body. It returns a 1 on success, 0 on failure, and -1 on error.
+
+int RemoveLimb(string limb, object agent);
+This function removes a limb from the body and defines it as a missing limb.
+The string limb is the limb that was removed and the object agent is the
+agent who is responsible for the removal of the limb. It returns 1 on
+success, 0 on failure, and -1 on error.
+
+mapping GetLimb(string limb);
+This function will return all vital data of a limb such as the parent limb,
+the class, the health, the children of the limb, etc.
+
+string GetRandomLimb(string targ);
+This function will return a random limb that is weighted towards the 
+targetted limb (if specified). The targetted limb is string targ.
+
+string GetTorso();
+This function will return the name of the torso on the player.
+
+string array GetLimbs();
+This function will return the names of all of the limbs on the player.
+
+int GetLimbClass(string limb);
+This function will return the class of the specified limb (string limb).
+
+string GetLimbParent(string limb);
+This function will return the parent limb of the specified limb
+(string limb).
+
+string array GetLimbChildren(string limb);
+This function will return all children limbs of the specified limb
+(string limb).
+
+mapping GetMissingLimb(string limb);
+This function will return all important information for the specified
+limb (string limb) that is missing from the player's body.
+
+string array GetMissingLimbs();
+This function will return the names of all the limbs that are missing
+from the player's body.
+
+string GetLong(string nom);
+This will return the long description of the specified player (string nom).
+It returns information such as missing limbs, the description of the player,
+the condition of the player, etc. Basically anything that is noticed when
+someone looks at the player.
+
+string array GetWieldingLimbs();
+This function will return all limbs that are capable of wielding a
+weapon.
+
+varargs int AddFingers(string limb, int x);
+This function will add the given number of fingers (int x) to the given
+limb (string limb). It will return the total amount of fingers on the
+limb after this addition.
+
+int GetFingers(string limb);
+This function will return the amount of fingers on the specified limb
+(string limb).
+
+varargs object *GetWorn(string limb);
+This function will return what is being worn on the specified limb
+(string limb).
+
+varargs int GetWielded(string limb);
+This function will return what is being wielded on the specified limb
+(string limb).
+
+varargs static int AddHealthPoints(int x, string limb, object agent);
+This function is used to add health points to a particular limb. Int x
+is the number of points being added. It may be negative. String limb is
+the limb to which the points are being added. Object agent is the
+living responsible for this. If the value of limb is not 0, then "x"
+number of health points will be added to that limb. If the value is 0 for
+the limb, then the overall health points will be modified. It will return
+the remaining number of health points for the limb in question or for the
+overall health points of the player.
+
+varargs int GetHealthPoints(string limb);
+This function will return the number of health points for the specified
+limb (string limb) or it will return the total number of health points
+for the player if no limb is specified.
+
+varargs int GetMaxHealthPoints(string limb);
+This function will return the maximum number of health points the specified
+limb (string limb) may have, or it will return the total number of health
+points the player may have as a whole if no limb is specified.
+
+int AddMagicPoints(int x);
+This function will add "x" number of magic points to the player.
+
+int GetMagicPoints();
+This function will return the number of magic points the player currently 
+has.
+
+int GetMaxMagicPoints();
+This function will return the maximum amount of magic points the player
+may have at any given time.
+
+int AddStaminaPoints(mixed x);
+This function will add "x" number of magic points to the player.
+
+int GetStaminaPoints();
+This function will return the current number of stamina points the player
+has.
+
+int GetMaxStaminaPoints();
+This function returns the maximum amount of stamina points a player may
+have at any given time.
+
+int AddMagicProtection(class MagicProtection cl);
+This function is responsible for adding a new magic protection to the
+player. It makes sure the protection has all of the arguments
+needed and if it doesn't, it returns an error. Also, if the player
+already has 3 or more protections, it will fail in adding more
+
+class MagicProtection array GetMagicProtection();
+This function will return the magic protections that the player
+currently has on them.
+
+int RemoveMagicProtection(int i);
+This function will remove the magic protection the player currently has. The
+i number is used to decide which one is removed. If the number is larger
+than the amount of protections that the player currently has, it will
+return 0.
+
+int GetDying();
+This returns 1 if the player is dying, 0 if not.
+
+int SetSleeping(int x);
+This function will make the player fall asleep if it is larger than 0.
+The larger the number, the longer the player will sleep.
+
+int SetBlind(int x);
+This function will make the player blind if it is larger than 0. The larger
+the number, the longer the player will be blind.
+
+int GetBlind();
+This will return how blind the person is.
+
+int AddBlind(int x);
+This will add x to the amount of blindness the player currently has,
+resulting in a new blindness. Values may be positive or negative.
+
+int AddAlcohol(int x);
+This will add x to the amount of alcohol currently in the player's
+body, resulting in a new value. The x value may be positive or
+negative.
+
+int GetAlcohol();
+This function returns how much alcohol the player currently
+has in their body.
+
+int AddCaffeine(int x);
+This function will add x to the amount of caffeine that the
+player currently has, resulting in a new value. The x value
+may be either positive or negative.
+
+int GetCaffeine();
+This returns how much caffeine the player has in their body.
+
+int AddDrink(int x);
+This will add x to the amount of drink (fluids) the player
+has in their body and will return a new value. The x
+value may be either positive or negative, but dropping 
+below 0 is dangerous to the player.
+
+int GetDrink();
+This will return how much drink (fluids) the player
+currently has in their body.
+
+int AddFood(int x);
+This function adds x to the amount of food the player currently
+has in their body, resulting in a new value. The x value
+may be either positive or negative, but dropping below 0
+is dangerous to the player.
+
+int AddPoison(int x);
+This function adds x to the amount of poison currently in
+the player's body. High values are dangerous to the player, and
+if the new value is less than 0, it will reset to 0.
+
+int GetPoison();
+This function returns the amount of poison currently in
+the player's body.
+
+int GetHeartRate();
+This function returns how fast the player's heart is beating.
+Returned values range from 2 to 6. Caffeine and Alcohol are
+major things which affect this.
+
+int GetPosition();
+This will return the position the player is currently
+in (ie: sitting).
+
+int GetHealRate();
+This function calculates how much the player will regen
+every time it's called for. Drink, food, position, alcohol,
+and sleeping modifies the returned value.
+
+string GetHealthShort();
+This function changes the color of the object's GetLong()
+to reflect how much health they have.
+
+int SetPosition(int x);
+This function will give the player a new position
+(ie: sitting).
+
+Zaxan Zimtafarous
+98-02-22

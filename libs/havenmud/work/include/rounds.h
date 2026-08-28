@@ -1,0 +1,11 @@
+#ifndef __ROUNDS_H__
+#define __ROUNDS_H__
+
+#define ROUND_UNDEFINED          0
+#define ROUND_MELEE              1
+#define ROUND_WEAPON             2
+#define ROUND_MAGIC              3
+#define ROUND_STYLE              4
+#define ROUND_OTHER              5
+
+#endif /* __ROUNDS_H__ */

@@ -1,0 +1,5 @@
+#define N_DIR     "/domains/tairi/areas/ninja_tower/"
+#define N_OBJ          N_DIR + "obj/"
+#define N_NPC          N_DIR + "npc/"
+#define N_ROOM         N_DIR + "room/"
+#define N_STORE        N_OBJ + "ninjastore/"

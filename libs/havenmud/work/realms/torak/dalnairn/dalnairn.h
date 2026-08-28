@@ -1,0 +1,10 @@
+#define DAL_DIR "/realms/torak/dalnairn/"
+
+#define DAL_NPC DAL_DIR "npc/"
+#define DAL_OBJ DAL_DIR "obj/"
+#define DAL_ROOM DAL_DIR "room/"
+#define DAL_VEH DAL_OBJ "vehicle/"
+#define DAL_MEAL DAL_OBJ "meal/"
+#define DAL_BLD DAL_ROOM "building/"
+#define DAL_WPN DAL_OBJ "weapon/"
+#define DAL_ARM DAL_OBJ "armour/"

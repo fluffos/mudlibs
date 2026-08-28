@@ -429,7 +429,10 @@ classes it's found.
 | 942 | `arkadia` | Arkadia | `git clone https://github.com/84rn/lpmud (commit 4be73fa8167a17c246c6bf22a4f528a4b45edd40, cloned 2026-08-26)` | 40244 | native-boot verified, WASM pending |
 | 943 | `openlib` | OpenLib | `git clone https://github.com/tmcintos/OpenLib (commit 044c60a5266e40f9b469503cf73fa06534d67df7, cloned 2026-08-27); only the repo's mudlib/ directory was used as the mudlib root -- LICENSE and README.md at the repo top level were ignored, this project uses its own driver build` | 40245 | native-boot verified, WASM pending |
 | 944 | `shadowgate` | ShadowGate | `git clone https://github.com/openshadowgate/shadowgate (cloned 2026-08-28)` | 40246 | native-boot verified, WASM pending |
+| 945 | `questmud` | QuestMud | `git clone https://github.com/vlehtola/questmud (cloned 2026-08-28)` | 40247 | native-boot verified, WASM pending |
 | 946 | `foundation1` | Foundation I | `mudbytes.net File Repository, file #1043, recovered via Wayback Machine snapshot 20190802021701 (original download endpoint down)` | 40248 | native-boot verified, WASM pending |
+| 947 | `havenmud` | Haven | `git clone https://github.com/brainface/havenmud (single-commit snapshot, cloned 2026-08-28)` | 40249 | native-boot verified, WASM pending |
+| 948 | `sluggymud` | SluggyMUD | `git clone https://github.com/Sluggy/SluggyMUD (commit bad0123cd9dc32e0576e6a9c992c003702a64449, cloned 2026-08-28)` | 40250 | native-boot verified, WASM pending |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout

@@ -1,0 +1,101 @@
+/* Party.c
+ *  Handles partying code
+ *
+ *
+ /
+ 
+int PARTY_POSITION_FRONT = 1;
+int PARTY_POSITION_REAR = 2;
+
+private string *PartyMembers = ({ });
+private string PartyPosition = PARTY_POSITION_FRONT;
+
+string *GetPartyMembers() { return filter(PartyMembers, (: $1 :) ); }
+
+string *GetCapitalPartyMembers() {
+  string *tmp = ({ });
+  foreach(string i in PartyMembers) { tmp += ({ capitalize(i) }); }
+  return tmp;
+}
+
+string *AddPartyMember(string who) {
+  if (lower_case(who) == GetKeyName()) return ({ });
+  PartyMembers = distinct_array(PartyMembers + ({ lower_case(who) }));
+  eventPrint("%^BOLD%^MAGENTA%^" + capitalize(who) +
+    " added to your party.%^RESET%^");
+  who->eventStandInFrontOfParty();  
+  return PartyMembers;
+}
+
+string *RemovePartyMember(string who) {
+  PartyMembers = distinct_array(PartyMembers - ({ lower_case(who) }));
+  eventPrint("%^BOLD%^MAGENTA%^" + capitalize(who) + 
+    " removed from your party.%^RESET%^");
+  return PartyMembers;
+}
+
+int SetPartyPosition(int position) {
+  position = PARTY_POSITION_FRONT;
+  if (position == PARTY_POSITION_REAR) {
+    //GetFrontRow
+    // if front row has members that are not me, allow the move back
+    PartyPosition = position;
+    // else, return a can't-do-that message.
+  }
+  return 1;
+}
+
+int eventStandInFrontOfParty() {
+  if (!sizeOf(GetPartyMembers())) return 0;
+  if (!environment(this_object())) return 0;
+  send_messages("stride",
+    "$agent_name $agent_verb bravely to the front of the group.",
+    this_object(), 0, environment(this_object()));
+  SetPartyPosition(PARTY_POSITION_FRONT);
+  return 1;
+}
+
+int AddPartyExperience(int x) {
+  return ::AddExperience(x);
+}
+
+int AddExperience(int x) {
+  object *party = ({ });
+  
+  // multiplier to xp to reward partying
+  float partyBonus = 1.0;
+  
+  foreach(string party_member in PartyMembers) {
+    if (find_player(party_member)) {
+      party += ({ find_player(party_member) });
+    } else {
+      RemovePartyMember(party_member);
+    }
+  }
+    
+  party += ({ this_object() });
+  if (x < 0) { AddPartyExperience(x); return x; }
+
+  
+  if (sizeof(party) > 1) {
+    eventPrint("%^YELLOW%^**%^RESET%^You are sharing experience with "
+      + conjunction(GetCapitalPartyMembers(), "and") + ".");
+    // +10% xp for each party member.
+    partyBonus += (sizeof(party) / 10.0)
+  }
+    
+  foreach(object m in party) {
+    // a more advantagous split than halfers/thirders:
+    // highest level gets full xp, lowbies get increasingly less.
+    x = to_int(x * m->GetLevel() / partyLevel * partyBonus)
+
+    // only add xp in the same room.
+    //  (small unavoidable malus for boarders. Oh well. :/ )
+    if (present(party_member), environment(this_object())) {
+      m->AddPartyExperience(x);
+    }
+  }
+
+  return x;
+}
+

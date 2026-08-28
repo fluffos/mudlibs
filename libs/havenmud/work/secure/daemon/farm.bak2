@@ -1,0 +1,131 @@
+#include <lib.h>
+#include <std.h>
+#include <daemons.h>
+inherit LIB_DAEMON;
+
+private mapping FoodStuffs;
+private mapping Farmers;
+
+void LoadFood();   // Load the array of food items to be farmed.
+void eventFarm(object who, object where);  // Basic heart_beat that controls farming.
+string GetFood(string location); // Returns a food filename for you.
+void RemoveFarmer(object);
+void AddFarmer(object);
+
+
+static void create() {
+	::create();
+	SetNoClean(1);
+  Farmers = ([]);
+  FoodStuffs = ([]);
+	set_heart_beat(6);
+	LoadFood();
+}
+
+void LoadFood() {
+	string *dirs = ({});
+	
+	dirs = get_dir(STD_FARMING);
+	foreach(string dir in dirs) {
+		FoodStuffs[dir] = get_dir(STD_FARMING + dir + "/*.c");
+	}
+	return;
+}
+
+string GetFood(string location) {
+	string *food = FoodStuffs[location];
+	
+	if (!arrayp(food)) error("Non-array FoodStuffs[location] \n"
+	                         "Expected valid data, got: " + location);
+	if (!sizeof(food)) return 0;
+	return STD_FARMING + location + "/" + food[random(sizeof(food))];
+}
+
+void heart_beat() {
+	foreach(object farmer in keys(Farmers)) {
+		eventFarm(farmer, Farmers[farmer]);
+	}
+}
+
+void eventFarm(object who, object where) {
+	int skill;
+	object food;
+	string foodfile;
+	int success = random(1000);
+	int result;
+	if (!who || !where) {
+		map_delete(Farmers, who);
+		return;
+	}
+	if (who->GetSleeping() || who->GetParalyzed()) {
+		who->eventPrint("You cannot move.");
+		map_delete(Farmers, who);
+		return;
+		}
+	if (who->GetStaminaPoints() < 50) {
+	  who->eventPrint("You are too tired to further work the land.");
+	  map_delete(Farmers, who);
+	  return;
+	  }
+	if (where->GetTown() != "Wilderness" || where->GetProperty("no farming")
+	    || where->GetClimate() == "indoors") {
+		who->eventPrint("You cannot farm here.");
+		map_delete(Farmers, who);
+		return;
+	}
+	if (environment(who) != where) {
+		map_delete(Farmers, who);
+		return;
+	}
+	if (who->GetInCombat()) {
+		who->eventPrint("You can't farm while fighting!");
+		map_delete(Farmers, who);
+		return;
+	}
+	skill = who->GetSkillLevel("farming");
+	who->AddStaminaPoints(-15);
+	result = (skill * 5 + random(who->GetStatLevel("luck")) + where->GetFarmingBonus());
+	if (success < result) {
+		if (!foodfile = where->GetSpecialCrop())
+		  foodfile = GetFood(where->GetClimate());
+		if (!foodfile) {
+			CHAT_D->eventSendChannel("FARM_D", "error", "No foodfile!");
+			return;
+		}
+		
+		if (!food = new(foodfile)) {
+			CHAT_D->eventSendChannel("FARM_D", "error", "Failed to clone food "
+			                         "object: " + foodfile);
+			return;
+		}
+		send_messages("pull", 
+		  "$agent_name $agent_verb $target_name from the ground.",
+		  who, food, where);
+		food->eventMove(who);
+		who->AddExperience(food->GetMass() * who->GetLevel() * (who->GetSkillLevel("farming")/5));
+		RemoveFarmer(who);
+		return;
+	}
+	send_messages("continue", "$agent_name $agent_verb working the ground.",
+	  who, 0, where);
+	return;
+}
+
+void RemoveFarmer(object who) {
+	map_delete(Farmers, who);
+	return;
+}
+
+object *GetFarmers() {
+	return keys(Farmers);
+}
+
+int GetFarming(object who) {
+	if (Farmers[who]) return 1;
+	return 0;
+}
+
+void AddFarmer(object who) {
+	Farmers[who] = environment(who);
+	return;
+}

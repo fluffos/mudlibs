@@ -1,0 +1,8 @@
+#define PARVADIR "/domains/havenwood/parva"
+#define P_NPC PARVADIR + "/npc"
+#define P_OBJ PARVADIR + "/obj"
+#define P_ROOM PARVADIR + "/room"
+#define P_SHRINE PARVADIR + "/shrines"
+#define PS_NPC P_SHRINE + "/npc"
+#define PS_OBJ P_SHRINE + "/obj"
+#define PS_ROOM P_SHRINE + "/room"
