@@ -1,0 +1,411 @@
+	     Nightmare IV Advanced Room Building Tutorial
+		 written by Descartes of Borg 940904
+			Last modified: 940904
+
+This document details the more advanced topics in room building.
+Though it is advanced as far as room building is concerned, it is
+basic to area building under Nightmare IV.  All creators should
+understand this document (after some practice naturally) and build
+rooms which use techniques described in it.
+
+****************************************************************
+I. Adding Objects to Rooms
+To add an object to a room, you must come to understand several
+concepts:
+1) the concepts of environment and inventory
+2) the concept of an external function call
+3) the concept of a clone
+
+First, environment and inventory.
+With MudOS and some other LPMud types, the only true relation between
+any two objects is that of inventory and environment.  In other words,
+given two objects, A and B, they can either have an
+inventory/environment relationship, or none at all.  If object A (say
+a room) is the environment of object B (say a player), then it follows
+that object B is an inventory object for object A.
+
+An object can only have one environment, but it can have any number of
+inventories.  In addition, an object is the environment to any object
+which is part of its inventory.  Room objects have inventories, but
+they do not have environments.  The way you put objects into a room is
+by making the room the environment of the object, and thus making the
+object part of the room's inventory.  There is a function present in
+each object called move() which is used to change the environment of
+an object.  More on that in a bit.
+
+In the room so far, you have learned how to use functions inside the
+room like set_long(), set_exits(), etc. to do things to the room.
+Well, You can also do that to other objects through external function
+calls (often referred to as call others).  This is done through the
+following syntax:
+
+    ob->fun(args)
+
+Where ob is the external object, fun is the name of the function you
+want to call, and args are whatever args you would pass (just like
+with any other function).  One example would be to call the move()
+function in a sword object to put it in the room.  Inside your room
+code, the function this_object() will always represent your room
+object:
+
+    sword->move(this_object());
+
+Makes your room the environment of sword (and therefore adds the sword
+to the inventory of the room).  In this example, sword would be a
+variable of type object.  If you do not understand variables, check
+out the LPC textbook chapters on data types.
+
+But before we start adding things to the room, you first must
+understand what a clone is.  When you write an object in LPC, you
+write all the code in a file, and that code gets loaded into memory
+the first time that file is referenced.  That code is then called the
+master copy of the object.  Your rooms are the master copies of your
+objects since you do not clone them.  But generally, master copies are
+used only for cloning.
+
+If you do not use your master copy of an object, in other words, never
+assign an environment to it, then you can make exact copies of it
+through the efun new().  What new() does is this:
+
+object ob;
+
+ob = new("/std/monster");
+
+new() here looks to see if there is an object called "/std/monster"
+loaded in memory.  If not, it loads it into memory.  If it is, or
+after it loads it into memory if it is not, it then duplicates that
+"/std/monster" object.  new() then returns the cloned version.  In the
+code above, you assign that cloned version to the variable ob.
+
+Thus, to put a monster in a room, you do the following:
+
+1) clone the monster object and store it in an object variable
+2) use the object variable to call functions in the monster to set it up
+3) assign the monster an environment, normally your room
+
+So here is some code that does that:
+
+****
+object ob;
+
+ob = new(MONSTER);
+ob->set_name("goblin");
+ob->set_id( ({ "goblin" }) );
+ob->set_adjectives( ({ "nasty", "ugly", "green" }) );
+ob->set_short("an ugly goblin");
+ob->set_long("A nasty looking green goblin that just makes you puke.");
+ob->set_level(10);
+ob->set_hp(500);
+ob->set_race("goblin");
+ob->set_body_type("human");
+ob->move(this_object());
+****
+
+MONSTER is a define from <std.h>.  Remember to #include that file if
+you plan to use the MONSTER define.  I recommend you use it.  
+
+If you notice, in the first line you set ob equal to the monster
+clone.  Then in the following several lines call functions inside the
+monster which you would normally call from inside the monster's
+create() in order to set it up.  Once you have put the monster
+together, you call its move() function to assign it your room as an
+environment.  And then you are all set! You have a fully configured
+goblin in your room.
+
+Ok... so you are not all set.  Where the hell does all of this code
+go?  More often than not, it goes inside the reset() function of your
+room.  reset() is a function that gets called periodically by the
+driver so that you can "reset" the condition of the room to its
+initial state.  So, in the room you have...
+
+create()
+Put stuff here that does not change
+
+reset()
+Put stuff here which might change AND which you want periodically to
+be put back to an initial state.
+
+The driver does not *automatically* call reset() when the room is
+first created.  The Nightmare Mudlib, however, calls reset() manually
+from the create() function in room.c.  The flow of code when your room
+is loaded thus goes like this:
+
+your create gets called
+everything in it gets executed until your 
+    room::create() 
+line.  At that point, it starts doing stuff inside the create()
+function in /std/room.c (take a look sometime and see what it does).
+One thing it does do is call reset();
+so your reset() gets called
+everything in it gets executed until your room calls 
+    room::reset()
+at which point it startes executing the reset code in /std/room.c  One
+thing that does is set the room reset number to 1.
+When that is done, it executes the rest of *your* reset() code.
+When that is done, it executes the rest of /std/room's create() code
+When that is fone, it executes the rest of *your* create() code
+
+A couple of important things to note then...
+1) In the first reset(), your code does not yet know about anything
+that happens in create() *after* the room::create() line
+2) You can only get the correct reset() number *after* you have called
+room::reset().
+
+The most common use of reset() is to place objects in a room, shut
+doors that were opened, etc.  The following is the full code to a room
+with a sword in it:
+
+****
+#include <std.h>
+
+inherit ROOM;
+
+void create() {
+    room::create();
+    set_properties( ([ "light" : 2, "indoors" : 1 ]) );
+    set_short("an example room");
+    set_long("This is only a model.");
+    set_items( ([ "model" : "It is not impressive." ]) );
+    set_exits( ([ "north" : "/domains/standard/square" ]) );
+    set_smell("default", "It smells like teen spirit.");
+}
+
+void reset() {
+    object ob;
+
+    room::reset();
+    if(present("sword")) return;
+    ob = new(WEAPON);
+    ob->set_name("sword");
+    ob->id( ({ "sword" }) );
+    ob->set_adjectives( ({ "dull" }) );
+    ob->set_short("a dull sword");
+    ob->set_long("a very dull sword");
+    ob->set_mass(100);
+    ob->set_wc(9);
+    ob->set_value(90);
+    ob->set_type("blade");
+    ob->move(this_object());
+}
+****
+
+So there you go.  You have a room which loads a sword every reset if
+one is not already present.  That present() function there is used to
+see if a sword is already in the room.  If there is one, it does not
+add another.  If there is not one, then it adds one.  That way you do
+not end up with 100 swords accumulating!
+
+A note on setting moving monsters.  You have to do a trick, since you
+cannot test if they are present in the room.  Instead of having the
+variable ob as a temporary, local variable, make ob a global variable
+(you do this by declaring it outside of the function).  Instead of:
+
+    if(present("sword")) return;
+
+you do:
+
+    if(ob) return;
+
+Cause when the wandering monster dies, the variable ob will be set to
+0.  So as long as the monster you made the first time around is alive,
+it will be stored in the variable ob!
+
+******************************************************************
+II. Adding commands to players
+
+So far you know about 2 functions the driver calls in an object,
+create(), done when the room is first referenced, and reset() done
+periodically while the room is in memory.  There is a third one which
+is important to know.  It is called init().  The driver calls it in an
+object whenever:
+1) the object becomes the environment of a living object
+2) the object becomes in the inventory of a living object
+3) the object gets the same environment of a living object
+
+Inside init(), the function this_player() will return the living
+object which caused init() to get called in the first place.
+this_player() is not necessarily a player, but any living thing.
+
+Each living object has inside it a list of commands it has and
+functions which should get called any time a given command is issued.
+For example, It might store a list like:
+"kill" : (: "/cmds/mortal/_kill", "cmd_kill" :)
+"get" : (: "/cmds/mortal/_get", "cmd_get" :)
+
+where the first column there is the command, and the second is the
+function.  A function, of course, is an object in which the function
+exists and the name of the function which gets called.  So, whenever
+the player types "kill bozo", the driver knows to call the function
+cmd_kill() in the object "/cmds/mortal_kill".
+
+There exists a special efun called add_action() which allows you to
+add commands to the list.  The syntax of add_action() is:
+
+    add_action(function, command);
+
+All functions are assumed to exist inside the object in which the
+add_action() call was made.  In order to add a "roll" command to roll
+a boulder and uncover a new exit, you would thus do this:
+
+****
+#include <std.h>
+
+inherit ROOM;
+
+int uncovered;
+
+void init() {
+    room::init();
+    add_action("cmd_roll", "roll");
+}
+
+void create() {
+   /* create() code goes here */
+}
+
+void reset() {
+   /* reset() code goes here */
+}
+
+int cmd_roll(string str) {
+    if(str != "boulder") {
+        notify_fail("Roll what!\n");
+        return 0;
+    }
+    if(uncovered) {
+        write("You roll the boulder over the exit!");
+        say((string)this_player()->query_cap_name()+" rolls the "+
+          "boulder over the exit.");
+        remove_enter("hole");
+        remove_item("hole");
+        uncovered = 0;
+        return 1;
+    }
+    else {
+        write("You uncover a hole!");
+        say((string)this_player()->query_cap_name()+" uncovers "+
+          "a hole behind the boulder!");
+        add_enter("hole", "/domains/standard/hole");
+        add_item("hole", "It is really dark in there.");
+        uncovered = 1;
+        return 1;
+    }
+}    
+****
+
+A couple of things to notice:
+1) You must call room::init().  That is where all the room exit
+commands are set up!  Failing to call that will mean nothing can leave
+the room :)
+2) You see your first look at the write() and say() SimulEfuns.  They
+are easy ways to send messages to the person who issued the command
+(in the case of write()), and to everyone but the command giver (in
+the case of say()).
+3) You see this_player() used.  this_player() inside commands returns
+the living thing which issued the command.
+4) Use notify_fail() to set a failure message up.  It should end in a
+carriage return "\n".
+5) Show failure by returning 0, success by returning 1.
+
+That's it!  You have created a command.
+
+When the driver starts looking for functions to call because a player
+typed a command, it picks out the first word only!  You can only use
+one word commands in add_action().  It then gets a list of functions
+which are supposed to be called for that command.  It starts with a
+default failure message of "What?" and chooses the last command added.
+If that command returns 1, it stops.  If it returns 0, it goes to the
+next function on the list for that command.  Each time notify_fail()
+is called, it changes the default error message to what was specified.
+It keeps going through functions until one of them returns 1, or it
+has called all the functions of a command.  If all functions return 0,
+it sends the player the failure message.
+
+*********************************************************************
+III. Function pointers in rooms
+
+You have seen all the room functions used with strings as arguments to
+set up long descriptions, short descriptions, smells, items, exits,
+etc.  But they are almost all more versatile than that.  They can also
+take a function pointer as an argument.  A function pointer is simply
+an object function name pair which points to some particular function
+in the game.  The functions you specify in add_action() are like
+function pointers in which the object part is assumed to be
+this_object().  With Nightmare IV, those functions which take function
+pointers as arguments will set up the value dynamically.
+
+The exact syntax of a function pointer is:
+
+1) (: fun :)
+2) (: efun :)
+3) (: SimulEfun :)
+4) (: ob, "fun" :)
+
+The first is a function in this_object() to be called.
+The second is a pointer to an efun.
+The third is a pointer to a SimulEfun.
+And the last is a pointer to a function in another object.
+
+This allows you to do things like:
+
+    set_long( (: check_open :) );
+
+where you write a function called check_open():
+
+string check_open(string unused) {
+    if(open) return "You are in a dark chamber.  The door north is open.";
+    else return "You are in a dakr chamber.  The door north is closed.";
+}
+
+Without a function pointer, you could not put any meaningful
+information about the door into the description, since you cannot know
+at create() time what the state of the door will be.  With a function
+pointer, you know that each time something tries to find out the long
+of the room, it has to call your function to get it.  So the value you
+return in the function is the value just for now.
+
+Functions which take function pointers as args:
+
+set_long()
+set_items()
+add_item()
+add_exit()
+add_enter()
+set_listen()
+set_search()
+set_smell()
+
+See the help page on each function to see how it is called, and how
+you should write your function.  For example, add_item() allows you to
+pass a function pointer instead of a description.  The man page says
+the function you write should look like this:
+
+string fun(string str);
+where fun is the name of your function
+where str is the name of the item being described
+where the return value is what the player gets as a message
+
+Make sure that you write a function fitting that prototype.  Note that
+you can write a single function to handle multiple items, since you
+can tell inside the function which item you are suppoed to be
+describing.
+
+A special note about exits. add_exit() can take several functions...
+
+varargs void add_exit(string dir, string dest, function pre, function post);
+
+You must give a direction and destination.  The first function arg is
+a pre-exit function, or one which called before the player actually
+leaves the room.  If you return 0 from your function, the player
+cannot leave the room.  Returning 1 allows the player to leave.
+Finally, the post-exit function gets called after the player has been
+moved to the new room.  It has no return value.  It just lets you do
+weird after exit things.
+
+*********************************************************************
+
+That's it!  You should now be well on your way to fully understanding
+room building under Nightmare IV.  Look at examples in
+/domains/Examples to see code which is done right which does the
+things described in these documents.  And ask questions when you do
+not understand something.

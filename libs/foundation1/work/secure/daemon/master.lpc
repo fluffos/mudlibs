@@ -1,0 +1,599 @@
+/*    /adm/obj/master.c
+ *    from Nightmare 3.3
+ *    the master object, responsible for security
+ *    created by Descartes of Borg 940910
+ */
+
+#include <config.h>
+#include <objects.h>
+#include <rooms.h>
+#include <cfg.h>
+#include <privs.h>
+#include <dirs.h>
+#include <save.h>
+#include <daemons.h>
+#include "master.h"
+
+nosave private object __Unguarded;
+nosave private string __PlayerName;
+nosave private object __NewPlayer;
+nosave private mapping __Groups, __ReadAccess, __WriteAccess;
+
+void create() {
+    __Unguarded = 0;
+    __NewPlayer = 0;
+    __PlayerName = 0;
+    new_read();
+    new_write();
+    new_groups();
+}
+
+void new_read() {
+    mapping tmp;
+
+    tmp = ([]);
+    load_access(CFG_READ, tmp);
+    __ReadAccess = tmp;
+}
+
+void new_write() {
+    mapping tmp;
+
+    tmp = ([]);
+    load_access(CFG_WRITE, tmp);
+    __WriteAccess = tmp;
+}
+
+void new_groups() {
+    mapping tmp;
+
+    tmp = ([]);
+    load_access(CFG_GROUPS, tmp);
+    __Groups = tmp;
+}
+
+nosave private void load_access(string cfg, mapping refmap) {
+    string *lines;
+    string file, fl, ac;
+    int i, maxi;
+
+    if(!(file = read_file(cfg)))
+      error("Failed to find config file: "+cfg);
+    maxi = sizeof(lines = explode(file, "\n"));
+    for(i=0; i<maxi; i++) {
+        if(!lines[i] || lines[i] == "" || lines[i][0] == '#') continue;
+        if(sscanf(lines[i], "(%s) %s", fl, ac) != 2)
+          error("Error in loading config file "+cfg+" at line "+
+            (i+1));
+        refmap[fl] = explode(ac, ":");
+    }
+}
+
+void flag(string str) {
+    string file, arg;
+    int i, x;
+
+    if(previous_object()) return;
+    if(sscanf(str, "for %d", x) == 1) {
+        for(i=0; i<x; i++) {}
+        return;
+    }
+    if(sscanf(str, "call %s %s", file, arg)) {
+        write("Got "+(string)call_other(file, arg)+" back.\n");
+        return;
+    }
+    write("Master: unknown flag.\n");
+}
+
+string *epilog(int x) {
+    string *lines, *files;
+    string content;
+    int i;
+
+    call_out("socket_preload", 5);
+    if(!(content = read_file(CFG_PRELOAD))) return ({});
+    i = sizeof(lines = explode(content, "\n"));
+    files = ({});
+    while(i--) {
+        if(!lines[i] || lines[i] == "" || lines[i][0] == '#') continue;
+        files += ({ lines[i] });
+    }
+    return files;
+}
+
+string privs_file(string file) {
+    string base;
+    int ext;
+
+    sscanf(file, "%s#%d", base, ext);
+    if("/"+base == OB_USER) {
+        string *grps;
+        string str;
+        int i;
+
+        if(!__PlayerName) return 0;
+        str = __PlayerName;
+        i = sizeof(grps = keys(__Groups));
+        while(i--)
+          if(member_array(__PlayerName, __Groups[grps[i]]) != -1)
+            str = str + ":" + grps[i];
+        return str;
+    }
+    return file_privs(file);
+}
+
+void preload(string str) {
+    string err;
+    int t;
+
+    if(!file_exists(str+".lpc")) return;
+    t = time();
+    write("Preloading: "+str+"...");
+    if(err=catch(call_other(str, "???")))
+      write("\nGot error "+err+" when loading "+str+".\n");
+    else {
+        t = time() - t;
+        write("("+(t/60)+"."+(t%60)+")\n");
+    }
+}
+
+void socket_preload() {
+    string *items;
+    int i, max;
+
+    max = sizeof(items=explode(read_file(CFG_PRELOAD_SOCKET), "\n"));
+    for(i=0; i<max; i++) {
+        if(!items[i] || items[i] == "" || items[i][0] == '#') continue;
+        catch(call_other(items[i], "???"));
+    }
+}
+
+int valid_write(string file, object ob, string fun) {
+    string *ok;
+
+    if (ob==master()) return 1;
+    if(file[0] != '/') file = "/"+file;
+    if(!(ok = match_path(__WriteAccess, file))) ok = 0;
+    if(check_access(ob, fun, file, ok, "write")) return 1;
+    log_file("access", "Write access denied: "+file+" : "+
+      identify(previous_object(-1))+" : "+fun+"\n");
+    return 0;
+}
+
+int valid_read(string file, object ob, string fun) {
+    string *ok;
+
+    if(file[0] != '/') file = "/"+file;
+    if(!(ok = match_path(__ReadAccess, file))) ok = 0;
+    if(check_access(ob, fun, file, ok, "read")) return 1;
+    log_file("access", "Read access denied: "+file+" : "+
+      identify(previous_object(-1))+" : "+fun+"\n");
+    //tc("WAT");
+    return 0;
+}
+
+int valid_apply(string *ok) {
+    return check_access(previous_object(1),0,previous_object(0), ok, "apply");
+}
+
+int check_access(object ob, string fun, mixed file, string *ok, string oper) {
+    object *stack;
+    string *privs;
+    string priv;
+    int i;
+
+    if(objectp(file)) file = base_name(file);
+    if(ok && sizeof(ok) && ok[0] == "all") return 1;
+    if(__Unguarded == ob) {
+        string tmp;
+        //tc("base_name(ob): "+base_name(ob));
+        //tc("OB_USER: "+OB_USER);
+        if((tmp = base_name(ob)) == OB_USER) {
+            if(!__PlayerName) i = sizeof(stack = ({ob})+previous_object(-1));
+            else if(file == DIR_USERS+"/"+__PlayerName[0..0]+"/"+__PlayerName+__SAVE_EXTENSION__)
+              return 1;
+            else i = sizeof(stack = ({ ob }));
+        }
+        else if(tmp == file) return 1;
+        else i = sizeof(stack = ({ ob }));
+    }
+    else if(__Unguarded && base_name(ob) == OB_SIMUL_EFUN) {
+        if(__Unguarded == previous_object(1))
+          stack = ({ previous_object(1) });
+        else stack = ({ ob }) + previous_object(-1);
+    }
+    else i = sizeof(stack = previous_object(-1) + ({ ob }));
+    while(i--) {
+        if(!stack[i] || stack[i] == this_object()) continue;
+        if(file_name(stack[i]) == OB_SIMUL_EFUN) continue;
+        if(!(priv = query_privs(stack[i]))) return 0;
+        if(!ok && oper == "read") continue;
+        privs = explode(priv, ":");
+        if(member_array(PRIV_SECURE, privs) != -1) continue;
+        if(member_array(file_privs(file), privs) != -1) continue;
+        if(!ok && oper == "write") {
+            if(userp(stack[i]) && check_user(stack[i], fun, file, oper))
+              continue;
+            else return 0;
+        }
+        if(sizeof(privs & ok)) continue;
+        if(userp(stack[i]) && check_user(stack[i], fun, file, oper)) continue;
+        if(userp(stack[i]) && check_domain(stack[i], fun, file,oper)) continue;
+        return 0;
+    }
+    return 1;
+}
+
+nomask nosave int check_user(object ob, string fun, string file, string oper) {
+    string nom;
+    int x;
+
+    if(!sscanf(file, REALMS_DIRS+"/%s/%*s", nom)) return 0;
+    nom = user_path(nom)+"adm/access";
+    if(file_size(nom+".lpc") < 0) return 0;
+    catch(x = (int)call_other(nom, "check_access", ob, fun, file, oper));
+    return x;
+}
+
+nomask nosave int check_domain(object ob, string fun, string file, string o) {
+    string nom;
+    int x;
+
+    if(!sscanf(file, DOMAINS_DIRS+"/%s/%*s", nom)) return 0;
+    nom = DOMAINS_DIRS+"/"+nom+"/adm/access";
+    if(file_size(nom+".lpc") < 0) return 0;
+    catch(x = (int)call_other(nom, "check_access", ob, fun, file, o));
+    return x;
+}
+
+object connect() {
+    object ob;
+    string err;
+
+    if(err=catch(ob = clone_object(OB_LOGIN))) {
+        write("It looks like someone is working on the user object.\n");
+        write(err);
+        destruct(ob);
+    }
+    return ob;
+}
+
+object compile_object(string str) {
+    string nom, tmp, where, which;
+    object ob;
+
+    //tc("DIR_USERS: "+DIR_USERS);
+    //tc("compile_object("+str+") called by:\n"+get_stack()+"\n---\n");
+
+    if(sscanf(str, REALMS_DIRS+"/%s/%*s", nom)){
+      tmp = sprintf("%svirtual/server", user_path(nom));
+      //tc("1tmp: "+tmp);
+    }
+    else if(sscanf(str, DOMAINS_DIRS+"/%s/%*s", nom)){
+      tmp = sprintf("%s/%s/virtual/server", DOMAINS_DIRS, nom);
+      //tc("2tmp: "+tmp);
+    }
+    else if(strsrch(str, ESTATES_DIRS) == 0){
+      tmp = sprintf("%s/adm/server", ESTATES_DIRS);
+      //tc("3tmp: "+tmp);
+    }
+    else if(sscanf(str, DIR_USERS+"/%*s/%s", nom)) {
+        //tc("player compilation.");
+        if(nom[<2..] == ".o") nom = nom[0..<3];
+        if(!__NewPlayer) return 0;
+        //tc("__New_Player: "+identify(__NewPlayer));
+        //tc(identify(__NewPlayer)+"->query_name(): "+__NewPlayer->query_name());
+        //tc("nom: "+nom);
+        if((string)__NewPlayer->query_name() != nom) return 0;
+        //tc("2");
+        __PlayerName = nom;
+        //tc("__PlayerName: "+__PlayerName);
+        ob = new(OB_USER);
+        //if(ob) tc("ob: "+identify(ob));
+        //else tc("HAY! no ob!");
+        //tc("str: "+str);
+        if(file_exists(str)) ob->restore_player(nom);
+        else if(file_size(DIR_USERS) != -2) mkdir(DIR_USERS);
+        else if(file_size(DIR_USERS+"/"+nom[0..0]) != -2)
+          mkdir(DIR_USERS+"/"+nom[0..0]);
+        ob->set_name(nom);
+        __PlayerName = 0;
+        return ob;
+    }
+    //tc("tmp: "+tmp);
+    if(file_size(tmp+".lpc") < 1) {
+        //tc("str: "+str);
+        if(sscanf(str, "%s.%s", where, which) != 2) return 0;
+        if(sscanf(str, REALMS_DIRS+"/%s/%*s", nom))
+          tmp = sprintf("%svirtual/%s_server", user_path(nom), which);
+        else if(sscanf(str, DOMAINS_DIRS+"/%s/%*s", nom))
+          tmp = sprintf("%s/%s/virtual/%s_server", DOMAINS_DIRS, nom, which);
+        if(file_size(tmp+".lpc") < 1) return 0;
+        else return (object)call_other(tmp, "compile_object", where);
+    }
+    return (object)call_other(tmp, "compile_object", str);                      
+}
+
+nosave void crash(string err) {
+    log_file("crashes", mud_name()+" crashed "+ctime(time())+" with error "+
+      err+".\n");
+    shout("Atmos tells you think "+mud_name()+" is crashing!\n");
+    shout("Atmos forced you to: quit\n");
+    users()->force_me("quit");
+}
+
+int valid_hide(object who) {
+    string priv;
+
+    if(!objectp(who)) return 0;
+    if(environment(who) && hiddenp(environment(who))) return 1;
+    if(!(priv = query_privs(who))) return 0;
+    else return (member_array(PRIV_SECURE, explode(priv, ":")) != -1);
+}
+
+int valid_override(string file, string nom) {
+    return (file == OB_SIMUL_EFUN || file == "/secure/SimulEfun/overrides");
+}
+
+int valid_socket(object ob, string fun, mixed *info) {
+    object *obs;
+    string tmp;
+    int i;
+
+    i = sizeof(obs = previous_object(-1));
+    while(i--) {
+        if(!obs[i]) continue;
+        if(userp(obs[i])) continue;
+        if(!(tmp = query_privs(obs[i]))) return 0;
+        if(!sizeof(explode(tmp,":") & ({ PRIV_SECURE,PRIV_MUDLIB, PRIV_SOCKET}))) return 0;
+    }
+    return 1;
+}
+
+int valid_function(function f) { return 1; }
+
+string get_wiz_name(string file) {
+    string nom, dir, tmp;
+
+    if(file[0] != '/') file = "/"+file;
+    if(sscanf(file, REALMS_DIRS+"/%s/%s", nom, tmp) == 2) return nom;
+    if(sscanf(file, DOMAINS_DIRS+"/%s/%s", nom, tmp) == 2) return nom;
+    sscanf(file, "/%s/%s", nom, tmp);
+    return nom;
+}
+
+mixed apply_unguarded(function f) {
+    object previous_unguarded;
+    string base, err, tmp;
+    mixed val;
+
+    if(base_name(previous_object(0)) != OB_SIMUL_EFUN) {
+        error("Illegal unguarded apply.");
+        return 0;
+    }
+    previous_unguarded = __Unguarded;
+    __Unguarded = previous_object(1);
+    //err = catch(val = (mixed)(*f)());
+    err = catch(val = evaluate(f));
+    __Unguarded = previous_unguarded;
+    if(err) error(err);
+    return val; 
+}
+
+int different(string fn, string pr) {
+    int tmp;
+
+    sscanf(fn, "%s#%d", fn, tmp);
+    fn += ".lpc";
+    return (fn != pr) && (fn != ("/" + pr));
+}
+
+string trace_line(object obj, string prog, string file, int line) {
+    string ret;
+    string objfn = obj ? file_name(obj) : "<none>";
+
+    ret = objfn;
+    if (different(objfn, prog)) ret += sprintf(" (%s)", prog);
+    if (file != prog) ret += sprintf(" at %s:%d\n", file, line);
+    else ret += sprintf(" at line %d\n", line);
+    return ret;
+}
+
+varargs
+string standard_trace(mapping mp, int flag) {
+    string obj, ret;
+    mapping *trace;
+    int i,n;
+
+    ret = mp["error"] + "Object: " + trace_line(mp["object"], mp["program"], mp["file"], mp["line"]);
+    ret += "\n";
+    trace = mp["trace"];
+
+    n = sizeof(trace);
+
+    for (i=0; i<n; i++) {
+    if (flag) ret += sprintf("#%d: ", i);
+
+        ret += sprintf("'%s' at %s", trace[i]["function"], trace_line(trace[i]["object"], trace[i]["program"], trace[i]["file"], trace[i]["line"]));
+    }
+    return ret;
+}
+
+string error_handler(mapping mp, int caught) {
+    string ret;
+
+    ret = "---\n"+timestamp()+" "+standard_trace(mp);
+    if (caught) {
+        write_file("/log/catch", ret);
+    } else {
+        write_file("/log/runtime", ret);
+    }
+    if (this_player(1)) {
+        /* If an object didn't load, they got compile errors; no need to
+         * tell them about the error.
+         */
+        if (mp["error"][0..23] != "*Error in loading object")
+        tell_object(this_player(1), sprintf("%sTrace written to /log/%s\n", mp["error"], (caught ? "catch" : "runtime")));
+        this_player(1)->set_error(mp);
+    }
+    return 0;
+}
+
+void log_error(string file, string msg) {
+    string nom, home;
+
+    if(this_player(1) && creatorp(this_player(1)))
+      message("error", msg, this_player(1));
+    if(!(nom = get_wiz_name(file))) nom = "log";
+    catch(write_file(DIR_ERROR_LOGS+"/"+nom, msg));
+}
+
+void destruct_env_of(object ob) {
+    if(!interactive(ob)) return;
+    message("environment", "Whoop whoop whoop.... BOOM!!!  And now "
+      "nothing exists any longer!", ob);
+    ob->move(ROOM_VOID);
+}
+
+string make_path_absolute(string file) {
+    return absolute_path((string)this_player()->get_path(), file);
+}
+
+int player_exists(string str) {
+    if(!str) return 0;
+    str = DIR_USERS+"/"+str[0..0]+"/"+str+SAVE_EXTENSION;
+    return (file_size(str) > -1);
+}
+
+string domain_file(string str) {
+    string nom, tmp;
+
+    if(str[0] != '/') str = "/"+str;
+    if(sscanf(str, DOMAINS_DIRS+"/%s/%s", nom, tmp) == 2) return nom;
+    return 0;
+}
+
+string author_file(string str) {
+    string nom, tmp;
+
+    if(str[0] != '/') str = "/"+str;
+    if(sscanf(str, REALMS_DIRS+"/%s/%s", nom, tmp) == 2) return nom;
+    return 0;
+}
+
+nosave int slow_shutdown() {
+    log_file("game_log", "Armageddon loaded by master: "+ctime(time())+".\n");
+    new(OB_SHUT)->move(ROOM_START);
+    SHUT_D->reboot_mud(4);
+    return 1;
+}
+
+int save_ed_setup(object who, int code) {
+    string file;
+
+    if(!intp(code)) return 0;
+    rm(file = user_path((string)who->query_name())+".edrc");
+    return write_file(file, code+"");
+}
+
+int retrieve_ed_setup(object who) {
+    string file;
+    int x;
+
+    file = user_path((string)who->query_name())+".edrc";
+    if(!file_exists(file)) return 0;
+    return to_int(read_file(file));
+}
+
+string get_save_file_name(string file) {
+    string str;
+
+    str = (string)this_player()->query_name();
+    if(file_size(user_path(str)) == -2)
+      return user_path(str)+"dead.edit";
+    else return DIR_TMP+"/"+str+".dead.edit";
+}
+
+int is_locked() { return MUD_IS_LOCKED; }
+
+string *parse_command_id_list() { return ({ "one", "thing" }); }
+
+string *parse_command_plural_id_list() { return ({ "ones", "things","them"}); }
+
+string *parse_command_adjectiv_id_list() {
+    return ({ "the", "an", "a" });
+}
+
+string *parse_command_prepos_list() {
+    return ({ "in", "with", "without", "into", "for", "on", "under",
+      "from", "between", "at", "to", "over", "near" });
+}
+
+string parse_command_all_word() { return "all"; }
+
+object player_object(string nom) {
+    object ob;
+    string err;
+    string pfile = DIR_USERS+"/"+nom[0..0]+"/"+nom+__SAVE_EXTENSION__;
+    //tc("oh hi!");
+    if(base_name(ob = previous_object(0)) != OB_LOGIN) return 0;
+    //tc("guess what!");
+    set_eval_limit(1000000000);
+    __NewPlayer = ob;
+    //tc("savefile: "+pfile);
+    err = catch(ob = load_object(pfile));
+    if(err){
+        //tc("hmm. error "+err+".");
+    } 
+    //tc("ob: "+identify(ob));
+    __NewPlayer = 0;
+    set_eval_limit(-1);
+    if(err) error(err);
+    return ob;
+}
+
+string *query_group(string grp) { return copy(__Groups[grp]); }
+
+mapping query_groups() { return copy(__Groups); }
+
+/* FluffOS PORT NOTE: PACKAGE_UIDS is enabled in this project's driver
+ * build and requires get_root_uid()/get_bb_uid() applies on the master
+ * object (the driver calls exit(-1) at boot if either is missing) --
+ * neither was ever defined anywhere in this archive. Sibling
+ * Nightmare-lineage master.lpc (libs/nightmare3/work/secure/daemon/
+ * master.lpc and libs/foundation2/work/secure/daemon/master.lpc, both
+ * sharing this file's own "from Nightmare 3.3" header comment) already
+ * carry this exact pair with these exact values; ported as-is rather
+ * than inventing new uid names.
+ */
+string get_root_uid() { return "Root"; }
+
+string get_bb_uid() { return "Backbone"; }
+
+/* FluffOS PORT NOTE: also required by PACKAGE_UIDS (see the note above)
+ * -- called by the driver on EVERY object load to assign its uid,
+ * unconditionally, so a missing definition here hard-errors the load of
+ * nearly every single object in the mudlib, not just a narrow feature.
+ * Never defined anywhere in this archive (its whole security model is
+ * the privs/access-list scheme in check_access() above, not driver-
+ * native uids). Reuses the existing top-level-directory classification
+ * this codebase's own secure/SimulEfun/security.lpc:file_privs()
+ * already provides (the same CMDS/GENERAL/MUDLIB/SECURE/domain-name
+ * categories check_access()/privs_file() themselves use) rather than
+ * inventing a new uid scheme -- there is no uid-based permission check
+ * anywhere in this codebase for the exact uid string to matter, only
+ * that every object gets *some* non-zero string.
+ */
+string creator_file(string str) {
+    string base, ret;
+    int ext;
+
+    /* sscanf() leaves an unmatched %s target at its int-0 default, not
+     * "" -- a clone-suffix-free path (the overwhelming majority) would
+     * otherwise pass an int into file_privs()'s explode()/string
+     * indexing below.
+     */
+    if( sscanf(str, "%s#%d", base, ext) != 2 ) base = str;
+    if( !stringp(ret = file_privs(base)) || ret == "" ) ret = get_bb_uid();
+    return ret;
+}

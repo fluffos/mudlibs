@@ -1,0 +1,542 @@
+/*    /std/user.c
+ *    from IdeaExchange
+ *    from The Idea Exchange
+ *    a very simple user object
+ *    created by Descartes of Borg 941001
+ */
+
+#include <std.h>
+#include <daemons.h>
+#include <objects.h>
+#include <rooms.h>
+#include <move.h>
+#include "user.h"
+
+#define OVERRIDE_IGNORE_MSG ({ "broadcast", "info", "more", "room_description", "room_exits","smell","sound","write","say", "system", "prompt", "inanimate_item", "living_item"})
+
+inherit CONTAINER;
+inherit AUTOSAVE;
+inherit EDITOR;
+inherit FILES;
+inherit NMSH;
+inherit MORE;
+inherit REFS;
+inherit MESSAGES;
+
+private int __Age, __WhereBlock, __Verbose, __LoginTime;
+private string __Password, __Email, __RealName, __Position, __Gender;
+private mapping __Blocked, __News, __Environment;
+private string *__RestrictedChannels;
+nosave private int __LastAge, __Setup, __LogHarass, __Forced;
+nosave private string __Client;
+nosave private object __NetDiedHere;
+nosave private mapping __TermInfo;
+nosave private string *__Channels, *__UserId, *__SearchPath;
+
+void create() {
+    container::create();
+    autosave::create();
+    editor::create();
+    nmsh::create();
+    more::create();
+    set_max_encumbrance(10000);
+    __Verbose = 1;
+    __Password = 0;
+    __Email = 0;
+    __RealName = 0;
+    __Position = "player";
+    __LastAge = time();
+    __Blocked = ([]);
+    __News = ([]);
+    __Environment = ([ "TITLE" : "Newbie $N to "+mud_name(),
+      "MIN" : "$N enters.", "MOUT" : "$N leaves $D.",
+      "MMIN" : "$N teleports in.", "MMOUT" : "$N teleports away.",
+      "MCLONE" : "$N creates $O.", "MDEST" : "$N dests $O.",
+      "MVIS" : "$N appears.", "MINVIS" : "$N disappears.",
+      "MHOME" : "$N goes home." ]);
+    __RestrictedChannels = ({});
+    __Channels = ({});
+    __SearchPath = ({ DIR_MORTAL_CMDS });
+}
+
+void setup() {
+    string tmp;
+
+    if(__Setup) return;
+    else __Setup = 1;
+    enable_commands();
+    set_living_name(query_name());
+    add_action("cmd_quit", "quit");
+    add_action("cmd_all", "", 1);
+    init_path();
+    __LoginTime = time();
+    register_channels();
+    set_id(({}));
+    nmsh::setup();
+    if(!stringp(tmp = getenv("TERM"))) setenv("TERM", tmp = "unknown");
+    __TermInfo = (mapping)TERMINAL_D->query_term_info(tmp);
+    autosave::setup();
+    call_out("save_player", 2, query_name());
+    log_file("enter", query_CapName()+" (enter): "+ctime(time())+
+      " : "+query_ip_name(this_object())+"\n");
+    move(ROOM_START);
+    message("environment", query_cap_name()+" enters "+mud_name()+".",
+      environment(this_object()), ({ this_object() }));
+    NEWS_D->read_news();
+}
+
+nosave void init_path() {
+    string tmp;
+
+    __SearchPath = ({ DIR_MORTAL_CMDS, DIR_SECURE_MORTAL_CMDS });
+    if(ambassadorp(this_object()) || creatorp(this_object()))
+      __SearchPath += ({ DIR_AMBASSADOR_CMDS, DIR_SECURE_AMBASSADOR_CMDS });
+    if(creatorp(this_object())) {
+        __SearchPath += ({ DIR_CREATOR_CMDS, DIR_SECURE_CREATOR_CMDS });
+        if(file_size(user_path(query_name()) + "cmds") == -2)
+            __SearchPath += ({ user_path(query_name())+"cmds" });
+        if(adminp(this_object()))
+            __SearchPath += ({ DIR_ADMIN_CMDS, DIR_SECURE_ADMIN_CMDS });
+    }
+}
+
+void net_dead() {
+    __Age += time() - __LastAge;
+    CHAT_D->remove_user(__Channels - __RestrictedChannels);
+    __Channels = ({});
+    save_player(query_name());
+    __NetDiedHere = environment(this_object());
+    message("other_action", query_cap_name()+" suddenly disappears into " +
+      "a sea of irreality.", environment(this_object()), ({ this_object() }));
+    move(ROOM_FREEZER);
+    if(query_snoop(this_object()))
+      message("snoop", query_CapName()+" has gone net-dead.",
+        query_snoop(this_object()));
+}
+
+void restart_heart() {
+    string dead_ed;
+
+    __LastAge = time();
+    if(creatorp(this_object()) && file_exists(dead_ed=user_path(query_name()) +
+      "dead.edit"))
+      message("system","\nYour edit file was saved as: "+dead_ed,this_object());
+    message("system", "Reconnected.", this_object());
+    if(__NetDiedHere) move(__NetDiedHere);
+    else move(ROOM_START);
+    message("environment", query_CapName()+" has rejoined this reality.",
+      environment(this_object()), ({ this_object() }));
+    __NetDiedHere = 0;
+    register_channels();
+}
+
+void describe_current_room(int verbose) {
+    object env;
+    mixed tmp;
+    string desc, smell, sound, item, liv;
+
+    if(!(env = environment(this_object()))) {
+        message("room_description", "You are nowhere.", this_object());
+        return;
+    }
+    if(verbose) {
+        desc = (string)env->query_long();
+        if(functionp(tmp = (mixed)env->query_smell("default")))
+          tmp = (string)(*tmp)("default");
+        smell = tmp;
+        if(functionp(tmp = (mixed)env->query_listen("default")))
+          tmp = (string)(*tmp)("default");
+        sound = tmp;
+    }
+    else desc = (string)env->query_short();
+    liv = (string)env->describe_living_contents(({ this_object() }));
+    item = (string)env->describe_item_contents(({}));
+    if(desc) message("room_description", desc, this_object());
+    if(smell) message("smell", smell, this_object());
+    if(sound) message("sound", sound, this_object());
+    if(item) message("inanimate_item", item, this_object());
+    if(liv) message("living_item", liv, this_object());
+}
+
+varargs void move_player(mixed dest, string msg) {
+    object prev;
+    object *inv;
+    string *arr;
+    string chambre,going,temp1,temp2,temp3;
+    int i, illum, bzbd, adj, tmp;
+
+    prev = environment( this_object() );
+    chambre = file_name(prev);
+    if (stringp(dest)) {
+        if(dest[0] != '/') {
+            arr = explode(chambre, "/");
+            dest = "/"+implode(arr[0..sizeof(arr)-2], "/")+"/"+dest;
+        }
+    }
+    if(move(dest) != MOVE_OK) {
+        message("system","You remain where you are.", this_object());
+        return;
+    }
+    if(!query_invis() && !hiddenp(this_object())) {
+        inv = all_inventory(prev);
+        for(i=0, bzbd = sizeof(inv); i<bzbd; i++) {
+            if(!living(inv[i]) || inv[i] == this_object()) continue;
+            if(!msg || msg == "") message("mmout", query_mmout(),inv[i]);
+            else message("mout", query_mout(msg), inv[i]);
+        }
+        inv = all_inventory(environment(this_object()));
+        for(i=0, bzbd = sizeof(inv); i<bzbd; i++) {
+            if(!living(inv[i])) continue;
+            if(inv[i] == this_object()) continue;
+            if(!msg || msg == "") message("mmin",query_mmin(),inv[i]);
+            else message("min", query_min(), inv[i]);
+        }
+    }
+    describe_current_room(query_verbose());
+}
+
+int remove() {
+    object *inv;
+    int i;
+
+    autosave::remove();
+    CHAT_D->remove_user(__Channels - __RestrictedChannels);
+    i = sizeof(inv = all_inventory(this_object()));
+    while(i--)
+      if(inv[i] && (int)inv[i]->allow_drop() && inv[i]) inv[i]->remove();
+    return container::remove();
+}
+
+void receive_message(string msg_class, string msg) {
+    string *words;
+    int i, max;
+    string str, pre, post;
+    int x, do_wrap;
+
+    if(query_log_harass())
+        unguarded( (: write_file, DIR_LOGS "/harass/" + query_name(),
+            strip_colours( msg ) + "\n" :) );
+    if(__Client) {
+        receive("<"+msg_class+">"+msg+"\n");
+        return;
+    }
+    if(!stringp(str=getenv("SCREEN"))) str = "75";
+    x = to_int(str);
+    if(msg_class[0] == 'N') msg_class = msg_class[1..sizeof(msg_class)-1];
+    else if(msg_class != "prompt") msg = wrap(msg, x);  // prompt fix -Val
+    if(msg_class == "system" || msg_class == "help" || msg_class =="more"){
+        receive(msg);
+        return;
+    }
+    if(query_blocked(msg_class) &&
+      member_array(msg_class, OVERRIDE_IGNORE_MSG) == -1) return;
+    switch(msg_class) {
+    case "room_exits": msg = "%^GREEN%^"+msg; break;
+    case "snoop": msg = "%^CYAN%^"+msg; break;
+    case "smell": msg = "%^ORANGE%^"+msg; break;
+    case "sound": msg = "%^CYAN%^"+msg; break;
+    case "tell": 
+        if(sscanf(msg, "%s:%s", pre, post) == 2)
+            msg = "%^BOLD%^RED%^"+pre+":%^RESET%^"+post;
+        break;
+    case "shout":
+        if(sscanf(msg, "%s:%s", pre, post) == 2)
+            msg = "%^BOLD%^BLUE%^"+pre+":%^RESET%^"+post;
+        break;
+    case "mmin": case "min": case "mmout": case "mout":
+        msg = "%^BOLD%^GREEN%^"+msg; break;
+    case "living_item": msg = "%^BOLD%^RED%^"+msg; break;
+    case "inanimate_item": msg = "%^BOLD%^MAGENTA%^"+msg; break;
+    }
+    if(!__TermInfo) reset_terminal();
+    for(i=0, max=sizeof(words=explode(msg, "%^")); i<max; i++)
+        if(__TermInfo[words[i]]) words[i] = __TermInfo[words[i]];
+    receive(implode(words, "")+__TermInfo["RESET"]);
+}
+
+void hide(int x) {
+    object *inv;
+    int i;
+
+    i = sizeof(inv = all_inventory(this_object()));
+    if(x) {
+        set_hide(x);
+        while(i--) inv[i]->hide(x);
+    }
+    else {
+        while(i--) inv[i]->hide(x);
+        set_hide(x);
+    }
+}
+
+void reset_terminal() {
+    __TermInfo = (mapping)TERMINAL_D->query_term_info(getenv("TERM"));
+}
+
+void restrict_channel(string channel) {
+    if(!((int)master()->valid_apply(({})))) return;
+    if(!__RestrictedChannels) __RestrictedChannels = ({});
+    __RestrictedChannels += ({ channel });
+    CHAT_D->remove_user( ({ channel }) );
+}
+
+void unrestrict_channel(string str) {
+    if(!((int)master()->valid_apply(({})))) return;
+    __RestrictedChannels -= ({ str });
+    CHAT_D->add_user( ({ str }) );
+}
+
+nosave private register_channels() {
+    __Channels = ({ "newbie" });
+    if(creatorp(this_object())) 
+      __Channels += ({ "cre", "gossip", "intercre"});
+    if(adminp(this_object())) __Channels += ({ "admin" });
+    if(!__RestrictedChannels) __RestrictedChannels = ({});
+    CHAT_D->add_user(__Channels - __RestrictedChannels);
+}
+
+void receive_snoop(string str) { receive_message("snoop", "%"+str); } 
+
+int force_me(string cmd) {
+    string err;
+    int res;
+
+    if(creatorp(this_object()) && !((int)master()->valid_apply(({query_name()}))))
+      return 0;
+    __Forced = 1;
+    err = catch(res = command(cmd));
+    __Forced = 0;
+    if(err) error(err);
+    return res;
+}
+
+int cmd_quit(string str) {
+    if(!((int)master()->valid_apply(({ query_name() })))) return 0;
+    message("system", "Please come back another time!", this_object());
+    save_player(query_name());
+    message("environment", query_cap_name()+" is gone from this reality!",
+      environment(this_object()), ({ this_object() }));
+    log_file("enter", query_CapName()+" (quit): "+ctime(time())+"\n");
+    remove();
+    return 1;
+}
+
+nosave int cmd_all(string cmd) {
+    string file, verb;
+
+    verb = query_verb();
+    if(!(file = (string)CMD_D->find_cmd(verb, __SearchPath))) {
+        if(!((int)SOUL_D->do_cmd(verb, cmd))) { 
+            if((int)CHAT_D->do_chat(verb, cmd)) return 1;
+            else {
+                if(query_client()) receive("<error>");
+                return 0;
+            }
+        }
+        else return 1;
+    }
+    if(!((int)call_other(file, "cmd_"+verb, cmd))) {
+        if(query_client()) receive("<error>");
+        return 0;
+    }
+    else return 1;
+}
+
+int query_age() {
+    int x;
+
+    if(!interactive(this_object())) return __Age;
+    x = time() - __LastAge;
+    __Age += x;
+    __LastAge = time();
+    return __Age;
+}
+
+int set_blocked(string type) {
+    __Blocked[type] = !__Blocked[type];
+    message("system", "You are "+(__Blocked[type] ? "now blocking" :
+      "no longer blocking")+" "+type+".", this_object());
+    return __Blocked[type];
+}
+
+int query_blocked(string type) { return (__Blocked["all"] || __Blocked[type]); }
+
+string *query_channels() { return __Channels - __RestrictedChannels; }
+
+void set_client(string str) {
+    if(base_name(previous_object()) != OB_LOGIN) return;
+    __Client = str;
+}
+
+string query_client() { return __Client; }
+
+string query_cwd() { return nmsh::query_cwd(); }
+
+void set_email(string str) {
+    if(!((int)master()->valid_apply(({ query_name() })))) return;
+    __Email = str;
+}
+
+string query_email() {
+    if(!((int)master()->valid_apply(({ query_name() })))) return 0;
+    else return __Email;
+}
+
+void set_gender(string str) {
+    if(query_name() && !((int)master()->valid_apply(({ query_name() }))))
+      return;
+    __Gender = str;
+}
+
+string query_gender() { return __Gender; }
+
+int query_forced() { return __Forced; }
+
+void set_id(string *bogus) {
+    int i;
+
+    if(__UserId) return;
+    if(!query_CapName()) {
+        __UserId = ({ query_name() });
+      return;
+    }
+    __UserId = ({ query_name(), lower_case(query_CapName()) });
+    if((i=sizeof(bogus = explode(lower_case(query_CapName()), " "))) == 1)
+        return;
+    while(i--)
+        if(!user_exists(bogus[i])) __UserId += ({ bogus[i] });
+}
+
+string *query_id() { return __UserId; }
+
+int id(string str) {
+    if(!str) return 0;
+    else return member_array(str, __UserId) != -1;
+}
+
+varargs int query_invis(object ob) { return container::query_invis(ob); }
+
+int query_login_time() { return __LoginTime; }
+
+void set_log_harass(int x) {
+    string txt;
+
+    if(this_player() != this_object()) return;
+    if( __LogHarass == x ) return;
+    if( x )
+    {
+        txt = "**************** Start of Log *****************\n"+
+            "Time: " + ctime( time() ) + "\n";
+        if( environment( this_object() ) ) txt += "Place: " +
+            file_name( environment( this_object() ) ) + "\n";
+    } else {
+        txt = "**************** End of Log *****************\n"+
+            "Time: " + ctime( time() ) + "\n";
+    }
+    unguarded( (: write_file, DIR_LOGS "/harass/" + query_name(), txt :) );
+    __LogHarass = x;
+}
+
+int query_log_harass() { return __LogHarass; }
+
+varargs string query_long(string str) {
+    return query_title();
+}
+
+void set_name(string str) {
+    if(!((int)master()->valid_apply(({ str })))) return;
+    container::set_name(str);
+}
+
+string query_name() { return container::query_name(); }
+
+void set_news(string type, int sz) { __News[type] = sz; }
+
+int query_news(string type) { return __News[type]; }
+
+void set_password(string str) {
+    if(!((int)master()->valid_apply(({ query_name() })))) return;
+    __Password = str;
+    save_player(query_name());
+}
+
+string query_password() {
+    //tc("\n----\npasswd: "+__Password+"\n---\n");
+    //tc("hmmmm. stack: "+get_stack());
+    if(!((int)master()->valid_apply(({ query_name() })))) return 0;
+    else return __Password;
+}
+
+void set_position(string str) { __Position = str; }
+
+string query_position() { return __Position; }
+
+string query_prompt() {
+    string str;
+
+    if(stringp(str = getenv("PROMPT"))) return str;
+    else return nmsh::query_prompt(); 
+}
+
+void set_real_name(string str) {
+    if(!((int)master()->valid_apply(({ query_name() })))) return;
+    __RealName = str;
+}
+
+string query_real_name() { return __RealName; }
+
+void add_search_path(mixed val) {
+    if(stringp(val)) val = ({ val });
+    else if(!pointerp(val)) error("Bad argument 1 to add_search_path()\n");
+    __SearchPath = distinct_array(__SearchPath + val);
+}
+
+void remove_search_path(mixed val) {
+    if(stringp(val)) val = ({ val });
+    else if(!pointerp(val)) error("Bad argument 1 to remove_search_path()\n");
+    __SearchPath -= val;
+}
+
+string *query_search_path() { return __SearchPath; }
+
+string query_short() { 
+    return (interactive(this_object()) ? query_title() :
+      query_title()+" (net dead)");
+}
+string query_title() {
+    string str;
+
+    if(query_invis(this_player() ? this_player() : previous_object())) return 0;
+    str = getenv("TITLE") || "$N";
+    if(strsrch(str, "$N") == -1) str = "$N";
+    return replace_string(str, "$N", query_cap_name());
+}
+
+int set_verbose() { return (__Verbose = !__Verbose); }
+
+int query_verbose() { return __Verbose; }
+
+int set_where_block() { return (__WhereBlock = !__WhereBlock); }
+
+int query_where_block() { return __WhereBlock; }
+
+string get_path() { return nmsh::query_cwd(); }
+
+varargs void setenv(string key, string val) {
+    if(val) __Environment[key] = val;
+    else map_delete(__Environment, val);
+}
+
+string getenv(string key) { return __Environment[key]; }
+
+private nosave mapping last_error;
+
+void set_error(mapping m) {
+    if (previous_object() != master()) return;
+    last_error = m;
+}
+
+mapping query_error() {
+    string caller = file_name(previous_object());
+    if (caller[0..24] == "/secure/cmds/creator/_dbx") return last_error;
+}
