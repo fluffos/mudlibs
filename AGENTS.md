@@ -1122,7 +1122,27 @@ warning matters). Two collision classes to check after every run:
   names get rewritten, orphaning real on-disk seed data. Grep `"static`
   (quote immediately before the word) and revert those hits. Seen on
   `moniHuafu` (10 files) and then repeatedly across the ES II family
-  (up to 105 hits/60 files on `yanhuangwuhun`).
+  (up to 105 hits/60 files on `yanhuangwuhun`). **Confirmed again on
+  `yxsj`'s §10.7 round-two deep-test** (4 files/5 call sites:
+  `cmds/wiz/call.lpc`'s `CALL_PLAYER`, `adm/obj/master.lpc`'s
+  `CRASHES` ×3, `cmds/arch/purge.lpc`'s `PURGE` ×2,
+  `adm/daemons/securityd.lpc`'s `promotion`) — this time caught not by
+  orphaned-but-inert seed data but by a live, reproducible crash: since
+  `log/nosave/` was never created (only `log/static/` ships, with real
+  2000-era history in it), every one of these `log_file()` calls threw
+  `*Wrong permissions for opening file /log/nosave/XXX for append.
+  "No such file or directory"` the moment it actually fired (an admin
+  `call`-ing a live player object, a driver crash, a wizard promotion,
+  a `purge`) — the wizard-facing `call` command crashing on ANY
+  cross-player call is a meaningfully more severe symptom than the
+  silent-data-orphaning shape this entry originally documented. Fixed
+  by reverting all 5 literals to `"static/..."` (confirmed against
+  `raw/`), and additionally hardened the shared `log_file()` simul_efun
+  itself (`adm/simul_efun/file.lpc`) with an `assure_file(LOG_DIR +
+  file)` call before the `write_file()` — the same helper
+  `feature/save.lpc`'s `save()` already uses — so any future
+  `log_file()` call site referencing a never-created directory
+  self-heals instead of crashing.
 - **Compatibility shims**: `#ifndef __SENSIBLE_MODIFIERS__` /
   `#define nosave static` / `#define protected static` — the sed turns
   the *values* into `nosave`, silently aliasing `protected` → `nosave`.
@@ -1130,6 +1150,82 @@ warning matters). Two collision classes to check after every run:
   the shim entirely (both keywords are real on this driver). Seen on
   `yxcs`, `ylfyxa3`, `zitengzhan`,
   `xajhzcjh`.
+
+---
+
+### 4.4 A BIG5 character whose second byte is literally `0x5C` (ASCII backslash) collides with the classic driver's own byte-level string escaping, so a straightforward BIG5→UTF-8 byte-stream conversion leaves a spurious literal backslash character behind — usually cosmetic, but can corrupt an `.o` save file's mapping syntax outright when it lands right before a closing quote
+
+Found on `yxsj`'s §10.7 round-two deep-test, triggered by a genuine
+runtime crash rather than a cosmetic mojibake symptom (the more usual
+way this class of bug gets noticed, per §1/§4.1's mojibake entries).
+Certain common BIG5 characters — `功` (`0xA5 0x5C`), `許` (`0xB3 0x5C`)
+— happen to end in the byte `0x5C`, which is ALSO the classic,
+byte-oriented MudOS-era driver's string-escape character. When that
+era's `save_object()` wrote such a character to a save file, it
+(correctly, from its own byte-blind point of view) escaped the literal
+`0x5C` byte by doubling it (`0xA5 0x5C 0x5C` on disk for one `功`), and
+its matching `restore_object()` un-escaped it the same way on read —
+a perfectly self-consistent round-trip AS LONG AS both sides treat
+every byte the same way, encoding-unaware. This project's
+`convert_lib.sh` BIG5→UTF-8 pass is a naive byte-stream `iconv`,
+oblivious to this escaping convention: it decoded the doubled
+`0x5C 0x5C` as two independent, correct-looking ASCII backslash
+CHARACTERS rather than as "one escaped literal backslash belonging to
+the preceding multi-byte character", so every such character round-
+tripped as itself PLUS a spurious trailing literal backslash (`功` →
+`功\`) in the converted UTF-8 text. In most positions (mid-sentence,
+inside a longer string) this is purely cosmetic — a stray `\` character
+the compiler flags with a harmless `warning: Unknown escape sequence`
+and otherwise passes through unchanged — confirmed on `yxsj` across
+~54 files / ~129 occurrences in ordinary `.lpc` source strings (dialog
+text, poem strings in `cmds/usr/quit.lpc`, damage-message tables in
+`adm/daemons/combatd.lpc`), all still grammatical Chinese with just an
+extra stray backslash glyph, none of them crashing. **But when the
+affected character is the very LAST character before a string's
+closing quote — which is exactly what happened in `yxsj`'s own
+`data/chinese.o`** (`adm/daemons/chinesed.lpc`'s `to_chinese()`
+dictionary, ending `..."玄子神功\",])`) **— the spurious backslash
+escapes the closing quote itself** (`功\"` parses as "escaped quote
+inside the string", not "end of string"), so the string literal never
+closes, the driver reads past it into `,])` and then EOF looking for a
+real closing quote, and `restore_object()` throws `*Illegal mapping
+format while restoring dict.` — caught non-fatally at boot (so it
+LOOKS like a harmless, ignorable warning), but leaves the `mapping`
+instance variable reset to bare `0` instead of `([])`, so ANY later
+call that actually indexes it (`chinesed.lpc`'s own `chinese(str)`,
+called by the `to_chinese()` simul_efun from `cmds/std/learn.lpc` and
+`cmds/usr/skills.lpc`) crashes for real, every time, with `*Value
+being indexed is zero.` — i.e. two of the most basic, core player
+commands (`learn`, `skills`) were completely broken from the very
+first boot after conversion, discovered only via an actual live
+`§10.7` playthrough, not by the original WASM-enablement pass (which
+never got far enough into actual skill-training to trigger it).
+**Fix, applied to `data/chinese.o` only** (the ONE instance that
+actually crashed): re-derive the file correctly from `raw/` with a
+custom script that tokenizes the save file's mapping literal at the
+BYTE level, string-by-string, un-escaping `\\`→literal single byte
+(recovering the original raw BIG5 byte sequence including the
+character's true trailing `0x5C`), THEN decodes each recovered raw
+byte string as BIG5, THEN re-escapes any genuinely-literal backslash/
+quote characters left in the decoded UTF-8 text for correct LPC string
+syntax — rather than a blind whole-file `iconv`. The ~129 cosmetic
+instances in ordinary `.lpc` source strings were left unfixed this
+pass (confirmed non-crashing, would require the same byte-level
+re-tokenization applied file-by-file — worth a dedicated future sweep
+across this and any other BIG5-sourced lib, not done here). **Detect**:
+grep a lib's `.lpc`/`.o` files for `功\` or `許\` (or any other BIG5
+character whose encoding ends in `0x5C` — check any garbled-looking
+lone backslash immediately after a CJK character), and separately grep
+`debug.log`/a fresh boot for `Illegal mapping format while restoring`
+on any `.o` file that's a flat string-keyed dictionary (a `chinese`/
+translation-style daemon is the highest-risk shape, since ordinary
+per-player save files rarely end a mapping on a string value that
+happens to end in one of these characters). **Applies to any lib whose
+`raw/` archive is genuinely BIG5** (not GB18030/GBK, which don't share
+this exact byte coincidence) that was converted with a plain
+byte-stream `iconv` rather than an escape-aware pass — check siblings
+in the same BIG5-sourced lineage (`yxjh`, `yhwhpublicfi`, other
+Taiwan-origin ES2 archives) next time one gets touched.
 
 ---
 
@@ -6605,6 +6701,25 @@ independent of the `replace_program()` fix — left as an observation in
 this file and correcting its inheritance would require guessing which
 item/NPC base class it was originally meant to also carry.
 
+**Another confirmed instance, a literal string path instead of any
+macro: `yxsj`'s §10.7 round-two deep-test.** `obj/board/wizard_j.lpc`
+(a wizard-only "job progress report" board, `/d/wiz/jobroom`) had
+`inherit "/std/jboard";` immediately followed by a `create()`-tail
+`replace_program("/std/jboard");` — missed by this lib's own earlier
+corpus-wide `BULLETIN_BOARD` sweep (§7.100's closing summary) because
+it doesn't use the `BULLETIN_BOARD`/`ROOM` macros at all, just the bare
+file path. `std/jboard.lpc`'s `project`/`report` commands both build
+the same self-bound-lfun-closure shape as `bboard.lpc`'s `do_post()`
+(`this_player()->edit((: done_describe_project/done_report, ... :))`),
+so both commands crashed with the identical `*cannot bind an lfun fp
+to an object with a pending replace_program()`. Fixed by deleting the
+redundant `replace_program()` call (kept `inherit`). Verified live:
+`project <title>` now opens the editor and saves normally. **Detection
+addendum**: don't just grep for the `BULLETIN_BOARD`/`ROOM` macro names
+— grep bare `replace_program(` and check whether its argument (macro
+OR literal string OR `"/path"`) matches the file's own `inherit`
+target, regardless of spelling.
+
 ---
 
 ### 7.87 A save file exceeding the driver's configured "maximum read file size" makes `restore()` THROW instead of failing gracefully, and the throw happens during a lazy first-load with no error ever reaching `debug.log` — corpus-wide sweep completed, 165 libs fixed total
@@ -11672,6 +11787,48 @@ registration produces no player-visible symptom whatsoever unless
 someone specifically tries to reference that character by name from
 elsewhere. Not yet checked on sibling `xxcqii2` — flagged for whoever
 tests that lib next.
+
+### 7.153 A `read new`/`read next` branch computes the target index but doesn't `return` or chain into an `else`, so the very next unconditional numeric-parse check re-parses the same non-numeric `"new"`/`"next"` argument, overwrites the already-correct index, and always fails
+
+Found on `yxsj`'s §10.7 round-two deep-test, `std/jboard.lpc` (a
+wizard-only "job progress board" class, sibling to the more common
+`std/bboard.lpc`). `do_read(string arg)`'s dispatch is:
+
+```lpc
+if (arg == "new" || arg == "next") {
+  for (num = 1; num <= sizeof(notes); num++)
+    if (notes[num - 1]["time"] > last_read_time) break;
+} else if (sscanf(arg, "%d.%d", num, rep) == 2) {
+  ... return 1;
+}
+if (!sscanf(arg, "%d", num))          // <-- always reached unless the
+  return notify_fail("你要讀第幾個計畫的簡報﹖\n");   //     %d.%d branch returned
+```
+
+The `"new"`/`"next"` branch correctly computes `num`, but since it's
+not connected to the following `if` by an `else`, control always falls
+through into `if (!sscanf(arg, "%d", num))` — which re-parses the
+SAME string (`"new"`, non-numeric) and, failing, both clobbers the
+already-correct `num` and returns the generic "which one do you want"
+rejection instead of ever displaying the found note. `read new`/`read
+next` were therefore completely non-functional — always answering
+"你要讀第幾個計畫的簡報﹖" no matter how many unread notes existed.
+Confirmed as a genuine, isolated copy-paste gap (not an intentional
+design choice) by diffing against the sibling `std/bboard.lpc`'s
+equivalent dispatch in the same lib, which chains the identical three
+cases correctly as `if / else if / else if`. **Fix**: change the
+plain `if (!sscanf(arg, "%d", num))` to `else if (!sscanf(arg, "%d",
+num))`, so it's skipped whenever the `"new"`/`"next"` branch already
+ran. Verified live: before the fix, `read new` on a board with one
+unread entry answered the generic rejection; after the fix, it
+correctly displayed the entry and updated the read-tracking timestamp.
+**How to apply generally**: whenever a command dispatch has a
+`"new"`/`"next"`/keyword special-case that computes a value used by
+a LATER shared code path, check that the later path is reached via
+`else`/early-`return`, not a second unconditional `if` re-testing the
+same raw input string — diffing against a sibling class implementing
+the same three-way dispatch (numbered / `new`-or-`next` / malformed)
+is the fastest way to confirm which shape is correct.
 
 ---
 
