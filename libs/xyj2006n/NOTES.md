@@ -23,3 +23,176 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Deep functional test (round two, 2026-08-27)
+
+First full §10.7 round-two live playthrough of this lib (previous work
+on it was WASM-onboarding + mechanical corpus sweeps only, never a
+continuous played session). Booted `~/src/fluffos/build-debug/src/driver
+config.fluffos` natively on port 40157 and drove it with raw Python
+socket scripts (client sends the literal `2060` version-handshake line
+first, per this lib's own Tomud-client-detection gate — confirmed not a
+bug, see the WASM summary above).
+
+**Admin account had to be re-seeded live.** `adm/etc/wizlist` already
+listed `fluffos (admin)`, but no corresponding save file
+(`data/{login,user}/f/fluffos.o`) existed on disk — the account was
+never actually registered through the login flow, only added to the
+wizlist text file, so a login attempt as `fluffos` got "没有这个玩家"
+(no such player). Registered it live: English id `fluffos`, Chinese
+name `管理员`, admin/management password `Mud@2026` (the project's
+standard password IS accepted for this field), login password
+`Play2026x` (the login password is REQUIRED to differ from the admin
+password — the registration flow rejects a login password equal to the
+admin password with "您的登陆密码不能和管理密码一样"). Confirmed
+`(admin)` privilege via the login banner. This is now a real, working
+seeded admin account (previously only a wizlist-only phantom entry).
+
+**Bugs found and fixed (2, both genuine programming bugs — missing
+guards causing real crashes, not content/design):**
+
+1. **`adm/simul_efun/file.lpc`'s `log_file()` writes into
+   `/log/nosave/`, a directory this archive never shipped, with no
+   `assure_file()` guard — crashing every wizard `call`/`clone`/`purge`/
+   `purgehouse`/`xpass`/`superpass` command AND the player-facing
+   `suicide -f` account-deletion command the welcome banner itself
+   advertises** (AGENTS.md §7.11, same shape as the `xajhxo`/
+   `nitan_ceshi` instances). Reproduced live: admin `call
+   ceshiwyz->add("money",1000)` (a normal wizard debug command) threw an
+   uncaught `执行时段错误：*Wrong permissions for opening file
+   /log/nosave/CALL_PLAYER for append. "No such file or directory"`
+   straight to the admin's screen, aborting the whole `call` before the
+   requested side effect ran. Since `cmds/usr/suicide.lpc`'s real
+   account-deletion path (`slow_suicide()`) calls the identical
+   `log_file("nosave/SUICIDE", ...)` line BEFORE any of the actual
+   deletion logic, every real `suicide -f` on this lib would have hit
+   the same uncaught error and aborted before deleting anything —
+   despite the rules banner telling players to use exactly this command
+   to clean up unused accounts. This file already carries its own
+   `assure_file(string file)` helper (mkdir-p's every path component),
+   just never wired into `log_file()`, and defined textually AFTER
+   `log_file()` in the same file (needs a forward declaration on this
+   compiler). **Fix**:
+   ```lpc
+   void assure_file(string file);          // added forward decl
+
+   void log_file(string file, string text) {
+     assure_file(LOG_DIR + file);          // added guard
+     write_file(LOG_DIR + file, text);
+   }
+   ```
+   Verified live post-fix: the identical `call` command now completes
+   cleanly (`/obj/user#206 ("云游生")->add("money", 1000) = 1000`, no
+   error), and `/log/nosave/CALL_PLAYER` now exists with the expected
+   audit-log line. This is the project-wide simul_efun `log_file()`, so
+   the fix transparently covers every one of the ~20 call sites across
+   `cmds/wiz/call.lpc`, `cmds/wiz/clone.lpc`, `cmds/arch/purge.lpc`,
+   `cmds/arch/purgehouse.lpc`, `cmds/adm/xpass.lpc`,
+   `cmds/adm/superpass.lpc`, `cmds/usr/suicide.lpc`, and others that
+   write into `nosave/...` or other never-shipped log subdirectories.
+
+2. **`adm/obj/master.lpc`'s `log_error()` broadcasts every plain compile
+   WARNING (not just genuine errors) straight to any connected player's
+   screen** (AGENTS.md §7.103, exact same shape/fix as `zzfy3`'s own
+   instance — this lib's own `master.lpc` still had the unguarded
+   original). Reproduced live: registering a fresh character and typing
+   ordinary early commands (`look`/`score`/`i`) each triggered several
+   `编译时段错误：...warning: Unused local variable 'x'`-style dumps as
+   the corresponding command file (`cmds/std/look.lpc`,
+   `cmds/std/score.lpc`, `cmds/usr/inventory.lpc`) got lazily compiled
+   for the first time that boot. **Fix**: `if (this_player(1)) ...` →
+   `if (this_player(1) && strsrch(message, "warning:") == -1) ...`,
+   identical to the established corpus fix. Verified live: post-fix, the
+   same register→look→score→i sequence produced zero warning dumps.
+
+**Cross-cutting pattern sweep** (all the standing AGENTS.md patterns
+listed in the round-two task brief, checked via targeted grep against
+`work/`, excluding the already-documented dead-code trees `daemons/`,
+`www/relative/`, `u/canoe/`, `u/vikee/`): §4.3 (no `log_file()` call
+site has "static" in its literal path argument), §4.4 (no remaining
+non-UTF-8 byte sequences in any `.lpc` file — the two known post-WASM
+GBK stragglers were already reconverted per the summary above), §7.86/
+§7.100 (already swept corpus-wide, re-confirmed no live residual
+`replace_program()`-on-top-of-`inherit` hits), §7.121 (no `int`-typed
+field/parameter assigned a bare `0.xx` float literal), §7.123 (no
+column-zero bare `IDENT = (\[|\{` file-scope statement outside a
+function), §7.126 (no `load_object()`/`new()` call fed a string pulled
+from a `dbase` mapping — this lib's saved data uses literal, already-
+`.lpc`-safe paths, not a macro-placeholder area engine), §7.129
+(already fixed at WASM-onboarding time — `exclude || ({})` guard
+confirmed still present in the live `adm/simul_efun/message.lpc`),
+§7.131/§7.152 (`find_living`/`find_player` work correctly — this lib
+DOES call `set_living_name()`, confirmed live via a cross-connection
+`tell` reaching the test character both before and after a reconnect),
+§7.133 (`net_dead()` is defined and reachable — `obj/user.lpc`/
+`obj/user1.lpc`/`obj/login.lpc` all define it directly, not a classic-
+driver `remove_interactive()`-on-master shape), §7.148 (no parameter
+named a reserved keyword like `nosave`), §7.153 (`feature/more.lpc`'s
+pagination `switch` correctly covers `"b"`/`"q"`/default with no
+missing `else`; confirmed live via a real multi-page `help menpai` — `q`
+correctly aborted mid-page). No new instances found for any of these.
+
+**Live playthrough** (real Chinese-named test character `云游生`
+/`Ceshiwyz`, deleted before commit — only the seeded admin account
+remains): version handshake → `new` → English id (letters only, 3-8
+chars, no digits — confirmed by trial) → Chinese name (2-6 Chinese
+characters) → admin password → confirm → login password (must differ
+from admin password) → confirm → email → gender → stat-allocation menu
+(`9`/`y` for defaults) → arrived at 南城客栈 with a full room
+description; `look`/`score`/`i` all clean. Skill acquisition: the
+starting-room NPC 阿凯哥哥 (Akaigege) grants one full free skill set via
+`ask akaigege about <menpai-keyword>` (e.g. `fangcun`), gated by a
+`yudian/skills == "got"` flag that correctly blocks a second grant
+("你不是已经要过功夫了吗？") — `skills` correctly showed all 13 granted
+skills afterward, `score` showed the resulting attribute increases.
+Safe-sparring mechanism: `fight <npc>` (documented in `help fight` as
+"点到为止，不会真的受伤") — used against 疥顶小僧 in 朱雀大街, fought to
+a clean loss (`这场比试算我输了，佩服，佩服！`), left "受伤" (wounded, a
+recoverable condition) but alive and not ejected from the room. Shop:
+`list`/`buy` at 南城客栈 dispatch correctly — `list` shows the real
+priced inventory, `buy huasheng from xiao er` on a broke fresh character
+correctly returns "你的钱不够" rather than silently no-op'ing or
+crashing (no §7.143/§7.151 shape found); currency here is physical
+money-objects (`gold_money`/`silver_money`/`coin_money` carried in
+inventory, not a simple int stat), so a full paid purchase wasn't
+exercised live. Board: `read board` on the (empty) 南城客栈留言板
+correctly reports no messages, no crash.
+
+**Quit/reconnect**: the "new account must be connected 1+ hour before
+it can be saved" gate (`cmds/usr/quit.lpc`, `time() -
+birthday < 3600`) is confirmed intentional design (also documented at
+WASM-onboarding time) — bypassed for testing purposes only by editing
+the test character's own `birthday` field backward in its `.o` save
+file while the driver was stopped (never done to the real admin
+account). With that bypassed, did TWO full quit→reconnect cycles:
+`quit` produced a clean "欢迎下次再来！" both times with zero new
+`log/log` error lines either time; a second connection (the seeded
+admin) could `tell ceshiwyz ...` and have it delivered correctly both
+before and after each reconnect (confirms `find_player()` +
+§7.152-style post-reconnect `set_living_name()` re-registration both
+work), and the room listing never showed more than one copy of either
+character at a time (no §7.150-style leaked duplicate). Non-`autoload`-
+flagged carried items (the starting 粗布衣 clothing) are dropped/
+destroyed on every `quit` and freshly reissued by `restore_autoload()`
+at next login — traced this to `feature/autoload.lpc`'s intentional
+"only autoload-flagged items persist across a session, everything else
+is graceful-dropped rather than silently vanishing on `destruct()`"
+design (the same TMI-2-lineage `save_autoload()`/`restore_autoload()`
+idiom documented corpus-wide in AGENTS.md §7.122's family) — NOT a bug,
+left untouched.
+
+**Not reached this session** (budget, not correctness concerns): a full
+paid shop purchase (no free starting currency reachable without a
+wizard-granted `add()`, and the currency is object-based rather than a
+simple stat), sect/menpai formal `apprentice`/`bai` enrollment beyond
+the one-shot NPC skill grant, real PK/death-and-respawn (would require
+finding a genuinely lethal opponent and burning significant real time),
+and the bang/economy-heavy `bank`/pawnshop flows. None of these showed
+any red flag during code reading; flagging honestly as unexercised
+rather than guessing them clean.
+
+Verified `grep -h '"port"' libs/*/meta.json | grep -oE '[0-9]{5}' | sort
+-n | uniq -c | awk '$1>1'` prints nothing before committing. Driver
+killed by exact PID after testing; test character's save files deleted,
+only the seeded `fluffos` admin account save files remain under
+`work/data/{login,user}/f/`.
