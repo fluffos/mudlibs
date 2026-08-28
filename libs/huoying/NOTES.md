@@ -609,3 +609,22 @@ Found during the §7.100 tail-sweep (below the original 166-lib survey's
 variant, hand-fixed). A full post-fix grep confirms 0 live occurrences
 remain. Verified via a clean native driver boot (zero new `debug.log`
 errors, port listening, killed by exact PID after ~8s).
+
+## §7.126 sibling-sweep fix: stale pre-`.lpc` extension in AREA save data (2026-08-28)
+
+Flagged in AGENTS.md §7.126 as a sibling worth checking (originally
+found on `naruto`, same ES2/Neolith "Annihilator" AREA-engine
+lineage). `std/area/map.lpc`'s `file_path()` has the identical
+macro-placeholder resolution shape as `naruto`'s, with no strip of a
+stale trailing `.c` left over from this project's own `.c`→`.lpc`
+conversion pass. Unlike `naruto` (210 affected save files), this lib's
+built-out AREA-grid world is much smaller — only 2 `.o` save files
+exist under `world/area/`, with exactly 1 stale `__DIR__...c"`
+reference (`world/area/wizard/wizard.o`). Fixed with the identical
+choke-point strip in `file_path()` regardless of the small blast
+radius, since the fix is a no-op for already-correct `.lpc`-suffixed
+values and costs nothing to apply. Verified via a clean native driver
+boot; not independently live-reproduced by walking onto the specific
+affected exit tile (small enough impact that a from-scratch
+reproduction wasn't warranted given the fix is a verbatim, already
+live-verified port from `naruto`).
