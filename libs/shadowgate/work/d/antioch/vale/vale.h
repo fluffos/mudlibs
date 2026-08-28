@@ -1,0 +1,15 @@
+#include <std.h>
+
+#define ROOMS "/d/antioch/vale/rooms/"
+#define FPATH "/d/antioch/vale/forest/"
+#define WALL "/d/antioch/vale/inherits/wall.lpc"
+#define CLEARING "/d/antioch/vale/inherits/clearing.lpc"
+#define GRASS "/d/antioch/vale/inherits/grasslands.lpc"
+#define SHORE_INH "/d/antioch/vale/inherits/shore.lpc"
+#define RBANK "/d/antioch/vale/inherits/riverbank.lpc"
+#define FOREST "/d/antioch/vale/inherits/forest.lpc"
+#define SANCTUARY "/d/antioch/vale/inherits/sanctuary.lpc"
+#define HUT_INH "/d/antioch/vale/inherits/hut.lpc"
+#define BORDER "/d/antioch/vale/inherits/fborder.lpc"
+#define MONS "/d/antioch/valley/mons/"
+#define OBJ "/d/antioch/valley/obj/"
