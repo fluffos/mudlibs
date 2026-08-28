@@ -1535,6 +1535,53 @@ compiler/sweep flags them:
   every sibling's copy too (the `zhengmen.lpc` truncation existed in
   three 金庸群侠传 builds).
 
+### 6.7 A build-time driver option can silently contradict an archive's own `local_options.example` — check what THIS PROJECT'S driver was actually compiled with, not what the archive assumes
+
+This project boots every lib against one shared prebuilt driver
+(`~/src/fluffos/build-debug/src/driver`/`lpcc`) rather than rebuilding
+per-lib from each archive's own `local_options.h`/`local_options.example`
+— so a from-scratch English archive's own config file can say one thing
+about a compile-time grammar option while the actual binary in use says
+another, and there is no warning anywhere that this happened; the
+archive's file is simply never consulted.
+
+Confirmed instance: FluffOS's `REF_RESERVED_WORD` option (when defined,
+the bare identifier `ref` becomes a reserved keyword — the old MudOS
+pass-by-reference argument marker, `void inc(int ref x)`, and `ref`
+"cannot be a variable or function name" per the option's own doc
+comment in `src/base/internal/options_internal.h`). `shadowgate`'s own
+`local_options.example` explicitly ships `#undef REF_RESERVED_WORD`,
+but this project's driver binary hardcodes `#define REF_RESERVED_WORD`
+regardless — so `std/user/refs.lpc`'s `set_ref(string ref, ...)`/
+`get_ref(string ref)` (an ordinary, working MudOS-era API on the
+archive's own intended build) hit a hard `unexpected ')'` syntax error
+on this driver. Severity depends entirely on WHERE the identifier is
+used: here it sat in a file `inherit`ed straight into the player body
+class via a header (`/adm/include/user.h` → `std/user.lpc`, i.e.
+`OB_USER`), so it broke compilation of the entire player body —
+functionally identical in blast radius to the `finalrealms`
+`ed_start()`/`query_ed_mode()` class of blocker (§6.2). Two more
+non-core instances of the exact same identifier hit the same wall in
+sibling wizard-tooling files (`adm/daemon/refs_d.lpc`,
+`cmds/system/_clog.lpc`'s `pop_coder(int ref)`) and were fixed the same
+way (rename to `refname`/`idx`).
+
+**How to apply on a new archive**: `ARRAY_RESERVED_WORD` is currently
+`#undef`ined on this project's driver (so `array` is safe), but
+`REF_RESERVED_WORD` is `#define`d — grep any new archive for the
+declaration shape `(string|object|int|mixed|float|mapping)\s*\*?\s*ref\b\s*[,;=)]`
+(parameter/local/global named exactly `ref`) proactively, the same way
+you'd grep for `static`/`array` collisions, rather than waiting for a
+compile failure to point at it — a `ref` sitting inside a file that's
+only lazily loaded (a rarely-used wizard command, say) can go
+unnoticed by even a full `lpcc_check.sh` sweep if nothing ever tries to
+load it during the sweep's file-list construction, and won't announce
+itself until a live player actually triggers that code path. Don't
+assume a compile-time option is "off" just because the archive's own
+config file says so — check `~/src/fluffos/src/base/internal/
+options_internal.h` (or the currently-active driver's actual build) for
+what's really compiled in.
+
 ---
 
 ## 7. Boot-time and runtime crash classes
