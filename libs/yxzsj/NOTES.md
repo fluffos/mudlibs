@@ -23,3 +23,131 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Deep functional test (round two) — 2026-08-27
+
+Full live continuous playthrough (`build-debug` driver, port 40170,
+raw Python socket client): registered a real character (譚雲/Tanyun),
+apprenticed to a sect NPC (柳淳風, 封山劍派/swordsman), learned a skill
+via `learn ... from ...`, fought a wild NPC with the safe `fight`
+command (ended in unconsciousness with a scheduled `revive()`
+call_out, not death — confirmed working, not a soft-lock), did two
+separate reconnect cycles (one abrupt-disconnect-then-reconnect while
+a `revive()` timer was still pending, one explicit `quit`+fresh
+relogin after a real wall-clock gap), and cross-checked `find_player()`
++ `tell` + the admin `call` command between two simultaneous
+connections. Registered and confirmed the seeded admin account
+(`fluffos`/`Mud@2026`) live for the first time (previously wizlist-only,
+no save file existed) — `目前權限﹕(admin)` confirmed, and `score`
+correctly showed the admin-only extended attribute block.
+
+Systematically grepped this lib's source for every standing
+cross-cutting bug pattern in AGENTS.md (§4.3, §4.4, §7.11, §7.80/118,
+§7.86/100, §7.103, §7.112, §7.121–§7.153) rather than spot-checking.
+Found and fixed 6 real bugs, all from the already-documented pattern
+list — same lineage, same bugs as `yxsj`'s own round-two pass, since
+these two libs share the ES2/`daniel` codebase at different points in
+its history:
+
+- **`data/chinese.o` (§4.4, BIG5 `0x5C`-collision)**: this snapshot's
+  BIG5→UTF-8 conversion had the exact same collision as `yxsj`, but
+  WORSE — not just the one trailing dict entry, but **10 separate
+  string values** ended in a `0x5C`-final BIG5 character (功/許)
+  immediately before their closing quote (e.g. `"move":"...輕功\"`,
+  `"celestial":"...神功\"`, plus 3 more mid-string cosmetic instances
+  like `"force":"內功\心法"`). Confirmed via boot: before the fix,
+  `chinesed`'s dict restore silently zeroed (same `Illegal mapping
+  format while restoring dict` class as `yxsj`, though this boot didn't
+  even surface the warning — the corruption ran past EOF differently
+  given the extra breaks), and `learn`/`skills` crash-risked on any
+  entry past the first broken string. Re-derived the whole file from
+  `raw/mudos/es2lib/data/chinese.o` with a custom escape-aware BIG5
+  decoder (unescape `\`-doubling byte-for-byte, THEN BIG5-decode, THEN
+  re-escape for LPC string syntax) rather than a blind `iconv` — diffed
+  byte-for-byte against the naive conversion and confirmed the ONLY
+  changes were removal of the 13 spurious backslashes, nothing else.
+  Verified live: fresh boot showed no `chinesed` restore warning at
+  all, and `learn sword from master` / `skills` both worked
+  crash-free on the test character.
+- **§4.3 `static`→`nosave` collision, 7 call sites / 4 files**
+  (`cmds/wiz/call.lpc`'s `CALL_PLAYER`, `adm/obj/master.lpc`'s
+  `CRASHES` ×3, `cmds/arch/purge.lpc`'s `PURGE` ×2,
+  `adm/daemons/securityd.lpc`'s `promotion`) — identical shape and
+  identical files to `yxsj`'s fix, confirmed against `raw/`'s
+  `"static/..."` literals. Reverted all 7, and hardened
+  `adm/simul_efun/file.lpc`'s shared `log_file()` with an
+  `assure_file()` call before `write_file()`, matching `yxsj`. Verified
+  live: logged in as admin (`fluffos`), ran `call tanyun->query("name")`
+  and `call tanyun->query("class")` against the live test character —
+  both executed cleanly and appended correctly to the pre-existing
+  (real 2000-era) `log/static/CALL_PLAYER` history file with no crash.
+- **§7.103 `log_error()` broadcasting raw compile warnings**
+  (`adm/obj/master.lpc`): added the `strsrch(message,"warning:") == -1`
+  guard. Verified live: a lazy first-compile of `cmds/usr/quit.lpc`
+  during testing threw multiple `Unknown escape sequence` warnings (the
+  ~129-instance cosmetic tail of the same §4.4 BIG5 collision, left
+  unfixed here exactly as documented for `yxsj` — none of these are
+  crash-causing) and none of them leaked to the connected test
+  player's screen.
+- **§7.86/§7.100 redundant `replace_program()`**
+  (`obj/board/wizard_j.lpc`): `inherit "/std/jboard"` +
+  `replace_program("/std/jboard")` in `create()` — same file, same
+  shape as `yxsj`'s fix (missed by the earlier macro-based corpus
+  sweep since this board uses a literal path). Deleted the redundant
+  `replace_program()` call. Verified live as the admin test character:
+  navigated to `/d/wiz/jobroom`, the board loaded without the "cannot
+  bind an lfun fp to an object with a pending replace_program()"
+  crash, and `project`/`read new` both worked end-to-end.
+- **§7.153 `std/jboard.lpc do_read()`**: identical missing-`else` shape
+  to `yxsj` — `read new`/`read next` computed the correct index, then
+  fell through into the unconditional `sscanf(arg, "%d", num)` numeric
+  parse, which always failed on the literal string `"new"`/`"next"`
+  and returned "你要讀第幾個計畫的簡報﹖" instead of showing the note.
+  Fixed by chaining it into the existing `if/else if` instead of a
+  bare trailing `if`. Verified live: `project <title>` followed by
+  `read new` now correctly displays the just-posted note instead of
+  erroring.
+
+No other cross-cutting pattern from the AGENTS.md checklist matched
+live source in this lib (checked explicitly, not just assumed clean):
+§7.121 (no float-typed economy function found), §7.122/§7.132/§7.134/
+§7.135/§7.136/§7.139/§7.144/§7.145/§7.146/§7.147/§7.148/§7.149/§7.151
+(no matching shape found by grep), §7.129 (`tell_room()` wrapper
+already has the `exclude || ({})` guard from the earlier §7.12-class
+onboarding fix), §7.133 (`net_dead()` IS defined on `obj/user.lpc`),
+§7.150 (the login-verification object restores directly onto itself,
+no throwaway clone; the leftover post-`exec()` shell object is
+destructed lazily on the player's *next* disconnect/quit/wizard
+`update`, confirmed via code read of `obj/user.lpc`'s own `net_dead()`
+and `cmds/usr/quit.lpc`/`cmds/wiz/update.lpc` — no active heart_beat on
+the orphan in the meantime, so no resave-corruption path), §7.152 (no
+`remove_living_name()`/`unset_living_name` call exists anywhere in this
+codebase, so the living-name registration from initial login persists
+across `reconnect()` without needing to be reset — confirmed
+empirically: cross-connection `tell tanyun ...` from the admin account
+worked immediately after `tanyun` had already gone through one full
+netdead→revive→reconnect cycle).
+
+Two harmless, pre-existing oddities noted but explicitly NOT touched
+(design/leftover, not crashes): `d/snow/schoolhall.lpc` and
+`d/wiz/jobroom.lpc` both end their `create()` with a
+`"obj/board/xxx"->foo()`/`->???()` call to an undefined function on a
+board object — apparently a preload idiom from the original codebase;
+call_other to an undefined function is a silent no-op on this driver
+(confirmed no error in either boot output or the caught-error handler
+across this whole session), not a crash. Also: `cmds/usr/recall.lpc`
+sends players to `/d/wiz/entrance` while `cmds/usr/recall2.lpc` (a
+distinct, separately-registered command) sends players to
+`/d/snow/inn` — both work correctly, left as-is since choosing which
+should be "the" recall command is a content decision, not a bug.
+
+This lib's actual playable world is a much smaller custom build (a
+"school" starting zone plus a 雪亭鎮/snow-town zone with the ES2 sect
+system) than `doc/help/newbie`'s text describes (which lists many
+more locations/sects than are reachable from the actual map) — a
+content/documentation mismatch, not a programming bug, left unfixed
+per the scope boundary.
+
+Admin account `fluffos`/`Mud@2026` confirmed seeded and working
+(kept, with its live-registered save file). Test character `譚雲`
+(`tanyun`) and its test bulletin-board post removed before commit.

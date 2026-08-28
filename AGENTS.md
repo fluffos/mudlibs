@@ -1142,7 +1142,11 @@ warning matters). Two collision classes to check after every run:
   file)` call before the `write_file()` — the same helper
   `feature/save.lpc`'s `save()` already uses — so any future
   `log_file()` call site referencing a never-created directory
-  self-heals instead of crashing.
+  self-heals instead of crashing. **Confirmed again on `yxzsj`'s §10.7
+  round-two deep-test** — same ES2/`daniel` lineage as `yxsj` at a
+  different point in its history, identical 7 call sites/4 files, same
+  fix, verified live via an admin `call tanyun->query(...)` against a
+  connected test character.
 - **Compatibility shims**: `#ifndef __SENSIBLE_MODIFIERS__` /
   `#define nosave static` / `#define protected static` — the sed turns
   the *values* into `nosave`, silently aliasing `protected` → `nosave`.
@@ -1226,6 +1230,20 @@ this exact byte coincidence) that was converted with a plain
 byte-stream `iconv` rather than an escape-aware pass — check siblings
 in the same BIG5-sourced lineage (`yxjh`, `yhwhpublicfi`, other
 Taiwan-origin ES2 archives) next time one gets touched.
+
+**Confirmed again, worse, on `yxzsj`'s §10.7 round-two deep-test**
+(sibling of `yxsj`, same lineage, different point in its history): the
+same `data/chinese.o` dict had **10 separate string values** (not just
+the one trailing entry) ending in a `0x5C`-final BIG5 character
+immediately before their closing quote, so the corruption wasn't
+confined to the tail of the mapping literal. Re-derived the whole file
+with the same escape-aware BIG5 decode (unescape byte-doubling → BIG5
+decode → re-escape for LPC syntax), diffed byte-for-byte against the
+naive conversion to confirm the ONLY change was removal of the 13
+spurious backslashes. Verified live: `learn`/`skills` both worked
+crash-free post-fix. This raises the applicability count for a
+dedicated future sweep — a lib in this lineage can have far more than
+one crash-triggering instance, not just the tail-of-mapping case.
 
 ---
 
@@ -11909,6 +11927,12 @@ a LATER shared code path, check that the later path is reached via
 same raw input string — diffing against a sibling class implementing
 the same three-way dispatch (numbered / `new`-or-`next` / malformed)
 is the fastest way to confirm which shape is correct.
+
+**Confirmed again on `yxzsj`'s §10.7 round-two deep-test**: identical
+`std/jboard.lpc do_read()`, byte-for-byte the same missing-`else`
+shape as `yxsj` (same ES2/`daniel` lineage, different snapshot). Same
+fix applied. Verified live: `project <title>` followed by `read new`
+correctly displayed the just-posted note post-fix.
 
 ---
 
