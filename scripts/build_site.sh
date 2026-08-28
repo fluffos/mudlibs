@@ -189,7 +189,7 @@ for slug in $SLUGS; do
   if [ -n "$base_tree" ] && [ "$base_tree" = "$tree" ] \
      && [ "$CACHE_OK" = 1 ] && [ "${OLDTREE[$slug]:-}" = "$tree" ] \
      && [ -f "$CACHE_DIR/packed/$slug/mudlib.data" ] \
-     && [ -f "$CACHE_DIR/packed/$slug/index.html" ]; then
+     && [ -f "$CACHE_DIR/packed/$slug/play.html" ]; then
     REUSED=$((REUSED + 1))
     continue
   fi
@@ -251,9 +251,19 @@ cp "$RELEASE_DIR/fluffos.js" "$RELEASE_DIR/fluffos.wasm" \
    "$RELEASE_DIR/telnet.js" "$SITE_DIR/_driver/"
 cp -r "$RELEASE_DIR/vendor" "$SITE_DIR/_driver/"
 for slug in $SLUGS; do
-  # hardlink when possible (same fs), fall back to a copy
+  # hardlink when possible (same fs), fall back to a copy. This brings in
+  # the WASM bundle (play.html, mudlib.js/data, fluffos-boot.js,
+  # README.md, NOTES.md) -- pack_lib_for_web.sh no longer writes an
+  # index.html of its own (renamed to play.html) specifically so the
+  # crawlable landing page copied right after this can't collide with it.
   cp -al "$CACHE_DIR/packed/$slug" "$SITE_DIR/$slug" 2>/dev/null \
     || cp -a "$CACHE_DIR/packed/$slug" "$SITE_DIR/$slug"
+  # Server-rendered landing page (full description + README/NOTES.md,
+  # "Play Now" link to play.html) -- see gen_site_index.py's
+  # render_lib_page. This, not the WASM page, is what /{slug}/ serves;
+  # it's what makes the game's description/notes crawlable and defers
+  # the actual driver/data download until the visitor clicks Play.
+  cp "$CACHE_DIR/index-staging/$slug/index.html" "$SITE_DIR/$slug/index.html"
 done
 for f in index.html robots.txt sitemap.xml llms.txt llm.txt llms-full.txt games.json; do
   cp "$CACHE_DIR/index-staging/$f" "$SITE_DIR/$f"

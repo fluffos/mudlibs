@@ -47,6 +47,16 @@ Outputs:
   scripts/wasm_status.json  the derived slug -> status mapping, kept as a
                      build artifact for scripts/build_site.sh (which reads
                      it for the packable-slugs list) and for inspectability.
+  <out>/<slug>/index.html  one crawlable landing page per non-noboot lib
+                     (render_lib_page): full description + rendered
+                     README.md/NOTES.md as real server-rendered HTML, plus
+                     a "Play Now" link to play.html (the actual WASM
+                     terminal, produced separately by
+                     scripts/pack_lib_for_web.sh and copied into the same
+                     slug dir by build_site.sh). This is what makes a
+                     game's description/restoration notes visible to
+                     search crawlers and defers the multi-MB driver/data
+                     download until a visitor actually clicks Play.
   <out>/index.html   the site index (default: site/index.html)
   <out>/robots.txt   allow-all + sitemap pointer, for search crawlers.
   <out>/sitemap.xml  the root index + every linked (non-noboot) lib's play
@@ -435,6 +445,298 @@ def _is_cjk_name(name):
     return any("一" <= ch <= "鿿" for ch in name)
 
 
+def _escape_md_html(s):
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _render_inline_md(s):
+    s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
+    s = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", s)
+    s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)",
+                r'<a href="\2" target="_blank" rel="noopener">\1</a>', s)
+    return s
+
+
+def render_markdown_html(md):
+    """Python port of renderMarkdown()/renderInline() in
+    scripts/web_shell_override/index.html -- same regexes, same
+    escape-first order, so a lib's README.md/NOTES.md render identically
+    whether fetched client-side into the play page's Info tab or
+    server-side rendered here into the crawlable landing page (see
+    render_lib_page). Keep the two in sync if either changes."""
+    lines = _escape_md_html(md).split("\n")
+    out = []
+    i = 0
+    n = len(lines)
+    list_open = False
+
+    def close_list():
+        nonlocal list_open
+        if list_open:
+            out.append("</ul>")
+            list_open = False
+
+    while i < n:
+        line = lines[i]
+        if re.match(r"^```", line):
+            close_list()
+            buf = []
+            i += 1
+            while i < n and not re.match(r"^```", lines[i]):
+                buf.append(lines[i])
+                i += 1
+            out.append("<pre><code>" + "\n".join(buf) + "</code></pre>")
+            i += 1
+            continue
+        heading = re.match(r"^(#{1,3})\s+(.*)$", line)
+        if heading:
+            close_list()
+            level = len(heading.group(1))
+            out.append(f"<h{level}>{_render_inline_md(heading.group(2))}</h{level}>")
+            i += 1
+            continue
+        if re.match(r"^---+\s*$", line):
+            close_list()
+            out.append("<hr>")
+            i += 1
+            continue
+        quote = re.match(r"^&gt;\s?(.*)$", line)
+        if quote:
+            close_list()
+            out.append(f"<blockquote>{_render_inline_md(quote.group(1))}</blockquote>")
+            i += 1
+            continue
+        item = re.match(r"^[-*]\s+(.*)$", line)
+        if item:
+            if not list_open:
+                out.append("<ul>")
+                list_open = True
+            buf = [item.group(1)]
+            i += 1
+            while (i < n and re.match(r"^\s+\S", lines[i])
+                   and not re.match(
+                       r"^\s*[-*]\s|^\s*(#{1,3})\s|^\s*```|^\s*&gt;\s?|^\s*---+\s*$",
+                       lines[i])):
+                buf.append(lines[i].strip())
+                i += 1
+            out.append(f"<li>{_render_inline_md(' '.join(buf))}</li>")
+            continue
+        if line.strip() == "":
+            close_list()
+            i += 1
+            continue
+        close_list()
+        buf = [line]
+        i += 1
+        while (i < n and lines[i].strip() != ""
+               and not re.match(r"^(#{1,3})\s|^```|^[-*]\s|^&gt;\s?|^---+\s*$", lines[i])):
+            buf.append(lines[i])
+            i += 1
+        out.append(f"<p>{_render_inline_md(chr(10).join(buf))}</p>")
+    close_list()
+    return "".join(out)
+
+
+def build_meta_bits(slug, info, ui, commits, linked):
+    """The admin-credential / updated-commit / source / download-zip line
+    shared by both the index card (render_index) and the per-lib landing
+    page (render_lib_page). Returns (meta_bits_html_list, admin_id) --
+    callers that also need admin_id for their own search corpus (only
+    render_index does) get it back rather than re-parsing the README."""
+    meta_bits = []
+    admin_id, admin_pw = parse_admin(slug)
+    if admin_id:
+        if admin_pw:
+            cred = f"{admin_id} / {admin_pw}"
+        elif admin_pw == "":
+            cred = f"{admin_id}({ui['admin_nopw']})"
+        else:
+            cred = f"{admin_id}({ui['admin_pw_readme']})"
+        meta_bits.append(
+            f'<span class="admin" title="{ui["admin_title"]}">'
+            f'🔑 {html.escape(cred)}</span>')
+    entry = commits.get(slug)
+    if entry:
+        short = html.escape(entry["sha"][:7])
+        day = html.escape(entry.get("date", "")[:10])
+        meta_bits.append(
+            f'<span>{ui["updated_label"]} <a href="{REPO_URL}/commit/'
+            f'{html.escape(entry["sha"])}" title="{ui["commit_title"]}"'
+            f'>{short}</a> {day}</span>')
+    meta_bits.append(
+        f'<a href="{REPO_URL}/tree/main/libs/{html.escape(slug)}" '
+        f'title="{ui["source_title"]}">{ui["source_label"]}</a>')
+    if linked:
+        meta_bits.append(
+            f'<a href="{RELEASE_ZIPS_URL}/{html.escape(slug)}.zip" '
+            f'title="{ui["download_title"]}">{ui["download_label"]}</a>')
+    return meta_bits, admin_id
+
+
+def render_lib_page(slug, info, commits):
+    """Full, server-side-rendered, crawlable landing page for one lib,
+    served at /{slug}/ (see build_site.sh's assembly step). This is what
+    fixes the site's core SEO problem: /{slug}/ used to serve straight
+    to the WASM play page, which unconditionally boots the driver on
+    load (createFluffOS(Module).then(...) in
+    scripts/web_shell_override/index.html) -- fine for a visitor who
+    already wants to play, useless to a crawler and unfriendly to a
+    visitor who just wants to read about the game first. This page is
+    plain HTML (full description + rendered README/NOTES.md, real text
+    in the first response, no JS/driver download required) with a
+    single "Play Now" link to the WASM page, relocated to play.html by
+    pack_lib_for_web.sh."""
+    st = info["status"]
+    icon, label, _ = BADGE[st]
+    ui_zh = UI["zh"]
+    meta_bits, _ = build_meta_bits(slug, info, ui_zh, commits, True)
+    meta_html = '<p class="meta">' + "\n    ".join(meta_bits) + '</p>'
+
+    name = html.escape(info["name"])
+    name_en = info.get("english_name") or ""
+    title_bits = name
+    if name_en and name_en != info["name"]:
+        title_bits += f" ({html.escape(name_en)})"
+
+    desc = info["description"]
+    desc_en = info.get("english_description") or ""
+    desc_html = f'<p class="desc">{html.escape(desc)}</p>' if desc else ""
+    if desc_en and desc_en != desc:
+        desc_html += f'<h2>English</h2>\n  <p class="desc">{html.escape(desc_en)}</p>'
+
+    doc_sections = []
+    readme_path = REPO / "libs" / slug / "README.md"
+    if readme_path.is_file():
+        text = readme_path.read_text(encoding="utf-8").strip()
+        # Drop the leading "# Name" heading -- this page already has its
+        # own <h1> with the game name, so keeping README's own would
+        # just double it.
+        text = re.sub(r"^#[^\n]*\n?", "", text, count=1).strip()
+        if text:
+            doc_sections.append(
+                f'<section class="doc"><h2>README</h2>{render_markdown_html(text)}</section>')
+    notes_path = REPO / "libs" / slug / "NOTES.md"
+    if notes_path.is_file():
+        text = notes_path.read_text(encoding="utf-8").strip()
+        if text:
+            doc_sections.append(
+                '<section class="doc"><h2>NOTES · 移植与修复记录</h2>'
+                f'{render_markdown_html(text)}</section>')
+    docs_html = "\n".join(doc_sections)
+
+    canonical_url = f"{SITE_URL}/{slug}/"
+    meta_desc_attr = html.escape((desc or desc_en or info["name"])[:300])
+
+    jsonld_doc = {
+        "@context": "https://schema.org",
+        "@type": "VideoGame",
+        "name": info.get("english_name") or info["name"],
+        "alternateName": info["name"] if info.get("english_name") else None,
+        "description": desc_en or desc,
+        "url": canonical_url,
+        "genre": ["MUD", "Text Adventure", "RPG"],
+        "gamePlatform": "Web browser (WebAssembly)",
+        "playMode": "MultiPlayer",
+        "inLanguage": "zh-CN",
+        "isAccessibleForFree": True,
+    }
+    jsonld_doc = {k: v for k, v in jsonld_doc.items() if v is not None}
+    jsonld = json.dumps(jsonld_doc, ensure_ascii=False).replace("</", "<\\/")
+
+    site_name = html.escape(ui_zh["site_name"])
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title_bits} — {site_name}</title>
+<meta name="description" content="{meta_desc_attr}">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{canonical_url}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{site_name}">
+<meta property="og:title" content="{title_bits}">
+<meta property="og:description" content="{meta_desc_attr}">
+<meta property="og:url" content="{canonical_url}">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{title_bits}">
+<meta name="twitter:description" content="{meta_desc_attr}">
+<script type="application/ld+json">{jsonld}</script>
+<style>
+  :root {{
+    --bg: #0b0e14; --fg: #d5dbe5; --dim: #6b7484; --accent: #7aa2f7;
+    --panel: #11151f; --border: #232a38;
+    --ok: #9ece6a; --warn: #e0af68; --bad: #f7768e;
+  }}
+  * {{ box-sizing: border-box; }}
+  body {{
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei",
+          "Noto Sans CJK SC", sans-serif;
+  }}
+  .wrap {{ max-width: 800px; margin: 0 auto; padding: 24px 16px 64px; }}
+  .back a {{ color: var(--accent); text-decoration: none; font-size: 13px; }}
+  .back a:hover {{ text-decoration: underline; }}
+  .head {{ display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+           margin-top: 14px; }}
+  h1 {{ font-size: 26px; margin: 0; color: var(--accent); }}
+  .badge {{ font-size: 13px; white-space: nowrap; }}
+  .badge.playable {{ color: var(--ok); }}
+  .badge.limited {{ color: var(--warn); }}
+  .badge.noboot {{ color: var(--bad); }}
+  .slug {{ margin: 4px 0 10px; color: var(--dim); font-size: 12px;
+          font-family: Consolas, Menlo, monospace; }}
+  .meta {{ margin: 0 0 18px; font-size: 13px; color: var(--dim);
+          display: flex; flex-wrap: wrap; gap: 4px 14px; }}
+  .meta .admin {{ font-family: Consolas, Menlo, monospace; }}
+  .meta a {{ color: var(--accent); text-decoration: none; }}
+  .meta a:hover {{ text-decoration: underline; }}
+  .play-cta {{ margin: 0 0 22px; }}
+  .play-btn {{
+    display: inline-block; background: var(--accent); color: #0b0e14;
+    font-weight: 600; text-decoration: none; padding: 12px 26px;
+    border-radius: 8px; font-size: 16px;
+  }}
+  .play-btn:hover {{ opacity: .9; }}
+  .desc {{ font-size: 15px; line-height: 1.7; }}
+  h2 {{ font-size: 19px; margin: 28px 0 10px; color: var(--fg);
+       border-bottom: 1px solid var(--border); padding-bottom: 6px; }}
+  section.doc h2:first-child {{ margin-top: 8px; }}
+  .doc p {{ margin: 0 0 12px; }}
+  .doc ul {{ margin: 0 0 12px; padding-left: 22px; }}
+  .doc li {{ margin: 4px 0; }}
+  .doc pre {{ background: var(--panel); border: 1px solid var(--border);
+             border-radius: 6px; padding: 10px 12px; overflow-x: auto; }}
+  .doc code {{ font-family: Consolas, Menlo, monospace; font-size: 13px; }}
+  .doc blockquote {{ margin: 0 0 12px; padding: 4px 14px; color: var(--dim);
+                     border-left: 3px solid var(--border); }}
+  .doc hr {{ border: none; border-top: 1px solid var(--border); margin: 20px 0; }}
+  .doc a {{ color: var(--accent); }}
+  footer {{ margin-top: 40px; color: var(--dim); font-size: 12px; }}
+  footer a {{ color: var(--accent); }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="back"><a href="/">← {site_name} / LPC MUD Museum</a></p>
+  <div class="head">
+    <h1>{title_bits}</h1>
+    <span class="badge {st}">{icon} {html.escape(label)}</span>
+  </div>
+  <p class="slug">{html.escape(slug)}</p>
+  {meta_html}
+  <p class="play-cta"><a class="play-btn" href="play.html">▶ 开始游玩 · Play Now</a></p>
+  {desc_html}
+  {docs_html}
+  <footer>
+{FOOTER['zh']}
+  </footer>
+</div>
+</body>
+</html>
+"""
+
+
 def render_index(status, commits, lang="zh", canonical_url=None):
     ui = UI[lang]
     libs = status["libs"]
@@ -488,33 +790,7 @@ def render_index(status, commits, lang="zh", canonical_url=None):
         title_html = (f'<a class="play" href="/{slug}/">{name}</a>' if linked
                       else name)
 
-        meta_bits = []
-        admin_id, admin_pw = parse_admin(slug)
-        if admin_id:
-            if admin_pw:
-                cred = f"{admin_id} / {admin_pw}"
-            elif admin_pw == "":
-                cred = f"{admin_id}({ui['admin_nopw']})"
-            else:
-                cred = f"{admin_id}({ui['admin_pw_readme']})"
-            meta_bits.append(
-                f'<span class="admin" title="{ui["admin_title"]}">'
-                f'🔑 {html.escape(cred)}</span>')
-        entry = commits.get(slug)
-        if entry:
-            short = html.escape(entry["sha"][:7])
-            day = html.escape(entry.get("date", "")[:10])
-            meta_bits.append(
-                f'<span>{ui["updated_label"]} <a href="{REPO_URL}/commit/'
-                f'{html.escape(entry["sha"])}" title="{ui["commit_title"]}"'
-                f'>{short}</a> {day}</span>')
-        meta_bits.append(
-            f'<a href="{REPO_URL}/tree/main/libs/{html.escape(slug)}" '
-            f'title="{ui["source_title"]}">{ui["source_label"]}</a>')
-        if linked:
-            meta_bits.append(
-                f'<a href="{RELEASE_ZIPS_URL}/{html.escape(slug)}.zip" '
-                f'title="{ui["download_title"]}">{ui["download_label"]}</a>')
+        meta_bits, admin_id = build_meta_bits(slug, info, ui, commits, linked)
         meta_html = ('<p class="meta">' + "\n    ".join(meta_bits) + '</p>')
 
         # Search should cover every field a visitor might type, not just the
@@ -926,6 +1202,23 @@ def main():
         render_index(status, commits, lang="zh",
                      canonical_url=f"{SITE_URL}/"),
         encoding="utf-8")
+    # Per-lib landing pages (see render_lib_page docstring) -- one per
+    # non-noboot lib, at <out>/<slug>/index.html. build_site.sh's
+    # assembly step copies this alongside the WASM bundle (play.html
+    # etc) that pack_lib_for_web.sh produces under the same slug dir, so
+    # /{slug}/ serves this crawlable page and /{slug}/play.html is the
+    # actual game, reached only via this page's "Play Now" link.
+    n_landing = 0
+    for slug, info in status["libs"].items():
+        if info["status"] == "noboot":
+            continue
+        lib_dir = out_dir / slug
+        lib_dir.mkdir(parents=True, exist_ok=True)
+        (lib_dir / "index.html").write_text(
+            render_lib_page(slug, info, commits), encoding="utf-8")
+        n_landing += 1
+    print(f"per-lib landing pages: {n_landing} written under {out_dir}/<slug>/index.html")
+
     (out_dir / "robots.txt").write_text(render_robots_txt(), encoding="utf-8")
     (out_dir / "sitemap.xml").write_text(render_sitemap_xml(status),
                                           encoding="utf-8")
