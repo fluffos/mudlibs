@@ -1,0 +1,98 @@
+#include "/sys/move_failure.h"
+
+inherit "/basic/simul_efun";
+inherit "/basic/id";
+inherit "/basic/description";
+inherit "/basic/move";
+
+string current_path, current_file;
+
+void create() {
+  set_id(({ "roommaker" }));
+  set_short("A roommaker");
+  set_long("An object that can be used to make rooms.\n");
+}
+
+int move(mixed dest) {
+  int did_move;
+  object ob;
+
+  did_move = move::move(dest);
+  if (did_move != MOVE_OK)
+    return did_move;
+  ob = environment(this_object());
+  if (!interactive(ob))
+    return MOVE_OK;
+  if ((string)ob->query_player_name() != getuid(this_object())) {
+    write("Ok, you now have a roommaker. You can't use it until\n");
+    write("You have given the command 'trust roommaker'\n");
+    seteuid(0);
+  } else {
+    if (!seteuid((string)ob->query_player_name())) {
+      write("Failed to seteuid!\n");
+    }
+  }
+  return MOVE_OK;
+}
+
+void trusted(object by) {
+  if (seteuid((string)by->query_player_name()) == 0)
+    write("Failed to trust.\n");
+  else
+    write("The room maker is ready.\n");
+}
+
+void init() {
+  add_action("make_command", "make");
+}
+
+void get_path() {
+  current_path = (string)this_player()->query_path();
+}
+
+void ask_for_command() {
+  write("command: [lq?] ");
+  input_to("execute_make_command");
+}
+
+int make_command(string path) {
+  if (!path) {
+    notify_fail("Give file name as argument!\n");
+    return 0;
+  }
+  get_path();
+  current_file = (string)this_player()->add_paths(current_path, path);
+  ask_for_command();
+  return 1;
+}
+
+void load_from_file() {
+  mixed ret;
+
+  if (file_size(current_file) <= 0) {
+    write("Not possible.\n");
+    return;
+  }
+  ret = catch(call_other(current_file, "??"));
+  // A genuine pre-existing bug in the original source (confirmed
+  // against the raw archive bytes, not conversion damage): the
+  // `if` here had no body at all, immediately followed by the
+  // function's own closing brace -- a hard syntax error. Completed
+  // with the same "report the catch() failure" idiom this file's
+  // own secure/master.lpc uses for the identical
+  // catch(call_other(...)) pattern. See AGENTS.md §6.6.
+  if (ret != 0)
+    write("Failed to load: " + ret + "\n");
+}
+
+void execute_make_command(string str) {
+  if (str == "q")
+    return;
+  if (str == "?") {
+    write("?	This help.\n");
+    write("l	Load from file.\n");
+    write("q	Quit.\n");
+  } else if (str == "l")
+    load_from_file();
+  ask_for_command();
+}

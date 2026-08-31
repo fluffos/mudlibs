@@ -1,0 +1,89 @@
+#include "config.h"
+#include "move_failure.h"
+
+/*
+ * Enable moving of this object.
+ */
+
+private int encumbrance;
+
+/*
+ * The argument 'dest' is either a string or an object.
+ */
+int move(mixed dest) {
+  object ob;
+
+  if (stringp(dest)) {
+    if (MAP_OBJECT(dest)) {
+      ob = (object)MASTER_OB->create_map_object(dest);
+    } else {
+      call_other(dest, "??");
+      ob = find_object(dest);
+    }
+  } else
+    ob = dest;
+
+  if (!dest->receive_objects())
+    return MOVE_NOT_ALLOWED;
+
+  if ((int)dest->exit(this_object()))
+    return MOVE_NOT_ALLOWED;
+
+  if (living(this_object()) && living(ob))
+    return MOVE_NOT_ALLOWED;
+
+  if (!dest->add_encumbrance(encumbrance))
+    return MOVE_NO_ROOM;
+
+  if (environment(this_object()))
+    environment(this_object())->add_encumbrance(-encumbrance);
+  // This driver's move_object() efun is 1-argument (moves
+  // this_object() only); the old 2-arg form's first argument was
+  // always this_object() here anyway. See AGENTS.md §6.2.
+  efun::move_object(ob);
+  return MOVE_OK;
+}
+
+void set_encumbrance(int enc) {
+  encumbrance = enc;
+}
+
+int query_encumbrance() {
+  return encumbrance;
+}
+
+/*
+ * To destruct objects, call 'remove()' in the object. The default here
+ * is to allow destruction and update encumbrance.
+ * All objects inside this object is also moved to the "outside" (if any).
+ */
+void remove() {
+  object super;
+  int i;
+  object *ob_list;
+
+  super = environment(this_object());
+  if (super) {
+    super->add_encumbrance(-encumbrance);
+    ob_list = all_inventory(this_object());
+    for (i = 0; i < sizeof(ob_list); i++)
+      ob_list[i]->move(super);
+  }
+  destruct(this_object());
+}
+
+/*
+ * move_object(dest): this driver's move_object() efun is 1-argument
+ * (moves this_object() only) -- unlike the classic 2-argument
+ * move_object(item, dest)/transfer(item, dest) this archive was
+ * written for. basic/player/trace.lpc's wizard tracer tools rewrite
+ * those old calls to `item->move_object(dest)`, which requires the
+ * target to define its own move_object(dest) lfun (this driver's
+ * call_other() never falls back to a same-named efun on a miss).
+ * Added here, on the shared "movable object" base every real
+ * clonable item/player inherits, rather than duplicated per-file.
+ * Not part of the original archive. See AGENTS.md §7.158.
+ */
+int move_object(mixed dest) {
+  return efun::move_object(dest);
+}

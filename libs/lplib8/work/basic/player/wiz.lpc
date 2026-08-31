@@ -1,0 +1,534 @@
+#include "config.h"
+#include "move_failure.h"
+
+private string current_path;
+private int is_invis;
+private string mmsgout, mmsgin, msgout, msgin;
+
+/*
+ * Export functions.
+ */
+int query_invis() {
+  return is_invis;
+}
+
+/*
+ * Take an absolute path name and add a relative.
+ */
+string add_paths(string p1, string p2) {
+  string *comp1, *comp2;
+  int i;
+
+  if (p2[0] == '/')
+    return p2;
+  comp1 = explode(p1, "/");
+  comp2 = explode(p2, "/");
+  for (i = 0; i < sizeof(comp2); i++) {
+    if (comp2[i] == "..") {
+      comp1 = slice_array(comp1, 0, sizeof(comp1) - 2);
+      if (comp1 == 0)
+        comp1 = ({});
+      continue;
+    }
+    comp1 += ({ comp2[i] });
+  }
+  return "/" + implode(comp1, "/");
+}
+
+nosave wiz_commands2() {
+  add_action("trust_command", "trust");
+  add_action("makedir", "mkdir");
+  add_action("removedir", "rmdir");
+  add_action("pwd", "pwd");
+  add_action("more", "more");
+  add_action("echo_to", "echoto");
+  add_action("echo", "echo");
+  add_action("echo_all", "echoall");
+  add_action("home", "home");
+  add_action("remove_file", "rm");
+  add_action("list_files", "ls");
+  add_action("cat_file", "cat");
+  add_action("edit", "ed");
+  add_action("clone", "clone");
+  add_action("destruct_local_object", "destruct");
+  add_action("load", "load");
+  add_action("tail_file", "tail");
+  add_action("cd", "cd");
+  add_action("Dump", "Dump");
+  add_action("Destruct", "Destruct");
+  add_action("Call", "Call");
+  add_action("Tell", "Tell");
+  add_action("Trans", "Trans");
+  add_action("Set", "Set");
+  add_action("Goto", "Goto");
+  add_action("In", "In");
+  add_action("Clean", "Clean");
+  add_action("man", "man");
+}
+
+nosave wiz_commands() {
+  add_action("local_commands", "localcmd");
+  add_action("wiz_score_list", "wizlist");
+  add_action("force_player", "force");
+  add_action("stat", "stat");
+  add_action("heal", "heal");
+  add_action("set_title", "title");
+  add_action("emote", "emote");
+  add_action("list_peoples", "people");
+  add_action("setmmin", "setmmin");
+  add_action("setmmout", "setmmout");
+  add_action("setmin", "setmin");
+  add_action("setmout", "setmout");
+  add_action("review", "review");
+  add_action("shut_down_game", "shutdown");
+  add_action("snoop_on", "snoop");
+  add_action("invis", "invis");
+  add_action("vis", "vis");
+}
+
+nosave echo_all(str) {
+  if (!str) {
+    write("Echoall what?\n");
+    return 1;
+  }
+  SHOUT(str + "\n");
+  write("You echo: " + str + "\n");
+  return 1;
+}
+
+nosave echo(str) {
+  if (!str) {
+    write("Echo what?\n");
+    return 1;
+  }
+  say(str + "\n");
+  write("You echo: " + str + "\n");
+  return 1;
+}
+
+nosave echo_to(str) {
+  object ob;
+  string who;
+  string msg;
+  if (!str || sscanf(str, "%s %s", who, msg) != 2) {
+    write("Echoto what ?\n");
+    return 1;
+  }
+  ob = find_living(lower_case(who));
+  if (!ob) {
+    write("No player with that name.\n");
+    return 1;
+  }
+  tell_object(ob, msg + "\n");
+  write("You echo: " + msg + "\n");
+  return 1;
+}
+
+nosave emote(str) {
+  if (!str) {
+    write("emote what ?\n");
+    return 1;
+  }
+  say((string)this_object()->query_player_cap_name() + " " + str + "\n");
+  write("Ok.\n");
+  return 1;
+}
+
+tail_file(path) {
+  if (!path)
+    return 0;
+  if (!tail(add_paths(current_path, path)))
+    return 0;
+  return 1;
+}
+
+cat_file(path) {
+  if (!path)
+    return 0;
+  if (!cat(add_paths(current_path, path)))
+    write("No such file.\n");
+  return 1;
+}
+
+nosave int list_files(string path) {
+  if (!path)
+    path = current_path;
+  else
+    path = add_paths(current_path, path);
+  if (path != "/")
+    path = path + "/.";
+  ls(path);
+  return 1;
+}
+
+list_peoples() {
+  object list;
+  int i, a;
+
+  list = users();
+  write("There are now " + sizeof(list) + " players");
+  for (i = 0, a = 0; i < sizeof(list); i++)
+    if (query_idle(list[i]) >= 5 * 60)
+      a++;
+  if (a)
+    write(" (" + (sizeof(list) - a) + " active)");
+  write(". " + query_load_average() + "\n");
+  for (i = 0; i < sizeof(list); i++) {
+    string name;
+    name = list[i]->query_player_name();
+    if (!name)
+      name = "logon";
+    name = capitalize(name);
+    if (list[i]->short() == 0)
+      name = "(" + name + ")";
+    if (strlen(name) < 8)
+      name = name + "\t";
+    write(query_ip_number(list[i]) + "\t" + name + "\t" +
+      list[i]->query_level() + "\t");
+    a = list[i]->query_age();
+    if (a / 86400 > 9)
+      write(a / 86400 + " D");
+    else if (a / 86400 > 0)
+      write(a / 86400 + "  D");
+    else if (a / 3600 > 9)
+      write(a / 3600 + " h");
+    else if (a / 3600 > 0)
+      write(a / 3600 + "  h");
+    else if (a / 60 > 9)
+      write(a / 60 + " m");
+    else
+      write(a / 60 + "  m");
+    if (query_idle(list[i]) >= 5 * 60)
+      write(" I\t");
+    else
+      write("\t");
+    if (environment(list[i]))
+      write(file_name(environment(list[i])));
+    write("\n");
+  }
+  return 1;
+}
+
+nosave int edit(string file) {
+  string tmp_file;
+  if (!file) {
+    ed();
+    return 1;
+  }
+  ed(add_paths(current_path, file));
+  return 1;
+}
+
+nosave heal(name) {
+  object ob;
+
+  if (!name)
+    return 0;
+  ob = find_living(lower_case(name));
+  if (!ob) {
+    write("No such person is playing now.\n");
+    return 1;
+  }
+  call_other(ob, "heal_self", 100000);
+  tell_object(ob, "You are healed by " +
+    (string)this_object()->query_player_cap_name() + ".\n");
+  write("Ok.\n");
+  return 1;
+}
+
+nosave stat(name) {
+  object ob;
+
+  if (!name)
+    return 0;
+  ob = present(lower_case(name), environment());
+  if (!ob || !living(ob))
+    ob = find_living(lower_case(name));
+  if (!ob) {
+    write("No such person is playing now.\n");
+    return 1;
+  }
+  call_other(ob, "show_stats", 0);
+  return 1;
+}
+
+nosave shut_down_game(str) {
+  if (!str) {
+    write("You must give a shutdown reason as argument.\n");
+    return 1;
+  }
+  shout("Game is shut down by " +
+    (string)this_object()->query_player_cap_name() + ".\n");
+#ifdef LOG_SHUTDOWN
+  log_file("GAME_LOG", ctime(time()) + " Game shutdown by " +
+    (string)this_object()->query_player_cap_name() +
+    "(" + str + ")\n");
+#endif
+  shutdown();
+  return 1;
+}
+
+nosave int force_player(string str) {
+  string who, what;
+  object ob;
+  if (!str)
+    return 0;
+  if (sscanf(str, "%s to %s", who, what) == 2 ||
+    sscanf(str, "%s %s", who, what) == 2) {
+    ob = find_living(who);
+    if (!ob) {
+      write("No such player.\n");
+      return 1;
+    }
+    tell_object(ob, (string)this_object()->query_player_cap_name()
+      + " force you to: " + what + "\n");
+    ob->force_me(what);
+    write("Ok.\n");
+    return 1;
+  }
+  return 0;
+}
+
+int clone(string str) {
+  object ob;
+  mixed res;
+
+  if (!str) {
+    write("Clone what object ?\n");
+    return 1;
+  }
+  str = add_paths(current_path, str);
+  res = catch(ob = clone_object(str));
+  if (res != 0) {
+    write(res + " file: '" + str + "'\n");
+    return 1;
+  }
+  say((string)this_object()->query_player_cap_name() +
+    " fetches something from another dimension.\n");
+  if (ob->move(this_player()) != MOVE_OK)
+    ob->move(environment(this_player()));
+  write("Ok.\n");
+  return 1;
+}
+
+nosave int load(string str) {
+  object env;
+  if (!str) {
+    write("Load what ?\n");
+    return 1;
+  }
+  str = add_paths(current_path, str);
+  env = environment();
+  /* We just call a non existing function in the object, and that way
+     * force it to be loaded.
+     */
+  call_other(str, "???");
+  write("Ok.\n");
+  return 1;
+}
+
+nosave int snoop_on(string str) {
+  object ob;
+  int ob_level;
+
+  if (!str) {
+    // This driver's snoop() efun requires at least the 'snooper'
+    // argument (the 1-arg form stops all snooping BY that snooper);
+    // the old bare 0-arg call assumed this_player() implicitly.
+    // See AGENTS.md §6.2.
+    snoop(this_player());
+    return 1;
+  }
+  ob = find_player(str);
+  if (!ob) {
+    write("No such player.\n");
+    return 1;
+  }
+  ob_level = (int)call_other(ob, "query_level");
+#if 0
+  if (ob_level >= level) {
+    write("You fail.\n");
+    return 1;
+  }
+#endif
+  // 2-arg form: snoop(snooper, snoopee) -- starts snooping. The
+  // original single-arg `snoop(ob)` would have (per this driver's
+  // semantics) stopped snooping BY ob instead. See AGENTS.md §6.2.
+  snoop(this_player(), ob);
+  return 1;
+}
+
+int invis() {
+  if (is_invis) {
+    tell_object(this_object(), "You are already invisible.\n");
+    return 1;
+  }
+  is_invis = 1;
+  tell_object(this_object(), "You are now invisible.\n");
+  say((string)this_object()->query_player_cap_name() +
+    " " + mmsgout + ".\n", this_object());
+  this_object()->set_short(0);
+  return 1;
+}
+
+int vis() {
+  if (!is_invis) {
+    tell_object(this_object(), "You are not invisible.\n");
+    return 1;
+  }
+  is_invis = 0;
+  tell_object(this_object(), "You are now visible.\n");
+  say((string)this_player()->query_player_cap_name() +
+    " " + mmsgin + ".\n", this_object());
+  this_object()->set_short((string)this_player()->query_player_cap_name());
+  return 1;
+}
+
+nosave int home() {
+  this_object()->move_player("players/" +
+    (string)this_player()->query_player_name() +
+    "/workroom",
+    "leaves for home.\n");
+  return 1;
+}
+
+nosave int wiz_score_list(string arg) {
+  if (arg)
+    wizlist(arg);
+  else
+    wizlist();
+  return 1;
+}
+
+nosave int remove_file(string str) {
+  if (!str)
+    return 0;
+  rm(str);
+  return 1;
+}
+
+nosave int local_commands() {
+  localcmd();
+  return 1;
+}
+
+nosave int cd(string str) {
+  string old_path;
+
+  if (!str)
+    current_path = "/w/" + (string)this_player()->query_player_name();
+
+  else
+    current_path = add_paths(current_path, str);
+  write(current_path + "\n");
+  return 1;
+}
+
+#define CHUNK 16
+
+nosave private string more_file; /* Used by the more command */ nosave private int more_line;
+
+int more(string str) {
+  if (!str)
+    return 0;
+  more_file = str;
+  more_line = 1;
+  if (cat(more_file, more_line, CHUNK) == 0) {
+    write("No such file\n");
+    return 1;
+  }
+  input_to("even_more");
+  write("More: (line " + (CHUNK + 1) + ") ");
+  return 1;
+}
+
+nosave void even_more(string str) {
+  if (str == "" || str == "d")
+    more_line += CHUNK;
+  else if (str == "q") {
+    write("Ok.\n");
+    return;
+  } else if (str == "u") {
+    more_line -= CHUNK;
+    if (more_line < 1)
+      more_line = 1;
+  }
+  if (cat(more_file, more_line, CHUNK) == 0) {
+    more_file = 0;
+    write("EOF\n");
+    return;
+  }
+  write("More: (line " + (more_line + CHUNK) + ") ");
+  input_to("even_more");
+}
+
+int pwd() {
+  write(current_path + "\n");
+  return 1;
+}
+
+int makedir(string str) {
+  if (!str)
+    return 0;
+  if (mkdir(str))
+    write("Ok.\n");
+  else
+    write("Fail.\n");
+  return 1;
+}
+
+int removedir(string str) {
+  if (!str)
+    return 0;
+  if (rmdir(str))
+    write("Ok.\n");
+  else
+    write("Fail.\n");
+  return 1;
+}
+
+string query_path() {
+  return current_path;
+}
+
+/* Some functions to set moving messages. */
+
+int setmout(string m) { msgout = m; return 1; }
+int setmin(string m) { msgin = m; return 1; }
+int setmmout(string m) { mmsgout = m; return 1; }
+int setmmin(string m) { mmsgin = m; return 1; }
+
+int review() {
+  write("mout:\t" + msgout +
+    "\nmin:\t" + msgin +
+    "\nmmout:\t" + mmsgout +
+    "\nmmin:\t" + mmsgin + "\n");
+  return 1;
+}
+
+string query_msgin() { return msgin; }
+string query_msgout() { return msgout; }
+string query_mmsgin() { return mmsgin; }
+string query_mmsgout() { return mmsgout; }
+
+nosave void init_current_path(string name) {
+  current_path = "/players/" + name;
+}
+
+nosave int trust_command(string what) {
+  object ob;
+
+  if (what == 0)
+    return 0;
+  ob = present(what, this_player());
+  if (ob == 0)
+    ob = present(what, environment(this_player()));
+  if (ob == 0)
+    return 0;
+  if (export_uid(ob) == 0) {
+    notify_fail("The object did not want to be trusted by you.\n");
+    return 0;
+  }
+  ob->trusted(this_object());
+  return 1;
+}

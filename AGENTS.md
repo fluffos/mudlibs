@@ -1486,6 +1486,30 @@ cause, fix, detection, known-affected lineages.
 - **`extract(str, start[, end])`** — classic MudOS substring-by-range
   efun (2- and 3-arg forms, `end` omitted meaning "to end of string").
   Reimplement as a simul_efun over `str[start..end]` slicing.
+  **Known blind spot in this exact reimplementation**: a `varargs`
+  simul_efun can't tell an OMITTED `end` from an EXPLICIT `end == 0`
+  (LPC coerces a missing argument to plain `int` `0`, identical to a
+  real `0`) — a genuine 3-arg call meaning "just the character at
+  index `start`" (`extract(name, 0, 0)`, seen bucketing save files by
+  first letter on `lplib8`) silently gets the 2-arg "to end of
+  string" behavior instead, with no error of any kind. This can't be
+  fixed in the shared shim (it's a real, unresolvable ambiguity, not
+  a bug in the shim's logic) — fix each affected CALL SITE by
+  rewriting with direct range slicing (`str[start..start]`) instead
+  of relying on `extract()`'s 3-arg form when `end` might legitimately
+  be `0`.
+- **`version()`** — classic MudOS efun, the driver's own version
+  string. Reimplement as `"FluffOS " + __VERSION__` (a predefined
+  macro this driver already provides). (`lplib8`.)
+- **`wizlist([name])`** — classic MudOS efun printing the `/WIZLIST`
+  file's contents. Reimplement as `cat("/WIZLIST")` (the optional
+  name-filter argument is rarely relied on and can usually be
+  ignored). (`lplib8`.)
+- **`localcmd()`** — classic MudOS efun listing commands currently
+  available to `this_object()`/`this_player()`. Reimplement via this
+  driver's real `commands()` efun, whose 4-item-per-row shape (verb,
+  flags, defining object, function) still covers the same
+  information. (`lplib8`.)
 - **`log_file(file, str)`** — classic MudOS efun appending `str` to a
   file under the mudlib's own log directory. Reimplement as
   `write_file(LOG_DIR + "/" + file, str)` (or whatever the lib's own
@@ -13464,6 +13488,66 @@ mudlib) needs all three applies stubbed together;
 boot into a genuinely usable state. A flat single-owner stub (e.g.
 `return "ROOT";`) is sufficient when the archive has no real per-
 wizard domain-crediting concept left to preserve.
+
+### 7.176 This driver's `valid_write()`/`valid_read()` master applies pass the CALLING OBJECT ITSELF as their 2nd argument, not a euid STRING the way the classic MudOS/LPmud-3.0 driver these archives targeted did — a `master.lpc` that still declares that parameter `string eff_user` gets an object silently flowing into it, and every uid-string comparison in the mudlib's own security code becomes permanently, silently false
+
+Confirmed directly in the driver source:
+`packages/core/file.cc`'s `check_valid_path()` does
+`push_object(call_object); push_constant_string(call_fun); ...
+safe_apply_master_ob(APPLY_VALID_WRITE, 3)` — the second argument
+pushed onto the stack for `valid_write(file, ??, func)` is the actual
+calling `object_t*`, never a euid string. A classic-MudOS-sourced
+`master.lpc` (the whole point of `secure/master.lpc`-style
+`valid_write`/`valid_read` implementations, going back to the
+original LPmud driver line) declares this parameter `string
+eff_user` and immediately compares it against uid strings throughout
+(`eff_user == get_root_uid()`, domain-membership lookups, etc.) — LPC's
+dynamic/weak parameter typing means passing an object where a
+`string`-declared parameter is expected produces no runtime error at
+all; the variable just silently holds an object value, and every `==`
+comparison against a string constant is unconditionally false. The
+result: every file-permission check the mudlib's own logic THINKS
+it's doing correctly is actually a no-op that always denies (falling
+through to whatever the function's final `return 0;` is), regardless
+of who the real caller is or what uid they have.
+
+Confirmed on `lplib8` with a devastating blast radius: this broke
+EVERY player's very first character save
+(`*Denied write permission in save_object()`) and every subsequent
+login's restore attempt (`*restore_object: read permission denied`),
+i.e. the entire save/restore subsystem, for every single player,
+permanently — with the only visible symptom being those two bare
+driver-level permission error messages (fully logged to `debug.log`
+including a complete stack trace, per §7.171's related finding, but
+giving zero hint that the actual root cause was a parameter-type
+mismatch rather than a missing ACL allowlist entry). Diagnosed by
+temporarily adding (or, as here, un-`#if 0`-ing an already-present but
+disabled debug line the ORIGINAL author had left in exactly for this
+purpose) a `write()`/`efun::write()` printing the raw 2nd argument —
+seeing `/obj/player#1` (an object reference) print where a uid string
+like `"lars"` was expected is the unambiguous tell.
+
+**Fix**: convert the object to its real uid string at the very top of
+both `valid_write()` and `valid_read()` (and anywhere else in the
+same `master.lpc` that receives this parameter, e.g. if `valid_read()`
+does its own additional checks beyond delegating to `valid_write()`):
+
+```lpc
+if (objectp(eff_user))
+    eff_user = geteuid(eff_user) || getuid(eff_user);
+```
+
+This is purely additive and safe regardless of what convention the
+rest of the file assumes — a string argument passes through
+`objectp()` as false and is left untouched. **Any archive whose
+`master.lpc` still declares `valid_write`/`valid_read`'s 2nd
+parameter as `string` rather than `object`/`mixed` should be treated
+as suspect for this bug even if it doesn't immediately fail to boot**
+(this class doesn't block compilation or booting at all — the mudlib
+compiles clean and the game world loads fine; it only surfaces once
+something actually tries to write or read a file gated by a
+non-root/non-open-directory rule, which for most mudlibs means the
+very first player save).
 
 ---
 

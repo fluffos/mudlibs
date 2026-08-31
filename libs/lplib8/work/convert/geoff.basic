@@ -1,0 +1,176 @@
+Path: mathrt0.math.chalmers.se!chalmers.se!sunic!mcsun!uunet!spool.mu.edu!munnari.oz.au!bruce!dec15!geoff
+From: geoff@dec15.cs.monash.edu.au (Geoff Wong)
+Newsgroups: alt.mud.lp
+Subject: LPC source: Simple player ownable homes.
+Message-ID: <geoff.680424490@dec15>
+Date: 25 Jul 91 06:48:10 GMT
+Sender: news@bruce.cs.monash.OZ.AU
+Lines: 167
+
+Ok - it seems some people are posting so I'll post some more :-)
+Below is a file which is not very interesting in itself is
+inheritable by another of my creations which I'll also post.
+It is simple a file which allows the player to "own" it and
+set the descriptions etc. If your mud doesn't automatically
+save objects don't worry about it too much; if it doesn't
+save arrays then mail me and I'll post you a copy of object.c with
+the appropriate code.
+
+(Sorry I don't package things up; but that would be like effort :-)
+
+geoff
+-----
+
+/* 
+   Dredd's Player Homes.
+
+   Ownable/tradable player homes. A player who purchases a home
+   will start up in his home (if he quits there).
+*/
+
+#include "wiz_dec.h"
+		/* boring; you can execute this and the line with WIZ_DEC */
+inherit "room/door";	/* You can make this room/room and use your own doors */
+
+string owner, 		/* owner's name */
+       inventory;	/* inventory of saved objects */
+
+static string new_long;
+
+reset(arg) {
+int i,x;
+	if (arg) return;
+	if (restore_object(file_name(this_object())) && inventory) {
+		x = sizeof(inventory);
+		for (i =0; i < x; i++) 
+			if (inventory[i]) move_object(inventory[i], this_object());
+		
+	}
+}
+
+init() {
+	add_action("quit", "quit");
+	if (this_player()->query_real_name() == owner) {
+		add_action("describe", "outfit");
+		add_action("title", "name");
+		add_action("owner", "owner");
+		add_action("home", "home");
+		add_action("help", "help");
+	}
+	::init();
+}
+
+query_owner() { return owner; }
+
+home(str) {
+	this_player()->set_home(file_name(this_object()));
+	write("This location is your starting home.\n");
+	return 1;
+}
+
+title(str) {
+	if (str == 0) str = short_desc;
+	short_desc = str;
+	if (this_player()) write("You home's current name is : "+str+"\n");
+	return 1;
+}
+
+describe(str) {
+	if (str != "home" && str != "pub" ) return 0;
+	new_long = 0;
+	write("Enter a new description of your home.\n");
+	write("Enter '**' to complete the description.\n");
+	input_to("describe2");
+	return 1;
+}
+
+describe2(str) /* allow players to set the short & long_desc of there home */
+{
+#ifdef 0
+    if (str == "") {
+	write("Aborted.\n");
+	return;
+    }
+#endif
+    if (str == "**") {
+	write("Description completed.\n");
+	long_desc = new_long;
+	new_long = 0;
+	return 1;
+    }
+    if (new_long)
+	new_long = new_long + str + "\n";
+    else
+	new_long = str + "\n";
+    input_to("describe2");
+}
+
+query_sell() { return 1; }
+
+update() {
+	save_object(file_name(this_object()));
+}
+
+/* nasty kludge so players home saves when they quit;
+   relies on a dubious LPC feature. */
+quit(str) {
+	update();
+	return 0;
+}
+
+set_owner(str) {
+	owner = str;
+	return 1;
+}
+
+/*
+   Allow players to change the owner of the house
+   Really ugly stuff; probably should be sold back to the real-estate agent.
+*/
+owner(str) 
+{
+/* for player trading */
+object tmpp, ky, ob;
+string kc;
+	tmpp = find_player(str);
+	if (!tmpp) {
+		write("A player must be logged on to receive ownership!\n");
+		return 1;
+	}
+	owner = str;
+	write(capitalize(str) + " is now the owner of this home.\n");
+	tell_object(tmpp, "You're now the proud owner of "+short_desc+".\n");
+/* find the key and transfer it - if it's available. */
+	tmpp->set_home(file_name(this_object()));
+	kc = this_object()->query_key_code();
+	if (kc) {
+		ob = first_inventory(this_player());
+		while (ob) {
+			if (ob->query_code() == kc) ky = ob;
+			ob = next_inventory(ob);
+		}
+		if (ky) move_object(ky, tmpp);
+	}
+	this_player()->set_home(0);
+	return 1;
+}
+
+
+help(str) {
+	if (str != "home") return 0;
+	write("Commands available :\n\toutfit home -- set the 'long' desciption of your home.\n\t");
+	write("name <name> -- name your home, appears on the 'brief' description.\n\t");
+	write("home -- set your starting home to this location.\n\t");
+	write("owner <new owner> -- for selling a home to another player - remember the key!\n\thelp home -- prints this page.\n");
+	return 1;
+}
+
+exit() {
+int i, x;
+	/* contents == all_inventory on lars's new versions. */
+	inventory = contents(this_object());
+	x = sizeof(inventory);
+	for (i = 0; i < x; i ++) if (living(inventory[i])) inventory[i] = 0;
+	/* special hack so our 2 muds don't stuff each other up :-) */
+	if (query_host_name() != WIZ_DEC) save_object(file_name(this_object()));
+}

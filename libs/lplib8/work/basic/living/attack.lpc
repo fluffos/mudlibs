@@ -1,0 +1,201 @@
+#include <config.h>
+#include <stats.h>
+
+private int hp; /* The hit point of the character */ private int exp; /* The experience points of the character */ private nosave int current_skill;
+private nosave object weapon; /* The weapon used for fighting. */ private nosave object *attackers; /* List of objects we are trying to kill */ private nosave int any_attack;    /* Are we in fighting mode ? */
+
+
+private void set_hands();
+void unwield(object ob);
+
+/*
+ * Remove dead or nonexisting objects out of the list of attackers.
+ * Return true if still attack going.
+ */
+private int clean_up_attackers() {
+  mixed *attackers_tmp;
+  int i;
+
+  attackers_tmp = ({});
+  for (i = 0; i < sizeof(attackers); i++) {
+    if (attackers[i] == 0 || !living(attackers[i]) ||
+      environment(attackers[i]) != environment(this_object())) {
+      continue;
+    }
+    if ((int)attackers[i]->query_ghost())
+      continue;
+    attackers_tmp += ({ attackers[i] });
+  }
+  attackers = attackers_tmp;
+  if (sizeof(attackers_tmp) == 0)
+    any_attack = 0;
+  return any_attack;
+}
+
+int query_hp() {
+  return hp;
+}
+
+/*
+ * This is the 'kill' command. If the victim is not attacked yet,
+ * then it is entered first into the list of victims. If it is already
+ * in the list, then it is moved first.
+ */
+int kill_command(string str) {
+  object victim;
+  int i;
+
+  if (str == 0) {
+    notify_fail("Kill what ?\n");
+    return 0;
+  }
+  str = lower_case(str);
+  victim = present(str, environment(this_object()));
+  if (!victim) {
+    notify_fail("Attack what ?\n");
+    return 0;
+  }
+  if (victim == this_player())
+    return 0;
+  i = member_array(victim, attackers);
+  if (i >= 0) {
+    if (attackers[0] == victim) {
+      notify_fail("You are already trying to!\n");
+      return 0;
+    }
+    attackers[i] = attackers[0];
+    attackers[0] = victim;
+    write((string)victim->query_short() +
+      " is now your primary target.\n");
+    return 1;
+  }
+  attackers = ({ victim }) + attackers;
+  any_attack = 1;
+  write("Ok.\n");
+  return 1;
+}
+
+/*
+ * Called from heart beat.
+ */
+void continue_attack() {
+  int i, damage, res;
+  string hit_name;
+
+  if (!any_attack)
+    return;
+  if (clean_up_attackers() == 0) {
+    write("The combat is over.\n");
+    return;
+  }
+  i = 0;
+  if (!weapon)
+    set_hands();
+  damage = (int)weapon->compute_damage(current_skill);
+  res = (int)attackers[i]->do_damage(damage, this_object());
+  hit_name = (string)attackers[i]->query_short();
+  if (res > 0) {
+    write("You hit " + res + " points on " + hit_name + ".\n");
+    this_object()->message("hit " + hit_name, "hit you", attackers[i]);
+    /*
+	 * Update the skill the player has in this weapon.
+	 * The call is slightly expensive. Don't do it every time.
+	 */
+    if (random(10) == 0)
+      weapon->reward_usage(this_object(), 10);
+  } else {
+    write("You miss " + hit_name + ".\n");
+    this_object()->message("miss " + hit_name, "miss you", attackers[i]);
+  }
+}
+
+private void update_current_skill() {
+  current_skill = (int)this_object()->compute_total_skill(weapon->query_skill());
+}
+
+int wield_command(string str) {
+  object ob;
+
+  ob = present(str, this_object());
+  if (!ob) {
+    notify_fail("You have no such thing!\n");
+    return 0;
+  }
+  if (weapon) {
+    weapon->stop_wield();
+    unwield(weapon);
+  }
+  if (!ob->do_wield()) {
+    notify_fail("You can't wield that!\n");
+    return 0;
+  }
+  weapon = ob;
+  update_current_skill();
+  write("Ok.\n");
+  return 1;
+}
+
+private void set_hands() {
+  weapon = this_object();
+  weapon->init_weapon_data(({ "skill", "offensive", "hands" }),
+    ({ STAT_STR, STAT_STR, STAT_DEX, STAT_CON }),
+    3, 20, LEARNING_1);
+  weapon->do_wield();
+  update_current_skill();
+}
+
+void init_attack_data() {
+  attackers = ({});
+  set_hands();
+  hp = 100;
+}
+
+/*
+ * Called by the weapon itself.
+ */
+void unwield(object ob) {
+  if (ob == weapon) {
+    if (ob != this_object())
+      write("You are no longer wielding " + (string)ob->query_short() +
+        ".\n");
+    return;
+  }
+  write("Tried to remove weapon not wielded: " +
+    (string)ob->query_short() + ".\n");
+}
+
+string *query_skill_path() {
+  if (weapon)
+    return (string *)weapon->query_skill();
+  else
+    return ({ "skill", "offensive", "hands" });
+}
+
+/*
+ * Do some damage on ourself.
+ */
+int do_damage(int damage, object agressor) {
+  if (member_array(agressor, attackers) == -1) {
+    attackers += ({ agressor });
+    tell_object(this_object(), "Adding " +
+      (string)agressor->query_player_name() + "\n");
+    any_attack = 1;
+  }
+  if (damage > hp) {
+    damage -= hp;
+    hp = -1;
+    this_object()->die();
+    return damage;
+  }
+  hp -= damage;
+  return damage;
+}
+
+void cease_all_attacks() {
+  attackers = ({});
+  any_attack = 0;
+}
+
+object query_wielded_weapon() {
+  return weapon;
+}

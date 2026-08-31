@@ -1,0 +1,102 @@
+#include <stats.h>
+
+inherit "/complex/room";
+
+int hedge_cut;
+
+void reset() {
+  hedge_cut = 0;
+  /* Make sure a knife exists ! */
+  "/room/start"->reset();
+}
+
+void create() {
+  set_short("A green lawn");
+  set_long("You are standing on a big green lawn.\n" +
+    "There is a hedge to the west and north.\n");
+  set_exits(({ "/room/start3", "/room/start2" }),
+    ({ "east", "south" }));
+  set_item_descriptions(({ "hedge", "lawn" }),
+    ({ "The hedge looks thin.\n",
+      "Sort of green.\n" }));
+  set_light(1);
+  reset();
+}
+
+void init() {
+  add_action("north", "north");
+  add_action("cut_command", "cut");
+  room::init();
+}
+
+int cut_command(string str) {
+  string with, *skill;
+  object ob;
+
+  if (str == 0) {
+    notify_fail("Cut what ?\n");
+    return 0;
+  }
+  str = lower_case(str);
+  if (sscanf(str, "hedge with %s", with) == 1) {
+    ob = present(with, this_player());
+    if (!ob) {
+      notify_fail("A sharp weapon would be better.\n");
+      return 0;
+    }
+  } else {
+    if (str != "hedge") {
+      notify_fail("Cut what ?\n");
+      return 0;
+    }
+    ob = (object)this_player()->query_wielded_weapon();
+  }
+  /*
+     * Here comes a test that it is the correct weapon type.
+     * This will probably be a common test, and should be moved
+     * into master.c, or defined in simul_efun.c.
+     */
+  skill = (string *)ob->query_skill();
+  if (!pointerp(skill) || sizeof(skill) < 2 || skill[0] != "skill") {
+    notify_fail("You can't use that!\n");
+    return 0;
+  }
+  if (sizeof(skill) < 3 || skill[1] != "offensive") {
+    notify_fail("An offensive weapon would be better.\n");
+    return 0;
+  }
+  if (sizeof(skill) < 4 || skill[2] != "sharp") {
+    notify_fail("A sharp weapon would be better!\n");
+    return 0;
+  }
+  if ((int)ob->query_wield() == 0) {
+    notify_fail("You are not wielding it !\n");
+    return 0;
+  }
+  if (hedge_cut >= 2) {
+    notify_fail("You fail to enlarge the hole in the hedge.\n");
+    return 0;
+  }
+  hedge_cut++;
+  if (hedge_cut == 2) {
+    write("You have made a big hole to the north in the hedge !\n");
+    set_one_item_descr("hedge",
+      "There is a big hole to the north in the hedge!\n");
+    return 1;
+  }
+  write("You have made a small hole to the north in the hedge !\n");
+  set_one_item_descr("hedge",
+    "There is a small hole to the north in the hedge!\n");
+  return 1;
+}
+
+int north() {
+  if (hedge_cut == 0)
+    return 0;
+  if (hedge_cut == 1) {
+    notify_fail("You can't pass through the small hole in the dense!\n");
+    return 0;
+  }
+  this_player()->move_player("/room/map/m0_0");
+  return 1;
+}

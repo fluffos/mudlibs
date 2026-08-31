@@ -1,0 +1,124 @@
+#include "config.h"
+
+inherit "/basic/description";
+inherit "/basic/container";
+
+private string *exit_list; /* List of rooms. */ private string *command_list; /* Matching list of commands. */ private string *move_hooks; /* Matching optional list of hooks, called
+				   before moving player. */ private string *item_names; /* Names of specific items in the room. */ private string *item_descriptions; /* Description of items in the rooms. */
+
+void set_exits(string *new_exit_list, string *new_command_list) {
+  string name;
+  exit_list = new_exit_list;
+  command_list = new_command_list;
+  name = (string)MASTER_OB->creator_file(file_name(this_object()));
+  if (seteuid(name) == 0) {
+    write("Failed to seteuid to " + name + "\n");
+  }
+}
+
+void set_move_hooks(string *hooks) {
+  move_hooks = hooks;
+}
+
+void init() {
+  int i;
+
+  if (!command_list)
+    return;
+  for (i = 0; i < sizeof(command_list); i++)
+    add_action("room_command", command_list[i]);
+}
+
+int room_command(string str) {
+  int i;
+
+  i = member_array(query_verb(), command_list);
+  if (move_hooks && (int)call_other(this_object(), move_hooks[i]))
+    return 1;
+  this_player()->move_player(exit_list[i], "leaves " + command_list[i] +
+    ".\n");
+  return 1;
+}
+
+/*
+ * This one is called when the room is to be destructed.
+ */
+void remove() {
+  int i;
+  object *ob_list;
+
+  ob_list = all_inventory(this_object());
+  for (i = 0; i < sizeof(ob_list); i++)
+    ob_list[i]->move("/room/void");
+  destruct(this_object());
+}
+
+/*
+ * clean_up() will be called just before this room is swapped out.
+ * This will give us a chance to free even more memory.
+ * The default is to actually destruct the room.
+ * If you want a room to remain, you have to redefine clean_up().
+ */
+void clean_up() {
+  if (sizeof(all_inventory(this_object())) > 0)
+    return;
+  if (file_name(this_object()) == "/complex/room")
+    return;
+  write("Selfdestruct room: " + file_name(this_object()) + "\n");
+  remove();
+}
+
+/*
+ * Set up a new list of items and their descriptions.
+ */
+void set_item_descriptions(string *names, string *descr) {
+  item_names = names;
+  item_descriptions = descr;
+}
+
+/*
+ * Add or modify the description of one item.
+ */
+void set_one_item_descr(string name, string descr) {
+  int i;
+  i = member_array(name, item_names);
+  if (i >= 0) {
+    item_descriptions[i] = descr;
+    return;
+  }
+  item_names += ({ name });
+  item_descriptions += ({ descr });
+}
+
+/*
+ * A mechanism to make it possible to describe things in a room
+ */
+int id(string str) {
+  int i;
+
+  if (pointerp(item_names)) {
+    for (i = 0; i < sizeof(item_names); i++) {
+      if (item_names[i] == str)
+        return 1;
+    }
+  }
+  return 0;
+}
+
+string query_long(string str) {
+  int i;
+
+  if (set_light(0) == 0)
+    return "It is dark.\n";
+  if (pointerp(item_names)) {
+    for (i = 0; i < sizeof(item_names); i++) {
+      if (item_names[i] == str)
+        return item_descriptions[i];
+    }
+  }
+  if (pointerp(command_list))
+    str = "    Obvious exits are: " + implode(command_list, ",");
+  else
+    str = "    There are no obvious exits";
+  return description::query_long(0) + str + ".\n";
+}

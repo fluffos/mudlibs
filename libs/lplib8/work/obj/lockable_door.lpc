@@ -1,0 +1,181 @@
+/*
+ *	lockable_door.c
+ *
+ *	Will only open if the door is unlocked.
+ *	Will only unlock if player is carrying correct key.
+ *	Will only lock if the door is closed and player is carrying correct key.
+ */
+#include "lock_logic.h"
+
+inherit "/obj/door";
+
+private object lockdata;
+
+// The original `reset() { door::reset(); }` called a function that
+// genuinely does not exist anywhere in this file's own inherit chain
+// (obj/door.lpc, its parent, defines no reset() of its own either --
+// confirmed by reading both files directly) -- a real, pre-existing
+// bug (calling a phantom parent function), not conversion damage.
+// Removed rather than invented a body for a function that was never
+// real: this driver (like every other object in this archive) simply
+// skips calling reset() when undefined, which is exactly the
+// behavior every sibling door/gateway class already relies on. See
+// AGENTS.md §6.6.
+
+void create() {
+  door::create();
+  set_id(({ "lockable door" }));
+  set_short("An uninitialised lockable door");
+  set_long("This is an uninitialised lockable door.\n");
+}
+
+init() {
+  door::init();
+  add_action("lock", "lock");
+  add_action("unlock", "unlock");
+}
+
+set_lock(object l) {
+  lockdata = l;
+}
+
+query_lock() {
+  return lockdata;
+}
+
+query_short() {
+  string str;
+
+  str = ": No lock data defined!";
+
+  if (lockdata) {
+    if (lockdata->query_is_unlocked()) {
+      str = "(unlocked)";
+    } else {
+      str = "(locked)";
+    };
+  };
+
+  return door::query_short() + " " + str;
+}
+
+/*
+ *	lock
+ *	Accepts commands of the following type:
+ *
+ *	lock [the] oak door 'with' / 'using' [the] silver key
+ */
+lock(str) {
+  int i,
+    success;
+  string rest;
+  object found_door,
+    found_key;
+
+  success = parse_command(str, environment(this_player()), " [the] %o %s ", found_door, rest);
+  if (success && this_object() == found_door) {
+    success = query_door()->query_is_open();
+    if (!success) {
+      /*
+			 * Have we got the right type of key?
+			 */
+      if (!rest) {
+        tell_room(environment(this_object()), "Lock it with what?\n");
+        return 1;
+      };
+      success = parse_command(rest,
+        this_player(),
+        " 'with' / 'using' [the] %o ", found_key);
+
+      if (!success) {
+        tell_room(environment(this_object()), "You haven't got that!\n");
+        return 1;
+      };
+
+      if (query_lock()->query_lock_type() != found_key->query_key_type()) {
+        tell_object(this_player(), "The key won't fit the lock!\n");
+        return 1;
+      };
+      success = lockdata->lock();
+      if (success == LOCKLOGIC_LOCK_LOCKS) {
+        tell_other_room("The door locks!\n");
+        tell_room(environment(this_object()), "The door locks.\n");
+        return 1;
+      } else if (success == LOCKLOGIC_LOCK_ALREADY_LOCKED) {
+        tell_object(this_player(), "The door is already locked!\n");
+        return 1;
+      };
+    } else {
+      tell_object(this_player(), "The door won't lock, it's open!\n");
+      return 1;
+    };
+  };
+  return 0;
+}
+
+
+/*
+ *	unlock
+ *	Accepts commands of the following type:
+ *
+ *	unlock [the] oak door 'with' / 'using' [the] silver key
+ */
+unlock(str) {
+  int i,
+    success;
+  string rest;
+  object found_door,
+    found_key;
+
+  success = parse_command(str, environment(this_player()), " [the] %o %s ", found_door, rest);
+  if (success && this_object() == found_door) {
+    /*
+		 * Have we got the right type of key?
+		 */
+    if (!rest) {
+      tell_room(environment(this_object()), "Unlock it with what?\n");
+      return 1;
+    };
+    success = parse_command(rest,
+      this_player(),
+      " 'with' / 'using' [the] %o ", found_key);
+
+    if (!success) {
+      tell_room(environment(this_object()), "You haven't got that!\n");
+      return 1;
+    };
+
+    if (query_lock()->query_lock_type() != found_key->query_key_type()) {
+      tell_object(this_player(), "The key won't fit the lock!\n");
+      return 1;
+    };
+    success = lockdata->unlock();
+    if (success == LOCKLOGIC_LOCK_UNLOCKS) {
+      tell_other_room("The door unlocks!\n");
+      tell_room(environment(this_object()), "The door unlocks.\n");
+      return 1;
+    } else if (success == LOCKLOGIC_LOCK_ALREADY_UNLOCKED) {
+      tell_object(this_player(), "The door is already unlocked!\n");
+      return 1;
+    };
+  };
+  return 0;
+}
+
+open(str) {
+  int i,
+    success;
+
+  i = member_array(str, query_id());
+  if (i >= 0) {
+    success = lockdata->query_is_unlocked();
+    if (success) {
+      door::open(str);
+      return 1;
+    } else {
+      tell_object(this_player(), "The door won't open, it's locked!\n");
+      return 1;
+    };
+  };
+  return 0;
+}

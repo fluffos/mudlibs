@@ -1,0 +1,539 @@
+This post contains some bug fixes to Furball's 'wonderful' party item.
+Actually, it is a neat item, but the version I last saw on the net,
+the so-called 'revised' version, had some serious flaws.  (I never saw
+the first version...)  The biggest problem was an error during throw,
+leaving the new player stuck with no commands.  There was also some
+rather strange behaviour when a party member died.
+
+With this version, players can suffer net-death and log back in (throw)
+without getting kicked out of the party.  When a party member dies he
+is removed from the party.  When a party leader dies the party is
+disbanded.  The entire party is notified of the death so that they may
+go and help their wounded comrade.
+
+Other tweaks include a limit on the range of acceptable members, they
+now have to be higher than the leader's level - 10.  Also, an npc check
+so you can't add monsters to your parties.  I fixed up the description
+a bit so it only display usable commands, and got rid of the divvy and
+share aliases.
+
+Also included at the end of this post is a 'party machine' which you need
+to create the inital party object.  (It includes some instructions, also.)
+
+I should stress that this object has (obviously) not had a lot of play
+testing.  I tested it for a few hours with some test players who repeatedly
+got killer and net-dead and added levels and stat points, and it appeared
+to do everything right.  Implement at your own risk!
+
+Happy MUDding!  (P.S.  Sorry, Furball, I tried to mail you but it bounced.)
+
+			--Theron Ware
+
+-------------------------------------------------------------------------
+
+cd /players/theron/obj
+ed party.c
+1,$d
+a
+/* Furball's wonderful party item.  Bug fixes by Theron Ware.
+
+   2-Aug-91
+
+   This is furball's wonderful party item to allow players to walk around
+   in groups.  It is as robust as I can make it and I have no problem with
+   you doing anything you like to it.  The only desire I have is that if you
+   take a copy of this, try and give it to another mud that you feel is
+   lacking a similar object.  Also, if you write some wonderful code, give
+   it away freely.  Why shouldn't everybody benefit from your good coding. */
+
+#include "tune.h"
+
+inherit "obj/treasure";
+
+#define PSHOUT_COST 15
+#define FILE_NAME "players/theron/obj/party"
+#define MAX_MEMBERS 10
+
+int last_exp, disbanded;
+string party_name;
+object my_leader, costs, current_members;
+
+reset(arg) {
+  int i, cost;
+  
+  if(!arg) {
+    set_party_name("the Unamed Party");
+    set_id("banner");
+    set_alias("party");
+    my_leader = this_object();
+    set_weight(0);
+    set_value(0);
+    disbanded = 0;
+    costs = allocate(40);
+    costs[0] = 0;
+    for (i = 1; i < 40; i++) {
+      cost = "room/adv_guild"->get_next_exp(i);
+      cost -= "room/adv_guild"->get_next_exp(i - 1);
+      cost /= STAT_COST;
+      costs[i] = cost + costs[i - 1];
+    }
+    return;
+  }
+  return;
+}
+
+
+drop(silently) {
+  if (!silently)
+     write("You cannot drop your party item.\n");
+  if (environment(this_object()) && calc_tot_exp() < last_exp) {
+     snapshot();
+     tell_party(environment(this_object())->query_name() + " has died.\n");
+     if (my_leader == this_object())
+        disband();
+     else {
+        my_leader->divvy(environment(this_object()));
+        my_leader->leaving(this_object());
+        destruct(this_object());
+     }
+  }
+  call_out("fix", 10, 0);
+  return 1;
+}
+
+
+fix() {
+  object here;
+
+  here = environment(this_object());
+  move_object(this_object(), "room/storage");
+  move_object(this_object(), here);
+  return 0;
+}
+
+
+get() { return 0; }
+
+
+query_wonder_party_item() { return 1; }
+
+
+init() {
+  ::init();
+  add_action("quit", "quit");
+  add_action("list_members", "members");
+  add_action("divide", "divide");
+  add_action("leave", "leave");
+  add_action("pshout", "pshout");
+
+  if (my_leader == this_object()) {
+    add_action("rally", "rally");
+    add_action("disband", "disband");
+    add_action("banish", "banish");
+  }
+}
+
+
+quit(str) {
+  int i;
+  object members;
+
+  divide();
+  if (my_leader != this_object()) {
+    if (my_leader) {
+      my_leader->leaving(this_object());
+    }
+    return 0;
+  }
+  tell_party("The party has been disbanded.\n");
+  members = find_members();
+  disbanded = 1;
+  for (i = 0; i < sizeof(members); i++) {
+    if(members[i] != this_object()) {
+      members[i]->leave("party");
+    }
+  }
+  return 0;
+}
+
+
+pshout(str) {
+  if(this_player()->query_spell_points() < PSHOUT_COST) {
+    write("You don't have enough spell points.\n");
+    return 1;
+  }
+  if(!my_leader) {
+    panic();
+    destruct(this_object());
+    return 1;
+  }
+  this_player()->restore_spell_points(-PSHOUT_COST);
+  my_leader->tell_party(this_player()->query_name() + " pshouts: "+str+"\n");
+  return 1;
+}
+
+
+disband() {
+  object members;
+  int i;
+
+  if(my_leader != this_object()) {
+    write("Only the leader can disband the party.\n");
+    return 1;
+  }
+  divide();
+  tell_party("The party has been disbanded.\n");
+  members = find_members();
+  disbanded = 1;
+  for (i = 0; i < sizeof(members); i++) {
+    if(members[i] != this_object()) {
+      members[i]->leave("party");
+    }
+  }
+  destruct(this_object());
+  return 1;
+}
+
+
+divide() {
+  if(!my_leader) {
+    panic();
+    destruct(this_object());
+    return 1;
+  }
+  my_leader->divvy(environment(this_object()));
+  return 1;
+}
+
+
+banish(str) {
+  object temp, members;
+  int ok, i;
+  string name;
+
+  if(my_leader != this_object()) {
+    write("Only the leader can banish members.\n");
+    return 1;
+  }
+  members = find_members();
+  name = lower_case(str);
+  for (i = 0; i < sizeof(members); i++)
+    if (lower_case(environment(members[i])->query_name()) == name) {
+      tell_party(environment(members[i])->query_name() +
+                 " has been banished from the party.\n");
+      members[i]->leave("party");
+      ok = 1;
+    }
+  if (!ok)
+    write(str + " is not in the party.\n");
+  return 1;
+}
+
+
+leave(str) {
+  if(!str || !id(str)) {
+    notify_fail("Usage: leave party\n");
+    return 0;
+  }
+  if(my_leader == this_object()) {
+    write("The leader cannot leave.  You must disband the party to get out.\n");
+    return 1;
+  }
+  if(!my_leader) {
+    panic();
+    destruct(this_object());
+    return 1;
+  }
+  if (my_leader->query_disbanded()) {
+    destruct(this_object());
+    return 1;
+  }
+  divide();
+  my_leader->leaving(this_object());
+  destruct(this_object());
+  return 1;
+}
+
+
+leaving(ob) {
+  object members;
+
+  if (!ob) return 0;
+  tell_party(environment(ob)->query_name() + " is leaving the party.\n");
+  remove_member(ob);
+}
+
+
+divvy(divider) {
+  object members, levels, exp;
+  int i, tot_exp, tot_levels, share, diff;
+
+  tell_party(divider->query_name() + " divided the experience.\n");
+  members = find_members();
+  levels = allocate(sizeof(members));
+  exp = allocate(sizeof(members));
+  for(i = 0; i < sizeof(members); i++) {
+    exp[i] = members[i]->exp_delta();
+    tot_exp = tot_exp + exp[i];
+    levels[i] = environment(members[i])->query_level();
+    tot_levels = tot_levels + levels[i];
+  }
+  share = tot_exp / tot_levels;
+  for (i = 0; i < sizeof(members); i++) {
+    diff = share * levels[i] - exp[i];
+    environment(members[i])->add_exp(diff);
+    members[i]->snapshot();
+    tell_party(share * levels[i] + "\t: " + 
+               environment(members[i])->query_name() + "\n");
+  }
+}
+
+
+rally(str) {
+  object who, ob, members, temp;
+  int i, ok;
+
+  if(my_leader != this_object()) {
+    write("Only the leader of the Party may rally members.\n");
+    return 1;
+  }
+  members = find_members();
+  if(sizeof(members) >= MAX_MEMBERS) {
+    write("Hey, this is a party, not a convention.\n");
+    return 1;
+  }
+  who = present(lower_case(str), environment(this_player()));
+  if(!who) {
+    write(str + " is not here!\n");
+    return 1;
+  }
+  for (i = 0; i < sizeof(members); i++) {
+    if (who == environment(members[i])) {
+      write("That person is a member already.\n");
+      return 1;
+    }
+  }
+  temp = first_inventory(who);
+  ok = 1;
+  while(temp && ok) {
+    ok = !temp->query_wonder_party_item();
+    temp = next_inventory(temp);
+  }
+  if(!ok) {
+     write("That person is a member of another party.\n");
+     return 1;
+  }
+  if (who->query_level() > this_player()->query_level()) {
+    write("That person would not associate with the likes of you.\n");
+    return 1;
+  }
+  if (who->query_level() < this_player()->query_level() - 10) {
+    write("That person is far too weak to be included in your party.\n");
+    return 1;
+  }
+  if (who->query_npc()) {
+    write("Party with a monster?!  Never!\n");
+    return 1;
+  }
+  divide();
+  tell_object(who, "You have been rallied to the party of "+party_name+".\n");
+  tell_party(who->query_name() + " has been rallied to the party.\n");
+  say(this_player()->query_name() + " gives a party banner to " +
+      who->query_name() + ".\n");
+  ob = clone_object(FILE_NAME);
+  move_object(ob, who);
+  ob->set_leader(this_object());
+  ob->set_party_name(party_name);
+  ob->snapshot();
+  add_member(ob);
+  return 1;
+}
+
+
+set_party_name(str) {
+  party_name = str;
+  set_short("Banner of " + str);
+  set_long("This is your record of membership in the party.\n");
+  return 1;
+}
+
+
+long() {
+  write("This is your record of membership in the party of " + party_name + ".\n"+
+        "party commands: leave party, divide, pshout, members");
+  if (my_leader == this_object())
+     write(", rally, banish, disband.\n");
+  else
+     write(".\n");
+}
+
+
+extra_look() {
+  if(my_leader == this_object())
+    return environment()->query_name() + " is the leader of " + party_name;
+  return environment()->query_name() + " is a member of " + party_name;
+}
+
+
+set_leader(ob) { my_leader = ob; }
+
+
+snapshot() { last_exp = calc_tot_exp(); }
+
+
+exp_delta() { return calc_tot_exp() - last_exp; }
+
+
+calc_tot_exp() {
+  int temp, str, dex, con, inte;
+
+/*
+  if (!query_ip_number(environment(this_object()))) {
+    my_leader->leaving(this_object());
+    destruct(this_object());
+    return -1;
+  }
+*/
+  temp = environment(this_object())->query_exp();
+  str = environment(this_object())->query_str();
+  dex = environment(this_object())->query_dex();
+  con = environment(this_object())->query_con();
+  inte = environment(this_object())->query_int();
+  temp += costs[str - 1];
+  temp += costs[dex - 1];
+  temp += costs[con - 1];
+  temp += costs[inte - 1];
+  return temp;
+}
+
+
+find_members() {
+  int i, removed;
+
+  if (!my_leader) {
+    panic();
+    destruct(this_object());
+    return 1;
+  }
+  if (my_leader != this_object())
+    return my_leader->find_members();
+  if (!current_members)
+    add_member(this_object());
+  removed = 1;
+  while(removed)
+     removed = remove_member(0);
+  return current_members;
+}
+
+
+query_disbanded() {
+  if(!my_leader) {
+    panic();
+    destruct(this_object());
+    return 1;
+  }
+  if (my_leader != this_object())
+    return my_leader->query_disbanded();
+  return disbanded;
+}
+
+
+tell_party(str) {
+  object members;
+  int i;
+
+  if (!my_leader) {
+    panic();
+    destruct(this_object());
+    return 1;
+  }
+  if (my_leader != this_object()) {
+    my_leader->tell_party(str);
+  }
+  members = find_members();
+  for (i = 0; i < sizeof(members); i++) {
+    tell_object(environment(members[i]), str);
+  }
+  return 1;
+}
+
+
+add_member(ob) {
+  object temp;
+  int i;
+
+  if (!my_leader) {
+    panic();
+    destruct(this_object());
+    return 1;
+  }
+  if(my_leader != this_object())
+    return my_leader->add_member(ob);
+  if (!current_members) {
+    current_members = ({ ob });
+    return 1;
+  }
+  temp = allocate(sizeof(current_members) + 1);
+  for (i = 0; i < sizeof(current_members); i++) {
+    temp[i] = current_members[i];
+  }
+  temp[sizeof(current_members)] = ob;
+  current_members = temp;
+  return 1;
+}
+
+
+remove_member(ob) {
+  object temp;
+  int i, exists;
+
+  if(!my_leader) {
+    panic();
+    destruct(this_object());
+    return 1;
+  }
+  if (my_leader != this_object()) {
+    return my_leader->remove_member(ob);
+  }
+  if (sizeof(current_members) <= 1) {
+    return 0;
+  }
+  exists = 0;
+  while (!exists && i < sizeof(current_members)) {
+    exists = current_members[i] == ob;
+    i++;
+  }
+  if(!exists) {
+    return 0;
+  }
+  temp = allocate(sizeof(current_members) - 1);
+  for (i = 0; i < sizeof(current_members) - 1; i++) {
+    if (current_members[i] == ob) {
+      temp[i] = current_members[sizeof(current_members)-1];
+    }
+    else {
+      temp[i] = current_members[i];
+    }
+  }
+  current_members = temp;
+  return 1;
+}
+
+
+list_members() {
+  object members;
+  int i;
+
+  members = find_members();
+  for(i = 0; i < sizeof(members); i ++ ) {
+    write(environment(members[i])->query_name() + "\n");
+  }
+  return 1;
+}
+
+
+panic() {
+  write("Leader has vanished.  Removing you from party.\n");
+  return 1;
+}
+

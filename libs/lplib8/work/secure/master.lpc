@@ -1,0 +1,688 @@
+/*
+ * /secure/master.c
+ *
+ * This is the LPmud master object, used from version 3.0.
+ * It is the second object loaded after void.c.
+ * Everything written with 'write()' at startup will be printed on
+ * stdout.
+ * 1. create() will be called first.
+ * 2. flag() will be called once for every argument to the flag -f
+ * 	supplied to 'parse'.
+ * 3. epilog() will be called.
+ * 4. The game will enter multiuser mode, and enable log in.
+ */
+
+inherit "/basic/simul_efun";
+inherit "/secure/domain";
+
+#include "/sys/config.h"
+
+/*
+ * To test a new function xx in object yy, do
+ * parse "-fcall yy xx arg" "-fshutdown"
+ */
+void flag(string str) {
+  string file;
+  mixed arg;
+
+  if (sscanf(str, "for %d", arg) == 1) {
+    int i;
+    for (i = 0; i < arg; i++) {
+      /* empty loop for speed test */
+    }
+    return;
+  }
+
+  if (str == "shutdown") {
+    shutdown();
+    return;
+  }
+
+  if (sscanf(str, "echo %s", arg) == 1) {
+    write(arg + "\n");
+    return;
+  }
+
+  if (sscanf(str, "call %s %s", file, arg) == 2) {
+    arg = (string)call_other(file, arg);
+    write("Got " + arg + " back.\n");
+    return;
+  }
+  write("master: Unknown flag " + str + "\n");
+}
+
+/*
+ * Function name:   get_root_uid
+ * Description:     Gives the uid of the root user
+ * Returns:         Name of the 'root' user
+ */
+string get_root_uid() {
+  return "root";
+}
+
+/*
+ * Function name:   get_bb_uid
+ * Description:     Gives the uid of the backbone
+ * Returns:         Name of the 'backbone' user
+ */
+string get_bb_uid() {
+  return "backbone";
+}
+
+/*
+ * This function is called every time a player connects.
+ * input_to() can't be called from here.
+ */
+object connect() {
+  object login_ob;
+  mixed err;
+
+  /* write("secure/master: Connect to /secure/login.c..."); */
+  err = catch(login_ob = clone_object("/obj/player"));
+  if (err) {
+    write("Failure: " + err);
+    shutdown();
+  }
+  return login_ob;
+}
+
+/*
+ * Function name:   valid_seteuid
+ * Description:     Checks if a certain user has the right to set a certain
+ *                  objects effective 'userid'. All objects has two 'uid'
+ *                  - Owner userid: Wizard who caused the creation.
+ *                  - Effective userid: Wizard responsible for the objects
+ *                    actions.
+ *                  When an object creates a new object, the new objects
+ *                  'Owner userid' is set to creating objects 'Effective
+ *                  userid'.
+ *                  
+ * Arguments:       ob:   Objekt to set 'effective' user id in.
+ *                  user: Wizard responsible for the setting.
+ * Returns:         True if set is allowed.
+ */
+int valid_seteuid(object ob, string str) {
+  /*
+     * Root can be anyone it pleases.
+     */
+  if (getuid(ob) == get_root_uid())
+    return 1;
+
+  /*
+     * An object can always be itself.
+     */
+  if (getuid(ob) == str)
+    return 1;
+
+  if (creator_file(file_name(ob)) == str)
+    return 1;
+
+  /*
+     * The original valid_seteuid() (this function's own comment
+     * above admits it: "the game driver has not been fixed to call
+     * these valid_functions ... yet, but I will fix that really soon")
+     * never actually let a plain backbone-owned object (e.g. a freshly
+     * cloned /obj/player -- creator_file() has no special case for it,
+     * so it gets the generic backbone owner uid) ever successfully
+     * seteuid() to "root", even temporarily -- confirmed live:
+     * basic/player/save.lpc's actually_restore_player()/
+     * actually_save_player() both explicitly seteuid(get_root_uid())
+     * before their restore_object()/save_object() calls, expecting
+     * this exact grant, and every single character's very first save
+     * failed with "Denied write permission in save_object()"
+     * (and the very first restore attempt with "read permission
+     * denied") without it. This is a small, fully-trusted
+     * single-owner mudlib with no untrusted-wizard threat model, so
+     * granting any backbone-owned object the SAME latitude root
+     * already has here is not a meaningful security regression.
+     * Not part of the original archive. See AGENTS.md (new entry,
+     * this session).
+     */
+  if (getuid(ob) == get_bb_uid())
+    return 1;
+
+  return 0;
+}
+
+/*
+ * This is the function called from the game driver when it wants to know
+ * if it has permission to write in file 'file_name' with effective user
+ * 'eff_user'. The return value is simply true or false.
+ * Currently, only "root" has permission to do anything. The game game driver
+ * has not been fixed to call these valid_functions instead of the ones
+ * in player.c< yet, but I will fix that really soon (Lars).
+ *
+ * If more complex permissions are to be investigated, as if a domain
+ * lord has permission to access files in a wizards directory, then we will
+ * have to call special functions in secure/????.c to find out.
+ */
+
+/*
+ * Function name:   valid_write
+ * Description:     Checks if a certain user has the right to write a file
+ * Arguments:       file - File name of the file to be written
+ *                  eff_user - Name of the wizard responsible for the write.
+ *		    func - The calling function.
+ * Returns:         True if write is allowed.
+ */
+int valid_write(string file, mixed eff_user, string func) {
+  string junk, dom, dir;
+
+  /*
+     * This driver's valid_write() apply passes the CALLING OBJECT
+     * itself as the 2nd argument (confirmed via
+     * packages/core/file.cc's check_valid_path(): `push_object(call_object)`),
+     * not a euid STRING the way the classic MudOS/LPmud-3.0 driver
+     * this archive targets did. Every single string comparison below
+     * (`eff_user == get_root_uid()`, `eff_user == dom`, etc.) was
+     * therefore always false regardless of the real caller identity
+     * -- confirmed live: EVERY write (including a brand new
+     * character's own very first save) fell through to the final
+     * `return 0`. Convert to the real uid string here, matching what
+     * this driver's actual convention requires. Not part of the
+     * original archive. See AGENTS.md (new entry, this session).
+     */
+  if (objectp(eff_user))
+    eff_user = geteuid(eff_user) || getuid(eff_user);
+
+  /*
+     * Anonymous objects can`t do anything.
+     */
+  if (eff_user == 0)
+    return 0;
+
+  /*
+     * Root, can always do as they please.
+     */
+  if (eff_user == get_root_uid())
+    return 1;
+
+  /*
+     * You can always write in /ftp and /open.
+     */
+  if (sscanf(file, "/ftp/%s", junk) == 1 ||
+    sscanf(file, "/open/%s", junk) == 1)
+    return 1;
+
+  /*
+     * Any object can log stuff. But only in /log.
+     */
+  if (sscanf(file, "/log/%s", junk) == 1)
+    return 1;
+
+  /*
+     * Domain writes.
+     */
+  if (file[1] == 'd') {
+    if (sscanf(file, "/d/%s/%s/%s", dom, dir, junk) == 1) {
+      sscanf(file, "/d/%s/%s", dom, junk);
+      dir = 0;
+    }
+
+    /*
+	 * Domain objects can write anywhere in their domains.
+	 */
+    if (eff_user == dom)
+      return 1;
+
+    /*
+	 * A wizard can write in the domain if he is a member.
+	 */
+    if (domain_member(dom, eff_user))
+      return 1;
+    return 0;
+  }
+
+  if (file[1] == 'w') {
+    sscanf(file, "/w/%s/%s", dom, junk);
+
+    /*
+	 * A wizard can write in his domain directory.
+	 */
+    if (eff_user == dom)
+      return 1;
+  }
+
+  return 0;
+}
+
+/*
+ * Function name:   valid_read
+ * Description:     Checks if a certain user has the right to read a file
+ * Arguments:       file - File name of the file to be read
+ *                  user - Name of the wizard responsible for the read.
+ *		    func - The calling function.
+ * Returns:         True if read is allowed.
+ */
+int valid_read(string file, mixed eff_user, string func) {
+  string junk, dom, dir;
+
+  /*
+     * Same object-vs-string convention gap as valid_write() above --
+     * see that function's comment for the full explanation. Not part
+     * of the original archive.
+     */
+  if (objectp(eff_user))
+    eff_user = geteuid(eff_user) || getuid(eff_user);
+
+  /*
+     * This driver routes literally every object compile and every
+     * #include resolution through valid_read(file, uid, func, ...)
+     * with func == "load_object"/"recompile_object"/"include" -- this
+     * archive's original valid_read() never special-cased these, so
+     * an object with no euid yet (eff_user == 0, e.g. before
+     * creator_file()'s own MASTER_OB-derived lookups can even run)
+     * hit the "Anonymous objects can't do anything" deny-by-default
+     * below for its own #include resolution, cascading into failures
+     * everywhere. Not part of the original archive. See AGENTS.md §7.5.
+     */
+  if (func == "load_object" || func == "recompile_object" || func == "include")
+    return 1;
+
+  if (valid_write(file, eff_user, func))
+    return 1;
+
+  /* 
+     * Anonymous objects can`t do anything.
+     */
+  if (eff_user == 0)
+    return 0;
+
+  /*
+     * Allow read in /
+     */
+  if (file == "/")
+    return 1;
+  /*
+     * Check for the "open" directories.
+     */
+  if (sscanf(file, "/doc/%s", junk) == 1 ||
+    sscanf(file, "/ftp/%s", junk) == 1 ||
+    sscanf(file, "/obj/%s", junk) == 1 ||
+    sscanf(file, "/basic/%s", junk) == 1 ||
+    sscanf(file, "/sys/%s", junk) == 1 ||
+    sscanf(file, "/banish/%s", junk) == 1 ||
+    sscanf(file, "/log/%s", junk) == 1 ||
+    sscanf(file, "/secure/%s", junk) == 1)
+    return 1;
+
+  /*
+     * Domain reads.
+     */
+  if (extract(file, 1, 2) == "d/") {
+    if (sscanf(file, "/d/%s/%s/%s", dom, dir, junk) == 1) {
+      sscanf(file, "/d/%s/%s", dom, junk);
+      dir = 0;
+    }
+
+    /* 
+	 * This is the Domains open to public read
+	 */
+    if (member_array(dom, OPEN_DOMAINS) >= 0)
+      return 1;
+
+    /*
+	 * Anyone can read in the domain open directory.
+	 */
+    if (dir == "open")
+      return 1;
+
+#if 0
+    /*
+	 * All wizards in the domain can read everything in the domain.
+	 */
+    if (find_player(eff_user) && (string)find_player(eff_user)->query_domain() == dom)
+      return 1;
+#endif
+    return 0;
+  }
+  return 0;
+}
+
+/*
+ * Function name: 	epilog()
+ * Description:		Loads master data, including list of all domains and
+ *			wizards. Then make a list of preload stuff
+ * Arguments:		load_empty: If true, epilog() does no preloading
+ * Return:		List of files to preload
+ */
+string *epilog(int load_empty) {
+  string *castles, str;
+  int i;
+
+  if (load_empty) {
+    write("Not preloading.\n");
+    return 0;
+  }
+  str = read_file("/adm/CASTLES");
+  if (str == 0)
+    return 0;
+  castles = explode(str, "\n");
+  for (i = 0; i < sizeof(castles); i++) {
+    if (castles[i][0] == '#')
+      castles[i] = 0;
+  }
+  return castles;
+}
+
+/*
+ * Load a castle.
+ */
+void preload(string file) {
+  int t1;
+  string err;
+
+  if (file_size(file + ".lpc") == -1)
+    return;
+
+  t1 = time();
+  write("Preloading : " + file + "...");
+  err = catch(call_other(file, "??"));
+  if (err != 0) {
+    write("\nGot error " + err + " when loading " + file + "\n");
+  } else {
+    t1 = time() - t1;
+    write("(" + t1 / 60 + "." + t1 % 60 + ")\n");
+  }
+}
+
+/*
+ * Function name:   save_player
+ * Description:     Saves a player object.
+ */
+int save_player() {
+  int res;
+  object pobj;
+
+  pobj = previous_object();
+
+  if (function_exists("save_player", pobj) != "/std/player_sec")
+    return 0;
+  else {
+    export_uid(pobj);
+    res = (int)pobj->save_player(pobj->query_real_name());
+    seteuid((string)pobj->query_real_name());
+    export_uid(pobj);
+    seteuid(get_root_uid());
+    return res;
+  }
+}
+
+/*
+ * This function is called for a wizard that has dropped a castle.
+ * The argument is the file name of the object that called create_wizard().
+ * Verify that this object is allowed to do this call.
+ */
+int verify_create_wizard(object ob) {
+  int dummy;
+
+  if (sscanf(file_name(ob), "obj/player#%d", dummy) == 1)
+    return 1;
+  return 0;
+}
+
+int load_player_from_file(string name, object player) {
+  int res;
+
+  export_uid(player);
+  res = (int)player->actually_restore_player(name);
+  seteuid(name);
+  export_uid(player);
+  seteuid(get_root_uid());
+  return res;
+}
+
+void save_player_to_file(string name, object player) {
+  if (!seteuid(get_root_uid()))
+    write("Seteuid failed!\n");
+  export_uid(player);
+  player->actually_save_player(name);
+  seteuid(name);
+  export_uid(player);
+  seteuid(get_root_uid());
+}
+
+/*
+ * Get the owner of a file.
+ */
+string get_wiz_name(string file) {
+  string name, rest;
+
+  if (sscanf(file, "w/%s/%s", name, rest) == 2) {
+    return name;
+  }
+  return 0;
+}
+
+/*
+ * Write an error message into a log file. The error occured in the object
+ * 'file', giving the error message 'message'.
+ */
+void log_error(string file, string message) {
+  string name;
+
+  name = get_wiz_name(file);
+  if (name == 0)
+    name = "log";
+  log_file(name, message);
+}
+
+/* save_ed_setup and restore_ed_setup are called by the ed to maintain
+   individual options settings. These functions are located in the master
+   object so that the local gods can decide what strategy they want to use.
+   suggestions:
+	A setup file for every wizard.
+		advantages:	transparent to the user
+				independent of wizard count
+		disadvantage:	extra file access at ed invocation
+	An array in the master object, wizards are searched by member_array
+		advantage:	easy to implement
+		disadvantage:	performance degradation with high wizard counts
+	An AVL-tree to access wizards by name
+		advantage:	can fit any need
+		disadvantage:	hard to implement, will need more overhead on
+				small and medium muds than it can ever make
+				good by lg(wizcount) complexity
+	Dedicated flags in every wizard object, inherited from /obj/living
+		advantages:	easy to implement ( as shown here)
+				independent of wizard count
+				Will also work for nonm-wizards.
+		disadvantage:	care has to be taken to avoid collision with
+				other uses of the /obj/living flags.          */
+
+#if 0 /* Dedicated flags not used. A save file method is used below */
+
+#define FIRST_ED_FLAG 0 /* adjust this value so that no flags are clobbered */
+#define NUM_ED_FLAGS 9
+int save_ed_setup(object wiz, int setup) {
+  int mask, i;
+
+  for (mask = 1, i = FIRST_ED_FLAG; i < FIRST_ED_FLAG + NUM_ED_FLAGS; mask <<= 1, i++) {
+    if (setup & mask) wiz->set_flag(i);
+    else wiz->clear_flag(i);
+  }
+  return 1; /* function is defined, success */
+}
+
+int retrive_ed_setup(object wiz) {
+  int i, setup;
+
+  for (i = FIRST_ED_FLAG + NUM_ED_FLAGS; i > FIRST_ED_FLAG; ) {
+    setup += setup + wiz->test_flag(--i);
+  }
+  return setup;
+}
+
+#endif /* 0 */
+
+/*
+ * The wizard object 'who' wants to save his ed setup. It is saved in the
+ * file /w/wiz_name/.edrc .
+ *
+ * Don't care to prevent unauthorized access of this file. Only make sure
+ * that a number is given as argument.
+ */
+int save_ed_setup(object who, int code) {
+  string file;
+
+  if (!intp(code))
+    return 0;
+  file = "/w/" + lower_case((string)who->query_player_name()) + "/.edrc";
+  rm(file);
+  return write_file(file, code + "");
+}
+
+/*
+ * Retrieve the ed setup. No meaning to defend this file read from
+ * unauthorized access.
+ */
+int retrieve_ed_setup(object who) {
+  string file;
+  int code;
+
+  file = "/w/" + lower_case((string)who->query_player_name()) + "/.edrc";
+  if (file_size(file) <= 0)
+    return 0;
+  sscanf(read_file(file), "%d", code);
+  return code;
+}
+
+/*
+ * Create a home dritectory and a castle for a new wizard. It is called
+ * automatically from create_wizard(). We don't use the 'domain' info.
+ * The create_wizard() efun is not really needed any longer, as a call
+ * could be done to this function directly.
+ *
+ * This function can create directories and files in /players. It is
+ * garded from calls from the wrong places.
+ */
+string master_create_wizard(string owner, string domain, object caller) {
+  string def_castle;
+  string dest, castle, wizard;
+  object player;
+
+  player = find_player(owner);
+  if (!player)
+    return 0;
+  if (!verify_create_wizard(caller)) {
+    tell_object(player, "That is an illegal attempt!\n");
+    return 0;
+  }
+  if (caller != previous_object()) {
+    tell_object(player, "Faked call!\n");
+    return 0;
+  }
+  if (!MAP_OBJECT(file_name(environment(caller)))) {
+    tell_object(player, "You can only drop the castle somewhere in the map!\n");
+    return 0;
+  }
+  wizard = "/w/" + owner;
+  castle = wizard + "/castle.lpc";
+  if (file_size(wizard) == -1) {
+    mkdir(wizard);
+    tell_object(player, "You now have a home drirectory: " +
+      wizard + "\n");
+  }
+  dest = file_name(environment(player));
+  def_castle = "#define NAME \"" + owner + "\"\n#define DEST \"" + dest + "\"\n" + read_file("/room/def_castle.lpc");
+  if (file_size(castle) > 0) {
+    tell_object(player, "You already had a castle !\n");
+  } else {
+    /* The master object can do this ! */
+    if (write_file(castle, def_castle)) {
+      tell_object(player, "You now have a castle: " + castle + "\n");
+      if (!write_file("/room/init_file", extract(castle, 1) + "\n"))
+        tell_object(player, "It couldn't be loaded automatically!\n");
+    } else {
+      tell_object(player, "Failed to make castle for you!\n");
+    }
+  }
+  return castle;
+}
+
+/*
+ * When an object is destructed, this function is called with every
+ * item in that room. We get the chance to save players !
+ */
+void destruct_environment_of(object ob) {
+  if (!interactive(ob))
+    return;
+  tell_object(ob, "Everything you see is disolved. Luckily, you are transported somewhere...\n");
+  ob->move("is transfered#room/void");
+}
+
+/*
+ * Define where the '#include' statement is supposed to search for files.
+ * "." will automatically be searched first, followed in order as given
+ * below. The path should contain a '%s', which will be replaced by the file
+ * searched for.
+ */
+string *define_include_dirs() {
+  return ({ "/room/%s", "/sys/%s" });
+}
+
+/*
+ * We have a map room as argument. Create it, and return it as argument.
+ */
+object create_map_object(string name) {
+  int x, y;
+  object ob;
+  string str;
+
+  if (sscanf(name, "/room/map/m%d_%d", x, y) != 2)
+    throw("Illegal map room name: " + name);
+  ob = find_object(name);
+  if (ob)
+    return ob;
+  if (file_size(name + ".lpc") < 0)
+    if (write_file(name + ".lpc", "inherit \"/room/map/base\";") == 0)
+      write("Failed to create file !\n");
+  call_other(name, "??"); /* Force load */ ob = find_object(name);
+  if ((int)ob->volatile())
+    rm(name + ".lpc");
+  return find_object(name);
+}
+
+/*
+ * Give a path to a simul_efun file. Observe that it is a string returned,
+ * not an object. But the object has to be loaded here. Return 0 if this
+ * feature isn't wanted.
+ */
+string get_simul_efun() {
+  string fname;
+  fname = "/secure/simul_efun";
+  if (catch(call_other(fname, "??"))) {
+    write("Failed to load " + fname + "\n");
+    shutdown();
+    return 0;
+  }
+  return fname;
+}
+
+/*
+ * get_include_path(): this archive's headers (config.h, move_failure.h,
+ * lock_logic.h, door_logic.h, door.h, stats.h) all live in /sys but
+ * get quote-included by files elsewhere ("config.h", not
+ * "/sys/config.h") -- this driver's angle-bracket/quoted include
+ * resolution only searches the configured "include directories" list,
+ * never the including file's own directory, unless master implements
+ * this apply. Not part of the original archive. See AGENTS.md §6.1.
+ */
+/*
+ * valid_override(): this driver requires explicit master permission
+ * before ANY object may define a function sharing a real efun's name
+ * (e.g. basic/move.lpc's own move_object(dest) shim added for the
+ * §7.158 move_object/transfer dialect fix), or even call
+ * `efun::something()` at all. Not part of the original archive.
+ * Permissive by design -- a small, fully-trusted single-owner mudlib,
+ * no untrusted-wizard threat model. See AGENTS.md §6.2/§7.158.
+ */
+int valid_override(string cur_file, string efun_name, string main_file) { return 1; }
+
+string *get_include_path(string file) {
+  string *parts;
+
+  parts = explode(file, "/");
+  if (sizeof(parts) <= 1) return ({ "/", ":DEFAULT:" });
+  return ({ "/" + implode(parts[0..<2], "/"), ":DEFAULT:" });
+}

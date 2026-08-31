@@ -1,0 +1,161 @@
+/*
+ * This is a mudlib file. Copy it to /obj/simul_efun.c, or
+ * wherever the get_simul_efun() in master.c says.
+ * The functions defined in this file should only be replacements of efuns
+ * no longer supported. Don't use these functions any longer, use the
+ * replacement instead.
+ */
+
+#pragma strict_types
+#pragma save_types
+
+/*
+ * extract() was a real efun on the classic driver this mudlib was
+ * written for; this driver (FluffOS) never implemented it, so it must
+ * be reimplemented here as a simul_efun -- see AGENTS.md §6.2.
+ * string extract(string str, int start, int end)
+ * string extract(string str, int start)
+ * Extract a substring, from character start to character end
+ * (inclusive), of the string str. If end is omitted, all of the
+ * characters up to the end of the string are returned. Indices start
+ * at 0. If start > end, or the string is shorter than requested, an
+ * empty string is returned.
+ */
+varargs string extract(string str, int start, int end) {
+  int len;
+
+  if (!str) return 0;
+  len = strlen(str);
+  if (!end) end = len - 1;
+  if (start < 0) start = 0;
+  if (end >= len) end = len - 1;
+  if (start > end) return "";
+  return str[start..end];
+}
+
+/*
+ * log_file() was a real efun on the classic driver this mudlib was
+ * written for (append 'str' to a file named 'file' inside the
+ * mudlib's own /log directory); this driver (FluffOS) never
+ * implemented it, so it must be reimplemented here as a simul_efun --
+ * see AGENTS.md §6.2.
+ */
+void log_file(string file, string str) {
+  write_file("/log/" + file, str);
+}
+
+/*
+ * version() was a real efun on the classic driver this mudlib was
+ * written for (the driver's own version string) -- never implemented
+ * on this driver. See AGENTS.md §6.2.
+ */
+string version() {
+  return "FluffOS " + __VERSION__;
+}
+
+/*
+ * cat() was a real efun on the classic driver this mudlib was written
+ * for; this driver (FluffOS) never implemented it, so it must be
+ * reimplemented here as a simul_efun -- see AGENTS.md §6.2.
+ * int cat(string file)
+ * int cat(string file, int start, int num)
+ *   Writes 'file' (or, in the 3-arg form, lines [start, start+num),
+ *   1-indexed, for pager-style paging) directly to the current
+ *   player, and returns the number of lines actually written (0 for
+ *   the 1-arg whole-file form).
+ */
+varargs int cat(string file, int start, int num) {
+  string content;
+  string *lines;
+  int len, i, end;
+
+  content = read_file(file);
+  if (!content) return 0;
+
+  if (!start) {
+    write(content);
+    return 0;
+  }
+
+  lines = explode(content, "\n");
+  len = sizeof(lines);
+  if (start < 1) start = 1;
+  end = (start - 1) + num;
+  if (end > len) end = len;
+  for (i = start - 1; i < end; i++) {
+    write(lines[i] + "\n");
+  }
+  return end - (start - 1);
+}
+
+/*
+ * wizlist() was a real efun on the classic driver this mudlib was
+ * written for (prints the /WIZLIST file's contents to the current
+ * player); never implemented on this driver. The 1-arg form's
+ * argument (a name filter) is not reimplemented here -- no call site
+ * in this archive actually relies on filtering. See AGENTS.md §6.2.
+ */
+varargs void wizlist(string name) {
+  cat("/WIZLIST");
+}
+
+/*
+ * localcmd() was a real efun on the classic driver this mudlib was
+ * written for (lists the commands currently available to
+ * this_object()/this_player()); never implemented on this driver.
+ * Reimplemented via the real commands() efun, whose 4-item-per-row
+ * shape (verb, flags, defining object, function) this driver still
+ * supports natively. See AGENTS.md §6.2.
+ */
+void localcmd() {
+  mixed *cmds;
+  int i;
+
+  cmds = commands();
+  for (i = 0; i < sizeof(cmds); i++) {
+    write(cmds[i][0] + "\t(" + file_name(cmds[i][2]) + ")\n");
+  }
+}
+
+/*
+ * The ls() function is no longer needed, as get_dir() can do the same
+ * work.
+ */
+void ls(string path) {
+  int i, len, tmp;
+  mixed *dir;
+  dir = get_dir(path);
+  for (i = 0; i < sizeof(dir); i++) {
+    string name;
+    if (file_size(path + "/" + dir[i]) == -2)
+      name = dir[i] + "/ ";
+    else
+      name = dir[i] + " ";
+    tmp = strlen(name);
+    while (tmp % 8) {
+      tmp++;
+      name += " ";
+    }
+    if (len + tmp > 79) {
+      len = 0;
+      write("\n");
+    }
+    len += tmp;
+    write(name);
+  }
+  write("\n");
+}
+
+mixed slice_array(mixed *arr, int from, int to) {
+  mixed *new_arr;
+  int i;
+
+  new_arr = ({});
+  if (from < 0 || to < 0) return 0;
+  if (from >= sizeof(arr) || to >= sizeof(arr)) return 0;
+  if (to < from) return 0;
+  for (i = from; i <= to; i++)
+    new_arr += ({ arr[i] });
+  return new_arr;
+
+}

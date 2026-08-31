@@ -1,0 +1,265 @@
+#include "move_failure.h"
+#include "stats.h"
+#include "config.h"
+
+inherit "/basic/debug";
+nosave inherit "/basic/move";
+nosave inherit "/basic/weapon_logic"; /* Used when fighting with hands */ inherit "/basic/id";
+nosave inherit "/basic/description";
+nosave inherit "/basic/container";
+inherit "/basic/living/gender";
+inherit "/basic/living/attack";
+inherit "/basic/living/physical";
+inherit "/basic/living/message";
+inherit "/basic/player/login";
+inherit "/basic/player/pick_objects";
+inherit "/basic/player/drop_objects";
+nosave inherit "/basic/player/trace";
+inherit "/basic/player/wiz";
+inherit "/basic/player/skills";
+inherit "/basic/player/save";
+inherit "/basic/player/communicate";
+
+int verbose_moves;
+int player_age;
+nosave int time_of_login;
+
+void describe_current_room(int verbose) {
+  object *ob_list;
+  int i;
+  string tmp;
+
+  if (set_light(0) <= 0) {
+    write("It is dark.\n");
+    return;
+  }
+  if (verbose)
+    write(environment(this_object())->query_long(0));
+  else
+    write((string)environment(this_object())->query_short() + ".\n");
+  ob_list = all_inventory(environment());
+  if (!ob_list)
+    return;
+  for (i = 0; i < sizeof(ob_list); i++) {
+    if (ob_list[i] == this_object())
+      continue;
+    tmp = (string)ob_list[i]->query_short();
+    if (tmp && tmp != "")
+      write(tmp + "\n");
+  }
+  return;
+}
+
+void define_basic_commands() {
+  add_action("brief", "brief");
+  add_action("drop_command", "drop");
+  add_action("examine_object", "exa", 1);
+  add_action("pick_command", "get");
+  add_action("kill_command", "kill");
+  add_action("inventory", "i");
+  add_action("inventory", "inventory");
+  add_action("look", "look");
+  add_action("quit", "quit");
+  add_action("save_player_command", "save");
+  add_action("score", "score");
+  add_action("pick_command", "take");
+  add_action("wield_command", "wield");
+  communicate::init_comm();
+}
+
+int brief() {
+  verbose_moves = !verbose_moves;
+  write("Verbose mode " + (verbose_moves ? "on" : "off") + ".\n");
+  return 1;
+}
+
+/*
+ * Move the player to another room. Give the appropriate
+ * message to on-lookers.
+ * The optional message describes the message to give when the player
+ * leaves.
+ */
+varargs void move_player(mixed dest, string message) {
+  if (message == 0)
+    message = "leaves.\n";
+  if (!query_invis())
+    say(query_player_cap_name() + " " + message);
+  if (move(dest) != MOVE_OK) {
+    write("You remain where you are.\n");
+    return;
+  }
+  if (!query_invis())
+    say(query_player_cap_name() + " arrives.\n");
+  describe_current_room(verbose_moves);
+}
+
+void create() {
+  set_encumbrance(500);
+  enable_commands();
+  set_short("A player");
+  set_long("An interactive player.\n");
+}
+
+/*
+ * Only used to enable error messages.
+ */
+int query_wiz_level() {
+  return 50;
+}
+
+/*
+ * Called by command "examine" and "look at".
+ */
+int examine_object(string str) {
+  object ob;
+
+  if ((int)environment(this_object())->id(str)) {
+    write((string)environment(this_object())->query_long(str));
+    return 1;
+  }
+  ob = present(str, environment(this_object()));
+  if (ob) {
+    write((string)ob->query_long(str));
+    return 1;
+  }
+  ob = present(str, this_object());
+  if (ob) {
+    write((string)ob->query_long(str));
+    return 1;
+  }
+  return 0;
+}
+
+int look(string str) {
+  string tmp;
+  if (stringp(str) && sscanf(str, "at %s", tmp) == 1)
+    return examine_object(tmp);
+  describe_current_room(1);
+  return 1;
+}
+
+int quit(string str) {
+  if (str) {
+    notify_fail("Quit what ?\n");
+    return 0;
+  }
+  write("See you another time!\n");
+  player_age += time() - time_of_login;
+  save_player(query_player_name());
+  destruct(this_object());
+  return 1;
+}
+
+void move_player_to_start() {
+  int i;
+
+  seteuid(query_player_name());
+  set_id(({ query_player_name() }));
+  set_short(query_player_cap_name());
+  set_long("A player named " + query_player_cap_name() + ".\n");
+  move_player("/room/start");
+  clone_object("/obj/soul")->init_soul(this_object(),
+    query_player_cap_name());
+  define_basic_commands();
+  wiz_commands();
+  wiz_commands2();
+  /* These skill data are added just that there are some values */
+  add_skill_points(({ "skill" }), 0);
+#if 0
+  add_skill_points(({ "skill", "magic", "magic missile" }));
+  add_skill_points(({ "skill", "magic", "shock" }));
+  add_skill_points(({ "skill", "magic", "fire ball" }));
+  add_skill_points(({ "skill", "defensive", "shield", "small" }));
+  add_skill_points(({ "skill", "defensive", "shield", "large" }));
+  add_skill_points(({ "skill", "offensive", "hands" }));
+  add_skill_points(({ "skill", "offensive", "blunt", "mace" }));
+  add_skill_points(({ "skill", "offensive", "blunt", "morningstar" }));
+  add_skill_points(({ "skill", "offensive", "sharp", "knife" }));
+  add_skill_points(({ "skill", "offensive", "sharp", "axe" }));
+  add_skill_points(({ "skill", "offensive", "sharp", "sword", "longsword" }));
+  add_skill_points(({ "skill", "offensive", "sharp", "sword", "shortsword" }));
+  add_skill_points(({ "skill", "offensive", "sharp", "sword", "sabre" }));
+  /* dump_value(query_skills()); */
+#endif
+  if (restore_player(query_player_name()) == 0) {
+    write("New player!\n");
+    set_gender("male");
+    init_stats();
+    init_current_path(query_player_name());
+  }
+  init_tracer();
+  time_of_login = time();
+  set_heart_beat(1);
+  set_living_name(query_player_name());
+  init_attack_data();
+}
+
+int inventory() {
+  int i;
+  object *ob_list;
+
+  ob_list = all_inventory(this_player());
+  if (!ob_list)
+    return 1;
+  write("You are carrying (weight: " + query_internal_encumbrance() +
+    "):\n");
+  for (i = 0; i < sizeof(ob_list); i++) {
+    string tmp;
+    tmp = (string)ob_list[i]->query_short();
+    if (tmp != 0)
+      write(tmp + ".\n");
+  }
+  return 1;
+}
+
+int save_player_command() {
+  save_player(query_player_name());
+  return 1;
+}
+
+int query_age() {
+  return player_age + time() - time_of_login;
+}
+
+void heart_beat() {
+  continue_attack();
+}
+
+int score() {
+  int i;
+  string *skillp;
+
+  write("Age: " + query_age() + "\n");
+  write("Health: " + query_hp() + "\n");
+  for (i = 0; i < STAT_NUMBER; i++) {
+    write("Stat\t" + STAT_NAMES[i] + ":\t" + query_stat(i) + "\n");
+  }
+  skillp = query_skill_path();
+  write("Skill:\t" + compute_total_skill(skillp) +
+    " in " + skillp[sizeof(skillp) - 1] + " fighting.\n");
+  return 1;
+}
+
+void die() {
+  object ob;
+  ob = clone_object("/obj/shadow_death");
+  ob->init_shadow(this_object());
+}
+
+int query_level() {
+  int i, sum, n;
+
+  n = 0;
+  for (i = 0; i < STAT_NUMBER; i++) {
+    sum += query_stat(i);
+    n++;
+  }
+  sum += compute_total_skill(query_skills());
+  n++;
+  return sum / n;
+}
+
+void general_reward(string *skill_path, int points, int stat) {
+  add_skill_points(skill_path, points);
+  reward_stat(stat, points);
+}

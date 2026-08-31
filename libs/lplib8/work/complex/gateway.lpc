@@ -1,0 +1,82 @@
+/*
+ *	gateway.c
+ *
+ *	A means of getting from 'here' to any number of 'there's
+ */
+#include "config.h"
+
+inherit "/basic/description";
+inherit "/basic/id";
+inherit "/basic/move";
+
+private string *exit_list; /* List of rooms. */ private string *command_list; /* Matching list of commands. */ private string *move_hooks;   /* Matching optional list of hooks, called
+                                 before moving player. */
+
+/*
+ *	The idea for set_exits comes from mudlib.n/complex/room.c
+ */
+void set_exits(string *new_exit_list, string *new_command_list) {
+  string name;
+  exit_list = new_exit_list;
+  command_list = new_command_list;
+  name = (string)MASTER_OB->creator_file(file_name(this_object()));
+  if (seteuid(name) == 0) {
+    write("Failed to seteuid to " + name + "\n");
+  }
+}
+
+void set_move_hooks(string *hooks) {
+  move_hooks = hooks;
+}
+
+void init() {
+  int i;
+
+  if (!command_list)
+    return;
+  for (i = 0; i < sizeof(command_list); i++)
+    add_action("door_command", command_list[i]);
+}
+
+/*
+ *	The idea is pinched from /complex/room.c but modified to only allow
+ *	a move if the hook function returns true ie. 1.
+ *	/complex/room.c didn't bother to check the hook function properly.
+ */
+int door_command(string str) {
+  int i;
+
+  i = member_array(query_verb(), command_list);
+  if (move_hooks && (int)call_other(this_object(), move_hooks[i])) {
+    this_player()->move_player(exit_list[i]);
+    return 1;
+  } else if (!move_hooks) {
+    ;
+    this_player()->move_player(exit_list[i]);
+    return 1;
+  };
+  return 1;
+}
+
+query_short() {
+  return description::query_short();
+}
+
+query_long(string unused) {
+  string str;
+
+  str = description::query_long(0);
+
+  if (pointerp(command_list))
+    str = str + "    Obvious exits are: " + implode(command_list, ",");
+  else
+    str = str + "	There are no obvious exits";
+  return str + ".\n";
+}
+
+/* Provide a default */
+void create() {
+  set_id(({ "gateway" }));
+  set_short("A gateway");
+  set_long("This is a gateway.\n");
+}

@@ -1,0 +1,235 @@
+Here is some code written on the Shattered World to improve the banishing
+system. There are three sorts of banishment:
+
+a) Permanent; gives the message, "That name is banished!" on login
+b) Temporary; gives the message, "You are frozen for <x> more game days."
+c) Memorial; gives the message, "That name is reserved for a former hero."
+
+Players banished with a memorial are those who have died a "power death".
+On our mud the "pow" stat is decremented every time a player dies, and the
+player dies permanently if their power reaches zero. Good incentive for the
+healers' guild :-) We have a cemetary where people can view their old
+characters' graves, complete with randomly selected epitaphs. Very touching.
+
+Players who are "frozen" have (usually voluntarily) placed themselves in the
+cryogenic chambers. We found this to be very helpful during the recent exam
+period when many players were being distracted from their studies by the
+mud. All they had to do was summon up the willpower once to freeze themselves
+until exams were over.
+
+Permanently banished names are as usual either cheat names, obscenities, or 
+particularly obnoxious players.
+
+Here is our /std/banish.c file. It acts as a server and is usually called
+using the form "std/banish"->add("dredd", -1). This would make Dredd a
+former hero :-) Another possibility is "std/banish"->banished("dredd"), which
+would return -2 (urk) to indicate that dredd is memorially banished. Slight
+non-orthogonality there, but hey: it's evolved code!
+
+Oh, you'll probably need to modify your /obj/game_clock if it doesn't include
+the query_abs_day() function. All this does is return an absolute number of
+days since some predetermined time, much in the manner of UNIX time(). (See
+the code below)
+
+--------------------------- cut here --------------------------
+/*
+	/std/banish.c
+
+	Object which keeps track of banished names.
+	
+	Dredd at Shattered World.
+	Billy at Shattered World added freezing times. 
+			(The bits with capitalised identifiers!)
+	
+	o did this to save disk space, pointless having all
+	those files in /banish. Although this adds a little
+	to memory usage the cost is worthwhile, IMHO
+*/
+
+#define BANISH "std/BANISHED"
+array names;
+array times;
+
+
+reset(arg) {
+	if (arg) return;
+	restore_object(BANISH);
+	if (!names) names = ({ });
+	if (!times) times = ({ });
+	}
+
+/*
+Ok, so Dredd doesn't document his code. But I'm going to document MY changes.
+I'm fucked if I'm going to document his stuff though, so:
+
+PARAMETERS: int time - -1 for banish a player forever due to power death,
+                        0 for banish forever,
+			+ve to banish for that many game days
+
+Oh, ok. I give in :-(
+PARAMETERS: string str - the name of the person to banish (lowercase, please)
+ACTION: Banishes the name, also logs the banishment in /log/BANISH just so we 
+		can check up later.
+RETURNS:    1 - if added
+	    0 - if already there
+*/
+add(str, banish_time)
+{
+	if (index(names, str) < 0) 
+	{
+		string HowLong;
+		string ByWhom;
+		names = names + ({str});
+		if (banish_time < 0)
+		    { /* permanent banishment */
+		    times = times + ({-1});
+		    HowLong = "permanently due to power death";
+		    }
+		if (banish_time == 0)
+		    { /* permanent banishment */
+		    times = times + ({0});
+		    HowLong = "permanently";
+		    }
+	        else
+		    {
+		    times = times + ({"obj/game_clock"->query_abs_day() + banish_time});
+		    HowLong = "for " + banish_time + " days";
+		    }
+		save_object(BANISH);
+		if (!this_player())
+		    ByWhom = "the unknown banisher (" + caller()->short() + ")";
+	        else
+	            ByWhom = capitalize(this_player()->query_real_name());
+		log_file("BANISH", capitalize(str) + " banished " + HowLong +
+			" by " + ByWhom + "\n");
+		return 1;
+	}
+	return 0;
+}
+
+
+/*
+NAME:		remove
+ACTION: 	Grumble, grumble. Wish he'd document it himself... Well, it 
+		unbanishes a name, ok?
+PARAMETERS:	string str - the name to banish
+RETURNS:	1 - if removed
+		0 - if couldn't be found
+*/
+remove(str)
+{
+int x;
+array a, b;
+	x = index(names, str);
+	if (x > -1) {
+		a = extract(names, 0, x-1);
+		b = extract(names, x+1);
+		names = a + b;
+		a = extract(times, 0, x-1);
+		b = extract(times, x+1);
+		times = a + b;
+		save_object(BANISH);
+		return 1;
+	}
+	return 0;
+}
+
+/*
+NAME:		banished
+ACTION:		returns the banish status of a name
+PARAMETERS:	string str - the name under question
+RETURNS:	-1 if name is banished 
+		-2 if banished due to power death,
+   		the number of days if temporarily banished, 
+		else returns 0 if not banished 
+*/
+banished(str) {
+	int PersonIndex;
+	int Count;
+	PersonIndex = index(names, str);
+	if (PersonIndex > -1) 
+		{ /* note the Zik-style indentation! */
+		if ("obj/game_clock"->query_abs_day() < times[PersonIndex])
+		    /* still banished for a while - return how long */
+		    return times[PersonIndex] - 
+		    	"obj/game_clock"->query_abs_day();
+	        else
+	            {
+	            if (times[PersonIndex] > 0)
+	                { /* out of date time banishment - remove it */
+	                remove(str);
+	                return 0;
+	                }
+		    else if (times[PersonIndex] < 0)
+		        return -2; /* power death permanent banishment */
+		    else
+		        return -1; /* permanent banishment */
+	            }
+	        }
+	return 0;
+}
+
+
+/*
+NAME: 	 banished_list
+RETURNS: an array containing interleaved names and times for banished people.
+	 The times are set to 0 if the person is banished permanently, and
+	 -1 if banished due to power death.
+*/
+banished_list()
+{
+array Banishes;
+int Count;
+int Today;
+
+Today = "obj/game_clock"->query_abs_day();
+Banishes = ({ });
+for (Count = 0; Count < sizeof(names); Count++)
+    {
+    if (times[Count] < 0)		/* power death banished */
+        Banishes = Banishes + ({ names[Count], -1 });
+    else if (times[Count] == 0)		/* permanently banished */
+        Banishes = Banishes + ({ names[Count], 0 });
+    else if (times[Count] > Today)	/* temporary banishment */
+        Banishes = Banishes + ({ names[Count], times[Count] - Today });
+    else				/* out of date */
+        remove(names[Count]);
+    }
+
+return Banishes;
+}
+
+--------------------------- cut here --------------------------
+For those interested in the query_abs_day() function from /obj/game_clock.c, 
+here it is:
+
+query_abs_day()
+{
+return day + month * DAYS + year * MONTHS * DAYS;
+}
+
+
+And to player.c you should add the following code in the login2() function:
+
+Banish = "std/banish"->banished(str);
+if (Banish != 0)
+    {
+    if (Banish == -1)
+	write("That name is banished!\n");
+    else if (Banish == -2)
+	write("That name is reserved for a former hero.\n");
+    else if (Banish > 0)
+	write("You are frozen for " + Banish + " more game days.\n");
+    destruct(this_object());
+    return;
+    }
+
+
+Have fun!
+
++---------------------------------------------------------------------+
+|             Zik                   |  "I don't want the world -      |
+|       Michael Saleeba             |   I just want your half"        |
+|   zik@bruce.cs.monash.oz.au       |                     - TMBG      |
++---------------------------------------------------------------------+
+

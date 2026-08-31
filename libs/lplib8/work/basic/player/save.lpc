@@ -1,0 +1,91 @@
+#include "config.h"
+
+/*
+ * Used for save and restore a player.
+ * It is not possible to immediately call save_object and restore_object,
+ * because the player will not have the rights to do so. Therefore,
+ * functions will be called in the master object, that will give the
+ * player object temporary priviledges.
+ */
+
+private string save_file_name(string name) {
+  // Was `extract(name, 0, 0)` -- this driver's extract() simul_efun
+  // (see AGENTS.md §6.2) can't actually distinguish an omitted 3rd
+  // argument from an explicit 0 (LPC coerces a missing varargs
+  // argument to plain int 0, indistinguishable from a real 0), so a
+  // genuine 3-arg call asking for "just character 0" silently got
+  // treated as the 2-arg "to end of string" form instead, returning
+  // the whole name instead of its first letter -- bucketing every
+  // single player's save file under "/players/<full name>/" rather
+  // than "/players/<first letter>/", confirmed live: this driver's
+  // valid_write()/valid_read() ACL only allows "/players/" at all
+  // for backbone/root-owned callers (a separate, also-missing grant
+  // fixed in secure/master.lpc's valid_seteuid()), and neither this
+  // bug alone nor that one alone was sufficient to notice without
+  // fixing the other first. Rewritten with unambiguous range
+  // slicing instead of relying on extract() at all. See AGENTS.md
+  // §6.2's new entry on this specific ambiguity.
+  return "/players/" + name[0..0] + "/" + name;
+}
+
+/*
+ * This one is called at login, to restore player data from saved file.
+ * Return 0 for no save file, which means a new player.
+ * Otherwise, restore player variables and return 1.
+ */
+int restore_player(string name) {
+  int res;
+
+  seteuid(0); /* Allow the master object to give us another uid */ res = (int)MASTER_OB->load_player_from_file(
+    name,
+    this_object()
+  );
+  /* The restore has now been done. */
+  seteuid(name); /* Set back the usual euid. */ return res;
+}
+
+/*
+ * This one will be called from the master object, which will grant us
+ * uid "root" temporarily.
+ */
+nomask int actually_restore_player(string name) {
+  int res;
+  seteuid((string)MASTER_OB->get_root_uid());
+  res = restore_object(save_file_name(name));
+  seteuid(0); /* We will get back the original uid */ return res;
+}
+
+void save_player(string name) {
+  seteuid(0);
+  MASTER_OB->save_player_to_file(name, this_object());
+  seteuid(name);
+}
+
+void assure_save_dir_exists(string file) {
+  string *elems;
+  string path;
+  int i;
+
+  elems = explode(file, "/");
+  path = "";
+  for (i = 0; i < sizeof(elems) - 1; i++) {
+    path += "/" + elems[i];
+    if (file_size(path) == -1) {
+      write("Make dir " + path + "\n");
+      mkdir(path);
+    }
+  }
+}
+
+/*
+ * This one will be called from the master object, which will grant us
+ * uid "root" temporarily.
+ */
+nomask void actually_save_player(string name) {
+  string tmp;
+
+  seteuid((string)MASTER_OB->get_root_uid());
+  assure_save_dir_exists(save_file_name(name));
+  save_object(save_file_name(name));
+  seteuid(0);
+}

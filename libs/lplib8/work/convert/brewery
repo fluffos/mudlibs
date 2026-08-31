@@ -1,0 +1,528 @@
+Path: mathrt0.math.chalmers.se!chalmers.se!sunic!mcsun!uunet!munnari.oz.au!bruce!dec15!geoff
+From: geoff@dec15.cs.monash.edu.au (Geoff Wong)
+Newsgroups: alt.mud.lp
+Subject: LPC source: Player ownable pubs.
+Message-ID: <geoff.680424899@dec15>
+Date: 25 Jul 91 06:54:59 GMT
+Sender: news@bruce.cs.monash.OZ.AU
+Lines: 518
+
+Ok next bit of source; we're trying to establish a player
+run economy (and some simple ecology) on our mud. It seemed
+appropriate to have player owned pubs (& breweries). Below
+is some `generic' brewery and pub code (note we also have a 
+full food system in which you're required to eat :-).
+
+You also need a backroom for the pub; or some other way to 
+manipulate the inventory (also need "wholesale" food containers etc.),
+the appropriate code is mundane. I'd probably post it if it
+wasn't such a quick hack :-).
+
+Use it by inheriting it and defining the appropriate flags etc.
+
+geoff
+note: you must be able to save arrays.
+----
+
+/*
+	 Dredd's Dreddful Food & Drink Stores;
+	 (Shattered World Lpmud).
+
+	 o Inheritable/configurable standard shop.
+	 o allows player ownership ( also see pub_back.c).
+	 o Either points of sale OR production point.
+	--
+	Problems/Ideas.
+	 o how often should it save?
+	 o exploitation & game balance (as always).
+	--
+*/
+
+inherit "players/dredd/home";
+
+#define PACKAGE "players/dredd/package"
+#define MAXI 10
+#define NO_FOOD 1
+#define NO_DRINK 2
+#include "wiz_dec.h"	/* dual mud hack */
+
+array hours; 		/* hours the shop is open */
+array 	item,		/* item name */
+	cost, 		/* item cost */
+	stock, 		/* amount of stock */
+	food, 		/* food value, if it's food. */
+	heal, 		/* amount player should be healed for 1 serve */
+	strength,	/* alcoholic strength if it's a drink */
+	mess,		/* consumption message */
+	size; 		/* size of barrel for wholesale amounts */
+
+int	accum,		/* money accumulated by owner */
+  	stock_remove,	/* the level of stock to remove an item from menu */ 
+	max_items,	/* maximum number of items in store */
+	package,	/* The cost of packages, if 0 there are none */
+	restrictions;	/* restrictions flag 0-none, 1-no_food, 2-no_drink */
+			/* Believe me - I hate magic numbers! */
+
+string type,		/* restaurant, pub, brewery, manafacturer */
+       shopkeeper;	/* name of shopkeeper, defaults to 'shopkeeper' */
+
+reset(arg)
+{
+	if (arg) return;
+	if (!max_items) max_items = MAXI;
+	if (!restore_object(file_name(this_object()))) {
+		zero();
+		set_up();
+	}
+	if (!shopkeeper) shopkeeper = "shopkeeper";
+}
+
+set_up() { }
+
+/*
+ 	Set everything up to be an empty array like
+	they should be anyway.
+*/
+zero()
+{
+	item = ({ });
+	cost = ({ });
+	stock = ({ });
+	food = ({ });
+	heal = ({ });
+	strength = ({ });
+	mess = ({ });
+	size = ({ });
+}
+
+/*
+	Add a new item into the shop, should fail for
+	drinks/food where appropriate.
+*/
+add_new_item(nm, ct, sk, hl, st, fd, ms, sz)
+{
+int x, y;	
+	if (restrictions == NO_FOOD && fd > 0) return 0;
+	if (restrictions == NO_DRINK && st > 0) return 0;
+
+	x = index(item, nm);
+	if (x > -1) return;
+	y = sizeof(item);
+
+	if (y >= max_items) return;
+
+	/* you need array addition for the below stuff */
+	item += ({ nm });
+	cost +=({ ct });
+	stock +=({ sk });
+	heal +=({ hl });
+	strength +=({ st });
+	food += ({ fd });
+	mess +=({ ms });
+	size += ({ sz });
+	return 1;
+}
+
+debug(x) {
+	write("item size : "+item[x]+"\n");
+	write("strength  : "+strength[x]+"\n");
+	write("cost  : "+(cost[x])+"\n");
+	write("heal  : "+(heal[x])+"\n");
+	write("food  : "+(food[x])+"\n");
+	write("mess  : "+(mess[x])+"\n");
+	write("stock  : "+(stock[x])+"\n");
+	write("size  : "+(size[x])+"\n");
+	return 1;
+}
+
+menu(flag) {
+int i;
+	write("\n");
+	if (item)
+	for(i = 0; i <  sizeof(item); i++)  {
+		if (!item[i]) continue;
+		write("\t"+(i+1)+") ");
+		if (flag) write(stock[i] + " in stock / ");
+		if (size[i]) write(size[i] + " per barrel @");
+		write(" "+cost[i]+" coins\t"+item[i]+".\n");		
+	}
+	write("\n");
+}
+
+long() {
+	if (set_light(0)) {
+		write(short_desc +".\n");
+		menu(0);
+	}
+	::long();
+	/* optional - you need a real estate agent first :-) */
+	if (!owner) write("A large sign reads: FOR SALE - enquiries at the real estate office.\n");
+}
+
+init() {
+	::init();
+	if (type == "brewery" || type == "manafacturer") {
+		add_action("order", "buy");
+		add_action("order", "order");
+	}
+	else {
+		add_action("consume", "buy");
+		add_action("consume", "order");
+	}
+}
+
+query_accum() { return accum; }
+
+add_accum(str) { 
+int taxp;
+	/* tax kludge; feel free to exterminate */
+	if (str > 10) {
+		taxp = str/20 + 1;
+		str -= taxp;
+		"room/city/treasury"->add(taxp);
+	}
+	accum += str;
+	if (accum < 0) accum = 0;
+	return accum;
+}
+		
+/*
+	Saves every tim someone leaves the store, probably too often.
+*/
+exit() {
+	if (query_host_name() != WIZ_DEC && !random(10))
+			 save_object(file_name(this_object()));
+	return 1;
+}
+
+
+/*
+	returns -1 if item doesn't exist (string comparison on name),
+	otherwise returns it's index in the arrays storing item information.
+*/
+query_item(name) 
+{
+int x;
+	x = index(item, name);
+	return x;	
+}
+
+/*
+	 adds a name with no values to the list.
+ */
+#if 0
+add_item(name)
+{
+	if (!name || !intp(name)) return;
+	if (sizeof(item) == max_items) return;
+	add_new_item(name);
+	return 1;
+}
+#endif
+
+/*
+	takes the index into the items array and sets the stock value.
+	or whatever the appropriate "field" is in the below procs.
+*/
+set_stock(num, amount)
+{
+	if (num > sizeof(stock) || num < 0) return;
+	stock[num] = amount;
+	return 1;
+}
+
+add_stock(num, amount)
+{
+	stock[num] += amount;
+	return 1;
+}
+
+set_size(num, amount)
+{
+	if (num > sizeof(size) || num < 0) return;
+	size[num] = amount;
+	return 1;
+}
+
+set_cost(num, str)
+{
+	if (num > sizeof(cost) || num < 0) return;
+	cost[num] = str;
+	return 1;
+}
+
+/*
+	Removes item X from all the field arrays.
+*/
+remove_item(x) {
+	if (x < 0 || !intp(x) || x > sizeof(item)) return;
+	item = fix_array(item, x);
+	heal = fix_array(heal, x);
+	cost = fix_array(cost, x);
+	mess = fix_array(mess, x);
+	stock = fix_array(stock, x);
+	strength = fix_array(strength, x);
+	food = fix_array(food, x);
+	size = fix_array(size, x);	
+	return 1;
+}
+
+fix_array(arr, t) {
+array a,b;
+	a = extract(arr, 0, t-1);	
+	b = extract(arr, t+1);
+	return (a + b);
+}
+
+set_hours( morn, even )
+{
+	if (!morn || !even) return 0;
+	if (!stringp(morn) || !stringp(even)) return 0;
+	hours = ({ morn, even });	
+	return 1;
+}
+
+/*
+	Determines whether or not it is in within operating hours.
+
+	Returns rejection mess if it is not.
+*/
+out_of_hours()
+{
+string tim;
+	if (pointerp(hours)) {
+		/* I hope you have a game clock :-) */
+		tim = "obj/game_clock"->query_time();
+		if (hours[1] > hours[0]) {
+			if (tim < hours[0] || tim > hours[1]) {
+				return ("The shop is closed, please come back between the hours of "+hours[0]+" and "+hours[1]+".\n");
+			}
+		}
+		else {
+			if (tim < hours[0] && tim > hours[1]) {
+				return ("The shop is closed, please come back between the hours of "+hours[0]+" and "+hours[1]+".\n");
+			}
+		}
+	}
+	return 0;
+}
+
+/*
+	Will determine if the shopkeeper is here.
+
+	o Bartender code is currently awaiting some other wizards
+	production (ie. a generic bartender).
+*/
+bartender() 
+{
+	return 0;
+}
+/*
+	Ok for a player to buy ?
+	Return 0 if its ok, otherwise rej message.
+*/
+ok_to_buy(flag, num)
+{
+object pob;
+	pob = this_player();
+	if (!flag && (pob->query_money() < cost[num])) {
+		return("The "+shopkeeper+" says: You don't have enough money! Beat it!\n");	
+	}
+	if (stock[num] <= stock_remove && owner) {
+		return ("The "+shopkeeper+" says: I'm sorry - we're out of that at the moment!\nThe "+shopkeeper+" says: Perhaps you should contact "+capitalize(owner)+" about the situation.\n");
+	}
+	return 0;
+}
+
+/*
+	Charge the player appropriately.
+	Determine if it is the owner and give it to them free.
+*/
+charge_player(flag, num)
+{
+object pob;
+	pob = this_player();
+
+	if (!flag) {
+		write("You pay " + cost[num] + " coins for a " + item[num] + ".\n");
+		say(capitalize(pob->query_name()) + " orders a " + item[num] + ".\n");
+		pob->add_money( - cost[num] );
+	}
+	else {
+		write("You get a " + item[num] + " on the house.\n");
+		say(capitalize(pob->query_name()) + " gets a " + item[num] + " on the house.\n");
+	}
+	return 1;
+}
+
+/*
+	The consume function is for consumption at the premesis
+	(ie. pubs & restaurants), if package is set then
+	a package is produced.
+	
+	The flag indicates whether or not you have to pay :-).
+*/
+
+consume(str,flag)
+{
+int num, i, me, tim, no_buy;
+object pob, pk;
+
+	notify_fail("What would you like to order?\n");
+	if (!str) return 0;
+
+	if ((tim = out_of_hours())) {
+		write (tim);
+		return 1;
+	}
+	if ((tim = bartender())) {
+		write (tim);
+		return 1;
+	}
+	pob = this_player();
+	num = get_num(str);
+	if (num == -1) return 0;
+
+	if (!flag && owner && pob->query_real_name() == owner) {
+		flag = 1;
+		write("The "+shopkeeper+" says: Good to see you "+capitalize(owner)+".\n");
+	}
+	if ((tim = ok_to_buy(flag, num))) {
+		write (tim);
+		return 1;
+	}
+
+	if (!package) {
+		if (strength[num] && !pob->drink_alcohol(strength[num])) {
+			write("The "+shopkeeper+" says: I think you've had enough.\n");
+			say(capitalize(pob->query_name()) + " asks for a " + str + " but the "+shopkeeper+" refuses.\n");
+			no_buy = 1;
+		}
+	    /* should do a food "cooking" delay here! -- later. */
+		if (food[num] && !pob->eat_food(food[num])) {
+			write("The "+shopkeeper+" says: You look awfully full - you're not going to be ill in my place!\n");
+			say(capitalize(pob->query_name()) + " asks for a " + str + " but the "+shopkeeper+" refuses.\n");
+			no_buy = 1;
+		}
+		if (no_buy) return 1;
+		write(mess[num] + ".\n");
+		if (heal[num] > 0) pob->heal_self(heal[num]);
+		else pob->damage(-heal[num]);
+		
+    	}
+	else {
+		pk = clone_object(PACKAGE);
+		if (strength[num])
+		pk->set_package(item[num], heal[num], strength[num], 
+				food[num], mess[num], "bottle");
+		else
+		pk->set_package(item[num], heal[num], strength[num], 
+			food[num], mess[num], "container");
+
+		if (transfer(pk, pob)) {
+			write("The "+shopkeeper+" says: You're carrying too much!\n");
+			destruct(pk);
+			return 1;
+		}
+     }
+     charge_player(flag, num);	
+     if (owner) {
+	     stock[num] -= 1;
+	     if (!flag) add_accum(cost[num]);
+	     if (package) add_accum(-pk->query_value());
+     }
+     if (stock[num] <= stock_remove) remove_item(num);
+     return 1;
+}
+
+/*
+	Clones up a food holding barrel and makes it
+	available for transfer to the purchaser.
+	(really a simple item to make)
+*/
+make_barrel(i)
+{
+object a;
+	stock[i] -= size[i];
+	if (!owner || item[i] > 0)
+	{
+	a = clone_object("players/dredd/barrel");
+	a->set_message(mess[i]);
+	a->set_id(item[i]);
+	a->set_heal(heal[i]);
+	a->set_strength(strength[i]);
+	a->set_amount(size[i]);
+	a->set_food(food[i]);
+	a->set_weight(10); /*(size[i] / 5); */
+	}
+	return a;
+}
+
+
+order(str,flag) {
+int num,i, tim; 
+object mb, pob;
+	notify_fail("What would you like to order?\n");
+	if (!str) return 0;
+	if ((tim = out_of_hours())) {
+		write (tim);
+		return 1;
+	}
+	if ((tim = bartender())) {
+		write (tim);
+		return 1;
+	}
+	pob = this_player();
+
+	num = get_num(str);
+	if (num == -1) return 0;
+
+	if (!flag && owner && pob->query_real_name() == owner) {
+		flag = 1;
+		write("The "+shopkeeper+" says: Good to see you "+capitalize(owner)+".\n");
+	}
+	if ((tim = ok_to_buy(flag, num))) {
+		write (tim);
+		return 1;
+	}
+
+    	mb = make_barrel(num);
+    	if (!mb) {
+		write("The "+shopkeeper+" says: Sorry we don't have enough to sell!\n");
+		return 1;
+	}
+	if (transfer(mb, pob)) {
+		write("The "+shopkeeper+" says: You don't seems to be able to carry anymore!\n");
+		return 1;
+	}
+     	charge_player(flag, num);	
+        if (owner) {
+		     stock[num] -= 1;
+		     if (!flag) add_accum(cost[num]);
+	 }
+    	 if (stock[num] <= stock_remove) remove_item(num);  
+   	 return 1;
+}
+
+/*
+	Translate the player's order into an array access number!
+*/
+get_num(str) {
+int num,i;
+string tmps;
+	sscanf(str, "%d", num);
+	if (!num) {
+	num = -1;
+		for (i=0; i < sizeof(item); i++) 
+			if (sscanf(lower_case(item[i]), "%s"+lower_case(str)+"%s", tmps))
+			{
+				num = i;
+				break;
+			}
+	}
+	else num = num - 1; /* array adjustment */
+	for (i=0; i < sizeof(item); i++) i = i;
+	if (num >= i) num = -1;
+	return num;
+}
+
