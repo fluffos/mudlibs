@@ -1541,6 +1541,30 @@ cause, fix, detection, known-affected lineages.
   new name elsewhere in the same file). (`basis`: `resolv_path.lpc`/
   `replace_string.lpc` for `new`, `std/i.lpc`'s
   `receive_message(string class, ...)` for `class`.)
+- **`set_this_object(ob)`** — classic MudOS efun temporarily overriding
+  `this_object()` for the rest of the current execution (used to make a
+  following privileged call, e.g. `write_file()`, act with a caller's
+  identity rather than the currently-executing object's own). Not a
+  real efun on this driver at all. Before reimplementing anything,
+  check whether it's actually load-bearing: if the archive's own
+  `valid_write()`/`valid_read()` master applies don't depend on caller
+  identity (e.g. an unconditional `return 1;`, as on a permissive
+  single-user testbed), the call can simply be dropped with zero
+  behavioral change. (`amylaarmini`'s `log_file()`.)
+- **`get_dir()`'s flag-value convention differs from the old
+  Amylaar-era driver**: that driver used flag `2` to request the
+  detailed `({filename, size, mtime})` per-entry array form; on this
+  driver that form is flag `-1` (any other nonzero flag value returns
+  a plain array of bare filename strings only). Code ported verbatim
+  from that lineage that does `get_dir(dir, 2)` and then indexes
+  `result[0]` expecting a file SIZE silently gets a filename STRING
+  instead, crashing the first arithmetic/comparison against it with no
+  indication the flag value itself was the problem. Grep any
+  `get_dir(\s*[^,]+,\s*2\s*)` call on a newly onboarded pre-LDMud
+  archive; fix by changing the flag to `-1` and indexing the resulting
+  per-entry array's `[1]` (size) / `[2]` (mtime) fields instead of
+  treating it as flat. (`amylaarmini`'s `log_file()` log-rotation
+  check, `secure/simul_efun.lpc`.)
 
 ### 6.3 Grammar strictness
 
@@ -13548,6 +13572,98 @@ compiles clean and the game world loads fine; it only surfaces once
 something actually tries to write or read a file gated by a
 non-root/non-open-directory rule, which for most mudlibs means the
 very first player save).
+
+### 7.177 A direct, explicit call to a function literally named `reset` can silently execute as a no-op on this driver — even from that same object's own `create()`, on the object's very first load — making the standard `create() { reset(0); }` lazy-reset workaround (§7.158) itself unreliable
+
+Every other lazy-`reset()` fix catalogued so far (§7.158, and this
+project's own `lpmud141` archive) assumes that once you force the call
+eagerly with `create() { reset(0); }`, the function body actually runs.
+On `holymission` this assumption broke in a way that produced NO
+compile error, NO runtime error, and NO trace — the call is entered
+(confirmed live: `debug_message()` calls immediately before and after
+the `reset(0);` call site in `create()` fired reliably every time) but
+every statement inside `reset()` itself, including a `debug_message()`
+placed as the very first line of the function body, never executed. A
+control experiment ruled out everything else: assigning
+`env_var = (["TEST":1]);` directly inside the same `create()` (bypassing
+`reset()` entirely) worked immediately, proving `create()` itself runs
+completely normally and the anomaly is specific to invoking a function
+whose name is literally `reset`.
+
+This reproduced identically in two unrelated files in the same archive
+(`doc/lib/player.lpc`'s own player-body `reset(int arg)`, and
+`secure/simul_efun.lpc`'s `reset(int tick)` restoring `pw_db` from
+`/secure/PWDB.o`) — in the `simul_efun.lpc` case specifically, the
+*first* time the object was created (during `master.lpc`'s own
+dependency-triggered early compile) the direct `reset(0)` call **did**
+run; a *second*, later create() of what the driver treats as the "real"
+simul_efun instance (right after `master.lpc` finishes compiling, before
+"Loading preload files") had its own `reset(0)` call silently no-op'd.
+So this is not a simple "first call always works" rule either — treat
+any bare, direct `reset(0)` call as unreliable everywhere on this
+driver, not just on lazily-triggered later resets.
+
+**Fix**: rename the actual initialization logic to a plain, non-magic
+function name (`do_reset(int arg)` was used here) and call *that*
+directly from `create()`, keeping a thin `void reset(int arg) {
+do_reset(arg); }` pass-through so the driver's own natural periodic
+reset-apply (which needs a function literally named `reset` to exist)
+still works normally. Where touching every call site isn't practical —
+e.g. a universal base class whose subclasses each define their own
+`reset()` and calling the most-derived override virtually is the actual
+goal, not a same-file rename — routing the explicit call through
+`call_other(this_object(), "reset", 0)` instead of a bare `reset(0)`
+also reliably executes it (confirmed both ways; this is exactly the fix
+this project's own `lpmud141` archive already used for what looks like
+the same driver quirk, though it was never promoted out of that one
+lib's own `meta.json` into this general catalog until now). Grep any
+archive using the §7.158-style `create() { reset(0); }` fix for whether
+it actually took effect (a `debug_message()` at the top of `reset()`,
+or an observable side effect like a populated mapping) rather than
+assuming the pattern works just because it's the documented fix
+elsewhere.
+
+### 7.178 A master apply that looks like a standard driver hook, compiles cleanly, and is even invoked by name from another function in the same file — but is simply never called by this driver at all — silently blocks any subsystem seeded solely by its own body
+
+`secure/master.lpc` had `void inaugurate_master(object ob) {
+master_reload(); }`, with `master_reload()` responsible for populating
+`wiz_info`/`sanc_info` (levels/promotion data) from
+`/secure/WIZSAVE.o`, or seeding safe defaults if that restore fails.
+`inaugurate_master()` is a real LDMud master apply (called once, right
+after the master object first compiles) — but this driver's own source
+has zero references to it anywhere (`grep -rn inaugurate_master
+src/` on the driver itself came up empty). Since nothing else in the
+mudlib ever calls `master_reload()` either, `wiz_info` sat at its
+never-executed declaration-time initializer's mercy: sometimes a real
+(if empty) mapping, sometimes truly `0` depending on incidental
+compile/reload timing elsewhere — `get_wiz_level(name)`'s
+`wiz_info[name]` lookup intermittently crashed with "Value being
+indexed is zero" on a perfectly ordinary player name, from
+`secure/login.lpc`'s very first per-connection wizard-level check,
+non-deterministically (worked on some driver boots, crashed on others,
+depending on whether some incidental object load happened to run
+`master.lpc`'s declaration-time mapping initializer before the first
+login arrived).
+
+This is the master-apply-name analogue of §7.158's `move_object`
+finding: a call that "looks like it should work" produces zero error
+signature of any kind — no compile warning, no runtime error, not even
+a wrong RESULT most of the time (since an empty `wiz_info` mapping is a
+perfectly valid, non-crashing return for `get_wiz_level()` on every
+name that isn't already a wizard) — it just never actually seeds the
+real data, and the resulting crash is gated by unrelated compile-order
+timing rather than being reliably reproducible every boot. **Fix**: give
+`master.lpc` a real `create() { master_reload(); }` (this driver DOES
+call `create()` normally on the master object) instead of relying on a
+dead apply name. **General lesson**: whenever a mudlib's master.lpc (or
+any other security-daemon-style file) defines a function with a
+recognizable "sounds like a driver hook" name that is never itself
+called by any other function IN that same mudlib file, grep the actual
+driver source for that exact identifier before trusting it fires —
+`inaugurate_master`, like `query_ed_mode` (non-`OLD_ED` builds only) and
+others catalogued elsewhere, is real on some driver lineages and
+completely absent on this one, with no warning at the call site either
+way.
 
 ---
 

@@ -1,0 +1,55 @@
+/*
+ * simul_efun.c
+ */
+
+
+#define MAX_LOG_SIZE 50000
+
+void log_file(string file, string str) {
+  string file_name;
+  mixed *st;
+
+  file_name = "/log/" + file;
+#ifdef COMPAT_FLAG
+  if (sizeof(regexp(({ file }), "/")) || file[0] == '.' || strlen(file) > 30) {
+    write("Illegal file name to log_file(" + file + ")\n");
+    return;
+  }
+#endif
+  // This driver's get_dir() uses flag -1 (not the old Amylaar-driver
+  // convention's 2) for the detailed ({filename, size, mtime})
+  // array form this code actually needs; any other flag value just
+  // returns a plain array of filenames (strings), which made
+  // st[0] a STRING here, not the file's size, crashing the very
+  // next comparison ("Bad argument 2 to >, Expected: string Got:
+  // 50000"). See AGENTS.md §6.2.
+  if (sizeof(st = get_dir(file_name, -1)) && st[0][1] > MAX_LOG_SIZE) {
+    catch(rename(file_name, file_name + ".old")); /* No panic if failure */
+  }
+  // set_this_object() (making write_file() below act with
+  // previous_object()'s identity for permission purposes) is not
+  // an efun on this driver. Harmless to drop here: this archive's
+  // own valid_write() (secure/master.lpc) unconditionally
+  // `return 1;`s regardless of caller identity, so the original
+  // call had no actual effect on this driver's permissive ACL
+  // anyway. See AGENTS.md §6.2.
+  write_file(file_name, str);
+}
+
+
+/*
+ * cat() was a real efun on the classic driver this mudlib was written
+ * for; this driver (FluffOS) never implemented it, so it must be
+ * reimplemented here as a simul_efun -- see AGENTS.md §6.2.
+ */
+void cat(string file) {
+  string content;
+
+  content = read_file(file);
+  if (content)
+    write(content);
+}
+
+void syserror(string err_message) {
+  log_file("sys_errors", err_message + "\n");
+}
