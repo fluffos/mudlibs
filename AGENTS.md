@@ -10290,6 +10290,18 @@ explaining why); verified live end-to-end (a fresh character's `look`/
 `score`/`inventory`/`who`/`say`/`quit` all producing correct output
 post-fix, where every one of them returned `"What?"` before it).
 
+**Another confirmed instance, `pd` (2026-08-31 onboarding, ~32K files,
+the largest lib onboarded this session)**: the exact same
+`daemon/command.lpc` `rehash()` shape, same `-3`-for-`.lpc` slice,
+same total blast radius (`quit` was the only command registered via
+direct `add_action()`; every other verb routed through this table's
+corrupted keys). Notable only for scale and for surfacing a SECOND,
+independent, even-more-severe bug once this one was fixed and testing
+could proceed past it (see `§8.22` — this dispatch-table fix made
+brand-new registrations fully playable, but reconnecting to an
+EXISTING account was separately broken by an unrelated `export_uid()`
+privilege-handoff bug in the login object's restore path).
+
 ### 7.119 `master.lpc`'s runtime warning-vs-error filter checks for a capitalized `"Warning"` string, but this driver emits lowercase `"warning:"` — every compile WARNING (not error) gets broadcast to the connected player as a hard-error notice, sometimes repeatedly per room entry
 
 A near-relative of §7.103 (which covers the same "warnings reach the player" symptom via a MISSING filter entirely) — here the lib actually HAS a filter, but it's matching the wrong case. `log_error()`/the error-handler's classification check does something like `strsrch(msg, "Warning") != -1` to decide "route this to the log only, not the player," but this driver's actual compiler emits lowercase `warning:` (not `Warning`), so the check never matches and every routine compile warning — extremely common, e.g. an unused local variable in a base class every room inherits — gets shown to the player as if it were a fatal error. `zhyx` showed this up to 19 times in a row on a single fresh room entry before being fixed. Confirmed independently on `zhyx` and `naruto` (a from-scratch-lineage sibling sharing base-engine ancestry) same day — 2 unrelated Chinese-wuxia-family archives in one session, worth checking by default on any future onboard of this family. **Fix**: match the actual lowercase string the driver emits (case-insensitive match is safer still), or better, check the driver's real classification (an error vs. a warning callback distinction) if the master apply signature exposes one, rather than string-sniffing the message text at all.
@@ -10633,6 +10645,26 @@ This is a distinct shape from §7.121 (a function's own RETURN type
 being too narrow for its own internal arithmetic) — here the bug is a
 function's PARAMETER type being narrower than how every real caller
 invokes it.
+
+**Confirmed at unusually large scale on `pd` (2026-08-31 onboarding,
+~32K files)**: this Nightmare-lineage base object class (`std/object.lpc`)
+declared `void set_id(string str)` while 7,350+ real call sites across
+the whole corpus pass an array (`set_id(({"sword","blade"}))`) — every
+OTHER override of `set_id` anywhere in the tree (monster/drink/food/
+etc. base classes) already independently redeclares it as `string *`,
+confirming the base declaration was the sole outlier. Same shape
+recurred across SEVEN more base-class setters in this one lib
+(`set_swarm`, `set_languages`, `set_alignment`, `set_long`, `set_short`,
+`set_door_func`), each declared narrower than real callers use it
+(usually a legitimate `mixed`/functional-value calling convention this
+1990s-era MudOS codebase never bothered to update the type annotation
+for) — together these 8 functions accounted for ~8,800 of this lib's
+original ~10,000 `lpcc_check.sh` failures (88%), by far the dominant
+failure class. Fixed identically each time: widen the declared
+parameter to `mixed`, adding a `stringp(x) ? ({x}) : x`-style
+normalization at the top of the body only where the function's own
+logic does array-specific operations (indexing, `sizeof`) that would
+misbehave on a bare scalar.
 
 ### 7.128 A mudlib that builds its own complete command dispatch (never using the driver's native `add_action()` at all) still returns the raw input string from `process_input()` — the driver re-parses that string through its own empty action table and appends its own "unknown command" fallback message after EVERY single command, forever
 
@@ -13008,6 +13040,134 @@ for `varargs.*efun::` patterns and check each trailing parameter's
 real declared type in the driver's own `*.spec` files rather than
 assuming the old MudOS "0 means omit" convention still holds.
 
+### 7.166 A daemon's own `create()` calling one of its OWN `check_privilege()`-gated mutators can never succeed — the check's design requires a real connected `this_user()` at the end of the call chain, which doesn't exist yet at boot; route through `unguarded()` instead
+
+`spacemud` (Lima-lineage, see §7.46) ships a capability-based security
+daemon (`secure/daemons/secure_d.lpc`'s `check_privilege()`, inherited
+verbatim from stock Lima) whose central routine walks
+`all_previous_objects()` requiring EVERY object in the call chain to
+carry sufficient privilege, and — critically — if the loop exhausts
+without an early failure, it falls through to `this_user()` and
+requires THAT to also carry sufficient privilege, `return`ing 0 (and
+`syslog`ging "Secvio: Missing user") if no user is connected. This is
+fine for the common case (a wizard's command triggering a privileged
+daemon call), but it makes it IMPOSSIBLE for a daemon to call one of
+its own privilege-gated mutators from its own `create()` at
+preload/boot time — there is no connected player yet, so the fallback
+always fails, and the mutator's own `error()` on denial throws. Two
+independent instances of the SAME shape, both spacemud's own additions
+(not present in stock Lima, which hardcodes its equivalent data
+inline instead of self-mutating at boot): `daemons/method_d.lpc`'s
+`create()` → `load_config_from_file()` → `add_method()`/
+`add_method_equivalents()` (gated `check_privilege("Mudlib:daemons")`)
+silently failed EVERY boot (masked at runtime because
+`secure/master.lpc`'s `preload()` wraps every preload `load_object()`
+in a bare `catch()`, so the thrown error never surfaces as a boot
+failure — it just leaves `methods` permanently empty, which broke
+EVERY "complex exit" `go` method mudlib-wide, visible in
+`log/runtime` as `*Cannot set method 'go'. Method is either too
+ambiguous or should be added to METHOD_D` for every door/elevator in
+the game); and `daemons/space_d.lpc`'s `create()` →
+`generate_starsystems()` (same gate) meant the procedurally-generated
+universe NEVER got created on a fresh install. Confirmed by
+temporarily instrumenting `check_privilege()` with a `debug_message()`
+dump of `all_previous_objects()` — the failing stack was exactly
+`({simul_efun, method_d-or-space_d (self), master})`, i.e. no user
+frame anywhere in it. **Fix**: this same codebase already ships the
+correct mechanism for exactly this scenario — `unguarded(priv,
+function code)` (in `secure/modules/m_access.lpc`, already used by
+`M_DAEMON_DATA`'s own `save_me()`/`restore_me()` for this identical
+"trusted self-action, no live user" case) bypasses the `this_user()`
+requirement by checking `query_unguarded_privilege()` on the object
+the function pointer is bound to instead. Changed the boot-time call
+sites from `add_method(x)` / `generate_starsystems()` to
+`unguarded(1, ( : add_method, x : ))` / `unguarded(1, ( :
+generate_starsystems: ))` — zero changes needed to the gated functions
+or to `check_privilege()` itself. **General lesson**: any
+`check_privilege()`/similar-framework call reachable from a daemon's
+own `create()` (not just this one) should be treated as suspect on
+sight — grep the gated function's callers for one that's invoked
+directly or transitively from `create()`, and if found, check whether
+`log/runtime` shows the corresponding `Secvio: Missing user` or a
+caught-and-silent `error()` before assuming a boot-time self-init path
+"just works" because the compile sweep and a `PASS` result didn't
+flag it (the `catch()` in `preload()` hides exactly this class of
+failure from both `lpcc_check.sh` — which doesn't wrap preload calls
+that way — and a real boot's obvious output alike).
+
+### 7.167 Two collection-emptiness pitfalls, both driver-dialect facts rather than bugs in isolation, that combine to make an "obviously correct" C-style idiom silently wrong: `mapping == mapping-literal` is REFERENCE equality, not value equality, and `explode("", sep)` returns a ZERO-element array, not a one-element array containing `""`
+
+Found in `spacemud`, but both facts are core, driver-wide semantics
+(reproduced with a trivial isolated test file, no Lima-specific flags
+involved) that could recur in any lib.
+
+**(a) `mapping == mapping-literal` never returns true, even for two
+empty mappings.** `daemons/crafting_d.lpc`'s `create()` used `if
+(materials == ([])) load_config_from_file();` to decide whether the
+crafting-materials config still needed loading (`materials` is a saved/
+restored variable, empty on a fresh install). This driver compares
+mappings (and non-empty arrays) by REFERENCE for `==`, not by value —
+`([]) == ([])` is `0` even though both sides are literally empty,
+confirmed with `debug_message(sprintf("%O", ([]) == ([])))` printing
+`0`. (Arrays get a deceptive partial pass: `({}) == ({})` IS `1`,
+apparently because this driver interns a single shared empty-array
+singleton, but `({1,2}) == ({1,2})` is still `0` — so even for arrays,
+`==` is not a general value-equality operator, just accidentally true
+in the zero-length case.) The practical effect here: the condition was
+ALWAYS false, `load_config_from_file()` never ran on any boot past the
+first, and `materials` stayed permanently empty — every single call to
+`set_salvageable()` mudlib-wide (any weapon/armor built with
+`std/modules/m_salvageable.lpc`) threw `*Invalid salvage type: X` and
+aborted that object's `setup()`/`create()` partway through, for EVERY
+category, not just one — a severe, corpus-wide breakage of the entire
+crafting/salvage feature from the very first boot. **Fix**: replace the
+identity comparison with the idiom already used correctly elsewhere in
+this SAME codebase (e.g. `space_d.lpc`'s `if
+(!sizeof(keys(starsystems)))`, `method_d.lpc`'s `if
+(!sizeof(keys(methods)))`) — `if (!sizeof(materials))`. **General
+lesson**: grep any newly-onboarded lib for `== *(\[\])` / `(\[\]) *==`
+(and the `!=` forms) — every hit is very likely a real bug, since
+`sizeof()`/`keys()` emptiness checks are the only reliable idiom on
+this driver and are already what the rest of any given codebase
+normally uses. This lib had exactly one such hit and it was a real,
+severe bug.
+
+**(b) `explode("", sep)` returns `({})` (zero elements), not `({""})`.**
+Some MudOS-lineage code assumes exploding ANY string — including an
+empty one — yields at least one element (the classic idiom being
+`explode(s, sep)[0]` for "the first piece, or the whole string if the
+separator never appears"). On this driver, exploding the empty string
+specifically returns a zero-length array, so `explode("", ",")[0]` /
+`[< 1]` throws `Array index out of bounds`. `spacemud`'s own
+`std/modules/m_frame.lpc` (`first_colour()`/`last_colour()`, part of
+a bespoke ASCII-frame colour-theme system with no stock-Lima
+equivalent) indexed `explode(hcolours[0], ",")[0]`/`[< 1]` directly;
+`hcolours[0]` is legitimately the empty string `""` for the built-in
+"none" colour theme (`include/frame_themes.h`'s `"none": ({"", "",
+"", ""})`), which is itself the DEFAULT `frame_colour` for any
+connection whose telnet negotiation doesn't report `xterm`
+(`obj/secure/shell/shellvars.lpc`'s `default_variables()`:
+`"frame_colour": (suggest_mode == "xterm" ? DEFAULT_FRAMES_THEME :
+"none")`) — i.e. any plain/non-MTTS-capable client, a very ordinary
+case, not a misconfiguration. Net effect: the very first time such a
+player pressed `s` (select character) or `r` (remove character) in
+the account menu — both routed through `obj/usermenu/usermenu.lpc`'s
+`list_chars()`, which calls `last_colour()` while building the header
+row — the menu crashed with `*Array index out of bounds`, logged to
+`log/catch`, corrupting the character-list screen (recoverable at the
+session level only because the surrounding menu framework treats the
+aborted command as "Invalid selection" and returns to the prompt,
+not because anything actually rendered correctly). **Fix**: guard on
+`sizeof()` of the exploded result before indexing, returning an empty
+colour tag when the theme's colour string is empty:
+`string *codes = explode(hcolours[0], ","); return sizeof(codes) ?
+"<" + codes[0] + ">" : "";` (and the same shape for `codes[< 1]`).
+**General lesson**: any `explode(x, sep)[0]` / `[< N]` where `x` can
+legitimately be `""` (not just "unexpected", but a real, reachable
+value — empty-string placeholders/defaults are common) needs a
+`sizeof()` guard on this driver; don't assume explode's classic
+MudOS "always at least one element" behavior carries over.
+
 ---
 
 ## 8. Login and registration flow bugs
@@ -14552,6 +14712,106 @@ from ANY redundant/duplicate restore call later in the same login
 flow — grep for more than one `restore_*()`/`restore_object()`-style
 call per connection before assuming setup-time state will still hold
 by the time the player's first command runs.
+
+### 8.22 `export_uid()` only ever transfers the target's UID, never its euid, and is a silent no-op unless the target's OWN euid is already unset — a Nightmare-lineage login's restore-path privilege handoff assumed the opposite on both counts, permanently blocking every EXISTING account from ever logging back in
+
+Found onboarding `pd` (Primal Darkness, Nightmare-mudlib lineage,
+~32K files — the largest lib onboarded this session). A fresh
+character registration worked perfectly end-to-end (name, password,
+race pick, starting room, `look`/`score`/`inventory`/`say`/`quit` all
+correct), but reconnecting to ANY already-created account — including
+one that had just registered and cleanly `quit` moments earlier —
+silently landed the player in a session with ZERO commands available:
+even `quit` itself returned the driver's generic `What?` fail message,
+with no error anywhere in `debug.log` to point at the cause. This is
+categorically worse than a single broken command: every RETURNING
+player was affected, corpus-wide, on this lineage's login object,
+while brand-new registrations (the far less common event, and the only
+path most `§10.1` playthrough scripts naturally exercise on the first
+try) looked completely fine — a shape worth remembering generally:
+**any login bug that only manifests on the RESTORE path needs its own
+explicit register-quit-reconnect cycle to catch, not just one
+continuous session** (a sibling case to `§8.20`'s post-driver-restart
+variant, except this one reproduces within the SAME driver process).
+
+Root cause, found via `message()`/`debug_message()` instrumentation
+(plain `write()` produced no visible output at all during the pre-body
+login sequence — this lineage's own code always uses
+`message("logon", ..., this_object())` instead, for good reason):
+`adm/obj/login.lpc`'s `get_password()` → `check_password()` calls
+`master()->load_player_from_file(name, ob)` to restore the player's
+save data (needed just to compare the stored password hash) — a
+classic "player object doesn't have rights to read its own save file
+directly, so briefly borrow root privileges via the master object"
+pattern. That handoff was written as `export_uid(ob); ob->restore_player(name);`.
+Two independent, compounding misunderstandings of what this driver's
+`export_uid()` actually does (confirmed directly against
+`packages/uids/uids.cc`'s `f_export_uid()`):
+1. **It is a silent no-op unless the target's OWN `euid` is currently
+   unset.** Every `/std/object` instance already has a real euid by
+   this point (`create()`'s own `seteuid(getuid())`), so `export_uid(ob)`
+   here always failed immediately, doing nothing.
+2. **Even when it DOES fire, it only ever sets the target's `uid`,
+   never its `euid`** — it is a one-time ownership-transfer primitive
+   for freshly-created objects, not a privilege-escalation efun. This
+   codebase's own `save_player()`/`actually_save_player()` pair (the
+   symmetric SAVE-side handoff) already worked correctly by accident of
+   a different code shape: `save_player()` calls `seteuid(0)` on
+   itself FIRST (clearing its own euid, always allowed for self) before
+   calling into master, satisfying misunderstanding #1, and
+   `actually_save_player()` then does its own `seteuid(UID_ROOT)` — which
+   succeeds specifically BECAUSE `export_uid()` had just set its UID to
+   Root, letting `master::valid_seteuid()`'s `uid==UID_ROOT` special case
+   pass. The RESTORE-side code never had either half of this: nothing
+   cleared `ob`'s euid before the export attempt, and `restore_player()`
+   never called `seteuid()` itself afterward — it just assumed
+   `export_uid()` had already granted enough privilege, so its own
+   `restore_object()` call failed `master::check_access()`'s permission
+   check on `/adm/save/users/...` with `*restore_object: read permission
+   denied`, thrown with nothing wrapping it in `catch()` — silently
+   aborting `check_password()` (and everything `get_password()` still
+   had queued after it) with no debug.log trace at all, right in the
+   middle of the very FIRST `input_to()` callback of the whole restore
+   attempt.
+
+**Fix** (two parts, mirroring the working save-side pattern):
+1. Added a small `nomask void clear_euid() { seteuid(0); }` to the
+   shared `std/object.lpc` base class (self-only, always safe — the
+   `seteuid(0)` literal-zero form bypasses `valid_seteuid()` entirely by
+   driver convention) so a privileged caller can reliably force an
+   object's euid to unset before exporting into it, rather than hoping
+   it already happens to be unset.
+2. In `master.lpc`'s `load_player_from_file()`: call `ob->clear_euid();`
+   immediately before `export_uid(ob)` (satisfies misunderstanding #1 —
+   this makes `ob`'s UID actually become Root as intended). In
+   `std/user/save.lpc`'s `restore_player()`: add an explicit
+   `seteuid(UID_ROOT);` right before `restore_object()` (satisfies
+   misunderstanding #2 — this succeeds because the UID export_uid() just
+   performed makes `valid_seteuid()`'s own-UID-is-Root special case
+   pass). Applied identically to `master2.lpc` and the `std/test/`/
+   `wizards/nulvect/std/` sibling copies of both files (this driver
+   compiles every `.lpc` in the tree standalone, backups and test
+   copies included). Verified live end-to-end: register a new
+   character, `quit`, reconnect with the same password — before the fix,
+   silent `What?` on every command including `quit`; after, correct
+   password prompt, correct room/inventory/equipment restoration, and
+   `look`/`score`/`inventory`/`quit` all producing correct output,
+   confirmed on two independent accounts.
+
+**How to apply generally**: any Nightmare/TMI-lineage master object
+with a `load_player_from_file()`/`load_object()`-style "temporarily
+borrow root to read this player's save file" pattern is suspect if it
+calls `export_uid()` without first clearing the target's existing euid,
+or treats a successful `export_uid()` as having granted `geteuid()`
+access rather than just `getuid()`. Compare the lib's SAVE-side handoff
+(usually works, because it often independently clears euid via a
+different code path) against its RESTORE-side handoff (the one this
+bug hides in, because it's the less-tested, less-obviously-broken-
+looking direction) rather than assuming both directions share the same
+bug status. A quick live test: register, quit, and reconnect with the
+same account in one sitting — a lib with this bug will show a
+correctly-prompted password step followed by a commandless "What?"
+session with nothing in `debug.log`, not an outright crash.
 
 ---
 

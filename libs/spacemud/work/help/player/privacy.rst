@@ -1,0 +1,44 @@
+Privacy
+=======
+.. TAGS: RST
+
+See:  `snoopable <../player_command/snoopable.html>`_ 
+
+Though technically your legal rights on a MUD are very limited,
+the administration of this MUD tries its best to treat you as
+human beings, and respect your privacy.  The most destructive
+invasion of privacy on MUDs is the ability for Wizards to snoop.
+This MUD's policy on snooping is hard coded:
+
+#. There is a player command called "snoopable."  Turning it on
+   allows a Wizard to snoop you.  Default is off.  If you want to
+   show a Wizard a bug, or have them watch what you are doing for
+   some reason, turn it on, but otherwise it's a good idea to leave
+   it off to protect your privacy.
+   
+#. Administrators of the MUD will always be able to snoop you.  They
+   have been hand-picked so that they are EXTREMELY trustable
+   individuals with excellent and final judgment.  They will only
+   make use of this power when cheating or other illegal behavior is
+   STRONGLY suspected.
+
+#. All Wizards have the ability to override your "snoopable" flag.
+   The only valid excuse for doing this is if they have an EXTREMELY
+   good reason for doing this without your consent.  If they STRONGLY
+   suspect illegal behavior, and there is no Administrator around to
+   handle the problem, they may override.
+
+#. ANY use of this override command will be carefully scrutinized by
+   the administration of the MUD.  The Wizard MUST provide a reason
+   before the command will work, and they are required to turn in a
+   report about the snoop afterwards.
+
+#. Wizards using the override command without excuse, or whoose
+   excuse is deemed inadequate by an Admin will be publicly
+   reprimanded once, then dismissed if such an event happens again.
+
+#. The Wizards are physically incapable of superseding these rules.
+   However, there is no protection from a Wizard eavesdropping by
+   being invisible in a room in which a conversation is occurring.
+   Though Wizards are expected to show discretion, you may restrict
+   your conversations to tells if you want to ensure privacy.
