@@ -1,0 +1,61 @@
+/*    /lib/editor.c
+ *    from the Dead Souls LPC Library
+ *    mudlib based editor interface
+ *    created by Descartes of Borg 950406
+ *
+ *    Rewritten against this driver's OLD_ED single-entry ed() efun --
+ *    the split ed_start()/ed_cmd()/query_ed_mode() API this file
+ *    originally used only exists when the driver is built WITHOUT
+ *    OLD_ED (AGENTS.md section 6.2). This build predefines __OLD_ED__,
+ *    so those three efuns are genuinely undefined here ("Undefined
+ *    function ed_start"), which failed the compile of this file --
+ *    and, since lib/editor.lpc sits in the interface/interactive
+ *    inheritance chain used by the player body class itself, that
+ *    compile failure took the WHOLE player body down with it, silently
+ *    breaking character creation (confirmed live: admin-install wizard
+ *    lost its input_to() chain the moment it tried to touch the new
+ *    player object).
+ *
+ *    Under OLD_ED the driver's own command loop intercepts every line
+ *    of input itself while an ed session is open (comm.cc's
+ *    process_user_command(): `if (ip->ed_buffer) { ed_cmd(...); goto
+ *    exit; }`, BEFORE any LPC-level process_input()/input_to() ever
+ *    runs) -- so there is no longer anything for this file's own
+ *    process_input() to do; it's kept only because interface.lpc's
+ *    contract calls editor::process_input() unconditionally.
+ */
+
+#include "include/editor.h"
+
+private nosave function EditCallback;
+
+nosave void create() {
+  EditCallback = 0;
+}
+
+varargs void eventEdit(string file, function callback) {
+  EditCallback = callback;
+#ifdef __DSLIB__
+  if (this_object()->GetCharmode()) {
+    this_object()->erase_prompt();
+    this_object()->CancelCharmode();
+    this_object()->SetProperty("was_charmode", 1);
+  } else this_object()->CancelCharmode();
+#endif
+  // ed(file, exit_fn, restricted) -- the driver calls exit_fn (a
+  // method on this same object, since editor.lpc is inherited into
+  // the player body) with 0 args when the ed session closes.
+  ed(file, "eventEdExit", !creatorp());
+}
+
+nosave void eventEdExit() {
+  if (functionp(EditCallback)) evaluate(EditCallback);
+  EditCallback = 0;
+}
+
+nosave string process_input(string str) {
+  // Dead code under OLD_ED -- the driver never reaches here while an
+  // ed session is open (see file header). Kept as a passthrough so
+  // interface.lpc's process_input() chain still has something to call.
+  return str;
+}
