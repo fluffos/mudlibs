@@ -6,8 +6,19 @@
 #define EXTRA_MOVE3
 #define EXTRA_MOVE4
 
+// See room/room.h for why every reset()-based room here also needs an
+// explicit create() { reset(0); } (this driver defers the natural first
+// reset() for up to "time to reset" seconds after load/clone, so light
+// and short/long descriptions stay unset -- "a dark room" -- until
+// then); applied here once for every ONE_EXIT/TWO_EXIT/THREE_EXIT/
+// FOUR_EXIT room using this header (confirmed live: room/shop and
+// room/adv_guild, both reachable one hop from the village's main
+// crossroads, were dark on every fresh boot until this fix -- init()
+// still wires up movement unconditionally here, so this header's rooms
+// were never exit-less like room.h's, just perpetually dark).
 #define ONE_EXIT(DEST, DIR, SH, LO, LIGHT)\
 reset(arg) { EXTRA_RESET if (arg) return; set_light(LIGHT); }\
+create() { reset(0); }\
 short() {\
     if (set_light(0))\
 	return SH;\
@@ -37,6 +48,7 @@ long(str) {\
 
 #define TWO_EXIT(DEST1, DIR1, DEST2, DIR2, SH, LO, LIGHT)\
 reset(arg) { EXTRA_RESET if (arg) return; set_light(LIGHT); }\
+create() { reset(0); }\
 short() {\
     if (set_light(0))\
 	return SH;\
@@ -73,6 +85,7 @@ long(str) {\
 
 #define THREE_EXIT(DEST1, DIR1, DEST2, DIR2, DEST3, DIR3, SH, LO, LIGHT)\
 reset(arg) { EXTRA_RESET if (arg) return; set_light(LIGHT); }\
+create() { reset(0); }\
 short() {\
     if (set_light(0))\
 	return SH;\
@@ -117,6 +130,7 @@ long(str) {\
 
 #define FOUR_EXIT(DEST1, DIR1, DEST2, DIR2, DEST3, DIR3, DEST4, DIR4, SH, LO, LIGHT)\
 reset(arg) { EXTRA_RESET if (arg) return; set_light(LIGHT); }\
+create() { reset(0); }\
 short() {\
     if (set_light(0))\
 	return SH;\
