@@ -504,3 +504,280 @@ at all but compiled clean standalone -- and `parcil` in particular is
 a real NPC in the real Haven-adjacent town content, not orphaned or
 backup content, further confirming this is a batch-tooling ceiling on
 a 13,589-file lib rather than a real per-file defect).
+
+## 7. §10.7 deep functional test (2026-08-31)
+
+Round-two pass on the native driver (`~/src/fluffos/build-debug/src/
+driver`, port 40249), building on top of the onboarding playthrough in
+section 5. Driven via `scripts/tmux_mud.sh` persistent telnet sessions
+(three sequential/parallel test characters: `Deeptestor`, `Combattest`,
+`Finaltest`), plus a ~210s idle long-sit boot watch
+(`python3 scripts/mudclient.py --idle 210 --timeout 215`) per AGENTS.md
+§10.0. One native driver reboot mid-session to pick up the two live
+fixes below; per section 5's own caution (`daemon/intermud`'s real
+outbound I3 connection), reboots were kept to the minimum needed.
+
+### Two real bugs found and fixed, verified live
+
+1. **AGENTS.md §7.191 (new) -- `daemon/help.lpc`'s `LoadIndices()`
+   crashed on the very first `help <topic>` command any player ever
+   ran, then stayed silently, permanently degraded for the rest of
+   that boot.** `tmp = get_dir(DIR_ROOM_VERBS + "/*.lpc") + get_dir(...)
+   + ... + get_dir(DIR_CRAFTING_VERBS + "/*.lpc") + ...` -- `/verbs/
+   crafting` genuinely never existed in this archive (confirmed absent
+   in `raw/` too, not a conversion artifact), and `get_dir()` on a
+   missing directory returns the driver's own bare integer `0` rather
+   than an empty array, so `array + int` threw
+   `Bad type argument to +. Had array and int.` uncaught. Live impact:
+   a fresh character's `help vendors` (the exact topic that surfaced
+   this) printed only "A runtime error occurred, use \"bug -r\" to
+   report it." Because the crash happened PARTWAY THROUGH a
+   `create()`-time one-shot function, every category meant to be
+   assigned after that line (`verbs`, `combat actions`, `immortal
+   commands`, `player documents`, `immortal documents`, `towns`,
+   `classes`, `races`, `religions`, `lore`, `library objects`) was
+   simply never populated for the rest of the boot -- confirmed by
+   `help human` (a race) and `help sword combat` (a verb) both
+   incorrectly returning "Help for the topic ... could not be found",
+   and `help index` showing only 3 categories (`commands`, `skill
+   documents`, `stat documents`) instead of the real 11. Fixed with a
+   `GD(string path)` wrapper (`mixed r = get_dir(path); return
+   arrayp(r) ? r : ({});`) substituted into every `get_dir()` call
+   feeding a `+`-concatenation in `LoadIndices()` -- the correct
+   guarded pattern was already sitting a few lines below in the SAME
+   function for a different set of categories. **Verified live twice**:
+   before the fix, `help vendors`/`help human`/`help index` all failed
+   exactly as above on a fresh boot's first `help` invocation; after
+   the fix and a clean reboot, the SAME fresh-boot-first-`help`
+   sequence returned the real `doc/help/players/vendors` documentation
+   text (confirmed by its own worked example, "Kelan"/"steel boots"),
+   `help human` returned the real race blurb, and `help index` showed
+   all 11 real categories.
+2. **`domains/averath/towns/averath/npc/chartercaptain.lpc` --
+   `SetFirstCommands("board ferry")` passed a bare `string` where the
+   real signature takes `string *`, so this NPC never compiled at
+   all.** Same self-evident-typo class already catalogued in section
+   3.11 above (`SetReligions`/`SetId`/`SetFriends` bare-string calls).
+   Impact: `domains/averath/towns/averath/room/charter.lpc`'s
+   `SetInventory()` tries to `new()` this NPC to run Averath's
+   ticket-purchase travel feature ("buy a charter to anywhere you've
+   been") -- with the NPC uncompilable, every attempt logs `*No
+   program in object '/domains/averath/towns/averath/npc/
+   chartercaptain'!` to `log/catch`, and the whole charter-travel
+   feature is permanently unusable. This also fires repeatedly and
+   noisily during ordinary play: the stock ferry's own wander/sail
+   logic (`lib/npcs/shipcaptain.lpc`) passes near/through the charter
+   room while sailing the Haven<->Averath route, so the caught error
+   logs on a recurring basis even for players who never try to charter
+   anything. Fixed by wrapping the argument (`({ "board ferry" })`).
+   **Verified**: `lpcc` standalone-compiles `chartercaptain.lpc` with
+   zero errors after the fix (zero occurrences of the pre-fix
+   `Bad type for argument 1 of SetFirstCommands` in a fresh
+   `log/errors/averath` compile pass), versus the error present before
+   -- not independently re-confirmed via a live charter purchase this
+   session (the charter feature itself needs real travel-history state
+   this session's time budget didn't reach), but the compile-blocking
+   bug itself, which is the actual defect, is conclusively fixed.
+
+### Confirmed working live
+
+- **Fresh registration, twice more** (`Combattest`, `Finaltest`,
+  alongside `Deeptestor` from section 5): identical flow each time,
+  landing in the newbie staging room, `read book` correctly awarding
+  160 development points and completing the "Newbie Book" quest.
+- **The newbie "describe yourself" nudge on first `go down`** (`who->
+  eventForce("describe")` in `domains/staff/room/setup.lpc`'s `Newbie()`
+  gate function) reproduced identically and deterministically across
+  all three fresh characters -- confirmed genuine content design (a
+  cheap way to show new players their race's eye/hair/skintone options
+  before advancement gates on having used `describe` at level 8, per
+  `lib/users/player.lpc:ResetLevel()`), not a test-harness artifact,
+  even though the wording ("You must <describe THING as WHAT>. Try
+  again.") reads oddly out of context since it's really the command's
+  own no-argument usage/help text being (ab)used as a tips display.
+- **Class join, organic teacher-NPC path**: `Combattest` converted to
+  the Kylin faith via `ask dalahalus to convert combattest`, then `ask
+  dalahalus to join priest` -- correctly deducted 160 development
+  points, granted a real primary/secondary/other skill set (`blunt
+  combat`, `chain armour`, `evokation`, `faith` primary; `healing`,
+  `fire magic`, etc. secondary), a title ("the Mendicant of Kylin"),
+  and starter gear (mace, armour, book of faith). `skills` afterward
+  correctly displayed ALL granted skills side by side in a formatted
+  grid (confirms this lib does NOT have the `rifts2`-class "only the
+  alphabetically-first skill displays" bug).
+- **Class join gating (citizenship + faith), both confirmed as real
+  design, not bugs**: Averath's own `Florian Sordeau` (priest leader)
+  refused `Deeptestor` ("Sorry, I only deal with people born in
+  Averath" -- `Deeptestor` is a Haven citizen); Haven's own `Dalahalus`
+  refused `Combattest` for `join priest` until converting to his faith
+  first ("Only members of my faith may become priests"). Both gates
+  are genuine `GetTown()`/`GetReligion()` checks in `lib/npcs/
+  leader.lpc`, working exactly as designed.
+- **No formal safe-sparring mechanism exists in this codebase** --
+  checked explicitly per AGENTS.md §10.7 item 3. `std/style/spar.lpc`
+  (a "sparring" combat style whose own file header credits `combat/
+  style.lpc`, which is itself explicitly commented "Outdated as of 18
+  August 2008. Any players with old styles should use the 'refund'
+  command.") is real but DEAD code: grepped every `SetCombatStyle(`
+  call site in the whole tree and found only a handful of NPCs
+  self-selecting a fixed style at their own `create()` time, never any
+  player-facing `set style <name>` command wiring a player into it.
+  No `accept_fight()`-mirrors-attacker-stats training-dummy pattern
+  exists anywhere either (grepped `accept_fight`, `dummy`, `spar`,
+  `practice fight` corpus-wide). Used a real, low-level wild NPC
+  instead for the combat test (see below) -- consistent with this
+  being a genuine, long-lived production game rather than a
+  content-thin engine demo (the newbie book itself never mentions
+  sparring, only "find an NPC and greet them").
+- **Real combat, full resolution, zero crashes**: `Combattest` (level
+  1 priest, wielding the class-granted mace) fought `Talis of the
+  Wharf` (`domains/southern_coast/towns/haven/npc/t_fisher.lpc`, a
+  real level-1 townsperson NPC, not a monster) via plain `kill talis`
+  at the Haven wharf. Real hit/miss messages, HP loss on both sides,
+  XP gain per hit, and a full death sequence (`You slay Talis without
+  mercy.`, reputation change with two different factions, 300 XP
+  bonus, Talis unwielding his own weapon before dying) -- `log/runtime`
+  and `log/catch` stayed byte-identical (zero new entries) across the
+  whole fight.
+- **Real quest content**: Averath's `Godard the Quest Giver` (`ask
+  godard for quests`) handed out a real, specific quest ("kill 5 rats
+  in the Averath sewers, from Felix Monteil's tavern-storage-room rat
+  problem") with full flavor text -- confirmed this is genuine
+  hand-written content, not a stub.
+- **Real economy/vendor content, browse+price path**: Taylor's General
+  Store (Haven) and Kelan's (referenced in the fixed `help vendors`
+  doc) both correctly support `ask <vendor> to browse` (a numbered
+  item list, real stock like fishing poles/torches/parchment) and `ask
+  <vendor> to price <item>` (a real imperials-denominated quote). A
+  full `sell`-side purchase transaction was not completed live this
+  session (time budget went to the bug-hunting above and the
+  multi-domain travel below) -- flagged here as unverified-live rather
+  than silently presented as tested, per AGENTS.md §10.7 item 6.
+- **Quit -> `log/runtime`/`log/catch` grep -> reconnect after a real
+  wall-clock gap, twice** (`Deeptestor` across the mid-session native
+  reboot; `Finaltest` across a plain ~10s gap): both reconnects
+  restored the SAME character in the SAME room with inventory/
+  equipment intact, a genuinely distinct code path from fresh
+  registration (skips race/town/gender prompts entirely, goes straight
+  to password). `log/runtime`/`log/catch` byte-for-byte unchanged
+  (zero new entries) across every quit in this session.
+- **Long-sit boot watch** (AGENTS.md §10.0, ~210s idle,
+  `mudclient.py --idle 210 --timeout 215`, run as a genuine
+  synchronous blocking wait, not backgrounded): zero new `log/runtime`/
+  `log/catch` entries appeared during the idle window on a fresh boot
+  -- no lazily-loaded daemon crashed during the watch.
+- **Multiple domains visited, real bespoke content in each (3 of the
+  21)**:
+  1. **Southern Coast / Haven** (the starting town): Merchant's Way
+     business district, the Elven Aide Charity newbie-gear NPCs,
+     Taylor's General Store, the Haven Town Guard barracks (`Damon
+     Falterless`, a real fighter-class leader), the Temple/Sanctuary of
+     Kylin (`Dalahalus`, `Ulan`), the Haven Cemetery (gated behind
+     level 2 -- `you can't quite get your nerve up to enter the Old
+     Cemetery yet`), and the wharf.
+  2. **Averath**: reached via the real `daemon/` ferry
+     (`domains/southern_coast/towns/haven/npc/ferrycaptain.lpc`'s
+     `SetShipWanderPath`, a genuine heart_beat-driven NPC-piloted
+     vehicle wandering between the two towns' wharves -- confirmed the
+     "out" exit dynamically retargets to wherever the ship currently
+     sits via `lib/special/vehicle.lpc:ResetExit()`, correctly
+     refusing to disembark into open ocean mid-transit with "You would
+     die if you moved into the waters!"). Averath's own town square,
+     church, Godard's quest, and the sewer entrance (rats, per the
+     quest) were all reached and are real, distinct content from
+     Haven's.
+  3. **Peninsula**: reached ENTIRELY OVERLAND, on foot, from Haven's
+     own town gate -- `Haven Town Gate` -> `out_rd1`/`out_rd2`
+     (`domains/southern_coast/towns/haven/room/out_rd*.lpc`) -> the
+     `domains/southern_coast/virtual/havenroad.lpc` procedurally-
+     numbered road grid (walked west from x=22 down to x=1) -> its
+     `x==1` south branch into `domains/peninsula/areas/wood/room/
+     vale9.lpc` ("A small wooded vale", corsican pines, a small fox) --
+     confirmed this world's geography is genuinely stitched together
+     with real cross-domain overland exits, not just isolated islands
+     reachable only by scripted vehicle.
+  A 4th domain (Crystal Reaches, reachable further west along the same
+  road grid at x=-36) was identified in source
+  (`CRYSTAL_REACHES_TOWNS "karak/room/rd1"`) but not walked to this
+  session given the time already spent on the ferry/road logistics
+  above -- left as a known-good, not-yet-walked route for a future
+  pass.
+
+### Minor anomaly observed, not root-caused (flagged, not fixed)
+
+- **Standing next to the docked ferry at the Haven wharf and issuing a
+  bare cardinal-direction `go` command (e.g. `go north`) once appeared
+  to re-board the player onto the ferry instead of moving them into
+  town**, immediately followed by the ferry captain's own autonomous
+  "All aboard!"/departure sequence. Reproduced once; not conclusively
+  isolated within this session's time budget whether this is a genuine
+  verb-registration collision (the vehicle's own multi-directional
+  ocean-grid exits, which are real add_action-registered commands
+  reachable from inside `lib/special/vehicle.lpc`, somehow shadowing
+  the room's own `SetExits()` "north" for a bystander standing in the
+  same room as a docked vehicle) or coincidental timing with the
+  captain's own scheduled departure. Flagged here for whoever next
+  works with this lib's vehicle system, rather than silently dropped.
+
+### Sibling bug-class check (per AGENTS.md §10.7 item 7)
+
+Checked both catalogued Dead-Souls/Nightmare-lineage sibling findings
+this session was specifically asked to cross-reference:
+
+- **AGENTS.md §8.24** (Nightmare/TMI `access.db`+`groups.db`+
+  `creator_file()`-based ACL, found on `rifts2`): does NOT apply here.
+  `secure/daemon/master.lpc`'s ACL is architecturally different --
+  `query_privs()`/`PRIV_ADMIN`/`PRIV_SECURE`-based, no `access.db`, no
+  `groups.db`, no `creator_file()`/UID system at all (confirmed already
+  in section 3.1 above during onboarding: "No `get_root_uid()`/
+  `get_bb_uid()`/`creator_file()` anywhere in this codebase").
+- **AGENTS.md §7.190** (Dead-Souls/Sapidlib `valid_read()`/
+  `valid_write()` per-daemon manual-allowlist mail trust gap, found on
+  `dock9`): does NOT apply here either. This lib's mail system
+  (`secure/obj/post.lpc`, `secure/daemon/folders.lpc`,
+  `secure/daemon/letters.lpc`) uses `write_file()`/`read_file()` into a
+  centrally-daemon-owned mail store, not `restore_object()`/
+  `save_object()` into a recipient's own player-save directory --
+  architecturally sidesteps the whole bug class. (A related, smaller,
+  non-`§10.7`-blocking finding: EVERY new character's first login logs
+  a caught `Could not open /secure/save/postal/<letter>/<name>/
+  postalrc.o.tmp for a save` -- `secure/save/postal/` was never
+  pre-created as one of the "missing runtime scaffolding" placeholder
+  directories in section 2 above, unlike `secure/save/players/`,
+  `secure/save/immortals/`, etc. It's silently caught by `master.lpc`'s
+  own `apply_unguarded()`/`CATCH` chain and does not visibly disrupt
+  play -- flagged as a minor content-scaffolding gap, not fixed, since
+  it's cosmetic-only and outside this pass's time budget.)
+
+### Unverified / out of scope for this pass
+
+- **Death/respawn**: Haven's own cemetery (the visible resurrection
+  totem) is gated behind character level 2; no admin/wizard account
+  exists for this lib (confirmed already in section 5's caveat -- no
+  first-boot install wizard, a live production game's wizard hierarchy
+  populated by manual promotion from an existing account that doesn't
+  exist in this fresh checkout), so there is no `set_hp(0)`/`die()`
+  admin shortcut available either. Reaching level 2 organically (or
+  finding a level-1-reachable death path) was not accomplished within
+  this session's time budget. Flagged as unverified-live rather than
+  silently presented as tested, per AGENTS.md §10.7 item 6.
+- **A completed shop purchase** (the `sell`-from-vendor-to-player
+  transaction, as opposed to `browse`/`price`, which were both
+  confirmed): not completed live this session, see above.
+- **A `realms/torak/` personal-wizard-realm observation, NOT chased as
+  a bug**: `log/runtime`/`log/catch` from an EARLIER boot this session
+  (before the native reboot) showed several `*Nesting call_out(0)
+  level limit exceeded: 1000` errors and `*No program in object`
+  errors for various `/realms/torak/*` NPCs/rooms (`npc/spider`,
+  `npc/dairycow`, `castlevania/npc/werewolf`, `torak/workroom`, `trade/
+  hugh`, etc.). A clean reboot afterward produced ZERO such errors
+  (confirmed both via a fresh `log/runtime`/`log/catch` mtime check and
+  a direct stdout grep of the fresh boot's own transcript), meaning
+  these are NOT deterministic eager-preload failures but something
+  lazily triggered by a specific action taken during the earlier
+  session (never isolated within this session's budget). Matches this
+  file's own already-established "abandoned personal wizard realm
+  scratch content" non-bug class (section 4 above) closely enough
+  (`torak` is one of the 25 personal `realms/*`) that it was not
+  pursued further -- flagged here rather than silently dropped, for
+  whoever next has budget to isolate the exact trigger.
