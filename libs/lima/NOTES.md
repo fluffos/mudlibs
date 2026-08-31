@@ -144,6 +144,10 @@ WASM 通道。
    切片，逐一读取上下文后确认其余都是无关的字符串截断（去掉末尾逗号、
    `"\n\n"`、`"::"` 等），或是针对 `.o`（`SAVE_EXTENSION`，仍是 2 字节，
    不受影响）——只有以上 4 处真的和 `.c`→`.lpc` 改名相关。
+   **不提交上游**：这是本项目自己 `.c`→`.lpc` 改名操作触发的问题，
+   上游 `fluffos/lima`/`limalib/lima` 原生文件名仍是两字节的 `.c`，
+   `[0..<3]` 在那里本来就是对的——这是本项目的转换产物，不是 lima
+   自己源码里的 bug，不属于这次 upstream PR 审计范围（2026-08-31）。
 2. **`set_droppable()` 参数类型声明过窄**：`std/modules/m_gettable.lpc`
    自己的文档注释写"传函数或字符串等效于调用 `set_dropmsg()`"，函数体
    也确实用 `functionp(g) || stringp(g)` 判断，但签名却声明成
@@ -151,12 +155,22 @@ WASM 通道。
    `domains/std/lima/directory.lpc`/`workroom_ob.lpc`（后者正是新巫师
    自己的 workroom）里传字符串自定义"拿不下来"提示语的调用。参数类型
    改成 `mixed g`，和函数体实际行为、文档注释保持一致。
+   **已提交上游**：`fluffos/lima` 已于 2024-10-08 被官方**归档只读**
+   （`gh pr create` 直接报 GraphQL 错误"Repository was archived so is
+   read-only"），无法开 PR。经核实，同一 LIMA 社区（同一 Discord 频道
+   `#LIMA`、同名品牌"limamudlib.dev"）已迁移到活跃维护的
+   `limalib/lima`（非 fork 关系但代码血缘一致，`git clone` 核对确认
+   `m_gettable.c`/`m_exit.c`/`usermenu.c` 三处逐字节相同，同一 bug
+   原样存在），已改为向 `limalib/lima` 提交：
+   **[limalib/lima#49](https://github.com/limalib/lima/pull/49)**。
 3. **`private` 跨文件继承调用**（AGENTS.md §7.48 标准案例）：
    `std/modules/m_exit.lpc` 的 `eval_dest()` 声明为 `private`，却被
    继承它的 `std/modules/m_exit_obj.lpc` 直接调用——这个驱动对
    `private` 的强制比老 MudOS 严格（继承链内也不能跨文件调），改成
    `protected`（比 `private` 宽松，不会引入新 bug，只会修好已经存在的
    非法调用错误）。
+   **已提交上游**：同上，`fluffos/lima` 已归档，改为
+   **[limalib/lima#50](https://github.com/limalib/lima/pull/50)**。
 4. **含内联注释的宏参数展开异常**：`daemons/spell_d.lpc` 里
    `ENSURE(spell_name /* 注释 */)` 这种"宏参数里带 C 风格块注释"的写法
    触发这个驱动预处理器的一个真实 bug——`ENSURE` 宏没有正常展开，报
@@ -168,6 +182,10 @@ WASM 通道。
    本项目范围内修驱动本身（那是 fluffos/fluffos 的事，需要走 PR），
    采用等价、保留原意的写法规避：把注释挪到宏调用**外面**
    （`ENSURE(spell_name); /* 注释 */`），两处均已修复并验证。
+   **不属于本次 lima queue 审计范围**：这是 `fluffos/fluffos`
+   驱动本身的 bug，不是 `fluffos/lima`/`limalib/lima` 源码的 bug——
+   本次任务（2026-08-31）只审计 lima 的 mudlib 源码是否需要提 PR，
+   驱动仓库层面的 PR 不在这次的范围内，未提交。
 5. **含"开括号后紧跟内容"的 heredoc（`@TAG content...`）在这个驱动的
    词法分析器里同样有真实问题**：`std/race/troll.lpc`
    （`@LONG Trolls are...`）和 `WWW/cgi/autodoc.lpc`（7 处
@@ -186,11 +204,16 @@ WASM 通道。
    （`http_d` 在 `preload` 里被注释掉）的巫师专用 CGI 文档生成工具，
    不影响核心游玩，这里记录下来但不再深入修——留给以后需要真正用到
    web 文档生成功能时再处理。
+   **不属于本次 lima queue 审计范围**：同上一条，这是 `fluffos/fluffos`
+   驱动词法分析器本身的 bug，不是 lima 源码的 bug，本次审计
+   （2026-08-31）未提交驱动仓库层面的 PR。
 6. **赋值/比较符打错**：`obj/usermenu/usermenu.lpc` 的
    `confirm_decision()`——`if (dec == "yes" || dec = "y")`，第二个条件
    是赋值不是比较，导致这个函数**永远返回真**，无视用户实际输入的
    "确认删除角色"对话框形同虚设（`remove_char` 流程里的 yes/no 确认，
    不管输入什么都会被当作"是"）。改成 `==`。
+   **已提交上游**：同上两条，`fluffos/lima` 已归档，改为
+   **[limalib/lima#51](https://github.com/limalib/lima/pull/51)**。
 
 ## §2.2 On-sight checklist 结论
 
@@ -584,3 +607,65 @@ bug。**
   ocean`这一个非方向性出口的存在，未强行走完整个解谜链（含
   `dig`挖出宝箱的完整 8 次交互序列）——按 §10.7 checklist
   第 6 条的原则，明确记录为"内容探索深度不足"而非"已知损坏"。
+
+## Upstream PR 审计（2026-08-31，standing queue 项目）
+
+按 `project_fluffos_org_upstream_pr_queue.md` 的标准流程，把上文"编译
+期发现的真实 bug"一节里已经在本地 `work/` 修好的 6 处 bug 逐一核对
+是否需要（也能否）提交回上游：
+
+- **bug #1（`cache_dir()` 等 4 处 `[0..<3]` 扩展名切片宽度）**：不提交
+  上游——这是本项目自己 `.c`→`.lpc` 改名触发的问题，上游原生文件名
+  仍是两字节的 `.c`，`[0..<3]` 在上游代码里本来就是对的。纯粹的
+  driver-build/转换集成问题，不是 lima 自己源码的 bug。
+- **bug #2（`set_droppable(int g)` 应为 `mixed g`）**、
+  **bug #3（`eval_dest()` `private`→`protected`）**、
+  **bug #6（`confirm_decision()` 的 `dec = "y"` 赋值/比较符打错）**：
+  三处都是 lima 自己源码里独立于任何编译期开关的真实逻辑 bug（和
+  `NO_LIGHT`/`NO_ADD_ACTION`/`NO_WIZARDS`/`OLD_ED`/`PACKAGE_UIDS`
+  这套本 lib 专属驱动 flag 完全无关，任何启用静态类型检查/严格
+  `private`语义的驱动都会踩到）——判定为上游真正应该修的 mudlib
+  bug。核对 `github.com/fluffos/lima`（HEAD 仍是快照记录的
+  `dbcef2a`，无新提交/PR/issue 涉及这三处）确认未被上游独立修复后，
+  fork+clone 到 scratch 目录、对照上游原始 `.c` 文件逐字节确认 bug
+  存在，准备提交 PR 时发现 **`fluffos/lima` 已于 2024-10-08 被官方
+  归档为只读仓库**（`gh pr create` 直接报 "Repository was archived so
+  is read-only"，无法开 PR）——`meta.json`/本文件开头记录的
+  "2026-08-24 克隆 HEAD dbcef2a" 只是 clone 时未受影响（归档仓库仍可
+  clone，只是不能收 PR/新 commit）。
+  - 核实同一 LIMA 社区已迁移到 `github.com/limalib/lima`（非
+    `fluffos/lima` 的 GitHub fork 关系，但同一 Discord `#LIMA` 频道、
+    同一品牌"limamudlib.dev"，且本文件前面"附录（2026-08-26）"一节
+    已经做过一次代码血缘对比，确认是同一 LIMA 代码库的延续版本，非
+    独立重写）——直接 clone 核对，`std/modules/m_gettable.c`/
+    `std/modules/m_exit.c`/`obj/usermenu/usermenu.c`
+    三个文件对应位置的三处 bug **逐字节存在，尚未修复**（master/
+    stable 两个分支都确认过），且该仓库尚无任何提及这三处的
+    open/closed PR。判定为这三处 fluffos-org 遗留 bug 的实际可提交
+    对象，改为向 `limalib/lima` 提交：
+    [PR #49](https://github.com/limalib/lima/pull/49)（`set_droppable`）、
+    [PR #50](https://github.com/limalib/lima/pull/50)（`eval_dest`
+    private→protected）、
+    [PR #51](https://github.com/limalib/lima/pull/51)（`confirm_decision`
+    赋值/比较符）。
+- **bug #4（`ENSURE(x /* 注释 */)` 宏参数内联注释）**、
+  **bug #5（heredoc 开始标记同行接正文）**：均已在原文标注为
+  `fluffos/fluffos`**驱动**本身的 bug，不是 `fluffos/lima`/
+  `limalib/lima` 的 mudlib 源码 bug——本次任务范围是审计 lima 这个
+  mudlib 是否需要提 PR，不包括驱动仓库层面的 PR，未提交。
+- 交叉核对 `libs/spacemud`（`limalib/spacemud`，明确基于 LIMA 代码库
+  "as few changes to Lima itself as possible"）与 `libs/wilderness`
+  （独立的 2000 年代 LIMA 快照）各自的 `NOTES.md`：wilderness 独立
+  发现了完全相同的 `eval_dest` private/protected 问题（`private
+  protected` 双修饰符写法，同一文件同一函数）和 `set_droppable`
+  同类"声明类型比函数体/文档窄"问题（另外还多发现了
+  `set_destination`/`set_fluid_level`/`m_complex_exit.lpc`
+  的 `set_method`/`add_method` 等 4 处同类型 bug），以及完全相同的
+  `ENSURE` 宏注释驱动 bug——回头检查这 4 处 wilderness 独有的额外
+  实例在本 lib 当前 `work/` 目录里对应文件的声明**均已经是正确的宽
+  类型**（`set_destination(mixed f)`、`set_fluid_level(int x, int y)`、
+  `m_complex_exit.lpc` 的 `exit_messages`/`enter_messages` 已经是
+  `mixed *`），说明这 4 处是 wilderness 那个独立 2000 年代快照自己的
+  历史遗留内容分支，并非 stock `fluffos/lima`/`limalib/lima` 现存的
+  bug，不需要额外提交。spacemud 的 `NOTES.md` 未提及这三处 bug（其
+  onboarding 没有触发到这几个调用路径），无新增交叉发现。
