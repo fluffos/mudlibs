@@ -447,6 +447,8 @@ classes it's found.
 | 960 | `lpmud245` | LPmud 2.4.5 | `ftp.lysator.liu.se/pub/lpmud/mudlibs/other/2.4.5.tar.gz (still live, recovered directly 2026-08-31)` | 40262 | WASM playable |
 | 961 | `lplib8` | LPlib8 | `ibiblio.org/pub/Linux/games/muds/lplib8.tar.z (still live, recovered directly 2026-08-31)` | 40263 | WASM playable |
 | 962 | `amylaarmini` | MiniMud | `ftp.lysator.liu.se/pub/lpmud/mudlibs/Amylaar/minilib (still live, recovered directly 2026-08-31)` | 40264 | WASM playable |
+| 963 | `brassring` | The Brass Ring | `gh repo clone LashMUD/TheBrassRing (cloned 2026-08-31)` | 40265 | native-boot verified, WASM pending |
+| 964 | `dock9` | Dock 9 | `github.com/dyher/dock9 (git clone https://github.com/dyher/dock9)` | 40266 | native-boot verified, WASM pending |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout

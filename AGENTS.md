@@ -13665,6 +13665,61 @@ others catalogued elsewhere, is real on some driver lineages and
 completely absent on this one, with no warning at the call site either
 way.
 
+### 7.179 `mkdir()` on this driver never creates intermediate directories — a new-account setup routine that `mkdir()`s a two-level `/data/users/<letter>/<name>/`-style save path in one call silently fails whenever the letter-bucket directory doesn't already exist, and the account's very first save then errors out
+
+Found on `dock9` (964, LPUniversity/Sapidlib lineage, same family as
+`lpuni`), reproduced live: registering a brand-new account whose name
+starts with a letter that had never been used by any existing archived
+player (`sailor` was the repro case, since the archive's own
+`/data/users/` tree only ships letter-bucket directories for letters
+that already had a real player -- `a/e/f/h/p/x` here) failed at the very
+end of registration with `Error: *Could not open
+/data/users/s/sailor/sailor.o.tmp for a save.`, right after the "welcome
+new player" banner. Root cause: `adm/obj/login.lpc`'s `setupNew()` did
+
+```lpc
+if (!directory_exists(user_data_directory(user->query_name())))
+    mkdir(user_data_directory(user->query_name()));
+user->save_user();
+```
+
+where `user_data_directory()` returns a full two-level path
+(`/data/users/<first-letter>/<name>/`). This driver's `mkdir()` behaves
+like POSIX `mkdir` without `-p`: it creates exactly one new directory
+level and fails (silently, from LPC's point of view -- no error is
+thrown, the return value is simply falsy and nothing here checks it) if
+the parent doesn't already exist. Every account whose name's first
+letter was already represented among pre-existing save data worked by
+sheer coincidence; every other letter was one `mkdir()` call short. Not
+a WASM-only or lpcc-only artifact -- reproduces identically on a real
+native driver boot, and is purely a function of what save data happened
+to ship in a given archive.
+
+**Fix**: create the letter-bucket directory first, the same two-step
+pattern this exact codebase already uses correctly for its `/home/`
+tree one function earlier in the same file:
+
+```lpc
+if (!directory_exists("/data/users/" + username[0..0]))
+    mkdir("/data/users/" + username[0..0]);
+if (!directory_exists(user_data_directory(username)))
+    mkdir(user_data_directory(username));
+```
+
+**The identical latent bug is also present in `lpuni`** (byte-identical
+`user_data_directory()`/`setupNew()` shape, confirmed by direct
+comparison) but has never manifested there because that archive happens
+to ship all 26 `/data/users/<letter>/` bucket directories pre-created --
+not yet fixed in `lpuni` as of this writing (flagged here for whichever
+agent next touches that lib, rather than fixed opportunistically outside
+its own onboarding's scope). **General lesson**: any `mkdir()` of a
+path with more than one path segment below an already-existing root is
+suspect on this driver -- grep for `mkdir(` calls whose argument has 2+
+slashes past a directory that isn't guaranteed to pre-exist, especially
+in new-account/first-run setup code where the exact directory that would
+expose the bug (an unused letter/shard bucket) is easy for a human
+tester to never happen to hit by accident.
+
 ---
 
 ## 8. Login and registration flow bugs
