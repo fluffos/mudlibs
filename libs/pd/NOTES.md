@@ -295,8 +295,13 @@ in `meta.json`.
 
 ## LPC formatter (§9)
 
-**Not run** — `node` is not installed in this environment/session, so
-`~/src/fluffos/tools/lpc-syntax/bin/format-corpus.mjs` could not be
-invoked on the ~200 files edited during this onboarding. Flagging
-explicitly rather than silently skipping, per the project's own
-discipline about reporting real tool state.
+**Run 2026-08-31** (catch-up pass) — the original onboarding couldn't
+run `node` (PATH issue, since fixed via `~/.zshenv`). Ran
+`format-corpus.mjs` over all 31,936 `.lpc` files under `work/`: 31,709
+reformatted, 84 already-clean, 143 refused (messy legacy code). Ran all
+three §9 blind-spot checks: `::` split (0 hits), case-label/comment
+merge (86 candidate spots across 8 files, manually diff-reviewed, all
+intact), and pre-existing-unbalanced-quote garbling (1 hit,
+`std/obj/deed.lpc` — a genuine original-source typo, fixed by hand and
+reformatted). Re-booted and re-verified the full live playthrough
+(registration, look, score, quit, restore/reconnect) — all correct.
