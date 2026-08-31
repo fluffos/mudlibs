@@ -308,3 +308,248 @@ scope was native-only per this onboarding's assignment.
   or by an already-privileged wizard's own `chpath`-style command.
   Verified live: `update <path>` against a real `adm/obj/master.lpc`
   file succeeds, and `ls` shows the corrected `.lpc` colour-highlighting.
+
+## 深度功能测试 / §10.7 deep functional test (2026-08-31)
+
+Round-two pass, adapted for this lib's real scope (no combat/stats
+system, per \S0). One continuous session, native driver
+(`~/src/fluffos/build-debug/src/driver config.fluffos` from
+`libs/dock9/`, port 40266), driven via `scripts/tmux_mud.sh` across
+several parallel sessions (the seeded admin `fluffos`/`MudAt2026`, plus
+two throwaway fresh registrations `mailerone`/`mailertwo` created
+specifically to exercise mail/channel between two real accounts and
+cleaned up before committing). Everything the original onboarding
+already covered (registration through world entry, movement through
+Trepi/docks, inventory/help, quit/reconnect, news, the letter-bucket
+save-directory fix) was not re-run in full; this pass targeted what
+NOTES.md flagged as not yet deeply tested.
+
+### Six bugs found and fixed
+
+**1. `adm/daemons/mail_d.lpc` + `adm/obj/master/valid.lpc` -- the
+entire mail system was completely unusable, in two compounding ways**
+(new AGENTS.md \S7.190 -- full root-cause writeup there):
+- `valid_read()`'s hard-coded daemon-trust exemption for `restore_object`
+  only ever listed `finger_d`, so `mail_d`'s own `restore(user)` -- which
+  needs to `restore_object()` a mailbox file on behalf of
+  `this_interactive()`, including the SENDER'S OWN mailbox -- was denied
+  outright: `Error: *restore_object: read permission denied:
+  /data/users/m/mailerone/mailerone.mail.o.` on the very first `mail
+  <recipient>` invocation, before any message could even be composed.
+- `valid_write()` had NO daemon-trust mechanism at all (not even a
+  finger_d-style one), so once the read side was fixed, `save_object()`
+  of the composed message -- including into the RECIPIENT's inbox for
+  delivery, a different user's directory entirely -- would have failed
+  the identical way.
+- Fixed by adding a `mail_d`-scoped exemption to `valid_read()`
+  (mirroring the existing `finger_d` one exactly) and a brand-new
+  `func=="save_object"` exemption to `valid_write()` for `mail_d`.
+  Verified live end-to-end: composed and sent a full message (subject,
+  empty CC, multi-line body via the in-editor `a`/`.`/`w`/`q` flow) from
+  `mailerone` to `mailertwo`, then logged in as `mailertwo` and read the
+  delivered message back via `mail` -> `1` (inbox) -> `1` (message) --
+  correct sender, subject, date, and body every time.
+- **Same bugs confirmed still present, unfixed, in the sibling `lpuni`**
+  (identical `master/valid.lpc` finger_d-only allowlist, identical
+  missing `valid_write()` mechanism) -- flagged in AGENTS.md \S7.190 for
+  whoever next deep-tests `lpuni`'s mail system, not fixed here (out of
+  this session's scope).
+
+**2. `adm/daemons/mail_d.lpc`'s own internal "only the real mail client
+may call this" guard was ALSO broken, independently, by the standard
+\S6.3 `.c`->`.lpc` rename-slice bug** -- `send_message()`/
+`delete_message()` both compared `file_name(previous_object())[0..index
+- 1]` (a bare clone name with no extension) against
+`OBJ_MAIL_CLIENT[0..<3]`, where `OBJ_MAIL_CLIENT` is
+`"/obj/mudlib/mail_clients/mail_client.lpc"` -- `[0..<3]` only strips 2
+characters, correct for the ORIGINAL `.c` extension but leaving a
+stray `.l` on the right-hand side after the rename, so the two sides
+could never match. Every legitimate call through the real mail client
+was rejected with `Error [mail]: You can only do that through the mail
+client!`, masking bug \#1 above until that was fixed first. Widened
+both occurrences to `[0..<5]` (correctly drops the full 4-character
+`.lpc` extension). **Same bug confirmed still present, unfixed, in
+`lpuni`'s own copy of this exact file** (also flagged, not fixed, per
+AGENTS.md \S7.190).
+
+**3. `adm/obj/master.lpc`'s `log_file()` had no missing-directory guard,
+so the FIRST-ever `force`/`makedev`/`revdev`/`nuke` each boot crashed**
+-- `LOG_FORCE`/`LOG_PROMOTE`/`LOG_NUKE` (in `include/logs.h`) all resolve
+to a path one level below `LOG_DIR` (`adm/force`, `adm/promote`,
+`adm/nuke`), inside a `/log/adm/` subdirectory this archive never ships.
+`write_file()` doesn't create missing parent directories, so the very
+first invocation of any of those four admin commands each boot threw
+`Error: *Wrong permissions for opening file /log/adm/force for append.:
+No such file or directory` (the command's own effect -- e.g. `force`
+actually forcing the target -- still happened; only the after-the-fact
+logging side effect crashed, visibly, to the admin). Fixed with a
+`directory_exists()`/`mkdir()` guard in `log_file()` before the
+`write_file()` call, same pattern already used in `adm/obj/login.lpc`'s
+home/data-directory setup. Verified live: `force`, `makedev`, and
+`revdev` (against the throwaway `mailerone` account) all ran clean with
+zero error traces post-fix, and `log/adm/force`/`log/adm/promote` now
+contain the expected log lines. **Same latent gap also exists in
+`lpuni`'s identical `log_file()`** -- masked there only because that
+archive happens to ship a pre-created (empty) `/log/adm/` directory,
+same "masked by a pre-existing directory" shape as the already-known
+`/data/users/` letter-bucket bug from this lib's own onboarding
+section (\S3) -- not fixed there, just noted for the next agent, same
+as that earlier precedent.
+
+**4. Three wizard commands unconditionally crashed instead of failing
+gracefully whenever an Intermud-3 service module wasn't loaded**
+(the normal state in this archive, since it implements no `mudlist`
+service handler per \S5) -- `cmds/wiz/mudinfo.lpc`, `cmds/wiz/finger.lpc`
+(the `user@mud` remote-finger form), and `cmds/wiz/i3seen.lpc` all did
+`find_object(I3_MUDLIST or I3_UCACHE)` immediately followed by an
+unguarded `->` call, with no null-check -- crashing every single
+invocation with `Bad argument 1 to EFUN call_other() Expected: object,
+string, array, Got: int(0)` instead of the already-correct
+"Mudlist unavailable."/"module is currently not loaded" fallback this
+codebase's OWN sibling implementations use correctly
+(`cmds/wiz/mudlist.lpc`, `cmds/std/tell.lpc`, `cmds/std/reply.lpc`,
+`cmds/wiz/rwho.lpc` all guard the identical lookup correctly). Fixed
+all three by adding the missing null-check, matching the working
+sibling pattern. Verified live (pre-fix crash reproduced first in every
+case): `mudinfo test`, `finger fluffos@dock9`, and `i3seen fluffos` now
+all correctly print a graceful unavailable-module message. Checked
+`lpuni` for the same pattern -- NOT present there; `lpuni`'s
+`cmds/std/mudinfo.lpc`/`cmds/std/finger.lpc` are an earlier,
+differently-written revision (`load_object()` with its own guard, or no
+I3 mudlist lookup at all) -- this looks like a regression introduced
+when `dock9`'s later revision (dated 2007, `Tricky @ RtH`) was rewritten
+against `find_object()`, not a lineage-wide bug, so no AGENTS.md entry
+filed for this one.
+
+**5. `adm/daemons/soul_d.lpc` had the identical unguarded-`find_object()`
+bug in two places, reachable via any targeted emote at an `"@mud"`-style
+target** -- `find_object(I3_UCACHE)->getUserCache()` (used to resolve an
+i3 username match for the emote target) and, separately,
+`find_object(I3_UCACHE)->getGender(...)` (used to pick a `$PT`/`$ST`
+pronoun for the message), both with no null-guard. Fixed both:
+the first now defaults to an empty mapping (`([])`) when the module
+isn't loaded, which this function's own existing logic already handles
+correctly (falls through to "no i3 match found"); the second now
+defaults `gender` to `-1`, which the surrounding `switch` already
+treats as its existing neutral "its"/"it" default case. Not
+independently reproduced with a full remote-i3 round trip (would need a
+live peer mud with a matching username), but the crash mechanism is
+identical to \#4 above and the fix is a direct, mechanical application
+of the same pattern.
+
+**6. `std/object/object.lpc`'s `set_chats()` had a stray
+`write(this_object());` debug leftover, executed on EVERY call to this
+universally-inherited base-class method** (any room, NPC, or item that
+sets ambient chat/emote messages) -- printed the raw object reference
+(`OBJ(/path/to/file)`, or `OBJ(/path/to/file#N)` for a clone) directly
+to whichever player's connection happened to trigger that particular
+object's first compile/`create()` each boot, with no relationship
+whatsoever to the function's actual job of storing the chat list and
+interval. Reproduced live: moving south from Dock 9 into Pier, Trepi
+for the first time in a fresh boot printed
+`OBJ(/areas/trepi/docks/npc/greeter_sailor)OBJ(/areas/trepi/docks/npc/greeter_sailor#8)OBJ(/areas/trepi/docks/room/pier3)`
+with no separators, immediately before the real "You move to Pier,
+Trepi." message (three separate `set_chats()` calls: the NPC's
+blueprint `create()`, the NPC's actual clone, and the room's own
+ambient-chat setup). Fixed by deleting the stray line. Verified live
+post-fix: the same first-ever move into a not-yet-compiled room (Dock
+12, this time) produced clean output with no leaked object references.
+Checked `lpuni`'s own copy of this file -- does NOT have this line, so
+this looks like a `dock9`-specific debug leftover from this archive's
+own author rather than an inherited lineage bug; no AGENTS.md entry
+filed.
+
+### What was tested and confirmed working
+
+- **Mail, full round trip**: compose (subject/CC/body via the in-editor
+  `a`/`.`/`w`/`q` sequence) -> send -> "You have new mail!" notification
+  on the recipient's live session -> inbox listing -> reading the
+  message back, all between two independent real accounts
+  (`mailerone`/`mailertwo`, both granted `/cmds/wiz/` path access purely
+  for this test, since `mail` is wizard-only by design in this engine,
+  same as `lpuni` -- not a bug).
+- **Channel**: the default `chat` channel carries messages correctly in
+  both directions between two independent live sessions in the same
+  room.
+- **Wizard commands** (`cmds/wiz/`): `eval`, `where`, `people`, `finger`
+  (local form), `home`, `goto`, `echo`, `force`, `path` (implicitly, via
+  the temporary grants above), `mudinfo`, `i3seen`, `finger` (remote
+  `user@mud` form), `makedev`, `revdev`, `sockinfo`, `callouts` -- all
+  exercised live (four found broken and fixed, see above; the rest
+  worked correctly on first try).
+- **File commands** (`cmds/file/`): `pwd`, `ls`, `cd`, `mkdir`, `cat`,
+  `cp`, `mv`, `grep`, `tail`, `ln`, `rm`, `rmdir` -- full create-inspect-
+  rename-delete lifecycle exercised in the admin's own home directory,
+  cleaned up afterward.
+- **Object commands** (`cmds/object/`): `clone`, `functions`, `dest` --
+  cloned a real item (`areas/trepi/docks/obj/pebble.lpc`), inspected its
+  function list, destroyed it, confirmed it was gone.
+- **Admin commands** (`cmds/adm/`): `wall` (broadcast), `what` (online-
+  users/last-command report), `force`, `makedev`, `revdev` (all three
+  also part of the \#3 bug fix above).
+- **NPC dialogue**: the greeter sailor in Pier, Trepi correctly greets a
+  newly-arrived player by name (`catch_tell()` pattern-matching the
+  room's own "X has entered" message) and correctly responds to the
+  exact documented trigger phrase ("say Take me to the training area.")
+  by teleporting the player to the Training Ground -- both paths
+  confirmed live.
+- **Intermud-3**: the same live outbound `*i4` router connection
+  documented in \S5 was confirmed active again this session (real
+  `i3.log` traffic); not hammered with additional reboots, per that
+  section's own caution (same class as `lpuni`/`imud`/`tmi2`/`skylib`).
+- **Two independent quit/reconnect cycles**: (a) `mailerone`/`mailertwo`
+  quit and reconnected mid-session with the same password, restoring
+  correctly into Dock 9; (b) the admin `fluffos` quit from the Training
+  Ground, a ~220-second real wall-clock gap elapsed (concurrent with the
+  long-sit boot watch below), then reconnected and was correctly
+  restored to the exact same room (Training Ground) with `[announce]
+  System: Fluffos has logged into Dock 9.` and no state loss.
+- **Long-sit boot watch** (\S10.0, no WASM build exists for this lib --
+  `wasm_status` still `""` -- so done via one idle
+  `scripts/mudclient.py` connection instead of
+  `wasm_boot_watch.sh`): held one connection idle for ~220 seconds;
+  driver stayed alive throughout (confirmed via `ps` uptime), and its
+  own captured stdout was clean (no errors, no crashes) for the entire
+  window.
+- **Letter-bucket save-directory fix re-confirmed live**: both
+  `mailerone` and `mailertwo` (letter `m`, not one of this archive's
+  originally-shipped pre-existing buckets) registered and saved cleanly
+  on the first try, re-verifying the onboarding-session fix in \S3 holds.
+- `debug.log` was (as expected, per AGENTS.md \S10.9) never touched
+  across this entire session -- the driver's own captured stdout was
+  used as the actual error-signal source throughout, and stayed clean
+  after every fix was applied and re-verified.
+
+### Flagged unverified
+
+- A genuine live round trip of the two `soul_d.lpc` i3-emote fixes
+  (\#5 above) against a real second mud on the Intermud-3 network was
+  not attempted (would require a live peer mud with a specific matching
+  username, outside this session's control) -- the fix is a direct,
+  mechanical application of the exact pattern already verified working
+  in \#4, but is flagged here as code-reviewed rather than end-to-end
+  live-tested.
+- The remaining `cmds/wiz/` commands not explicitly listed above
+  (`beep`, `edemote`, `jcheck`, `jlo`, `lazygun`, `locate`, `rwho`,
+  `setplan`, `snowball`, `trans`, `which`, `i3seen` beyond the fix
+  above) were read but not individually exercised live in this pass --
+  time-budgeted in favour of the mail/ACL investigation, which turned
+  out to be the highest-value finding.
+
+### Test accounts
+
+`mailerone`/`mailertwo` (both password-protected throwaway accounts
+created solely to exercise mail/channel between two real sessions) were
+deleted -- save files, `/home/m/` workroom copies, and dev journal links
+-- before committing, keeping only the pre-existing seeded `fluffos`
+admin account, per this project's established cleanup convention (see
+`lpuni`'s own \S "Deep functional test round two" for the precedent).
+`adm/etc/access`/`adm/etc/groups` picked up a purely-cosmetic
+mapping-iteration-order diff from the `makedev`/`revdev` test cycle
+(no actual ACL content changed) and were reverted rather than
+committed. `data/daemons/history_d/` and
+`data/daemons/chmodules/i3.o` (real Intermud-3 chat history and router
+connection state, growing on every live boot) were added to the
+project's root `.gitignore`, mirroring the existing `imud` precedent,
+and the pre-fix churn in those paths was reverted rather than
+committed.

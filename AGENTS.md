@@ -14290,6 +14290,57 @@ archive), diff them before assuming a missing safety check is
 intentional design — here, three of four known copies had the guard,
 which is strong evidence the fourth is a genuine regression.
 
+### 7.190 A master ACL's "let this daemon always restore_object()/save_object() into a player's data directory" trust exemption gets added ONE DAEMON AT A TIME as each hits the bug, with no equivalent mechanism at all on the write side — so every OTHER daemon needing the identical trust (and EVERY daemon on the write side) stays silently broken
+
+Found on `dock9`'s §10.7 deep functional test (2026-08-31), sending the
+first real piece of mail this lib had ever tried between two accounts.
+This LPUniversity/Sapidlib-lineage `adm/obj/master/valid.lpc` has a
+`this_interactive()`'s-own-directory shortcut in `valid_read()` that
+explicitly EXCLUDES any object whose privs are `"[daemon]"` (everything
+under `/adm/daemons/`, per this master's own `privs_file()`) from using
+it — backwards from what you'd want, since a global system daemon is
+MORE trusted than an arbitrary player-owned object, not less. The
+codebase papers over this with a single hard-coded exemption, scoped to
+exactly one daemon: `if (func == "restore_object" && member_array(
+find_object("/adm/daemons/finger_d.lpc"), all_previous_objects()) !=
+-1) return 1;`. `adm/daemons/mail_d.lpc` needs the identical trust — its
+`restore(user)` calls `restore_object(get_mail_box_file(user))` on
+behalf of `this_interactive()`, including the sender's OWN mailbox —
+but was never added to the allowlist, so literally every `mail`
+invocation crashed outright: `Error: *restore_object: read permission
+denied: /data/users/m/mailerone/mailerone.mail.o.` `valid_write()` is
+worse: it has NO daemon-trust mechanism at all, for ANY daemon, so once
+the read side is fixed, `save_object()`-ing the composed message (into
+the sender's own outbox, and — unreachable by any own-directory
+shortcut regardless, since it's a DIFFERENT user's directory — the
+recipient's inbox for delivery) would still fail the same way.
+
+**Fix**: add the same daemon to the existing per-daemon
+`func=="restore_object"` allowlist in `valid_read()` (mirroring
+`finger_d`'s exemption exactly), AND add a matching
+`func=="save_object"` exemption to `valid_write()` (which needed one
+built from scratch — there was no existing pattern to extend). Verified
+live end-to-end after both fixes: composing and sending mail from one
+account to another, then logging in as the recipient and reading the
+delivered message back, both succeeded with zero permission errors.
+
+**How to apply generally**: any master ACL with this "per-object,
+manually-allowlisted daemon trust" shape is a trap that grows one
+exemption at a time, reactively, only as each affected daemon happens
+to get exercised — check BOTH `valid_read()` and `valid_write()`
+whenever adding one, since a working exemption on one side is no
+evidence the other side has (or even could reuse) an equivalent.
+Confirmed the identical bug, still unfixed, in the sibling `lpuni`
+(same `master/valid.lpc` and `mail_d.lpc` lineage, same finger_d-only
+allowlist, same missing `valid_write()` mechanism) — flagged there for
+whichever session next deep-tests `lpuni`'s mail system, not fixed as
+part of this session (out of scope). `lpuni`'s own `mail_d.lpc` also
+carries the exact `OBJ_MAIL_CLIENT[0..<3]` filename-slice bug described
+in dock9's own NOTES.md (another instance of the already-catalogued
+§6.3 `.c`→`.lpc` rename-slice class, needed alongside the ACL fix to
+get mail working at all) — same "unfixed sibling, flagged not fixed"
+treatment.
+
 ---
 
 ## 8. Login and registration flow bugs

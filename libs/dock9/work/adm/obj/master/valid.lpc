@@ -302,6 +302,20 @@ int valid_read(string file, object user, string func) {
   if (func == "restore_object"
     && member_array(find_object("/adm/daemons/finger_d.lpc"), all_previous) != -1)
     return 1;
+  /* FluffOS PORT NOTE (dock9, found live testing the "mail" command): the
+     * same finger_d-only trust hole applies to mail_d -- it is a "[daemon]"
+     * privs object (per master.lpc's privs_file(), everything under
+     * /adm/daemons/ is "[daemon]"), which the OWN-directory shortcut just
+     * below explicitly EXCLUDES (it only fires when the acting object's
+     * privs are NOT "[daemon]"). Since mail_d needs to restore_object()
+     * every mailbox file under /data/users/ -- including the reading
+     * player's OWN mailbox, not just other recipients' -- every "mail"
+     * invocation failed outright with "restore_object: read permission
+     * denied" on the sender's own .mail.o file. Same fix pattern as the
+     * existing finger_d exemption above. */
+  if (func == "restore_object"
+    && member_array(find_object("/adm/daemons/mail_d.lpc"), all_previous) != -1)
+    return 1;
   /* FluffOS PORT NOTE (AGENTS.md sec7.140, found on the lineage sibling
      * lpuni): the driver's own global-include-file injection issues this
      * SAME valid_read() gate with func=="include" for every single
@@ -367,12 +381,25 @@ int valid_read(string file, object user, string func) {
 int valid_write(string file, object user, string func) {
   string name, tmp, tmp2;
 
+  if (user == this_object() || user == master()) return 1;
+  /* FluffOS PORT NOTE (dock9, same live "mail" test as the valid_read()
+     * mail_d exemption above): unlike valid_read(), valid_write() has NO
+     * blanket-trust mechanism for "[daemon]"-privs system objects at all
+     * -- mail_d's save_object() into a mailbox file (the sender's OWN
+     * mailbox, and, for delivery, the RECIPIENT's -- a different user's
+     * data directory entirely, which the self-directory shortcut below
+     * could never cover anyway) was unconditionally denied. Mirrors the
+     * finger_d/mail_d read-side exemption pattern; "save_object" is this
+     * driver's standard valid_write() func string for save_object(). */
+  if (func == "save_object"
+    && member_array(find_object("/adm/daemons/mail_d.lpc"), all_previous_objects()) != -1)
+    return 1;
+
   if (this_interactive() && query_privs(user) != "[daemon]")
     name = query_privs(this_interactive());
   else name = query_privs(user);
 
   if (!name) name = "<noname>";
-  if (user == this_object() || user == master()) return 1;
   if (strlen(file) > strlen(user_data_directory(name)))
     if (file[0..(strlen(user_data_directory(name)) - 1)] == user_data_directory(name))
       return 1;
