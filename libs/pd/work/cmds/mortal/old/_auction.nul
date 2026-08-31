@@ -1,0 +1,161 @@
+//      /cmds/mortal/_auction.c
+//      Nightshade 12-13-01
+
+#include <std.h>
+#include <daemons.h>
+#define STORAGE_ROOM "/d/nopk/standard/astorage"
+inherit DAEMON;
+object thing, auctioner, bidder;
+int money, final;
+string currency;
+int cmd_auction(string str) {
+    if(!str || (str == ""))
+	return CHAT_D->do_chat("auction");
+    if(thing) {
+	write("Something is already up for auction.\nYou will have to wait for the auction to end.");
+	return 1;
+    }
+    if(!present(str,this_player())) {
+	write("You do not have that to auction!");
+	return 1;
+    }
+    if(present(str, this_player())->query_property("no auction"))
+	return notify_fail("You cannot auction that.\n");
+    write("You have chosen to put "+present(str,this_player())->query_short()+" up for auction.\nAre you sure you want to do this? (y/n): ");
+    thing = present(str,this_player());
+    auctioner = this_player();
+    bidder = 0;
+    input_to("start_it");
+    return 1;
+}
+void start_it(string str) {
+    string *ids, stuff;
+    if(str == "n") {
+	thing = 0;
+	auctioner = 0;
+	return;
+    }
+    if(str != "y") {
+	write("Invalid input.");
+	ids = thing->query_id();
+	thing = 0;
+	cmd_auction(ids[0]);
+	return;
+    }
+    thing->move(STORAGE_ROOM);
+    if(!sizeof(all_inventory(thing))) {
+	CHAT_D->do_auction_line(capitalize(auctioner->query_name())+" has put "+thing->query_short()+"%^RESET%^ up for auction!");
+    }
+    else {
+	CHAT_D->do_auction_line(capitalize(auctioner->query_name())+" has put "+thing->query_short()+"%^RESET%^ up for auction!");
+	sscanf(thing->query_long(),"%*sIt contains:%s",stuff);
+	CHAT_D->do_auction_line("It contains:"+stuff);
+
+    }
+    money = 0;
+    final = 1;
+    call_out("do_timer",30);
+}
+void do_timer() {
+    CHAT_D->do_auction_line("There are 30 seconds left to bid on "+capitalize(auctioner->query_name())+"'s "+thing->query_short()+"!");
+    call_out("second",25);
+}
+void second() {
+    CHAT_D->do_auction_line("There are only 5 seconds left to bid on "+capitalize(auctioner->query_name())+"'s "+thing->query_short()+"!");
+    call_out("last",5);
+}
+void last() {
+    if(money == 0) {
+	message("info","No one bid on your "+thing->query_short()+".",auctioner);
+	CHAT_D->do_auction_line("No one bid on "+capitalize(auctioner->query_name())+"'s "+thing->query_short()+"!");
+	thing->move(auctioner);
+	thing = 0;
+	auctioner = 0;
+	bidder = 0;
+	return;
+    }
+    switch(currency) {
+    case "platinum": money = money/10;
+    case "gold": money = money/10;
+    case "electrum": money = money/5;
+    case "silver": money = money/2;
+    }
+    CHAT_D->do_auction_line("SOLD!!!  To "+capitalize(bidder->query_name())+" for "+money+" "+currency+"!");
+    if(interactive(auctioner))
+	auctioner->add_money(currency, money);
+    if(interactive(bidder))
+	thing->move(bidder);
+    thing = 0;
+    auctioner = 0;
+    bidder = 0;
+}
+int do_bid(string str) {
+    string curr;
+    int amnt, old;
+    if (!str || str == "") {
+	write("Syntax: <bid [amount] [currency]>");
+	return 1;
+    }
+    if(sscanf(str, "%d %s", amnt, curr) != 2) {
+	write("Syntax: <bid [amount] [currency]>");
+	return 1;
+    }
+    if(!thing || final == 0) {
+	write("There is no item to bid on!");
+	return 1;
+    }
+    old = amnt;
+    switch(curr) {
+    case "platinum": amnt = amnt*10;
+    case "gold": amnt = amnt*10;
+    case "electrum": amnt = amnt*5;
+    case "silver": amnt = amnt*2;
+    case "copper": break;
+    default: write("Invalid currency.");
+    }
+    if((!this_player()->query_money(curr)) || (this_player()->query_money(curr) < old)) {
+	write("You do not have that much to bid!");
+	return 1;
+    }
+    if(old < 10) {
+	write("You cannot bid that low an amount!");
+	return 1;
+    }
+    if(money == 0) {
+	money = amnt;
+	currency = curr;
+    }
+    else if(amnt <= money) {
+	write("You cannot bid less than what it is already going for!");
+	return 1;
+    }
+    if(bidder) {
+	switch(currency) {
+	case "platinum": money = money/10;
+	case "gold": money = money/10;
+	case "electrum": money = money/5;
+	case "silver": money = money/2;
+	}
+	bidder->add_money(currency,money);
+    }
+    money = amnt;
+    currency = curr;
+    bidder = this_player();
+    CHAT_D->do_auction_line(capitalize(bidder->query_name())+" has bid "+old+" "+curr+" on "+capitalize(auctioner->query_name())+"'s "+thing->query_short()+".");
+    remove_call_out("do_timer");
+    remove_call_out("second");
+    remove_call_out("last");
+    bidder->add_money(currency, old*(-1));
+    call_out("do_timer",30);
+}
+void help() {
+    write("Syntax: <auction [item]>\nPuts the item up for auction.\n See also: bid\n\n\n"
+      "Do not continually bid on an item you have put up for auction,\n"
+      "if you put something up for auction, bid on it once for the minimum\n"
+      "price you wish to sell it for and do not bid on it again. Do not put\n"
+      "worthless items such as stones, oil, meat, or things of this nature\n"
+      "up for auction. Do not continually try to auction the same item over and\n"
+      "over. If no one bids on your item the first time around, you should wait at\n"
+      "least 10 minutes before putting that item up for auction again.\n"
+    );
+}

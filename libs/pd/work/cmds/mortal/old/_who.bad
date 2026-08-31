@@ -1,0 +1,218 @@
+//      /bin/mortal/_who.c
+//      from the Nightmare Mudlib
+//      lists users() in an interesting format and sorting order
+//      created by Descartes of Borg 03 july 1993
+
+#include <std.h>
+#include <daemons.h>
+
+#define DEFAULT_SORT "b";
+
+inherit DAEMON;
+
+string list_users(string *races, string order);
+
+int cmd_who(string str) {
+    string *args, *races;
+    string order;
+    int i;
+
+    races = ({});
+    order = DEFAULT_SORT;
+    if(str) {
+        i = sizeof(args = explode(str, " "));
+        while(i--) {
+            if(args[i][0] == '-' && strlen(args[i]) > 1) order = args[i][1..1];
+            else if(RACE_D->is_race(args[i])) races += ({ args[i] });
+        }
+    }
+    this_player()->more(explode(list_users(races, order), "\n"));
+    return 1;
+}
+
+string list_users(string *races, string order) {
+    object *who;
+    string tmp, mark, borg;
+    int i, max;
+
+    who = filter_array(users(), "which_users", this_object(), races);
+    switch(order) {
+        case "a":
+            who = sort_array(who, "sort_by_name", this_object());
+            break;
+        case "b":
+            who = sort_array(who, "sort_by_birth", this_object());
+            break;
+        case "d":
+            who = sort_array(who, "sort_by_deaths", this_object());
+            break;
+        case "k":
+            who = sort_array(who, "sort_by_kills", this_object());
+            break;
+        case "l":
+            who = sort_array(who, "sort_by_level", this_object());
+            break;
+        case "p":
+            who = sort_array(who, "sort_by_playing_time", this_object());
+            break;
+        case "q":
+            who = sort_array(who, "sort_by_quests", this_object());
+            break;
+        case "t":
+            who = sort_array(who, "sort_by_login_time", this_object());
+            break;
+        default:
+            who = sort_array(who, "sort_by_birth", this_object());
+            break;
+    }
+    max = sizeof(who);
+    mark = "%^BOLD%^%^RED%^?%^RESET%^";
+    borg = "%^BOLD%^%^RED%^??????????????????????????????????????????????????????????????????????????????\n";
+    borg += mark+"%^BOLD%^%^BLUE%^                         The Reality of Nightmare                           "+mark+"\n";
+    if(sizeof(races) && max == 1)
+      borg += mark+"%^BOLD%^%^BLUE%^                    There is only one such adventurer!                      "+mark+"\n";
+    else 
+      if(max == 1) 
+        borg += mark+"%^BOLD%^%^BLUE%^                    You are the only current adventurer!                    "+mark+"\n";
+      else 
+        borg += mark+"%^BOLD%^BLUE%^                    There are currently "+max+" adventurers!                     "+mark+"\n";
+    borg += "%^BOLD%^%^RED%^??????????????????????????????????????????????????????????????????????????????\n";
+    for(i=0; i<max; i++) {
+        if(!(tmp=(string)who[i]->query_title()))
+          tmp = "("+capitalize((string)who[i]->query_name())+")";
+        if(in_edit(who[i]) || in_input(who[i])) 
+          tmp = " **"+arrange_string(tmp, 47)+"**";
+        else 
+          tmp = "   "+arrange_string(tmp, 47)+"  ";
+        if(wizardp(who[i])) 
+          tmp += " ("+(string)who[i]->query_position()+")";
+        else 
+          if(high_mortalp(who[i])) 
+            tmp += " (high mortal)";
+          else 
+            if((int)who[i]->query_level() < 6) 
+              tmp += " ("+(ambassadorp(who[i]) ? "ambassador" : "newbie")+")";
+        tmp = (string)arrange_string(tmp, 68);
+        if(query_idle(who[i]) > 60) 
+          tmp += " -idle- ";
+        else 
+          tmp += "        ";
+
+        if(archp(who[i])) 
+          borg += mark+"%^BOLD%^%^RED%^"+tmp+mark;
+        else 
+          if(wizardp(who[i])) 
+            borg += mark + "%^RED%^"+tmp + mark;
+          else {
+            switch((string)who[i]->query_class()) {
+              case "rogue": borg += mark+"%^BOLD%^%^GREEN%^"+tmp+mark; break;
+              case "mage": borg += mark+"%^BOLD%^%^MAGENTA%^"+tmp+mark; break;
+              case "monk": borg += mark+"%^YELLOW%^"+tmp+mark; break;
+              case "cleric": borg += mark+"%^BOLD%^%^CYAN%^"+tmp+mark; break;
+              case "fighter": borg += mark+"%^BOLD%^%^BLUE%^"+tmp+mark; break;
+              default: borg += mark+tmp+mark; break;
+            }
+          }
+        borg += "\n";
+    }
+    borg += "%^BOLD%^%^RED%^??????????????????????????????????????????????????????????????????????????????\n";
+    return borg;
+}
+
+int which_users(object who, string *races) {
+    string my_race;
+    int i;
+
+    if(!who->query_name()) return 0;
+    if(who->query_invis() && wizardp(who) && !archp(this_player()))
+      return 0;
+    if(!(i=sizeof(races))) return 1;
+    my_race = (string)who->query("race");
+    while(i--) if(races[i]== my_race) return 1;
+    return 0;
+}
+
+int sort_by_birth(object alpha, object beta) {
+    int a, b;
+
+    a = (int)alpha->query_birthday();
+    b = (int)beta->query_birthday();
+    if(a == b) return strcmp((string)alpha->query_name(), (string)beta->query_name());
+    else if(a > b) return 1;
+    else return -1;
+}
+
+int sort_by_name(object alpha, object beta) {
+    return strcmp((string)alpha->query_name(), (string)beta->query_name());
+}
+
+int sort_by_playing_time(object alpha, object beta) {
+    int a, b;
+
+    a = (int)alpha->query_age();
+    b = (int)beta->query_age();
+    if(a==b) return strcmp((string)alpha->query_name(), (string)beta->query_name());
+    else if(a > b) return -1;
+    else return 1;
+}
+
+int sort_by_login_time(object alpha, object beta) {
+    int a, b;
+
+    a = (int)alpha->query_login_time();
+    b = (int)beta->query_login_time();
+    if(a==b) return strcmp((string)alpha->query_name(), (string)beta->query_name());
+    else if(a>b) return 1;
+    else return -1;
+}
+
+int sort_by_level(object alpha, object beta) {
+    int a, b;
+
+    a = (int)alpha->query_level();
+    b = (int)beta->query_level();
+    if(a > b) return -1;
+    if(b > a) return 1;
+    a = wizardp(alpha);
+    b = wizardp(beta);
+    if( (a && b) || (!a && !b) )
+      return strcmp((string)alpha->query_name(), (string)beta->query_name());
+    if(a) return 1;
+    return -1;
+}
+
+int sort_by_kills(object alpha, object beta) {
+    int a, b;
+
+    if((a=sizeof((string *)alpha->query_kills())) > (b=sizeof((string *)beta->query_kills())))
+      return -1;
+    else if(a < b) return 1;
+    else return strcmp((string)alpha->query_name(), (string)beta->query_name());
+}
+
+int sort_by_deaths(object alpha, object beta) {
+    int a, b;
+
+    a = sizeof((mixed *)alpha->query_deaths());
+    b = sizeof((mixed *)beta->query_deaths());
+    if(a>b) return -1;
+    else if(a<b) return 1;
+    else return strcmp((string)alpha->query_name(), (string)beta->query_name());
+}
+
+int sort_by_quests(object alpha, object beta) {
+    int a, b;
+
+    if((a=(int)alpha->query_quest_points()) > (b=(int)beta->query_quest_points()))
+      return -1;
+    else if(a < b) return 1;
+    else return strcmp((string)alpha->query_name(), (string)beta->query_name());
+}
+
+void help() {
+    write(
+      "Syntax: <who [-][abdklpqt] [race1 race2 ... raceN]>\n\n"+
+      "Lists all players online or all players of the race(s) given.\n"+
+      "If no arguments are given, it simply lists all players sorted by\n"
+      "birthdate.\n" );
+}

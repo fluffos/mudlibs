@@ -1,0 +1,227 @@
+// Asmodeus
+#include <daemons.h>
+inherit DAEMON;
+int abil();
+string *charging;
+void create()
+{
+ ::create();
+ charging = ({});
+}
+int cmd_dakzhul(string str)
+{
+ object ob;
+ int i;
+if (this_player()->query_subclass()!="kataan")
+   {
+write("What?\n");
+    return 1;
+   }
+   if (!abil()) {
+      notify_fail("What?");
+      return 0;
+   }
+ if (!str || str=="")
+   {
+    write("Attack what?");
+    return 1;
+   }
+if(this_player()->query_skill("projectile") < 125)
+   {
+    write("You lack the skill with the pike to perform the dak-zhul.");
+    return 1;
+   }
+   if(this_player()->query_current_attacker()) {
+     write("You are already in combat with something else!\n");
+     return 1;
+}
+    
+ ob = present(str, environment(this_player()));
+ if (!ob)
+   {
+     write("You dont see that anywhere in sight.");
+     return 1;
+   }
+ if (member_array(ob, this_player()->query_hunted()) != -1)
+  
+    return notify_fail("You are already in combat with that.\n");
+    if(ob == this_player()) {
+       write("You're an idiot.");
+        return 1;
+    }
+    if(this_player()->query_sp() < 100) {
+        write("Your to tired to use that move.\n");
+        return 1;
+    }  
+if(this_player()->query_mp() < 200) {
+write("You lack the demonic energy to perform the dak-zhul.\n");
+return 1;
+}
+    if (this_player()->query_ghost())
+      {
+write("Ghosts may not perform this attack.");
+       return 1;
+      }
+    
+    if(ob->query_ghost()) {
+       write("Your target is already dead.");
+        return 1;
+    }
+   if(!living(ob)){
+        write("The dak-zhul can't be used on that foe.");
+        return 1;
+    }
+ if (environment(ob)->query_property("no attack"))
+   {
+   write("You cannot attack in such a peaceful place.");
+    return 1;
+  }
+   if (this_player()->query_disable())
+      return notify_fail("You are busy.\n");
+   i = sizeof(charging);
+   while (i--)
+    {
+    if (charging[i]==this_player()->query_name())
+     {
+     write("You are already performing this move on something.");
+     return 1;
+      }
+    }
+ if (!charging) charging = ({ this_player()->query_name() });
+   else
+    charging += ({ this_player()->query_name() }); 
+ this_player()->add_sp(-random(60));
+ this_player()->set_disable(); 
+ write("You summon your demonic energy and unleash the dak-zhul upon "+capitalize(ob->query_name())+"!");
+ message("dak-zhul", this_player()->query_cap_name()+" summons demonic energy and then unleashes the dak-zhul upon "+ capitalize(ob->query_name())+"!", environment(this_player()),  ({ ob, this_player() }));
+ message("dak-zhul", this_player()->query_cap_name()+" seems to darken and then flies at you with a destructive blast!", ob);
+ call_out("charge_hit", 2, ob);
+ return 1;
+}
+void do_charge_message(float perc, string name, string limb, object ob)
+{
+ string a,b;
+if (perc < 0.1)
+  {
+    a = "%^YELLOW%^scraped%^RESET%^";
+    b = "%^YELLOW%^barely%^RESET%^";
+  }
+ else
+  if (perc >= 0.6)
+    {
+      a = "%^BOLD%^%^BLACK%^destroyed%^RESET%^";
+      b = "%^BOLD%^%^BLACK%^utterly%^RESET%^";
+    }
+  else
+  if (perc >= 0.5)
+   {
+    a = "%^GREEN%^%^BOLD%^destroyed%^RESET%^";
+    b = "%^GREEN%^%^BOLD%^terribly%^RESET%^";
+   }
+ else
+  if (perc >= 0.3)
+  {
+   a = "%^BLUE%^%^BOLD%^mutilated%^RESET%^";
+   b= "%^BLUE%^%^BOLD%^horribly%^RESET%^";
+  }
+else
+ if (perc >= 0.2)
+  {
+   a = "%^RED%^sliced%^RESET%^";
+   b = "%^RED%^badly%^RESET%^";
+  }
+ else
+if (perc >= 0.1)
+  {
+   a = "%^MAGENTA%^%^BOLD%^knicked%^RESET%^";
+   b = "%^MAGENTA%^%^BOLD%^barely%^RESET%^";
+  }
+write("You "+a+" "+name+" "+b+" in the "+limb+" with the dak-zhul!");
+ message("info",  
+this_player()->query_cap_name()+"'s attack "+a+" "+name+" "+b+" in the "+limb+"!",
+environment(this_player()), ({ this_player(), ob }) );
+ message("info",
+this_player()->query_cap_name()+"'s attack "+a+" you "+b+" in the "+limb+"!", ob );
+}
+int charge_hit(object ob)
+{
+ int a, dam, b;
+ float c;
+ string target_thing;
+ int wc, i, tmp;
+ object *weap;
+ charging -= ({ this_player()->query_name() });
+ if(!ob) return 1;
+ if (environment(this_player())!=environment(ob))
+   {
+    write("Your opponent is out of range.");
+    return 1;
+   }
+ if (environment(ob)->query_property("no attack"))
+    return 1;
+     weap = (object *)this_player()->query_wielded();
+    for(i=0, tmp = sizeof(weap); i<tmp; i++) {
+       if((string)weap[i]->query_name() != "kataan warpike") continue;
+         if (wc < weap[i]->query_wc()) wc = weap[i]->query_wc();
+      }
+  if (!wc)
+    {
+    write("You are unable to draw energy from your weapon.");
+     return 1;
+    }
+a = ( (this_player()->query_stats("dexterity")*3+
+       this_player()->query_stats("strength")*3) -
+      (ob->query_stats("dexterity")+ob->query_stats("intelligence")) +
+      (this_player()->query_skill("faith")*2) -
+      (ob->query_skill("defense"))- 
+      (random(ob->query_level()/5)) 
+    + (random(this_player()->query_level()/4)) 
+      +random(30)
+     );
+if (a < -random(250) && !ob->query_paralyzed() && !present("pillow", ob))
+  {
+    write("You miss your attack.");
+    say( this_player()->query_cap_name()+" fails to fully perform the dak-zhul.");
+    if(!this_player()->kill_ob(ob, 0)) return 1;
+    return 1;
+  }    
+dam = (this_player()->query_skill("faith"))+
+      (this_player()->query_stats("strength")*5/6)+
+      (this_player()->query_stats("dexterity")*5/6)-
+      (ob->query_stats("strength")/2) -
+      (ob->query_skill("defense")/3) -
+      (ob->query_stats("dexterity")/2) +
+       wc*30/2;
+    if(!this_player()->kill_ob(ob)) {
+        write(ob->query_cap_name()+" can't be attacked by you yet.");
+       return 1;
+    }
+  target_thing = (string)ob->return_target_limb();
+  a = ob->query_hp();
+  b = ob->query_hp() -dam;
+  c = b - a;
+  c = c / a;
+  if (c < 0) c = -c;
+  do_charge_message(c, capitalize(ob->query_name()), target_thing, ob);
+  ob->do_damage(target_thing, dam*3/4);
+  ob->check_on_limb(target_thing);
+  this_player()->add_sp(-(dam/7));
+  this_player()->add_mp(-(dam/7));
+  this_player()->set_disable();
+ return 1;
+}
+ 
+void help()
+{
+ write("Syntax: dakzhul <living>\n"
+"The mark of the Kataan masters, the dak-zhul is a powerful attack that is used in conjunction with the kataan warpike.  It involves the focusing of demonic energy into a powerful opening attack. "
+);
+}
+int abil() {
+   object tp;
+   tp = this_player();
+   if (!tp) return 0;
+   if (tp->query_subclass() != "kataan") return 0;
+   if (tp->query_level() < 25) return 0;
+   return 1;
+}

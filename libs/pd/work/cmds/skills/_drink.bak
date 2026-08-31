@@ -1,0 +1,370 @@
+
+#include <std.h>
+#include <daemons.h>
+#include <rest.h>
+
+#define RES "%^RESET%^"
+#define COL RES+"%^BLUE%^"
+#define COL2 RES+"%^BOLD%^%^RED%^"
+#define COL3 RES+"%^RED%^"
+
+#define DRINK_PROP "drink_abil_who"
+#define COMMAND_OB "/cmds/skills/obj/command"
+
+#define FAIL(s) return notify_fail(s+"\n")
+
+inherit DAEMON;
+
+object *who = ({});
+
+int drink_deeply(object tp);
+int do_stop(string str);
+int notify(object killer, object victim);
+
+int abil() {
+  object tp = this_player();
+  if (tp && tp->query_race() == "vampire")
+    return 1;
+  return 0;
+}
+
+string type() { return "other"; }
+
+void help() {
+  message("help",
+    "Syntax: <drink [who]>\n\n"
+    "Vampires must drink the blood of the living, and this is how "
+    "they do so. Sneaking up from behind or lunging at a weakened foe "
+    "are the easiest ways to feed. One can <stop drinking> at any time.",
+    this_player() );
+}
+
+int can_cast(object tp, object tgt) {
+
+  if (!tp) return 0;
+
+  if (environment(tp)->query_property("no attack"))
+    FAIL("Some force prevents your violence.");
+
+  if (tp->query_busy())
+    FAIL("You are busy.");
+
+  if (member_array("fangs", tp->query_severed_limbs()) != -1)
+    FAIL("Your fangs are missing!");
+
+  if (!tgt)
+    FAIL("Drink from whom?");
+
+  if (!living(tgt))
+    FAIL("That thing isn't alive.");
+
+  if (tgt->query_undead())
+    FAIL("The blood of the undead would not be satisfying.");
+
+  if (tp == tgt)
+    FAIL("You drink blood from your wrist, but don't feel any better.");
+
+  if (tp->query_hp() >= tp->query_max_hp())
+    FAIL("You are already full.");
+
+  if (tp->query_rest_type())
+    FAIL("You need to stand up first.");
+
+  if (tp->query_sp() < 20)
+    FAIL("You are too tired.");
+
+  if (sizeof(tp->query_attackers()) > 1)
+    FAIL("Your feeding would be disturbed by your other opponents.");
+
+  if (!tp->ok_to_kill(tgt))
+    FAIL("You cannot attack "+tgt->query_cap_name()+".");
+
+  return 1;
+}
+
+int cmd_drink(string str) {
+  object tp = this_player();
+  object env = environment(tp);
+  object tgt;
+  int hit = 0;
+  int miss = 0;
+  int perc;
+
+  if (!abil()) return 0;
+
+  if (str)
+    tgt = present(str, env);
+  else
+    tgt = tp->query_current_attacker();
+
+  if (!can_cast(tp, tgt)) return 0;
+
+  hit += tp->query_stats("dexterity");
+  hit += tp->query_skill("agility")*2;
+  hit += tp->query_skill("ferocity")*2/3;
+  hit += tp->query_skill("attack")/2;
+  
+  miss += tgt->query_stats("dexterity")*3/4;
+  miss += tgt->query_stats("wisdom")/2;
+  miss += tgt->query_skill("defense")*2/3;
+
+  // drink while in combat
+  if (tp->clean_up_attackers()) {
+
+    hit += tp->query_skill("stealth")/2;
+
+    miss += tgt->query_skill("perception")/3;
+    miss += tgt->query_skill("agility")/3;
+
+    perc = percent(tgt->query_hp(), tgt->query_max_hp());
+    if (perc > 25)
+      miss += 1.4*(perc-25);
+
+  }
+  // not in combat, sneaking up on them
+  else {
+
+    hit += tp->query_skill("stealth");
+    if (tp->use_stealth(20))
+      hit += 20;
+    if (tp->query_level() < 5) hit += (5-tp->query_level())*3;
+
+    miss += tgt->query_skill("perception");
+
+  }
+
+  hit += random(15);
+
+  who += ({ tp });
+
+  if (tgt->query_skill("perception")*3/4 + tgt->query_skill("wisdom") >
+      tp->query_skill("stealth")*2 + tgt->query_stats("dexterity")*2/3) {
+        miss += 40;
+        message("combat", tp->query_cap_name()+" attempts to "+
+                          COL+"slip behind"+RES+" you!", tgt);
+  }
+
+  tp->set(DRINK_PROP, ({ tgt, (hit > miss ? 1 : 0) }) );
+  tp->set_disable();
+  tp->add_sp(-(5+random(6)));
+
+  message("info", "You try to "+COL+"slip behind"+RES+" "+
+                    tgt->query_cap_name()+".", tp);
+
+  set_heart_beat(1);
+
+  return 1;
+}
+
+void heart_beat() {
+  foreach (object p in who) {
+    object vic, ob;
+    if (p) {
+      if (!sizeof(p->query(DRINK_PROP))) {
+        //p->set_paralyzed(0, "You are busy.");
+        who -= ({ p });
+      }
+      else if (!drink_deeply(p)) {
+        vic = p->query(DRINK_PROP)[0];
+        if (objectp(vic)) {
+          vic->set_paralyzed(0);
+        }
+        //p->set_paralyzed(0, "You are busy.");
+        p->set(DRINK_PROP, ({ }) );
+        who -= ({ p });
+      }
+    }
+    if (!p)
+      who -= ({ p });
+  }
+  if (!sizeof(who)) set_heart_beat(0);
+}
+
+int drink_deeply(object tp) {
+  object env, tgt, ob;
+  mixed *arr;
+  int mystr, mydex, myatt, mymurd, mymelee;
+  int yourstr, yourdex, yourdef;
+  int dmg, cost, count, escape;
+  int lvl, rank;
+  string *skills;
+  object stop;
+
+  if (!tp || sizeof(arr = (mixed)tp->query(DRINK_PROP)) < 2) return 0;
+
+  if (!(env = environment(tp))) return 0;
+
+  tgt = arr[0];
+  count = arr[1];
+
+  if (!tgt || !environment(tgt) || environment(tgt) != env)
+    return 0;
+
+  if (!tp->kill_ob(tgt)) return 0;
+
+  // he caught us sneaking up
+  if (count == 0) {
+    message("combat", "Just before you bite "+tgt->query_cap_name()+
+                      "'s neck, "+tgt->query_subjective()+
+                      " jerks out of the way!", tp);
+    message("combat", "You feel a presence behind you and jerk out of the way "
+                      "just before "+tp->query_cap_name()+" bites your neck!", tgt);
+    tp->set_disable();
+    tp->add_sp(-25);
+    return 0;
+  }
+
+  lvl = tp->query_level();
+  if (lvl < 5) lvl = 5;
+
+  switch (tp->query_level()) {
+    case 1..17: rank = 1; break;
+    case 18..33: rank = 2; break;
+    case 34..50: rank = 3; break;
+    default: rank = 4; break;
+  }
+
+  skills = ({ "attack", "attack" });
+  for (int i = rank - 1; i > 0; i--)
+    skills += ({ "ferocity" });
+
+  dmg = BALANCE3_D->get_damage(tp, tgt, rank,
+    skills,
+    ({ "strength", "strength", "dexterity" }),
+    ({ "strength", "dexterity" }) );
+
+  dmg *= to_float(lvl+15) / 100.0;
+
+  if (count == 1)
+    cost = 20;
+  else
+    cost = 2+dmg/80+random(3);
+
+  if (tp->query_sp() < 20) {
+
+    message("combat", "You grow tired, and let "+tgt->query_cap_name()+
+                      " fall to the ground.", tp);
+    message("combat", tp->query_cap_name()+" releases you and you fall "
+                      "to the ground.", tgt);
+    message("combat", tp->query_cap_name()+" releases "+tgt->query_cap_name()+
+                      " and "+tgt->query_subjective()+" falls to the ground.",
+                      env, ({ tp, tgt }) );
+
+    tp->set_disable();
+    tgt->set_disable();
+    tgt->set_rest_type(SIT);
+
+    return 0;
+  }
+
+  if (count == 1) {
+    message("combat", "You "+COL2+"sink"+RES+" your fangs into "+
+                      tgt->query_cap_name()+"'s neck and "
+                      +COL2+"w"+COL3+"a"+COL2+"r"+COL3+"m bl"+COL2+"oo"+COL3+"d"+RES+
+                      " begins to trickle down your throat.", tp);
+    message("combat", "Fangs suddenly "+COL2+"sink"+RES+" into your neck!\n"
+                      "You find yourself too dizzy to move...", tgt);
+    message("combat", tp->query_cap_name()+" "+COL2+"sinks"+RES+" "+
+                      tp->query_possessive()+
+                      " fangs into "+tgt->query_cap_name()+"'s neck and "
+                      "begins to drink "+tgt->query_possessive()+" "+
+                      COL3+"bl"+COL2+"oo"+COL3+"d"+RES+"!",
+                      env, ({ tp, tgt }) );
+    if (stop = new(COMMAND_OB)) {
+      stop->set_command("stop");
+      stop->set_catchall(1);
+      stop->set_function(this_object(), "do_stop");
+      stop->set_notify("notify");
+      stop->set_uses(1);
+      stop->move(tp);
+    }
+  }
+  else {
+    message("combat", tp->query_cap_name()+" sucks more "+
+                      COL3+"bl"+COL2+"oo"+COL3+"d"+RES+" from "+
+                      tgt->query_cap_name()+"'s neck.", env, ({ tp, tgt }) );
+  }
+
+  dmg = dmg*(100+count*10)/100;
+
+  tp->add_sp(-(cost));
+  tgt->add_hp(-dmg);
+  tp->add_hp(dmg*(tgt->query_sentient() ? 4 : 2+random(2))/5);
+
+  if (tp->query_hp() >= tp->query_max_hp()) {
+    message("combat", "Having drunk your fill, you pull your fangs from "+
+                      tgt->query_cap_name()+"'s neck.", tp);
+    message("combat", tp->query_cap_name()+" stops drinking your blood and "
+                      "pulls "+tp->query_possessive()+" fangs from your neck.", tgt);
+    message("combat", tp->query_cap_name()+" stops drinking blood and pulls "+
+                      tp->query_possessive()+" fangs out.",
+                      env, ({ tp, tgt }) );
+    return 0;
+  }
+
+  tp->set_paralyzed(8, "You suck more "+COL3+"bl"+COL2+"oo"+COL3+"d"+RES+
+                       " from "+tgt->query_cap_name()+"'s neck.");
+  tgt->set_paralyzed(8, tp->query_cap_name()+" sucks more "+
+                        COL3+"bl"+COL2+"oo"+COL3+"d"+RES+" from your neck.");
+
+  tp->set(DRINK_PROP, ({ tgt, count+1 }) );
+  
+  return 1;
+}
+
+int do_stop(string str) {
+  object tp = this_player();
+  object vic;
+  object obs;
+
+  if (!tp) return 0;
+
+  if (query_verb() != "stop") return 0;
+
+  if (!str || str != "drinking")
+    FAIL("Stop what?");
+  
+  vic = tp->query(DRINK_PROP)[0];
+
+  if (objectp(vic)) {
+    message("combat", tp->query_cap_name()+" stops drinking your blood and "
+                      "pulls "+tp->query_possessive()+" fangs from your neck.", vic);
+    vic->set_paralyzed(0, "You feel weak.");
+  }
+  message("combat", "You stop drinking blood and pull your fangs out.", tp);
+  message("combat", tp->query_cap_name()+" stops drinking blood and pulls "+
+                    tp->query_possessive()+" fangs out.",
+                    environment(tp), ({ tp, vic }) );
+  tp->set(DRINK_PROP, ({ }) );
+  heart_beat();
+  tp->set_paralyzed(0, "You are carefully pulling your fangs out.");
+//who -= ({ tp });
+
+  return 1;
+}
+
+int notify(object killer, object victim) {
+  mixed arr;
+  // the victim was someone drinking blood
+  if (member_array(victim, who) != -1) {
+    object ob;
+    arr = victim->query(DRINK_PROP);
+    if (sizeof(arr) && ob = arr[0]) ob->set_paralyzed(0, "You feel weak.");
+    victim->set(DRINK_PROP, 0);
+    heart_beat();
+    return -1;
+  }
+  // killer is someone drinking blood
+  else if (member_array(killer, who) != -1) {
+    arr = killer->query(DRINK_PROP);
+    // the victim was the person being drunk from
+    if (sizeof(arr) && arr[0] == victim) {
+      victim->set_paralyzed(0);
+      killer->set(DRINK_PROP, 0);
+      heart_beat();
+      return -1;
+    }
+  }
+  return 1;
+}
+

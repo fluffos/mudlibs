@@ -1,0 +1,208 @@
+// _inventory.c: by Seeker Friday June 9 2000 -- 23:25
+// My own inventory command...
+
+#include <std.h>
+#include <daemons.h>
+
+inherit DAEMON;
+string fil;
+#define ISIN(el,array) (member_array(el,array) != -1)
+
+int get_weight(object *ob)
+{
+    int i=sizeof(ob);
+    int a;
+
+    if (!i) return 0;
+    while(i--)
+	if (!a)
+	    a = to_int(ob[i]->query_weight());
+	else a += to_int(ob[i]->query_weight());
+    return a;
+}
+int valid_inv(object *ob)
+{
+    int i=sizeof(ob);
+    int a, ok;
+
+    if (!i) return 0;
+    while(i--)
+	if(ob[i]->query_short() && ob[i]->query_short() != "") ok=1;
+    return ok;
+}
+int get_value(object *ob)
+{
+    int i=sizeof(ob);
+    int a;
+
+    a = 0;
+    if (!i) return 0;
+    while(i--)
+	if (ob[i]->query_value())
+	    if (!a)
+		a = to_int(ob[i]->query_value());
+	    else a += to_int(ob[i]->query_value());
+    return a;
+}
+int get_wcac(object *ob)
+{
+    int i=sizeof(ob);
+    int a;
+
+    if (!i) return 0;
+    while(i--)
+    {
+	if (ob[i]->query_wc())
+	    if (!a)
+		a = ob[i]->query_wc();
+	    else a += ob[i]->query_wc();
+
+	if (ob[i]->query_ac())
+	    if (!a)
+		a = ob[i]->query_ac();
+	    else a += ob[i]->query_ac();
+    }
+    return a;
+}
+
+string get_autoload(object *ob)
+{
+    int i=sizeof(ob);
+    int a=0;
+
+    if (!i) return 0;
+    while(i--)
+	if (ob[i]->query_auto_load()) a++;
+
+    if (!a && sizeof(ob) == 1) return "No";
+    if (a  && sizeof(ob) == 1) return "Yes";
+    if (!a) return "None";
+    if (a == sizeof(ob)) return "All";
+    return "Some";
+
+}
+int cmd_inventory(string str)
+{
+    object *obj;
+    mapping inv=([]);
+    string sh, *shorts, tmp;
+    int a, b, weight, siz, enc;
+
+
+    if(effective_light(this_player()) < 0) {
+	notify_fail("It is too dark.\n");
+	return 0;
+    }
+
+    obj = all_inventory(this_player());
+    if(str) { 
+	fil=str;
+	switch(str) {
+	case "weapon": 
+	case "weapons":
+	case "wep":
+	    obj=filter_array(obj, "filter_weapon");  break;
+	case "armour": 
+	    obj=filter_array(obj, "filter_armour");  break;
+	case "worn":
+	case "wearing":
+	    obj=filter_array(obj, "filter_worn");  break;
+	case "wielded":
+	case "wield":
+	case "wielding":
+	    obj=filter_array(obj, "filter_wield");  break;
+	case "short":
+	    obj=filter_array(obj, "filter_wornandwield");  break;
+	default: obj=filter_array(obj, "filter_id"); break;
+
+	}
+    } 
+    b = sizeof(obj);
+    a = 0;
+    shorts = ({ }); 
+    while(a++<b)
+    {
+	sh = TERMINAL_D->no_colours(obj[a-1]->query_short());
+	if (!inv[sh])
+	    inv[sh] = ({ obj[a-1] });
+	else inv[sh] += ({ obj[a-1] });
+	if (!ISIN(sh, shorts))  shorts += ({ sh });
+    }
+    a = 0; b = sizeof(inv);
+    write("%^BLUE%^+=+=%^BOLD%^( %^WHITE%^Inventory %^BLUE%^)%^RESET%^%^BLUE%^=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+");
+    if (!sizeof(obj) || !valid_inv(obj)) { write("You are not carrying anything."); return 1; }
+    message("inv", 
+      "%^WHITE%^%^BOLD%^               Name                               Autoload   Weight\n"
+      "%^BOLD%^%^BLUE%^+-----------------------------------------------+-----------+--------+", this_player());
+
+    while(a++<b)
+    {
+	obj = inv [ shorts[ a - 1 ] ];
+	siz = sizeof( obj );
+	weight += get_weight(obj);
+	if (shorts[a-1] != "" && shorts[a-1]) {
+
+	    /* Name of the object(consolidated) */
+	    sh = "%^BOLD%^%^BLUE%^|%^RESET%^ "+arrange_string(capitalize(consolidate(siz, shorts[a-1])),46);
+	    sh += "%^BOLD%^%^BLUE%^|";
+	    /* If the object does autoload */
+	    sh += "%^RESET%^%^CYAN%^    "+arrange_string(get_autoload(obj),7);
+	    sh += "%^BOLD%^%^BLUE%^|";
+	    /* Checks the weight */
+	    sh += "%^RESET%^%^CYAN%^   "+arrange_string((sprintf("%d",get_weight(obj))?sprintf("%d", get_weight(obj)):"0"), 5);
+	    sh += "%^BOLD%^%^BLUE%^|";
+	    message("info", sh, this_player());
+	}
+    }
+    message("info", "%^BOLD%^%^BLUE%^|-------------------------------------+---------+-----------+--------'", this_player());
+    sh = "%^BOLD%^%^BLUE%^| ";
+    enc = this_player()->query_max_internal_encumbrance()/2;
+    tmp =sprintf("%d%% (%d/%d)", to_int(percent(weight,enc)), weight, enc);
+    sh += "%^BOLD%^%^CYAN%^ Total Weight:%^RESET%^ "+
+    sprintf("%-21s", tmp);
+    sh += "%^BOLD%^%^BLUE%^|";
+    message("info", sh, this_player());
+    message("info", "%^BOLD%^%^BLUE%^'-------------------------------------'%^RESET%^", this_player());
+    return 1;
+
+}
+int help()
+{
+    write( @EndText
+Syntax: inventory
+Effect: shows what your character is carrying.  You may limit 
+how many items are shown by putting in the id, or general category
+of an object.  For example, <inventory weapons> will show you all 
+the weapons you are carrying.  To see objects that are worn or 
+wielded, type <inventory wielding/worn>.  For a list of your without
+showing wielded/worn items, type <inventory short>.
+See also: score
+EndText
+    );
+    return 1;
+}
+int filter_id(object o) {
+    if(o->id(fil)) return 1;
+    return 0;
+}
+int filter_weapon(object o) {
+    if(o->is_weapon()) return 1;
+    return 0;
+}
+int filter_armour(object o) {
+    if(o->is_armour()) return 1;
+    return 0;
+}
+int filter_worn(object o) {
+    if(o->query_worn()) return 1;
+    return 0;
+}
+int filter_wield(object o) {
+    if(o->query_wielded()) return 1;
+    return 0;
+}
+int filter_wornandwield(object o) {
+    if(o->query_wielded() || o->query_worn()) return 0;
+    return 1;
+}
+

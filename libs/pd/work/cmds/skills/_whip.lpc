@@ -1,0 +1,268 @@
+#include <std.h>
+#include <daemons.h>
+#include <rest.h>
+#include <damage_types.h>
+#include <damage.h>
+#include <effect_cl.h>
+
+#define RES "%^RESET%^"
+#define COL "%^MAGENTA%^"
+#define TYPE "flail"
+#define WCMOD 8
+#define SKILLS ({ TYPE, TYPE, "attack" })
+#define SKMORE ({ "ferocity", "discipline", "entertainment" })
+#define DWMOD 4
+#define STATS ({ "strength", "dexterity", "dexterity", "dexterity" })
+#define EXTRA ({ "dexterity" })
+#define SPMOD 13.0
+#define VERBLOW ([ \
+  "my" : "whip", \
+  "your" : "whips", \
+  "their" : "whips", \
+])
+#define VERBHIGH ([ \
+  "my" : "lash", \
+  "your" : "lashes", \
+  "their" : "lashes", \
+])
+
+#define FAIL(s) return notify_fail(s+"\n")
+
+inherit DAEMON;
+
+void extra_hit(object tp, object tgt, int rank, 
+               int dmg, object w, string limb, int focus);
+void do_messages(string what, object tp, object tgt,
+                 int rank, object wep, string limb);
+
+int abil() {
+  object tp = this_player();
+  if (tp && tp->query_skill(TYPE) >= 20)
+    return 1;
+  return 0;
+}
+
+string type() { return "weapon"; }
+
+void help() {
+  message("help",
+    "Syntax: <whip [whom]>\n\n"
+    "The basic attack used with a flail. "
+    "Anyone with sufficient skill can learn this. "
+    "It's possible to pull your foe's legs out from under him, "
+    "if you're strong enough.",
+    this_player() );
+}
+
+int can_cast(object tp, object tgt, object *weps) {
+
+  if (!tp) return 0;
+
+  if (environment(tp)->query_property("no attack"))
+
+    FAIL("Some force prevents your violence.");
+
+  if (tp->query_disable() || tp->query_casting() || tp->query_magic_round())
+    FAIL("You are busy.");
+
+  if (!tgt)
+    FAIL("Whip whom?");
+
+  if (!living(tgt))
+    FAIL("That is not alive.");
+
+  if (tp == tgt)
+    FAIL("That would hurt.");
+
+  if (tp->query_rest_type())
+    FAIL("You must stand up first.");
+
+  if (!sizeof(weps))
+    FAIL("You need to use "+a_or_an(TYPE)+" "+TYPE+" for that.");
+
+  if (!tp->kill_ob(tgt))
+    FAIL("You may not attack "+tgt->query_cap_name()+".");
+
+  return 1;
+}
+
+int cmd_whip(string str) {
+  object tp=this_player();
+  object env=environment(tp);
+  object tgt;
+  object *weps;
+  string wep, limb;
+  string *skills;
+  int cost, dmg, rank, wc, tmp;
+  int dtype = DAMAGE_PHYSICAL | DAMAGE_IMPACT | DAMAGE_SLASH;
+  float tmpf;
+  class Effect check;
+  int focus;
+
+  if (!abil()) return 0;
+
+  if (str)
+    tgt = present(str, env);
+  else
+    tgt = tp->query_current_attacker();
+
+  weps = filter(tp->query_wielded(), (: $1->query_type() == TYPE :) );
+
+  if (!can_cast(tp, tgt, weps)) return 0;
+
+  focus = ((check = tp->query_effect("focus")) && check->misc[0] == TYPE);
+
+  if (tp->query_skill("attack") >= 40) {
+    if (focus && tp->query_skill(TYPE) >= 240) rank = 4;
+    if (tp->query_skill(TYPE) >= 160) rank = 3;
+    else if (tp->query_skill(TYPE) >= 75) rank = 2;
+    else rank = 1;
+  }
+  else rank = 1;
+
+  // --- skills ---
+  skills = SKILLS;
+
+  if (sizeof(tp->query_wielded()) > 1) {
+    for (int i = 0; i < DWMOD; i++)
+      skills += ({ "double wielding" });
+  }
+
+  if (tp->query_riding())
+    skills += ({ "riding" });
+
+  tmp = 0;
+  foreach (string sk in SKMORE)
+    if (tp->skill_exists(sk)) {
+      skills += ({ sk });
+      tmp = 1;
+    }
+  // this makes this abil weaker by looking for a skill that doesn't exist
+  if (!tmp)
+    skills += ({ "" });
+  // --- end skills ---
+
+
+  dmg = BALANCE3_D->get_damage(tp, tgt, rank, skills, STATS, EXTRA );
+
+  tmp = rank*270 + focus*75;
+  if (dmg > tmp)
+    dmg = tmp+tp->query_level();
+
+  /*
+  tmpf = dmg/45.0;
+  if (tmpf < 1.5) tmpf = 1.5;
+  cost = SPMOD*log(tmpf);
+  */
+  cost = BALANCE3_D->get_cost(dmg, rank, "sp");
+
+  if (tp->query_sp() < cost)
+    FAIL("You are too tired.");
+
+  tp->set_disable(1);
+  tp->add_sp(-(cost+random(cost/10)));
+
+  weps = sort_array(weps,
+    (: $1->query_wc() < $2->query_wc() ? $1 : $2 :)
+  );
+
+  wc = weps[0]->query_wc();
+
+  switch (rank) {
+  case 1:
+    wc = 0;
+  break;
+  case 2:
+    wc /= 2;
+  break;
+  }
+
+  dmg += wc*WCMOD;
+
+  do {
+    limb = tgt->return_target_limb();
+  } while (focus && strsrch(limb, "leg") == -1 && random(50) < 35);
+
+  tmp = weps[0]->query_damage_type();
+  if (!(tmp & DAMAGE_SLASH))
+    dtype ^= DAMAGE_SLASH;
+
+  if (dmg < 15)
+    do_messages("miss", tp, tgt, rank, weps[0], limb);
+  else {
+    do_messages("hit", tp, tgt, rank, weps[0], limb);
+    tgt->do_damage(limb, dmg, dtype, DAMAGE_NO_SEVER, tp);
+    extra_hit(tp, tgt, rank, dmg, weps[0], limb, focus);
+  }
+  
+  return 1;
+}
+
+void extra_hit(object tp, object tgt, int rank, int dmg, object w, string limb, int focus) {
+  string wep = remove_article(w->query_name());
+  
+  if (focus) {
+    if (tgt->query_rest_type()) tgt->add_bleeding(dmg/9);
+  }
+
+  if (rank > 1 && strsrch(limb, "leg") != -1 && !tgt->query_rest_type() &&
+      tp->query_stats("strength")+random(10)-random(10) > tgt->query_stats("dexterity")-(focus*15)) {
+
+    message("combat", "The "+wep+" wraps around "+tgt->query_possessive()+
+                      " "+limb+" and you pull back, "+COL+"wrenching"+RES+
+                      " it out from under "+tgt->query_objective()+"!", tp);
+    message("combat", "The "+wep+" wraps around "+tgt->query_possessive()+
+                      " "+limb+" and "+tp->query_cap_name()+" pulls back, "+
+                      COL+"wrenching"+RES+" it out from under "+
+                      tgt->query_objective()+"!", environment(tp), ({ tp, tgt }) );
+    message("combat", "The "+wep+" wraps around your "+limb+" and "+
+                      tp->query_cap_name()+" pulls back, "+COL+"wrenching"+RES+
+                      " it out from under you!", tgt);
+    message("combat", "You fall over!", tgt);
+    message("combat", tgt->query_cap_name()+" falls over!", environment(tp), tgt);
+
+    tgt->do_damage(tgt->return_limb(), dmg/16, DAMAGE_PHYSICAL | DAMAGE_IMPACT, DAMAGE_NO_SEVER, tp);
+    tgt->set_rest_type(LAY);
+
+  }
+}
+
+void do_messages(string what, object tp, object tgt, int rank, object w, string limb) {
+  mapping verb;
+  string mymsg, yourmsg, theirmsg;
+  string wep = remove_article(w->query_name());
+  string adverb = "";
+
+  if (rank == 1) verb = VERBLOW;
+  else verb = VERBHIGH;
+
+  if (rank == 3) adverb = COL+" painfully"+RES;
+  
+  switch (what) {
+
+  case "miss":
+    mymsg = "You try to "+verb["my"]+" "+tgt->query_cap_name()+
+            " and miss completely.";
+    yourmsg = tp->query_cap_name()+" tries to "+verb["my"]+" you "
+              "and misses completely.";
+    theirmsg = tp->query_cap_name()+" tries to "+verb["my"]+" "+
+               tgt->query_cap_name()+" and misses completely.";
+  break;
+
+  case "hit":
+    mymsg = "You "+COL+verb["my"]+RES+
+            " "+tgt->query_cap_name()+adverb+" with your "+wep+"!";
+    yourmsg = tp->query_cap_name()+" "+COL+verb["your"]+RES+
+              " you"+adverb+" with "+tp->query_possessive()+" "+wep+"!";
+    theirmsg = tp->query_cap_name()+" "+COL+verb["their"]+RES+" "+
+               tgt->query_cap_name()+adverb+" with "+
+               tp->query_possessive()+" "+wep+"!";
+  break;
+
+  }
+
+  message("combat", mymsg, tp);
+  message("combat", yourmsg, tgt);
+  message("combat", theirmsg, environment(tp), ({ tp, tgt }) );
+  
+}

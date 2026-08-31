@@ -1,0 +1,149 @@
+A queue system.
+
+A system designed to take in an array of lines, along with a time delay in seconds, so that they can queued and then fed back into the calling object at appropriate times. You can also pass a function that the line will be sent to inside of the object.
+
+What will be referred to as a "line" can also be thought of as a "bundle" or a "packet", anything can be passed in as a 'line'
+
+The system will keep track of how many queued lines have been sent since open_queue() has started, along with how many seconds have passed since the last line was sent. Using these pieces of information along with a queueID that is provided for each queue you wish to create, it is possible to create functions that can only be used in specific time periods, between certain lines, or which react differently depending on exactly where the queue is along its line path.
+
+The system will queue and send lines based off of an offset set within the system's time() function, in order to keep time differences between function calls as consistant as possible, even with MUD limitations.
+
+
+
+
+Usage:
+
+
+
+
+//When this is called, a new queue entry is added to the queue
+//system, and its reference value is returned. That reference value
+//is required to refer to that queue, to add lines to it, set
+//a short circuit function, and so on.
+int open_queue();
+
+
+//This is called to close the queue that currently existed
+//at that reference value and to free up the memory that was
+//created for it.
+void close_queue(int queueID);
+
+
+//This should be called whenever all the lines that will ever
+//be added to that queue have been added. It sets the queue to
+//a value that prevents it from being modified and closes it
+//automatically after it has finished executing.
+void finish_queue(int queueID);
+
+
+//This will close the queue immediately and stop any lines from
+//being able to be executed under that queue's queueID, including
+//any lines that were originally queued for that queue.
+void abort_queue(int queueID);
+
+
+
+
+//All of the lines will be sent to func() in this_object().
+//
+//every odd line will be the line that is sent
+//to the queue daemon. Every even line following
+//it will be the time period that will
+//be allowed to pass before the next line is sent
+//The first line will have no delay and will be
+//executed the moment the queue daemon passes
+//its next heart beat
+set_queue(int queueID, string func, mixed* lines);
+
+# example usage:
+# 
+# void do_say(string str) {
+#   command("say "+str);
+# }
+# 
+# void start_speech() {
+#   int queueRef = QUEUE_D->open_queue();
+#   QUEUE_D->set_queue(queueRef, "do_say", ({
+#     "What?", 3,
+#     "Oh, hi there!", 2,
+#     "How are you?", 7,
+#     "MMMmmm... yes, I see.", 12,
+#     "Interesting!", 4,
+#     "What's for dinner?", 0,
+#    }) );
+#   QUEUE_D->finish_queue(queueRef);
+# }
+
+
+
+
+
+
+//Acts similarly to set_queue
+//
+//Instead of sending all the lines as parameters to a
+//single function, you can specify a specific function
+//to be called for each line.
+void set_long_queue(int queueID, mixed* mixed);
+
+# example usage:
+# 
+# void do_say(string str) {
+#   command("say "+str);
+# }
+# 
+# //note that the following function returns 1 on failure
+# //and 0 on success. This is because 'void' functions that
+# //do not return anything should always be considered
+# //to have ran successfully with the command system,
+# //and so if you wish to create a dialogue tree
+# //that can short-circuit, the return type must be distinguishable
+# //from the defualt 'success' type.
+# 
+# int reward_player(object pl) {
+#   if(!pl) return 0;
+#   new("/wizards/pyro/cowitem")->move(pl);
+#   message("info", this_object()->query_cap_name()+" hands you an item!", pl);
+#   return 1;
+# }
+# 
+# void reward_queue(object tp) {
+#   int queueRef = QUEUE_D->open_queue();
+#   QUEUE_D->set_queue( queueRef, ({
+#     "do_say", "Oh, I see that you have completed my task!", 4,
+#     "do_say", "I daresay you deserve a reward!", 5,
+#     "reward_player", tp, 5,
+#     "do_say", "I hope you enjoy it!", 5,
+#    }) );
+#   QUEUE_D->finish_queue(queueRef);
+# }
+
+
+//This is used to set up a function to call when the
+//conversation tree short-circuits.
+//It is not called when the conversation tree exits normally
+
+void on_fail(int queueID, string func, mixed* parameters);
+
+
+//Before each line of the conversation is executed, the func passed
+//to the queue daemon through set_conditional will be
+//called with the parameters given. If the func returns 0,
+//the conversation will continue as normal. If
+//it returns 1, it will be short circuited.
+
+void set_conditional(int queueID, string func, mixed* parameters);
+
+
+//returns the time that has elapsed in seconds since
+//the last time that a line in the queue refferred to
+//by queueID has been executed.
+
+int time_passed(int queueID);
+
+
+//returns the number of lines that have been executed for
+//the queue referenced by queueID since the queue was
+//originally opened
+
+int lines_called(int queueID);

@@ -1,0 +1,143 @@
+#include <std.h>
+
+inherit ROOM;
+
+/* define this if the arena is broken */
+#undef BROKEN
+
+object *ob;
+
+string query_extra_long()
+{
+ if (sizeof(ob)==1)
+   return "\n%^BOLD%^%^RED%^"+ob[0]->query_cap_name()+" is waiting for an opponent.";
+ if (sizeof(ob)==2)
+   return "\n%^BOLD%^%^RED%^"+ob[0]->query_cap_name()+" and "+ob[1]->query_cap_name()+" are in the arena.";
+ return "";
+}
+void create()
+{
+ ::create();
+ set_short("Sindarii Arena Betting room");
+ set_long("The arena waiting room has a window with a worker there to "
+          "take bets for arenas that are taking place. If you want to "
+          "enter yourself into an arena battle, type <enter> and you "
+          "will be placed with the person thats already waiting or "
+          "wait for the next person that enters the arena." + query_extra_long());
+   
+ set_properties( ([ "no attack" : 1,
+                    "no magic" : 1,
+                    "light" : 2,
+                    "night light" : 2 ]) );
+ set_exits( ([ "west" : "/d/standard/nveros1" ]) );
+}
+void init()
+{
+ ::init();
+ add_action("join_arena", "enter");
+#ifdef BROKEN
+ write("%^CYAN%^The janitor says:%^RESET%^ Hey! the arena is broken come back later."
+        "\nThe janitor pushes you out of the arena betting area.");
+ this_player()->move("/d/standard/nveros1");
+#endif
+}
+int clean_arena()
+{
+ if (sizeof(ob)==1)
+   {
+    message("ob", "Nobody has decided to battle you.", ob[0]);
+    ob = ({});
+   }
+}
+int join_arena() { 
+ if (!ob) ob = ({});
+ if (sizeof(ob))
+ if (ob[0]==this_player())
+   {
+    write("You cant arena yourself!");
+    return 1;
+  }
+ if (sizeof(ob) > 1)
+   {
+    write("There is already players in arena.");
+    return 1;
+   }
+ if (!ob) ob = ({ this_player() });
+  else ob += ({ this_player() });
+ if (sizeof(ob) == 1)
+   {
+    write("You have been placed on the list for an arena battle. "
+          "please wait paitently until somebody decides to battle "
+          "with you.");
+    call_out("clean_arena", 60);
+    return 1;
+    }
+ message("info", "You enter your arena waiting room.", ob[0]);
+ message("info", "You enter your arena waiting room.", ob[1]);
+ ob[0]->move_player("/d/arena/start1", "through the arena doors"); 
+ ob[1]->move_player("/d/arena/start2", "through the arena doors");
+ ob[0]->set_property("arena", 1);
+ ob[1]->set_property("arena", 1);
+ call_out("start_arena", 60);
+ return 1;
+}
+void start_arena()
+{
+ if (!ob) return;
+ if (!ob[0] || !ob[1]) return;
+ if (file_name(environment(ob[0]))!="/d/arena/start1" &&
+     file_name(environment(ob[1]))!="/d/arena/start2")
+     return;
+ message("shout", "%^RED%^The battle between "+ob[0]->query_cap_name()+
+    " and "+ob[1]->query_cap_name()+" has begun!", users());
+ ob[0]->move("/d/arena/arena1");
+ ob[1]->move("/d/arena/arena1");
+ return;
+}
+ void end_arena(object loser)
+{
+ object *inv;
+ int i;
+ 
+ if (!sizeof(ob)) return;
+  remove_call_out("start_arena");
+  ob[0]->remove_property("arena");
+  ob[1]->remove_property("arena");
+ if (ob[0]==loser) 
+ message("shout", "%^BOLD%^%^WHITE%^"+ob[1]->query_cap_name()+" wins in the Sindarii Arena.",users());
+ if (ob[1]==loser)
+ message("shout", "%^BOLD%^%^WHITE%^"+ob[0]->query_cap_name()+" wins in the Sindarii Arena.", users());
+
+ message("shout", "%^BOLD%^%^BLUE%^"+loser->query_cap_name()+" failed to achieve victory in the Sindarii Arena.", users());
+ ob[0]->clean_up_attackers();
+ ob[1]->clean_up_attackers();
+ ob[0]->set_attackers(({}));
+ ob[1]->set_attackers(({}));
+
+ ob[1]->set_hp(ob[1]->query_max_hp());
+ ob[1]->set_sp(ob[1]->query_max_sp());
+ ob[1]->set_mp(ob[1]->query_max_mp());
+ ob[0]->set_hp(ob[1]->query_max_hp()); 
+ ob[0]->set_sp(ob[1]->query_max_sp());
+ ob[0]->set_mp(ob[1]->query_max_mp());
+
+     inv = all_inventory(ob[0]);
+    for(i=0; i<sizeof(inv); i++)
+        inv[i]->unequip();
+     inv = all_inventory(ob[1]);
+    for(i=0; i<sizeof(inv); i++)
+        inv[i]->unequip();
+ ob[1]->new_body();
+ ob[0]->new_body();
+ ob[1]->add_poisoning(-(ob[1]->query_poisoning()));
+ ob[0]->add_poisoning(-(ob[1]->query_poisoning()));
+ if (interactive(ob[1])) ob[1]->move("/d/arena/bet");
+ if (interactive(ob[2])) ob[0]->move("/d/arena/bet");
+
+ ob = ({});
+ return;
+}
+
+void receive_battle(string str)
+{
+}

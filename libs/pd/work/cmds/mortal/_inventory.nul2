@@ -1,0 +1,353 @@
+// inventory command
+// Nulvect 2012-06-09
+
+#include <std.h>
+
+#define tp this_player()
+
+#define COLOR_RESET "%^RESET%^"
+#define COLOR_HEADER "%^BOLD%^%^WHITE%^"
+#define COLOR_BAR "%^BOLD%^%^BLUE%^"
+#define COLOR_SHORT COLOR_RESET+"%^WHITE%^"
+#define COLOR_WEIGHT COLOR_RESET+"%^CYAN%^"
+#define COLOR_AUTOLOAD COLOR_RESET+"%^CYAN%^"
+#define COLOR_TOTALWEIGHT "%^BOLD%^%^CYAN%^"
+#define COLOR_NUMBER "%^YELLOW%^"
+
+
+inherit DAEMON;
+
+
+class InvLine {
+  int count;
+  int autoyes;
+  int autono;
+  int weight;
+}
+
+
+int cmd_inventory_number(string str, object player);
+string get_short(object ob, int len);
+int get_width(object player);
+void msg(string str);
+
+
+void help() {
+  message("help",
+    "Syntax: <inventory>\n"
+    "        <inventory weapons>\n"
+    "        <inventory armour>\n"
+    "        <inventory wielded>\n"
+    "        <inventory worn>\n"
+    "        <inventory short>\n"
+    "\n"
+    "        <inventory number [what]>\n"
+    "        <inventory [what]>\n"
+    "\n"
+    "The inventory command shows what your character is carrying.\n"
+    "Also displayed are the weight of the items, if they autoload or not, "
+    "and a summary of total weight. You can carry up to 200% weight, "
+    "but carrying more than 100% increases stamina usage.\n"
+    "\n"
+    "Items that do not autoload will be lost when you quit or otherwise "
+    "log off. See <help autoload> for more information.\n"
+    "\n"
+    "By default, all items are shown. The categories \"weapons\", "
+    "\"armour\", \"wielded\", and \"worn\" show only those items. "
+    "The \"short\" category shows all items that are neither worn nor "
+    "wielded.\n"
+    "\n"
+    "Other command arguments are taken as an identifier to search for.\n"
+    "Example: <inventory sword> will show you everything you are carrying "
+    "that is identified as a sword.\n"
+    "\n"
+    "Specifying \"number\" in front of an identifier will show all items "
+    "with that identifier in a non-consolidated format, with a number "
+    "in front that can be used to reference each item.\n"
+    "Example: <inventory number sword>\n"
+    "Output: \"1\" | A steel sword\n"
+    "        \"2\" | A steel sword\n"
+    "        \"3\" | A curved longsword\n"
+    "In this example, <drop sword 3> will drop the curved longsword.\n"
+    "\n"
+    +(tp && wizardp(tp) ?
+      "Immortals can <inventory player [name] [inv options]>.\n"
+      "Example: <inventory player bob weapons>\n"
+      "Autoload info may be incorrect with this method.\n\n" : ""
+    )+
+    "See also: equipment, wield, wear, autoload",
+    tp
+  );
+}
+
+int cmd_inventory(string str) {
+  object *ai;
+  object player = tp;
+  mapping lines = ([]);
+  int totalweight, enc;
+  int width, display_width = 26;
+  string pname;
+  string out;
+
+  if (effective_light(tp) < -2) {
+    return notify_fail("It is too dark.\n");
+  }
+
+  if (!str)
+    str = "all";
+
+  if (wizardp(tp)) {
+    sscanf(str, "player %s %s", pname, str);
+    if (!pname) {
+      if (sscanf(str, "player %s", pname) == 1) {
+	str = "all";
+      }
+    }
+    if (pname) {
+      player = find_player(pname);
+      if (!player) {
+	msg("No such player online.");
+	return 1;
+      }
+    }
+  }
+
+
+  ai = all_inventory(player);
+
+  switch (str) {
+    case "all":
+      // show everything
+    break;
+
+    case "weapon": 
+    case "weapons":
+    case "wep":
+    case "weps":
+      ai=filter(ai, (: $1->is_weapon() :) );
+    break;
+
+    case "armour": 
+    case "armours": 
+    case "armor":
+    case "armors":
+      ai=filter(ai, (: $1->is_armour() :) );
+    break;
+
+    case "worn":
+    case "wear":
+    case "wearing":
+      ai=filter(ai, (: $1->query_worn() :) );
+    break;
+
+    case "wielded":
+    case "wield":
+    case "wielding":
+      ai=filter(ai, (: $1->query_wielded() :) );
+    break;
+
+    case "short":
+      ai=filter(ai, (:
+	!( $1->query_worn() || $1->query_wielded() )
+      :) );
+    break;
+
+    default: 
+      if (sscanf(str, "number %s", str) == 1)
+	return cmd_inventory_number(str, player);
+      else
+	ai=filter(ai, (: $1->id($2) :), str);
+  }
+
+  // subtract total width of display bars, autoload field, weight field,
+  // everything except the short desc area
+  width = get_width(tp) - display_width;
+
+  msg( header_line("Inventory") );
+
+  ai = filter(ai, (: strlen($1->query_short()) :) );
+
+  foreach (object ob in ai) {
+    string short;
+    class InvLine line;
+
+    short = get_short(ob, width);
+
+    totalweight += ob->query_weight();
+
+    if ((line = lines[short])) {
+      line->count++;
+      line->weight += ob->query_weight();
+    }
+    else {
+      line = new(class InvLine);
+      line->count = 1;
+      line->weight = ob->query_weight();
+      line->autoyes = 0;
+      line->autono = 0;
+      lines[short] = line;
+    }
+
+    if (player->query_will_autoload(ob))
+      line->autoyes++;
+    else
+      line->autono++;
+  }
+
+  if (!sizeof(lines))
+    msg("You are not carrying anything.\n");
+  else {
+    msg(
+      sprintf(
+	"%s %15s %-*s %|11s %|8s %s\n"
+	"%s+-"+
+	repeat_string("-", width) +
+	"-+-----------+--------+%s",
+	COLOR_HEADER, "", (width-14), "Name", "Autoload", "Weight", COLOR_RESET,
+	COLOR_BAR, COLOR_RESET
+      )
+    );
+
+    // we could just loop over 'lines' with foreach, but inventory command is used a lot,
+    // so let's use efuns for speed when possible
+    map(lines, function(string short, class InvLine line, int width) {
+      string autotext;
+      if (line->count == 1) {
+        if (line->autoyes == 1)
+	  autotext = "Yes";
+	else
+	  autotext = "No";
+      }
+      else if (line->count == line->autoyes)
+        autotext = "All";
+      else if (line->count == line->autono)
+        autotext = "None";
+      else
+        autotext = "Some";
+
+      msg(
+	sprintf("%s|%s %-*s %s|%s %|9s %s|%s  %4d  %s|%s",
+	  COLOR_BAR, COLOR_SHORT,
+	  width, capitalize(consolidate(line->count, short)),
+	  COLOR_BAR, COLOR_AUTOLOAD,
+	  autotext,
+	  COLOR_BAR, COLOR_WEIGHT,
+	  line->weight,
+	  COLOR_BAR, COLOR_RESET
+	)
+      );
+
+    }, width );
+
+    msg(out);
+    
+    enc = player->query_max_internal_encumbrance()/2;
+
+    msg(
+      sprintf(
+	"%s|-"
+	"------------------------------------+"+
+	repeat_string("-", width-37) +
+	"-+-----------+--------'%s\n"
+	"%s|  %sTotal Weight: %s%-20s %s|%s\n"
+	"%s'-------------------------------------'%s",
+	COLOR_BAR, COLOR_RESET,
+	COLOR_BAR, COLOR_TOTALWEIGHT, COLOR_SHORT,
+	  sprintf("%d%% (%d/%d)", to_int(percent(totalweight, enc)), totalweight, enc),
+	COLOR_BAR, COLOR_RESET,
+	COLOR_BAR, COLOR_RESET
+      )
+    );
+  }
+
+  return 1;
+
+}
+
+int cmd_inventory_number(string str, object player) {
+  object *ai;
+  mapping lines = ([]);
+  string out;
+  int num;
+  int width, display_width = 32;
+
+  ai=filter(all_inventory(player), (: $1->id($2) && strlen($1->query_short()):), str);
+
+  msg( header_line("Inventory: " + COLOR_NUMBER + str + COLOR_RESET) );
+
+  // subtract width of display bars and non-shortdesc fields
+  width = get_width(tp) - display_width;
+  num = sizeof(ai);
+
+  if (!num)
+    msg("You are not carrying anything by that name.");
+  else {
+    msg(
+      sprintf(
+	"%s  %3s  %9s %-*s %|11s %|8s %s\n"
+	"%s+-----+-"+
+	repeat_string("-", width) +
+	"-+-----------+--------+%s",
+	COLOR_HEADER, "#", "", (width-8), "Name", "Autoload", "Weight", COLOR_RESET,
+	COLOR_BAR, COLOR_RESET
+      )
+    );
+
+    for (int i = 1; i <= num; i++) {
+      object ob = ai[i-1];
+      string autotext = (player->query_will_autoload(ob) ? "Yes" : "No");
+
+      msg(
+	sprintf("%s|%s %3d %s|%s %-*s %s|%s %|9s %s|%s  %4d  %s|%s",
+	  COLOR_BAR, COLOR_NUMBER,
+	  i,
+	  COLOR_BAR, COLOR_SHORT,
+	  width, capitalize(get_short(ob, width)),
+	  COLOR_BAR, COLOR_AUTOLOAD,
+	  autotext,
+	  COLOR_BAR, COLOR_WEIGHT,
+	  ob->query_weight(),
+	  COLOR_BAR, COLOR_RESET
+	)
+      );
+    }
+
+    msg(
+      sprintf(
+	"%s|-----+-"+
+	repeat_string("-", width) +
+	"-+-----------+--------'%s",
+	COLOR_BAR, COLOR_RESET,
+      )
+    );
+  }
+
+  return 1;
+}
+
+string get_short(object ob, int len) {
+  string short;
+  string more;
+
+  short = ob->query_short();
+  more = ob->query_short_more();
+  if (more) short += more;
+  short = strip_color(short);
+
+  len--;
+
+  return short[0..len];
+}
+
+int get_width(object player) {
+  string tmp = player->getenv("SCREEN");
+  int width = to_int(tmp);
+  width -= 2;
+  if (width < 75) width = 75;
+  return width;
+}
+
+void msg(string str) {
+  message("info", str, tp);
+}
+

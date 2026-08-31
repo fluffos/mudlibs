@@ -1,0 +1,182 @@
+//      /std/room.c
+//      from the Nightmare Mudlib
+//      the room object
+//      written by Descartes of Borg 17 june 1993
+//      ::create() added by Pallando (93-06-18)
+//      ::create() changed to container::create() with calls to
+//      items::create(), exits::create(), and senses::create() added
+//      by Descartes 930619
+//      this_object()->setup(); removed from reset() by Pallando (93-06-20)
+//      seteuid(getuid()) removed from create() by Pallando (93-06-23)
+//      query_long() changed not to give error if none set by Pallando 93-07-10
+
+#include <std.h>
+#include <rooms.h>
+#include <move.h>
+
+#define DEFAULT_MSG "You do not notice that here."
+#define DEFAULT_NO_ITEM_MSG "There is nothing extraordinary about it."
+
+inherit CONTAINER;
+inherit "/std/room/exits";
+inherit "/std/room/range";
+
+private int reset_number;
+int blm, foraged, dcombat;
+
+void reset();
+void init();
+void reinitiate();
+void set_short(string str);
+void set_long(string str);
+void set_block_light(int x);
+void set_day_long(string str);
+void set_night_long(string str);
+void set_dynamic_combat(int d);
+string query_short();
+string query_long(string str);
+string query_extra_long();
+int query_block_light();
+int move(mixed dest);
+int query_reset_number();
+int do_forage();
+int is_room();
+int query_dynamic_combat();
+string describe(string str);
+
+void create() {
+    container::create();
+    exits::create();
+    reset_number = 0;
+    this_object()->reset(); 
+    call_out("reinitiate", 0);
+}
+
+mixed query_property(string str) {
+    if(strlen(base_name(this_object())) >= strlen("/d/guilds/"))
+	if(base_name(this_object())[0..9] == "/d/guilds/" && str == "no teleport")
+	    return 1;
+
+    return container::query_property(str);
+}
+
+void reset() {
+    container::reset();
+    foraged = 6 + random(4);
+    reset_number++;
+}
+
+void init() {
+    // if (!reset_number) this_object()->reset(); 
+    exits::initiate_exits();
+    if(dcombat) { set_initial_position(this_object()); }
+}
+
+int do_forage() {
+    if(foraged) {
+	foraged--;
+	return 1;
+    }
+    return 0;
+}
+
+void set_short(string str) { container::set_short(str); }
+
+void set_long(string str) 
+{ 
+    container::set_long(str); 
+}
+void set_day_long(string str)
+{
+    container::set("day long", str);
+}
+void set_night_long(string str)
+{
+    container::set("night long", str);
+}
+void set_dynamic_combat(int d)
+{
+    dcombat = 1;
+}
+string query_short() { 
+    return container::query_short();
+}
+
+string query_long(string str) {
+    string ret;
+
+    if(str) return describe(str);
+    else {
+	if(query_night() && query("night long")) ret = query("night long");
+	else if(!query_night() && query("day long")) ret = query("day long");
+	else ret = container::query_long(str);
+    }
+    if( !ret ) ret = "";
+    if(query_extra_long() != "") ret += query_extra_long();
+    return ret;
+}
+
+string query_extra_long() {
+    object *inv;
+    string ret, tmp;
+    int i;
+
+    ret = "";
+    i = sizeof(inv = all_inventory(this_object()));
+    while(i--)
+	if(tmp = (string)inv[i]->affect_environment()) ret += tmp;
+    return ret;
+}
+
+void reinitiate() {
+    object *inv;
+    int i;
+
+    i = sizeof(inv = all_inventory(this_object()));
+    while(i--) {
+	inv[i]->move(ROOM_VOID);
+	inv[i]->move(this_object());
+    }
+}
+
+int query_reset_number() { return reset_number; }
+
+int move(mixed dest) { return MOVE_NOT_ALLOWED; }
+
+void set_block_light(int x) { blm = x; }
+
+int query_block_light() { return blm; }
+
+int is_room() { return 1; }
+int query_dynamic_combat() { return dcombat; }
+
+string *query_id() { return keys(this_object()->query_items()); }
+int id(string str) { return (str && member_array(str, keys(this_object()->query_items())) != -1); }
+mixed query_item_description(string str) { return this_object()->query_item(str); }
+string query_no_item(string str) { return (str && strlen(str) && strsrch(this_object()->query_long(), str) == -1 ? DEFAULT_MSG : DEFAULT_NO_ITEM_MSG); }
+string describe(string str) {
+  mixed item;
+  string tmp;
+  if (!str || !strlen(str) || !strlen(this_object()->query_item(str))) return query_no_item(str);
+  item = this_object()->query_item(str);
+  if (functionp(item)) {
+    tmp = evaluate(item, str);
+    if (stringp(tmp)) return tmp;
+    else return "";
+  }
+  else return item;
+}
+/*
+void set_items(mapping m) { ::set_items(m); }
+void add_item(string str, mixed val) { ::set_item(str, val); }
+void remove_item(string str) { ::remove_item(str); }
+void set_search(string item, mixed desc) { ::set_search(item, desc); }
+void set_listen(string item, mixed desc) { ::set_search(item, desc); }
+void set_smell(string item, mixed desc) { ::set_search(item, desc); }
+void remove_search(string item) { ::remove_search(item); }
+void remove_listen(string item) { ::remove_search(item); }
+void remove_smell(string item) { ::remove_search(item); }
+mixed query_search(string item) { return ::query_search(item); }
+mixed query_listen(string item) { return ::query_search(item); }
+mixed query_smell(string item) { return ::query_search(item); }
+*/

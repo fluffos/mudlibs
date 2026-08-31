@@ -1,0 +1,109 @@
+//  Filtration System for fucking potty mouths.  Damn those sons of a bitches!
+//   Whit
+//
+//  Extended a bit by Nulvect
+
+#include <daemons.h>
+#include <guild.h>
+
+// if someone changes these words, be sure to update the daemon
+#define WORDS ({ \
+  "fuck", "blowjob", "pussy", \
+  "damn", "vagina", "nipple", \
+  "dammit", "shit", "bitch", \
+  "cunt", "nigger", "whore", \
+  "fag", "dick", "cock", \
+  "piss", \
+})
+#define LINES ({\
+  "newbie", "hm", "elite",\
+  "fighter", "mage", "rogue",\
+  "clergy", "wanderer", "dragon",\
+  "gossip", "OOC", "colosseum",\
+  "trivia", "angel", "demon",\
+  "lich", "vampire", "guild",\
+  "council", "shout",\
+})
+#define CLASS_NO_CENSOR ({\
+  "room_description", "smell", "listen",\
+  "living_item", "inanimate_item", "system",\
+  "combat", "magic", "prompt",\
+  "room_exits", "info", "no_wrap",\
+})
+#define COMMANDS_PUB ({\
+  "say", "emote", "speak", "yell",\
+})
+#define LOCATIONS_PUB ({\
+  "/d/nopk/tirun/square",\
+  "/d/nopk/tirun/pubstart",\
+  "/wizards/nulvect/workroom",\
+})
+#define REPLACEMENTS ({\
+  "@", "!", "#",\
+})
+
+string cusscheck;
+
+int query_public_location(object room);
+
+void create() {
+  // do this here to save cycles
+  cusscheck = implode(WORDS, "|");
+}
+
+int query_public_location(object room) {
+  if (member_array(base_name(room), LOCATIONS_PUB) != -1) return 1;
+  if (inherits(HALL, room)) return 1;
+  return 0;
+}
+
+string censor(object who, string channel, string msg) {
+  string *tmp;
+  object env;
+  int cussed = 0;
+
+  if (!who || !channel || !msg) return 0;
+
+  env = environment(who);
+
+  // these are quick checks to see if we should NOT censor
+  if (member_array(channel, CLASS_NO_CENSOR) != -1) return msg;
+  if (member_array(channel, COMMANDS_PUB) != -1) {
+    // censor public communication in major gathering places
+    if (!query_public_location(env) && !who->getenv("CENSOR_PRIVATE"))
+      return msg;
+  }
+  else if (member_array(channel, LINES) == -1) {
+    // if we get here, it's a private comm like a tell or emoteto
+    // if this_player isn't who, then this_player is sender and who is receiver
+    if (!who->getenv("CENSOR_PRIVATE")) {
+      if (this_player() && this_player() != who) return msg;
+      if (member_array(channel, VALID_GUILDS) != -1) return msg;
+    }
+  }
+
+  // another quick check to save some cycles
+  if (!regexp(lower_case(msg), cusscheck))
+    return msg;
+  
+  tmp = explode(msg, " ");
+
+  for (int i=0; i < sizeof(tmp); i++) {
+    
+    if (regexp(lower_case(tmp[i]), cusscheck)) {
+      cussed = 1;
+      for (int j=0; j < strlen(tmp[i]); j++)
+        if (tmp[i][j..j] != "\n")
+          tmp[i][j..j] = REPLACEMENTS[random(sizeof(REPLACEMENTS))];
+    }
+      
+  }
+
+  if (cussed) {
+    return implode(tmp, " ");
+  }
+  else
+    return msg;
+
+}
+

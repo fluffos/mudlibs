@@ -1,0 +1,105 @@
+//  IP Daemon
+//    Logs the ips that characters have logged in from.
+
+#include <security.h>
+#define SAVE_FILE "/adm/save/daemons/ip"
+
+mapping Ips;
+static string *OnlineIps;
+
+int save();
+int restore();
+
+int user_offline(object o) {
+   if(!o || !o->is_player() || !query_ip_number(o)) return 0;
+   restore();
+   OnlineIps -= ({ query_ip_number(o) });
+   save();
+   return 1;
+}
+
+int user_online(object o) {
+   if(!o || !o->is_player() || !query_ip_number(o)) return 0;
+   restore();
+   this_object()->add_user_ip((string)o->query_name(), query_ip_number(o));
+   this_object()->last_on(o->query_name(), time());
+   OnlineIps += ({ query_ip_number(o) });
+   save();
+   return 1;
+}
+
+string query_ip(string user) {
+   restore();
+   if(!Ips[user]) return 0;
+   if(!Ips[user]["current_ip"]) return 0;
+   return Ips[user]["current_ip"];
+}
+
+string *sameip(string ip) {
+   string *k, *o=({});
+   int i, x;
+   
+   restore();
+   i=sizeof(k=keys(Ips));
+   while(i--) {
+      x=sizeof(Ips[k[i]]["ips"]);
+      while(x--) if(strsrch(Ips[k[i]]["ips"][x]["ip"], ip)!=-1) { o += ({ k[i] }); break; }
+   }
+   return o;
+}
+
+string query_all_ips(string user) {
+   if(!Ips[user]) return 0;
+   if(!Ips[user]["ips"]) return 0;
+   return Ips[user]["ips"];
+}
+
+static void add_user_ip(string user, string ip) {
+   restore();
+   if(!Ips[user]) Ips[user]=([]);
+   if(!Ips[user]["ips"]) Ips[user]["ips"]=({});
+   if(member_array((["ip":ip, "time":time()]), Ips[user]["ips"]) == -1)
+     Ips[user]["ips"] += ({ (["ip":ip, "time":time()]) });
+   Ips[user]["current_ip"] = ip;
+   save();
+}
+
+int query_last_on(string user) {
+   restore();
+   if(!Ips) return 0;
+   if(!Ips[user]) return 0;
+   return Ips[user]["last_on"];
+}
+
+void last_on(string user, int time) {
+   restore();
+   if(!Ips[user]) Ips[user]=([]);
+   Ips[user]["last_on"]=time;
+   save();
+
+}
+
+int delete_user(string user) {
+   restore();
+   map_delete(Ips, user);
+   save();
+}
+int save() {
+   seteuid( UID_SECURE_DAEMONSAVE );
+   save_object(SAVE_FILE);
+   seteuid(getuid());
+   return 1;
+}
+
+int restore() {
+   seteuid( UID_SECURE_DAEMONSAVE );
+   restore_object(SAVE_FILE);
+   seteuid(getuid());
+   return 1;
+}
+
+void create() {
+   Ips=([]);
+   OnlineIps=({});
+   restore();
+}

@@ -1,0 +1,242 @@
+The virtual map daemon creates rooms for an area as needed, using an ascii map
+that you provide to show the rooms and their exits.
+
+Basically this means you write one or two files to take care of all the rooms
+in your whole area, rather than making a file for each room.
+
+You use the virtual map daemon by creating a file like so:
+
+====
+
+#include <std.h>
+#include <myarea.h>
+
+inherit VIRTUALMAP;
+
+void create() {
+  set_mapfile(MYAREA+"map");
+  set_descfile(MYAREA+"descs");
+  ::create();
+}
+
+====
+
+This file must be named "virtual.c".
+
+You'll need to have an ascii map of your area and a file with description
+information as well. The map file would normally look like this:
+
+====
+
+#-#-# #-#
+|\     X
+#-#-#-#-#-#-#
+  |         |
+  #-#       #
+
+,
+
++     +
+.
+.
+.
+.
+
+,
+
+#-#-#-#
+.
+.
+.
+.
+
+====
+
+This map has a large upper area and a corridor below it. The - / \ | X +
+characters indicate exits and always come between the room characters.
+
+The , on a line by itself separates vertical levels of your area - note
+the middle 'level' here only holds information about the up/down exits;
+it's not really a level of your area, just a place for exit info.
+
+Also, notice the lines that have nothing but a . on them. These are here
+because the map must be the same 'width' at all vertical levels.
+
+If you don't want up or down exits you can just leave the map two-dimensional,
+but the virtual map will always treat everything as three-dimensional.
+Basically this means exits that lead into your area need to use all three
+coordinates (more on this later).
+
+Let's take a look at another way to draw your map:
+
+====
+
+### ####
+#  # ##
+######
+,
+##
+#
+ # <-- we're looking at this room
+
+====
+
+In order to use this format, you need to put the line "set_compact(1);" into
+your virtual map file, inside the create() function. Any adjacent rooms
+automatically have exits between them. Alternatively, you can use
+"set_compact(2);" to make your map disregard diagonal exits entirely.
+
+For example, look at the second level of the above map. Using set_compact(1),
+the lowest room is accessible from another room on the bottom level to the
+northwest of it. Using set_compact(2) will disable exits to the northwest,
+northeast, southwest, and southeast, so that same room will only be accessible
+by using a down exit from the upper level.
+
+====
+
+Now let's talk about coordinates. All areas use 3-dimensional coordinates in
+the basic form of x,y,z. The X coordinate starts at 0 on the left side of your
+map and goes up towards the right. Y starts at 0 at the top of the map and
+increases towards the bottom of the map (line-wise). The Z coordinate begins
+at 0 at the topmost level (separated by a , by itself, remember) and goes up
+with each vertical level you indicate on the map.
+
+Be careful! The Y and Z coordinates are backwards from what you may be used
+to! In the future an option for inverting these axes may be added.
+
+====
+
+Now for the description file. It will look something like this:
+
+====
+
+short A short description.
+property indoors 1
+property no teleport:1
+max_sentences 3
+first_sentence Optional line to go at the beginning of every description.
+last_sentence Same, but for the end.
+day_sentence One of the random lines used to make up your descriptions.
+day_sentence Another line used at random.
+night_sentence Lines used for night time descriptions, these are optional.
+night_sentence And another.
+item thing A thing you can look at.
+item another thing:Another thing, this one has a space in the name.
+listen default The sound of all your rooms.
+listen stream The sound of the stream nearby.
+max_inventory 2
+living_inventory /path/to/goblin 3
+living_inventory /path/to/ogre 4
+inventory /path/to/rock 1
+
+====
+
+In addition to listen, you can use smell, search, touch, taste, and read.
+
+You can have multiple sections like this, each with a line at the top with a
+coordinate range such as "coords 0,0,0 - 5,6,1". The default coordinate range
+is "coords *". Make sure none of your ranges overlap.
+
+====
+
+The last few things to go over are alternatives to using separate files for
+the map and descriptions, special rooms, and special exits.
+
+Let's look at an example virtual.c that contains all of these.
+
+====
+
+#include <std.h>
+#include <myarea.h>
+
+inherit VIRTUALMAP;
+
+void create() {
+
+  // call ::create() after set_mapfile & set_descfile but before anything else
+  ::create();
+
+  set_map( ({
+    ({
+      "#-#-# #-#", // <-- this end room is the one we make static below: 4,0,0
+      "|/    |  ",
+      "#-#-#-#  ",
+      //   ^this room's coordinates are 2, 1, 0
+    }),
+    ({
+      "+",
+      ".",
+      ".",
+    }),
+    ({
+      "#", // <-- this room's coordinates are 0,0,1
+      ".",
+      ".",
+    }),
+  }) );
+
+  // this is basically the same way you do it in the separate file
+  set_descriptions("*", ({
+    "short A short description.",
+    "property indoors 1",
+    "max_sentences 3",
+    "day_sentence A sentence to use.",
+  }) );
+
+  // another way, using a mapping for the info
+  // in each key : value, leave the "set_" off of the key
+  set_descriptions("0,0,0 - 5,6,1", ([
+    "short" : "A short description.",
+    "properties" : ([ "indoors" : 1, "no teleport" : 1 ]),
+    "max_sentences" : 4,
+    // just double up on the ({ })s
+    "day_sentences" : ({ ({
+      "One line.",
+      "Second line.",
+    }) }),
+  ]) );
+
+  // use a special prepared room for this area
+  // this room should inherit VMAPROOM, see examples
+  set_virtual_room("0,0,0 - 5,6,1", MYAREA+"special_room");
+
+  // set special exits (non-directional), also good for setting the exit from
+  // your area and into another one
+  // this is done one room at a time, not by range
+  set_special_exits("1,0,0", ([
+    "enter house" : MYAREA+"house",
+    "west" : OTHERAREA+"someroom",
+  ]) );
+}
+
+====
+
+You can make specific files if you'd like. For example, if you make a file in
+the same directory as the above virtual.c named 4,0,0.c then that file will be
+loaded as normal, not created by the virtual map.
+
+The very last thing to note is that you can use set_legend in your create()
+to change what ascii characters are interpreted as what. Here's the default:
+
+set_legend( ([
+  "room" : "#",
+  "empty" : ".",
+  "comment" : "!",
+  "level separator" : ",",
+  "n s" : "|",
+  "e w" : "-",
+  "nw se" : "\\",
+  "ne sw" : "/",
+  "nw se ne sw" : "X",
+  "u d" : "+",
+]) );
+
+Any line beginning with the comment character is ignored, as are blank lines.
+The "\" has to be doubled up because a \ has special meanings in code.
+The "empty" entry doesn't really do anything but mark lines that aren't really
+blank (for purposes of multiple vertical levels).
+
+
+Please see an example virtual map area for more information.
+
+

@@ -1,0 +1,165 @@
+// New get command by Nightshade
+// based off of old NM get command by Brian Leet
+
+
+#include "move.h"
+#include <std.h>
+#include <daemons.h>
+
+inherit DAEMON;
+
+void help();
+void do_messages(string *str);
+int get_coins(string str);
+
+int cmd_get2(string str) {
+    string tmpa, *total;
+    int numb, ret;
+    object ob, *stuff;
+
+    if(!wizardp(this_player()))
+      return 0;
+
+    total = ({});
+
+    if(this_player()->query_ghost()) {
+        notify_fail("You cannot do that in your immaterial state.\n");
+        return 0;
+    }
+    if (!str) {
+        return help();
+    }
+    if(effective_light(this_player()) < -6) {
+        notify_fail("It is too dark.\n");
+        return 0;
+    }
+
+    if(sscanf(str, "%d %s", numb, tmpa) == 2) {
+        if(strsrch(tmpa, "coin") != -1)
+            return get_coins(str);
+        ob = present(tmpa+" "+numb, environment(this_player()));
+        if(!ob) {
+            tmpa = tmpa[0..sizeof(tmpa)-2];
+            ob = present(tmpa+" "+numb, environment(this_player()));
+            if(!ob)
+                return notify_fail("There are not "+numb+" "+pluralize(tmpa)+" here.\n");
+        }
+        while(numb--) {
+            if(!(ob = present(tmpa, environment(this_player())))) continue;
+            if(ob->query_prevent_get()) {
+                write(ob->query_prevent_get());
+                continue;
+            }
+            if(ob->query_living()) continue;
+            if(!ob->get()) continue;
+            if(ob->move(this_player()) == MOVE_OK)
+                total += ({ob->query_short()});
+        }
+        do_messages(total);
+        return 1;
+    }
+    if(str == "all") {
+        stuff = all_inventory(environment(this_player()));
+        numb = sizeof(stuff);
+        if(numb <= 0)
+            return notify_fail("There is nothing here to get!\n");
+        while(numb--) {
+            if(stuff[numb]->query_prevent_get()) continue;
+            if(stuff[numb]->is_living()) continue;
+            if(!stuff[numb]->get()) continue;
+            if(stuff[numb]->is_money_pile()) {
+                this_player()->force_me("get coins");
+                continue;
+            }
+            else {
+                if((ret = stuff[numb]->move(this_player())) == MOVE_OK)
+                    total += ({stuff[numb]->query_short()});
+                else if(ret == MOVE_NO_ROOM && sizeof(all_inventory(environment(this_player()))) == sizeof(stuff))
+                    write("The "+stuff[numb]->query_short()+" is too heavy to carry with your things.");
+            }
+        }
+        do_messages(total);
+        return 1;
+    }
+    if(strsrch(str, "coin") != -1)
+        return get_coins(str);
+    if(!(ob = present(str, environment(this_player()))))
+        return notify_fail("There is no "+str+" here.\n");
+    if(ob->query_prevent_get())
+        return notify_fail(ob->query_prevent_get()+"\n");
+    if(ob->is_living())
+        return notify_fail("Get a living creature?\n");
+    if(!ob->get())
+        return 1;
+    if(ob->is_money_pile())
+        return get_coins("get coins");
+    numb = ob->move(this_player());
+    switch(numb) {
+        case MOVE_OK:
+            do_messages( ({ ob->query_short() }) );
+            break;
+        case MOVE_NOT_ALLOWED:
+            write("You cannot do that.");
+            return 1;
+            break;
+        case MOVE_NO_ROOM:
+            write("You cannot carry that much.");
+            return 1;
+            break;
+        default: return 1;
+    }
+    return 1;
+}
+
+void do_messages(string *str) {
+    int i;
+    if(sizeof(str) <= 0) return;
+    str = consolidate_string(str);
+    i = sizeof(str);
+    while(i--) {
+        write("You take "+str[i]+".");
+        say(this_player()->query_cap_name()+" takes "+str[i]+".");
+    }
+}
+
+int get_coins(string str) {
+    string tmp, tmp2, type, *curr;
+    int ammount, b;
+    object ob;
+
+    if ( (sscanf(str, "%s %s %s", tmp2, type, tmp) > 1 )) {
+        if (tmp2!="all") ammount = atoi(tmp2);
+        type = lower_case(type);
+        if(ammount < 1 && tmp2!="all") {
+            notify_fail("You can only take positive ammounts of coins.\n");
+            return 0;
+        }
+        ob = present("coins", environment(this_player()));
+        if (tmp2=="all") ammount = ob->query_money(type);
+        if(!ob || ob->query_money(type) < ammount) {
+            notify_fail("I don't see that much "+type+" here.\n");
+            return 0;
+        }
+        this_player()->add_money(type, ammount);
+        ob->add_money(type, -ammount);
+        if((int)ob->query_total_money() == 0)
+            destruct(ob);
+        write("You put " + ammount + " " + type + " pieces into your purse.");
+        say(this_player()->query_cap_name() + " takes some " + type + ".");
+        return 1;
+    }
+    if(str == "coins" || str == "pile of coins" || str == "coin pile") {
+        ob = present("coins", environment(this_player()));
+        b = sizeof( curr = ob->query_currencies() );
+        while(b--) {
+            write("You find "+(ammount=ob->query_money(curr[b]))+" "+curr[b]+" "+
+              (ammount>1?"coins":"coin")+" in the pile.");
+            this_player()->add_money(curr[b], ammount);
+        }
+        ob->remove();
+        if(ob)
+            destruct(ob);
+        return 1;
+    }
+    return notify_fail("There are no coins here.\n");
+}

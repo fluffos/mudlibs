@@ -1,0 +1,237 @@
+#include <std.h>
+#include <daemons.h>
+
+inherit DAEMON;
+int abil();
+string type() { return "attack"; }
+int cmd_snap(string str) {
+    object *weapons, *knives;
+    object victim;
+    int *wc;
+    string *type;
+    int i, tmp;
+    
+    if (!abil()) {
+        return notify_fail("What?\n");
+    }
+    
+    if(!str) {
+        notify_fail("Snap whom?\n");
+        return 0;
+    }
+    
+    if (this_player()->query_subclass() != "thug") {
+        write("Only thugs can snap necks.");
+        return 1;
+    }
+    if (this_player()->query_rest_type()) {
+        write("You can't do that while not on your feet.");
+        return 1;
+    }
+    if(this_player()->query_ghost()) {
+        notify_fail("You appear to be dead.\n");
+        return 0;
+    }
+    if(this_player()->query_disable()) return 1;
+    
+    if(environment(this_player())->query_property("no attack")) {
+        notify_fail("Some mystical force prevents you from that.\n");
+        return 0;
+    }
+    if(this_player()->query_sp() < 25) {
+        notify_fail("You are too tired to break someones neck.\n");
+        return 0;
+    }
+    if((int)this_player()->query_skill("murder") < 5 || !(string)this_player()->query_class()) {
+        notify_fail("Don't you wish you were fast enough for that?\n");
+        return 0;
+    }
+    if(!(victim = present(lower_case(str),environment(this_player())))) {
+        notify_fail("You don't see the target here.\n");
+        return 0;
+    }
+    if(victim == this_player()) {
+        notify_fail("Break your own neck?\n");
+        return 0;
+    }
+    if(victim->query_ghost()) {
+        notify_fail("Break whose neck?\n");
+        return 0;
+    }
+    if(!living(victim)){
+        notify_fail("That doesn't appear to have a neck to break.\n");
+        return 0;
+    }
+    
+    weapons = (object *)this_player()->query_wielded();
+    
+    
+    if(sizeof(weapons)) {
+        write("Your weapons make it impossible to snap someones neck.\n");
+        return 1;
+    }
+    this_player()->set_disable();
+    
+    if(member_array(victim, (object *)this_player()->query_hunted()) != -1 ||
+        member_array(victim, (object *)this_player()->query_attackers())!=-1) {
+            notify_fail("You have lost the element of surprise!\n");
+            return 0;
+    }
+    
+    if(this_player()->query_current_attacker()) {
+        notify_fail("You are already in combat with something else!\n");
+        return 0;
+    }
+    
+    if(victim->is_player() && !interactive(victim)) return 0;
+    
+    if (victim->query_skill("perception") + victim->query_stats("wisdom") >
+        this_player()->query_skill("stealth"))
+            tell_object(victim, "%^ORANGE%^"+this_player()->query_cap_name()+" attempts to sneak behind you unnoticed!");
+    
+    this_player()->set_paralyzed(1,"You are concentrating on grabbing "+victim->query_cap_name()+" head!\n");
+    
+    call_out("do_dmg", 1, victim, this_player());
+    
+    write("%^ORANGE%^You sneak around behind "+victim->query_cap_name()+"!%^RESET%^");
+    
+    return 1;
+}
+
+int do_dmg(object victim) {
+    int i, tmp, *wc, str;
+    object *weapons, *knives, tp;
+    string tt, tk, *type;
+    int j, spUse;
+    float mod = 0;
+    if (!victim){
+        write("Your target is not here.");
+        tell_room(environment(this_player()), this_player()->query_cap_name()+" grumbles.", ({ this_player() }));
+        return 1;
+    }
+    
+    if (environment(this_player()) != environment(victim)){
+        write("Your target is not here.");
+        tell_room(environment(this_player()),
+        this_player()->query_cap_name()+" grumbles.", ({ this_player() }));
+        return 1;
+    }
+    
+    if(!this_player()->kill_ob(victim)) {
+        write(victim->query_cap_name()+" can't be attacked by you yet.");
+        return 1;
+    }
+    
+    if (random(victim->query_stats("dexterity")/2) +
+            (victim->query_stats("dexterity")/2) >
+            this_player()->query_stats("dexterity") + 5 ) 
+    {
+        write("%^ORANGE%^You fail to grab "+victim->query_cap_name()+" head!%^RESET%^");
+        say(this_player()->query_cap_name()+" misses an attempt to break "
+            +(string)victim->query_cap_name()+ " neck!\n", victim);
+        tell_object(victim, "%^ORANGE%^"+this_player()->query_cap_name()+" misses an attempt to break your neck!%^RESET%^");
+        return 1;
+    }
+    
+    weapons = (object *)this_player()->query_wielded();
+    if(sizeof(weapons)) {
+        write("Your weapons make it impossible to snap someones neck.\n");
+        return 1;
+    }
+    
+    /****( Damage: )***********************************************/
+
+    if (this_player()->query_level() > 1)
+    {
+        j = BALANCE_D->get_damage( this_player(), victim, 2, ({ "murder", "melee", "melee", "attack" }),
+            ({ "strength", "dexterity" }) );
+    }
+    if (this_player()->query_level() >= 20)
+    {
+        j = BALANCE_D->get_damage( this_player(), victim, 3, 
+            ({ "murder", "melee", "melee", "attack"}),
+            ({ "strength", "strength", "dexterity" }),
+            ({ "strength", "dexterity" }));
+    }
+    if (this_player()->query_level() >= 36)
+    {
+        j = BALANCE_D->get_damage( this_player(), victim, 4, 
+            ({ "murder", "melee", "melee", "attack"}),
+            ({ "strength", "strength", "dexterity" }),
+            ({ "strength", "dexterity" }));
+    }
+    if (this_player()->query_level() >= 55)
+    {
+        j = BALANCE_D->get_damage( this_player(), victim, 4, 
+            ({ "murder", "melee", "melee", "attack"}),
+            ({ "strength", "strength", "dexterity" }),
+            ({ "strength", "dexterity" }));
+        j = j * 4 / 3;
+    }
+    /**************************************************************/    
+    tp = this_player();
+    str = tp->query_stats("dexterity");
+    if(str < 30) mod = (7 / 4);
+    else if(str < 50) mod = (19 / 10);
+    else if(str < 70) mod = 2;
+    else if(str < 100) mod = (21 / 10);
+    else if(str < 120) mod = (11 / 5);
+    else if(str < 150) mod = (23 / 10);
+    else if(str < 190 ) mod = (  24/10);
+    else if(str < 240) mod = (  25/10);
+    else if(str < 300) mod = (  26/10);
+    else mod = (27/10);
+    j = (j*mod*1.3);
+    /******(pass/fail)***************************************************/
+    if(j >= victim->query_hp())
+    {
+        message("player", "You grab " +victim->query_cap_name()+"'s head and twist it violently!\n", this_player());
+        message("room", this_player()->query_cap_name() +" grabs " +victim->query_cap_name()+ " by the head and twists it violently!\n", 
+            environment(this_player()), ({this_player(), victim}));
+        message("victim", this_player()->query_cap_name()+" grabs you by the head and twists it violently, causing your neck to snap!\n", victim);
+        message("snapage", victim->query_cap_name()+" appears to go limp and falls to the ground!\n", environment(this_player()), victim);
+        
+//        victim->damage(j*2); changed for balance to line below by stormy
+        victim->do_damage("head", j);
+        victim->set_paralyzed(5,"You can't move, you neck is broken!");
+        this_player()->add_sp(-(this_player()->query_skill("melee")/5 + 
+            random(this_player()->query_skill("murder")/5)));
+        
+        this_player()->add_skill_points("murder", j/50);
+        this_player()->add_skill_points("melee", j/50);
+        this_player()->add_skill_points("attack", j/50);
+    }
+    else
+    {
+        message("player", "You grab " +victim->query_cap_name()+"'s head and twist it violently!\n", this_player());
+        message("room", this_player()->query_cap_name() +" grabs " +victim->query_cap_name()+ " by the head and twists it violently!\n", 
+            environment(this_player()), ({this_player(), victim}));
+        message("victim", this_player()->query_cap_name()+" grabs you by the head and twists it violently!\n", victim);
+        this_player()->set_paralyzed(2,"You are in a terrible position!");
+    }
+    
+    /**************************************************************/
+    
+    if (!wizardp(this_player()))
+        this_player()->add_alignment(-5);
+    
+    if(victim->query_hp() < 0)
+        victim->heart_beat();
+    return 1;
+}
+
+void help() {
+    write("Syntax: snap <enemy>\n\n"
+      "This command is used to initiate combat with the\n"
+      "monster or player you specify.\n"
+    );
+}
+
+int abil() {
+    object tp;
+    tp = this_player();
+    if (tp->query_subclass() != "thug") return 0;
+    if (tp->query_skill("melee") < 20) return 0;
+    if (tp->query_skill("murder") < 15) return 0;
+    return 1;
+}

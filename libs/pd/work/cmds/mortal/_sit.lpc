@@ -1,0 +1,29 @@
+#include <rest.h>
+
+int cmd_sit() {
+  if(this_player()->query_current_attacker())
+       return notify_fail("You cannot sit in battle.\n");
+
+    if (this_player()->query_rest_type() == SIT )
+      return notify_fail("You are already sitting.\n");
+
+    if((this_player()->query_riding() ||
+        this_player()->query_mounting()))
+        this_player()->force_me("dismount");
+  
+       write("You find a place and sit down.");
+       this_player()->set_rest_type( SIT );
+      say(capitalize(this_player()->query_cap_name())+" finds a "
+        "place and sits down.");
+       return 1;
+}
+int help()
+{
+  write( @EndText
+Syntax: sit
+Effect: allows you to sit.
+See also: rest, sleep
+EndText
+  );
+  return 1;
+}

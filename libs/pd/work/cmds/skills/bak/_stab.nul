@@ -1,0 +1,165 @@
+#include <daemons.h>
+#include <std.h>
+inherit DAEMON;
+
+int abil();
+
+int cmd_stab(string str) {
+    object tp, ob, wep;
+    int i, which, skip, attack;
+    object *inv, *wield, *knives;
+    string what;    
+    knives = ({});
+
+   	if (!abil())
+      	return 0;
+
+    tp = this_player();
+
+    if(tp->query_ghost())
+        return notify_fail("You emit a ghostly moan.\n");
+    
+    if (tp->query_disable())
+        return notify_fail("You are too busy to stab your opponent!\n");
+    
+    if(environment(tp)->query_property("no attack"))
+        return notify_fail("Some strange force prevents your attack.\n");
+    
+    if(tp->query_casting()) return notify_fail("You are casting a spell!");
+    
+    if(tp->query_sp() < 25) 
+        return notify_fail("You are too tired!\n");
+    
+    if(!str) {
+        ob = (object)tp->query_current_attacker();
+        if(!ob) {
+            return notify_fail("Stab who?\n");
+        }
+    }
+    else {
+        ob = present(str, environment(tp));
+        if(!ob) {
+            sscanf(str, "%s %d", what, which);
+            inv = all_inventory(environment(tp));
+            for(i=0, skip = 0; i<sizeof(inv) && !ob; i++) {
+                if(inv[i]->id(what)) {
+                    skip++;
+                    if(skip == which) ob = inv[i];
+                }
+            }
+            if(!ob) {
+                notify_fail("No "+str+" here!\n");
+                return 0;
+            }
+        }
+    }
+    
+    if(!living(ob))
+        return notify_fail(ob->query_cap_name()+" is not a living thing!\n");
+    
+    if(ob==tp)
+        return notify_fail("Stab yourself?\n");
+
+    if(ob->is_player() && !interactive(ob))
+        return notify_fail("You cannot attack link-dead players.\n");
+    
+    if(environment(tp)->query_property("no attack"))
+        return notify_fail("Some strange force prevents your attack!\n");
+	
+	wield = tp->query_wielded();
+	
+	if(!sizeof(wield))
+        return notify_fail("You need a knife to stab with!\n");
+    
+	i = sizeof(wield);
+    while (i--) {
+        if(wield[i]->query_type() == "knife")
+            knives  += ({ wield[i] });
+   	}
+   	if(!sizeof(knives))
+   		return notify_fail("You need a knife to stab with!\n");
+   		
+   	wep = knives[0];
+	i = sizeof(knives);
+    while (i--) 
+    {
+        if(knives[i]->query_wc() > wep->query_wc())
+        	wep = wield[i];            
+    }
+
+
+    attack = BALANCE2_D->get_Pdamage( tp, ob, 1, 
+		({ "knife", "knife", "perception", "attack" }),
+        ({ "dexterity", "dexterity", "strength" }), 
+		({ "dexterity", "strength" }) );
+    
+    attack = attack * 1.2;
+    
+    if(attack < 1) attack = 1;
+    if(attack > 260) attack = 260 + tp->query_level();
+
+    attack = attack + wep->query_wc()*3/2;
+    
+    if(!this_player()->kill_ob(ob))
+        return notify_fail(ob->query_cap_name()+" can't be attacked by you yet.\n");
+    
+    write("%^BOLD%^You %^CYAN%^th%^RESET%^%^CYAN%^ru%^BOLD%^st%^WHITE%^ your "
+		+knives[0]->query_name()+
+		" at "
+		+ob->query_cap_name()+
+		" %^RED%^s%^RESET%^%^RED%^t%^BOLD%^a%^RESET%^%^RED%^b%^BOLD%^b%^RESET%^%^RED%^i%^BOLD%^n%^RESET%^%^RED%^g%^BOLD%^%^WHITE%^ "
+		+ob->query_objective()+
+		" in the "
+		+ob->return_target_limb()+
+		"!%^RESET%^");
+    
+    message("room","%^BOLD%^"+tp->query_cap_name()+
+		" %^CYAN%^th%^RESET%^%^CYAN%^rus%^BOLD%^ts%^WHITE%^ "
+		+tp->query_possessive()+
+		" "
+		+wep->query_name()+
+		" at "
+		+ob->query_cap_name()+
+		" %^RED%^s%^RESET%^%^RED%^t%^BOLD%^a%^RESET%^%^RED%^b%^BOLD%^b%^RESET%^%^RED%^i%^BOLD%^n%^RESET%^%^RED%^g%^BOLD%^%^WHITE%^ "
+		+ob->query_objective()+
+		" in the "
+		+ob->return_target_limb()+
+		"!%^RESET%^", environment(tp), ({tp,ob}));            
+    
+    message("ob", "%^BOLD%^"+tp->query_cap_name()+ 
+		" %^CYAN%^th%^RESET%^%^CYAN%^rus%^BOLD%^ts%^WHITE%^ "
+	    +tp->query_possessive()+
+    	" "
+	    +wep->query_name()+
+    	" at you, %^RED%^s%^RESET%^%^RED%^t%^BOLD%^a%^RESET%^%^RED%^b%^BOLD%^b%^RESET%^%^RED%^i%^BOLD%^n%^RESET%^%^RED%^g%^BOLD%^%^WHITE%^ you in the "
+		+ob->return_target_limb()+
+    	"!%^RESET%^",ob);
+    
+    ob->damage(attack);
+    
+    tp->add_skill_points("attack", attack/20 + 2);
+    tp->add_skill_points("knife", attack/20 + 2);
+    tp->add_skill_points("perception", attack/20 + 2);
+    
+    tp->add_sp(-(this_player()->query_skill("attack")/7 + (1+random(this_player()->query_stats("strength")/3))));
+    
+    tp->set_disable();
+    
+    return 1;
+}
+void help() {
+    write("Syntax: <stab [(living)]>\n"
+        "Someone skilled with knives can sneak in a deadly blow "
+		"at the target, causing damage wherever the knife lands.\n");
+}
+int abil() {
+    object tp;
+    tp = this_player();
+    if (!tp) return 0;
+    if (tp->query_class() == "mage") return 0;
+    if (tp->query_class() == "clergy") return 0;
+    if (tp->query_skill("knife") < 72) return 0;
+    if (tp->query_skill("perception") < 72) return 0;
+    return 1;
+}
+

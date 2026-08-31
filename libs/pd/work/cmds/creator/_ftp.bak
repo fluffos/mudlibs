@@ -1,0 +1,185 @@
+//  FTP Command
+#define CHAT_D "/daemon/chat"
+#define STAFF ({"whit","stormbringer","daos"})
+int in_use, current, all_lines, bre, recursive, tmp, abort;
+string *lines, file, progress, progressbar, dir, *con;
+object initiator;
+varargs void recurse(string str);
+void ftp();
+int cmd_ftp(string str) {
+    if(member_array(this_player()->query_name(), STAFF)==-1) return 0;
+    if(!str || str=="") return notify_fail("Syntax: <ftp [filename]>\n");
+    if(in_use) return notify_fail("FTP in use, sorry.\n");
+    str = resolv_path((string)this_player()->get_path(), str);
+    initiator=this_player();
+    recursive=-1;
+    all_lines=0;
+    if(file_size(str)==-2) {
+        write("Directory contents.  Sending...");
+        recurse(str);
+        return 1;
+    }
+    if(!file_exists(str)) return notify_fail("No such file or dir.");
+    write("Starting FTP.\n");
+    "/wizards/whit/network"->send_pd("FTP:::START");
+    file=str;
+    in_use=1;
+    ftp();
+    input_to("stop");
+    return 1;
+}
+void stop(string str) {
+    if(!in_use) return;
+    if(str=="q") {
+        write("Aborting after this file.\n");
+        abort=1;
+    }
+    if(abort) return;
+    if(str[0..0]=="!") {
+        switch(str[1..]) {
+        case "who":
+        case "finger":
+        case "more":
+            write("Unable to use more commands in FTP.\n");
+            input_to("stop");
+            return;
+            break;
+        default: this_player()->force_me(str[1..]); break;
+        }
+        input_to("stop");
+    }
+    if(!progressbar) progressbar=".....................";
+    write("0%["+progressbar+"]100%");
+    input_to("stop");
+}
+void reset_vars() {
+    initiator=0;
+    in_use=current=all_lines=bre=recursive=tmp=abort=0;
+    lines=con=0;
+    file=progress=progressbar=dir=0;
+}
+void change_progress_meter() {
+    mixed per;
+    if(!all_lines) per=100;
+    per=percent(current, all_lines);
+    if (per >= 100)
+        progressbar = "|||||||||||||||||||||";
+    if (per <= 99)
+        progressbar = "|||||||||||||||||||..";
+    if (per <= 95)
+        progressbar = "|||||||||||||||||||..";
+    if (per <= 90)
+        progressbar = "||||||||||||||||||...";
+    if (per <= 85)
+        progressbar = "|||||||||||||||||....";
+    if (per <= 80)
+        progressbar = "||||||||||||||||.....";
+    if (per <= 75)
+        progressbar = "|||||||||||||||......";
+    if (per <= 70)
+        progressbar = "||||||||||||||.......";
+    if (per <= 65)
+        progressbar = "|||||||||||||........";
+    if (per <= 60)
+        progressbar = "||||||||||||.........";
+    if (per <= 55)
+        progressbar = "|||||||||||..........";
+    if (per <= 50)
+        progressbar = "||||||||||...........";
+    if (per <= 45)
+        progressbar = "|||||||||............";
+    if (per <= 40)
+        progressbar = "||||||||.............";
+    if (per <= 35)
+        progressbar = "|||||||..............";
+    if (per <= 30)
+        progressbar = "||||||...............";
+    if (per <= 25)
+        progressbar = "|||||................";
+    if (per <= 20)
+        progressbar = "||||.................";
+    if (per <= 15)
+        progressbar = "|||..................";
+    if (per <= 10)
+        progressbar = "||...................";
+    if (per <= 5)
+        progressbar = "|....................";
+    if (per <= 1)
+        progressbar = ".....................";
+    write("0%["+progressbar+"]100%");
+}
+int set_vars() {
+    seteuid(geteuid(initiator));
+    lines=explode(read_file(file), "\n");
+    seteuid(geteuid());
+    if(!lines) {
+        write("Unable to read file.\n");
+        return 0;
+    }
+    all_lines=sizeof(lines);
+    if(!all_lines) {
+        write("Unable to read file. File="+file+"\n");
+        return 0;
+    }
+    current=0;
+    return 1;
+}
+varargs void recurse(string directory) {
+    if(abort) { in_use=0;return; }
+    if(directory) {
+        in_use=1;
+        if(directory[sizeof(directory)-1..sizeof(directory)]!="/") directory =
+            directory+"/";
+    }
+    if(directory)
+        dir=directory;
+    seteuid(geteuid(initiator));
+    if(!tmp)
+    {recursive=sizeof(con=get_dir(directory)); tmp=1; all_lines=0;}
+    write("Files left: "+recursive+"\n");
+    if(recursive==0) {
+        in_use=0;
+        reset_vars();
+        return CHAT_D->do_raw_chat("network", "<network> Recursive "
+          "Directory Transfer Complete.");
+        return;
+    }
+    recursive--;
+    if(file_size(dir+con[recursive])==-2) { 
+        "/wizards/whit/network"->send_pd("MK_DIR:::"+dir+con[recursive]);
+        write("Creating Directory: "+dir+con[recursive]);
+        return recurse(); 
+    }
+    file=dir+con[recursive];
+    write("Sending file. ("+file+")");
+    "/wizards/whit/network"->send_pd("FTP:::START");
+    in_use = 1;
+    all_lines=0;
+    input_to("stop");
+    ftp();
+    seteuid(geteuid());
+}
+void ftp() {
+    if(!in_use) return;
+    if(!all_lines || all_lines==0) 
+        set_vars();
+    if(current>=all_lines && in_use != 0) {
+        change_progress_meter();
+        "/wizards/whit/network"->send_pd("FTP:::END|"+file);
+        if(recursive!=-1) return call_out("recurse", 1);
+        in_use=0;
+        write("File is sent.\n");
+        return;
+    }
+    if(!lines[current]) 
+        "/wizards/whit/network"->send_pd("L-"+current+":\n"); else
+        "/wizards/whit/network"->send_pd("L-"+current+":"+lines[current]);
+    current++;
+    bre++;
+    if(bre >=20) {
+        call_out("ftp", 1);
+        change_progress_meter();
+        bre=0;
+    } else 
+    if(in_use) ftp();
+}

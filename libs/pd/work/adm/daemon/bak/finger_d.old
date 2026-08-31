@@ -1,0 +1,328 @@
+//      /bin/daemon/fingerd.c
+//      Nightmare Mudlib finger daemon
+//      based on finger daemon from the TMI mudlib coded by
+//      Sulam, Jubal, Brian, and Buddha (12.8.91 - 3.8.92)
+//      written by Descartes of Borg 22 November 1992
+
+#include <objects.h>
+#include <dirs.h>
+#include <daemons.h>
+#include <config.h>
+
+inherit OB_USER;
+
+
+string alig_str(string what, int x);
+string query_title();
+string query_last_on();
+string query_hah(object ob, int verbose);
+int mytrig = 0, age;
+
+void create() {
+    seteuid(getuid());
+}
+
+static void complete_variables() {
+    /*if(!true_name) true_name = "";*/
+    if(!real_name) real_name = "???";
+    if(!player_class) player_class = "child";
+    if(!last_on) last_on = "no record";
+    if(!ip) ip = "nowhere";
+    if(!level) level = -1;
+    if(!race) race = "Unborn";
+    if(!player_age) player_age = 0;
+}
+
+string general_finger_display() {
+    string finger;
+    object *who;
+    int i;
+    string level;
+
+    finger =
+    "                  Members of the "+mud_name()+" Reality\n";
+    finger +=
+    "  "+mud_name()+" has been up since PDT "+ctime(time()-uptime())+"\n";
+    finger +=
+    "   "+mud_name()+" runs "+version()+" driver with "+mudlib()+"\n";
+    finger += alig_str("Player", 15);
+    finger += alig_str("Real Name", 30);
+    finger += alig_str("Class", 10);
+    finger += alig_str("Level", 7);
+    finger +=alig_str("Idle", 5);
+    finger += "\n";
+    who = users();
+    for(i=0; i<sizeof(who); i++) {
+	if(who[i]->query_invis()) continue;
+	if(!who[i]->query_name()) continue;
+	finger += alig_str((string)who[i]->query_cap_name(), 15);
+	finger += alig_str((string)who[i]->query_rname(), 30);
+	if(!who[i]->query_class()) finger += alig_str("child", 10);
+	else finger += alig_str((string)who[i]->query_class(), 10);
+	if(wizardp(who[i]))   // provide some distinction by Val June 1, 1993
+	    level = "im";
+	else
+	    level = "" + (int)who[i]->query_level() + "";
+	finger += alig_str(level, 7);
+	finger += alig_str(query_idle_string(who[i], 0), 5);
+	finger += "\n";
+    }
+    return finger;
+}
+
+string user_finger_display(string who) {
+    mapping mail_stat;
+    string tmp,a,b;
+    string pos;   /* caller's position used to show email for high level 
+		     callers.  Added by Valodin, June 8, 1993 */
+    object ob;
+    string uh_oh;
+    string finger;
+    string level, tmp9;
+
+    if(!who) return "You must specify whom you wish to finger.\n";
+
+    ob = find_player(lower_case(who));
+    tmp = lower_case(who);
+    who = sprintf("%s/%s/%s", DIR_USERS, tmp[0..0], tmp);
+    if(file_size(who + ".o") < 0) 
+	return "No such person in this reality.\n";
+    restore_object(who);
+    mail_stat = (mapping)LOCALPOST_D->mail_status(tmp);
+    if(ob) {
+	finger = "\n%^ORANGE%^[%^YELLOW%^*%^RESET%^%^ORANGE%^]%^RED%^------%^RESET%^(finger)%^RED%^----------------------------------------%^RESET%^%^ORANGE%^[%^YELLOW%^*%^RESET%^%^ORANGE%^]%^RESET%^\n";
+	finger += "%^BOLD%^%^WHITE%^"+query_cap_name()+"\n";
+	uh_oh = capitalize((string)ob->query_gender()) + " ";
+        if ((string)ob->query_race()=="dragon") {
+	    uh_oh += (string)ob->query_subclass()+ " ";
+	    uh_oh += (string)ob->query_class() + " ";
+	}
+	else {
+	    uh_oh += (string)ob->query("race") + " ";
+	    uh_oh += (string)ob->query_class() + " ";
+	    uh_oh += "(%^BOLD%^%^RED%^"+ob->query_subclass()+"%^WHITE%^) ";
+	}
+	/*        if(stringp(tmp9=(string)ob->query_guild()) && tmp9 != "assassin")
+		  uh_oh += "\nGuild: "+pluralize(tmp9)+"\n";
+	*/	finger += alig_str(uh_oh, 75);
+	/*
+		if(wizardp(ob))
+		  level = "Immortal";
+		else
+	*/
+	level = "" + (int)ob->query_level() + "";
+	finger += "%^CYAN%^Level:%^RESET%^ "+level+"\n";
+	if(stringp(tmp9=(string)ob->query_guild()) && tmp9 != "assassin") {
+	    finger += "%^BOLD%^%^GREEN%^Guild:%^RESET%^ "+pluralize(tmp9);
+	    finger += alig_str("", 32);
+	    mytrig = 1;
+	}
+	age = time() - (int)ob->query_birthday();
+	finger += "%^CYAN%^Age:%^RESET%^ "+(18 + (age/4320000));
+	if (!mytrig) {
+	    finger += alig_str("", 44);
+	    if (!ob->query_married())
+		finger += "%^BOLD%^%^BLUE%^Single%^RESET%^\n";
+	    else
+		finger += "%^BOLD%^%^BLUE%^Married to "+capitalize(ob->query_married())+"%^RESET%^\n";
+	} else finger += "\n";
+	finger += "%^BOLD%^%^BLACK%^In real life:%^RESET%^ ";
+	finger += alig_str((string)ob->query_rname(), 37);
+	if (mytrig) {
+	    if(!ob->query_married()) 
+		finger += "%^BOLD%^%^BLUE%^Single%^RESET%^\n";
+	    else 
+		finger += "%^BOLD%^%^BLUE%^Married to " + capitalize((string)ob->query_married()) +
+		"%^RESET%^\n";
+	} else finger += "\n";
+	birth = (int)ob->query_birthday();
+	finger += "%^RED%^Birthday:%^RESET%^ "+capitalize(month(birth))+" "+date(birth)+", "+
+	((year(birth)-18))+" BN\n";
+       if (sscanf(ob->query_email(), "#%s@%s", a,b)==2) {
+	if(this_player() && archp(this_player()))
+	    if((uh_oh = (string)ob->query_email()) != "")
+		finger += "%^GREEN%^Email:%^RESET%^ " + uh_oh + "\n";     
+        } else finger += "%^GREEN%^Email:%^RESET%^ "+ob->query_email()+"\n";
+	if(ob->query_invis()) 
+	    finger += "%^ORANGE%^Last on:%^RESET%^ ";
+	else {
+	    uh_oh = query_hah(ob, 1);
+	    if(uh_oh != "") 
+		finger += uh_oh + "\n";
+	    finger += "%^ORANGE%^On since:%^RESET%^ ";
+	}
+
+	finger += query_last_on() + "\n";
+	/*	if(ob->query_property("where block") ) 
+		  if(this_player() && archp(this_player()))
+		     finger += (string)ob->query_ip() + "\n";
+		  else
+		     finger += "Anonymous\n";
+		else
+		  finger += (string)ob->query_ip() + "\n";
+	*/
+	finger += "%^YELLOW%^" + query_cap_name() + " has ";
+	if(!mail_stat["unread"]) 
+	    finger += "no unread mail.%^RESET%^\n";
+	else if(mail_stat["unread"] == 1) 
+	    finger += "1 unread piece of mail.%^RESET%^\n";
+	else 
+	    finger += mail_stat["unread"] + " unread pieces of mail.%^RESET%^\n";
+	tmp = user_path(tmp);
+	if(file_size(tmp + ".project") >= 0) 
+	    finger += "%^BOLD%^%^GREEN%^Project:%^RESET%^ "+read_file(tmp+".project");
+	if(file_size(tmp+".plan") >= 0) 
+	    finger += "%^MAGENTA%^Plan:%^RESET%^\n"+read_file(tmp+".plan");
+	else 
+	    finger += "%^MAGENTA%^No plan.%^RESET%^\n";
+    }
+    else {
+	complete_variables();
+	finger = "\n%^ORANGE%^[%^YELLOW%^*%^RESET%^%^ORANGE%^]%^RED%^------%^RESET%^(finger)%^RED%^----------------------------------------%^RESET%^%^ORANGE%^[%^YELLOW%^*%^RESET%^%^ORANGE%^]%^RESET%^\n";
+	finger += "%^BOLD%^%^WHITE%^"+query_cap_name()+ "\n";
+	/*	    if(query_description())
+			finger += capitalize(query_true_name()) + " " + 
+				  query_description() + "\n";*/
+	uh_oh = capitalize(query_gender());
+        if ((string)query_race()=="dragon") {
+           uh_oh += " " + query_subclass() +" ";
+           uh_oh += query_class() + " ";
+        }
+        else {
+	uh_oh += " " + query_race() + " ";
+	uh_oh += query_class()+" (%^BOLD%^%^RED%^";
+	uh_oh += query_subclass()+"%^WHITE%^) ";
+        }
+	/*            if(query_guild() && query_guild() != "assassin")
+		  uh_oh += "\nGuild: "+pluralize(query_guild());
+	*/	    finger += alig_str(uh_oh, 75);
+	/*
+		    if(member_array(query_position(), MORTAL_POSITIONS)==-1) 
+			finger += "%^BOLD%^%^CYAN%^Level:%^RESET%^ Immortal\n"; 
+		    else
+	*/
+	finger += "%^BOLD%^%^CYAN%^Level:%^RESET%^ "+query_level()+"\n"; 
+	tmp9 = "";
+	if(query_guild()) tmp9 = query_guild();
+	if(tmp9 != "" && tmp9 != "assassin") {
+	    finger += "%^BOLD%^%^GREEN%^Guild:%^RESET%^ "+pluralize(tmp9);
+	    finger += alig_str("", 37);
+	    mytrig = 1;
+	}
+	age = time() - query_birthday();
+	finger += "%^CYAN%^Age:%^RESET%^ "+(18 + (age/4320000));
+	if (!mytrig) {
+	    finger += alig_str("", 44);
+	    if (query_married())
+		finger += "%^BOLD%^%^BLUE%^Married to "+capitalize(query_married())+"%^RESET%^\n";
+	    else
+		finger += "%^BOLD%^%^BLUE%^Single%^RESET%^\n";
+	}
+
+	finger += "\n%^BOLD%^%^BLACK%^In real life:%^RESET%^ ";
+	finger += alig_str(query_rname(), 37);
+	//            finger += "BLah\n\n married = "+query_married();
+	if (mytrig) {
+	    if(query_married()) 
+		finger += "%^BOLD%^%^BLUE%^Married to "+capitalize(query_married())+"%^RESET%^\n";
+	    else 
+		finger += "%^BOLD%^%^BLUE%^Single%^RESET%^\n";
+	    finger += "%^RED%^Birthday:%^RESET%^ "+capitalize(month(birth))+" "+date(birth)+", "+
+	    ((year(birth)-18))+" BN\n";
+	}
+	if(this_player() && archp(this_player()))
+	    if((uh_oh = query_email()) != "")
+		finger += "%^GREEN%^Email:%^RESET%^ " + uh_oh + "\n";
+	if(this_player() && archp(this_player()))
+	    finger += "%^ORANGE%^Last on:%^RESET%^ " + query_last_on() + " from "+query_ip()+"\n";
+	else finger += "%^ORANGE%^Last on:%^RESET%^ "+query_last_on()+" from "+
+	    (query_property("where block") ? "Anonymous" : query_ip())+"\n";
+	finger += "%^YELLOW%^"+query_cap_name() + " has ";
+	if(!mail_stat["unread"]) 
+	    finger += "no unread mail.%^RESET%^\n";
+	else if(mail_stat["unread"] == 1) 
+	    finger += "1 unread piece of mail.%^RESET%^\n";
+	else 
+	    finger += mail_stat["unread"]+" unread pieces of mail.%^RESET%^\n";
+	tmp = user_path(tmp);
+	if(file_size(tmp+".project") >= 0)
+	    finger += "%^BOLD%^%^GREEN%^Project:%^RESET%^ "+read_file(tmp+".project");
+	if(file_size(tmp+".plan") >= 0) 
+	    finger += "%^MAGENTA%^Plan:%^RESET%^\n" + read_file(tmp + ".plan");
+	else 
+	    finger += "%^MAGENTA%^No plan.%^RESET%^\n";
+    }
+    finger += "%^ORANGE%^[%^YELLOW%^*%^RESET%^%^ORANGE%^]%^RED%^------------------------------------------------------%^RESET%^%^ORANGE%^[%^YELLOW%^*%^RESET%^%^ORANGE%^]%^RESET%^\n";
+    return finger;
+}
+
+string query_hah(object ob, int verbose) {
+    int time, tmp;
+    string line;
+
+    if(!ob) return 0;
+    if(!interactive(ob)) {
+	if(verbose) return "Disconnected.";
+	else return "disconnected";
+    }
+    line = "";
+    time = query_idle(ob);
+    if(time < 60) return line;
+    tmp = time / 86400;
+    if(tmp) {   
+	if(!verbose) return tmp + " d";
+	else line += tmp + " day" + (tmp>1 ? "s " : " ");
+    }
+    tmp = (time%86400)/3600;
+    if(tmp) {   
+	if(!verbose) {
+	    if(tmp>9) return tmp+" h";
+	    else line += tmp+":";
+	}
+	else line += tmp + " hour"+(tmp>1 ? "s " : " ");
+    }
+    tmp = (time%3600)/60;
+    if(tmp) {   
+	if(!verbose) {  
+	    if(strlen(line)>0 && tmp < 10) line += "0";
+	    line += (string)tmp;
+	}
+	else line += tmp+ " minute"+(tmp>1 ? "s " : " ");
+    }
+    if(verbose) line += "idle time";
+    else line += "idle";
+    return line;
+}
+
+string query_last_on() { return last_on; }
+
+string query_title() {
+    string pre, post;
+
+    if(!getenv("TITLE")) return query_cap_name();
+    if(sscanf(getenv("TITLE"), "%s $N %s", pre, post) != 2) {
+	if(sscanf(getenv("TITLE"), "$N %s", post) != 1) return capitalize(query_true_name());
+	else return capitalize(query_true_name())+" "+post;
+    }
+    return pre+" "+capitalize(query_true_name())+" "+post;
+}
+
+string alig_str(string what, int x) {
+    int y;
+    string out;
+
+    out = "";
+    if(!what) return 0;
+    y = strlen(what);
+    out += what;
+    if(y>x) {
+	out = what[0..x-1] + " ";
+	return out;
+    }
+    x = x-y;
+    if(x<1) return out;
+    for(y=0; y<=x; y++) out += " ";
+    return out;
+}
+
+string query_cap_name() { return capitalize(query_true_name()); }

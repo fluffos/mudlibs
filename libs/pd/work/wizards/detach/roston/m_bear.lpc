@@ -1,0 +1,35 @@
+#include <std.h>
+inherit MONSTER;
+  int wielded_sword=0;
+void create() {
+::create();
+    set_name("Bear");
+    set_short("White Bear");
+    set_long("A huge white bear, that stands 6 feet tall. "
+             "He has little spots of brown fur all over.");
+    new("/wizards/detach/roston/claw")->move(this_object());
+    new("/wizards/detach/roston/claw")->move(this_object());
+    set_id(({"bear","white bear"}));
+    set_level(35);
+    set_race("bear");
+    set_body_type("human");
+    set_swarm("Bear");
+    set_gender("male");
+    set_spell_chance(35);
+    set_spells( ({ "slash", }) );
+    set_heart_beat(1);                              
+ 
+    ::init();
+}
+
+void heart_beat()
+{
+ ::heart_beat();
+ if (!wielded_sword)
+   {
+    this_object()->force_me("wield claw");
+    this_object()->force_me("wield claw 2");
+    wielded_sword = 1;               
+    } 
+
+}

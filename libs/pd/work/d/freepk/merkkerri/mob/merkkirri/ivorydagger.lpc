@@ -1,0 +1,32 @@
+#include <std.h>
+inherit WEAPON;
+
+int weapon_hit(object atk);
+create() {
+::create();
+set_id(({"dagger", "ivory dagger"}));
+set_name("dagger");
+set_short("Ivory dagger");
+set_long("A dagger of ivory that has been magically strengthened.  The blade is about seven inches in length and the handle is hollowed for lighter weight.");
+set_weight(8);
+set_curr_value("gold",65);
+set_wc(10);
+set_ac(0);
+set_type("knife");
+set_hands(1);
+set_wield("%^CYAN%^BOLD%^You feel a slight tingle as you wield the dagger.%^RESET%^");
+set_unwield("%^BOLD%^CYAN%^You unwield the ivory dagger.%^RESET%^");
+set_hit((:weapon_hit:));
+}
+
+int weapon_hit(object atk)
+{
+int result;
+if(random(12) == 10) {
+write("You %^BOLD%^RED%^SLICE%^RESET%^ your foe with a particularly brutal hit.");
+say((string)this_player()->query_cap_name()+"'s dagger %^BOLD%^RED%^SLICES%^RESET%^ horribly as it strikes.");
+result=(random(15))+((this_player()->query_level()/2));
+return result;
+}
+}
+int query_auto_load() {return 1; }

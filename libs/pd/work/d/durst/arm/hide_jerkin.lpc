@@ -1,0 +1,14 @@
+#include <std.h>														
+inherit ARMOUR;															
+void create() {	
+   ::create();	
+	set_name("Hide Jerkin");
+	set_id( ({ "hide", "armour", "armor", "jerkin" }) );
+	set_short("Hide jerkin");
+	set_long("This is a poory tailored jerkin made from some unknown hide. It doesn't appear to offer much protection");
+	set_ac(1);
+	set_curr_value("gold", 3);
+	set_limbs( ({ "torso", "right arm", "left arm" }) );
+	set_weight(5);
+	set_type("body armour");
+}

@@ -1,0 +1,1 @@
+void create() { seteuid( getuid() ); }

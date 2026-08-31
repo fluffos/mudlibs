@@ -1,0 +1,352 @@
+// inheritable file for mobs that can be controlled by players
+// -Nulvect 20080606
+
+#include <std.h>
+#include <dirs.h>
+#include <daemons.h>
+
+inherit MONSTER;
+
+static object owner;
+int exp_percent;
+string reveal_help;
+object *assist = ({});
+mixed command_check;
+mapping def_commands = ([
+  "reveal" : "pet_def_reveal",
+  "report" : "pet_def_report",
+  "assist" : "pet_def_assist",
+  "stop" : "pet_def_stop",
+]);
+
+int pet_command(string str);
+int pet_def_reveal(string str);
+int pet_def_report(string str);
+int pet_def_assist(string str);
+int pet_def_stop(string str);
+void add_assist(object o);
+void remove_assist(object o);
+object *query_assist();
+void set_exp_percent(int x);
+int query_exp_percent();
+void add_exp(int x);
+void set_owner(object o);
+object query_owner();
+void set_command_check(mixed f);
+string *query_commands();
+void set_reveal(string r);
+string query_reveal();
+void tell_owner(string str);
+int query_can_talk();
+int is_pet();
+
+void create() {
+  ::create();
+  set_property("teleport follow", 1);
+  exp_percent = 0;
+  owner = 0;
+  assist = ({});
+  set_spells( ({ }) );
+  foreach (string cmd, string func in def_commands)
+    add_action(func, cmd);
+}
+
+void init() {
+  ::init();
+  add_action("pet_command", "command");
+}
+
+void heart_beat() {
+  object to=this_object();
+  object env=environment();
+  ::heart_beat();
+  if (!to || !owner || !env) return;
+
+  if (!to->query_rest_type() && to->query_property("teleport follow"))
+    if (env != environment(owner) && member_array(to, (object *)owner->query_followers()) != -1 && to->query_following() == owner)
+      to->move_player(environment(owner),
+      "following "+owner->query_cap_name());
+
+  foreach (object who in query_assist())
+    foreach (object atkr in who->query_attackers())
+      if (atkr != owner)
+        to->kill_ob(atkr);
+}
+
+// make sure it can't attack anyone its owner can't attack
+int ok_to_kill(object who) {
+  if (who && query_owner() &&
+      who != query_owner() &&
+      !query_owner()->ok_to_kill(who))
+        return 0;
+  return ::ok_to_kill(who);
+}
+int kill_ob(object who) {
+  if (!ok_to_kill(who))
+    return 0;
+  return ::kill_ob(who);
+}
+
+int pet_command(string str) {
+  object tp=this_player();
+  object to=this_object();
+  object env=environment(to);
+  object *pets;
+  string who, cmd, arg, fullpath;
+  int all, spell, ok=1;
+
+  if (!tp || !owner || tp != owner)
+   return 0;
+
+  if (!str)
+    return notify_fail("Command who?\n");
+
+  if (sscanf(str, "%s to %s %s", who, cmd, arg) != 3 &&
+      sscanf(str, "%s to %s", who, cmd) != 2)
+        who = str;
+
+  if (who == "all") all=1;
+
+  if (!all && present(who, env) != to)
+    return notify_fail("Command who?\n");
+
+  if (!strlen(cmd))
+    return notify_fail("Command "+
+      (all ? "them" : to->query_objective())+
+      " to do what?\n");
+
+  if (arg && arg == "me")
+    arg = tp->query_name();
+
+  if (owner->query_property("gagged") && !to->query_property("gagged"))
+    to->set_property("gagged", 1);
+  if (to->query_property("gagged") && !owner->query_property("gagged"))
+    to->remove_property("gagged");
+
+  if ((fullpath = CMD_D->find_cmd(cmd, to->query_search_path())) &&
+      !strsrch(fullpath, DIR_CLASS_CMDS))
+        spell = 1;
+
+  if (command_check && functionp(command_check) &&
+      !evaluate(command_check, cmd, arg) )
+        ok = 0;
+
+  if (spell && member_array(cmd, to->query_spells()) == -1 && member_array(cmd, query_commands()) == -1)
+    ok = 0;
+
+  if (ok)
+    command(cmd+(arg?" "+arg:""));
+
+  // make the first mob control all the rest
+  if (all && !previous_object()) {
+    pets = filter(all_inventory(env), (:
+      ($1->is_pet() && $1->query_owner() && $1->query_owner() == $2)
+    :), query_owner() );
+    pets -= ({ to });
+    pets->pet_command(str);
+  }
+
+  return 1;
+}
+
+int pet_def_reveal(string str) {
+  object tp=this_player();
+  object to=this_object();
+  string msg="", reveal;
+  int cantalk;
+
+  if (!tp || tp != to) return 0;
+
+  if (!str || str != "powers") return 0;
+
+  cantalk = query_can_talk();
+
+  if (cantalk)
+    msg += "I know ";
+  else
+    msg += "You sense that "+to->query_cap_name()+" knows ";
+
+  if (sizeof(to->query_spells()))
+    msg += "the following spells and abilities";
+  else
+    msg += "no spells or abilities";
+
+  if (sizeof(to->query_spells()))
+    msg += ":\n  "+list(to->query_spells())+"\n";
+  else
+    msg += ".\n";
+
+//  if (!(reveal = query_reveal()))
+  reveal = list(query_commands());
+
+  if (cantalk)
+    msg += "I have ";
+  else
+    msg += "You sense ";
+
+
+  if (strlen(reveal))
+    msg += "the following";
+  else
+    msg += "no";
+
+  msg += " special powers";
+
+  if (strlen(reveal)) {
+    msg += ":\n  "+replace_string(reveal, "\n", "\n  ")+"\n";
+    if (strlen(query_reveal()))
+      msg += "  "+replace_string(query_reveal(), "\n", "\n  ")+"\n";
+  }
+  else
+    msg += ".\n";
+
+  if (cantalk)
+    msg += "I am level "+to->query_level()+".";
+  else
+    msg += capitalize(to->query_subjective())+" seems to be level "+
+           to->query_level()+".";
+
+  tell_owner(msg);
+
+  return 1;
+}
+
+int pet_def_report(string str) {
+  object tp = this_player();
+  object to = this_object();
+  object env = environment(to);
+  string report;
+  
+  if (!tp || tp != to) return 0;
+
+  if (to->query_can_talk())
+    report = "I have %d/%d hp, %d/%d sp, and %d/%d mp.";
+  else
+    report = to->query_cap_name()+
+      " seems to have %d/%d hp, %d/%d sp, and %d/%d mp.";
+
+  tell_owner(sprintf(report,
+    query_hp(), query_max_hp(),
+    query_sp(), query_max_sp(),
+    query_mp(), query_max_mp()
+  ));
+
+  return 1;
+}
+
+int pet_def_assist(string str) {
+  object tp = this_player();
+  object to = this_object();
+  object env = environment(to);
+  object who;
+
+  if (!tp || tp != to) return 0;
+
+  if (!str) return 0;
+
+  who = present(str, env);
+
+  if (who) {
+    add_assist(who);
+    message("emote", to->query_cap_name()+" comes to your aid.", who);
+    message("emote", to->query_cap_name()+" comes to "+
+        who->query_cap_name()+"'s aid.", env, ({ to, who }) );
+  }
+
+  return 1;
+}
+
+int pet_def_stop(string str) {
+  object tp = this_player();
+  object to = this_object();
+  object env = environment(to);
+  object who;
+  string verb, name="";
+
+  if (!tp || tp != to) return 0;
+
+  if (!str) return 0;
+
+  if (sscanf(str, "%s %s", verb, name) != 2)
+    verb = str;
+
+  switch (verb) {
+  case "assist": case "assisting":
+    if (name == "me") who = owner;
+    else who = present(name, env);
+    if (who) remove_assist(who);
+  break;
+  }
+
+  return 1;
+}
+
+void add_assist(object o) {
+  if (member_array(o, query_assist()) == -1)
+    assist += ({ o });
+}
+void remove_assist(object o) { assist -= ({ o }); }
+object *query_assist() {
+  assist = filter(assist, (: objectp($1) :) );
+  return copy(assist);
+}
+
+void set_exp_percent(float x) { exp_percent = x; }
+int query_exp_percent() { return exp_percent; }
+
+//override the normal add_exp() to give some to the owner
+void add_exp(int x) {
+  if (owner && exp_percent)
+    owner->add_exp( (x * exp_percent) / 100);
+  ::add_exp(x);
+}
+
+
+void set_owner(object o) {
+  owner = o;
+  if (owner)
+    owner->add_follower(this_object());
+}
+object query_owner() { return owner; }
+
+// lets you run a function to determine if commanding this mob succeeds
+void set_command_check(mixed f) { command_check = f; }
+
+// count all commands added using add_action in the mob's own file only
+// don't count the basic command hook or default commands added in this file
+string *query_commands() {
+  mixed *arr = commands();
+  arr = filter(arr, (:
+    ($1[2] == this_object() && $1[3] != "cmd_hook")
+  :) );
+  arr = map(arr, (: $1[0] :) );
+  arr -= ({ "quit" }) + keys(def_commands);
+  return arr;
+}
+
+// if set, this is displayed for the special powers section of reveal powers
+void set_reveal(string r) { reveal_help = r; }
+string query_reveal() { return reveal_help; }
+
+void tell_owner(string str) {
+  object to = this_object();
+  string *out;
+
+  if (!owner) return;
+
+  if (query_can_talk()) {
+    out = explode(str, "\n");
+    foreach (string s in out)
+      command("say "+s);
+  }
+  else
+    message("emote", str, owner);
+}
+
+int query_can_talk() {
+  object to = this_object();
+  return to->query_sentient() && !to->query_property("gagged");
+}
+
+int is_pet() { return 1; }
+

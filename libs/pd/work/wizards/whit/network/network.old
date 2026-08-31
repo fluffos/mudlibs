@@ -1,0 +1,61 @@
+//  Created by Whit
+//  PD Network
+
+#include <std.h>
+#include <daemons.h>
+#include <socket.h>
+#include <newnetwork.h>
+inherit DAEMON;
+
+mapping muds, network;
+
+void read_from_mud(mixed msg);
+
+void create() {
+    restore_object("/daemon/save/network");
+    if(!muds) muds = ([]);
+    call_out("open_socket_for_connect", 2);
+}
+
+void open_socket_for_connect() {
+    mixed error;
+    int i;
+    CHAT_D->do_raw_chat("network", "NETWORK <network> Starting services.");
+    if(error = catch( network["socket"] = socket_create(0, "read_callback", "close_callback"))) {
+	if(i>4) {
+	    CHAT_D->do_raw_chat("network", "NETWORK <network> Socket creation halted.  (failed 5 attempts)");
+	    return;
+	}
+	CHAT_D->do_raw_chat("network", "NETWORK <network> Error creating socket.  Retrying 5 seconds.");
+	i = i+1;
+	call_out("open_socket_for_connect", 5);
+    }
+    if(i==0) 
+	if(socket_bind(network["socket"], 6000) <= 0) socket_close(network["socket"]);
+}
+
+void read_callback(int sock, mixed msg) {
+    read_from_mud(msg);
+}
+
+void close_callback(int sock) {
+    CHAT_D->do_raw_chat("network", "NETWORK <network> Error.  Socket close (socket: "+sock+")");
+    call_out("open_socket_for_connect", 5);
+}
+
+void send_to_mud(mixed msg) {
+    int sock;
+    //  preview of what msg should be:  (["username":NAME, "usermud":MUD_NAME, "usermsg":MSG])
+    sock = socket_create(0, "read_callback", "close_callback");
+    socket_write(sock, msg, "63.84.93.196 6000");
+    socket_close(sock);
+}
+
+void read_from_mud(mapping msg) {
+    string name, mud, msg2;
+    name = msg["username"];
+    mud = msg["usermud"];
+    msg2 = msg["usermsg"];
+    CHAT_D->do_raw_chat("pd", name+"@"+mud+" <pd> "+msg2);
+}
+

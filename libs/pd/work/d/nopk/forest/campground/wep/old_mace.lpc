@@ -1,0 +1,15 @@
+#include <std.h>
+inherit WEAPON;
+void create() {
+   ::create();
+	set_name("Old mace");
+	set_short("Old Mace");
+        set_long("It looks like this mace used to have spikes, but they appear to have been been broken off due to over-use");
+	set_weight(12);
+	set_id( ({ "mace", "blunt" }) );
+	set_curr_value("gold", 12);
+	set_ac(1);
+	set_wc(2);
+	set_type("blunt");
+	set_hands(1);
+}

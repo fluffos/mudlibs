@@ -1,0 +1,191 @@
+#include <std.h>
+#include <daemons.h>
+
+#define FAIL(s) return notify_fail(s+"\n")
+
+#define RES "%^RESET%^"
+#define COL "%^BOLD%^%^MAGENTA%^"
+#define COL2 "%^BOLD%^%^BLUE%^"
+#define COL3 "%^BOLD%^%^WHITE%^"
+
+inherit DAEMON;
+
+int spell() {
+  object tp = this_player();
+  if (tp && tp->query_subclass() == "sorceror" &&
+      tp->query_skill("psionics") >= 30*6 &&
+      tp->query_skill("magic attack") >= 30*6)
+        return 1;
+  return 0;
+}
+
+string type() { return "attack"; }
+
+void help() {
+  message("help",
+    "Syntax: <psistorm>\n\n"
+    "An advanced sorceror releases a storm of psionic force that lifts and "
+    "throws everything around them at a high rate of speed.",
+    this_player() );
+}
+
+int can_cast(object tp) {
+
+  if (environment(tp)->query_property("no attack"))
+    FAIL("Some force prevents your violence.");
+
+  if (environment(tp)->query_property("no magic"))
+    FAIL("Some force prevents your magic.");
+
+  if (tp->query_busy())
+    FAIL("You are busy.");
+
+  if (tp->query_ghost())
+    FAIL("You cannot harness your powers in this state.");
+
+  if (tp->query_mp() < 150)
+    FAIL("Too low on magic.");
+
+  return 1;
+}
+
+int can_target(object tp, object tgt) {
+
+  if (!tp->ok_to_kill(tgt))
+    FAIL("You cannot attack "+tgt->query_cap_name()+".");
+
+  return 1;
+}
+
+int cmd_ps(string str) {
+  object tp = this_player();
+  object env = environment(tp);
+  object *ai, *tgts, *items;
+
+  if (!spell()) return 0;
+
+  if (!can_cast(tp)) return 0;
+
+  ai = all_inventory(env) - ({ tp });
+
+  tgts = filter(ai, (:
+    $1->is_living() &&
+    can_target($2, $1) &&
+    !PARTY_D->same_party($1, $2) &&
+    $1->query_owner() != $2 &&
+    (object)$1->query_riding() != $2 &&
+    (object)$2->query_riding() != $1
+  :), tp);
+
+  items = filter(ai, (:
+    !$1->is_living() &&
+    !$1->query_prevent_get() &&
+    $1->get()
+  :) );
+
+  tp->add_mp(-(50+random(100)));
+  tp->set_magic_round(2);
+
+  message("magic", COL+"You gather your psionic energy."+RES, tp);
+
+  call_out("do_hit", 2, ({ tp, env, tgts, items, 1 }) );
+
+  return 1;
+}
+
+void do_hit(mixed *args) {
+  object tp = args[0];
+  object env = args[1];
+  object *tgts = args[2];
+  object *items = args[3];
+  int hit = args[4];
+  string storm;
+
+  if (!tp || !env) return;
+
+  if (env != environment(tp)) {
+    message("info", "Your spell is interrupted!", tp);
+    return;
+  }
+
+  tgts = filter(tgts, (: $1 && environment($1) == $2 :), env);
+  items = filter(items, (: $1 && environment($1) == $2 :), env);
+
+  if (hit == 1) {
+    storm = COL2+"ps"+COL3+"ion"+COL2+"ic "+COL2+"st"+COL3+"o"+COL2+"rm";
+
+    message("magic", COL+"You unleash a "+storm+COL+"!"+RES, tp);
+    message("magic", COL+tp->query_cap_name()+"unleashes a "+storm+"!"+RES,
+      env, tp);
+
+    tp->set_magic_round(2);
+    call_out("do_hit", 2, ({ tp, env, tgts, items, 2 }) );
+  }
+
+  foreach (object tgt in tgts) {
+    int dmg, cost, rand;
+    string into;
+    object *temp, ob;
+    
+    if (!tp->kill_ob(tgt)) continue;
+
+    dmg = BALANCE3_D->get_damage(tp, tgt, 3,
+      ({ "psionics", "psionics", "magic attack" }),
+      ({ "intelligence", "intelligence", "wisdom" }),
+      ({ "intelligence", "wisdom" }) );
+
+    dmg = dmg * 150 / 100;
+    dmg = dmg - random(dmg / 2);
+
+    cost = BALANCE3_D->get_cost(dmg, 3, "mp") * 70 / 100;
+
+    if (tp->query_mp() < cost) {
+      message("info", "Your spell falters as your magical reserves fail.", tp);
+      message("info", tp->query_cap_name()+"'s spells falters.", env, tp);
+      return;
+    }
+
+    tp->add_mp(-cost);
+
+    message("magic", COL2+"The "+COL3+"st"+COL2+"o"+COL3+"rm"+COL2+
+                     " lifts you up and "+COL+"slams"+COL2+
+                     " you into the ground!"+RES, tgt);
+    message("magic", COL2+"The "+COL3+"st"+COL2+"o"+COL3+"rm"+COL2+
+                     " lifts "+tgt->query_cap_name()+" up and "+
+                     COL+"slams"+COL2+
+                     " "+tgt->query_objective()+" into the ground!"+RES,
+                     env, tgt);
+
+    tgt->do_damage(tgt->return_limb(), dmg);
+
+    temp = items + tgts - ({ tgt });
+    rand = sizeof(temp) + 1;
+    rand *= 2;
+    rand = random(rand);
+    
+    // extra collision damage
+    if (rand < sizeof(temp)) {
+      ob = temp[rand];
+      if (ob->is_living()) {
+        into = ob->query_cap_name();
+        dmg = 15 + ob->query_stats("constitution") * 6 / 10;
+      }
+      else {
+        into = indefinite_article(ob->query_name());
+        dmg = 15 + ob->query_weight()*2;
+      }
+
+      into = capitalize(into);
+      message("magic", COL2+"You crash into "+tgt->query_cap_name()+"!", ob);
+      message("magic", COL2+into+" crashes into you!", tgt);
+      message("magic", COL2+into+" crashes into "+tgt->query_cap_name()+"!",
+        env, ({ tgt, ob }) );
+
+      tgt->do_damage(tgt->return_limb(), dmg);
+      ob->do_damage(ob->return_limb(), dmg);
+    } // end extra collision damage
+
+  } // end foreach
+
+}
+

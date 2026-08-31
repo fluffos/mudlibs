@@ -1,0 +1,104 @@
+#include <std.h>
+#include <daemons.h>
+inherit DAEMON;
+int spell();
+int cmd_demonfire(string str) {
+    int dmg, al;
+    object ob, tp, env;
+    tp = this_player();
+    env = environment(tp);
+    if (!str) ob = tp->query_current_attacker();
+    else ob = present(str, env);
+    if (!ob) {
+        notify_fail("You do not see that here.\n");
+        return 0;
+    }
+    if(!spell()) return 0;
+    if (tp->query_subclass() != "kataan")
+        return notify_fail("What?\n");
+    if (tp->query_skill("faith") < 150)
+        return notify_fail("You are not faithful enough.\n");
+    if (env->query_property("no attack") || env->query_property("no magic"))
+        return notify_fail("Greater powers prevent your malice.\n");
+    if (this_player()->query_disable())
+        return notify_fail("You are busy doing something else.\n");
+    if (!living(ob))
+        return notify_fail("Syntax: <demonfire [living]>\n");
+    al = (int)tp->query_alignment();
+    if (al > -100)
+        return notify_fail("You have betrayed the source of your power.\n");
+    if (ob == tp)
+        return notify_fail("With this amount of skill, how sad.. :P\n");
+    if (tp->query_mp() < 90) 
+        return notify_fail("Your spell fails, due to lack of magic.\n");
+    if(!this_player()->kill_ob(ob)) {
+        write(ob->query_cap_name()+" can't be attacked by you yet.");
+        return 1;
+    }
+    dmg = tp->query_skill("faith")*7/8 + tp->query_skill("summoning")*5/6;
+    dmg += tp->query_stats("wisdom");
+    dmg -= ob->query_skill("magic defense")/3 + ob->query_stats("wisdom");
+    dmg *= 3/2;
+    if (dmg < 30) {
+        write("%^CYAN%^Your powers have abandoned you.");
+        tell_room(env, "%^CYAN%^"+tp->query_cap_name()+"'s spell fails.", ({ tp }));
+        return 1;
+    }
+    tell_room(env, "%^BOLD%^%^RED%^Flames gather on "+tp->query_cap_name()+
+      "'s shoulders, head, and outstreched arms.%^RESET%^", ({ tp }));
+    this_player()->set_disable(1);
+    tp->force_me("grin wildly");
+    tp->set_paralyzed(2, "%^RED%^The raw power within holds you back.%^RESET%^");
+    if(random(10)>6) ob->set_paralyzed(random(1), "%^RED%^The power of demons holds you back.%^RESET%^");
+    call_out("flame", 1, ob, tp, dmg);
+    return 1;
+}
+void flame(object ob, object tp, int dmg) {
+    if(!ob){
+        write("%^BOLD%^%^BLACK%^The fire fades away.");
+        tell_room(environment(tp), "%^BOLD%^%^BLACK%^The fire around "+tp->query_cap_name()+" fades away.", ({ tp }));
+        return;
+    }
+   if(environment(ob) != environment(tp)) {
+        write("%^BOLD%^%^BLACK%^The fire rages out of control and dies!");
+        tell_room(environment(tp), "%^BOLD%^%^BLACK%^The fire around "+tp->query_cap_name()+" flares and fades away.", ({ tp }));
+        tp->add_mp(-(random(100)+(dmg/20)));
+     return;
+   }
+    write("%^RED%^The flames grow and you point your arms at "+ob->query_cap_name()+".");
+    tell_room(environment(tp), "%^RED%^The flames around "+tp->query_cap_name()+" grow, as "+tp->query_subjective()+" points "+tp->query_title_gender()+" arms at "+ob->query_cap_name()+".", ({ ob, tp }));
+    tell_object(ob, "%^RED%^The flames around "+tp->query_cap_name()+" grow, as "+tp->query_subjective()+" points "+tp->query_title_gender()+" arms at you.");
+    call_out("hit", 1, ob, tp, dmg);
+}
+void hit(object ob, object tp, int dmg) {
+    if(!ob){
+        write("%^BOLD%^%^BLACK%^The fire fades away.");
+        tell_room(environment(tp), "%^BOLD%^%^BLACK%^The fire around "+tp->query_cap_name()+" fades away.", ({ tp }));
+        return;
+    }
+   if(environment(ob) != environment(tp)) {
+        write("%^BOLD%^%^BLACK%^The fire rages out of control and dies!");
+        tell_room(environment(tp), "%^BOLD%^%^BLACK%^The fire around "+tp->query_cap_name()+" flares and fades away.", ({ tp }));
+        tp->add_mp(-(random(100)+(dmg/20)));
+     return;
+   }
+    write("%^RED%^Tongues %^BOLD%^%^BLACK%^of %^RESET%^%^RED%^flame %^BOLD%^%^BLACK%^leap from your fingertips and %^BOLD%^%^RED%^scorch%^BOLD%^%^BLACK%^ "+ob->query_cap_name()+"!%^RESET%^");
+    tell_object(ob, "%^RED%^Tongues %^BOLD%^%^BLACK%^of %^RESET%^%^RED%^flame %^BOLD%^%^BLACK%^leap from "+tp->query_cap_name()+"'s fingertips and %^BOLD%^%^RED%^scorch %^BOLD%^%^BLACK%^you!");
+    tell_room(environment(tp), "%^RED%^Tongues %^BOLD%^%^BLACK%^of %^RESET%^%^RED%^flame %^BOLD%^%^BLACK%^leap from "+tp->query_cap_name()+"'s fingertips and %^BOLD%^%^RED%^scorch "+ob->query_cap_name()+"!",({ ob, tp }));
+    tp->add_mp(-dmg/7);
+    ob->damage(dmg + random(tp->query_level()/2),"unholy");
+}
+void help() {
+    write("
+Syntax: <demonfire [living]>%^RESET%^%^RED%^
+ Demonfire channels raw power through the caster in the form of flame at the caster's opponent. Those of great, and evil, faith get this spell.
+");
+}
+int spell() {
+   object o;
+   o = this_player();
+   if (o && o->query_skill("faith") < 150) return 0;
+   if (o->query_level() < 29) return 0;
+   if (o->query_subclass() != "kataan") return 0;
+     return 1;
+}

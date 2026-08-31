@@ -1,0 +1,17 @@
+#include <std.h>
+#include <pforest.h>
+
+inherit VIRTUALROOM;
+
+void create() {
+  set_server(SERVER);
+  ::create();
+  set_exits( ([ 
+                "north" : ROOMS"171",
+                "south" : ROOMS"168",
+                "southwest" : ROOMS"169",
+
+
+  ]) );
+}
+

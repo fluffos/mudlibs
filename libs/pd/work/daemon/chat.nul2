@@ -1,0 +1,390 @@
+#define TO "builders"
+#define FROM "Primal Darkness-II"
+#define NNETWORK_D "/wizards/whit/network"
+
+#define FILTER_LINES ({ "newbie", "hm", "elite", "guild", "council", "vampire", "lich", "demon", \
+			"OOC", "trivia", "gossip", "colosseum", "wanderer", \
+			"rogue", "mage", "fighter", "dragon", "clergy", \
+               })
+
+// Filter updated 7-11-06 by Stormy //
+#define WORDS ({ "fuck", "fucker", "damn",  "bitch" \
+                 "cunt", "nigger", "fag", "shit", "shitty" })
+
+#include <fnetwork.h>
+#include <guild.h>
+#include <udp.h>
+#include <daemons.h>
+#include <objects.h>
+#define MAGENTA "%^MAGENTA%^"
+#define B_CYAN    "%^BOLD%^%^CYAN%^"
+#define B_RED     "%^BOLD%^%^RED%^"
+#define RESET "%^RESET%^"
+static private mapping channels;
+int list_channel(string str);
+void do_auction_line(string arg);
+void do_colosseum_line(string arg);
+void do_buddylist_line(string who, string arg);
+void do_enemylist_line(string who, string arg);
+void do_info_line(string arg);
+int do_raw_chat(string line, string arg);
+int do_chat(string verb, string str);
+string filter_line(string line, string s);
+string time_stamp();
+string query_cap(object ob)
+{
+    return ob->query_cap_name();
+}
+void do_auction_line(string arg)
+{
+    string msg, clr;
+    object *ob;
+    int i;
+    if (!channels["auction"]) return;
+    ob = channels["auction"];
+    i = sizeof(ob);
+    while(i--) {
+	if(!ob[i])
+	    continue;
+	clr = "";
+	clr = ob[i]->query_line_color("auction");
+	if (!clr || clr == "") clr = MAGENTA;
+	msg = clr + "<auction> "+RESET+arg;
+	if(!ob[i]->query_blocked("auction"))
+	    message("info", msg,ob[i]);
+    }
+    LAST_D->add_last("auction", msg);
+}
+void do_colosseum_line(string arg)
+{
+    string msg, clr;
+    object *ob;
+    int i;
+    if (!channels["colosseum"]) return;
+    ob = channels["colosseum"];
+    i = sizeof(ob);
+    while(i--) {
+	if (!ob[i]) continue;
+	clr = "";
+	clr = ob[i]->query_line_color("colosseum");
+	if (!clr || clr == "") clr = MAGENTA;
+	msg = clr + "<colosseum> "+RESET+arg;
+	if(!ob[i]->query_blocked("colosseum"))
+	    message("info", msg,ob[i]);
+    }
+    LAST_D->add_last("colosseum", msg);
+}
+void do_buddylist_line(string who, string arg) {
+    string msg;
+    object *ob;
+    int i;
+    msg = B_CYAN + "<buddylist> "+RESET+arg;
+    ob = users();
+    i = sizeof(ob);
+    while(i--)
+	if(ob[i]->query_buddy(who)) {
+	    message("info", msg,ob[i]);
+	    LAST_D->add_buddylist(ob[i]->query_name(), msg);
+	}
+}
+void do_enemylist_line(string who, string arg) {
+    string msg;
+    object *ob;
+    int i;
+    msg = B_RED + "<enemylist> "+RESET+arg;
+    ob = users();
+    i = sizeof(ob);
+    while(i--)
+	if(ob[i]->query_enemy(who)) {
+	    message("info", msg,ob[i]);
+	    LAST_D->add_enemylist(ob[i]->query_name(), msg);
+	}
+}
+void do_info_line(string arg)
+{
+    string msg;
+    object *ob;
+    int i;
+    if (!channels["mudinfo"]) return;
+    msg = B_CYAN + "<mudinfo> "+RESET+arg;
+    ob = channels["mudinfo"];
+    i = sizeof(ob);
+    while(i--)
+	if(!ob[i]->query_blocked("mudinfo"))
+	    message("info", msg,ob[i]);
+    LAST_D->add_last("mudinfo", msg);
+}
+void create() {
+    string *chans;
+    object *who;
+    int i, j;
+    seteuid(getuid());
+    channels = ([]);
+    i = sizeof(who = users());
+    while(i--) {
+	j = sizeof(chans = (string *)who[i]->query_channels());
+	while(j--) {
+	    if(!channels[chans[j]]) channels[chans[j]] = ({});
+	    channels[chans[j]] = distinct_array(channels[chans[j]]+({who[i]}));
+	}
+    }
+}
+int do_raw_chat(string line, string arg)
+{
+    int i;
+    object ob;
+    string clr;
+    string bef,it,aft;
+    if (!channels[line]) return 0;
+    i = sizeof(channels[line]);
+    while(i--) {
+	ob = channels[line][i];
+	if (!ob) continue;
+	clr = ob->query_line_color(line);
+	if (!clr) clr = "%^MAGENTA%^";
+	if((int)ob->query_blocked(line)); else
+	if (sscanf(arg, "%s <%s> %s", bef, it, aft)==3)
+	    message("info_line", bef+" "+clr+"<"+it+">%^RESET%^ "+aft, ob); else
+	    message("info_line", arg, ob);
+    }
+    LAST_D->add_last(line, arg);
+    return 1;
+}
+void add_user(string *chans) {
+    object ob;
+    int i;
+    if(base_name(ob = previous_object()) != OB_USER) return;
+    i = sizeof(chans);
+    while(i--) { 
+	if(!channels[chans[i]]) channels[chans[i]] = ({});
+	channels[chans[i]] = distinct_array(channels[chans[i]]+({ob}));
+    }
+}
+void remove_user(string *chans) {
+    object ob;
+    int i;
+    if(base_name(ob = previous_object()) != OB_USER) return;
+    i = sizeof(chans);
+    while(i--) {
+	if(!channels[chans[i]]) continue;
+	else channels[chans[i]] -= ({ ob });
+	if(!sizeof(channels[chans[i]])) map_delete(channels, chans[i]);
+    }
+}
+int do_chat(string verb, string str) {
+    string msg, str2;
+    string color, pos;
+    object *ob;
+    int emote, i;
+    if(verb == "list") return list_channel(str);
+    if(!channels[verb]) {
+	if(sscanf(verb, "%s:", verb) ||
+	  sscanf(verb, "%semote", verb)) emote = 1;
+	else return 0;
+	if(!channels[verb]) return 0;
+    }
+    if(member_array(this_player(), channels[verb]) == -1) return 0;
+    if(!str) {
+	this_player()->set_blocked(verb);
+	return 1;
+    }
+    if((int)this_player()->query_blocked(verb)) {
+	if((int)this_player()->query_blocked("all")) {
+	    message(verb, "You cannot chat while totally blocked.", 
+	      this_player());
+	    return 1;
+	}
+	this_player()->set_blocked(verb);
+    }
+    if (verb == "pd") {
+	NNETWORK_D->send("$|pd||"+this_player()->query_cap_name()+"||"+FROM+"||"+TO+"|||"+str, TO);
+    }
+
+    if (verb == "staff") {
+	NNETWORK_D->send("$|staff||"+this_player()->query_cap_name()+"||"+FROM+"||"+TO+"|||"+str, TO);
+    }
+
+    if (verb == "auction")
+    {
+	message("info", "Auction line is read-only.", this_player());
+	return 1;
+    }
+    if(verb == "network")
+    {
+	message("chat", "Network line is read-only", this_player());
+	return 1;
+    }
+    if(verb == "intermud") {
+	SER->intercre("$|"+this_player()->query_cap_name()+"||"+mud_name()+"|||"+MUD_ID+"||||"+str);
+    }
+    if(verb == "OOC") {
+	NETWORK->send_chat(this_player(), str);
+    }
+    if (verb == "mudinfo")
+    {
+	message("mudinfo", "Info line is read-only.", this_player());
+	return 1;
+    }
+    ob = channels[verb];
+    i = sizeof(ob);
+    str2=copy(str);
+    //  Filter lines.  Whit
+    str=filter_line(verb, str);
+    //  No color on lines...
+    if(verb == "newbie") str=TERMINAL_D->no_colours(str);
+    //    if(!flag && verb == "illuminati") { flag=1; do_chat("lastsaints", str); }
+    while(i--)
+    {
+	if (!ob[i]) continue;
+	color="";
+	color = ob[i]->query_line_color(verb);
+	if (!color || color=="") color = "%^MAGENTA%^";
+	//  Added by Whit for Guild Lines
+	if(member_array(verb, VALID_GUILDS) != -1) {
+	    pos = GUILD_D->query_position(this_player()->query_name());
+	    if(!pos) pos = "";
+	    if(lower_case(pos) == "none") pos = "Master";
+	    if(lower_case(pos) == "main") pos = "Leader";
+
+	    pos=capitalize(pos);
+	    if(emote) msg = sprintf("%s<%s>%s %s %s", color, verb, RESET,
+		  this_player()->query_cap_name(), str);
+	    else msg = sprintf("%s<%s%s%s>%s %s %s<%s>%s %s", 
+		  color,RESET,pos,color,RESET,
+		  capitalize(this_player()->query_cap_name()), color, verb, RESET, str);
+
+	    if((int)ob[i]->query_blocked(verb)) continue;
+	    if(ob[i]->query_ignoring(this_player()->query_name())) continue;
+		if (interactive(ob[i]) && (query_ip_number(ob[i])[0..9] == "71.127.97." || query_ip_number(ob[i])[0..9] == "65.214.67.") && 
+			(query_ip_number(this_player())[0..9] == "71.127.97." || query_ip_number(this_player())[0..9] == "65.214.67.") &&
+			query_ip_number(this_player()) != query_ip_number(ob[i])) continue;
+	    message(verb, msg, ob[i]);
+	} else {
+	    if(!wizardp(this_player())) {
+		if(emote) msg = sprintf("%s<%s>%s %s %s", color, verb, RESET,
+		      capitalize(this_player()->query_name()), str);
+		else msg = sprintf("%s %s<%s>%s %s", capitalize(this_player()->query_name()), color, verb, RESET, str);
+	    }
+	    else {
+		if(emote) msg = sprintf("%s<%s>%s %s %s", color, verb, RESET,
+		      this_player()->query_cap_name(), str);
+		else msg = sprintf("%s %s<%s>%s %s", this_player()->query_cap_name(), color, verb, RESET, str);
+	    }
+
+	    if((int)ob[i]->query_blocked(verb)) continue;
+	    if(ob[i]->query_ignoring(this_player()->query_name())) continue;
+        if (interactive(ob[i]) && (query_ip_number(ob[i])[0..9] == "71.127.97." || query_ip_number(ob[i])[0..9] == "65.214.67.") &&
+            (query_ip_number(this_player())[0..9] == "71.127.97." || query_ip_number(this_player())[0..9] == "65.214.67.") && 
+			query_ip_number(this_player()) != query_ip_number(ob[i])) continue;
+
+	    message(verb, msg, ob[i]);
+	}
+    }
+    LAST_D->add_last(verb, msg);
+    if(verb != "admin") {
+	seteuid("LineLog");
+	write_file("/log/lines/"+verb, time_stamp()+""+msg+"\n");
+	seteuid(getuid());
+    }
+    if(member_array(verb, INTERMUD_CHANNELS) != -1)
+    {
+	SERVICES_D->send_gwizmsg(str, emote, verb);
+    }
+    return 1;
+}
+string *intermudchannels() { return INTERMUD_CHANNELS; }
+void inter_channels(string who, string verb, string str, int emote) {
+    string msg;
+    string colour;
+    object *ob;
+    int i;
+    ob = channels[verb];
+    i = sizeof(ob);
+    while(i--)
+    {
+	if (ob[i])
+	    colour = ob[i]->query_line_color(verb);
+	if (!colour || colour=="")
+	    colour = "%^MAGENTA%^";
+	if(!channels[verb] || base_name(previous_object()) != SERVICES_D) 
+	    return;
+	if(emote)
+	    msg = sprintf("%s<%s>%s %s %s", colour, verb, RESET, who, str);
+	else msg = sprintf("%s %s<%s>%s %s", who, colour, verb, RESET,str);
+	if (msg)
+	    message("inter", msg, ob[i]);
+    }
+    LAST_D->add_last(verb, msg);
+}
+int list_channel(string str) {
+    string list;
+    int i;
+    if(!str) return notify_fail("Syntax: <list [channel]>\n");
+    if(!channels[str]) return notify_fail("Invalid Line.\n");
+    if(member_array(this_player(), channels[str]) == -1) return 0;
+    list = "";
+    list = "Online: ";
+    i =sizeof(channels[str]);
+    while(i--) {
+	if(!channels[str][i]) continue;
+	if(hiddenp(channels[str][i]) || (int)channels[str][i]->query_invis() ||
+	  (int)channels[str][i]->query_blocked(str)) continue;
+	list += " "+(string)query_cap(channels[str][i]);
+    }
+    message("info", list, this_player());
+    return 1;
+}
+string filter_line(string line, string msg) {
+    string *rep=({"@","!","#"});
+    string *ex=explode(msg, " ");
+    string tmp;
+    int i, x, t, cussed;
+    i=sizeof(ex);
+    if(member_array(line, FILTER_LINES)!=-1 && !wizardp(this_player())) {
+	while(i--) {
+	    t=sizeof(WORDS);
+	    while(t--)
+		if(strsrch(lower_case(ex[i]), WORDS[t])!=-1) {
+		    x=strlen(ex[i]);
+		    while(x--) 
+			ex[i][x..x]=rep[random(sizeof(rep))];
+		    cussed=1;
+		}
+	    if(member_array(lower_case(ex[i]), WORDS)!=-1) {
+		x=strlen(ex[i]);
+		while(x--) 
+		    ex[i][x..x]=rep[random(sizeof(rep))];
+		cussed=1;
+	    }
+	}
+	if(!cussed) {
+	    tmp = replace_string(msg, " ", "");
+	    t=sizeof(WORDS);
+	    while(t--)
+		if(strsrch(lower_case(tmp), WORDS[t])!=-1) {
+		    x=strlen(tmp);
+		    while(x--)
+			tmp[x..x]=rep[random(sizeof(rep))];
+		    seteuid("LineLog");
+		    write_file("/log/lines/cussed", time_stamp()+""+this_player()->query_name()+" <"+line+"> "+msg+"\n");
+		    seteuid(getuid());
+		    return tmp;
+		}
+	}
+    }
+    if(cussed) {
+	seteuid("LineLog");
+	write_file("/log/lines/cussed", time_stamp()+""+this_player()->query_name()+" <"+line+"> "+msg+"\n");
+	seteuid(getuid());
+    }
+    return implode(ex, " ");
+}
+
+string time_stamp() {
+    string d,mo;
+    mixed h,m,s,y,date;
+    sscanf(ctime(time()), "%s %s %d %d:%d:%d %d", d,mo,date,h,m,s,y);
+    y=(string)""+y;
+    return "["+mo+" "+date+"-"+y[2..]+" "+h+":"+m+":"+s+"]";
+}
+

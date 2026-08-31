@@ -1,0 +1,22 @@
+#ifndef K_VENENUM_H
+#define K_VENENUM_H
+#define GUILDEQ "/wizards/venenum/guildeq/guildeq.lpc"
+#define GUILDARM "/wizards/venenum/guildeq/guildarm.lpc"
+#define GUILDARMOUR "/wizards/venenum/guildeq/armour.lpc"
+#define GUILDBELT "/wizards/venenum/guildeq/belt.lpc"
+#define GUILDBODYARMOUR "/wizards/venenum/guildeq/bodyarmour.lpc"
+#define GUILDBOOTS "/wizards/venenum/guildeq/boots.lpc"
+#define GUILDBRACELET "/wizards/venenum/guildeq/bracelet.lpc"
+#define GUILDBRACERS "/wizards/venenum/guildeq/bracers.lpc"
+#define GUILDCLOAK "/wizards/venenum/guildeq/cloak.lpc"
+#define GUILDGLOVES "/wizards/venenum/guildeq/gloves.lpc"
+#define GUILDHELMET "/wizards/venenum/guildeq/helmet.lpc"
+#define GUILDLEGGINGS "/wizards/venenum/guildeq/leggings.lpc"
+#define GUILDMASK "/wizards/venenum/guildeq/MASK.lpc"
+#define GUILDNECKLACE "/wizards/venenum/guildeq/necklace.lpc"
+#define GUILDPANTS "/wizards/venenum/guildeq/pants.lpc"
+#define GUILDSHIELD "/wizards/venenum/guildeq/shield.lpc"
+#define GUILDTUNIC "/wizards/venenum/guildeq/tunic.lpc"
+#define GUILDVEST "/wizards/venenum/guildeq/vest.lpc"
+#define GUILDWEP "/wizards/venenum/guildeq/guildwep.lpc"
+#endif

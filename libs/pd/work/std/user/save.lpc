@@ -1,0 +1,102 @@
+// A lot of this code seems to have come from the mudlib.n and the early
+// days.  In fact, a moderate security leak jumped up from this area, not
+// long ago.  We suspect someone may have cracked into the mudlib via
+// some things this file uses.  That hole has since been covered, of course.
+// -Buddha (3-15-92)
+
+#include <security.h>
+#include <dirs.h>
+#include <daemons.h>
+
+/*
+ * Used for save and restore a player.
+ * It is not possible to immediately call save_object and restore_object,
+ * because the player will not have the rights to do so. Therefore,
+ * functions will be called in the master object, that will give the
+ * player object temporary priviledges.
+ */
+
+private string save_file_name(string name) {
+    return sprintf("%s/%s/%s", DIR_USERS, name[0..0], name);
+}
+
+/*
+ * This one is called at login, to restore player data from saved file.
+ * Return 0 for no save file, which means a new player.
+ * Otherwise, restore player variables and return 1.
+ */
+// You can't restore something if you're just anybody.
+// The caller should be able to set stuff, if it has root access, and if
+// the player already has the uid/euid, then obviously it's not new.
+
+nomask int restore_player(string name) {
+	int res;
+        if(geteuid(previous_object()) != UID_ROOT &&
+          geteuid(previous_object()) != UID_USERACCESS) return 0;
+	// AGENTS.md: master::load_player_from_file()'s export_uid(ob) call
+	// only sets our UID to Root -- export_uid() never touches euid at
+	// all (it's a UID-only ownership transfer, not a privilege grant --
+	// confirmed against the driver's own f_export_uid()). Without this
+	// explicit seteuid(), our euid stays whatever it was cleared to
+	// (0/none), so restore_object() below fails master::check_access()'s
+	// permission check on /adm/save/users/... ("*restore_object: read
+	// permission denied") on every single restore -- i.e. every login to
+	// an existing account, corpus-wide, since new-character registration
+	// never calls this function at all. Our UID is "Root" at this point
+	// (just exported), so valid_seteuid()'s own uid==Root special case
+	// lets this succeed.
+	seteuid(UID_ROOT);
+	res = restore_object(save_file_name(name));
+	seteuid(0);
+	return res;
+}
+	
+// Lars had a HORRENDOUS security hole here...
+
+void save_player(string name) {
+	if( name && name != (string)this_object()->query_name() ) {
+	    log_file("ILLEGAL", "save_player: "+this_object()->query_name()+
+		" tried: "+name);
+	    return;
+	}
+	this_object()->compute_autoload_array(); /* Tru - 92/02/11 */
+	if( !name ) name = (string)this_object()->query_name();
+	seteuid(0);
+	master()->save_player_to_file(this_object());
+
+	if(find_object(WEB_D))
+		catch(WEB_D->update_player(name));
+
+	seteuid(name);
+}
+
+void assure_save_dir_exists(string file) {
+    string *elems;
+    string path;
+    int i;
+
+    elems = explode(file, "/");
+    path = "";
+    for (i=0; i < sizeof(elems) - 1; i++) {
+		path += "/" + elems[i];
+		if (file_size(path) == -1) {
+	    	write("Make dir " + path + "\n");
+	    	mkdir(path);
+		}
+    }
+}
+
+/*
+ * This one will be called from the master object, which will grant us
+ * uid "root" temporarily.
+ */
+nomask void
+actually_save_player(string name) {
+    string tmp;
+
+	if (previous_object() != master()) return;
+    seteuid(UID_ROOT);
+    assure_save_dir_exists(save_file_name(name));
+    save_object(save_file_name(name));
+    seteuid(0);
+}

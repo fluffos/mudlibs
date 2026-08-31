@@ -1,0 +1,396 @@
+/*Programmed by Pyro789x  August 1st, 2008
+ * extended mapper program */
+
+#include <std.h>
+#include <daemons.h>
+
+//#define NO_REPEATS
+#define ONE_WAY_ROOM_COLOR "%^ORANGE%^"
+#define OVERLAPPING_ROOM_COLOR "%^RED%^"
+#define ROOM_DOESNT_EXIST_COLOR "%^BOLD%^%^BLACK%^"
+#define THIS_PLAYER_SYMBOL "%^RED%^X%^RESET%^"
+#define MOB_IN_ROOM_SYMBOL "%^GREEN%^*%^RESET%^"
+
+inherit DAEMON;
+
+/** Global Variables **********************************************/
+mapping roomIds;
+mapping dMarks;
+int maxDepth;
+int showInvisExits;
+string* roomsToExplore;
+#ifdef NO_REPEATS
+mapping trackedRooms;
+#endif
+int smallestValue;
+object tp;
+int vagueExits;
+string errors;
+/******************************************************************/
+
+/** Function Prototypes *******************************************/
+void initialize_map(int maxDepth);
+varargs string get_map(int newMaxDepth, object who, int invisExits, int useVagueExits);
+int* getDirOffsets(string exit);
+void start_exploration(string room_path);
+void make_vague(int x, int y);
+void explore_room(int x, int y, int depth, string room_path);
+int mark_room(int x, int y, string room_path);
+varargs int mark_room_exit(int x, int y, string dir, string color);
+string consolidateSymbols(string s1, string s2);
+int get_max_x();
+int get_max_y();
+string get_map_visual();
+void finalize();
+int rooms_connected(string origRoom, string dir, string thatRoom);
+
+varargs string* get_adjacent_rooms(int newMaxDepth, object who, int invisExits, int useNonstandardExits);
+string* start_adj_exploration(string room_path, int useNonstandardExits);
+void explore_adj_room(int depth, string room_path, int useNonstandardExits);
+/******************************************************************/
+
+void initialize_map(int newMaxDepth) {
+  roomIds = ([]);
+  dMarks = ([]);
+  maxDepth = newMaxDepth;
+#ifdef NO_REPEATS
+  trackedRooms = ([]);
+#endif
+  smallestValue = newMaxDepth*4 - 5;
+  errors = "";
+}
+
+varargs string get_map(int newMaxDepth, object who, int invisExits, int useVagueExits) {
+  newMaxDepth = !nullp(newMaxDepth)?newMaxDepth:2;
+  showInvisExits = !nullp(invisExits)?invisExits:0;
+  vagueExits = !nullp(useVagueExits)?useVagueExits:0;
+  tp = !nullp(who)?who:this_player();
+  initialize_map(newMaxDepth);
+  mark_room(maxDepth, maxDepth, file_name(environment(tp)));
+  start_exploration(file_name(environment(tp)));
+  //explore_room(maxDepth, maxDepth, 0, file_name(environment(tp)));
+
+  finalize();
+  return get_map_visual()+(wizardp(this_player())?(errors!=""?"\nErrors:\n"+errors:""):"");
+}
+
+int* getDirOffsets(string exit) {
+  if(!exit || exit == "") return 0;
+  if(exit == "up" || exit == "down" || exit == "u" || exit == "d") return 0;
+  if(exit == "north" || exit == "n") return ({ 0, -1 });
+  if(exit == "northeast" || exit == "ne") return ({ 1, -1 });
+  if(exit == "east" || exit == "e") return ({ 1, 0 });
+  if(exit == "southeast" || exit == "se") return ({ 1, 1 });
+  if(exit == "south" || exit == "s") return ({ 0, 1 });
+  if(exit == "southwest" || exit == "sw") return ({ -1, 1 });
+  if(exit == "west" || exit == "w") return ({ -1, 0 });
+  if(exit == "northwest" || exit == "nw") return ({ -1, -1 });
+  return 0;
+}
+
+int rooms_connected(string origRoom, string dir, string thatRoom) {
+  string oldDir = dir;
+  object tr = load_object(thatRoom);
+  if(!tr) return 2;
+  if(dir == "east") dir = "west";
+  else if(dir == "west") dir = "east";
+  else if(dir == "north") dir = "south";
+  else if(dir == "south") dir = "north";
+  else if(dir == "southeast") dir = "northwest";
+  else if(dir == "northwest") dir = "southeast";
+  else if(dir == "northeast") dir = "southwest";
+  else if(dir == "southwest") dir = "northeast";
+  else return 0;
+
+  if(( tr->query_exit(dir)[<2..<1]==".c" ? tr->query_exit(dir)[0..<3] : tr->query_exit(dir) )
+    == ( origRoom[<2..<1]==".c" ? origRoom[0..<3] : origRoom ) )
+      return 1;
+  errors += origRoom+" exit "+oldDir+": "+thatRoom+"\n"+thatRoom+" exit "+dir+": "+tr->query_exit(dir)+"\n";
+  return 0;
+}
+
+void make_vague(int x, int y) {
+  x = x*4 + 1;
+  y = y*2 + 1;
+  if(dMarks[""+x+","+(y+1)+""]) dMarks[""+x+","+(y+1)+""] = "?";
+  if(dMarks[""+x+","+(y-1)+""]) dMarks[""+x+","+(y-1)+""] = "?";
+  if(dMarks[""+(x+2)+","+y+""]) dMarks[""+(x+2)+","+y+""] = "?";
+  if(dMarks[""+(x-2)+","+y+""]) dMarks[""+(x-2)+","+y+""] = "?";
+  if(dMarks[""+(x-2)+","+(y+1)+""]) dMarks[""+(x-2)+","+(y+1)+""] = "?";
+  if(dMarks[""+(x-2)+","+(y-1)+""]) dMarks[""+(x-2)+","+(y-1)+""] = "?";
+  if(dMarks[""+(x+2)+","+(y-1)+""]) dMarks[""+(x+2)+","+(y-1)+""] = "?";
+  if(dMarks[""+(x+2)+","+(y+1)+""]) dMarks[""+(x+2)+","+(y+1)+""] = "?";
+
+  if(dMarks[""+(x+1)+","+(y-1)+""]) dMarks[""+(x+1)+","+(y-1)+""] = " ";
+  if(dMarks[""+(x-1)+","+(y+1)+""]) dMarks[""+(x-1)+","+(y+1)+""] = " ";
+}
+
+void start_exploration(string room_path) {
+  roomsToExplore = ({ ""+maxDepth+"#"+maxDepth+"#"+room_path });
+  for(int i = 0; i< maxDepth; i++) {
+    string* tempExploreRooms = roomsToExplore;
+    roomsToExplore = ({});
+    foreach(string room in tempExploreRooms) {
+      string *temp = explode(room, "#");
+      explore_room(to_int(temp[0]), to_int(temp[1]), i, temp[2]);
+    }
+  }
+}
+
+/*To do: currently, rooms are explored depth-first. The problem with this is, a room could be
+ *evaluated at a further distance from the original point than another exit could have evaluated
+ *at. Instead, modify room code to do a breadth-first search, so that each room is reached at
+ *the same distance of the other rooms. EDIT: completed by Pyro Aug. 1st 2007 */
+void explore_room(int x, int y, int depth, string room_path) {
+  object tr = load_object(room_path);
+  string* theseExits;
+  if(!tr) return;
+  if(depth >= maxDepth) return;
+
+  //for each direction in this room, if it's a direction that can be mapped, add the direction's mark
+  //to the room connection markings. Attempt to mark the room
+  //using: mark_room(x, y, room_path); if it fails, call
+  //vaguify(x,y), to set all room connection markings to that room to '?', as it's
+  //impossible to tell by looking at the map which connections should work.
+  //alternate solution: if VAGUE_EXITS is not defined, attempt to mark_room() before
+  //adding the direction mark, and if mark_room fails then do nothing.
+
+  if(showInvisExits) theseExits = tr->query_exits();
+  else theseExits = tr->query_obvious_exits();
+  theseExits = map(theseExits, (: ($1[<2..<1] == ".c" ? $1[0..<3] : $1) :) );
+  foreach(string exit in theseExits) {
+    int* dir = getDirOffsets(exit);
+    int returnvalue;
+    if(exit == "up" || exit == "down" || exit == "u" || exit == "d") {
+      mark_room_exit(x, y, exit);
+      continue;
+    }
+    if(!dir) continue;
+    dir[0] += x;
+    dir[1] += y;
+
+    if(vagueExits) {
+      if(!rooms_connected(room_path, exit, tr->query_exit(exit))) {
+        mark_room_exit(x, y, exit, ONE_WAY_ROOM_COLOR);
+      }
+      else {
+	mark_room_exit(x, y, exit);
+	returnvalue = mark_room(dir[0], dir[1], tr->query_exit(exit));
+	if(!returnvalue) {
+	  make_vague(dir[0], dir[1]);
+          errors += room_path+" exit: "+exit+" to room "+tr->query_exit(exit)+" overlaps previous room at that location.\n";
+	}
+	else {
+	  if(returnvalue == 1)
+	    roomsToExplore += ({ ""+dir[0]+"#"+dir[1]+"#"+tr->query_exit(exit) });
+	}
+      }
+    } else {
+      returnvalue = mark_room(dir[0], dir[1], tr->query_exit(exit));
+      if(returnvalue) {
+	mark_room_exit(x, y, exit);
+	if(returnvalue == 1)
+	  roomsToExplore += ({ ""+dir[0]+"#"+dir[1]+"#"+tr->query_exit(exit) });
+      }
+    }
+
+  }
+}
+
+//attempts to set the room's path at position x,y to room_path.
+//If x,y is already taken, set it instead to ?, as there as been an overlap in rooms.
+int mark_room(int x, int y, string room_path) {
+  string id = ""+x+","+y+"";
+  room_path = room_path[<2..<1]==".c" ? room_path[0..<3] : room_path;
+  if(roomIds[id]) {
+    if(roomIds[id] == room_path) return 2;
+    if(vagueExits && roomIds[id] != "!") {
+      errors += "Room "+roomIds[id]+" was overwritten at position "+x+","+y+"\n";
+      roomIds[id] = "!";
+    }
+    return 0;
+  }
+  roomIds[id] = room_path;
+  return 1;
+}
+
+varargs int mark_room_exit(int x, int y, string dir, string color) {
+  string symbol;
+  string charloc;
+  if(nullp(x) || nullp(y) || nullp(dir)) return 0;
+  if(nullp(color)) color = "";
+  x = x*4 + 1;
+  y = y*2 + 1;
+  if(dir == "south" || dir == "s") {
+    symbol = "|";
+    charloc = ""+x+","+(y+1)+"";
+  }
+  else if(dir == "north" || dir == "n") {
+    symbol = "|";
+    charloc = ""+x+","+(y-1)+"";
+  }
+  else if(dir == "east" || dir == "e") {
+    symbol = "-";
+    charloc = ""+(x+2)+","+y+"";
+  }
+  else if(dir == "west" || dir == "w") {
+    symbol = "-";
+    charloc = ""+(x-2)+","+y+"";
+  }
+  else if(dir == "southwest" || dir == "sw") {
+    symbol = "/";
+    charloc = ""+(x-2)+","+(y+1)+"";
+  }
+  else if(dir == "northwest" || dir == "nw") {
+    symbol = "\\";
+    charloc = ""+(x-2)+","+(y-1)+"";
+  }
+  else if(dir == "northeast" || dir == "ne") {
+    symbol = "/";
+    charloc = ""+(x+2)+","+(y-1)+"";
+  }
+  else if(dir == "southeast" || dir == "se") {
+    symbol = "\\";
+    charloc = ""+(x+2)+","+(y+1)+"";
+  }
+  else if(dir == "up" || dir == "u") {
+    symbol = "+";
+    charloc = ""+(x+1)+","+(y-1)+"";
+  }
+  else if(dir == "down" || dir == "d") {
+    symbol = "-";
+    charloc = ""+(x-1)+","+(y+1)+"";
+  }
+  if(charloc) {
+    //this was moved to finalize() to save CPU time
+    //if(x-4 < smallestValue) smallestValue = x-4;
+    dMarks[charloc] = color+consolidateSymbols(symbol, dMarks[charloc]?dMarks[charloc]:" ")+((color&&color!="")?"%^RESET%^":"");
+    return 1;
+  }
+  return 0;
+}
+
+string consolidateSymbols(string s1, string s2) {
+  s1 = strip_color(s1);
+  s2 = strip_color(s2);
+  if(s1 && s1 == "?") return "?";
+  if(s2 && s2 == "?") return "?";
+  if(!s1 || !s2) return " ";
+  if(s1 == " ") return s2;
+  if(s2 == " ") return s1;
+  if((s1 == "\\" && s2 == "/") || (s1 == "/" && s2 == "\\")) return "X";
+  if((s1 == "\\" && s2 == "X") || (s1 == "X" && s2 == "\\")) return "X";
+  if((s1 == "/" && s2 == "X") || (s1 == "X" && s2 == "/")) return "X";
+  if(s1 == s2) return s1;
+  return "?";
+}
+
+int get_max_x() {
+  return (((maxDepth*2)+1)*4)-1;
+}
+
+int get_max_y() {
+  return (((maxDepth*2)+1)*2)-1;
+}
+
+string get_map_visual() {
+  string returnValue = "";
+  //buffer is a reserved name apparently
+  string buffrawr = "";
+  int maxX = get_max_x();
+  int maxY = get_max_y();
+  int printNewline = 0;
+  for(int y = 0; y<=maxY; y++) {
+    for(int x = smallestValue; x<=maxX; x++) {
+      if(dMarks[""+x+","+y+""]) {
+	returnValue += buffrawr;
+	buffrawr = "";
+	printNewline = 1;
+	returnValue += dMarks[""+x+","+y+""];
+      }
+      else buffrawr += " ";
+    }
+    if(printNewline) {
+      returnValue += "\n";
+      printNewline = 0;
+    }
+    buffrawr = "";
+  }
+  return returnValue;
+}
+
+//run through keys(roomIds) and add dMarks for each room
+void finalize() {
+  foreach(string key in keys(roomIds)) {
+    object tr = load_object(roomIds[key]);
+    int *location = map(explode(key, ","), (: to_int($1) :) );
+    location[0] = location[0]*4 + 1;
+    location[1] = location[1]*2 + 1;
+    if(location[0]-4 < smallestValue) smallestValue = location[0]-4;
+    dMarks[""+(location[0]-1)+","+location[1]+""] = !tr?(roomIds[key]=="!"?OVERLAPPING_ROOM_COLOR:ROOM_DOESNT_EXIST_COLOR)+"[%^RESET%^":"[";
+    if(tr && sizeof(tr->describe_living_contents()))
+      dMarks[""+(location[0])+","+location[1]+""] = MOB_IN_ROOM_SYMBOL;
+    if(wizardp(this_player()) && tr && present(this_player(), tr)) dMarks[""+(location[0])+","+location[1]+""] = THIS_PLAYER_SYMBOL;
+    dMarks[""+(location[0]+1)+","+location[1]+""] = !tr?(roomIds[key]=="!"?OVERLAPPING_ROOM_COLOR:ROOM_DOESNT_EXIST_COLOR)+"]%^RESET%^":"]";
+  }
+  dMarks[""+(maxDepth*4 + 1)+","+(maxDepth*2 + 1)+""] = THIS_PLAYER_SYMBOL;
+}
+
+
+varargs string* get_adjacent_rooms(int newMaxDepth, object who, int invisExits, int useNonstandardExits) {
+  newMaxDepth = !nullp(newMaxDepth)?newMaxDepth:1;
+  showInvisExits = !nullp(invisExits)?invisExits:0;
+  tp = !nullp(who)?who:this_player();
+  initialize_map(newMaxDepth);
+  return start_adj_exploration(file_name(environment(tp)), useNonstandardExits);
+}
+
+string* start_adj_exploration(string room_path, int useNonstandardExits) {
+  int currRoom = 0;
+  roomsToExplore = ({ room_path });
+  for(int i = 0; i< maxDepth; i++) {
+    string* tempExploreRooms = roomsToExplore[currRoom..<1];
+    //roomsToExplore = ({ });
+    foreach(string room in tempExploreRooms) {
+      explore_adj_room(i, room, useNonstandardExits);
+    }
+  }
+
+  return roomsToExplore;
+}
+
+
+void explore_adj_room(int depth, string room_path, int useNonstandardExits) {
+  object tr = load_object(room_path);
+  int i;
+  string* theseExits;
+
+  if(!tr) return;
+  if(depth >= maxDepth) return;
+
+
+  if(showInvisExits) theseExits = tr->query_exits();
+  else theseExits = tr->query_obvious_exits();
+  foreach(string exit in theseExits) {
+    string exitName = tr->query_exit(exit);
+    exitName = exitName[<2..<1] == ".c" ? exitName[0..<3] : exitName;
+
+    if(!useNonstandardExits) {
+      if(!(exit == "up" || exit == "down" || exit == "u" || exit == "d"
+        || exit == "east" || exit == "e" || exit == "west" || exit == "w"
+        || exit == "north" || exit == "n" || exit == "south" || exit == "s"
+        || exit == "northeast" || exit == "ne" || exit == "northwest" || exit == "nw"
+        || exit == "southeast" || exit == "se" || exit == "southwest" || exit == "w")) {
+          //do not add this room to the list
+          continue;
+      }
+    }
+
+    i=sizeof(roomsToExplore);
+    roomsToExplore -= ({ exitName });
+    if(i > sizeof(roomsToExplore))
+      roomsToExplore = ({ exitName }) + roomsToExplore;
+    else
+      roomsToExplore += ({ exitName });
+  }
+}

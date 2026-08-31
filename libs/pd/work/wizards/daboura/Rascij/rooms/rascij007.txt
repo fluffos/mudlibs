@@ -1,0 +1,28 @@
+#include <std.h>
+#include <durst.h>
+inherit ROOM;
+void create() {
+   ::create();
+	set_name("Rascij");
+	set_short("Small Camp");
+	set_properties(([
+        "light"       : 2,        
+        "night light" : 1,
+        ]));
+	set_day_long("An old tent is set up here, an old weapons rack has been placed near it. Many fallen leaves have been piled up, for some unknown purpose. The leaves on the trees rustle softly in the wind.");
+	set_night_long("Nothing seems right here, dark shadows dance everywhere, however, nothing else seems to be moving. A tent, which can barley be seen, has some strange shapes cast upon it from some unknown source.");
+	 set_items(([
+            "leaves" : "A small pile of dead leaves",
+            "tent"   : "A tattered old tent",
+	]));
+	set_exits( ([
+	"southwest"  : ROOMS"rascij008.c",
+	"east" : ROOMS"rascij006.c",
+	"enter" : ROOMS"rascij020.c",
+	]) );
+}
+void reset() {
+   ::reset();
+if (!present("camper", this_object()))
+     new(MOB"camper.c")->move(this_object());
+}

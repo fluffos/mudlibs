@@ -1,0 +1,18 @@
+#include <std.h>
+#include <durst.h>
+inherit ROOM;
+void create() {
+   ::create();
+	set_name("Rascij");
+	set_short("Small Camp");
+	set_properties(([
+        "light"       : 2,        
+        "night light" : 1,
+        ]));
+	set_day_long("This clearing in the forest seems to be a natural one. It doesn't look like anything has been removed to make this place clear. Dozens of birds fly through the sky, with almost no notice that anything is going on below them.");
+	set_night_long("To the northeast is a small campfire, it gives off just enough light to allow the clearing to be seen. The campfire casts strange shadows that look to almost be dancing around the fire.");
+	set_exits( ([
+	"southeast"  : ROOMS"rascij011.c",
+	"north" : ROOMS"rascij009.c",
+	]) );
+}

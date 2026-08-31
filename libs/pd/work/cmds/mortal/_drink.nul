@@ -1,0 +1,95 @@
+#include <std.h>
+#include <rooms.h>
+#include <dirs.h>
+#define FAIL(s) return notify_fail(s+"\n")
+
+inherit DAEMON;
+
+void help() {
+  if (this_player()->query_race() == "vampire" && find_object(DIR_CLASS_CMDS+"_drink"))
+    find_object(DIR_CLASS_CMDS+"_drink")->help();
+  else
+  message("help",
+    "Syntax: <drink [beverage]>\n\n"
+    "This lets you drink something. Alcoholic drinks can provide a small "
+    "boost of stamina, but don't contribute to the natural healing process much. "
+    "Other drinks can give you an overall boost in health and help with magic regeneration. "
+    "Those with caffeine will help you sober up a little more quickly.",
+    this_player() );
+}
+
+int cmd_drink(string str) {
+  object tp = this_player();
+  object env = environment(tp);
+  object drink, empty;
+  string mymsg, yourmsg, type;
+  int poison, disable, strength;
+  int hp, sp, mp;
+  mixed extra;
+
+  if (this_player()->query_race() == "vampire" && find_object(DIR_CLASS_CMDS+"_drink"))
+    return find_object(DIR_CLASS_CMDS+"_drink")->cmd_drink(str);
+
+  if (tp->query_busy()) FAIL("You are too busy to drink.");
+  if (tp->query_ghost()) FAIL("The dead do not need to drink.");
+  if (tp->query_current_attacker()) FAIL("You are too busy fighting!");
+  if (!str) FAIL("Drink what?");
+
+  drink = present(str, tp);
+  if (!drink) FAIL("You have nothing by that name.");
+  if (!drink->is_drink()) FAIL("You can't drink that.");
+
+  type = drink->query_type();
+  strength = drink->query_strength();
+  disable = drink->query_disable();
+  poison = drink->query_poison();
+  extra = drink->query_extra();
+
+  mymsg = drink->query_my_mess();
+  yourmsg = drink->query_your_mess();
+
+  switch (type) {
+  case "alcoholic":
+    if (tp->query_max_intox() - tp->query_intox() < strength) FAIL("You are too drunk!");
+    tp->add_intox(strength);
+    mp = strength/2;
+    hp = strength;
+    sp = strength*2;
+  break;
+
+  case "caffeine":
+    if (tp->query_max_quenched() - tp->query_quenched() < strength) FAIL("You are too bloated!");
+    tp->add_quenched(strength);
+    tp->add_intox(-strength);
+    hp = sp = mp = strength*3/4;
+  break;
+
+  default:
+    if (tp->query_max_quenched() - tp->query_quenched() < strength) FAIL("You are too bloated!");
+    tp->add_quenched(strength);
+    hp = sp = strength;
+    mp = strength*3/2;
+  }
+
+  message("info", mymsg, tp);
+  message("info", yourmsg, env, tp);
+
+  tp->add_hp(hp);
+  tp->add_sp(sp);
+  tp->add_mp(mp);
+
+  if (poison) tp->add_poisoned(poison);
+  if (disable) tp->set_disable(disable);
+  if (functionp(extra)) evaluate(extra);
+
+  if (empty = drink->clone_empty()) {
+    drink->move(ROOM_CACHE);
+    if (empty->move(tp))
+      empty->move(env);
+  }
+
+  if (drink) drink->remove();
+
+  return 1;
+}
+
