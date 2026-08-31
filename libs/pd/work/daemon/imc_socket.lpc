@@ -70,191 +70,169 @@
 */
 //#define REQUIRE_PRIV	"Mudlib:socket"
 
-private int	style;
-private int	fdOwned = -1;	/* no socket yet */
-private function	read_func;
-private function	close_func;
+private int style;
+private int fdOwned = -1; /* no socket yet */ private function read_func;
+private function close_func;
 
-private mixed *	write_queue = ({ });
-private int	blocked;
+private mixed *write_queue = ({});
+private int blocked;
 
 
 int stat_me() {
-	printf("%O: connected to %O\n", this_object(), socket_address(fdOwned));
-	printf("    read_func=%O  close_func=%O\n", read_func, close_func);
-	if ( sizeof(write_queue) ) printf("queue: %O\n", write_queue);
-    	return 1;
+  printf("%O: connected to %O\n", this_object(), socket_address(fdOwned));
+  printf("    read_func=%O  close_func=%O\n", read_func, close_func);
+  if (sizeof(write_queue)) printf("queue: %O\n", write_queue);
+  return 1;
 }
 
 
 //### socket_connect() doesn't take funcptr yet...
-/* private */ protected nomask void read_callback(int fd, mixed message)
-{
-    catch(evaluate(read_func, this_object(), message));
+/* private */ protected nomask void read_callback(int fd, mixed message) {
+  catch(evaluate(read_func, this_object(), message));
 }
 
 
-private nomask void close_callback(int fd)
-{
+private nomask void close_callback(int fd) {
 
-    /* this descriptor is closed. don't try to close again. */
-    fdOwned = -1;
+  /* this descriptor is closed. don't try to close again. */
+  fdOwned = -1;
 
-    if ( close_func )
-    {
-	catch(evaluate(close_func, this_object()));
-    }
+  if (close_func) {
+    catch(evaluate(close_func, this_object()));
+  }
 
-    destruct(this_object());
+  destruct(this_object());
 }
 
 //### socket_connect() doesn't take a funcptr yet
-/* private */ protected nomask void write_callback(int fd){
-    /*
+/* private */ protected nomask void write_callback(int fd) {
+  /*
     ** No longer blocked (can accept new data).
     */
-    
-    blocked = 0;
 
-    while ( sizeof(write_queue) > 0 )
-    {
-	int err;
+  blocked = 0;
 
-	err = socket_write(fd, write_queue[0]);
-
-	if ( err == EEALREADY )
-	{
-            // write_callback will get called automatically.
-            blocked = 1;
-	    return;
-	}
-        if ( err == EEWOULDBLOCK )
-        {
-            // write_callback needs to get called manually.
-            blocked = 1;
-            call_out("write_callback",1,fd);
-            return;
-        }
-
-	/*
-	** Remove the item from the queue.  It has been written.
-	*/
-	write_queue = write_queue[1..];
-
-	if ( err == EECALLBACK )
-	{
-	    /* done for now... wait for the next callback */
-	    blocked = 1;
-	    return;
-	}
-	if ( err < 0 )
-	{
-	    error("could not write: " + socket_error(err) + "\n");
-	}	
-    }
-}
-
-/* private */ nomask void release_callback(int fdToAcquire)
-{
+  while (sizeof(write_queue) > 0) {
     int err;
 
-    fdOwned = fdToAcquire;
-    err = socket_acquire(fdOwned,
-			 (: read_callback :),
-			 (: write_callback :),
-			 (: close_callback :));
-    if ( err < 0 )
-	error("could not release: " + socket_error(err) + "\n");
+    err = socket_write(fd, write_queue[0]);
+
+    if (err == EEALREADY) {
+      // write_callback will get called automatically.
+      blocked = 1;
+      return;
+    }
+    if (err == EEWOULDBLOCK) {
+      // write_callback needs to get called manually.
+      blocked = 1;
+      call_out("write_callback", 1, fd);
+      return;
+    }
 
     /*
+	** Remove the item from the queue.  It has been written.
+	*/
+    write_queue = write_queue[1..];
+
+    if (err == EECALLBACK) {
+      /* done for now... wait for the next callback */
+      blocked = 1;
+      return;
+    }
+    if (err < 0) {
+      error("could not write: " + socket_error(err) + "\n");
+    }
+  }
+}
+
+/* private */ nomask void release_callback(int fdToAcquire) {
+  int err;
+
+  fdOwned = fdToAcquire;
+  err = socket_acquire(fdOwned,
+    (: read_callback :),
+    (: write_callback :),
+    (: close_callback :));
+  if (err < 0)
+    error("could not release: " + socket_error(err) + "\n");
+
+  /*
     ** Deliver a 0 indicating a new connection (and providing self)
     */
-    catch(evaluate(read_func, this_object(), 0));
+  catch(evaluate(read_func, this_object(), 0));
 }
 
 
 //### need a way to protect this from random writes
-varargs nomask void send(mixed message, string address)
-{
-    int	err;
+varargs nomask void send(mixed message, string address) {
+  int err;
 
-    if ( address )
-	err = socket_write(fdOwned, message, address);
-    else if ( blocked )
-    {
-	/*
+  if (address)
+    err = socket_write(fdOwned, message, address);
+  else if (blocked) {
+    /*
 	** If we are blocked, then the socket doesn't want us to send
 	** any more.  Place it on our queue for sending later.
 	*/
-	write_queue += ({ message });
-    }
-    else
-    {
-	while ( sizeof(message) )
-	{
-	    err = socket_write(fdOwned, message);
+    write_queue += ({ message });
+  } else {
+    while (sizeof(message)) {
+      err = socket_write(fdOwned, message);
 
-	    if ( err == EEALREADY )
-	    {
-		// write_callback will get called automatically.
-		blocked = 1;
-		write_queue += ({ message });
-		return;
-	    }
-	    if ( err == EEWOULDBLOCK )
-	    {
-		// write_callback needs to get called manually.
-		blocked = 1;
-		write_queue += ({ message });
-		call_out("write_callback", 1, fdOwned);
-		return;
-	    }
-	    if ( err == EECALLBACK )
-	    {
-		/*
+      if (err == EEALREADY) {
+        // write_callback will get called automatically.
+        blocked = 1;
+        write_queue += ({ message });
+        return;
+      }
+      if (err == EEWOULDBLOCK) {
+        // write_callback needs to get called manually.
+        blocked = 1;
+        write_queue += ({ message });
+        call_out("write_callback", 1, fdOwned);
+        return;
+      }
+      if (err == EECALLBACK) {
+        /*
 		** Socket took the message but is blocked until it can
 		** write it out.  Set a flag so that we don't write any
 		** more until we get the callback.
 		*/
-		blocked = 1;
-		return;
-	    }
+        blocked = 1;
+        return;
+      }
 
-	    message = "";
-	}
+      message = "";
     }
+  }
 
-    if ( err < 0 )
-	error("could not write: " + socket_error(err) + "\n");
+  if (err < 0)
+    error("could not write: " + socket_error(err) + "\n");
 }
 
-void remove()
-{
-    int err;
+void remove() {
+  int err;
 
-    if ( fdOwned >= 0 )
-    {
-	err = socket_close(fdOwned);
-	//if ( err < 0 ) logging could go here
-		
-    }
+  if (fdOwned >= 0) {
+    err = socket_close(fdOwned);
+    //if ( err < 0 ) logging could go here
 
-    destruct(this_object());
+  }
+
+  destruct(this_object());
 }
 
-nomask mixed *address()
-{
-    string tmp;
-    string host;
-    int port;
+nomask mixed *address() {
+  string tmp;
+  string host;
+  int port;
 
-    tmp = socket_address(fdOwned);
-    sscanf(tmp, "%s %d", host, port);
-    return ({ host, port });
+  tmp = socket_address(fdOwned);
+  sscanf(tmp, "%s %d", host, port);
+  return ({ host, port });
 }
 
-nomask int local_port()
-{
+nomask int local_port() {
   string address;
   int port;
   sscanf(socket_address(fdOwned), "%s %d", address, port);
@@ -264,24 +242,24 @@ nomask int local_port()
 nomask string local_address() {
   string address;
   int port;
-    sscanf(socket_address(fdOwned), "%s %d", address, port);
+  sscanf(socket_address(fdOwned), "%s %d", address, port);
   return address;
 }
 
-void create(int typewhichisnotused,mixed addy, mixed readfcn , mixed closefcn) {
-	int err;
+void create(int typewhichisnotused, mixed addy, mixed readfcn, mixed closefcn) {
+  int err;
 #ifdef IMC_LIMA
-	set_privilege(1);
+  set_privilege(1);
 #endif
-    	if (!clonep()) return;
-    	read_func  = readfcn;
-    	close_func = closefcn;
-   	fdOwned = socket_create(1 /* STREAM */,
-		(: read_callback :),
-		(: close_callback :));
-	if ( fdOwned < 0 )
-		error("could not create socket: " + socket_error(fdOwned) + "\n");
-	err = socket_connect(fdOwned, addy, "read_callback", "write_callback");
-	if ( err < 0 )
-	    error("could not listen to socket: " + socket_error(err) + "\n");
+  if (!clonep()) return;
+  read_func = readfcn;
+  close_func = closefcn;
+  fdOwned = socket_create(1 /* STREAM */,
+    (: read_callback :),
+    (: close_callback :));
+  if (fdOwned < 0)
+    error("could not create socket: " + socket_error(fdOwned) + "\n");
+  err = socket_connect(fdOwned, addy, "read_callback", "write_callback");
+  if (err < 0)
+    error("could not listen to socket: " + socket_error(err) + "\n");
 }
