@@ -334,3 +334,44 @@ Not yet attempted this session -- native driver boot/play verified
 only. No known WASM-blocking pattern identified during this pass (no
 `sockets`-package dependency, no `query_ip_number()`-adjacent login
 gate given there's no login/ban system at all).
+
+## 9. §10.7 deep functional test (2026-08-31) -- verified clean, plus WASM closed out
+
+Definition of done for this lib, per its own §2/§5 precedent (a bare
+engine skeleton with no game content): every implemented dev command
+still produces correct output, exercised again end to end on the
+native driver in one continuous session -- `who`, `say` (correctly
+silent to the speaker), `eval` (`return 1+1;` -> `Result = 2`),
+`codefor` (`return 3+3;` -> correct constant-folded disassembly,
+`byte 6` / `return`), `dest` (correctly reports "can't find that." for
+a nonexistent path), `update /public/cmds/who` (silent success,
+`who` still works immediately afterward -- confirms the reload is
+real, not just a silent no-op), `ed` (created a new file, wrote a
+line, saved, exited cleanly -- confirmed the file's actual byte count
+matched), `rm` (confirmed the file was actually gone from disk
+afterward), `tests /core/sefun/tests/efuns/sizeof` (silent success),
+the bare recursive `tests` walk (reproduced the exact same two
+already-documented, expected stopping points from §4h/§5 -- the `##`
+token-pasting gap in `compiler/succeed.lpc` caught and reported
+without aborting the walk, then the intentional `Check failed.` in
+`compiler/fail/missing_type.lpc` correctly halting the whole run by
+the suite's own design), and `quit` (`Bye.`, clean disconnect). Zero
+new findings -- every fix from §4 still holds, no regression.
+
+**WASM, closed out this session** (§8's own "not yet attempted" note):
+`node scripts/wasm_client.js ~/src/fluffos/build-wasm/src
+libs/sluggymud --send "who" --send "eval return 5+5;" --send "quit"`
+-- identical correct output to native (`Result = 10`, clean `Bye.`).
+Also ran `scripts/wasm_boot_watch.sh sluggymud 200`, a 200-second
+long-sit with one connection open the whole time to catch any
+lazily-triggered daemon failure a short smoke test would miss --
+clean, no new failure signatures beyond the already-known cosmetic
+`Unable to open log file` line. `wasm_status: playable`.
+
+Zero errors in the driver's own captured stdout across the whole
+native session (this build's `debug.log` is dead for the process's
+whole life per AGENTS.md §10.9, so stdout is the only reliable error
+channel) beyond the intentional, by-design compiler-fixture errors
+from the `fail/*.lpc` test files themselves (each one IS a "this
+should fail to compile" fixture; the compiler correctly rejecting
+them is the test passing, not a bug).
