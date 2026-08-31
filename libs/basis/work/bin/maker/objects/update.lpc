@@ -1,0 +1,109 @@
+// This file is part of the TMI mudlib distribution.
+// Please include this header if you use this code.
+// Written by Sulam(12-19-91)
+
+// Modified 3/11/92 By Huthar to allow updating of master.c
+// It is important to put the file_size() after the destruction
+// of the object as file_size does an apply_master() which will
+// cause the master object to load itself should it not exist.
+
+// Modifed 92/04/25 by Truilkan to do The Right Thing (TM) -- i.e. avoid
+// leaving people in the void whenever possible (even when updating a remote
+// room).
+
+#include <config.h>
+#include <daemons.h>
+#include <attributes.h>
+#include <search_paths.h>
+#include <move.h>
+inherit BIN;
+
+string *path;
+
+#define TEMP_ROOM VOID_OB
+
+int do_command(string str) {
+  object *ob, obb, ob2;
+  string file, res, *pair2, *pair, tmp;
+  int n, is_bin;
+
+  is_bin = 0;
+  if (str) {  /* update the specified file */
+    file = resolv_path((string)this_player()->query(a_cwd), str);
+    if (!file_exists(file)) {
+      tmp = (string)COMMAND_D->where(str, path);
+      if (tmp) {
+        file = tmp;
+      }
+    }
+    is_bin = (file[0..4] == "/bin/");
+    pair = path_file(file);
+    pair2 = path_file((string)COMMAND_D->where(pair[1], path));
+    ob2 = find_object(file);
+    if (!ob2) {
+      write(file + ": " + ((res = catch(call_other(file, "???"))) ?
+        res : "loaded.") + "\n");
+      if (!res && is_bin) {
+        write("update: rehashing...\n");
+        COMMAND_D->rehash(pair[1], pair[0]);
+      }
+      return 1;
+    }
+  } else {    /* update the user's environment */
+    ob2 = environment(this_player());
+    if (ob2)
+      file = file_name(ob2);
+    else {
+      notify_fail("You have no environment.\n");
+      return 0;
+    }
+  }
+  if (ob2) {
+    ob = all_inventory(ob2);
+    for (n = 0; n < sizeof(ob); n++) { /* move all players to saferoom */
+      if (interactive(ob[n]))
+        ob[n]->move(TEMP_ROOM);
+    }
+    res = catch(ob2->remove());
+    if (res)
+      write(file + ": error in remove() - " + res + "\n");
+    if (ob2) /* if the call to remove failed */
+      destruct(ob2);
+    if (ob2) {
+      notify_fail(file + ": couldn't destruct.\n");
+      return 0;
+    }
+    /* important not to remove the file_size(file) line */
+    file_size(file); /* 'update /adm/obj/master.c' depends on this */ write(file + ": " + ((res = catch(call_other(
+      file,
+      "???"
+    ))) ?
+      res : "updated and loaded.") + "\n");
+    if (!res) { /* if no load errors */
+      ob2 = find_object(file);
+      if (ob2) {
+        for (n = 0; n < sizeof(ob); n++) {
+          if (ob[n])
+            ob[n]->move(ob2);
+        }
+      }
+      if (str) {
+        if (is_bin && (pair2[0] == pair[0])) {
+          write("update: rehashing...\n");
+          COMMAND_D->rehash(pair[1], pair[0]);
+        }
+      }
+    }
+    return 1;
+  } else {
+    notify_fail("Couldn't find " + file + "\n");
+    return 0;
+  }
+}
+
+create() {
+  seteuid(getuid(this_object()));
+  path = USER_SEARCH_PATH + MAKER_SEARCH_PATH + ADMIN_SEARCH_PATH;
+}
+
+/* EOF */

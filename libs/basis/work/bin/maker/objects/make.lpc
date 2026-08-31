@@ -1,0 +1,124 @@
+// make.c
+// Author: Shadowhawk
+//  $Locker: yorkjoe $
+//
+//  $Source: /usr/local/mud/libs/basis/bin/maker/objects/RCS/make.c,v $
+//  $Revision: 1.4 $
+//  $Author: yorkjoe $
+//  $Date: 92/10/05 04:50:56 $
+//  $State: Exp $
+
+/*
+  $Log:	make.c,v $
+ * Revision 1.4  92/10/05  04:50:56  yorkjoe
+ * Added a debugging line.
+ * 
+ * Revision 1.3  92/10/05  04:48:27  yorkjoe
+ * Fixed error with usage of resolv_path.
+ * 
+ * Revision 1.2  92/10/05  04:43:50  yorkjoe
+ * Reworked the whole thing to remove inconsistencies.
+ * 
+ * Revision 1.1  92/10/02  06:37:26  yorkjoe
+ * Initial revision
+ * 
+ */
+
+#include <config.h>
+#include <daemons.h>
+#include <attributes.h>
+#include <search_paths.h>
+#include <move.h>
+
+inherit BIN;
+
+mixed *get_parents(string file);
+int do_make(string file);
+
+string update; /* Holds path to update bin command. */
+
+/* Will move these to make.h or somewhere soon. */
+#define CONT 0
+#define NEW 1
+#define STOP 2
+
+int do_command(string arg) {
+  string file;
+  object curr;
+
+  seteuid(getuid(this_player()));
+  if (arg) {
+    file = resolv_path(this_player()->query(a_cwd), arg);
+    if (!file_exists(file)) {
+      file += ".lpc";
+      if (!file_exists(file)) {
+        write("File: " + file + " not found.\nTerminating Make.\n");
+        return 1;
+      }
+    }
+  } else {
+    curr = environment(this_player());
+    if (!curr) {
+      write("You have no environment to make!\n");
+      return 1;
+    } else
+      file = file_name(curr);
+    if (sscanf(file, "%s#%*s", arg) > 1)
+      file = arg;
+    file += ".lpc";
+  }
+  do_make(file);
+  return 1;
+}
+
+int do_make(string file) { /* File is assumed to exist. Extension _must_ be on */
+  mixed *parents;
+  int index, cont_code;
+  int *file_stat;
+
+  write("Making file: " + file + ".\n");
+  cont_code = CONT;
+  parents = get_parents(file);
+  if ((int)parents[0] == -1)
+    return STOP; /* Could not load/find object to determine inheritance list */ if ((int)parents[0] > 0) {
+      write("Going into for loop.\n");
+      for (index = 1; index <= parents[0]; index++)
+        if ((cont_code |= do_make(parents[index])) & STOP)
+          return STOP;
+    }
+  /* All ancestors are up to date. */
+  file_stat = stat(file);
+  if ((cont_code & NEW) || (file_stat[1] > file_stat[2])) {
+    update->do_command(file);
+    cont_code |= NEW;
+  }
+  if (!find_object(file))
+    return STOP;
+  write("File: " + file + " is now up to date.\n");
+  return cont_code;
+}
+
+mixed *get_parents(string file) {
+  object curr;
+  string err;
+  string *parents;
+  int size;
+
+  if (!(curr = find_object(file)))
+    if (err = catch(update->do_command(file))) {
+      write("Got error: " + err + " while attempting to load " + file + ".\n");
+      return ({ -1, });
+    } else
+      curr = find_object(file);
+  parents = inherit_list(curr);
+  size = sizeof(parents);
+  write("Parents of: " + file + " has size: " + size + ".\n");
+  if (size == 0)
+    return ({ 0, });
+  return ({ size, }) + parents;
+}
+
+void create() {
+  ::create();
+  update = COMMAND_D->where("update");
+}

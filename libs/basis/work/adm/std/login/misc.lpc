@@ -1,0 +1,101 @@
+/*
+   mudlib:  base
+   file:    /adm/std/login/misc.c
+   created: 1992/07/28
+   purpose: encapsulates those functions used by /adm/obj/login.c that are 
+            most likely to change from mud to mud (so that /adm/obj/login.c
+            can be more stable).
+*/
+
+#include <config.h>
+#include <login.h>
+#include <flags.h>
+
+// welcome: writes the stuff that is displayed prior to the NAME_PROMPT
+
+void welcome() {
+  cat(WELCOME_FILE);
+  write(MUD_NAME + " is currently running " + MUDOS_VERSION + ".\n");
+}
+
+// valid_name: returns 1 if a name is legal and returns 0 if a name
+// is not legal.
+
+int valid_name(string name) {
+  int i, limit;
+
+  if (strlen(name) > MAX_NAME_LEN) {
+    write("Sorry, your name is not allowed to contain more than "
+      +MAX_NAME_LEN + " characters.\n");
+    return 0;
+  }
+  limit = strlen(name);
+  for (i = 0; i < limit; i++) {
+    if (name[i] >= 'a' || name[i] <= 'z')
+      continue;
+    write("Sorry, your name may only contain letters [a-z].\n");
+    return 0;
+  }
+  return 1;
+}
+
+// disconnect_copy:
+// Asks whether or not someone wants to disconnect their other copy.
+// the disconnect actually gets done in dis_copy2()
+// todo: copy can be passed via input_to once we have that working
+// This hasn't really been bug tested as I can't get the mud to run.
+
+void disconnect_copy(object copy) {
+  write(DIS_COPY_PROMPT);
+  // arg passing to input_to feature was added in 0.8.15 (thus will be in 0.9.0)
+  input_to("dis_copy2", I_NORMAL, copy);
+  return;
+}
+
+void dis_copy2(string answer, object copy) {
+  object temp_obj;
+
+  if (!yes(answer) && !no(answer)) {
+    write(DIS_COPY_PROMPT);
+    input_to("dis_copy2");
+  }
+  if (no(answer)) {
+    write(MSG_TRY_AGAIN);
+    destruct(this_object());
+    return;
+  }
+  tell_object(copy, MSG_DEST_COPY);
+  temp_obj = new(EMPTY_OB);
+  exec(temp_obj, copy);
+  exec(copy, this_object());
+  destruct(temp_obj);
+  write(MSG_ALLOWING_DUPLICATE);
+  destruct(this_object());
+  return;
+}
+
+nosave void switch_new_obj(object new_obj, string name) {
+  int new_user;
+
+  seteuid(name);
+  export_uid(new_obj);
+  seteuid(ROOT_UID);
+  if (!new_obj->restore_data()) {
+    destruct(new_obj);
+    new_obj = new(NEW_USER);
+    new_user = 1;
+  } else {
+    new_user = 0;
+  }
+  if (exec(new_obj, this_object())) {
+    if (new_user) {
+      new_obj->setup(name);
+    } else {
+      new_obj->setup();
+    }
+  } else {
+    write(MSG_BAD_NEW_PLAYER_OBJ);
+    destruct(new_obj);
+  }
+  destruct(this_object());
+}

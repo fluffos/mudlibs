@@ -1,0 +1,92 @@
+/*
+// This file is part of the TMI Mudlib distribution.
+// Please include this header if you use this code.
+// Written by Sulam (Jan 21, 92)
+*/
+
+#include <config.h>
+
+inherit "/adm/std/security/bin";
+
+object *n_player, *player;
+string *who;
+
+void switch_player(int i);
+
+cmd_su(string name) {
+  string file, err;
+  int i;
+
+  if (!player) player = ({ previous_object() });
+  else player += ({ previous_object() });
+  i = sizeof(player) - 1;
+  if (!who) who = ({ name });
+  else who += ({ name });
+  if (!interactive(player[i]))
+    throw("su: player not interactive\n");
+  if (sscanf(file_name(player[i]), "%s#%s", file, err) != 2)
+    throw("su: Bad player object!\n");
+  if (!n_player) n_player = ({ new(file) });
+  else n_player += ({ new(file) });
+  err = catch(player[i]->save_player());
+  if (err) throw("su: Illegal to save_player " + who[i] + "\n");
+  if (who[i] != "" && who[i] &&
+    (!((int)MASTER_OB->
+      query_member_group(player[i]->query_name(), "admin")))) {
+    write("Password:");
+    input_to("pass", 1);
+    return 1;
+  }
+  if (who[i] == "" || !who[i]) who[i] = getuid(player[i]);
+  else
+    tell_room(environment(player[i]), (string)player[i]->query_cap_name()
+      + " polymorphs into " + capitalize(who[i]) + ".\n");
+  n_player[i]->restore_player(who[i]);
+  switch_player(i);
+  return 1;
+}
+
+nosave void pass(string pass) {
+  string password;
+  int i;
+
+  for (i = sizeof(player) - 1; i > 0; i--)
+    if (player[i] == this_player())
+      break;
+  n_player[i]->restore_player(who[i]);
+  password = (string)n_player[i]->query_password();
+  if (password != crypt(pass, password)) {
+    destruct(n_player[i]);
+    write("Bad password!\n");
+    return;
+  }
+  tell_room(environment(player[i]), (string)player[i]->query_cap_name()
+    + " polymorphs into " + capitalize(who[i]) + ".\n");
+  switch_player(i);
+}
+
+nosave void switch_player(int i) {
+  n_player[i]->set_name(who[i]);
+  n_player[i]->set_short(capitalize(who[i]));
+  n_player[i]->set_long("A player named " + capitalize(who[i]) + ".\n");
+  if (exec(n_player[i], player[i])) {
+    object *inv;
+    int x;
+
+    n_player[i]->setup();
+    n_player[i]->move(environment(player[i]));
+    inv = all_inventory(player[i]);
+    for (x = 0; x < sizeof(inv); x++) {
+      /* only transfer items that don't autoload -- Truilkan@TMI */
+      if (!function_exists("query_auto_load", inv[x]))
+        inv[x]->move(n_player);
+    }
+    player[i]->remove();
+    write("\nOk.\n");
+  } else {
+    write("Error in exec()\n");
+    n_player[i]->remove();
+  }
+}
+
+int permissions() { return 500; }

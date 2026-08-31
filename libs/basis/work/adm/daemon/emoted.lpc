@@ -1,0 +1,701 @@
+/*
+   mudlib:  Basis
+   file:    /bin/daemon/emoted.c
+   author:  Truilkan
+   created: 1992/09/25
+*/
+
+// emote entries are mappings that may contain the following keys:
+// e_me, e_others, e_target, e_modifier (these are defined in emoted.h).
+// the values for each of these keys should be ascii text.  The following
+// variables may be contained within the values:
+// $N == name of the doer
+// $n == name of the doee
+// $M == text user types following the emote (or value of e_modifier if
+//       no extra text was typed)
+// $S == subjective pronoun for doer (he, she, it, sie)
+// $P == possessive pronoun for doer (his, her, its, hir)
+// $O == objective pronoun for doer (him, her, it, hir)
+// $s == same as $S except is for doee
+// $p == same as $P except is for doee
+// $o == same as $O except is for doee
+// note: variables need not be delimited by spaces so $oself translates
+// to himself
+
+/*
+  $Locker:  $
+
+  $Source: /usr/local/mud/libs/basis/adm/daemon/RCS/emoted.c,v $
+  $Revision: 1.37 $
+  $Author: garnett $
+  $Date: 92/10/10 05:11:48 $
+  $State: Exp $
+
+  $Log:	emoted.c,v $
+ * Revision 1.37  92/10/10  05:11:48  garnett
+ * fixed $o and $O for yourself
+ * 
+ * Revision 1.36  92/10/04  08:05:45  garnett
+ * added .verb2 and $W
+ * 
+ * Revision 1.35  92/10/04  07:26:51  garnett
+ * added $Q and $q preceding possessive (Hamster's idea)
+ * 
+ * Revision 1.34  92/10/02  05:00:34  garnett
+ * added ability to capitalize variables.. e.g. just do $cS to get
+ * capitalized version of $S
+ * 
+ * Revision 1.33  92/10/02  04:48:00  garnett
+ * fixed default modifier overrides (same problem as before)
+ * 
+ * Revision 1.32  92/10/02  04:39:22  garnett
+ * fixed problem with using default modifier (via " ." suffix)
+ * 
+ * Revision 1.31  92/10/02  04:36:18  garnett
+ * fixed problem that was causing e_others for non-targeted messages not
+ * to be displayed (introduced when i added remote emote capability)
+ * 
+ * Revision 1.30  92/10/02  02:35:30  garnett
+ * added support for remote emotes (prefixed with *) for wizards only
+ * (since they can be used for free communication.  eventually i suppose
+ * could extend privilege to players for a cost of some sort).  e_others
+ * messages don't get displayed for remote emotes.
+ * 
+ * Revision 1.29  92/09/30  21:30:04  garnett
+ * fixed so that adding null bodies doesn't cause a problem
+ * 
+ * Revision 1.28  92/09/30  21:17:03  garnett
+ * added the $G and $g variables
+ * 
+ * Revision 1.27  92/09/30  08:21:34  garnett
+ * too many changes to list them all
+ * 
+ * Revision 1.26  92/09/30  05:00:28  garnett
+ * added by add_temote() because now targeted emotes are allowed not
+ * to have a target field (if empty target field, then value from others
+ * field is used since $n now == "you" for the target).  note that if
+ * you want a targeted emote with a target field you have to use /t (in
+ * edemote).  added a new variable $m that acts like $M except that
+ * $m is displayed by default (if the user types no text) and doesn't require
+ * the user to type a " ." following the emote command.
+ * 
+ * Revision 1.25  92/09/29  18:02:16  garnett
+ * fixed so that 'emote_name .' punctuates correctly when there is
+ * no default modifier
+ * 
+ * Revision 1.24  92/09/28  00:01:29  garnett
+ * changed query_emotes and query_temotes to return keys
+ * 
+ * Revision 1.23  92/09/27  23:16:53  garnett
+ * fixed a problem that the changs to 'M' introduced
+ * 
+ * Revision 1.22  92/09/27  23:13:20  garnett
+ * changed $M once again so that the default is to have no modifier and
+ * the player only gets the default modifier if the player types a .
+ * (so "smile" gives "$N smiles." and "smile ." gives "$N smiles happily"
+ * 
+ * Revision 1.21  92/09/27  23:10:21  garnett
+ * changed code for $M case so that if player types 'verb .' then an
+ * empty replacement is done.
+ * 
+ * Revision 1.20  92/09/27  22:24:52  garnett
+ * corrected to use $oself instead of $pself
+ * 
+ * Revision 1.19  92/09/27  21:36:19  garnett
+ * fixed punctuate to handle sentences ending in a space
+ * 
+ * Revision 1.18  92/09/27  21:18:26  garnett
+ * added check for ending punctuation and made it so that entries shouldn't
+ * end with a newline
+ * 
+ * Revision 1.17  92/09/27  00:31:50  garnett
+ * fixed another problem with unprocess (was modifying the entry for others)
+ * 
+ * Revision 1.16  92/09/27  00:10:35  garnett
+ * fixed a bug in unprocess
+ * 
+ * Revision 1.15  92/09/27  00:00:05  garnett
+ * added \n after each header printed in test mode
+ * 
+ * Revision 1.14  92/09/26  23:54:28  garnett
+ * added a test mode (if parse is called with an extra are of 1 then print
+ * emotion results all to the doer)
+ * 
+ * Revision 1.13  92/09/26  22:22:22  garnett
+ * save_data is now called only via remove, the shutdown commands (halt
+ * and reboot), and from crash in master.c (via the shutdown daemon)
+ * 
+ * Revision 1.12  92/09/26  15:54:11  garnett
+ * stopped adding \n to text to be displayed (assuming it will be added
+ * in the actual text)
+ * 
+ * Revision 1.11  92/09/26  04:30:02  garnett
+ * fixed $M so that if its followed by some text then the trailing blank
+ * is deleted (so that "blah $M blah" comes out "blah blah" if $M is empty)
+ * 
+ * Revision 1.10  92/09/26  03:08:08  garnett
+ * fixed a mistake in the documentation (in comments)
+ * 
+ * Revision 1.9  92/09/26  03:07:31  garnett
+ * added some documentation of the emote format at the top of the file
+ * 
+ * Revision 1.8  92/09/26  02:54:54  garnett
+ * took out a tell_object debug i mistakenly left in
+ * 
+ * Revision 1.7  92/09/26  02:53:54  garnett
+ * fixed do_emote so that the modifier array is copied before each sub
+ * (previous substitutions were modifying the modifier array and affecting
+ * later substitutions).
+ * 
+ * Revision 1.6  92/09/26  02:45:20  garnett
+ * fixed problem with emotes containing $n but having no target
+ * 
+ * Revision 1.5  92/09/26  02:38:08  garnett
+ * removed add_temote interface and merged it into add_emote
+ * 
+ * Revision 1.4  92/09/26  02:33:11  garnett
+ * fixed 'M' case of substitute so it handled an empty e_modifier field
+ * 
+ * Revision 1.3  92/09/25  23:44:39  garnett
+ * not sure
+ * 
+ * Revision 1.2  92/09/25  08:41:15  garnett
+ * added delete_emote and delete_temote
+ * 
+ * Revision 1.1  92/09/25  08:32:20  garnett
+ * Initial revision
+ * 
+*/
+
+#include <config.h>
+#include <attributes.h>
+#include <emoted.h>
+
+inherit DAEMON;
+inherit SAVE;
+
+mapping temotes, emotes;
+
+void create() {
+  temotes = ([]);
+  emotes = ([]);
+  set_persistent(TRUE);  // cause create()/remove() to load/save data
+  save::create();       // restore the datafile
+}
+
+string *query_keys() {
+  return unique_array(keys(temotes) + keys(emotes));
+}
+
+string *query_emotes() {
+  return keys(emotes);
+}
+
+string *query_temotes() {
+  return keys(temotes);
+}
+
+string to_string(mapping entry) {
+  string result, *fields, val;
+  int x;
+
+  result = 0;
+  if (mapp(entry)) {
+    result = "";
+    fields = FIELDS;
+    for (x = 0; x < sizeof(fields); x++) {
+      if (entry && !undefinedp(val = entry[x])) {
+        result += (fields[x] + "\n");
+        result += (val + "\n");
+      }
+    }
+    result += ".end\n";
+  }
+  return result;
+}
+
+
+mapping to_mapping(string body) {
+  int i, size, x, start;
+  string *lines, *fields, *stop_fields;
+  mapping new_entry;
+
+  if (!body) {
+    return 0;
+  }
+  lines = explode(body, "\n");
+  size = sizeof(lines);
+  new_entry = ([]);
+  fields = FIELDS;
+  stop_fields = STOP_FIELDS;
+  for (x = 0; x < sizeof(fields); x++) {
+    i = member_array(fields[x], lines) + 1;
+    if (!i) {
+      continue;
+    }
+    if ((i < size) && ((member_array(lines[i], stop_fields) == -1))) {
+      new_entry[x] = "";
+      start = i;
+      for (; (i < size) && (member_array(lines[i], stop_fields) == -1); i++) {
+        if (i != start) {
+          new_entry[x] += "\n" + lines[i];
+        } else {
+          new_entry[x] += lines[i];
+        }
+      }
+    }
+  }
+  return new_entry;
+}
+
+// return a processed map to its original form
+
+mapping unprocess(mapping entry) {
+  string *words, line, field;
+  mapping new_entry;
+  int *idx, j, k;
+
+  if (!entry) {
+    return 0;
+  }
+  idx = keys(entry);
+  new_entry = allocate_mapping(sizeof(entry));
+  for (j = 0; j < sizeof(idx); j++) {
+    if ((idx[j] == e_verb) || (idx[j] == e_verb2)) {
+      new_entry[idx[j]] = entry[idx[j]];
+    } else {
+      words = entry[idx[j]];
+      line = "";
+      for (k = 0; k < sizeof(words); k++) {
+        field = words[k];
+        if (field[0] == 'X') {
+          field = field[1..(strlen(field) - 1)];
+        } else {
+          field = "$" + field;
+        }
+        line += field;
+      }
+      new_entry[idx[j]] = line;
+    }
+  }
+  return new_entry;
+}
+
+// query an emote without a target
+
+string query_emote(string verb) {
+  return to_string(unprocess(emotes[verb]));
+}
+
+// query an emote with a target
+
+string query_temote(string verb) {
+  return to_string(unprocess(temotes[verb]));
+}
+
+// process: convert the map into a form that may be parsed more efficiently
+
+mapping process(mapping entry) {
+  string *words, line;
+  int *idx;
+  int j;
+
+  if (!entry) {
+    return 0;
+  }
+  idx = keys(entry);
+  for (j = 0; j < sizeof(idx); j++) {
+    if ((idx[j] != e_verb) && (idx[j] != e_verb2)) {
+      line = entry[idx[j]];
+      words = explode(line, "$");
+      if (line[0] != '$') {
+        words[0] = "X" + words[0];
+      }
+      entry[idx[j]] = words;
+    }
+  }
+  return entry;
+}
+
+// add a temote
+
+void add_temote(string verb, string body) {
+  if (!body) {
+    return;
+  }
+  temotes[verb] = process(to_mapping(body));
+}
+
+// add an emote
+
+void add_emote(string verb, string body) {
+  mapping entry;
+
+  if (!body) {
+    return;
+  }
+  entry = to_mapping(body);
+  if (undefinedp(entry[e_target])) {
+    emotes[verb] = process(entry);
+  } else {
+    add_temote(verb, body);
+  }
+}
+
+void delete_emote(string verb) {
+  map_delete(emotes, verb);
+}
+
+void delete_temote(string verb) {
+  map_delete(temotes, verb);
+}
+
+string apostrophed(string name) {
+  int len;
+
+  len = strlen(name);
+  if (name[len - 1] == 's') {
+    return name + "'";
+  } else {
+    return name + "'s";
+  }
+}
+
+string cap_it(string str, int do_cap) {
+  if (do_cap) {
+    return capitalize(str);
+  } else {
+    return str;
+  }
+}
+
+// make the substitutions for the various $variables
+
+string substitute(string verb, string verb2, int kind, string rest, string *words,
+  string *modifier, object me, object target) {
+  string name, pronoun, mo, remainder, temp;
+  string plural, plural2;
+  int j, forced, do_cap;
+
+  for (j = 0; j < sizeof(words); j++) {
+    forced = 0;
+    if (!j) {
+      do_cap = 1;
+    } else if (words[j][0] == 'c') {
+      words[j] = words[j][1..(strlen(words[j]) - 1)];
+      do_cap = 1;
+    } else {
+      do_cap = 0;
+    }
+    remainder = words[j][1..(strlen(words[j]) - 1)];
+    switch (words[j][0]) {
+      case 'X':  // empty replacement (necessary)
+        words[j] = remainder;
+        break;
+      case 'V':
+        if (kind == e_me) {
+          words[j] = cap_it(verb, do_cap) + remainder;
+        } else {
+          if (!plural) {
+            plural = pluralize_verb(verb);
+          }
+          words[j] = cap_it(plural, do_cap) + remainder;
+        }
+        break;
+      case 'W':
+        if (kind == e_me) {
+          words[j] = cap_it(verb2, do_cap) + remainder;
+        } else {
+          if (!plural2) {
+            plural2 = pluralize_verb(verb2);
+          }
+          words[j] = cap_it(plural2, do_cap) + remainder;
+        }
+        break;
+      case 'N':  // my name
+        if (kind == e_me) {
+          name = "you";
+        } else {
+          name = (string)me->query(a_cap_name);
+        }
+        words[j] = cap_it(name, do_cap) + remainder;
+        break;
+      case 'n':  // name of the target
+        if (target == me) {
+          switch (kind) {
+            case e_me:
+              name = "yourself";
+              break;
+            case e_others:
+            case e_target:
+              if (!mo) {
+                mo = objective((string)me->query(a_gender));
+              }
+              name = cap_it(mo, do_cap) + "self"; break;
+              break;
+            default:
+              break;
+          }
+        } else {
+          if (target) {
+            if (kind == e_target) {
+              name = "you";
+            } else {
+              name = (string)target->query(a_cap_name);
+            }
+          } else {
+            name = "";
+          }
+        }
+        words[j] = cap_it(name, do_cap) + remainder;
+        break;
+      case 'Q':
+        if (kind == e_me) {
+          pronoun = "yours";
+        } else {
+          pronoun = ppossessive((string)me->query(a_gender));
+        }
+        words[j] = cap_it(pronoun, do_cap) + remainder;
+        break;
+      case 'q':
+        if (kind == e_target) {
+          pronoun = ppossessive((string)target->query(a_gender));
+        } else {
+          pronoun = "yours";
+        }
+        words[j] = cap_it(pronoun, do_cap) + remainder;
+        break;
+      case 'G':
+        if (kind == e_me) {
+          pronoun = "your";
+        } else {
+          pronoun = apostrophed((string)me->query(a_cap_name));
+        }
+        words[j] = cap_it(pronoun, do_cap) + remainder;
+        break;
+      case 'g':
+        if ((kind == e_target) || ((kind == e_me) && (me == target))) {
+          pronoun = "your";
+        } else if (target == me) {
+          pronoun = possessive((string)target->query(a_gender));
+        } else {
+          pronoun = apostrophed((string)target->query(a_cap_name));
+        }
+        words[j] = cap_it(pronoun, do_cap) + remainder;
+        break;
+      case 'm':
+        forced = 1;
+      case 'M':  // replace with extra text or default
+        temp = remainder;
+        if ((!forced && (rest == ".")) || (forced && !rest)) {
+          if (pointerp(modifier)) {
+            rest = substitute(verb, verb2, kind, "",
+              modifier, 0, me, target);
+          }
+        }
+        if (!rest || (rest == ".")) {
+          int rlen;
+
+          rest = "";
+          rlen = strlen(temp);
+          if (rlen && (temp[0] == ' ')) {
+            temp = temp[1..(rlen - 1)];
+          }
+        }
+        words[j] = cap_it(rest, do_cap) + temp;
+        break;
+      case 'S':  // subjective pronoun for me
+        if (kind == e_me) {
+          pronoun = "you";
+        } else {
+          pronoun = subjective((string)me->query(a_gender));
+        }
+        words[j] = cap_it(pronoun, do_cap) + remainder;
+        break;
+      case 's':  // subjective pronoun for target
+        if (kind == e_target) {
+          pronoun = "you";
+        } else {
+          pronoun = subjective((string)target->query(a_gender));
+        }
+        words[j] = cap_it(pronoun, do_cap) + remainder;
+        break;
+      case 'P':  // possessive pronoun for me
+        if (kind == e_me) {
+          pronoun = "your";
+        } else {
+          pronoun = possessive((string)me->query(a_gender));
+        }
+        words[j] = cap_it(pronoun, do_cap) + remainder;
+        break;
+      case 'p':  // possessive pronoun for target
+        if (kind == e_target) {
+          pronoun = "your";
+        } else {
+          pronoun = possessive((string)target->query(a_gender));
+        }
+        words[j] = cap_it(pronoun, do_cap) + remainder;
+        break;
+      case 'O':  // objective pronoun for me
+        if (kind == e_me) {
+          pronoun = (target == me) ? "yourself" : "you";
+        } else {
+          pronoun = objective((string)me->query(a_gender));
+        }
+        words[j] = cap_it(pronoun, do_cap) + remainder;
+        break;
+      case 'o':  // objective pronoun for target
+        if (kind == e_target) {
+          pronoun = "you";
+        } else {
+          if ((kind == e_me) && (target == me)) {
+            pronoun = "yourself";
+          } else {
+            pronoun = objective((string)target->query(a_gender));
+          }
+        }
+        words[j] = cap_it(pronoun, do_cap) + remainder;
+        break;
+      default:  // words[j] unchanged
+        break;
+    }
+  }
+  return implode(words, "");
+}
+
+string punctuate(string result) {
+  int len, ch, ch2;
+
+  if ((len = strlen(result)) < 3) {
+    return result;
+  }
+  ch = result[len - 1];
+  ch2 = result[len - 2];
+  if ((ch == '.') && (ch2 == ' ')) {
+    return result[0..(len - 3)] + ".";
+  }
+  if (ch == ' ') {
+    result = result[0..(len - 2)];
+    ch = result[len - 2];
+  }
+  if ((ch != '.') && (ch != '!') && (ch != '?')) {
+    return result + ".";
+  } else {
+    return result;
+  }
+}
+
+varargs void do_emote(string verb, string verb2, string rest, mapping entry, object me,
+  object target, int test, int same_super) {
+  string result, *mods, *words, *values, *def;
+
+  mods = copy_array(entry[e_modifier]);
+  def = entry[e_me];
+  if (!def) {
+    if (target) {
+      def = ({ "N ", "V ", "M at ", "n" });
+    } else {
+      def = ({ "N ", "V ", "M" });
+    }
+  }
+  if (def[0] != "X*empty") {
+    result = substitute(verb, verb2, e_me, rest, copy_array(def),
+      mods, me, target);
+    result = punctuate(result);
+    if (target && !same_super) {
+      result = "*" + result;
+    }
+    if (test) {
+      write("me:\n" + result + "\n");
+    } else {
+      write(result + "\n");
+    }
+  }
+  if (target && (target != me)) {
+    mods = copy_array(entry[e_modifier]);
+    if (!(values = entry[e_target])) {
+      values = entry[e_others];
+      if (!values) {
+        values = def;
+      }
+    }
+    if (values && (values[0] != "X*empty")) {
+      result = substitute(verb, verb2, e_target, rest,
+        copy_array(values), mods, me, target);
+      result = punctuate(result);
+      if (target && !same_super) {
+        result = "*" + result;
+      }
+      if (test) {
+        write("target:\n" + result + "\n");
+      } else {
+        tell_object(target, result + "\n");
+      }
+    }
+  }
+  if (!target || same_super) {
+    mods = copy_array(entry[e_modifier]);
+    if (!(values = entry[e_others])) {
+      values = def;
+    }
+    if (values) {
+      result = substitute(verb, verb2, e_others, rest,
+        copy_array(values), mods, me, target);
+      result = punctuate(result);
+      if (test) {
+        write("others:\n" + result + "\n");
+      } else {
+        say(result + "\n", target);
+      }
+    }
+  }
+}
+
+varargs int parse(string command, string rest, int test) {
+  string head, tail, verb, verb2;
+  object target, me;
+  mapping entry, tentry;
+  int same_super;
+
+  entry = emotes[command];
+  tentry = temotes[command];
+  same_super = 0;
+  if (!mapp(entry) && !mapp(tentry)) {  // not a recognized emote
+    return 0;
+  }
+  me = this_player();
+  if (rest && (sscanf(rest, "%s %s", head, tail) != 2)) {
+    head = rest;
+    tail = 0;
+  }
+  if (rest) {
+    if (mapp(tentry)) {
+      target = find_player(head);
+      if (target && me) {
+        same_super = (target->query(a_super) == me->query(a_super));
+      }
+      if (target && (wizardp(me) || same_super)) {
+        rest = tail;
+      } else {
+        target = 0;
+      }
+    }
+  }
+  if (target) {
+    if (!(verb = tentry[e_verb])) {
+      verb = command;
+    }
+    verb2 = tentry[e_verb2];
+    do_emote(verb, verb2, rest, tentry, me, target, test, same_super);
+  } else {
+    if (!entry) {
+      return 0;
+    }
+    if (!(verb = entry[e_verb])) {
+      verb = command;
+    }
+    verb2 = entry[e_verb2];
+    do_emote(verb, verb2, rest, entry, me, target, test, same_super);
+  }
+  return 1;
+}

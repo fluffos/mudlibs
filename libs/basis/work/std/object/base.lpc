@@ -1,0 +1,128 @@
+//  mudlib:   Basis
+//  file:     base.c
+//  author:   John Garnett
+//  modified: 1992/12/13
+//  purpose:  this is the basic object to be inherited by most typical
+//            objects (excluding daemons and bin commands etc).
+
+#include <config.h>
+#include <attributes.h>
+#include <daemons.h>
+
+inherit CORE;
+inherit MOVE;
+
+nosave string this_euid;
+
+mixed query(mixed key) {
+  mixed attr;
+
+  if (functionp(attr = core::query(key))) {
+    return (* attr) (key);
+  }
+  return attr;
+}
+
+nosave void set_lfuns(mixed key, mixed value) {
+  switch (key) {
+    case a_filename:
+      if (strcmp(getuid(previous_object()), ADMIN_UID)) {
+        return;
+      }
+      PLAYER_D->load_data((string)this_object()->query(a_name));
+      PLAYER_D->set(key, value);
+      PLAYER_D->save_data();
+      break;
+    default:
+      break;
+  }
+}
+
+void set(mixed key, mixed value) {
+  string euid;
+
+  switch (key) {
+    case ADMIN_RANGE:  // attributes only settable by commands in /bin/admin
+      if (strcmp(getuid(previous_object()), ADMIN_UID)) {
+        return;
+      }
+      core::set(key, value);
+      break;
+    case EFUNS:
+      break;
+    case LFUNS:
+      set_lfuns(key, value);
+      break;
+    default:
+      euid = geteuid(previous_object());
+      if (!euid) {
+        euid = getuid(previous_object());
+      }
+      if (strcmp(euid, ROOT_UID) && strcmp(euid, this_euid)) {
+        return;
+      }
+      core::set(key, value);
+      break;
+  }
+}
+
+int id(string str) {
+  string *ids;
+
+  if (!(ids = query(a_ids))) {
+    return 0;
+  }
+  return (member_array(str, ids) != -1);
+}
+
+void setup_efun_attributes() {
+  function qef, qlf;
+
+  // set up attributes that are currently mapped to efuns
+  //
+  // Old MudOS accepted `(: object_or_path, "func" :)` as a bound
+  // call_other pointer for ANY expression in the first slot. This
+  // driver's grammar only builds that special form when the token
+  // right after "(:" is a bare, compile-time-resolved name followed
+  // by a comma (`L_FUNCTION_OPEN L_DEFINED_NAME ',' arg_list ...`) --
+  // anything else (a string constant like SIMUL_EFUN_OB, or a call
+  // like this_object()) instead falls through to the generic
+  // "expression functional" rule, which just evaluates the whole
+  // thing as an ordinary comma-expression: `(: SIMUL_EFUN_OB,
+  // "query_efuns" :)` silently became "evaluate SIMUL_EFUN_OB
+  // (discarded), return the string \"query_efuns\"" -- confirmed via
+  // a temporary catch()+sprintf("%O") probe in query() below, which
+  // showed invoking the closure just returned the literal string
+  // "query_efuns" rather than calling anything. That string then got
+  // handed to look.lpc/etc as if it were an object, and compile_object()
+  // on the driver's own call_other-of-a-string fallback tried to load
+  // an object literally named "query_efuns", cascading into
+  // virtuald.lpc's self-referential compile_object() and hard-crashing
+  // every `query(a_super)`/`query(a_contains)` call (i.e. `look` and
+  // friends) with "Inherit chain too deep".
+  //
+  // Fix: use `call_other` itself as the bare NAME (a real efun
+  // identifier, matching the grammar's special-cased shape), with the
+  // target object/path and method name as its BOUND arguments; the
+  // invoke-time argument (the query() key) is appended after the
+  // bound ones, giving call_other(SIMUL_EFUN_OB, "query_efuns", key)
+  // -- exactly the old semantics. See AGENTS.md §6.2.
+  qef = (: call_other, SIMUL_EFUN_OB, "query_efuns" :);
+  core::set(a_contains, qef);    // all_inventory
+  core::set(a_super, qef);       // environment
+  core::set(a_uid, qef);         // getuid
+  core::set(a_ip_address, qef);  // query_ip_address
+  qlf = (: call_other, SIMUL_EFUN_OB, "query_lfuns" :);
+  core::set(a_filename, qlf);
+}
+
+void create() {
+  this_euid = geteuid(this_object());
+  if (!this_euid) {
+    this_euid = getuid(this_object());
+  }
+  core::create();
+  setup_efun_attributes();
+}
+
+// EOF

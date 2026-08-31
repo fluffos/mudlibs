@@ -1,0 +1,145 @@
+/*
+// tsh.c: TMI-shell or Tru-shell -- written by Truilkan@TMI 92/02/05 
+//        meant to be inherited by player.c
+//
+// Brutally hacked up and destroyed by Buddha to install something "better"
+// on 3-7-92
+//
+// 1992/03/08 - hacked again by Truilkan@TMI to fix pushd and popd
+*/
+
+#include <adt_defs.h>
+#include <commands.h>
+#include <tsh.h>
+
+#define DEFAULT_PROMPT "> "
+#define MAX_HIST_SIZE  50
+#define MAX_PUSHD_SIZE 50
+
+/*
+   CSTACK_ADT should be inherited from here so that this object can have its
+   own private stack
+*/
+private inherit CSTACK_ADT;       /* for pushd and popd */
+
+private nosave string tsh_prompt;
+private nosave int cur, hist_size, pushd_size, custom_prompt;
+
+string do_nicknames(string arg);
+string do_alias(string arg);
+string handle_history(string arg);
+
+/* do_new: called by the "new" command */
+
+int do_new() {
+  string d1, d2;
+
+  tsh_prompt = (string)this_object()->getenv("prompt");
+  tsh_prompt = !tsh_prompt ? DEFAULT_PROMPT : tsh_prompt + " ";
+  custom_prompt = (tsh_prompt != DEFAULT_PROMPT);
+
+  d1 = (string)this_object()->getenv("pushd");
+  pushd_size = 0;
+  if (d1)
+    sscanf(d1, "%d", pushd_size);
+  if (pushd_size > MAX_PUSHD_SIZE)
+    pushd_size = MAX_PUSHD_SIZE;
+
+  d1 = (string)this_object()->getenv("history");
+  hist_size = 0;
+  if (d1)
+    sscanf(d1, "%d", hist_size);
+  if (hist_size > MAX_HIST_SIZE)
+    hist_size = MAX_HIST_SIZE;
+  return 1;
+}
+
+/* push current directory onto the stack and cd to dir named "arg" */
+int pushd(string arg) {
+  string path;
+
+  path = (string)this_object()->get_path();
+  if (((int)CD->cmd_cd(arg))) {
+    if (cstack::enqueue(path) == -1) { /* cstack full */
+      cstack::dequeue(); /* remove from bottom of stack */ cstack::enqueue(path);  /* add to the top */
+    }
+  }
+  return 1;
+}
+
+int popd() {
+  mixed dir;
+
+  dir = cstack::pop();
+  if ((int)dir == -1)
+    write("Directory stack is empty.\n");
+  else
+    CD->cmd_cd((string)dir);
+  return 1;
+}
+
+void initialize() {
+  do_new();
+  if (pushd_size)
+    cstack::alloc(pushd_size);
+  if (hist_size)
+    history::alloc(hist_size);
+  alias::init_aliases();
+}
+
+string write_prompt() {
+  string path, prompt, tmp;
+
+  if (custom_prompt) {
+    prompt = tsh_prompt;
+    path = (string)this_player()->get_path();
+    tmp = user_path((string)this_player()->query_name());
+    tmp = tmp[0..strlen(tmp) - 2];
+    // There's a directory-tree specific thing here
+    if (sscanf(path, "/u/%*s/%s", tmp) == 3)
+      path = "~" + tmp;
+    prompt = replace_string(prompt, "$D", path);
+    prompt = replace_string(prompt, "\\n", "\n");
+    prompt = replace_string(prompt, "$N", lower_case(mud_name()));
+    prompt = replace_string(prompt, "$C", "" + query_cmd_num());
+    prompt += " ";
+  } else
+    prompt = DEFAULT_PROMPT;
+  write(prompt);
+  return prompt;
+}
+
+string process_input(string arg) {
+  if (arg && arg != "") {
+    arg = handle_history(arg);
+    arg = do_nicknames(arg);
+    arg = do_alias(arg);
+  }
+  return arg;
+}
+
+int tsh(string file) {
+  string contents, *lines;
+  int j, len, finished;
+
+  if (!file) {
+    notify_fail("usage: tsh filename\n");
+    return 0;
+  }
+  contents = read_file(resolv_path((string)this_object()->get_path(), file));
+  if (!contents) {
+    notify_fail("tsh: couldn't read " + file + "\n");
+    return 0;
+  }
+  lines = explode(contents, "\n");
+  len = sizeof(lines);
+  finished = 0;
+  for (j = 0; j < len && !finished; j++) {
+    if (!command(lines[j])) {
+      write(file + ": terminated abnormally on line #" + (j + 1) + "\n");
+      write("while doing: " + lines[j] + "\n");
+      finished = 1;
+    }
+  }
+  return 1;
+}

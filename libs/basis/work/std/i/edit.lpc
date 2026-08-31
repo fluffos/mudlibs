@@ -1,0 +1,125 @@
+// mudlib: Basis
+// data:   1992/09/07
+
+// the original version was by Wayfarer@Portals (this one has been changed)
+
+//  $Locker:  $
+//
+//  $Source: /usr/local/mud/libs/basis/std/user/RCS/edit.c,v $
+//  $Revision: 1.4 $
+//  $Author: garnett $
+//  $Date: 92/09/26 23:09:20 $
+//  $State: Exp $
+
+/*
+  $Log:	edit.c,v $
+ * Revision 1.4  92/09/26  23:09:20  garnett
+ * added an abort() to user so that aborted edits unlock the file
+ * 
+ * Revision 1.3  92/09/26  23:06:14  garnett
+ * now just prints a warning if locker is this_player
+ * 
+ * Revision 1.2  92/09/26  22:55:58  garnett
+ * added code to check the SFM_D to see if the file is locked.
+ * 
+ * Revision 1.1  92/09/26  20:16:08  garnett
+ * Initial revision
+ * 
+ */
+
+/*
+ *  Basic editor object
+ */
+
+#include <daemons.h>
+
+// this can be moved into the /bin ed command when the ed() efun is able
+// take variable # of arguments and pass them back to stop_ed function
+
+private nosave string edit_filename, func;
+private nosave object act_ob;
+private nosave mixed argument;
+
+varargs int edit(string fname, string fun, object ob, mixed arg) {
+  string tmp, locker;
+
+  func = fun;
+  argument = arg;
+  if (!ob) {
+    ob = this_object();
+  }
+  act_ob = ob;
+  if (!fname) {
+    notify_fail("No filename passed to edit.\n");
+    return 0;
+  }
+  if (locker = (string)SFM_D->query_lock(fname)) {
+    if (locker != getuid(this_object())) {
+      notify_fail("File is locked by " + capitalize(locker) + ".\n");
+      return 0;
+    } else {
+      write("Warning: file is already locked by you.\n");
+    }
+  }
+  SFM_D->lock(fname);
+  tmp = read_file(fname);
+  if (!write_file(fname, "")) {
+    notify_fail("Edit can't write to " + fname + ".\n");
+    return 0;
+  }
+  edit_filename = fname;
+  if ((string)this_player()->getenv("editor") == "ed") {
+    ed(edit_filename, "stop_ed");
+    return 1;
+  }
+  write("To end message type '.'. To abort type ~q.  To use ed type ~e.\n");
+  write("________________________________________________________________\n");
+  if (tmp) {
+    write(tmp);
+  }
+  input_to("lines");
+  return 1;
+}
+
+void lines(string str) {
+  if (str == ".") {
+    if (act_ob && func) {
+      call_other(act_ob, func, argument);
+    }
+    return;
+  } else if (str == "~e") {
+    write("Set your 'editor' environment variable to 'ed' if you wish\n");
+    write("to enter ed immediately rather than having to type ~e.\n");
+    ed(edit_filename, "stop_ed");
+    return;
+  } else if (str == "~q") {
+    write("Edit aborted.\n");
+    if (act_ob) {
+      act_ob->abort();
+    }
+    return;
+  }
+  write_file(edit_filename, str + "\n");
+  input_to("lines");
+  return;
+}
+
+void stop_ed() {
+  SFM_D->unlock(edit_filename);
+  if (act_ob && func) {
+    call_other(act_ob, func, argument);
+  }
+}
+
+void abort() {
+  SFM_D->unlock(edit_filename);
+}
+
+string query_edit_filename() {
+  return edit_filename;
+}
+
+void set_edit_filename(string str) {
+  edit_filename = str;
+  return;
+}

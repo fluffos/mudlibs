@@ -1,0 +1,75 @@
+/*
+   file:    /bin/daemon/playerd.c
+   mudlib:  basis
+   created: 1992/07/28
+
+   This file is for retrieving player information that changes rarely if
+   at all.  The idea is to store important information (that doesn't
+   change much) in a separate place from the rest of the player data.
+   this provides a recovery method in the event the normal playerfile
+   becomes corrupted.
+*/
+
+#include <config.h>
+#include <attributes.h>
+inherit DAEMON;
+
+mapping attrs;
+
+// data that isn't to be saved to the pith file
+nosave string current_uid;
+
+nosave int ok() {
+  if (interactive(previous_object()))
+    return 1;
+  if (!strcmp(geteuid(previous_object()), ROOT_UID))
+    return 1;
+  return 0;
+}
+
+string compute_dir(string uid) {
+  return USER_DIR + "/" + uid[0..0];
+}
+
+int load_data(string uid) {
+  string pith_file;
+
+  attrs = ([]);
+  current_uid = uid;
+  pith_file = compute_dir(uid) + "/" + uid;
+  if (!file_exists(pith_file + ".o")) {
+    return 0;
+  } else {
+    restore_object(pith_file);
+    return 1;
+  }
+}
+
+void save_data() {
+  string pith_dir;
+
+  if (!ok())
+    return;
+  pith_dir = compute_dir(current_uid);
+  if (!directory_exists(pith_dir)) {
+    mkdir(pith_dir);
+  }
+  save_object(compute_dir(current_uid) + "/" + current_uid);
+}
+
+void set(mixed key, mixed value) {
+  if (!ok())
+    return;
+  attrs[key] = value;
+}
+
+mixed query(mixed key) {
+  if (!ok())
+    return;
+  return attrs[key];
+}
+
+void create() {
+  attrs = ([]);
+  seteuid(ROOT_UID);
+}

@@ -1,0 +1,74 @@
+// Written by Huthar. (NOT! By Wayfarer actually!)
+// modified to run on Basis by Truilkan
+
+#include <config.h>
+#include <daemons.h>
+#include <socket.h>
+#include <inetd.h>
+inherit BIN;
+
+#define TIMEOUT 15
+
+mapping requests;
+
+void remote_finger(object me, string target, string mud);
+
+int do_command(string str) {
+  object ob;
+  string tmp1, tmp2;
+
+  if (!str) {
+    notify_fail("finger <player>\n");
+    return 0;
+  }
+
+  if (sscanf(str, "%s@%s", tmp1, tmp2)) {
+    if (!tmp1)
+      tmp1 = "";
+    remote_finger(this_player(), tmp1, tmp2);
+    return 1;
+  }
+  seteuid("anonymous");
+  ob = find_object_or_load(FINGER_D);
+  (int)ob->do_finger(str);
+  return 1;
+}
+
+/*
+ * Intermud finger command
+ * Blackthorn@Genocide (10/31/92)
+ */
+
+void create() {
+  requests = ([]);
+  seteuid("anonymous");
+}
+
+void remote_finger(object source, string user, string mud) {
+  int id;
+  id = INET_D->open_service(mud, "finger", ({ user }));
+  if (id < 0) {
+    tell_object(source, "Remote mud does not exist.\n");
+    return;
+  }
+  requests[id] = ({ source, user, mud });
+  call_out("timeout", TIMEOUT, id);
+}
+
+void read_callback(int id, string msg) {
+  if (!msg) return;
+  tell_object(requests[id][0], msg);
+}
+
+void close_callback(int id) {
+  map_delete(requests, id);
+}
+
+void timeout(int id) {
+  if (!requests[id]) return;
+  tell_object(requests[id][0], "Remote finger connection timed out.\n");
+  INET_D->close_socket(id);
+  map_delete(requests, id);
+}
+
+int permissions() { return 0; }

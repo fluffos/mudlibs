@@ -1,0 +1,76 @@
+// aproposd.c: apropos daemon - updates /tmp/apropos and responds to queries
+//
+// written by Whiplash@TMI - 92/02/11
+// minor rewriting by Truilkan@TMI - 92/02/11
+
+#define TMP_FILE "/tmp/apropos"
+
+nosave int already_updating;
+string *all_apropos;
+
+void create() {
+  all_apropos = ({});
+}
+
+nosave update_aplist() {
+  string *docl;
+  int i;
+  if (already_updating) return;
+  already_updating = 1;
+  all_apropos = ({});
+  docl = stat("/man/.");
+  for (i = 0; i < sizeof(docl); i++) {
+    string tmp;
+#if 0
+    write(docl[i] + "\n");
+#endif
+    if (!sscanf(docl[i], "man%s", tmp)) continue;
+    // call_out is used to avoid exceeding max evaluations limit
+    call_out("dump_line", 1, "/man/" + docl[i]);
+  }
+  call_out("save_me", 2);
+}
+
+// apropos: called by /bin/cmd/_apropos.c
+
+string *apropos(string str) {
+  int i;
+
+  if (!all_apropos || !sizeof(all_apropos)) {
+    if (!restore_object(TMP_FILE)) {
+      write("Updating apropos list, this'll be a few seconds.\n");
+      update_aplist();
+    }
+  }
+  return regexp(all_apropos, ".*" + str + ".*");
+}
+
+nosave void save_me() {
+  save_object(TMP_FILE);
+  already_updating = 0;
+}
+
+// dump_line: called via call_out
+
+dump_line(str) {
+  string *filel;
+  int i;
+  string *all_lines;
+  filel = stat(str + "/.");
+  if (!filel) return;
+  for (i = 0; i < sizeof(filel); i++) {
+    string tmp;
+    int j;
+    tmp = read_file(str + "/" + filel[i]);
+    all_lines = explode(tmp, "\n");
+    for (j = 0; j < sizeof(all_lines); j++) {
+      if (all_lines[j] == ".SH NAME") break;  /* KLOOOODGE!!! */
+    }
+    if (j < sizeof(all_lines))
+      all_apropos += ({ all_lines[j + 1] });
+  }
+}
+
+clean_up() {
+  all_apropos = 0;
+}

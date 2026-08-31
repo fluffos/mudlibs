@@ -1,0 +1,110 @@
+// mudlib: Basis
+// date:   1992/09/22
+
+// originally written by Huthar@portals (normal mud tell by Wayfarer@portals)
+// last modified by Truilkan@Basis
+
+#include <config.h>
+#include <daemons.h>
+#include <attributes.h>
+#include <socket.h>
+#include <inetd.h>
+
+#define IDLE_TIME 60
+#define log(a) log_file("tell.err",a)
+
+inherit BIN;
+
+mapping requests;
+
+void remote_tell(object ob, string target, string mud, string msg);
+
+int do_command(string str) {
+  string tell_msg;
+  string who, msg;
+  object ob, act_ob;
+  string target, mud;
+
+  act_ob = previous_object();
+
+  if (!str || sscanf(str, "%s %s", who, msg) != 2) {
+    notify_fail("usage: tell <player> <message>\n");
+    return 0;
+  }
+
+  if (sscanf(who, "%s@%s", target, mud) == 2) {
+    remote_tell(this_player(), target, mud, msg);
+    return 1;
+  }
+
+  who = lower_case(who);
+  ob = find_living(who);
+  if (!ob || !living(ob)) {
+    notify_fail("I don't think " + who + " is around.\n");
+    return 0;
+  }
+
+  tell_object(ob,
+    (string)act_ob->query(a_cap_name) + " tells you: " + msg + "\n");
+  if (interactive(ob)) {
+    if (!interactive(ob))
+      write((string)ob->query(a_cap_name) + " is netdead.\n");
+    else {
+      if (query_idle(ob) > IDLE_TIME)
+        write((string)ob->query(a_cap_name) + " has been idle for " +
+          format_time(query_idle(ob)) + ".\n");
+    }
+  }
+  return 1;
+}
+
+void create() {
+  seteuid(getuid(this_object()));
+  requests = ([]);
+}
+
+/*
+ * Intermud tell command
+ * Blackthorn@Genocide (10/29/92)
+ */
+
+void remote_tell(object source, string user, string mud, string msg) {
+  int id;
+
+  id = INET_D->open_service(mud, "tell");
+  if (id < 0) {
+    tell_object(source, "Remote mud does not exist.\n");
+    return;
+  }
+  requests[id] = ({ source, user, mud, msg });
+}
+
+void service_callback(int id) {
+  if (!requests[id]) {
+    return;
+  }
+  INET_D->write_socket(id, requests[id][0]->query(a_cap_name) + "@" +
+    THIS_MUD + " tells " + requests[id][1] + ": " +
+    requests[id][3] + "\n");
+  call_out("close_connection", 8, id);
+}
+
+void read_callback(int id, string msg) {
+  string originator, mud, target, mesg;
+  object ob;
+
+  if (!msg) return;
+  if (sscanf(msg, "%s@%s tells %s: %s", originator, mud, target, mesg) == 4 &&
+    (ob = find_player(target))) {
+    tell_object(ob, capitalize(originator) + "@" + capitalize(mud) +
+      " tells you: " + mesg);
+  }
+  INET_D->close_socket(id);
+}
+
+void close_connection(int id) {
+  map_delete(requests, id);
+  INET_D->close_socket(id);
+}   // give them a chance to respond if player doesn't exist
+
+int permissions() { return 0; }

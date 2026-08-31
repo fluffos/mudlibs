@@ -1,0 +1,174 @@
+// file:   /adm/std/master/valid.c
+// mudlib: Basis
+
+#include <config.h>
+#include <access.h>
+#include <login.h>
+
+inherit "/adm/std/master/access";
+inherit "/adm/std/master/groups";
+
+int
+valid_override(string file, string name)
+{
+	if (file == SIMUL_EFUN_OB) {
+		return 1;
+	}
+	if (name == "destruct")
+		return 0;
+	if (name == "shutdown")
+		return 0;
+	return 1;
+}
+
+int
+valid_domain(string domain)
+{
+	return 1;
+} 
+
+int
+valid_socket(object eff_user, string fun, mixed *info)
+{
+	return 0; /* until we get intermud stuff that works with 0.8.81+ */
+}
+
+// valid_destruct
+
+int valid_destruct(object destructee)
+{
+	object destructor;
+
+	destructor = previous_object();
+	if ((destructee == this_object())
+		&& (base_name(destructor) != NEW_MASTER_OB))
+	{
+		return 0;
+	}
+	return 1;
+}
+
+// Write and Read stuff:
+// valid_write: called with the file name, the object initiating the call,
+//              and the function by which they called it. 
+// valid_read:  called exactly the same as valid_write()
+//
+// These now use a special feature that enables us to update the access
+// of people without rebooting the game, an unfortunate side effect of
+// the old system.
+//
+// Something to be careful of is commands in /bin that do file manipulation,
+// as they have root access.
+
+int
+valid_write(string file, mixed user, string func)
+{
+	int i;
+	string tmp, eff_user;
+
+	if (!objectp(user)) {
+		user = find_living(user);
+	}
+	if (geteuid(user) == ROOT_UID) { /* Should this be allowed? */
+		return 1;
+	}
+	i = check_access(file,user);
+	if (i & ACCESS_WRITE) {
+		return (i & ACCESS_WRITE);
+	} else if (objectp(user)) {
+		return (file == data_file(user));
+	}
+}
+
+int
+valid_read(string file, mixed user, string func)
+{
+	int i;
+
+	if (!objectp(user)) {
+		user = find_living(user);
+	}
+	if (geteuid(user) == ROOT_UID) {
+		return 1;
+	}
+	i = check_access(file,user);
+	if (i & ACCESS_READ) {
+		return (i & ACCESS_READ);
+	} else if (objectp(user)) {
+		return (file == data_file(user));
+	}
+}
+
+int
+valid_shutdown(string eff_user)
+{
+	log_file("shutdowns", "Game shut down by " + eff_user + " at " +
+		ctime(time()) + "\n");
+	if (geteuid(previous_object()) == ROOT_UID) {
+		return 1;
+	}
+	return 0;
+}
+
+// valid_seteuid: determines whether an object ob can become euid str.
+// This is very important because the euids still control most of the
+// access permissions.   
+
+int
+valid_seteuid(object ob, string str)
+{
+    // ROOT_UID has privileges...
+	if (getuid(ob) == ROOT_UID) {
+		return 1;
+	}
+	// An object is lucky enough to be itself...
+	if (getuid(ob) == str) {
+		return 1;
+	}
+    // creator_file() is a simul_efun that determines who is 'responsible'
+    // for an object.  It's another way of saying getuid(ob) in general, but
+    // there are sometimes differences.
+	if (creator_file(file_name(ob)) == str) {
+		return 1;
+	}
+	return 0;
+}
+
+// The master object is asked if it is ok to shadow object ob. Use
+// previous_object() to find out who is asking.
+//
+// In this example, we allow shadowing as long as the target object
+// hasn't denied it with a query_prevent_shadow() returning 1.
+
+nomask int
+valid_shadow(object ob)
+{
+	// dangerous to allow people to shadow things with global access 
+	if (getuid(ob) == ROOT_UID) {
+		return 0;
+	}
+	// this gives an object the chance to stop the shadow also 
+	return !ob->query_prevent_shadow(previous_object());
+}
+
+// Check to see if someone can snoop someone else.
+
+int
+valid_snoop(object snooper, object snoopee)
+{
+    return 0;
+}
+
+// valid_exec: Check to see if a user can exec() into another object.
+
+int
+valid_exec(object from_obj, object to_obj)
+{
+	string prev;
+
+	prev = base_name(previous_object());
+	if ((prev == SU_OB) || (prev == LOGIN_OB) || (prev == NEW_USER)) {
+		return 1;
+	}
+	return 0;
+}

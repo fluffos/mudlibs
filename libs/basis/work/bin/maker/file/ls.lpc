@@ -1,0 +1,158 @@
+// Mudlib: Basis
+// Date:   1992/09
+/*
+// The new, more efficient, improved ls command.
+// Thanks to Huthar and Wayfarer for this one.
+*/
+
+#include <config.h>
+inherit BIN;
+
+string spaces;
+
+varargs int do_ls(mixed path, object act_ob, int show_dots, string real_path) {
+  string *files;
+  string *Files, *Dirs;
+  int index, j, x, y, rows, cols, l, length, num, size, i;
+  string *wcfiles;
+  string string_path;
+
+  if (!act_ob)
+    act_ob = previous_object();
+
+  spaces = "                                                                               ";
+  seteuid(getuid(act_ob));
+  if (!pointerp(path)) {
+    size = file_size(path);
+    if (size > -1) {
+      size /= 1000;
+      if (size == 0) size = 1;
+      files = explode(path, "/");
+      path = files[sizeof(files) - 1];
+      write(size + " " + path + "\n");
+      return 1;
+    }
+    if (path != "/")
+      path += "/";
+    files = get_dir(path);
+  } else {
+    files = path[1];
+    path = path[0][0] + "/";
+  }
+  if (!show_dots)
+    files = filter_array(files, "remove_dots", this_object());
+
+  if (!files) {
+    size = file_size(path);
+    if (size == -2) {
+      return 1;
+    }
+    if (size == -1) {
+      notify_fail("No such file or directory '" + path + "'\n");
+      return 0;
+    }
+    write(size + " " + path + "\n");
+    return 1;
+  }
+  num = sizeof(files);
+  for (index = 0; index < num; index++) {
+    i = strlen(files[index]);
+    if (i > length) length = i;
+  }
+  length++;
+  if (length > 75)
+    length = 75;
+  cols = 80 / (length + 5);
+  if (!cols) cols = 1; /* filenames can be huge in un*x */ rows = num / cols;
+  if (rows * cols < num)
+    rows++;
+  for (y = 0; y < rows; y++) {
+    for (x = 0; x < cols; x++) {
+      index = x * rows + y;
+      if (index > num - 1)
+        break;
+      size = file_size((string)path + files[index]);
+      l = strlen(files[index]);
+      switch (size) {
+        case -2:
+          write("   1 " + files[index] + "/");
+          l++;
+          break;
+        case -1:
+          write("   - " + files[index]);
+          break;
+        default:
+          size /= 1000;
+          if (size == 0) size = 1;
+          if (size < 10) write(" ");
+          if (size < 100) write(" ");
+          write(" " + size + " " + files[index]);
+          break;
+      }
+      if (length - l > 0)
+        write(spaces[1..(length - l)]);
+    }
+    write("\n");
+  }
+#if 0
+  if (index % cols != 0)
+    write("\n");
+#endif
+  return 1;
+}
+
+int do_command(string path) {
+  string *Files, *Dirs;
+  int i, num;
+  string *wcfiles;
+  mixed *tmp;
+  int show_dots;
+  string str2;
+  object act_ob;
+
+  act_ob = previous_object();
+
+  seteuid(getuid(act_ob));
+  if (path && (path == "-a" || sscanf(path, "-a %s", str2))) {
+    show_dots = 1;
+    path = str2;
+  }
+
+  wcfiles = (string *)act_ob->wild_card(path);
+
+  if (!wcfiles || !sizeof(wcfiles)) {
+    notify_fail("No such file or directory '" + path + "'\n");
+    return 0;
+  }
+  num = sizeof(wcfiles);
+  if (num == 1) {
+    do_ls(wcfiles[0], act_ob, show_dots);
+    return 1;
+  }
+
+  tmp = path_file(wcfiles);
+  Files = filter_array(wcfiles, "is_file", this_object());
+  Dirs = wcfiles - Files;
+
+  if (Files)
+    do_ls(path_file(Files), act_ob, show_dots);
+  if (Dirs) {
+    for (i = 0; i < sizeof(Dirs); i++) {
+      write(Dirs[i] + ":\n");
+      do_ls(Dirs[i], act_ob, show_dots);
+    }
+  }
+  return 1;
+}
+
+int is_file(string file) {
+  return (file_size(file) >= 0);
+}
+
+int remove_dots(string file) {
+  if (file[0] == '.')
+    return 0;
+  return 1;
+}
+
+int permissions() { return 0; }

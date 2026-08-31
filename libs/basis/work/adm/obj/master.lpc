@@ -1,0 +1,301 @@
+// /adm/obj/master.c
+
+//  $Locker:  $
+//
+//  $Source: /usr/local/mud/libs/basis/adm/obj/RCS/master.c,v $
+//  $Revision: 1.8 $
+//  $Author: garnett $
+//  $Date: 92/10/10 22:29:03 $
+//  $State: Exp $
+
+/*
+  $Log:	master.c,v $
+ * Revision 1.8  92/10/10  22:29:03  garnett
+ * changed crash() not to call quit() in user
+ * 
+ * Revision 1.7  92/10/01  02:31:35  garnett
+ * put make_data_dir back in here
+ * 
+ * Revision 1.6  92/09/29  03:16:36  garnett
+ * various updates
+ * 
+ * Revision 1.5  92/09/29  02:29:37  garnett
+ * added a create()
+ * 
+ * Revision 1.4  92/09/29  02:25:07  garnett
+ * cleaned it up somewhat and moved all the valid_* stuff into
+ * /adm/std/master dir.
+ * 
+ * Revision 1.3  92/09/28  20:05:47  garnett
+ * fixed valid_exec again (i messed up new users)
+ * 
+ * Revision 1.2  92/09/28  18:33:59  garnett
+ * fixed valid_exec to check previous_object()
+ * 
+ * Revision 1.1  92/09/26  22:19:41  garnett
+ * Initial revision
+ * 
+ */
+
+// This is the MudOS master object.
+// This is the second object loaded after simul_efun.c.
+// Everything written with 'write()' at startup will be printed on
+// stdout.
+// 1. create() will be called first.
+// 2. flag() will be called once for every argument to the flag -f
+// supplied to 'parse'.
+// 3. epilog() will be called.
+// 4. The game will enter multiuser mode, and enable log in.
+
+// Revision history:
+// - Originally written by unknown authors, probably Lars, for the "mudlib.n".
+// - Functions were added or removed by Sulam and Buddha at The Mud Institute
+//   as they became necessary or obsolete.
+// - The file was mostly rewritten by Sulam, probably in December of 1991.
+// - The file was seriously revised during the development of the new
+//   MudOS enhanced LPmud driver by Buddha, using code by Huthar and Wayfarer,
+//   in February 1992. 
+// - Revised again to support more than one mud by Buddha on March 12, 1992.
+// - Some serious bugs in access and groups were hacked and slashed, this
+//   also necessitated inheriting those files.  Sulam (April 11, 1992)
+
+
+#include <config.h>
+#include <attributes.h>
+#include <daemons.h>
+
+inherit "/adm/std/master/parse_com.lpc";
+inherit "/adm/std/master/valid";
+inherit "/adm/std/master/bench";
+
+nosave int access_loaded = 0;
+
+void preload(string file);
+
+object connect() {
+  object login_ob;
+  mixed err;
+
+  err = catch(login_ob = new(LOGIN_OB));
+  if (err) {
+    write("It looks like someone is working on the player object.\n");
+    write(err);
+    destruct(this_object());
+  }
+  return login_ob;
+}
+
+// compile_object: This is used for loading MudOS "virtual" objects.
+
+mixed compile_object(string file) {
+  return (mixed)VIRTUAL_D->compile_object(file);
+}
+
+// This is called when there is a segmentation fault or a bus error, etc.
+// As it's nosave it can't be called by anything but the driver (and master).
+
+nosave void crash(string error, object command_giver, object current_object) {
+  efun::shout("Master object shouts: Fuck a duck!\n");
+  efun::shout("Master object tells you: The game is crashing.\n");
+  SHUTDOWN_D->save_daemons();
+  log_file("crashes", MUD_NAME + " crashed on: " + ctime(time()) +
+    ", error: " + error + "\n");
+  if (command_giver) {
+    log_file("crashes", "this_player: " + file_name(command_giver) + "\n");
+  }
+  if (current_object) {
+    log_file("crashes", "this_object: " + file_name(current_object) + "\n");
+  }
+}
+
+// Function name:	update_file()
+// Description:		reads in a file, ignoring lines that begin with '#'
+// Arguements:		file: a string that shows what file to read in.
+// Return:		Array of nonblank lines that don't begin with '#'
+// Note:                must be declared nosave (else a security hole)
+
+nosave string *update_file(string file) {
+  string *array;
+  string str;
+  int i;
+
+  str = read_file(file);
+  if (!str) {
+    return ({});
+  }
+  array = explode(str, "\n");
+  for (i = 0; i < sizeof(array); i++) {
+    if (array [i][0] == '#') {
+      array [i] = 0;
+    }
+  }
+  return array;
+}
+
+// Function name:       epilog()
+// Description:         Loads master data, including list of all domains and
+//                      wizards. Then make a list of preload stuff
+// Arguments:           load_empty: If true, epilog() does no preloading
+// Return:              List of files to preload
+
+string *epilog(int load_empty) {
+  string *items;
+
+  if (!load_groups()) {
+    write("*Error in loading group list\n");
+    shutdown();
+  }
+  if (!load_access()) {
+    write("*Error in loading access list\n");
+    shutdown();
+  }
+  items = update_file(CONFIG_DIR + "/preload");
+  call_out("socket_preload", 5);
+  return items;
+}
+
+// preload an object
+
+void preload(string file) {
+  int t1;
+  string err;
+
+  if (file_size(file + ".lpc") == -1)
+    return;
+
+  t1 = time();
+  write("Preloading : " + file + "...");
+  err = catch(call_other(file, "??"));
+  if (err != 0) {
+    write("\nGot error " + err + " when loading " + file + "\n");
+  } else {
+    t1 = time() - t1;
+    write("(" + t1 / 60 + "." + t1 % 60 + ")\n");
+  }
+}
+
+void socket_preload() {
+  string *items, err;
+  int i;
+
+  CMWHO_D->boot();
+  items = update_file(CONFIG_DIR + "/preload_socket");
+
+  for (i = 0; i < sizeof(items); i++) {
+    if (items[i] && items[i] != "") {
+      write("Preloading (inet) : " + items[i] + "\n");
+      err = catch(call_other(items[i], "???"));
+      if (err) {
+        write("\nGot error " + err + " when loading " + items[i] + "\n");
+      }
+    }
+  }
+}
+
+// Write an error message into a log file. The error occured in the object
+// 'file', giving the error message 'message'.
+
+void log_error(string file, string message) {
+  string name, home;
+
+  name = file_owner(file);
+  if (name) {
+    home = user_path(name);
+  } else {
+    home = LOG_DIR;
+  }
+  write_file(home + "/log", message);
+}
+
+// save_ed_setup and restore_ed_setup are called by the ed to maintain
+// individual options settings. These functions are located in the master
+// object so that the local gods can decide what strategy they want to use.
+//
+// The wizard object 'who' wants to save his ed setup. It is saved in the
+// wizard's .edrc in his/her home directory.
+//
+// Don't care to prevent unauthorized access of this file. Only make sure
+// that a number is given as argument.
+
+int save_ed_setup(object who, int code) {
+  string file;
+
+  if (!intp(code)) {
+    return 0;
+  }
+  file = user_path(getuid(who)) + ".edrc";
+  rm(file);
+  return write_file(file, code + "");
+}
+
+// Retrieve the ed setup. No meaning to defend this file read from
+// unauthorized access.
+
+int retrieve_ed_setup(object who) {
+  string file;
+  int code;
+
+  file = user_path(getuid(who)) + ".edrc";
+  if (file_size(file) <= 0) {
+    return 0;
+  }
+  sscanf(read_file(file), "%d", code);
+  return code;
+}
+
+// When an object is destructed, this function is called with every
+// item in that room. We get the chance to save users from being destructed.
+//
+// *Does this really need to be here?  could handle this from remove().
+
+void destruct_environment_of(object ob) {
+  if (!interactive(ob)) {
+    return;
+  }
+  tell_object(ob,
+    "Everything you see disolves. Luckily, you are transported somewhere...\n");
+  ob->move(VOID_OB);
+}
+
+// make_path_absolute: This is called by the driver to resolve path names in ed.
+
+string make_path_absolute(string file) {
+  file = resolv_path((string)this_player()->query(a_cwd), file);
+  return file;
+}
+
+// These will hopefully go soon.
+// As long as we keep config.h secure, there is no need to query the 
+// master object for these.
+// However the game driver still uses this.
+
+string get_root_uid() { return ROOT_UID; }
+
+string get_bb_uid() { return BACKBONE_UID; }
+
+string creator_file(string str) {
+  return (string)call_other(SECURE_DIR + "/simul_efun", "creator_file", str);
+}
+
+string domain_file(string str) {
+  return (string)call_other(SECURE_DIR + "/simul_efun", "domain_file", str);
+}
+
+string author_file(string str) {
+  return (string)call_other(SECURE_DIR + "/simul_efun", "author_file", str);
+}
+
+void make_data_dir() {
+  string *parts, dir;
+  string path;
+  int j;
+
+  path = data_dir(previous_object());
+  parts = explode(path, "/");
+  dir = "";
+  for (j = 0; j < sizeof(parts); j++) {
+    dir += parts[j];
+    mkdir(dir);
+    dir += "/";
+  }
+}

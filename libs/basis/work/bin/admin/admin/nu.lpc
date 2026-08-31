@@ -1,0 +1,123 @@
+// file:    nu.c (newuser)
+// author:  Truilkan
+// date:    1992/09/05
+// comment: This file uses the enhancements in the MudOS version of input_to().
+//          This allows multiple people to run nu simultaneously since
+//          no global variables were required.
+// comment: This file is based on the nu I wrote for Portals
+
+#include <config.h>
+#include <daemons.h>
+#include <attributes.h>
+inherit BIN;
+
+#include <search_paths.h>
+
+int do_command(string arg) {
+#if 0
+  object act_ob;
+
+  act_ob = previous_object();
+  // todo: add positions or some equivalent thing
+  if ((string)master()->query_position(act_ob) != "Admin") {
+    notify_fail("Insufficient permission.\n");
+    return 0;
+  }
+#endif
+  write("Enter name of new user: ");
+  input_to("get_user");
+  return 1;
+}
+
+void get_user(string name) {
+  if (!name || (name == "")) {
+    do_command(0);
+    return;
+  }
+  write("Enter the password for the new user: ");
+  input_to("get_password", 1, name);
+}
+
+void get_password(string password, string name) {
+  if (!password || (password == "")) {
+    get_user(name);
+    return;
+  }
+  write("\nEnter the password again (confirmation): ");
+  input_to("get_password2", 1, password, name);
+}
+
+void get_password2(string password2, string password, string name) {
+  if (password != password2) {
+    write("\nYou didn't type the same password twice.\n");
+    get_user(name);
+    return;
+  }
+  write("\nEnter the domain for the new user (or 'none'): ");
+  input_to("get_domain", 0, password, name);
+}
+
+void get_domain(string domain, string password, string name) {
+  string home_dir, domain_dir, dir_file;
+  string *subdirs, *pair;
+  int j;
+
+  if (!domain || (domain == "")) {
+    write("Using default domain of 'maker'\n");
+    domain = "maker";
+  }
+  home_dir = user_path(lower_case(name));
+  home_dir = home_dir[0..strlen(home_dir) - 2];
+  if (user_exists(name)) {
+    write("That user already exists.\n");
+    return;
+  }
+  pair = path_file(home_dir);
+  if (file_size(pair[0]) != -2) {
+    if (!mkdir(pair[0])) {
+      write("Unable to create " + pair[0] + ".\n");
+      return;
+    }
+  }
+  write("Setting player info.\n");
+  PLAYER_D->load_data(name);
+  PLAYER_D->set(a_filename, domain);
+  PLAYER_D->set(a_password, crypt(password, name));
+  PLAYER_D->save_data();
+  write("Saving player info.\n");
+  if ((domain != "maker") && (domain != "admin")) {
+    return;
+  }
+  write("Creating home directory: " + home_dir + "\n");
+  if (!mkdir(home_dir)) {
+    write("Unable to create home directory.\n");
+    return;
+  }
+  domain_dir = "/d/" + domain + "/default/";
+  if (!directory_exists(domain_dir)) {
+    write("Domain directory " + domain_dir + " doesn't exist.\n");
+    return;
+  }
+  write("Copying workroom.c\n");
+  if (cp(domain_dir + "workroom.lpc", home_dir + "/workroom.lpc") != 1) {
+    write("Unable to copy workroom.c\n");
+  }
+  // todo: decide if we are going to use the .config.c idea
+#if 0
+  write("Copying .config.c\n");
+  if (cp(domain_dir + "config.lpc", home_dir + "/.config.lpc") != 1) {
+    write("Unable to copy .config.c\n");
+  }
+#endif
+  dir_file = domain_dir + "directories";
+  if (file_size(dir_file) < 0) {
+    write(dir_file + " doesn't exist.\n");
+    return;
+  }
+  subdirs = explode(read_file(dir_file), "\n");
+  for (j = 0; j < sizeof(subdirs); j++) {
+    write("Making directory: " + home_dir + "/" + subdirs[j] + "\n");
+    if (!mkdir(home_dir + "/" + subdirs[j]))
+      write("Unable to make " + home_dir + "/" + subdirs[j] + "\n");
+  }
+}

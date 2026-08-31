@@ -1,0 +1,105 @@
+/*
+// mudlib:  Basis
+// purpose: inherited by users (players)
+*/
+
+/*
+  $Locker:  $
+
+  $Source: /usr/local/mud/libs/basis/std/RCS/user.c,v $
+  $Revision: 1.4 $
+  $Author: garnett $
+  $Date: 92/09/24 21:01:57 $
+  $State: Exp $
+
+  $Log:	user.c,v $
+ * Revision 1.4  92/09/24  21:01:57  garnett
+ * changed shell::clear_aliases to shell::create
+ * 
+ * Revision 1.3  92/09/24  21:01:08  garnett
+ * fixed alias:clear_aliases to shell::clear_aliases
+ * 
+ * Revision 1.2  92/09/24  20:16:10  garnett
+ * added inherit "/std/user/shell" and moved some inherits into it out
+ * of user.c.  moved process_input into it as well.
+ * 
+ * Revision 1.1  92/09/24  06:07:25  garnett
+ * Initial revision
+ * 
+*/
+
+#include <config.h>
+#include <attributes.h>
+#include <daemons.h>
+
+inherit LIVING;
+
+inherit "/std/i/shell";
+// todo: move wild_cards out of the developer object (used by ls etc.)
+inherit "/std/i/wild_card";
+
+void remove() {
+  CMWHO_D->remove_user(this_object());
+  living::remove();
+}
+
+void create() {
+  living::create();
+  shell::create();
+  seteuid(0);  // so that login.c can export_uid to us
+}
+
+/*
+   receive_message: called by the message() efun.  see /include/message.h
+   for the various message classes.
+*/
+
+void receive_message(string msgclass, string msg) {
+  receive(msg);
+}
+
+// catch_tell: in case INTERACTIVE_CATCH_TELL is defined in driver
+
+void catch_tell(string str) {
+  receive(str);
+}
+
+/*
+   setup: used to configure attributes that aren't known by this_object()
+   at create() time such as living_name (and so can't be done in create()).
+*/
+
+void setup() {
+  seteuid(getuid(this_object()));
+  living::setup();
+  // add code here to set standard attributes of a user
+  set(a_create_time, time());
+  PASSWORD_D->check(getuid(this_object()));
+  CMWHO_D->add_user(this_object());
+  ::setup_efun_attributes();
+}
+
+/*
+   net_dead: called by the gamedriver when an interactive player loses
+   hir network connection to the mud.
+*/
+
+void net_dead() {
+  // the simul_efun was causing an error for some reason
+  efun::say(query(a_cap_name) + " is now link-dead.\n");
+  set_heart_beat(0);
+  CMWHO_D->remove_user(this_object());
+}
+
+/*
+    reconnect: called by the login.c object when a netdead player reconnects.
+*/
+
+void reconnect() {
+  CMWHO_D->add_user(this_object());
+  say(query(a_cap_name) + " has reconnected.\n");
+  tell_me("Reconnected.\n");
+  set_heart_beat(1);
+}
+
+// EOF

@@ -1,0 +1,185 @@
+/*
+   mudlib:  base
+   file:    /adm/obj/login.c
+   created: 1992/07/23
+   purpose: handles login and exec() to the appropriate object
+*/
+
+#include <config.h>
+#include <login.h>
+#include <daemons.h>
+#include <attributes.h>
+#include <flags.h>
+
+// todo: change this code to use the multi-args version of input_to
+
+// The site-banning code is from Dainia@DreamShadow
+inherit "/adm/std/banish";
+
+inherit "/adm/std/login/misc";
+inherit "/adm/std/login/new_user";
+
+nosave void logon();
+nosave void get_name(string str);
+nosave void get_password(string pass);
+nosave int check_password(string pass);
+nosave void try_again();
+nosave void idle();
+
+private nosave string name, /* name of character	*/ password; /* encrypted password	*/ private nosave object new_obj; /* object to exec to	*/ private nosave int attempts; /* # attempts at login	*/
+
+void clean_up() {
+  if (sizeof(children(LOGIN_OB)) == 1) {
+    destruct(this_object());
+  }
+}
+
+void tell_me(string t) {
+  receive(t);
+}
+
+nosave void logon() {
+  misc::welcome();
+  write("\n");
+  write(NAME_PROMPT);
+  input_to("get_name");
+  return;
+}
+
+nosave void get_name(string str) {
+  int i, limit;
+
+  if (str == "") {
+    try_again();
+  }
+  name = lower_case(str);
+  if (MASTER_OB->is_locked()) {
+    // let all comers know about the lock (including those immune to it)
+    cat(LOCKED_MSG_FILE);
+    if (MASTER_OB->query_member_group(name, "key")) {
+      write("\n** Access allowed **\n");
+    } else {
+      destruct(this_object());
+      return;
+    }
+  }
+  if (!misc::valid_name(name)) {
+    write(NEW_NAME_PROMPT);
+    input_to("get_name");
+    return;
+  }
+  if (!user_exists(name)) {
+    new_user::handle_new_user(name);
+    return;
+  }
+  write(PASSWORD_PROMPT);
+  input_to("get_password", I_NOECHO | I_NOESC);
+  return;
+}
+
+nosave int is_copy(object copy) {
+  if (!copy) {
+    return 0;
+  }
+  if (interactive(copy)) { /* if there's a copy not netdead */
+    write("\n");
+    write(MSG_IS_DUPLICATE);
+#ifdef ALLOW_COPIES
+    if (wizardp(copy)) {  // only allow multiple logins for wizards
+      write(MSG_ALLOWING_DUPLICATE);
+      log_enter(name + ":\texec copy\t" + ctime(time()) + "\n");
+      switch_new_obj(new_obj, name);
+      return 1;
+    }
+#endif
+    disconnect_copy(copy);
+    return 1;
+  }
+  log_enter(name + ":\texec\t\t" + ctime(time()) + "\n");
+  if (exec(copy, this_object())) {  // reconnect to the netdead copy
+    copy->reconnect();
+  } else {
+    write(MSG_BAD_RECONNECT);
+  }
+  destruct(this_object());
+  return 1;
+}
+
+// get_password: ok -- Tru
+
+nosave void get_password(string pass) {
+  write("\n");
+  if (pass == "") {
+    try_again();
+  }
+  if (!check_password(pass)) {
+    attempts++;
+    write(MSG_BAD_PASSWORD);
+    if (attempts > MAX_LOGIN_TRIES) {
+      if (new_obj) {
+        destruct(new_obj);
+      }
+      destruct(this_object());
+    }
+    write(NEW_NAME_PROMPT);
+    input_to("get_name");
+    return;
+  }
+  if (is_copy(find_player(name))) {
+    return;
+  }
+  log_enter(name + ":\tenter\t\t" + ctime(time()) + "\n");
+  cat(NEWS_FILE);
+  cat(SCHEDULE_FILE);
+  switch_new_obj(new_obj, name);
+}
+
+nosave int check_password(string pass) {
+  string password, filename;
+
+  PLAYER_D->load_data(name);
+  password = (string)PLAYER_D->query(a_password);
+  if (password != crypt(pass, name)) {
+    if (new_obj)
+      destruct(new_obj);
+    return 0;
+  }
+  filename = (string)PLAYER_D->query(a_filename);
+  if (!new_obj) {
+    new_obj = new(INTERACTIVES_DIR + "/" + filename);
+  }
+  return 1;
+}
+
+nosave void try_again() {
+  write(MSG_TRY_AGAIN);
+  if (new_obj)
+    destruct(new_obj);
+  destruct(this_object());
+}
+
+nosave void idle() {
+  if (!interactive(this_object())) {
+    return;
+  }
+  if (query_idle(this_object()) < TIMEOUT) {
+    call_out("idle", TIMEOUT);
+    return;
+  }
+  receive(MSG_TIMED_OUT);
+  if (new_obj) {
+    destruct(new_obj);
+  }
+  destruct(this_object());
+}
+
+void create() {
+  ::create();
+  attempts = 0;
+  seteuid(ROOT_UID);
+  if (TIMEOUT) {
+    call_out("idle", TIMEOUT);
+  }
+}
+
+/* EOF */

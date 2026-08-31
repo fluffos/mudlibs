@@ -1,0 +1,173 @@
+// file:   /bin/daemon/commandd.c (idea from TMI)
+// mudlib: basis
+// date:   1992 September 5
+// author: Truilkan
+// desc:   command daemon
+
+// A mapping is used to maintain a cache of the bin directory structure.
+// The top level of the mapping is keyed by the command name.  The value
+// for each command is another mapping consisting of ({directory, object})
+// pairs.  This is fairly efficient since string constants are stored
+// as shared strings (the directory name).  The update command should
+// call the rehash() method in this object specifying the command and
+// path to the command (otherwise the update won't have an effect on
+// which bin file is executed for a given command).
+
+/*
+  $Locker:  $
+
+  $Source: /usr/local/mud/libs/basis/bin/daemon/RCS/commandd.c,v $
+  $Revision: 1.5 $
+  $Author: garnett $
+  $Date: 92/10/02 03:57:10 $
+  $State: Exp $
+
+  $Log:	commandd.c,v $
+ * Revision 1.5  92/10/02  03:57:10  garnett
+ * made where() varargs and removed .c from returned values
+ * 
+ * Revision 1.4  92/09/26  05:03:11  garnett
+ * fixed a syntax error
+ * 
+ * Revision 1.3  92/09/26  05:01:53  garnett
+ * removed the catch() from find_bin_object since find_object_or_load
+ * already does it.
+ * 
+ * Revision 1.2  92/09/26  04:40:27  garnett
+ * fixed the where function
+ * 
+ * Revision 1.1  92/09/26  03:57:17  garnett
+ * Initial revision
+ * 
+*/
+
+#include <config.h>
+#include <search_paths.h>
+inherit DAEMON;
+
+mapping cache;
+string *thePath;
+
+void prime_cache(string *paths) {
+  int j, k, len;
+  string *files, name;
+
+  for (j = 0; j < sizeof(paths); j++) {
+    files = get_dir(paths[j] + "/.");
+    if (!pointerp(files)) {
+      continue;
+    }
+    for (k = 0; k < sizeof(files); k++) {
+      len = strlen(files[k]);
+      // The original archive matched the 2-char ".c" extension
+      // with a fixed-width slice ([len-2..len-1]); convert_lib.sh's
+      // literal ".c" -> ".lpc" reference fixup updated the quoted
+      // string but not this slice's width, so the comparison
+      // (2 chars vs the 4-char ".lpc") was always false -- the
+      // whole command cache stayed permanently empty and every
+      // command in the game silently failed ("Errmm?"). See
+      // AGENTS.md §4.2 item 4.
+      if ((len > 4) && (files[k][(len - 4)..(len - 1)] == ".lpc")) {
+        name = files[k][0..(len - 5)];
+        if (undefinedp(cache[name])) {
+          cache[name] = ([ paths[j]: 0 ]);
+        } else {
+          cache[name][paths[j]] = 0;
+        }
+      }
+    }
+  }
+}
+
+// todo: extend to handle files with extensions other than .c (virtual objects)
+
+void create() {
+  cache = ([]);
+  prime_cache(USER_SEARCH_PATH);
+  prime_cache(MAKER_SEARCH_PATH);
+  prime_cache(ADMIN_SEARCH_PATH);
+  thePath = USER_SEARCH_PATH + MAKER_SEARCH_PATH + ADMIN_SEARCH_PATH;
+}
+
+void rehash(string command, string path) {
+  object binObj;
+
+  // use find_object() rather than passing in binObj for security reasons
+  binObj = find_object(path + "/" + command);
+  if (!binObj) {
+    return;
+  }
+  if (undefinedp(cache[command])) {
+    cache[command] = ([ path: binObj ]);
+  } else {
+    cache[command][path] = binObj;
+  }
+}
+
+// remove_bin_object: called bin /std/bin/bin_m.c
+
+void remove_bin_object(mixed anObject) {
+  string *pair, file;
+  mapping pairs;
+  int j;
+
+  if (objectp(anObject)) {
+    file = file_name(anObject);
+  } else if (stringp(anObject)) {
+    file = anObject;
+  } else {
+    return;
+  }
+  pair = path_file(file);
+  if (undefinedp(pairs = cache[pair[1]])) {
+    return;
+  }
+  if (!undefinedp(pairs[pair[0]])) {
+    map_delete(pairs, pair[0]);
+    if (!sizeof(pairs)) {
+      map_delete(cache, pair[1]);
+    }
+  }
+}
+
+object find_bin_object(string command, string *search_path) {
+  string path, err;
+  object binObj;
+  mapping pairs;
+  int j;
+
+  if (undefinedp(pairs = cache[command])) {
+    return 0;
+  }
+  for (j = 0; j < sizeof(search_path); j++) {
+    if (!undefinedp(binObj = pairs[search_path[j]])) {
+      if (binObj) {
+        return binObj;
+      } else {
+        return find_object_or_load(search_path[j] + "/" + command);
+      }
+    }
+  }
+  return 0;
+}
+
+varargs string where(string command, string *search_path) {
+  string path, fullPath, err;
+  object binObj;
+  mapping pairs;
+  int j;
+
+  if (!search_path) {
+    search_path = thePath;
+  }
+  pairs = cache[command];
+  if (!pairs) {
+    return 0;
+  }
+  for (j = 0; j < sizeof(search_path); j++) {
+    if (!undefinedp(pairs[search_path[j]])) {
+      return search_path[j] + "/" + command;
+    }
+  }
+  return 0;
+}

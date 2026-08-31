@@ -1,0 +1,453 @@
+#include <socket.h>
+
+// this is a partial port of the mudwho daemon (not client) which uses
+// MudOS DATAGRAM (udp) sockets to talk with mudwho clients and other
+// mudwho daemons.  The port is partial in that this daemon doesn't respond
+// to client requests on port 6889.  It does however accept new client
+// and peer information on port 6888 and it does forward information to 
+// its peers.  The author of this port is Cynosure (Dave Richards).
+//
+// 1992 October.
+
+/*
+ * Name of this MWHOD
+ */
+#define	MWHOD_NAME	"mini-basis"
+
+/*
+ * UDP Timeouts
+ */
+#define	UDP_CLEAN	300
+#define	UDP_UPDATE	300
+
+/*
+ * MWHOD Port Definitions
+ */
+#define	UDP_PORT	6888
+#define	TCP_PORT	6889
+
+/*
+ * Time to Live Definitions
+ */
+#define	TTL_MUD		800
+#define	TTL_PLAYER	800
+
+/*
+ * MUD Entry Key Definitions
+ */
+#define	M_ADDRESS	0
+#define	M_FLAGS		1
+#define	M_GENERATION	2
+#define	M_NAME		3
+#define	M_NUSER		4
+#define	M_PASSWORD	5
+#define	M_PORT		6
+#define	M_TEXT		7
+#define	M_TTL		8
+#define	M_UPDATE	9
+#define	M_UPTIME	10
+#define	M_USERS		11
+
+/*
+ * MUD Entry Flag Definitions
+ */
+#define	MF_UP		1
+#define	MF_PEER		2
+#define	MF_GUEST	4
+#define	MF_NOADDR	8
+
+/*
+ * User Entry Key Definitions
+ */
+#define	U_GENERATION	0
+#define	U_LOGIN		1
+#define	U_NAME		2
+#define	U_STATE		3
+#define	U_TTL		4
+#define	U_UID		5
+#define	U_UPDATE	6
+
+/*
+ * User Entry State Definitions
+ */
+#define	US_ALIVE	0
+#define	US_ZOMBIE	1
+
+int tcp_socket;
+int udp_socket;
+mapping mud_database;
+
+/*
+ * Initialize MWHOD
+ */
+void create() {
+  int error;
+
+  mud_database = ([
+    /* peer */
+    "okwho": ([
+      M_NAME: "okwho",
+      M_ADDRESS: "139.78.1.15",
+      M_PASSWORD: "removed",
+      M_FLAGS: MF_PEER,
+      M_GENERATION: 1
+    ]),
+    /* client */
+    "TinyCWRU": ([
+      M_NAME: "TinyCWRU",
+      M_ADDRESS: "129.22.24.22",
+      M_PASSWORD: "removed",
+      M_FLAGS: 0,
+      M_GENERATION: 0,
+      M_NUSER: 0,
+      M_USERS: ([])
+    ])
+  ]);
+
+  tcp_socket = socket_create(STREAM, "tcp_socket_close");
+  if (tcp_socket < 0) {
+    log_file("mwhod", "socket_create: " + socket_error(udp_socket) + "\n");
+    return;
+  }
+
+  error = socket_bind(tcp_socket, TCP_PORT);
+  if (error != EESUCCESS) {
+    log_file("mwhod", "socket_bind: " + socket_error(error) + "\n");
+    socket_close(tcp_socket);
+    return;
+  }
+
+  error = socket_listen(tcp_socket, "tcp_socket_listen");
+  if (error != EESUCCESS) {
+    log_file("mwhod", "socket_listen: " + socket_error(error) + "\n");
+    socket_close(tcp_socket);
+    return;
+  }
+
+  udp_socket = socket_create(DATAGRAM, "udp_socket_read", "udp_socket_close");
+  if (udp_socket < 0) {
+    log_file("mwhod", "socket_create: " + socket_error(udp_socket) + "\n");
+    socket_close(tcp_socket);
+    return;
+  }
+
+  error = socket_bind(udp_socket, UDP_PORT);
+  if (error != EESUCCESS) {
+    log_file("mwhod", "socket_bind: " + socket_error(error) + "\n");
+    socket_close(tcp_socket);
+    socket_close(udp_socket);
+    return;
+  }
+
+  call_out("udp_clean", UDP_CLEAN / 2);
+  call_out("udp_update", UDP_UPDATE);
+}
+
+/*
+ * Add (or update) a MUD Entry
+ */
+void add_mud_entry(string *arg, int flag) {
+  int uptime, generation;
+  mapping ment;
+
+  if (sizeof(arg) < 6)
+    return;
+
+  if (sscanf(arg[4], "%d", uptime) != 1)
+    return;
+
+  if (sscanf(arg[5], "%d", generation) != 1)
+    return;
+
+  ment = mud_database[arg[3]];
+
+  if (undefinedp(ment)) {
+    mud_database[arg[3]] = ment = ([]);
+    ment[M_NAME] = arg[3];
+    ment[M_FLAGS] = MF_GUEST;
+    ment[M_NUSER] = 0;
+    ment[M_USERS] = ([]);
+    ment[M_GENERATION] = generation;
+  } else {
+    if (generation > ment[M_GENERATION])
+      return;
+  }
+
+  ment[M_FLAGS] |= MF_UP;
+  ment[M_TTL] = TTL_MUD;
+  ment[M_UPDATE] = time();
+  ment[M_UPTIME] = uptime;
+
+  if (sizeof(arg) > 6)
+    ment[M_TEXT] = arg[6];
+
+  if (flag) {
+    ment[M_NUSER] = 0;
+    ment[M_USERS] = ([]);
+  }
+}
+
+/*
+ * Zap a MUD Entry
+ */
+void delete_mud_entry(string *arg) {
+  mapping ment;
+
+  if (sizeof(arg) != 4)
+    return;
+
+  ment = mud_database[arg[3]];
+  if (undefinedp(ment))
+    return;
+
+  ment[M_FLAGS] &= ~MF_UP;
+  ment[M_NUSER] = 0;
+  ment[M_USERS] = ([]);
+}
+
+/*
+ * Add (or update) a User Entry
+ */
+void add_user_entry(string *arg) {
+  int login, generation;
+  mapping ment, uent;
+
+  if (sizeof(arg) < 7)
+    return;
+
+  ment = mud_database[arg[3]];
+  if (undefinedp(ment))
+    return;
+
+  if (sscanf(arg[5], "%d", login) != 1)
+    return;
+
+  if (sscanf(arg[6], "%d", generation) != 1)
+    return;
+
+  if (generation > ment[M_GENERATION])
+    return;
+
+  uent = ment[M_USERS][arg[4]];
+  if (undefinedp(uent)) {
+    ment[M_USERS][arg[4]] = uent = ([]);
+    uent[U_UID] = arg[4];
+    uent[U_NAME] = arg[4];
+  }
+  if (sizeof(arg) == 8)
+    uent[U_NAME] = arg[7];
+  uent[U_TTL] = TTL_PLAYER;
+  uent[U_LOGIN] = login;
+  uent[U_UPDATE] = time();
+  if (undefinedp(uent[U_STATE]) || uent[U_STATE] != US_ALIVE)
+    ment[M_NUSER]++;
+  uent[U_STATE] = US_ALIVE;
+  uent[U_GENERATION] = generation;
+}
+
+/*
+ * Zap a User Entry
+ */
+void delete_user_entry(string *arg) {
+  mapping ment, uent;
+
+  if (sizeof(arg) != 5)
+    return;
+
+  ment = mud_database[arg[3]];
+  if (undefinedp(ment))
+    return;
+
+  if (undefinedp(ment[M_USERS]))
+    return;
+
+  uent = ment[M_USERS][arg[4]];
+  if (undefinedp(uent))
+    return;
+
+  if (uent[U_STATE] != US_ALIVE)
+    return;
+
+  ment[M_NUSER]--;
+  uent[U_STATE] = US_ZOMBIE;
+}
+
+/*
+ * Process UDP Datagrams
+ */
+void udp_socket_read(int fd, string datagram, string address) {
+  string *arg;
+  mapping ment;
+
+  datagram = replace_string(datagram, "Genocide", "Gen0cide");
+
+  arg = explode(datagram, "\t");
+  if (sizeof(arg) < 3)
+    return;
+
+  ment = mud_database[arg[1]];
+  if (undefinedp(ment))
+    return;
+
+  if (ment[M_FLAGS] & MF_GUEST)
+    return;
+
+  if ((ment[M_FLAGS] & MF_NOADDR) == 0)
+    if (ment[M_ADDRESS] != explode(address, " ")[0])
+      return;
+
+  if (ment[M_PASSWORD] != arg[2])
+    return;
+
+  ment[M_UPDATE] = time();
+
+  switch (arg[0][0]) {
+
+    case 'U':
+      add_mud_entry(arg, 1);
+      break;
+
+    case 'M':
+      add_mud_entry(arg, 0);
+      break;
+
+    case 'D':
+      delete_mud_entry(arg);
+      break;
+
+    case 'A':
+      add_user_entry(arg);
+      break;
+
+    case 'Z':
+      delete_user_entry(arg);
+      break;
+  }
+}
+
+/*
+ * Clean-up Timed-Out Database Entries
+ */
+void udp_clean() {
+  int i, j;
+  string *mkey, *ukey;
+  mapping ment, uent;
+
+  mkey = keys(mud_database);
+  for (i = 0; i < sizeof(mkey); i++) {
+    ment = mud_database[mkey[i]];
+
+    if ((ment[M_FLAGS] & MF_UP) == 0)
+      continue;
+
+    if (time() - ment[M_UPDATE] > ment[M_TTL]) {
+      ment[M_FLAGS] &= ~MF_UP;
+      ment[M_NUSER] = 0;
+      ment[M_USERS] = ([]);
+      continue;
+    }
+
+    if (undefinedp(ment[M_USERS]))
+      continue;
+
+    ukey = keys(ment[M_USERS]);
+    for (j = 0; j < sizeof(ukey); j++) {
+      uent = ment[M_USERS][ukey[j]];
+
+      if (time() - uent[U_UPDATE] > uent[U_TTL]) {
+        if (uent[U_STATE] == US_ALIVE)
+          ment[M_NUSER]--;
+        map_delete(ment[M_USERS], ukey[j]);
+      }
+    }
+  }
+  call_out("udp_clean", UDP_CLEAN);
+}
+
+/*
+ * Send a Database Updates
+ */
+void udp_update() {
+  int i, j, k;
+  string *mkey, *ukey, datagram;
+  mapping ment1, ment2, uent;
+
+  mkey = keys(mud_database);
+  for (i = 0; i < sizeof(mkey); i++) {
+    ment1 = mud_database[mkey[i]];
+    if ((ment1[M_FLAGS] & MF_PEER) == 0)
+      continue;
+    for (j = 0; j < sizeof(mkey); j++) {
+      ment2 = mud_database[mkey[j]];
+      if (ment1 == ment2)
+        continue;
+      if (ment2[M_GENERATION] + 1 > ment1[M_GENERATION])
+        continue;
+      if (ment2[M_FLAGS] & MF_PEER)
+        continue;
+      if ((ment2[M_FLAGS] & MF_UP) == 0)
+        continue;
+      datagram = "M" + "\t" + MWHOD_NAME + "\t" + ment1[M_PASSWORD] + "\t" + ment2[M_NAME] + "\t" + ment2[M_UPTIME] + "\t" + (ment2[M_GENERATION] + 1);
+      if (!undefinedp(ment2[M_TEXT]))
+        datagram += "\t" + ment2[M_TEXT];
+      socket_write(udp_socket, datagram, ment1[M_ADDRESS] + " " +
+        UDP_PORT);
+      log_file("mwhod.M", datagram + "\n");
+    }
+  }
+
+  mkey = keys(mud_database);
+  for (i = 0; i < sizeof(mkey); i++) {
+    ment1 = mud_database[mkey[i]];
+    if ((ment1[M_FLAGS] & MF_PEER) == 0)
+      continue;
+    for (j = 0; j < sizeof(mkey); j++) {
+      ment2 = mud_database[mkey[j]];
+      if (ment1 == ment2)
+        continue;
+      if (ment2[M_GENERATION] + 1 > ment1[M_GENERATION])
+        continue;
+      if (ment2[M_FLAGS] & MF_PEER)
+        continue;
+      if ((ment2[M_FLAGS] & MF_UP) == 0)
+        continue;
+      ukey = keys(ment2[M_USERS]);
+      for (k = 0; k < sizeof(ukey); k++) {
+        uent = ment2[M_USERS][ukey[k]];
+        if (uent[U_GENERATION] + 1 > ment1[M_GENERATION])
+          continue;
+        switch (uent[U_STATE]) {
+
+          case US_ALIVE:
+            datagram = "A" + "\t" + MWHOD_NAME + "\t" + ment1[M_PASSWORD] + "\t" + ment2[M_NAME] + "\t" + uent[U_UID] + "\t" + uent[U_LOGIN] + "\t" + (uent[U_GENERATION] + 1);
+            if (!undefinedp(uent[U_NAME]))
+              datagram += "\t" + uent[U_NAME];
+            break;
+
+          case US_ZOMBIE:
+            datagram = "Z" + "\t" + MWHOD_NAME + "\t" + ment1[M_PASSWORD] + "\t" + ment2[M_NAME] + "\t" + uent[U_UID];
+            break;
+
+          default:
+            continue;
+        }
+        socket_write(udp_socket, datagram, ment1[M_ADDRESS] + " " +
+          UDP_PORT);
+      }
+    }
+  }
+
+  for (i = 0; i < sizeof(mkey); i++) {
+    ment1 = mud_database[mkey[i]];
+    if (undefinedp(ment1[M_USERS]))
+      continue;
+    ukey = keys(ment1[M_USERS]);
+    for (j = 0; j < sizeof(ukey); j++) {
+      uent = ment1[M_USERS][ukey[j]];
+      if (uent[U_STATE] == US_ZOMBIE)
+        map_delete(ment1[M_USERS], ukey[j]);
+    }
+  }
+
+  call_out("udp_update", UDP_UPDATE);
+}

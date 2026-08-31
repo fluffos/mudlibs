@@ -1141,7 +1141,20 @@ each of these shapes has bitten at least once:
 4. **Fixed-width slices instead of extension ops** —
    `map_array(get_dir(DIR+"*.lpc"), (: $1[0..<3] :))` stripped 2-char
    `.c` correctly, now leaves `"foo.l"`. Grep `\[0\.\.<[0-9]\]` near
-   `get_dir()` and widen by 2.
+   `get_dir()` and widen by 2. **A second shape of this same class,
+   confirmed on `basis`**: a hand-rolled command-file cache
+   (`adm/daemon/commandd.lpc`'s `prime_cache()`) matched files by
+   `files[k][(len-2)..(len-1)] == ".lpc"` — the quoted extension
+   string got mechanically updated from `".c"` to `".lpc"` by the
+   rename fixup, but the SLICE WIDTH (`len-2..len-1`, 2 characters)
+   was left unchanged, so the comparison (2 chars vs. a 4-char string)
+   was permanently false. Every single command in the game silently
+   failed with the generic fail message, since the cache this feeds
+   never gained a single entry. Grep any archive with a similar
+   directory-scanning file cache for
+   `\[\s*\(?\s*len\s*-\s*[0-9]+\s*\)?\s*\.\.` and check the slice
+   width against the ACTUAL current extension length, not the
+   original `.c`'s.
 5. **Extensionless live file + same-named `.c` backup**
    (`zitengzhan`, 35 pairs): the original driver loaded the literal
    extensionless file; this driver's `.lpc`-then-`.c` resolution makes
@@ -1470,6 +1483,40 @@ cause, fix, detection, known-affected lineages.
   the player body class from compiling on `tianxia`). These surface at
   RUNTIME only, one at a time, as game logic reaches them — keep
   watching debug.log during play-testing.
+- **`extract(str, start[, end])`** — classic MudOS substring-by-range
+  efun (2- and 3-arg forms, `end` omitted meaning "to end of string").
+  Reimplement as a simul_efun over `str[start..end]` slicing.
+- **`log_file(file, str)`** — classic MudOS efun appending `str` to a
+  file under the mudlib's own log directory. Reimplement as
+  `write_file(LOG_DIR + "/" + file, str)` (or whatever the lib's own
+  log-dir constant is).
+- **`privp(ob)`** — classic MudOS predicate, "does `ob` have an
+  effective uid (i.e. is it privileged)". Distinct from `wizardp()`
+  (which DOES exist on this driver) — only `privp()` needs
+  reimplementing, as `geteuid(ob) && strlen(geteuid(ob))`.
+- **`cat(file[, start, num])`** — classic MudOS efun: writes a file (or,
+  3-arg form, a 1-indexed line range of it, for pager-style paging)
+  directly to the current player, returning the line count written.
+  Reimplement via `read_file()` + `explode()`/`write()`.
+  (`extract`/`log_file`/`privp`/`cat` all confirmed missing on `basis`;
+  `tail` above was already catalogued.)
+- **`indices(mapping)`** — old MudOS name for what this driver calls
+  `keys(mapping)`. Mechanical rename. (`basis`.)
+- **`new`/`class` as ordinary identifiers** — both are hard-reserved
+  keywords on this driver (`new(...)`/`new(class ...)` object
+  instantiation syntax, and typed-class/struct declarations),
+  UNCONDITIONALLY — unlike `ref` (§6.7), which is only reserved when
+  this project's driver build happens to have `REF_RESERVED_WORD`
+  defined. A parameter/local/global literally named `new` or `class`
+  hits a hard `unexpected L_NEW`/`unexpected L_CLASS` syntax error at
+  the declaration site. Grep
+  `\b(string|object|int|mixed|float|mapping)\s*\*?\s*(new|class)\b\s*[,;=)]`
+  on any new archive; rename to the closest non-colliding synonym
+  (`newpath`/`newstr`/`msgclass`, etc. — pick per call site, a blind
+  global rename risks colliding with an unrelated local of the same
+  new name elsewhere in the same file). (`basis`: `resolv_path.lpc`/
+  `replace_string.lpc` for `new`, `std/i.lpc`'s
+  `receive_message(string class, ...)` for `class`.)
 
 ### 6.3 Grammar strictness
 
@@ -1646,6 +1693,14 @@ same way regardless), but it also doesn't get caught by
 `convert_lib.sh`'s existing `static`→`nosave` sweep, so it needs its own
 grep pass or will surface piecemeal as individual `lpcc_check.sh`
 failures.
+**Both narrower patterns above can miss a real instance**: `basis`'s
+`std/i/pager.lpc` had `nosave private status use_get_char;` — `status`
+sits mid-declaration after two other modifiers, matching neither
+`^\s*status\s` (not at line-start) nor `[(,]\s*status\s` (not in a
+parameter list). The reliable general grep is a bare `\bstatus\b`
+across the whole tree, then manually filtering out plain-English
+prose/path-string false positives (comments, `"the status of..."`
+strings) from the real type-position hits.
 
 ---
 
@@ -13167,6 +13222,126 @@ legitimately be `""` (not just "unexpected", but a real, reachable
 value — empty-string placeholders/defaults are common) needs a
 `sizeof()` guard on this driver; don't assume explode's classic
 MudOS "always at least one element" behavior carries over.
+
+### 7.168 A `(: object_or_path_expr, "method" :)` closure only becomes a real call_other function pointer on this driver when the head is a bare, compile-time-resolved NAME — anything else (a string constant, a called function) silently degrades to a no-op comma-expression, with no error at construction OR at the point the wrong value gets used
+
+Old MudOS's classic "bound call_other pointer" idiom,
+`(: object_or_path, "method" :)`, works for ANY expression in the head
+slot — a bare object variable, `this_player()`, a string path
+constant, whatever evaluates to something `call_other()`-able. This
+driver's actual grammar (`compiler/internal/grammar.y`'s
+`L_FUNCTION_OPEN L_DEFINED_NAME[fn] ',' arg_list ':' ')'` production —
+confirmed by reading the grammar source directly, since
+`~/src/fluffos/docs/lpc/types/function.md`'s own worked examples
+describe the OLD, more general behavior and do not match what's
+actually implemented) only builds that special call_other form when
+the token immediately after `(:` is a bare identifier the compiler
+resolves at COMPILE TIME to a known efun/simul_efun/local function
+name, followed directly by a comma. Anything else — a string literal
+(even a `#define`d path constant), or a genuine expression like a
+called `this_object()` — instead falls through to the generic
+`L_FUNCTION_OPEN comma_expr ':' ')'` "expression functional" rule,
+which just evaluates the WHOLE closure body as an ordinary C-style
+comma-expression and returns the value of the LAST operand when
+invoked, having evaluated (and discarded the result of) everything
+before it. **This produces no compile error, no warning, and no
+runtime error at the point the closure is constructed or even at the
+point it's invoked** — it just silently returns the wrong value,
+which then goes on to cause whatever downstream failure consuming
+that wrong value triggers (compile-time this looks completely benign;
+`lpcc_check.sh` and a bare boot both stay clean).
+
+Confirmed on `basis`: `std/object/base.lpc`'s
+`setup_efun_attributes()` built `qef = (: SIMUL_EFUN_OB, "query_efuns"
+:)` (a `#define`d string path) to redirect `query(a_super)`/
+`query(a_contains)`/etc. through a simul_efun. Invoking it (via
+`(*attr)(key)`) returned the literal string `"query_efuns"` verbatim —
+confirmed by a temporary `catch()` + `sprintf("%O", attr)` probe,
+which printed `attr=(: <code>() :)` (an expression-functional, not a
+call_other pointer). That bogus string then got treated as an
+object/path by the caller (`look.lpc`'s `act_ob->query(a_super)`), the
+driver's own call_other-of-a-string fallback tried
+`compile_object("/query_efuns")`, `virtuald.lpc`'s generic
+virtual-object handler couldn't resolve THAT either and fell back to
+`/adm/obj/virtual/0` (which also doesn't exist), and since
+`master.lpc`'s `compile_object()` apply unconditionally re-delegates
+every failed load back to `virtuald.lpc`, the two bounced off each
+other in a genuine self-referential recursion until hitting the
+inherit-depth safety net — `*Inherit chain too deep: > 30` on every
+single `look` (and anything else touching the redirected attributes).
+A second instance in the same lib, `obj/weapon.lpc`'s `(: this_object,
+"query_damage_string" :)`, hit an EARLIER, more obvious compile-time
+symptom first (bare `this_object`, no parens, inside a closure literal
+parses as "call the `this_object()` efun with these args" — a hard
+"Too many arguments to this_object" error, since that efun takes
+none) — but fixing that syntax error alone (parenthesizing to
+`this_object()`) is NOT sufficient: a called function still isn't a
+bare `L_DEFINED_NAME`, so it STILL only produces a broken
+expression-functional, silently, with no further error at all.
+
+**Fix**: use `call_other` itself as the bare NAME (a real efun
+identifier, satisfying the grammar's special-cased shape), with the
+real target object/path and method name supplied as its BOUND
+arguments: `(: call_other, target, "method" :)`. Any further argument
+supplied at invocation time (`(*qef)(key)`) is appended after the
+bound ones, giving `call_other(target, "method", key)` — exactly the
+old semantics, and confirmed working live (registration + `look` +
+movement all correct afterward, zero `debug.log` errors).
+
+**Detection**: grep any archive for the shape
+`(:\s*[A-Za-z_][A-Za-z0-9_]*\s*,\s*"` where the identifier before the
+comma is a `#define`d string constant or a called function rather
+than a plain local/global object variable — the ambiguity is
+specifically between "bare NAME" (works) and "any other expression,
+including one that LOOKS like it should behave the same way" (silently
+doesn't). Given how fundamental and silent this failure mode is —
+clean compile, clean boot, wrong value used only much later, crash (if
+any) several call-frames removed from the actual defect — treat any
+lib using the classic MudOS `(: object_or_path, "method" :)` idiom for
+anything other than a bare bound NAME as suspect until verified live.
+
+### 7.169 A vestigial `private inherit` of an already-publicly-inherited base class creates an ambiguous SECOND copy of a needed method — this driver resolves the unqualified call to the wrong (private, uninitialized) one, either hard-failing the whole inheriting file's compile or, if "fixed" by just loosening visibility, silently using the wrong data instead
+
+Distinct from §7.48's "a function genuinely declared `private` in file
+A, called from an unrelated file B that inherits A" shape: here, the
+SAME base class is inherited into one file through TWO separate
+`inherit` statements at different points in a multi-file hierarchy —
+once normally (public), and once via an unrelated sibling file's own
+`private inherit` of that same base, done purely as leftover/unused
+scaffolding. Classic LPC's multiple-inheritance model gives each
+separate `inherit` directive its OWN independent copy of the base
+class's state (no deduplication), so the inheriting file ends up with
+two distinct instances of the same method — one public and correctly
+initialized (via the normal inherit chain), one private and NEVER
+initialized (because the sibling file that privately inherits the
+base also defines its OWN `create()`, which shadows the base's
+`create()` and never calls it).
+
+Confirmed on `basis`: `std/living.lpc` inherits both
+`std/object/base.lpc` (a normal `inherit CORE`) and
+`std/living/envars.lpc` (which did `private nosave inherit CORE;` —
+but never actually calls any of CORE's `query()`/`set()`/`delete()`/
+`add()` methods itself; it manages its own independent `evars`
+mapping). This gave `living.lpc` two inherited copies of `query()`,
+and its own unqualified `query(a_name)`/`query(a_permissions)` calls
+resolved to the PRIVATE one, hard-failing with "Illegal to call
+inherited private function 'query'" — blocking the compile of every
+player-body class (`std/i`, `std/user`, `std/maker`, `std/admin` all
+failed transitively, since all four ultimately inherit `living.lpc`).
+
+**Fix**: check whether the private inherit is actually load-bearing
+(does ANY code in its own file call anything from it?) before
+"fixing" the visibility. If genuinely unused (as here), DELETE the
+vestigial inherit outright — this is the only fix that's actually
+correct. Changing `private` to `protected` (§7.48's usual fix for a
+DIFFERENT bug shape) would merely trade the clean compile error for a
+silent one: the ambiguity between the two copies doesn't go away, and
+the private copy's `attrs` mapping was never initialized (`nil`/`0`),
+so a "successfully compiling" version of this fix would have made
+every `query()` call on a living object silently return errors/wrong
+values from an empty mapping instead of failing loudly at compile
+time — strictly worse. When you see this shape, always check whether
+the private inherit is dead weight first.
 
 ---
 

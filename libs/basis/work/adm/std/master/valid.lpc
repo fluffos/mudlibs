@@ -1,0 +1,136 @@
+// file:   /adm/std/master/valid.c
+// mudlib: Basis
+
+#include <config.h>
+#include <access.h>
+#include <login.h>
+
+inherit "/adm/std/master/access";
+inherit "/adm/std/master/groups";
+
+int valid_shadow(object ob) {
+  // dangerous to allow people to shadow things with global access
+  if (getuid(ob) == ROOT_UID) {
+    return 0;
+  }
+  // this gives an object the chance to stop the shadow also
+  if (ob->query_prevent_shadow(previous_object())) {
+    return 0;
+  }
+  return 1;
+}
+
+int valid_author(string name) {
+  return 1;
+}
+
+int valid_override(string file, string name) {
+  if (file == OVERRIDES) {
+    return 1;
+  }
+  if (name == "destruct")
+    return 0;
+  if (name == "shutdown")
+    return 0;
+  if (name == "snoop")
+    return 0;
+  if (name == "exec")
+    return 0;
+  if ((name == "move_object") && (file != MOVE))
+    return 0;
+  return 1;
+}
+
+// valid_seteuid: determines whether an object ob can become euid str.
+// This is very important because the euids still control most of the
+// access permissions.
+
+int valid_seteuid(object ob, string str) {
+  // ROOT_UID has privileges...
+  if (getuid(ob) == ROOT_UID) {
+    return 1;
+  }
+  if (getuid(ob) == ADMIN_UID) {
+    return 1;
+  }
+  if (getuid(ob) == MAKER_UID) {
+    return 1;
+  }
+  if (getuid(ob) == USER_UID) {
+    return 1;
+  }
+  // An object is lucky enough to be itself...
+  if (getuid(ob) == str) {
+    return 1;
+  }
+  // creator_file() is a simul_efun that determines who is 'responsible'
+  // for an object.  It's another way of saying getuid(ob) in general, but
+  // there are sometimes differences.
+  if (creator_file(file_name(ob)) == str) {
+    return 1;
+  }
+  return 0;
+}
+
+int valid_domain(string domain) {
+  return 1;
+}
+
+int valid_socket(object eff_user, string fun, mixed *info) {
+  return 1;
+}
+
+// Write and Read stuff:
+// valid_write: called with the file name, the object initiating the call,
+//              and the function by which they called it. 
+// valid_read:  called exactly the same as valid_write()
+//
+// These now use a special feature that enables us to update the access
+// of people without rebooting the game, an unfortunate side effect of
+// the old system.
+//
+// Something to be careful of is commands in /bin that do file manipulation,
+// as they have root access.
+
+int valid_write(string file, mixed user, string func) {
+  int i;
+  string tmp, eff_user;
+
+  if (!objectp(user)) {
+    user = find_living(user);
+  }
+  if (geteuid(user) == ROOT_UID) {
+    return 1;
+  }
+  i = check_access(file, user);
+  if (i & ACCESS_WRITE) {
+    return (i & ACCESS_WRITE);
+  } else if (objectp(user)) {
+    // The driver's save_object()/restore_object() efuns pass the
+    // FULL filename (extension included) to valid_write()/
+    // valid_read(), but data_file() returns the bare path -- a
+    // bare `==` never matches. See AGENTS.md §7.49.
+    return (file == data_file(user) || file == data_file(user) + ".o");
+  }
+}
+
+int valid_read(string file, mixed user, string func) {
+  int i;
+
+  if (!objectp(user)) {
+    user = find_living(user);
+  }
+  if (geteuid(user) == ROOT_UID) {
+    return 1;
+  }
+  i = check_access(file, user);
+  if (i & ACCESS_READ) {
+    return (i & ACCESS_READ);
+  } else if (objectp(user)) {
+    // The driver's save_object()/restore_object() efuns pass the
+    // FULL filename (extension included) to valid_write()/
+    // valid_read(), but data_file() returns the bare path -- a
+    // bare `==` never matches. See AGENTS.md §7.49.
+    return (file == data_file(user) || file == data_file(user) + ".o");
+  }
+}
