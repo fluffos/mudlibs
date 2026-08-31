@@ -369,3 +369,203 @@ freshly-created accounts.
 
 Not attempted this pass (native-driver bring-up only, per this task's
 scope) -- `wasm_status` left empty in `meta.json`.
+
+## 深度功能测试 / §10.7 deep functional test (2026-08-31)
+
+Round-two pass, native driver (`build-debug`), continuous session. Test
+character: `Fluffosc` (fighter, human/morinnen, real chargen with
+`select random`/`recommended`/`done` per the section-5 pattern above),
+kept as evidence -- save at `work/data/...` under the standard
+per-account path (`f/fluffosc`). Admin `fluffos`/`Mud@2026` used for
+setup/inspection only (`eval`, direct `move_player()`/`add_money()`
+calls to skip unreachable multi-hour travel through a 44,500-file
+world) -- all player-visible mechanics themselves were exercised
+through the ordinary mortal command set, not bypassed.
+
+### Two real bugs found and fixed
+
+**1. `daemon/feat_d.lpc:1464` -- another confirmed instance of AGENTS.md
+S7.118's `.c`->`.lpc` filename-slice-arithmetic class (6th+ instance
+this project has hit): the feat-catalog directory scanner's own
+extension check never matched, so `__ALL_FEATS` stayed permanently
+empty and every player-facing feat-browsing command (`feats list`,
+`feats list <category>`, `feats list categories`) silently printed
+NOTHING -- no error, no text, just a bare prompt -- for every player,
+always, since the very first boot. `feats allowed`/`feats add
+<name>`/automatic class-feat-granting on level-up all kept working
+because they resolve feats via direct file paths
+(`/cmds/feats/<letter>/_<name>.lpc`) rather than through this category
+index, which is exactly why this went undetected by both the compile
+sweep and the onboarding smoke test -- it's a pure silent-no-output
+bug with zero compile error and zero functional-looking absence (the
+game just never seemed to have a browsable feat catalog at all).
+`build_feat_list()`'s loop over each feat-type subfolder's files did:
+
+```lpc
+if (strsrch(files[y], ".lpc") != (strlen(files[y]) - 2)) {
+    continue;
+}
+```
+
+`strsrch(x, ".lpc")` on a real 4-character-extension filename returns
+`strlen(x) - 4`, never `strlen(x) - 2` -- so this `continue`d on
+literally every single file in every one of `/cmds/feats/{a..z}/`,
+before the mechanical `.c`->`.lpc` rename this correctly checked for a
+2-character `.c` extension. Fixed: `- 2` -> `- 4`. Verified live:
+`sizeof(("/daemon/feat_d")->query_categories())` was `0` before the fix
+and `67` after (via `eval` + `update /daemon/feat_d`); `feats list` in
+a real player session went from a silently empty response to the full,
+correctly-formatted two-column feat-category listing (ArcaneSpellcraft,
+ArmorMastery, DamageResistance, Duelist, WeaponDamage, etc.). Grepped
+the whole tree for the same `strsrch(X, ".lpc") != (strlen(X) - N)`
+shape for other N -- this is the only live instance.
+
+**2. `daemon/yuck_d.lpc`'s inventory-backup subsystem -- another
+instance of the AGENTS.md S7.11 missing-runtime-directory class this
+lib's own onboarding NOTES.md section 4 already found and partially
+fixed, but one bucketed directory tree that pass missed: `/inv/backup_inv/<letter>/<account>/`.**
+`backup_inventory()` (called from the ordinary `save_inventory()` path
+on every ordinary `quit`, gated on "has been online 20+ minutes")
+calls its own `assure_save_dir_exists(path)` before saving each carried
+item -- but that function's fast-path branch for a 4-segment path
+(`elems = explode(file,"/")`, `sizeof(elems)==4`) only ever `mkdir()`s
+the immediate parent (`let_path`) and the leaf (`name_path`); `mkdir()`
+on this driver is not recursive, so when the GRANDPARENT
+(`/inv/backup_inv/` itself) is *also* missing -- true on every fresh
+checkout, since `/inv/backup_inv` isn't among the directories this
+project's own runtime-write-directory seeding created (only the
+unrelated flat `/inv/<letter>/<account>/` used by the *primary* save
+path was covered) -- both `mkdir()` calls silently no-op and every
+subsequent `save_me()` into that still-missing path fails with `Could
+not open /inv/backup_inv/<letter>/<account>/obN.o.tmp for a save`,
+confirmed live on `Fluffosc`'s own first `quit` past the 20-minute
+mark (visible only in the driver's own captured stdout, per this
+lib's own S10.9-relevant note that `debug.log` and this driver's
+stdout are NOT interchangeable -- but empirically both channels
+carried this specific message here). Fixed the same way section 4's
+instances were fixed: created the full `a`-`z` bucket set under
+`inv/backup_inv/`. Verified the underlying mechanism directly (rather
+than waiting a further 3 real hours for the per-account backup-timer
+gate in `BACKUPS[name]` to re-arm): `mkdir("/inv/backup_inv/f/fluffosc")`
+and a follow-up `write_file()` into it both failed with "No such file
+or directory" before creating the letter buckets, and both succeeded
+immediately afterward -- confirms the fix, though the natural
+20-minutes-online code path was not re-observed succeeding live within
+this session's time budget (flagged honestly rather than presented as
+directly re-verified through the original trigger). Neither finding
+above needed a new AGENTS.md catalog entry -- both are further
+confirmed instances of already-catalogued classes (S7.118 and S7.11
+respectively).
+
+### What was tested and confirmed working
+
+- **Skill/feat acquisition, organic path**: the class-trainer-NPC
+  path (`d/shadowgate/masters/fighter.lpc`-family) was already
+  exercised during chargen per section 5 above (deity/class-special
+  selection). This pass additionally exercised the *level-up* feat
+  path, this lineage's actual primary "learn a new ability" mechanic
+  (a d20-style class/feat system, not a traditional "find a teacher,
+  `learn <skill>`" verb) -- gained a real level via the newbie `mass`
+  object's first scripted task (dig up a black gem in an
+  auto-assigned meadow room, `feed` it to the mass for exp), which
+  correctly triggered `ADVANCE_D->advance()` -> `add_class_feats()`,
+  printing real per-feat grant/reject messages (`Adding class feat
+  bravery` / `You do not meet the prerequisites for the feat medium
+  armor proficiency` for a level-2 fighter, correctly gated). `advance`
+  issued directly in the (non-training) town square correctly refused
+  with "You are not yet experienced enough" rather than crashing.
+  `feats allowed` correctly reports the class's real bonus-feat
+  budget (1 general + 1 racial + 3 martial bonus feats at level 2).
+  The archive's own std/trainer.lpc-based weapon-proficiency-training
+  NPC system (`apply prof to <skill>`, a *second*, distinct
+  skill-training path gated on fighting a specific safe trainer NPC)
+  exists in the code but its one newbie-zone placement
+  (`d/newbie/mon/mortius.lpc`) is only ever loaded from a room under
+  `d/newbie/rooms/town/old/` -- apparently superseded, dead legacy
+  content, not reachable from the live newbie zone -- not exercised
+  live; flagged as unverified rather than silently presented as tested
+  (this is a content/placement gap, not chased further per this
+  project's "deeper content bugs logged, not necessarily fixed"
+  policy).
+- **Safe-sparring combat mechanism**: `d/shadow/coliseum/room/training1.lpc`'s
+  `retrieve dummy`/`return dummy` (spawns/despawns a real
+  `d/shadow/coliseum/mon/dummy_weak.lpc`, HD 1/1, 100 HP, `die()`
+  overridden to just narrate "cracks and splinters" rather than
+  anything punitive) is this lib's designated safe newbie-combat
+  target. Fought it twice, once unarmed (bare-hand combat, `kill
+  dummy` -> full turn-by-turn "You hit Dummy"/"Dummy hits you
+  ineffectively"/occasional real "Dummy hits you" narration, correct
+  HP tracking, correct exp gain on the dummy's real death: 2,001 ->
+  2,103) and once wielding a cloned short sword (`wield sword` ->
+  armed combat, including a `(Critical) You hit Dummy.` crit-narration
+  line) -- both fully correct, no crash, no eval-cost issue despite a
+  fairly long fight. `flee` mid-combat correctly moved the character
+  out of the room to an adjacent one. No real (non-training) combat
+  was risked given a fresh level-2 character's fragility on a
+  44,500-file world with unknown wandering-monster danger near the
+  newbie zone.
+- **Inventory/equipment**: `wear`/`remove` round-tripped correctly on
+  both a ring (`A pure white ring` -- correct "gem begins
+  illuminating"/"dims" flavor text) and a holy symbol; `wield`/(dummy
+  fight above) confirmed a wielded weapon is actually used in combat
+  resolution, not just cosmetic. A size-mismatched hat correctly
+  refused with "That is too large for you" rather than a silent/wrong
+  equip (a real design gate, not a bug).
+- **Shop/economy**: the Offestry clothing shop (`Adresa, the Offestry
+  seamstress`) -- `list` (paginated inventory with AC/MaxDEX
+  columns), `buy hat` (id-based match, not full-name match -- matches
+  this shop's own `help shop` documentation), correct multi-denomination
+  coin change (1 gold spent on a 4-silver item correctly returned 1
+  silver + 1 electrum change), `i` (shop-context "evaluate your
+  inventory" listing with sell values), and `sell hat` (correct payout)
+  all worked correctly end-to-end with real player-held gold (granted
+  via admin `add_money()` since a level-1/2 newbie starts with none --
+  flagged here as an admin-assisted setup step, not a live-earned-gold
+  path, since no gold-earning activity was reached in this session's
+  time budget).
+- **`quit`, stdout/debug.log grep, reconnect after a real gap**: two
+  full `quit`/reconnect cycles run (the second after the ~25+ minutes
+  of wall-clock time this whole pass took, comfortably a "real gap").
+  Both quits produced the correct "we hope you enjoyed playing..."
+  banner and clean disconnect; reconnecting with the same
+  name+password both times correctly restored the saved character
+  (level, exp, room location -- including the coliseum training room
+  the character was in, not reset to a default start room) rather
+  than re-running chargen. One pre-existing, already-documented-above
+  (section 5) cosmetic issue recurred identically on both restores:
+  `Error: File //d/magic/symbols/holy_symbol not found` during
+  inventory reload -- confirmed still non-blocking, not a regression,
+  not re-investigated further.
+- **Long-sit boot watch** (no WASM build exists for this lib, per
+  `meta.json`'s empty `wasm_status` -- used the native-driver
+  equivalent per this task's instructions): a raw `mudclient.py`
+  connection held open at the login-name prompt for a full 220
+  seconds (`--idle 220 --timeout 220`) produced only the expected
+  server-side "Login timed out." disconnect, no crash, no unexpected
+  output. Grepped the driver's own captured stdout across the entire
+  ~34-minute test session (not just this one idle window) for error
+  signatures -- the only non-cosmetic hits were the two bugs fixed
+  above (both since resolved) and the already-known-benign
+  `Unable to open log file: "log/debug.log"`/monsters-database-missing
+  lines (the latter already correctly self-guarded in the archive's
+  own `daemon/monster_d.lpc`, confirmed by reading the code -- a
+  graceful "start empty" fallback, not a crash). Driver RSS stayed a
+  healthy ~2.2GB after the full session (registration, meadow-quest,
+  shop, two dummy fights, two reconnects); process never needed
+  intervention.
+- **Death/respawn**: NOT reached live this pass -- flagged honestly as
+  unverified rather than guessed at. No safe admin-assisted death path
+  exists for an interactive player on this lineage (`slay` explicitly
+  refuses interactive targets: "you still have to kill players by
+  hand"), and no `die()`-equivalent entry point for players was found
+  in `std/living.lpc`/`std/battle.lpc` within this session's time
+  budget (this AD&D-style engine's real death/wound resolution lives
+  somewhere deeper in the class/combat files not yet located). Forcing
+  a genuine death by fighting something dangerous enough was judged
+  too risky for a fresh level-2 test character given the size and
+  unfamiliarity of this 44,500-file world's newbie-adjacent zones.
+  The newbie `mass` object's own multi-stage task chain (graveyard
+  item retrieval, then a keep/rescue quest) was also not completed --
+  each is a genuine multi-room fetch-quest requiring real exploration
+  time beyond this pass's budget; the mechanism up through task 1
+  (dig/feed) was confirmed working, tasks 2+ unverified.
