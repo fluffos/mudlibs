@@ -14,6 +14,7 @@ varargs nosave void indices(int x, string str);
 varargs nosave void aliases(string str);
 varargs nosave void options(string str);
 nosave private void help(string arg, string ind);
+void end_help();
 nosave private void index_menu();
 nosave private void alias_menu();
 nosave private void option_menu();

@@ -14219,6 +14219,77 @@ project's scope for that reason — but it's worth knowing it manifests
 as a full silent disconnect rather than the milder "left floating with
 no environment" a real content fix might assume.
 
+### 7.189 A terrain-hazard room's `object_arrived` hook that `destruct()`s small arriving objects (a "your dropped item sinks/burns/washes away" flavor mechanic) must explicitly exclude `is_living()` (and usually `is_vehicle()`) — omitting the guard destructs the PLAYER'S OWN BODY the instant they walk in
+
+Found on `wilderness`'s §10.7 deep functional test (2026-08-31).
+`domains/std/rooms/beach/Outside_Cave.lpc`'s `obj_arrived()` (wired via
+`add_hook("object_arrived", (: obj_arrived :))`, fired by the driver's
+`move()`/`move_object()` machinery for every object that lands in the
+room) checked `ob->get_size() >= VERY_LARGE` to decide between a
+"large splash" message and a "sinks into the surf" message, but only
+the VERY_LARGE branch checked `is_living()` before deciding whether to
+print a message — the small-object branch (which is what EVERY normal
+player or NPC entering the room hits, since ordinary humanoids aren't
+VERY_LARGE) unconditionally printed the sinks-into-the-surf message
+and then called `destruct(ob)` with no living/vehicle check at all.
+Reproduced live, 100% repeatable, with zero combat or other
+precondition involved: `goto` (or simply walking) into Outside_Cave
+from the connected `Grotto` room destructs the player's own body
+object mid-move, immediately followed by a cascade of driver errors
+(`*Bad argument 1 to EFUN call_other() ... Got: int(0)`, `*Bad argument
+1 to environment() ... Got: 0`, `*Parse accepted, but no do_* function
+found`) and a fully dead connection (`Can't use verb with no body.` on
+every subsequent command) until the player reconnects. The connection
+recovers on reconnect (the persisted save file is untouched — only the
+in-memory body instance was destroyed), so this is "only" a hard forced
+disconnect rather than true permadeath, but it's a 100%-reproducible
+crash on an entirely ordinary, connected exploration path (no combat,
+no edge-case input) two rooms from the map's own portal-accessible
+example content.
+
+**Root cause is a regression, not an inherent lineage bug**: this
+exact `object_arrived` pattern exists correctly elsewhere in this same
+codebase — `domains/std/Lava_Room.lpc`'s `when_person_enters()` uses
+the identical "destruct small non-living arrivals" idiom but guards it
+with `if ( !o->is_living() && !o->is_vehicle() )` before the
+`destruct()` call. Both this project's `libs/lima` (modern fork) and
+`libs/spacemud` (a third, independent Lima-lineage archive in this
+collection) ship their OWN copies of this exact `Outside_Cave.lpc` file
+with the correct `if (!ob->is_living())` guard already present around
+the destruct call — confirming `wilderness`'s 2000-era snapshot is the
+outlier, not the lineage's typical shape, and ruling out "fix by
+copying a sibling's behavior" as guesswork rather than restoration.
+
+**Fix**: add the missing guard, matching the confirmed-correct sibling
+pattern:
+```c
+void obj_arrived(object ob) {
+    if (ob->get_size() >= VERY_LARGE) { ... return; }
+    if (ob->is_living() || ob->is_vehicle())
+	return;
+    receive_inside_msg(...);
+    destruct(ob);
+}
+```
+Verified live after the fix: walking `out` of `Grotto` into
+`Outside_Cave` now correctly shows "You enter." and the room
+description, with `north` back into `Grotto` immediately afterward
+confirming the round trip is clean and the player's body survives
+intact.
+
+**General lesson**: any `object_arrived`/`init()`-style room hook that
+unconditionally `destruct()`s (or otherwise permanently removes) an
+arriving object based only on a size/weight check needs an explicit
+`is_living()` guard (and usually `is_vehicle()` too) — the size check
+alone doesn't distinguish "a player standing at the small end of the
+size range" from "a dropped coin," and a hazard-terrain room whose
+whole point is to be walked through by players is exactly where this
+gap does the most damage. When a codebase has more than one copy of
+the same room/mechanic (a shared lineage, a later fork, a sibling
+archive), diff them before assuming a missing safety check is
+intentional design — here, three of four known copies had the guard,
+which is strong evidence the fourth is a genuine regression.
+
 ---
 
 ## 8. Login and registration flow bugs
@@ -15863,6 +15934,91 @@ bug status. A quick live test: register, quit, and reconnect with the
 same account in one sitting — a lib with this bug will show a
 correctly-prompted password step followed by a commandless "What?"
 session with nothing in `debug.log`, not an outright crash.
+
+### 8.23 A `(: "funcname" :)` single-string-argument functional literal was valid, documented MudOS syntax for "call `funcname` on `this_object()`" in 1993-95 — this driver instead treats it as a literal that just returns the string, so every `edit()`/`more()` "when you're done" callback written that way silently never fires
+
+Found on `foundation1`'s deep functional test (§10.7). The mudlib's own
+shipped documentation (`doc/lpc/types/function`, copied verbatim from
+1992-era MudOS docs) states as fact: `(: "hi" :) makes a function pair
+that is equivalent to (: this_object(), "hi" :)` — i.e. a bare string
+inside a functional literal was meant to resolve to a bound call to
+that same-named function on the object where the literal appears. This
+driver's compiler no longer honors that: it emits `warning: Function
+pointer returning string constant is NOT a function call` and, at
+runtime, invoking such a "function" just returns the string itself —
+the named function is never called.
+
+This silently breaks the exact "finish callback" pattern this whole
+Nightmare/IdeaExchange-lineage codebase uses everywhere for
+`this_player()->edit(file, (: "callback_name" :), (: "abort_name" :))`
+and `this_player()->more(text, class, (: "endfun_name" :))`: the
+editor/pager itself works fine (text gets typed/paged normally), but
+the instant it tries to hand control back via the broken callback,
+nothing happens — no error, no message, the interactive session's
+object-level state (`__Callback`/`__More["endfun"]`) is simply
+discarded, and the player is left staring at a bare, silent drop back
+to the top-level command prompt with no confirmation, no "operation
+aborted," nothing. On `foundation1` this manifested as: composing mail
+via `mail <player>` silently discarded the entire message on typing
+"." (no send-confirmation menu, no delivery — confirmed by checking the
+recipient's mailbox showed zero letters); reading a short mail letter
+or a short help-topic page (one that finishes without needing
+`--More--`) dropped straight to the raw prompt instead of the expected
+follow-up prompt; and submitting a `bug` report via the interactive
+editor printed nothing on completion (though the report WAS still
+logged, since `report()` ran from inside the broken callback's dead
+code path in that particular case — don't assume "nothing printed"
+always means "nothing happened," check the actual side effect).
+
+**Fix pattern**: replace `(: "funcname" :)` with the bare-identifier
+form `(: funcname :)`, which this driver DOES correctly bind to
+`this_object()` at the point the literal is written (confirmed by this
+lib's own `std/bboard.lpc`, which already used the correct bare form
+throughout and worked without a live fix). **Critical gotcha**: this
+driver's compiler only resolves a bare-identifier functional literal
+against an ALREADY-VISIBLE declaration of that function — either an
+earlier definition in the same file, or (far more commonly, since these
+callbacks are typically referenced from a function defined earlier in
+the file than the callback function itself) an explicit prototype in
+the file or its `#include`d header. Simply swapping the string for a
+bare identifier without checking this produces a NEW, different compile
+error (`error: Undefined variable 'funcname'`) instead of a clean fix —
+add the missing prototype (matching the exact signature of the real
+definition) rather than only fixing the literal. Fixed on `foundation1`
+in 8 sites across 7 files: `secure/std/post.lpc` (mail compose/forward/
+reply's `complete_send`+`abort`, mail-help's `end_help`, letter-read's
+`end_read` — 2 of the 4 targets already had prototypes in `post.h`, 1
+didn't and needed one added), `std/user/editor.lpc` (in-editor-help's
+`return_to_edit`, needed a new prototype in `editor.h`), `daemon/
+help.lpc` (menu-driven help's `endmore`, prototype already present in
+`help.h`), `secure/cmds/mortal/_bug.lpc`, `cmds/adm/_register.lpc`, and
+`secure/cmds/creator/_changelog.lpc` (each needed a fresh prototype
+added at file scope — none of these three single-file commands had one).
+Left three additional occurrences in this same lib unfixed as
+LOW-IMPACT: `secure/std/post.lpc`'s `set_prevent_get/drop/put( (:
+"remove"/"drop" :) )` calls are the SAME broken construct, but
+`allow_get()`-style callers only check the callback's return value for
+truthiness (a string is truthy regardless of content), so the object
+still gets correctly blocked — only the descriptive denial MESSAGE is
+silently dropped, and the affected object here is invisible by design
+so the path is barely reachable anyway.
+
+**How to apply generally — CONFIRMED recurrence, not just theoretical**:
+grepping the sibling `nightmare3` lib (same "Nightmare IV"/IdeaExchange
+lineage, independently onboarded earlier) found the EXACT SAME
+`std/user/editor.lpc` line (`(: "return_to_edit" :)`) and the exact same
+`daemon/help.lpc` `(menu ? (: "endmore" :) : 0)` line, both still
+unfixed there as of this writing. `foundation2` (the direct successor
+release, also in this corpus) has one occurrence too, but it's inside
+already-documented dead/unreachable Examples content. Any Nightmare-
+lineage lib (grep its own `doc/lpc/types/function` or `doc/*/driver/
+done-mudos` for the "makes a function pair equivalent to" sentence as a
+lineage fingerprint) should be grepped for
+`'(: *"[a-zA-Z_]*" *:)'` — excluding `log/errors/`, `.c~` backups, and
+doc/example files — as a cheap, mechanical way to find every instance;
+each hit needs individual judgment on whether the broken callback is
+reachable/high-impact (interactive edit/more sessions almost always
+are) versus a low-impact prevent_get/drop/put-style truthiness check.
 
 ---
 

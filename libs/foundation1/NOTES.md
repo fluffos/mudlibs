@@ -324,3 +324,178 @@ without also checking whether the process merely aged out of this
 particular sandbox's process lifetime.
 
 WASM status: not attempted this session (`wasm_status` left `""`).
+
+## 深度功能测试 / §10.7 deep functional test (2026-08-31)
+
+Round-two pass per the queue directive to hold every recently-onboarded
+lib to the §10.7 bar. Since this lib has no combat/skills/stats system
+(confirmed in \S1-5 above, matching its own README), this pass targeted
+the actual engine features onboarding hadn't yet exercised: mail, help,
+bug reports, finger, and a real quit/reconnect cycle. Booted
+`~/src/fluffos/build-debug/src/driver config.fluffos` from
+`libs/foundation1/`, tested via `scripts/tmux_mud.sh` (two concurrent
+sessions, `fluffos` the seeded admin and a fresh throwaway mortal
+`xiaoyan`), restarting the driver as needed for this sandbox's
+documented ~100-130s lifetime quirk (\S5) and to pick up each fix.
+
+### Bugs found and fixed
+
+All of the following share ONE root cause, a single systemic pattern —
+see the new AGENTS.md \S8.23 entry for the full writeup and confirmed
+recurrence in the `nightmare3` sibling lib:
+
+**A `(: "funcname" :)` single-string functional literal was valid MudOS
+syntax in 1993-95 (this lib's own `doc/lpc/types/function` states it
+verbatim: "makes a function pair that is equivalent to `(: this_object(),
+"funcname" :)`"), but this driver's compiler no longer honors that —
+calling such a "function" just returns the string, the named function
+is never invoked.** This silently broke every `edit()`/`more()`
+"when you're done, call me back" hook written that way:
+
+- `secure/std/post.lpc:1355,1361,1415` — mail compose/forward/reply's
+  `this_player()->edit(tmp, (:"complete_send":), (:"abort":))`. Live
+  repro: `mail xiaoyan` as `fluffos`, wrote a message, typed `.` to
+  finish — no send-confirmation menu appeared, and xiaoyan's mailbox
+  showed "Folder is new with zero letters" (the message was silently
+  discarded, no error, no feedback). Fixed: `(: complete_send :)`
+  (already prototyped in `post.h`), abort callback changed to plain
+  `0` (falls back to `edit()`'s own existing default no-op rather than
+  inventing a new function). Verified fixed: same flow now shows
+  "e)dit, f)orget, s)end", sending produces "Mail successfully sent!",
+  and xiaoyan's mailbox correctly shows the letter and can read it.
+- `secure/std/post.lpc:823` — reading a mail letter's
+  `this_player()->more(..., "mail", (: "end_read" :))`. Live repro:
+  reading a short letter (no `--More--` paging needed) dropped straight
+  to the raw `>` prompt instead of the expected `Command (i for index
+  menu):` follow-up. Fixed: `(: end_read :)` (needed a NEW prototype
+  added to `post.h`, since `end_read` is defined after its point of use
+  and forward references need an explicit prototype on this driver — a
+  bare-identifier fix without adding the prototype produces a NEW
+  compile error, `Undefined variable`, confirmed the hard way). Verified
+  fixed live.
+- `secure/std/post.lpc:511` — the mailer's own `?`/help command's
+  `this_player()->more(..., "help", (: "end_help" :))`. Same class,
+  fixed the same way (`(: end_help :)`, new prototype added to
+  `post.h`); not separately live-repro'd beyond the compile check since
+  it's the identical pattern to `end_read` in the same file.
+- `daemon/help.lpc:264` — the TOP-LEVEL `help` command's menu-driven
+  flow: `this_player()->more(tmp, "help", (menu ? (: "endmore" :) : 0), ...)`.
+  Live repro: `help` -> pick category -> pick topic ("postal") -> page
+  through with `--More--` -> after the last page, dropped straight to
+  `>` instead of "Hit <return> to continue:" back into the category
+  menu. This is the general help system used by EVERY player for EVERY
+  topic reached via the menu (not just the mail-specific help above).
+  Fixed: `(: endmore :)` (prototype already present in `help.h`).
+  Verified fixed: the same flow now correctly shows "Hit <return> to
+  continue:" and returns to "Selection:".
+- `std/user/editor.lpc:64` — the shared player-body editor mixin's
+  in-editor-help (`~h` while composing ANYTHING — mail, bug reports,
+  bulletin posts): `this_object()->more(EDITOR_HELP, "help", (: "return_to_edit" :))`.
+  Fixed: `(: return_to_edit :)` (needed a new prototype added to
+  `editor.h`). Not separately live-repro'd (low-traffic sub-feature of
+  every editor session, same confirmed-working pattern as the others).
+- `secure/cmds/mortal/_bug.lpc:29` — the player-facing `bug` command's
+  `previous_object()->edit(..., (:"end_edit":), (:"abort":))`. Live
+  repro: `bug` (no argument, triggers the interactive-editor path),
+  typed a report, typed `.` — nothing printed on completion (though the
+  report WAS still logged to `log/bugs` in this specific case, since
+  `report()` happened to run from inside the callback's own body before
+  the bug bit — don't assume silent output always means nothing
+  happened). Fixed: `(: end_edit :), (: abort :)` (needed a NEW
+  prototype for `end_edit` — the file already had a stale, unrelated
+  `void end_text();` prototype left over from what looks like an old
+  rename, itself dead/unreferenced anywhere, left alone). Verified
+  fixed: `bug` -> compose -> `.` now correctly prints "Bug reported!
+  Thank you!" immediately.
+- `cmds/adm/_register.lpc:23` and `secure/cmds/creator/_changelog.lpc:34`
+  — the admin `register <site>` and creator `changelog <dir>` commands'
+  own interactive-editor callbacks, identical pattern. Fixed the same
+  way (added fresh prototypes to each single-file command, since
+  neither had one). Verified by lpcc compile only (both are low-traffic
+  admin/creator-only tools; the pattern is now proven correct on 3
+  independently-tested siblings above, so a compile-clean fix here was
+  judged sufficient rather than re-deriving live repro for every site).
+
+**Left unfixed, judged low-impact**: `secure/std/post.lpc:34-36`'s
+`set_prevent_get/drop/put( (: "remove"/"drop" :) )` are the SAME broken
+construct, but the caller (`std/Object.lpc`'s `allow_get()`) only checks
+the callback's return value for TRUTHINESS — a string is truthy
+regardless of content — so the intended "block this action" behavior
+still works correctly; only the descriptive denial message is silently
+dropped. The affected object (the postal mailbox) is also `set_invis(1)`
+so a player can't normally target it with `get`/`drop`/`put` at all,
+making this a barely-reachable cosmetic gap. Left as-is per this lib's
+own existing NOTES.md precedent for similarly low-impact cosmetic
+`nosave`/warning-only issues.
+
+### A separate, unrelated bug found via `finger`
+
+`secure/daemon/finger.lpc`'s `user_finger_display()` had a
+missing-braces bug: `if(this_player() && adminp(this_player())) if(...) tmp = ...; else tmp = ...; drow = tmp;`
+— the trailing `drow = tmp;` was written as if it were inside the outer
+`if`, but with no braces it's an UNCONDITIONAL statement that runs for
+EVERY finger, admin viewer or not. Live repro: `finger fluffos` as the
+non-admin `xiaoyan` printed `Male IdeaExchanger Coder of the HackersOn
+since : ...` — missing the title line entirely AND missing the newline
+before "On since", because `drow` got silently reset to the stale,
+newline-less `tmp` value from several lines earlier instead of keeping
+the properly-built (title + bio + trailing `\n`) string. Fixed by
+adding braces around the admin-only email-line block (line ~47-52) so
+`drow = tmp;` only executes when actually appending the email line for
+an admin viewer. Verified fixed: `finger fluffos` as `xiaoyan` now
+correctly prints the title line, the bio line, "Last on: ..." (or "On
+since : ..." if actively connected), unread-mail count, and "No Plan."
+each on its own line.
+
+### Confirmed working (no fix needed)
+
+- Mail (IIPS 3.1) end-to-end: send, receive, read, folder listing,
+  unread markers — full round trip between `fluffos` and `xiaoyan`
+  after the fixes above.
+- Help system: menu navigation across categories, topic display,
+  `--More--` pagination (tested a 5-page topic), `q` to exit cleanly.
+- `bug` command: both the direct-text path (`bug <text>`, no editor)
+  and the interactive-editor path.
+- `finger`, `news`, `who`, `date`, `version` — all correct output.
+- Registration (repeated from a fresh second account, `xiaoyan`, per
+  \S5's `wizbaz` precedent) and a real `quit` -> "Please come back
+  another time!" -> clean disconnect.
+- A ~190-second continuous idle-connected session (\S10.0 long-sit
+  watch, held via `mudclient.py --idle 30`) produced zero fatal errors
+  and the driver survived the full duration and remained responsive
+  afterward — notably LONGER than \S5's previously-documented ~100-130s
+  sandbox lifetime quirk, so that quirk is apparently not deterministic
+  (or was specific to a particular earlier run); still worth budgeting
+  for on a future session regardless.
+- The Intermud-3 socket (`daemon/intermud.lpc`, \S3) did not crash
+  anything across 5 separate driver boots this session, including the
+  ~190s long-sit — confirms the \S3 caution (real outbound UDP, don't
+  reboot-loop this lib) without finding any NEW crash risk.
+
+### Observed but NOT fixed — flagged for the record, not a clear bug
+
+`log/runtime` accumulated several thousand `*Denied write permission in
+save_object().` entries this session, all from `daemon/intermud.lpc`'s
+`eventRead()` (lines ~121/145, `save_object(SAVE_INTERMUD)` after a
+`startup-reply`/`mudlist` packet) via `secure/std/client.lpc`'s
+`eventReadCallback`. Two things both need a human's attention but
+neither felt safe to "fix" under this pass's driver-API-misuse-only
+scope: (1) the daemon apparently can NEVER persist its Intermud
+mudlist/nameserver state under this lib's directory-privs security
+model (a real functional gap, but fixing it means deciding how a
+system daemon should be granted write access under this lib's
+own custom, install-it-yourself privs scheme — a security-design
+judgment call, not a clear typo); (2) the sheer VOLUME of packets
+received in a ~20-minute session (thousands) from the hardcoded 1996
+nameserver address is surprising and not something the LPC code
+controls either way (no crash or unbounded growth observed, just a lot
+of log noise) — flagged as an environment/network observation, not
+a lib bug.
+
+### Flagged unverified
+
+- Message boards (`std/bboard.lpc`): confirmed (again, per \S3) that
+  this is dead code with zero live instances anywhere in this archive —
+  no command creates or reaches a board object, so there is nothing to
+  functionally test. Not a gap introduced by this port.
+- WASM: still not attempted (`wasm_status` still `""`).
