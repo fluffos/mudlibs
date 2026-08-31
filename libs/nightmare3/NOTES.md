@@ -193,6 +193,57 @@ GBK-encoded legacy archive), most of the usual AGENTS.md §4 encoding/
     wizard command) — worth flagging for future git-hosted-source
     onboardings in this project generally.
 
+## Upstream PR audit (2026-08-31)
+
+Per this project's standing fluffos-org upstream-PR policy, audited every
+fix above against `github.com/fluffos/nightmare3` (confirmed still at
+this collection's original snapshot commit, no independent fixes and no
+open issues/PRs covering any of this). Filed two PRs:
+
+- **PR https://github.com/fluffos/nightmare3/pull/4** — bundles items
+  3 (`static`→`nosave` in `std/door.c`), 4 (`ref`/`class` reserved-word
+  collisions — `class` only for the live `daemon/refs.c`/`ref` sites;
+  `standardOld/setter.c`'s `class` rename was left out, see below), 5
+  (old-style two-arg closure literals in `secure/include/old_weapon.h`
+  and `daemon/refs.c`), 6 (`Room::set_long()` narrowed to `string`), 7
+  (`status` legacy type keyword), 8 (the two content typos), 9
+  (`inherit`-after-globals ordering), and 12 (`_ss.lpc`'s stale
+  `/adm/daemon/refs_d` path) — all reproduced byte-for-byte upstream and
+  confirmed fixed with `lpcc` against a real `fluffos/fluffos` driver
+  build. Also caught and included one adjacent, previously-undocumented
+  bug found while verifying `domains/Praxis/obj/misc/gallows.c` compiles
+  clean end-to-end: `string str, name;` where `name` only ever holds the
+  return of `present()` (an object) — declared `mixed` instead upstream
+  (this collection's own `.lpc` already had this fix, just never written
+  up here).
+- **PR https://github.com/fluffos/nightmare3/pull/5** — bundles the 3
+  round-two gameplay bugs below (setter.c ordering, vendor.c silent
+  dialogue, autosave.c duplicate items).
+
+**Not filed upstream** (audited, conservative call not to PR):
+- Item 10 (`domains/Praxis/attic/class_change.lpc`'s corrupted first
+  line): genuinely corrupted source, but the file still fails to
+  *load* even after restoring the line breaks (missing
+  `/obj/mon/wizard` content, pre-existing and unrelated) — fixing pure
+  syntax in a deprecated "attic" file that still doesn't work either
+  way isn't a compelling PR.
+- Item 11 (`standardOld/` porting, including its own `class` rename):
+  `domains/Praxis/standardOld/` is dead weight upstream too (not
+  inherited/referenced/preloaded by anything), and per the "Known
+  remaining issues" section below it has 11 *other* untriaged compile
+  errors even after this one fix — porting just this one rename
+  wouldn't get any standardOld file to actually compile, so it's not a
+  meaningful upstream contribution on its own.
+- Item 13 (`daemon/command.lpc`'s filename-slice offset): **this bug is
+  entirely an artifact of this collection's own `.c`→`.lpc` rename
+  convention** — upstream still ships the original `.c` extension, so
+  the original `-3` offset is already correct there. Explicitly
+  out-of-scope for upstream, not a real bug in the source itself.
+- Item 14 / round-two finding 4 (missing runtime directories): a
+  deployment/git-empty-directory gap, not an LPC source bug — out of
+  scope for a code PR (would need tracked placeholder files, which is
+  more of a repo-hygiene suggestion than a bug fix).
+
 ## Known remaining issues (documented, not fixed)
 
 - **14 of 822 files** (1.7%) still fail the `lpcc_check.sh` batch
@@ -306,6 +357,8 @@ zero crash, invisible to `lpcc_check.sh` and to a clean boot:
    legitimate fatigue mechanic, `add_sp()`'s own documented floor is
    -200 — confirmed this is intentional design, not something to
    "fix" further, by reading every `add_sp()` call site).
+   **Filed upstream as PR https://github.com/fluffos/nightmare3/pull/5**
+   (see "Upstream PR audit" above).
 
 2. **`std/vendor.lpc`'s entire buy/sell/cost/value/show feedback** was
    completely silent — written up as new AGENTS.md **§7.143**. Every one
@@ -343,6 +396,10 @@ zero crash, invisible to `lpcc_check.sh` and to a clean boot:
    `force_me("speak in ...")` share the identical shape and are equally
    suspect, but no spellcasting monster was actually engaged live this
    session to confirm the symptom before touching that code.
+   **Filed upstream as PR https://github.com/fluffos/nightmare3/pull/5**
+   (see "Upstream PR audit" above; the untouched `execute_attack()`/
+   `realtor.lpc` siblings above were left out, not independently
+   confirmed live).
 
 3. **`std/user/autosave.lpc`'s `setup()`** unconditionally `new()`s a
    fresh copy of every `query_auto_load()`-flagged item on every login,
@@ -376,6 +433,8 @@ zero crash, invisible to `lpcc_check.sh` and to a clean boot:
    at all). Flagged for a follow-up sibling check: `nightmare4`/
    `residuum` (this lib's own direct siblings) and the Dead-Souls-3.x
    lineage (built on old Nightmare-IV code) next.
+   **Filed upstream as PR https://github.com/fluffos/nightmare3/pull/5**
+   (see "Upstream PR audit" above).
 
 4. **Missing runtime directory `daemon/save/votes/`** — `daemon/
    voting.lpc`'s `create()` does `restore_object(VOTE_SAVE)` (`"/daemon/
