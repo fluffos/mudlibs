@@ -453,7 +453,126 @@ fixes live), confirming full wizard write access works correctly.
   convention (confirmed via `RACE_D`'s race list, a real, intentional
   design choice consistent with the game's fantasy setting).
 
-## 7. WASM status
+## 7. §10.7 deep functional test (round two, 2026-08-31)
+
+Full continuous native-driver session (`~/src/fluffos/build-debug/src/driver
+config.fluffos`, port 40258) beyond the registration-flow smoke test
+already covered by onboarding (§5 above): a fresh mortal character
+(`Deeptestor`, `TestPass123`) plus the seeded `fluffos` admin, driven
+via `scripts/tmux_mud.sh` in parallel sessions.
+
+**ACL cross-check (per this session's specific instruction, since
+`rifts2` -- this lib's own direct fork -- already turned up AGENTS.md
+§8.24's "`groups.db` group never lists the daemon UID it's meant to
+include" pattern from the exact same `access.db`+`groups.db`+
+`creator_file()` ACL architecture, and §8.24's own "how to apply
+generally" section explicitly names DarkeLIB as a suspect lineage):**
+carefully traced `adm/obj/master.lpc`'s `check_access()` end to end.
+This lib's `(mudlib)` group in `adm/db/groups.db` is indeed just
+`noone` (no `Mudlibrary` entry) -- superficially the identical shape.
+But unlike `rifts2`'s damage daemon (which only had the group-
+membership path available), `check_access()` here has a SECOND,
+earlier-checked path: `access[file][euid]` is tested directly (as a
+literal string key) before ever falling through to the
+`groups[grps[j]]` membership loop. Every real persistent daemon that
+needs `/daemon/save` write access (`castle_d`, `clan_d`,
+`council_vote`, `letter`, `events_d`, `email_d`, `reinc_d`, `pk_d`,
+`multi_d`, `network`, `remotepost`, `player_d`, `mine_d`, `voting`)
+deliberately `seteuid()`s itself to a purpose-specific UID
+(`UID_DAEMONSAVE` = `"DaemonSave"`, `UID_POSTALSAVE`, `UID_VOTESAVE`,
+`UID_USERSAVE`, `UID_SOCKET`, ...) that is *itself* one of the literal
+permission-class names already written directly into the matching
+`access.db` line (e.g. `(/daemon/save): (all)[r] (mudlib)[rw]
+(DaemonSave)[rw] (superuser)[rw]`) -- so the direct-euid-match branch
+succeeds immediately and `groups.db` never needs an entry for
+`DaemonSave`/`PostalSave`/etc. at all. Confirmed live: `daemon/save/`
+files (`economy.o`, `events.o`, `player_list.o`, ...) all had fresh
+mtimes after a normal boot and playthrough, with zero `permission
+denied` lines anywhere in `debug.log`. **Verdict: §8.24's pattern does
+NOT reproduce here** -- this lib's `check_access()` is written
+differently from `rifts2`'s inherited copy in exactly the way that
+avoids the bug (the two libs share the surrounding file structure and
+comments but not this function's actual logic). No `groups.db`/
+`access.db` change made.
+
+**Full playthrough**: `look`/`score`/`inventory` after every state
+change; joined the Fighter guild via the organic route (walked an
+admin-`trans`-assisted path to `/d/damned/guilds/join_rooms/
+fighter_join` and typed `join` -- succeeded, guild mods applied
+correctly: HP 38->64, Mental 6->25, plus a starting gold/silver grant)
+and trained a skill there (`train melee`, correctly deducted
+development points and reported the new percentage and next cost). No
+admin/direct guild-join shortcut command exists anywhere in this
+codebase (grepped `cmds/` for a `set_class`/`set_member_status`-driving
+wizard command -- none found) -- documented honestly as "only one path
+exists," not silently skipped.
+
+No dedicated safe-sparring mechanism exists in this codebase either (no
+`accept_fight()`/stat-mirroring dummy anywhere, confirmed via grep) --
+the nearest guild-side NPC (`t_guard.lpc`, guarding the treasury
+door) is a fully-armed, very high-stat door guard, not a sparring
+partner. Used the deliberately weak, stationary
+`d/excelsior/newbie/mon/halfling.lpc` (`set_skill("dodge",0)`,
+`set_skill("parry",0)`, level 1) instead, per the checklist's
+"weak wild NPC" fallback. Real combat produced real bidirectional
+damage (confirmed `get_damage()`'s unarmed-strike branch is fully
+implemented and exercised, NOT the "weapons never populated, 0 damage
+always" content gap `rifts2` separately documented as a genuine
+unfinished-content issue in ITS OWN reskinned combat data -- that gap
+does not reproduce in this, the ancestor lib, whose base
+`std/living/combat.lpc` is fully functional) -- limbs got crippled and
+severed, the character died cleanly (`death_stage`-equivalent flow:
+"You die" -> "you rise above your corpse" -> immediate reincarnation
+with full health, gold/inventory dropped to the corpse), and
+`debug.log` stayed completely clean through the entire death sequence
+(only ordinary first-load compile warnings from lazily-loaded
+`damage_d.lpc`/`pk_d.lpc`/`_unequip.lpc`, no errors).
+
+`quit` -> `debug.log` grep (clean, zero error/denied/undefined-function
+lines) -> a real ~3-minute wall-clock gap -> reconnect with the same
+account/password restored the exact same character state (guild,
+trained skill, dev points, zeroed gold/silver from the death above) in
+the room set by `quit`'s own "Setting start location" mechanic (Akkad
+Church, a resurrection-shrine room, not the death location) --
+confirmed both the save and the restore paths work correctly.
+
+**Shop/economy: attempted, blocked by a real (non-bug) in-game
+condition, honestly flagged unverified rather than skipped silently.**
+The Fighter guild shop (`fighter_shop.lpc`) enforces real business
+hours (`set_close_function(..., "16:00:00")` /
+`set_open_function(..., "7:00:00")`) and the in-game clock
+(`EVENTS_D->query_time_of_day()`) was genuinely "night" for this
+entire session -- confirmed via `eval` as a real, moving day/night
++ moon-phase cycle (`ASTRONOMY_D->query_moon_light()` returned a
+real, non-stuck value), not a broken/frozen clock. This also fully
+explains an initially-suspicious observation (`look` showing "It is
+dark." in the outdoor Newbieville town square, whose own `.lpc`
+explicitly sets `set_property("light", 3)`) -- `total_light()`'s
+`"night"` branch legitimately subtracts more than that base light
+level when the moon is dim, which is exactly what a 1999-era
+MudOS day/night/moon-phase darkness system is supposed to do. Neither
+of these is a bug; both are documented here so a future session
+doesn't waste time re-investigating them. Did not budget enough
+remaining session time to wait out to daytime and complete a real
+purchase -- flagged unverified-live, not tested.
+
+**Long-sit idle boot watch**: `python3 scripts/mudclient.py 127.0.0.1
+40258 --timeout 225 --idle 300` (no WASM build exists yet for this lib,
+so this is the native-driver equivalent of §10.0's watch, sitting on an
+open, otherwise-idle connection at the login prompt for ~185
+wall-clock seconds, run synchronously in the foreground) -- ended in
+the login object's own normal inactivity-timeout disconnect
+("Login timed out."), zero new `debug.log` errors, driver RSS a steady
+~340MB the whole time. No lazily-loaded daemon failures surfaced.
+
+**No new programming bug found** in this pass beyond what onboarding
+(§3 above) already fixed -- despite the ACL deep-dive, the combat
+system, guild-join, skill training, death/respawn, and quit/reconnect
+all independently exercised live and found clean. Documenting a clean
+result explicitly, per this project's standing rule against silently
+treating "found nothing" the same as "didn't look."
+
+## 8. WASM status
 
 Not yet run through the WASM pipeline (§1 of AGENTS.md) -- this
 onboarding pass focused on the native-driver bring-up, bug fixes, and
