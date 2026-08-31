@@ -13821,6 +13821,151 @@ hides; and any shared base-class `heart_beat()`/`reset()` that touches
 them, since a single unguarded block undoes the safety the others
 provide.
 
+### 7.181 An unguarded `sscanf()` that fails to match leaves its output parameters unassigned (0) rather than untouched — code that skips checking the match count and feeds that parameter straight into `present()`/a similar efun crashes on every non-matching input
+
+Found on `basis`'s §10.7 deep functional test (2026-08-31).
+`bin/user/senses/look.lpc`'s `do_command()` did:
+
+```lpc
+sscanf(args, "at %s", something);
+target = present(something, this_player());
+```
+
+with no check of `sscanf`'s return value. Old MudOS-era LPC code
+routinely wrote `sscanf()` this way when the pattern was expected to
+usually match, but on a non-match `something` is simply never assigned
+— it keeps its declared-but-uninitialized value (0 for a `string`), not
+the original unmatched text and not an empty string. Every player who
+typed the room's OWN documented syntax variant (`look dictionary`
+instead of the room description's suggested `look at dictionary`) fed a
+literal `0` into `present()`, which hard-errors `*Bad argument 1 to
+present(), Expected: string or object Got: 0` — silently swallowed for
+non-wizards (§7.171), so the client saw nothing at all, not even a fail
+message. A second, more severe variant needs no `sscanf` at all:
+`bin/user/objects/ready.lpc`'s `do_command(string arg)` passed `arg`
+(0 when the player types the bare command with no argument whatsoever)
+straight into `present()` with the same crash.
+
+**Fix pattern**: always check the match count (or, for a bare-argument
+case, `stringp()`) before using an `sscanf()`/command target as an
+efun argument:
+
+```lpc
+if (sscanf(args, "at %s", something) == 1 && something) {
+  target = present(something, this_player());
+  ...
+}
+```
+
+**General lesson**: grep any archive for `present(`/`find_living(`/
+similar identity-lookup efuns whose argument comes directly from an
+`sscanf()` output variable or a bare command argument with no
+`stringp()`/match-count guard immediately before the call — this is a
+100%-reproducible crash on the very first "wrong syntax" input, not an
+edge case.
+
+### 7.182 A `create()` override that omits `::create()` silently skips ALL base-class initialization on this driver — when the base class's `create()` is what sets a per-object permission/security field, every subclass that forgets the chain call inherits a wrong DEFAULT instead of failing to compile
+
+Found on `basis`'s §10.7 deep functional test (2026-08-31), across 13
+separate command files at once: `finger.lpc`, `alias.lpc`,
+`unalias.lpc`, `tell.lpc`, `clone.lpc`, `update.lpc`, `ref.lpc`,
+`new_master.lpc`, `galias.lpc`, `gunalias.lpc`, `bug.lpc`, `idea.lpc`,
+`typo.lpc` — every one of them inherits (directly or transitively) a
+security base class (`/adm/std/security/bin.lpc`) whose OWN `create()`
+does `seteuid(ROOT_UID); set_permission((int)this_object()->permissions());`,
+and every one of them ALSO defines its own `create()` for unrelated
+per-command setup (`requests = ([]);`, `set_global(0);`,
+`set_logfile("Bugs");`, etc.) without calling `::create()` first. This
+compiles perfectly cleanly — LPC never requires (or warns about) an
+overriding `create()` calling its parent's version — but it means the
+base class's `seteuid()`/`set_permission()` NEVER RUNS for that object.
+The object's `permission` instance variable is left at its raw
+declared default (`999`, the class-level `MAX_PERMISSION` constant)
+instead of the command's own intended value (usually `0`), and its
+euid stays unset (`0`) instead of `ROOT_UID`. Symptom: the command
+fails with a permission-check error (`"bin: Permission denied."` here)
+for every ordinary player, since their real permission level (0) is
+always less than the leftover 999 default — indistinguishable from an
+intentional access-control gate unless you actually read the base
+class's `create()` to see what it was supposed to set.
+
+**Fix**: add `::create();` as the very first statement of every
+overriding `create()`. **General lesson**: whenever a base class's
+`create()` sets a security-relevant field (permission level, euid,
+ACL group), grep every file that inherits it (directly or through an
+intermediate class) for `create()` overrides missing a `::create()`
+call — this is easy to miss because nothing about it looks wrong in
+isolation, and the resulting bug reads exactly like an intentional
+permission gate rather than an initialization bug.
+
+### 7.183 A command file's actual entry-point function is named something other than `do_command` — silently, permanently unreachable, and indistinguishable from a genuinely unrecognized command
+
+Found on `basis`'s §10.7 deep functional test (2026-08-31), across 20
+separate files at once (converse, plus 19 more using an older
+`cmd_<verb>` naming convention: `force`, `review`, `gauge`, `popd`,
+`pushd`, `snoop`, `tsh`, `load`, `home`, `whatis`, `origin`, `apropos`,
+`man`, `give`, `remove`, `nickname`, `unnickname`, `history`). This
+mudlib's command dispatch contract (`/adm/std/security/bin.lpc`'s
+`execute(string arg, int upermission)`) always calls a function
+literally named `do_command(arg)` on the target command object — but
+every one of these files instead defined `do_converse`/`cmd_force`/
+`cmd_review`/etc., a leftover TMI/Portals-mudlib-lineage naming
+convention (`bin_m`-family archives commonly used `cmd_<verb>` as the
+entry point under a different, older dispatcher). The result:
+`*Undefined function called: do_command`, swallowed for non-wizards
+(§7.171) — the player just sees the driver's generic command-not-found
+fail message, with **zero way to distinguish "this command doesn't
+exist" from "this command is completely broken"** from the client
+side. Confirmed empirically that renaming each function is safe (no
+other file in the archive referenced any of the old names).
+
+**General lesson**: on any archive whose command-dispatch base class
+requires one specific entry-point function name, grep every command
+file for that exact name's presence — a file that inherits the
+dispatcher but never defines the expected entry point is a silent,
+100%-reproducible dead command, and (per this instance) the failure
+can be widespread rather than a one-off typo when the source archive
+mixed conventions from more than one lineage. Worth checking
+proactively on any archive whose own documentation admits mixed
+authorship/lineage (this one: "many of the bin commands are based on
+the ones from the old TMI").
+
+### 7.184 A simul_efun that reimplements a classic "trusted" MudOS efun (one that bypassed the mudlib's own file-ACL layer entirely) must explicitly elevate its OWN euid before calling the real write efun — this driver's `valid_write()` keys off the simul_efun object itself, not the calling command, per §7.176
+
+Found on `basis`'s §10.7 deep functional test (2026-08-31). The
+classic MudOS `log_file(file, str)` efun appended to a file under
+`LOG_DIR` unconditionally, at the C level, regardless of the calling
+object's own privileges — it was a native primitive, not subject to
+the mudlib's `valid_write()` master apply at all. This driver has no
+such efun, so it's reimplemented as a one-line simul_efun:
+`void log_file(string file, string str) { write_file(LOG_DIR + "/" + file, str); }`.
+That reimplementation is now subject to `valid_write()` like any
+ordinary write — and per §7.176, this driver's `valid_write()` master
+apply receives **`current_object()`** as its "user"/euid argument, not
+`previous_object()`. Since `write_file()` here is called directly from
+inside the simul_efun's own code, `current_object()` at that exact
+call is the simul_efun object itself (e.g. `/adm/obj/simul_efun`), NOT
+the privileged command that invoked `log_file()`. The simul_efun
+object's own euid was never explicitly set (0, i.e. unprivileged), so
+`valid_write()` denied every single call, project-wide, for every
+caller regardless of how privileged that caller actually was —
+`write_file()` simply returns 0 on denial with no catchable error, so
+this was **completely invisible**: no crash, no log line anywhere, the
+calling code's own control flow continues exactly as if the write had
+succeeded.
+
+**Fix**: `seteuid(ROOT_UID);` as the first statement inside the
+simul_efun, before the `write_file()` call — replicating the original
+efun's "trusted, bypasses the mudlib's own ACL" semantics rather than
+relying on (and being silently defeated by) the caller's privilege.
+**General lesson**: any simul_efun standing in for a classic
+driver-level "trusted" primitive (file I/O, socket operations, log
+writes) that this driver subjects to the mudlib's own `valid_write()`/
+`valid_read()` needs to `seteuid()` itself explicitly if the real efun
+never had that restriction — the bug is invisible in code review
+unless you specifically remember that `current_object()` inside a
+simul_efun's own body is the simul_efun object, not the caller.
+
 ---
 
 ## 8. Login and registration flow bugs

@@ -406,3 +406,189 @@ guessing or discarding a pre-existing real account.
    hand-rolled command-file cache -- every command in the game
    failed. Worth a proactive grep (`\[\(?len\s*-\s*[0-9]+\)?\.\.`) on
    any archive with a similar directory-scanning command cache.
+
+## 9. §10.7 deep functional test (2026-08-31)
+
+Full continuous-session playthrough on the native driver (port 40261),
+exercising literally every implemented `bin/user/*` command (not just
+the register/look/go/quit path already verified in §5), plus a maker
+and admin pass logged in as the seeded `fluffos` account, plus a WASM
+long-sit boot watch (`scripts/wasm_boot_watch.sh basis 200`). This is a
+genuinely thin lib by design (per the archive author's own README), so
+"deep test" here meant "does every implemented feature actually work,"
+not a full RPG progression. Found and fixed **7 distinct, previously
+undetected programming bugs** -- more than any prior pass on this lib,
+all invisible to the boot-log/registration-smoke-test bar because they
+only fire when a specific command is actually typed.
+
+### Bugs found and fixed
+
+1. **`bin/user/senses/look.lpc`: `look <item>` (without the literal
+   `at`) crashed on literally every attempt**, `look.lpc:19-20`.
+   `sscanf(args, "at %s", something)` leaves `something` unassigned
+   (0) whenever `args` doesn't start with `"at "` (i.e. any plain
+   `look dictionary` instead of `look at dictionary`); the unguarded
+   `present(something, this_player())` right after then hard-errors
+   `*Bad argument 1 to present(), Expected: string or object Got: 0`,
+   swallowed silently for the non-wizard player (§7.171) -- the client
+   saw NOTHING at all, not even a fail message. Fixed by only
+   attempting the `present()` lookup when `sscanf` actually matched
+   (`== 1 && something`), falling through to the existing "Nothing
+   like that around here." message otherwise -- preserves the
+   room-description's own documented UX (`'look at dictionary'`)
+   while eliminating the crash. New AGENTS.md class, §7.181.
+2. **13 `bin/`/`std/bin/` command files silently locked at
+   `MAX_PERMISSION` (999) for every player, including ones whose own
+   `permissions()` correctly declares `0`**: `finger.lpc`, `alias.lpc`,
+   `unalias.lpc`, `tell.lpc` (user-level); `clone.lpc`, `update.lpc`,
+   `ref.lpc` (maker-level); `new_master.lpc`, `galias.lpc`,
+   `gunalias.lpc` (admin-level); `bug.lpc`, `idea.lpc`, `typo.lpc`
+   (report-based). Each overrides `create()` without calling
+   `::create()`, so `/adm/std/security/bin.lpc`'s own `create()`
+   (`seteuid(ROOT_UID); set_permission((int)this_object()->permissions());`)
+   never runs -- `permission` stays at its raw declared default (999)
+   instead of the command's own intended value, and the command's
+   euid stays unset (0) instead of `ROOT_UID`. Symptom: `tell`,
+   `alias`, `unalias`, `finger` all failed with `"bin: Permission
+   denied."` for a brand-new player; `bug`/`idea`/`typo` failed the
+   same way AND (even after the permission fix) their reports never
+   got logged because of bug #6 below. Fixed by adding `::create();`
+   as the first statement in each. New AGENTS.md class, §7.182.
+3. **20 command files' actual entry point was named something other
+   than `do_command`**, the one name `/adm/std/security/bin.lpc`'s
+   `execute()` calls -- every one of these was **100% dead for every
+   player**, failing with `*Undefined function called: do_command`
+   (swallowed for non-wizards, so the player just saw the driver's
+   generic `"Errmm?"` fail message, indistinguishable from a genuinely
+   unrecognized command). `converse.lpc` (`do_converse`); maker-level
+   `force.lpc` (`cmd_force`), `review.lpc` (`cmd_review`),
+   `gauge.lpc` (`cmd_gauge`), `popd.lpc`/`pushd.lpc`
+   (`cmd_popd`/`cmd_pushd`), `snoop.lpc` (`cmd_snoop`), `tsh.lpc`
+   (`cmd_tsh`), `load.lpc` (`cmd_load`), `home.lpc` (`cmd_home`),
+   `whatis.lpc` (`cmd_whatis`), `origin.lpc` (`cmd_origin`),
+   `apropos.lpc` (`cmd_apropos`), `man.lpc` (`cmd_man`); user-level
+   `give.lpc`/`remove.lpc` (`cmd_give`/`cmd_remove`),
+   `nickname.lpc`/`unnickname.lpc`
+   (`cmd_nickname`/`cmd_unnickname`), `history.lpc` (`cmd_history`).
+   Confirmed each renamed identifier is used nowhere else in the
+   archive before renaming (safe, no external callers). This is
+   clearly leftover TMI/Portals-lineage naming convention (the
+   archive's own README says "many of the bin commands are based on
+   the ones from the old TMI") that never got reconciled with
+   `bin.lpc`'s actual `do_command` contract -- worth checking on sight
+   in any TMI-derived archive. New AGENTS.md class, §7.183.
+4. **`bin/user/objects/ready.lpc`: bare `ready` (no argument) crashed**
+   the same `present()`-with-0 way as bug #1, `ready.lpc:15`
+   (`arg` is 0 when the player types no argument at all, not merely
+   sscanf-unassigned). Fixed with a `stringp(arg)` guard printing
+   "Ready what?\n" first (matching `drop.lpc`/`get.lpc`'s existing,
+   correct pattern for the same efun).
+5. **`log_file()` (the simul_efun reimplementing the classic MudOS
+   log-append efun, `adm/obj/simul_efun/log_file.lpc`) silently wrote
+   NOTHING, every single call, project-wide** -- confirmed via
+   instrumentation: `write_file()` inside it always returned `0`
+   (denied) with zero visible symptom (no catchable error; classic
+   MudOS `write_file()`/its simul_efun reimplementation just returns
+   false on denial). Root cause: this driver's `valid_write()` master
+   apply receives **`current_object()`** as its "user" argument
+   (AGENTS.md §7.176) -- since `log_file()` calls `write_file()`
+   directly from ITS OWN code, `current_object()` at that point is
+   the simul_efun object itself (`/adm/obj/simul_efun`), whose own
+   euid is 0 (never set), not the actually-privileged calling command
+   (confirmed `ROOT_UID` euid) that `previous_object()` would have
+   shown. Every caller was silently affected: `bug`/`idea`/`typo`
+   reports (never appended to `log/Bugs`/`Ideas`/`Typos` despite the
+   interactive editor completing normally), `tell.lpc`'s own error
+   log, `master.lpc`, and 5+ `adm/daemon/inet/*` daemons' logging.
+   Fixed by adding `seteuid(ROOT_UID);` inside `log_file()` itself
+   before the `write_file()` call, replicating the "trusted native
+   primitive" semantics the real MudOS efun had. New AGENTS.md class,
+   §7.184 (a direct, simul_efun-specific consequence of §7.176).
+6. **`bin/maker/help/apropos.lpc`: `APROPOS_D` pointed at the stale
+   path `/bin/daemon/aproposd`**, while the real file lives at
+   `/adm/daemon/aproposd.lpc` -- the exact same archive-internal
+   path-drift shape already documented in §3 for the 19-file
+   `bin_m`/`/adm/std/security/bin` case, just a single fresh instance.
+   Symptom: `apropos <anything>` crashed the driver's own
+   master/virtuald fallback into the self-referential
+   `*Inherit chain too deep: > 30` recursion (same mechanism as §3's
+   closure bug) on literally every invocation, for every maker.
+   Fixed by correcting the macro's path.
+7. **`std/i/shell.lpc` never inherited `std/i/nicknames.lpc`** -- unlike
+   the genuinely-incomplete, never-finished `std/i/history.lpc` and
+   `std/i/tsh.lpc` siblings already documented in §4 (both reference
+   undefined variables or `#include` headers that never existed),
+   `nicknames.lpc` is a complete, internally-consistent, correctly
+   implemented mixin (`query_nicknames`/`set_nicknames`/
+   `query_nickname`/`remove_nickname`/`empty_nicknames`, all
+   self-contained) that was simply never added to the inherit chain.
+   Symptom: `nickname <nick> <real>` crashed with `*Value being
+   indexed is zero` (call_other of an undefined function on the
+   player returns 0, then `nicknames[nn]` indexes that 0), and
+   `unnickname <nick>` always reported "No such nickname defined."
+   even right after a (crashing) `nickname` attempt. Fixed by adding
+   `inherit "/std/i/nicknames";` to `std/i/shell.lpc` alongside the
+   existing `pager`/`edit`/`alias` mixins. **Left deliberately
+   incomplete**: the mixin's own `do_nicknames()` substitution helper
+   (meant to actually replace a nickname with the real name in a
+   typed command line) is `private` and still never called from
+   `process_input()` anywhere -- wiring that in would mean completing
+   a never-finished feature integration rather than fixing an
+   omission, so `nickname`/`unnickname` now correctly manage the
+   nickname list but the substitution effect itself remains
+   unverified/unimplemented. Documented here rather than guessed at.
+
+### Confirmed NOT bugs -- genuinely incomplete pre-existing content (left alone)
+
+- **`history` command** (`bin/user/shell/history.lpc`, entry point now
+  correctly renamed per fix #3 above) depends entirely on
+  `std/i/history.lpc` for `query_max`/`query_cmd_num`/`query_ptr`/
+  `query_history` -- but that mixin is the SAME file already
+  documented in §4 as "genuinely incomplete original content...
+  referencing `ptr`/`max`/`cmd_num` variables that are never declared
+  anywhere," never inherited by anything live. Now that the entry
+  point is reachable, typing `history` silently no-ops (the undefined
+  `call_other`s return 0, `max` ends up 0, the display loop's range
+  is empty) instead of crashing -- a mild improvement, but the actual
+  feature remains unimplemented by the original author, not by this
+  port. Left as-is, matching the existing precedent exactly.
+- **`popd`/`pushd` commands** (entry points now correctly renamed per
+  fix #3) depend entirely on `std/i/tsh.lpc` for their actual
+  `popd()`/`pushd()` methods -- but `tsh.lpc` `#include`s
+  `<commands.h>` and `<tsh.h>`, both of which "never existed anywhere
+  in the archive" (§4's own words, re-confirmed here), so it cannot
+  even compile, let alone be inherited. Typing `popd`/`pushd` now
+  correctly reaches `do_command()` (fix #3) but silently no-ops when
+  `previous_object()->popd(str)` calls a function that exists nowhere
+  on any real player object. Left as-is, same bucket as `history`/
+  `tsh` above -- this is the SAME already-abandoned shell rewrite
+  ("Brutally hacked up and destroyed by Buddha... on 3-7-92"), not a
+  fixable omission.
+- **`emote <text>`/`mail` permission gate** (§5's original finding):
+  re-confirmed still true and still reads as intentional design, not
+  touched.
+
+### WASM
+
+`scripts/wasm_boot_watch.sh basis 200` ran the full 200s with no
+driver crash, reaching the login prompt cleanly. One expected,
+already-documented WASM-only limitation fired exactly as AGENTS.md
+predicts (line ~349, "WASM builds ship without `sockets`... package"):
+`adm/daemon/inet/inetd.lpc` fails to compile under WASM
+(`Undefined function socket_close/socket_write/socket_create/
+socket_error`), so `/adm/daemon/inet/inetd` never loads and the
+intermud-tell/finger feature is unavailable under WASM specifically
+-- `master.lpc`'s own `socket_preload()` already wraps this in
+`catch()`, so it's non-fatal and the rest of the game is unaffected.
+Native-only limitation, not a bug; not fixed.
+
+### Regression check
+
+All 7 fixes re-verified together in one final continuous session
+(register `deeptest16`, exercise every fixed command, `quit`) plus a
+separate maker/admin pass logged in as the seeded `fluffos` account
+exercising every one of the 13 previously-dead maker commands
+(`apropos`, `review`, `force`, `gauge`, `popd`, `pushd`, `snoop`) --
+zero errors in the driver's own captured stdout across the whole
+session (native builds' `debug.log` is dead for the process's whole
+life per §10.9, so stdout is the only reliable error channel).
