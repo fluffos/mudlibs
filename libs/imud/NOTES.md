@@ -243,6 +243,17 @@ router: error`——路由器自己不接受把 `"error"` 类型的包直接发�
 （`mudlist` 真实连公网 I3 网络）本轮再次原生实测确认工作正常，`update`
 命令、未知命令兜底、~50 秒空闲期、WASM 构建全部无新发现。
 
+**filed upstream as PR #1: <https://github.com/fluffos/imud/pull/1>**
+（2026-08-31，标准 fluffos-org 上游回馈流程，见
+`project_fluffos_org_upstream_pr_queue.md`）——审计了本文件里其余的
+转换记录（编码、`.c`→`.lpc` 重命名、`config.fluffos` 端口选择、
+lpcc 编译扫查的 8 个 FAIL、WASM 实测差异），全部是本仓库自己的集成
+工作或上游自带的死代码/环境差异，唯一符合"真实驱动兼容性 bug"标准的
+就是这一处 `handle_router_read()` 的 `return` 缺失，已在 fork
+`thefallentree/imud` 的 `fix-handle-router-read-missing-return` 分支
+里把等价修复应用到上游原始 `secure/imud/imud.c`（本仓库转换后的路径是
+`secure/imud/imud.lpc`）并提交 PR。
+
 ## 管理员账号
 
 不适用，见 README「管理员账号」小节——没有账号系统，无法播种。
