@@ -28,6 +28,49 @@
 
 #define INVISIBILITY_D "/daemons/invisibility_d"
 
+/* Forward declarations: this driver compiles one function-call pass
+ * per file, so a same-file function called before its own definition
+ * needs a prototype here first (same class as NOTES.md §3's corpus-wide
+ * forward-reference sweep -- this file wasn't caught by that pass).
+ * Left this file permanently uncompilable, which broke every single
+ * NPC in the mudlib (obj/monster.lpc is the base class for all of
+ * them) -- confirmed live: a guild room's reset() cloning its own
+ * guildmaster NPC threw "No program in object '/obj/monster'!" and
+ * aborted mid-reset(), silently skipping the room's own add_exit()/
+ * short_desc/long_desc setup that comes right after in the same
+ * function (see room/room.lpc's new create()). */
+mixed random_move();
+mixed short();
+mixed query_invisible();
+varargs mixed query_limb(string str);
+mixed test_match(mixed str);
+varargs mixed check_al_aggr(mixed player, mixed arg);
+mixed pick_any_obj();
+mixed follow(string str);
+/* move_away(): called (0 args) at one heart_beat()-adjacent site but
+ * never actually defined anywhere in this whole mudlib -- same class
+ * as NOTES.md §3's "base class calls a function only the derived
+ * class defines" gap (forward-declared to satisfy this driver's
+ * compiler, left as a genuine, real, pre-existing incompleteness
+ * rather than invented around; would throw a real "Undefined
+ * function" at runtime if ever actually reached, exactly like the
+ * original archive's own class design already risked elsewhere). */
+mixed move_away();
+varargs mixed random_resists(int lev);
+varargs mixed set_skills(mixed num, mixed pros, mixed arg);
+mixed heart_beat();
+mixed set_skill_chance(string sk, int sc);
+mixed query_race();
+mixed set_short(mixed sh);
+varargs mixed query_hunter_list(string str, mixed arg);
+mixed set_random_pick(mixed r);
+mixed random_combat_tactic();
+mixed set_resists(mixed pref, int num);
+mixed query_resists(mixed pref);
+varargs mixed set_skill(string num, int pros, int force_over_100);
+mixed set_spell_chance(int c, string wr);
+mixed query_animal();
+
 /*
  * The heart beat is always sstarted in living.h when we are attacked.
  */
@@ -45,9 +88,13 @@ nosave string a_chat_head;     /* Vector with all a_chat strings. */
 int a_chat_chance;
 
 object talk_ob;
-string talk_func;       /* Vector of functions. */
-string talk_match;      /* Vector of strings. */
-string talk_type;       /* Vector of types. */
+/* Declared as plain string but always assigned whole arrays from
+ * set_match() and indexed in test_match() -- same class as NOTES.md
+ * §3's "declared-scalar-but-actually-array" bug (their own comments
+ * already say "Vector of ..."). */
+string *talk_func;       /* Vector of functions. */
+string *talk_match;      /* Vector of strings. */
+string *talk_type;       /* Vector of types. */
 string the_text;
 int have_text;
 int kill_log;
@@ -57,9 +104,18 @@ object init_ob;
 
 int random_pick, extra;
 int animal;
-int skill_chance;
-string use_skill;
-string spell_words;
+/* Both assigned allocate()'d results and indexed as parallel arrays
+ * throughout this file (skill-chance-roll code around line 295 +
+ * set_skill_chance()'s own append logic) despite being declared plain
+ * scalars -- same class as NOTES.md §3's "declared-scalar-but-
+ * actually-array" bug. */
+int *skill_chance;
+string *use_skill;
+/* Assigned allocate()'d results and indexed as an array throughout
+ * this file (set_spell_chance() below) despite being declared a
+ * plain string -- same class as NOTES.md §3's "declared-scalar-but-
+ * actually-array" bug. */
+string *spell_words;
 int spell_chance, spell_dam;
 string spell_mess1, spell_mess2;
 nosave object me;
@@ -88,6 +144,24 @@ mixed query_terminal() { return 0; }
 mixed query_turbo() { return is_turbo; }
 
 mixed parse_prompt() { return; }
+
+/* Same class as room/room.lpc's own create() fix: this file's reset()
+ * (below) is what actually sets `me` (used unconditionally by init()'s
+ * environment(me) on every single clone) plus skills/limbs/resists
+ * mappings -- but FluffOS's call_create() already arms next_reset to
+ * an hour in the future before create() even runs, so lazy resets
+ * never fires reset() near clone time. Without this, any NPC clone
+ * whose init() runs before that hour is up crashes immediately with
+ * "Bad argument 1 to environment(), Expected: object Got: 0" --
+ * confirmed live via a /world/monsters/citizen clone in the city.
+ * Routed through call_other() rather than a bare reset(0) per
+ * AGENTS.md §7.177 (bare same-name calls can silently no-op on this
+ * driver; this is also a base class every monster/NPC subclass
+ * overrides reset() in, so the most-derived override must run). */
+void create() {
+    call_other(this_object(), "reset", 0);
+}
+
 mixed reset(mixed arg) {
     int i;
     object scroll;
@@ -223,7 +297,7 @@ mixed remove_limb(string str) {
   this_object()->hit_with_spell(random(40)+10);
 }
 
-mixed query_limb(string str) {
+varargs mixed query_limb(string str) {
   if(!str) {
     str = implode(keys(limbs),", ");
     return str;
@@ -373,7 +447,7 @@ mixed catch_tell(mixed str, mixed arg) {
     if (arg) { tell_object(arg, str + "" + the_text); }
 }
 
-mixed query_hunter_list(string str, mixed arg) {
+varargs mixed query_hunter_list(string str, mixed arg) {
   int i;
   if (arg) { return hunter_list; }
   if(!str) return;
@@ -587,7 +661,7 @@ mixed set_level(int ll) {
     random_combat_tactic();
 }
 
-mixed random_resists(int lev) {
+varargs mixed random_resists(int lev) {
   int i,ii;
   if(!lev) lev = query_level();
     if (random(lev)+lev/4 > 15) {
@@ -763,7 +837,7 @@ mixed set_aggressive(mixed a) { aggressive = a; }
 
 int query_aggressive() { return aggressive; }
 
-mixed set_skills(mixed num,mixed pros, mixed arg) {
+varargs mixed set_skills(mixed num,mixed pros, mixed arg) {
   return set_skill(num,pros, arg);
 }
 mixed set_undead() {
@@ -784,7 +858,7 @@ mixed query_no_corpse() {
   if (no_corpse) { return 1; }
 }
 
-mixed set_skill(string num, int pros, int force_over_100) {
+varargs mixed set_skill(string num, int pros, int force_over_100) {
   int tmp;
   if(!intp(pros) || intp(num)) {
     return;
@@ -810,7 +884,7 @@ mixed set_al_aggr(mixed arg) {
   al_aggr = arg;
 }
 
-mixed check_al_aggr(mixed player, mixed arg) 
+varargs mixed check_al_aggr(mixed player, mixed arg)
 {
 
 if(player->query_level() < 70) { return 0; } 
@@ -843,7 +917,7 @@ mixed query_resists(mixed pref) {
  * The percent chance of casting a spell.
  */
 mixed set_spell_chance(int c, string wr) {
-    string old_spell_words;
+    string *old_spell_words;
     int i;
     spell_chance = c;
     if (!spell_words) {
@@ -861,8 +935,14 @@ mixed set_spell_chance(int c, string wr) {
 }
 
 mixed set_skill_chance(string sk, int sc) {
-  string tmp;
-  int tmp2,i;
+  /* tmp/tmp2 hold a snapshot of the OLD arrays for copying into the
+   * freshly-allocated (one-larger) arrays below -- the copy loop
+   * needs tmp[i]/tmp2[i] (per-element), not tmp/tmp2 (whole array),
+   * matching the already-correct sibling pattern in this same file's
+   * add_exit()-equivalent room.lpc code. Also declared as arrays to
+   * match, not the plain scalars this was mis-declared as before. */
+  string *tmp;
+  int *tmp2,i;
   if(!skill_chance) {
     skill_chance = allocate(1);
     use_skill = allocate(1);
@@ -875,8 +955,8 @@ mixed set_skill_chance(string sk, int sc) {
   use_skill = allocate(i);
   i = 0;
   while(i<sizeof(tmp2)) {
-    skill_chance[i] = tmp2;
-    use_skill[i] = tmp;
+    skill_chance[i] = tmp2[i];
+    use_skill[i] = tmp[i];
     i += 1;
   }
   skill_chance[i] = sc;
@@ -950,7 +1030,11 @@ mixed set_dead_ob(mixed ob) {
 
 mixed second_life() {
   string cre,str;
-  object p_ob, members;
+  object p_ob;
+  /* Assigned query_members()'s array result and indexed below despite
+   * being declared a plain object -- same class as NOTES.md §3's
+   * "declared-scalar-but-actually-array" bug. */
+  object *members;
   int i;
   if(query_npc() && kill_log && attacker_ob && !attacker_ob->query_wiz()) {
     str = ctime(time())+" "+short()+" ("+file_name(this_object())+", "+query_level()+
@@ -1152,7 +1236,11 @@ mixed heal_slowly() {
 
 
 mixed set_antiobjects() {
-  object ob, antio;
+  /* Assigned all_inventory()'s array result and indexed below despite
+   * being declared a plain object -- same class as NOTES.md §3's
+   * "declared-scalar-but-actually-array" bug. */
+  object *ob;
+  object antio;
   int i;
   ob = all_inventory(this_object());
   if (!ob) { return; }

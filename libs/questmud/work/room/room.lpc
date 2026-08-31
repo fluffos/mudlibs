@@ -10,6 +10,30 @@
  * in the function that inherits this file.
  */
 
+/* §2.7's lazy-reset gap (NOTES.md), a new/more severe instance: this
+ * driver's call_create() (vm/internal/base/object.cc) sets an object's
+ * own next_reset to now+"time to reset" (3600s here) BEFORE create()
+ * even runs -- so try_reset()'s lazy-resets check (next_reset <
+ * current tick) is already false the instant the object finishes
+ * loading, for every single object, preloaded or lazily compiled alike.
+ * Since this shared base class is inherited by 5,000+ room files
+ * corpus-wide and NONE of them define their own create(), no room's
+ * reset() (which is what actually populates short_desc/long_desc/exits
+ * via add_exit(), per this file's own opening comment) was ever
+ * running until a full hour after that specific room object's first
+ * load -- confirmed live: entering a freshly-loaded guild room printed
+ * no description at all and "No obvious exits." (a hard, silent
+ * dead-end for every new character immediately after chargen, not a
+ * cosmetic gap). A bare `reset(0);` call here would call the wrong
+ * (non-virtual) copy on this driver per AGENTS.md §7.177's own
+ * documented fix for this exact "universal base class whose subclasses
+ * each define their own reset()" shape -- routing through
+ * call_other(this_object(), ...) instead reliably dispatches to the
+ * actual most-derived reset() and is what's used below. */
+void create() {
+    call_other(this_object(), "reset", 0);
+}
+
 /* An array with destinations and directions: "room/church", "north" ... */
 /* Assigned allocate()'d results and indexed as an array throughout
  * this file despite being declared a plain string. */

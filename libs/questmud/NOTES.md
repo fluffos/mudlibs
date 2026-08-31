@@ -448,3 +448,198 @@ already proven safe on the files fixed this session.
 - The 6,736-file compile-sweep tail (\S4) was triaged by category, not
   fixed file-by-file.
 - WASM pass not attempted this session.
+
+## §10.7 deep functional test (2026-08-31, round two)
+
+Full continuous playthrough against `~/src/fluffos/build-debug/src/
+driver config.fluffos` (the shared driver, no dedicated worktree
+needed), several fresh throwaway registrations, following AGENTS.md's
+own note that \S2.7's lazy-reset class was "confirmed real but not
+exhaustively audited." It wasn't -- this pass found the single most
+severe, most far-reaching bug in this whole port, well beyond what
+\S2/\S7.158 already catalogued. Full technical writeup: **new AGENTS.md
+\S7.192**. Summary here.
+
+### SEVERE finding: `room/room.lpc` and `obj/monster.lpc` were both still missing the \S2.7 lazy-reset `create()` bridge -- this made essentially the ENTIRE explorable game world unreachable
+
+Registering a fresh character (`Bragoth`, human Fighter) through the
+full chargen flow and joining the Fighter guild landed in a room with
+**no description at all and "No obvious exits."** -- a hard, silent,
+total dead end immediately after character creation, for every single
+new player, every time. Root-caused via `vm/internal/base/object.cc`'s
+`call_create()`: it arms `next_reset` to an hour in the future BEFORE
+`create()` even runs, so `try_reset()`'s lazy-resets check is already
+false the instant any object finishes loading -- meaning `reset()`
+(which is what actually populates `short_desc`/`long_desc`/exits via
+`add_exit()`, per `room/room.lpc`'s own header comment) never fires
+until a full hour after that specific room's first load, REGARDLESS of
+`lazy resets : 1`. `room/room.lpc` (inherited by 5,368+ files
+corpus-wide) and `obj/monster.lpc` (the base class for every NPC/
+monster clone in the game) both had no `create()` of their own. Fixed
+both with the same pattern AGENTS.md \S7.177 already established for
+"universal base class, subclasses each override `reset()`" (a bare
+`reset(0)` can silently no-op on this driver -- route through
+`call_other()` instead):
+
+```lpc
+void create() {
+    call_other(this_object(), "reset", 0);
+}
+```
+
+### The reset() gap cascaded into a whole chain of previously-unreachable, independent compile/type bugs -- fixed one link at a time via live reproduction, not static analysis
+
+Once `reset()` actually started running for the first time ever on
+this driver, every bug hiding inside it (permanently dead code before
+the fix) became a real, live, uncaught crash that aborts the calling
+room's `reset()` PARTWAY THROUGH -- silently skipping whatever comes
+textually after the crash point, including the room's own
+`add_exit()`/description setup that always follows its initial
+"populate my furniture/NPCs" `clone_object()` calls. Traced and fixed
+via repeated live reproduction (join guild -> crash -> read trace ->
+fix -> reboot -> repeat), not a static sweep:
+
+- **`obj/monster.lpc`**: a dozen+ same-file forward-reference bugs
+  (functions called before their own definition -- `random_move`,
+  `short`, `query_invisible`, `test_match`, `check_al_aggr`,
+  `pick_any_obj`, `follow`, `random_resists`, `set_skills`,
+  `heart_beat`, `set_skill_chance`, `query_race`, `set_short`,
+  `query_hunter_list`, `set_random_pick`, `random_combat_tactic`,
+  `set_resists`, `query_resists`, `set_skill`, `set_spell_chance`,
+  `query_animal` -- all forward-declared, same mechanical pattern as
+  \S3's original sweep, just not caught for this specific file);
+  `move_away()` called but never defined anywhere in the mudlib
+  (forward-declared only, left as a genuine pre-existing gap per \S3's
+  own precedent); several arg-count mismatches needing `varargs`
+  (`query_limb`, `check_al_aggr`, `query_hunter_list`, `set_skill`,
+  `random_resists`, `set_skills` -- each verified falsy-safe against
+  its own body before adding `varargs`); declared-scalar-but-actually-
+  array globals (`skill_chance`, `use_skill`, `spell_words`,
+  `talk_func`/`talk_match`/`talk_type` -- the last three literally
+  commented "Vector of ..." in the original source) and locals
+  (`second_life()`'s `members`, `set_antiobjects()`'s `ob`); a missing
+  `[i]` index in `set_skill_chance()`'s own array-copy loop (copying
+  the whole old array into one slot instead of one element, same shape
+  as `room/room.lpc`'s own already-correct `add_exit()` copy loop);
+  plus its own missing `create()` (above).
+- **`obj/living.lpc`**: `death(mixed force)` needed `varargs` --
+  `obj/monster.lpc` calls it with 0 args in two places, and `force` is
+  already used with a falsy-safe `!force` check in the body.
+- **`obj/monster_data.lpc`**: `get_hp()`'s local `cost` declared `int`
+  but assigned `allocate(21)` and indexed throughout -- `int *cost`.
+- **`obj/base_object.lpc`**: `size` declared `string` alongside the
+  file's other string fields, but every real call site
+  (`set_size(2)`/`set_size(30)`/`set_size(5)`) and this file's own
+  `get_size(int)` (0-100 numeric size code) treat it as `int` -- fixed
+  the declaration, plus a same-file forward-reference on `get_size()`
+  itself.
+- **`wizards/siki/base_drink.lpc`** -- **a file this project's usual
+  "wizards/ = personal sandbox, never referenced from the live game"
+  assumption does NOT hold for**: `/world/objects/fountain.lpc` (the
+  real, shipped fountain at the game's own Central Square) inherits it
+  directly. A forward-reference (`get_drinks_left`) and a genuinely
+  undefined `query_name()` (forward-declared only, per \S3's "base
+  class calls a subclass-only function" precedent -- the one live
+  caller, the fountain, always sets `liquid_type` and never reaches
+  that branch) were both blocking Central Square's own `reset()`.
+- **`cmds/std/_environment.lpc`**: a forward-reference (`return_color`)
+  plus a false-positive instance of \S2.6's wide-mapping pattern -- `l`
+  is a genuinely single-valued mapping but read with LDMud-style
+  `l[key, 0]` column indexing in three places, fixed by dropping the
+  `, 0` (same remedy \S2.6 already documented for `daemons/
+  leader_d.lpc`'s identical false-positive shape).
+- **`secure/master.lpc`**: `valid_read()` had no case for call_fun
+  `"stat"` -- this driver's `get_dir()`/`stat()` efuns BOTH route
+  through `valid_read(path, eff_user, "stat", caller)`
+  (`packages/core/file.cc`), a different call_fun value than the
+  `"get_dir"` case this master's switch already had (dead code on this
+  driver -- never actually passed). Silently denied `get_dir()`
+  return an int `0` instead of an array, which fell all the way
+  through the race-selection room's own `sizeof(str)` guard with zero
+  error -- "Available races:" printed as a genuinely empty list on
+  every single registration. Fixed by adding `"stat"` to the existing
+  permissive read policy alongside `read_file`/`read_bytes`/
+  `file_size`.
+- **267-file corpus sweep**: `string chat_str;` declared as a scalar
+  but always assigned `allocate(N)` and indexed via
+  `chat_str[0..N] = ...; load_chat(N, chat_str);` -- a copy-pasted NPC
+  idle-chat idiom used across the ENTIRE archive (guild masters, city
+  guards, wizard-realm NPCs, wild monsters). A quote-aware Python sweep
+  found 294 candidate files, confirmed array usage (`chat_str[` or
+  `chat_str = allocate(`) in 267 of them before fixing (27 correctly
+  skipped as genuine single-string scalars, e.g. `world/misc/chat.lpc`).
+
+### Verified live, end to end, after all of the above
+
+Full continuous session, fresh registration each time a fix needed a
+reboot: name -> password -> race selection (`Available races:` now
+lists all 22 real races, not empty) -> special traits -> guild
+selection (`select fighter`) -> **the Fighter guild room now shows its
+real description AND all 5 exits** -> `east` onto Gold street (a real
+citizen and city guard NPC both visible and correctly described, no
+crash) -> `south` into **Central Square** (the game's own central hub
+-- also showing its real description, all 4 exits, and a patrolling
+guard NPC) -> `north` back. `quit` produced a clean disconnect with
+`log/debug.log` never created (no uncaught errors) both before and
+after every fix in this chain. A ~220s idle long-sit boot watch (real
+driver stdout capture, not `debug.log` alone) produced zero new error
+lines beyond the already-catalogued, unrelated 66-line compile-sweep
+tail from \S4/\S5.
+
+### What was NOT reached, flagged honestly rather than silently skipped
+
+- **Combat**: `kill citizen` on an ordinary street NPC produced no
+  visible combat exchange at all (no damage either direction over
+  several heartbeat ticks) -- most likely this specific NPC/room is
+  intentionally non-hostile "flavor" content (the newbie help text
+  explicitly directs new players to dedicated zones instead: "City
+  slums: 2s,2e,2s,1e", "Ant mines: 16s,11e,3s,6e,2n" from Central
+  Square), not a bug; not chased further given the travel distance and
+  time budget. No dedicated safe-sparring dummy/mechanism exists in
+  this archive (grepped for the `accept_fight` pattern this project's
+  own AGENTS.md documents as the thing to look for -- zero hits
+  anywhere outside `wizards/`).
+- **Skill training past the automatic background-advancement phase,
+  and admin-shortcut guild assignment**: not reached -- the organic
+  `select <guild>` path (verified above) is the only guild-join
+  mechanism found in the explorable game; no separate admin/newbie-
+  gift shortcut exists to cross-check against.
+- **Shop/economy**: not reached, time-budgeted out in favor of the
+  severe crash-chain fix above.
+- **Death/respawn**: not reached; `help newbie`'s own "Death and
+  logging in to the game" section describes a ghost/resurrection flow
+  (ask a cleric-guild player, or accept a costly ress from an NPC
+  called Khaland) that was read but not live-triggered.
+- **Restore/reconnect path**: attempted, but **this lib's own
+  `save_me()` deliberately no-ops** (`if (level < 2 && age < 3600 ||
+  guest) return 1;` in `obj/player.lpc`) for any character below
+  internal level 2 and under 1 hour old -- a design choice from the
+  original 1996-2000-era archive (not something this session's fixes
+  touched or should touch per scope discipline), most likely intended
+  to avoid persisting throwaway newbie registrations. The "Saving
+  <name>." message prints unconditionally regardless of whether
+  `save_me()` actually persisted anything, which is genuinely
+  misleading but was left alone as an in-scope-adjacent messaging
+  quirk of an intentional gate, not fixed. Practical effect for
+  testing: **a normal single-session `§10.7` playthrough cannot
+  exercise the restore path for this lib** (every test character
+  quits well under both thresholds) -- a future pass would need either
+  a wizard-seeded high-level test account or a genuine 1-hour real-time
+  session to verify reconnect/restore.
+- **Minor, unresolved cosmetic observation**: a room's `look` output
+  occasionally printed a stray bare `0` on its own line (once directly,
+  once as `two times 0` via `daemons/string_stack_d.lpc`'s item-
+  stacking formatter), implying some item's `short()` resolves to the
+  literal string `"0"` rather than a real description in at least one
+  placed object. Did not block navigation or any other functionality;
+  not root-caused given time constraints -- flagged for a future pass
+  rather than guessed at.
+
+### Files modified this pass
+
+`room/room.lpc`, `obj/monster.lpc`, `obj/living.lpc`,
+`obj/monster_data.lpc`, `obj/base_object.lpc`,
+`wizards/siki/base_drink.lpc`, `cmds/std/_environment.lpc`,
+`secure/master.lpc`, plus 267 files (guild masters, city NPCs, and
+wizard-realm monsters/NPCs archive-wide) for the `chat_str` array-type
+sweep -- see AGENTS.md §7.192 for the full technical writeup.

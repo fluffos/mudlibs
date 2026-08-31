@@ -14341,6 +14341,144 @@ in dock9's own NOTES.md (another instance of the already-catalogued
 get mail working at all) — same "unfixed sibling, flagged not fixed"
 treatment.
 
+### 7.191 A one-time "build several category arrays via sequential `get_dir()+get_dir()+...` calls" index-loading function has no type guard on any individual `get_dir()` call — the FIRST call against a directory that doesn't exist on disk throws `Bad type argument to +. Had array and int.`, permanently truncating every category assigned AFTER that point for the rest of the boot, not just the one tied to the missing directory
+
+Found on `havenmud`'s §10.7 deep functional test: the very first `help
+<topic>` command any player ever ran crashed visibly ("A runtime error
+occurred, use \"bug -r\" to report it.") the instant this Nightmare-
+IVr2-lineage `daemon/help.lpc` lazily loaded for the first time.
+`create()` calls `LoadIndices()`, which builds its `Indices` mapping
+one category at a time, several of them via
+`tmp = get_dir(DIR_A + "/*.lpc") + get_dir(DIR_B + "/*.lpc") + ...`.
+`get_dir()` on this driver returns the integer `0` (not an empty
+array) when the target directory doesn't exist at all — and
+`DIR_CRAFTING_VERBS` ("/verbs/crafting") genuinely never existed
+anywhere in this archive (confirmed byte-identical absence in
+`raw/havenmud/verbs/`, not a conversion artifact) even though it's
+listed alongside four directories that DO exist in the same
+concatenation building the `"verbs"` category. `array + int` is a hard
+runtime type error, uncaught, so it aborted `LoadIndices()` PARTWAY
+THROUGH — every category assigned before that line (`"admin
+commands"`, `"muse commands"`, `"stat documents"`, `"skill
+documents"`, `"commands"`) survived, but every category meant to be
+assigned AFTER it in the same function (`"verbs"` itself, `"combat
+actions"`, `"immortal commands"`, `"player documents"`, `"immortal
+documents"`, `"towns"`, `"classes"`, `"races"`, `"religions"`,
+`"lore"`, `"library objects"`) was simply never reached — silently
+missing for the rest of that boot's uptime, since `create()` only runs
+once and the daemon (`SetNoClean(1)`) is never destructed/retried.
+Confirmed live: after the crash, `help human` (a race), `help sword
+combat` (a verb), and `help index` (which dropped from a dozen-plus
+categories to just 3) all failed with "Help for the topic ... could
+not be found" — a MUCH wider blast radius than the one topic
+(`vendors`) that happened to trigger the discovery, because the
+missing directory sits in the MIDDLE of the category-building sequence
+rather than the one category it actually belongs to.
+
+**Fix**: added a private `GD(string path)` wrapper —
+`mixed r = get_dir(path); return arrayp(r) ? r : ({});` — and replaced
+every raw `get_dir(...)` call feeding a `+`-concatenation in
+`LoadIndices()` with `GD(...)`. The established-correct pattern for
+this was already sitting a few lines below in the SAME function
+(`if (tmp = get_dir(DIR_PLAYER_HELP + "/")) Indices[...] = tmp; else
+Indices[...] = ({});`) — the bug is that five of the earlier
+concatenation-building lines never got the same treatment.
+
+**How to apply generally**: any lib with a similar "build a category
+index by concatenating several `get_dir()` calls with `+`" pattern
+(common in Nightmare/Dead-Souls-lineage `help`/`verbs`/`classes`-index
+daemons) is suspect if even ONE of the scanned directories can be
+missing on disk — grep for `get_dir(` immediately followed by ` + ` or
+preceded by ` + ` with no enclosing `if`/ternary guard. The failure
+mode is worse than a single missing feature: because these are
+typically sequential statements inside one `create()`/`LoadIndices()`-
+style one-shot function, an uncaught error on an EARLY line silently
+disables every LATER line in the same function too, for the entire
+remaining server uptime — and since the daemon is usually lazy-loaded
+(triggered by the first real user of the feature, not eager boot
+preload), this is invisible to `debug.log`-review boot-watch testing
+and only surfaces via a live `§10.7`-style playthrough.
+
+### 7.192 The §7.158/§2.7 "FluffOS `reset()` is lazy, not synchronous-on-load" gap is far more severe than originally documented — it silently blocks EVERY room's exits/description and EVERY NPC clone's core state, not just the handful of named daemons the onboarding pass happened to hit
+
+`questmud`'s §10.7 deep functional test found that this driver's
+`call_create()` (`vm/internal/base/object.cc`) sets an object's own
+`next_reset` to `now + "time to reset"` (an hour, by default)
+**before `create()` even runs** — so `try_reset()`'s lazy-resets check
+(`next_reset < current tick && !O_RESET_STATE`) is already false the
+instant ANY object finishes loading, preloaded or lazily compiled
+alike, regardless of the `lazy resets : 1` config setting. The original
+onboarding's §7.158/NOTES.md §2.7 write-up described this as a narrow
+problem needing a `create() { reset(0); }` fix on "several daemons"
+whose own state got read before `reset()` ran — but `room/room.lpc`
+(the shared base class for 5,000+ room files corpus-wide, none of
+which define their own `create()`) and `obj/monster.lpc` (the base
+class for every NPC/monster clone in the mudlib) were BOTH still
+missing it. Confirmed live: joining a guild and landing in its own
+room printed no description at all and "No obvious exits." — a hard,
+silent, unrecoverable dead-end immediately after character creation,
+for literally every new player — and a wild NPC's `init()` crashed
+outright (`Bad argument 1 to environment(), Expected: object Got: 0`)
+because its own `reset()`-set `me` variable was still unset.
+
+**Fix, matching §7.177's own established pattern** (a bare `reset(0)`
+call can silently no-op on this driver, especially from a universal
+base class whose subclasses each override `reset()` — route through
+`call_other()` instead so the most-derived override actually runs):
+
+```lpc
+void create() {
+    call_other(this_object(), "reset", 0);
+}
+```
+
+Added to both `room/room.lpc` and `obj/monster.lpc`.
+
+**This one architectural gap cascaded into exposing a whole chain of
+independent, previously-unreached compile/type bugs**, because
+`reset()` now actually executes for the first time ever on this
+driver, and any bug inside it that used to be permanently unreachable
+(silently never running) is now a real, live crash the moment the
+object first loads: a `clone_object()` of any NPC/item whose own class
+had ANY compile error aborts the calling room's `reset()` PARTWAY
+THROUGH, silently skipping everything textually after it in the same
+function — including, in this codebase, the `add_exit()`/`short_desc`/
+`long_desc` setup that always comes right after the room's initial
+"populate my furniture" `clone_object()` calls. This is why fixing the
+create()/reset() gap alone wasn't sufficient to unblock movement:
+`questmud`'s own `obj/monster.lpc` (base class for every NPC in the
+game) had a dozen+ same-file forward-reference bugs, several
+declared-scalar-but-actually-array globals, and a few missing
+`varargs` markers — all latent and invisible until reset() actually
+ran for the first time. Once fixed, THAT unblocked `obj/base_object.lpc`
+(a `string`-vs-`int` type bug on its own `size` field feeding a
+forward-referenced `get_size()`), which unblocked
+`/world/objects/fountain.lpc`, which turned out to inherit
+`/wizards/siki/base_drink.lpc` — **a file living under a personal
+`wizards/` sandbox directory that is nonetheless a REAL, live
+dependency of shipped, central game content**, not the "personal
+sandbox clutter, never referenced from the live game" class the
+original onboarding's blanket `wizards/`-directory assumption
+described for the other ~6,021 such files. A same-file
+`chat_str = allocate(N)` idiom declared as a scalar `string` instead of
+`string *` (feeding every wandering NPC's idle "chat" lines) turned out
+to be copy-pasted into 267 separate files across this one archive.
+
+**How to apply generally**: on any lib carrying the §7.158/§2.7-class
+"reset() is lazy here" finding, don't assume the original onboarding
+pass's list of fixed files was exhaustive — grep for every widely-
+inherited BASE class (a room base, a monster/NPC base, an item base)
+that itself defines no `create()` and whose derived files rely on
+`reset()` alone for one-time setup (exits, descriptions, core state
+variables), and add the same `create() { call_other(this_object(),
+"reset", 0); }` bridge there instead of chasing individual leaf files
+one at a time. Then re-verify by ACTUALLY WALKING through the game
+world (not just registering) — a crash-mid-`reset()` from a broken
+`clone_object()` dependency silently truncates whatever code comes
+after it in the same function, so a room can compile perfectly clean
+and still end up completely exit-less and description-less at runtime,
+which no compile sweep alone will ever catch.
+
 ---
 
 ## 8. Login and registration flow bugs
