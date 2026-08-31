@@ -1,0 +1,786 @@
+/**
+ * @file /std/daemon/http_client.lpc
+ * Inheritable asynchronous HTTP client with DNS resolution, TLS, redirects,
+ * response framing, temporary body caching, and lifecycle callbacks.
+ *
+ * @created 2024-07-05 - Gesslar
+ * @last_modified 2026-08-26 - Gesslar
+ *
+ * @history
+ * 2024-07-05 - Gesslar - Created
+ * 2024-12-07 - Gesslar - Enhance HTTP client logging and response processing.
+ *                        Improved cache file checks with detailed logging for
+ *                        existence and size. Adjusted buffer handling in
+ *                        chunked transfer encoding and content-length
+ *                        scenarios. Cleaned up response processing logic for
+ *                        better clarity and reliability.
+ * 2026-08-26 - Gesslar - Hardened request lifecycles and documented the API.
+ */
+
+// This is a base HTTP client daemon that is intended to be inherited by other
+// objects to create a custom HTTP client. It provides the ability to send HTTP
+// requests to a server and receive responses.
+//
+// Created:     2024/07/01: Gesslar
+// Last Change: 2024/07/01: Gesslar
+//
+// 2024/07/01: Gesslar - Created
+
+#include <socket.h>
+#include <socket_err.h>
+#include <http.h>
+#include <daemons.h>
+
+inherit STD_DAEMON;
+inherit EXT_HTTP;
+
+// Prototypes
+varargs private nomask void http_connect(mapping request);
+private nomask void process_redirect(int fd, mapping server);
+private nomask void process_response(int fd, mapping server);
+private nomask string decode_chunked_body(string body);
+private nomask mixed send_http_request(int fd, mapping server);
+protected nomask void shutdown_socket(int fd);
+private nomask void socket_resolve(string host, string addr, int key);
+
+// Variables
+private nosave mapping servers = ([ ]);
+private nosave mapping resolve_keys = ([ ]);
+private nosave int max_redirects = 5;
+private nosave mapping default_headers;
+private nosave int request_serial;
+
+void mudlib_setup() {
+  set_log_level(0);
+  set_log_prefix("(HTTP CLIENT)");
+  default_headers = ([
+    "User-Agent" : "FluffOS",
+    "Connection" : "close",
+    "Accept-Charset" : "utf-8",
+  ]);
+
+  set_option("cache", "/tmp/http/");
+  // set_option("deflate", 1);
+}
+
+void post_setup_1() {
+  string cache = get_option("cache");
+
+  assure_dir(cache);
+
+  if(get_option("deflate"))
+    default_headers["Accept-Encoding"] = "deflate";
+  else
+    default_headers["Accept-Encoding"] = "identity";
+}
+
+/**
+ * Starts an asynchronous HTTP request.
+ *
+ * @param {string} url - The absolute HTTP or HTTPS URL.
+ * @param {string} method - The HTTP request method.
+ * @param {mapping} [headers] - Additional request headers.
+ * @param {string} [body] - The optional request body.
+ * @returns {mapping | undefined} A copy of the request state, or undefined if
+ *                                the URL cannot be parsed.
+ * @errors If the URL or method is not a string.
+ */
+varargs nomask mapping http_request(string url, string method, mapping headers, string body) {
+  mapping parsed_url;
+  float now = time_frac();
+
+  _log(2, "Url: %s, Method: %s, Headers: %O, Body: %s", url, method, headers, body);
+
+  if(!stringp(url) || !stringp(method))
+    error("Invalid URL, method, or headers specified.");
+
+  parsed_url = parse_url(url);
+  if(!parsed_url) {
+    _log(2, "Failed to parse URL: %s", url);
+    return null;
+  }
+
+  parsed_url["url"] = url;
+  parsed_url["method"] = method;
+  parsed_url["headers"] = headers;
+  parsed_url["body"] = body;
+  parsed_url["start_time"] = now;
+  parsed_url["id"] = ++request_serial;
+
+  call_out_walltime((: http_connect, parsed_url :), 0.01);
+
+  return copy(parsed_url);
+}
+
+/**
+ * Creates a socket and begins resolving a request host.
+ *
+ * @param {mapping} request - The prepared request state.
+ */
+varargs private nomask void http_connect(mapping request) {
+  int fd, key;
+  string host;
+  mapping server;
+  int secure;
+
+  host = request["host"];
+
+  secure = get_option("tls") || request["secure"];
+
+  _log(2, "Connecting to %s", host);
+  _log(4, "Request before creating socket: %O", request);
+
+  fd = socket_create(secure ? STREAM_TLS_BINARY : STREAM_BINARY, "socket_read", "socket_closed");
+
+  if(fd < 0) {
+    _log(0, "Unable to create socket: %s", socket_error(fd));
+    server = ([
+      "state": HTTP_STATE_ERROR,
+      "error": socket_error(fd),
+      "request": request,
+      "redirects": request["redirects"] || 0,
+      "response": ([]),
+    ]);
+    call_if(this_object(), "http_handle_connection_error", server);
+    call_if(this_object(), "http_handle_shutdown", server);
+    return;
+  }
+
+  if(secure) {
+    socket_set_option(fd, SO_TLS_VERIFY_PEER, 1);
+    socket_set_option(fd, SO_TLS_SNI_HOSTNAME, host);
+  }
+
+  server = ([
+    "state" : HTTP_STATE_RESOLVING,
+    "request" : request,
+    "redirects" : request["redirects"] || 0,
+  ]);
+
+  _log(4, "Server after creating socket and options: %O", server);
+
+  servers[fd] = server;
+
+  key = resolve(host, (: socket_resolve :));
+  resolve_keys[key] = fd;
+
+  _log(2, "Resolving host: %s", host);
+}
+
+/**
+ * Handles completion of an asynchronous hostname lookup.
+ *
+ * @param {string} host - The requested hostname.
+ * @param {string | 0} addr - The resolved address, or 0 on failure.
+ * @param {int} key - The resolver request key.
+ */
+nomask void socket_resolve(string host, string addr, int key) {
+  int fd, port, result;
+  mapping server;
+
+  _log(2, "Validating resolution for %s", host);
+
+  if(nullp(resolve_keys[key]))
+    return;
+
+  fd = resolve_keys[key];
+  map_delete(resolve_keys, key);
+
+  server = servers[fd];
+  _log(4, "Server: %O", server);
+
+  if(!server)
+    return;
+
+  port = server["request"]["port"];
+
+  if(!addr) {
+    server["state"] = HTTP_STATE_ERROR;
+    server["error"] = "Failed to resolve hostname " + host;
+    servers[fd] = server;
+
+    call_if(this_object(), "http_handle_resolve_error", server);
+
+    _log(2, "Failed to resolve hostname %s", host);
+
+    shutdown_socket(fd);
+    return;
+  }
+
+  _log(2, "Host resolved: %s (%s)", host, addr);
+
+  server["ip"] = addr;
+  server["state"] = HTTP_STATE_CONNECTING;
+  server["host"] = host;
+  server["port"] = port;
+  servers[fd] = server;
+
+  call_if(this_object(), "http_handle_connecting", server);
+
+  result = socket_connect(fd, addr + " " + port, "socket_read", "socket_ready");
+  if(result != EESUCCESS) {
+    _log(2, "Failed to connect to %s", host);
+
+    server["state"] = HTTP_STATE_ERROR;
+    server["error"] = socket_error(result);
+    servers[fd] = server;
+
+    call_if(this_object(), "http_handle_connection_error", server);
+
+    shutdown_socket(fd);
+    return;
+  }
+
+  server["state"] = HTTP_STATE_CONNECTED;
+  server["transactions"] = 0;
+  server["cache"] = get_option("cache") + time_ns();
+  server["received_body"] = 0;
+  server["received_total"] = 0;
+  servers[fd] = server;
+  _log(2, "Connected to %s %d", host, port);
+
+  call_if(this_object(), "http_handle_connected", server);
+}
+
+/**
+ * Handles a socket closed by its remote peer.
+ *
+ * @param {int} fd - The closed socket descriptor.
+ */
+nomask void socket_closed(int fd) {
+  mapping server = servers[fd];
+
+  if(!server) {
+    _log(3, "No server found to be closed.");
+    return;
+  }
+
+  _log(2, "Socket closed: %s %d", server["host"], server["port"]);
+
+  call_if(this_object(), "http_handle_closed", server);
+
+  shutdown_socket(fd);
+}
+
+/**
+ * Finalises response processing, closes a socket, and dispatches shutdown.
+ *
+ * @param {int} fd - The socket descriptor to shut down.
+ */
+nomask void shutdown_socket(int fd) {
+  mapping server = servers[fd];
+  int result;
+  string cache_file;
+  float duration;
+  float speed;
+  float now, started;
+  float received_total;
+  int fs;
+
+  _log(3, "Shutting down socket: %d", fd);
+
+  if(!server)
+    return;
+
+  cache_file = server["cache"];
+  fs = stringp(cache_file) ? file_size(cache_file) : -1;
+  if(fs == -1) {
+    _log(2, "Cache file does not exist: %s", cache_file);
+    server["response"] = server["response"] || ([]);
+    server["response"]["body"] = "";
+    if(server["state"] != HTTP_STATE_ERROR)
+      server["state"] = HTTP_STATE_COMPLETE;
+  } else if(fs == 0) {
+    _log(2, "Cache file is empty: %s", cache_file);
+    server["response"]["body"] = "";
+    if(server["state"] != HTTP_STATE_ERROR)
+      server["state"] = HTTP_STATE_COMPLETE;
+  } else {
+    _log(2, "Total received: %d", server["received_total"]);
+    _log(2, "Body received: %d", server["received_body"]);
+
+    string err = catch(process_response(fd, server));
+    if(err) {
+      server["state"] = HTTP_STATE_ERROR;
+      server["error"] = err;
+      servers[fd] = server;
+      _log(0, "Unable to process response: %O", err);
+    }
+  }
+
+  now = time_frac();
+  started = server["request"]["start_time"];
+  duration = (now - started);
+
+  received_total = to_float(server["received_total"]);
+  speed = duration > 0.0 ? received_total / duration : 0.0;
+
+  _log(3, "Transfer size: %d bytes", server["received_total"]);
+  _log(3, "Transfer time: %.2f seconds", duration);
+  _log(3, "Transfer speed: %.2f bytes/s", speed);
+
+  result = socket_close(fd);
+  if(result != EESUCCESS)
+    _log(2, "Error closing socket: %s", socket_error(result));
+  else
+    _log(3, "Socket removed: %s %d", server["host"], server["port"]);
+
+  call_if(this_object(), "http_handle_shutdown", server);
+
+  map_delete(servers, fd);
+}
+
+/**
+ * Consumes response bytes received from a connected server.
+ *
+ * The method incrementally parses the status line and headers, follows
+ * redirects, and caches entity-body bytes for processing at shutdown.
+ *
+ * @param {int} fd - The server socket descriptor.
+ * @param {buffer} incoming - The newly received response bytes.
+ */
+nomask void socket_read(int fd, buffer incoming) {
+  mapping server = servers[fd];
+  int status_code;
+  buffer buf;
+
+  if(!server)
+    return;
+
+  _log(4, "First 10 bytes: %O", incoming[0..9]);
+
+  server["transactions"] ++;
+
+  _log(3, "================= STARTING TRANSACTION #%d =================", server["transactions"]);
+
+  if(server["buffer"]) {
+    buf = server["buffer"] + incoming;
+    map_delete(server, "buffer");
+  } else
+    buf = incoming;
+
+  server["received_total"] += sizeof(incoming);
+  // Process headers if not done yet
+  server["response"] = server["response"] || ([]);
+  _log(4, "Server[response]: %O", server["response"]);
+
+  _log(3, "Starting to process status");
+  if(sizeof(buf) && !server["response"]["status"]) {
+    mapping status;
+
+    status = parse_response_status(buf, 1);
+    if(!status) {
+      server["buffer"] = buf;
+      servers[fd] = server;
+      return;
+    }
+
+    if(status["buffer"]) {
+      buf = status["buffer"];
+      map_delete(status, "buffer");
+    }
+
+    server["response"]["status"] = status;
+
+    _log(3, "Status found: %O", status);
+    _log(3, "Remaining buffer size: %d", sizeof(buf));
+  } else
+    _log(3, "Status already found");
+
+  _log(3, "Starting to process headers");
+  if(sizeof(buf) && !server["response"]["headers"]) {
+    mapping headers;
+
+    headers = parse_headers(to_string(buf), 1);
+
+    if(!headers) {
+      server["buffer"] = buf;
+      servers[fd] = server;
+      return;
+    }
+
+    if(headers["buffer"]) {
+      buf = headers["buffer"];
+      map_delete(headers, "buffer");
+    }
+
+    server["response"]["headers"] = headers;
+
+    _log(4, "Headers found: %O", headers);
+    _log(3, "Remaining buffer size: %d", sizeof(buf));
+  } else
+    _log(3, "Headers already found");
+
+  if(!sizeof(server["response"]["status"]) || !sizeof(server["response"]["headers"])) {
+    _log(3, "* Both status and headers not found");
+    server["buffer"] = buf;
+    servers[fd] = server;
+    return;
+  }
+
+  if(sizeof(server["response"]["status"]) && sizeof(server["response"]["headers"]))
+    _log(3, "Status and headers found");
+
+  // Check for redirect status codes (301, 302, etc.)
+  status_code = server["response"]["status"]["code"];
+
+  if(member_array(status_code, HTTP_REDIRECT_CODES) != -1) {
+    _log(1, "Redirecting");
+
+    call_if(this_object(), "http_handle_redirect", server);
+
+    server["buffer"] = buf;
+    servers[fd] = server;
+    process_redirect(fd, server);
+    return;
+  }
+
+  server["received_body"] += sizeof(buf);
+
+  _log(3, "Received body: %d, caching response", sizeof(buf));
+  cache_response(server["cache"], buf);
+}
+
+/**
+ * Handles a socket becoming ready for request transmission.
+ *
+ * @param {int} fd - The ready socket descriptor.
+ */
+protected nomask void socket_ready(int fd) {
+  mapping server = servers[fd];
+  mixed result;
+
+  if(!server)
+    return;
+
+  server["state"] = HTTP_STATE_READY;
+  servers[fd] = server;
+
+  _log(2, "Ready to send request");
+
+  call_if(this_object(), "http_handle_ready", server);
+
+  server["state"] = HTTP_STATE_SENDING;
+  servers[fd] = server;
+
+  call_if(this_object(), "http_handle_sending", server);
+
+  _log(2, "Sending request");
+  _log(3, "Request: %O", server["request"]);
+  result = send_http_request(fd, server);
+  if(stringp(result)) {
+    _log(2, "Failed to send request: %s", result);
+    server["state"] = HTTP_STATE_ERROR;
+    servers[fd] = server;
+    shutdown_socket(fd);
+    return;
+  }
+}
+
+/**
+ * Decodes and stores the cached response entity body.
+ *
+ * @param {int} fd - The server socket descriptor.
+ * @param {mapping} server - The connection state.
+ */
+private nomask void process_response(int fd, mapping server) {
+  string file = server["cache"];
+  mixed response = "";
+  string err;
+  buffer cache;
+  string buf;
+
+  _log(2, "Processing response: %s", file);
+
+  if(!server["response"]["body"])
+    server["response"]["body"] = 0;
+
+  cache = read_cache(file);
+  buf = to_string(cache);
+  _log(3, "Last 10 bytes of converted cache: %O", identify(buf[<10..]));
+
+  // Chunked transfer encoding
+  if(server["response"]["headers"]["transfer-encoding"] == "chunked")
+    response = decode_chunked_body(buf);
+  // Content-Length
+  else if(server["response"]["headers"]["content-length"]) {
+    int expected = server["response"]["headers"]["content-length"];
+    _log(2, "Content-Length: %d", expected);
+
+    if(sizeof(cache) != expected) {
+      server["state"] = HTTP_STATE_ERROR;
+      server["error"] = sprintf(
+        "Response body size %d does not match Content-Length %d",
+        sizeof(cache), expected,
+      );
+      _log(0, "%s", server["error"]);
+    }
+
+    response = buf;
+  }
+  // No content-length or chunked transfer encoding found. What is it???
+  // If someone identifies the format, please update this!
+  else {
+    _log(2, "No content-length or chunked transfer encoding found. "
+      "Therefore, assuming the response is the entire body. 🤷🏻");
+
+    response = buf;
+  }
+
+  _log(2, "Removing cache file: %s", file);
+
+  err = catch {
+    int result = rm(file);
+
+    if(result == 0) {
+      _log(2, "Failed to remove cache file: %s", file);
+      throw("Failed to remove cache file: " + file);
+    }
+  };
+
+  server["response"]["body"] = parse_body(
+    response,
+    server["response"]["headers"]["content-type"],
+  );
+  server["state"] = server["state"] == HTTP_STATE_ERROR
+    ? HTTP_STATE_ERROR
+    : HTTP_STATE_COMPLETE;
+  servers[fd] = server;
+  call_if(this_object(), "http_handle_response", server);
+}
+
+/**
+ * Decodes an HTTP chunked-transfer body.
+ *
+ * @param {string} body - The encoded body.
+ * @returns {string} The decoded entity body.
+ * @throws If the chunk framing is incomplete or malformed.
+ */
+private nomask string decode_chunked_body(string body) {
+  string decoded = "";
+  int cursor;
+
+  while(1) {
+    int line_end = find_marker(body[cursor..], "\r\n");
+    int chunk_size;
+    string size_line;
+
+    if(line_end == -1)
+      throw("Incomplete chunk size line.");
+
+    line_end += cursor;
+    size_line = body[cursor..line_end-1];
+    if(sscanf(size_line, "%x", chunk_size) != 1 || chunk_size < 0)
+      throw("Invalid chunk size.");
+
+    cursor = line_end + 2;
+    if(chunk_size == 0)
+      return decoded;
+
+    if(cursor + chunk_size + 2 > sizeof(body) ||
+       body[cursor+chunk_size..cursor+chunk_size+1] != "\r\n")
+      throw("Incomplete chunk data.");
+
+    decoded += body[cursor..cursor+chunk_size-1];
+    cursor += chunk_size + 2;
+  }
+}
+
+/**
+ * Follows a redirect while preserving the original request identity.
+ *
+ * Authentication is removed when the redirect changes origin, and a 303
+ * response is converted to a bodyless GET request.
+ *
+ * @param {int} fd - The redirecting socket descriptor.
+ * @param {mapping} server - The current connection state.
+ */
+private nomask void process_redirect(int fd, mapping server) {
+  mapping processed_url;
+  string location;
+  mapping request;
+  int status_code;
+
+  _log(2, "Processing redirect");
+
+  location = server["response"]["headers"]["location"];
+  if(!stringp(location) || !strlen(location)) {
+    _log(0, "No location header found in redirect response");
+    server["state"] = HTTP_STATE_ERROR;
+    server["error"] = "Redirect response did not include a Location header.";
+    servers[fd] = server;
+    shutdown_socket(fd);
+    return;
+  }
+
+  if(location[0] == '/')
+    location = sprintf("%s://%s:%d%s",
+      server["request"]["protocol"],
+      server["request"]["host"],
+      server["request"]["port"],
+      location,
+    );
+
+  processed_url = parse_url(location);
+
+  if(!processed_url) {
+    _log(0, "Failed to parse URL: %s", location);
+    shutdown_socket(fd);
+    return;
+  }
+
+  if(server["redirects"] >= max_redirects) {
+    server["state"] = HTTP_STATE_ERROR;
+    server["error"] = "Maximum redirect count exceeded.";
+    servers[fd] = server;
+    shutdown_socket(fd);
+    return;
+  }
+
+  socket_close(fd);
+  map_delete(servers, fd);
+
+  _log(1, "Redirecting to: %s", location);
+
+  request = copy(server["request"]);
+  foreach(string key, mixed value in processed_url)
+    request[key] = value;
+
+  request["url"] = location;
+  request["redirects"] = server["redirects"] + 1;
+  request["headers"] = copy(server["request"]["headers"] || ([]));
+  if(processed_url["host"] != server["request"]["host"] ||
+     processed_url["port"] != server["request"]["port"] ||
+     processed_url["secure"] != server["request"]["secure"]) {
+    foreach(string key in keys(request["headers"])) {
+      if(lower_case(key) == "authorization")
+        map_delete(request["headers"], key);
+    }
+  }
+
+  request["headers"]["X-Redirect-Count"] = request["redirects"];
+
+  status_code = server["response"]["status"]["code"];
+  if(status_code == 303) {
+    request["method"] = "GET";
+    request["body"] = 0;
+  }
+
+  call_out_walltime((: http_connect, request :), 0.01);
+}
+
+/**
+ * Serialises and writes an HTTP/1.1 request to a connected socket.
+ *
+ * @param {int} fd - The connected socket descriptor.
+ * @param {mapping} server - The connection and request state.
+ * @returns {int | string} The socket result code, or an error message.
+ */
+private nomask mixed send_http_request(int fd, mapping server) {
+  string request, body;
+  mapping headers = server["request"]["headers"];
+  string method = server["request"]["method"];
+  string path = server["request"]["path"];
+  string host = server["request"]["host"];
+  int result;
+
+  _log(2, "Sending request: %s %s %s", method, path, host);
+
+  if(!servers[fd])
+    return "No such connection: " + fd;
+
+  if(!stringp(method) || !stringp(path) || !stringp(host)) {
+    _log(2, "Invalid request parameters");
+    return "Invalid request parameters";
+  }
+  method = upper_case(method);
+
+  request = method + " " + path + " HTTP/1.1\r\n";
+  request += "Host: " + host;
+  if(server["request"]["port"] != (server["request"]["secure"] ? 443 : 80))
+    request += ":" + server["request"]["port"];
+
+  request += "\r\n";
+
+  headers = copy(headers || ([]));
+  foreach(string key, string value in default_headers) {
+    if(nullp(headers[key]))
+      headers[key] = value;
+  }
+
+  foreach(string key, string value in headers) {
+    if(key != "Content-Type" && key != "Content-Length")
+      request += key + ": " + value + "\r\n";
+  }
+
+  body = server["request"]["body"];
+
+  if(body) {
+    request += "Content-Length: " + sizeof(to_binary(body)) + "\r\n";
+    if(headers["Content-Type"]) {
+      string content_type = headers["Content-Type"];
+      string *matches, type, subtype, charset;
+
+      matches = pcre_extract(
+        content_type,
+        "(\\w+)/([-\\w]+)(?:\\s*;\\s*charset=(\\S+))?"
+      );
+
+      switch(sizeof(matches)) {
+        case 2:
+          type = matches[0];
+          subtype = matches[1];
+          charset = "utf-8";
+          break;
+        case 3:
+          type = matches[0];
+          subtype = matches[1];
+          charset = matches[2] || "utf-8";
+          break;
+        default:
+          _log(2, "Failed to parse Content-Type header: %s", content_type);
+          shutdown_socket(fd);
+          return "Failed to parse Content-Type header: " + content_type;
+      }
+
+      request += sprintf("Content-Type: %s/%s; charset=%s\r\n", type, subtype, charset);
+    }
+  }
+
+  request += "\r\n";
+
+  if(body)
+    request += body;
+
+  result = socket_write(fd, request);
+
+  if(result != EESUCCESS) {
+    _log(3, "Failed to send request: %s", socket_error(result));
+    shutdown_socket(fd);
+    return "Failed to send request: " + socket_error(result);
+  }
+
+  _log(3, "Request sent: %s", identify(request));
+
+  return result;
+}
+
+/**
+ * Sets the maximum number of redirects followed for a request.
+ *
+ * @param {int} max - The redirect limit.
+ * @returns {int} The configured redirect limit.
+ */
+public nomask int set_max_redirects(int max) {
+  max_redirects = max;
+  return max_redirects;
+}
+
+/**
+ * Queries the maximum number of redirects followed for a request.
+ *
+ * @returns {int} The configured redirect limit.
+ */
+public nomask int query_max_redirects() {
+  return max_redirects;
+}

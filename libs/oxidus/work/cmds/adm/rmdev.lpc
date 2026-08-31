@@ -1,0 +1,73 @@
+/**
+ * @file /cmds/adm/rmdev.lpc
+ *
+ * Revokes developer status from a user by removing the "developer" role
+ * grant. Works whether or not the target is currently logged in. Refuses on
+ * an owner or admin: their developer access is conferred by the higher role,
+ * so it cannot be peeled off in isolation - remove the higher role instead.
+ *
+ * @created 2026-07-17 - Gesslar
+ * @last_modified 2026-07-17 - Gesslar
+ *
+ * @history
+ * 2026-07-17 - Gesslar - Created
+ */
+
+#include <logs.h>
+
+inherit STD_CMD;
+
+void setup() {
+  usage_text = "rmdev <user>";
+  help_text =
+    "Revokes developer status from <user>. The target need not be online.\n"
+    "\n"
+    "Refuses if the target is an admin or owner: their developer access is "
+    "implied by the higher role and cannot be removed in isolation - use "
+    "rmadmin, or adjust owner membership manually.\n"
+    "\n"
+    "Only admins may revoke developer status.\n"
+    "\n"
+    "See also: makedev, makeadmin, rmadmin";
+}
+
+mixed main(/** @type {STD_PLAYER} */ object caller, string arg) {
+  if(!adminp(previous_object()))
+    return _error("Access denied.");
+
+  if(!arg)
+    return _usage(caller);
+
+  string name = lower_case(arg);
+
+  if(!user_exists(name))
+    return _error("No such user '%s'.", name);
+
+  if(!has_role(name, "developer"))
+    return _info("%s is not a developer.", capitalize(name));
+
+  if(ownerp(name))
+    return _error("%s is an owner; developer access is implied and managed manually.",
+      capitalize(name));
+
+  if(adminp(name))
+    return _error("%s is an admin; developer access is implied. Use rmadmin instead.",
+      capitalize(name));
+
+  master()->remove_role(name, "developer");
+
+  log_file(LOG_PROMOTE, sprintf("%s revokes developer from %s - %s\n",
+    query_privs(previous_object()), name, ldatetime()));
+
+  if(devp(name))
+    return _warn("%s still has developer status via group membership; edit "
+      "/adm/custom/security/groups.lpml to remove it.", capitalize(name));
+
+  // If the target is online, strip their command paths now rather than
+  // waiting for a relog.
+  object body = find_player(name);
+  if(body)
+    body->remove_dev_paths();
+
+  return _ok("%s is no longer a developer.", capitalize(name));
+}

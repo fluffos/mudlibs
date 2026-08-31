@@ -1,0 +1,67 @@
+#!/bin/bash
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Change to the directory containing the script
+cd "$SCRIPT_DIR"
+
+# Get the full OS path to the driver executable
+driver="$(pwd)/bin/driver"
+config="$(pwd)/config.mud"
+
+# Function to run the driver and check its exit status
+run_driver() {
+    echo "Running driver..."
+    $driver $config
+    local exit_status=$?
+    echo "Driver finished running with exit status: $exit_status"
+    return $exit_status
+}
+
+# Function to stop any existing driver processes
+stop_driver() {
+    echo "Stopping all running driver instances..."
+    pids=$(pgrep -f "$driver")
+    if [[ -n "$pids" ]]; then
+        echo "Found driver processes with PIDs: $pids"
+        kill $pids
+        echo "Driver processes stopped."
+    else
+        echo "No running driver processes found."
+    fi
+}
+
+# Handle script arguments
+case "$1" in
+    "")
+        # Loop to restart the driver if it exits with status 0
+        while true; do
+            run_driver
+            exit_status=$?
+
+            echo "Exit status: $exit_status"
+
+            if [[ $exit_status -eq 1 ]]; then
+                echo "Driver exited with reboot status code. Restarting."
+                sleep 1  # Optional: Add a small delay before restarting
+            else
+                echo "Driver exited with status $exit_status. Stopping."
+                break
+            fi
+        done
+        ;;
+    bg)
+      echo "Starting driver in the background..."
+      nohup bash -c "$SCRIPT_DIR/$(basename "$0")" > "$SCRIPT_DIR/run.log" 2>&1 &
+      echo "Driver started in the background with PID $!"
+      exit 0
+      ;;
+    stop)
+        stop_driver
+        exit 0
+        ;;
+    *)
+        echo "Usage: $0 [bg|stop]"
+        exit 1
+        ;;
+esac

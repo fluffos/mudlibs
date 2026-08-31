@@ -1,0 +1,106 @@
+/**
+ * @file /cmds/object/call.lpc
+ *
+ * Command to call an arbitrary function on an object and display the result.
+ * A terse alternative to eval for the common "poke a function and see what it
+ * returns" case.
+ *
+ * @created 2026-07-17 - Gesslar
+ * @last_modified 2026-07-17 - Gesslar
+ *
+ * @history
+ * 2026-07-17 - Gesslar - Created
+ */
+
+inherit STD_CMD;
+
+private mixed coerce_arg(object caller, string s);
+
+void setup() {
+  usage_text = "call <object>;<function>[;<arg>...]";
+  help_text =
+    "Calls <function> on <object> and shows the return value.\n"
+    "\n"
+    "<object> may be 'me', 'here', an object present in your inventory or "
+    "room, a living by name, or a file path (which is loaded if needed). "
+    "Arguments are separated by ';'. Numeric arguments are passed as int or "
+    "float; everything else is passed as a string.\n"
+    "\n"
+    "Examples:\n"
+    "  call here;query_short\n"
+    "  call me;query_name\n"
+    "  call /adm/daemons/config;get_mud_config;MORELINES\n"
+    "  call orc;set_hp;50";
+}
+
+mixed main(
+  /** @type {STD_PLAYER} */ object caller,
+  string str
+) {
+  if(!str)
+    return _usage(caller);
+
+  string *parts = explode(str, ";");
+  int sz = sizeof(parts);
+
+  if(sz < 2)
+    return _usage(caller);
+
+  string spec = trim(parts[0]);
+  string func = trim(parts[1]);
+
+  if(spec == "" || func == "")
+    return _usage(caller);
+
+  mixed *args = map(parts[2..], (: coerce_arg($(caller), $1) :));
+
+  /** @type {STD_OBJECT} */ object ob = get_object(spec, caller);
+  if(!ob)
+    return _error("Could not find object: %s", spec);
+
+  if(!function_exists(func, ob))
+    return _info("Function '%s' does not exist on '%O'", func, ob);
+
+  mixed result;
+  string err = catch(result = call_other(ob, ({ func }) + args));
+
+  if(err)
+    return _error("%s->%s() raised: %s", file_name(ob), func, trim(err));
+
+  if(nullp(result))
+    return _info("%s->%s() = undefined", file_name(ob), func);
+
+  return _info("%s->%s() = %s", file_name(ob), func, sprintf("%O", result));
+}
+
+/**
+ * Coerces a raw string argument to a typed value: an int or float when the
+ * trimmed text is wholly numeric, a quoted string is passed through verbatim,
+ * and anything that resolves to a named object is passed as that object;
+ * otherwise the string itself.
+ *
+ * @param {string} s - The raw argument text.
+ * @returns {mixed} The coerced value.
+ */
+private mixed coerce_arg(object caller, string s) {
+  int i;
+  float f;
+  string unquoted;
+
+  s = trim(s);
+
+  if(sscanf(s, "\"%s\"", unquoted) == 1)
+    return unquoted;
+
+  if(sscanf(s, "%d", i) == 1 && s == sprintf("%d", i))
+    return i;
+
+  if(sscanf(s, "%f", f) == 1)
+    return f;
+
+  object ob = get_object(s, caller);
+  if(objectp(ob))
+    return ob;
+
+  return s;
+}

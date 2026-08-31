@@ -1,0 +1,91 @@
+/**
+ * @file /cmds/object/dest.lpc
+ *
+ * Destruct an object.
+ *
+ * @created 2026-07-14 - Gesslar
+ * @last_modified 2026-07-14 - Gesslar
+ *
+ * @history
+ * 2026-07-14 - Gesslar - Created
+ */
+
+inherit STD_CMD;
+
+void setup() {
+  usage_text = "dest <target|file>";
+  help_text =
+    "Destructs an object. The argument may be a file path, in which case the "
+    "loaded object for that file is destructed if one exists, or the name of "
+    "something in your inventory or in the room. Paths are resolved against "
+    "your current working directory, and a path that names a file which is "
+    "not loaded is reported rather than loaded just to destruct it.\n"
+    "\n"
+    "Destructing a player requires admin standing, and only an owner may "
+    "destruct another owner.\n"
+    "\n"
+    "See also: clean, update\n";
+}
+
+private int can_destruct(object tp, object ob);
+
+mixed main(
+  /** @type {STD_PLAYER} */ object tp,
+  string arg
+) {
+  if(!arg)
+    return _usage(tp);
+
+  // First let's try by path, because if we do it by get_object first, it'll
+  // try to load it when it's a path.
+  string path = resolve_path(tp->query_env("cwd") ?? "", arg);
+  string code_file = source_file(path);
+  if(file_size(code_file) >= 0) {
+    /** @type {STD_OBJECT} */ object ob = find_object(code_file);
+    if(ob) {
+      string dested = file_name(ob);
+
+      if(!can_destruct(tp, ob))
+        return _error("You do not have permission to destruct %s", dested);
+
+      catch(ob->remove());
+      if(ob)
+        catch(destruct(ob));
+
+      return _ok(tp, "Destructed %s", dested);
+    } else {
+      return _info("%s is not loaded", code_file);
+    }
+  }
+
+  /** @type {STD_OBJECT} */ object ob = get_object(arg, tp);
+  if(!ob)
+    return _error("No such object %s", arg);
+
+  string dested = file_name(ob);
+
+  if(!can_destruct(tp, ob))
+    return _error("You do not have permission to destruct %s", dested);
+
+  catch(ob->remove());
+  if(ob)
+    catch(destruct(ob));
+
+  return _ok("Destructed %s", dested);
+}
+
+private int can_destruct(object tp, object ob) {
+  if(living(ob) && userp(ob)) {
+    if(ownerp(tp)) {
+      return 1;
+    }
+
+    if(adminp(tp)) {
+      return !ownerp(ob);
+    }
+
+    return 0;
+  }
+
+  return 1;
+}

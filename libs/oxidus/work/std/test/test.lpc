@@ -1,0 +1,191 @@
+/**
+ * @file /std/test/test.lpc
+ * Base for individual test files. A test file inherits this,
+ * registers suites in setup() via describe()/test(), and is
+ * cloned and invoked by a STD_TEST_RUNNER.
+ */
+
+#include <test.h>
+
+inherit STD_OBJECT;
+
+// Forward declare functions
+varargs int same(mixed x, mixed y, int loose);
+void _assert(int condition, string where);
+void _assert_eq(mixed expected, mixed actual, string where);
+void _assert_ne(mixed expected, mixed actual, string where);
+
+void mudlib_setup() {
+  // master()->clear_last_error();
+}
+
+private nosave mixed *test_functions = ({});
+
+/**
+ * Compare two values for equality.
+ *
+ * @param {mixed} x The first value to compare
+ * @param {mixed} y The second value to compare
+ * @param {int} [loose=1] If true, allow arrays to be loosely compared,
+ *                        rather than requiring positional matches.
+ * @returns {int} 1 if the values are equal, 0 otherwise
+ */
+varargs int same(mixed x, mixed y, int loose) {
+  loose = nullp(loose) ? 1 : loose;
+
+  // Allow comparing array with buffer
+  if(!(typeof(x) == T_ARRAY && typeof(y) == T_BUFFER || typeof(y) == T_ARRAY && typeof(x) == T_BUFFER))
+  if(typeof(x) != typeof(y))
+    return 0;
+  switch(typeof(x)) {
+    case T_INT:
+      // undefined values are 0, but still test as undefined
+      if(nullp(x))
+        return nullp(y);
+      // fallthrough, because it was a legit 0
+    case T_UNDEFINED:
+    case T_STRING:
+    case T_OBJECT:
+    case T_FLOAT:
+    case T_FUNCTION:
+      return x == y;
+    case T_MAPPING:
+      if(x == y) return 1; // speed up this case
+      if(sizeof(x) != sizeof(y)) return 0;
+      if(!same(keys(x), keys(y))) return 0;
+      if(!same(values(x), values(y))) return 0;
+      return 1;
+    case T_BUFFER:
+    case T_ARRAY:
+      if(sizeof(x) != sizeof(y))
+        return 0;
+
+      if(loose)
+        return !sizeof(filter(x, (: of($1, $(y)) == -1 :)));
+
+      for(int i = 0; i < sizeof(x); i++)
+        if(!same(x[i], y[i]))
+          return 0;
+
+      return 1;
+    case T_CLASS:
+      error("Not implemented.");
+  }
+
+  return 0;
+}
+
+void _assert(int condition, string where) {
+  if(!condition)
+    throw(sprintf("Assertion Failed: %s", where));
+}
+
+void _assert_eq(mixed expected, mixed actual, string where) {
+  _assert(
+    same(expected, actual),
+    sprintf("%s\nExpected: %O\nGot: %O", where, expected, actual)
+  );
+}
+
+void _assert_ne(mixed expected, mixed actual, string where) {
+  _assert(
+    !same(expected, actual),
+    sprintf("%s\nExpected: %O\nGot: %O", where, expected, actual)
+  );
+}
+
+/**
+ * Register a suite of tests.
+ *
+ * @param {string} description Suite description.
+ * @param {mixed *} tests Array of test entries built by test().
+ * @returns {object} this_object() for chaining.
+ */
+object describe(string description, mixed *tests) {
+  test_functions += ({({ description, tests })});
+
+  return this_object();
+}
+
+/**
+ * Build a single test entry. The returned array is meant to be placed in the
+ * tests array passed to describe().
+ *
+ * @param {string} description Test description.
+ * @param {function} test The test function. May call ASSERT_EQ etc.
+ * @param {mixed} args Optional extra args passed to the test function.
+ */
+varargs mixed *test(string description, function test, mixed *args...) {
+  args = args || ({});
+
+  return ({description, function(function f, mixed *fn_args) {
+    string e = catch{
+      if(sizeof(fn_args))
+        (*f)(fn_args...);
+      else
+        (*f)();
+    };
+
+    if(e)
+      throw(e);
+
+    return 1;
+  }, test, args...});
+}
+
+/**
+ * Build a pending test entry — registered in the suite, listed in the
+ * summary, but never executed. Use when you've identified a buggy
+ * boundary, an unimplemented behaviour, or anything you want surfaced
+ * without blocking the suite.
+ *
+ * @param {string} description Test description.
+ * @param {string} [reason] Optional explanation for why it's pending.
+ */
+varargs mixed *pending(string description, string reason) {
+  return ({ description, "pending", reason || "" });
+}
+
+/**
+ * Run all registered suites and return aggregate results. Resets the suite
+ * list so a subsequent run() starts fresh (relevant if the same instance is
+ * reused; runners typically clone instead).
+ *
+ * @returns {mixed *} ({ passed, failed, failures, pendings }) where failures
+ *                   is an array of ({ suite, test, error }) and pendings is
+ *                   an array of ({ suite, test, reason }).
+ */
+mixed *run() {
+  mixed *failures = ({});
+  mixed *pendings = ({});
+  int passed = 0, failed = 0;
+
+  foreach(mixed *suite in test_functions) {
+    string suite_description = suite[0];
+    mixed *tests = suite[1];
+
+    foreach(mixed *test in tests) {
+      string test_description = test[0];
+      mixed e;
+
+      // pending: ({ description, "pending", reason })
+      if(stringp(test[1]) && test[1] == "pending") {
+        pendings += ({({ suite_description, test_description, test[2] })});
+        continue;
+      }
+
+      e = catch((*test[1])(test[2], sizeof(test) > 3 ? test[3..] : ({}))) || 1;
+
+      if(stringp(e)) {
+        failed++;
+        failures += ({({ suite_description, test_description, e })});
+      } else {
+        passed++;
+      }
+    }
+  }
+
+  test_functions = ({});
+
+  return ({ passed, failed, failures, pendings });
+}

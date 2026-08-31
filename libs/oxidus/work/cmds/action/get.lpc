@@ -1,0 +1,192 @@
+/**
+ * @file /cmds/action/get.lpc
+ *
+ * The get command. Picks things up and out of containers.
+ *
+ * @created 2026-07-16 - Gesslar
+ * @last_modified 2026-07-18 - Gesslar
+ *
+ * @history
+ * 2026-07-16 - Gesslar - Created
+ * 2026-07-18 - Gesslar - Added 'all' and 'all <type>' quantifiers, from the
+ *                        room or from a container
+ */
+
+inherit STD_ACT;
+
+private mixed get_all(object tp, object env, string ob_id);
+private void announce_get(object tp, string *phrase, object env, int from_room);
+private string *get_phrase(object ob);
+
+void setup() {
+  usage_text =
+    "get <object>\n"
+    "get all\n"
+    "get all <object>\n"
+    "get <object> from <container>\n"
+    "get all from <container>\n"
+    "get all <object> from <container>\n";
+  help_text =
+    "This command picks things up off the ground or out of a container. Name "
+    "a single object to get just that one, or use 'all' to get everything (or "
+    "everything of a given type). With 'from <container>', it takes from the "
+    "named container instead of the room.\n"
+    "\n"
+    "See also: drop, put\n";
+}
+
+mixed main(
+  /** @type {STD_BODY} */ object tp,
+  string arg
+) {
+  if(!arg)
+    return "Get what?";
+
+  /** @type {STD_ROOM|STD_CONTAINER} */ object env;
+  string ob_id, env_id;
+
+  if(sscanf(arg, "%s from %s", ob_id, env_id) == 2) {
+    env = get_object(env_id);
+    if(  !env
+      || (!present(env, tp) && !present(env, environment(tp)))
+      || !tp->can_see(env)
+    )
+      return `You do not possess ${env_id}.`;
+  } else {
+    ob_id = arg;
+    env = environment(tp);
+  }
+
+  // A living has an inventory (so is_container() is true), but you don't get
+  // things out of people - that would be theft, not a plain get.
+  if(living(env))
+    return `You cannot get anything from ${get_short(env)}.`;
+
+  if(!env->is_container())
+    return `${get_short(env)} is not a container.`;
+
+  if(env->is_closed())
+    return `${get_short(env)} is closed.`;
+
+  // Detect an "all" quantifier: bare "all" (everything) or "all <type>".
+  int all_flag = 0;
+  string rest;
+
+  if(ob_id == "all") {
+    all_flag = 1;
+    ob_id = 0;
+  } else if(sscanf(ob_id, "all %s", rest) == 1) {
+    all_flag = 1;
+    ob_id = rest;
+  }
+
+  if(all_flag)
+    return get_all(tp, env, ob_id);
+
+  /** @type {STD_ITEM} */ object ob = present(ob_id, env);
+  if(    !ob
+      || !tp->can_see(ob)
+    ) {
+    return `You do not see ${ob_id}.`;
+  }
+
+  if(living(ob))
+    return `You cannot get ${get_short(ob)}.`;
+
+  if(call_if(ob, "prevent_get", tp))
+    return 1;
+
+  // Build the description before moving; coins auto-destruct on entering
+  // inventory (or merging), leaving nothing to describe afterwards.
+  string sh = get_short(ob);
+  string *phrase = get_phrase(ob);
+
+  if(ob->move(tp))
+    return `You could not get the ${sh}.`;
+
+  announce_get(tp, phrase, env, env == environment(tp));
+
+  return 1;
+}
+
+private mixed get_all(
+  /** @type {STD_BODY} */ object tp,
+  /** @type {STD_ROOM|STD_CONTAINER} */ object env,
+  string ob_id
+) {
+  int from_room = env == environment(tp);
+
+  // Livings are never picked up, and never the actor themselves.
+  object *obs = find_targets(tp, ob_id, env, (: !living($1) :));
+  int got = 0;
+
+  if(!sizeof(obs)) {
+    if(ob_id)
+      return `You do not see any ${ob_id}.`;
+
+    return from_room
+      ? "There is nothing here to get."
+      : `The ${get_short(env)} is empty.`;
+  }
+
+  foreach(/** @type {STD_ITEM} */ object ob in obs) {
+    if(call_if(ob, "prevent_get", tp))
+      continue;
+
+    // Build the description before moving; coins auto-destruct on entering
+    // inventory (or merging), leaving nothing to describe.
+    string *phrase = get_phrase(ob);
+
+    if(ob->move(tp))
+      continue;
+
+    announce_get(tp, phrase, env, from_room);
+    got++;
+  }
+
+  if(!got)
+    return "You could not get anything.";
+
+  return 1;
+}
+
+// Emits the pick-up / get-from-container message. <phrase> is ({ self, others })
+// so a coin pile can tell the actor the exact count while everyone else sees a
+// vague quantity.
+private void announce_get(
+  /** @type {STD_BODY} */ object tp,
+  string *phrase,
+  /** @type {STD_ROOM|STD_CONTAINER} */ object env,
+  int from_room
+) {
+  if(from_room) {
+    tp->my_action("$N $vpick up $o.", phrase[0]);
+    tp->other_action("$N $vpick up $o.", phrase[1]);
+  } else {
+    tp->my_action("$N $vget $o from a $o1.", phrase[0], env);
+    tp->other_action("$N $vget $o from a $o1.", phrase[1], env);
+  }
+}
+
+// Builds ({ self_phrase, others_phrase }) for a picked-up object. The actor sees
+// the exact coin count ("27 copper coins"); others see a vague quantity ("some
+// copper coins"). A single coin and any non-coin read the same for both. MUST be
+// called before the object moves, since a coin self-destructs on entering
+// inventory or merging into a ground pile.
+private string *get_phrase(/** @type {STD_ITEM} */ object ob) {
+  int cnum = call_if(ob, "query_coin_num");
+
+  if(cnum > 0) {
+    string ctype = call_if(ob, "query_coin_type");
+
+    if(cnum == 1) {
+      string one = add_article(`${ctype} coin`);
+      return ({ one, one });
+    }
+
+    return ({ `${cnum} ${ctype} coins`, `some ${ctype} coins` });
+  }
+
+  string s = add_article(get_short(ob));
+  return ({ s, s });
+}

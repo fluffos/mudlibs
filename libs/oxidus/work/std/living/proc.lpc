@@ -1,0 +1,172 @@
+/**
+ * @file /std/living/proc.lpc
+ *
+ * NPC procs.
+ *
+ * @created 2026-07-20 - Gesslar
+ * @last_modified 2026-07-20 - Gesslar
+ *
+ * @history
+ * 2026-07-20 - Gesslar - Created
+ */
+
+#include <action.h>
+#include <combat.h>
+#include <damage.h>
+
+// @this_object /std/living/npc.lpc
+
+private void perform_simple_proc(string tag, mapping proc);
+
+private nosave mapping __npc_procs = ([]);
+private nosave float __npc_proc_chance = 12.0;
+private nosave mapping __npc_proc_cooldowns = ([]);
+private nosave float __default_cooldown = 1;
+private nosave float __default_proc_weight = 1;
+
+public float set_proc_chance(float chance) {
+  assert_arg(nullp(chance) || (floatp(chance) && clamped(chance, 0.0, 100.0)), 1, "Chance must be null or a float clamped to 0.0 and 100.0.");
+
+  __npc_proc_chance = chance;
+
+  return __npc_proc_chance;
+}
+
+public float get_proc_chance() {
+  return __npc_proc_chance;
+}
+
+public varargs void add_simple_proc(
+  string  tag,
+  string *msgs,
+  string  damage_type,
+  string  attack_type,
+  int     weight,
+  int     cooldown,
+  string  severity) {
+  assert_arg(stringp(tag) && truthy(tag), 1, "Tag must be a non-empty string.");
+  assert_arg(pointerp(msgs) && uniformp(msgs, T_STRING), 2, "Invalid messages array.");
+  assert_arg(stringp(damage_type) && truthy(damage_type), 3, "Damage type must be a non-empty string.");
+  assert_arg(stringp(attack_type) && truthy(attack_type), 4, "Attack type must be a non-empty string.");
+  assert_arg(nullp(weight) || (intp(weight) && clamped(weight, 0, 100)), 5, "Weight must be null or an int clamped to 0 and 100.");
+  assert_arg(nullp(cooldown) || (intp(cooldown) && cooldown >= 0), 6, "Cooldown must be an int greater than or equal to 0.");
+  assert_arg(nullp(severity) || (stringp(severity) && truthy(severity)), 7, "Severity must be null or a non-empty string.");
+
+  assert(
+    sizeof(msgs) == 1 || sizeof(msgs) == 2,
+    "Messages must contain one or two strings."
+  );
+
+  severity ??= "normal";
+
+  mapping proc = ([
+    "messages": msgs,
+    "damage_type": damage_type,
+    "attack_type": attack_type,
+    "severity": severity,
+    "type": "simple",
+    "cooldown": cooldown,
+    "weight" : weight,
+  ]);
+
+  // If one already exists, just overwrite it.
+  __npc_procs[tag] = proc;
+}
+
+mapping get_procs() {
+  return copy(__npc_procs);
+}
+
+mapping get_proc(string tag) {
+  return copy(__npc_procs[tag]);
+}
+
+string can_proc() {
+  mapping procs = ([]);
+  int now = time();
+  string result;
+
+  // If there are no procs, return false
+  if(!sizeof(__npc_procs))
+    return false;
+
+  // If the proc chance is 0, return false
+  if(__npc_proc_chance <= 0.0)
+    return false;
+
+  float roll = random_float(100.0);
+
+  if(roll > __npc_proc_chance)
+    return false;
+
+  // Iterate through all procs and check if they can proc, if they have
+  // a cooldown.
+  foreach(string name, mapping proc in __npc_procs) {
+    if(proc.cooldown > 0) {
+      if(now - __npc_proc_cooldowns[name] > proc.cooldown) {
+        procs[name] = proc.weight ?? 100;
+      }
+    } else {
+      procs[name] = proc.weight ?? 100;
+    }
+  }
+
+  if(!sizeof(procs))
+    return false;
+
+  // Now let's check which proc can occur. This is based on the weight of
+  // the proc.
+  result = element_of_weighted(procs);
+
+  return result;
+}
+
+/**
+ * @brief Query a proc from an object.
+ * @param {string} tag - The name of the proc to query.
+ * @returns {mapping} The proc.
+ */
+public mapping query_proc(string tag) {
+  assert_arg(stringp(tag) && truthy(tag), 1, "Tag must be a string.");
+
+  return copy(__npc_procs[tag]);
+}
+
+/**
+ * @brief Call a proc.
+ * @param {string} tag - The name of the proc to call.
+ */
+public varargs void proc_npc(string tag) {
+  mapping proc = query_proc(tag);
+
+  if(!mapp(proc))
+    return;
+
+  if(proc.type == "simple") {
+    return perform_simple_proc(tag, proc);
+  }
+}
+
+private void perform_simple_proc(string tag, mapping proc) {
+  /** @type {STD_BODY} */ object enemy = highest_threat();
+
+  string skill_name = `combat.${proc.attack_type}.${proc.damage_type}`;
+
+  if(!can_strike(enemy, skill_name))
+    return;
+
+  if(sizeof(proc.messages) == 1) {
+    target_action(proc.messages[0], enemy);
+  } else if(sizeof(proc.messages) == 2) {
+    target_action(proc.messages[0], enemy);
+    other_target_action(proc.messages[1], enemy);
+  }
+
+  float raw = calculate_damage(enemy, skill_name);
+  float damage = adjust_damage_by_severity(raw, proc.severity);
+
+  // for now use mundane damage until we have defences sorted out
+  deliver_mundane_damage(enemy, damage, proc.damage_type);
+
+  __npc_proc_cooldowns[tag] = time();
+}

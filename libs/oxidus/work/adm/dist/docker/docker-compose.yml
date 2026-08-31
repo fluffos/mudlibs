@@ -1,0 +1,51 @@
+# Oxidus — local run / build.
+#
+#   docker compose up -d         # build locally and start
+#   docker compose up -d --build # force a rebuild (gets latest fluffos master)
+#   docker compose logs -f       # watch the driver
+#   docker compose down          # stop (state persists in the host bind mount)
+#
+# To run the published image instead of building, comment out `build:` and
+# uncomment the ghcr image line.
+
+services:
+  oxidus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Pin a specific commit/branch/tag of the mudlib if you like.
+        OXIDUS_REF: main
+    # image: ghcr.io/gesslar/oxidus:latest
+    container_name: oxidus
+    init: true                 # tini as PID 1: clean signal forwarding + zombie reaping
+    # "no", not unless-stopped/on-failure: mirrors adm/dist/run, where only an
+    # in-game reboot restarts the driver. Reboot (exit 1) is absorbed by the
+    # entrypoint's own loop and never surfaces here, so the container process
+    # only exits on a clean shutdown (0) or a crash (non-zero) — both must stay
+    # down. Auto-restarting a crash would bury the fault in a boot loop; leave
+    # the dead container up for triage instead.
+    restart: "no"
+    stop_grace_period: 30s     # give the driver time to save on shutdown
+    ports:
+      - "1336:1336"            # plain telnet
+      # - "1338:1338"          # TLS telnet (also set OXIDUS_TLS=1 below)
+    environment:
+      # Host uid/gid that should own the bind-mounted state, so you can edit it
+      # without sudo and certbot/etc. can write to it. Default 1000 = the usual
+      # single-user Linux desktop; set OXIDUS_UID/OXIDUS_GID (in .env) to your
+      # `id -u`/`id -g` if different. Ignored on Docker Desktop (mac/Windows).
+      OXIDUS_UID: ${OXIDUS_UID:-1000}
+      OXIDUS_GID: ${OXIDUS_GID:-1000}
+      # OXIDUS_TLS: "1"        # enable TLS telnet using the FluffOS test certs
+      # OXIDUS_TLS_PORT: "1338"
+    volumes:
+      # Persistent state lives on the host at <parent>/oxidus-state, where
+      # <parent> = OXIDUS_STATE_PARENT if set, else your home directory ($HOME).
+      # The oxidus-state leaf is always appended, so the final path is
+      # predictable. On Windows, run compose from WSL, Cygwin, or Git-Bash (all
+      # set $HOME); from bare PowerShell/cmd, set OXIDUS_STATE_PARENT explicitly.
+      # Set OXIDUS_STATE_PARENT (and OXIDUS_UID/GID above) in a .env file beside
+      # this compose file — export syntax differs per shell, a .env does not.
+      # See .env.example.
+      - ${OXIDUS_STATE_PARENT:-${HOME}}/oxidus-state:/oxidus/state

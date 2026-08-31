@@ -1,0 +1,115 @@
+// @lpc-nocheck
+/**
+ * @file /tests/adm/simul_efun/mapping.test.lpc
+ * @description Tests for the mapping simul_efuns from /adm/simul_efun/mapping.lpc:
+ *              find_key, find_keys, dot_walk, and pretty_map.
+ *
+ * Mapping iteration order is unspecified, so find_key value-match tests use
+ * unique values for a deterministic key, and find_keys multi-match relies on
+ * ASSERT_EQ's loose (order-insensitive) array comparison. dot_walk misses
+ * return undefined, asserted with nullp(). pretty_map's exact %O layout is
+ * driver-dependent, so its contract (keeps the data, strips the size
+ * annotation) is asserted rather than a literal string.
+ */
+
+#include <test.h>
+
+inherit STD_TEST;
+
+void setup() {
+  describe("find_key", ({
+    test("returns the key for a matching value", function() {
+      ASSERT_EQ("Bob", find_key(([ "Alice": 95, "Bob": 87 ]), 87));
+    }),
+    test("returns the key satisfying a predicate", function() {
+      ASSERT_EQ("b", find_key(([ "a": 5, "b": 10 ]), (: $1 > 7 :)));
+    }),
+    test("forwards a trailing argument to the predicate as $4", function() {
+      ASSERT_EQ("b", find_key(([ "a": 5, "b": 10 ]), (: $1 > $4 :), 7));
+    }),
+    test("returns 0 when no value matches", function() {
+      ASSERT_EQ(0, find_key(([ "a": 5 ]), 99));
+    }),
+    test("returns 0 when no element satisfies the predicate", function() {
+      ASSERT_EQ(0, find_key(([ "a": 5 ]), (: $1 > 100 :)));
+    }),
+  }));
+
+  describe("find_keys", ({
+    test("returns every key for a matching value", function() {
+      ASSERT_EQ(({ "Alice", "Charlie" }),
+        find_keys(([ "Alice": 95, "Bob": 87, "Charlie": 95 ]), 95));
+    }),
+    test("returns every key satisfying a predicate", function() {
+      ASSERT_EQ(({ "b", "c" }),
+        find_keys(([ "a": 5, "b": 10, "c": 15 ]), (: $1 >= 10 :)));
+    }),
+    test("forwards a trailing argument to the predicate as $4", function() {
+      ASSERT_EQ(({ "b", "c" }),
+        find_keys(([ "a": 5, "b": 10, "c": 15 ]), (: $1 >= $4 :), 10));
+    }),
+    test("returns an empty array when nothing matches", function() {
+      ASSERT_EQ(0, sizeof(find_keys(([ "a": 5 ]), 99)));
+    }),
+    test("returns a single-element array for one match", function() {
+      ASSERT_EQ(({ "b" }), find_keys(([ "a": 5, "b": 10 ]), 10));
+    }),
+  }));
+
+  describe("dot_walk", ({
+    test("resolves a single-segment path", function() {
+      ASSERT_EQ(1, dot_walk(([ "a": 1 ]), "a"));
+    }),
+    test("resolves a nested value", function() {
+      mapping data = ([ "player": ([ "name": "Alice" ]) ]);
+      ASSERT_EQ("Alice", dot_walk(data, "player.name"));
+    }),
+    test("resolves a deeply nested value", function() {
+      mapping data = ([ "player": ([ "stats": ([ "hp": 100 ]) ]) ]);
+      ASSERT_EQ(100, dot_walk(data, "player.stats.hp"));
+    }),
+    test("returns an intermediate mapping as-is", function() {
+      mapping data = ([ "player": ([ "stats": ([ "hp": 100, "mp": 40 ]) ]) ]);
+      ASSERT_EQ(1, same(([ "hp": 100, "mp": 40 ]), dot_walk(data, "player.stats")));
+    }),
+    test("a missing final segment yields undefined", function() {
+      mapping data = ([ "player": ([ "name": "Alice" ]) ]);
+      ASSERT_EQ(1, nullp(dot_walk(data, "player.age")));
+    }),
+    test("a missing intermediate hop yields undefined", function() {
+      mapping data = ([ "player": ([ "name": "Alice" ]) ]);
+      ASSERT_EQ(1, nullp(dot_walk(data, "player.gear.head")));
+    }),
+    test("a non-mapping intermediate hop yields undefined", function() {
+      ASSERT_EQ(1, nullp(dot_walk(([ "a": 5 ]), "a.b")));
+    }),
+    test("a missing single segment yields undefined", function() {
+      ASSERT_EQ(1, nullp(dot_walk(([ "a": 1 ]), "z")));
+    }),
+    test("a non-mapping first argument errors", function() {
+      string err = catch(dot_walk(5, "a"));
+      ASSERT_NE(0, err);
+    }),
+    test("a non-string path errors", function() {
+      string err = catch(dot_walk(([ "a": 1 ]), 5));
+      ASSERT_NE(0, err);
+    }),
+  }));
+
+  describe("pretty_map", ({
+    test("returns a string", function() {
+      ASSERT_EQ(1, stringp(pretty_map(([ "hp": 100 ]))));
+    }),
+    test("includes the mapping's keys and values", function() {
+      string s = pretty_map(([ "hp": 100 ]));
+      ASSERT_EQ(1, strsrch(s, "hp") != -1 && strsrch(s, "100") != -1);
+    }),
+    test("strips the sizeof() size annotation", function() {
+      string s = pretty_map(([ "a": 1, "b": 2, "c": 3 ]));
+      ASSERT_EQ(-1, strsrch(s, "sizeof"));
+    }),
+    test("handles an empty mapping", function() {
+      ASSERT_EQ(1, stringp(pretty_map(([]))));
+    }),
+  }));
+}

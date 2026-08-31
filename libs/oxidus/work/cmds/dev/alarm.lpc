@@ -1,0 +1,463 @@
+/**
+ * @file /cmds/dev/alarm.lpc
+ *
+ * Command to inspect, add, remove, and rehash alarms registered with
+ * the central alarm daemon.
+ *
+ * @created 2024-02-25 - Gesslar
+ * @last_modified 2026-07-13 - Gesslar
+ *
+ * @history
+ * 2024-02-25 - Gesslar - Created
+ * 2026-05-18 - Gesslar - Subcommands: list/info/next/add/remove
+ * 2026-07-13 - Gesslar - Moved help into setup()
+ */
+
+#include <daemons.h>
+#include <classes.h>
+#include <messaging.h>
+
+inherit STD_CMD;
+inherit CLASS_ALARM;
+
+#define TYPES ({ "once", "hourly", "daily", "weekly", "monthly", "yearly" })
+
+private mixed list_alarms(object tp, string filter_type, int as_time);
+private int next_poll(object tp);
+private int rehash(object tp);
+private int add_alarm_entry(object tp, string type, int root);
+private int rem_alarm_entry(object tp);
+private mixed show_info(object tp, int num);
+private string resolve_type(string s);
+private int sort_by_next(class Alarm a, class Alarm b);
+private string generate_obj_func_line(string obj, string func);
+private string time_as_string(int number);
+
+private nosave mapping interval_colors = ([
+  "once":    "{{8DD68D}}",
+  "hourly":  "{{D3E68A}}",
+  "daily":   "{{C48DD6}}",
+  "weekly":  "{{E6AE8A}}",
+  "monthly": "{{E6AEAE}}",
+  "yearly":  "{{AED3E6}}",
+  "boot":    "{{8DB1D6}}",
+]);
+
+private nosave mapping type_to_char = ([
+  "once":    "O",
+  "hourly":  "H",
+  "daily":   "D",
+  "weekly":  "W",
+  "monthly": "M",
+  "yearly":  "Y",
+]);
+
+private nosave mapping char_to_type = ([
+  "O": "once",
+  "H": "hourly",
+  "D": "daily",
+  "W": "weekly",
+  "M": "monthly",
+  "Y": "yearly",
+  "B": "boot",
+]);
+
+private nosave mapping pattern_help = ([
+  "once":    "YY-MM-DD@HH:MM",
+  "hourly":  "MM",
+  "daily":   "HH:MM",
+  "weekly":  "D@HH:MM   (D=day-of-week, Sunday=0)",
+  "monthly": "D@HH:MM   (D=day-of-month)",
+  "yearly":  "MM-DD@HH:MM",
+]);
+
+private nosave int busy;
+
+void setup() {
+  usage_text =
+  "alarm                     - list all alarms\n"
+  "alarm time                - list all alarms (timestamps)\n"
+  "alarm list [type]         - list alarms (filtered)\n"
+  "alarm info <#>            - show metadata for an alarm\n"
+  "alarm next                - seconds until next poll\n"
+  "alarm rehash              - rehash from config (admin)\n"
+  "alarm add [type]          - add a new alarm interactively\n"
+  "alarm add root [type]     - add as root permissions (admin)\n"
+  "alarm remove              - remove an alarm by number\n"
+  "\n"
+  "type: [o]nce / [h]ourly / [d]aily / [w]eekly /\n"
+  "      [m]onthly / [y]early\n"
+  "      (any unambiguous prefix; boot is config-file only)\n";
+
+  help_text =
+    "This command inspects, adds, removes, and rehashes alarms registered "
+    "with the central alarm daemon (ALARM_D).\n\n"
+    "Recurring alarms (hourly/daily/weekly/monthly/yearly) and boot alarms "
+    "typically live in the configured ALARMS_PATH and are rehashed "
+    "automatically at boot. One-shot (\"once\") alarms added at runtime via "
+    "\"alarm add once\" persist across reboots.\n\n"
+    "\"alarm rehash\" rereads all config files and discards any runtime-added "
+    "alarms.\n\n"
+    "Only an admin may add an alarm with root permissions or rehash the "
+    "alarm daemon.\n\n"
+    "PATTERNS BY TYPE:\n"
+    "  once     YY-MM-DD@HH:MM\n"
+    "  hourly   MM\n"
+    "  daily    HH:MM\n"
+    "  weekly   D@HH:MM     (D = day-of-week, Sunday = 0)\n"
+    "  monthly  D@HH:MM     (D = day-of-month)\n"
+    "  yearly   MM-DD@HH:MM\n"
+    "  boot     <seconds after boot> (config-file only)\n";
+  }
+
+mixed main(object tp, string arg) {
+  string type;
+  int root, num;
+
+  if(!arg || arg == "")
+    return list_alarms(tp, 0, 0);
+  if(arg == "time")
+    return list_alarms(tp, 0, 1);
+  if(arg == "next")
+    return next_poll(tp);
+  if(arg == "rehash")
+    return rehash(tp);
+  if(arg == "list")
+    return list_alarms(tp, 0, 0);
+
+  if(arg == "remove") {
+    if(busy)
+      return _error("The alarm command is busy. Try again in a moment.");
+    return rem_alarm_entry(tp);
+  }
+
+  if(sscanf(arg, "list %s", type) == 1) {
+    type = resolve_type(type);
+    if(!type)
+      return _error("Unknown or ambiguous alarm type.");
+    return list_alarms(tp, type, 0);
+  }
+
+  if(sscanf(arg, "info %d", num) == 1)
+    return show_info(tp, num);
+
+  if(sscanf(arg, "add %s", type) == 1) {
+    if(busy)
+      return _error("The alarm command is busy. Try again in a moment.");
+
+    if(sscanf(type, "root %s", type) == 1) {
+      if(!adminp(tp))
+        return _error("Only admin may set root permission alarms.");
+      root = 1;
+    }
+    type = resolve_type(type);
+    if(!type)
+      return _error("Unknown or ambiguous alarm type.");
+    return add_alarm_entry(tp, type, root);
+  }
+
+  return _error(
+    "Syntax: alarm [list [type] | time | info <#> | next | rehash | "
+    "add [root] <type> | remove]");
+}
+
+private string resolve_type(string s) {
+  string *matches;
+
+  if(!s || s == "")
+    return 0;
+
+  matches = filter(TYPES, (: strsrch($1, $2) == 0 :), s);
+
+  if(sizeof(matches) == 1)
+    return matches[0];
+
+  return 0;
+}
+
+private int next_poll(object tp) {
+  int seconds = ALARM_D->time_to_next_poll();
+
+  if(seconds < 0)
+    return _info(tp, "No poll is currently scheduled.");
+
+  return _info(
+    tp,
+    "Next poll in %s (at %s).",
+    time_as_string(seconds),
+    strftime("%b %d %Y %H:%M:%S", time() + seconds)
+  );
+}
+
+private int rehash(object tp) {
+  if(!adminp(tp))
+    return _error("Only admin may rehash alarms.");
+
+  ALARM_D->rehash_alarms();
+  return _ok(
+    tp,
+    "Alarms rehashed. Any runtime-added alarms have been discarded."
+  );
+}
+
+private int sort_by_next(class Alarm a, class Alarm b) {
+  int ta = ALARM_D->calculate_alarm_time(a, 1);
+  int tb = ALARM_D->calculate_alarm_time(b, 1);
+  return ta - tb;
+}
+
+private mixed list_alarms(object tp, string filter_type, int as_time) {
+  class Alarm *alarms;
+  string *out = ({});
+  int idx;
+
+  alarms = ALARM_D->query_alarms();
+
+  if(filter_type)
+    alarms = filter(alarms,
+      (: $1.type == $2 :), type_to_char[filter_type]);
+
+  if(!sizeof(alarms)) {
+    if(filter_type)
+      return _info(tp, `No %s alarms are currently registered.`, filter_type);
+    return _info(tp, "No alarms are currently registered.");
+  }
+
+  alarms = sort_array(alarms, (: sort_by_next :));
+
+  out += ({ sprintf("  %1s %1s %-54s%19s",
+    "#", "T", "Object->Function", "Next") });
+
+  out += ({
+    "-------------------------------------------------------------------------------"
+  });
+
+  foreach(class Alarm alarm in alarms) {
+    int next_t = ALARM_D->calculate_alarm_time(alarm, 1);
+    string color = interval_colors[char_to_type[alarm.type]];
+    string fmt;
+
+    idx++;
+
+    if(!color)
+      color = "";
+
+    if(alarm.type == "B")
+      fmt = sprintf("boot+%ss", alarm.pattern);
+    else if(next_t < 0)
+      fmt = "    --";
+    else if(as_time)
+      fmt = strftime("%b %d %H:%M:%S", next_t);
+    else
+      fmt = time_as_string(next_t - time());
+
+    out += ({
+      sprintf("%3d %s%1s{{res}} %s%:19s",
+        idx,
+        color, alarm.type,
+        generate_obj_func_line(alarm.file, alarm.func),
+        fmt
+      )
+    });
+  }
+
+  return out;
+}
+
+private string generate_obj_func_line(string obj, string func) {
+  string result = obj + "->" + func;
+
+  result = sprintf("%-54.54s", result);
+  result = replace_string(result, "->", "{{acb}}->{{res}}");
+
+  return result;
+}
+
+private int add_alarm_entry(object tp, string type, int root) {
+  busy = 1;
+  tell(tp, "\nInput [target filename],[function],[optional arguments]\n"
+           "(Arguments are semicolon-delimited.)\n: ", MSG_PROMPT);
+  input_to("receive_target", 0, tp, type, root);
+  return 1;
+}
+
+private void receive_target(string str, object tp, string type, int root) {
+  string obj, func, arg, e;
+  object target;
+
+  if(sscanf(str, "%s, %s, %s", obj, func, arg) != 3 &&
+     sscanf(str, "%s,%s,%s", obj, func, arg) != 3 &&
+     sscanf(str, "%s, %s", obj, func) != 2 &&
+     sscanf(str, "%s,%s", obj, func) != 2) {
+    busy = 0;
+    _error(tp, "Illegal alarm addition format.");
+    return;
+  }
+
+  e = catch(target = load_object(obj));
+  if(e) {
+    busy = 0;
+    _error(tp, "Could not access %s: %s", obj, e);
+    return;
+  }
+
+  if(adminp(query_privs(target)) && !adminp(tp)) {
+    busy = 0;
+    _error(tp, "You have insufficient permissions to access that object.");
+    return;
+  }
+
+  tell(
+    tp,
+    sprintf("\nInput pattern [Format: %s]\n: ",
+      pattern_help[type]
+    ),
+    MSG_PROMPT
+  );
+  input_to("receive_pattern", 0, tp, type, root, obj, func, arg);
+}
+
+private void receive_pattern(string str, object tp, string type, int root,
+                             string obj, string func, string arg) {
+  string master = root ? "true" : "false";
+  mixed *args;
+
+  if(!str || str == "") {
+    busy = 0;
+    _error(tp, "A pattern is required.");
+    return;
+  }
+
+  if(arg && arg != "")
+    args = explode(arg, ";");
+  else
+    args = ({});
+
+  busy = 0;
+
+  if(!ALARM_D->add_alarm(type_to_char[type], master, str, obj, func, args...))
+    _error(tp, "Could not add requested alarm.");
+  else
+    _ok(tp, "Alarm added to the \"%s\" type.", type);
+}
+
+private mixed show_info(object _tp, int num) {
+  class Alarm *alarms = ALARM_D->query_alarms();
+  class Alarm alarm;
+  int next_t;
+  string type_name, master_str, args_str, last_str, next_str;
+  string *out = ({});
+
+  alarms = sort_array(alarms, (: sort_by_next :));
+
+  if(num < 1 || num > sizeof(alarms))
+    return _error("There is no such alarm.");
+
+  alarm = alarms[num - 1];
+  next_t = ALARM_D->calculate_alarm_time(alarm, 1);
+  type_name = char_to_type[alarm.type];
+
+  master_str = alarm.master ? "true" : "false";
+  args_str = sprintf("%O", alarm.args || ({}));
+
+  if(alarm.last_run)
+    last_str = sprintf("%s (%s ago)",
+      strftime("%b %d %Y %H:%M:%S", alarm.last_run),
+      time_as_string(time() - alarm.last_run));
+  else
+    last_str = "never";
+
+  if(alarm.type == "B")
+    next_str = sprintf("boot+%ss", alarm.pattern);
+  else if(next_t < 0)
+    next_str = "--";
+  else
+    next_str = sprintf("%s (at %s)",
+      time_as_string(next_t - time()),
+      strftime("%b %d %Y %H:%M:%S", next_t));
+
+  out += ({
+    `Alarm #${num} ${alarm.type} (${type_name ? capitalize(type_name) : "?"})`,
+    `  Pattern:    ${alarm.pattern}`,
+    `  File:       ${alarm.file}`,
+    `  Func:       ${alarm.func}`,
+    `  Args:       ${args_str}`,
+    `  Master:     ${master_str}`,
+    `  ID:         ${alarm.id}`,
+    `  Next fire:  ${next_str}`,
+    `  Last fire:  ${last_str}`,
+  });
+
+  return out;
+}
+
+private int rem_alarm_entry(object tp) {
+  class Alarm *alarms = ALARM_D->query_alarms();
+  mixed listing;
+
+  if(!sizeof(alarms))
+    return _info(tp, "No alarms are currently registered.");
+
+  busy = 1;
+  listing = list_alarms(tp, 0, 0);
+  if(pointerp(listing))
+    foreach(string line in listing)
+      tell(tp, line + "\n");
+
+  tell(tp, "\nDelete which alarm? [num]  ", MSG_PROMPT);
+  input_to("del_number", 0, tp);
+  return 1;
+}
+
+private void del_number(string str, object tp) {
+  class Alarm *alarms = ALARM_D->query_alarms();
+  int num = to_int(str);
+
+  alarms = sort_array(alarms, (: sort_by_next :));
+
+  if(num < 1 || num > sizeof(alarms)) {
+    busy = 0;
+    _error(tp, "There is no such alarm available for removal.");
+    return;
+  }
+
+  busy = 0;
+
+  if(!ALARM_D->remove_alarm(alarms[num - 1].id))
+    _error(tp, "Unable to remove requested alarm.");
+  else
+    _ok(tp, "Alarm %d removed.", num);
+}
+
+private string time_as_string(int number) {
+  string result;
+  int minutes, seconds, hours, days;
+
+  if(number < 0)
+    return sprintf("-%s", time_as_string(-number));
+
+  if(number < 60) {
+    result = sprintf(":%02d", number);
+  } else if(number < 3600) {
+    minutes = number / 60;
+    seconds = number % 60;
+    result = sprintf("%2d:%02d", minutes, seconds);
+  } else if(number < 86400) {
+    hours = number / 3600;
+    number -= hours * 3600;
+    minutes = number / 60;
+    seconds = number % 60;
+    result = sprintf("%2d:%02d:%02d", hours, minutes, seconds);
+  } else {
+    days = number / 86400;
+    number -= days * 86400;
+    hours = number / 3600;
+    number -= hours * 3600;
+    minutes = number / 60;
+    seconds = number % 60;
+    result = sprintf("%dd %02d:%02d:%02d",
+      days, hours, minutes, seconds);
+  }
+
+  return result;
+}

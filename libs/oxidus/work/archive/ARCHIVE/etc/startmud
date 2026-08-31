@@ -1,0 +1,137 @@
+#!/bin/sh
+
+#
+# file:    startmud
+# version: 1.0
+# date:    08-OCT-05
+# desc:    Startmud script based off of TMI-II Script
+#
+#
+
+# WARNING: After starting script for the first time, ensure
+#     that the script is not caught in a loop writing error
+#     messages to startmud.err
+
+# NOTE: I've decided to use relative directories so that you
+#     might not even need to modify this script to get started.
+#     If it doesn't work on your system, just replace with full
+#     paths (You will however have to modify the paths in
+#     config.lpu).
+
+# -=CONFIGURATION=-
+
+#  BINDIR
+# Directory of driver binaries
+# BINDIR=/users/somervil/lpuni/bin
+BINDIR=../bin
+
+#  ETCDIR
+# Directory with runtime configuration data
+# ETCDIR=/users/somervil/lpuni/etc
+ETCDIR=./
+
+#  LOGDIR
+# Mudlib directory containing driver-related log fiels
+# LOGDIR=/users/somervil/tmi3/lib/log/driver
+LOGDIR=../lib/log/driver
+
+
+#  DRIVER
+# Name of driver binary (default: driver)
+DRIVER=driver
+
+#  ADDR_SERVER
+# Name of address server binary (default: addr_server)
+ASERVER=addr_server
+
+#  APORT
+# Port that the mudlib will look for the address server on
+APORT=7374
+
+#  CONFIG
+# MudOS runtime configuration file
+CONFIG=config.lpu
+
+#  UP
+# Name of logfile showing dates when driver starts up and goes down
+UP=UPRECORD
+
+# LOG
+# Name of driver logfile
+LOG=driver.log
+
+#  ERR
+# Name of driver logfile for output sent to stderr
+ERR=driver.err
+
+#  ALOG
+# Name of address server stdout server log file
+ALOG=aserver.log
+
+#  AERR
+# Name of address server stderr log file
+AERR=aserver.err
+#  PIDFILE
+# File containing process id [Advanced Users Only]
+PIDFILE=."mud".pid
+
+# -=SCRIPT=-
+
+exec > $ETCDIR/startmud.log 2> $ETCDIR/startmud.err
+
+# Warning: Modifying beyond this point is not recommended
+
+umask 003
+
+if test -d ${BINDIR}
+then
+        true
+else
+        echo "Error [startmud]: Unable to find binaries directory: ${BINDIR}"
+        exit 3
+fi
+
+echo $$ > ${BINDIR}/${PIDFILE}
+
+if test -f ${BINDIR}/${ASERVER}
+then
+    ${BINDIR}/${ASERVER} ${APORT} >> ${LOGDIR}/${ALOG} 2> ${LOGDIR}/${AERR} &
+
+else
+        echo "Error: Unable to find the address server:    ${BINDIR}/${ASERVER}"
+        echo "Continuing anyway."
+fi
+
+if test -f ${BINDIR}/${DRIVER}
+then
+  echo  "Success [startmud]: Found driver"
+else
+  echo "Error [startmud]: No driver"
+fi
+
+if test -f ${BINDIR}/${DRIVER}
+then
+        while :
+        do
+                echo -n "Driver came up: " >> ${LOGDIR}/${UP}
+                date >> ${LOGDIR}/${UP}
+                ${BINDIR}/${DRIVER} ${CONFIG} > ${LOGDIR}/${LOG} 2> ${LOGDIR}/${ERR}
+                ERROR=$?
+                echo -n "Driver went down (exit code: ${ERROR}): " >> ${LOGDIR}/${UP}
+                date >> ${LOGDIR}/${UP}
+                rm -f ${LOGDIR}/${LOG}.old
+                mv ${LOGDIR}/${LOG} ${LOGDIR}/${LOG}.old
+                rm -f ${LOGDIR}/${ERR}.old
+                mv ${LOGDIR}/${ERR} ${LOGDIR}/${ERR}.old
+                if test $ERROR -eq 255
+                then
+                        echo "NOTICE: Driver exited with -1.  Halting." >> ${LOGDIR}/${UP}
+                        echo "Halting..."
+                        exit 255
+                fi
+                test -f ${BINDIR}/${DRIVER} || exit 1
+        done
+else
+        echo "Error [startmud]: Unable to find the gamedriver executable:     ${BINDIR}/${DRIVER}"
+        echo "Halting."
+fi

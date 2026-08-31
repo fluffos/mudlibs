@@ -1,0 +1,113 @@
+// /cmds/adm/showtree.c
+// Command to show all inheritables of a given object
+// Recursively showing as an inheritance tree
+//
+// Created:     ????/??/??: ?????
+// Last Change: 2024/01/31: Gesslar
+//
+// ????/??/??: Gesslar - ?????
+
+inherit STD_CMD;
+
+private string dig(string file, string func, int index);
+
+private nosave string error_message;
+
+void setup() {
+  usage_text =
+    "showtree <file>\n"
+    "showtree <func> in <file>\n";
+  help_text =
+    "In its first version, shows you the full inheritance tree for the named "
+    "object. In its second form, it shows you all files in the inheritance "
+    "tree which contain the function you name, specifically noting those "
+    "objects which have definitions for the function."
+  ;
+}
+
+mixed main(
+  /** @type {STD_PLAYER} */ object caller,
+  string str
+) {
+  string func, target, file, result;
+  /** @type {STD_OBJECT} */ object ob;
+
+  if(!str)
+    return _usage(caller);
+
+  if(sscanf(str, "%s in %s", func, target) != 2 && sscanf(str, "%s %s", func, target) != 2) {
+    func = 0;
+    target = str;
+  }
+
+  ob = get_object(target);
+  if(ob) {
+    if(virtualp(ob)) {
+      file = ob->query_virtual_master();
+    } else {
+      file = base_name(ob);
+    }
+  } else {
+    file = resolve_path(caller->query_env("cwd"), file);
+  }
+
+  if(!file)
+    return _error("Unable to determine file for %O", ob);
+
+  result = dig(file, func, 0);
+
+  if(!result)
+    if(error_message)
+      return _error(error_message);
+    else
+      return _error("No such file %s.lpc", file);
+
+  if(result == "")
+    return _error("No such function %s in %s.lpc", func, file);
+
+  return result;
+}
+
+string dig(string file, string func, int indent) {
+  object ob;
+  string str;
+  int found;
+
+  file = chop(chop(file, ".lpc", -1), ".lpc", -1);
+  if(file[0] != '/')
+    file = "/" + file;
+  if(!file_exists(file + ".lpc")) {
+    error_message = "No such file " + file + ".lpc\n";
+    return 0;
+  }
+
+  if(!(ob = load_object(file))) {
+    error_message = "Error in loading " + file + ".\n";
+    return 0;
+  }
+
+  int width = indent * 3;
+
+  str = sprintf("%*-' 's↳ %s", width-1, "", file);
+  if(func && (function_exists(func, ob) == file))
+    str += " ({{ffcc00}}" + func + "{{res}} defined)\n";
+  else
+    str += "\n";
+
+  if(!func || function_exists(func, ob))
+    found = 1;
+
+  indent++;
+
+  foreach(file in sort_array(inherit_list(ob), 1)) {
+    string tmp;
+    tmp = dig(file, func, indent);
+    if(tmp && tmp != "") {
+      str += tmp;
+      found = 1;
+    } else if(!tmp) {
+      return 0;
+    }
+  }
+  return (found ? str : "");
+}

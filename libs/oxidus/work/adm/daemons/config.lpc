@@ -1,0 +1,114 @@
+/**
+ * @file /adm/daemons/config.lpc
+ *
+ * Configuration management daemon that provides a centralized system for
+ * game settings. Uses a cascading configuration pattern where default values
+ * are loaded from default.lpml and can be overridden by local settings in
+ * config.lpml.
+ *
+ * The two-file system enables:
+ * - Default values stored in git (/adm/etc/default.lpml)
+ * - Local overrides in /adm/custom/config.lpml (not in git)
+ * - Easy upgrades without losing custom settings
+ * - Environment-specific configurations
+ *
+ * @created 2024-02-03 - Gesslar
+ * @last_modified 2024-02-03 - Gesslar
+ *
+ * @history
+ * 2024-02-03 - Gesslar - Created
+ */
+
+inherit STD_DAEMON;
+
+// Forward declarations
+public void rehash_config();
+public mixed get_mud_config(string key);
+
+private nosave string DEFAULT_CONFIG = "/adm/etc/default.lpml";
+private nosave string CONFIG_FILE = "/adm/custom/config.lpml";
+private nosave mapping config = ([ ]);
+private nosave int loaded = false;
+/**
+ * Initializes the configuration daemon.
+ *
+ * Sets the daemon to persist and loads the initial configuration.
+ */
+void setup() {
+  set_no_clean(1);
+  rehash_config();
+
+  loaded = true;
+}
+
+/**
+ * Retrieves a configuration value by key.
+ *
+ * The key may be a flat top-level key (`"PORT"`) or a dot-separated
+ * path into nested mappings (`"RESOURCE.GLOBAL_SPAWN_CHANCE"`).
+ * Dotted paths are resolved via `dot_walk`, so any hop that misses
+ * a key — or hits a non-mapping intermediate — surfaces the same
+ * "Invalid key" error as a missing top-level key.
+ *
+ * @param {string} key - The configuration key or dot-separated path
+ *                       to look up.
+ * @returns {mixed} The value at `key`. Sub-mappings are returned
+ *                  as-is when the path stops at a non-leaf.
+ * @errors If config is null, key is missing, or the path cannot be
+ *         resolved.
+ */
+public mixed get_mud_config(string key) {
+  mixed value;
+
+  if(!loaded)
+    return null;
+
+  if(nullp(config))
+    error("get_mud_config: No configuration found.");
+
+  if(!key)
+    error("get_mud_config: Missing key.");
+
+  value = dot_walk(config, key);
+
+  if(nullp(value))
+    error("get_mud_config: Invalid key: " + key + ".");
+
+  return value;
+}
+
+/**
+ * Reloads configuration from both default and override files.
+ *
+ * Loads and merges configurations in this order:
+ * 1. /adm/etc/default.lpml - Base configuration
+ * 2. /adm/custom/config.lpml - Local overrides
+ *
+ * Later values override earlier ones for the same keys.
+ */
+public void rehash_config() {
+  mapping temp;
+
+  if(file_exists(DEFAULT_CONFIG)) {
+    temp = lpml_decode(read_file(DEFAULT_CONFIG));
+
+    if(mapp(temp))
+      config += temp;
+  }
+
+  if(file_exists(CONFIG_FILE)) {
+    temp = lpml_decode(read_file(CONFIG_FILE));
+
+    if(mapp(temp))
+      config += temp;
+  }
+}
+
+/**
+ * Returns a copy of the entire configuration mapping.
+ *
+ * @returns {mapping} A copy of the current configuration
+ */
+mapping get_all_config() {
+  return copy(config);
+}

@@ -1,0 +1,131 @@
+/**
+ * @file /std/test/runner.lpc
+ * Base for area test runners. An area runner inherits this and
+ * has no other obligation — run_tests() globs *.test.c siblings
+ * of the inheriting runner, clones each, calls run(), and
+ * prints an aggregate summary.
+ *
+ * Direct usage: TEST_RUNNER_FOR_AREA->run_tests()
+ */
+
+inherit STD_DAEMON;
+
+private nosave string check = sprintf("\e[32m%c\e[0m", 0x2714);
+private nosave string cross = sprintf("\e[31m%c\e[0m", 0x2718);
+
+/**
+ * Directory whose *.test.c files this runner runs. Defaults to the directory
+ * of the inheriting object's source file. Override to point elsewhere.
+ */
+protected string test_dir() {
+  string fname = file_name(this_object());
+  string *parts = explode(fname, "/");
+  // Keep the leading slash: file efuns don't care, but the path-access
+  // security model matches its rules against absolute paths, so a
+  // slash-less dir is denied by every rule (including the /** catch-all)
+  // once SECURITY_ENFORCE_PATHS is on.
+  return prepend(implode(parts[0..<2], "/"), "/") + "/";
+}
+
+private string indent_lines(string text) {
+  string *lines = explode(text, "\n");
+  lines = map(lines, (: sprintf("      %s", trim($1)) :));
+  return implode(lines, "\n");
+}
+
+void run_tests() {
+  string dir = test_dir();
+  string *files = get_dir(dir + "*.test.lpc");
+  int total_passed = 0, total_failed = 0, total_pending = 0;
+  mixed *all_failures = ({});
+  mixed *all_pendings = ({});
+
+  if(!sizeof(files)) {
+    printf("No test files found in %s\n", dir);
+    return;
+  }
+
+  printf("\n== Tests in %s (%d file%s) ==\n",
+    dir, sizeof(files), sizeof(files) == 1 ? "" : "s");
+
+  // Suppress catch-log noise from sad-path tests. Window is generous; the
+  // master auto-clears at the deadline if our explicit clear below never
+  // runs.
+  master()->set_test_mode(300);
+
+  catch{
+    foreach(string file in files) {
+      string path = dir + file;
+      object ob;
+      string err, mark, suffix;
+      mixed *results;
+      int passed, failed, pending_ct;
+      mixed *failures, *pendings;
+
+      reset_eval_cost();
+
+      err = catch(ob = clone_object(path));
+      if(err) {
+        printf(" %s  %s — load failed\n%s\n",
+          cross, file, indent_lines(err));
+        total_failed++;
+        continue;
+      }
+
+      results = ob->run();
+      catch(destruct(ob));
+
+      // Destruct the test file's master so the next sweep recompiles
+      // from disk instead of reusing in-memory bytecode. Without this,
+      // edits to the test file (or to the source it tests) wouldn't be
+      // picked up until the next mud restart.
+      object master_ob = find_object(path);
+      if(master_ob)
+        catch(destruct(master_ob));
+
+      passed = results[0];
+      failed = results[1];
+      failures = results[2];
+      pendings = sizeof(results) > 3 ? results[3] : ({});
+      pending_ct = sizeof(pendings);
+
+      total_passed += passed;
+      total_failed += failed;
+      total_pending += pending_ct;
+
+      mark = failed ? cross : check;
+      suffix = failed ? sprintf("%d passed, %d failed", passed, failed)
+                      : sprintf("%d passed", passed);
+      if(pending_ct)
+        suffix += sprintf(", %d pending", pending_ct);
+
+      printf(" %s  %s — %s\n", mark, file, suffix);
+
+      foreach(mixed *fail in failures)
+        all_failures += ({ ({ file, fail[0], fail[1], fail[2] }) });
+      foreach(mixed *pend in pendings)
+        all_pendings += ({ ({ file, pend[0], pend[1], pend[2] }) });
+    }
+  };
+
+  master()->clear_test_mode();
+
+  if(sizeof(all_failures)) {
+    printf("\nFailures:\n");
+    foreach(mixed *fail in all_failures)
+      printf("\n  %s :: %s :: %s\n%s\n",
+        fail[0], fail[1], fail[2], indent_lines(fail[3]));
+  }
+
+  if(sizeof(all_pendings)) {
+    printf("\nPending:\n");
+    foreach(mixed *pend in all_pendings)
+      printf("  %s :: %s :: %s%s\n",
+        pend[0], pend[1], pend[2],
+        strlen(pend[3]) ? " — " + pend[3] : "");
+  }
+
+  printf("\nTotal: %d passed, %d failed%s\n",
+    total_passed, total_failed,
+    total_pending ? sprintf(", %d pending", total_pending) : "");
+}

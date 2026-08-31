@@ -1,0 +1,149 @@
+---
+title: ALARM_D
+description: Alarm daemon API reference — scheduling, dispatch, and runtime registration.
+---
+
+import {
+  ClassBrowser,
+  ClassExtends,
+  ClassMethod,
+  ClassMethodInput,
+  ClassMethodOutput,
+  ClassProperty,
+  ClassPropertyType,
+} from "../../../components/class-browser";
+
+<ClassBrowser language="lpc" name="ALARM_D" source="adm/daemons/alarm.c" type="object">
+  Schedules and executes recurring or one-shot events defined in the
+  configured alarms directory (`ALARMS_PATH`) or registered at runtime.
+  Re-evaluates the full alarm list once per wall-clock minute and
+  dispatches any alarm whose pattern matches the current minute. See the
+  [alarm system](/systems/alarm/) for types, file format, and patterns.
+
+  <ClassExtends label="inherits" name="STD_DAEMON" source="std/daemon/daemon.c" highlight="object" target="/systems/alarm/" />
+  <ClassExtends label="inherits" name="CLASS_ALARM" highlight="object" target="/systems/alarm/" />
+
+  <ClassProperty name="alarms" label="variable" highlight="variable">
+    <ClassPropertyType type="class Alarm *" highlight="type" />
+  </ClassProperty>
+
+  <ClassProperty name="cid" label="variable" highlight="variable">
+    <ClassPropertyType type="int" highlight="type" />
+  </ClassProperty>
+
+  <ClassMethod name="add_once" visibility="public varargs" highlight="function">
+    Registers a one-shot (`"O"` type) alarm at runtime — a thin wrapper
+    around `add_alarm()` that fixes the type to `"O"`. Throws if any of
+    `master`, `pattern`, `file`, or `func` is null.
+
+    <ClassMethodInput name="master" type="string" highlight="parameter">`"true"` if the alarm targets the master file, anything else otherwise</ClassMethodInput>
+    <ClassMethodInput name="pattern" type="string" highlight="parameter">When to fire, in `YY-MM-DD@HH:MM` form</ClassMethodInput>
+    <ClassMethodInput name="file" type="string" highlight="parameter">Absolute path to the target object</ClassMethodInput>
+    <ClassMethodInput name="func" type="string" highlight="parameter">Function on the target to invoke</ClassMethodInput>
+    <ClassMethodInput name="args..." type="mixed" highlight="parameter">Optional trailing arguments handed to the target function</ClassMethodInput>
+    <ClassMethodOutput type="int" highlight="type">1 on success, 0 if the alarm failed validation</ClassMethodOutput>
+  </ClassMethod>
+
+  <ClassMethod name="add_alarm" visibility="public varargs" highlight="function">
+    Registers an alarm of any type at runtime. Builds and validates the
+    alarm, appends it to the in-memory list, and persists it. Throws if
+    any of `type`, `master`, `pattern`, `file`, or `func` is null. Note
+    that `reload_alarms()` discards any alarm not present on disk.
+
+    <ClassMethodInput name="type" type="string" highlight="parameter">One-character alarm type (`O`, `H`, `D`, `W`, `M`, `Y`); `B` alarms must come from config files</ClassMethodInput>
+    <ClassMethodInput name="master" type="string" highlight="parameter">`"true"` if the alarm targets the master file</ClassMethodInput>
+    <ClassMethodInput name="pattern" type="string" highlight="parameter">Pattern string in the format for the given type</ClassMethodInput>
+    <ClassMethodInput name="file" type="string" highlight="parameter">Absolute path to the target object</ClassMethodInput>
+    <ClassMethodInput name="func" type="string" highlight="parameter">Function on the target to invoke</ClassMethodInput>
+    <ClassMethodInput name="args..." type="mixed" highlight="parameter">Optional trailing arguments</ClassMethodInput>
+    <ClassMethodOutput type="int" highlight="type">1 on success, 0 if the alarm failed validation</ClassMethodOutput>
+  </ClassMethod>
+
+  <ClassMethod name="remove_alarm" visibility="public" highlight="function">
+    Removes an alarm by its generated id and persists the change.
+
+    <ClassMethodInput name="id" type="string" highlight="parameter">The alarm id assigned in `create_alarm()`</ClassMethodInput>
+    <ClassMethodOutput type="int" highlight="type">1 if an alarm was removed, 0 if none matched</ClassMethodOutput>
+  </ClassMethod>
+
+  <ClassMethod name="find_alarm_by_id" visibility="public" highlight="function">
+    Looks up a single alarm by its unique id.
+
+    <ClassMethodInput name="id" type="string" highlight="parameter">The alarm id to search for</ClassMethodInput>
+    <ClassMethodOutput type="class Alarm" highlight="object">The matching alarm, or null if not found</ClassMethodOutput>
+  </ClassMethod>
+
+  <ClassMethod name="query_alarms" visibility="public" highlight="function">
+    Returns all currently registered alarms.
+
+    <ClassMethodOutput type="class Alarm *" highlight="object">The full alarm list</ClassMethodOutput>
+  </ClassMethod>
+
+  <ClassMethod name="reload_alarms" visibility="public" highlight="function">
+    Rebuilds the in-memory list from disk — clears the current alarms,
+    scans `ALARMS_PATH` for `*.txt` files, parses each, and persists the
+    result. Discards any alarms added at runtime.
+
+    <ClassMethodOutput type="void" highlight="type" />
+  </ClassMethod>
+
+  <ClassMethod name="create_alarm" visibility="public" highlight="function">
+    Builds and validates an alarm from parsed parts in the order
+    `({ type, pattern, master, file, func, args... })`. Assigns a
+    UUID-based id. Returns null if the parts list is too short or
+    validation fails.
+
+    <ClassMethodInput name="parts" type="string *" highlight="parameter">The parsed config line — at least 5 elements</ClassMethodInput>
+    <ClassMethodInput name="silent" type="int" highlight="parameter">When non-zero, validation failures return null quietly instead of throwing</ClassMethodInput>
+    <ClassMethodOutput type="class Alarm" highlight="object">The constructed alarm, or null</ClassMethodOutput>
+  </ClassMethod>
+
+  <ClassMethod name="calculate_alarm_time" visibility="public" highlight="function">
+    Computes the next execution time for an alarm based on its type and
+    pattern.
+
+    <ClassMethodInput name="alarm" type="class Alarm" highlight="parameter">The alarm to calculate for</ClassMethodInput>
+    <ClassMethodInput name="next" type="int" highlight="parameter">1 to force the strictly-future occurrence, 0 to allow the current minute</ClassMethodInput>
+    <ClassMethodOutput type="int" highlight="type">Unix timestamp of the next execution, or -1 on error</ClassMethodOutput>
+  </ClassMethod>
+
+  <ClassMethod name="validate_alarm" visibility="public" highlight="function">
+    Validates an alarm: target file exists and loads, target function
+    exists, and (for `"O"` alarms) the time is not in the past.
+
+    <ClassMethodInput name="alarm" type="class Alarm" highlight="parameter">The alarm to validate</ClassMethodInput>
+    <ClassMethodInput name="silent" type="int" highlight="parameter">0 to throw on failure, 1 to log and return 0</ClassMethodInput>
+    <ClassMethodOutput type="int" highlight="type">1 if valid, 0 if invalid</ClassMethodOutput>
+  </ClassMethod>
+
+  <ClassMethod name="time_to_next_poll" visibility="public" highlight="function">
+    Reports how long until the next scheduled poll.
+
+    <ClassMethodOutput type="int" highlight="type">Seconds until the next poll, or -1 if none is scheduled</ClassMethodOutput>
+  </ClassMethod>
+
+  <ClassMethod name="poll_alarms" visibility="public" highlight="function">
+    The scheduling engine. Re-schedules itself for the start of the next
+    minute, then fires every alarm whose occurrence falls in the current
+    minute and has not already run, cleaning up expired one-shots.
+
+    <ClassMethodOutput type="void" highlight="type" />
+  </ClassMethod>
+
+  <ClassMethod name="execute_boot_alarms" visibility="public" highlight="function">
+    Handler for `SIG_SYS_BOOT`. Schedules every `"B"` (Boot) alarm to run
+    after its configured seconds-after-boot delay. Rejects callers other
+    than the signal daemon.
+
+    <ClassMethodOutput type="void" highlight="type" />
+  </ClassMethod>
+
+  <ClassMethod name="execute_alarm" visibility="private" highlight="function">
+    Loads an alarm's target file and invokes its handler with the alarm's
+    arguments. Any failure is logged to `system/alarm` rather than
+    propagated.
+
+    <ClassMethodInput name="alarm" type="class Alarm" highlight="parameter">The alarm to execute</ClassMethodInput>
+    <ClassMethodOutput type="void" highlight="type" />
+  </ClassMethod>
+</ClassBrowser>

@@ -1,0 +1,66 @@
+/**
+ * @file /d/tunnels/tunnels_base.lpc
+ *
+ * Inheritable base for the virtual tunnel rooms. Sets up terrain
+ * and zone, delegates room population to the tunnels daemon, and
+ * handles per-room mob respawn on reset.
+ *
+ * @created 2024-08-25 - Gesslar
+ * @last_modified 2024-08-25 - Gesslar
+ *
+ * @history
+ * 2024-08-25 - Gesslar - Created
+ */
+
+inherit STD_ROOM;
+
+public void repopulate();
+
+/** @type {STD_NPC*} */
+private nosave mapping *__mobs = ({});
+private nosave float spawn_chance = 8.0;
+
+void virtual_setup(mixed args...) {
+  string file = args[0];
+
+  set_light(0);
+  set_terrain("tunnels");
+  set_zone("twisting_tunnels");
+
+  __DIR__ "tunnels_daemon"->setup_exits(this_object(), file);
+  __DIR__ "tunnels_daemon"->setup_short(this_object());
+  __DIR__ "tunnels_daemon"->setup_long(this_object());
+
+  add_reset((: repopulate :));
+}
+
+public void repopulate() {
+  /** @type {STD_NPC} */ object mob;
+
+  __mobs -= ({ 0 });
+
+  if(sizeof(filter(__mobs, (: $1->in_combat() :))))
+    return;
+
+  foreach(mob in __mobs) {
+    if(objectp(mob)) {
+      mob->simple_action("$N $vscurry away into the darkness.");
+      mob->clean_remove();
+    }
+  }
+
+  if(random_float(100.0) < spawn_chance) {
+    mapping mob_data = element_of_weighted(
+      __DIR__ "tunnels_daemon"->query_mob_files()
+    );
+    string file = mob_data["path"];
+    int level = random_clamp(mob_data["level"][0], mob_data["level"][1]);
+
+    mob = add_inventory(file);
+    mob->set_level(level);
+
+    __mobs += ({ mob });
+
+    mob->simple_action("$N $vappear from the shadows.");
+  }
+}

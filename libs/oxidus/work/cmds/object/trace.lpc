@@ -1,0 +1,169 @@
+/**
+ * @file /cmds/object/trace.lpc
+ *
+ * Command to find every loaded object matching a blueprint - the master and
+ * all of its clones (via the children() efun). With -d, the clones are
+ * destructed; when a blueprint has no clones, -d destructs the master copy
+ * itself. Player bodies are virtual, so their file names never match a typed
+ * blueprint and children() cannot surface them here.
+ *
+ * @created 2026-07-18 - Gesslar
+ * @last_modified 2026-07-18 - Gesslar
+ *
+ * @history
+ * 2026-07-18 - Gesslar - Created
+ */
+
+inherit STD_CMD;
+
+private mixed do_trace(object caller, string spec, int del);
+private mixed delete_matches(object caller, string blueprint, object master_ob,
+  object *clone_list);
+private string resolve_blueprint(object caller, string spec);
+private string strip_ext(string p);
+
+void setup() {
+  usage_text =
+    "trace <file|object>\n"
+    "trace -d <file|object>";
+  help_text =
+    "Finds every loaded object matching <file|object> - the master "
+    "(blueprint) and all of its clones.\n"
+    "\n"
+    "<file|object> may be a file path (absolute or relative to your current "
+    "working directory) or an object reference ('me', 'here', something in "
+    "your inventory or room, or a living by name), whose blueprint is used.\n"
+    "\n"
+    "With -d, the matching clones are destructed. If a blueprint has no "
+    "clones, the master copy itself is destructed instead.\n"
+    "\n"
+    "See also: clone, dest, update";
+}
+
+mixed main(/** @type {STD_PLAYER} */ object caller, string str) {
+  int del;
+  string spec;
+
+  if(!str)
+    return _usage(caller);
+
+  if(sscanf(str, "-d %s", spec) == 1)
+    del = 1;
+  else
+    spec = str;
+
+  spec = trim(spec);
+
+  if(spec == "")
+    return _usage(caller);
+
+  return do_trace(caller, spec, del);
+}
+
+private mixed do_trace(object caller, string spec, int del) {
+  string blueprint = resolve_blueprint(caller, spec);
+
+  if(!blueprint)
+    return _error(caller, "Could not resolve '%s' to a file or object.", spec);
+
+  object *kids = children(blueprint);
+  object master_ob = find_object(blueprint);
+  object *clone_list = filter(kids, (: clonep :));
+
+  if(del)
+    return delete_matches(caller, blueprint, master_ob, clone_list);
+
+  if(!sizeof(kids))
+    return _info(caller, "No loaded objects match %s.", blueprint);
+
+  object *ordered = (objectp(master_ob) ? ({ master_ob }) : ({})) + clone_list;
+  string *out = ({ sprintf("Objects matching %s:", blueprint) });
+
+  foreach(object ob in ordered)
+    if(objectp(ob))
+      out += ({ sprintf("  %s%s", file_name(ob),
+        clonep(ob) ? "" : "   (master)") });
+
+  out += ({ "" });
+  out += ({ sprintf("%d clone%s, master %sloaded.", sizeof(clone_list),
+    sizeof(clone_list) == 1 ? "" : "s", objectp(master_ob) ? "" : "not ") });
+
+  return out;
+}
+
+/**
+ * 
+ * @param caller 
+ * @param blueprint 
+ * @param {STD_OBJECT} master_ob 
+ * @param clone_list 
+ */
+private mixed delete_matches(object caller, string blueprint, object master_ob,
+                             object *clone_list) {
+  int done;
+
+  /** @type {STD_OBJECT} */ object ob;
+  if(sizeof(clone_list)) {
+    foreach(ob in clone_list) {
+      if(!objectp(ob))
+        continue;
+
+      catch(ob->remove());
+
+      if(objectp(ob))
+        catch(destruct(ob));
+
+      done++;
+    }
+
+    return _ok(caller, "Destructed %d clone%s of %s.", done,
+      done == 1 ? "" : "s", blueprint);
+  }
+
+  if(objectp(master_ob)) {
+    catch(master_ob->remove());
+
+    if(objectp(master_ob))
+      catch(destruct(master_ob));
+
+    return _ok(caller, "No clones; destructed the master copy of %s.", blueprint);
+  }
+
+  return _info(caller, "No loaded objects match %s.", blueprint);
+}
+
+/**
+ * 
+ * @param {STD_PLAYER} caller 
+ * @param spec 
+ */
+private string resolve_blueprint(object caller, string spec) {
+  // A file path takes precedence, so an object reference never shadows a real
+  // file you named. get_object() only loads real paths, and we've already
+  // failed the file test by the time we call it, so it won't load anything.
+  string path = resolve_path(caller->query_env("cwd") ?? "", spec);
+
+  // source_file() always returns a .lpc candidate, so test real existence;
+  // otherwise a bare name like "me" would never reach get_object() below.
+  if(file_size(source_file(path)) >= 0)
+    return strip_ext(path);
+
+  object ob = get_object(spec, caller);
+
+  if(objectp(ob))
+    return base_name(ob);
+
+  return 0;
+}
+
+// children() keys on the extensionless object name, so drop any source
+// extension the operator may have typed.
+private string strip_ext(string p) {
+  if(strlen(p) > 4 && p[<4..] == ".lpc")
+    return p[0..<5];
+
+  if(strlen(p) > 2 && p[<2..] == ".lpc")
+    return p[0..<3];
+
+  return p;
+}

@@ -1,0 +1,156 @@
+/**
+ * @file /adm/obj/error_tester.lpc
+ *
+ * Crawls the entire mudlib, test-loading every source file it finds in order
+ * to surface any that fail to compile. Failures are echoed to the caller and
+ * appended to /log/ERRORS.
+ *
+ * Do not run this on PRODUCTION!
+ *
+ * @created 2022-03-23 - Gesslar
+ * @last_modified 2026-08-23 - Gesslar
+ *
+ * @history
+ * 2022-03-23 - Gesslar - Created
+ * 2026-08-23 - Gesslar - Converted the call_out chains to async/await
+ */
+
+inherit STD_ITEM;
+
+private async void collect_dir();
+private void check_file();
+private void report();
+
+private nosave string *dirs_to_check = ({ });
+private nosave string *files_to_check = ({ });
+private nosave mixed *errs = ({ });
+private nosave string *exclude = ({
+  ".", "..", "attic", "BACKUP", "old", "backup",
+  "ATTIC", ".git", ".vscode", "tmp", "TMP", "u",
+  "log", "doc", "plans", "players", "data", "_attic",
+  "weapon2", "removed", "cards", "fluffos", ".github", "ARCHIVE",
+  "archive", "home", "node_modules", ".claude", "tests",
+});
+
+private nosave int files_checked = 0;
+private nosave int dirs_checked = 0;
+
+private nosave float started;
+private nosave object notify;
+
+private nosave string FILE_COLOUR = "{{b06ba3}}";
+private nosave string DIR_COLOUR  = "{{1fa378}}";
+
+/**
+ * Clones a fresh tester and awaits its crawl. If the crawl aborts, the
+ * rejection surfaces here rather than vanishing, and the clone is cleaned up.
+ *
+ * @param {STD_PLAYER} who - The body to report progress and results to.
+ */
+public async void runit(object who) {
+  object tester = new(base_name());
+  mixed err = acatch(await tester->do_check(who));
+
+  if(err) {
+    message("info", `{{f04747}}=== ERROR FINDER ABORTED: ${err} ==={{res}}\n`, who);
+
+    if(objectp(tester))
+      tester->remove();
+  }
+}
+
+/**
+ * Walks the mudlib from the root down, collecting directories and test-loading
+ * every source file found. Yields to the event loop between units of work so
+ * the driver keeps serving players, then reports and destructs.
+ *
+ * @param {STD_PLAYER} who - The body to report progress and results to.
+ */
+public async void do_check(object who) {
+  notify = who;
+  started = time_frac();
+
+  message("info", "=== STARTING THE ERROR FINDER ===\n", notify);
+  message("info", `=== Running as ${query_privs(this_object())} ===\n`, notify);
+
+  rm("/log/ERRORS");
+
+  dirs_to_check = ({ "/" });
+
+  while(sizeof(dirs_to_check) || sizeof(files_to_check)) {
+    if(sizeof(dirs_to_check))
+      await collect_dir();
+
+    if(sizeof(files_to_check))
+      check_file();
+
+    await async_yield();
+  }
+
+  report();
+}
+
+/**
+ * Pops the next directory off the queue, lists it on a worker thread, and
+ * appends its subdirectories and source files to their respective queues. A
+ * directory that cannot be listed is skipped rather than aborting the crawl.
+ */
+private async void collect_dir() {
+  string current = dirs_to_check[0];
+  string *paths, *files, *dirs;
+  mixed err;
+
+  dirs_to_check = dirs_to_check[1..];
+  dirs_checked++;
+
+  message("info", `${DIR_COLOUR}COLLECTING: ${current}{{res}}\n`, notify);
+
+  current = append(current, "/");
+
+  err = acatch {
+    paths = await async_getdir(current);
+  };
+
+  if(err || !pointerp(paths))
+    return;
+
+  paths -= exclude;
+  paths = map(paths, (: $2 + $1 :), current);
+
+  files = filter(paths, (: file_size($1) > 0 && (ends_with($1, ".lpc") || ends_with($1, ".lpc")) :));
+  dirs = filter(paths, (: file_size($1) == -2 :));
+
+  dirs_to_check += dirs;
+  files_to_check += files;
+}
+
+/**
+ * Pops the next source file off the queue and test-loads it, recording and
+ * logging any failure to compile.
+ */
+private void check_file() {
+  string file = files_to_check[0];
+  string err;
+
+  files_to_check = files_to_check[1..];
+  files_checked++;
+
+  message("info", `${FILE_COLOUR} - CHECKING: ${file}{{res}}\n`, notify);
+
+  if(err = catch(test_load(file))) {
+    errs += ({ ({ file, err }) });
+    write_file("/log/ERRORS", `${file}\n${err}\n`);
+  }
+}
+
+/**
+ * Reports the crawl totals and duration to the caller, then destructs.
+ */
+private void report() {
+  message("info", "\aDone!\n", notify);
+  message("info", sprintf("%d dirs and %d files checked.\n", dirs_checked, files_checked), notify);
+  message("info", sprintf("%d file(s) failed to load.\n", sizeof(errs)), notify);
+  message("info", sprintf("Duration: %.2fs\n", time_frac() - started), notify);
+
+  remove();
+}

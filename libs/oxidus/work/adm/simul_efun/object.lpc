@@ -1,0 +1,612 @@
+/**
+ * @file /adm/simul_efun/object.lpc
+ *
+ * Object manipulation and querying simul-efuns. Provides utilities for
+ * finding, filtering and managing game objects, including specialized
+ * functions for handling players, NPCs and environments.
+ *
+ * @created 2005-10-22 - Tacitus
+ * @last_modified 2024-03-11
+ *
+ * @history
+ * 2005-10-22 - Tacitus - Grouped functions into single file
+ */
+
+#include <simul_efun.h>
+
+/**
+ * Resolves a target object from a specifier string. Checks, in order: the
+ * 'me'/'here' keywords, the context object's inventory and its environment,
+ * livings by name, and finally a file path (loading it if necessary). The
+ * search context defaults to this_body() when no object is supplied.
+ *
+ * @param {string} str - The object specifier.
+ * @param {object} [player] - Context object for relative lookups; defaults to
+ *                            this_body() when not an object.
+ * @returns {object} The first matching object, or 0 if none matched.
+ * @example
+ * get_object("sword");           // present in you or your environment
+ * get_object("me", this_body()); // yourself
+ * get_object("here");            // your environment
+ */
+varargs object get_object(string str, object player) {
+  object ob, env;
+
+  if(!str)
+    return 0;
+
+  if(!objectp(player))
+    player = this_body();
+
+  if(objectp(player)) {
+    if(str == "me")
+      return player;
+
+    if(ob = present(str, player))
+      return ob;
+
+    if(env = environment(player)) {
+      if(str == "here" || str == "env" || str == "environment")
+        return env;
+
+      if(ob = present(str, env))
+        return ob;
+    }
+  }
+
+  if(ob = find_player(str))
+    return ob;
+
+  if(ob = find_living(str))
+    return ob;
+
+  if(objectp(player))
+    str = resolve_path(/** @type {STD_BODY} */ (player)->query_env("cwd"), str);
+
+  if(ob = find_object(str))
+    return ob;
+
+  catch(ob = load_object(str));
+
+  return ob;
+}
+
+/**
+ * Retrieves the top-level environment of the specified object, traversing up
+ * through nested environments.
+ *
+ * @param {object} ob - The object to get the top-level environment of.
+ * @returns {object} The top-level environment of the object. Usually STD_ROOM.
+ */
+varargs object top_environment(object ob) {
+  ob ??= previous_object();
+
+  object test, env;
+
+  if(!objectp(ob))
+    ob = previous_object();
+
+  if(!objectp(ob))
+    error("Missing argument 1 to top_environment()");
+
+  if(call_if(ob, "is_room"))
+    return ob;
+
+  if(!environment(ob))
+    return ob;
+
+  while(test = environment(ob)) {
+    env = test;
+    ob = env;
+
+    if(call_if(ob, "is_room"))
+      break;
+  }
+
+  return env;
+}
+
+/**
+ * Retrieves all environments of the specified object, traversing up through
+ * nested environments.
+ *
+ * @param {object} ob - The object to get the environments of.
+ * @returns {object*} An array of environments of the object.
+ */
+varargs object *all_environment(object ob) {
+  ob ??= previous_object();
+
+  object *envs = ({});
+
+  while(ob = environment(ob)) {
+    push(ref envs, ob);
+
+    if(call_if(ob, "is_room"))
+      break;
+  }
+
+  return envs;
+}
+
+/**
+ * Retrieves all living objects present in the specified room.
+ *
+ * @param {object STD_ROOM} room - The room to search for living objects in.
+ * @returns {STD_BODY*} An array of living objects present in the room.
+ */
+object *present_livings(object room) {
+  if(!room)
+    return ({});
+
+  return filter(all_inventory(room), (: living($1) :));
+}
+
+/**
+ * Retrieves all player objects present in the specified room.
+ *
+ * @param {object STD_ROOM} room - The room to search for player objects in.
+ * @returns {object STD_PLAYER*} An array of player objects present in the room.
+ */
+object *present_players(object room) {
+  if(!room)
+    return ({});
+
+  return filter(present_livings(room), (: userp :));
+}
+
+/**
+ * Retrieves all non-player characters (NPCs) present in the specified room.
+ *
+ * @param {object STD_ROOM} room - The room to search for NPCs in.
+ * @returns {object STD_NPC*} An array of NPC objects present in the room.
+ */
+object *present_npcs(object room) {
+  if(!room)
+    return ({});
+
+  return filter(present_livings(room), (: !userp($1) :));
+}
+
+/**
+ * Locates a living object by the specified name within the specified room.
+ *
+ * @param {string} id - The name of the living object to locate.
+ * @param {object STD_ROOM} room - The room to search for the living object in.
+ * @returns {object} The located living object, or 0 if not found.
+ */
+object get_living(string id, object room) {
+  object ob;
+
+  if(!room)
+    return 0;
+
+  ob = present(id, room);
+  if(ob && living(ob))
+    return ob;
+
+  return 0;
+}
+
+/**
+ * Locates living objects by the specified names within the specified room.
+ *
+ * @param {string|string*} ids - The name of the living objects to locate.
+ * @param {object STD_ROOM} room - The room to search for the living objects in.
+ * @returns {object*} An array of located living objects.
+ */
+object *get_livings(mixed ids, object room) {
+  object *obs, *ret = ({});
+
+  if(!room)
+    return ret;
+
+  if(!pointerp(ids))
+    ids = ({ ids });
+
+  ids = filter(ids, (: stringp :));
+
+  obs = map(ids, (: get_living($1, $(room)) :));
+
+  return obs;
+}
+
+/**
+ * Locates a player object by the specified name within the specified room.
+ *
+ * @param {string} name - The name of the player to locate.
+ * @param {object} room - The room to search for the player in.
+ * @returns {object STD_PLAYER|0} The located player object, or 0 if not found.
+ */
+object get_player(string name, object room) {
+  object ob;
+
+  ob = get_living(name, room);
+
+  if(ob && userp(ob))
+    return ob;
+
+  return 0;
+}
+
+/**
+ * Locates player objects by the specified names within a room.
+ *
+ * @param {string|string*} names - The name of the player objects to locate.
+ * @param {object STD_ROOM} room - The room to search for the player objects in.
+ * @returns {object STD_PLAYER*} An array of located player objects.
+ */
+object *get_players(mixed names, object room) {
+  object *ret = ({});
+
+  ret = get_livings(names, room);
+  ret = filter(ret, (: userp :));
+
+  return ret;
+}
+
+/**
+ * This is a simul_efun that will return the body object of the current living
+ * who executed a command.
+ *
+ * It is used as a replacement for this_player().
+ *
+ * @returns {STD_BODY} The body of the current calling living.
+ */
+object this_body() {
+  return efun::this_player();
+}
+
+/**
+ * This is a simul_efun that will return the object that called the current
+ * operation. This may be this_body(), but it may also be a shadow another
+ * player who initiated the chain. For example, a developer using the force
+ * command.
+ *
+ * Be careful with this one, you don't want to accidentally perform operations
+ * on the wrong object.
+ *
+ * * @returns {object STD_PLAYER|object STD_NPC} The object that called the current operation.
+ */
+object this_caller() {
+  return efun::this_player(1);
+}
+
+/**
+ * Retrieves all clones of the specified file present in the specified
+ * container. If the file is an object, it will retrieve all clones using the
+ * object's base name.
+ *
+ * If container is not provided, will default to previous_object().
+ *
+ * @param {string|object} file - The file or object to look for clones of in a container.
+ * @param {object STD_CONTAINER} [container] - The container to search.
+ * @returns {object*} An array of clones of the specified file present in the container.
+ */
+object *present_clones(mixed file, object container) {
+  object *obs;
+  object *result;
+
+  if(objectp(file))
+    file = base_name(file);
+
+  if(!stringp(file))
+    return ({});
+
+  if(nullp(container))
+    container = previous_object();
+
+  obs = all_inventory(container);
+
+  result = filter(obs, (: base_name($1) == $(file) :));
+
+  return result;
+}
+
+/**
+ * This simul_efun will return 1 if the caller of the current operation is the
+ * specified object, or if the caller is the object with the specified file
+ * name.
+ *
+ * *NOTE* This simul_efun will not succeed when called from other functions in
+ * the simul_efun object, as previous_object() does not count the object
+ * itself in its call list.
+ *
+ * @param {mixed} ob - The object or file name to compare the caller to.
+ * @returns {int} 1 if the caller is the specified object, 0 otherwise.
+ */
+int caller_is(mixed ob) {
+  object prev = previous_object(1);
+
+  if(objectp(ob))
+    return this_caller() == ob;
+
+  if(stringp(ob))
+    return base_name(ob) == base_name(prev);
+
+  return 0;
+}
+
+/**
+ * This simul_efun will return 1 if the two objects are in the same
+ * environment, or 0 if they are not.
+ *
+ * If top_env is set to 1, the simul_efun will check if the two objects share
+ * the same top-level environment.
+ *
+ * @param {object} one - The first object to compare.
+ * @param {object} two - The second object to compare.
+ * @param {int} top_env - Whether to check the top-level environment.
+ * @returns {int} 1 if the objects are in the same environment, 0 otherwise.
+ */
+varargs int same_env_check(object one, object two, int top_env) {
+  object env1, env2;
+
+  if(!objectp(one) || !objectp(two))
+    return 0;
+
+  if(top_env) {
+    env1 = top_environment(one);
+    env2 = top_environment(two);
+  } else {
+    env1 = environment(one);
+    env2 = environment(two);
+  }
+
+  if(!env1 || !env2)
+    return 0;
+
+  return env1 == env2;
+}
+
+private object *filter_by_id(object *obs, string arg) {
+  return (object *)filter(obs, (: $1->id($(arg)) :));
+}
+
+private object *filter_by_visibility(/** @type {STD_BODY} */ object tp, object *obs) {
+  return (object *)filter(obs, (: $(tp)->can_see($1) :));
+}
+
+private object *apply_custom_filter(object *obs, function f, object tp) {
+  return (object *)filter(obs, (: (*$(f))($1, $(tp)) :));
+}
+
+private object *get_all_inventory(object env) {
+  return all_inventory(env);
+}
+
+/**
+ * This simul_efun will find all objects in a container, such as a room,
+ * chest, player's inventory, that match the specified argument. The argument
+ * can be a name, ID, or other identifier that can be used to match objects.
+ *
+ * The simul_efun will then filter the objects based on the visibility of the
+ * calling object, and apply an additional custom filter function if provided.
+ *
+ * @param {object STD_PLAYER | object STD_NPC} user - The body object of the player or NPC searching
+ * @param {string} arg - The argument to match objects against
+ * @param {object} source - The object to search within, such as a room or
+ *                          container. If not provided, the environment of the
+ *                          calling object will be used.
+ * @param {function} f - An optional custom filter function to further filter
+ *                       the objects.
+ * @returns {object* | undefined} An array of located objects or undefined (0) if none are found.
+ */
+varargs object *find_targets(object user, string arg, object source, function f) {
+  object *obs = ({});
+  object env;
+
+  if(nullp(user))
+    error("Missing argument 1 for find_targets");
+
+  // Determine the environment to search in
+  if(objectp(source))
+    env = source;
+  else
+    env = environment(user);
+
+  if(!env)
+    return undefined;
+
+  // Get all inventory objects from the determined environment
+  obs = get_all_inventory(env);
+
+  // Filter objects by ID if argument is provided
+  if(arg)
+    obs = filter_by_id(obs, arg);
+
+  // Filter objects by visibility
+  obs = filter_by_visibility(user, obs);
+
+  // Apply the additional custom filter function if provided
+  if(valid_function(f))
+    obs = apply_custom_filter(obs, f, user);
+
+  return obs;
+}
+
+/**
+ * This simul_efun will find a single object in a container, such as a room,
+ * chest, player's inventory, that matches the specified argument. The
+ * argument can be a name, ID, or other identifier that can be used to match
+ * objects.
+ *
+ * The simul_efun will then filter the objects based on the visibility of the
+ * calling object, and apply an additional custom filter function if provided.
+ *
+ * @param {object STD_PLAYER|object STD_NPC} user - The body object of the player or NPC
+ *  searching
+ * @param {string} arg - The argument to match objects against
+ * @param {object} source - The object to search within, such as a room or
+ *                          container. If not provided, the environment of the
+ *                          calling object will be used.
+ * @param {function} f - An optional custom filter function to further filter
+ * @returns {object} The located object, or 0 if not found.
+ */
+varargs object find_target(object user, string arg, object source, function f) {
+  object *obs;
+  string base_arg;
+  int num, sz;
+
+  // Parse the argument for a numeric index
+  if(sscanf(arg, "%s %d", base_arg, num) != 2)
+    base_arg = arg;
+
+  obs = find_targets(user, base_arg, source, f);
+
+  sz = sizeof(obs);
+  if(!sz)
+    return 0;
+
+  if(!num)
+    return obs[0];
+
+  if(num < 1 || num > sz)
+    return 0;
+
+  return obs[num - 1];
+}
+
+/**
+ * Retrieves all clones of the specified file in the game. If the file is an
+ * object, it will retrieve all clones using the object's base name. If
+ * env_only is set to 1, the simul_efun will only return clones that have an
+ * environment.
+ *
+ * @param {object|string} file - The file or object to find clones of.
+ * @param {int} [env_only] - Whether to only return clones that have an environment.
+ * @returns {object*} An array of objects that are clones of the specified file.
+ */
+varargs object *clones(mixed file, int env_only) {
+  object *obs;
+
+  if(objectp(file))
+    file = base_name(file);
+
+  if(!stringp(file))
+    return ({});
+
+  obs = children(file);
+  if(env_only)
+    obs = filter(obs, (: environment :));
+
+  obs = filter(obs, (: clonep :));
+
+  return obs;
+}
+
+/**
+ * Retrieves a nested array of objects that can be reached within a container.
+ *
+ * This function checks the accessibility of objects within a container from
+ * the perspective of another object, including nested containers.
+ *
+ * @param {STD_CONTAINER} container - The container object we are checking
+ * @param {STD_ITEM} [pov] - The perspective object doing the checking.
+ * @returns {mixed*} A nested array of objects that can be reached in the container.
+ */
+varargs mixed *accessible_objects(object container, object pov) {
+  mixed  *result;
+  object *contents, content;
+  object *nested_contents;
+
+  assert_arg(objectp(container), 1, "Invalid object.");
+  assert_arg(nullp(pov) || objectp(pov), 2, "Invalid object.");
+
+  if(!container->inventory_accessible())
+    return 0;
+
+  if(!sizeof(contents = all_inventory(container)))
+    return 0;
+
+  result = ({container});
+
+  foreach(content in contents) {
+    nested_contents = accessible_objects(content, pov);
+
+    if(nested_contents == 0)
+      result += ({content});
+    else
+      result += ({content,nested_contents});
+  }
+
+  return result;
+}
+
+/**
+ * Retrieves a flat array of objects that can be reached within a container.
+ *
+ * This function checks the accessibility of objects within a container from
+ * the perspective of another object, including nested containers, and returns
+ * a flat array of all reachable objects.
+ *
+ * @param {STD_CONTAINER} container - The container object we are checking
+ * @param {STD_ITEM} [pov] - The perspective object doing the checking.
+ * @returns {STD_ITEM*} An array of objects that can be reached in the container.
+ */
+varargs object *accessible_objects_flat(object container, object pov) {
+  return flatten(accessible_objects(container, pov));
+}
+
+/**
+ * Builds the composite short description for an object.
+ *
+ * Combines the object's base short with any extra shorts, rendering
+ * each extra short parenthesized and space-separated after the base.
+ * When the base short is absent, only the extra shorts are returned;
+ * when both are absent, an empty string is returned.
+ *
+ * @param {STD_OBJECT} ob - The object whose short description to build.
+ * @returns {string} The composite short description, or "" if ob is not an
+ *  object or has nothing to show.
+ */
+string ob_short(object ob) {
+  if(!objectp(ob))
+    return "";
+
+  string short = ob->query_short() ?? "";
+  string *xs = ob->query_extra_shorts() ?? ({});
+
+  xs = filter(xs, (: stringp($1) && truthy($1) :));
+
+  if(sizeof(short) && sizeof(xs))
+    return `${short} ${implode(map(xs, (: `(${$1})` :)), " ")}`;
+  if(sizeof(short) && !sizeof(xs))
+    return short;
+  if(!sizeof(short) && sizeof(xs))
+    return implode(map(xs, (: `(${$1})` :)), " ");
+
+  return "";
+}
+
+/**
+ * Builds the composite long description for an object.
+ *
+ * Combines the object's base long with any extra longs, each on its
+ * own line beneath the base. The base long is newline-terminated and
+ * each extra long is stripped of a trailing newline before joining.
+ * When the base long is absent, only the extra longs are returned;
+ * when both are absent, an empty string is returned.
+ *
+ * @param {STD_OBJECT} ob - The object whose long description to build.
+ * @returns {string} The composite long description, or "" if ob is not an
+ *  object or has nothing to show.
+ */
+string ob_long(object ob) {
+  if(!objectp(ob))
+    return "";
+
+  string long = ob->query_long() ?? "";
+  string *xl = ob->query_extra_longs() ?? ({});
+
+  xl = filter(xl, (: stringp($1) && truthy($1) :));
+  xl = map(xl, (: chop($1, "\n") :));
+
+  if(sizeof(long) && sizeof(xl))
+    return `${append(long, "\n")}\n${implode(xl, "\n")}`;
+  if(sizeof(long) && !sizeof(xl))
+    return append(long, "\n");
+  if(!sizeof(long) && sizeof(xl))
+    return implode(xl, "\n");
+
+  return "";
+}

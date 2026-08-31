@@ -1,0 +1,301 @@
+// @lpc-nocheck
+/**
+ * @file /tests/adm/daemons/account.test.lpc
+ * @description Tests for ACCOUNT_D (/adm/daemons/account.lpc) — account
+ *              creation, record storage, key read/write, character
+ *              association, and removal.
+ *
+ * Permission note: valid_manip() short-circuits on adminp(this_caller()), so
+ * every happy path here relies on `runtests` being run by an admin/owner (it
+ * always is). The negative permission path is therefore NOT exercisable from
+ * this harness — the caller is always privileged — so it is registered as a
+ * pending() rather than a failing test.
+ *
+ * Isolation: these tests mutate the live, persistent daemon and touch
+ * /data/accounts on disk. Every test defensively wipes its fixture names
+ * before and after, and _clean() removes both the in-memory record and the
+ * on-disk account file so a leftover file can't masquerade as a duplicate on
+ * the next run.
+ */
+
+#include <test.h>
+#include <daemons.h>
+
+inherit STD_TEST;
+
+#define ACCT    "oxtestacct"
+#define ACCT_B  "oxtestacctb"
+#define PW      "$6$oxsalt$oxhashvalue"
+#define CHAR_A  "oxtestchara"
+#define CHAR_B  "oxtestcharb"
+
+private void _wipe(string name) {
+  // Belt-and-suspenders isolation: drop any on-disk file and the in-memory
+  // record. remove_account() now rm()s the file itself, but a test may throw
+  // before reaching it, so we clean both here defensively.
+  catch(rm(account_file(name)));
+  catch(ACCOUNT_D->remove_account(name));
+}
+
+private void _clean() {
+  _wipe(ACCT);
+  _wipe(ACCT_B);
+}
+
+void setup() {
+  describe("create_account", ({
+    test("creates a valid account", function() {
+      _clean();
+      ASSERT_EQ(1, ACCOUNT_D->create_account(ACCT, PW));
+      ASSERT_EQ(1, valid_account(ACCT));
+      _clean();
+    }),
+    test("stored record carries password and empty character list", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      mapping record = ACCOUNT_D->load_account(ACCT);
+      ASSERT_EQ(PW, record["password"]);
+      ASSERT_EQ(({}), record["characters"]);
+      _clean();
+    }),
+    test("lower-cases the stored name", function() {
+      _clean();
+      ASSERT_EQ(1, ACCOUNT_D->create_account("OxTestAcct", PW));
+      ASSERT_EQ(1, valid_account(ACCT));
+      _clean();
+    }),
+    test("rejects a duplicate account", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ASSERT_EQ(0, ACCOUNT_D->create_account(ACCT, PW));
+      _clean();
+    }),
+    test("rejects a password not encrypted with $6$", function() {
+      _clean();
+      ASSERT_EQ(0, ACCOUNT_D->create_account(ACCT, "plaintext"));
+      ASSERT_EQ(0, valid_account(ACCT));
+      _clean();
+    }),
+    test("rejects a non-string name", function() {
+      ASSERT_EQ(0, ACCOUNT_D->create_account(5, PW));
+    }),
+    test("rejects a non-string password", function() {
+      _clean();
+      ASSERT_EQ(0, ACCOUNT_D->create_account(ACCT, 5));
+      _clean();
+    }),
+  }));
+
+  describe("valid_account", ({
+    test("false for a non-existent account", function() {
+      _clean();
+      ASSERT_EQ(0, valid_account(ACCT));
+    }),
+    test("false for a non-string name", function() {
+      ASSERT_EQ(0, valid_account(5));
+    }),
+    test("true after the account is created", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ASSERT_EQ(1, valid_account(ACCT));
+      _clean();
+    }),
+  }));
+
+  describe("load_account", ({
+    test("returns undefined for a non-existent account", function() {
+      _clean();
+      ASSERT_EQ(undefined, ACCOUNT_D->load_account(ACCT));
+    }),
+    test("returns the record after creation", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      mapping record = ACCOUNT_D->load_account(ACCT);
+      ASSERT_EQ(1, mapp(record));
+      ASSERT_EQ(PW, record["password"]);
+      _clean();
+    }),
+  }));
+
+  describe("write_account / read_account", ({
+    test("write then read round-trips a value", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ASSERT_EQ("hello", ACCOUNT_D->write_account(ACCT, "greeting", "hello"));
+      ASSERT_EQ("hello", ACCOUNT_D->read_account(ACCT, "greeting"));
+      _clean();
+    }),
+    test("read of an unset key returns undefined", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      // A mapping miss passes through as undefined (T_UNDEFINED), NOT an
+      // explicit `false`/0 (T_NUMBER) — same() distinguishes the two.
+      ASSERT_EQ(undefined, ACCOUNT_D->read_account(ACCT, "no_such_key"));
+      _clean();
+    }),
+    test("write rejects a non-string key", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ASSERT_EQ(0, ACCOUNT_D->write_account(ACCT, 5, "value"));
+      _clean();
+    }),
+    test("write rejects null data", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ASSERT_EQ(0, ACCOUNT_D->write_account(ACCT, "greeting", 0));
+      _clean();
+    }),
+    test("read of a non-existent account returns 0", function() {
+      _clean();
+      ASSERT_EQ(0, ACCOUNT_D->read_account(ACCT, "greeting"));
+    }),
+  }));
+
+  describe("character association", ({
+    test("add_character associates a character with the account", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ASSERT_EQ(1, ACCOUNT_D->add_character(ACCT, CHAR_A));
+      ASSERT_EQ(ACCT, ACCOUNT_D->character_account(CHAR_A));
+      ASSERT_EQ(({ CHAR_A }), ACCOUNT_D->account_characters(ACCT));
+      _clean();
+    }),
+    test("add_character lower-cases the character name", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ACCOUNT_D->add_character(ACCT, "OxTestCharA");
+      ASSERT_EQ(ACCT, ACCOUNT_D->character_account(CHAR_A));
+      _clean();
+    }),
+    test("add_character does not duplicate an existing character", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ACCOUNT_D->add_character(ACCT, CHAR_A);
+      ACCOUNT_D->add_character(ACCT, CHAR_A);
+      ASSERT_EQ(1, sizeof(ACCOUNT_D->account_characters(ACCT)));
+      _clean();
+    }),
+    test("add_character tracks multiple characters", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ACCOUNT_D->add_character(ACCT, CHAR_A);
+      ACCOUNT_D->add_character(ACCT, CHAR_B);
+      ASSERT_EQ(({ CHAR_A, CHAR_B }), ACCOUNT_D->account_characters(ACCT));
+      _clean();
+    }),
+    test("add_character returns undefined for an unknown account", function() {
+      _clean();
+      ASSERT_EQ(undefined, ACCOUNT_D->add_character(ACCT, CHAR_A));
+    }),
+    test("remove_character drops the association", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ACCOUNT_D->add_character(ACCT, CHAR_A);
+      ASSERT_EQ(1, ACCOUNT_D->remove_character(ACCT, CHAR_A));
+      ASSERT_EQ(0, sizeof(ACCOUNT_D->account_characters(ACCT)));
+      ASSERT_EQ(undefined, ACCOUNT_D->character_account(CHAR_A));
+      _clean();
+    }),
+    test("remove_character returns undefined for an unknown account", function() {
+      _clean();
+      ASSERT_EQ(undefined, ACCOUNT_D->remove_character(ACCT, CHAR_A));
+    }),
+    test("account_characters is undefined for an unknown account", function() {
+      _clean();
+      ASSERT_EQ(undefined, ACCOUNT_D->account_characters(ACCT));
+    }),
+    test("character_account is undefined for an unknown character", function() {
+      ASSERT_EQ(undefined, ACCOUNT_D->character_account("oxnobodychar"));
+    }),
+  }));
+
+  describe("remove_account", ({
+    test("removes an existing account", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ASSERT_EQ(1, ACCOUNT_D->remove_account(ACCT));
+      ASSERT_EQ(0, valid_account(ACCT));
+      _clean();
+    }),
+    test("clears the reverse character mapping", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ACCOUNT_D->add_character(ACCT, CHAR_A);
+      ACCOUNT_D->remove_account(ACCT);
+      ASSERT_EQ(undefined, ACCOUNT_D->character_account(CHAR_A));
+      _clean();
+    }),
+    test("returns 0 for a non-existent account", function() {
+      _clean();
+      ASSERT_EQ(0, ACCOUNT_D->remove_account(ACCT));
+    }),
+  }));
+
+  describe("case normalization", ({
+    test("valid_account is case-insensitive", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ASSERT_EQ(1, valid_account("OxTestAcct"));
+      _clean();
+    }),
+    test("load_account is case-insensitive", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      mapping record = ACCOUNT_D->load_account("OxTestAcct");
+      ASSERT_EQ(PW, record["password"]);
+      _clean();
+    }),
+    test("read_account is case-insensitive", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ACCOUNT_D->write_account(ACCT, "greeting", "hello");
+      ASSERT_EQ("hello", ACCOUNT_D->read_account("OxTestAcct", "greeting"));
+      _clean();
+    }),
+    test("create_account rejects a case-variant duplicate", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ASSERT_EQ(0, ACCOUNT_D->create_account("OxTestAcct", PW));
+      _clean();
+    }),
+    test("character_account is case-insensitive", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ACCOUNT_D->add_character(ACCT, CHAR_A);
+      ASSERT_EQ(ACCT, ACCOUNT_D->character_account("OxTestCharA"));
+      _clean();
+    }),
+  }));
+
+  describe("removal — disk persistence", ({
+    test("remove_account deletes the on-disk account file", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      // write_account() is the only path that puts a file on disk.
+      ACCOUNT_D->write_account(ACCT, "greeting", "hello");
+      ASSERT_EQ(1, file_exists(account_file(ACCT)));
+      ACCOUNT_D->remove_account(ACCT);
+      // remove_account() now rm()s the file it persisted, so no orphan is
+      // left behind.
+      ASSERT_EQ(0, file_exists(account_file(ACCT)));
+      _wipe(ACCT);
+    }),
+    test("a removed account does not resurrect from a stale file", function() {
+      _clean();
+      ACCOUNT_D->create_account(ACCT, PW);
+      ACCOUNT_D->write_account(ACCT, "greeting", "hello");
+      ACCOUNT_D->remove_account(ACCT);
+      // With the file gone, load_account() has nothing to slurp back in, so
+      // a removed account stays removed.
+      ASSERT_EQ(0, valid_account(ACCT));
+      _wipe(ACCT);
+    }),
+  }));
+
+  describe("known boundaries", ({
+    pending("valid_manip() rejects an unprivileged caller",
+      "adminp(this_caller()) short-circuits to true under the admin-run test "
+      "runner, so the rejection branch of valid_manip() cannot be reached from "
+      "here. Needs a fixture that calls in with non-admin privs."),
+  }));
+}

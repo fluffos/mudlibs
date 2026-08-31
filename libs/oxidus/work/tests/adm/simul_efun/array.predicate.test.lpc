@@ -1,0 +1,217 @@
+// @lpc-nocheck
+/**
+ * @file /tests/adm/simul_efun/array.predicate.test.lpc
+ *
+ * Tests for boolean-query simul_efuns in
+ * /adm/simul_efun/array.c — uniformp(), includes(),
+ * in_array(), same_array(), same_array_precisely(),
+ * every(), some(), intersects(), and in_range().
+ */
+
+#include <test.h>
+
+inherit STD_TEST;
+
+void setup() {
+  describe("uniformp", ({
+    test("empty array is uniform", function() {
+      ASSERT_EQ(1, uniformp(({}), "string"));
+    }),
+    test("uniform string array returns 1", function() {
+      ASSERT_EQ(1, uniformp(({ "a", "b", "c" }), "string"));
+    }),
+    test("mixed types return 0", function() {
+      ASSERT_EQ(0, uniformp(({ "a", 1, "b" }), "string"));
+    }),
+    test("uniform int array returns 1", function() {
+      ASSERT_EQ(1, uniformp(({ 1, 2, 3 }), "int"));
+    }),
+  }));
+
+  describe("includes", ({
+    test("finds an existing string element", function() {
+      ASSERT_EQ(1, includes(({ "a", "b", "c" }), "b"));
+    }),
+    test("returns 0 when element is absent", function() {
+      ASSERT_EQ(0, includes(({ "a", "b", "c" }), "z"));
+    }),
+    test("returns 0 for empty array", function() {
+      ASSERT_EQ(0, includes(({}), "anything"));
+    }),
+    test("finds first element", function() {
+      ASSERT_EQ(1, includes(({ 1, 2, 3 }), 1));
+    }),
+    test("finds last element", function() {
+      ASSERT_EQ(1, includes(({ 1, 2, 3 }), 3));
+    }),
+    test("returns 0 for non-array input", function() {
+      ASSERT_EQ(0, includes(0, "x"));
+    }),
+    test("uses custom comparator when provided", function() {
+      ASSERT_EQ(1, includes(({ 1, 2, 3, 4 }), 6,
+        (: $1 + $4 == 10 :)));
+    }),
+    test("custom comparator returns 0 when no match", function() {
+      ASSERT_EQ(0, includes(({ 1, 2, 3 }), 99,
+        (: $1 == $2 :)));
+    }),
+  }));
+
+  describe("in_array", ({
+    test("alias forwards to includes (found)", function() {
+      ASSERT_EQ(1, in_array("b", ({ "a", "b", "c" })));
+    }),
+    test("alias forwards to includes (missing)", function() {
+      ASSERT_EQ(0, in_array("z", ({ "a", "b", "c" })));
+    }),
+    test("alias accepts an optional comparator", function() {
+      ASSERT_EQ(1, in_array(6, ({ 1, 2, 3, 4 }),
+        (: $1 + $4 == 10 :)));
+    }),
+  }));
+
+  describe("same_array", ({
+    test("two empty arrays are equal", function() {
+      ASSERT_EQ(1, same_array(({}), ({})));
+    }),
+    test("identical arrays are equal", function() {
+      ASSERT_EQ(1, same_array(({ 1, 2, 3 }), ({ 1, 2, 3 })));
+    }),
+    test("loose mode ignores order", function() {
+      ASSERT_EQ(1, same_array(({ 1, 2, 3 }), ({ 3, 2, 1 })));
+    }),
+    test("different sizes are not equal", function() {
+      ASSERT_EQ(0, same_array(({ 1, 2 }), ({ 1, 2, 3 })));
+    }),
+    test("different contents are not equal", function() {
+      ASSERT_EQ(0, same_array(({ 1, 2, 3 }), ({ 1, 2, 4 })));
+    }),
+    test("exact mode requires matching order", function() {
+      ASSERT_EQ(0, same_array(({ 1, 2, 3 }), ({ 3, 2, 1 }), 1));
+    }),
+    test("exact mode accepts identical order", function() {
+      ASSERT_EQ(1, same_array(({ 1, 2, 3 }), ({ 1, 2, 3 }), 1));
+    }),
+    test("works with string arrays", function() {
+      ASSERT_EQ(1, same_array(({ "a", "b" }), ({ "b", "a" })));
+    }),
+  }));
+
+  describe("same_array_precisely", ({
+    test("alias treats reordered arrays as different", function() {
+      ASSERT_EQ(0, same_array_precisely(({ 1, 2, 3 }),
+        ({ 3, 2, 1 })));
+    }),
+    test("alias accepts identical arrays", function() {
+      ASSERT_EQ(1, same_array_precisely(({ 1, 2, 3 }),
+        ({ 1, 2, 3 })));
+    }),
+  }));
+
+  describe("every", ({
+    test("empty array is vacuously true", function() {
+      ASSERT_EQ(1, every(({}), (: $1 > 0 :)));
+    }),
+    test("returns 1 when all elements satisfy predicate", function() {
+      ASSERT_EQ(1, every(({ 2, 4, 6 }), (: $1 % 2 == 0 :)));
+    }),
+    test("returns 0 when any element fails predicate", function() {
+      ASSERT_EQ(0, every(({ 2, 3, 4 }), (: $1 % 2 == 0 :)));
+    }),
+    test("value criteria checks equality across all", function() {
+      ASSERT_EQ(1, every(({ 5, 5, 5 }), 5));
+    }),
+    test("value criteria returns 0 on mismatch", function() {
+      ASSERT_EQ(0, every(({ 5, 5, 6 }), 5));
+    }),
+    test("single element passes", function() {
+      ASSERT_EQ(1, every(({ "x" }), "x"));
+    }),
+    test("non-array first arg errors", function() {
+      string err = catch(every(0, (: 1 :)));
+      ASSERT_NE(0, err);
+    }),
+    test("null criteria errors", function() {
+      string err = catch(every(({ 1, 2, 3 }), undefined));
+      ASSERT_NE(0, err);
+    }),
+  }));
+
+  describe("some", ({
+    test("empty array returns 0", function() {
+      ASSERT_EQ(0, some(({}), (: $1 > 0 :)));
+    }),
+    test("returns 1 when at least one element matches", function() {
+      ASSERT_EQ(1, some(({ 1, 2, 3 }), (: $1 > 2 :)));
+    }),
+    test("returns 0 when no element matches", function() {
+      ASSERT_EQ(0, some(({ 1, 2, 3 }), (: $1 > 100 :)));
+    }),
+    test("value criteria finds the value", function() {
+      ASSERT_EQ(1, some(({ "a", "b", "c" }), "b"));
+    }),
+    test("value criteria returns 0 when value missing", function() {
+      ASSERT_EQ(0, some(({ "a", "b", "c" }), "z"));
+    }),
+    test("non-array first arg errors", function() {
+      string err = catch(some("nope", (: 1 :)));
+      ASSERT_NE(0, err);
+    }),
+    test("null criteria errors", function() {
+      string err = catch(some(({ 1, 2, 3 }), undefined));
+      ASSERT_NE(0, err);
+    }),
+  }));
+
+  describe("intersects", ({
+    test("returns 1 when arrays share an element", function() {
+      ASSERT_EQ(1, intersects(({ 1, 2, 3 }), ({ 3, 4, 5 })));
+    }),
+    test("returns 0 when arrays are disjoint", function() {
+      ASSERT_EQ(0, intersects(({ 1, 2, 3 }), ({ 4, 5, 6 })));
+    }),
+    test("returns 0 when both arrays are empty", function() {
+      ASSERT_EQ(0, intersects(({}), ({})));
+    }),
+    test("returns 0 when first array is empty", function() {
+      ASSERT_EQ(0, intersects(({}), ({ 1, 2, 3 })));
+    }),
+    test("returns 0 when second array is empty", function() {
+      ASSERT_EQ(0, intersects(({ 1, 2, 3 }), ({})));
+    }),
+    test("works with string arrays", function() {
+      ASSERT_EQ(1, intersects(({ "sword", "axe" }),
+        ({ "bow", "axe" })));
+    }),
+    test("custom comparator finds a match", function() {
+      ASSERT_EQ(1, intersects(({ 1, 2, 3 }), ({ 10, 20, 30 }),
+        (: $1 * 10 == $2 :)));
+    }),
+    test("custom comparator finds nothing", function() {
+      ASSERT_EQ(0, intersects(({ 1, 2, 3 }), ({ 10, 20, 30 }),
+        (: $1 == $2 :)));
+    }),
+  }));
+
+  describe("in_range", ({
+    test("returns 0 for empty array", function() {
+      ASSERT_EQ(0, in_range(0, ({})));
+    }),
+    test("returns 1 for valid index 0", function() {
+      ASSERT_EQ(1, in_range(0, ({ "a", "b", "c" })));
+    }),
+    test("returns 1 for last valid index", function() {
+      ASSERT_EQ(1, in_range(2, ({ "a", "b", "c" })));
+    }),
+    test("returns 0 for index past the end", function() {
+      ASSERT_EQ(0, in_range(3, ({ "a", "b", "c" })));
+    }),
+    test("returns 0 for negative index", function() {
+      ASSERT_EQ(0, in_range(-1, ({ "a", "b", "c" })));
+    }),
+    test("returns 1 for sole element of single-element array",
+      function() {
+        ASSERT_EQ(1, in_range(0, ({ "only" })));
+      }),
+  }));
+}

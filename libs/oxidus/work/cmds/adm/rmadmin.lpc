@@ -1,0 +1,76 @@
+/**
+ * @file /cmds/adm/rmadmin.lpc
+ *
+ * Revokes admin status from a user by removing the "admin" role grant. Works
+ * whether or not the target is currently logged in. Refuses on an owner:
+ * owner inherits admin and is managed manually. Developer access that was
+ * conferred solely by the admin role goes away with it.
+ *
+ * @created 2026-07-17 - Gesslar
+ * @last_modified 2026-07-17 - Gesslar
+ *
+ * @history
+ * 2026-07-17 - Gesslar - Created
+ */
+
+#include <logs.h>
+
+inherit STD_CMD;
+
+void setup() {
+  usage_text = "rmadmin <user>";
+  help_text =
+    "Revokes admin status from <user>. The target need not be online.\n"
+    "\n"
+    "Refuses if the target is an owner - owner status is managed manually. "
+    "If the target's developer access came only from being an admin, it is "
+    "removed along with the admin role; a separately granted developer role "
+    "is left intact.\n"
+    "\n"
+    "Only admins may revoke admin status.\n"
+    "\n"
+    "See also: makeadmin, makedev, rmdev";
+}
+
+mixed main(/** @type {STD_PLAYER} */ object caller, string arg) {
+  if(!adminp(previous_object()))
+    return _error("Access denied.");
+
+  if(!arg)
+    return _usage(caller);
+
+  string name = lower_case(arg);
+
+  if(!user_exists(name))
+    return _error("No such user '%s'.", name);
+
+  if(ownerp(name))
+    return _error("%s is an owner; owner status is managed manually and cannot "
+      "be revoked here.", capitalize(name));
+
+  if(!adminp(name))
+    return _info("%s is not an admin.", capitalize(name));
+
+  master()->remove_role(name, "admin");
+
+  log_file(LOG_PROMOTE, sprintf("%s revokes admin from %s - %s\n",
+    query_privs(previous_object()), name, ldatetime()));
+
+  if(adminp(name))
+    return _warn("%s still has admin status via group membership; edit "
+      "/adm/custom/security/groups.lpml to remove it.", capitalize(name));
+
+  // If the target is online, reset their command paths now rather than waiting
+  // for a relog. remove_admin_paths() resets to standard; if a separate
+  // developer grant remains, restore their dev paths so the live path set
+  // matches their actual role.
+  object body = find_player(name);
+  if(body) {
+    body->remove_admin_paths();
+    if(devp(name))
+      body->add_dev_path();
+  }
+
+  return _ok("%s is no longer an admin.%s", capitalize(name),
+    devp(name) ? "" : " Developer access was conferred by admin and is now also removed.");
+}

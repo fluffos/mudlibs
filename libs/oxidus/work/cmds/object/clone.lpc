@@ -1,0 +1,93 @@
+/**
+ * @file /cmds/object/clone.lpc
+ *
+ * Command to clone a fresh instance of an object from its blueprint file and
+ * place it. A carriable object goes into your inventory; a living (or one that
+ * refuses to be carried) is placed in your environment.
+ *
+ * @created 2026-07-18 - Gesslar
+ * @last_modified 2026-07-18 - Gesslar
+ *
+ * @history
+ * 2026-07-18 - Gesslar - Created
+ */
+
+#include <move.h>
+
+inherit STD_CMD;
+
+void setup() {
+  usage_text = "clone <file>";
+  help_text =
+    "Clones a new instance of the object described by <file> and places it. A "
+    "carriable object goes into your inventory; a living, or one that refuses "
+    "to be carried, is placed in your environment.\n"
+    "\n"
+    "<file> may be an absolute path or one relative to your current working "
+    "directory.\n"
+    "\n"
+    "See also: dest, trace, update, call";
+}
+
+mixed main(/** @type {STD_PLAYER} */ object caller, string str) {
+  int virtual = 0;
+
+  str ||= caller->query_env("cwf") ?? "";
+
+  // If the argument names something already present (or loaded), clone from
+  // that object's blueprint - this is what lets you clone a copy of a thing
+  // you can see. Virtual objects have no disk file, so remember that and skip
+  // the file-existence check below.
+  object exist = get_object(str);
+  if(exist) {
+    virtual = virtualp(exist);
+    str = base_name(exist);
+  }
+
+  string path = resolve_path(caller->query_env("cwd") ?? "", str);
+  string code = source_file(path);
+
+  // source_file() always hands back a .lpc candidate, existing or not, so
+  // confirm the file is actually on disk.
+  if(!virtual && file_size(code) < 0)
+    return _error(caller, "No such file: %s", path);
+
+  if(!master()->valid_read(code, caller, "clone"))
+    return _error(caller, "Permission denied: %s", code);
+
+  /** @type {STD_OBJECT} */ object ob;
+  string err = catch(ob = clone_object(path));
+
+  if(err || !objectp(ob))
+    return _error(caller, "Could not clone %s:%s", path,
+      err ? " " + trim(err) : "");
+
+  object room = environment(caller);
+  object dest = living(ob) ? room : caller;
+
+  if(!dest)
+    dest = caller;
+
+  int r = ob->move(dest);
+
+  // If inventory refused it, drop it in the room instead.
+  if(r != MOVE_OK && dest == caller && objectp(room)) {
+    r = ob->move(room);
+
+    if(r == MOVE_OK)
+      dest = room;
+  }
+
+  if(r != MOVE_OK) {
+    string fn = file_name(ob);
+    catch(ob->remove());
+    if(ob)
+      catch(destruct(ob));
+
+    return _warn(caller, "Cloned %s, but it could not be placed (%s) and has "
+      "been removed.", fn, MOVE_REASON[r] ?? "unknown");
+  }
+
+  return _ok(caller, "Cloned %s into %s.", file_name(ob),
+    dest == caller ? "your inventory" : "the room");
+}

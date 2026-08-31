@@ -1,0 +1,85 @@
+/**
+ * @file /cmds/dev/runtests.lpc
+ *
+ * Run unit tests under /tests/. With no argument, walks /tests/
+ * recursively and invokes every runner.lpc found. With an argument,
+ * invokes /tests/<arg>/runner directly.
+ *
+ * @created 2024-07-24 - Gesslar
+ * @last_modified 2026-07-13 - Gesslar
+ *
+ * @history
+ * 2024-07-24 - Gesslar - Created
+ * 2026-07-13 - Gesslar - Added help text
+ */
+
+inherit STD_CMD;
+
+/** @typedef {STD_TEST_RUNNER} TestRunner */
+
+private void invoke_runner(object tp, string runner_path);
+private void walk(object tp, string dir);
+
+void setup() {
+  usage_text = "runtests [<area>]\n";
+  help_text =
+    "Runs unit test suites under /tests/. With no argument, walks /tests/ "
+    "recursively and invokes every runner.lpc it finds. With an argument, "
+    "invokes /tests/<area>/runner directly, for example: "
+    "runtests adm/simul_efun.";
+}
+
+mixed main(object tp, string arg) {
+  if(arg && strlen(arg)) {
+    string trimmed = trim(arg);
+    string path = "/tests/" + trimmed + "/runner";
+
+    if(file_size(path + ".lpc") < 0)
+      return _error("No runner found at %s.lpc\n", path);
+
+    invoke_runner(tp, path);
+    return 1;
+  }
+
+  if(file_size("/tests") != -2) {
+    tell(tp, "No /tests/ directory found.\n");
+    return 1;
+  }
+
+  walk(tp, "/tests/");
+  return 1;
+}
+
+/**
+ *
+ * @param {STD_PLAYER} tp - The developer running the tests.
+ * @param {string} runner_path - The Test Runner object.
+ */
+private void invoke_runner(object tp, string runner_path) {
+  string err = catch(/** @type {TestRunner} */ (runner_path)->run_tests());
+  if(err)
+    tell(tp, sprintf("Runner %s failed: %s\n", runner_path, err));
+
+  /** @type {TestRunner} */ (find_object(runner_path))->remove();
+}
+
+private void walk(object tp, string dir) {
+  string *entries = get_dir(dir);
+
+  foreach(string entry in entries) {
+    string path;
+    int sz;
+
+    if(entry == "." || entry == "..")
+      continue;
+
+    path = dir + entry;
+    sz = file_size(path);
+
+    if(sz == -2) {
+      walk(tp, path + "/");
+    } else if(entry == "runner.lpc") {
+      invoke_runner(tp, chop(path, ".lpc", -1));
+    }
+  }
+}

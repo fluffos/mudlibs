@@ -1,0 +1,61 @@
+name: Docs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'doc/wiki/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: doc/wiki/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: doc/wiki
+
+      - name: Build Starlight
+        run: npm run build
+        working-directory: doc/wiki
+        env:
+          NODE_ENV: production
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add known hosts
+        env:
+          SFTP_SERVER: ${{ secrets.SFTP_SERVER }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$SFTP_SERVER" >> ~/.ssh/known_hosts
+
+      - name: Install rsync
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync
+
+      - name: Rsync deploy
+        env:
+          SFTP_SERVER: ${{ secrets.SFTP_SERVER }}
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+          SFTP_TARGET_DIR: ${{ secrets.WIKI_TARGET_DIR }}
+        run: |
+          rsync -avz --delete -e "ssh" doc/wiki/dist/ "$SFTP_USERNAME@$SFTP_SERVER:$SFTP_TARGET_DIR"

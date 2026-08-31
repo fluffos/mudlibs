@@ -1,0 +1,236 @@
+/**
+ * @file /cmds/dev/callouts.lpc
+ *
+ * Command to inspect the driver's pending call_out() queue (via the
+ * call_out_info() efun). Lists each pending call_out - the object, the
+ * function that will run, and the time remaining - soonest first, and can
+ * summarise where call_outs are piling up.
+ *
+ * This is read-only. A call_out belongs to the object that scheduled it and
+ * can only be removed by that object (remove_call_out operates on the caller),
+ * so this command inspects but does not remove them.
+ *
+ * @created 2026-07-18 - Gesslar
+ * @last_modified 2026-07-18 - Gesslar
+ *
+ * @history
+ * 2026-07-18 - Gesslar - Created
+ */
+
+inherit STD_CMD;
+
+#define TOP_N 15
+
+private mixed list_callouts(object tp, string filter, int as_time);
+private mixed count_callouts(object tp);
+private string *top_lines(mapping m);
+private string obj_func_line(string name, string func);
+private string urgency_colour(int secs);
+private string time_as_string(int number);
+
+void setup() {
+  usage_text =
+  "callouts                  - list all pending call_outs\n"
+  "callouts time             - list all (absolute fire times)\n"
+  "callouts count            - summary counts by object and function\n"
+  "callouts <pattern>        - list call_outs whose object or function\n"
+  "                            name matches <pattern>\n";
+
+  help_text =
+    "This command inspects the driver's pending call_out() queue "
+    "(call_out_info). Each entry shows the object, the function that will "
+    "run, and the time remaining before it fires, soonest first. The "
+    "remaining time is coloured by urgency.\n"
+    "\n"
+    "This is a read-only diagnostic. A call_out belongs to the object that "
+    "scheduled it and can only be removed by that object, so this command "
+    "does not remove call_outs - it is for seeing what is scheduled and, via "
+    "\"callouts count\", where they are piling up. A leak shows up as a large "
+    "count against one object (clones collapsed to their base) or one "
+    "function.\n"
+    "\n"
+    "\"callouts time\" shows absolute fire times instead of countdowns. A "
+    "bare argument other than \"time\" or \"count\" is treated as a filter "
+    "matched against both the object name and the function name.\n"
+    "\n"
+    "See also: alarm\n";
+}
+
+mixed main(object tp, string arg) {
+  if(!arg || arg == "")
+    return list_callouts(tp, 0, 0);
+
+  if(arg == "time")
+    return list_callouts(tp, 0, 1);
+
+  if(arg == "count")
+    return count_callouts(tp);
+
+  return list_callouts(tp, arg, 0);
+}
+
+private mixed list_callouts(object tp, string filter, int as_time) {
+  mixed *info = call_out_info();
+  mixed *rows = ({});
+  string *out = ({});
+  int idx;
+
+  foreach(mixed *entry in info) {
+    object ob = entry[0];
+    string func = entry[1];
+    string name;
+
+    if(!objectp(ob))
+      continue;
+
+    name = file_name(ob);
+
+    if(filter && strsrch(lower_case(name), lower_case(filter)) == -1 &&
+       strsrch(lower_case(func), lower_case(filter)) == -1)
+      continue;
+
+    rows += ({ ({ name, func, entry[2] }) });
+  }
+
+  if(!sizeof(rows)) {
+    if(filter)
+      return _info(tp, "No pending call_outs match \"%s\".", filter);
+
+    return _info(tp, "No call_outs are currently pending.");
+  }
+
+  rows = sort_array(rows, (: $1[2] - $2[2] :));
+
+  out += ({ sprintf("%3s %-54s %19s", "#", "Object->Function",
+    as_time ? "Fires" : "Remaining") });
+  out += ({ repeat_string("-", 78) });
+
+  foreach(mixed *row in rows) {
+    string cell;
+
+    idx++;
+
+    if(as_time)
+      cell = strftime("%b %d %H:%M:%S", time() + row[2]);
+    else
+      cell = time_as_string(row[2]);
+
+    out += ({ sprintf("%3d %s %s%19s{{res}}",
+      idx, obj_func_line(row[0], row[1]), urgency_colour(row[2]), cell) });
+  }
+
+  out += ({ "" });
+  out += ({ sprintf("%d pending call_out%s%s.", sizeof(rows),
+    sizeof(rows) == 1 ? "" : "s",
+    filter ? " matching \"" + filter + "\"" : "") });
+
+  return out;
+}
+
+private mixed count_callouts(object tp) {
+  mixed *info = call_out_info();
+  mapping by_obj = ([]);
+  mapping by_func = ([]);
+  string *out = ({});
+  int total;
+
+  foreach(mixed *entry in info) {
+    object ob = entry[0];
+    string func = entry[1];
+    string name;
+
+    if(!objectp(ob))
+      continue;
+
+    name = base_name(ob);
+
+    by_obj[name] = (by_obj[name] || 0) + 1;
+    by_func[func] = (by_func[func] || 0) + 1;
+    total++;
+  }
+
+  if(!total)
+    return _info(tp, "No call_outs are currently pending.");
+
+  out += ({ sprintf("Pending call_outs: %d", total) });
+  out += ({ "" });
+  out += ({ sprintf("By object (top %d of %d):", TOP_N, sizeof(by_obj)) });
+  out += top_lines(by_obj);
+  out += ({ "" });
+  out += ({ sprintf("By function (top %d of %d):", TOP_N, sizeof(by_func)) });
+  out += top_lines(by_func);
+
+  return out;
+}
+
+// Returns up to TOP_N "  <count>  <key>" lines, highest count first.
+private string *top_lines(mapping m) {
+  mixed *pairs = ({});
+  string *out = ({});
+  int shown;
+
+  foreach(string k, int c in m)
+    pairs += ({ ({ c, k }) });
+
+  pairs = sort_array(pairs, (: $2[0] - $1[0] :));
+
+  foreach(mixed *p in pairs) {
+    if(shown++ >= TOP_N)
+      break;
+
+    out += ({ sprintf("  %5d  %s", p[0], p[1]) });
+  }
+
+  return out;
+}
+
+// Pads "name->func" to 54 columns, then tints the arrow. Width is baked on
+// the plain text before the (zero-width) colour codes go in, so columns hold.
+private string obj_func_line(string name, string func) {
+  string result = sprintf("%-54.54s", name + "->" + func);
+
+  return replace_string(result, "->", "{{acb}}->{{res}}");
+}
+
+// Reddish when imminent, amber when soon, green otherwise.
+private string urgency_colour(int secs) {
+  if(secs < 60)
+    return "{{E68A8A}}";
+
+  if(secs < 300)
+    return "{{E6C88A}}";
+
+  return "{{8DD68D}}";
+}
+
+private string time_as_string(int number) {
+  string result;
+  int minutes, seconds, hours, days;
+
+  if(number < 0)
+    return sprintf("-%s", time_as_string(-number));
+
+  if(number < 60) {
+    result = sprintf(":%02d", number);
+  } else if(number < 3600) {
+    minutes = number / 60;
+    seconds = number % 60;
+    result = sprintf("%2d:%02d", minutes, seconds);
+  } else if(number < 86400) {
+    hours = number / 3600;
+    number -= hours * 3600;
+    minutes = number / 60;
+    seconds = number % 60;
+    result = sprintf("%2d:%02d:%02d", hours, minutes, seconds);
+  } else {
+    days = number / 86400;
+    number -= days * 86400;
+    hours = number / 3600;
+    number -= hours * 3600;
+    minutes = number / 60;
+    seconds = number % 60;
+    result = sprintf("%dd %02d:%02d:%02d", days, hours, minutes, seconds);
+  }
+
+  return result;
+}

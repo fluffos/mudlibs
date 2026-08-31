@@ -1,0 +1,152 @@
+/**
+ * @file /std/living/attributes.lpc
+ *
+ * Core attributes (e.g. strength, dexterity) for living objects.
+ * Holds each living's per-attribute base scores and reconciles them
+ * against the configured attribute set, layering race modifiers and
+ * boon/curse effects on top when queried.
+ *
+ * @created 2024-07-30 - Gesslar
+ * @last_modified 2026-07-21 - Gesslar
+ *
+ * @history
+ * 2024-07-30 - Gesslar - Created
+ * 2026-07-21 - Gesslar - Documented
+ */
+
+#include <attributes.h>
+#include <boon.h>
+#include "/std/object/include/module.h"
+
+/**
+ * The canonical set of attribute names, sourced from the
+ * "ATTRIBUTES" mud config. Used to seed and prune __attributes.
+ *
+ * @type {string*}
+ */
+private nomask nosave string *__default_attributes = ({});
+
+/**
+ * Per-attribute base scores for this living, keyed by attribute
+ * name. Race modifiers and boons are applied on read, not stored
+ * here.
+ *
+ * @type {([ string: int ])}
+ */
+private nomask mapping __attributes = ([]);
+
+/**
+ * Reconciles this living's stored attributes against the configured
+ * attribute set. Missing attributes are seeded to a base score of 5,
+ * and any stored attributes no longer present in the configuration
+ * are removed.
+ *
+ * @returns {void}
+ */
+void init_attributes() {
+  string key;
+  mixed data;
+
+  __default_attributes = mud_config("ATTRIBUTES");
+
+  __attributes ??= ([]);
+
+  foreach(key in __default_attributes) {
+    if(!of(key, __attributes)) {
+      __attributes[key] = 5;
+    }
+  }
+
+  foreach(key, data in __attributes) {
+    if(!of(key, __default_attributes)) {
+      map_delete(__attributes, key);
+    }
+  }
+}
+
+/**
+ * Sets the base score for an attribute, overwriting any existing
+ * value. Race modifiers and boons are not affected. Only known
+ * attributes (present in the current set) may be set.
+ *
+ * @param {string} key - The attribute name.
+ * @param {int} value - The new base score.
+ * @returns {int | undefined} The stored score, or undefined if the
+ *                            attribute is unknown.
+ */
+int set_attribute(string key, int value) {
+  if(!of(key, __attributes)) {
+    return null;
+  }
+
+  __attributes[key] = value;
+
+  return __attributes[key];
+}
+
+/**
+ * Returns the effective score for an attribute. The stored base
+ * score is always combined with the living's race modifier for that
+ * attribute; the raw form omits boon/curse effects while the default
+ * form includes them.
+ *
+ * @param {string} key - The attribute name.
+ * @param {int} [raw=0] - When truthy, excludes boon/curse effects
+ *                        (base score plus race modifier only).
+ * @returns {int | undefined} The effective score, or undefined if
+ *                            the attribute is unknown.
+ */
+varargs int get_attribute(string key, int raw) {
+  if(!of(key, __attributes)) {
+    return null;
+  }
+
+  int attribute_mod = module("race", "query_attribute_mod", key);
+
+  if(raw)
+    return __attributes[key] + attribute_mod;
+
+  return __attributes[key] + query_effective_boon("attribute", key) + attribute_mod;
+}
+
+/**
+ * Adjusts an attribute's base score by a relative amount. The value
+ * is added to the current base score (pass a negative value to
+ * decrease it). Only known attributes may be modified.
+ *
+ * @param {string} key - The attribute name.
+ * @param {int} value - The amount to add to the base score.
+ * @returns {int | undefined} The new base score, or undefined if the
+ *                            attribute is unknown.
+ */
+int modify_attribute(string key, int value) {
+  if(!of(key, __attributes)) {
+    return null;
+  }
+
+  __attributes[key] += value;
+
+  return __attributes[key];
+}
+
+/**
+ * Returns a copy of all attribute scores with race modifiers folded
+ * in. Boon/curse effects are not included. The result is a copy, so
+ * callers may mutate it freely.
+ *
+ * @returns {([ string: int ])} Attribute names mapped to their
+ *                              race-adjusted scores.
+ */
+mapping get_attributes() {
+  mapping attributes = copy(__attributes);
+  mapping mods = module("race", "query_attribute_mod");
+
+  if(!mapp(mods))
+    return attributes;
+
+  foreach(string attrib, int value in mods) {
+    attributes[attrib] += value;
+  }
+
+  return attributes;
+}

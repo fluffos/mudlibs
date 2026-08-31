@@ -1,0 +1,232 @@
+/**
+ * @file /std/living/act.lpc
+ *
+ * Call-out based action module
+ *
+ * Tracks delayed actions ("acts") on a living. Each act is a `class Act`
+ * holding the walltime call-out id, a uuid, the action label, an assembled
+ * callback, and the object that requested it. The callback fires with `true`
+ * when the act runs to completion, and with `false` when it is cancelled.
+ *
+ * @created 2024-08-08 - Gesslar
+ * @last_modified 2026-08-07 - Gesslar
+ *
+ * @history
+ * 2024-08-08 - Gesslar - Created
+ * 2026-08-07 - Gesslar - Refactored lookups onto find_index, documented
+ */
+
+#include <act.h>
+#include <classes.h>
+
+inherit CLASS_ACT;
+
+/** @type {class Act *} */
+private nomask nosave class Act *__acts = ({});
+
+/**
+ * Begins a delayed action on this living.
+ *
+ * Schedules a walltime call-out for `delay` seconds and records the act so it
+ * can be found, cancelled, or reported on. The requesting object is captured
+ * from the call chain, hopping past the simul_efun object when the call
+ * arrived through `delay_act()`.
+ *
+ * @param {string} action - The action label, e.g. "casting".
+ * @param {float} delay - Seconds to wait before firing the callback.
+ * @param {mixed*} cb - Callback array from assemble_call_back().
+ * @returns {int|undefined} The call-out id, or undefined if any argument is
+ *                          missing.
+ * @see delay_act
+ */
+public int act(string action, float delay, mixed *cb) {
+  if(!action || !delay || !cb)
+    return undefined;
+
+  if(intp(delay))
+    delay = to_float(delay);
+
+  string uuid = generate_uuid();
+  int id = call_out_walltime("finish_act", delay, uuid);
+
+  object po;
+  if(caller_is(SIMUL_OB))
+    po = previous_object(1);
+  else
+    po = previous_object();
+
+  class Act act = new(class Act,
+    id: id,
+    uuid: uuid,
+    action: action,
+    cb: cb,
+    prev: po
+  );
+
+  push(ref __acts, act);
+
+  return id;
+}
+
+/**
+ * Begins a delayed action on this living, delivering its outcome through a
+ * promise.
+ *
+ * The async counterpart to act(). The act is registered exactly as act()
+ * registers it, so is_acting() reports it and cancel_act()/cancel_acts() still
+ * interrupt it; what changes is how the outcome arrives. Rather than taking an
+ * assembled callback, the returned promise settles when the act resolves:
+ * fulfilled with 1 if it ran to completion, or 0 if it was cancelled.
+ *
+ * Await it from inside an async function rather than calling it for its value.
+ *
+ * @param {string} action - The action label, e.g. "casting".
+ * @param {float} delay - Seconds to wait before the act completes.
+ * @returns {promise<int>} A promise for 1 if the act ran to completion, or 0
+ *                         if it was cancelled or could not be scheduled.
+ * @see act
+ * @see is_acting
+ * @example
+ * if(!await tp->async_act("punch", 2.0))
+ *   return;                                // interrupted
+ */
+public async int async_act(string action, float delay) {
+  promise p = promise_create();
+  mixed id = act(action, delay, assemble_call_back((: promise_resolve($(p), $1) :)));
+
+  if(nullp(id))
+    return 0;
+
+  return await p;
+}
+
+/**
+ * Looks up a pending act without removing it.
+ *
+ * A string id is matched against the act's uuid, an int id against its
+ * call-out id.
+ *
+ * @param {mixed} id - The uuid or call-out id to look for.
+ * @returns {class Act|undefined} The matching act, or undefined if there is
+ *                                none.
+ */
+public class Act find_act(mixed id) {
+  int index = -1;
+
+  if(stringp(id))
+    index = find_index(__acts, (: $1.uuid == $(id) :));
+  else if(!nullp(id) && intp(id))
+    index = find_index(__acts, (: $1.id == $(id) :));
+
+  if(index == -1)
+    return undefined;
+
+  return __acts[index];
+}
+
+/**
+ * Removes a pending act from the list and returns it.
+ *
+ * Given an id, removes the act matching it. Given nothing, removes the most
+ * recently added act, which is how cancel_acts() drains the list. Removal
+ * neither cancels the call-out nor fires the callback; the caller decides
+ * what happens next.
+ *
+ * @param {mixed} [id] - The uuid or call-out id to remove.
+ * @returns {class Act|undefined} The removed act, or undefined if there was
+ *                                no match.
+ */
+public varargs class Act pop_act(mixed id) {
+  if(nullp(id))
+    return sizeof(__acts) ? pop(ref __acts) : undefined;
+
+  class Act act = find_act(id);
+
+  if(!act)
+    return undefined;
+
+  eject_value(ref __acts, act);
+
+  return act;
+}
+
+/**
+ * Call-out target that completes an act.
+ *
+ * Fires the act's callback with `true` to signal that it ran to completion.
+ *
+ * @param {string} uuid - The uuid of the act that has elapsed.
+ */
+public void finish_act(string uuid) {
+  class Act act;
+
+  if(!classp(act = pop_act(uuid)))
+    return;
+
+  catch(call_back(act.cb, true));
+}
+
+/**
+ * Cancels every pending act on this living.
+ *
+ * Each act has its call-out removed and its callback fired with `false`.
+ */
+public void cancel_acts() {
+  class Act act;
+
+  while(classp(act = pop_act())) {
+    remove_call_out(act.id);
+    catch(call_back(act.cb, false));
+  }
+}
+
+/**
+ * Cancels a single pending act.
+ *
+ * The act's call-out is removed and its callback fired with `false`.
+ *
+ * @param {mixed} action - The uuid or call-out id of the act to cancel.
+ * @returns {int} 1 if an act was cancelled, 0 if there was no match.
+ */
+public int cancel_act(mixed action) {
+  class Act act;
+
+  if(!classp(act = pop_act(action)))
+    return 0;
+
+  remove_call_out(act.id);
+  catch(call_back(act.cb, false));
+
+  return 1;
+}
+
+/**
+ * Returns every pending act, keyed by uuid.
+ *
+ * @returns {mapping} Mapping of uuid to `class Act`.
+ */
+public mapping query_acts() {
+  mapping acts = ([ ]);
+
+  int sz = sizeof(__acts);
+  while(sz--)
+    acts[__acts[sz].uuid] = __acts[sz];
+
+  return acts;
+}
+
+/**
+ * Reports whether this living is busy.
+ *
+ * Given an action label, reports whether that particular action is pending.
+ * Given nothing, reports whether any act is pending at all.
+ *
+ * @param {string} [action] - The action label to look for.
+ * @returns {int} 1 if a matching act is pending, 0 if not.
+ */
+public varargs int is_acting(string action) {
+  if(!action)
+    return sizeof(__acts) > 0;
+
+  return find_index(__acts, (: $1.action == $(action) :)) > -1;
+}

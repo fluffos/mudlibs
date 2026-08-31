@@ -1,0 +1,323 @@
+/**
+ * @file /cmds/action/look.lpc
+ *
+ * Command to look at things and the room and stuff.
+ *
+ * @created 2026-07-13 - Gesslar
+ * @last_modified 2026-07-27 - Gesslar
+ *
+ * @history
+ * 2026-07-13 - Gesslar - Created
+ * 2026-07-27 - Gesslar - Show equipped and wielded items when looking at a
+ *                        living
+ */
+
+inherit STD_ACT;
+
+void setup() {
+  help_text =
+    "Describes your surroundings, or something in particular. On its own it "
+    "shows the room you are standing in, the ways out of it, and everything "
+    "you can see there. Name a target — 'look at sword' or just "
+    "'look sword' — to examine that instead, or 'look me' to examine "
+    "yourself. 'look in <container>' lists what a container holds. Targets "
+    "are searched for in your inventory first and then in the room; adding "
+    "'here' to the end skips your inventory and looks only at the room.\n"
+    "\n"
+    "See also: inventory\n";
+}
+
+mixed identify_filename(object ob, int vm);
+mixed describe_environment(object tp);
+mixed describe_object(object tp, object ob);
+mixed describe_contents(object tp, object ob);
+mixed describe_living(object tp, object ob);
+mixed describe_item(object tp, string item);
+private string *format_contents(object *obs, int fns);
+
+mixed main(
+  /** @type {STD_BODY} */ object tp,
+  string arg
+) {
+  if(!environment(tp))
+    return "You don't see anything.";
+
+  if(falsy(arg))
+    return describe_environment(tp);
+
+  if(arg == "me")
+    return describe_living(tp, tp);
+
+  int here = 0, contents = 0;
+
+  if(sscanf(arg, "at %s here", arg) == 1) {         // look at <x>
+    here = 1;
+  } else if(sscanf(arg, "at %s", arg) == 1) {       // look at <x> here
+    // nothing to do
+  } else if(sscanf(arg, "in %s here", arg) == 1) {  // look in <x>
+    here = 1;
+    contents = 1;
+  } else if(sscanf(arg, "in %s", arg) == 1) {       // look in <x> here
+    contents = 1;
+  } else if(sscanf(arg, "%s here", arg) == 1) {     // look <x> here
+    here = 1;
+  }
+
+  /** @type {STD_ITEM | STD_BODY} */ object ob;
+  if(!here)
+    ob = find_target(tp, arg, tp);
+
+  if(!ob)
+    ob = find_target(tp, arg, environment(tp));
+
+  if(ob) {
+    if(contents)
+      return describe_contents(tp, ob);
+
+    return describe_object(tp, ob);
+  }
+
+  if(/** @type {STD_ROOM} */ (environment(tp))->has_item(arg))
+    return describe_item(tp, arg);
+
+  return "You don't see that here.";
+}
+
+mixed describe_environment(
+  /** @type {STD_BODY} */ object tp
+) {
+  /** @type {STD_ROOM} */ object env = environment(tp);
+  string result = "";
+  int fns = devp(tp) && tp->query_pref("look_filename") == "on";
+
+  if(fns) {
+    string fn = `{{069}}${identify_filename(env, 1)}{{res}}`;
+
+    result += append(fn, "\n");
+  }
+
+  string short = ob_short(env);
+  if(truthy(short)) {
+    result += append(short, "\n");
+  }
+
+  string long = ob_long(env);
+  if(truthy(long))
+    result += append(long, "\n");
+
+  string *exits = env->query_exit_ids();
+  if(sizeof(exits)) {
+    if(truthy(long)) {
+      result += "\n";
+    }
+
+    result += `You may go ${simple_list(exits, "and")}.`;
+  }
+
+  object *obs = all_inventory(env);
+  obs = filter(obs, (: $(tp)->can_see($1) :));
+  obs -= ({ tp });
+
+  object *non_livs = filter(obs, (: !living($1) :));
+  object *livs = filter(obs, (: living :));
+  obs = non_livs + livs;
+
+  string *shorts = format_contents(obs, fns);
+
+  if(sizeof(shorts)) {
+    string obs_desc = implode(shorts, "\n") + "\n";
+
+    if(sizeof(result))
+      result += "\n\n";
+
+    result += obs_desc;
+  }
+
+  return result;
+}
+
+mixed describe_object(
+  /** @type {STD_BODY} */ object tp,
+  /** @type {STD_ITEM | STD_BODY} */ object ob
+) {
+  if(living(ob))
+    return describe_living(tp, ob);
+
+  string result = "";
+  int fns = devp(tp) && tp->query_pref("look_filename") == "on";
+
+  if(fns) {
+    string fn = `{{069}}${identify_filename(ob, 1)}{{res}}`;
+
+    result += append(fn, "\n");
+  }
+
+  string short = ob_short(ob);
+  if(truthy(short)) {
+    result += append(short, "\n");
+  }
+
+  string long = ob_long(ob);
+  if(truthy(long))
+    result += append(long, "\n");
+
+  return result;
+}
+
+mixed describe_contents(
+  /** @type {STD_BODY} */ object tp,
+  /** @type {STD_CONTAINER} */ object ob
+) {
+  if(living(ob))
+    return "Wouldn't that be amazing?";
+
+  string result = "";
+  int fns = devp(tp) && tp->query_pref("look_filename") == "on";
+
+  if(fns) {
+    string fn = `{{069}}${identify_filename(ob, 1)}{{res}}`;
+
+    result += append(fn, "\n");
+  }
+
+  string short = ob_short(ob);
+  if(truthy(short)) {
+    result += append(short, "\n");
+  }
+
+  if(ob->is_closed()) {
+    result += "It is closed.";
+  } else {
+    object *obs = all_inventory(ob);
+    obs = filter(obs, (: $(tp)->can_see($1) :));
+    obs -= ({ tp });
+
+    string *shorts = format_contents(obs, fns);
+    if(sizeof(shorts)) {
+      if(truthy(result))
+        result += "\n";
+
+      shorts = map(shorts, (: `  ${$1}` :));
+      unshift(& shorts, "Contents:");
+      result += implode(shorts, "\n");
+    } else {
+      result += "You see nothing inside.";
+    }
+  }
+
+  return result;
+}
+
+mixed describe_living(
+  /** @type {STD_BODY} */ object tp,
+  /** @type {STD_BODY} */ object ob
+) {
+  string result = "";
+  int fns = devp(tp) && tp->query_pref("look_filename") == "on";
+
+  if(fns) {
+    string fn = `{{069}}${identify_filename(ob, 1)}{{res}}`;
+
+    result += append(fn, "\n");
+  }
+
+  string short = ob_short(ob);
+  if(truthy(short)) {
+    result += append(short, "\n");
+  }
+
+  string long = ob_long(ob);
+  if(truthy(long))
+    result += append(long, "\n");
+
+  string race = ob->query_race();
+  string gender = ob->query_gender();
+  string sub = tp == ob ? "You" : capitalize(subjective(ob));
+  string verb = tp == ob ? "are" : "is";
+
+  if(truthy(race) && truthy(gender))
+    result += `${sub} ${verb} ${add_article(gender)} ${race}.\n`;
+  else if(truthy(race))
+    result += `${sub} ${verb} ${add_article(race)}.\n`;
+  else if(truthy(gender))
+    result += `${sub} ${verb} ${gender}.\n`;
+
+  string *vitals = ob->query_condition_string();
+  if(pointerp(vitals)) {
+    if(strlen(result))
+      result += `${sub} ${verb} ${vitals[0]}.\n`;
+  }
+
+  // Copied from eq.lpc. kekela
+  mapping eq, wielded;
+  string slot, *slots;
+  string out = "";
+  int max;
+
+  eq = ob->query_equipped();
+  wielded = ob->query_wielded();
+
+  if(sizeof(eq) || sizeof(wielded)) {
+    slots = keys(wielded);
+    slots += keys(eq);
+
+    max = max(map(slots, (: strlen :)));
+
+    foreach(slot in slots) {
+      object item = wielded[slot] || eq[slot];
+      out += sprintf("%*s : %s\n", max, capitalize(slot), get_short(item));
+    }
+
+    if(strlen(out))
+      result += `\n${out}`;
+  }
+
+  return result;
+}
+
+mixed describe_item(object tp, string item) {
+  return /** @type {STD_ROOM} */ (environment(tp))->get_item(item);
+}
+
+/**
+ *
+ * @param {STD_OBJECT} ob
+ * @param vm
+ */
+mixed identify_filename(object ob, int vm) {
+  vm = !!vm;
+
+  string fn = file_name(ob);
+
+  if(virtualp(ob)) {
+    if(vm == 0) {
+      return `${fn} [V]`;
+    } else {
+      string virt = ob->query_virtual_master();
+
+      if(!virt)
+        return `${fn} [Virtual]`;
+      else
+        return `${fn} [${virt}]`;
+    }
+  } else {
+    return fn;
+  }
+}
+
+private string *format_contents(object *obs, int fns) {
+  string *shorts = map(obs, function(object ob, int fns) {
+    string short = ob_short(ob);
+    if(!truthy(short))
+      return "";
+
+    if(fns)
+      return `${short} (${identify_filename(ob, 0)})`;
+    else
+      return short;
+  }, fns);
+
+  shorts = filter(shorts, (: strlen :));
+
+  return shorts;
+}

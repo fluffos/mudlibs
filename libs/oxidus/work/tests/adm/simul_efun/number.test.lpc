@@ -1,0 +1,324 @@
+// @lpc-nocheck
+/**
+ * @file /tests/adm/simul_efun/number.test.lpc
+ * @description Tests for the number simul_efuns from /adm/simul_efun/number.lpc:
+ *              percent/percent_of, clamp/clamped/between, remainder, sum,
+ *              evaluate_number (condition DSL), and the diminishing-return
+ *              family (diminish, dim_square_root, dim_logarithmic,
+ *              dim_hyperbolic, dim_exponential_decay, dim_sigmoid).
+ *
+ * Exact IEEE results are asserted directly; irrational results (sqrt/log/exp)
+ * are asserted to fall within a tight band via `ASSERT_EQ(1, lo < r && r < hi)`.
+ */
+
+#include <test.h>
+
+inherit STD_TEST;
+
+void setup() {
+  describe("percent_of", ({
+    test("50% of 200 is 100", function() {
+      ASSERT_EQ(100.0, percent_of(50.0, 200.0));
+    }),
+    test("25% of 80 is 20", function() {
+      ASSERT_EQ(20.0, percent_of(25.0, 80.0));
+    }),
+    test("0% of anything is 0", function() {
+      ASSERT_EQ(0.0, percent_of(0.0, 200.0));
+    }),
+    test("100% of 50 is 50", function() {
+      ASSERT_EQ(50.0, percent_of(100.0, 50.0));
+    }),
+  }));
+
+  describe("percent", ({
+    test("50 out of 200 is 25%", function() {
+      ASSERT_EQ(25.0, percent(50.0, 200.0));
+    }),
+    test("1 out of 4 is 25%", function() {
+      ASSERT_EQ(25.0, percent(1.0, 4.0));
+    }),
+    test("the whole is 100%", function() {
+      ASSERT_EQ(100.0, percent(200.0, 200.0));
+    }),
+    test("0 out of anything is 0%", function() {
+      ASSERT_EQ(0.0, percent(0.0, 5.0));
+    }),
+  }));
+
+  describe("clamp", ({
+    test("a value inside the range is unchanged", function() {
+      ASSERT_EQ(5.0, clamp(5.0, 0.0, 10.0));
+    }),
+    test("a value below the range clamps to min", function() {
+      ASSERT_EQ(0.0, clamp(-5.0, 0.0, 10.0));
+    }),
+    test("a value above the range clamps to max", function() {
+      ASSERT_EQ(10.0, clamp(15.0, 0.0, 10.0));
+    }),
+    test("the min boundary is preserved", function() {
+      ASSERT_EQ(0.0, clamp(0.0, 0.0, 10.0));
+    }),
+    test("the max boundary is preserved", function() {
+      ASSERT_EQ(10.0, clamp(10.0, 0.0, 10.0));
+    }),
+  }));
+
+  describe("clamped", ({
+    test("a value inside the range is clamped", function() {
+      ASSERT_EQ(1, clamped(5.0, 0.0, 10.0));
+    }),
+    test("the min boundary is inclusive", function() {
+      ASSERT_EQ(1, clamped(0.0, 0.0, 10.0));
+    }),
+    test("the max boundary is inclusive", function() {
+      ASSERT_EQ(1, clamped(10.0, 0.0, 10.0));
+    }),
+    test("below the range is not clamped", function() {
+      ASSERT_EQ(0, clamped(-1.0, 0.0, 10.0));
+    }),
+    test("above the range is not clamped", function() {
+      ASSERT_EQ(0, clamped(11.0, 0.0, 10.0));
+    }),
+  }));
+
+  describe("between", ({
+    test("a value inside the range is between", function() {
+      ASSERT_EQ(1, between(5.0, 0.0, 10.0));
+    }),
+    test("the min boundary is exclusive", function() {
+      ASSERT_EQ(0, between(0.0, 0.0, 10.0));
+    }),
+    test("the max boundary is exclusive", function() {
+      ASSERT_EQ(0, between(10.0, 0.0, 10.0));
+    }),
+    test("below the range is not between", function() {
+      ASSERT_EQ(0, between(-1.0, 0.0, 10.0));
+    }),
+  }));
+
+  describe("remainder", ({
+    test("fractional part of 10/4 is 0.5", function() {
+      ASSERT_EQ(0.5, remainder(10, 4));
+    }),
+    test("an evenly divisible quotient has no remainder", function() {
+      ASSERT_EQ(0.0, remainder(9, 3));
+    }),
+    test("accepts float arguments", function() {
+      ASSERT_EQ(0.5, remainder(5.0, 2.0));
+    }),
+    test("fractional part of 10/3 is ~0.333", function() {
+      float r = remainder(10, 3);
+      ASSERT_EQ(1, r > 0.333 && r < 0.334);
+    }),
+  }));
+
+  describe("sum", ({
+    test("sums a list of positive integers", function() {
+      ASSERT_EQ(10, sum(({ 1, 2, 3, 4 })));
+    }),
+    test("an empty array sums to 0", function() {
+      ASSERT_EQ(0, sum(({})));
+    }),
+    test("a single element sums to itself", function() {
+      ASSERT_EQ(5, sum(({ 5 })));
+    }),
+    test("negatives cancel positives", function() {
+      ASSERT_EQ(0, sum(({ 10, -3, -7 })));
+    }),
+  }));
+
+  describe("evaluate_number basic operators", ({
+    test("= matches", function() {
+      ASSERT_EQ(1, evaluate_number(5, "=5"));
+    }),
+    test("== matches", function() {
+      ASSERT_EQ(1, evaluate_number(5, "==5"));
+    }),
+    test("> is true when greater", function() {
+      ASSERT_EQ(1, evaluate_number(5, ">3"));
+    }),
+    test("< is false when not less", function() {
+      ASSERT_EQ(0, evaluate_number(5, "<3"));
+    }),
+    test(">= is inclusive", function() {
+      ASSERT_EQ(1, evaluate_number(5, ">=5"));
+    }),
+    test("<= is inclusive", function() {
+      ASSERT_EQ(1, evaluate_number(5, "<=5"));
+    }),
+    test("!= is true when unequal", function() {
+      ASSERT_EQ(1, evaluate_number(5, "!=3"));
+    }),
+    test("!= is false when equal", function() {
+      ASSERT_EQ(0, evaluate_number(5, "!=5"));
+    }),
+    test("spaces in the condition are ignored", function() {
+      ASSERT_EQ(1, evaluate_number(7, "5 - 10"));
+    }),
+  }));
+
+  describe("evaluate_number modulo, range, set", ({
+    test("modulo is true when divisible", function() {
+      ASSERT_EQ(1, evaluate_number(9, "%3"));
+    }),
+    test("modulo is false when not divisible", function() {
+      ASSERT_EQ(0, evaluate_number(10, "%3"));
+    }),
+    test("range is inclusive of both ends", function() {
+      ASSERT_EQ(1, evaluate_number(5, "5-10"));
+    }),
+    test("range matches the upper bound", function() {
+      ASSERT_EQ(1, evaluate_number(10, "5-10"));
+    }),
+    test("range excludes values outside it", function() {
+      ASSERT_EQ(0, evaluate_number(11, "5-10"));
+    }),
+    test("set inclusion matches a member", function() {
+      ASSERT_EQ(1, evaluate_number(2, "[1,2,3]"));
+    }),
+    test("set inclusion rejects a non-member", function() {
+      ASSERT_EQ(0, evaluate_number(4, "[1,2,3]"));
+    }),
+    test("set exclusion matches a non-member", function() {
+      ASSERT_EQ(1, evaluate_number(4, "![1,2,3]"));
+    }),
+    test("set exclusion rejects a member", function() {
+      ASSERT_EQ(0, evaluate_number(2, "![1,2,3]"));
+    }),
+  }));
+
+  describe("evaluate_number compound", ({
+    test("pure AND requires both conditions (pass)", function() {
+      ASSERT_EQ(1, evaluate_number(9, "5-15AND%3"));
+    }),
+    test("pure AND requires both conditions (fail)", function() {
+      ASSERT_EQ(0, evaluate_number(7, "5-15AND%3"));
+    }),
+    test("banded-comparison AND (the real-world usage)", function() {
+      ASSERT_EQ(1, evaluate_number(60, ">=50AND<80"));
+    }),
+    test("banded-comparison AND rejects out-of-band", function() {
+      ASSERT_EQ(0, evaluate_number(90, ">=50AND<80"));
+    }),
+    test("pure OR matches the first alternative", function() {
+      ASSERT_EQ(1, evaluate_number(5, "=5OR=10"));
+    }),
+    test("pure OR matches the second alternative", function() {
+      ASSERT_EQ(1, evaluate_number(10, "=5OR=10"));
+    }),
+    test("pure OR fails when neither matches", function() {
+      ASSERT_EQ(0, evaluate_number(7, "=5OR=10"));
+    }),
+    // The documented grouped example `(5-15AND%3)OR[20,25,30]`: parens bind
+    // tightest, OR loosest, so the AND-group is evaluated as a unit first.
+    test("grouped example: in-band AND divisible satisfies the AND-group", function() {
+      ASSERT_EQ(1, evaluate_number(9, "(5-15AND%3)OR[20,25,30]"));
+    }),
+    test("grouped example: in-band but not divisible falls through to the set", function() {
+      ASSERT_EQ(0, evaluate_number(7, "(5-15AND%3)OR[20,25,30]"));
+    }),
+    test("grouped example: a set member satisfies the OR arm", function() {
+      ASSERT_EQ(1, evaluate_number(20, "(5-15AND%3)OR[20,25,30]"));
+    }),
+    test("precedence: AND binds tighter than OR without parens", function() {
+      // 20: (fails 5-15 AND %3) OR (matches =20) -> true
+      ASSERT_EQ(1, evaluate_number(20, "5-15AND%3OR=20"));
+    }),
+    test("nested groups evaluate innermost first", function() {
+      ASSERT_EQ(1, evaluate_number(12, "((10-20)AND%3)OR=99"));
+    }),
+  }));
+
+  describe("evaluate_number errors", ({
+    test("an unparseable condition errors", function() {
+      string err = catch(evaluate_number(5, "garbage"));
+      ASSERT_NE(0, err);
+    }),
+  }));
+
+  describe("diminish", ({
+    test("output equals scale when val == scale", function() {
+      ASSERT_EQ(10.0, diminish(10, 10));
+    }),
+    test("triangular growth: 3x input yields 2x output", function() {
+      ASSERT_EQ(20.0, diminish(30, 10));
+    }),
+    test("triangular growth: 6x input yields 3x output", function() {
+      ASSERT_EQ(30.0, diminish(60, 10));
+    }),
+    test("zero input yields zero", function() {
+      ASSERT_EQ(0.0, diminish(0, 10));
+    }),
+    test("negative input mirrors the positive result", function() {
+      ASSERT_EQ(-10.0, diminish(-10, 10));
+    }),
+  }));
+
+  describe("dim_square_root", ({
+    test("output equals scale when val == scale", function() {
+      ASSERT_EQ(10.0, dim_square_root(10, 10));
+    }),
+    test("4x input yields 2x output", function() {
+      ASSERT_EQ(20.0, dim_square_root(40, 10));
+    }),
+    test("9x input yields 3x output", function() {
+      ASSERT_EQ(30.0, dim_square_root(90, 10));
+    }),
+    test("zero input yields zero", function() {
+      ASSERT_EQ(0.0, dim_square_root(0, 10));
+    }),
+    test("negative input mirrors the positive result", function() {
+      ASSERT_EQ(-20.0, dim_square_root(-40, 10));
+    }),
+  }));
+
+  describe("dim_logarithmic", ({
+    test("zero input yields zero", function() {
+      ASSERT_EQ(0.0, dim_logarithmic(0, 10));
+    }),
+    test("val == scale yields scale*ln(2) ~= 6.931", function() {
+      float r = dim_logarithmic(10, 10);
+      ASSERT_EQ(1, r > 6.93 && r < 6.932);
+    }),
+  }));
+
+  describe("dim_hyperbolic", ({
+    test("output is scale/2 when val == scale", function() {
+      ASSERT_EQ(5.0, dim_hyperbolic(10, 10));
+    }),
+    test("zero input yields zero", function() {
+      ASSERT_EQ(0.0, dim_hyperbolic(0, 10));
+    }),
+    test("approaches but stays under the ceiling", function() {
+      ASSERT_EQ(7.5, dim_hyperbolic(30, 10));
+    }),
+    test("negative input mirrors the positive result", function() {
+      ASSERT_EQ(-5.0, dim_hyperbolic(-10, 10));
+    }),
+  }));
+
+  describe("dim_exponential_decay", ({
+    test("zero input yields zero", function() {
+      ASSERT_EQ(0.0, dim_exponential_decay(0, 10));
+    }),
+    test("val == scale yields ~0.632*scale", function() {
+      float r = dim_exponential_decay(10, 10);
+      ASSERT_EQ(1, r > 6.32 && r < 6.322);
+    }),
+  }));
+
+  describe("dim_sigmoid", ({
+    test("zero input yields zero", function() {
+      ASSERT_EQ(0.0, dim_sigmoid(0, 10, 1));
+    }),
+    test("a large val*k approaches the ceiling", function() {
+      float r = dim_sigmoid(10, 10, 1);
+      ASSERT_EQ(1, r > 9.99 && r < 10.0);
+    }),
+    test("negative input mirrors the positive result", function() {
+      float r = dim_sigmoid(-10, 10, 1);
+      ASSERT_EQ(1, r < -9.99 && r > -10.0);
+    }),
+  }));
+}

@@ -1,0 +1,323 @@
+/**
+ * @file /adm/daemons/alias.lpc
+ *
+ * The alias daemon. Loads alias definitions from ETC_ALIASES, grouped
+ * by security group, and resolves any alias at the head of a player's
+ * command line into its expansion before the command is dispatched.
+ * Supports prefix aliases (XALIAS, names ending in a space) and token
+ * substitution within expansions — positional tokens ($1, $2, ...) and
+ * the gobble token ($*) are filled in from the words the player typed.
+ *
+ * Masquerade! Painted input on parade.
+ *
+ * @created 2026-06-02 - Gesslar
+ * @last_modified 2026-06-02 - Gesslar
+ *
+ * @history
+ * 2026-06-02 - Gesslar - Created
+ */
+
+inherit STD_DAEMON;
+
+#define INPUT_SPACES      0
+#define INPUT_WORD        1
+
+#define NO_MATCH          0
+#define POSITIONAL_MATCH  1
+#define GOBBLE_MATCH      2
+
+public void rehash();
+
+/**
+ * Alias definitions grouped by security group. Each group maps an
+ * alias name to its expansion string. Loaded from ETC_ALIASES by
+ * rehash().
+ *
+ * @type {([ string: ([ string: string ]) ])}
+ */
+private nosave mapping __aliases = ([]);
+
+void setup() {
+  set_no_clean();
+  rehash();
+}
+
+/**
+ * Returns the alias groups available to the given living: the shared
+ * "all" group plus any group the living's security name belongs to.
+ *
+ * @param {STD_BODY} who - The living whose group membership gates which
+ *  groups are returned; when null, only the globally-available groups
+ *  apply.
+ * @returns {([ string: ([ string: string ]) ])} The matching alias
+ *  groups, each mapping an alias name to its expansion.
+ */
+public mapping get_global_aliases(object who) {
+  string name = who
+    ? query_privs(who)
+    : NONAME;
+
+  mapping available = filter(__aliases, (:
+    $1 == "all" || is_member($(name), $1)
+  :));
+
+  return available;
+}
+
+/**
+ * Reloads alias definitions from ETC_ALIASES, replacing the current
+ * set. Duplicate aliases defined in more than one group are detected
+ * and removed, with a warning logged for each, so that any given alias
+ * name resolves to a single expansion.
+ */
+public void rehash() {
+  __aliases = load_lpml(ETC_ALIASES);
+
+  string *found = ({});
+
+  // Look for dupes
+  foreach(string group, mapping aliases in __aliases) {
+    foreach(string alias, string _expanded in aliases) {
+      if(includes(found, alias)) {
+        _warn("ALIAS_D: More than one definition of alias '"+alias+"' found.");
+        _warn("ALIAS_D: Removing alias '"+alias+"' from group '"+group+"'");
+
+        map_delete(__aliases[group], alias);
+      } else {
+        push(ref found, alias);
+      }
+    }
+  }
+}
+
+/**
+ * Searches a single alias mapping for one matching the given input
+ * word. An alias whose name ends in a space (an XALIAS) matches on
+ * prefix, splitting the remainder of the input off so the caller can
+ * re-insert it; a plain alias must match the whole word.
+ *
+ * @param {string} input - The first word the player typed.
+ * @param {([ string: string ])} [aliases] - The alias-name to expansion
+ *  mapping to search; defaults to an empty mapping.
+ * @returns {({string}) | ({string, string}) | undefined} A one-element
+ *  array holding the expansion, a two-element array of the expansion and
+ *  the leftover input for an XALIAS match, or undefined if no alias
+ *  matched.
+ */
+private string *find_alias(string input, mapping aliases: (: ([]) :)) {
+  string *found;
+
+  foreach(string alias, string expanded in aliases) {
+    if(ends_with(alias, " ")) { // XALIAS
+      if(starts_with(input, alias[0..<2])) {
+        found = ({ expanded, input[1..] });
+
+        break;
+      }
+    } else { // Not XALIAS (duh)
+      if(alias == input) {
+        found = ({ expanded });
+
+        break;
+      }
+    }
+  }
+
+  return found;
+}
+
+/**
+ * Searches the loaded alias groups for one matching the given input
+ * word and returns its expansion. Aliases whose name ends in a space
+ * (an XALIAS) match on prefix, splitting the remainder of the input
+ * off to be re-inserted by the caller. Only aliases in the "all" group
+ * or in a group the living belongs to are considered.
+ *
+ * @param {string} input - The first word the player typed.
+ * @param {STD_BODY} who - The living whose group membership gates which
+ *  aliases apply.
+ * @returns {({string}) | ({string, string}) | undefined} A one-element array
+ *  holding the expansion, a two-element array of the expansion and the
+ *  leftover input for an XALIAS match, or undefined if no alias matched.
+ */
+private string *find_global_alias(string input, object who) {
+  string name = who
+    ? query_privs(who)
+    : NONAME;
+
+  mapping available = filter(__aliases, (:
+    $1 == "all" || is_member($(name), $1)
+  :));
+
+  foreach(string _group, mapping aliases in available) {
+    string *found = find_alias(input, aliases);
+
+    if(found)
+      return found;
+  }
+
+  return undefined;
+}
+
+/**
+ * Searches a living's personal aliases for one matching the given input
+ * word.
+ *
+ * @param {STD_BODY} tp - The living whose personal aliases are searched.
+ * @param {string} input - The first word the player typed.
+ * @returns {({string}) | ({string, string}) | undefined} A one-element
+ *  array holding the expansion, a two-element array of the expansion and
+ *  the leftover input for an XALIAS match, or undefined if no alias
+ *  matched.
+ */
+private string *find_personal_alias(
+  /** @type {STD_BODY} */ object tp,
+  string input
+) {
+  mapping aliases = tp->get_aliases();
+  string *found = find_alias(input, aliases);
+
+  return found;
+}
+
+/**
+ * Resolves any alias at the head of a command line into its expansion,
+ * substituting positional tokens ($1, $2, ...) and the gobble token
+ * ($*) with words drawn from the original input. If no alias matches,
+ * the input is returned unchanged.
+ *
+ * Positional tokens are replaced by the correspondingly numbered word
+ * from the input (1-based). The gobble token ($*) is replaced by every
+ * input word following the highest-numbered positional already
+ * consumed; when more than one $* appears, only the last is honoured.
+ *
+ * @param {string} input - The raw command line to resolve.
+ * @param {STD_BODY} [who] - The living whose aliases apply; defaults to
+ *                           this_body() when null.
+ * @returns {string} The expanded command line, or the original input if
+ *                   no alias applied.
+ * @errors If input is not a non-empty string.
+ * @errors If who is neither null nor a living object.
+ */
+public resolve_alias(string input, object who) {
+  assert_arg(stringp(input) && truthy(input), 1, "Input must be a string.");
+  assert_arg(nullp(who) || (objectp(who) && living(who)), 2, "Who must be null or a living.");
+
+  who ??= this_body();
+
+  string *input_parts = explode(input, " ");
+  string  to_try = shift(ref input_parts);
+  string *found =
+    find_personal_alias(who, to_try) ?? find_global_alias(to_try, who);
+
+  if(!found)
+    return input;
+
+  // We had a remainder! Nuzzle it back in.
+  if(sizeof(found) == 2)
+    unshift(ref input_parts, found[1]);
+
+  // Re-assemble input so we get the proper positioning
+  input = implode(input_parts, " ");
+
+  // Now un-re-assemble so we can have everything word-separating. Not a
+  // straightforward explode, because maybe sections of contiguous spaces.
+  mixed *assoc = pcre_assoc(
+    input,
+    ({ "\\s+"}),
+    ({ INPUT_SPACES }),
+    INPUT_WORD,
+  );
+  string *input_words = assoc[0];
+  int *input_matches = assoc[1];
+
+  string alias = found[0];
+  mixed *alias_parts = pcre_assoc(
+    alias,
+    ({
+      "(?<=^|\\s)\\$\\d+(?=$|\\s)", /* $N */
+      "(?<=^|\\s)\\$\\*(?=$|\\s)",  /* $* */
+    }),
+    ({POSITIONAL_MATCH, GOBBLE_MATCH}),
+    NO_MATCH
+  );
+
+  string *positional_tokens = alias_parts[0];
+  int *positional_matches = alias_parts[1];
+
+  string *result = copy(positional_tokens);
+
+  int highest_positional_token_position = -1;
+  int highest_input_cursor = -1;
+  int *gobble_token_positions = ({});
+
+  // Now we have everything! let's Lupin!
+  int i = 0, sz = sizeof(positional_tokens);
+
+  for(; i < sz; i++) {
+    if(positional_matches[i] == NO_MATCH)
+      continue;
+
+    if(positional_matches[i] == POSITIONAL_MATCH) {
+      int positional_token_position;
+
+      sscanf(positional_tokens[i], "$%d", positional_token_position);
+
+      highest_positional_token_position = max(
+        ({
+          highest_positional_token_position,
+          positional_token_position
+        }));
+
+      // Find the word from the input.
+      int inner = 0;
+      int cursor = -1;
+      int found_index = -1;
+      int sz_inner = sizeof(input_matches);
+
+      for(; inner < sz_inner; inner++) {
+        if(input_matches[inner] == INPUT_SPACES)
+          continue;
+
+        if(++cursor == positional_token_position-1) { // remember tokens are 1-based
+          found_index = inner;
+
+          highest_input_cursor = max(({
+            highest_input_cursor,
+            found_index,
+          }));
+
+          break;
+        }
+      }
+
+      if(found_index > -1)
+        result[i] = input_words[found_index];
+      else
+        result[i] = "";
+    } else if(positional_matches[i] == GOBBLE_MATCH) {
+      push(ref gobble_token_positions, i);
+    }
+  }
+
+  int sz_gobbles = sizeof(gobble_token_positions);
+
+  if(sz_gobbles) {
+    string *gobbled = ({});
+
+    if(highest_input_cursor > -1) {
+      gobbled = input_words[highest_input_cursor+1..];
+    } else {
+      gobbled = input_words;
+    }
+
+    int final_gobble_position = pop(ref gobble_token_positions);
+    each(gobble_token_positions, (: $(result)[$1] = "" :));
+
+    result = result[0 .. final_gobble_position-1];
+    result += gobbled;
+    result += positional_tokens[final_gobble_position+1..];
+  }
+
+  return trim(implode(result, ""));
+}

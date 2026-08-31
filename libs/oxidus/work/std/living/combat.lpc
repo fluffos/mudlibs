@@ -1,0 +1,1083 @@
+/**
+ * @file /std/living/combat.lpc
+ *
+ * Combat module for living objects. Drives the per-round attack loop, threat
+ * tracking for current and recently-seen enemies, hit-chance and damage
+ * resolution, defence and AC aggregation from equipment, and the weapon/damage
+ * fields NPCs use to fight without wielded equipment.
+ *
+ * @created 2024-07-24 - Gesslar
+ * @last_modified 2024-07-24 - Gesslar
+ *
+ * @history
+ * 2024-07-24 - Gesslar - Created
+ */
+
+#include <combat.h>
+#include <action.h>
+#include <advancement.h>
+#include <body.h>
+#include <equipment.h>
+#include <gmcp_defines.h>
+#include "/std/object/include/module.h"
+#include <skills.h>
+#include <vitals.h>
+#include "/std/object/include/object.h"
+
+inherit __DIR__ "damage";
+
+// Variables
+/** @type {([ STD_BODY: float ])}  */
+private nosave mapping __current_enemies = ([]);
+
+/** @type {([ STD_BODY: float ])} */
+private nosave mapping __seen_enemies = ([]);
+
+private nosave float __attack_speed = 2.0;
+private nosave int __next_combat_round = 0;
+private nosave int __first_strike = 0;
+private nosave int __second_strike = 0;
+
+/** @type {([ string: float ])} */
+private nosave mapping __defence = ([]);
+
+private nosave float __ac = 0.0;
+private nosave float __spell_ac = 0.0;
+
+/** @type {STD_BODY} */
+private nosave object __last_damager;
+
+/** @type {STD_BODY} */
+private nosave object __killed_by_ob;
+
+private nosave int __no_combat = 0;
+
+/**
+ * Per-tick combat heartbeat. Stops the loop if dead or unconscious, prunes
+ * stale enemies, picks the highest-threat target, executes a swing, broadcasts
+ * the GMCP combat status, and schedules the next round if one is not already
+ * pending.
+ */
+void combat_round() {
+  /** @type {STD_BODY} */ object victim;
+
+  if(is_dead())
+    return;
+
+  if(query_hp() <= 0.0) {
+    stop_all_attacks();
+    return;
+  }
+
+  clean_up_enemies();
+
+  if(!in_combat()) {
+    __next_combat_round = 0;
+    return;
+  }
+
+  victim = highest_threat();
+
+  if(!valid_enemy(victim))
+    return;
+
+  swing();
+
+  if(!valid_enemy(victim))
+    return;
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_STATUS, ([
+    GMCP_LBL_CHAR_STATUS_CURRENT_ENEMY: victim->query_name(),
+    GMCP_LBL_CHAR_STATUS_CURRENT_ENEMY_HEALTH: sprintf("%.2f", victim->hp_ratio()),
+    GMCP_LBL_CHAR_STATUS_CURRENT_ENEMIES: keys(__current_enemies),
+  ]));
+
+  if(find_call_out(__next_combat_round) == -1)
+    next_round();
+}
+
+public void reset_combat_round() {
+  if(in_combat() && __next_combat_round && find_call_out(__next_combat_round) > -1) {
+    remove_call_out(__next_combat_round);
+    next_round();
+  }
+}
+
+/**
+ * Begin attacking a victim. Adds it to the current and seen enemy tables,
+ * schedules the first combat round, and tells the victim to start attacking
+ * back. NPCs also push the victim into combat memory.
+ *
+ * @param {STD_BODY} victim - The body to engage.
+ * @returns {int} 1 if a new engagement was started, 0 if the
+ *                victim was missing or already engaged.
+ */
+int start_attack(object victim) {
+  if(!victim)
+    return 0;
+
+  if(__current_enemies[victim])
+    return 0;
+
+  __current_enemies[victim] = 1.0;
+
+  if(!__seen_enemies[victim])
+    __seen_enemies[victim] = 1.0;
+
+  if(npcp(this_object()))
+    module("combat_memory", "add_to_memory", victim);
+
+  if(!__next_combat_round || find_call_out(__next_combat_round) == -1)
+    next_round();
+
+  victim->start_attack(this_object());
+
+  return 1;
+}
+
+/**
+ * Recursively performs a sequence of attack swings against the current
+ * highest-threat enemy. Picks the main weapon for the first swing and may roll
+ * into an off-hand swing for the next iteration based on the combat.melee
+ * skill. Stops early if the attacker is exhausted, the enemy is invalid, or
+ * count is exhausted.
+ *
+ * Note: Some preparation is in the works for weapon speed, but I haven't
+ * quite figured out how I'm going to do it just yet. I might have to break
+ * swing out into something else, or maybe combat round, because count exists
+ * for flurries of attacks, but it doesn't really account for fast or slow
+ * weapons. We'll see how that goes in the future.
+ *
+ * @param {int} [count=1] - Remaining swings to perform.
+ * @param {int} [multi] - Non-zero if this iteration should pick an off-hand
+ *  weapon instead of the main.
+ */
+varargs void swing(int count, int multi) {
+  int off_hand_swing = !!multi;
+  int next_multi = 0;
+
+  object enemy = highest_threat();
+  object weapon;
+  string *slots = query_weapon_slots();
+
+  if(nullp(count))
+    count = 1;
+
+  if(!enemy)
+    return;
+
+  if(!valid_enemy(enemy))
+    return;
+
+  if(pcp(this_object()) && query_mp() < 1.0) {
+    tell(this_object(), "You are too exhausted to attack.\n");
+    return;
+  }
+
+  if(count < 1)
+    return;
+
+  mapping wielded = query_wielded();
+  wielded = filter(wielded, (: objectp($2) :));
+
+  if(sizeof(wielded)) {
+    string main_slot = slots[0];
+    object main_hand = wielded[main_slot];
+    // A two-handed weapon occupies every slot it needs with the same object,
+    // so exclude the main hand by object as well as by slot.
+    mapping off_hands = filter(wielded,
+      (: $1 != $(main_slot) && $2 != $(main_hand) :));
+
+    if(off_hand_swing) {
+      object *possible = distinct_array(values(off_hands));
+
+      weapon = element_of(possible);
+    } else {
+      weapon = main_hand;
+
+      if(sizeof(off_hands)) {
+        float multi_chance =  15.0
+                            + floor(query_skill_level("combat.melee") / 5.0);
+
+        float roll = random_float(100.0);
+
+        if(roll < multi_chance)
+          next_multi = 1;
+      }
+    }
+  }
+
+  if(can_strike(enemy, weapon)) {
+    strike_enemy(enemy, weapon, off_hand_swing);
+  } else {
+    enemy->use_skill("combat.defence.dodge");
+    fail_strike(enemy, weapon);
+  }
+
+  // Subtract for this round
+  count--;
+
+  // if we're doing second weapon, we gotta do it anyway
+  if(next_multi)
+    count++;
+
+  if(count)
+    swing(count, next_multi);
+}
+
+/**
+ * Schedules the next combat round.
+ *
+ * @returns {int} The call_out handle for the scheduled round.
+ */
+int next_round() {
+  float speed = __attack_speed;
+
+  __next_combat_round = call_out_walltime("combat_round", speed);
+
+  return __next_combat_round;
+}
+
+/**
+ * Rolls the hit chance for an attempted strike. The weapon argument selects
+ * how the roll is computed:
+ *
+ *  - object (or null) — physical attack against the enemy's AC, defended by
+ *    combat.defence.dodge.
+ *  - string — treated as a skill name (e.g. an ability or spell). Spell paths
+ *    defend against combat.defence.evade, other skill paths against
+ *    combat.defence.dodge, and the enemy's spell AC is used in place of
+ *    physical AC.
+ *
+ * The defending skill is exercised regardless of outcome.
+ *
+ * @public
+ * @param {STD_BODY} enemy - The body being struck.
+ * @param {object | string} weapon - Wielded weapon, null for unarmed/default,
+ *  or a skill name string for spells and abilities.
+ * @returns {int} 1 if the strike lands, 0 if it misses or the weapon argument
+ *  is of an unsupported type.
+ */
+public int can_strike(object enemy, mixed weapon) {
+  float ac;
+  float chance = mud_config("COMBAT.DEFAULT_HIT_CHANCE");
+  float lvl = query_effective_level();
+  float vlvl = enemy->query_effective_level();
+  float result;
+  string skill_name;
+  string defence_skill;
+  float skill;
+  mapping weapon_info;
+
+  if(nullp(weapon) || objectp(weapon)) {
+    weapon_info = query_weapon_info(weapon);
+    skill_name = weapon_info["skill"];
+    ac = enemy->query_ac();
+    defence_skill = "combat.defence.dodge";
+  } else if(stringp(weapon)) {
+    skill_name = weapon;
+    ac = enemy->query_spell_ac();
+    if(strsrch(weapon, "arcane.") == 0)
+      defence_skill = "combat.defence.evade";
+    else
+      defence_skill = "combat.defence.dodge";
+  } else
+    return 0;
+
+  skill = query_skill_level(skill_name);
+
+  if(enemy->query_mp() <= 0.0)
+    chance += 50.0;
+
+  chance = chance
+          + (lvl - vlvl)
+          + skill
+          - (ac * 2.0)
+          - enemy->query_skill_level(defence_skill)
+  ;
+
+  //debug("->  Chance = %O", chance);
+  chance = 50.0 + dim_sigmoid(chance - 50.0, 45.0, 0.03);
+  // debug("->> Chance = %O", chance);
+  result = random_float(100.0);
+
+  enemy->use_skill(defence_skill);
+
+  return result < chance;
+}
+
+/**
+ * Emits the miss messages for a failed strike to the attacker, the victim, and
+ * the surrounding environment.
+ *
+ * @private
+ * @param {STD_BODY} enemy - The body that dodged.
+ * @param {object} weapon - The weapon used (may be null for unarmed or NPC
+ *  defaults).
+ */
+private fail_strike(object enemy, object weapon) {
+  string wname, wtype;
+  string *messes, mess;
+  mapping weapon_info = query_weapon_info(weapon);
+
+  wname = weapon_info["name"];
+  wtype = weapon_info["type"];
+
+  mess = MESS_D->get_message("combat", wtype, 0);
+  messes = ACTION_D->action(({ this_object(), enemy }), mess, ({wname}));
+
+  tell(this_object(), messes[0], MSG_COMBAT_MISS);
+  tell(enemy, messes[1], MSG_COMBAT_MISS);
+  tell_down(environment(), messes[2], MSG_COMBAT_MISS, ({ this_object(), enemy }));
+}
+
+/**
+ * Resolves a successful strike. Computes damage from a base percentage of the
+ * enemy's max HP plus level and skill bonuses, minus the enemy's level,
+ * type-specific defence, and combat defence skill, with a hidden bonus when
+ * the enemy is past exhaustion. Sends the hit messages, exercises the weapon
+ * skill, delivers damage, drains the attacker's MP, records threat in both the
+ * current and seen tables, and triggers any weapon proc.
+ *
+ * @param {STD_BODY} enemy - The body being struck.
+ * @param {STD_WEAPON} [weapon] - The weapon used, or null for unarmed
+ *                          or NPC defaults.
+ */
+void strike_enemy(object enemy, object weapon, int off_hand) {
+  if(!valid_enemy(enemy))
+    return;
+
+  if(!current_enemy(enemy))
+    return;
+
+  mapping weapon_info = query_weapon_info(weapon);
+
+  string skill_name = weapon_info.skill;
+  string wtype = weapon_info.type;
+  string wname = weapon_info.name;
+
+  float dam = calculate_damage(enemy, weapon);
+
+  use_skill(skill_name);
+
+  if(dam < 0.0)
+    dam = 1.0;
+
+  string mess = MESS_D->get_message("combat", wtype, to_int(ceil(dam)));
+  string *messes = ACTION_D->action(({ this_object(), enemy }), mess, ({wname}));
+
+  if(off_hand)
+    tell(this_object(), "{{909}}#-> {{res}}");
+
+  tell(this_object(), messes[0], MSG_COMBAT_HIT);
+  tell(enemy, messes[1], MSG_COMBAT_HIT);
+  tell_down(environment(), messes[2], MSG_COMBAT_HIT, ({ this_object(), enemy }));
+
+  deliver_mundane_damage(enemy, dam, wtype);
+  adjust_mp(-random_float(5.0));
+  add_threat(enemy, dam);
+  add_seen_threat(enemy, dam);
+
+  if(!valid_enemy(enemy))
+    return;
+
+  string proc;
+  if(weapon && weapon->is_weapon()) {
+    if(stringp(proc = call_if(weapon, "can_proc"))) {
+      call_if(weapon, "proc", proc, this_object(), enemy);
+    }
+  }
+
+  if(!valid_enemy(enemy))
+    return;
+
+  if(npcp(this_object())) {
+    string tag = call_if(this_object(), "can_proc");
+    if(tag) {
+      catch {
+        /** @type {STD_NPC} */ (this_object())->proc_npc(tag);
+      };
+    }
+  }
+}
+
+/**
+ * Resolves the descriptive fields used when striking with a given weapon. For
+ * an actual weapon object the name, damage type, derived combat skill, and
+ * damage class are read from the weapon. For unarmed players the result
+ * is fists with the unarmed combat skill. For NPCs without a weapon the
+ * configured weapon name and type are used along with the NPC's base damage.
+ *
+ * @param {STD_WEAPON} weapon - The weapon object, or null for unarmed or NPC
+ *  defaults.
+ * @returns {([ string: mixed ])} Mapping with keys "name" (string), "type"
+ *  (string), "skill" (string), and "base" (float).
+ */
+mapping query_weapon_info(object weapon) {
+  string wname, wtype;
+  string skill_name;
+  float base;
+
+  if(weapon) {
+    wname = weapon->query_name();
+    wtype = weapon->query_damage_type();
+    skill_name = sprintf("combat.melee.%s", wtype);
+    base = weapon->query_dc();
+  } else {
+    if(pcp(this_object())) {
+      wname = "fist";
+      wtype = "bludgeoning";
+      skill_name = "combat.melee.unarmed";
+    } else {
+      wname = query_weapon_name();
+      wtype = query_weapon_type();
+      skill_name = "combat.melee.unarmed";
+    }
+    base = query_damage();
+  }
+
+  return ([
+    "name": wname,
+    "type": wtype,
+    "skill": skill_name,
+    "base": base,
+  ]);
+}
+
+/**
+ * Returns whether this body is currently attacking the given victim.
+ *
+ * @param {STD_BODY} victim - The body to test.
+ * @returns {int} 1 if engaged with victim, 0 otherwise.
+ */
+int attacking(object victim) {
+  if(!victim)
+    return 0;
+
+  if(__current_enemies[victim])
+    return 1;
+
+  return 0;
+}
+
+/**
+ * Removes the victim from the current enemy table, optionally also from the
+ * seen-enemies table.
+ *
+ * @param {STD_BODY} victim - The body to disengage from.
+ * @param {int} [seen] - If non-zero, also drop the victim from the
+ *  seen-enemies table.
+ * @returns {int} 1 if a removal occurred, 0 if neither table contained the
+ *  victim, -1 if victim was missing or not currently engaged.
+ */
+varargs int stop_attack(object victim, int seen) {
+  if(!victim)
+    return -1;
+
+  if(!__current_enemies[victim])
+    return -1;
+
+  if(__current_enemies[victim]) {
+    map_delete(__current_enemies, victim);
+    return 1;
+  }
+
+  if(seen && __seen_enemies[victim]) {
+    map_delete(__seen_enemies, victim);
+    return 1;
+  }
+
+  return 0;
+}
+
+/**
+ * Disengages from every current enemy. Cancels the pending combat round,
+ * clears the current enemy table, broadcasts an empty GMCP combat status, and
+ * runs a final cleanup pass.
+ */
+void stop_all_attacks() {
+  if(find_call_out(__next_combat_round) != -1)
+    remove_call_out(__next_combat_round);
+
+  __next_combat_round = 0;
+  __current_enemies = ([]);
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_STATUS, ([
+    GMCP_LBL_CHAR_STATUS_CURRENT_ENEMY: "",
+    GMCP_LBL_CHAR_STATUS_CURRENT_ENEMIES: ({}),
+  ]));
+
+  clean_up_enemies();
+
+  if(is_dead())
+    return;
+}
+
+/**
+ * Returns whether this body has any current enemies.
+ *
+ * @returns {int} 1 if engaged with at least one enemy, 0 otherwise.
+ */
+int in_combat() {
+  return sizeof(__current_enemies) > 0;
+}
+
+/**
+ * Returns whether the victim has been seen recently — i.e. is tracked in the
+ * seen-enemies table even if not currently engaged.
+ *
+ * @param {STD_BODY} victim - The body to test.
+ * @returns {int} 1 if present in the seen table, 0 otherwise.
+ */
+int seen_enemy(object victim) {
+  if(!victim)
+    return 0;
+
+  if(__seen_enemies[victim])
+    return 1;
+
+  return 0;
+}
+
+/**
+ * Returns whether the victim is in the current enemy table.
+ *
+ * @param {STD_BODY} victim - The body to test.
+ * @returns {int} 1 if currently engaged, 0 otherwise.
+ */
+int current_enemy(object victim) {
+  if(!victim)
+    return 0;
+
+  if(__current_enemies[victim])
+    return 1;
+
+  return 0;
+}
+
+/**
+ * Returns a shallow copy of the current enemy threat table.
+ *
+ * @returns {([ STD_BODY: float ])} Copy of the current enemies mapping, keyed
+ *  by enemy and valued by threat.
+ */
+mapping current_enemies() {
+  return copy(__current_enemies);
+}
+
+/**
+ * Returns the current enemy with the highest accumulated threat.
+ *
+ * @returns {STD_BODY} The highest-threat enemy, or 0 if no current enemies
+ *  exist.
+ */
+object highest_threat() {
+  object *enemies;
+  object highest;
+  int highest_threat = 0;
+
+  if(!sizeof(__current_enemies))
+    return 0;
+
+  enemies = keys(__current_enemies);
+  highest = enemies[0];
+
+  foreach(object enemy in enemies) {
+    if(__current_enemies[enemy] > highest_threat) {
+      highest = enemy;
+      highest_threat = __current_enemies[enemy];
+    }
+  }
+
+  return highest;
+}
+
+/**
+ * Returns the current enemy with the lowest accumulated threat.
+ *
+ * @returns {STD_BODY} The lowest-threat enemy.
+ */
+object lowest_threat() {
+  object *enemies = keys(__current_enemies);
+  object lowest = enemies[0];
+  int lowest_threat = MAX_INT;
+
+  foreach(object enemy in enemies) {
+    if(__current_enemies[enemy] < lowest_threat) {
+      lowest = enemy;
+      lowest_threat = __current_enemies[enemy];
+    }
+  }
+
+  return lowest;
+}
+
+/**
+ * Returns the seen enemy with the highest accumulated threat.
+ *
+ * @returns {STD_BODY} The highest-threat seen enemy.
+ */
+object highest_seen_threat() {
+  object *enemies = keys(__seen_enemies);
+  object highest = enemies[0];
+  int highest_threat = 0;
+
+  foreach(object enemy in enemies) {
+    if(__seen_enemies[enemy] > highest_threat) {
+      highest = enemy;
+      highest_threat = __seen_enemies[enemy];
+    }
+  }
+
+  return highest;
+}
+
+/**
+ * Returns the seen enemy with the lowest accumulated threat.
+ *
+ * @returns {STD_BODY} The lowest-threat seen enemy.
+ */
+object lowest_seen_threat() {
+  object *enemies = keys(__seen_enemies);
+  object lowest = enemies[0];
+  int lowest_threat = MAX_INT;
+
+  foreach(object enemy in enemies) {
+    if(__seen_enemies[enemy] < lowest_threat) {
+      lowest = enemy;
+      lowest_threat = __seen_enemies[enemy];
+    }
+  }
+
+  return lowest;
+}
+
+/**
+ * Filters the current enemy table down to valid enemies. If the table empties
+ * as a result, clears the next-round handle, tells the body that combat is
+ * over (when alive), and broadcasts an empty GMCP combat status.
+ */
+void clean_up_enemies() {
+  if(is_dead())
+    return;
+
+  if(!in_combat())
+    return;
+
+  __current_enemies = filter(__current_enemies, (: valid_enemy :));
+
+  if(!in_combat()) {
+    __next_combat_round = 0;
+
+    if(query_hp() > 0.0)
+      tell(this_object(), "You are no longer in combat.\n");
+
+    GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_STATUS, ([
+      GMCP_LBL_CHAR_STATUS_CURRENT_ENEMY: "",
+      GMCP_LBL_CHAR_STATUS_CURRENT_ENEMIES: ({}),
+    ]));
+  }
+}
+
+/**
+ * Tests whether an enemy is still a valid combat target — same environment as
+ * this body and not already dead.
+ *
+ * Declared varargs so it can be passed directly as a filter callback over the
+ * threat mappings, where the iterator hands in a value alongside the key.
+ *
+ * @param {STD_BODY} enemy - The candidate enemy.
+ * @returns {int} 1 if still a valid target, 0 otherwise.
+ */
+varargs int valid_enemy(object enemy) {
+  if(!same_env_check(this_object(), enemy))
+    return 0;
+
+  if(enemy->is_dead())
+    return 0;
+
+  return 1;
+}
+
+/**
+ * Filters the seen-enemies table down to entries that are still valid (objects
+ * that are not dead).
+ */
+void clean_up_seen_enemies() {
+  __seen_enemies = filter(__seen_enemies, (: valid_seen_enemy :));
+}
+
+/**
+ * Tests whether a seen-enemy entry is still worth keeping — the value must be
+ * a live object. Unlike valid_enemy, no environment check is performed; seen
+ * enemies can be tracked across rooms.
+ *
+ * @param {STD_BODY} enemy - The candidate seen enemy.
+ * @returns {int} 1 if the entry should be retained, 0 otherwise.
+ */
+varargs int valid_seen_enemy(object enemy) {
+  if(!objectp(enemy))
+    return 0;
+
+  if(enemy->is_dead())
+    return 0;
+
+  return 1;
+}
+
+/**
+ * Adds threat for a current enemy and returns the new accumulated total. No-op
+ * if the enemy is no longer valid.
+ *
+ * @param {STD_BODY} enemy - The enemy whose threat to adjust.
+ * @param {float} amount - Threat to add (may be negative).
+ * @returns {float} The new threat total, or 0.0 if the enemy was rejected.
+ */
+float add_threat(object enemy, float amount) {
+  if(!valid_enemy(enemy))
+    return 0.0;
+
+  __current_enemies[enemy] += amount;
+
+  return __current_enemies[enemy];
+}
+
+/**
+ * Adds threat for a seen enemy and returns the new accumulated total. No-op if
+ * the seen entry is no longer valid.
+ *
+ * @param {STD_BODY} enemy - The enemy whose seen threat to adjust.
+ * @param {float} amount - Threat to add (may be negative).
+ * @returns {float} The new seen-threat total, or 0.0 if the entry was
+ *  rejected.
+ */
+float add_seen_threat(object enemy, float amount) {
+  if(!valid_seen_enemy(enemy))
+    return 0.0;
+
+  __seen_enemies[enemy] += amount;
+
+  return __seen_enemies[enemy];
+}
+
+/**
+ * Adjusts the attack speed by a delta and clamps the result to the legal range
+ * of 0.5 to 10.0 seconds per round.
+ *
+ * The amount is inverted, such that a positive number added reduces the delay.
+ * The lower the faster!
+ *
+ * @param {float} amount - Delta to apply (may be negative).
+ * @returns {float} The new attack speed.
+ */
+float add_attack_speed(float amount) {
+  __attack_speed -= amount;
+
+  __attack_speed = clamp(__attack_speed, 0.5, 10.0);
+
+  return __attack_speed;
+}
+
+/**
+ * Sets the raw attack speed in seconds per round. No clamping is applied;
+ * callers are responsible for staying in range.
+ *
+ * @param {float} speed - The new attack speed in seconds.
+ * @returns {float} The attack speed.
+ */
+float set_attack_speed(float speed) {
+  __attack_speed = speed;
+
+  __attack_speed = clamp(__attack_speed, 0.5, 10.0);
+
+  return __attack_speed;
+}
+
+/**
+ * Returns the current attack speed in seconds per round.
+ *
+ * @returns {float} The configured attack speed.
+ */
+float query_attack_speed() {
+  return __attack_speed;
+}
+
+/**
+ * Replaces the per-type defence mapping wholesale and triggers a recompute
+ * from equipment.
+ *
+ * @param {([ string: float ])} def - New defence mapping keyed by damage type.
+ */
+void set_defence(mapping def) {
+  __defence = def;
+
+  adjust_protection();
+}
+
+/**
+ * Sets a single damage-type defence value and triggers a recompute from
+ * equipment.
+ *
+ * @param {string} type - The damage type (e.g. "fire", "slashing").
+ * @param {float} amount - Defence value for that type.
+ */
+void add_defence(string type, float amount) {
+  if(!__defence)
+    __defence = ([ ]);
+
+  __defence[type] = amount;
+
+  adjust_protection();
+}
+
+/**
+ * Returns a shallow copy of the per-type defence mapping.
+ *
+ * @returns {([ string: float ])} Damage-type to defence-value mapping.
+ */
+mapping query_defence() {
+  return copy(__defence);
+}
+
+/**
+ * Returns the defence value for a single damage type.
+ *
+ * @param {string} type - The damage type to look up.
+ * @returns {float} The defence value, or 0.0 if not configured.
+ */
+float query_defence_amount(string type) {
+  if(pcp(this_object())) {
+    if(!__defence)
+      return 0.0;
+
+    return __defence[type];
+  } else {
+    return query_level() * 0.5;
+  }
+}
+
+/**
+ * Recomputes the per-type defence mapping and total AC by summing the
+ * corresponding values from every equipped item. Called whenever defences are
+ * set or equipment changes.
+ *
+ * @returns {([ string: float ])} The recomputed defence mapping.
+ */
+mapping adjust_protection() {
+  mapping _equipment = query_equipped();
+  object *obs = values(_equipment), ob;
+
+  { // Defences
+    __defence = ([]);
+    foreach(ob in obs) {
+      mapping def = ob->query_defence();
+
+      if(!mapp(def))
+        continue;
+
+      foreach(string type, float amount in def) {
+        if(!__defence[type])
+          __defence[type] = 0.0;
+
+        __defence[type] += amount;
+      }
+    }
+  }
+
+  { // Armor Class
+    __ac = 0.0;
+    foreach(ob in obs)
+      __ac += ob->query_ac();
+  }
+
+  return copy(__defence);
+}
+
+/**
+ * Returns the cached total armour class aggregated across all equipped items
+ * by adjust_protection().
+ *
+ * @returns {float} The current total AC.
+ */
+float query_ac() {
+  if(pcp(this_object()))
+    return __ac;
+  else
+    return query_level() + (query_level() * 2.0);
+}
+
+/**
+ * Returns the cached total armour class aggregated across all equipped items
+ * by adjust_protection().
+ *
+ * @returns {float} The current total AC.
+ */
+float query_spell_ac() {
+  return __spell_ac;
+}
+
+/**
+ * Returns the body that most recently dealt damage to this one.
+ *
+ * @returns {STD_BODY} The last damager, or 0 if none recorded.
+ */
+object last_damaged_by() {
+  return __last_damager;
+}
+
+/**
+ * Records a body as the most recent source of damage. Called from the damage
+ * pipeline.
+ *
+ * @param {STD_BODY} ob - The damaging body.
+ * @returns {STD_BODY} The same body that was set.
+ */
+object set_last_damaged_by(object ob) {
+  __last_damager = ob;
+  return __last_damager;
+}
+
+/**
+ * Returns the body credited with killing this one.
+ *
+ * @returns {STD_BODY} The killer, or 0 if not killed.
+ */
+object killed_by() {
+  return __killed_by_ob;
+}
+
+/**
+ * Records the body credited with killing this one. Called from the death
+ * sequence.
+ *
+ * @param {STD_BODY} ob - The killer.
+ * @returns {STD_BODY} The same body that was set.
+ */
+object set_killed_by(object ob) {
+  __killed_by_ob = ob;
+  return __killed_by_ob;
+}
+
+// The following are generally used by NPCs, but are available for special
+// circumstances for players.
+
+private nomask float __damage = 0.0;
+private nomask string __weapon_name = "fist";
+private nomask string __weapon_type = "bludgeoning";
+
+/**
+ * Sets the NPC default base damage. Negative values are rejected.
+ *
+ * @param {float} x - The new base damage (must be >= 0).
+ * @returns {float} The new damage, or 0.0 if rejected.
+ */
+float set_damage(float x) {
+  if(x <= 0.0)
+    return 0.0;
+
+  return __damage = x;
+}
+
+/**
+ * Returns a randomised damage roll for unarmed/NPC attacks. If no base damage
+ * has been configured, the roll scales with the NPC's level.
+ *
+ * @returns {float} A randomised damage value.
+ */
+float query_damage() {
+  if(__damage <= 0.0)
+    return query_level() + random_float(query_level());
+
+  return random_float(__damage);
+}
+
+/**
+ * Sets the NPC default weapon name (used in combat messages when no real
+ * weapon is wielded). Non-string values are ignored.
+ *
+ * @param {string} str - The new weapon name.
+ * @returns {string} The current weapon name after the call.
+ */
+string set_weapon_name(string str) {
+  if(!stringp(str))
+    return __weapon_name;
+
+  return __weapon_name = str;
+}
+
+/**
+ * Returns the NPC default weapon name.
+ *
+ * @returns {string} The configured weapon name.
+ */
+string query_weapon_name() {
+  return __weapon_name;
+}
+
+/**
+ * Sets the NPC default damage type (used when no real weapon is wielded).
+ * Non-string values are ignored.
+ *
+ * @param {string} str - The new damage type.
+ * @returns {string} The current damage type after the call.
+ */
+string set_weapon_type(string str) {
+  if(!stringp(str))
+    return __weapon_type;
+
+  return __weapon_type = str;
+}
+
+/**
+ * Returns the NPC default damage type.
+ *
+ * @returns {string} The configured damage type.
+ */
+string query_weapon_type() {
+  return __weapon_type;
+}
+
+/**
+ * Tests whether combat with the given victim is allowed in the current
+ * context. Probes optional hooks on the victim and the environment via
+ * call_other — any responder that returns truthy vetoes the attack. Targets
+ * that do not implement these hooks simply return 0, which is the common case.
+ *
+ * @param {object} victim - The object that would be attacked.
+ *                          Any object is accepted; the relevant
+ *                          hooks (query_peaceful, query_no_combat)
+ *                          are duck-typed.
+ * @returns {int | string} 1 if combat is permitted, or a string
+ *          message describing why it is forbidden.
+ */
+mixed prevent_combat(object victim) {
+  if(call_if(victim, "query_peaceful", this_object()))
+    return "You cannot attack a peaceful creature.\n";
+
+  if(call_if(victim, "query_no_combat", this_object()))
+    return "You cannot attack that.\n";
+
+  if(call_if(environment(), "query_no_combat", this_object()))
+    return "You cannot attack here.\n";
+
+  return 1;
+}
+
+/**
+ * Sets the no-combat flag. When set, this body cannot be targeted by attackers
+ * (@link prevent_combat).
+ *
+ * @param {int} x - Truthy to enable, zero to disable.
+ */
+void set_no_combat(int x) {
+  __no_combat = !!x;
+}
+
+/**
+ * Returns the no-combat flag.
+ *
+ * @returns {int} 1 if no-combat is enabled, 0 otherwise.
+ */
+int query_no_combat() {
+  return __no_combat;
+}

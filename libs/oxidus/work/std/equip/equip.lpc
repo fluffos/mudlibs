@@ -1,0 +1,177 @@
+/**
+ * @file /std/equip/equip.lpc
+ * Base equipment object that provides equip/unequip functionality.
+ *
+ * Inherited by armour, clothing, and weapon objects to provide
+ * slot-based equipment management, equip/unequip checks, and
+ * GMCP updates when equipment state changes.
+ *
+ * @created 2024-03-02 - Gesslar
+ * @last_modified 2024-03-02 - Gesslar
+ *
+ * @history
+ * 2024-03-02 - Gesslar - Created
+ */
+
+#include <clothing.h>
+#include <armour.h>
+#include <gmcp_defines.h>
+
+inherit STD_ITEM;
+
+private mapping __slots = ([ ]);
+private nosave string __slot;
+private nosave int __equipped = 0;
+
+/**
+ * Checks whether this equipment can be equipped in the given slot
+ * by the specified living.
+ *
+ * Delegates to an optional equip_check() function on this object.
+ * If no such function exists, equipping is allowed by default.
+ *
+ * @param {string} slot - The body slot to equip into
+ * @param {STD_BODY} tp - The living attempting to equip
+ * @returns {mixed} 1 if equipping is allowed, or an error string
+ */
+mixed can_equip(string slot, object tp) {
+  return call_if(this_object(), "equip_check", slot, tp) || 1;
+}
+
+/**
+ * Sets the body slot this equipment occupies when equipped.
+ *
+ * @param {string} str - The slot identifier
+ */
+void set_slot(string str) {
+  __slot = str;
+}
+
+/**
+ * Returns the body slot this equipment occupies when equipped.
+ *
+ * @returns {string} The slot identifier
+ */
+string query_slot() {
+  return __slot;
+}
+
+/**
+ * Equips this object on the given living in the specified slot.
+ *
+ * Verifies the object is in the living's inventory, is not already
+ * equipped, and the slot is available. On success, marks the item
+ * as equipped and sends a GMCP update.
+ *
+ * @param {STD_BODY} tp - The living to equip on
+ * @param {string} slot - The body slot to equip into
+ * @returns {mixed} 1 on success, 0 or an error string on failure
+ */
+mixed equip(object tp, string slot) {
+  mixed result;
+  object env = environment();
+
+  if(env != tp)
+      return 0;
+
+  if(__equipped)
+      return 0;
+
+  if(tp->equipped_on(slot))
+      return 0;
+
+  result = tp->equip(this_object(), slot);
+  if(result != 1)
+      return result;
+
+  __equipped = 1;
+
+  GMCP_D->send_gmcp(tp, GMCP_PKG_CHAR_ITEMS_UPDATE, ({ this_object(), tp }));
+
+  return 1;
+}
+
+/**
+ * Checks whether this equipment can be unequipped by the specified
+ * living.
+ *
+ * Delegates to an optional unequip_check() function on this object.
+ * If no such function exists, unequipping is allowed by default.
+ *
+ * @param {STD_BODY} tp - The living attempting to unequip
+ * @returns {mixed} 1 if unequipping is allowed, or an error string
+ */
+mixed can_unequip(object tp) {
+  return call_if(this_object(), "unequip_check", tp) || 1;
+}
+
+/**
+ * Unequips this object from the given living.
+ *
+ * Verifies the item is currently equipped and that the living has
+ * it equipped in the expected slot. On success, marks the item as
+ * unequipped, emits an action message (unless silent), and sends
+ * a GMCP update.
+ *
+ * @param {STD_BODY} tp - The living to unequip from; defaults to
+ *                        environment() if not provided
+ * @param {int} [silent] - If true, suppress the unequip action
+ *                         message
+ * @returns {int} 1 on success, 0 on failure
+ */
+varargs int unequip(object tp: (: environment() :), int silent: (: 0 :)) {
+  if(!__equipped)
+    return 0;
+
+  __equipped = 0;
+
+  if(!tp || !living(tp))
+    return 0;
+
+  if(tp->equipped_on(query_slot()) != this_object())
+    return 0;
+
+  if(!tp->unequip(this_object()))
+    return 0;
+
+  if(!silent)
+    tp->simple_action("$N $vremove $p $o.", get_short());
+
+  GMCP_D->send_gmcp(tp, GMCP_PKG_CHAR_ITEMS_UPDATE, ({ this_object(), tp }));
+
+  return 1;
+}
+
+/**
+ * Moves this object to a new destination, automatically unequipping
+ * it if it was equipped.
+ *
+ * @override
+ * @param {mixed} dest - The destination object or path
+ * @returns {int} The result of the move operation
+ */
+int move(mixed dest) {
+  object env = environment();
+  int ret = ::move(dest);
+
+  if(env) {
+    if(__equipped) {
+      if(!ret) {
+        unequip(env);
+      }
+    }
+  }
+
+  return ret;
+}
+
+/**
+ * Returns whether this object is currently equipped.
+ *
+ * @returns {int} 1 if equipped, 0 if not
+ */
+int equipped() { return __equipped; }
+
+void unsetup() {
+  unequip(environment());
+}

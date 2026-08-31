@@ -1,0 +1,8 @@
+#!/bin/sh
+# Tacitus @ LPUniversity
+# 17-OCT-05
+# Script to delete all home directories quickly
+
+cd ../lib/home/
+rm -rf a/* b/* c/* d/* e/* f/* g/* h/* i/* j/* k/* l/* m/* n/* o/* p/* q/* r/* s/* t/* u/* v/* w/* x/* y/* z/*
+

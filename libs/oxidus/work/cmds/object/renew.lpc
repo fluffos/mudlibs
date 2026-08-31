@@ -1,0 +1,95 @@
+/**
+ * @file /cmds/object/renew.lpc
+ *
+ * Command for renewing objects. Destructs the original and reclones from a
+ * freshly loaded master.
+ *
+ * @created 2024-07-23 - Gesslar
+ * @last_modified 2026-07-13 - Gesslar
+ *
+ * @history
+ * 2024-07-23 - Gesslar - Created
+ * 2026-07-13 - Gesslar - Moved help into setup()
+ */
+
+inherit STD_CMD;
+
+void setup() {
+  usage_text = "renew <object>";
+  help_text =
+    "This command destructs a cloned object, reloads its master, and creates "
+    "a fresh clone in the same location. Useful for picking up code changes "
+    "without manually destructing and recloning.\n"
+    "\n"
+    "See also: update, clone, dest";
+}
+
+public mixed main(
+  /** @type {STD_PLAYER} */ object caller, string str
+) {
+  /** @type {STD_OBJECT} */ object ob;
+  object env;
+  string e, file;
+
+  if(!str)
+    return _info("Usage: renew <object>");
+
+  if(!ob = get_object(str))
+    return _error("No object found with that name.");
+
+  if(/** @type {STD_ROOM} */ (ob)->is_room())
+    return _error(
+      "You cannot renew rooms. Use update."
+    );
+
+  if(call_if(ob, "no_renew"))
+    return _error("That object cannot be renewed.");
+
+  if(!clonep(ob))
+    return _error(
+      "That object is not a clone. Use update instead."
+    );
+
+  env = environment(ob);
+
+  if(/** @type {STD_OBJECT} */ (ob)->move(ROOM_VOID))
+    return _error(
+      "Failed to move the object to the void."
+    );
+
+  file = base_name(ob);
+  if(virtualp(ob))
+    caller->set_env("cwf", ob->query_virtual_master());
+  else
+    caller->set_env("cwf", file);
+
+  ob->remove();
+
+  e = catch(/** @type {STD_OBJECT} */ (file)->remove());
+  if(e)
+    return _error(
+      "Failed to destruct the original object: " + e
+    );
+
+  e = catch(load_object(file));
+  if(e)
+    return _error(
+      "Failed to reload the object: " + e
+    );
+
+  e = catch(ob = new(file));
+  if(e)
+    return _error(
+      "Failed to renew the object: " + e
+    );
+
+  if(ob->move(env)) {
+    ob->remove();
+    return _error(
+      "Failed to move the object back to its "
+      "original location."
+    );
+  }
+
+  return _ok("Object renewed: %s", get_short(ob));
+}

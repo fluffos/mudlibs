@@ -1,0 +1,161 @@
+/* Do not remove the headers from this file! see /USAGE for more info. */
+
+/**
+ * @file /std/object/persist.lpc
+ * Provides persistence capabilities allowing objects to save and
+ * restore their state to/from strings or files.
+ *
+ * @created Unknown - Beek (Nightmare)
+ * @last_modified 2025-03-16 - GitHub Copilot
+ *
+ * @history
+ * Unknown date - Beek - Original implementation for Nightmare
+ * Unknown date - Rust - Ported to current system
+ * 2025-03-16 - GitHub Copilot - Added documentation
+ */
+
+#include <item.h>
+#include <object.h>
+#include <persist.h>
+
+private nosave int save_recurse;
+private nosave mapping saved_vars = ([]);
+
+/**
+ * Marks variables to be included when the object is saved.
+ *
+ * Variables must be explicitly marked for saving using this function.
+ *
+ * @param {mapping} vars - Variable names to mark for saving
+ */
+protected void save_var(mapping vars) {
+  saved_vars += vars;
+}
+
+// ###Security problem here - Beek. What is it used for anyway?
+/**
+ * Returns the list of variables that will be saved.
+ *
+ * @returns {mapping} Array of variable names marked for saving
+ */
+public mapping get_saved_vars() { return copy(saved_vars); }
+
+/**
+ * Sets whether saving should recursively include inventory items.
+ *
+ * @param {int} flag - 1 to enable recursive saving, 0 to disable
+ */
+protected void set_save_recurse(int flag) { save_recurse = flag; }
+
+/**
+ * Saves object state to a string representation.
+ *
+ * Creates a mapping with special keys:
+ * - #vars#: Contains all saved variables and their values
+ * - #base_name#: The object's base name
+ * - #inventory#: Inventory objects (if recursep is true)
+ *
+ * @param {int} recursep - Whether to recursively save inventory objects
+ * @returns {string} Serialized object state
+ */
+varargs string save_to_string(int recursep) {
+  mapping elements;
+  mapping map = ([]);
+  mapping tmp;
+
+  event(({ this_object() }), "saving");
+
+  //### setting a property based on a function arg?  Gross.
+  set_save_recurse(recursep);
+
+  if(sizeof(elements = copy(saved_vars))) {
+    tmp = ([]);
+
+    foreach(string element, string func in elements) {
+      mixed value = fetch_variable(element);
+
+      if(!nullp(value)) {
+        tmp[element] = ([
+          "value": value,
+          "func": func,
+        ]);
+      }
+    }
+
+    if(sizeof(tmp))
+      map["#vars#"] = tmp;
+  }
+
+  map["#base_name#"] = base_name();
+
+  /** @type {STD_ITEM*} */ object *obs = all_inventory();
+
+  if(save_recurse)
+    map["#inventory#"] = obs->save_to_string(1) - ({ 0 });
+
+  return save_variable(map);
+}
+
+/**
+ * Loads object state from a string representation.
+ *
+ * Restores variables, creates inventory items, and moves them
+ * into the appropriate containers.
+ *
+ * @param {mixed} value - String representation or mapping of object state
+ * @param {int} recurse - Recursion level (used internally)
+ * @errors If object creation fails
+ */
+void load_from_string(mixed value, int recurse) {
+  mixed data;
+  object ob;
+
+  if(!mapp(value))
+    data = restore_variable(value);
+  else
+    data = value;
+
+  foreach(string save_key, mapping restore in data) {
+    if(save_key == "#vars#") {
+      foreach(string var_name, mapping var_data in restore) {
+        if(!nullp(saved_vars[var_name])) {
+          if(function_exists(var_data["func"], this_object())) {
+            call_other(this_object(), var_data["func"], var_data["value"]);
+          } else {
+            store_variable(var_name, var_data["value"]);
+          }
+        }
+      }
+    }
+  }
+
+  if(data["#inventory#"]) {
+    foreach(string obj in data["#inventory#"]) {
+      mixed result;
+
+      mixed val = restore_variable(obj);
+      result = catch(ob = new(val["#base_name#"]));
+      if(intp(result) && result == 0)
+        ob->load_from_string(val, recurse + 1);
+      else
+        error((string)result);
+    }
+  }
+
+  // We don't want to move the object we're restoring into the
+  // previous_object() (happens at the end)...  When you restored the body,
+  // the body moved into the user object, but couldn't move out! -- Rust
+  if(recurse > 1) {
+    if(move(previous_object())) {
+      object env = environment(previous_object());
+      if(env) {
+        if(move(env))
+          remove();
+        else
+          remove();
+      }
+    }
+  }
+
+  event(({this_object()}), "restored");
+}

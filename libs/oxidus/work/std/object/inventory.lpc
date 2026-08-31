@@ -1,0 +1,248 @@
+/**
+ * @file /std/object/inventory.lpc
+ *
+ * Inventory inheritable for objects that can hold other objects.
+ * Provides registration and automated spawning of items and NPCs
+ * during reset, along with spawn-info stamping for traceability.
+ *
+ * @created 2024-07-23 - Gesslar
+ * @last_modified 2026-05-04 - Gesslar
+ *
+ * @history
+ * 2024-07-23 - Gesslar - Created
+ * 2025-03-16 - GitHub Copilot - Added documentation
+ * 2026-05-04 - Gesslar - Consolidated spawn-info stamping and the
+ *                        `object_spawned` event into add_inventory;
+ *                        reset_objects now threads the registration
+ *                        uuid through and no longer stamps separately.
+ *                        Dropped the `belongs_to` stamp (duplicate of
+ *                        `spawn_point`) and fixed the args splat in
+ *                        reset_objects.
+ */
+
+// Functions from other objects
+void set_spawn_info(mapping info);
+
+/**
+ * Registered inventory definitions, keyed by uuid.
+ *
+ * Each value has the shape
+ * `([ "object": string, "number": int|function, "args": mixed* ])`,
+ * describing what `reset_objects` should spawn.
+ *
+ * @type {([ string: mapping ])}
+ */
+private nosave mapping __inventory = ([]);
+
+/**
+ * Items and NPCs tracked alongside this inventory.
+ *
+ * @type {(STD_ITEM | STD_NPC)*}
+ */
+protected nosave object *__objects = ({});
+
+/**
+ * Adds or clones an object into the inventory of this object.
+ *
+ * If `file` is an object, it is moved into this object. If `file` is
+ * a string, a new object is cloned from that path and moved in. On
+ * success the object is stamped with spawn info (`spawned`,
+ * `spawn_point`, `spawn_trace`) and the `object_spawned` event is
+ * fired. When a uuid is supplied (typically by `reset_objects`), it
+ * is also recorded as `object_uuid` and registered as an id.
+ *
+ * @param {STD_OBJECT | string} file - Object to add, or path to clone.
+ * @param {string} [uuid] - Uuid of the inventory definition that
+ *                          spawned this clone.
+ * @param {mixed...} [args] - Constructor arguments forwarded to the
+ *                            clone.
+ * @returns {STD_OBJECT, undefined} The added object, or undefined on
+ *                                  failure.
+ */
+varargs object add_inventory(mixed file, string uuid, mixed *args...) {
+  object ob;
+  string e;
+  int result;
+  int new_ob;
+  /** @type {STD_OBJECT} */ object f;
+  string fname;
+
+  if(nullp(file))
+    return null;
+
+  if(objectp(file))
+    f = file;
+  else if(stringp(file))
+    fname = file;
+  else
+    return 0;
+
+  e = catch {
+    if(f) {
+      if(environment(f) == this_object())
+        return f;
+
+      result = f->move(this_object());
+
+      if(result)
+        return 0;
+
+      return f;
+    }
+
+    new_ob = 1;
+
+    if(sizeof(args))
+      ob = new(fname, args...);
+    else
+      ob = new(fname);
+  };
+
+  if(e) {
+    if(ob) {
+      if(new_ob) {
+        ob->remove();
+      }
+    }
+
+    log_file("OBJECT", "%s %s add_inventory clone error: %s\n  file: %s\n",
+      ldatetime(), file_name(), e, fname || file_name(f));
+  }
+
+  if(!ob)
+    return 0;
+
+  ob->set_spawn_info(([
+    "spawned" : time(),
+    "spawn_point" : file_name(),
+    "spawn_trace" : call_trace(),
+  ]));
+
+  if(uuid) {
+    ob->add_spawn_info("object_uuid", uuid);
+    ob->add_id(uuid);
+  }
+
+  e = catch(ob->move(this_object()));
+  if(e) {
+    log_file("OBJECT", "%s %s add_inventory move error: %s\n  ob: %s\n",
+      ldatetime(), file_name(), e, file_name(ob));
+    ob->remove();
+    return 0;
+  }
+
+  if(environment(ob) != this_object()) {
+    ob->remove();
+    return 0;
+  }
+
+  ob->query_post_spawn_fixed() && ob->set_fixed(1);
+
+  event(this_object(), "object_spawned", ob);
+
+  return ob;
+}
+
+/**
+ * Registers an object to be automatically spawned during reset.
+ *
+ * Positional args are: path (string), count (int|function, default 1), then
+ * any extra arguments forwarded to the constructor when the object is cloned.
+ *
+ * @param {mixed...} args - Positional argument list (path, count, then
+ *  constructor args).
+ * @returns {string | undefined} UUID of the registered definition, or
+ *  undefined when no path was given or that path is already registered.
+ */
+varargs string add_object(mixed args...) {
+  mapping element;
+  string uuid;
+  int sz;
+
+  if(!__inventory)
+    __inventory = ([]);
+
+  // Count the number of arguments
+  sz = sizeof(args);
+
+  if(sz == 0)
+    return;
+
+  // Double-check we don't already have this object in our inventory mapping
+  mapping *elements = values(__inventory);
+  foreach(element in elements) {
+    if(element["object"] == args[0]) {
+      return;
+    }
+  }
+
+  element = ([]);
+  element["object"] = args[0];
+
+  if(sz >= 2)
+    element["number"] = args[1];
+  else
+    element["number"] = 1;
+
+  if(sz >= 3)
+    element["args"] = args[2..];
+  else
+    element["args"] = ({});
+
+  uuid = generate_uuid();
+
+  __inventory[uuid] = element;
+
+  return uuid;
+}
+
+/**
+ * Removes an object definition from the inventory mapping.
+ *
+ * @param {string} uuid - UUID of the definition to remove.
+ */
+void remove_object(string uuid) {
+  if(!__inventory) return;
+  if(!uuid) return;
+  if(!__inventory[uuid]) return;
+
+  map_delete(__inventory, uuid);
+}
+
+/**
+ * Spawns missing inventory objects during reset.
+ *
+ * For each registered definition, counts the present clones and
+ * spawns the difference via `add_inventory`. Spawn-info stamping
+ * and the `object_spawned` event are handled by `add_inventory`.
+ */
+void reset_objects() {
+  string uuid;
+  mapping element;
+
+  if(!__inventory)
+    return;
+
+  foreach(uuid, element in __inventory) {
+    object *clones = present_clones(element["object"], this_object());
+    int num_clones = sizeof(clones);
+    int diff;
+
+    if(num_clones < element["number"]) {
+      diff = element["number"] - num_clones;
+
+      while(diff--)
+        add_inventory(element["object"], uuid, element["args"]...);
+    }
+  }
+}
+
+/**
+ * Returns all registered inventory object definitions.
+ *
+ * @returns {([ string: mapping ])} Copy of the definition mapping,
+ *                                  keyed by uuid.
+ */
+mapping query_all_objects() {
+  return copy(__inventory);
+}

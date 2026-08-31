@@ -1,0 +1,254 @@
+/**
+ * @file /cmds/action/give.lpc
+ *
+ * The give command. Hands objects - or coins from the wealth pool - to
+ * another living.
+ *
+ * @created 2026-07-18 - Gesslar
+ * @last_modified 2026-07-18 - Gesslar
+ *
+ * @history
+ * 2026-07-18 - Gesslar - Created
+ */
+
+inherit STD_ACT;
+
+private mixed give_all(object tp, object target, string ob_id);
+private mixed give_coins(object tp, object target, string arg);
+private mixed give_all_coins(object tp, object target);
+private mixed give_coin_pile(object tp, object target, string currency, int amount);
+
+void setup() {
+  usage_text =
+    "give <object> to <living>\n"
+    "give all to <living>\n"
+    "give all <object> to <living>\n"
+    "give <number> <currency> to <living>\n"
+    "give <currency> to <living>\n";
+  help_text =
+    "This command hands something you are carrying to another living. Name a "
+    "single object to give just that one, or use 'all' to give everything (or "
+    "everything of a given type).\n"
+    "\n"
+    "Coins are carried as wealth rather than as items, so name a currency to "
+    "give coins: 'give 5 silver to bob' gives five silver coins, while 'give "
+    "all silver to bob' gives all of your silver. Bare 'give all' leaves "
+    "your coins alone.\n"
+    "\n"
+    "See also: get, drop, put\n";
+}
+
+mixed main(
+  /** @type {STD_BODY} */ object tp,
+  string arg
+) {
+  string what, target_id;
+
+  if(!arg)
+    return "Give what to whom?";
+
+  if(sscanf(arg, "%s to %s", what, target_id) != 2)
+    return "Give what to whom?";
+
+  /** @type {STD_BODY} */ object target = find_target(tp, target_id, environment(tp));
+
+  if(!target)
+    return `You do not see ${target_id} here.`;
+
+  // You can only hand things to something alive - not to the floor, a chest,
+  // or a corpse.
+  if(!living(target))
+    return `You cannot give anything to ${get_short(target)}.`;
+
+  if(target == tp)
+    return "You cannot give things to yourself.";
+
+  // Coins live in the wealth pool, not inventory. A request naming a currency
+  // ('give 5 silver to bob', 'give silver to bob') transfers wealth instead of
+  // moving an inventory item.
+  mixed coins = give_coins(tp, target, what);
+  if(!nullp(coins))
+    return coins;
+
+  // Detect an "all" quantifier: bare "all" (everything) or "all <type>".
+  int all_flag = 0;
+  string rest;
+
+  if(what == "all") {
+    all_flag = 1;
+    what = 0;
+  } else if(sscanf(what, "all %s", rest) == 1) {
+    all_flag = 1;
+    what = rest;
+  }
+
+  if(all_flag)
+    return give_all(tp, target, what);
+
+  /** @type {STD_ITEM} */ object ob = find_target(tp, what, tp);
+  if(!ob || !tp->can_see(ob))
+    return `You do not have ${add_article(what)}.`;
+
+  if(call_if(ob, "prevent_drop", tp))
+    return `You cannot give ${get_short(ob)} away.`;
+
+  if(ob->move(target))
+    return `You could not give ${get_short(ob)} to ${get_short(target)}.`;
+
+  tp->targetted_action("$N $vgive a $o to $t.", target, ob);
+
+  return 1;
+}
+
+private mixed give_all(
+  /** @type {STD_BODY} */ object tp,
+  /** @type {STD_BODY} */ object target,
+  string ob_id
+) {
+  object *obs = find_targets(tp, ob_id, tp);
+  int given = 0;
+
+  if(!sizeof(obs))
+    return ob_id
+      ? `You are not carrying any ${ob_id}.`
+      : "You are not carrying anything.";
+
+  foreach(/** @type {STD_ITEM} */ object ob in obs) {
+    if(call_if(ob, "prevent_drop", tp))
+      continue;
+
+    if(ob->move(target))
+      continue;
+
+    tp->targetted_action("$N $vgive a $o to $t.", target, ob);
+    given++;
+  }
+
+  if(!given)
+    return "You could not give anything.";
+
+  return 1;
+}
+
+// Routes a currency request to the wealth pool. Recognises "give <n> <type> to
+// X", "give all <type> to X", and "give all coin(s) to X" (every currency).
+// Bare "give <type>" is intentionally NOT handled here - an item may be
+// described with a currency word (e.g. a silver ingot), so a plain name must
+// fall through to a normal item give. Returns undefined when the request is not
+// about coins.
+private mixed give_coins(
+  /** @type {STD_BODY} */ object tp,
+  /** @type {STD_BODY} */ object target,
+  string arg
+) {
+  string currency, base;
+  int amount = 0;
+  int all = 0;
+
+  if(sscanf(arg, "%d %s", amount, currency) == 2) {
+    // "give 5 silver to bob"
+  } else if(sscanf(arg, "all %s", currency) == 1) {
+    all = 1;                                    // "give all silver" / "all coins"
+  } else {
+    return undefined;
+  }
+
+  // Accept "silver coin" / "silver coins" as "silver".
+  if(sscanf(currency, "%s coin", base) == 1 && strlen(base))
+    currency = base;
+
+  currency = lower_case(trim(currency));
+
+  // Bare "coin"/"coins", only with 'all', means every currency at once.
+  if(all && (currency == "coin" || currency == "coins"))
+    return give_all_coins(tp, target);
+
+  if(!CURRENCY_D->valid_currency_type(currency))
+    return undefined;
+
+  int have = tp->query_wealth(currency);
+
+  if(have < 1)
+    return `You have no ${currency} coins.`;
+
+  if(all)
+    amount = have;
+
+  if(amount < 1)
+    return `Give how many ${currency} coins?`;
+
+  if(amount > have)
+    return `You only have ${have} ${currency} ${have == 1 ? "coin" : "coins"}.`;
+
+  return give_coin_pile(tp, target, currency, amount);
+}
+
+// Gives every currency the body holds. Bare "give all" never reaches here; this
+// is only for the explicit "give all coin(s) to X" form.
+private mixed give_all_coins(
+  /** @type {STD_BODY} */ object tp,
+  /** @type {STD_BODY} */ object target
+) {
+  mapping wealth = tp->query_all_wealth();
+  int given = 0;
+
+  if(!tp->query_total_coins())
+    return "You have no coins to give.";
+
+  foreach(string currency, int amount in wealth) {
+    if(amount < 1)
+      continue;
+
+    if(give_coin_pile(tp, target, currency, amount) == 1)
+      given++;
+  }
+
+  if(!given)
+    return "You could not give your coins.";
+
+  return 1;
+}
+
+// Deducts <amount> of <currency> from the actor's wealth pool and hands it to
+// the target via a coin object, which folds itself into the target's wealth on
+// arrival. Refunds the actor if the transfer fails. The actor and target see
+// the exact count; everyone else sees a vague quantity.
+private mixed give_coin_pile(
+  /** @type {STD_BODY} */ object tp,
+  /** @type {STD_BODY} */ object target,
+  string currency,
+  int amount
+) {
+  mixed res = tp->adjust_wealth(currency, -amount);
+  if(stringp(res))
+    return res;
+
+  /** @type {LIB_COIN} */ object coin = new(LIB_COIN);
+  coin->set_up(currency, amount);
+
+  if(coin->move(target)) {
+    if(coin)
+      coin->remove();
+
+    tp->adjust_wealth(currency, amount);       // refund the deduction
+
+    return `You could not give the ${currency} coins to ${get_short(target)}.`;
+  }
+
+  // The actor and target see the exact count; everyone else sees a vague
+  // quantity.
+  string precise, vague;
+
+  if(amount == 1) {
+    precise = vague = add_article(`${currency} coin`);
+  } else {
+    precise = `${amount} ${currency} coins`;
+    vague = `some ${currency} coins`;
+  }
+
+  tp->my_target_action("$N $vgive $o to $t.", target, precise);
+  tp->target_action("$N $vgive $o to $t.", target, precise);
+  tp->other_target_action("$N $vgive $o to $t.", target, vague);
+
+  return 1;
+}

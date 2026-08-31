@@ -1,0 +1,276 @@
+/**
+ * @file /std/equip/weapon.lpc
+ *
+ * Standard weapon object providing wield/unwield functionality.
+ *
+ * Manages hand requirements, damage class, damage type, equip/unequip checks,
+ * and GMCP updates when weapon state changes.
+ *
+ * @created 2024-08-04 - Gesslar
+ * @last_modified 2024-08-04 - Gesslar
+ *
+ * @history
+ * 2024-08-04 - Gesslar - Created
+ */
+
+#include <weapon.h>
+#include <gmcp_defines.h>
+
+inherit STD_ITEM;
+
+private nosave int __hands = 1;
+private nosave int __equipped = 0;
+private nosave string __slot;
+private nosave mixed __dc = 1.0;
+private nosave string __damage_type = "bludgeoning";
+private nosave float __speed_mod = 0.0;
+
+/**
+ * Sets how many hands are required to wield this weapon.
+ *
+ * @param {int} i - The number of hands required
+ */
+void set_hands(int i) { __hands = i; }
+
+/**
+ * Returns how many hands are required to wield this weapon.
+ *
+ * @returns {int} The number of hands required
+ */
+int query_hands() { return __hands; }
+
+/**
+ * Sets the body slot this weapon occupies when wielded.
+ *
+ * @param {string} str - The slot identifier
+ */
+void set_slot(string str) {
+  __slot = str;
+}
+
+/**
+ * Sets the identifiers for this object, automatically adding "weapon" as an
+ * additional ID.
+ *
+ * @override
+ * @param {mixed} ids - The identifier(s) to set
+ */
+void set_id(mixed ids) {
+  ::set_id(ids);
+  add_id(({ "weapon" }));
+}
+
+/**
+ * Sets the damage class for this weapon.
+ *
+ * Accepts a numeric value (int or float) or a function that returns the
+ * class dynamically.
+ *
+ * @param {float | int | function} x - The damage class value or callable
+ * @errors If the argument is null or an invalid type
+ */
+void set_dc(mixed x) {
+  if(nullp(x))
+    error("Bad argument 1 to set_dc().\n");
+
+  if(!valid_function(x) && !floatp(x) && !intp(x))
+    error("Bad argument 1 to set_dc().\n");
+
+  if(intp(x))
+    x = to_float((int)x);
+
+  __dc = x;
+}
+
+/**
+ * Returns the current damage class for this weapon.
+ *
+ * If the class was set as a function, it is evaluated and the result returned.
+ *
+ * @returns {float} The damage class.
+ */
+float query_dc() {
+  function f = valid_function(__dc) ? __dc : null;
+  mixed result = f ? f() : __dc;
+
+  return to_float(result);
+}
+
+/**
+ * Sets the damage type dealt by this weapon.
+ *
+ * @param {string} dt - The damage type (e.g. "bludgeoning", "slashing",
+ *  "piercing")
+ */
+void set_damage_type(string dt) {
+  __damage_type = dt;
+}
+
+/**
+ * Returns the damage type dealt by this weapon.
+ *
+ * @returns {string} The damage type
+ */
+string query_damage_type() {
+  return __damage_type;
+}
+
+float set_speed_mod(float mod) {
+  __speed_mod = mod;
+
+  return mod;
+}
+
+float get_speed_mod(float mod) {
+  return __speed_mod;
+}
+
+/**
+ * Returns the body slot this weapon occupies when wielded.
+ *
+ * @returns {string} The slot identifier
+ */
+string query_slot() {
+  return __slot;
+}
+
+/**
+ * Checks whether this weapon can be wielded by the specified living.
+ *
+ * Delegates to an optional equip_check() function on this object. If no such
+ * function exists, wielding is allowed by default.
+ *
+ * @param {STD_BODY} tp - The living attempting to wield
+ * @returns {mixed} 1 if wielding is allowed, or an error string
+ */
+mixed can_equip(object tp) {
+  return call_if(this_object(), "equip_check", tp) || 1;
+}
+
+/**
+ * Wields this weapon on the given living in the specified slot.
+ *
+ * Verifies the weapon is in the living's inventory, is not already wielded,
+ * and the slot is available. On success, marks the weapon as wielded and sends
+ * a GMCP update.
+ *
+ * @param {STD_BODY} tp - The living to wield on
+ * @param {string} slot - The body slot to wield in
+ * @returns {mixed} 1 on success, 0 or an error string on failure
+ */
+mixed equip(object tp, string slot) {
+  mixed result;
+
+  tp ??= environment();
+
+  if(__equipped) {
+    printf("Already equipped: %O\n", this_object());
+    return 0;
+  }
+
+  if(tp->wielded_in(slot)) {
+    printf("Already wielded in slot %s: %O\n", slot, tp->wielded_in(slot));
+    return 0;
+  }
+
+  result = tp->equip(this_object(), slot);
+  if(result != 1)
+    return result;
+
+  __equipped = 1;
+
+  // If you unwield a speedy weapon and then wield a slower one, you did not
+  // help yourself. Soz. But this is a penalty regardless for wielding during
+  // combat, which is a good idea.
+  tp->reset_combat_round();
+
+  GMCP_D->send_gmcp(tp, GMCP_PKG_CHAR_ITEMS_UPDATE, ({ this_object(), tp }));
+
+  return 1;
+}
+
+/**
+ * Checks whether this weapon can be unwielded by the specified living.
+ *
+ * Delegates to an optional unequip_check() function on this object. If no such
+ * function exists, unwielding is allowed by default.
+ *
+ * @param {STD_BODY} tp - The living attempting to unwield
+ * @returns {mixed} 1 if unwielding is allowed, or an error string
+ */
+mixed can_unequip(object tp) {
+  return call_if(this_object(), "unequip_check", tp) || 1;
+}
+
+/**
+ * Unwields this weapon from the given living.
+ *
+ * Verifies the weapon is currently wielded and that the living does not still
+ * have it equipped. On success, marks the weapon as unwielded, emits an action
+ * message (unless silent), and sends a GMCP update.
+ *
+ * @param {STD_BODY} tp - The living to unwield from; defaults to environment()
+ *  if not provided
+ * @param {int} [silent] - If true, suppress the unwield action message
+ * @returns {int} 1 on success, 0 on failure
+ */
+varargs int unequip(object tp, int silent) {
+  if(!__equipped)
+    return 0;
+
+  __equipped = 0;
+
+  tp ??= environment();
+  if(!living(tp))
+    return 0;
+
+  if(!tp->equipped(this_object()))
+    return 0;
+
+  if(!tp->unequip(this_object()))
+    return 0;
+
+  if(!silent)
+    tp->simple_action("$N $vunwield $p $o.", get_short());
+
+  GMCP_D->send_gmcp(tp, GMCP_PKG_CHAR_ITEMS_UPDATE, ({ this_object(), tp }));
+
+  return 1;
+}
+
+/**
+ * Moves this object to a new destination, automatically unwielding it if it
+ * was wielded.
+ *
+ * @override
+ * @param {mixed} dest - The destination object or path
+ * @returns {int} The result of the move operation
+ */
+int move(mixed dest) {
+  object env = environment();
+  int ret = ::move(dest);
+
+  env && __equipped && !ret && unequip(env);
+
+  return ret;
+}
+
+/**
+ * Returns whether this weapon is currently wielded.
+ *
+ * @returns {int} 1 if wielded, 0 if not
+ */
+int equipped() {
+  return __equipped;
+}
+
+void unsetup() {
+  unequip(environment());
+}
+
+/**
+ * Identifies this object as a weapon.
+ *
+ * @returns {int} Always returns 1
+ */
+int is_weapon() { return 1; }

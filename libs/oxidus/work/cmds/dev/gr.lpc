@@ -1,0 +1,82 @@
+/**
+ * @file /cmds/dev/gr.lpc
+ * Grapevine command
+ *
+ * @created 2024-07-18 - Gesslar
+ * @last_modified 2026-07-13 - Gesslar
+ *
+ * @history
+ * 2024-07-18 - Gesslar - Created
+ * 2026-07-13 - Gesslar - Added help text
+ */
+
+#include <daemons.h>
+
+inherit STD_CMD;
+
+void setup() {
+  usage_text =
+    "gr pstatus <game>\n"
+    "gr gstatus <game>\n";
+  help_text =
+    "Queries the Grapevine network about another game. 'pstatus <game>' "
+    "requests the list of players currently online in the named game and "
+    "reports them back to you. 'gstatus <game>' requests the named game's "
+    "status record from Grapevine and echoes the raw response. Both forms "
+    "dispatch an asynchronous request and reply once Grapevine answers.";
+}
+
+void handle_pstatus(mapping request, mapping response, object tp);
+void handle_gstatus(mapping request, mixed response, object tp, string game);
+
+mixed main(object tp, string str) {
+  string cmd, arg;
+
+  if(sscanf(str, "%s %s", cmd, arg) != 2) {
+    cmd = str;
+  }
+
+  switch(cmd) {
+    case "pstatus" :
+      GRAPEVINE_D->grapevine_send_event_players_status(
+        arg,
+        assemble_call_back((: handle_pstatus :), tp),
+      );
+      return _ok(sprintf("Sending players status request for %s", arg));
+    case "gstatus" :
+      GRAPEVINE_D->grapevine_send_event_games_status(
+        arg,
+        assemble_call_back((: handle_gstatus :), tp, arg),
+      );
+      return _ok(sprintf("Sending game status request for %s", arg));
+  }
+
+  return _error("Unknown Grapevine command.");
+}
+
+void handle_pstatus(mapping request, mixed response, object tp) {
+  if(!tp) {
+    return;
+  }
+
+  if(stringp(response)) {
+    _error(tp, sprintf("%s: %s", request["game"], response));
+  } else if(sizeof(response["players"])) {
+    _info(tp,
+      sprintf("The following players are playing %s:\n%s\n",
+        response["game"],
+        sizeof(response["players"]) ? simple_list(response["players"]) : "<none>"
+      )
+    );
+  } else {
+    _info(tp, sprintf("Nobody is playing %s.", response["game"]));
+  }
+}
+
+void handle_gstatus(mapping _request, mixed response, object tp, string _game) {
+  if(!tp) {
+    return;
+  }
+
+  _info(tp, sprintf("Response: %O", response));
+}

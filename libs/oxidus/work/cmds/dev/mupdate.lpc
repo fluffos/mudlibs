@@ -1,0 +1,92 @@
+/**
+ * @file /cmds/dev/mupdate.lpc
+ * This command will cause the caller to be moved around
+ * all coordinates in order to generate a new Mudlet map.
+ *
+ * @created 2024-08-23 - Gesslar
+ * @last_modified 2026-07-13 - Gesslar
+ *
+ * @history
+ * 2024-08-23 - Gesslar - Created
+ * 2026-07-13 - Gesslar - Added help text
+ */
+
+#include <classes.h>
+#include <gmcp_defines.h>
+
+inherit STD_CMD;
+
+inherit CLASS_ROOMINFO;
+
+void setup() {
+  usage_text = "mupdate";
+
+  help_text =
+    "Regenerates your Mudlet map by walking every known coordinate in the "
+    "world. It gathers all rooms with coordinate data, sorts them by "
+    "elevation and position, then loads each in turn and sends its GMCP room "
+    "information to you so your client can rebuild the map. Progress is "
+    "reported as it proceeds. This is a heavy operation that visits every "
+    "mapped room, so it may take some time to finish. It takes no arguments.";
+}
+
+varargs void move_to_room(object tp, string *rooms, mapping data, int it);
+
+private nosave int done, sz;
+private nosave float delay = 0.05;
+
+mixed main(object tp, string _arg) {
+  mapping rooms = COORD_D->get_coordinate_data();
+  string *room_names = keys(rooms);
+
+  sz = sizeof(room_names);
+  done = 0;
+
+  /** @lpc-ignore - LSP is wrong here. @see https://github.com/jlchmura/lpc-language-server/pull/316 */
+  room_names = sort_array(room_names, function(string a, string b, mapping data) {
+    if(data[a].coords[2] != data[b].coords[2])
+      return data[b].coords[2] - data[a].coords[2]; // Sort z from highest to lowest
+
+    if(data[a].coords[1] != data[b].coords[1])
+      return data[a].coords[1] - data[b].coords[1]; // Sort y from lowest to highest
+
+    return data[a].coords[0] - data[b].coords[0]; // Sort x from lowest to highest
+  }, rooms);
+
+  move_to_room(tp, room_names, rooms);
+
+  return 1;
+}
+
+void move_to_room(object tp, string *rooms, mapping data, int it: (: 0 :)) {
+  /** @type {STD_ROOM} */ object room;
+  string room_file;
+  int *coords;
+
+  room_file = pop(ref rooms);
+  // debug_message(room_file);
+  // room_file  = element_of(rooms);
+
+  coords = data[room_file].coords;
+
+  done++;
+
+  // tell(tp, sprintf("Sending GMCP Room Info for %s (x: %d, y: %d, z: %d)\n", room_file, coords...));
+
+  if(room = find_object(room_file))
+    room->remove();
+
+  GMCP_D->send_gmcp(tp, GMCP_PKG_ROOM_INFO, load_object(room_file));
+
+  if(sizeof(rooms) > 0) {
+    if(++it == 250) {
+      it = 0;
+      call_out_walltime((:move_to_room, tp, rooms, data, it:), delay);
+      tell(tp, sprintf("Done %s/%s (%.2f%%)\n", add_commas(done), add_commas(sz - 1), percent(done*1.0, sz*1.0)));
+    } else {
+      call_out_walltime((:move_to_room, tp, rooms, data, it:), delay);
+    }
+  } else {
+    tell(tp, sprintf("Done %s/%s (%.2f%%)\n", add_commas(done), add_commas(sz - 1), percent(done*1.0, sz*1.0)));
+  }
+}

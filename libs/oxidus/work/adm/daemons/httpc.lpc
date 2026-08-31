@@ -1,0 +1,91 @@
+/**
+ * @file /adm/daemons/httpc.lpc
+ * General-purpose HTTP fetch daemon that associates each outbound request
+ * with a callback and invokes it with the completed response mapping.
+ *
+ * @created 2024-07-06 - Gesslar
+ * @last_modified 2026-08-26 - Gesslar
+ *
+ * @history
+ * 2024-07-06 - Gesslar - Created
+ * 2026-08-26 - Gesslar - Stabilised request identities and documented the API.
+ */
+
+inherit STD_HTTP_CLIENT;
+
+private nosave mapping serials = ([]);
+
+void setup() {
+  set_log_prefix("(HTTPC)");
+  set_log_level(0);
+}
+
+/**
+ * Starts an HTTP request and records a completion callback.
+ *
+ * @param {mixed*} callback - A callback descriptor accepted by call_back().
+ * @param {string} method - The HTTP request method.
+ * @param {string} url - The absolute request URL.
+ * @param {mapping} [headers] - Additional request headers.
+ * @param {string} [body] - The optional request body.
+ * @returns {int} The unique request serial.
+ * @errors If the callback, method, URL, headers, or request is invalid.
+ */
+varargs int fetch(mixed *callback, string method, string url, mapping headers, string body) {
+  int serial;
+  mapping request;
+
+  _log(2, "Fetching " + url);
+
+  if(nullp(callback))
+    error("No callback specified");
+
+  if(!stringp(method))
+    error("Invalid method");
+
+  if(!stringp(url))
+    error("Invalid URL");
+
+  if(!nullp(headers) && !mapp(headers))
+    error("Invalid headers");
+
+  if(!mapp(request = http_request(url, method, headers, body)))
+    error("Error creating request");
+
+  serial = request["id"];
+  serials[serial] = callback;
+
+  _log(3, "Recording serial %d for callback: %O %O", serial, callback, previous_object());
+
+  return serial;
+}
+
+/**
+ * Dispatches the callback associated with a completed HTTP request.
+ *
+ * @param {mapping} server - The completed client connection state.
+ */
+nomask void http_handle_shutdown(mapping server) {
+  int serial;
+  mixed *callback;
+  string err;
+
+  _log(2, "Handling shutdown");
+
+  serial = server["request"]["id"];
+  if(!serials[serial]) {
+    _log(3, "No callback found for serial %d", serial);
+    return;
+  }
+
+  callback = serials[serial];
+
+  _log(3, "Callback found for serial %d: %O", serial, callback);
+  map_delete(serials, serial);
+
+  err = catch(call_back(callback, server["response"]));
+  if(err)
+    _log(2, "Error executing callback: %O", err);
+  else
+    _log(3, "Callback executed");
+}

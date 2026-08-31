@@ -1,0 +1,1104 @@
+/**
+ * @file /adm/obj/master/security.lpc
+ *
+ * Security subsystem inherited by the master object. Implements the
+ * role/group model and (eventually) the driver validation applies.
+ *
+ * The model has three data sources. The shipped base lives in
+ * /adm/etc/security/; the per-MUD overrides live in the git-ignored
+ * /adm/custom/security/ tree:
+ *
+ *   - groups_base.lpml  - shipped base group compositions. Each group
+ *                         confers a set of roles to its members. This
+ *                         is where the owner > admin > developer
+ *                         hierarchy is expressed (owner confers all
+ *                         three roles, admin two, developer one) and
+ *                         where the structural code-object identities
+ *                         ([master], [daemon], ...) are listed.
+ *   - groups.lpml       - per-MUD overrides. The MUD owner edits this
+ *                         to assign real users to groups and to tweak
+ *                         a group's roles. Entries are merged over the
+ *                         base; a "-name" entry removes, a plain entry
+ *                         adds, and removals take precedence.
+ *   - roles.map         - per-MUD direct role grants, written by
+ *                         add_role()/remove_role(). A directly granted
+ *                         role that names a group expands to that
+ *                         group's conferred roles, so granting "owner"
+ *                         confers the whole hierarchy without group
+ *                         membership.
+ *
+ * is_member() answers strict group membership (the forgiving "are
+ * they an admin?" gate). has_role() answers a user's effective roles -
+ * group-conferred plus direct - and is the precise "this operation
+ * requires this role" gate.
+ *
+ * adm/obj/master.lpc->privs_file(string filename) decides what objects
+ * identify as when loaded.
+ *
+ * @rewritten 2026-06-16 - Gesslar
+ * @last_modified 2026-06-16 - Gesslar
+ *
+ * @history
+ * 2026-06-16 - Gesslar - Rebuilt as the role/group security model
+ */
+
+#include <logs.h>
+
+/* Function prototypes */
+
+protected nomask void setup_security();
+public nomask string *get_roles(string name);
+public nomask int has_role(string name, string role);
+public nomask int is_member(string user, string group);
+public nomask string *add_role(string name, string role);
+public nomask string *remove_role(string name, string role);
+public nomask void purge_roles(string name);
+public nomask string *query_group(string group);
+public nomask mapping query_groups();
+public nomask string *query_group_names();
+private nomask mapping load_roles();
+private nomask string *merge_list(string *base_list, string *custom_list);
+private nomask string *group_roles(string group, mapping seen);
+private nomask void restore_roles();
+private nomask void load_access();
+private nomask string glob_to_regex(string pattern);
+private nomask int owns_path(string privs, string file);
+private nomask int satisfies(string cap, string privs, string file);
+private nomask int is_command_privs(string privs);
+private nomask int identity_ok(string privs, string file, string op);
+private nomask int access_ok(string file, object user, string op);
+private nomask int access_gate(string file, object user, string op, string func);
+private nomask void log_access_denial(string file, object user, string op, string func, int enforced);
+
+/* Global variables */
+
+/**
+ * The merged group definitions. Maps a group name to a record of the
+ * groups it inherits, the roles it confers in its own right, and the
+ * identities that are its members. A group's effective roles are its
+ * own roles plus, transitively, the roles of every group it inherits
+ * (so owner inherits admin inherits developer). Members may be real
+ * user names or bracketed code-object privs (e.g. "[cmd_adm]").
+ *
+ * @type {([ string: ([ "inherits": string*, "roles": string*, "members": string* ]) ])}
+ */
+private nomask nosave mapping security_groups = ([]);
+
+/**
+ * In-memory authoritative copy of the direct role grants (roles.map),
+ * loaded at setup and written through on every change. Permission
+ * checks read this, never the file - a check that read the file would
+ * trigger a permission check on that read and recurse.
+ *
+ * @type {([ string: string* ])}
+ */
+private nomask nosave mapping security_roles = ([]);
+
+private nomask nosave string GROUPS_FILE = "adm/etc/security/groups_base.lpml";
+private nomask nosave string GROUPS_FILE_CUSTOM = "adm/custom/security/groups.lpml";
+private nomask nosave string ROLES_FILE_CUSTOM = "adm/custom/security/roles.map";
+
+/**
+ * The path-access table, most-specific-first, consulted by valid_read/
+ * valid_write. Each element is a rule mapping with a "path" glob, "read"
+ * and "write" capability tokens, and a precompiled "re" regex.
+ *
+ * @type {({ ([ "path": string, "read": string, "write": string, "re": string ]) })}
+ */
+private nomask nosave mapping *access_rules = ({});
+
+/**
+ * When set, path-access refusals are enforced; when clear, they run in
+ * shadow mode - logged but permitted. Cached from SECURITY_ENFORCE_PATHS
+ * (default set) at setup.
+ *
+ * @type {int}
+ */
+private nomask nosave int access_enforce = 0;
+
+/**
+ * Re-entrancy guard for the path-access check. The check (and especially
+ * its denial logging via log_file) performs file operations that re-enter
+ * valid_read/valid_write; while set, those nested checks are permitted
+ * outright rather than recursing.
+ *
+ * @type {int}
+ */
+private nomask nosave int in_access_check = 0;
+
+private nomask nosave string ACCESS_FILE = "adm/etc/security/access.lpml";
+private nomask nosave string ACCESS_FILE_CUSTOM = "adm/custom/security/access.local.lpml";
+
+/* Functions */
+
+/**
+ * Loads and merges the group definitions. The shipped base
+ * (groups_base.lpml) is loaded first, then the per-MUD overrides
+ * (groups.lpml) are merged over it. Role and member names are
+ * normalised to lower case so lookups are case-insensitive.
+ *
+ * Called by the master object at boot and whenever the security
+ * object is reloaded.
+ *
+ * @returns {void}
+ */
+protected nomask void setup_security() {
+  mapping custom;
+
+  security_groups = ([]);
+
+  catch(security_groups = load_lpml(GROUPS_FILE));
+
+  if(!mapp(security_groups))
+    security_groups = ([]);
+
+  catch(custom = load_lpml(GROUPS_FILE_CUSTOM));
+
+  if(mapp(custom)) {
+    foreach(string group, mapping data in custom) {
+      if(!mapp(data))
+        continue;
+
+      if(!mapp(security_groups[group]))
+        security_groups[group] = ([]);
+
+      security_groups[group]["inherits"] =
+        merge_list(security_groups[group]["inherits"], data["inherits"]);
+      security_groups[group]["roles"] =
+        merge_list(security_groups[group]["roles"], data["roles"]);
+      security_groups[group]["members"] =
+        merge_list(security_groups[group]["members"], data["members"]);
+    }
+  }
+
+  // Normalise: guarantee the arrays exist and are lower-cased.
+  foreach(string _group, mapping data in security_groups) {
+    if(!pointerp(data["inherits"]))
+      data["inherits"] = ({});
+
+    if(!pointerp(data["roles"]))
+      data["roles"] = ({});
+
+    if(!pointerp(data["members"]))
+      data["members"] = ({});
+
+    data["inherits"] = map(data["inherits"], (: lower_case($1) :));
+    data["roles"] = map(data["roles"], (: lower_case($1) :));
+    data["members"] = map(data["members"], (: lower_case($1) :));
+  }
+
+  load_access();
+
+  // Restore the persisted role grants into memory, deferred until after
+  // master creation completes: the load runs through the cache daemon
+  // and file layer, which during create() would try to compile std/*
+  // objects before the master can serve their include paths.
+  call_out_walltime((: restore_roles :), 0.01);
+}
+
+/**
+ * Merges a custom override list over a base list. A plain entry is
+ * added (if not already present); a "-name" entry removes that name.
+ * Additions are applied before removals so a removal always wins over
+ * an addition of the same name in the same override. A leading "--"
+ * is an escaped no-op and is skipped.
+ *
+ * @param {string*} base_list - The base list to merge over.
+ * @param {string*} custom_list - The override entries.
+ * @returns {string*} The merged list.
+ */
+private nomask string *merge_list(string *base_list, string *custom_list) {
+  string *result = pointerp(base_list) ? copy(base_list) : ({});
+
+  if(!pointerp(custom_list))
+    return result;
+
+  custom_list = filter(custom_list, (: stringp($1) && truthy($1) :));
+
+  // Sorting descending places plain entries (alphabetic) ahead of
+  // "-" removals, so additions are processed first.
+  foreach(string entry in sort_array(custom_list, -1)) {
+    if(entry[0] == '-') {
+      if(strlen(entry) > 1 && entry[1] == '-')
+        continue;
+
+      // TODO: collapse once https://github.com/fluffos/fluffos/pull/1207
+      // is merged.
+      string *tmp = result;
+      eject_value_all(ref tmp, entry[1..]);
+      result = tmp;
+    } else if(!includes(result, entry)) {
+      string *tmp = result;
+      push(ref tmp, entry);
+      result = tmp;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Resolves a group's effective roles: its own roles plus, transitively,
+ * the roles of every group it inherits. The seen mapping guards against
+ * inheritance cycles so a misconfigured chain cannot loop forever.
+ *
+ * @param {string} group - The group name to resolve.
+ * @param {mapping} seen - Tracks visited groups to prevent cycles.
+ * @returns {string*} The group's transitive role set.
+ */
+private nomask string *group_roles(string group, mapping seen) {
+  if(!stringp(group) || seen[group])
+    return ({});
+
+  mapping data = security_groups[group];
+
+  if(!mapp(data))
+    return ({});
+
+  seen[group] = 1;
+
+  string *roles = pointerp(data["roles"]) ? copy(data["roles"]) : ({});
+
+  if(pointerp(data["inherits"])) {
+    foreach(string parent in data["inherits"])
+      roles += group_roles(parent, seen);
+  }
+
+  return roles;
+}
+
+/**
+ * Returns the effective roles of an identity: the roles conferred by
+ * every group it is a member of, plus its direct grants from
+ * roles.map. A direct grant that names a group is expanded to that
+ * group's conferred roles, so a direct "owner" grant pulls in the
+ * whole owner > admin > developer hierarchy.
+ *
+ * @param {string} name - The user name or code-object priv.
+ * @returns {string*} The distinct list of effective role names.
+ */
+public nomask string *get_roles(string name) {
+  if(!stringp(name) || !truthy(name))
+    return ({});
+
+  name = lower_case(name);
+
+  string *direct = security_roles[name];
+  string *roles = ({});
+
+  if(pointerp(direct)) {
+    foreach(string role in direct) {
+      if(!stringp(role))
+        continue;
+
+      role = lower_case(role);
+      roles += ({ role });
+
+      // A grant naming a group confers that group's full inherited
+      // role set, so granting "owner" pulls in admin and developer.
+      if(mapp(security_groups[role]))
+        roles += group_roles(role, ([]));
+    }
+  }
+
+  foreach(string group, mapping data in security_groups) {
+    if(!mapp(data) || !pointerp(data["members"]))
+      continue;
+
+    if(includes(data["members"], name))
+      roles += group_roles(group, ([]));
+  }
+
+  return distinct_array(roles);
+}
+
+/**
+ * Tests whether an identity has a specific role among its effective
+ * roles. This is the precise access gate - use it when an operation
+ * requires a particular role regardless of which group confers it.
+ *
+ * @param {string} name - The user name or code-object priv.
+ * @param {string} role - The role to test for.
+ * @returns {int} 1 if the identity has the role, 0 otherwise.
+ */
+public nomask int has_role(string name, string role) {
+  if(!stringp(role) || !truthy(role))
+    return 0;
+
+  return includes(get_roles(name), lower_case(role));
+}
+
+/**
+ * Tests whether an identity is a member of a group. This is strict
+ * membership - it does not consider roles. It is the forgiving access
+ * gate: the MUD owner curates membership knowing which roles each
+ * group confers.
+ *
+ * @param {string} user - The user name or code-object priv.
+ * @param {string} group - The group name.
+ * @returns {int} 1 if the identity is a member of the group, 0
+ *                otherwise.
+ */
+public nomask int is_member(string user, string group) {
+  if(!stringp(user) || !stringp(group))
+    return 0;
+
+  user = lower_case(user);
+
+  mapping data = security_groups[group];
+
+  if(!mapp(data) || !pointerp(data["members"]))
+    return 0;
+
+  return includes(data["members"], user);
+}
+
+/* The role-mutation API (add_role/remove_role/purge_roles) is gated on
+ * the caller by may_mutate_role(): every mutation requires the admin
+ * role, and the owner role may only be granted or revoked by an existing
+ * owner (bootstrap exception aside). Each public entry logs refusals and
+ * then delegates to its protected do_* worker. The workers are protected
+ * (not private) so the master's own inherit chain can drive them directly
+ * during bootstrap, while external objects can only reach the gated
+ * public entries via master()->.
+ */
+protected string *do_add_role(string name, string role);
+protected string *do_remove_role(string name, string role);
+protected void do_purge_roles(string name);
+
+/**
+ * Authorization gate for the role-mutation API. Every mutation requires
+ * the caller to hold the admin role. The owner role is special: only an
+ * existing owner may grant or revoke it. The single exception is the
+ * first-owner bootstrap in login.c - before any owner exists (no
+ * FIRST_USER marker) an admin may mint the first owner, otherwise no
+ * owner could ever come into being.
+ *
+ * @param {string} caller_privs - The privs string of previous_object().
+ * @param {string} role - The role being mutated (0 for purge_roles).
+ * @returns {int} 1 if the mutation is permitted, 0 otherwise.
+ */
+private nomask int may_mutate_role(string caller_privs, string role) {
+  if(!has_role(caller_privs, "admin"))
+    return 0;
+
+  if(stringp(role) && lower_case(role) == "owner" &&
+     !has_role(caller_privs, "owner") &&
+     file_exists(mud_config("FIRST_USER")))
+    return 0;
+
+  return 1;
+}
+
+/**
+ * Records a refused role mutation to LOG_PROMOTE.
+ *
+ * @param {string} op - The mutation that was attempted.
+ * @param {string} caller_privs - The privs string of the refused caller.
+ * @param {string} name - The target user name.
+ * @param {string} role - The role involved (0 for purge_roles).
+ */
+private nomask void log_role_denial(string op, string caller_privs, string name, string role) {
+  log_file(
+    LOG_PROMOTE,
+    sprintf("DENIED %s by %s on %s%s - %s\n",
+      op,
+      caller_privs || "(no privs)",
+      name || "(none)",
+      role ? " role=" + role : "",
+      ldatetime()
+    )
+  );
+}
+
+/**
+ * Grants a role to a user, writing it to roles.map. Idempotent - an
+ * already-granted role is a no-op.
+ *
+ * @param {string} name - The user name to grant the role to.
+ * @param {string} role - The role to grant.
+ * @returns {string*} A copy of the user's direct role list after the
+ *                    grant.
+ * @errors If the caller may not mutate the role (see may_mutate_role).
+ * @errors If name or role is not a non-empty string.
+ * @errors If role contains anything but alphanumerics and
+ *         underscores, or is the reserved name "all".
+ * @errors If the user's existing roles are malformed.
+ */
+public nomask string *add_role(string name, string role) {
+  string caller_privs = query_privs(previous_object());
+
+  if(!may_mutate_role(caller_privs, role)) {
+    log_role_denial("add_role", caller_privs, name, role);
+    error("Unauthorized role mutation.");
+  }
+
+  return do_add_role(name, role);
+}
+
+/**
+ * Unchecked worker for add_role. Protected so the master's inherit chain
+ * can drive it directly (e.g. bootstrap grants); external objects can only
+ * reach the gated add_role().
+ *
+ * @param {string} name - The user name to grant the role to.
+ * @param {string} role - The role to grant.
+ * @returns {string*} A copy of the user's direct role list after the grant.
+ */
+protected string *do_add_role(string name, string role) {
+  assert(stringp(name) && truthy(name), "Name must be a non-empty string.");
+  assert(stringp(role) && truthy(role), "Role must be a non-empty string.");
+
+  name = lower_case(name);
+  role = lower_case(role);
+
+  assert(pcre_match(role, "^\\w+$"), "Role may only contain alphanum and underscores.");
+  assert(role != "all", "All is not assignable.");
+
+  string *user_roles = security_roles[name] ? copy(security_roles[name]) : ({});
+
+  assert(uniformp(user_roles, T_STRING), "Roles for '"+name+"' is not an array of strings.");
+  assert(every(user_roles, (: truthy :)), "Roles for '"+name+"' is not an array of non-empty strings.");
+
+  if(includes(user_roles, role))
+    return copy(user_roles);
+
+  push(ref user_roles, role);
+
+  security_roles[name] = user_roles;
+
+  write_file(ROLES_FILE_CUSTOM, pretty_map(security_roles), 1);
+
+  return copy(user_roles);
+}
+
+/**
+ * Revokes a role from a user, writing the change to roles.map. If the
+ * user has no roles left afterwards, their entry is removed entirely.
+ *
+ * @param {string} name - The user name to revoke the role from.
+ * @param {string} role - The role to revoke.
+ * @returns {string*} A copy of the user's direct role list after the
+ *                    revocation.
+ * @errors If the caller may not mutate the role (see may_mutate_role).
+ * @errors If name or role is not a non-empty string.
+ * @errors If the user's existing roles are malformed.
+ */
+public nomask string *remove_role(string name, string role) {
+  string caller_privs = query_privs(previous_object());
+
+  if(!may_mutate_role(caller_privs, role)) {
+    log_role_denial("remove_role", caller_privs, name, role);
+    error("Unauthorized role mutation.");
+  }
+
+  return do_remove_role(name, role);
+}
+
+/**
+ * Unchecked worker for remove_role. Protected so the master's inherit chain
+ * can drive it directly; external objects can only reach the gated
+ * remove_role().
+ *
+ * @param {string} name - The user name to revoke the role from.
+ * @param {string} role - The role to revoke.
+ * @returns {string*} A copy of the user's direct role list after the
+ *                    revocation.
+ */
+protected string *do_remove_role(string name, string role) {
+  assert(stringp(name) && truthy(name), "Name must be a non-empty string.");
+  assert(stringp(role) && truthy(role), "Role must be a non-empty string.");
+
+  name = lower_case(name);
+  role = lower_case(role);
+
+  string *user_roles = security_roles[name] ? copy(security_roles[name]) : ({});
+
+  assert(uniformp(user_roles, T_STRING), "Roles for '"+name+"' is not an array of strings.");
+  assert(every(user_roles, (: truthy :)), "Roles for '"+name+"' is not an array of non-empty strings.");
+
+  eject_value_all(ref user_roles, role);
+
+  if(sizeof(user_roles))
+    security_roles[name] = user_roles;
+  else
+    map_delete(security_roles, name);
+
+  write_file(ROLES_FILE_CUSTOM, pretty_map(security_roles), 1);
+
+  return copy(user_roles);
+}
+
+/**
+ * Removes all of a user's direct role grants from roles.map. Used when
+ * an account is deleted. Group membership lives in groups.lpml and is
+ * not touched.
+ *
+ * @param {string} name - The user name to purge.
+ * @returns {void}
+ * @errors If the caller may not mutate roles (see may_mutate_role).
+ * @errors If name is not a non-empty string.
+ */
+public nomask void purge_roles(string name) {
+  string caller_privs = query_privs(previous_object());
+
+  if(!may_mutate_role(caller_privs, 0)) {
+    log_role_denial("purge_roles", caller_privs, name, 0);
+    error("Unauthorized role mutation.");
+  }
+
+  do_purge_roles(name);
+}
+
+/**
+ * Unchecked worker for purge_roles. Protected so the master's inherit chain
+ * can drive it directly; external objects can only reach the gated
+ * purge_roles().
+ *
+ * @param {string} name - The user name to purge.
+ * @returns {void}
+ */
+protected void do_purge_roles(string name) {
+  assert(stringp(name) && truthy(name), "Name must be a non-empty string.");
+
+  name = lower_case(name);
+
+  if(nullp(security_roles[name]))
+    return;
+
+  map_delete(security_roles, name);
+
+  write_file(ROLES_FILE_CUSTOM, pretty_map(security_roles), 1);
+}
+
+/**
+ * Returns the member list of a group.
+ *
+ * @param {string} group - The group name.
+ * @returns {string*} A copy of the group's member list, or an empty
+ *                    array if no such group exists.
+ */
+public nomask string *query_group(string group) {
+  mapping data = security_groups[group];
+
+  if(!mapp(data) || !pointerp(data["members"]))
+    return ({});
+
+  return copy(data["members"]);
+}
+
+/**
+ * Returns a copy of the full merged group definitions.
+ *
+ * @returns {([ string: ([ "roles": string*, "members": string* ]) ])}
+ *          A copy of all group definitions.
+ */
+public nomask mapping query_groups() {
+  return copy(security_groups);
+}
+
+/**
+ * Returns the names of all defined groups.
+ *
+ * @returns {string*} The list of group names.
+ */
+public nomask string *query_group_names() {
+  return keys(security_groups);
+}
+
+/**
+ * Restores the persisted role grants from disk into the in-memory
+ * security_roles authority. Runs once per master (re)load. At runtime
+ * the in-memory copy is the authority and is kept current by the
+ * add_role()/remove_role()/purge_roles() write-through API, so this is
+ * only the load-on-(re)load step, not a per-call refresh.
+ *
+ * @returns {void}
+ */
+private nomask void restore_roles() {
+  security_roles = load_roles();
+
+  // Deferred with the role restore: reading config during create() would
+  // force CONFIG_D to compile before the master can serve include paths.
+  access_enforce = !!mud_config("SECURITY_ENFORCE_PATHS");
+}
+
+/**
+ * Reads the direct-grant role map (roles.map) from disk via the cache
+ * daemon. Called only by restore_roles() to populate the in-memory
+ * security_roles authority; permission checks read that, never this.
+ *
+ * @returns {([ string: string* ])} A copy of the user-to-roles map.
+ */
+private nomask mapping load_roles() {
+  mapping all_roles = CACHE_D->load_data(
+    ROLES_FILE_CUSTOM,
+    ([
+      "kind": "auto",
+    ])
+  );
+
+  if(!mapp(all_roles))
+    all_roles = ([]);
+
+  return copy(all_roles);
+}
+
+/* Path-access layer
+ *
+ * valid_read/valid_write resolve the caller's identity against the
+ * ordered access table (access.lpml, plus the git-ignored override
+ * access.local.lpml). Enforcement is gated on SECURITY_ENFORCE_PATHS:
+ * when set (the default in default.lpml) refusals are denied; when clear
+ * the layer runs in shadow mode - refusals are logged but still permitted,
+ * so the table can be tuned against real traffic before it bites.
+ *
+ * This is guardrails against fat-finger writes into /adm, not an ACL
+ * engine - keep it at that altitude.
+ *
+ * @TODO Route valid_override through access_gate(file, ., "write", .)
+ *   too, so an object that cannot write a file cannot let it override an
+ *   efun either.
+ */
+
+/**
+ * Loads the path-access table (access.lpml) and its per-MUD override
+ * (access.local.lpml, checked first). Each rule's glob is precompiled to
+ * an anchored regex and missing capabilities default to "none". Called
+ * from setup_security(); the enforcement flag is read separately in the
+ * deferred restore_roles() step, since mud_config() would force CONFIG_D
+ * to compile too early during create().
+ *
+ * @returns {void}
+ */
+private nomask void load_access() {
+  mixed base, custom;
+  mapping *rules = ({});
+
+  catch(custom = load_lpml(ACCESS_FILE_CUSTOM));
+  catch(base = load_lpml(ACCESS_FILE));
+
+  if(pointerp(custom))
+    rules += custom;
+  if(pointerp(base))
+    rules += base;
+
+  rules = filter(rules, (: mapp($1) && stringp($1["path"]) :));
+
+  foreach(mapping rule in rules) {
+    rule["re"] = glob_to_regex(rule["path"]);
+
+    if(!stringp(rule["read"]))
+      rule["read"] = "none";
+    if(!stringp(rule["write"]))
+      rule["write"] = "none";
+  }
+
+  access_rules = rules;
+}
+
+/**
+ * Translates a path glob into an anchored regex. '*' matches within a
+ * single path segment (no slash); '**' matches the remainder of the path
+ * (slashes included). A trailing '/**' additionally matches the directory
+ * node itself, so '/adm/**' covers '/adm' as well as '/adm/foo' - callers
+ * pass a bare directory path without a trailing slash and still match.
+ * Everything else is matched literally, with regex metacharacters escaped.
+ *
+ * @param {string} pattern - The glob pattern.
+ * @returns {string} An anchored regex equivalent.
+ */
+private nomask string glob_to_regex(string pattern) {
+  string re = "";
+  int i, n = strlen(pattern);
+  int subtree = 0;
+
+  // Fold a trailing '/**' so the directory node matches too: '/adm/**'
+  // becomes ^/adm(/.*)?$, matching '/adm', '/adm/', and '/adm/foo' but not
+  // '/administrator'. The bare '/**' catch-all is left untouched.
+  if(n > 3 && pattern[<3..] == "/**") {
+    pattern = pattern[0..<4];
+    n = strlen(pattern);
+    subtree = 1;
+  }
+
+  for(i = 0; i < n; i++) {
+    int c = pattern[i];
+
+    if(c == '*') {
+      if(i + 1 < n && pattern[i + 1] == '*') {
+        re += ".*";
+        i++;
+      } else {
+        re += "[^/]*";
+      }
+    } else if((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '/' || c == '_' || c == '-') {
+      re += pattern[i..i];
+    } else {
+      re += "\\" + pattern[i..i];
+    }
+  }
+
+  if(subtree)
+    re += "(/.*)?";
+
+  return "^" + re + "$";
+}
+
+/**
+ * Returns 1 if the identity owns the path: either the name in the owner
+ * segment of /home/<x>/<name>/... or /data/users/<x>/<name>/... (a player
+ * writing their own home or save data), or the matching [home_<name>]
+ * code identity.
+ *
+ * @param {string} privs - The caller's privs string.
+ * @param {string} file - The target file path.
+ * @returns {int} 1 if the identity owns the path, 0 otherwise.
+ */
+private nomask int owns_path(string privs, string file) {
+  string owner, home_id;
+
+  if(!stringp(privs) || !truthy(privs))
+    return 0;
+
+  if(sscanf(file, "/home/%*s/%s/%*s", owner) != 3 &&
+     sscanf(file, "/data/users/%*s/%s/%*s", owner) != 3)
+    return 0;
+
+  if(privs == owner)
+    return 1;
+
+  if(sscanf(privs, "[home_%s]", home_id) == 1 && home_id == owner)
+    return 1;
+
+  return 0;
+}
+
+/**
+ * Tests whether a privs string is one of the canonical command identities
+ * assigned by path in master's privs_file(). A command is a proxy for the
+ * player who invoked it, not an actor in its own right, so access_ok()
+ * resolves a command identity to the runner's authority.
+ *
+ * Matched by exact identity, NOT a "[cmd_...]" prefix pattern: an object
+ * under a "/obj/cmd_<x>/" directory is assigned "[cmd_<x>_object]" (the
+ * "/obj/<name>/" rule in privs_file()), which a prefix match would wrongly
+ * admit into the delegation path.
+ *
+ * @param {string} privs - The identity's privs string.
+ * @returns {int} 1 if the privs is a command identity, 0 otherwise.
+ */
+private nomask int is_command_privs(string privs) {
+  return member_array(privs,
+    ({ "[cmd_adm]", "[cmd_dev]", "[cmd_file]", "[cmd_object]" })) != -1;
+}
+
+/**
+ * Evaluates a capability token against an identity and target file.
+ *
+ * @param {string} cap - The capability (all/none/self/role:x/group:x).
+ * @param {string} privs - The caller's privs string.
+ * @param {string} file - The target file path.
+ * @returns {int} 1 if the capability is satisfied, 0 otherwise.
+ */
+private nomask int satisfies(string cap, string privs, string file) {
+  string arg;
+
+  if(cap == "all")
+    return 1;
+  if(cap == "none")
+    return 0;
+  if(cap == "self")
+    return owns_path(privs, file);
+  if(sscanf(cap, "role:%s", arg) == 1)
+    return has_role(privs, arg);
+  if(sscanf(cap, "group:%s", arg) == 1)
+    return is_member(privs, arg);
+
+  return 0;
+}
+
+/**
+ * Evaluates whether a single identity (by privs string) may perform op on
+ * file: trusted code identities and admins bypass the table, otherwise the
+ * first matching access rule's capability decides. A missing identity
+ * yields 0 here - access_ok() handles the driver/no-actor permit case.
+ *
+ * @param {string} privs - The identity's privs string.
+ * @param {string} file - The target file path.
+ * @param {string} op - "read" or "write".
+ * @returns {int} 1 if this identity is permitted, 0 otherwise.
+ */
+private nomask int identity_ok(string privs, string file, string op) {
+  if(!stringp(privs) || !truthy(privs))
+    return 0;
+
+  if(member_array(privs, ({ "[master]", "[adm_obj]", "[daemon]" })) != -1)
+    return 1;
+
+  if(has_role(privs, "admin"))
+    return 1;
+
+  foreach(mapping rule in access_rules) {
+    if(!pcre_match(file, rule["re"]))
+      continue;
+
+    return satisfies(rule[op], privs, file);
+  }
+
+  return 0;
+}
+
+/**
+ * Resolves whether an operation on a file is permitted. Checks the acting
+ * identity first; a command ([cmd_*]) additionally carries the authority of
+ * the runner who invoked it, since ownership ('self') is inherently the
+ * player's and the runner may hold roles the command identity lacks.
+ * Trusted code identities and admins bypass the table entirely; during
+ * early boot (before groups load) everything is permitted so the master can
+ * read the very files the check depends on.
+ *
+ * @param {string} file - The target file path.
+ * @param {object} user - The object on whose behalf the op occurs.
+ * @param {string} op - "read" or "write".
+ * @returns {int} 1 if permitted, 0 otherwise.
+ */
+private nomask int access_ok(string file, object user, string op) {
+  string privs;
+
+  if(!objectp(user) || user == this_object() || !sizeof(security_groups))
+    return 1;
+
+  privs = query_privs(user);
+
+  // No identity: a driver/compile-time operation, not an actor. Permit.
+  if(!stringp(privs) || !truthy(privs))
+    return 1;
+
+  // The acting identity's own authority decides first.
+  if(identity_ok(privs, file, op))
+    return 1;
+
+  // A command is a proxy for the runner who invoked it, so grant it the
+  // runner's authority too. this_caller() is the interactive command-giver
+  // at the top of the chain - stable through the call chain and not
+  // reassignable mid-flow, unlike this_body()/this_player().
+  if(is_command_privs(privs)) {
+    object runner = this_caller();
+
+    if(objectp(runner) && identity_ok(query_privs(runner), file, op))
+      return 1;
+  }
+
+  return 0;
+}
+
+/**
+ * Shadow-aware wrapper around access_ok used by valid_read/valid_write.
+ * Refusals are logged either way; when SECURITY_ENFORCE_PATHS is off the
+ * refusal is permitted anyway (shadow mode), otherwise (the default) it is
+ * enforced.
+ *
+ * @param {string} file - The target file path.
+ * @param {object} user - The object on whose behalf the op occurs.
+ * @param {string} op - "read" or "write".
+ * @param {string} func - The efun performing the operation.
+ * @returns {int} 1 if permitted (or shadowed), 0 if enforced-denied.
+ */
+private nomask int access_gate(string file, object user, string op, string func) {
+  // A nested check (the logging below reads/writes files) must not
+  // recurse; permit it and let the outermost call decide.
+  if(in_access_check)
+    return 1;
+
+  defer((: in_access_check = 0 :));
+
+  in_access_check = 1;
+
+  if(access_ok(file, user, op)) {
+    in_access_check = 0;
+    return 1;
+  }
+
+  log_access_denial(file, user, op, func, access_enforce);
+  in_access_check = 0;
+
+  return access_enforce ? 0 : 1;
+}
+
+/**
+ * Records a path-access refusal to LOG_SECURITY, tagged SHADOW (would
+ * have denied) or DENIED (enforced).
+ *
+ * @param {string} file - The target file path.
+ * @param {object} user - The object on whose behalf the op occurred.
+ * @param {string} op - "read" or "write".
+ * @param {string} func - The efun performing the operation.
+ * @param {int} enforced - Whether the refusal was enforced.
+ * @returns {void}
+ */
+private nomask void log_access_denial(string file, object user, string op, string func, int enforced) {
+  log_file(
+    LOG_SECURITY,
+    sprintf("%s %s of %s by %s (%O via %s) via %s - %s\n",
+      enforced ? "DENIED" : "SHADOW",
+      op,
+      file,
+      query_privs(user) || "(no privs)",
+      user,
+      implode(map(reverse_array(previous_object(-1)), (: sprintf("%s (%s)", file_name($1), query_privs($1)) :)), " => "),
+      func || "?",
+      ldatetime()
+    )
+  );
+}
+
+/**
+ * Driver apply: decides whether one object may shadow another.
+ *
+ * No shadows. None. Git.
+ *
+ * @apply
+ * @param {object} _ob - The object to be shadowed.
+ * @returns {int} Always 0 - Oxidus does not use shadows.
+ */
+private int valid_shadow(object _ob) {
+  return 0;
+}
+
+/**
+ * Driver apply: decides whether a function may be bound from one
+ * object onto another.
+ *
+ * Yeah, I'm fine with this being always 1. At least until I discover a use
+ * case otherwise.
+ *
+ * @apply
+ * @param {object} _obj - The object whose function is being bound.
+ * @param {object} _owner - The object that owns the function.
+ * @param {object} _target - The object the function is bound to.
+ * @returns {int} Always 1.
+ */
+private int valid_bind(object _obj, object _owner, object _target) {
+  return 1;
+}
+
+/**
+ * Driver apply: decides whether an object may hide itself.
+ *
+ * @NOTE That's a no from me, dawg.
+ *
+ * @apply
+ * @param {object} _ob - The object requesting to be hidden.
+ * @returns {int} Always 0 - Oxidus does not hide.
+ */
+private int valid_hide(object _ob) {
+  return 0;
+}
+
+/**
+ * Driver apply: decides whether a hard link may be created.
+ *
+ * @NOTE Undecided if I want to allow hard linking. I think that I do not.
+ *
+ * @apply
+ * @param {string} _from - The link source path.
+ * @param {string} _to - The link destination path.
+ * @returns {int} Always 0 - linking is not used.
+ */
+public int valid_link(string _from, string _to) {
+  return 0;
+}
+
+/**
+ * Driver apply: decides whether a newly loaded object may exist.
+ *
+ * @TODO Update later.
+ *
+ * @apply
+ * @param {object} _ob - The object being validated.
+ * @returns {int} Always 1.
+ */
+private int valid_object(object _ob) {
+  return 1;
+}
+
+/**
+ * Driver apply: decides whether a file may override an efun.
+ *
+ * @apply
+ * @param {string} _file - The file attempting the override.
+ * @param {string} _efun_name - The name of the efun being overridden.
+ * @param {string} mainfile - The file defining the override.
+ * @returns {int} 1 if permitted, 0 if not.
+ */
+public int valid_override(string _file, string _efun_name, string mainfile) {
+  if(mainfile == `${ADM_OBJ_SIMUL_EFUN}.lpc`)
+    return 1;
+
+  if(starts_with(mainfile, DIR_ADM_SIMUL_EFUN))
+    return 1;
+
+  return 0;
+}
+
+/**
+ * Driver apply: decides whether a socket operation is permitted. We aren't
+ * doing granular anything here yet.
+ *
+ * @apply
+ * @param {object} _caller - The object requesting the socket call.
+ * @param {string} _func - The socket function being invoked.
+ * @param {mixed*} _info - Socket call information.
+ * @returns {int} Always 1.
+ */
+private int valid_socket(object _caller, string _func, mixed *_info) {
+  return 1;
+}
+
+/**
+ * Driver apply: decides whether a file may be read.
+ *
+ * @TODO Update later.
+ *
+ * @apply
+ * @param {string} _file - The file being read.
+ * @param {object} _user - The object on whose behalf the read occurs.
+ * @param {string} _func - The efun performing the read.
+ * @returns {int} 1 if the read is permitted (shadow mode always permits).
+ */
+public int valid_read(string _file, object _user, string _func) {
+  return access_gate(_file, _user, "read", _func);
+}
+
+/**
+ * Driver apply: decides whether a file may be written.
+ *
+ * @TODO Update later.
+ *
+ * @apply
+ * @param {string} _file - The file being written.
+ * @param {object} _user - The object on whose behalf the write occurs.
+ * @param {string} _func - The efun performing the write.
+ * @returns {int} 1 if the write is permitted (shadow mode always permits).
+ */
+public int valid_write(string _file, object _user, string _func) {
+  return access_gate(_file, _user, "write", _func);
+}
+
+/**
+ * Driver apply: decides whether a database operation is permitted.
+ *
+ * This is permissive because we're using SQLite3 and don't need any specific
+ * gating here.
+ *
+ * @apply
+ * @param {object} _caller - The object requesting the database call.
+ * @param {string} _fun - The database function being invoked.
+ * @param {mixed*} _info - Database call information.
+ * @returns {mixed} Always 1 - the mudlib uses SQLite3.
+ */
+private mixed valid_database(object _caller, string _fun, mixed *_info) {
+  return 1;
+}

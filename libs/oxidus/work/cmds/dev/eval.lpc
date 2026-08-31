@@ -1,0 +1,77 @@
+/**
+ * @file /cmds/dev/eval.lpc
+ *
+ * Evaluate a string by first writing it to a temp file and then compiling and
+ * executing it.
+ *
+ * @created 2026-07-13 - Gesslar
+ * @last_modified 2026-07-13 - Gesslar
+ *
+ * @history
+ * 2026-07-13 - Gesslar - Created
+ */
+
+inherit STD_CMD;
+
+void setup() {
+  usage_text = "eval <lpc-statements>";
+  help_text =
+    "This command allows you to execute stand-alone lpc statements. "
+    "Everything executed is done as {{bl1}}you{{bl0}}, so care should be "
+    "taken that what you run is intended.";
+}
+
+mixed main(/** @type {STD_PLAYER} */ object caller, string arg) {
+  string file;
+  object ob;
+  string err;
+  mixed result;
+  int limit = max_eval_cost(), cost;
+
+  _info(caller, "Evaluating: %s", arg);
+
+  // Compile the snippet from a scratch file under /tmp, which the path-access
+  // table makes world-writable. The command's identity ([cmd_dev]) can't
+  // write into a developer's home, but it can write here. One file per caller so
+  // concurrent evals don't collide.
+  file = "/tmp/eval_" + caller->query_real_name() + ".lpc";
+
+  if(file_size(file) != -1)
+    rm(file);
+
+  if(ob = find_object(file))
+    destruct(ob);
+
+  if(!write_file(file, "mixed eval() { "+arg+"; }\n"))
+    return _error("Could not write eval scratch file %s.", file);
+
+  err = catch(ob = load_object(file));
+  rm(file);
+
+  if(err)
+    return _error("Error loading file %s\n%s", file, err);
+
+  if(!objectp(ob))
+    return _error("Failed to load eval scratch file %s.", file);
+
+  // Run the evaluated code with the caller's own privileges, so eval is a
+  // faithful "as me" tool. The set_privs override allowlists CMD_EVAL for
+  // exactly this.
+  set_privs(ob, query_privs(caller));
+
+  err = catch {
+    reset_eval_cost();
+    result = call_other(ob, "eval");
+    cost = limit - eval_cost();
+  };
+
+  catch(destruct(ob));
+
+  if(err)
+    return _error("Runtime error:\n%s\nSee logs for more details.", err);
+
+  _ok("Result (%s) = %O", typeof(result), result);
+  _ok("Eval cost: %s", add_commas(cost));
+
+  return 1;
+}

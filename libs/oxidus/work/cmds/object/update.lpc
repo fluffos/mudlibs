@@ -1,0 +1,186 @@
+/**
+ * @file /cmds/object/update.lpc
+ *
+ * A command to update objects! Neat, huh?
+ *
+ * @created 2026-07-13 - Gesslar
+ * @last_modified 2026-07-13 - Gesslar
+ *
+ * @history
+ * 2026-07-13 - Gesslar - Created
+ */
+
+inherit STD_CMD;
+
+void setup() {
+  usage_text =
+    "update [<file|object>]\n"
+    "update -r [<file|object>]\n"
+    "update -R [<file|object>]\n"
+  ;
+
+  help_text =
+    "Reloads an object from source, putting any players who were inside it "
+    "back afterwards. The target may be a file path or something you can "
+    "name in your inventory or the room; with no target at all, your current "
+    "working file is used, which is whatever you updated last.\n"
+    "\n"
+    "'-r' also reloads the object's immediate inheritables, and '-R' walks "
+    "the whole inheritance tree beneath it. Virtual objects are reloaded "
+    "through their virtual master.\n"
+    "\n"
+    "This command cannot update itself — destruct it instead and it will "
+    "reload on next use.\n"
+    "\n"
+    "See also: dest, showtree\n";
+}
+
+private nomask mapping resolve_target(mixed target, string kind);
+private nomask void generate_graph(mapping target, string kind);
+private nomask mixed reload_it(mixed target);
+private nomask mixed perform_update(object tp, mapping target);
+
+mixed main(
+  /** @type {STD_PLAYER} */ object tp,
+  string arg
+) {
+  string target;
+  mapping to_update;
+
+  if(!arg)
+    to_update = resolve_target(tp->query_env("cwf"), "single");
+  else if(arg == "-r")
+    to_update = resolve_target(tp->query_env("cwf"), "shallow");
+  else if(sscanf(arg, "-r %s", target) == 1)
+    to_update = resolve_target(target, "shallow");
+  else if(arg == "-R")
+    to_update = resolve_target(tp->query_env("cwf"), "deep");
+  else if(sscanf(arg, "-R %s", target) == 1)
+    to_update = resolve_target(target, "deep");
+  else
+    to_update = resolve_target(arg, "single");
+
+  if(!to_update) {
+    if(!tp->query_env("cwf"))
+      return _error(tp, "You do not have a current working file.");
+    else
+      return _error(tp, "Invalid target for update.");
+  }
+
+  if(includes(to_update.graph, base_name()))
+    return _error("The update command may not be updated in this manner. "
+                  "Destruct it instead.");
+
+  tp->set_env("cwf", to_update.file);
+
+  return perform_update(tp, to_update);
+}
+
+private nomask mapping resolve_target(mixed target, string kind) {
+  if(stringp(target)) {
+    if(cfile_exists(target)) {
+      if(find_object(target)) {
+        return resolve_target(find_object(target), kind);
+      }
+    }
+
+    return resolve_target(get_object(target), kind);
+  }
+
+  if(!objectp(target))
+    return 0;
+
+  mapping new_target = ([
+    "file": base_name(target),
+    "object": target,
+    "virtual": false,
+    "virtual_master": undefined,
+  ]);
+
+  if(virtualp(target)) {
+    new_target["virtual"] = true;
+    new_target["virtual_master"] =
+      /** @type {STD_OBJECT} */ (target)->query_virtual_master();
+  }
+
+  generate_graph(new_target, kind);
+
+  return new_target;
+}
+
+private nomask void process_leaf(object ob, mixed ref *graph, int recurse: (: 0 :)) {
+  string *list = inherit_list(ob);
+
+  if(!sizeof(list))
+    return;
+
+  if(recurse) {
+    foreach(string file in list) {
+      object sub_ob = load_object(file);
+      process_leaf(sub_ob, ref graph, recurse);
+    }
+  }
+
+  push(ref graph, list);
+}
+
+private nomask void generate_graph(mapping target, string kind) {
+  target["graph"] = ({});
+
+  if(kind != "single") {
+    if(kind == "shallow")
+      process_leaf(target["object"], ref target["graph"], 0);
+    if(kind == "deep")
+      process_leaf(target["object"], ref target["graph"], 1);
+  }
+
+  if(target.virtual)
+    push(ref target["graph"], ({target.virtual_master}));
+  else
+    push(ref target["graph"], ({target.file}));
+
+  target["graph"] = flatten(target["graph"]);
+}
+
+private nomask mixed reload_it(mixed target) {
+  /** @type {STD_OBJECT} */ object ob = find_object(target);
+  /** @type {STD_PLAYER*} */ object *livs = present_players(ob);
+
+  if(objectp(ob))
+    catch(ob->remove());
+  else
+    return;
+
+  if(ob)
+    destruct(ob);
+
+  string err = catch(ob = load_object(target));
+  if(err)
+    return err;
+
+  if(sizeof(livs))
+    livs->move(ob);
+}
+
+private nomask mixed perform_update(object tp, mapping target) {
+  foreach(string file in target.graph) {
+    string err = reload_it(file);
+    if(err) {
+      if(target.virtual) {
+        return _error("Unable to update %O (%O):\n%s => %s", target.file, target.virtual_master, file, err);
+      } else {
+        return _error("Unable to update %O:\n%s => %s", target.file, file, err);
+      }
+    }
+
+    _ok(tp, "%s => OK", file);
+  }
+
+  if(target.virtual && objectp(target["object"])) {
+    if(roomp(target["object"])) {
+      reload_it(file_name(target["object"]));
+    }
+  }
+
+  return 1;
+}

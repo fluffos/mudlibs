@@ -1,0 +1,238 @@
+/**
+ * @file /cmds/action/drop.lpc
+ *
+ * The drop command.
+ *
+ * @created 2026-07-16 - Gesslar
+ * @last_modified 2026-07-18 - Gesslar
+ *
+ * @history
+ * 2026-07-16 - Gesslar - Created
+ * 2026-07-18 - Gesslar - Added 'all' and 'all <type>' quantifiers
+ */
+
+inherit STD_ACT;
+
+private mixed drop_all(object tp, string ob_id);
+private mixed drop_coins(object tp, string arg);
+private mixed drop_all_coins(object tp);
+private mixed drop_coin_pile(object tp, string currency, int amount);
+
+void setup() {
+  usage_text =
+    "drop <object>\n"
+    "drop all\n"
+    "drop all <object>\n"
+    "drop <number> <currency>\n"
+    "drop <currency>\n";
+  help_text =
+    "This command drops an object you are carrying onto the ground. Name a "
+    "single object to drop just that one, or use 'all' to drop everything (or "
+    "everything of a given type).\n"
+    "\n"
+    "Coins are carried as wealth rather than as items, so name a currency to "
+    "drop coins: 'drop 5 silver' drops five silver coins, while 'drop silver' "
+    "(or 'drop all silver') drops all of your silver. Bare 'drop all' leaves "
+    "your coins alone.\n"
+    "\n"
+    "See also: get, put\n";
+}
+
+mixed main(
+  /** @type {STD_BODY} */ object tp,
+  string arg
+) {
+  if(!arg)
+    return "Drop what?";
+
+  // Coins live in the wealth pool, not inventory. A request naming a currency
+  // ('drop 5 silver', 'drop silver', 'drop all gold') materialises coin
+  // objects on the ground instead of moving an inventory item.
+  mixed coins = drop_coins(tp, arg);
+  if(!nullp(coins))
+    return coins;
+
+  // Detect an "all" quantifier: bare "all" (everything) or "all <type>".
+  int all_flag = 0;
+  string rest;
+
+  if(arg == "all") {
+    all_flag = 1;
+    arg = 0;
+  } else if(sscanf(arg, "all %s", rest) == 1) {
+    all_flag = 1;
+    arg = rest;
+  }
+
+  if(all_flag)
+    return drop_all(tp, arg);
+
+  /** @type {STD_ITEM} */ object ob = get_object(arg);
+  if(   !ob
+     || !present(ob, tp)
+     || !tp->can_see(ob))
+    return "You do not posses that.";
+
+  if(call_if(ob, "prevent_drop", tp))
+    return "You cannot drop that.";
+
+  // Capture the short before moving; some objects (coins) auto-destruct when
+  // they change inventory, leaving nothing to describe afterwards.
+  string sh = get_short(ob);
+
+  if(ob->move(environment(tp)))
+    return "You could not drop that.";
+
+  tp->simple_action("$N $vdrop a $o.", sh);
+
+  return 1;
+}
+
+private mixed drop_all(
+  /** @type {STD_BODY} */ object tp,
+  string ob_id
+) {
+  /** @type {STD_ROOM} */ object room = environment(tp);
+  object *obs = find_targets(tp, ob_id, tp);
+  int dropped = 0;
+
+  if(!sizeof(obs))
+    return ob_id
+      ? `You are not carrying any ${ob_id}.`
+      : "You are not carrying anything.";
+
+  /** @type {STD_ITEM} */ object ob;
+
+  foreach(ob in obs) {
+    if(call_if(ob, "prevent_drop", tp))
+      continue;
+
+    // Capture the short before moving; coins auto-destruct on changing
+    // inventory, leaving nothing to describe.
+    string sh = get_short(ob);
+
+    if(ob->move(room))
+      continue;
+
+    tp->simple_action("$N $vdrop a $o.", sh);
+    dropped++;
+  }
+
+  if(!dropped)
+    return "You could not drop anything.";
+
+  return 1;
+}
+
+// Routes a currency request to the wealth pool. Recognises "drop <n> <type>",
+// "drop all <type>", and "drop all coin(s)" (every currency). Bare "drop
+// <type>" is intentionally NOT handled here - an item may be described with a
+// currency word (e.g. a silver ingot), so a plain name must fall through to a
+// normal item drop. Returns undefined when the request is not about coins.
+private mixed drop_coins(
+  /** @type {STD_BODY} */ object tp,
+  string arg
+) {
+  string currency, base;
+  int amount = 0;
+  int all = 0;
+
+  if(sscanf(arg, "%d %s", amount, currency) == 2) {
+    // "drop 5 silver"
+  } else if(sscanf(arg, "all %s", currency) == 1) {
+    all = 1;                                    // "drop all silver" / "all coins"
+  } else {
+    return undefined;
+  }
+
+  // Accept "silver coin" / "silver coins" as "silver".
+  if(sscanf(currency, "%s coin", base) == 1 && strlen(base))
+    currency = base;
+
+  currency = lower_case(trim(currency));
+
+  // Bare "coin"/"coins", only with 'all', means every currency at once.
+  if(all && (currency == "coin" || currency == "coins"))
+    return drop_all_coins(tp);
+
+  if(!CURRENCY_D->valid_currency_type(currency))
+    return undefined;
+
+  int have = tp->query_wealth(currency);
+
+  if(have < 1)
+    return `You have no ${currency} coins.`;
+
+  if(all)
+    amount = have;
+
+  if(amount < 1)
+    return `Drop how many ${currency} coins?`;
+
+  if(amount > have)
+    return `You only have ${have} ${currency} ${have == 1 ? "coin" : "coins"}.`;
+
+  return drop_coin_pile(tp, currency, amount);
+}
+
+// Drops every currency the body holds. Bare "drop all" never reaches here;
+// this is only for the explicit "drop all coin(s)" form.
+private mixed drop_all_coins(/** @type {STD_BODY} */ object tp) {
+  mapping wealth = tp->query_all_wealth();
+  int dropped = 0;
+
+  if(!tp->query_total_coins())
+    return "You have no coins to drop.";
+
+  foreach(string currency, int amount in wealth) {
+    if(amount < 1)
+      continue;
+
+    if(drop_coin_pile(tp, currency, amount) == 1)
+      dropped++;
+  }
+
+  if(!dropped)
+    return "You could not drop your coins.";
+
+  return 1;
+}
+
+// Deducts <amount> of <currency> from the wealth pool and materialises a coin
+// object on the ground, refunding the pool if the drop fails.
+private mixed drop_coin_pile(
+  /** @type {STD_BODY} */ object tp,
+  string currency,
+  int amount
+) {
+  mixed res = tp->adjust_wealth(currency, -amount);
+  if(stringp(res))
+    return res;
+
+  /** @type {LIB_COIN} */ object coin = new(LIB_COIN);
+  coin->set_up(currency, amount);
+
+  if(coin->move(environment(tp))) {
+    if(coin)
+      coin->remove();
+
+    tp->adjust_wealth(currency, amount);       // refund the deduction
+
+    return `You could not drop the ${currency} coins.`;
+  }
+
+  // The actor sees the exact count; everyone else sees a vague quantity.
+  string self_phrase, other_phrase;
+
+  if(amount == 1) {
+    self_phrase = other_phrase = add_article(`${currency} coin`);
+  } else {
+    self_phrase = `${amount} ${currency} coins`;
+    other_phrase = `some ${currency} coins`;
+  }
+
+  tp->my_action("$N $vdrop $o.", self_phrase);
+  tp->other_action("$N $vdrop $o.", other_phrase);
+
+  return 1;
+}

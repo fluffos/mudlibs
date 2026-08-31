@@ -1,0 +1,296 @@
+/**
+ * @file /adm/daemons/shutdown.lpc
+ *
+ * Shutdown daemon. Owns the scheduling, countdown, broadcast, and
+ * cancellation of a pending game shutdown or reboot. The `shutdown` and
+ * `reboot` admin commands are thin wrappers that hand their argument line
+ * here; this daemon parses the grammar and drives everything else.
+ *
+ * A shutdown and a reboot differ only by the exit code handed to the
+ * driver: SYS_SHUTDOWN (0) exits cleanly and the run script stops;
+ * SYS_REBOOT (1) exits and the run script restarts the driver. Only one
+ * shutdown or reboot may be pending at a time.
+ *
+ * The actual driver call goes through the security-wrapped shutdown()
+ * override, which permits only master() and this daemon (SHUTDOWN_D) to
+ * invoke it, emits SIG_SYS_SHUTDOWN, and persists all objects first.
+ *
+ * @created 2026-07-18 - Gesslar
+ * @last_modified 2026-07-18 - Gesslar
+ *
+ * @history
+ * 2026-07-18 - Gesslar - Created
+ */
+
+#include <shutdown.h>
+#include <signal.h>
+#include <logs.h>
+
+inherit STD_DAEMON;
+
+public int request(int how, string arg);
+private int schedule(object who, int how, int minutes, string why);
+private int do_halt(object who);
+private int report_status(object who);
+private void warn();
+private void fire();
+private void announce(string msg);
+private void clear_calls();
+private string phrase(int secs);
+private string label(int how);
+
+private nosave int pending;         // 1 while a shutdown/reboot is scheduled
+private nosave int mode;            // SYS_SHUTDOWN or SYS_REBOOT
+private nosave int fire_time;       // time() at which it fires
+private nosave string reason;       // operator-supplied reason, or ""
+private nosave string actor;        // name of the operator who scheduled it
+private nosave int *calls = ({});   // outstanding call_out handles
+
+// Seconds-before-fire at which to broadcast a countdown warning. Only the
+// offsets shorter than the total delay are actually scheduled.
+private nosave int *warn_at = ({ 900, 600, 300, 120, 60, 30, 10 });
+
+void setup() {
+  set_no_clean(1);
+}
+
+/**
+ * Entry point for the `shutdown` and `reboot` commands. Parses the argument
+ * line and dispatches. The grammar (for either verb) is:
+ *
+ *   <verb>                  - report the current shutdown/reboot status
+ *   <verb> halt             - cancel a pending shutdown/reboot
+ *   <verb> now [reason]     - fire immediately
+ *   <verb> <minutes> [reason] - fire after <minutes> minutes
+ *   <verb> <reason>         - fire after the default delay
+ *
+ * @param {int} how - SYS_SHUTDOWN or SYS_REBOOT.
+ * @param {string} arg - The raw argument line from the command.
+ * @returns {int} A feedback result (always 1) sent to the invoking operator.
+ */
+public int request(int how, string arg) {
+  /** @type {STD_PLAYER} */ object who = this_body();
+  string first, rest, junk;
+  int minutes;
+
+  if(!objectp(who) || !adminp(who))
+    return _error(who, "You are not permitted to schedule a %s.", label(how));
+
+  arg = arg ? trim(arg) : "";
+
+  if(arg == "")
+    return report_status(who);
+
+  if(sscanf(arg, "%s %s", first, rest) != 2) {
+    first = arg;
+    rest = "";
+  }
+
+  if(lower_case(first) == "halt")
+    return do_halt(who);
+
+  if(pending)
+    return _error(who, "A %s is already scheduled. Use '%s halt' to cancel it "
+      "first.", label(mode), label(mode));
+
+  if(lower_case(first) == "now")
+    return schedule(who, how, 0, rest);
+
+  if(sscanf(first, "%d%s", minutes, junk) == 2 && junk == "") {
+    if(minutes < 0)
+      return _error(who, "The delay must not be negative.");
+
+    return schedule(who, how, minutes, rest);
+  }
+
+  return schedule(who, how, SHUTDOWN_DEFAULT_MINUTES, arg);
+}
+
+/**
+ * Schedules the shutdown/reboot: records state, broadcasts the opening
+ * announcement, and arms the countdown warnings plus the final fire. A zero
+ * delay fires at once.
+ *
+ * @param {STD_PLAYER} who - The operator scheduling it.
+ * @param {int} how - SYS_SHUTDOWN or SYS_REBOOT.
+ * @param {int} minutes - Delay in minutes; 0 means immediately.
+ * @param {string} why - The reason, possibly empty.
+ * @returns {int} A feedback result for the operator.
+ */
+private int schedule(object who, int how, int minutes, string why) {
+  int total = minutes * 60;
+
+  why = why ? trim(why) : "";
+
+  pending = 1;
+  mode = how;
+  reason = why;
+  actor = who->query_name();
+  fire_time = time() + total;
+
+  clear_calls();
+
+  log_file(LOG_SHUTDOWN, sprintf("%s scheduled by %s in %s (%s) - %s\n",
+    label(how), actor, total <= 0 ? "0 seconds" : phrase(total),
+    why == "" ? "no reason given" : why, ldatetime()));
+
+  if(total <= 0) {
+    fire();
+
+    return _ok(who, "%s now.", how == SYS_REBOOT ? "Rebooting" : "Shutting down");
+  }
+
+  foreach(int th in warn_at)
+    if(th < total)
+      calls += ({ call_out((: warn :), total - th) });
+
+  calls += ({ call_out((: fire :), total) });
+
+  announce(sprintf("\n*** The game will %s in %s.%s ***\n",
+    how == SYS_REBOOT ? "reboot" : "shut down", phrase(total),
+    why == "" ? "" : " Reason: " + why));
+
+  return _ok(who, "%s scheduled in %s.%s", capitalize(label(how)),
+    phrase(total), why == "" ? "" : " Reason: " + why);
+}
+
+/**
+ * Cancels a pending shutdown/reboot, clears the armed call_outs, announces
+ * the cancellation, and emits the matching cancel signal.
+ *
+ * @param {STD_PLAYER} who - The operator cancelling it.
+ * @returns {int} A feedback result for the operator.
+ */
+private int do_halt(object who) {
+  int how = mode;
+
+  if(!pending)
+    return _error(who, "There is no shutdown or reboot scheduled to cancel.");
+
+  clear_calls();
+  pending = 0;
+
+  announce(sprintf("\n*** The scheduled %s has been cancelled by %s. ***\n",
+    label(how), capitalize(who->query_name())));
+
+  emit(how == SYS_REBOOT ? SIG_SYS_REBOOT_CANCEL : SIG_SYS_SHUTDOWN_CANCEL);
+
+  log_file(LOG_SHUTDOWN, sprintf("%s cancelled by %s - %s\n",
+    label(how), who->query_name(), ldatetime()));
+
+  reason = actor = 0;
+
+  return _ok(who, "The scheduled %s has been cancelled.", label(how));
+}
+
+/**
+ * Reports the current shutdown/reboot status to the operator.
+ *
+ * @param {STD_PLAYER} who - The operator asking.
+ * @returns {int} A feedback result for the operator.
+ */
+private int report_status(object who) {
+  int remaining;
+
+  if(!pending)
+    return _info(who, "No shutdown or reboot is currently scheduled.");
+
+  remaining = fire_time - time();
+  if(remaining < 0)
+    remaining = 0;
+
+  return _info(who, "%s scheduled by %s in %s.%s", capitalize(label(mode)),
+    capitalize(actor || "someone"), phrase(remaining),
+    reason == "" || nullp(reason) ? "" : " Reason: " + reason);
+}
+
+/**
+ * Countdown warning broadcast. Fired by call_out at each armed offset; it
+ * derives the remaining time from fire_time so the phrasing is always
+ * accurate.
+ */
+private void warn() {
+  int remaining;
+
+  if(!pending)
+    return;
+
+  remaining = fire_time - time();
+  if(remaining <= 0)
+    return;
+
+  announce(sprintf("\n*** The game will %s in %s.%s ***\n",
+    mode == SYS_REBOOT ? "reboot" : "shut down", phrase(remaining),
+    reason == "" || nullp(reason) ? "" : " Reason: " + reason));
+}
+
+/**
+ * Fires the shutdown/reboot: final broadcast, emits the pre-shutdown signal,
+ * then calls the security-wrapped shutdown() override with the exit code.
+ */
+private void fire() {
+  int how = mode;
+
+  clear_calls();
+  pending = 0;
+
+  announce(sprintf("\n*** The game is %s NOW. ***\n",
+    how == SYS_REBOOT ? "rebooting" : "shutting down"));
+
+  emit(how == SYS_REBOOT ? SIG_SYS_REBOOTING : SIG_SYS_SHUTTING_DOWN);
+
+  shutdown(how);
+}
+
+/**
+ * Broadcasts a message to every interactive user.
+ *
+ * @param {string} msg - The message to send.
+ */
+private void announce(string msg) {
+  foreach(object u in users())
+    if(objectp(u) && interactive(u))
+      tell(u, msg);
+}
+
+/**
+ * Removes and clears all outstanding countdown/fire call_outs.
+ */
+private void clear_calls() {
+  foreach(int id in calls)
+    remove_call_out(id);
+
+  calls = ({});
+}
+
+/**
+ * Formats a second count as a human-readable duration.
+ *
+ * @param {int} secs - The number of seconds.
+ * @returns {string} e.g. "15 minutes", "1 minute 30 seconds", "10 seconds".
+ */
+private string phrase(int secs) {
+  int m, s;
+
+  if(secs < 60)
+    return sprintf("%d second%s", secs, secs == 1 ? "" : "s");
+
+  m = secs / 60;
+  s = secs % 60;
+
+  if(s == 0)
+    return sprintf("%d minute%s", m, m == 1 ? "" : "s");
+
+  return sprintf("%d minute%s %d second%s", m, m == 1 ? "" : "s",
+    s, s == 1 ? "" : "s");
+}
+
+/**
+ * Returns the noun for an exit mode: "reboot" or "shutdown".
+ *
+ * @param {int} how - SYS_SHUTDOWN or SYS_REBOOT.
+ * @returns {string} The label.
+ */
+private string label(int how) {
+  return how == SYS_REBOOT ? "reboot" : "shutdown";
+}

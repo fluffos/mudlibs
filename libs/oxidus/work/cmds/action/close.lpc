@@ -1,0 +1,92 @@
+/**
+ * @file /cmds/action/close.lpc
+ *
+ * Command to close a container or door.
+ *
+ * @created 2024-08-08 - Gesslar
+ * @last_modified 2024-08-08 - Gesslar
+ *
+ * @history
+ * 2024-08-08 - Gesslar - Created
+ */
+
+inherit STD_ACT;
+
+void setup() {
+  usage_text = "close <object> [here]";
+  help_text =
+    "This command will allow you to close a container or a door in your "
+    "environment. If you have a container in your inventory and another of "
+    "the same name in the room, append 'here' to close the one in the room.\n"
+    "\n"
+    "See also: open";
+}
+
+
+mixed main(/** @type {STD_BODY} */ object tp, string args) {
+  string target;
+  /** @type {STD_ROOM} */ object room;
+  string *doors;
+  int here_flag;
+
+  if(!args)
+    return "Close what?";
+
+  room = environment(tp);
+  if(sizeof(doors = room->id_door(args))) {
+    string door;
+
+    if(sizeof(doors) > 1)
+      return "There are multiple doors with that name.";
+
+    door = doors[0];
+
+    if(room->is_door_locked(door))
+      return "It's locked.";
+
+    if(room->is_door_open(door))
+      room->set_door_open(door, false, true);
+    else
+      return sprintf("The way leading %s is already closed.", room->query_door_name(door));
+
+    tp->simple_action("$N $vclose the $o.\n", room->query_door_name(door));
+
+    /** @type {STD_ROOM} */ object other_room = room->query_exit_dest(door);
+    if(other_room) {
+      foreach(string dir in other_room->query_exit_ids()) {
+        if(other_room->query_exit_dest(dir) == room) {
+          other_room->set_door_open(dir, false, false);
+          break;
+        }
+      }
+    }
+    return 1;
+  }
+
+  if(sscanf(args, "%s here", target) == 1)
+    here_flag = 1;
+  else
+    target = args;
+
+  /** @type {STD_CONTAINER} */ object cont;
+
+  if(here_flag) {
+    if(!cont = find_target(tp, target, room))
+      return "You do not see that here.";
+  } else {
+    if(!cont = find_target(tp, target, tp))
+      if(!cont = find_target(tp, target))
+        return "You do not see " + target + " anywhere.";
+  }
+
+  if(!cont->is_closeable())
+    return "You cannot close that.";
+
+  if(cont->is_closed())
+    return "It is already closed.";
+
+  cont->set_closed(1);
+  tp->simple_action("$N $vclose $o.\n", cont);
+
+  return 1;
+}

@@ -1,0 +1,184 @@
+---
+import "./class-browser.css";
+import TargetLink from "./TargetLink.astro";
+import { generateThemeCSS } from "./resolve-theme";
+
+interface Props {
+  /** Language for syntax context (e.g. "lpc", "typescript", "lua") */
+  language?: string;
+  /** Class/module/object name */
+  name: string;
+  /** Source file path */
+  source?: string;
+  /** Type badge: object, module, class, interface */
+  type?: string;
+  /** Link URL — no protocol = internal */
+  target?: string;
+}
+
+const { language, name, source, type, target } = Astro.props;
+
+const badgeClass = type
+  ? `cb-badge cb-badge-${type}`
+  : "cb-badge cb-badge-default";
+
+const themeCSS = await generateThemeCSS();
+---
+
+{themeCSS && <style set:html={themeCSS} />}
+<div class="cb-browser not-content" data-language={language}>
+  <header class="cb-header">
+    {type && <span class={badgeClass}>{type}</span>}
+    <span class="cb-header-name">{name}</span>
+    {source && <span class="cb-source">{source}</span>}
+    {target && <TargetLink target={target} />}
+    <button class="cb-copy-json" title="Copy as JSON" aria-label="Copy class data as JSON">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
+        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2" fill="none"/>
+      </svg>
+    </button>
+    <button class="cb-toggle-all" title="Expand / collapse all" aria-label="Expand or collapse all methods">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path class="cb-toggle-expand" d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+    </button>
+  </header>
+  <div class="cb-body">
+    <slot />
+  </div>
+</div>
+
+<script>
+  function initClassBrowser() {
+    // Hash navigation: open and scroll to target method
+    const hash = location.hash.slice(1);
+    if (hash) {
+      const target = document.getElementById(hash);
+      if (target && target.classList.contains("cb-method")) {
+        target.open = true;
+        // Small delay so the browser can lay out the opened details
+        requestAnimationFrame(() => {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
+    }
+
+    // Copy as JSON
+    document.querySelectorAll(".cb-copy-json").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const browser = btn.closest(".cb-browser");
+        if (!browser) return;
+
+        const data: Record<string, any> = {
+          name: browser.querySelector(".cb-header-name")?.textContent?.trim(),
+          language: (browser as HTMLElement).dataset.language || undefined,
+          source: browser.querySelector(".cb-header .cb-source")?.textContent?.trim() || undefined,
+          type: browser.querySelector(".cb-header .cb-badge")?.textContent?.trim() || undefined,
+        };
+
+        // Extends
+        const extendsEls = browser.querySelectorAll(".cb-extends");
+        if (extendsEls.length) {
+          data.inherits = Array.from(extendsEls).map((el) => ({
+            name: el.querySelector(".cb-hl")?.textContent?.trim(),
+            source: el.querySelector(".cb-source")?.textContent?.trim() || undefined,
+          }));
+        }
+
+        // Properties
+        const propEls = browser.querySelectorAll(".cb-property");
+        if (propEls.length) {
+          data.properties = Array.from(propEls).map((el) => ({
+            name: el.querySelector(".cb-hl")?.textContent?.trim(),
+            type: el.querySelector(".cb-type-annotation")?.textContent?.trim() || undefined,
+          }));
+        }
+
+        // Methods
+        const methodEls = browser.querySelectorAll(".cb-method");
+        if (methodEls.length) {
+          data.methods = Array.from(methodEls).map((el) => {
+            const method: Record<string, any> = {
+              name: el.querySelector("summary .cb-hl")?.textContent?.trim(),
+            };
+            const badges = el.querySelectorAll("summary .cb-badge");
+            if (badges.length) {
+              method.visibility = Array.from(badges).map((b) => b.textContent?.trim()).join(" ");
+            }
+
+            // Description: first <p> in body
+            const desc = el.querySelector(".cb-method-body > p");
+            if (desc) method.description = desc.textContent?.trim();
+
+            // Params
+            const params = el.querySelectorAll(".cb-param");
+            if (params.length) {
+              method.params = Array.from(params).map((p) => {
+                const param: Record<string, any> = {
+                  name: p.querySelector(".cb-param-name")?.textContent?.trim(),
+                };
+                const typeEl = p.querySelector(".cb-type-annotation");
+                if (typeEl) param.type = typeEl.textContent?.trim();
+                const descEl = p.querySelector(".cb-param-desc");
+                if (descEl) param.description = descEl.textContent?.trim().replace(/^—\s*/, "");
+                const hintEl = p.querySelector(".cb-hint");
+                if (hintEl) param.hint = hintEl.textContent?.trim();
+                return param;
+              });
+            }
+
+            // Returns
+            const returns = el.querySelectorAll(".cb-returns");
+            if (returns.length) {
+              method.returns = Array.from(returns).map((r) => {
+                const ret: Record<string, any> = {
+                  type: r.querySelector(".cb-returns-type-name")?.textContent?.trim(),
+                };
+                const descEl = r.querySelector(".cb-returns-desc");
+                if (descEl) ret.description = descEl.textContent?.trim().replace(/^—\s*/, "");
+                return ret;
+              });
+            }
+
+            return method;
+          });
+        }
+
+        // Clean undefined values
+        const clean = JSON.parse(JSON.stringify(data));
+        navigator.clipboard.writeText(JSON.stringify(clean, null, 2));
+        btn.classList.add("cb-copied");
+        setTimeout(() => btn.classList.remove("cb-copied"), 1500);
+      });
+    });
+
+    // Expand/collapse all toggle
+    document.querySelectorAll(".cb-toggle-all").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const browser = btn.closest(".cb-browser");
+        if (!browser) return;
+        const methods = browser.querySelectorAll(".cb-method") as NodeListOf<HTMLDetailsElement>;
+        const anyOpen = Array.from(methods).some((m) => m.open);
+        methods.forEach((m) => (m.open = !anyOpen));
+        btn.classList.toggle("cb-all-expanded", !anyOpen);
+      });
+    });
+
+    // Anchor click: copy permalink to clipboard, don't toggle the details
+    document.querySelectorAll(".cb-anchor").forEach((anchor) => {
+      anchor.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const href = anchor.getAttribute("href") || "";
+        const url = location.origin + location.pathname + href;
+        history.replaceState(null, "", href);
+        navigator.clipboard.writeText(url);
+      });
+    });
+  }
+
+  // Run on initial load and Astro view transitions
+  initClassBrowser();
+  document.addEventListener("astro:after-swap", initClassBrowser);
+</script>

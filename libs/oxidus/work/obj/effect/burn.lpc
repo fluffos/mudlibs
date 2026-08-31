@@ -1,0 +1,95 @@
+/**
+ * @file /obj/effect/burn.lpc
+ *
+ * Burn effect — a fire-typed damage-over-time that lives inside
+ * its victim and ticks for a configured number of pulses. Attached
+ * via the boon/curse system using curse_object on the victim. The
+ * caster must remain in the same environment as the victim for the
+ * burn to keep ticking; otherwise it dissipates.
+ *
+ * @created 2026-05-11 - Gesslar
+ * @last_modified 2026-05-11 - Gesslar
+ *
+ * @history
+ * 2026-05-11 - Gesslar - Created
+ */
+
+inherit STD_ITEM;
+
+/** @type {STD_BODY} */
+private nosave object __caster;
+private nosave float __per_tick;
+private nosave int __remaining;
+
+void setup() {
+  set_id(({ "burn" }));
+  set_name("burn");
+  set_short("a smouldering burn");
+  set_long(
+    "Tongues of flame cling to flesh, searing as they smoulder."
+  );
+}
+
+void set_caster(/** @type {STD_BODY} */ object c) {
+  __caster = c;
+}
+
+object query_caster() {
+  return __caster;
+}
+
+void set_burn(float per_tick, int ticks) {
+  __per_tick = per_tick;
+  __remaining = ticks;
+}
+
+void start() {
+  call_out("tick", 2.5);
+}
+
+void tick() {
+  /** @type {STD_BODY} */ object victim = environment();
+
+  if(!objectp(victim)) {
+    destruct(this_object());
+    return;
+  }
+
+  if(!objectp(__caster) || !same_env_check(__caster, victim)) {
+    victim->simple_action(
+      "The flames consuming $n flicker and die."
+    );
+    destruct(this_object());
+    return;
+  }
+
+  victim->simple_action(
+    "{{fc0}}$N $vwrithe as the flames sear $p flesh.{{res}}"
+  );
+  __caster->deliver_magic_damage(victim, __per_tick, "fire");
+
+  if(--__remaining > 0) {
+    call_out("tick", 2.5);
+  } else {
+    victim->simple_action(
+      "{{555}}The flames consuming $n die down.{{res}}"
+    );
+    destruct(this_object());
+  }
+}
+
+int expire_obj(int expired) {
+  // tick() handles natural end and dissipation itself. expire_obj
+  // only matters here for forced removal — natural expiry would
+  // arrive after tick() already destructed us.
+  if(!expired) {
+    /** @type {STD_BODY} */ object victim = environment();
+
+    if(objectp(victim))
+      victim->simple_action(
+        "{{666}}The flames consuming $n are smothered.{{res}}"
+      );
+  }
+
+  return 1;
+}

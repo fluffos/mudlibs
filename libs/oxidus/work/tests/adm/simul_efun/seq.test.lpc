@@ -1,0 +1,182 @@
+// @lpc-nocheck
+/**
+ * @file /tests/adm/simul_efun/seq.test.lpc
+ * @description Tests for the seq_* simul_efuns from /adm/simul_efun/seq.lpc —
+ *              the "sequential map" (ordered array of {key, value} pairs,
+ *              JS Map-like): valid_seq, seq_set/get/has/delete/clear,
+ *              seq_keys/values, and seq_from_mapping/seq_to_mapping.
+ *
+ * Note: a miss on seq_get() returns undefined (`([])[0]`), not 0, so those
+ * are asserted with nullp(). Insertion order is preserved by the array, so
+ * seq_keys/seq_values are compared with strict same_array; conversions from a
+ * mapping are order-agnostic (mapping iteration order is unspecified) and are
+ * asserted via seq_get instead.
+ */
+
+#include <test.h>
+
+inherit STD_TEST;
+
+void setup() {
+  describe("valid_seq", ({
+    test("any array is valid when non_empty is not set", function() {
+      ASSERT_EQ(1, valid_seq(({})));
+    }),
+    test("an empty array is invalid when non_empty is required", function() {
+      ASSERT_EQ(0, valid_seq(({}), 1));
+    }),
+    test("an array of pairs is valid when non_empty is required", function() {
+      ASSERT_EQ(1, valid_seq(({ ({ "a", 1 }), ({ "b", 2 }) }), 1));
+    }),
+    test("a non-pair element fails the non_empty check", function() {
+      ASSERT_EQ(0, valid_seq(({ ({ "a", 1 }), ({ "b" }) }), 1));
+    }),
+    test("an over-long element fails the non_empty check", function() {
+      ASSERT_EQ(0, valid_seq(({ ({ "a", 1, 2 }) }), 1));
+    }),
+    test("a non-array is invalid", function() {
+      ASSERT_EQ(0, valid_seq("nope"));
+    }),
+    test("an integer is invalid", function() {
+      ASSERT_EQ(0, valid_seq(5));
+    }),
+  }));
+
+  describe("seq_set", ({
+    test("adds a new key and returns the new size", function() {
+      mixed *m = ({});
+      int sz = seq_set(ref m, "a", 1);
+      ASSERT_EQ(1, sz);
+      ASSERT_EQ(1, seq_get(m, "a"));
+    }),
+    test("adding a second key grows the map", function() {
+      mixed *m = ({});
+      seq_set(ref m, "a", 1);
+      ASSERT_EQ(2, seq_set(ref m, "b", 2));
+    }),
+    test("updating an existing key keeps the size", function() {
+      mixed *m = ({ ({ "a", 1 }) });
+      int sz = seq_set(ref m, "a", 99);
+      ASSERT_EQ(1, sz);
+      ASSERT_EQ(99, seq_get(m, "a"));
+    }),
+    test("update does not append a duplicate", function() {
+      mixed *m = ({ ({ "a", 1 }) });
+      seq_set(ref m, "a", 2);
+      ASSERT_EQ(1, sizeof(m));
+    }),
+    test("a non-seq argument errors", function() {
+      mixed *m = 0;
+      string err = catch(seq_set(ref m, "a", 1));
+      ASSERT_NE(0, err);
+    }),
+  }));
+
+  describe("seq_get", ({
+    test("returns the value for an existing key", function() {
+      mixed *m = ({ ({ "a", 25 }), ({ "b", 30 }) });
+      ASSERT_EQ(30, seq_get(m, "b"));
+    }),
+    test("returns undefined for a missing key", function() {
+      mixed *m = ({ ({ "a", 25 }) });
+      ASSERT_EQ(1, nullp(seq_get(m, "charlie")));
+    }),
+    test("supports integer keys", function() {
+      mixed *m = ({ ({ 1, "one" }), ({ 2, "two" }) });
+      ASSERT_EQ("two", seq_get(m, 2));
+    }),
+  }));
+
+  describe("seq_has", ({
+    test("returns 1 for an existing key", function() {
+      mixed *m = ({ ({ "a", 1 }) });
+      ASSERT_EQ(1, seq_has(m, "a"));
+    }),
+    test("returns 0 for a missing key", function() {
+      mixed *m = ({ ({ "a", 1 }) });
+      ASSERT_EQ(0, seq_has(m, "z"));
+    }),
+    test("returns 0 on an empty map", function() {
+      ASSERT_EQ(0, seq_has(({}), "a"));
+    }),
+  }));
+
+  describe("seq_delete", ({
+    test("removes an existing key and returns 1", function() {
+      mixed *m = ({ ({ "a", 1 }), ({ "b", 2 }), ({ "c", 3 }) });
+      ASSERT_EQ(1, seq_delete(ref m, "b"));
+      ASSERT_EQ(2, sizeof(m));
+      ASSERT_EQ(0, seq_has(m, "b"));
+    }),
+    test("returns 0 for a missing key and leaves the map intact", function() {
+      mixed *m = ({ ({ "a", 1 }), ({ "b", 2 }) });
+      ASSERT_EQ(0, seq_delete(ref m, "z"));
+      ASSERT_EQ(2, sizeof(m));
+    }),
+    test("preserves the order of the remaining pairs", function() {
+      mixed *m = ({ ({ "a", 1 }), ({ "b", 2 }), ({ "c", 3 }) });
+      seq_delete(ref m, "b");
+      ASSERT_EQ(1, same_array(({ "a", "c" }), seq_keys(m), 1));
+    }),
+  }));
+
+  describe("seq_clear", ({
+    test("empties the map", function() {
+      mixed *m = ({ ({ "a", 1 }), ({ "b", 2 }) });
+      seq_clear(ref m);
+      ASSERT_EQ(0, sizeof(m));
+    }),
+  }));
+
+  describe("seq_keys", ({
+    test("returns the keys in insertion order", function() {
+      mixed *m = ({});
+      seq_set(ref m, "a", 1);
+      seq_set(ref m, "b", 2);
+      seq_set(ref m, "c", 3);
+      ASSERT_EQ(1, same_array(({ "a", "b", "c" }), seq_keys(m), 1));
+    }),
+    test("an empty map has no keys", function() {
+      ASSERT_EQ(0, sizeof(seq_keys(({}))));
+    }),
+  }));
+
+  describe("seq_values", ({
+    test("returns the values in insertion order", function() {
+      mixed *m = ({});
+      seq_set(ref m, "a", 10);
+      seq_set(ref m, "b", 20);
+      seq_set(ref m, "c", 30);
+      ASSERT_EQ(1, same_array(({ 10, 20, 30 }), seq_values(m), 1));
+    }),
+  }));
+
+  describe("seq_from_mapping", ({
+    test("converts every mapping pair (order-agnostic)", function() {
+      mixed *m = seq_from_mapping(([ "hp": 100, "sp": 50 ]));
+      ASSERT_EQ(2, sizeof(m));
+      ASSERT_EQ(100, seq_get(m, "hp"));
+      ASSERT_EQ(50, seq_get(m, "sp"));
+    }),
+    test("an empty mapping yields an empty seq", function() {
+      ASSERT_EQ(0, sizeof(seq_from_mapping(([]))));
+    }),
+    test("a non-mapping argument errors", function() {
+      string err = catch(seq_from_mapping(({ 1, 2 })));
+      ASSERT_NE(0, err);
+    }),
+  }));
+
+  describe("seq_to_mapping", ({
+    test("converts a seq to a mapping", function() {
+      mixed *m = ({ ({ "name", "sword" }), ({ "damage", 15 }) });
+      mapping result = seq_to_mapping(m);
+      ASSERT_EQ("sword", result["name"]);
+      ASSERT_EQ(15, result["damage"]);
+    }),
+    test("roundtrips a mapping through seq and back", function() {
+      mapping original = ([ "a": 1, "b": 2, "c": 3 ]);
+      ASSERT_EQ(1, same(original, seq_to_mapping(seq_from_mapping(original))));
+    }),
+  }));
+}

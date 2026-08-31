@@ -1,0 +1,234 @@
+/**
+ * @file /std/living/ed.lpc
+ *
+ * Object to handle interacting with the basic composer or the driver's line
+ * editor. Two independent flows live here:
+ *
+ *   - start_edit() : a hand-rolled line collector (the "║ " prompt) that
+ *     gathers free text into a temp file and fires a callback. Used for
+ *     composing blobs of text (bug reports, descriptions) - it does not touch
+ *     the driver editor.
+ *   - ed_edit() : a thin wrapper around the driver's classic ed() efun. The
+ *     driver owns the whole input loop directly; the 'w'/'x' commands write
+ *     the real file through valid_write() via the ed_write() callback.
+ *
+ * @created 2024-07-20 - Gesslar
+ * @last_modified 2026-08-30 - fluffos/mudlibs onboarding
+ *
+ * @history
+ * 2024-07-20 - Gesslar - Created
+ * 2026-07-17 - Gesslar - Converted ed_edit() to the modern ed_start()/ed_cmd()
+ *                        paradigm; removed the OLD_ED ed() wrapper
+ * 2026-08-30 - fluffos/mudlibs onboarding - Reverted ed_edit() to the classic
+ *                        ed() efun: this corpus's shared driver build has
+ *                        OLD_ED defined (needed by hundreds of other libs'
+ *                        own wizard editors), which compiles out
+ *                        ed_start()/ed_cmd()/query_ed_mode() entirely (see
+ *                        fluffos core.spec). See mudlib repo AGENTS.md.
+ */
+
+#include <ed.h>
+
+private void parse_input(string input);
+private void finish_exit_callback();
+protected void abort_edit();
+
+public string query_editing();
+
+private nosave string edit_file, temp_file;
+private nosave mixed *post_edit;
+
+// When passing a callback to this function, you should have assembled it with
+// a string function instead of a function pointer. This is because the
+// function pointer may not be valid when the callback is called.
+public int start_edit(string file, mixed *cb) {
+  string text;
+  string *lines;
+  int sz;
+
+  if(in_edit() || !nullp(edit_file))
+    return _error(this_object(), "You are already editing a file.");
+
+  if(nullp(cb))
+    return _error(this_object(), "Invalid callback.");
+
+  post_edit = cb;
+  temp_file = temp_file(this_object());
+
+  text = "";
+
+  if(!nullp(file)) {
+    sz = file_size(file);
+
+    if(sz > -1) {
+      catch(cp(file, temp_file));
+
+      if(sz > 0) {
+        if(!master()->valid_read(file, this_object(), "ed"))
+          return _error(this_object(), "Permission denied.");
+
+        if(file_size(file) > get_config(__MAX_READ_FILE_SIZE__)) {
+          _error("File is too large to read");
+          abort_edit();
+        }
+
+        text = read_file(file);
+      }
+    }
+  }
+
+  if(strlen(text))
+    text = append(text, "\n");
+
+  lines = map(explode(text, "\n"), (: "║ " + $1 :));
+  text = implode(lines, "\n") + "\n║ ";
+
+  tell(this_object(),
+"
+    Enter text. When finished, enter '.' on a blank line, or '#' to abort.
+  ═══════════════════════════════════════════════════════════════════════════\n");
+
+  tell(this_object(), text);
+
+  input_to(parse_input, 0);
+}
+
+private void parse_input(string input) {
+  if(!input || input == "#")
+    return abort_edit();
+
+  if(input == ".")
+    return finish_exit_callback();
+
+  write_file(temp_file, input + "\n");
+
+  tell(this_object(), "║ ");
+
+  input_to(parse_input, 0);
+}
+
+private void finish_exit_callback() {
+  string e;
+  int sz;
+
+  defer((: rm, temp_file :));
+
+  if(!interactive(this_object())) {
+    catch(abort_edit());
+
+    return;
+  }
+
+  // Now let's copy the temp file to the edit file.
+  e = catch {
+    sz = file_size(temp_file);
+
+    if(sz > 0) {
+      if(!nullp(edit_file)) {
+        if(!master()->valid_write(edit_file, this_object(), "ed"))
+          throw("Permission denied.");
+
+        cp(temp_file, edit_file);
+      }
+
+      if(!nullp(post_edit))
+        catch(call_back(post_edit, ED_STATUS_SUCCESS, edit_file, temp_file));
+    } else {
+      abort_edit();
+    }
+  };
+
+  if(e)
+    catch(abort_edit());
+
+  edit_file = post_edit = temp_file = null;
+}
+
+protected void abort_edit() {
+  if(!nullp(temp_file))
+    defer((: rm, temp_file :));
+
+  if(!nullp(post_edit))
+    catch(call_back(post_edit, ED_STATUS_ABORTED, edit_file, temp_file));
+
+  edit_file = post_edit = temp_file = null;
+}
+
+// ─── classic ed() session ────────────────────────────────────────────────
+//
+// The "modern" ed_start()/ed_cmd()/query_ed_mode() trio this file's history
+// mentions (see @history above) does not exist on every driver build this
+// mudlib runs under -- those three efuns compile out entirely whenever the
+// driver is built with OLD_ED defined (see fluffos's core.spec: the two
+// efun sets are an #if/#else, never both available at once). This corpus's
+// shared driver build has OLD_ED defined (hundreds of other, older mudlibs
+// depend on the classic ed() efun for their own wizard editors), so Oxidus
+// runs against the classic API instead. The driver owns the whole input
+// loop directly once ed() is called -- no input_to() loop needed here --
+// calling back into ed_write() before/after every write and ed_exit() when
+// the session ends.
+
+private nosave mixed *ed_post;
+private nosave string ed_target;
+
+/**
+ * Starts a driver ed session on <file>. The driver holds the buffer and
+ * drives the whole input loop directly. Writing ('w'/'x') goes through
+ * valid_write() via the ed_write() callback below. An optional callback, if
+ * given, is fired once when the session ends.
+ *
+ * @param {string} file - The file to edit; may be null to open an empty buffer.
+ * @param {mixed*} cb - Optional callback assembled with assemble_call_back(),
+ *                      invoked as (ED_STATUS_SUCCESS, file) when the session ends.
+ * @param {int} restricted - If set, disables commands that change which file is
+ *                           being edited.
+ * @returns {int} 1 on start, or an error result if already editing.
+ */
+public varargs int ed_edit(string file, mixed *cb, int restricted) {
+  if(in_edit(this_object()))
+    return _error(this_object(), "You are already editing something.");
+
+  if(!nullp(file) && !stringp(file))
+    return _error(this_object(), "Invalid file name.");
+
+  ed_post = cb;
+  ed_target = file;
+
+  ed(file, "ed_write", "ed_exit", restricted);
+
+  return 1;
+}
+
+// ed() write callback: the driver calls this once before (flag == 0, to
+// authorize the write) and once after (flag != 0) every write the editor
+// performs. Must stay `public` -- unlike a true fixed-name driver apply
+// (create/heart_beat/valid_*), this is a dynamic string-name callback the
+// driver reaches via the same generic by-name apply used for call_out()
+// callbacks, which -- per function_exists()'s own docs -- treats
+// `private`/`protected` functions as not defined for any caller outside
+// the object. A `private` ed_write()/ed_exit() here is silently never
+// invoked: every write fails with ed's generic "Failed command." (dowrite()
+// sees the callback return as zero/not-found) and no error is logged
+// anywhere, since safe_apply() swallows a not-found callback silently.
+public int ed_write(string fname, int flag) {
+  if(!flag)
+    return master()->valid_write(fname, this_object(), "ed");
+
+  return 1;
+}
+
+// ed() exit callback: fired when the session ends, for whatever reason (the
+// file, if any, has already been written by the editor itself).
+public void ed_exit() {
+  mixed *cb = ed_post;
+  string target = ed_target;
+
+  ed_post = ed_target = null;
+
+  if(!nullp(cb))
+    catch(call_back(cb, ED_STATUS_SUCCESS, target));
+}
+
+public string query_editing() {
+  return in_edit(this_object());
+}

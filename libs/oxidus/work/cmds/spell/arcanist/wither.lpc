@@ -1,0 +1,103 @@
+/**
+ * @file /cmds/spell/wither.lpc
+ *
+ * Wither spell.
+ *
+ * @created 2026-05-11 - Gesslar
+ * @last_modified 2026-08-23 - Gesslar
+ *
+ * @history
+ * 2026-05-11 - Gesslar - Created
+ * 2026-08-23 - Gesslar - Moved the cast delay onto async_act/await
+ */
+
+inherit STD_SPELL;
+
+private async void cast(object tp, object victim);
+
+void setup() {
+  set_name("wither");
+
+  aggressive = true;
+  target_current = true;
+  sp_cost = 7.0;
+
+  cooldowns = ([
+    "wither" : ({ "", 15 }),
+  ]);
+
+  usage_text = "wither <target>";
+  help_text =
+    "Weave grasping shadow that clings to a target and weakens their "
+    `defences for a time. This spell costs ${evaluate(sp_cost)} SP and has `
+    `a cooldown of ${evaluate(cooldowns["wither"][1])} seconds.`
+  ;
+}
+
+mixed use(/** @type {STD_BODY} */ object tp, string arg) {
+  /** @type {STD_BODY} */ object victim;
+
+  if(!victim = local_target(tp, arg, (: living($1) && $1 != $(tp) :)))
+    return 1;
+
+  apply_cost(tp, arg);
+  apply_cooldown(tp, arg);
+
+  tp->simple_action("$N $vweave threads of grasping shadow...");
+
+  cast(tp, victim);
+
+  return 1;
+}
+
+/**
+ * Waits out the wither cast, then resolves the spell.
+ *
+ * Suspends on the "wither" act, so moving away or anything else that cancels
+ * acts resolves the wait with 0 and the cast is abandoned.
+ *
+ * @param {STD_BODY} tp - The body casting the spell.
+ * @param {STD_BODY} victim - The body being targeted.
+ */
+private async void cast(/** @type {STD_BODY} */ object tp,
+                        /** @type {STD_BODY} */ object victim) {
+  mixed err = acatch {
+    if(!await tp->async_act("wither", 2.0))
+      return;
+
+    if(!same_env_check(tp, victim))
+      return;
+
+    if(tp->can_strike(victim, "arcane.discipline.shadow")) {
+      /** @type {"obj/effect/wither"} */ object eff;
+
+      tp->targetted_action(
+        "{{83a}}$N $vreach out with a grasping shadow toward $t!{{res}}",
+        victim
+      );
+      tp->use_skill("arcane.discipline.shadow", 1.15);
+
+      // Withers stack across casters — each contributes its own
+      // -amount to two defence skills.
+      eff = clone_object("/obj/effect/wither");
+      eff->set_caster(tp);
+      eff->set_amount(2);
+      eff->set_duration(30);
+      eff->move(victim);
+      eff->set_fixed(1);
+      victim->curse_object(eff, 30);
+      eff->apply();
+
+      victim->simple_action("$N $vlook weakened.");
+    } else {
+      tp->targetted_action("The grasping shadow recoils from $t.", victim);
+      tp->use_skill("arcane.discipline.shadow", 0.25);
+      victim->use_skill("combat.defence.evade", 0.1);
+    }
+
+    victim->start_attack(tp);
+  };
+
+  if(err)
+    debug_message(`wither: ${err}\n`);
+}

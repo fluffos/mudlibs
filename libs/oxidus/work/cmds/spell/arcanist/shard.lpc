@@ -1,0 +1,102 @@
+/**
+ * @file /cmds/spell/shard.lpc
+ *
+ * Shard spell.
+ *
+ * @created 2026-05-11 - Gesslar
+ * @last_modified 2026-08-23 - Gesslar
+ *
+ * @history
+ * 2026-05-11 - Gesslar - Created
+ * 2026-08-23 - Gesslar - Moved the cast delay onto async_act/await
+ */
+
+inherit STD_SPELL;
+
+private async void cast(object tp, object victim);
+
+void setup() {
+  set_name("shard");
+
+  aggressive = true;
+  target_current = true;
+  sp_cost = 6.0;
+
+  cooldowns = ([
+    "shard" : ({ "", 12 }),
+  ]);
+
+  usage_text = "shard <target>";
+  help_text =
+    "Drive a wicked shard of magical ice into a target. The shard strikes "
+    "for a small initial wound, then shatters a few seconds later for a "
+    `burst of cold damage. This spell costs ${evaluate(sp_cost)} SP and has `
+    `a cooldown of ${evaluate(cooldowns["shard"][1])} seconds.`
+  ;
+}
+
+mixed use(/** @type {STD_BODY} */ object tp, string arg) {
+  /** @type {STD_BODY} */ object victim;
+
+  if(!victim = local_target(tp, arg, (: living($1) && $1 != $(tp) :)))
+    return 1;
+
+  apply_cost(tp, arg);
+  apply_cooldown(tp, arg);
+
+  tp->simple_action("$N $vconjure a wicked shard of magical ice...");
+
+  cast(tp, victim);
+
+  return 1;
+}
+
+/**
+ * Waits out the shard cast, then resolves the spell.
+ *
+ * Suspends on the "shard" act, so moving away or anything else that cancels
+ * acts resolves the wait with 0 and the cast is abandoned.
+ *
+ * @param {STD_BODY} tp - The body casting the spell.
+ * @param {STD_BODY} victim - The body being targeted.
+ */
+private async void cast(/** @type {STD_BODY} */ object tp,
+                        /** @type {STD_BODY} */ object victim) {
+  mixed err = acatch {
+    if(!await tp->async_act("shard", 2.0))
+      return;
+
+    if(!same_env_check(tp, victim))
+      return;
+
+    if(tp->can_strike(victim, "arcane.discipline.frost")) {
+      float initial = 2.0 + tp->query_damage() * 0.3;
+      float burst = 6.0 + tp->query_damage();
+
+      tp->targetted_action(
+        "{{cef}}A wicked shard of magical ice drives into $t!{{res}}",
+        victim
+      );
+      tp->deliver_magic_damage(victim, initial, "cold");
+      tp->use_skill("arcane.discipline.frost", 1.15);
+
+      // Shards stack — each caster's shard shatters on its own
+      // schedule, so group casts don't trample each other.
+      /** @type {"obj/effect/ice_shard"} */ object eff = clone_object("/obj/effect/ice_shard");
+      eff->set_caster(tp);
+      eff->set_burst(burst);
+      eff->move(victim);
+      eff->set_fixed(1);
+      victim->curse_object(eff, 3);
+    } else {
+      tp->simple_action("The shard of ice splinters harmlessly.");
+      tp->use_skill("arcane.discipline.frost", 0.25);
+      victim->use_skill("combat.defence.evade", 0.1);
+    }
+
+    victim->start_attack(tp);
+  };
+
+  if(err)
+    debug_message(`shard: ${err}\n`);
+}

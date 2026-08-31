@@ -1,0 +1,93 @@
+/**
+ * @file /cmds/ability/punch.lpc
+ *
+ * Punch command
+ *
+ * @created 2024-08-08 - Gesslar
+ * @last_modified 2026-08-23 - Gesslar
+ *
+ * @history
+ * 2024-08-08 - Gesslar - Created
+ * 2026-08-23 - Gesslar - Moved the wind-up onto async_act/await
+ */
+
+inherit STD_ABILITY;
+
+private async void strike(object tp, object victim);
+
+void setup() {
+  set_name("punch");
+
+  aggressive = true;
+  target_current = true;
+  mp_cost = 5.0;
+
+  cooldowns = ([
+    "punch" : ({ "", 10 }),
+  ]);
+
+  usage_text = "punch <target>";
+  help_text =
+    `Use your fist to punch a target. This ability costs ${evaluate(mp_cost)} `
+    `\n\n`
+    `MP and has a cooldown of ${evaluate(cooldowns["punch"][1])} seconds.`
+  ;
+}
+
+mixed use(/** @type {STD_BODY} */ object tp, string arg) {
+  /** @type {STD_BODY} */ object victim;
+
+  if(!victim = local_target(tp, arg, (: living($1) && $1 != $(tp) :)))
+    return 1;
+
+  apply_cost(tp, arg);
+  apply_cooldown(tp, arg);
+
+  tp->simple_action("$N $vpull back a fist...");
+
+  // we don't await here, because we want to return right away and let
+  // the call_out happen.
+  strike(tp, victim);
+
+  return 1;
+}
+
+/**
+ * Waits out the punch wind-up, then lands or misses the blow.
+ *
+ * Suspends on the "punch" act, so moving away or anything else that cancels
+ * acts resolves the wait with 0 and the punch is abandoned.
+ *
+ * @param {STD_BODY} tp - The body throwing the punch.
+ * @param {STD_BODY} victim - The body being punched.
+ */
+private async void strike(/** @type {STD_BODY} */ object tp,
+                          /** @type {STD_BODY} */ object victim) {
+
+  // we acatch here so this can only ever fulfil, never reject. use() threw our
+  // promise away, and the driver only gets mad about rejections nobody looked
+  // at.
+  mixed err = acatch {
+    if(!await tp->async_act("punch", 2.0))
+      return;
+
+    if(!same_env_check(tp, victim))
+      return;
+
+    if(tp->can_strike(victim)) {
+      float damage = percent_of(25.0, tp->query_damage());
+
+      tp->targetted_action("$N $vpunch $t!", victim);
+      tp->deliver_mundane_damage(victim, damage, "bludgeoning");
+      tp->use_skill("combat.melee.unarmed");
+    } else {
+      tp->targetted_action("$N $vtry to punch $t, but $vmiss.", victim);
+      victim->use_skill("combat.defence.dodge");
+    }
+
+    victim->start_attack(tp);
+  };
+
+  if(err)
+    debug_message(`punch: ${err}\n`);
+}

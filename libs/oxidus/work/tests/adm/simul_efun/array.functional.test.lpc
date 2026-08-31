@@ -1,0 +1,270 @@
+// @lpc-nocheck
+/**
+ * @file /tests/adm/simul_efun/array.functional.test.lpc
+ *
+ * Tests for callback-applying simul_efuns in
+ * /adm/simul_efun/array.c — reduce(), each(), find(),
+ * find_index(), eval_first(), and eval_last().
+ */
+
+#include <test.h>
+
+inherit STD_TEST;
+
+// Side-effect accumulators used by closures inside tests. Each test
+// resets the slot it cares about before invoking the function under
+// test. Anonymous function literals don't capture mutable local
+// state, so file-globals are the cleanest sink for "did the callback
+// run with these args?" assertions.
+private nosave mixed *__seenArr = ({});
+private nosave mapping __seenMap = ([]);
+private nosave int __counter = 0;
+
+void setup() {
+  describe("reduce", ({
+    test("sums an int array with initial value", function() {
+      ASSERT_EQ(10, reduce(({ 1, 2, 3, 4 }), (: $1 + $2 :), 0));
+    }),
+    test("multiplies an int array with initial value", function() {
+      ASSERT_EQ(24, reduce(({ 1, 2, 3, 4 }), (: $1 * $2 :), 1));
+    }),
+    test("uses first element as accumulator when init omitted",
+      function() {
+        ASSERT_EQ(10, reduce(({ 1, 2, 3, 4 }), (: $1 + $2 :)));
+      }),
+    test("returns init unchanged for empty array", function() {
+      ASSERT_EQ(42, reduce(({}), (: $1 + $2 :), 42));
+    }),
+    test("empty array with no init errors", function() {
+      string err = catch(reduce(({}), (: $1 + $2 :)));
+      ASSERT_NE(0, err);
+    }),
+    test("non-array first arg errors", function() {
+      string err = catch(reduce(0, (: $1 + $2 :), 0));
+      ASSERT_NE(0, err);
+    }),
+    test("invalid function arg errors", function() {
+      string err = catch(reduce(({ 1, 2 }), 0, 0));
+      ASSERT_NE(0, err);
+    }),
+    test("callback receives index as third arg", function() {
+      // Sum of indices: 0 + 1 + 2 = 3
+      ASSERT_EQ(3, reduce(({ "a", "b", "c" }),
+        (: $1 + $3 :), 0));
+    }),
+    test("extra varargs are forwarded to the callback", function() {
+      // $1=acc, $2=elem, $3=index, $4=arr, $5=multiplier
+      ASSERT_EQ(20, reduce(({ 1, 2, 3, 4 }),
+        (: $1 + $2 * $5 :), 0, 2));
+    }),
+    test("works with string concatenation", function() {
+      ASSERT_EQ("abc",
+        reduce(({ "a", "b", "c" }), (: $1 + $2 :), ""));
+    }),
+  }));
+
+  describe("each (arrays)", ({
+    test("invokes callback for every element", function() {
+      __seenArr = ({});
+      each(({ 10, 20, 30 }), (: __seenArr += ({ $1 }) :));
+      ASSERT_EQ(({ 10, 20, 30 }), __seenArr);
+    }),
+    test("callback receives index as second arg", function() {
+      __seenArr = ({});
+      each(({ "a", "b", "c" }), (: __seenArr += ({ $2 }) :));
+      ASSERT_EQ(({ 0, 1, 2 }), __seenArr);
+    }),
+    test("callback receives source array as third arg", function() {
+      __counter = 0;
+      each(({ 1, 2, 3, 4 }), (: __counter += sizeof($3) :));
+      // Called 4 times, each sees a 4-element array.
+      ASSERT_EQ(16, __counter);
+    }),
+    test("does nothing for an empty array", function() {
+      __counter = 0;
+      each(({}), (: __counter++ :));
+      ASSERT_EQ(0, __counter);
+    }),
+    test("forwards extra varargs to the callback", function() {
+      __seenArr = ({});
+      each(({ 1, 2, 3 }), (: __seenArr += ({ $1 * $4 }) :), 10);
+      ASSERT_EQ(({ 10, 20, 30 }), __seenArr);
+    }),
+  }));
+
+  describe("each (mappings)", ({
+    test("invokes callback for every key/value pair", function() {
+      __seenMap = ([]);
+      each(([ "a": 1, "b": 2, "c": 3 ]),
+        (: __seenMap[$1] = $2 :));
+      ASSERT_EQ(([ "a": 1, "b": 2, "c": 3 ]), __seenMap);
+    }),
+    test("callback receives source mapping as third arg",
+      function() {
+        __counter = 0;
+        each(([ "a": 1, "b": 2 ]), (: __counter += sizeof($3) :));
+        // Called twice, each sees a 2-element mapping.
+        ASSERT_EQ(4, __counter);
+      }),
+    test("does nothing for an empty mapping", function() {
+      __counter = 0;
+      each(([]), (: __counter++ :));
+      ASSERT_EQ(0, __counter);
+    }),
+    test("forwards extra varargs to the callback", function() {
+      __seenArr = ({});
+      each(([ "a": 2, "b": 3 ]),
+        (: __seenArr += ({ $2 * $4 }) :), 5);
+      ASSERT_EQ(({ 10, 15 }), __seenArr);
+    }),
+  }));
+
+  describe("each (errors)", ({
+    test("non-array, non-mapping first arg errors", function() {
+      string err = catch(each("nope", (: 1 :)));
+      ASSERT_NE(0, err);
+    }),
+    test("invalid function arg errors", function() {
+      string err = catch(each(({ 1, 2, 3 }), 0));
+      ASSERT_NE(0, err);
+    }),
+  }));
+
+  describe("find_index", ({
+    test("returns index of first matching element", function() {
+      ASSERT_EQ(2, find_index(({ 1, 2, 3, 4 }),
+        (: $1 > 2 ? 1 : 0 :)));
+    }),
+    test("returns -1 when nothing matches", function() {
+      ASSERT_EQ(-1, find_index(({ 1, 2, 3 }),
+        (: $1 > 100 ? 1 : 0 :)));
+    }),
+    test("returns -1 for empty array", function() {
+      ASSERT_EQ(-1, find_index(({}), (: 1 :)));
+    }),
+    test("returns 0 when first element matches", function() {
+      ASSERT_EQ(0, find_index(({ "a", "b", "c" }),
+        (: $1 == "a" ? 1 : 0 :)));
+    }),
+    test("forwards extra varargs to the predicate", function() {
+      ASSERT_EQ(1, find_index(({ 1, 2, 3 }),
+        (: $1 == $4 :), 2));
+    }),
+    test("non-array first arg errors", function() {
+      string err = catch(find_index(0, (: 1 :)));
+      ASSERT_NE(0, err);
+    }),
+    test("invalid function arg errors", function() {
+      string err = catch(find_index(({ 1, 2 }), 0));
+      ASSERT_NE(0, err);
+    }),
+  }));
+
+  describe("find", ({
+    test("returns first matching element", function() {
+      ASSERT_EQ(3, find(({ 1, 2, 3, 4 }),
+        (: $1 > 2 ? 1 : 0 :)));
+    }),
+    test("returns null when nothing matches", function() {
+      mixed result = find(({ 1, 2, 3 }), (: $1 > 100 ? 1 : 0 :));
+      ASSERT_EQ(1, nullp(result));
+    }),
+    test("returns null for empty array", function() {
+      mixed result = find(({}), (: 1 :));
+      ASSERT_EQ(1, nullp(result));
+    }),
+    test("finds string element", function() {
+      ASSERT_EQ("banana", find(({ "apple", "banana", "cherry" }),
+        (: $1 == "banana" ? 1 : 0 :)));
+    }),
+    test("forwards extra varargs to the predicate", function() {
+      ASSERT_EQ(20, find(({ 10, 20, 30 }),
+        (: $1 == $4 :), 20));
+    }),
+    test("non-array first arg errors", function() {
+      string err = catch(find(0, (: 1 :)));
+      ASSERT_NE(0, err);
+    }),
+    test("invalid function arg errors", function() {
+      string err = catch(find(({ 1, 2 }), 0));
+      ASSERT_NE(0, err);
+    }),
+  }));
+
+  describe("eval_first", ({
+    test("returns first non-null callback result", function() {
+      // Returns elem * 10 when elem > 1, else null. First match is
+      // 2 -> 20.
+      ASSERT_EQ(20, eval_first(({ 1, 2, 3, 4 }),
+        (: $1 > 1 ? $1 * 10 : null :)));
+    }),
+    test("skips null results and returns next non-null",
+      function() {
+        ASSERT_EQ("hit", eval_first(({ 1, 2, 3 }),
+          (: $1 == 3 ? "hit" : null :)));
+      }),
+    test("callback receives size as fourth arg", function() {
+      ASSERT_EQ(5, eval_first(({ 10, 20, 30, 40, 50 }),
+        (: $4 :)));
+    }),
+    test("returns UNDEFINED when no element yields non-null",
+      function() {
+        mixed result = eval_first(({ 1, 2, 3 }), (: null :));
+        ASSERT_EQ(1, nullp(result));
+      }),
+    test("returns UNDEFINED for empty array", function() {
+      mixed result = eval_first(({}), (: "anything" :));
+      ASSERT_EQ(1, nullp(result));
+    }),
+    test("forwards extra varargs to the callback", function() {
+      // $1=elem, $2=idx, $3=src, $4=sz, $5=bonus
+      ASSERT_EQ(7, eval_first(({ 1, 2, 3 }),
+        (: $1 == 2 ? $1 + $5 : null :), 5));
+    }),
+    test("non-array first arg errors", function() {
+      string err = catch(eval_first(0, (: 1 :)));
+      ASSERT_NE(0, err);
+    }),
+    test("invalid function arg errors", function() {
+      string err = catch(eval_first(({ 1, 2 }), 0));
+      ASSERT_NE(0, err);
+    }),
+  }));
+
+  describe("eval_last", ({
+    test("returns last non-null callback result", function() {
+      // Iterates in reverse. With elem > 1 ? elem : null, the first
+      // non-null hit while iterating reversed is the last matching
+      // elem in original order: 4.
+      ASSERT_EQ(4, eval_last(({ 1, 2, 3, 4 }),
+        (: $1 > 1 ? $1 : null :)));
+    }),
+    test("callback receives size as fourth arg", function() {
+      ASSERT_EQ(5, eval_last(({ 10, 20, 30, 40, 50 }),
+        (: $4 :)));
+    }),
+    test("forwards extra varargs to the callback", function() {
+      // $1=elem, $2=idx, $3=src, $4=sz, $5=bonus. Reversed iteration
+      // hits 2 before 1, so the first non-null match is 2 + 5 = 7.
+      ASSERT_EQ(7, eval_last(({ 1, 2, 3 }),
+        (: $1 == 2 ? $1 + $5 : null :), 5));
+    }),
+    test("returns UNDEFINED when no element yields non-null",
+      function() {
+        mixed result = eval_last(({ 1, 2, 3 }), (: null :));
+        ASSERT_EQ(1, nullp(result));
+      }),
+    test("returns UNDEFINED for empty array", function() {
+      mixed result = eval_last(({}), (: "anything" :));
+      ASSERT_EQ(1, nullp(result));
+    }),
+    test("non-array first arg errors", function() {
+      string err = catch(eval_last(0, (: 1 :)));
+      ASSERT_NE(0, err);
+    }),
+    test("invalid function arg errors", function() {
+      string err = catch(eval_last(({ 1, 2 }), 0));
+      ASSERT_NE(0, err);
+    }),
+  }));
+}

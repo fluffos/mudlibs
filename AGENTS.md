@@ -12754,6 +12754,76 @@ were specific to this lib:
   round-trip that looked stuck at a 15-second total budget completed
   cleanly, prompt and all, at ~20 seconds).
 
+### 7.161 `oxidus` — a genuinely modern lib's own "modern efun" assumption doesn't hold against THIS driver build's compile-time `OLD_ED` choice, breaking `std/living/body.lpc`'s entire inheritance chain (every player/NPC body) at compile time
+
+`oxidus` (gesslar/oxidus-mudlib) is a bleeding-edge, actively-developed
+FluffOS lib (not a legacy archive) whose `std/living/ed.lpc` was
+rewritten (per its own file-header changelog) to use the "modern"
+session-style editor efuns — `ed_start()`/`ed_cmd()`/`query_ed_mode()` —
+instead of the classic `ed(file, write_fn, exit_fn, restricted)`. Both
+efun sets are real, both are current fluffos/fluffos source (confirmed
+in `src/packages/core/core.spec`), but they are a straight `#if
+OLD_ED ... #else ... #endif` — **never both compiled in at once**. This
+corpus's shared driver build has `OLD_ED` defined (`src/local_options`)
+because hundreds of older libs in this collection depend on the classic
+`ed()` efun for their own wizard editors (undefining it to satisfy one
+modern lib would silently break the `edit`/`ed` command in all of
+them — confirmed via a corpus grep finding 800+ files calling classic
+`ed(`). The result for `oxidus` specifically: `ed_start`/`ed_cmd`/
+`query_ed_mode` don't exist as efuns at all on this build, so
+`std/living/ed.lpc` fails to compile — and because it's inherited by
+`std/living/body.lpc` (the shared player/NPC base), the failure cascades
+into `std/living/player`, `std/living/npc`, `std/living/ghost`, and
+every `std/mobs/*` class: the ENTIRE character/body system fails to
+load, not just the in-game text editor. Fixed by reverting `ed_edit()`
+to the classic `ed()` API (the driver owns the whole input loop directly
+once `ed()` is called — no `input_to()` loop needed at all, simpler than
+the session-style rewrite it replaced) with `ed_write()`/`ed_exit()`
+callbacks doing the `valid_write()` gate the modern version did. General
+lesson for any other modern, actively-developed lib onboarded into this
+corpus: verify which side of an `#if`/`#else` efun-set split (`OLD_ED`
+here; check others per §1's "always verify against the actual compiled-
+in build" rule) the ACTUAL shared driver was built on before assuming a
+recently-written mudlib's efun choice is available — a real, current
+efun documented in fluffos's own docs tree is not proof it's compiled
+into any specific build.
+
+### 7.162 A dynamic string-name driver callback (`ed()`'s `write_fn`/
+`exit_fn`, and by the same mechanism `call_out()`, socket callbacks,
+etc.) declared `private` is never invoked, with NO error anywhere —
+`function_exists()`'s own documented behavior, easy to miss because it
+looks identical to a genuine "driver applies stay private" pattern
+
+`oxidus`'s own house style (its `.claude/skills/lpc-coding-style` /
+`AGENTS.md`) correctly says fixed-name driver applies (`create`,
+`heart_beat`, `valid_read`, etc.) should be `private` — "the driver
+ignores visibility" for those, since the driver calls them through a
+special fixed-slot apply mechanism, not ordinary by-name lookup.
+`ed_write`/`ed_exit` LOOK like the same kind of thing (driver-invoked,
+never called directly from LPC) and so got the same `private` treatment
+in `std/living/ed.lpc` — but they are a completely different mechanism:
+a MUDLIB-CHOSEN function name passed as a plain string argument to an
+efun (`ed(file, "ed_write", "ed_exit", restricted)`), resolved later via
+the driver's generic by-name `apply()`/`safe_apply()` — the exact same
+path `call_out()` callbacks and socket read/write/close callbacks use.
+`function_exists()`'s own docs are explicit: "By default, functions that
+cannot be called from outside the object (protected and private
+functions) are treated as not defined" — and the driver's internal
+lookup for a dynamic callback name is exactly that kind of "outside"
+caller. A `private` `ed_write()` is silently never found: every write
+returns `EDERR` (fluffos's ed prints its generic "Failed command."),
+`safe_apply()` swallows the "function not found" case with no error
+raised, no mudlib `error_handler()` call, and nothing in ANY log file —
+compiles clean, boots clean, and the only symptom is the feature not
+working. Confirmed by isolating the exact same `ed()`+callback pattern
+in a trivial throwaway command object: identical code worked instantly
+once `public`, failed identically once changed to `private`. Fix: any
+function passed to an efun as a callback NAME STRING (not a fixed
+driver-apply name) must be `public` (or at least not `private`/
+`protected`) — visibility here is a real access-control check, not
+cosmetic, and the failure mode gives zero diagnostic signal to work
+from.
+
 ---
 
 ## 8. Login and registration flow bugs
@@ -14256,6 +14326,48 @@ line (`//add_action("read", "read");`) was left alone — `help races`
 already covers the same information reachably, so that one line looks
 like genuinely-superseded dead code rather than a second instance of
 this bug.
+
+### 8.21 A redundant second `restore_body()` call in the login object, running AFTER the body daemon's own restore-then-role-setup sequence, silently reverts a reconnecting admin/dev's role-based command search paths back to whatever was saved BEFORE their last promotion — no error, just "What?" on every privileged command
+
+Found onboarding `oxidus`. The body-creation sequence is meant to run
+in one specific order: restore saved state, THEN compute role-based
+extras from that now-current state (`adm/daemons/body.lpc`'s
+`create_body()`: `set_privs(body, name); body->restore_body();
+body->std_setup();` — and `std_setup()` itself adds `/cmds/adm/`,
+`/cmds/dev/`, or just the standard paths, depending on `adminp()`/
+`devp()` checked fresh). But the LOGIN object's OWN wrapper around this
+(`adm/obj/login.lpc`'s `create_body()`) called `body->restore_body()`
+a SECOND time, redundantly, immediately AFTER `BODY_D->create_body()`
+already did the correct restore-then-setup sequence. `__command_paths`
+(`std/object/command.lpc`) isn't `nosave`, so it's part of the object's
+ordinary save-file state — meaning this second restore silently
+reloads it from disk too, clobbering the just-computed role-appropriate
+path list with whatever was persisted the LAST time this character was
+saved. A player promoted to admin/dev mid-session (or whose save
+predates their promotion) gets full standard gameplay working
+perfectly on their NEXT login, but every `/cmds/adm/`, `/cmds/dev/`,
+and `/cmds/file/` command (including the in-game `ed`/`edit` command)
+silently doesn't exist — the driver's default fail message ("What?")
+looks EXACTLY like a typo, with no error anywhere to point at the real
+cause, and the very first login right after a `makeadmin`/`makedev`
+promotion looks fine (those commands add the extra paths directly on
+the live body, so the very next reconnect is the first one affected).
+Confirmed via targeted instrumentation: `std_setup()`'s own trailing
+`get_path()` showed the correct 6-entry path list immediately after
+running, but `command_hook()`'s copy of the same `__command_paths` was
+back down to 3 entries by the time the player's first command arrived.
+
+Fix: delete the redundant `body->restore_body()` call in `login.lpc`'s
+`create_body()` — `BODY_D->create_body()` already restores and then
+runs `std_setup()` in the correct order; a second restore afterward can
+only ever un-do it. General lesson: any variable NOT marked `nosave`
+that is computed or adjusted during setup (role-based command paths
+here, but the same trap applies to anything else derived from
+current-session state rather than pure save-file content) is at risk
+from ANY redundant/duplicate restore call later in the same login
+flow — grep for more than one `restore_*()`/`restore_object()`-style
+call per connection before assuming setup-time state will still hold
+by the time the player's first command runs.
 
 ---
 

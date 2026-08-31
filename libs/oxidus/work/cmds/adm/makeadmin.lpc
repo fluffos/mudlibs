@@ -1,0 +1,89 @@
+/**
+ * @file /cmds/adm/makeadmin.lpc
+ *
+ * Grants admin status to a user by adding the "admin" role. The admin role
+ * inherits developer, so a new admin is also a developer without a separate
+ * grant. Works whether or not the target is currently logged in - status is
+ * a role grant keyed by name, so an offline user is promoted immediately.
+ *
+ * @created 2026-07-17 - Gesslar
+ * @last_modified 2026-07-17 - Gesslar
+ *
+ * @history
+ * 2026-07-17 - Gesslar - Created
+ */
+
+#include <logs.h>
+
+inherit STD_CMD;
+
+private int assure_home(string name);
+
+void setup() {
+  usage_text = "makeadmin <user>";
+  help_text =
+    "Grants admin status to <user>. Admin inherits developer, so the target "
+    "gains developer access as well. The target need not be online; the "
+    "change persists immediately and takes effect for all access checks at "
+    "once, with admin command paths installed at their next login.\n"
+    "\n"
+    "Only admins may grant admin status. Owner status is managed manually "
+    "and is not affected by this command.\n"
+    "\n"
+    "See also: rmadmin, makedev, rmdev";
+}
+
+mixed main(/** @type {STD_PLAYER} */ object caller, string arg) {
+  if(!adminp(previous_object()))
+    return _error("Access denied.");
+
+  if(!arg)
+    return _usage(caller);
+
+  string name = lower_case(arg);
+
+  if(!user_exists(name))
+    return _error("No such user '%s'.", name);
+
+  if(has_role(name, "admin"))
+    return _info("%s already has admin status.", capitalize(name));
+
+  master()->add_role(name, "admin");
+
+  int made_home = assure_home(name);
+
+  // If the target is online, install their admin command paths now rather than
+  // waiting for a relog.
+  object body = find_player(name);
+  if(body)
+    body->add_admin_path();
+
+  log_file(LOG_PROMOTE, sprintf("%s grants admin to %s - %s\n",
+    query_privs(previous_object()), name, ldatetime()));
+
+  return _ok("%s is now an admin. Effective roles: %s%s",
+    capitalize(name), implode(get_roles(name), ", "),
+    made_home ? sprintf("\nCreated home directory %s", home_path(name)) : "");
+}
+
+/**
+ * Ensures the target has a home directory and a workroom to start in.
+ * Idempotent and non-destructive: an existing directory and an existing
+ * workroom are left untouched, so re-promoting a previously demoted user
+ * preserves their work. Best-effort - a failure here does not undo the role
+ * grant.
+ *
+ * @param {string} name - The target user name.
+ * @returns {int} 1 if the home was freshly created, 0 if it already existed.
+ */
+private int assure_home(string name) {
+  string home = home_path(name);
+  int existed = directory_exists(home);
+
+  assure_dir(home);
+
+  if(!file_exists(home + "workroom.lpc"))
+    catch(cp("/d/std/workroom.lpc", home));
+
+  return !existed;
+}

@@ -1,0 +1,199 @@
+/**
+ * @file /std/cmd/reporter.lpc
+ *
+ * Inherited by reporting commands such as bug, typo, and idea.
+ * Handles the full report lifecycle: subject input, editor
+ * session, local log file writing, and optional GitHub issue
+ * submission.
+ *
+ * @created 2024-07-13 - Gesslar
+ * @last_modified 2024-07-13 - Gesslar
+ *
+ * @history
+ * 2024-07-13 - Gesslar - Created
+ */
+
+#include <daemons.h>
+#include <ed.h>
+
+inherit STD_CMD;
+inherit EXT_LOG;
+
+private nomask nosave string report_type = "";
+private nomask nosave string git_hub_label = "";
+
+public nomask void get_subject(string subject, object user);
+mixed start_report(object user, string subject);
+public nomask void finish_report(int status, string _file, string temp_file, object user, string subject);
+public nomask void finish_github(mapping status, object user);
+
+/**
+ * Sets the type of report this command generates (e.g.
+ * "bug", "typo", "idea"). Used in user-facing messages
+ * and log file naming.
+ *
+ * @protected
+ * @param {string} type - The report type identifier
+ * @errors If type is not a valid string
+ */
+protected nomask void set_report_type(string type) {
+  if(!stringp(type) && !strlen(type))
+    error("Bad argument 1 to set_report_type().");
+
+  report_type = type;
+}
+
+/**
+ * Sets the GitHub label used when submitting this report as
+ * a GitHub issue. Validates the label against the configured
+ * GITHUB_REPORTER types. GitHub filing is an optional integration --
+ * per finish_report()'s `git_hub_label != ""` check below -- so a
+ * missing GITHUB_REPORTER configuration leaves git_hub_label unset
+ * (local-log-only reporting) rather than failing setup(); this runs
+ * from setup() during object load, and an uncaught error() there
+ * would take the whole command down for every player, not just
+ * disable the optional GitHub half.
+ *
+ * @protected
+ * @param {string} label - The GitHub issue label
+ * @errors If label is not a valid string
+ * @errors If GITHUB_REPORTER is configured but label is not one of its types
+ */
+protected nomask void set_git_hub_label(string label) {
+  mapping config;
+
+  if(!stringp(label) && !strlen(label))
+    error("Bad argument 1 to set_git_hub_label().\n");
+
+  // CONFIG_D->get_mud_config() errors on an unset key rather than
+  // returning null (see adm/daemons/config.lpc) -- an unconfigured
+  // GITHUB_REPORTER is exactly the case this catch() is for.
+  catch(config = mud_config("GITHUB_REPORTER"));
+
+  if(!config || !of("types", config))
+    return;
+
+  if(!of(label, config["types"]))
+    error("Invalid label. Available labels: " + implode(config["types"], ", "));
+
+  git_hub_label = label;
+}
+
+mixed main(object user, string str) {
+  return start_report(user, str);
+}
+
+/**
+ * Begins the report workflow. If no subject is provided,
+ * prompts the user for one via input_to. Otherwise proceeds
+ * directly to the editor session.
+ *
+ * @param {STD_BODY} user - The user filing the report
+ * @param {string} subject - The report subject line
+ * @returns {mixed} 1 on success, or an error message string
+ */
+mixed start_report(object user, string subject) {
+  if(!strlen(report_type))
+    return "Report type not set.\n";
+
+  if(!stringp(subject) && !strlen(subject)) {
+    tell(user, "Enter a subject for your "+report_type+" report.\nSubject: ");
+    input_to("get_subject", user);
+  } else {
+    tell(user, "Subject: "+subject+"\n");
+    get_subject(subject, user);
+  }
+
+  return 1;
+}
+
+/**
+ * Receives the subject line and opens the editor for the
+ * user to compose the report body. Aborts if the subject
+ * is empty.
+ *
+ * @param {string} subject - The report subject line
+ * @param {STD_BODY} user - The user filing the report
+ */
+public nomask void get_subject(string subject, object user) {
+  if(!subject || !strlen(subject))
+    return tell(user, "Aborted.\n");
+
+  user->start_edit(
+    null,
+    assemble_call_back((:finish_report:), user, subject)
+  );
+}
+
+/**
+ * Callback invoked when the editor session completes.
+ * Writes the report to the local log file and, if a GitHub
+ * label is configured, submits it as a GitHub issue.
+ *
+ * @param {int} status - The editor exit status
+ * @param {string} _file - The editor file path
+ * @param {string} temp_file - The temporary file containing
+ *                             the report body
+ * @param {STD_BODY} user - The user who filed the report
+ * @param {string} subject - The report subject line
+ */
+public nomask void finish_report(int status, string _file, string temp_file, object user, string subject) {
+  string log_file, log_text, gh_text;
+  string text;
+
+  defer((:rm, temp_file:));
+
+  if(status == ED_STATUS_ABORTED || file_size(temp_file) < 1) {
+    if(interactive(user))
+      _info(user, "Report aborted.");
+
+    return;
+  }
+
+  text = read_file(temp_file);
+
+  assure_dir(log_dir());
+  log_file = log_dir() + "/" + upper_case(report_type);
+
+  log_text = sprintf("%s\n%s - %s\nSubject: %s\nLocation: %s\n\n%s\n",
+    repeat_string("-", 79),
+    ldatetime(),
+    capitalize(query_privs(user)),
+    subject,
+    file_name(environment(user)),
+    text
+  );
+
+  write_file(log_file, log_text);
+
+  tell(user, "Thank you for your "+report_type+" report.\n");
+
+  gh_text = sprintf("Reporter: %s\nLocation: %s\n\n%s\n",
+    capitalize(query_privs(user)),
+    file_name(environment(user)),
+    text
+  );
+
+  if(git_hub_label != "")
+    GH_ISSUES_D->create_issue(
+      git_hub_label,
+      subject,
+      gh_text,
+      assemble_call_back((:finish_github:), user)
+    );
+}
+
+/**
+ * Callback invoked after the GitHub issue creation request
+ * completes. Notifies the user of success or failure.
+ *
+ * @param {mapping} status - The HTTP response containing a
+ *                           "code" key
+ * @param {STD_BODY} user - The user who filed the report
+ */
+public nomask void finish_github(mapping status, object user) {
+  if(status["code"] == 201)
+    tell(user, "Report submitted to GitHub.\n");
+  else
+    tell(user, "Error submitting report to GitHub.\n");
+}

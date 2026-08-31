@@ -1,0 +1,90 @@
+/**
+ * @file /cmds/dev/hb.lpc
+ *
+ * Reports heartbeat status for a specific object or for all livings.
+ *
+ * @created 2024-02-18 - Gesslar
+ * @last_modified 2026-07-13 - Gesslar
+ *
+ * @history
+ * 2024-02-18 - Gesslar - Created
+ * 2026-07-13 - Gesslar - Added help text and LPCDoc header
+ */
+
+inherit STD_CMD;
+
+void setup() {
+  usage_text =
+    "hb <object>\n"
+    "hb all\n";
+
+  help_text =
+    "Reports heartbeat status. Given an <object> (a loaded object or a file "
+    "path resolved from your current working directory), it shows whether that "
+    "object's heartbeat is on or off, along with its interval and the "
+    "resulting period in milliseconds. Use 'all' to list every interactive "
+    "living that currently has a heartbeat, with the same interval details. "
+    "This command only queries heartbeat state; it does not change it.";
+}
+
+mixed all_heartbeats();
+
+mixed main(object _tp, string arg) {
+  if(!arg)
+    return "Usage: hb <object|all>";
+
+
+  if(arg == "all")
+    return all_heartbeats();
+
+
+  /** @type {STD_ITEM} */ object ob;
+  if(!ob = get_object(arg)) {
+    string file = resolve_path("cwd", arg);
+    file = append(file, ".lpc");
+
+    if(file_exists(file)) {
+      ob = load_object(file);
+    }
+  }
+
+  if(!ob) {
+    return "No such object: " + arg;
+  }
+
+  int i = query_heart_beat(ob);
+  int hb_ms = (int)get_config(__RC_HEARTBEAT_INTERVAL_MSEC__);
+
+  arg = ob->query_name();
+
+  if(i) {
+    return `Heartbeat is on for ${arg} (${i}x${hb_ms}ms = ${(i * hb_ms)}ms)`;
+  } else {
+    return `Heartbeat is off for ${arg}.`;
+  }
+}
+
+mixed all_heartbeats() {
+  int hb_ms = (int)get_config(__RC_HEARTBEAT_INTERVAL_MSEC__);
+
+  object *obs = heart_beats();
+  obs = filter(obs, (: living($1) && interactive($1) :));
+
+  string *ret = ({ });
+  int sz = sizeof(obs);
+  for(int i = 0; i < sz; i++) {
+    int interval = query_heart_beat(obs[i]);
+
+    if(query_heart_beat(obs[i])) {
+      ret += ({
+        `${obs[i]->query_name()} (${interval}x${hb_ms}ms = ${(interval * hb_ms)}ms)`
+      });
+    }
+  }
+
+  if(sizeof(ret)) {
+    return ({ "All Heartbeats:", "" }) + map(ret, (: `  ${$1}` :));
+  } else {
+    return "No heartbeats.";
+  }
+}

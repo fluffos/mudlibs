@@ -1,0 +1,204 @@
+/**
+ * @file /cmds/std/alias.lpc
+ *
+ * Manage personal aliases.
+ *
+ * @created 2026-06-06 - Gesslar
+ * @last_modified 2026-07-13 - Gesslar
+ *
+ * @history
+ * 2026-06-06 - Gesslar - Created
+ * 2026-07-13 - Gesslar - Added help text
+ */
+
+inherit STD_CMD;
+
+void setup() {
+  usage_text =
+    "alias - list your personal aliases\n"
+    "alias -g - list the global aliases available to you\n"
+    "alias <name> - show the expansion of one of your aliases\n"
+    "alias <name> <expansion> - add or update an alias\n"
+    "alias -<name> - remove an alias\n";
+  help_text =
+    "Manages your personal command aliases. With no arguments it lists the "
+    "aliases you have defined; with -g (or -global) it lists the global "
+    "aliases available to you across the groups you belong to. Given a name "
+    "and an expansion, it adds or updates that alias so typing the name runs "
+    "the expansion. Given a single name, it shows what that alias expands to. "
+    "Prefixing a name with a dash removes that alias. If the expansion begins "
+    "with a space, the alias becomes a prefix alias, matching whenever a "
+    "command line starts with the alias name.";
+}
+
+private mixed add_alias(object tp, string alias, string expansion);
+private mixed remove_alias(object tp, string alias);
+private mixed show_alias(object tp, string alias);
+private mixed list_personal_aliases(object tp);
+private mixed list_global_aliases(object tp);
+
+mixed main(object tp, string arg) {
+  if(!arg)
+    return list_personal_aliases(tp);
+
+  if(arg == "-g" || arg == "-global")
+    return list_global_aliases(tp);
+
+  string alias, expansion;
+
+  if(sscanf(arg, "%s %s", alias, expansion) == 2) {
+    if(starts_with(alias, "-")) {
+      return _error("Adding an alias does not take a preceding '-'.");
+    }
+
+    return add_alias(tp, alias, expansion);
+  }
+
+  if(starts_with(arg, "-")) {
+    if(strlen(arg) < 2) {
+      return _error("Remove which alias?");
+    }
+
+    return remove_alias(tp, arg[1..]);
+  }
+
+  return show_alias(tp, arg);
+}
+
+/**
+ * Adds or updates a personal alias for the player. A leading space on
+ * the expansion is folded into the alias name as a trailing space,
+ * marking it an XALIAS (prefix alias).
+ *
+ * @param {STD_BODY} tp - The player gaining the alias.
+ * @param {string} alias - The alias name.
+ * @param {string} expansion - The text the alias expands to.
+ * @returns {string} A success or error message reporting the result.
+ */
+mixed add_alias(
+  /** @type {STD_BODY} */ object tp,
+  string alias,
+  string expansion
+) {
+  if(starts_with(expansion, " ")) {
+    alias = sprintf("%s ", alias);
+    expansion = expansion[1..];
+  }
+
+  int updating = tp->has_alias(alias);
+
+  tp->add_alias(alias, expansion);
+
+  if(!tp->has_alias(alias))
+    return updating
+      ? _error("Unable to update the alias %O.", alias)
+      : _error("Unable to add the alias %O.", alias);
+
+  return updating
+    ? _ok("Updated alias %O ⮞ %O", alias, expansion)
+    : _ok("Added alias %O ⮞ %O", alias, expansion);
+}
+
+/**
+ * Shows the expansion of one of the player's personal aliases.
+ *
+ * @param {STD_BODY} tp - The player whose alias is shown.
+ * @param {string} alias - The alias name to display.
+ * @returns {string} The alias and its expansion, or an error message if
+ *  the player has no such alias.
+ */
+mixed show_alias(
+  /** @type {STD_BODY} */ object tp,
+  string alias
+) {
+  if(!tp->has_alias(alias))
+    return _error("You do not have an alias for %O", alias);
+
+  string expansion = tp->get_alias(alias);
+
+  return _ok("Alias: %O ⮞ %O", alias, expansion);
+}
+
+/**
+ * Removes one of the player's personal aliases.
+ *
+ * @param {STD_BODY} tp - The player whose alias is removed.
+ * @param {string} alias - The alias name to remove.
+ * @returns {string} A success or error message reporting the result.
+ */
+mixed remove_alias(
+  /** @type {STD_BODY} */ object tp,
+  string alias
+) {
+  if(!tp->has_alias(alias))
+    return _error("You do not have an alias for %O", alias);
+
+  tp->remove_alias(alias);
+
+  if(tp->has_alias(alias))
+    return _error("You unable to remove the alias for %O", alias);
+
+  return _ok("Alias %O removed.", alias);
+}
+
+/**
+ * Lists the player's personal aliases, each padded into an aligned
+ * name and expansion column.
+ *
+ * @param {STD_BODY} tp - The player whose aliases are listed.
+ * @returns {string | string*} A titled list of the player's aliases, or
+ *  an informational message if none are defined.
+ */
+mixed list_personal_aliases(
+  /** @type {STD_BODY} */ object tp
+) {
+  mapping defined = tp->get_aliases();
+
+  if(!sizeof(defined))
+    return _info("You have no personal aliases defined.");
+
+  string *aliases = keys(defined);
+  int longest = max(map(aliases, (: strlen :)));
+
+  aliases = sort_array(aliases, 1);
+  aliases = map(aliases, (:
+    sprintf("%-*s  %s", $(longest), $1, $(defined)[$1])
+  :));
+
+  return ({ "Personal Aliases", aliases...});
+}
+
+/**
+ * Lists the global aliases available to the player, merged across every
+ * group the player belongs to and aligned into a name and expansion
+ * column.
+ *
+ * @param {STD_BODY} tp - The player whose available global aliases are
+ *  listed.
+ * @returns {string | string*} A titled list of the global aliases, or an
+ *  informational message if none are defined.
+ */
+mixed list_global_aliases(
+  /** @type {STD_BODY} */ object tp
+) {
+  mapping defined = ALIAS_D->get_global_aliases(tp);
+
+  if(!sizeof(defined))
+    return _info("There are no global aliases defined.");
+
+  mapping *definitions = values(defined);
+  mapping all = ([]);
+
+  foreach(mapping definition in definitions)
+    all += definition;
+
+  string *aliases = keys(all);
+  int longest = max(map(aliases, (: strlen :)));
+
+  aliases = sort_array(aliases, 1);
+  aliases = map(aliases, (:
+    sprintf("%-*s  %s", $(longest), $1, $(all)[$1])
+  :));
+
+  return ({ "Global Aliases", aliases...});
+}

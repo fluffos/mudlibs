@@ -1,0 +1,119 @@
+/**
+ * @file /cmds/adm/awipe.lpc
+ *
+ * Account wipe command. Mirrors nuke, but operates on an account, removing the
+ * account along with every character associated with it.
+ *
+ * @created 2026-07-13 - Gesslar
+ * @last_modified 2026-07-13 - Gesslar
+ *
+ * @history
+ * 2026-07-13 - Gesslar - Moved help into setup()
+ */
+
+#include <logs.h>
+
+inherit STD_CMD;
+
+void confirm_awipe(string str, object caller, string account);
+
+void setup() {
+  usage_text = "awipe <account>";
+  help_text =
+    "This command deletes the target account along with every character "
+    "associated with it, removing each character's pfile and group "
+    "memberships from " + mud_name() + ". This is NON-REVERSIBLE, so use "
+    "with discretion.\n"
+    "\n"
+    "See also: nuke";
+}
+
+mixed main(/** @type {STD_PLAYER} */ object caller, string account) {
+  if(!adminp(previous_object()))
+    return _error("Access denied.");
+
+  if(!account)
+    return _usage(caller);
+
+  account = lower_case(account);
+
+  if(!valid_account(account))
+    return _error("Account '%s' does not exist.", account);
+
+  _question(
+    caller,
+    "Are you sure you want to delete account %s and all of its "
+    "characters? [y/n] ",
+    account
+  );
+
+  input_to("confirm_awipe", 0, caller, account);
+
+  return 1;
+}
+
+void confirm_awipe(string str, object caller, string account) {
+  if(str != "y" && str != "yes") {
+    _info(caller, "Aborting account wipe.");
+    return;
+  }
+
+  /** @type {string*} */ string *characters = ACCOUNT_D->account_characters(account) || ({});
+
+  _info(caller, "Wiping account '%s' with %d character(s).", account, sizeof(characters));
+
+  // Second pass: disconnect any logged-in bodies and delete user directories.
+  foreach(string character in characters) {
+    object body;
+
+    master()->purge_roles(character);
+
+    if(body = find_player(character)) {
+      _info(caller, "Disconnecting user '%s'.", character);
+      _ok(body, "You watch as your body dematerializes.");
+
+      if(environment(body)) {
+        tell_down(
+          environment(body),
+          `You watch as ${capitalize(character)} dematerializes before your `
+          `eyes.\n`,
+          0,
+          ({ body })
+        );
+
+        body->remove();
+      }
+    }
+
+    _info(caller, "Removing bank account for user '%s'.", capitalize(character));
+    BANK_D->remove_account(character, caller);
+
+    string user_dir = user_data_directory(character);
+    if(directory_exists(user_dir)) {
+      mixed err;
+
+      _info(caller, "Deleting user directory for user '%s'.", capitalize(character));
+      err = catch(recursive_delete(as_directory(user_dir), true));
+
+      if(err) {
+        _error(caller, "Error while deleting user directory: %s", err);
+        return;
+      }
+    }
+  }
+
+  string account_file = account_file(account);
+
+  _info(caller, "Removing account '%s'.", account);
+  ACCOUNT_D->remove_account(account);
+
+  if(file_exists(account_file)) {
+    _info(caller, "Deleting account file.");
+    rm(account_file);
+  }
+
+  _ok(caller, "Account '%s' has been wiped.", account);
+  log_file(LOG_AWIPE,
+    `${capitalize(query_privs(caller))} awipes account ${account} on `
+    `${ldatetime()}\n`);
+}

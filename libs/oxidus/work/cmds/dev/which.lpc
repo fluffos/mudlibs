@@ -1,0 +1,74 @@
+/**
+ * @file /cmds/dev/which.lpc
+ *
+ * Command to locate where a verb resolves: a command file on your path, an
+ * add_command() handler on a nearby object, or a room exit.
+ *
+ * @created 2026-07-17 - Gesslar
+ * @last_modified 2026-07-17 - Gesslar
+ *
+ * @history
+ * 2026-07-17 - Gesslar - Created
+ */
+
+inherit STD_CMD;
+
+void setup() {
+  usage_text = "which <verb>";
+  help_text =
+    "Reports where a verb would resolve. It searches each directory on your "
+    "command path for a matching command file, checks the add_command() "
+    "handlers registered by objects in your inventory and room, and checks "
+    "the exits of your current room.\n"
+    "\n"
+    "Every match is reported, so a verb defined in more than one place shows "
+    "all of its locations.\n"
+    "\n"
+    "See also: path";
+}
+
+mixed main(
+  /** @type {STD_PLAYER} */ object caller,
+  string str
+) {
+  if(!str)
+    return _usage(caller);
+
+  string verb = lower_case(str);
+  string *out = ({ });
+
+  // Command files on the search path.
+  foreach(string p in caller->get_path())
+    if(file_exists(p + verb + ".lpc"))
+      out += ({ "Command: " + p + verb });
+
+  // add_command() handlers on nearby objects, in command-resolution order.
+  object *obs = all_inventory(caller);
+  /** @type {STD_ROOM} */ object room = environment(caller);
+
+  if(room)
+    obs += ({ room }) + all_inventory(room);
+
+  obs += ({ caller });
+  obs = distinct_array(obs);
+
+  foreach(object ob in obs) {
+    mixed handler = ob->query_command(verb);
+
+    if(nullp(handler))
+      continue;
+
+    string desc = stringp(handler) ? handler + "()" : "<closure>";
+    out += ({ sprintf("Object:  %s -> %s", file_name(ob), desc) });
+  }
+
+  // Room exit (dispatched as 'go' by the command hook).
+  if(room && room->valid_exit(verb))
+    out += ({ "Exit:    " + room->query_exit(verb) });
+
+  if(!sizeof(out))
+    return _error(caller, "'%s' does not resolve to a command, handler, or "
+      "exit.", verb);
+
+  return out;
+}

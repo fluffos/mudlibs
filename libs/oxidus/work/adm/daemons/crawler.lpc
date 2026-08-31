@@ -1,0 +1,325 @@
+/**
+ * @file /adm/daemons/crawler.lpc
+ *
+ * Crawls the game world room by room, deriving a coordinate grid for every
+ * reachable room and handing the result to COORD_D. The crawl is kicked off
+ * automatically at boot and walks each room's exits, placing neighbours so
+ * that adjacent rooms abut without overlapping.
+ *
+ * @created 2024-08-21 - Gesslar
+ * @last_modified 2026-08-23 - Gesslar
+ *
+ * @history
+ * 2024-08-21 - Gesslar - Created
+ * 2026-06-02 - Gesslar - Documented
+ * 2026-07-12 - Gesslar - Hardened moving objects out/in
+ * 2026-08-23 - Gesslar - Converted the call_out chain to async/await
+ */
+
+#include <classes.h>
+
+inherit STD_DAEMON;
+
+inherit CLASS_ROOMINFO;
+
+private void process_room(object room, object tp);
+private object stash_objects(string room_file, object tp);
+private int *update_coordinates(int *coords, string exit, int distance);
+
+private nosave string log_file = "/log/crawl.log";
+
+/**
+ * Rooms that have been fully crawled, keyed by room file path.
+ *
+ * @type {([ string: class RoomInfo ])}
+ */
+private nosave mapping done = ([]);
+
+/**
+ * Rooms discovered but not yet crawled, keyed by room file path.
+ *
+ * @type {([ string: class RoomInfo ])}
+ */
+private nosave mapping todo = ([]);
+private nosave int x, y, z;
+
+/**
+ * The directional exits that map onto the coordinate grid. Only these
+ * are checked for cross-edge consistency; other exits (portals, named
+ * passages) carry no spatial relationship.
+ */
+private nosave string *grid_dirs = ({
+  "north", "south", "east", "west", "up", "down",
+  "northeast", "northwest", "southeast", "southwest"
+});
+
+private nosave string crawl_start_room;
+
+void setup() {
+  crawl_start_room = "/d/village/square";
+  slot(SIG_SYS_BOOT, "crawl");
+}
+
+/**
+ * Begins a fresh crawl of the game world, starting from crawl_start_room and
+ * mapping every reachable room into a coordinate grid.
+ *
+ * Slotted on SIG_SYS_BOOT, so the crawl runs automatically at boot. The stale
+ * crawl log is removed, the starting room is stashed and seeded into the todo
+ * queue at the origin ({0, 0, 0}), and the queue is then drained one room at a
+ * time, yielding to the event loop between rooms so the driver keeps serving
+ * players while the crawl runs.
+ *
+ * When the queue empties the accumulated room data is handed to COORD_D, the
+ * todo and done state is cleared, and SIG_SYS_CRAWL_COMPLETE is emitted. A
+ * crawl that errors part way through logs the reason and clears its state
+ * without publishing a partial grid.
+ *
+ * @param {mixed...} _arg - Unused; accepted because the signal dispatcher may
+ *  pass arguments along with the signal.
+ */
+public async void crawl(mixed _arg...) {
+  object tp = this_player();
+  object room;
+  mixed err;
+
+  // A non-empty todo queue means a crawl is already in flight; a second would
+  // drain the same queue into the same done mapping.
+  if(sizeof(todo))
+    return;
+
+  rm(log_file);
+
+  room = stash_objects(crawl_start_room, tp);
+
+  if(!room)
+    return;
+
+  err = acatch {
+    COORD_D->clear();
+
+    todo[file_name(room)] = new(class RoomInfo,
+      short: room->query_short(),
+      todo: room->query_exit_ids(),
+      done: ({}),
+      coords: ({0, 0, 0})
+    );
+
+    while(sizeof(todo)) {
+      string file;
+      object next;
+
+      // Yield first: the queue stays non-empty for as long as this crawl is
+      // in flight, which is what lets sizeof(todo) stand in for "in progress".
+      await async_yield();
+
+      file = keys(todo)[0];
+      next = stash_objects(file, tp);
+
+      if(!next)
+        map_delete(todo, file);
+      else
+        process_room(next, tp);
+    }
+  };
+
+  if(err) {
+    write_file(log_file, `Crawl aborted: ${err}\n`);
+
+    if(tp)
+      tell(tp, `Crawling aborted: ${err}\n`);
+
+    done = ([ ]);
+    todo = ([ ]);
+
+    return;
+  }
+
+  if(tp)
+    tell(tp, sprintf(
+        "Crawling complete. Total rooms discovered: %d\n",
+        sizeof(done)
+      )
+    );
+
+  COORD_D->set_coordinate_data(done);
+  done = ([ ]);
+  todo = ([ ]);
+  emit(SIG_SYS_CRAWL_COMPLETE);
+}
+
+/**
+ * Walks every exit of a room, discovering and queuing each unvisited
+ * destination with its computed grid coordinates.
+ *
+ * For each exit, the destination is loaded (stashing any inventory), its grid
+ * coordinates are derived from this room's coordinates and the two rooms'
+ * sizes, and it is added to the todo queue. Rooms that fail to load are logged
+ * and skipped. Once all exits are walked, the room is moved from todo to done.
+ *
+ * @param {STD_ROOM} room - The room whose exits are being processed.
+ * @param {STD_BODY} tp - The crawling player to notify on completion, if any.
+ */
+private void process_room(object room, object tp) {
+  string file = file_name(room);
+  class RoomInfo room_data = todo[file];
+  string exit;
+  string dest;
+
+  while(sizeof(room_data.todo)) {
+    exit = room_data.todo[0];
+    dest = room->query_exit(exit);
+
+    if(dest) {
+      int distance = room->query_distance(exit);
+
+      if(!done[dest] && !todo[dest]) {
+        object next_room;
+        string e;
+
+        e = catch( next_room = stash_objects(dest, tp) );
+        if(e)
+          write_file(
+            log_file,
+            sprintf(
+              "Failed to load %s => %s via %s\n",
+              file,
+              dest,
+              exit
+            )
+          );
+        else if(next_room) {
+          int *new_coords = update_coordinates(room_data.coords, exit, distance);
+
+          todo[dest] = new(class RoomInfo,
+            short: next_room->query_short(),
+            todo: next_room->query_exit_ids(),
+            done: ({}),
+            coords: new_coords
+          );
+        }
+      } else if(member_array(exit, grid_dirs) != -1) {
+        // Cross-edge: the destination is already placed. Verify this exit
+        // agrees with where it sits, and log the edge if not.
+        class RoomInfo placed = done[dest];
+        int *expected = update_coordinates(room_data.coords, exit, distance);
+
+        if(!placed)
+          placed = todo[dest];
+
+        if(placed && (placed.coords[0] != expected[0] ||
+                      placed.coords[1] != expected[1] ||
+                      placed.coords[2] != expected[2]))
+          write_file(
+            log_file,
+            sprintf(
+              "Cross-edge conflict: %s %s -> %s expected (%d,%d,%d) but placed at (%d,%d,%d)\n",
+              file, exit, dest,
+              expected[0], expected[1], expected[2],
+              placed.coords[0], placed.coords[1], placed.coords[2]
+            )
+          );
+      }
+    }
+
+    room_data.todo = room_data.todo[1..];
+    room_data.done += ({ dest });
+  }
+
+  done[file] = room_data;
+  map_delete(todo, file);
+}
+
+/**
+ * Computes the grid coordinates of an adjacent room based on the
+ * direction of travel and the per-exit distance declared on the
+ * current room.
+ *
+ * The destination is shifted by the whole-square distance along the
+ * relevant axis (both axes for diagonals). Distances are integers, so
+ * no rounding is involved and the grid stays exact. Non-directional
+ * exits leave the coordinates unchanged.
+ *
+ * @param {int*} coords - The {x, y, z} coordinates of the current room.
+ * @param {string} exit - The direction of travel (e.g. "north", "southeast",
+ *  "up").
+ * @param {int} distance - The centre-to-centre distance in grid squares for
+ *  this exit.
+ * @returns {int*} The {x, y, z} grid coordinates of the destination room.
+ */
+private int *update_coordinates(int *coords, string exit, int distance) {
+  int *new_coords = ({ coords[0], coords[1], coords[2] });
+
+  switch(exit) {
+    case "north": new_coords[1] += distance; break;
+    case "south": new_coords[1] -= distance; break;
+    case "east":  new_coords[0] += distance; break;
+    case "west":  new_coords[0] -= distance; break;
+    case "up":    new_coords[2] += distance; break;
+    case "down":  new_coords[2] -= distance; break;
+    case "northeast":
+      new_coords[0] += distance;
+      new_coords[1] += distance;
+      break;
+    case "northwest":
+      new_coords[0] -= distance;
+      new_coords[1] += distance;
+      break;
+    case "southeast":
+      new_coords[0] += distance;
+      new_coords[1] -= distance;
+      break;
+    case "southwest":
+      new_coords[0] -= distance;
+      new_coords[1] -= distance;
+      break;
+  }
+
+  return new_coords;
+}
+
+/**
+ * Loads a room fresh while preserving any objects already inside it.
+ *
+ * If the room is already loaded, its entire inventory is moved into the void,
+ * the room is removed and reloaded, and the inventory is moved back. If the
+ * room is not loaded, it is simply loaded. This lets the crawler query a clean
+ * copy of the room without destroying its live contents.
+ *
+ * @param {string} room_file - The path of the room to (re)load.
+ * @param {STD_BODY} _tp - The crawling player; carried through the crawl
+ *  pipeline but unused here.
+ * @returns {STD_ROOM} The freshly loaded room, or 0 if it failed to load.
+ */
+private object stash_objects(string room_file, object _tp) {
+  /** @type {STD_ROOM} */ object room;
+  object v = load_object(ROOM_VOID);
+
+  if(room = find_object(room_file)) {
+    /** @type {STD_ITEM* | STD_BODY*} */ object *all = all_inventory(room);
+
+    if(sizeof(all)) {
+      each(all, (:
+           $1
+        && catch($1->move($(v)))
+      :));
+    }
+
+    catch {
+      room->remove();
+      room = load_object(room_file);
+    };
+
+    if(objectp(room) && sizeof(all)) {
+      each(all, (:
+           $1
+        && catch($1->move($(room)))
+      :));
+    } // else, you're in the void. soz. but you can just walk out of the void
+      // so stop crying about it.
+  } else {
+    catch(room = load_object(room_file));
+  }
+
+  return room;
+}

@@ -1,0 +1,335 @@
+/**
+ * @file /std/living/damage.lpc
+ *
+ * Damage delivery and receipt for living objects. Provides the attacker-side
+ * entry point (deliver_damage) and the victim-side resolution (receive_damage),
+ * where the type-specific defence value, the global DAMAGE_LEVEL_MODIFIER, and
+ * the level difference combine to mitigate the incoming hit before it is
+ * applied to HP. Records last-damaged-by and killed-by attribution as side
+ * effects.
+ *
+ * @created 2024-07-25 - Gesslar
+ * @last_modified 2026-07-30 - Gesslar
+ *
+ * @history
+ * 2024-07-25 - Gesslar - Created
+ * 2026-05-10 - Gesslar - Documentation pass
+ * 2026-07-30 - Gesslar - Documented calculate_damage and
+ *                        adjust_damage_by_severity
+ * 2026-07-30 - Gesslar - Documented the mundane and magic damage channels
+ */
+
+#include <advancement.h>
+#include <combat.h>
+#include <damage.h>
+#include <skills.h>
+#include <vitals.h>
+#include "/std/object/include/module.h"
+
+/**
+ * Deliver a damage event to a victim. Validates inputs and routes the call to
+ * the victim's receive_damage(), which is where defence reduction, level
+ * scaling, and HP application happen.
+ *
+ * Try not to use this function directly. Prefer to use `deliver_mundane_damage`
+ * or `deliver_magic_damage`.
+ *
+ * @param {STD_BODY} victim - The body to damage.
+ * @param {float} damage - The pre-mitigation damage amount. Must be non-
+ *  negative.
+ * @param {string} type - The damage type (e.g. "slashing", "fire"). Used by
+ *  the victim to look up the matching defence value.
+ * @returns {float} The actual damage applied after the victim's reductions, or
+ *  0 if the victim is missing or the input damage was negative.
+ */
+public float deliver_damage(object victim, float damage, string type) {
+  if(!victim)
+    return 0;
+
+  if(damage < 0)
+    return 0;
+
+  float received = victim->receive_damage(this_object(), damage, type);
+
+#if 0
+  tell(this_object(), sprintf("delivering %O %O damage => %O\n", damage, type, received));
+#endif
+
+  return received;
+}
+
+/**
+ * Deliver a mundane damage event to a victim. This is the attacker-side entry
+ * point for physical damage — weapon strikes, unarmed blows, falling rocks —
+ * and routes to the victim's receive_mundane_damage().
+ *
+ * @param {STD_BODY} victim - The body to damage.
+ * @param {float} damage - The pre-mitigation damage amount. Must be non-
+ *  negative.
+ * @param {string} type - The damage type (e.g. "slashing", "bludgeoning").
+ *  Used by the victim to look up the matching defence value.
+ * @returns {float} The actual damage applied after the victim's reductions, or
+ *  0 if the victim is missing or the input damage was negative.
+ */
+public float deliver_mundane_damage(object victim, float damage, string type) {
+  if(!victim)
+    return 0;
+
+  if(damage < 0)
+    return 0;
+
+  float received = victim->receive_mundane_damage(this_object(), damage, type);
+
+  return received;
+}
+
+/**
+ * Deliver a magical damage event to a victim. This is the attacker-side entry
+ * point for spells, arcane procs, and other conjured harm, and routes to the
+ * victim's receive_magic_damage().
+ *
+ * @param {STD_BODY} victim - The body to damage.
+ * @param {float} damage - The pre-mitigation damage amount. Must be non-
+ *  negative.
+ * @param {string} type - The damage type (e.g. "fire", "shadow"). Used by the
+ *  victim to look up the matching defence value.
+ * @returns {float} The actual damage applied after the victim's reductions, or
+ *  0 if the victim is missing or the input damage was negative.
+ */
+public float deliver_magic_damage(object victim, float damage, string type) {
+  if(!victim)
+    return 0;
+
+  if(damage < 0)
+    return 0;
+
+  float received = victim->receive_magic_damage(this_object(), damage, type);
+
+  return received;
+}
+
+/**
+ * Apply damage to this body after defence reduction and level- difference
+ * scaling.
+ *
+ * The victim's defence amount for the given type is converted to a percentage
+ * reduction. The global DAMAGE_LEVEL_MODIFIER is then scaled by the level
+ * difference (attacker - victim) and used to adjust that reduction: a higher-
+ * level attacker erodes the victim's defence, a lower-level attacker has its
+ * damage further reduced. After clamping at zero, the result is subtracted
+ * from HP. If the body is already dead the call is a no-op. If this hit brings
+ * HP to zero, the attacker is recorded as the killer.
+ *
+ * Try not to use this function directly. Prefer to use `receive_mundane_damage`
+ * or `receive_magic_damage`.
+ *
+ * @param {STD_BODY} attacker - The body dealing the damage.
+ * @param {float} damage - The pre-mitigation damage amount.
+ * @param {string} type - The damage type for defence lookup.
+ * @returns {float} The damage actually applied to HP, or 0.0 if the attacker
+ *  is missing, the input was negative, or the body was already dead.
+ */
+public float receive_damage(object attacker, float damage, string type) {
+  if(!attacker)
+    return 0.0;
+
+  if(query_hp() <= 0.0)
+    return 0.0;
+
+  float new_damage = damage;
+
+  if(damage < 0.0) {
+#if 0
+    tell(this_object(), sprintf("receiving %O %O damage => %O\n", damage, type, new_damage));
+#endif
+    return 0.0;
+  }
+
+  float def = query_defence_amount(type);
+  float red = percent_of(def, damage);
+
+  // The global damage level modifier
+  float mod = to_float(mud_config("COMBAT.DAMAGE_LEVEL_MODIFIER"));
+
+  // The level of the attacker and the victim
+  float level = query_effective_level();
+  float alevel = attacker->query_effective_level();
+
+  // The difference in levels between the attacker and the victim
+  float level_difference = alevel - level;
+
+  mod *= level_difference;
+  red -= percent_of(mod, damage);
+
+  // The damage is reduced by the level modifier
+  new_damage -= red;
+
+#if 0
+  tell(this_object(), sprintf("receiving %O %O damage => %O\n", damage, type, new_damage));
+#endif
+
+  if(new_damage < 0.0)
+    new_damage = 0.0;
+
+  float *reduced = module("shielding", "mitigate_damage", new_damage, type);
+  if(!nullp(reduced)) {
+    float all_reduced = sum(reduced);
+    if(all_reduced < 0.0)
+      all_reduced = 0.0;
+
+    new_damage -= all_reduced;
+  }
+
+  // Take the damage
+  adjust_hp(-new_damage);
+
+  // Set the last damaged by object
+  set_last_damaged_by(attacker);
+
+  if(query_hp() <= 0.0)
+    set_killed_by(attacker);
+
+  return new_damage;
+}
+
+/**
+ * Resolve an incoming mundane damage event against this body. This is the
+ * victim-side counterpart to deliver_mundane_damage(), and applies the
+ * mitigation and HP bookkeeping of receive_damage() to physical harm.
+ *
+ * @param {STD_BODY} attacker - The body dealing the damage.
+ * @param {float} damage - The pre-mitigation damage amount.
+ * @param {string} type - The damage type for defence lookup.
+ * @returns {float} The damage actually applied to HP, or 0.0 if the attacker
+ *  is missing, the input was negative, or the body was already dead.
+ */
+public float receive_mundane_damage(object attacker, float damage, string type) {
+  // later we'll add functionality specific to mundane damage, but for,
+  // just directly route.
+
+  return receive_damage(attacker, damage, type);
+}
+
+/**
+ * Resolve an incoming magical damage event against this body. This is the
+ * victim-side counterpart to deliver_magic_damage(), and applies the
+ * mitigation and HP bookkeeping of receive_damage() to conjured harm.
+ *
+ * @param {STD_BODY} attacker - The body dealing the damage.
+ * @param {float} damage - The pre-mitigation damage amount.
+ * @param {string} type - The damage type for defence lookup.
+ * @returns {float} The damage actually applied to HP, or 0.0 if the attacker
+ *  is missing, the input was negative, or the body was already dead.
+ */
+public float receive_magic_damage(object attacker, float damage, string type) {
+  // later we'll add functionality specific to magic damage, but for,
+  // just directly route.
+  return receive_damage(attacker, damage, type);
+}
+
+/**
+ * Calculate the raw, pre-mitigation damage for a single attack or ability
+ * against an enemy.
+ *
+ * The base damage comes from COMBAT.BASE_DAMAGE, reduced by
+ * COMBAT.DAMAGE_VARIANCE and then given back a random slice of that variance,
+ * so each call lands somewhere in the configured band. To that are added the
+ * weapon's base damage and the attacker's offensive skill (the full skill plus
+ * half of the general "combat" skill), and from it is subtracted the enemy's
+ * evasive skill — "combat.defence.evade" for arcane skills, otherwise
+ * "combat.defence.dodge". An enemy out of movement points (negative MP) is
+ * too winded to defend well, and takes a flat bonus.
+ *
+ * The result is pre-mitigation: type defence and level scaling are applied
+ * later by receive_damage().
+ *
+ * @param {STD_BODY} enemy - The intended target, consulted for its evasive
+ *  skill and movement points.
+ * @param {object | string} [weapon_or_skill] - A weapon object, whose info
+ *  supplies the base damage and the skill to test; or a skill name, tested
+ *  directly against unarmed weapon info. Omitted, unarmed weapon info is used
+ *  and its own skill is tested.
+ * @returns {float} The pre-mitigation damage. May be negative when the enemy's
+ *  evasive skill outweighs the attack.
+ */
+public varargs float calculate_damage(object enemy, mixed weapon_or_skill) {
+  mapping weapon_info;
+
+  if(objectp(weapon_or_skill)) {
+    weapon_info = query_weapon_info(weapon_or_skill);
+  } else {
+    weapon_info = query_weapon_info(undefined);
+  }
+
+  string skill_name = stringp(weapon_or_skill) ? weapon_or_skill : weapon_info["skill"];
+  float skill = query_skill_level(skill_name);
+  float base = to_float(mud_config("COMBAT.BASE_DAMAGE"));
+  float subtracted = percent_of(to_float(mud_config("COMBAT.DAMAGE_VARIANCE")), base);
+
+  base -= subtracted;
+  float variance = random_float(subtracted);
+  base += variance;
+
+  float wbase = weapon_info["base"];
+
+  if(enemy->query_mp() < 0.0)
+    base += 4.0;
+
+  string defence_skill;
+  if(strsrch(skill_name, "arcane.") == 0) {
+    defence_skill = "combat.defence.evade";
+  } else {
+    defence_skill = "combat.defence.dodge";
+  }
+
+  float dam =
+      base
+    + wbase
+    + (skill + query_skill_level("combat") / 2.0)
+    - enemy->query_skill_level(defence_skill)
+  ;
+
+#if 0
+  false && _debug("base %O + wbase %O + skill %O - enemy skill %O = %O",
+    base,
+    wbase,
+    (skill + query_skill_level("combat") / 2.0),
+    enemy->query_skill_level(defence_skill),
+    dam
+  );
+#endif
+
+  return dam;
+}
+
+/**
+ * Scale a damage amount by a named severity band.
+ *
+ * Used by damage sources that describe their strength qualitatively — procs,
+ * for example — rather than computing a multiplier of their own. The bands are
+ * "weak" (0.25), "moderate" (0.75), "normal" (1.0), "heavy" (1.5), "high"
+ * (1.75), and "brutal" (2.0).
+ *
+ * @param {float} damage - The damage amount to scale.
+ * @param {string} severity - The severity band name.
+ * @returns {float} The scaled damage.
+ * @errors If the severity is not one of the recognised bands.
+ */
+public float adjust_damage_by_severity(float damage, string severity) {
+  switch(severity) {
+    case "weak":
+      return damage * 0.25;
+    case "moderate":
+      return damage * 0.75;
+    case "normal":
+      return damage;
+    case "heavy":
+      return damage * 1.50;
+    case "high":
+      return damage * 1.75;
+    case "brutal":
+      return damage * 2.0;
+    default:
+      error("Invalid damage severity.");
+  }
+}

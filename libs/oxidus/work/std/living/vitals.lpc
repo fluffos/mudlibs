@@ -1,0 +1,572 @@
+/**
+ * @file /std/living/vitals.lpc
+ *
+ * Vitals for living objects: the three pools — hit points (HP), skill
+ * points (SP), and movement points (MP) — with current and maximum
+ * values, ratio and condition reporting, passive regeneration ticking,
+ * and death state. Every mutator mirrors the new value to the client
+ * over GMCP.
+ *
+ * @created 2024-07-24 - Gesslar
+ * @last_modified 2026-07-21 - Gesslar
+ *
+ * @history
+ * 2024-07-24 - Gesslar - Created
+ * 2026-07-21 - Gesslar - Documented; regen tick now heals MP while in
+ *                        combat (HP and SP remain gated on combat)
+ */
+
+#include <gmcp_defines.h>
+#include <vitals.h>
+#include <runtime_config.h>
+#include <boon.h>
+#include "/std/object/include/module.h"
+#include <combat.h>
+
+private nomask float __hp, __max_hp, __sp, __max_sp, __mp, __max_mp;
+private nomask int __dead = false;
+private nomask nosave int __tick;
+
+// Number of pulses to trigger a regen
+private nomask nosave int __regen_interval_pulses;
+
+/**
+ * Initialises the three vital pools, defaulting any unset pool (current
+ * and maximum) to 100.0, then computes the regeneration interval. Safe
+ * to call on an already-initialised living — existing values are kept.
+ */
+void init_vitals() {
+  __hp = __hp ?? 100.0;
+  __max_hp = __max_hp ?? 100.0;
+  __sp = __sp ?? 100.0;
+  __max_sp = __max_sp ?? 100.0;
+  __mp = __mp ?? 100.0;
+  __max_mp = __max_mp ?? 100.0;
+
+  // Calculate regen interval based on the product of HEART_PULSE and
+  // HEARTBEATS_TO_REGEN.
+  init_healing();
+}
+
+/**
+ * Returns the current hit points.
+ *
+ * @returns {float} Current HP.
+ */
+float query_hp() { return __hp; }
+
+/**
+ * Returns the maximum hit points, including boon adjustments unless the
+ * raw base value is requested.
+ *
+ * @param {int} [raw] - When true, returns the base maximum without any
+ *                      boon adjustment.
+ * @returns {float} Maximum HP.
+ */
+varargs float query_max_hp(int raw) {
+  if(raw)
+    return __max_hp;
+
+  return __max_hp + query_effective_boon("vital", "max_hp");
+}
+
+/**
+ * Returns current HP as a percentage of (buffed) maximum HP.
+ *
+ * @returns {float} HP percentage, 0.0 to 100.0.
+ */
+float hp_ratio() { return percent(query_hp(), query_max_hp()); }
+
+/**
+ * Returns the current skill points.
+ *
+ * @returns {float} Current SP.
+ */
+float query_sp() { return __sp; }
+
+/**
+ * Returns the maximum skill points, including boon adjustments unless
+ * the raw base value is requested.
+ *
+ * @param {int} [raw] - When true, returns the base maximum without any
+ *                      boon adjustment.
+ * @returns {float} Maximum SP.
+ */
+varargs float query_max_sp(int raw) {
+  if(raw)
+    return __max_sp;
+
+  return __max_sp + query_effective_boon("vital", "max_sp");
+}
+
+/**
+ * Returns current SP as a percentage of (buffed) maximum SP.
+ *
+ * @returns {float} SP percentage, 0.0 to 100.0.
+ */
+float sp_ratio() { return percent(query_sp(), query_max_sp()); }
+
+/**
+ * Returns the current movement points.
+ *
+ * @returns {float} Current MP.
+ */
+float query_mp() { return __mp; }
+
+/**
+ * Returns the maximum movement points, including boon adjustments
+ * unless the raw base value is requested.
+ *
+ * @param {int} [raw] - When true, returns the base maximum without any
+ *                      boon adjustment.
+ * @returns {float} Maximum MP.
+ */
+varargs float query_max_mp(int raw) {
+  if(raw)
+    return __max_mp;
+
+  return __max_mp + query_effective_boon("vital", "max_mp");
+}
+
+/**
+ * Returns current MP as a percentage of (buffed) maximum MP.
+ *
+ * @returns {float} MP percentage, 0.0 to 100.0.
+ */
+float mp_ratio() { return percent(query_mp(), query_max_mp()); }
+
+/**
+ * Sets current hit points to the given value and pushes the update
+ * over GMCP.
+ *
+ * @param {float} x - The new HP value.
+ */
+void set_hp(float x) {
+  __hp = to_float(x);
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_VITALS, ([
+    GMCP_LBL_CHAR_VITALS_HP: sprintf("%.2f", __hp),
+  ]));
+}
+
+/**
+ * Sets the base maximum hit points to the given value and pushes the
+ * update over GMCP.
+ *
+ * @param {float} x - The new maximum HP value.
+ */
+void set_max_hp(float x) {
+  __max_hp = to_float(x);
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_VITALS, ([
+    GMCP_LBL_CHAR_VITALS_MAX_HP: sprintf("%.2f", __max_hp),
+  ]));
+}
+
+/**
+ * Sets current skill points to the given value and pushes the update
+ * over GMCP.
+ *
+ * @param {float} x - The new SP value.
+ */
+void set_sp(float x) {
+  __sp = to_float(x);
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_VITALS, ([
+    GMCP_LBL_CHAR_VITALS_SP: sprintf("%.2f", __sp),
+  ]));
+}
+
+/**
+ * Sets the base maximum skill points to the given value and pushes the
+ * update over GMCP.
+ *
+ * @param {float} x - The new maximum SP value.
+ */
+void set_max_sp(float x) {
+  __max_sp = to_float(x);
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_VITALS, ([
+    GMCP_LBL_CHAR_VITALS_MAX_SP: sprintf("%.2f", __max_sp),
+  ]));
+}
+
+/**
+ * Sets current movement points to the given value and pushes the update
+ * over GMCP.
+ *
+ * @param {float} x - The new MP value.
+ */
+void set_mp(float x) {
+  __mp = to_float(x);
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_VITALS, ([
+    GMCP_LBL_CHAR_VITALS_MP: sprintf("%.2f", __mp),
+  ]));
+}
+
+/**
+ * Sets the base maximum movement points to the given value and pushes
+ * the update over GMCP.
+ *
+ * @param {float} x - The new maximum MP value.
+ */
+void set_max_mp(float x) {
+  __max_mp = to_float(x);
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_VITALS, ([
+    GMCP_LBL_CHAR_VITALS_MAX_MP: sprintf("%.2f", __max_mp),
+  ]));
+}
+
+/**
+ * Adds to current hit points, clamping to the base maximum on the high
+ * end and to zero on the low end, then pushes the update over GMCP.
+ *
+ * @param {float} x - The amount to add; negative values subtract.
+ * @returns {float} The resulting HP.
+ */
+float adjust_hp(float x) {
+  __hp += to_float(x);
+
+  if(__hp > __max_hp)
+    __hp = __max_hp;
+
+  if(__hp <= 0.0)
+    __hp = 0.0;
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_VITALS, ([
+    GMCP_LBL_CHAR_VITALS_HP: sprintf("%.2f", __hp),
+  ]));
+
+  return __hp;
+}
+
+/**
+ * Adds to the base maximum hit points, flooring the maximum at zero and
+ * clamping current HP down when it would exceed the new maximum. Pushes
+ * both values over GMCP.
+ *
+ * @param {float} x - The amount to add to max HP; negative values
+ *                    subtract.
+ * @returns {float} The resulting maximum HP.
+ */
+float adjust_max_hp(float x) {
+  __max_hp += to_float(x);
+
+  if(__max_hp < 0.0)
+    __max_hp = 0.0;
+
+  if(__hp > __max_hp)
+    __hp = __max_hp;
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_VITALS, ([
+    GMCP_LBL_CHAR_VITALS_HP: sprintf("%.2f", __hp),
+    GMCP_LBL_CHAR_VITALS_MAX_HP: sprintf("%.2f", __max_hp),
+  ]));
+
+  return __max_hp;
+}
+
+/**
+ * Adds to current skill points, clamping to the base maximum, then
+ * pushes the update over GMCP.
+ *
+ * @param {float} x - The amount to add; negative values subtract.
+ * @returns {float} The resulting SP.
+ */
+float adjust_sp(float x) {
+  __sp += to_float(x);
+
+  if(__sp > __max_sp)
+    __sp = __max_sp;
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_VITALS, ([
+    GMCP_LBL_CHAR_VITALS_SP: sprintf("%.2f", __sp),
+  ]));
+
+  return __sp;
+}
+
+/**
+ * Adds to the base maximum skill points, flooring the maximum at zero
+ * and clamping current SP down when it would exceed the new maximum.
+ * Pushes both values over GMCP.
+ *
+ * @param {float} x - The amount to add to max SP; negative values
+ *                    subtract.
+ * @returns {float} The resulting maximum SP.
+ */
+float adjust_max_sp(float x) {
+  __max_sp += to_float(x);
+
+  if(__max_sp < 0.0)
+    __max_sp = 0.0;
+
+  if(__sp > __max_sp)
+    __sp = __max_sp;
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_VITALS, ([
+    GMCP_LBL_CHAR_VITALS_SP: sprintf("%.2f", __sp),
+    GMCP_LBL_CHAR_VITALS_MAX_SP: sprintf("%.2f", __max_sp),
+  ]));
+
+  return __max_sp;
+}
+
+/**
+ * Adds to current movement points, clamping to the base maximum, then
+ * pushes the update over GMCP.
+ *
+ * @param {float} x - The amount to add; negative values subtract.
+ * @returns {float} The resulting MP.
+ */
+float adjust_mp(float x) {
+  __mp += to_float(x);
+
+  if(__mp > __max_mp)
+    __mp = __max_mp;
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_VITALS, ([
+    GMCP_LBL_CHAR_VITALS_MP: sprintf("%.2f", __mp),
+  ]));
+
+  return __mp;
+}
+
+/**
+ * Adds to the base maximum movement points, flooring the maximum at
+ * zero and clamping current MP down when it would exceed the new
+ * maximum. Pushes both values over GMCP.
+ *
+ * @param {float} x - The amount to add to max MP; negative values
+ *                    subtract.
+ * @returns {float} The resulting maximum MP.
+ */
+float adjust_max_mp(float x) {
+  __max_mp += to_float(x);
+
+  if(__max_mp < 0.0)
+    __max_mp = 0.0;
+
+  if(__mp > __max_mp)
+    __mp = __max_mp;
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_CHAR_VITALS, ([
+    GMCP_LBL_CHAR_VITALS_MP: sprintf("%.2f", __mp),
+    GMCP_LBL_CHAR_VITALS_MAX_MP: sprintf("%.2f", __max_mp),
+  ]));
+
+  return __max_mp;
+}
+
+/**
+ * Advances the regeneration counter and, once a full regen interval has
+ * elapsed (or when forced), restores each depleted pool by its race's
+ * per-tick regen rate. HP and SP only regenerate out of combat; MP
+ * regenerates regardless. Does nothing if the race defines no regen
+ * rate.
+ *
+ * @protected
+ * @param {int} [force=0] - When true, regenerate immediately without
+ *                          resetting the interval counter.
+ */
+protected void heal_tick(int force: (: 0 :)) {
+  mapping rate = module("race", "query_regen_rate");
+
+  if(nullp(rate))
+    rate = ([
+      "hp" : pcp(this_object()) ? 2.0 : 15.0,
+      "sp" : pcp(this_object()) ? 2.0 : 15.0,
+      "mp" : pcp(this_object()) ? 2.0 : 15.0,
+    ]);
+
+  int fighting = in_combat();
+
+  if((++__tick >= __regen_interval_pulses) || force) {
+    if(!force)
+      __tick = 0;
+
+    if(!fighting && __hp < __max_hp)
+      adjust_hp(rate.hp);
+    if(!fighting && __sp < __max_sp)
+      adjust_sp(rate.sp);
+    if(__mp < __max_mp)
+      adjust_mp(rate.mp);
+  }
+}
+
+/**
+ * Sets the living's heartbeat rate, clamped to the range 5 to 100.
+ *
+ * @param {int} x - The desired heartbeat rate.
+ * @returns {int} The rate actually applied after clamping.
+ */
+int set_heart_rate(int x) {
+  x = clamp(x, 5, 100);
+
+  set_heart_beat(x);
+
+  return x;
+}
+
+/**
+ * Adjusts the heartbeat rate by a delta relative to the current rate,
+ * subject to the same clamping as set_heart_rate.
+ *
+ * @param {int} x - The amount to add to the current heartbeat rate.
+ * @returns {int} The rate actually applied after clamping.
+ */
+int add_heart_rate(int x) {
+  return set_heart_rate(query_heart_beat() + x);
+}
+
+/**
+ * Recomputes the regeneration interval (in heartbeat pulses) from the
+ * HEART_PULSE and HEARTBEATS_TO_REGEN configuration values and resets
+ * the tick counter.
+ */
+void init_healing() {
+  // Calculate regen interval based on the product of HEART_PULSE and
+  // HEARTBEATS_TO_REGEN converted from ms to seconds.
+  __regen_interval_pulses =
+      to_int(
+        (mud_config("HEART_PULSE") * mud_config("HEARTBEATS_TO_REGEN"))
+        / 1_000.0
+      );
+
+  __tick = 0;
+}
+
+/**
+ * Returns the current heartbeat rate.
+ *
+ * @returns {int} The heartbeat rate.
+ */
+int query_heart_rate() {
+  return query_heart_beat();
+}
+
+/**
+ * Returns the regeneration interval in heartbeat pulses.
+ *
+ * @returns {int} Number of pulses between regeneration ticks.
+ */
+int query_regen_duration() {
+  return __regen_interval_pulses;
+}
+
+/**
+ * Restores all three vital pools to their (buffed) maximum values.
+ */
+void restore() {
+  set_hp(query_max_hp());
+  set_sp(query_max_sp());
+  set_mp(query_max_mp());
+}
+
+/**
+ * Sets the living's dead flag.
+ *
+ * @param {int} x - Truthy to mark dead, falsy to mark alive.
+ * @returns {int} The resulting dead flag (0 or 1).
+ */
+int set_dead(int x) {
+  __dead = !!x;
+
+  return __dead;
+}
+
+/**
+ * Returns the three vital ratios as an array in HP, SP, MP order.
+ *
+ * @returns {float*} Percentages for HP, SP, and MP.
+ */
+float *query_condition() {
+  return ({
+    hp_ratio(),
+    sp_ratio(),
+    mp_ratio(),
+  });
+}
+
+/**
+ * Returns human-readable condition labels for the three vital pools, derived
+ * from their current ratios, in HP, SP, MP order (e.g. "healthy", "focused",
+ * "full of stamina").
+ *
+ * @returns {string*} Condition strings for HP, SP, and MP.
+ */
+string *query_condition_string() {
+  string *result = allocate(3);
+  float *ratio = query_condition();
+
+  // HP Condition
+  if(ratio[0] <= 0.0)
+    result[0] = "dead";
+  else if(ratio[0] <= 10.0)
+    result[0] = "criticall injured";
+  else if(ratio[0] <= 30.0)
+    result[0] = "severely injured";
+  else if(ratio[0] <= 45.0)
+    result[0] = "moderately injured";
+  else if(ratio[0] <= 60.0)
+    result[0] = "injured";
+  else if(ratio[0] <= 75.0)
+    result[0] = "hurt";
+  else if(ratio[0] <= 90.0)
+    result[0] = "wounded";
+  else if(ratio[0] < 100.0)
+    result[0] = "bruised and nicked";
+  else
+    result[0] = "healthy";
+
+  // SP Condition
+  if(ratio[1] <= 5.0)
+    result[1] = "brain dead";
+  else if(ratio[1] <= 15.5)
+    result[1] = "depleted";
+  else if(ratio[1] <= 30.0)
+    result[1] = "unfocused";
+  else if(ratio[1] <= 45.0)
+    result[1] = "mentally fuzzy";
+  else if(ratio[1] <= 60.0)
+    result[1] = "losing focus";
+  else if(ratio[1] <= 75.0)
+    result[1] = "clear-headed";
+  else if(ratio[1] <= 90.0)
+    result[1] = "sharp";
+  else if(ratio[1] < 100.0)
+    result[1] = "focused";
+  else
+    result[1] = "fully charged";
+
+  // MP Condition
+  if(ratio[2] <= 5.0)
+    result[2] = "exhausted";
+  else if(ratio[2] <= 15.5)
+    result[2] = "sluggish";
+  else if(ratio[2] <= 30.0)
+    result[2] = "fatigued";
+  else if(ratio[2] <= 45.0)
+    result[2] = "tired";
+  else if(ratio[2] <= 60.0)
+    result[2] = "somewhat tired";
+  else if(ratio[2] <= 75.0)
+    result[2] = "lively";
+  else if(ratio[2] <= 90.0)
+    result[2] = "energetic";
+  else if(ratio[2] < 100.0)
+    result[2] = "very lively";
+  else
+    result[2] = "full of stamina";
+
+  return result;
+}
+
+/**
+ * Returns whether the living is currently marked dead.
+ *
+ * @returns {int} 1 if dead, 0 otherwise.
+ */
+int is_dead() { return __dead; }

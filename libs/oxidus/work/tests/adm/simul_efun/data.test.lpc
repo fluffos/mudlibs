@@ -1,0 +1,150 @@
+// @lpc-nocheck
+/**
+ * @file /tests/adm/simul_efun/data.test.lpc
+ *
+ * Tests for the data_value, data_write, data_del, and data_inc
+ * simul_efuns from /adm/simul_efun/data.c.
+ *
+ * Uses a fixture file under __fixtures/ that is cleaned at the
+ * start of each test that needs a known starting state.
+ */
+
+#include <test.h>
+
+inherit STD_TEST;
+
+#define FIXTURE_DIR "/tests/adm/simul_efun/__fixtures"
+#define FIXTURE FIXTURE_DIR "/data.dat"
+
+private void ensure_dir() {
+  if(file_size(FIXTURE_DIR) != -2)
+    mkdir(FIXTURE_DIR);
+}
+
+private void clean() {
+  if(file_exists(FIXTURE))
+    rm(FIXTURE);
+}
+
+private void seed(string contents) {
+  clean();
+  write_file(FIXTURE, contents, 1);
+}
+
+void setup() {
+  ensure_dir();
+
+  describe("data_value", ({
+    test("returns undefined for missing file", function() {
+      clean();
+      ASSERT_EQ(undefined, data_value(FIXTURE, "key"));
+    }),
+    test("returns default when key not in file", function() {
+      seed("other|7\n");
+      ASSERT_EQ("def", data_value(FIXTURE, "key", "def"));
+    }),
+    test("returns undefined when key absent and no default", function() {
+      seed("other|7\n");
+      ASSERT_EQ(undefined, data_value(FIXTURE, "key"));
+    }),
+    test("returns single int value unwrapped", function() {
+      seed("count|42\n");
+      ASSERT_EQ(42, data_value(FIXTURE, "count"));
+    }),
+    test("returns multiple values as array", function() {
+      seed("stats|10|12|15\n");
+      ASSERT_EQ(({ 10, 12, 15 }), data_value(FIXTURE, "stats"));
+    }),
+    test("only matches whole-key, not prefix", function() {
+      seed("name_long|9\nname|3\n");
+      ASSERT_EQ(3, data_value(FIXTURE, "name"));
+    }),
+  }));
+
+  describe("data_write", ({
+    test("updates existing key in file", function() {
+      seed("count|10\n");
+      data_write(FIXTURE, "count", 99);
+      ASSERT_EQ(99, data_value(FIXTURE, "count"));
+    }),
+    test("creates a new entry alongside existing entries", function() {
+      seed("other|5\n");
+      data_write(FIXTURE, "count", 7);
+      ASSERT_EQ(7, data_value(FIXTURE, "count"));
+      ASSERT_EQ(5, data_value(FIXTURE, "other"));
+    }),
+    test("creates first entry in a new file", function() {
+      clean();
+      data_write(FIXTURE, "count", 7);
+      ASSERT_EQ(7, data_value(FIXTURE, "count"));
+    }),
+    test("stores multiple values under one key", function() {
+      clean();
+      data_write(FIXTURE, "stats", 10, 12, 15);
+      ASSERT_EQ(({ 10, 12, 15 }), data_value(FIXTURE, "stats"));
+    }),
+  }));
+
+  describe("data_del", ({
+    test("removes existing key and returns 1", function() {
+      seed("a|1\nb|2\n");
+      ASSERT_EQ(1, data_del(FIXTURE, "a"));
+      ASSERT_EQ(undefined, data_value(FIXTURE, "a"));
+      ASSERT_EQ(2, data_value(FIXTURE, "b"));
+    }),
+    test("returns 0 for missing key", function() {
+      seed("a|1\n");
+      ASSERT_EQ(0, data_del(FIXTURE, "missing"));
+    }),
+    test("removes file when last entry deleted", function() {
+      seed("only|1\n");
+      data_del(FIXTURE, "only");
+      ASSERT_EQ(0, file_exists(FIXTURE));
+    }),
+    test("returns 0 when file is null", function() {
+      ASSERT_EQ(0, data_del(undefined, "k"));
+    }),
+    test("returns 0 when key is null", function() {
+      seed("a|1\n");
+      ASSERT_EQ(0, data_del(FIXTURE, undefined));
+    }),
+    test("only deletes whole-key match, not a prefix", function() {
+      seed("name_long|9\nname|3\n");
+      data_del(FIXTURE, "name");
+      ASSERT_EQ(9, data_value(FIXTURE, "name_long"));
+      ASSERT_EQ(undefined, data_value(FIXTURE, "name"));
+    }),
+  }));
+
+  describe("data_inc", ({
+    test("creates key with inc value when missing", function() {
+      clean();
+      ASSERT_EQ(5, data_inc(FIXTURE, "count", 5));
+      ASSERT_EQ(5, data_value(FIXTURE, "count"));
+    }),
+    test("default increment is 1", function() {
+      clean();
+      ASSERT_EQ(1, data_inc(FIXTURE, "count"));
+    }),
+    test("increments an existing value and persists it", function() {
+      seed("count|10\n");
+      data_inc(FIXTURE, "count", 5);
+      ASSERT_EQ(15, data_value(FIXTURE, "count"));
+    }),
+    test("returns the new value after incrementing existing key", function() {
+      seed("count|10\n");
+      ASSERT_EQ(15, data_inc(FIXTURE, "count", 5));
+    }),
+    test("zero increment returns the current value unchanged", function() {
+      seed("count|7\n");
+      ASSERT_EQ(7, data_inc(FIXTURE, "count", 0));
+      ASSERT_EQ(7, data_value(FIXTURE, "count"));
+    }),
+    test("only increments whole-key match, not a prefix", function() {
+      seed("name_long|9\nname|3\n");
+      data_inc(FIXTURE, "name", 1);
+      ASSERT_EQ(9, data_value(FIXTURE, "name_long"));
+      ASSERT_EQ(4, data_value(FIXTURE, "name"));
+    }),
+  }));
+}

@@ -1,0 +1,190 @@
+/**
+ * @file /std/cmd/cmd.lpc
+ *
+ * Basic command object. Provides the standard framework for
+ * all commands, including help/usage text, file and directory
+ * resolution, and the command entry point.
+ *
+ * @created 2022-08-24 - Gesslar
+ * @last_modified 2026-07-13 - Gesslar
+ *
+ * @history
+ * 2022-08-24 - Gesslar - Created
+ * 2024-08-16 - Gesslar - Added resolve_dir and resolve_file
+ * 2026-07-13 - Gesslar - Re-wired query_help()/_usage() to assemble
+ *                        usage_text and help_text; defined help() default
+ */
+
+inherit STD_OBJECT;
+
+// Functions
+public string help(object caller);
+public string usage(object caller);
+public int _usage(object tp);
+public mixed main(object user, string arg);
+
+// Variables
+protected mixed help_text = (: help :);
+protected mixed usage_text = (: usage :);
+
+// Private so only the driver can call it.
+private void create() {
+  setup_chain();
+}
+
+/**
+ * Returns the assembled help text for this command, combining its usage and
+ * help text. Both `usage_text` and `help_text` may be a plain string or a
+ * closure returning one; each is resolved with evaluate(). Commands may
+ * override this directly, or simply set the variables in setup().
+ *
+ * @param {STD_BODY} caller - The player requesting help
+ * @returns {string} The assembled help text, or "" if none is available
+ */
+string query_help(object caller) {
+  string usage = evaluate(usage_text, caller);
+  string help = evaluate(help_text, caller);
+  string result = "";
+
+  if(stringp(usage)) {
+    usage = rtrim(usage, "\n");
+    if(strlen(usage)) {
+      if(strsrch(usage, "\n") == -1)
+        result = "Usage: " + usage;
+      else
+        result = "Usage:\n" + usage;
+    }
+  }
+
+  if(stringp(help)) {
+    help = rtrim(help, "\n");
+    if(strlen(help)) {
+      if(strlen(result))
+        result += "\n\n";
+      result += help;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Resolves a file path from a player's argument. If the
+ * argument matches an object in the environment, returns its
+ * base name (or virtual master for virtual objects). Otherwise
+ * resolves relative to the player's current working directory.
+ *
+ * @param {STD_BODY} tp - The caller resolving the file
+ * @param {string} arg - The file path or object identifier
+ * @returns {string} The resolved file path
+ */
+string resolve_file(object tp, string arg) {
+  string file;
+
+  // If it looks like a file path, resolve it directly without trying to
+  // load it as an object — the file might have compilation errors.
+  if(strsrch(arg, "/") != -1 || ends_with(arg, ".lpc") || ends_with(arg, ".lpc")) {
+    file = resolve_path(tp->query_env("cwd"), arg);
+  } else {
+    // Otherwise, check if it matches an object in inventory or environment.
+    // If so, return its file path.
+    /** @type {STD_ITEM} */ object ob = get_object(arg);
+    if(objectp(ob)) {
+      if(virtualp(ob))
+        file = ob->query_virtual_master();
+      else
+        file = base_name(ob) + ".lpc";
+    } else {
+      file = resolve_path(tp->query_env("cwd"), arg);
+    }
+  }
+
+  return file;
+}
+
+/**
+ * Resolves a directory path from a player's argument. If the
+ * argument matches an object in the environment, returns the
+ * directory portion of its file path. Otherwise resolves
+ * relative to the player's current working directory.
+ *
+ * @param {STD_BODY} tp - The caller resolving the directory
+ * @param {string} arg - The directory path or object identifier
+ * @returns {string} The resolved directory path
+ */
+string resolve_dir(object tp, string arg) {
+  /** @type {STD_ITEM} */ object ob = get_object(arg);
+  string dir;
+
+  if(ob) {
+    string *parts;
+    string file;
+
+    if(virtualp(ob))
+      file = ob->query_virtual_master();
+    else
+      file = base_name(ob);
+
+    parts = dir_file(file);
+    dir = parts[0];
+  } else {
+    dir = resolve_path(tp->query_env("cwd"), arg);
+  }
+
+  return dir;
+}
+
+/**
+ * Prints the command's usage text to the caller, formatted as a "Usage:"
+ * block. Commands typically `return _usage(tp)` from main() when invoked
+ * with missing or invalid arguments.
+ *
+ * @param {STD_BODY} tp - The caller to show the usage to
+ * @returns {int} 1 if usage was shown, 0 if none is available
+ */
+int _usage(object tp) {
+  string usage = evaluate(usage_text, tp);
+
+  if(!stringp(usage))
+    return 0;
+
+  usage = rtrim(usage, "\n");
+  if(!strlen(usage))
+    return 0;
+
+  if(strsrch(usage, "\n") == -1)
+    usage = "Usage: " + usage;
+  else
+    usage = "Usage:\n" + usage;
+
+  _info(tp, "%s", usage);
+
+  return 1;
+}
+
+/**
+ * Identifies this object as a command.
+ *
+ * @returns {int} Always returns 1
+ */
+int is_command() {
+  return 1;
+}
+
+/**
+ * Default usage-text provider, resolved by the `usage_text` closure when a
+ * command sets no usage string of its own.
+ *
+ * @param {STD_BODY} _caller - The calling living.
+ * @returns {string} Always null; commands supply their own usage_text.
+ */
+string usage(object _caller) { return null; }
+
+/**
+ * Default help-text provider, resolved by the `help_text` closure when a
+ * command sets no help string of its own.
+ *
+ * @param {STD_BODY} _caller - The calling living.
+ * @returns {string} Always null; commands supply their own help_text.
+ */
+string help(object _caller) { return null; }

@@ -1,0 +1,90 @@
+/**
+ * @file /cmds/spell/motes.lpc
+ * Motes spell.
+ *
+ * @created 2024-08-09 - Gesslar
+ * @last_modified 2026-08-23 - Gesslar
+ *
+ * @history
+ * 2024-08-09 - Gesslar - Created
+ * 2026-08-23 - Gesslar - Moved the cast delay onto async_act/await
+ */
+
+inherit STD_SPELL;
+
+private async void cast(object tp, object victim);
+
+void setup() {
+  set_name("motes of light");
+
+  aggressive = true;
+  target_current = true;
+  sp_cost = 5.0;
+
+  cooldowns = ([
+    "motes" : ({ "", 10 }),
+  ]);
+
+  usage_text = "motes <target>";
+  help_text =
+    "Summon motes of light to strike a target. This spell costs "
+    `${evaluate(sp_cost)} SP and has a cooldown of `
+    `${evaluate(cooldowns["motes"][1])} seconds.`
+  ;
+}
+
+mixed use(/** @type {STD_BODY} */ object tp, string arg) {
+  object victim;
+
+  if(!victim = local_target(tp, arg, (: living($1) && $1 != $(tp) :)))
+    return 1;
+
+  apply_cost(tp, arg);
+  apply_cooldown(tp, arg);
+
+  tp->simple_action("$N $vsummon motes of light...");
+
+  cast(tp, victim);
+
+  return 1;
+}
+
+/**
+ * Waits out the motes cast, then resolves the spell.
+ *
+ * Suspends on the "motes" act, so moving away or anything else that cancels
+ * acts resolves the wait with 0 and the cast is abandoned.
+ *
+ * @param {STD_BODY} tp - The body casting the spell.
+ * @param {STD_BODY} victim - The body being targeted.
+ */
+private async void cast(/** @type {STD_BODY} */ object tp,
+                        /** @type {STD_BODY} */ object victim) {
+  mixed err = acatch {
+    if(!await tp->async_act("motes", 2.0))
+      return;
+
+    if(!same_env_check(tp, victim))
+      return;
+
+    if(tp->can_strike(victim, "arcane.discipline.light")) {
+      float damage = 5.0 + tp->query_damage();
+
+      tp->targetted_action(
+        "{{"+COLOUR_D->random_bright_hex()+"}}Motes of light strike $t!{{res}}",
+        victim
+      );
+      tp->deliver_magic_damage(victim, damage, "light");
+      tp->use_skill("arcane.discipline.light", 1.15);
+    } else {
+      tp->simple_action("The motes of light disperse harmlessly.");
+      tp->use_skill("arcane.discipline.light", 0.25);
+      victim->use_skill("combat.defence.evade", 0.1);
+    }
+
+    victim->start_attack(tp);
+  };
+
+  if(err)
+    debug_message(`motes: ${err}\n`);
+}

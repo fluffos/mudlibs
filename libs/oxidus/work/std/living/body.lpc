@@ -1,0 +1,385 @@
+/**
+ * @file /std/living/body.lpc
+ *
+ * Body object that is shared by players and NPCs.
+ *
+ * @created 2024-07-29 - Gesslar
+ * @last_modified 2026-07-23 - Gesslar
+ *
+ * @history
+ * 2024-07-29 - Gesslar - Created
+ * 2026-07-04 - Gesslar - Applied coding style and documentation
+ * 2026-07-23 - Gesslar - Renamed mudlib_setup() to std_setup(). It will now
+ *                        run before mudlib_setup() so inheritors will not need
+ *                        to make super calls.
+ *
+ */
+
+#include <body.h>
+#include <commands.h>
+#include <env.h>
+#include <player.h>
+#include <gmcp_defines.h>
+#include <driver/origin.h>
+
+inherit STD_CONTAINER;
+inherit STD_ITEM;
+
+inherit __DIR__ "act";
+inherit __DIR__ "advancement";
+inherit __DIR__ "alias";
+inherit __DIR__ "appearance";
+inherit __DIR__ "attributes";
+inherit __DIR__ "boon";
+inherit __DIR__ "combat";
+inherit __DIR__ "communication";
+inherit __DIR__ "ed";
+inherit __DIR__ "env";
+inherit __DIR__ "equipment";
+inherit __DIR__ "pager";
+inherit __DIR__ "race";
+inherit __DIR__ "skills";
+inherit __DIR__ "visibility";
+inherit __DIR__ "vitals";
+inherit __DIR__ "wealth";
+
+inherit EXT_ACTION;
+inherit EXT_LOG;
+
+void std_setup() {
+  if(!clonep() &&
+     origin() != ORIGIN_LOCAL &&
+     previous_object() != body_d()
+    ) {
+    return;
+  }
+
+  enable_commands();
+  add_standard_paths();
+  // Explicit this_object(): adminp()/devp() default to previous_object()
+  // when called with no argument, which here is std_setup()'s CALLER
+  // (body_d or the driver's own create() apply), never this body -- so
+  // an ordinary (non-first-login) admin/dev reconnect silently got only
+  // the standard command paths, with no error, just "What?" on every
+  // adm/dev/file command until re-promoted via makeadmin/makedev (which
+  // call add_admin_path()/add_dev_path() directly on the body).
+  if(adminp(this_object()))
+    add_admin_path();
+  else if(devp(this_object()))
+    add_dev_path();
+
+  if(!query_pref("prompt"))
+    set_pref("prompt", ">");
+
+  set_log_level(0);
+  set_prevent_get(1);
+  // TODO figure out how we were getting this twice and then
+  //      fix that and then remove remove_action() here
+  remove_action("command_hook", "");
+  add_action("command_hook", "", 1);
+  set_ignore_mass(1);
+}
+
+private nosave string *body_slots = ({
+  "head", "neck", "torso", "back", "arms", "hands", "legs", "feet"
+});
+
+private nosave string *weapon_slots = ({
+  "right hand", "left hand"
+});
+
+/**
+ * Returns the armour slots this body provides.
+ *
+ * @returns {string*} A copy of the body slot names.
+ */
+protected string *query_body_slots() {
+  return copy(body_slots);
+}
+
+/**
+ * Returns the weapon slots this body provides.
+ *
+ * @returns {string*} A copy of the weapon slot names.
+ */
+public string *query_weapon_slots() {
+  return copy(weapon_slots);
+}
+
+/**
+ * Handles this body's death. Stops all attacks, ejects any switched-user
+ * occupant, spawns a corpse and transfers inventory and wealth into it,
+ * then either raises a ghost (for players) or awards kill experience (for
+ * NPCs) before removing the body.
+ *
+ * @returns {void}
+ */
+protected void die() {
+  object
+  /** @type {STD_BODY} */   body,
+  /** @type {LIB_CORPSE} */ corpse,
+  /** @type {STD_ITEM} */   ob,
+  /** @type {STD_ITEM} */   next;
+
+  if(!environment())
+    return;
+
+  if(!is_dead())
+    return;
+
+  stop_all_attacks();
+
+  if(objectp(body = query_su_body())) {
+    exec(body, this_object());
+    body->move(environment());
+    body->simple_action(
+      "$N $vis violently ejected from the body of $o.",
+      this_object()
+    );
+    clear_su_body();
+  }
+
+  simple_action("$N $vhave perished.");
+  save_body();
+  emit(SIG_PLAYER_DIED, this_object(), killed_by());
+
+  corpse = new(LIB_CORPSE);
+  corpse->setup_corpse(this_object(), killed_by());
+
+  if(function_exists("query_loot_table"))
+    LOOT_D->loot_drop(killed_by(), this_object());
+  if(function_exists("query_coin_table"))
+    LOOT_D->coin_drop(killed_by(), this_object());
+
+  ob = first_inventory(this_object());
+  while(ob) {
+    next = next_inventory(ob);
+    if(ob->move(corpse))
+      ob->remove();
+    ob = next;
+  }
+
+  // Now move coin objects to the corpse
+  if(query_total_wealth()) {
+    mapping wealth = query_all_wealth();
+    foreach(string currency, int amount in wealth) {
+      object coin = new(LIB_COIN);
+      coin->set_up(currency, amount);
+      if(coin->move(corpse))
+        if(coin)
+          coin->remove();
+    }
+  }
+
+  if(corpse->move(environment()))
+    corpse->remove();
+
+  if(userp())  {
+    object ghost = BODY_D->create_ghost(query_privs());
+    exec(ghost, this_object());
+    ghost->setup_body();
+    ghost->set_hp(-1.0);
+    ghost->set_sp(-1.0);
+    ghost->set_mp(-1.0);
+    ghost->move(environment());
+  } else {
+    ADVANCE_D->kill_xp(killed_by(), this_object());
+  }
+
+  remove();
+}
+
+/**
+ * Moves this body to a destination, recording the previous environment as
+ * the last location when the move succeeds.
+ *
+ * @param {mixed} ob - The destination object or path to move into.
+ * @returns {int} 0 on success, or a non-zero move failure code.
+ */
+public varargs int move(mixed ob) {
+  int result;
+  object env;
+
+  env = environment();
+  result = ::move(ob);
+
+  if(result)
+    return result;
+
+  if(env)
+    set_last_location(env);
+
+  return result;
+}
+
+/**
+ * Disperses this body's inventory when it is removed, dropping items into
+ * the environment where possible and removing those that prevent dropping.
+ *
+ * @param {object} _prev - The previous environment before removal.
+ * @returns {void}
+ */
+protected void event_remove(object _prev) {
+  object
+  /** @type {STD_ITEM} */ ob,
+  /** @type {STD_ITEM} */ next;
+
+  ob = first_inventory();
+  while(ob) {
+    next = next_inventory(ob);
+    if(call_if(ob, "prevent_drop")) {
+      ob->remove();
+    } else {
+      if(environment()) {
+        int result = ob->move(environment());
+        if(result)
+          ob->remove();
+      }
+    }
+    ob = next;
+  }
+}
+
+/**
+ * Moves a living body between environments, cancelling any in-progress
+ * actions and broadcasting departure and arrival messages to the rooms
+ * involved. A message of "SILENT" suppresses that half of the narration.
+ *
+ * @param {mixed} dest - The destination object or path.
+ * @param {string} [dir="somewhere"] - The direction of travel, used in the
+ *  departure message.
+ * @param {string} [depart_message] - Departure message override, or "SILENT"
+ *  to suppress it.
+ * @param {string} [arrive_message] - Arrival message override, or "SILENT" to
+ *  suppress it.
+ * @returns {int} 0 on success, or a non-zero move failure code.
+ */
+public varargs int move_living(mixed dest, string dir, string depart_message, string arrive_message) {
+  int result;
+  object curr = environment();
+  string tmp;
+
+  result = move(dest);
+  if(result)
+    return result;
+
+  if(is_acting()) {
+    tell(this_object(), "You stop what you are doing.\n");
+    cancel_acts();
+  }
+
+  if(curr) {
+    if(depart_message != "SILENT") {
+      depart_message =
+        depart_message
+        || query_env("move_out")
+        || "$N leaves $D.";
+
+      dir = dir || "somewhere";
+
+      tmp = replace_string(depart_message, "$N", query_name());
+      tmp = replace_string(tmp, "$D", dir);
+
+      tmp = append(tmp, "\n");
+
+      tell_down(curr, tmp);
+    }
+  }
+
+  if(arrive_message != "SILENT") {
+    curr = environment();
+
+    arrive_message =
+      arrive_message
+      || query_env("move_in")
+      || "$N arrives.\n";
+    tmp = replace_string(arrive_message, "$N", query_name());
+
+    tmp = append(tmp, "\n");
+
+    tell_down(curr, tmp, null, ({ this_object() }));
+  }
+
+  force_me("look");
+
+  GMCP_D->send_gmcp(this_object(), GMCP_PKG_ROOM_INFO, environment());
+
+  return result;
+}
+
+/** Body bodily functions */
+
+/**
+ * Reports whether the body is presently able. This is a general status,
+ * such as, are they a player or monster and alive, can they manipulate
+ * things, like not stunned, etc.
+ *
+ * TODO: For now, just returns 1 until more is implemented that will affect
+ * this.
+ *
+ * @returns {int | string} 1 if the body passes the ability check, otherwise a
+ *  string error message.
+ */
+public int is_able() {
+  return 1;
+}
+
+// Misc functions
+
+/**
+ * Writes this body's configured prompt to its connection.
+ *
+ * @returns {void}
+ */
+protected void write_prompt() {
+  string prompt = query_pref("prompt");
+
+  receive(prompt + " ");
+}
+
+/**
+ * Returns this body's logging verbosity level, read from preferences.
+ *
+ * @returns {int} The configured log level, or 0 when unset.
+ */
+public int query_log_level() {
+  if(!query_pref("log_level"))
+    return 0;
+
+  return to_int(query_pref("log_level"));
+}
+
+/* Switch User Functionality */
+
+/**
+ * This variable holds the body we are inhabiting if not our own.
+ *
+ * @type {STD_BODY}
+ */
+private object su_body;
+
+/**
+ * Register the body we have moved into.
+ *
+ * @param {STD_BODY} source - The body we are now inhabiting.
+ */
+public void set_su_body(object source) {
+  su_body = source;
+}
+
+/**
+ * Returns the body we are inhabiting. Will be undefined if we are already in
+ * our own body.
+ *
+ * @returns {STD_BODY|0} The body we are currently inhabiting, or null.
+ */
+public object query_su_body() {
+  return su_body;
+}
+
+/**
+ * Resets our current switch user body to null.
+ */
+public void clear_su_body() {
+  su_body = null;
+}

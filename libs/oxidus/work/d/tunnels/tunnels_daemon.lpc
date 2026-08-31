@@ -1,0 +1,194 @@
+/**
+ * @file /d/tunnels/tunnels_daemon.lpc
+ *
+ * Virtual map daemon for the underground tunnels area. Loads the
+ * tunnels map file and supplies short, long, and exit data to the
+ * virtual rooms generated from it.
+ *
+ * @created 2024-08-25 - Gesslar
+ * @last_modified 2026-05-04 - Gesslar
+ *
+ * @history
+ * 2024-08-25 - Gesslar - Created
+ * 2026-05-04 - Gesslar - Documented
+ */
+
+inherit STD_VIRTUAL_MAP;
+
+private void setup_tunnel_shorts();
+private void setup_tunnel_longs();
+private void load_mobs();
+
+private nosave string *tunnel_shorts;
+private nosave string *tunnel_longs;
+private nosave string cavern_long;
+private nosave int rot = 0;
+
+/**
+ * Weighted spawn pool for tunnel mobs, keyed by a mapping containing
+ * the mob path and level range, with the value being the relative
+ * spawn weight.
+ *
+ * @type {([ ([ string: mixed ]): int ])}
+ */
+private nosave mapping mob_files = ([]);
+
+void setup() {
+  apply_map_file(__DIR__ "tunnels_map.txt");
+  setup_tunnel_shorts();
+  setup_tunnel_longs();
+  load_mobs();
+}
+
+/**
+ * Populates the rotation pool of short descriptions used by ordinary
+ * tunnel rooms.
+ */
+private void setup_tunnel_shorts() {
+  tunnel_shorts = ({
+    "Narrow Tunnel",
+    "Winding Passage",
+    "Damp Corridor",
+    "Dark Tunnel",
+  });
+}
+
+/**
+ * Populates the rotation pool of long descriptions used by ordinary
+ * tunnel rooms, along with the single shared long for cavern rooms.
+ */
+private void setup_tunnel_longs() {
+  tunnel_longs = ({
+    "The tunnel here is narrow and claustrophobic, with rough dirt walls "
+    "pressing in from all sides. The air is stale and heavy with the scent "
+    "of earth. Your footsteps echo softly in the confined space, and you "
+    "can hear the occasional drip of water from unseen crevices.",
+
+    "This section of the tunnel winds unpredictably, twisting and turning "
+    "through the earth. The uneven floor is littered with small rocks and "
+    "debris, making each step treacherous. The darkness seems to deepen "
+    "around each bend, hiding whatever may lie ahead.",
+
+    "Moisture seeps through the walls here, creating a damp and chilly "
+    "atmosphere. The tunnel widens slightly, but the ceiling remains low. "
+    "Patches of pale fungi cling to the walls, providing a faint, eerie glow "
+    "that barely illuminates the passage.",
+
+    "Darkness envelops this part of the tunnel, making it difficult to see "
+    "more than a few feet ahead. The walls are smooth here, as if worn down "
+    "by countless years of flowing water or passing creatures. An unsettling "
+    "silence hangs in the air, broken only by your own careful movements.",
+  });
+
+  cavern_long =
+  "The tunnel opens up into a small, natural cavern. The ceiling arches "
+  "high above, disappearing into darkness. Stalactites hang precariously "
+  "overhead, while stalagmites rise from the uneven floor. A faint echo "
+  "of dripping water can be heard, and the air feels slightly less "
+  "oppressive here. This cavern seems to be a crossroads of sorts, with "
+  "several tunnel openings visible along its perimeter.";
+}
+
+/**
+ * Virtual-map apply that assigns a short description to a generated
+ * room. Tunnel rooms ("O") receive a random entry from
+ * tunnel_shorts; cavern rooms ("X") receive a fixed short.
+ *
+ * @param {STD_ROOM} room - The virtual room being populated.
+ */
+public void setup_short(object room) {
+  int *coords = room->get_virtual_coordinates();
+  string room_type;
+
+  room_type = get_room_type(coords[0], coords[1], coords[2]);
+
+  if(room_type == "O")
+    room->set_short(element_of(tunnel_shorts));
+  else if(room_type == "X")
+    room->set_short("Underground Cavern");
+}
+
+/**
+ * Virtual-map apply that assigns a long description to a generated
+ * room. Tunnel rooms ("O") cycle through tunnel_longs in order via
+ * the rot index, wrapping around at the end of the array. Cavern
+ * rooms ("X") receive the shared cavern_long.
+ *
+ * @param {STD_ROOM} room - The virtual room being populated.
+ */
+public void setup_long(object room) {
+  int *coords = room->get_virtual_coordinates();
+  string room_type;
+
+  if(!coords)
+    return;
+
+  room_type = get_room_type(coords[0], coords[1], coords[2]);
+
+  if(room_type == "O") {
+    room->set_long(tunnel_longs[rot]);
+    if(++rot >= sizeof(tunnel_longs))
+      rot = 0;
+  } else if(room_type == "X")
+    room->set_long(cavern_long);
+}
+
+/**
+ * Virtual-map apply that assigns exits to a generated room. Uses
+ * the map's computed exits for the room's coordinates, with special-
+ * case "up" exits at the two surface shafts: (7,13,-1) climbs out to
+ * the well in the village square of Olum, and (0,0,-1) climbs out to
+ * the dry well on Thornwick green. The tunnel network between them
+ * forms the subsurface link between the two hamlets.
+ *
+ * @param {STD_ROOM} room - The virtual room being populated.
+ * @param {string} file - The virtual file identifier for the room
+ *                        (in "x,y,z" form).
+ */
+public void setup_exits(object room, string file) {
+  int *coords = room->get_virtual_coordinates();
+
+  if(!coords)
+    return;
+
+  // string room_type = get_room_type(coords[0], coords[1], coords[2]);
+  mapping exits = get_exits(coords[0], coords[1], coords[2]);
+
+  if(file == "7,13,-1")
+    exits["up"] = "../village/square";
+  else if(file == "0,0,-1")
+    exits["up"] = "../thornwick/thornwick_green";
+
+  room->set_exits(exits);
+}
+
+/**
+ * Loads the tunnels spawn pool from spawn.lpml into mob_files.
+ * Each entry is keyed by a mapping containing the mob's file path
+ * and level range, with the LPML weight as the value.
+ */
+private void load_mobs() {
+  mapping spawn = load_lpml(__DIR__ "spawn.lpml");
+
+  mob_files = ([]);
+
+  each(spawn, function(mapping mob) {
+    mapping mob_data = ([
+        "path": mob["path"],
+        "level": mob["level"]
+      ]);
+
+    mob_files[mob_data] = mob["weight"];
+  });
+}
+
+/**
+ * Returns the loaded spawn pool for tunnel rooms to use when
+ * deciding which mob to spawn.
+ *
+ * @returns {([ ([ string: mixed ]): int ])} The weighted spawn
+ *                                           pool mapping.
+ */
+public mapping query_mob_files() {
+  return mob_files;
+}

@@ -1,0 +1,168 @@
+/**
+ * @file /std/ext/bank.lpc
+ *
+ * Extension module that provides banking commands for room objects.
+ * Allows players to register accounts, deposit and withdraw currency,
+ * and check their balance. All amounts are stored internally as
+ * copper and converted on deposit/withdrawal.
+ *
+ * @created 2024-02-29 - Gesslar
+ * @last_modified 2024-02-29 - Gesslar
+ *
+ * @history
+ * 2024-02-29 - Gesslar - Created
+ */
+
+#include <daemons.h>
+
+void add_command(string cmd, string fun);
+
+/**
+ * Initialises the banking commands for the room. Should be called
+ * during room setup to register the register, deposit, withdraw,
+ * and balance commands.
+ */
+void init_bank() {
+  add_command("register", "cmd_register");
+  add_command("deposit", "cmd_deposit");
+  add_command("withdraw", "cmd_withdraw");
+  add_command("balance", "cmd_balance");
+}
+
+/**
+ * Displays the player's current bank balance.
+ *
+ * @param {STD_PLAYER} tp - The player checking their balance.
+ * @returns {string} A message with the balance or an error.
+ */
+mixed cmd_balance(object tp) {
+  mixed result;
+
+  result = BANK_D->query_balance(tp->query_name());
+  if(nullp(result))
+    return "You do not have an account with the bank.\n";
+
+  return "You have " + add_commas(result) + " coins in your account.\n";
+}
+
+/**
+ * Registers a new bank account for the player.
+ *
+ * @param {STD_PLAYER} tp - The player registering an account.
+ * @returns {string} A success or failure message.
+ */
+mixed cmd_register(object tp) {
+  mixed result;
+
+  result = BANK_D->new_account(tp->query_name());
+  if(stringp(result))
+    return result + "\n";
+
+  if(result == 0)
+    return "You already have an account with the bank.\n";
+
+  return "You have successfully registered an account with the bank.\n";
+}
+
+/**
+ * Deposits coins from the player's wealth into their bank
+ * account. The amount is converted to copper for internal storage.
+ *
+ * @param {STD_PLAYER} tp - The player making the deposit.
+ * @param {string} str - Expected format: "<number> <currency type>".
+ * @returns {string} A success or failure message.
+ */
+mixed cmd_deposit(object tp, string str) {
+  int num, conv, have;
+  string type;
+  mixed result;
+  string name;
+
+  if(!str)
+    return "Deposit what?\n";
+
+  if(sscanf(str, "%d %s", num, type) != 2)
+    return "Syntax: deposit <number> <type>\n";
+
+  if(num < 1)
+    return "You must deposit at least one coin.\n";
+
+  if(!CURRENCY_D->valid_currency_type(type))
+    return "That is not a valid currency type.\n";
+
+  name = tp->query_name();
+
+  result = BANK_D->query_balance(name);
+  if(nullp(result))
+    return "You do not have an account with the bank.\n";
+
+  have = tp->query_wealth(type);
+  if(have < num)
+    return "You do not have that many " + type + " coins.\n";
+
+  if(nullp(tp->adjust_wealth(type, -num)))
+    return "We were unable to process your transaction.\n";
+
+  conv = to_int(CURRENCY_D->convert_currency(num, type, "copper"));
+
+  result = BANK_D->add_balance(name, conv);
+
+  if(stringp(result))
+    return result + "\n";
+
+  return "You have deposited " + add_commas(num) + " " + type + " coins.\n";
+}
+
+/**
+ * Withdraws coins from the player's bank account into their
+ * wealth. The requested amount is converted from the specified
+ * currency type to copper for the balance check, then the coins
+ * are added to the player's wealth. If adjusting the player's
+ * wealth fails, the balance deduction is rolled back.
+ *
+ * @param {STD_PLAYER} tp - The player making the withdrawal.
+ * @param {string} str - Expected format: "<number> <currency type>".
+ * @returns {string} A success or failure message.
+ */
+mixed cmd_withdraw(object tp, string str) {
+  int num, base;
+  string type;
+  mixed result;
+  string name;
+
+  if(!str)
+    return "Withdraw what?\n";
+
+  if(sscanf(str, "%d %s", num, type) != 2)
+    return "Syntax: withdraw <number> <type>\n";
+
+  if(num < 1)
+    return "You must withdraw at least one coin.\n";
+
+  if(!CURRENCY_D->valid_currency_type(type))
+    return "That is not a valid currency type.\n";
+
+  name = tp->query_name();
+
+  result = BANK_D->query_balance(name);
+  if(nullp(result))
+    return "You do not have an account with the bank.\n";
+
+  base = to_int(CURRENCY_D->convert_currency(num, type, "copper"));
+
+  result = BANK_D->query_balance(name);
+  if(base > result)
+    return "You do not have that many coins in your account.\n";
+
+  result = BANK_D->add_balance(name, -base);
+  if(stringp(result))
+    return result + "\n";
+
+  result = tp->adjust_wealth(type, num);
+  if(stringp(result)) {
+    BANK_D->add_balance(name, base);
+    return append(result, "\n");
+  }
+
+  return "You have withdrawn " + add_commas(num) + " " + type + " coins.\n";
+}

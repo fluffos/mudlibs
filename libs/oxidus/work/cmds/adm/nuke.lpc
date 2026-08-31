@@ -1,0 +1,110 @@
+/**
+ * @file /cmds/adm/nuke.lpc
+ *
+ * Character wipe command. Mirrors awipe, but operates on a single character,
+ * removing that character's pfile, bank account, and group memberships, and
+ * detaching it from its owning account. The account itself is left intact.
+ *
+ * @created 2026-07-18 - Gesslar
+ * @last_modified 2026-07-18 - Gesslar
+ *
+ * @history
+ * 2026-07-18 - Gesslar - Created
+ */
+
+#include <logs.h>
+
+inherit STD_CMD;
+
+void confirm_nuke(string str, object caller, string character);
+
+void setup() {
+  usage_text = "nuke <character>";
+  help_text =
+    "This command deletes the target character, removing its pfile, bank "
+    "account, and group memberships from " + mud_name() + ", and detaching it "
+    "from its owning account. The account and its other characters are left "
+    "intact. This is NON-REVERSIBLE, so use with discretion.\n"
+    "\n"
+    "See also: awipe";
+}
+
+mixed main(/** @type {STD_PLAYER} */ object caller, string character) {
+  if(!adminp(previous_object()))
+    return _error("Access denied.");
+
+  if(!character)
+    return _usage(caller);
+
+  character = lower_case(character);
+
+  if(!user_exists(character))
+    return _error("Character '%s' does not exist.", character);
+
+  _question(
+    caller,
+    "Are you sure you want to delete character %s? [y/n] ",
+    character
+  );
+
+  input_to("confirm_nuke", 0, caller, character);
+
+  return 1;
+}
+
+void confirm_nuke(string str, object caller, string character) {
+  if(str != "y" && str != "yes") {
+    _info(caller, "Aborting character wipe.");
+    return;
+  }
+
+  object body;
+
+  _info(caller, "Wiping character '%s'.", character);
+
+  master()->purge_roles(character);
+
+  if(body = find_player(character)) {
+    _info(caller, "Disconnecting user '%s'.", character);
+    _ok(body, "You watch as your body dematerializes.");
+
+    if(environment(body)) {
+      tell_down(
+        environment(body),
+        `You watch as ${capitalize(character)} dematerializes before your eyes.\n`,
+        0,
+        ({ body })
+      );
+    }
+
+    body->remove();
+  }
+
+  _info(caller, "Removing bank account for user '%s'.", capitalize(character));
+  BANK_D->remove_account(character, caller);
+
+  string user_dir = user_data_directory(character);
+  if(directory_exists(user_dir)) {
+    mixed err;
+
+    _info(caller, "Deleting user directory for user '%s'.", capitalize(character));
+    err = catch(recursive_delete(as_directory(user_dir), true));
+
+    if(err) {
+      _error(caller, "Error while deleting user directory: %s", err);
+      return;
+    }
+  }
+
+  string account = ACCOUNT_D->character_account(character);
+  if(account) {
+    _info(caller, "Detaching character from account '%s'.", account);
+    ACCOUNT_D->remove_character(account, character);
+  }
+
+  _ok(caller, "Character '%s' has been nuked.", character);
+  log_file(LOG_NUKE,
+    `${capitalize(query_privs(caller))} nukes character ${character} on `
+    `${ldatetime()}\n`
+  );
+}

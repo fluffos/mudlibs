@@ -1,0 +1,282 @@
+/**
+ * @file /cmds/file/ls.lpc
+ *
+ * List files and directories
+ *
+ * @created 2026-07-14 - Gesslar
+ * @last_modified 2026-07-14 - Gesslar
+ *
+ * @history
+ * 2026-07-14 - Gesslar - Created
+ */
+
+#include <get_dir.h>
+
+inherit STD_CMD;
+
+void setup() {
+  help_text =
+    "Lists the contents of a directory, or a single entry if you name a "
+    "file. With no path it lists your current working directory. Wildcards "
+    "('*' and '?') are matched against the directory they appear in.\n"
+    "\n"
+    "Entries are coloured by kind — directories, source, headers, data, and "
+    "save files — and loaded objects are marked with an asterisk. Each "
+    "colour is a preference of its own — 'ls_directory', 'ls_source', "
+    "'ls_loaded', 'ls_header', 'ls_data', 'ls_save', and 'ls_other' — so "
+    "'set ls_source 6cf' will recolour source files.\n"
+    "\n"
+    "The '-l' flag switches to a long listing, adding each entry's size and "
+    "the date it was last modified.\n"
+    "\n"
+    "See also: cd, pwd, cat\n";
+}
+
+private mixed perform_ls(string target, string *flags);
+private mapping resolve_entry(string dir, mixed *entry);
+private mapping decorate_entry(mapping entry);
+private string *format_ls(mapping *entries, string *flags);
+private int sort_listing(mapping a, mapping b);
+
+mixed main(
+  /** @type {STD_PLAYER} */ object tp,
+  string arg
+) {
+  if(falsy(arg))
+    arg = ".";
+
+  mixed flags;
+  if(sscanf(arg, "-%s %s", flags, arg) == 2) {
+    flags = explode(flags, "");
+  } else if(sscanf(arg, "-%s", flags) == 1) {
+    // Flags with no path (e.g. "ls -l") — list the current directory.
+    flags = explode(flags, "");
+    arg = ".";
+  } else {
+    flags = ({});
+  }
+
+  string cwd = tp->query_env("cwd");
+  string path = resolve_path(cwd, arg);
+
+  // Gate on the developer's own identity. get_dir()'s own valid_read (in
+  // perform_ls) runs as the command object - a developer - so it only
+  // bounds the tool's reach, not this player's; this is the real per-developer
+  // check.
+  if(!master()->valid_read(path, tp, "ls"))
+    return _error(tp, "ls: %s: Permission denied.", arg);
+
+  // An existing directory: list its contents. The trailing slash is
+  // get_dir()'s "list inside the directory" form.
+  if(directory_exists(path))
+    return perform_ls(append(path, "/"), flags);
+
+  // An existing file: list the single entry.
+  if(file_exists(path))
+    return perform_ls(path, flags);
+
+  // Neither, but a wildcard means get_dir() will glob it — an empty
+  // match there is a legitimate "nothing matched", not a bad path.
+  if(strsrch(path, "*") != -1 || strsrch(path, "?") != -1)
+    return perform_ls(path, flags);
+
+  // A concrete path that resolves to nothing: say so, rather than
+  // returning an empty listing that looks like an empty directory.
+  return _error(tp, "ls: %s: No such file or directory.", arg);
+}
+
+private mixed perform_ls(string target, string *flags) {
+  // dir_file() splits a "dir/leaf" path; a bare directory (trailing
+  // slash) has no leaf, so it returns ({}) and target IS the directory.
+  string *df = dir_file(target);
+
+  if(!sizeof(df)) {
+    df = ({
+      target,
+      ""
+    });
+  }
+
+  // get_dir() returns 0 (not an array) when the driver's own valid_read
+  // denies the path (checked as this command - a developer - so this only
+  // bounds the tool; the per-developer gate is in main()). An existing,
+  // readable directory returns ({}) when it is merely empty.
+  mixed *entries = get_dir(target, -1);
+
+  if(!pointerp(entries))
+    return _error(this_body(), "ls: %s: Permission denied.", target);
+
+  mapping *resolved = map(entries, (: resolve_entry($(df[0]), $1) :));
+  mapping *sorted = sort_array(resolved, (: sort_listing :));
+  mapping *decorated = map(sorted, (: decorate_entry :));
+  string  *formatted = format_ls(decorated, flags);
+
+  string *out = ({ df[0] }) + formatted;
+
+  return out;
+}
+
+private mapping resolve_entry(string dir, mixed *entry) {
+  string path = `${dir}${entry[GD_FILE_NAME]}`;
+
+  if(entry[GD_FILE_SIZE] == -2) {
+    return as_directory(path);
+  } else {
+    return as_file(path);
+  }
+}
+
+private nosave mapping __defaults = ([
+  "directory":  "5087b4",
+  "source":     "b0cabf",
+  "loaded":     "04e5ad",
+  "header":     "a2c5b2",
+  "save":       "c5baa5",
+  "data":       "9e93d4",
+  "other":      "bbb",
+]);
+
+private string get_object_colour(string kind) {
+  string colour = this_body()->query_pref(`ls_${kind ?? "other"}`);
+
+  colour ??= __defaults[kind ?? "other"];
+
+  return `{{${colour}}}`;
+}
+
+private mapping decorate_entry(mapping entry) {
+  mapping work = copy(entry);
+
+  if(work.directory) {
+    work["decoration"] = `${get_object_colour("directory")} `;
+  } else {
+    if(work.ext == "lpc" || work.ext == "c") {
+      if(work.loaded)
+        work["decoration"] = `${get_object_colour("loaded")}*`;
+      else
+        work["decoration"] = `${get_object_colour("source")} `;
+    } else if(work.ext == "lpml" || work.ext == "json5" || work.ext == "json") {
+      work["decoration"] = `${get_object_colour("data")} `;
+    } else if(work.ext == "h") {
+      work["decoration"] = `${get_object_colour("header")} `;
+    } else if(work.ext == chop(__SAVE_EXTENSION__, ".", 1)) {
+      work["decoration"] = `${get_object_colour("save")} `;
+    } else {
+      work["decoration"] = `${get_object_colour("other")} `;
+    }
+  }
+
+  return work;
+}
+
+private string *format_ls_short(mapping *entries, string *flags);
+private string *format_ls_long(mapping *entries, string *flags);
+
+private string *format_ls(mapping *entries, string *flags) {
+  if(includes(flags, "l"))
+    return format_ls_long(entries, flags);
+
+  return format_ls_short(entries, flags);
+}
+
+private string *format_ls_short(mapping *entries, string *_flags) {
+  int items = sizeof(entries);
+
+  if(!items)
+    return ({});
+
+  int longest = max(map(entries, (: strlen($1.name) :)));
+  int cell = longest + 2;                    // glyph + name + 1-space gap
+  int columns = max(({ 1, 80 / cell }));
+  int rows = (items + columns - 1) / columns;
+  string *result = ({});
+
+  for(int r = 0; r < rows; r++) {
+    string line = "";
+    int last_col = (items - 1 - r) / rows;   // last populated column this row
+
+    for(int c = 0; c < columns; c++) {
+      int idx = c * rows + r;
+
+      if(idx >= items)
+        break;
+
+      // Don't pad the final cell of a row; avoids trailing whitespace.
+      if(c == last_col)
+        line += sprintf(
+          "%s%s{{res}}",
+          entries[idx].decoration,
+          entries[idx].name
+        );
+      else
+        line += sprintf(
+          "%s%-*s{{res}}",
+          entries[idx].decoration,
+          cell - 1,
+          entries[idx].name
+        );
+    }
+
+    result += ({ line });
+  }
+
+  return result;
+}
+
+private nosave int DATE_THRESHOLD = 15_552_000;
+
+private string *format_ls_long(mapping *entries, string *_flags) {
+  int now = time();
+  int past = now - DATE_THRESHOLD;
+
+  string *result = map(
+    entries,
+    function(mapping entry, int now, int past) {
+      string date;
+
+      if(entry.modified < past || entry.modified > now) {
+        date = strftime("%_2d %b %_5Y", entry.modified);
+      } else {
+        date = strftime("%_2d %b %5R", entry.modified);
+      }
+
+      if(entry.directory) {
+        return sprintf(
+          "%5s %-12s %s%s{{res}}",
+          " ",
+          date,
+          entry.decoration,
+          entry.name
+        );
+      } else {
+        string size;
+
+        if(entry.size < 1_000) {
+          size = sprintf("%d", entry.size);
+        } else if(entry.size < 100_000) {
+          size = sprintf("%.1fk", entry.size / 1_000.0);
+        } else if(entry.size < 1_000_000) {
+          size = sprintf("%dk", entry.size / 1_000);
+        } else if(entry.size < 100_000_000) {
+          size = sprintf("%.1fM", entry.size / 1_000_000.0);
+        } else {
+          size = sprintf("%dM", entry.size / 1_000_000);
+        }
+
+        return sprintf(
+          "%5s %-12s %s%s{{res}}",
+          size,
+          date,
+          entry.decoration,
+          entry.name
+        );
+      }
+    }, now, past
+  );
+
+  return result;
+}
+
+private int sort_listing(mapping a, mapping b) {
+  return strcmp(lower_case(a.name), lower_case(b.name));
+}

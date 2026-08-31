@@ -1,0 +1,174 @@
+/**
+ * @file /adm/daemons/help.lpc
+ *
+ * Help! Daemon!
+ *
+ * @created 2026-06-07 - Gesslar
+ * @last_modified 2026-06-10 - Gesslar
+ *
+ * @history
+ * 2026-06-07 - Gesslar - Created
+ * 2026-06-10 - Gesslar - Fleshed out directory excludes; directory includes
+ */
+
+inherit STD_DAEMON;
+
+#include <pcre_flags.h>
+
+public void rehash();
+private void rehash_directory(mapping directory);
+
+private nosave string  __help_root;
+private nosave string *__excluded_directories;
+private nosave mixed  *__included_directories;
+private nosave mapping __cache = ([]);
+
+void setup() {
+  set_no_clean();
+
+  __help_root = mud_config("DOC.ROOT") + mud_config("DOC.HELP.ROOT");
+  __excluded_directories = map(
+    mud_config("DOC.HELP.EXCLUDE") ?? ({}),
+    (: __help_root + $1 :)
+  );
+  __excluded_directories = map(__excluded_directories,
+    (: resolve_dir("", $1) :)
+  );
+
+  __included_directories = map(
+    mud_config("DOC.HELP.INCLUDE") ?? ({}),
+    (: ({
+        pointerp($1)
+          ? __help_root + $1[0]
+          : stringp($1)
+            ? __help_root + $1
+            : error("Invalid include format in config."),
+        pointerp($1) && sizeof($1) > 1 ? $1[1] : "all"
+      })
+    :)
+  );
+
+  __included_directories = map(__included_directories,
+    (: ({ resolve_dir("", $1[0]), $1[1] }) :)
+  );
+
+  rehash();
+}
+
+public void rehash() {
+  __cache = ([]);
+
+  mapping fd = read_directory(__help_root);
+  mixed *directories = map(fd["directories"], (: ({ $1, undefined }) :));
+  mixed *included_directories = map(
+    __included_directories,
+    (: ({ as_directory($1[0]), $1[1] }) :)
+  );
+  included_directories = filter(included_directories, (: $1[0] :));
+  mapping *excluded_directories = map(
+    __excluded_directories,
+    (: as_directory :)
+  );
+  excluded_directories = filter(excluded_directories, (: $1 :));
+
+  string *excluded_paths = map(excluded_directories, (: $1["path"] :));
+
+  directories += included_directories;
+  directories = filter(directories, (: !includes($(excluded_paths), $1[0]["path"]) :));
+
+  int sz = sizeof(directories);
+
+  while(sz--)
+    call_out_walltime((: rehash_directory, directories[sz] :), sz * 0.1);
+}
+
+private void rehash_directory(mapping directory_entry) {
+  mapping directory = directory_entry[0];
+  string priv = directory_entry[1];
+
+  if(file_size(directory["path"]) != -2)
+    return;
+
+  mapping fd = read_directory(directory["path"]);
+  mapping *files = fd["files"];
+  mapping help = ([
+    "priv" : priv,
+  ]);
+
+  if(!sizeof(files))
+    return;
+
+  foreach(mapping file in files) {
+    mapping front_matter;
+    string front_matter_text;
+    string content = read_file(file["path"]);
+
+    if(falsy(content))
+      continue;
+
+    // Do we have front matter?
+    string *matches =
+    pcre_extract(
+      content,
+      "^---$([\\s\\S]+?)^---$([\\s\\S]+)",
+      // @lpc-expect-error: the LSP doesn't know about these arguments
+      0,
+      PCRE_M
+    );
+
+    if(sizeof(matches) == 2) {
+      content = matches[1];
+      front_matter_text = matches[0];
+    }
+
+    if(truthy(front_matter_text)) {
+      string e = catch(front_matter = lpml_decode(front_matter_text));
+
+      if(e) {
+        front_matter = ([
+          "title": all_caps(file["base"]),
+        ]);
+      }
+    } else {
+      front_matter = ([
+        "title": all_caps(file["base"])
+      ]);
+    }
+
+    front_matter += ([ "topic" : file["base"] ]);
+
+    help[file["base"]] = front_matter + ([ "content": content ]);
+  }
+
+  __cache[directory["name"]] = help;
+}
+
+mapping *query_help(string topic, object who) {
+  who ??= this_body();
+
+  // string name = who
+  //   ? query_privs(who)
+  //   : NONAME;
+
+  // it's ok if groups is broken for awhile
+  // string *groups = master()->query_group_names();
+  mapping *result = ({});
+
+  foreach(string cat, mapping helps in __cache) {
+    if(!helps[topic])
+      continue;
+
+    // Includes carry an explicit priv; plain directories fall back to the
+    // directory name acting as its own priv.
+    // string priv = helps["priv"] ?? cat;
+
+    // if(priv == "all" || !includes(groups, priv))
+    //   push(ref result, ({ cat, helps[topic] }));
+    // else if(is_member(name, priv))
+    //   push(ref result, ({ cat, helps[topic] }));
+
+    push(ref result, ({ cat, helps[topic] }));
+  }
+
+  return result;
+}

@@ -1,0 +1,177 @@
+/**
+ * @file /adm/daemons/cache.lpc
+ *
+ * A daemon that reads files and caches the result for later consumption.
+ * Cached records are keyed by resolved path and invalidated automatically
+ * when the underlying file's modification time changes. Both the raw file
+ * contents and a decoded form (LPML or save-string) are retained per path.
+ *
+ * Note: the "skip cache" option in default_options is reserved and not yet
+ * honoured by the lookup path.
+ *
+ * @created 2026-06-11 - Gesslar
+ * @last_modified 2026-06-11 - Gesslar
+ *
+ * @history
+ * 2026-06-11 - Gesslar - Created
+ */
+
+#include <stat.h>
+
+inherit STD_DAEMON;
+
+private nomask void clean(string path);
+private nomask mixed load_from_cache(string file_name, string kind);
+public nomask mixed load_data(string file_name, mapping options);
+public nomask varargs void invalidate(string ttl);
+
+/**
+ * Cache store keyed by resolved file path. Each record holds the file's
+ * last-modified timestamp, the raw file contents, and the decoded form.
+ *
+ * @type {([ string: ([ string: mixed ]) ])}
+ */
+private nomask nosave mapping __cache = ([]);
+
+/**
+ * Default options applied to load_data when no options mapping is supplied.
+ * "skip cache" is reserved and not yet honoured by the lookup path.
+ * "reparse" is reserved and not yet honoured by the lookup path.
+ *
+ * @type {([ string: mixed ])}
+ */
+private nomask nosave mapping default_options = ([
+  "kind": "string",
+  "skip cache": false,
+  "reparse": false,
+]);
+
+void setup() {
+  set_no_clean();
+}
+
+/**
+ * Removes a single path's record from the cache.
+ *
+ * @private
+ * @param {string} path - The resolved file path to evict.
+ */
+private nomask void clean(string path) {
+  map_delete(__cache, path);
+}
+
+/**
+ * Returns the cached data for a path, reading and decoding the file when no
+ * valid record exists. A record is valid only while its stored modification
+ * timestamp matches the file's current timestamp; otherwise the file is
+ * re-read and re-decoded. The raw contents are read under the caller's
+ * privileges. For "string" kind the raw contents are returned; for "lpml"
+ * the contents are decoded via lpml_decode (failures are swallowed, leaving
+ * the resolved value undefined); any other kind (ex: "auto") decodes via
+ * from_string.
+ *
+ * @private
+ * @param {string} path - The resolved file path to load.
+ * @param {string} kind - The decode mode: "string", "lpml", or other.
+ * @returns {mixed} The raw string, the decoded value, or undefined.
+ */
+private nomask mixed load_from_cache(string path, string kind) {
+  mixed *stats = stat(path, -1);
+  if(!sizeof(stats))
+    return undefined;
+
+  int last_modified = stats[STAT_LAST_MODIFIED];
+
+  mapping record = __cache[path] ?? ([
+    "modified": last_modified,
+    "raw": undefined,
+    "resolved": undefined,
+  ]);
+
+  record["last checked"] = time();
+
+  if(record["modified"] == last_modified) {
+    if(kind == "string" && !nullp(record["raw"])) {
+      return record["raw"];
+    }
+
+    if(!nullp(record["resolved"]))
+      return record["resolved"];
+  }
+
+  __cache[path] = record;
+
+  record["modified"] = last_modified;
+  record["raw"] = run_as_caller(read_file, path);
+  record["resolved"] = undefined;
+
+  if(kind == "string")
+    return record["raw"];
+
+  if(kind == "lpml")
+    catch(record["resolved"] = lpml_decode(record["raw"]));
+  else
+    record["resolved"] = from_string(record["raw"]);
+
+  return record["resolved"];
+}
+
+/**
+ * Loads a file through the cache, resolving and validating the path first.
+ *
+ * @public
+ * @param {string} file_name - The file to load, relative to the caller.
+ * @param {([ string: mixed ])} [options] - Lookup options; defaults to
+ *  default_options. "kind" selects the decode mode ("string", "lpml", or
+ *  "auto").
+ * @returns {mixed} The cached data, or undefined if the path is invalid.
+ * @errors If file_name is not a non-empty string.
+ * @errors If options["kind"] is not "string", "lpml", or "auto".
+ */
+public nomask mixed load_data(string file_name, mapping options: (: $(default_options) :)) {
+  assert_arg(stringp(file_name) && truthy(file_name), 1, "File name must be a non-empty string.");
+  assert_arg(options["kind"] == "string" || options["kind"] == "lpml" || options["kind"] == "auto", 2, "Kind must be 'string|lpml|auto'");
+
+  string path = valid_file("", file_name);
+  string kind = options["kind"] ?? "string";
+
+  if(nullp(path))
+    return undefined;
+
+  return load_from_cache(path, kind);
+}
+
+/**
+ * Evicts a file's cached record, forcing a fresh read on the next load.
+ *
+ * @public
+ * @param {string} file_name - The file to evict, relative to the caller.
+ * @errors If file_name is not a non-empty string.
+ */
+public nomask void reset_cache(string file_name) {
+  assert_arg(stringp(file_name) && truthy(file_name), 1, "File name must be a non-empty string.");
+
+  string path = valid_file("", file_name);
+
+  if(!path)
+    return;
+
+  clean(path);
+}
+
+public nomask varargs void invalidate(string ttl) {
+  if(!alarmp(previous_object()))
+    return;
+
+  int now = time();
+
+  foreach(string path, mapping data in __cache) {
+    if(stringp(ttl)) {
+      if(evaluate_number(now - data["last checked"], ttl)) {
+        clean(path);
+      }
+    } else {
+      clean(path);
+    }
+  }
+}

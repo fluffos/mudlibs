@@ -1,0 +1,121 @@
+/**
+ * @file /adm/daemons/resource.lpc
+ *
+ * Resource daemon for daemoning resources.
+ *
+ * @created 2026-05-11 - Gesslar
+ * @last_modified 2026-05-11 - Gesslar
+ *
+ * @history
+ * 2026-05-11 - Gesslar - Created
+ */
+
+inherit STD_DAEMON;
+
+//: Functions
+private void redistribute_resources();
+public void register_obj(object room, mapping config);
+public void unregister_obj(mixed room);
+public void clean_up_obj(object room);
+private void cleanse_null();
+private void reset_room_resources(string file, mapping info);
+private void load_resources();
+private void swap_in();
+private void swap_out();
+
+//: Variables
+private nosave mapping __loaded = ([]);
+private nosave mapping __resource = ([]);
+
+public void setup() {
+  // int hb_ms = (int)get_config(__RC_HEARTBEAT_INTERVAL_MSEC__);
+  // int frequency = mud_config("RESOURCE.GLOBAL_SPAWN_FREQUENCY");
+
+  // set_heart_beat((frequency * 1_000) / hb_ms);
+  set_heart_beat(100);
+  add_hb("redistribute_resources");
+  add_destruct((: swap_in :));
+  load_resources();
+  swap_out();
+}
+
+private void load_resources() {
+  mapping fd = read_directory("/etc/resource", "*.lpml");
+
+  each(fd["files"], (: __resource[$1["base"]] = load_lpml($1["path"]) :));
+}
+
+public mapping query_resources() {
+  return copy(__resource);
+}
+
+private void redistribute_resources() {
+  each(__loaded, (: reset_room_resources :));
+}
+
+private void reset_room_resources(string file, mapping info) {
+  object room = info["object"];
+  mapping weighted_options = info["config"];
+
+  if(!objectp(room))
+    return unregister_obj(file);
+
+  string selected_resource = element_of_weighted(weighted_options);
+  float value = random_float(100.0);
+  string key = find_key(__resource[selected_resource], (: evaluate_number($(value), $2) :));
+
+  if(!key)
+    return;
+
+  mapping result = __resource[selected_resource][key];
+
+  /** @type {OBJ_NODE} */ /** @lpc-ignore - not a real file */
+  object node = new("/obj/node/"+selected_resource, result);
+}
+
+public void register_obj(object room, mapping config) {
+  if(__loaded[file_name(room)])
+    return;
+
+  __loaded[file_name(room)] = ([
+    "object" : room,
+    "config" : config,
+  ]);
+}
+
+public void unregister_obj(mixed room) {
+  if(stringp(room)) {
+    if(!__loaded[room]) {
+      return;
+    }
+
+    map_delete(__loaded, room);
+  } else if(objectp(room)) {
+    if(!__loaded[file_name(room)]) {
+      return;
+    }
+
+    map_delete(__loaded, file_name(room));
+  }
+}
+
+public void clean_up_obj(object room) {
+  if(!objectp(room))
+    return;
+
+  /** @type {OBJ_NODE*} */
+  object *nodes = filter(all_inventory(room), (: $1->is_resource_node() :));
+  filter(nodes, (: remove :));
+}
+
+private void cleanse_null() {
+  each(__loaded, (: !objectp($2["object"]) && map_delete(__loaded, $1) :));
+}
+
+private void swap_out() {
+  __loaded = SWAP_D->swap_out("RESOURCE_LOADED") ?? ([]);
+}
+
+private void swap_in() {
+  SWAP_D->swap_in("RESOURCE_LOADED", __loaded);
+}
