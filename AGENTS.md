@@ -13740,6 +13740,87 @@ in new-account/first-run setup code where the exact directory that would
 expose the bug (an unused letter/shard bucket) is easy for a human
 tester to never happen to hit by accident.
 
+### 7.180 A monster's shared `heart_beat()` chat/emote/wander logic can crash every single tick, forever, once the monster ends up environment-less — and a "spawn a pool of guard clones up front, dispatch them one at a time later" daemon pattern reliably produces exactly that state for the un-dispatched ones
+
+Found on `majik3`'s §10.7 deep functional test (2026-08-31), triggered
+by the game's own "citizen shouts for help, a guard runs in" mechanic
+(`world/creek/monsters/citizen.lpc`'s `before_battle()`/`do_shout()` ->
+`world/creek/daemons/guard.lpc`'s `wake_guard()`) — a completely ordinary
+first-combat test, not an edge case a player would need to go out of
+their way to hit.
+
+`guard.lpc`'s `load_guards()` clones a pool of 4 `cityguard` monsters up
+front and never `move()`s any of them anywhere — a freshly
+`clone_object()`d object has no environment until explicitly moved.
+`wake_guard()` later picks ONE random guard from that pool and moves
+*that one* into the fight; the other 3 are left sitting with `ENV() ==
+0` for the rest of the driver's uptime (the pool is never refilled once
+non-empty, so this is permanent, not transient). Every `cityguard`
+already has `set_heart_beat(1)` from `create_monster()`, and
+`inherit/base/monster.lpc`'s shared `heart_beat()` has THREE blocks that
+unconditionally dereference `ENV(THOB)` without checking it first: the
+"chat" block (`"/command/mortal/say"->main(talk[i])`, which itself does
+`all_inventory(ENV(previous_object()))` inside `say.lpc`), the "emote"
+block (`message("emote", ..., all_inventory(ENV(THOB)))`), and the
+"wander" block (`ENV(THOB)->query_exit_dir()`) — immediately adjacent
+"pick"/"drop" blocks in the SAME function already correctly guard with
+`if (ENV(THOB)) { ... }`, showing the omission is an inconsistency, not
+an intentional design choice. The result: every environment-less guard
+in the pool throws a real runtime error on EVERY heartbeat tick (3
+seconds in this config) for as long as the driver runs — confirmed
+live, 508+ `Bad argument ... Got: int(0)` entries accumulating in
+`log/runtime` within minutes of one ordinary player-vs-citizen fight,
+with zero player-visible symptom (the error is silently swallowed the
+same way `bxsj`'s §7.16 `quit` crash was).
+
+A second, related failure lives directly in `guard.lpc`'s
+`wake_guard()` itself: after `guard->move(ENV(ob))`, the very next line
+unconditionally calls `ENV(guard)->query_exit_dir()` and then
+`guard->force_us("say ...")` with no check that the `move()` actually
+succeeded (it can fail, e.g. if `ENV(ob)` is itself falsy) — the
+existing `if (ENV(guard)) message(...)` check three lines earlier, for
+the OLD environment before the move, shows the author was aware of this
+class of check but didn't extend it to the NEW environment after the
+move.
+
+**Fix**: guard all three heart_beat() blocks and the post-move
+`guard.lpc` lines the same way the neighboring "pick"/"drop" blocks
+already do —
+
+```lpc
+// inherit/base/monster.lpc, three separate blocks:
+if (talk && ENV(THOB)) { ... }
+if (emote && ENV(THOB)) { ... }
+if (wander && ENV(THOB) && (!THOB->query_battle_object())) { ... }
+
+// world/creek/daemons/guard.lpc, after the move:
+guard->move (ENV(ob));
+if (ENV(guard))
+  {
+    dir = ENV(guard)->query_exit_dir();
+    if (dir && sizeof(dir))
+      message ("3", guard->query_cap_name() + " arrives from "+dir[random(sizeof(dir))]+".\n", ENV(guard));
+    guard->force_us("say I'll take you, "+ob->query_cap_name()+" - BANZAI!");
+    guard->force_us("kill "+ob->query_name()+"");
+  }
+```
+
+Verified live: reproduced the crash-loop pre-fix (508 accumulating
+`log/runtime` entries across two fight+guard-dispatch cycles), applied
+both fixes, rebuilt nothing (LPC-only), restarted the driver, and
+re-ran the identical fight+guard-dispatch+flee+40-second-idle sequence
+twice more — zero new entries either time, while the guard itself still
+dispatched, spoke its "BANZAI!" line, and fought normally when it DID
+have a valid environment. **General lesson for this bug class**: any
+"pre-clone a pool of N objects, dispatch them one at a time later"
+daemon pattern is suspect for the same reason `mkdir()` without `-p`
+is suspect in §7.179 — the code path that's easy for casual testing to
+never hit (the un-dispatched pool members) is exactly where the gap
+hides; and any shared base-class `heart_beat()`/`reset()` that touches
+`ENV(THOB)` should guard EVERY block that does so, not just some of
+them, since a single unguarded block undoes the safety the others
+provide.
+
 ---
 
 ## 8. Login and registration flow bugs
