@@ -14028,6 +14028,197 @@ never touched. Don't stop testing at the first two or three rooms from
 spawn, either — this class is invisible to a smoke test that only
 walks the (already-fixed) hand-written starting area.
 
+### 7.186 `this_player()` is NOT valid inside a command dispatched via a heart_beat-driven `force_us()` queue — only `previous_object()` is; a file that uses the wrong one is silently, permanently broken for every real invocation, and the driver's own error relay makes the crash visible to random bystanders
+
+Found on `majik4`'s §10.7 deep functional test (2026-08-31). This lib's
+client protocol queues almost every player command in a `command_buffer`
+array and drains one per `heart_beat()` tick (`secure/player.lpc`), which
+then calls `THOB->force_us(command_buffer[0])` — a call made from the
+DRIVER's own scheduled heartbeat callback, not from live network input.
+`this_player()` is reliably valid inside `force_us()` for the handful of
+commands dispatched a different way (the three no-delay commands `i`/
+`blook`/`vlook` called directly from `process_input()`, which the driver
+DOES treat as live input), but is unreliable/0 for the overwhelming
+majority of commands that go through the queue. Every command file in
+this codebase's `command/mortal/` and `command/immortal/` trees (dozens
+of files) uses `previous_object()` (aliased `PREV(0)` here) to identify
+the acting player — except three that used `this_player()` (`THIS`)
+instead, each broken in a different, characteristic way:
+
+- **`command/immortal/warp.lpc`** (an admin teleport command) crashed
+  outright on every single invocation: `Bad argument 1 to environment()
+  Expected: object Got: 0` at `THIS->move(ENV(ENV(THIS)), ...)`, because
+  `ENV(THIS)` (`environment(this_player())`) evaluated `environment(0)`.
+  The command was completely unusable, always, for every admin, with the
+  only visible symptom being total silence (no teleport, no error shown
+  to the caller — the mudlib's error relay only reaches nearby bystanders
+  in this lib, not the object whose call actually threw).
+- **`command/mortal/vlook.lpc`** (a client-side "look at this specific
+  grid tile" feature) is grouped with `blook` in this lib's own
+  documentation as one of the three "no-delay" commands, but its
+  *actual* invocation always carries `<x> <y>` arguments (`vlook 12 34`)
+  — and `process_input()`'s no-delay fast path only matches the bare,
+  argument-less string `"vlook"` by strict equality, so every real
+  client usage falls through to the SAME queued/force_us() path as any
+  ordinary command. Since `vlook.lpc` used `THIS` for its `MAPENV()`
+  lookups, EVERY real tile-look request crashed identically:
+  `Bad argument 1 to environment() Expected: object Got: 0` at
+  `MAPENV(THIS)->get_obj(x, y)` — a documented, core client feature that
+  never worked at all in practice. `blook.lpc`, which correctly uses
+  `PREV(0)` throughout, was unaffected and is the reference pattern.
+- **`command/mortal/who.lpc`** degraded silently instead of crashing:
+  `message(CMD_MSG, 0,0,0, msg, THIS)` with a 0 recipient is tolerated by
+  `message()` (unlike `environment()`'s strict object-type check) and
+  just quietly delivers to nobody — `who` always "succeeded" with zero
+  visible output, no error anywhere, the more insidious failure mode of
+  the same root cause.
+
+**Fix**: replace `THIS`/`this_player()` with `PREV(0)`/`previous_object()`
+throughout all three files, matching the established convention used by
+every other command file in the same directories. Verified live for all
+three: `warp <x> <y>` now actually teleports (confirmed via `log/runtime`
+staying flat across a fresh teleport, versus the identical crash
+reproducing 100% of the time pre-fix); `vlook <x> <y>` now returns the
+correct tile/object description; `who` now prints the correct player
+count. **General lesson**: in any mudlib where a "command" file can be
+invoked from something OTHER than a live, synchronous `process_input()`
+call on the connected object itself (a command queue, a scheduled
+`call_out`, an NPC's own `force_us()`) — grep every command-dispatch
+directory for the codebase's own "current player" macro/efun and diff
+against whatever the file actually needs at its call time; a bare
+majority-convention match (all-but-a-handful of files agree) is a strong
+signal that the outliers are bugs, not intentional variations, especially
+when — as here — the outliers happen to be exactly the files least likely
+to get exercised by a shallow smoke test (an admin-only command, a
+client-protocol edge case requiring the exact right argument shape, and
+a command whose failure produces no visible symptom at all).
+
+### 7.187 A command's own dispatch loop can keep running AFTER the command it just called destructs (or environment-strips) the very object the loop is iterating on — the next statement's implicit `this_object()`/`environment()` reference then silently resolves to 0
+
+Also found on `majik4`'s §10.7 deep functional test, in the SAME
+`force_us()` covered by §7.186 above, but a distinct root cause: this
+one fires on `THIS` (this_player()) is correct throughout and there is
+no macro-convention mismatch. `force_us()` dispatches the mortal `quit`
+command via `call_other("/command/mortal/quit.lpc", "main", args)`, and
+`quit.lpc`'s `main()` calls `previous_object()->quit(reason)`
+(`secure/player.lpc`), which calls `OFFLINE_D->add_offline(THOB)`
+(`daemon/offline.lpc`), which — as part of this lib's normal, intended
+"represent a disconnected player with a non-interactive stand-in object"
+design — calls `o->remove()` (`destruct(THOB)`) on the ORIGINAL calling
+object and replaces it with a brand-new restored one. Control then
+returns up through that entire call chain back into `force_us()`, which
+UNCONDITIONALLY continues past the dispatch with
+`else if(THOB->query_somatic_meaning(verb))` and several more
+`THOB`-referencing branches — but `THOB` (`this_object()`) now resolves
+to `0` for the destructed frame, producing `Bad argument 1 to EFUN
+call_other() Expected: object, string, array, Got: int(0)` on **every
+single `quit`**, invisible to the player (the visible "Normal exit."/
+disconnect looked completely normal) — the same shape as this project's
+own foundational `bxsj` §7.16 case study. A second, narrower variant of
+the identical class was found in the same function's "find a command
+handler on our inventory / grid / surrounding grid" search block
+(`MAPENV(THOB)->get_obj(...)`, no caller frame in the resulting error
+since it fires before any command has even been dispatched yet): a
+character that had already been through the offline round-trip once
+before could reach `force_us()` again with `ENV(THOB)` unexpectedly
+already empty, crashing at `Bad argument 1 to environment() Expected:
+object Got: 0`; the precise trigger for HOW the environment goes missing
+in that specific case was not fully isolated in the time available (it
+surfaced reliably during a run with several rapid, overlapping test
+connections logging into the same character, which may itself have been
+a confounding factor — see the process-hygiene note this produced,
+§10.5-adjacent, about never running more than one client process against
+the same FIFO/log pair) but the fix below is safe regardless of the exact
+cause.
+
+**Fix**: guard every subsequent `THOB`-dependent statement after a
+call that can plausibly destruct or re-home the calling object:
+
+```lpc
+if (!ret && file_size ("/command/mortal/" + verb + ".lpc") > -1)
+    ret = call_other ("/command/mortal/" + verb + ".lpc", "main", args);
+
+/* The command we just dispatched (e.g. "quit" -> OFFLINE_D->
+   add_offline() -> remove()) may have destructed us. */
+if (!THOB)
+    return ret;
+
+if (ret == 0 && fail_message)
+    ...
+```
+
+and, separately, gate each of the "find command from grid" blocks on
+`MAPENV(THOB)` (not just `!ret`) the same way two neighboring blocks in
+the very same function already correctly gate on plain `ENV(THOB)`.
+Verified live: reproduced the always-on `quit` crash pre-fix (100%
+repro across three independent fresh characters), applied the guard,
+restarted, and re-ran `quit`/`quit y` on multiple fresh characters with
+zero new `log/runtime` entries afterward. **General lesson, restating
+§10.7's own opening case study one level deeper**: it is not enough to
+check that a command's OWN logic is safe — a dispatcher that keeps
+executing statements referencing the caller after handing control to
+that command must also assume the command may have invalidated the very
+reference the dispatcher is about to use next.
+
+### 7.188 This driver's `move_object(string)` resolves the destination with `find_object()` ONLY — unlike its own documented "dest should either be a filename or an object" contract, it never auto-loads a not-yet-resident path, so a mudlib "reload this object" command that only `destruct()`s (relying on some LATER reference to bring it back, the way `call_other()` on a string path always does) permanently breaks anything reached via `move_object()`/`move_player()` with a bare path
+
+Found on `amylaarmini`'s §10.7 deep functional test (2026-08-31).
+`cmds/update.lpc` (this archive's `update <path>` wizard command)
+did `ob = find_object(args); destruct(ob); write("Ok\n");` — no
+recompile/reload of any kind after the `destruct()`. On the classic
+driver this archive targeted, and per THIS driver's own documented
+`move_object()` contract (`docs/efun/objects/move_object.md`: "dest
+should either be a filename or an object"), that's fine: any later
+reference to the same path by a bare filename is expected to
+transparently reload it. Confirmed this genuinely IS true for
+`call_other()` — `cmds/eval.lpc`'s own `"/log/tmpfile"->run();`
+idiom, and every ordinary player command dispatch in this archive
+(`call_other(cmd, "main", ...)` on a string path), auto-load a
+destructed/never-loaded object with no special handling needed.
+**But `move_object()`'s actual C implementation
+(`packages/core/efuns_main.cc`'s `f_move_object()`) resolves a string
+destination with `find_object()` alone** — which only finds objects
+already resident in memory — and calls `error("move_object failed:
+could not find destination\n")` if that lookup misses, rather than
+falling back to a compile/load path the way `call_other()` does.
+Confirmed live: `update /room/start` (destructing this archive's only
+room, with no reload) left EVERY subsequent login (`move_player(START)`
+-> `move("/room/start")` -> `efun::move_object("/room/start")`)
+completely stuck with no output and no logged error at all — not a
+one-time footgun for the wizard who ran the command, but a permanent,
+driver-wide breakage of the login path for every future connection,
+until the process is restarted.
+
+**Fix**: after `destruct(ob)`, force an immediate fresh compile with
+the same `call_other(args, "??")` "force-load a nonexistent function to
+trigger compilation" idiom already used elsewhere in this project for
+an unrelated purpose (`log_file()` reimplementations, §6.2) —
+`write_file`-then-`call_other` idioms already rely on it, so it's a
+natural fit here too. **General lesson**: any mudlib "update"/"reload"
+command that only `destruct()`s an object, relying on some future
+reference to bring it back, is safe ONLY if every future reference to
+that path goes through `call_other()` (or an efun that internally uses
+the driver's real load/compile path) — it is NOT safe if any reference
+comes through `move_object()`/`move_player()` with a bare filename,
+which requires the object to already be resident. Grep any archive's
+`update`/`reload`-style command for a bare `destruct()` with no
+following reload, and check whether the destructed path is ever a
+`move_object()` DESTINATION (as opposed to only ever a `call_other()`
+target) before assuming the missing reload is harmless.
+
+A narrower, separate, already-known risk remains even with this fix:
+destructing a room while a living object is actually standing inside
+it crashes/disconnects that connection outright (confirmed: zero
+LPC-level error or trace of any kind, not even a checkpoint placed
+immediately before the destructing call site's own `move()` LFUN —
+consistent with a driver-level fault in `destruct_object()`'s own
+content-relocation `apply(APPLY_MOVE, ...)` step, not something
+catchable from LPC). This is the well-known "don't update the room
+you're standing in" classic-MudOS wizard footgun and stays out of this
+project's scope for that reason — but it's worth knowing it manifests
+as a full silent disconnect rather than the milder "left floating with
+no environment" a real content fix might assume.
+
 ---
 
 ## 8. Login and registration flow bugs

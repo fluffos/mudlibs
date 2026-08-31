@@ -155,3 +155,94 @@ respacing hits (moot -- pure-English archive). Re-ran the full
 `lpcc_check.sh` compile sweep (still 14/15, same single expected
 `master_skeleton.lpc` failure) and a fresh native + WASM boot after
 formatting -- both clean, all commands re-verified working.
+
+## 7. §10.7 deep functional test (2026-08-31)
+
+Re-verified all 7 implemented commands (`look`, `say`, `who`, `ls`,
+`eval`, `rehash`, `update`) on the native driver plus a 200s WASM
+`scripts/wasm_boot_watch.sh amylaarmini 200` long-sit, going further
+than §4's original pass specifically on `update` (the one command
+§4 flagged as needing a second look after an inconclusive first test).
+**Transport note, not a bug**: sending an `eval` expression with a
+trailing `;` through `scripts/tmux_mud.sh` (local `telnet` CLI)
+silently drops the semicolon before it reaches the server -- confirmed
+by sending the byte-identical input through `scripts/mudclient.py`
+(raw socket), which preserves it correctly. Matches AGENTS.md §10.2's
+already-documented "local telnet CLI can mangle specific transport
+bytes" class (previously seen for certain CJK code points, now also
+confirmed for at least one ASCII punctuation mark) -- always
+cross-check an `eval`/any-syntax-sensitive test through `mudclient.py`
+before concluding a semicolon-dependent LPC snippet doesn't work.
+
+### Bug found and fixed: `update <path>` permanently broke every future login once it was ever run against `/room/start`, not just a one-time wizard mistake
+
+`cmds/update.lpc` only ever `destruct()`ed the target object with no
+reload of any kind afterward (`ob = find_object(args); destruct(ob);
+write("Ok\n");`). §4's original test tried this against the player's
+OWN occupied `/room/start` and reasoned that even a resulting crash
+would be "the well-known, expected classic-MudOS wizard footgun
+(content/design), not a driver-compat bug in scope" -- but a
+follow-up test this session found a SEPARATE, more severe, and
+genuinely driver-compat effect that has nothing to do with self-
+displacement: **this driver's `move_object(string)` efun resolves a
+string destination with `find_object()` ONLY** (confirmed by reading
+`packages/core/efuns_main.cc`'s `f_move_object()` directly) -- it
+never auto-loads a not-yet-resident path the way `call_other()` on a
+string always does (confirmed working correctly via `cmds/eval.lpc`'s
+own `"/log/tmpfile"->run();` idiom and every ordinary command
+dispatch in this archive). Since every new login's `enter_game()` ->
+`move_player(START)` -> `move("/room/start")` ends in a bare
+`efun::move_object("/room/start")` call, destructing `/room/start`
+with no reload left **every subsequent connection stuck with zero
+output and zero logged error** -- reproduced live across three
+separate fresh connections after one `update /room/start`, all
+silently hanging right after the login banner, only recovering after
+a full driver restart. This is qualitatively different from (and more
+severe than) the already-documented self-displacement footgun: it's a
+driver-wide, permanent breakage triggered by the ORDINARY, documented
+use of the `update` command against the one room every player must
+pass through, not a "don't shoot yourself in the foot" edge case.
+
+**Fix**: `cmds/update.lpc` now does `call_other(args, "??")`
+immediately after `destruct(ob)` -- the same "force a fresh
+compile via a nonexistent-function call" idiom already used elsewhere
+in this session's sibling libs -- restoring a live, working object at
+the same path before `update` returns. Verified live: after the fix,
+`update /room/start` executed by one connection still crashes/
+disconnects THAT connection (see below -- the self-occupied-room
+case is a separate, narrower, still-out-of-scope issue), but a
+SECOND, independent fresh connection immediately afterward reaches
+`/room/start` and gets a normal room description, confirming the
+reload actually took effect and the driver-wide breakage is gone.
+Also re-verified `update /cmds/who` (a non-occupied, non-room object)
+end to end: `Ok`, then a subsequent `who` still works correctly.
+New AGENTS.md catalog entry, §7.188.
+
+### Confirmed NOT a bug, but sharper than §4's original writeup: destructing your own occupied room is a HARD DISCONNECT with zero trace, not a graceful "left floating"
+
+Re-tested the self-occupied-room case specifically (this archive has
+exactly one room, `/room/start`, so every connected player -- not just
+a hypothetical multi-room wizard mistake -- is unavoidably "in" it):
+running `update /room/start` while standing in it closes that
+connection outright ("Connection closed by foreign host"), with
+**absolutely nothing** in the driver's own captured stdout -- not
+even a checkpoint `efun::write()` placed as the very first statement
+of the object's own `move()` LFUN, which the driver's `destruct_object()`
+is supposed to call on every contained object to relocate it before
+finishing the destruct. That checkpoint never fired, meaning this
+looks like a fault inside the driver's own `destruct_object()`/
+`APPLY_MOVE` content-relocation step itself, not a catchable LPC-level
+error -- consistent with, and a sharper confirmation of, §4's own
+conclusion that this is the classic "don't update the room you're
+standing in" wizard footgun, out of scope for a mudlib-level fix.
+Documented here specifically so a future tester doesn't mistake the
+abrupt disconnect for a NEW crash distinct from the one already
+flagged.
+
+### Regression check
+
+All 7 commands re-verified working after the `update.lpc` fix in one
+final session (native + WASM), zero errors in the driver's own
+captured stdout throughout (this native build's `debug.log` is dead
+for the process's whole life per AGENTS.md §10.9, so stdout is the
+only reliable error channel).
