@@ -347,3 +347,151 @@ comment-swallowing damage -- all case bodies and fall-throughs intact.
 Re-booted and re-ran the full `fluffos`-reconnect smoke test after
 formatting: zero new compile/fatal errors, same room/inventory/output
 as before formatting.
+
+## 9. §10.7 deep functional test (round two, 2026-08-31)
+
+Full continuous native-driver session beyond the onboarding smoke test,
+with a fresh mortal (`Questora`, human, PRIMARY blade/melee
+attack+defense/stealth/detection, SECONDARY bargaining/healing/
+tracking/concealment, MINOR faith/fishing/stealing/multi-hand) driven
+via `scripts/tmux_mud.sh`, plus the seeded `fluffos` admin for
+`eval`/`goto`-assisted navigation between this lib's disconnected
+content clusters (etnar's bespoke domain and the bundled diku-alfa port
+share no real exits with `domains/town`, confirmed by grep --
+`eventMoveLiving()`, the same primitive `secure/cmds/creators/goto.lpc`
+itself uses, is the correct way to relocate a living object here;
+`object->move(dest)` is NOT a real function in this codebase and
+silently no-ops with no error via `->`-dispatch -- a footgun worth
+recording for any future session scripting movement here).
+
+**Tooling note**: this lib's registration flow ("Do you use a screen
+reader...") drives an ANSI-cursor-addressed overhead-map/stat-panel
+HUD that assumes a normal ~24-row terminal. A `tmux_mud.sh`-style pane
+taller than that (the tool's default `-y 500`) makes `tmux capture-pane`
+show badly interleaved stale-and-fresh text (the HUD only repaints
+rows within its assumed viewport, leaving everything below frozen at
+whatever was last drawn there) -- looks exactly like a hung/unresponsive
+connection but isn't. Fix: `tmux resize-window -t <session> -y 50`
+right after `start`. Confirmed via independent `eval
+file_name(environment(player))` ground-truth checks that the game
+state was always correct even when the pane looked frozen/garbled.
+
+Tested and confirmed working correctly, live: guild-independent skill
+training via `ask <trainer> to train <skill>` (the class's own
+in-character hint text, not the more natural-sounding but WRONG `ask
+<trainer> train <skill>` or bare `train <skill>`, both of which this
+verb's own rule table -- `verbs/common/ask.lpc`'s `SetRules("LIV STR",
+...)` routes to a plain spoken-sentence handler, not
+`eventAsk()`/`CommandResponses` at all -- confirmed correct rejection
+"You need more training points!" at level 1/0 training points, per
+design); real melee combat vs. a placed diku-alfa mob (`Beastly Fido`,
+bidirectional limb-targeted damage, a live "You are a bit more adept
+with your melee attack" skill-improvement message, clean `flee`); the
+Pet Shop's economy loop end-to-end (`inquire` correct price list,
+`adopt <pet>` correctly refused for insufficient gold, then correctly
+succeeded once funded, with the right currency deduction); etnar's Wyr
+village (`The Lounge` -> `The Common Room` -> `The Entrance to the
+Cyclops Inn`, matching onboarding's own documented room text) and
+diku-alfa's Midgaard city square area, both with correct room
+text/exits and zero new `debug.log` errors; `quit` -> `debug.log` grep
+(clean) -> a real ~3.5-minute gap (the long-sit watch below) ->
+reconnect, correctly restoring the exact same character/location/
+worn-inventory/vitals; a ~200s synchronous idle long-sit boot watch
+(`python3 scripts/mudclient.py ... --timeout 200 --idle 300`, this lib
+has no WASM build yet) sitting on an open connection at the login
+prompt -- ended in the login object's own normal inactivity timeout,
+zero new `debug.log` errors, driver RSS stable (~2.2GB, expected for
+this 3,800+-file mega-lib per its own onboarding notes).
+
+Death/respawn and a full guild-class questline were not reached --
+budgeted out in favor of the two real bugs below and the broad
+etnar+diku-alfa content-verification pass the task specifically asked
+for; flagged honestly as unverified-live rather than silently skipped.
+
+### Bugs found and fixed
+
+1. **AGENTS.md §7.193 (NEW) -- two DikuMud-port `SetShort()` calls hold
+   a full "long room-appearance" sentence instead of a bare noun
+   phrase, and this codebase's living-NPC room-listing code
+   unconditionally appends a posture verb phrase to `GetShort()`
+   regardless of what it already says**, producing a doubled,
+   grammatically broken line. `domains/diku-alfa/room/30.zon/npc/
+   3095_pet_shop_boy.lpc` had `SetShort("A Pet Shop Boy is here,
+   humming gently.")`; `domains/diku-alfa/room/41.zon/npc/
+   4101_troll.lpc` had `SetShort("A large mean-looking troll is
+   here")`. `lib/body.lpc`'s `GetHealthShort()` just wraps
+   `GetShort()` in a health-color code with no stripping; `lib/events/
+   describe.lpc`'s room-listing code then buckets livings by
+   `GetPosition()` and appends `" is standing here."`/`" is lying
+   down."`/etc. unconditionally to that same string for the
+   `POSITION_STANDING` (etc.) bucket -- confirmed live: `look`ing at
+   the Pet Shop showed "A Pet Shop Boy is here, humming gently. is
+   standing here." Every OTHER living NPC checked in the same corpus
+   (`3064_drunk.lpc`: `"a singing, happy Drunk"`, `3061_janitor.lpc`:
+   `"the Janitor"`, `3062_fido.lpc`: `"Beastly Fido"`) correctly uses a
+   bare noun phrase for `SetShort()`, matching a DikuMud port
+   convention where the original Diku MOB file's "long description"
+   (Diku's own room-listing line, self-contained) was supposed to stay
+   separate from the short combat-message name -- these 2 files
+   mistakenly got the Diku long-description text copied into
+   `SetShort()` instead. (Non-living scenery objects like
+   `3600_candlestick.lpc`/`3134_bench.lpc` correctly DO bake `"is
+   standing here"` directly into their own `SetShort()`, because
+   inanimate items are rendered via a different, non-appending display
+   path -- confirmed by checking `all_inventory(env)` is filtered by
+   `living(ob)` before the posture-bucketing code ever runs, so this
+   is not a contradiction, just two different, both-legitimate
+   conventions for two different object categories.) Fixed by
+   stripping the redundant sentence fragment from both `SetShort()`
+   calls, matching the established living-NPC convention (`"a humming
+   Pet Shop Boy"`, `"a large mean-looking troll"`). Verified live
+   (destruct + respawn a fresh instance of each): the pet shop now
+   correctly shows "A humming Pet Shop Boy is standing here."
+   **How to apply generally**: any Dead-Souls lib hosting a DikuMud (or
+   similar Diku-lineage) port is suspect for this exact class --
+   `grep -rE 'SetShort\("[^"]* is (here|standing|lying)' domains/` (or
+   the equivalent short-description setter) to find any living NPC
+   whose short description was left as a full self-contained sentence
+   instead of a bare noun phrase.
+
+2. **`domains/diku-alfa/room/30.zon/rm_3031.lpc`'s pet-shop `adopt`
+   command has the `if (!name)`/`if (name)` branches swapped/confused
+   for 4 of 5 pet types**, a copy-paste mistake (confirmed via the
+   file's own `cmd_adopt`-equivalent switch statement): the `if
+   (!name)` branch (meant for "no custom name given") for wolf,
+   rottweiler, puppy, and kitten still executed `ob->SetShort("a pet
+   <animal> named " + capitalize(name))` with `name` actually 0/undefined,
+   producing a dangling `"a pet kitten named "` (rendered live as "A
+   pet kitten named is standing here." once combined with bug #1's
+   posture-append behavior) -- confirmed by adopting an unnamed kitten
+   and reproducing this exact broken line. The `SetId()` calls in the
+   same branch also uselessly included the undefined `name`/
+   `capitalize(name)` values in the identifier array. The beagle case
+   had the OPPOSITE bug: its `if (name)` branch (custom name given) was
+   byte-identical to its `if (!name)` branch, so a beagle NEVER got its
+   custom name applied even when the player supplied one. Fixed all 5:
+   the `if (!name)` branches for wolf/rottweiler/puppy/kitten now just
+   set a bare `"a pet <animal>"` short description (matching the
+   beagle's own already-correct no-name branch) with no bogus `name`
+   values in `SetId()`; the beagle's `if (name)` branch now actually
+   applies `"a pet beagle named " + capitalize(name)` (matching the
+   pattern the other 4 pets already use in their own `if (name)`
+   branches). Verified live, both directions: `adopt puppy` (no name)
+   now correctly shows "A pet puppy is standing here."; `adopt puppy
+   Rex` (with a name, after destructing/re-adopting) correctly shows
+   "A pet puppy named Rex is standing here." No new AGENTS.md entry --
+   this is a narrow, single-room copy-paste bug in bespoke vendor
+   script, not a shared-library pattern likely to recur elsewhere.
+
+### Non-bugs (documented, not fixed)
+
+- `doc/RELEASE_NOTES_HTTP`'s cached response timestamp updated during
+  this session's boots despite NOTES.md §4's earlier claim of "No
+  RELEASE_NOTES/version-check HTTP fetch runs automatically" --
+  apparently a real outbound HTTP GET does still fire somewhere in the
+  boot/`autoexec` chain after all (the file's `Date:` header advanced
+  across reboots). Not chased further (out of this pass's scope, and
+  the response itself is cached/served from a local file either way,
+  not a live dependency of anything tested) -- flagged as a correction
+  to that earlier claim for whoever next cares about this lib's
+  network footprint, not fixed or re-verified in depth.

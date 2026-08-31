@@ -14479,6 +14479,49 @@ after it in the same function, so a room can compile perfectly clean
 and still end up completely exit-less and description-less at runtime,
 which no compile sweep alone will ever catch.
 
+### 7.193 A DikuMud-to-Dead-Souls port can leave a living NPC's `SetShort()` holding the full self-contained Diku "room-listing" sentence instead of a bare noun phrase — this codebase's own posture-based room-listing code unconditionally appends its own verb phrase ("is standing here."/"is lying down."/etc.) on top, producing a doubled, grammatically broken line
+
+Found on `brassring`'s (The Brass Ring, a Dead Souls-lineage lib
+bundling a DikuMud Alfa port) §10.7 deep functional test:
+`domains/diku-alfa/room/30.zon/npc/3095_pet_shop_boy.lpc` had
+`SetShort("A Pet Shop Boy is here, humming gently.")` and
+`domains/diku-alfa/room/41.zon/npc/4101_troll.lpc` had
+`SetShort("A large mean-looking troll is here")`. `lib/body.lpc`'s
+`GetHealthShort()` just wraps `GetShort()` in a health-color code with
+no stripping; `lib/events/describe.lpc`'s room-listing code buckets
+livings present in a room by `GetPosition()` and unconditionally
+appends `" is standing here."` (or the sitting/lying/flying/etc.
+equivalent) to that same string for its position bucket — regardless
+of whether the short description already reads like a complete
+sentence. Live result: `look`ing at the room showed "A Pet Shop Boy is
+here, humming gently. is standing here." Every other living NPC in the
+same corpus correctly uses a bare noun phrase for `SetShort()` (`"a
+singing, happy Drunk"`, `"the Janitor"`, `"Beastly Fido"`) — this
+matches the original DikuMud MOB file format, where the "long
+description" (Diku's own self-contained room-listing line) is a
+SEPARATE field from the short combat-message name; these 2 files
+mistakenly got the Diku long-description text copied into the
+Dead-Souls `SetShort()` slot instead during the port. (Inanimate
+scenery objects in the same corpus — a candlestick, a bench — correctly
+DO bake `"is standing here"` directly into their own `SetShort()`,
+because non-living items are rendered via a separate, non-appending
+display path; that's a different, equally legitimate convention for a
+different object category, not a contradiction.)
+
+**Fix**: strip the redundant sentence fragment back down to a bare noun
+phrase (`"a humming Pet Shop Boy"`, `"a large mean-looking troll"`),
+matching the convention every other living NPC in the corpus already
+follows. Verified live (destruct + respawn a fresh instance of each):
+the room now correctly shows "A humming Pet Shop Boy is standing
+here."
+
+**How to apply generally**: any Dead-Souls-lineage lib hosting a
+DikuMud (or other Diku-lineage) content port is suspect for this exact
+class — `grep -rE 'SetShort\("[^"]* is (here|standing|lying|sitting)'
+domains/` (or whatever the local short-description setter is named) to
+find any LIVING NPC (not scenery/furniture) whose short description was
+left as a full self-contained sentence instead of a bare noun phrase.
+
 ---
 
 ## 8. Login and registration flow bugs
