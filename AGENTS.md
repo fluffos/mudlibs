@@ -606,6 +606,37 @@ assignment in `create()` instead (e.g. `wiz_status["fluffos"] =
 "(admin)";`, placed after any `restore()` call so it isn't overwritten).
 (`nt1`'s `adm/daemons/securityd.lpc`.)
 
+**Dead Souls lineage (`ds386`/`dsI-III`/`dshakkard`/`deadsouls_fluffos`/
+`riftsds`, etc.): admin-ness is a SAVE-FILE-DIRECTORY fact, not a rank
+flag, when the lib is past its own first-boot install wizard.**
+`creatorp()` (`secure/sefun/pointers.lpc`) checks whether the live
+player object's `file_name()` starts with `DIR_CRES`
+(`/secure/save/creators`) rather than any groups/ACL table;
+`secure/daemon/master.lpc`'s `player_object()` loads a returning
+account from `secure/save/creators/<letter>/<name>.o` in preference to
+`secure/save/players/<letter>/<name>.o`, and the stock `encre`
+admin command (`secure/cmds/admins/encre.lpc`) promotes a player purely
+by `rename()`-ing their existing `.o` save file from the players tree
+to the creators tree (no separate program file needed — verified live,
+not just by reading the code). `secure/cfg/groups.cfg` membership
+(`SECURE`/`ELDER`/etc.) controls specific PRIVILEGES once you're
+already a creator, but does **not** by itself make an ordinary player
+account a creator, so a lib whose repo arrives with pre-existing
+non-`fluffos` admin accounts already seeded (a live/played snapshot,
+not a fresh archive — check `secure/save/creators/*/*.o` before
+assuming §1.5's normal flow applies) needs an extra step: **1.** add
+`fluffos` alongside the existing names on every line of
+`secure/cfg/groups.cfg` (don't replace real accounts — this preserves
+pre-existing content per usual policy), **2.** register `fluffos`
+through the ordinary NEW-player flow (step 1 of the normal procedure
+above — this lands the account under `secure/save/players/f/
+fluffos.o`), **3.** with the driver stopped, `mkdir -p
+secure/save/creators/f` and move that same `.o` file into it unchanged
+(exactly what `encre.lpc` itself does), then reboot. Verified live on
+`riftsds`: this alone was sufficient — `fluffos` immediately showed the
+admin-only room-path annotation and welcome banner, and `goto`/other
+creator-only commands worked with no further seeding.
+
 ---
 
 ## 2. The per-lib pipeline (bring-up from a raw archive)
@@ -12823,6 +12854,82 @@ driver-apply name) must be `public` (or at least not `private`/
 `protected`) — visibility here is a real access-control check, not
 cosmetic, and the failure mode gives zero diagnostic signal to work
 from.
+
+### 7.163 The `TYPE array NAME` idiom (§4.3/§6.3-class) also appears with a `class` return/declarator type, invisible to a plain-base-type regex sweep
+
+Found onboarding `riftsds` (Dead Souls 3.9, `grav1tyzero/rifts-ds`):
+`lib/body.lpc`'s `class MagicProtection array GetMagicProtection(){
+return Protection; }` is the exact same MudOS `array`-as-type-modifier
+habit already catalogued (§4.3's `TYPE array NAME` — `int`/`string`/
+`object`/`mixed`/`float`/`mapping`/`function`/`buffer` are the usual
+offenders), but with a `class STRUCTNAME` compound type instead of a
+bare keyword. A sweep regex anchored on the base-type list alone
+(`\b(int|string|object|mixed|...)\s+array\s+`) will silently skip this
+shape. The file's own header (`class MagicProtection *Protection;`)
+and its own forward declaration in the paired `.h`
+(`class MagicProtection *GetMagicProtection();`) already used the
+correct `*` form, confirming the return-type line was the only actual
+bug, not a real design ambiguity — fixed by matching those two
+already-correct declarations (`class MagicProtection *GetMagicProtection(){ return Protection; }`).
+When sweeping a newly-onboarded MudOS-lineage lib for this idiom, also
+grep `class \w+ array` specifically, not just the plain-base-type
+pattern.
+
+### 7.164 Bundled "flagship" domain content can depend ENTIRELY on a second, bespoke base-object framework the archive's own author never committed — no amount of per-file bug-fixing makes it boot, because the classes it inherits don't exist anywhere in the repository
+
+Found onboarding `riftsds` (`grav1tyzero/rifts-ds`, a Dead Souls 3.9
+lineage lib whose own repo description and file layout strongly imply
+`domains/omega` — 150 files describing a detailed multi-floor sci-fi
+space station, "Omega Station," with NPCs, shops, and an elevator — is
+the lib's standout content). Every one of those 150 files (148 with
+real code; 2 are empty stubs) fails to compile, and NONE of them fail
+for a fixable reason: `inherit LIVING`, `inherit M_VENDOR`, `inherit
+CONTAINER`, `inherit M_OPENABLE`, `inherit M_WEARABLE`, `inherit
+M_GETTABLE`, `inherit ARMOUR`, `inherit INDOOR_ROOM`, `inherit
+ELEVATOR` — none of these macros are `#define`d ANYWHERE in the
+repository (checked the full mudlib tree, the bundled driver source,
+and even the top-level non-mudlib `extra/` directory some of the
+onboarding session first suspected might hold them). `secure/include/
+compat.h` (gated live via `COMPAT_MODE 1` in `global.h`, genuinely
+wired in) proves this lib's author WAS actively building a compat
+shim to port old-style/foreign content onto this Dead Souls base — it
+correctly maps `ROOM`/`OBJECT`/`DAEMON`/`MONSTER`/`VAULT` and ~50
+lowercase `set_*`/`query_*` verb names to this lib's own CamelCase API
+— but it stops well short of the macros `domains/omega` (and, it turns
+out, `domains/common` — 33 more files, shared sci-fi item/ship
+infrastructure — and `domains/std` — 315 more files, a bundled Lima-
+style "builder school" example area shipped with upstream Dead Souls
+3.9 itself, using its own DIFFERENT missing-macro set: `KEY`, `OBJ`,
+`PARAM_OBJ`, `BOOK`, `VEHICLE`, `ADVERSARY`, `STOCK_MASTER`,
+`RANGED_WEAPON`) actually need. A `git log` on the upstream repo (only
+10 commits total, all bulk-importing large content trees or making
+small numeric tweaks — "money pops up a lot more than I thought",
+"multiple fixes credits added mana now ppe") confirms this reads as a
+personal, mid-development snapshot: the author bulk-imported this
+content once and moved on to other systems before finishing the
+compat layer, rather than the repository being a build artifact with a
+missing step on this project's side. Confirmed live, not just via the
+`lpcc_check.sh` batch sweep: an admin `goto` into
+`/domains/omega/room/elevator_center` throws the exact same `inherit
+ELEVATOR;` syntax error interactively, with `*No program in object
+'/domains/omega/room/elevator_center'!` on every subsequent reference.
+**This is a scale-up of the already-documented `LIB_CAPTURE` precedent
+(`libs/ds386/NOTES.md`: "implementing an entire mechanic from a one-line
+hint would be inventing content, not fixing a bug") from one orphaned
+item to two entire domains and a stock example area — 496 of a lib's
+524 total compile failures, one root cause.** Do not attempt to author
+the missing framework (a `LIVING`/`CONTAINER`/`ARMOUR`/`ELEVATOR`/
+mixin-style `M_*` class hierarchy, guessed from ~500 call sites, is
+authoring a second mudlib engine, not a bug fix) — verify the finding
+thoroughly (grep the WHOLE clone, including any non-mudlib top-level
+dirs, for the missing macro names before concluding this), document it
+prominently in the lib's own NOTES.md and README.md (don't advertise
+non-functional content as the highlight), and let the rest of the
+onboarding proceed normally on the content that DOES compile (this
+lib's actual stock-Dead-Souls domains — `Africa`/`Americas`/`Atlantis`/
+`Australia`/`China`/`Europe`/`Japan`/`Mexico`/`Russia`/`SouthAmericas`/
+`campus`/`town`/`Praxis`/`Ylsrim`/`default`/`amigara` — all compiled
+and played cleanly after the ordinary per-file fixes below).
 
 ---
 

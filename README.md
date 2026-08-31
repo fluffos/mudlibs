@@ -438,6 +438,7 @@ classes it's found.
 | 951 | `majik4` | Majik 4 | `git clone https://github.com/tleino/majik4 (commit b24efafe0b53c5b3433f421751e29442cee1262b, cloned 2026-08-28); mudlib root is the repo's lib/ directory -- bin/, COPYING, doc/, README.1st, TODO, and template/ at the repo top level were not part of the mudlib and were not converted` | 40253 | native-boot verified, WASM pending |
 | 953 | `rifts2` | RiftsMUD2 | `git clone https://github.com/tsathoqqua/RiftsMUD2 (cloned 2026-08-28); mudlib root is the repo's mudlib/ directory -- build/, docker-compose.yml, Dockerfile, local_options/local_options.h, and mud.sh at the repo top level were not part of the mudlib and were not converted` | 40255 | native-boot verified, WASM pending |
 | 954 | `oxidus` | Oxidus | `gh repo clone gesslar/oxidus-mudlib (cloned 2026-08-28/30, actively-developed HEAD as of cloning)` | 40256 | pending |
+| 955 | `riftsds` | Rifts DS | `git clone https://github.com/grav1tyzero/rifts-ds (cloned 2026-08-30); mudlib root is the repo's lib/ directory -- bin/, extra/, fluffos-2.23-ds03/ (bundled driver source), win32/, and top-level docs/license/batch files were not part of the mudlib and were not converted` | 40257 | native-boot verified, WASM pending |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout
