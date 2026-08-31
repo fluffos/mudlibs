@@ -305,3 +305,127 @@ intact), and pre-existing-unbalanced-quote garbling (1 hit,
 `std/obj/deed.lpc` — a genuine original-source typo, fixed by hand and
 reformatted). Re-booted and re-verified the full live playthrough
 (registration, look, score, quit, restore/reconnect) — all correct.
+
+## §10.7 deep functional test (2026-08-31, round two)
+
+Full continuous playthrough on the native driver (`build-debug`), going
+beyond the onboarding pass's registration/restore verification above —
+specifically to independently re-confirm the restore-path fix (§8.22)
+holds for a SECOND, unrelated account, and to exercise gameplay systems
+(race pick, class/subclass acquisition, safe-sparring, domain travel,
+long-sit daemon watch) the onboarding pass didn't reach. Test
+character: id `Vulmarrow`, password `Test12345`, male human, class
+Mage/subclass Sorceror — **kept** (not cleaned up) as a representative
+playthrough character. Save file: `work/adm/save/users/v/vulmarrow.o`.
+
+### Bug found and fixed: two objects pass a bare `int` to a `string`-typed setter, so this driver's strict compile-time type check rejects them and they never load
+
+`/d/nopk/standard/cemetary/mon/monument.lpc:12` and
+`/d/nopk/standard/rain_forest/obj/statue.lpc:8` both called
+`set_prevent_get(1)` — `std/object.lpc`'s real declaration is
+`void set_prevent_get(string str)` (494 other call sites across the
+corpus correctly pass a message string, e.g. `fighter/dummy.lpc`'s
+`set_prevent_get("You can't take that out of the ground!")`) — so both
+objects hit `Bad type for argument 1 of set_prevent_get ( string vs int
+)` and never compiled at all (`*No program in object '...'!` every time
+anything tried to `new()` them). This is the mirror image of the
+already-catalogued AGENTS.md §7.127 pattern (there, a shared base
+setter was declared narrower than the corpus's real usage; here the
+base declaration is correct and these two call sites are the outliers)
+— narrow enough (2 files, not a systemic class) that it doesn't warrant
+its own new AGENTS.md entry, but worth noting as the same general
+"literal-argument-type mismatch on an otherwise-correct setter" shape.
+Found via the long-sit boot watch below: a wandering `errand boy` NPC's
+`move_around()` heart_beat wandered into
+`/d/nopk/standard/cemetary/gravyar9`, whose `reset()` tried to
+`new()` the broken `monument.lpc`, throwing a real (if silent-to-players)
+error every reset cycle — exactly the class of bug §10.0 exists to
+catch (invisible to registration/login smoke testing, only surfaces
+once a lazily-reset room with wandering NPC traffic is hit). Fixed by
+giving each object a real message string matching the established
+convention (`"The monument/statue is far too heavy to carry."`).
+Verified with a targeted `lpcc --batch` recompile of just these two
+paths — both compile clean, no more `FAIL`/`error` lines — and
+confirmed no recurrence of the `No program in object` error across a
+fresh driver boot plus the full long-sit idle window below.
+
+### What was tested and confirmed working
+
+- **Registration and race pick**: full flow (name → name-policy
+  confirm → password → gender → email → real name → identity-profile
+  prompt) into the race-selection void room, `read list` (all 30 races
+  render), `pick human` → landed correctly in Tirun Central Park with
+  starting gear (boots, chainmail, helmet, newbie guide) and 600 gold.
+- **Movement/exploration into 3 distinct domains**: Tirun (walked the
+  hand-built street grid — market square, Honin Road, Ganthus Road,
+  Wayward/Parthos Roads — using a small BFS script built from parsing
+  every room's `set_exits()` in `d/nopk/tirun/`, since the town is large
+  enough that blind wandering wasn't practical); the North Forest
+  (`d/nopk/standard/forest1-3`, reached via the north gate, a genuinely
+  calm/monster-free newbie corridor by design); and Lodos (a full second
+  city, reached via the `/d/coach/` inter-city coach system — `coach to
+  lodos` from the western coach house, correct in-transit flavor text,
+  arrival with newbie fare correctly free — money stayed at 600 gold
+  throughout).
+- **Safe-sparring found and used before real combat**: `d/nopk/tirun/
+  fighter/dummy.lpc` (reached via `enter fighter hall` → south from
+  the Sparring Hall) is this lib's designated safe target — its
+  `attack dummy` handler is pure narration keyed off `random(this_player
+  ()->query_skill("melee"))`, no real damage exchanged either direction;
+  used repeatedly with zero HP loss before any real fight was
+  attempted (none was attempted this pass — see Death/respawn below).
+- **Skill/guild (class/subclass) acquisition, organic path**: walked to
+  the mage hall (`enter mage hall` off East Honin Road), `preview` →
+  `become mage` (class set, skill points 5→25), then BFS-navigated to
+  the sorceror hall (`enter sorceror hall` off East Wayward Avenue),
+  `preview` → `become sorceror` (subclass set, skill points →31,
+  alignment flipped to Godly, title updated to "novice sorceror").
+  `spells`/`skills` both rendered correctly afterward (a `missile`
+  attack spell newly available, full skill-point table). **No separate
+  admin-only shortcut command for class/subclass assignment was found**
+  — grepped `cmds/creator/` for a `set`-style utility and found only a
+  generic environment-variable `set` (unrelated); the only path to a
+  class/subclass in this lineage is the `become` command inside the
+  relevant hall, whether run by a mortal or (via a wizard's generic
+  `force`) an admin. Documented honestly rather than guessing at a
+  shortcut that doesn't exist.
+- **`quit`, `debug.log` grep, reconnect after a real gap — 3 independent
+  passes, specifically to re-verify §8.22 (found during onboarding)
+  holds for an account other than the one onboarding tested**: (1)
+  same-session quit+immediate reconnect — correct password accepted,
+  full state (class/subclass/HP/money/skills) restored, zero new
+  `debug.log` lines; (2) killed and rebooted the native driver entirely
+  (picking up the `monument.lpc`/`statue.lpc` fix), reconnected — same
+  clean result; (3) after that reboot, left one idle connection open
+  for the full ~220-second long-sit window (below), THEN reconnected a
+  real ~5 real-minutes-elapsed gap later — password accepted, full
+  state restored again, zero new `debug.log` growth across the entire
+  boot+idle+reconnect+quit cycle (`debug.log` line count identical
+  before and after). This independently reconfirms §8.22's fix is not
+  an artifact of the one account onboarding happened to test.
+- **Shop/economy**: the weaponsmith shop (`enter weaponsmith shop` off
+  Ganthus Road) correctly lists its repair-only service via `read sign`
+  (100 gold/level of disrepair — no `list`/`buy` inventory verb, a
+  repair-only shop by design, not a bug); the inter-city coach fare
+  system (above) is a real, working economy transaction (newbie-tier
+  fare correctly waived, gold unchanged) — a full paid transaction
+  (mid/elite fare, or a buy-from-peddler transaction with `Rejik`, whose
+  `reset()`-gated appearance in `square1` didn't line up with this
+  pass's timing) was not reached; flagging this as **budgeted, not
+  fully exercised**, per the project's own explicit fallback for
+  shop/economy coverage.
+- **Death/respawn**: **not verified live this pass** — time-budgeted
+  out in favor of the long-sit watch and the 3-way reconnect
+  re-verification above, both judged higher-value given this lib's
+  already-known restore-path history. Flagging honestly as unverified
+  rather than silently skipping it.
+- **Long-sit boot watch (§10.0, native-driver equivalent)**: no WASM
+  build exists for this lib yet (§ WASM status below), so used the
+  native equivalent — rebooted fresh (with the `monument.lpc`/
+  `statue.lpc` fix applied), opened one idle raw-socket connection, and
+  sat through a full ~220-second window without logging in, while a
+  wandering `errand boy` NPC's heart_beat continued triggering
+  `reset()` on the (now-fixed) cemetery room in the background. Zero
+  new `debug.log` entries during the entire window — confirms the fix
+  above actually closed the only lazily-triggered failure this pass
+  found, and surfaced no others.
