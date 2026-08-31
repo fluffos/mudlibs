@@ -1,0 +1,188 @@
+/*
+ * This is a mudlib file. Copy it to /obj/simul_efun.c, or
+ * wherever the get_simul_efun() in master.c says.
+ * The functions defined in this file should only be replacements of efuns
+ * no longer supported. Don't use these functions any longer, use the
+ * replacement instead.
+ */
+
+#pragma strict_types
+#pragma save_types
+
+/*
+ * extract() was a real efun on the classic driver this mudlib was
+ * written for; this driver (FluffOS) never implemented it, so it must
+ * be reimplemented here as a simul_efun -- see AGENTS.md §6.2.
+ * string extract(string str, int start, int end)
+ * string extract(string str, int start)
+ * Extract a substring, from character start to character end
+ * (inclusive), of the string str. If end is omitted, all of the
+ * characters up to the end of the string are returned. Indices start
+ * at 0. If start > end, or the string is shorter than requested, an
+ * empty string is returned.
+ */
+varargs string extract(string str, int start, int end) {
+  int len;
+
+  if (!str) return 0;
+  len = strlen(str);
+  if (!end) end = len - 1;
+  if (start < 0) start = 0;
+  if (end >= len) end = len - 1;
+  if (start > end) return "";
+  return str[start..end];
+}
+
+/*
+ * log_file() was a real efun on the classic driver this mudlib was
+ * written for (append 'str' to a file named 'file' inside the
+ * mudlib's own /log directory); this driver (FluffOS) never
+ * implemented it, so it must be reimplemented here as a simul_efun --
+ * see AGENTS.md §6.2.
+ */
+void log_file(string file, string str) {
+  write_file("/log/" + file, str);
+}
+
+/*
+ * cat() was a real efun on the classic driver this mudlib was written
+ * for; this driver (FluffOS) never implemented it, so it must be
+ * reimplemented here as a simul_efun -- see AGENTS.md §6.2.
+ * int cat(string file)
+ * int cat(string file, int start, int num)
+ *   Writes 'file' (or, in the 3-arg form, lines [start, start+num),
+ *   1-indexed, for pager-style paging) directly to the current
+ *   player, and returns the number of lines actually written (0 for
+ *   the 1-arg whole-file form).
+ */
+varargs int cat(string file, int start, int num) {
+  string content;
+  string *lines;
+  int len, i, end;
+
+  content = read_file(file);
+  if (!content) return 0;
+
+  if (!start) {
+    write(content);
+    return 0;
+  }
+
+  lines = explode(content, "\n");
+  len = sizeof(lines);
+  if (start < 1) start = 1;
+  end = (start - 1) + num;
+  if (end > len) end = len;
+  for (i = start - 1; i < end; i++) {
+    write(lines[i] + "\n");
+  }
+  return end - (start - 1);
+}
+
+/*
+ * creator() was a real efun on the classic driver this mudlib was
+ * written for (returns the wizard name that CLONED an object, if a
+ * wizard's own code called clone_object() on it directly, or 0 if the
+ * game/master created it normally) -- used defensively by
+ * obj/player.lpc's reset() to detect "someone manually cloned the
+ * player class" and self-destruct. This driver never implemented the
+ * efun at all. This archive's whole uid/creator model is already
+ * flattened to a single ROOT owner (see master.lpc's creator_file()
+ * stub, AGENTS.md §7.2) -- there is no meaningful per-wizard identity
+ * left to distinguish, and this is a small, fully-trusted
+ * single-owner mudlib with no untrusted-wizard threat model, so a
+ * permissive always-0 ("never flagged as an illegal manual clone")
+ * stub is the correct-for-this-archive reimplementation, not a
+ * security regression. See AGENTS.md §6.2.
+ */
+int creator(object ob) {
+  return 0;
+}
+
+/*
+ * previous_file() was a real efun on the classic driver this mudlib
+ * was written for (the file name of previous_object(), a convenience
+ * wrapper) -- never implemented on this driver. See AGENTS.md §6.2.
+ */
+string previous_file() {
+  return file_name(previous_object());
+}
+
+/*
+ * The ls() function is no longer needed, as get_dir() can do the same
+ * work.
+ */
+void ls(string path) {
+  int max, i, len, tmp;
+  int trunc_flag;
+  string *dir;
+#ifndef COMPAT_FLAG
+  seteuid(geteuid(previous_object()));
+#endif
+  /*    dir = efun::get_dir(path);  crashes the gd -- demos 911115 */
+  dir = get_dir(path);
+#ifdef COMPAT_FLAG
+  if (path[0] == '/')
+    path = extract(path, 1);
+  if (path != "")
+    path += "/";
+#else
+  if (path != "/")
+    path += "/";
+#endif
+  if (!dir) {
+    write("No such directory.\n");
+    return;
+  }
+  if (sizeof(dir) > 330) {
+    dir = dir[0..329];
+    trunc_flag = 1;
+  }
+  for (i = 0; i < sizeof(dir); i++) {
+    if (file_size(path + "/" + dir[i]) == -2)
+      dir[i] += "/";
+    len = strlen(dir[i]);
+    if (len >= max)
+      max = len + 1;
+  }
+  if (max > 79)
+    max = 79;
+  for (i = 0; i < sizeof(dir); i++) {
+    string name;
+    name = dir[i];
+    tmp = strlen(name);
+    if (len + tmp > 79) {
+      len = 0;
+      write("\n");
+    }
+    write(name);
+    if (len + max > 80) {
+      write("\n");
+      len = 0;
+    } else {
+      write(extract(
+        "                                                                                ",
+        80 - max + tmp));
+      len += max;
+    }
+  }
+  write("\n");
+  if (trunc_flag) write("***TRUNCATED***\n");
+}
+
+/*
+ * The old 'slice_array' is no longer needed. Use range argument inside
+ * a pair of brackets instead.
+ */
+mixed *slice_array(mixed *arr, int from, int to) {
+  return arr[from..to];
+}
+#if 0
+/*
+ * filter_objects() has been renamed to filter_array().
+ */
+mixed *filter_objects(mixed *list, string str, object ob, mixed extra) {
+  return filter_array(list, str, ob, extra);
+}
+
+#endif

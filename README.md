@@ -443,6 +443,7 @@ classes it's found.
 | 956 | `darkelib` | DarkeLIB | `gh repo clone thraeq/DarkeLIB (cloned 2026-08-30); mudlib root is the repo's mudlib/ directory -- Dockerfile, docker-compose.yml, local_options.fluffos, local_options.v22.2b14, mud.sh, and README.md at the repo top level were not part of the mudlib and were not converted` | 40258 | native-boot verified, WASM pending |
 | 957 | `spacemud` | Spacemud | `gh repo clone limalib/spacemud (HEAD f4428ee, cloned 2026-08-30); mudlib root is the repo's lib/ directory -- adm/, bin/, resources/, CODE_OF_CONDUCT.md, LICENSE, README.md, and SECURITY.md at the repo top level were not part of the mudlib and were not converted` | 40259 | native-boot verified, WASM pending |
 | 959 | `basis` | Basis | `ftp.lysator.liu.se/pub/lpmud/mudlibs/MudOS/basis-20.tar.gz (still live, recovered directly 2026-08-31)` | 40261 | WASM playable |
+| 960 | `lpmud245` | LPmud 2.4.5 | `ftp.lysator.liu.se/pub/lpmud/mudlibs/other/2.4.5.tar.gz (still live, recovered directly 2026-08-31)` | 40262 | WASM playable |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout

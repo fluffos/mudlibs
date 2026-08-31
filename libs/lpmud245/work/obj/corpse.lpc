@@ -1,0 +1,134 @@
+/*
+ * This is a decaying corpse. It is created automatically
+ * when a player or monster die.
+ */
+
+#define DECAY_TIME	120
+
+string name;
+int decay;
+
+prevent_insert() {
+  write("The corpse is too big.\n");
+  return 1;
+}
+
+init() {
+  add_action("search", "search");
+}
+
+reset(arg) {
+  if (arg)
+    return;
+  name = "noone";
+  decay = 2;
+}
+
+set_name(n) {
+  name = n;
+  call_out("decay", DECAY_TIME);
+}
+
+short() {
+  if (decay < 2)
+    return "The somewhat decayed remains of " + capitalize(name);
+  return "Corpse of " + capitalize(name);
+}
+
+long() {
+  write("This is the dead body of " + capitalize(name) + ".\n");
+}
+
+id(str) {
+  return str == "corpse" || str == "corpse of " + name || str == "remains";
+}
+
+decay() {
+  decay -= 1;
+  if (decay > 0) {
+    call_out("decay", 20);
+    return;
+  }
+  destruct(this_object());
+}
+
+can_put_and_get() { return 1; }
+
+search(str) {
+  object ob;
+  if (!str || !id(str))
+    return 0;
+  ob = present(str, environment(this_player()));
+  if (!ob)
+    ob = present(str, this_player());
+  if (!ob)
+    return 0;
+  write("You search " + str + ", and find:\n");
+  say(call_other(this_player(), "query_name") + " searches " + str + ".\n");
+  if (!search_obj(ob))
+    write("\tNothing.\n");
+  else
+    write("\n");
+  return 1;
+}
+
+search_obj(cont) {
+  object ob;
+  int total;
+
+  if (!call_other(cont, "can_put_and_get"))
+    return 0;
+  ob = first_inventory(cont);
+  while (ob) {
+    total += 1;
+    write(call_other(ob, "short") + ", ");
+    ob = next_inventory(ob);
+  }
+  return total;
+}
+
+get() {
+  return 1;
+}
+
+query_weight() {
+  return 5;
+}
+
+/*
+ * move_object(dest): this driver's move_object() efun is 1-argument
+ * (moves this_object() only) -- unlike the classic 2-argument
+ * move_object(item, dest) this archive was written for. Every 2-arg
+ * call site in this mudlib was mechanically rewritten to
+ * `item->move_object(dest)`, which requires EVERY object that can
+ * ever be the "item" to define its own move_object(dest) lfun (this
+ * driver's call_other() never falls back to a same-named efun on a
+ * miss -- it just silently returns 0, no error). Added mechanically
+ * to every obj/ and players/ file as a precaution; not part of the
+ * original archive. See AGENTS.md §7.158.
+ */
+int move_object(mixed dest) {
+  return efun::move_object(dest);
+}
+
+/*
+ * create(): this driver's call_create() (invoked once, synchronously,
+ * right when an object is first loaded/cloned) ALWAYS marks the
+ * object as "already reset" and schedules its real first reset() for
+ * up to "time to reset" seconds later -- regardless of whether the
+ * mudlib defines create() at all. This whole archive uses the classic
+ * old-MudOS reset(arg){if(arg)return;...} idiom AS ITS CONSTRUCTOR
+ * (initial light/exits/NPCs/etc), which this driver's behavior
+ * otherwise defers for up to 30 minutes after load -- e.g. a brand
+ * new player's very first `look` finding their starting room
+ * completely dark, because room/church's own reset() (which sets its
+ * light) had never actually run yet. Call reset() explicitly here so
+ * initialization is guaranteed synchronous on load, matching what
+ * this archive's own master.c header comment describes ("reset()
+ * will be called first"). Not part of the original archive -- added
+ * mechanically to every file using this idiom. See AGENTS.md (new
+ * entry, this session).
+ */
+create() {
+  reset(0);
+}

@@ -1,0 +1,216 @@
+/*
+ * This file defines a general purpose armour. See below for configuration
+ * functions: set_xx.
+ */
+
+/*
+ * If you are going to copy this file, in the purpose of changing
+ * it a little to your own need, beware:
+ *
+ * First try one of the following:
+ *
+ * 1. Do clone_object(), and then configure it. This object is specially
+ *    prepared for configuration.
+ *
+ * 2. If you still is not pleased with that, create a new empty
+ *    object, and make an inheritance of this objet on the first line.
+ *    This will automatically copy all variables and functions from the
+ *    original object. Then, add the functions you want to change. The
+ *    original function can still be accessed with '::' prepended on the name.
+ *
+ * The maintainer of this LPmud might become sad with you if you fail
+ * to do any of the above. Ask other wizards if you are doubtful.
+ *
+ * The reason of this, is that the above saves a lot of memory.
+ */
+
+string name, alias, short_desc, long_desc, value, weight;
+string type;
+int worn, ac;
+object worn_by;
+object next;
+string info;
+
+reset(arg) {
+  if (arg)
+    return;
+  type = "armour";
+}
+
+link(ob) {
+  next = ob;
+}
+
+remove_link(str) {
+  object ob;
+
+  if (str == name) {
+    ob = next;
+    next = 0;
+    return ob;
+  }
+  if (next)
+    next = call_other(next, "remove_link", str);
+  return this_object();
+}
+
+init() {
+  add_action("wear", "wear");
+  add_action("remove", "remove");
+}
+
+rec_short() {
+  if (next)
+    return name + ", " + call_other(next, "rec_short");
+  return name;
+}
+
+short() {
+  if (!short_desc)
+    return 0;
+  if (worn)
+    return short_desc + " (worn)";
+  return short_desc;
+}
+
+long(str) {
+  write(long_desc);
+}
+
+id(str) {
+  return str == name || str == alias || str == type;
+}
+
+test_type(str) {
+  if (str == type)
+    return this_object();
+  if (next)
+    return call_other(next, "test_type", str);
+  return 0;
+}
+
+tot_ac() {
+  if (next)
+    return ac + call_other(next, "tot_ac");
+  return ac;
+}
+
+query_type() { return type; }
+
+query_value() { return value; }
+
+query_worn() { return worn; }
+
+query_name() { return name; }
+
+armour_class() { return ac; }
+
+wear(str) {
+  object ob;
+
+  if (!id(str))
+    return 0;
+  if (environment() != this_player()) {
+    write("You must get it first!\n");
+    return 1;
+  }
+  if (worn) {
+    write("You already wear it!\n");
+    return 1;
+  }
+  next = 0;
+  ob = call_other(this_player(), "wear", this_object());
+  if (!ob) {
+    worn_by = this_player();
+    worn = 1;
+    return 1;
+  }
+  write("You already have an armour of class " + type + ".\n");
+  write("Worn armour " + call_other(ob, "short") + ".\n");
+  return 1;
+}
+
+get() { return 1; }
+
+drop(silently) {
+  if (worn) {
+    call_other(worn_by, "stop_wearing", name);
+    worn = 0;
+    worn_by = 0;
+    if (!silently)
+      tell_object(environment(this_object()), "You drop your worn armour.\n");
+  }
+  return 0;
+}
+
+remove(str) {
+  if (!id(str))
+    return 0;
+  if (!worn) {
+    return 0;
+  }
+  call_other(worn_by, "stop_wearing", name);
+  worn_by = 0;
+  worn = 0;
+  return 1;
+}
+
+query_weight() { return weight; }
+
+set_id(n) { name = n; }
+set_name(n) { name = n; }
+set_short(s) { short_desc = s; long_desc = s + ".\n"; }
+set_value(v) { value = v; }
+set_weight(w) { weight = w; }
+set_ac(a) { ac = a; }
+set_alias(a) { alias = a; }
+set_long(l) { long_desc = l; }
+set_type(t) {
+  type = t;
+}
+set_arm_light(l) { set_light(l); }
+set_info(i) {
+  info = i;
+}
+
+query_info() {
+  return info;
+}
+
+/*
+ * move_object(dest): this driver's move_object() efun is 1-argument
+ * (moves this_object() only) -- unlike the classic 2-argument
+ * move_object(item, dest) this archive was written for. Every 2-arg
+ * call site in this mudlib was mechanically rewritten to
+ * `item->move_object(dest)`, which requires EVERY object that can
+ * ever be the "item" to define its own move_object(dest) lfun (this
+ * driver's call_other() never falls back to a same-named efun on a
+ * miss -- it just silently returns 0, no error). Added mechanically
+ * to every obj/ and players/ file as a precaution; not part of the
+ * original archive. See AGENTS.md §7.158.
+ */
+int move_object(mixed dest) {
+  return efun::move_object(dest);
+}
+
+/*
+ * create(): this driver's call_create() (invoked once, synchronously,
+ * right when an object is first loaded/cloned) ALWAYS marks the
+ * object as "already reset" and schedules its real first reset() for
+ * up to "time to reset" seconds later -- regardless of whether the
+ * mudlib defines create() at all. This whole archive uses the classic
+ * old-MudOS reset(arg){if(arg)return;...} idiom AS ITS CONSTRUCTOR
+ * (initial light/exits/NPCs/etc), which this driver's behavior
+ * otherwise defers for up to 30 minutes after load -- e.g. a brand
+ * new player's very first `look` finding their starting room
+ * completely dark, because room/church's own reset() (which sets its
+ * light) had never actually run yet. Call reset() explicitly here so
+ * initialization is guaranteed synchronous on load, matching what
+ * this archive's own master.c header comment describes ("reset()
+ * will be called first"). Not part of the original archive -- added
+ * mechanically to every file using this idiom. See AGENTS.md (new
+ * entry, this session).
+ */
+create() {
+  reset(0);
+}

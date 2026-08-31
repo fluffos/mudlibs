@@ -13343,6 +13343,128 @@ values from an empty mapping instead of failing loudly at compile
 time — strictly worse. When you see this shape, always check whether
 the private inherit is dead weight first.
 
+### 7.170 `file_name()` always returns a leading `/` on this driver — a self-identity check comparing against a bare (no-slash) path constant is always false, and when the false branch re-delegates to the very same path via `call_other()`, the result is infinite self-recursion, not just a missed match
+
+`efuns_main.cc`'s own source comment for `f_file_name()`: "This
+function now returns a leading '/'". An archive written against an
+older convention that returned bare paths (`"room/room"`, not
+`"/room/room"`) will have any `file_name(ob) == "some/bare/path"`
+check silently and permanently fail. The USUAL consequence is just a
+quietly-missed feature (a special case never triggers). But watch
+specifically for a "is this object ITS OWN shared singleton instance"
+identity check feeding a decision between "do the real work" and
+"delegate to path X via `call_other()`" — if X is the object's own
+path, a false negative on the self-identity check means the object
+delegates to *itself*, forever: a genuine stack-overflow crash
+("Too deep recursion"), not a silently-missing feature. Confirmed on
+`lpmud245`: `room/room.lpc`'s shared `query_numbers()` cache used
+exactly this shape (`if (file_name(this_object()) == "room/room")
+... else numbers = call_other("room/room", "query_numbers");`),
+breaking every room's long-form exit description in the entire game
+the first time any room needed to spell out its exit count in words.
+Fix: add the leading slash to the comparison constant. Grep any new
+archive for `file_name(` compared against a string literal that
+doesn't start with `/`.
+
+### 7.171 A non-wizard player's visible error output can be a complete red herring when `mudlib error handler` is on (the default) — the real error is ALWAYS fully logged to debug.log regardless, but the player only sees it if they're flagged as a wizard
+
+`vm/internal/simulate.cc`'s error-reporting path: when
+`RC_MUDLIB_ERROR_HANDLER` is on (the default — `rc.cc`'s own default
+value is 1) and no mudlib `error_handler()` apply overrides the
+default, ordinary (non-`O_IS_WIZARD`) command-givers are shown the
+configured `default error message` string INSTEAD OF the real error
+text (`add_vmessage(command_giver, "%s\n", default_error_message)`),
+while `debug_message_with_location(err+1)` still fires unconditionally
+first, logging the FULL error (message, program, object, line,
+complete stack trace) to `debug.log` every single time regardless of
+who's connected. A crash whose player-facing symptom reads like
+ordinary (if terse) game content — not an obvious "Undefined
+function"/"Bad argument" message — should still prompt a direct read
+of `debug.log` before concluding nothing is wrong; don't infer
+"no bug" purely from an unalarming-looking player-facing response.
+Confirmed on `lpmud245`: a genuine infinite-recursion crash (§7.170)
+produced only "Something is wrong." (this lib's own configured
+`default error message`) to an ordinary test player, with zero visible
+indication anything had failed, while `debug.log` had the complete
+"Too deep recursion" trace the entire time. This generalizes §10.3's
+existing narrower point about `logon()` specifically swallowing
+errors via `safe_apply` to a much broader, config-driven case that can
+apply to literally any command a non-wizard player runs.
+
+### 7.172 `command(str, ob)` (run a command as a specific, non-current object) does not exist on this driver — `command(str)` always runs against `current_object`, never `command_giver`/`this_player()`
+
+Old MudOS's `command(str, ob)` ran `str` as if `ob` had typed it —
+useful for forcing an NPC to `wield` a weapon, or a wizard utility
+replaying a queued command on behalf of a player from a heartbeat
+callback. This driver's `command()` efun takes exactly one argument
+and always executes via `parse_command(buff, current_object)`
+(`add_action.cc`'s `f_command()`) — i.e. as whatever object's OWN
+code is making the call, which is essentially never the intended
+target when the call originates from a THIRD object's heartbeat or a
+room's forcing logic. A bare `target->command(str)` does NOT work
+around this — `command` isn't a real user-definable function name
+match, and even if it were, this driver's `call_other()` never falls
+back to a same-named efun on a miss (the same root cause already
+documented for `move_object()`'s 2-arg dialect gap, §7.158) — it
+silently returns 0. **Fix**: add a small wrapper to every class that's
+ever the intended target, `do_command(string str) { return
+command(str); }`, and call `target->do_command(str)` instead — inside
+that wrapper, `current_object` really is the target (call_other
+switches it for the call's duration), so the real efun call executes
+in the right context. Confirmed on `lpmud245`: ~12 call sites across
+a heartbeat-driven wizard queued-auto-typer utility, two wizard
+tracer/pull tools, and NPC-forced-`wield` room logic.
+
+### 7.173 `transfer(item, dest)` — a second classic MudOS efun for the same "move an arbitrary object" concept `move_object()` covers, also absent on this driver
+
+Distinct efun name, identical old-MudOS 2-argument shape and identical
+fix to the `move_object()` dialect gap (§7.158): `transfer(A, B)` ->
+`A->move_object(B)`, reusing whatever per-object `move_object(dest) {
+return efun::move_object(dest); }` shim that gap's fix already
+requires. One caveat: a few old call sites check the efun's return
+value for success (`if (transfer(...) != 0)`) — a shim forwarding to
+this driver's `void`-declared `move_object()` efun doesn't reliably
+preserve that signal, so treat any such check as no-longer-meaningful
+unless verified otherwise case-by-case. (`lpmud245`, 12 sites.)
+
+### 7.174 `add_action("fun"); add_verb("cmd");` — an archaic two-statement command-registration idiom, mechanically equivalent to this driver's required 2-argument `add_action(fun, cmd)`
+
+A very old LPMud idiom: `add_action(fun)` alone (1-arg, implicit
+"verb == fun name") immediately followed by a separate `add_verb(cmd)`
+efun call setting the real verb text. This driver's `add_action()`
+declares its 2nd (cmd) parameter as required, not `void`-optional
+(`void add_action(string|function, string|string*, void|int);` — note
+only the 3rd param is `void`-prefixed), so every 1-arg `add_action(fun)`
+call in an archive using this idiom fails to compile ("Too few
+arguments to add_action"), and `add_verb` isn't a real efun on this
+driver either. Mechanical fix: merge each adjacent
+`add_action("X"); add_verb("Y");` pair (across any whitespace/tabs)
+into a single `add_action("X", "Y");`. Detect via a paren-balanced
+scan rather than a naive regex if either argument can itself contain
+nested parentheses or commas. (`lpmud245`, 366 call sites across 111
+files — this fixed the overwhelming majority of that lib's initial
+compile-sweep failures in one mechanical pass.)
+
+### 7.175 `creator_file()` is required by a `PACKAGE_UIDS` build for literally EVERY object load, not just at boot — a distinct requirement from `get_root_uid()`/`get_bb_uid()` (§7.2)
+
+§7.2 already documents that `get_root_uid()`/`get_bb_uid()` are
+unconditionally required at BOOT when `PACKAGE_UIDS` is on (the driver
+`exit(-1)`s otherwise). `creator_file()` is a separate, easy-to-miss
+THIRD requirement of the same build flag, invoked via
+`apply_master_ob(APPLY_CREATOR_FILE, ...)` inside `simulate.cc`'s
+object-loading path for EVERY SINGLE subsequent object load (to
+assign it a euid) — its absence doesn't block boot itself (master and
+simul_efun load fine), but hard-`error()`s ("master object: No
+function creator_file() defined!") the moment anything else tries to
+load, which in practice means immediately after boot completes. An
+archive that predates the uid system entirely (as `lpmud245` does —
+confirmed by grep, only one incidental `seteuid()` call in the whole
+mudlib) needs all three applies stubbed together;
+`get_root_uid()`/`get_bb_uid()` alone is not sufficient to get past
+boot into a genuinely usable state. A flat single-owner stub (e.g.
+`return "ROOT";`) is sufficient when the archive has no real per-
+wizard domain-crediting concept left to preserve.
+
 ---
 
 ## 8. Login and registration flow bugs

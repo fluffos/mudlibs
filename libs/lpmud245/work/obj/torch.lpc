@@ -1,0 +1,141 @@
+/*
+ * This is a generic torch.
+ * It will have some good initialisations by default.
+ * The torch can't be sold when it is lighted.
+ */
+
+string amount_of_fuel;
+string name;
+int is_lighted;
+int weight;
+
+long() {
+  write(short() + "\n");
+}
+
+reset(arg) {
+  if (arg)
+    return;
+  amount_of_fuel = 2000; name = "torch"; is_lighted = 0; weight = 1;
+}
+
+set_weight(w) { weight = w; }
+
+query_weight() { return weight; }
+
+short() {
+  if (is_lighted)
+    return name + " (lighted)";
+  return name;
+}
+
+set_name(n) { name = n; }
+set_fuel(f) { amount_of_fuel = f; }
+
+init() {
+  add_action("light", "light");
+  add_action("extinguish", "extinguish");
+}
+
+light(str) {
+  if (!str || str != name)
+    return 0;
+  if (is_lighted) {
+    write("It is already lighted.\n");
+    return 1;
+  }
+  is_lighted = 1;
+  call_out("out_of_fuel", amount_of_fuel * 2);
+  if (set_light(1) == 1) {
+    write("You can see again.\n");
+    say(call_other(this_player(), "query_name") +
+      "lights a " + name + "\n");
+  } else
+    write("Ok.\n");
+  amount_of_fuel = 0;
+  return 1;
+}
+
+out_of_fuel() {
+  object ob;
+  if (set_light(-1) == 0)
+    say("There is darkness as a " + name + " goes dark.\n");
+  else
+    say("The " + name + " goes dark.\n");
+  ob = environment(this_object());
+  if (living(ob))
+    call_other(ob, "add_weight", -weight);
+  destruct(this_object());
+}
+
+id(str) {
+  return str == name;
+}
+
+query_value() {
+  return amount_of_fuel / 100;
+}
+
+get() { return 1; }
+
+extinguish(str) {
+  int i;
+
+  if (str && !id(str))
+    return 0;
+  if (!is_lighted)
+    return 0;
+  i = remove_call_out("out_of_fuel");
+  if (i == -1) {
+    write("Error.\n");
+    return 1;
+  }
+  amount_of_fuel = i / 2;
+  is_lighted = 0;
+  if (set_light(-1) == 0) {
+    write("It turns dark.\n");
+    say(call_other(this_player(), "query_name") +
+      " extinguishes the only light source.\n");
+  } else {
+    write("Ok.\n");
+  }
+  return 1;
+}
+
+/*
+ * move_object(dest): this driver's move_object() efun is 1-argument
+ * (moves this_object() only) -- unlike the classic 2-argument
+ * move_object(item, dest) this archive was written for. Every 2-arg
+ * call site in this mudlib was mechanically rewritten to
+ * `item->move_object(dest)`, which requires EVERY object that can
+ * ever be the "item" to define its own move_object(dest) lfun (this
+ * driver's call_other() never falls back to a same-named efun on a
+ * miss -- it just silently returns 0, no error). Added mechanically
+ * to every obj/ and players/ file as a precaution; not part of the
+ * original archive. See AGENTS.md §7.158.
+ */
+int move_object(mixed dest) {
+  return efun::move_object(dest);
+}
+
+/*
+ * create(): this driver's call_create() (invoked once, synchronously,
+ * right when an object is first loaded/cloned) ALWAYS marks the
+ * object as "already reset" and schedules its real first reset() for
+ * up to "time to reset" seconds later -- regardless of whether the
+ * mudlib defines create() at all. This whole archive uses the classic
+ * old-MudOS reset(arg){if(arg)return;...} idiom AS ITS CONSTRUCTOR
+ * (initial light/exits/NPCs/etc), which this driver's behavior
+ * otherwise defers for up to 30 minutes after load -- e.g. a brand
+ * new player's very first `look` finding their starting room
+ * completely dark, because room/church's own reset() (which sets its
+ * light) had never actually run yet. Call reset() explicitly here so
+ * initialization is guaranteed synchronous on load, matching what
+ * this archive's own master.c header comment describes ("reset()
+ * will be called first"). Not part of the original archive -- added
+ * mechanically to every file using this idiom. See AGENTS.md (new
+ * entry, this session).
+ */
+create() {
+  reset(0);
+}
