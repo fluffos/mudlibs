@@ -811,3 +811,183 @@ work -- a WASM build of this lib would need the SAME
 `ARRAY_RESERVED_WORD`-flipped `local_options` change layered onto an
 `emcmake cmake --preset wasm` build, analogous to what `libs/lima`'s
 NOTES.md already flags as its own outstanding WASM work).
+
+## §10.7 deep functional test (2026-08-31, round two)
+
+Full continuous playthrough on the dedicated `~/src/fluffos-wilderness`
+native driver, going well beyond the onboarding pass's registration/
+recursion-fix verification above -- specifically to re-confirm the §5
+infinite-recursion fix and the §10 sword/exit fixes hold under fresh,
+independent exploration, and to exercise systems (economy, real
+combat, quit/reconnect, a long-sit boot watch) the onboarding pass
+didn't reach. Used the seeded `fluffos`/`Mud@2026` admin account for
+exploration/instrumentation, plus a fresh throwaway mortal
+registration (`Questorwild`/`Test12345`, real male human, 50/50/.../50
+attribute spread, deleted after use per this project's no-test-clutter
+convention) to independently re-verify the mortal registration and
+restore paths on an account other than the onboarding session's own.
+
+### Bug found and fixed: `domains/std/rooms/beach/Outside_Cave.lpc`'s `object_arrived` hook destructed the PLAYER'S OWN BODY on ordinary entry -- new AGENTS.md §7.189
+
+Found via ordinary exploration, no combat or edge-case input involved:
+`goto`-ing (or simply walking, confirmed both ways) from the connected,
+portal-reachable `Grotto` room `out` into `Outside_Cave` destructed the
+player's own body object mid-move, 100% reproducible. The visible
+symptom was severe and immediate -- the room's own flavor text
+("Fluffos sinks into the surf, and you quickly lose track of it in the
+violent crashing waves.") printed as if describing the PLAYER
+themselves, followed by a cascade of driver errors (`*Bad argument 1
+to EFUN call_other() ... Got: int(0)`, `*Bad argument 1 to
+environment() ... Got: 0`, `*Parse accepted, but no do_* function
+found`) and a fully dead connection (`Can't use verb with no body.` on
+every subsequent command) until reconnecting. Root-caused via
+`log/runtime`'s stack trace to `std/modules/m_smartmove.lpc:170`
+(`environment()->call_hooks("person_arrived", ...)` returning 0 right
+after a successful move) plus a direct read of
+`Outside_Cave.lpc`'s own `obj_arrived()`: it checked `ob->get_size() >=
+VERY_LARGE` to pick between a "large splash" and a "sinks into the
+surf" message, but only the VERY_LARGE branch checked `is_living()`
+before deciding whether to destruct at all -- the small-object branch
+(what every ordinary humanoid player or NPC entering the room hits)
+unconditionally printed the sinks-into-the-surf message and called
+`destruct(ob)` with **no living/vehicle check whatsoever**. Confirmed
+this is a `wilderness`-specific regression, not an inherent Lima-
+lineage bug: the sibling `domains/std/Lava_Room.lpc` in this SAME
+codebase implements the identical "destruct small non-living arrivals"
+idiom correctly (`if ( !o->is_living() && !o->is_vehicle() )` before
+its own `destruct()`), and BOTH `libs/lima`'s modern fork AND
+`libs/spacemud`'s independent archive ship their own copies of this
+exact `Outside_Cave.lpc` file with the correct `if (!ob->is_living())`
+guard already present -- three of four known copies have the guard,
+strong evidence the fourth (this one) genuinely lost it rather than
+never having it. Fixed by adding the missing guard (see AGENTS.md
+§7.189 for the full writeup and general lesson); verified live,
+before/after: pre-fix, `out` from `Grotto` crashes the connection
+every time; post-fix, `out` correctly shows "You enter." + the room
+description, and `north` back into `Grotto` immediately afterward
+confirms the round trip and the player's body survive intact. The
+connection always recovered on reconnect (only the in-memory body was
+destroyed, not the save file), so this was "only" a forced-disconnect
+crash rather than true permadeath, but it was a 100%-reproducible
+crash on an entirely ordinary two-hops-from-the-portal exploration
+path.
+
+### Bug found and fixed: `daemons/messages_d.lpc`'s unarmed "graze" combat message baked a hardcoded `-s` into the verb token, breaking this codebase's own `$v` conjugation contract in both directions
+
+`"unarmed"`'s `"none"` (near-miss/graze) tier read `"$N $vgrazes to $t
+with $p fist."` -- note `$vgrazes`, not `$vgraze` -- while every
+sibling weapon category's identical tier (`"edged"`, `"blunt"`,
+`"piercing"`) correctly used `$vgraze`. Root-caused by reading
+`std/modules/m_messages.lpc`'s `$v` handler: for the second-person
+subject ("you"), it uses the verb token verbatim (so a token that
+already ends in `-s` prints wrong for "you" -- confirmed live,
+`"You grazes to Bill the Troll with your fist."`); for a third-person
+subject, it calls `M_GRAMMAR->pluralize(str)` to append the `-s`
+itself, so a token that ALREADY has one gets doubled --
+confirmed with an isolated instrumented test,
+`M_GRAMMAR->pluralize("grazes")` returns `"grazesses"` (efun
+`pluralize()`'s real "ends in s -> add -es" rule firing on an
+already-conjugated word). So the bug was wrong for BOTH grammatical
+persons, not just cosmetically wrong for one. Fixed by dropping the
+baked-in `-s`, matching the three sibling categories: `"$N $vgraze $t
+with $p fist."`. Verified live (a fresh player-body instance was
+needed since `set_combat_messages()` caches `MESSAGES_D->get_messages()`
+once per object at `setup()` time, so an already-loaded body doesn't
+pick up a live `update` to `messages_d.lpc` until it reconnects):
+post-fix, the exact same fight now correctly shows "You graze Bill the
+Troll with your fist." Narrow enough (one file, a single message
+string, no corpus-wide grep hits for the same `$v<word>s` doubled-verb
+shape) that it doesn't warrant its own AGENTS.md entry.
+
+### What was tested and confirmed working
+
+- **Fresh mortal registration, independent of the onboarding session's
+  own test characters**: full flow (name confirm -> password (twice)
+  -> gender -> email -> real name -> homepage -> 5-question personality
+  quiz -> 8-attribute 400-point budget -> size) for `Questorwild`,
+  landing correctly in `The Void` with 25/25 HP (NOT auto-promoted to
+  admin, confirming the first-character-only bootstrap correctly stays
+  off for a second/later character) -> `enter portal` -> landed in
+  `Branin's Study`, surrounded by 6 different sword/dagger/mace/
+  zweihander weapons with zero crash (independently re-confirms the
+  §10 `set_combat_messages("combat-sword")`/`m_exit.lpc` guard fixes
+  hold for a brand-new account, not just the ones onboarding tested).
+- **Shop/economy, a full two-sided transaction**: `domains/std/Shop`
+  (Biff the Shopkeeper, reached via admin `goto`) -- `list` shows a
+  red apple (1 copper) and a rusty sword (1 electrum 5 copper); cloned
+  a sword, `sell sword to biff` correctly paid 1 electrum; `buy apple`
+  correctly charged 1 copper and made change (9 copper back); a second
+  `buy sword` correctly refused for insufficient funds. Full
+  sell-then-buy-with-correct-change loop verified, not just a
+  read-only `list`.
+  `ask biff about swords` returned "Nothing in this shop matches that!"
+  -- `M_VENDOR`'s "ask" handling appears to only match the room's own
+  authored `add_item("sign", ...)` topics, not a shopkeeper's own stock
+  by name; not chased further since `list`/`buy`/`sell` are the shop's
+  real, documented interface (the sign's own text says exactly that)
+  and all three work correctly -- flagging as an observation, not
+  fixing, since it's unclear whether `ask about <item>` was ever meant
+  to be wired to vendor stock at all.
+- **Real combat** (this lib has no dedicated safe-sparring
+  dummy/mechanism -- grepped for the `accept_fight` pattern documented
+  in AGENTS.md as the thing to look for and found zero hits anywhere
+  in the tree, confirmed honestly rather than assuming one exists):
+  used `domains/std/rooms/caves/Grotto`'s placed `Bill the Troll`
+  (`max_health` 30, a genuinely weak, deliberately-reachable "starter
+  monster" per its own file, fought at full admin HP as the safest
+  available substitute) -- full fight with both hit/miss/graze
+  messages and off-balance/clumsy-swipe flavor text all rendering
+  correctly (post-fix). Did not press the fight to a kill (admin
+  landed zero solid unarmed hits in ~130 rounds -- low unarmed skill
+  by design, not a bug) since the immediate priority once combat was
+  confirmed working was root-causing the `Outside_Cave` crash above;
+  the corpse-decay/insect-scavenging flavor system was independently
+  observed working correctly on an unrelated NPC corpse during the
+  same fight.
+- **`quit`, `debug.log`(`log/execute`)/`log/runtime` grep, reconnect
+  after a real gap** -- multiple passes: (1) admin same-session
+  reconnects across 4 separate tmux sessions while iterating on the
+  two bugs above, full state preserved every time including HP/
+  inventory-affecting actions (heal, clone, sell, buy); (2) the fresh
+  mortal `Questorwild` registered, played through to `Branin's Study`,
+  `quit`, then reconnected after the driver had been fully restarted
+  (picking up both fixes) -- correct password prompt, full state
+  restored (`Branin's Study`, 25/25 HP, 100/100 Stam) confirming the
+  restore path independently of the onboarding session's own accounts.
+- **Long-sit boot watch (native-driver equivalent of §10.0, no WASM
+  build exists for this lib)**: killed and rebooted the driver fresh
+  with both fixes applied, opened one idle raw-socket connection at
+  the login-name prompt (never logging in), and sat through a full
+  ~225-second window. Zero growth in `log/execute` (the debug-log
+  equivalent for this driver -- see §0's config note; confirmed
+  working correctly for a properly-launched-from-`libs/wilderness/`
+  driver, unlike the CWD-relative-fopen concern flagged for other
+  launch methods) and zero new entries in `log/runtime` beyond the
+  pre-fix crash artifacts from earlier in this same session -- no
+  lazily-triggered daemon failures surfaced during the idle window.
+- **Death/respawn**: **not verified live this pass** -- time-budgeted
+  out in favor of root-causing and fixing the `Outside_Cave` crash
+  (judged higher-value: a severe, 100%-reproducible crash on an
+  ordinary path clearly outweighs a code-reviewed-only death sequence
+  for this session's available time). `std/adversary/health/
+  hit_points.lpc`'s `reincarnate()` (`if(health < 1) health = 1;`) and
+  the death/ghost machinery referenced throughout this codebase were
+  read but not live-triggered. Flagging honestly as unverified rather
+  than silently skipping it.
+- **Skill/guild acquisition**: **no reachable guild exists in this
+  archive's explorable world** -- grepped for `inherit.*M_GUILD_MASTER`
+  and found exactly one hit, `domains/std/monsters/fighter_master2.lpc`,
+  which is referenced only from a wizard-facing HELP file
+  (`help/wizard/coding/guilds/guild_d`), never `set_objects()`'d into
+  any actual room anywhere in the tree -- i.e. it's example/template
+  content for wizards building their OWN guild, not a preloaded,
+  reachable NPC. `std/body/guilds.lpc`'s full `add_guild`/`revoke_guild`/
+  `suspend_guild` API is real and functional (a wizard-facing coding
+  primitive), but there is no organic OR admin-shortcut in-game path to
+  actually join a guild as an ordinary player in this snapshot.
+  Documented honestly per this project's "don't guess at a shortcut
+  that doesn't exist" precedent (matching `pd`'s own round-two
+  writeup) rather than fabricating a test that isn't possible here.
+
+WASM status unchanged from §13 above (native-only this pass too, same
+`ARRAY_RESERVED_WORD` flag blocker as a WASM build would need).
