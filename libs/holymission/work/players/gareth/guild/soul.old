@@ -1,0 +1,220 @@
+#include "/players/gareth/define.h"
+#define TPRN    this_player()->query_real_name()
+#define GM      "guild/master"
+#define GUILD   "fighter"
+#define BIN     "/players/gareth/guild/skills/"
+
+id(str) { return str=="fighter_soul" || str=="fightersoul"; }
+
+string enam,eobj,epos;
+string owner;
+object wp,po,berz_where,bloarm,bwho;
+int lev,level,no_but,bash;
+int is_berzerk;                 
+int gd;
+int bash, butt;
+
+get()  { return 1; }
+drop() { return 1; }
+
+query_butting()  { return butt; }
+query_bash()     { return bash; }
+reset_butt()     { butt = 0;    }
+reset_bash()     { bash = 0;    }
+
+set_butting(arg) {
+    if(arg) {
+        butt = arg;
+        call_out("reset_butt",0,1);
+    }
+    return;
+}
+
+set_bash(arg) {
+    if(arg) {
+        bash = arg;
+        call_out("reset_bash",0,1);
+    }
+    return;
+}
+
+reset(arg) {
+
+  if(arg) return;
+  gd=GM->query_number(GUILD);
+}
+
+init() { 
+  object shadow;
+
+"sys/chatd.c"->do_chat(gd,"You suddenly feel the blood rushing strongly through your veins.\n");
+
+  add_action("no_spell","missile");
+  add_action("no_spell","shock");
+  add_action("no_spell","fireball");
+  add_action("compare","compare");
+  add_action("home","stronghold");
+  add_action("fighter_line","fighters");
+  add_action("fighter_line","fighter");
+  add_action("emote","fighter/");
+  add_action("help","help");
+  add_action("head_but","but");
+  add_action("munch","munch");
+  add_action("berzerk","berzerk");
+  add_action("check","check");
+  add_action("rescue","rescue");
+  add_action("calm","calm");
+  add_action("shield_bash","bash");
+  add_action("shield_block","block");
+  add_action("lower","lower");
+  add_action("track","track");
+  add_action("guild_command","",1);
+     if(!TP->parry_shad())  {
+     shadow = CO("/players/gareth/guild/skills/parry_shad");
+     shadow->start_shadow(TP,0,"parry_shad");
+    }
+}
+
+guild_command(str) {
+	string verb;
+	verb=query_verb();
+	if(file_size(BIN+verb+".c")<1) return 0;
+	return call_other(BIN+verb,verb,str);
+} 
+
+track(str) { return ((BIN+"track.c")->track(str)); }
+
+help(arg) { return ((BIN+"help.c")->help(arg,GM,gd)); }
+
+home() { return (BIN+"home.c")->home(); }
+
+head_but(str) { return ((BIN+"but.c")->but(str)); }
+
+munch() { return (BIN+"munch.c")->munch(); }
+
+compare(str) { return (BIN+"compare.c")->compare(str); }
+
+berzerk() {
+  if(TP->query_ghost()) {
+    write("You suddenly realize that this was a great mistake.\n" +
+          "The whole room is spinning around you.\n" +
+          "You decide to run as far as you can to leave this place.\n");
+    TP->run_away();
+    TP->run_away();
+    write("As you feel your mind clearing you decide to rest for a moment.\n");
+  }
+	
+  if(TP->query_level() < 18) {
+    write("You are not strong enough.\n");
+    return 1;
+  }
+  if (!TP->query_attack()) {
+      write("You are not fighting anyone.\n");
+      return 1;
+  }
+  if (is_berzerk) {
+     write("You are as berzerk as anyone can be.\n");
+     return 1;
+  }
+  if(bloarm) {
+	write("You cannot berzerk whilst you are blocking.\n");
+	return 1;
+	}
+
+  if (TP->query_spell_points()<40) {
+     write("You are too tired to go berzerk.\n");
+     return 1;
+  }
+  		        /* Higher the level the longer the berzerk lasts */
+  call_out("anti_berz",40+TP->query_level());
+  write("You turn into a rampaging frenzy.\n");
+  is_berzerk=1;
+  berz_where=E(TP);
+  TP->restore_spell_points(-40);
+  owner=TPN;
+  return 1;
+}
+
+anti_berz() {
+  write("You get tired, and turn back normal.\n");
+  is_berzerk=0;
+  return 1;
+}
+
+recognize_fight() {   /* Used to hit the monster twice */
+object enmy;
+  TP->attack();
+  TP->attack();
+
+  if (!previous_object() || !(E(previous_object()))) {
+     destruct(this_object());   /* Herp: probably in case of linkdeath */
+     return;
+  }
+
+  enmy=TP->query_attack();
+
+  if (is_berzerk && enmy && (E(TP)==E(enmy))) {
+    write("++++ ");
+    TP->attack();
+    if (TP->query_level() > 23) {
+        write("#### ");
+        TP->attack();
+        TP->attack();
+    }
+    return;
+  }
+  if (is_berzerk && enmy) {
+    if(E(TP)!=berz_where)
+        write("You cowardly run away from battle! You're NO longer berzerk.\n");
+    else
+        write("You calm down as your enemy flees.\n");
+    remove_call_out("anti_berz");
+    is_berzerk=0;
+    return;
+  }
+}
+
+no_spell() {
+  write("A fighter cast a spell?? Hah! Not in yer lifetime Pal!!!!!\n");
+  return 1;
+}
+
+emote(str) { 
+  "sys/chatd.c"->do_chat(gd,"[*Fighter*] "+CAP(TPRN)+" "+str+"\n");
+  return 1;
+}
+
+fighter_line(str) { return TP->guild_line(str); }       
+
+check(str) { return (BIN+"check.c")->check(str); }
+
+rescue(arg) { return (BIN+"rescue.c")->rescue(arg); }
+
+calm() {
+	if(!is_berzerk) {
+		write("You are not berzerking at the moment.\n");
+		return 1;
+		}
+	if(TP->query_spell_points()<5) {
+		write("You no longer have the mental energy to stop");
+		return 1;
+		}
+	call_out("calm_stop",6);
+	TP->restore_spell_points(-5);
+	write("You start to calm yourself down.\n");
+	return 1;
+	}
+
+calm_stop() {
+	if(is_berzerk) {
+		remove_call_out("anti_berz");
+		is_berzerk=0;
+		write("You feel that your are completely calm once again.\n");
+		}
+	return;
+	}
+
+shield_bash(str) { return (BIN+"bash.c")->bash(str); }
+
+shield_block(str) { return (BIN+"block.c")->block(str); }
+

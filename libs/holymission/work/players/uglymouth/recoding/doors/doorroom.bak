@@ -1,0 +1,544 @@
+/*
+ * FILE:         /room/doorroom.c
+ * GOAL:         To provide an inheritable room with doors to replace the
+ *               old door macro. It can be used with replace_program() too.
+ * AUTHOR:       Uglymouth@HolyMission
+ * LAST UPDATED: 970720
+ * CHANGES:      (use format: date, wiz name: change documentation)
+ * 971015, Uglymouth: on several wizards' request added a door description
+ *               to long_desc and improved fail messages.
+ */
+#include "doorroom.h"
+
+inherit "room/room";
+
+private mapping door_data;
+private string  original_long_desc, *invisible_doors;
+
+string opposite_door_dir( string door_id );
+void update_long_desc();
+
+/* USERDOC:
+ * Initialise the door_data mapping at creation time.
+ * Send message and call functions to restore all the doors to their 
+ * respective reset positions.
+ */
+void reset( int arg ) {
+  int i, soi, j, soj;
+  string *doors;
+    
+  ::reset( arg );
+  if( !arg ) {
+    if( !door_data ) door_data = ([ ]);
+    if( !invisible_doors ) invisible_doors = ({ });
+  }
+  else {
+    doors = m_indices( door_data );
+    for( i = 0, soi = sizeof( doors ); i < soi; i++ ) {
+      if( door_data[ doors[i] ][ "dependent" ] ) continue;
+      if( door_data[ doors[i] ][ "reset_msg" ] ) {
+        tell_room( this_object(), door_data[ doors[i] ][ "reset_msg" ] );
+        if( door_data[ doors[i] ][ "other_side" ] )
+          tell_room( find_object( door_data[ doors[i] ][ "other_side" ] ), 
+            door_data[ doors[i] ][ "reset_msg" ] );
+      }
+      if( !door_data[ doors[i] ][ "reset" ] ) continue;
+      soj = sizeof( door_data[ doors[i] ][ "reset" ] );
+      for( j = 0; j < soj; j += 2 ) {
+        call_other( this_object(), 
+          door_data[ doors[i] ][ "reset" ][j], doors[i],
+          door_data[ doors[i] ][ "reset" ][j+1] );
+        if( door_data[ doors[i] ][ "other_side" ] )
+          call_other( door_data[ doors[i] ][ "other_side" ],
+            door_data[ doors[i] ][ "reset" ][j], doors[i],
+            door_data[ doors[i] ][ "reset" ][j+1] );
+      } /* end for loop - calling reset functions */
+    } /* end for loop - door count */
+  } /* end else */
+}
+
+/* USERDOC:
+ * Add actions for door manipulation.
+ */
+void init() {
+  ::init();
+  add_action( "do_open",   "open" );
+  add_action( "do_close",  "close" );
+  add_action( "do_lock",   "lock" );
+  add_action( "do_unlock", "unlock" );
+}
+
+/* USERDOC:
+ * With set_door() you define the door id the player has to type when doing
+ * look at <door>, open <door>, close <door> or (un)lock <door>. You can
+ * make multiple doors, as long as each has its own unique id.
+ */
+void set_door( string door_id ) {
+  door_data[ door_id ] = ([ "status" : DOOR_CLOSED ]);
+  if( !original_long_desc ) original_long_desc = long_desc;
+}
+
+/* USERDOC:
+ * With set_door_desc() you set the description of the door. The player will
+ * get this description plus info on whether the door is open or closed. You
+ * also have to add a dummy description to the items array in the room. Like
+ * with items, a final period and newline will be added automatically.
+ */
+void set_door_desc( string door_id, string door_desc ) {
+  if( !door_data[ door_id ] ) return;
+  door_data[ door_id ][ "desc" ] = door_desc;
+}
+
+/* USERDOC:
+ * With set_door_direction(), you define the direction in which the player
+ * has to go in order to go through it. Make sure that this direction has
+ * also been set in either the dest_dir or the hidden_dir, otherwise the
+ * door will not appear in the room. You don't need to bother with file
+ * names with these doors. They will be retrieved from dest_dir/hidden_dir.
+ */
+void set_door_direction( string door_id, string door_dir ) {
+  int i;
+
+  if( !door_data[ door_id ] ) return;
+  i = -1;
+  if( dest_dir ) i = member_array( door_dir, dest_dir );
+  if( i == -1 && hidden_dir ) i = member_array( door_dir, hidden_dir );
+  if( i == -1 ) return;
+  door_data[ door_id ][ "dir" ] = door_dir;
+}
+
+/* USERDOC:
+ * With set_door_status() you define whether the door is open or closed. If
+ * you don't set this, the door will start closed by default.
+ */
+void set_door_status( string door_id, string door_status ) {
+  if( !door_data[ door_id ] ) return;
+  if( door_status != DOOR_OPEN && door_status != DOOR_CLOSED )
+    return;
+  door_data[ door_id ][ "status" ] = door_status;
+}
+
+/* USERDOC:
+ * With set_lock_status() you define whether 1) the door has a lock, and if
+ * so, 2) if it is locked or unlocked. If you don't set this function, then
+ * by default the door cannot be locked. The higher the value of lock_status
+ * the more difficult it is to unlock a door without possessing the proper
+ * key. Negative values of lock_status indicate an unlocked door. You can 
+ * remove a lock by setting the value of lock_status to 0. Note that locks 
+ * work independent from the open/closed status, making it possible to force 
+ * a door to remain in the open position. Suggested strength values for locks
+ * are: 1 (normal lock) - 5 (bank vault), 6 (light magic) - 10 (a god's 
+ * magic), 11 (impossible to unlock).
+ */
+void set_lock_status( string door_id, int lock_status ) {
+  if( !door_data[ door_id ] ) return;
+  if( lock_status == REMOVE_LOCK && door_data[ door_id ][ "lock" ] ) {
+    m_delete( door_data[ door_id ], "lock" );
+    return;
+  }
+  door_data[ door_id ][ "lock" ] = lock_status;
+}
+
+/* USERDOC:
+ * With set_door_key() you define the id of the key with which the door can
+ * be locked or unlocked. If you set a lock, but don't set a key, then the 
+ * door cannot be (un)locked. Note that you can have multiple doors use the
+ * same key by setting the same key_id to all doors. Make sure that the id
+ * of the key is a unique string that can't accidentally be set to other
+ * objects. Make sure you set the key AFTER you have set the lock.
+ */
+void set_door_key( string door_id, string key_id ) {
+  if( !door_data[ door_id ] ) return;
+  if( !door_data[ door_id ][ "lock" ] ) return;
+  door_data[ door_id ][ "key" ] = key_id;
+}
+
+/* USERDOC:
+ * This function is called in the room which is on the other side of the
+ * door. It will then be completely dependent for it functions on this room.
+ * If the door can be approaced _for the first time_ from either side, you
+ * should call set_door() and set_door_dependent() in the second room,
+ * but no other things should be set there. Otherwise, you don't need to
+ * call this function at all.
+ */
+void set_door_dependent( string door_id, string door_file ) {
+  if( !door_data[ door_id ] ) return;
+  door_data[ door_id ][ "dependent" ] = 1;
+  door_data[ door_id ][ "other_side" ] = door_file;
+  if( !find_object( door_file ) ) call_other( door_file, "???" );
+}
+
+/* USERDOC:
+ * With set_other_door() you define the file_name of the room which is at
+ * the other side of the door. That room should also inherit this file, but
+ * you usually don't need to set anything in it. If the door if approachable
+ * for the first time from either room, you only need to put set_door()
+ * and this function in the second room and have it pointing to the room you
+ * defined the door in. Make sure that this is the LAST door setting function
+ * you call, because it will also set all the door data in the other room.
+ * If you wish to make a one way door, simply don't set this function.
+ */
+void set_other_door( string door_id ) {
+  int i;
+  string location;
+
+  if( !door_data[ door_id ] ) return;
+  i = -1;
+  if( dest_dir ) i = member_array( door_data[ door_id ][ "dir" ], dest_dir );
+  if( i != -1 ) location = dest_dir[ i - 1 ];
+  else {
+    i = member_array( door_data[ door_id ][ "dir" ], hidden_dir );
+    if( i == -1 ) return;
+    location = hidden_dir[ i - 1 ];
+  }
+  if( file_size( location + ".c" ) < 0 ) return; // prevent logging 7 errors.
+
+  door_data[ door_id ][ "other_side" ] = location;
+  call_other( location, "set_door", door_id );
+  call_other( location, "set_door_desc", door_id,
+    door_data[ door_id ][ "desc" ] );
+  call_other( location, "set_door_direction", door_id,
+    opposite_door_dir( door_id ) );
+  call_other( location, "set_door_status", door_id,
+    door_data[ door_id ][ "status" ] );
+  call_other( location, "set_lock_status", door_id,
+    door_data[ door_id ][ "lock" ] );
+  call_other( location, "set_door_key", door_id,
+    door_data[ door_id ][ "key" ] );
+  call_other( location, "set_door_dependent", door_id,
+    file_name( this_object() ) );
+  call_other( location, "set_invisible_doors", invisible_doors );
+  update_long_desc();
+  call_other( location, "update_long_desc" );
+}
+
+/* USERDOC:
+ * With set_door_reset() you can define the default status to which the door
+ * will be set at each reset. The array reset_status must consist, like for
+ * instance the items array, of pairs: the first element being the function
+ * to be called, the second the argument to be passed to that function.
+ * Example: set_door_reset( "red door", ({ "set_door_status", "closed" }) );
+ * The set functions will be called in the rooms at both sides of the door.
+ * Note that this allows you to add your own custom made functions as well,
+ * although this will forgo the possibility of using replace_program.
+ */
+void set_door_reset( string door_id, string *reset_status ) {
+  if( !door_data[ door_id ] ) return;
+  door_data[ door_id ][ "reset" ] = reset_status;
+}
+
+/* USERDOC:
+ * With set_door_reset_msg() you can define a message that will be sent to
+ * everyone in the room when the room resets. I have added this function so
+ * that a message (i.e. "A sudden gust of wind makes the door fall shut.") 
+ * can be given while maintaining the possibility of using replace_program.
+ */
+void set_door_reset_msg( string door_id, string message ) {
+  if( !door_data[ door_id ] ) return;
+  door_data[ door_id ][ "reset_msg" ] = message;
+}
+
+/* USERDOC:
+ * By default doorroom will add a sentence to the long_desc of the room
+ * displaying for each door whether it is open or closed. If you have any
+ * hidden doors or simply don't want that message to appear, list the doors
+ * for which you don't want the message here.
+ */
+void set_invisible_doors( string *door_ids ) {
+  if( !pointerp( door_ids ) ) door_ids = ({ door_ids });
+  invisible_doors = door_ids;
+}
+
+/* USERDOC:
+ * All the queries needed to retrieve the data from the door_data mapping.
+ */
+string *query_doors() { return m_indices( door_data ); }  
+
+int query_number_of_doors() { return m_sizeof( door_data ); }
+
+string query_door_desc( string door_id ) {
+  if( !door_data[ door_id ] ) return 0;
+  return door_data[ door_id ][ "desc" ];
+}
+  
+string opposite_door_dir( string door_id ) {
+  string *exits;
+  int i, so;
+
+  exits = call_other( door_data[ door_id ][ "other_side" ], "query_room",
+    "dest_dir" );
+  if( exits ) {
+    for( i = 0, so = sizeof( exits ); i < so; i += 2 ) {
+      if( exits[i][0] != '/' ) exits[i] = "/" + exits[i];
+      if( exits[i] != "/" + file_name( this_object() ) ) continue;
+      else break;
+    }
+    if( i < so ) return exits[i+1];
+  }
+  exits = call_other( door_data[ door_id ][ "other_side" ], "query_room",
+    "hidden_dir" );
+  if( exits ) {
+    for( i = 0, so = sizeof( exits ); i < so; i += 2 ) {
+      if( exits[i][0] != '/' ) exits[i] = "/" + exits[i];
+      if( exits[i] != "/" + file_name( this_object() ) ) continue;
+      else break;
+    }
+    if( i < so ) return exits[i+1];
+  }
+  return 0;
+}
+
+string query_door_direction( string door_id ) {
+  if( !door_data[ door_id ] ) return 0;
+  return door_data[ door_id ][ "dir" ];
+}
+
+string query_other_door( string door_id ) {
+  if( !door_data[ door_id ] ) return 0;
+  return door_data[ door_id ][ "other_side" ];
+}
+
+string query_door_status( string door_id ) {
+  if( !door_data[ door_id ] ) return 0;
+  return door_data[ door_id ][ "status" ];
+}
+
+int query_lock_status( string door_id ) {
+  if( !door_data[ door_id ] ) return 0;
+  return door_data[ door_id ][ "lock" ];
+}
+
+string query_door_key( string door_id ) {
+  if( !door_data[ door_id ] ) return 0;
+  return door_data[ door_id ][ "key" ];
+}
+
+int query_door_dependent( string door_id ) {
+  if( !door_data[ door_id ] ) return 0;
+  return door_data[ door_id ][ "dependent" ];
+}
+
+string *query_door_reset( string door_id ) {
+  if( !door_data[ door_id ] ) return 0;
+  return door_data[ door_id ][ "reset" ];
+}
+
+string query_door_reset_msg( string door_id ) {
+  if( !door_data[ door_id ] ) return 0;
+  return door_data[ door_id ][ "reset_msg" ];
+}
+
+/* USERDOC:
+ * This function returns the message that is added to the long_desc for all
+ * doors that are not set invisible.
+ */
+string query_door_long() {
+  string *doors, door_long;
+  int i;
+
+  doors = m_indices( door_data ) - invisible_doors;
+  i = sizeof( doors ) - 1;
+  if( i < 0 ) return "";
+
+  door_long = "";
+  while( i ) {
+    door_long += sprintf( "the %s is %s, ", doors[i],
+      query_door_status( doors[i] ) == DOOR_OPEN ? "open" : "closed" );
+    i--;
+  }
+  if( sizeof( doors ) > 1 ) door_long += "and ";
+  door_long += sprintf( "the %s is %s.\n", doors[i],
+    query_door_status( doors[i] ) == DOOR_OPEN ? "open" : "closed" );
+  return capitalize( door_long );
+}
+
+void update_long_desc() {
+  long_desc = original_long_desc + query_door_long();
+}
+
+/* USERDOC:
+ * The routines to execute the open/close/lock/unlock commands...
+ */
+int do_open( string door_id ) {
+  if( !door_data[ door_id ] ) {
+    notify_fail( "Open what door?\n" );
+    return 0;
+  }
+  if( door_data[ door_id ][ "status" ] == DOOR_OPEN ) {
+    notify_fail( sprintf( "The %s already is wide open.\n", door_id ) );
+    return 0;
+  }
+  if( door_data[ door_id ][ "lock" ] &&
+      door_data[ door_id ][ "lock" ] >= DOOR_LOCKED ) {
+    notify_fail( sprintf( "The %s is locked.\n", door_id ) );
+    return 0;
+  }
+  door_data[ door_id ][ "status" ] = DOOR_OPEN;
+  update_long_desc();
+  printf( "You open the %s.\n", door_id );
+  say( sprintf( "%s opens the %s.\n", this_player()->query_name(), door_id ), 
+    this_player() );
+  if( door_data[ door_id ][ "other_side" ] ) {
+    call_other( door_data[ door_id ][ "other_side" ], "set_door_status",
+      door_id, DOOR_OPEN );
+    call_other( door_data[ door_id ][ "other_side" ], "update_long_desc" );
+    tell_room( find_object( door_data[ door_id ][ "other_side" ] ),
+      sprintf( "The %s is being opened from the other side.\n", door_id ) );
+  }
+  return 1;
+}
+
+int do_close( string door_id ) {
+  if( !door_data[ door_id ] ) {
+    notify_fail( "Close what door?\n" );
+    return 0;
+  }
+  if( door_data[ door_id ][ "status" ] == DOOR_CLOSED ) {
+    notify_fail( sprintf( "The %s already is closed.\n", door_id ) );
+    return 0;
+  }
+  if( door_data[ door_id ][ "lock" ] &&
+      door_data[ door_id ][ "lock" ] >= DOOR_LOCKED ) {
+    notify_fail( sprintf( "The %s is locked in the open position.\n", 
+      door_id ) );
+    return 0;
+  }
+  door_data[ door_id ][ "status" ] = DOOR_CLOSED;
+  update_long_desc();
+  printf( "You close the %s.\n", door_id );
+  say( sprintf( "%s closes the %s.\n", this_player()->query_name(), door_id ), 
+    this_player() );
+  if( door_data[ door_id ][ "other_side" ] ) {
+    call_other( door_data[ door_id ][ "other_side" ], "set_door_status",
+      door_id, DOOR_CLOSED );
+    call_other( door_data[ door_id ][ "other_side" ], "update_long_desc" );
+    tell_room( find_object( door_data[ door_id ][ "other_side" ] ),
+      sprintf( "The %s is being closed from the other side.\n", door_id ) );
+  }
+  return 1;
+}
+
+int do_unlock( string door_id ) {
+  if( !door_data[ door_id ] ) return 0;
+  if( !door_data[ door_id ][ "lock" ] ) {
+    notify_fail( "You seem to have trouble finding a lock.\n" );
+    return 0;
+  }
+  if( door_data[ door_id ][ "lock" ] <= DOOR_UNLOCKED ) {
+    notify_fail( sprintf( "The %s wasn't locked in the first place.\n", 
+      door_id ) );
+    return 0;
+  }
+  if( !present( door_data[ door_id ][ "key" ], this_player() ) ) {
+    notify_fail( "You don't possess the appropriate key.\n" );
+    return 0;
+  }
+  door_data[ door_id ][ "lock" ] = DOOR_UNLOCKED;
+  printf( "You unlock the %s.\n", door_id );
+  say( sprintf( "%s unlocks the %s.\n", this_player()->query_name(), door_id ), 
+    this_player() );
+  if( door_data[ door_id ][ "other_side" ] ) {
+    call_other( door_data[ door_id ][ "other_side" ], "set_lock_status",
+      door_id, DOOR_UNLOCKED );
+    tell_room( find_object( door_data[ door_id ][ "other_side" ] ),
+      sprintf( "At the other side someone tampers with the lock of the %s.\n", 
+      door_id ) );
+  }
+  return 1;
+}
+
+int do_lock( string door_id ) {
+  if( !door_data[ door_id ] ) return 0;
+  if( !door_data[ door_id ][ "lock" ] ) {
+    notify_fail( "You seem to have trouble finding a lock.\n" );
+    return 0;
+  }
+  if( door_data[ door_id ][ "lock" ] >= DOOR_LOCKED ) {
+    notify_fail( sprintf( "The %s already is locked.\n", door_id ) );
+    return 0;
+  }
+  if( !present( door_data[ door_id ][ "key" ], this_player() ) ) {
+    notify_fail( "You don't possess the appropriate key.\n" );
+    return 0;
+  }
+  door_data[ door_id ][ "lock" ] = DOOR_LOCKED;
+  printf( "You lock the %s.\n", door_id );
+  say( sprintf( "%s locks the %s.\n", this_player()->query_name(), door_id ), 
+    this_player() );
+  if( door_data[ door_id ][ "other_side" ] ) {
+    call_other( door_data[ door_id ][ "other_side" ], "set_lock_status",
+      door_id, DOOR_LOCKED );
+    tell_room( find_object( door_data[ door_id ][ "other_side" ] ),
+      sprintf( "At the other side someone tampers with the lock of the %s.\n", 
+      door_id ) );
+  }
+  return 1;
+}
+
+/* USERDOC:
+ * The unauthorised_unlock() can be used in any cases where someone has some
+ * means to unlock the door without possessing the appropriate key. It only
+ * performs checks for valid variable handling. Skill checks for players
+ * should be handled by the appropriate command functions. If the strength
+ * of the lock is not overcome, the amount of force lacking will be returned
+ * as a negative figure. On success the function returns 1.
+ */
+int unauthorised_unlock( string door_id, int force ) {
+  if( !door_data[ door_id ] ) return 0;
+  if( !door_data[ door_id ][ "lock" ] ||
+    door_data[ door_id ][ "lock" ] <= DOOR_UNLOCKED ) return 0;
+  if( force < door_data[ door_id ][ "lock" ] ) 
+    return force - door_data[ door_id ][ "lock" ];
+  door_data[ door_id ][ "lock" ] = DOOR_UNLOCKED;
+  if( door_data[ door_id ][ "other_side" ] )
+    call_other( door_data[ door_id ][ "other_side" ], "set_lock_status",
+      door_id, DOOR_UNLOCKED );
+  return 1;
+}
+
+/* USERDOC:
+ * A small override of the same function in /room/room. When looking at
+ * one of the doors of this room it will display its description and its
+ * open and locked status.
+ */
+void long( string str ) {
+  if( !str ) return ::long();
+  if( member_array( str, m_indices( door_data ) ) == -1 )
+    return ::long( str );
+  printf( "%s.\nIt is %s%s.\n", door_data[ str ][ "desc" ], 
+    door_data[ str ][ "status" ], door_data[ str ][ "lock" ] ?
+    " and " + ( door_data[ str ][ "lock" ] <= 0 ? "unlocked" :
+    "locked" ) : "" );
+}
+
+/* USERDOC:
+ * A small override of the same function in /room/room. When there is no
+ * door, the standard move() will be executed. Otherwise movement in that
+ * direction will be blocked if 1) the door is closed, 2) a custumizable
+ * function int door_block( object player ) { ... } returns non-0. The
+ * door_block() can be used for making i.e. magic effects when passing doors.
+ */
+int move( string str ) {
+  string *doors, door_id;
+  int i, so;
+
+  doors = m_indices( door_data );
+  for( i = 0, so = sizeof( doors ); i < so; i++ ) {
+    if( door_data[ doors[i] ][ "dir" ] != query_verb() ) continue;
+    else {
+      door_id = doors[i];
+      break;
+    }
+  }
+  if( !door_id ) return ::move( str );
+  if( door_data[ door_id ][ "status" ] == DOOR_CLOSED ) {
+    printf( "You bang your head against a closed %s!\n", door_id );
+    say( sprintf( "%s bangs %s head against a closed %s.\n",
+      this_player()->query_name(), this_player()->query_possessive(),
+      door_id ), this_player() );
+    return 1;
+  }
+  if( this_object()->door_block( this_player() ) ) return 1;
+  return ::move( str );
+}
+

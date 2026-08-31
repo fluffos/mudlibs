@@ -1,0 +1,260 @@
+/*
+    secure/valid.c - validating functions
+    To be inherited nomask by the player object.
+*/
+
+#include <ctype.h>
+#include <levels.h>
+
+#define DOMAINROOM "room/domain_room"
+
+int query_level();
+int query_immortal();
+int query_newwiz();
+int query_wizard();
+int query_lord();
+int query_archwiz();
+string query_real_name();
+
+string current_path;	/* Current directory */
+string *domains;		/* List of domains a wizard belongs to */
+
+string query_path () { return current_path; }
+string *query_domains() { return domains ? domains[0..sizeof(domains)] : ({}); }
+
+/* HERP 930509 xperms: a array containing a path-list (i.e. ({ "room","obj"}) */
+string *xperms;
+
+/* Domain code 09-MAR-92 by Macbeth */
+/* adapted Mar 17 1992 marion@cs.tu-berlin.de */
+
+void
+join_domain (string str)
+{
+  if (previous_object() && previous_object() != this_object()
+    && file_name(previous_object()) != DOMAINROOM)
+    return;
+
+  if (!domains)					domains = ({str});
+  else if (member_array(str,domains) < 0)	domains += ({str});
+}
+
+void
+leave_domain(string str)
+{
+  int p;
+
+  if (previous_object() && previous_object() != this_object()
+    && file_name(previous_object()) != DOMAINROOM)
+    return;
+  if (!domains)
+    return;
+  if ((p=member_array(str,domains)) >= 0) {
+    domains[p] = domains[0];
+    domains = domains[1..sizeof (domains)];
+  }
+}
+
+
+/*
+ * Check that a player name is valid. Only allow
+ * lowercase letters.
+ */
+int
+valid_name(string str)
+{
+    int i, length;
+
+    if (!str || str=="" || str == "logon") {
+	write("Invalid name");
+	return 0;
+    }
+    length = strlen(str);
+    if (length > 11) {
+	write("Too long name.\n");
+	return 0;
+    }
+    for (i = 0; i < length; i++) {
+	if (str[i] < 'a' || str[i] > 'z') {
+	    write("Invalid characters in name:" + str + "\n");
+	    write("Character number was " + (i+1) + ".\n");
+	    return 0;
+	}
+    }
+    return 1;
+}
+
+string *
+normalize_path (mixed path, int file)
+{   /* changed by marion@cs.tu-berlin.de */
+    int i, j;
+    if (stringp (path)) path = explode (path, "/");
+    if (!pointerp (path)) return ({});
+    for (i = j = 0; i < sizeof (path); i++) {
+	if (path[i] == "") continue;
+	if (path[i] == "..") {
+	    if (j) j--;
+	    continue;
+	}
+	if (path[i] == "." && (!file || i != sizeof (path) - 1))
+	    continue;
+	if (j != i) path[j++] = path[i];
+	else        j++;
+    }
+    return path[0..j-1];
+}
+
+string
+valid_write(string str)
+{
+    string uid, *path;
+    string lpath;			/*HERP: leading path */
+    string pnam;
+    int i;
+
+    /*
+        Determine uid for write permission. Please use the same definition
+	as the gamedriver uses for save_object. There is a difference
+	concerning domains currently, which will we fixed in the gamedriver
+	soon.
+    */
+    if (previous_object() && previous_object() != this_object()) {
+	uid = explode (file_name (previous_object()), "/")[0];
+	if (uid == "obj" || uid == "room" || uid == "std" ||
+	    uid == "secure" || uid == "sys" || uid == "tools" )
+	   uid = 0;		/* 245 backbone */
+	else if (uid == "log" || uid == "open" || uid == "ftp")
+	    return 0;		/* distrust open directories */
+        else if ( uid == "boards" )
+           uid = "boards";      // senseless, but more understandable !?
+	else if (!(uid = creator (previous_object())))
+	    return 0;		/* no good - not manually cloned */
+    } else uid = query_real_name();
+
+    if (uid && !isalpha (uid[0])) return 0;
+
+
+    if (str[0]!='/')
+    {
+	if (previous_object() && previous_object() != this_object() && uid) {
+	    return
+		(islower (uid[0]) ?
+		    "players/"+uid :		/* wizard */
+		    "domains/"+lower_case(uid)	/* domain */
+		)+"/"+implode (normalize_path (str, 1), "/");
+	} else {
+	    path = normalize_path(current_path, 1) + normalize_path (str, 1);
+	}
+    }
+    else
+      path = normalize_path (str, 1);
+
+    if (!path || !sizeof(path))
+      return 0;
+
+/*HERP 93-05-09 check extended permissions (xperms) */
+    if (xperms && sizeof(path) > 1) {
+	lpath=implode(path[0..sizeof(path)-2],"/");
+	if (member_array(lpath,xperms)>=0)	/* found in permlist */
+	    return implode(path,"/");
+    }
+
+    switch (path[0]) {
+    case "log":
+	if (sizeof (path) != 2 ||
+	    lower_case (extract (path[1], 1)) != extract (path[1], 1))
+	    break;
+    case "open":	/* sorry for that, it's for efficiency */
+    case "ftp":
+	return implode(path,"/");
+    case "boards":
+        if ( uid == "boards" ) return( implode(path,"/") );
+        break;
+    case "players":
+	pnam=path[1];
+	i=strlen(pnam)-1;
+	if (pnam[i-1..i]==".o") pnam=pnam[0..i-2];
+
+/* Herp: Lords may access /player-directories */
+
+	if (master_object()->get_wiz_level(query_real_name())==L_LORD &&
+	    master_object()->get_wiz_level(pnam)<L_LORD)
+	  return implode(path,"/");
+	if (sizeof (path) < 3 ||
+	    (path[1] != (uid ? uid : query_real_name()) &&
+             !(master_object()->valid_access(query_real_name(),pnam)) ))
+	    break;
+	return implode(path,"/");
+    case "domains":
+	if (sizeof (path) < 3) break;
+	if (uid && uid != query_real_name()) {
+	    if (!isupper (uid[0]) || lower_case (uid) != path[1]) break;
+	} else if (!domains || member_array (path[1], domains) < 0) break;
+	return implode(path,"/");
+    }
+
+    /*
+     * After checking all the standard cases we'll now check
+     * whether we are privileged or not. We have to ensure that
+     * nobody is forcing a change of this_player() by means of init()
+     * or command().
+     */ 
+    if (!this_player()->query_archwiz() ||       /* arch level */
+	(uid && uid != query_real_name()) ||	/* only owned tools work (!) */
+	this_player() != this_object()) 	/* no init() cheats */
+	return 0;
+    return implode(path,"/");
+}
+
+int chk_for_lock(string *path);
+
+string
+valid_read(string str) {
+string *s;
+    if (str[0] != '/') str = "/" + current_path + "/" + str;
+    s=normalize_path(str,1);
+    if(sizeof(s) && s[sizeof(s)-1]==".SECURE") 
+        return implode (s,"/");
+    if(this_interactive() && this_interactive()->query_archwiz())
+        return implode (s,"/");
+    if(sizeof(s) && 
+      (s[0]=="secure" || s[0]=="sys" || s[0]=="spells" || s[0]=="masters" ||
+       s[0]=="abilities" || s[0] =="p"))
+    {
+       return 0;
+    }
+    if ( sizeof(s) && s[0] == "boards" && !(previous_object() &&
+         explode(file_name(previous_object()),"/")[0]=="boards") )
+    {
+      return( 0 );
+    }
+
+    if(chk_for_lock(s)) return 0;
+    return implode (s,"/");
+}
+
+/* 030793 Llort use a '.SECURE' file to protect this and all following dirs */
+// 070993 Moonchild change so that .SECUREd directories can only be read by
+//	  wizards of level >= level of owner. (and of course only if senior+
+//	  also).
+static int
+chk_for_lock(string *path) {
+string tmp;
+int i;
+
+  if(this_player()) {
+    if(sizeof(path)>1 && path[0]=="players") {
+      if(((int)this_player()->query_level() >= L_SENIOR)
+	&& ((int)this_player()->query_level()
+	>= (int)master_object()->get_wiz_level(path[1]))) return 0;
+      if((string)this_player()->query_real_name()==path[1]) return 0;
+     if(master_object()->valid_access(this_player()->query_real_name(),path[1]))
+	return 0;
+    }
+  }
+  for(i=0,tmp="";i<sizeof(path);i++) {
+    tmp+="/"+path[i];
+    if(file_size(tmp+"/.SECURE")>=0) return 1;
+  }
+  return 0;
+}

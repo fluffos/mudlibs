@@ -1,0 +1,5 @@
+#define GUARD_IN_HALL 10
+#define GUARD_ARREST_TIME 3
+#define IN_PRIS_TIME 120
+#define GUARD_RANDOM 4
+#define MONSTER_NUMBER 3

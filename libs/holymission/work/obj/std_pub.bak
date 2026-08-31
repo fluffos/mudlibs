@@ -1,0 +1,192 @@
+
+/* --------------------------------------------------------------------
+    Creator: Whisky
+    Functions:
+    add_drink( drink, cost, strength, art, heal)
+              art can be: food, alc or soft
+    set_waiter(string)
+    set_header(string)
+    EXAMPLE:
+        inherit this file then:
+
+         void reset(int flag)
+         {
+              ::reset(flag);
+              if (flag == 0)
+              {
+                add_drink("beer",   8, 2, "alc", 2);
+                add_drink("wine",  12, 4, "alc", 3);
+                add_drink("bread",  4, 2, "food", 1);
+                add_drink("water",  2, 1, "soft", 1);
+                add_drink("coffee", 20, -1, "alc",0);   soberer
+                set_waiter("Franz");
+                set_header("           The funny inn        ");
+                long_desc =
+                "You are inside the funny inn. There is a sign \n"+
+                "fixed to the eastern wall.\n";
+                short_desc = "The funny inn";
+               }
+        }
+        done :*)
+      ----------------------------------------------------------------- */     
+ 
+
+inherit "/room/room";
+
+mapping drinks,check;
+string waiter, header;
+int count;
+
+void reset(int flag)
+{
+     ::reset(flag);
+     if (flag == 0)
+     {
+        count = 0;
+        if (!stringp(waiter))
+            waiter = "Hias";
+        if (!stringp(header))
+            header ="            Mamma's Pizzaria           ";
+        if (!mappingp(drinks))
+        {
+            drinks = ([ "test" :({ "0", 20,  2, "alc", 2 }) ]);
+            check =  ([ "0":"test" ]);
+        }
+        short_desc = "Whisky's test pub";
+        long_desc =  "In a small pub.\n";
+        set_light(1);
+        items =
+        ({
+           "sign","There is something written on it",
+           "menu","There is something written on it"
+        });
+     }
+}
+
+void add_drink(string dr,int co,int st,string ar,int h)
+{
+   string al;
+
+     if (!stringp(dr) || !intp(co)  || !intp(st) ||
+         !stringp(ar) || !intp(h) || member(drinks,dr)==1)
+         return;
+     al = to_string( count + 1);
+     count++;
+     drinks = drinks + ([ dr :({ al, co,  st,  ar, h }) ]);
+     check = check + ([ al : dr]); 
+}
+
+void set_waiter(string arg)
+{
+     if (stringp(arg))
+         waiter = arg;
+}
+
+void set_header(string arg)
+{
+      if (stringp(arg))
+         header = arg;
+}
+
+
+void init()
+{
+    ::init();
+    add_action("do_buy","order");
+    add_action("do_buy","buy");
+    add_action("do_read","read");
+}
+
+
+int do_read(string arg)
+{
+    int i, sz, x;
+    string *arr;
+    if (arg!="sign" && arg!="menu")
+       return 0;
+
+    if (strlen(header) > 1)
+    {
+        write("\n"+
+        "---------------------------------------------------\n"+
+        header+"\n"+
+        "---------------------------------------------------\n");
+    }
+    arr = m_indices(drinks);
+
+    printf("%-6s %-35s %-10s\n\n","Num:","Art:","Price:");
+    sz = sizeof(arr);
+    i = 1;
+
+    while(i < sz)
+    {
+        printf("%-6s %-35s %-10s\n",
+               to_string(i),check[to_string(i)],
+               to_string(drinks[check[to_string(i)]][1]));
+        i++;
+    }
+
+    write("\nYou can type 'buy number' too.\n");
+   return 1;
+}
+    
+int do_buy(string arg)
+{
+  string what;
+  
+    if (!arg)    
+    {
+        notify_fail("Buy what ?\n");
+        return 0;
+    }
+    else if (member(check,arg))
+        what = check[arg];
+    else 
+        what = arg;
+
+    if (!member(drinks,what))
+    {
+        notify_fail(waiter+" "+"tells you: "+
+                   "Sorry, but we dont have this kind of drink.\n");
+        return 0;
+    }
+    else if (this_player()->query_money() <  drinks[what][1])
+    {
+        notify_fail(waiter+" tells you: "+"You don't have enough money.\n");
+        return 0;
+    }
+    switch(drinks[what][3])
+    {
+      case "alc":
+           if (!(this_player()->drink_alcohol(drinks[what][2])))
+              return 1;
+      case "soft":
+           if (!this_player()->drink_soft(drinks[what][2]))
+              return 1;
+      case "food":
+           if (!this_player()->eat_food(drinks[what][2]))
+              return 1;
+      }
+
+      tell_room(this_object(),waiter+" says: Here we are.\n");
+      if (drinks[what][3]!="food")
+      {
+         write("You drink glass of "+what+".\n");
+         say(this_player()->query_name()+" drinks a glass of "+what+".\n",
+             this_player());
+      }
+      else
+      {
+         write("You eat some "+what+".\n");
+         say(this_player()->query_name()+" eats some "+what+".\n",
+             this_player());
+      }
+
+      this_player()->heal_self(drinks[what][4]);
+      this_player()->add_money(-drinks[what][1]);
+   return 1;
+}
+
+      
+          
+        

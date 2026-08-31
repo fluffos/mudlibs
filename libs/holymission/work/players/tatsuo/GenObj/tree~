@@ -1,0 +1,478 @@
+#define SHARE "obj/share"
+inherit "room/room";
+
+#include "/players/patience/GenObj/globMonst.h"
+
+
+/*
+ * This is a proposal of a replacement to std.h. It is used with
+ * 'inherit "room/room";'.
+ * All global variables below are supposed to be setup by the reset()
+ * in the function that inherits this file.
+ */
+ 
+#ifndef TRUE
+#define TRUE   (1)
+#endif
+#ifndef FALSE
+#define FALSE  (0)
+#endif
+
+
+/* --- Which kind of tree it is */
+string kindOfTree;
+
+/* --- An array with destinations and directions: "room/church", "north" ... */
+string dest_dir;
+ 
+/* --- Short description of the room */
+string short_desc;
+ 
+/* --- Long description of the room */
+string long_desc;
+ 
+/* --- Special items in the room. "table", "A nice table", "window", "A window" */
+string items;
+ 
+/* --- Fact about this room. ex: "no_fight", "no_steal", "no_sneak" */
+string property;
+ 
+/* --- No castles are allowed to be dropped here */
+int no_castle_flag;
+
+/* --- Cashimor: smell of the room */
+string smell;
+
+/* --- state of the door */
+status doorIsClosed;
+status doorIsLocked;
+string otherDoor;
+
+/* ---- is a sign her ? */
+status signIsHere;
+string sign_read;
+
+/* --- monster of this room */
+object roomMonster;
+
+string numbers;
+
+init() {
+    int i;
+    
+    add_action( "smell_it", "smell"   );
+    add_action( "search",   "search"  );
+    add_action( "open",     "open"    );
+    add_action( "close",    "close"   );
+    add_action( "enter",    "enter"   );
+    add_action( "climb",    "climb"   );
+    add_action( "read_it",  "read"    );
+   
+    if (!dest_dir)
+      return;
+    i = 1;
+    while(i < sizeof(dest_dir)) {
+      add_action("move", dest_dir[i]);
+      i += 2;
+    }
+
+}
+
+/* Done by Herp 920718: for REALMS portability */
+reset(arg)
+{
+   if ( monstChange > 0 ) {
+      if ( !roomMonster ) {
+         if ( random(100) < monstChange ) {
+            roomMonster = get_rnd_monster();
+            if ( roomMonster )
+               transfer( roomMonster, this_object() );
+         }
+      }
+   }
+
+   return;
+}
+
+/* ----- Add-Actions -------------------------------------------------------------- */
+smell_it(str)
+{
+  say(this_player()->query_name() + " tastes the air.\n");
+  if( !smell )
+  {
+    if ( !str )
+       write( "You smell the flavour of " + kindOfTree +".\n" );
+    else  
+       write( "You the flavour of the " + kindOfTree + " is do dominant, that only can smell this.\n" );
+    return( 1 );
+  }
+  
+  write(smell+"\n");
+  
+  return( 1 );
+}
+
+search( arg )
+{
+   if ( !arg )
+      return;
+      
+   write("You search and search, but find nothing.\n");
+   say(this_player()->query_name()+" searches around.\n");
+   return 1;
+}
+
+climb( str )
+{
+   if ( !str )
+      return;
+     
+   if ( str == "tree" || str == kindOfTree || str == "down" || str == "up" ) {
+      write( "You can't get a hold of any of the tree's branches and so you fail.\n" );    
+      say( this_player()->query_name() + " tries to climb the tree, but fails.\n" );
+      return( 1 );
+   }
+   return( 0 );
+}
+
+close(str)
+{
+   if ( !str )
+      return;
+
+   if (str != "door" && str != "wooden door" )
+      return;
+      
+   if ( doorIsClosed )
+      write( "But the door is aready closed!\n" );
+   else {
+      if ( doorIsLocked ) {
+         write( "You can't close the door. It is locked.\n" );
+         say( this_player()->query_name()+" tries to close the door but fails.\n" );
+      }
+      else {
+         write("You close the door.\n");
+         say(this_player()->query_name()+" closes the door.\n");
+         doorIsClosed = TRUE;
+      }
+   }
+   return( 1 );
+}
+     
+open( str )
+{
+   if ( !str )
+      return;
+
+   if (str != "door" && str != "wooden door" )
+      return;
+      
+   if ( doorIsClosed ) {
+      if ( doorIsLocked ) {
+         write( "You can't open the door, it is locked.\n" );
+         say( this_player()->query_name()+" tries to open the door but fails.\n" );
+      }
+      else {
+         write( "You open the door.\n" );
+         say( this_player()->query_name()+" opens the door.\n" );
+         doorIsClosed = FALSE;
+      }
+   }
+   else
+     write( "But it's already open!\n" );
+     
+   return( 1 );
+}
+
+enter( str )
+{
+   if ( str == "door" || str == "wooden door" || str == "tree" || str == kindOfTree ) {
+      if ( doorIsClosed ) {
+         write("You bang your head against the closed door.\n");
+         say(this_player()->query_name()+" runs into the door. Not very effective, though.\n");
+      }
+      else
+         this_player()->move_player( "into the tree#" + otherDoor );
+      
+      return( 1 );
+   }
+   return( 0 );
+}
+
+read_it( arg )
+{
+   if ( !arg )
+      return;
+
+   if ( signIsHere ) {
+      if ( arg == "engraving" || arg == "the engraving" ) {
+         write( "The engraving says: " + sign_read + "\n" );
+         return( 1 );
+      }
+   }
+   
+   return( 0 );
+}
+
+
+id(str)
+{
+   int i;
+   
+   if (!items)
+     return;
+   
+   while (i < sizeof(items) ) {
+     if (items[i] == str)
+        return 1;
+     i += 2;
+   }
+    
+   return 0;
+}
+
+long(str) {
+   int i;
+   
+   if (!str)
+   {
+     write("You are standing on a platform in front of a huge, old tree.\n");
+      write(process_string(long_desc));
+      if (!dest_dir) write("    No obvious exits.\n");
+      else {
+         i = 1;
+         if ( !pointerp(numbers) ) 
+            numbers=SHARE->share_room_numbers();
+         if (sizeof(dest_dir) == 2)
+            write("    There is one obvious exit:");
+         else if (sizeof(dest_dir) > 18)
+            write("    There are many obvious exits:");
+         else 
+            write("    There are " + numbers[sizeof(dest_dir)/2] + " obvious exits:");
+       
+         while(i < sizeof(dest_dir)) {
+            write(" " + dest_dir[i]);
+            i += 2;
+            if (i == sizeof(dest_dir) - 1)
+               write(" and");
+            else
+               if (i < sizeof(dest_dir)) write(",");
+          }
+           write("\n");
+       }
+       return;
+   }
+  
+   if (!items)
+      return;
+   i = 0;
+   while(i < sizeof(items)) {
+      if (items[i] == str) {
+         write(process_string(items[i+1]) + "\n");
+         return;
+      }
+      i += 2;
+   }
+}
+ 
+/*
+ * Does this room has a special property ?
+ * The 'property' variable can be both a string and array of strings.
+ * If no argument is given, return the 'property' variable.
+ */
+query_property(str)
+{
+   int i;
+   if (str == 0)
+      return property;
+   if (!property)
+      return 0;
+   if (stringp(property))
+      return str == property;
+   while(i < sizeof(property)) {
+      if (property[i] == str)
+         return 1;
+      i++;
+   }
+   return 0;
+}
+ 
+move(str)
+{
+   int i;
+ 
+   i = 1;
+
+   if (!str) str=query_verb();
+
+   while(i < sizeof(dest_dir)) {
+      if (str == dest_dir[i]) {
+         if (dest_dir[i-1]=="")
+            return 0;
+         this_player()->move_player(dest_dir[i] + "#" + dest_dir[i-1]);
+         return 1;
+      }
+      i += 2;
+   }
+}
+ 
+short()
+{
+   if (set_light(0))
+      return short_desc;
+   return "Dark room";
+}
+ 
+query_dest_dir()
+{
+   return dest_dir;
+}
+query_dest_dirs()
+{
+    return dest_dir;
+}
+ 
+query_long()
+{
+   return ( process_string( long_desc ) );
+}
+ 
+query_drop_castle()
+{
+   return no_castle_flag;
+}
+
+query_door_closed()
+{
+   return( doorIsClosed );
+}
+
+query_door_locked()
+{
+   return( doorIsLocked );
+}
+
+query_kindOfTree()
+{
+   return( kindOfTree );
+}
+
+/* ----- */
+
+set_tree( str )
+{
+   if ( !str )
+      kindOfTree = "oak";
+   else
+      kindOfTree = str;
+}
+
+set_door_state( state )
+{
+   switch( state ) {
+      case 2:  doorIsLocked = TRUE; doorIsClosed = TRUE; break;
+      case 1:  doorIsLocked = FALSE; doorIsClosed = TRUE; break;
+      default: doorIsLocked = FALSE; doorIsClosed = FALSE;
+   }
+}
+
+set_short_desc( str )
+{
+   if ( !str )
+      short_desc = "In front of a " + kindOfTree +"-tree";
+   else
+      short_desc = str;
+      
+   long_desc = short_desc + ".\n";
+   doorIsClosed = TRUE;
+   
+   items = ({ "door","The door is made of " + kindOfTree + "-wood. It is " +
+                     "@@_door_state1@@.",
+              "wooden door","The door is made of " + kindOfTree + "-wood. It is " +
+                            "@@_door_state1@@.",
+              "tree","It is a very huge and massive " + kindOfTree + "-tree.",
+              kindOfTree,"It is a very huge and massive " + kindOfTree + "-tree.",
+              kindOfTree+"-tree","It is a very huge and massive " + kindOfTree + "-tree.",
+              kindOfTree+" tree","It is a very huge and massive " + kindOfTree + "-tree.",
+              "wood","Which kind of wood do you expect to see???",
+              kindOfTree+"-wood","It's "+kindOfTree+"-wood, nothing else.",
+              "engraving","@@_l_engraving@@",
+           });
+}
+
+set_long_desc( str )
+{
+   if ( !str )
+      long_desc = "This tree is a massive " + kindOfTree + "-tree with a massive wooden door in it.\n" +
+                  "The door is @@_door_state1@@. @@_engraving@@\n";
+   else
+      long_desc = str;
+      
+   doorIsClosed = TRUE;
+}
+
+cat_long_desc( str )
+{
+   long_desc += str;
+}
+
+set_items( array )
+{
+   if ( items )
+      items += array;
+   else
+      items = array;
+}
+
+set_other_dside( str )
+{
+   otherDoor = str;
+}
+
+set_dest_dir( array )
+{
+   dest_dir = array;
+}
+
+set_sign( read )
+{
+   sign_read = read;
+   signIsHere = 1;
+}
+
+set_rope( state )
+{
+   return( 1 );
+}
+
+_door_state1( )
+{
+   if ( doorIsClosed )
+      return( "closed" );
+   else
+      return( "open" );
+}
+
+_door_state2( )
+{
+   if ( doorIsClosed )
+      return( "a closed" );
+   else
+      return( "an open" );
+}
+
+_engraving()
+{
+   if ( signIsHere )
+      return( "Also you can see an engraving over the door." );
+   else
+      return( "" );
+}
+
+_l_engraving( )
+{
+   if ( signIsHere )
+      return( "The engraving is scratched into the "+kindOfTree+"-tree. Maybe you should read it." );
+   else
+      return( "But you can't see an engraving." );
+}

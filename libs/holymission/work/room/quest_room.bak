@@ -1,0 +1,343 @@
+#include "tune.h"
+inherit "room/room";
+
+#define QUEST_DESC	"very easy/easy/quite easy/moderate/quite hard/hard/very hard/only for the best adventurers"
+#define QUEST_OWNERS ({\
+ "/room/adv_guild",\
+ "/players/goldsun/castle",\
+ "/players/muzmuz/castle",\
+ "/players/colossus/castle",\
+ "/players/kawai/castle",\
+ "/players/matt/castle",\
+ "/players/sarge/castle",\
+ "/players/uglymouth/castle",\
+ "/players/dice/castle",\
+ "/players/airborne/castle",\
+ "/players/sherman/castle",\
+ "/players/warlord/castle",\
+ "/players/pretzel/castle",\
+ "/players/patience/castle",\
+ "/players/moonchild/castle",\
+ "/players/whisky/castle",\
+ "/players/brainsprain/castle",\
+ "/players/llort/castle",\
+ "/players/padrone/castle",\
+ "/players/emerald/castle",\
+ "/players/herp/castle", })
+
+#define	GM	"guild/master"
+#define gd	1
+
+int total_weight;
+int max_weight;
+string *desc;
+int s_flag;
+int c_total_weight;
+int c_level;
+int g_i;
+int tq;
+int *lv;
+object *qo;
+
+reset(arg) {
+    ::reset(arg);
+    if(arg) return; 
+    max_weight = 0;
+    catch(set_quests());
+    set_light(1);
+    short_desc="Room of quests";
+    long_desc=
+"This is the room of quests. Every wizard can make at most one quest.\n" +
+"When he has made a quest, he should have it approved by an arch wizard.\n" +
+"When it is approved, put a permanent object in this room, wich has as\n"+
+"short description the name of the wizard. All objects in this room will be\n"+
+"checked when a player wants to become a wizard. The player must have\n"+
+"solved ALL quests. To mark that a quest is solved, call 'set_quest(\"name\")'\n"+
+"in the player object. The objects must all accept the id 'quest' and the\n"+
+"name of the wizard. The objects must also define a function hint(),\n"+
+"that should return a message giving a hint of where to start the quest.\n"+
+"Note that players never can come here. set_quest(str) will return 1 if\n"+
+"this is the first time it was solved by this player, otherwise 0.\n";
+    dest_dir=({ "room/wiz_hall", "south" });
+    desc=explode(QUEST_DESC,"/");
+
+    property = ({"no_clean_up"});
+}
+
+get_quest_desc(i) {
+  i=i*100/max_weight;
+  switch(i) {
+    case 1..5:   return "very easy";                     break;
+    case 6..15:  return "easy";                          break;
+    case 16..25: return "quite easy";                    break;
+    case 26..35: return "moderate";                      break;
+    case 41..55: return "quite hard";                    break;
+    case 56..70: return "hard";                          break;
+    case 75..99: return "very hard";                     break;
+    case 100:    return "only for the best adventurers"; break;
+  }
+}
+
+set_quests() {
+  string *qo, err ;
+  int i, sz;
+
+  map_array( QUEST_OWNERS, "make_it", this_object() );
+  call_out("order_quests", 1, 0);
+}
+
+make_it( obj )   { write( obj + "\n" ); obj->make_quest(); return( 0 ); }
+
+order_quests() {
+  object *ob;
+  int i;
+  ob=filter_array(all_inventory(), "quest_filter", this_object());
+  ob=sort_array(ob, "value_sorter", this_object());
+  for(i=0;i<sizeof(ob);i++)
+    move_object(ob[i], this_object());
+}
+
+quest_filter(ob) {
+  return ob->id("quest");
+}
+
+value_sorter(ob1, ob2) {
+  return ob1->query_weight() > ob2->query_weight();
+}
+
+init() {
+  ::init();
+  add_action("verbose_list","dump");
+  add_action("calc_weight","calc");
+}
+
+list_all(long) {
+  this_player()->more_string(get_list_all(long));
+}
+
+static get_list_all(long) {
+  string z;
+  object ob;
+  int i;
+  z="";
+  ob=first_inventory(this_object());
+  while(ob) {
+    if(ob->id("quest")) {
+      string str;
+      i++;
+      z+=ladjust(i + ".");
+      str=ob->short();
+      if(this_player()->query_quests(str)) z+="(*) ";
+      else z+="    ";
+      z+=ob->short_hint();
+#if 0
+      if(ob->compulsory()) z+=" (compulsory)";
+#endif
+      z+="\n";
+      if(long) z+="\n" + ob->hint() + "\n";
+    }
+    ob=next_inventory(ob);
+  }
+  if(!long)
+    z+="\nA (*) means you have already solved this particular quest.\nThe star ratings indicate difficulty of the killing in the quest.\n";
+  return z;
+}
+  
+count(silently) {
+    object ob;
+    int i,j,k,l;
+
+    ob = first_inventory(this_object());
+    while(ob) {
+	if(ob->id("quest")) {
+	    string str;
+	    str=ob->short();
+	    j++;
+	    if(this_player()->query_quests(str)) i++;
+	    if(ob->compulsory()) {
+		k++;
+		if(this_player()->query_quests(str)) l++;
+	    }
+	}
+	ob = next_inventory(ob);
+    }
+    if(!silently) {
+	if(i==j) write("You have solved all " + j + " quests!\n");
+	else write("You have solved " + i + " out of " + j + " quests.\n");
+	if(k) {
+	    if(k==l) write("You have solved all " + k 
+		+ " compulsory quests!\n");
+	    else write("You have solved " + l + " of the " + k
+		+ " compulsory quests.\n");
+	}
+	    write("You have currently managed to score a quest rating of " +
+                (100*this_player()->query_cum_q_points()/total_weight) + "%.\n");
+	    write("To become a Wizard you have to solve all compulsory quests,\n"
+		+ "and you must have scored a quest rating of " +
+		QUEST_PERCENT_FOR_WIZ + "%, or higher.\n");
+	    write("See also \"list all\", \"list <number>\", \"list long\".\n");
+    }
+    return k-l;
+}
+
+ladjust(str) { return extract(str+"    ",0,3); }
+
+radjust(str) {
+  int len;
+  string longstring;
+  longstring="   "+str;
+  len=strlen(longstring);
+  return extract(longstring,len-3,len);
+}
+
+list(i) {
+    int w,idl;
+    object ob;
+
+    if(i<1) { write("No such quest.\n"); return 1; }
+    ob=first_inventory(this_object());
+    while(ob) {
+	if(ob->id("quest")) {
+	    string str;
+	    i--;
+	    str=ob->short();
+	    if (!i) {
+		write(ob->short_hint());
+		if(this_player()->query_quests(str)) write(" (done)");
+		write("\n\n");
+		write(ob->hint());
+		if ((w=ob->query_weight())!=0) {
+		    if(idl==-1) idl=0;
+		    write("\nThis quest is "
+			+get_quest_desc(ob->query_weight())+".\n");
+		    if(ob->compulsory())
+			write("\n** You must solve this quest to become wizard **\n");
+		}
+		return;
+	    }
+	}
+	ob = next_inventory(ob);
+    }
+}
+
+enter_inventory(ob) {
+string name;
+int i,w;
+object *o;
+
+  if (ob->id("quest")) {
+      name=ob->query_name();
+      if(present(name, this_object()))
+      {
+          destruct(ob);
+          return;
+      }
+      w=ob->query_weight();
+      if(w<0) return;
+      if (w>max_weight) max_weight=w;
+      total_weight+=w;
+      move_object(ob, this_object());
+  }
+} 
+
+query_total_weight() { return total_weight; }
+
+verbose_list() {
+object *o;
+int i,tq,max_l,lvl,qexp,weight;
+
+  if (!this_player()->query_wizard()) return;
+  write("Total weight: "+total_weight+".\n");
+  write("Maximum weight: "+max_weight+".\n");
+  o=all_inventory(this_object());
+  for (i=0;i<sizeof(o);i++)
+     if (o[i]->id("quest")) {
+	weight=o[i]->query_weight();
+	if (weight!=0) {
+	  max_l=GM->query_levels(gd);
+	  qexp=GM->query_exp(gd,max_l)*weight/total_weight;
+	  lvl=GM->query_level(gd,qexp);
+/*
+          write(o[i]->query_name()+"\t"+o[i]->query_weight()+" points. "+
+	        "\tExp "+qexp+" points.\tLevel "+lvl+".\n");
+*/
+          printf("%-20s %3d points.  Exp %7d points. Level %2d.\n",
+                 o[i]->query_name(),o[i]->query_weight(),qexp,lvl);
+	}
+	else write(o[i]->query_name()+":\tNo Weight.\n");
+	tq++;
+     }
+  write("Number of quests: "+tq+".\n");
+  return 1;
+}
+
+calc_weight(str) {
+  if (!this_player()->query_archwiz()) return;
+  if (str=="!") s_flag=1;
+  else s_flag=0;
+  write("Give the total weight: ");
+  input_to("g_total_weight");
+  return 1;
+}
+
+g_total_weight(str) {
+object *ob;
+int i;
+
+  sscanf(str,"%d",c_total_weight);
+  ob=all_inventory(this_object());
+  qo=allocate(0);
+  tq=0;
+  for (i=0;i<sizeof(ob);i++)
+     if (ob[i]->id("quest")) {
+	tq++;
+        qo+=({ ob[i] });
+     }
+  lv=allocate(tq); 
+  write("There are "+tq+" quests in total.\n");
+  if (tq==0) return 1;
+
+  g_i=0;
+  write("("+g_i+") "+qo[g_i]->query_name()+": Give the desired level: ");
+  input_to("g_level");
+  return 1;
+}
+
+  
+g_level(str) {
+  sscanf(str,"%d",lv[g_i]);
+  g_i++;
+  if (g_i==tq) {
+    calc_weights();
+    return 1;
+  }
+  write("("+g_i+") "+qo[g_i]->query_name()+": Give the desired level: ");
+  input_to("g_level");
+}
+
+calc_weights() {
+int i,w,max_exp,cmax_exp;
+
+  max_exp=GM->query_exp(gd,GM->query_levels(gd)); 
+  cmax_exp=0;
+  for (i=0;i<tq;i++) cmax_exp+=GM->query_exp(gd,lv[i]);
+  if (cmax_exp==0) {
+     write("No levels given.\n");
+     return 1;
+  }
+  if (max_exp!=cmax_exp)
+     write("\nCaution, sum of Quest-Experience not equal to Max-Experience!\n"+
+	   "Sum: "+cmax_exp+"\n"+"Max: "+max_exp+"\n"+
+	   "Using calculated sum, resulting levels will differ from "+
+	   "given levels.\n");
+  write("\nCalculated weights:\n");
+  for (i=0;i<tq;i++) {
+    w=c_total_weight*GM->query_exp(gd,lv[i])/cmax_exp;
+    write("("+i+") "+qo[i]->query_name()+": ");
+    if (w!=0) write(w+" points.\n");
+    else write("No weight.\n");
+    if (s_flag) qo[i]->set_weight(w); 
+  }
+  if (s_flag) total_weight=c_total_weight;
+  return;
+}

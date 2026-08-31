@@ -1,0 +1,459 @@
+/* ROOM.C - This is an inherit file. DO NOT COPY! */
+/* 180792: Herp: reset() added for REALMS portability */
+/* 231192: James: Removed query_dest_dir */
+/* 081292: Ethereal Cashimor: query_dest_dir put back */
+/* 181292: Llort: Search routine added */
+/* 020393: Ethereal Cashimor: Linewrap in long_desc */
+/* 080393: Ethereal Cashimor: query_no_teleport added */
+/* 090393: Ethereal Cashimor: process_string on query_long */
+/* 100393: Ethereal Cashimor: query_long parameters added */
+/* 240393: Ethereal Cashimor: Smell of players added */
+/* 310393: Ethereal Cashimor: Start of query_inorout */
+/* 280493: James: member_array used instead of loops */
+/* 290493: Patience: member_array removed from query_no_teleport */
+/* 029593: Llort: query_dest_dir put back */
+/* 230593: James: query_room instead of various query functions USE THIS! */
+/* 280593: James: clone_list added for use with replace_program() */
+/* 140693: Moonchild: Declaring types */
+/* 280693: James: move() no longer performs an array addition */
+/* 020793: Ethereal Cashimor: USERDOC added */
+/* 140793: Moonchild: smell removed */
+/* 140793: Moonchild: Search routine removed */
+// 130893: Moonchild: removed the #if 0 around inherit /room/clean_up
+//         also inserted a replacement for process_string (not used yet tho'
+// 180893: Moonchild: use printf() not write() for increased speed(), also
+//	   store result of query_obvious_exits() for future use. saves 100 cpu
+//	   cycles for a two exit room, and more for more. Some cleanups, too.
+//	   removal of numbers, which should save a lot of memory.
+// 070993: Moonchild, yet more improvements
+/*HERP: removed an improvement */
+// 030294, Uglymouth: in move(str) checked if(dest_dir) before trying
+//    to calculate member_array in it. ditto hidden_dir.
+
+#pragma strict_types
+#include <lw.h>
+#include "clean_up.c"
+#define USE_PROCESS_STRING
+
+/* USERDOC:
+general
+This is a room, and unlike normal options it can only be initialized by
+inheriting it. Still, after inheriting it you might want to use
+replace_program() to make it another clone... Setting isn't done by calling
+set-functions, but by addressing the variables directly. Possible variables
+are:
+dest_dir, short_desc, long_desc, items, property, no_castle_flag, smell,
+no_obvious_msg, hidden_dir, clone_list.
+Don't forget to use set_light(1) if you want to room to be lit!
+Usage of these variables is best learned from looking at examples:
+/room/church.c: short_desc, long_desc, dest_dir, items, property, smell.
+/room/vill_green.c: no_castle_flag.
+/players/cashimor/rooms/elevator.c: no_obvious_msg.
+/room/wiz_hall.c: hidden_dir.
+Of clone list there is only a docfile at the moment: 
+/doc/build/clone_list
+*/
+
+/* An array with destinations and directions: "room/church", "north" ... */
+string *dest_dir;
+ 
+/* Short description of the room */
+string short_desc;
+
+/* Long description of the room */
+string long_desc;
+ 
+/* Special items in the room. "table", "A nice table", "window", "A window" */
+string *items;
+ 
+/* Fact about this room. ex: "no_fight", "no_steal", "no_sneak" */
+mixed property;
+ 
+/* No castles are allowed to be dropped here */
+int no_castle_flag;
+
+/* Cashimor: smell of the room, search string */
+string smell;
+
+/* Llort: This message is displayed when there is no obvious exit */
+// Moonchild: now used also when there are exits, to save memory & cpu
+string no_obvious_msg;
+
+/* Llort: this variable is used similar to dest_dir, but the exits are
+          not shown as obvoius exits */
+string *hidden_dir;
+/* Llort: this is the powerlevel of the room. it changes on every reset of
+          the room */
+int power_level;
+
+/* James: This variable used in the new reset() function, to clone
+          new monsters and objects each reset (IF the variable
+          is defined by the wizard) */
+mixed *clone_list;
+
+/*HERP: it looks ugly */
+
+#if 0
+// Moonchild, shows whether short has exits in it
+status short_updated;
+#endif
+
+mixed query_dest_dirs();
+
+#define ROOMINFO "room/roominfo"
+
+#ifndef USE_PROCESS_STRING
+static string process(string str);
+#endif
+
+
+void init()
+{
+ int i, sz;
+ closure add;
+
+ add = #'add_action;
+
+  if (dest_dir) for (sz=sizeof(dest_dir),i=1;i<sz;i += 2)
+      funcall(add,"move",dest_dir[i]); 
+  if (hidden_dir) for (sz=sizeof(hidden_dir),i=1;i<sz;i += 2)
+      funcall(add,"move",hidden_dir[i]); 
+}
+
+int recalc_power_level()
+{
+  int p;
+  p=random(9)+1;
+  if(!random(100)) p+=random(20)+1;
+  power_level=p;
+  return p;
+}
+
+void reset(int arg) 
+{ 
+  int i,j,k,l,n,id,index;
+  int h1, h2, h3;
+  object ob, *all;
+  mixed *monsters;
+
+  this_object()->recalc_power_level();
+
+  if (clone_list) 
+  {
+    monsters = ({ });
+    all = all_inventory(this_object());
+    
+    if (!all) all= ({ });
+
+   /* will only calculate sizeof 1 time Whisky */
+
+    for( h1 = sizeof(clone_list), i=0; i < h1; i += 5) 
+    {
+      if ((id=clone_list[i]) == 0) continue; 
+      if (id > 0) 
+      { 
+        if(!(index=member_array(id,monsters)+1)) 
+	{
+          monsters += ({ id, ({ }) });
+          index = sizeof(monsters)-1;
+        } /* endif */
+        n = clone_list[i+1];
+        for(h2 = sizeof(all),j=0; j < h2; j++)
+          if ((int) call_other(all[j], "id", clone_list[i+2])) n -= 1;
+        for(j=0; j<n; j++) 
+  	{
+           ob = clone_object(clone_list[i+3]);
+           for( h3=sizeof(clone_list[i+4]), k=0; k < h3; k+=2)
+             call_other(ob, clone_list[i+4][k], clone_list[i+4][k+1]);
+           monsters[index] += ({ ob });
+           move_object(ob, this_object());
+           all += ({ ob });
+        } /* endfor */
+      } else 
+      {   //Clone items for any monsters we've created,buit don't use that !
+        if(index=member_array(-id,monsters)+1)
+          for(h2 = sizeof(monsters[index]), l=0; l < h2; l++)
+            for(j=0; j<clone_list[i+1]; j++) 
+            {
+              ob=clone_object(clone_list[i+3]);
+              for(h3 = sizeof(clone_list[i+4]),k=0; k < h3; k+=2)
+                call_other(ob, clone_list[i+4][k], clone_list[i+4][k+1]);
+              move_object(ob, monsters[index][l]);
+              if (ob->query_weapon())
+                command(sprintf("wield %s",clone_list[i+2]),monsters[index][l]);
+              if (ob->query_armour())
+                command(sprintf("wear %s",clone_list[i+2]),monsters[index][l]);
+            } /* endfor */
+      }  /* endif */
+    } /* endif */
+  } /* endfor */
+}
+
+status id(string str) 
+{
+    return items && member_array(str, items) != -1;
+}
+
+void long(string str)  /* be careful called very often */
+{
+    int i;
+
+    if(!this_player()) return;
+
+	if (!str && stringp(long_desc))
+	{
+#ifdef USE_PROCESS_STRING
+      writelw(process_string(long_desc));
+#else
+      writelw(process(long_desc));
+#endif
+      if(!no_obvious_msg)          // pat: changed to function-call in next line
+       	no_obvious_msg=(string)ROOMINFO->get_long_exits(query_dest_dirs());
+        write(no_obvious_msg);
+      return;
+    }
+
+    if (pointerp(items) && (i = member_array(str, items)) != -1)
+#ifdef USE_PROCESS_STRING
+        writelw(sprintf("%s.\n", process_string(items[i+1])));
+#else
+        writelw(sprintf("%s.\n", process(items[i+1])));
+#endif
+}
+
+/* USERDOC:
+query_property
+Format: m=query_property([s])
+Does this room has a special property? The 'property' variable can be both a 
+string and array of strings. If no argument is given, return the 'property' 
+variable. Possible properties are: no_fight, has_fire...
+*/
+mixed query_property(string str) 
+{
+  int i;
+  if(!str) return property;
+  if(pointerp(property)) return member_array(str, property) != -1;
+  return str==property;
+}
+
+/* USERDOC:
+query_no_teleport
+Format: i=query_no_teleport()
+This function returns 0 if you can teleport to this room, and something else
+otherwise.
+*/
+status query_no_teleport() 
+{
+  return (status)query_property("no_teleport");
+}
+
+status move(string str) 
+{
+    int i;
+
+    if (!str) str=query_verb();
+    if(dest_dir && (i = member_array(str, dest_dir)) != -1) 
+	{
+      if (dest_dir[--i]=="") return 0;
+      (void)this_player()->move_player(str,dest_dir[i]);
+      return 1;
+    }
+    if(hidden_dir && (i = member_array(str, hidden_dir)) != -1) 
+	{
+      if (hidden_dir[--i]=="") return 0;
+      (void)this_player()->move_player(str,hidden_dir[i]);
+      return 1;
+    }
+}
+
+#if 0 
+string short() 
+{
+  if(!short_updated) 
+  {
+    short_desc=sprintf("%s (%s)", short_desc,
+	(string)ROOMINFO->get_short_exits(dest_dir));
+    short_updated=1;
+  }
+  return set_light(0) ? short_desc : "It's pitch dark";
+}
+#endif
+
+string short() 
+{ 
+   if (this_player()->test_dark())
+       return "It's pitch dark";
+   else
+       return short_desc;
+  /*
+	return set_light(0) ? short_desc : "It's pitch dark"; 
+   */
+}
+
+/* USERDOC:
+query_dest_dir
+Format: s=query_dest_dir()
+See also: query_room, query_hidden_dir.
+This function returns a string with all possible directions in it. These
+directions are pairs of strings, the first being the filename, the second
+being the direction of this filename. Please use query_room("dest_dir")
+instead of this function.
+*/
+string *query_dest_dir() 
+{
+    return query_dest_dirs();
+}
+
+/* USERDOC:
+query_hidden_dir
+Format: s=query_hidden_dir()
+See also: query_room, query_dest_dir.
+This function returns a string similar to that of query_dest_dir, but only the
+hidden exits are mentioned. Please use query_room("hidden_dir") instead of
+this function.
+*/
+string *query_hidden_dir() 
+{
+    return hidden_dir;
+}
+
+/* USERDOC:
+query_long
+Format: s=query_long([i])
+See also: query_room.
+If i is not supplied, then this function returns the long description of the
+room, after being processed by process_string() and lw(). If i is supplied and
+unequal to zero, the obvious exits are added to the string as well. Please use
+query_room("long_desc") and query_room("long_desc",1) instead of this function.
+*/
+
+string query_long(int arg) 
+{
+#ifdef USE_PROCESS_STRING
+  if(!arg) return lw(process_string(long_desc)); 
+  if(!no_obvious_msg) no_obvious_msg=(string)ROOMINFO->get_long_exits();
+  return sprintf("%s%s", lw(process_string(long_desc)), no_obvious_msg);
+#else
+  if(!arg) return lw(process(long_desc)); 
+  if(!no_obvious_msg) no_obvious_msg=(string)ROOMINFO->get_long_exits();
+  return sprintf("%s%s", lw(process(long_desc)), no_obvious_msg);
+#endif
+}
+
+/* USERDOC:
+query_drop_castle
+Format: i=query_drop_castle()
+See also: query_room.
+This function returns 0 if it's possible to drop a castle at this location.
+This function is probably obsolete due to the new system of wizards. If you
+have to use it, use query_room("no_castle_flag") instead.
+*/
+status query_drop_castle() 
+{
+    return no_castle_flag;
+}
+
+/* USERDOC:
+query_room
+Format: m=query_room(s[,i]);
+See also: query_drop_castle, query_long, query_hidden_dir, query_dest_dir,
+          query_property.
+This function returns variables defined in room.c, depending on s. Possible
+values of s:
+items         : The string containing the items, in pairs of itemname,
+                description.
+dest_dir      : See query_dest_dir.
+short_desc    : The short description of the room.
+long_desc     : See query_long. The optional argument is i.
+property      : A call to query_property without an argument.
+no_castle_flag: See query_drop_castle.
+smell         : The smell of the room.
+no_obvious_msg: The message displayed if there are no obvious exists.
+*/
+varargs mixed query_room(string arg, mixed param1) {
+  switch (arg) {
+    case "items" :          return items;
+    case "dest_dir" :       return dest_dir;
+    case "short_desc" :     return short_desc;
+#ifdef USE_PROCESS_STRING
+    case "long_desc" :      if(param1) return lw(process_string(long_desc));
+                            if(!no_obvious_msg)
+			     no_obvious_msg=(string)ROOMINFO->get_long_exits();
+			    return sprintf("%s%s",
+			     lw(process_string(long_desc)), no_obvious_msg);
+#else
+    case "long_desc" :      if(param1) return lw(process(long_desc));
+                            if(!no_obvious_msg)
+			     no_obvious_msg=(string)ROOMINFO->get_long_exits();
+			    return sprintf("%s%s",
+				 lw(process(long_desc)), no_obvious_msg);
+#endif
+    case "property" :       return property;
+    case "no_castle_flag" : return no_castle_flag;
+    case "smell" :          return smell;
+    case "no_obvious_msg" : return no_obvious_msg;
+    case "hidden_dir" :     return hidden_dir;
+    default :               return sprintf("Sorry, %s is not defined", arg);
+  }
+}
+
+#ifndef USE_PROCESS_STRING
+static string process(string str) 
+{
+  string *bits;
+  int i,h;
+  bits=explode(str, "@@");
+  if(sizeof(bits)==1)
+    return str;
+  for (h=sizeof(bits), i=1; i<h; i+=2) 
+  {
+    string func;
+    mixed arg;
+    if(!sscanf(bits[i], "%s|%d", func, arg)
+         && !sscanf(bits[i], "%s|%s", func, arg)) {
+      func=bits[i];
+      arg=0;
+    }
+    bits[i]=(string)call_other(this_object(), func, arg);
+  }
+  return implode(bits, "");
+}
+#endif
+
+mixed query_items()
+{
+   if (sizeof(items))
+      return items;
+   return ({});
+}
+
+mixed query_dest_dirs()
+{
+   if (sizeof(dest_dir))
+      return dest_dir;
+   return  ({});
+}
+
+int test_darkness()
+{
+   if(this_player() && this_player()->infravision()) return 1;
+   return set_light(0);
+}
+
+int test_dark()
+{
+   return set_light(0);
+}
+
+int power_level()
+{
+   return power_level;
+}
+
+int lcatch_tell( string act, string msg, object who )
+{
+   if ( who && living(who) )
+      tell_object( this_object(),
+                   capitalize((string)who->query_real_name())+" "+act+" "+msg );
+   return( 1 );
+}

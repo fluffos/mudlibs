@@ -1,0 +1,14 @@
+#define STAGE_ONE_MAX		3
+#define STAGE_ONE_PROB		2
+#define WIZ   "/players/beardy"
+#define ROOM WIZ+"/golem_cave/room/"
+#define MONST WIZ+"/golem_cave/monster/"
+#define OBJ   WIZ+"/golem_cave/obj/"
+#define TO    this_object()
+#define TON   this_object()->query_name()
+#define TP    this_player()
+#define TPN   this_player()->query_name()
+#define CM(x) move_object(clone_object(MONST+x),TO)
+#define CO(x) move_object(clone_object(OBJ+x),TO)
+#define TCM(x,y) move_object(clone_object(MONST+x),ROOM+y)
+#define TCO(x,y) move_object(clone_object(OBJ+x),ROOM+y)

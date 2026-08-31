@@ -1,0 +1,52 @@
+#include "/players/sargon/define.h"
+inherit "/players/sargon/magic/mw";
+
+void reset(int arg) {
+
+  if (arg) return;
+
+   set_name("Frostbite");
+   set_id("Frostbite");
+   set_short("Frostbite, The Sword of Ice");
+   set_alt_name("sword");
+   set_alias("frostbite");
+   set_long("Even in dim light this weapon radiates a polished\n"+
+            "look. The sword gives off an aura of power, not \n"+
+            "only from the magic, but from the metal itself.\n"+
+            "There is a fine mottled pattern along the blade,\n"+
+            "it seems to run deep into the metal though the\n"+
+            "surface is flawlessly smooth. On the black handle\n"+
+            "there is a simple symbol: a snowflake.\n");
+   set_value(6000);
+   set_weight(7);
+   set_type(1);
+   set_hit_func(TO);
+}
+
+int weapon_hit(object attacker) {
+
+    int i;
+
+    i = random(100);
+
+   if (i > 21 ) {
+        write("Frostbite grows cold and glows blue. The air begins to chill\n"+
+              "and uncontrolable. The area shakes as if caught in a storm\n"+
+              "The wind howls as Frostbite peirces "+attacker->N+"'s body!\n");
+        say("You feel the chill of the unforgiving iceages as Frostbite cuts\n"+
+            attacker->N+"'s body!\n");
+        return 20+random(5);
+    }
+
+    if ( i <= 20 ) {
+        write("Frostbite lets loose a storm of hail.\n");
+        return 100;
+    }
+
+  if ( i >= 90 ) {
+    write("Frostbite turns white and shoots a blizzard at " +attacker->N+"!\n");
+    say("Frostbite captures "+attacker->N+" in a block of ice!\n");
+    attacker->hold(TP, 2);
+    return 20;
+    }
+}

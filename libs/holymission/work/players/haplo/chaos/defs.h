@@ -1,0 +1,9 @@
+#define TP this_player
+#define TO this_object
+#define CO clone_object
+#define CPATH "/players/haplo/chaos/"
+#define VPATH "/players/haplo/chaos/vortex/"
+#define DPATH "/players/haplo/chaos/dungeon/"
+#define OPATH "/players/haplo/chaos/obj/"
+#define EPATH "/players/haplo/chaos/expa/"
+#define MPATH "/players/haplo/chaos/monsters/"

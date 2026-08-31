@@ -1,0 +1,30 @@
+/*=+=+=+=+=+=+=+=+=+=+=+=+=+=+= The Thief Soul=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=*/
+
+#define GM             "guild/master"
+#define GUILD          "thief"
+#define CD             "sys/chatd"
+#define dir            GM->query_dir(gd) + "/"
+#define TOTAL_HIDDEN   (dex * 45)   /*        max time hidden  */
+#define ROOM           "/players/brainsprain/guild/rooms/joinroom"
+#define ENV            environment
+#define AL_STEALMONEY  -10          /*  alignment: steal money */
+#define AL_STEALITEM   -50          /*             steal item  */
+#define LV_STBAG        20          /* level for stealing bags */
+#define TP this_player()
+#define ROOMDIR dir + "rooms/"
+#define BINDIR  dir + "bin/"
+#define OBJDIR dir + "obj/"
+#define MONDIR dir + "mon/"
+#define POIDIR dir + "poison/"
+#define TDIR dir + "thieves/"
+#define SROOM ROOMDIR + "scroll_room"
+#define PROOM ROOMDIR + "plunder_room"
+object att;
+#define CHK_ATT(); \
+if ((att=THIEF->query_attack()) &&\
+    present(att,environment(THIEF))) {\
+      write("You are much too busy to do that.\n");\
+      return 1;\
+}
+
+

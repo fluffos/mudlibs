@@ -1,0 +1,820 @@
+#define LOCAL		"127.0.0.1"
+#define DEFAULT		"/sys/player"
+#define MAXPLAYERS	60
+#define LOCALPLAYERS\
+        ({"airborne"\
+        "blark","bonecrusher",\
+        "calidor","cherina","chuck",\
+        "dago",\
+        "earthquake","esox",\
+        "foxi",\
+        "galadriel","gareth","gargl","gator","gothmog",\
+        "hari","herp","hinz",\
+        "impatience","itzy",\
+        "just",\
+        "kairon","kbl","kelly","kemp","klorathy",\
+        "llort",\
+        "matt","max","milk","mueller","muehli","muesli","mul","muzmuz",\
+        "nokey",\
+        "orcgrimm","oink","ozozoz",\
+        "patience","patty","pcbeth",\
+        "rasta","robinhood",\
+        "schnarch","sepp","shaggratt","sherman","skeeve","skeevie","smiler",\
+        "smirk","soozie","sourcer","stabi",\
+        "tarjan","testklor","thram",\
+        "uglymouth",\
+        "victor",\
+        "wamsy","wergznase","wumpading",\
+        "xylophon",\
+        })
+
+#define			BAN_NEW_FROM_AMES
+
+// 05.09.97 Airborne: Passwd hacking from this site. 
+#define                 BAN_HACK
+
+/* *I* undefined that - HERP */
+
+#undef			BAN_LINZ
+
+#include "/sys/levels.h"
+
+/* logon() is called when the players logges on. */
+static string name;
+static int lock_level;
+
+string name_of_friend;        /* needed to switch to testplayer */
+int ftp_user;
+string password;
+
+int level;
+int legend_level;
+int wiz_level;
+
+int guild;
+
+static string password2;
+static int pw_expired;
+static int master;
+static int try;
+static object ob;
+ 
+static logon() {
+    string *tmp;
+    int date,rnd;
+
+    printf("Welcome to the Holy Mission at Linz, Austria, \
+linux-1.idv.uni-linz.ac.at %d\n",query_mud_port());
+    tmp=get_dir("/etc/WELCOME*");
+    rnd=random(sizeof(tmp))+1;
+    cat("/etc/WELCOME"+rnd);
+    printf("Sic transit gloria \
+mundi...___________________________________________________\n");
+    date=get_dir("/etc/NEWS",4)[0];
+    if(date>0)
+        printf("Player News Updated: %s %s\n",
+               ctime(date)[4..9],ctime(date)[<4..<1]);
+    date=get_dir("/etc/WIZNEWS",4)[0];
+    if(date>0)
+        printf("Wizard News Updated: %s %s\n",
+               ctime(date)[4..9],ctime(date)[<4..<1]);
+    cat("/etc/ATTENTION");
+    printf("Version: %s\nWhat is your name: ",version());
+    input_to("logon2");
+#if 1
+    call_out("time_out", 120);
+#else
+    call_out("time_out", 1200);
+#endif
+}
+
+sizeof_players() {
+  return sizeof(users());
+}
+
+static logon2(str) {
+    string n;
+
+    if(!str || str=="")
+        destruct(this_object());
+    else {
+        str=lower_case(str);
+        if(!valid_name(str)) {
+            input_to("logon2");
+            return;
+        }
+/* HERP: use file_size ! */
+        if(str!=NAME_OF_GOD
+              && ((str=="whisky" || str=="Whisky")
+              ||  (file_size("/banish/"+str+".o")>0
+              ||   file_size("/banish2/"+str+".o")>0))) {
+            write("That name is reserved.\n");
+            destruct(this_object());
+            return;
+        }
+        if(!master_object()->get_wiz_level(str)
+           && sizeof_players()>=MAXPLAYERS
+           && query_ip_number()[0..6]!="127.0.0") {
+            write("Sorry, Holy Mission is full at the moment, try later.\n");
+            destruct(this_object());
+            return;
+        }
+#ifdef BAN_LINZ
+        n=str;
+#if 0
+        if((query_ip_number()[0..6]=="140.78." ||
+            query_ip_number()[0..6]=="127.0.0")
+#else
+        if(query_ip_number()[0..6]=="140.78."
+#endif
+                && member_array(n,LOCALPLAYERS)==-1) {
+            write("No local players allowed at the moment!\n");
+            remove_interactive(this_object());
+            return;
+         }
+#endif
+
+#if 0
+        if((strlen(query_ip_number())>11
+                && query_ip_number()[0..10]=="198.207.193")
+                || query_ip_number()[0..13]=="204.117.211.11") {
+           write("Pretzel, you have harrassed enough people, and until \
+you grow up, these sites will remain banned.\n");
+           remove_interactive(this_object());
+           return;
+        }
+/*
+        if((strlen(query_ip_name())>11
+                && query_ip_name()[<11..<1]=="buffalo.edu")
+                || query_ip_name()=="146.110.1.2") {
+           write("WE DO NOT LIKE TO BE BLACKMAILED, SO STAY AWAY!!!!!\n");
+           remove_interactive(this_object());
+           return;
+        }
+*/
+#endif
+
+/*94-04-14 Herp: trash the secure/passwd directory structure
+                 and use a ndbm database instead */
+        if(!(password=getpwent(str))) {
+            if(!restore_object("p/"+str[0..0]+"/"+str)) {
+                password="new";
+                write("New character.\n");
+            }
+            else {
+                password="new";
+#if 1
+/*** Some one from buffalo was messing with us when passwords were messed up.
+ ***/
+                write("---------------------------------------------\n"+
+                      "Your password has expired!!!!!!\n"+
+                      "Please log in as guest and ask an Arch\n"+
+                      "to restore your password!!!\n"+
+                      "Sorry for the problems....\n"+
+                      "----------------------------------------------\n");
+                remove_interactive(this_object());
+                return;
+#else
+                write("Your password has expired. Please enter a new one.\n");
+#endif
+            }
+            /* else addpwent(str); */
+        }
+        else
+            if(!restore_object("p/"+str[0..0]+"/"+str)) {
+                write("Your player file has expired.\n");
+                level=-1;
+                password="new";
+                write("New character.\n");
+            }
+#ifdef        BAN_NEW_FROM_AMES
+
+        if(query_ip_number()[0..7]=="129.186." && level<2) {
+            write("Newbies not allowed.\n");
+            destruct(this_object());
+            return;
+        }
+#endif
+
+#ifdef  BAN_HACK
+
+	if((query_ip_number()[0..10]=="193.170.75.") ||
+	   (query_ip_number()[0..10]=="128.130.87.")) {
+	  write("We do not want passwd hackers here.\n");
+	  destruct(this_object());
+	  return;
+	}
+#endif
+
+        if(ftp_user) {
+            write("This character is for ftp purpose only.\n");
+            destruct(this_object());
+            return;
+        }
+        name=str;                 /* Must be here for a new player. */
+        if(password!="new")
+            input_to("check_password",1);
+        else {
+            password=0;
+            input_to("new_password",1);
+        }
+        write("Enter password: ");
+        if(name=="guest")
+            write("(just CR) ");
+    }
+}
+ 
+/*
+ * Check that a player name is valid. Only allow
+ * lowercase letters.
+ */
+valid_name(str) {
+
+    int i,length;
+
+    length=strlen(str);
+    if(!str || str=="") {
+        write("What a weird name... try again.\nWhat is your name: ");
+        return 0;
+    }
+    if(length<3) {
+      write("That name is too short... try again.\nWhat is your name: ");
+      return 0;
+    }
+    if(length>11) {
+        write("That name is too long... try again.\nWhat is your name: ");
+        return 0;
+    }
+    i=0;
+    while(i<length) {
+        if(str[i]<'a' || str[i]>'z') {
+            write("Invalid characters in name: "+str+"\n");
+            write("Character number was "+(i+1)+".\n");
+            write("What is your name: ");
+            return 0;
+        }
+        i++;
+    }
+    return 1;
+}
+
+static check_password(p) {
+
+    int pwt;	// password limit: how long allowed to be unmodified
+    int dc;	// delta changed: days password has been unmodified
+    int wx;	// will expire: how many days left to go
+
+    pw_expired=0;
+
+    write("\n");
+    if(!p || p=="") {
+        if(!try)
+            write("Enter password: ");
+        else
+            write("Try again: ");
+        input_to("check_password",1);
+        return;
+    }
+    remove_call_out("time_out");
+    if(password==0)
+        write("You have no password! Please set one.\n");
+    else if(p=="#master" && !master && query_ip_number()[0..6]=="127.0.0") {
+        write("Enter master password: ");
+        input_to("check_mpassword",1);
+        master=1;
+        return;
+    }
+    else if(name!="guest" && crypt(p,password)!=password) {
+        try++;
+        write("Wrong password!\n");
+        if(try==3) {
+            write("But it doesn't matter...\n");
+            destruct(this_object());
+            return;
+        }
+        else {
+            input_to("check_password",1);
+            write("Try again: ");
+            return;
+        }
+    }
+
+/*HERP 26-Aug-1994: add password expiry check */
+    if((pwt=master_object()->get_pwlim(name))>0) {	// -1: no check
+        dc=(time()-master_object()->get_pwstamp(name))/24/60/60;
+        wx=pwt-dc;					// will expire
+        if(wx<=master_object()->get_pwwarn()) {
+            if(wx>0)
+                write("Your password will expiry in "+wx+" days.\n");
+            else {
+                write("Your password has expired.\n");
+                write("New password: ");
+                password2=0;
+                pw_expired=1;
+                input_to("change_password2",1);
+                return;
+            }
+        }
+    }
+
+#ifdef LOG_ENTER
+    log_file("ENTER",capitalize(name)+", "+ctime()[4..15]
+                                     +" from "+query_ip_number()+".\n");
+#endif
+    menu();
+}
+
+static check_mpassword(p) {
+    write("\n");                            /* checking the master password */
+
+    if(!(password=getpwent("#master"))) {
+        write("That service is not available at the moment.\n");
+        destruct(this_object());
+        return;
+    }
+
+    if (crypt(p,password)!=password) {
+        write("Wrong password!\n");
+        write("But it doesn't matter...\n");
+        destruct(this_object());
+        return;
+    }
+                                                /* set the right password */
+    password=getpwent(name);
+#ifdef LOG_ENTER
+    log_file("ENTER",capitalize(name)+", "+ctime()[4..15]
+                                     +" from "+query_ip_number()
+                                     +". (MASTER)\n");
+#endif
+    menu();
+}
+
+/*
+ * Give a new password to a player.
+ */
+static new_password(p) {
+
+    int val;
+
+    write("\n");
+    if(!p || p=="") {
+        write("Try again another time then.\n");
+        destruct(this_object());
+        return;
+    }
+    if(strlen(p)<6) {
+        write("The password must have at least 6 characters.\nTry again: ");
+        input_to("new_password",1);
+        return;
+    }
+    if(password==0) {
+        password=p;
+        input_to("new_password",1);
+        write("Again: ");
+        return;
+    }
+    remove_call_out("time_out");
+    if(password!=p) {
+        write("You changed!\n");
+        destruct(this_object());
+        return;
+    }
+    val=addpwent(name,crypt(password,0));
+    val=setpwent(name,crypt(password,0));
+    write("Password set.\n");
+    if(!val)
+      write("Your password is not set please ask an "
+           +"Archwizard for help.\n");
+#ifdef LOG_NEWPLAYER
+    log_file("NEWPLAYER",CName+", "+ctime()[4..15]
+                              +" from "+query_ip_number()+".\n");
+#endif
+    menu();
+}
+
+static menu() {
+
+    write("**************************\n\n\n");
+    write("0) Exit from Holy Mission.\n");
+    write("1) Enter the game.\n");
+    write("2) Change password.\n");
+    write("3) The admins of the Holy Mission.\n");
+    write("4) Read the actual news.\n");
+    write("5) Read the wizard news.\n");
+//    write("6) Delete this character.\n");
+    write("   Make your choice: ");
+    input_to("menu_choice",0);
+    return;
+}
+
+static menu_choice(c) {
+
+    switch(c) {
+        case "0":
+            destruct(this_object());
+            return;
+        case "1":
+            connect();
+            return;
+        case "2":
+            write("Enter the old password: ");
+            input_to("change_password",1);
+            return;
+        case "3":
+            cat("/doc/helpdir/admin");
+            input_to("menu",0);
+            return;
+        case "4":
+            cat("/etc/NEWS");
+            write("\n*** Enter to continue ***\n");
+            input_to("menu",0);
+            return;
+        case "5":
+            if(level>=L_APPR ||
+               (int)"/secure/master"->get_wiz_level(name_of_friend)>=L_APPR)
+                cat("/etc/WIZNEWS");
+            else
+                write("\nThis is much too heavy for you.\n\n");
+            write("\n*** Enter to continue ***\n");
+            input_to("menu",0);
+            return;
+/*
+        case "6":
+            if ( level > L_PLAYER )
+                write("\nWizards are not allowed to delete their character.\n");
+            else
+                write("\nPlease enter your password for verification: ");
+            input_to( "delete_char",1 );
+            return;
+*/
+        default:
+            write("Bad choice.\n");
+            menu();
+    }
+}
+
+/*
+ * This one is called when the player wants to change his password.
+ */
+static change_password(str) {
+
+    write("\n");
+    if (password!=0 && !str) {
+        write("Sorry!\n"); 
+        menu();
+        return 1;
+    }
+    if(!master && password!=0 && password!=crypt(str,password)) {
+        write("Wrong old password.\n");
+        menu();
+        return 1;
+    }
+    password2=0;
+    input_to("change_password2",1);
+    write("New password: ");
+    return 1;
+}
+ 
+static change_password2(str) {
+
+    write("\n");
+    if(!str || str=="") {
+        write("Password not changed.\n");
+        menu();
+        return;
+    }
+    if(password2 == 0) {
+        password2=str;
+        input_to("change_password2", 1);
+        write("Again: ");
+        return;
+    }
+    if(password2!=str) {
+        write("Wrong! Password not changed.\n"); 
+        menu();
+        return;
+    }
+
+    password2=crypt(password2,password);
+    if(password2==password) {
+        write("Old and new Password are the same.\n");
+        menu();
+        return;
+    }
+    master_object()->set_pwstamp(name,time());
+    setpwent(name,(password=password2));
+    password2=0;
+    pw_expired=0;
+    menu();
+}
+
+static delete_char( str ) {
+    write("\n");
+    if (password != 0 && !str) {
+        write("\nNo password given, character not deleted !\n\n"); 
+        menu();
+        return 1;
+    }
+    if (!master && password != 0 && password != crypt(str, password)) {
+        write("\nWrong password, character not deleted !\n\n");
+        menu();
+        return 1;
+    }
+    input_to("delete_char1", 0);
+    write( 
+     "\n\nDANGEROUS, YOU ARE UP TO PERMANENTLY DELETE YOUR CHARACTER !!!!!\n\n"+
+     "Please enter \"yes\" if you really want to delete it: " );
+    return 1;
+}
+
+static delete_char1( str ) {
+   string path;
+
+   if ( str != "yes" ) {
+      write( "\nAborted ...\n\n" );
+      menu();
+      return( 1 );
+   }
+
+   path = "/p/"+name[0..0]+"/"+name+".o";
+   write( path );
+   rm( path );
+   remove_interactive( this_object() );
+   destruct( this_object() );
+}
+
+connect() {
+
+    string nof;
+    int lv,i,j;
+
+    if(pw_expired) {
+        write("Change your password first.\n");
+        menu();
+        return;
+    }
+    nof=(name_of_friend?name_of_friend:"");
+    if((lv=master_object()->query_lock_level()) && level<=lv &&
+        !find_player(nof)) {
+        write("\nThe game is locked at level "+lv+".\n"+
+              "Check the news (menu: 4) for more information.\n\n");
+        cat("/etc/LOCK_LEVEL");
+        menu();
+        return;
+    }
+    i=1<<guild;
+    j=master_object()->query_lock_guild();
+    if(i&j && !find_player(nof)) {
+        write("\nThe game is locked for to guild.\n"+
+              "Check the news (menu: 4) for more information.\n\n");
+        cat("/etc/LOCK_GUILD");
+        menu();
+        return;
+    }
+    if(query_ip_number()==LOCAL && level>=L_ARCH) {
+        write("Enter the file to connect to (CR for default): ");
+        input_to("get_file",0);
+        return;
+    }
+    connect_def();
+}
+
+static get_file(f) {
+    object pl;
+    if(f=="" || catch(pl=clone_object(f))) {
+        if(f!="")
+            write("file '"+f+"' not accessable.. default connect...\n");
+        connect_def();
+        return;
+    }
+    write("connecting to "+f+"...\n");
+    exec(pl,this_object());
+    pl->logon(name);
+    destruct(this_object());
+}
+
+/* Sauron: Commented out in favour of new version of this fun - see below.
+void connect_def(string n) {
+
+    object pl;
+    string def_obj,fn;
+    mixed *wizinf;
+
+    fn="secure";
+    if(fn!="sys" && fn!="secure") {   // Illegal
+        destruct(this_object());
+        return;
+    }
+    if(n)
+        name=n;
+    restore_object("p/"+to_string(({name[0]}))+"/"+name);
+    if(!level="/secure/master"->get_wiz_level(name))
+        level=L_PLAYER;
+    switch (level) {
+        case -1..L_PLAYER:
+// Matt 8-16-94: only allow testp logon if wiz is valid
+            if(name_of_friend) {
+                if("/secure/master"->get_wiz_level(name_of_friend)>=L_NEWWIZ
+                   && file_size("/banish/"+name_of_friend+".o")<0
+                   && file_size("/banish2/"+name_of_friend+".o")<0)
+                    def_obj="/sys/testp";
+                else {
+                    write("This testplayer is no longer valid.\n");
+                    destruct(this_object());
+                    return;
+                }
+            }
+            else
+              def_obj="/sys/player";
+            break;
+        case L_APPR..L_NEWWIZ-1:
+            def_obj="/sys/appr";	break;
+        case L_NEWWIZ..L_WIZ-1:
+            def_obj="/sys/newwiz";	break;
+        case L_WIZ..L_SAGE-1:
+            def_obj="/sys/wiz";		break;
+        case L_SAGE..L_RETD-1:
+            def_obj="/sys/wiz";		break;
+        case L_RETD..L_ELDER-1:
+            def_obj="/sys/wiz";		break;
+        case L_ELDER..L_ARCH-1:
+            def_obj="/sys/wiz";		break;
+        case L_ARCH..L_SPEC-1:
+            def_obj="/sys/arch";	break;
+        case L_SPEC..L_GOD-1:
+            def_obj="/sys/arch";	break;
+        case L_GOD:
+            def_obj="/sys/god";
+            call_other(def_obj,"???");
+            pl=find_object(def_obj);
+            if(interactive(pl)) {
+                tell_object(pl,"Session called from another login.\n");
+                remove_interactive(pl);
+            }
+            break;
+        default:
+            if(!n)
+                write("Your level is invalid! You get player status.\n");
+            def_obj="/sys/player";
+            break;
+    }
+
+    if(name == "krylltest") {
+        def_obj = "/sys/newplay";
+    }
+
+    if(!pl && catch(pl=clone_object(def_obj))) {
+        write("Error in "+def_obj+"!\n");
+        destruct(this_object());
+        return;
+    }
+    if(!n)
+        write("connecting to "+def_obj+"...\n");
+    exec(pl,this_object());
+    pl->logon(name);
+    destruct(this_object());
+}
+*/
+
+varargs void connect_def(string n) {
+  string def_obj,err,fn;
+  int wl;
+  object pl;
+  mixed *wizinf;
+
+// Sauron: What is the point of this block of code?
+  fn="secure";
+  if(fn!="sys" && fn!="secure") {   // Illegal
+    destruct(this_object());
+    return;
+  }
+  if(n)
+    name=n;
+  restore_object("p/"+name[0..0]+"/"+name);
+  if(!level=(int)master_object()->get_wiz_level(name))
+    level=L_PLAYER;
+  switch(level) {
+    case -1..L_PLAYER:
+// Matt 8-16-94: only allow testp logon if wiz is valid
+      if(name_of_friend) {
+        if((int)master_object()->get_wiz_level(name_of_friend)>=L_NEWWIZ
+           && file_size("/banish/"+name_of_friend+".o")<0
+           && file_size("/banish2/"+name_of_friend+".o")<0)
+          def_obj="/sys/testp";
+        else {
+          write("This testplayer is no longer valid.\n");
+          destruct(this_object());
+          return;
+        }
+      }
+      else
+        def_obj="/sys/player";
+      break;
+    case L_APPR..L_NEWWIZ-1:
+      def_obj="/sys/appr";
+      wiz_level=WL_APPR;
+      break;
+    case L_NEWWIZ..L_WIZ-1:
+      def_obj="/sys/newwiz";
+      wiz_level=WL_NEWWIZ;
+      break;
+    case L_WIZ..L_SAGE-1:
+      def_obj="/sys/wiz";
+      wiz_level=WL_WIZ;
+      break;
+    case L_SAGE..L_RETD-1:
+      def_obj="/sys/wiz";
+      wiz_level=WL_SAGE;
+      break;
+    case L_RETD..L_ELDER-1:
+      def_obj="/sys/wiz";
+      wiz_level=WL_RETD;
+      break;
+    case L_ELDER..L_ARCH-1:
+      def_obj="/sys/wiz";
+      wiz_level=WL_ELDER;
+      break;
+    case L_ARCH..L_GOD-1:
+      def_obj="/sys/arch";
+      wiz_level=WL_ARCH;
+      break;
+    case L_GOD:
+      def_obj="/sys/god";
+      wiz_level=WL_GOD;
+      call_other(def_obj,"???");
+      pl=find_object(def_obj);
+      if(interactive(pl)) {
+        tell_object(pl,"Session called from another login.\n");
+        remove_interactive(pl);
+      }
+      break;
+    default:
+      if(!n)
+        write("Your level is invalid! You get player status.\n");
+      def_obj="/sys/player";
+      break;
+  }
+
+  if(!pl && (err=catch(pl=clone_object(def_obj)))) {
+    write("Error in "+def_obj+"!\n");
+    if(wiz_level)
+      write(err+"\n");
+    destruct(this_object());
+    return;
+  }
+  if(!n)
+    write("Connecting to "+def_obj+"...\n");
+
+  exec(pl,this_object());
+  pl->logon(name);
+
+  if(wiz_level && (!(wl=(int)pl->query_wiz_level()) || wl!=wiz_level))
+    pl->init_wiz_level();
+  if(!wiz_level)
+    pl->set_indicators();
+  if(legend_level) {
+    if(wiz_level)
+      pl->set_legend_level(0);
+    else
+      pl->recalc_legend_level();
+    pl->save_me();
+  }
+
+  destruct(this_object());
+}
+
+int query_login_object() {
+    return 1;
+}
+
+time_out() {
+    write("Time out.\n");
+    destruct(this_object());
+}
+
+recon(n) {
+    if(this_player()->query_real_name()!=n) {
+        destruct(this_object());
+        return;
+    }
+    name=n;
+    level=this_player()->query_level();
+    if(!(password=getpwent(name))) {
+        destruct(this_object());
+        return;
+    }
+    menu();
+}
+
+string valid_read(string str) {
+    return str;
+}
+
+add_history(x) {
+}
+
+/* No-one must shadow this object ! */
+
+query_prevent_shadow() {
+  return 1;
+}

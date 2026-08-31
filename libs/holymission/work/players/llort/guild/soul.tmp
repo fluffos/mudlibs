@@ -1,0 +1,537 @@
+/* ############################################################   
+   #                                                          #
+   #         The mages soul. It's the mage robe too.          #
+   #    (most functions are called via the magemaster!!)      #
+   #                                                          #
+   ###############################################(C) Llort#### */
+
+inherit "obj/armour";
+
+#include "tune.h"        /* include the mage-tuning header */
+#include "/obj/descs.h"
+
+#define E           environment
+#define MS          "players/llort/guild/magemaster"
+#define MED_TITLE   " is sitting in the lotus position"
+#define SP(X)       ("players/llort/guild/newspells/"+X)
+#define SM          "obj/skill_master"
+#define TP          this_player()
+#define MAGE_BIN	"/players/saffrin/guild/bin/"
+#define MAGE_HELP	"/players/saffrin/guild/helpdir/"
+
+int fattack;                /* if true no attack spell */
+int meditate;                /* true if meditating */
+string spells;                /* the actual spells I have */
+object go_mark;                /* the room we left at the last goguild */
+object tp_mark;                /* the room we marked for teleport */
+string nametmp,timetmp, /* temporary variables for the illusion spell */
+shorttmp,longtmp;
+string nextarg,nextverb;/* this is for timing the spells */
+object nextpl;                 /* ----- || ----- */
+object cast_env;
+int notalk;                /* true if the magetalk is turned OFF */
+object shadow;
+mixed skill_DB;
+closure call;
+object location;
+
+drop() { 
+    tell_object(E(),"Do you want to get rid of your robe?\n");
+    tell_object(E(),"Sorry, you'll have to leave the guild for that.\n");
+    return 1; 
+}
+
+guild_changes(){ /* Destructs staff now Colossus 041294 */
+    object staff;
+    staff = present("llort_guild_staff", this_player());
+    if(staff){
+        write("Your staff disappears as fast as it first appeared.\n");
+        destruct(staff);
+    }
+    write("Sorry about that! :-(\n");
+    if(shadow) {
+        if(E()->query_immortal())
+            tell_object(E(),"Wizinfo: trying to remove shadow!\n");
+        shadow->get_lost();
+    }
+}
+
+int _vis() {
+    remove_call_out("_vis");
+    TP->set_vis();
+    write("You feel exposed!\n");
+    tell_room(environment(TP),TP->query_name() + " appears.\n",TP);
+    return 1;
+}
+
+int _invis() {
+    write("You turn yourself invisible.\n");
+    tell_room(environment(TP),TP->query_name() + " vanishes!\n",TP);
+    TP->set_invis();
+    call_out("_vis",TP->query_level() * 20,0);
+    return 1;
+}
+
+id(arg) {
+    return ::id(arg) || arg=="robe";
+}
+
+query_weight() {
+    return WEIGHT_OF_ROBE;
+}
+
+reset(arg) {
+    ::reset(arg);
+    if (arg) return;
+    set_id("mage robe"); 
+    set_alias(MS->query_id());
+    set_short("A mage robe"); /* 170992 Cashimor */
+    set_long("A beautifully decorated mage robe.\n");
+    set_value(0);
+    set_weight(WEIGHT_OF_ROBE);
+    set_ac(STD_AC_OF_ROBE);
+    set_type(TYPE_OF_ROBE); 
+    notalk=0;        /* Magetalk is default ON */
+    spells=allocate(0);
+    enable_commands();
+
+    spells=MS->query_spells();
+    call = #'call_other;
+}
+
+init() {
+    int i, *pracs, txt; 
+
+    if(this_player()!=E()) return;
+    ::init();
+    init_spells();
+      init_skills();
+// convert the mage_practice_sessions
+    pracs=E()->get_skill("mage_practice");
+    if(pracs)
+    {
+        E()->remove_skill_old("mage_practice");
+        E()->remove_skill_old("mage_prac_lev");
+    }
+
+    if(pracs && !E()->practice_sessions())
+        E()->add_practice_sessions(pracs[0]-1);
+
+    if(txt=read_file("/players/llort/secure/wishes/"+ 
+              E()->query_real_name()+"_power"))
+    {
+        E()->set_n_wc(to_int(txt));
+        E()->set_number_of_arms(2);
+    }
+
+    if(txt=read_file("/players/llort/secure/wishes/"+ 
+              E()->query_real_name()+"_defense"))
+    {
+        E()->set_n_ac(to_int(txt));
+    }
+
+    add_action("help","help");
+    add_action("check","check");
+    add_action("mage_line","mage");
+    add_action("_cast","cast");
+    add_action("mage_line","mage/");
+    add_action("_invis","invisibility");
+    add_action("_vis","visible");
+    add_action("_filter","",1);
+    shadow=clone_object("/players/llort/guild/mage_shadow"); 
+    shadow->cover_it(E()); 
+}
+
+int _filter(string str) {
+    string verb;
+
+    verb=query_verb();
+
+    if(verb=="quit" || verb[0..0]=="'" || member(verb,'.')!=-1)
+        return 0;
+
+    if(file_size(MAGE_BIN+verb+".c")>0)
+        if((MAGE_BIN+verb)->main(str))
+            return 1;
+
+    return 0;
+}
+
+_cast(str){
+  string what, where;
+  if(!str) return 0;
+  if(sscanf(str, "%s %s", what, where)==2){
+    if(what=="'teleport'") {
+      write("SPELL DOWN FOR RECODE, SORRY\n"); return 1;}
+    else return 0;
+  }
+  return 0;
+}
+
+vitals() {
+    write(show_vitals(this_player()));
+    return 1;
+}
+
+init_spells() {
+    string update_spells;
+    int i;
+
+    add_action("no_std_spells","missile");
+    add_action("no_std_spells","shock");
+    add_action("no_std_spells","fireball");
+
+    update_spells=spells;
+    spells=allocate(0);
+    for(i=0;i<sizeof(update_spells);i++) {
+        if(this_player())
+            if(!set_spell(update_spells[i])) 
+                write("!! Spell "+update_spells[i]+
+                      " is no longer available !!\n");
+    }
+}  
+
+no_std_spells() { 
+    tell_object(E(),"What ??\n");
+    return 1;
+}
+
+extra_look() {
+    if(meditate) return capitalize(E()->query_pronoun())+MED_TITLE;
+}
+
+check(arg) {
+    return MS->check(arg,E());
+}
+
+help(arg) {
+    if(cat(MAGE_HELP+arg))
+        return 1;
+    else
+        return MS->help(arg,E());
+}
+
+do_spell(arg) {
+    if(nextpl) {
+        write("You are already concentrating on another spell.\n");
+        return 1;
+    }
+    if(MS->query_attack_spell()) {
+        nextpl=E();
+        nextarg=arg; 
+        nextverb=query_verb();
+        cast_env=E(nextpl);
+        return 1;
+    } else return MS->do_spell(arg,E());
+}
+
+time_guild_soul() {
+    int ret;
+    if(cast_env!=E(E())) nextpl=0;
+    if(!nextpl) return;
+    ret=MS->do_spell(nextarg,nextpl,nextverb);
+    fattack=nextpl=nextarg=nextverb=0; // moonchild 110893
+    return ret;
+}
+
+/* get visible if we are invisible :) */
+recognize_fight() {
+    if(this_player()->query_invis() &&
+      (!this_player()->query_immortal())) this_object()->_vis();
+}
+
+/* whats to do if the hold spell i casted ends */
+hold_end(ob) {
+    return;
+}
+
+refresh_invis(cost) {
+    remove_call_out("dec_sp");
+    call_out("dec_sp",CHK_SP_FOR_INVIS,cost);
+}
+
+dec_sp(cost) {
+    if(E()->query_spell_points()<cost) return command("visible",E());
+    E()->restore_spell_points(-cost);
+    call_out("dec_sp",CHK_SP_FOR_INVIS,cost);
+    return 1;
+}
+
+end_invis() {
+    remove_call_out("dec_sp");
+}
+
+/* ########        the input comes here if the mage is meditating         ######## */
+
+nil(arg) { 
+    string tmp;
+    if(arg) {
+        sscanf(arg,"whisper %s",tmp); 
+        if(tmp) {
+            input_to("nil");
+            command(arg,E());
+            return;
+        }
+        if(meditate) {
+            input_to("nil");
+            switch(arg) {
+            case "who":
+            case "look":
+            case "l":
+            case "score":
+            case "i": 
+            case "wake_up":
+            case "hp":
+                command(arg,E());
+                break;
+            default:
+                write("You can't do that while meditating.\n");
+            }
+            return;
+        }
+        command(arg,E());
+    }
+}
+
+/* #########        end meditation           ######### */
+
+end_meditate() {
+    tell_room(E(E()),E()->query_name()+" awakes and rises. "+
+      capitalize(this_player()->query_pronoun())+" looks refreshed.\n");
+    meditate=0;
+}
+
+shield_call_out(tim) {
+    call_out("end_shield",tim);
+}
+
+/* ###########        end shield         ########## */
+
+end_shield() {
+
+    if(armour_class()==STD_AC_OF_ROBE) {
+        write("There is no shield spell active.\n");
+        return 1;
+    }
+
+    set_ac(STD_AC_OF_ROBE);
+    if(query_worn()) {
+        E()->recalc_ac();
+        tell_room(E(E()),E()->query_name()+"'s aura is gone.\n");  
+    }
+    return 1;
+}
+
+/* ## most of the illusion spell has to be in here becouse of the input_to ## */
+
+start_illusion(name,time) {
+    nametmp=name;
+    timetmp=time;
+    input_to("get_short");
+}
+
+/* ######        get short description for the illusion           ###### */
+
+get_short(str) {
+    shorttmp=str;
+    write("Enter the exact description of your illusion: (end with **)\n>>");
+    longtmp=0;
+    input_to("get_long");
+}
+
+/* #######        get long description for the illusion                 ##### */
+
+get_long(str) {
+    if(str=="**") { 
+        set_ill();
+        return;
+    }
+    if(!str) {if(longtmp) longtmp+="\n"; else longtmp="\n";}
+    else {if(longtmp) longtmp+=(str+"\n"); else longtmp=str+"\n";}
+    write(">>");
+    input_to("get_long");
+}
+
+set_ill() {
+    object ob;
+
+    ob=clone_object("players/llort/guild/obj/illusion");
+    move_object(ob,E(E()));
+    ob->set_name("illusion");
+    ob->set_alias(nametmp);
+    ob->set_short(shorttmp);
+    ob->set_long(longtmp);
+    ob->start(timetmp);
+    tell_room(E(E()),"Something in the area has changed.\n");
+}
+
+set_spell(arg) {
+    if(MS->chk_spell(arg)) add_action("do_spell",arg);
+    else return 0;
+    spells+=({ arg });
+    return 1;
+}
+
+set_fattack() { fattack=1; }
+
+set_go_mark(m) { go_mark=m; }
+
+set_tp_mark(m) { tp_mark=m; }
+
+set_meditate(m) { meditate=m; }
+
+set_notalk(t) { notalk=t; }
+
+query_mage_wear() { return 1; }
+
+query_fattack() { return fattack; }
+
+query_meditate() { return meditate; }
+
+query_spells() { return spells; }
+
+query_spell(sp) { return member_array(sp,spells)!=-1; }
+
+query_go_mark() { return go_mark; }
+
+query_tp_mark() { return tp_mark; }
+
+query_notalk() { return notalk; }
+
+_csk(object pl, string name, int val, int max_val, int gid)
+{
+   return
+   "/guild/master"->change_skill(pl,name,val,max_val,gid);
+}
+
+/************************ SKILL-SUPPORT ***************************/
+init_skills()
+{
+   return 0;
+        skill_DB = this_player()->get_skill(this_player()->query_guild());
+        if(E()->query_immortal())
+        {
+            add_action("list_skills","practice");
+   };
+}
+
+list_skills()
+{
+        int i,nrsk;
+        string msg;
+
+        msg = "Mage Skills:\n";
+
+        if(sizeof(skill_DB) == 0)
+   {
+                write("  none.\n");
+      return 1;
+   };
+
+   nrsk = sizeof(skill_DB[0]);
+        for(i=0;i<nrsk;i++)
+      msg+= "  "+SP(skill_DB[0][i])->name()+ " \t"+skill_DB[1][i]+"%\n";
+   write(msg);
+   return 1;
+}
+
+dump_skills()
+{
+   return(skill_DB);
+}
+
+
+string know_level(int val)
+{
+   string rtc;
+
+   if(val ==   0)      rtc = "not learned";
+   else if(val <   10) rtc = "Awful";
+   else if(val <   25) rtc = "Bad";
+   else if(val <   40) rtc = "Poor";
+   else if(val <   60) rtc = "Average";
+   else if(val <   80) rtc = "Fine";
+   else if(val <   90) rtc = "Good";
+   else if(val <   95) rtc = "Very good";
+   else if(val <  100) rtc = "Superb";
+   else if(val == 100) rtc = "Perfect";
+   else                rtc = " ** Strange ** ";
+
+   return rtc;
+}
+
+string time_level(int val)
+{
+   string rtc;
+
+   if(val <  -2) rtc = " ** Strange ** ";
+   else if(val == -2) rtc = "-----";
+   else if(val == -1) rtc = "Immediate";
+   else if(val ==  0) rtc = "Very short";
+   else if(val ==  1) rtc = "Short";
+   else if(val ==  2) rtc = "Average";
+   else if(val ==  3) rtc = "Long";
+   else if(val ==  4) rtc = "Very long";
+   else rtc = "Extremely long";
+
+   return rtc;
+}
+
+practice()
+{
+   object tp;
+   mixed *spdat,*spdat2;
+   string msg;
+   int i,j,*pracs,nr_of_spells;
+
+   tp=environment();
+
+   if(environment(tp)->query_mage_guild()) return 0;
+                
+   if(!(pracs=tp->get_skill("mage_practice")))
+   {
+      write("You should go to the mage guild to practice first!\n");
+      return 1;
+   };
+
+   msg = "Your current skills are the following:\n"+
+         "--------------------------------------\n"+
+         sprintf(" %-20s   %|20s   %|20s\n",
+                 "Name of field","Knowledge","Time to perform")+"\n";
+   spdat = tp->get_spell(-1);
+   if(spdat) nr_of_spells = sizeof(spdat[0]); 
+   else
+   {
+      nr_of_spells = 0;
+      msg += "                                NONE!\n";
+   };
+
+   for(i=j=0;i<nr_of_spells;i++)
+   {
+      spdat2 = SM->get_spell(spdat[0][i]);
+      if(spdat2[2]==5)
+      {
+         msg+=sprintf(" %-20s   %|20s   %|20s\n", spdat[0][i],
+                      know_level(spdat[1][i]),
+                      time_level(call_other(spdat2[1],"speed",
+                                            tp->query_level())) );
+         j++;
+      };
+   };
+   
+   msg += "\nYou have "+(pracs[0]-1)+" practice sessions left.\n";
+  
+   if(this_interactive() == tp) tp->more_string(msg);
+
+   return msg;
+}
+
+int mage_line(string txt)
+{
+   return this_player()->guild_line(txt);
+}
+
+object prev_environment( object ob ) {
+  if( ob ) location = ob;
+  return location;
+}

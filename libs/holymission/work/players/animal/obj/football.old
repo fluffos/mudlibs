@@ -1,0 +1,161 @@
+inherit "obj/treasure";
+
+#include "/players/mangla/defs.h"
+
+string name;
+int weight, value;
+
+int drop_object(string str) {
+
+    if (str == "all") {
+        drop_object("magic ball");
+        return 0;
+    }
+    if (!str || !id(str)) return 0;
+        if(ENV() != TP) return 0;
+    write("The magic ball explodes when it hits the ground!\n");
+    say(TP->NAME + " drops a magic ball, which explodes into a million pieces.\n");
+    destruct(TO);
+    return 1;
+}
+
+int throw(string str) {
+
+    object ob;
+
+    if(!str) return 0;
+    ob = find_player(lower_case(str));
+    if(!ob) {
+        write("The ball is confused. It cannot find that person.\n");
+//        write("That person is not playing right now!\n");
+        return 1;
+    }
+    if((ob->query_invis() || ob->query_immortal()) && !TP->query_immortal()) {
+        write("Wizards don't like to be bugged with games.\n");
+        return 1;
+    }
+    if(!present("magic ball",ob)) {
+            if(!ob->query_immortal()) {
+            if(!(ob->query_immortal())) {
+                write("You throw the magic ball to " + capitalize(str)+".\n");
+                transfer(TO, ob);
+                TELLR(ENV(ob),"You see a magic ball flying through the air.\n" +
+                              "The ball is going towards " + capitalize(str) + ".\n" +
+                              "The magic ball is really moving fast!\n" +
+                              "The magic ball was thrown by " + TP->NAME + ".\n" +
+                              "That is a wizard!\n\n" +
+                              "The ball hits "+capitalize(str)+" hard!\n");
+                TELL(ob,"You feel like puking, the ball hit you so hard!\n");
+                TELLR(ENV(ob),capitalize(str)+" starts to cough uncontrollably!\n");
+                command("cough",ob);
+                command("cough",ob);
+                command("cough",ob);
+                command("puke",ob);
+                          
+/* Mangla: inefficient to call tell_room all the time when you
+           can just pass it a longer string.
+
+            tell_room(ENV(ob), "You see a magic ball flying through the air.\n");
+            tell_room(ENV(ob), "\n" +
+                    "The magic ball is going towards "+capitalize(str)+".\n");
+            tell_room(ENV(ob), "The magic ball is really moving fast!\n");
+            tell_room(ENV(ob), "The magic ball was thrown by "+who+".\n");
+            tell_room(ENV(ob), "That is a wizard!\n");
+            tell_room(ENV(ob), "\n");
+            tell_room(ENV(ob), "The ball hits "+capitalize(str)+" hard!\n");
+            tell_object(ob, "You feel like puking, the ball hit you so hard!\n");
+            tell_room(ENV(ob), "\n" +
+                      ""+capitalize(str)+" starts to cough uncontrollably!\n");
+
+    Mangla: force_us was removed from HM code for security
+            call_other(ob, "force_us", "cough");
+            call_other(ob, "force_us", "cough");
+            call_other(ob, "force_us", "cough");
+            call_other(ob, "force_us", "puke");
+*/
+                return 1;
+            }        
+        }
+        write("You throw the magic ball to " + capitalize(str) + ".\n");
+        transfer(TO,ob);
+        TELLR(ENV(ob),"You see a magic ball flying through the air.\n" +
+                      "The magic ball is swiftly thrown to " +
+                      capitalize(str) + " by " + TP->NAME + ".\n" +
+                      capitalize(str)+" jumps into the air and catches it.\n");
+/* Mangla: Same as above
+        tell_room(ENV(ob), "You see a magic ball flying through the air.\n");
+        tell_room(ENV(ob), "The magic ball is swiftly thrown to " +
+                  ""+capitalize(str)+" by "+who+".\n");
+        tell_room(ENV(ob), ""+capitalize(str)+" jumps into the air" +
+                            " and catches it.\n");
+*/
+        TELL(ob, "You catch a perfect spiral thrown to you.\n");
+        return 1;
+    }
+    write("That person has a magic ball already, only one per player.\n");
+    return 1;
+}
+
+int kick(string str) {
+
+    object ob;
+
+    if(!str) return 0;
+    ob = find_player(lower_case(str));
+    if(!ob) {
+        write("No such person is playing now.\n");
+        return 1;
+    }
+/*
+    if(str == "magic ball" || str == "ball"){
+        write("You clumbsily kick the magic ball.\n");
+
+// Mangla: Not sure what this is supposed to mean
+//        call_other(this_player(),"remote_say","A magic ball slowly to you.\n");
+        MOVE(TO, ENV(TP));
+        return 1;
+    }
+*/
+    if((ob->query_invis() || ob->query_immortal()) && !TP->query_immortal()) {
+        write("Wizards don't like to be bugged with games.\n");
+        return 1;
+    }
+    if(!present("magic ball",ob)) {
+        write("You kick the magic ball to " + capitalize(str) + ".\n");
+        transfer(TO,ob);
+        TELLR(ENV(ob),"A magic ball kicked by " + TP->NAME + " flies over your " +
+                      "head on its way to " + capitalize(str) + ".\n" +
+                      capitalize(str) + " leaps into the air and " +
+                      "catches the magic ball with one hand!\n");
+/*
+     tell_room(ENV(ob), "A magic ball kicked by "+who+" flies over your"+
+                         " head on its way to "+capitalize(str)+".\n");
+     tell_room(ENV(ob),""+capitalize(str)+" leaps into the air and" +
+                              " catches the magic ball with one hand!\n");
+*/
+        TELL(ob, "A magic ball kicked by " + TP->NAME + " lands in your arms.\n");
+        return 1;
+    }
+    write("That person has a magic ball already, only one per player.\n");
+    return 1;
+}
+
+void reset(int arg)  {
+
+   ::reset (arg);
+   if (!arg) {
+      set_name("magic ball");
+      set_short("A magic ball");
+      set_alias("ball");
+      set_long("An offical magic ball! throw <player> or kick <player>.\n");
+      set_value(10);
+      set_weight(0);
+   }
+}
+
+init(){
+     add_action("throw","throw");
+     add_action("kick","kick");
+     add_action("drop_object","drop");
+}
+

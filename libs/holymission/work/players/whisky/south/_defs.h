@@ -1,0 +1,1 @@
+#define PATH "/room/south/"

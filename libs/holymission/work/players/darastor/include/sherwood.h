@@ -1,0 +1,6 @@
+#include "/players/darastor/include/defs.h"
+#define ROOMS       SHERWOOD+"rooms/"
+#define MONSTERS    SHERWOOD+"monsters/"
+#define OBJECTS     SHERWOOD+"objects/"
+#define ACTIONS     SHERWOOD+"actions/"
+#define QUEST       SHERWOOD+"quest/"

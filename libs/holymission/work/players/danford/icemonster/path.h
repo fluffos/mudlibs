@@ -1,0 +1,5 @@
+#include "../path.h"
+#define ICE ROOT+"icemonster/"
+#define ROOM ICE+"room/"
+#define OBJ ICE+"obj/"
+#define NPC ICE+"npc/"

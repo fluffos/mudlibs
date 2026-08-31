@@ -1,0 +1,8 @@
+#include "cut.h"
+#include "climb2.h"
+#include "tear2.h"
+#include "listen.h"
+#include "dig.h"
+#include "pass.h"
+#include "shake.h"
+#include "light.h"

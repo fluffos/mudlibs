@@ -1,0 +1,952 @@
+ // Original development (c) Leslie@CoreDump 1995.7.9pm
+ // Version 3.0 by Leslie@CoreDump
+ // 
+ // PLEASE edit this code ONLY if you know what you are doing
+ // Thanx
+
+#include "../params.h"
+#define FNAME OD+"data"
+#define query_cap_name query_name
+#define notify_fail(x) write(x)
+
+string query_item(int cord, string str);
+int where_to(int cord, int dir);
+string short(int cord);
+void long(int cord, string str);
+varargs int spec_exit(int cord, string dir, string dest, int flag);
+object query_room(int cord);
+#ifdef ROAD
+int road(int cord);
+#endif
+#ifdef CREEK
+int creek(int cord);
+#endif
+#ifdef BUSH
+int bush(int cord);
+static int *bushes;
+#endif
+#ifdef ITEMS
+mapping items;
+#endif
+#ifndef UNIQUE_TERRAIN
+#endif
+#ifdef INTERACTIVE_CREATE
+int security_ok(object ob);
+int set_road(int cord);
+int set_bush(int cord, int type);
+int set_creek(int cord);
+int set_height(int cord, int x);
+int set_desc(int cord, int desc);
+int set_items(int cord, string str);
+#endif
+#ifdef LABYRINTH
+int *lab_data;
+#endif
+#ifdef DOORS
+mapping doors;
+mapping *door_data;
+#endif
+#ifdef GCH
+mapping *ave_types;
+#endif
+
+int cord_int(int *x);
+int *int_cord(int x);
+int use_exit(int dir);
+
+int ceiling;
+int *tenser;
+int *data;
+static object *rooms;
+#ifdef HEIGHTS
+int *level;
+#endif
+string dfls;
+int *descr;
+mapping *items;
+mapping specxit;
+static int monster_amount, monster_killed;
+
+int load_me() {
+    return restore_object(FNAME);
+}
+
+void save_me() {
+    save_object(FNAME);
+}
+
+int security_ok(object ob) { return ob->query_real_name() == "leslie"; }
+#ifdef GCH
+int add_ave_type(mapping map) {
+    if(!ave_types) ave_types = ({});
+    if(pointerp(map["a"])) 
+        if(catch(map["a"] = cord_int(map["a"]))) return -1;
+    if(pointerp(map["b"]))
+        if(catch(map["b"] = cord_int(map["b"]))) return -1;
+    ave_types += ({ map });
+    save_me();
+    return sizeof(ave_types);
+}
+
+mapping *query_ave_types() { return ave_types; }
+
+void set_ave_types(mapping *map) { if(!security_ok(this_player())) return; else ave_types = map; save_me(); }
+
+int resolv_ave(int cord) {
+    int i, j, k;
+    int *tm1, *tm2, *tmp;
+    int l;
+    tmp = int_cord(cord);
+    l = 0;
+    i = sizeof(ave_types);
+    while(i--) {
+        j = sizeof(tmp);
+        k = 1;
+        tm1 = int_cord(ave_types[i]["a"]);
+        tm2 = int_cord(ave_types[i]["b"]);
+        while(j--&& k) {
+            if(((tm1[j] - tmp[j]) * (tmp[j] - tm2[j])) < 0) k = 0;
+            else k = 1;
+        }
+        if(k && !l) l = i;
+        else if(k) l |= i << 8;
+    }
+    return l;
+}
+
+void __Setup_aves(int i) {
+    int j;
+    if(!i) i = ceiling;
+    j = 5;
+    for(; i>0, j>0; i--,j--, data[i] &= 0x00ff, data[i] |= resolv_ave(i) << 8);
+    if(i) call_out("__Setup_aves",1, i);
+    else write("Done\n");
+}
+
+string part_of(int cord) {
+int i, k;
+float j, j1, j2;
+    int *tm1, *tm2, *tmp;
+    string all;
+    tmp = int_cord(cord);
+    i = (data[cord]&0xff00) >>8;
+    tm1 = int_cord(ave_types[i]["a"]);
+    tm2 = int_cord(ave_types[i]["b"]);
+    switch(ave_types[i]["type"]) {
+    case 1:
+        k = tm1[0] - tm2[0];
+        if(!k) {
+k = tm2[1] - tm1[1];
+j = to_float(tmp[1] - tm1[1]);
+j /= to_float(k);
+j *= 3.0;
+            if(((j < 1.0) && (k > 0)) || ((j > 2.0) && (k < 0))) return "western part";
+if(((j > 2.0) && (k > 0)) || ((j < 1.0) && (k < 0))) return "eastern part";
+            return "middle part";
+        }
+j = to_float(tm1[0] - tmp[0]);
+j /= to_float(k);
+j *= 3.0;
+        if(((j < 1.0) && (k > 0)) || ((j > 2.0) && (k < 0))) return "southern part";
+        if(((j > 2.0) && (k > 0)) || ((j < 1.0) && (k > 0))) return "northern part";
+        return "middle part";
+        break;
+    case 2:
+        tm1[0] -= tm2[0]; tm1[1] -= tm2[1];
+        tmp[0] -= tm2[0]; tmp[1] -= tm2[1];
+j1 = to_float(tmp[0]) / to_float(tm1[0]);
+j2 = to_float(tmp[1]) / to_float(tm1[1]);
+all = "";
+j1 *= 3.0;
+j2 *= 3.0;
+if(((j1 < 1.0) && (tm1[0] > 0)) || ((j1 > 2.0) && (tm1[0]<0))) all += "north";
+else if(((j1 > 2.0) && (tm1[0] > 0)) || ((j1 < 1.0) &&(tm1[0] < 0))) all += "south";
+if(((j2 < 1.0) && (tm1[1] > 0)) || ((j2 > 2.0) && (tm1[1]<0))) all +="west";
+else if(((j2 > 2.0) && (tm1[1] > 0)) || ((j2 < 1.0) &&(tm1[1] < 0))) all += "east";
+        if(strlen(all)) all+="ern";
+        else all = "center";
+return all + " part";
+    }
+}
+#endif
+
+#ifdef DOORS
+int set_door(int cord, string str) {
+    string dir, ndir;
+    int i, j, n;
+
+    if(sscanf(str, "%s:%d", dir, i) != 2) dir = str;
+    if((j = member_array(dir, XITS)) < 0) return 2;
+    if(dir == str) {
+        if(doors && doors[cord] && sizeof(doors[cord])) {
+            m_delete(doors[cord],j);
+            m_delete(doors[where_to(cord, j)], j^1);
+        }
+        return 1;
+    }
+    n = where_to(cord, j);
+    if(!doors) doors = ([]);
+    if(!doors[cord]) doors[cord] = ([]);
+    if(!doors[n]) doors[n] = ([]);
+    doors[cord][j] = i;
+    doors[n][j^1] = i;
+    return 1;
+}
+
+int add_door_type(mapping map) {
+    if(!door_data) door_data = ({});
+    door_data += ({ map });
+    return sizeof(door_data);
+}
+
+mapping *query_door_types() { return door_data; }
+
+int door_id(int type, string str) {
+    type &= 0x00ff;
+    return (str == door_data[type]["type"]) || (str == explode(door_data[type]["type"], " ")[<1]);
+}
+
+int get_door(int cord, string str) {
+    string * tmp;
+    int * qq, ret;
+    int i;
+    qq = ({});
+    tmp = explode(str, " ");
+    if(sscanf(tmp[0], "%sern", str) == 1) {
+        if((ret = member_array(str, XITS)) > -1) {
+            if((member_array(ret, m_indices(doors[cord])) != -1)&&(sizeof(tmp)>1) && door_id(doors[cord][ret]&0xff, implode(tmp[1..], " "))){
+                return ret;
+            }
+            else return -1;
+        }
+    }
+    if(!mappingp(doors[cord])) return -1;
+qq = filter_array(m_values(doors[cord]), #'door_id, str);
+    if(!sizeof(qq)) return -1;
+    if(sizeof(qq) > 1) return -2;
+    return m_indices(doors[cord])[member_array(qq[0], m_values(doors[cord]))];
+}
+int open_door(int cord, string str) {
+    int n;
+    n = get_door(cord, str);
+    if(n == -1) return (int)notify_fail("There is no such door!\n");
+    if(n == -2) return (int)notify_fail("Which one do you mean?\n");
+    if(!(doors[cord][n] & 0x0300)) return (int)notify_fail("Its already open!\n");
+    if((doors[cord][n] & 0x0300) == 2) return (int)notify_fail("You try to open it, but its locked!\n");
+    doors[cord][n] &= 0xff;
+    doors[where_to(cord, n)][n^1] &= 0xff;
+    write("You open the "+str+".\n");
+    say(this_player()->query_name()+" opens the "+str+".\n");
+    return 1;
+}
+
+string door_long(int cord) {
+    int i;
+    int *tm1, *tm2;
+    string *tmp;
+    string all;
+    if(!doors || !doors[cord] || !sizeof(doors[cord])) return "";
+    all = " You see ";
+    i = sizeof(doors[cord]);
+    tm1 = m_indices(doors[cord]);
+    tm2 = m_values(doors[cord]);
+    tmp = ({});
+    while(i--) 
+        tmp += ({ "a " + door_data[tm2[i]&0xff]["type"] + " leading "+XITS[tm1[i]]});
+    all += do_list(tmp);
+    return all;
+}
+int close_door(int cord, string str) {
+    int n;
+    n = get_door(cord, str);
+    if(n == -1) return (int)notify_fail("There is no such door!\n");
+    if(n == -2) return (int)notify_fail("Which one do you mean?\n");
+    if(doors[cord][n] & 0x0300) return (int)notify_fail("Its already closed!\n");
+    doors[cord][n] |= 1 << 8;
+    doors[where_to(cord, n)][n^1] |= 1 << 8;
+    write("You close the "+str+".\n");
+    say(this_player()->query_name()+" closes the "+str+".\n");
+    return 1;
+}
+int lock_door(int cord, string str) {
+    int n;
+    object ob;
+    n = get_door(cord, str);
+    if(n == -1) return (int)notify_fail("There is no such door!\n");
+    if(n == -2) return (int)notify_fail("Which one do you mean?\n");
+    if(!(doors[cord][n] & 0x0300)) return (int)notify_fail("But its not closed!\n");
+    if((doors[cord][n] & 0x0300)==2) return (int)notify_fail("Its already locked!\n");
+    if(door_data[doors[cord][n]&0xff]["lockable"] == 2) return (int)notify_fail("You cant find any keyhole in the door!\n");
+    if(!(ob = present(door_data[doors[cord][n]&0xff]["key"],this_player()) && !(ob->id("city_of_light_key")))) return (int)notify_fail("You dont have the proper key!\n");
+    doors[cord][n] &= ~(1 << 8);
+    doors[cord][n] |= 1 << 9;
+    doors[where_to(cord, n)][n] &= ~(1 << 8);
+    doors[where_to(cord, n)][n] |= 1 << 9;
+    say("You lock the "+str+".\n");
+    say(this_player()->query_name()+" locks the "+str+".\n");
+    return 1;
+}
+int unlock_door(int cord, string str) {
+    int n;
+    object ob;
+    n = get_door(cord, str);
+    if(n == -1) return (int)notify_fail("There is no such door!\n");
+    if(n == -2) return (int)notify_fail("Which one do you mean?\n");
+    if(!(doors[cord][n] & 0x0300)) return (int)notify_fail("But its not closed!\n");
+    if((doors[cord][n] & 0x0300)==2) return (int)notify_fail("Its already locked!\n");
+    if(door_data[doors[cord][n]&0xff]["lockable"] == 2) return (int)notify_fail("You cant find any keyhole in the door!\n");
+    if(!(ob = present(door_data[doors[cord][n]&0xff]["key"],this_player()) && !(ob->id("city_of_light_key")))) return (int)notify_fail("You dont have the proper key!\n");
+    doors[cord][n] &= 0x00ff;
+    doors[cord][n] |= 1 << 8;
+    doors[where_to(cord, n)][n^1] &= 0x00ff;
+    doors[where_to(cord, n)][n^1] |= 1<<8;
+    return 1;
+}
+#endif
+#ifdef LABYRINTH
+int set_lab(int cord, string exit) {
+    int i;
+    int where;
+
+    if((i = member_array(exit, XITS)) == -1) return 2;
+    if((where = where_to(cord, i)) == -1) return 2;
+    lab_data[cord] ^= 1 << i;
+    lab_data[where] ^= 1 << (i ^ 1);
+    return 1;
+}
+#endif
+
+#ifdef BUSHES
+int query_berries(int cord) {
+    return bushes[cord];
+}
+
+void dec_berries(int cord) {
+    bushes[cord]--;
+}
+#endif
+
+set_specxit(int cord, string str) {
+    string dir;
+    string dest;
+
+    if(sscanf(str, "%s:%s", dir, dest) != 2) dir = str;
+    if(!specxit) specxit = ([]);
+    if(!specxit[cord]) specxit[cord] = ([]);
+    if(!dest) m_delete(specxit[cord], dir);
+    else
+        specxit[cord][dir] = dest;
+    return 1;
+}
+
+
+int id(mixed cord, string str) {
+    if(cord == "door") return 1; // this is stupid, but needed for follow
+    if(!intp(cord)) 
+        return 0;
+    return !!query_item(cord, str);
+}
+
+
+string query_item(int cord, string str) {
+    int n;
+#ifdef ROAD
+    if((str == "road") && road(cord))
+        return "Its a damn dusty road that you are walking on.";
+#endif
+#ifdef BUSHES
+    if(bush(cord))
+        if((str == "bush") || (str == "bushes"))
+            return "Lovely bushes full of berries! Maybe you can pick few!";
+#endif
+#ifdef CREEK
+    if((str == "creek") && creek(cord))
+        return "A clear creek with fresh water.";
+#endif
+#ifdef DOORS
+    if((n = get_door(cord, str)) != -1) {
+        if(n == -2) return "Which door do you want to look at?";
+        return "Its a "+(door_data[doors[cord][n]&0x00ff]["type"])+". It is "+((doors[cord][n]&0x0300)?"closed":"open")+".";
+    }
+#endif
+    return (
+      items
+      && items[(int)descr[cord]]
+      && items[(int)descr[cord]][str]
+    )? items[(int)descr[cord]][str] : 0;
+}
+
+int set_items(int cord, string str) {
+    int dsc;
+    string what;
+    string how;
+
+    dsc = descr[cord];
+    if(!items) items = ({});
+    while(sizeof(items)<(dsc+1)) items+= ({ ([]) });
+    if(sscanf(str, "%s:%s", what, how) !=2) {
+        m_delete(items[dsc], str);
+        return 1;
+    }
+    items[dsc][what] = how;
+    return 1;
+}
+
+#ifdef HEIGHTS
+int set_height(int cord, int x) {
+    if((cord < 0) || (cord >= ceiling))
+        return 2;
+    level[cord] = x;
+    return 1;
+}
+
+int query_height(int cord) {
+    return ((cord>0) && (cord<=ceiling))?level[cord]:0;
+}
+#endif
+
+
+#ifdef ROAD
+int road(int cord) {
+    return data[cord] & 1;
+}
+
+int set_road(int cord) {
+    if((cord < 0) || (cord >= ceiling))
+        return 2;
+    data[cord] ^= 1;
+    return 1;
+}
+#endif
+
+#ifdef CREEK
+int creek(int cord) {
+    return !!(data[cord] & 2);
+}
+
+int set_creek(int cord) {
+    if((cord < 0) || (cord >= ceiling)) return 2;
+    data[cord] ^= 2;
+    return 1;
+}
+#endif
+
+#ifdef BUSH
+int bush(int cord) {
+    if(data[cord] & 4) return 1;
+    if(data[cord] & 8) return 2;
+    return 0;
+}
+
+int set_bush(int cord, int type) {
+    if((cord < 0) || (cord >= ceiling)) return 2;
+    data[cord] &= ~12;
+    if(type == 1) data[cord] |= 4;
+    else if(type == 2) data[cord] |= 8;
+    else return 2;
+    return 1;
+}
+#endif
+
+int abs(int i) { 
+    return i>0 ? i : (-1*i);
+}
+
+#ifdef INTERACTIVE_CREATE
+int set_desc(int cord, int value) {
+    if((cord < 0) || (cord >= ceiling))
+        return 2;
+    descr[cord] = value;
+    return 1;
+}
+
+int _set(string str) {
+    string what;
+    mixed value;
+    int ret;
+    object env;
+
+    if(lower_case(this_player()->query_real_name()) != "leslie")
+        return 0;
+    if(sscanf(str, "%s %s", what, value) != 2)
+        what = str;
+    if(what != "items")
+        sscanf(value, "%d", value);
+    if(!(env = environment(this_player())))
+        return 0;
+    ret = (int) call_other(this_object(), "set_"+what, env->query_cord(), value);
+    if(!ret) {
+        write("You cannot set that!\n");
+        return 1;
+    }
+    write("Tried to set: "+str+"\n");
+    if(ret == 2)
+        write("Failure due to bug!\n");
+    say(this_player()->query_cap_name()+" sets "+str+".\n");
+    save_me();
+    return 1;
+}
+#endif
+
+string *get_exits(int cord) {
+    string * ret;
+    int i, j;
+    ret = ({});
+    i = sizeof(XITS);
+    while(i--)
+        if(((j = where_to(cord, i)) > -1)
+#ifdef HEIGHTS
+        && (abs(level[cord] - level[j]) <= MAX_LVL_DIFF)
+#endif
+#ifdef LABYRINTH
+        && (lab_data[cord] & (1<<i))
+#endif
+        )
+           ret += ({ XITS[i] }); 
+    if(specxit && mappingp(specxit) && specxit[cord] && mappingp(specxit[cord]))
+        ret += m_indices(specxit[cord]);
+    return ret;
+    }
+#ifdef ROAD     
+string * get_road_exits(int cord) {
+    string * ret;
+    int i, j;
+    if(!road(cord)) return ({});
+    ret = ({});
+    i =sizeof(XITS);
+    while(i--)
+        if((
+        j = where_to(cord, i)) > -1 && road(j))
+            ret += ({ XITS[i] });
+    return ret;
+    }
+#endif
+
+
+#define LONGS ({ "north", "south", "east", "west", "northeast", "southwest", "northwest", "southeast" })
+#define SHORTS ({ "n", "s", "e", "w", "ne", "sw", "nw", "se" })
+
+string short_form(string str) {
+    int i;
+    return ((i = member_array(str, LONGS)) > -1)?SHORTS[i]:str;
+    }
+
+string short_look(int cord) {
+    string ret;
+
+#ifdef GCH
+    if(!(data[cord]&0xffff00)) ret = SHORT;
+else if(!(data[cord]&0xff0000)) ret = capitalize(ave_types[(data[cord]&0xff00)>>8]["short"])+".";
+    else ret = "Junction of "+capitalize(ave_types[(data[cord]&0xff00)>>8]["short"])+" and "+capitalize(ave_types[(data[cord]&0xff0000)>>16]["short"])+".";
+    return ret;
+#else
+    return SHORT;
+#endif
+}
+
+string short(int cord) {
+    string ret;
+    string *exits;
+    
+    ret = short_look(cord);
+
+#ifdef ROAD
+    if(road(cord)) ret += " Road.";
+#endif
+
+#ifdef BUSH
+    if(bush(cord)) ret += " Bushes.";
+#endif
+
+#ifdef CREEK
+    if(creek(cord)) ret += " Creek.";
+#endif
+#ifdef EXITS_IN_SHORT
+    exits = get_exits(cord);
+    exits = map_array(exits, #'short_form);
+    ret += "\n";
+    ret += "E: <"+implode(exits, " ")+">";
+#ifdef ROAD
+    exits = get_road_exits(cord);
+    exits = map_array(exits, #'short_form);
+    ret += "\n";
+    ret += "R: ["+implode(exits, " ")+"]";
+#endif
+#endif
+    return ret;
+}
+
+void long(int cord, string str) {
+    int i, j;
+    string *roaders;
+
+    write(WHT);
+    if(str) {
+        write(query_item(cord, str)+"\n");
+        return;
+    }
+
+    if(this_player()->query_immortal()) {
+        write("Coord: ");
+        write(cord);
+#ifdef HEIGHTS
+        write(", Height:");
+        write(level[cord]);
+#endif
+        write("\n");
+    }
+    write(read_file(RD+dfls+descr[cord])[0..<2]);
+#ifdef DOORS
+    if(data[cord]&0xff00) {
+        if((!(data[cord]&0xff0000)) &&(ave_types[(data[cord]&0xff00)>>8]["type"] != 3)) write(" You are in the "+part_of(cord)+" of the "+ave_types[(data[cord]&0xff00)>>8]["short"]+".");
+else write(" You are at the "+short_look(cord));
+    }
+#endif
+#ifdef DOORS
+    write(door_long(cord));
+#endif
+#ifdef CREEK
+    if(creek(cord)) write(" A little creek flows through the area.");
+#endif
+#ifdef BUSH
+    if(bush(cord)) write(" There are some bushes around.");
+#endif
+#ifdef ROAD
+    if(road(cord)) {
+        write(" You are walking on a road.");
+        write("\n");
+        roaders = get_road_exits(cord);
+        if(sizeof(roaders) == 0)
+            write("There is road here, but it leads nowhere.");
+        else if(sizeof(roaders) == 1)
+            write("A road starts here, and leads "+roaders[0]+".");
+        else if(sizeof(roaders) == 2)
+            write("The road comes from "+roaders[0]+" and leads "
+              +roaders[1]+".");
+        else {
+            write("The road forks in "+(i = sizeof(roaders))
+              +" directions: ");
+            while(i--) {
+                write(roaders[i]);
+                if(!i) write(".");
+                else write(", ");
+            }
+        }
+    }
+#endif
+    roaders = get_exits(cord);
+    write("\n\n");
+    if(!sizeof(roaders))
+        write("There are no exits.\n");
+    else {
+        write("Exits: ");
+        i = sizeof(roaders);
+        while(i--) {
+            write(roaders[i]);
+            if(!i) write(".\n");
+            else write(", ");
+        }
+    }
+    write("\n");
+}
+
+void init_rooms() {
+    int i;
+    if(!rooms) {
+        rooms = allocate(ceiling);
+        return;
+    }
+    i = sizeof(rooms);
+    while(i--)
+        if(objectp(rooms[i]))
+            destruct(rooms[i]);
+}
+
+int *vect_div(int cord, int *arr) {
+    int *ret;
+    int i, a;
+    ret = ({});
+    i = sizeof(arr);
+    while(i--) {
+        a = (cord / arr[i]);
+        ret = ({ a }) + ret;
+        cord -= a*arr[i];
+    }
+    return ret;
+}
+
+int vect_skal(int *arr1, int *arr2) {
+    int a, ret;
+    a = sizeof(arr1);
+    ret = 0;
+    while(a--) ret += arr1[a]*arr2[a];
+    return ret;
+}
+
+int *int_cord(int cord) {
+    return vect_div(cord, tenser);
+}
+
+int cord_int(int *x) {
+    return vect_skal(x, tenser);
+}
+
+void reset(int arg) {
+    int i, j;
+    int q;
+    int *t1, *t2;
+    monster_killed = 0;
+#ifdef BUSHES
+    if(!bushes) {
+        load_me();
+        bushes = allocate(ceiling);
+    }
+    i = ceiling;
+    while(i--)
+        bushes[i] = 10+random(10);
+#endif
+    if(!arg) {
+        load_me();
+        init_rooms();
+        monster_amount = 0;
+    }
+#ifdef DOORS
+    i = sizeof(doors);
+    t1 = m_indices(doors);
+    while(i--) {
+        j = sizeof(doors[m_indices(doors)[i]]);
+        t2 = m_indices(doors[t1[i]]);
+        while(j--) {
+            doors[t1[i]][t2[j]] &= 255;
+            q = doors[t1[i]][t2[j]];
+            doors[t1[i]][t2[j]] |= (door_data[q]["status"] - 1) << 8;
+        }
+    }
+#endif
+}
+
+void setup() {
+    int i;
+    ceiling = 1;
+    i = DIM;
+    while(i--) ceiling *= DMS[i];
+    if(ceiling > 10000) return;
+    tenser = ({ 1 });
+    i = DIM;
+    while(i--) tenser += ({ tenser[<1] * DMS[<(i+1)] });
+    data = allocate(ceiling);
+#ifdef LABYRINTH
+    lab_data = allocate(ceiling);
+#endif
+#ifdef HEIGHTS
+    level = allocate(ceiling);
+#endif
+    dfls = "for";
+    descr = allocate(ceiling);
+    init_rooms();
+    save_me();
+}
+
+int where_to(int cord, int dir) {
+    int direc, pol;
+    int *temp;
+#ifdef ALLEXIT
+    if( (cord >= ceiling) || (dir > 8) ) return -1;
+    temp = int_cord(cord);
+    switch(dir) {
+    case 0:
+        temp[1]--;
+        break;
+    case 1:
+        temp[1]++;
+        break;
+    case 2:
+        temp[0]--;
+        break;
+    case 3:
+        temp[0]++;
+        break;
+    case 4:
+        temp[0]--;
+        temp[1]--;
+        break;
+    case 7:
+        temp[1]--;
+        temp[0]++;
+        break;
+    case 6:
+        temp[1]++;
+        temp[0]--;
+        break;
+    case 5:
+        temp[1]++;
+        temp[0]++;
+        break;
+    default:
+        return -1;
+    }
+    if((temp[0] < 0) || (temp[0] >= DMS[0]) ||
+      (temp[1] < 0) || (temp[1] >=DMS[1]) )
+        return -1;
+    return cord_int(temp);
+#else
+    if( (cord > ceiling) || (dir > 2*DIM) )
+        return -1;
+    direc = dir >>1;
+    pol = dir & 1;
+    temp = int_cord(cord);
+    if(pol) temp[direc]++;
+    else temp[direc]--;
+    if( (temp[direc] < 0) || (temp[direc] >=DMS[direc]) )
+        return -1;
+    return cord_int(temp);
+#endif
+}
+
+object query_room(int cord) {
+    object obj;
+    object ob;
+    if(rooms[cord]) return rooms[cord];
+    ob = clone_object(RCL);
+    ob ->set_cord(cord);
+#if 0
+    if((monster_amount + monster_killed) < random(ceiling))
+    {
+        obj = clone_object(MD+MONSTERS[random(sizeof(MONSTERS))]);
+        obj->set_die(this_object());
+        move_object(obj, ob);
+        monster_amount++;
+    }
+#endif
+    rooms[cord] = ob;
+    return ob;
+}
+
+int command_line(string str) {
+    string verb, arg;
+    int n;
+
+    if(sscanf(str, "%s %s", verb, arg) != 2) verb = str;
+    if(verb == "home") return 0;
+    if(specxit && specxit[n = (int)(environment(this_player())
+          ->query_cord())] &&specxit[n][str])
+        return !this_player()->move_player(str, specxit[n][str]);
+    if((n = member_array(str, XITS)) != -1)
+        return use_exit(n);
+    if(file_size(BINDIR+verb+".c") < 0) return 0;
+    return call_other(BINDIR+verb, "cmd_"+verb, arg);
+}
+
+int use_exit(int dir) {
+    int dest;
+    object dst;
+    int envir;
+    int i, j, k;
+    object env;
+
+    env = environment(this_player());
+    envir = env->query_cord();
+    dest = where_to(envir, dir);
+
+    if(dest < 0) {
+        write("You cannot go that way!\n");
+        return 1;
+    }
+#ifdef DOORS
+    if(doors && doors[envir] && mappingp(doors[envir]) && (member_array(dir, m_indices(doors[envir])) != -1)) {
+        if(doors[envir][dir] & 0x0300) return (int)notify_fail("You bump your head against the closed door.\n");
+        this_player()->move_player(XITS[dir], query_room(dest));
+        return 1;
+    }
+#endif
+#ifdef LABYRINTH
+    if(!(lab_data[envir] & (1 << dir))) {
+        notify_fail("You cannot go that way!\n");
+        return 0;
+    }
+#endif
+
+#ifdef HEIGHTS
+    if(abs((i = level[envir] - level[dest])) > MAX_LVL_DIFF) {
+        if(i>0) {
+            write("You try to climb down the hill, but you are"
+              " too scared.\n");
+            say(this_player()->query_cap_name()+
+              " tries to climb down the hill, but then fails.");
+            return 1;
+        }
+        else {
+            write("You try to climb up the hill, but fail.\n");
+            say(this_player()->query_cap_name()+
+              " tries to climb up the hill, but fails.\n");
+            return 1;
+        }
+    }
+
+    if(i) {
+        if(i>0) {
+            write("You climb down the hill.\n");
+            say(capitalize(this_player()->query_name())+
+              " climbs down the hill.\n");
+        }
+        else {
+            write("You climb up the hill.\n");
+            say(capitalize(this_player()->query_name())+
+              " climbs up the hill.\n");
+        }
+    }
+#endif
+
+    this_player()->move_player(XITS[dir], query_room(dest));
+    if(env && !first_inventory(env))
+        destruct(env);
+    return 1;
+}
+
+
+#ifdef SPECIAL
+#endif
+string query_exits_info(int cord) {
+    string ret;
+    int i, j;
+    ret = "";
+    if(this_player()->query_immortal()){
+        ret += "Info on the exits:\n";
+        ret += "\n"+identify(rooms[cord])+"\n";
+        ret += "Cord: "+cord;
+#ifdef HEIGHT
+        ret += "  Height: "+level[cord];
+#endif
+        ret += "  Description: "+descr[cord];
+        ret += "\n";
+    }
+    for( i = 0; i < sizeof(XITS); i++ ) {
+        ret += XITS[i];
+        ret += " : ";
+        if((j = where_to(cord, i)) == -1) {
+            ret += "It leads too deep into the forest. You wont be able to get there.\n";
+            continue;
+        }
+        else {
+#ifdef LABYRINTH
+            if(lab_data[cord] & (1 << i)) {
+                ret += "You wont be able to get there.\n";
+                continue;
+            }
+#endif
+#ifdef HEIGHTS
+            if((level[cord] - level[j]) > MAX_LVL_DIFF) {
+                ret += "You wont climb down that hill.\n";
+                continue;
+            }
+            if((level[cord] - level[j]) < -MAX_LVL_DIFF) {
+                ret += "You wont climb up that hill.\n";
+                continue;
+            }
+#endif
+        }
+        ret += short(j);
+        ret += "\n";
+    }
+    return ret;
+}

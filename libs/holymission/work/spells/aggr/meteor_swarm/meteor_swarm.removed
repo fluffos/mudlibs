@@ -1,0 +1,124 @@
+
+/* ################################################################
+   #								  #
+   #    		Mage Meteor Swarm                         #
+   #                                          		          #
+   ###############################################(C) Llort######## */
+
+inherit "/spells/spell";
+#include "/spells/spell.h"
+
+speed(lev)
+{
+   if(lev<44) return 4;
+   if(lev<47) return 3;
+   if(lev<49) return 2;
+   return 1;
+}
+
+void reset( int tick )
+{
+   ::reset( tick );
+
+   if ( tick ) return;
+
+   set_name( "meteor swarm" );
+   set_kind( AGGRESSIVE );
+   set_syntax( "cast 'meteor swarm'" );
+   set_save_vs( FIRE );
+   set_save_vs_info( "for half damage (non on impact damage)" );
+   set_damage_info( "YES!! ;)" );
+   set_guild_allowed( 5, 43 );
+   set_cost( 200 );
+   set_player_help(
+"The caster summons a swarm of meteors, shooting them at the victim.\n"+
+"These inflict impact damage on the victim plus a gigantic explosion in\n"+
+"the area.\n");
+}
+
+void release_spell( string arg, int act_skill, int max_skill )
+{
+    object *inv, oppo;
+    int    dice,i,j,sz,max,damage, odam, sdam;
+    string oppo_name;
+
+    oppo = check_target( arg );
+    if ( !oppo ) {
+        return;
+    }
+    if ( !valid_living( oppo ) ) {
+        return;
+    }
+
+    if ( !check_success( act_skill, max_skill ) ) return;
+
+    inv = all_inventory( environment(TP) ) - TP->grmems_in_room();
+
+    damage = roll_dice(20,20,0) + roll_dice(20,20,0) +
+             roll_dice(20,20,0) +
+             (random(2) ? roll_dice(20,20,0) : 0);
+
+    oppo_name = apply( call, oppo, "query_name" );
+
+    write("You send a group of METEORS at "+oppo_name);
+    if(TP->is_invis_for(oppo))
+        tell_object( oppo,
+         "The world seems to explode as some meteors fly down upon YOU !!\n");
+    else
+        tell_object( oppo,
+            TPNT+ " sends some  M-E-T-E-O-R-S  at YOU!!\n");
+    say( TPNT+ " sends some  M-E-T-E-O-R-S  at "+oppo_name,
+         oppo, TP, 
+         "The world seems to explode as some meteors fly down upon " +
+         oppo_name);
+
+    if ( damage > apply( call, oppo, "query_hp" ) ) {
+        write(",\nscattering "+TPOBJ+" across the landscape!!!\n");
+        say(",\nscattering "+TPOBJ+" across the landscape!!!\n");
+        tell_object( oppo, "Und Tschuess.\n"); 
+        inv -= ({ oppo });
+    }
+    else {
+        write( ".\n");
+        say( ".\n");
+    }         
+    SHOWDAM(damage, damage);
+    apply( call, oppo, "hit_by_spell", damage );
+
+    say("A red hot globe of fire explodes in the area!\n");
+    write("A red hot globe of fire explodes in the area!\n");
+
+    sz=sizeof( inv );
+    max = TPL;
+    sdam = damage;
+
+    for ( i = j = 0; i < sz && j < max; i++ )
+    {
+        if ( living( inv[i] ) )
+        {   
+             oppo=inv[i];
+             odam = damage = sdam;
+             oppo_name = apply( call, oppo, "query_name" );
+
+             switch( apply(call,oppo,"do_save",Skind,Ssave,0,0,this_object()))
+             {
+                 case IMMUNE:      damage = 0; break;
+                 case SAVED:       damage /= 2; break;
+                 case SAVE_FAILED: break;
+                 default:          damage = 0;
+             }
+
+             if ( damage == 0 ) {
+                 write("Strange, but "+oppo_name+ " seems to ignore it.\n");
+                 say( "But "+oppo_name+"seems to be unharmed.\n",oppo);
+                 tell_object( oppo,
+                      "The heat of the explosion warms your body.\n");
+             }
+             else 
+                 tell_object( oppo, "You are burned by the explosion!\n");
+             SHOWDAM(odam, damage);
+             apply( call, oppo, "hit_by_spell", damage ); 
+             j++;
+         }
+    }
+}

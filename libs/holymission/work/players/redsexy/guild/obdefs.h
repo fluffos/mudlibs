@@ -1,0 +1,36 @@
+#define TP        ENV(TO)
+#define TO        this_object()
+#define NAME      query_name()
+#define RNAME     query_real_name()
+#define SNAME     query_short_name()
+#define SHORT     short()
+#define POS       query_possessive()
+#define PRO       query_pronoun()
+#define OBJ       query_objective()
+#define CAP	  capitalize
+#define LOW	  lower_case
+
+#define STR       query_str()
+#define INT 	  query_int()
+#define WIS	  query_wis()
+#define DEX	  query_dex()
+#define CON	  query_con()
+#define CHA	  query_chr()
+#define LEVEL	  query_level()
+#define AC        query_n_ac()
+#define SP	  query_sp()
+#define MAXSP 	  query_max_sp()
+#define HP	  query_hp()
+#define MAXHP  	  query_max_hp()
+#define BP	  query_bp()
+#define ENV	  environment
+#define WEAR	  query_test_wear()
+#define WIELD	  query_test_wield()
+
+#define MOVE      move_object
+#define MOVEP     move_player
+#define TELL      new_tell_object
+#define TELLR     tell_room
+#define TELLS     tell_select
+#define TELLRS    tell_room_select
+#define TRANS     transfer

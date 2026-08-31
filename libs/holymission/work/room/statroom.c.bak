@@ -1,0 +1,155 @@
+/* Changed by Ethereal Cashimor, 150493, for lowering the maxstat of undefined
+   races. */
+
+inherit "/room/room";
+
+#define TP this_player()
+
+int *xpcost;
+mixed *guildbonus;
+
+void reset(int arg) {
+    ::reset(arg);
+    if(arg) return;
+
+    set_light(1);
+    short_desc="Stat advance room";
+    long_desc="This is a strange, clean room. The floor, the ceiling, "
+             +"and all walls are colored white. A small mystic person "
+             +"sits behind a desk, and above the desk you can make out "
+             +"the following text:\n\tYou can gain information about "
+             +"the <cost> of advancing your stats,\n\tand you can try to "
+             +"<improve> one of your stats here.\nThe text is written "
+             +"in shining yellow letters which are levitating above "
+             +"the table.\n"
+             +"The new stat limits for levels was intended by Herp!\n";
+    dest_dir=({ "/room/attic","south" });
+    items=({ "desk","A big table shining in bright white",
+             "person","The person looks very powerful",
+             "wall","It is white",
+             "walls","They are white",
+             "floor","It is white",
+             "ceiling","It is white",
+             "text","The same text as before",
+             "letters","They are shining in beautiful yellow" });
+
+    xpcost=({   569,    663,    773,    901,   1051,   1226,
+               1430,   1668,   1946,   2270,   2648,   3089,
+               3603,   4203,   4903,   5720,   6673,   7785,
+               9082,  10595,  12360,  14420,  16823,  19626,
+              22897,  26713,  31165,  36359,  42418,  49487,
+              57734,  67356,  78582,  91679, 106958, 124784,
+             145581, 169844, 198151, 231176, 269705, 314655,
+             367097
+           });
+
+    guildbonus=({ ({  0,  0,  0,  0,  0,  0 }), //  0
+                  ({ -2,  2,  0,  0, -2,  2 }), //  1
+                  ({  0,  0,  0,  0,  0,  0 }), //  2
+                  ({  2,  0,  2, -2, -2,  0 }), //  3
+                  ({ -1,  0, -1,  0,  1,  1 }), //  4
+                  ({ -2,  0, -2,  2,  2,  0 }), //  5
+                  ({ -2,  0, -2,  2,  0,  2 }), //  6
+                  ({  0,  2,  0, -2,  2, -2 }), //  7
+                  ({  0,  2,  0,  0,  0, -2 }), //  8
+                  ({ -2, -1, -2,  2,  1,  2 }), //  9
+                  ({  0,  0,  0,  0,  0,  0 }), // 10
+                  ({  2,  0,  2, -2, -2,  0 }), // 11
+                  ({  0,  0,  0,  0,  0,  0 }), // 12
+                  ({ -2,  2, -1,  0,  1,  0 }), // 13
+                  ({  0,  0,  0,  0,  0,  0 }), // 14
+                  ({  0,  0,  0,  0,  0,  0 }), // 15
+                  ({  0,  0,  0,  0,  0,  0 }), // 16
+               });
+}
+
+void init() {
+
+//    object visor;  // Mangla wondering what this is doing here.
+    ::init();
+    add_action("_cost","cost");
+    add_action("_improve","improve");
+}
+
+int max_imp() {
+    return this_player()->query_level()*5/4+4;
+}  /* changed: Herp */
+
+int calc_cost(int stat) {
+
+    int g,m,s;
+
+    g=(int)TP->query_guild();
+    m="/race/master"->query_max_stat((string)TP->query_race(),stat);
+    s=TP->query_stats(stat);
+
+    if(!m) m=20; /* Changed: Cashimor */
+    if(s>=m) return 0;
+    s=s+1-guildbonus[g][stat];
+    return xpcost[s];
+}
+
+int _cost() {
+
+    int i,s;
+    string *snam;
+
+    snam=({ "Str","Dex","Con","Int","Wis","Chr" });
+    i=(int)TP->query_exp()-"guild/master"->query_exp(TP->query_guild(),
+                                                TP->query_level()); 
+    write("You have "+(i>0 ? (string)i : "no")+" XP you can use for improvement.\n");
+    write("Stat Costs: \n");
+    for(i=0;i<6;i++) {
+       if(TP->query_stats(i)>=max_imp())
+           write(snam[i]+"\t\tYou have to improve your level first.\n");
+       else
+           write(snam[i]+"\t\t"+
+                 ((s=calc_cost(i)) ? s+" XP\n" : "at your limit\n"));
+    }
+    return 1;
+}
+
+int _improve(string arg) {
+
+    int snr,c;
+
+    if(this_player()->query_race()=="frog") {
+        write("Sorry, you can't improve your stats as frog.\n");
+        return 1;
+    }
+    if(!arg) {
+        write("You can improve: str, dex, con, int, wis or chr.\n");
+        return 1;
+    }
+    snr=0;
+    switch(arg) {
+        case "chr": snr++;
+        case "wis": snr++;
+        case "int": snr++;
+        case "con": snr++;
+        case "dex": snr++;
+        case "str": break;
+        default: write("Sorry, I don't know how to improve '"+arg+"'.\n");
+            return 1;
+    }
+    if(!(c=calc_cost(snr))) {
+        write("You can not improve this stat any further!\n");
+        return 1;
+    }
+    if(TP->query_stats(snr)>=max_imp()) {
+        write("You have to improve your level first.\n");
+        return 1;
+    }
+    if(TP->query_exp()-"guild/master"->query_exp(TP->query_guild(), 
+       TP->query_level())<c) {
+        write("You don't have enough XP to improve that stat.\n");
+        return 1;
+    }
+    TP->add_exp(-c);
+    TP->set_stats(snr,TP->query_stats(snr)+1);
+    write("You raised your stat.\n");
+    say(TP->query_name()+" just raised a stat.\n");
+    return 1;
+}
+
+int stat_room() { return 1; }

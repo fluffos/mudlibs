@@ -1,0 +1,259 @@
+
+#include "setlight.h"
+
+/* USERDOC:
+general
+This object is a standard food object and works like /obj/alco_drink.c or 
+/obj/armour.c. To use this you can do:
+   inherit "obj/food";
+   ......
+   or,
+   object ob;
+   ob=clone_object("obj/food");
+   ob->set_name("apple pie");
+For more documentation look at /doc/build/food. These functions are defined:
+set_name, set_alias, set_short, set_long, set_value, set_weight, set_alt_name,
+query_value, query_weight, query_name.
+For an example of the use of this object, please read:
+/doc/examples/apple_pie.c
+*/
+
+// prototyping
+string query_name();
+string name, short, long, eating_mess, eater_mess, alias, alt_name;
+int value, strength, weight, heal_amount, poison;
+
+void init() 
+{
+  add_action("eat", "eat");
+}
+
+void reset(int arg) 
+{
+  if (arg!=0) return;
+  weight = 1; 
+  eater_mess = "Yum yum yum.\n"; 
+}
+
+int id(string str) 
+{ 
+    return  str == query_name() || str == alt_name || str == alias;
+}
+
+string short() 
+{ 
+  if (!short && !name)
+      return "food";
+  else if (!short) 
+      return name;
+  return short;
+}
+
+void long() 
+{
+  if(!long)
+    write(short() + ".\n");
+  else
+    write(process_string(long));
+}
+
+int get(string str) 
+{ 
+    return 1; 
+}
+
+void set_name(string n) 
+{ 
+  name = n; 
+}
+
+void set_short(string s) 
+{ 
+  short = s; 
+}
+
+void set_long(string l) 
+{ 
+  long = l; 
+}
+
+void set_value(int v) 
+{ 
+  value = v; 
+}
+
+void set_weight(int w) 
+{ 
+  weight = w; 
+}
+
+/* USERDOC:
+set_strength
+Format: set_strength(i)
+Example: set_strength(5)
+This function sets the strength of the food. This is a value between 0 and 50.
+High strengths indicate much healing, but also that low level characters can't
+eat the food.
+*/
+void set_strength(int s) 
+{ 
+  strength = s; 
+}
+
+/* USERDOC
+   This function can be set extra in the reset(0) of the obj/food.
+   It has its usage by coding special food objects as herbs, which
+   are not much of food (low strength), but shall heal a bit more.
+   Or for objects which shall heal less than it's strength. As 
+   fouly apples. Use it carefully. */
+
+void set_heal_amount(int h)
+{
+   heal_amount = h;
+}
+
+/* USERDOC
+   This function can be set extra in the reset(0) of the obj/food.
+   It allows you to add poison to the object. It can be used for
+   guildabilities, or to poison bad meat. The amount of damage the
+   living can get from poison is calculated in a geometric row, where
+   poison/2 * (1 + poison) is the full damage reduced with the con of
+   the living.    */
+
+void set_poison(int p)
+{
+     poison = p;
+}
+
+void set_alias(string a) 
+{ 
+  alias = a; 
+}
+
+void set_alt_name(string an) 
+{ 
+  alt_name = an; 
+}
+
+/* USERDOC:
+set_eating_mess
+Format: set_eating_mess(s)
+Example: set_eating_mess(" is enjoying an apple.\n");
+See also: set_eater_mess.
+This function sets the string displayed to other players in the room,
+prepended by the eater's name. Notice the leading space and the terminating
+\n in this string.
+*/
+void set_eating_mess(string em) 
+{ 
+  eating_mess = em; 
+}
+
+/* USERDOC:
+set_eater_mess
+Format: set_eater_mess(s)
+Example: set_eater_mess("It tastes delicious.\n");
+See also: set_eating_mess.
+This function sets the string written to the screen of the eater. This string
+should end with a \n.
+*/
+void set_eater_mess(string em) 
+{ 
+  eater_mess = em; 
+}
+
+/* USERDOC:
+query_food
+Format: i=query_food()
+This function always returns 1 to indicate this object as food.
+*/
+int query_food() 
+{ 
+  return 1;
+}
+
+int query_value() 
+{ 
+  if (value)
+    return value; 
+  else if (strength)
+    return (strength * 5);
+  return 10;
+}
+
+int query_weight() 
+{ 
+  if (weight)
+      return weight; 
+  return 0;
+}
+
+string query_name() 
+{ 
+  if (stringp(name))
+      return name; 
+  return "food";
+}
+
+int query_strength()
+{
+   if (strength)
+      return strength;
+   return 1;
+}
+
+int query_heal_amount()
+{
+  if (heal_amount)
+      return heal_amount;
+  else if (strength)
+      return strength;
+  return 0;
+}
+
+int query_poison()
+{
+   if (poison)
+       return poison;
+   return 0;
+}
+
+
+int eat(string str) 
+{
+  object tp;
+  closure call;
+  string tpn;
+  int poi;
+
+  tp = this_player();
+  call = #'call_other;
+  tpn = apply(call,tp,"query_name");
+
+  if (!str || !id(str)) return 0;
+
+  if(apply(call,tp,"query_level") * 8 < strength) 
+  {
+    write(
+   "You realize even before trying that you are not able to eat all this.\n");
+    return 1;
+   }
+   if (!apply(call,tp,"eat_food",strength))
+       return 1;
+
+// to shadow this function if necessary : cookingskill
+   apply(call,tp,"heal_self",apply(call,this_object(),"query_heal_amount"));
+
+// can be shadowed too as poisony for humans but not for dragons .. ect 
+   if (poi = apply(call,this_object(),"query_poison"))
+       apply(call,tp,"add_poison",poi);
+
+   write(eater_mess);
+   if (eating_mess)
+     say(capitalize(tpn) + eating_mess);
+   else
+     say(capitalize(tpn) + " eats " + short + ".\n");
+   destruct(this_object());
+   return 1;
+}
+

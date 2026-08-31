@@ -1,0 +1,63 @@
+/* 12.03.93 Airborne: Added add_action to allow for reading sign. */
+/*Room description corrected by Silas*/
+
+inherit "room/room";
+
+reset(arg) {
+ if(!arg){
+  object guard, weapon;
+
+ set_light(1);
+
+ short_desc = "Entry Hall of Jug`s Castle";
+
+ long_desc = 
+    "You come into a large and well equipped entry hall.\n"+
+    "In the eastern wall you can see a small passage.\n"+
+    "There is a sign on the west side of the entry door.\n";
+ 
+ dest_dir = ({
+    "/players/jug/castle", "south",
+    "/players/jug/room/floor_east", "east",
+     });
+ 
+ items = ({
+    "sign", "The sign reads: This is the `World of Wonders' created by Jug.\n"+
+      "This world is for all levels, but it is under construction, so\n"+
+      "please no complaints, but you can tell me your ideas ..",
+    "wall", "In the eastern wall you see a small passage", 
+    "door", "A simple entry door",
+      });
+
+  if (!guard || !living(guard)) {
+    guard = clone_object("obj/monster");
+    guard->set_name("guard");
+    guard->set_level(11);
+    guard->set_hp(200);
+    guard->set_al(100);
+    guard->set_short("The Portal Guard");
+    guard->set_long("A big and good looking guard.\n");
+    move_object(guard, this_object());
+    weapon = clone_object("players/jug/obj/halbard");
+    transfer(weapon, guard);
+    guard->init_command("wield halbard");
+                     }
+	}
+}
+
+
+init() {
+ ::init();
+ 
+ add_action("read","read");
+  	}
+
+read(string str){
+
+ if((!str)||(str!="sign")) { return; }
+
+ write("The sign reads: This is the `World of Wonders' created by Jug.\n"
+      "This world is for all levels, but it is under construction, so\n"
+      "please no complaints, but you can tell me your ideas ..");
+ return 1;
+	}

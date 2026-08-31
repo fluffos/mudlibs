@@ -1,0 +1,962 @@
+/* Guild soul for Jedi */
+#define ENV environment
+#define CAP capitalize
+#define LC lower_case
+#define NAME query_name()
+#define RNAME query_real_name()
+#define PRO query_pronoun()
+#define POS query_possessive()
+#define OBJ query_objective()
+#define LEV query_level()
+#define TO this_object()
+#define TPN TP->NAME
+#define TPPR TP->PRO
+#define TPPO TP->POS
+#define TPOB TP->OBJ
+#define TPL TP->LEV
+ 
+/* some things that may change are listed in this file */
+#include "soul.h"
+ 
+int guild,lastparry,toggletalk,timeslight,lightdam;
+status parrying,preparing;
+object TP,tangle_obj,arm_obj;
+ 
+string align_arr,shape_arr,wc_arr,weight_arr,suggest_arr,suggestions,monsters;
+ 
+get() { return 1; }
+ 
+drop () { return 1; }
+ 
+id(str) { return (str=="jedisoul" || str=="guildsoul"); }
+ 
+long() {
+  write("It's your guild-soul. Type 'help guild' for help.\n");
+}
+ 
+reset(arg) {
+  if(arg) return;
+  guild=GM->query_number("jedi");
+  toggletalk=1;
+  preparing=0;
+}
+ 
+init() {
+  if(this_player()!=ENV()) return;
+  add_action("judge","judge");     /* Jedi can judge things and livings */
+  add_action("inv","i");           /* Jedi can see in the dark          */
+  add_action("inv","inventory");   /* the same                          */
+  add_action("see","look");        /* the same                          */
+  add_action("help","help");       /* help on jedisoul                  */
+  add_action("shock","bolt");      /* Jedi's electroshock               */
+  add_action("prepare","prepare"); /* For lightning spell               */
+  add_action("free","free");       /* For lightning spell               */
+  add_action("spread","spread");   /* A variation of lightning          */
+  add_action("cure","cure");       /* Jedi can blind their wounds       */
+  add_action("suggest","suggest"); /* Jedi's primar power               */
+  add_action("find","find");       /* Jedi can find the location of pl. */
+  add_action("take","take");       /* Jedi can see in the dark          */
+  add_action("take","get");        /* also in dark room                 */
+  add_action("putting","put");     /* also in dark rooms                */
+  add_action("giving","give");     /* also in dark rooms                */
+  add_action("parry","parry");     /* Jedi can use a weapon to parry    */
+  add_action("low_parry","lower"); /* used too lower your parry         */ 
+  add_action("low_parry","stop");  /* used too lower your parry         */ 
+  add_action("guild_talk","jedi"); /* guild talking, telepathy          */
+  add_action("quitting","quit");   /* give a message to your guild membs*/
+  add_action("nomore","fireball"); /* You have given up this spell      */
+  add_action("nomore","missile");  /* You have given up this spell      */
+  add_action("nomore","shock");    /* You have given up this spell      */
+ 
+  align_arr=explode(ALIGNMENT,",");
+  wc_arr=explode(WCAC,",");
+  shape_arr=explode(SHAPE,",");
+  weight_arr=explode(WEIGHTS,",");
+  monsters=explode(MONSTER,",");
+  suggest_arr=explode(SUGGESTIONS,",");
+ 
+  TP=ENV();
+  tell_object(TP,"You can feel the Force floating through your whole body.\n");
+  guild_communication("You feel a strong movement in the Force.\n");
+ 
+}
+ 
+extra_look() {
+  string m;
+  m = CAP(TPPR)+" is a member of the famous Jedi guild.\n";
+  
+  switch (TP->query_al_string()) {
+  case "demonic": 
+         m+="You sense that "+TPPR+" is one with the Dark Side of the Force";
+         break;
+  case "evil":
+         m+=CAP(TPPR)+" is a disciple of the Dark Side of the Force" ;
+         break;
+  case "nasty":
+         m+=CAP(TPPR)+" is beginning to turn toward the Dark Side of the Force";
+         break;
+  case "neutral":
+         m+="You sense balance and oneness with the Force in "+TPOB;
+         break;
+  case "nice":
+         m+=CAP(TPPR)+" adheres to the Code of the Light Side of the Force";
+         break;
+  case "good":
+         m+="You have a sense of goodness and great Force about "+TPOB;
+         break;
+  case "saintly":
+      m+=CAP(TPPR)+"emanates goodness and the power of the Light Side of the Force";
+      break;
+  default : ;
+  }
+  if(preparing) m+=".\n"+CAP(TPPO)+" hands are glowing brightly"; 
+  return m;
+}
+ 
+help(str) {
+  string path;
+ 
+  if(!str) return;
+ 
+  if(str=="levels") {
+    GM->list_levels(guild);
+    return 1;
+  }
+  path="/players/kelly/guild/helpdir/"+str;
+ 
+  if(file_size(path)>0)
+    cat(path);
+  else
+    return 0;
+ 
+  return 1;
+}
+ 
+judge(str) {         /* Main proc for jugding */
+  object ob;
+  if(!str) return;
+  if(present(LC(str),ENV(TP)))
+     ob=present(LC(str),ENV(TP));
+  else
+     ob=present(LC(str),TP);
+  if(!ob)  write("What do you want to judge?\n");
+  else {
+    write("You concentrate your Force on "+CAP(str)+".\n");
+    if(living(ob)) judge_living(ob);
+    else judge_object(ob);
+  }
+  return 1;
+}   /* end  judge */
+ 
+see(str) {            /* You can see in the dark */
+  object room,obj;
+  int count;
+ 
+  if(!str) {
+    room=ENV(TP);
+    if(set_light(0)<1) {
+      write("You concentrate the Force.\nIn your mind you can see:\n\n");
+    }
+    set_light(5);
+    room->long();
+    set_light(-5);
+    count=0;
+    obj=first_inventory(room);
+    while(obj) {
+      if(obj!=TP && obj->short())
+        write(obj->short()+".\n");
+      if((obj->query_invis() || !obj->short()) && living(obj) && obj!=TP
+          && !obj->query_wizard())
+        count++;
+      obj=next_inventory(obj);
+    }
+    if(count>0)
+      write("You feel the presence of something you can't see.\n");
+    return 1;
+  }
+  if(set_light(0)<1) {
+    write("You close your eyes and see:\n");
+  }
+  set_light(5);
+  TP->look(str);
+  set_light(-5);
+  return 1;
+}
+ 
+inv() {                   /* you can see your inventory */
+  object obj;
+  if(set_light(0)<1) {
+    write("You can feel the items you carry.\nYou carry:\n");
+  }
+  obj=first_inventory(TP);
+  while(obj) {
+    if(obj->short())
+      write(obj->short()+".\n");
+    obj=next_inventory(obj);
+  }
+  return 1;
+}
+ 
+/* further procedures for jugde */
+judge_living(obj) {
+  write(obj->NAME+" is living. "+CAP(obj->PRO)+" is "+ align(obj)+".\n"+
+        CAP(obj->NAME)+" is a "+monster(obj)+" "+obj->query_race()+".\n"+
+        CAP(obj->PRO)+" is "+shapey(obj)+".\n"+
+        CAP(obj->PRO)+" is "+armed(obj)+" armed and "+protect(obj)+
+        " protected.\n");
+  return 1;
+}
+ 
+judge_object(obj) {
+  int flag;
+  flag=0;
+  write(obj->short()+".\n");
+  if(obj->query_weapon()) {
+    write("It seems to be some kind of weapon.\n");
+    write("It is a "+armed(obj)+" weapon.\n");
+    flag=1;
+  }
+  if(obj->query_armour()) {
+     write("It seems to be some kind of armour.\n");
+     write("It provides "+protect2(obj)+" protection.\n");
+     flag=1;
+  }
+  if(obj->query_container()) {
+     write("It seems to be some kind of a container.\n");
+     flag=1;
+  }
+  if(obj->query_food()) {
+     write("It seems you can eat it.\n");
+     flag=1;
+  }
+  if(obj->query_drink()) {
+     write("It seems you can drink it.\n");
+     flag=1;
+  }
+  if(!flag)
+     write("You don't know exactly what it is used for.\n");
+  write("It "+weight(obj)+".\n");
+  return  1;
+}
+ 
+/* some procedures for jugde-command */
+shapey(obj) {
+  int no;
+  no=sizeof(shape_arr)*obj->query_hp()/obj->query_maxhp();
+  if(no==0 && obj->query_hp()>30) no=1;
+  if(no<0) no=0;
+  else if (no>10) no=10;
+  return shape_arr[sizeof(shape_arr)-no];
+}
+ 
+align(obj) {
+  return obj->query_al_string();
+}
+ 
+armed(obj) {
+  int no;
+  if(living(obj)) no=obj->query_wc()/3-1;
+  else no=obj->weapon_class()/3-1;
+  if(no>7) no=7;
+  else if(no<0) no=0;
+  return wc_arr[no];
+}
+ 
+protect(obj) {
+  int no;
+  no=obj->query_ac()/2-1;
+   if(no>7) no=7;
+   else if(no<0) no=0;
+   return wc_arr[no];
+}
+ 
+protect2(obj) {
+  int no;
+  no=obj->armour_class();
+  if(no>7) no=7;
+  else if(no<0) no=0;
+  return wc_arr[no];
+}
+ 
+monster(obj) {
+  int no;
+  no=obj->query_maxhp()/60-1;
+  if(no>7) no=7;
+  else if(no<0) no=0;
+  return monsters[no];
+}
+ 
+weight(obj) {
+   int no;
+   no=obj->query_weight()+1;
+   if(no<0) no=0;
+   else if(no>6) no=6;
+   return weight_arr[no];
+}
+/*****************************/
+/* shock , called by bolt    */
+shock(str) {
+  object whom;
+  int damn,cost;
+  damn=15+TPL/3+TP->query_wis();
+  cost=30-TP->query_int()/5+TPL;
+ 
+  if(!str) whom=TP->query_attack();
+  else whom=present(str,ENV(TP));
+  if(!whom) {
+    if(!str) write("Whom !?\n");
+    else write("No "+CAP(str)+" here.\n");
+     return 1;
+  }
+  if(whom==TP) {
+    write("You don't want to do that.\n");
+    return 1;
+  }
+  if(!living(whom)) {
+    write(CAP(str)+" is not a living thing.\n");
+    return 1;
+  }
+ 
+  write("You hold your hands towards "+whom->NAME+".\n");
+  if(TP->query_spell_points()<cost) {
+    write("You lack the Force to finish the spell.\n");
+    return 1;
+  }
+  write("Blue flashes of electricity crackle out of your hands and strike "+
+      whom->NAME+".\n");
+  say("Bolts of electricity crackle out of "+TPN+"'s hands and strike "+
+      whom->NAME+".\n");
+  if(whom->query_hp()<damn) damn=whom->query_hp()/2;
+  /* this makes you attack the monster */
+  whom->hit_player(1);
+  /* This spell penetrates the armour */
+  whom->reduce_hit_point(damn);
+  spell_cost(cost);
+  return 1;
+}
+
+prepare(str) {
+  if(str!="lightning") return;
+  if(preparing) {
+    write("You are already preparing a lightning.\n");
+    return 1;
+  }
+  write("You concentrate the Force on your hands.\n");
+  preparing=1;
+  light_heart();
+  return 1;
+}
+
+light_heart() {
+  int dam;
+  timeslight++;
+  if(timeslight==lightT()) {
+    write("You'd better free the energy.\n");
+  } 
+  if(timeslight>lightT()) {
+    write("You free the energy uncontrolled and hurt yourself.\n");
+    TP->hit_player(lightdam/10+5);
+    lightReset();
+    return 1;
+  }
+  dam += lightD()+random(8);
+  lightdam += dam;
+  if(TP->query_sp()-dam/2<0) {
+    write("You are low at mental energy.\n");
+    lightdam = 0;
+    free("lightning");
+    return 1;
+  }
+  
+  spell_cost(dam/2);
+  write("You feel the energy rising.\n");
+  call_out("light_heart",lightS());
+}
+
+free(str) {
+  string what,pro,whom;
+  object att;
+  if(str=="lightning") att=TP->query_attack();
+  else {
+    if(sscanf(str,"%s %s %s",what,pro,whom)!=3) return;
+    if(what!="lightning" && pro!="at" && pro!="to") return;
+    att=present(whom,ENV(TP));
+  }
+  if(!att) {
+    if(!preparing) {
+      write("Bolts of electricity swirl aroud your fingers.\n");
+      say("Bolts of electricity swirl around "+TPN+"'s fingers.\n");
+    }
+    else
+      if(att=present("corpse",ENV(TP))) {
+        write("The corpse falls to ashes.\n");
+        say("The corpse falls to ashes.\n");
+        destruct(att);
+      }
+      else {
+        write("You free the energy.\n");
+        say(TPN+" sends lightning into the air.\n");
+      }
+    lightReset();
+    return 1;
+  } 
+  if(!living(att))  {
+    write(CAP(whom)+" is actually not a living thing.\n");
+    return 1;
+  }
+  if(!preparing) {
+    write("You throw a non-harmful lighting at "+att->query_name()+".\n");
+    say(TPN+" throws a non-harmful lightning at you. You glow for a second.\n");
+    return 1;
+  }
+  write("You stretch forth your hands and a lightning strikes out of them "+
+        "towards "+ att->query_name()+".\n");
+  att->reduce_hit_point(lightdam);
+  att->hit_player(0);
+  lightReset();
+  return 1;
+}
+
+spread(str) {
+  object *ob;
+  int i,j,enemys,dam;
+
+  if(str!="lightning") return;
+  if(!preparing) {
+    write("That would have no effect.\n");
+    return 1;
+  }
+  write("You quickly turn around spreading the lightning all across the area.\n");
+  say(TPN+" turns around a spreads a lightning all across the area.\n");
+ 
+  ob=all_inventory(ENV(TP));
+  for(i=0;i<sizeof(ob);i++)
+    if(ob[i]->query_npc()) enemys++;
+
+  dam=3*lightdam/enemys/2+random(7); 
+
+  for(i=0;i<sizeof(ob);i++) 
+    if(ob[i]->query_npc()) {
+      ob[i]->reduce_hit_point(dam);
+      ob[i]->hit_player(0);
+    }
+
+  lightReset();
+  return 1;
+}
+ 
+lightReset() {
+  remove_call_out("light_heart");
+  preparing = 0;
+  timeslight = 0;
+  lightdam = 0;
+}
+
+lightS() { 
+  if(TPL<10) return 6;
+  if(TPL<20) return 4;
+  return 2;
+}
+lightD() {
+  if(TPL<10) return 5;
+  if(TPL<20) return 8;
+  return 11;
+}
+lightT() {
+  if(TPL<10) return 3;
+  if(TPL<20) return 5;
+  return 7;
+}
+
+guild_talk(str) {
+  string msg;
+  object *u,s;
+  int i;
+ 
+  u=users();
+ 
+  if(!str) {
+    write("Jedi online :\n");
+    for(i=0;i<sizeof(u);i++)
+      if(u[i]->query_guild()==guild && u[i]->short()) {
+        s=present("guildsoul",u[i]);
+        if(s && s->query_hear())
+          write("     ");
+        else
+          write(" OFF ");
+        write(u[i]->short()+"\n");
+      }
+      return 1;
+  }
+  else
+    switch(str) {
+      case "off": toggletalk=0;break;
+      case "on" : toggletalk=1;break;
+      default   :
+        for(i=0;i<sizeof(u);i++) {
+          s=present("guildsoul",u[i]);
+          if(u[i]->query_guild()==guild && u[i]!=TP && s && s->query_hear())
+            tell_object(u[i],"[*Jedi "+CAP(TP->RNAME)+"*] "+str+"\n");
+        }
+    }
+  write("Ok.\n");
+  return 1;
+}
+ 
+query_hear() { return toggletalk; }
+ 
+guild_communication(str) {
+string msg;
+object *u;
+int i;
+ 
+  u=users();
+  for (i=0;i<sizeof(u);i++)
+    if (u[i]->query_guild()==guild && u[i]!=TP)
+      tell_object(u[i],str);
+  return 1;
+}
+ 
+suggest(str) {
+  int i;
+  status found;
+  string what,who;
+  if(!str) {
+    write("Suggestions are :"+SUGGESTIONS+"\n");
+    return 1;
+  }
+  sscanf(str,"%s %s",what,who);
+  if(!who) what=str;
+  i=sizeof(suggest_arr)-1;
+  found=0;
+  while(i>=0) {
+   if (suggest_arr[i] ==what) found=1;
+   i--;
+  }
+  if(!found) {
+    write("You don't know how to do this.\n");
+    return 1;
+  }
+  else
+  {
+    call_other(this_object(),what,who);
+    return 1;
+  }
+}
+ 
+fear(str) {
+  object obj;
+  if(str=="all") {
+    fear_all();
+    return 1;
+  }
+  if(!str) {
+    write("Whom do you want to suggest fear?\n");
+    return 1;
+  }
+  obj=present(str,ENV(TP));
+  if(!obj) {
+    write(CAP(str)+" isn't here.\n");
+    return 1;
+  }
+  if(!living(obj)) {
+    write(CAP(str)+" is actually not a living thing.\n");
+    return 1;
+  }
+  if(obj->query_guild()==guild) {
+    write(obj->NAME+" is a Jedi, too. You cannot fake him.\n");
+    tell_object(obj,TPN+" tries to fear you.\n");
+    return 1;
+  }
+  if(obj->query_wis()-10>TP->query_wis()) {
+    write(obj->NAME+" is to wise to fall for that.\n");
+    return 1;
+  }
+  write("You concentrate your Force and say some words.\n");
+  say(TPN+" speaks some strange words and waves with a hand.\n");
+  tell_object(obj,"As you look up to "+TPN+" you get an unusual "+
+    "feeling.\nYour hands begin to sweat.\nYou panic.\n");
+  obj->run_away();
+}
+ 
+fear_all() {
+  object obj,wimps;
+  int i;
+  status allow;
+ 
+  wimps=all_inventory(ENV(TP));
+  i=sizeof(wimps)-1;
+ 
+  say(TPN+" murmurs something you don't understand.\n");
+  while(i>=0) {
+    allow=1;
+    if(living(wimps[i]) && wimps[i]!=TP) {
+      if(wimps[i]->query_guild()==guild) {
+	write(wimps[i]->NAME+" is a Jedi, too. You cannot fake him.\n");
+	tell_object(wimps[i],TPN+" tries to fear you.\n");
+	allow=0;
+      }
+      if(wimps[i]->query_wis()-10>TP->query_wis()) {
+	write(wimps[i]->NAME+" is to wise to fall for that.\n");
+	allow=0;
+      }
+      if(allow) {
+	tell_object(wimps[i],"As you look up to "+TPN+" you get an unusual "+
+		   "feeling.\nYour hands begin to sweat.\nYou panic.\n");
+	wimps[i]->run_away();
+      }
+    }
+    i--;
+  }
+  return 1;
+}
+ 
+noattack() {
+  object *ob,env;
+  int i;
+ 
+  write("You concentrate your Force.\n");
+  say(TPN+" says a magic word.\n");
+ 
+  ob = all_inventory(env=environment(TP));
+  for (i=0; i<sizeof(ob); i++)
+    if (living(ob[i]) && ob[i]->query_attack()) {
+      ob[i]->stop_fight();
+      ob[i]->stop_fight();
+      ob[i]->stop_hunter(1);
+    }       
+  write("You're no longer attacked.\n");
+}
+ 
+brainstrom(str) {
+  object obj;
+  int cost;
+  if(!str) {
+    write("Whom do you want to suggest anything?\n");
+    return 1;
+  }
+  obj=present(str,ENV(TP));
+  cost=10+TPL*3-TP->query_wis();
+  if(!obj) {
+    write("That is not here.\n");
+    return 1;
+  }
+  if(!living(obj)) {
+    write("That is not a living thing.\n");
+    return 1;
+  }
+  if(TP->query_spell_points()<cost) {
+    write("You are not strong enough.\n");
+    return 1;
+  }
+  if (100*obj->query_hp()/obj->query_maxhp()<10) {
+    if(random(100)<TP->query_chr()) {
+      write(obj->NAME+" suddenly looks very bad."+obj->PRO+
+       " stumbles and falls to the ground.\n");
+      obj->hit_player(1000);
+    } else
+      write("You fail to suggest anything.\n");
+  }
+  else
+    write("You concentrate hard, but you fail to affect "+obj->NAME+"\n");
+  spell_cost(cost);
+  return 1;
+}
+ 
+weak(str) {
+  object obj,weaker;
+  int cost,percentage,duration;
+ 
+  if(!str) {
+    write("Whom do want to suggest anything ?\n");
+    return 1;
+  }
+  obj=present(str,ENV(TP));
+  cost=10+TPL*3-TP->query_wis();
+  if(!obj) {
+    write("That is not here.\n");
+    return 1;
+  }
+  if(!living(obj)) {
+    write("That is not a living thing.\n");
+    return 1;
+  }
+  if(!present("weakerobj",obj)) {
+    if(TP->query_spell_points()<cost) {
+      write("You are not strong enough.\n");
+    return 1;
+    }
+    duration=TP->query_chr()*2-obj->query_chr();
+    percentage=TPL/30*25;
+    weaker=clone_object("players/kelly/guild/weaker");
+    move_object(weaker,obj);
+    weaker->start(duration,percentage);
+    write(obj->NAME+" looks less strong than before.\n");
+    spell_cost(cost);
+  }
+  else {
+    write(obj->NAME+" doesn't check anything you do.\n");
+    spell_cost(cost/3);
+  }
+ 
+  return 1;
+}
+ 
+discord(str) {
+  object all;
+  int i,percentage,w,cost,count;
+ 
+  all=all_inventory(environment(TP));
+  cost=TPL*3;
+ 
+  if(TP->query_spell_points()<cost) {
+    write("You lack the mental energy to suggest anything.\n");
+    return 1;
+  }
+ 
+  spell_cost(cost);
+ 
+  count=0;
+  all=all_inventory(environment(TP));
+ 
+  for(i=0;i<sizeof(all);i++) {
+    if(all[i]->short() && all[i]->query_attack()==TP) {
+ 
+      w=random(sizeof(all));
+      while ((all[w]==TP && !random(3)) || (w==i) || (!living(all[w])))
+	w=random(sizeof(all));
+ 
+      count++;
+      all[i]->attack_object(all[w]);
+    }
+  }
+  if(!count)
+    write("Everybody here seems to do somethings else.\n");
+  else
+    write("You have sown the seeds of discord between your opponents.\n");
+ 
+  return 1;
+ 
+}
+ 
+entanglement(str) {
+  object obj,obj_att;
+  int cost,i,time;
+ 
+  if(!str) {
+    write("Whom do want to suggest anything ?\n");
+    return 1;
+  }
+  obj=present(str,ENV(TP));
+  cost=50+TPL*3-TP->query_wis();
+  if(!obj) {
+    write("That is not here.\n");
+    return 1;
+  }
+  if(!living(obj)) {
+    write("That is not a living thing.\n");
+    return 1;
+  }
+  if(!obj->query_attack()) {
+    write(obj->NAME+" will not fall for that.\n");
+    return 1;
+  }
+  if(TP->query_spell_points()<cost) {
+    write("You are not strong enough.\n");
+    return 1;
+  }
+  spell_cost(cost);
+ 
+  time=4-obj->query_int()+TP->query_chr();
+  if(time<1) time=1;
+  if(time>10) time=10;
+ 
+  write(obj->NAME+" seems some how embarresed.\n");
+  say(obj->NAME+" seems some how embarresed.\n");
+  obj_att=obj->query_attack();
+  obj->attack_object(obj);
+ 
+  tangle_obj=obj;
+  call_out("retangle",time,obj_att);
+  return 1;
+}
+ 
+retangle(obj_att) {
+  if(!tangle_obj) return;
+  write(tangle_obj->NAME+" seems to be normal again.\n");
+  say(tangle_obj->NAME+" seems to be normal again.\n");
+  tangle_obj->attack_object(obj_att);
+  tangle_obj=0;
+}
+
+cure(str) {
+  int i,cost,a; 
+  string what,how;
+  
+  if(!str) return ;
+
+  if(str=="wounds" || (sscanf(str,"%s %s",how,what)==2 && what=="wounds")) {
+    switch(how) {
+      case "light"   : a=3*TP->query_maxhp()/10; break;
+      case "serious" : a=5*TP->query_maxhp()/10; break;
+      case "critical": a=9*TP->query_maxhp()/10; break;
+      default        : if(str=="wounds") 
+                         a=TP->query_sp()-20;
+                       else
+                         return;
+    }	
+    
+    if(TP->query_hp()+a>TP->query_maxhp()) { 
+      if(str!="wounds") {
+        write("You don't have "+how+" wounds.\n");
+        return 1;
+      }
+      a=TP->query_maxhp()-TP->query_sp()-20;
+    }
+
+    if(a>TP->query_sp()) {
+      write("You don't have the mental energy to do that.\n");
+      return 1;
+    }
+
+    if(a<=0) {
+      write("You think that this was useless.\n");
+      return 1;
+    }
+    write("You feel better now.\n");
+    TP->reduce_hit_point(-a);
+    spell_cost(a);
+    return 1;
+  }
+  if (str=="poison" || str=="poisonness") {
+    cost = TP->query_poisoned()*2+TP->query_intoxination()*2/3;
+    if(!TP->query_poisoned() && !TP->query_intoxination()) {
+      write("You are not poisoned or intoxicated.\n");
+      return 1;
+    }  
+    if(TP->query_sp()<cost) {
+      write("You lack the power to do that.\n");
+      return 1;
+    }
+    write("You concentrate your Force.\n"+
+          "You think your blood is boiling.\n");
+    if(TP->query_hp()>10)
+      TP->reduce_hit_point(10);
+    TP->add_poison(-TP->query_poisoned());
+    for (i=0;i<TP->query_intoxination();i++)
+      TP->add_intoxination(-1);
+    spell_cost(cost);
+    return 1;
+  }   
+}
+ 
+find(str) {
+  string where;
+  object obj;
+  if(!str) return ;
+ 
+  obj=find_living(str);
+  if(!obj) {
+    write("You concentrate hard, but you fail to find "+CAP(str)+".\n");
+    return 1;
+  }
+  else
+  {
+    write("You close your eyes and let the Force search for "+CAP(str)+
+      ".\n"+CAP(obj->PRO)+" is at :\n");
+    where=environment(obj);
+    if(!where) {
+      write("You don't see anything.\n");
+      return 1;
+    }
+ 
+    where->long();
+    if(!obj->query_npc()) write(obj->NAME+" is a Player.\n");
+    return 1;
+  }
+}
+ 
+spell_cost(cost) {
+  TP->restore_spell_points(-cost);
+}
+ 
+take(str) {
+  set_light(5);
+  TP->pick_up(str);
+  set_light(-5);
+  return 1;
+}
+ 
+putting(str) {
+  set_light(5);
+  TP->put(str);
+  set_light(-5);
+  return 1;
+}
+ 
+giving(str) {
+  set_light(5);
+  TP->give_object(str);
+  set_light(-5);
+  return 1;
+}
+ 
+parry() {
+  int cost,armor,retime;
+  if(!TP->query_wielded()) {
+    write("You are not wielding a weapon.\n");
+    return 1;
+  }
+  if(parrying) {
+    write("You are already parrying.\n");
+    return 1;
+  }
+  if(time()-lastparry<PARRYTIME) {
+    write("You have to wait for a while.\n");
+    return 1;
+  }
+  write("You start your parrying.\n");
+  armor=TP->query_dex()/5+3+TPL/10;
+  arm_obj=clone_object("players/kelly/guild/parryarmor");
+  arm_obj->set_ac(armor);
+  move_object(arm_obj,TP);
+  TP->wear(arm_obj);
+  retime=60+TPL*3+TPL*2;
+  parrying=1;
+  parry_heart();
+  return 1;
+}
+
+low_parry(str) {
+  if(str!="parry") return;
+  if(!arm_obj) return; 
+  arm_obj->stop();
+  tell_object(TP,"You stop your parrying.\n");
+  parrying=0;
+  lastparry=time();
+  remove_call_out("parry_heart");
+  return 1;
+}
+
+parry_heart() {
+  if(TP->query_spell_points()<=PARRYRANGE || !TP->query_wielded()) {
+    low_parry("parry");
+    return; 
+  }
+  spell_cost(1);
+  call_out("parry_heart",5);
+} 
+
+nomore() {
+  write("You have given up these spells by joining the Jedi guild.\n");
+  return 1;
+}
+ 
+recognize_fight() {
+}
+ 
+quitting() {
+  guild_communication("You feel a light movement in the Force.\n");
+  TP->quit();
+  return 1;
+}

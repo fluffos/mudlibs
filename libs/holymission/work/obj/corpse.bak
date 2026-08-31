@@ -1,0 +1,175 @@
+/* CORPSE.C - This is a clone file - DO NOT COPY! */
+/* 220792: Bonzo: set_race, query_race added. */
+/* 120992: Moonchild: set_weight, query_weight added. */
+/* 070693: Ethereal Cashimor: USERDOC added. */
+/* 201094: Ethereal Cashimor: Tried to fix the problem with Goblin quest */
+
+/* USERDOC:
+general
+This is a decaying corpse. It's created automatically when a player or a
+monster dies. Generally defined functions:
+set_name, query_weight, set_weight, query_name, query_real_name.
+*/
+
+#include "setlight.h"
+
+#define DECAY_TIME	30
+
+string name,decay_name;
+string race; /* Added by Bonzo */
+int decay,weight;
+
+prevent_insert() {
+/*  we need it for the angmar-quest  */
+    write("The corpse is too big.\n");
+    return 1;
+}
+
+init() {
+    add_action("search", "search");
+}
+
+reset(arg) {
+    if (arg)
+	return;
+    name = "corpse";
+    race = "corpse";
+    decay = 3;
+    decay_name=({"The skeleton","The somewhat decayed remains","Corpse"});
+}
+
+set_name(n)
+{
+    name = n;
+    call_out("decay", DECAY_TIME);
+}
+
+query_real_name() {
+  return name;
+}
+
+short() 
+{
+  string dname;
+
+   if (stringp(decay_name[decay-1]))
+      return decay_name[decay-1]+" of "+capitalize(name);
+   return decay_name[0]+" of "+capitalize(name);
+}
+
+long() {
+    write("The dead body of "+capitalize(name)+".\n");
+}
+
+id(str) {
+    return str == "corpse" || str == "corpse of " + name ||
+	str == "remains" || str=="skeleton";
+}
+
+decay()
+{
+    decay -= 1;
+    if (decay > 0) {
+	call_out("decay", 5);
+	return;
+    }
+    destruct(this_object());
+}
+
+can_put_and_get() { return 1; }
+
+search(str)
+{
+    object ob;
+    if (!str || !id(str))
+	return 0;
+    ob = present(str, environment(this_player()));
+    if (!ob)
+	ob = present(str, this_player());
+    if (!ob)
+	return 0;
+    write("You search " + str + ", and find:\n");
+    say(this_player()->query_name() + " searches " + str + ".\n");
+    if (!search_obj(ob))
+	write("\tNothing.\n");
+    else
+	write("\n");
+    return 1;
+}
+
+drop()
+{
+  call_out("decay",5);
+  return 0;
+}
+
+get()
+{
+  if (find_call_out("decay") && this_player()->query_player())
+  {
+      remove_call_out("decay");
+      call_out("decay",180);
+  }
+  return 1;
+}
+
+
+search_obj(cont)
+{
+    object ob;
+    int total;
+
+    if (!cont->can_put_and_get())
+	return 0;
+    ob = first_inventory(cont);
+    while(ob) {
+	total += 1;
+	write(ob->short() + ", ");
+	ob = next_inventory(ob);
+    }
+    return total;
+}
+
+query_weight() {
+    return weight;
+}
+
+set_weight(w) { 
+  weight=(w<0 ? 0 : w); 
+}
+
+query_name() {
+   return lower_case(short());
+}
+
+#if 1
+/* USERDOC:
+set_race
+Format: set_race(s)
+Example: set_race("orc")
+See also: query_race.
+This function sets the race of the corpse. It's also set if a player or a
+monster dies. Very interesting for various purposes, especially the query_race
+function.
+*/
+set_race(str) {
+ race = str;
+}
+
+/* USERDOC:
+query_race
+Format: s=query_race()
+See also: set_race.
+This function returns the race of a corpse. A very interesting function that
+is unfortunately not used on many places.
+*/
+query_race() {
+ return race;
+}
+#endif
+
+query_plural() {
+  return sprintf("corpses of %ss", name);
+}
+
+query_show_short() { return 1; }

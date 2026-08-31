@@ -1,0 +1,94 @@
+#define ETO     environment(this_object())
+#define ROOM    environment(ETO)
+
+int base, old_wimpy;
+object *frozen;
+
+reset( arg )
+{
+   if ( arg )
+      return;
+
+   base = 0;
+}
+
+init( arg )
+{
+   add_action( "do_block", "", 1 );
+}
+
+id( str )
+{
+   return( str == "wkn1" || str == "waskannom1" );
+}
+
+drop()
+{
+   destruct( this_object() );
+   return( 1 );
+}
+
+query_name()
+{
+   return( "waskannom" );
+}
+
+do_block()
+{
+   write( "You are froozen, don't even think that you can do something.\n" );
+   return( 1 );
+}
+
+free_chance( b )
+{
+   if ( frozen )
+      return;
+
+   frozen = ETO;
+   if ( !frozen ) {
+      destruct( this_object() );
+      return;
+   } 
+
+   base = b;
+   if ( frozen->query_npc() )
+      frozen->set_trapped(1);
+   else {
+      old_wimpy = frozen->query_wimpy();
+      frozen->set_wimpy(-1);
+   }
+   frozen->hold( 0, 4 );
+
+   if ( clonep( this_object() ) )
+      call_out( "free_myself", 2 );
+}
+
+free_myself()
+{
+   if ( !frozen || !(this_object() && ETO && living(ETO)) ) {
+      if ( frozen )
+         frozen->de_hold();
+      destruct( this_object() );
+      return;
+   }
+
+   tell_room( ROOM,
+              ETO->query_name() + " tries to break out of the ice,\n" ); 
+   if ( ETO->query_str() > random( base ) ) {
+      tell_room( ROOM, "...and succeeds !!!\n" );
+      if ( frozen->query_npc() )
+         frozen->set_trapped( 0 );
+      else
+         frozen->set_wimpy( old_wimpy );
+      frozen->de_hold();
+      frozen = 0;
+
+      destruct( this_object() );
+   }
+   else {
+      tell_room( ROOM, "...but fails.\n" );
+      frozen->hold( 0, 4 );
+      if ( clonep(this_object()) )
+         call_out( "free_myself", 2 );
+   }
+}

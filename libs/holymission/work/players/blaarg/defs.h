@@ -1,0 +1,12 @@
+#define TP	this_player()
+#define TO	this_object()
+#define RNAME	query_real_name()
+#define LEVEL	query_level()
+#define FP	find_player
+#define AROOMS  "/players/blaarg/area/rooms/"
+#define NAME 	query_name()
+#define PATH    "/players/blaarg/"
+#define ROOM	PATH+"area/rooms/"
+#define WEAPON  PATH+"area/weapons/"
+#define MOB     PATH+"area/monsters/"
+#define ARMOUR  PATH+"area/armour/"

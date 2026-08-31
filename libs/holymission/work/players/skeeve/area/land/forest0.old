@@ -1,0 +1,17 @@
+#include "/players/skeeve/area.h"
+
+#define DEST_DIRS ({\
+      ROAD + "northgate", "east",\
+      LAND + "path1",     "south",\
+      LAND + "forest11",  "west"\
+    })
+
+inherit LAND+"forest";
+
+reset (arg) { ::reset(arg,DEST_DIRS); }
+
+move(dir) {
+   if (!dir) dir=query_verb();
+   return (this_player()->query_stay_garden() && (dir=="east") ) ?
+     ::move("west") : ::move(dir);
+}

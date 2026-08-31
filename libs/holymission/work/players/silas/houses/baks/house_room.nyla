@@ -1,0 +1,1957 @@
+
+ /* House_room.c   V2        Metaprat       6th April 1992  */
+
+ /* This object defines all the customisation and movement  */
+ /* commands for rooms.  It uses information supplied by    */
+ /* the master room (main_hall AKA house.c) for the short,  */
+ /* long, contents and exits.                               */
+
+
+inherit "/room/room";   // whisky for room/room
+
+#define FILENAME     "/players/silas/houses/house_room"
+#include "/players/silas/houses/house_defines.h"
+
+
+/* Everything has to be static, because the main house obj inherits from */
+/* this, and uses save_/restore_object().  Static variables are not      */
+/* included in the save and restore.                                     */
+
+static string mort_exit_desc;   /* There are N obvious exits: ...    */
+static string wiz_exit_desc;    /* ditto                             */
+
+static string normal_exits;     /* arrays of exits.   north, south.. */
+static string special_exits;    /* church, guild, shop               */
+static string wizard_exits;     /* castle, workroom                  */
+
+static int    this_room_index;
+static string get_room_index;
+static string my_short_desc;
+static string this_room_furnish;
+static string this_room_items;
+
+static string new_room_desc;   /* for decorating the room */
+static string new_short_desc;
+static string new_items;
+static string new_exit_dir;
+static int    line;
+
+static int    north_exit;      /* set if exit in that direction exists */
+static object north_room;      /* Set if room cloned for direction */
+static int    south_exit;
+static object south_room;
+static int    east_exit;
+static object east_room;
+static int    west_exit;
+static object west_room;
+
+static int    loc_x;
+static int    loc_y;
+
+static object main_hall;       /* controlling room */
+
+
+
+/* standard functions */
+
+
+id(str) {
+string items;
+int i;
+
+   /* Herp: if we don't do this, we can't look at it. */
+
+   if (items=main_hall->query_items(this_room_index))
+      for (i=0;i<sizeof(items);i+=2)
+          if (items[i]==str) return 1;
+ 
+   return (str == "north door") || (str == "south door") ||
+          (str == "east door")  || (str == "west door")  ||
+          (str == "north")      || (str == "south")      ||
+          (str == "east")       || (str == "west");
+}
+
+
+short() {
+   if (my_short_desc) {
+      return my_short_desc;
+      if (this_player()->query_level() < WIZLEVEL) {
+         return my_short_desc + ".\n" + mort_exit_desc;
+      }
+      else {
+         return my_short_desc + ".\n" + wiz_exit_desc;
+      }
+   }
+   if ((main_hall) && (GETOWNER)) {
+      return "A room in " + capitalize(GETOWNER + "'s house");
+   }
+   return "An unowned room";
+}
+
+
+long(str) {
+   int i,door_status;
+
+   /* Herp: Look at an item */
+   if (str) {
+      string items;
+      items=main_hall->query_items(this_room_index);
+      for (i=0;i<sizeof(items);i+=2)
+	  if (items[i]==str) {
+	     write(items[i+1]+".\n");
+	     return 1;
+	  }
+ 
+      if ((str == "north door") || (str == "north")) {
+         door_status = north_exit;
+      }
+      if ((str == "south door") || (str == "south")) {
+         door_status = south_exit;
+      }
+      if ((str == "east door")  || (str == "east")) {
+         door_status = east_exit;
+      }
+      if ((str == "west door")  || (str == "west")) {
+         door_status = west_exit;
+      }
+      describe_door(door_status);
+      return 1;
+   }
+
+   write(main_hall->query_desc(this_room_index));
+   if (this_player()->query_level() < WIZLEVEL) {
+      write(mort_exit_desc + ".\n");
+   }
+   else {
+      write(wiz_exit_desc + ".\n");
+   }
+   return 1;
+}
+
+
+get() {
+   return 0;     /* may not be picked up */
+}
+
+
+drop() {
+   return 1;     /* may not be dropped */
+}
+
+
+query_weight() {
+   return 0;     /* weightless  */
+}
+
+
+query_value() {
+   return 0;     /* may not be sold */
+}
+
+
+reset(arg) {
+     ::reset(arg);
+   if (arg) {
+      /* See if anything is wrong with the main room.  If so, and if */
+      /* empty, then self-destruct.                                  */
+      if ((!main_hall) && (!first_inventory(this_object()))) {
+         say("A room explodes in a glittering shower of sparks.\n");
+         destruct(this_object());
+      }
+      return;
+   }
+   normal_exits      = ({ });
+   special_exits     = ({ "church" });
+   wizard_exits      = ({ });
+   my_short_desc        = "Undecorated room.  'help decorate'";
+   this_room_index   = -1;  /* eg not indexed in rooms[] */
+   this_room_furnish = 0;
+   this_room_items   = 0;
+   set_light(1);
+}
+
+
+query_drop_castle() {
+   return 1;              /* do not permit portable castles here!!! */
+}
+
+
+
+/* The following section is where we build up the room data from the */
+/* main hall.  These should be called just after reset, and before   */
+/* anyone has the chance to see the room (or init() is called).      */
+
+set_parent_house(arg) {
+   main_hall = arg;
+}
+
+
+set_room_index(arg) {
+   this_room_index = arg;
+}
+
+
+set_room_short_desc(str) {
+   my_short_desc = str;
+}
+
+
+set_room_furnish(str) {
+   this_room_furnish = str;
+}
+
+set_room_items(str) {
+  this_room_items = str;
+}
+
+set_room_coords(x, y) {
+   if ((main_hall) && (this_object() == main_hall)) {
+      loc_x = 0;
+      loc_y = 0;
+      return;
+   }
+   loc_x = x;
+   loc_y = y;
+}
+
+
+set_room_special_exits(arr) {
+   special_exits = arr;
+}
+
+
+set_room_wizard_exits(arr) {
+   wizard_exits = arr;
+}
+
+
+set_room_exits(new_north, new_south, new_east, new_west) {
+   normal_exits = ({ });
+
+   if (new_north) {
+      normal_exits = normal_exits + ({ "north" }) ;
+   }
+   if (new_south) {
+      normal_exits = normal_exits + ({ "south" }) ;
+   }
+   if (new_east) {
+      normal_exits = normal_exits + ({ "east" }) ;
+   }
+   if (new_west) {
+      normal_exits = normal_exits + ({ "west" }) ;
+   }
+   north_exit = new_north;
+   south_exit = new_south;
+   east_exit  = new_east;
+   west_exit  = new_west;
+   build_exit_description();
+}
+
+
+static build_exit_description() {
+   int    total;
+
+   /* Make the exit description for mortals. */
+   if (sizeof(special_exits + normal_exits) == 0) {
+      mort_exit_desc = "    There are NO obvious exits.";
+   }
+   else {
+      mort_exit_desc = "    There are " +
+         ({"NO",    "one",   "two",
+           "three", "four",  "five",
+           "six",   "seven", "eight"})[sizeof(special_exits + normal_exits)] +
+         " obvious exits: " +
+         implode(special_exits + normal_exits, ", ");
+   }
+
+   /* Now we create the exit description for wizards. */
+#if 0
+   if (!sizeof(wizard_exits)) {
+#endif
+   if (!wizard_exits) {
+      wiz_exit_desc = mort_exit_desc;
+      return;
+   }
+   total = sizeof(special_exits + wizard_exits + normal_exits);
+   wiz_exit_desc =  "    There is " +
+      ({"NO",    "one",   "two",
+        "three", "four",  "five",
+        "six",   "seven", "eight",
+        "nine",  "ten",   "eleven"})[total] +
+      " obvious exits: " +
+      implode(special_exits + wizard_exits + normal_exits, ", ");
+}
+
+
+
+/* The following section is player commands */
+
+
+init() {
+   if (environment(this_player()) != this_object()) {
+      return;
+   }
+   add_action("go_church","church");
+   add_action("go_guild", "guild");
+   add_action("go_shop",  "shop");
+   add_action("go_north", "north");
+   add_action("go_south", "south");
+   add_action("go_east",  "east");
+   add_action("go_west",  "west");
+   add_action("help",     "help");
+   add_action("open",     "open");
+   add_action("close",    "close");
+   add_action("map",      "map");
+   if (this_player()->query_real_name() == GETOWNER) {
+      add_action("invite","invite");
+      add_action("unlock","unlock");
+      if (this_player()->query_real_name() != "guest") {
+         add_action("decorate", "decorate");
+         add_action("decorate", "redecorate");
+         add_action("banish",   "banish");
+         add_action("banish",   "expel");
+         add_action("build",    "build");
+         add_action("destroy",  "destroy");
+         add_action("furnish",  "furnish");
+         add_action("lock",     "lock");
+         add_action("room_stats", "room_stats");
+         if (this_player()->query_level() > WIZLEVEL) {
+            add_action("generate_lpc", "generate_lpc");
+         }
+      }
+      else {
+         add_action("guest_cmd", "decorate");
+         add_action("guest_cmd", "banish");
+         add_action("guest_cmd", "expel");
+         add_action("guest_cmd", "build");
+         add_action("guest_cmd", "destroy");
+         add_action("guest_cmd", "furnish");
+         add_action("guest_cmd", "lock");
+         add_action("guest_cmd", "room_stats");
+      }
+   }
+   else {
+      add_action("not_permitted", "decorate");
+      add_action("not_permitted", "invite");
+      add_action("not_permitted", "banish");
+      add_action("not_permitted", "expel");
+      add_action("not_permitted", "build");
+      add_action("not_permitted", "destroy");
+      add_action("not_permitted", "furnish");
+      add_action("not_permitted", "lock");
+      add_action("not_permitted", "unlock");
+      if (this_player()->query_level() > WIZLEVEL) {
+         add_action("room_stats", "room_stats");
+      }
+      else {
+         add_action("not_permitted", "room_stats");
+      }
+   }
+   if (this_player()->query_level() > WIZLEVEL) {
+      if (search_array(wizard_exits, "workroom")) {
+         add_action("go_workroom", "workroom");
+      }
+      if (search_array(wizard_exits, "castle")) {
+         add_action("go_castle",   "castle");
+      }
+   }
+}
+
+
+static search_array(arr, str) {
+   int indx;
+
+   if ((!arr) || (sizeof(arr) < 1)) {
+      return 0;
+   }
+   for (indx = 0; indx < sizeof(arr); indx ++) {
+      if (arr[indx] == str) {
+         return 1;
+      }
+   }
+   return 0;
+}
+
+
+static remove_array_item(arr, str) {
+   int    indx;
+   string new_arr;
+
+   if ((!arr) || (sizeof(arr) < 1)) {
+      return 0;
+   }
+   new_arr = ({ });
+   for (indx = 0; indx < sizeof(arr); indx ++) {
+      if (arr[indx] != str) {
+         new_arr = new_arr + ({ arr[indx] });
+      }
+   }
+   return new_arr;
+}
+
+
+
+
+
+help(str) {
+   return HOUSEHELP->help(str);
+}
+
+
+
+/* Directions.  This code is pretty primitive, maybe something closer */
+/* to the /room/room.c code might be better one day.                  */
+
+go_church() {
+   if (!search_array(special_exits, "church")) {
+      return 0;
+   }
+   this_player()->move_player("to the church#" + CHURCH);
+   return 1;
+}
+
+
+go_guild() {
+   if (!search_array(special_exits, "guild")) {
+      return 0;
+   }
+   this_player()->move_player("to the guild#" + GUILD);
+   return 1;
+}
+
+
+go_shop() {
+   if (!search_array(special_exits, "shop")) {
+      return 0;
+   }
+   this_player()->move_player("to the shop#" + SHOP);
+   return 1;
+}
+
+
+go_workroom() {
+   object workroom_loc;
+
+   if (!search_array(wizard_exits, "workroom")) {
+      return 0;
+   }
+   workroom_loc = find_object("/players/" +
+                              this_player()->query_real_name() +
+                              "/workroom");
+   if (!workroom_loc) {
+      write("Sorry, cannot locate your workroom.\n");
+      return 1;
+   }
+   this_player()->move_player("towards a workroom#" + file_name(workroom_loc));
+   return 1;
+}
+
+
+go_castle() {
+   object castle_loc;
+
+   if (!search_array(wizard_exits, "castle")) {
+      return 0;
+   }
+   castle_loc = find_object("/players/" +
+                            this_player()->query_real_name() +
+                            "/castle");
+   if (!castle_loc) {
+      write("Sorry, cannot locate your castle.\n");
+      return 1;
+   }
+   if (environment(castle_loc)) {
+      castle_loc = environment(castle_loc);
+   }
+   this_player()->move_player("castlewards#" + file_name(castle_loc));
+   return 1;
+}
+
+
+
+go_north() {
+   if (north_exit == DOOR_NONE) {
+      return 0;
+   }
+   if (!check_door(north_exit, "north")) {
+      return 1;
+   }
+   if (!north_room) {
+      north_room = main_hall->find_room(loc_x, loc_y - 1);
+   }
+   this_player()->move_player("north#" + file_name(north_room));
+   return 1;
+}
+
+
+go_south() {
+   if (south_exit == DOOR_NONE) {
+      return 0;
+   }
+   if (!check_door(south_exit, "south")) {
+      return 1;
+   }
+   if (!south_room) {
+      south_room = main_hall->find_room(loc_x, loc_y + 1);
+   }
+   this_player()->move_player("south#" + file_name(south_room));
+   return 1;
+}
+
+
+go_east() {
+   if (east_exit == DOOR_NONE) {
+      return 0;
+   }
+   if (!check_door(east_exit, "east")) {
+      return 1;
+   }
+   if (!east_room) {
+      east_room = main_hall->find_room(loc_x + 1, loc_y);
+   }
+   this_player()->move_player("east#" + file_name(east_room));
+   return 1;
+}
+
+
+go_west() {
+   if (west_exit == DOOR_NONE) {
+      return 0;
+   }
+   if (!check_door(west_exit, "west")) {
+      return 1;
+   }
+   if (!west_room) {
+      west_room = main_hall->find_room(loc_x - 1, loc_y);
+   }
+   this_player()->move_player("west#" + file_name(west_room));
+   return 1;
+}
+
+
+
+/* Most of the door code is here */
+
+static describe_door(door_status) {
+   /*   status           type               mode                */
+   /*     DOOR_NONE        no exit            --                */
+   /*     DOOR_NORM        normal exit        --                */
+   /*     DOOR_L_LOCK      lockable doors     locked            */
+   /*     DOOR_L_UNLK        "        "       unlocked, closed  */
+   /*     DOOR_L_OPEN        "        "       unlocked, open    */
+   /*     DOOR_O_CLOS      openable doors     closed            */
+   /*     DOOR_O_OPEN         "       "       open              */
+   /*     DOOR_PORTAL      owner only doors   --                */
+   if (door_status == DOOR_NONE) {
+      write("There is no (obvious) exit in that direction..\n");
+   }
+   else if (door_status == DOOR_NORM) {
+      write("Just a normal exit, from the looks of it.\n");
+   }
+   else if (door_status == DOOR_L_LOCK) {
+      write("The door is locked at the moment.\n");
+   }
+   else if (door_status == DOOR_L_UNLK) {
+      write("The door is unlocked, but closed.\n");
+   }
+   else if (door_status == DOOR_L_OPEN) {
+      write("The door is unlocked, and open.\n");
+   }
+   else if (door_status == DOOR_O_CLOS) {
+      write("The door is closed.\n");
+   }
+   else if (door_status == DOOR_O_OPEN) {
+      write("The door is open.\n");
+   }
+   else if (door_status == DOOR_PORTAL) {
+      write("A strange flickering field of light obscures the exit.\n");
+   }
+   else {
+      write("The door looks a bit strange, for some reason.\n");
+   }
+}
+
+
+
+static check_door(door_status, which_door) {
+   string dork;
+
+   if (door_status == DOOR_NONE) {
+      write("Eh?  There isn't an exit there..\n");
+      return 0;
+   }
+   dork = this_player()->query_name();
+   if (door_status == DOOR_L_LOCK) {
+      write("Sorry, the " + which_door + " door is locked.\n");
+      say(dork + " tries to go " + which_door + ", through the " +
+          "locked door.\nWhat a dork!\n");
+      return 0;
+   }
+   if ((door_status == DOOR_L_UNLK) || (door_status == DOOR_O_CLOS)) {
+      write("Sorry, the " + which_door + " door is closed.\n");
+      say(dork + " tries to walk through the closed door to the " +
+          which_door + ".  Some people!\n");
+      return 0;
+   }
+   if ((door_status == DOOR_PORTAL) &&
+       (this_player()->query_real_name() != GETOWNER)) {
+      write("You walk into the field of white fire, injuring your nose.\n");
+      say(dork + " walks into the magic portal " +
+          "to the " + which_door + ".\nThud!  Blood starts dribbling...\n");
+      return 0;
+   }
+   return 1;   /* person allowed through the door */
+}
+
+
+static change_exit_pair(which_door, door_status) {
+   int    x_offset;
+   int    y_offset;
+   int    next_room;
+   string next_dir;
+
+   if ((door_status != DOOR_NONE)   &&
+       (door_status != DOOR_NORM)   &&
+       (door_status != DOOR_L_LOCK) &&
+       (door_status != DOOR_L_UNLK) &&
+       (door_status != DOOR_L_OPEN) &&
+       (door_status != DOOR_O_CLOS) &&
+       (door_status != DOOR_O_OPEN) &&
+       (door_status != DOOR_PORTAL)) {
+      log_file(LOGFILE, "House_room: Tried to set bad exit status.\n");
+      return;
+   }
+   if (which_door == "north") {
+      next_dir = "south";
+      x_offset = 0;
+      y_offset = -1;
+   }
+   if (which_door == "south") {
+      next_dir = "north";
+      x_offset = 0;
+      y_offset = 1;
+   }
+   if (which_door == "east") {
+      next_dir = "west";
+      x_offset = 1;
+      y_offset = 0;
+   }
+   if (which_door == "west") {
+      next_dir = "east";
+      x_offset = -1;
+      y_offset = 0;
+   }
+   if (!next_dir) {
+      return;
+   }
+#if 0
+   if (get_room_index(loc_x + x_offset, loc_y + y_offset) < 0) { /* Herp */
+#endif
+   if (main_hall->get_room_index(loc_x + x_offset, loc_y + y_offset) < 0) {
+      write("But there is no room in that direction!\n");
+      return;
+   }
+   charge_money(DOORCOST);
+   change_exit_status(which_door, door_status);
+   (main_hall->find_room(loc_x + x_offset, loc_y + y_offset))->
+      change_exit_status(next_dir, door_status);
+}
+
+
+
+change_exit_status(which_door, door_status) {
+   if (door_status) {
+      tell_room(this_object(),
+         "A team of builders rush in, and do something to the " +
+         which_door + " exit.  It\nlooks different..\n");
+   }
+   else {
+      tell_room(this_object(),
+         "A team of demolition experts do something to the " +
+         which_door + " exit.  Its gone!\n");
+   }
+   if (which_door == "north") {
+      north_exit = door_status;
+      main_hall->set_new_exits_north(loc_x, loc_y, door_status);
+   }
+   if (which_door == "south") {
+      south_exit = door_status;
+   }
+   if (which_door == "east") {
+      east_exit = door_status;
+      main_hall->set_new_exits_east(loc_x, loc_y, door_status);
+   }
+   if (which_door == "west") {
+      west_exit = door_status;
+   }
+   set_room_exits(north_exit, south_exit, east_exit, west_exit);
+}
+
+
+
+lock(str) {
+   string which_door;
+   int    door_status;
+
+   if (GETOWNER != this_player()->query_real_name()) {
+      write("You don't have the key.\n");
+      return 1;
+   }
+   if (!str) {
+       write("Lock which door?\n");
+       return 1;
+   }
+   if (sscanf(str, "%s door", which_door) != 1) {
+      which_door = str;
+   }
+   if (which_door == "north") { door_status = north_exit; }
+   if (which_door == "south") { door_status = south_exit; }
+   if (which_door == "east")  { door_status = east_exit; }
+   if (which_door == "west")  { door_status = west_exit; }
+   if (door_status == DOOR_NONE) {
+      write("Which door?  Try specifying it by (eg) 'north door'.\n");
+      return 1;
+   }
+   if (door_status == DOOR_NORM) {
+      write("Thats just an exit, it isn't a door as such.\n");
+      return 1;
+   }
+   if (door_status == DOOR_L_LOCK) {
+      write("Its already locked!\n");
+      return 1;
+   }
+   if (door_status == DOOR_L_OPEN) {
+      write("You have to close it first.\n");
+      return 1;
+   }
+   if (door_status == DOOR_PORTAL) {
+      write("Hmm.. just HOW do you lock a mystic field of white fire? :-)\n");
+      return 1;
+   }
+   if (door_status != DOOR_L_UNLK) {
+      write("Thats just a normal door.. you can't lock it.\n");
+      return 1;
+   }
+   write("You lock the " + which_door + " door.\n");
+   lock_door(which_door, 1);
+   if (which_door == "north") {
+      if (!north_room) {
+         north_room = main_hall->find_room(loc_x, loc_y - 1);
+      }
+      north_room->lock_door("south", 0);
+   }
+   if (which_door == "south") {
+      if (!south_room) {
+         south_room = main_hall->find_room(loc_x, loc_y + 1);
+      }
+      south_room->lock_door("north", 0);
+   }
+   if (which_door == "east") {
+      if (!east_room) {
+         east_room = main_hall->find_room(loc_x + 1, loc_y);
+      }
+      east_room->lock_door("west", 0);
+   }
+   if (which_door == "west") {
+      if (!west_room) {
+         west_room = main_hall->find_room(loc_x - 1, loc_y);
+      }
+      west_room->lock_door("east", 0);
+   }
+   return 1;
+}
+
+
+
+unlock(str) {
+   string which_door;
+   int    door_status;
+
+
+   if (GETOWNER != this_player()->query_real_name()) {
+      write("You don't have the key.\n");
+      return 1;
+   }
+   if (!str) {
+      write("Unlock which door?\n");
+      return 1;
+   }
+   if (sscanf(str, "%s door", which_door) != 1) {
+      which_door = str;
+   }
+   if (which_door == "north") { door_status = north_exit; }
+   if (which_door == "south") { door_status = south_exit; }
+   if (which_door == "east")  { door_status = east_exit; }
+   if (which_door == "west")  { door_status = west_exit; }
+   if (door_status == DOOR_NONE) {
+      write("Which door?  Specify it by (for example) 'north door'.\n");
+      return 1;
+   }
+   if (door_status == DOOR_NORM) {
+      write("Thats just an egress.. not even a door as such.\n");
+      return 1;
+   }
+   if ((door_status == DOOR_L_UNLK) || (door_status == DOOR_L_OPEN)) {
+      write("Its already unlocked!\n");
+      return 1;
+   }
+   if (door_status == DOOR_PORTAL) {
+      write("Interesting.. how do you propose to unlock a field of mystic " +
+            "fire?\n");
+      return 1;
+   }
+   if (door_status != DOOR_L_LOCK) {
+      write("Thats just a normal door.. no lock on it.\n");
+      return 1;
+   }
+   write("You unlock the " + which_door + " door.\n");
+   unlock_door(which_door, 1);
+   if (which_door == "north") {
+      if (!north_room) {
+         north_room = main_hall->find_room(loc_x, loc_y - 1);
+      }
+      north_room->unlock_door("south", 0);
+   }
+   if (which_door == "south") {
+      if (!south_room) {
+         south_room = main_hall->find_room(loc_x, loc_y + 1);
+      }
+      south_room->unlock_door("north", 0);
+   }
+   if (which_door == "east") {
+      if (!east_room) {
+         east_room = main_hall->find_room(loc_x + 1, loc_y);
+      }
+      east_room->unlock_door("west", 0);
+   }
+   if (which_door == "west") {
+      if (!west_room) {
+         west_room = main_hall->find_room(loc_x - 1, loc_y);
+      }
+      west_room->unlock_door("east", 0);
+   }
+   return 1;
+}
+
+
+open(str) {
+   string which_door;
+   int    door_status;
+
+   if (!str) {
+      write("Open which door?\n");
+      return 1;
+   }
+   if (sscanf(str, "%s door", which_door) != 1) {
+      which_door = str;
+   }
+   if (which_door == "north") { door_status = north_exit; }
+   if (which_door == "south") { door_status = south_exit; }
+   if (which_door == "east")  { door_status = east_exit; }
+   if (which_door == "west")  { door_status = west_exit; }
+   if (door_status == DOOR_NONE) {
+      write("Which door?  Specify it by (for example) 'north door'.\n");
+      return 1;
+   }
+   if (door_status == DOOR_NORM) {
+      write("Thats just an egress.. not even a door as such.\n");
+      return 1;
+   }
+   if (door_status == DOOR_L_LOCK) {
+      write("But the door is locked!  You have to unlock it first.\n");
+      return 1;
+   }
+   if ((door_status == DOOR_L_OPEN) || (door_status == DOOR_O_OPEN)) {
+      write("Its already open!\n");
+      return 1;
+   }
+   if (door_status == DOOR_PORTAL) {
+      write("Interesting.. how do you propose to open a field of mystic " +
+            "fire?\n");
+      return 1;
+   }
+   if ((door_status != DOOR_L_UNLK) && (door_status != DOOR_O_CLOS)) {
+      write("You can't see any way to open the door.\n");
+      return 1;
+   }
+   write("You open the " + which_door + " door.\n");
+   open_door(which_door, 1);
+   if (which_door == "north") {
+      if (!north_room) {
+         north_room = main_hall->find_room(loc_x, loc_y - 1);
+      }
+      north_room->open_door("south", 0);
+   }
+   if (which_door == "south") {
+      if (!south_room) {
+         south_room = main_hall->find_room(loc_x, loc_y + 1);
+      }
+      south_room->open_door("north", 0);
+   }
+   if (which_door == "east") {
+      if (!east_room) {
+         east_room = main_hall->find_room(loc_x + 1, loc_y);
+      }
+      east_room->open_door("west", 0);
+   }
+   if (which_door == "west") {
+      if (!west_room) {
+         west_room = main_hall->find_room(loc_x - 1, loc_y);
+      }
+      west_room->open_door("east", 0);
+   }
+   return 1;
+}
+
+
+
+close(str) {
+   string which_door;
+   int    door_status;
+
+   if (!str) {
+      write("Close which door?\n");
+      return 1;
+   }
+   if (sscanf(str, "%s door", which_door) != 1) {
+      which_door = str;
+   }
+   if (which_door == "north") { door_status = north_exit; }
+   if (which_door == "south") { door_status = south_exit; }
+   if (which_door == "east")  { door_status = east_exit; }
+   if (which_door == "west")  { door_status = west_exit; }
+   if (door_status == DOOR_NONE) {
+      write("Which door?  Specify it by (for example) 'north door'.\n");
+      return 1;
+   }
+   if (door_status == DOOR_NORM) {
+      write("Thats just an egress.. not even a door as such.\n");
+      return 1;
+   }
+   if (door_status == DOOR_L_LOCK) {
+      write("But the door is locked!  Therefore it HAS to be closed.\n");
+      return 1;
+   }
+   if ((door_status == DOOR_L_UNLK) || (door_status == DOOR_O_CLOS)) {
+      write("Its already closed!\n");
+      return 1;
+   }
+   if (door_status == DOOR_PORTAL) {
+      write("Interesting.. how do you propose to close a field of mystic " +
+            "fire?\n");
+      return 1;
+   }
+   if ((door_status != DOOR_L_OPEN) && (door_status != DOOR_O_OPEN)) {
+      write("You can't see any way to close the door.\n");
+      return 1;
+   }
+   write("You close the " + which_door + " door.\n");
+   close_door(which_door, 1);
+   if (which_door == "north") {
+      if (!north_room) {
+         north_room = main_hall->find_room(loc_x, loc_y - 1);
+      }
+      north_room->close_door("south", 0);
+   }
+   if (which_door == "south") {
+      if (!south_room) {
+         south_room = main_hall->find_room(loc_x, loc_y + 1);
+      }
+      south_room->close_door("north", 0);
+   }
+   if (which_door == "east") {
+      if (!east_room) {
+         east_room = main_hall->find_room(loc_x + 1, loc_y);
+      }
+      east_room->close_door("west", 0);
+   }
+   if (which_door == "west") {
+      if (!west_room) {
+         west_room = main_hall->find_room(loc_x - 1, loc_y);
+      }
+      west_room->close_door("east", 0);
+   }
+   return 1;
+}
+
+
+
+lock_door(str, is_here) {
+   if (is_here) {
+      tell_room(this_object(), "CLICK!  " + this_player()->query_name() +
+                " locks the " + str + " door.\n");
+   }
+   else {
+      tell_room(this_object(), "CLICK!  Someone locks the " +str+ " door.\n");
+   }
+   if (str == "north") {
+      north_exit = DOOR_L_LOCK;
+   }
+   if (str == "south") {
+      south_exit = DOOR_L_LOCK;
+   }
+   if (str == "east") {
+      east_exit = DOOR_L_LOCK;
+   }
+   if (str == "west") {
+      west_exit = DOOR_L_LOCK;
+   }
+}
+
+
+unlock_door(str, is_here) {
+   if (is_here) {
+      tell_room(this_object(),"CLACK!  " + this_player()->query_name() +
+                " unlocks the " + str + " door.\n");
+   }
+   else {
+      tell_room(this_object(),"CLACK!  Someone unlocks the "+str+" door.\n");
+   }
+   if (str == "north") {
+      north_exit = DOOR_L_UNLK;
+   }
+   if (str == "south") {
+      south_exit = DOOR_L_UNLK;
+   }
+   if (str == "east") {
+      east_exit = DOOR_L_UNLK;
+   }
+   if (str == "west") {
+      west_exit = DOOR_L_UNLK;
+   }
+}
+
+
+open_door(str, is_here) {
+   if (is_here) {
+      tell_room(this_object(),"Creak.. " + this_player()->query_name() +
+                " opens the " + str + " door.\n");
+   }
+   else {
+      tell_room(this_object(),"Creak.. someone opens the " + str + " door.\n");
+   }
+   if (str == "north") {
+      if (north_exit == DOOR_L_UNLK) {
+         north_exit = DOOR_L_OPEN;
+      }
+      else {
+         north_exit = DOOR_O_OPEN;
+      }
+   }
+   if (str == "south") {
+      if (south_exit == DOOR_L_UNLK) {
+         south_exit = DOOR_L_OPEN;
+      }
+      else {
+         south_exit = DOOR_O_OPEN;
+      }
+   }
+   if (str == "east") {
+      if (east_exit == DOOR_L_UNLK) {
+         east_exit = DOOR_L_OPEN;
+      }
+      else {
+         east_exit = DOOR_O_OPEN;
+      }
+   }
+   if (str == "west") {
+      if (west_exit == DOOR_L_UNLK) {
+         west_exit = DOOR_L_OPEN;
+      }
+      else {
+         west_exit = DOOR_O_OPEN;
+      }
+   }
+}
+
+
+
+close_door(str, is_here) {
+   if (is_here) {
+      tell_room(this_object(),"Slam!  " + this_player()->query_name() +
+                " closes the " + str + " door.\n");
+   }
+   else {
+      tell_room(this_object(),"Slam!  Someone closes the " +str+ " door.\n");
+   }
+   if (str == "north") {
+      if (north_exit == DOOR_L_OPEN) {
+         north_exit = DOOR_L_UNLK;
+      }
+      else {
+         north_exit = DOOR_O_CLOS;
+      }
+   }
+   if (str == "south") {
+      if (south_exit == DOOR_L_OPEN) {
+         south_exit = DOOR_L_UNLK;
+      }
+      else {
+         south_exit = DOOR_O_CLOS;
+      }
+   }
+   if (str == "east") {
+      if (east_exit == DOOR_L_OPEN) {
+         east_exit = DOOR_L_UNLK;
+      }
+      else {
+         east_exit = DOOR_O_CLOS;
+      }
+   }
+   if (str == "west") {
+      if (west_exit == DOOR_L_OPEN) {
+         west_exit = DOOR_L_UNLK;
+      }
+      else {
+         west_exit = DOOR_O_CLOS;
+      }
+   }
+}
+
+
+
+room_stats() {
+   write("Room statistics:\n");
+   write("Short desc:    " + my_short_desc                   + ".\n");
+   write("File name:     " + file_name(this_object())     + ".\n");
+   write("Parent:        " + file_name(main_hall)         + ".\n");
+   write("Owner:         " + GETOWNER                     + ".\n");
+   write("Debug lev:     " + DEBUGLEVEL                   + ".\n");
+   write("Log file:      " + "/log/" + LOGFILE            + ".\n");
+   write("Decoration:    " + strlen(main_hall->query_desc(this_room_index)) +
+         " bytes.\n");
+   write("Furnishing:    " + this_room_furnish            + ".\n");
+   write("Index num:     " + main_hall->get_room_index(loc_x, loc_y)+ ".\n");
+   write("Position:      x=" + loc_x + ", y=" + loc_y     + ".\n");
+// whisky debuged it a bit
+   if (sizeof(special_exits))
+       write("Special exits: " + implode(special_exits, ", ") + ".\n");
+   if (sizeof(wizard_exits))
+       write("Wizard exits:  " + implode(wizard_exits, ", ")  + ".\n");
+   if (sizeof(normal_exits))
+       write("Normal exits:  " + implode(normal_exits, ", ")  + ".\n");
+   write("Normal exit details:\n");
+   if (north_exit) {
+      write("North door, type: " + north_exit + ", joins: ");
+      if (north_room) {
+         write(file_name(north_room) + ".\n");
+      }
+      else {
+         write("an uninitialised room.\n");
+      }
+   }
+   else {
+      write("There is no exit north.\n");
+   }
+   if (south_exit) {
+      write("South door, type: " + south_exit + ", joins: ");
+      if (south_room) {
+         write(file_name(south_room) + ".\n");
+      }
+      else {
+         write("an uninitialised room.\n");
+      }
+   }
+   else {
+      write("There is no exit south.\n");
+   }
+   if (east_exit) {
+      write("East door, type: " + east_exit + ", joins: ");
+      if (east_room) {
+         write(file_name(east_room) + ".\n");
+      }
+      else {
+         write("an uninitialised room.\n");
+      }
+   }
+   else {
+      write("There is no exit east.\n");
+   }
+   if (west_exit) {
+      write("West door, type: " + west_exit + ", joins: ");
+      if (west_room) {
+         write(file_name(west_room) + ".\n");
+      }
+      else {
+         write("an uninitialised room.\n");
+      }
+   }
+   else {
+      write("There is no exit west.\n");
+   }
+   return 1;
+}
+
+
+invite(str) {
+   object invitation;
+
+   if (!has_money(INVITECOST)) {
+      return 1;
+   }
+   if (!str) {
+      write("Who do you want to invite?\n");
+      return 1;
+   }
+   if (!find_player(str)) {
+      write("Sorry, can't locate " + str + ".\n");
+      return 1;
+   }
+   tell_object(find_player(str),
+      this_player()->query_name() + " gives you an invitation.\n");
+   write("You give " + str + " an invitation.\n");
+   say(this_player()->query_name() + " gives " + capitalize(str) +
+       " an invitation to visit.\n");
+   invitation = clone_object(INVITATIONS);
+   invitation->set_invitee(this_player()->query_real_name());
+   invitation->set_invited_house(file_name(main_hall));
+   move_object(invitation,find_player(str));
+   charge_money(INVITECOST);
+   return 1;
+}
+
+
+
+banish(str) {
+   object invitation;
+   object nextob;
+
+   if (!str) {
+      write("Who do you want to expel?\n");
+      return 1;
+   }
+   if (!find_player(str)) {
+      write("Sorry, can't locate " + str + ".\n");
+      return 1;
+   }
+   if (environment(find_player(str)) == this_object()) {
+      write("You throw " + capitalize(str) + " out of your house.\n");
+      say(this_player()->query_name() + " throws " + capitalize(str) +
+          " violently out of the house.\n");
+      move_object(find_player(str), CHURCH);
+      command("look",find_player(str));
+      tell_room(find_object(CHURCH),
+         capitalize(str) + " lands on the floor with a big *THUMP*\n");
+   }
+   invitation = first_inventory(find_player(str));
+   while (invitation) {
+      nextob = next_inventory(invitation);
+      if (invitation->id(this_player()->query_real_name() +
+                         "s invitation")) {
+         tell_object(find_player(str),
+            this_player()->query_name() + " repeals an invitation.\n");
+         destruct(invitation);
+      }
+      invitation = nextob;
+   }
+   return 1;
+}
+
+
+decorate() {
+   if (!has_money(DECORCOST)) {
+      return 1;
+   }
+   if (DEBUGLEVEL > 1) {
+      log_file(LOGFILE,
+         "House_room: " + GETOWNER + " redecorating, at " +
+         ctime(time()) + ".\n");
+   }
+   say(capitalize(GETOWNER) + " starts redecorating the room.\n");
+   write("You start redecorating the room.\n");
+   write("Please enter a short, single line, description of the room.\n");
+   write("This is used by 'brief'.\n");
+   write("Short>>");
+   input_to("get_short_desc");
+   return 1;
+}
+
+
+static get_short_desc(str) {
+   new_short_desc = str;
+   write("Enter full room description.  End with '**', abort with '~q'.\n");
+   write("1>>");
+   new_room_desc = "";
+   line = 1;
+   input_to("get_desc");
+}
+
+
+static get_desc(str) {
+   if (str == "~q") {
+      say(capitalize(GETOWNER) + " stops redecorating, with a " +
+          "grimace.\n");
+      write("You stop redecorating the room, and restore it to its original " +
+            "splendor.\n");
+      new_room_desc = "";
+      line = 1;
+      return;
+   }
+   if ((line > MAXDESCLINES) || (strlen(new_room_desc + str) > MAXDESCLEN)) {
+      write("You have exceeded the maximum size for room descriptions.\n");
+      write("No more lines can be added.\n");
+      str == "**";
+   }
+   if (str == "**") {
+      if (line == 1) {
+         write("You decide not to decorate the room after all.\n");
+         say(capitalize(GETOWNER)+ " decides not to redecorate "+
+             "after all.\n");
+         new_room_desc = "";
+         line = 1;
+         return;
+      }
+      write("You step back to take a look at the new decorations.\n");
+      say(capitalize(GETOWNER)
+          + " finishes redecorating, and " +
+          "takes a look at the result.\n");
+      write("----------------------------Short---------------------------\n");
+      write(new_short_desc + ".\n");
+      write("----------------------Long--description---------------------\n");
+      write(new_room_desc);
+      write("------------------------------------------------------------\n");
+      write("If this is acceptable, please enter [nY].  If not, the old\n");
+      write("room description will be used instead.  : ");
+      input_to("check_desc");
+      return;
+   }
+   new_room_desc = new_room_desc + str + "\n";
+   line += 1;
+   if (line > (MAXDESCLINES - 4)) {
+      write("WARNING: near maximum description size (lines).\n");
+   }
+   else if (strlen(new_room_desc) > ((MAXDESCLEN * 9) / 10)) {
+      write("WARNING: near maximum description size (bytes).\n");
+   }
+   write(line + ">>");
+   input_to("get_desc");
+   return;
+}
+
+
+static check_desc(str) {
+   if ((str == "y") || (str == "Y") || (str == "yes") || (str == "YES")) {
+      write("You make the new room decor permanent.\n");
+      say(capitalize(GETOWNER) +
+          " smiles, and admires the new decoration.\n");
+      my_short_desc = new_short_desc;
+      main_hall->set_new_decoration(loc_x, loc_y, my_short_desc, new_room_desc);
+      new_room_desc = "";
+      line = 0;
+      charge_money(DECORCOST);
+      return;
+   }
+   if ((str == "n") || (str == "N") || (str == "no")  || (str == "NO")) {
+      write("You look in horror at the decor, and junk the lot.\n");
+      say(capitalize(GETOWNER) +
+          " looks in horror at the new decor, and junks the lot.\n");
+      new_room_desc = "";
+      line = 0;
+      return;
+   }
+   write("Please enter y, yes, n, or no.  : ");
+   input_to("check_desc");
+}
+
+
+map() {
+   object map_ob;
+
+   if (!has_money(MAPCOST)) {
+      return 1;
+   }
+   map_ob = clone_object(MAPS);
+   map_ob->set_owner(GETOWNER);
+   move_object(map_ob, this_player());
+   write("You are given a well-drawn map.\n");
+   charge_money(MAPCOST);
+   return 1;
+}
+
+
+
+build(str) {
+   string room_dir;
+
+// debug Whisky
+   if (!str)
+   {
+      notify_fail("Build what ?\n");
+      return 0;
+   }
+   if (str == "room") {
+      if (!has_money(ROOMCOST)) {
+         return 1;
+      }
+      write("In what direction do you want to build the new room?\n");
+      write("[north/south/east/west] : ");
+      input_to("build_room");
+      return 1;
+   }
+   if ((sscanf(str, "room %s", room_dir) == 1)  ||
+       (sscanf(str, "%s room", room_dir) == 1)) {
+      if ((room_dir == "north") || (room_dir == "south") ||
+          (room_dir == "east")  || (room_dir == "west")) {
+         if (!has_money(ROOMCOST)) {
+            return 1;
+         }
+         build_room(room_dir);
+         return 1;
+      }
+   }
+   if ((str == "door") || (str == "exit")) {
+      if (!has_money(DOORCOST)) {
+         return 1;
+      }
+      write("In what direction do you want the door?\n");
+      write("[north/south/east/west/church/guild/shop] : ");
+      input_to("select_exit_dir");
+      return 1;
+   }
+   if ((sscanf(str, "door %s", room_dir) == 1) ||
+       (sscanf(str, "exit %s", room_dir) == 1) ||
+       (sscanf(str, "%s door", room_dir) == 1) ||
+       (sscanf(str, "%s exit", room_dir) == 1)) {
+      if ((room_dir == "north") || (room_dir == "south") ||
+          (room_dir == "east")  || (room_dir == "west")  ||
+          (room_dir == "church")|| (room_dir == "guild") ||
+          (room_dir == "shop"))                              {
+         if (!has_money(DOORCOST)) {
+            return 1;
+         }
+         select_exit_dir(room_dir);
+         return 1;
+      }
+   }
+   write("What?  You should specify 'room' or 'door', and an optional\n");
+   write("direction  (eg, build door east).\n");
+   return 1;
+}
+
+
+static build_room(str) {
+   string room_direction;
+
+   if ((str == "north") || (str == "n")) {
+      room_direction = str;
+   }
+   if ((str == "south") || (str == "s")) {
+      room_direction = str;
+   }
+   if ((str == "east") || (str == "e")) {
+      room_direction = str;
+   }
+   if ((str == "west") || (str == "w")) {
+      room_direction = str;
+   }
+   if (!room_direction) {
+      write("The direction must be one of north/south/east/west.\n");
+      write("Please enter your selection : ");
+      input_to("build_room");
+   }
+   create_new_room(room_direction);
+}
+
+
+
+static select_exit_dir(str) {
+   string exit_direction;
+
+   if (!((str == "north")  || (str == "n")     ||
+         (str == "south")  || (str == "s")     ||
+         (str == "east")   || (str == "e")     ||
+         (str == "west")   || (str == "w")     ||
+         (str == "church") || (str == "guild") ||
+         (str == "shop")))                         {
+      write("The direction must be one of north/south/east/west/" +
+            "church/guild/shop.\n");
+      write("Please enter your selection : ");
+      input_to("select_exit_dir");
+      return;
+   }
+   if ((str == "church") || (str == "guild") || (str == "shop")) {
+      if (search_array(special_exits, str)) {
+         write("But there is already an exit that leads there!\n");
+         return;
+      }
+      special_exits = special_exits + ({ str });
+      main_hall->set_new_exits_special(special_exits, loc_x, loc_y);
+      build_exit_description();
+      charge_money(DOORCOST);
+      return;
+   }
+   else {
+      new_exit_dir = str;
+      if (str == "n") { new_exit_dir = "north"; }
+      if (str == "s") { new_exit_dir = "south"; }
+      if (str == "e") { new_exit_dir = "east";  }
+      if (str == "w") { new_exit_dir = "west";  }
+      write("Now please select which type of exit you want.\n");
+      write("   a  -  normal exit        (recommended)\n");
+      write("   b  -  door (open/close)\n");
+      write("   c  -  door (open/close/lock)\n");
+      write("   d  -  magic portal; only the house owner may use it.\n");
+      write("[a/b/c/d] : ");
+      input_to("select_exit_type");
+   }
+}
+
+
+static select_exit_type(str) {
+   int exit_type;
+
+   if ((str != "a") && (str != "b") && (str != "c") && (str != "d")) {
+      write("The type must be one of a/b/c/d.\n");
+      write("Please enter your selection : ");
+      input_to("select_exit_type");
+      return;
+   }
+   if (str == "a") {
+      exit_type = DOOR_NORM;
+   }
+   if (str == "b") {
+      exit_type = DOOR_O_CLOS;
+   }
+   if (str == "c") {
+      exit_type = DOOR_L_LOCK;
+   }
+   if (str == "d") {
+      exit_type = DOOR_PORTAL;
+   }
+   change_exit_pair(new_exit_dir, exit_type);
+}
+
+
+
+static create_new_room(which_dir) {
+   string next_dir;
+   int    x_offset;
+   int    y_offset;
+   int    indx;
+
+   if (which_dir == "north") {
+      next_dir = "south";
+      x_offset = 0;
+      y_offset = -1;
+   }
+   if (which_dir == "south") {
+      next_dir = "north";
+      x_offset = 0;
+      y_offset = 1;
+   }
+   if (which_dir == "east") {
+      next_dir = "west";
+      x_offset = 1;
+      y_offset = 0;
+   }
+   if (which_dir == "west") {
+      next_dir = "east";
+      x_offset = -1;
+      y_offset = 0;
+   }
+   if (main_hall->get_room_index(loc_x + x_offset, loc_y + y_offset) >= 0) {
+      write("Eh?? But that room already exists!\n");
+      return;
+   }
+   indx = 1;
+   while (indx < MAXNUMROOMS) {
+      if (!main_hall->query_room_position(indx)) {
+         break;
+      }
+      indx ++;
+   }
+   if (indx >= MAXNUMROOMS) {
+      write("All the rooms you are permitted to build are already built..\n");
+      return;
+   }
+   write("The builders work away at your new room, and then send you a\n");
+   write("bill.  After they leave, a woodworker arrives to fit a door.\n");
+   charge_money(ROOMCOST);
+   main_hall->set_new_room(indx, loc_x + x_offset, loc_y + y_offset);
+   write("The woodworker finishes, and charges you his standard fee.\n");
+   change_exit_pair(which_dir, 1);
+}
+
+
+
+destroy(str) {
+   string door_dir;
+
+   if (str == "room") {
+      say(this_player()->query_name() + " calls in the demolition experts " +
+          "to utterly destroy this room.\n");
+      write("Are you SURE you wish to utterly destroy this room?  It will\n");
+      write("be totally erased from your house.  Also note, if any exits\n");
+      write("to other rooms remain, the builders will refuse to demolish\n");
+      write("it.  Furthermore, if you have accidently isolated rooms then\n");
+      write("there could be serious problems.\n");
+      write("Please confirm: [yes/y] to destroy the room : ");
+      input_to("destroy_room_confirm");
+      return 1;
+   }
+   if ((str == "door") || (str == "exit")) {
+      if (!has_money(DOORCOST)) {
+         return 1;
+      }
+      write("Which door do you want to destroy?  Please select from these,\n");
+      if (this_player()->query_level() < WIZLEVEL) {
+         write("[cancel/north/south/east/west/church/guild/shop] : ");
+      }
+      else {
+         write("[cancel/north/south/east/west/church/guild/shop/" +
+               "castle/workroom] : ");
+      }
+      input_to("destroy_door_dir");
+      return 1;
+   }
+   if ((sscanf(str, "door %s", door_dir) == 1) ||
+       (sscanf(str, "exit %s", door_dir) == 1) ||
+       (sscanf(str, "%s door", door_dir) == 1) ||
+       (sscanf(str, "%s exit", door_dir) == 1)) {
+      if ((door_dir == "north")  ||  (door_dir == "south")   ||
+          (door_dir == "east")   ||  (door_dir == "west")    ||
+          (door_dir == "church") ||  (door_dir == "guild")   ||
+          (door_dir == "shop")   ||  (door_dir == "castle")  ||
+          (door_dir == "workroom")) {
+         if (!has_money(DOORCOST)) {
+            return 1;
+         }
+         say(this_player()->query_name() + " asks a team of builders to\n" +
+             " remove the " + door_dir + " door.\n");
+         write("Are you sure you want to destroy the door?  It could leave\n");
+         write("some rooms isolated.\n");
+         write("Enter [yes/y] to destroy the " + door_dir + " door : ");
+         new_exit_dir = door_dir;
+         input_to("destroy_door_confirm");
+         return 1;
+      }
+   }
+   write("What?  You should specify 'room' or 'door'.  Room always refers\n");
+   write("to THIS room, but door has to specify a direction.\n");
+   write("Eg),    'destroy room'    or    'destroy door north'.\n");
+   write("See 'help destroy' for warnings about this command.\n");
+   return 1;
+}
+
+
+static destroy_room_confirm(str) {
+   if ((str != "yes") && (str != "y") &&
+       (str != "no")  && (str != "n")) {
+      write("You must enter [yes/y/no/n] : ");
+      input_to("destroy_room_confirm");
+      return;
+   }
+   if ((str == "no") || (str == "n")) {
+      write("You change your mind about utterly destroying this room.\n");
+      say(this_player()->query_name() + " decides not to utterly destroy " +
+          "the room after all.\n");
+      return;
+   }
+   if ((loc_x == 0) && (loc_y == 0)) {
+      write("You may not destroy the entrance.\n");
+      say("Demolition experts look around, shake their heads, and leave.\n");
+      return;
+   }
+   if (main_hall->erase_room(get_room_index(loc_x, loc_y))) {
+      write("You have successfully destroyed the room.\n");
+   }
+   else {
+      write("You failed in your bid to destroy the room.\n");
+      say("Demolition experts fall over laughing, and say: April fool!\n");
+   }
+   return;
+}
+
+
+
+static destroy_door_dir(str) {
+   if (str == "cancel") {
+      write("You change your mind.\n");
+      return;
+   }
+   if ((str != "north")  &&   (str != "south")  &&
+       (str != "east")   &&   (str != "west")   &&
+       (str != "church") &&   (str != "guild")  &&
+       (str != "shop")   &&   (str != "castle") &&
+       (str != "workroom"))  {
+      write("The direction must be one of:\n");
+      if (this_player()->query_level() < WIZLEVEL) {
+         write("[cancel/north/south/east/west/church/guild/shop] : ");
+      }
+      else {
+         write("[cancel/north/south/east/west/church/guild/shop/" +
+               "castle/workroom] : ");
+      }
+      input_to("destroy_door_dir");
+      return;
+   }
+   if ((((str == "church") || (str == "guild") || (str == "shop")) &&
+          (!search_array(special_exits, str)))                        ||
+       (((str == "workroom") || (str == "castle"))                 &&
+          (!search_array(wizard_exits, str)))                         ||
+       ((str == "north") && (!north_exit))                            ||
+       ((str == "south") && (!south_exit))                            ||
+       ((str == "east")  && (!east_exit))                             ||
+       ((str == "west")  && (!west_exit)))          {
+      write("But there is no exit there anyway!\n");
+      return;
+   }
+   new_exit_dir = str;
+   say(this_player()->query_name() + " asks a team of builders to remove\n" +
+       " the " + str + " door.\n");
+   write("Are you sure you want to destroy the door?  It could leave some\n");
+   write("rooms isolated.\n");
+   write("Enter [yes/y] to destroy the " + str + " door : ");
+   input_to("destroy_door_confirm");
+}
+
+
+
+static destroy_door_confirm(str) {
+   if ((str != "yes") && (str != "y") &&
+       (str != "no")  && (str != "n")) {
+      write("You must enter [yes/y/no/n] : ");
+      input_to("destroy_door_confirm");
+      return;
+   }
+   if ((str == "no") || (str == "n")) {
+      write("You change your mind about utterly destroying the door.\n");
+      say(this_player()->query_name() + " decides not to utterly destroy " +
+          "the " + new_exit_dir + " door\nafter all.\n");
+      new_exit_dir = "";
+      return;
+   }
+   write("The builders remove the door, and send you a bill.\n");
+   if ((new_exit_dir == "north") || (new_exit_dir == "south") ||
+       (new_exit_dir == "east")  || (new_exit_dir == "west")) {
+      change_exit_pair(new_exit_dir, 0);
+      new_exit_dir == "";
+      /* charging is implicit in change_exit_pair */
+      return;
+   }
+   if ((new_exit_dir == "church") || (new_exit_dir == "guild") ||
+       (new_exit_dir == "shop")) {
+      special_exits = remove_array_item(special_exits, new_exit_dir);
+      main_hall->set_new_exits_special(special_exits, loc_x, loc_y);
+      build_exit_description();
+      new_exit_dir = "";
+      charge_money(DOORCOST);
+      return;
+   }
+   if ((new_exit_dir == "workroom") || (new_exit_dir == "castle")) {
+      wizard_exits = remove_array_item(wizard_exits, new_exit_dir);
+      main_hall->set_new_exits_wizard(wizard_exits, loc_x, loc_y);
+      build_exit_description();
+      new_exit_dir = "";
+      charge_money(DOORCOST);
+      return;
+   }
+}
+
+
+furnish() {
+  new_items=allocate(0);
+  write("You start furnishing the room.\n"+
+        "Please enter the item.\n"+
+	"This is used by 'items'. Abort with ~q\n"+
+	"Item>>");
+  say(this_player()->query_name()+" starts furnishing the room.\n");
+  input_to("get_item");
+  return 1;
+}
+
+get_item(str) {
+  if (str=="~q") {
+     write("You change your mind.\n");
+     say(this_player()->query_name()+" leaves the room unchanged.\n");
+     return;
+  }
+  if (str=="**") {
+     write("You have rearranged the items in this room.\n");
+     say(this_player()->query_name()+
+	 " has rearranged the items in this room.\n");
+     main_hall->set_new_items(loc_x, loc_y, new_items);
+     new_items=0;
+     return;
+  }
+  new_items += ({ str });
+  write("Enter full description of the item (only one line).\n"+
+	">>");
+  input_to("get_item_desc");
+  return;
+}
+
+get_item_desc(str) {
+  new_items += ({ str });
+  write("Enter the next item or end with **. Abort with ~q.\n"+
+	"Item>>");
+  input_to("get_item");
+  return;
+}
+
+has_money(arg) {
+   if (arg < 0) {
+      return 0;
+   }
+   if (arg > this_player()->query_money()) {
+      write("Sorry, you do not have enough coins on you.  It costs " + arg +
+            " coins for that.\n");
+      if (this_player()->query_level() > WIZLEVEL) {
+         write("However, since you're a wiz.. who am I to complain?\n");
+         return 1;
+      }
+      return 0;
+   }
+   return 1;
+}
+
+
+charge_money(arg) {
+   if (arg < 0) {
+      return;
+   }
+   write("You are charged " + arg + " coins.\n");
+   if (this_player()->query_level() > WIZLEVEL) {
+      write("But since you're a wiz.. have it free instead!\n");
+      return;
+   }
+   this_player()->add_money(-arg);
+   (ESTATEAGENT)->add_revenue(arg);
+   return;
+}
+
+
+
+
+
+/* The following are used to block off restricted commands. */
+
+not_permitted() {
+   write("Sorry, this is not your house, and '" + query_verb() +
+         "' is restricted to the owner.\n");
+   say(this_player()->query_name() + " tried to '" + query_verb() +
+       "', but is not permitted to do so.\n");
+   return 1;
+}
+
+
+guest_cmd() {
+   write("Sorry, but you may not use that command if you are the guest\n");
+   write("character.  However, you can still 'invite' people, and unlock\n");
+   write("doors.  I suggest that you get a character of your own, and\n");
+   write("buy a house, so that you can use it to the fullest extent.\n");
+   return 1;
+}
+
+
+generate_lpc() {
+   string this_line;
+   string remainder;
+   string filenm;
+
+   filenm = "/open/house_" + GETOWNER + "_" + GETINDEX + ".c";
+   write("Generating LPC code for the current room.\n");
+   write("Target: " + filenm + "\n");
+   write("Please copy the file to : " +
+      "ROOMSDIR/house_"+GETINDEX+".c\n");
+
+   write_file(filenm, "/* Metaprat - automatically generated house room */\n");
+   write_file(filenm, "\n");
+   write_file(filenm, "/* Save as: ROOMSDIR/house_"+GETINDEX+".c */\n");
+   write_file(filenm, "\n");
+   write_file(filenm, "inherit \"/room/room.c\";\n");
+   write_file(filenm, "\n");
+   write_file(filenm, "#define OWNER     \"" + GETOWNER + "\"\n");
+   write_file(filenm, "#define ROOMSDIR  \"/players/\"+OWNER+\"/rooms/\"\n");
+   write_file(filenm, "#define PREFIX    \"house_\"\n");
+   write_file(filenm, "\n");
+   write_file(filenm, "reset(arg) {\n");
+   write_file(filenm, "   if (!arg) {\n");
+   write_file(filenm, "      no_castle_flag = 1;\n");
+   write_file(filenm, "      set_light(1);\n");
+   write_file(filenm, "\n");
+   write_file(filenm, "      dest_dir =  ({\n");
+   if (north_exit) {
+      write_file(filenm, "         ROOMSDIR+PREFIX+ \"" +
+         main_hall->get_room_index(loc_x, loc_y - 1) +
+         "\", \"north\"");
+      if ((south_exit) || (east_exit) || (west_exit)) {
+         write_file(filenm, ",");
+      }
+      write_file(filenm, "\n");
+   }
+   if (south_exit) {
+      write_file(filenm, "         ROOMSDIR+PREFIX+ \"" +
+         main_hall->get_room_index(loc_x, loc_y + 1) +
+         "\", \"south\"");
+      if ((east_exit) || (west_exit)) {
+         write_file(filenm, ",");
+      }
+      write_file(filenm, "\n");
+   }
+   if (east_exit) {
+      write_file(filenm, "         ROOMSDIR+PREFIX+ \"" +
+         main_hall->get_room_index(loc_x + 1, loc_y) +
+         "\", \"east\"");
+      if (west_exit) {
+         write_file(filenm, ",");
+      }
+      write_file(filenm, "\n");
+   }
+   if (west_exit) {
+      write_file(filenm, "         ROOMSDIR+PREFIX+ \"" +
+         main_hall->get_room_index(loc_x - 1, loc_y) +
+         "\", \"west\"\n");
+   }
+   if (special_exits && (sizeof(special_exits))) {
+      write_file(filenm, "         })   +    ({\n");
+   }
+   if (search_array(special_exits, "church")) {
+      write_file(filenm, "         \"/room/church\", \"church\"");
+      if ((search_array(special_exits, "guild")) ||
+          (search_array(special_exits, "shop"))) {
+         write_file(filenm, ",");
+      }
+      write_file(filenm, "\n");
+   }
+   if (search_array(special_exits, "guild")) {
+      write_file(filenm, "         \"/room/adv_guild\", \"guild\"");
+      if (search_array(special_exits, "shop")) {
+         write_file(filenm, ",");
+      }
+      write_file(filenm, "\n");
+   }
+   if (search_array(special_exits, "shop")) {
+      write_file(filenm, "         \"/room/shop\", \"shop\"\n");
+   }
+   write_file(filenm, "            });\n");
+   write_file(filenm, "      my_short_desc = \"" + my_short_desc + "\";\n");
+   write_file(filenm, "      long_desc =\n");
+   new_room_desc = GETLONG;
+   while (sscanf(new_room_desc, "%s\n%s", this_line, remainder) == 2) {
+      if ((remainder) && (remainder != "")) {
+         write_file(filenm, "\"" + this_line + "\\n\" +\n");
+      }
+      else {
+         write_file(filenm, "\"" + this_line + "\\n\";\n");
+      }
+      new_room_desc = remainder;
+   }
+   new_room_desc = "";
+   remainder     = "";
+   write_file(filenm, "   }\n");
+   write_file(filenm, "}\n");
+
+   return 1;
+}
+
+// the mixed arg can be used for all kinds of properties 
+int query_property(mixed arg)
+{
+      if (stringp(arg) && arg=="no_teleport")
+          return 1;
+    return 0;
+}
+
+
+

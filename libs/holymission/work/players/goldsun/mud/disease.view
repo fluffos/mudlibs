@@ -1,0 +1,97 @@
+inherit "obj/treasure";
+
+static int state;
+
+reset(arg)
+{ if (arg) return;
+}
+
+int id(string arg)
+{
+    return arg=="mal_27";
+}
+
+get()
+{ 
+  return 1;
+}
+
+init()
+{ call_out("worse",2,0);
+  add_action("notell","tell");
+  add_action("noshout","shout");
+  ::init();
+}
+
+drop()
+{ 
+  return 1;
+}
+
+notell(str)
+{ write("You are too weak to tell something.\n");
+  return 1;
+}
+
+noshout(str)
+{ write("You are too weak to shout something.\n");
+  return 1;
+}
+
+worse(state)
+{ 
+  if (!state)
+  { write("You got a disease somewhere, it just broke out !\n");
+    state=1;
+  }
+  else
+  { this_player()->reduce_hit_point((this_player()->query_hp()*state)/6);
+    switch(state)
+    { case 1 : write("You get a light attack of your disease.\n"); break;
+      case 2 : write("You get a middle attack of your disease.\n"); break;
+      case 3 : write("You get a hard attack of your disease.\n"); break;
+      case 4 : write("You get a severe attack of your disease.\n"); break;
+      case 5 : write("You roll onto the floor filled with pain.\n");
+               write("You should cure your Malaria QUICKLY !!!\n");
+               say(this_player()->query_name()+" rolls onto the floor filled "+
+                   "with pain.\n",this_player());
+               break;
+    }
+    
+  if(random(10)>=5)
+    { write("You feel your disease got worse.\n");
+      state+=1;
+    }
+  }
+  if(state==6) 
+  { write("The desease is cured now.\n");
+    destruct(this_object());
+    return 1;
+  }
+ 
+  infect(state);
+ 
+  call_out("worse",2,state);
+  return 1;
+}
+
+
+infect(state)
+{ object *env;
+  int i,j;
+
+  if(1==1)
+  { env = all_inventory(environment(environment()));
+    for(i=0,j=sizeof(env); i<j; i++) 
+    { if(living(env[i]) && !present("mal_27",env[i])) 
+       move_object(clone_object("/players/beardy/obj/mal2"),env[i]);
+    }
+  }
+  return 1;
+}
+
+string
+query_auto_load()
+{
+  return "/players/beardy/obj/mal2:";
+}

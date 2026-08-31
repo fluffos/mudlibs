@@ -1,0 +1,13 @@
+#define TP	this_player()
+#define TO	this_object()
+#define RNAME	query_real_name()
+#define LEVEL	query_level()
+#define FP	find_player
+#define NAME 	query_name()
+#define PATH    "/players/tuppence/"
+#define FORT    "/players/tuppence/fortress/"
+#define FROOM   "/players/tuppence/fortress/room/"
+#define FMON    "/players/tuppence/fortress/monster/"
+#define FARMR   "/players/tuppence/fortress/armour/"
+#define FITEM   "/players/tuppence/fortress/item/"
+#define FWEAP   "/players/tuppence/fortress/weapon/"

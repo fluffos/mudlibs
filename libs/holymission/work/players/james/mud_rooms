@@ -1,0 +1,224 @@
+A primer on writing efficient mud room objects.
+
+Part A: The inheritable room.c object
+
+When making changes to the room.c object, you must remember a few
+important details. FIRST AND FOREMOST is that the typical mud
+will have over 2000 rooms loaded after it has been up for a few hours.
+Some may be swapped to disk, but basically you can consider rooms
+to be a very important part of a mud, and it is very important that
+rooms be small and efficient.
+
+What you can do about this:
+
+	1) You must at all times strive to minimize the NUMBER of
+	functions and global variables in the room.c file. The 
+	size of a function is fairly irrelevant. This is due to 
+	the fact that room.c is INHERITED by other objects, and
+	each of those objects will share program space with room.c
+	BUT each room gains header information for each function
+	in room.c (and any functions in objects that are inherited
+	by room.c) plus various information for each global variable
+	that is being inherited. This header information is typically
+	about 20 bytes per function or variable in most parsers
+	(actually 16, rounded up to 20 by the C compiler for efficency
+	reasons), but under the Amylaar parser it is closer to 12 bytes.
+
+	Example: Adding a room attribute.
+	=======================================================================
+
+	Ok, suppose you have this wiz-bang great idea, that you want
+	to have this new room attribute called 'underwater', so that
+	you can code up rooms that are under the ocean, or in rivers,
+	and you plan to modify torches ans such so they dont work when
+	the user is underwater. One typical way of implementing this is
+	to add this to room.c:
+
+		integer is_underwater;
+
+		set_underwater() { is_underwater = 1; return 1; }
+		query_underwater() { return is_underwater; }
+
+	Assume the variable under_water is set to 0 in the room.c
+	reset() function, though this isnt strictly necessary. THIS
+	IS AN ABSOLUTELY HORRIBLE WAY TO IMPLEMENT THIS!!!! You added
+	approximately 60 bytes to EVERY room on the game (36 or so
+	under Amylaar parser), and also added 2 functions. The more 
+	functions that exist in an object, the more cpu time is needed
+	to execute any function in that object. Also, due to function
+	caching, it also tends to slow down function calls throughtout
+	the mud. Consider this: We didnt add 2 functions to 1 object,
+	we added 2 function to every room in the mud, over 2000 * 2
+	functions!
+
+	A much better way to implementing this is to use the existing
+	functions in room.c, such as properties. You can add a 
+	property "underwater" using the existing functions, or just
+	directly manipulate the inherited variable. And you can call
+	query_property("underwater") from the torches to see if the
+	room is underwater or not. IE:
+	    if (environment(this_player())->query_property("underwater"))
+
+USE OF ARRAYS IN INHERITED OBJECTS
+=======================================================================
+
+	The parser automatically tries to share string space between
+	all objects in the game. It DOES NOT do this with arrays. So,
+	If you add an array to room.c that should be shared, such as
+	an array called 'numbers' that contains CONSTANT values of
+	{( "One", "Two", "Three", .... "Nine" )}  Then this array is
+	going to be created some 2000 or more times....
+
+	To share a single array with multiple objects, you need to have
+	one of the objects create the array, and then have a query_function
+	that returns an object pointer to the ENTIRE array. When you
+	return an entire array in LPC, you actually return just a pointer
+	to the array space, and Not a pointer to a new copy.
+
+	Some 2.4.5ish mudlibs knew this, and tried to fix the problem
+	by adding 2 functions to room.c that acted as follows: If the
+	file_name() of the current object was "room/room", then it created 
+	the array, otherwise it correctly assumed it was an inherited
+	room, and if the variable 'numbers' was empty (there is a efun
+	called pointerp() that is useful for this test) then it called:
+		numbers = "room/room"->query_numbers();
+	which called query_numbers() in the room.c master object, and 
+	got a pointer to that objects array. Now, from the previous 
+	discussion, whats wrong with this approach?
+
+	Well, they added 2 functions to all 2000+ rooms in the game!
+	The correct way to implement this, is to create a separate 
+	object, such as /obj/share_arrays and have IT create the array,
+	and have IT define the query_numbers() function. Then each room
+	still needs to declare a global variable called 'numbers' just
+	as it did before, but now it does:
+		numbers = "obj/share_arrays" -> query_numbers();
+	It can do this from the rooms reset() function in order to ignore
+	the need to use an If statement and a pointerp() call. This fix
+	in one form or another has already been made to the room.c of
+	After Hours, Holy Mission, and Realmsmud, but if you decide to
+	add more arrays OF CONSTANT VALUES to room.c, you need to be
+	aware of this method. This method should be used anytime a
+	array of constant values is added to one of the major inheritable
+	mudlib files, such as player.c, living.c or monster.c
+
+USE OF replace_program() EFUN 
+=======================================================================
+
+	The Amylaar parser contains many new efuns. One such efun is
+	replace_program(), which is VERY useful in designing efficient 
+	rooms. 
+
+	If you have rooms that are very trivial, ie, you inherit room.c
+	but you dont add any functions or variables EXCEPT one reset()
+	function that assigns values to some of the variables you
+	inherited from room.c (or you call a inherited function that 
+	merely sets these values) THEN you can use replace_program().
+
+	WHY use replace_program()??? Well, it reduces the memory use 
+	of that room object alot. Basically it throws away the program
+	space of the object (including that one reset() function) and
+	replaces it with a pointer to the program space of the master
+	room.c object. Your rooms file_name() stays the same, but otherwise
+	this is very similar to a clone of an object, ie, after you call
+	replace_program(), you have no program space, and your variable
+	space is much smaller (variables will take approximately 8 bytes
+	per variable instead of 12-20 bytes, just like in a clone)..
+	ALSO, since using this alot will severely reduce the number
+	of program blocks (functions) in the game, the mud's function
+	cache hit rate is improved, which speeds up all function calls
+	in the mud.
+
+HOW TO USE replace_program()
+=======================================================================
+
+	Its very easy. If you inherit "room/room", then at the end of your
+	reset() function, call replace_program("room/room");
+
+ADVANCED USAGE OF replace_program()
+=======================================================================
+
+	It should be obvious that alot of rooms cannot use replace_program.
+	Rooms that clone monsters or other objects each reset cannot use
+	it, since the reset() of room.c doesnt have the code to clone 
+	your monsters in it. Basically, only 'empty' rooms, rooms with
+	just room descriptions, can use replace_program. BUT, since 
+	replace_program is SO beneficial, it would be useful to modify
+	room.c so that more rooms can use it.
+
+	One way to do this, is to have wizards write separate objects
+	that handle room reset's.... Here is an exampe of how this might
+	work:
+
+	IN ROOM.C: Add a global variable 'reset_object', and have the
+	reset() function call this object if it has been defined by
+	the wizard that coded the room.
+
+	Example: 
+	    reset() {
+	        /* The rest of room.c's reset() code is above this if */
+		if (reset_object) reset_object->reset_room();
+	    }
+
+	IN EACH ROOM: The wizard writes a separate object that clones 
+	monsters and gives them the objects they normally carry. Lets
+	assume that this object is in the file "players/james/myreset".
+	NOTE that the same reset_object can be used by multiple rooms, 
+	by using a switch() statement.
+
+	The wizard would add this line to his rooms reset() before calling
+	replace_program() : 
+		reset_object = find_object("players/james/myreset");
+
+EXAMPLE OF A reset_object
+======================================================================
+
+	This is how the file "players/james/myreset" might look:
+	    reset_room() {
+		switch (file_name(previous_object())) {
+
+		  case "players/james/newbie1" : {
+			if (!present("mymonster",previous_object())) {
+			  /* clone /obj/monster.c */
+			  /* configure the monster, give it a clones dagger */
+			  /* MOVE_OBJECT the monster. The destination is
+			     previous_object() */
+			} /* end of IF */
+		  } /* end of case */
+
+		  case "players/james/newbie2" : {
+			/* similar to the code for room newbie1, etc... */
+		  } /* end of case */
+
+		} /* end of switch */ 
+	    return 1;
+	    } /* end of reset_room */
+
+USE OF STRINGS
+===============================================================================
+
+	When writing objects, it is important to realise that strings are
+	automatically shared. This means that every time a string is
+	created, the parser must first search all the existing strings to
+	see if an identical string already exists. 
+
+	Example of poor string usage:
+
+	set_long("This is a long room description. It is very long \n"+
+		 "and complicated, and it has been written so that it\n"+
+		 "LOOKS neat to the programmer, and to whomever will be\n"+
+		 "reading this in the future\n");
+
+	SO...Whats wrong? Well, this example doesnt just create a string.
+	It creates 4 separate strings, each of which requires the parser
+	to search all of string space, which can be quite large. Now, the
+	parser is very efficent in its searching, but even so, this search
+	should be avoided if possible. Now consider the first +, ie, 
+	the first string addition. This creates a NEW string, and it also
+	means that this object no longer needs 2 of its previous strings.
+	SO, the parser keeps track of how many objects are sharing each
+	string, and occasionally (depending on the parser) it will clean
+	up the memory that is allocated to unused strings. As you might
+	realise, this process of adding each new string is causing a 
+	minor mess for the parser to deal with. Its best to avoid this
+	sort of 'nice looking' code, whenever possible.

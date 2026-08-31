@@ -1,0 +1,285 @@
+inherit "obj/weapon";
+
+#include "/players/mangla/defs.h"
+
+#pragma strict_types
+#define GM "guild/master"
+#define COLS ({ "black","red","orange","blue","violet","green","white" })
+#define MHIT 1
+
+int is_sword;
+
+int magic_hit(object attacker);
+void switching(int arg);
+string query_color();
+void handle_reset();
+void notify(string str);
+
+int id(string str) {
+
+    switch(str) {
+        case "lightsaber":
+        case "handle":
+            if (is_sword) {
+                long_desc = "This is a saber with a blade of light.\n" +
+                            "The blade glows in a " + query_color() + " light.\n" +
+                            "There is something written on the handle.\n";
+            }
+            else {
+                long_desc = "This seems to be the handle of a saber.\n" +
+                            "It has a button on it.\n" +
+                            "There is something written on it.\n";
+            }
+            return 1;
+        case "blade":
+            if (is_sword) {
+                long_desc = "It glows in a " + query_color() +
+                        " light. It seems to be very dangerous.\n";
+                return 1;
+             }
+             else
+                return 0;
+        case "button":
+            long_desc = "A simple button.\n";
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+
+string short() {
+
+    string m;
+
+    if(is_sword) m = "A " + query_color() + "-bladed lightsaber";
+    else         m = "A simple handle";
+    if(wielded)  m = m + " (wielded)";
+    return m;
+}
+
+
+int press(string str) {
+
+    if(str != "button") return 0;
+
+    if(ENV(TO)!=TP
+                    || !wielded
+                    || TP->query_real_guild()!=GM->query_number("jedi")
+                  ) {
+          write("Nothing happens. How strange!\n");
+          return 1;
+    }
+    if(!is_sword) {
+          is_sword=1;
+          write("As you press the button, a "+query_color()+
+                " blade of light flashes" +
+                " out of the handle.\n" +
+                "You concentrate hard to keep it saber under control.\n");
+          say("Suddenly a "+query_color()+" blade of light flashes out of "+
+               CAP((string)TP->RNAME) + "'s simple handle.\n" +
+               "You can hear a strange humming noise.\n");
+
+          switching(1);
+    }
+    else {
+          write("As you press the button the blade of light disappears.\n");
+          say("The blade of light disappears.\n");
+          switching(0);
+    }
+    return 1;
+}
+
+void switching(int arg) {
+
+    if(arg) {
+          set_hit_func(TO);
+          set_light(1);
+    }
+    else {
+          handle_reset();
+          set_light(-1);
+    }
+    return;
+}
+
+int wield(string str) {
+    if( !::wield(str) ) return 0;
+    TO->press("button");
+    if((int)TP->query_real_guild() != 4) set_class(5);
+    return 1;
+}
+
+void un_wield() {
+
+    if(is_sword) {
+        notify("The blade of light disappears.\n");
+        handle_reset();
+    }
+    ::un_wield();
+    return;
+}
+
+void handle_reset() {
+
+    is_sword=0;
+    set_hit_func();
+    return;
+}
+
+int weapon_hit(object attacker) {
+
+    int magdam, dam;
+
+    if((int)TP->query_guild() != 4) return 10;
+    if(MHIT) {
+        magdam = magic_hit(attacker);
+        if(attacker->query_hp() < magdam) magdam = 0;
+        attacker->misc_hit(magdam, 5, 0);
+        TP->add_experience(magdam);
+    }
+    return class_of_weapon*3;
+}
+
+int magic_hit(object attacker) {
+
+    int dam, dam2, dam3;
+    string atta;
+    object weap;
+
+    if(attacker->query_wielded()) {
+      if (3*((int)TP->LEVEL) > random(100)) {
+//      if (2*((int)TP->LEVEL) > random(100)) {
+        weap = (object) attacker->query_wielded();
+        if (weap) {
+          weap->drop(0);
+          attacker->drop(weap->NAME);
+          printf("You force your opponent to drop his weapon!\n");
+        }
+      }
+    }
+    atta = (string)attacker->NAME;
+    dam = (int)TP->LEVEL;
+    dam2 = 8;
+    dam3 = 12;
+/*
+    dam = (int)TP->LEVEL/2;
+    dam2 = 3;
+    dam3 = 5;
+ */
+
+    switch (random(9)) {
+      case 0: notify(TP->NAME+" swings " + TP->POS +
+                     " lightsaber in a wide arc.\n");
+              break;
+      case 1: notify(TP->NAME + " thrusts with " +
+                     TP->POS + " lightsaber.\n");
+              break;
+      case 2: notify(TP->NAME + "'s lightsaber throws off sparks as it "+
+                     "slices and dices.\n");
+              break;
+      case 3: notify(atta+" screams as " + TP->NAME + " cuts "+
+                      "through " + attacker->query_objective() + ".\n");
+              break;
+      case 4: notify(TP->NAME + "'s lightsaber hums as it pierces " +
+                    TP->POS + " opponent.\n");
+              break;
+      case 5: notify(TP->NAME + " calmly dismembers " + atta + ".\n");
+              break;
+      case 6: notify(atta + " clutches at the horrible wounds dealt by " +
+                     TP->NAME + ".\n");
+              break;
+      case 7: notify(TP->NAME + "'s " + query_color() + " blade of light " +
+                     "slices through " + atta + "'s body.\n");
+              break;
+      case 8: notify(TP->NAME + "'s lightsaber weaves under " + atta + "'s " +
+                     "guard and pierces " + attacker->POS + " body.\n");
+    }
+    if (objectp(attacker) && living(attacker)) {
+    if(TP->LEVEL > 24) {
+        return dam + dam2 + dam3;
+    }
+    else if (TP->LEVEL > 11) {
+        write("You sign your work with a small 'J' for Jedi.\n");
+        return dam + dam2;
+    }
+    else
+        return dam;
+    }
+    return 0;
+}
+
+void notify(string str) {
+
+     write(str);
+     say(str);
+     return;
+}
+
+int get() {
+    if( (int)TP->query_guild() == 4 )
+        remove_call_out("fade_away");
+    return 1;
+}
+
+int drop() {
+    ::drop();
+    call_out("fade_away",30);
+    return 0;
+}
+
+string query_color() {
+
+    int no;
+    no=0;
+
+    switch(TP->query_al_string()) {
+        case "saintly": no++;
+        case "good": no++;
+        case "nice": no++;
+        case "neutral": no++;
+        case "nasty": no++;
+        case "evil": no++;
+        case "demonic": ;
+        default: ;
+    }
+    return COLS[no];
+}
+
+
+void fade_away() {
+    if ((!living(ENV(TO))) ||
+            ((int)ENV(TO)->query_guild() != 4)) {
+        TELLR(ENV(TO),"The handle becomes indistinct and fades away.\n");
+        destruct(this_object());
+    }
+    return;
+}
+
+int query_is_sword() {
+
+    return is_sword;
+}
+
+
+void reset(int arg)
+{
+    if(!arg) {
+        set_alias("handle");
+        set_name("lightsaber");
+        set_long("The chosen weapon of the Jedi.\n");
+        set_type(2);
+        set_class(5);
+        set_weight(1);
+        set_read("This is the weapon of a Jedi!\nThe Force is with you!\n");
+        handle_reset();
+    }
+}
+
+
+void init()
+{
+  ::init();
+  add_action("press","press");
+  add_action("press","push");
+}

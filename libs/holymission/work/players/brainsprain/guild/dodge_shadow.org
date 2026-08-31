@@ -1,0 +1,143 @@
+
+/*=+=+=+=+=+=+=+=+=+=+=+=+=+=+ Dodge Shadow =+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=*/
+
+#define RM      "race/master"
+#define MAX_ST  30
+#define W_DODGE 100		      /* weight * 100/strength max for dodge */
+
+inherit "/obj/std_shadow";
+
+/* USERDOC:
+This shadows the living function, hit_player().
+It allows full and partial 'dodging' of certain types of attacks: dexterity and
+charisma based (0,2,6,7), and normal.
+*/
+
+hit_player(dam, kind)
+{
+    string          name, pname;
+    int             dex, dk, enc, i, max, wt;
+
+    dex = me->query_dex() - this_player()->query_dex();/* delta dexterity */
+    wt = me->query_weight();	                     /* what we are carrying */
+    enc = wt * 100 / me->query_str();
+    name = me->query_name();
+    pname = this_player()->query_name();
+
+    if (!kind || kind == 0 || kind == 2 || kind == 6 || kind == 7)
+	dk = 0;
+    if (dk || dex < 1 || enc > W_DODGE) {
+	return me->hit_player(dam, kind);	          /* original route */
+    }
+
+    if (! (max = RM->query_max_stat(me->query_race(), 1)) )
+	max = MAX_ST;
+
+    /* First we check if a complete dodge of the attack is possible */
+
+    i = dex * (W_DODGE - enc) / max;      /* % possibility reduced by weight */
+    if (random(100) < i) {	                      /* We dodge completely */
+	write(name + " dodges your attack.\n");
+	say(name + " swiftly dodges the attack of " + pname + ".\n", me);
+	tell_object(me, "You swiftly dodge the attack of " + pname + ".\n");
+	return 0;
+    }
+
+    /* It isn't possible to dodge. But maybe we can reduce the damage ? */
+
+    i = random(100 - i) / 2 + 50;	            /* Minimum: 50 % damage */
+    dam = dam * i / 100;
+    i = me->hit_player(dam, kind);
+    write(me->query_name() +" tried to dodge your attack.\n");
+    if (i)
+	say(me->query_name() +" tried to dodge the attack of "+ pname +".\n");
+    tell_object(me, "You tried to dodge the attack of "+ pname +".\n");
+    return i;
+
+}
+
+/*=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+ Look Shadow =+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=*/
+
+#define MAX_LIST 30
+
+look(str)
+{
+    object          ob, ob_tmp;
+    string          item, short_str, msg, position;
+    int             max;
+
+    if (this_player()->test_dark())
+	return notify_fail("It is too dark.\n");
+    if (!str) 
+	return this_player()->mylook(0);
+
+    if (sscanf(str, "at %s", item) == 1 || sscanf(str, "in %s", item) == 1) {
+	int             weight;
+	item = lower_case(item);
+	ob = present(item, this_player());
+	if (!ob && environment(this_player())->id(item))
+	    ob = environment(this_player());
+	if (!ob)
+	    ob = present(item, environment(this_player()));
+	if (!ob) {
+	    write("There is no " + item + " here.\n");
+	    return 1;
+	}
+	call_other(ob,"long", item);
+	weight = ob->query_weight();
+	if (ob->can_put_and_get(item) < 1) /* <1 for container */
+	    return 1;
+	if (living(ob)) {
+	    object          special;
+	    special = first_inventory(ob);
+	    while (special) {
+		string          extra_str;
+		extra_str = special->extra_look();
+		if (extra_str)
+		    write(extra_str + ".\n");
+		special = next_inventory(special);
+	    }
+	}
+	ob_tmp = first_inventory(ob);
+	while (ob_tmp && !ob_tmp->short())
+	    ob_tmp = next_inventory(ob_tmp);
+	if (ob_tmp) {
+	    if (living(ob)) {
+		write("\t" + capitalize(item) + " is carrying:\n");
+	    } else
+		write("\t" + capitalize(item) + " contains:\n");
+	}
+	max = MAX_LIST;
+	msg = "";
+	ob = first_inventory(ob);
+	while (ob && max > 0) {
+	    if (short_str = ob->short())
+		msg += capitalize(short_str) + ".\n";
+	    ob = next_inventory(ob);
+	    max -= 1;
+	}
+	if (ob && !max)
+	    msg += "*** TRUNCATED ***\n";
+	write(msg);
+	if (!this_player()->query_invis() && (ob = find_player(item)) && 
+	  ob != this_player()) {
+	    tell_object(ob, this_player()->query_name() + " looks at you.\n");
+	}
+	return 1;
+    }
+    write("Look AT something, or what ?\n");
+    return 1;
+}
+
+int dodge_shadow()
+{
+    return 1;
+}
+
+object dodge_object()
+{
+    return this_object();
+}
+
+/*=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=*/
+

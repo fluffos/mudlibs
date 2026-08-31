@@ -1,0 +1,31 @@
+inherit "/room/room";
+inherit "/players/alex/room/short";
+reset(arg) {
+    ::reset(arg);
+    if (arg) return;
+
+    set_light(1);
+    short_desc = "A stone tunnel.";
+    long_desc =
+    "You are in a white marble hall. Your skin tingles with the energy being\n"+
+    "exuded by your surroundings. The energy content of this room is so high\n"+
+    "that upon contact with your feet with the floor, sparks fly. You get the\n"+
+    "impression that beings of power have once roamed this area.\n";
+
+    items=({
+      "floor", "The floor is made of a tough and unbreakable white marble",
+
+      "sparks",
+      "The sparks are seen whever any part of your body comes in contact with\n"+
+	"the surroundings",
+      
+      "hall", "The hall seems to stretch out in front of you",
+    });
+
+
+    dest_dir = ({
+      "players/alex/quest/2", "east",
+      "players/alex/quest/6", "north",
+    });
+}
+

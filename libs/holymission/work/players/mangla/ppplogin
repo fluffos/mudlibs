@@ -1,0 +1,196 @@
+#!/bin/bash
+# Reset $PATH, to avoid any trojan-horse executables anyone might
+# stick in their path (like something named 'chat' or 'pppd'.
+# Modify this as appropriate for your machine.
+PATH=/bin:/usr/bin:/usr/sbin/:/usr/local/bin
+
+##############################################################################
+
+# Set $userid to be your PPP login id at pagesz.
+# This should be your pagesz shell login ID with '.ppp' appended.
+userid=yourname
+
+##############################################################################
+
+# Set $password to whatever your pagesz password is.
+#
+# NOTE! Make sure that when you install this script, that you set the
+# file permissions so that other users cannot log in and read this script
+# and see your passwords.
+password-yourpassword
+
+##############################################################################
+
+# Set $phone to pagesz' phone number.
+# Shouldn't need to change this.
+phone=355-9652
+
+##############################################################################
+
+# Set $pppd to the name of the pppd executable on your system.
+# On my system (a RedHat 2.0 distribution), the distributed pppd in
+# /usr/sbin does not work at all, and I copied the pppd over from the
+# Slackware Linux  distribution instead, which I put in /usr/local/bin.
+#
+# You don't have to have an absolute path here, if it can be found in
+# the $PATH.
+
+#pppd=pppd              # Standard pppd in $PATH
+pppd=/usr/sbin/pppd    # Typical location, hardwired.
+#pppd=/usr/local/bin/pppd.slackware
+
+##############################################################################
+# Set $chat to the name of the chat executable on your system.
+# Same comments about absolute paths as for $pppd.
+chat=chat               # Standard chat in $PATH
+
+##############################################################################
+
+# Set $device to be the name of your outgoing modem line.
+device=/dev/cua1
+
+##############################################################################
+# Set $speed to be the line speed for your modem.
+# Note: this is the speed of your serial port to modem connection, it has
+# nothing to do with the speed your modem connects to the remote end with,
+# which is probably much slower.  Your serial port speed should be appreciably
+# higher than the modem speed (like 115200 bps for a 28.8Kbps modem).
+# Make sure you have your modem configured to do hardware handshaking
+# (using the CTS and RTS lines) and not software handshaking (XON/XOFF).
+#
+# PC users: make sure you have a serial port which can handle the speed you
+# set here.  Older or cheap serial ports sometimes have primitive UARTS which
+# drop characters at higher speeds.
+#speed=115200
+speed=38400
+
+##############################################################################
+# Set $maxDial to the maximum number of times you want to try dialing before
+# giving up.
+maxDial=20
+
+##############################################################################
+# Set $dialDelay to the number of seconds to delay between redials.
+# This can be zero.
+dialDelay=5
+
+##############################################################################
+# Everything from this point on should not need modification, unless you need
+# to modify the chat script itself (quite possible depending on your modem
+# type -- I am using a U.S Robotics "Sportster" (33Kbps model)).
+##############################################################################
+
+chat_flags=-v
+pppd_flags=-d
+
+# Parse out command line arguments.
+# This parsing is stupid and non-robust, and uses the nasty 'getopt'
+# function.  For this rinky-dink script, we can live with that.  This is
+# just for debug anyways.
+
+# OK. Dial them up.
+#
+# WARNING!  This "chat" command could be visible via "ps"; which means
+# if there are other users on your system they could use "ps" and see
+# the command line options to chat, which would include your name and
+# password. If this is a problem for you, then put the actual "send-expect"
+# pairs into a separate file and use "chat -f chat-file" instead of the
+# inline chat script used here.  For most of us home users it is not a
+# problem, because no one else would be logged in simultaneously to our
+# machine -- at least, not until AFTER we had already established a
+# network connection.
+
+numTries=0
+
+while : ; do
+  # Redirect stdin/stdout to the modem device.
+  exec < $device > $device
+
+  # Set line speed, no echo, 7-wire handshaking, etc.
+  # This affects stdin, which is now the modem port.
+  stty $speed -tostop -echo crtscts cread -clocal
+
+  # Dial remote end, using 'chat'.
+  # Note: "chat" is a rather brain-dead utility .. I ought to write/find
+  # a better dialer!  One big drawback to the chat script shown here
+  # is that if we connect at some nasty baud-rate (like, we get
+  # connected at 22000 Kbps when we expected a 28.8K link), that
+  # we won't register that fact and hang up and redial to get a cleaner
+  # phone line.  I tried catching these with ABORT strings like
+  # "CONNECT 24", but it seems that if we match the generic "expect"
+  # string of "CONNECT" that we won't ever match a longer "ABORT"
+  # string which begins with "CONNECT".  Fooey.
+
+  $chat $chat_flags                             \
+        ABORT "NO CARRIER" ABORT "BUSY"         \
+        "" "ATZ"                                \
+        "OK" "ATDT$phone"                       \
+        "CONNECT" "\d\d\c"                      \
+        "ogin:" "$userid"                       \
+        "ssword:" "$password\q"
+
+        # PPP Config Request packet comes in looking like this;
+        # would be nice to wait til we really saw this, before
+        # kicking off our own PPP handler, but 'chat' doesn't
+        # seem to handle waiting on metachars very well.  Either
+        # that or I have an error in this string (it should look
+        # like the characters FF 7D 23 C0 21 on an async line).
+        #"\377\175\043\300\041" "\c"
+
+  case $? in
+    0) # We connected successfully. Start PPP.
+        echo 1>&2 "Connected, starting PPP..."
+
+       # Delay here, just to make sure other end is ready for us.
+       # I seemed to have a problem getting Terminate-Request packets
+       # otherwise (this _shouldn't_ be happening).
+        sleep 2
+
+       # Even though we've already attached to the modem device,
+       # we will include the $device and $speed here ...
+       # this is just to convince pppd to detach itself and
+       # let this script exit in peace.
+       #
+       # Note that pagesz's terminal server doesn't support Van Jacobson
+       # header compression for TCP/IP packets (dernit), nor negotiate
+       # it correctly -- if you try to negotiate VJC, pagesz hangs up
+       # on you! (This is a defect in the PPP software on the terminal
+       # server apparently; it sends an LCP Terminate-Request packet
+       # when it should be sending a IPCP Config-Nak or Config-Reject
+       # instead.  If this last statement doesn't mean anything to you,
+       # don't worry about it!  These are technical details about PPP
+       # coming from someone who codes PPP stuff for a living).
+        $pppd   $pppd_flags                     \
+                asyncmap 0x00000000             \
+                mtu 1500 mru 1500               \
+                modem crtscts                   \
+                noipdefault defaultroute        \
+                -vj                             \
+                $device $speed
+        exit 0
+        ;;
+
+    *) # Got an error code.  Redial, up to a limit.
+
+       # Break our connection to the modem device.
+       # We do this to deassert DTR and get the modem to hangup
+       # (make sure your modem is configured to do this!)
+       # Whether this will really work or not is questionable.
+
+        exec < /dev/null > /dev/null
+
+        numTries=$((numTries + 1))
+
+        if [ $numTries -ge $maxDial ] ; then
+            echo 1>&2 "Tried $numTries times; giving up."
+            exit 1
+        fi
+
+        sleep $dialDelay
+        echo 1>&2 "Redialing ..."
+        ;;
+  esac
+done
+
+exit 0
+

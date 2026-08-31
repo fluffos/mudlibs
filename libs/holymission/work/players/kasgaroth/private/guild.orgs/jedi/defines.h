@@ -1,0 +1,15 @@
+#define ENV environment
+#define CAP capitalize
+#define LC lower_case
+#define NAME query_name()
+#define RNAME query_real_name()
+#define PRO query_pronoun()
+#define POS query_possessive()
+#define OBJ query_objective()
+#define LEV query_level()
+#define TO this_object()
+#define TPN TP->NAME
+#define TPPR TP->PRO
+#define TPPO TP->POS
+#define TPOB TP->OBJ
+#define TPL TP->LEV

@@ -1,0 +1,9 @@
+#define RO "/players/iishima/mpass/rooms/";
+#define MO "/players/iishima/mpass/mobs/";
+#define OB "/players/iishima/mpass/objs/";
+#define TP this_player();
+#define TO this_object();
+#define QN query_name();
+#define QRN query_real_name();
+#define WE "/players/iishima/mpass/weapons/";
+#define AR "/players/iishima/mpass/armour/";

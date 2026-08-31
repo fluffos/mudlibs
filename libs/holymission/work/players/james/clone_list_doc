@@ -1,0 +1,109 @@
+Use of clone_list in rooms:   -James, 6/30/93
+--------------------------
+
+For this discussion, a 'monster' is a clone of some file, that is to
+me automatically moved into the room, and an 'item' is the clone of
+some file, that is to be automatically moved to a previously cloned
+monster (and in the future, 'item' will be wielded/worn if possible)
+
+The objective in using clone_list, is to make it possible to write a
+room that clones monsters and items, and yet can still use the
+replace_program() efun. Use of replace_program is easy, and it speeds
+up the mud by reducing the number of functions in an item (this improves
+the function-cache hit rate of the LPC parser) AND it also reduces the 
+memory use of the rooms that use it, which is also very beneficial.
+
+What is clone_list? clone_list is an array variable defined in room.c
+that can be used from rooms that inherit "room/room". The array must
+contain some multiple of 5 parameters, and the order of the parameters 
+IS significant. 
+
+Parameters:
+  1) An integer, used to define 'groups' of monsters or items.
+
+     If the integer is positive, it means that you're defining a monster.
+     If you reuse a number, ie, if you define an Orc as 4, and later define
+     a Orc Shaman as 4, all of these monsters will be temporarily 
+     remembered as a 'group'.
+
+     If the integer is negative, it means that you're defining an item.
+     Items are cloned for EACH previously defined monster of the corresponding
+     group, ie, if you have three monsters in group 4, then Each of them
+     will get a clone of any item of group -4.
+
+  2) An integer, used to declare How Many of the current monster or item
+     should be cloned. Note that if you want 3 Orcs during a reset, and
+     1 Orc is still in the room, then only 2 Orcs are cloned. And in this
+     example, if you later defined an item for these orcs, only the 2 new
+     Orcs would get items.
+
+  3) A string, which must be a valid id() for the monster or item that you're
+    currently defining.
+
+  4) A string, which must be a valid file name that is to be cloned. 
+     "obj/monster" is usually used, though it can be anything, especially
+     for items.
+
+  5) An array, which contains configuration information for the monster or
+     item that is being cloned. If no configuation is needed (such as if
+     you're cloning a bag from "obj/bag") then this argument should be Zero.
+     The array consists of a string containing a function that should be
+     called in the clone, followed by an argument (of any type) that should
+     be passed to that function. heres an example, possibly for a monster:
+
+       ({ "set_name", "orc", "set_level", 5, "set_alignment", -500 })
+
+==============================================================================
+
+Ok, thats alot of explanation, for something thats really quite easy to use!
+Here's an example, from my workroom:
+
+inherit "room/room";
+
+reset(arg) {
+  set_light(1);
+  short_desc = "James workroom";
+  long_desc  = "The workroom of James the Great\n\n" +
+               "As you look around, you wonder where all\n"+
+               "the impressive gadgets and doo-dads are...\n";
+  dest_dir = ({ "room/church", "church",
+                "room/main_shop", "shop" });
+  items = ({ "desk", "The desk is old and decayed" });
+  clone_list = ({ 1, 2, "rat", "obj/monster", ({"set_name", "rat",
+                                                "set_level", 3 }),
+                 -1, 1, "bag", "obj/bag", 0 });
+  ::reset();
+  replace_program("room/room");
+}
+
+
+It is important to note a few things. First, i inherit "room/room", and 
+i dont inherit any other files, i dont declare any additional variables
+or functions besides reset(), and the only thing that the reset() does
+is to define values for variables that were inherited from room/room. 
+
+IF YOU MUST ADD FUNCTIONS, VARIABLES, OR ADDITIONAL KINDS OF CODE TO A
+ROOM, YOU CANNOT USE replace_program(). SO EITHER CODE THAT ROOM NORMALLY,
+OR REMOVE THE replace_program() LINE (if you want all your rooms coded
+in the same style)
+
+Ok, sorry to shout. Define the clone_list variable, then call ::reset(), 
+which is what really clones the monsters and items for you. Then you can
+do a replace_program(), which effectively throws away the current room code 
+(but not inherited variables) and replaces it with a link (pointer) to the
+inherited room/room code space. Since the reset() of room.c will use the
+clone_list variable information to clone new monsters each reset, everything
+will work just fine.
+
+Let me know if there are any problems. Monsters with items currently dont
+attempt to wear or wield weapons or armor, but that should be added very
+soon.
+
+8/10/93 - James
+Since people seem to be starting to use clone_list alot, i finally
+got around to adding the automatic wield of weapons, and wear of
+armours... After cloning any item and moving it to the monster, it
+calls query_armor() and query_weapon(), and if either of these 
+return true (1), then the monster will issue the appropriate command
+using the id string (3rd parameter of a clone_list definition)...IE,
+for weapons, it issues the command "wield "+id_string.

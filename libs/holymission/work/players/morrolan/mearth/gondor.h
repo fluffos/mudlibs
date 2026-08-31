@@ -1,0 +1,9 @@
+#define TP this_player()
+#define TO this_object()
+#define E  environment()
+#define ENV(x) environment(x)
+#define GONDOR "/players/colossus/mearth/gondor"
+#define GWEAP  "/players/colossus/mearth/gondor/weapons"
+#define GMON   "/players/colossus/mearth/gondor/monsters"
+#define GARM   "/players/colossus/mearth/gondor/armour"
+#define GOBJ   "/players/colossus/mearth/gondor/obj"

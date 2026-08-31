@@ -1,0 +1,353 @@
+
+/* fightersoul 
+
+   Last Edit: Whisky 25.01.95 faster code, installed legends, strict types 
+								       */
+
+#define TP      this_player()
+#define TPN     this_player()->query_name()
+#define TPRN    this_player()->query_real_name()
+#define ENV     environment
+#define GM      "guild/master"
+#define GUILD   "fighter"
+#define BIN     "/players/portil/guild/bin/"
+
+object bloarm, bwho;
+int no_but, bash, is_berzerk, gd, lg_lev;
+closure call, out;              /* Whisky needed for faster code */
+
+/* the vars for timing the butt */
+object xpl,xatt;
+int xdam;
+string xmsg;
+
+/* portotypes */
+int berzerk();
+int but(string str);
+
+int get() 
+{ 
+    return 1; 
+}
+
+int drop() 
+{ 
+    return 1; 
+}
+
+int id(string str) 
+{ 
+    return str=="fighter_soul" || str=="fightersoul"; 
+}
+
+void reset(int arg) 
+{
+    if(arg) return;
+    call = #'call_other;
+    out =  #'call_out;
+    is_berzerk = 0;
+    gd=GM->query_number(GUILD);
+}
+
+
+// legendsystem: Whisky, will update the legendlevel with any login
+
+void update_legends()
+{
+
+    if ( apply(call,TP,"query_exp")   > 2000000 &&
+      apply(call,TP,"query_age")   >  250000 &&
+      apply(call,TP,"query_level") <      30)
+    {
+	lg_lev = (apply(call,TP,"query_exp")/500000 - 3);
+
+	if (lg_lev > 150)  
+	    lg_lev = 150;
+
+	// setting the legendlevel here. with query_property("fighter_legend")
+	// the current level can be asked afterwards 
+
+	apply(call,TP,"add_property","fighter_legend",lg_lev);
+	apply(out,"extra_title",1,this_player());
+    }
+}
+
+// extra title: will set the title Legend after the login 
+void extra_title(object pl)
+{
+    apply(call,pl,"set_title","Legend");
+    if (apply(call,pl,"query_gender")==1)
+	apply(call,pl,"set_pretitle","Lord");
+    else if (apply(call,pl,"query_gender")==2)
+	apply(call,pl,"set_pretitle","Lady");
+    else
+	apply(call,pl,"set_pretitle","Warbeast");
+     if (apply(call,pl,"query_property","fighter_legend") > 100)
+         apply(call,pl,"set_pretitle","Emporer");
+}
+
+void init() 
+{
+    object gem;
+    object shad;
+
+    if (!TP)
+	return;
+
+    update_legends();
+    // Whisky: for the fighter skills [slash,pierce,bludgeon]
+
+    if (!apply(call,TP,"fighter_shad"))
+    {
+	shad = clone_object("/players/portil/guild/obj/fighter_shad");
+	apply(call,shad,"start_shadow",TP,0,"fighter_shad");
+    }
+
+    add_action("no_spell","missile");
+    add_action("no_spell","shock");
+    add_action("no_spell","fireball");
+    add_action("fix","fix");
+    add_action("fighter_line","fighters");
+    add_action("fighter_line","fighter");
+    add_action("emote","fighter/");
+    add_action("berzerk","berzerk");
+    add_action("but","but");
+    add_action("guild_command","",1); 
+}
+
+/* --------------------------------------------------------------------
+      Commands which are executed via call_other in another file
+   -------------------------------------------------------------------- */
+
+mixed guild_command(string str) 
+{
+    string verb;
+
+    verb=query_verb();
+
+    if (file_size(BIN+verb+".c") < 0) 
+	return 0;
+
+    switch(verb) 
+    {
+    case "but":     return but(str);
+    case "berzerk": return berzerk();
+    case "help":    return (apply(call,BIN+"help","help",str,GM,gd));
+    case "bash":    return (apply(call,BIN+"bash","bash",&bash,no_but));
+    case "block":   return (apply(call,BIN+"block","shield_block",
+	    &bloarm,is_berzerk,&bwho));
+    case "lower":   return (apply(call,BIN+"lower","lower",&bloarm));
+    default:        return funcall(call,BIN+verb,verb,str);
+    }
+} 
+
+/* --------------------------------------------------------------------
+			 The Berzerk
+   -------------------------------------------------------------------- */
+
+int berzerk() 
+{
+    int ret;
+
+    ret = (BIN+"berzerk")->berzerk(is_berzerk,bloarm); 
+    if (ret == 2)
+	is_berzerk= 20 + apply(call,TP,"query_level")/2;
+    return 1;
+}
+
+/* --------------------------------------------------------------------
+			Stoping the Berzerk mode 
+   -------------------------------------------------------------------- */
+
+int anti_berz() 
+{
+    write("You get tired, and turn back normal.\n");
+    apply(call,this_player(),"set_berzerk",0);
+    is_berzerk=0;
+    return 0;
+}
+
+/* --------------------------------------------------------------------
+			   The Headbut
+   -------------------------------------------------------------------- */
+
+int but(string str) 
+{
+    mixed *ret;
+    ret=funcall(call,BIN+"but","but",bash,no_but);
+    if(ret[0]==-1) return 1;
+    xdam=ret[0];
+    xmsg=ret[1];
+    xatt=ret[2];
+    xpl=TP;
+    no_but = 1;
+    return 1;
+}
+
+/* --------------------------------------------------------------------
+		     The Heart beat of the Fighter
+   -------------------------------------------------------------------- */
+
+void time_guild_soul() 
+{
+    string aname, aposs;
+
+
+    if (is_berzerk)
+    {
+	is_berzerk = is_berzerk -1;
+	if (is_berzerk < 1)
+	    anti_berz();
+    }
+    if(bash) bash--;
+
+    if(bloarm && (!bwho || (ENV(TP)!=ENV(bwho)))) 
+    {
+	destruct(bloarm);
+	write("You stop blocking.\n");
+    }
+
+    if(!no_but) return;
+
+    if(xatt && living(xatt) && ENV(xatt)==ENV(TP)) 
+    {
+	write(xmsg);
+	aname = apply(call,xpl,"query_name");
+	aposs = apply(call,xpl,"query_possessive");
+
+	tell_object(xatt,aname + " smashes "+aposs+
+	  " head in your face.\n");
+	say(aname + " smashes "+aposs+
+	  " head in "+apply(call,xatt,"query_name")+"'s face.\n");
+	if (xpl) 
+	    apply(call,xpl,"add_exp",apply(call,xatt,"hit_player",xdam) );
+    }
+    no_but=0;
+}
+
+/* --------------------------------------------------------------------
+			The Multiattacks
+   -------------------------------------------------------------------- */
+
+void recognize_fight() 
+{                             
+    object enmy;
+    int rnd;
+    int sz, max;
+
+    enmy= 1 + apply(call,TP,"query_dex");
+    rnd = 1 + random(80);
+    sz = 1;
+
+    if (lg_lev)
+    {
+	max = 4 + (lg_lev / 50);
+	enmy = enmy + 5 + (lg_lev/15);
+    }
+    else 
+	max = 4;
+
+
+    while(sz < max)
+    {
+	if (rnd < enmy)
+	    apply(call,TP,"attack");
+	sz++;
+	rnd = rnd / sz;
+    }
+
+    if (is_berzerk) 
+    {
+        if (random(4))
+	   apply(call,TP,"attack");
+        if (apply(call,TP,"query_level") > 18)
+        {
+           if (random(3))
+               apply(call,TP,"attack");
+        }
+	if (apply(call,TP,"query_level") > 23 ) 
+	{
+          if (random(2))
+	    apply(call,TP,"attack");
+	}
+    }
+}
+
+/* --------------------------------------------------------------------
+			  Block Adventurers spell
+   -------------------------------------------------------------------- */
+
+int no_spell() 
+{
+    write("You don't think a Fighter could cast a spell ????\n");
+    return 1;
+}
+
+/* --------------------------------------------------------------------
+			   The Guildemote 
+   -------------------------------------------------------------------- */
+
+int emote(string str) 
+{ 
+    funcall(call,"sys/chatd","do_chat",gd,"[*Fighter*] "+
+      capitalize(apply(call,TP,"query_real_name"))+" "+str+"\n");
+    return 1;
+}
+
+/* --------------------------------------------------------------------
+			   The Guildtalk 
+   -------------------------------------------------------------------- */
+
+int fighter_line(string str) 
+{
+    object *u;
+    int num, i, sz, lv;
+    string msg;
+
+    if (str!="legends")
+    {
+	if (!str)
+	{
+	    write("=-=-=-=-=-=-=-=-=-=-=-=-=-= "+
+	      "Fighters online "+
+	      "=-=-=-=-=-=-=-=-=-=-=-=-=-= \n\n");
+	}
+	apply(call,this_player(),"guild_line",str);
+	return 1;
+    }
+    u = users();
+    num = 0;
+    msg = "\n";
+
+    for (sz = sizeof(u), i=0 ; i < sz; i++)
+    {
+	if (apply(call,u[i],"query_guild")==3 &&
+	  (lv = apply(call,u[i],"query_property","fighter_legend")) > 0)
+	{
+	    msg = msg + sprintf("%-15s %-17s %-17s\n",
+	      capitalize(apply(call,u[i],"query_real_name")),
+	      "Guildlevel: "+to_string(apply(call,u[i],"query_level")),
+	      "Legenlevel: "+to_string(lv));
+	    num = num + 1;
+	}
+    }
+    if (num == 1)
+	write("\n                1 Fighter Legend online\n\n");
+    else
+    {
+	write("\n               "+to_string(num)+" Fighter Legends online.\n"+
+	  "\n");
+    }
+    write(msg);
+    return 1;
+}
+
+
+/* fix */
+void fix()
+{
+    update_legends();
+    this_player()->update_weight();
+    write("Ok.\n");
+  }
+    

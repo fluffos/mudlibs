@@ -1,0 +1,128 @@
+int gived, foo, charges;
+object old_room, targetloc, otherplayer;
+ 
+foo() {return 1;}
+ 
+id(str) {
+    return str == "eye" || str == "catseye";
+}
+ 
+reset(arg) {
+    if (!arg) charges=random(5)+1;
+}
+ 
+short() {
+    return "A catseye";
+}
+ 
+query_value() {return 2500; }
+ 
+long() {
+    write("This looks like a cats eye embedded in a black stone.\n");
+    write("The cats eye seems to have a look to it that is somehow\n");
+    write("giving you the impression it is following you.\n");
+    write("The eye is glowing with a soft inner light.\n");
+    write("You seem to be gazing at a door through space.\n");
+}
+ 
+query_weight() { return 2; }
+ 
+get() { return 1; }
+ 
+init() {
+    add_action("gaze_eye"); add_verb("gaze");
+    add_action("drop_object"); add_verb("drop");
+    gived = 0;
+}
+ 
+object inven_success;
+object inv2;
+ 
+gaze_eye(str)
+{
+    object who;
+    string s;
+
+    if (!str) {
+	write("You gaze in the air....\n");
+	say(this_player()->query_name()+" gazes in the air.\n");
+	return 1;
+    }
+    if (sscanf(str,"at %s",s)==1) str=s;	/* Herp: better syntax */
+    who = find_living(str);
+    if (!find_living(str)) {
+        write("A voice inside your head tells you ");
+        write(str);
+        write(" is not alive right now.\n");
+        say(call_other(this_player(), "query_name") +
+        " peers perplexedly into an catseye.\n");
+        return 1;
+    }
+    if(who->query_wizard()) {
+    write("Do not even THINK about looking at a wiz.\n");
+    write("This is for finding players not wizards.\n");
+    return 1;
+    }
+    write("You gaze into the catseye and see " + str + ".\n");
+    write("\n");
+    say(call_other(this_player(), "query_name") +
+    " peers into a catseye.\n");
+          old_room = environment(this_player());
+            otherplayer = find_living(str);
+            targetloc = environment(otherplayer);
+                 move_object(this_player(), targetloc);
+                call_other(this_player(), "look", 0);
+                move_object(this_player(), old_room);
+                write("\n");
+	tell_object(otherplayer,"You feel like someone is watching you.\n");
+write("Looking through the eye, you see that " + str + " is carrying:\n");
+    inven_success = first_inventory(find_living(str));
+    if (inven_success) while ((inven_success) &&
+(call_other(inven_success,"short",0))) {
+        write("    " + call_other(inven_success,"short",0) + "\n");
+        if (call_other(inven_success,"can_put_and_get",0)) {
+             inv2 = first_inventory(inven_success);
+             if (inv2) while ((inv2) &&  (call_other(inv2,"short",0))) {
+                 write("        " + call_other(inv2,"short",0) + "\n");
+                 inv2 = next_inventory(inv2);
+               }
+     }
+        inven_success = next_inventory(inven_success);
+    }
+if (charges == 0) {
+    write("\nThe catseye begins to glow with a holy light.\n");
+    write("The light grows brighter and brighter.\n");
+    write("When you can see again, the eye is gone.\n");
+    say(call_other(this_player(), "query_name") + 
+" begins to glow brightly!\n");
+    say("The blinding aura fades to a dull glow and vanishes.\n");
+
+#if 0
+	/* Herp: destruct uses add_weight already !!! */
+
+    call_other(this_player(), "add_weight", -2);
+#endif
+    destruct(this_object());
+    return 1;
+}
+     charges=charges-1;
+     return 1;
+}
+ 
+drop_object(str) {
+    if (str == "all") {
+        drop_object("catseye");
+        return;
+    }
+    if (!str || !id(str)) return 0;
+	if(environment() != this_player()) return 0;
+    write("The catseye shatters into a million pieces.\n");
+    say(call_other(this_player(), "query_name") +
+    " drops a catseye. It shatters into a million pieces.\n");
+#if 0
+    call_other(this_player(), "add_weight", -2);
+#endif
+    destruct(this_object());
+    return 1;
+}
+ 

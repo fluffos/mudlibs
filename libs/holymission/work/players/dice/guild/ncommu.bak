@@ -1,0 +1,451 @@
+#ifndef _ninja_communicate_
+#define _ninja_communicate_
+
+int noff;
+
+/* --- the shout -------------------------------------------------------------- */
+_shout( str )
+{
+    object *u;
+    int    i;
+
+    if ( !str ) {
+	write( "Shout what ?\n" );
+	return( 1 );
+    } 
+
+    if ( !(TP->query_wizard()) && TP->query_sp() < TP->query_max_sp()/5 )
+	write( "Your mouth is that dry that you don't manage it to shout.\n" );
+    else {
+	if ( str == "nihonese" ) {
+	    write( "Shout what in nihonese ?\n" );
+	    return( 1 );
+	}
+
+	if ( explode( str, " " ) && explode( str, " " )[0] == "nihonese" ) {
+	    str = extract( str, strlen("nihonese")+1, strlen( str )-1 );
+	    write( "You shout in nihonese:\n   " + str + "\n" );
+
+	    log_file( "SHOUTS", TP->query_real_name()+": "+TP->query_name() + 
+	      " shouts in nihonese:\n  " + str + "!\n\n" );
+
+	    u = users();
+	    for ( i = 0; i < sizeof( u ); i++ ) {
+		if ( u[i]->query_guild() == 8 && u[i] != TP ) {
+		    if ( TP->query_level() >= 20 )
+			tell_object( u[i],
+			  TP->query_name() + "-san shouts in nihonese:\n  " + str + "!\n" );
+		    else
+			tell_object( u[i],
+			  TP->query_name() + " shouts in nihonese:\n  " + str + "!\n" );
+		}
+		else if ( TP != u[i] )
+		    tell_object( u[i],
+		      TP->query_name() + " shouts something in nihonese.\n" );
+	    }
+
+	}
+	else {
+	    write( "You shout:\n  " + str + "!\n" );
+	    shout( TP->query_name() + " shouts: " + str + "!\n" );
+	}
+	if ( !TP->query_wizard() )
+	    TP->restore_spell_points( -1 * (TP->query_max_sp()/5) );
+    }
+
+    return( 1 );
+}
+
+/* --- the tell --------------------------------------------------------------- */
+_tell( str )
+{
+    string swho, what, name;
+    object who;
+    int    sp_reduce;
+
+    if ( !str ) {
+	write( "Tell whom what ?\n" );
+	return( 1 );
+    }
+
+    if ( TP->query_level() > 19 )
+	name = TP->query_name() + "-san tells you";
+    else
+	name = TP->query_name() + " tells you";
+
+    if ( sscanf( str, "%s %s", swho, what ) != 2 ) {
+	write( "Tell whom what?\n" );
+	return( 1 );
+    }
+    who = find_living( swho );
+    if ( !who || (who->query_invis() && who->query_level() > TP->query_level()) ) {
+	write( "No living person with that name (" + capitalize( swho ) + ").\n" );
+	return( 1 );
+    }
+    else if ( who->query_earmuff_level() >= TP->query_level() ) {
+	write( who->query_name() + " is busy now, try it later.\n" );
+	return( 1 );
+    }
+    else if ( what == "nihonese" ) {
+	write( "Tell what in nihonese ?\n" );
+	return( 1 );
+    }
+
+    if ( TP->query_wizard() )
+	sp_reduce = 0;
+    else if ( who->query_guild() == GUILD_MASTER->query_number(GUILD) )
+	sp_reduce = 0;
+    else
+	sp_reduce = TP->query_max_sp()/5;
+
+    if ( TP->query_sp() < sp_reduce ) {
+	write( "Your mouth is that dry that you don't manage it to tell.\n" );
+	return( 1 );
+    }
+
+    if ( explode( what, " " ) && explode( what, " " )[0] == "nihonese" ) {
+	what = extract( what, strlen("nihonese")+1, strlen( what )-1 );
+	write( "You tell " + who->query_name() + " in nihonese:\n  " + what + "\n" );
+	if ( who->query_guild() == 8 ) {
+	    tell_object( who, name + " in nihonese: " + what + "\n" );
+	}
+	else
+	    tell_object( who, name + " tells you something in nihonese.\n" );
+    }
+    else {
+	write( "You tell " + who->query_name() + ": " + what + "\n" );
+	tell_object( who, name + ": " + what + "\n" );
+    }
+
+    TP->restore_spell_points( -1 * sp_reduce );
+
+    return( 1 );
+}
+
+/* --- say -------------------------------------------------------------------- */
+_say( what )
+{
+    int    i;
+    object inv;
+    string name;
+
+    if ( !what ) {
+	write( "Say what ?\n" );
+	return( 1 );
+    }
+    else if ( what == "nihonese" ) {
+	write( "Say what in nihonese ?\n" );
+	return( 1 );   
+    }
+    if ( TP->query_level() > 19 )
+	name = TP->query_name() + "-san says";
+    else
+	name = TP->query_name() + " says";
+
+    if ( explode( what, " " ) && explode( what, " " )[0] == "nihonese" ) {
+	what = extract( what, strlen("nihonese")+1, strlen( what )-1 );
+	write( "You say in nihonese: " + what + "\n" );
+	inv = all_inventory( environment( this_player() ) );
+	for ( i = 0; i < sizeof(inv); i++ ) {
+	    if ( living( inv[i] ) ) {
+		if ( inv[i]->query_guild() == 8 && inv[i] != TP ) {
+		    tell_object( inv[i], name + 
+		      " in nihonese:\n  " + what + "\n" );
+		}
+		else if ( inv[i] != TP )
+		    tell_object( inv[i], name + 
+		      " something in nihonese.\n" );
+	    }
+	}
+    }
+    else {
+	say( name +": " + what + "\n" );
+	write( "You say: " + what + "\n" );
+    }
+
+    return( 1 );
+}
+
+/* --- introducing ------------------------------------------------------------ */
+_intro( arg )
+{
+    object who, ob;
+
+    if ( !arg ) {
+	write( "Introduce whom ?\n" );
+	return( 1 );
+    }
+
+    if ( arg == "myself" )
+	_intro_me( TP );
+    else {
+	who = present( arg, environment(this_player()) );
+	if ( who ) {
+	    ob = present( "ninjasoul", who );
+	    if ( !ob ) {
+		write( "You only can introduce memeber of your guild.\n" );
+		return( 1 );
+	    }
+	    else
+		ob->_intro_me( who );
+	}
+    }
+
+    return( 1 );
+}
+
+_intro_me( arg )
+{
+    string str;
+
+    if ( arg == TP ) {
+	write( "You introduce yourself as:\n\n" );
+	str = TP->query_possessive();
+	if ( str == "his" ) str = "him";
+	else if ( str == "its" ) str = "it";
+	say( capitalize(arg->query_name()) + " introduces " + str + "self as:\n" );
+    }
+    else {
+	tell_object( this_player(), "You introduce " + capitalize(arg->query_real_name()) + 
+	  " as:\n");
+	tell_object(arg, capitalize(TP->query_real_name()) + " introduces you as:\n" );
+	say( capitalize(TP->query_real_name()) + " introduces " + 
+	  capitalize(arg->query_name()) + " as:\n", arg );
+    }
+
+    write( NINJA_TITLES->get_pretitle(arg->query_level()) + " " + 
+      capitalize(arg->query_real_name()) + ", member of the ninja-guild, " + 
+      arg->query_gender_string() + ".\n" );
+    say( NINJA_TITLES->get_pretitle(arg->query_level()) + " " +
+      capitalize(arg->query_real_name()) + ", member of the ninja-guild, " +
+      arg->query_gender_string() + ".\n" );
+
+    if ( arg == TP ) {
+	tell_object( arg, "You are:\n" );
+	say( capitalize(arg->query_pronoun()) + " is:\n", arg );
+    }
+    else {
+	write( capitalize(arg->query_pronoun()) + " is:\n" );
+	say( capitalize(arg->query_pronoun()) + " is:\n", arg );
+	tell_object( arg, "You are:\n" );
+    }
+
+    write( capitalize(NINJA_TITLES->get_skill_title(actThrowSkill)) + " in Throwing.\n" );
+    write( capitalize(NINJA_TITLES->get_skill_title(actKarateSkill)) + " in Karate.\n" );
+    write( capitalize(NINJA_TITLES->get_skill_title(actParrySkill)) + " in Yadomejutsu.\n" );
+    write( capitalize(NINJA_TITLES->get_skill_title(actAccSkill)) + " in Kenjutsu.\n" );
+    write( capitalize(NINJA_TITLES->get_skill_title(actTHCSkill)) + " in Ni-To-Kenjutsu.\n" );
+    write( capitalize(NINJA_TITLES->get_skill_title(actCamouSkill)) + " in Camouflage.\n" );
+    write( capitalize(NINJA_TITLES->get_skill_title(actAssassSkill)) + " in Assassination.\n" );
+
+    say( capitalize(NINJA_TITLES->get_skill_title(actThrowSkill)) + " in throwing.\n" );
+    say( capitalize(NINJA_TITLES->get_skill_title(actKarateSkill)) + " in karate.\n" );
+    say( capitalize(NINJA_TITLES->get_skill_title(actParrySkill)) + " in Yadomejutsu.\n" );
+    say( capitalize(NINJA_TITLES->get_skill_title(actAccSkill)) + " in Kenjutsu.\n" );
+    say( capitalize(NINJA_TITLES->get_skill_title(actTHCSkill)) + " in Ni-To-Kenjutsu.\n" );
+    say( capitalize(NINJA_TITLES->get_skill_title(actCamouSkill)) + " in Camouflage.\n" );
+    say( capitalize(NINJA_TITLES->get_skill_title(actAssassSkill)) + " in Assassination.\n" );
+
+    say( "\nThank you for your aknowledgement.\n" );
+
+    return( 1 );
+}
+
+/*171093 Herp: chat daemon */
+
+_ninja(str) { return TP->guild_line(str); }
+
+_emote(str)
+  { "sys/chatd.c"->do_chat(GuildNo,"[*Ninja*] "+TP->query_name()+" "+str+"\n");
+ return 1;
+}
+
+#if 0
+/* ----- ninjas online ------------------------------------------------------------- */
+_ninja( str )
+{
+    string msg, tmp, name;
+    object *u, *nsoul;
+    int i, anzWiz, anzPlay;
+
+    u = users();
+
+    /* --- toggle guild on/off ----------- */
+    if ( str == "off" ) {
+	write( "Ninja-channel now off.\n" );
+	noff = 1;
+	return( 1 );
+    }
+    if ( str == "on" ) {
+	noff = 0;
+	write( "Ninja-channel now on.\n" );
+	return( 1 );
+    }
+
+    name = TP->query_name();
+
+    /* --- guild emote ------------- */
+    if ( str && explode(str," ")  &&
+      explode( str, " " )[0] == "emote" ) {
+	if ( !str || sizeof( explode(str," ") ) < 2 ) {
+	    write( "What do you want to emote?\n" );
+	    return( 1 );
+	}
+	sscanf( str, "%s %s", msg, str );
+	for ( i = 0; i < sizeof( u ); i++ ) {
+	    if ( u[i]->query_guild() == GUILD_MASTER->query_number(GUILD) ) {
+		nsoul = present( "ninja_soul", u[i] );
+		if ( !nsoul ) break;
+		if ( nsoul->query_noff() == 0 )
+		    tell_object( u[i], "<<"+name
+		      +" "+str+">>\n" );
+	    }
+	}
+	write( "Ok.\n" );
+	return( 1 );
+    }
+
+    /* --- guild-message ----------- */
+    if ( str ) {
+	for ( i = 0; i < sizeof( u ); i++ ) {
+	    if ( u[i]->query_guild() == GUILD_MASTER->query_number(GUILD) ) {
+		nsoul = present( "ninja_soul", u[i] );
+		if ( !nsoul ) break;
+		if ( u[i]->query_earmuff_level() < TP->query_level() )
+		    if ( nsoul->query_noff() == 0 )
+			tell_object( u[i], "<<"+name
+			  +">> " + str + "\n" );
+	    }
+	}
+	write( "Ok.\n" );
+	return( 1 );
+    }
+
+    /* --- show online ------------- */
+    u = sort_array( u, "less_func", this_object() );
+    anzWiz = anzPlay = 0;
+
+    msg = right_align( "Name", 25 ) + right_align( "Gender", 8 ) +
+    right_align( "Race", 20 ) + right_align( "Level", 12 ) + 
+    "Extras\n";
+    msg += get_line( "=", 75 ) + "\n";
+
+    for (i=0;i<sizeof(u);i++) {
+	if ( u[i]->query_guild() == GUILD_MASTER->query_number(GUILD) ) {
+	    nsoul = present( "ninja_soul", u[i] );
+	    if ( !nsoul ) break;
+	    if ( u[i]->query_immortal() ) {                         /* wizzes */
+		if ( !(u[i]->query_invis()) ||
+		  TP->query_immortal() ) {
+		    anzWiz++;
+		    if ( u[i]->query_invis() )
+			msg += right_align( capitalize(u[i]->query_real_name()), 25 );
+		    else
+			msg += right_align( process_string(u[i]->query_name()), 25 ); 
+		    msg += right_align( u[i]->query_gender_string(), 8 ) +
+		    right_align( u[i]->query_race(), 20 ) +
+		    right_align( "(immortal)", 12 );
+		    if ( u[i]->query_earmuff_level() >= TP->query_level() )
+			msg += "(busy) ";
+		    if ( nsoul->query_noff() )
+			msg += "(off) ";
+		    if ( u[i]->query_invis() )
+			msg += "(invis)";
+		    msg += "\n";
+		}
+	    }
+	    else {                                                    /* player */
+		if ( !anzPlay )
+		    msg += get_line( "-", 75 ) + "\n";
+		anzPlay++;
+		msg += right_align( NINJA_TITLES->get_pretitle(u[i]->query_level())
+		  + " " + capitalize( u[i]->query_real_name() ), 25 ) +
+		right_align( u[i]->query_gender_string(), 8 );
+		msg += right_align( u[i]->query_race(), 20 );
+
+		msg += right_align( "(" + u[i]->query_level() + ")", 12 );
+		if ( nsoul->query_iscamou() ) {
+		    if ( TP->query_immortal() )
+			msg+= "(C"+nsoul->query_iscamou()+") ";
+		    else
+			msg += "(camou) ";
+		}
+		if ( nsoul->query_noff() )
+		    msg += "(off)";
+		msg += "\n";
+	    }
+	}
+    }
+
+    msg += get_line( "=", 10 ) + " Wizes: ";
+    tmp = (string) anzWiz;
+    msg += right_align( tmp, 2 ) + " === Players: ";
+    tmp = (string) anzPlay;
+    msg += right_align( tmp, 2 ) + " " + get_line( "=", 38 );
+    write( msg + "\n\n" );
+
+    return( 1 );     
+}
+#endif
+
+less_func( ob1, ob2 )
+{
+    if ( ob1->query_level() < ob2->query_level() )
+	return( 1 );
+
+    return( 0 );
+}
+
+query_noff()
+{
+    return( noff );
+}
+
+right_align( txt, w )
+{
+    if ( strlen( txt ) < w )
+	txt = txt + "                                     ";
+
+    return( extract( txt, 0, w-1 ) );
+}
+
+get_line( c, w )
+{
+    int i;
+    string l;
+
+    l = "";
+    for ( i = 0; i < w; i++ )
+	l += c;
+
+    return( l );
+}
+
+
+/* ----- beep dice ------------------------------------------------------------- */
+_beep( arg )
+{
+    object obj;
+
+    if ( arg != "dice" ) {
+	write( "Sorry, but you only can beep Dice.\n" +
+	  "And this only for a good reason ! (e.g. a bug or something like that)\n" );
+	return( 1 );
+    }
+
+    obj = find_player( "dice" );
+    if ( !obj || obj->query_invis() ) {
+	write( "Sorry, but Dice isn't on right now.\n" );
+	return( 1 );
+    }
+
+    tell_object( obj, "" );
+    tell_object( obj, "---->" + TP->query_name() + " beeped you !\n");
+    write("You just called for Dice.\nHe will answer as soon as possible.\n"+
+      "Maybe he is off for coffee ( As usual ...)\n");
+
+    return( 1 );
+}
+
+
+#endif /*_ninja_communicate_*/

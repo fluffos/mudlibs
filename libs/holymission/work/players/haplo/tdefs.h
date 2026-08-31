@@ -1,0 +1,12 @@
+#define TP	this_player()
+#define TO	this_object()
+#define RNAME	query_real_name()
+#define LEVEL	query_level()
+#define FP	find_player
+#define NAME 	query_name()
+#define PATH	"/players/haplo/"
+#define ROOM	PATH+"rooms/"
+#define AROOMS "/players/haplo/fortress/"
+#define SROOMS "/players/haplo/newbie/"
+#define GROOMS "/players/haplo/newbie/garden/rooms/"
+#define RROOMS "/players/haplo/rainforest/rooms/"

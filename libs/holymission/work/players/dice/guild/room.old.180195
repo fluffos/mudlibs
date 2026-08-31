@@ -1,0 +1,161 @@
+/* 920228 mud@alijku05.edvz.uni-linz.ac.at Herbert Rosmanith */ 
+
+#include "std.h"
+#define GUILD           "ninja"                 /* ninja guild */
+#define GM      "guild/master"
+#define LGF     "GUILD.JOIN"
+#define CONF    "/players/patience/ezo/fconference"
+
+inherit "guild/room";
+
+/*-------------------------------------------------------*/
+/* All the Advance, Cost, List stuff here        */
+/* All the pretitles, titles and exp levels for a monk.  */
+/*-------------------------------------------------------*/
+
+/* dagmar strikte_typen */
+
+#define TO      this_object()
+#define TP      this_player()
+#define TPN     this_player()->query_name()
+#define env     environment
+#define SAY(x)      tell_room(env(TO),x)
+#undef  EXTRA_RESET 
+#define EXTRA_RESET ::reset(); extra_reset(arg);
+#undef  EXTRA_INIT
+#define EXTRA_INIT  ::init(); extra_init();
+#undef  EXTRA_MOVE1
+#define EXTRA_MOVE1     if(!chk_leave())
+int guild; 
+
+FOUR_EXIT("players/patience/ezo/tearoom","south",
+  "players/patience/ezo/inner-yard1","west",
+  "players/patience/ezo/empty","north",
+  "room/church","church",
+  "In the Ninja Guild",
+  "This is a chamber in the residence of the residence of Matsumae Yoshihiro,\n" +
+  "the evil Shogun of the island of Ezo.\n" +
+  "It seems, that this is the guild-room of the ninjas.\n\n"+
+  "Commands: cost, advance,\n" +
+  "          list, list [number],\n" +
+  "          or join.\n",1) 
+
+extra_reset(arg) {
+    if (arg) return;
+    guild=GM->query_number(GUILD);
+    set_guild(guild);
+} 
+
+extra_init()
+{
+    /* --- is the player banished from the guild ?? ------ */
+    if ( CONF->query_is_banished( TP->query_real_name() ) ) {
+	write( "You have been banished from the guild, so stay away !!!\n\n" );
+	if ( TP->query_guild() == 8 )
+	    TP->set_guild( 0 );
+
+	TP->move_player( "this mighty place#/room/church" );
+	commune_ninja( "<<Yoshihiro-san>> " + TP->query_name() + 
+	  " just tried to enter our guild, although " +
+	  TP->query_pronoun() + " is banished from the guild !\n" );
+    }
+}
+
+do_join()
+{
+    string quests;
+
+    /*  write( "You cannot join at the moment.\n" );
+      return( 1 );
+   */
+
+    /* --- alignment-blocking ------------------ */
+    if ( TP->query_alignment() > -100 ) {
+	write( "If you want to join us, you have to decide for the dark side of the moon.\n" );
+	return( 1 );
+    }
+
+    /* --- race-blocking ----------------------- */
+    if ( TP->query_race() == "elf" ) {
+	write( "Sorry, but you are too honest to join this guild of outcasts!\n");
+	return( 1 );
+    }
+    if ( TP->query_race() == "dwarf" ) {
+	write( "Sorry, but you're atonomy doesn't suite this guild!\n" );
+	return( 1 );
+    }
+    if (TP->query_race()== "giant") {
+       write("Sorry but your anatomy does not suit this guild !\n");
+       return (1);
+        }
+
+    /* --- quest-blocking --------------------- */
+    if ( !TP->query_quests() || !(member_array("shadow_quest",explode(TP->query_quests(),"#"))+1)) 
+    {
+	write( "You have to free Holy-Mission, before you can join us!\n" );
+	return( 1 );
+    }
+    /* --- needs an eastern religion ------------- */
+    if ( TP->query_religion() != "Amaterasu" ) {
+	write( "You have to believe in an eastern religion to join the ninjas.\n");
+	return( 1 );
+    } 
+    /* --- is the player banished from the guild ?? ------ */
+    if ( CONF->query_is_banished( TP->query_real_name() ) ) {
+	write( "You have been banished from the guild, so stay away !!!\n\n" );
+	TP->move_player( "this mighty place#/room/church" );
+	return( 1 );
+    }
+    /* --- is the player accepted from the guild ??? ----- */
+    if ( !(CONF->query_is_accepted( TP->query_real_name() )) ) {
+	write( "You have to talk to a San to join the ninjas.\n" );
+	return( 1 );
+    }
+
+    if ( !::do_join() )
+	return 1;
+
+    TP->set_guild(guild);
+    write("Welcome to the ninjas !!!\n");
+    TP->set_al(-100000);
+    TP->add_money(-400);
+
+    commune_ninja( "<<Yoshihiro-san>> " + TPN + " just joined our guild.\n" );
+    say(TPN+" has joined the ninja guild.\n");
+    log_file(LGF,TPN+" joins the "+GUILD+"'s guild at "+
+      ctime(time())+"\n");
+    log_file( "NINJA.JOINS", TPN+" joined at " +
+      ctime(time())+"\n" );
+    return 1;
+
+}
+
+do_advance( arg )
+{
+    ::do_advance();
+
+    if ( TP->query_level() >= 20 )
+	commune_ninja( "<<Yoshihiro-san>> " + TPN + " is now level " +
+	  TP->query_level() + ".  CONGRATS !!!\n" );
+
+    return( 1 );
+}
+
+query_maxsp(lvl) {
+    return( lvl*4+lvl/3+40 );
+}
+
+query_maxhp(lvl) {
+    return( lvl*14+50 );
+}
+
+commune_ninja( str )
+{
+    object *u;
+    int    i;
+
+    u = users();
+    for ( i = 0; i < sizeof( u ); i++ )
+	if ( u[i]->query_guild() == 8 )
+	    tell_object( u[i], str );
+}

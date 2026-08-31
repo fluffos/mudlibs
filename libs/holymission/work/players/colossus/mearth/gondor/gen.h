@@ -1,0 +1,25 @@
+#define TP this_player()
+#define E(x) environment(x)
+#define QN query_name()
+#define QRN query_real_name()
+#define TO this_object()
+#define ETO environment(TO)
+#define ETP environment(TP)
+#define QPO query_possessive()
+#define QOB query_objective()
+#define CTPRN capitalize((string)TP->QRN)
+#define TPRN (string)TP->QRN
+#define CTPN capitalize((string)TP->QN)
+#define CP(x) capitalize(x)
+#define SP query_sp()
+#define HP query_hp()
+#define QL query_level()
+#define QD query_dex()
+#define QM query_money()                                                        
+#define QS short()
+
+#define COB(str) clone_object(str)
+#define TCL(file) transfer(clone_object(file),TO)
+#define TCP(file) transfer(clone_object(file),TP)
+
+#define OBJ "/players/colossus/obj/"

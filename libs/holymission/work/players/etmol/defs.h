@@ -1,0 +1,20 @@
+// player general
+#define QNAME      query_name()
+#define QRNAME     query_real_name()
+#define QSNAME     query_short_name()
+#define QPOS       query_possessive()
+#define QPRO       query_pronoun()
+#define QOBJ       query_objective()
+
+#define TP         this_player()
+#define TPN        TP->QNAME
+#define TPRN       TP->QRNAME
+#define TPSN       TP->QSNAME
+#define TPPOS      TP->QPOS
+#define TPPRO      TP->QPRO
+#define TPOBJ      TP->QOBJ
+#define TO this_object()
+#define ENV environment
+#define CAP capitalize
+#define LOW lower_case
+#define AA  add_action

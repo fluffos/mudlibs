@@ -1,0 +1,34 @@
+inherit "obj/treasure";
+ reset(arg) {
+ if (arg) return;
+ set_id("drop");
+ set_alias("drop of oil");
+ set_short("A drop of oil");
+ set_long("A little drop of olive oil.\n");
+ set_value(1);
+}
+init() {
+ ::init();
+ add_action("clean","clean");
+ add_action("clean","polish");
+ add_action("drink","drink");
+}
+drink(str) {
+ if (str=="drop" || str=="oil" || str=="drop of oil") {
+  write("A bit oily, but quite tasteful.\n");
+  say(this_player()->query_name()+" drinks a drop of oil.\n");
+  this_player()->drink_soft(2);
+  destruct(this_object());
+  return 1;
+}
+}
+clean(str) {
+ write("You won't make your fingers dirty.\n");
+ return 1;
+ }
+
+
+drop() {
+  write("How will you drop a drop ?\n");
+  return 1;
+ }

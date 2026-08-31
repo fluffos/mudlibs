@@ -1,0 +1,3 @@
+
+
+#define ORC "/room/orc/"

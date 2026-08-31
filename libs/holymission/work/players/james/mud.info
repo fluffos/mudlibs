@@ -1,0 +1,135 @@
+From umn.edu!math.fu-berlin.de!zrz.tu-berlin.de!cs.tu-berlin.de!alcaman Mon Mar 16 18:05:57 CST 1992
+Article: 1060 of rec.games.mud.lp
+Newsgroups: rec.games.mud.lp
+Path: umn.edu!math.fu-berlin.de!zrz.tu-berlin.de!cs.tu-berlin.de!alcaman
+From: alcaman@opal.cs.tu-berlin.de (Alexander Weidt)
+Subject: Re: Optimizing LPC programs
+Message-ID: <1992Mar12.212126.17621@cs.tu-berlin.de>
+Sender: news@cs.tu-berlin.de
+Organization: Techn. University of Berlin, Germany
+References: <Cynthia_Higginbotham.0a9u@agwbbs.new-orleans.LA.US>
+Distribution: fb20
+Date: Thu, 12 Mar 1992 21:21:26 GMT
+Lines: 69
+
+Hi.. 
+
+  When writing LPC code you should bear in mind that the compiler does not
+optimise your code.  So you should always try and keep efficiency in mind,
+when designing code that is to be executed often.  Unfortunately, efficient
+code is not always easy to read... but I do not want to get dragged into a
+flame war about commenting code.
+
+Possibly the most expensive operation is loading an object. 
+
+In a previous article Duncan Stansfield pointed out the advantages of using
+clean_up() and init() in objects, in order to be able to destruct copies not
+in current usage.  This method, although rather useful for cutting down on
+memory usage will put quite a strain on the lpc compiler since it has to
+recompile every object every time it has been destructed in addition to an
+extra call_other() to the `world_object'.
+
+Duncan's proposed optimisations do nothing for a mud's execution speed,
+although memory use will decrease.  This is usually not much of a problem
+unless you have a large mud, where not much locality of reference can be
+guaranteed.  The mud's swapping mechanism (although quite a kludge) does a
+relatively good job of removing unwanted objects from main memory, in
+general it does this better than the operating system because of the finer
+granularity of things swapped (hardware clusters/pages as opposed to lpc
+objects).
+
+Furthermore call_other()s are also rather expensive, in terms of execution
+time.  Several table lookups have to be performed (especially when the first
+argument is a string).  Needless to say the longer the object's shadowing
+chain is, the more expensive the operation.
+
+Having a large number of functions in an object is also a hindrance since
+locating the function will take longer.  (Note that in earlier versions of
+the driver there was no cache to speed this up.  On our driver we typically
+have an apply_low() cache hit rate of over 80%.)
+This is also an argument against such mudlibs which require the inheritance
+of a large object (such as /std/object in the cdlib) which contains many
+functions that are just not required by the object in question.)
+
+Avoiding extreme use of the heart_beat() and call_out features will also
+serve to improve driver performance.  (Be sure to turn off the heart beat
+in an object when it is no longer required, for example in players that 
+have gone link-dead.)
+
+If after quite lengthy uptimes (four to five days) you may find that the mud
+slows down quite noticeably.  This can be because of the length of memory
+lists, and hence the time it takes to allocate a block if a best_fit strategy
+is used.  As a last resort, it might be sensible to switch to a first_fit
+strategy before shutting down the game.
+
+Last, but by no means least, save/restore object are rather costly.
+
+I do not know if there are people currently working on a multi threaded
+driver, but perhaps the first step would probably be to try and separate the 
+compiler from the execution unit.
+
+On the question of mudlib organaisation, modern mudlibs are all starting to
+separate the building blocks of the mudlib (base classes) from other more
+complex classes and those that can be actually instantiated.  Lars's mudlib.n
+provides an exemplatory solution.  It is also rather useful to try and split
+up otherwise huge directories (such as the 2.4.5 player dir).
+
+As for finding the mud to be taking up too much disk space, you could write
+a little script to check wizard's disk usage, then perhaps compare it to the
+wizlist ...
+
+Happy hacking, Demos.
+--
+Wouldn't life be easy if we could take a look at the source code.
+
+
+From umn.edu!paperboy.micro.umn.edu!magnus.acs.ohio-state.edu!zaphod.mps.ohio-state.edu!mips!mips!munnari.oz.au!metro!seagoon.newcastle.edu.au!frey.newcastle.edu.au!guest Mon Mar 16 18:13:44 CST 1992
+Article: 1066 of rec.games.mud.lp
+Newsgroups: rec.games.mud.lp
+Path: umn.edu!paperboy.micro.umn.edu!magnus.acs.ohio-state.edu!zaphod.mps.ohio-state.edu!mips!mips!munnari.oz.au!metro!seagoon.newcastle.edu.au!frey.newcastle.edu.au!guest
+From: guest@frey.newcastle.edu.au (Guest Account)
+Subject: Re: Optimizing LPC programs
+Message-ID: <1992Mar13.031945.20938@frey.newcastle.edu.au>
+Organization: Department of Mathematics, Uni of Newcastle, Oz.
+References: <Cynthia_Higginbotham.0a9u@agwbbs.new-orleans.LA.US>
+Date: Fri, 13 Mar 1992 03:19:45 GMT
+
+
+Cynthia_Higginbotham@agwbbs.new-orleans.LA.US (Cynthia Higginbotham) writes:
+
+>   Here's a question for the LPC programmers out there:
+> What tricks and techniques do you use to optimize LPC programs?  What do
+>YOU do to minimize memory use and speed up execution?  
+
+Memory optimization is simple. Just use as few functions as possible.
+ Use lots of case statements, and as few global vars as possible too. Why
+does this make a difference ?? Every time you inherit an object you get a
+complete copy of all the function eaders it defines, and all the functions that
+IT inherited. (Including 'private' ones). Every time you clone, you get
+a copy of all it's global vars. (Not early as much, but still makes a diff).
+
+In particular, if you have inheritable rooms and monsters, cut down those
+functions and global vars. We halved the size of our mudlib by loseing 
+functions that weren't needed. The average room objects uses 1K on average 
+(Down from 3K!!! NOTE: these are the SAME rooms, only the inherited object
+is different!!)
+
+Optimizing speed is harder. Basically, you just make as few call_other()'s
+as possible. (->'s chew a LOT of cpu time. Oweing to O(n) execution time,
+proportinal to number of fn's in the destination object)
+>   Special question for "god" types: 
+> How do you keep the mudlib organized and the file clutter under control? 
+>How do you keep the mudlib from taking over every byte of available mass
+>storage?  How do you sort and organize files -- what kind of directory tree
+>do you use, and how do you decide what goes where?
+Laugh. You will ALWAYS run out of diskce. Try delgating authority, makeing
+people responsable for their section of the file system...
+
+
+>  
+
+>-- Via DLG Pro v0.985b
+
+>cynthia_higginbotham@agwbbs.new-orleans.LA.US
+
+

@@ -1,0 +1,13 @@
+inherit "obj/alco_drink";
+
+
+reset(arg) {
+  ::reset(arg);
+  name="sweet looking cola";
+  alias="cola";
+  short_desc="A bottle of cola";
+  long_desc="drink it.\n";
+  drinking_mess="Yummie cola!.\n";
+  strength=8;
+  value = 20;
+  }

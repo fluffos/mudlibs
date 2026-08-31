@@ -1,0 +1,100 @@
+
+
+/* --------------------------------------------------------------------
+   filename: executor.c last edit: 7.2.94 whisky uni-linz.ac.at 
+   -------------------------------------------------------------------- */
+
+inherit "/obj/monster";
+int check;
+
+reset(arg) {
+   ::reset(arg);
+   if(arg) return;
+      set_name("gorgurack");
+     set_short("Gorgurack, the Executiondrake !");
+      set_long("You see an almost 150 feet high drake. She is the little\n"+
+        "daughter of Danahra and Eros and the sister of Garschmirack.\n"+
+        "She seems so mighty that nobody serious will trust to attack her.\n"+
+        "Her claws have nearly the length of a tall human body and\n"+
+        "her skin is looking like steel plates.\n");
+      set_race("drake");
+      set_level(88);
+      set_wc(100);
+      set_ac(8);
+      set_size(5);
+      set_weight(1000);
+      set_gender(2);
+      set_al(-10000);
+      set_dead_ob(this_object());
+  }
+
+ monster_died(ob) 
+{
+    move_object(clone_object("/players/whisky/hole/obj/live_stealer"),
+    environment(this_object()) );
+    return 0; 
+}
+
+attack() 
+{
+  object mob;
+  int i;
+
+ if (attacker_ob && environment(attacker_ob) == environment()
+     && random(100) <= 60  )
+ {
+   mob = all_inventory(environment());
+   tell_room(environment(),
+   "Gorgurack breathes a red flame of death at you !\n");
+   check = 1;
+
+   for (i=0;i<sizeof(mob);i++)
+   {
+     if (living(mob[i]) && mob[i]!=this_object())
+         mob[i]->hit_player(120+random(80));
+   }  /* endfor */
+  
+ }   /* endif */
+ 
+  if (random(100) < 8 && !check)
+  {
+      attack();
+      tell_room(environment(),
+      "Gorgurack bites "+attacker_ob->query_name()+".\n");
+      attacker_ob->add_poison(30+random(8));
+      check = 1;
+   } else 
+      check = 0;
+  return ::attack();
+}
+   
+
+ hit_player(dam,kind) 
+{
+   if (dam > 400 && kind!=5 && kind!=7)
+   {
+     switch(random(3))
+     {
+       case 0:
+       tell_room(environment(),"Gorgurack parades "+this_player()->query_name()+                               "'s attack with her right claw !\n");
+       break;
+       case 1:
+       tell_room(environment(),"Gorgurack parades "+this_player()->query_name()+                               "'s attack with her left claw !\n");
+       break;
+       default:
+       tell_room(environment(),"Gorgurack parades "+this_player()->query_name()+                               "'s attack with her tail !\n");
+       break;
+      return ::hit_player(dam/8, kind);
+     }
+   }
+   return ::hit_player(dam,kind);
+}
+   
+hold(caller,time)
+{
+  if (time > 2)
+  return ::hold(caller,random(6));
+  return ::hold(caller,time);
+}
+query_dex() { return 150; }
+query_str() { return 150; }

@@ -1,0 +1,189 @@
+Strings written with write(), are now seen by NPCs. This means that more
+intelligent monsters can be made.
+
+Objects must inherit std/object.c if they want to be moved, or moved into.
+The -o flag will as usuall remove this requirement.
+
+A major change has been done with the way reset() is called. When the
+object is loaded first time, create() is called instead of reset(0). When it
+is time for next 'reset', then reset() will be called (without arguments).
+The -o flag is a compatible mode as usual. A good coding technique may be
+to call reset() from create(). The mudlib.n found at alcazar.cd.chalmers.se
+has been changed apropriately.
+
+JnA: "destruct_environment_of" is now called in master when the environment
+JnA: of an object gets destructed and the destructed environment does not
+JnA: have an environment itself, ie in rooms. This is so players will not
+JnA: get disconnected when the room they are in get destructed.
+JnA: If this func does not exist in master or does not move the object from
+JnA: its location then the object is destructed.
+
+RW: snoop: Added a backwards compatible patch to set_snoop. There is 
+    now a new function in comm1.c (new_set_snoop) that defines the
+    mudlib 3.0 version of set_snoop. The difference is that the efun
+    in !o_flag mode takes two arguments, snooper and snopee and checks
+    with the function valid_snoop() in master.c if this is permissable
+    or not. The new function breaks previous snoops if necessary
+    relying on the mudlib to decide if this is ok or not. Neither does
+    the new function write anything to the player, but expects the mudlib
+    to take care of that as well. The efun returns the object snooped on if
+    success, otherwise 0. Note however, that in o_flag mode, the
+    functionality is just as before.
+
+RW: query_snoop: Fixed so that in !o_flag mode query_snoop can only be
+    called from the master object.
+
+RW: query_snoop was declared as returning string while actually returning
+    object. Fixed in efun_spec.
+
+JnA: move_or_destruct: should call move(to,1) in objects in mudlib 3.0
+JnA: It is dubious if the objects should be moved at all and not just
+JnA: destructed.
+
+New restrictions has been defined for when a shadow may be used. A function
+query_allow_shadow() is called in master.c, which should return 0 or 1
+to deny respectively allow shadowing. The example in the provided master.c
+will define such a function that is compatible with the old way of calling
+query_prevent_shadow() in the victim. It is thus easy to change the shadowing
+into both allow never, allow always and allow sometimes, whatever you prefer.
+
+Enabled default argument to some efuns. For example, all_inventory() will
+use this_object() as argument if none specified.
+
+There can now be third optional argument to tell_room(), an array of objects
+to be excluded.
+
+There is a new function:
+string *get_dir(string)
+that takes a path as argument and returns an array of file names in that
+directory.
+    get_dir("/w"); returns ({ "w" })
+    get_dir("/w/"); and get_dir("/w/."); return contents of directory "/w"
+    get_dir("/");, get_dir("."); and get_dir("/."); return contents of
+        directory "/".
+
+New efun:
+mixed assoc(mixed key, mixed *keys, mixed *|void data_or_fail, mixed|void fail);
+Searches a key in an alist.
+
+Three modes of calling:
+   i ) With exactly two arguments, the second being an array which's first
+       element is no array.
+       In this case the entire array is searched for the key; -1 is returned
+	 if not found, else the index ( like member_array, but faster ).
+
+   ii) With two or three arguments, the second being an array which's first
+       element is an array.
+       The array has to have a second element of the same size;
+       the key is searched in the first and the associated element of the
+       second array that is element of second argument is returned if succesful;
+       if not, 0 is returned, or the third argument, if given.
+
+   iii) With three or four arguments, the second being an array of keys
+	( first element no array ) and the second is a matching data array.
+	returns 0 or fourth argument ( if given ) for failure,
+	or the matching entry in the array given as third argument for success.
+
+Complexity : O( lg(n) ) , where n is the number of keys.
+
+Return value is undefined if another list is given in place of a presorted
+key list.
+
+
+New efun:
+mixed insert_alist( mixed key, mixed data_or_key_list..., mixed * alist);
+inserts an entry into an alist, or shows the place where this is to be done.
+When called with the last argument being an alist:
+  The first argument is a key to be inserted, the second and all the
+  following but the last are data to associate it with.
+  The last has to be an array with as much elements as key and data arguments
+  are given, the matching key and data arrays; this should be already an
+  alist, or the return value will neither be an alist.
+  Return value is the enlarged assoc list ( array of two arrays ).
+  If the key is already in the list, the data is simply replaced
+  in the returned list.
+
+When called with the last argument beinig a list of non-lists:
+  The call has to be done with exactly two arguments.
+  The first argument is a key to be inserted in the presorted key list
+  ( first element of an array that is an alist )
+  that has to be given as second argument. Return value is the index
+  where the key has to be inserted to preserve the structure of a presorted
+  alist, or the index where the key has been found.
+  Return value is an int.
+  CEVEATS: when called with certain string keys, the correct place might
+    change after the call. So better don't use this mode of calling with
+    a string key.
+
+Complexity O( lg(n) + a*n ) Where n is the number of keys and s is
+a very small constant ( for block move );
+
+
+New efun:
+mixed *order_alist(mixed *keys, mixed *|void data, ...);
+Creates an alist.
+Either takes an array containing keys, and others containing the associated
+data, where all arrays are to be of the same length,
+or takes a single array that contains as first member the array of keys
+and has an arbitrary number of other members containing data, each of wich
+has to be of the same length as the key array.
+Returns an array holding the sorted key array and the data arrays; the same
+permutation that is applied to the key array is applied to all data arrays.
+
+Complexity is O( n * lg(n) * m ) , where n is the number of elements in the key
+array and m is the number of data arrays + 1;
+
+Note that the the dimensions of the arrays are used the other way than in lisp
+to allow for faster searching.
+
+Keys have to be of type integer, string or object. Types can be mixed.
+
+New efun:
+mixed *sort_array(mixed *arr, string greater_fun, object ob);
+Returns an array sorted by the ordering function ob->greater_fun()
+The function 'greater_fun' in the object 'ob' is continously passed two
+arguments which are two of the elements of the array 'arr'. It should return
+true or a positive number if the first argument is greater than the second.
+
+A parse_old.c was copied from 3.0.45 parse.c, and the new parse.c is not used
+currently.
+
+read_bytes() will no longer convert newlines to spaces.
+
+A new efun, "mixed debug_info(int, ...)", to be used for general debug
+information. The first number defines what kind of debugging information.
+Currently, only 0 is allowed, which will print info about an object (second
+argument).
+
+get_dir() now returns a zero length array if no files in directory.
+
+Runtime type check of third argument to tell_room was missing.
+
+indent() popped off it's arguments before it was used. Can be dangerous.
+
+The efun ls() is no longer needed because of get_dir(), and has been removed.
+There is a file mudlib_simul_efun.c, which can define functions to replace
+obsolete efuns etc. This file has a definition of ls() if you don't want to
+fix all occurences in your mudlib code. The provided master.c now as a
+function named get_simul_efun(), which is supposed to return the name of this
+simul-efun file. Users of both COMPAT_MODE and native mode can use this
+get_simul_efun() in master.c. Beware of other things in the provided master.c,
+as they are specially for COMPAT_MODE. Expect more obsolete efuns to disappear
+in the future. Because of this simul_efun mechanism, compatibilty is
+maintained. For more details, look in source code or in the LPmud.texinfo
+documentation.
+
+extract() will remain for compatibility, but slice_array() has been replaced
+by a simulated efun in mudlib_simul_efun.c.
+
+Fixed bug in read_bytes(), which did not terminate strings properly with
+a 0-byte.
+
+The efun filter_objects() has been renamed as filter_array(), as that is
+really what it does. An entry has been added to mudlib_simul_efun.c for
+the sake of compatibility.
+
+sort_array() has been made more portable.
+
+New efun: intersect_alist(), does a fast set intersection on alists. The
+operator '&' does set intersection on arrays in general.

@@ -1,0 +1,398 @@
+/* 161093 HERP: a centralized chat daemon.
+   The chat daemon handles only guild and wizard line chat.
+   No more chat lines are neccessary, anyway.
+
+   user interface:
+
+        add_chat        ...     SYSTEM: called upon login
+        remove_chat     ...     SYSTEM: called upon guild-change
+        remove_chat_ob  ...     SYSTEM: called upon logout
+        do_chat         ...     sends a message to the line
+        map_chat        ...     similar to map_array
+        set_line        ...     switch on/off line
+        print_line      ...     print line users
+
+  The user is, however, the mudlib only ...
+
+  int do_chat(int guild,string msg);
+  void map_chat(int guild,string fun,object ob);
+  int set_line(object player,int guild,status ,mixed extrai)
+  int print_line(int guild);
+
+  * do_chat sends the message [msg] over over the guild line.
+
+  * map_chat calls function [fun] in object [ob], and passes
+    the line-contents and the extra-argument
+    basically this is a:
+
+    foreach (index) (users[guild]) ob->fun(users[guild][index],extra)
+
+    where users[guild][index][0] is the player object and
+          users[guild][index][1] is the on/off switch
+
+
+  * set_line switches on/offe extra-arg to that function.
+
+  * print_line prints the guild members and their guild-line switch.
+
+  guild is either a guild number, or
+    -1 for the chat line.
+    -2 for the report line.
+    -3 for the wizard line.
+    -4 for the arch line.
+    -5 for the notify line.
+  a switch value of 0 means, line is off.
+  a switch value of 1 means, line is on.
+
+  return values are 0 or 1 for failure or succes, respectively.
+*/
+
+// 121293: Galadriel: dont show invis ppl in print_line
+// 040295: Llort: wizards should get the Name of invis players
+// 310796: Sauron: Added arch channel and more info in channel listing.
+// 050997: Sauron: Added chat and report channels.
+// 100997: Sauron: Rewritten slightly so that channel states are stored in
+//                 the player's env vars. Removed old code.
+
+/* #pragma      strict_types */
+
+#define private
+#define GM      "guild/master"
+
+mixed *cusers;          // a matrix line X users
+
+varargs string name_chan(int chan,int flag) {
+    string gname;
+
+    switch(chan) {
+        case -5:
+            if(flag)
+                return "Notify";
+            else
+                return "notify";
+            break;
+        case -4:
+            if(flag)
+                return "Arch";
+            else
+                return "arch";
+            break;
+        case -3:
+            if(flag)
+                return "Wiz";
+            else
+                return "wiz";
+            break;
+        case -2:
+            if(flag)
+                return "Report";
+            else
+                return "report";
+            break;
+        case -1:
+            if(flag)
+                return "Chat";
+            else
+                return "chat";
+            break;
+        default:
+            gname=GM->query_name(chan);
+            if(flag)
+                gname=capitalize(gname);
+            return gname;
+            break;
+    }
+}
+
+private void init_chat(object ob) {
+  string cname;
+
+  cusers[ob->query_guild()+5]+=({ob});
+  cname=GM->query_name(ob->query_guild());
+  if(!ob->queryenv(cname+"-channel"))
+    ob->setenv(cname+"-channel","on");
+
+  cusers[4]+=({ob});      // Chat line
+  if(!ob->queryenv("chat-channel"))
+    ob->setenv("chat-channel","on");
+
+  if(ob->query_archwiz()) {
+    cusers[0]+=({ob});  // Notify line
+    if(!ob->queryenv("notify-channel"))
+      ob->setenv("notify-channel","on");
+
+    cusers[1]+=({ob});    // Arch line
+    if(!ob->queryenv("arch-channel"))
+      ob->setenv("arch-channel","on");
+  }
+  if(ob->query_immortal() || ob->query_testchar()) {
+    cusers[2]+=({ob});    // Wiz line
+    if(!ob->queryenv("wiz-channel"))
+      ob->setenv("wiz-channel","on");
+
+    cusers[3]+=({ob});    // Report line
+    if(!ob->queryenv("report-channel"))
+      ob->setenv("report-channel","on");
+  }
+}
+
+private int find_chat(object ob,int line) {
+  int i,j;
+
+  return member_array(ob,cusers[line]);
+}
+
+private void print_name(object ob,int line) {
+  string tmp,tmp2,cstate,cname;
+  int i,j;
+  object tp;
+
+  tp=this_player();
+
+  if(!ob)
+    return;
+  if(interactive(ob) &&       // only when not linkdead
+     !ob->is_invis_for(tp)) { // Galadriel: and visible
+
+    i=query_idle(ob);
+    j=i/3600;
+    if(j)
+      tmp=j+"h";
+    else {
+      j=i/60;
+      if(j)
+        tmp=j+"m";
+      else
+        tmp=i+"s";
+    }
+
+    if(ob->query_afk()) {
+      if(tp->query_immortal() || tp->query_testchar())
+        tmp2=sprintf(" (afk %s)",tmp);
+      else
+        tmp2=" (afk)";
+    }
+    else if(i>120) {
+      if(tp->query_immortal() || tp->query_testchar())
+        tmp2=sprintf(" (idle %s)",tmp);
+      else
+        tmp2=" (idle)";
+    }
+    else if(query_editing(ob))
+      tmp2=" (editing)";
+    else if(query_input_pending(ob))
+      tmp2=" (input)";
+    else
+      tmp2="";
+
+    cname=name_chan(line-5)+"-channel";
+    if(!ob->queryenv(cname))
+      ob->setenv(cname,"on");
+    cstate=ob->queryenv(cname);
+
+    printf("%-5s %s%s\n",cstate=="on"?"":"OFF:",
+           ob->query_real_name(1),tmp2);
+  }
+}
+
+int print_line(int line) {
+  line+=5;
+  if(line>=sizeof(cusers))
+    return 0;
+  map_array(cusers[line],"print_name",this_object(),line);
+  return 1;
+}
+
+int *list_channels(object ob) {
+    int chan,*list;
+
+    list=({});
+    while(chan<sizeof(cusers)) {
+        if(find_chat(ob,chan)!=-1)
+            list+=({chan});
+        chan++;
+    }
+    return list;
+}
+
+int print_channels(object ob) {
+    string cname,cstate;
+    int chan,ind;
+
+    while(chan<sizeof(cusers)) {
+        ind=find_chat(ob,chan);
+        if(ind!=-1) {
+            cname=name_chan(chan-5)+"-channel";
+            if(!ob->queryenv(cname))
+                ob->setenv(cname,"on");
+            cstate=ob->queryenv(cname);
+            printf("%-20s: %s.\n",capitalize(cname),capitalize(cstate));
+        }
+        chan++;
+    }
+    return 1;
+}
+
+int add_chat(object ob,int line) {
+  string cname;
+
+  line+=5;
+  if(find_chat(ob,line)!=-1)
+    return 0;   // already there
+  cusers[line]+=({ob});           // add to line
+  cname=name_chan(line-5)+"-channel";
+  if(!ob->queryenv(cname))
+    ob->setenv(cname,"on");
+  return 1;
+}
+
+int remove_chat(object ob,int guild) {
+  int i;
+
+  guild+=5;
+  if((i=find_chat(ob,guild))==-1)
+    return 0;   // not there
+  cusers[guild]=del_array(cusers[guild],i);
+  return 1;
+}
+
+void remove_chat_ob(object ob) {
+  remove_chat(ob,ob->query_guild());	// Guild-line
+  remove_chat(ob,-1);			// Chat-line
+  if(ob->query_immortal() || ob->query_testchar()) {
+    remove_chat(ob,-2);			// Report-line
+    remove_chat(ob,-3);			// Wiz-line
+  }
+  if(ob->query_archwiz()) {
+    remove_chat(ob,-4);			// Arch-line
+    remove_chat(ob,-5);			// Notify-line
+  }
+}
+
+int map_chat(int line,string fun,object ob,mixed extra) {
+  line+=5;
+  if(line>=sizeof(cusers))
+    return 0; // illegal index
+  map_array(cusers[line],fun,ob,extra);
+  return 1;
+}
+
+int set_line(object ob,int line,int state) {
+  string cname,cstate;
+  int i;
+
+  cname=name_chan(line);
+  line+=5;
+  if(this_interactive()==ob) {
+    if(line>=sizeof(cusers) || (i=find_chat(ob,line))==-1)
+      return 0;
+    if(!ob->queryenv(cname+"-channel"))
+      ob->setenv(cname+"-channel","on");
+    cstate=ob->queryenv(cname+"-channel");
+    if((cstate=="on")==state)
+      printf("Your %s-line is already %s.\n",
+             cname,state?"on":"off");
+    else {
+      printf("You turn your %s-line %s.\n",
+             cname,state?"on":"off");
+      ob->setenv(cname+"-channel",(state?"on":"off"));
+    }
+    return 1;
+  }
+  return 0;     // faked call
+}
+
+private int tell_chat(object ob,string msg,int line) {
+  string cname;
+  int elvl;
+
+  cname=name_chan(line-5)+"-channel";
+  if(ob) {
+    elvl=ob->query_earmuff_level();
+    if(ob->queryenv(cname)=="on" &&
+       this_player() && elvl<this_player()->query_level())
+      tell_object(ob,msg);
+  }
+}
+
+int do_chat(int line,string msg) {
+  string cname;
+  int c;
+  object tp;
+
+  tp=this_player();
+  cname=name_chan(line)+"-channel";
+  line+=5;
+  if(line>=sizeof(cusers))
+    return 0;   // illegal index
+
+//  map_array(cusers[line],#'tell_object,msg);  // too bad...
+// If you're using the line, switch it on...
+  if(tp)
+    c=find_chat(tp,line);
+  else
+    c=-1;
+  if(c>=0 && (line!=0 || tp->query_archwiz()) &&
+     tp->queryenv(cname)!="on")
+    set_line(tp,(line-5),1);
+  if(line == 4) {
+    if(this_player()->query_sp() > 6) {
+      this_player()->restore_spell_points(-5);
+    }
+    else {
+      tell_object(this_player(), "You are too low on spell points to chat right now.\n");
+      return 1;
+    }
+  }
+  map_array(cusers[line],"tell_chat",this_object(),msg,line);
+  return 1;
+}
+
+private void dump_line(object ob,int i) {
+  if(ob)
+    printf(" %s",ob->query_real_name());
+  else
+    printf(" %O",ob);
+}
+
+int dump() {
+  int i,j;
+
+  if(!(this_player()->query_archwiz()))
+    return 0;
+
+  j=sizeof(cusers);
+  printf("Nr of lines: %d\n",j);
+  for(i=0;i<j;i++) {
+    printf("Line %2d(%-10s)(#%d): ",i,name_chan(i-5),sizeof(cusers[i]));
+    map_array(cusers[i],"dump_line",this_object(),i);
+    printf("\n");
+  }
+  return 1;
+}
+
+string short() {
+  return "The Chat Daemon";
+}
+
+void long() {
+  printf("%s.\nIt's very noisy here.\n",short());
+}
+
+void reset(int arg) {
+  object *u;
+  int i;
+
+  if(arg)
+    return;             /* only needed at load time */
+  set_light(1);         /* oh well ... */
+
+  cusers=allocate(GM->query_nog()+5);
+  for(i=0;i<sizeof(cusers);i++)
+    cusers[i]=allocate(0);
+  map_array(users(),"init_chat",this_object());
+}
+
+void init() {
+  add_action("dump","dump");
+}

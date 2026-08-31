@@ -1,0 +1,41 @@
+inherit "obj/npc";
+
+reset(arg){
+    ::reset(arg); 
+    if(!arg) { 
+    set_name("ewok");
+    set_short("ewok");
+    move_object(clone_object("players/sargon/weapons/club.c"), this_object());
+    set_long("A furry little creature with a cute face and big brown eyes.\n");
+    command("wield club");
+    set_level(10);
+    set_ac(5);
+    set_wc(5);
+    set_hp(400);
+    set_al(1000);
+    set_aggressive(0);
+    set_chance();
+    set_spell_mess1(); 
+    set_spell_mess2(); 
+    set_dodge();
+    set_attacks(1);
+    add_money(75);
+}
+}
+int catch_tell(string arg) {
+
+    string who, what;
+
+    if(who == "ewok" || who == "Ewok")
+       return 0;
+       if(sscanf(arg,"%s smiles happily",who) == 1)
+//        call_out("Ewok smiles happily.\n")
+   tell_room(environment(this_object()), "Ewok snickers.\n");
+    }
+
+
+
+
+
+
+

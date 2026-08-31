@@ -1,0 +1,10 @@
+#define WIZ   "/players/beardy"
+#define ROOM WIZ+"/walhalla/room/"
+#define MONST WIZ+"/walhalla/monster/"
+#define OBJ   WIZ+"/walhalla/obj/"
+#define TO    this_object()
+#define TON   this_object()->query_name()
+#define TP    this_player()
+#define TPN   this_player()->query_name()
+#define CM(x) move_object(clone_object(MONST+x),TO)
+#define CO(x) move_object(clone_object(OBJ+x),TO)

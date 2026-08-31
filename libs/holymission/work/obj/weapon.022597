@@ -1,0 +1,547 @@
+
+
+/* -------------------------------------------------------------------
+   generic obj/weapon last edit: 17.2.94 Whisky uni-linz.ac.at
+   This object should be inherited when you build a weapon
+   Changes: put strict types in all functions and asked after
+            stringp, objectp .... if necessary
+   ------------------------------------------------------------------- */
+/* Galadriel 30-MAR-94: no dest at reset, already in clean_up() of room, 
+   besides that it was too buggy. */
+
+/* USERDOC:
+general
+This file defines a general purpose weapon. Generally defined functions:
+set_id, set_name, query_name, query_value, set_weight, set_alt_name, set_alias,
+set_short, set_long, set_info, query_info.
+*/
+
+#include "setlight.h"
+#include "properties.h"
+
+#define STR	0x01
+#define DEX	0x02
+#define CON	0x04
+#define INT	0x08
+#define WIS	0x10
+#define CHR	0x20
+
+#include "/spells/spell.h"
+
+status wielded;
+string where_wielded;
+object wielded_by;
+string name_of_weapon;
+string cap_name;
+string alt_name;
+string alias_name;
+string short_desc;
+string long_desc;
+string read_msg;
+int class_of_weapon;
+int type_of_weapon; /* 0 is str+dex .. else use the defines above and
+		       and (&) then to get the combination u want.
+ 		       eg: dex+int = set_type(DEX & INT) or
+ 				   = set_type(10)                   */
+ 
+int value;
+int local_weight;
+object hit_func;
+object wield_func;
+string info;
+int two_handed;   /* 0: no, 1: yes */
+
+private mapping res_mod;
+private mapping imm_mod;
+private mapping stat_mod;
+
+private void _do_modify( int wwi );
+
+
+/*HERP: prototype */
+
+int id(string str);
+query_name() { 
+  return name_of_weapon; 
+}
+
+/* USERDOC:
+query_weapon_type
+Format: i=query_weapon_type()
+See also: set_weapon_type.
+This function returns the type of the weapon. This indicates which stats will
+be used when fighting with the weapon. The most important ones are: 0: normal
+weapon behaviour, 1: strength, 2: dexterity, 3: both strength and dexterity.
+*/
+int query_weapon_type() 
+{ 
+  return type_of_weapon; 
+}
+
+void long() 
+{
+  write(process_string(long_desc));
+}
+
+void reset(int flag) 
+{
+  if (flag) return;
+  wielded = 0; 
+  wielded_by = 0;
+  value = 0;
+  two_handed=0; 
+  type_of_weapon=0;
+}
+
+void init() 
+{
+  if (read_msg) 
+  add_action("read", "read");
+  add_action("wield", "wield");
+  add_action("do_unwield", "unwield" );
+  add_action("do_unwield", "remove" );
+}
+
+/* USERDOC:
+query_weapon
+Format: i=query_weapon()
+This function returns 1, to identify this object as a weapon.
+*/
+int query_weapon() 
+{ 
+  return 1; 
+}
+
+void log_weapon(string func) 
+{
+  if (stringp(func))
+  {
+    if (this_player()) 
+    {
+      log_file("ILLEGAL",this_player()->query_real_name()+" "+func+", WC"+
+      " "+class_of_weapon+", "+short_desc+"("+name_of_weapon+")"+
+      " creator: "+creator(this_object())+" "+
+      file_name(this_object())+"\n");
+    } else 
+      log_file("ILLEGAL",ctime(time())+"\n");
+  }
+}
+
+int wield(string str) 
+{
+int *where,i, counter;
+
+  if ( !str || this_object() != present(str,this_player()) ) return( 0 );
+
+  if (this_player()->query_ghost()) 
+  {
+     write("You fail.\n");
+     say(this_player()->query_name()+" failed to wield "+short_desc+".\n");
+     return 1;
+  }
+  if (environment() != this_player()) 
+      return 0;
+  if (wielded) 
+  {
+    write("You already wield the "+str+"\n");
+    return 1;
+  }
+  if (class_of_weapon > 20) log_weapon("wield");
+  if(wield_func)
+  {
+    if(!wield_func->wield(this_object())) 
+    return 1;
+  }
+   wielded_by = this_player();
+
+  if ( two_handed )
+     where = this_player()->wield( this_object(), 2 );
+  else 
+     where = this_player()->wield( this_object(), 1 );
+
+  if ( !(where && sizeof(where)) ) 
+  {
+     write( "You fail to wield the "+this_object()->query_name()+".\n" );
+     return( 1 ); 
+  }
+
+  str = "You wield the "+this_object()->query_name()+" in your ";
+  str += this_player()->get_hand_name(where[0]);
+  where_wielded = this_player()->get_hand_name(where[i]);
+  counter = sizeof(where);
+
+  for ( i = 1; i < counter; i++ ) 
+  {
+     str += " and " + this_player()->get_hand_name(where[i]);
+     where_wielded += " & " + this_player()->get_hand_name(where[i]);
+  }
+  str += " hand";
+  where_wielded += " hand";
+  wielded = 1;
+  _do_modify( 1 );
+  write( str + ".\n" );
+  return 1;
+}
+
+string short() {
+  if (wielded && short_desc) {
+    if ( environment( this_object() ) != wielded_by )
+       write( "BUG in "+name_of_weapon+". Tell a god.\n" );
+    else
+       return short_desc + " ("+where_wielded+")";
+  }
+  return short_desc;
+}
+
+/* USERDOC:
+weapon_class
+Format: i=weapon_class()
+See also: set_class
+This function queries the weapon class of the item. This should be a value from
+0 to 20.
+*/
+int weapon_class() 
+{
+  return class_of_weapon;
+}
+
+/* herp */
+
+int id(string str) 
+{
+   if (stringp(str))
+      return str == name_of_weapon || str == alt_name || str == alias_name;
+}
+
+int drop() 
+{
+  if (wielded) 
+  {
+    if(!wielded_by->stop_wielding(this_object())) return 1;
+    _do_modify( -1 );
+    wielded = 0;
+    tell_object(wielded_by,"You drop your wielded weapon.\n");
+    wielded_by = 0;
+   }
+  return 0;
+}
+
+int un_wield( )                  /* called from living, do not change !!! */
+{
+  if (wielded) {
+     wielded = 0;
+  }
+
+  return( 1 );
+}
+
+int do_unwield(string what)
+{
+  if ( !what || this_object() != present(what,this_player()) ) return( 0 );
+
+  if ( wielded ) 
+  {
+    if(!wielded_by->stop_wielding(this_object())) 
+    {
+       wielded = 1;          /* could be removed of living, so set it again */
+       return( 1 );
+    }
+    wielded = 0;
+    tell_object(wielded_by,"You unwield the " + query_name() + ".\n");
+    say( this_player()->query_name() + " unwields " + query_name() + ".\n" );
+    _do_modify(-1);
+    wielded_by = 0;
+    return( 1 );
+   }   /* endif , wielded */
+  return 0;
+}
+
+int hit(object ob)  /* thats waste of speed :( ...same below */
+{
+  if (objectp(ob) && hit_func)
+     return hit_func->weapon_hit(ob); 
+  return 0;
+}
+
+int hit2(object ob) 
+{
+  if (objectp(ob) && hit_func)
+     return hit_func->magic_hit(ob);
+  return 0;
+}
+
+void set_id(string n) 
+{
+  if (stringp(n))
+  {
+     name_of_weapon = n;
+     cap_name = capitalize(n);
+     short_desc = cap_name;
+     long_desc = "You see nothing special.\n";
+  }
+}
+
+void set_name(string n) 
+{
+  if (stringp(n))
+  {
+     name_of_weapon = n;
+     cap_name = capitalize(n);
+     short_desc = cap_name;
+     long_desc = "You see nothing special.\n";
+  }
+}
+
+int read(string str) 
+{
+  if (!id(str) || !stringp(str)) return 0;
+  write(read_msg);
+  return 1;
+}
+
+int query_value() 
+{ 
+  return value; 
+}
+
+/* USERDOC:
+query_wielded
+Format: i=query_wielded()
+This function returns 0 if the weapon is not wielded, and something else
+otherwise.
+*/
+int query_wielded() 
+{ 
+  return wielded; 
+}
+
+int get() 
+{ 
+  return 1; 
+}
+
+int query_weight() 
+{ 
+  return local_weight; 
+}
+
+/* USERDOC:
+query_two_handed
+Format: i=query_two_handed()
+This function returns 0 if the weapon isn't a two-handed weapon, and something
+else if it is.
+*/
+int query_two_handed() 
+{ 
+  return two_handed; 
+}
+
+/* USERDOC:
+set_class
+Format: set_class(i)
+Example: set_class(5)
+See also: weapon_class.
+This function sets the weapon class of the weapon. This is a value between 1
+and 20 indicating how strong the weapon is. The weight is also set by this
+function, so do not call it while the object is carried by someone.
+*/
+void set_class(int class) 
+{ 
+  if (intp(class))
+  {
+	if (class <= 20)
+      class_of_weapon = class;
+    else
+	  class_of_weapon = 20;
+   }
+
+  if (local_weight < ( (class_of_weapon +5) / 5) )
+	  local_weight = (class_of_weapon +5) / 5;
+}
+
+void set_weight(int w) 
+{ 
+  if (intp(w))
+  {
+    local_weight = w; 
+    if(class_of_weapon) 
+       set_class(class_of_weapon); 
+  }
+}
+
+void set_value(int v) 
+{ 
+   if (intp(v))
+      value = v; 
+}
+
+void set_alt_name(string n) 
+{ 
+  if (stringp(n))
+      alt_name = n; 
+}
+
+/* USERDOC:
+set_hit_func
+Format: set_hit_func(o)
+Example: weapon->set_hit_func(this_object())
+See also: set_wield_func.
+When an object is set in this function, the functions 'weapon_hit()' and
+'magic_hit()' will be called in o. The value returned by weapon_hit() is a
+maximum value of additional hits to be removed when the weapon hits, the value
+returned by magic_hit is the amount of additional hits to be removed. Of
+course, armour still helps against these. These functions could also be used
+for different purposes (poison, breaking weapons).
+*/
+void set_hit_func(object ob) 
+{ 
+  if (objectp(ob))
+  {
+     hit_func = ob; 
+// with query_property("magic_hit") you can see if the weapon has a magic hit 
+     ob->add_property("magic_hit",1);
+  }
+}
+
+/* USERDOC:
+set_wield_func
+Format: set_wield_func(o)
+Example: weapon->set_wield_func(this_object())
+See also: set_hit_func
+If this function is used, wield() will be called in o when the weapon is
+wielded. wield() will have this object as argument. If wield returns 0, the
+weapon will not be wielded.
+*/
+void set_wield_func(object ob) 
+{ 
+  if (objectp(ob))
+     wield_func = ob; 
+}
+
+void set_alias(string n) 
+{ 
+   if (stringp(n))
+      alias_name = n; 
+}
+
+void set_short(string sh) 
+{ 
+   if (stringp(sh))
+   {
+      short_desc = sh; 
+      long_desc = short_desc + "\n";
+   }
+}
+
+void set_long(string long) 
+{ 
+   if (stringp(long))
+      long_desc = long; 
+}
+
+void set_read(string str) 
+{ 
+  if (stringp(str))
+     read_msg = str; 
+}
+
+void set_info(string i) 
+{ 
+  if (stringp(i))
+     info = i; 
+}
+
+/* USERDOC:
+set_type
+Format: set_type(i)
+Example: set_type(3)
+See also: query_weapon_type.
+This function sets the type of the weapon. Most common values are: 1 for
+strength only, 2 for dexterity only and 3 for strength and dexterity.
+*/
+void set_type(int i) 
+{ 
+  if (intp(i)) 
+     type_of_weapon=i; 
+}
+
+/* USERDOC:
+set_two_handed
+Format: set_two_handed()
+See also: query_two_handed.
+This function makes the weapon a two handed weapon. This means no shield can
+be used in conjunction with it.
+*/
+void set_two_handed()
+{ 
+  two_handed=1; 
+}
+
+string query_info() 
+{
+  return info; 
+}
+
+nomask void modify_resistance( int kind, int value )
+{
+   if ( kind > 0 && kind < MAX_NO_OF_SAVE ) {
+      if ( !res_mod ) res_mod = ([]);
+      res_mod[kind] = value;
+   }
+}
+
+nomask void modify_immunity( int kind, int value )
+{
+   if ( kind > 0 && kind < MAX_NO_OF_SAVE ) {
+      if ( !imm_mod ) imm_mod = ([]);
+      imm_mod[kind] = value;
+   }
+}
+
+nomask void modify_stat( int stat, int value )
+{
+   if ( stat >= 0 && stat <= 5 ) {
+      if ( !stat_mod ) stat_mod = ([]);
+      stat_mod[stat] = value;
+   }
+}
+
+private void _do_modify( int wwi )                // 1 = start, -1 = end
+{
+   int   i;
+   mixed *idx;
+
+   if ( !(wielded_by && (wwi==1 || wwi==-1)) ) return;
+
+   if ( res_mod ) {
+      idx = m_indices( res_mod );
+      i = m_sizeof( res_mod ) - 1;
+      while ( i >= 0 ) {
+         wielded_by->modify_resistance( idx[i], res_mod[idx[i]]*wwi );
+         i--;
+      }
+   }
+
+   if ( imm_mod ) {
+      idx = m_indices( imm_mod );
+      i = m_sizeof( imm_mod ) - 1;
+      while ( i >= 0 ) {
+         wielded_by->modify_immunity( idx[i], imm_mod[idx[i]]*wwi );
+         i--;
+      }
+   }
+
+   if ( stat_mod ) {
+      idx = m_indices( stat_mod );
+      i = m_sizeof( stat_mod ) - 1;
+      while ( i >= 0 ) {
+         wielded_by->modify_stat( idx[i], stat_mod[idx[i]]*wwi );
+         i--;
+      }
+   }
+}
+
+void notify_destruct( object ob )
+{
+   if ( wielded_by ) _do_modify(-1);
+}
