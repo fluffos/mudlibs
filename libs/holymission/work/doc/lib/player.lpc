@@ -341,6 +341,22 @@ int set_int(int v) { if (!stats) stats = allocate(6, 10); return stats[3] = v; }
 int set_wis(int v) { if (!stats) stats = allocate(6, 10); return stats[4] = v; }
 int set_chr(int v) { if (!stats) stats = allocate(6, 10); return stats[5] = v; }
 
+// query_maxhp()/query_maxsp(): genuinely missing here too (this file
+// doesn't inherit /sys/living, whose own copies -- `int query_maxhp() {
+// return max_hp; }` -- are one-line accessors over the real `max_hp`/
+// `max_sp` member vars this file already declares at the top but, until
+// this fix, never actually assigned anywhere except a bare `hit_point =
+// max_hp;` in logon()'s new-character branch below -- so `max_hp`/
+// `max_sp` stayed at their bare-declaration 0 forever, and score()'s own
+// `this_object()->query_maxhp()` call_other silently returned 0 for a
+// nonexistent function (this driver's call_other() doesn't error on a
+// missing function, it just returns 0). Confirmed live: a brand new
+// character always showed "Hit points(max) : 0(0)" -- already
+// effectively dead from the moment of creation, before ever taking a
+// single hit. Mirrors living.lpc's own accessor shape exactly.
+int query_maxhp() { return max_hp; }
+int query_maxsp() { return max_sp; }
+
 #include "/sys/quest_sys.lpc"
 #include "/spells/spell.h"
 
@@ -1175,6 +1191,14 @@ void logon2() {
     set_dex(1);
     set_wis(1);
     set_chr(1);
+    // max_hp/max_sp: never computed anywhere in this file before now
+    // (see the query_maxhp()/query_maxsp() comment above) -- ported
+    // from the same real, intact GM->query_maxhp()/query_maxsp()
+    // mechanism doc/lib/living.lpc's stat_changed() uses for monsters,
+    // using this new character's just-set guild (0, "adventurer",
+    // the bare-declaration default) and stats.
+    max_hp = (int)evaluate(call, GM, "query_maxhp", query_guild(), query_con(), this_object()->query_legend_level());
+    max_sp = (int)evaluate(call, GM, "query_maxsp", query_guild(), query_int(), this_object()->query_legend_level());
     hit_point = max_hp;
     spell_points = -30;
   } else

@@ -26,6 +26,33 @@
 // recovered by inheriting it directly. See AGENTS.md, NOTES.md.
 inherit "/sys/living";
 
+// This driver's reset() apply is scheduled/lazy (config.fluffos "time to
+// reset" is 1800 seconds here), and a bare, unscheduled `reset(0)` call
+// can silently no-op on this driver -- see AGENTS.md §7.177. Without a
+// create() forcing the first reset() to run synchronously, a freshly
+// cloned monster's alias_list/hunted/alignment/etc (all set inside
+// reset() below, never in a declaration initializer) stay at their
+// bare 0 default. Since the near-universal room idiom throughout this
+// mudlib is `ob = clone_object("obj/monster"); ob->set_name(...);` in
+// the SAME reset()/init() that just cloned it, the very next line after
+// clone_object() calls set_name(), which does
+// `member_array(str, alias_list)` -- a hard driver error ("Bad argument
+// 2 to member_array()") when alias_list is still 0 instead of an array.
+// Confirmed live: a fresh character's very first move (`east` from
+// room/church into players/herp/room/father, whose reset() clones a
+// "priest" NPC exactly this way) threw this error uncaught inside the
+// ROOM's own reset() -- and since (per the room/room.lpc fix above)
+// reset() is now called synchronously from create(), an uncaught error
+// there aborts the whole object's compilation, turning what would have
+// been a room that's merely dark for half an hour into a room that
+// NEVER loads at all ("No program in object ...") -- confirmed on
+// room/vill_road2.lpc, whose reset() clones and immediately
+// set_name()s the "harry" NPC the same way. Fixed identically to
+// obj/armour.lpc/obj/share.lpc/room/room.lpc's own copies of this fix.
+void create() {
+  call_other(this_object(), "reset", 0);
+}
+
 #if 1
 #include "/obj/monsoul.lpc"             /*  only needed for possess ...  */
 #endif

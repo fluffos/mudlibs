@@ -64,6 +64,26 @@ string query_name() {
   return name_of_weapon;
 }
 
+// This driver's reset() apply is scheduled/lazy (config.fluffos "time to
+// reset" is 1800 seconds here), and a bare, unscheduled `reset(0)` call
+// can silently no-op on this driver -- see AGENTS.md §7.177. Every
+// weapon subclass (players/moonchild/newbie/sword.lpc et al.) defines
+// its own reset() to set_name()/set_short()/set_class()/set_weight(),
+// but this base class had no create() forcing that first reset to run
+// synchronously, so a freshly-cloned weapon sat with an empty
+// short_desc/name_of_weapon (short() returns 0, silently dropped from
+// `i`/`look`, and query_class()/query_weight() read 0) for up to 30
+// minutes after cloning, until the driver's own natural scheduled
+// reset apply eventually caught up. Confirmed live: a newbie
+// `get sword` never showed up in `i` even though `get jacket` (whose
+// obj/armour.lpc base already has this exact fix) did. Fixed
+// identically to obj/armour.lpc/obj/share.lpc's own copies of this fix
+// -- routed through call_other() to self since a bare `reset(0)` call
+// is the very thing that's unreliable here.
+void create() {
+  call_other(this_object(), "reset", 0);
+}
+
 /* USERDOC:
 query_weapon_type
 Format: i=query_weapon_type()

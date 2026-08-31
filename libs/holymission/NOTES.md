@@ -283,3 +283,265 @@ restart**: correct password accepted, character restored in the church
 with race/stats/guild intact; a wrong password is correctly rejected
 ("Wrong password!", `Try again:`), confirming the login check is
 genuinely functional post-fix, not just bypassed.
+
+## 14. §10.7 deep functional test (round two, 2026-08-31)
+
+Full continuous native-driver session (`~/src/fluffos/build-debug/src/driver
+config.fluffos`, port 40260), specifically instructed to VERIFY the
+onboarding-pass fixes above hold up under a genuinely independent
+playthrough, not re-run the same steps. Five throwaway characters used
+across this pass, all different from onboarding's `holyseeker`/male/human:
+`Pilgrim` (female elf), `Aldric`/`Bertrand`/`Cassian` (male human, same
+name reused across driver restarts to test different fixes),
+`Delphine` (female dwarf), `Gwendal` (female gnome), `Rosalind` (female
+hobbit) -- covering 4 of the 9 races and both genders, via
+`scripts/tmux_mud.sh` sessions. Explored a materially different part of
+the map than onboarding (which stopped at the church): south through
+`players/moonchild/newbie/hut` (get sword/jacket), the newbie map room,
+then east along the full village road strip (`players/cashimor/extend/village1`
+-> `room/vill_track` -> `room/vill_road1` -> `room/vill_road1b` ->
+`room/vill_road2` -> `room/vill_shore`), west across `room/hump` (a
+river bridge) into `room/wild1`/`room/forest1`, and to
+`room/adv_guild` (the Adventurers' Guild room) and `room/narr_alley`
+(post office/brokers).
+
+**Onboarding's headline fixes (§7.177 `reset()`-no-op, §7.178
+`inaugurate_master()`, the password database, room darkness) all hold**:
+verified via 5 independent fresh registrations, gendered race choice
+branching correctly (elf/dwarf/gnome/hobbit all showed correct
+race-specific stat floors and moved cleanly into a fully lit, described
+starting room), and a genuine SEPARATE-CONNECTION reconnect (not the
+same open socket) for a second independent account (`Delphine`) across
+a real ~3-minute wall-clock gap plus an intervening full driver
+restart -- correct password accepted, race/stats/HP restored exactly,
+wrong-password rejection re-confirmed working.
+
+This pass found and fixed **4 further real programming bugs**, one of
+them (§7.194 below) as severe as anything onboarding found -- the
+combat engine was completely unusable against any monster in the game
+until now:
+
+### 14.1 `obj/weapon.lpc` missing the same create()-forces-reset() fix already applied to `obj/armour.lpc`/`obj/share.lpc`/`room/room.lpc` (AGENTS.md §7.177/§7.192 class)
+
+Reproduced live: `get sword` in the newbie hut successfully cloned
+`players/moonchild/newbie/sword.lpc` (a `obj/weapon` subclass whose own
+`reset()` sets `set_name()`/`set_short()`/`set_class()`/`set_weight()`),
+but the sword never appeared in `i` (inventory) -- `get jacket`
+(`obj/armour`, already fixed) worked correctly side by side with the
+identical idiom, isolating the gap to `obj/weapon.lpc` specifically.
+`obj/weapon.lpc`'s own `short()` returns the never-initialized
+`short_desc` (0), and `doc/lib/player.lpc`'s `inventory()` silently
+skips any item whose `short()` is falsy -- so every weapon in the game
+sat with no name/short description/class/weight for up to the
+30-minute lazy-reset window after being cloned. Fixed identically:
+added `void create() { call_other(this_object(), "reset", 0); }` to
+`obj/weapon.lpc`. Verified live post-fix: `get sword` -> `i` correctly
+shows "A small sword."
+
+### 14.2 `obj/monster.lpc` (this archive's near-universal NPC base, cloned 600+ times) had the identical gap, with a much worse blast radius
+
+Same root cause, same fix (`obj/monster.lpc` had `reset()` -- which
+initializes `alias_list = ({})`, `hunted = ({})`, `alignment`, etc. --
+but no `create()`). The near-universal room idiom throughout this
+archive is `ob = clone_object("obj/monster"); ob->set_name(...);` in
+the SAME `reset()`/`init()` that just cloned it -- and `set_name()`
+does `member_array(str, alias_list)`, a hard driver error ("Bad
+argument 2 to member_array() Expected: string or array Got: 0") when
+`alias_list` is still 0. Confirmed live: a fresh character's very
+first move (`east` from `room/church` into `players/herp/room/father`,
+whose `reset()` clones a "priest" NPC this exact way) threw this error
+uncaught INSIDE the room's own `reset()` -- and since `reset()` now
+runs synchronously from `create()` (the already-applied §7.177 fix),
+an uncaught error there aborts the whole room's compilation
+("No program in object ...") rather than just leaving one monster
+blank. `room/vill_green.lpc` (whose `clone_list` clones "Harry" the
+same way) hit the identical crash. Fixed by adding the same `create()`
+to `obj/monster.lpc`. Verified live post-fix: `east` from church now
+reaches the priest's room cleanly, `look at priest` shows a fully
+described, correctly-inventoried NPC.
+
+### 14.3 §7.194 (new AGENTS.md entry) -- `doc/lib/living.lpc`'s own `query_str()`/`query_dex()`/`query_con()`/`query_int()`/`query_wis()`/`query_chr()` called themselves forever, crashing combat against every monster in the game
+
+The headline finding of this pass. `sys/living_defs.h` (a header this
+project's OWN earlier onboarding pass reconstructed from an empty file,
+see §3/§9 above) defines `#define Str (query_str())` etc as a
+convenience macro for OTHER code. `doc/lib/living.lpc`'s own
+`query_str() { return Str; }` (and the Dex/Con/Int/Wis/Chr siblings)
+preprocesses into `query_str() { return (query_str()); }` -- a literal
+unconditional call to itself. Confirmed live: `kill priest` crashed
+with `Too deep recursion.` at `doc/lib/living.lpc:2953`/`:2963` (this
+file's own weapon-damage-class calculation calls
+`this_object()->query_str()`/`query_dex()`), which also silently
+disabled that NPC's `heart_beat`. Since `obj/monster.lpc` (§14.2 above)
+is this archive's near-universal NPC base and inherits this exact
+`living.lpc`, this bug meant **combat could never work against any
+monster in the entire game** -- confirmed the crash reproduces
+identically on a second, independent NPC once §14.2 was fixed and this
+room became reachable at all. Fixed by making all 6 accessors return
+`query_stats(nr_x)` (the file's own real, non-recursive underlying
+accessor) instead of their own macro alias -- see AGENTS.md §7.194 for
+the full writeup and the general "how to spot this again" grep.
+Verified live post-fix: `kill priest` now resolves normal combat
+(`You take 19 damage! Priest hit you very hard.`, no crash,
+`debug.log`/driver stdout clean).
+
+### 14.4 `room/room.lpc`'s `clone_list` population logic had no guard for a missing/uncompilable clone target -- an unrelated pre-existing gap the §7.177 create()-fix turned from "one blank monster" into "whole room permanently unloadable" (AGENTS.md §7.25 class)
+
+`room/vill_green.lpc`'s `clone_list` references
+`/players/emerald/misc/danseuse` and `.../paperboy` -- both files are
+genuinely absent from the archive under any name (confirmed both in the
+raw and converted trees). `room/room.lpc`'s `reset()` does
+`ob = clone_object(clone_list[i+3]); ...; ob->move_object(this_object());`
+with no check that `clone_object()` actually succeeded -- for a
+genuinely-missing file it returns `0`, and the very next line's
+`ob->move_object(...)` (an implicit `call_other()`) throws "Bad
+argument 1 to EFUN call_other() ... Got: int(0)" uncaught. Exactly the
+same shape as the already-catalogued AGENTS.md §7.25 ("room-population
+helper's unguarded `new()`/`move()` chain"), just with `clone_object()`
+in place of `new()`. Before the §7.177 create()-fix this would have
+been invisible for 30 minutes then silently no-op'd every subsequent
+lazy reset; after that fix it aborts the ROOM's own `create()` on
+first load, taking down `room/vill_green.lpc` (a room every single new
+character walks through one hop from the church) entirely. Fixed with
+a plain `if (!ob) continue;` guard in both of `room/room.lpc`'s
+`clone_list` branches (the direct-clone branch and the
+per-existing-monster item-clone branch). Verified live post-fix:
+`room/vill_green` loads and describes correctly; no new AGENTS.md entry
+needed, this is a same-shaped instance of the existing §7.25 class.
+
+### 14.5 A separate, unrelated pre-existing compile error: `room/vill_road2.lpc` declared a variable literally named `function`
+
+Found while re-verifying §14.2/§14.3 reached `room/vill_road2.lpc`
+("Harry" the chatty NPC) cleanly -- it instead failed with a hard
+syntax error (`unexpected L_BASIC_TYPE, expecting L_DEFINED_NAME or
+L_IDENTIFIER`) at `string *function, *type, *match;`. `function` is a
+real type keyword on this driver (function-pointer/closure type,
+`function f = (: foo :);`), hard-reserved the same way `new`/`class`/
+`status` already are elsewhere in this archive (AGENTS.md §6.2, this
+lib's own NOTES.md §4). This was NOT caused by any of §14.1-14.4's
+fixes (a genuine syntax error is caught at parse time, before any of
+those runtime paths could ever run) -- it's an independent pre-existing
+gap that happened to be masked behind the (also broken) §14.2/§14.3
+crashes the whole time, so it was never actually reached/tested by
+onboarding either. Fixed by mechanically renaming the identifier to
+`func_name` throughout the file (10 occurrences, verified via grep that
+no other real archive file uses `function` as a bare identifier
+outside `players/`). Verified live: `room/vill_road2` now compiles and
+loads; Harry greets arriving players correctly (though see the next
+paragraph for a separate, NOT fixed, minor cosmetic observation).
+
+**Minor cosmetic observation, not fixed**: Harry's `say_hello()`
+(triggered by a room-chat pattern match on an "arrives" message) prints
+"Harry says: Hi 0, nice to see you!" instead of the arriving player's
+name -- an `sscanf(str, "%s arrives.", who)` pattern that doesn't
+account for whatever the real decorated arrival-message format is on
+this driver, leaving `who` at its string-type default. Cosmetic only
+(doesn't block or crash anything), flagged here rather than
+investigated further given the session's time budget and the size of
+the fixes above.
+
+### 14.6 A severe pre-existing content gap, found and fixed as a missing-accessor reconstruction (same technique as §3/§6/§9/§10 above, not a new AGENTS.md pattern): every new character had 0/0 hit points from the moment of creation
+
+`doc/lib/player.lpc` declares `max_hp`/`max_sp` at the top of the file
+but -- since this file doesn't inherit `/sys/living` (see §3) -- never
+defines `query_maxhp()`/`query_maxsp()` accessors, and never computes
+`max_hp`/`max_sp` anywhere. `logon()`'s new-character branch does
+`hit_point = max_hp;` while `max_hp` is still its bare-declaration `0`;
+`score`'s own `this_object()->query_maxhp()` call_other silently
+returned `0` for a nonexistent function (this driver's `call_other()`
+doesn't error on a missing function, just returns 0). Confirmed live:
+every single fresh character showed "Hit points(max) : 0(0)" --
+already effectively dead before taking a single hit, which is also why
+Bertrand's very first `kill priest` produced "You have died!"
+immediately on the first hit. Root-caused further: `logon()`'s own
+comment says "we call the adventurers guild to get our first title,"
+via `call_other("room/adv_guild", "advance", 0)` -- but
+`guild/guild_room.lpc` (the real base class `room/adv_guild.lpc`
+inherits) only defines `do_advance()` (the player-facing command, wired
+via `add_action`), never a bare function literally named `advance` --
+so that `call_other()` always silently no-ops and never triggers
+anything HP-related anyway (nor, apparently, ever assigned a title --
+a separate, much more minor loose end not chased further this session).
+**Fixed**: added `query_maxhp()`/`query_maxsp()` accessors (one-line,
+mirroring `doc/lib/living.lpc`'s own real, intact shape), and in
+`logon()`'s new-character branch, computed `max_hp`/`max_sp` for real
+via the same `GM->query_maxhp(guild, con, legend_level)`/`query_maxsp`
+mechanism `doc/lib/living.lpc`'s `stat_changed()` already uses for
+monsters (`guild/master.lpc` is real, intact archive content with a
+genuine `gd_info[0] = ({"adventurer", 0, 30, 1, 42, 8, ...})` base+
+per-CON-point table for the default "adventurer" guild -- not an
+invented balance number). Verified live: a fresh level-1 adventurer
+with CON 4 now shows "Hit points(max): 50(50)" and survives real
+combat hits instead of being already dead. This is the same
+"genuinely missing, reconstruct from the real archive mechanism"
+technique already used repeatedly in this file (§3/§6/§9/§10 above),
+not a new generalizable driver-quirk pattern, so no new AGENTS.md entry
+was added for it -- but it's flagged here prominently given how severe
+its effect was (nothing else this session even matters if every
+character starts already dead).
+
+### 14.7 Combat/death: real damage now happens both directions, but the already-documented "intentional simplification" of `doc/lib/player.lpc`'s `hit_player()` (NOTES.md §3, "NOT the full ~830-line combat engine") means death never actually ends a fight
+
+With §14.1-14.6 fixed, real bidirectional combat is now genuinely
+exercised for the first time this project (previously blocked at the
+very first hit by §14.3's crash). `hit_player()` sets `dead = 1` and
+prints "You have died!" exactly once when `hit_point` crosses 0, but
+never calls any actual death/reincarnation routine, never
+`stop_fight()`s the attacker, and the player object is never destructed
+or moved -- so the fight (and the "You take N damage!" spam) continues
+indefinitely at the NPC's own heart_beat pace regardless of how far
+negative `hit_point` goes, until the player disconnects or physically
+walks away (both work correctly and end the fight cleanly, confirmed
+live -- a plain movement command out of the room, or `quit`, both
+succeed instantly even mid-fight and the NPC's aggro drops once its
+target is gone). This is squarely the ALREADY-DOCUMENTED, explicitly
+out-of-scope content gap from this lib's own onboarding notes (§3
+above: "a deliberately-simplified attack_object()/hit_player() fallback
+... so combat is at least FUNCTIONAL (damage happens, death happens)
+rather than a hard compile/runtime error -- flagged clearly as a real
+content gap, not a finished feature") -- confirmed and expanded with a
+live reproduction, not a new bug, and per this project's scope
+discipline (fix programming bugs, not incomplete content), left
+untouched.
+
+**Guild-join / skill acquisition**: no dedicated safe-sparring
+mechanism exists in this archive (grepped for `accept_fight` plus a
+stat-mirroring dummy pattern -- zero hits anywhere in the tree,
+including `players/`) -- used the placed, non-aggressive
+`players/herp/room/father` "priest" NPC as the checklist's documented
+weak/non-aggressive-NPC fallback instead. Reached `room/adv_guild.lpc`
+(the Adventurers' Guild room, real archive content, base class
+`guild/guild_room.lpc`) and exercised its real command dispatch
+organically (`join` correctly refuses with "You can't join the
+adventurers guild." -- `gd == 0` for the default "adventurer" guild is
+a deliberate special case in `do_join()`, not a bug; `advance`
+correctly refuses with "You are not ready to advance." per the real
+0%-experience gate in `do_advance()`) -- confirms the guild-room
+command layer itself is functional post-fix, but this session's time
+budget did not extend to locating and joining one of the archive's
+actual non-default guilds (mage/thief/monk, mentioned in race `about`
+text) via either the organic or a shortcut path; flagged honestly as
+unverified rather than silently skipped.
+
+**Shop/economy**: attempted but not reached within this session's time
+budget -- `room/main_shop.lpc` (`obj/std_shop`-based, real archive
+content, confirmed reachable via `room/vill_road2.lpc`'s own `north`
+exit in source) was identified but this pass's navigation time was
+consumed by the combat-chain bug fixes above and the world's extensive
+reuse of near-identical "long road" room descriptions (several
+distinct road tiles share verbatim or near-verbatim prose, which
+repeatedly caused this session's own dead-reckoning navigation to
+misidentify which physical room it was standing in -- a genuine
+tooling/methodology lesson for future navigation of this specific lib,
+not a bug). Flagged unverified-live rather than silently skipped.
+
+**Long-sit boot watch**: `python3 scripts/mudclient.py 127.0.0.1 40260
+--timeout 220 --idle 250`, run synchronously in the foreground for
+~220 wall-clock seconds sitting idle at the login prompt -- ended in
+the login object's own normal inactivity-timeout disconnect ("Time
+out."), zero new `debug.log`/driver-stdout errors, driver RSS a steady
+~33-34MB throughout. No lazily-loaded daemon failures surfaced.
+
+**Files modified this pass**: `work/obj/weapon.lpc`, `work/obj/monster.lpc`,
+`work/doc/lib/living.lpc`, `work/room/room.lpc`, `work/room/vill_road2.lpc`,
+`work/doc/lib/player.lpc`.

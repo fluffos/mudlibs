@@ -14522,6 +14522,55 @@ domains/` (or whatever the local short-description setter is named) to
 find any LIVING NPC (not scenery/furniture) whose short description was
 left as a full self-contained sentence instead of a bare noun phrase.
 
+### 7.194 Reconstructing a lost "convenience macro" header for a stat/field accessor can make the accessor call itself forever — a hazard specific to this project's own "genuinely missing, reconstructed from cross-references" recovery method
+
+Found on `holymission`'s §10.7 round-two deep functional test, in a
+header this project's OWN earlier onboarding pass had reconstructed
+(`sys/living_defs.h`, found completely empty in the archive — see
+§7.177/§7.178's sibling findings on the same lib). The header defines
+object-like convenience macros so OTHER code can read a stat without
+knowing the exact accessor name: `#define Str (query_str())`, `#define
+Wis (query_wis())`, etc. — a real, verbatim archive convention
+(cross-referenced from a surviving wizard-workspace copy). The trap:
+the base "living" class's OWN implementation of these exact accessor
+functions was written as `int query_str() { return Str; }` — and since
+the macro header is `#include`d at file scope near the top of that same
+file, the preprocessor expands the bare `Str` token inside `query_str`'s
+own body into `(query_str())`, turning the function into a literal,
+unconditional call to itself. No compile error, no warning — this is
+completely valid preprocessing. The bug is invisible until the function
+is actually CALLED at runtime, where it immediately blows the call
+stack: `Too deep recursion.` (this driver's stack-depth guard, not a
+silent hang). Confirmed live: attacking a placed NPC crashed with `Too
+deep recursion` inside the combat engine's own weapon-damage-class
+calculation (`this_object()->query_str()`/`query_dex()`), turned that
+specific NPC's `heart_beat` off as a side effect, and would have broken
+EVERY combat action against EVERY monster in the game (the base class
+in question is the near-universal NPC base, cloned 600+ times
+archive-wide) had it not been caught this session.
+
+**Fix**: the accessor function's own body must read the underlying
+STORAGE directly, never its own macro alias — e.g. `int query_str() {
+return query_stats(nr_str); }` (using this same file's own
+non-recursive `query_stats(i)`, which indexes the real `stats[]` array),
+not `return Str;`. Apply this fix to all six stat accessors
+(str/dex/con/int/wis/chr) if any one of them has the pattern — they are
+near-certainly copy-pasted siblings.
+
+**How to apply generally**: this is a hazard of the specific
+reconstruction technique this project uses over and over for "header
+found completely empty, rebuilt by cross-referencing a surviving
+personal/wizard copy elsewhere in the archive" cases (§7.170, §7.175,
+and dozens of `NOTES.md` "genuinely missing" entries follow this same
+playbook) — not a hazard of any particular archive's original content.
+Whenever reconstructing (or reviewing an earlier reconstruction of) a
+header that defines a `#define NAME (query_NAME())`-shaped convenience
+macro, grep the base class's own accessor function bodies for a bare
+use of that same macro name inside the very function the macro is an
+alias for — `int query_NAME() { return NAME; }` is the exact shape to
+flag. The macro is meant for OTHER files to use; the function that
+implements it must never use its own alias.
+
 ---
 
 ## 8. Login and registration flow bugs
