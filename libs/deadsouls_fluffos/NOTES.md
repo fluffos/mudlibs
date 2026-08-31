@@ -158,6 +158,16 @@ rooms.lpc`、`reaper.lpc`、`chat.lpc` 等多处代码本来就把 `/open/`
 自身的既有惯例，不是新引入的目录）。修复后两个 daemon 都能正常
 `create()`、lpcc 单独验证通过。
 
+**Upstream note (2026-08-31)**: 上面 §1（`.c`→`.lpc` 定宽切片修复）和
+§2（`ed_start`/`ed_cmd` driver-compat shim）均**不**上游——前者只是
+本项目自己 `.c`→`.lpc` 改名步骤的副作用（上游仓库仍然全树用 `.c`，
+不存在这个问题），后者是本项目共享驱动构建选用 `OLD_ED` 这个配置
+选项造成的兼容缺口（本项目自己的驱动配置，不是上游 mudlib 的
+bug）。§3（缺失 `/open/` 目录）经审计确认是上游仓库自身的真实 bug
+（16 个其它必需空目录都配了 `.gitkeep`，唯独 `/open/` 没有），已
+filed upstream as PR #13:
+https://github.com/fluffos/dead-souls/pull/13。
+
 ### 4. `domains/Praxis/supply2.lpc` 的 `set_pre_exit_functions` 误用（比照姊妹文件的既有处理方式）
 
 `secure/include/compat.h` 里 `#define set_pre_exit_functions
@@ -171,6 +181,11 @@ mixed * )`。这是这份"更现代"的 upstream fork 自己遗留的一处内�
 不一致（不是本项目转换引入的），但既然 5/6 的姊妹房间已经用注释掉
 达成了事实上的处理方案，为了让这个房间能编译，比照同样的处理方式把
 这一行也注释掉，而不是去猜测重新实现这个从未真正工作过的旧 API。
+
+**Upstream note (2026-08-31)**: 确认这是上游仓库自身的真实 bug
+（`supply2.c` 在上游仍然是唯一一个未注释掉这行调用、因而编译失败的
+文件），已比照姊妹文件的处理方式 filed upstream as PR #15:
+https://github.com/fluffos/dead-souls/pull/15。
 
 ## 已知但未修复的边角情况（不阻塞注册/核心玩法，记录备查）
 
@@ -290,6 +305,12 @@ raw save file after `save` showed `Currency
 (["silver":186,"gold":2,])` — both integers, no float. `log/debug.log`
 stayed clean through the whole sequence.
 
+**Upstream note (2026-08-31)**: confirmed present byte-for-byte in
+`fluffos/dead-souls` upstream (`secure/sefun/economy.c`,
+`lib/teller.c`, `lib/props/value.c`), filed upstream as part of PR #12
+(bundled with the two related float/int bugs documented below):
+https://github.com/fluffos/dead-souls/pull/12.
+
 ## Sibling sweep of ds386's round-two `eventRevive()`/room.lpc/combat.lpc/beggar.lpc bugs (2026-08-27)
 
 Per `ds386/NOTES.md`'s "Deep functional test (round two, 2026-08-27)"
@@ -310,19 +331,32 @@ and fixed identically:
   -- post-fix status bar showed `hp: 111/370  mp: 23/460`, clean
   integers; `save` confirmed the raw save file has plain integer
   `HealthPoints 111` / `MagicPoints 23` lines, no float.
+  **Upstream note (2026-08-31)**: confirmed present in `lib/player.c`
+  upstream, filed as part of PR #12 (bundled with the two other
+  float/int bugs documented earlier in this file):
+  https://github.com/fluffos/dead-souls/pull/12.
 - **Bug #2 (`replace_program()` fold, AGENTS.md §7.141)**: same
   MudOS-era fold present in `lib/std/room.lpc`'s `create()` (`protected
   void create()` variant here rather than `nosave void create()`, same
   fold body otherwise). Removed it entirely, identical to
   `ds386`/`dsI`/`dsIII`/`dshakkard`.
+  **Upstream note (2026-08-31)**: confirmed present in
+  `lib/std/room.c` upstream, filed upstream as PR #16:
+  https://github.com/fluffos/dead-souls/pull/16.
 - **Bug #3 (`Wimpy` fraction-vs-percentage, AGENTS.md §7.124 class)**:
   `lib/combat.lpc:65` had `Wimpy = 0.20;` plus `float SetWimpy`/`float
   GetWimpy`. Fixed to `Wimpy = 20;` and `int SetWimpy`/`int GetWimpy`.
   **Verified live**: `wimpy` command on the same fresh character
   showed `Percentage: 20%`, a clean integer from creation.
+  **Upstream note (2026-08-31)**: confirmed present in `lib/combat.c`
+  upstream, filed as part of PR #12:
+  https://github.com/fluffos/dead-souls/pull/12.
 - **Bug #4 (`GiveMap()` reentrancy, `domains/town/npc/beggar.lpc`)**:
   same missing delivery-time `!present("town map",ob)` guard. Fixed
   identically to `ds386`.
+  **Upstream note (2026-08-31)**: confirmed present in
+  `domains/town/npc/beggar.c` upstream, filed upstream as PR #14:
+  https://github.com/fluffos/dead-souls/pull/14.
 
 Committed only the four source-file fixes plus the new `Qintestdfx`
 test-creator account's realm/save files (following this lib's own
