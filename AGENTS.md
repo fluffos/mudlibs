@@ -1601,6 +1601,26 @@ cause, fix, detection, known-affected lineages.
   using the real array-type syntax (`string *arrCmd`). (`xajh2`'s
   `clone/user/immortal.lpc`, the wizard-only `;`-separated multi-command
   batching feature.)
+  **Root cause and scale, confirmed on `brassring`**: this driver's
+  lexer only tokenizes the word `array` as the special `L_ARRAY` token
+  when built with `ARRAY_RESERVED_WORD` defined
+  (`src/compiler/internal/lexer_utils.cc`'s reserved-word table); a
+  build without that flag treats `array` as a plain identifier, so
+  `TYPE array NAME` parses as declaring a variable literally named
+  `array`, then chokes on `NAME`. On `brassring` (a Dead Souls
+  3.8.x-derived game whose own bespoke code and bundled DikuMud port
+  used this idiom throughout, not just in one or two files) this hit
+  37 files/~120 sites and, because two of the affected files
+  (`lib/body.lpc`, `lib/player.lpc`) are inherited by nearly every
+  object, cascaded into 1,873 of 3,800 files (49%) failing a full
+  `lpcc_check.sh` sweep until fixed — see AGENTS.md section 6.4. Two
+  additional shapes of the same dialect, not previously catalogued:
+  **`TYPE array *NAME`** (the author already wrote the correct `*` AND
+  the redundant `array` keyword — a blind "insert a star" fix produces
+  a wrong doubled-`*` type here; just drop the word `array` and keep
+  the existing `*`) and **`class TYPENAME array NAME`** (the same
+  dialect applied to a `class`-typed array; fix to `class TYPENAME
+  *NAME`).
 
 ### 6.4 One shared root cause, not N bugs
 
