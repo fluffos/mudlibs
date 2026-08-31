@@ -256,3 +256,247 @@ session's scope was native onboarding + bring-up per the standard
 pipeline; WASM triage left for a follow-up pass, matching the same
 "native-boot verified, WASM pending" status other very recently
 onboarded libs in this corpus (e.g. `rifts2`) currently carry.
+
+## §10.7 deep functional test (2026-08-31)
+
+Round-two deep-functional-test pass, going beyond the onboarding
+playthrough into actual game systems: combat, skills/spells, equipment,
+shop economy, consumables, death/respawn, and a real quit+reconnect gap.
+Native driver (`~/src/fluffos/build-debug/src/driver config.fluffos`,
+rebuilt since onboarding — confirmed still the correct build, async/await
+and `ed()` fixes both still in effect), port 40256, via
+`scripts/tmux_mud.sh`. Three accounts used: `thornwick`/`elmswood`
+(first-ever character on this driver boot, auto-admin, used for `makedev`
+promotion and `eval`-assisted mob spawning), `briarwyn`/`willowmere`
+(second character, used only to verify the stray-directory fix), and
+`cinderfall`/`moonshade` (main playthrough character, promoted to
+developer for `gimme`/`healup`).
+
+### Upstream movement check (informational, not acted on)
+
+Per the task brief, checked whether `gesslar/oxidus-mudlib` has moved
+since this project's clone (2026-08-28/30). It has, substantially:
+`gh api repos/gesslar/oxidus-mudlib/commits?since=2026-08-28T00:00:00Z`
+returns 21 commits between 2026-08-29 16:01 and 2026-08-31 14:02 (today,
+a few hours before this test pass — `gh repo view` confirms `pushedAt:
+2026-08-31T17:44:59Z`). Notable commit subjects suggest the areas most
+likely to have diverged from this snapshot are exactly the two this
+project's onboarding had the most friction with: the login/account
+system (`login object updated`, `promise-driven login handshake`) and
+the async/promise infrastructure (`gmcp_await`, `promises header file`,
+`request_deadline never fulfils; type it that way`, `LPCDoc unwraps
+promises; document the payload`). This is informational only per the
+task brief — not re-synced, not investigated further, and none of the
+bugs found in this pass were re-checked against the newer upstream code.
+A future re-onboarding pass should expect the login/async areas in
+particular to have changed shape.
+
+### Bug found and fixed
+
+**`adm/obj/login.lpc:449` — `new_character()`'s home-directory setup
+call passed the bare character name to `assure_dir()` instead of a real
+path, creating a spurious empty directory named after the character at
+the mudlib ROOT on every single character creation (not just
+admin/dev promotions) — this closes the "Minor unfixed observation" left
+open in this lib's own onboarding NOTES.**
+
+- The function's own doc comment says it "Validates length, format, and
+  uniqueness, then creates the character, body, and home directory" — but
+  the actual call was `assure_dir(str);` where `str` is the bare
+  lowercase character name (e.g. `"elmswood"`). `assure_dir()`
+  (`adm/simul_efun/file.lpc`) builds a directory tree by
+  `explode(path, "/")` and `mkdir()`-ing each successive segment; a
+  bare name with no slashes just does one `mkdir("elmswood")` relative
+  to the mudlib root, not the character's real home directory.
+  `home_path(name)` (the correct helper, already used two lines further
+  down inside `first_admin_login()` for exactly this purpose) returns
+  `"/home/<first-letter>/<name>/"`.
+- Confirmed the stray directory is genuinely harmless-looking but
+  100% reproducible for EVERY new character, not just the first-ever
+  admin bootstrap as the onboarding note speculated: created a third,
+  ordinary (non-admin, non-dev) character `moonshade` on a fresh driver
+  boot before applying the fix and got `work/moonshade/` (empty) at the
+  mudlib root exactly as before.
+- The real home directory (`/home/<letter>/<name>/`) is otherwise never
+  created for any character except the very first (`first_admin_login()`
+  only runs once, gated by the `FIRST_USER` marker file) — so every
+  ordinary player's home directory silently doesn't exist until
+  something else happens to create it (e.g. `ed`'s own write-permission
+  path, which per onboarding's own testing DID succeed writing to a
+  non-admin's home dir — the file-write efun apparently tolerates a
+  missing intermediate directory here, or creates it, so this was
+  latent rather than an active second bug).
+- **Fix**: `assure_dir(str)` → `assure_dir(home_path(str))`. Verified
+  live end-to-end: reverted the stray-directory symptom by creating a
+  fresh character (`briarwyn`/`willowmere`) BEFORE restarting the driver
+  and confirmed the bug still reproduced (objects don't recompile from a
+  live edit — driver restart required, per AGENTS.md §10.3), then
+  restarted the driver, applied the fix, created a THIRD fresh character
+  (`cinderfall`/`moonshade`) and confirmed: no stray directory at
+  mudlib root, and `/home/m/moonshade/` now exists with the correct
+  `.keep` sibling structure. A final full long-sit idle boot watch
+  (~220s, native `mudclient.py`, nobody logging in) also confirmed no
+  new stray directories appear from boot alone.
+
+### Confirmed working, no bugs found
+
+- **Shop economy, both architectures** (`currency-and-shops` skill):
+  the bakery's `EXT_SHOP_MENU` (`list`/`buy muffin`/`eat muffin`, correct
+  price and change-in-copper math, item cloned fresh and consumed) and
+  the tailor's `EXT_SHOP` (`list`/`buy tunic`/`wear tunic`/`remove
+  tunic`/`sell tunic`, correct `sell_factor` payout and exact-coin
+  change on both legs of the transaction). `wealth` command, `gimme`
+  dev command, and `adjust_wealth()`'s currency-denomination math all
+  verified correct across several buy/sell round-trips.
+- **Equipment** (`equipment` skill): `wear`/`remove` on a clothing item
+  worked correctly end-to-end including the shop round-trip above.
+- **Consumables** (`consumables` skill): `eat muffin` correctly depleted
+  the single-use food item and removed it from inventory with the
+  documented "You have eaten the last of the muffin." message.
+- **Skills** (`skills-and-advancement` skill): `use_skill()`'s
+  auto-creation-on-first-use fired correctly — punching for the first
+  time printed "You have gained a new skill: combat.melee.unarmed.",
+  taking a hit for the first time printed the matching
+  `combat.defence.dodge` message, and casting a spell for the first time
+  printed `arcane.discipline.lightning`. The `skills` command
+  (`cmds/std/skills.lpc`) correctly prints nothing for a skill-less
+  character (its own recursive walk over an empty `query_skills()`
+  mapping legitimately produces an empty string) — this is expected
+  behaviour given `initialize_missing_skills()` (the function that would
+  pre-seed the config's default skill tree) is dead code, never called
+  from anywhere; not a bug, since the use-based auto-creation path is
+  the one actually exercised by every real gameplay action.
+- **Combat** (`combat-system` skill): fought a level-1 `field mouse`
+  (admin-spawned into the village's `field` virtual zone via
+  `add_inventory("mob/field_mouse")` — the correct virtual-object path
+  form; see gotcha below) with the `punch` ability end-to-end across a
+  full multi-round fight — hit/miss rolls, cooldown gating ("You must
+  wait before you can use that again."), mutual damage, and HP loss all
+  behaved correctly and consistently with the formulas in the skill doc.
+- **Death and revival**: died for real (HP reached 0 from the field
+  mouse's counter-attacks) — `"You have perished."` fired, a
+  `the rotting body of moonshade` corpse appeared, wealth converted to
+  loose coin objects in the room (not inside the corpse — a small
+  presentation detail, not chased down further), and the player
+  auto-revived 1 second later at 1 HP/1 SP/1 MP via `ghost.lpc`'s
+  `call_out("revive", 1)` — a deliberately forgiving, near-instant
+  revival design, not a bug. The revived player's own
+  `move_cost()`-gated movement correctly refused a distance-2 exit
+  ("That location is too far away to travel to right now.") until MP
+  regenerated — also correct, not a bug (confirmed by reading
+  `std/room/room.lpc`'s `move_cost()`).
+- **Arcanist spell tree** (`skills-and-advancement` + `combat-system`
+  skills): found Madame Brille in the manor's salon (see navigation
+  gotcha below), `learn arcane` correctly granted
+  `/cmds/spell/arcanist/` path access, `shield` (self-buff, costs SP)
+  and `shock <target>` (offensive lightning bolt, costs MP, trains
+  `arcane.discipline.lightning`) both worked correctly — the shield's
+  damage-absorption message ("Your inertial shielding absorbs some of
+  the damage.") correctly appeared on subsequent hits taken.
+- **Reconnect with a real gap**: quit from the `moonshade` character,
+  waited (a ~4-minute gap covering the long-sit boot-watch pass below,
+  which required a driver restart in between), reconnected with
+  `character@account` form — full state correctly restored (room,
+  HP/SP/MP, wealth all exactly as left).
+- **Long-sit idle boot watch** (~220s, native `mudclient.py --idle
+  220 --timeout 220`, no login attempted): clean, only the same cosmetic
+  compile warnings already documented as pre-existing/harmless; the
+  connection was closed by the login object's own legitimate 60-second
+  login timeout, not by anything unexpected.
+
+### Not a bug: two same-`id` doors in the manor's Foyer
+
+`d/village/manor/foyer.lpc` has two `add_door()` calls both using
+`id: "foyer door"` (one north-facing to the porch, one east-facing to
+the salon) with no distinguishing adjective. A bare `open door` (or
+`open foyer door`) in that room correctly reports "There are multiple
+doors with that name." — looked like a content bug at first (the room's
+only two exits both blocked), but `std/room/door.lpc:add_door()` already
+auto-appends a direction-specific alias (`door.name = "<direction>
+door"`) to each door's `id` array specifically to handle this case:
+`open north door` / `open east door` disambiguate correctly and are the
+intended way to interact with a room that has multiple same-named doors.
+Confirmed live. Not fixed, because it isn't broken.
+
+### Flagged, not fixed: benign first-boot-only messaging race during the very first character's world-entry
+
+Every fresh driver boot's first-ever `new_character()` call (which is
+also always the auto-admin bootstrap path) logs 2-3 caught,
+non-fatal `*Object cannot be loaded during compilation.` errors from
+`std/ext/messaging.lpc:172` (`receive(message)`), reached via
+`enter_world()` → `move_living()` → `force_me("look")`'s own
+`command_hook()` chain. Confirmed genuinely reproducible, not a
+one-off: it happened identically for `elarion` (the original onboarding
+session's first character, 2026-08-30 19:51, per `log/runtime`) and
+again for `elmswood` (this pass's first character, 2026-08-31 12:24) —
+but did NOT recur for any subsequently-created character on either
+driver boot (`wisteria`, `briarwyn`/`willowmere`, `cinderfall`/
+`moonshade`), confirming it's specific to the very-first-ever compile of
+the full player class hierarchy on a cold boot, not a general messaging
+bug. `enter_world()` already wraps the relevant calls in `catch()`, so
+nothing crashes, and the player-visible outcome was correct both times
+(the new admin lands in the Developer Workroom with a correct room
+description). Root cause not fully chased down (plausibly a
+`COLOUR_D`/`LINES_D` daemon still finishing its own first-ever lazy
+compile at the exact moment `receive()` tries to use it) — flagged here
+per this round's "document honestly rather than guess" instruction
+rather than risking a speculative fix to first-boot compile ordering.
+
+### Flagged, not fixed: `defence`/`defense` skill-path spelling split (zero live impact)
+
+Every live combat/spell code path (`std/living/combat.lpc`,
+`std/living/damage.lpc`, `cmds/ability/punch.lpc`, weapon procs, all
+five arcanist spell files) consistently uses the Canadian-English
+spelling `"combat.defence.dodge"` / `"combat.defence.evade"` — correct
+per this project's own mandated Canadian-English house style
+(`AGENTS.md`'s own example list literally includes "defence"). Live
+gameplay in this pass confirmed this spelling is what actually gets
+trained and queried ("You have gained a new skill:
+combat.defence.dodge."). However, `adm/etc/default.lpml`'s configured
+default skill tree, and this lib's own `.claude/skills/` documentation
+(`combat-system` and `skills-and-advancement` SKILL.md), both use the
+American spelling `"combat.defense.dodge"` / `"combat.defense.evade"`
+instead. This is a real spelling inconsistency, but has **zero live
+functional impact** today: `initialize_missing_skills()` (the function
+that would seed the config's `"defense"`-named default tree onto new
+characters) is dead code, never called from anywhere in the codebase,
+so nothing ever tries to reconcile the two trees — every skill node in
+practice is created lazily by `use_skill()`'s own auto-creation using
+whichever spelling the calling code happens to use, and combat code is
+internally self-consistent. Not fixed: which side is "canonical" here
+is genuinely ambiguous (more call sites use "defence", but the config
+schema and generated docs use "defense"), and there is no live bug to
+reproduce/verify a fix against — flagged for whoever eventually
+resolves it (`initialize_missing_skills()` dead code, or the doc
+spelling, or both) rather than guessed at.
+
+### Gotchas hit while testing (useful for future passes on this lib)
+
+- **Virtual mob paths are NOT filesystem paths.** Spawning a monster for
+  testing requires the routed virtual form
+  `add_inventory("mob/<name>")` (no leading slash, `"mob/"` prefix),
+  which `master()->compile_object()` routes through
+  `adm/daemons/modules/virtual/mob.lpc` to `/d/mobs/<name>.lpml`.
+  Calling `add_inventory("/d/mobs/<name>")` directly (a real absolute
+  path, since only the `.lpml` data file exists there, no `.lpc`) fails
+  with `"Something went wrong."` broadcast to the room and logs `*Too
+  deep recursion.` to `log/VIRTUAL` — an artifact of feeding the wrong
+  path form, not a mudlib bug (self-inflicted during this pass, verified
+  the correct form works cleanly on the next attempt).
+- **`this_body()`/`this_player()` inside the `eval` dev command's
+  scratch object is unreliable for chained calls.** `eval`
+  compiles the given statements into a fresh, unrelated
+  `/tmp/eval_<name>.lpc` object and runs them with the caller's privs,
+  but `this_body()` (`efun::this_player()`) inside that context returned
+  `0` when chained (`this_body()->environment()`). Use `find_player(name)`
+  to get a reliable reference to a live player object from inside
+  `eval`, and the bare `environment(ob)` efun (not `ob->environment()`,
+  which calls a same-named method that doesn't exist) to get their
+  room.
+- The village's own two north/south "A Path Through the Village" rooms
+  (`village_path1`/`village_path2`, reached from the square's `north`
+  and `west` exits respectively) share the same room title and a very
+  similar opening sentence structure but lead to different content
+  (bakery vs. tavern) — easy to misnavigate by title alone; check the
+  room's own listed exits, not just the heading, when route-planning
+  through the village by hand.
