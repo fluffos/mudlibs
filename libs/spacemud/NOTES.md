@@ -454,3 +454,160 @@ than deleted.
 WASM status: not attempted this session (native-only, matching this
 session's scope) -- would need the same `emcmake`-plus-`local_options`
 treatment `libs/lima`'s own WASM pass would need, left as future work.
+
+## §10.7 deep functional test (2026-08-31, round two)
+
+Full continuous playthrough on `~/src/fluffos-lima/build-debug/src/driver`
+(admin `fluffos` + a fresh throwaway mortal registration, `Zara`/
+`Test12345`, human female, deleted after use), going beyond onboarding's
+own bug-fix verification to re-confirm the §7.166/§7.167 fixes hold,
+exercise a real economy vendor, real limb-based combat, and a fresh
+guild system onboarding hadn't reached at all. Note: **each driver boot
+makes a real Intermud-3 network connection** (§-1 above) -- this
+session's testing needed 2 boots total (initial + one final fix-
+verification/long-sit reboot), not a high-frequency loop.
+
+### Bug found and fixed: joining the only real, wired-up guild in this archive (`yakitori`) always failed with a raw daemon error instead of subscribing the new member to their guild channel
+
+`std/modules/m_guild_master.lpc`'s `guildmsg_welcome()` (run every time
+a player successfully joins a guild) unconditionally calls
+`CHANNEL_D->cmd_channel(which_guild, "/on")` to auto-subscribe the new
+member to that guild's own chat channel -- but `cmd_channel()`'s `/on`
+handling only works if the named channel was already registered as one
+of `daemons/channel_d.lpc`'s bootstrap `permanent_channels` (the same
+list `"wiz"`/`"admin"`/`"gossip"`/etc. are auto-created from at daemon
+boot); if not, it just prints `'<name>' does not exist. Use /new to
+create it.` and returns -- a message meant to guide a WIZARD manually
+creating a brand-new channel, not something an ordinary guild-joining
+player should ever see. `"yakitori"` (the delivery guild reachable via
+`domains/std/guild/yakitori/room/lead.lpc`'s Mr Nakamura, the ONLY
+`M_GUILD_MASTER` instance anywhere in this archive that's actually
+placed in a room rather than left as unplaced template content) was
+simply missing from that bootstrap list -- confirmed live: every
+`Can I join yakitori?` conversation choice printed the raw daemon error
+instead of a working channel subscription, for every single joining
+player, unconditionally. Root-caused by reading `guildmsg_welcome()`'s
+own `CHANNEL_D->cmd_channel()` call, then `daemons/channel/cmd.lpc`'s
+`/on` branch (`if (!ci) { printf("... does not exist ..."); return; }`),
+then `daemons/channel_d.lpc`'s own `create()`, which auto-creates every
+channel in one hardcoded mapping. Fixed by adding `"yakitori":0` to
+that mapping (flag `0` = an ordinary, unrestricted channel, matching
+`"gossip"`/`"newbie"`, not `CHANNEL_WIZ_ONLY`/`CHANNEL_ADMIN_ONLY` like
+`"wiz"`/`"admin"`). This is a one-line missing-config-entry fix
+restoring what the guild system's own code already assumes exists,
+not an invented feature. Verified live: pre-fix, rejoining the guild
+printed `'yakitori' does not exist. Use /new to create it.`; post-fix
+(after a fresh driver boot, since `permanent_channels` is itself a
+persisted daemon variable that only re-initializes from the hardcoded
+default when empty), the identical rejoin correctly printed `You are
+now listening to 'yakitori'.`
+
+### Bug found and fixed: two off-by-2 slice bugs in `daemons/guild_d.lpc`'s own directory-scanner "skip the base template file" checks, both permanently broken since they can never match
+
+`load_missions()`/`load_favours()` each scan a guild content directory
+for `.lpc` files, skipping the one abstract base-template file that
+ships alongside the real per-mission/per-favour subclasses
+(`std_mission.lpc`/`std_favour.lpc`, neither of which carries the
+`// MISSION:`/`// FAVOUR:` name comment the scanner looks for in every
+OTHER file). Both skip-checks compare a fixed-length string SLICE
+against the full template filename: `item[ < 14..] == "/std_mission.lpc"`
+(a 16-character string) and `item[ < 13..] == "/std_favour.lpc"` (a
+15-character string) -- since a slice can never equal a string of a
+different length, NEITHER check can ever be true, so the template file
+always falls through and gets processed as if it were real content,
+missing its required name comment, and printing `Missing '// FAVOUR:'
+string for '.../std_favour.lpc'.` / `Missing // MISSION: string for
+'.../std_mission.lpc'.` to whatever player happens to trigger `GUILD_D`'s
+lazy first load (confirmed live: entering the `yakitori` guild room for
+the first time -- the room's own `set_which_guild()` call in
+`guild_lead.lpc`'s `setup()` lazily loads `GUILD_D` -- printed the
+`FAVOUR` message directly into the room's own text, exactly the kind of
+lazily-loaded-daemon failure §10.0's long-sit boot watch exists to
+catch, except surfaced here by ordinary room entry instead). Both are
+narrow, one-file, mechanical off-by-2 typos (the intended length is the
+literal string's own `strlen()`), not a systemic corpus pattern (this
+file is the only place either idiom appears) -- fixed by correcting the
+slice lengths to 16/15 respectively. Verified live: `update
+/daemons/guild_d` (recompile + full reload, re-running `create()`,
+hence `load_missions()`/`load_favours()`) produced no output at all
+post-fix, versus the pre-fix `Missing '// FAVOUR:' ...` line appearing
+immediately on the equivalent recompile beforehand.
+
+### What was tested and confirmed working
+
+- **Fresh mortal registration** (`Zara`, human female): full flow
+  (name confirm -> gender menu -> race picker, `list`/`help race`
+  available) through to character creation and entering the game --
+  **every new character (not just the account's first) is
+  automatically granted "guest wizard" status** (`#define AUTO_WIZ` in
+  `include/config.h`, confirmed), matching stock Lima's own documented
+  demo-mud design (a coding-tutorial mudlib, not a `wilderness`-style
+  from-scratch game) -- this is intentional, shipped behavior, not a
+  bug, and it means genuine MORTAL death is not reachable for any
+  ordinary player in this archive's shipped config (see Death/respawn
+  below).
+- **Re-confirmed the onboarding-found fixes hold under fresh play**:
+  the §7.166 `method_d`/complex-exit fix (`open door` + `south` through
+  the maintenance corridors from `wakeup_room` works cleanly, no
+  `Cannot set method 'go'` errors); the §7.167a `crafting_d` fix
+  (`get chainmail shirt` + `salvage chainmail shirt` in the armour
+  tutorial room correctly yields scrap materials); the §7.167b
+  `m_frame.lpc` "none"-theme crash fix (the ASCII-frame `score` card
+  renders correctly via this session's non-MTTS-negotiating raw
+  client, the exact condition that used to crash).
+- **Shop/economy, list rendering confirmed, full paid transaction NOT
+  reached**: `domains/omega/room/floor3/canteen_area_sw`'s vendor NPC
+  (Liam Johnson) correctly lists 7 real menu items with credit pricing
+  (`list` command) and correctly refuses a purchase for insufficient
+  funds (`buy #1` -> "Sorry, that costs ..., which you don't have!");
+  this vendor has no `set_will_buy()` (sell-only), and no admin
+  money-grant command or clonable coin-with-setup-args shortcut was
+  found in the time available to fund a real purchase (unlike
+  `libs/wilderness`, which has a simpler `clone`+`sell`-to-vendor loop
+  that this codebase's own vendor doesn't support) -- flagging as
+  **budgeted, not fully exercised**, per this project's explicit
+  shop/economy fallback.
+- **Real combat, limb-based wound system**: no safe-sparring dummy
+  exists anywhere in this archive (grepped for the `accept_fight`
+  pattern, zero hits, confirmed honestly) -- fought a `large space
+  roach` (`domains/omega/mob/space_roach.lpc`, `max_health = 5*size`,
+  a small/weak reachable mob) at full admin health. Confirmed the
+  limb-targeting damage system works correctly under real, sustained
+  combat (individual limb HP tracking, "cannot use $limb anymore"
+  disabling, no crash even with torso HP down to 2) and that the
+  wizard-death-immunity check fires correctly ("If you were mortal, you
+  would now no longer be mortal.") rather than crashing or silently
+  no-oping.
+- **Guild acquisition, organic path**: `talk to nakamura` -> conversation
+  menu -> "Can I join yakitori?" successfully joins (exercises both
+  fixes above). No separate admin-shortcut join command was found or
+  expected to exist (guild membership is tracked via
+  `std/body/guilds.lpc`'s `add_guild()`, invoked here only through the
+  guild master's own conversation flow) -- documented honestly rather
+  than inventing a shortcut.
+- **`quit`, log grep, reconnect after a real gap**: `Zara`'s full
+  session (registration -> Grand Hall -> canteen shop -> `quit`)
+  reconnected correctly after the driver's final fix-verification
+  reboot with full position/state preserved ("You have reconnected.");
+  `fluffos`'s own multiple tmux-session reconnects across this whole
+  testing session all preserved state (guild membership, health)
+  correctly. `work/log/{runtime,catch}` never grew beyond empty for the
+  entire session except the two now-fixed daemon `write()` messages
+  (neither of which was ever a real `error()`-level crash).
+- **Long-sit boot watch (native equivalent of §10.0)**: rebooted fresh
+  with both fixes applied, opened one idle raw-socket connection at the
+  login-name prompt, sat through a full ~220-second window. Zero growth
+  in `work/log/runtime` (nonexistent throughout) and zero unexpected
+  entries in `work/log/i3_errors` beyond the already-documented,
+  expected `not-allowed: Not in allow list` I3-router response (§-1)
+  -- no additional lazily-triggered daemon failures surfaced.
+- **Death/respawn**: **not reachable this pass** -- every character in
+  this archive's shipped config is auto-granted wizard status (see
+  Fresh mortal registration above), and wizards are explicitly immune
+  to real death ("If you were mortal, you would now no longer be
+  mortal.", confirmed live during the roach fight). Demoting a
+  character to true mortal status to force a real death sequence was
+  judged out of scope for the time available (would require deciding
+  how/whether to alter shipped security-daemon state, not just play the
+  game) -- flagged honestly as unreachable-by-design rather than
+  silently skipped, distinct from a code bug.
