@@ -1,0 +1,460 @@
+/*
+
+  Arena for guildmaster challenges.
+
+
+
+  Diewarzau 7/4/96
+
+  DarkeLIB 1.0
+
+*/
+
+
+
+#include <rooms.h>
+
+#include <security.h>
+
+#define ARENA "/wizards/diewarzau/rooms/gm_arena"
+
+
+
+inherit "/std/room";
+
+
+
+int cip = 0;
+
+object chal = 0;
+
+object gm = 0;
+
+int go = 0;
+
+int spon = 0;
+
+
+
+void create() {
+
+  ::create();
+
+  seteuid(getuid());
+
+  set_short("The Guild Master Arena");
+
+  set_long(
+
+	   "This is the arena where the guild master rite of "
+
+	   "challenge takes place.  A small field is bordered by "
+
+	   "fences on all sides.");
+
+  set_property("indoors", 1);
+
+  set_property("light", 2);
+
+  set_property("no scry", 1);
+
+  set_property("no summon", 1);
+
+  set_property("no teleport", 1);
+
+  add_exit("/d/standard/square", "surrender");
+
+  add_pre_exit_function("surrender", "do_surrender");
+
+  return;
+
+}
+
+
+
+void init() {
+
+  add_action("do_cast", "cast");
+
+  add_action("check_use", "use");
+
+  add_action("check_kill", "kill");
+
+  return;
+
+}
+
+
+
+int do_cast(string str) {
+
+  if(go) return 0;
+
+  write("You may not do that until the challenge begins!");
+
+  return 1;
+
+}
+
+
+
+int check_use(string str) {
+
+  if(go) return 0;
+
+  write("You may not do that until the challenge begins!");
+
+  return 1;
+
+}
+
+
+
+int check_kill(string str) {
+
+  if(go) return 0;
+
+  write("You may not do that until the challenge begins!");
+
+  return 1;
+
+}
+
+
+
+int do_surrender() {
+
+  this_player()->set("death save", 0);
+
+  if(!cip || !gm || !chal) return 1;
+
+  if(!present(gm) || !present(chal)) {
+
+    cip = 0;
+
+    return 1;
+
+  }
+
+  remove_delayed_call("begin_challenge");
+
+  if(this_player() == gm) {
+
+    message("info", "By surrendering, you have lost your guildmaster "+
+
+	    "position!\n\n", gm);
+
+    call_other("/wizards/diewarzau/obj/misc/death_func", "gm_death",
+
+	       gm, chal);
+
+    return 1;
+
+  }
+
+  else if(this_player() == chal) {
+
+    message("info", "You have lost the guild master challenge.\n\n",
+
+	    chal);
+
+    message("shout", (string)chal->query_cap_name() + " has challenged "+
+
+	    (string)gm->query_cap_name() + " for the position of "+
+
+	    "Guild Master of the "+pluralize(capitalize((string)gm->
+
+							query_class()))+
+
+	    "!", users());
+
+    message("info", "%^GREEN%^%^BOLD%^You are transported to the church.",
+
+	    gm);
+
+    gm->move(ROOM_START);
+
+    return 1;
+
+  }
+
+  return 1;
+
+}
+
+
+
+void set_cip(int x) { 
+
+  cip = x;
+
+  if(!x) {
+
+    go = x;
+
+    spon = 0;
+
+  }
+
+}
+
+
+
+int query_spon() { return spon; }
+
+
+
+object query_chal() { return chal; }
+
+
+
+object query_gm() { return gm; }
+
+
+
+void set_gm(object ob) { gm = ob; }
+
+
+
+void set_chal(object ob) { chal = ob; }
+
+
+
+int query_cip() { return cip; }
+
+
+
+void sponsor(object who) {
+
+  if(!cip) return;
+
+  if(!gm) {
+
+    message("shout", "The DemiUrge shouts: Could not find the guild master.  "
+
+	    "Challenge is nullified.", users());
+
+    cip = 0;
+
+    gm = 0;
+
+    chal = 0;
+
+    return;
+
+  }
+
+  if(!chal) {
+
+    message("shout", "The DemiUrge shouts: Could not find the challenger.  "
+
+            "Challenge is nullified.", users());
+
+    cip = 0;
+
+    gm = 0;
+
+    chal = 0;
+
+    return;
+
+  }
+
+  go = 0;
+
+  if(!interactive(gm) && interactive(chal)) {
+
+    message("shout", "The DemiUrge shouts: The Guild Master is "+
+
+	    "net dead, so "+(string)chal->query_cap_name() +
+
+	    " becomes the guild master of the "+
+
+	    (string)chal->query_class()+" guild!", users());
+
+    call_other("/wizards/diewarzau/obj/misc/death_func", "gm_death",
+
+	       gm, chal);
+
+    cip = 0;
+
+    gm = 0;
+
+    chal = 0;
+
+    return;
+
+  }
+
+  else if(!interactive(chal)) {
+
+    message("info", "The DemiUrge shouts: The challenger is net dead, "+
+
+	    "so the challenge is negated.", users());
+
+    if(interactive(gm)) {
+
+      message("info", "%^GREEN%^%^BOLD%^You are transported to the church.",
+
+	      gm);
+
+      gm->move(ROOM_START);
+
+    }
+
+    return;
+
+  }
+
+  spon = 1;
+
+  gm->move_player(file_name(this_object()), 0);
+
+  chal->move_player(file_name(this_object()), 0);
+
+  message("info", "You have 20 seconds until the challenge begins.  "
+
+	  "Until then you may cast no spells and use no skills, but anything "
+
+	  "else is possible.", ({ gm, chal }));
+
+  message("info", "You may surrender at any time by typing 'surrender'.  "
+
+	  "If you are the guild master, yoiu will forfeit your position.",
+
+	  ({ gm, chal }));
+
+  gm->set("death save", (: call_other,
+
+			 "/wizards/diewarzau/obj/misc/death_func",
+
+			 "gm_death" :));
+
+  chal->set("death save", (: call_other,
+
+			   "/wizards/diewarzau/obj/misc/death_func",
+
+			   "other_guy" :));
+
+  delayed_call("begin_challenge", 20);
+
+}
+
+
+
+void gm_quit() {
+
+  if(!cip) return;
+
+  remove_delayed_call("begin_challenge");
+
+  message("shout", "The DemiUrge shouts: The Guild Master has conceded, "
+
+	  "making "+(string)chal->query_cap_name() + " the new "+
+
+	  "guild master of the "+(string)chal->query_class()+" guild!",
+
+	  users());
+
+  call_other("/wizards/diewarzau/obj/misc/death_func", "gm_death",
+
+               gm, chal);
+
+  cip = 0;
+
+  return;
+
+}
+
+
+
+int can_exceed_max_hp() { return 1; }
+
+
+
+void chal_quit() {
+
+  object ob;
+
+
+
+  remove_delayed_call("begin_challenge");
+
+  message("shout", "The DemiUrge shouts: The challenger has quit, "
+
+	  "negating the challenge.", users());
+
+  ({ chal, gm })->move(ROOM_START);
+
+  if(gm && (ob=present("challenge soul", gm))) ob->remove();
+
+  if(chal && (ob=present("challenge soul", chal))) ob->remove();
+
+  cip = 0;
+
+  chal->add_hp(-1 * (int)chal->query_max_hp() - 10);
+
+  return;
+
+}
+
+
+
+void begin_challenge() {
+
+  if(!interactive(gm) && interactive(chal)) {
+
+    message("shout", "The DemiUrge shouts: The Guild Master is "+
+
+            "net dead, so "+(string)chal->query_cap_name() +
+
+            " becomes the guild master of the "+
+
+            (string)chal->query_class()+" guild!", users());
+
+    call_other("/wizards/diewarzau/obj/misc/death_func", "gm_death",
+
+               gm, chal);
+
+    cip = 0;
+
+    gm = 0;
+
+    chal = 0;
+
+    return;
+
+  }
+
+  else if(!interactive(chal)) {
+
+    message("info", "The DemiUrge shouts: The challenger is net dead, "+
+
+            "so the challenge is negated.", users());
+
+    if(interactive(gm)) {
+
+      message("info", "%^GREEN%^%^BOLD%^You are transported to the church.",
+
+              gm);
+
+      gm->move(ROOM_START);
+
+    }
+
+    return;
+
+  }
+
+  message("shout", "The DemiUrge shouts: Let the challenge begin!",
+
+	  users());
+
+  go = 1;
+
+  gm->kill_ob(chal, 0);
+
+  return;
+
+}
+

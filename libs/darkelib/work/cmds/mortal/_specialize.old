@@ -1,0 +1,253 @@
+//  Command to specialize in a skill/spell for
+//  custom multi-classing.
+//
+//  Diewarzau
+//  5/5/96
+
+#define EXCLUDE_SK ({ "skill.c", "long_term.c" })
+#define EXCLUDE_SP ({ "spell.c", "long_term_spell.c", \
+  "weapon_stack_logic.c" })
+
+string pl_class;
+string *tmpv;
+int lev;
+
+int check_related_skill(string skill, object tp);
+int check_related_spell(string spell, object tp);
+void do_specialize(string yn, object tp, string which);
+
+int check_related_skill(string skill, object tp) {
+  string *all_skills, *dir, *guilds;
+  string p_class;
+  int i;
+
+  p_class = (string)tp->query_class();
+  dir = map_array(get_dir("/d/damned/guilds/"+p_class+
+    "/*.c"), (: $2 + $1 :), "/d/damned/guilds/"+p_class+"/");
+  dir = filter_array(dir, (: call_other :),
+    "is_skill_room");
+  all_skills = ({});
+  i = sizeof(dir);
+  while(i--)
+    all_skills += (string *)dir[i]->query_all_skills();
+  if(member_array(skill, all_skills) >= 0) return -1;
+  if(!file_exists("/d/damned/guilds/join_rooms/"+
+    p_class+"_join.c")) {
+    write("Error: Unable to find your join room.");
+    return 0;
+  }
+  guilds = distinct_array((string *)call_other("/d/damned/guilds/join_rooms/"+
+    p_class+"_join", "query_related_guilds"));
+  if(!guilds || !sizeof(guilds)) return 0;
+  dir = ({});
+  all_skills = ({});
+  i = sizeof(guilds);
+  while(i--)
+    dir += filter_array(map_array(get_dir("/d/damned/guilds/"+guilds[i]+"/*.c"),
+      (: $2 + $1 :), "/d/damned/guilds/"+guilds[i]+"/"), (: call_other :),
+      "is_skill_room");
+  i = sizeof(dir);
+  while(i--) all_skills += (string *)dir[i]->query_all_skills();
+  if(member_array(skill, all_skills) >= 0) return 1;
+  return 0;
+}
+
+int check_related_spell(string spell, object tp) {
+  string *all_spells, *dir, *guilds;
+  string p_class;
+  int i;
+
+  p_class = (string)tp->query_class();
+  dir = map_array(get_dir("/d/damned/guilds/"+p_class+
+    "/*.c"), (: $2 + $1 :), "/d/damned/guilds/"+p_class+"/");
+  dir = filter_array(dir, (: call_other :),
+    "is_spell_room");
+  all_spells = ({});
+  i = sizeof(dir);
+  while(i--)
+    all_spells += (string *)dir[i]->query_all_spells();
+  if(member_array(spell, all_spells) >= 0) return -1;
+  if(!file_exists("/d/damned/guilds/join_rooms/"+
+    p_class+"_join.c")) {
+    write("Error: Unable to find your join room.");
+    return 0;
+  }
+  guilds = distinct_array((string *)call_other("/d/damned/guilds/join_rooms/"+
+    p_class+"_join", "query_related_guilds"));
+  if(!guilds || !sizeof(guilds)) return 0;
+  dir = ({});
+  all_spells = ({});
+  i = sizeof(guilds);
+  while(i--)
+    dir += filter_array(map_array(get_dir("/d/damned/guilds/"+guilds[i]+"/*.c"),
+      (: $2 + $1 :), "/d/damned/guilds/"+guilds[i]+"/"), (: call_other :),
+      "is_spell_room");
+  i = sizeof(dir);
+  while(i--) all_spells += (string *)dir[i]->query_all_spells();
+  if(member_array(spell, all_spells) >= 0) return 1;
+  return 0;
+}
+
+int cmd_specialize(string str) {
+  string tmp, *dir, file;
+
+  seteuid(getuid());
+  pl_class = (string)this_player()->query_class();
+  if(!pl_class || pl_class == "child") {
+    write("You must join a guild before specializing.");
+    return 1;
+  }
+  if(!str) {
+    tmp = "%^BOLD%^Skills specialized:\n"
+          "%^BLUE%^"+sprintf("%'-='60s\n", "");
+    if(!this_player()->query_property("sp skills") ||
+      !sizeof((string *)this_player()->query_property("sp skills")))
+      tmp += "None.";
+    else tmp += format_page(map_array((string *)this_player()->
+        query_property("sp skills"), (: capitalize :)), 2);
+    tmp += "\n\n%^BOLD%^Spells specialized:\n"
+             "%^BLUE%^"+sprintf("%'-='60s\n", "");
+    if(!this_player()->query_property("sp spells") ||
+      !sizeof((string *)this_player()->query_property("sp spells")))
+      tmp += "None.";
+    else tmp += format_page(map_array((string *)this_player()->
+        query_property("sp spells"), (: capitalize :)), 2);
+    tmp += sprintf("\n\n%%^CYAN%%^Specialization Points: %%^RESET%%^%%^BOLD%%^%d",
+      (this_player()->query_property("sp points"))?((int)this_player()->query_property("sp points")):
+      0);
+    this_player()->more(explode(tmp, "\n"));
+    return 1;
+  }
+  if(sscanf(str, "skill %s", tmp)) {
+    dir = filter_array(get_dir("/std/skills/*.c"), (: (member_array($1, $2) < 0) :), EXCLUDE_SK);
+    file = replace_string(lower_case(tmp), " ", "_");
+    if(member_array(file+".c", dir) < 0) {
+      write("Skill: \""+tmp+"\" does not exist.");
+      return 1;
+    }
+    file = "/std/skills/"+file;
+    lev = ((int)file->query_dev() + (int)file->query_fast_dev()/2) / 4;
+    if(lev > ((int)this_player()->query_level()-5)/2) {
+      write("You may only specialize in skills up to "
+        +sprintf("level %d\n", ((int)this_player()->query_level()-5)/2) +
+        "'"+capitalize(tmp)+"' is a level "+
+        sprintf("%d", lev) + " skill.");
+      return 1;
+    }
+    switch(check_related_skill(lower_case(tmp), this_player())) {
+    case -1:
+      write("That skill is available in your guild already.");
+      return 1;
+    case 1:
+      if(lev < 1) lev = 1;
+      write("That is a related skill.  Half off specialization cost.");
+      break;
+    default:
+      if(lev < 1) lev = 1;
+      lev *= 2;
+    }
+    write("Specialization Cost: "+sprintf("%d (%d total)", lev,
+      (int)this_player()->query_property("sp points")));
+    if((int)this_player()->query_property("sp points") < lev) {
+      write("You do not have enough points.");
+      return 1;
+    }
+    tmpv = (string *)this_player()->query_property("sp skills");
+    if(!tmpv) tmpv = ({});
+    tmp = lower_case(tmp);
+    if(member_array(tmp, tmpv) >= 0) {
+      write("You already specialize in that skill.");
+      return 1;
+    }
+    tmpv += ({ tmp });
+    printf("Are you sure you wish to specialize in '%s'?\n(Yes or No): ",
+      capitalize(tmp));
+    input_to("do_specialize", 0, this_player(), "skill");
+    return 1;
+  }
+  if(sscanf(str, "spell %s", tmp)) {
+    dir = filter_array(get_dir("/std/spells/*.c"), (: (member_array($1, $2) < 0) :), EXCLUDE_SK);
+    file = replace_string(lower_case(tmp), " ", "_");
+    if(member_array(file+".c", dir) < 0) {
+      write("Spell: \""+tmp+"\" does not exist.");
+      return 1;
+    }
+    file = "/std/spells/"+file;
+    lev = (int)file->query_property("spell level");
+    if(lev > ((int)this_player()->query_level()-5)/2) {
+      write("You may only specialize in spells up to "
+        +sprintf("level %d\n", ((int)this_player()->query_level()-5)/2) +
+        "'"+capitalize(tmp)+"' is a level "+
+        sprintf("%d", lev) + " spell.");
+      return 1;
+    }
+    switch(check_related_spell(lower_case(tmp), this_player())) {
+    case -1:
+      write("That spell is available in your guild already.");
+      return 1;
+    case 1:
+      if(lev < 1) lev = 1;
+      write("That is a related spell.  Half off specialization cost.");
+      break;
+    default:
+      lev *= 2;
+    }
+    write("Specialization Cost: "+sprintf("%d (%d total)", lev,
+      this_player()->query_property("sp points")));
+    if((int)this_player()->query_property("sp points") < lev) {
+      write("You do not have enough points.");
+      return 1;
+    }
+    tmpv = (string *)this_player()->query_property("sp spells");
+    if(!tmpv) tmpv = ({});
+    tmp = lower_case(tmp);
+    if(member_array(tmp, tmpv) >= 0) {
+      write("You already specialize in that spell.");
+      return 1;
+    }
+    tmpv += ({ tmp });
+    printf("Are you sure you wish to specialize in '%s'?\n(Yes or No): ",
+      capitalize(tmp));
+    input_to("do_specialize", 0, this_player(), "spell");
+    return 1;
+  }
+  return notify_fail("See 'help specialize' for syntax.\n");
+}
+
+int help() {
+  message("help",
+  "This command allows a player to specialize in a particular skill "
+  "or spell OUTSIDE of his/her guild.  Doing so allows the player to "
+  "train this skill or spell at the Adventurer's guild for 4x base cost, "
+  "rather that the 15x base cost incurred normally.\n\n"
+  "Syntax:\n"
+  "  'specialize'               List skills/spells in which you\n"
+  "                             already specialize, as well as\n"
+  "                             your remaining specialization\n"
+  "                             points.\n\n"
+  "  'specialize skill <skill>' Specialize in a skill\n"
+  "  'specialize spell <spell>' Specialize in a spell\n\n"
+  "NOTE: You will be informed of the specialization cost, "
+  "then asked to confirm whether or not you wish to specialize.",
+  this_player());
+  return 1;
+}
+
+void do_specialize(string yn, object tp, string which) {
+  if(lower_case(yn) == "no") {
+    write("Ok.  Aborting.");
+    return;
+  }
+  if(lower_case(yn) != "yes") {
+    write("Please type 'yes' or 'no'.");
+    printf("? ");
+    input_to("do_specialize", 0, tp, which);
+    return;
+  }
+  tp->set_property("sp points",
+    (int)tp->query_property("sp points") - lev);
+  write(sprintf("You have %d specialization points left.",
+    (int)tp->query_property("sp points")));
+  tp->set_property("sp "+which+"s", tmpv);
+  return;
+}

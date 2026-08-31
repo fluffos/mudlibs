@@ -1,0 +1,112 @@
+Docs on making simple shadows for spells
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+	If you intend to code spells, you will probably at some point 
+need to know something about shadows.  If you want to know what they are 
+at the basic level, see 'man shadow'.  Once you understand that, you may 
+try to code one.
+	It's not hard to figure out that shadows make it very easy to 
+temporarily modify just about anything (characters stats, weapons damage, 
+etc.)  However, the handling of cumulative shadows gets a little complex 
+so I have written a generic object that should handle all of the hard 
+work for you.
+
+	The top of EVERY shadow file should have the line:
+
+inherit "/std/spells/shadows/shadow";
+
+	The main functions you'll need when coding a shadow are:
+
+	create()
+	remove()
+
+	plus a function which starts the shadow.  The create function 
+only needs to stick initial values in your variables and may look 
+something like this:
+
+void create() {
+    strength_mod = 10;
+    return;
+}
+
+When you start the shadow, you can include anything you want, but make 
+sure you have this line
+
+begin_shadow(object shadowed)
+
+where object shadowed is the object variable containg the thing you wish 
+to shadow.  Also, if the spell has a duration, include:
+
+call_out("remove", int duration);
+
+where int duration is the number of seconds to expiration.  Also, you 
+will want to set any variables that you need to refer back to the target 
+of the spell.  For instance, a start_shadow for a shaw which modifies a 
+player's strength might look like:
+
+object who_shadowed;       <-- global variables at top of file
+int strength_mod;
+
+void start_shadow(object who, int duration) {
+    if(!objectp(who)) return;
+    who_shadowed = who;          <-- so we can get to him later to
+    call_out("remove",duration);      send messages, etc.
+    begin_shadow(who);
+    return;
+}
+
+
+	Now you must define the functions you want to shadow.  Very 
+important here is to MAKE SURE YOUR SHADOW IS CUMULATIVE with other 
+stacked shadows (if you want it to be).  If you want the effect of the 
+last spell cast to override the effects of all other spells, don't worry 
+about this.  The function
+
+object next_shadow()
+
+returns the next object in the shadow chain. Basically it would be used 
+like this.
+
+query_stats(string what) {
+    if(what == "strength")
+	return strength_mod + 
+	    (int)next_shadow()->query_stats("strength");
+    else return (int)next_shadow()->query_stats("strength");
+}
+
+This is an example of a shadow which would add strength_mod to a 
+character's strength.
+
+Finally, the shadow must be removed if you want the effects to "wear 
+off."  This uses the remove function and is usually called by a call_out 
+(see above).  The remove function NEVER has any arguements, and can be 
+used to handle anything like sending a message to the player that the 
+spell has expired.  Here is the example remove function for out strength 
+modifying shadow:
+
+void remove() {
+    if(!::remove()) return;        <-- ALWAYS INCLUDE THIS LINE!
+    message("info", "You don't feel so strong anymore.",
+	who_shadowed);
+    return;
+}
+
+DO NOT include destruct(this_object()), the ::remove line takes care of that.
+
+If you want to be able to destroy a shadow with a call_other, i.e. from
+an object outside the shadow, things can once again be complex.  Because
+of the nature of shadows, if you try to call remove() in a shadowing 
+object, the call will "leap" down to the end of the shadow chain and 
+possibly destruct an object which is not the one you want to destroy.
+In order to deal with this, you may call the function external_destruct.
+BE SURE to supply an arguement which is an object variable pointing to
+the shadow you wish to destruct.  The fuction in the external object
+which destroys the shadow might look like this:
+
+void destroy_shadow(object which) {
+    which->external_destruct(which);
+    return;
+}
+
+Hope this helps.  Mail me with any questions.
+
+-Diewarzau 7/18/95

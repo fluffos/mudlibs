@@ -1,0 +1,171 @@
+//    A generic glyph
+//    Adapted from Diewarzau's Runes
+#include <move.h>
+#include <rooms.h>
+#include <daemons.h>
+
+inherit "/std/Object";
+
+string caster;
+string my_file;
+string *non_active;
+int level;
+
+void remove();
+void preserve_me();
+int query_level();
+
+int is_glyph() { return 1; }
+int query_level() { return level; }
+void set_level(int l) { level = l; }
+
+void remove() {
+  object env;
+
+  ::remove();
+  return;
+}
+
+void set_dur(int dur) {
+  call_out("remove_glyph", dur);
+  return;
+}
+
+int detect_magic(object who) {
+  if(!living(who)) return 0;
+  if(caster == (string)who->query_name()) return 1;
+  if(random(100) < (int)who->query_skill("detect magic")) return 1;
+  if(random(100) < (int)who->query_skill("sense spell")) return 1;
+  return 0;
+}
+
+void start_preserve() {
+  remove_call_out("remove_rune");
+  return;
+}
+
+void remove_glyph() {
+  object *inv;
+
+  inv = filter_array(all_inventory(environment()), "detect_magic", this_object());
+  message("info", "%^BOLD%^MAGENTA%^A glyph of power fizzles.", inv);
+  remove();
+  return;
+}
+
+string query_cap_name() { return "Glyph"; }
+
+void set_caster(string str) { caster = str; }
+
+int move(mixed dest) {
+  if(objectp(dest) && living(dest)) return MOVE_NOT_ALLOWED;
+  return ::move(dest);
+}
+
+void create() {
+  ::create();
+  set_name("glyph");
+  set_short("A glyph");
+  set_long("A glyph");
+  set_id(({ "glyph" }));
+  my_file = 0;
+  level = 1;
+  non_active = ({});
+  return;
+}
+
+void preserve_me() {
+  int spec;
+  string *dir;
+
+  seteuid(getuid());
+  remove_call_out("remove_glyph");
+  set_property("preserved", 1);
+  return;
+}
+
+void init() {
+  function go_off;
+  int save;
+  object who;
+  
+  ::init();
+  if((string)this_player()->query_name() == caster) {
+    add_action("erase_glyph", "erase");
+    return;
+  }
+  if(this_object()->query("delay")) return;
+  if(!functionp(go_off=query("function"))) return;
+  if(query("safe flag")) return;
+  if(query_property("can resist")) {
+    if(stringp(query_property("save mod")))
+      save = (int)this_player()->query_stats(query_property("save mod"));
+    else save = 0;
+    save += (int)this_player()->query_property("magic resistance");
+    save -= 30 * query_level() - 30;
+    if(random(100) < save) {
+      message("info", "%^MAGENTA%^BOLD%^You shrug off the power of a glyph.", this_player());
+      return;
+    }
+  }
+  if(pointerp(non_active) &&
+    member_array((string)this_player()->query_name(), non_active) >= 0)
+    return;
+  if(caster && (who=find_player(caster)) && !query_property("non-combat"))
+    this_player()->kill_ob(who, 1);
+  (*go_off)(this_player());
+  return;
+}
+
+int delay_rune(int delay) {
+  if(query("delay")) return 0;
+  set("delay", 1);
+  set("safe flag", 1);
+  call_out("delay_action", delay);
+  return 1;
+}
+
+int filter_living(object who) { return living(who); }
+
+void delay_action() {
+  object *inv, who;
+  int i, save;
+  function go_off;
+
+  if(!environment()) {
+    remove();
+    return;
+  }
+  set("safe flag", 0);
+  inv = filter_array(all_inventory(environment()), "filter_living",
+      this_object());
+  if(inv && (i=sizeof(inv)) && functionp(go_off=query("function"))) {
+    while(i--) {
+      if(query_property("can resist")) {
+        if(stringp(query_property("save mod")))
+          save = (int)inv[i]->query_stats(query_property("save mod"));
+        else save = 0;
+        save += (int)inv[i]->query_property("magic resistance");
+        save -= 30 * query_level() - 45;
+        if(random(100) < save) {
+          message("info", "%^MAGENTA%^BOLD%^You shrug off the effects of a glyph.", inv[i]);
+          continue;
+        }
+      }
+      if(caster && (who=find_player(caster)) && !query_property("non-combat"))
+        inv[i]->kill_ob(who, 1);
+      (*go_off)(inv[i]);
+    }
+  }
+  set("delay", 0);
+  remove();
+  return;
+}
+
+string query_short() {
+  if(!this_player() || random(100) <
+    (int)this_player()->query_skill("detect magic"))
+    return ::query_short();
+  return 0;
+}
+

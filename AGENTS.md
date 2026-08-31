@@ -1613,6 +1613,40 @@ config file says so — check `~/src/fluffos/src/base/internal/
 options_internal.h` (or the currently-active driver's actual build) for
 what's really compiled in.
 
+### 6.8 `status` as a declared type — a real MudOS-era `int` alias this driver's lexer doesn't recognize at all
+
+Some older MudOS-lineage archives declare function return types and
+local/global variables as `status` (a period convention meaning "an int
+used as a boolean/success flag", distinct from a real `bool` type which
+classic LPC never had). This driver has no `status` keyword whatsoever
+— not even as a soft-deprecated alias — so every declaration shaped
+`status foo(...)`, `status *bar;`, or a bare `status flag;` local hits a
+hard parse error (`syntax error, unexpected L_IDENTIFIER`) at the
+declaration site, then cascades into "Undefined variable"/"Illegal
+lvalue" errors everywhere that identifier is used, exactly like the
+`static`→`nosave` class in §4.3/§6 but with no automatic sed-safe
+fallback (the driver doesn't emit a soft warning the way it does for
+`nosave` on a function — it's a hard, unrecoverable syntax error).
+Confirmed on `darkelib` (10 files: `d/khojem/room.lpc`'s custom
+room-mixin `id()` override, `d/excelsior/locker.lpc` +
+`d/daybreak/obj/ntfbox.lpc` + two `guilds/cleric{,_new}/safe.lpc`
+guild-bank items' `query_is_locker()`/`query_is_safe()` boolean checks,
+two `world_server.lpc` virtual-zone generators' `brook`/`query_brook()`
+plus a mid-function `status flag;` local, and a couple of already-dead
+backup files it didn't matter to also fix). **Fix**: mechanically
+replace `status` with `int` wherever it appears in type position
+(return type, parameter, or declaration) — this is exactly what the
+word meant on the original driver, so the substitution is behavior-
+preserving, not a guess. **How to apply**: grep any new archive for
+`^\s*status\s+[a-zA-Z_]` (declarations) and `[(,]\s*status\s` (parameter
+lists) before the first boot; unlike `static`, there is no in-file
+string-literal collision risk (`status` is a much less common word to
+appear as a legitimate quoted path/log-file fragment, but check the
+same way regardless), but it also doesn't get caught by
+`convert_lib.sh`'s existing `static`→`nosave` sweep, so it needs its own
+grep pass or will surface piecemeal as individual `lpcc_check.sh`
+failures.
+
 ---
 
 ## 7. Boot-time and runtime crash classes
@@ -12930,6 +12964,49 @@ lib's actual stock-Dead-Souls domains — `Africa`/`Americas`/`Atlantis`/
 `Australia`/`China`/`Europe`/`Japan`/`Mexico`/`Russia`/`SouthAmericas`/
 `campus`/`town`/`Praxis`/`Ylsrim`/`default`/`amigara` — all compiled
 and played cleanly after the ordinary per-file fixes below).
+
+### 7.165 A `message()` compatibility shim unconditionally forwards its varargs 4th (`exclude`) argument even when the caller never supplied one, hard-erroring on this driver's stricter `void | object | object *` type check for that parameter on the OVERWHELMING MAJORITY of ordinary 3-arg `message()` calls in the whole codebase
+
+`darkelib`'s `adm/simul_efun/overrides.lpc` re-implements `message()` as
+a compatibility shim (`varargs void message(string type, string mess,
+mixed to, mixed exclude) { if(!to) return; efun::message(type, mess,
+to, exclude); }`) whose own comment explains its ORIGINAL intent
+correctly ("Allows message to be supplied with 0 as a third arg, in
+which case it does nothing") — but the guard only covers the 3rd
+argument (`to`). Since the function is `varargs`, any ordinary 3-arg
+caller (`message("my_action", "You wear the robe.", this_player());` —
+by far the most common call shape in this entire codebase) gets
+`exclude` defaulted to plain `int 0`, which this shim then forwards
+POSITIONALLY to `efun::message()` regardless. This driver's real
+`message()` efun declares its 4th parameter `void | object | object *`
+(see `core.spec`) — omitting the argument is fine, but an explicit
+literal `0` is NOT an accepted value, so every such call throws `*Bad
+argument 4 to EFUN message() Expected: object, array, Got: int(0)`
+the moment `to` happens to be truthy (i.e., almost always in real
+play). Caught via a `lpcc_check.sh` batch-mode false-negative-turned-
+runtime-crash: a room's `reset()` spawning an NPC that gets force-
+equipped starting armor (`std/armour.lpc`'s `wear()` calling the
+ordinary 3-arg `message()` form) crashed with this exact error the
+moment fixing an UNRELATED stale-include bug let the room compile far
+enough to actually execute; fixing that ONE simul_efun function turned
+a 1363-failure `lpcc_check.sh` batch sweep into 493 failures in a
+single pass (out of ~6957 files) — this was overwhelmingly the
+dominant bug in the whole lib, silently aborting nearly every in-game
+action that prints a `my_action`/`other_action`-style message with no
+explicit exclude list, not just the one NPC that happened to surface
+it first. **Fix**: only forward `exclude` when it was actually
+supplied (`if(exclude) efun::message(type, mess, to, exclude); else
+efun::message(type, mess, to);`), preserving the original 3-arg
+compatibility path while still supporting a real 4-arg call. **How to
+apply**: any varargs efun-override/compat-shim that unconditionally
+forwards a trailing optional argument to the real efun — rather than
+branching on whether it was actually supplied — is suspect whenever
+the real efun's declared type for that parameter doesn't include a
+bare `int`/`0` sentinel; grep `adm/simul_efun/overrides.lpc`-shaped
+files (efun-wrapping shims, common in Nightmare/TMI-lineage archives)
+for `varargs.*efun::` patterns and check each trailing parameter's
+real declared type in the driver's own `*.spec` files rather than
+assuming the old MudOS "0 means omit" convention still holds.
 
 ---
 

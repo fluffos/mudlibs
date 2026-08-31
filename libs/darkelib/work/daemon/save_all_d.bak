@@ -1,0 +1,80 @@
+// save_all_d.c
+// Daemon which allows players to save items on thier bodies over
+// crashes, quits and reboots.
+// Written by: Thrace (April 11 '1999)
+// Special thanks to Helios.
+
+#include <std.h>
+#include <security.h>
+#include <move.h>
+#include <daemons.h>
+
+inherit DAEMON;
+
+string playername;
+
+int do_save_filter(object ob){
+    if(!ob->query_auto_load() && !ob->query_property("no save"))
+        return 1;
+    else
+        return 0;
+}
+
+void add_crash_items(object player, int flag){
+    object *inv;
+    object a;
+    int i, x;
+    string tmp, file, *inv2;
+
+    playername=player->query_true_name();
+    inv2 = get_dir("/adm/save/objects/crash/"+playername+"_*");
+    for (i=0;i<sizeof(inv2);i++){
+        file = "/adm/save/objects/crash/"+inv2[i];
+        rm(file);
+    }
+    inv = all_inventory(player);
+    inv = filter_array(inv, "do_save_filter");
+    for(i=0;i<sizeof(inv);i++){
+        a=inv[i];
+        a->save_me("crash/"+playername+"_"+i);
+        if(virtualp(a)){
+            tmp = "/adm/save/objects/crash/"+playername+"_"+i;
+            rename(tmp + ".o", tmp + ".tmp");
+            write_file(tmp+".o", "#"+base_name(a)+"\n", 1);
+            file = read_file(tmp+".tmp");
+            write_file(tmp+".o", file, 0);
+            rm(tmp+".tmp");
+        }
+        if (flag) {
+            a->remove();
+        }
+    }
+    message("info", "%^BOLD%^%^YELLOW%^-%^CYAN%^*%^MAGENTA%^>%^RESET%^RED%^ Items Saved:%^RESET%^ "+sizeof(inv)+".",player);
+    return;
+}
+
+void restore_crash_items(object player){
+    string file;
+    string obj;
+    object ob;
+    int x, i;
+    string *inv;
+
+    playername=player->query_true_name();
+    inv = get_dir("/adm/save/objects/crash/"+playername+"_*");
+    for (i=0;i<sizeof(inv);i++){
+        file = "/adm/save/objects/crash/"+inv[i];
+        obj = replace_string(read_file(file, 1, 1), "#", "");
+        obj = replace_string(obj, "\n", "");
+        ob = new(obj);
+        ob->restore_me("crash/"+inv[i][0..(sizeof(inv[i])-3)]);
+        x = ob->move(player);
+        message("info", "%^BOLD%^%^YELLOW%^-%^CYAN%^*%^MAGENTA%^>%^RESET%^ %^RED%^Item restored: %^RESET%^"+(string)ob->query_short()+".", player);
+        if(x != MOVE_OK){
+            message("info", ob->query_short()+" was too heavy to hold, you drop it.");
+            ob->move(environment(player));
+       }
+        rm(file);
+    }
+    return;
+}

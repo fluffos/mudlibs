@@ -1,0 +1,822 @@
+//    DarkeLIB 0.1
+
+//    -Diewarzau 8/8/95
+
+//
+
+//    Initiated a rewrite to daemonize many of the quild queries,
+
+//    storage, and maintenance for the purpose of reducing cpu,
+
+//    memory overhead and centralizing the function calls.
+
+//    Zortek 4-15-96
+
+    
+
+#include <std.h>
+
+#include <security.h>
+
+// #include <guilds.h>
+
+
+
+#define LEGAL_GUILDS ({"arch-mage","cavalier","chaotic-lord","cleric",\
+
+"elementalist","enchanter","fighter","mindmage","necromancer","nightblade",\
+
+"paladin","sword-mage","thief","tinker","war-priest"})
+
+
+
+string *all_masters;
+
+/* contains a list of all guild masters */
+
+
+
+mapping guilds;
+
+/* ([ guild0: ([
+
+ * Guildmaster   "gm"    : "gm_name",
+
+ * Join_room     "join"  : "/file_name",
+
+ * Treasury      "treas" : "/file_name",
+
+ * Stat Mods     "stats" : (["stat0":mod, "stat1":mod, "stat2":mod,...]),
+
+ * Advance       "adv"   : (["hp":num,"mp":num,]),
+
+ * Regen         "regen" : (["hp":num,"mp":num,]),
+
+ *              ]),...]);
+
+ */
+
+
+
+mapping membership;
+
+/* ([ guild0: ([
+
+ * Guest Members "guest"   :(["name0":({"room0","room1","room2",...}),...]),
+
+ * Allow Member  "allow"   :({"name0","name1","name2",...]),
+
+ * New Members   "new"     :({"name0","name1","name2",...]),
+
+ * Full Members  "full"    :({"name0","name1","name2",...]),
+
+ * Elite Members "elite"   :({"name0","name1","name2",...]),
+
+ * Punished      "punished":({"name0","name1","name2",...]),
+
+ * Banish        "banish"  :({"name0","name1","name2",...]),
+
+ * Ally          "ally"    :({"name0","name1","name2",...]),
+
+ * Enemy         "enemy"   :({"name0","name1","name2",...]),
+
+ * Money         "money"   :(["total":amt,"name0":amt,"name1":amt,...]),
+
+ *             ]),...]);
+
+ */
+
+
+
+mapping privs;
+
+/* ([ guild0: ([
+
+ * Add Join      "a_join"   :({"name0","name1","name2",...}),
+
+ * Del Join      "d_join"   :({"name0","name1","name2",...}),
+
+ * Add punish    "a_punish" :({"name0","name1","name2",...}),
+
+ * Del punish    "d_punish" :({"name0","name1","name2",...}),
+
+ * Add banish    "a_banish" :({"name0","name1","name2",...}),
+
+ * Del banish    "d_banish" :({"name0","name1","name2",...}),
+
+ * Add ally      "a_ally"   :({"name0","name1","name2",...}),
+
+ * Del ally      "d_ally"   :({"name0","name1","name2",...}),
+
+ * Add enemy     "a_enemy"  :({"name0","name1","name2",...}),
+
+ * Del enemy     "d_enemy"  :({"name0","name1","name2",...}),
+
+ * Guest         "guest"    :({"name0","name1","name2",...}),
+
+ * Money         "money"    :({"name0","name1","name2",...}),
+
+ * Asst GM       "assist"   :({"name0","name1","name2",...}),
+
+ *            ]),...]);
+
+ */
+
+
+
+mapping related_guilds;
+
+/* ([ guild1:({ "relation1", "relation2",...}),...]); */
+
+
+
+mapping guild_obj;
+
+/* ([ guild1:file_name, guild2:file_name,...]); */
+
+
+
+void save_guilds();
+
+---------------------------------------------------------------------
+
+GENERAL NOTES:
+
+--Unless mentioned otherwise, all function calls will initialize
+
+their referenced variables if they are null or not initialized.
+
+
+
+--Unless otherwise specified, all arguments are to be assumed to
+
+be all lower case.
+
+
+
+--The LEGAL_GUILDS check takes place in all of the following
+
+functions that take a guild as an argument.
+
+
+
+--Mappings were chosen over classes due to the large size and
+
+indexing needs of the daemon in general.  If you can find a more
+
+optimal data storage and retrieval pragma for large amounts of
+
+indexed data....code it and I'll believe it.
+
+---------------------------------------------------------------------
+
+---->FUNCTION DESCRIPTIONS
+
+
+
+---->mapping query_all_privs()
+
+This query will return the ENTIRE privs mapping that contains the
+
+priv data for ALL guilds.  This function should only be used for
+
+diagnostic purposes!
+
+
+
+---->mapping query_guild_privs(string guild)
+
+Given the name of a guild (in all lower case), this query will
+
+return all the privs for that particular guild.  If the guild
+
+does not exist or is not a LEGAL guild the function will return
+
+a zero value.
+
+
+
+---->string *query_privs(string guild, string what, string which)
+
+This query will return an array of people that have received the
+
+privilidge specified in the 'what' parameter and the modifier
+
+of "add" or "del" in the which parameter.
+
+
+
+Notes on the guild privilidges:
+
+--People receiving "add" privilidge are granted the ability to
+
+add someone to the associated membership group.  Subsequently,
+
+people receiving the "del" privilidge are granted the ability
+
+to revoke or remove someone from the associated membership group.
+
+
+
+For example: 
+
+    If player Wibble were _granted_ (join) "add" privilidge,
+
+    this would mean that he then could authorize or allow
+
+    someone to join his guild, but he does not have the 
+
+    privilidge to unallow the (join) permission that he just
+
+    issued.
+
+
+
+    Later that day, Wibble is _granted_ (join) "del" privilidge
+
+    by his GM and he now can allow or un-allow anyone from his
+
+    guild.  The next day; however, the GM _removed_ Wibble's
+
+    "add" and "del" (join) privilidges.        
+
+
+
+The focus of this is to minimize the potential to confuse "add"
+
+and "del" authority with "granting" and "removing" of a privilidge.
+
+I know this makes sense in my mind, but if it is still confusing,
+
+read the code and if you still are baffled ask me and I will see
+
+if I can babble further on the topic.
+
+
+
+---->string grant_privs(string guild,string who,string what,string which)
+
+This function will add someone to a privilidge group for a particular
+
+(guild).  (who) is to be added to (what) group and (which) privilidge
+
+is to be granted:
+
+	guild == LEGAL_GUILD
+
+        who   == Person to receive the privilidge
+
+        what  == Any privilidge group outlined in the privs description
+
+        which == ["add"||"del"] In some cases (which) may be omitted
+
+
+
+---->string rm_privs(string guild,string who,string what,string which)
+
+This function will remove someone from a privilidge group for a
+
+particular (guild).  (who) is to be removed from (what) group and
+
+(which) privilidge is to be revoked:
+
+	guild == LEGAL_GUILD
+
+        who   == Person to lose the privilidge
+
+        what  == Any privilidge group outlined in the privs description
+
+        which == ["add"||"del"] In some cases (which) may be omitted
+
+
+
+---->string *query_all_masters() {
+
+This function will return an array of all the official guild masters.
+
+
+
+---->mapping query_all_guilds() {
+
+This query will return the ENTIRE guilds mapping that contains the
+
+core data for ALL guilds.  This function should only be used for
+
+diagnostic purposes!
+
+
+
+---->mapping query_guild(string guild)
+
+This function will return all core data for a single guild.
+
+
+
+---->string query_gm(string guild)
+
+This query will return the name of the guild's guild master.
+
+
+
+---->string set_gm(string guild, string name)
+
+This will set the guild master's name for the guild.
+
+
+
+---->void reset_gm(string guild)
+
+This function will initialize the guild's guild master position.
+
+
+
+---->string query_join(string guild)
+
+This function will return the path and file name of the guild's
+
+"join room" (the room from which potential members can join the
+
+guild). This can then be used if necessary for call_other()s.
+
+
+
+---->string set_join(string guild, string join_room)
+
+This function will store the path and file name to the "join room"
+
+for a particular guild.
+
+
+
+---->string query_treas(string guild)
+
+This function will return the path and file name of the guild's
+
+"treasury" (the room in which items are often stored and guild
+
+finances are managed). This can then be used if necessary for
+
+call_other()s.
+
+
+
+---->string set_treas(string guild, string treas_room)
+
+This function will store the path and file name to the "treasury"
+
+for a particular guild.
+
+
+
+---->mapping query_stats(string guild)
+
+This function will return a mapping of the stats that are to
+
+receive modification when a player joins the guild.  The format
+
+of the returned mapping is in the form of ([ "stat":mod,...])
+
+
+
+NOTE: Technically this and the next five functions COULD utilize
+
+string arrays for the values stored and passed, but bleh...I chose
+
+consistency over picking nits.
+
+
+
+---->mapping set_stats(string guild, mapping stats)
+
+This function will set the stats that are to be modified when a
+
+player joins this guild.  The stats to be modified are to be
+
+passed in a mapping in the form of ([ "stat":mod,...]) and the
+
+function will return the mapping if the "set" is successful.
+
+
+
+---->mapping query_advance(string guild)
+
+This function will return a mapping of the hit point (hp) and
+
+spell point (mp) advancements that are to be applied to any
+
+player that joins this guild.  The format of the returned
+
+mapping is in the form of ([ "hp":num, "mp":num2, ])
+
+
+
+---->mapping set_advance(string guild, mapping stuff)
+
+This function will set the hit point (mp) and spell point (mp)
+
+advancements that are to be applied to any player that joins
+
+this guild.  The format of the mapping to be passed to the
+
+function is ([ "hp":num, "mp":num2, ])
+
+
+
+---->mapping query_regen(string guild)
+
+This function will return a mapping of the hit point (hp) and
+
+spell point (mp) regen rates that are to be applied to any
+
+player that joins this guild.  The format of the returned
+
+mapping is in the form of ([ "hp":num, "mp":num2, ])
+
+
+
+---->mapping set_regen(string guild, mapping stuff)
+
+This function will set the hit point (mp) and spell point (mp)
+
+regen rates that are to be applied to any player that joins
+
+this guild.  The format of the mapping to be passed to the
+
+function is ([ "hp":num, "mp":num2, ])
+
+
+
+---->mapping query_all_membership()
+
+This query will return the ENTIRE membership mapping that contains
+
+the membership data for ALL guilds.  This function should only be
+
+used for diagnostic purposes!
+
+
+
+---->mapping query_membership(string guild)
+
+This function will return the membership mapping for a particular
+
+guild.  While this mapping is only a fraction of the size of the
+
+entire membership mapping, the use of this function should be
+
+limited to rare usage or diagnostic purposes.
+
+
+
+---->mixed query_membership_group(string guild, string what)
+
+This query is more functional and practical for use in checking the
+
+members of a sub-group within a guild.  It is yet again a fraction
+
+of the size of the guild membership mapping and should be limited
+
+ot occational usage.
+
+
+
+---->mixed 
+
+     query_specific_membership(string guild,string what,string who)
+
+This query will specifically acknowledge if (who) is a member of a
+
+particular sub-group within a guild.  This is the most frequently
+
+used of the membership queries and takes full advantage of the
+
+indexing provided by the mapping overhead.
+
+
+
+---->string allow_member(string guild, string target)
+
+This function will add the (target) player to the array of players
+
+that are allowed to join the guild.
+
+
+
+---->void unallow_member(string guild, string target)
+
+This function will remove the (target) player from the array of
+
+players that are allowed to join the guild.  This is expected to
+
+be a seldomly used function, but is provided "just in case."
+
+
+
+---->string punish_member(string guild, string target, string who)
+
+This function will place the (target) player in the array of players
+
+that are in bad standing with the guild or are being punished.  The
+
+(who) parameter must be passed and is provided as an opportunity for
+
+non-player disciplinary actions...such as by guild npc's or systemic
+
+violations of guild "rules."  While the need for this parameter may
+
+seem unlikely at this time it is provided "just in case."
+
+
+
+---->void unpunish_member(string guild, string target, string who)
+
+This is the reverse of the above function and will remove a player
+
+from the "bad standing" array.  Similiarly, the (who) parameter must
+
+be passed indicating who is responsible for the unpunishment.
+
+
+
+---->string add_member(string guild, string what, string who)
+
+This is a general purpose membership "add" function that will add
+
+the player (who) to an array of player names to the membership group
+
+specified in the (what) parameter.  Currently, the legal membership
+
+groups (what) that are allowed are: "new", "full", and "elite"
+
+
+
+---->int purge_member(string guild, string who, string purger)
+
+This is a "clean-up" function that will eliminate all traces of
+
+a player from the member groups:"allow","new","full","elite",
+
+"punished","banish","ally","enemy","money", and "guest." While
+
+the use of this function is necessary, it should be used carefully.
+
+
+
+---->string add_ally(string guild, string who)
+
+This function will add a player (who) to an array of players that
+
+are considered an ally or friend of the specified guild.  What
+
+can this be used for? dunno....I only code the functions... :)
+
+
+
+---->void rm_ally(string guild, string who)
+
+This the companion function to add_ally and will remove the player
+
+(who) from the array of players that are considered guild allies.
+
+
+
+---->string add_enemy(string guild, string who)
+
+This function will add a player (who) to an array of players that
+
+are considered hostile or blood enemies of the specified guild.
+
+Once again, what you (arches) decide to do with this is your
+
+bidness...
+
+
+
+void rm_enemy(string guild, string who) {
+
+Hmmm, perhaps a cut-n-paste is in order:
+
+This the companion function to add_enemy and will remove the player
+
+(who) from the array of players that are considered guild enemies.
+
+
+
+---->int transact_money(string guild, string who, int amt)
+
+This is a general purpose money transacting function.  I have not
+
+identified a particular "monitary standard" that amt represents and
+
+therefore such a standard should be established at the guild level.
+
+
+
+NOTE: This function is different from the following function in that
+
+negative values of amt are allowed to be passed to the function.  It
+
+it not the purpose of this function to handle the security issues of
+
+financial management...that is left to the guild-build level.
+
+
+
+---->int add_money(string guild, string who, int amt, string what)
+
+This function is provided for the purpose of "charging" players money
+
+for guild functions (read training, advancement, etc).  Use of the
+
+function is religated to the individual guild level.  The parameters
+
+that the function expects are:
+
+    guild == LEGAL_GUILD
+
+    who   == Player name of the "contributor"
+
+    amt   == Amt of money (standard to be determined at guild level)
+
+    what  == What did the "charging" of money, ie. Spell Trainer, etc.
+
+
+
+---->string *add_guest(string guild, string who, string room)
+
+This function will add guest access privilidge to the guild specified
+
+for the player (who) to the (room) <---identified as a string that
+
+contains the full path and file name of the room.  This allows for
+
+a very modular security/access system on a room by room basis.
+
+
+
+NOTE:  I understand the potential for data bloat in this area, but
+
+in my experience so far, guest access has been seldom or brief and
+
+not extensive.  Thus the compromise of memory seems justified for
+
+the trade off of extreme flexibility.
+
+
+
+---->string *rm_guest(string guild, string who, string room)
+
+This is the companion function that will remove guest access to a
+
+specific room in a particular guild for the player identified as (who).
+
+
+
+---->int delete_guest(string guild, string who)
+
+This is a more extreem companion to the add_guest function in that
+
+it will COMPLETELY remove a guest's access to all rooms in a guild
+
+that may have been assigned (rather than removing access to a single
+
+room).  While I debated on whether this was needed, I included it
+
+just so we could comprehensively manage guild guests in a quick and
+
+efficient (sic) manner.
+
+
+
+---->void set_related_guilds(string guild, string *relations)
+
+This function will set the array of related guilds for this guild.
+
+I included this function because of its presence in the origional
+
+join-room code and am uncertain as to its usage...coder emptor.
+
+
+
+---->void add_related_guild(string guild, string relation)
+
+This function is a more detailed add function that will add a
+
+single guild to an existing related_guilds array...(of course
+
+if the array doesn't exist, it will be created with this as a
+
+single entry.
+
+
+
+---->void rm_related_guild(string guild, string relation)
+
+This function is a companion to the two preceeding ones in that
+
+it will singularly remove a guild relation from the array.
+
+
+
+---->string *query_related_guilds(string guild)
+
+This function will return the array of quild relations that are
+
+maintained by this specific guild.
+
+
+
+---->void set_guild_obj(string guild, string file)
+
+This function will set the file name of the primary guild_object.
+
+I have included this function strictly for compat or transition
+
+purposes and an presently uncertain as to how it will be used.
+
+There is no query_guild_object function; however, due to my
+
+lack of foresight at this time reguarding this I will resist the
+
+temptation to blindly code some "blathering" functions reguarding
+
+this object at this time.
+
+
+
+---->void create()
+
+This function is the create() function--"Doh!"
+
+It preforms the actions of initializing all the base mapping
+
+and array variables.  In addition is changes (unnecessarily)
+
+it EUID to that of UID_SECURE_DAEMONSAVE and will retrieve
+
+"/adm/save/daemons/guild_d.o" and restore it if it is present.
+
+
+
+---->void reset()
+
+Uh...this is the reset() function. ;)
+
+Actually this function provides the critical action of periodically
+
+saving off an archive of the .o file to:
+
+"/adm/save/daemons/guild_archive" <----directory
+
+and it prepends the time() to its filename...I have broken with the
+
+tradition of my documenting and included the full code of this
+
+function which follows....
+
+
+
+  seteuid(UID_SECURE_DAEMONSAVE);
+
+  save_object("/adm/save/daemons/guild_archive/"+time()+"backup");
+
+  seteuid(getuid());
+
+  return;
+
+
+
+The archive process WILL create an EXCESSIVE number of backups;
+
+however, down the road we can externally use a diff call from the
+
+system level and eliminate sequentially identical files.  I feel
+
+this archive is critical for the integrity of the guild system!
+
+
+
+While it is possible that we could lose hours or days of guild
+
+changes...with a little diligence and patience this process will
+
+provide DarkeMud with as stable of a guild system as can be expected
+
+given that this daemon centralizes the guild data.
+
+
+
+---->void save_guilds()
+
+This function is frequently called by many of the above function
+
+when changes to the global variables are committed.  Once again
+
+while it is unnecessary for the EUID change (due to the location
+
+of the daemon in "/adm/daemon") I have done it for the purposes
+
+consistency.
+
+
+

@@ -1,0 +1,321 @@
+//      /d/standard/setter.c
+//      Starting room for new characters choosing races
+//      from the Nightmare Mudlib
+//      created by Shadowwolf@Nightmare july 1992
+//      modified by Descartes of Borg for the race daemon 10 june 1993
+
+#include <std.h>
+#include <rooms.h>
+#include <daemons.h>
+
+#define STATS ({ "strength", "constitution", "intelligence",\
+		   "dexterity", "wisdom", "charisma" })
+
+inherit ROOM;
+
+void do_rolls();
+
+int assign_stats(string choice, int *rolls, string *stats_left);
+int pick_stats(string choice, mapping roll_set);
+void set_ansi();
+
+void create() {
+    ::create();
+    set_property("light", 2);
+    set_property("indoors", 1);
+    set("long",
+      "This is the race setter room.\n \n"
+      "LOOK AT THE WEB PAGE!!!!!!!!!!!!!!\n"
+      "http://darke.shadowlands.com\n\n"
+      "Directions: 1) Read the faq... <help faq>.\n"
+      "Read the newbie help...<help newbie>.\n"
+      "            2) Read the race help... <help races>.\n"
+      "            3) Pick the race... pick <race>.\n \n"
+      " Note: type <read list> to see a list of the races.\n"
+      "       type <help guilds> for a list of guilds.\n"
+      "       type help <guild name> for more information on the guild.\n");
+    skip_obvious();
+    set_items(
+      (["room" : "The nothingness from which you will be born "
+	"into DarkMUD.",
+	"list" : "A list of races that exist in the world of DarkeMUD."]) );
+}
+
+void init() {
+    ::init();
+    this_player()->setenv("SCORE", "off");
+    this_player()->set("in creation", 1);
+    this_player()->set_catch("off");
+    add_action("read", "read");
+    add_action("pick","pick");
+    if (this_player()->query_exp() <= 0) {
+	write("\nWelcome to DarkeMUD.   Let the CARNAGE begin!\n"
+	  "Please choose a race for yourself.  Your race determines your main "
+	  "genetic attributes, strength, intelligence, dexterity, constitution, "
+	  "and charisma.");
+	this_player()->set_rolls(0); 
+    }
+}
+
+int pick(string str) {
+    mapping racial_props;
+    string *skill_keys, *which, *racial_keys;
+    mapping borg;
+    int tmp, i, j;
+    string my_class, *g_dir, name;
+
+    my_class = "child";
+    if(!str) {
+	return notify_fail("Please supply a race from the race list.\n");
+    }
+    str = lower_case(str);
+    if(member_array(str, (string *)RACE_D->query_races()) == -1) {
+	write("You must pick a race from the list!\nType <read list>\n");
+	return 1;
+    }
+    printf("Ok.\nCreating your character...");
+    g_dir = get_dir("/d/damned/guilds/join_rooms/*_join.c");
+    i = sizeof(g_dir);
+    name = (string)this_player()->query_name();
+    while(i--)
+	call_other("/d/damned/guilds/join_rooms/"+g_dir[i], "kick_member",
+	  name);
+    this_player()->remove_property("lycanthrope moon");
+    this_player()->set_race(str);
+    this_player()->new_body();
+    this_player()->set_class(my_class);
+    this_player()->init_skills(my_class);
+    this_player()->add_sight_bonus((int)RACE_D->query_sight_bonus(str) -
+      (int)this_player()->query_sight_bonus());
+    this_player()->set_property("ambidextry", 0);
+    this_player()->set_property("sp points", 0);
+    racial_props = (mapping)RACE_D->query_racial_properties(str);
+    if(mapp(racial_props)) {
+	racial_keys = keys(racial_props);
+	i = sizeof(racial_keys);
+	while(i--) {
+	    switch(racial_keys[i]) {
+	    case "innate skills":
+		if(!mapp(racial_props[racial_keys[i]])) break;
+		skill_keys = keys(racial_props[racial_keys[i]]);
+		j = sizeof(skill_keys);
+		while(j--) {
+		    this_player()->set_skill(skill_keys[j],
+		      racial_props["innate skills"][skill_keys[j]]);
+		}
+		break;
+	    case "innate spells":
+		if(!mapp(racial_props[racial_keys[i]])) break;
+		skill_keys = keys(racial_props[racial_keys[i]]);
+		j = sizeof(skill_keys);
+		while(j--) {
+		    this_player()->set_spell_level(skill_keys[j],
+		      racial_props["innate spells"]
+		      [skill_keys[j]]);
+		}
+		break;
+	    default:
+		this_player()->set_property(racial_keys[i],
+		  racial_props[racial_keys[i]]);
+	    }
+	}
+    }
+    this_player()->setenv("TITLE","Novice $N the " + capitalize(str));
+    do_rolls();
+    return 1;
+}
+
+void do_rolls() {
+    int i, j;
+    mapping roll_set;
+
+    if(!(roll_set = (mapping)this_player()->query_property("roll set"))) {
+	roll_set = ([ "1" : RACE_D->do_rolls(), "2" : RACE_D->do_rolls(),
+	  "3" : RACE_D->do_rolls(), "4" : RACE_D->do_rolls() ]);
+    write("Ok.\nYou roll four sets of six stats. Pick the one you like best.\n");
+}
+else
+    write("Ok.\nYou have already rolled your stats.  Pick the set you like best.\n");
+for(i=0 ; i < 4 ; i++) {
+    printf("Set %d: ",i+1);
+    for(j=0 ; j < 6 ; j++) {
+	printf("%d  ",roll_set[sprintf("%d",i+1)][j]);
+    }
+    printf("\n");
+}
+this_player()->set_property("roll set", roll_set);
+this_player()->save_player((string)this_player()->query_name());
+write("\nPick the set you want for your stats (1,2,3, or 4).");
+input_to("pick_stats",0,roll_set);
+return;
+}
+
+int pick_stats(string choice, mapping roll_set) {
+    if(!pointerp(roll_set[choice])) {
+	write("Choose 1, 2, 3, or 4.");
+	input_to("pick_stats",0,roll_set);
+	return 1;
+    }
+    write("Ok.\nTime to assign the rolls to your stats.");
+    return assign_stats(0, roll_set[choice], STATS);
+}
+
+int assign_stats(string choice, int *rolls, string *stats_left) {
+    string stat_str, *hands;
+    int i, stat_bonus, stat_idx, dev_tot;
+    int j;
+
+    j = sizeof(rolls) - 1;
+    if(choice && stringp(choice)) {
+        if(member_array(lower_case(choice), stats_left, 1) == -1) {
+	    write("Choose one of the available remaining stats.");
+	}
+	else {
+            stat_idx = member_array(lower_case(choice), stats_left, 1);
+	    choice = stats_left[stat_idx];
+	    write("Roll " + rolls[0] + " assigned to " + choice + ".");
+	    stat_bonus = (int)RACE_D->query_stat_adjustment(choice[0..2],
+	      (string)this_player()->query("race"));
+	    write(sprintf("Racial bonus: %+d.\n",stat_bonus)); 
+	    this_player()->set_stats(choice,rolls[0]+stat_bonus);
+	    if(j > 0)
+		rolls = rolls[1..j];
+	    stats_left -= ({ stats_left[stat_idx] });
+	}
+    }
+    i = sizeof(stats_left);
+    if(i==0) {
+	this_player()->remove_property("roll set");
+	write("\n Finished!");
+	this_player()->set_skill("attack",5);
+	this_player()->set_skill("trade lore", 5);
+	this_player()->set_skill("dodge", 0);
+	this_player()->set_skill("parry", 0);
+	this_player()->set_skill("melee",0);
+	hands = (string *)this_player()->query_wielding_limbs();
+	this_player()->set_property("handedness", hands[random(sizeof(hands))]);
+	if(!this_player()->query_property("ambidextry"))
+	    write("IMPORTANT:  You favor your "+(string)this_player()->
+	      query_property("handedness") + ".  Wield weapons there\n"+
+	      "when possible.");
+	this_player()->set_lang_prof("common",5+(int)this_player()->
+	  query_stats("intelligence")/20);
+	i=sizeof(STATS);
+	dev_tot=0;
+	this_player()->set_property("dev points",0);
+	while(i--) {
+	    if(STATS[i] == "charisma") continue;
+	    switch((int)this_player()->query_stats(STATS[i])) {
+	    case 1..15:
+		dev_tot += 2;
+		break;
+	    case 16..25:
+		dev_tot += 3;
+		break;
+	    case 26..40:
+		dev_tot += 5;
+		break;
+	    case 41..60:
+		dev_tot += 7;
+		break;
+	    case 61..75:
+		dev_tot += 9;
+		break;
+	    case 76..90:
+		dev_tot += 12;
+		break;
+	    case 91..100:
+		dev_tot += 15;
+		break;
+	    case 101..105:
+		dev_tot += 18;
+		break;
+	    case 106..110:
+		dev_tot += 20;
+		break;
+	    case 111..2000:
+		dev_tot += 23;
+		break;
+	    default:
+		tell_object(this_player(),"There is an ERROR in your stats.\n"+
+		  "Tell an Arch IMMEDIATELY.\n");
+	    }
+	}
+	dev_tot += (dev_tot * (40 +(int)this_player()->query_property("xp mod")))
+	/ 250;
+	if(dev_tot < 42) 
+	    message("info", "Your stats suck.  If you would like to be deleted, "+
+	      "ask Drizzt or Diewarzau.", this_player());
+	this_player()->set_property("dev points",dev_tot);
+	this_player()->set_property("dev point base",dev_tot);
+	this_player()->set_max_hp(4 * ((int)this_player()->query_stats("constitution") + 20) / 5);
+	this_player()->augment_body((int)this_player()->query_stats("constitution"));
+	this_player()->set_max_mp(4 * ((int)this_player()->query_stats("intelligence") + 20) / 5);
+	this_player()->set_property("base mp regen", 3);
+	this_player()->set_property("base hp regen", 3);
+	set_ansi();
+	this_player()->set("in creation", 0);
+	return 1;
+    }
+    stat_str = "Remaining stats: ";
+    i--;
+    stat_str += stats_left[i];
+    while(i--)
+	stat_str += ", " + stats_left[i];
+    stat_str += ".";
+    write(stat_str);
+    write("Which stat do you wish to assign " + rolls[0] + " to?");
+    input_to("assign_stats", 0, rolls, stats_left);
+    return 1;
+}
+
+void set_ansi() {
+    this_player()->setenv("TERM", "ansi");
+    this_player()->reset_terminal();
+    this_player()->reset_max_exp();
+    write("\nOne more thing...\n%^RED%^Is this line red (y or n)?%^RESET%^");
+    input_to("set_ansi_two");
+}
+
+void set_ansi_two(string str) {
+    str = arrange_string(lower_case(str), 1);
+    if(str == "n") {
+	write("Ok.  Terminal set to \"unknown.\"  See 'help setenv' for more info.");
+	this_player()->setenv("TERM","unknown");
+	this_player()->reset_terminal();
+	this_player()->move_player(ROOM_START);
+	return;
+    }
+    else if(str == "y") {
+	write("Terminal set to ansi.");
+        this_player()->set_property("reincarnate", 0);
+	this_player()->move_player(ROOM_START);
+	return;
+    }
+    else {
+	write("Answer y or n");
+	input_to("set_ansi_two");
+	return;
+    }
+}
+
+int read(string str) {
+    string *res;
+    int i, j, tmp;
+    if(!str) {
+	notify_fail("What do you want to read? A list?\n");
+	return 0;
+    }
+    if(str != "list") {
+	notify_fail("That is not here to be read.\n");
+	return 0;
+    }
+    write("These are the following races available in our reality:");
+    write("-----------------------------------------------------------");
+    message("Ninfo", format_page((string *)RACE_D->query_races(), 4),
+      this_player());
+    write("----------------------------------------------------------");
+    write("pick <race> will forever make you one of these races");
+    write("Type help <race> for more information.");
+    return 1;
+}

@@ -1,0 +1,86 @@
+#include <std.h>
+#include <daemons.h>
+#include <tell.h>
+
+inherit DAEMON;
+
+int cmd_tell(string str) {
+    string tell_msg, who, target, mud, msg;
+    object ob;
+    int sp_cost;
+
+    if (!str || sscanf(str,"%s %s",who,msg) != 2) {
+        notify_fail("usage: tell <player> <message>\n");
+        return 0;
+    }
+    if(sscanf(lower_case(who),"%s@%s",target,mud) == 2) {
+        if(!NETWORK_D->mud_exists(mud)) 
+          return notify_fail("That mud is not listed with "+mud_name()+".\n");
+        SERVICES_D->send_gtell(mud, target, msg);
+        return 1;
+    }
+    if(wizardp(this_player())
+       ||this_player()->query("in creation")) sp_cost = 0;
+        else sp_cost = 2 - (8*(int)this_player()->query_skill("telepathy"))
+           /200;
+    sp_cost = (sp_cost < 0)? 0:sp_cost;
+    if(!this_player()->query("in creation") && !wizardp(this_player()) && 
+       (int)this_player()->query_mp() < sp_cost)
+        return notify_fail("You do not have enough mp.\n");
+    this_player()->add_mp(-sp_cost);
+    if(!(ob = find_living(who = lower_case(who)))) {
+        notify_fail(capitalize(who)+NOT_HERE+"\n");
+        return 0;
+    }
+    if(atoi(ob->getenv("TellFilter")) > (int)this_player()->query_level()) {
+        message("info",
+%^YELLOW%^TELL FILTER <%^GREEN%^ACTIVE%^YELLOW%^>%^RESET%^
+Due to the overwhelming demand placed on my by tells and
+the frequent disruptions they cause, I have filtered your
+tell out.  Please, don't take this personally...
+, this_player()
+);
+        return 1;
+    }
+    if(ob->query_invis() && wizardp(ob) && !archp(this_player())) {
+        message("info", sprintf("%s%s", capitalize(who), NOT_HERE),
+          this_player());
+        message("tell", sprintf("%s is unaware of telling you: %s",
+          (string)this_player()->query_cap_name(), msg), ob);
+      ob->set("reply", (string)this_player()->query_name());
+        return 1;
+    }
+    if(ob->query_blocked("tell")) {
+        write(ob->query_cap_name()+" is currently blocking all tells.");
+        return 1;
+    }
+    if(ob->is_player() && !interactive(ob)) {
+        notify_fail(ob->query_cap_name()+" is link-dead and cannot hear you.\n");
+        return 0;
+    }
+    message("tell", (string)this_player()->query_cap_name() + " tells you: "+
+      msg, ob);
+    ob->set("reply", (string)this_player()->query_name());
+    message("tell", sprintf("You tell %s: %s", (string)ob->query_cap_name(),
+      msg), this_player());
+    if(!ob->is_player()) return 1;
+    if(query_idle(ob) > IDLE_TIME)
+      write(ob->query_cap_name() +
+          " is idle, and may not have been paying attention.");
+    if(in_edit(ob) || in_input(ob))
+      message("info", (string)ob->query_cap_name()+
+      " is currently editing a file and may be unable or UNWILLING"+
+      " to respond at this time...", this_player());
+    return 1;
+}
+
+void help() {
+    message("help",
+      "Syntax: <tell [player] [message]>\n"
+      "        <tell [player]@[mud] [message]>\n\n"
+      "Sends the message to the player named either on this mud if no "
+      "mud is specified, or to the player named on another mud when "
+      "another mud is specified.\n\n"
+      "See also: say, shout, yell, emote", this_player()
+    );
+}

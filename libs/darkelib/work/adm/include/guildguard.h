@@ -1,0 +1,5 @@
+//GUARD HEADER
+#define GUARD_LEVEL	20
+#define GUARD_AC	120
+#define GUARD_RESIST	30
+#define GUARD_ENHCRIT	-2

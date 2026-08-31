@@ -1,0 +1,6 @@
+#define GenVersion          "v1.1"
+#define AnnoyShadow         "/wizards/drizzt/shadow/annoyshad"
+#define MiscShadow          "/wizards/drizzt/shadow/miscshad"
+#define Shadow311           "/wizards/drizzt/shadow/311shad"
+#define ColorCurse          "/wizards/drizzt/shadow/color_curse"
+#define WordCurse           "/wizards/drizzt/shadow/word_curse"

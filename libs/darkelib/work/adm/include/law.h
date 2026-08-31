@@ -1,0 +1,1 @@
+#define VALID_SHADOWS ({ "/wizards/valodin/obj/opticalshadow", "/wizards/darkone/lawshadow", "/wizards/valodin/obj/acidshadow", "/wizards/valodin/obj/tapeshadow", "/wizards/valodin/obj/horseshadow", "/wizards/valodin/vampire/obj/vampsh", "/wizards/silenus/obj/steedshadow" })

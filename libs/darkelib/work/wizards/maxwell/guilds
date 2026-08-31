@@ -1,0 +1,467 @@
+//    A generic inheritable object fro guild joining rooms.  Note that 
+//    the player must have permission from the guildmaster to join.
+//    NPC guildmasters will give permission to any guildless person.
+//    Handles all necessary changes to the character, including
+//    setting of class, mods of stats, etc.  The join room also 
+//    saves itself so the guildmaster can have access to the total
+//    guild membership.
+//
+//    DarkeLIB 0.1
+//    -Diewarzau 8/8/95
+
+#include "/adm/include/std.h"
+#include "/adm/include/security.h"
+#include "under.h"
+
+inherit ROOM;
+
+mapping guild_list;
+static string class_name;
+string master;
+mixed *inv;
+static private string *related_guilds;
+static private string guild_obj;
+
+private void save_this_room();
+string query_class_name();
+string *query_all_members();
+void set_guild_obj(string file);
+string *query_member_privs(string plyr);
+
+void set_related_guilds(string *guilds) {
+  related_guilds = guilds;
+  return;
+}
+
+void set_guild_obj(string file) {
+  guild_obj = file;
+  return;
+}
+
+string *query_related_guilds() {
+  if(!related_guilds || !pointerp(related_guilds)) return ({ });
+  return related_guilds;
+}
+
+void create() {
+  string which;
+
+  ::create();
+  which = (string)this_object()->query_class_name();
+  guild_list = ([]);
+  master = 0;
+  seteuid(UID_DAMNED_DATA);
+  if(file_exists("/d/damned/data/guild_"+which+".o"))
+    restore_object("/d/damned/data/guild_"+which, 1);
+  seteuid(getuid());
+  return;
+}
+
+void reset() {
+  string gm;
+  object ob;
+
+  if(!(gm = (string)query("guildmaster"))) return;
+  if(master) return;
+  if(present("guildmaster", this_object())) return;
+  seteuid(getuid());
+  ob = new(gm);
+  ob->move(this_object());
+  return;
+}
+int clean_members() {
+  string which, *m_list;
+  int x;
+
+  which = (string)this_object()->query_class_name();
+  m_list = query_all_members();
+  for(x=0;x<sizeof(m_list);x++) {
+    if(!user_exists(m_list[x])) {
+      "/daemon/chat"->send_chat(which,"Scribe","Auto-Kick:  "+
+        capitalize(m_list[x]));
+    }
+  }
+}
+
+//void set(string what, mixed val) {
+//  string *allowers, tmp_str;
+//  int i;
+
+//  if(what == "long" || what == "day long" || what == "night long") {
+//    val += "\nIf you have permission from the guildmaster to "+
+//      "join this guild, you may join by typing 'join'.";
+//    if(master) {
+//      val += "\nThe guildmaster is "+capitalize(master)+".";
+//      allowers = filter_array(query_all_members(), "filter_allow_join",
+//	  this_object());
+//      i = sizeof(allowers);
+//      if(i) {
+//	tmp_str = "\nThe following players may also allow you to join:";
+//	while(i--) {
+//	  tmp_str += " "+allowers[i];
+//	  if(i == 0) tmp_str += ".";
+//	  else tmp_str += ",";
+//	}
+//      }
+//if(tmp_str)
+//      val += tmp_str;
+//    }
+//  }
+//  ::set(what, val);
+//  return;
+//}
+
+void set_class_name(string str) {
+  class_name = str;
+}
+
+string query_class_name() {
+  return class_name;
+}
+
+void init() {
+  ::init();
+    add_action("join_func", "join");
+    add_action("allow_player", "allow");
+    add_action("list_members", "list");
+    add_action("read_plaque","read");
+    add_action("turn_ring","turn");
+    add_action("check_room","lift");
+    return;
+}
+
+private void save_this_room() {
+  seteuid(UID_DAMNED_DATA);
+  save_object("/d/damned/data/guild_"+(string)this_object()->query_class_name());
+  seteuid(getuid());
+  return;
+}
+
+int read_plaque(string str){
+   if(!str){
+     write("Read what?");
+     return 1;
+   }
+   if(str == "plaque"){
+     write("Welcome to the Thieves Guild! Talk to the guildmaster to become "
+           "a member.\nThe current guildmaster of the Thieves is "
+           +capitalize(master)+".");
+     return 1;
+   }
+}
+string *query_all_members() {
+  if(!guild_list || !mapp(guild_list)) return ({ });
+  else return filter_array(keys(guild_list), "allow_train_filter", this_object());
+}
+
+// list members moved down ++Drizzt 7/10/96
+
+int is_member(string who) {
+  return (member_array(who, query_all_members()) >= 0);
+}
+
+string query_member_status(string member) {
+  if(!guild_list || !mapp(guild_list) || !guild_list[member])
+    return 0;
+  else if(undefinedp(guild_list[member]["status"])) {
+    guild_list[member]["status"] = "not joined";
+    return "not joined";
+  }
+  else return guild_list[member]["status"];
+}
+
+string *query_member_privs(string member) {
+  if(!guild_list || !mapp(guild_list) || !guild_list[member])
+    return ({ });
+  else if(undefinedp(guild_list[member]["privs"]) || !pointerp(guild_list[member]
+							   ["privs"]))
+    return ({ });
+  else return guild_list[member]["privs"];
+}
+
+int filter_allow_join(string plyr) {
+  string *privs;
+
+  privs = query_member_privs(plyr);
+  if(!pointerp(privs) || member_array("allow join", privs) < 0)
+    return 0;
+  return 1;
+}
+
+void set_member_status(string member, string str) {
+  if(!guild_list) guild_list = ([]);
+  if(!guild_list[member]) guild_list[member] = ([]);
+  guild_list[member]["status"] = str;
+  save_this_room();
+  return;
+}
+
+int allow_player(string str) {
+  object who;
+
+  if(!str) return 0;
+  if(!archp(this_player()) && member_array("allow join",
+    query_member_privs((string)this_player()->query_name())) < 0)
+    return 0;
+  who = present(lower_case(str), environment(this_player()));
+  if(!who || !who->is_player()) {
+    write(capitalize(str)+" isn't here.");
+    return 1;
+  }
+  if(who->query_class() && (string)who->query_class() != "child") {
+    write(capitalize(str)+" is already the member of a guild.");
+    return 1;
+  }
+  this_object()->set_member_status((string)who->query_name(), "not joined");
+  write(capitalize(str) + " may now join your guild.");
+  message("info", "You may now join the "+class_name+" guild.", who);
+  return 1;
+}
+
+void add_member_priv(string member, string priv) {
+  if(!guild_list) guild_list = ([]);
+  if(!guild_list[member]) guild_list[member] = ([]);
+  if(!guild_list[member]["privs"]) guild_list[member]["privs"] = ({});
+  guild_list[member]["privs"] = distinct_array(guild_list[member]["privs"]
+					    + ({ priv }));
+  save_this_room();
+  return;
+}
+
+
+int list_members() {
+  string *wib_mem;
+  int x;
+//  Don't want just anyone to see the list ++Drizzt 7/10/96
+  if(!archp(this_player()) && member_array("allow join",
+    query_member_privs((string)this_player()->query_name())) < 0)
+    return 0;
+  wib_mem = query_all_members();
+  for(x=0;x<sizeof(wib_mem);x++) {
+    write("  "+wib_mem[x]);
+  }
+  return 1;
+}
+
+void remove_member_priv(string member, string priv) {
+  int pos;
+
+  if(!guild_list) guild_list = ([]);
+  if(!guild_list[member]) guild_list[member] = ([]);
+  if(!guild_list[member]["privs"]) return;
+  if((pos = member_array(priv, guild_list[member]["privs"])) < 0)
+    return;
+  guild_list[member]["privs"] -= ({ guild_list[member]["privs"][pos] });
+  save_this_room();
+  return;
+}
+
+int allow_train_filter(string who) {
+  if((string)this_object()->query_member_status(who) == "allow train"
+     || (string)this_object()->query_member_status(who) == "not joined") return 0;
+  else return 1;
+}
+
+void kick_member(string member) {
+  object ob;
+  mapping mods;
+  string *mod_keys;
+  int i;
+
+  if(!guild_list) guild_list = ([]);
+  if(!guild_list[member]) return;
+  map_delete(guild_list, member);
+  save_this_room();
+  ob = find_player(member);
+  if(ob) {
+    if((string)ob->query_class() != query_class_name()) return;
+    ob->set_class("child");
+    message("info", "%^RED%^%^BOLD%^-*> You have been kicked from your guild! <*-", ob);
+    mods = (mapping)query_property("guild mods");
+    if(mods) {
+      mod_keys = keys(mods);
+      for(i=0;i<sizeof(mod_keys);i++) {
+	if(ob->query_base_stats(mod_keys[i]))
+	  ob->set_stats(mod_keys[i], (int)ob->query_base_stats(mod_keys[i]) -
+			mods[mod_keys[i]]);
+      }
+    }
+  }
+  return;
+}
+
+int join_func() {
+  string what, *mod_keys;
+  int i;
+  mapping mods;
+
+  what = (string)this_object()->query_class_name();
+  if(this_player()->query_class() && (string)this_player()->query_class() !=
+     "child" && (string)this_player()->query_class() != what) {
+    write("You already belong to another guild.");
+    return 1;
+  }
+  if(!this_object()->query_member_status((string)this_player()->
+							query_name())) {
+    write("You must have the guildmaster's permission to join this guild.");
+    return 1;
+  }
+  if((string)this_object()->query_member_status((string)this_player()->
+						query_name()) ==
+     "allow train") {
+    write("You may only train in this guild, not join it.");
+    return 1;
+  }
+  if((string)this_object()->query_member_status((string)this_player()->
+						query_name()) !=
+     "not joined") {
+    write("You are already a member of this guild.");
+    return 1;
+  }
+  write("Welcome to the "+capitalize(what)+" guild!");
+  this_player()->set_class(what);
+  if(query_property("guild mods") && mapp(query_property("guild mods"))) {
+    mod_keys = keys(mods = (mapping)query_property("guild mods"));
+    i = sizeof(mod_keys);
+    while(i--) {
+      if(!this_player()->query_stats(mod_keys[i])) continue;
+      this_player()->set_stats(mod_keys[i], (int)this_player()->
+			       query_base_stats(mod_keys[i]) + mods[mod_keys[i]]);
+    }
+  }
+  if(query_property("hp advance"))
+    this_player()->set_property("hp advance", query_property("hp advance"));
+  if(query_property("mp advance"))
+    this_player()->set_property("mp advance", query_property("mp advance"));
+  if(query_property("base hp regen"))
+    this_player()->set_property("base hp regen", query_property("base hp regen"));
+  if(query_property("base mp regen"))
+    this_player()->set_property("base mp regen", query_property("base mp regen"));
+  this_object()->set_member_status(this_player()->query_name(), "member");
+  if((int)this_player()->query_level() == 1 &&
+	!this_player()->query_property("reincarnate")) {
+    this_player()->add_money("gold", 40 + random(30));
+    this_player()->add_money("copper", 2500 + 10 * random(150));
+    this_player()->add_money("silver", 250 + 2 * random(150));
+  }
+
+  return 1;
+}
+
+int set_master(string str) {
+  object who, ob;
+
+  str = lower_case(str);
+  if(master == str) return 0;
+  who = find_player(str);
+  if(!who) return 0;
+  if(wizardp(who) || (string)who->query_class() != class_name) return 0;
+  if(master) {
+    message("info", "There is already a player guildmaster of the "+
+      class_name+" guild.  Use the 'challenge' command to attempt to "+
+      "take the position when he/she is on.", who);
+    return 0;
+  }
+  while(ob = find_object(query("guildmaster"))) ob->remove();
+  while(ob = find_object(guild_obj)) ob->remove();
+  master = str;
+  seteuid(getuid());
+  message("info", "%^BLUE%^%^BOLD%^You are now the "+
+	  capitalize(class_name) + " Guildmaster!\nType 'help guildmaster'.", 
+	  who);
+  message("shout", "The Demiurge shouts: All hail "+
+	  (string)who->query_cap_name() + ", new guildmaster of the "+
+	  capitalize(pluralize(class_name)) + "!", users());
+  save_this_room();
+  who->save_player((string)who->query_name());
+  return 1;
+}
+int check_room(string str){
+int y;
+    if(!str){
+      write("Lift what?");
+      return 1;
+    }
+    if(str == "plate"){
+      write("You lift the plate and glance down into the dungeon below.");
+      say(this_player()->query_cap_name()+" lifts the plate and looks "
+         "underneath it.");
+      inv=filter_array(all_inventory(find_object_or_load(UNTHIEF+"thief_du")),
+            "is_living",this_object());
+      if(sizeof(inv) == 0)
+        write("The dungeon is empty.");
+      else {
+        write("The dungeon is occupied by "+sizeof(inv)+" living beings.");
+         y = 0;
+         while(y < sizeof(inv)){
+             write(inv[y]->query_cap_name());
+             y = y + 1;
+         }
+      }
+      return 1;
+    }
+}
+int is_living(object str){
+       return living(str);
+}
+
+mixed query_occupants(){
+    return inv;
+}
+int turn_ring(string str){
+string limb;
+int lmd,lcd,dam;
+    if(str == "ring"){
+      if(this_player()->query_class() == "thief"){
+        write("You grasp the ring and turn it! It makes a solid "
+              "click and the wall in front of you slides open! You "
+              "quickly step into the opening and the wall slides "
+              "shut behind you."); 
+        say(this_player()->query_cap_name()+" grasps one of the steel "
+         "rings on the wall and steps into a secret opening!");
+        this_player()->move(UNTHIEF+"thief6");
+        tell_room(UNTHIEF+"thief6","The secret door slides open and "
+         +this_player()->query_cap_name()+" walks in.",this_player());
+        return 1;
+       }
+       write("You feel the floor vibrate slightly and suddenly your "
+             "dropping through the thick air!!\nYou slam into a stone "
+             "floor after dropping through the darkness. As you glance "
+             "up you see the opening you fell through slide shut!");
+       limb = (this_player()->return_target_limb());
+       lmd =  (this_player()->query_max_dam(limb));
+       lcd =  (this_player()->query_dm(limb));   
+       dam = (random(4)+3);       
+       this_player()->do_damage(limb,((lmd-lcd)/dam) );
+       write("You smashed your "+limb+" during the fall. Ouch!");
+       say(this_player()->query_cap_name()+" grasps one of the steel "
+         "rings on the wall. Suddenly a gaping hole opens underneath "
+         +this_player()->query_possessive()+" feet!\n"
+         +this_player()->query_cap_name()+" drops out of sight and "
+         +this_player()->query_possessive()+" scream is silenced as the "
+         "floor slides back into place!");
+        this_player()->move(UNTHIEF+"thief_du");
+        tell_room(UNTHIEF+"thief_du","You hear a scream above you!\n"
+         +this_player()->query_cap_name()+" falls through the opening in "
+         "the ceiling and slams into the hard stone floor in a cloud "
+         "of straw and dust!",this_player());
+        return 1;
+   }
+}
+void reset_master() {
+  int i;
+  string *m_keys;
+
+  if(guild_list) {
+    m_keys = keys(guild_list);
+    i = sizeof(m_keys);
+    while(i--) if(!mapp(guild_list[m_keys[i]]) || guild_list[m_keys[i]]["status"] != "member")
+		  map_delete(guild_list, m_keys[i]);
+  }
+  master = 0;
+  save_this_room();
+  this_object()->reset();
+}
+
+string query_master() { return master; }
+

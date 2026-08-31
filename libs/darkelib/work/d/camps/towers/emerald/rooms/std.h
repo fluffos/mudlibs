@@ -1,0 +1,5 @@
+#define PATH "/d/camps/towers/emerald/rooms/"
+#define MONSTER_PATH "/d/camps/towers/emerald/mon/"
+#define WEAPON_PATH "/d/camps/towers/emerald/weapons/"
+#define ARMOUR_PATH "/d/camps/towers/emerald/armour/"
+#define MISC_PATH "/d/camps/towers/emerald/misc/"

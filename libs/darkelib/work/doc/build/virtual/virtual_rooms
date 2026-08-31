@@ -1,0 +1,178 @@
+Building Virtual Rooms
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+The ability of MudOS to handle virtual objects adds a great deal of power 
+to the wizard who wishes to create large areas, particularly if several 
+of the rooms are repetitive.  In this doc, I will describe how to 
+implement a virtual area.
+
+
+1) When should I use virtual rooms?
+
+     Virtual rooms are only appropriate in a few applications, but they 
+can save you tons of trouble.  Ask yourself these questions:
+
+	1. Does my area consist of a large number of rooms with 
+	repetitive characteristics (ie, description, commands, 
+	monsters, etc.)?
+
+	2. Could my area be descibed accurately using only a map?
+	For example, could I map out my area on paper, hand it to
+	my friend, and then he/she could code the area just as well?
+
+	3. Does my area have WAY TOO many rooms, several of which are
+	just filler, with only a small percentage being important?
+
+        4. Do you want your rooms or the configuration of your area
+        to change (for instance a maze that reconfigures itself)
+        and perhaps to save these changes past reboots?
+
+If you answered yes to any of these, you could probably benefit from 
+virtual rooms in your area.  And as you read further you will see how...
+
+
+2) How do virtual rooms work?
+
+     First of all, lets talk about what the 'virtual' in virtual room 
+means.  Normally, in your area, every room has its own file.  This is not 
+the case with virual rooms.  They exist only in the computer's memory, 
+and do not have a representative file.  As such they are 'virtual' and do 
+not exist on the hard disk, only in memory.  The are created at runtime, 
+rather than at compile time.
+
+    Every virtual object is cloned and set up by a 'virtual object 
+server'.  Every 'class' of virtual objects has its own server.  For 
+instance, all rooms on the world map are cloned by 
+/d/damned/virtual/world_server.c.  Basically, for every related class of 
+virtual rooms, you want a server.  The server, of course, can do anything 
+you want...  Read a text map of your area and convert it into rooms, 
+store room properties in separate files, etc.  The fact that the rooms 
+are not hard-coded into files also allows them to be 'dynamic', ie they 
+can change if so directed and perhaps even save these changes past 
+reboots.  An excellent example of this is the server that handles player 
+castles: /d/damned/virtual/castle_server.c
+
+    So, when are virtual objects loaded?  Whenever the system is told to 
+load an object (in this case a room file), it looks first in the file 
+system (on the hard disk), and if it doesn't find it there, it looks for 
+a virtual server that it can direct to clone the object.  The NAME of the 
+server it looks for depends on the filename of the object you ask the 
+driver to load.  For instance:
+
+load_object("/d/damned/virtual/room_15_15.world");
+
+The driver will do this:
+
+Does the file "/d/damned/virtual/room_15_15.world.c" exist on the hard disk?
+
+If not, look for the file "/d/damned/virtual/world_server.c".
+Is "/d/damned/virtual/world_server.c" found?
+
+If not, error, file not found.
+
+If so, call compile_object("d/damned/virtual/room_15_15") in that server,
+and take the object returned to represent
+"/d/damned/virtual/room_15_15.world" as a virtual object.
+
+
+This may be a little confusing, but if you follow the simple rules 
+outlined later it can be very easy.  The message of this section, 
+however, is that any file of the format:
+
+/directory/filename.extension
+
+Looks for the server:
+
+/directory/extension_server.c
+
+and calls compile_object in it with the string arguement:
+"directory/filename".
+
+IMPORTANT NOTES:
+1.  The directory containing a virtual server MUST be named 'virtual' and 
+it MUST either be a subdir. of your wizard directory 
+(Ex. /wizards/diewarzau/virtual) or of a domain directory 
+(Ex. /d/damned/virtual).
+
+2.  Every directory that contains virtual servers MUST also contain a 
+copy of '/std/virtual/server.c'.  Copy that file into your virtual 
+directory.
+
+
+3) Building a virtual server
+
+     Building a virtual server is quite easy in and of itself, but may 
+become slightly difficult depending on what you wish to do with it.  A 
+few rules to follow are:
+
+1.  Every virtual server MUST inherit "/std/virtual/compile";  You must 
+also inherit "/std/room"; or "/std/vault"; just like in a normal room.
+
+2.  Unlike a normal room, where all the 'room stuff' is set up in 
+create() { }, you will set up the room in virtual_setup(string file) { }.
+You MAY use create() { } to define stuff that will be common to ALL the 
+virtual rooms cloned from that server.  I will describe what the 'file' 
+arg to virtual_setup means below.
+
+3.  You do not need to worry about the 'compile_object' stuff explained 
+above for a virtual room server.  /std/virtual/compile takes care of all 
+that.
+
+     Okay, now let's talk about the virtual_setup function, which is the 
+backbone of the virtual room system.  It is a sort of room-specific 
+create() function, though create() is STILL called in virtual objects.  
+Since the same create() function will be called in all virtual objects 
+cloned from that server, though, only include stuff that will be the same 
+for all objects there.
+
+     Every time a new virtual room is loaded, it's server is cloned, and 
+virtual_setup is called in that object with a single string argument.  
+That argument is the name of the room file WITHOUT the directory OR the 
+extension.  For example, if a room file had the line:
+
+add_exit("/wizards/diewarzau/virtual/room_4.maze", "east");
+
+in it, then if the player went east, the driver would look for the file:
+
+/wizards/diewarzau/virtual/maze_server.c
+
+The driver would then clone that server, and the function:
+
+virtual_setup("room_4")
+
+would get called in it.  Notice that "room_4" is 
+"/wizards/diewarzau/virtual/room_4.maze" with the directory and extension 
+stripped.
+
+     This introduces the central concept of virtual rooms: THE ARGUMENT 
+TO virtual_setup IS THE ONLY THING THAT TELLS ONE ROOM OF THE SAME CLASS 
+FROM ANOTHER.  Meaning the only way you can make one room cloned from a 
+particular virtual server different from another cloned from the same 
+server is to have the virtual_setup function do something different with 
+the string.  For instance, if the virtual_setup function gets "room_4" as 
+an arg, it may read from the file:
+"/wizards/diewarzau/room_data/mazeroom.4" for information, whereas if it 
+gets "exit_5" as an arg it may read from:
+"/wizards/diewarzau/room_data/mazeexit.5" and set up an exit from the 
+maze.  All of this, of course, can be done with creative use of the 
+sscanf() efun as well as if/else and switch/case constructs.  For 
+examples of this, see the following virtual servers:
+
+/d/damned/virtual/inn_server.c
+Maintains inn rooms as well as user-settable long descriptions.
+
+/d/damned/virtual/world_server.c
+Reads a variable-sized text map as well as a few other database files to 
+create a world complete with animals, varying terrain, minerals, and 
+support for areas of all types.
+
+/d/damned/virtual/castle_server.c
+One of my better pieces of code.  A completely user-buildable castle that 
+is fully customizeable, from long and short desc to light level to exits 
+to doors.
+
+Eventually I will try to add some examples to the dox, but for now, just 
+look over the above, and mail me with any questions...
+
+-Diewarzau
+

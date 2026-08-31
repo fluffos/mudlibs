@@ -1,0 +1,5 @@
+#define PATH "/d/camps/kobold/"
+#define MON_PATH "/d/camps/kobold/mon/"
+#define ARMOR_PATH "/d/camps/kobold/armor/"
+#define WEAP_PATH "/d/camps/kobold/weapon/"
+#define MISC_PATH "/d/camps/kobold/misc/"
