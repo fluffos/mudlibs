@@ -102,7 +102,9 @@ in SOME branches, not baked into the shared upstream design itself as
    keeps `len-n+1` chars on this driver, so stripping a 4-char suffix
    needs `[0..<5]`, not `[0..<3]`). This lib wasn't part of that sweep
    (never onboarded before), so it still had the bug. Fixed
-   `[0..<3]` → `[0..<5]`.
+   `[0..<3]` → `[0..<5]`. **Filed upstream, bundled with the 29 sibling
+   sites found in round two below, as
+   [PR #3](https://github.com/fluffos/nt7/pull/3).**
 2. **§4.3 string-literal collision, self-inflicted by the mechanical
    `static`→`nosave` conversion, fixed**: 150 files/282 call sites had
    `log_file("static/...", ...)`-style path literals rewritten to
@@ -110,6 +112,10 @@ in SOME branches, not baked into the shared upstream design itself as
    original source, confirmed via `raw/`, has zero `"nosave/` strings
    anywhere — this is 100% conversion-tool fallout, not an upstream
    bug). Reverted every `"nosave/` → `"static/` across the whole tree.
+   **Not upstream-worthy** (audited for the fluffos-org-PR queue,
+   2026-08-31): this is self-inflicted by this collection's own
+   `static`→`nosave` conversion pass, not present in the upstream
+   source at all — no PR filed.
 3. **`#ifndef __SENSIBLE_MODIFIERS__` shim in `include/globals.h`,
    confirmed DEAD (not a live bug on this driver), removed for
    cleanliness anyway**: the classic AGENTS.md §4.3 "`#define protected
@@ -122,6 +128,9 @@ in SOME branches, not baked into the shared upstream design itself as
    recompile (no new warnings/errors), and confirms `feature/
    command.lpc`'s `protected nomask int command_hook(...)` (§8.3a) was
    never actually broken here either — no fix needed for that one.
+   **Not upstream-worthy** (audited for the fluffos-org-PR queue,
+   2026-08-31): a dead-code cleanup with no functional-bug signature,
+   not a genuine bug fix — no PR filed.
 4. **New WASM-only bug, found + fixed, root-caused via bisection**: the
    very FIRST connection under the WASM build always failed
    `logon()` silently (driver log: `new_conn_handler: logon() on
@@ -153,7 +162,9 @@ in SOME branches, not baked into the shared upstream design itself as
    theoretical class — this was the one call site actually exercised
    and confirmed broken on the critical first-connection path; note for
    a future WASM pass on this lib (or a sibling) if another
-   first-connection daemon call turns up the same symptom.
+   first-connection daemon call turns up the same symptom. **Filed
+   upstream, bundled with fix #5 below, as
+   [PR #5](https://github.com/fluffos/nt7/pull/5).**
 5. **Unrelated hardening applied alongside #4**: `logind.lpc`'s
    `logon()` also had an UNCONDITIONAL `DATABASE_D->db_count_user()`
    call (real MySQL `db_connect()`) feeding a purely cosmetic "N
@@ -166,7 +177,8 @@ in SOME branches, not baked into the shared upstream design itself as
    alone didn't fix the WASM hang) — kept anyway since it's a genuine,
    independent correctness/consistency fix (and doubly so under WASM,
    where `PACKAGE_DB` isn't compiled in at all, per the WASM build's
-   own `CMakePresets.json`).
+   own `CMakePresets.json`). **Filed upstream bundled with fix #4, see
+   [PR #5](https://github.com/fluffos/nt7/pull/5).**
 
 ## Interactive verification
 
@@ -311,7 +323,9 @@ flagging this as a separate, out-of-scope missing-content gap
 content/design decision, not a programming fix) rather than chasing it
 further. Fixed the slice arithmetic at all 29 sites anyway
 (`[0..<3]` → `[0..<5]`), since it's the same unambiguous mechanical bug
-independent of what currently consumes the result.
+independent of what currently consumes the result. **Filed upstream,
+bundled with the `eventd.lpc` instance above, as
+[PR #3](https://github.com/fluffos/nt7/pull/3).**
 
 One additional match, `adm/daemons/skillsd.lpc`'s real `valid_perform(
 object me, string file)` (the actively-used `SKILLS_D`, as opposed to
@@ -379,7 +393,9 @@ firing deterministically on every single fresh boot (both via a first
 connection reaching `logind.lpc`'s `TIME_D` lazy-load path, and via a
 direct wizard `update /u/redl/cangku.lpc`/`update /adm/daemons/
 equipmentd.lpc`) to zero occurrences across multiple clean reboots
-post-fix. Added as a new confirmed instance of AGENTS.md §7.147, with
+post-fix. **Filed upstream as
+[PR #4](https://github.com/fluffos/nt7/pull/4).** Added as a new
+confirmed instance of AGENTS.md §7.147, with
 a new note about the extra severity when an unguarded factory chain is
 reached from inside a bootstrap/scheduler loop rather than ordinary
 gameplay.
