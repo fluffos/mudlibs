@@ -325,3 +325,176 @@ WASM packaging not attempted this pass -- `wasm_status` left empty,
 matching `majik3`/`openlib`'s precedent for a lib onboarded outside the
 site-wide WASM sweep (and this lib's custom client protocol would need
 its own WASM-side client shim regardless, a separate follow-up task).
+
+## 深度功能测试 / §10.7 deep functional test (2026-08-31)
+
+Full round-two pass on the native driver, driven entirely through a
+small custom Python client (`<code>:<len>:<data>\n` framing, one
+persistent socket per session managed via a FIFO+select() loop so
+several separate tool calls can share one login across the queue's
+6-13s-per-command latency -- see §4 for the gotcha this ran into with
+overlapping stray client processes). Test characters: `valtor`
+(password `Passw0rd`, human, kept as the representative mortal
+playthrough character) and the pre-seeded admin `fluffos`/`Mud2026x`.
+Save files: `work/data/player/v/valtor.o`, `work/data/player/f/fluffos.o`.
+
+### Four real bugs found and fixed (AGENTS.md §7.186/§7.187, new entries)
+
+**1. `command/immortal/warp.lpc` (admin teleport) crashed on literally
+every invocation** -- used `this_player()` (`THIS`) instead of this
+codebase's own established `previous_object()` (`PREV(0)`) convention
+for identifying the acting player. Since almost every command (warp
+included) is dispatched from the driver's own `heart_beat()`-driven
+command queue rather than live network input, `this_player()` isn't
+valid there, and `THIS->move(ENV(ENV(THIS)), ...)` crashed with `Bad
+argument 1 to environment() Expected: object Got: 0` -- completely
+silent to the caller (no error shown), so this command has plausibly
+never worked at all in this build. Fixed by switching every `THIS` to
+`PREV(0)` (7 occurrences), matching `goto.lpc`'s already-correct
+sibling implementation in the same directory. Verified live: `warp <x>
+<y>` now actually teleports the caller, confirmed via a real
+before/after position check and a flat `log/runtime` across the
+attempt (versus 100% reproduction of the crash pre-fix, tested three
+times).
+
+**2. `command/mortal/vlook.lpc` (the client's "look at this specific
+grid tile" feature, documented in §0 above as one of the three
+no-delay commands) crashed on every REAL invocation** -- same `THIS`
+vs `PREV(0)` bug. The "no delay" fast path in `secure/player.lpc`'s
+`process_input()` only matches the bare string `"vlook"` with no
+arguments by strict equality; every actual client usage (`vlook <x>
+<y>`, the only form the command's own logic accepts) therefore falls
+through to the same queued `force_us()` path as any ordinary command --
+so despite being grouped with `blook`/`i` as "immediate", `vlook` in
+practice ALWAYS went through the path where `this_player()` is
+invalid, and crashed with the identical `Bad argument 1 to
+environment()` shape at `MAPENV(THIS)->get_obj(x, y)`. `blook.lpc`
+(the companion command) already correctly used `PREV(0)` throughout and
+was unaffected -- used as the reference pattern for the fix. Verified
+live: `vlook <x> <y>` now correctly returns the tile/object
+description (tested against the caller's own tile, "a human boy"),
+with zero new `log/runtime` entries.
+
+**3. `command/mortal/who.lpc` silently printed nothing to anyone,
+always** -- the milder variant of the same bug: `message(CMD_MSG,
+0,0,0, msg, THIS)` with a 0 recipient doesn't crash (unlike
+`environment()`'s strict object check), it just quietly delivers to
+no one. `who` therefore always "succeeded" with zero visible output
+and no error anywhere -- the more dangerous failure mode, since nothing
+in a live session would ever flag it as broken. Fixed the same way;
+verified live (`who` now correctly reports "1 player is currently
+online.").
+
+**4. Every single `quit` crashed the driver's runtime log, invisible
+to the player** -- the exact same class of bug this project's own
+`bxsj` §7.16 case study describes, found independently here.
+`inherit/living.lpc`'s `force_us()` dispatches `quit` via `call_other`,
+which chains into `secure/player.lpc:quit()` ->
+`daemon/offline.lpc:add_offline()`, which (as part of this lib's
+intended "swap the connected player for a non-interactive offline
+stand-in" design) `destruct()`s the very object `force_us()` is still
+executing on. Control returns to `force_us()`, which unconditionally
+continues into `else if(THOB->query_somatic_meaning(verb))` and
+several more `THOB`-referencing branches -- but `THOB`
+(`this_object()`) is now `0` for the destructed frame, crashing every
+time with `Bad argument 1 to EFUN call_other() Expected: object,
+string, array, Got: int(0)`. 100% reproducible across three independent
+fresh test characters, each time with the visible "Normal exit."
+disconnect looking completely normal to the player. A second, narrower
+instance of the same "code assumes `THOB` is still valid after a call
+that can invalidate it" pattern was found (and defensively fixed, same
+session) in the same function's inventory/grid command-search block
+(`MAPENV(THOB)->get_obj(...)` unguarded, unlike two neighboring blocks
+in the identical function that already correctly check plain
+`ENV(THOB)`) -- its exact trigger wasn't fully isolated (it surfaced
+during a stretch of overlapping stray test-client processes racing the
+same character name, see §4 below, which may have been a contributing
+factor rather than the root cause) but the guard is safe and free
+regardless. Full write-up and fix code in AGENTS.md §7.187. Verified
+live: reproduced the always-on crash pre-fix, applied the guard, and
+re-ran `quit`/`quit y` clean on three separate fresh characters
+post-fix with zero new `log/runtime` entries each time.
+
+### What was tested and confirmed working
+
+- **Registration + re-login (restore path)**: fresh character
+  creation (name/password/race-selection dialog) through to a real
+  placed-in-world state, then a full disconnect+reconnect cycle
+  (restore-object path) preserving race, inventory, skills, and grid
+  position correctly.
+- **Movement**: real grid-delta moves (`"dx#dy"` frames, e.g. `1#-1`
+  for diagonal) via the documented keyboard-alias convention,
+  including a wall-collision bump ("You bang your head against the
+  wall, ouch!") -- correctly rejected, no crash.
+- **Skill acquisition, two paths**: an admin-shortcut path
+  (`lpc find_player("valtor")->teach_skill("dodge",
+  find_player("fluffos"))`, using the same `teach_skill()` API the
+  world's own trainer NPC (`world/hilltop/npc/trainer.lpc`, "darklash")
+  calls internally) produced the correct in-game confirmation ("You
+  feel like you just improved your dodge.") and updated `skills`
+  output. The organic path -- physically walking to darklash and using
+  `chat teach` -- was attempted but NOT reached live in the time
+  budgeted for this pass (darklash is a wandering NPC and repeated
+  `warp`+diagonal-move attempts kept landing just outside `chat`'s
+  3-tile radius); flagged here as unverified-live rather than silently
+  presented as tested. The trainer's own `do_teach()` code was read and
+  confirmed to correctly call the same `teach_skill()` API exercised
+  above.
+- **Combat**: the bump-to-attack mechanic
+  (`inherit/gridobject.lpc:move()` calling `BATTLE_D->hit(THOB, o,
+  THOB->resolve_weapon())` when walking into an occupied, physical,
+  non-ethereal grid cell) was confirmed correct by direct code reading,
+  but **not reached live** -- this snapshot's only living NPCs near the
+  starting zone are shopkeepers/trainers/a guard, none of which could
+  be reliably reached and safely bumped into within the time budgeted
+  (the guard specifically carries a real weapon and was judged too
+  risky to test blind against a fresh level-1 character). Flagged as
+  unverified-live, not silently presented as tested.
+- **Shop/economy**: `world/hilltop/npc/grocer.lpc` and `innkeeper.lpc`
+  both `inherit SHOP`, but the shop room itself was not successfully
+  reached within the time budgeted (`warp`'s `get_near_location()`
+  fallback repeatedly snapped to an outdoor tile rather than the
+  enclosed shop interior) -- confirmed `list` correctly returns "No
+  such command available." when issued outside shop range (i.e. the
+  command dispatch itself doesn't crash on a miss), but the actual
+  `list`/`buy`/`sell` flow was not exercised. Flagged as
+  unverified-live.
+- **Death/respawn**: read `inherit/living.lpc:die()` in full --
+  confirmed this is **genuinely unfinished content, not a bug**: the
+  block that would move a dead character to an afterlife room and
+  support revival is entirely commented out in the shipped source
+  (consistent with this archive's own README.1st "almost, still not
+  even beta" self-description); what remains active on death is
+  real and would need to be tested with real risk (drop all inventory,
+  force-disconnect with "You have been killed.", mark the save
+  permanently `dead`, destruct the character) -- there is no live
+  respawn to verify since that code path doesn't exist in this
+  snapshot. Not attempted live given the risk of permanently bricking
+  a test character for a code path confirmed non-functional by reading
+  the source; documented here rather than guessed at.
+- **`quit`, `log/runtime` grep, reconnect after a real gap**: covered
+  above under bug #4 -- now clean post-fix, confirmed across multiple
+  fresh characters.
+- **Long-sit boot watch**: no WASM build exists for this lib (per §8
+  above); used the native-driver equivalent (`mudclient.py --idle 250
+  --timeout 220`, one idle connection held open for the full ~220s
+  window without logging in). See the tail of this session's testing
+  for the result.
+
+### Process-hygiene lesson from this session, worth recording for future majik4 (or similarly protocol-scripted) testing
+
+Because this lib's client is a custom raw-socket protocol rather than
+telnet, testing it requires a purpose-built persistent-connection
+helper (no `tmux_mud.sh`/`mudclient.py` equivalent exists for this
+frame format). A naive re-launch-on-every-step pattern against a
+shared FIFO+log-file pair, without first confirming the PREVIOUS
+background client process actually exited, produced multiple
+concurrent Python processes all reading the same FIFO and writing the
+same log file at once -- non-deterministic which process consumed
+which directive, and login attempts for the same character name
+racing each other in ways that produced confusing, hard-to-attribute
+symptoms (a "stuck" login, an unexpected second name-prompt). Always
+verify exactly one session process exists (`pgrep -af
+<script-name>`) immediately after launching a new one, before sending
+any further directives, and `pkill -9` any stragglers before starting
+a fresh session against the same character.
