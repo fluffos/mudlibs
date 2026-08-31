@@ -97,6 +97,21 @@ are unreachable/dead content (see "Not fixed" section).
    its output keys instead of crashing. Not reachable via normal play;
    flagged here for a future pass if `area_server`'s admin tooling ever
    gets tested directly.
+   **Upstream disposition (2026-08-31, fluffos-org-PR-queue audit)**: no
+   genuine upstream-worthy fix — this entire item (cmd_d/quest_d/
+   spell_d/troop_type_d's `[0..<3]`↔`[<2..]` slice bounds, plus the
+   unfixed `area_server.lpc` instance) is an artifact of THIS
+   collection's own blanket `.c`→`.lpc` rename; upstream's original
+   files still end in the 2-char `.c` extension, so the original
+   `[0..<3]`/`[<2..]` slice bounds are already correct there. Not
+   ported.
+**Upstream disposition (2026-08-31)**: items 2–10 below (compile-blocking
+type/scope/grammar bugs) and the `cmds/player/help.lpc` trailing-newline
+fix further down were filed upstream as
+[fluffos/sanguozhi#1](https://github.com/fluffos/sanguozhi/pull/1),
+confirmed present byte-for-byte in a fresh clone and not already fixed
+independently upstream.
+
 2. **`cmds/player/tell.lpc` / `cmds/player/stell.lpc`**: `string muds;`
    declared as a scalar but assigned `IMUD_D->query_up_muds()` (a
    `string *`) and passed straight into `find_best_match_or_complete()`
@@ -168,6 +183,10 @@ are unreachable/dead content (see "Not fixed" section).
     further since the object is unreachable from any room in `a/` or
     `sgdomain/` (confirmed via grep), so it's dead content, not a live
     bug. Documented here in case it's ever wired into a room.
+    **Upstream disposition (2026-08-31)**: no genuine upstream-worthy
+    fix — the fix applied here is itself incomplete (further genuine
+    pre-existing bugs remain deeper in the file, past line 183), and
+    the object is confirmed unreachable/dead content. Not ported.
 12. **The `set_defence_ablity`/`set_attack_ablity` misspelling (SEVERE,
     equipment-wide)**: 55-60+ files across `sgdomain/obj/weapon/*`,
     `sgdomain/obj/{ljtyjia,ljtyji}.lpc`, and several `wiz/*` personal
@@ -206,6 +225,18 @@ are unreachable/dead content (see "Not fixed" section).
     whose own `set_attack_ability` call is already commented out,
     untouched; also left the older, self-consistent, unreferenced
     `sgdomain/obj/dawanhorse.lpc` duplicate untouched).
+
+**Upstream disposition (2026-08-31)**: items 12 and 13 above (both
+equipment bugs) were filed upstream together as
+[fluffos/sanguozhi#2](https://github.com/fluffos/sanguozhi/pull/2).
+The upstream audit turned up 2 files this session's local sweep missed
+(`wiz/ljty/obj/ljtyjia.c` and `wiz/ljty/obj/ljtyji.c` — inherit
+`M_WEARABLE`/`M_WEAPON`, not `M_HORSE_1`, so they have the genuine
+typo bug too, not the self-consistent `M_HORSE_1` spelling; not
+re-checked against this collection's own converted `.lpc` tree, since
+neither is loaded by any live room/NPC here either way) and correctly
+excluded `sgdomain/obj/dawanhorse.lpc`'s sibling
+`wiz/ljty/obj/dawanhorse.lpc` (also self-consistent under `M_HORSE_1`).
 
 ## Not fixed (out of scope / unreachable / low value)
 
@@ -433,6 +464,12 @@ Files: `secure/user/sw_body.lpc` (bootstrap block), `secure/simul_efun/
 userfuncs.lpc` (`adminp()`). New AGENTS.md bug-class entry needed (not
 a prior-numbered pattern) — see the corpus doc.
 
+**Upstream disposition (2026-08-31)**: filed upstream as
+[fluffos/sanguozhi#3](https://github.com/fluffos/sanguozhi/pull/3),
+confirmed byte-for-byte present in a fresh clone (including the same
+`domains["Admin"]`-is-permanently-empty root cause) and not already
+fixed independently upstream.
+
 ### §7.121-class (int declared, float-literal arithmetic, no
 `to_int()`) — 19 confirmed instances across the entire `sgdomain/jimou/`
 national-warfare stratagem subsystem, plus 2 more in the 献帝/Emperor
@@ -507,6 +544,13 @@ already-corpus-confirmed pattern match per AGENTS.md §7.121's own
 clean `lpcc`/formatter passes, not a live repro. Flagged honestly as
 such rather than claimed as live-verified.
 
+**Upstream disposition (2026-08-31)**: filed upstream as
+[fluffos/sanguozhi#4](https://github.com/fluffos/sanguozhi/pull/4),
+confirmed byte-for-byte present in a fresh clone (all `kill`/`e_skill`/
+`damage` sink sites, `hunluan.lpc`'s `x`/`z` int-declared-with-float-
+initializer shape, and both `king.lpc` copies' `repd` reputation
+penalty), and not already fixed independently upstream.
+
 ### §7.118-class (`.c`→`.lpc` filename-slice-arithmetic leftovers) — 2
 new instances beyond the corpus already fixed at onboarding time
 
@@ -541,6 +585,15 @@ Every other trailing-newline check in this codebase
 uses the correct single-index idiom `str[<1] == '\n'` — confirming this
 was a typo, not an intentional different check. Fixed to match:
 `if(ret[<1]!='\n') ret+="\n";`.
+
+**Upstream disposition (2026-08-31)**: the `dir.lpc`/`doc_d.lpc` pair
+above is this collection's own `.c`→`.lpc` rename artifact — not
+upstream-worthy (upstream's original 2-char `.c` extension makes the
+original `[<2..]`/`[<2..<1]` slices correct as-is there). The
+`cmds/player/help.lpc` fix (a genuine pre-existing typo, independent
+of any extension rename) was filed upstream as part of
+[fluffos/sanguozhi#1](https://github.com/fluffos/sanguozhi/pull/1)
+(see the note at the top of the "Compile-sweep fixes" section above).
 
 ### Confirmed clean / not applicable (systematic grep sweep of every
 standing cross-cutting pattern requested for this pass)
