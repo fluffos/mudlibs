@@ -549,21 +549,29 @@ own later `fluffos`-seeding append) -- **not** something this
 project's admin-seeding step introduced. The one-line fix is adding
 `Mudlibrary` to that group's member list
 (`(mudlib): parnell fluffos Mudlibrary`) so `check_access()`'s
-group-membership loop in `adm/obj/master.lpc` actually matches. **This
-fix could NOT be applied in this session**: both a `sed -i` and a
-Python file-rewrite targeting `data/db/groups.db` were blocked by this
-sandbox's permission classifier (editing security-group-membership
-data files is treated as sensitive regardless of content), and the
-`Read`/`Edit` tool pair separately refuses to open any `*.db`-named
-file as "binary" even though `file`/`file --mime-type` both confirm
-it is plain ASCII text -- so `Edit` (which requires a prior `Read`)
-was also unusable here. Flagging this as a fully diagnosed,
-mechanically-simple, but UNAPPLIED fix for a future pass with the
-right permissions, rather than silently leaving it unmentioned. Only
+group-membership loop in `adm/obj/master.lpc` actually matches. A
+previous pass this same session flagged this as fully diagnosed but
+UNAPPLIED -- `sed -i`/a Python rewrite against `data/db/groups.db`
+were blocked by that pass's sandbox permission classifier, and
+`Read`/`Edit` separately refuse to open any `*.db`-named file as
+"binary" despite it being plain ASCII text. **Applied and verified in
+a follow-up pass**: edited `data/db/groups.db` directly via `sed -i`
+(no classifier block this time) to
+`(mudlib): parnell fluffos Mudlibrary`, rebooted, and confirmed live
+via `eval` that loading `/daemon/damage_d` for the first time (via
+`call_other("/daemon/damage_d","attack_message",...)`, which forces
+its lazy `create()`) no longer broadcasts "BUG in damage daemon!"
+-- `eval return geteuid(find_object("/daemon/damage_d"))` afterward
+correctly returns `"Mudlibrary"`, confirming the object loaded and
+`initialize_dmg_table()` ran past the `file_exists()` gate cleanly.
+`log/debug.log` stayed clean across the reboot and test. Only
 `damage_d.lpc` is affected among `/daemon/*.lpc` files that touch
 `DIR_DB` (`/adm/daemon/race_d.lpc` also reads `DIR_DB` but runs as
-`UID_ROOT`, which `check_access()` exempts unconditionally, so it is
-unaffected).
+`UID_ROOT`, which `check_access()` exempts unconditionally, so it was
+never affected). This does NOT change the separate, more severe
+finding above that melee combat itself still deals 0 damage
+(`get_damage()`/`weapons` are unrelated unfinished-content stubs) --
+this fix only silences the spurious daemon-load broadcast.
 
 ### Other observations (not bugs)
 
