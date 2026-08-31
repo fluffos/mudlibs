@@ -290,3 +290,67 @@ dialect gaps, and `file_name()`'s leading-slash convention.)
    "just character N" will silently get the "rest of string" 2-arg
    behavior instead. Fix per call site (rewrite with direct range
    slicing, e.g. `str[N..N]`), not in the shared shim.
+
+## 8. §10.7 deep functional test (2026-08-31) -- verified clean
+
+Full continuous-session playthrough on the native driver (port
+40263), well beyond §5's original registration/look/move/score/quit
+pass: fresh registration -> walked all four green-lawn rooms in a
+full loop (north/south/east/west, confirming every room's own
+exit/hedge description text matches its actual position rather than
+just testing one hop) -> three `obj/soul.lpc` emote commands
+(`smile`, `dance`, `giggle`, `applaud`, all producing correct
+first-person + emote text) -> `take knife` -> `wield knife` (correctly
+updated both `inventory`'s display, "A knife (wielded)", and
+`score`'s skill line, "hands fighting" -> "knife fighting") -> `quit`
+(clean save) -> reconnect after a real gap (password accepted
+silently, matching the archive's own "no confirmation" registration
+flow) -> `score`/`i` confirming persisted stats/age but empty
+inventory. Also spot-checked several of `basic/player/wiz.lpc`'s
+always-available wizard commands (`pwd`, `ls`, `Goto <path>`) since
+this archive's own documented "no untrusted-wizard threat model"
+design (§3) grants them to every player unconditionally -- `Goto
+/room/start1` worked correctly (teleport + room re-description). Ran
+a 200s WASM `scripts/wasm_boot_watch.sh lplib8 200` long-sit
+afterward.
+
+**Confirmed intentional, not a bug**: a fresh reconnect loses the
+picked-up/wielded knife and reverts the skill display to "hands
+fighting" -- `players/<letter>/<name>.o`'s actual save schema (already
+documented in §5) only ever contained `names`/`gender`/`hp`/`stats`/
+`player_name`/`current_path`/`skill_structure`/`player_age`; carried
+items were never part of what gets saved in the first place. No error
+signature anywhere, consistent scope both before and after this
+session's testing -- documented per the "no error signature = design"
+standard rather than "fixed."
+
+**One genuine gap found, but confirmed out of scope (author's own
+demo/scratch content, not reachable by an ordinary player)**:
+`Goto /w/lars/castle` failed ("You remain where you are.") while
+`Goto` against any real room worked correctly. Root cause: every real
+room inherits `/complex/room` -> `/basic/container` (which provides
+`receive_objects()`/`add_encumbrance()`, both required by
+`basic/move.lpc`'s own `move()` for ANY destination); `w/lars/
+castle.lpc` -- Lars's own "It is really only an example of how to make
+a castle" demo file, explicitly never placed in any real room's exits
+and never referenced anywhere else in the archive (confirmed by
+grep) -- only inherits `/basic/move` + `/basic/id`, never
+`/basic/container`, so `dest->receive_objects()` silently calls an
+undefined function (returns 0, no error) and `move()` always returns
+`MOVE_NOT_ALLOWED` for it. Since this object is unreachable through
+ordinary play (no room links to it; even the wizard-only `Goto`
+command can't successfully target it) and sits in the same `/w/lars/`
+personal-scratch directory already flagged for `w/lars/yy.lpc`'s
+literal garbage code (§4) -- the established pattern for this
+specific author's demo content across every sibling archive this
+session (`basis`'s `obj/quicktyper.lpc`, `lpmud245`'s `players/lars/
+test.lpc`) -- left unmodified rather than "fixed" by adding an inherit
+whose only effect would be making an already-undocumented, unlinked
+demo object slightly more functional.
+
+### Regression check
+
+Zero errors in the driver's own captured stdout across the full
+session (native builds' `debug.log` is dead for the process's whole
+life per AGENTS.md §10.9, so stdout is the only reliable error
+channel) and the WASM boot watch transcript.
