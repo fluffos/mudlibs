@@ -718,3 +718,40 @@ exact PID when done.
 
 Source pattern for all four checks: `ds386/NOTES.md`'s "Deep
 functional test (round two, 2026-08-27)" section.
+
+## Sibling sweep: `become <class>` SetClass -> ChangeClass fix (2026-09-01)
+
+Ported the fix from `riftsds` (AGENTS.md §7.195/§7.196; commit
+`11216f003b1`) -- see `ds386/NOTES.md`'s identical write-up (same
+session, same batch) for the full bug mechanism. Summary: the stock
+Dead Souls "Praxis" demo guild-join rooms called `SetClass()` directly
+instead of `ChangeClass()`, so the multi-class privilege gate
+(`high_mortalp()`, which excludes creators too) always silently
+rejected a fresh explorer's first class despite a success message
+printing.
+
+**Confirmed present here**, byte-identical to `ds386`/`riftsds`'s
+pre-fix files: all six `domains/Praxis/*_join.lpc` files called
+`SetClass()`; `secure/include/compat.h` was missing the same three
+`query_name`/`query_cap_name`/`query_gender` mappings.
+
+**Fix applied**: six `SetClass()` -> `ChangeClass()` edits, three
+`compat.h` accessor lines added -- identical to `ds386`.
+
+**Live-verified** with the seeded `fluffos` admin (`Class` reset to
+`"explorer"` via `eval` between attempts, to force the exact
+creator-excluded-from-`high_mortalp()` scenario the bug hits):
+`become fighter`/`become cleric`/`become mage` all now print the real
+success text and `score` confirms the genuine class change ("You are
+a level 1 Human Fighter"/"Cleric"/"Mage"). `become monk`/`kataan`/
+`rogue` do not work, but this is the identical pre-existing,
+shared-lineage missing-class-data gap documented in `ds386/NOTES.md`
+(`secure/cfg/classes/` here also only ships `explorer`/`fighter`/
+`mage`/`cleric`/`thief` -- confirmed, same as `riftsds` and `ds386`),
+not a regression or a miss in this fix.
+
+Committed only the six join-file fixes and the three `compat.h`
+mappings; incidental save-file churn from this session's boot (seeded
+`fluffos` admin's `Class` field, player list, mudinfo, snoop, preload
+saves, RELEASE_NOTES_HTTP refetch) was left uncommitted. Killed the
+test driver by exact PID when done.
