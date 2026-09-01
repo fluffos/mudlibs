@@ -1,8 +1,8 @@
 # Lima
 
 FluffOS 驱动项目自己维护的官方参考 mudlib（源码：
-<https://github.com/fluffos/lima>，官网 <https://limalib.dev>）。**这不是
-一款武侠/仙侠游戏**——和本项目收录的其它中文 mudlib 不是同一个宗谱，
+<https://github.com/fluffos/lima>，官网 <https://limalib.dev>）。这不是
+一款武侠/仙侠游戏——和本项目收录的其它中文 mudlib 不是同一个宗谱，
 是一个独立的、英文的、面向开发者的现代 LPC 框架，收录进本项目是作为
 "当代 FluffOS mudlib 长什么样"的参照样本。
 
@@ -44,8 +44,12 @@ cd libs/lima
 （如果 `~/src/fluffos-lima` 不存在，`NOTES.md` 里有完整的重建步骤，
 一次性编译大约 5-10 分钟。）
 
-游戏端口：**40212**。当前只验证了原生（native）驱动，WASM 通道未构建
-（需要同样的专用开关叠加 `emcmake` 构建，留作未来工作）。
+游戏端口：**40212**。原生（native）驱动已验证；专用 WASM 驱动
+（同样的开关叠加 `emcmake` 构建）也已经建出来并验证 mudlib 内容本身
+完全可玩，但站点部署用的是全项目唯一一份共享 WASM 驱动、没有
+per-lib 驱动覆盖机制，lima 自己的 `secure/check_config.lpc` 在共享
+驱动上仍会编译期报错中止——所以 `wasm_status` 记为 `noboot`（内容层
+没问题，卡在站点基础设施上），详见 `NOTES.md`「wasm_status 审计」。
 
 ## 本地运行
 

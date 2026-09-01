@@ -81,11 +81,112 @@ AGENTS.md §7.46 早先记录过一个结论："基于 LIMA 代码库的 mudlib 
 如果这台机器/这个 checkout 丢失了要重新按上面步骤建一次——大概 5-10
 分钟的一次性编译，之后复用。
 
-WASM 状态标为 `partial (native only)`：要让这个 lib 在浏览器里跑，
+WASM 状态当时标为 `partial (native only)`：要让这个 lib 在浏览器里跑，
 还需要在 `emcmake cmake --preset wasm` 的基础上叠加同样的
 `local_options`/`PACKAGE_UIDS=OFF` 改动，构建一个专用的 wasm 驱动——
 留作未来工作，这次 session 的任务范围（见协调者的原始指令）没有要求
-WASM 通道。
+WASM 通道。（2026-09-01 更新：这个专用 wasm 驱动后来真的建出来了、
+且验证可用——见下方「wasm_status 审计」一节。`partial` 本身也不是这个
+项目 `wasm_status` 枚举里的合法值之一，`scripts/gen_site_index.py` 的
+`EXCLUDE_STATUSES` 把它当"deliberately deprioritized, e.g. ds386"处理
+而不是"boots but WASM未验证"——当时这样写等于把这个 lib 从站点彻底
+排除，而不是标成"限制"，这正是本次审计要修的那类 `wasm_status` 误标。）
+
+## wasm_status 审计（2026-09-01）：专用 WASM 驱动建成、但站点基础设施还接不上
+
+之前 `meta.json` 的 `wasm_status` 一直留空——本节记录 2026-09-01 那次
+批量审计（[[project_wasm_status_audit]]）对这个 lib 的完整调查过程和
+最终结论：**`noboot`**（不是 `playable`，原因见下）。
+
+### 专用 WASM 驱动：编译成功，mudlib 本身完全可玩
+
+复用已有的 `~/src/fluffos-lima`（git worktree，`src/local_options` 已经
+按上面的六项要求改好）：
+
+```
+cd ~/src/fluffos-lima
+source ~/src/emsdk/emsdk_env.sh
+cmake --preset native-tools && cmake --build --preset native-tools -- -j8
+emcmake cmake --preset wasm -DPACKAGE_UIDS=OFF
+cmake --build --preset wasm -- -j8
+```
+
+（`/opt/wasm-deps` 下的 ICU/zlib 已经是全项目共享、编译好的，不需要
+重新跑 `tools/wasm/build-deps.sh`。）一次性编译成功，产出
+`~/src/fluffos-lima/build-wasm/src/{fluffos.js,fluffos.wasm}`。
+
+第一次用 `scripts/wasm_client.js` 起跑立即命中和 `ds386`/`dsII`/`dsIII`
+同一类"sockets 包缺失导致 simul_efun 编译失败"的 bug（AGENTS.md §1.3(c)
+那一类，这次是首次在 lima 自身代码里发现，而不是三国/西游同人 mudlib
+里的变体）：`secure/simul_efun/misc.lpc` 的 `dump_socket_status()`
+无条件调用 `socket_status()`——这个 efun 只在编译了 `sockets` 包的
+驱动上存在（WASM 构建默认不带 `sockets` 包，浏览器沙箱里没有真实
+socket 的语义），所以这不只是运行时缺失，而是**编译期就报
+"Undefined function socket_status"**，导致整个 `secure/simul_efun`
+编译失败（`*No program in object '/secure/simul_efun/misc'!`），
+驱动直接拒绝启动（"The simul_efun ... and master ... objects must be
+loadable"）。修复（`#ifdef __PACKAGE_SOCKETS__` 包一层，没有这个包时
+退化成返回空字符串，和 ds386 已有的同类修复手法一致）：
+
+```lpc
+string dump_socket_status()
+{
+#ifdef __PACKAGE_SOCKETS__
+    ... (原有实现，逐行不变) ...
+#else
+    return "";
+#endif
+}
+```
+
+修复后用 `wasm_client.js` 完整跑通一次真实会话：`fluffos`/`Mud@2026`
+登录 → 用户菜单等到 auto-login 10 秒倒计时自动进入游戏（也可以直接
+输入 `p` 跳过倒计时）→ 落地 Grand Hall → `score` 显示完整的属性/
+经验/负重面板 → `quit` 干净退出（"You have left Lima Mud."），全程
+`driver_stdout.log` 无一条运行期错误。**这套 mudlib 内容本身在专用
+WASM 驱动上是完全可玩的**——之前 README 写的"WASM 通道未构建"这句话
+现在已经不成立了，专用驱动确实建出来了且验证通过。
+
+原生驱动（`~/src/fluffos-lima/build-debug/src/driver`）用同样的
+`fluffos`/`Mud@2026` 账号复测，无回归。
+
+### 但站点实际部署用的是唯一一份共享驱动，这个专用驱动接不进去
+
+问题出在这个项目的站点打包管线，不在 lima 自己身上：
+`scripts/pack_lib_for_web.sh` 把每个 lib 打包进站点时，`play.html`
+里的驱动脚本引用是写死的相对路径 `../_driver/fluffos.js`——`_driver/`
+是整个站点**唯一一份**共享的 WASM 驱动产物（来自
+`~/src/fluffos/build-wasm`），所有 ~240 个 lib 共用同一份二进制，
+没有任何"这个 lib 用另一份驱动"的每-lib 覆盖机制（`build_site.sh`/
+`pack_lib_for_web.sh` 通读一遍，找不到任何 per-lib driver 路径参数）。
+
+`secure/check_config.lpc` 的六项检查（`NO_LIGHT`/`NO_ADD_ACTION`/
+`NO_WIZARDS`/`OLD_ED`/`PACKAGE_UIDS`）在**任何**驱动上、在 `create()`
+里都会无条件跑一遍，不分 native 还是 WASM——用共享站点驱动（没有按
+lima 的要求编译）跑 lima，这个检查一定会 `error()` 掉，跟本地这次
+用专用驱动之前遇到的、AGENTS.md §7.46 记录的"驱动编译选项冲突"是
+同一个错误。也就是说：即使这次把专用 WASM 驱动建出来了，**部署到
+mudlibs.fluffos.info 上的那份 lima 实际上还是会用共享驱动去启动，
+一样会在 simul_efun 编译期报错中止**——`wasm_status: playable` 会是
+一句谎言，不代表访客点开这个 lib 的页面真的能玩。
+
+### 结论：`wasm_status` 设为 `noboot`
+
+按审计任务给出的定义（"noboot: 即使 native 能跑，WASM 下也跑不
+起来"）——这里的"WASM"应该理解成"这个项目实际部署的 WASM 环境"，也就是
+共享驱动，而不是"技术上存在某种 WASM 驱动配置能跑"。专用驱动的存在
+证明了 mudlib 内容层不是问题，问题完全在站点基础设施的"一份驱动打包
+所有 lib"这个假设上，这已经超出本次审计（"修正个别 lib 的
+wasm_status 字段"）的范围，属于一次单独的站点管线改造工作（给
+`pack_lib_for_web.sh`/`build_site.sh` 加一个 per-lib 驱动目录覆盖
+参数，再单独为 lima 归档 `~/src/fluffos-lima/build-wasm` 的产物）。
+把这个专用驱动的完整构建步骤记在上面，方便未来那次改造直接复用，
+不用重新摸索 `check_config.lpc` 的六项要求或重新踩一遍
+`__PACKAGE_SOCKETS__` 这个坑。
+
+`secure/simul_efun/misc.lpc` 的这处修复本身不依赖站点基础设施，已经
+提交进 `libs/lima/work/`——不管未来站点管线怎么改，这个修复都是
+必需的前置条件，先做掉不亏。
 
 ## 转换步骤（对照 AGENTS.md §2/§2.3）
 
