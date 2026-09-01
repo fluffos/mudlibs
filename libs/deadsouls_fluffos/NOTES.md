@@ -407,3 +407,5 @@ in `Qtestfixdfx`'s own realm was deleted before commit (matching the
 already-committed convention for `Qintestdfx`/`Qintestdsf`, whose own
 same-named scratch files were untouched). Killed the test driver by
 exact PID when done.
+
+Confirmed present byte-identical in a fresh clone of `github.com/fluffos/dead-souls` (current `master`, commit `4ddbd3b`, i.e. still un-fixed after PRs #12-16): all six `lib/domains/Praxis/*_join.c` files call `SetClass()`, and `secure/include/compat.h` is missing the same three `query_name`/`query_cap_name`/`query_gender` mappings (confirmed these resolve via `global.h`'s `COMPAT_MODE`-gated auto-`#include <compat.h>` in every object, and that `GetName`/`GetCapName`/`GetGender` already exist as real accessors on `player.c`/`race.c`, so the mapping is a pure omission). Filed upstream as **PR https://github.com/fluffos/dead-souls/pull/17**.
