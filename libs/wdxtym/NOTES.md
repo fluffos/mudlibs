@@ -270,3 +270,22 @@ NPC 商店的价格扣除/发货流程是同一套只是货币类型不同）：
 来就不受影响）。帮派任务未触达，留给下一轮。测试账号
 （`qintest01`~`qintest11`）存档留在 `data/` 下，未跟踪，未清理，不纳
 入本次提交。
+
+## §7.19 enable_player() reentrancy fix (2026-09-01)
+
+Corpus-wide mechanical fix (AGENTS.md §7.19, Batch F of 6). Originally
+flagged as a possible false positive (pre-existing `nosave int enabled = 0;`
+flag in `feature/command.lpc`, the shape confirmed sufficient on
+`xiaoyuxiyou`/`xyxyutf8`/`xyxy2` in earlier batches) -- but this is NOT the
+safe shape: `enabled = 1` is set AFTER `enable_commands()` returns here, not
+before, so it does not guard the synchronous reentrant
+`init()`->`setup()`->`enable_player()` call that happens DURING
+`enable_commands()` (per AGENTS.md §7.19 and the driver docs). Confirmed the
+reachable chain is real via the `d/shushan/npc/zhangmen.lpc` family
+(`init()` unconditionally calls `me->setup()` -> `enable_player()`), and
+`feature/damage.lpc`'s `revive()`/`cmds/std/sleep.lpc`'s `wakeup()`
+re-invoke `enable_player()` while already `living()`, ruling out a bare
+`living()` guard. Fixed by adding a true `in_enable_player_now` reentrancy
+flag alongside the existing `enabled` bookkeeping variable (left untouched,
+`disable_player()` still needs it). Verified via single-file `lpcc --batch`
+PASS.
