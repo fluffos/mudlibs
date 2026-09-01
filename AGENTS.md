@@ -14666,6 +14666,24 @@ suggests it was meant to cover, not just the ones an initial pass
 happened to test, and check whether the shim's list is a strict subset
 of the calls actually made anywhere in the tree.
 
+**Update (2026-09-01): §7.195/§7.196 sibling sweep CLOSED.** Ported
+both fixes to all 4 flagged sibling libs — `ds386`, `dsIII`,
+`dshakkard`, `deadsouls_fluffos` — each got the identical six
+`SetClass()` -> `ChangeClass()` join-file edits plus the three
+`compat.h` accessor lines, live-verified per-lib with a seeded/fresh
+creator account (`become fighter`/`cleric`/`mage` all confirmed via
+`score`/`skills` showing the real class + skill grant, not just the
+success message). `become monk`/`kataan`/`rogue` do NOT work on any of
+the 4 (nor on `riftsds` itself, checked for comparison) — a separate,
+pre-existing content gap: `secure/cfg/classes/` across this whole
+lineage only ships `explorer`/`fighter`/`mage`/`cleric`/`thief` class
+data, so `CLASSES_D->SetClass()` returns no match for `monk`/`kataan`/
+`rogue` regardless of which entry function calls it (and `rogue_join`'s
+`become("rogue")` doesn't even match the shipped `thief` class name
+anyway). Not fixed — would mean authoring three new balanced classes
+from scratch, out of scope per this project's "don't invent content"
+policy. See each lib's own `NOTES.md` for the full per-lib write-up.
+
 ---
 
 ### 7.197 A generic "wizard toolkit" mixin inherited directly into the player class can define its own vestigial `id()`/`short()`/`long()` (leftovers from when it was a standalone clonable item) that silently shadows the player's REAL identity function via this driver's multiple-inheritance name resolution — breaking every `present()`-based lookup of that player by name, archive-wide

@@ -873,3 +873,71 @@ refetch) reverted/removed before commit, keeping only the seeded
 `fluffos` admin account and the four genuine source fixes
 (`lib/std/room.lpc`, `lib/combat.lpc`, `lib/player.lpc`,
 `domains/town/npc/beggar.lpc`).
+
+## Sibling sweep: `become <class>` SetClass -> ChangeClass fix (2026-09-01)
+
+Ported the fix from `riftsds` (AGENTS.md §7.195/§7.196; commit
+`11216f003b1`): the stock Dead Souls "Praxis" demo guild-join rooms
+call `this_player()->SetClass(class)` directly, but a fresh
+`explorer` character's first class assignment must go through
+`ChangeClass(class)` instead -- `SetClass()` alone treats any
+existing non-empty `Class` (every player starts as `"explorer"`,
+which is truthy) as a **multi-class** request, gated behind
+`high_mortalp()` (a non-creator player above level 24; `creatorp()`
+accounts are explicitly excluded from `high_mortalp()` too, so not
+even an admin test account can pass). `ChangeClass()` zeroes `Class`
+first specifically to bypass that gate for a legitimate first-class
+assignment. The bug is invisible in play: `become()` always prints
+its success flavor text *before* the doomed `SetClass()` call, so the
+player sees an apparent success message while `score`/`skills`
+afterward silently still show `Explorer` with none of the class's
+real skills.
+
+**Confirmed present here** (byte-identical to `riftsds`'s pre-fix
+files): all six `domains/Praxis/{fighter,cleric,mage,monk,kataan,
+rogue}_join.lpc` called `SetClass()`; this lib's own working
+`domains/town/npc/herkimer.lpc` (Mage's Guild join) already correctly
+calls `ChangeClass()`, confirming this is a wrong-call bug and not a
+design choice. `secure/include/compat.h` was also missing the same
+three accessor mappings riftsds's shim was missing:
+`query_name`/`query_cap_name`/`query_gender` -> `GetName`/
+`GetCapName`/`GetGender` (needed by the same bulk-imported Praxis
+content, e.g. `query_cap_name()` calls inside `say()` broadcasts that
+silently reach no one when undefined).
+
+**Fix applied**: switched all six join files' `SetClass(class)` calls
+to `ChangeClass(class)`; added the three missing `compat.h` lines.
+
+**Live-verified** with the seeded `fluffos` admin (resetting `Class`
+to `"explorer"` via `eval` between each attempt, since `high_mortalp()`
+excludes creators too -- the exact scenario the bug hits): `become
+fighter`/`become cleric`/`become mage` each now print the real success
+flavor text, and `score`/`skills` immediately afterward confirm the
+genuine class change (e.g. "You are a level 1 Human Fighter" plus a
+real fighter skill list, not the pre-fix "Explorer"/no-skills state).
+
+`become monk`/`become kataan`/`become rogue` do **not** work here --
+but this is a separate, pre-existing content gap, not a regression or
+a miss in this fix: `secure/cfg/classes/` on this lib (and on
+`riftsds` itself, checked for comparison) only ships class-definition
+files for `explorer`/`fighter`/`mage`/`cleric`/`thief` -- there is no
+`monk`, `kataan`, or `rogue` class data anywhere, and the `rogue_join`
+room's `become("rogue")` doesn't even match the shipped `thief` class
+name. `CLASSES_D->SetClass()` returns an empty args list for any
+unrecognized class name, so `SetClass`/`ChangeClass` both correctly
+no-op regardless of which one is called -- confirmed via `eval
+this_player()->GetClass()` returning `0` immediately after a "become
+monk" attempt that had already printed its (equally misleading) success
+flavor text. Since `riftsds` itself ships the identical missing-class
+gap, this is inherited stock-content incompleteness common to the
+whole Dead-Souls-lineage "Praxis" demo, not something introduced or
+fixable by this SetClass/ChangeClass port -- left as-is per this
+project's standing "don't invent content" policy.
+
+Committed only the six join-file fixes and the three `compat.h`
+mappings; all incidental save-file churn from this session's boot
+(seeded `fluffos` admin's `Class` field, player list, mudinfo, snoop,
+preload class/race/soul/economy/events/intermud/stargate/unique/voting
+saves, RELEASE_NOTES_HTTP refetch, throwaway `Fighttest`/`guest`
+character churn) was left uncommitted. Killed the test driver by exact
+PID when done.

@@ -64,7 +64,7 @@ int become(string str) {
     }
     write("The High Priestess of Clerics initiates you into the class of clerics.");
     say(this_player()->query_cap_name()+" becomes a cleric.", this_player());
-    this_player()->SetClass("cleric");
+    this_player()->ChangeClass("cleric");
     this_player()->setenv("TITLE", "$N the novice cleric");
     this_player()->init_skills("cleric");
     this_player()->setenv("start", "/domains/Praxis/cleric_hall");

@@ -70,7 +70,7 @@ int become(string str) {
     }
     write("The Grand Master Rogue initiates you into the class of rogues.");
     say(this_player()->query_cap_name()+" becomes a rogue.", this_player());
-    this_player()->SetClass("rogue");
+    this_player()->ChangeClass("rogue");
     this_player()->setenv("TITLE", "$N the novice rogue");
     this_player()->init_skills("rogue");
     this_player()->setenv("start", "/domains/Praxis/rogue_hall");
