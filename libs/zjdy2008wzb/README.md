@@ -1,12 +1,6 @@
 # 终极地狱2008完整版 (zjdy2008wzb)
 
-《终极地狱2008完整版》（REVIVE OF ULTRA HELL(BLOOD & MAGIC) FROM
-1999.11.13，CDS 出品）。和本次会话已经处理过的 `hell` 档案是同一
-个 Doing 血统的家族，`master.lpc`/`logind.lpc`/`named.lpc`/
-`versiond.lpc` 的结构几乎逐行一致。注册流程为英文 ID → 中文姓氏 →
-中文名字 → 管理密码 + 确认 → 登陆密码 + 确认 → 角色类型菜单
-（1-5）→ 性别。这份档案的提示行有实时时钟，测试时用了
-`--idle 0.3`。
+《终极地狱2008完整版》（REVIVE OF ULTRA HELL(BLOOD & MAGIC) FROM 1999.11.13，CDS 出品）是本项目"地狱"/Doing 血统六件套之一——与 `hell`、`zjdyaryl`、`zjdywzb`、`zjdyzj`、`zjmudhell` 共享同一个门派江湖世界，逐字节地图比对显示彼此高度重合（与 `hell` 约 88% 一致，与 `zjdyaryl` 高达 95%、与 `zjdyzj` 约 90%，与 `zjdywzb`、`zjmudhell` 则更疏远、约 76%），是同一份原作世界的六个快照/变体而非各自独立设计；本版特色是注册时姓氏、名字分开输入并附 1-5 号角色类型菜单，新角色从"世外桃源"而非常见的南城客栈开局，门派地图除少林、武当、峨嵋、丐帮、明教外，还有呼应金庸原著兵器/门派的"屠龙"、"血刀"场景。
 
 ## 内容亮点
 
