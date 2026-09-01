@@ -1193,3 +1193,24 @@ bugs). Save-file churn only: `work/data/{login,user}/{f/fluffos,q/
 qinfengw}.o` (admin coin-clone + `qinfengw`'s new sect membership/
 inventory), `work/tmp/tmp_eval.lpc` (routine `eval`-command scratch
 file, already tracked from prior passes).
+
+## AGENTS.md §7.19 fix: enable_player() reentrancy from init()
+
+`feature/command.lpc`'s `enable_player()` (wrapper around
+`enable_commands()`) was reachable from an NPC's `init()`: the shared
+`inherit/char/char.lpc` `setup()` (called from every character's
+`create()`) itself calls `enable_player()`, and `d/zhongnan/npc/killer.lpc`
+redundantly calls `setup()` again from inside its own `init()` (on top
+of the `setup()` its `create()` already made) -- same shape as the
+originally-documented mhxy `zhangmen.lpc` case. `enable_commands()` is
+only safe to call from `create()`: calling it again on an object
+already `living()` makes the driver re-invoke that same object's
+`init()` as a side effect, which recurses back into `enable_player()`
+on the same call stack until "Too deep recursion" aborts the boot on
+a room's first-ever visit. Fixed with a true reentrancy flag
+(`in_enable_player_now`), NOT a `living()` guard (which would break
+legitimate re-enables from `revive()` in `feature/damage.lpc` and
+`wakeup()`/`wakeup2()` in `cmds/std/sleep.lpc`, both confirmed to
+re-invoke `enable_player()` on this lib while the object is still
+`living()`). Verified via `lpcc --batch` single-file compile check
+(PASS). Part of the corpus-wide §7.19 sweep (Batch E).
