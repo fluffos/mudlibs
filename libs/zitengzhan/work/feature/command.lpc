@@ -116,9 +116,35 @@ int force_me(string cmd) {
   return command(this_object()->process_input(cmd));
 }
 
+nosave private int in_enable_player_now;
+
 nomask void enable_player() {
   object env;
   object me = this_object();
+
+  // AGENTS.md sec.7.19: enable_commands() is only safe to call from
+  // create() -- calling it again on an object that is already living()
+  // makes the driver re-invoke that same object's init() as a side
+  // effect, and if init() (directly or via a setup() chain) calls back
+  // into enable_player(), that re-invocation happens while the ORIGINAL
+  // init() call is still on the stack: genuine reentrancy, repeating
+  // until the call-depth limit aborts with "Too deep recursion." Guard
+  // here (the shared choke point) rather than at every call site.
+  //
+  // IMPORTANT: this must be a true reentrancy flag, NOT `if
+  // (living(this_object())) return;` -- disable_player() (below) calls
+  // enable_commands() again internally right after disable_commands(),
+  // specifically so the object STAYS living() while "disabled" (its own
+  // comment: "so this object would be marked living again"). That means
+  // living() is already true across every legitimate disable/re-enable
+  // cycle this codebase uses (unconscious/revive via feature/damage.lpc,
+  // sleep/wakeup via cmds/std/sleep.lpc). A living()-gated guard would
+  // silently no-op those real re-enables while still blocking the one
+  // pathological case it was meant to catch. A dedicated flag that only
+  // guards true same-call-stack reentrancy has none of that collateral
+  // damage.
+  if (in_enable_player_now) return;
+  in_enable_player_now = 1;
 
   if (stringp(query("id"))) set_living_name(query("id"));
   else set_living_name(query("name"));
@@ -167,6 +193,7 @@ nomask void enable_player() {
     me->move(env);
   }
   //修复结束
+  in_enable_player_now = 0;
 }
 
 nomask void disable_player(string type) {
