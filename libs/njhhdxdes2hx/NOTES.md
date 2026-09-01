@@ -154,3 +154,99 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## §10.7 深度功能测试第二轮 (2026-09-01): 拜师/门派、店铺交易、邮件、§7.19 排查
+
+本轮刻意挑选上一轮（2026-08-04）明确跳过的角度：拜师/门派系统、真
+正的买卖交易（不只是被动观察 NPC），以及邮件系统；同时按 AGENTS.md
+§7.19 的形状专门排查这份档案是否有 NPC `init()` 里无条件呼叫
+`enable_player()`/`enable_commands()` 导致首次访问某房间时同一调用
+栈重入触发 "Too deep recursion" 的隐患。全程使用原生 Python socket
+脚本（未用 `scripts/tmux_mud.sh`），真实中文名字"周文"（id
+`wenzhouqi`）注册。
+
+**§7.19 静态排查（未发现漏洞）**：`feature/command.lpc::enable_player()`
+只从 `std/char.lpc::setup()`（NPC/玩家 `create()` 阶段调用一次）和
+`feature/damage.lpc::revive()`（合法的"昏迷→复活"重新启用流程，配对
+`disable_player()`）调用；`std/char/npc.lpc`本身不定义 `init()`，各
+NPC 自己的 `init()`（如 `herbalist.lpc`、`daemon/class/swordsman/
+master.lpc`）只做 `::init(); add_action(...)`，`::init()` 解析到
+`feature/attack.lpc` 的自动索敌逻辑，与 `enable_player()` 无关。本轮
+实际游玩中新访问了雪亭镇街道×3、淳风武馆大门/教练场/大厅、桑邻药
+铺、丰登当铺、谷物加工厂等多个"首次进入即有活体 NPC"的房间，
+`debug.log` 全程未出现任何 "Too deep recursion"。结论：这份档案目前
+没有 §7.19 的漏洞形状。
+
+**拜师/门派系统测试（此前完全未测试的角度）**：`cmds/std/
+apprentice.lpc`（`apprentice <目标>` 指令，档名即指令名）+
+`feature/apprentice.lpc`（`create_family`/`recruit_apprentice`/
+`is_apprentice_of` 等 dbase 逻辑）是全局挂在 `CHARACTER` 上的完整拜
+师机制。找到 `淳风武馆大厅`（`d/snow/schoolhall.lpc`）的
+`daemon/class/swordsman/master.lpc`（柳淳风，`封山剑派`）——这一支
+`attempt_apprentice()` 只检查 `cor`/`cps` 属性门槛，不需要额外任务
+道具，是本档案里最容易直接验证整条链路的一个。现场 `apprentice
+master` 一次性走完"表态拜师→师父直接 command 触发 recruit→
+`recruit_apprentice()` 写入 `family` dbase→称号/score 更新"全链路，
+`score` 正确显示"封山剑派第十四代弟子"、"你的师父是柳淳风"，
+`debug.log` 全程干净。也顺手验证了 `apprentice cancel`（无 pending
+时正确 notify_fail）。**结果：拜师系统工作正常，未发现 bug。**
+
+**店铺交易测试（买+当，此前只观察未交易）**：
+1. 桑邻药铺（`herbalist.lpc`，`F_VENDOR`/`feature/vendor.lpc`）：
+   `list` 指令正常列出六项商品及价目（`do_vendor_list()` 用
+   `goods[key]->query("value")` 这种"字符串路径当 call_other 目标"
+   的写法，现场确认能正常触发按需装载，不崩溃）；`buy 金疮药 from
+   yang` 因新角色身无分文被正确地 notify_fail "你的钱不够"，未崩
+   溃。
+2. 丰登当铺（`d/snow/hockshop.lpc` + `std/room/hockshop.lpc`）：
+   `value cloth`/`pawn cloth` 均因布衣一文不值被正确拒绝
+   （"布衣一文不值。"/"这样东西不值钱。"）；`pawn`（查询已当物品，
+   无参数）正确回报"你目前没有典当任何物品。"；`redeem 0`（赎回不
+   存在的当票）正确回报"你要取回什么物品？"。均是设计内的正常边
+   界拒绝，不是 bug。
+3. 安记钱庄（银行 `convert`/`cun`/`qu`/`check`）：无参数/无存款情
+   况下均返回正确的用法提示或"您在敝商号没有存钱。"，同样干净。
+两处商店的门（"红漆大门"/"店铺门"）默认关闭，需要先 `open door`
+才能进入——这是正常的房间机制，不是 bug（第一次不知道要开门时
+"east"会提示"你必须先把...打开！"，行为符合预期）。
+
+**邮件系统检查（结果：未对玩家开放，非 bug）**：`obj/mailbox.lpc`、
+`obj/misc/mailbox.lpc`、`adm/daemons/network/mail_serv.lpc` 等邮件基
+础设施文件存在，但全档案 `cmds/` 下没有任何 `mail` 指令文件，
+`d/` 下也没有任何房间把 mailbox 对象放进 `"objects"`。也就是说邮件
+系统从未真正连接到玩家可用的指令或场景——这是内容/部署缺口，不在
+本项目"只修程序 bug"的范围内，如实记录，不动它。
+
+**发现并修复一处真实 bug（AGENTS.md §7.11 同型，第 N+1 例）**：用
+`(admin)` 权限的 `call` 指令（`cmds/arch/call.lpc`）对在线玩家对象
+执行 `call wenzhouqi->add_money(coin,1000)`（用来给测试角色发钱，
+以便完整走一次购买流程）时，驱动直接报出未捕获运行时错误：
+
+```
+执行时段错误：*Wrong permissions for opening file /log/nosave/CALL_PLAYER for append.
+"No such file or directory"
+```
+
+根因：`call.lpc` 每次对另一个玩家对象执行 call 都会无条件
+`log_file("nosave/CALL_PLAYER", ...)` 记审计日志，而
+`adm/simul_efun/file.lpc::log_file()` 是裸 `write_file(LOG_DIR +
+file, text)`，完全没有调用同文件里紧接着定义的 `assure_file()`
+——`/log/nosave/` 这个目录本来就没有随档案打包，第一次真正命中这
+条日志路径时必然崩溃。这正是 AGENTS.md §7.11（"Missing runtime
+directories and the silent write_file abort"）已经归档的经典形状
+（`zjmudhell`/`xajh2`/等多个不相关血统都独立踩过一样的坑），只是
+这次的触发点是 `call` 指令自己的审计日志，不是 registration 流程。
+按 §7.11 的标准修法在共享的 `log_file()` 里补上
+`assure_file(LOG_DIR + file);`——由于 `assure_file()` 在文件里定义
+在 `log_file()` 后面，作为 simul_efun 单文件内的前向引用需要一个
+函数原型声明，否则编译报 "Undefined function assure_file"（已加
+`void assure_file(string file);` 原型声明一并解决）。修复后重启驱
+动，用两个并发连线（测试角色在线 + admin 连线）重放同一条 `call`
+指令，确认 `add_money("coin", 1000) = 0` 正常返回、`log/
+nosave/CALL_PLAYER` 被成功创建并写入、`debug.log` 全程干净。
+
+**改动文件**：`work/adm/simul_efun/file.lpc`（2 行改动：`log_file()`
+内加 `assure_file()` 调用 + 文件顶部加前向原型声明）。测试角色存档
+（`data/{login,user}/{w/wenzhouqi,z/zhouwen}.o`，后者是命名规则试
+错留下的半成品）保持未跟踪；`data/{login,user}/f/fluffos.o` 的
+admin 登入时间戳漂移已在提交前用 `git checkout --` 撤销。
