@@ -246,3 +246,181 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## §10.7 deep functional test, round three (2026-09-01): genuine two-account multiplayer nation testing
+
+This pass deliberately covered the angles the two prior passes explicitly
+left untested: a SECOND real player account interacting with the king
+account inside the nation system (`appoint`/`teleport`/`fire`), currency
+persistence across a real `quit`+reconnect, adversarial/malformed
+kingdom-system input, and a real board `post`. Standing admin account
+`fluffos`/`Mud@2026` played the king; a brand-new throwaway account
+`xiaolong`/`王小龙` (deleted afterward, not committed) played the
+citizen/minister. Native driver on port 40122, driven via a two-socket
+Python script (not committed, scratch-only), `debug.log` checked after
+every state-changing command.
+
+**Two real bugs found and fixed, both verified live:**
+
+- **§7.11 instance (missing `/log/nosave/` directory): `adm/simul_efun/
+  file.lpc`'s `log_file()` was the exact same "unguarded `write_file()`
+  sitting next to its own already-correct, unused `assure_file()`
+  helper" shape documented dozens of times elsewhere in AGENTS.md §7.11.**
+  Live-triggered on the very first wizard `call` targeting the second
+  player (`call xiaolong->move("/open/ceshitwo/kingdom.lpc")`, used to
+  physically place the second account into the orphan throne room since
+  no walkable exit reaches it — see round-four's notes above): `*Wrong
+  permissions for opening file /log/nosave/CALL_PLAYER for append. "No
+  such file or directory"`, thrown from `call.lpc`'s own audit-log line
+  BEFORE it ever reached `call_other()`, so the wizard tool completely
+  failed to affect another player object at all, every single time.
+  Fixed identically to every other instance of this bug class: forward-
+  declared `assure_file()` and called it immediately before the
+  `write_file()` in `log_file()`. This `simul_efun.lpc` is `#include`-
+  based (not `inherit`-based), so — like `fy2005`'s instance — the fix
+  required a full driver restart to take effect, not a hot `update`.
+  Verified live post-restart: the identical `call` now succeeds
+  (`/obj/user#N ("王小龙")->move(...) = 1`), and `/log/nosave/
+  CALL_PLAYER` is created on demand with no further crash on any later
+  `call` in the session.
+
+- **NEW bug, not previously seen in this corpus: `cmds/king/fire.lpc`'s
+  offline-target branch (`load_player()`) can NEVER succeed, because it
+  incorrectly gates on `userp(ob)`, which is structurally always false
+  for a `load_player()` result.** `fire <大臣>` first tries
+  `find_player(arg)`; if the minister is offline it falls back to
+  `flag = -1; ob = load_player(arg);` — a bare `new(LOADUSER_OB)` clone
+  that reads the target's save file directly, specifically so a king can
+  fire a minister who isn't currently connected. But the very next line,
+  `if (!userp(ob)) return notify_fail(ob->name() + "他不是玩家。\n");`,
+  rejects it unconditionally: `userp()` per this driver's own doc
+  ("如果参数物件曾是互动物件，传回 1") reports whether an object has EVER
+  been a real interactive connection, and a `load_player()` clone never
+  is one — it's a pure in-memory data-reader, by design, never
+  `exec()`'d to any socket. So this check silently aborts the whole
+  offline-fire attempt before it ever reaches the actual
+  `kingdom_data(...,"power","sub","minister",...)` removal or
+  `destruct(ob)` cleanup, with a confusing message that implies the
+  target isn't a real player when they demonstrably are (just offline).
+  Confirmed this is a copy-paste/logic mismatch specific to this file by
+  comparing sibling commands that use the identical
+  `find_player()`-else-`load_player()` pattern: `cmds/min/banish.lpc`
+  has NO `userp()` check at all on its `load_player()` result (works
+  correctly offline), and `cmds/min/arrest.lpc`'s only `userp()` check
+  sits on a completely different, online-only code path (its pardon
+  branch), never applied to its own `load_player()` result. **Fix**:
+  gate the check on `flag == 1` (i.e. only require `userp()` when `ob`
+  actually came from `find_player()`) — `if (flag == 1 && !userp(ob))
+  ...`. Verified live end-to-end, twice: (1) fired a minister who had
+  just abruptly disconnected (TCP close, not `quit` — still "net-dead"
+  but not destructed) succeeded even on the UNFIXED code, because
+  `userp()` is true for life once an object has ever been interactive,
+  confirming the bug is specific to the fully-offline `load_player()`
+  path, not net-dead players; (2) after hot-`update`ing this file (an
+  ordinary `inherit`-based cmds file, unlike the simul_efun fix above),
+  re-appointed the same test citizen as minister, had them run a real
+  `quit` (full destruct, no in-memory object left at all), and `fire
+  xiaolong` from the king then correctly succeeded — the correct
+  channel broadcast fired, and the target's on-disk save file confirmed
+  `kingdom/minister` and `home` both removed while `kingdom/id`
+  (ordinary citizenship) was correctly left intact, exactly matching the
+  command's intended "demote minister to citizen" semantics. This is a
+  new bug shape for this corpus (not seen in prior §7.x entries) — filed
+  as a candidate for its own AGENTS.md catalog entry if it recurs
+  elsewhere, but not enough evidence yet of a shared-lineage sibling to
+  justify a corpus-wide sweep on its own (this lib has no confirmed
+  close siblings).
+
+**Confirmed clean / no bug found, despite active testing:**
+
+- **Cross-player `appoint`/`teleport` both worked correctly** once both
+  accounts were physically brought into the same room (`teleport`
+  doesn't require same-room, only same-kingdom + a valid environment;
+  `appoint`/`accept`/`join` all use `present(arg, environment(me))` and
+  correctly require it). One non-bug trap worth recording: **founding a
+  kingdom does NOT change where `enter_world()` places you on your next
+  login** — `adm/daemons/logind.lpc`'s `enter_world()` always uses
+  `user->query("startroom")`, never `home`, so a king who reconnects
+  lands back at 中央广场 (their fixed spawn point) every time, not their
+  throne room. This is exactly what `cmds/min/home.lpc`'s `home` command
+  is for (confirmed by its own help text: "国王与大臣用的瞬间传送指令,
+  可以传送回自己的家"). Cost real test time the first attempt (chased a
+  false "king and citizen are in different rooms" symptom before
+  realizing `home` was simply never invoked after reconnecting) — worth
+  remembering for any future session testing this lib's kingdom system.
+- **Currency persistence across a real `quit`+reconnect: the actual
+  economy currency (the `gold`/`bank_gold` numeric character
+  properties, read by `score` and by `feature/finance.lpc`'s
+  `pay_money()`/`deposit_bank()`/`withdraw_bank()`) persists correctly.**
+  Funded a test citizen with `call xiaolong->add("gold",777)`, confirmed
+  `score` showed 777, did a real `quit`, reconnected, and `score` still
+  showed 777. This lib's `std/money.lpc` — the PHYSICAL coin object
+  class — was also checked per this session's explicit brief (the
+  sibling `fysjmb`/§7.199 "`query_autoload()` commented out while
+  `autoload()` stayed live" shape): **not applicable here, `query_autoload()`
+  is fully active** (`string query_autoload() { return query_amount() +
+  "";}`, not commented out). Separately (not a bug, a design
+  observation): physical coin objects you're merely carrying (not
+  equipped) DO get lost on `quit` — but this is because `cmds/usr/
+  quit.lpc`'s `main()` explicitly, unconditionally drops every
+  non-`equipped()` inventory item for any non-wizard player before
+  saving (`if (!wizardp(me)) { ... if (!inv[i]->query("equipped"))
+  DROP_CMD->do_drop(me, inv[i]); }`) — a deliberate, internally
+  consistent design choice (matches §10.7's "death dropping items" example
+  of a non-bug) applied uniformly to ALL unequipped items, not a
+  money-specific persistence bug; the actual currency wallet bypasses
+  this entirely since it's a character property, not an inventory
+  object.
+- **§7.19-class NPC `init()` reentrancy via `enable_commands()`/
+  `enable_player()` from a room's `setup()`/`reset_me()`: not
+  applicable.** Full-tree grep found only two `enable_commands()` call
+  sites in the whole lib (`obj/user.lpc`'s own player-login path and
+  `feature/command.lpc`'s `command_hook()` mixin) — no NPC in this lib
+  calls `enable_commands()` itself, so the reentrancy shape this bug
+  class depends on structurally cannot occur here.
+- **Adversarial/malformed kingdom-system input, all handled cleanly, no
+  `debug.log` errors**: `appoint`ing a nonexistent player, `fire`ing
+  yourself, `fire`ing the king, a second `buy_kingdom` from an
+  already-kinged player (`建国必须平民才行`), negative/non-numeric/
+  absurdly-large `set_tax` values (`-10`, `abc`, `999999999999999999999`
+  — all correctly rejected by the existing 5–50% range check, no
+  overflow crash), and — via a third throwaway account at the
+  (unreachable-by-normal-walking, `goto`-only) `buy_kingdom` room —
+  too-short Chinese kingdom names, a 30-character Chinese name, a
+  100-character English id, uppercase letters in the English id, and an
+  embedded space in the English id. Every case was rejected with the
+  expected in-game message and zero uncaught errors.
+- **Real board `post`+`read` round-trip**: posted a real multi-line
+  message via the line editor (`post <title>` → lines → `.` to finish)
+  to the central-plaza board, confirmed it appeared in `read new`
+  alongside the original archive post, and confirmed `~q` correctly
+  cancels a post-in-progress (including with a 200+ character title)
+  without creating a stray entry. The test post itself was reverted
+  (`git checkout`) before committing, since it was pollution on a
+  board every real player sees, not evidence worth keeping.
+
+**Cleanup**: driver restarted once mid-session to pick up the
+`#include`-based simul_efun fix (§10.9-documented `debug.log`-goes-dead
+convention followed: log inspected via `work/log/debug.log` after every
+state change, both before and after the restart). Test kingdom
+`ceshitwo` (`work/open/ceshitwo/`, `work/data/{kingdom,nuke/kingdom}/
+ceshitwo/`) and both throwaway accounts (`xiaolong`, and a third
+validation-only account `ceshimin` that never actually founded
+anything) deleted, not committed. `fluffos`'s `kingdom`/`home`/`cwd`/
+`cwf` properties cleared and hp/mp reset to full via explicit `set()` +
+`save()` (a testing mistake along the way — first attempt used a
+wizard `call me->set("hp", me->query("base_hp"))`, which the `call`
+command's own simplistic argument parser treats as a **literal string**,
+not a nested expression, corrupting `hp`/`mp` into a broken string that
+then crashed `heart_beat()`'s `>=` comparison every tick; caught via the
+very same `debug.log`-after-every-command discipline this methodology
+requires, and fixed immediately with plain integer literals instead —
+recorded here as a reminder that this driver's wizard `call` command
+does not evaluate nested `->` calls in its arguments). Ambient
+save-churn from this session (`data/chinese.o`'s kingdom-name lookup
+dict gaining a stale `ceshitwo` entry, `open/sky/kingdom_data.o`'s
+known pre-existing periodic economic-simulation drift, login-timestamp
+noise) reverted via `git checkout` before committing; only the two
+real `.lpc` fixes plus `fluffos`'s own cleaned-up save file are
+included in the commit. A final fresh driver boot + login/score/look/
+quit cycle confirmed a clean `debug.log` throughout.

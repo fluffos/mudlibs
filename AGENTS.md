@@ -16637,6 +16637,55 @@ test: `eval return geteuid(find_object("<some /daemon/ file>"))` to
 get the real euid, then grep `groups.db` for that literal string under
 the group(s) the relevant `access.db` entry names.
 
+### 8.25 A command's own `find_player()`-else-`load_player()` fallback (the standard "act on someone whether they're online or not" pattern) is immediately defeated by a `userp()` check that can never pass on the offline branch's result
+
+Found on `gjzddmudda`'s round-three §10.7 deep functional test, while
+live-testing a genuine two-account nation-management interaction
+(`cmds/king/fire.lpc`, firing a minister). This lib's own `load_player()`
+simul_efun (`adm/simul_efun/object.lpc`) exists specifically so a wizard
+tool can read/manipulate an OFFLINE player's save file — it returns 0 if
+the target is actually online (`find_player(id)` check), otherwise
+clones a bare `LOADUSER_OB` and restores the save file into it, never
+`exec()`-ing it to any real connection. `fire.lpc` uses the standard
+`if (!ob = find_player(arg)) { flag = -1; ob = load_player(arg); }`
+fallback shape — but the very next line unconditionally does
+`if (!userp(ob)) return notify_fail(...);`. Per this driver's own
+efun doc, `userp()` reports whether an object has EVER been a real
+interactive connection — which a `load_player()` clone, by design, can
+never be. The result: the entire offline branch is dead on arrival,
+always rejected with a message that misleadingly implies the target
+isn't a real player, even though the whole point of the fallback was to
+act on a real player who simply isn't connected right now. This is NOT
+the §7.11 missing-directory class (no crash, no `debug.log` entry at
+all — it just silently, permanently fails) and not a net-dead false
+positive (`userp()` correctly stays true for an object that has ever
+connected, even after it disconnects, so a merely net-dead/still-in-
+memory target is unaffected by this bug — confirmed by testing both
+cases side by side). **Detection**: grep any file for the
+`find_player()`-else-`load_player()` fallback shape, then check whether
+a `userp(ob)` (or equivalent "was this ever a live connection" check)
+sits unconditionally below it — compare against sibling commands using
+the identical fallback in the same lib (a mix of "some check it, some
+don't, one checks something else entirely on a different branch" is a
+strong tell this is copy-paste damage, not intentional). **Fix**: gate
+the check on which branch actually produced `ob` (`if (flag == 1 &&
+!userp(ob)) ...`, where `flag` distinguishes the `find_player()` result
+from the `load_player()` result), or drop the check entirely for the
+offline branch if the lib's sibling commands (here, `banish.lpc`) show
+that's the established, safe pattern. Verified live end-to-end: a real
+`quit` (full destruct) followed by `fire <offline minister>` failed
+before the fix (rejected at the `userp()` line) and succeeded after a
+hot `update` of the fixed file, correctly clearing the target's
+minister status and `home` on disk while leaving their citizenship
+intact. Only one instance found in this lib (`banish.lpc` and
+`arrest.lpc`'s own uses of the same fallback shape were checked and are
+both already correct); no confirmed sibling library for this
+archive's unique nation-building codebase, so this is recorded as a new
+bug shape rather than swept corpus-wide — worth checking on sight in
+any OTHER lib's own `find_player()`-else-`load_player()` (or equivalent
+"act on someone online or not" two-branch) command for the same
+misapplied-liveness-check mismatch.
+
 ---
 
 ## 9. LPC formatter (`~/src/fluffos/tools/lpc-syntax/`) — required checks
