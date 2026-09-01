@@ -262,3 +262,19 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## §7.19 enable_player() reentrancy fix (2026-09-01)
+
+Corpus-wide mechanical fix (AGENTS.md §7.19, Batch F of 6), byte-identical
+sibling of `ylfyxa3`'s `feature/command.lpc`. Originally flagged as a
+possible false positive (pre-existing `nosave int enabled = 0;` flag, the
+shape confirmed sufficient on `xiaoyuxiyou`/`xyxyutf8`/`xyxy2` in earlier
+batches) -- but this is NOT the safe shape: `enabled = 1` is set AFTER
+`enable_commands()` returns, not before, so it does not guard the
+synchronous reentrant `init()`->`setup()`->`enable_player()` call that
+happens DURING `enable_commands()`. Confirmed the reachable chain is real:
+`d/shushan/npc/zhangmen.lpc`'s `init()` unconditionally calls `me->setup()`,
+which unconditionally calls `enable_player()`. Fixed by adding a true
+`in_enable_player_now` reentrancy flag alongside the existing `enabled`
+bookkeeping variable (left untouched, `disable_player()` still needs it).
+Verified via single-file `lpcc --batch` PASS.
