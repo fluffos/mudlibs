@@ -1,13 +1,6 @@
 # 侠客新传98书剑 (xkxc98sj)
 
-「侠客新传」v0.1b，MudOS v22pre11，Xkxz MUD Wizard Group 2000-2001，
-由 jjgod 维护。名字里带"书剑"二字，但和 `sjecl`/`sje`/`sjplgfjxb`/
-`sjplii` 那批真正的"书剑"系列泥潭完全不同源，纯属命名巧合（"98书
-剑"应该是站点当年的版本代号）。血统上也和同样带"XKX"/"侠客"字样的
-`xkx100`/`xkx2017`（另一支"侠客行"泥潭）无关——`master.lpc` 逐字节
-确认属于 AGENTS.md §11 的「"hell" / Doing Lu」支系（ES II → XKX →
-hell），和 `zjdyaryl`/`zjdyzj`/`hell` 同源，详见 NOTES.md 的深度测
-试记录。
+「侠客新传98书剑」（New Legend of the Wandering Swordsman）v0.1b，MudOS v22pre11，由 Xkxz MUD Wizard Group 于 2000-2001 年制作，jjgod 维护。名字里带"书剑"二字，但和 `sjecl`/`sje`/`sjplgfjxb`/`sjplii` 那批真正的"书剑"系列泥潭完全不同源，纯属命名巧合（"98书剑"应该是站点当年的版本代号）；血统上也和同样带"XKX"/"侠客"字样的 `xkx100`/`xkx2017`（另一支"侠客行"泥潭）无关——`master.lpc` 逐字节比对显示它实际属于"hell / 丁磊"支系（ES II → XKX → hell），和 `zjdyaryl`/`zjdyzj`/`hell` 同源。地图里收录了一片"苗疆"场景，涉及蛊术文化背景的门派与地理设定，是这批档案里比较少见的题材。
 
 ## 内容亮点
 
