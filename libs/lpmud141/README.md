@@ -50,7 +50,8 @@ a full driver restart.
 No outbound network connections of any kind (confirmed by source
 inspection, not just by absence of symptoms).
 
-WASM status: not yet attempted (`wasm_status` left `""`).
+WASM status: `playable`. Clean WASM boot and full session (register,
+look, score, quit) with zero fixes needed. See `NOTES.md` \S10.
 
 ## Local run
 

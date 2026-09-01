@@ -567,3 +567,12 @@ requirement of the `guest` login path, since `obj/player.lpc`'s own
 account). All other test characters created during this pass were
 deleted afterward (not committed) per this project's `git add -u`
 convention for avoiding test-save clutter.
+
+## 10. WASM status audit (2026-09-01)
+
+`playable`. Booted `~/src/fluffos/build-wasm/src` against this lib via
+`scripts/wasm_client.js` -- clean boot, zero fixes needed. Full session
+verified: register a brand-new character (letters-only name), land in
+the Endoplasmatorium lit and described, `look`, `score`, `quit` (with
+autosave). No sockets/pcre/uptime-gate issues -- consistent with this
+lib's own "no outbound network connections of any kind" finding above.
