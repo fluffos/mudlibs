@@ -640,3 +640,20 @@ deep-test sections above, is 翠香楼 (Cuixiang Tower) in 傲来国 (the Aolai
 Kingdom) — Chang'an only enters the map later, as the destination of the
 raft crossing on the way to the 百花谷 sect. Rewrote the description to
 name the correct starting location and dropped the invented tavern name.
+
+## AGENTS.md §7.19 sweep (2026-09-01): false positive, not fixed
+
+Flagged by the corpus-wide scoping scan as sharing the `mhxy`/`wuhanzhan`
+`enable_player()`-reentrancy-from-`init()` shape, but on closer
+inspection this lib already carries its own, differently-shaped guard
+(byte-identical to sibling `xyxyutf8`'s copy of `feature/command.lpc`):
+`nosave int enabled = 0;` at file scope, and `enable_player()` only
+calls the raw `enable_commands()` efun (plus `add_action("command_hook",
+...)`) inside `if (!enabled) { enabled = 1; ... }`. Since `enabled` is
+set to `1` *before* `enable_commands()` runs, any reentrant call into
+`enable_player()` triggered as a side effect of that same
+`enable_commands()` call sees `enabled == 1` and skips re-invoking the
+efun -- the recursion terminates at depth 2 instead of running away into
+"Too deep recursion." (Same pre-existing-guard pattern Batch C found on
+sibling lib `xiaoyuxiyou`.) No `in_enable_player_now` mechanical fix
+applied -- would be redundant with the existing `enabled` guard.
