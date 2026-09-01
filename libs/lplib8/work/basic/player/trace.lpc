@@ -96,10 +96,29 @@ Dump(str) {
   return 1;
 }
 
-id(str) {
-  return str == "tracer" || str == "trace";
-}
-
+// A dead, vestigial `id()` from when this file was presumably a
+// standalone clonable "tracer tool" item (its own short()/long()/
+// drop()/get()/query_value() below still read exactly like one).
+// Nothing in the archive ever does present("tracer", ...) or
+// present("trace", ...) -- confirmed by grep -- so this served no
+// purpose once the file was merged directly into obj/player.lpc as a
+// mixin (`inherit "/basic/player/trace";`). But since it's inherited
+// AFTER /basic/id in player.lpc's own inherit list, this driver's
+// multiple-inheritance name resolution keeps THIS definition as the
+// player's real id() (confirmed via the boot-time compiler warning:
+// "id() inherited from both /basic/player/trace.lpc and
+// /basic/id.lpc; using the definition in /basic/player/trace.lpc"),
+// permanently shadowing /basic/id.lpc's real id() (which checks
+// query_player_name() via set_id() in move_player_to_start()). Since
+// id() gates present()'s name matching, this silently broke
+// present()-based lookup of any OTHER PLAYER by name for every
+// targeted soul.lpc emote (hug/kiss/slap/etc.) and
+// basic/living/attack.lpc's kill_command -- confirmed live: "hug
+// <name>"/"kill <name>" against a second, genuinely-present connected
+// player both returned the driver's default "What?"/"Attack what ?"
+// as if the target didn't exist. Removed entirely (rather than
+// chaining to the shadowed definition) since nothing needs a player
+// object to identify as "tracer"/"trace" at all. See AGENTS.md §7.197.
 short() {
   return "General purpose object tracer";
 }
@@ -239,7 +258,16 @@ nosave find_item(prev, str) {
   if (sscanf(str, "*%s", tmp) == 1)
     return find_player(tmp);
   if (sscanf(str, "/%s", tmp) == 1) {
-    call_other(tmp, "??"); /* Force load */ return find_object(tmp);
+    // This driver raises an uncaught runtime error ("*call_other()
+    // couldn't find object ...") when the target file doesn't exist
+    // or fails to compile, rather than silently returning 0 the way
+    // the classic driver this archive targets did -- confirmed via a
+    // live "Goto /nonexistent/path" reproducing "No error handler for
+    // error" in the log. The author's own w/lars/badload.lpc
+    // demonstrates the same force-load idiom already wrapped in
+    // catch() elsewhere in this archive. See AGENTS.md §6.2.
+    catch(call_other(tmp, "??")); /* Force load */
+    return find_object(tmp);
   }
   if (sscanf(str, "$%d", tmp) == 1) {
     object u;

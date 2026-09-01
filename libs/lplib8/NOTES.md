@@ -354,3 +354,268 @@ Zero errors in the driver's own captured stdout across the full
 session (native builds' `debug.log` is dead for the process's whole
 life per AGENTS.md §10.9, so stdout is the only reliable error
 channel) and the WASM boot watch transcript.
+
+## 9. §10.7 deep functional test, round two (2026-09-01) -- three real bugs found and fixed via a genuinely new angle
+
+The 2026-08-31 pass (§8 above) tested a single player end-to-end
+(movement, untargeted `obj/soul.lpc` emotes, wield/take, quit/relogin)
+and found the lib clean. This pass deliberately took the angles §8
+never touched: a **full command inventory sweep** (all 68
+`obj/soul.lpc` emote verbs, not just 4), **two simultaneous live
+connections** interacting with each other, **real PvP combat to
+actual death** (this archive has no NPCs at all -- confirmed by grep,
+combat is player-vs-player only, via `basic/living/attack.lpc`'s
+`kill_command`), and **adversarial/malformed input** on `wield`/
+`take`/`Goto`. This immediately surfaced three real, fixable bugs the
+single-player pass structurally could not have found.
+
+### 9.1 SEVERE: a dead `id()` in a wizard-toolkit mixin shadowed the player's real identity function, breaking ALL targeted commands archive-wide
+
+**Symptom**: every targeted `obj/soul.lpc` emote (`hug bobqatest`,
+`kiss bobqatest`, `slap bobqatest`, etc.) against a second, genuinely
+connected, correctly-named player returned the driver's bare "What?"
+fallback, as if the target didn't exist. `kill bobqatest` similarly
+returned "Attack what ?". This is **the single most impactful bug
+found this session** -- it silently disabled every player-to-player
+interaction in the game (all directed emotes AND all combat) with zero
+error signature, since `present()` returning `0` for "not found" looks
+identical to "target genuinely absent."
+
+**Root cause**: `obj/player.lpc` inherits both `/basic/id` (whose real
+`id(str)` checks `member_array(str, names)` against
+`set_id(({query_player_name()}))`, set in `move_player_to_start()`)
+and `/basic/player/trace` (a "general purpose tracer" mixin providing
+the always-available `Goto`/`Dump`/`Destruct`/`Call`/`Tell`/`Trans`/
+`Set`/`In`/`Clean` wizard commands). `trace.lpc` **also** defined its
+own `id(str) { return str == "tracer" || str == "trace"; }` -- a
+leftover from when this file was apparently a standalone clonable item
+(its neighboring `short()`/`long()`/`drop()`/`get()`/`query_value()`
+functions all read exactly like one: a fixed value of 10, a `drop()`
+that refuses to be dropped, a `get()` that self-destructs the item if
+picked up by a player below level 20). Confirmed genuine in the raw
+archive bytes (`raw/basic/player/trace.c`, `raw/obj/player.c`'s
+inherit order) -- not conversion damage. This driver's own boot-time
+compiler warning names the exact failure: `"id() inherited from both
+/basic/player/trace.lpc and /basic/id.lpc; using the definition in
+/basic/player/trace.lpc"` -- confirmed the tie-break is "whichever
+`inherit` statement comes LAST in declaration order wins," which for
+`player.lpc`'s own inherit list (`/basic/id` several lines before
+`/basic/player/trace`) silently picks the useless one. Grepped the
+whole archive for any caller of `present("tracer", ...)`/
+`present("trace", ...)` against a player object: **zero** -- this
+`id()` served no purpose whatsoever after being merged into
+`player.lpc`, and was pure liability.
+
+**Fix**: removed the dead `id()` entirely from
+`basic/player/trace.lpc` (not chained via `id::id(str)` -- nothing
+needs the "tracer" identity at all). The boot-time ambiguity warning
+disappears entirely once removed.
+
+**Live verification**: booted a fresh driver, opened two simultaneous
+raw-socket connections (`aliceqatest`/`bobqatest`), and fired all 68
+`obj/soul.lpc` emote verbs at the second player by full registered
+name. Before the fix: every single targeted verb returned "What?" (68/68
+failed). After the fix: `hug bobqatest` -> "You hug bobqatest." +
+`bobqatest` sees "Aliceqatest hugs you.", and likewise for every other
+verb tested (kiss/slap/poke/bow/smile/growl/wink/knee) -- all correct.
+`kill bobqatest` also started working correctly for the first time
+(see §9.2). New AGENTS.md §7.197.
+
+### 9.2 SEVERE: a missing `valid_shadow()` master apply silently broke `die()`, leaving combat stuck in an infinite "already dead" loop forever
+
+**Symptom**: once §9.1 unblocked real PvP combat, a live fight-to-death
+between two connected players never actually ended. Health dropped
+correctly hit-by-hit down to `-1` (death threshold), `die()` fired
+(clones `/obj/shadow_death` and calls `init_shadow()`), but the
+attacker's screen showed `"death_shadow: Failed to shadow
+Bobqatest."` -- and the SAME message, plus a "You hit N points on
+Bobqatest."/"Bobqatest hit you." exchange, repeated **every single
+heartbeat indefinitely** (confirmed for 10+ consecutive heartbeats
+before manually stopping the test), with `score` permanently frozen at
+`Health: -1`. The dead player was never actually turned into a ghost
+and combat never terminated.
+
+**Root cause**: `obj/shadow_death.lpc`'s `init_shadow()`:
+```
+void init_shadow(object ob) {
+  if (shadow(ob, 1) == 0) {
+    write("death_shadow: Failed to shadow " + ob->query_player_cap_name() + ".\n");
+    return;
+  }
+  shadowing = ob;
+  write("You turn into an immaterial ghost.\n");
+  this_object()->cease_all_attacks();
+}
+```
+`shadow(ob, 1)` returned `0` every time, hitting the failure branch,
+which `return`s WITHOUT ever calling `cease_all_attacks()`. Since the
+victim's `hp` stayed at `-1` and its `attackers`/`any_attack` state was
+never cleared, `basic/living/attack.lpc`'s `continue_attack()` called
+`do_damage()` again on the next heart_beat -- and since `damage > hp`
+is always true once `hp` is negative, `do_damage()` called `die()`
+AGAIN, forever. Confirmed by reading this driver's own
+`interpret.cc`'s `validate_shadowing()`: `shadow()` requires an
+explicit master `valid_shadow(object)` apply to approve the call
+(`master_approved()`'s `if (!v) return 0;` treats an **undefined**
+apply identically to an explicit deny) -- and `secure/master.lpc` never
+defined `valid_shadow()` at all. This is the exact same "deny by
+default unless master explicitly opts in" shape already fixed twice
+in this same lib for `valid_override()`/`valid_seteuid()` (§3/§7)
+and once for `valid_write()`/`valid_read()` (§3's most severe finding)
+-- just a fourth security apply this project hadn't catalogued yet.
+The classic 1990s driver this archive targets never required this
+apply at all.
+
+**Fix**: added `int valid_shadow(object ob) { return 1; }` to
+`secure/master.lpc`, matching the existing permissive
+`valid_override()` stub's rationale (small, fully-trusted
+single-owner mudlib, no untrusted-wizard threat model).
+
+**Live verification**: rebooted with the fix, repeated a full
+fight-to-death between two connected players. This time: `"You turn
+into an immaterial ghost."` printed correctly, the attacker's next hit
+showed `"You hit 1 points on a mist."` (confirming the target is now
+genuinely the ghost object), immediately followed by `"The combat is
+over."` -- `cease_all_attacks()` now fires and the fight correctly
+terminates instead of looping forever. The ghost's own `score` command
+correctly shows shadow_death.lpc's override (`"You are dead, and have
+no score."`). New AGENTS.md §7.198.
+
+**Not fixed (confirmed out of scope, matches this project's existing
+"no design invention" rule)**: nothing anywhere in the archive ever
+calls `shadow_death.lpc`'s own `revive()` -- there is no timer, no
+automatic trigger, and no dedicated player command for it. A player
+*could* self-revive via the always-available wizard `Call` command
+(e.g. `Call <ownname> revive`, since "here" targets the room, which has
+no `revive()`) if they knew the right object/function names, matching
+this archive's own documented "no untrusted-wizard threat model"
+design (§3) where every player already has unrestricted debug tooling.
+Implementing an automatic revival trigger would mean deciding what the
+game SHOULD do post-death (a timer? a command? a room?) -- a genuine
+content/design question, not a programming bug -- so left alone,
+consistent with the already-documented `Goto /w/lars/castle` and dead
+`revive()` gaps found in earlier passes.
+
+### 9.3 Minor/cosmetic: `knee`'s gender check called an undefined function, so its "male" flavor-text branch never fired for anyone
+
+**Symptom**: `knee bobqatest` against a freshly registered (default
+gender "male") target always printed `"You try to knee bobqatest. Not
+very effective though."` -- the archive's OWN "without much effect"
+branch, meant only for non-male targets, fired unconditionally.
+
+**Root cause**: `obj/soul.lpc`'s `knee(str)` calls
+`who->query_male()`, a function that does not exist anywhere in this
+54-file archive (confirmed against the raw archive bytes -- genuine
+pre-existing 1990s bug, not conversion damage) -- `basic/living/
+gender.lpc` only ever defined `query_gender()`/`query_pronoun()`/
+`query_possessive()`/`query_objective()`. Calling an undefined function
+via `->` silently returns `0` on this driver (same shape as the
+already-documented `Goto /w/lars/castle` gap), so the "male" branch
+never fires for ANY target regardless of actual gender. Purely
+cosmetic -- neither branch deals any damage or has any other mechanical
+effect, only flavor text differs.
+
+**Fix**: `who->query_male()` -> `who->query_gender() == "male"`, using
+the archive's own real, already-used equivalent. Zero design decision
+involved -- the intended behavior was already unambiguous from the
+surrounding branch text.
+
+**Live verification**: rebooted with the fix, `knee bobqatest2`
+(freshly registered, default gender "male") against a live second
+connection now correctly prints `"You hit bobqatest2 with your
+knee."`/`"...writhing in pain!"` -- the male branch.
+
+### 9.4 Minor robustness fix: an unvalidated force-load in the shared wizard-tool object resolver threw an uncaught runtime error on a bad absolute path
+
+**Symptom**: `Goto /some/nonexistent/path` (or any of the other 7
+wizard commands sharing `parse_list()`/`find_item()` --
+`Dump`/`Destruct`/`Call`/`Tell`/`Trans`/`Set`/`In`/`Clean`) produced no
+error visible to the player, but logged a full uncaught LPC runtime
+error and stack trace: `"No error handler for error: *call_other()
+couldn't find object '<path>'."` This did NOT crash the driver (all
+live boots afterward continued normally) -- it's a robustness gap, not
+a game-breaking bug -- but it's an unnecessarily ugly failure mode for
+an admin tool every player has unrestricted access to (per this
+archive's own "no untrusted-wizard threat model").
+
+**Root cause**: `basic/player/trace.lpc`'s `find_item()`, the
+`"/%s"` (bare absolute-path) branch: `call_other(tmp, "??"); /* Force
+load */ return find_object(tmp);` -- never validates the target file
+exists before calling `call_other()` on it. Confirmed genuine in the
+raw archive bytes. This driver raises an uncaught runtime error when
+`call_other()`'s target fails to load/compile, rather than silently
+returning `0` the way the classic driver this archive targets did --
+notably, the archive's OWN `w/lars/badload.lpc` scratch file
+demonstrates the author already knew this exact operation needs a
+`catch()` wrapper (`safe_load()`: `a = catch(safe_load(file));`), just
+never applied it to this production call site.
+
+**Fix**: wrapped the force-load in `catch()`:
+`catch(call_other(tmp, "??"));`. Player-visible behavior is now
+strictly better than before (a bad path now cleanly falls through to
+the normal "What?"/"Attack what ?" fallback the way a legitimately
+absent target already did, rather than producing no feedback at all).
+
+**Live verification**: rebooted with the fix, `Goto
+/this/path/does/not/exist` now cleanly shows "What?" and the session
+continues normally; a subsequent successful `Goto /room/start2`
+worked. The debug log still shows the caught error's stack trace
+(expected -- this driver logs errors caught by `catch()` too, purely
+informational) but the frame list now shows `in <catch>()`, confirming
+it no longer propagates uncaught.
+
+### 9.5 Other angles tried, confirmed clean
+
+- **Full soul.lpc command inventory** (all 68 emote verbs, both
+  untargeted and targeted forms): no crashes on any verb, bare or
+  targeted, including deliberately garbage targets (empty, self,
+  nonexistent, a 500-character string). All argument-optional verbs
+  correctly fall back to their untargeted message when called bare;
+  all argument-required verbs correctly no-op (driver default "What?")
+  when called bare or against a nonexistent target.
+- **`kiss`'s dead "frog curse" branch**
+  (`call_other(who, "query_frog")`/`call_other(_, "frog_curse", _)`):
+  both functions are undefined everywhere in the archive (confirmed
+  genuine in raw bytes, an entire never-implemented sub-feature, not
+  just a renamed accessor like §9.3's `query_male()`) -- always
+  silently `0`, so `kiss` always falls through to its ordinary message.
+  Not fixed: implementing an actual "turn into a frog" curse mechanic
+  from scratch would mean inventing new content/design (what happens
+  while cursed? for how long? what un-curses you?), not making
+  already-intended logic work -- out of scope, unlike §9.3 where a
+  real equivalent function already existed to redirect to.
+- **Adversarial input on `wield`/`take`**: `wield knife` with nothing
+  carried -> "You have no such thing!" (correct); `take
+  nonexistentitem123` -> "What nonexistentitem123?" (correct); no
+  crashes.
+- **Other `/w/lars/` files beyond the already-documented
+  `castle.lpc`/`yy.lpc`**: `badload.lpc` (a deliberate catch()-safety
+  test script, see §9.4), `rand.lpc` (a standalone math test), `xx.lpc`
+  (a treasure-item test clone with an intentionally-broken second
+  command, `add_action("::foobar", "crash")`, wired to an undefined
+  `crash()` function -- but "::foobar" is not a usable verb string
+  through the normal parser, and nothing else references it),
+  `workroom.lpc` (a real, correctly-`/complex/room`-inheriting personal
+  room, unlike `castle.lpc`) -- all genuinely Lars's own `/w/lars/`
+  scratch content, matching the already-established pattern for this
+  author across every sibling archive this session. No new
+  actually-reachable "undefined function silently returns 0" instance
+  found beyond the already-documented, already-out-of-scope
+  `castle.lpc` case.
+
+### Regression check (round two)
+
+Zero runtime errors (`No error handler`/`FATAL`) in the driver's own
+captured stdout across the full corrected test session (fresh
+registration x2, full 68-verb x2 emote sweep, adversarial input,
+`Goto` adversarial paths, a complete real PvP fight to actual death,
+and post-death `score`/`Call` probing) after all three fixes above.
+One unrelated environmental incident during testing: the driver
+process received an external `SIGTERM` while idling in `epoll_wait()`
+(confirmed via its native crash-handler stack trace showing no LPC
+code on the stack at the time) partway through an early test run --
+almost certainly this sandboxed environment's own process management
+and NOT caused by any lplib8 code (a subsequent isolated repro of the
+specific command being tested at that moment did not reproduce any
+crash on a fresh driver). Flagged here only for the record, not as a
+mudlib bug.

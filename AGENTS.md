@@ -14668,6 +14668,93 @@ of the calls actually made anywhere in the tree.
 
 ---
 
+### 7.197 A generic "wizard toolkit" mixin inherited directly into the player class can define its own vestigial `id()`/`short()`/`long()` (leftovers from when it was a standalone clonable item) that silently shadows the player's REAL identity function via this driver's multiple-inheritance name resolution — breaking every `present()`-based lookup of that player by name, archive-wide
+
+Found on `lplib8`'s §10.7 round-two pass (2026-09-01), while testing a
+genuinely new angle (two live connections interacting via targeted
+`obj/soul.lpc` emotes) that the first pass never exercised. Every
+targeted emote (`hug <name>`, `kiss <name>`, etc.) and
+`basic/living/attack.lpc`'s `kill_command` returned the driver's bare
+"What?"/"Attack what ?" fallback against a second, genuinely-present,
+correctly-named connected player — as if `present()` could never find
+anyone. Root cause: `obj/player.lpc` inherits both `/basic/id` (whose
+real `id(str)` checks `member_array(str, names)` against
+`set_id(({query_player_name()}))`) and `/basic/player/trace` (a
+"general purpose tracer tool" mixin providing `Goto`/`Dump`/`Call`/etc.
+wizard commands) — and `trace.lpc` ALSO defines its own `id(str) {
+return str == "tracer" || str == "trace"; }`, a leftover from when this
+file was apparently a standalone clonable item (its neighboring
+`short()`/`long()`/`drop()`/`get()`/`query_value()` functions all read
+exactly like one). This driver's own boot-time compiler warning names
+the exact failure: `"id() inherited from both /basic/player/trace.lpc
+and /basic/id.lpc; using the definition in /basic/player/trace.lpc"` —
+confirmed the tie-break is "whichever inherit comes LAST in the
+inherit-statement order wins," which for `player.lpc`'s own inherit
+list (`/basic/id` then, several lines later, `/basic/player/trace`)
+picks the wrong one. Since `present(str, container)` gates its match on
+each candidate's own `id(str)`, and NOTHING outside trace.lpc's own
+never-triggered help text ever does `present("tracer", ...)` or
+`present("trace", ...)` against a player (confirmed by grep), this
+`id()` served no purpose post-merge and was pure liability. **Fix**:
+removed the vestigial `id()` entirely (not chained via `id::id(str)`,
+since nothing needs the "tracer" identity at all) — un-shadows the real
+`/basic/id` definition and the boot-time ambiguity warning disappears.
+**General lesson**: when a lib's boot log shows an `"X() inherited from
+both ... and ...; using the definition in ..."` warning for ANY
+function name that's also a normal accessor/identity function elsewhere
+in the same inherit chain (not just `id()` — the same risk applies to
+`short()`/`long()`/`drop()`/anything a generic "utility mixin" defines
+for its own historical reasons), check whether the WINNING definition
+is the one the rest of the codebase actually needs, and if the loser is
+the real one, either remove the vestigial shadowing function (if truly
+dead) or rename/chain it — don't assume a compiler *warning* (as
+opposed to an *error*) means the ambiguity resolved harmlessly.
+
+---
+
+### 7.198 A missing `valid_shadow()` master apply denies EVERY `shadow()` call by default on this driver — silently breaking a `die()`-clones-a-ghost-and-shadows-the-corpse death implementation so combat can never actually end, re-triggering `die()` on the same already-"dead" victim every single heartbeat forever
+
+Found on the same `lplib8` pass, immediately after §7.197's fix
+unblocked real PvP combat for the first time. A live fight-to-death
+between two connected players never stopped: `obj/player.lpc`'s
+`die()` (`ob = clone_object("/obj/shadow_death"); ob->init_shadow(this_object());`)
+clones a ghost-body object and asks it to `shadow(ob, 1)` the corpse,
+turning the player into "a mist" and calling `cease_all_attacks()` —
+but `shadow(ob,1)` returned 0 every time, hitting
+`obj/shadow_death.lpc`'s own `"death_shadow: Failed to shadow
+<name>."` failure branch, which `return`s WITHOUT ever calling
+`cease_all_attacks()`. Since the victim's `hp` was left permanently at
+`-1` and its `attackers`/`any_attack` state was never cleared,
+`basic/living/attack.lpc`'s `continue_attack()` called `do_damage()`
+again on the very next heart_beat, which (since `damage > hp` is always
+true once `hp` is negative) called `die()` AGAIN — producing an
+infinite "death_shadow: Failed to shadow" loop, once per heartbeat,
+forever, with the game state stuck at a corpse that can never actually
+become a ghost or get removed from combat. Root cause (confirmed by
+reading `interpret.cc`'s `validate_shadowing()`): this driver requires
+a master `valid_shadow(object)` apply to explicitly approve every
+`shadow()` call (`MASTER_APPROVED()` treats an *undefined* apply
+identically to an explicit deny, per `master_approved()`'s `if (!v)
+return 0;`) — the exact same "deny by default unless master explicitly
+opts in" shape as `valid_override()`/`valid_seteuid()`/`valid_read()`/
+`valid_write()` (§7.176 and this same lib's earlier `valid_override`/
+`valid_seteuid` gaps), just for a FOURTH driver security apply this
+project hadn't catalogued yet. The classic 1990s driver this archive
+targets never required this apply at all, so `secure/master.lpc` never
+defined it. **Fix**: `int valid_shadow(object ob) { return 1; }` added
+to `secure/master.lpc`, matching the existing permissive
+`valid_override()` stub's own "small, fully-trusted single-owner
+mudlib, no untrusted-wizard threat model" rationale. **General lesson**:
+any classic-MudOS/LPmud-sourced archive using `shadow()` for ANY
+purpose (ghost/death states, disguise, `previous_object()` tricks) on
+this driver needs a permissive `valid_shadow()` the same way it needs
+`valid_override()` — check for both together, since a missing one
+produces a silent `shadow()` failure with no error, easy to miss unless
+the shadowing object's own code happens to write a failure message the
+way `shadow_death.lpc` did here.
+
+---
+
 ## 8. Login and registration flow bugs
 
 Registration is where restoration succeeds or fails: it exercises the
