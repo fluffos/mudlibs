@@ -698,3 +698,22 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+
+## AGENTS.md §7.19 fix: enable_player() reentrancy from init()
+
+`feature/command.lpc`'s `enable_player()` (wrapper around
+`enable_commands()`) was reachable from an NPC's `init()` (via the
+shared `std/char.lpc` `setup()` chain), and `enable_commands()` is only
+safe to call from `create()` -- calling it again on an object already
+`living()` makes the driver re-invoke that same object's `init()` as a
+side effect, which recursed back into `enable_player()` on the same call
+stack until "Too deep recursion" aborted the boot on a room's first-ever
+visit. Fixed with a true reentrancy flag (`in_enable_player_now`, set at
+entry, cleared before every return), NOT a `living()`-gated guard --
+`disable_player()` in the same file legitimately re-calls
+`enable_commands()` while already `living()` (sleep/wakeup via
+`cmds/std/sleep.lpc`, revive via `feature/damage.lpc`), which a
+`living()` guard would silently break. Verified via `lpcc --batch`
+single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
+(Batch C).
