@@ -89,7 +89,24 @@ int force_me(string cmd) {
   return command(this_object()->process_input(cmd));
 }
 
+nosave private int in_enable_player_now;
+
+// AGENTS.md sec.7.19: enable_commands() is only safe to call from
+// create() -- calling it again on an object that is already living()
+// makes the driver re-invoke that same object's init() as a side
+// effect, and if init() (directly or via a setup()/reset_me() chain)
+// calls back into enable_player(), that re-invocation happens while
+// the ORIGINAL init() call is still on the stack: genuine reentrancy,
+// repeating until the call-depth limit aborts with "Too deep
+// recursion." Guard here (the shared choke point) with a true
+// reentrancy flag rather than `if (living(this_object())) return;` --
+// this lib's disable_player()/revive()/wakeup() paths legitimately
+// re-invoke enable_player() while already living(), so a living()-
+// gated guard would silently no-op those real re-enables.
 void enable_player() {
+  if (in_enable_player_now) return;
+  in_enable_player_now = 1;
+
   if (stringp(query("id"))) set_living_name(query("id"));
   else set_living_name(query("name"));
 
@@ -141,6 +158,7 @@ void enable_player() {
       default:
         set_path(PLR_PATH);
     }
+  in_enable_player_now = 0;
 }
 
 // modified by xuy to fix add_action bug.

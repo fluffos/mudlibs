@@ -200,3 +200,19 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## §7.19 enable_player() reentrancy fix (2026-09-01)
+
+Corpus-wide mechanical fix (AGENTS.md §7.19, Batch F of 6). `feature/command.lpc`'s
+`enable_player()` had no reentrancy guard at all: an NPC's `init()` (e.g.
+`d/zhongnan/npc/killer.lpc`'s first-time `!query_temp("copied")` branch) reaches
+`setup()` -> `enable_player()` -> `enable_commands()`, which the driver docs and
+this project's own live-verified prior findings (mhxy/wuhanzhan) confirm can
+re-invoke the same object's `init()` synchronously while the original call is
+still on the stack -- genuine reentrancy, "Too deep recursion" on a room's first
+visit. `feature/damage.lpc`'s `revive()` and `cmds/std/sleep.lpc`'s
+`wakeup()`/`wakeup2()` also re-invoke `enable_player()` while already `living()`,
+so a bare `living()` guard would have broken legitimate revive/wakeup re-enables.
+Fixed with a true reentrancy flag (`nosave private int in_enable_player_now;`,
+set at entry, cleared before the function's single return path), matching the
+reference fix on `mhxy`. Verified via single-file `lpcc --batch` PASS.
