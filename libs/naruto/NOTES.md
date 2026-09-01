@@ -680,3 +680,14 @@ unlike most siblings): post-fix, `eval tell_room(environment(me),
 with no crash. `include/compress_obj.h` (the sibling §7.14 bug from
 the same `es1` finding) does not exist anywhere in this lib's tree —
 not applicable.
+
+## WASM status audit (2026-09-01)
+
+`playable`. Booted `~/src/fluffos/build-wasm/src` via
+`scripts/wasm_client.js` -- clean boot, zero fixes needed. Full session
+verified with a real Chinese name: registration (English id, y/n
+confirm, password + confirm, email, gender m/f, Chinese display name),
+landing in 巫師神殿 (Wizard's Temple), `look`/`score`/`quit` all
+correct. Consistent with this lib's own "confirmed making zero
+outbound network connections" finding above -- no sockets-package
+issues encountered.

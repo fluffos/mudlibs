@@ -40,6 +40,11 @@ https://mudlibs.fluffos.info/naruto/
 > 警告：`Mud@2026` 是本地遊玩用的公開預設密碼。若要正式對外開放主機，
 > 請先修改此密碼（或刪除該帳號及 `adm/etc/wizlist` 中的授權行）。
 
+## WASM 狀態
+
+`playable`。WASM 環境下開機、註冊（含中文姓名）、look/score/quit 全部
+正常，無需任何修正。詳見 `NOTES.md`。
+
 ## 本地運行
 
 ```
