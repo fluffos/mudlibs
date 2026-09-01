@@ -1,15 +1,6 @@
 # 再现天涯 (zxty)
 
-《再现天涯》（游戏内横幅：梦回天涯）。和本次会话之前处理过的
-Doing 血统 `hell` 家族没有关系，但和 `tybxjh`/`wlhd`/`xhcii` 那个
-"天涯"家族是同源代码——`d/city/sj.lpc`（"世界之巅"跳崖场景）逐字
-节完全相同，此前处理这四份档案时都没有互相记录这层关系。档案里有
-一个巫师个人目录 `u/zjb/`，里面放了好几份核心系统文件的旧
-备份（`logind.lpc`、`master.lpc`、`securityd.lpc` 等）——用
-grep 确认过这些备份没有被任何活动路径引用（`include/globals.h`
-和 `config.fluffos` 里 `LOGIN_D`=`/adm/daemons/logind`、
-`MASTER_OB`=`/adm/obj/master`），所以本次只修了这两份真正生效的
-文件，`u/zjb/` 下的备份保持原样没动。
+《再现天涯》（游戏内横幅：梦回天涯），与本项目里由 `tybxjh` 领衔的完整"天涯"八件套家族（`wlhd`/`xhcii`/`ffxymud`/`jhfy2`/`xysylmhb`/`xyzxiiylzymh`/`yxjh`/`yzxiiizylfy`）同源——"世界之巅"跳崖场景（`d/city/sj.lpc`）与 `tybxjh`/`xhcii`/`ffxymud`/`jhfy2`/`xysylmhb`/`xyzxiiylzymh` 逐字节完全相同，`wlhd` 则独立改写过同一个房间；与 Doing 血统的 `hell` 家族并无关系。角色创建采用单一 2-4 字姓名（不像 `zjdywzb` 系列那样区分姓氏与名字），带属性天赋随机菜单，新角色从"有间客栈"起步；巫师权限阶梯的最高称号是 `(boss)`，不同于多数兄弟档案惯用的 `(admin)`。本项目里的 `zxty08nxgbb` 是同一款游戏 2008 年的修改重发布版本。
 
 ## 内容亮点
 
