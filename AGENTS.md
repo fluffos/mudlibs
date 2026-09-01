@@ -14771,6 +14771,83 @@ produces a silent `shadow()` failure with no error, easy to miss unless
 the shadowing object's own code happens to write a failure message the
 way `shadow_death.lpc` did here.
 
+### 7.199 A commented-out `query_autoload()` accessor with its `autoload(string)` receiver left fully intact silently strips ordinary carried currency from EVERY normal `quit` — dropped in a public room (or destroyed outright) and never restored on the next login
+
+Found on `fysjmb`'s deep functional test (§10.7), while testing a real
+shop buy-then-sell transaction for the first time (the lib's previous
+§10.7 pass only ever ran `list`). After buying a `玉簪` from the jade
+shop and reconnecting, a completely ordinary `quit` printed `你丢下一些
+黄金。` (**you drop some gold**) — the character's physical cash was
+left sitting on the floor of whatever public room they happened to be
+in when they quit, exactly like an intentional drop, and a normal
+relogin came back with empty pockets. This is not a net-dead/disconnect
+edge case (§7.20's territory) — it reproduces on every single clean
+`quit`, for every player, anywhere in the game, as long as they're
+carrying physical currency.
+
+Root cause: `cmds/usr/quit.lpc` classifies every carried item into one
+of two buckets purely by `inv[i]->query_autoload()`: items that DON'T
+support it get `DROP_CMD->do_drop()`-ed onto the room floor (or
+destroyed with a "turned to dust" message if the drop itself fails,
+e.g. a `no_drop` item); items that DO support it get destroyed
+immediately with the same "turned to dust" flavor text, on the
+understanding that `me->save()` (called earlier in the same function)
+already captured a reconstruction string for them via
+`feature/autoload.lpc`'s `save_autoload()`, and `setup()`'s
+`restore_autoload()` will `new()` a fresh instance and call
+`ob->autoload(param)` on the next login. `std/money.lpc` (the class
+backing every coin/silver/gold/cash object in the game) has BOTH halves
+of this contract half-written: `void autoload(string param) { ...
+set_amount(amt); }` is fully present and functional — but the accessor
+that would register a money stack for saving in the first place is
+dead code:
+
+```
+//string query_autoload() { return query_amount() + ""; }
+```
+
+With that line commented out, `query_autoload()` returns 0 for every
+money object, so `quit.lpc` always routes currency into the FIRST
+(drop-on-the-floor) bucket instead of the second (destroy-and-
+reconstruct-next-login) bucket — money can never survive a clean quit,
+and worse, it's left as a stealable item in whatever room the player
+happened to disconnect in. This is not a hypothetical dead branch: it
+is the single general-purpose classification `quit.lpc` uses for ALL
+inventory, so it fires for every player on every quit, unconditionally.
+
+This traces back to the ORIGINAL (pre-conversion) Fengyun IV source
+(the identical commented-out line is already present in
+`raw/fy4_S/fy4/std/money.c`) — it is a bug inherited from the base
+game, not introduced by this project's LPC-to-FluffOS conversion, but
+it is still squarely a programming bug rather than a design choice: the
+matching `autoload(string)` receiver has no purpose at all unless
+`query_autoload()` also works, and a corpus grep found the exact same
+`string query_autoload() { return query_amount() + ""; }` line ACTIVE
+(uncommented) in dozens of unrelated, non-Fengyun-lineage libs' own
+`std/money.lpc` — i.e. this exact fix is already the normal, working
+form used everywhere else; only the Fengyun lineage shipped with it
+disabled.
+
+**Fix**: uncomment the line (`string query_autoload() { return
+query_amount() + ""; }`). Verified live on `fysjmb`: funded a test
+character via an admin `clone`+`give`, confirmed a clean `quit` now
+prints `黄金化成一蓬粉末消失了` (destroy-and-reconstruct branch, not a
+drop) instead of `你丢下一些黄金`, and a fresh relogin shows the exact
+gold amount restored in `i`/inventory — round-trip confirmed working.
+
+**Sweep (2026-09-01)**: grepped every lib's `std/money.lpc` for this
+exact commented-out signature. 16 libs total carried it (all in the
+Fengyun/风云-derived lineage): `fysjmb` (live-verified as above),
+`fengyun434`, `fy2`, `fy2005`, `fy2mg`, `fy2qh`, `fy330`, `fy3dz`,
+`fy3xd`, `sjpl2`, `sjplgfjxb`, `sjplii`, `wqfy`, `xsfyssjb`, `zzfy`,
+`zzfy3` — all fixed identically (single-line uncomment, no other
+changes). Verified via a targeted single-file `lpcc` compile
+(`lpcc config.fluffos /std/money`) on all 15 sibling libs, clean on
+every one; not individually re-booted or live-replayed beyond that,
+consistent with this project's established "mechanical sweep, compile-
+check only" precedent for a bug confirmed live on one lib and then
+grepped corpus-wide.
+
 ---
 
 ## 8. Login and registration flow bugs

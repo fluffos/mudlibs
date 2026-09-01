@@ -110,3 +110,82 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（§10.7，2026-09-01，第二轮）
+
+角度：这次专门补测上一轮（2026-08-04）明确跳过的部分——真实的商店
+买卖交易、拜师门派流程、信箱/寄信系统，以及沿途新走的房间是否触发
+§7.19 一类的 NPC `init()` 重入 bug。原生 debug driver（端口 40165），
+用纯 Python socket 脚本全程操作（未用 `tmux_mud.sh`）。协议层确认：
+这个 lib 的连线是 **UTF-8**，不是 GBK（草稿脚本一开始按 GBK 编码送
+字符导致中文名字连续判定失败，换成 UTF-8 后正常）。
+
+1. 用真实中文名"沈秋"（id `muqiuxia`）注册成功，落地"凤求凰客栈"。
+2. **管理员账号补注册**：发现 meta.json 里记录的"fluffos/Mud@2026
+   已通过真实注册流程播种"其实不准确——`adm/etc/wizlist` 里虽然列
+   着 `fluffos (admin)`，但 `data/login`/`data/user` 下根本没有这个
+   账号的存档（甚至连 `f` 字母桶目录都不存在）。重新用正常注册流程
+   走了一遍（id `fluffos`，密码 `Mud@2026`），因为在 wizlist 里，注
+   册完直接拿到 `(admin)` 权限。之后用这个号 `goto`/`summon`/
+   `clone`/`give` 给测试角色发测试用的黄金。
+3. **商店买卖交易（此前只测过 `list`）**：玉龙珠宝店（`d/fy/yuljade.
+   lpc`，掌柜"商玉龙"）`buy 玉簪 from jadeseller` 成功购买，价格、
+   找零（黄金/银子/铜钱换算）都正确；千银当铺（`d/fy/qianyin.lpc`，
+   老板娘"香菱"，`feature/pawnowner.lpc`）`value`/`sell` 也验证成
+   功，按物品价值的 80% 换算成实际钱币正确发放。注意：这两个指令走
+   的是 `present()`/`id()`，只认物品的英文 id（如 `jade pin`），不
+   认中文名字"玉簪"作为参数——直接拿中文名字当 `sell`/`value` 的参
+   数会被判定为"没有这样物品"，这不是 bug，是这个 lib 全局一致的物
+   品寻址规则（`feature/name.lpc` 的 `id()` 只查英文 id 数组，`buy`
+   指令之所以能认中文名字，是 `feature/vendor.lpc` 里 `buy_object()`
+   自己额外加了一条按 `name()` 比较的特例，不是通用规则）。
+4. **拜师门派流程**：`d/fy/jbang.lpc`（帮主堂，金钱帮总舵）的
+   "荆无命"（`d/fy/npc/jinwuming.lpc`）`attempt_apprentice()` 无条
+   件接受拜师，用 `apprentice master jin` 一次成功拜师，`score` 正
+   确显示"金钱帮 帮众"和"你的师父是荆无命"。
+5. **信箱/寄信系统**：风云驿站（`d/fy/mailst.lpc`）的"王风"
+   （`officer.lpc`）`ask officer about mail` 成功领取信箱（`obj/item/
+   mailbox.lpc`），`mail muqiuxia` 给自己寄信（标题+正文，用 `.` 结
+   束编辑，`n` 选择不留副本）成功，`from`/`read 1` 都能正确读出刚
+   寄出的信。这个 lib 没有独立的 `tell`/频道类指令入口可测（未找到
+   `cmds/usr/tell.lpc` 或类似文件）。
+6. 沿途新走的房间（`swind2`/`swind3`/`swind4`/`qianyin`/`jinqian`/
+   `jting`/`jhuang1`/`jbang`/`wcloud1`/`wcloud2`/`mailst`，均为上一
+   轮未到过的区域）里的黄衣卫、王风、香菱、荆无命、上官金虹等 NPC
+   首次编译加载时 `debug.log` 全程干净，没有出现 §7.19 一类的
+   "Too deep recursion"。
+
+**新发现并修复（真实 bug，非设计选择）**：`std/money.lpc` 的
+`query_autoload()` 被注释掉了（`autoload(string param)` 接收端完整
+存在且能正常工作，但登记端整行被 `//` 注掉），导致 `cmds/usr/
+quit.lpc` 把所有随身货币都误判成"不支持 autoload"，每次正常 `quit`
+都会把身上的黄金/银子/铜钱直接丢在退出时所在的房间地板上（公共场
+所，任何路人都能捡走），而且下次登入也不会恢复——这不是断线/net-
+dead 的边缘情况，是**每一次正常 `quit` 都会触发**的通用逻辑。追到
+`raw/fy4_S/fy4/std/money.c`，确认这行注释在原始风云Ⅳ源码里就已经
+存在，不是这次转换引入的；但这明显是真实的程序 bug 而不是设计选
+择——全库跨库搜索发现同一行 `string query_autoload() { return
+query_amount() + ""; }` 在几十个非风云系血统的 lib 里是**启用状态**
+（原样一字不差），只有风云系血统的档案带着这行被注释掉的版本，说
+明这就是别的血统早就修过、风云系一直没修的同一个 bug。已取消注释，
+用管理员账号发钱给测试角色、`quit`、重新登入验证：修复后 `quit`
+正确打印"黄金化成一蓬粉末消失了"（走 destroy-and-reconstruct 分
+支，不再是"你丢下一些黄金"），重新登入后 `i` 正确显示黄金金额原样
+恢复。已加入 AGENTS.md §7.199。
+
+**跨库扫描（同日）**：grep 全部 lib 的 `std/money.lpc`，发现同样被
+注释掉的这一行一共命中 16 个 lib（全部是风云系血统）：`fysjmb`（本
+lib，已实测验证）、`fengyun434`、`fy2`、`fy2005`、`fy2mg`、`fy2qh`、
+`fy330`、`fy3dz`、`fy3xd`、`sjpl2`、`sjplgfjxb`、`sjplii`、`wqfy`、
+`xsfyssjb`、`zzfy`、`zzfy3`。其余 15 个用同一处单行取消注释修复，
+逐一用 `lpcc config.fluffos /std/money` 做了针对性编译检查，全部干
+净通过；未对这 15 个做完整 §10.7 深度游玩测试或整库重启验证，符合
+本项目"一个 lib 实测确认、其余同款 lineage 机械扫描 + 编译检查"的
+既有惯例。
+
+**结果**：本轮测试期间 `debug.log` 除已知的编译期"unused local
+variable"一类警告（首次加载各文件时会广播到当前连线的屏幕上，是正
+常的懒编译提示，不是错误）之外，没有出现任何 `error:`/`Bad
+argument`/`No program`/`Too deep recursion`/`FATAL` 记录。测试角色
+存档（`data/{login,user}/m/muqiuxia/`）与管理员测试号
+（`data/{login,user}/f/fluffos/`）均保持未跟踪。
