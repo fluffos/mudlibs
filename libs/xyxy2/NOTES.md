@@ -628,3 +628,15 @@ re-deriving the branch caller-side. Verified via `lpcc --batch` (single
 file compile, PASS) -- not re-tested with a full live playthrough this
 pass, since the fix is a mechanical port of the exact fix already
 verified live on `xyxyutf8`. See AGENTS.md §7.156.
+
+## Description-quality pass correction (2026-09-01, batch 26)
+
+The pre-existing `meta.json` `english_description` claimed new characters
+"start out in worldly scenes like Chang'an's Yingxiong Restaurant" — this
+was a factual error. A grep for `英豪酒楼` across `work/` returns zero
+hits (in this lib or in sibling `xiaoyuxiyou`), and the actual live-tested
+starting room, confirmed repeatedly in this file's own round-two/three/four
+deep-test sections above, is 翠香楼 (Cuixiang Tower) in 傲来国 (the Aolai
+Kingdom) — Chang'an only enters the map later, as the destination of the
+raft crossing on the way to the 百花谷 sect. Rewrote the description to
+name the correct starting location and dropped the invented tavern name.
