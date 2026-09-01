@@ -886,3 +886,23 @@ narrative files, describing a mechanic near "泾水桥南" that has no
 corresponding room/NPC file anywhere in the snapshot) — genuine missing
 content, not a bug, consistent with this lib's other confirmed
 missing-zone findings.
+
+## AGENTS.md §7.19 sweep (2026-09-01): false positive, not fixed
+
+Flagged by the corpus-wide scoping scan as sharing the `mhxy`/`wuhanzhan`
+`enable_player()`-reentrancy-from-`init()` shape (`feature/command.lpc`
+does define an `enable_player()` wrapper around the raw
+`enable_commands()` efun, and `feature/damage.lpc`'s `revive()` /
+`cmds/std/sleep.lpc`'s `wakeup()` do legitimately re-invoke it while
+`living()`), but the actual reachability leg never exists here: a
+body-aware static scan of every `init()` function in this lib (354
+`init()` bodies total, two independent regex passes) found **zero**
+cases of `init()` calling `setup()`/`reset_me()`, directly or
+indirectly. The naive whole-file grep that the original scoping scan
+likely used (`file contains both "void init()" and "setup()"`)
+over-matches here: several `d/city/*.lpc` room files (e.g. `proom.lpc`)
+call `setup()` from `create()` and separately define an `init()` that
+only does unrelated `add_action()` calls -- same function names, same
+file, but no call edge between them. Same false-positive pattern already
+ruled out for `shzs`/`xzyx` earlier in this sweep (see the sweep's
+top-level memory doc). No fix applied.
