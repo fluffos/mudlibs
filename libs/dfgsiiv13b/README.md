@@ -1,7 +1,11 @@
 # 東方故事II v1.3b
 
 一個 1994-2000 年間由 Annihilator 開發的台灣 ES2 血統 MUD（正體中
-文），登入橫幅另稱「天朝帝國 / Celestial Empire」。
+文），登入橫幅另稱「天朝帝國 / Celestial Empire」。地圖内容目前只
+有一座「雪村」——廣場、客棧、鐵匠鋪、集市、廢墟——比起完整的門派
+江湖遊戲，更接近 ES2 引擎自帶的示範村規模，也是這批檔案裡
+「original from Lil, rewritten by Annihilator」這一支血統說法可能
+的發端之處。
 
 ## 内容亮点
 
