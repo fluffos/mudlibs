@@ -122,3 +122,140 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## §10.7 深度功能测试第二轮（2026-09-01）：门派拜师、商店买卖、PvP `kill`
+——四处未受保护的 `write_file()`/`log_file()` 写入不存在的
+`/log/nosave/` 目录，导致真实死亡结算和玩家互殴全部崩溃
+
+本轮测试角度和 2026-08-04 那次刻意不同：全程用原生 Python socket
+脚本（未用 `scripts/tmux_mud.sh`），注册了新测试角色（秦风武 /
+`qinfengwu`），额外注册了一个 `fluffos`/`Mud2026Adm`（按
+`adm/etc/wizlist` 早先播种的凭据登记，登记后自动获得 (admin) 权限，
+用作第二条并行连线，负责 `goto`/`summon`/`call` 等测试用快捷操作，
+不代表这是给普通玩家开的后门）。测试了上一轮明确跳过的三个角度：
+
+**拜师/门派测试**：`cmds/skill/bai.lpc`（`apprentice`/`bai` 指令，
+`cmds/skill/apprentice.lpc` 是字节相同的拷贝）配合
+`feature/apprentice.lpc`。`d/baituo/npc/li.lpc`（白驼山"李教头"）是
+一个会自动收徒的 NPC（`attempt_apprentice()` 直接 `command("recruit
+...")`，不需要额外确认）。现场对秦风武执行 `bai li`，一次成功——
+`score` 正确显示"白驼山派第三代弟子"、"你的师父是李教头"，
+`family/generation`（师父的 2 代 +1）与 `family/master_name` 都正确
+写入。同一房间东侧的"练功房"里还有个"教练"NPC（本局首次被访问），
+连带验证了下面提到的 §7.19 检查，干净。
+
+**商店买卖测试**：`d/city/zahuopu.lpc`（杨永福，`F_DEALER`，只挂了
+`buy`/`list` 两个 `add_action`，没挂 `sell`）用来买东西，
+`d/city/dangpu.lpc`（唐楠，`F_DEALER` + 自己额外挂了
+`sell`/`value`/`redeem`）用来卖东西——先用 `value`/id 关键字踩了个
+自己的坑："草鞋"的 `id()` 列表是 `({"sandals","cao xie","xie"})`，
+没有不带空格的 `"caoxie"`，第一次拿这个打的 `buy caoxie` 自然失败
+（`present()`/`is_vendor_good()` 找不到东西，不是 bug，是我的指令
+打错了）。改用 `buy sandals` 后走通了完整一轮：`杨永福` 处
+"你从杨永福那里买下了一双草鞋。"（花掉 1 两白银），带着这双草鞋走
+到 `dangpu`，`sell sandals` 得到 "你卖掉了一双草鞋给唐楠。"
+并进账 70 文铜板，跟 `feature/dealer.lpc::do_sell()` 的
+`value*70/100` 折算一致。全程 `debug.log` 干净。
+
+**§7.19 检查（AGENTS.md §7.19：`init()`→`setup()`→
+`enable_player()` 链条造成同栈重入）**：静态审查全档案（`grep` 所有
+`enable_player(`/`enable_commands(`/`setup(` 调用点，脚本化提取每个
+`void init()` 函数体检查是否直接调用了 `setup()`/`enable_player()`/
+`enable_commands()`）——零命中；`feature/damage.lpc::revive()` 里那
+处 `this_object()->enable_player();` 是从 `call_out("revive", ...)`
+触发的独立调用栈，不是 `init()` 链条内重入，符合 AGENTS.md §7.19
+"合法的 disable/re-enable 场景"描述，不是 bug。现场访问的全新
+NPC（欧阳克、流氓×2、流氓头、菩提子、杨永福、唐楠、李教头、
+"教练"）首次进入房间时全部干净，没有 "Too deep recursion"。
+
+**发现并修复的真 bug——AGENTS.md §7.x 已知模式家族（`log_file()`/
+`write_file()` 写入不存在的 `/log/nosave/` 目录，异常未捕获，整段
+调用链被吞掉）在本档案里至少 4 处，此前完全未修**：
+
+1. `cmds/adm/call.lpc`（`cmds/arch/call.lpc` 是字节相同拷贝，两份都
+   活跃，分别对应 `(admin)`/`(arch)` 两级指令搜索路径）——管理员
+   `call <玩家>-><函数>(...)` 指令，只要目标是玩家，就会先执行
+   `log_file("nosave/CALL_PLAYER", ...)`，此调用先于真正的
+   `call_other()`。现场复现：`call qinfengwu->die()` 直接抛出
+   `*Wrong permissions for opening file /log/nosave/CALL_PLAYER for
+   append. "No such file or directory"`，`die()` 根本没被调用到。
+2. `adm/daemons/combatd.lpc::killer_reward()`——**AGENTS.md 在 6th+
+   实例那条已经点名"`jyqxc`/`jyqxc2`... 携带同样未受保护的
+   `write_file()`... 截至目前仍未修复"**，本轮就是把这条已知欠账
+   补上。写入点在 `if (userp(victim)) { ... if (userp(killer))
+   write_file("/log/nosave/KILL_PLAYER", ...) ... }` 内，被 gate 在
+   "玩家杀玩家"分支，所以之前两轮打 NPC 的测试从没触发过。真正
+   PvP 死亡时，这次 `write_file()` 抛出的异常会把 `killer_reward()`
+   连同调用它的 `die()` 一起中断在 `this_object()->move(DEATH_ROOM)`
+   之前——受害玩家会卡在"已昏迷/已死亡但从未真正移出房间"的状态，
+   与 AGENTS.md 描述的"死亡循环"是同一类症状。
+3. `cmds/std/kill.lpc`——`kill <目标>` 指令本体，`me->kill_ob(obj)`
+   （发起攻击）之后紧跟着对玩家目标做
+   `write_file("/log/nosave/ATTEMP_KILL", ...)`，同样没有保护。现场
+   复现：`kill fluffos`（对方也是真玩家）打过去，`me` 一方攻击已经
+   生效，但异常把 `obj->fight_ob(me)`（受害者的反击注册）和警告
+   提示整段吞掉——也就是说，**任何玩家对任何玩家使用 `kill` 指令，
+   受害一方永远不会反击**，是个非常常见指令路径上的真实功能性
+   bug，不是罕见分支。
+4. `cmds/skill/bai.lpc` / `cmds/skill/apprentice.lpc`（字节相同）——
+   `attempt_apprentice`/`recruit` 流程里，专门给"风清扬"这个隐藏
+   NPC 准备的徒弟计数彩蛋逻辑，`write_file("/log/nosave/FENG", ...)`
+   同样没保护；顺手发现同一行还有一个独立的运算符优先级 typo——
+   `me->query("family/master_id" == "feng qingyang")` 把 `==`
+   写在了 `query()` 的参数里面，实际上先算出恒假的字符串比较，再拿
+   结果（永远是 `0`）去调 `query(0)`，导致这个分支根本永远进不去
+   （这条彩蛋逻辑本来就因为这个 typo 而完全死代码，`write_file()`
+   的 bug 本身反而从未被触发过）。
+
+**修复方式**：优先修共享入口——`adm/simul_efun/file.lpc` 的
+`log_file()` 本来就是裸 `write_file(LOG_DIR + file, text)`，同一份
+文件里下面几行就有现成、正确、但从未被用到的 `assure_file()`
+辅助函数（跟 AGENTS.md 记录的其它几个姊妹档案一模一样的"帮手函数
+就在旁边却没人用"形状）。把 `assure_file()` 挪到 `log_file()`
+前面定义（避免同驱动下"函数须先声明才能调用"的编译顺序坑，
+AGENTS.md 已记录过这个坑），再让 `log_file()` 内部先
+`assure_file(LOG_DIR + file);` 再 `write_file(...)`——这一次性修好
+了全档案所有经由 `log_file()` 写 `nosave/` 的调用点（`securityd.lpc`
+的升级日志、`master.lpc`/`adm/single/master.lpc` 的崩溃日志、
+`suicide.lpc`、`cmds/arch|adm/purge.lpc`、`call.lpc` 两份拷贝等），
+不用逐一点名修。上面第 2/3/4 条是绕开 `log_file()` 直接裸调
+`write_file()` 的独立调用点，各自在 `write_file()` 前补一行
+`assure_file("/log/nosave/XXX");`；第 4 条顺带把误放的 `==`
+挪回 `query()` 外面。
+
+**现场验证（修复后重启 `build-debug` 驱动）**：
+- `call qinfengwu->die()` 不再抛异常，返回 `= 0`；`/log/nosave/`
+  目录被自动建出来，`CALL_PLAYER` 文件正确写入一行记录；被强制
+  处死的秦风武完整走完"死了→鬼门关（实习无常+白无常五段对话，
+  每段 5 秒 `call_out`）→功德箱一闪→复活于武庙"全流程，`score`
+  显示精/气降到约 16%（符合死亡惩罚），`实战经验` +1。
+- 用 `age_modify` 字段把 `fluffos` 的有效年龄推过 15 岁下限
+  （`kill` 指令自带一个"未成年玩家禁止被 kill"的设计性门槛，
+  跟本次要修的 bug 无关，纯粹是测试需要绕开——顺带确认
+  `clone/user/user.lpc::update_age()` 每次 `heart_beat` 都会用
+  `14 + age_modify + mud_age/86400` 重算 `age`，直接 `set("age",
+  N)` 几秒内就会被冲掉，这是有意的"在线时长决定年龄"机制，不是
+  bug），随后现场发起一场真正的玩家对玩家 `kill fluffos`：多回合
+  拳脚交锋消息正常双向输出，秦风武被打到昏迷倒地
+  （`unconcious()`），确认 `last_damage_from` 记录为 `fluffos` 后
+  用 `call qinfengwu->die()` 补一刀触发真正死亡结算——
+  `killer_reward()` 的玩家互杀分支完整跑完，谣言频道正确广播
+  "秦风武被福来福杀死了"，`/log/nosave/KILL_PLAYER` 与
+  `/log/nosave/ATTEMP_KILL` 都正确写入，全程 `debug.log`
+  零新增运行时错误（只有已知的、无害的首次编译告警噪音）。
+
+**断线/重连对照测试（本轮新增角度，上一轮明确没测）**：用
+`call qinfengwu->die()` 触发一次死亡，让"实习无常"五段对话跑到
+第二段左右时主动断开测试连线（模拟真实掉线），空等超过一个
+`call_out` 周期后重新登录——`death_stage()` 的
+`if (!ob || !present(ob)) return;` 单次判定（此前 §7.68 更正说明
+里明确保留、判定为设计而非 bug 的写法）在断线期间因为角色对象本身
+仍然 `present()` 在鬼门关房间里（断线不移除角色，只是标记
+"断线中"）而完全不受影响，对话链在后台正常继续推进，重连后
+`look`/`score` 都显示已经复活、状态正常——没有新问题，符合预期。
+
+**范围说明**：本轮修复严格限定在"未受保护的 I/O 导致崩溃"这一类
+程序性 bug（并顺手带了一个同一行上的运算符优先级 typo），没有触碰
+任何战斗强度/门派设定/NPC 性格等内容设计；`kill` 指令自带的
+"未成年玩家保护"门槛、`age_modify`/`mud_age` 计龄机制均予保留，
+只是测试时借用来快速绕过门槛，不代表对其做了任何修改。
