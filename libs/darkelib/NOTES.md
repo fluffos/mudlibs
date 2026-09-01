@@ -579,3 +579,56 @@ onboarding pass focused on the native-driver bring-up, bug fixes, and
 full playthrough verification per the assignment. `wasm_status` left
 empty in `meta.json`, matching the convention for other recently-
 onboarded libs pending their WASM pass (`rifts2`, `riftsds`, `oxidus`).
+
+## 9. AGENTS.md §7.19 (room/prop variant) -- kobold pond reentrancy crash, fixed
+
+Corpus-wide `enable_commands()`/`init()` reentrancy sweep (AGENTS.md
+§7.19) flagged `d/camps/kobold/rooms/pond.lpc:26` as a structurally
+distinct instance: not the ES2/Xiyouji player-wrapper architecture the
+main sweep fixed (66 libs), but a scenery prop cloned into a real room
+(`d/camps/kobold/rooms/camp07.lpc`, `new(PATH+"pond")->move(this_object())`
+in `create()`) whose own `init()` unconditionally called
+`enable_commands()`.
+
+**Live-confirmed real and severe, not a false alarm.** The driver's
+`enable_commands()` (`packages/core/add_action.cc`) re-invokes `init()`
+on environment/sibling/inventory objects whenever `enable_commands
+call init` (default ON, `__RC_ENABLE_COMMANDS_CALL_INIT__`) is set --
+regardless of the `setup_actions` argument passed. Because the pond is
+sitting in camp07's own inventory, every living object (an
+already-`enable_commands()`'d player) entering camp07 makes the
+driver's own command-registration cascade call the pond's `init()`
+again while the ORIGINAL call is still on the stack; that nested call
+hits `enable_commands()` again and re-enters the same cascade,
+recursing until the control-stack depth limit aborts it.
+
+Reproduced live pre-fix: `goto /d/camps/kobold/rooms/camp07` as the
+`fluffos` admin threw `Too deep recursion.` immediately (the player
+was NOT moved, `debug.log` blamed `/std/room.lpc:54` -- the closing
+brace of camp07's inherited `::init()`, the frame that finally
+exceeded the depth limit inside the reentrant cascade). This is not
+first-visit-only self-healing: the pond permanently gets its
+`O_ENABLE_COMMANDS` flag set on the very first (aborted) attempt, and
+every subsequent player entering camp07 re-triggers the same crash via
+the driver's per-object command-registration loop -- i.e. camp07 was
+permanently unusable, not just broken on its first-ever visit.
+
+**Fix**: guarded the call with `if (!living(this_object())) enable_commands();`
+(see the in-code comment for the full reasoning). Unlike the
+player-wrapper §7.19 case, a plain `living()` guard is safe here --
+the driver sets `O_ENABLE_COMMANDS` as literally the first statement
+inside `enable_commands()`, before any recursive init() cascade runs,
+so `living()` already reflects the truth for a reentrant call; and
+this prop has no legitimate re-enable-while-living use case the way a
+player's revive/wakeup/disguise-removal flows do (no `catch_tell()`,
+no `command()` use, and `add_action()` doesn't require
+`enable_commands()` to function at all -- the call appears to be
+inert copy-paste, per the file's own header comment "Code ripped from
+Khojem's vats and stream").
+
+Re-verified live post-fix with a full driver restart: fresh login (the
+`fluffos` account's saved start location is camp07 from the pre-fix
+test) drops straight into camp07 with no crash, `look`/`fill` both
+work normally, `debug.log` shows zero "Too deep recursion" occurrences
+across the whole post-fix session. Compile-clean (single-file
+recompile via driver restart, no new warnings/errors on this file).

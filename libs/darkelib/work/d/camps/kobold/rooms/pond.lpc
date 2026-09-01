@@ -23,7 +23,24 @@ void create() {
 
 void init() {
   ::init();
-  enable_commands();
+  // AGENTS.md sec.7.19 (room/prop variant): this object is cloned into
+  // /d/camps/kobold/rooms/camp07 and sits in its inventory, so every
+  // time a living object (a player, already enable_commands()'d) enters
+  // camp07, the driver's own item<->room command-registration cascade
+  // re-invokes THIS init() on the pond while the original call is still
+  // on the stack -- calling enable_commands() unconditionally here then
+  // reenters the same cascade and recurses until "Too deep recursion."
+  // Live-reproduced: `goto /d/camps/kobold/rooms/camp07` crashed the
+  // room's own ::init() (std/room.lpc) via this exact chain before this
+  // guard was added. Unlike the player-wrapper §7.19 case, there is no
+  // legitimate re-enable-while-living use for a static hazard/scenery
+  // prop like this one (nothing here uses catch_tell()/command(), and
+  // add_action() below doesn't require enable_commands() to work), so a
+  // plain living() guard is safe -- the driver sets the O_ENABLE_COMMANDS
+  // flag as the very first step inside enable_commands() itself, before
+  // it re-invokes any init() cascade, so living() already reflects the
+  // truth by the time a reentrant call reaches here.
+  if (!living(this_object())) enable_commands();
   add_action("fill_vessel", "fill");
   return;
 }
