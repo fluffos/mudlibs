@@ -66,3 +66,28 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## AGENTS.md §7.19: enable_player() reentrancy guard (2026-09-01)
+
+Same corpus-wide bug class as `mhxy`/`wuhanzhan`: `feature/command.lpc`'s
+`enable_player()` wraps `enable_commands()` and is unconditionally
+reachable from an NPC's `init()` via `setup()`/`reset_me()` (confirmed
+on this lib's own `d/*/npc/zhangmen*.lpc`-family NPCs, matching
+`mhxy`'s originally-documented `d/xueshan/npc/zhangmen.lpc` pattern).
+Calling `enable_commands()` on an object that's already `living()`
+makes the driver re-invoke that object's `init()` as a side effect;
+since `init()` calls back into `enable_player()`, that is genuine
+same-call-stack reentrancy that repeats until "Too deep recursion"
+aborts a room's first-ever visit.
+
+Fixed with a true reentrancy flag (`nosave private int
+in_enable_player_now;`), NOT a bare `if (living(this_object()))
+return;` guard — this lib's `feature/damage.lpc` `revive()` and
+`cmds/std/sleep.lpc` `wakeup()`/`wakeup2()` all legitimately
+re-invoke `enable_player()` while the object is still `living()`
+(that's how a fainted/asleep character gets commands back), so a
+living()-gated guard would silently break every one of those real
+re-enables. `enable_player()`'s single body has no early `return`
+statements, so the flag is set at entry and cleared once, before the
+function's fall-through end. Verified with a single-file `lpcc`
+compile check (exit 0, no errors) against `feature/command.lpc`.
