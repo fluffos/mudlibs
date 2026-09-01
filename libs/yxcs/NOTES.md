@@ -1002,3 +1002,15 @@ net-dead in-memory reattach rather than an actual disk restore (the
 first tmux session was never sent `quit`, just closed); nothing to
 clean up on disk either way since no `qinmaiwu.o` file exists. Driver
 killed by exact PID after testing; both tmux sessions stopped.
+
+## §7.19 enable_player() reentrancy fix (2026-09-01)
+
+Corpus-wide mechanical fix (AGENTS.md §7.19, Batch F of 6). `feature/command.lpc`'s
+`enable_player()` had no reentrancy guard: NPC `init()` (e.g.
+`d/shushan/npc/zhangmen.lpc`) -> `setup()`/`reset_me()` -> `enable_player()`
+-> `enable_commands()`, which can synchronously re-invoke the same object's
+`init()` (driver docs BUGS note; live-verified mhxy/wuhanzhan precedent), and
+`revive()`/`wakeup()`/`wakeup2()` re-invoke `enable_player()` while already
+`living()`, ruling out a bare `living()` guard. Fixed with the standard
+`in_enable_player_now` true reentrancy flag (mhxy's reference fix). Verified
+via single-file `lpcc --batch` PASS.
