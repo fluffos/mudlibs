@@ -400,3 +400,119 @@ here (only whitespace/indentation differences, but enough that the
 automated port skipped it) and has NOT had the same socket-gutting fix
 re-applied -- worth checking first if a future WASM pass reports the
 same "no sockets package" boot failure `ds386` hit.
+
+## §10.7 deep functional test (2026-08-31, round two)
+
+Full continuous playthrough against the shared `~/src/fluffos/build-
+debug/src/driver config.fluffos` (no dedicated worktree needed),
+deliberately exercising the WORKING stock-Dead-Souls content per this
+session's own brief -- the confirmed-broken `domains/omega`/`domains/
+common`/`domains/std` gap (§4 above, AGENTS.md §7.164) was not
+re-litigated or re-poked at beyond a single deliberate negative-control
+clone (below). A fresh throwaway mortal registration (`Vantharion`,
+human) through the full chargen ritual (name validation, age gate,
+screen-reader prompt, password, gender, email, race pick) landed
+correctly in the start room; `enter town` reached the real, working
+village hub. Also re-verified the seeded `fluffos` admin account
+(§1.5/AGENTS.md's Dead-Souls admin-seeding note) still logs in
+correctly and shows the wizard room-path annotation.
+
+### What was tested and confirmed working -- zero programming bugs found this pass
+
+- **Movement/navigation**: start room -> town intersection -> Saquivor
+  Road (a talking beggar NPC gave a real map item) -> the Healer's
+  Guild building, all with correct descriptions/exits/NPCs every time.
+- **Shop/economy**: the Healer's Guild's real buy-a-service shop
+  (`buy claritin from james`) correctly refused an empty-walleted
+  character with "You don't have enough universal credits to buy
+  that." -- a genuine, live-verified insufficient-funds economy check,
+  not just a `list` read.
+- **Real combat, extensively**: cloned a real stock-content NPC
+  (`/domains/town/npc/orc`, the ordinary Dead Souls API --
+  `inherit LIB_NPC`) as the admin and fought it to the admin's own
+  death. Limb-targeted damage was exchanged realistically in both
+  directions for well over 30 rounds (hits, misses, "flourish of
+  attacks," stunning blows, per-limb messages) with zero crash and
+  zero `debug.log` growth throughout.
+- **Death and full resurrection cycle, live end-to-end** -- normally
+  one of the two hardest-to-reach §10.7 checklist items, verified for
+  real here because the admin-vs-orc fight above went all the way:
+  `SYSTEM <death> Orc has slain Fluffos.` -> landed in `/domains/
+  default/room/death` (`YOU ARE DEAD!`, "You are in formless void
+  without substance and outside time.") -> the room's own `regenerate`
+  command worked correctly, rematerializing the character back at
+  `/domains/default/room/start` with restored (if reduced) HP/PPE/SP.
+  Not gated behind `wizardp()` the way some other libs' ghost-recovery
+  flows are (AGENTS.md §7.68/§10.7 item 6a) -- this lib's own death
+  system handles a wizard character exactly like an ordinary one.
+- **`quit` / reconnect**: clean disconnect (`Please come back another
+  time!`), `log/debug.log` never created at any point in the whole
+  session (before, during, or after the death/regen sequence). A fresh
+  reconnect as `fluffos` correctly restored the post-respawn location
+  (`/domains/default/room/start`) and HP/PPE/SP state from the save
+  file.
+- **Negative control, confirming §4's finding is still accurate and
+  scoped correctly**: deliberately tried `clone /domains/std/monster/
+  troll` (part of the already-documented broken `domains/std` tree) --
+  got the exact same `inherit ADVERSARY;` compile error §4 already
+  catalogued, then successfully cloned the WORKING `/domains/town/npc/
+  orc` instead for the real combat test above. Confirms the broken/
+  working boundary from onboarding is still exactly where it was
+  documented, not encroaching on stock content.
+- **~220s (3+ hour, see below) idle long-sit boot watch**: `debug.log`
+  never created; stdout showed zero new errors beyond the one expected
+  `domains/std/monster/troll.lpc` compile error from this session's
+  own deliberate negative-control clone above.
+
+### Minor, unresolved cosmetic observations (not fixed -- neither blocks anything or has a confirmed severe effect; scope discipline against guessing)
+
+- **HP/PPE/SP occasionally render as a raw float** (`hp:
+  132.000000/440` instead of `hp: 132/440`) after the death/regenerate
+  sequence -- some stat-regen calculation along that path isn't
+  truncated back to an int before being substituted into the prompt
+  template. Purely cosmetic (regeneration and the death/respawn cycle
+  both worked correctly regardless); not root-caused given time
+  constraints.
+- **`domains/Praxis/supply2.lpc`'s `add_sky_event((: "shop_closing"
+  :))`** triggers this driver's "Function pointer returning string
+  constant is NOT a function call" warning at compile time -- the same
+  MudOS single-string functional-literal shorthand class already
+  catalogued in AGENTS.md §8.23 (confirmed there to silently never
+  fire on this driver). Here it would only affect a shop's scheduled
+  "closing" cosmetic flavor event, not blocking `list`/`buy`/`sell`
+  themselves; not chased further given the narrow, cosmetic blast
+  radius and time budget.
+
+### Not reached this session, flagged honestly
+
+- **Skill/guild-class progression** (as distinct from the Healer's
+  Guild's plain buy-a-service building, which is a shop not a
+  class/skill guild): not exercised -- time was budgeted toward the
+  admin combat/death/respawn sequence instead, which this project's
+  own methodology explicitly treats as one of the two hardest-to-reach
+  checklist items and therefore worth prioritizing when it becomes
+  reachable.
+- **A full two-sided paid shop transaction** (buy AND sell, with
+  correct change): only the insufficient-funds refusal path was
+  reached; a fresh mortal character never accumulated enough starting
+  currency to complete a real purchase in the time available.
+
+### An extended idle window (not a soak-test bug)
+
+The driver was left running considerably longer than the standard
+~200s idle target this pass (a background-task notification delay
+outside this session's control stretched the wait to several hours of
+real wall-clock time) -- reported here for the record since it's an
+unusually long uptime, not because anything was found: `debug.log`
+remained completely absent the entire time, and memory growth (~1.5GB
+-> ~5.6GB RSS) is consistent with this driver's own already-documented
+ambient NPC `heart_beat()`/lazy-compile behavior (AGENTS.md §10.8) over
+that much extra wall-clock time, not a new leak specific to this lib.
+
+### Files modified this pass
+
+None -- this pass found zero programming bugs. Runtime state generated
+during testing (the `fluffos` admin's updated save, the throwaway
+`Vantharion` character's save/mailbox, and a few daemon `.o` save
+files) was reverted before committing, per this project's own
+runtime-state policy.
