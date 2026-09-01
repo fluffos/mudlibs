@@ -14571,6 +14571,101 @@ alias for — `int query_NAME() { return NAME; }` is the exact shape to
 flag. The macro is meant for OTHER files to use; the function that
 implements it must never use its own alias.
 
+### 7.195 A Dead Souls "become a class from the stock `Praxis` demo guild" join room calling `SetClass()` where `ChangeClass()` was required silently no-ops for every ordinary player, forever — confirmed corpus-wide across 5 Dead-Souls-lineage libs
+
+Found on `riftsds`'s §10.7 round-three deep functional test (targeting
+the "skill/guild-class progression" checklist item round two had
+flagged as unreached). `lib/classes.lpc`'s `SetClass(class_name)` is
+NOT the entry point for a fresh character's *first* class — every
+Dead Souls player starts with `Class = "explorer"` set at creation
+(`lib/player.lpc:317`), so `SetClass()`'s own `if(Class){
+if(!high_mortalp()) return Class; ... }` guard always treats a second
+`SetClass()` call as **multi-classing** (bolting on a secondary class)
+and silently refuses unless the caller is `high_mortalp()` — a
+non-creator player above level 24 (Rifts DS's "veteran mortal" tier;
+`secure/sefun/pointers.lpc`'s `high_mortalp()` explicitly excludes
+`creatorp()` accounts too, so even an admin test character can never
+pass this gate). The correct entry point for a first class assignment
+is `ChangeClass()` (same file): it does `Class = 0` before delegating
+to `SetClass()`, specifically to bypass that gate for a legitimate
+one-time assignment, then restores the player's level via
+`ChangeLevel()`.
+
+The stock Dead Souls demo content's own `domains/Praxis/
+{fighter,cleric,mage,monk,kataan,rogue}_join.lpc` files (the "Hall of
+X"/"become X" guild-join rooms) all get this wrong — every one of
+them calls `this_player()->SetClass("X")` directly instead of
+`ChangeClass("X")`. The bug is invisible at the UI level: `become()`
+always prints its success flavor text ("The Great Warrior initiates
+you into the class of fighters.") BEFORE the doomed `SetClass()` call,
+so the player sees an apparent success message while `score`/`skills`
+afterward silently show they're still `Explorer` with none of the
+class's skills — no error, no crash, `debug.log` untouched, reachable
+by any newly-registered mortal on their very first visit to the guild.
+The correct pattern IS present and working elsewhere in the exact
+same stock content: `domains/town/npc/herkimer.lpc`'s "ask herkimer to
+join" (the Mage's Guild) calls `ob->ChangeClass("mage")` — proving
+this is a genuine wrong-function-call bug in the six Praxis files, not
+a design choice, since the lib's own other join point does it
+correctly right next to it.
+
+**Confirmed corpus-wide**: `ds386`, `dsIII`, `dshakkard`, and
+`deadsouls_fluffos` all ship byte-identical copies of all six broken
+`domains/Praxis/*_join.lpc` files (`grep -c 'SetClass("fighter")'`
+etc. all return 1 hit at the same line number in every one of the
+four), and none of them have applied the `ChangeClass()` fix. **Not
+yet fixed on those four** — flagged here for a dedicated sibling sweep
+(six one-line `SetClass(` → `ChangeClass(` edits per lib, 24 total)
+rather than fixed inline during this pass, since this session's scope
+was `riftsds` only. `dsI`/`dsII` do not ship the `domains/Praxis` tree
+at all (checked, not applicable).
+
+**How to apply generally**: on any Dead-Souls-lineage lib, grep
+`domains/Praxis/*_join.lpc` (or any custom guild-join room built on
+the same `lib/classes.lpc` class system) for `this_player()->
+SetClass(` — every hit going from a fresh/explorer character to a
+first real class needs to be `ChangeClass()` instead. A working
+sibling call site elsewhere in the same lib's own stock content
+(often a town-guild NPC's "ask X to join" handler) is the fastest way
+to confirm which one is correct for that lib's specific class-system
+variant before changing anything.
+
+### 7.196 The same `riftsds` pass also found three accessor names (`query_cap_name`/`query_name`/`query_gender`) missing from an already-partially-built `compat.h` naming-convention shim — the same gap-shape as §4's `domains/omega`/`common`/`std` framework hole, but small enough to actually finish
+
+`riftsds/work/secure/include/compat.h` (auto-`#include`d into every
+compiled file via this driver's `global include file` setting, gated
+`#if COMPAT_MODE`) already maps ~50 lowercase `set_*`/`query_*`
+Nightmare/TMI-style verb names onto this lib's real Dead Souls
+CamelCase API (`#define query_class GetClass`, `#define query_open
+GetOpen`, etc.) — evidence the original single-developer author was
+actively building a compatibility shim for stock content bulk-imported
+from a different-naming-convention source tree. It just never got
+three more entries that the SAME bulk-imported `domains/Praxis` demo
+content actually needs: `query_cap_name()` (51 call sites across 30
+files), `query_name()` (40 call sites), and `query_gender()` (8 call
+sites) — all genuinely undefined on the player object, silently
+absorbed wherever called (`this_player()->query_cap_name()+"..."`
+inside a `say()`/`message()` argument just produces a broadcast that
+never reaches anyone, since a `say()` call already always excludes the
+actor from receiving their own line — easy to mistake for "the call
+crashed" when it's actually a red herring; the REAL live tell is
+`GetClass()`/`GetLevel()`/etc. actually changing after the call, not
+whether a flavor-text broadcast appeared). **Fix**: three more lines
+in `compat.h`, following the file's own established pattern —
+`#define query_name GetName` / `#define query_cap_name GetCapName` /
+`#define query_gender GetGender`. **Not yet checked on `ds386`/
+`dsIII`/`dshakkard`/`deadsouls_fluffos`** (confirmed missing the same
+three mappings from their own `compat.h` files, per a quick grep during
+this pass, but not fixed there this session) — bundle with the §7.195
+sweep since it's the same four sibling libs and the same `domains/
+Praxis` content trunk driving the need. **How to apply generally**: on
+any lib with this kind of naming-convention `compat.h`/shim header,
+don't assume "the shim exists" means "the shim is complete" — grep
+every `->query_*`/`->set_*` call site the shim's own comment/history
+suggests it was meant to cover, not just the ones an initial pass
+happened to test, and check whether the shim's list is a strict subset
+of the calls actually made anywhere in the tree.
+
 ---
 
 ## 8. Login and registration flow bugs

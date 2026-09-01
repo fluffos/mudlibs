@@ -516,3 +516,259 @@ during testing (the `fluffos` admin's updated save, the throwaway
 `Vantharion` character's save/mailbox, and a few daemon `.o` save
 files) was reverted before committing, per this project's own
 runtime-state policy.
+
+## §10.7 deep functional test (2026-09-01, round three) -- guild/class progression was completely broken, fixed
+
+This pass deliberately targeted the two angles round two's own "Not
+reached" section flagged: skill/guild-class progression, and a
+completed two-sided (buy+sell) shop transaction. It also tried `tell`
+(including a nonexistent recipient) and a battery of malformed/empty
+command inputs. Both flagged gaps turned into real findings.
+
+### BUG 1 (SEVERE): every Praxis guild-join point silently failed to
+### ever change the player's class -- `SetClass()` called where
+### `ChangeClass()` was required
+
+**Symptom**: `domains/Praxis/fighter_join.lpc`'s `become fighter`
+(and the identical pattern in `cleric_join.lpc`, `mage_join.lpc`,
+`monk_join.lpc`, `kataan_join.lpc`, `rogue_join.lpc`) always printed
+its success message ("The Great Warrior initiates you into the class
+of fighters.") but `score`/`skills` afterward still showed the
+character as `Explorer` with none of the class's real skills --
+100% reproducible, on a fresh level-1 character, every time, for
+every one of the six guild-join rooms.
+
+**Root cause**: all six `become()`/`join()` handlers call
+`this_player()->SetClass(class_name)` directly. `lib/classes.lpc`'s
+`SetClass()` is NOT the entry point for a fresh character's *first*
+class -- its own header comment says so ("pass by reference... please
+see the FAQ") and its logic proves it: `if(Class){ if(!high_mortalp())
+return Class; ... }` -- if the player already has ANY non-zero `Class`
+value (and every character does, since `lib/player.lpc:317` sets
+`Class = "explorer"` for everyone at creation), `SetClass()` treats
+the call as **multi-classing** (bolting a second class onto an
+existing one) and silently refuses unless the caller is
+`high_mortalp()` (a non-creator player above level 24 -- Rifts DS's
+own "veteran mortal" tier for genuine multi-classing, `secure/sefun/
+pointers.lpc:95`). A fresh level-1 (or even a creator, since
+`high_mortalp()` explicitly excludes `creatorp()` accounts too --
+confirmed live: `fluffos` itself could never pass this gate either)
+explorer can never satisfy that gate, so the assignment is dropped on
+the floor every time, with the success message printed regardless
+because it's written to the screen *before* the doomed `SetClass()`
+call.
+
+The correct entry point for a fresh explorer's first class is
+`ChangeClass()` (same file, `lib/classes.lpc`): it explicitly does
+`Class = 0` before delegating to `SetClass()`, which is exactly what
+bypasses the multi-class gate for a legitimate first-time
+assignment, then restores the player's level via `ChangeLevel(lvl)`.
+**Proof this is the established, working convention in this very
+lib**: `domains/town/npc/herkimer.lpc:111` (the real, working, already
+round-two-tested Mage's Guild join command, "ask herkimer to join")
+calls `ob->ChangeClass("mage")`, not `SetClass()`. The six Praxis
+files are the only call sites in the whole corpus using the wrong one
+(`grep -rln ChangeClass` turns up exactly `lib/classes.lpc`,
+`herkimer.lpc`, `Ylsrim/npc/roshd.lpc`, and `secure/lib/connect.lpc`
+-- none of the six broken join files).
+
+**Fix**: `this_player()->SetClass("X")` -> `this_player()->
+ChangeClass("X")` in:
+- `domains/Praxis/fighter_join.lpc:78`
+- `domains/Praxis/cleric_join.lpc:67`
+- `domains/Praxis/mage_join.lpc:77`
+- `domains/Praxis/monk_join.lpc:66`
+- `domains/Praxis/kataan_join.lpc:66`
+- `domains/Praxis/rogue_join.lpc:73`
+
+**Live-verified**: fresh boot, admin `fluffos` (level 1, `Explorer`)
+-> `goto /domains/Praxis/fighter_join` -> `become fighter` ->
+`score` now correctly shows `Class: [Fighter]` -> `skills` now
+correctly shows the real fighter primary skill set (`blade attack`,
+`blunt attack`, `melee attack`, `multi-hand`, `multi-weapon`, etc.,
+all at the class file's configured 4/8 starting level) in place of
+Explorer's skills. Before the fix, `score` stayed `Explorer` and
+`skills` stayed unchanged no matter how many times `become fighter`
+was run. `debug.log` stayed empty and stdout showed no new errors
+across the whole test (expected -- this was a silent no-op, not a
+crash, per AGENTS.md §10.9's "invisible failure" class).
+
+**Known residual content gap, NOT fixed (out of scope, same shape as
+the already-documented `domains/omega`/`common`/`std` framework gap
+but much smaller)**: `secure/cfg/classes/` only ships `cleric`,
+`explorer`, `fighter`, `mage`, and `thief` class definitions --
+`monk_join.lpc`, `kataan_join.lpc`, and `rogue_join.lpc` call
+`ChangeClass("monk")`/`("kataan")`/`("rogue")`, none of which have a
+matching config file. Even with the `SetClass`->`ChangeClass` fix
+applied, `CLASSES_D->SetClass()` (`daemon/classes.lpc:123`) returns
+immediately for an unconfigured class name, so `become monk`/`become
+kataan`/`become rogue` still silently leave the player as `Explorer`
+-- this is a missing-content-data gap (nobody ever authored a `monk`/
+`kataan`/`rogue` class file), not a wrong-function-call bug, and
+authoring three balanced class skill-lists from scratch would be
+inventing content, not fixing one -- left alone per this project's
+established policy. `fighter`/`cleric`/`mage` (and presumably `thief`,
+not separately live-tested but config-file-complete and structurally
+identical) are now fully functional via their Praxis join rooms.
+
+### BUG 2 (moderate, fixed as part of the same investigation):
+### `query_cap_name()`/`query_name()`/`query_gender()` are undefined
+### on the player object -- three missing entries in the lib's own
+### compat shim
+
+While root-causing BUG 1, `call me->query_cap_name()` (admin `call`
+command, a direct `function_exists()` probe) confirmed this function
+plain does not exist anywhere on the player object -- `grep -rln
+"->query_cap_name(" domains/Praxis` turns up 51 call sites across 30
+files (plus one in `realms/gravity/cmds/testooc.lpc`), all from the
+same bulk-imported content lineage documented in §4 above. Two
+siblings, `query_name()` (40 call sites) and `query_gender()` (8 call
+sites), are equally undefined.
+
+This is the exact same class of gap as the already-documented
+`secure/include/compat.h` shim (§4: "the repo's own author was
+ACTIVELY building a compatibility shim... but it simply never got the
+additional ~18 class macros" for the three fully-broken trees) --
+except this time the shim already has 50 other `query_*`/`set_*`
+mappings covering exactly this kind of naming-convention mismatch
+(`#define query_class GetClass`, `#define query_open GetOpen`, etc.),
+it just never got these three specific ones added, even though the
+Praxis tree that needs them is otherwise fully working, non-broken
+content. Confirmed live: before the fix, `preview()`'s `say(this_player
+()->query_cap_name()+" seeks to learn about fighter.", ...)` line
+never produced its "X seeks to learn..." room broadcast to bystanders
+(silently absorbed); `query_class()` -- which DOES have a compat.h
+mapping already -- correctly resolved and printed "Welcome,
+explorer!" the whole time, proving the macro-substitution mechanism
+itself works fine and is exactly what was missing for the other three
+names.
+
+**Fix**: added three lines to `secure/include/compat.h`, following the
+file's own established pattern exactly:
+```
+#define query_name                      GetName
+#define query_cap_name                  GetCapName
+#define query_gender                    GetGender
+```
+`GetName()`, `GetCapName()`, and `GetGender()` are all real,
+extensively-used lfuns already defined on the player object (`lib/
+player.lpc:531,563`, `lib/race.lpc:216`) -- confirmed via `grep -rln
+GetCapName` returning 60+ genuine call sites across the working parts
+of this same lib (`verbs/players/bump.lpc`, `secure/cmds/players/
+tell.lpc`, `secure/daemon/chat.lpc`, etc.), so this is restoring the
+established convention, not inventing a new one. Two stray hits inside
+already-broken `domains/std`/`domains/common` files (which don't
+compile at all, per §4) are harmless dead code either way. Because
+`global.h` (which conditionally `#include`s `compat.h` under
+`COMPAT_MODE`) is this driver's configured `global include file`,
+every `.lpc` file in the mudlib picks up the three new mappings
+automatically on next compile -- no per-file edits needed beyond the
+one header.
+
+**Live-verified**: post-fix, `call me->query_cap_name()` (raw
+`function_exists()` probe) still correctly reports "not in OBJ" (a
+runtime string handed to `call_other` is never macro-expanded --
+expected, since `#define` is a compile-time textual substitution over
+literal source identifiers, not a runtime symbol lookup), but the
+*compiled* `become()`/`preview()` functions in `fighter_join.lpc` --
+which contain the literal identifier `query_cap_name` in their own
+source, and get recompiled fresh against the updated `compat.h` on
+driver restart -- now correctly resolve to `GetCapName()` at compile
+time. No regressions: full driver reboot, zero new compile errors,
+zero `debug.log`/stdout errors across the whole remaining test
+session.
+
+### Skill training (organic teacher-NPC route), verified working
+
+With `fluffos` reverted to `Explorer` (which carries `magic attack`/
+`magic defense` as innate secondary skills) and 5 training points
+granted via `call me->AddTrainingPoints(5)` (the admin-command
+shortcut this project's own brief for this pass explicitly sanctions
+in place of a lengthy real XP grind), `goto /domains/town/room/
+training` -> `ask radagast to train magic attack` correctly matched
+against `lib/base_trainer.lpc`'s `eventTrain()` (found the skill in
+the player's own skill list, found available training points, started
+a real multi-stage `ContinueTraining()` call_out sequence) and printed
+"Radagast begins teaching you about the skill of magic attack." --
+confirming the organic NPC-trainer skill-progression path (distinct
+from both the Healer's Guild buy-a-service shop and the Praxis
+guild-join mechanism above) is genuinely wired up and functional. Not
+chased to full completion (the training sequence runs across several
+`TRAINING_WAIT`-spaced `call_out()`s) since the mechanism's entry path
+was the object of the test, not the multi-minute wait.
+
+### Two-sided shop transaction, completed and verified end-to-end
+
+Registered a fresh throwaway mortal (`Testshopper`, human), granted
+currency via `call %testshopper->AddCurrency("universal credits",
+N)` (admin shortcut, same sanctioned pattern as above -- note the
+lowercase key name: `find_player()`/`to_object()`'s `%name` token
+lookup is case-sensitive on the saved keyname, `%Testshopper`
+capitalized fails with "Cannot identify any object" while
+`%testshopper` succeeds). At the Healer's Guild (`domains/town/room/
+healer`, reached via `enter town` -> `north` -> `north` -> `enter
+guild`):
+
+- **Buy**: `buy healing slip from james` with 29000 universal credits
+  on hand correctly charged 20000 ("James exclaims... Here is a
+  healing slip for 20000 universal credits!"), left exactly 9000,
+  and added "A healing slip" to inventory.
+- **Sell**: `sell slip to james` correctly paid back 10000 (half of
+  the 20000 buy price, per `lib/std/vendor.lpc:eventBuy()`'s own
+  `cost = cost / 2` markdown logic for player->vendor sales) for a
+  final balance of 19000, and correctly removed "A healing slip" from
+  inventory.
+- **Negative control**: `sell pill to james` (a `claritin` bought
+  earlier) was correctly refused ("I do not buy things like a
+  claritin pill.") with zero currency/inventory side effects --
+  `claritin.lpc` never overrides `SetVendorType()` so it stays the
+  `lib/meal.lpc` default `VT_DRINK`, which doesn't match James's own
+  `SetVendorType(VT_HERB)`. This is correct, intentional
+  `GetVendorType() & GetVendorType()` bitmask economy logic (a healer
+  buys herbs, not the medicine he dispenses), not a bug.
+
+Both the earlier round-two insufficient-funds refusal and this
+pass's fully-funded buy+sell round trip are now live-verified for the
+same shop, closing out this checklist item completely.
+
+### `tell`, briefly
+
+`tell testshopper hello there` (creator -> mortal, both connected)
+worked correctly in both directions and correctly charged 15 PPE (a
+deliberate Rifts-flavored "telepathic tell costs psychic energy"
+design choice, not a bug). `tell <nonexistent-name> hello` fell
+through to a confusing but 30-year-old stock `secure/cmds/players/
+tell.lpc` (`Descartes of Borg 950523`) code path that attempts an
+inter-mud-instance tell lookup and then prints the generic "Tell whom
+what?" instead of a clear "no such player" -- odd UX, but it's
+unmodified stock Dead Souls library logic (not this lib's own bug),
+causes no crash, and is exactly the kind of pre-existing-library
+"design as shipped" case this project's scope explicitly says to
+leave alone.
+
+### Adversarial/malformed input, briefly
+
+`become` (no arg), `become fighter fighter fighter`, `become
+''''"";;--`, `buy` (no args), `buy 99999999999999999999 from james`,
+`sell` (no args) all produced sane rejection messages ("Become
+what?", "You cannot become that here.", "Buy what from whom?",
+"There is no james here." -- correctly, since `james` wasn't in the
+room this was tried from -- "Sell what to whom?") with zero crashes
+and zero `debug.log`/stdout growth.
+
+### Files modified this pass
+
+- `libs/riftsds/work/secure/include/compat.h` -- added `query_name`/
+  `query_cap_name`/`query_gender` -> `GetName`/`GetCapName`/
+  `GetGender` mappings (BUG 2 fix).
+- `libs/riftsds/work/domains/Praxis/fighter_join.lpc`,
+  `cleric_join.lpc`, `mage_join.lpc`, `monk_join.lpc`,
+  `kataan_join.lpc`, `rogue_join.lpc` -- `SetClass()` ->
+  `ChangeClass()` (BUG 1 fix).
+
+Runtime state generated during testing (`fluffos`'s class reverted
+back to `Explorer` via `call me->ChangeClass("explorer")` before
+finishing, the throwaway `Testshopper` character's save/postal files,
+and the incidental daemon/`RELEASE_NOTES_HTTP`/`mudlist.txt` `.o`/txt
+churn from having the driver up) was reverted before committing, per
+this project's own runtime-state policy.
