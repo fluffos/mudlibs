@@ -112,3 +112,22 @@ UTF-8 解码失败的文件逐一确认是二进制/运行期产物（tar 包、
 已在提交前删除；只保留种子管理员账号 `fluffos`（中文名"悟空侠"，
 已加入灵台方寸山三星洞门下，测试用的技能/金钱/门派状态原样保留，
 作为本次测试的存证）。
+
+
+## AGENTS.md §7.19 fix: enable_player() reentrancy from init()
+
+`feature/command.lpc`'s `enable_player()` (wrapper around
+`enable_commands()`) was reachable from an NPC's `init()` (via the
+shared `std/char.lpc` `setup()` chain), and `enable_commands()` is only
+safe to call from `create()` -- calling it again on an object already
+`living()` makes the driver re-invoke that same object's `init()` as a
+side effect, which recursed back into `enable_player()` on the same call
+stack until "Too deep recursion" aborted the boot on a room's first-ever
+visit. Fixed with a true reentrancy flag (`in_enable_player_now`, set at
+entry, cleared before every return), NOT a `living()`-gated guard --
+`disable_player()` in the same file legitimately re-calls
+`enable_commands()` while already `living()` (sleep/wakeup via
+`cmds/std/sleep.lpc`, revive via `feature/damage.lpc`), which a
+`living()` guard would silently break. Verified via `lpcc --batch`
+single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
+(Batch C).
