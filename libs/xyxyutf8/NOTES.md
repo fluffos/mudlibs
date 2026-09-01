@@ -244,3 +244,15 @@ caller-side regression risk, flagged for a possible future corpus-wide
 follow-up sweep). LPC formatter (§9) could not be run this session —
 `node`/`npm` are not available in this environment; all edits are
 small, hand-formatted, and match each file's existing style.
+
+## Description-quality pass correction (2026-09-01, batch 26)
+
+The pre-existing `meta.json` `english_description` claimed this lib's
+Aolai Kingdom map made it "closer to the source text than most other
+games in this family" — checked directly via `ls work/d/aolai` on all
+three siblings and found this false: `xyxy2` and `xiaoyuxiyou` both also
+ship the identical `d/aolai/` zone (confirmed live-tested as the actual
+starting area in `xyxy2`'s own NOTES.md round-two section). Rewrote the
+description to drop the false distinctiveness claim and instead lead
+with this lib's genuinely distinct content (the tiered `spells/40/`
+dungeon progression) and its own two real bug fixes.
