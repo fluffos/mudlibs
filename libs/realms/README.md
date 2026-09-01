@@ -1,8 +1,8 @@
 # RealmsMUD core-lib (realms)
 
-The official mudlib of **RealmsMUD** (source:
+The official mudlib of RealmsMUD (source:
 <https://github.com/realms-mud/core-lib>). Unlike some engine-only ports in
-this collection, this is **not** a bare engine -- it ships a real,
+this collection, this is not a bare engine -- it ships a real,
 substantial game world alongside the framework: 9,994 files under `guilds/`
 (class/profession systems), 2,577 files under `areas/` (rooms, NPCs, items),
 plus full quest, research, crafting, and trading systems. A fresh character
@@ -10,11 +10,11 @@ can register, create a character through an 11-step creation wizard
 (color/charset/minimap/gender/race/subrace/hair/eye/attribute/skills/trait
 selectors), and land in the actual game world.
 
-RealmsMUD is built for a mixed LDMud/FluffOS dialect with a **MySQL-backed**
+RealmsMUD is built for a mixed LDMud/FluffOS dialect with a MySQL-backed
 persistence layer for login credentials and player-character records (via
 this driver's own `db_*` package) -- the only lib in this collection with a
-real external database dependency. MySQL is **not part of the shipped
-repo**; it's session-local test infrastructure this port needed to provision
+real external database dependency. MySQL is not part of the shipped
+repo; it's session-local test infrastructure this port needed to provision
 itself (see "Local run" below).
 
 ## Highlights
@@ -165,7 +165,13 @@ command-execution gap above. Real combat, guild-joining, and skill/trait
 *advancement* (as opposed to display) were not reached this session --
 flagged as unverified-live, not silently presented as tested.
 
-WASM status: not attempted this session (`wasm_status` left `""`).
+WASM status: `noboot` -- this lib's entire login/persistence model is
+built on `db_*` efuns against a real external MySQL server, and the
+`db` package (like `sockets`) is entirely absent from WASM builds by
+design (no way to reach an external TCP service from a browser sandbox).
+Unlike a peripheral `sockets`-absent daemon, this can't be guarded away
+-- there's no flat-file fallback anywhere in this codebase. See
+`NOTES.md` \S15 for the full reasoning.
 
 ## Local run
 

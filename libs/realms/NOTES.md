@@ -846,3 +846,50 @@ compile/runtime fixes: `lib/environment/modules/regions/
 {generate-path,persist-region}.lpc`, `lib/core/prerequisites.lpc`,
 `lib/commands/wizard/patch.lpc`, `lib/services/regions/region-types.h`,
 `lib/modules/combat.lpc` (2 more null-guard instances).
+
+## 15. wasm_status audit (2026-09-01): `noboot` -- fundamental, not fixable at the mudlib level
+
+Attempted a WASM boot (`node scripts/wasm_client.js ... libs/realms`). The
+driver's simul_efun fails to compile entirely:
+
+```
+/secure/simulated-efuns/database.lpc:120: error: Unknown efun: db_exec
+/secure/simulated-efuns/database.lpc:157: error: Unknown efun: db_fetch
+/secure/simulated-efuns/database.lpc:333: error: Unknown efun: db_connect
+/secure/simulated-efuns/database.lpc:346: error: Unknown efun: db_close
+No error handler for error: *No program in object '/secure/simulated-efuns/database'!
+The simul_efun (/secure/simul_efun) and master (/secure/master) objects must be loadable.
+```
+
+This is AGENTS.md \S1.3's "no `db` package under WASM" gap, but unlike the
+`sockets`-absent daemon class (an optional peripheral feature that can be
+`#ifdef __PACKAGE_DB__`-guarded and treated as "absent, skip it"), this
+lib's entire login/persistence model IS `db_*`. `secure/master/security.lpc`'s
+`valid_database()` grants the MySQL connection password on every
+`db_connect()`, and per this lib's own README "login itself depends on it" --
+there is no flat-file or in-memory fallback path anywhere in this codebase.
+Even if `database.lpc`'s four `efun::db_*` call sites were `#ifdef`-guarded
+to let simul_efun compile, the resulting boot could never actually log a
+character in or persist anything, because:
+
+1. The WASM build ships without the `db` package at all (same exclusion
+   list as `sockets`/`ffi`/`pcre`/`crypto`/`async`/`compress` -- AGENTS.md
+   \S1.3c), so no in-process MySQL client exists to fall back to even if
+   the compile guard were added.
+2. Unlike `lima` (this project's other `noboot` verdict, \S "wasm_status
+   审计" in that lib's own NOTES.md), where the gap was a missing
+   *site-packaging* mechanism (a per-lib driver override) and the mudlib
+   content itself was proven WASM-capable end-to-end with a custom driver
+   build, here the gap is that a real external MySQL server is
+   fundamentally unreachable from a WASM/browser sandbox at all (no
+   sockets, no TCP, no `db` package) -- rebuilding the driver differently
+   cannot fix this, because the `sockets`/`db` exclusion is what makes a
+   browser tab a safe sandbox in the first place.
+
+Verdict: `noboot`. Did not bother adding the `#ifdef __PACKAGE_DB__` compile
+guard to `database.lpc` since it would only change "simul_efun fails to
+compile" into "simul_efun compiles but every login attempt still fails
+with no database backend" -- no observable difference in playability, and
+this note documents the reasoning for any future session that
+re-investigates. Native play (with a real local MySQL 8.0+ instance) is
+unaffected by any of this and remains fully verified per \S14 above.
