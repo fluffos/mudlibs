@@ -76,9 +76,30 @@ int force_me(string cmd) {
 }
 
 nosave int enabled = 0;
+nosave private int in_enable_player_now;
 
+// AGENTS.md sec.7.19: enable_commands() is only safe to call from
+// create() -- calling it again on an object that is already living()
+// makes the driver re-invoke that same object's init() as a side
+// effect, and if init() (directly or via a setup()/reset_me() chain)
+// calls back into enable_player(), that re-invocation happens while
+// the ORIGINAL init() call is still on the stack: genuine reentrancy,
+// repeating until the call-depth limit aborts with "Too deep
+// recursion." This file's own `enabled` flag looks like a guard but
+// does NOT prevent this -- it's only set to 1 AFTER enable_commands()
+// returns, and the reentrant nested call happens synchronously DURING
+// that call, while `enabled` is still 0 -- so the reentrant call sees
+// `!enabled` too and calls enable_commands() again, recursing exactly
+// as if there were no guard at all. A true reentrancy flag, checked
+// and set BEFORE anything else runs, is required; a bare
+// `if (living(this_object())) return;` is not safe either since
+// disable_player()/revive()/wakeup() legitimately re-invoke
+// enable_player() while already living().
 nomask void enable_player() {
   object me;
+
+  if (in_enable_player_now) return;
+  in_enable_player_now = 1;
 
   me = this_object();
 
@@ -136,6 +157,7 @@ nomask void enable_player() {
     default:
       set_path(PLR_PATH);
   }
+  in_enable_player_now = 0;
 }
 
 nomask void disable_player(string type) {
