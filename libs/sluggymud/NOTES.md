@@ -375,3 +375,184 @@ channel) beyond the intentional, by-design compiler-fixture errors
 from the `fail/*.lpc` test files themselves (each one IS a "this
 should fail to compile" fixture; the compiler correctly rejecting
 them is the test passing, not a bug).
+
+## 10. §10.7 deep functional test, round two (2026-09-01) -- new angle:
+    adversarial `eval`, `ed`/`update`/`rm` edge cases, and (the real
+    find) bypassing the two known `tests` stopping points to finally
+    exercise the ~113-file `efuns/`/`operators/` subtrees that no prior
+    pass had ever reached
+
+Genuinely different angles from §9 (which only tried trivial happy-path
+`eval return 1+1;` and single-file `tests <path>` runs):
+
+- **Adversarial `eval`**: division by zero, a call to an undefined
+  function, deliberate syntax errors, out-of-bounds array indexing, an
+  infinite `while(1){}` loop. All five correctly produce a compile-time
+  or `eval_cost`-limit error caught by the driver -- `Divide by zero in
+  constant`, `Undefined function ...`, `syntax error`, `Illegal index
+  to array constant`, `*Too long evaluation. Execution aborted.` -- and
+  the driver stayed fully responsive afterward every time (`who` kept
+  working). Array/mapping literals, string concat, `sizeof()` all
+  eval'd correctly. Not a bug: `eval.lpc`'s generic "*No program in
+  object" player-facing message on any compile failure is the expected
+  behavior of this bare, uncaught `TMP_EVAL_FILE->eval()` debug command.
+- **`ed` edge cases**: editing an *existing* file (`$a` append, correct
+  new line/byte count, correct saved content) and a hard socket
+  disconnect *mid-edit*, after entering insert mode and typing a line
+  but before `.`/`w`/`q` -- confirmed the on-disk file was **completely
+  unchanged** (matching md5sum) and the driver logged nothing and
+  stayed healthy. Clean on both counts.
+- **`update`/`rm`/`dest` edge cases**: `update` on a file with a real
+  syntax error reports a normal caught compile error (no crash);
+  `update`/`rm` on a nonexistent file is silently a no-op (no crash);
+  `rm` on a directory path does nothing (directory survives); `dest`
+  on a real, currently-in-use command object (`/public/cmds/who`)
+  correctly destructs just that instance, and the next `who` invocation
+  transparently recompiles and works. All clean.
+- **Two-connection concurrent `eval`**: both connections got their own
+  correct, independent result despite both invocations using the exact
+  same shared `TMP_EVAL_FILE` path -- expected, since this driver's
+  single-threaded command-execution model means two telnet commands
+  from different connections never actually execute concurrently at
+  the interpreter level (no `call_out`/`sleep` in `eval.lpc` to yield
+  mid-command). Rapid-fire same-connection `eval`/`who` repeats: clean.
+
+**The real finding -- getting past the two known `tests` stopping
+points**: §9 reproduced the same two already-documented halts
+(`compiler/succeed.lpc`'s `##`-pasting gap, then the uncaught
+`compiler/fail/missing_type.lpc` assertion failure that aborts the
+*entire* bare `tests` walk). Directly invoking `tests.lpc`'s own
+`recurse()` function via `eval` on the `efuns/` and `operators/`
+subdirectories individually (bypassing the `compiler/` subtree
+entirely, e.g. `eval "/public/cmds/tests"->recurse("/core/sefun/tests/efuns/");`)
+reached ~113 fixture files that **no previous pass -- onboarding or
+round one -- had ever actually executed**, because the bare `tests`
+command dies in `compiler/` (alphabetically first) before it ever
+reaches `efuns/`/`operators/` at all. `operators/` runs 100% clean
+(zero failures, only a harmless deprecated-range-syntax compile
+warning). `efuns/` surfaced **12 failures**, all individually
+root-caused below:
+
+**8 were the same stale-pre-refactor-absolute-path bug class as §4e,
+just not exhaustively swept the first time** -- `grep -rl '"/single/'`
+across `core/sefun/tests/` found 9 files still referencing the old
+flat pre-`core`/`public`/`secure` layout (`/single/...` instead of
+`/core/lib/single/...`, `/core/sefun/tests/efuns/...`, etc.); 7 of
+these actually manifested as live failures and 1 more (`set_light.lpc`)
+had the same stale-path defect masking a *separate*, pre-existing
+fixture bug (see below). Fixed by point-correcting each stale literal
+path to its real current location, matching §4e's exact fix style
+(direct corrected literal, no new macros, except `VOID_OBJ` which
+already exists in `globals.h` and is the established convention
+used by `login.lpc`/`master.lpc`/`tests.h` for exactly this object):
+
+  | File | Bad path | Fix |
+  |---|---|---|
+  | `efuns/cp.lpc` (:6,:8) | `/single/master.lpc` | `/core/lib/master/master.lpc` |
+  | `efuns/deep_inherit_list.lpc` (:5,7,8) | `/single/tests/efuns/inh{0,1,2}.lpc` | `/core/sefun/tests/efuns/inh{0,1,2}.lpc` |
+  | `efuns/inherit_list.lpc` (:4,6) | same | same |
+  | `efuns/inherits.lpc` (:1-3, `#define`s) | same | same |
+  | `efuns/find_object.lpc` (:5,8,9,10,12,13) | `/single/tests/efuns/unloaded` | `/core/sefun/tests/efuns/unloaded` |
+  | `efuns/rename.lpc` (:6,8,9) | `rename(..., "/single")` (a *directory* rename target that no longer exists) | `rename(..., "/core/lib/single")` |
+  | `efuns/say.lpc` (:28) | `new("/single/void")` | `new(VOID_OBJ)` |
+  | `efuns/set_light.lpc` (:7) | `new("/single/void")` | `new(VOID_OBJ)` |
+
+  `efuns/call_other.lpc` also references a stale `"/single/master"`
+  (:25) but this one currently does **not** actually manifest as an
+  observed failure (the call incidentally still behaves as the test
+  expects even against the wrong path) -- left untouched per this
+  project's evidence-only-fix rule, but flagged here for anyone doing
+  a future sweep.
+
+  **Confirmed live evidence of real, silent damage from this bug
+  class**: before the fix, running `efuns/rename.lpc` actually
+  **created a stray top-level file literally named `single`**
+  (containing "Hmm.") at the mudlib root, because `rename("/ren_test",
+  "/single")` silently renamed-to a nonexistent-directory target
+  instead of erroring. Caught and removed (`git status` confirmed it
+  was untracked, not part of the archive) before committing -- this is
+  exactly the kind of quiet on-disk pollution the stale-path bug class
+  can cause beyond just failing an `ASSERT`.
+
+  Verified live post-fix: all 7 previously-failing files above now
+  pass silently via direct `tests <path>`; re-running the full
+  `efuns/` `recurse()` dropped from 12 failures to 5.
+
+**The remaining 5 failures are genuine pre-existing archive
+characteristics/driver-behavior differences, not programming bugs --
+documented, not touched, per this lib's own established
+`missing_type.lpc` precedent (§5):**
+
+- **`read_bytes.lpc` / `read_file.lpc`** (cascading from the same root
+  cause): both compare `read_bytes("/testfile")` against
+  `read_file("/testfile")` and assert byte-identical output.
+  `/testfile` is a `cp()` of `core/lib/master/master.lpc`, and that
+  *specific* source file has **CRLF line endings throughout** (`grep
+  -c $'\r'` = all 269 lines, confirmed present identically in the
+  pristine `raw/` archive copy too -- not a conversion artifact; 184 of
+  this whole lib's 202 `.lpc` files have `\r` somewhere, a pervasive
+  original-archive characteristic). `read_file()` does universal
+  newline translation (`\r\n`->`\n`); `read_bytes()` returns exact raw
+  bytes -- this is standard, correct, intentional MudOS/FluffOS efun
+  semantics (text-mode vs binary-mode read), confirmed via `eval`
+  (`a[25]==13 ('\r'), b[25]==10 ('\n')`, first divergence). The test's
+  own assumption that these two efuns return identical output for an
+  arbitrary source file only holds for a CRLF-free file; fixing this
+  would mean either normalizing `master.lpc`'s line endings (a broad,
+  out-of-scope content decision touching most of the lib, not a
+  compile/type-check-level bug) or picking a different comparison
+  file (inventing new test behavior) -- documented only.
+- **`call_stack.lpc`**: `ASSERT(catch(call_stack(4)))` (line 17)
+  expects `call_stack(4)` to throw for an out-of-range `info` argument;
+  this driver returns a value instead of throwing, so `catch()` yields
+  falsy and the assert fails. A genuine `call_stack()` argument-range
+  behavior difference from whatever original driver this fixture
+  targeted -- same class as `missing_type.lpc`.
+- **`set_light.lpc`**: fails on the *very first* assertion (line 15,
+  `#define CHK ASSERT(light = set_light(0));`, called with
+  `light` starting at 0) -- `set_light(0)` legitimately returns `0` for
+  a freshly-created object with no light set yet (confirmed live via
+  `eval`), so `ASSERT(0)` is unconditionally false by the macro's own
+  construction, independent of any path bug or driver quirk. This is a
+  pre-existing defect in the archive's own test fixture (asserting
+  truthiness of a value that can legitimately be zero), not something
+  introduced by porting -- documented only, not "fixed" (there's no
+  way to guess what threshold the original author intended without
+  inventing test logic).
+- **`shadow.lpc`**: `goodshad.lpc:4`'s `ASSERT(shadow(previous_object()))`
+  fails because the driver's `master.lpc`-mediated `valid_shadow()`
+  check (`core/lib/master/valid.lpc:13`) calls
+  `ob->query_prevent_shadow(previous_object())` on the bare test
+  object being shadowed, which defines no such function and isn't
+  approved as a result -- a driver/master-apply interaction difference
+  from whatever base class the original archive expected all test
+  objects to inherit. Same class as the others: documented, not fixed.
+
+**Operationally important gotcha, also newly discovered by finally
+reaching `efuns/`**: `core/sefun/tests/efuns/shutdown.lpc`'s
+`do_tests()` schedules `call_out((: do_the_nasty_deed :), 60)`, which
+60 seconds later calls the **real** `shutdown()` efun (exit code 55)
+-- the file's own comment says "This one is hard to test :-)". This
+does not error or show up in any `tests`/`recurse()` output at the
+time it runs (`do_tests()` returns immediately, cleanly); it silently
+armed a 60-second-delayed full driver shutdown that fired mid-session
+during this test pass and was initially mistaken for external
+interference before the `call_out` was found. **This is exactly why
+the bare `tests` command dying early in `compiler/` has, by accident,
+never actually been a problem in practice** -- it currently prevents
+`efuns/` from ever being reached by a normal `tests` run at all. If a
+future fix ever resolves the `missing_type.lpc` compiler gap (or
+`compiler/succeed.lpc`'s `##`-pasting gap) enough to let the bare
+walk continue past `compiler/`, running a bare `tests` on a live,
+populated mud would, ~60 seconds later, silently kill the whole driver
+for every connected player. Documented here as a standing operational
+trap for any future maintainer or test pass on this lib, not
+"fixed" -- the fixture is doing exactly what its author intentionally
+wrote it to do, and disarming it would be a content/design change
+outside this project's scope.
+
+Verified live throughout with a real driver boot + `mudclient.py`;
+`git status` re-checked and all incidental test-run scratch files
+(`/testfile`, `OBJ_DUMP`, `OBJ_DUMP2`, `sf.o`, `test_file`, ad-hoc
+`ed`-created files, a stray top-level `single` file) removed before
+committing -- only the 8 genuine `.lpc` fixture fixes remain staged.

@@ -17110,6 +17110,67 @@ just a "flow incomplete" property, or the fix reenters itself and (as
 live-reproduced on `darkelib`) can crash the entire driver process via a
 corrupted action/sentence list on the very next command.
 
+### 10.11 A self-test/testsuite's own early abort can permanently mask both further real bugs AND a booby-trapped fixture further into the same suite
+
+Found on `sluggymud`'s §10.7 round-two pass (see its own NOTES.md §10
+for the full writeup). `sluggymud` ships a real, substantial
+~113-file compiler/efun self-test suite (`core/sefun/tests/`), but the
+bare `tests` command (`public/cmds/tests.lpc`'s `recurse()`) always
+processes subdirectories in the same order and had, since onboarding,
+only ever reached the *first* one (`compiler/`) before dying on an
+uncaught fixture failure there (§4h/§5 of that lib's own NOTES) —
+meaning the `efuns/` and `operators/` subtrees, alphabetically later,
+had **never actually been executed by any prior test pass at all**,
+onboarding included. Directly invoking the suite's own internal
+`recurse()` function via `eval` on those specific subdirectories
+(`"/public/cmds/tests"->recurse("/core/sefun/tests/efuns/")`),
+bypassing the subtree that dies, reached them for the first time and
+surfaced two categories of finding purely because the reach was
+finally possible:
+
+1. **8 real, fixable programming bugs** — the same stale-pre-refactor-
+   absolute-path bug class already found and *partially* fixed at
+   onboarding time (only in files whose failure was reachable then),
+   now shown to have been incompletely swept: `grep` for the *old*
+   layout's path convention across the whole self-test tree (not just
+   the files already known to be broken) found 1 more instance beyond
+   the 8 fixed this round that still doesn't currently manifest as an
+   observed failure — left untouched, but worth a second look if the
+   suite's reach is extended again later. One of the 8 had a genuinely
+   nasty confirmed side effect: a stale `rename(file, "/single")` call
+   (expecting `/single` to be an existing directory to move a file
+   into) silently created a stray top-level file *literally named*
+   `single` at the mudlib root instead of erroring, because the target
+   no longer exists as a directory — exactly the kind of quiet on-disk
+   pollution a "the path doesn't exist so the call just silently no-ops
+   or does something else entirely" gap can cause beyond just failing
+   an assertion.
+2. **A live-fire operational trap**: one fixture in the newly-reached
+   subtree (`efuns/shutdown.lpc`) schedules a `call_out()` that, 60
+   seconds later, calls the real `shutdown()` efun and kills the whole
+   driver — by the original author's own explicit design ("This one is
+   hard to test :-)"), not a bug. It produces zero error output at the
+   time `do_tests()` runs, so it is invisible until the delayed
+   `call_out` actually fires (which briefly looked like unrelated
+   external interference before the mechanism was traced). The
+   suite's own early abort in `compiler/` has been *accidentally*
+   preventing this from ever firing during a normal bare `tests` run;
+   fixing the earlier abort without noticing this fixture further down
+   would turn a routine self-test invocation into a silent
+   driver-killer for any mudlib actually shipping this test file live.
+
+**General lesson for any lib with a self-test/fixture-walking
+command that aborts partway through a full run**: before concluding
+"the untested tail past the abort point is presumably fine" or
+routing all fix effort at only the fixtures the abort makes visible,
+check whether the walk can be invoked on just the untested remainder
+directly (call the runner's own internal iteration function via `eval`
+if there's no first-class "run this subtree" command) — the tail can
+hide both more instances of an already-identified bug class (a
+sweep that stopped early looks "complete" but wasn't) and a fixture
+whose side effects are actively dangerous to a live process, which an
+early abort was incidentally suppressing.
+
 ---
 
 ## 11. Lineage map — who shares code with whom
