@@ -16967,6 +16967,54 @@ on whether to PR a fix upstream (per this project's established
 fluffos/fluffos PR workflow) rather than patched unilaterally
 mid-testing-session.
 
+### 10.10 Multi-step `input_to()` chains (character creation, guild join, shop transactions, ...) don't survive a reconnect — a dead-end room in the middle of one is a permanent soft-lock
+
+Found on `darkelib`'s §10.7 disconnect-mid-action pass (see its own
+NOTES.md §10 for the full writeup). A pending `input_to()` callback is
+registered on `command_giver->interactive` (confirmed in
+`~/src/fluffos/src/vm/internal/simulate.cc`'s `input_to()`) and does
+**not** carry over when a dropped connection reattaches to the same
+in-memory player object via `exec()` on reconnect — this is normal,
+expected driver behavior for this whole class of driver, not itself a
+bug. The bug shape this creates in mudlib code: `darkelib`'s character
+creation (`d/standard/setter.lpc`'s `pick()`) moves the player into a
+transitional room (`d/standard/waiting_room.lpc`) with **zero exits and
+no commands of its own**, then drives the rest of setup through a
+multi-step `input_to()` chain. A player who disconnects (real link
+death, or simply closing the client — not a clean `quit`) anywhere in
+that chain reconnects into a dead room with the chain gone: no exits,
+no way to resume, permanently stuck short of wizard intervention.
+**Any lib whose character creation, guild-join, shop-purchase, or
+similar flow uses a chained `input_to()` sequence to walk a player
+through several prompts, especially one that also relocates the player
+partway through, is worth checking for this shape**: does the
+intermediate room/state have its own way out (exits, a fallback
+command) independent of the `input_to()` chain finishing? If not, a
+disconnect at the wrong moment permanently strands the account. Checked
+`darkelib`'s own direct-fork siblings (§11) for the same setup-room
+shape: `rifts2`'s `d/standard/setter.lpc` diverges here — it moves
+players straight to `ROOM_NEWBIE` rather than through a separate
+dead-end waiting room — so this specific instance does not reproduce
+there; not otherwise checked corpus-wide, since the shape depends on
+each lib's own transitional-room design rather than a copy-pasted
+function signature that greps reliably.
+
+**A related, more urgent lesson from the same fix**: when patching a
+transitional room's `init()` to auto-resume an interrupted flow, remember
+that `move_object()` calls the *destination*'s `init()` synchronously
+for any mover with `O_ENABLE_COMMANDS` set (`packages/core/
+add_action.cc`'s `setup_new_commands()`, the same driver mechanism as
+§7.19/§9's `enable_commands()`-cascade reentrancy, but triggered here by
+plain `move()` rather than by `enable_commands()` itself) — so a naive
+recovery check in that `init()` fires on the very first, completely
+normal entry too (synchronously, before the code that moved the player
+there has even returned to make its own first call), not just on a
+later reconnect. Guard with an explicit boolean the moving code sets
+immediately before its own move+resume and clears immediately after, not
+just a "flow incomplete" property, or the fix reenters itself and (as
+live-reproduced on `darkelib`) can crash the entire driver process via a
+corrupted action/sentence list on the very next command.
+
 ---
 
 ## 11. Lineage map — who shares code with whom

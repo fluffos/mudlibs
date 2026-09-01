@@ -632,3 +632,153 @@ test) drops straight into camp07 with no crash, `look`/`fill` both
 work normally, `debug.log` shows zero "Too deep recursion" occurrences
 across the whole post-fix session. Compile-clean (single-file
 recompile via driver restart, no new warnings/errors on this file).
+
+## 10. §10.7 deep functional test (round two, second pass, 2026-09-01) -- disconnect-during-character-creation soft-lock, fixed
+
+New angle from this pass's assignment: adversarial/malformed input and
+disconnecting mid-action, plus a corpus-wide re-check of the
+`enable_commands()`/`init()` reentrancy shape (§9 above) for other
+instances. The reentrancy re-check was **clean**: every other
+`enable_commands()` call site in this codebase
+(`d/zortek/spells/channel_ward.lpc`'s in `create()` before any
+`move_object()`, `std/monster.lpc`'s in `__INIT()` -- itself only ever
+called from `create()`, never `init()` -- and the various `std/user*.lpc`
+player-wrapper variants' own self-enabling in `init()`) is either on a
+living object enabling its own commands (the normal, safe shape) or runs
+before the object has an environment to cascade into. No second instance
+of the dangerous "scenery prop cloned into a room's own inventory,
+unconditional `enable_commands()` in `init()`" shape found anywhere else
+in the corpus.
+
+**Severe bug found and fixed via the disconnect-mid-action angle:
+disconnecting during character creation's stat-assignment step
+permanently soft-locks the account, unrecoverable without a wizard.**
+
+`d/standard/setter.lpc`'s `pick()` (the `pick <race>` command) moves the
+player into `/d/standard/waiting_room` (line 182, before this fix) and
+then calls `do_rolls()` (line 183), which prints the stat-assignment
+intro and registers `input_to("press_enter", ...)`. That kicks off a
+multi-step `input_to()` chain (`press_enter` -> `assign_point`/
+`pick_stat` -> `yes_or_no`) that only ends when the player types "yes" to
+confirm their stat spread, at which point `yes_or_no()` finally sets
+`who->set_property("dev points", dev_tot)` and moves them onward via
+`set_ansi()`/`set_ansi_two()` to `ROOM_NEWBIE`.
+
+**Root cause**: a pending `input_to()` callback does not survive a
+reconnect. `adm/obj/login.lpc`'s `is_copy()` reattaches a returning
+connection to the same in-memory player object via a plain
+`exec(ob, this_object())` (confirmed live: this is the *only* code path
+taken once the prior connection is no longer `interactive()`, which is
+the ordinary case for a real link death or a client just closing) --
+this does not preserve whatever `input_to()` chain was pending on `ob`.
+Since `/d/standard/waiting_room.lpc` (before this fix) had **zero exits
+and no `add_action` commands of its own** -- the `pick`/`read` commands
+live on the setter room the player already left -- a player who
+disconnects anywhere between `pick()` and the final "yes" confirmation
+comes back to a completely dead room: ordinary commands like `look`/
+`score` still work (global commands, not tied to the room), but there is
+no way to move, no way to resume the stat-assignment prompt, and no way
+to ever finish creation. `"dev points"` stays unset/left at whatever
+value it had before (0 for a genuinely new character), so `score` shows
+`DevPts: 0`, `Race:` whatever was picked, `Master: None`, forever.
+
+**Live-reproduced** (native driver, port 40258): registered
+`Novaquest`/`Testfixer` fresh, paged through the MOTD, `pick dwarf` /
+`pick wood-elf`, then deliberately let the TCP connection close right at
+the `"Press [enter] to continue:"` prompt (mid `do_rolls()`) instead of
+answering it. Reconnecting with the same name/password showed
+`"Password: Reconnected."` immediately followed by the room's bare
+`"This is the waiting room, you are in the creation process. \n\nThere
+are no obvious exits."` with no way to progress -- confirmed `pick
+<race>`, `out`, `exits`, and every direction all fail (`"What?"` /
+`"You cannot go that way."`) in this state, only `look`/`score`/`help`
+(global commands) respond. Also confirmed this is **not** a driver-restart
+artifact: within one continuous driver session the stuck state persists
+across as many reconnects as tried; only a full driver restart discards
+it (because it reloads from the last periodic `save_player()` snapshot,
+which in this lib runs on a `call_out("save_player", 2, ...)` scheduled
+at every login/`std/user.lpc:491` -- 2 real seconds after the *previous*
+successful login, so it generally lags behind live progress and isn't a
+substitute for testing within one boot).
+
+**Fix**: `d/standard/waiting_room.lpc` gained an `init()` that detects
+"reconnected with character creation still incomplete" and re-invokes
+`ROOM_SETTER->do_rolls()` (`ROOM_SETTER` = `/d/standard/setter`, from
+`adm/include/rooms.h`) to restart the stat-assignment step from scratch
+(safe, since no partial point allocation is ever saved to the player
+object until the final "yes" -- there is nothing partial to lose).
+`d/standard/setter.lpc`'s `pick()` gained a matching pair of `set()`
+calls on a new player property, `"__creation_complete"` (reset to 0
+right before `pick()`'s own `move()`+`do_rolls()`, set to 1 only at the
+very end of `yes_or_no()` alongside `"in creation"` going back to 0) --
+this is the completion marker the room's `init()` checks, **not**
+`"dev points"`, because a *reincarnating* character
+(`daemon/reinc_d.lpc` moves players back through this exact same
+`ROOM_SETTER`/`pick()`/`waiting_room` flow to re-roll) already has a
+real, nonzero `"dev points"` left over from their previous life -- that
+property alone can't tell "never finished this `pick()`" apart from
+"finished a *previous* life's `pick()`" for a reincarnating player who
+disconnects mid-reroll, which would have silently left that case
+unfixed.
+
+**A second, more severe bug was found and fixed while verifying the
+first fix live**: the very first (pre-guard) version of the
+`waiting_room.lpc` `init()` above checked only `"in creation"` and
+`!"dev points"`, with no guard against re-entering `do_rolls()` while
+`pick()`'s own call to it was still on the stack. `move_object()`
+synchronously calls the destination room's `init()` as part of the same
+driver mechanism documented in §9 above
+(`packages/core/add_action.cc`'s `setup_new_commands()`, called directly
+by `move_object()` for any object with `O_ENABLE_COMMANDS` set, not just
+the `enable_commands()`-cascade path) -- so `pick()`'s own
+`who->move("/d/standard/waiting_room")` on line 182 immediately,
+synchronously, called the room's new `init()`, which (before the
+`"__setup_in_progress"` guard existed) matched the exact same "in
+creation, no dev points yet" condition on **every single normal, never-
+disconnected character creation** and called `do_rolls()` a second,
+reentrant time -- registering a duplicate `input_to()` on the same
+player object while `pick()`'s own subsequent `do_rolls()` call was
+about to do the same thing. **Live-confirmed severe**: this crashed the
+*entire driver process* on the very next command after `pick <race>`
+(reproduced twice, both a "brand-new-character-plus-`pick`" session
+against a freshly-booted, otherwise idle driver) --
+```
+#0 mudlib_stats.cc:178, in add_moves: if (st->domain) {
+#1 add_action.cc:479, in user_parser: add_moves(&s->ob->stats, 1);
+Segmentation fault (Address not mapped to object [0xd0])
+```
+-- consistent with a stale/dangling `sentence->ob` (null `s->ob`, and
+`offsetof(object_t, stats)` on this build is exactly `0xd0` = 208,
+matching the faulting address) left in the action/sentence list by the
+duplicate `input_to()`/`add_action` registration. Fixed by adding the
+`"__setup_in_progress"` property (set by `pick()` immediately before its
+own `move()`+`do_rolls()`, cleared immediately after) as a third
+condition on the room's `init()` -- this is the only thing that reliably
+distinguishes `pick()`'s own single correct call (guard is true) from a
+genuine later reconnect (guard is always false, since it's cleared
+synchronously before `pick()` ever returns control to the input loop).
+
+**Re-verified live, full regression pass, after the reentrancy fix**:
+three fresh characters (`Brintor` the Dwarf, `Calidor` the Gnome,
+`Whistrel` the Sprite) each completed the ENTIRE normal creation flow
+end-to-end with no crash and no reconnect involved (confirms the
+reentrancy fix didn't just move the bug -- ordinary, uninterrupted
+creation is unaffected). Two more characters were deliberately
+disconnected mid-flow at two different `input_to()` stages (`Calidor` at
+the `"Press [enter] to continue:"` prompt right after `pick`, `Whistrel`
+at the final `"(yes or no):"` confirmation prompt) and reconnected within
+the same driver boot: both correctly saw `"Your character creation was
+interrupted -- restarting stat assignment."` and were walked back through
+a fresh stat-assignment sequence to a normal completion (`DevPts: 44`,
+moved to Newbieville town square, `score`/`look`/`i` all functioning
+normally afterward), with **zero further crashes and zero new
+`debug.log` errors** (`work/log/debug.log` and the live
+`/log/debug.log`, per the §10.9 dead-log caveat -- checked the live one)
+across the whole multi-character regression session. A subsequent normal
+reconnect on an already-*completed* character does not re-trigger the
+recovery message (confirmed on `Brintor`), since `"__creation_complete"`
+is correctly left at 1.
+
+Files touched: `d/standard/waiting_room.lpc` (new `init()`),
+`d/standard/setter.lpc` (`pick()` and `yes_or_no()`, both in the file's
+existing functions, no new functions added).

@@ -1,3 +1,5 @@
+#include <rooms.h>
+
 inherit "/std/room";
 
 
@@ -22,4 +24,58 @@ void create() {
 
   set("long", "This is the waiting room, you are in the creation process.");
 
+}
+
+// /d/standard/setter.lpc's pick() moves a player here BEFORE the
+// multi-step do_rolls()/input_to() stat-assignment sequence has finished
+// setting "dev points" -- and this room has zero exits and no add_action
+// commands of its own (the "pick"/"read" actions live on the setter room,
+// which the player already left). A player who disconnects (link death,
+// or just closing the client) anywhere in that sequence -- rather than
+// reaching the final "yes" confirmation -- loses the pending input_to()
+// callback across the reconnect (the driver does not carry a pending
+// input_to across an exec()'d reconnect), and comes back into a
+// dead-end room with no way to resume creation and no way to leave it:
+// permanently soft-locked, with only wizard intervention (trans/goto) as
+// a way out. Also reachable via daemon/reinc_d.lpc's reincarnation path,
+// which moves players back through the same ROOM_SETTER flow. Restart
+// the stat-assignment step from scratch (no partial progress was ever
+// saved to the player object -- pick() resets "__creation_complete" to 0
+// and setter.lpc's yes_or_no() is the only place that ever sets it back
+// to 1, right when "in creation" itself goes back to 0) whenever a
+// living reconnects/re-enters here with character creation still
+// incomplete.
+//
+// Deliberately NOT keyed on "dev points" being unset: a REINCARNATING
+// character (daemon/reinc_d.lpc moves them back through this same
+// ROOM_SETTER flow to re-pick a race) already has a real, nonzero "dev
+// points" left over from their previous life, so that property alone
+// can't distinguish "never finished this pick()" from "finished a
+// previous life's pick()" -- see setter.lpc's pick() for the same note.
+//
+// IMPORTANT: pick()'s own move() into this room synchronously triggers
+// THIS init() too (move_object()'s setup_new_commands(), same as any
+// room entry) -- before pick() gets to call do_rolls() itself on the very
+// next line. Without the "__setup_in_progress" guard below, that first,
+// completely normal entry would also match the "still incomplete"
+// condition and call do_rolls() a SECOND, reentrant time while the first
+// call is still unwinding, corrupting the driver's action/sentence list
+// (live-reproduced: a driver segfault in add_action.cc's user_parser ->
+// mudlib_stats add_moves(), dereferencing a stale sentence->ob, on the
+// very next command after a brand-new character's first-ever "pick
+// <race>" -- see NOTES.md for the full writeup). pick() sets
+// "__setup_in_progress" immediately before its own move()+do_rolls() and
+// clears it immediately after, so this guard is only ever false during
+// pick()'s own single, correct call -- true on every genuine
+// reconnect-into-an-unfinished-creation, since that always happens well
+// after pick() has already returned.
+void init() {
+  ::init();
+  if (living(this_player()) && this_player()->query("in creation") &&
+    !this_player()->query("__creation_complete") &&
+    !this_player()->query("__setup_in_progress")) {
+    write("\nYour character creation was interrupted -- restarting stat "
+      "assignment.\n");
+    ROOM_SETTER->do_rolls();
+  }
 }

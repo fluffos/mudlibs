@@ -179,8 +179,26 @@ int pick(string str) {
   //DEFAULT COMBAT COLOR
   who->set_property("combat color", "%^BOLD%^");
   //DEFAULT COMBAT COLOR
+  // Guard against d/standard/waiting_room.lpc's disconnect-recovery init()
+  // (see its own comment) re-entering do_rolls() a second time, reentrant,
+  // while THIS call is still on the stack: move() into waiting_room
+  // synchronously triggers that room's init() via the driver's own
+  // setup_new_commands(), before do_rolls() below even runs once.
+  //
+  // "__creation_complete" (reset here, set 1 at the very end of
+  // yes_or_no() below) is the disconnect-recovery completion marker
+  // instead of "dev points" precisely because a REINCARNATING character
+  // (daemon/reinc_d.lpc moves them back through this same ROOM_SETTER
+  // flow) already has a real, nonzero "dev points" left over from their
+  // previous life -- "dev points" alone can't distinguish "never
+  // finished this pick()" from "finished a previous life's pick()" for
+  // that case, so waiting_room's recovery check would silently never
+  // fire for a reincarnating player who disconnects mid-reroll.
+  who->set("__creation_complete", 0);
+  who->set("__setup_in_progress", 1);
   who->move("/d/standard/waiting_room");
   do_rolls();
+  who->set("__setup_in_progress", 0);
   return 1;
 }
 
@@ -353,6 +371,7 @@ void yes_or_no(string str, int *points, int pts_left) {
   who->set_property("base hp regen", 3);
   set_ansi();
   who->set("in creation", 0);
+  who->set("__creation_complete", 1);
   return;
 }
 
