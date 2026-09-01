@@ -720,3 +720,171 @@ cleanly removed from the `admin` domain via `admtool` (run as the
 now-legitimate `fluffos` admin) so the final `data/secure/access.o`
 state has `fluffos` as the sole real Admin, matching this project's
 standing seeded-admin convention.
+
+## 深度功能测试（round three, 2026-09-01）
+
+A third pass, deliberately covering exactly what the round-two pass
+above documented as unreached: `settle`+`fight` combat, real board
+`post`/read (checked specifically against the AGENTS.md §7.86
+`replace_program()` board-crash shape), currency persistence across a
+real `quit`+reconnect, adversarial/malformed input, and the §7.19-class
+NPC `init()`/`enable_commands()` reentrancy shape. Two fresh throwaway
+non-wizard test characters (`qtstv`/云斗五, `qtstw`/云斗六, both deleted
+via `CHAR_D->remove_char()` plus their `data/{players,pshells,links}/q/`
+save files before commit) plus the standing `fluffos` admin account.
+
+**`settle` → `fight`**: `sgdomain/event/ev_settle.lpc`'s
+`check_settle()` requires `sk_wuli`/`sk_meili`/`sk_zhimou` skill
+levels ≥30 (a training grind well beyond one session's reach from a
+level-1 newbie) before an area's rotating, time-gated 太守/村长 NPC
+will even discuss it, then `run_settle()` calls
+`CHAR_D->new_player_char()`/`set_char(..,"area",..)`. Used the admin
+account's `call` shell tool (`cmds/wiz/call.lpc`) to set those three
+skills directly (`call .qtstv,set_sg_skill,sk_wuli,30,0` etc.) and to
+replicate `run_settle()`'s own CHAR_D writes directly — an admin
+shortcut around the NPC-availability grind, not a bypass of the
+`fight` gate itself (which is genuinely `CHAR_D->char_exist()`, exactly
+what `settle` establishes). With both `qtstv` and `qtstw` settled,
+`fight qtstw`/`fight qtstv` (mutual consent, since both are real
+interactive players — `daemons/fight_d.lpc`'s `confirm_fight()` path)
+produced a full, real combat exchange ending in the loser (`qtstw`)
+taking "你受了相当重的伤，只怕有生命危险" (severely wounded, possibly
+fatal) damage and then fleeing ("跳出战圈") rather than dying — this
+exactly matches `help fight`'s own explicit claim ("现在只有 fight，
+没有 kill，所以单挑不会杀死人" — there is no `kill`, dueling can never
+actually kill) and confirms the auto-flee-before-death safety gate
+works correctly. A repo-wide grep for any death/resurrection
+vocabulary (`reincarnate`/复活/死亡/轮回/resurrect) found no player
+death mechanic anywhere in this codebase at all — Lima's own
+`reincarnate()` term here is the WIZARD-setup flow (`new_user_ready()`
+→ `incarnate()`), unrelated to player death. So "push to a real death"
+is confirmed **not reachable by design** in this game, not merely
+unreached this session — no death→revival cycle exists to watch play
+out.
+
+**Board post/reply, and the §7.86 crash-shape check**: grepped the
+whole tree for `inherit.*BOARD`/`replace_program` first, per this
+task's own instruction — zero hits; this codebase's board class
+(`sgdomain/modules/m_board.lpc`, backed by a real `NEWS_D` per-group
+newsgroup daemon) directly `inherit`s its bases with no redundant
+self-`replace_program()`, so the §7.86 shape doesn't apply
+architecturally. Live `post <subject>` on the 草庐 (`a/huayin/vhall.lpc`)
+board's real "city.huayin" newsgroup worked cleanly end to end (editor
+opens, `.` finishes, "留言结束.", the post is genuinely saved — confirmed
+via `NEWS_D->get_messages()` admin queries showing the new message ID
+each time). Reading it back down turned up a real, independent, and
+more interesting bug — see §7.200 below.
+
+### SEVERE (new, §7.200) — `set_in_room_desc()`'s eager `evaluate()` permanently freezes any dynamic in-room description at whatever it computed on first creation
+
+While confirming a board's `post` worked, its own room-description line
+(`草庐留言板【共有22条留言，其中22条未读】(board)`) never changed after
+three separate real posts across two driver restarts, even though
+`NEWS_D->get_messages()` confirmed the new messages really were being
+saved (22 → 23 → 25 raw messages). Root cause, in the shared base class
+`std/object/description.lpc`:
+```lpc
+protected void set_in_room_desc( mixed arg )
+{
+  in_room_desc = evaluate(arg);   // evaluates the closure IMMEDIATELY
+}
+```
+`set_in_room_desc((: do_desc :))` (used by both board classes,
+`sgdomain/home/out_door.lpc`'s open/closed door text, and
+`sgdomain/modules/m_charnpc/marriage/cgs.lpc`'s random-picture
+`show_pic()`) only ever runs its closure ONCE, at object-creation
+time, and stores the resulting STRING forever — `query_in_room_desc()`
+re-`evaluate()`s that stored value on every later `look`, but by then
+it's already a plain string (a no-op). The sibling `set_long()`/
+`get_base_long()` pair in the same file does this correctly (stores
+the raw closure, defers evaluation to read time) — full technical
+write-up, all 4 affected call sites, and the fix are in this file's
+own catalog entry, AGENTS.md §7.200. Fixed by making `set_in_room_desc()`
+store the raw `arg` instead of `evaluate(arg)`; `query_in_room_desc()`
+needed no change. Verified live: board message counts now correctly
+update to the real, current count on every single post, confirmed
+across a fresh driver restart.
+
+**Currency/inventory persistence across `quit`+reconnect**: this
+codebase has NO `query_autoload()`/`autoload()` split at all (grepped
+clean) — the exact §7.199 shape (a commented-out `query_autoload()`
+silently classifying real currency as autoload-junk) is architecturally
+absent here. Money is a real physical carried object
+(`sgdomain/obj/money/{m_gold,m_silver,m_coin}.lpc`, inheriting
+`std/body/money.lpc`'s plain, non-`nosave` `private mapping money`),
+persisted exactly like any other ordinary inventory item via the
+player body's normal `save_object()`/restore cycle. Gave a test
+character a real silver-coin object (admin `clone`+`give`, after fixing
+`give`'s own bug below), confirmed `i`/`money` showed it, `quit`, fully
+reconnected in a fresh script invocation, and confirmed it was still
+there — **currency does survive a real quit/reconnect cycle** on this
+lib. (CHAR_D-backed abstract "gold"/俸禄 salary is separately, and
+correctly, daemon-persisted on a periodic in-game-hour timer via
+`daemons/ai_d.lpc`'s `start()` → `CHAR_D->save_data()` — independent of
+any player object's own save cycle, so a player's own `quit` was never
+actually at risk of losing it either way.)
+
+### SEVERE (new, §7.201) — `give <money> to <player>` destroys the money instead of transferring it, for every ordinary recipient, in BOTH of `give.lpc`'s two code paths
+
+Found reaching for the most direct way to hand a test character money
+for the persistence check above. `give silver to qtstv` (admin to
+player) printed a transfer-sounding message ("你把银子交给云斗五" — you
+handed the silver to X) while the recipient's inventory stayed
+completely empty: `cmds/verbs/give.lpc`'s whole-object path
+`destruct()`s any `query_is_money()` object instead of moving it to the
+named recipient. The amount-specified path (`give N <type> to X`) has
+the same bug behind a `query_accept_money()`/`receive_money()` gate
+that only ONE NPC in the whole codebase (`kongyiji`, a real quest)
+opts into — every other recipient, i.e. every ordinary player and every
+other NPC, hits the default branch, which ALSO just destructs the
+split-off money with nothing delivered. Full root-cause detail,
+the `get.lpc`-comment evidence for what the intended behavior actually
+is, and the fix are in AGENTS.md's own §7.201 entry. Fixed both
+branches in `cmds/verbs/give.lpc`: the whole-object path now does a
+real `ob->move(liv)` (moved to run after the pre-existing
+`this_body()==liv` self-give guard, which used to sit AFTER the money
+branch and so was itself unreachable for money); the amount-specified
+path's default (non-opted-in) branch now does a real `o1->move(who)`,
+with `kongyiji`'s own `receive_money()` quest hook left completely
+untouched. Verified live both ways with two real, simultaneously-online
+player sessions: `give silver to qtstv` and `give 3 silver to qtstw`
+both now correctly move the coins, correctly reflected in `i`/`money`
+on both the giver's and the recipient's side, and confirmed to survive
+a subsequent `quit`+reconnect.
+
+Also confirmed, during the same fix-verification pass: `cmds/verbs/
+money.lpc`'s carried-cash display had `if(n_withbody=0)` (assignment,
+not `==`) — a tautologically-false condition, so a player with real
+bank/salary money but zero cash on hand always saw a misleading blank
+"你身上带有：" (you are carrying:) header instead of the intended
+"你身上没有装钱。" (you have no money on you). Reproduced live (gave a
+test character `salary` via `CHAR_D->set_char` with zero carried cash)
+and fixed the typo to `==`.
+
+**Adversarial/malformed input**: sent 3000–5000 character strings,
+embedded NUL/control bytes, ANSI escape sequences, `%s%s%d%n`-style
+format-string content, and a SQL-injection-shaped string through `new`
+registration (English id, Chinese name — all correctly rejected by
+existing length/charset checks, no crash) and through live `say`/
+`look`/`ask`/`post`/`give` commands post-login. Every case was either
+cleanly rejected or printed back as inert literal text (confirming
+`say`/`printf`-style output never treats player input as a format
+string); `debug.log` stayed completely empty (zero entries) through
+the whole pass, and the driver remained responsive to new connections
+throughout with no lingering sockets. Clean — no crash, no hang, no
+uncaught error found.
+
+**§7.19-class reentrancy** (`enable_commands()`/`enable_player()`
+called from `setup()`/`reset_me()` on a first-ever room visit,
+re-entering an NPC's `init()`): grepped the entire live tree for both
+function names — zero hits anywhere outside `wiz/` personal homedirs.
+Confirms the round-two pass's own related finding (`§7.112` doesn't
+apply either) that this codebase's command-dispatch/NPC framework is
+Lima-native, not the ES2 `enable_commands()`-cascade shape this pattern
+was cataloged from — architecturally not applicable here, not merely
+untested.
+
+Cleanup: `qtstv`/`qtstw` removed from `CHAR_D` via
+`call /daemons/char_d,remove_char,<id>` (run as `fluffos`, live, before
+killing the test driver) and their `data/{players,pshells,links}/q/`
+save files deleted before commit.

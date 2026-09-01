@@ -14848,6 +14848,168 @@ consistent with this project's established "mechanical sweep, compile-
 check only" precedent for a bug confirmed live on one lib and then
 grepped corpus-wide.
 
+### 7.200 `set_in_room_desc()` eagerly `evaluate()`s a closure argument AT SET TIME, permanently freezing any object whose in-room description is meant to be recomputed on every look (message counts, open/closed state, random-pick flavor text)
+
+Found on `sanguozhi`'s deep functional test (§10.7), while specifically
+checking for the AGENTS.md §7.86 "board `replace_program()`" crash
+shape on a real `post`/read board cycle. `post`ing to a live bulletin
+board never crashed (this codebase's board class directly `inherit`s
+its base with no redundant `replace_program()` call, so §7.86 itself
+doesn't apply here) — but the board's own room-description line
+(`草庐留言板【共有22条留言，其中22条未读】(board)`) never updated its
+message count after posting, even after two more confirmed posts and a
+full driver restart's worth of testing. `NEWS_D->get_messages()`
+confirmed the posts really did land (23, then 25 raw messages), so the
+data layer was fine; the DISPLAY was frozen.
+
+Root cause, in the shared base class `std/object/description.lpc`:
+```lpc
+protected void set_in_room_desc( mixed arg )
+{
+  in_room_desc = evaluate(arg);   // BUG: runs the closure immediately
+}
+...
+string query_in_room_desc()
+{
+  if(!is_visible()) return "";
+  return (string)evaluate(in_room_desc);   // pointless if arg is
+                                            // already a plain string
+}
+```
+`set_in_room_desc()` calls `evaluate(arg)` and stores only the
+RESULT — so a closure like `set_in_room_desc((: do_desc :))` gets
+called exactly once, at whatever moment the object is first created,
+and the STRING it happened to return that one time is what's stored
+forever; every subsequent `look` calls `query_in_room_desc()`, which
+`evaluate()`s `in_room_desc` AGAIN, but by then it's already a plain
+string (evaluate() on a string is a no-op), so nothing ever changes.
+The giveaway that this is a bug and not a deliberate one-shot cache:
+`query_in_room_desc()`'s own `evaluate()` call is completely dead code
+unless `in_room_desc` can still be a live function pointer at read
+time — the only way BOTH `evaluate()` calls make sense is if the
+setter was supposed to store the raw closure and defer evaluation to
+the getter, exactly like the sibling `set_long()`/`get_base_long()`
+pair in the same file does (`long = str;` with no eager `evaluate()`,
+confirmed already working correctly everywhere in this session's
+testing).
+
+Blast radius beyond the board: any `set_in_room_desc((: fn :))` call
+with an actual closure (as opposed to the overwhelming majority of
+call sites in this codebase, which pass a plain string and are
+unaffected either way, since a plain string's "evaluation" is a no-op
+regardless of when it happens). Grep found 4 such closure call sites,
+all silently frozen by this bug before the fix: the two board classes
+(`sgdomain/modules/m_board.lpc`, `sgdomain/obj/other/board.lpc`,
+message-count display), `sgdomain/home/out_door.lpc` (a door's
+open/closed room-desc text never updates after the first look, so an
+opened door can go on being described as closed forever), and
+`sgdomain/modules/m_charnpc/marriage/cgs.lpc`'s `show_pic()` (meant to
+show a randomly-picked sedan-chair ASCII picture on every look —
+instead permanently stuck on whichever random picture it drew the
+first time).
+
+Fix: stop evaluating at set time — store the raw argument, matching
+`set_long()`'s pattern:
+```lpc
+protected void set_in_room_desc( mixed arg )
+{
+  in_room_desc = arg;
+}
+```
+`query_in_room_desc()` needed no change (its own `evaluate()` call
+already does the right thing once `in_room_desc` is allowed to still
+be a closure). Verified live end-to-end: posted three messages to a
+real board across two driver restarts; before the fix the room
+description was stuck at "22条留言，其中22条未读" through all of it;
+after the fix it correctly read 23, then 24, then 25 after each
+successive post, confirmed both from the posting player's own `look`
+and from a second admin session's independent `stat here`.
+
+Detection: grep `set_in_room_desc(\s*(:` (or the equivalent for any
+lib using the same Lima-derived `description.lpc` module) for a
+closure argument, then check whether the base class's own setter
+`evaluate()`s it immediately — if so, every one of those call sites is
+silently non-dynamic no matter how the closure itself is written.
+
+### 7.201 `give <money> to <player>` (both the whole-object and the amount-specified code paths) destructs the money object instead of transferring it to the named recipient, for every ordinary target — the money is simply gone, the recipient gets nothing
+
+Found on `sanguozhi`'s deep functional test (§10.7), while verifying
+currency survives a real `quit`+reconnect cycle (the exact angle that
+turned up the unrelated §7.199 `query_autoload()` bug on a sibling
+Fengyun-lineage lib this same session). Reaching for the most direct
+way to hand a test character some money to check persistence with
+surfaced this instead: `cmds/verbs/give.lpc`'s `do_give_obj_to_liv()`
+(whole-item give, e.g. `give silver to qtstw`) had
+```lpc
+if(ob->query_is_money())
+{
+    write("钱给出去可就没有了。\n");   // "once given, it's gone"
+    destruct(ob);
+    return;
+}
+```
+— framed as flavor text implying a caution, but literally true: the
+money object is destructed on the spot, `ob->move(liv)` (the actual
+transfer) is never reached, and the recipient receives nothing no
+matter who they are. Confirmed live: `give silver to qtstv` (admin to
+a test player) printed "你把银子交给云斗五" (you handed the silver to
+X) while the recipient's `i`/`money` stayed completely empty — a
+`say`/action message describing a transfer that never happened.
+
+The sibling amount-specified path, `my_give_num_obj_to_liv()` (e.g.
+`give 3 silver to qtstw`), has the SAME bug in a different shape, and
+is worse because it's gated behind a mechanism that makes it look
+deliberate:
+```lpc
+if (o1->query_is_money()) {
+    if (!who->query_accept_money()) {
+        write("钱给出去就没了。\n");
+        destruct(o1);
+        return;
+    } else {
+        ...
+        who->receive_money(this_body(), amount, o1->query_id()[0]);
+        destruct(o1);
+        return;
+    }
+}
+```
+`query_accept_money()` (`std/living.lpc`) defaults to 0 and is opted
+into by calling `set_accept_money(1)` — a whole-tree grep found
+exactly ONE caller in the entire codebase, `sgdomain/npc/kongyiji.lpc`
+(a real quest NPC: paying it 5+ 两银子 "tuition" unlocks a skill via
+its own `receive_money()`). Every other possible recipient — every
+ordinary player, every other NPC in the game — always takes the
+`!who->query_accept_money()` branch, which destructs the split-off
+money with nothing handed over, for ANY amount to ANY normal target.
+`get.lpc`'s own comment on picking coins up off the ground
+("钱一定能检起来" — money can always be picked up, and the code there
+does a real `ob->move(this_body())`) confirms the intended design is a
+normal transfer for the ordinary case; `receive_money()`/
+`query_accept_money()` is a narrow opt-in hook for one specific quest
+interaction, not a blanket "money given to a player just vanishes"
+rule.
+
+Fix: in `do_give_obj_to_liv()`, replace the `destruct(ob)` branch with
+an actual `ob->move(liv)` (moved after the existing
+`this_body()==liv` self-give guard, which used to run AFTER the money
+branch — meaning giving money to yourself hit the same bug too). In
+`my_give_num_obj_to_liv()`, keep the `receive_money()` hook fully
+intact for the opted-in case (`who->query_accept_money()` true — just
+`kongyiji` today), but make the DEFAULT, far more common case do a
+real `o1->move(who)` transfer instead of destructing the split
+object. Verified live both ways: `give silver to qtstv` now correctly
+shows up in the recipient's `i`/`money` and survives a real
+`quit`+reconnect; `give 3 silver to qtstw` (between two live player
+sessions) correctly moved the giver from 5 to 2 taels and the
+recipient from 0 to 3, both reflected in `money` on both sides.
+
+Detection: grep `query_is_money()` beside a `destruct(` in the same
+branch, in any lib with a similar physical-coin-object economy — the
+tell is a flavor-text write() that FRAMES the destruction as an
+inherent property of "giving money" rather than a refusal, right next
+to a `destruct()` that isn't preceded by any real transfer attempt.
+
 ---
 
 ## 8. Login and registration flow bugs
