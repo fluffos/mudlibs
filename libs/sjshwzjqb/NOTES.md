@@ -182,3 +182,30 @@ functionally re-tested live on this lib.
 崩溃修复）、`include/weapon.h`（补 `HALBERD`/`F_HALBERD` 宏，移植自
 `sjshwzb`）、`std/room.lpc`（`make_inventory()`/`reset()` 空指针防护，
 移植自 `sjshwzb`）。工具调用数约 90 次，在预算范围内。
+
+## AGENTS.md §7.19 sweep (2026-09-01): `enable_player()` reentrancy from `init()`
+
+Same corpus-wide bug class as `mhxy`/`wuhanzhan` (AGENTS.md §7.19): this
+lib's `feature/command.lpc` `enable_player()` wrapper (around the raw
+`enable_commands()` efun) is reachable from an NPC's `init()` via a
+redundant `create()`-then-`init()`-calls-`setup()` (or `reset_me()`
+calling `setup()`) chain -- confirmed live via a static scan of every
+`init()` body in this lib: 50 NPC/item files call `setup()` directly
+or via `reset_me()` from `init()`, after `create()` already called
+`setup()` once (which already made the object `living()`). Calling
+`enable_commands()` a second time on an already-`living()` object makes
+the driver re-invoke that object's own `init()` as a side effect, which
+re-enters this same chain while the original call is still on the
+stack -- genuine reentrancy, crashing with "Too deep recursion" (most
+likely to surface on an NPC's first-ever preload/compile).
+
+`feature/damage.lpc`'s `revive()` and `cmds/std/sleep.lpc`'s `wakeup1()`/`wakeup2()` call `enable_player()` again while the object is still `living()`. This confirms a bare `if (living(this_object())) return;`
+guard would be the WRONG fix (it would silently break that legitimate
+re-enable) -- used the same true reentrancy-flag fix as `mhxy` instead:
+a `nosave private int in_enable_player_now;` set for the duration of the
+wrapper's body, guarding only genuine same-call-stack reentrancy while
+leaving every legitimate re-enable (revive/wakeup/disguise) unaffected.
+`feature/command.lpc`'s `enable_player()` had a single fall-through exit
+(no early `return`s), so one guard-at-top + one clear-at-bottom pair was
+sufficient. Verified via a single-file `lpcc --batch` compile check
+(PASS) -- not individually live-boot-tested.
