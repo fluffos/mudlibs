@@ -105,3 +105,15 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## §7.19 enable_player() reentrancy fix (2026-09-01)
+
+Corpus-wide mechanical fix (AGENTS.md §7.19, Batch F of 6). `feature/command.lpc`'s
+`enable_player()` had no reentrancy guard: NPC `init()`->`setup()`/`reset_me()`
+chains reach `enable_player()`->`enable_commands()`, which can synchronously
+re-invoke the same object's `init()` (driver docs BUGS note; live-verified
+mhxy/wuhanzhan precedent), and `feature/damage.lpc`'s `revive()` /
+`cmds/std/sleep.lpc`'s `wakeup()` re-invoke `enable_player()` while already
+`living()`, ruling out a bare `living()` guard. Fixed with the standard
+`in_enable_player_now` true reentrancy flag (mhxy's reference fix). Verified
+via single-file `lpcc --batch` PASS.
