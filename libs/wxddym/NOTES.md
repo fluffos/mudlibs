@@ -455,3 +455,24 @@ real apprenticeship-and-combat progress (`data/{login,user}/f/fluffos.o`
 playthrough state). Reverted transient `data/newsd.o` churn. Driver
 killed by exact PID, no tmux session left running, no test characters
 created (all testing reused the existing demo `fluffos` admin account).
+
+## §7.19 enable_player() reentrancy fix (2026-09-01)
+
+Corpus-wide mechanical fix (AGENTS.md §7.19, Batch F of 6). Confirmed the
+real active wrapper is `feature/command.lpc` via `F_COMMAND` (`inherit/char/char.lpc`
+etc. all `inherit F_COMMAND` -> `/feature/command.lpc`); a same-directory
+`feature/command喵.lpc` also has an identical `enable_player()` body but
+nothing inherits it (confirmed with a corpus grep) -- a dead orphan file,
+left untouched. Originally flagged as a possible false positive
+(pre-existing `static int enabled = 0;` flag) -- but this is NOT the safe
+shape: `enabled = 1` is set AFTER `enable_commands()` returns, not before,
+so it does not guard the synchronous reentrant
+`init()`->`setup()`->`enable_player()` call that happens DURING
+`enable_commands()`. Confirmed the reachable chain is real:
+`d/shushan/npc/zhangmen.lpc`'s `init()` unconditionally calls `me->setup()`
+(line 53), which reaches `enable_player()`; `feature/damage.lpc`'s
+`revive()`/`cmds/std/sleep.lpc`'s `wakeup()` re-invoke `enable_player()`
+while already `living()`, ruling out a bare `living()` guard. Fixed by
+adding a true `in_enable_player_now` reentrancy flag alongside the existing
+`enabled` bookkeeping variable (left untouched, `disable_player()` still
+needs it). Verified via single-file `lpcc --batch` PASS.
