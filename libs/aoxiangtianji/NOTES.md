@@ -602,3 +602,34 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## §7.19 enable_player() reentrancy -- FALSE POSITIVE, unreachable (2026-09-01)
+
+Corpus-wide mechanical sweep (AGENTS.md §7.19, Batch F of 6). `feature/command.lpc`'s
+`enable_player()` does have the same structurally-ineffective
+`nosave int enabled = 0;` guard found on `ylfyxa3`/`longyunmeng`/`xajh4gkb`/
+`xyzxyl201412`/`wdxtym` in this batch (`enabled = 1` set AFTER
+`enable_commands(1)` returns, not before -- would NOT actually prevent the
+reentrancy if it were reachable), and `feature/damage.lpc`'s `revive()`
+does re-invoke `enable_player()` while already `living()`. However, unlike
+those 5 siblings, an exhaustive search of this entire lib (every `void
+init()` in all ~1150 files that define one, brace-matched to isolate each
+function's own body, cross-checked with a second independent line-window
+heuristic, plus every file inheriting `NPC` individually, plus every
+`F_*` mixin `char.lpc` inherits) found **zero** calls to `setup()`,
+`reset_me()`, `enable_player()`, or `enable_commands()` from inside any
+`init()` function anywhere in the lib -- this lib's NPC roster (e.g.
+`std/char/smith.lpc`, `d/meishan/npc/cao.lpc`, `d/qujing/wuji/npc/kingfake.lpc`)
+simply doesn't use the "leader NPC's `init()` unconditionally re-calls
+`me->setup()`" idiom that the `zhangmen.lpc`-family sibling libs in this
+batch do. The only whole-file grep hits were coincidental same-named
+`setup()` calls in unrelated functions (a fire-hazard room's own exit
+`setup()` in `d/18hell/16/heitudi.lpc`, a ranking-board item's `ITEM`-lineage
+`setup()` in `obj/mptop.lpc`, both several lines *after* their `init()`'s own
+closing brace, not inside it) -- same false-positive shape as the already-
+documented `shzs`/`xzyx`/`xiyouji2003` cases. Since `enable_player()` is
+never reachable from any `init()`, the driver-side-effect reentrancy this
+sweep guards against cannot occur here regardless of the `enabled` flag's
+ordering. **Left untouched, no fix applied** (the mechanical fix would be
+inert but harmless; skipped per this project's "don't fix what isn't
+reachable" standing practice).
