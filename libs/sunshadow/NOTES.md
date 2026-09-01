@@ -670,3 +670,67 @@ works this lib, not chased further.
   checks) should be run on these files by whoever next has `node`
   available, before considering this pass's formatting fully compliant
   with the project's own §9 requirement.
+
+## WASM verification (wasm_status audit)
+
+First WASM pass for this lib (`wasm_status` had been left `""` since the
+original port -- see AGENTS.md §1.4's triage playbook). Ran
+`scripts/wasm_client.js` against `~/src/fluffos/build-wasm/src` with a
+full fresh registration (name/password/ANSI/screen-reader/email) through
+the entire 15-stage `ROLL_CHAIN` creation wizard -- `select fighter`,
+`select male`, `select dwarf` chosen explicitly to keep the path
+deterministic (dwarf isn't one of the two `is_statmod_race()` races
+[`human`, `half-elf`], so the `stat_mod` stage auto-skips reliably;
+`fighter` avoids caster-class complications), `select random` for the
+remaining option-list stages, and `recommended` + `done` for the `stats`
+stage specifically (it's the one `ROLL_CHAIN` stage that rejects the
+generic `select`/`select random` verb outright -- `select_stats()`
+always returns 0 and just reprints the stat-allocation help; confirmed
+this live on a first attempt that sent `select random` into it and
+watched the wizard stall repeating the same screen) -- then `finalize`,
+tutorial `skip`, and `look`/`score`/`who`/`say hello world`/`quit`.
+
+**Result: clean end-to-end with zero mudlib-side changes needed.** The
+full chargen produced a real character (fighter/male/shield dwarf,
+svelte body, silver eyes, gray hair, chaotic neutral, The Faceless One,
+thug fighter-style), landed correctly in the tutorial room, `skip`
+reached the rules room, and `score`/`who`/`say`/`quit` all rendered
+correct output with no `debug.log`-equivalent errors, no `No program in
+object`, and no driver-level crash anywhere in the transcript.
+
+The only compile-time error seen during boot was the pre-existing,
+already-documented `adm/daemon/ipc.lpc` (an admin chat-relay daemon using
+raw `socket_create()`/`socket_bind()`/`socket_listen()`, which don't
+exist in the `sockets`-less WASM build) -- confirmed via a full-corpus
+grep that this file is referenced from nowhere else in the archive (not
+preloaded, no `IPC_D`-style macro, no caller), so its compile failure is
+inert noise, not a WASM blocker; left unguarded rather than adding a
+speculative `#ifdef __PACKAGE_SOCKETS__` to a file nothing calls. The
+only other socket-using file in the whole archive,
+`cmds/creator/_netstat.lpc`, is a creator-only diagnostic command never
+exercised by ordinary registration/play and wasn't touched either. No
+`uptime()` startup-grace gates, no `pcre`/`regexp()` calls in
+simul_efun/master, and no IP-parsing bans in `logind`'s equivalent
+(`adm/obj/login.lpc`'s `BANISH_D`/`MULTI_D` chain: both start with empty
+allow/deny lists on a fresh archive and have no IP-format-sensitive
+logic that could reject a loopback WASM connection) -- none of the
+usual §1.3 bug classes applied here. `std/user.lpc`'s `setup()` already
+hardcodes `ip = "127.0.0.1";` for every logged-in player regardless of
+driver mode, which incidentally makes this lib immune to any future
+`query_ip_number()` regression on this specific field (unrelated to the
+still-live `query_ip_number()` efun call itself, which was never an
+issue here since nothing in the login/registration path parses it).
+
+Set `wasm_status: "playable"` in `meta.json`. Also took this pass as the
+opportunity (per the site's ongoing description-quality sweep) to
+rewrite `meta.json`'s `english_description` and `README.md`'s intro
+section, which had drifted into porting-bug narrative instead of game
+content -- replaced with real specifics pulled from `std/races/` (43
+race files, several `is_restricted()`-gated), `std/class/` (base vs.
+`is_prestige_class()` roster), `d/shadowgate/dieties.h`'s ten-deity
+NEWPANTHEON, and the `d/` zone tree (Tabor/Muuldaan, the city of Shadow
+and its coliseum, Underdark, a Ravenloft-flavored domain, the
+Atoyatl/Tecqumin jungle region, Dagger). Also stripped a stray
+`**40232**` markdown-bold artifact from the README's "Local run" section
+(the site's `parse_readme()` doesn't strip markdown, so it would have
+rendered as literal asterisks on the site card).
