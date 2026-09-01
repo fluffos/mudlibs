@@ -1,13 +1,6 @@
 # 侠客行 Ⅰ (The Quest of Oriental Chivalry)
 
-由 "XiaKeXing Gaming Group" 制作，登录画面自称 1996-2003 年出品。属于
-早期"ES II"引擎家族的一支——与本项目中的 `rzrmud`（大唐西游）、
-`bmxkx2001`、`xuanjianlu`（玄剑录）等同属一个更古老的技术
-谱系，但游戏世界内容各自独立。精确到发行版本层面：`d/taihu/gumu/
-houtang.lpc` 等场景文件头带"Cracked by Roath"署名，和
-`bmxkx2001`/`jym`/`xkm` 是同一批流通版本；`xuanjianlu` 则
-是"Cracked by Kafei"的另一批流通版本（与 `xkx2000zxb` 同批），两批
-之间文件头署名不同，但核心引擎同源。
+由 "XiaKeXing Gaming Group" 制作的武侠 MUD，登录画面自称 1996-2003 年出品，属于早期"ES II"引擎家族的一支，与本项目中的 `rzrmud`（大唐西游）、`bmxkx2001`、`xuanjianlu`（玄剑录）等同属一个更古老的技术谱系，但游戏世界内容各自独立（发行版本层面，`d/taihu/gumu/houtang.lpc` 等场景文件头带"Cracked by Roath"署名，和 `bmxkx2001`/`jym`/`xkm` 是同一批流通版本，`xuanjianlu` 则属于"Cracked by Kafei"的另一批流通版本，与 `xkx2000zxb` 同批，两批文件头署名不同但核心引擎同源）。游戏以"侠客岛"为背景：新角色先在岛上沙滩苏醒，由"赏善使"张三或"罚恶使"李四迎接并带往登记处办理入岛手续（用 `register <邮箱>` 完成注册，系统随机生成新密码并断开连接，是一种老式的防小号验证机制），之后才正式踏入江湖，探索少林、武当、华山、丐帮、星宿派等经典金庸门派地图，体验完整的门派拜师、内功修炼、江湖任务与帮派系统。
 
 ## 内容亮点
 
