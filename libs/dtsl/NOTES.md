@@ -1031,6 +1031,109 @@ real board-post content change (`data/board/party_cy_b.o` +
 新增 "cannot replace"/"cannot bind" 行）；未做完整 §10.7 深度
 游玩测试。
 
+## 深度功能测试（round three, 2026-09-01）— clean, no new bug found
+
+A genuinely different-angle pass, per the standing rule that "already
+tested" libs keep turning up new bugs when probed differently. Booted
+native `build-debug` (port 40008), used a raw Python socket harness
+(`recv_for(seconds)` fixed-wall-clock reads, no quiet-detection) rather
+than `tmux_mud.sh`. Five angles targeted, all came back clean:
+
+1. **Mail system**: does not exist in this lib. The only `mail`-named
+   files (`adm/daemons/sendmaild.lpc`, `adm/daemons/network/mail_serv.lpc`,
+   `netmail.lpc`, `include/net/sendmail.h`) are real internet-SMTP
+   daemon plumbing (the `sockets`-package-gated networking subsystem,
+   already documented elsewhere as WASM-incompatible but otherwise
+   inert), not a player-to-player in-game mail command. Confirmed via
+   grep across `cmds/` for any `add_action` on `"mail"` — none. N/A,
+   not a gap in testing coverage.
+2. **Board `post`/reply**: this lineage's boards (`std/bboard.lpc` /
+   `obj/board/*.lpc`) have no `reply` verb at all — only
+   `post`/`read`/`list`/`discard` (confirmed via `long()`'s own usage
+   text). `post`/`read`/`list` were already live-tested in round three;
+   this pass added adversarial `discard`/`read`/`list` arguments
+   (`discard 999`/`-1`/`0`/`abc`, `read -5`/`abc`, `list -1`/a
+   20-digit-overflow number) against 洛阳`d/luoyang/zhulou`'s
+   `花间弟子留言板` (`/obj/board/party_hj_b`) — every out-of-range or
+   non-numeric case returned a clean `notify_fail()`/format-hint
+   message, zero `debug.log` output. Also re-confirmed the §7.86
+   `BULLETIN_BOARD`-`replace_program()` corpus-sweep fix has no
+   remaining instances (`grep -rn "replace_program" | grep -i board`
+   returns nothing). One incidental finding, NOT a bug: a wizard-only
+   `post` (bypassing the non-wizard 2-24-char/Chinese-only title gate,
+   per `do_post()`'s own `if (!wizardp(me)) {...} else if (i > 24)`
+   branch) left mid-`edit()` when the test connection net-deaded before
+   the closing `.` — the pending post was correctly discarded on
+   reconnect (no partial/corrupted post appeared), consistent with the
+   already-documented §10.10 "an in-progress `input_to()`/edit chain
+   doesn't survive reconnect" driver behavior, not a new defect.
+3. **Currency persistence across quit/reconnect** (the exact angle that
+   found `fysjmb`'s severe dead-`query_autoload()` bug this session):
+   checked `std/money.lpc` directly first — `string query_autoload() {
+   return query_amount() + ""; }` (line 7) is **already live, not
+   commented out**, unlike the Fengyun-lineage sibling family. This
+   lineage is unaffected by that bug class. Live-verified anyway: test
+   character `ceshiq`/测钱 withdrew 5 coins from 石龙武馆's 账房
+   (`withdraw 5 coin`), confirmed carrying `五文钱(Coin)` via `i`, did a
+   real `quit` (clean, no `debug.log` output), waited a real 12s, and
+   reconnected — `i` and `score`'s `存款`/inventory both showed the
+   exact same 5-coin cash and 10-coin deposit intact. No bug.
+4. **Adversarial/malformed input**: a 10,000-character English "id"
+   during registration, control-byte/ANSI-escape-embedded strings
+   (`"abc\x00\x01\x1b[31mdef\x07"`), raw invalid-UTF-8 byte sequences
+   (`\xff\xfe\x80\x81`, an encoded UTF-16-surrogate pair) and a
+   3,000-character valid-Chinese-codepoint string all fed into the id
+   and Chinese-name registration prompts — every case was cleanly
+   rejected by `check_legal_id()`/`check_legal_name()`'s existing
+   length/charset gates (the NUL-containing string was silently
+   truncated to its prefix, `"abc"`, by the driver's own C-string
+   handling before LPC ever saw it — a known telnet/socket-layer
+   behavior, not an LPC bug) with zero `debug.log` output in any case.
+   Mid-game: `bai <nonexistent-npc-name>`, `xue <teacher> <nonexistent-
+   skill-name>`, `buy` with no args, a 5000-character item name, `buy
+   sword from <nonexistent-vendor>`, and `sell sword` (no vendor
+   context) all produced normal in-character "什么?"/"你要跟谁买东
+   西？"-style rejections, never a crash or `debug.log` entry.
+5. **§7.19-class reentrancy via `enable_commands()`/`enable_player()`
+   reachable from an NPC's `init()`**: grepped every `enable_commands()`
+   call site in the lib. Only `feature/command.lpc` (the dispatcher
+   itself), `obj/user.lpc`, `d/death/npc/yanluo.lpc` (round three's
+   already-fixed §7.112 death-stage bug — re-confirmed the
+   `in_death_stage` guard is still present at lines 73/74/83/101), and
+   `u/fengfei/object.lpc` (a personal player-directory WIP file, already
+   documented elsewhere as non-playable/out-of-scope content, not part
+   of any real game path) call it. Every `enable_player()` call site
+   funnels back through `feature/command.lpc`'s own `enable_player()`
+   (confirmed the round-two §7.16(Bug 2) `remove_action("command_hook",
+   "")`-before-`add_action()` guard is still present, lines 108-109) —
+   this defends against duplicate-dispatch regardless of how many
+   unrelated call sites (`feature/move.lpc`'s living-toggle logic
+   included) redundantly invoke it. Live-reconfirmed with a real failing
+   `xue jiao force` against `ceshiq` (single "缺乏实战经验" message, not
+   doubled) that this fix has not regressed since round two.
+
+**Net result: no new bug found.** This is an honest clean pass, not a
+forced one — `work/log/debug.log` never came into existence at any
+point across roughly a dozen driver interactions (registration,
+combat, economy, board edge cases, adversarial input, quit/reconnect),
+and the driver's own captured stdout showed only expected preload
+compile-warning spam. No code changes this pass; nothing to port to
+`dtsl2`/`dtslmud`.
+
+**Test character** (kept, saves are ordinary fresh-registration state):
+id `ceshiq`, Chinese name 测钱 (male), password `Cq123456`. State: newbie
+gift received (combat_exp 6015, +1 str/con/dex), 5 coin cash + 10 coin
+deposit, one sparring session at 石龙武馆's 练武场. Saves:
+`work/data/user/c/ceshiq.o`, `work/data/login/c/ceshiq.o`.
+
+### Cleanup
+
+One native driver boot this pass (PID confirmed via
+`readlink /proc/<pid>/cwd` matching this lib's `work` directory before
+`kill`). Incidental `data/login/f/fluffos.o` + `data/user/f/fluffos.o`
+(admin save, pure key-reorder, no value change) reverted via `git
+checkout --` before commit.
+
 ## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
 
 Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
