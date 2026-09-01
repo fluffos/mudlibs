@@ -29,9 +29,9 @@ https://mudlibs.fluffos.info/residuum/
 
 ## Admin account
 
-- **ID**: `fluffos`
-- **Password**: `Mud@2026`
-- **Privilege**: immortal (auto-granted to the first character ever
+- ID: `fluffos`
+- Password: `Mud@2026`
+- Privilege: immortal (auto-granted to the first character ever
   created on this copy of the lib, via its own real first-connection
   bootstrap -- not a hand-edited save file).
 
@@ -45,4 +45,4 @@ cd libs/residuum
 ~/src/fluffos/build-debug/src/driver config.fluffos
 ```
 
-Game port: **40237**.
+Game port: 40237.

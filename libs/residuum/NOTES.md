@@ -326,9 +326,47 @@ live boot: no established or attempted outbound connections at any
 point. This lib is safe for high-frequency automated reboot/deep-test
 loops, unlike its two Nightmare-lineage siblings in this collection.
 
-## 9. WASM status
+## 9. WASM status: `playable`, zero code fixes needed
 
-Not attempted (`wasm_status` left `""` per task scope).
+Tested with `node scripts/wasm_client.js ~/src/fluffos/build-wasm/src
+libs/residuum --timeout 25 --idle 1.0` driving the exact flow real
+players use: `fluffos` (account name) -> `Mud@2026` (password) ->
+`fluffos` (select the existing, already-chargen'd character from §10)
+-> `look` -> `score` -> `quit`. No fresh registration was needed since
+this lib already carries a seeded, fully-chargen'd admin
+account/character from the native §10 pass (Level 2 Warrior, standing
+in Origin Point) -- reusing it exercises the account-menu/character-
+select half of the login flow that a brand-new registration wouldn't.
+
+Transcript was completely clean end to end: `Enter account name:` ->
+`Existing account 'fluffos'...` -> `Password:` -> the full
+`border()`-rendered account menu (correctly listing "Fluffos, Level 2
+Human, Origin Point") -> selecting the character produced the real
+room description of Origin Point (ASCII mini-map, four exits, the
+`R-0111010` NPC's greeting) -> `look` re-rendered the identical room ->
+`score` produced the full character-sheet box (Warrior, Level 2, XP
+896, HP/SP/MP 140/84/72, stats, connected time) -> `quit` cleanly
+dropped back to the account menu with `Fluffos exits Nightmare
+Residuum.` logged, exactly matching native behavior. Grepped the full
+driver console output for `Error`/`FATAL`/`Undefined function`/`No
+program in object`/`Bad argument` and found none -- no
+`sockets`-package crash, no `pcre` issue, no `uptime()` gate, no
+`log/`-path ENOENT. This lines up with §8's own finding that this
+lib's only socket user (`secure/daemon/ipc.lpc`) is inbound-only and
+not preloaded, so the WASM build's absent `sockets` package was never
+going to be exercised on this path in the first place -- no
+`#ifdef __PACKAGE_SOCKETS__` guard or `catch()` wrap was needed
+anywhere. This is one of this project's "clean WASM session, zero
+fixes needed" cases, alongside `demonangel`/`dreamofseven`/
+`immaster`/`lpmud141`/`mortremains`.
+
+Since the WASM harness runs the whole mudlib out of an in-memory
+filesystem (MEMFS) copied at boot, none of this touched
+`libs/residuum/work/` on disk at all -- no save-data churn to clean up,
+and the seeded `fluffos` account's on-disk save is unchanged from §10's
+own native-testing state.
+
+`meta.json`'s `wasm_status` set to `"playable"`.
 
 ## 10. Deep functional test, round two (2026-08-27, AGENTS.md §10.7)
 
