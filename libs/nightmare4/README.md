@@ -43,6 +43,16 @@ https://mudlibs.fluffos.info/nightmare4/
 > Warning: `Mud@2026` is a public default password for local play
 > only. Change it before exposing this host publicly.
 
+## Status
+
+WASM status: `playable`. A `dump_socket_status()` sefun calling
+`socket_status()` unconditionally (a `netstat` creator-command
+diagnostic, not on the boot/login path) was fatal to simul_efun's
+compile without the `sockets` package -- guarded with `#ifdef
+__PACKAGE_SOCKETS__`. Full session verified clean after the fix:
+registration, race selection, `look`/`score`/`quit`. See `NOTES.md`
+\S13.
+
 ## Local run
 
 ```

@@ -401,7 +401,22 @@ elsewhere in this collection.
 
 ## 13. WASM status
 
-Not attempted (`wasm_status` left `""` per task scope).
+`playable`. Booted `~/src/fluffos/build-wasm/src` against this lib via
+`scripts/wasm_client.js`. `secure/sefun/sefun.lpc`'s `dump_socket_status()`
+(a `cmds/creators/netstat.lpc`-only diagnostic, not on the boot/login
+path) called `socket_status()` unconditionally, which is `Unknown efun`
+without the `sockets` package -- fatal at simul_efun compile time,
+identical shape to this project's `ds386`/`dsII`/`lima` entries. Guarded
+the function body with `#ifdef __PACKAGE_SOCKETS__ ... #else return "";
+#endif`. After the fix, a full WASM session verified clean: real
+menu-driven registration (name, confirm, password + confirm, gender,
+display name, email, real name), race selection (`list` / `pick human`),
+landing in Ylsrim's central bazaar, `look`/`score`, and `quit`. (Initial
+runs with too-short `--idle` values between `wasm_client.js` sends
+appeared to hang mid-registration at the gender prompt -- reproduced
+identically on the *native* driver with the same fast timing, confirmed
+purely a test-harness pacing artifact via a slower `--idle 2.0`, not a
+WASM-specific or mudlib bug.)
 
 ## 14. Deep functional test, round two (2026-08-27, AGENTS.md §10.7)
 
