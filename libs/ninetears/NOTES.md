@@ -693,4 +693,29 @@ formatting.
 combat/death, and quit/reconnect tests) was removed
 (`players/t/testespa.o` deleted) before committing, per this project's
 throwaway-test-character policy. Only the seeded admin account
-(`fluffos`) remains in `players/`.
+remains in `players/` (see below for the rest of this file).
+
+## 12. WASM status audit (2026-09-01)
+
+`playable`. `secure/login.lpc`'s `logon()` had a classic AGENTS.md
+§1.3(e) startup-grace gate: `if(uptime() < 10) { write(JUST_REBOOTED);
+dest_me(); return; }`, unconditionally destructing every connection
+during the first 10 seconds after boot. The WASM harness connects
+instantly after boot, so this fired deterministically on every run.
+Bypassed for local/WASM connections only (the same loopback-exemption
+pattern used elsewhere in this collection):
+
+```lpc
+if(query_ip_number(this_object()) != "127.0.0.1" && uptime() < 10) {
+```
+
+The preloaded `/secure/ftpd` (real listening socket on port 4001, see
+§9 above) fails to *compile* under WASM without the `sockets` package
+(`Undefined function socket_create` etc.) -- but this is a normal,
+gracefully-skipped preload failure (the driver just logs it and moves
+on to the next preload file), not fatal to boot, so no fix was needed
+there: the FTP feature is simply absent under WASM, matching its
+absence in any other sandboxed/no-sockets deployment. After the
+`uptime()` fix, a full WASM session verified clean: registration
+(name, `s` confirm, password + confirm, gender `h`/`m`), landing in
+"Plano Inmaterial", `mirar` (look), `score`, and `salir` (quit).

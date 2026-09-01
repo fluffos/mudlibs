@@ -51,7 +51,13 @@ on a hardcoded port (4001) a couple of seconds after boot, for an
 in-game FTP-style file transfer feature -- see `NOTES.md` before adding
 this lib to any automated high-frequency reboot loop.
 
-WASM status: not attempted (`wasm_status` left `""`).
+WASM status: `playable`. A `uptime() < 10` startup-grace gate in
+`secure/login.lpc` destructed every connection during the WASM
+harness's instant-connect window; bypassed for local/loopback
+connections only. The preloaded FTP daemon simply fails to compile
+without the `sockets` package (a graceful, non-fatal preload skip).
+Full registration/`mirar`/`score`/`salir` verified clean after the
+fix. See `NOTES.md` \S12.
 
 ## Local run
 
