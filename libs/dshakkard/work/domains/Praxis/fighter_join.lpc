@@ -75,7 +75,7 @@ int become(string str) {
     }
     write("The Great Warrior initiates you into the class of fighters.");
     say(this_player()->query_cap_name()+" becomes a fighter.", this_player());
-    this_player()->SetClass("fighter");
+    this_player()->ChangeClass("fighter");
     this_player()->setenv("TITLE", "$N the page");
     this_player()->init_skills("fighter");
     this_player()->setenv("start", "/domains/Praxis/fighter_hall");

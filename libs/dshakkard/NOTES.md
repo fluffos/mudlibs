@@ -663,3 +663,38 @@ matching the bar `ds386`/`dsIII` were promoted at. The remaining
 admin/network-tooling-only limitation already accepted as out of scope
 for the playable/limited distinction on `ds386` itself -- not something
 this port introduced, and not on the boot/login/play path.
+
+## Sibling sweep: `become <class>` SetClass -> ChangeClass fix (2026-09-01)
+
+Ported the fix from `riftsds` (AGENTS.md §7.195/§7.196; commit
+`11216f003b1`) -- see `ds386/NOTES.md`'s identical write-up (same
+session, same batch) for the full bug mechanism. Summary: the stock
+Dead Souls "Praxis" demo guild-join rooms called `SetClass()` directly
+instead of `ChangeClass()`, so the multi-class privilege gate
+(`high_mortalp()`, which excludes creators too) always silently
+rejected a fresh explorer's first class despite a success message
+printing.
+
+**Confirmed present here**, byte-identical to `ds386`/`riftsds`'s
+pre-fix files: all six `domains/Praxis/*_join.lpc` files called
+`SetClass()`; `secure/include/compat.h` was missing the same three
+`query_name`/`query_cap_name`/`query_gender` mappings.
+
+**Fix applied**: six `SetClass()` -> `ChangeClass()` edits, three
+`compat.h` accessor lines added -- identical to `ds386`.
+
+**Live-verified** with the seeded `fluffos` admin (`Class` reset to
+`"explorer"` via `eval` between attempts): `become fighter`/`become
+cleric`/`become mage` all now print the real success text and `score`
+confirms the genuine class change ("You are a level 1 Human Fighter"/
+"Cleric"/"Mage"). `become monk`/`kataan`/`rogue` were not tested here
+(the same pre-existing missing-class-data gap already confirmed on
+`ds386`/`dsIII`/`riftsds`'s identical `secure/cfg/classes/` directory
+listing -- `explorer`/`fighter`/`mage`/`cleric`/`thief` only, no
+`monk`/`kataan`/`rogue` data anywhere in this lineage).
+
+Committed only the six join-file fixes and the three `compat.h`
+mappings; incidental save-file churn from this session's boot (seeded
+`fluffos` admin's `Class` field, player list, mudinfo, snoop, preload
+saves) was left uncommitted. Killed the test driver by exact PID when
+done.

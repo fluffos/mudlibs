@@ -68,5 +68,8 @@
 #define set_quest_points		SetQuestPoints
 #define query_quest_points		GetQuestPoints
 #define query_class                     GetClass
+#define query_name                      GetName
+#define query_cap_name                  GetCapName
+#define query_gender                    GetGender
 
 #endif /* s_lpu_h */
