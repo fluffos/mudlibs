@@ -1,10 +1,6 @@
 # 侠客行2000最新版 (xkx2000zxb)
 
-侠客行Ⅰ（"The Quest of Oriental Chivalry"），XiaKeXing Gaming
-Group 1996-1999，MudOS v22b25 世系，由 sdong 移植。`jym`（金庸梦）
-共享同一套地图骨架（`d/taihu/gumu/houtang.lpc` 等场景内容相同，
-只是文件头"破解"署名不同：这份是"Cracked by Kafei"，`jym`/`xkm`
-都是"Cracked by Roath"），应是同一款底层代码库的不同流通版本。
+侠客行Ⅰ（"The Quest of Oriental Chivalry"），XiaKeXing Gaming Group 1996-1999，MudOS v22b25 世系，由 sdong 移植。与 `jym`（金庸梦）共享同一套地图骨架（`d/taihu/gumu/houtang.lpc` 等场景内容相同，只是文件头"破解"署名不同：这份是"Cracked by Kafei"，`jym`/`xkm` 都是"Cracked by Roath"），应是同一款底层代码库的不同流通版本。
 
 ## 内容亮点
 
