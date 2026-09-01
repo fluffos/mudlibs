@@ -864,3 +864,98 @@ premature line in `enter_world()`. Verified via a clean native driver
 boot only (not an independent live walk-out-of-the-room reproduction
 on this specific lib — the bug shape and remedy are a verbatim port of
 an already live-verified fix from the shared-lineage sibling `zhyx`).
+
+## §10.7 深度功能测试（回合三 · 批次三，2026-09-01）：五个全新角度，全部干净
+
+上一轮（2026-08-04）已经深度测试过注册流程、地图探索、商店、真实
+死亡+undisturbed 复活、GBK 乱码新 bug 类等。本轮受命从五个明确未
+覆盖的角度重新测试，刻意寻找编程 bug（而非内容/平衡问题）：
+
+**① 拜师入门机制（区别于死亡系统的"白无常"）**：`cmds/skill/bai.lpc`
+是真正的拜师指令，最终会对目标 NPC 调用 `ob->attempt_apprentice(me)`。
+本档案里能真正收徒的门派入口分散在各 `kungfu/class/<门派>/*.lpc`
+里，且各家老大门槛都很高（如丐帮帮主洪七公要求 `combat_exp >=
+400000`），新手要到达要花很长时间；但丐帮在中央广场树洞
+（`enter dong` → `/d/gaibang/inhole`）里的黎生（`kungfu/class/
+gaibang/li.lpc`）没有战力门槛（仅要求 `permit_recruit()` 通过 +
+`shen >= 0`），是新手唯一能立即验证的真实入口。用测试角色"王道"
+（`wangdao`）现场 `bai li`，全程走完 `attempt_apprentice()` →
+`command("recruit ...")` → `cmds/skill/recruit.lpc` 的完整链路，
+真实状态变化确认：称号从"普通百姓"变成"丐帮第二十代传人"（显示
+"小叫花"），`score` 显示"师父是黎生"，`family/family_name` =
+"丐帮"。**干净，没有发现 bug**。（顺带发现 `d/gaibang/npc/{1..7}dai.
+lpc` 这些普通丐帮弟子场景 NPC 虽然通过 `create_family()` 设了
+`family`，却没有 `inherit F_MASTER` 也没有定义
+`attempt_apprentice()`——理论上对它们 `bai` 会触发一次"函数不存在"
+的 call_other，但这更像是"这些低阶弟子本来就不该被拜师"的场景设
+计缺失防御性检查，而不是会崩溃或产生错误数据的编程 bug；受时间
+限制未继续深挖，留作观察，未作修改。）
+
+**② 留言板 post/read 真实往返**：客店留言板（`clone/board/
+kedian_b.lpc`，`inherit BULLETIN_BOARD`）此前已被 §7.86 跨库扫描
+处理过（删除多余 `replace_program()`），但那次只做了编译检查，未
+做过真实的 `post` 命令回归验证。本轮现场 `post test-post-yhyxs`
++ 编辑器正文 + `.` 结束，留言完毕，留言数从 131 增至 132，`read
+new` 成功读出第一条留言（无崩溃、无"cannot bind an lfun fp"错
+误）。**§7.86 修复在这份档案上首次得到真实的 live 回归验证，干
+净**。
+
+**③ 货币跨 quit/reconnect 持久化**：先确认 `inherit/item/money.lpc`
+的 `query_autoload()`（AGENTS.md §7.199 类 bug 的关键函数）本身
+就是启用状态（未被注释掉，和风云系血统的 §7.199 bug 不同），
+这份档案不属于风云系血统。现场验证：管理员 `clone /clone/money/
+gold 50` + `give gold to wangdao` 给测试角色五十两黄金，`i` 确
+认在身上；`quit`（"欢迎下次再来！"，没有"你丢下一些黄金"的丢弃
+提示）；等待退出锁定窗口过后重新连线，`i`/`score` 确认五十两黄
+金完整保留。**干净，没有 §7.199 那类 bug**。
+
+**④ 死亡对话中途net-dead硬断线（对抗性测试）**：区别于上一轮"不
+打断、等待完整走完"的验证方式，本轮刻意在死亡序列进行中制造真实
+的原始 socket 断线（不发 quit，直接关闭连接），测试 `d/death/
+npc/bai.lpc`（含 §7.112 补丁的 `death_stage_active` 重入守卫）
+在这种最坏情况下是否会产生重复对话/状态损坏/卡死。用管理员
+`smash wangdao` 触发真实死亡，立即连线捕获到死亡对话第 1、2 阶
+段（"白无常用奇异的眼光盯著你" / "从袖中掏出一本像帐册的东西翻
+看著"）后，硬断开 socket（脚本进程直接关闭连接，不发送任何命
+令）。等待足够时间让剩余阶段在服务端后台跑完后重新连线，确认
+`score` 显示"你到目前为止总共到黑白无常那里串门二次"（正确的次
+数，没有因为断线重连触发第二条 `death_stage()` 调用链而重复计
+数）、死亡原因正确记录一次（"你最后一次是被浮浮用雷劈死了"）、
+落脚点正确（复活至"武庙"），全程 `debug.log` 保持空白无报错。
+**§7.112 的重入守卫在真实的 net-dead 中途硬断线场景下依然完全
+正确，干净**。
+
+**⑤ §7.19 类 `enable_commands()` 重入检查**：`feature/command.lpc`
+是全档案唯一的 `enable_player()`/`enable_commands()` 调用出口
+（`nomask void enable_player()`），本身已经有正确的重入守卫：
+```lpc
+nosave int enabled = 0;
+
+nomask void enable_player() {
+  ...
+  if (!enabled) {
+    enable_commands();
+    enabled = 1;
+    add_action("command_hook", "", 1);
+  }
+  ...
+}
+```
+配对的 `disable_player()` 也会把 `enabled` 重置回 `0` 再调用
+`disable_commands()`，是完整对称的实现——比 §7.19 记录的
+`living(this_object())` 猜测式守卫更精确（不依赖"当前是否
+living"这个间接信号，而是直接跟踪"`enable_commands()` 是否已经
+调用过"），对 `mhxy` 那种合法重入（sleep/wake 类流程）也不会误
+伤。全档案 grep 未发现任何绕过这个统一出口、直接调用 `enable_
+commands()` efun 的 NPC/房间代码。**结构性免疫于 §7.19 这一类
+bug，干净**。
+
+**总结**：五个角度全部现场验证，**没有发现新的编程 bug**，也没
+有需要移植给 `yanhuangwuhun`/`yhwhpublicfi` 的修复。测试全程原
+生 driver（端口 40061）跑了约 24 分钟，本轮没有复现上一轮遇到的
+§10.8 驱动级懒编译崩溃（同一份档案上一次是该崩溃类的第六个独立
+实例）。测试角色"王道"（`wangdao`）的存档（`data/{user,login}/w/
+wangdao.o`）按惯例保持未跟踪、未提交；测试过程中意外修改的三份
+已跟踪共享状态文件（`data/board/kedian_b.o` 的测试留言、`data/
+dbased.o` 的 ID 计数器、管理员 `fluffos` 账号的登录位置/时间戳）
+已用 `git checkout` 还原，本次没有产生任何需要提交的源码变更。
