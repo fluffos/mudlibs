@@ -902,3 +902,25 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## §7.19 enable_player() reentrancy fix (2026-09-01)
+
+Corpus-wide mechanical fix (AGENTS.md §7.19, Batch F of 6). This lib was
+originally flagged as a possible false positive (it has a pre-existing
+`nosave int enabled = 0;` flag in `feature/command.lpc`, the same shape
+confirmed genuinely sufficient on `xiaoyuxiyou`/`xyxyutf8`/`xyxy2` in earlier
+batches) -- but on closer inspection this is NOT the safe shape: those
+libs set `enabled = 1` BEFORE calling `enable_commands()`, while here
+`enabled = 1` is set AFTER `enable_commands()` returns. Since the reentrant
+nested `init()`->`setup()`->`enable_player()` call (per AGENTS.md §7.19 and
+driver docs) happens synchronously DURING the `enable_commands()` call --
+before it returns -- the nested call still sees `!enabled` and calls
+`enable_commands()` again, recursing exactly as if there were no guard at
+all. Confirmed the reachable chain is real: `d/shushan/npc/zhangmen.lpc`'s
+`init()` unconditionally calls `me->setup()`, and `inherit/char/char.lpc`'s
+`setup()` unconditionally calls `enable_player()`. Fixed by adding a true
+`in_enable_player_now` reentrancy flag (checked/set before anything else,
+cleared before the function's single return path) alongside the existing
+`enabled` bookkeeping variable, which is left untouched since
+`disable_player()` still needs it. Verified via single-file `lpcc --batch`
+PASS.
