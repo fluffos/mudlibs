@@ -61,7 +61,9 @@ Intermud-3 router address on every boot. This is genuine intended
 upstream behavior, not a bug -- see `NOTES.md` \S12 before adding this
 lib to any automated high-frequency reboot/test loop.
 
-WASM status: not attempted (`wasm_status` left `""`).
+WASM status: `playable`. Clean WASM boot and full registration/game
+session with zero fixes needed; the outbound I3 socket attempt (see
+below) fails gracefully without a `sockets` package. See `NOTES.md`.
 
 ## Local run
 

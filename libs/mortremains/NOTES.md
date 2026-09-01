@@ -775,3 +775,14 @@ of this bug class found.
 - Driver killed cleanly by exact PID after this pass; no automated
   reboot loop was set up, consistent with \S12's standing caution
   about this lib's genuine outbound I3 connection attempt at boot.
+
+## WASM status audit (2026-09-01)
+
+`playable`. Booted `~/src/fluffos/build-wasm/src` via
+`scripts/wasm_client.js` -- clean boot, zero fixes needed; the
+preloaded channel daemon's outbound I3 socket-connect attempt (\S12)
+fails silently/gracefully under WASM's no-`sockets` build without
+affecting anything else. Full session verified: real TMI-2 registration
+flow (name, y/n confirm, password + confirm, email, real name, the
+1/2/3/4/5/6/0 stat-optimization menu), landing in The YMAA (Decatur),
+`look`/`score`/`quit` all correct.
