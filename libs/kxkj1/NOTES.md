@@ -727,3 +727,36 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## AGENTS.md §7.19 sweep (2026-09-01): `enable_player()` reentrancy from `init()`
+
+Same corpus-wide bug class as `mhxy`/`wuhanzhan` (AGENTS.md §7.19), and
+the same sibling lineage as `kxkj`/`kxkjii2` but a full generation
+older -- this lib uses `open/` (not `d/`) for its domain/zone
+directories. This lib's `feature/command.lpc` `enable_player()`
+wrapper (around the raw `enable_commands()` efun) is reachable from an
+NPC's `init()` via a redundant `create()`-then-`init()`-calls-`setup()`
+chain -- confirmed via a body-aware static scan of every `init()` in
+this lib: 6 NPC files under `open/gblade/npc/pker{1..5}.lpc` (and a
+6th sibling) call `setup()` directly from `init()`, after `create()`
+already made the object `living()`. Calling `enable_commands()` a
+second time on an already-`living()` object makes the driver re-invoke
+that object's own `init()` as a side effect, re-entering the same
+chain while the original call is still on the stack -- genuine
+reentrancy, crashing with "Too deep recursion" (most likely on an
+NPC's first-ever preload/compile).
+
+`feature/damage.lpc`'s `revive()` calls `enable_player()` again while
+the object is still `living()` -- this lib has no `cmds/std/sleep.lpc`
+wakeup mechanism, so `revive()` is the only confirmed legitimate
+re-enable path here. This confirms a bare `if (living(this_object()))
+return;` guard would be the WRONG fix -- used the same true
+reentrancy-flag fix as `mhxy` instead: a `nosave private int
+in_enable_player_now;` set for the duration of the wrapper's body,
+guarding only genuine same-call-stack reentrancy while leaving the
+legitimate revive re-enable unaffected. `enable_player()` had a single
+fall-through exit (no early `return`s, unlike `kxkj`/`kxkjii2`'s `if
+(!this_object()) return;` variant), so one guard-at-top +
+one clear-at-bottom pair was sufficient. Verified via a single-file
+`lpcc --batch` compile check (PASS) -- not individually
+live-boot-tested.
