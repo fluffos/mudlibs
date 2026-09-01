@@ -1,9 +1,6 @@
 # Arkadia
 
-Polskojęzyczna lokalizacja/fork mudliba silnika **Genesis** (CD gamedriver),
-tego samego, na którym oparty jest już włączony do tej kolekcji `genesis`
-(oryginał angielski). To pierwsza pozycja w tej kolekcji w języku innym niż
-chiński, angielski czy niemiecki. Źródło: <https://github.com/84rn/lpmud>.
+Polskojęzyczna lokalizacja/fork mudliba silnika **Genesis** (CD gamedriver), tego samego, na którym oparty jest już włączony do tej kolekcji `genesis` (oryginał angielski) -- pierwsza pozycja w tej kolekcji w języku innym niż chiński, angielski czy niemiecki. Standardowy fantastyczny świat w stylu silnika CD, z własnym, charakterystycznym dla tej lokalizacji wymogiem przy tworzeniu postaci: nowo przybyła dusza musi samodzielnie podać odmianę własnego imienia przez wszystkie 6 polskich przypadków (mianownik/dopełniacz/celownik/biernik/narzędnik/miejscownik), a standardowe angielskie komendy duszy zostały w pełni zastąpione polskimi odpowiednikami (`spojrz`/`sp`, `zakoncz`, `stan`, `nagraj`, `haslo`). Świeżo zarejestrowana postać trafia jako bezcielesny duch do kamiennej sali na planie półkola, otoczonej pięcioma milczącymi posągami trzymającymi płonące pochodnie, z tajemniczym portalem pośrodku -- dotknięcie posągu ma wybrać rasę, a przejście przez portal nadać prawdziwe ciało, lecz w tym zrzucie archiwum ten ostatni krok nigdy się nie udaje, więc duch może się zarejestrować, zalogować ponownie i grać podstawowymi komendami, ale nigdy nie opuszcza stanu ducha -- walka, sklepy i szkolenie w gildiach pozostają poza zasięgiem. Źródło: <https://github.com/84rn/lpmud>.
 
 ## Ciekawostki
 
@@ -31,7 +28,7 @@ chiński, angielski czy niemiecki. Źródło: <https://github.com/84rn/lpmud>.
   podstawowymi komendami, ale nie da się jej "ucieleśnić" przez zwykłą
   rozgrywkę. Zobacz `NOTES.md`, sekcja 5.
 
-## Konto administratora
+## Konto administratora / Admin account
 
 - id: `fluffos`, hasło: `Mud@2026x` (dokładne `Mud@2026` z zadania nie
   spełnia własnej polityki haseł tego mudliba -- musi zaczynać i kończyć
@@ -54,7 +51,16 @@ logowanie po restarcie sterownika zweryfikowane end-to-end. Brak
 jakichkolwiek wychodzących połączeń sieciowych. Pełne szczegóły w
 `NOTES.md`.
 
-WASM: nie próbowano w tej sesji (`wasm_status` pozostawione puste).
+WASM: zweryfikowano (`wasm_status`: `playable`). Pełna rejestracja przez
+standardowy webowy terminal tego projektu (nazwa, hasło x2, odmiana
+imienia przez 6 przypadków, e-mail) kończy się dokładnie tak samo jak na
+natywnym sterowniku -- postać trafia do sali wyboru rasy i poprawnie
+wykonuje `spojrz`/`stan`. Przy okazji znaleziono i naprawiono jeden
+prawdziwy, ogólny błąd (nie specyficzny dla WASM): w drzewie `players/`
+brakowało 24 z 26 katalogów na literę (zostały tylko `f/` i `r/`, jedyne
+zawierające prawdziwe zapisy), przez co każda nowa postać o imieniu na
+inną literę nie mogła się zapisać. Naprawiono, dodając puste znaczniki
+`.gitkeep` do brakujących katalogów. Pełne szczegóły w `NOTES.md`, § 9.
 
 ## Uruchomienie lokalne
 

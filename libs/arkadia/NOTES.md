@@ -654,3 +654,91 @@ scope permits fixing.
   account and the pre-existing archived `root.o.backup` remain.
 - No outbound network connections observed at any point this pass
   either (spot-checked via `ss` during active testing).
+
+## 9. WASM packaging + boot verification (2026-09-01)
+
+Per AGENTS.md §1, ran `scripts/wasm_client.js` against
+`~/src/fluffos/build-wasm/src` (the project's shared, already-built WASM
+driver) with the exact registration flow documented in §4/§7 above
+(`nowa` -> name -> password x2 -> 6-case declension Q&A -> email ->
+arrival), same as the native transcripts.
+
+**One real, previously-latent bug found and fixed, affecting BOTH native
+and WASM (not WASM-specific):** `players/` only shipped the two letter
+buckets that happen to contain real save files (`f/` for the seeded
+`fluffos` admin, `r/` for the archive's own archived `root.o.backup`).
+Section 3's "created the remaining 25 letter directories" note from the
+original onboarding pass never actually persisted, because git does not
+track empty directories -- once that session's shell-created `mkdir`s
+were left with nothing to commit, the fix silently reverted itself on
+the next fresh checkout. Symptom: any new character whose name starts
+with a letter other than `f`/`r` fails to save
+(`*Could not open /players/<letter>/<name>.o.tmp for a save`,
+`std/player_sec.lpc:625`), which cascades into `ghost_start()` never
+placing the character in a room (`environment()` returns 0), which in
+turn crashes the very first `spojrz`/look with `*Bad argument 1 to EFUN
+call_other()` in `do_glance()`. This is a real, general registration
+blocker, not a content gap or a WASM-sandbox artifact -- confirmed the
+same missing directories are absent from the native `work/` tree too.
+Fixed properly this time: created all 24 missing single-letter
+directories (`a`-`z` minus `f`/`r`) each with an empty `.gitkeep` file
+(the convention already used elsewhere in this project, e.g.
+`libs/openlib/work/u/p/.gitkeep`) so they survive as real git blobs and
+get copied into both a fresh native checkout and the WASM MEMFS copy
+`pack_lib_for_web.sh`/`wasm_client.js` build for every future run.
+
+After that fix, a full WASM registration (`testarkb`, matching the
+declension pattern used elsewhere in this file) completed cleanly and
+reached the exact same place the native transcripts in §7/§8 describe:
+the redundant second declension Q&A fires once (§5.1, confirmed still
+present under WASM too, same self-resolving non-bug), then the
+character lands in the `sala.lpc` race-choosing hall with its full room
+description, where `stan` correctly answers `"To nie jest mozliwe w tym
+miejscu."` -- identical to the native ghost-state restriction documented
+in §8.7, not a WASM regression. `zakoncz` (quit) printed `"Nagrywam
+postac."` and the connection closed cleanly, same as native.
+
+**Conclusion: WASM boots and plays identically to the already-verified
+native driver**, including reproducing the same documented,
+deliberately-unfixed content gap (no reachable path out of ghost
+status, so combat/shop/guild remain unverified/unreachable under WASM
+for the same reason they are under native -- see §5.2/§8.7). No
+WASM-specific blocker of any kind was found; the one real bug (missing
+`players/` letter directories) was a general infrastructure gap that
+happened to surface first here because this was the first full,
+from-a-fresh-checkout registration test with a name outside `f`/`r`.
+Checked precedent before picking `wasm_status`: of the ~234 libs already
+classified, 233 are `"playable"` and exactly one (`zjdyzj`) is
+`"limited"` -- and that one lone `"limited"` case is `"limited"` for a
+purely technical reason unrelated to content depth: its `logind.lpc`
+gates every connection behind a custom crypt-challenge mobile-client
+handshake that this project's generic telnet-style web terminal cannot
+compute automatically, so an ordinary site visitor can't even get past
+the FIRST prompt without an external tool. By contrast, several other
+libs with severe, code-confirmed content gaps at least as deep as
+arkadia's -- `nitan6` (combat never applies real damage at all),
+`kxkj` (a shared-file bug permanently corrupts room exits over uptime),
+`zsdsj`, `bmxkx2001`, and many more across this collection's NOTES.md
+-- are all still classified `"playable"`, because the standard
+login/registration/explore loop works end to end through the ordinary
+web terminal; the gap is something a player runs into DURING play, not
+something that blocks the standard site experience from ever starting.
+Arkadia's case fits that same pattern, not `zjdyzj`'s: the generic web
+terminal completes the ENTIRE documented registration flow with no
+special tooling, reaches a live, responsive `> ` prompt, and correctly
+executes ghost-level commands (`spojrz`, the room description, the
+ghost-state-restriction response from `stan`) -- exactly the "playable"
+bar this collection has consistently applied elsewhere. The embodiment
+gap is therefore recorded as a documented content limitation (per §5.2/
+§8.7 above and in the README/meta.json description) rather than
+expressed via a `"limited"` status, matching how this project has
+classified every other lib with a comparably severe in-play content gap.
+`wasm_status` set to `"playable"`.
+
+Test characters (`testarka`, `testarkb`) never touched the real
+on-disk `players/` tree at all -- `wasm_client.js` copies the lib into
+an in-process MEMFS filesystem per run and all writes (including
+character saves) land only there, discarded when the Node process
+exits. Only the newly-added `.gitkeep` placeholders and the pre-existing
+`fluffos`/`root.o.backup` files are present in `players/` after this
+pass.
