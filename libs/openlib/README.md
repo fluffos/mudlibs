@@ -30,14 +30,23 @@ https://mudlibs.fluffos.info/openlib/
 ## Admin account
 
 - **ID**: `root`
-- **Password**: `Mud@2026`
+- **Password**: `RootPass2026!` (the account was reset during a later
+  deep-functional-test pass since the original onboarding password
+  wasn't recorded anywhere retrievable -- see `NOTES.md` \S12)
 - **Privilege**: the archive's own bootstrap superuser account (defined
   in `security.h`) -- per its own GETTING_STARTED, the intended next
   step is to `mkwiz`/`addmem .. Admin`/`chmem adm .. Admin` a real named
   admin character from here, then `rmwiz root`.
 
-> Warning: `Mud@2026` is a public default password for local play
+> Warning: `RootPass2026!` is a public default password for local play
 > only. Change it before exposing this host publicly.
+
+## Status
+
+WASM status: `playable`. The FTP/finger/HTTP daemons and their shared
+socket-server base class fail to compile without the `sockets`
+package -- a normal, non-fatal preload skip, not a boot blocker. Login
+and gameplay verified clean under WASM. See `NOTES.md` \S14.
 
 ## Local run
 

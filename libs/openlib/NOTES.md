@@ -594,3 +594,28 @@ absolute path argument bypasses `query_cwd()` entirely -- not
 independently re-verified live one by one this pass, but flagged here
 in case a future relative-path-as-non-wizard test surfaces the same
 shape elsewhere in this file family.
+
+## 14. WASM status audit (2026-09-01)
+
+`playable`. Booted `~/src/fluffos/build-wasm/src` via
+`scripts/wasm_client.js` -- clean boot; the `sockets`-dependent daemons
+(`adm/obj/daemon/net/services.lpc`, `.../intermud.lpc`,
+`adm/obj/inherit/server.lpc`, `adm/obj/daemon/net/http_d.lpc` -- the
+FTP/finger/HTTP daemons and their shared server-socket base class) all
+fail to *compile* without the `sockets` package, but these are normal
+non-fatal preload failures the driver logs and moves past, not fatal
+to boot -- those network-service features are simply absent under
+WASM. **Reproduced first as an apparent login failure that turned out
+to be unrelated to WASM at all**: logging in as `root` with the
+README's documented password (`Mud@2026`) got `login incorrect.` on
+*both* the WASM and a fresh native boot -- \S12 above already
+documents that `root`'s password was reset to `RootPass2026!` during
+the round-two deep-functional-test pass and the README was never
+updated to match. Fixed the README. With the correct password, a full
+WASM session verified clean: login, `score`, `quit`. (A `compile:
+error: Check .../compile for more information` notice appears on
+screen a few times during any session, on both native and WASM --
+this is `adm/obj/daemon/master.lpc`'s `log_error()` broadcasting a
+background daemon's periodic recompile-retry failure to whichever
+player happens to be connected at that tick; cosmetic noise, not a
+sign that the connecting player's own login/commands failed.)
