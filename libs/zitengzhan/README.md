@@ -1,8 +1,6 @@
 # 紫藤站
 
-大唐西游之紫藤站（登录后横幅也作【紫藤西游】），属于 ES II 引擎系列
-（与 `es1_win`/`xkx2001`/`rzrmud` 等同源，master 文件署名同样能追溯到
-"for ES II mudlib, original from Lil, rewritten by Annihilator"）。
+大唐西游之紫藤站（登录后横幅也作【紫藤西游】），属于 ES II 引擎系列（与 `es1_win`/`xkx2001`/`rzrmud` 等同源，master 文件署名同样能追溯到 "for ES II mudlib, original from Lil, rewritten by Annihilator"），与本项目"地狱"/Doing 血统档案（`zjdy2008wzb` 等六件套）逐一比对地图后确认二者几乎没有重叠，属于彼此独立的分支；世界观把《西游记》色彩的三十三天、高老庄、南海等场景嫁接在标准金庸门派地图（华山、峨嵋、昆仑等）之上，新角色需先在体格、根骨、悟性、灵性四项属性间分配天赋点，再从南城客栈起步闯荡江湖，巫师登录除普通登陆密码、管理密码外还要求第三重"巫师专用密码"。
 
 ## 内容亮点
 
