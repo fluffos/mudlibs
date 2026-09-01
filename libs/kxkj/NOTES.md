@@ -929,3 +929,34 @@ functionally re-tested live on this lib.
   `open/clan/tstclan1/`（测试用占位帮派房间，见上）。
 - 测试角色密码均已设置但不记录明文（`kxjtesta`/`kxjtestb` 等），仅以
   账号 id 指代。
+
+## AGENTS.md §7.19 sweep (2026-09-01): `enable_player()` reentrancy from `init()`
+
+Same corpus-wide bug class as `mhxy`/`wuhanzhan` (AGENTS.md §7.19): this
+lib's `feature/command.lpc` `enable_player()` wrapper (around the raw
+`enable_commands()` efun) is reachable from an NPC's `init()` via a
+redundant `create()`-then-`init()`-calls-`setup()`/`reset_me()` chain --
+confirmed via a body-aware static scan of every `init()` in this lib: 6
+NPC files call `setup()`/`reset_me()` from `init()` (e.g.
+`d/snow/npc/waiter.lpc` and the `open/gblade/npc/pker*.lpc` family),
+after `create()` already made the object `living()`. Calling
+`enable_commands()` a second time on an already-`living()` object makes
+the driver re-invoke that object's own `init()` as a side effect,
+re-entering the same chain while the original call is still on the
+stack -- genuine reentrancy, crashing with "Too deep recursion" (most
+likely on an NPC's first-ever preload/compile).
+
+`feature/damage.lpc`'s `revive()` calls `enable_player()` again while
+the object is still `living()` (kept alive across the `disable_player()`
+interval by that lib's own internal re-`enable_commands()`). This
+confirms a bare `if (living(this_object())) return;` guard would be the
+WRONG fix -- used the same true reentrancy-flag fix as `mhxy` instead: a
+`nosave private int in_enable_player_now;` set for the duration of the
+wrapper's body, guarding only genuine same-call-stack reentrancy while
+leaving the legitimate revive re-enable unaffected. This lib's
+`enable_player()` (unlike most others in the sweep) already had one
+early return, `if (!this_object()) return;`, right at the top -- added
+`in_enable_player_now = 0;` before that return too (rewritten as a
+2-line block) alongside the fall-through exit at the end, so both
+return paths clear the flag. Verified via a single-file `lpcc --batch`
+compile check (PASS) -- not individually live-boot-tested.
