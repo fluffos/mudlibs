@@ -486,3 +486,36 @@ west/south` 到〖民居〗（`d/city/minju3.lpc`），`kill rat` 攻击非陪�
 期行为完全一致——该提示不写入 `debug.log`（仅出现在玩家屏幕上，与
 此前记录的"底层真实错误文本从未被捕获"现象一致），且未阻断任何后
 续指令。确认修复仍然有效，非新问题。
+
+## AGENTS.md §7.19 sweep (2026-09-01): `enable_player()` reentrancy from `init()`
+
+Same corpus-wide bug class as `mhxy`/`wuhanzhan` (AGENTS.md §7.19): this
+lib's `feature/command.lpc` `enable_player()` wrapper (around the raw
+`enable_commands()` efun) is reachable from an NPC's `init()` via a
+redundant `create()`-then-`init()`-calls-`setup()` (or `reset_me()`
+calling `setup()`) chain -- confirmed via a body-aware static scan of
+every `init()` in this lib: 43 NPC/item files call `setup()` directly
+or via `reset_me()` from `init()` (e.g. `d/zhangmen.lpc`,
+`d/nanhai/npc/zhangmen.lpc`, `d/xueshan/npc/zhangmen.lpc` -- the same
+`zhangmen.lpc` family already documented as the original live-reproduced
+crash on `mhxy`), after `create()` already called `setup()` once (which
+already made the object `living()`). Calling `enable_commands()` a
+second time on an already-`living()` object makes the driver re-invoke
+that object's own `init()` as a side effect, which re-enters this same
+chain while the original call is still on the stack -- genuine
+reentrancy, crashing with "Too deep recursion" (most likely on an NPC's
+first-ever preload/compile).
+
+`feature/damage.lpc`'s `revive()` and `cmds/std/sleep.lpc`'s
+`wakeup()` both call `enable_player()` again while the object is still
+`living()` (kept alive across the disabled interval by
+`disable_player()`'s own internal re-`enable_commands()`). This
+confirms a bare `if (living(this_object())) return;` guard would be the
+WRONG fix -- used the same true reentrancy-flag fix as `mhxy` instead: a
+`nosave private int in_enable_player_now;` set for the duration of the
+wrapper's body, guarding only genuine same-call-stack reentrancy while
+leaving every legitimate re-enable (revive/wakeup/disguise) unaffected.
+`enable_player()` had a single fall-through exit (no early `return`s),
+so one guard-at-top + one clear-at-bottom pair was sufficient. Verified
+via a single-file `lpcc --batch` compile check (PASS) -- not
+individually live-boot-tested.
