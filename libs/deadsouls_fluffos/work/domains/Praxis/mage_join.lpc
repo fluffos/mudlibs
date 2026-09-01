@@ -74,7 +74,7 @@ int become(string str) {
     }
     message("my_action", "The High Mage Warlock initiates you into the class of mages.", this_player());
     message("other_action", this_player()->query_cap_name()+" becomes a mage.", this_object(), ({this_player()}));
-    this_player()->SetClass("mage");
+    this_player()->ChangeClass("mage");
     this_player()->setenv("TITLE", "$N the novice mage");
     this_player()->init_skills("mage");
     this_player()->setenv("start", "/domains/Praxis/mage_hall");

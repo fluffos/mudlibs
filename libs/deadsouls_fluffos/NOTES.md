@@ -364,3 +364,46 @@ precedent of keeping test-creator accounts, e.g. `Qintestdsf` above);
 `RELEASE_NOTES_HTTP`/daemon-state save churn from booting the driver
 was reverted first, not committed. Killed the test driver by exact
 PID when done.
+
+## Sibling sweep: `become <class>` SetClass -> ChangeClass fix (2026-09-01)
+
+Ported the fix from `riftsds` (AGENTS.md §7.195/§7.196; commit
+`11216f003b1`) -- see `ds386/NOTES.md`'s identical write-up (same
+session, same batch) for the full bug mechanism. Summary: the stock
+Dead Souls "Praxis" demo guild-join rooms called `SetClass()` directly
+instead of `ChangeClass()`, so the multi-class privilege gate
+(`high_mortalp()`, which excludes creators too) always silently
+rejected a fresh explorer's first class despite a success message
+printing.
+
+**Confirmed present here**, byte-identical to `ds386`/`riftsds`'s
+pre-fix files: all six `domains/Praxis/*_join.lpc` files called
+`SetClass()`; `secure/include/compat.h` was missing the same three
+`query_name`/`query_cap_name`/`query_gender` mappings.
+
+**Fix applied**: six `SetClass()` -> `ChangeClass()` edits, three
+`compat.h` accessor lines added -- identical to `ds386`.
+
+**Live-verified** with a fresh AUTO_WIZ creator account (`Qtestfixdfx`,
+registered normally through the "creator" choice at the AUTO_WIZ
+prompt, following this lib's own precedent), `Class` starting clean
+at `"explorer"`: `become fighter`/`become cleric`/`become mage` each
+printed the real success flavor text and `score` immediately
+afterward confirmed the genuine class change ("You are a level 1
+Human Fighter"/"Cleric"/"Mage"). `become monk`/`kataan`/`rogue` were
+not re-tested here (the same pre-existing missing-class-data gap
+already confirmed on `ds386`/`dsIII`/`riftsds`'s identical
+`secure/cfg/classes/` listing -- `explorer`/`fighter`/`mage`/
+`cleric`/`thief` only).
+
+Committed the six join-file fixes, the three `compat.h` mappings, and
+the new `Qtestfixdfx` test-creator account's realm/save files
+(following this lib's own precedent above); daemon-state save churn
+from booting the driver (player list, mudinfo, snoop, preload
+class/economy/events/race/soul/stargate/unique/voting saves,
+`files.o`/`functions.o`) was left uncommitted. A stray
+`CMD_EVAL_TMP_FILE.lpc` scratch file left behind by the `eval` command
+in `Qtestfixdfx`'s own realm was deleted before commit (matching the
+already-committed convention for `Qintestdfx`/`Qintestdsf`, whose own
+same-named scratch files were untouched). Killed the test driver by
+exact PID when done.

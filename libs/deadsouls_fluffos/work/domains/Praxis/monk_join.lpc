@@ -63,7 +63,7 @@ int become(string str) {
     message("my_action", "The Grand Lord High Priestess initiates you into the class of monks.", this_player());
     message("other_action", this_player()->query_cap_name()+" becomes a monk.",
             this_object(), ({ this_player() }));
-    this_player()->SetClass("monk");
+    this_player()->ChangeClass("monk");
     this_player()->setenv("TITLE", "$N the novice monk");
     this_player()->init_skills("monk");
     this_player()->setenv("start", "/domains/Praxis/monk_hall");

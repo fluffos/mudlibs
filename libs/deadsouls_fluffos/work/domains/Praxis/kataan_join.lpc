@@ -63,7 +63,7 @@ int become(string str) {
     }
     write("The Master Kataan initiates you into the class of kataans.");
     say(this_player()->query_cap_name()+" becomes a kataan.", this_player());
-    this_player()->SetClass("kataan");
+    this_player()->ChangeClass("kataan");
     this_player()->setenv("TITLE", "$N the pebble tosser");
     this_player()->init_skills("kataan");
     this_player()->setenv("start", "/domains/Praxis/kataan_hall");
