@@ -628,3 +628,115 @@ boot; not independently live-reproduced by walking onto the specific
 affected exit tile (small enough impact that a from-scratch
 reproduction wasn't warranted given the fix is a verbatim, already
 live-verified port from `naruto`).
+
+## §10.7 deep functional test, round three (2026-09-01): actually exercising the wizard-guildhall's own content
+
+Given round two's finding that the entire reachable game world is the
+5-room wizard guildhall (bug/black-magic room, academy, propose room,
+meeting room, guildhall itself — `world/area/` has no other subtree),
+this pass's angle was to actually USE every one of those rooms' real
+commands rather than just visiting them, plus adversarial input and a
+fresh look at the `enable_commands()`/net-dead/currency bug classes
+flagged this session on unrelated lineages.
+
+**Bug board (`bug.lpc` room → `/daemon/board/bug`, the §7.86 fix)**:
+live-verified for real this time — `west` to the black-magic room,
+`post <title>` / body / `.` succeeded cleanly, `read 1` displayed the
+posted message correctly, board listing updated (`[ 1 张留言 ]`). Also
+threw adversarial post content at it (`%n%d%s` in the title, `%s` plus
+odd characters in the body) — the board's title/body fields are stored
+and displayed as plain data, never passed through `sprintf`/`printf` as
+part of a format string, so no crash. Zero `debug.log` errors.
+
+**Academy (`/daemon/board/design`) and propose room
+(`/daemon/board/propose`)**: both are the same `BULLETIN_BOARD`
+base class as the bug board with just a different `board_id`/location —
+confirmed by reading `daemon/board/design.lpc` and `propose.lpc`
+alongside `bug.lpc` (near-identical `create()` bodies). No separate
+custom command surface beyond the inherited board verbs already
+exercised above, so a second live post there would just be retesting
+the identical inherited code path — not repeated.
+
+**Meeting room (`meetingroom.lpc`) — real bug found and fixed** (new
+catalog entry, see below): its own `say`/`start`/`over` verbs are a
+genuinely custom, non-board command surface. `start`/`over` are
+wizard-gated and log cleanly via a safely-parameterized `sprintf`. But
+`say`'s own meeting-transcript logger built its `sprintf` **format
+string** by directly concatenating the raw player-typed message onto a
+string literal, instead of passing the message as a `%s`-bound
+argument. Live-reproduced as `fluffos` (admin) with an active meeting:
+typing `say hello %s world %d test` while `meeting_trigger` was set
+threw `*(s)printf(): More arguments specified than passed. (arg: 1)`
+straight to the player's screen (caught by the driver's own top-level
+command handler, so it doesn't crash the process, but it's a real,
+easily-triggered runtime error visible to any non-wizard player in the
+room during a meeting, not just the wizard who started it). Fixed by
+splitting the format string from the data: `sprintf("%s说道﹕%s\n",
+this_player()->name(1), msg)`. Verified live: after a wizard `update`
+of the room, the identical `%s`/`%d`-laden message now logs and speaks
+normally with zero errors. **New AGENTS.md §-worthy bug class**: a
+user-supplied string spliced directly into a `sprintf`/`printf` format
+string (as opposed to passed as a `%s` argument) lets any embedded `%`
+directive in player input crash the call — grep pattern
+`sprintf("[^"]*"\s*\+\s*<var>` (a literal format-string prefix
+concatenated with a variable, not passed as a trailing argument) is a
+good detector. Checked the rest of this lib's `sprintf` call sites for
+the same shape (`cmds/usr/tell.lpc`, `cmds/usr/reply.lpc`) — both
+already correctly pass the user message as a `%s` argument, not spliced
+into the format text, so they're safe; only `meetingroom.lpc` had the
+bug.
+
+**Sibling check**: `naruto` (same ES2/Neolith "Annihilator" lineage,
+already cross-referenced for the §7.126 AREA-save fix) has the
+byte-shape-identical bug in its own
+`world/area/wizard/meetingroom.lpc`'s `say()` — fixed there too
+(`sprintf("%s說道﹕%s\n", this_player()->name(1), msg)`), verified with
+a standalone `lpcc config.fluffos /world/area/wizard/meetingroom`
+compile (clean, no errors) since `naruto`'s own driver wasn't booted
+this pass.
+
+**§7.19-class reentrancy check**: grepped every file calling
+`enable_commands`/`enable_player` for a co-located `init()` (the shape
+that crashes a room's first-ever visit via NPC `setup()`/`reset_me()`
+recursion). Only hit is `feature/char/command.lpc`'s own
+`enable_player()`, called from the player's own login/reconnect path,
+not from any NPC's `init()` — no candidate NPC in this lib's tiny
+reachable world has this shape. Not applicable here.
+
+**Currency/`query_autoload()` check** (the severe `fysjmb`/Fengyun-
+lineage §7.199 bug): `std/money.lpc` here already has
+`string query_autoload() { return query_amount() + ""; }` live and
+uncommented — not the Fengyun lineage, not affected.
+
+**Net-dead / `tell_room()` 2-arg wrapper crash (the `dtsl` §10.7
+severity escalation)**: `huoying` was already confirmed clean for the
+related heart_beat-loss-on-reconnect bug class in an earlier corpus
+sweep (2026-08-19 batch 1). This pass additionally confirms the
+`message()`/`tell_room()` wrapper itself is already on the safe,
+guarded form (`adm/simul_efun/message.lpc`'s
+`message("tell_room", str, ob, exclude || ({}));`, applied as the
+§15s fix at onboarding) — not re-triggered by anything exercised this
+pass. Did not attempt the full 900s net-dead wait live (no new
+evidence surfaced this pass suggesting this lib's `user_dump()` path
+has the unguarded-wrapper shape that made it worth the wait on `dtsl`);
+low remaining-risk given the wrapper fix is already in place and
+independently verified.
+
+**Adversarial input**: over-length email (5000 chars) correctly
+rejected by the existing 64-char bound with a clean re-prompt, no
+crash; a name containing a stray Latin `%s` inside otherwise-Chinese
+text was rejected/re-prompted by `check_legal_name()` with no error;
+board posts with `%n%d%s`-laden titles/bodies rendered as inert plain
+text. Zero `debug.log` runtime errors across the whole adversarial
+pass.
+
+Files modified this pass:
+- `libs/huoying/work/world/area/wizard/meetingroom.lpc` — `say()`'s
+  `sprintf` no longer splices the raw player message into the format
+  string.
+- `libs/naruto/work/world/area/wizard/meetingroom.lpc` — identical
+  fix, ported (compile-verified only, not live-booted this pass).
+
+Test character saves (`advtest`, `hytestone`) and incidental board/
+admin-account save churn removed after testing; driver killed by exact
+PID.

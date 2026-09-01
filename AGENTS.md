@@ -15010,6 +15010,63 @@ tell is a flavor-text write() that FRAMES the destruction as an
 inherent property of "giving money" rather than a refusal, right next
 to a `destruct()` that isn't preceded by any real transfer attempt.
 
+### 7.202 A raw player-typed message spliced directly into a `sprintf`/`printf` FORMAT STRING (not passed as a `%s` argument) lets any embedded `%` directive in the input crash the call
+
+Found on `huoying`'s round-three §10.7 deep functional test, exercising
+the wizard-guildhall meeting room's own custom `say`/`start`/`over`
+commands for the first time (round two only visited the room, never
+used its commands). `world/area/wizard/meetingroom.lpc`'s meeting-
+transcript logger built its `sprintf` call like this:
+```lpc
+int say(string msg) {
+  if (!msg) return 0;
+  else
+    SAY_CMD->main(this_player(), msg);
+  if ((int)query("meeting_trigger") == 1)
+    log_file(filename,
+      sprintf("%s说道﹕" + msg + "\n", this_player()->name(1)));
+  return 1;
+}
+```
+`msg` — raw, unfiltered player input — is concatenated directly onto
+the format-string literal instead of being passed as a `%s`-bound
+argument. Live-reproduced with an active meeting session (`start`
+requires a wizard, but any player in the room can `say`): typing
+`say hello %s world %d test` threw
+`*(s)printf(): More arguments specified than passed. (arg: 1)` straight
+to the speaking player's screen — caught by the driver's own top-level
+command handler (so it doesn't crash the process), but it's a real,
+trivially-triggered runtime error reachable by ANY player in the room
+during a meeting, not just the wizard who started it, and depending on
+what a player types, a `%s`/`%d` that happens to line up with an
+existing argument could also silently corrupt the logged/spoken text
+rather than erroring at all.
+
+Fix: split the format string from the data —
+`sprintf("%s说道﹕%s\n", this_player()->name(1), msg)`. Verified live:
+after a wizard `update` of the room, the identical `%s`/`%d`-laden
+message now logs and speaks with zero errors.
+
+**Ported to sibling `naruto`** (same ES2/Neolith "Annihilator"
+lineage, already cross-referenced for §7.126): its
+`world/area/wizard/meetingroom.lpc`'s `say()` has the byte-shape-
+identical bug (Traditional-Chinese variant of the same format string) —
+fixed identically, verified via a standalone `lpcc` compile of just
+that file (clean, `naruto`'s driver not booted this pass).
+
+Detection: grep for a literal format-string prefix concatenated with a
+variable rather than passed as a trailing `sprintf`/`printf` argument —
+`sprintf("[^"]*"\s*\+\s*<var>` is a good pattern (note this is
+different from, and easy to confuse with, the safe and common shape
+`sprintf("...%s..." + SOME_CONSTANT, args...)` where the concatenated
+piece is a literal ANSI-code constant, not attacker-controlled input —
+`huoying`'s own `cmds/usr/tell.lpc`/`reply.lpc` use that safe shape and
+were checked and confirmed NOT affected). Any lib with a player-facing
+"say"/"broadcast"/"log this message" feature that builds its own
+`sprintf` call (as opposed to using a shared `tell_room`/`message`
+wrapper that already treats the message as a plain argument) is worth
+checking for this shape.
+
 ---
 
 ## 8. Login and registration flow bugs
