@@ -43,7 +43,47 @@ void long() {
 }
 
 void init() {
-  enable_commands();
+  // AGENTS.md sec.7.19 (room/prop variant, worse shape than the
+  // darkelib room/prop instance -- a plain living() guard is NOT
+  // enough here, see below). This "flames" hazard prop is freshly
+  // CLONED and moved into players/kawai/hell.lpc every time a living
+  // object enters that room (hell.lpc's own init(): `ob =
+  // clone_object("players/kawai/obj/flames")->move_object(this_object());`).
+  // Because the entering living object is already sitting in hell's
+  // inventory at that point, the driver's own item<->room command-
+  // registration cascade re-invokes THIS init() on the fresh flames
+  // clone while hell.lpc's original init() call is still on the stack;
+  // calling enable_commands() here reenters that same cascade, which
+  // reenters hell.lpc's OWN init() -- cloning yet ANOTHER brand-new
+  // flames object -- which reenters this init() on THAT fresh clone,
+  // and so on, recursing until "Too deep recursion." aborts it. A
+  // living()-guard (`if (!living(this_object())) enable_commands();`,
+  // the fix used for darkelib's structurally simpler pond.lpc case)
+  // does NOT stop this: every reentrant pass gets a brand-new,
+  // never-yet-living clone, so the guard is always true and never
+  // blocks anything -- it's hell.lpc's own init() that needs to stop
+  // recursing, not this object's. Live-reproduced via a temporary
+  // preload harness, including confirming the living()-guard alone was
+  // insufficient: a single trigger left 48 leaked, uninitialized
+  // flames clones sitting in the hell room in addition to throwing
+  // "Too deep recursion." -- the punishment mechanic (burn_player(),
+  // below) never even ran, since the crash happens before hell.lpc's
+  // init() reaches that call.
+  //
+  // Fix: drop the enable_commands() call entirely, rather than guard
+  // it. It serves no purpose here -- this object never defines
+  // catch_tell() or uses command(), and doesn't even use add_action()
+  // (unlike darkelib's pond.lpc, which at least had a real add_action()
+  // call after its own enable_commands()) -- so nothing anywhere reads
+  // living(this_object()) for this prop. This matches how the SAME bug
+  // was already fixed, independently, elsewhere in this very archive:
+  // 3 near-identical sibling copies of this file
+  // (players/goldsun/mud/flames.lpc, players/goldsun/lank/obj/flames.lpc,
+  // players/whisky/garden/obj/flames.lpc) carry a 1993 header comment,
+  // "Recoded by Uglymouth 930901: removed enable_commands() and
+  // heart_beat(), ... bug (dead 1, ghost 0) solved now" -- this file
+  // (players/kawai/obj/flames.lpc) is simply the one copy that never
+  // got that fix applied.
 }
 
 void burn_player(object ob) {

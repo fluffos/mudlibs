@@ -545,3 +545,103 @@ out."), zero new `debug.log`/driver-stdout errors, driver RSS a steady
 **Files modified this pass**: `work/obj/weapon.lpc`, `work/obj/monster.lpc`,
 `work/doc/lib/living.lpc`, `work/room/room.lpc`, `work/room/vill_road2.lpc`,
 `work/doc/lib/player.lpc`.
+
+## 15. AGENTS.md §7.19 (room/prop variant) -- kawai's "hell" punishment room, two bugs fixed
+
+Corpus-wide `enable_commands()`/`init()` reentrancy sweep (AGENTS.md
+§7.19) flagged `players/kawai/obj/flames.lpc:46` (`void init() {
+enable_commands(); }`) as a structurally distinct instance from the
+ES2/Xiyouji player-wrapper architecture the main sweep fixed (66
+libs): a wizard-built hazard prop, freshly cloned and moved into
+`players/kawai/hell.lpc` (a punishment room reachable via
+`players/kawai/workroom.lpc`'s `boot <name> to hell` wizard command)
+every time a living object enters that room.
+
+**Live-confirmed real and severe, not a false alarm -- and confirmed
+WORSE than the sibling `darkelib` room/prop instance of the same
+AGENTS.md section (see that lib's own NOTES.md/AGENTS.md entry)**:
+there, a `living()` guard was sufficient because the SAME persistent
+room-fixture object kept getting its own `init()` re-entered. Here,
+`hell.lpc`'s own `init()` clones a **brand-new** `flames` object on
+every call, so a `living()` guard on `flames.lpc` never blocks
+anything -- every reentrant pass gets a fresh, never-yet-`living()`
+clone. The real cycle is: entering living object already sits in
+hell's inventory -> hell's `init()` clones+moves a flames object ->
+driver's own command-registration cascade reenters flames' `init()`
+(original `hell.lpc init()` still on the stack) -> `enable_commands()`
+there reenters the cascade -> which reenters **hell.lpc's own
+`init()`** (cloning yet ANOTHER flames object) -> which reenters
+flames' `init()` on that new clone -> ... until "Too deep recursion."
+aborts it.
+
+**Live reproduction method**: this lib's wizard command shell
+(`/sys/wiz.lpc`) turned out to be a genuinely empty 0-byte file --
+confirmed live (a fresh `kawai`-named registration, a name seeded at
+wizard level in `secure/WIZSAVE.o`, correctly triggered "Connecting to
+/sys/wiz..." but then had ZERO working commands, including `look`,
+`i`, and `help` -- all returned "What?") -- so the in-game `boot`
+command path was unusable for testing. This is itself a real,
+previously-undocumented gap (every wizard login on this lib is
+apparently non-functional), flagged here for a future pass but out of
+scope for this one. Worked around with a temporary preload test
+harness instead: a throwaway `/repro719.lpc` (never committed, deleted
+after use, along with its one added-then-reverted line in
+`secure/init_file`) whose `create()` legitimately calls
+`enable_commands()` on itself (the one documented-safe call site) and
+then `move_object("players/kawai/hell")`, using the driver's real move
+machinery (not a simulation) to get a genuinely-`living()` object into
+hell's inventory exactly the way a real player would.
+
+Pre-fix, this reliably reproduced `*Too deep recursion.` from
+`move_object()` AND left **48 leaked, uninitialized `flames` clones**
+sitting in the hell room from the recursive clone-and-crash cascade
+(`hell room inventory count=49` after a single trigger) -- a real
+object leak on top of the crash. The punishment mechanic
+(`burn_player()`) never even ran, since the crash happens during the
+clone+move line itself, before `hell.lpc`'s `init()` reaches that call.
+
+**Fix 1 (`players/kawai/obj/flames.lpc`)**: removed the
+`enable_commands()` call entirely rather than guarding it (a guard
+provably doesn't work here, see above). It serves no purpose in this
+file -- no `catch_tell()`, no `command()` use, not even an
+`add_action()` (unlike darkelib's `pond.lpc`, which at least used
+`add_action()` after its `enable_commands()`) -- so nothing anywhere
+reads `living(this_object())` for this prop. This matches how the
+identical bug was already fixed, independently, elsewhere in this same
+archive: 3 near-identical sibling copies
+(`players/goldsun/mud/flames.lpc`, `players/goldsun/lank/obj/flames.lpc`,
+`players/whisky/garden/obj/flames.lpc`) carry a real 1993 header
+comment, "Recoded by Uglymouth 930901: removed enable_commands() and
+heart_beat(), ... bug (dead 1, ghost 0) solved now" -- `kawai`'s copy
+was simply the one that never got that historical fix applied. (A
+4th, unrelated sibling, `players/redsexy/guild/spell/flames.lpc`, was
+also checked and has no `init()`/`enable_commands()` at all -- clean.)
+
+**Fix 2 (`players/kawai/hell.lpc`), found live while re-verifying fix
+1**: after the crash was fixed, `move_object()` (the universal 1-arg
+compat shim in `/include/include.h`,
+`mixed move_object(mixed dest) { return efun::move_object(dest); }`)
+still threw `Bad argument 1 to EFUN call_other() ... Got: int(0)` --
+`ob = clone_object("players/kawai/obj/flames")->move_object(this_object());`
+assigns `ob` the compat shim's *return value* (an int status code,
+since the real efun always moves `this_object()` and returns a status,
+not the moved object), not the cloned flames object; the subsequent
+`ob->burn_player(this_player())` then called a method on an int. Split
+into two statements (`ob = clone_object(...); ob->move_object(...);`)
+so `ob` keeps the real object reference. This bug was **already
+present, just permanently masked** by fix 1's crash aborting `init()`
+before ever reaching this line -- confirmed by re-running the same
+preload harness after fix 1 alone (crash gone, this error appeared)
+and again after fix 2 (`err=none`, `hell room inventory count=2`: the
+harness object plus exactly one legitimate flames clone, no leak,
+`debug.log` clean).
+
+**Same clone-then-`->move_object()` pattern (not the same file, out of
+scope for this pass, flagged for a possible future sweep)**: identical
+`clone_object(...)->move_object(...)` value-discarding pattern also
+exists in `players/whisky/garden/room/oven.lpc`,
+`players/goldsun/mud/oven.lpc`, and
+`players/misticalla/garden/room/oven.lpc` (each cloning that player's
+own, already-fixed `obj/flames.lpc` sibling, not `kawai`'s), plus
+`players/topaz/monsters/tower/general.lpc` (an unrelated `flamesword`
+weapon clone) -- none of these were exercised or verified this pass.
