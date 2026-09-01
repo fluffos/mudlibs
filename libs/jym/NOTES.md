@@ -347,3 +347,20 @@ socket 全程 UTF-8 直连规避）。
 作，全程无 debug.log 报错，未发现新程序 bug。测试号 `pktesty` 存档
 （`data/login/p/pktesty.o`、`data/user/p/pktesty.o`）已在测试结束
 后删除。驱动进程按精确 PID kill，tmux 会话已停止。
+
+## §7.19 enable_player() reentrancy fix (2026-09-01)
+
+Corpus-wide mechanical fix (AGENTS.md §7.19, Batch F of 6). Real active
+wrapper confirmed to be `feature/command.lpc` via `F_COMMAND` (`inherit/char/char.lpc`
+etc all `inherit F_COMMAND` -> `/feature/command.lpc`); a same-named
+`feature/command2.lpc` also has an identical `enable_player()` but is a dead
+orphan file (nothing inherits it -- its only grep hit was a coincidental
+substring match inside an unrelated garbled log dump). No pre-existing
+reentrancy guard: NPC `init()` reaches `setup()`/`reset_me()` ->
+`enable_player()` -> `enable_commands()`, which can synchronously re-invoke
+the same object's `init()` (driver docs BUGS note + this project's own
+live-verified mhxy/wuhanzhan findings), and `feature/damage.lpc`'s `revive()`
+/ `cmds/std/sleep.lpc`'s `wakeup()` re-invoke `enable_player()` while already
+`living()`, ruling out a bare `living()` guard. Fixed with the standard
+`in_enable_player_now` true reentrancy flag (mhxy's reference fix), applied
+to `feature/command.lpc` only. Verified via single-file `lpcc --batch` PASS.
