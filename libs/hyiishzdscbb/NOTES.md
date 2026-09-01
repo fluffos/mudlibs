@@ -81,3 +81,50 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（round three, 2026-09-01）— skill/拜师/首访 NPC 房间，结果：干净
+
+本轮专门针对前两轮未覆盖的角度：(1) `feature/skill.lpc` 那 5 个
+§7.30 accessor 修法从未 live 验证过；(2) 从未测试过拜师/门派收徒
+流程；(3) 从未针对本库单独做过 §7.19（`enable_commands()`/
+`enable_player()` 从 `init()` 里被重入触发的 "Too deep recursion"）
+首访检查。用真实 Python socket 脚本（未用 `tmux_mud.sh`），全程用
+UTF-8 编码收发（确认这个 WASM 化后的版本内部字符串是真正的 UTF-8
+codepoint 阵列——`is_chinese()` 检查的是 `str[0] in
+[0x4e00,0x9fff]`，不是旧版 GBK 字节区间；`Are you using BIG5` 提示
+只影响输出转码，不影响输入，用 GBK 编码发送中文名字会被
+`check_legal_name()` 的 `strlen()` 字节数误判超长，纯属测试脚本自
+己的编码错误，不是 mudlib bug）。
+
+用真实注册流程新建角色 `hyszdsii`/苏挽秋（男，随机天赋），全程可用：
+
+- `skills`（一进游戏立刻测，直接命中 §7.30 修过的
+  `query_skills()`）——干净返回"你目前并没有学会任何技能。"，无崩
+  溃。这是该 accessor 修法第一次真正 live 验证通过。
+- 用管理员账号 `fluffos`（此前已注册，见 2026-08-13 章节）`goto`
+  到三个本库账号历史上从未有人到过的 NPC 房间（本次开机后的第一
+  次装载）：`/d/quanzhen/wanwutang`（全真教王处一）、
+  `/d/shaolin/wuqiku`（少林武器库，道尘禅师/打铁僧）、
+  `/d/baituo/liangong`（白驼山练功场，李教头）——三个房间的
+  `init()`/`chat_msg`/`greeting()` 首次触发均正常，`debug.log` 全程
+  只新增未使用局部变量的编译期 warning，没有任何 "Too deep
+  recursion"、崩溃或 §7.19 症状。
+- 完整拜师流程（用 `summon` 把新角色叫到管理员所在的
+  `/d/baituo/liangong`，`bai li`）：`d/baituo/npc/li.lpc`（李教头，
+  白驼山派）的 `attempt_apprentice()` 没有任何门槛，直接
+  `recruit_apprentice()` 成功——"恭喜您成为白驼山派的第三代弟子"，
+  `score` 确认"你的师傅是：李教头"、称谓更新为"白驼山派第三代弟
+  子"。`feature/apprentice.lpc` 的 `create_family`/
+  `recruit_apprentice`/`assign_apprentice`/`is_apprentice_of` 全程无
+  异常。收徒后 `skills` 依然干净（未自动获得任何技能，这是
+  `recruit_apprentice()` 本身的设计——不赠技能，不是 bug）。
+- 顺手测了平安广场留言板（`/d/pingan/pinganguangchang`，
+  `pingan_b.lpc`，此前 §7.86 跨库扫描已修过 `replace_program()` 崩
+  溃）：`read 1` 正常显示留言，`post`（不带参数）正常提示"留言请指
+  定一个标题。"，没有重现 §7.86 症状。
+
+**结论：本轮三个新角度（skill accessor 首次 live 验证、拜师门派流
+程、多间从未装载过的 NPC 房间首访）全部干净，未发现新的 PROGRAMMING
+bug。** 没有编造问题；`log/debug.log` 全程只有正常的首次装载编译期
+warning（未使用局部变量），无一条 error/crash/"Too deep
+recursion"。驱动按精确 PID kill。
