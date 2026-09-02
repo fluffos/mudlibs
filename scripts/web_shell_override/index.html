@@ -45,7 +45,20 @@
     background: var(--panel); display: flex; align-items: baseline; gap: 12px;
   }
   header h1 { font-size: 15px; margin: 0; color: var(--accent); font-weight: 600; }
-  header #status { color: var(--dim); font-size: 12px; }
+  header #status { color: var(--dim); font-size: 12px; min-width: 0; }
+  /* Connection dot: the always-legible form of the status. On narrow
+     compact screens (see the last media query below) the text collapses
+     away entirely and this dot is all that's left, so it exists at every
+     width -- a shape that appears only under pressure would read as a new
+     unknown control.  Colored via data-state, which JS derives centrally
+     from the status text (see the #status MutationObserver). */
+  header #status::before {
+    content: ''; display: inline-block; width: 7px; height: 7px;
+    border-radius: 50%; margin-right: 6px; vertical-align: 6.5%;
+    background: #e0af68;
+  }
+  header #status[data-state="ok"]::before { background: #9ece6a; }
+  header #status[data-state="err"]::before { background: #f7768e; }
   /* Fullscreen toggle: hidden until the boot script verifies the
      Fullscreen API actually exists here (iPhone Safari, some webviews:
      it does not) -- see the "fullscreen toggle" section of the script. */
@@ -85,6 +98,10 @@
     display: flex; align-items: center; gap: 7px; cursor: pointer;
     background: transparent; border: 0; border-bottom: 2px solid transparent;
     color: var(--dim); font: inherit; font-size: 12px; padding: 7px 12px 5px;
+    /* flex:none + nowrap: a tab label must never shrink into a mid-word
+       wrap ("Game" over "1") -- when the row is short on width, #gameTabs
+       is the release valve (it scrolls), not the labels. */
+    flex: none; white-space: nowrap;
   }
   #tabs .tab:hover { color: var(--fg); }
   #tabs .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
@@ -350,10 +367,19 @@
    * (see fontSizeForViewport() below) since it renders to a canvas, not text.
    * ------------------------------------------------------------------ */
   @media (max-width: 600px) {
-    header { padding: max(8px, env(safe-area-inset-top, 0px)) 12px 8px; gap: 8px; }
-    header h1 { font-size: 14px; }
+    header { padding: max(8px, env(safe-area-inset-top, 0px)) 12px 8px; gap: 8px; align-items: center; }
+    /* At phone widths the title and the status can't share a row without
+       one of them truncating mid-word; the status is live information and
+       the title is branding already in the page <title>, so the title
+       loses.  flex:1 hands its space to the status, which then fits every
+       real message this page emits; the ellipsis stays only for
+       arbitrary-length load-failure strings (full text in title + Logs). */
+    header h1 { display: none; }
     header #status {
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      /* 11px is what fits the longest real message ("char mode -- keys go
+         straight to the mud") beside Wrap+fullscreen at 360-390px. */
+      font-size: 11px;
     }
     #tabs { padding: 0 6px; }
     #tabs .tab { padding: 10px 10px 8px; font-size: 12.5px; }
@@ -429,10 +455,16 @@
   body.compact #inputbar .prompt { padding: 7px 0 7px 12px; }
   body.compact #cmd { padding: 7px 12px 7px 6px; }
   @media (max-width: 600px) {
-    /* short AND narrow (keyboard open in portrait): width is scarce
-       too -- drop the title text, keep status + tabs.  Landscape has
-       width to spare, so the title survives there. */
-    body.compact header h1 { display: none; }
+    /* short AND narrow (keyboard open in portrait): width is scarce too.
+       The h1 is already gone at this width; the status TEXT goes next and
+       only its dot survives as the connection indicator (the full text
+       stays in the title attribute and for screen readers) -- that frees
+       the shared row for the tabs' real tap targets instead of a
+       mid-word-truncated status label. */
+    body.compact header { padding-left: 12px; }
+    body.compact header #status { font-size: 0; max-width: none; }
+    body.compact #tabs { padding: 0 4px; }
+    body.compact #tabs .tab { padding: 5px 8px 4px; }
     body.compact #inputbar { padding-bottom: 0; }
   }
 </style>
@@ -798,6 +830,24 @@ function iconTapGuard(s) {
 }
 
 const status = document.getElementById('status');
+// The status dot (#status::before) needs a connected/error/busy state, but
+// status.textContent is assigned from a dozen sites across both scripts --
+// classify centrally off the text instead of threading a state through
+// every one.  The title mirror is what keeps the full message reachable on
+// narrow compact screens, where the CSS collapses the text to dot-only.
+{
+  const syncStatusState = () => {
+    const t = status.textContent;
+    status.dataset.state =
+      /^(connected|char mode)/.test(t) ? 'ok'
+      : /disconnect|abort|fail|error|crash/i.test(t) ? 'err'
+      : 'busy';
+    status.title = t;
+  };
+  new MutationObserver(syncStatusState)
+    .observe(status, { childList: true, characterData: true, subtree: true });
+  syncStatusState();
+}
 // The custom command input -- see the big comment on #cmd's CSS for why
 // this isn't a real visible <input>/<textarea>: cmdWrap is the plain div
 // that renders text/caret/placeholder itself; cmdReal is the invisible
