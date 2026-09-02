@@ -467,3 +467,144 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试 round three batch 4 新角度测试 (2026-09-01) —— 补齐 round one 明确跳过的真实战斗/死亡/留言板/货币持久性测试，找到并修复一个 `buy.lpc` 价格显示 bug（`mnhf` 共享）
+
+Round one（见上文 2026-08-17 一节）明确承认"鉴于孪生档案 `mnhf`
+已经验证过完整战斗流程，本轮未重复完整战斗/复活/留言板测试"，只
+用 `goto` 确认了死亡区房间能载入。本轮按任务要求，在 `moniHuafu`
+自己身上独立补测这些从未真正跑过的角度，不再依赖孪生档案的"代理
+覆盖"。
+
+**测试账号**：新注册真实玩家角色 `testqaz`（中文名"测试生"，密码
+`TestPass1`），管理员账号复用既有的 `fluffos`/`Mud@2026`（已在
+wizlist 里，有真实存档）。全程用 `scripts/tmux_mud.sh` 交互操作，
+`goto`/`summon` 由管理员执行，实际游戏动作全部由 `testqaz` 这个
+普通玩家账号真人指令驱动。
+
+**1. 注册环节对抗性输入**：英文名字阶段输入含数字的
+`testqa4`（正确拒绝："对不起，你的英文名字只能用英文字母"）；
+y/n 确认阶段发送 3000 字节纯 ASCII 垃圾字符串（被当成非
+"y" 处理，正常回落到重新输入英文名字，无崩溃）；中文名字阶段发
+送 2000 字符的"测试"重复垃圾字符串（正确拒绝："你的中文名字必须
+是一到六个中文字"）；邮件地址阶段发送空白回车（正常放行，不强
+制要求邮箱）。全程 `debug.log` 零新增错误。
+
+**2. 真实战斗到实际死亡 + 完整复活流程**（round one 从未做过）：
+`testqaz` 在 `/d/huafu/caoping`（草坪，`valid_startroom` 新手练功
+点，5 只 `npc/bird`）对 `小鸟` 发起 `kill bird`，交手 7-8 回合后
+气血降到临界值触发游戏自带的自动逃跑安全阀（"看来该找机会逃跑
+了..." → 自动往西逃到 `/d/huafu/zhxd1`），这是设计好的保护机制，
+不是 bug。为了真正走完死亡流程（不是设计出来阻止死亡的安全阀），
+管理员 `fluffos` 追上去用 `smash testqaz` 强制致死（AGENTS.md 记
+录过的"管理员 smash/die() 绕过自动逃跑"标准做法）——测试角色正
+确传送到 `/d/death/`（"高三鬼门关"死亡区），`监考官`/`铁索 数学
+老师`/`枷铐 语文老师` 三个死神系 NPC 正常互动对话，几秒后"一股
+阴冷的浓雾突然出现，很快地包围了你"，自动传送回 `/d/huafu/juqing`
+（聚清园，复活点）。复活后角色 `hp`：气血 31/369、精力 70/499、
+潜能 150（死前 299）、学分 491（死前 501）——正确应用了死亡惩罚
+（潜能/学分扣减），`i` 显示"目前你身上没有任何东西"（死亡时随身
+物品/装备全部清空，这也是死亡惩罚设计的一部分）。全程 `debug.log`
+零新增错误，这是本档案第一次真正验证"战斗判定→致死→死亡区→复
+活→惩罚结算"这条此前完全没测过的完整链路。
+
+**3. 货币持久性（quit → 重连）验证，针对任务里点名的 §7.199 风险
+点**：`grep` 检查 `work/std/money.lpc` 和 `work/std/item/money.lpc`
+两份货币基类，`query_autoload()`（`return query_amount() + "";`）
+和配套的 `void autoload(string param)` 都是**完整、未被注释掉**
+的——不是 AGENTS.md §7.199 那种"`autoload()` 收方在、`query_autoload()`
+访问器被注释掉"的半吊子形状。**这份档案（以及孪生档案 `mnhf`）都
+不在 §7.199 已确认的 16 个风云家族档案名单里**（`fysjmb`/
+`fengyun434`/`fy2`/`fy2005`/`fy2mg`/`fy2qh`/`fy330`/`fy3dz`/`fy3xd`/
+`sjpl2`/`sjplgfjxb`/`sjplii`/`wqfy`/`xsfyssjb`/`zzfy`/`zzfy3`），本
+轮现场验证印证了这一点，不是巧合漏查。**现场验证**：管理员
+`clone /obj/money/gold` + `give gold to testqaz` 给测试角色一张
+"一百元人民币"；`quit` 干净退出（无"你丢下"提示，因为这是唯一支
+持 `query_autoload()` 的随身物品）；重新连线登入后 `i` 正确显示
+钱款仍在（自动转成了找零后的"九十八元人民币(Silver)"面额——见下
+一条商店测试），排行榜也正确显示"十大富翁排行榜第三名"。货币
+quit/reconnect 持久性**完全正常，没有数据丢失**。
+
+（附带发现，非 bug）：`i` 里"测试生的运动鞋(Shoe)"/"测试生的校
+服(Cloth)"/"测试生的文具盒(Wj case)" 这三件新手装备在死亡后清
+空、在下一次 `quit` 后也会被 `quit.lpc` 当成"不支持
+`query_autoload()`" 的普通物品丢在原地（提示"因为这样东西并不值
+钱，所以人们并不会注意到它的存在"），但下次连线 `enter_world()`
+（`adm/daemons/logind.lpc:617-624`）**无条件**重新 `new()` 一套全
+新的鞋/校服/文具盒发给玩家，不检查玩家是否已经有一套。源代码注
+释就写着"// This is the basic equip for players just login."——这
+是刻意设计的"每次连线发一套新校服"机制（这三样东西都没有设
+`"value"` 属性，等同于 0 元不可变卖，不构成经济漏洞），不是数据
+损坏/丢失类 bug，未改动。
+
+**4. 商店购买 + 真实发现并修复的价格显示 bug（`mnhf` 共享）**：
+管理员 `summon testqaz` 到 `/d/huafu/xmbu`（小卖部），`list` 正确
+显示"水果面包 fruitbread：2元"；`buy fruitbread from seller` 成功
+扣款（`i` 确认从 100 元变成"九十八元人民币(Silver)"找零，扣款金
+额正确），但游戏回显的确认信息却是**"价格：200。"**——比商店
+`list` 标示的"2元"整整大了 100 倍。
+
+根因：`cmds/std/buy.lpc` 内部金额单位是"分"（`pay_him()`/
+`affordable()` 用 `SILVER_OB`/`GOLD_OB` 等面额换算全部按分计
+算，1 元 = 100 分，与 `feature/vendor.lpc` 的 `buy_object()`/
+`do_vendor_list()` 一致），`do_vendor_list()`（`list` 指令）用
+`price_string(v)` 把内部分值正确转成"N元"再显示，但 `buy.lpc`
+第 31、37 行的两处 `write("价格：" + price + "。\n");` 直接把内部
+分值原样打印出来，从未转换成元，导致每次购买确认信息都比商店价
+目表大 100 倍（这次买 2 元的东西显示"价格：200"）。这是纯粹的显
+示层 bug——实际扣款金额是对的（分制内部账本本身没有算错），只
+是回显给玩家的确认文字用错了单位，容易让玩家误以为被多扣了钱。
+
+**修复**：把两处 `write("价格：" + price + "。\n");` 改成
+`write("价格：" + owner->price_string(price) + "。\n");`——`owner`
+（卖家 NPC）经由 `F_VENDOR` 继承了 `price_string()`，与 `list`
+指令用的是同一个格式化函数，保证两处显示口径一致。**现场验证**：
+管理员 `update /cmds/std/buy` 热重载（"重新编译
+/cmds/std/buy.lpc：OK！成功了！"），`testqaz` 紧接着
+`buy chizi from seller`（商店标价 7 元），确认信息正确变成
+"价格：7元。"（改前会显示"价格：700。"），`debug.log` 全程零新
+增错误/警告变化。
+
+**共享风险**：`diff` 确认 `mnhf` 的 `cmds/std/buy.lpc` 与本档案**逐
+字节相同**——这是两份档案共享的同一个 bug，`mnhf` 自己至今没有被
+验证过真实的 buy 交互（`mnhf` 的 round two 深度测试记录未提及测过
+商店购买），大概率同样受影响。本次会话未去动 `mnhf`，留给未来专
+门测试或跨库扫描 `cmds/std/buy.lpc` 时一并处理（只在这一个共享文
+件里出现两次，属于孤立的小范围问题，未达到本项目"3+ 独立血统"才
+发起机械化跨库 sweep 的门槛，暂不单独立项）。
+
+**5. 留言板 post/read**：`testqaz` 走到 `/d/huafu/zhting`（南楼中
+厅）的 `校园公告栏(Board)`，`post board` 成功发帖（留言计数从 47
+正确增加到 48），`read <编号>` 能正确读回刚发的帖子。**方法论踩
+坑记录（不是 mudlib bug，是本次测试工具的假阳性）**：最初两次
+（一次论坛留言，一次后面的站内信）都是通过 `tmux send-keys` 发送
+含"内"字（UTF-8 三字节 `E5 86 85`）的中文测试语句，`read`/`from`
+回显和磁盘落地文件里那个"内"字都被替换成了 Unicode 替换字符
+`U+FFFD`（`EF BF BD`）——一度怀疑是驱动/mudlib 层的编码 bug。改
+用绕过 tmux/pty、直接进程内 Python `socket` 连接发送完全相同的字
+节序列后，`read`/落地文件里的"内"字**完全正确**，证明这是
+`tmux send-keys` 本身在处理这个特定字节序列时的终端层问题（很可
+能与 `0x85` 单独出现时被某层当成 NEL 控制字符处理有关），不是
+`moniHuafu`/驱动的真实 bug——记录在这里防止未来测试重蹈覆辙，避
+免误报。
+
+**6. 站内信（邮局系统）**：`testqaz` 在 `/d/huafu/youju`（石牌邮
+局）用 `ask officer about 寄信` 拿到信箱物品（`obj/mailbox.lpc`），
+`mail fluffos` 走完标题→正文→是否留底三步流程，成功寄出。收件人
+`fluffos`（在线）用 `ask officer about 收信` 拿到自己的信箱，
+`from` 正确显示"你的信箱中现在共有 1 封信件"，`read 1` 正确显示
+标题/寄信人/正文（用绕过 tmux 的原始 socket 复测过第二封信，字节
+完全正确，见上一条）。**邮箱存档目录自动创建验证**：`work/data/mail/`
+原本只有 `g`/`j` 两个字母子目录，`testqaz`（t 开头）和 `fluffos`
+（f 开头）对应的 `t`/`f` 子目录此前都不存在——`feature/save.lpc`
+的 `save()` 在 `save_object()` 之前调用了 `assure_file()`，两个缺
+失目录都被正确自动创建，没有触发 AGENTS.md 记录过的"目录不存在
+导致 `log_file()`/`save_object()` 崩溃"那一类 bug（`dock9` 那次是
+真的崩溃，这里是正常的自愈行为）。
+
+**未发现的问题**：本轮压力测试的角度里，除上述已修复的 `buy.lpc`
+显示 bug 外，注册对抗性输入、战斗/死亡/复活、货币持久性、留言板、
+邮局系统均**完全干净**，`debug.log` 全程零新增报错。测试账号
+`testqaz` 的存档变化（等级、货币、邮件等）随本次提交一并保留，
+`fluffos` 管理员账号的信箱/位置变化同样保留（历次深度测试的标准
+可复用巫师账号，累积游玩痕迹属预期行为）。
