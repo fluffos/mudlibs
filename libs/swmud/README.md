@@ -1,12 +1,5 @@
 # Star Wars Mud (swmud)
 
-> **⚠️ Makes a real outbound network connection at boot.** `daemons/
-> imud_d.lpc` preloads and connects to the public Intermud-3 router
-> network at every boot (`ADMIN_EMAIL` in `include/config.h` is a real-
-> looking value, so Lima's placeholder-based protective guard doesn't
-> block it). Do not include this lib in high-frequency automated re-boot
-> loops. See `NOTES.md`.
-
 A Star Wars-themed LPC mudlib built as an extension of the Lima mudlib
 (<https://limalib.dev>, FluffOS's own official reference/framework
 mudlib). Its own README describes it exactly: "This project only
@@ -83,7 +76,22 @@ item/combat API out from under Lima's original demo files" incompatibility
 documented repeatedly in `NOTES.md`. See `NOTES.md` for the full
 breakdown and what's left unfixed on purpose.
 
-WASM status: not attempted (`wasm_status` left `""`).
+WASM status: `noboot`. The specialized Lima-flavor WASM driver (built in
+`~/src/fluffos-lima` the same way as the native one) boots this lib's
+content cleanly -- registration, race selection, and world entry all
+verified live -- but the deployed site packages every lib against one
+shared WASM driver binary with no per-lib driver override mechanism, so
+the site itself cannot actually run it this way. See `libs/lima/NOTES.md`'s
+`wasm_status 审计` section and this lib's own `NOTES.md` for the full
+investigation; this is a site-infrastructure gap, not a defect in swmud
+itself.
+
+> **⚠️ Makes a real outbound network connection at boot.** `daemons/
+> imud_d.lpc` preloads and connects to the public Intermud-3 router
+> network at every boot (`ADMIN_EMAIL` in `include/config.h` is a real-
+> looking value, so Lima's placeholder-based protective guard doesn't
+> block it). Do not include this lib in high-frequency automated re-boot
+> loops. See `NOTES.md`.
 
 ## Local run
 

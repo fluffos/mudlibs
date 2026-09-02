@@ -544,3 +544,42 @@ line with role tag, race, location) -> `inventory` -> admin `update`/
 back to the User Menu, `debug.log` free of new errors). No crashes,
 zero silent failures, across all of the above after the fixes in this
 document.
+
+## wasm_status 审计（2026-09-01）：内容在专用 WASM 驱动上完全可玩、但与 lima 同样卡在站点基础设施上，结论 noboot
+
+`meta.json` 的 `wasm_status` 此前一直留空（README 的 Status 一节写
+"WASM status: not attempted"）。本次批量审计（见
+[[project_wasm_status_audit]]）补上这一步，结论直接参照本收藏
+`libs/lima`（164）自己 2026-09-01 那次审计的先例——见
+`libs/lima/NOTES.md` 的「wasm_status 审计」一节。
+
+复用 lima 那次审计已经建好的专用 WASM 驱动
+（`~/src/fluffos-lima/build-wasm/src/{fluffos.js,fluffos.wasm}`，
+`NO_ADD_ACTION`/`NO_WIZARDS`/`NO_LIGHT` 定义、`OLD_ED`/`PACKAGE_UIDS`
+未定义，与本 lib 的 `README.md`/`config.fluffos` 一贯记载的驱动
+要求完全一致，不需要重新编译）。第一次起跑就命中和 lima 自己
+`secure/simul_efun/misc.lpc` 一模一样的 bug：swmud 自己独立重写过
+的同名文件（`secure/simul_efun/misc.lpc`，与 lima 原版逐行对比
+差异很大，是 swmud 自己的版本，不是继承 lima 的）里
+`dump_socket_status()` 同样无条件调用 `socket_status()`，WASM 构建
+默认不带 `sockets` 包，导致 secure/simul_efun 整个编译失败，驱动
+拒绝启动。用 lima 已验证过的同一手法修复（`#ifdef
+__PACKAGE_SOCKETS__` 包一层，退化返回空字符串）。
+
+修复后完整验证：`fluffos_boot` 成功，登入菜单正常显示"Welcome to
+Star Wars MUD!"，走完 `new name` → 确认 → 密码×2 → 性别 → 邮箱/
+真实姓名/主页（可跳过）→ 种族选择列表正常显示 13 个种族选项，全程
+无未捕获错误——**这个 lib 的内容本身在专用 WASM 驱动上是完全可玩
+的**，`obj/secure/socket.lpc`/`secure/daemons/ftp_d.lpc`/
+`daemons/imud/finger.lpc` 等几个非 simul_efun 级的外围文件编译
+失败只是正常的预载跳过，不影响真实登入。
+
+但和 lima 一样卡在同一个站点基础设施缺口上：这个项目的站点打包
+管线（`pack_lib_for_web.sh`/`build_site.sh`）给**所有** lib 共用
+同一份 WASM 驱动二进制，没有任何按 lib 切换驱动配置的机制——部署
+到线上时，swmud 仍然会撞上和用共享驱动跑原生版一模一样的"驱动
+配置不匹配"问题（`NO_ADD_ACTION`/`PACKAGE_UIDS` 等宏的差异会导致
+mudlib 自身的启动期检查失败）。标记 `playable` 会误导站点实际能
+跑什么，因此和 lima 一样定为 `noboot`——这是站点基础设施层面的
+缺口，不是这个 lib 自身内容的问题，等以后站点支持按 lib 覆盖驱动
+时可以直接翻正，不需要重新调查。
