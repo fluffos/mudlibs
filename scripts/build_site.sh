@@ -268,6 +268,10 @@ done
 for f in index.html robots.txt sitemap.xml llms.txt llm.txt llms-full.txt games.json; do
   cp "$CACHE_DIR/index-staging/$f" "$SITE_DIR/$f"
 done
+# Vendored (not CDN) classless CSS framework every page links as
+# /assets/pico.min.css -- see gen_site_index.py's main() for why it's
+# self-hosted rather than loaded from a CDN.
+cp -r "$CACHE_DIR/index-staging/assets" "$SITE_DIR/assets"
 mkdir -p "$SITE_DIR/en" "$SITE_DIR/cn"
 cp "$CACHE_DIR/index-staging/en/index.html" "$SITE_DIR/en/index.html"
 cp "$CACHE_DIR/index-staging/cn/index.html" "$SITE_DIR/cn/index.html"

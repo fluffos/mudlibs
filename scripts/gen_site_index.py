@@ -331,7 +331,7 @@ INTRO = {
         "    这里收藏了 {n_total} 个上世纪九十年代至今的 LPC MUD(泥潭)游戏库,\n"
         "    以中文武侠/仙侠题材为主,也收录了 Dead Souls、Discworld 等几款\n"
         '    经典英文 mudlib。均已修复并运行在 <a href="https://github.com/fluffos/fluffos"\n'
-        "    style=\"color:var(--accent)\">FluffOS</a> 驱动上。整个驱动通过 WebAssembly\n"
+        "    style=\"color:var(--pico-primary)\">FluffOS</a> 驱动上。整个驱动通过 WebAssembly\n"
         "    在你的浏览器里运行 —— 点击任意一款游戏,即可像当年 telnet 泥潭一样注册、\n"
         "    登录、行走江湖。无需安装,无需服务器。每张卡片还标注了预置的管理员账号\n"
         "    (🔑)——用它登录即可获得巫师权限,自由探索游戏世界与代码。"
@@ -341,7 +341,7 @@ INTRO = {
         "    back to the 1990s — mostly Chinese-language wuxia/xianxia titles, plus a\n"
         "    handful of landmark English-language mudlibs like Dead Souls and\n"
         '    Discworld — restored and running on the\n'
-        '    <a href="https://github.com/fluffos/fluffos" style="color:var(--accent)">FluffOS</a>\n'
+        '    <a href="https://github.com/fluffos/fluffos" style="color:var(--pico-primary)">FluffOS</a>\n'
         "    driver. The whole driver runs in your browser via WebAssembly — click any\n"
         "    game and register, log in, and explore the world exactly as players did\n"
         "    over telnet decades ago. No install, no server. Every card lists a\n"
@@ -663,9 +663,20 @@ def render_lib_page(slug, info, commits):
     if notes_path.is_file():
         text = notes_path.read_text(encoding="utf-8").strip()
         if text:
+            # NOTES.md is a developer-facing porting/bug-fix log, not
+            # game content -- on a typical lib it runs to tens of
+            # thousands of words and was measured at 80-90% of this
+            # page's total weight, burying the actual description a
+            # visitor came to read under a wall of compiler-error
+            # minutiae before they ever reach "Play Now". Collapse it
+            # behind a native <details> disclosure (still real DOM --
+            # fully crawlable/indexable and screen-reader-navigable,
+            # no JS involved) so the page reads cleanly by default
+            # while the material stays one click away for anyone who
+            # wants it.
             doc_sections.append(
-                '<section class="doc"><h2>NOTES · 移植与修复记录</h2>'
-                f'{render_markdown_html(text)}</section>')
+                '<details class="doc notes"><summary><h2>NOTES · 移植与修复记录</h2></summary>'
+                f'{render_markdown_html(text)}</details>')
     docs_html = "\n".join(doc_sections)
 
     canonical_url = f"{SITE_URL}/{slug}/"
@@ -689,7 +700,7 @@ def render_lib_page(slug, info, commits):
 
     site_name = html.escape(ui_zh["site_name"])
     return f"""<!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -706,62 +717,96 @@ def render_lib_page(slug, info, commits):
 <meta name="twitter:title" content="{title_bits}">
 <meta name="twitter:description" content="{meta_desc_attr}">
 <script type="application/ld+json">{jsonld}</script>
+<link rel="stylesheet" href="/assets/pico.min.css">
 <style>
+  /* Remap this site's own long-standing dark palette onto Pico's
+     theming variables, rather than keeping two parallel color systems
+     -- every Pico-styled element (links, headings, code, hr, details)
+     picks this up for free. Vendored locally; see main()'s comment for
+     why this isn't a CDN include. */
   :root {{
-    --bg: #0b0e14; --fg: #d5dbe5; --dim: #6b7484; --accent: #7aa2f7;
-    --panel: #11151f; --border: #232a38;
+    --pico-font-family: -apple-system, "PingFang SC", "Microsoft YaHei",
+          "Noto Sans CJK SC", var(--pico-font-family-sans-serif);
+    --pico-background-color: #0b0e14;
+    --pico-color: #d5dbe5;
+    --pico-h1-color: #d5dbe5;
+    --pico-h2-color: #d5dbe5;
+    --pico-muted-color: #6b7484;
+    --pico-muted-border-color: #232a38;
+    --pico-primary: #7aa2f7;
+    --pico-primary-background: #7aa2f7;
+    --pico-primary-hover: #9ab8f9;
+    --pico-primary-hover-background: #9ab8f9;
+    --pico-primary-underline: rgba(122, 162, 247, .5);
+    --pico-primary-inverse: #0b0e14;
+    --pico-card-background-color: #11151f;
+    --pico-card-border-color: #232a38;
+    --pico-code-background-color: #11151f;
+    --pico-code-color: #d5dbe5;
+    --pico-blockquote-border-color: #232a38;
     --ok: #9ece6a; --warn: #e0af68; --bad: #f7768e;
   }}
-  * {{ box-sizing: border-box; }}
-  body {{
-    margin: 0; background: var(--bg); color: var(--fg);
-    font: 15px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei",
-          "Noto Sans CJK SC", sans-serif;
-  }}
-  .wrap {{ max-width: 800px; margin: 0 auto; padding: 24px 16px 64px; }}
-  .back a {{ color: var(--accent); text-decoration: none; font-size: 13px; }}
-  .back a:hover {{ text-decoration: underline; }}
-  .head {{ display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
-           margin-top: 14px; }}
-  h1 {{ font-size: 26px; margin: 0; color: var(--accent); }}
-  .badge {{ font-size: 13px; white-space: nowrap; }}
+  body > header, body > main, body > footer {{ max-width: 760px; }}
+  body > header {{ padding-bottom: 0; }}
+  .back {{ font-size: 13px; margin-bottom: 0; }}
+  .head {{ display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+           margin: 18px 0 0; }}
+  h1 {{ font-size: 30px; margin: 0; font-weight: 700; letter-spacing: -.01em; }}
+  .badge {{ font-size: 13px; font-weight: 600; white-space: nowrap;
+           padding: 3px 10px; border-radius: 999px; border: 1px solid currentColor; }}
   .badge.playable {{ color: var(--ok); }}
   .badge.limited {{ color: var(--warn); }}
   .badge.noboot {{ color: var(--bad); }}
-  .slug {{ margin: 4px 0 10px; color: var(--dim); font-size: 12px;
-          font-family: Consolas, Menlo, monospace; }}
-  .meta {{ margin: 0 0 18px; font-size: 13px; color: var(--dim);
-          display: flex; flex-wrap: wrap; gap: 4px 14px; }}
-  .meta .admin {{ font-family: Consolas, Menlo, monospace; }}
-  .meta a {{ color: var(--accent); text-decoration: none; }}
-  .meta a:hover {{ text-decoration: underline; }}
-  .play-cta {{ margin: 0 0 22px; }}
+  .slug {{ margin: 6px 0 14px; color: var(--pico-muted-color); font-size: 12px;
+          font-family: var(--pico-font-family-monospace); }}
+  .meta {{ margin: 0 0 24px; font-size: 13px; color: var(--pico-muted-color);
+          line-height: 1.9; display: flex; flex-wrap: wrap; gap: 4px 16px; }}
+  .meta .admin {{ font-family: var(--pico-font-family-monospace); }}
+  .play-cta {{ margin: 0 0 28px; }}
   .play-btn {{
-    display: inline-block; background: var(--accent); color: #0b0e14;
-    font-weight: 600; text-decoration: none; padding: 12px 26px;
+    display: inline-block; background: var(--pico-primary); color: #0b0e14;
+    font-weight: 700; text-decoration: none; padding: 13px 30px;
     border-radius: 8px; font-size: 16px;
+    box-shadow: 0 4px 20px -6px rgba(122, 162, 247, .55);
+    transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
   }}
-  .play-btn:hover {{ opacity: .9; }}
-  .desc {{ font-size: 15px; line-height: 1.7; }}
-  h2 {{ font-size: 19px; margin: 28px 0 10px; color: var(--fg);
-       border-bottom: 1px solid var(--border); padding-bottom: 6px; }}
+  .play-btn:hover {{
+    opacity: .92; transform: translateY(-1px);
+    box-shadow: 0 6px 24px -6px rgba(122, 162, 247, .7);
+  }}
+  .play-btn:active {{ transform: translateY(0); }}
+  .desc {{
+    font-size: 16.5px; line-height: 1.75;
+    margin: 0 0 30px; padding: 2px 0 2px 16px;
+    border-left: 3px solid var(--pico-primary);
+  }}
   section.doc h2:first-child {{ margin-top: 8px; }}
-  .doc p {{ margin: 0 0 12px; }}
-  .doc ul {{ margin: 0 0 12px; padding-left: 22px; }}
-  .doc li {{ margin: 4px 0; }}
-  .doc pre {{ background: var(--panel); border: 1px solid var(--border);
-             border-radius: 6px; padding: 10px 12px; overflow-x: auto; }}
-  .doc code {{ font-family: Consolas, Menlo, monospace; font-size: 13px; }}
-  .doc blockquote {{ margin: 0 0 12px; padding: 4px 14px; color: var(--dim);
-                     border-left: 3px solid var(--border); }}
-  .doc hr {{ border: none; border-top: 1px solid var(--border); margin: 20px 0; }}
-  .doc a {{ color: var(--accent); }}
-  footer {{ margin-top: 40px; color: var(--dim); font-size: 12px; }}
-  footer a {{ color: var(--accent); }}
+  details.notes {{
+    border: 1px solid var(--pico-muted-border-color); border-radius: 10px;
+    padding: 4px 18px; margin: 30px 0 0; background: var(--pico-card-background-color);
+  }}
+  details.notes[open] {{ padding-bottom: 18px; }}
+  details.notes summary {{
+    cursor: pointer; list-style: none; padding: 14px 0;
+    display: flex; align-items: center; gap: 10px; user-select: none;
+  }}
+  details.notes summary::-webkit-details-marker {{ display: none; }}
+  details.notes summary h2 {{
+    margin: 0; border-bottom: none; padding-bottom: 0;
+    font-size: 16px; color: var(--pico-muted-color); flex: 1;
+  }}
+  details.notes summary::after {{
+    content: "▸"; color: var(--pico-muted-color); font-size: 13px;
+    transition: transform .15s ease; flex-shrink: 0;
+  }}
+  details.notes[open] summary::after {{ transform: rotate(90deg); }}
+  details.notes summary:hover h2, details.notes summary:hover::after {{ color: var(--pico-primary); }}
+  details.notes > *:not(summary) {{ margin-top: 4px; }}
+  body > footer {{ margin-top: 44px; font-size: 12px; color: var(--pico-muted-color); }}
 </style>
 </head>
 <body>
-<div class="wrap">
+<header>
   <p class="back"><a href="/">← {site_name} / LPC MUD Museum</a></p>
   <div class="head">
     <h1>{title_bits}</h1>
@@ -769,13 +814,15 @@ def render_lib_page(slug, info, commits):
   </div>
   <p class="slug">{html.escape(slug)}</p>
   {meta_html}
-  <p class="play-cta"><a class="play-btn" href="play.html">▶ 开始游玩 · Play Now</a></p>
+</header>
+<main>
+  <p class="play-cta"><a role="button" class="play-btn" href="play.html">▶ 开始游玩 · Play Now</a></p>
   {desc_html}
   {docs_html}
-  <footer>
+</main>
+<footer>
 {FOOTER['zh']}
-  </footer>
-</div>
+</footer>
 </body>
 </html>
 """
@@ -889,7 +936,7 @@ def render_index(status, commits, lang="zh", canonical_url=None):
     jsonld = build_jsonld(status, lang, ui, numbers, canonical_url=canonical_url)
 
     return f"""<!doctype html>
-<html lang="{ui['html_lang']}">
+<html lang="{ui['html_lang']}" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -912,91 +959,102 @@ def render_index(status, commits, lang="zh", canonical_url=None):
 <meta name="twitter:title" content="{html.escape(page_title)}">
 <meta name="twitter:description" content="{meta_desc_attr}">
 <script type="application/ld+json">{jsonld}</script>
+<link rel="stylesheet" href="/assets/pico.min.css">
 <style>
+  /* Same palette remap as the per-lib landing page (render_lib_page) --
+     kept in sync by hand since these are two independent inline
+     <style> blocks, not a shared stylesheet. */
   :root {{
-    --bg: #0b0e14; --fg: #d5dbe5; --dim: #6b7484; --accent: #7aa2f7;
-    --panel: #11151f; --border: #232a38;
+    --pico-font-family: -apple-system, "PingFang SC", "Microsoft YaHei",
+          "Noto Sans CJK SC", var(--pico-font-family-sans-serif);
+    --pico-background-color: #0b0e14;
+    --pico-color: #d5dbe5;
+    --pico-h1-color: #d5dbe5;
+    --pico-muted-color: #6b7484;
+    --pico-muted-border-color: #232a38;
+    --pico-primary: #7aa2f7;
+    --pico-primary-background: #7aa2f7;
+    --pico-primary-hover: #9ab8f9;
+    --pico-primary-hover-background: #9ab8f9;
+    --pico-primary-underline: rgba(122, 162, 247, .5);
+    --pico-primary-inverse: #0b0e14;
+    --pico-card-background-color: #11151f;
+    --pico-card-border-color: #232a38;
     --ok: #9ece6a; --warn: #e0af68; --bad: #f7768e;
   }}
-  * {{ box-sizing: border-box; }}
-  body {{
-    margin: 0; background: var(--bg); color: var(--fg);
-    font: 15px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei",
-          "Noto Sans CJK SC", sans-serif;
-  }}
-  .wrap {{ max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }}
-  h1 {{ font-size: 26px; margin: 8px 0 4px; color: var(--accent); }}
-  .intro {{ color: var(--dim); margin: 0 0 6px; }}
-  .stats {{ color: var(--dim); font-size: 13px; margin-bottom: 18px; }}
-  .stats b {{ color: var(--fg); }}
+  body > header, body > main, body > footer {{ max-width: 1100px; }}
+  body > header {{ position: relative; padding-bottom: 0; }}
+  h1 {{ font-size: 28px; margin: 8px 0 4px; font-weight: 700; letter-spacing: -.01em; }}
+  .intro {{ color: var(--pico-muted-color); margin: 0 0 6px; }}
+  .stats {{ color: var(--pico-muted-color); font-size: 13px; margin-bottom: 8px; }}
+  .stats b {{ color: var(--pico-color); }}
   .controls {{
-    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px;
-    position: sticky; top: 0; background: var(--bg); padding: 10px 0;
-    z-index: 5; border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px;
+    position: sticky; top: 0; background: var(--pico-background-color);
+    padding: 12px 0; z-index: 5; border-bottom: 1px solid var(--pico-muted-border-color);
   }}
   #q {{
-    flex: 1 1 220px; background: var(--panel); border: 1px solid var(--border);
-    border-radius: 8px; color: var(--fg); font: inherit; padding: 8px 12px;
-    outline: none;
+    flex: 1 1 220px; background: var(--pico-card-background-color);
+    border: 1px solid var(--pico-muted-border-color); border-radius: 8px;
+    color: var(--pico-color); font: inherit; padding: 9px 14px;
+    outline: none; margin: 0; transition: border-color .12s;
   }}
-  #q:focus {{ border-color: var(--accent); }}
+  #q:focus {{ border-color: var(--pico-primary); box-shadow: none; }}
   .fbtn {{
-    background: var(--panel); border: 1px solid var(--border); color: var(--fg);
-    border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 13px;
-    cursor: pointer; white-space: nowrap;
+    background: var(--pico-card-background-color); border: 1px solid var(--pico-muted-border-color);
+    color: var(--pico-color); border-radius: 8px; padding: 9px 16px;
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    white-space: nowrap; margin: 0; transition: border-color .12s, color .12s;
   }}
-  .fbtn.active {{ border-color: var(--accent); color: var(--accent); }}
+  .fbtn.active {{ border-color: var(--pico-primary); color: var(--pico-primary); }}
   .grid {{
-    display: grid; gap: 12px;
+    display: grid; gap: 14px;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   }}
   .card {{
-    position: relative; display: block; background: var(--panel);
-    border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
-    color: inherit; transition: border-color .15s;
+    position: relative; display: block; background: var(--pico-card-background-color);
+    border: 1px solid var(--pico-muted-border-color); border-radius: 10px;
+    padding: 16px 18px; color: inherit;
+    transition: border-color .15s, transform .15s, box-shadow .15s;
   }}
-  .card.linked:hover {{ border-color: var(--accent); }}
+  .card.linked:hover {{
+    border-color: var(--pico-primary); transform: translateY(-2px);
+    box-shadow: 0 8px 24px -10px rgba(0, 0, 0, .5);
+  }}
   .card .play {{ color: inherit; text-decoration: none; }}
   /* stretch the title link over the whole card (see render_index) */
   .card.linked .play::after {{ content: ""; position: absolute; inset: 0; }}
   .card.noboot {{ opacity: .55; }}
   .card-head {{ display: flex; align-items: baseline; gap: 8px;
                justify-content: space-between; }}
-  .card h2 {{ font-size: 16px; margin: 0; }}
-  .badge {{ font-size: 12px; white-space: nowrap; }}
+  .card h2 {{ font-size: 16px; margin: 0; font-weight: 600; }}
+  .badge {{
+    font-size: 11.5px; font-weight: 600; white-space: nowrap;
+    padding: 2px 9px; border-radius: 999px; border: 1px solid currentColor;
+  }}
   .badge.playable {{ color: var(--ok); }}
   .badge.limited {{ color: var(--warn); }}
   .badge.noboot {{ color: var(--bad); }}
-  .slug {{ margin: 2px 0 6px; color: var(--dim); font-size: 12px;
-          font-family: Consolas, Menlo, monospace; }}
+  .slug {{ margin: 4px 0 8px; color: var(--pico-muted-color); font-size: 12px;
+          font-family: var(--pico-font-family-monospace); }}
   .desc {{
-    margin: 0; font-size: 13px; color: var(--fg);
+    margin: 0; font-size: 13px; line-height: 1.55; color: var(--pico-color);
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
     overflow: hidden;
   }}
   .meta {{
-    margin: 8px 0 0; font-size: 12px; color: var(--dim);
+    margin: 10px 0 0; font-size: 12px; color: var(--pico-muted-color);
     display: flex; flex-wrap: wrap; gap: 2px 12px;
   }}
-  .meta .admin {{ font-family: Consolas, Menlo, monospace; }}
+  .meta .admin {{ font-family: var(--pico-font-family-monospace); }}
   /* meta links must stay clickable above the stretched .play overlay */
-  .meta a {{
-    color: var(--accent); text-decoration: none;
-    position: relative; z-index: 1;
-  }}
-  .meta a:hover {{ text-decoration: underline; }}
-  footer {{ margin-top: 32px; color: var(--dim); font-size: 12px; }}
-  footer a {{ color: var(--accent); }}
-  .lang-switch {{
-    position: absolute; top: 24px; right: 16px; font-size: 13px;
-  }}
-  .lang-switch a {{ color: var(--accent); text-decoration: none; }}
-  .lang-switch a:hover {{ text-decoration: underline; }}
-  .wrap {{ position: relative; }}
+  .meta a {{ position: relative; z-index: 1; }}
+  body > footer {{ margin-top: 36px; color: var(--pico-muted-color); font-size: 12px; }}
+  .lang-switch {{ position: absolute; top: 0; right: 0; font-size: 13px; }}
 </style>
 </head>
 <body>
-<div class="wrap">
+<header>
   <p class="lang-switch"><a href="{ui['lang_switch_href']}">{html.escape(ui['lang_switch_label'])}</a></p>
   <h1>{html.escape(ui['h1'])}</h1>
   <p class="intro">
@@ -1005,6 +1063,8 @@ def render_index(status, commits, lang="zh", canonical_url=None):
   <p class="stats">
 {STATS[lang].format(n_play=n_play, n_lim=n_lim, n_no=n_no)}
   </p>
+</header>
+<main>
   <div class="controls">
     <input id="q" type="search" placeholder="{html.escape(ui['search_placeholder'])}"
            autocomplete="off">
@@ -1016,10 +1076,10 @@ def render_index(status, commits, lang="zh", canonical_url=None):
   <div class="grid" id="grid">
 {cards_html}
   </div>
-  <footer>
+</main>
+<footer>
 {FOOTER[lang]}
-  </footer>
-</div>
+</footer>
 <script>
 (function () {{
   var q = document.getElementById('q');
@@ -1230,6 +1290,19 @@ def main():
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Vendored (not CDN-loaded) classless CSS framework -- a real
+    # network dependency on every page load would be a genuine
+    # reliability risk for this site's largely mainland-Chinese
+    # audience, where CDN hosts are frequently slow or blocked, so the
+    # file is committed to the repo and just copied into the build
+    # output here. Every generated page links it as /assets/pico.min.css
+    # (site-root-relative, works the same from / and from /<slug>/).
+    assets_dir = out_dir / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    pico_src = REPO / "scripts" / "vendor" / "pico.classless.min.css"
+    (assets_dir / "pico.min.css").write_bytes(pico_src.read_bytes())
+
     (out_dir / "index.html").write_text(render_index(status, commits, lang="zh"),
                                         encoding="utf-8")
     en_dir = out_dir / "en"
