@@ -824,3 +824,57 @@ account remain. `lpcc --batch` re-confirmed the single edited file
 (`_input_usr.lpc`) compiles clean. The
 `grep -h '"port"' libs/*/meta.json | ...` duplicate-port sanity check
 (per task instructions) printed nothing before committing.
+
+## wasm_status 审计（2026-09-01）：修复两处 sockets 包缺失崩溃，验证为 playable
+
+`meta.json` 的 `wasm_status` 此前一直留空（NOTES.md 已注明"WASM 通道
+未构建"，此前只做过原生驱动验证）。本次批量审计（见
+[[project_wasm_status_audit]]）补上这一步。
+
+首次用 `scripts/wasm_client.js` 起跑，driver 直接拒绝启动：
+
+```
+/system/kernel/simul_efun/socket.lpc:20:46: error: Undefined function socket_status
+No error handler for error: *No program in object '/system/kernel/simul_efun'!
+The simul_efun (/system/kernel/simul_efun) and master (/system/kernel/master) objects must be loadable.
+```
+
+与本收藏此前已修复的 `dsII`/`dsIII`/`lima`/`nightmare4` 同一类
+bug（AGENTS.md §1.3(c)）：`dump_socket_status()` 无条件调用只有
+编译了 `sockets` 包的驱动才有的 `socket_status()`，WASM 构建默认不带
+这个包，导致这不是运行时缺失而是**编译期**报错，进而拖垮整个
+simul_efun 编译。修复（`#ifdef __PACKAGE_SOCKETS__` 包一层，没有
+这个包时退化成空字符串，与既有修复手法一致）。
+
+修复后再跑，登入对象本身编译失败，每个连线在 `Can not accept
+connection ... due to error in connect()` 后被直接拒绝：
+`std/inherit/feature/living/usr/_ident_usr.lpc` 的 `get_ident()`
+（被 `system/object/login_ob.lpc` 每次连线都无条件调用一次）整个
+函数体依赖 `socket_address()`/`socket_create()`/`socket_connect()`/
+`socket_error()`/`socket_write()`/`socket_close()`——这是 AGENTS.md
+§1.3(c) 目录里"ident/auth 端口 113 查询"那一类的具体实例（此前只在
+`huoying` 见过）。修复：整个函数体和其余几个只服务于这个功能的
+回调函数一起包进 `#ifdef __PACKAGE_SOCKETS__`，没有这个包时
+`get_ident()` 直接返回 0（表示身份识别不可用，原有调用方已经会
+正确处理这个返回值）。
+
+`cmds/std/adm/wscheck.lpc`、`cmds/std/guest/ident.lpc`/`userid.lpc`
+（客人可用的手动 ident 查询指令）、`system/daemons/{dict_d,ftp_d,
+http_client_d,im_d,intermud2_d,mud_d,realnews_d,smtp_d,socket_d,
+socket_ob,translate_d,whois_d}.lpc` 等文件也用到 socket 相关 efun，
+但都不在开机/登入这条关键路径上——它们是懒加载的指令文件或预载
+精灵，编译失败只表现为开机预载列表里的一行"Failed"（预载完成后
+驱动照常打印"啟動完畢，重新連線中..."），不影响真实登入，保持
+原样不动，与本项目对同类"外围精灵编译失败"一贯的处理方式一致。
+
+**开机行为提醒**：这个 lib 的预载会在跑完整个精灵列表后**主动
+断开当前连线并提示"啟動完畢，重新連線中..."**，需要在测试脚本上
+加 `--reconnect-on-disconnect`（`wasm_client.js` 现有参数）才能让
+客户端跟着重连，否则会被误判为登入失败。已确认这不是 bug，是与
+README 里记载的"开机预载持续 2-3 分钟"配套的既有设计。
+
+两处修复后跑通一次完整会话：`new` 创角 → 英文 ID/名称/密码/信箱/
+性别全部走完 → "歡迎 WasmTest(Wasmtest) 進入重生的世界。" → 落地
+巫師神殿 → 5 秒后自动进入游戏 → 城市公告栏/新手提示正常显示 →
+`quit` 干净退出（"你離開遊戲了。"），全程无未捕获错误。`wasm_status`
+设为 `playable`。
