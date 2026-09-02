@@ -1,12 +1,6 @@
 # Majik 4
 
-A real [MudOS](https://en.wikipedia.org/wiki/LPMud#Server_software)
-v21/v22-era mudlib from 1998-1999 -- the fourth incarnation of hobbyist
-author Tero "namhas" Leino's Majik project, and the direct successor to
-[majik3](../majik3/README.md) (also in this collection). Development
-stopped when the base engine was, in the author's own words, "almost,
-still not even beta" -- the world builders hadn't finished building
-content by the time the team moved on to a 3D successor project.
+A real [MudOS](https://en.wikipedia.org/wiki/LPMud#Server_software) v21/v22-era mudlib from 1998-1999 -- the fourth incarnation of hobbyist author Tero "namhas" Leino's Majik project, and the direct successor to [majik3](../majik3/README.md) (also in this collection). Development stopped when the base engine was, in the author's own words, "almost, still not even beta" -- the world builders hadn't finished building content by the time the team moved on to a 3D successor project.
 
 Architecturally very different from majik3: a grid-based, "roguelike"
 2D gameworld with a real graphical client (not plain telnet) driving it

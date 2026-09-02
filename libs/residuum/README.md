@@ -1,12 +1,6 @@
 # Nightmare Residuum
 
-An [LPMud](https://en.wikipedia.org/wiki/LPMud) "inspired by the Nightmare
-Mudlib" but written from scratch for modern [FluffOS](https://github.com/fluffos/fluffos)
-rather than ported from a period MudOS archive. Distinct from both
-`nightmare3` and `nightmare4` elsewhere in this collection -- its own
-codebase, its own space-themed example domain, and a full account/character
-split (your login connection and your in-game character are two separate
-objects, so one account can hold several characters).
+An [LPMud](https://en.wikipedia.org/wiki/LPMud) "inspired by the Nightmare Mudlib" but written from scratch for modern [FluffOS](https://github.com/fluffos/fluffos) rather than ported from a period MudOS archive. Distinct from both `nightmare3` and `nightmare4` elsewhere in this collection -- its own codebase, its own space-themed example domain, and a full account/character split (your login connection and your in-game character are two separate objects, so one account can hold several characters).
 
 Source: `michaelprograms/nightmare-residuum` on GitHub.
 

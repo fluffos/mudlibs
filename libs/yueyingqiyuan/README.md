@@ -1,9 +1,6 @@
 # 月影奇缘
 
-登录横幅原文亦作"世纪西游之月影奇缘"/"Moon Love Story"，一个以《西游记》
-世界观为背景改编的老牌 MUD。属于 ES II 引擎系列（与 `es1_win`、
-`xkx2001`、`rzrmud`、`xo` 等同源，master 文件署名可追溯到 "Lil"→
-"Annihilator" 这一支）。
+登录横幅原文亦作"世纪西游之月影奇缘"/"Moon Love Story"，一个以《西游记》 世界观为背景改编的老牌 MUD。属于 ES II 引擎系列（与 `es1_win`、 `xkx2001`、`rzrmud`、`xo` 等同源，master 文件署名可追溯到 "Lil"→ "Annihilator" 这一支）。
 
 ## 内容亮点
 

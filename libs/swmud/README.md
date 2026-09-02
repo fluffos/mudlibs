@@ -1,13 +1,6 @@
 # Star Wars Mud (swmud)
 
-A Star Wars-themed LPC mudlib built as an extension of the Lima mudlib
-(<https://limalib.dev>, FluffOS's own official reference/framework
-mudlib). Its own README describes it exactly: "This project only
-includes additions and changes to the base mudlib. It must be installed
-over the current Lima mudlib." So that's how it's built here: a full
-copy of this project's already-converted `libs/lima/work/` (164, port
-40212) with swmud's own ~980-file tree overlaid on top (852 new files,
-233 overriding same-path Lima files).
+A Star Wars-themed LPC mudlib built as an extension of the Lima mudlib (<https://limalib.dev>, FluffOS's own official reference/framework mudlib). Its own README describes it exactly: "This project only includes additions and changes to the base mudlib. It must be installed over the current Lima mudlib." So that's how it's built here: a full copy of this project's already-converted `libs/lima/work/` (164, port 40212) with swmud's own ~980-file tree overlaid on top (852 new files, 233 overriding same-path Lima files).
 
 Source: `git clone https://github.com/coupdeforce/swmud` (last pushed
 2016-02-16, commit `cf33a51`). Slug `swmud`, number 180, port 40227.

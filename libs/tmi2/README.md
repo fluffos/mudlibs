@@ -1,13 +1,6 @@
 # TMI-2 (tmi2)
 
-**TMI-2** ("The Mud Institute", version 2) is one of the historically
-significant, widely-copied English-language LPMud mudlibs of the
-1992-1996 era. Its `std/` base classes, command-soul dispatch, and
-`/adm/`-rooted security-daemon layout (`master`, `access`, `groups`)
-were inherited and re-derived by a large family of later mudlibs -- this
-project's own catalog already refers to a "TMI-2/Falcon family" of
-descendants because of how far this lineage's conventions spread through
-the wider LPMud ecosystem.
+TMI-2 ("The Mud Institute", version 2) is one of the historically significant, widely-copied English-language LPMud mudlibs of the 1992-1996 era. Its `std/` base classes, command-soul dispatch, and `/adm/`-rooted security-daemon layout (`master`, `access`, `groups`) were inherited and re-derived by a large family of later mudlibs -- this project's own catalog already refers to a "TMI-2/Falcon family" of descendants because of how far this lineage's conventions spread through the wider LPMud ecosystem.
 
 This port is the "famous TMI-2 quad" release itself: a landing zone with
 a general-purpose bulletin board, a network-discussion room (Intermud-3),

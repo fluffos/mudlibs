@@ -1,17 +1,6 @@
 # Hakkard World (dshakkard)
 
-A custom closed-alpha game ("Hakkard World", banner reads "Revision
-0.0.1, Status: Closed Alpha") built on the Dead Souls 3.8.6 mudlib --
-the same Cratylus-lineage engine this collection already hosts as
-`ds386`/`deadsouls_fluffos` and `dsIII`. Not a distinct Dead Souls
-release: the non-secure top-level code (command dispatch, headers, the
-stock `campus`/`cave`/`default`/`examples`/`learning`/`Praxis`/`town`/
-`Ylsrim` domains) is close to byte-identical to `ds386`'s own raw
-archive. What makes this game distinct is three bespoke domains added
-on top -- `lennar`, `lennarmanor`, and `northernwastes`, a custom
-fantasy setting with its own manor rooms, NPCs, and virtual-room
-servers -- plus a personal builder's realm (`realms/muirrum`) with
-several in-progress test rooms and abandoned editor scratch buffers.
+A custom closed-alpha game ("Hakkard World", banner reads "Revision 0.0.1, Status: Closed Alpha") built on the Dead Souls 3.8.6 mudlib -- the same Cratylus-lineage engine this collection already hosts as `ds386`/`deadsouls_fluffos` and `dsIII`. Not a distinct Dead Souls release: the non-secure top-level code (command dispatch, headers, the stock `campus`/`cave`/`default`/`examples`/`learning`/`Praxis`/`town`/ `Ylsrim` domains) is close to byte-identical to `ds386`'s own raw archive. What makes this game distinct is three bespoke domains added on top -- `lennar`, `lennarmanor`, and `northernwastes`, a custom fantasy setting with its own manor rooms, NPCs, and virtual-room servers -- plus a personal builder's realm (`realms/muirrum`) with several in-progress test rooms and abandoned editor scratch buffers.
 
 Source: `git clone https://github.com/hakkard-dev-team/ds-hakkard`.
 Slug `dshakkard`, number 185, port 40230.

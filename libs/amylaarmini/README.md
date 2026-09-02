@@ -1,12 +1,6 @@
 # MiniMud (amylaarmini)
 
-A genuine pre-LDMud, Amylaar-driver-era testbed skeleton -- 19 files
-total. Not a game in any real sense: one starting room, a player
-class, a handful of commands, and the master/simul_efun pair needed
-to boot at all. Valuable purely as a primary-source historical
-artifact from the driver lineage that later forked into LDMud, kept
-here in the same "verify implemented functionality, don't expect a
-world" spirit as the already-onboarded `lil` and `lplib8`.
+A genuine pre-LDMud, Amylaar-driver-era testbed skeleton -- 19 files total. Not a game in any real sense: one starting room, a player class, a handful of commands, and the master/simul_efun pair needed to boot at all. Valuable purely as a primary-source historical artifact from the driver lineage that later forked into LDMud, kept here in the same "verify implemented functionality, don't expect a world" spirit as the already-onboarded `lil` and `lplib8`.
 
 ## Provenance
 

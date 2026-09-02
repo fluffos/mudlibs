@@ -1,11 +1,6 @@
 # Holy Mission (holymission)
 
-A large (~24,000 `.lpc` file) MudOS-lineage archive originally run out
-of Linz, Austria -- the login banner reads "Welcome to the Holy Mission
-at Linz, Austria". A guild-and-race-based fantasy game world with a
-village, a church, sewers, an adventurers' guild, and extensive
-player/wizard-authored content spanning years of active development
-(the archive's own comments date from the early-to-mid 1990s onward).
+A large (~24,000 `.lpc` file) MudOS-lineage archive originally run out of Linz, Austria -- the login banner reads "Welcome to the Holy Mission at Linz, Austria". A guild-and-race-based fantasy game world with a village, a church, sewers, an adventurers' guild, and extensive player/wizard-authored content spanning years of active development (the archive's own comments date from the early-to-mid 1990s onward).
 
 Source: `github.com/speedbunny/holymission-mud`, cloned 2026-08-31.
 Slug `holymission`, number 958, port 40260.

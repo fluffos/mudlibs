@@ -1,14 +1,6 @@
 # Primal Darkness
 
-A real, historically-operated English-language MUD (1999-2010) built on
-the Nightmare mudlib lineage -- one of the largest libraries in this
-collection, at roughly 32,000 source files. Genuinely authored content
-throughout, not a stock skeleton: dozens of hand-built domains (aekari,
-citrin, distopia, durst, forest, frozen, guilds, helgrath, helves,
-inferi_island, lodos, marshes, metaisland, pastarlon, roston, saahr,
-tirun, and more), a 30-race character-creation system, guilds, and
-years of accumulated wizard-built content and real player history
-preserved from the original archive.
+A real, historically-operated English-language MUD (1999-2010) built on the Nightmare mudlib lineage -- one of the largest libraries in this collection, at roughly 32,000 source files. Genuinely authored content throughout, not a stock skeleton: dozens of hand-built domains (aekari, citrin, distopia, durst, forest, frozen, guilds, helgrath, helves, inferi_island, lodos, marshes, metaisland, pastarlon, roston, saahr, tirun, and more), a 30-race character-creation system, guilds, and years of accumulated wizard-built content and real player history preserved from the original archive.
 
 Source: `ehershey/pd` on GitHub. The mudlib itself lives at
 `libraries/beta-ii/` inside that repository (a bundled Flash client and

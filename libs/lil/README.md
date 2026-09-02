@@ -1,14 +1,6 @@
 # Lil (lil)
 
-A "fixed up version of the MudOS testsuite lib with MudOS docs added,"
-per its original lpmuds.net listing -- genuinely a from-scratch
-bootstrapping base, not a game. Its own shipped `README` puts it bluntly:
-"about as bare bones as it gets without coding 100% from scratch...
-For the seriously leet only!" There is no login/password system, no
-rooms, no combat, no accounts -- connecting drops you straight into an
-anonymous session with a small handful of primitive commands, plus a
-sizeable bundled compiler/efun/operator self-test suite meant for driver
-developers, not players.
+A "fixed up version of the MudOS testsuite lib with MudOS docs added," per its original lpmuds.net listing -- genuinely a from-scratch bootstrapping base, not a game. Its own shipped `README` puts it bluntly: "about as bare bones as it gets without coding 100% from scratch... For the seriously leet only!" There is no login/password system, no rooms, no combat, no accounts -- connecting drops you straight into an anonymous session with a small handful of primitive commands, plus a sizeable bundled compiler/efun/operator self-test suite meant for driver developers, not players.
 
 Source: a maintained, already-FluffOS-adapted archive (`lil_0.3.zip`)
 from lpmuds.net, a now-defunct LPMud archive site. Recovered via the

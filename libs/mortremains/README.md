@@ -1,10 +1,6 @@
 # Mortal Remains (mortremains)
 
-A classic English-language LPMud, admin'd by "Cyanide" from 1997 to
-2000, built on the TMI-2 ("The Mud Institute") 1.4alpha mudlib base.
-Released into the public domain by its original admin; source cloned
-from `git clone https://github.com/clockworksoul/MortalRemains`. Slug
-`mortremains`, number 929, port 40231.
+A classic English-language LPMud, admin'd by "Cyanide" from 1997 to 2000, built on the TMI-2 ("The Mud Institute") 1.4alpha mudlib base. Released into the public domain by its original admin; source cloned from `git clone https://github.com/clockworksoul/MortalRemains`. Slug `mortremains`, number 929, port 40231.
 
 A real, messy multi-author archive: ~13,500 files of genuine 1997-2000
 wizard-home content from dozens of authors (Cyanide, Chronos,

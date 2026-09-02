@@ -1,10 +1,6 @@
 # 梦幻七域 (The Dream of Seven / dreamofseven)
 
-台湾团队自 1999 年开发的 BIG5 编码 MUD，源代码开机横幅自述"其精神
-源自 ES2 Mudlib 架构，特此感谢 Annihilator"——和本项目已收录的
-`hell`/`zhyx` 等同属 ES II/Annihilator 血统，但只继承了最早期的
-"original from Lil / rewritten by Annihilator"一支，没有后续"Doing
-Lu"/"yh2003"分支的痕迹，是一支更早、更独立的旁支分叉。
+台湾团队自 1999 年开发的 BIG5 编码 MUD，源代码开机横幅自述"其精神源自 ES2 Mudlib 架构，特此感谢 Annihilator"——和本项目已收录的 `hell`/`zhyx` 等同属 ES II/Annihilator 血统，但只继承了最早期的 "original from Lil / rewritten by Annihilator"一支，没有后续"Doing Lu"/"yh2003"分支的痕迹，是一支更早、更独立的旁支分叉。
 
 ## 内容亮点
 

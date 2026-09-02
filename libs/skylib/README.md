@@ -1,11 +1,6 @@
 # Skylib (skylib)
 
-Version 1.8 of Skylib, an English-language LPMud library boot-banner'd
-as the "Divided Sky Distribution Lib". It's built on the same lineage
-as Discworld/Nightmare -- soul-based emotes, a directory-based
-per-verb command dispatcher (`cmds/living`, `cmds/player`, ...),
-guilds, a round-time combat/action system, and Intermud-3 networking
--- and per its own design "should feel familiar to Discworld types".
+Version 1.8 of Skylib, an English-language LPMud library boot-banner'd as the "Divided Sky Distribution Lib". It's built on the same lineage as Discworld/Nightmare -- soul-based emotes, a directory-based per-verb command dispatcher (`cmds/living`, `cmds/player`, ...), guilds, a round-time combat/action system, and Intermud-3 networking -- and per its own design "should feel familiar to Discworld types".
 
 Source: a maintained, already-FluffOS-adapted archive
 (`skylib_fluffos_v3.zip`) from lpmuds.net, a now-defunct LPMud archive

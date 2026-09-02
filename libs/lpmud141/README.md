@@ -1,13 +1,6 @@
 # LPmud 1.4.1-A (lpmud141)
 
-A historically significant early LPMud reference mudlib -- "HMC LP-mud"
-(Harvey Mudd College), version 1.4.1-A, bundled together with the
-original classic C-language LPMud driver it shipped with (ignored here;
-this project uses its own FluffOS build). Only the mudlib itself was
-ported. This is a genuinely small, from-a-university-account game, not a
-commercial title: a starter guild, an Endoplasmatorium, a village green,
-a clinic, an elevator, some mines, a maze, basic wizard tooling and
-soul/emote commands -- thin by design, not by omission.
+A historically significant early LPMud reference mudlib -- "HMC LP-mud" (Harvey Mudd College), version 1.4.1-A, bundled together with the original classic C-language LPMud driver it shipped with (ignored here; this project uses its own FluffOS build). Only the mudlib itself was ported. This is a genuinely small, from-a-university-account game, not a commercial title: a starter guild, an Endoplasmatorium, a village green, a clinic, an elevator, some mines, a maze, basic wizard tooling and soul/emote commands -- thin by design, not by omission.
 
 Source: `lpmud-1.4.1-A-r10.tar.gz`, recovered via the Wayback Machine
 from mudmagic.com (`codes/dl/2154/lpmud-1.4.1-A-r10.tar.gz`), a now-defunct

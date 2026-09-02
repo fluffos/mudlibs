@@ -1,15 +1,6 @@
 # ShadowGate
 
-A *Nightmare Mudlib*-lineage English-language fantasy MUD (its own
-`adm/obj/master.c` header reads: "from the Nightmare Mudlib ... created by
-Descartes of Borg 1993"), grown into a large, actively-developed AD&D/d20
-ruleset game: feats, invocations, spell disciplines, ~50 playable races,
-and 14 classes (barbarian, bard, cavalier, cleric, druid, fighter, mage,
-paladin, psion, psywarrior, ranger, sorcerer, thief, warlock), each with
-its own trainer NPC and a 15-stage guided character-creation wizard
-(class, gender, race, subrace, template, age, stat rolling,
-height/weight/body/hair/eye color, language, alignment, deity, and a
-class-specific "special" choice).
+A Nightmare Mudlib-lineage English-language fantasy MUD (its own `adm/obj/master.c` header reads: "from the Nightmare Mudlib ... created by Descartes of Borg 1993"), grown into a large, actively-developed AD&D/d20 ruleset game: feats, invocations, spell disciplines, ~50 playable races, and 14 classes (barbarian, bard, cavalier, cleric, druid, fighter, mage, paladin, psion, psywarrior, ranger, sorcerer, thief, warlock), each with its own trainer NPC and a 15-stage guided character-creation wizard (class, gender, race, subrace, template, age, stat rolling, height/weight/body/hair/eye color, language, alignment, deity, and a class-specific "special" choice).
 
 The repo's own `README` says this is (or was) a real, still-hosted MUD at
 `shadowgate.org` -- unrelated to the classic 1989 NES adventure game of

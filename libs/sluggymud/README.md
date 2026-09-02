@@ -1,9 +1,6 @@
 # SluggyMUD
 
-A tiny, bare-bones LPC mudlib skeleton, explicitly built to run on the
-[FluffOS](https://github.com/fluffos/fluffos) driver -- per the
-archive's own two-line README: "A component-based mudlib designed to
-run on the FluffOS LPC driver."
+A tiny, bare-bones LPC mudlib skeleton, explicitly built to run on the [FluffOS](https://github.com/fluffos/fluffos) driver -- per the archive's own two-line README: "A component-based mudlib designed to run on the FluffOS LPC driver."
 
 There's no world here to explore: no rooms, no NPCs, no combat, no
 account/login system. This is a from-scratch engine's earliest

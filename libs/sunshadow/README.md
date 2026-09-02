@@ -1,9 +1,6 @@
 # Sundering Shadows (sunshadow)
 
-A long-running, still-live English-language fantasy LPMud built on a
-heavily customized Nightmare/TMI-lineage mudlib base. Source cloned from
-`git clone https://github.com/MudRen/SunderingShadows` (a fork of
-`SuS-Tsera/SunderingShadows`). Slug `sunshadow`, number 930, port 40232.
+A long-running, still-live English-language fantasy LPMud built on a heavily customized Nightmare/TMI-lineage mudlib base. Source cloned from `git clone https://github.com/MudRen/SunderingShadows` (a fork of `SuS-Tsera/SunderingShadows`). Slug `sunshadow`, number 930, port 40232.
 
 ## The world
 

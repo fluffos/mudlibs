@@ -1,9 +1,6 @@
 # IMUD@FluffOS.v2019
 
-FluffOS 项目自己的官方演示（源码：<https://github.com/fluffos/imud>，线上
-地址 <https://imud.fluffos.info>）。**这不是一款游戏**——没有角色注册、
-没有存档、没有房间地图，只是一个从零开始的最小 FluffOS mudlib 范例，
-用来演示驱动自带的 Intermud-3（跨 MUD 聊天/名录协议）支持。
+FluffOS 项目自己的官方演示（源码：<https://github.com/fluffos/imud>，线上地址 <https://imud.fluffos.info>）。这不是一款游戏——没有角色注册、 没有存档、没有房间地图，只是一个从零开始的最小 FluffOS mudlib 范例，用来演示驱动自带的 Intermud-3（跨 MUD 聊天/名录协议）支持。
 
 ## 内容说明
 

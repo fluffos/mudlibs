@@ -1,12 +1,6 @@
 # DarkeLIB
 
-The real, original **DarkeLIB** circa 1999 -- the mudlib behind
-*Daybreak Ridge*, a from-scratch English-language Lima/Nightmare/TMI-
-lineage MudOS game. This is the actual ancestor codebase that this
-project's already-onboarded `rifts2` (RiftsMUD2) forked into a
-*Rifts*-tabletop-RPG reskin; DarkeLIB itself is the more original,
-broader base -- real fantasy-domain content, not a stripped-down
-starting point.
+The real, original DarkeLIB circa 1999 -- the mudlib behind Daybreak Ridge, a from-scratch English-language Lima/Nightmare/TMI- lineage MudOS game. This is the actual ancestor codebase that this project's already-onboarded `rifts2` (RiftsMUD2) forked into a Rifts-tabletop-RPG reskin; DarkeLIB itself is the more original, broader base -- real fantasy-domain content, not a stripped-down starting point.
 
 Source: `thraeq/DarkeLIB` on GitHub, a community-maintained fork 58
 commits ahead of the original `jpeckham/DarkeLIB`, with real

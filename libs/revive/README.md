@@ -1,13 +1,6 @@
 # 终极地狱-轩辕传说 (revive)
 
-游戏内标题为 "EMPEROR OF ULTRA HELL(BLOOD & MAGIC) FROM 1999.12.12"，
-和本项目已收录的 `hell`（游戏内标题 "REVIVE OF ULTRA HELL...FROM
-1999.11.13"）同属 Doing Lu 的"地狱"血统家族（master.lpc 的作者传承
-注释一字不差），但这份 GitHub 上的 `revive` 仓库是一份规模小得多的
-"底层代码"发行版——仓库自述即为"mud 底层代码"，只随附了投胎/阎罗殿
-(`death`)、比武场 (`pk`) 和注册入口 (`register`) 三个地图分区，原版
-`hell` 里的近 54 个门派/城市地图（武当、少林、峨嵋、大理、丐帮……）
-和整个武功技能树都没有包含在这份发行版里。
+游戏内标题为 "EMPEROR OF ULTRA HELL(BLOOD & MAGIC) FROM 1999.12.12"，和本项目已收录的 `hell`（游戏内标题 "REVIVE OF ULTRA HELL...FROM 1999.11.13"）同属 Doing Lu 的"地狱"血统家族（master.lpc 的作者传承注释一字不差），但这份 GitHub 上的 `revive` 仓库是一份规模小得多的 "底层代码"发行版——仓库自述即为"mud 底层代码"，只随附了投胎/阎罗殿 (`death`)、比武场 (`pk`) 和注册入口 (`register`) 三个地图分区，原版 `hell` 里的近 54 个门派/城市地图（武当、少林、峨嵋、大理、丐帮……）和整个武功技能树都没有包含在这份发行版里。
 
 ## 内容亮点
 

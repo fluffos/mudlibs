@@ -1,12 +1,6 @@
 # Dead Souls I (dsI)
 
-An early, distinct generation of the Dead Souls object library. Several
-files in this archive self-identify as "Dead Souls V" or "the Dead
-Soulsr1/r2 Object Library" (circa 1996-98), and per lpmuds.net's own
-description this snapshot is closer to Nightmare IV than to the later
-3.8.6-era Dead Souls already in this collection (`ds386`,
-`deadsouls_fluffos`). Confirmed genuinely distinct by a structural and
-byte-level diff -- see `NOTES.md` \S1.
+An early, distinct generation of the Dead Souls object library. Several files in this archive self-identify as "Dead Souls V" or "the Dead Soulsr1/r2 Object Library" (circa 1996-98), and per lpmuds.net's own description this snapshot is closer to Nightmare IV than to the later 3.8.6-era Dead Souls already in this collection (`ds386`, `deadsouls_fluffos`). Confirmed genuinely distinct by a structural and byte-level diff -- see `NOTES.md` \S1.
 
 Source: a maintained, already-FluffOS-adapted archive (`dsI.zip`) from
 lpmuds.net, a now-defunct LPMud archive site. Recovered via the Wayback

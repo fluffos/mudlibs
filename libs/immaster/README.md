@@ -1,12 +1,6 @@
 # immaster (菜鸟飞天传)
 
-A small, real Chinese-language LPC learning project built on top of
-**MudCore** (<https://github.com/oiuv/mudcore>), a modern FluffOS-native
-engine framework. immaster's own README calls it plainly: "Ongoing
-building of the mudlib, as a learning project." It supplies only the
-content layer -- a short tutorial map -- while MudCore supplies the
-engine underneath (accounts, login/registration, save/restore, movement,
-command dispatch, wizard tools, and a set of daemons).
+A small, real Chinese-language LPC learning project built on top of MudCore (<https://github.com/oiuv/mudcore>), a modern FluffOS-native engine framework. immaster's own README calls it plainly: "Ongoing building of the mudlib, as a learning project." It supplies only the content layer -- a short tutorial map -- while MudCore supplies the engine underneath (accounts, login/registration, save/restore, movement, command dispatch, wizard tools, and a set of daemons).
 
 Source: `git clone https://github.com/flyinrookie/immaster` (commit
 `43382dc`, July 2020), plus MudCore pinned at the exact commit

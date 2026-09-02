@@ -1,14 +1,6 @@
 # Wilderness (wilderness)
 
-A production game built on the LIMA Mudlib -- the same natural-language-
-parser, capability-security, wizard-Unix-shell framework already
-onboarded in this collection standalone as `libs/lima`, but this is an
-independent, much older snapshot (dated May 2000) with the framework's
-own `AUTO_WIZ` demo convenience turned off. Real characters here start
-as ordinary mortals in a real, populated game world -- floating in "The
-Void" and stepping through a randomized portal into one of several
-wizard-built areas -- not as instant wizards in a bare-bones framework
-demo.
+A production game built on the LIMA Mudlib -- the same natural-language- parser, capability-security, wizard-Unix-shell framework already onboarded in this collection standalone as `libs/lima`, but this is an independent, much older snapshot (dated May 2000) with the framework's own `AUTO_WIZ` demo convenience turned off. Real characters here start as ordinary mortals in a real, populated game world -- floating in "The Void" and stepping through a randomized portal into one of several wizard-built areas -- not as instant wizards in a bare-bones framework demo.
 
 Source: `wlib051100.tar.gz` (`https://www.cs.hmc.edu/~jhsu/wilderness/`),
 credited in its own `USAGE` file to the original LIMA Mudlib authors

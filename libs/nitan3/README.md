@@ -1,13 +1,6 @@
 # 泥潭三 / 《終極魔界》 (nitan3) — 与 nitan_san 完全同源
 
-**这是本项目已收录的 `nitan_san`（archive #61，泥潭三.rar）的一份
-确认重复档案**，来源是 GitHub `mudchina` 组织的 `nitan3` 仓库（同一份
-"泥潭三"快照，改为 git 托管而非打包成 .rar）。全部 15,236 个共有文件
-中 15,235 个逐字节相同（唯一差异是 `config.cfg` 里一处纯装饰性的
-Windows 文件夹名字符串），`adm/single/master.c` 逐字节 md5 相同。按本
-项目约定，确认重复后仍然完整走完整套上线流程（独立编号/端口/存档），
-并在 `meta.json` 里用 `duplicate_of` 字段指向 `nitan_san`，而不是悄悄
-跳过——详见 `NOTES.md`。
+这是本项目已收录的 `nitan_san`（archive #61，泥潭三.rar）的一份确认重复档案，来源是 GitHub `mudchina` 组织的 `nitan3` 仓库（同一份 "泥潭三"快照，改为 git 托管而非打包成 .rar）。全部 15,236 个共有文件中 15,235 个逐字节相同（唯一差异是 `config.cfg` 里一处纯装饰性的 Windows 文件夹名字符串），`adm/single/master.c` 逐字节 md5 相同。按本项目约定，确认重复后仍然完整走完整套上线流程（独立编号/端口/存档），并在 `meta.json` 里用 `duplicate_of` 字段指向 `nitan_san`，而不是悄悄跳过——详见 `NOTES.md`。
 
 由于内容确认同源，本次没有重新走一遍 `nitan_san` 那边耗时的独立踩坑
 流程，而是直接把 `nitan_san` 已经修好、已经格式化、已经实机验证过的

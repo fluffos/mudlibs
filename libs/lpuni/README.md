@@ -1,14 +1,6 @@
 # LPUniversity Mudlib (lpuni)
 
-An English-language classic LPC teaching/reference mudlib. Per its own
-lpmuds.net description, LPUniversity was never meant to be a finished game
--- "not ready for play... provides a chance to build a lib from the ground
-up without having to deal much with the driver." What actually shipped is
-more complete than that framing suggests: a full login/registration/
-security/command-dispatch/help/mail/message-board/news/channel/Intermud-3
-engine (including a real first-boot admin-setup wizard), plus one small
-real starting area -- "LPUniversity Cafe" -- with a greeter NPC and real
-room descriptions. There is no combat/stats/limbs system at all.
+An English-language classic LPC teaching/reference mudlib. Per its own lpmuds.net description, LPUniversity was never meant to be a finished game -- "not ready for play... provides a chance to build a lib from the ground up without having to deal much with the driver." What actually shipped is more complete than that framing suggests: a full login/registration/ security/command-dispatch/help/mail/message-board/news/channel/Intermud-3 engine (including a real first-boot admin-setup wizard), plus one small real starting area -- "LPUniversity Cafe" -- with a greeter NPC and real room descriptions. There is no combat/stats/limbs system at all.
 
 Source: a maintained, already-FluffOS-adapted archive
 (`lpuni_fluffos_v1.zip`) from lpmuds.net, a now-defunct LPMud archive

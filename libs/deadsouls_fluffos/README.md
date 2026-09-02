@@ -1,9 +1,6 @@
 # DeadSouls-FluffOS2019
 
-`fluffos` GitHub 组织自己维护的 Dead Souls 3.8.6 fork
-（<https://github.com/fluffos/dead-souls>），已经预先适配现代 FluffOS
-（`v2019` 驱动分支）——不是从老式压缩包提取的传统档案，是这批语料库
-里少数几个"英文原版、本身就来自 FluffOS 生态"的收录对象之一。
+`fluffos` GitHub 组织自己维护的 Dead Souls 3.8.6 fork （<https://github.com/fluffos/dead-souls>），已经预先适配现代 FluffOS （`v2019` 驱动分支）——不是从老式压缩包提取的传统档案，是这批语料库里少数几个"英文原版、本身就来自 FluffOS 生态"的收录对象之一。
 
 ## 和 `ds386` 的关系
 

@@ -1,13 +1,6 @@
 # 恶魔天使 — Demon Angel (DA)
 
-一个由 es2 1.1e mudlib 改造而来的中文武侠/仙侠 MUD——项目自己的 README
-明确写着"本 DA mudlib ... 由 es2 1.1e mudlib 修改而成"，`README.ES2`
-（es2 原作者 Annihilator 的原版说明文件）也原样保留在存档中。与本项目
-已收录的 `es2`、`haiyang2`、`xkx2001` 等"ES II 引擎家族"一样，共享同
-一套 `adm/`、`feature/` 底层框架，但游戏世界完全不同：城市/地图以
-gourd（葫芦城，新手出生点）、grid、pet、ship、special、wiz 等 domain
-构成，和 es2 的 canyon/choyin/city/temple/village 等世界完全独立，并
-非重复收录。
+一个由 es2 1.1e mudlib 改造而来的中文武侠/仙侠 MUD——项目自己的 README 明确写着"本 DA mudlib ... 由 es2 1.1e mudlib 修改而成"，`README.ES2` （es2 原作者 Annihilator 的原版说明文件）也原样保留在存档中。与本项目已收录的 `es2`、`haiyang2`、`xkx2001` 等"ES II 引擎家族"一样，共享同一套 `adm/`、`feature/` 底层框架，但游戏世界完全不同：城市/地图以 gourd（葫芦城，新手出生点）、grid、pet、ship、special、wiz 等 domain 构成，和 es2 的 canyon/choyin/city/temple/village 等世界完全独立，并非重复收录。
 
 原始存档：`git clone https://github.com/MudRen/DemonAngel`（commit
 `9487693`）。仓库本身是纯 GBK 编码的原始快照，本次上线按本项目一贯

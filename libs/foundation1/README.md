@@ -1,14 +1,6 @@
 # Foundation I (foundation1)
 
-A stripped-down, classic Nightmare-3.3-derived LPC library, released by
-George Reese ("Descartes of Borg") in April 1995. Per its own shipped
-`README`: "This LPC library is designed very much for people who know
-what they are doing. Unlike Nightmare, it does not come with any
-configuration script to get you started, a combat system for a fantasy
-MUD, or a starter area." Foundation I is a bare engine (login/
-registration, security, command dispatch, help, mail, message boards,
-Intermud-3) meant as a clean base for LPC programmers to build their own
-game on top of -- not a playable-out-of-the-box game world.
+A stripped-down, classic Nightmare-3.3-derived LPC library, released by George Reese ("Descartes of Borg") in April 1995. Per its own shipped `README`: "This LPC library is designed very much for people who know what they are doing. Unlike Nightmare, it does not come with any configuration script to get you started, a combat system for a fantasy MUD, or a starter area." Foundation I is a bare engine (login/ registration, security, command dispatch, help, mail, message boards, Intermud-3) meant as a clean base for LPC programmers to build their own game on top of -- not a playable-out-of-the-box game world.
 
 This is the direct, earlier ancestor of this collection's existing
 `foundation2` (a separate, more developed later release by the same

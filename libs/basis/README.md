@@ -1,17 +1,6 @@
 # Basis (basis)
 
-**Basis** is a small, historically significant English-language LPMud
-mudlib written by John Garnett ("Truilkan") -- the same author as the
-already-onboarded `tmi2` (TMI-2), but an earlier, deliberately smaller
-1993 project. Per its own `README`: "Basis was conceived as an
-experiment... It has some good features in it but is far from a
-finished polished mudlib... Basis is for experimenters who actually
-want to start with something smaller and less complete than TMI-2."
-Basis's `std/` base classes, groups/access permission model, and `bin`
-command-dispatch system were later inherited by TMI-2 itself (per
-Basis's own README: "TMI-2 uses Basis's emoted system... uses the
-groups/access model originated by Portals as does TMI-2... Both TMI-2
-and Basis use some variant of the 'bin' command system").
+Basis is a small, historically significant English-language LPMud mudlib written by John Garnett ("Truilkan") -- the same author as the already-onboarded `tmi2` (TMI-2), but an earlier, deliberately smaller 1993 project. Per its own `README`: "Basis was conceived as an experiment... It has some good features in it but is far from a finished polished mudlib... Basis is for experimenters who actually want to start with something smaller and less complete than TMI-2." Basis's `std/` base classes, groups/access permission model, and `bin` command-dispatch system were later inherited by TMI-2 itself (per Basis's own README: "TMI-2 uses Basis's emoted system... uses the groups/access model originated by Portals as does TMI-2... Both TMI-2 and Basis use some variant of the 'bin' command system").
 
 This is a "core infrastructure" mudlib, not a game with content: a
 tiny two-room test area (`/room/start`, `/room/void`, connected by

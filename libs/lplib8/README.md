@@ -1,12 +1,6 @@
 # LPlib8 (lplib8)
 
-An experimental mudlib written by **Lars Pensjö himself** -- the
-creator of LPMud, and the author of the original LPC driver line --
-as his own testbed for "how things really should be done" with the
-new features of "LPmud game driver 3.0" (per the archive's own
-README). Explicitly NOT the well-known "CDlib" for Genesis; a much
-smaller, more experimental sketch, mailed out for feedback
-(`lars@cd.chalmers.se`).
+An experimental mudlib written by Lars Pensjö himself -- the creator of LPMud, and the author of the original LPC driver line -- as his own testbed for "how things really should be done" with the new features of "LPmud game driver 3.0" (per the archive's own README). Explicitly NOT the well-known "CDlib" for Genesis; a much smaller, more experimental sketch, mailed out for feedback (`lars@cd.chalmers.se`).
 
 54 real `.c` files, genuinely FluffOS/MudOS-compatible (zero
 `driver_hook`/`set_driver_hook` usage anywhere). A thin but real

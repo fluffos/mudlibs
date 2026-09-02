@@ -1,12 +1,6 @@
 # Final Realms (finalrealms)
 
-**Final Realms** (source: <https://github.com/quixadhal/fr>) is a classic,
-from-scratch English-language MudOS mudlib -- the last commit in its own
-history dates to 1998, making it the oldest-vintage lib onboarded into this
-collection so far. It's a full game mudlib, not just an engine: race
-selection (12 playable races -- Drow, Duergar, Dwarf, Elf, Half-Elf, Gnome,
-Goblin, Halfling, Human, Lizard-Man, Orc, Half-Orc), a real starting-zone
-"newbie" world per race, guilds, shops, taverns, and a full wizard toolset.
+Final Realms (source: <https://github.com/quixadhal/fr>) is a classic, from-scratch English-language MudOS mudlib -- the last commit in its own history dates to 1998, making it the oldest-vintage lib onboarded into this collection so far. It's a full game mudlib, not just an engine: race selection (12 playable races -- Drow, Duergar, Dwarf, Elf, Half-Elf, Gnome, Goblin, Halfling, Human, Lizard-Man, Orc, Half-Orc), a real starting-zone "newbie" world per race, guilds, shops, taverns, and a full wizard toolset.
 
 ## Highlights
 

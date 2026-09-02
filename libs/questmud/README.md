@@ -1,16 +1,6 @@
 # QuestMud (questmud)
 
-**QuestMud** (source: <https://github.com/vlehtola/questmud>) is a real,
-English-language LPMud restored from a 2012 backup of a game whose "golden
-age" ran 1996-2000, per its own upstream README: up to 35 concurrent
-players and over a thousand individual registered accounts at its peak.
-It's a full game mudlib set in "The Isles of Deleria" -- 20 playable
-races (from Human and Dwarf through Golem, Lich, Demon, and Spirit
-rebirth races), 9 base guilds (Fighters, Mages, Clerics, Necromancers,
-Psionicists, Warlocks, Martial Artists, Abjurers, plus a handful of
-multiguild combinations like Paladin and Battlemage), a stronghold/
-housing system, a mail system, and years of individual wizards' own
-personal build areas.
+QuestMud (source: <https://github.com/vlehtola/questmud>) is a real, English-language LPMud restored from a 2012 backup of a game whose "golden age" ran 1996-2000, per its own upstream README: up to 35 concurrent players and over a thousand individual registered accounts at its peak. It's a full game mudlib set in "The Isles of Deleria" -- 20 playable races (from Human and Dwarf through Golem, Lich, Demon, and Spirit rebirth races), 9 base guilds (Fighters, Mages, Clerics, Necromancers, Psionicists, Warlocks, Martial Artists, Abjurers, plus a handful of multiguild combinations like Paladin and Battlemage), a stronghold/ housing system, a mail system, and years of individual wizards' own personal build areas.
 
 ## The port: LDMud, not MudOS
 

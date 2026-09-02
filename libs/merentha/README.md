@@ -1,10 +1,6 @@
 # Merentha (merentha)
 
-**Merentha** is a classic English-language LPMud lib explicitly based on
-the popular **Nightmare 3** lib -- per its own description, aiming for
-"the Nightmare feel and robustness without the complications of verbs
-or weird lfun names." This collection already carries `nightmare3`
-(160) itself, so the two are worth comparing side by side.
+Merentha is a classic English-language LPMud lib explicitly based on the popular Nightmare 3 lib -- per its own description, aiming for "the Nightmare feel and robustness without the complications of verbs or weird lfun names." This collection already carries `nightmare3` (160) itself, so the two are worth comparing side by side.
 
 ## Highlights
 

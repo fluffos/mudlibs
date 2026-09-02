@@ -1,18 +1,6 @@
 # Dead Souls 3.0 (dsIII)
 
-The real, self-identified "Dead Souls" object library at its 3.0 point
-release -- released 2009-12-30, signed Cratylus @ Dead Souls (see
-`doc/RELEASE_NOTES`). A genuinely distinct release from the other four
-Dead Souls entries already in this collection (`dsI`, 1996-98
-Nightmare-IV-era; `dsII`, 2006's "Dead Souls II"; `ds386`/
-`deadsouls_fluffos`, the 2014-era 3.8.6 generation) -- but the CLOSEST
-of the four to `ds386`/`deadsouls_fluffos` by a wide margin: 90.8% of
-shared files are byte-identical, and `secure/daemon/master.lpc` differs
-from `ds386`'s by only 8 trivial lines. Best understood as an early
-snapshot of the exact same "3.x" codebase branch that later became
-3.8.6, captured a few point releases and several years earlier -- see
-`NOTES.md` \S1 for the full byte-level comparison against all four
-siblings.
+The real, self-identified "Dead Souls" object library at its 3.0 point release -- released 2009-12-30, signed Cratylus @ Dead Souls (see `doc/RELEASE_NOTES`). A genuinely distinct release from the other four Dead Souls entries already in this collection (`dsI`, 1996-98 Nightmare-IV-era; `dsII`, 2006's "Dead Souls II"; `ds386`/ `deadsouls_fluffos`, the 2014-era 3.8.6 generation) -- but the CLOSEST of the four to `ds386`/`deadsouls_fluffos` by a wide margin: 90.8% of shared files are byte-identical, and `secure/daemon/master.lpc` differs from `ds386`'s by only 8 trivial lines. Best understood as an early snapshot of the exact same "3.x" codebase branch that later became 3.8.6, captured a few point releases and several years earlier -- see `NOTES.md` \S1 for the full byte-level comparison against all four siblings.
 
 Source: a ZIP archive from mudbytes.net, a now-dead site. Recovered via
 the Wayback Machine

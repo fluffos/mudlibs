@@ -1,14 +1,6 @@
 # RealmsMUD core-lib (realms)
 
-The official mudlib of RealmsMUD (source:
-<https://github.com/realms-mud/core-lib>). Unlike some engine-only ports in
-this collection, this is not a bare engine -- it ships a real,
-substantial game world alongside the framework: 9,994 files under `guilds/`
-(class/profession systems), 2,577 files under `areas/` (rooms, NPCs, items),
-plus full quest, research, crafting, and trading systems. A fresh character
-can register, create a character through an 11-step creation wizard
-(color/charset/minimap/gender/race/subrace/hair/eye/attribute/skills/trait
-selectors), and land in the actual game world.
+The official mudlib of RealmsMUD (source: <https://github.com/realms-mud/core-lib>). Unlike some engine-only ports in this collection, this is not a bare engine -- it ships a real, substantial game world alongside the framework: 9,994 files under `guilds/` (class/profession systems), 2,577 files under `areas/` (rooms, NPCs, items), plus full quest, research, crafting, and trading systems. A fresh character can register, create a character through an 11-step creation wizard (color/charset/minimap/gender/race/subrace/hair/eye/attribute/skills/trait selectors), and land in the actual game world.
 
 RealmsMUD is built for a mixed LDMud/FluffOS dialect with a MySQL-backed
 persistence layer for login credentials and player-character records (via

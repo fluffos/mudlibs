@@ -1,10 +1,6 @@
 # Haven (havenmud)
 
-A long-running Dead Souls-based game called **Haven**, set in the world
-of **Kailie**. New characters begin in "the skies above Kailie" -- a
-staging area where you read the newbie book (Type `read book`, then
-`go down`) before descending into the real world through your chosen
-hometown.
+A long-running Dead Souls-based game called Haven, set in the world of Kailie. New characters begin in "the skies above Kailie" -- a staging area where you read the newbie book (Type `read book`, then `go down`) before descending into the real world through your chosen hometown.
 
 Source: `git clone https://github.com/brainface/havenmud`. Slug
 `havenmud`, number 947, port 40249.

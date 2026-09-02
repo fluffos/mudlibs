@@ -1,11 +1,6 @@
 # Spacemud
 
-A **space-themed** mudlib built on the [LIMA Mudlib](https://limalib.dev)
-codebase (the same FluffOS reference framework already onboarded
-standalone as `libs/lima`), with as few changes to Lima itself as
-possible. Where Lima's own demo world is a fantasy wizard's guildhall,
-Spacemud drops you into a decaying space station and layers a real
-spaceship/exploration game on top:
+A space-themed mudlib built on the [LIMA Mudlib](https://limalib.dev) codebase (the same FluffOS reference framework already onboarded standalone as `libs/lima`), with as few changes to Lima itself as possible. Where Lima's own demo world is a fantasy wizard's guildhall, Spacemud drops you into a decaying space station and layers a real spaceship/exploration game on top:
 
 > Person (classic MUD) - you walk around, pick up things, upgrade and
 > explore. Buy spacecrafts! Spacecraft - you fly ships, pick up goods,

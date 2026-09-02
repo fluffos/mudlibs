@@ -1,12 +1,6 @@
 # Dead Souls II (dsII)
 
-The real, self-identified "Dead Souls Mud Library II" -- public domain,
-released November 2006 by Cratylus. A genuinely distinct middle
-generation of the Dead Souls object library, sitting between the
-Nightmare-IV-era snapshot this collection already hosts as `dsI`
-(1996-98, 2 domains) and the later 3.8.6-era copies `ds386`/
-`deadsouls_fluffos` (8 domains, much larger feature set). Confirmed
-distinct by a structural and byte-level diff -- see `NOTES.md` \S1.
+The real, self-identified "Dead Souls Mud Library II" -- public domain, released November 2006 by Cratylus. A genuinely distinct middle generation of the Dead Souls object library, sitting between the Nightmare-IV-era snapshot this collection already hosts as `dsI` (1996-98, 2 domains) and the later 3.8.6-era copies `ds386`/ `deadsouls_fluffos` (8 domains, much larger feature set). Confirmed distinct by a structural and byte-level diff -- see `NOTES.md` \S1.
 
 Source: a ZIP archive from mudbytes.net, a now-dead site. Recovered via
 the Wayback Machine

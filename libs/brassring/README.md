@@ -1,13 +1,6 @@
 # The Brass Ring (brassring)
 
-A Dead Souls 3.8.x-based game-in-development. The village of
-**Saquivor** is the starting town; from there, roads lead west past the
-old church, across a humpbacked bridge, and into a dark forest. Bundled
-alongside the game's own custom content is a full port of the classic
-**DikuMud Alfa** world (the city of Midgaard and its surrounding zones)
-and the beginnings of a bespoke fantasy continent called **Etnar** --
-the village of **Wyr**, with the Bramblewood and Vexwood forests and
-the town of Orgon planned around it.
+A Dead Souls 3.8.x-based game-in-development. The village of Saquivor is the starting town; from there, roads lead west past the old church, across a humpbacked bridge, and into a dark forest. Bundled alongside the game's own custom content is a full port of the classic DikuMud Alfa world (the city of Midgaard and its surrounding zones) and the beginnings of a bespoke fantasy continent called Etnar -- the village of Wyr, with the Bramblewood and Vexwood forests and the town of Orgon planned around it.
 
 Source: `gh repo clone LashMUD/TheBrassRing`. Slug `brassring`, number
 963, port 40265.

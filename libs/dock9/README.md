@@ -1,10 +1,6 @@
 # Dock 9 (dock9)
 
-A small English-language LPC mudlib built on the same LPUniversity/
-Sapidlib teaching-engine base as this project's `lpuni` -- a complete
-login/registration/security/command-dispatch/help/mail/news/channel/
-Intermud-3 engine, plus a small, genuinely original starting area: the
-dock town of **Trepi**.
+A small English-language LPC mudlib built on the same LPUniversity/ Sapidlib teaching-engine base as this project's `lpuni` -- a complete login/registration/security/command-dispatch/help/mail/news/channel/ Intermud-3 engine, plus a small, genuinely original starting area: the dock town of Trepi.
 
 Source: [`dyher/dock9`](https://github.com/dyher/dock9) on GitHub. Slug
 `dock9`, number 964, port 40266.

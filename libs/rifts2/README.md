@@ -1,12 +1,6 @@
 # RiftsMUD2
 
-A real LPC mudlib built on the DarkeLIB lineage (itself descended from
-the classic Nightmare/TMI mudlib family) and reskinned onto Palladium's
-post-apocalyptic *Rifts* tabletop RPG setting -- Mega-Damage/Structural
-Damage Capacity (MDC/SDC), Occupational Character Classes (OCCs), and
-Potential Psychic Energy (PPE) all show up on the real character sheet.
-The repo's own tagline: "Another take by going from DarkeLIB down to
-Rifts."
+A real LPC mudlib built on the DarkeLIB lineage (itself descended from the classic Nightmare/TMI mudlib family) and reskinned onto Palladium's post-apocalyptic Rifts tabletop RPG setting -- Mega-Damage/Structural Damage Capacity (MDC/SDC), Occupational Character Classes (OCCs), and Potential Psychic Energy (PPE) all show up on the real character sheet. The repo's own tagline: "Another take by going from DarkeLIB down to Rifts."
 
 Not a duplicate of `grav1tyzero/rifts-ds` (also in this collection) --
 that lib reskins the same setting onto a completely different engine

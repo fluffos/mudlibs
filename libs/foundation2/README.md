@@ -1,13 +1,6 @@
 # Foundation II (foundation2)
 
-A stripped-down, classic descendant of the Nightmare mudlib lineage,
-originally released by George Reese ("Descartes of Borg") in the mid-
-1990s. Per the mud's own boot banner: "This mud is NOT for newcomers to
-LPC. You must be hardcore." Foundation II ships no combat, limbs, or
-stats system at all -- it's a minimal, complete engine (login/
-registration, security, command dispatch, help, mail, message boards,
-Intermud-3) meant as a clean base for LPC programmers to build their own
-game world on top of, not a playable-out-of-the-box game.
+A stripped-down, classic descendant of the Nightmare mudlib lineage, originally released by George Reese ("Descartes of Borg") in the mid- 1990s. Per the mud's own boot banner: "This mud is NOT for newcomers to LPC. You must be hardcore." Foundation II ships no combat, limbs, or stats system at all -- it's a minimal, complete engine (login/ registration, security, command dispatch, help, mail, message boards, Intermud-3) meant as a clean base for LPC programmers to build their own game world on top of, not a playable-out-of-the-box game.
 
 Source: a maintained, already-FluffOS-adapted archive
 (`foundation2_fluffos_v1.zip`) from lpmuds.net, a now-defunct LPMud

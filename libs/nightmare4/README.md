@@ -1,12 +1,6 @@
 # Nightmare 4
 
-The fourth major generation of the Nightmare Object Library -- one of the
-oldest and most historically influential LPMud mudlib families, an
-ancestor of the TMI-2 lineage that several other libs in this collection
-(including some of the Chinese-MUD codebases) ultimately trace back to.
-Distinct from `nightmare3` elsewhere in this collection: a later
-generation with its own separate example domain, its own socket/net
-object layer, and a class-based Race/Class/Season data-daemon design.
+The fourth major generation of the Nightmare Object Library -- one of the oldest and most historically influential LPMud mudlib families, an ancestor of the TMI-2 lineage that several other libs in this collection (including some of the Chinese-MUD codebases) ultimately trace back to. Distinct from `nightmare3` elsewhere in this collection: a later generation with its own separate example domain, its own socket/net object layer, and a class-based Race/Class/Season data-daemon design.
 
 Source: `MudRen/nightmare4` on GitHub. Unlike the rest of this "Chinese
 MUD Museum" collection, this lib's content is in English -- included

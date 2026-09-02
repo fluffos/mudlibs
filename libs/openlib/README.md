@@ -1,8 +1,6 @@
 # OpenLib
 
-A real [MudOS](https://en.wikipedia.org/wiki/LPMud#Server_software) v22.1a6-era
-mudlib by Tim McIntosh, formerly called "UltraLib". Released as a single
-alpha snapshot (v0.1) in late 1996 before development ceased.
+A real [MudOS](https://en.wikipedia.org/wiki/LPMud#Server_software) v22.1a6-era mudlib by Tim McIntosh, formerly called "UltraLib". Released as a single alpha snapshot (v0.1) in late 1996 before development ceased.
 
 Distinct from the rest of this collection in almost every way: an
 English-language, from-scratch codebase built around a UNIX-flavored

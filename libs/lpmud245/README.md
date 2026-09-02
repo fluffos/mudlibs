@@ -1,14 +1,6 @@
 # LPmud 2.4.5 (lpmud245)
 
-A pristine, pre-LDMud **LPMud 2.4.5** snapshot -- the mudlib distributed
-with Lars Pensjö's own original LPMud driver line, from the era right
-before the LDMud/MudOS fork. Genuinely FluffOS/MudOS-compatible: a full
-`driver_hook`/`H_[A-Z_]+`/`set_driver_hook` grep across the whole
-archive found zero hits (unlike, say, the Docker Hub `ldmuddev/lp245`
-image, which is an LDMud-ported build of the same nominal version).
-`obj/master.lpc`'s own header comment dates it precisely: "This is the
-LPmud master object, used from version 3.0... designed to be used with
-mudlib 2.4.6 or earlier."
+A pristine, pre-LDMud LPMud 2.4.5 snapshot -- the mudlib distributed with Lars Pensjö's own original LPMud driver line, from the era right before the LDMud/MudOS fork. Genuinely FluffOS/MudOS-compatible: a full `driver_hook`/`H_[A-Z_]+`/`set_driver_hook` grep across the whole archive found zero hits (unlike, say, the Docker Hub `ldmuddev/lp245` image, which is an LDMud-ported build of the same nominal version). `obj/master.lpc`'s own header comment dates it precisely: "This is the LPmud master object, used from version 3.0... designed to be used with mudlib 2.4.6 or earlier."
 
 This is a real, playable small world -- 286 files, hundreds of real
 rooms (a village with a church, green, market road, forest, mine,

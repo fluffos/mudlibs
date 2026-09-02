@@ -1,13 +1,6 @@
 # Nightmare 3
 
-One of the oldest and most historically influential LPMud mudlib
-families — an ancestor of the TMI-2 lineage that many later mudlibs
-(including several Chinese-MUD codebases elsewhere in this collection)
-ultimately trace back to. This is the `fluffos/nightmare3` fork,
-already updated for modern FluffOS. Unlike the rest of this "Chinese
-MUD Museum" collection, this lib's content is in English — included
-here deliberately for its historical significance to the wider LPMud
-family tree.
+One of the oldest and most historically influential LPMud mudlib families — an ancestor of the TMI-2 lineage that many later mudlibs (including several Chinese-MUD codebases elsewhere in this collection) ultimately trace back to. This is the `fluffos/nightmare3` fork, already updated for modern FluffOS. Unlike the rest of this "Chinese MUD Museum" collection, this lib's content is in English — included here deliberately for its historical significance to the wider LPMud family tree.
 
 ## Highlights
 

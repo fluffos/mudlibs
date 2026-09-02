@@ -1,15 +1,6 @@
 # Genesis (genesis)
 
-The official mudlib of **Genesis**, one of the oldest and most influential
-LPMuds still running (source: <https://github.com/genesismud/mudlib>). This
-is the CD gamedriver-native mudlib itself, not a snapshot of the live game
-world -- per the repo's own README: "This repo does not contain a standard
-domain which will need to be implemented to use the mud." There is no
-`/d/Genesis` domain here: no rooms, no NPCs, no items, no race std files, no
-wizard guild content. What ships is the *engine*: master object, login/
-character-creation infrastructure, the std/ base classes (living, player,
-room, container, weapon, armour, ...), the command souls, the board/mail/
-bank/donation/report subsystems, and the full wizard toolset.
+The official mudlib of Genesis, one of the oldest and most influential LPMuds still running (source: <https://github.com/genesismud/mudlib>). This is the CD gamedriver-native mudlib itself, not a snapshot of the live game world -- per the repo's own README: "This repo does not contain a standard domain which will need to be implemented to use the mud." There is no `/d/Genesis` domain here: no rooms, no NPCs, no items, no race std files, no wizard guild content. What ships is the engine: master object, login/ character-creation infrastructure, the std/ base classes (living, player, room, container, weapon, armour, ...), the command souls, the board/mail/ bank/donation/report subsystems, and the full wizard toolset.
 
 ## Highlights
 

@@ -1,13 +1,6 @@
 # Rifts DS
 
-A Dead Souls mudlib (the same well-known generic LPC starter codebase
-as `ds386`/`dsI`/`dsII`/`dsIII` elsewhere in this collection, here on
-version 3.9) reskinned onto Palladium's post-apocalyptic *Rifts*
-tabletop RPG setting: characters track a P.P.E. (Potential Psychic
-Energy) resource alongside the usual HP/SP, and the race list includes
-a custom `greathorneddragon` option alongside the stock Dead Souls
-choices (dwarf, elf, human, half-elf, half-orc, halfling, orc,
-poleepkwa).
+A Dead Souls mudlib (the same well-known generic LPC starter codebase as `ds386`/`dsI`/`dsII`/`dsIII` elsewhere in this collection, here on version 3.9) reskinned onto Palladium's post-apocalyptic Rifts tabletop RPG setting: characters track a P.P.E. (Potential Psychic Energy) resource alongside the usual HP/SP, and the race list includes a custom `greathorneddragon` option alongside the stock Dead Souls choices (dwarf, elf, human, half-elf, half-orc, halfling, orc, poleepkwa).
 
 Not to be confused with `rifts2` (`RiftsMUD2`) elsewhere in this
 collection -- that's a completely different, unrelated codebase

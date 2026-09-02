@@ -1,16 +1,6 @@
 # Majik 3
 
-A real [MudOS](https://en.wikipedia.org/wiki/LPMud#Server_software)
-v22.1b22-era mudlib from 1997-1998 -- the third incarnation of hobbyist
-author Tero "namhas" Leino's Majik project, a text-based online RPG. This
-snapshot is taken from a backup made just before a planned conversion to
-a grid-based ("roguelike") engine -- the author's own README calls it
-alpha testing, "not playable at all, except you could grow carrots, make
-money and do some exploring." That candid self-assessment holds up:
-character creation and basic exploring and farming all work, while
-several other areas (monster-stocked rooms, a couple of guild rooms, an
-abandoned early grid-map prototype) rely on game mechanics that were
-still mid-development when this backup was made.
+A real [MudOS](https://en.wikipedia.org/wiki/LPMud#Server_software) v22.1b22-era mudlib from 1997-1998 -- the third incarnation of hobbyist author Tero "namhas" Leino's Majik project, a text-based online RPG. This snapshot is taken from a backup made just before a planned conversion to a grid-based ("roguelike") engine -- the author's own README calls it alpha testing, "not playable at all, except you could grow carrots, make money and do some exploring." That candid self-assessment holds up: character creation and basic exploring and farming all work, while several other areas (monster-stocked rooms, a couple of guild rooms, an abandoned early grid-map prototype) rely on game mechanics that were still mid-development when this backup was made.
 
 Distinct from the rest of this collection in the same way `openlib` is:
 an English-language, from-scratch codebase, not a Chinese-wuxia

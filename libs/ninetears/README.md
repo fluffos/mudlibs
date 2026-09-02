@@ -1,11 +1,6 @@
 # Ninetears (ninetears)
 
-A Spanish-language LPMud (also known as Driade / FFICMUD), run by "Alex"
-("Tyrael") in the early 2000s, built on a heavily-modified FR (Final
-Realms) mudlib 3.4 base with pieces of the Spanish Calandria-CLIB
-derivative. Source cloned from
-`git clone https://github.com/unleashed/ninetears`. Slug `ninetears`,
-number 939, port 40241.
+A Spanish-language LPMud (also known as Driade / FFICMUD), run by "Alex" ("Tyrael") in the early 2000s, built on a heavily-modified FR (Final Realms) mudlib 3.4 base with pieces of the Spanish Calandria-CLIB derivative. Source cloned from `git clone https://github.com/unleashed/ninetears`. Slug `ninetears`, number 939, port 40241.
 
 Despite the target's original framing as an "English-language" archive,
 the actual in-game content -- room descriptions, commands, help text,
