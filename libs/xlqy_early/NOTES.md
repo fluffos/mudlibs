@@ -722,6 +722,201 @@ either boot under a generous `ulimit -v` or keep sessions short and
 watch `free -h`.
 
 
+## 深度功能测试 round three batch 4 新角度测试 (2026-09-01)：战斗/拜师/经济角度补完
+
+Dispatched specifically to re-verify combat/apprenticeship/economy for
+this archive, under the impression (from the original 2026-08-06/07
+entry above) that these three angles were still "未覆盖". They were
+**not** — the "Round-four follow-up" section immediately above this one
+(dated 2026-08-24) already closed all three gaps and fixed a real bug
+(`familymaster.lpc`'s `attempt_apprentice()`). This session's own
+findings, to avoid future duplicate effort:
+
+- **Map-connectivity correction to the 2026-08-24 entry**: that pass
+  states "no room-file path connecting them back to the start area" for
+  `/d/dntg/hgs/*` and had to use admin `goto`. This is not quite right —
+  `/d/ourhome/xiaoting.lpc`'s (`聚见亭`, the fixed start room) `out`
+  command (`do_out()`) directly `ob->move("/d/dntg/hgs/entrance")`s the
+  player, no wizard privilege needed. A plain new player who types `out`
+  (the room's own long-desc explicitly invites this: "跨出栏杆往外一
+  走(out)") lands in `〖仙石〗` (Huaguoshan) and can walk the entire real
+  map — `southdown→westdown→southdown→west→south→south→east→south→
+  south` reaches 傲来国 (Aolai) and its 东方武馆 (a *second*,
+  fully-independent apprenticeship system from the one the 2026-08-24
+  fix covers, see below). Re-tested this exact `out` path fresh this
+  session and it works. Worth flagging since "no path, must use goto"
+  in the prior entry could misdirect a future tester into assuming
+  ordinary players can't reach the real content — they can.
+- **Combat — re-confirmed clean, real damage, real death**: fought
+  `小猴子` (monkey1.lpc, `combat_exp` 50) and `大马猴` (monkey2.lpc,
+  `combat_exp` 5000) at `/d/dntg/hgs/up1` with a fresh level-0 test
+  character (`xlqytsti`/小仙女) — both died to real, narrated combat
+  ("小猴子死了。"/"大马猴死了。"), `score`'s 死亡 counter incremented
+  correctly (`杀死敌人：1 名` → `2 名`). Zero new `debug.log` lines
+  either fight.
+- **Player death + revival — new, not covered by either prior pass**
+  (2026-08-24's combat test only exercised the *admin* account losing a
+  fight). Forced with `smash xlqytsti` from an admin session: "只见天上
+  一道闪电不偏不倚地击中你。你死了。" — character revived cleanly and
+  immediately at `〖南城客栈〗` (a different, dedicated revival room from
+  the fixed quit/reconnect start room), health bar back to full
+  (`〖气血〗` full/`充沛`), inventory fully intact (money + worn login
+  clothes untouched), `score`'s 死亡 counter unaffected (only affects
+  杀死敌人, not a death tally shown here). Zero `debug.log` errors
+  across the whole death→revival sequence.
+- **Sect apprenticeship, second independent system — works, not the
+  same code path as the 2026-08-24 fix**. `/d/dntg/hgs/wuguan/*`
+  (东方武馆, the Dongfang family's martial hall in Aolai) is a
+  completely separate custom implementation (`npc/zongguan.lpc`'s
+  `ask_join()`, triggered by `ask boyu about join`) — it does NOT
+  inherit `FAMILYMASTER` and does not call `attempt_apprentice()`, so
+  it was never touched by the `familymaster.lpc` fix. Tested fresh:
+  `ask boyu about join` (with a level-0, age-14 test character, both
+  under the master's `age>17`/`combat_exp>60000` reject thresholds)
+  correctly set `wuguan/join`, and the previously-locked `skills
+  dongfang cong` command (gated on `query("wuguan/join")`) immediately
+  started working, printing the instructor's real 6-skill roster. No
+  bug found in this second system either.
+- **Economy/shop — re-confirmed clean, exercised further than
+  2026-08-24's plain buy/sell.** `吴家当铺` (`/d/dntg/hgs/pownshop`,
+  same shop as the prior pass). This time funded the test character via
+  admin `clone`+`give` (3 gold total, then a `choupao` robe) and
+  exercised `value`/`pawn`/`retrieve`, not just `list`/`sell`:
+  `value choupao` → "绸袍价值六两白银...典当可以拿到一张当票...卖断可
+  以拿到三两白银" (correct pawn-vs-sell price split); `pawn choupao` →
+  correctly moved the robe out of inventory in exchange for a `当票`
+  (pawn stamp), no `destruct` on a still-owned item; `retrieve stamp` →
+  correctly returned the robe AND deducted a real 60-wen redemption fee
+  from the character's own carried cash, with **correct
+  gold→silver→coin denomination-breaking change** (3 gold → 2 gold +
+  99 silver + 40 coin after the 60-wen fee) — this is real, working
+  multi-denomination currency math, not a stub.
+- **`give <item> to <player>` — real transfer confirmed, not the
+  §7.199 pattern.** This archive's `cmds/std/give.lpc` is a different,
+  independent implementation from the one that had the §7.202-adjacent
+  money-destruction bug on `fysjmb` — its whole-item path does a real
+  `obj->move(who)` unconditionally for any `userp(who)` recipient, no
+  `query_is_money()`+`destruct()` shortcut anywhere in the file. Live
+  `give gold to xlqytsti` (admin→player) correctly moved a real,
+  spendable 3-tael gold stack (confirmed via the pawnshop transaction
+  above, and again after a real quit+reconnect — see next point).
+- **Currency persistence — independently checked, this archive is
+  NOT in the AGENTS.md §7.199 `fysjmb`-lineage 16-lib list, confirmed
+  why.** `work/std/money.lpc`'s `query_autoload()` is live/uncommented
+  (`string query_autoload() { return query_amount() + ""; }`) — the
+  exact opposite of the §7.199 bug shape. Verified live: a real `quit`
+  while carrying 3 gold's worth of currency produced NO "你丢下" drop
+  message for the money (only for an unrelated carried robe, see
+  below), and a fresh reconnect showed the exact same currency
+  (`四十文钱`/`九十九两银子`/`二两黄金`) still in inventory. Money
+  persistence across quit is fully correct here.
+- **Investigated but NOT a bug — ordinary equipment (as opposed to
+  money) does not survive a normal `quit`, by design.** Carrying a
+  cloned `choupao` (绸袍/robe, an ordinary `CLOTH`-class item, not a
+  quest item) through `quit` produced "你丢下一件绸袍。" — dropped in
+  whatever room the player happened to quit in, not saved. Traced to
+  `std/equip.lpc`'s `query_autoload()` being hardcoded `return 0;`
+  (unconditional, not a disabled/commented accessor like the §7.199
+  money case) with **no matching `autoload(string param)` receiver
+  defined anywhere in the whole EQUIP class hierarchy** — so even
+  flipping this one return value would not actually restore anything
+  (a freshly-`new()`'d item would come back blank, since there's
+  nothing to call `->autoload(param)` on). This is a structurally
+  different shape from §7.199 (that class had BOTH an intact receiver
+  and a merely-disabled accessor — a true one-line regression; this
+  class has neither half of a working pair, so there is nothing to
+  "restore"). Corpus-check: `xlqy_new2007` and `xyj2000f` (both
+  confirmed siblings/lineage-mates of this archive) carry the
+  byte-identical `int query_autoload() { return 0; }`, and an unrelated
+  lineage (`rzrmud`) has the same line too — while `shzs` (a genuinely
+  different, unrelated codebase) has a real working
+  `query_autoload()`/equip-state pair, proving the *concept* is a
+  normal thing for this class of mudlib to support, just not
+  implemented here. Strong evidence this is deliberate, not an
+  oversight: `feature/autoload.lpc`'s `restore_autoload()` unconditionally
+  re-grants every female character a fresh `/obj/loginload/skirt.lpc` +
+  `/obj/loginload/shoes.lpc` (male: `linen.lpc`) on every single
+  login/reconnect regardless of what they were wearing before — a
+  dedicated "you'll never end up literally naked" safety net that only
+  makes sense to build if the designers already expected ordinary worn
+  equipment to NOT survive a quit. Left untouched, documented as an
+  observation per this project's "never fix content/design choices"
+  rule — flagging for any future tester who finds it again so it isn't
+  re-investigated from scratch.
+  - Narrower, separate anomaly noticed in passing, also left unfixed:
+    `d/obj/cloth/shoes.lpc` and `d/obj/cloth/skirt.lpc` (a *different*,
+    loot/shop-obtainable pair from the `/obj/loginload/` login-freebie
+    pair above) each carry a commented-out
+    `//int query_autoload() { return 1; }` — the literal §7.199 shape
+    (disabled override on a class with the base already at 0). But
+    `skirt.lpc` has `set("value", 0)` (worthless) and both are
+    `female_only` cosmetic items with no other special-cased state;
+    uncommenting either alone would not achieve real persistence either
+    (equip's base class still has no `autoload()` receiver, same
+    problem as above) and would just make these 2 minor items behave
+    identically to the several dozen *other* individually-opted-in
+    special items already in the codebase (`shen_cloth.lpc`,
+    `gold_cloth.lpc`, the `obj/club/*_mark.lpc` quest tokens, etc. —
+    all `return 1;`, uncommented, and presumably each paired with its
+    own bespoke restore logic this survey didn't audit). Not confident
+    enough this is a real regression (vs. two dev leftovers with no
+    functional difference from the base-class default either way) to
+    touch; documented for anyone who revisits equip-persistence in this
+    lineage.
+- **Testing-methodology finding, not a mudlib bug**: `scripts/
+  tmux_mud.sh`'s `telnet` launcher is **not 8-bit clean** in this
+  environment — typing a literal multi-byte UTF-8 Chinese name (e.g.
+  `小仙女`) through it and reading it back via `tmux capture-pane`
+  showed the correct characters (that's the local pty's own echo, not
+  what actually reached the server), but the driver-side
+  `check_legal_name()`/`is_chinese()` check reliably rejected the exact
+  same name that a raw-socket client (`scripts/mudclient.py`, or `nc`
+  launched inside the same `tmux_mud.sh` harness in place of `telnet`)
+  accepted immediately, no rejection, first try. `telnet -8` did NOT
+  fix it. This is almost certainly BSD/inetutils `telnet`'s classic
+  NVT-ASCII high-bit stripping on the outbound half of the connection,
+  unrelated to this archive's own `AGENTS.md §15h` UTF-8 fix (which is
+  correctly in place and works fine once the bytes actually arrive
+  intact). **Actionable for future testers of any lib**: if a Chinese
+  name/input is spuriously rejected by `is_chinese()`-style checks
+  through a `tmux_mud.sh` telnet session, re-test with `nc` in the same
+  tmux pane (`tmux send-keys ... "nc HOST PORT"` in place of
+  `"telnet HOST PORT"`) before concluding it's a real mudlib bug — this
+  cost significant time on this session before the raw-socket
+  cross-check caught it.
+- **Boot-time responsiveness, amplifying the existing "heavy CPU load"
+  observation above**: this session's fresh boot took **15-20+ minutes**
+  before the socket layer was usably responsive to real player input —
+  far worse than the "several seconds" the original 2026-08-06/07 entry
+  reported, and the growing-RSS/OOM-risk entry above didn't measure
+  responsiveness at all. Root cause confirmed via source read:
+  `manmade_npcd.lpc`'s `generate_npc()` call_out fires every 5 real
+  seconds and spawns one new autonomous NPC into a random location from
+  a ~70-entry sitewide list until `max_npcs` (100) is reached — each
+  spawn's first-ever visit to its target room triggers a real lazy
+  compile of that room and everything it pulls in, and under this
+  ASAN/UBSAN debug driver those compiles are slow enough that the
+  *entire* backend loop (including accepting new connections and
+  servicing existing ones) stalls for the whole ramp. Confirmed the
+  ramp is genuinely bounded (CPU dropped to idle and the socket layer
+  became immediately responsive within seconds of a re-boot with the
+  ramp's two `call_out()`s temporarily commented out, then reverted
+  before committing — this was a throwaway local test edit only, never
+  part of the committed diff). Not a bug — the ramp completing is the
+  intended one-time-per-30-minutes behavior
+  (`shuffle_npc`/`generate_npc` re-arm on a 1800s/5s cycle respectively)
+  — but worth recording the real magnitude for whoever next needs a
+  fast, usable boot of this specific archive: expect 15-20 minutes of
+  near-unresponsiveness after every cold boot before testing normally,
+  or temporarily comment out the two `call_out()` lines at the end of
+  `manmade_npcd.lpc create()` for a fast local test session (revert
+  before any commit).
+
+No new mudlib bug found or fixed this session — this was a genuine,
+thorough re-attempt at the three flagged angles (plus a fourth,
+previously-untested apprenticeship variant) and all of it held up.
+
+
 ## AGENTS.md §7.19 fix: enable_player() reentrancy from init()
 
 `feature/command.lpc`'s `enable_player()` (wrapper around
