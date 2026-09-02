@@ -375,6 +375,141 @@ FOOTER = {
     ),
 }
 
+# Light-mode values for the same variable set both templates' dark
+# :root block defines -- kept as one shared Python constant so light
+# mode is only ever specified once even though it's needed in TWO CSS
+# selectors per page (see THEME_STYLE_BLOCK): an explicit
+# :root[data-theme="light"] override (the visitor clicked the toggle)
+# and an @media(prefers-color-scheme:light) block gated on
+# :not([data-theme="dark"]) (the visitor's OS prefers light and they
+# haven't overridden it). Dark stays the default/fallback either way,
+# matching this site's established identity when neither condition
+# applies. Colors were chosen to keep the same primary-blue hue and
+# the same ok/warn/bad semantics as the dark palette, re-tuned for
+# AA contrast against a white background rather than a literal
+# invert.
+LIGHT_VARS = """
+    --pico-background-color: #fff;
+    --pico-color: #1f2430;
+    --pico-h1-color: #1f2430;
+    --pico-h2-color: #1f2430;
+    --pico-muted-color: #5b6472;
+    --pico-muted-border-color: #e2e5ec;
+    --pico-primary: #3b5bc9;
+    --pico-primary-background: #3b5bc9;
+    --pico-primary-hover: #2f49a3;
+    --pico-primary-hover-background: #2f49a3;
+    --pico-primary-underline: rgba(59, 91, 201, .5);
+    --pico-primary-inverse: #fff;
+    --pico-card-background-color: #f5f6fa;
+    --pico-card-border-color: #e2e5ec;
+    --pico-code-background-color: #f5f6fa;
+    --pico-code-color: #1f2430;
+    --pico-blockquote-border-color: #e2e5ec;
+    --ok: #2f7d32; --warn: #a15c00; --bad: #b3273f;
+"""
+
+# Shared CSS emitted verbatim into both templates' <style> blocks --
+# the toggle button + badge-link chip styling, plus the light-mode
+# selector pair described above. Kept as one constant so the two
+# templates can't drift out of sync on this shared chrome.
+THEME_STYLE_BLOCK = f"""
+  :root[data-theme="light"] {{{LIGHT_VARS}}}
+  @media (prefers-color-scheme: light) {{
+    :root:not([data-theme="dark"]) {{{LIGHT_VARS}}}
+  }}
+  .topbar {{ display: flex; align-items: center; justify-content: space-between;
+            gap: 10px; flex-wrap: wrap; }}
+  .topbar p {{ margin: 0; font-size: 13px; }}
+  .engage {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }}
+  .badge-link {{
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 12.5px; font-weight: 600; text-decoration: none;
+    color: var(--pico-color); background: var(--pico-card-background-color);
+    border: 1px solid var(--pico-card-border-color); border-radius: 999px;
+    padding: 5px 12px; transition: border-color .12s, color .12s;
+  }}
+  .badge-link:hover {{ border-color: var(--pico-primary); color: var(--pico-primary); }}
+  .theme-toggle {{
+    font-size: 15px; line-height: 1; cursor: pointer; padding: 6px 9px;
+    background: var(--pico-card-background-color);
+    border: 1px solid var(--pico-card-border-color); border-radius: 999px;
+    color: var(--pico-color);
+  }}
+  .theme-toggle:hover {{ border-color: var(--pico-primary); }}
+"""
+
+# Sets data-theme from a saved visitor choice as early as possible (a
+# synchronous <head> script, before first paint) so returning visitors
+# never see a flash of the wrong theme. The toggle button's onclick
+# calls window.__toggleTheme directly -- no click-handler wiring/build
+# step needed for a plain multi-page static site like this one.
+THEME_SCRIPT = """<script>
+(function(){
+  var KEY = 'mudlibs-theme';
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) document.documentElement.setAttribute('data-theme', saved);
+  } catch (e) {}
+  window.__toggleTheme = function () {
+    var root = document.documentElement;
+    var cur = root.getAttribute('data-theme');
+    if (!cur) {
+      cur = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
+          ? 'light' : 'dark';
+    }
+    var next = cur === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem(KEY, next); } catch (e) {}
+  };
+})();
+</script>"""
+
+
+def get_github_stars():
+    """Best-effort GitHub star count for the engagement badge, fetched
+    once at build time (not client-side -- no runtime API dependency,
+    works the same whether or not a visitor's browser can reach the
+    GitHub API). Returns None on any failure (rate limit, no `gh` auth
+    in this environment, network hiccup) so callers can render the
+    badge without a number rather than fail the whole build over a
+    cosmetic stat."""
+    try:
+        result = subprocess.run(
+            ["gh", "api", "repos/fluffos/mudlibs", "--jq", ".stargazers_count"],
+            capture_output=True, text=True, timeout=15)
+        if result.returncode == 0 and result.stdout.strip().isdigit():
+            return int(result.stdout.strip())
+    except Exception:
+        pass
+    return None
+
+
+def render_engage_badges(lang, stars):
+    """GitHub + Open Collective sponsor badges, shown on every page for
+    discoverability. Plain self-styled links, not shields.io/Open
+    Collective's own hosted badge images -- this project already
+    chose to vendor its CSS framework locally rather than load it from
+    a CDN specifically because this site's largely mainland-Chinese
+    audience can find CDN hosts slow or blocked (see the Pico CSS
+    vendoring comment in main()); an actual badge IMAGE from a
+    different external host would reintroduce exactly that risk for a
+    purely decorative element. The star count itself is still real,
+    just fetched at build time (get_github_stars) instead of rendered
+    client-side."""
+    star_label = f"⭐ {stars}" if stars is not None else "⭐ GitHub"
+    sponsor_label = "💚 赞助 · Sponsor" if lang == "zh" else "💚 Sponsor"
+    toggle_label = "🌓" if lang == "zh" else "🌓"
+    toggle_title = "切换深色/浅色主题" if lang == "zh" else "Toggle dark/light theme"
+    return (
+        '<div class="engage">'
+        f'<a class="badge-link" href="{REPO_URL}" title="GitHub">{star_label}</a>'
+        f'<a class="badge-link" href="https://opencollective.com/fluffos-579">{sponsor_label}</a>'
+        f'<button type="button" class="theme-toggle" onclick="__toggleTheme()" '
+        f'title="{toggle_title}" aria-label="{toggle_title}">{toggle_label}</button>'
+        '</div>'
+    )
+
 
 def build_jsonld(status, lang, ui, numbers, canonical_url=None):
     """schema.org structured data: a WebSite wrapping an ItemList of
@@ -573,7 +708,7 @@ def build_meta_bits(slug, info, ui, commits, linked):
     return meta_bits, admin_id
 
 
-def render_lib_page(slug, info, commits):
+def render_lib_page(slug, info, commits, stars=None):
     """Full, server-side-rendered, crawlable landing page for one lib,
     served at /{slug}/ (see build_site.sh's assembly step). This is what
     fixes the site's core SEO problem: /{slug}/ used to serve straight
@@ -700,7 +835,7 @@ def render_lib_page(slug, info, commits):
 
     site_name = html.escape(ui_zh["site_name"])
     return f"""<!doctype html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -717,6 +852,7 @@ def render_lib_page(slug, info, commits):
 <meta name="twitter:title" content="{title_bits}">
 <meta name="twitter:description" content="{meta_desc_attr}">
 <script type="application/ld+json">{jsonld}</script>
+{THEME_SCRIPT}
 <link rel="stylesheet" href="/assets/pico.min.css">
 <style>
   /* Remap this site's own long-standing dark palette onto Pico's
@@ -803,11 +939,15 @@ def render_lib_page(slug, info, commits):
   details.notes summary:hover h2, details.notes summary:hover::after {{ color: var(--pico-primary); }}
   details.notes > *:not(summary) {{ margin-top: 4px; }}
   body > footer {{ margin-top: 44px; font-size: 12px; color: var(--pico-muted-color); }}
+{THEME_STYLE_BLOCK}
 </style>
 </head>
 <body>
 <header>
-  <p class="back"><a href="/">← {site_name} / LPC MUD Museum</a></p>
+  <div class="topbar">
+    <p class="back"><a href="/">← {site_name} / LPC MUD Museum</a></p>
+    {render_engage_badges("zh", stars)}
+  </div>
   <div class="head">
     <h1>{title_bits}</h1>
     <span class="badge {st}">{icon} {html.escape(label)}</span>
@@ -828,7 +968,7 @@ def render_lib_page(slug, info, commits):
 """
 
 
-def render_index(status, commits, lang="zh", canonical_url=None):
+def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
     ui = UI[lang]
     libs = status["libs"]
     counts = status["counts"]
@@ -936,7 +1076,7 @@ def render_index(status, commits, lang="zh", canonical_url=None):
     jsonld = build_jsonld(status, lang, ui, numbers, canonical_url=canonical_url)
 
     return f"""<!doctype html>
-<html lang="{ui['html_lang']}" data-theme="dark">
+<html lang="{ui['html_lang']}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -959,6 +1099,7 @@ def render_index(status, commits, lang="zh", canonical_url=None):
 <meta name="twitter:title" content="{html.escape(page_title)}">
 <meta name="twitter:description" content="{meta_desc_attr}">
 <script type="application/ld+json">{jsonld}</script>
+{THEME_SCRIPT}
 <link rel="stylesheet" href="/assets/pico.min.css">
 <style>
   /* Same palette remap as the per-lib landing page (render_lib_page) --
@@ -983,7 +1124,7 @@ def render_index(status, commits, lang="zh", canonical_url=None):
     --ok: #9ece6a; --warn: #e0af68; --bad: #f7768e;
   }}
   body > header, body > main, body > footer {{ max-width: 1100px; }}
-  body > header {{ position: relative; padding-bottom: 0; }}
+  body > header {{ padding-bottom: 0; }}
   h1 {{ font-size: 28px; margin: 8px 0 4px; font-weight: 700; letter-spacing: -.01em; }}
   .intro {{ color: var(--pico-muted-color); margin: 0 0 6px; }}
   .stats {{ color: var(--pico-muted-color); font-size: 13px; margin-bottom: 8px; }}
@@ -1050,12 +1191,15 @@ def render_index(status, commits, lang="zh", canonical_url=None):
   /* meta links must stay clickable above the stretched .play overlay */
   .meta a {{ position: relative; z-index: 1; }}
   body > footer {{ margin-top: 36px; color: var(--pico-muted-color); font-size: 12px; }}
-  .lang-switch {{ position: absolute; top: 0; right: 0; font-size: 13px; }}
+{THEME_STYLE_BLOCK}
 </style>
 </head>
 <body>
 <header>
-  <p class="lang-switch"><a href="{ui['lang_switch_href']}">{html.escape(ui['lang_switch_label'])}</a></p>
+  <div class="topbar">
+    <p class="lang-switch"><a href="{ui['lang_switch_href']}">{html.escape(ui['lang_switch_label'])}</a></p>
+    {render_engage_badges(lang, stars)}
+  </div>
   <h1>{html.escape(ui['h1'])}</h1>
   <p class="intro">
 {INTRO[lang].format(n_total=n_total)}
@@ -1303,12 +1447,17 @@ def main():
     pico_src = REPO / "scripts" / "vendor" / "pico.classless.min.css"
     (assets_dir / "pico.min.css").write_bytes(pico_src.read_bytes())
 
-    (out_dir / "index.html").write_text(render_index(status, commits, lang="zh"),
-                                        encoding="utf-8")
+    # GitHub star count for the engagement badge, fetched once here
+    # rather than per-page -- see get_github_stars()/render_engage_badges().
+    stars = get_github_stars()
+    print(f"GitHub star count: {stars if stars is not None else '(unavailable, badge omits the number)'}")
+
+    (out_dir / "index.html").write_text(
+        render_index(status, commits, lang="zh", stars=stars), encoding="utf-8")
     en_dir = out_dir / "en"
     en_dir.mkdir(parents=True, exist_ok=True)
-    (en_dir / "index.html").write_text(render_index(status, commits, lang="en"),
-                                        encoding="utf-8")
+    (en_dir / "index.html").write_text(
+        render_index(status, commits, lang="en", stars=stars), encoding="utf-8")
     # /cn/ mirrors / (an explicit Chinese-language path, requested
     # alongside /en/) -- same content, but its canonical/og:url/JSON-LD
     # point back at the real / so search engines consolidate ranking
@@ -1317,7 +1466,7 @@ def main():
     cn_dir.mkdir(parents=True, exist_ok=True)
     (cn_dir / "index.html").write_text(
         render_index(status, commits, lang="zh",
-                     canonical_url=f"{SITE_URL}/"),
+                     canonical_url=f"{SITE_URL}/", stars=stars),
         encoding="utf-8")
     # Per-lib landing pages (see render_lib_page docstring) -- one per
     # non-noboot lib, at <out>/<slug>/index.html. build_site.sh's
@@ -1332,7 +1481,7 @@ def main():
         lib_dir = out_dir / slug
         lib_dir.mkdir(parents=True, exist_ok=True)
         (lib_dir / "index.html").write_text(
-            render_lib_page(slug, info, commits), encoding="utf-8")
+            render_lib_page(slug, info, commits, stars=stars), encoding="utf-8")
         n_landing += 1
     print(f"per-lib landing pages: {n_landing} written under {out_dir}/<slug>/index.html")
 
