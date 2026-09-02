@@ -862,3 +862,45 @@ not a testing gap, a genuine, already-well-documented content gap (no
 `kungfu/skill/` tree, no sect NPCs, no shops, no city domains at all
 survive in this "engine only" release). This was verified directly
 this session rather than assumed from the onboarding notes.
+
+## wasm_status 审计（2026-09-01）：VERSION_D 登入闸门缺 find_object() 守卫，验证为 playable
+
+`meta.json` 的 `wasm_status` 此前一直留空（此前只做过原生驱动验证，
+`NOTES.md` 已注明 WASM/§10.7 深测"out of scope for this onboarding
+session"）。本次批量审计（见 [[project_wasm_status_audit]]）补上这
+一步。
+
+`scripts/wasm_client.js` 起跑本身没有触发编译期致命错误（这份
+"底层代码"精简发行版没有自己的 simul_efun 级 socket 依赖），但每一
+个新玩家连线都会被 `adm/daemons/logind.lpc` 直接踢掉，提示"现在本站
+正在同步版本中，暂时不能登录，请稍候再尝试。"——这正是 AGENTS.md
+§1.3(c) 目录里"中华英雄/终极地狱血统家族的 VERSION_D->is_version_ok()
+式闸门"那一类（此前在 `zhonghua2`/`zhongjidiyu`/`zjdyzj`/
+`yanhuangwuhun`/`yhyxs` 都出现过）：`adm/daemons/versiond.lpc` 自己
+的 `socket_create()`/`socket_bind()`/`socket_listen()`/`socket_close()`
+调用在 WASM 下编译失败（没有 `sockets` 包），使得 `VERSION_D` 这个
+对象始终"不存在"，`VERSION_D->is_version_ok()` 每次都以运行期错误
+收场、等效于返回 0，而 `logind.lpc` 把"未确认在线"当成"正在同步
+版本"直接拒绝所有非巫师连线。
+
+修复（标准 `find_object()` 守卫，缺席即放行，与 AGENTS.md 现有目录
+写法一致）：`adm/daemons/logind.lpc` 两处新玩家/老玩家登入检查、
+`adm/daemons/questd.lpc` 的任务系统启动检查、`adm/daemons/closed.lpc`
+的 `heart_beat()`（从开机起每 3 秒执行一次，此前每次都要重新尝试
+编译一遍上千行的 `versiond.lpc`，是明显的额外开销）都加上
+`find_object(VERSION_D) &&` 前缀。`cmds/arch/version.lpc`（巫师手动
+`version` 指令）未改，不在登入路径上，属正常的"外围指令编译失败"。
+
+修复后跑通一次完整会话：英文 ID（3-10 个英文字母）→ 中文姓氏（留空）
+→ 中文名字 → 管理密码×2 → 普通密码×2 → 角色资质(3)→ 性别(m) →
+落地"世外桃源"，水笙/狄云 NPC 均在场，水笙主动提示注册 email →
+`look` 正常显示房间描述 → `quit` 干净退出（"欢迎下次再来！"），全程
+无未捕获错误。**踩到一个纯测试脚本层面的坑，记录以免下次误判为
+bug**：这个 lineage 的游戏内提示符自带每秒刷新的实时时钟
+（`19:43:47>` 这种），`wasm_client.js` 的空闲检测是"距离上一次驱动
+输出满 N 秒才发送下一条指令"——只要 `--idle` 设得比 1 秒长，输出
+永远赶在空闲阈值之前刷新一次，后续指令就会一直排队发不出去，直到
+外层 `--timeout` 超时为止（观察到的现象是：注册正常走完、进入
+游戏、然后卡住不再有任何指令生效）。换成 `--idle 0.3`（小于时钟
+刷新间隔）后 `look`/`quit` 才能正常送达并看到回显。`wasm_status`
+设为 `playable`。
