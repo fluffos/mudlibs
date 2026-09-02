@@ -595,14 +595,46 @@ def render_lib_page(slug, info, commits):
     name = html.escape(info["name"])
     name_en = info.get("english_name") or ""
     title_bits = name
-    if name_en and name_en != info["name"]:
+    # README's own "# Name" heading conventionally already embeds the
+    # English name and/or slug parenthetically (see parse_readme's
+    # docstring: "# Haven (havenmud)", "# 大唐双龙传 (Twin Dragons of the
+    # Tang Dynasty)"), so info["name"] already contains it. Appending
+    # english_name again unconditionally produced a triple-repeated
+    # title on nearly every page ("Haven (havenmud) (Haven)") -- only
+    # append when it isn't already present in some form.
+    if name_en and name_en != info["name"] and name_en.lower() not in info["name"].lower():
         title_bits += f" ({html.escape(name_en)})"
 
     desc = info["description"]
     desc_en = info.get("english_description") or ""
-    desc_html = f'<p class="desc">{html.escape(desc)}</p>' if desc else ""
-    if desc_en and desc_en != desc:
-        desc_html += f'<h2>English</h2>\n  <p class="desc">{html.escape(desc_en)}</p>'
+
+    # For a genuinely English-original archive, README's own intro
+    # paragraph (desc) and meta.json's hand-authored english_description
+    # (desc_en) are both already English -- independently worded, but
+    # the same content -- so showing them stacked under an "English"
+    # heading reads as the page repeating itself. Detect "desc is
+    # already English" via common English stopwords (robust enough to
+    # tell it apart from Chinese, and from this collection's one
+    # ASCII-only non-English case, Polish, which has none of these
+    # words): only show both blocks when they're genuinely two
+    # different languages serving two different readers.
+    _en_stopwords = (" the ", " and ", " of ", " is ", " with ",
+                      " to ", " a ", " in ", " this ")
+    desc_already_english = sum(
+        1 for w in _en_stopwords if w in f" {desc.lower()} ") >= 3
+    same_language_dup = bool(desc and desc_en and desc != desc_en
+                              and desc_already_english)
+    if same_language_dup:
+        # Prefer the more thoroughly-researched field (usually
+        # english_description, curated by this project's later
+        # description-quality sweep) as the single description shown.
+        primary_desc = desc_en if len(desc_en) >= len(desc) else desc
+        desc_html = f'<p class="desc">{html.escape(primary_desc)}</p>'
+    else:
+        primary_desc = desc
+        desc_html = f'<p class="desc">{html.escape(desc)}</p>' if desc else ""
+        if desc_en and desc_en != desc:
+            desc_html += f'<h2>English</h2>\n  <p class="desc">{html.escape(desc_en)}</p>'
 
     doc_sections = []
     readme_path = REPO / "libs" / slug / "README.md"
@@ -612,6 +644,18 @@ def render_lib_page(slug, info, commits):
         # own <h1> with the game name, so keeping README's own would
         # just double it.
         text = re.sub(r"^#[^\n]*\n?", "", text, count=1).strip()
+        # Drop the leading paragraph too, if it's the exact text already
+        # shown as the page's own description block above (parse_readme
+        # extracts `desc` from precisely this paragraph, so it usually
+        # is) -- otherwise every page repeats its own opening sentence
+        # a second time the moment a reader scrolls to the README
+        # section.
+        if text and primary_desc:
+            parts = re.split(r"\n\s*\n", text, maxsplit=1)
+            first_para_norm = re.sub(
+                r"\s+", " ", parts[0].replace("\n", "")).strip()
+            if first_para_norm == primary_desc.strip():
+                text = parts[1].strip() if len(parts) > 1 else ""
         if text:
             doc_sections.append(
                 f'<section class="doc"><h2>README</h2>{render_markdown_html(text)}</section>')
@@ -625,14 +669,14 @@ def render_lib_page(slug, info, commits):
     docs_html = "\n".join(doc_sections)
 
     canonical_url = f"{SITE_URL}/{slug}/"
-    meta_desc_attr = html.escape((desc or desc_en or info["name"])[:300])
+    meta_desc_attr = html.escape((primary_desc or desc_en or info["name"])[:300])
 
     jsonld_doc = {
         "@context": "https://schema.org",
         "@type": "VideoGame",
         "name": info.get("english_name") or info["name"],
         "alternateName": info["name"] if info.get("english_name") else None,
-        "description": desc_en or desc,
+        "description": primary_desc or desc_en,
         "url": canonical_url,
         "genre": ["MUD", "Text Adventure", "RPG"],
         "gamePlatform": "Web browser (WebAssembly)",
