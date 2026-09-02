@@ -24,6 +24,23 @@
   是像 `hy3` 那样"误封所有人"——已一并修复。`jyqxc`/`jyqxc2` 两份
   姊妹档案的 `logind.lpc` 都带有和本档案完全相同的这两处未修复代
   码，后续如再碰到可以直接照搬本次修法。
+- §10.7 round three batch 4（2026-09-01）复查：上一条 `KILLRECORD`
+  的修法（就地建出 `/log/nosave/` 目录）虽然消除了崩溃，但对照
+  `raw/jy/` 原始未转档源码后确认这是 AGENTS.md §4.3 记录的
+  `convert_lib.sh` `static`→`nosave` 转档误伤（字符串字面量里的
+  `"static/..."` 路径前缀被连带替换），本档案确实存在真正的
+  `log/static/` 历史种子目录（`CALL_PLAYER` 最老记录可回溯到 2013
+  年，`KILLRECORD` 到 1997 年）而 `log/nosave/` 从未存在过。全档案
+  又挖出另外 16 处同类命中（`securityd.lpc`、`master.lpc` ×2、
+  `call.lpc` ×2、`recover.lpc`、`purge.lpc`、`suicide.lpc`、
+  `kill.lpc`、`bai.lpc`/`apprentice.lpc`），已全部机械改回
+  `static/` 并给共享的 `log_file()` simul_efun 加了 `assure_file()`
+  兜底。这是该 bug 类第三次在互不相关血统独立确认（`jyqxc`→本档案→
+  `hxxtjqb`），详见 NOTES.md。同一轮顺手在 `d/mingjiao/npc/
+  mingjiao.h`（及其字节相同拷贝 `kungfu/class/mingjiao/mingjiao.h`，
+  共 19 个明教 NPC 共享）里发现并修复一处未判空的
+  `ob->query("party")["party_name"]` 索引崩溃——任何未加入门派的玩
+  家（含所有新角色）路过这些 NPC 都会触发。
 
 ## 注册流程
 

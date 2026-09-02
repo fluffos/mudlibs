@@ -200,3 +200,140 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试第二轮（§10.7 round three batch 4，2026-09-01）：`convert_lib.sh` `static`→`nosave` 误伤（AGENTS.md §4.3），third independent lineage — 三处直接 `write_file()` 崩溃 + 一处共享 NPC 头文件的未初始化 mapping 崩溃
+
+本轮的直接触发原因：姊妹档案 `jyqxc`（round-three batch 2）和不相关
+血统 `hxxtjqb`（本轮 batch 4）都各自独立确认了同一枚 `convert_lib.sh`
+转档脚本的 `\bstatic\b`→`nosave` 全局替换误伤字符串字面量的 bug
+（AGENTS.md §4.3），本档案自己 2026-08-08 那次 §10.7 也真的踩过同一个
+形状（`combatd.lpc::killer_reward()` 的 `KILLRECORD` 写入崩溃），但当
+时的修法是「就地建出 `/log/nosave/` 目录」而不是「查 `raw/` 确认原始
+路径应该是 `static/` 再改回去」——本轮用 `raw/jy/` 原始未转档源码逐一
+核对，证实那次修法虽然消除了崩溃，却让新数据写偏了目录（`log/static/`
+里其实早就有对应的、可回溯到 1997/2013 年的真实历史记录，`log/nosave/`
+从未存在过、也不该存在）。
+
+**全档案 grep 复查**（`grep -rn '"nosave/\|nosave/'`，排除 `nosave int/
+string/object/mapping/...`/`nosave void` 这些合法的变量与函数修饰符用
+法）：命中 **12 个文件 / 17 处调用点**，逐一对照 `raw/jy/` 原始 `.c`
+源码确认全部应为 `static/`：
+
+- `adm/daemons/securityd.lpc`（`promotion`，1 处）
+- `adm/obj/master.lpc` / `adm/single/master.lpc`（`crash()` 里的
+  `CRASHES`，各 3 处，两份文件字节相同）
+- `cmds/adm/call.lpc` / `cmds/arch/call.lpc`（`CALL_PLAYER`，字节相同
+  拷贝，各 1 处）
+- `cmds/adm/recover.lpc`（`RECOVER`，1 处，`raw/` 原文件里这行本来就
+  带一个多余的前导 `/`——`log_file("/static/RECOVER", ...)`——是原始
+  设计里就有的、无害的路径拼接小瑕疵，不是转档引入的，本次原样保留
+  只改 `nosave`→`static`）
+- `cmds/arch/purge.lpc`（`PURGE`，2 处）
+- `cmds/usr/suicide.lpc`（`SUICIDE`，1 处）
+- `cmds/std/kill.lpc`（`ATTEMP_KILL`，1 处，直接裸 `write_file()`，不
+  经过 `log_file()`）
+- `cmds/skill/bai.lpc` / `cmds/skill/apprentice.lpc`（`FENG`，字节相同
+  拷贝，各 2 处，同样是直接裸 `write_file()`/`read_file()`）
+- `adm/daemons/combatd.lpc`（`KILLRECORD`，2 处，2026-08-08 那次已经
+  用「就地建目录」的方式堵住了崩溃，本轮改成查 `raw/` 后确认的正确
+  路径）
+
+`work/log/static/` 目录本身确实包含这些文件的真实历史种子数据（例如
+`CALL_PLAYER` 最老一条是 2013 年的记录，`KILLRECORD` 最老一条能追溯到
+1997 年），`work/log/nosave/` 在 git 里从未存在、`.gitignore` 也确认
+是运行期目录——这就是 AGENTS.md §4.3 描述的两种表现之一：不是「立刻
+崩溃」就是「静默地把新数据写偏进一个从未被任何人读取的目录，旧数据被
+晾在原地」。本档案是两种表现都占了：`CALL_PLAYER`/`ATTEMP_KILL`/
+`KILLRECORD` 三处一旦真正触发就会抛出 `*Wrong permissions for opening
+file /log/nosave/XXX for append. "No such file or directory"`
+未捕获异常（`KILLRECORD` 那处 2026-08-08 已经先用 `assure_file()`
+堵过一次，但堵的是错误的目录）；其余几处（`CRASHES`/`PURGE`/
+`SUICIDE`/`promotion`/`RECOVER`/`FENG`）走 `log_file()`，此前从未被
+命中过，属于静默数据丢失类型，直到本轮才被系统性挖出来。
+
+**修法**：与 `hxxtjqb` 本轮同一手法——(1) 全部 12 个文件 17 处调用点
+按 `raw/jy/` 原文核对后机械改回 `static/`；(2) 给共享的 `log_file()`
+simul_efun（`adm/simul_efun/file.lpc`）本身也加一道
+`assure_file(LOG_DIR + file)` 前置调用（文件里已有现成的
+`assure_file()` helper，补一行前向声明避免"函数须先声明才能调用"的编
+译顺序坑），这样以后任何新增的、引用了未创建目录的 `log_file()` 调用
+点都会自愈；(3) 三处绕开 `log_file()` 直接裸 `write_file()` 的调用点
+（`kill.lpc` 的 `ATTEMP_KILL`、`bai.lpc`/`apprentice.lpc` 的 `FENG`）
+各自补一行 `assure_file()`，和 `combatd.lpc::killer_reward()` 里
+2026-08-08 已经加过的那行做法保持一致（只是把路径也一并订正为
+`static/`）。
+
+**顺手修复一个同一行上的运算符优先级 typo**（`bai.lpc`/`apprentice.lpc`
+两份字节相同拷贝，均已确认 `raw/jy/cmds/skill/bai.c` 原始代码里就带
+这个 bug，不是转档引入的）：`(string)me->query("family/master_id" ==
+"feng qingyang")` 把 `==` 误放在了 `query()` 的参数字符串里面，先算
+出恒假的字符串比较结果（`0`）再拿去调 `query(0)`，导致这条给"风清扬"
+准备的隐藏收徒彩蛋分支永远进不去、`nosave/FENG` 的 bug 本身反而从未
+被真正触发过。已把 `==` 挪回 `query()` 外面：`(string)me->query
+("family/master_id") == "feng qingyang"`。
+
+**现场验证**（`build-debug` 驱动重启，端口 40108，全程原始 Python
+socket 脚本，逐动作 grep `log/debug.log`；测试角色 `qftestc`/
+"秦风测三"，管理员 `fluffos`/`Mud@2026`）：
+- `call qftestc->query("id")` （管理员对在线玩家的跨对象调用，
+  `cmds/adm/call.lpc`/`CALL_PLAYER` 路径）：修复前会直接执行时段报错
+  中止；修复后干净返回 `= "qftestc"`，`log/static/CALL_PLAYER` 追加了
+  一行新记录（紧接在 2013 年的历史记录后面）。
+- 管理员对测试角色发起真实 `kill`（先用 `call qftestc->update_age()`
+  把有效年龄推过 15 岁下限，绕开 `kill` 指令自带的"未成年玩家保护"设
+  计性门槛——与本次要修的 bug 无关，纯粹是测试需要；在允许战斗的
+  "中央广场"进行）：修复前 `write_file()` 异常会把 `obj->fight_ob(me)`
+  和警告提示整段吞掉，受害玩家永远不会反击；修复后测试角色正确收到
+  "看起来沙河生想杀死你！如果你要和沙河生性命相搏，请你也对这个人下
+  一次 kill 指令。"提示并成功反击，双向多回合拳脚交锋消息正常输出，
+  `log/static/ATTEMP_KILL` 追加了新记录（紧接在 1997 年的历史记录
+  后面）。
+- 用 `call qftestc->die()` 在真实对练中途强制触发死亡结算（此时
+  `last_damage_from` 已经是管理员，走的是 `killer_reward()` 的玩家互
+  杀分支）：`= 0` 干净返回，谣言频道正确广播"我看到秦风测三被沙河生
+  击死了"，完整无中断地走完"死了→鬼门关（白无常对话链）→复活于武庙"
+  全流程，`score` 显示潜能从 99 掉到 50（符合死亡惩罚），
+  `log/static/KILLRECORD` 追加了新记录（紧接在 2013 年的历史记录
+  后面）。全程 `log/debug.log` 零新增执行时段错误。
+
+**顺带发现并修复的独立 bug（未初始化 mapping 索引崩溃，与 §4.3 无关，
+是本轮测试"进入中央广场"这一步意外撞见的）**：`d/mingjiao/npc/
+mingjiao.h` 与 `kungfu/class/mingjiao/mingjiao.h`（两份字节相同拷贝，
+被 19 个明教 NPC 文件 `#include`，含本次测试路过的"常遇春"）里共享的
+`greeting(object me, object ob)` 函数，`if (ob->query("party")
+["party_name"] == ...)` 直接对 `query("party")` 的返回值取下标，没有
+先判空——任何没有加入门派的玩家（包括所有新建角色，`query("party")`
+返回未初始化的 `int 0`）第一次和这些 NPC 同处一室、`init()` 触发
+`call_out("greeting", 1, ...)` 时，都会抛出 `*Value being indexed is
+zero.` 未捕获异常。同一文件夹里 `kungfu/class/mingjiao/zhangwuji.lpc`
+（"张无忌"）自己内联的同一段逻辑已经正确写成 `if (ob->query("party")
+&& ob->query("party")["party_name"] == ...)`——两份 `mingjiao.h` 显然
+是从这份正确逻辑抄漏了判空这一步。现场复现：测试角色（未加入任何门
+派）被管理员 `summon` 进中央广场（"常遇春"所在房间）后，`debug.log`
+立即出现该运行时错误；补上 `ob->query("party") &&` 判空、重启驱动后
+同样操作不再报错。已同步修复两份字节相同的头文件。
+
+修改文件：`adm/daemons/securityd.lpc`、`adm/obj/master.lpc`、
+`adm/single/master.lpc`、`cmds/adm/call.lpc`、`cmds/arch/call.lpc`、
+`cmds/adm/recover.lpc`、`cmds/arch/purge.lpc`、`cmds/usr/suicide.lpc`、
+`cmds/std/kill.lpc`、`cmds/skill/bai.lpc`、`cmds/skill/apprentice.lpc`、
+`adm/daemons/combatd.lpc`（以上均为 §4.3 `nosave`→`static` 路径订正，
+`combatd.lpc` 额外是订正 2026-08-08 那次的部分修复）、
+`adm/simul_efun/file.lpc`（`log_file()` 加固）、`d/mingjiao/npc/
+mingjiao.h`、`kungfu/class/mingjiao/mingjiao.h`（未初始化 mapping 判
+空）。测试用抛弃角色 `qftestc`/"秦风测三"的存档已删除，未提交；管理
+员账号 `fluffos` 因测试期间多次 `save()`/死亡/加钱而产生的存档更新
+按 AGENTS.md §1.5 约定提交。另：现场也验证了 `inherit/item/money.lpc`
+的 `query_autoload()`/`autoload()` 契约完整无误（不是 AGENTS.md §7.199
+`fysjmb`-class 的货币销毁 bug）——用管理员 `clone`+`give` 塞给测试角
+色 555 文铜板，`quit`/重新连线后 `i` 正确显示金钱原样保留。
+
+**跨库信号**：这是 AGENTS.md §4.3 `static`→`nosave` 误伤模式第三次
+在互不相关的血统家族独立确认（`jyqxc`/`jyqxc2`→本档案→`hxxtjqb`，外
+加更早的 `yxsj`/`yxzsj`），已达到项目"3+ 独立血统 → 值得跑一次全档
+案机械扫描"的标准线。建议后续扫描用这个 grep 起手：
+`grep -rn '"nosave/\|nosave/' --include='*.lpc' --include='*.h' .`，
+命中后逐条排除 `nosave int/string/object/mapping/mixed/float/function/
+void`（这些是合法的变量/函数修饰符用法，不要动），剩下的字符串字面
+量命中都需要去对应库的 `raw/` 原始源码核实是否应该是 `static/`，并
+检查仓库里是否真的存在 `log/static/` 这个种子目录作为佐证。

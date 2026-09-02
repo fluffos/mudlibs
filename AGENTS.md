@@ -1249,6 +1249,43 @@ warning matters). Two collision classes to check after every run:
   file.lpc`); live-verified via an admin `call advteste->add_money(...)`
   against a connected test character — execution-time error before the
   fix, clean `= 0` result after. See `libs/hxxtjqb/NOTES.md`.
+  **Retroactively confirms the same shape had already been hit (and
+  only half-fixed) on `jyqxc/jqxz`-lineage archives**: `jyqxc`'s own
+  round-three batch 2 §10.7 pass found this exact crash (4 call sites)
+  but "fixed" it by creating the never-shipped `/log/nosave/` directory
+  with `assure_file()` rather than reverting the literal — functionally
+  non-crashing but semantically wrong (new data silently written to a
+  directory that never shipped, while the real historical seed data in
+  `log/static/` sits orphaned). Sibling archive `jyqxc2013fwq`'s
+  round-three batch 4 §10.7 pass (2026-09-01) repeated the same partial
+  fix on 2026-08-08 (`combatd.lpc`'s `KILLRECORD`) and this time, cross-
+  checking `raw/jy/` originals, corrected it properly — 12 files/17
+  call sites total (`adm/daemons/securityd.lpc`, `adm/obj/master.lpc`
+  ×3, `adm/single/master.lpc` ×3, `cmds/adm/call.lpc`, `cmds/arch/
+  call.lpc`, `cmds/adm/recover.lpc`, `cmds/arch/purge.lpc` ×2, `cmds/
+  usr/suicide.lpc`, `cmds/std/kill.lpc`, `cmds/skill/bai.lpc` ×2,
+  `cmds/skill/apprentice.lpc` ×2, plus `combatd.lpc`'s `KILLRECORD` ×2
+  redone correctly), confirmed against `raw/jy/` originals (`log/
+  static/CALL_PLAYER`/`ATTEMP_KILL`/`KILLRECORD` genuinely contain
+  1997-2013-era history) and live-verified via an admin `call
+  qftestc->query("id")`, a real PvP `kill` exchange, and a forced
+  `->die()` mid-fight — all three previously-crashing paths now
+  complete cleanly and append to the correct `log/static/` files. If
+  `jyqxc` is revisited, its own `KILLRECORD` `assure_file("/log/
+  nosave/...")` workaround should be corrected the same way. **This
+  brings the count of genuinely independent lineages hit by this bug
+  class to 3+** (the `yxsj`/`yxzsj` ES2/`daniel` lineage; the unrelated
+  西游记/ES `hxxtjqb`; and the `jyqxc`/`jqxz` Jin-Yong-sect-mashup
+  lineage across its `jyqxc` and `jyqxc2013fwq` archives) — per this
+  project's standing rule (3+ independent lineages → corpus-wide
+  mechanical sweep warranted), a full-corpus sweep for this shape is
+  now due. Suggested detection grep: `grep -rn '"nosave/\|nosave/'
+  --include='*.lpc' --include='*.h' .`, then exclude legitimate `nosave
+  int/string/object/mapping/mixed/float/function/void` declarations,
+  then confirm each remaining string-literal hit against that lib's own
+  `raw/` source (if present) and check whether a `log/static/` seed
+  directory with matching filenames already exists on disk as
+  corroborating evidence.
 - **Compatibility shims**: `#ifndef __SENSIBLE_MODIFIERS__` /
   `#define nosave static` / `#define protected static` — the sed turns
   the *values* into `nosave`, silently aliasing `protected` → `nosave`.
