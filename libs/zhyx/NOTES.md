@@ -709,3 +709,31 @@ a real quit+reconnect cycle. Save files: `work/data/user/q/qintestb.o`,
   **a real gold-funded shop purchase**: both would need either a much
   longer session or a deliberately-outmatched fight; documented above
   as unverified-live rather than silently presented as tested.
+
+## wasm_status 审计（2026-09-01）：内容本身干净，closed.lpc 一处 VERSION_D 守卫补齐，验证为 playable
+
+`meta.json` 的 `wasm_status` 此前一直留空（此前只做过原生驱动验证）。
+本次批量审计（见 [[project_wasm_status_audit]]）补上这一步。
+
+好消息：当前生效的 `adm/daemons/logind.lpc` 里对
+`VERSION_D->is_version_ok()` 的调用早就被注释掉了（同目录下还留着
+一份没有接入配置的 `zhyx_logind.lpc`，那份还是活的调用，但不是
+`LOGIN_D` 宏指向的文件，不影响实际登入），`questd.lpc` 里的同类调用
+也已经注释——说明这个登入路径本身在 WASM 下不会被同宗
+`revive`/`zhonghua2` 家族那个"VERSION_D 编译失败→登入被拒"的闸门
+卡住。只有 `adm/daemons/closed.lpc` 的 `heart_beat()`（开机常驻）
+还留着一处未加保护的 `VERSION_D->is_version_ok()` 调用，同 AGENTS.md
+§1.3(c) 目录里的既有模式，补上 `find_object(VERSION_D) &&` 前缀，
+消除每次心跳都要重新编译一遍失败的 `versiond.lpc` 的额外开销。
+
+`system/kernel` 之类没有独立 simul_efun 级 socket 依赖，`dns_master.
+lpc`/`ftpd.lpc`/`versiond.lpc`/`messaged.lpc` 等网络精灵编译失败
+只是预载列表里的正常"外围精灵跳过"，不影响真实登入。
+
+完整会话验证：英文 ID（3-10 个英文字母）→ 中文姓氏（留空）→ 中文
+名字 → 双重密码 → 角色资质(3) → 性别(m) → 落地"世外桃源"，水笙/
+狄云在场，水笙主动提示注册邮箱 → `look` 正常重复显示房间描述 →
+`score` 得到"还没有出生呐，察看什么？"（与 NOTES.md 此前记载的
+"score 显示未出生是正常游戏设计"一致，不是 bug）→ `quit` 干净退出
+（"欢迎下次再来！"），全程无未捕获错误。`wasm_status` 设为
+`playable`。
