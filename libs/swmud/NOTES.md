@@ -575,7 +575,7 @@ Star Wars MUD!"，走完 `new name` → 确认 → 密码×2 → 性别 → 邮�
 失败只是正常的预载跳过，不影响真实登入。
 
 但和 lima 一样卡在同一个站点基础设施缺口上：这个项目的站点打包
-管线（`pack_lib_for_web.sh`/`build_site.sh`）给**所有** lib 共用
+管线（`write_play_page.sh`/`build_site.sh`）给**所有** lib 共用
 同一份 WASM 驱动二进制，没有任何按 lib 切换驱动配置的机制——部署
 到线上时，swmud 仍然会撞上和用共享驱动跑原生版一模一样的"驱动
 配置不匹配"问题（`NO_ADD_ACTION`/`PACKAGE_UIDS` 等宏的差异会导致

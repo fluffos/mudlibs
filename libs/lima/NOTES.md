@@ -153,12 +153,12 @@ WASM 驱动上是完全可玩的**——之前 README 写的"WASM 通道未构�
 ### 但站点实际部署用的是唯一一份共享驱动，这个专用驱动接不进去
 
 问题出在这个项目的站点打包管线，不在 lima 自己身上：
-`scripts/pack_lib_for_web.sh` 把每个 lib 打包进站点时，`play.html`
-里的驱动脚本引用是写死的相对路径 `../_driver/fluffos.js`——`_driver/`
+`scripts/write_play_page.sh` 把每个 lib 的 `play.html` 写进站点时，
+里面的驱动脚本引用是写死的相对路径 `../_driver/fluffos.js`——`_driver/`
 是整个站点**唯一一份**共享的 WASM 驱动产物（来自
 `~/src/fluffos/build-wasm`），所有 ~240 个 lib 共用同一份二进制，
 没有任何"这个 lib 用另一份驱动"的每-lib 覆盖机制（`build_site.sh`/
-`pack_lib_for_web.sh` 通读一遍，找不到任何 per-lib driver 路径参数）。
+`write_play_page.sh` 通读一遍，找不到任何 per-lib driver 路径参数）。
 
 `secure/check_config.lpc` 的六项检查（`NO_LIGHT`/`NO_ADD_ACTION`/
 `NO_WIZARDS`/`OLD_ED`/`PACKAGE_UIDS`）在**任何**驱动上、在 `create()`
@@ -178,7 +178,7 @@ mudlibs.fluffos.info 上的那份 lima 实际上还是会用共享驱动去启�
 证明了 mudlib 内容层不是问题，问题完全在站点基础设施的"一份驱动打包
 所有 lib"这个假设上，这已经超出本次审计（"修正个别 lib 的
 wasm_status 字段"）的范围，属于一次单独的站点管线改造工作（给
-`pack_lib_for_web.sh`/`build_site.sh` 加一个 per-lib 驱动目录覆盖
+`write_play_page.sh`/`build_site.sh` 加一个 per-lib 驱动目录覆盖
 参数，再单独为 lima 归档 `~/src/fluffos-lima/build-wasm` 的产物）。
 把这个专用驱动的完整构建步骤记在上面，方便未来那次改造直接复用，
 不用重新摸索 `check_config.lpc` 的六项要求或重新踩一遍

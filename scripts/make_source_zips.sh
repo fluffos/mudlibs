@@ -1,24 +1,21 @@
 #!/usr/bin/env bash
 #
 # make_source_zips.sh -- zip each lib's trimmed source tree into a
-# standalone downloadable archive, so a visitor can grab ONE game's
-# source without cloning the whole (~4GB, full archive history) repo.
-#
-# Reuses the exact same trim/exclude rules pack_lib_for_web.sh uses to
-# stage a lib for WASM packing (see that script's EXCLUDES block) --
-# what's playable in-browser is the same tree you get in the zip, just
-# without the WASM/JS wrapping. Kept on purpose: .lpc/.h source, in-game
-# help/doc text, data/*.o saves (including the pre-seeded admin account
-# every README documents) -- see pack_lib_for_web.sh's own comment for
-# why those stay.
+# standalone archive. This is THE definitive trim/exclude ruleset for what
+# ships in a lib's zip (see the EXCLUDES block below) -- there is no
+# separate WASM-packing trim step any more: the exact same zip this script
+# produces is what a visitor downloads via the site's "Download ZIP" link
+# AND what scripts/web_shell_override/zip-loader.js fetches and unpacks
+# into the driver's in-memory filesystem at play time (see
+# scripts/pack_lib_zip.sh, AGENTS.md §1.6). Kept on purpose: .lpc/.h
+# source, in-game help/doc text, data/*.o saves (including the pre-seeded
+# admin account every README documents).
 #
 # Usage: scripts/make_source_zips.sh <out_dir> [slug ...]
 #   <out_dir>  directory to write <slug>.zip into
-#   [slug ...] optional: only zip these specific libs (e.g. from CI's
-#              "which libs changed since last publish" list -- see
-#              .github/workflows/pages.yml's release-zips step, which
-#              reuses build_site.sh's repacked_slugs output so this
-#              script doesn't need its own separate change-detection).
+#   [slug ...] optional: only zip these specific libs (e.g. from
+#              build_site.sh's "changed since last publish, or no valid
+#              cached zip" list -- see pack_lib_zip.sh).
 #              Omit to zip every packable lib (the manual/full-refresh
 #              case -- same "has config.fluffos" gate gen_site_index.py
 #              uses, slug list from wasm_status.json).
@@ -47,8 +44,8 @@ d = json.load(open('$REPO_ROOT/scripts/wasm_status.json'))
 print('\n'.join(sorted(d['libs'].keys())))")
 fi
 
-# Same exclusion set as pack_lib_for_web.sh's EXCLUDES (kept in sync by
-# hand -- both scripts trim the same lib tree for two different outputs).
+# The one trim/exclude ruleset for what ships in every lib's zip (see
+# this file's header) -- there is no separate WASM-side ruleset any more.
 EXCLUDES=(
   --exclude='/log/'
   --exclude='/www/' --exclude='/temp/' --exclude='/backup/'

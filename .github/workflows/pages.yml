@@ -4,30 +4,24 @@
 #   1. Download the latest prebuilt WASM driver (fluffos-<ver>-wasm.zip) from
 #      fluffos/fluffos releases: fluffos.js/fluffos.wasm + the web terminal
 #      (index.html, telnet.js, vendor/xterm).
-#   2. scripts/build_site.sh packs every lib in libs/<slug>/ into a browser
-#      bundle (scripts/pack_lib_for_web.sh: trimmed tree -> mudlib.data/.js
-#      via emscripten's file_packager, config rewritten to the in-memory
-#      mount, per-lib page patched to load the driver from ONE shared copy
-#      at site/_driver/ instead of duplicating ~3.5MB x 90 libs).
+#   2. scripts/build_site.sh produces, per lib, the SAME trimmed source zip
+#      as the site's "Download ZIP" link (scripts/pack_lib_zip.sh, a thin
+#      wrapper around scripts/make_source_zips.sh -- plain rsync+zip, no
+#      compile step at all) plus a play.html + fluffos-boot.js
+#      (scripts/write_play_page.sh, always regenerated, never cached --
+#      see that script's header). The zip is fetched and unpacked into the
+#      driver's in-memory filesystem entirely client-side at play time by
+#      scripts/web_shell_override/zip-loader.js (a Web Worker pool does the
+#      actual decompression -- some libs run to 60K+ files, and that's
+#      what makes it fast); no emscripten/file_packager build step is
+#      needed here at all any more.
 #   3. scripts/gen_site_index.py renders the index (game names, admin
 #      credentials from each lib's README.md, playable/limited/noboot
 #      status derived from the checked-in scripts/wasm_status.json status
 #      mapping, per-lib last-changed commit links from lib-commits.json --
 #      maintained by scripts/update_lib_commits.py via the GitHub commits
 #      API, because this shallow clone has no history to derive it from).
-#   4. scripts/make_source_zips.sh re-zips just the libs build_site.sh
-#      repacked this run (its repacked_slugs output -- same "changed
-#      since last publish, or no valid cache" set the WASM step used) and
-#      uploads them to the "source-zips" GitHub Release, so each site
-#      card's "Download ZIP" link always points at a current archive
-#      without re-zipping all libs every run. This runs in its own `zips`
-#      job, sharded across N parallel matrix runners (see that job's
-#      comment) and NOT a dependency of `deploy` -- with ~250 libs in the
-#      corpus, a cache-miss day can repack most of them at once, and
-#      serially re-zipping all of them used to sit in the same job as
-#      (and block) the Pages artifact upload below for no real reason:
-#      the zips live on a separate GitHub Release, not the Pages site.
-#   5. Upload site/ as the Pages artifact and deploy.
+#   4. Upload site/ as the Pages artifact and deploy.
 #      (There is deliberately no boot smoke test here anymore -- it kept
 #      failing CI on real, but slow/flaky-under-node-timeout, per-lib boot
 #      issues that don't reflect the actual browser deploy. Bad bundles
@@ -35,13 +29,13 @@
 #      instead, run by hand against the native driver before a lib is
 #      committed.)
 #
-# INCREMENTAL packing -- two mechanisms with distinct roles:
+# INCREMENTAL zipping -- two mechanisms with distinct roles:
 #
 # CORRECTNESS: the `pages-state` orphan branch holds one file,
 # last-published-sha -- the commit the LIVE site was last successfully
 # deployed from.  It is read at the start of every build (empty on
-# bootstrap -> full repack) and advanced ONLY after the deploy job actually
-# succeeds, so it always reflects reality.  build_site.sh repacks exactly
+# bootstrap -> full re-zip) and advanced ONLY after the deploy job actually
+# succeeds, so it always reflects reality.  build_site.sh re-zips exactly
 # the libs whose tree differs between that sha and HEAD.  This matters
 # because cancel-in-progress (below) means that during a burst of pushes
 # most runs die mid-build leaving no trace; whichever run finally survives
@@ -52,18 +46,21 @@
 # The pages-state branch is not in this workflow's push branch filter, so
 # advancing the marker never re-triggers the pipeline.
 #
-# SPEED: the packed bundles persist in ONE actions/cache entry (see
-# build_site.sh's manifest: driver tag + packer blob sha + per-lib tree
-# hashes recording what each cached bundle was packed FROM).  A lib
-# unchanged since last publish whose cached bundle provenance matches
-# HEAD's tree + the current driver/packer is reused instead of repacked.
-# The cache key embeds the commit sha so every run with changes saves a
-# fresh snapshot; restore-keys fall back to the newest previous entry.
-# GitHub's cache is 10GB/repo with LRU eviction -- the ~2GB packed site
-# fits; a cache miss (eviction/expiry) just means one slow full repack,
-# never a wrong site: the marker alone decides what MUST be repacked.
-# The deploy itself is always full-site: actions/deploy-pages replaces the
-# site atomically, so only the packing step can be (and is) incremental.
+# SPEED: the zips persist in ONE actions/cache entry (see build_site.sh's
+# manifest: packer blob sha + per-lib tree hashes recording what each
+# cached zip was built FROM).  A lib unchanged since last publish whose
+# cached zip provenance matches HEAD's tree + the current packer is reused
+# instead of re-zipped.  The cache key embeds the commit sha so every run
+# with changes saves a fresh snapshot; restore-keys fall back to the
+# newest previous entry.  A cache miss (eviction/expiry) just means one
+# slow full re-zip, never a wrong site: the marker alone decides what MUST
+# be re-zipped.  Deliberately NOT part of this cache key: the driver
+# release tag, or anything under scripts/web_shell_override/ -- see
+# build_site.sh's header for why a shell-page edit no longer forces a
+# corpus-wide re-zip (it used to, see git history around 2026-09-02 for
+# the incident that motivated this split).  The deploy itself is always
+# full-site: actions/deploy-pages replaces the site atomically, so only
+# the zip step can be (and is) incremental.
 #
 # Trigger note: push is filtered to the paths that actually change the site
 # (lib content, scripts, this workflow) so unrelated
@@ -93,8 +90,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    outputs:
-      repacked_slugs: ${{ steps.build.outputs.repacked_slugs }}
     steps:
       # The repo carries ~4GB of history (original archives); a shallow
       # clone is mandatory.  HEAD's tree objects are enough for the
@@ -151,22 +146,20 @@ jobs:
           done
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      # Only emscripten's file_packager is needed (no compile), so any
-      # recent emsdk works; 'latest' keeps it maintenance-free.
-      - uses: mymindstorm/setup-emsdk@v14
-        with:
-          version: latest
-
+      # Not keyed on the driver tag: it no longer affects a zip's content
+      # at all (see build_site.sh's header) -- the shared _driver/ files
+      # are copied wholesale from $RELEASE_DIR every run regardless of
+      # caching, so a driver bump takes effect site-wide with no per-lib
+      # cache invalidation needed.
       - name: Restore packed-lib cache
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/packed-cache
-          key: packed-site-v1-${{ steps.driver.outputs.tag }}-${{ github.sha }}
+          key: packed-site-v1-${{ github.sha }}
           restore-keys: |
-            packed-site-v1-${{ steps.driver.outputs.tag }}-
             packed-site-v1-
 
-      - name: Build site (incremental repack + index)
+      - name: Build site (incremental zip + index)
         id: build
         env:
           LAST_PUBLISHED_SHA: ${{ steps.marker.outputs.sha }}
@@ -175,7 +168,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           scripts/build_site.sh "$RUNNER_TEMP/wasm-release/rel" \
-              "${{ steps.driver.outputs.tag }}" \
               "$RUNNER_TEMP/packed-cache" site
 
       - name: Save packed-lib cache
@@ -183,24 +175,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/packed-cache
-          key: packed-site-v1-${{ steps.driver.outputs.tag }}-${{ github.sha }}
-
-      # Make sure the release the `zips` job's shards upload to actually
-      # exists before any of them try to upload to it -- a single cheap
-      # idempotent check here avoids N parallel matrix shards racing each
-      # other on `gh release create`. The heavy per-lib zip/upload work
-      # itself happens in the sharded `zips` job below, off the critical
-      # path to `deploy`.
-      - name: Ensure source-zips release exists
-        if: steps.build.outputs.repacked_slugs != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release view source-zips --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
-            || gh release create source-zips --repo "$GITHUB_REPOSITORY" \
-                 --title "Per-lib source archives" \
-                 --notes "One downloadable ZIP per mudlib in this collection -- the trimmed source tree (LPC/header source, config.fluffos, README/NOTES/meta.json, seeded save data), no need to clone the full repository. Auto-generated by scripts/make_source_zips.sh on every relevant push; linked from each game's card at https://mudlibs.fluffos.info/ and from games.json."
+          key: packed-site-v1-${{ github.sha }}
 
       # enablement: true lets the very first run switch the repo's Pages
       # source to "GitHub Actions" itself.
@@ -211,72 +186,6 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
-
-  # Per-lib downloadable source ZIPs (scripts/make_source_zips.sh),
-  # hosted as assets on the "source-zips" GitHub Release rather than in
-  # the Pages deploy itself -- the full set is ~2.3GB, which would
-  # roughly double the ~2GB WASM site if bundled in (see that script's
-  # header). Reuses build_site.sh's own repacked_slugs output (the libs
-  # whose tree changed since last publish, or lacked a valid cached
-  # bundle) as the "needs a fresh zip" list, so there's no separate
-  # change-detection to maintain -- when it's empty (nothing changed,
-  # true for most pushes) this whole job is skipped.
-  #
-  # Deliberately NOT a dependency of `deploy`: these zips live on a
-  # separate GitHub Release, not the Pages site, so there is no reason
-  # a slow zip refresh should hold up shipping the site itself. Sharded
-  # across a fixed set of parallel matrix runners (rather than one
-  # runner looping over every slug) because a cache-miss day can put
-  # most of the ~250-lib corpus in repacked_slugs at once -- serially
-  # rsync+zipping all of them was the single slowest step in the whole
-  # pipeline on those days. Most shards just see an empty slice of the
-  # list and exit immediately on a normal few-libs-changed push; the
-  # fixed shard count trades a little wasted runner-startup overhead on
-  # those routine runs for a big win on full-repack days, which is the
-  # case that actually matters here.
-  #
-  # Known gap: this does not prune assets for libs that are removed or
-  # renamed (rare -- see AGENTS.md's numbering-duplicate process); a
-  # stale zip left behind is a minor blemish, not a correctness bug, and
-  # cleaning it up by hand (`gh release delete-asset`) is fine when it
-  # happens.
-  zips:
-    needs: build
-    if: needs.build.outputs.repacked_slugs != ''
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # Keep in sync with SHARD_COUNT below.
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Zip and upload this shard's libs
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ALL_SLUGS: ${{ needs.build.outputs.repacked_slugs }}
-          SHARD: ${{ matrix.shard }}
-          SHARD_COUNT: 8
-        run: |
-          set -euo pipefail
-          mine=$(python3 -c "
-          import os
-          slugs = os.environ['ALL_SLUGS'].split()
-          shard, total = int(os.environ['SHARD']), int(os.environ['SHARD_COUNT'])
-          print(' '.join(slugs[shard::total]))
-          ")
-          if [ -z "$mine" ]; then
-            echo "shard $SHARD/$SHARD_COUNT: nothing assigned, skipping"
-            exit 0
-          fi
-          echo "shard $SHARD/$SHARD_COUNT: $mine"
-          out="$RUNNER_TEMP/source-zips"
-          mkdir -p "$out"
-          scripts/make_source_zips.sh "$out" $mine
-          gh release upload source-zips "$out"/*.zip --repo "$GITHUB_REPOSITORY" --clobber
 
   deploy:
     needs: build

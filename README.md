@@ -468,7 +468,7 @@ scripts/                  extraction/conversion/test/site tooling:
   mudclient.py            scriptable telnet smoke-test client
   wasm_client.js          same interface, drives an in-process WASM driver
   wasm_boot_check.js      boot-check a packed site bundle under node
-  pack_lib_for_web.sh / build_site.sh / gen_site_index.py   GitHub Pages build
+  pack_lib_zip.sh / write_play_page.sh / build_site.sh / gen_site_index.py   GitHub Pages build
 lib_numbering.json        number <-> slug <-> original archive mapping (machine-readable)
 AGENTS.md                 the contributor/agent handbook: pipeline, fix catalog, WASM triage
 ```

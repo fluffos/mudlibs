@@ -103,7 +103,7 @@ Conventions used throughout:
   the old slug and replace it — a rename that leaves stale cross-references
   is worse than not renaming at all. **Also re-run
   `python3 scripts/gen_keep_dirs.py`** (see its own docstring, and the
-  `pack_lib_for_web.sh`/§1.4 note on `wasm_keep_dirs.txt`) — this manifest
+  `write_play_page.sh`/§1.4/§1.6 note on `wasm_keep_dirs.txt`) — this manifest
   is keyed by slug, so a rename that skips it silently orphans the old
   slug's entries and ships the new slug with NONE of its needed runtime
   directory shape. Caught live on `xkyx3b` (renamed from
@@ -147,8 +147,10 @@ node: the mudlib tree is copied into an in-memory filesystem (MEMFS), the
 driver boots against it, and "connections" are in-process
 (`wasm_console_connect()` / `fluffos_input()` / an output callback) — no
 sockets anywhere. The GitHub Pages workflow (`.github/workflows/pages.yml`
-+ `scripts/build_site.sh` / `pack_lib_for_web.sh` / `gen_site_index.py`)
-packs every lib this way and publishes a click-to-play site.
++ `scripts/build_site.sh` / `pack_lib_zip.sh` / `write_play_page.sh` /
+`gen_site_index.py`) packs every lib this way and publishes a
+click-to-play site — see §1.6 for how the in-browser filesystem is
+actually populated at play time.
 
 Build notes (once per machine):
 
@@ -636,6 +638,75 @@ secure/save/creators/f` and move that same `.o` file into it unchanged
 `riftsds`: this alone was sufficient — `fluffos` immediately showed the
 admin-only room-path annotation and welcome banner, and `goto`/other
 creator-only commands worked with no further seeding.
+
+### 1.6 Site packing & deploy pipeline (zip-based FS loading, 2026-09-02)
+
+The Pages site no longer packs libs with emscripten's `file_packager`, and
+no longer needs emsdk in CI at all. Each lib's browser bundle is now built
+from the SAME trimmed source zip the site's "Download ZIP" link serves
+(`scripts/make_source_zips.sh`, wrapped by `scripts/pack_lib_zip.sh`) —
+one file does both jobs, hosted same-origin at `/<slug>/<slug>.zip`. At
+play time, `scripts/web_shell_override/zip-loader.js` fetches that zip,
+parses its ZIP central directory itself, and populates the driver's
+in-memory filesystem directly via `Module.FS.writeFile` inside a
+`preRun`/`addRunDependency` hook — the same public Emscripten API
+`file_packager` itself used, so no driver-side change was needed.
+`scripts/write_play_page.sh` writes each lib's `play.html`/
+`fluffos-boot.js` fresh on every build (cheap template substitution, not
+cached) — this is what actually decouples a `web_shell_override/` edit
+from needing to re-zip any lib's data (see the incident below).
+
+**Why this replaced the old pipeline**: on 2026-09-02, a routine
+`web_shell_override/index.html` edit (a mobile-toolbar fix) hit the old
+pipeline's cache-invalidation fingerprint — which included that file —
+and forced a full ~248-lib repack, serially blocking the Pages deploy for
+10+ minutes before being caught mid-flight (see the `zips`-job sharding
+fix that was built as an immediate mitigation, then made obsolete by this
+rearchitecture the same day). The zip-based design fixes the root cause,
+not just the symptom: a lib's zip content now depends ONLY on its own
+tree + `pack_lib_zip.sh`/`make_source_zips.sh`, never on the web shell,
+never on the driver release tag (the shared `_driver/` files are copied
+wholesale every build regardless of caching) — so neither can force a
+corpus-wide re-zip again.
+
+**Performance trap, found via broad testing before rollout (don't
+reintroduce it)**: the corpus's median lib has ~9,900 files in its zip,
+and 119/249 libs exceed 10,000 (max seen: ~72,000). Decompressing that
+many individually-DEFLATEd zip entries one at a time on the main thread —
+even with many `DecompressionStream` calls "concurrently" in flight via
+`Promise.all` — barely parallelizes at all, because the per-call JS
+overhead (Blob/stream construction, promise scheduling) is bound to that
+one thread regardless of how many are nominally in flight. Measured on an
+8-core sandbox: a 60K-file lib took over a minute this way. Real
+multi-core speedup needed actual OS threads: `zip-loader.js` now
+dispatches decompression to a pool of `zip-worker.js` Web Workers sized to
+`navigator.hardwareConcurrency` (workers can't reach `Module.FS` at all,
+so every filesystem write still happens on the main thread after
+collecting a worker's result) — this cut the same 60K-file lib to ~19s,
+and the corpus median to under 4s. If you ever touch this loading path
+again: **test against a large real lib (not just a small one) before
+shipping** — a 2-lib smoke test (52 files, ~1,100 files) completely missed
+this, since both were far below the corpus's actual median.
+
+**Persistence**: the driver build in use has no IDBFS compiled in
+(`driver.FS.filesystems.IDBFS` is `undefined`), so player saves persist
+via a hand-rolled IndexedDB overlay instead (`scripts/web_shell_override/
+persist.js`) — only `/mudlib/work/data` is ever persisted, never LPC
+source/config, so a returning player always gets the latest upstream fix
+rather than stale cached code. `save-export.js` lets a player download/
+import their save as a portable zip (IndexedDB is per-browser-profile and
+gets wiped by private browsing/"clear site data"/storage eviction) and
+reset it to a clean seed state. `tab-lock.js` uses the Web Locks API to
+stop two tabs of the same lib from racing on the same save data — a
+second tab gets a blocking "already open elsewhere" message and never
+boots a driver at all, rather than risking two independently-diverging
+saves. A security bug was caught in review before shipping: `importZip`
+fed raw zip-entry names straight into IndexedDB keys, which `restore()`
+then turned into filesystem paths with no path-traversal check — a
+crafted save zip could have overwritten LPC code outside the save area.
+Fixed with `safeRel()` validation on every key, both at import and at
+restore (restore can't trust its own store either, once import can write
+to it).
 
 ---
 
@@ -17959,7 +18030,7 @@ mobile-UX pass (branch `feat/wasm-mobile-ux`, PR pending) covering:
   so it can't desync from an OS/browser-driven exit (Esc, back-swipe).
 
 Mirrored byte-for-byte at `scripts/web_shell_override/index.html` in
-this repo, which `pack_lib_for_web.sh` prefers over the release zip's
+this repo, which `write_play_page.sh` prefers over the release zip's
 page — this is how the site gets a page improvement immediately without
 waiting for a new fluffos release. **Keep both copies identical after
 any change**; a manual sync race (the orchestrator copying an old

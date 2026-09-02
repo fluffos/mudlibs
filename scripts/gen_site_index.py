@@ -52,7 +52,7 @@ Outputs:
                      README.md/NOTES.md as real server-rendered HTML, plus
                      a "Play Now" link to play.html (the actual WASM
                      terminal, produced separately by
-                     scripts/pack_lib_for_web.sh and copied into the same
+                     scripts/write_play_page.sh straight into the same
                      slug dir by build_site.sh). This is what makes a
                      game's description/restoration notes visible to
                      search crawlers and defers the multi-MB driver/data
@@ -88,12 +88,10 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 REPO_URL = "https://github.com/fluffos/mudlibs"
 SITE_URL = "https://mudlibs.fluffos.info"
-# Per-lib source ZIPs (scripts/make_source_zips.sh) live as assets on this
-# GitHub Release rather than in the Pages deploy itself -- 192 libs' worth
-# comes to ~2.3GB, which would roughly double the size of the already
-# ~2GB WASM site if bundled in. Releases are built for large binary
-# distribution and have no comparable size pressure.
-RELEASE_ZIPS_URL = f"{REPO_URL}/releases/download/source-zips"
+# Per-lib source ZIPs (scripts/make_source_zips.sh) are hosted same-origin
+# at /<slug>/<slug>.zip -- the exact same file scripts/web_shell_override/
+# zip-loader.js fetches to boot the game, so there is no separate archive
+# to build or keep in sync (see build_site.sh/pack_lib_zip.sh).
 
 # libs/<slug>/meta.json's wasm_status enum -> the site's 3-tier badge.
 # "limited"/"password-protected" both mean "boots, but login is blocked or
@@ -112,7 +110,7 @@ STATUS_MAP = {
 # deprioritized per AGENTS.md §10.6 and never pushed through the WASM
 # pass. It also has no libs/ds386/README.md (deliberate, since it was
 # never given the standard per-lib docs pass either), which actively
-# breaks the Pages build: pack_lib_for_web.sh's `sed ... README.md
+# breaks the Pages build: write_play_page.sh's `sed ... README.md
 # 2>/dev/null | head -1` swallows the "No such file" message, but under
 # `set -euo pipefail` sed's own exit code (2, for a missing file) still
 # kills the script -- the mystery "exit code 2" with no visible error in
@@ -714,7 +712,7 @@ def build_meta_bits(slug, info, ui, commits, linked):
         f'title="{ui["source_title"]}">{ui["source_label"]}</a>')
     if linked:
         meta_bits.append(
-            f'<a href="{RELEASE_ZIPS_URL}/{html.escape(slug)}.zip" '
+            f'<a href="{html.escape(slug)}.zip" '
             f'title="{ui["download_title"]}">{ui["download_label"]}</a>')
     return meta_bits, admin_id
 
@@ -731,7 +729,7 @@ def render_lib_page(slug, info, commits, stars=None):
     plain HTML (full description + rendered README/NOTES.md, real text
     in the first response, no JS/driver download required) with a
     single "Play Now" link to the WASM page, relocated to play.html by
-    pack_lib_for_web.sh."""
+    write_play_page.sh."""
     st = info["status"]
     icon, label, _ = BADGE[st]
     ui_zh = UI["zh"]
@@ -1298,7 +1296,7 @@ def render_games_json(status, commits):
             "status": info["status"],
             "url": f"{SITE_URL}/{slug}/",
             "source_url": f"{REPO_URL}/tree/main/libs/{slug}",
-            "source_zip_url": f"{RELEASE_ZIPS_URL}/{slug}.zip",
+            "source_zip_url": f"{SITE_URL}/{slug}/{slug}.zip",
             "admin_id": admin_id,
             "admin_password": admin_pw,
             "last_changed_commit": entry.get("sha") if entry else None,
@@ -1368,7 +1366,7 @@ This project (fluffos/mudlibs) extracts, restores, and documents LPC mudlib arch
 - Driver: [FluffOS](https://github.com/fluffos/fluffos), an actively-maintained LPMud/LPC driver, compiled to WebAssembly for in-browser play.
 - Language/setting: mostly Chinese-language LPC MUDs (泥潭), primarily wuxia (武侠) and xianxia (仙侠) themed, plus several classic English-language mudlib codebases (Dead Souls, Discworld, Nightmare, Lima). Every game card and description exists in both Chinese ({SITE_URL}/) and English ({SITE_URL}/en/) -- this is a fully bilingual site.
 - Source code, restoration notes (AGENTS.md), and native-driver play instructions: [github.com/fluffos/mudlibs]({REPO_URL})
-- Each game also has a standalone downloadable source ZIP (trimmed source tree, no need to clone the whole repo) linked from its card and from games.json's `source_zip_url` field, hosted as GitHub Release assets at {RELEASE_ZIPS_URL}/<slug>.zip
+- Each game also has a standalone downloadable source ZIP (trimmed source tree, no need to clone the whole repo) linked from its card and from games.json's `source_zip_url` field, hosted same-origin at {SITE_URL}/<slug>/<slug>.zip
 
 ## Full game list
 
@@ -1489,7 +1487,7 @@ def main():
     # Per-lib landing pages (see render_lib_page docstring) -- one per
     # non-noboot lib, at <out>/<slug>/index.html. build_site.sh's
     # assembly step copies this alongside the WASM bundle (play.html
-    # etc) that pack_lib_for_web.sh produces under the same slug dir, so
+    # etc) that write_play_page.sh produces under the same slug dir, so
     # /{slug}/ serves this crawlable page and /{slug}/play.html is the
     # actual game, reached only via this page's "Play Now" link.
     n_landing = 0

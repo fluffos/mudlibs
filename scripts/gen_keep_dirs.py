@@ -8,9 +8,9 @@ save_object() calls throw -- and silently abort the caller -- when a target
 directory is missing at ANY depth (see AGENTS.md's missing-directory-
 swallows-errors pattern).  Locally these dirs exist (created by real boots:
 work/log/..., data/topten/, ...) but they are gitignored, so
-scripts/pack_lib_for_web.sh recreates their SHAPE in the packed image from
-this file (0-byte .keep placeholders; emscripten's file_packager only
-materializes directories that contain files).
+scripts/web_shell_override/zip-loader.js recreates them at play time from
+this file (baked into each lib's fluffos-boot.js by write_play_page.sh) --
+a zip archive has no notion of an empty directory to preload.
 
 Run this from a machine where the libs have actually been booted (i.e. the
 runtime dir shapes exist on disk) whenever a lib gains new runtime dirs,

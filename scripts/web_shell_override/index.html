@@ -193,6 +193,18 @@
     color: var(--dim); margin: 0 0 0.8em;
   }
   #info .info-empty { color: var(--dim); font-size: 13px; }
+  #saveTools {
+    margin-bottom: 1.6em; padding-bottom: 1.2em; border-bottom: 1px solid var(--border);
+  }
+  .save-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .save-row button {
+    background: var(--panel); border: 1px solid var(--border); color: var(--fg);
+    font: inherit; font-size: 12.5px; padding: 7px 12px; border-radius: 6px;
+    cursor: pointer;
+  }
+  .save-row button:hover { border-color: var(--accent); }
+  .save-row button.danger:hover { border-color: #f7768e; color: #f7768e; }
+  #saveStatus { margin: 8px 0 0; min-height: 1.2em; }
   /* Boot progress overlay: covers the (blank) terminal area while the wasm
      driver + packed mudlib download, unpack and boot.  Driven by the
      BootProgress script below; removed once the first session connects. */
@@ -505,7 +517,18 @@
   </div>
 </div>
 <div id="logs" aria-label="Driver logs" aria-live="off"></div>
-<div id="info" aria-label="About this mudlib"></div>
+<div id="info" aria-label="About this mudlib">
+  <div id="saveTools">
+    <div class="save-row">
+      <button id="saveDl" type="button">Download save</button>
+      <button id="saveImp" type="button">Import save</button>
+      <button id="saveReset" type="button" class="danger">Reset data</button>
+      <input id="saveFile" type="file" accept=".zip,application/zip" hidden>
+    </div>
+    <p id="saveStatus" class="info-empty"></p>
+  </div>
+  <div id="infoDocs"></div>
+</div>
 <canvas id="jscanvas" width="300" height="130"></canvas>
 <div id="inputbar">
   <span class="prompt">&gt;</span>
@@ -724,8 +747,11 @@
 <script src="vendor/addon-fit.js"></script>
 <script src="telnet.js"></script>
 <script src="fluffos-boot.js"></script>
-<script src="mudlib.js"></script>
+<script src="../_driver/persist.js"></script>
+<script src="../_driver/save-export.js"></script>
+<script src="../_driver/zip-loader.js"></script>
 <script src="fluffos.js"></script>
+<script src="../_driver/tab-lock.js"></script>
 <script>
 'use strict';
 
@@ -865,6 +891,7 @@ const inputBar = document.getElementById('inputbar');
 const termEl = document.getElementById('term');
 const logsEl = document.getElementById('logs');
 const infoEl = document.getElementById('info');
+const infoDocsEl = document.getElementById('infoDocs');
 const gameTabsEl = document.getElementById('gameTabs');
 const tabAdd = document.getElementById('tabAdd');
 const tabLogs = document.getElementById('tabLogs');
@@ -1375,13 +1402,13 @@ async function loadInfoDoc(path, label) {
 async function ensureInfoLoaded() {
   if (infoLoaded) return;
   infoLoaded = true;   // set eagerly: a failed fetch shouldn't retry every tab click
-  infoEl.innerHTML = '<p class="info-empty">loading…</p>';
+  infoDocsEl.innerHTML = '<p class="info-empty">loading…</p>';
   const [readme, notes] = await Promise.all([
     loadInfoDoc('README.md', 'README'),
     loadInfoDoc('NOTES.md', 'NOTES'),
   ]);
   const body = readme + notes;
-  infoEl.innerHTML = body || '<p class="info-empty">(no README/NOTES.md shipped for this lib)</p>';
+  infoDocsEl.innerHTML = body || '<p class="info-empty">(no README/NOTES.md shipped for this lib)</p>';
 }
 
 function showInfo() {
@@ -1783,6 +1810,74 @@ createFluffOS(Module).then((M) => {
   ErrorModal.show('Failed to load WebAssembly driver', e,
     'mount: ' + BOOT.mount + '\nconfig: ' + BOOT.config);
 });
+</script>
+<script src="../_driver/sync-hook.js"></script>
+<script>
+// Save-data tools live in the Info tab (see #saveTools there) rather than
+// the header toolbar: three more always-visible buttons would undo the
+// careful mobile-width tuning above (see the header/tabs media queries),
+// and this is inherently secondary/occasional action a player reaches for
+// deliberately, not something needed mid-play.
+(function () {
+  const SLUG = window.FLUFFOS_ZIP_BOOT.slug;
+  const st = document.getElementById('saveStatus');
+  const say = (msg) => { if (st) st.textContent = msg; };
+
+  document.getElementById('saveDl').addEventListener('click', async () => {
+    if (!driver) { say('game still loading…'); return; }
+    try {
+      await window.__forceSync();          // export what's on screen, not N seconds ago
+      const n = await SaveExport.download(driver.FS, SLUG);
+      say('downloaded save (' + n + ' file' + (n === 1 ? '' : 's') + ')');
+    } catch (e) {
+      console.error('save download failed:', e);
+      say('save download failed: ' + (e && e.message || e));
+    }
+  });
+
+  const fileInput = document.getElementById('saveFile');
+  document.getElementById('saveImp').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    const f = fileInput.files[0];
+    fileInput.value = '';
+    if (!f) return;
+    try {
+      // stop the periodic sync FIRST: the live FS would otherwise clobber
+      // the freshly imported IndexedDB state within one sync interval
+      window.__stopSync();
+      const n = await SaveExport.importZip(f, SLUG);
+      say('imported ' + n + ' file(s) -- reloading…');
+      location.reload();                   // next boot's restore() picks it up
+    } catch (e) {
+      console.error('save import failed:', e);
+      alert('Import failed: ' + (e && e.message || e));
+      location.reload();                   // re-arm the sync loop we stopped
+    }
+  });
+
+  document.getElementById('saveReset').addEventListener('click', () => {
+    if (!confirm('Erase ALL local progress for this game and restart from ' +
+                 'a clean state?\n\nThis cannot be undone (unless you ' +
+                 'downloaded a save backup first).')) return;
+    window.__stopSync();                   // no late tick may re-create the DB
+    setTimeout(() => {                     // let any in-flight sync tx finish
+      let done = false;
+      const finish = () => { if (!done) { done = true; location.reload(); } };
+      try {
+        const req = indexedDB.deleteDatabase(PersistFS.DB_NAME + '-' + SLUG);
+        req.onsuccess = finish;
+        req.onerror = finish;
+        // onblocked: some connection is still open; the pending delete
+        // completes as soon as the reload closes it, before the next
+        // page's open() is allowed to proceed -- reloading is still right.
+        req.onblocked = finish;
+        setTimeout(finish, 3000);          // belt-and-braces
+      } catch (e) {                        // IndexedDB unavailable: nothing
+        finish();                          // was persisted anyway
+      }
+    }, 300);
+  });
+})();
 </script>
 </body>
 </html>
