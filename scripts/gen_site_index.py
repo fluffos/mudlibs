@@ -407,6 +407,7 @@ LIGHT_VARS = """
     --pico-code-color: #1f2430;
     --pico-blockquote-border-color: #e2e5ec;
     --ok: #2f7d32; --warn: #a15c00; --bad: #b3273f;
+    --fg: #1f2430;
 """
 
 # Shared CSS emitted verbatim into both templates' <style> blocks --
@@ -422,10 +423,20 @@ THEME_STYLE_BLOCK = f"""
             gap: 10px; flex-wrap: wrap; }}
   .topbar p {{ margin: 0; font-size: 13px; }}
   .engage {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }}
+  /* Hand-built chrome below (badge/toggle chips) deliberately uses the
+     plain --fg var, NOT --pico-color: Pico's own CSS locally redefines
+     --pico-color on <button>/<a> elements to its own component colors
+     (button text -> its own inverse-of-primary white, link text ->
+     its own primary blue) with a selector that wins regardless of our
+     :root remap's specificity, since a rule that matches the element
+     directly always beats one only inherited from an ancestor. --fg is
+     a name Pico's CSS has no rule for, so it can't be shadowed the
+     same way -- this is what made these chips render as invisible
+     white-on-near-white text in light mode before this was caught. */
   .badge-link {{
     display: inline-flex; align-items: center; gap: 5px;
     font-size: 12.5px; font-weight: 600; text-decoration: none;
-    color: var(--pico-color); background: var(--pico-card-background-color);
+    color: var(--fg); background: var(--pico-card-background-color);
     border: 1px solid var(--pico-card-border-color); border-radius: 999px;
     padding: 5px 12px; transition: border-color .12s, color .12s;
   }}
@@ -434,7 +445,7 @@ THEME_STYLE_BLOCK = f"""
     font-size: 15px; line-height: 1; cursor: pointer; padding: 6px 9px;
     background: var(--pico-card-background-color);
     border: 1px solid var(--pico-card-border-color); border-radius: 999px;
-    color: var(--pico-color);
+    color: var(--fg);
   }}
   .theme-toggle:hover {{ border-color: var(--pico-primary); }}
 """
@@ -881,6 +892,7 @@ def render_lib_page(slug, info, commits, stars=None):
     --pico-code-color: #d5dbe5;
     --pico-blockquote-border-color: #232a38;
     --ok: #9ece6a; --warn: #e0af68; --bad: #f7768e;
+    --fg: #d5dbe5;
   }}
   body > header, body > main, body > footer {{ max-width: 760px; }}
   body > header {{ padding-bottom: 0; }}
@@ -1122,6 +1134,7 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
     --pico-card-background-color: #11151f;
     --pico-card-border-color: #232a38;
     --ok: #9ece6a; --warn: #e0af68; --bad: #f7768e;
+    --fg: #d5dbe5;
   }}
   body > header, body > main, body > footer {{ max-width: 1100px; }}
   body > header {{ padding-bottom: 0; }}
@@ -1134,16 +1147,21 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
     position: sticky; top: 0; background: var(--pico-background-color);
     padding: 12px 0; z-index: 5; border-bottom: 1px solid var(--pico-muted-border-color);
   }}
+  /* #q and .fbtn use --fg, not --pico-color -- see THEME_STYLE_BLOCK's
+     comment on .badge-link: Pico's own CSS shadows --pico-color locally
+     on <button>/form elements with its own component colors, which a
+     plain :root remap can't override (a rule matching the element
+     directly always wins over one only inherited from :root). */
   #q {{
     flex: 1 1 220px; background: var(--pico-card-background-color);
     border: 1px solid var(--pico-muted-border-color); border-radius: 8px;
-    color: var(--pico-color); font: inherit; padding: 9px 14px;
+    color: var(--fg); font: inherit; padding: 9px 14px;
     outline: none; margin: 0; transition: border-color .12s;
   }}
   #q:focus {{ border-color: var(--pico-primary); box-shadow: none; }}
   .fbtn {{
     background: var(--pico-card-background-color); border: 1px solid var(--pico-muted-border-color);
-    color: var(--pico-color); border-radius: 8px; padding: 9px 16px;
+    color: var(--fg); border-radius: 8px; padding: 9px 16px;
     font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
     white-space: nowrap; margin: 0; transition: border-color .12s, color .12s;
   }}
