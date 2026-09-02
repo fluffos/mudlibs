@@ -1236,7 +1236,19 @@ warning matters). Two collision classes to check after every run:
   round-two deep-test** — same ES2/`daniel` lineage as `yxsj` at a
   different point in its history, identical 7 call sites/4 files, same
   fix, verified live via an admin `call tanyun->query(...)` against a
-  connected test character.
+  connected test character. **Fourth+ instance, unrelated 西游记/ES
+  lineage: `hxxtjqb`'s round-three batch 4 §10.7 deep-test
+  (2026-09-01)** — 13 files/17 call sites (`adm/daemons/logind.lpc`,
+  `adm/daemons/securityd.lpc`, `adm/obj/master.lpc` ×4, `cmds/adm/
+  promote.lpc`, `cmds/adm/xpass.lpc`, `cmds/arch/purge.lpc` ×2,
+  `cmds/arch/purge2.lpc` ×2, `cmds/arch/purgehouse.lpc`, `cmds/eld/
+  full.lpc`, `cmds/std/suicide.lpc`, `cmds/usr/suicide.lpc`, `cmds/wiz/
+  call.lpc`, `cmds/wiz/force.lpc`, `feature/vi.lpc`'s `LOGFILE` define),
+  confirmed against `raw/hxxt/` originals and fixed the same way
+  (literal revert + `assure_file()` hardening in `adm/simul_efun/
+  file.lpc`); live-verified via an admin `call advteste->add_money(...)`
+  against a connected test character — execution-time error before the
+  fix, clean `= 0` result after. See `libs/hxxtjqb/NOTES.md`.
 - **Compatibility shims**: `#ifndef __SENSIBLE_MODIFIERS__` /
   `#define nosave static` / `#define protected static` — the sed turns
   the *values* into `nosave`, silently aliasing `protected` → `nosave`.
@@ -4129,7 +4141,12 @@ treats it as harmless). `ylfyxa3` (XYZX/炎龙封印 branch, §11) carries the
 SAME pair — `get_resp()` (accept-random-name path) and `get_name()`
 (typed-name path) — each a bare `printf("%O\n", ob)` printing
 `/clone/user/login#N`, found via §10.7 deep functional test; both
-removed. A leftover diagnostic write/printf with no
+removed. `hxxtjqb` (round-three batch 4 §10.7 deep-test, 2026-09-01):
+same bare `printf("%O\n", ob)` in `adm/daemons/logind.lpc`'s
+`get_name()`, right before `ob->set("name", arg)` and the password
+prompt — live-verified (name `秦风测二` accepted, `/obj/login#25`
+printed to the screen before the fix, clean transition to the password
+prompt after); removed. A leftover diagnostic write/printf with no
 explanatory comment, sitting in an otherwise-clean sequence of
 player-facing `write()`/prompt calls in a login or registration daemon,
 prints raw internal state (an object's driver-assigned path, a
