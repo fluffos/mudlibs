@@ -724,3 +724,57 @@ exists in this lib. 4 pre-existing already-`//`-commented instances
 left untouched. Fixed by deleting the redundant lines. Verified via a
 clean native driver boot (zero new `debug.log` errors, port listening,
 killed by exact PID after ~8s).
+
+## 深度功能测试第三轮 / Deep functional test round three (2026-09-03)
+
+新角度：巡捕游荡触发的城门 `reset`/`make_inventory` 路径（`log/catch`
+里成串的 `*Bad argument 1 to EFUN call_other() ... Got: int(0)`）、
+留言板 `post`/`read`、酒楼 `list`/`buy`、真实死亡进入地府。
+
+### Bug（AGENTS.md §7.73 新实例）：迷你版把装备挪到 `npc/obj/`，
+NPC 仍按全局 `HEAD_DIR`/`BLADE_DIR` 取值 → 每次城门 reset 都
+`call_other(0)`
+
+`xunbu` 的 `random_move()` 懒加载城门房间时，`make_inventory` 克隆
+士兵/卖花姑娘，其 `create()` 里无防护的 `carry_object(...)->wear()/
+wield()` 对缺失路径返回 `0`，立刻炸：
+
+| NPC | 坏路径 | 本档案实际位置 |
+|---|---|---|
+| `liu_yan` / `run_yu` | `HEAD_DIR "huang_m"` / `"yu_jin"` 等花 | `d/city/yangzhou/npc/obj/*.lpc` |
+| `shibing1` / `shibing2` / `xiaowei` | `BLADE_DIR + "changdao"` | 同上 `obj/changdao.lpc` |
+
+`xo_final`/`xajh2` 在全局 `clone/wear/head/`、`clone/weapon/blade/`
+里有这些文件，所以同名代码在兄弟档不炸——这是迷你版裁剪后的路径
+错位，不是内容彻底丢失。`vendor_goods` 也指向同样的坏 `HEAD_DIR`
+路径，卖花 `list`/`buy` 同样会失败。
+
+修复：花与长刀改为 `__DIR__ "obj/..."`，并对所有
+`carry_object`→`wear`/`wield` 链加上 §7.73 标准守卫（先赋值再
+`if (ob)`）。现场验证：`goto` 通泗门/安定门/镇淮门/草河小街/
+禾嘉街，士兵与柳烟均正常出现；`list liu yan` 列出六种花；
+`buy 干菜包子 from xiao er`（酒楼）成交；游荡约 20s 后
+`log/catch` 中 **0** 条 `call_other` 错误（仅剩启动时已知的
+`emoted` 损坏存档 `restore_object` 警告，CATCH 住、与本轮无关）。
+
+### 本轮其它现场验证（无新 bug）
+
+- 注册（字母-only id，3–12）→ 小秦淮客寓；管理员 `fluffos`/`Mud@2026`
+- 留言板：`post <标题>` → 正文 → `.` → `read N` 正常（§7.114 形状的
+  `edit`/`input_to` 通路干净）
+- §7.111 `trace_line` 已有 `obj ? file_name : "<none>"` 守卫
+- §7.112 `chacha`/`mengpo` 的 `death_stage_active` 守卫在位；
+  §7.113 `reconnect()` 含 `enable_commands()` + `set_heart_beat(1)`
+- 死亡：`call <mortal>->die()` 进入黄泉路，北行经孟婆至鬼门关；
+  判官转世目标此前已按 §7.18 修过（三支均指向现存的
+  `kuixing_ge`）
+- `give` 对 NPC 的 `obj->value()`→`destruct` 分支与兄弟档同形，是
+  给 NPC 钱的惯用写法，**不是** §7.201（那是给玩家也 destruct）
+
+### 本轮修改的文件
+
+- `work/d/city/yangzhou/npc/liu_yan.lpc`
+- `work/d/city/yangzhou/npc/run_yu.lpc`
+- `work/d/city/yangzhou/npc/shibing1.lpc`
+- `work/d/city/yangzhou/npc/shibing2.lpc`
+- `work/d/city/yangzhou/npc/xiaowei.lpc`

@@ -6246,6 +6246,8 @@ to the square, confirmed the NPC loads and renders correctly, and
 `debug.log` stayed clean where it had shown the error every time
 before.
 
+**Mini-archive path-relocation variant (`xo`, round-three §10.7, 2026-09-03):** the target file is NOT missing from the archive — it was relocated under a local `npc/obj/` (or similar) directory when the archive was trimmed, while NPC `create()`/`vendor_goods` still point at the fuller sibling's global `HEAD_DIR`/`BLADE_DIR`/… macros. Same `call_other(0)` symptom on every room reset that clones the NPC (surfaced here via a wandering `xunbu`'s `random_move()` lazily compiling gate rooms). Fix is to retarget the path at the local copy *and* keep the §7.73 guard. Check `vendor_goods` mappings for the same stale global paths — `list`/`buy` fail the same way. `xo_final`/`xajh2` keep the global copies, so a byte-identical NPC file can be clean there and broken here.
+
 **Wider-blast-radius confirmed instance, `ldtx`'s §10.7 deep functional
 test: the same unguarded chain, when it lives inside a ROOM's own
 NPC-population step, can silently abort an unrelated LATER statement in
