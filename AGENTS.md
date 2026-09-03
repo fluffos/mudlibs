@@ -708,6 +708,63 @@ Fixed with `safeRel()` validation on every key, both at import and at
 restore (restore can't trust its own store either, once import can write
 to it).
 
+### 1.7 Per-lib client-side protocol adapters (ZJ/"指间MUD", 2026-09-02)
+
+A small number of libs (`zjdyzj`, `zjmudhell`, `shujian3` — all sharing
+`work/include/zjmud.h`) implement a bespoke mobile-app login handshake
+instead of ordinary line-by-line prompts: a `crypt()` challenge/response
+exchange with no prior prompt text, then a single pipe-delimited
+(`║`-separated) account/character-creation line. No telnet/web client can
+complete this without a working DES-crypt(3) implementation — one of
+these libs (`zjmudhell`) was shipping mislabeled `"playable"` despite
+being unplayable through the web terminal for exactly this reason, and
+`zjdyzj` was accurately marked `"limited"` for the same gap.
+
+`scripts/web_shell_override/zj-protocol.js` is a self-contained adapter
+that turns the raw handshake into ordinary-looking prompts through the
+same `#cmd` input bar every other lib uses, computing the required
+`crypt()` calls via the driver's own `crypt()` efun — exported per-lib as
+`js_export("zj_crypt", (: crypt(ZJKEY, $1[0]) :))` inside each affected
+lib's `logind.lpc` `create()`, guarded by `#ifdef __PACKAGE_JSBRIDGE__`
+(WASM-only) — rather than reimplementing DES-crypt from scratch in JS, a
+deliberate risk-avoidance call for a security/login-adjacent code path.
+`js_export`/`Module.fluffos.callLPC` is a general WASM-driver bridge
+(register an LPC function, call it from JS, get a Promise back) usable
+for any future lib that needs the driver to compute something JS can't.
+
+Because `makeSession()` and the keydown/Enter handler are defined inside
+`index.html`'s own inline `<script>` (unlike `createFluffOS`, which
+`tab-lock.js` successfully wraps because it's already defined by the time
+that file loads), a separately-loaded adapter script can't monkey-patch
+them. Instead `index.html` exposes two small, generic, always-defined
+extension points a per-lib script can hook: `window.installSessionAdapter
+(s)` (called once at the end of `makeSession()`) and `s.lineFilter(line)`
+(called on every Enter-key submit, before history/echo — return `true` to
+consume the line locally, e.g. a locally-synthesized password prompt that
+must never enter command history or get echoed). Both are `undefined` for
+every lib that doesn't install one, so this adds no overhead or risk to
+the shared player for the other ~250 libs. `write_play_page.sh`
+autodetects which libs need this from the literal existence of
+`work/include/zjmud.h` (the protocol's own header) rather than a
+hand-maintained slug list, so it self-maintains if this protocol ever
+turns up in another lib.
+
+If you ever add another per-lib client-side adapter: the state-machine
+gotchas found here generalize. (1) A retry-on-validation-error branch
+must restart the WHOLE composite line's friendly-prompt round, not just
+the one field that failed — the server-side retry (`input_to()` called
+again) is waiting for the entire delimited line resent, not a patch to
+one field. (2) Set any `state` transition that gates an async callback's
+effect BEFORE the `await`, not after — a line arriving during real
+driver-tick latency can otherwise be misrouted by a callback that still
+sees the pre-await state. (3) Guard an async response's delivery with a
+"do you still want this?" state check before sending it — a lib whose
+server-side validation is disabled/short-circuited (found live in
+`shujian3`, whose `jiance()` has its check commented out) can advance the
+state machine synchronously, in the same batch, before your async bridge
+call ever resolves, making a since-stale response arrive as garbage input
+to whatever now expects it instead.
+
 ---
 
 ## 2. The per-lib pipeline (bring-up from a raw archive)
