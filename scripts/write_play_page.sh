@@ -9,7 +9,7 @@
 # the whole site immediately without invalidating any lib's (expensive)
 # cached zip -- see pack_lib_zip.sh's header for why that split matters.
 #
-# Usage: scripts/write_play_page.sh <slug> <driver_dir> <shell_dir> <site_lib_dir>
+# Usage: scripts/write_play_page.sh <slug> <driver_dir> <shell_dir> <site_lib_dir> [custom_driver_dir]
 #
 #   <slug>          directory name under libs/
 #   <driver_dir>    dir containing fluffos.js + fluffos.wasm (only validated
@@ -24,26 +24,44 @@
 #   <site_lib_dir>  the site's already-assembled libs/<slug>/ dir -- must
 #                   already contain <slug>.zip (from pack_lib_zip.sh); this
 #                   script adds play.html + fluffos-boot.js to it.
+#   [custom_driver_dir]  optional: a dir containing a lib-specific
+#                   fluffos.js + fluffos.wasm (e.g.
+#                   scripts/custom_drivers/lima_swmud/), for a lib whose
+#                   secure/check_config.c needs compile-time options the
+#                   shared site driver doesn't have. When given, THESE
+#                   files are copied into <site_lib_dir> and play.html
+#                   references them locally instead of ../_driver/ --
+#                   telnet.js/vendor/xterm are driver-config-independent
+#                   and still come from the shared _driver/ either way.
 
 set -euo pipefail
 
 SELF_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(cd "$SELF_DIR/.." && pwd)
 
-if [ $# -ne 4 ]; then
-  echo "usage: $0 <slug> <driver_dir> <shell_dir> <site_lib_dir>" >&2
+if [ $# -ne 4 ] && [ $# -ne 5 ]; then
+  echo "usage: $0 <slug> <driver_dir> <shell_dir> <site_lib_dir> [custom_driver_dir]" >&2
   exit 2
 fi
 SLUG=$1
 DRIVER_DIR=$(cd "$2" && pwd)
 SHELL_DIR=$(cd "$3" && pwd)
 OUT=$4
+CUSTOM_DRIVER_DIR=""
+if [ $# -eq 5 ] && [ -n "$5" ]; then
+  CUSTOM_DRIVER_DIR=$(cd "$5" && pwd)
+fi
 
 LIB="$REPO_ROOT/libs/$SLUG"
 [ -f "$DRIVER_DIR/fluffos.js" ] && [ -f "$DRIVER_DIR/fluffos.wasm" ] || {
   echo "error: driver not found in $DRIVER_DIR (need fluffos.js + fluffos.wasm)" >&2; exit 1; }
 [ -f "$SHELL_DIR/index.html" ] || { echo "error: $SHELL_DIR/index.html not found" >&2; exit 1; }
 [ -f "$OUT/$SLUG.zip" ] || { echo "error: $OUT/$SLUG.zip missing -- run pack_lib_zip.sh first" >&2; exit 1; }
+if [ -n "$CUSTOM_DRIVER_DIR" ]; then
+  [ -f "$CUSTOM_DRIVER_DIR/fluffos.js" ] && [ -f "$CUSTOM_DRIVER_DIR/fluffos.wasm" ] || {
+    echo "error: custom driver not found in $CUSTOM_DRIVER_DIR (need fluffos.js + fluffos.wasm)" >&2; exit 1; }
+  cp "$CUSTOM_DRIVER_DIR/fluffos.js" "$CUSTOM_DRIVER_DIR/fluffos.wasm" "$OUT/"
+fi
 
 SHELL_PAGE="$SHELL_DIR/index.html"
 if [ -f "$SELF_DIR/web_shell_override/index.html" ]; then
@@ -101,19 +119,31 @@ EOF
 # Path patches (MUST all apply -- fail loudly if the upstream page changed):
 #   vendor/, telnet.js, fluffos.js -> ../_driver/...
 #   locateFile: .wasm from ../_driver/, everything else local.
+# (With a custom driver dir given, fluffos.js/wasm stay local to this
+# lib's own dir instead -- see the CUSTOM_DRIVER_DIR branch above.)
 # Cosmetic patches (title/h1 -> game name) are best-effort.
 # (The zip-loader/persist/save-export/tab-lock/sync-hook script tags already
 # reference ../_driver/ directly in the template -- see index.html -- so
 # they need no per-lib patching here.)
 GAME_NAME=$(sed -n 's/^# *//p' "$LIB/README.md" 2>/dev/null | head -1)
 [ -n "$GAME_NAME" ] || GAME_NAME=$SLUG
-export SLUG GAME_NAME
+export SLUG GAME_NAME CUSTOM_DRIVER_DIR
 python3 - "$SHELL_PAGE" "$OUT/play.html" <<'PYEOF'
 import os, sys
 src, dst = sys.argv[1], sys.argv[2]
 html = open(src, encoding='utf-8').read()
 slug = os.environ['SLUG']
 name = os.environ['GAME_NAME']
+has_custom_driver = bool(os.environ['CUSTOM_DRIVER_DIR'])
+
+# A lib with its own driver (fluffos.js/.wasm copied into this lib's own
+# site dir, see the shell script above) references them locally instead
+# of the shared _driver/ -- telnet.js/vendor/xterm are driver-config-
+# independent and stay shared either way.
+fluffos_js_target = ('fluffos.js' if has_custom_driver
+                      else '../_driver/fluffos.js')
+locate_file_target = ('locateFile: (f) => f,' if has_custom_driver else
+                       "locateFile: (f) => f.endsWith('.wasm') ? '../_driver/' + f : f,")
 
 required = [
     ('href="vendor/xterm.css"', 'href="../_driver/vendor/xterm.css"'),
@@ -124,9 +154,8 @@ required = [
     ('<script src="telnet.js"></script>',
      '<script src="../_driver/telnet.js"></script>'),
     ('<script src="fluffos.js"></script>',
-     '<script src="../_driver/fluffos.js"></script>'),
-    ('locateFile: (f) => f,',
-     "locateFile: (f) => f.endsWith('.wasm') ? '../_driver/' + f : f,"),
+     '<script src="%s"></script>' % fluffos_js_target),
+    ('locateFile: (f) => f,', locate_file_target),
 ]
 for old, new in required:
     if html.count(old) != 1:

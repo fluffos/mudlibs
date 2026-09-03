@@ -252,6 +252,19 @@ cp -r "$RELEASE_DIR/vendor" "$SITE_DIR/_driver/"
 # See scripts/web_shell_override/zip-loader.js's header for the mechanism.
 cp "$SELF_DIR/web_shell_override"/{persist,save-export,zip-loader,zip-worker,tab-lock,sync-hook,zj-protocol}.js \
    "$SITE_DIR/_driver/"
+# Libs whose secure/check_config.c needs compile-time options the shared
+# site driver doesn't have -- see scripts/custom_drivers/lima_swmud/
+# README.md and libs/lima/NOTES.md for the full story. Both currently
+# share one prebuilt driver; add more "slug:dir" pairs here (space-
+# separated) if another lib ever needs a DIFFERENT custom build.
+CUSTOM_DRIVER_LIMA_SWMUD="$SELF_DIR/custom_drivers/lima_swmud"
+custom_driver_dir_for() {
+  case "$1" in
+    lima|swmud) echo "$CUSTOM_DRIVER_LIMA_SWMUD" ;;
+    *) echo "" ;;
+  esac
+}
+
 for slug in $SLUGS; do
   # hardlink when possible (same fs), fall back to a copy. This brings in
   # the cached zip (+README/NOTES.md) from pack_lib_zip.sh.
@@ -260,7 +273,8 @@ for slug in $SLUGS; do
   # play.html + fluffos-boot.js: written fresh for EVERY packable lib on
   # EVERY run, deliberately uncached -- see this file's header and
   # write_play_page.sh's own header for why.
-  "$SELF_DIR/write_play_page.sh" "$slug" "$RELEASE_DIR" "$RELEASE_DIR" "$SITE_DIR/$slug"
+  "$SELF_DIR/write_play_page.sh" "$slug" "$RELEASE_DIR" "$RELEASE_DIR" \
+      "$SITE_DIR/$slug" "$(custom_driver_dir_for "$slug")"
   # Server-rendered landing page (full description + README/NOTES.md,
   # "Play Now" link to play.html) -- see gen_site_index.py's
   # render_lib_page. This, not the WASM page, is what /{slug}/ serves;

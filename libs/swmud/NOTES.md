@@ -583,3 +583,15 @@ mudlib 自身的启动期检查失败）。标记 `playable` 会误导站点实�
 跑什么，因此和 lima 一样定为 `noboot`——这是站点基础设施层面的
 缺口，不是这个 lib 自身内容的问题，等以后站点支持按 lib 覆盖驱动
 时可以直接翻正，不需要重新调查。
+
+## 站点基础设施缺口已补上（2026-09-02/03）：`wasm_status` 翻正为 `playable`
+
+见 `libs/lima/NOTES.md`"站点基础设施缺口已补上"一节——`write_play_page.sh`/
+`build_site.sh` 加了 per-lib 自定义驱动目录支持，`lima`/`swmud`
+共用同一份已提交的驱动产物（`scripts/custom_drivers/lima_swmud/`）。
+
+本地范围内测试站点（只打包这两个 lib）用 Playwright 通过真实 `#cmd`
+输入框验证：`fluffos_boot` 成功，"Welcome to Star Wars MUD!" 正常
+显示，走完 `new name` → 确认 → 密码×2，控制台无 JS 报错——和本节
+前面用 `wasm_client.js` 跑通的结果一致。`meta.json` 的 `wasm_status`
+从 `noboot` 改为 `playable`。

@@ -188,6 +188,31 @@ wasm_status 字段"）的范围，属于一次单独的站点管线改造工作�
 提交进 `libs/lima/work/`——不管未来站点管线怎么改，这个修复都是
 必需的前置条件，先做掉不亏。
 
+## 站点基础设施缺口已补上（2026-09-02/03）：`wasm_status` 翻正为 `playable`
+
+上一节末尾说的"未来那次改造"这次做掉了：`write_play_page.sh` 新增
+一个可选的第 5 个参数（自定义驱动目录），给出时把该目录下的
+`fluffos.js`/`fluffos.wasm` 拷进这个 lib 自己的站点输出目录，
+`play.html` 里的驱动脚本引用也相应改成本地路径而非共享的
+`../_driver/`（`telnet.js`/`vendor/xterm` 这些和驱动编译选项无关的
+文件仍然共享）。`build_site.sh` 新增一个 `custom_driver_dir_for()`
+查找表，`lima`/`swmud` 两个 slug 映射到
+`scripts/custom_drivers/lima_swmud/`——本节上面记录的那份专用驱动
+产物（`~/src/fluffos-lima/build-wasm/src/{fluffos.js,fluffos.wasm}`，
+2026-08-24 的 `fluffos/fluffos@721878c` 构建）直接提交进了这个目录，
+不需要在 CI 里重新编译（CI 没有装 emsdk，见 AGENTS.md §1.6）。
+
+本地用 `pack_lib_zip.sh` + `write_play_page.sh <slug> ... <custom_dir>`
+搭了一个范围内（只有这两个 lib）的测试站点验证：`fluffos.js`/
+`fluffos.wasm` 正确落地在 lib 自己的输出目录，`play.html` 引用也正确
+指向本地而非 `../_driver/`。用 Playwright 通过真实的 `#cmd` 输入框
+走完整个流程——注册、性别/种族选择、创建角色、`s`+`p` 进入游戏——
+落地 Grand Hall，`look` 正常显示房间描述，和本节前面用
+`wasm_client.js` 跑通的那次结果完全一致，控制台无 JS 报错。
+
+`meta.json` 的 `wasm_status` 从 `noboot` 改为 `playable`。见
+`libs/swmud/NOTES.md` 对应小节（同一份驱动，独立验证）。
+
 ## 转换步骤（对照 AGENTS.md §2/§2.3）
 
 1. 克隆到 scratch 目录，`lib/` 就是 mudlib 根（README 自带的
