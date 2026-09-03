@@ -10220,6 +10220,8 @@ necessarily share the exact missing-`enable_commands()` gap).**
   [[feedback_verify_stalls_with_connectivity_check]] for the standing
   methodology lesson this uncovered.
 
+
+**Missed by the original 162-lib sweep: `qhxajh`** (round-three §10.7, 2026-09-03). Same shape — `reconnect()` restored `set_heart_beat(1)` but not `enable_commands()` — left the kick-duplicate path permanently command-deaf (「什麼？」). Fixed in place; treat any Falcon/`xo`-family sibling that still lacks `enable_commands()` in `reconnect()` as a candidate, not as "sweep said clean."
 ### 7.109 `logind.lpc`'s uncaught `init_new_player()` call, immediately followed by the real world-entry call, silently strands a new character forever with no environment and no command dispatch if anything inside `init_new_player()` throws — corpus-wide sweep completed, 113 libs fixed
 
 Found on `nt6`'s round-three §10.7 deep-dive — a lib whose prior two

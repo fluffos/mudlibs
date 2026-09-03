@@ -176,3 +176,67 @@ tool, `clone/wizard/roommaker.lpc`: a standalone line in its heredoc
 post-fix grep confirms 0 live occurrences remain. Verified via a clean
 native driver boot (zero new `debug.log` errors, port listening, killed
 by exact PID after ~8s).
+
+## 深度功能测试第三轮 / Deep functional test round three (2026-09-03)
+
+新角度：挤号重连（§7.108）、`log/nosave` 缺失时的 wiz 登录
+（§7.11）、迷你档装备路径（§7.73，同 `xo` 本轮形态）、留言板/
+小店买卖、以及 reconnect 路径上对缺失 `UPDATE_D` 的调用。
+
+### Bug 1（§7.108）：`clone/user/user.lpc::reconnect()` 缺
+`enable_commands()`
+
+本档案不在当年 162-lib §7.108 扫过名单的生效结果里（或当时漏网）。
+`reconnect()` 只恢复了 `set_heart_beat(1)`，没有 `enable_commands()`。
+现场：第二次连线答 y 挤掉旧连线后，提示「重新连线返回」但所有指令
+一律回「什麼？」——与 `xo` 已修形态一致。已补上 `enable_commands()`；
+挤号重连后 `look`/`score`/`quit` 立即正常。
+
+### Bug 2（§7.11）：`log_file()` 不 `assure_file()`，`log/nosave/`
+一缺就炸 wiz 登录/重连
+
+`secure/simul_efun/file.lpc` 的 `log_file()` 直接 `write_file(LOG_DIR
++ file)`，没有兄弟档 `xo` 已有的 `assure_file()`。`log/nosave/` 被
+gitignore，环境里一不存在，`log_login()`→`log_file("nosave/wiz_usage")`
+就抛 `Wrong permissions for opening file /log/nosave/wiz_usage`，在
+`get_passwd`/`confirm_relogin` 里炸掉——表现成登录后有 `>` 却任何指令
+都「什麼？」（enter_world 路径被截断）。已加前向声明 + `assure_file`
+；删掉 `log/nosave` 后重测，目录被自动建出，runtime 干净。
+
+### Bug 3：`UPDATE_D`（`/system/daemon/updated`）整档缺失，
+reconnect 必炸
+
+`logind.lpc::reconnect()` 末尾 `UPDATE_D->check_user(user)`，但
+`system/daemon/updated.lpc` 在本档案里根本不存在（`xo`/`xajhxo` 同
+家族有）。每次挤号重连都在 runtime 留下
+`*call_other() couldn't find object '/system/daemon/updated'`。从
+`xo` 拷入同家族的 `updated.lpc`（含 force 上限钳制）；重测 reconnect
+后 runtime 为空。
+
+### Bug 4（§7.73）：`man.lpc`/`waiter.lpc` 无防护的全局装备宏
+
+上一轮 NOTES 已记录「`BLADE_DIR`/`CLOTH_DIR` 整树不存在、被 room
+`catch` 吞掉、未修」。本轮按 `xo` 迷你档先例正式修：
+
+- `man.lpc`：`cloth2` 改指向本地 `__DIR__ "obj/cloth2"`（档案里有）；
+  `blade` 无本地副本，保留宏但加守卫。
+- `waiter.lpc`：`cloth6` 全局/本地皆无，仅加守卫；顺手修好战斗喊话
+  字符串里把 `\n` 转码成 PUA+`n` 的损坏（`！n"` → `！”\n"`；
+  `xajhxo` 同文件仍带同一损坏，未在本轮改兄弟档）。
+
+`goto` 大街/小店后大汉与马老二正常出现，`list ma`/`buy 大碗清茶`
+成交；catch 无 `call_other(0)`。
+
+### 本轮其它验证（无新 bug）
+
+- §7.111 `trace_line` 已有 `obj ? file_name : "<none>"`
+- 留言板 `post`/`read`（先前 §10.7 补测修过的 funiu_b / seteuid）正常
+- 管理员 `fluffos`/`Mud@2026` 登录→look/score→挤号重连→quit
+
+### 本轮修改的文件
+
+- `work/clone/user/user.lpc`
+- `work/d/nanyang/npc/man.lpc`
+- `work/d/nanyang/npc/waiter.lpc`
+- `work/secure/simul_efun/file.lpc`
+- `work/system/daemon/updated.lpc`（新增，来自 xo）
