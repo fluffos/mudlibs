@@ -2950,6 +2950,8 @@ unaffected, only visible via `debug.log`.
   and `/log/nosave/CALL_PLAYER` was created on demand with the expected
   audit line.
 
+- **Dead Souls `/save/economy.o` gap + gitignored log skeleton, `dshakkard` §10.7 (2026-09-03).** Two compounding shapes on the same lib. (1) Onboarding rebuilt top-level `/save/` from the pristine raw tree but never seeded `economy.o` (every sibling DS 3.x lib in this collection commits it). Empty `ECONOMY_D` → every `SetBaseCost("silver", N)` silently rejects → every shop `buy` hits `query_value()`'s `baseval / rate` with `rate == 0.0` → live `*Division by 0.0`. Fix: commit `work/save/economy.o` from `ds386`, and harden `query_value()` / `query_player_money()` against non-positive rates. (2) `.gitignore`'s `libs/*/work/**/log` means NOTES claims about committing `foo.txt` placeholders under `/log` and `/secure/log` cannot survive a fresh checkout — `log_error()` / `chat::LogIt` / `LogSpecial` / `STATISTICS_D->eventKill` then throw "Wrong permissions" on every compile warning, every quit, every intermud packet, and the first kill. Fix: `mkdir_recurse` (or boot-time skeleton mkdir in `LOG_D::create()`) before those writes; `eventKill` must `mkdir_recurse` the letter dir so `/save/kills` itself is created, not only `/save/kills/<letter>`. **Sibling flag**: any DS-lineage lib whose `work/save/economy.o` is absent, and any lib whose log dirs are gitignored without a code-level assure, is the same class — do not trust "we mkdir'd once in NOTES" as durable.
+
 ### 7.12 Shared message/wrapper argument bugs
 
 A 2-arg `tell_room()` wrapper passing a raw int 0 as `message()`'s

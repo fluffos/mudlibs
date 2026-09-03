@@ -847,3 +847,8 @@ gitignored; `data/user/f/` and `data/login/f/` are NEW directories):
 路线同时失效），修复经过全新测试角色从死亡到复活的完整实测验证，两
 份日志文件全程干净无新增。标准检查清单六项全部确认（一项已修实无需
 再动、四项确认不适用/设计正常工作、一项就是本轮的核心发现）。
+
+## String corruption `！\xee\x93\xa2n` cleanup (2026-09-03)
+
+Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
+`！` + private-use `U+E4E2` + literal `n` shape. Fixed in: waiter.lpc (nanyang + city/nanyang), huilun.lpc, system/feature/command.lpc.

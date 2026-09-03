@@ -6,54 +6,68 @@ inherit LIB_DAEMON;
 mapping SpecialLogs = ([]);
 
 nosave void create() {
-    daemon::create();
-    SetNoClean(1);
-    SpecialLogs = ([
-            INTERMUD_D : ({ LOG_I3, LOG_I3ERR }),
-            SERVICES_D : ({ LOG_I3, LOG_I3ERR }),
-            ]);
+  daemon::create();
+  SetNoClean(1);
+  SpecialLogs = ([
+    INTERMUD_D: ({ LOG_I3, LOG_I3ERR }),
+    SERVICES_D: ({ LOG_I3, LOG_I3ERR }),
+  ]);
+  // /log and /secure/log are gitignored (work/**/log); fresh checkouts
+  // have none of these dirs. Create the skeleton once at boot so channel
+  // / intermud logging doesn't throw on every quit (AGENTS.md §7.11).
+  foreach (string path in ({
+    DIR_LOGS, DIR_ERROR_LOGS, DIR_CHANNEL_LOGS, DIR_SECURE_LOGS,
+    DIR_SECURE_INTERMUD_LOGS, DIR_NETWORK_LOGS, DIR_SECURE_LOGS "/adm",
+    DIR_LOGS "/router", DIR_LOGS "/secure", DIR_LOGS "/adm",
+    DIR_LOGS "/archive", DIR_CHANNEL_LOGS "/archive"
+  })) {
+    if (!directory_exists(path))
+      catch(mkdir_recurse(path));
+  }
 }
 
-varargs int RotateLogs(int force){
-    string *contents,*paths;
-    string fooname,foopath,temppath;
-    int maxsize = 50000;
-    if(force) maxsize = 0;
-    paths = ({"/log/chan/", "/log/","/log/errors/","/secure/log/adm/",
-            "/secure/log/","/log/router/","/log/secure/","/log/adm/"});
-    foreach(string path in paths){
-        contents = get_dir(path);
-        foreach(string substr in contents){
-            temppath = path+substr;
-            if( file_size(temppath) > maxsize) {
-                write_file(temppath,"\nEND-OF-LOG\n");
-                fooname=substr+"-"+timestamp();
-                foopath=path+fooname;
-                cp(temppath,foopath);
-                if( file_size(path+"archive") != -2 ) mkdir(path+"archive");
-                cp(foopath,path+"archive/"+fooname);
-                rm(foopath);
-                write_file(temppath, "NEW_LOG "+timestamp()+"\n", 1); 
-            }
-        }
+varargs int RotateLogs(int force) {
+  string *contents, *paths;
+  string fooname, foopath, temppath;
+  int maxsize = 50000;
+  if (force) maxsize = 0;
+  paths = ({ "/log/chan/", "/log/", "/log/errors/", "/secure/log/adm/",
+    "/secure/log/", "/log/router/", "/log/secure/", "/log/adm/" });
+  foreach (string path in paths) {
+    contents = get_dir(path);
+    foreach (string substr in contents) {
+      temppath = path + substr;
+      if (file_size(temppath) > maxsize) {
+        write_file(temppath, "\nEND-OF-LOG\n");
+        fooname = substr + "-" + timestamp();
+        foopath = path + fooname;
+        cp(temppath, foopath);
+        if (file_size(path + "archive") != -2) mkdir(path + "archive");
+        cp(foopath, path + "archive/" + fooname);
+        rm(foopath);
+        write_file(temppath, "NEW_LOG " + timestamp() + "\n", 1);
+      }
     }
-    return 1;
+  }
+  return 1;
 }
 
 #if 1
-int LogSpecial(string file, string content){
-    int ret;
-    object prev = previous_object();
-    string prevname, *specials = ({});
-    if(!prev) return 0;
-    specials = keys(SpecialLogs);
-    if(!sizeof(specials)) return;
-    prevname = base_name(prev);
-    if(!sizeof(prevname) || member_array(prevname, specials) == -1){
-        return 0;
-    }
-    if(member_array(file, SpecialLogs[prevname]) == -1) return 0;
-    ret = unguarded( (: write_file($(file), $(content)) :) );
-    return ret;
+int LogSpecial(string file, string content) {
+  int ret;
+  object prev = previous_object();
+  string prevname, *specials = ({});
+  if (!prev) return 0;
+  specials = keys(SpecialLogs);
+  if (!sizeof(specials)) return;
+  prevname = base_name(prev);
+  if (!sizeof(prevname) || member_array(prevname, specials) == -1) {
+    return 0;
+  }
+  if (member_array(file, SpecialLogs[prevname]) == -1) return 0;
+  // Parent dir may be missing on a fresh checkout (gitignored logs).
+  catch(mkdir_recurse("/" + implode(explode(file, "/")[0..<2], "/")));
+  ret = unguarded((: write_file($(file), $(content)) :));
+  return ret;
 }
 #endif

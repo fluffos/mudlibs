@@ -240,3 +240,8 @@ reconnect 必炸
 - `work/d/nanyang/npc/waiter.lpc`
 - `work/secure/simul_efun/file.lpc`
 - `work/system/daemon/updated.lpc`（新增，来自 xo）
+
+## String corruption `！\xee\x93\xa2n` cleanup (2026-09-03)
+
+Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
+`！` + private-use `U+E4E2` + literal `n` shape. Fixed in: system/feature/command.lpc (missed in prior round-three waiter-only fix).

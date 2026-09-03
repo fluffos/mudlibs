@@ -698,3 +698,94 @@ mappings; incidental save-file churn from this session's boot (seeded
 `fluffos` admin's `Class` field, player list, mudinfo, snoop, preload
 saves) was left uncommitted. Killed the test driver by exact PID when
 done.
+
+## Deep functional test (first full §10.7 pass, 2026-09-03)
+
+First continuous playthrough of the bespoke domains (`lennar`,
+`lennarmanor`, `northernwastes`) plus stock town combat / shop / death /
+class-join / quit-reconnect. Admin `fluffos`/`Mud@2026`. Prior work on
+this lib was onboarding + sibling sweeps only — never a full §10.7 pass
+against the custom content.
+
+### Bug 1 (§7.11): missing `/save/economy.o` — every shop buy *Division by 0.0*
+
+Onboarding rebuilt `/save/` from the pristine raw tree but never seeded
+`economy.o`. Every other Dead Souls 3.x lib in this collection commits
+that file (`ds386`, `dsIII`, `deadsouls_fluffos`, …). With an empty
+`ECONOMY_D` currency map:
+
+- `ECONOMY_D->__QueryCurrencies()` returns `({ })`
+- `SetBaseCost("silver", N)` silently fails (`"Bad currency value"`)
+- `buy ale from smort` (and any other costed purchase) hits
+  `query_value()` → `baseval / rate` with `rate == 0.0` →
+  `*Division by 0.0` at `secure/sefun/economy.lpc:70`
+
+**Fix**: committed `work/save/economy.o` copied from `ds386` (same
+engine, same stock currency table: copper/silver/gold/electrum/
+platinum/dollars). Also hardened `query_value()` / `query_player_money()`
+to skip or return 0 on non-positive rates so an empty economy degrades
+instead of crashing. **Verified live**: `buy ale from smort` after
+`AddCurrency("gold", 100)` delivers the tankard and deducts gold
+(`99 gold` remaining).
+
+### Bug 2 (§7.11): gitignored `/log` and `/secure/log` skeleton
+
+`.gitignore` has `libs/*/work/**/log`, so NOTES §4's "commit foo.txt
+placeholders" claim cannot survive a fresh checkout. Observed live:
+
+- `master::log_error()` → `/log/errors/<domain>` → builder-visible
+  "Wrong permissions" flood on every compile warning
+- `chat::LogIt` → `/log/chan/connections` → error on every `quit`
+- `LOG_D->LogSpecial` → `/secure/log/intermud/i3{,err}` → boot-time
+  intermud noise
+
+**Fix**:
+
+- `master::log_error()`: `mkdir_recurse(DIR_ERROR_LOGS)` before write
+- `secure/daemon/log.lpc::create()`: mkdir the known skeleton
+  (`/log/{errors,chan,router,adm,secure,archive}`,
+  `/secure/log/{intermud,network,adm}`, …); `LogSpecial` also
+  assures the parent of its target file
+- `chat::LogIt`: assure parent of `/log/chan/<chan>` before append
+
+**Verified live**: wiped both log trees, rebooted — skeleton recreated
+with zero "Wrong permissions"; quit prints a clean
+`Please come back another time!` + connections-channel line.
+
+### Bug 3 (§7.11): `STATISTICS_D->eventKill` mkdir only the leaf letter dir
+
+`daemon/statistics.lpc` did `mkdir("/save/kills/f")` without ensuring
+`/save/kills` itself exists. First kill of a rat threw
+`Wrong permissions ... /save/kills/f/fluffos`. Fixed with
+`unguarded((: mkdir_recurse($(file)) :))` on the letter directory.
+**Verified live**: kill writes `(["a rat":1,])` under
+`/save/kills/f/fluffos`.
+
+### Playthrough checklist (all green after fixes)
+
+- Admin login → Lennar Prancing Dolphin → Everett Square →
+  Lennar Manor foyer → Northern Wastes village intersection
+- Shop: buy ale from Sarum Smort
+- Combat: mansion kitchen rats (limb sever / death channel / XP)
+- Death/revive via `eventDie` + `regenerate`: `hp: 120/400` clean ints
+  (prior §7.121 `to_int` fix holds)
+- `become fighter` at Praxis fighter_join (prior ChangeClass fix holds)
+- Quit + reconnect after wall-clock gap: Fighter class, XP, kitchen
+  position all persisted; quit path clean
+
+### Side fix this cycle (not dshakkard)
+
+Ported the `！\xee\x93\xa2n` → `！\n` / `！”\n` string-corruption fix
+from `qhxajh`'s waiter to `xajhxo` (`d/nanyang/npc/waiter.lpc`,
+`d/city/nanyang/npc/waiter.lpc`, `d/menpai/shaolin/npc/huilun.lpc`,
+`system/feature/command.lpc`) and the matching
+`qhxajh` `system/feature/command.lpc` instance.
+
+### Files touched
+
+- `work/save/economy.o` (new, from ds386)
+- `work/secure/daemon/master.lpc`
+- `work/secure/sefun/economy.lpc`
+- `work/secure/daemon/log.lpc`
+- `work/secure/daemon/chat.lpc`
+- `work/daemon/statistics.lpc`
