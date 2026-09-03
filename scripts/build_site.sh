@@ -250,7 +250,7 @@ cp -r "$RELEASE_DIR/vendor" "$SITE_DIR/_driver/"
 # one copy for the whole site rather than duplicated into every lib dir
 # (they're byte-identical across libs; only fluffos-boot.js is per-lib).
 # See scripts/web_shell_override/zip-loader.js's header for the mechanism.
-cp "$SELF_DIR/web_shell_override"/{persist,save-export,zip-loader,zip-worker,tab-lock,sync-hook}.js \
+cp "$SELF_DIR/web_shell_override"/{persist,save-export,zip-loader,zip-worker,tab-lock,sync-hook,zj-protocol}.js \
    "$SITE_DIR/_driver/"
 for slug in $SLUGS; do
   # hardlink when possible (same fs), fall back to a copy. This brings in
