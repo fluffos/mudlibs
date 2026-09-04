@@ -119,3 +119,56 @@ legitimate re-enables from `revive()` in `feature/damage.lpc` and
 re-invoke `enable_player()` on this lib while the object is still
 `living()`). Verified via `lpcc --batch` single-file compile check
 (PASS). Part of the corpus-wide §7.19 sweep (Batch E).
+
+## 深度功能测试第三轮 / §10.7 round three (2026-09-03)
+
+新角度：2026-08-05 那一轮测过指令表、留言板 `post`、武馆切磋、北大街
+死斗和鬼门关→阎罗审判复活。当时写明没测的是门派拜师和商店。本轮只
+补这两条，不重打死亡。管理员仍是 `fluffos` / `Mud2026A`（中文名秦风，
+UTF-8：BIG5 询问答 `N`）。端口 40146。回环只放行巫师，本号是 admin。
+
+### 实测过程
+
+- 落地武馆门廊 `/d/wuguan/menlang`，孙均新手讲解还在。`goto
+  /d/city/dangpu` 到当铺，老板黄（`lao ban`）。
+- `list` 要分类（`armor|weapon|drug|book|misc`）。空武器列表只印标题
+  「你可以向当铺老板购买下列武器：」，不崩。
+- `clone /clone/weapon/changjian` 后 `value changjian` = 10 银 50 文；
+  `sell` 成交，「讨价还价」升 1。再 `list weapon` 显示库存长剑单价
+  十八两白银。身上只有卖剑所得 10 银 50 文时 `buy` 回「穷光蛋，一边
+  呆着去！」——当铺加价，不是 bug。再 `clone` 一两黄金后
+  `buy changjian` 成交：「你从当铺老板那里买下了一柄长剑。」
+- 拜师：`clone /kungfu/class/kunlun/jiangtao`（蒋涛几乎无门槛），
+  `bai jiang` →「好吧，我就收下你」→ 昆仑派第六代弟子。`score` 师承
+  【昆仑派】【蒋涛】。quit 后重连称号和师承都还在。
+- 帮派建板仍未测（仍要先入帮、攒一千两黄金）。
+
+### 发现并修复的 PROGRAMMING bug
+
+**`log_file()` 不 `assure_file()`（AGENTS.md §7.11，和 `ldtx` 同一
+Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
+`log_file()` 是裸 `write_file(LOG_DIR + file)`，同文件里已经有
+`assure_file()` 却没用。`log/nosave/` 被 gitignore，全新/干净树上不
+存在。巫师 `clone` 在物件已经复制成功之后去写
+`log_file("nosave/CLONE_OBJ")`，抛
+
+```
+*Wrong permissions for opening file /log/nosave/CLONE_OBJ for append.
+"No such file or directory"
+```
+
+栈在 `file.lpc` / `simul_efun.lpc` 第 8 行。`clone` 本身成功，但每
+次都对巫师刷执行时段错误。`securityd` 晋升日志和 `valid_write` 拒绝
+日志（`log_file("FILES")`）是同一条路。
+
+修复：前向声明 + `assure_file(LOG_DIR + file)`，并加
+`nosave int in_log_file` 重入守卫（`securityd` 拒绝写入也会
+`log_file("FILES")`，避免再走一遍 `file_size`/`mkdir`；同 fqyy2
+2026-09-03）。CRLF 按二进制保留。复测：`clone` 零条权限错误，
+`work/log/nosave/CLONE_OBJ` 被自动建出并写下审计行。冷启动无
+“Too deep recursion”。
+
+### 本轮修改的文件
+
+- `work/adm/simul_efun/file.lpc`
+- 管理员存档 `work/data/{login,user}/f/fluffos.o`（本轮后状态，含昆仑派）
