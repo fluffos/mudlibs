@@ -472,3 +472,28 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，round three，paid shop）
+
+新角度：补上 2026-08-14 round two 没做成的真实购买。那次
+`buy dumpling from waiter` 停在「你的钱不够」（新角色身无分文）；
+雷一鸣拜师已经完成，本轮不再拜师。
+
+本轮没有新的 programming bug。`log_file()` 已有 `assure_file()`。
+`log_error()` 已有 `arning:` 闸门。第一输入是 GB/BIG5 内码菜单
+（`0` = GB，`1` = BIG5），不是把 id 直接喂给 `get_id`。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026` / 浮浮。端口 40011。先发 `0` 选 GB，
+再发 id/密码。落地已经在凤求凰客栈（`/d/fy/fqkhotel`），店小二 id
+`waiter`。`clone /obj/money/gold` 一次成功（这份档案的 `clone.lpc`
+没有 `is_admin()` 门槛）。`list` 牛皮酒袋二十文 / 包子十五文 /
+烤鸡腿三十文。`buy dumpling from waiter` 成功：「你向店小二买下一
+个包子。」`i` 剩九十九两银子 + 八十五文钱（10000−15=9985）+ 包子。
+`save`「档案储存完毕。」找零数学正确，不是钱被吞。
+
+live `debug.log` 是 `libs/fengyun434/log/debug.log`（Boot Time Fri
+Sep 4 03:43:50 2026），无 `error:` / `Too deep recursion`。管理员
+存档未提交。
+
