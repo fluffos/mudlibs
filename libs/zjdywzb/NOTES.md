@@ -269,3 +269,58 @@ functionally re-tested live on this lib.
   器）5 处存取器全部已是 `mapp(x) ? x : ([])` 写法；`combatd.lpc`
   没有 `bounce` 相关代码，4 份姊妹档案命中的除零 bug 在这份档案不
   适用。
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：扬州醉仙楼购物 + 丐帮李斧头拜师。上一次深挖是 2026-08-20
+死亡/复活（`smash`/`death_stage`），NOTES 全文没有 `buy`/`商店`/
+`apprentice` 实测。sibling `zjdyaryl` 同日刚走过同一条路径；
+`zjdy2008wzb` 2026-08-19 已经 `buy jitui` + `bai li futou`。
+
+本轮没有新的 programming bug。`enter_world()` 已经是
+`ob->set("registered", user->query("registered"))`（从 user 抄到
+login，和 xkxz2 Bug 2 方向相反）。`work/log/nosave/` 目录本来就在，
+`clone` 这条路没碰到 ntii 那种缺目录崩溃——但 `clone` 本身对
+`(admin)` 巫师不可用：`is_admin()` 是 `admin_flag == 1222 ||
+getuid() == "pkyou"`，和 wizlist `(admin)` 是两回事（2026-08-20
+NOTES 已记录，不改）。`env/prompt` 是 `"time"`，live clock，idle
+0.45。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026` / 浮浮。第一输入是「您的英文名字」，
+没有 BIG5 提示。端口 40109。原先 `registered:0`、`qi:1`（上次死亡
+测试留下的）、`startroom` 世外桃源。`recover` 后走完 `register
+fluffos@example.com` → `decide` → `west`/`out`（阴险奸诈）→ `wash`
+→ `born 扬州人氏`，落地扬州客店。`born` 后弹出游戏规则 pager
+（ENTER/q）。
+
+`clone /clone/money/gold` 被拒：「你不能复制物品。」（`is_admin()`
+门槛，设计如此）。布衣当铺估价一文不值。改用巫师 `update` 加载一
+个一次性 `/clone/misc/_tmp_pay.lpc`（`create()` 里 `new` 黄金然后
+`move` 给 `this_player()`；测完已删，未提交），`i` 出现一两黄金。
+
+`goto /d/city/zuixianlou`，`list` 包子五十文 / 烤鸡腿八十文。扬州
+店小二没有丐帮穷叫化踢人。`buy jitui` 成功：「你从店小二那里买下
+了一根烤鸡腿。」`i` 剩九十九两白银 + 二十文铜钱（10000−80=9920）。
+
+`goto /d/gaibang/underhs`（舍身崖下），李斧头 id `li` /
+`kungfu/class/gaibang/li-futou.lpc`，只收男性。`apprentice li` 一次
+成功：「恭喜您成为丐帮的第二十代弟子。」`score`「你是扬州人氏，
+天性阴险奸诈，师父是李斧头。」`title`「丐帮第二十代传人」。
+
+第一次 `save` 撞上 30 秒冷却（`born` 刚写过 `last_save`）。丢
+socket 后重连「重新连线完毕」，再 `save`「档案储存完毕」。此时
+`user.o` `registered:1` + `family_name` 丐帮 / `master_name` 李斧头；
+`login.o` 仍是 `registered:0`（`do_decide` 不写 `link_ob`）。
+
+重启驱动强迫走 `enter_world()`。重连落地客店而不是世外桃源，没有
+「您还没有注册」，`score` 仍是丐帮二十代 / 李斧头 / 扬州人氏，银
+子铜钱还在。烤鸡腿是 `F_FOOD`，不进 autoload，重启后不在身上——
+不是存档 bug。
+
+live `debug.log` 是 `libs/zjdywzb/log/debug.log`（第一轮 Boot Time
+Fri Sep 4 03:39:22，persist 轮 03:41:00），无 `error:` / `Too deep
+recursion`。mudlib `work/log/log` 只有开机/指令编译警告。心跳期
+`Inherit chain too deep`（2026-08-20 已记录、quest/shen.lpc）本轮
+短会话没有再出现，不修。管理员存档未提交。
