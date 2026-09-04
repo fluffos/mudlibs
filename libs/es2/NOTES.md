@@ -513,3 +513,42 @@ Verified via `scripts/lpcc_check.sh` (same 21 pre-existing FAILs as
 before this pass — all previously-documented dead/gapped content, zero
 new regressions) and a full native driver boot + the playthrough above,
 with zero `debug.log`/driver-stdout errors across the whole session.
+
+## 深度功能测试（2026-09-04，round three，paid shop）
+
+新角度：补上 2026-08-27 round two 没做过的真实购买。那次已经
+`apprentice` 封山剑派柳淳风，本轮不再拜师。
+
+### 修复的 programming bug
+
+1. **`log_error()` 把编译警告当「编译时段错误」广播给玩家（§15w）**：
+   `adm/obj/master.lpc` 的 `log_error()` 对 `this_player(1)` 无条件
+   `write("编译时段错误：" + message)`。本驱动把 `warning: Unused
+   local variable` / `Unknown #pragma` 也送进 `log_error()`，第一次
+   登录刷了 34 条「编译时段错误」。闸门改成
+   `this_player(1) && strsrch(message, "arning:") == -1`，警告仍写入
+   `work/log/log`。修复后同路径 0 条玩家可见「编译时段错误」。
+2. **`can_afford()` 在没有白银时把任何非整两黄金的价格都判成「零钱」**：
+   `feature/finance.lpc` 的 1996-10-14 改写在 `silver` 缺失时直接
+   `else if (amount%10000) return 2`。身上已有足够铜钱支付 15 文包子
+   （一百文钱 + 一两黄金）仍报「你没有足够的零钱，而对方也找不开」。
+   补上「无银、有铜、铜钱覆盖 `amount%10000`」分支。修复后
+   `buy 包子 from waiter` 成功，找零 100−15=85 文。
+
+黄金不能拆成铜钱仍是设计（纯黄金买 15 文会走同一句零钱提示）；
+`vendor_goods` 的键是中文「包子」不是 `dumpling`，`buy dumpling from
+waiter` 会「对方好像不愿意跟你交易」——list 列出的就是中文键，不是
+bug。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`。第一输入是「您的英文名字」，没有内码
+菜单。端口 40214。落地饮风客栈 `/d/snow/inn`，店小二 id `waiter`。
+孙悟空在场，ambient 不算 live clock，idle 0.45 够用。`clone
+/obj/money/coin` + `call coin->set_amount(100)`，`list` 包子十五文 /
+鸡腿三十文 / 酒二十文 / 匕首五十文。修复后 `buy 包子 from waiter`：
+「你向店小二买下一个包子。」`i` 包子 + 一两黄金 + 八十五文钱。
+
+live `debug.log` 是 `libs/es2/log/debug.log`（Boot Time Fri Sep 4
+03:48:47 2026），无 `error:` / `Too deep recursion` / `F_FINANCE`。
+管理员存档未提交。
