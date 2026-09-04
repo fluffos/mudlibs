@@ -969,3 +969,19 @@ re-enables. `enable_player()`'s single body has no early `return`
 statements, so the flag is set at entry and cleared once, before the
 function's fall-through end. Verified with a single-file `lpcc`
 compile check (exit 0, no errors) against `feature/command.lpc`.
+
+## 深度功能测试（2026-09-04，shop）
+
+Live pass, port **40087**. 2026-07-24 already apprenticed `qinlangf` to
+谷虚道长 (武当派); this round is shop only. First send is the English
+id (no GB/BIG5 menu). Admin `fluffos` / `Mud@2026` lands at 英豪酒楼
+(`/d/zhongzhou/yinghao`) with 武大郎 present.
+
+**Shop**: `list` on 武大郎 (`d/zhongzhou/npc/wudalang.lpc`, `F_VENDOR`)
+shows 烤鸡腿 三十文铜板 (key `jitui`). `clone /obj/money/gold` then
+`buy jitui from wu dalang` succeeded: “你向武大郎买下一根烤鸡腿”,
+inventory 烤鸡腿 + 九十九两银子 + 七十文钱. `can_afford()`'s 零钱
+checks are already commented out here (Huang 1996 auto-convert), so
+gold-only is fine. 武大郎 `random_chat` emotes — idle 0.45.
+
+No code change. 拜师 not re-done.
