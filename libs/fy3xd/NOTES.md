@@ -574,3 +574,29 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-03，第三轮）
+
+新角度：2026-08-07 第一轮已经走完金钱帮拜师（荆无命）和 quit+reconnect，
+没有测商店。本轮只补商店，并顺带发现 `save` 指令被影子文件挡住。
+
+- **商店**：落地即在凤求凰客栈。`list` 列出烤鸡腿 / 包子 / 牛皮酒袋；
+  `clone /obj/money/gold` 后 `buy fried chicken leg from waiter` 成功
+  （「你向店小二买下一根烤鸡腿」），找零成九十九两银子 + 七十文钱。
+  `goto /d/fy/stopwin` 镇风兵器铺，诸葛雷 `list` 列出长剑等多件兵器；
+  `buy sword from zhuge` 成功（「你向诸葛雷买下一把长剑」），银子减到
+  九十五两。`quit` 后重连，九十五两银子 + 七十文钱仍在；烤鸡腿/长剑
+  未进 autoload（该血统普通物件常规范围，不按丢物 bug 记）。
+- **`save` 被 `cmds/std/save.lpc` 挡住**：玩家输入 `save` 只回「什麽？」。
+  `COMMAND_D->find_command()` 从 path 末尾往前扫；admin 的 `ADM_PATH`
+  末项是 `/cmds/std/`，该目录里有一份没人 inherit、也没人
+  `call_other` 的残留 `save.lpc`（只有 `save()`/`restore()`，没有
+  `main()`），把真正的 `/cmds/usr/save.lpc` 挡掉。`call_other(file,
+  "main")` 失败后 command_hook 落到默认失败句。真实存盘走 `F_SAVE`
+  （`/feature/save.lpc`），`quit` 本身能存，所以第一轮没踩到。已删除
+  这份无引用的影子文件。冷启动后 `save` 回「档案储存完毕。」手足
+  `fy3dz` 以及 `kxkj`/`kxkj1`/`kxkjii2` 也有同名路径，未在本轮改。
+- **日志**：live `debug.log` 为 `libs/fy3xd/log/debug.log`。无 `error:` /
+  `Too deep recursion`。`work/log/log` 只有编译警告。
+- **结论**：两家商店买卖 + quit/reconnect 通过；修了 `save` 影子文件。
+
