@@ -704,3 +704,48 @@ lifecycle gutted to no-ops/always-fail per this project's established
 **Lesson for future WASM passes**: "playable" from an earlier pass
 doesn't guarantee every login tier was exercised — an admin-only code
 path can hide a real crash that a player-only test never reaches.
+
+## 深度功能测试（2026-09-04，shop + 拜师）
+
+Independent live pass on this slug (port **40055**, `build-debug`
+driver — do not use the ASAN `build/` driver; that 10–20× preload
+slowdown is a documented false positive from the 2026-08-12 round).
+Prior §10.7 / 2026-08-12 text never exercised a shop purchase or a
+recruiting NPC here. First send is **`gb`** (banner “Select 国标码 GB
+or … BIG5 (gb/big5)”), then id `fluffos` / password `Mud@2026`.
+`#undef DB_SAVE` in `work/include/ntsql.h`, so there is no MySQL
+login/restore gate. Admin has no `wizpwd` yet — login prints the
+“请登陆后用 wizpwd 命令设置” warning and then asks for the ordinary
+password. `register player@me.com` from `/d/register/regroom` drops
+the wizard into 生命之谷. Birth is `choose 1` (光明磊落) →
+`washto 20 20 20 20` → `born 扬州人氏` (lands at `/d/city/kedian`;
+`help rules` more-pager — send `q` before further commands, or they
+are swallowed). Unlike `nitan170911`, `washto` here does **not**
+auto-set `born`.
+
+**Shop**: 客店 `xiaoer` is an innkeeper; `游讯` in the same room
+intercepts `list`/`buy` (“我只卖消息不卖货”). Real vendor is
+`/d/city/zuixianlou` 店小二 (`d/city/npc/xiaoer2.lpc`, `F_DEALER`).
+`list` shows 烤鸡腿 80 文. `clone /clone/money/gold` works
+(`release server : local` makes `is_admin()` true). `buy jitui`
+deducted one gold into 99 两白银 + 20 文铜钱 and delivered 烤鸡腿.
+`feature/dealer.lpc` already `#include <dbase.h>`, so mixin
+`query("vendor_goods")` resolves; no F_DEALER this_object() patch
+needed (unlike `nitan170911`/`hhsj`/`xfbhh`). No F_DEALER 丐帮
+refuse on this lib.
+
+**拜师**: `goto /d/city/lichunyuan`, `bai kong` on 空空儿
+(`kungfu/class/gaibang/kongkong.lpc`) — no skill/shen gate beyond
+`permit_recruit()`. Accepted immediately: “恭喜您成为丐帮的第二十代弟子.”
+`score` shows 【门派】丐帮 / 【师承】空空儿. `save` (30s cooldown)
+then disconnect. After a full driver kill + reboot, relogin still
+shows 丐帮 / 空空儿; the silver/coin change persisted; 烤鸡腿 did
+not (food, not autoload — expected, not a save bug). Do not `quit`
+when `mud_age` is tiny — new-account quit deletes the account.
+
+**Bug fixed**: `kungfu/class/huashan/{yue-buqun,yue-wife,feng-buping}.lpc`
+`recruit_apprentice()` wrote `add("apprentice_availavble", -1)` (extra
+“av”) while `attempt_apprentice()`/`reset()` use `"apprentice_available"`.
+Same typo `nitan3`/`nitan6` already live-verified — the daily-recruit
+counter never decremented. Corrected the property name in all three
+files (LF-only). `qingcheng/yu.lpc` is not in this tree.
