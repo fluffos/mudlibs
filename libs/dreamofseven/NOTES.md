@@ -791,3 +791,24 @@ driver restart happened anywhere in the preceding session.
   routine boot-churn diffs (uptime/cmds-per-second display caches) from
   the several reboots this session required; committed alongside, no
   action needed (matches this project's standard save-churn precedent).
+
+## 商店付费购买（2026-09-04 librarian shop slice）
+
+拜师（八極門 / 李書文）已在 2026-08-27 深度测试中 live 验证，本轮不重做。
+
+起始房间朝天樓的店小二 (`open/world1/tmr/area/npc/waiter.lpc`，继承
+`SELLMAN`) `list` 给出真实标价清单：馒头 10、水袋 20、鸡汤 40、火把 10
+等。货币是 world1 实物 `past_money`（`/obj/money/coin.lpc` 古幣），不是
+整数钱包；`buy` 另外扣 `supply_point`（馒头这一档扣 8 点，见
+`sell_list` 的 mapping value）。新号 `supply_point` 默认为 0，心跳里
+`feature/damage.lpc` 才会慢慢补到 `level*20+40`。
+
+Admin `fluffos`/`Mud@2026` 进房后（隐形问 n）：
+`eval this_player()->set("supply_point", 60)` 与
+`eval this_player()->receive_money(100)` 各成功一次（`eval` 需要
+`/u/f/fluffos/` 工作目录存在，本机临时建了空目录，不入库）。
+`i` 见到「一百枚古幣」。`buy manto` live 回「你花了10枚古幣向店小二買了
+一個饅頭」，随后 `i` 为九十枚古幣 + 饅頭(Manto)
+`/open/world1/tmr/area/npc/obj/manto`。没有崩溃，没有「钱不够」误报。
+`log/debug.log` 是本次开机（2026-09-04 14:20）的 live 档，只有既有的
+反斜杠 warning，没有 fatal。

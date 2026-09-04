@@ -249,3 +249,24 @@ entry, cleared before every return), NOT a `living()`-gated guard --
 `living()` guard would silently break. Verified via `lpcc --batch`
 single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
 (Batch C).
+
+## 商店付费购买 + 将军府拜师（2026-09-04 librarian shop slice）
+
+2026-08-27 深度测试只验证了穷号 `buy huasheng from xiao er` 回「你的钱不够」，
+正式 `bai` 未走到。本轮补完付费购买和将军府拜师，并确认 quit→重连后师承仍在。
+
+第一行必须发字面 `2060`（Tomud 握手，`get_id` 拒其它）。登录密码
+`Play2026x`，管理密码 `Mud@2026`。`if_young("no")` 自动走，没有 Y/N 提示。
+落地南城客栈 `/d/city/kezhan`，`list` 显示花生豆 二十文钱。
+
+Admin `fluffos`：`clone /obj/money/gold` 得到一两黄金，然后
+`buy huasheng from xiao er` live 回「你向店小二买下一碟花生豆」。
+`i` 为九十九两银子 + 八十文钱 + 花生豆。没有崩溃，没有「钱不够」误报。
+
+新手拜师：`goto /d/jjf/jjf_bingqi`，`bai qin ping`（秦平，管家，无经验门槛）
+→ 将军府第四代弟子，师承秦平。秦琼要求 `combat_exp >= 100000`：
+`call me->set("combat_exp", 100000)`（本库 `eval` 只 `force_me` 一条命令，
+不是 LPC；用 `call`），`goto /d/jjf/keting`，`bai qin qiong` →
+将军府第三代弟子，师承秦琼。`quit` 后重连，`score` 仍是师承秦琼 / 第三代弟子。
+
+本机临时建了空 `/u/f/fluffos/`（不入库）。驱动 PID 已杀，端口 40157 已空。
