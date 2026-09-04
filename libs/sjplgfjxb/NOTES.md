@@ -231,3 +231,43 @@ had a single fall-through exit (no early `return`s), so one
 guard-at-top + one clear-at-bottom pair was sufficient. Verified via a
 single-file `lpcc --batch` compile check (PASS) -- not individually
 live-boot-tested.
+
+## 深度功能测试（2026-09-03，第三轮）
+
+新角度：2026-08-08 第一轮已经走完注册、战斗、留言板；死亡/复活当时
+只做了代码走读。本轮补商店，并顺带实机确认红旗镖局拜师已经写入存档。
+
+- **商店（燕云客栈店小二 / 酒馆酒保）是真 bug，已修**：
+  `d/city/npc/waiter.lpc` 的 `vendor_goods` 列了
+  `/d/city/obj/food/dishes/dish01`–`dish10`，`jiubao.lpc` 列了
+  `dish16`–`dish20`，但这份教学版子集里整个 `d/city/obj/food/dishes/`
+  目录从未随档（只有一个无关的 `apple.lpc`）。`feature/vendor.lpc` 的
+  `do_vendor_list()` / `buy_object()` 对 `name[i]->name()` /
+  `query("id")` 没有守卫，`list` 或 `buy` 一碰到缺失档案就
+  `*call_other() couldn't find object '/d/city/obj/food/dishes/dish07'`
+  （`vendor.lpc:73` / `:13`），连已经存在的
+  `/obj/example/chicken_leg` 等货物也一起买不成。手足 `sjplii` 带着
+  完整 `dishes/` 物件，所以那边不会踩这个洞；不要从 `sjplii` 抄菜谱
+  进来——那是另一份完整档的内容，不是这份教学版丢掉的源文件。
+  修复：删掉两份 NPC 里指向缺失物件的键；`feature/vendor.lpc` 的
+  `list`/`buy`/`compelete_trade` 对
+  `file_size(path+".lpc")`/`file_size(path+".c")` 都小于 0 的键
+  `continue`，一个坏键不能再拖垮整张货表。
+- **改后冷启动验证**（端口 40134，`fluffos`/`Mud@2026`，中文名云中鹤）：
+  `goto /d/city/kezhan`，`list` 列出椒盐排骨 / 鱼香肉丝 / 烤鸡腿 /
+  包子 / 牛皮酒袋 / 油辣猪排；`clone /obj/money/gold` 后
+  `buy fried chicken leg from waiter` 成功（「你向店小二买下一根烤鸡
+  腿」）。`goto /d/city/jiuguan`，酒保 `list` 列出包子 / 牛皮酒袋 /
+  生烧扒翅，无崩溃。
+- **拜师已写入存档**：上一轮会话里 `goto /d/city/biaoju/kufang`、
+  `bai zhuang`（庄容）成功。本轮冷启动 + 断线重连后 `score` 仍是
+  「红旗镖局趟子手」「你的师父是庄容。」`save` 本身第一轮已经确认
+  回「档案储存完毕。」，本轮未再踩到影子文件。
+- **日志**：live `debug.log` 为 `libs/sjplgfjxb/log/debug.log`（fd
+  在 chdir 进 `work/` 之前打开）。本轮无 `call_other() couldn't find
+  object`、无 `error:` / `Too deep recursion`。`work/log/log` 只有
+  既有的 Unused local variable 编译警告（含 `vendor.lpc` 里预先就
+  在的未使用 `list` 变量，不是这次引入的）。`error_handler()` 把
+  追踪写回 debug.log，没有另一份独立 runtime-error 日志。
+- **结论**：两家商店 `list`/`buy` 通过；红旗镖局拜师跨冷启动仍在；
+  修了缺失菜谱键 + vendor 缺档守卫。死亡/复活仍未实机触发。
