@@ -760,3 +760,34 @@ fall-through exit (no early `return`s, unlike `kxkj`/`kxkjii2`'s `if
 one clear-at-bottom pair was sufficient. Verified via a single-file
 `lpcc --batch` compile check (PASS) -- not individually
 live-boot-tested.
+
+## 深度功能测试（2026-09-03，第三轮）
+
+新角度：2026-08-04 第一轮已经走完中央驿站 `list`、战斗死亡和复活。
+本轮只补加入公会 + 拜师，并核对 `fy3xd` 记下的
+`cmds/std/save.lpc` 影子文件嫌疑。
+
+- **`cmds/std/save.lpc` 不是 fy3xd 那种影子文件**：这份有完整
+  `main()`（含 `save -1`/`-2` 备份档）。冷启动后第一次 `save` 回
+  「档案储存完毕。」「备份资料 ok.」。`COMMAND_D` 虽也是
+  `while (i--)` 从后往前扫，但这里没有第二份无 `main()` 的
+  `/cmds/usr/save` 挡路。
+- **加入剑士公会 + 仙剑派拜师（通过）**：
+  `goto /open/gsword/room/swordhouse`（五岳剑盟），柳毅在场，
+  `join` →「欢迎浮浮加入剑士公会!!」（`class=swordsman`）。
+  `goto /open/gsword/room/g5-1`（凌霄宝殿）`apprentice teng`，
+  郑士欣不直接收新手，改为 `select 梁发`。
+  `goto /open/gsword/room/g2-17` `apprentice fa` →
+  「恭喜您成为仙剑派的第五代弟子。」`score` 显示「仙剑派第五代弟子」
+  「师父：梁发」。冷启动重连后 `score` 仍在，`save`/`quit` 干净。
+- **一次脚本会话里 `save` 之后驱动空转**：第一次脚本在 `apprentice`
+  之后立刻 `save`，客户端 0.6s 无回音就断开（没 `quit`）。随后驱动
+  占 50–72% CPU、新连线收不到 banner，直到对本会话 PID 发 TERM。
+  冷启动后同一账号再 `save` 立刻成功，备份档
+  `data/backup/user/f/fluffos.o` 也从 0 字节变成正常大小。没有第二次
+  复现，不当成已确认的编程 bug，只记现象：断线发生在 `save` 的备份
+  `cp` 路径上时，驱动可能停在单线程 eval 里。
+- **日志**：live `debug.log` 为 `libs/kxkj1/log/debug.log`。本轮无
+  `error:` / `Too deep recursion`。`work/log/log` 只有编译警告。
+- **结论**：剑士公会 `join` + 仙剑派梁发拜师跨冷启动仍在；`save`
+  指令本身可用。未改代码。
