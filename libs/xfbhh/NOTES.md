@@ -287,3 +287,7 @@ CHARACTER 的 nomask `_query` 冲突）。旁路文件 `feature/dealer1.lpc`
 （档案不存在），`item->move` 对 0 做 call_other——管理员指令缺档，
 未当玩家商店 bug 修。`cmds/usr/sellitem` 把售价写入 `balance`，
 `MONEY_D->player_pay` 在身上没带现钱时会扣存款。
+
+重启驱动后现场复核：`list` 列出烤鸡腿/包子/烤鸭/酒袋/干粮等货表；
+`giveall /clone/money/gold` 后 `buy 1 jitui` 得到「你从店小二那里买下
+了一根烤鸡腿」，身上出现 `jitui`，找零灵石碎片/灵石。
