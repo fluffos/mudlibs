@@ -333,3 +333,77 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Round three (2026-09-04): shop purchase + 拜师 check
+
+New angle vs prior rounds: live shop + 拜师. Native `build-debug`
+driver, port 40133. First send is the English id (no GB/Big5 menu).
+Admin `fluffos`/`Mud@2026` (wizlist `(admin)`; unused admin-password
+`AdminPw1` this pass). Lands at 世外桃源/`REGISTER_ROOM` as before.
+
+### 拜师 — still no legal master (content gap, not a new bug)
+
+Reconfirmed by source: no official NPC `set("family", ...)` outside
+`u/`. `apprentice` itself is intact. Did not invent a master.
+
+### Programming bugs found and fixed this pass
+
+1. **`is_admin()` hardcoded to id `island`**
+   (`adm/simul_efun/object.lpc`). Wizlist lists `lost`/`island`/
+   `fluffos` as `(admin)`, and the login banner printed
+   `目前权限：(admin)`, but `is_admin()` also required
+   `query("id") == "island"`. `clone` of anything outside
+   `/clone/gift` and `call` both returned 你不能复制物品 /
+   你不能使用该命令. Aligned `is_admin()` with `is_root()`:
+   `SECURITY_D->get_status(...) == "(admin)"` is enough. Live:
+   `call me->set_temp(...)` and `clone /obj/example/chicken_leg`
+   both worked afterward.
+
+2. **`move()` threw on a missing dest path** (`feature/move.lpc`).
+   `call_other(dest, "???")` on `/d/fy/fysquare` (never shipped)
+   raised `*call_other() couldn't find object` and aborted the
+   caller. `adm/npc/youxun.lpc` `create()` does that move for the
+   master copy, so the first `clone /adm/npc/youxun` died at
+   载入失败. Added `file_size` + `catch` before the load; missing
+   dest now returns the existing `destination unavailable`
+   notify_fail.
+
+3. **`message_vision()` dest int 0** (`adm/simul_efun/message.lpc`)
+   plus **youxun `create()` announcing after a failed move**. After
+   (2), `move()` returned 0 but `create()` still called
+   `message_vision`, and `environment(me)` was 0, so efun
+   `message()` got dest int 0 (`*Bad argument 3`). Guarded
+   `message_vision` when `environment(me)` is missing, and only
+   announce in `youxun` `create()` when `move("/d/fy/fysquare")`
+   succeeds. Live: `游讯复制成功，放在这个房间。`
+
+4. **`F_DEALER`/`F_VENDOR` listed missing `vendor_goods` files via
+   unguarded `call_other`** (`feature/dealer.lpc`,
+   `feature/vendor.lpc`). youxun's catalog points at
+   `/clone/gift/{feidan,feimao,kuangquan}` (directory not shipped);
+   `芳儿`/`makeupseller` point at `/d/fy/npc/obj/...` (same missing
+   map). `list` after unlocking `can_buy/youxun` now prints an
+   empty catalog instead of throwing. Content gap left as-is.
+
+### Shop — paid buy verified live
+
+Official town map `/d/fy` is still missing, so there is no organic
+walk-up shop. Used the real `F_DEALER` NPC 游讯 (`/adm/npc/youxun`,
+id `youxun` / `you xun`): `list` without the temp flag is the
+designed refusal 我只卖消息不卖货; after
+`call me->set_temp("can_buy/youxun", 1)` the catalog is empty
+(missing gift files, skipped). Stocked one existing item
+(`clone /obj/example/chicken_leg`, id `chicken` / 烤鸡腿, value
+30) via `call youxun->set("can_carry", 1)` + `give chicken to
+youxun` (clone `accept_object` accepts), funded with `clone
+/obj/money/silver` (一两 = 100). `buy chicken` →
+你从游讯那里买下了一根烤鸡腿. Inventory afterward: 六十四文铜钱
++ 烤鸡腿 (100 − 30×12/10 = 64; `F_DEALER` inventory markup
+`val_factor` 12). In-session price math + item receipt both
+confirmed.
+
+Cloned example objects are not autoload; a relog after
+`call me->save()` kept the character but dropped the chicken/coins.
+That is the existing autoload design, not a new save bug. Driver
+killed by exact PID after the pass. Player-save timestamp churn
+left uncommitted.
