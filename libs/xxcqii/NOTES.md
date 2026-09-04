@@ -125,3 +125,18 @@ reconnect，确认角色属性、门派归属、师父、已学技能、位置�
 `reconnect()` 缺 `set_living_name()`）都基于共享 mixin/feature 档案，
 如果 `xxcqii2` 复用了同一份代码，大概率会有同样的问题，建议优先
 核对这几个档案。
+
+## Shop (2026-09-04)
+
+2026-08-27 already did 浣花 `bai li` (on tstsnow, later deleted) and
+fixed dealer `list` at 华阳打铁铺 (`0件布衣` → `1件布衣`). That pass
+never paid for a catalog item. This pass: native port **40131**, first
+send **`g`**, admin `fluffos`/`Mud@2026` (云天明, 【天神】). `goto
+/d/bianliang/sanhelou`, `list` still `1件布衣` + 烤鸡腿 八十文.
+Cloned 一两白银, `buy jitui` → 买下烤鸡腿, leftover 二十文铜板.
+拜师 not re-run.
+
+**Bug ported.** `inherit/room/room.lpc` `make_inventory()` lacked the
+`objectp` guard after `new()` (same sibling shape as `xxcq` /
+`xxcqii2`). Added `if (!objectp(ob)) return 0;` plus the two `reset()`
+`objectp` checks. CRLF preserved.
