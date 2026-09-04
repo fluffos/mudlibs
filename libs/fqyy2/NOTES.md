@@ -116,3 +116,71 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试第三轮 / §10.7 round three (2026-09-03)
+
+新角度：2026-08-12 那一轮只覆盖了注册 + 落在「混沌之初」。本轮走
+移动、平安城当铺/武馆、扬州实战、白驼山拜师传送、quit 后重连。管
+理员仍是播种账号 `fluffos` / `Mud@2026`（中文名阿福，称号天帝，年
+龄 14）。登录第一提示是 GB/Big5，先回 `g`。
+
+### 实测过程（无崩溃）
+
+- 有机路径：`newbie` → `east` → `east` → `down` 进入
+  `/d/pingan/pingankezhan`。年龄 ≥20 进不了平安城；本号 14 岁所以
+  这条路通。kezhan `east` → nan1 `north` → 广场 `east` → dong1
+  `south` = 当铺；dong1 `east` → dong2 `north` = 武馆。巫师
+  `goto /d/pingan/dangpu` 也能到（驱动会补 `.lpc` 再 `move()`）。
+- 当铺唐二：`list` 要分类（`armor|book|misc|weapon`）。空武器列表
+  回「目前没有可以卖的武器。」，不是崩溃。`value changjian` = 7 银
+  50 文；`sell` 成交，`trade` 升到 1。
+- 武馆陈小德（`chen xiaode` / `chen`）：`give gold to chen`（学费
+  ≥500 文）后 `xue chen dodge 1`，基本轻功到 1。
+- 扬州 `/d/city/guangchang` 有流氓 / 流氓头。`kill liu` 打中流氓头，
+  双方互出拳，角色打到「已经陷入半昏迷状态」。之后一次登录因残留
+  战斗状态直接眼前一黑。巫师 `full` 回满 HP。`cmds/arch/recover.lpc`
+  坏了（`#include obj.h.es2`），不要用；`full` 不调用 `revive()`，
+  若仍 `!living()` 要等 `feature/damage.lpc` 的 revive `call_out`
+  （约 30–111 秒）。
+- 拜师：欧阳克（`/kungfu/class/btshan/ouyangke`）会 `random_move`，
+  未加载时 `goto ouyang` 失败。`clone` 后再 `bai ke`：角色内拒绝 +
+  传送到 `/d/baituo/liangong`，李教头劝拜他。无崩溃。
+- quit 后重连：`trade` + `dodge` 都还在。
+
+### 发现并修复的 PROGRAMMING bug
+
+**`log_file()` ↔ `SECURITY_D` 重入「Too deep recursion」**
+（AGENTS.md §7.11 的后续形状，不是缺目录本身）。2026-08-12 在
+`adm/simul_efun/file.lpc` 给 `log_file()` 加了
+`assure_file(LOG_DIR + file)`。`assure_file()` 里的 `file_size()` /
+`mkdir()` 走 `SECURITY_D->valid_read` / `valid_write`。拒绝路径会
+再调 `log_file("read_fail.log")` / `log_file("write_fail.log")`，
+于是又进 `assure_file()`，直到：
+
+```
+Too deep recursion.
+program: /adm/obj/simul_efun.lpc, ... file: /adm/simul_efun/file.lpc:25
+Too deep recursion.
+program: /adm/obj/master.lpc, ... file: /adm/obj/master.lpc:315
+```
+
+触发点是开机 `backupd` `create()` → `log_file("backup")`。驱动仍
+会听到 40197，但这是真编程 bug，不是无害警告。
+
+修复：`nosave int in_log_file;`。嵌套的 `log_file()` 跳过
+`assure_file()`，直接 `write_file()`（`valid_write` 本来就放行
+`LOG_DIR` 下的 `write_file`，循环出在 `file_size`/`mkdir`，不是
+写文件）。CRLF 按二进制保留。复测冷启动（`/tmp/fqyy2-boot2.out`）
+零条 “Too deep recursion”，登录 / skills / quit 仍正常。
+
+兄弟档：同一套 Ocean/hy `securd.lpc` 拒绝日志 + §7.11
+`assure_file`-in-`log_file` 至少在 `hy2000` 上也在。本轮不扫全库。
+
+### 本轮未现场走完
+
+- 死亡 / 转生 / 阴曹地府：只打到昏迷 + 巫师 `full`，没有走完地府。
+
+### 本轮修改的文件
+
+- `work/adm/simul_efun/file.lpc`
+- 管理员存档 `work/data/{login,user}/f/fluffos.o`（本轮后状态）

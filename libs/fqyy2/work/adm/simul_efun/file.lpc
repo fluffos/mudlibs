@@ -6,6 +6,8 @@ void cat(string file) {
   write(read_file(file));
 }
 
+nosave int in_log_file;
+
 void log_file(string file, string text) {
   // FIX (AGENTS.md §7.11-class): file may include a subdirectory under
   // LOG_DIR (e.g. "nosave/CRASHES", "nosave/PURGE") that doesn't exist
@@ -14,8 +16,21 @@ void log_file(string file, string text) {
   // subdirectory, already exists) so this doesn't block the core
   // playtest path, but every nosave/* admin path (suicide, crash log,
   // purge, promotion) would hit it on first use.
+  //
+  // Reentrancy guard (2026-09-03): assure_file() calls file_size()/mkdir(),
+  // which go through SECURITY_D->valid_read/valid_write. Those denial paths
+  // themselves call log_file("read_fail.log") / log_file("write_fail.log"),
+  // which re-entered assure_file() and recursed until "Too deep recursion"
+  // during boot (backupd create() -> log_file("backup")). Nested log_file
+  // calls now skip the directory-create step and write the line if possible.
+  if (in_log_file) {
+    write_file(LOG_DIR + file, text);
+    return;
+  }
+  in_log_file = 1;
   assure_file(LOG_DIR + file);
   write_file(LOG_DIR + file, text);
+  in_log_file = 0;
 }
 
 void assure_file(string file) {
