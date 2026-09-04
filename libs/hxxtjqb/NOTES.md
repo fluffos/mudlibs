@@ -266,3 +266,33 @@ void log_file(string file, string text) {
 bug class 都已经在 AGENTS.md 里有完整记录，本次不需要再新开
 bug-class 条目，仅需要在这两节里补充 `hxxtjqb` 这个新实例（如果后续
 批次也在别的库发现，再由那个批次自己写补充说明）。
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：南城客栈购物 + 方寸山云清拜师。2026-09-01 测过货币 quit 持久
+和邮件，没有走 `list`/`buy`，也没有拜师。这是 ES/幻想西天血统（游戏
+内标题「幻想西天」），不是夕阳再现。端口 40177。第一输入是 GB/BIG5
+选单，发 `gb`，然后「是否中小学学生」发 `no`，再英文 id。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`（权限 `(admin)`）。既有存档带着
+`kee:-1` / `disable_type:"<昏迷不醒>"`（2026-08-17 被朱睛冰蟾打死留下
+的），登录后会立刻「眼前一黑」；等「又有了知觉」再 `full` 才恢复。
+`clone /obj/money/gold` 可用。
+
+`goto /d/city/kezhan`（南城客栈，店小二 `d/city/npc/xiaoer.lpc`，
+`F_VENDOR_SALE`）。`list` 炸鸡腿八十文钱 / 桂花酒袋一两银子 / 花生豆
+二十文钱等。本库 `buy` 格式是 `buy <物> from <人>`，不是光 `buy jitui`。
+`buy jitui from xiaoer` 成功（「你向店小二买下一根炸鸡腿」）。当场
+`i` 是九十九两银子 + 二十文钱 + 炸鸡腿。
+
+`goto /d/lingtai/inside6`，云清（`d/lingtai/npc/yunqing.lpc`）无门槛
+收徒。`apprentice yun` 一次成功：恭喜成为方寸山三星洞第四代弟子。
+`score` 职称「方寸山三星洞第四代弟子」、师承云清。菩提祖师只收本门
+高道行弟子，不要拿他当新手拜师点。`cmds/usr/save.lpc` 真正写盘，10
+秒内再 save 是「你迟点才可以储存」。save 后杀驱动冷启动再登录，门派/
+师傅/银子铜板都在。炸鸡腿未进 autoload。
+
+本轮没有新的 programming bug。巫师登录时大量「编译时段错误」其实是
+`#pragma` 警告被 `log_error()` 打到巫师屏幕上，不是执行时段崩溃。
