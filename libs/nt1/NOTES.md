@@ -209,3 +209,85 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，shop + 拜师）
+
+Live `build-debug` driver on port **40185**. Prior rounds stopped at
+the register room (`ask nan about gift` / 先天 / 移动 / 战斗 deferred)
+or were static-only (§7.100 / §7.30). First send is **`gb`** (GB/BIG5
+menu; `gb` is two letters so `check_legal_id` rejects it and re-prompts
+for the English id). No `fluffos.o` existed; `securityd.lpc` `create()`
+still seeds `wiz_status["fluffos"] = "(admin)"`. New-character path:
+`gb` → `fluffos` → `y` → 秦 / 风 → admin password `Mud@2026x` →
+ordinary `Mud@2026` → 性格 `1` → 类型 `5` → `m`. Lands in
+`/d/wizard/wizard_room` (WIZARD_ROOM overrides REGISTER_ROOM for
+non-players). Live clock prompt needs idle ≤0.45. `register
+player@me.com` in `/d/register/regroom`, then `goto /d/register/entry`
+→ `wash` → `born 扬州人氏` (客店; `help rules` more-pager — send `q`).
+`clone` is `is_admin()` gated (`VERSION_D->is_release_server()` /
+`admin_flag==21` / `getuid()=="lonely"`) — design, not removed.
+`giveall /clone/money/gold` works via `valid_grant("(admin)")`.
+
+**§7.110:** first boot this pass kept `data/closed.o` (138 闭关
+accounts). Port came up, but `load_all_users()` still mass-`enter_world()`s
+them; RSS climbed ~5.5GB in ~4 minutes and the 6GB `ulimit -v` process
+died. `closed.lpc` `restore()` is already catch-wrapped (round two);
+the remaining cost is the design of loading every closed account each
+heartbeat, not an uncaught exception. Subsequent boots in this pass
+moved `closed.o` aside for the shop/拜师 playthrough only (restored
+afterward, not committed). **Never boot nt1 without a memory cap.**
+
+**Bug 1 — `goto` aborted on `MESSAGE_D->find_user()`.**
+`cmds/wiz/goto.lpc` always calls `MESSAGE_D->find_user(arg)` before
+treating `arg` as a path, which `create()`s
+`/adm/daemons/network/messaged.lpc`. `startup_udp()` →
+`socket_bind(socket_id, my_port)` got string `"10"` (`Expected: int
+Got: "10"`). Uncaught error aborted the first `goto` (wizard stayed in
+巫师休息室; the wizard `register` command then fired instead of the
+room action). Same shape as `wxddym`: `LOCAL_PORT()` is
+`((int) get_config(__MUD_PORT__))` but the bare `(int)` cast is a
+no-op on the string `get_config()` returns, and `MESSAGE_PORT` (10)
+arrived as string `"10"` too. Fixed `create()` to
+`my_port = to_int(LOCAL_PORT()) + to_int(MESSAGE_PORT);`. File is LF.
+After reboot, `goto /d/register/regroom` reached 注册房间.
+
+**Bug 2 — `(admin)` character creation dropped `password` /
+`ad_password`.** `feature/dbase.lpc` `set()` refuses those keys when
+`wizhood(id)=="(admin)"` unless `geteuid(this_player())==id`. During
+`input_to` character creation `this_player()` is the login object,
+whose euid is not yet the new id, so `ob->set("password", ...)` in
+`logind.lpc` silently no-op'd. `login.o` saved without either secret;
+reconnect was `密码错误！`. `nitan3` had already commented this guard
+out; here it is kept but skipped when `this_player()==ob` (self during
+creation) so a third party still cannot `set` an admin password. File
+is LF. After the fix, `login.o` contains both hashes and relogin with
+`Mud@2026` works.
+
+**Shop:** `/d/city/zuixianlou` 店小二 (`d/city/npc/xiaoer2.lpc`).
+`feature/dealer.lpc` already `#include <dbase.h>`, so bare
+`query("vendor_goods")` resolves; `list` shows 烤鸡腿 80 文 without a
+`this_object()` patch. `buy jitui` deducted one gold into 99 两白银 +
+20 文铜钱 and delivered 烤鸡腿. No `F_DEALER` 丐帮 refuse on `do_buy`
+(only `do_pawn`).
+
+**拜师:** `goto /d/city/lichunyuan`, `bai kong` on 空空儿
+(`kungfu/class/gaibang/kongkong.lpc`) — `permit_recruit()` only.
+Accepted: “恭喜您成为丐帮的第二十代弟子.” `score` shows 【门派】丐帮
+/ 【师承】空空儿. `save` (after the 30s `last_save` cooldown). After a
+full driver kill + reboot, relogin still shows 丐帮 / 空空儿; the
+silver/coin change persisted; 烤鸡腿 did not (food, not autoload —
+expected). Do not `quit` a fresh character: `cmds/usr/quit.lpc` offers
+to delete the account when `mud_age < 1800`.
+
+**Also fixed (same Huashan recruit-limit typo as nitan3):**
+`kungfu/class/huashan/{yue-buqun,yue-wife,feng-buping}.lpc`
+`recruit_apprentice()` wrote `add("apprentice_availavble", -1)` (extra
+“av”) while `attempt_apprentice()`/`reset()` use
+`"apprentice_available"`. CRLF preserved. `qingcheng/yu.lpc` is not in
+this tree.
+
+`debug.log` for `cd libs/nt1 && driver` is `libs/nt1/log/debug.log`
+(opened before chdir into `work/`). Mudlib `error_handler()` also
+writes `work/log/debug.log`. Truncated both before the patched boot;
+Boot Time Fri Sep 4 05:55:42 2026 matches. No `socket_bind` / `Error:`
+lines on that boot. Demo `fluffos` save left uncommitted.
