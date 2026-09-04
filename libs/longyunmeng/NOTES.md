@@ -966,3 +966,31 @@ chain is real: `d/shushan/npc/zhangmen.lpc`'s `init()` unconditionally calls
 by adding a true `in_enable_player_now` reentrancy flag alongside the
 existing `enabled` bookkeeping variable (left untouched, `disable_player()`
 still needs it). Verified via single-file `lpcc --batch` PASS.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：醉仙楼购物 + 丐帮左全拜师。2026-08-14 那一轮没测这两步。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`。本端口是 ZMud 口（config 40094），
+`logon()` 的第一输入进 `get_version()`：不含 `2060` 的行被当成英文
+id，**不要**先发 `2060`（那会按 Tomud 握手走，本口会直接踢人）。
+巫师效验码步骤还在（`if (1)` 任意输入都过），然后才是普通密码。
+
+落地 `/d/huashan/qunxianguan`（旧存档已是华山派岳不群弟子）。`goto
+/d/city/zuixianlou`，`list` 价目为铜钱尺度（烤鸡腿八十文钱）。泥潭
+时刻是未时，店没打烊。`clone /clone/money/gold` 后 `buy jitui` 成功
+（找零九十九两银子 + 二十铜板）。`F_DEALER` 对丐帮拒绝购买，所以
+必须先买再拜；本轮买的时候还是华山，没撞上那条。
+
+`goto /d/gaibang/inhole`，第一次 `apprentice zuo` 被挡（已有华山师
+傅，须先战胜师傅才能改投——内容规则，未改）。巫师
+`call me->delete("family")` 清掉旧门派后再拜，左全收徒，`score` 称
+谓「丐帮第二十零代弟子」（`chinese_number(20)` 的既有写法）、师傅
+左全。`cmds/wiz/save.lpc` 真正调用了两个 `save()`，`user.o` 立刻带
+上 `family`。断线 10 秒 `quit_time` 后再连，`score` 仍是丐帮 / 左全，
+银子还在。
+
+本轮没有新的 programming bug。`securityd` 没有 tianya 那种
+`/log/` + `log_file` 再入。夜半打烊是 `NATURE_D` 内容，未改。
