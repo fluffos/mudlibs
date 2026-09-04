@@ -180,3 +180,27 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-03，第三轮）
+
+新角度：2026-08-05 第一轮覆盖了注册/食物饮水/死亡复活/留言板，没有
+走商店或有机拜师。本轮只补这两条 + quit+reconnect。
+
+- **商店**：`goto /d/city/datiepu`，铁匠铺老板「铁匠」`list` 列出长
+  剑/铁锤/屠刀/匕首/铁棍/钢刀；`clone /clone/money/gold` 后
+  `buy changjian` 成功（「你从铁匠那里买下了一柄长剑」）。`sell` 回
+  「什麼？」——`d/city/npc/smith.lpc` 的 `init()` 只 `add_action`
+  了 `list`/`buy`，没有把 `F_DEALER` 的 `do_sell`/`do_value` 挂上。
+  同库里挂了 `sell` 的是当铺/收购类 NPC（`d/city/npc/tang`、
+  `aqingsao`、`d/city2/npc/jia`、`d/quanzhou/npc/chen`），和
+  AGENTS.md §13.4 已记录的「只有当铺接 sell」设计一致，不按 bug 修。
+- **拜师**：`goto /d/xingxiu/xxh1`，`bai zhaixing`（摘星子）当场
+  「好吧，我就收下你了。」→ 星宿派第三代弟子，师承摘星子。`save` +
+  `quit` 后重连 `score` 仍是「星宿派第三代弟子 / 你的师父是摘星子」，
+  八十五两白银仍在。长剑未进 `autoload`（普通兵器无 autoload 标记，
+  存档只有 `silver:85`），属该血统常规存盘范围，不是丢物品 bug。
+- **中文名「风�扬」**：第一轮 NOTES 已定性为当时 telnet CJK 转发损
+  坏，不是 `is_chinese()` bug；本轮未改名。
+- **日志**：live `debug.log` 为 `libs/jyqxc2/log/debug.log`。无
+  `error:` / `Too deep recursion`。`work/log/log` 只有编译警告。
+- **结论**：商店购买 / 有机拜师 / 重连均通过，本轮无新编程 bug。
