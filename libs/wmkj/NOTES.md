@@ -855,3 +855,58 @@ unaffected. `enable_player()` had a single fall-through exit (no early
 `return`s), so one guard-at-top + one clear-at-bottom pair was
 sufficient. Verified via a single-file `lpcc --batch` compile check
 (PASS) -- not individually live-boot-tested.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：醉仙楼购物 + 丐帮左全拜师。此前各轮覆盖了注册、战斗、死亡/
+复活和若干 sweep，没有买东西、也没有拜师。这是夕阳再现/江湖风云血统
+（与 `bixiecanyang` 同系），不是天涯家族。标准端口 40049 第一输入就是
+「请输入您的英文名字：」，不要发 2060。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`（权限 `(boss)`；wizpwd 不是登录密码）。
+落地北疆小镇 `/d/xingxiu/beijiang`（房间描述里仍有一处未替换的字面
+`%s`，2026-08 已记为美观性遗留，未修）。`clone /clone/money/gold` 可用。
+
+`goto /d/city/zuixianlou`，`list` 烤鸡腿八十文钱 / 牛皮酒袋一两白银 /
+包子五十文钱。`buy jitui` 成功（「你向店小二买下一根烤鸡腿」）。当场
+`i` 是九十九两银子 + 二十文铜板 + 鸡腿（1 两黄金找零 10000−80 = 9920）。
+`feature/dealer.lpc` 已 `#include <dbase.h>`，`query("vendor_goods")`
+正常。F_DEALER 对丐帮拒绝购买（穷叫化），必须先买再拜。本轮游戏内时间
+是「亥时」深夜，但 `NATURE_D` 没有 `room_event_fun()`，打烊判断拿不到
+`event_night`，店开着——这是既有缺口，不是本轮要修的内容 bug。
+
+`goto /d/gaibang/inhole`，左全源码是 `kungfu/class/gaibang/zuo-qu.lpc`
+（文件名少一个 n），`apprentice zuo` 一次成功：左全收徒，`score`
+「丐帮第二十代弟子」、师傅左全、头衔【叫 化 子】。`cmds/usr/save.lpc`
+真正调用 `link_ob->save()` 和 `me->save()`；60 秒内再 save 是
+`notify_fail("你迟点才可以储存。")`（不是假「档案储存完毕」）。等 62
+秒后 save 一次，`user.o` 立刻带上 `family_name":"丐帮"` /
+`master_name":"左全"` / `generation":20`。杀驱动冷启动再登录，称谓/
+师傅/银子铜板还在。烤鸡腿未进 autoload。左全只收男性。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **华山收徒计数拼写**（与 `nitan_ceshi`/`nitan_san` 同形，静态对照
+   修，本轮拜师走的是左全不是华山）：
+   `kungfu/class/huashan/{yue-buqun,yue-wife,feng-buping}.lpc` 的
+   `recruit_apprentice()` 写 `add("apprentice_availavble", -1)`，计数
+   键永远对不上 `apprentice_available`。改成 `apprentice_available`。
+   文件是 LF。
+
+2. **`wizlist` 执行时段崩溃**（活体踩到）：
+   `cmds/imm/wizlist.lpc`（以及副本 `cmds/imm/ww.lpc`、
+   `cmds/wizlist.lpc`、`adm/etcc/wizlist.lpc`）三处：
+   - `explode(read_file("/u/xiha/wtm"), "\n")`：档案里没有这份巫师
+     任务文件，`read_file` 返回 0，`explode` 要 string。改成
+     `read_file(...) || "#"`（`#` 行会被后面的任务解析跳过）。
+   - `stat(login_path, -1)[1]`：FluffOS 里 `stat(path, -1)` 等于
+     `get_dir()`，缺档时返回空数组/0，`[1]` 越界。巫师 `hfzz` 在
+     wizlist 里但没有 `login.o`。改成不带 `-1` 的 `stat(path)`（返回
+     `({ size, mtime, ... })`），并用 `arrayp(st) && sizeof(st) > 1`
+     护住缺档。
+   - `get_mission`/`get_titlemission` 对空行做 `mission[i][0]` 也会
+     越界；空串先 `!sizeof` 跳过。`/adm/etc/renwu` 里确实有空行。
+   文件是 CRLF，按字节替换。`update` 后 `wizlist` 列出 fluffos（连线）
+   和 hfzz（断线），不再报执行时段错误。
