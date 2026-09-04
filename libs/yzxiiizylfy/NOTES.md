@@ -90,3 +90,25 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-03，round three，shop + 拜师）
+
+新角度：醉仙楼购物 + 丐帮左全拜师。第一行仍发 `2060`（Tomud 握手）；
+单密码 `fluffos`/`Mud@2026`，无巫师效验码。
+
+### 实测过程
+
+落地铁枪庙（`/d/quanzhou/tieqiang`）。`goto /d/city/zuixianlou`，
+`list` 为铜钱尺度（烤鸡腿八十文钱）。**先买后拜**：`clone
+/clone/money/gold` 后 `buy jitui` 成功（找零九十九两银子 + 二十个
+铜板）。本血统 `feature/dealer.lpc` 在拜师后会拒绝全部丐帮（「你是
+个穷叫化，买什麽东西！」），和 `xyzxiiylzymh` 相同。`goto
+/d/gaibang/inhole`，`apprentice zuo` 一次成功，`score` 称谓「丐帮
+第二十代弟子」、师傅左全。`save`/`quit` 干净（巫师，没有 zxty 那种
+30 分钟删档）。
+
+`quit_time` 50 秒冷却（`logind.lpc`，非 120 秒 `last_on`）。等满后
+重连仍先发 `2060`：落地武庙，`score` 门派仍在，银子还在；烤鸡腿不
+存档。全程驱动 `log/debug.log` 无运行时错误；mudlib
+`error_handler` 写的 `work/log/debug.log` 仍是 2026-08-13 的旧档，
+本轮没有新执行时段错误。无新编程 bug。
