@@ -47,7 +47,10 @@ with restore, `look`, movement between rooms, `say`, `help`, the
 archive's own `test` command, and a clean `quit` -- plus save/restore
 confirmed across an actual driver restart.
 
-WASM status: not yet attempted (`wasm_status` left `""`).
+WASM status: **playable**. Shared WASM driver. New-character registration
+(`wasmim`, Chinese name `浮浮`, `Mud@2026`, `m`, after the GBK y/n
+prompt) into 茅草屋, `south` to 前院, and `quit`, verified with
+`scripts/wasm_client.js`. Play: https://mudlibs.fluffos.info/immaster/
 
 ## Local run
 

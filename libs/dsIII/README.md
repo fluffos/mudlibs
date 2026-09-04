@@ -117,8 +117,10 @@ non-blocking content-side performance bug in the `cave` domain's orc
 NPC race setup, a missing `LIB_CAPTURE` library component, and a
 missing `opcprof()` efun) -- see `NOTES.md` \S6 for the full breakdown.
 
-WASM status: not yet attempted (`wasm_status` left `""`) -- see
-`NOTES.md` \S7 for what a future pass should expect to hit.
+WASM status: **playable**. Shared WASM driver (`secure/sefun/sockets.lpc`
+already stubbed). Admin login (`fluffos` / `Mud@2026`) into Fluffos'
+workroom, plus `score` / `quit`, verified with `scripts/wasm_client.js`.
+Play: https://mudlibs.fluffos.info/dsIII/
 
 ## Local run
 

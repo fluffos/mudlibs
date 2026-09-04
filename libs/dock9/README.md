@@ -67,7 +67,12 @@ meant to be `#include`d into `simul_efun` rather than compiled standalone,
 or an object whose `create()` legitimately needs a live player context --
 see `NOTES.md` \S6 for the full triage.
 
-WASM status: not attempted (`wasm_status` left `""`).
+WASM status: **playable**. Shared WASM driver. `dump_socket_status()` in
+`adm/simul_efun/socket.lpc` is stubbed without `PACKAGE_SOCKETS` (same
+treatment as `lpuni`). Admin login (`fluffos` / `MudAt2026`) into
+Training Ground, plus `look` / `quit`, verified with
+`scripts/wasm_client.js`. `http_d.lpc` `socket_error` is a graceful
+preload skip. Play: https://mudlibs.fluffos.info/dock9/
 
 ## Local run
 

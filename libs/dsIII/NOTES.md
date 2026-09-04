@@ -427,15 +427,14 @@ sweep (99.6%); the 9 that don't are broken down in section 6.
 
 ## 7. WASM pass
 
-Not attempted this session (`wasm_status` left `""`). Given this
-archive's confirmed-live outbound HTTP/socket behavior (section 5), a
-future WASM pass should specifically check whether the `sockets`
-package gap that hit `ds386` under WASM (simul_efun's
-`secure/sefun/sockets.lpc` calling `socket_status()` unconditionally,
-gutted per that lib's WASM notes) applies here too -- this archive's
-`secure/sefun/sockets.lpc` is very likely byte-identical to `ds386`'s
-pre-fix copy, so the same gut-the-function-bodies treatment would
-probably be needed before this lib could boot under WASM at all.
+Measured 2026-09-03 against the shared `~/src/fluffos/build-wasm`.
+`secure/sefun/sockets.lpc` was already stubbed (the `ds386` sibling
+treatment this section originally predicted). No further mudlib-side
+compile fix was needed. Verified with `scripts/wasm_client.js`:
+`fluffos` / `Mud@2026` into Fluffos' workroom, `score` showed
+"First Admin Fluffos", clean `quit`. IMC2/I3/HTTP version-check still
+try outbound connects at boot — do not loop-reboot. Shop/combat/death
+were not exercised this pass.
 
 ## 深度功能测试 / Deep functional test (round two, AGENTS.md §10.7)
 

@@ -643,3 +643,24 @@ tail from \S4/\S5.
 `secure/master.lpc`, plus 267 files (guild masters, city NPCs, and
 wizard-realm monsters/NPCs archive-wide) for the `chat_str` array-type
 sweep -- see AGENTS.md §7.192 for the full technical writeup.
+
+## WASM measurement (2026-09-03)
+
+`meta.json` was already `playable` from the 2026-08-31 deploy-unblock;
+the README still said "not attempted." Cold-boot under the shared
+`~/src/fluffos/build-wasm` succeeded with no new mudlib-side compile
+fix. `work/` is ~378MB and copies into MEMFS without OOM. Verified
+with `scripts/wasm_client.js` (`--timeout 300 --idle 0.4`): `c` →
+`wasmqm` → password → `select human` → `continue` → `continue` →
+`select fighter`. Landed in the Fighter guild of Duranghom with the
+real room description, five exits, and Anrax the guildmaster visible.
+`look` reprinted that room; `score` showed "Wasmqm. You are a level 1
+Human" / "Primary guild: Fighters" / HP 86(141); `quit` printed
+"Saving Wasmqm." The already-catalogued \S4 compile-sweep tail
+(LDMud leftover `#'` closures, `No program in object` on
+`/guilds/obj/skillfun`, `/cmds/std/_drop`, etc.) still prints at
+preload and on `quit`'s drop-all path; none of it blocked the login
+or play session. Shop/combat/death were not exercised this pass
+(same gaps as the native §10.7 writeup). The MEMFS copy does not
+write player saves back to the host, so `wasmqm` left no work-tree
+debris.

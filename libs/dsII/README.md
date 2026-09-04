@@ -93,7 +93,10 @@ missing library component, a foreign-codebase remote-admin daemon, and
 two wizard debug scratch files) -- see `NOTES.md` \S7 for the full
 breakdown.
 
-WASM status: not yet attempted (`wasm_status` left `""`).
+WASM status: **playable**. Shared WASM driver (sockets already guarded).
+Admin login (`fluffos` / `fluffwiz123`) through the news pager into
+Test Labs Corridor, plus `score` / `quit`, verified with
+`scripts/wasm_client.js`. Play: https://mudlibs.fluffos.info/dsII/
 
 ## Local run
 

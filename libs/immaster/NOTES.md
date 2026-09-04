@@ -407,3 +407,15 @@ worked identically post-restart. `log/debug.log` (created fresh each
 boot per this project's own `.gitignore`) stayed completely empty
 across the whole multi-session test — zero uncaught errors of any
 kind.
+
+## WASM measurement (2026-09-03)
+
+`meta.json` was already `playable` from the 2026-08-31 deploy-unblock;
+the README still said "not attempted." Cold-boot under the shared
+`~/src/fluffos/build-wasm` succeeded with no mudlib-side compile fix.
+Verified with `scripts/wasm_client.js`: first prompt is the GBK `y/n`
+encoding question (`n`), then English ID (`wasmim`, ≥3 letters),
+new-account `y`, Chinese name `浮浮` (2–10 chars), password `Mud@2026`
+twice, gender `m`. Arrived in 茅草屋, `south` to 前院, `quit` printed
+`Bye，欢迎下次光临`. The existing `teamug` save was left untouched
+(unknown password). Shop/combat/death were not exercised this pass.

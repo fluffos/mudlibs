@@ -504,8 +504,8 @@ filed.
   long-sit boot watch below), then reconnected and was correctly
   restored to the exact same room (Training Ground) with `[announce]
   System: Fluffos has logged into Dock 9.` and no state loss.
-- **Long-sit boot watch** (\S10.0, no WASM build exists for this lib --
-  `wasm_status` still `""` -- so done via one idle
+- **Long-sit boot watch** (\S10.0, WASM not yet measured in that
+  session -- done via one idle
   `scripts/mudclient.py` connection instead of
   `wasm_boot_watch.sh`): held one connection idle for ~220 seconds;
   driver stayed alive throughout (confirmed via `ps` uptime), and its
@@ -553,3 +553,16 @@ connection state, growing on every live boot) were added to the
 project's root `.gitignore`, mirroring the existing `imud` precedent,
 and the pre-fix churn in those paths was reverted rather than
 committed.
+
+## WASM measurement (2026-09-03)
+
+`meta.json` was already `playable` from the 2026-08-31 deploy-unblock;
+the README still said "not attempted." Cold-boot under the shared
+`~/src/fluffos/build-wasm` failed on `adm/simul_efun/socket.lpc`
+calling `socket_status()` from `dump_socket_status()` — same class as
+`lpuni`. Stubbed the header behind `#ifndef __PACKAGE_SOCKETS__`. After
+that, `scripts/wasm_client.js` logged in as `fluffos` / `MudAt2026`
+into Training Ground, `look` and `quit` both worked. `http_d.lpc`
+`socket_error` is a graceful preload skip (not on the login path).
+I3 still tries an outbound connect at boot — do not loop-reboot.
+Shop/combat/death were not exercised this pass.

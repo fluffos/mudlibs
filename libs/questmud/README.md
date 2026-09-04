@@ -102,7 +102,15 @@ never loaded by the live game (the canonical `obj/player.lpc`/
 verified play session above. See `NOTES.md` \S3 for the fix patterns
 that would close most of this tail, if picked up as future work.
 
-WASM status: not attempted this session (`wasm_status` left `""`).
+WASM status: **playable**. Shared WASM driver. Full new-character
+registration (`c` / `wasmqm` / password / `select human` / `continue` /
+`continue` / `select fighter`) into the Fighter guild of Duranghom
+(five exits, guildmaster visible), plus `look` / `score` ("level 1
+Human", "Primary guild: Fighters") / `quit` ("Saving Wasmqm."),
+verified with `scripts/wasm_client.js`. The compile-sweep tail (LDMud
+leftover syntax in wizard/cmd files) still prints at boot and on
+`quit`'s drop-all path; none of it blocked the login or play session.
+Play: https://mudlibs.fluffos.info/questmud/
 
 ## Local run
 

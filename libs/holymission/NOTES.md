@@ -645,3 +645,16 @@ exists in `players/whisky/garden/room/oven.lpc`,
 own, already-fixed `obj/flames.lpc` sibling, not `kawai`'s), plus
 `players/topaz/monsters/tower/general.lpc` (an unrelated `flamesword`
 weapon clone) -- none of these were exercised or verified this pass.
+
+## WASM measurement (2026-09-03)
+
+`meta.json` was already `playable` from the 2026-08-31 deploy-unblock;
+the README still said "not attempted." Cold-boot under the shared
+`~/src/fluffos/build-wasm` succeeded (known `catch()` wizard-soul
+compile failures still print; they do not block login). Verified with
+`scripts/wasm_client.js`: new character `wasmhol` / `TestPass123` /
+`TestPass123`, then menu `1` (enter game — not `m`), gender `m`,
+`list`, `choose human`. Arrived in the village church (5 exits),
+`score` showed "Wasmhol the Human" Level 1, clean `quit`. Name must
+be 3–11 lowercase letters; password ≥6. Shop/combat/death were not
+exercised this pass.

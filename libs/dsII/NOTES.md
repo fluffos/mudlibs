@@ -425,7 +425,14 @@ content gaps (see \S7).
 
 ## 9. WASM pass
 
-Not yet attempted this session (`wasm_status` left `""`).
+Measured 2026-09-03 against the shared `~/src/fluffos/build-wasm`.
+Sockets were already guarded (this archive's earlier
+`dump_socket_status` / `foreach (mixed *item in socket_status())`
+fix). No further mudlib-side compile fix was needed. Verified with
+`scripts/wasm_client.js`: `fluffos` / `fluffwiz123` through the news
+pager into Test Labs Corridor, `score` showed "First Admin Fluffos",
+clean `quit`. I3 still tries an outbound connect at boot — do not
+loop-reboot. Shop/combat/death were not exercised this pass.
 
 ## 10. Sibling sweep of the dsIII §7.121 currency-float bug — confirmed present, fixed
 

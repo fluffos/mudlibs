@@ -75,7 +75,12 @@ teaching content with a pre-existing content/API mismatch predating this
 port (see `NOTES.md` \S3) -- expected for a deliberately minimal engine
 like this one, not a sign of missing conversion work.
 
-WASM status: not yet attempted (`wasm_status` left `""`).
+WASM status: **playable**. Shared WASM driver. `dump_socket_status()` in
+`secure/SimulEfun/SimulEfun.lpc` is `#ifdef __PACKAGE_SOCKETS__` so the
+eager simul_efun compiles without the sockets package. Admin login
+(`fluffos` / `Mud@2026`) into the Pool Room, plus `look` / `status` /
+`quit`, verified with `scripts/wasm_client.js`.
+Play: https://mudlibs.fluffos.info/foundation1/
 
 ## Local run
 

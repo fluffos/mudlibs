@@ -498,4 +498,17 @@ a lib bug.
   this is dead code with zero live instances anywhere in this archive —
   no command creates or reaches a board object, so there is nothing to
   functionally test. Not a gap introduced by this port.
-- WASM: still not attempted (`wasm_status` still `""`).
+- WASM: measured 2026-09-03 — see the WASM measurement section below.
+
+## WASM measurement (2026-09-03)
+
+`meta.json` was already `playable` from the 2026-08-31 deploy-unblock
+(`2ec643a7c45`); the README still said "not attempted." Cold-boot under
+the shared `~/src/fluffos/build-wasm` failed on the eager simul_efun
+calling `socket_status()` from `dump_socket_status()` in
+`secure/SimulEfun/SimulEfun.lpc` — same lima §1.3(c) / wilderness class.
+Guarded the body with `#ifdef __PACKAGE_SOCKETS__` (empty-string stub
+otherwise). After that, `scripts/wasm_client.js` logged in as
+`fluffos` / `Mud@2026` into the Pool Room cavern, `look` showed lichen,
+`status` reported `hp: 1/10`, and `quit` printed "Please come back
+another time!" Shop/combat/death were not exercised this pass.

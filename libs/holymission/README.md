@@ -51,7 +51,11 @@ confirming the login check is genuinely functional.
 No outbound network connections of any kind (confirmed by source
 inspection).
 
-WASM status: not yet attempted (`wasm_status` left `""`).
+WASM status: **playable**. Shared WASM driver. New-character registration
+(`wasmhol` / `TestPass123` / menu `1` / `m` / `choose human`) into the
+village church, plus `score` / `quit`, verified with
+`scripts/wasm_client.js`. After "Password set." the next input must be
+`1` (enter game), not `m`. Play: https://mudlibs.fluffos.info/holymission/
 
 ## Local run
 
