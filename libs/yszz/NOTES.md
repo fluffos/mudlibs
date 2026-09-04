@@ -142,3 +142,20 @@ leaving every legitimate re-enable (revive/wakeup/disguise) unaffected.
 (no early `return`s), so one guard-at-top + one clear-at-bottom pair was
 sufficient. Verified via a single-file `lpcc --batch` compile check
 (PASS) -- not individually live-boot-tested.
+
+## 深度功能测试（2026-09-04，shop）
+
+Live native pass on port **40192**. 2026-08-24 already did 月宫嫦娥拜师;
+this slice is shop-only. First send is **`gb`** (banner “Select GB or
+BIG5 (gb/big5)”), then id `fluffos` / `Mud@2026` (`(admin)`, lands in
+巫师会议厅). `clone /obj/money/gold` works.
+
+南城客栈 店小二 (`u/city/npc/xiaoer.lpc`, `F_VENDOR_SALE`) `list`
+already showed 炸鸡腿 80文 (`vendor_sale.lpc` `#include <dbase.h>`).
+Bare `buy jitui` did **not**: `cmds/std/buy.lpc` auto-picks
+`is_vendor()` in the room, but `F_VENDOR_SALE` never defined it (only
+`feature/vendor.lpc` did). Help text requires `buy <item> from
+<someone>`; without `is_vendor()` the short form always printed the
+usage line. Added `int is_vendor() { return 1; }` (CRLF preserved).
+After reboot, `buy jitui` purchased 炸鸡腿 and changed 1 黄金 into 99
+两银子 + 20 文. No 丐帮 refuse (this vendor has none).
