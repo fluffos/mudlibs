@@ -845,3 +845,34 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：醉仙楼购物 + 丽春院空空儿拜师。2026-08-13 第二轮只测了战斗/
+死亡和 `log_file`，没有买东西、也没有拜师。这是 ES II 随缘洗剑录
+（混有金庸门派），端口 40088。第一输入是 GB/BIG5 选单，发 `gb`，然后
+「Press Enter to Continue」发空行，再英文 id。密码 `Mud@2026`。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`（权限 `(admin)`）。`clone
+/clone/money/gold` 可用。
+
+`goto /d/city/zuixianlou`（醉仙楼，店小二源码
+`kungfu/class/npc/xiaoer.lpc`，`F_VENDOR_SALE`；现场显示名「独孤宝贝」
+是摊位易主，不是缺 NPC）。`list` 烤鸡腿八十文铜板 / 包子五十文铜板。
+`cmds/std/buy.lpc` 靠 `is_vendor()` 自动选中摊主，`buy jitui` 成功
+（「你向独孤宝贝买下一根烤鸡腿」）。当场 `i` 是九十九两白银 + 二十文
+铜板 + 一两黄金 + 烤鸡腿。F_DEALER 店铺对丐帮拒绝购买，必须先买再拜；
+本轮买的是 F_VENDOR_SALE 摊，没有踩到那条门。随缘客栈自己的店小二只卖
+灯笼/火把，不是食物摊。
+
+`goto /d/city/lichunyuan`，空空儿（`kungfu/class/gaibang/kongkong.lpc`）
+对 `combat_exp < 2000` 的局外人无门槛收徒。`apprentice kong` 一次成功：
+恭喜成为丐帮第二十代弟子，`score` 称谓「丐帮一袋弟子」、师傅空空儿。
+同室左全（`/d/gaibang/inhole`）只收已经是丐帮且袋数够的弟子，不要拿
+他当新手拜师点。`cmds/usr/save.lpc` 真正写盘（「【存盘精灵】档案储存
+成功」）。save 后杀驱动冷启动再登录，称谓/师傅/银子铜板/布袋都在。烤
+鸡腿未进 autoload。
+
+本轮没有新的 programming bug。
