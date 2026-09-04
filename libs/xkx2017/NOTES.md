@@ -131,3 +131,39 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：醉仙楼购物 + 丐帮左全拜师。§10.7 原文明确写「没有测试拜师、
+购物」；2026-08-13 round two 修了 `log_error`/`log_file`/`short()`
+和损坏留言板存档，仍然没走这两步。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`。第一输入是「您的英文名字：」，落地
+客店，留言板显示「客店留言板(Board) [ 没有任何留言 ]」（round two
+删损坏存档后的状态仍在）。`score` 「【天神】普通百姓」。
+
+`goto /d/city/zuixianlou`，`list` 烤鸡腿八十文铜板 / 牛皮酒袋一两
+白银 / 包子五十文 / 鲸鱼十两黄金。`clone /clone/money/gold` 后
+`buy jitui` 成功（「你从店小二那里买下了一根烤鸡腿」）。当场 `i`
+还挂着「一两黄金」+ 九十九两白银 + 二十文铜板，那是
+`MONEY_D->player_pay()` 把金锭 `set_amount(0)` 后物件还没析构的显
+示；断线重连后黄金条目消失，只剩九十九两白银 + 二十文铜板
+（10000−80 = 9920），找零数学正确，不是复制金钱。这份档案的
+`feature/dealer.lpc` 里丐帮「穷叫化」拒绝购买整段是注释掉的，先买
+再拜仍然按家族惯例走，没有撞上拒绝。
+
+`goto /d/gaibang/inhole`，左全在树洞里，`apprentice zuo` 一次成功：
+左全收徒，`score` 「丐帮第二十代弟子」、师父左全。`cmds/usr/save.lpc`
+真正调用两个 `save()`。`user.o` 立刻带上 `family_name":"丐帮"` /
+`master_name":"左全"` / `generation":20`。断线后再连（「重新连线完
+毕」），`score` 仍是丐帮 / 左全，银子还在。左全只收男性（`gender
+!= "男性"` 就静默 return），本账号是男的所以没撞上。
+
+本轮没有新的 programming bug。live `debug.log` 是
+`libs/xkx2017/log/debug.log`（Boot Time Fri Sep 4 01:23:45 2026），
+无 `error:` / `Too deep recursion`。`error_handler` 把轨迹交回驱动
+debug.log。`work/log/log` 只有编译期 Unused local variable 警告；
+`work/log/{condition.err,move.bug}` 停在 2026-07-30，不是本轮写入。
+管理员存档未提交（本轮只记 NOTES）。
