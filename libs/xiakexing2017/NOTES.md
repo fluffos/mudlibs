@@ -858,3 +858,36 @@ session with a clean, in-game `quit`.
 
 - `work/adm/daemons/chinesed.lpc` — new fix (§10.7 item 1, `catch()` +
   `mapp()` guard on `dict`).
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：扬州醉仙楼购物 + 丐帮左全拜师。2026-07-24 round two 的 `list`/`buy`
+因没钱被拒，诚实记录「成功购物未现场完成」；2026-08-20 round four 用
+`qinfengxia` 走完余洪兴拜师和 `xue`，仍没补上一次真正付钱的购买。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026` / 浮浮。第一输入是「您的英文名字：」（欢迎
+画面之后，没有 BIG5 选择）。落地扬州客店 `/d/city/kedian`。`score`
+「【天神】普通百姓」。`log_error()` 已有 `arning:` 闸门，本轮屏幕上没有
+编译警告倾泻。
+
+`goto /d/city/zuixianlou`，`list` 烤鸡腿八十文铜板 / 牛皮酒袋一两白银 /
+包子五十文铜板 / 鲸鱼十两黄金。`F_DEALER` 里丐帮穷叫化拒绝购买整段是
+注释掉的，仍按家族惯例先买再拜。`clone /clone/money/gold` 后 `buy jitui`
+成功（「你从店小二那里买下了一根烤鸡腿」）。当场 `i` 还挂着「一两黄金」
++ 九十九两白银 + 二十文铜板，跟 xkx2017 一样是 `MONEY_D->player_pay()`
+把金锭 `set_amount(0)` 后物件还没析构的显示；断线重连后黄金条目消失，
+只剩烤鸡腿 + 九十九两白银 + 二十文铜板（10000−80 = 9920），找零数学
+正确。
+
+`goto /d/gaibang/inhole`，左全在树洞里（`kungfu/class/gaibang/zuo-quan.lpc`，
+只检查男性），`apprentice zuo` 一次成功：左全收徒，`score` 「丐帮第二十
+代弟子」、师父左全。`cmds/usr/save.lpc` 真正调用两个 `save()`。`user.o`
+立刻带上 `family_name":"丐帮"` / `master_name":"左全"` / `generation":20`
+/ `class":"beggar"`。断线后再连（「重新连线完毕」），称谓/师傅/银子/鸡
+腿还在。
+
+本轮没有新的 programming bug。live `debug.log` 是
+`libs/xiakexing2017/log/debug.log`（Boot Time Fri Sep 4 02:15:41 2026），
+无 `error:` / `Too deep recursion`。管理员存档未提交。
