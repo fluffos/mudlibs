@@ -40,12 +40,10 @@ cd libs/lima
 （如果 `~/src/fluffos-lima` 不存在，`NOTES.md` 里有完整的重建步骤，
 一次性编译大约 5-10 分钟。）
 
-游戏端口：**40212**。原生（native）驱动已验证；专用 WASM 驱动
-（同样的开关叠加 `emcmake` 构建）也已经建出来并验证 mudlib 内容本身
-完全可玩，但站点部署用的是全项目唯一一份共享 WASM 驱动、没有
-per-lib 驱动覆盖机制，lima 自己的 `secure/check_config.lpc` 在共享
-驱动上仍会编译期报错中止——所以 `wasm_status` 记为 `noboot`（内容层
-没问题，卡在站点基础设施上），详见 `NOTES.md`「wasm_status 审计」。
+游戏端口：**40212**。原生（native）驱动已验证。站点现在按 lib 覆盖
+WASM 驱动（`scripts/custom_drivers/lima_swmud/`，与 `swmud` 共用），
+浏览器试玩已走通注册→选种族→进入 Grand Hall，`wasm_status` 为
+**playable**。详见 `NOTES.md`「站点基础设施缺口已补上」。
 
 ## 本地运行
 

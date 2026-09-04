@@ -69,15 +69,11 @@ item/combat API out from under Lima's original demo files" incompatibility
 documented repeatedly in `NOTES.md`. See `NOTES.md` for the full
 breakdown and what's left unfixed on purpose.
 
-WASM status: `noboot`. The specialized Lima-flavor WASM driver (built in
-`~/src/fluffos-lima` the same way as the native one) boots this lib's
-content cleanly -- registration, race selection, and world entry all
-verified live -- but the deployed site packages every lib against one
-shared WASM driver binary with no per-lib driver override mechanism, so
-the site itself cannot actually run it this way. See `libs/lima/NOTES.md`'s
-`wasm_status 审计` section and this lib's own `NOTES.md` for the full
-investigation; this is a site-infrastructure gap, not a defect in swmud
-itself.
+WASM status: **playable**. The specialized Lima-flavor WASM driver
+(same `NO_ADD_ACTION`/`NO_WIZARDS`/`NO_LIGHT` build as native lima/swmud)
+is now packaged per-lib via `scripts/custom_drivers/lima_swmud/`, so the
+site can actually boot this game. Registration, race selection, and world
+entry were verified in-browser; see `NOTES.md` 「站点基础设施缺口已补上」.
 
 > **⚠️ Makes a real outbound network connection at boot.** `daemons/
 > imud_d.lpc` preloads and connects to the public Intermud-3 router

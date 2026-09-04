@@ -270,3 +270,12 @@ byte-identical `versiond.lpc`) despite its `wasm_status` already being
 `playable` from an earlier pass — that pass never exercised an
 admin-rank login, so the crash went undetected. Patched `nitan_san`'s
 copy identically as part of this same pass; see its own NOTES.md.
+
+## 深度功能测试（§10.7）
+
+No independent playthrough under this slug. This tree is a confirmed
+byte-identical duplicate of `nitan_san` (15,235/15,236 files; the only
+diff is a cosmetic Windows folder name in `config.cfg`). `nitan_san`'s
+2026-08-12 round-two §10.7 pass (`libs/nitan_san/NOTES.md`) is the
+functional-test record for this codebase. The `work/` sync above already
+carries every fix from that pass.

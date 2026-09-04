@@ -22,8 +22,8 @@ euid 权限顺序 bug（`master.lpc::log_error()` 缺少 `assure_file()` 后
 
 ## 在线试玩
 
-（本档案未做 WASM 打包测试，暂无在线试玩链接；`meta.json` 的
-`wasm_status` 留空，而非编造状态。）
+https://mudlibs.fluffos.info/nitan3/ — WASM **playable**（与同源的
+`nitan_san` 同一套已修过的 `work/` 树；管理员登录走通，见 `NOTES.md`）。
 
 ## 管理员账号 / Admin account
 
