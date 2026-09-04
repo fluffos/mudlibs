@@ -4,8 +4,16 @@
 Handles just enough Telnet IAC negotiation to stay usable against old
 MudOS/FluffOS-era servers (refuses/ignores option negotiation instead of
 implementing it), sends a scripted list of lines with waits in between, and
-dumps everything received (decoded permissively) so it can be grepped for
+streams everything received (decoded permissively) so it can be grepped for
 a login prompt / room description / error text.
+
+By default each outgoing line is echoed into the transcript with a wall-clock
+timestamp and elapsed-since-connect, so you can see which --send produced
+which reply:
+
+  [19:51:03.201 +  1.12s] >>> SEND look
+
+Use --no-echo for a game-text-only transcript (old behavior, no markers).
 
 Usage:
   mudclient.py HOST PORT [--send LINE ...] [--timeout SEC] [--idle SEC]
@@ -17,6 +25,8 @@ Example:
       --send "" --send "look" --send "quit"
 """
 import argparse
+import codecs
+import datetime
 import socket
 import sys
 import time
@@ -68,6 +78,22 @@ def negotiate_strip(buf: bytes, sock: socket.socket) -> bytes:
     return bytes(out)
 
 
+def format_stamp(t0: float, now: float | None = None) -> str:
+    """Wall-clock HH:MM:SS.mmm plus elapsed seconds since connect."""
+    if now is None:
+        now = time.time()
+    wall = datetime.datetime.fromtimestamp(now).strftime("%H:%M:%S")
+    msec = int((now % 1) * 1000)
+    return f"{wall}.{msec:03d} +{now - t0:6.2f}s"
+
+
+def emit_marker(kind: str, detail: str, t0: float, enabled: bool) -> None:
+    if not enabled:
+        return
+    sys.stdout.write(f"[{format_stamp(t0)}] >>> {kind} {detail}\n")
+    sys.stdout.flush()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("host")
@@ -79,9 +105,12 @@ def main():
     ap.add_argument("--idle", type=float, default=1.0,
                      help="seconds of silence before sending the next --send line")
     ap.add_argument("--connect-timeout", type=float, default=5.0)
+    ap.add_argument("--no-echo", action="store_true",
+                     help="omit timestamped SEND/CONNECT/CLOSE markers (game text only)")
     args = ap.parse_args()
 
     sends = args.send if args.send is not None else ["", "look", "quit"]
+    echo = not args.no_echo
 
     try:
         sock = socket.create_connection((args.host, args.port), timeout=args.connect_timeout)
@@ -90,42 +119,61 @@ def main():
         sys.exit(2)
 
     sock.settimeout(0.3)
-    start = time.time()
-    last_recv = time.time()
+    t0 = time.time()
+    last_recv = t0
     send_idx = 0
-    transcript = bytearray()
+    decoder = codecs.getincrementaldecoder("utf-8")("replace")
+    got_any = False
+    emit_marker("CONNECT", f"{args.host}:{args.port}", t0, echo)
 
-    while time.time() - start < args.timeout:
+    def write_recv(data: bytes, final: bool = False) -> None:
+        nonlocal got_any
+        if not data and not final:
+            return
+        text = decoder.decode(data, final)
+        if text:
+            got_any = True
+            sys.stdout.write(text)
+            sys.stdout.flush()
+
+    while time.time() - t0 < args.timeout:
         try:
             chunk = sock.recv(4096)
             if not chunk:
+                emit_marker("CLOSE", "peer hung up", t0, echo)
                 break
-            transcript += negotiate_strip(chunk, sock)
+            write_recv(negotiate_strip(chunk, sock))
             last_recv = time.time()
         except socket.timeout:
             pass
         except OSError:
+            emit_marker("CLOSE", "socket error", t0, echo)
             break
 
         if send_idx < len(sends) and time.time() - last_recv >= args.idle:
             line = sends[send_idx]
+            shown = '""' if line == "" else line
+            emit_marker("SEND", shown, t0, echo)
             try:
                 sock.sendall(line.encode("utf-8", "replace") + b"\r\n")
             except OSError:
+                emit_marker("CLOSE", "send failed", t0, echo)
                 break
             send_idx += 1
             last_recv = time.time()  # reset idle clock after sending
         elif send_idx >= len(sends) and time.time() - last_recv >= args.idle:
+            emit_marker("CLOSE", "idle after last send", t0, echo)
             break  # nothing left to send and it's gone quiet
+    else:
+        emit_marker("CLOSE", "timeout", t0, echo)
 
+    write_recv(b"", final=True)
     try:
         sock.close()
     except OSError:
         pass
 
-    text = transcript.decode("utf-8", "replace")
-    sys.stdout.write(text)
-    if not text.strip():
+    if not got_any:
         print("NOTE: empty transcript (server sent nothing / connection refused mid-way)",
               file=sys.stderr)
 

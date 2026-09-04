@@ -3,7 +3,10 @@
 // of the fluffos driver (see ~/src/fluffos/docs/driver/wasm.md). Mirrors
 // scripts/mudclient.py's interface/semantics so the two can be used
 // interchangeably in test scripts: a scripted list of --send lines, paced
-// by --idle silence, with the full transcript dumped to stdout for grepping.
+// by --idle silence. Received text is streamed to stdout; each --send is
+// echoed with a timestamp (same `[HH:MM:SS.mmm +  1.12s] >>> SEND ...`
+// shape as mudclient.py) so you can see which line produced which reply.
+// --no-echo omits those markers.
 //
 // Unlike mudclient.py this doesn't open a real socket -- it boots an
 // in-process WASM driver instance, copies the mudlib's work/ directory into
@@ -54,16 +57,32 @@ function parseArgs(argv) {
   let timeout = 10.0;
   let idle = 1.0;
   let reconnectOnDisconnect = false;
+  let noEcho = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--send') { sends.push(argv[++i]); }
     else if (a === '--timeout') { timeout = parseFloat(argv[++i]); }
     else if (a === '--idle') { idle = parseFloat(argv[++i]); }
     else if (a === '--reconnect-on-disconnect') { reconnectOnDisconnect = true; }
+    else if (a === '--no-echo') { noEcho = true; }
     else { positional.push(a); }
   }
   if (sends.length === 0) sends.push('', 'look', 'quit');
-  return { positional, sends, timeout, idle, reconnectOnDisconnect };
+  return { positional, sends, timeout, idle, reconnectOnDisconnect, noEcho };
+}
+
+function formatStamp(t0ms) {
+  const now = Date.now();
+  const d = new Date(now);
+  const pad = (n, w) => String(n).padStart(w, '0');
+  const wall = `${pad(d.getHours(), 2)}:${pad(d.getMinutes(), 2)}:${pad(d.getSeconds(), 2)}.${pad(d.getMilliseconds(), 3)}`;
+  const elapsed = ((now - t0ms) / 1000).toFixed(2).padStart(6);
+  return `${wall} +${elapsed}s`;
+}
+
+function emitMarker(kind, detail, t0ms, enabled) {
+  if (!enabled) return;
+  process.stdout.write(`[${formatStamp(t0ms)}] >>> ${kind} ${detail}\n`);
 }
 
 function mkdirsOnly(Module, src, dst) {
@@ -111,10 +130,11 @@ function copyDir(Module, src, dst) {
 }
 
 (async () => {
-  const { positional, sends, timeout, idle, reconnectOnDisconnect } = parseArgs(process.argv.slice(2));
+  const { positional, sends, timeout, idle, reconnectOnDisconnect, noEcho } = parseArgs(process.argv.slice(2));
+  const echo = !noEcho;
   const [buildDirArg, libRootArg] = positional;
   if (!buildDirArg || !libRootArg) {
-    console.error('usage: wasm_client.js BUILD_DIR LIB_ROOT_DIR [--send LINE ...] [--timeout SEC] [--idle SEC]');
+    console.error('usage: wasm_client.js BUILD_DIR LIB_ROOT_DIR [--send LINE ...] [--timeout SEC] [--idle SEC] [--no-echo]');
     process.exit(2);
   }
   const buildDir = path.resolve(buildDirArg);
@@ -127,8 +147,9 @@ function copyDir(Module, src, dst) {
   configText = configText.replace(
     /^(\s*mudlib directory\s*:\s*).*$/m, '$1/mudlib/work');
 
-  const transcriptChunks = [];
   let lastOutputAt = Date.now();
+  let gotAny = false;
+  const wallT0 = Date.now();
   let connId = null;
   let disconnected = false;
   let needsReconnect = false;
@@ -154,7 +175,11 @@ function copyDir(Module, src, dst) {
   Module.FS.chdir('/mudlib');
   Module.fluffos = {
     onOutput: (id, bytes) => {
-      transcriptChunks.push(Buffer.from(bytes));
+      const text = Buffer.from(bytes).toString('utf-8');
+      if (text) {
+        gotAny = true;
+        process.stdout.write(text);
+      }
       lastOutputAt = Date.now();
     },
     onDisconnect: (id) => { disconnected = true; needsReconnect = reconnectOnDisconnect; },
@@ -172,6 +197,7 @@ function copyDir(Module, src, dst) {
   }, 50);
 
   connId = Module.ccall('fluffos_connect', 'number', [], []);
+  emitMarker('CONNECT', `wasm ${libRoot}`, wallT0, echo);
 
   const start = Date.now();
   let sendIdx = 0;
@@ -180,6 +206,7 @@ function copyDir(Module, src, dst) {
       const elapsed = (Date.now() - start) / 1000;
       if (disconnected && needsReconnect && sendIdx < sends.length) {
         connId = Module.ccall('fluffos_connect', 'number', [], []);
+        emitMarker('CONNECT', 'reconnect', wallT0, echo);
         disconnected = false;
         needsReconnect = false;
         lastOutputAt = Date.now();
@@ -191,7 +218,9 @@ function copyDir(Module, src, dst) {
         return;
       }
       if (sendIdx < sends.length && idleFor >= idle) {
-        const line = sends[sendIdx] + '\r\n';
+        const raw = sends[sendIdx];
+        emitMarker('SEND', raw === '' ? '""' : raw, wallT0, echo);
+        const line = raw + '\r\n';
         const bytes = Array.from(Buffer.from(line, 'utf-8'));
         try {
           Module.ccall('fluffos_input', null, ['number', 'array', 'number'],
@@ -207,9 +236,8 @@ function copyDir(Module, src, dst) {
   });
 
   clearInterval(tickTimer);
-  const text = Buffer.concat(transcriptChunks).toString('utf-8');
-  process.stdout.write(text);
-  if (!text.trim()) {
+  emitMarker('CLOSE', disconnected ? 'peer hung up' : 'idle after last send', wallT0, echo);
+  if (!gotAny) {
     console.error('NOTE: empty transcript (driver produced no output)');
   }
   process.exit(0);

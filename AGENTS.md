@@ -17189,7 +17189,9 @@ least once per lib.
 `python3 scripts/mudclient.py 127.0.0.1 <port> --timeout N --send ...`.
 Use `--idle 0.3`–`0.5` on any lib whose prompt shows a live clock
 (§8.3 item 1). One `--send` at a time when a flow behaves confusingly. WASM:
-same interface via `scripts/wasm_client.js` (§1.2).
+same interface via `scripts/wasm_client.js` (§1.2). Transcripts stream live
+and, unless `--no-echo`, interleave `[HH:MM:SS.mmm +  1.12s] >>> SEND look`
+markers so you can see which scripted line produced which reply.
 
 For a flow that needs several separate sequential commands with real
 state in between (a multi-step registration ritual, walking through
