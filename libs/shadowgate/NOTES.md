@@ -367,8 +367,13 @@ freshly-created accounts.
 
 ## 7. WASM status
 
-Not attempted this pass (native-driver bring-up only, per this task's
-scope) -- `wasm_status` left empty in `meta.json`.
+Measured 2026-09-03 against the shared `~/src/fluffos/build-wasm`.
+No mudlib-side compile fix was needed. Verified with
+`scripts/wasm_client.js`: `fluffos` / `Mud@2026` as "Fluffos, A heavy
+other elf with azure eyes and silver hair", `score` showed fighter /
+swashbuckler, `quit` printed "We hope you enjoyed playing" /
+"Have a nice cake!" / "Fluffos has left the game." Shop/combat/death
+were not exercised this pass.
 
 ## 深度功能测试 / §10.7 deep functional test (2026-08-31)
 

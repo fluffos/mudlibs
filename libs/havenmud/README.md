@@ -50,3 +50,10 @@ a real outbound connection to the public Intermud-3 network on boot
 (confirmed live, same router this collection's other Dead Souls-family
 libs connect to) -- don't sweep this lib into high-frequency automated
 re-boot loops.
+
+WASM status: **playable**. Shared WASM driver. New-character
+registration (`wasmhav` / `Mud@2026` / `pick human` / `pick haven`)
+into "In the skies above Kailie", plus `look` / `score` ("You are
+Wasmhav, a level 0 Human.") / `quit`, verified with
+`scripts/wasm_client.js`. FTP/`socket_*` compile failures are graceful
+preload skips. Play: https://mudlibs.fluffos.info/havenmud/

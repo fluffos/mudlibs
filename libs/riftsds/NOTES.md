@@ -386,20 +386,18 @@ Full continuous session via `scripts/mudclient.py` against
 
 ## 7. WASM status
 
-Not attempted this pass -- `wasm_status` left blank in `meta.json`,
-matching the current treatment of other still-pending Dead-Souls-
-lineage libs (`discworld`/`nightmare3`/`lima` as of 2026-08-25). Given
-`ds386`'s own WASM pass found a real `sockets`-package-absent gap in
-the eagerly-loaded simul_efun (`secure/sefun/sockets.lpc`) that had to
-be gutted to boot at all under WASM, and that exact fixed file WAS
-ported into this lib wholesale (§2 above), a future WASM pass should
-start from a strong position -- but `secure/daemon/instances.lpc`
-(also socket-touching, also loaded during a normal `quit()`'s channel
-broadcast per `ds386`'s own writeup) diverged from `ds386`'s baseline
-here (only whitespace/indentation differences, but enough that the
-automated port skipped it) and has NOT had the same socket-gutting fix
-re-applied -- worth checking first if a future WASM pass reports the
-same "no sockets package" boot failure `ds386` hit.
+Measured 2026-09-03 against the shared `~/src/fluffos/build-wasm`.
+`secure/sefun/sockets.lpc` was already stubbed, but the eager
+`secure/sefun/sefun.lpc` still called `efun::socket_address()`
+unconditionally -- "Unknown efun: socket_address", simul_efun not
+loadable, boot failed. Guarded with `#ifdef __PACKAGE_SOCKETS__`
+(same as `dsIII`/`ds386`). After that, `scripts/wasm_client.js`
+logged in as `fluffos` / `Mud@2026` into First Village Bank, `score`
+showed "Fluffos the unaccomplished", `hp: 440/440`, `quit` printed
+"Please come back another time!" `secure/daemon/instances.lpc` still
+fails to compile on `socket_status()` during quit's channel
+broadcast — a graceful skip, not on the login path. Shop/combat/death
+were not exercised this pass. Do not loop-reboot (I3).
 
 ## §10.7 deep functional test (2026-08-31, round two)
 

@@ -36,8 +36,15 @@ character exactly where you left off.
 
 Boots clean natively and plays correctly end-to-end -- registration,
 character creation, movement through real authored rooms, and the
-in-game editor were all verified live during onboarding. Not yet
-packaged for the browser (WASM) gallery.
+in-game editor were all verified live during onboarding.
+
+WASM status: **playable**. Shared WASM driver. A `hash()` simul_efun
+stub (`adm/simul_efun/hash.lpc`) covers the missing PACKAGE_CRYPTO
+efun so `std/room/room.lpc` compiles. New-account registration
+(`wasmxid` / `wasmox` / `Mud@2026`) into Village Square of Olum, plus
+`look` / `score` ("You are Wasmox, a level 1 human.") / `quit`,
+verified with `scripts/wasm_client.js`. Play:
+https://mudlibs.fluffos.info/oxidus/
 
 ## Onboarding notes
 

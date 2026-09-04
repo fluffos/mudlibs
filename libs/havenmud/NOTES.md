@@ -781,3 +781,18 @@ this session was specifically asked to cross-reference:
   (`torak` is one of the 25 personal `realms/*`) that it was not
   pursued further -- flagged here rather than silently dropped, for
   whoever next has budget to isolate the exact trigger.
+
+## WASM measurement (2026-09-03)
+
+`meta.json` was already `playable` from the 2026-08-31 deploy-unblock;
+the README had no WASM line. Cold-boot under the shared
+`~/src/fluffos/build-wasm` succeeded with no mudlib-side compile fix
+(FTP/`socket_*` failures in `secure/lib/net/` are graceful preload
+skips). Verified with `scripts/wasm_client.js`: new character
+`wasmhav` / confirm / email / `Mud@2026` / male / real name /
+`pick human` / `pick haven`. Landed in "In the skies above Kailie"
+(newbie book visible, `down` exit), `score` showed "You are Wasmhav,
+a level 0 Human" / "Citizen of Haven", `quit` printed "Please come
+back another time!" / "Wasmhav logs out." Shop/combat/death were not
+exercised this pass. The MEMFS copy does not write the throwaway
+character back to the host. Do not loop-reboot (I3).

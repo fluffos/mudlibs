@@ -264,6 +264,11 @@ int ends_with(string str, string ending_string);
 string sanitize_regex(string msg);
 varargs string safe_string(string str, string replacement);
 
+#ifndef __PACKAGE_CRYPTO__
+// File: hash.c -- WASM/no-crypto stub only; native uses the real efun
+string hash(string algo, string data);
+#endif
+
 // File: system.c
 int port();
 object simul_efun();

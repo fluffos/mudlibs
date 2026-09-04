@@ -43,6 +43,12 @@ playable.
 
 ## Play online
 
+WASM status: **playable**. Shared WASM driver. `socket_address()` in
+`secure/sefun/sefun.lpc` is `#ifdef __PACKAGE_SOCKETS__` so the eager
+simul_efun compiles without the sockets package (same treatment as
+`dsIII`/`ds386`). Admin login (`fluffos` / `Mud@2026`) into First
+Village Bank, plus `score` ("Fluffos the unaccomplished") / `quit`,
+verified with `scripts/wasm_client.js`. Play:
 https://mudlibs.fluffos.info/riftsds/
 
 ## Admin account

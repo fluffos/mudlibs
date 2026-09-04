@@ -574,11 +574,14 @@ treating "found nothing" the same as "didn't look."
 
 ## 8. WASM status
 
-Not yet run through the WASM pipeline (§1 of AGENTS.md) -- this
-onboarding pass focused on the native-driver bring-up, bug fixes, and
-full playthrough verification per the assignment. `wasm_status` left
-empty in `meta.json`, matching the convention for other recently-
-onboarded libs pending their WASM pass (`rifts2`, `riftsds`, `oxidus`).
+Measured 2026-09-03 against the shared `~/src/fluffos/build-wasm`.
+No mudlib-side compile fix was needed (`dump_socket_status` lives
+only in a creator `_netstat` command). Verified with
+`scripts/wasm_client.js`: `fluffos` / `Mud@2026` into Newbieville
+town square (`/d/newbieville/rooms/townsquare`, five exits including
+castle), `score` showed "Novice Fluffos the High-man" Health 31,
+`quit` printed "Saving...Successful." Shop/combat/death were not
+exercised this pass.
 
 ## 9. AGENTS.md §7.19 (room/prop variant) -- kobold pond reentrancy crash, fixed
 

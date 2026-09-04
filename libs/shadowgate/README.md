@@ -40,6 +40,13 @@ Source: `openshadowgate/shadowgate` on GitHub.
 > Warning: `Mud@2026` is a public default password for local play
 > only. Change it before exposing this host publicly.
 
+WASM status: **playable**. Shared WASM driver. Admin login
+(`fluffos` / `Mud@2026`) as "Fluffos, A heavy other elf with azure
+eyes and silver hair", plus `score` (fighter / swashbuckler) / `quit`
+("We hope you enjoyed playing" / "Fluffos has left the game."),
+verified with `scripts/wasm_client.js`. Play:
+https://mudlibs.fluffos.info/shadowgate/
+
 ## Local run
 
 ```

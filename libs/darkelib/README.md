@@ -23,7 +23,11 @@ the original staff, hardcoded admin names).
 
 ## Play online
 
-Not yet WASM-packaged for the browser gallery -- run natively (below).
+WASM status: **playable**. Shared WASM driver. Admin login
+(`fluffos` / `Mud@2026`) into Newbieville town square, plus `look` /
+`score` ("Novice Fluffos the High-man") / `quit` ("Saving...Successful."),
+verified with `scripts/wasm_client.js`. Play:
+https://mudlibs.fluffos.info/darkelib/
 
 ## Admin account
 

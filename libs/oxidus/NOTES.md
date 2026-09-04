@@ -257,6 +257,23 @@ pipeline; WASM triage left for a follow-up pass, matching the same
 "native-boot verified, WASM pending" status other very recently
 onboarded libs in this corpus (e.g. `rifts2`) currently carry.
 
+## WASM measurement (2026-09-03)
+
+`meta.json` was already `playable` from the 2026-08-31 deploy-unblock;
+the README still said "not yet packaged." Cold-boot under the shared
+`~/src/fluffos/build-wasm` reached the account prompt, but every
+room failed to compile: `std/room/room.lpc` `gmcp_room_info()` calls
+`hash("md4", ...)` (a PACKAGE_CRYPTO efun the WASM build does not
+have). Added `adm/simul_efun/hash.lpc` (compiled only when
+`__PACKAGE_CRYPTO__` is absent; native keeps the real efun) and
+included it from `adm/obj/simul_efun.lpc`. After that,
+`scripts/wasm_client.js` created account `wasmxid` / character
+`wasmox` / `Mud@2026` and landed in Village Square of Olum (five
+exits), `look` reprinted the square, `score` showed "You are Wasmox,
+a level 1 human." HP 100, `quit` printed "Y'all come back, now,
+y'hear?" Shop/combat/death were not exercised this pass. The MEMFS
+copy does not write the throwaway account back to the host.
+
 ## §10.7 deep functional test (2026-08-31)
 
 Round-two deep-functional-test pass, going beyond the onboarding
