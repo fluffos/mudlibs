@@ -266,6 +266,18 @@ WASM packaging not attempted this pass -- `wasm_status` left empty,
 matching `openlib`'s precedent for a lib onboarded outside the
 site-wide WASM sweep.
 
+## WASM measurement (2026-09-03)
+
+`meta.json` was already `playable` from the 2026-08-31 deploy-unblock;
+the README still said "not yet WASM-packaged." Cold-boot under the
+shared `~/src/fluffos/build-wasm` succeeded with no mudlib-side
+compile fix. Verified with `scripts/wasm_client.js`: `fluffos` /
+`Mud2026x` → "Good day-time, Fluffos! You wake up from a too long
+sleep." → Arcane street (`/world/creek/rooms/arcane3`, exits e/w) →
+`score` ("Fluffos, the human coder", race human / thari) → `quit`
+("Your character is now sleeping. Be back soon!"). Shop/combat/death
+were not exercised this pass.
+
 ## 深度功能测试 / §10.7 deep functional test (2026-08-31)
 
 Full round-two continuous playthrough on the native driver

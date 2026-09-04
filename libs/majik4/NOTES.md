@@ -326,6 +326,21 @@ matching `majik3`/`openlib`'s precedent for a lib onboarded outside the
 site-wide WASM sweep (and this lib's custom client protocol would need
 its own WASM-side client shim regardless, a separate follow-up task).
 
+## WASM measurement (2026-09-03): limited, not playable
+
+`meta.json` was flipped to `playable` on 2026-08-31 (`2ec643a7c45`)
+to unblock the Pages deploy — that commit equated a native §10.7
+pass with WASM playability. Measured against the shared
+`~/src/fluffos/build-wasm`: the driver **boots** and immediately
+emits MCP frames (`1:18:$Revision: 1.19 $`, then `17:2:0`
+`CMD_ASK_NAME`). The site's browser terminal cannot complete
+login — typed names/passwords are not `<code>:<len>:<data>` frames,
+so this is the same class as `zjdyzj` (a real client protocol the
+gallery player does not speak), not a missing sockets stub.
+`wasm_status` is now `limited`. Native play is unchanged. A future
+WASM-side MCP client shim would be needed before this can be
+`playable`. Shop/combat/death were not exercised this pass.
+
 ## 深度功能测试 / §10.7 deep functional test (2026-08-31)
 
 Full round-two pass on the native driver, driven entirely through a

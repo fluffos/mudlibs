@@ -28,7 +28,11 @@ Source: `tsathoqqua/RiftsMUD2` on GitHub.
 
 ## Play online
 
-Not yet WASM-packaged for the browser gallery -- run natively (below).
+WASM status: **playable**. Shared WASM driver. Admin login
+(`fluffos` / `Mud@2026`) into the city center square, plus `look` /
+`score` ("Novice Fluffos the Human") / `quit` ("Saving...Successful."),
+verified with `scripts/wasm_client.js`. Play:
+https://mudlibs.fluffos.info/rifts2/
 
 ## Admin account
 

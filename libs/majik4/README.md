@@ -35,9 +35,12 @@ originally built.
 
 ## Play online
 
-Not yet WASM-packaged for the browser gallery -- run natively (below),
-and note this lib needs a protocol-aware client (a plain telnet client
-will not work for interactive play -- see NOTES.md for the wire format).
+WASM status: **limited**. The shared WASM driver boots and speaks this
+lib's MCP frame protocol (`<code>:<len>:<data>`), but the site's
+browser terminal cannot complete login — same class as `zjdyzj`, a
+real client protocol the gallery player does not speak. Native play is
+fully verified; a future WASM-side client shim would be needed before
+this can be `playable`. See `NOTES.md`.
 
 ## Admin account
 

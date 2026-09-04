@@ -34,6 +34,12 @@ seeded admin, granted by moving its save file into
 `secure/save/creators/` after a normal registration -- see `NOTES.md`
 section 5).
 
+WASM status: **playable**. Shared WASM driver. Admin login
+(`fluffos` / `Mud@2026`) through the news pager into the Temple of
+Midgaard, plus `hp: 430/430` / `quit` ("Please come back another
+time!"), verified with `scripts/wasm_client.js`. Play:
+https://mudlibs.fluffos.info/brassring/
+
 See `NOTES.md` for the full porting log, including how this session
 reconstructed the game's entire missing security-daemon layer (this
 repo never once committed a `secure/master.lpc`/`simul_efun` engine of

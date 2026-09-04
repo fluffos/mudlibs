@@ -495,3 +495,16 @@ for; flagged honestly as unverified-live rather than silently skipped.
   not a live dependency of anything tested) -- flagged as a correction
   to that earlier claim for whoever next cares about this lib's
   network footprint, not fixed or re-verified in depth.
+
+## WASM measurement (2026-09-03)
+
+`meta.json` was already `playable` from the 2026-08-31 deploy-unblock;
+the README had no WASM line. Cold-boot under the shared
+`~/src/fluffos/build-wasm` succeeded (`secure/sefun/sockets.lpc`
+already stubbed). `secure/daemon/imc2.lpc` still fails to compile on
+`socket_status()` — a graceful preload skip, not on the login path.
+Verified with `scripts/wasm_client.js`: `fluffos` / `Mud@2026`
+through the news pager into the Temple of Midgaard
+(`/domains/diku-alfa/room/30.zon/rm_3001`), `hp: 430/430`, `quit`
+printed "Please come back another time!" / "Fluffos quits The Brass
+Ring." Shop/combat/death were not exercised this pass.

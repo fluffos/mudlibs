@@ -354,11 +354,16 @@ reload command path work correctly.
 
 ## 7. WASM status
 
-Not yet run through the WASM pipeline (§1 of AGENTS.md) -- this
-onboarding pass focused on the native-driver bring-up, bug fixes, and
-full playthrough verification per the assignment. `wasm_status` left
-empty in `meta.json`, same convention as other recently-onboarded libs
-pending their WASM pass (e.g. majik4).
+Measured 2026-09-03 against the shared `~/src/fluffos/build-wasm`.
+No mudlib-side compile fix was needed (`dump_socket_status` lives
+only in a creator `_netstat` command, not the eager simul_efun).
+`daemon/network.lpc` `socket_create` fails to compile without the
+sockets package — a graceful preload skip, not on the login path.
+Verified with `scripts/wasm_client.js`: `fluffos` / `Mud@2026` into
+`/d/standard/square` (city center, exits world/east), `score` showed
+"Novice Fluffos the Human" HP 15, `quit` printed
+"Saving...Successful." Shop/combat/death were not exercised this
+pass.
 
 ## 深度功能测试 / §10.7 deep functional test (2026-08-31)
 

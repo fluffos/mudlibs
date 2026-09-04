@@ -23,7 +23,11 @@ Source: `tleino/majik3` on GitHub.
 
 ## Play online
 
-Not yet WASM-packaged for the browser gallery -- run natively (below).
+WASM status: **playable**. Shared WASM driver. Admin login
+(`fluffos` / `Mud2026x`) onto Arcane street
+(`/world/creek/rooms/arcane3`), plus `look` / `score` ("Fluffos, the
+human coder") / `quit` ("Your character is now sleeping."), verified
+with `scripts/wasm_client.js`. Play: https://mudlibs.fluffos.info/majik3/
 
 ## Admin account
 
