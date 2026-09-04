@@ -635,3 +635,49 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：石龙武馆兵器铺购物 + 净念禅院虚尘拜师。2026-07-25 第二轮只做了
+钱不够的 `buy` 拒绝和教头负例（「既不属於任何门派…不能拜师」），正例
+拜师没走完。2026-08-20 第四轮是野鸡战斗→死亡→阎罗重生，留下管理员
+`fluffos` 存档 `ghost 1`（`last_damage_msg` 被野鸡杀害）。本轮端口
+40043。第一输入是英文 id（没有 GB 选单）。密码 `Mud@2026`。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`（权限 `(admin)`）。上一轮死亡留下的鬼魂
+状态下，`full` 只回 kee/sen/食物饮水，**不清 ghost**。鬼魂 `living()`
+为假，所以 `apprentice xu` 会先打出虚尘源码里那句抢跑的「你成为了净念
+禅院的俗家弟子！」，再被 `cmds/std/recruit.lpc` 以「没有办法行拜师之
+礼」拒绝，`score` 仍是普通百姓 / 还未拜师学艺。`call me->reincarnate()`
+后头衔不再是鬼魂，买东西和拜师才走得通。
+
+`goto /d/slwg/bingqipu`（石龙武馆兵器铺，铁匠 `d/slwg/npc/tiejiang.lpc`，
+`F_VENDOR_SALE`）。买法是 `buy <物> from <人>`，不能光 `buy sword`。
+`list` 长剑一两银子。`buy sword from tiejiang` 成功（「你向铁匠买下一把
+长剑」），银子 99→98。长剑不进 autoload。
+
+`goto /d/chanyuan/wuchang`，虚尘（`d/chanyuan/npc/xuchen.lpc`）。鬼魂那
+次失败会把 `pending/apprentice` 留在身上，再 `apprentice xu` 只得到
+「你想拜虚尘为师，但是对方还没有答应」，不会重跑 `attempt_apprentice`。
+`apprentice cancel` 之后再拜：磕头、「恭喜您成为净念禅院的第八代弟子」。
+`score` 职称「净念禅院第八代弟子」、师承虚尘。`cmds/usr/save.lpc` 在 60
+秒内再 save 会假报「档案储存完毕」却不写盘；本轮用 `call me->save()`
+落盘。杀驱动冷启动再登录：称谓/师傅/一两黄金/九十八两银子都在，长剑不
+在。虚尘只收男性、拒已婚、PKS≥5、杀气≥100。学院老师不收徒；阴癸派
+`dizi2` 有 `create_family` 但没有 `F_MASTER`/`attempt_apprentice`；朱玉
+雁只收女弟子。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **鬼魂收徒失败后 `pending/apprentice` 不清理**（`cmds/std/recruit.lpc`）：
+   `!living(ob)` 分支已经告诉双方「没有办法行拜师之礼」，却既不收徒也
+   不 `delete_temp("pending/apprentice")`。玩家还阳后同一目标再
+   `apprentice` 会卡在「对方还没有答应」，必须先 `apprentice cancel`。
+   该分支补上 `ob->delete_temp("pending/apprentice")`。现场 `update` 后
+   用 cancel + 重拜验证通过。
+
+虚尘 `attempt_apprentice()` 在 `command("recruit")` 之前就 `tell_object`
+「你成为了净念禅院的俗家弟子」——鬼魂路径下这是假成功提示。recruit
+修好以后活人路径会立刻真收徒，这条抢跑提示不再误导，未改 NPC 台词。
