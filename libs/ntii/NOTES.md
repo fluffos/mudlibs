@@ -288,3 +288,66 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：扬州醉仙楼购物 + 丐帮空空儿拜师。sibling `nte` 在 2026-08-21
+round four 已经走过 `buy baozi` + `bai kong`；`ntii` 自己的 2026-08-12
+round two 只测了「流氓头」organic 拒绝 + `copyskill` 捷径，没有真实商店
+购买，也没有真实门派收徒。`score` 对未投胎的巫师账号仍回「还没有出生呐」
+（2026-08-12 已记录的内容门槛），所以本轮用 `title` 和 `user.o` 的
+`family` 字段确认拜师写入。
+
+### 本轮修的 bug
+
+**`log_file()` 不 `assure_file()`，缺目录的 `log/nosave/` 会把巫师
+`clone` 打成运行时错误**（AGENTS.md 已有的 unguarded-`log_file` 形状，
+sibling `nte` 的 `adm/simul_efun/file.lpc` 早已加上 forward 声明 +
+`assure_file(LOG_DIR + file)`，这里还是裸 `write_file`）。现场：
+`clone /clone/money/gold` 立刻
+
+```
+执行时段错误：*Wrong permissions for opening file /log/nosave/clone
+for append. "No such file or directory"
+```
+
+错误出在 `clone.lpc` 的 `log_file("nosave/clone", ...)`，发生在
+`move()` 之前，所以黄金根本没进物品栏。`.gitignore` 排除整个
+`work/log/`，不能靠提交空目录蒙混。修复与 `nte` 逐行相同：在
+`log_file()` 上方加 `void assure_file(string file);`，调用
+`write_file()` 之前 `assure_file(LOG_DIR + file)`。档案是 LF。
+
+驱动重启后同一条 `clone /clone/money/gold` 成功（「黄金复制成功，放在
+你的物品栏。」），`work/log/nosave/clone` 被自动创建。`is_admin()` 在
+这份档案是 `VERSION_D->is_release_server() || admin_flag == 21 ||
+getuid() == "lonely"`，`is_release_server()` 为真，wizlist `(admin)`
+可以 clone——和 `xkxc98sj` 那种还要 `admin_flag == 1222` 的门不同，
+不要把那边的 clone 拒绝套过来。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026` / 凌霄。第一行是
+`Select 国标码 GB or BIG5 (gb/big5)：`，但 `input_to` 直接进 `get_id`；
+`gb` 只有两个字母，会被 `check_legal_id` 拒绝。默认就是 GB，第一条发
+`fluffos` 即可。没有 `wizpwd`。端口 40151。提示符是普通 `>`（不是每秒
+时钟）。
+
+先拜后买：`d/city/npc/xiaoer2.lpc` 没有丐帮穷叫化踢人（和襄阳/大理那些
+`xiaoer2` 不同）。`goto /d/city/lichunyuan`，空空儿在场（id `kong`，
+`kungfu/class/gaibang/kongkong.lpc`，会 `random_move()`）。
+`apprentice kong` 一次成功：空空儿收徒，「恭喜您成为丐帮的第二十代弟子。」
+`user.o` 立刻带上 `family_name":"丐帮"` / `master_name":"空空儿"` /
+`generation":20` / `title":"丐帮第二十代传人"`。驱动重启后 `title` 仍是
+「你现在的江湖称号：丐帮第二十代传人」。`permit_recruit` 只拒叛师/已有
+别派。
+
+然后 `goto /d/city/zuixianlou`，`list` 包子五十文铜板 / 烤鸡腿八十文 /
+烤鸭一两白银又五十文。`buy baozi` 成功（「你从店小二那里买下了一个包子」）。
+`i` 剩九十九两白银 + 五十文铜钱 + 包子（10000−50 = 9950），找零数学正确。
+扬州店小二对已入丐帮的巫师没有穷叫化拒绝（本轮先拜后买仍买成）。
+
+`clone/quest/shen` 的 `*No program in object` 开机噪音 2026-08-12 已记录，
+本轮未再动。live 驱动 `debug.log` 是 `libs/ntii/log/debug.log`（Boot Time
+Fri Sep 4 03:02:17 2026），修复后无 `error:` / `Too deep recursion` /
+`Wrong permissions`。mudlib `error_handler` 写 `work/log/debug.log`，里面
+只有修复前那一次 clone 崩溃，重启后没有新行。管理员存档未提交。
