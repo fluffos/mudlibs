@@ -169,3 +169,56 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-03，round three，shop + 拜师）
+
+新角度：醉仙楼购物 + 丐帮左全拜师，并核对存盘后门派是否还在。
+2026-08-13 那一轮明确没测这两步。
+
+### 实测过程
+
+管理员 `fluffos` / 普通密码 `Mud@2026`（双密码账号，本次未走管理
+密码）。落地 `/d/city2/kedian`。`goto /d/city/zuixianlou`，`list`
+价目为铜钱尺度（烤鸡腿八十文钱）。`clone /clone/money/gold` 后
+`buy jitui` 成功（找零九十九两银子 + 二十个铜板）。本血统
+`feature/dealer.lpc` 没有丐帮「穷叫化」拒绝，买可以放在拜师前或后。
+
+拜师比 zxty08 多一道阵营门：`apprentice zuo` 先被挡，提示「丐帮」
+属于名门正派，须先 `join 名门正派`（`cmds/skill/join.lpc`）。宣誓
+后再拜，左全收徒，`score` 称谓「丐帮第二十代弟子」、师傅左全。
+`logind.lpc` 每次巫师登陆会把 `env/invisibility` 设成 1；`present()`
+看不到隐身玩家。正确指令是 `unset invisibility`（没有
+`unsetenv`）。这是内容/巫师惯例，未改。
+
+`quit.lpc` 对 `mud_age <= 600` 会 `rm` login.o **和** user.o，真正
+删除路径没有 `wizardp()`（确认提示才豁免巫师）。和 zxty08 同一类
+既有政策，未改，本轮不 `quit`。
+
+重连 `score` 仍是丐帮第二十代弟子 / 师傅左全；`user.o` 里有
+`family` / `zhenying`。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`cmds/usr/save.lpc` 把真正的 `link_ob->save()` / `me->save()`
+   注释掉了，只打印「档案储存完毕」。** `net_dead()` 只存 login.o
+   不存身体；`quit` 在低 `mud_age` 还会删档。结果是玩家（和巫师）
+   的 `save` 完全是假的，拜师/购物都不会进 `user.o`，只靠
+   `inherit/char/char.lpc` 心跳大约 15 分钟一次的自动存盘。已恢复
+   成真正调用两个 `save()`，失败则报「储存失败」。修复后同一次
+   `save` 立刻把 `family` 写进 `data/user/f/fluffos.o`。
+
+2. **`securityd.lpc` `valid_read()` 里对 `/log/` 的拒绝会
+   `log_file("file/bug_read")`，而 `log_file` 自己又要
+   `valid_read(/log/...)`。** 非 `rock`/`jerry` 的巫师（包括
+   `fluffos` admin）登陆写 usage 日志、以及 `clone` 碰到 `/log/`
+   时，都会 Too deep recursion，并刷几十行「警告：你不能操作这些
+   目录下的文件。」。加了 `in_valid_read` 重入保护（和
+   `zxty08nxgbb` 同形状；允许读写的 id 在这里仍是 `rock`/`jerry`）。
+   修复后登陆只剩两行警告，不再 recursion。
+
+### 观察（未改）
+
+- 冷启动 `boss.lpc` eval-cost 是 2026-08-03 已记录的一次性编译，
+  未再改 `maximum evaluation cost`。
+- `quit` 低 `mud_age` 删档：确认提示有巫师豁免，真正 `rm` 没有。
+- 巫师隐身由 `logind` 强制打开；拜师前需要 `unset invisibility`。
