@@ -279,3 +279,43 @@ diff is a cosmetic Windows folder name in `config.cfg`). `nitan_san`'s
 2026-08-12 round-two §10.7 pass (`libs/nitan_san/NOTES.md`) is the
 functional-test record for this codebase. The `work/` sync above already
 carries every fix from that pass.
+
+## 深度功能测试（2026-09-04，shop + 拜师）
+
+Independent live pass on this slug (port **40217**, `build-debug`
+driver). Prior §10.7 text above only deferred to `nitan_san` and never
+exercised a shop purchase or a recruiting NPC here. First send is
+**`gb`** (GB/BIG5 menu), then id `fluffos` / password `Mud@2026`. Admin
+has no `wizpwd` yet — login prints the “请登陆后用 wizpwd 命令设置”
+warning and then asks for the ordinary password. `score` refuses an
+unborn wizard (“还没有出生呐”); birth is `goto /d/register/entry` →
+`choose 1` (光明磊落) → `washto 20 20 20 20` → `born 扬州人氏`
+(lands at `/d/city/kedian`; `help rules` more-pager — send `q`).
+
+**Shop**: 客店 `xiaoer` is an innkeeper, not `F_DEALER`. Real vendor is
+`/d/city/zuixianlou` 店小二 (`d/city/npc/xiaoer2.lpc`). `list` shows
+烤鸡腿 80 文. `clone /clone/money/gold` works (`release server : local`
+makes `is_admin()` true). `buy jitui` deducted one gold into 99 两白银
++ 20 文铜钱 and delivered 烤鸡腿. No `F_DEALER` 丐帮 refuse on this
+lib.
+
+**拜师**: `goto /d/city/lichunyuan`, `bai kong` on 空空儿
+(`kungfu/class/gaibang/kongkong.lpc`) — no skill/shen gate beyond
+`permit_recruit()`. Accepted immediately: “恭喜您成为丐帮的第二十代弟子.”
+`score` shows 【门派】丐帮 / 【师承】空空儿. `save` then `quit`. After
+a full driver kill + reboot, relogin still shows 丐帮 / 空空儿; the
+silver/coin change persisted; 烤鸡腿 did not (food, not autoload —
+expected, not a save bug).
+
+**Bug fixed**: `kungfu/class/huashan/{yue-buqun,yue-wife,feng-buping}.lpc`
+`recruit_apprentice()` wrote `add("apprentice_availavble", -1)` (extra
+“av”) while `attempt_apprentice()`/`reset()` use `"apprentice_available"`.
+Same typo `nitan6` already live-verified — the daily-recruit counter
+never decremented. Corrected the property name in all three files
+(LF-only). `nitan_san` still has the typo; not patched this pass.
+`qingcheng/yu.lpc` is not in this tree. `inherit/weapon/pin.lpc` here
+has no `to_chinese()` call (the nitan6 compile-blocker is already
+absent).
+
+No new `debug.log` `Error:` / `Wrong permissions` / eval-cost lines on
+the shop+拜师 boot.
