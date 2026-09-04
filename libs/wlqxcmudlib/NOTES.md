@@ -28,3 +28,57 @@ MUD
 改成 `is_killing(ob->query("id"))` 后，`qinfeng`/秦风 走完整注册进
 世外桃源（水笙、狄云在场）。`logind.lpc` 的 `MESSAGE_D->find_chatter`
 也加了 `find_object` 保护。
+
+## 商店付费购买（2026-09-04 librarian shop slice）
+
+手足 `yanhuangwuhun` 2026-09-03 的路径可套：醉仙楼买烤鸡腿、丐帮黎生拜师。
+本轮注册了真正的 admin `fluffos`/`Mud@2026`（登录密码 `Play2026x`，中文名
+云游）。第一行就是英文 id，没有 GB/Big5 选择。落地世外桃源
+`/d/register/entry`，`register test@example.com` + `decide` + `west`
+花铁干（阴险奸诈）+ `out` 阎罗殿，`washto 20 20 20 20`，`born 扬州人氏`
+进扬州客店 `/d/city/kedian`。提示是每秒时钟（`env/prompt` = time），
+`mudclient.py` 用 `--idle 0.4`–`0.6`。`help/rules` 仍是生 GB18030，分页
+打断第一次 look，是 yh 血统已知内容缺口，不是本轮新 bug。
+
+### 修了两处真编程 bug
+
+1. **`goto` 第一次触发 `MESSAGE_D` 崩溃**（AGENTS.md §7.89 形状）：
+   `/adm/daemons/network/messaged.lpc` 的 `create()` 写
+   `my_port = LOCAL_PORT() + MESSAGE_PORT`，`LOCAL_PORT()` 是
+   `(int) get_config(__MUD_PORT__)`，这个驱动上 `get_config` 回字符串，
+   `(int)` 不强制转换，`"" + 10` 变成字符串 `"10"`，`socket_bind()` 报
+   `Expected: int Got: "10"`，整条 `goto` 中止。本树 `versiond.lpc`
+   进口时已经用 `to_int(get_config(__MUD_PORT__))` 修过，`messaged`
+   漏了。已改成同样的 `to_int`，`socket_bind` 两处也包 `to_int(my_port)`，
+   `send_udp()` 加了 `!socket_id` 守卫。修复后 `goto /d/city/zuixianlou`
+   干净落到醉仙楼。
+
+2. **`clone` 因 `/log/nosave/` 不存在崩溃**（§7.11）：
+   `adm/simul_efun/file.lpc` 的 `log_file()` 直接 `write_file(LOG_DIR +
+   file)`，没有 `assure_file()`。巫师 `clone /clone/money/gold` 写
+   `/log/nosave/clone` 时报 `Wrong permissions ... No such file or
+   directory`，物件没变出来。已加 `assure_file` 前向声明并在写入前建
+   目录。修复后 `clone` 回「黄金复制成功」，`i` 见到一两黄金。
+
+本机 `debug.log` 这轮没打开（`log directory : /log` 是绝对路径，驱动
+cwd 进 work 之后没有对应 fd）。运行时错误当时打在玩家屏幕上。
+
+### 商店
+
+`goto /d/city/zuixianlou`，店小二 `list` 给出牛皮水袋/干粮/包子/烤鸡腿
+（八十文铜板）/烤鸭/牛皮酒袋。`clone /clone/money/gold` 后 `buy jitui`
+live 回「你从店小二那里买下了一根烤鸡腿」。`i` 为九十九两白银 +
+二十文铜钱 + 烤鸡腿 + 零两黄金。扬州客店的 `list` 会先打到北丑（只卖
+消息），要用醉仙楼的店小二。
+
+### 拜师（未完成）
+
+`goto /d/gaibang/inhole` 见到黎生（`li sheng`）。`bai li` / `bai li sheng`
+都只回玩家侧「你想要拜黎生为师」，黎生的 `command("nod")` /
+`command("say 我便收你为徒…")` / `command("recruit")` 没有任何输出，
+`score` 仍是「还没有拜师」。同一次游玩里花铁干 `init()` 的
+`command("grin")`/`command("say 阴险奸诈…")` 也是静默的，只有
+`check_leave` 里的 `message_vision` 可见。手足 `yanhuangwuhun` 同一份
+黎生代码 2026-09-03 是成功收徒的。本轮没有改 `command()`/`enable_player()`，
+也没有用 `call` 硬写 family。下一切片若继续，先查 NPC 是否 `living()`、
+`command()` efun 在嵌套玩家指令里是否直接回 0。
