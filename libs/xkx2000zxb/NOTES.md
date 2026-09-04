@@ -216,3 +216,47 @@ so a bare `living()` guard would have broken legitimate revive/wakeup re-enables
 Fixed with a true reentrancy flag (`nosave private int in_enable_player_now;`,
 set at entry, cleared before the function's single return path), matching the
 reference fix on `mhxy`. Verified via single-file `lpcc --batch` PASS.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：扬州醉仙楼购物 + 丐帮左全拜师。2026-08-17 round one 和
+2026-08-19 round four 覆盖了战斗/死亡/复活/`call`，没有走商店或拜师。
+
+### 实测过程
+
+管理员 `fluffos`。第一输入是 `Do you want to use BIG5 code?(y/n)`，回
+`n` 用 GB。落地侠客岛沙滩 `/d/xiakedao/shatan`（巫师跳过挂名处）。原
+登录密码是注册时自设、对不上 `Mud@2026`，本轮把 `login.o` 的 crypt 重
+设成 `Mud@2026`（未提交）。`waiwai`/`xgslxz` 的 `valid_wiz_login` 锁定
+`192.168.0.40` 是设计，没动；`fluffos` 的 `wiz_sites` 仍是 `.*`。
+
+`goto /d/city/zuixianlou`，`list` 烤鸡腿四十文铜板 / 牛皮酒袋五十文 /
+包子三十文（`vendor_goods` 三条，没有 `start_more` 分页）。`F_DEALER`
+里丐帮穷叫化拒绝购买整段是注释掉的，仍按家族惯例先买再拜。
+`clone /clone/money/gold` 后 `buy jitui` 成功（「你从店小二那里买下了
+一根烤鸡腿」）。`i` 剩六十文铜钱 + 九十九两白银（10000−40 = 9960），
+黄金条目消失，找零数学正确。
+
+`goto /d/gaibang/inhole`，左全源码是 `kungfu/class/gaibang/zuo-quan.lpc`，
+`apprentice zuo` 一次成功：左全收徒，`score` 「丐帮一袋弟子」、师父左
+全、恭喜成为第二十代弟子。`cmds/usr/save.lpc` 真正调用两个 `save()`。
+`user.o` 立刻带上 `family_name":"丐帮"` / `master_name":"左全"` /
+`generation":20`。断线后再连（「重新连线完毕」），称谓/师傅/银子还在。
+左全只收男性。
+
+### Bug：`log_error()` 把编译警告当「编译时段错误」打给每个连线玩家（AGENTS.md §7.10 / §7.103）
+
+第一次进游戏时，`look`/`score`/`i`/`list`/`goto` 每碰到一个尚未编译的
+档案，就往屏幕上倒 `编译时段错误：...warning: Unused local variable`
+/ `Unknown #pragma`。`adm/single/master.lpc` 的 `log_error()` 对
+`this_player(1)` 无条件 `efun::write("编译时段错误：" + message)`，没
+有把 warning 和真正的 error 分开——`this_player(1)` 在本驱动上就是当
+前玩家，不分巫师。修复：加上 corpus 标准闸门
+`strsrch(message, "arning:") == -1`（大小写都吃到）。警告仍写入
+`work/log/log`。重启驱动后同一条 look/score/i/list/inhole 路径
+`编译时段错误` 次数为 0。没有对 `log_error()` 呼叫 `wizardp()`（§7.10
+ACL 陷阱）。
+
+live `debug.log` 是 `libs/xkx2000zxb/log/debug.log`（Boot Time Fri Sep 4
+02:10:11 然后修复后 02:12:02 2026），无 `error:` / `Too deep recursion`。
+`error_handler` 把轨迹交回驱动 debug.log。管理员存档未提交。
