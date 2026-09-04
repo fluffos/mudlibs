@@ -293,6 +293,29 @@ Not yet attempted — out of scope for this onboarding pass per the
 assigned task (native boot/playthrough only). `wasm_status: "pending"`
 in `meta.json`.
 
+## WASM measurement (2026-09-03)
+
+`meta.json` was already `playable` from the 2026-08-31 deploy-unblock;
+the README still said "not yet packaged." Cold-boot under the shared
+`~/src/fluffos/build-wasm` failed: eager `adm/simul_efun/mail.lpc`
+calls `socket_create`/`socket_bind`/`socket_error` (SMTP outbound),
+so the whole simul_efun object was not loadable. Wrapped those
+bodies in `#ifndef __PACKAGE_SOCKETS__` no-ops (native unchanged).
+Wizard `network.lpc` / `daemon/web.lpc` socket failures remain
+graceful preload skips.
+
+Verified with `scripts/wasm_client.js`: new character `wasmpd` →
+name-policy enter → `y` → `Test12345` twice → male →
+`wasm@test.local` → real name → identity `new` → `read list` (30
+races including human) → `pick human` → Tirun Central Park →
+`score` ("Newbie Wasmpd the boy", 600 gold, 70 stat / 5 skill
+points) → `quit` ("Reality suspended. See you another time!").
+The seeded `fluffos` admin rejected `Mud@2026` ("Invalid password";
+driver also logged the old-crypt 8-char warning) — not chased; new
+registration is enough for the gallery path. Shop/combat/death were
+not exercised this pass. The MEMFS copy does not write `wasmpd`
+back to the host.
+
 ## LPC formatter (§9)
 
 **Run 2026-08-31** (catch-up pass) — the original onboarding couldn't

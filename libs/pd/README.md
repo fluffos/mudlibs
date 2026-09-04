@@ -37,8 +37,16 @@ room and equipment you left with.
 Boots clean natively and plays correctly end-to-end: registration,
 race selection, movement through real authored rooms, and the
 restore/reconnect path were all verified live, repeatedly, across
-multiple independent test accounts. Not yet packaged for the browser
-(WASM) gallery.
+multiple independent test accounts.
+
+WASM status: **playable**. Shared WASM driver. `adm/simul_efun/mail.lpc`
+SMTP helpers are `#ifndef __PACKAGE_SOCKETS__` no-ops so the eager
+simul_efun compiles. New-character registration (`wasmpd` / `Test12345`
+/ `new` identity / `pick human`) into Tirun Central Park, plus `look`
+/ `score` ("Newbie Wasmpd the boy", 600 gold) / `quit` ("Reality
+suspended."), verified with `scripts/wasm_client.js`. The seeded
+`fluffos` admin password did not match `Mud@2026` under WASM (old
+crypt). Play: https://mudlibs.fluffos.info/pd/
 
 ## Admin account
 
