@@ -298,3 +298,60 @@ identical fix (same `this_object()`/`me` redirect pattern) directly from
 `nitan6`'s fixed files rather than re-deriving it. Compile-verified via
 `lpcc --batch` (not live-boot-tested independently on this lib — the fix
 itself was already proven live on `nitan6`).
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：扬州醉仙楼购物 + 古村武伯拜师。2026-08-20 对狂风 `bai kuang`
+磕头了但 score 仍是「还没有拜师」——同一套 F_NAME 裸 `query()` 让 NPC
+名字显示成无关物品、`present()` 拜错对象。这是 nt6 兄弟库，端口 40187。
+第一输入 `gb` 再英文 id。管理员 `fluffos` 的 login 口令此前未知，本轮用
+原 salt 重算 `crypt` 把 `password`/`ad_password` 重置成 `Mud@2026`（只
+提交未跟踪的 `data/login/f/fluffos.o`）。wizlist 是 `fluffos (admin)`。
+没有 wizpwd，只警告「请用 wizpwd 设定」。进世界前有约 3 秒「请输入任意
+键继续」。预载期间第一次连上可能只有「已经执行了 N 秒」就看不到 id
+提示——等横幅出现「允许玩家登入」或开机约 90 秒后再连。
+
+`clone` / `call` 被 `is_admin()` 锁死，`gift fluffos` 可用。武伯
+`attempt_apprentice` 自己会 `ob->save()`，拜师因此能落盘。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`。巫师落地 `/d/wizard/wizard_room`。score
+在出生前拒绝（「还没有出生呐」）。`goto /d/register/entry`：`choose 1`
+再 `washto 20 20 20 20`，**和 nt6 一样会自动 born 到古村**。盘古招呼里
+玩家显示成 `0`——旧存档的 `"name"` 写在修 F_NAME 之前的共享 dbase 上，
+不是新 bug。
+
+`gift fluffos` 后 `goto /d/city/zuixianlou`。F_NAME 修好以后店小二名字
+正常（`xiao er`，不是 `0(0)` / 布衣）。`list` 烤鸡腿八十文铜板，另有酒
+袋/包子/烤鸭/神仙醉/干粮/水袋/布衣。`buy jitui` 成功（「你从店小二那里
+买下了一根烤鸡腿」）；行囊被 gift 塞到 99% 负重，金子银子鸡腿当场掉在
+地上，付钱本身已现场验证。`feature/dealer.lpc` 的 `init_goods()` 已改成
+`this_object()->query("vendor_goods")`，冷启动后的新 NPC 货架对得上
+`xiaoer2.lpc`。
+
+拜师对象是 `/d/newbie/lianwuchang` 的武伯（`d/newbie/npc/wubo.lpc`，
+id `({ "wu bo", "wu", "bo" })`）。要用 `bai bo`，不要用 `bai wu` /
+`bai wu bo`（身上若有布衣，`present("wu")` 仍会先命中布衣）。现场：
+「恭喜您成为古村的第二代弟子」。杀驱动冷启动再登录：门派古村、师承武
+伯、古村第二代传人。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **F_NAME / F_COMMAND / F_APPRENTICE 裸 `query()`/`set()`**（按 nt6
+   已修形状移植，保留本档 `short()` 里已有的 `stringp()` capitalize
+   守卫）：这三个 feature 和 F_DBASE 是 `char.lpc` 的兄弟 inherit，裸
+   调用打到 simul_efun 共享 dbase。修复前 2026-08-20 的 `bai kuang`
+   磕头了但门派写不到角色身上。
+
+2. **F_DEALER `vendor_goods` 同样打到共享 dbase**（`feature/dealer.lpc`）：
+   `init_goods()` 的 `item = query("vendor_goods")` 改成
+   `this_object()->query("vendor_goods")`。
+
+3. **华山/青城收徒计数拼写**（与 nt6 同形，静态对照修，本轮拜师走的是
+   武伯不是华山）：
+   `kungfu/class/huashan/{yue-buqun,yue-wife,feng-buping}.lpc` 以及
+   `kungfu/class/qingcheng/yu.lpc` 的 `recruit_apprentice()` 写
+   `add("apprentice_availavble", -1)`，永远减不到
+   `set("apprentice_available", 3)` 那个字段。四处都改成
+   `apprentice_available`。
