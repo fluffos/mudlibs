@@ -94,3 +94,27 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-03，第三轮）
+
+新角度：2026-08-13 第二轮只做了注册 + 重连（含「输入任意键继续」），
+没测商店和拜师。本轮用既有 `fluffos`/`Mud@2026`（中文名「浮浮」）。
+
+- **登录**：先空行过欢迎页，再 id/密码。落地巫师休息室。本轮第一
+  次进世界再次打出 `Too deep recursion.`（`wizard.lpc:4`
+  `wizhood()`）——和 08-13 记下的冷启动伪影同一处；同一次 boot 的
+  第二次重连没有再出现。
+- **商店**：`goto /d/city/zuixianlou`，`list` 列出烤鸡腿 80 文铜板
+  / 牛皮酒袋一两白银 / 包子 50 文铜板。无现金时 `buy jitui` 正确
+  拒绝「穷光蛋，一边呆着去！」。`clone /clone/money/gold` 后再买
+  成功。`feature/dealer.lpc` 里丐帮「穷叫化」判断已被注释掉，先买
+  后拜不是硬性要求。
+- **拜师**：`goto /d/gaibang/inhole`，`apprentice zuo`（左全）一次
+  完成 →「恭喜您成为丐帮的第二十代弟子」。`score`「丐帮第二十代
+  弟子」、「你的师父是左全」。
+- **持久化**：立刻重连（巫师只提示「距上次退出仅 13 tick」），称
+  谓/师傅/99 两白银 + 20 文铜板均在；烤鸡腿未随存档回来。
+- **日志**：live `debug.log` 是 `libs/xkxyb/log/debug.log`（Boot
+  Time Thu Sep 3 22:25:55 2026）。除上述已记录的一次性
+  `Too deep recursion` 外无新 `error:`。
+- **结论**：商店 / 有机拜师 / 重连均通过，本轮无新编程 bug 可修。
