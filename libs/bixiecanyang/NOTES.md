@@ -842,3 +842,42 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：醉仙楼购物 + 丐帮左全拜师。2026-08-04 / 2026-08-14 / 2026-08-18
+三轮覆盖了注册、战斗、死亡/复活和 `log_file`，没有买东西、也没有拜师。
+这是真正的夕阳再现/江湖风云血统（`d/city/sj.lpc` 与 `xyzx` 逐字节相同），
+不是天涯家族；拜师路线仍是扬州树洞左全，不是华山。TOMUD 的 2060 握手
+只在 `query_temp("tomud")` 时走 `get_version()`，标准端口 40065 第一
+输入就是「请输入您的英文名字：」，不要发 2060。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`（wizpwd `Wiz@2026` 不是登录密码）。落地
+北疆小镇 `/d/xingxiu/beijiang`。游戏内时间是「盛夏的清晨」，醉仙楼
+`F_DEALER` 在 night/midnight/dawn 会打烊，本轮赶上可买窗口。
+
+`goto /d/city/zuixianlou`，`list` 烤鸡腿八十文钱 / 牛皮酒袋一两白银 /
+包子五十文钱（`jitui` `value` 80，不是 `xyzxfk` 那种八十两黄金标价）。
+`clone /clone/money/gold` 后 `buy jitui` 成功（「你向店小二买下一根烤
+鸡腿」）。当场 `i` 就是九十九两银子 + 二十个铜板 + 烤鸡腿，黄金条目
+已消失（找零 10000−80 = 9920）。`F_DEALER` 对丐帮拒绝购买（穷叫化），
+必须先买再拜。
+
+`goto /d/gaibang/inhole`，左全源码是 `kungfu/class/gaibang/zuo-qu.lpc`
+（文件名少一个 n），`apprentice zuo` 一次成功：左全收徒，`score` 「丐
+帮第二十代弟子」、师傅左全。`cmds/usr/save.lpc` 真正调用两个 `save()`
+（60 秒内再 save 会假「档案储存完毕」不写盘，本轮只 save 一次）。
+`user.o` 立刻带上 `family_name":"丐帮"` / `master_name":"左全"` /
+`generation":20`。断线后再连（「重新连线完毕」），称谓/师傅/银子还在。
+左全只收男性。烤鸡腿未进 autoload 列表（身上还在是因为这次是 linkdead
+重连，不是冷启动读档）。
+
+本轮没有新的 programming bug。巫师账号登录时 `score` 刷了一条
+`combatd.lpc` Unknown #pragma，是 2026-07-23 §15af 已记录的「巫师看全
+部诊断、玩家只看真正错误」分流，不是漏网。live `debug.log` 是
+`libs/bixiecanyang/log/debug.log`（Boot Time Fri Sep 4 02:01:32 2026），
+无 `error:` / `Too deep recursion`。`error_handler` 把轨迹交回驱动
+debug.log。`work/log/log` 只有编译期 pragma/unused 警告；`move.bug`
+停在 2026-07-22。管理员存档未提交。
