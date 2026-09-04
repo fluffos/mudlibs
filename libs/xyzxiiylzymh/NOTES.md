@@ -86,3 +86,27 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-03，第三轮）
+
+新角度：2026-08-13 第二轮只做了注册 + `2060` 握手重连，没测商店和
+拜师。本轮用既有 `fluffos`/`Mud@2026`（中文名「浮浮」，男性）。
+第一行仍发 `2060`（Tomud 握手）；单密码，无巫师效验码。
+
+- **登录**：落地 `/d/xingxiu/beijiang` 北疆小镇（四个候选出生点
+  之一）。`quit_time` 冷却 50 秒（不是手足 `xyzx` 的 120 秒
+  `last_on`）。
+- **商店**：先买后拜（`feature/dealer.lpc` 对丐帮一律「穷叫化」）。
+  `goto /d/city/zuixianlou`，`list` 列出烤鸡腿 80 文 / 牛皮酒袋一
+  两白银 / 包子 50 文。无现金时 `buy jitui` 正确拒绝。`clone
+  /clone/money/gold` 后再买成功（烤鸡腿 + 找零 99 两白银 + 20 个
+  铜板）。
+- **拜师**：`goto /d/gaibang/inhole`，`apprentice zuo`（左全）一次
+  完成 →「恭喜您成为丐帮的第二十代弟子」。`score` 称谓「丐帮第二
+  十代弟子」、师傅「左全」。
+- **持久化**：`save` + 50 秒后重连，落地铁枪庙，称谓/师傅/银钱均
+  在；烤鸡腿未随存档回来。
+- **日志**：live `debug.log` 是 `libs/xyzxiiylzymh/log/debug.log`
+  （Boot Time Thu Sep 3 22:16:22 2026）。无 `error:`。mudlib
+  `work/log/debug.log` mtime 仍是 2026-08-13。
+- **结论**：商店 / 有机拜师 / 重连均通过，本轮无新编程 bug 可修。
