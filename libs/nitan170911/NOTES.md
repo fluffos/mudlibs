@@ -813,3 +813,68 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，shop + 拜师）
+
+Live native pass on port **40018** (`build-debug`). Prior notes treated
+MySQL as a hard login gate and never completed a shop purchase or a
+recruiting `bai`. This environment still has no MySQL; the bugs below
+are what made local `TX_SAVE` playable anyway.
+
+First send is the id **`fluffos`** (not `gb` — sending `gb` hits
+`pass_id`). Password `Mud@2026`. No `wizpwd` yet: login prints the
+“请登陆后用 wizpwd 命令设置” warning, then the ordinary password
+prompt. After MOTD there is a 3-second “请输入任意键继续” splash —
+early game commands are eaten if sent before it. Lands in
+`/d/wizard/wizard_room`. `clone` is `is_admin()` locked (`lonely` /
+`admin_flag==21`) — design; `giveall /clone/money/gold` works because
+`valid_grant("(admin)")` is enough.
+
+Wizards skip the born startroom, so birth is `goto /d/register/regroom`
+→ `register player@me.com` (moves to `/d/register/entry`) → `choose 1`
+→ `washto 20 20 20 20`. In this tree `washto` already sets `born` to
+`古村`, saves, and moves to `/d/newbie/shijiezhishu`; a follow-up
+`born 扬州人氏` is then just `什么？` (wrong room), not a pager miss.
+
+**Bugs fixed**
+
+1. `adm/daemons/logind.lpc` `get_id()`: when `DATABASE_D->query_db_status()`
+   is false, `do_sql()` cannot tell “id exists” from “db unreachable”,
+   so even an archived `login.o` was dumped into the “暂时不接受数据漫游
+   或新玩家注册” gate. Fall back to `file_size(login.o)` like the
+   non-`DB_SAVE` path (LF).
+2. `clone/user/login.lpc` `restore()`: `#ifdef DB_SAVE` used to restore
+   only from MySQL; a miss never called `::restore()`. Now a MySQL miss
+   / unreachable still honors the local `login.o` when `TX_SAVE` is on.
+3. `clone/user/user.lpc` `restore()`: `db_restore_all()` returns **-1**
+   when MySQL is down. LPC treats `-1` as truthy, so a `if (!res)` (or
+   the original `if (query_temp("restore_mysql"))` only) skip of the
+   `TX_SAVE` fallback left a blank body. A later `save()` then clobbered
+   the on-disk `user.o` (this is why an in-session 拜师 vanished across
+   reboot before the fix). Treat `res < 1` as a miss and call
+   `::restore()`. Also skip `db_restore_all()` entirely when
+   `query_db_status()` is false.
+4. `feature/dealer.lpc` `init_goods()`: mixin `query("vendor_goods")`
+   resolved to simul_efun dbase (this file does **not** `#include
+   <dbase.h>` — same §15 shape as `xfbhh`). `this_object()->query` so
+   醉仙楼 `list`/`buy` see the 店小二货表.
+5. Huashan `yue-buqun`/`yue-wife`/`feng-buping` plus `qingcheng/yu.lpc`:
+   `apprentice_availavble` typo (extra “av”) so the daily recruit
+   counter never decremented. LF, same as `nitan3` this slice.
+
+**Shop**: `/d/city/zuixianlou` 店小二 (`d/city/npc/xiaoer2.lpc`). `list`
+shows 烤鸡腿 80文. `buy jitui` paid 1 gold → 99 两白银 + 20 文 and
+delivered 烤鸡腿. No `F_DEALER` 丐帮 refuse on this dealer.
+
+**拜师**: `goto /d/city/lichunyuan`, `bai kong` on 空空儿 — accepted
+(“恭喜您成为丐帮的第二十代弟子.”). `score` shows 【门派】丐帮 /
+【师承】空空儿. `cmds/usr/save.lpc` has a 30s cooldown. After `save` +
+driver kill + reboot, relogin still shows 丐帮 / 空空儿; silver/coin
+change persisted. 烤鸡腿 was also in inventory after reboot (not listed
+in `autoload`; food often is not — here it came back anyway). Do not
+`quit` this account to test persistence when `mud_age` is still tiny.
+
+`log/debug.log` Boot Time for the persist-check boot matches that run;
+no `Error:` / `Wrong permissions` / eval-cost lines. Mudlib
+`work/log/debug.log` and `work/log/log` (`error_handler` /
+`log_error`) likewise had no execution-time errors on that boot.
