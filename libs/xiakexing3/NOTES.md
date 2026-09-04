@@ -304,3 +304,31 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：醉仙楼购物 + 丐帮左全拜师。2026-08-05 / 2026-08-13 两轮都没
+测这两步。`F_DEALER` 对丐帮拒绝购买（穷叫化），必须先买再拜。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`。第一输入是 `您的英文名字：`，落地客
+店。`goto /d/city/zuixianlou`，`list` 烤鸡腿八十文铜板 / 包子五十文
+/ 牛皮酒袋一两白银。`clone /clone/money/gold` 后 `buy jitui` 成功
+（「你从店小二那里买下了一根烤鸡腿」）。当场 `i` 还挂着「一两黄
+金」，那是 `MONEY_D->player_pay()` 把金锭 `set_amount(0)` 后物件还
+没析构的显示；quit 后再连只剩九十九两白银 + 二十文铜板（10000−80
+= 9920），找零数学正确，不是复制金钱。
+
+`goto /d/gaibang/inhole`，`apprentice zuo` 一次成功：左全收徒，
+`score` 「丐帮第二十代弟子」、师父左全。`cmds/usr/save.lpc` 真正调
+用两个 `save()`。`user.o` 立刻带上 `family_name":"丐帮"` /
+`master_name":"左全"`。断线后再连，`score` 仍是丐帮 / 左全，银子还
+在。烤鸡腿未进 autoload，quit 后不在身上。
+
+本轮没有新的 programming bug。左全只收男性（`gender != "男性"` 就
+静默 return），本账号是男的所以没撞上。live `debug.log` 是
+`libs/xiakexing3/log/debug.log`（Boot Time Fri Sep 4 00:43:12
+2026），无 `error:` / `Too deep recursion`。`error_handler` 把轨迹
+交回驱动 debug.log；`work/log/log` 只有编译期 Unused local
+variable 警告。
