@@ -783,3 +783,26 @@ premature line in `enter_world()`. Verified via a clean native driver
 boot only (not an independent live walk-out-of-the-room reproduction
 on this specific lib — the bug shape and remedy are a verbatim port of
 an already live-verified fix from the shared-lineage sibling `zhyx`).
+
+## 深度功能测试（2026-09-03，第三轮）
+
+新角度：2026-08-04 第一轮做了注册 / `washto` / 战斗死亡，没测商店
+和拜师。手足 `yhyxs` 2026-09-01 的路径可直接套。
+
+- **既有 `fluffos` (admin)** 卡在 `/d/register/entry`（registered=1
+  但从未投胎，`score` 报「还没有出生呐」）。`west` 到花铁干选「阴
+  险奸诈」，`out` 进阎罗殿，`washto 20 20 20 20`，`born 扬州人氏`
+  落地扬州客店。客店 `店小二` 不是 vendor（和 `yhyxs` 一样）。
+- **商店**：`goto /d/city/zuixianlou`，`npc/xiaoer2` `list` 列出牛
+  皮水袋/干粮/包子/烤鸡腿/烤鸭/牛皮酒袋。`clone /clone/money/gold`
+  后 `buy jitui` 成功（「你从店小二那里买下了一根烤鸡腿」），一两
+  黄金找零成九十九两白银 + 二十文铜钱。
+- **拜师**：`goto /d/gaibang/inhole`，`bai li`（黎生，无战力门槛）
+  「我便收你为徒」→ 丐帮第二十代弟子 / 小叫花，师父是黎生。
+  `save` + `quit` 后重连，`score` 仍是「丐帮第二十代传人 / 师父是
+  黎生」，银钱仍在；烤鸡腿未随存档回来（食物常见 `no_save`）。
+- **日志**：本轮 live `debug.log` 是
+  `libs/yanhuangwuhun/log/debug.log`（Boot Time Thu Sep 3 21:23:29
+  2026）。无 `error:` / `Too deep recursion` / `No program`。没有
+  单独的 mudlib `work/log/log`。
+- **结论**：商店 / 有机拜师 / 重连均通过，本轮无新编程 bug 可修。
