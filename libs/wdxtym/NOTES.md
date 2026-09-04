@@ -289,3 +289,62 @@ re-invoke `enable_player()` while already `living()`, ruling out a bare
 flag alongside the existing `enabled` bookkeeping variable (left untouched,
 `disable_player()` still needs it). Verified via single-file `lpcc --batch`
 PASS.
+
+## Shop + 华山岳不群拜师 (2026-09-04)
+
+2026-08-21 did `myshop buy` (yuanbao 商城) and never a regular NPC
+shop; 拜师 was a §7.78 mixin *code* fix, not a live recruit. This
+pass does both live.
+
+Login is the Lonely GUI protocol: first line `ver1.0,<crypt-salt>`
+(changes every connect), send `123456789abcd` (documented backdoor;
+`jiance()` really checks the challenge unlike wxddym's dead branch),
+then `id║password║密文║email` (U+2551; comma-separated still fails
+未知错误). `get_user()` appends `_1`, so `fluffos` becomes
+`fluffos_1` (already in `adm/etc/wizlist` as (admin)). No prior
+`fluffos_1` save existed; character create is `gender║img║nickname`.
+Names containing 管理员/总管 are rejected by `named.d`. Used
+`男性║1║青云`. Lands 世外桃源. Status-bar HP lines fire about once
+a second — mudclient `--idle` must stay ≤0.45s or queued sends
+never go out (live-clock pacing).
+
+**Birth (same connection; `washed`/`tianfu` are temps).** `east`
+(光明磊落 / 陆天抒) → `out` (阎罗殿) → `washto 30 30 30 30` (each
+stat must be exactly 30, sum 120 — not the 13–30/sum-80 prompt
+text) → `pianshu msx` (天赋 鬼脉) → `born 扬州人氏`. Lands 宝昌客栈
+(`/d/city/kedian`). `score`: 扬州人氏、天性【光明磊落】、师父：尚无.
+Wizards do **not** skip this room after born (timer "wizard room"
+note is wrong for this lib).
+
+**Shop — works.** kedian 店小二 is innkeeper only (points at 醉仙楼).
+Walk `west` (北大街1) `north` (北大街2) `east` (醉仙楼). 店小二 is
+`F_DEALER` (`xiaoer2.lpc`: jitui/jiudai/baozi/kaoya). `list` shows
+`buy 1 烤鸡腿`. `cmds/wiz/clone`/`goto`/`call`/`summon` all
+`return 0` unless `id == z110614_1` (same ID gate NOTES already
+called design on 2026-08-21 — not removed). Unlocked admin path:
+`cmds/adm/clonee` (`wizardp` only). `clonee /clone/money/gold 1`
+then `buy 1 jitui` → `你从店小二那里买下了1根烤鸡腿`. Inventory:
+20文铜钱 + 99两白银 + 烤鸡腿.
+
+**拜师 — works.** kedian `fly2 huashan` (新手拜师 menu) → 群仙观
+`/d/huashan/qunxianguan`. `bai yue` on 岳不群: 2s `call_out`
+`do_recruit`, then `好，好，好，很好` / `岳不群决定收你为弟子` /
+华山派第十四代弟子. `score`: 华山派第十四代传人 / 师父：岳不群.
+
+**Bug — Huashan recruit-limit typo (same as nitan3).**
+`kungfu/class/huashan/{yue-buqun,yue-wife,feng-buping}.lpc`
+`recruit_apprentice()` did `add("apprentice_availavble", -1)` while
+`attempt_apprentice()`/`create()`/`reset()` use `apprentice_available`.
+Decrement was a no-op; the daily-three-disciples cap never counted.
+`create()` already `set("apprentice_available", 3)` so the first
+recruit still worked. Fixed the three `add()` keys. Files are LF.
+Did not `update` the live Yue object this boot (recruit already
+completed). `qingcheng/yu.lpc` not in this tree.
+
+`debug.log` is `libs/wdxtym/log/debug.log` (opened before chdir).
+Boot Time Fri Sep 4 04:54:39 2026 matches. Pre-existing transients
+already in this file (bossdd `message()` arg-4 int 0; master
+Too-deep-recursion) recurred at boot; no new error from shop/拜师.
+`cmds/wiz/goto` ID gate is why walking/`fly2` were used. New
+`fluffos_1` save left uncommitted (player-save churn).
+
