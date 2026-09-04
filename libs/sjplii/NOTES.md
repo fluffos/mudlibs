@@ -234,3 +234,35 @@ leaving every legitimate re-enable (revive/wakeup/disguise) unaffected.
 (no early `return`s), so one guard-at-top + one clear-at-bottom pair was
 sufficient. Verified via a single-file `lpcc --batch` compile check
 (PASS) -- not individually live-boot-tested.
+
+## 深度功能测试（2026-09-03，第三轮）
+
+新角度：2026-08-08 第一轮已经走完注册、战斗、完整死亡/复活和留言板。
+本轮补商店，并尝试红旗镖局拜师。手足 `sjplgfjxb` 同一轮刚修过缺失
+`dishes/` 键把整张货表拖垮的 bug；这份完整档带着
+`d/city/obj/food/dishes/dish*.lpc`，预期不会踩那个洞。
+
+- **商店（通过，菜谱是齐的）**：管理员落地在鬼门关（上一轮死亡测试把
+  `fluffos` 的 startroom 留在 `/d/death/gate`，不是新 bug）。
+  `goto /d/city/kezhan`，`list` 列出烤鸡腿 / 包子 / 牛皮酒袋 / 油辣猪
+  排，以及十道真正的 `dishes/` 菜（油炝大虾、红烧素鹅、京酱肉丝等）。
+  `clone /obj/money/gold` 后 `buy fried chicken leg from waiter` 成功
+  （「你向店小二买下一根烤鸡腿」），找零七十文 + 九十九两银子。
+  `feature/vendor.lpc` 没有缺档崩溃。不需要把 `sjplgfjxb` 的
+  `file_size` 守卫搬过来——这边货物档案都在。
+- **拜师未完成**：`goto /d/city/biaoju/kufang`，庄容在场。这份的
+  `cmds/std/apprentice.lpc` 比 `sjplgfjxb` 多一步 `input_to` 确认
+  （「如果确定，请再输入一次对方名称」）。第二次输入 `zhuang` 后只
+  看到「你想要拜庄容为师。」，没有 `smile` / `recruit` 的可见输出，
+  `score` 仍是「普通百姓」、没有师父。`recruit.lpc` 开头有
+  `if (userp(me)) return notify_fail("禁止玩家收徒。");`——若 NPC 的
+  `command("recruit")` 在玩家 `input_to` 回调里跑成了玩家上下文，就会
+  直接失败；本轮没有看到那句提示，也没有第二次独立复现，不当成已确
+  认的编程 bug。下次从这一步接着做：确认后等 NPC 回句，或用巫师
+  `call` 直接走 `recruit_apprentice`。
+- **`save`**：确认步之后 `save` 回「档案储存完毕。」
+- **日志**：live `debug.log` 为 `libs/sjplii/log/debug.log`。本轮无
+  `error:` / `Too deep recursion` / `couldn't find object`。
+  `work/log/log` 只有编译警告。
+- **结论**：燕云客栈 `list`/`buy` 通过（完整菜谱）。红旗镖局拜师还没
+  拜成，留给下一轮。未改代码。
