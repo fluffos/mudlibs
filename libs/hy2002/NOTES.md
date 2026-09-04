@@ -174,3 +174,39 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：扬州醉仙楼购物 + 丐帮左全拜师。2026-08-13 第二轮只测了
+`log_error`/`log_file`，没有买东西、也没有拜师。这是海洋II/ES2 金庸
+血统，端口 40116。第一输入是 GB/BIG5 选单，发 `g`，再英文 id。密码是
+`Mud@2026Pass1`，不是 `Mud@2026`。登录对象没有 `wizpwd`，不会多问一
+层巫师口令。同一 IP 退出后 30 秒内不能再 login（`last_on` 冷却），本
+轮用杀驱动冷启动做持久验证，没有踩到这条。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026Pass1`（权限 `(admin)`）。`clone
+/clone/money/gold` 可用。
+
+`goto /d/city/zuixianlou`（醉仙楼，店小二 `d/city/npc/xiaoer2.lpc`，
+`F_DEALER`）。`list` 烤鸡腿一两白银又十二文铜板 / 包子七十文铜板。
+`buy jitui` 成功（「你从店小二那里买下了一根烤鸡腿」），顺带涨了
+「讨价还价」。当场 `i` 是九十八两白银 + 八十八文铜钱 + 烤鸡腿。本档
+`feature/dealer.lpc` 没有丐帮拒买门，但买完再拜仍更稳妥。
+
+`goto /d/gaibang/inhole`，左全源码是 `kungfu/class/gaibang/zuo-qu.lpc`
+（文件名少一个 n），`apprentice zuo` 一次成功：恭喜成为丐帮第二十代
+弟子。`score` 称谓「丐帮第二十代弟子」、师傅左全。`cmds/usr/save.lpc`
+真正写盘。save 后杀驱动冷启动再登录，称谓/师傅/银子铜钱都在。烤鸡腿
+未进 autoload。左全只收男性。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **华山收徒计数拼写**（与 `jhfy2`/`wmkj`/`nitan_ceshi` 同形，静态
+   对照修，本轮拜师走的是左全不是华山）：
+   `kungfu/class/huashan/{yue-buqun,yue-wife,feng-buping}.lpc` 以及
+   `quest/menpaijob/huashan/yue-buqun.lpc` 的 `recruit_apprentice()`
+   写 `add("apprentice_availavble", -1)`，计数键名拼错，永远减不到
+   `set("apprentice_available", 3)` 那个字段。四处都改成
+   `apprentice_available`。
