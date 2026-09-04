@@ -247,3 +247,43 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，shop + 拜师）
+
+Lonely GUI：服务端先发 `ver1.0,<salt>` 和「版本验证成功」，`jiance()`
+把第一行当 `get_user`。逗号会自动换成 U+2551，所以第一发
+`fluffos,Mud@2026,x,x@x.com` 即可（不必先回 `123456789abcd`）。管理员
+id 不加 `_1`。巫师落在巫师休息室，未投胎时 `score` 报「还没有出生呐」。
+HP 状态条约 1Hz，脚本 idle 必须 ≤0.45。`clone` 被 `is_admin()` 锁住
+（只认 `admin_flag==21` / uid `luoyun`/`modao`，`VERSION_D` 发布站判断
+已注释）——设计，未改。
+
+投胎：`goto /d/register/entry`（生命之谷）→ `zz 1` → `xuan 1` →
+`choose 1` → `washto 50 50 50 50`（每项 10–200，和必须 200）→ 世界之树。
+`score`：男性人类、光明磊落、膂力/悟性/根骨/身法 50/50/50/50。
+
+拜师：未投胎时在 `/d/city/lichunyuan` `bai kong` 已被空空儿收下（丐帮
+第二十代）。投胎后 `score` 仍是【门派】丐帮 / 【师承】空空儿。本 lib
+的 `feature/dealer.lpc` 没有天涯系那种「丐帮拒买」门，不必先买后拜。
+华山 `yue-buqun`/`yue-wife`/`feng-buping` 和青城 `yu` 的
+`recruit_apprentice` 把限额键打成 `apprentice_availavble`（`create()`
+写的是 `apprentice_available`），递减是空操作；已改键名。
+
+商店：醉仙楼 `list` 只列出店小二身上那件未装备的「布衣」，
+`buy 1 jitui` / `buy 1 烤鸡腿` 都回「你想买什么？」。根因是
+`feature/dealer.lpc` 作为 mixin 没有自己的 `F_DBASE`，裸
+`query("vendor_goods")` 打到 simul_efun 共享 dbase，`init_goods()` /
+`do_list` 都读不到 NPC 在 `create()` 里 `set` 的货表；`all_goods`
+只剩身上的布衣，对不上鸡腿。同文件里其它 1 参自指向
+`query`/`query_temp`/`set_temp`/`delete_temp` 一并改成
+`this_object()->…`（不能给 dealer 加 `inherit F_DBASE`，会跟
+CHARACTER 的 nomask `_query` 冲突）。旁路文件 `feature/dealer1.lpc`
+的 `init_goods` 已经是 `this_object()->query("vendor_goods")`，但
+没有任何 NPC `inherit F_DEALER1`。
+
+钱：武庙二楼 `ask gift about 礼物` 走节日奖励，当前无节日。
+`ask gift about 每日礼物` 给一条小灵脉 + 500 洪荒点。巫师
+`gift fluffos` 发到 `/clone/gift/xiandan` 时 `new()` 失败
+（档案不存在），`item->move` 对 0 做 call_other——管理员指令缺档，
+未当玩家商店 bug 修。`cmds/usr/sellitem` 把售价写入 `balance`，
+`MONEY_D->player_pay` 在身上没带现钱时会扣存款。
