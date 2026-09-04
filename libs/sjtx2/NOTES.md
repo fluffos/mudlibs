@@ -305,3 +305,40 @@ legitimate re-enables from `revive()` in `feature/damage.lpc` and
 re-invoke `enable_player()` on this lib while the object is still
 `living()`). Verified via `lpcc --batch` single-file compile check
 (PASS). Part of the corpus-wide §7.19 sweep (Batch E).
+
+## 深度功能测试第三轮 / §10.7 round three (2026-09-03)
+
+新角度：2026-08-07 测过武馆沙袋/木人、`setparty` 捷径门派、quit 重连，
+当时写明没测商店，组织性拜师也只走到俞莲舟的正气门槛。本轮补扬州当铺
+买卖，以及一次真正走 `attempt_apprentice`→`recruit` 的拜师。管理员
+`fluffos` / `Mud@2026`（浮浮），登录先答 BIG5 `N`。
+
+### 商店
+
+`goto /d/city/dangpu` 在修之前会炸：当铺 `create()` 调 `getspec()`，
+对 `/clone/spec/` 每个文件 `new()`。`clone/spec/putao.lpc` 的
+`set("long", ...)` 把 `HIG"神奇葡萄"NOR` 写进字符串字面量中间，整档
+编译失败，驱动报 `*No program in object '/clone/spec/putao'!`，栈在
+`dangpu.lpc:102` / `goto.lpc:26`。房间加载失败，后续 `list` 落到巫师
+休息室留言板分页器上。
+
+修复：按同目录 `pearl.lpc` 的写法把葡萄描述改成
+`"……中土"HIG"神奇葡萄"NOR"，……"`；`getspec()` 的 `new()` 包进
+`catch()`，一个坏礼品不再拖死整间当铺。CRLF 按二进制保留。
+`shujian2008` 的 `clone/spec/putao.lpc` 仍是同一行损坏（手足档，本轮
+未改）。
+
+复测：`goto` 进入当铺，老板在。`list weapon`：「目前没有可以卖的武
+器。」`value changjian` = 7 银 50 文；`sell` 按该价成交。无崩溃。
+
+### 拜师
+
+`clone /d/dali/npc/gaoshengtai`，`bai gao`：高升泰收徒（悟性 23、正
+气 0 过门槛）→「恭喜您成为天龙寺的第十五代弟子。」`score` 师承
+【天龙寺】【高升泰】。quit 后重连仍在。
+
+### 本轮修改的文件
+
+- `work/clone/spec/putao.lpc`
+- `work/d/city/dangpu.lpc`
+- 管理员存档 `work/data/{login,user}/f/fluffos.o`
