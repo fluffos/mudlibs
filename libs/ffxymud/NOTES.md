@@ -127,3 +127,11 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，shop）
+
+Live pass, port **40142**. Prior §10.7 already did 白驼山李教头 `apprentice li`; this round is shop only. First send is the magic string `shikongyouxia3.0`, then id `fluffos` / `Mud@2026`. Current admin `score` shows 普通百姓 / 目前还没有师傅 (the 白驼山 title from the earlier pass is not on this save). `F_DEALER` 丐帮 refuse would not apply.
+
+**Shop**: `goto /d/city/zuixianlou`. `clone /clone/money/gold` then `buy jitui` succeeded (“你向店小二买下一根烤鸡腿”, inventory 鸡腿 + 99 两银子 + 20 铜板). `list` initially crashed after printing 烤鸡腿: `shanzi.lpc` calls `init_shan(250, 2)` while `inherit SWORD` only defines `init_sword` — `Undefined function init_shan` then `*No program in object`. Fixed both copies (`d/city/npc/obj/shanzi.lpc` is the vendor path; `d/city/npc/shanzi.lpc` is a duplicate) to `init_sword`. After `update`, `list` shows the full board (鸡腿/扇子/酒袋/包子/养身丹) with no compile error.
+
+No other code change.
