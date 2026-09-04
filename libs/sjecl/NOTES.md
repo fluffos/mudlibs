@@ -114,3 +114,33 @@ legitimate re-enables from `revive()` in `feature/damage.lpc` and
 re-invoke `enable_player()` on this lib while the object is still
 `living()`). Verified via `lpcc --batch` single-file compile check
 (PASS). Part of the corpus-wide §7.19 sweep (Batch E).
+
+## Shop + 拜师 (2026-09-04 librarian loop)
+
+The 2026-08-05 deep test left shop and 门派拜师 untested (`ask shizhe
+about 拜师` was garbled by the tmux/telnet path). This pass used
+`mudclient.py` (raw socket) on port **40139**.
+
+First send is the BIG5 gate (`Are you using BIG5 font(Y/N)?`) — send
+`n`. Email must have ≥2 characters before `@` (`aa@bb.com`; `a@b.c`
+is rejected). New characters start with no money objects.
+
+**拜师 (mortal `sjeqinb` / 秦风测 / `Mud@2026`)**: landed 武馆前院,
+`answer n` to skip 狄云's tutorial. `ask shizhe about newbie` wiped
+skills and granted the VIP newbie pack. Immediate follow-up `ask
+shizhe about 拜师` hit the speech-busy gate (`您先歇口气再说话吧`);
+that inquiry is help text only. `ask shizhe about 华山` recruited via
+`recruit_apprentice` (`create_family("华山派", 99, "弟子")`) and
+moved the character to `/d/huashan/zhengqi` (正气堂, 岳不群/宁中则
+present). `score`: 头衔 华山派第一百代弟子, 师承【华山派】【书剑礼物使者】.
+Unclean first quit; reconnect (`n` / `sjeqinb` / `Mud@2026`) printed
+`重新连线完毕` and the same 华山 title/family — persist confirmed.
+
+**Shop (seeded admin `fluffos` / `Mud@2026`, (admin))**: newbies have
+no starting cash, so this was a paid buy with wizard-cloned currency
+(not a programming workaround — `call me->add_money` is ACL-denied on
+this lib). `clone /clone/money/gold`, `goto /d/xiangyang/shaobingpu`,
+`list` showed 烧饼 二两白银又八十文铜钱. `buy 烧饼 from liu` misses
+(NPC `do_buy` wants the item id, not `from <npc>`). `buy bing`
+succeeded: `你以二两白银又八十文铜钱的价格从烧饼刘那里买下了一个烧饼。`
+and `i` showed 一个烧饼(Shao bing) plus change. No LPC change.

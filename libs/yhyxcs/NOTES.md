@@ -323,3 +323,21 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Shop + 拜师 (2026-09-04 librarian loop)
+
+Shop was the remaining gap — the 2026-08 deep-test already recorded a
+live `apprentice` at `/d/phezzan/npc/boltic.lpc` (尼古拉斯·博尔德克 →
+【费沙武官】, uniform persist across reboot) and that record still stands;
+this pass did not redo 拜师.
+
+Live shop, native `build-debug` on **40104**, seeded admin `fluffos` /
+`Mud@2026` (first prompt is English id, no GB/Big5 gate). `goto
+/d/phezzan/coffee_bar` (中央银行咖啡厅). `list` from 咖啡厅小姐
+(`girl`): 蓝山咖啡 20 费沙马克, 费沙红茶 40, 费沙咖啡 20, 美食家咖啡
+40. `buy 蓝山咖啡 from girl` printed `你向咖啡厅小姐买下一杯蓝山咖啡.`
+and `i` showed 蓝山咖啡(Blue cup) next to the auto-cloned ＩＤ卡
+(`id_card` balance 500 from registration). Payment is the ID-card path
+in `cmds/std/buy.lpc`, not copper/gold. Cosmetic `Too deep recursion`
+on `/obj/login.lpc:33` reproduced on login (already documented; not
+blocking). No LPC change this pass.

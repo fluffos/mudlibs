@@ -825,3 +825,12 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Shop + 拜师 (2026-09-04 librarian loop) — cheap-confirm, no re-boot
+
+The existing deep-test body already records, with concrete evidence,
+that this archive is a skeleton: every shipped room is `no_fight: 1`,
+shop/sect NPCs and skill files live under missing `/d/<sect>` trees,
+and "No shop, no fightable NPC" was an explicit live-test conclusion
+rather than a heading-only TODO. This pass re-read that section and
+did not re-boot. Still no reachable shop or `bai` path to exercise.
