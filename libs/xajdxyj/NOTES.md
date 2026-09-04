@@ -174,3 +174,26 @@ re-enables. `enable_player()`'s single body has no early `return`
 statements, so the flag is set at entry and cleared once, before the
 function's fall-through end. Verified with a single-file `lpcc`
 compile check (exit 0, no errors) against `feature/command.lpc`.
+
+## 深度功能测试（2026-09-03，第三轮）
+
+新角度：2026-08-09 第一轮做了战斗 / 死亡 / 留言板，没测商店和拜师。
+
+- **登录**：开机 180 秒闸门仍在（`let me join ok` 绕过）。既有
+  `fluffos`（admin，中文名「毛绒绒」，`Mud@2026`）能进，落地
+  `/d/city/kezhan`，权限 `(admin)`。死亡计数 1 次仍在（上一轮杀张果
+  老），尚未入门派。
+- **商店**：客栈 `店小二`（`/d/city/npc/xiaoer`，房间 `objects` 已
+  加载）`list` 列出炸鸡腿/红烧狗肉/花生豆/下棋指南/桂花酒袋。
+  `clone /obj/money/gold` 后 `buy jitui from xiaoer` 成功（「你向店
+  小二买下一根炸鸡腿」），黄金找零成九十九两银子 + 二十文钱。
+- **拜师**：`goto /d/qujing/wuzhuang/wangxian`，`bai lan`（蓝采和）
+  当场收徒：「好，那我就勉为其难吧。」→ 五庄观第四代弟子，师父是
+  蓝采和。`save` + `quit` 后重连，`score` 仍是「五庄观第四代弟子 /
+  你的师父是蓝采和」，银钱仍在；炸鸡腿未随存档回来（食物物件常见
+  `no_save`，金钱与门派都持久，不按编程 bug 记）。
+- **日志**：本轮 live `debug.log` 是 `libs/xajdxyj/log/debug.log`
+  （Boot Time Thu Sep 3 21:19:16 2026）。无 `error:` / `Too deep
+  recursion` / `No program`。`work/log/log` 只有编译警告（未用局部
+  变量）。商店买卖和拜师都现场成功。
+- **结论**：商店 / 有机拜师 / 重连均通过，本轮无新编程 bug 可修。
