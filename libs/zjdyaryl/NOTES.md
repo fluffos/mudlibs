@@ -794,3 +794,48 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：扬州醉仙楼购物 + 丐帮李斧头拜师。round one 只测了 `apprentice
+ouyang ke` 的 `born_family` 拒收（「你不是我们欧阳家的人」），没有真实
+收徒，也没有商店购买。round two（2026-08-15）只补了 kick-duplicate 重连。
+sibling `zjdy2008wzb` 2026-08-19 已经走过华山店 `buy jitui` +
+`bai li futou`。
+
+本轮没有新的 programming bug。`enter_world()` 已经是
+`ob->set("registered", user->query("registered"))`（从 user 抄到 login，
+和 xkxz2 Bug 2 方向相反）。`log_file()` 已有 `assure_file()`。
+`log_error()` 已有 `arning:` 闸门。`env/prompt` 是 `"null"`，不是每秒时钟。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026` / 浮云。第一输入是「您的英文名字」，没有
+BIG5 提示。端口 40073。连线有大量 Tomud 控制码（`licon`/`lbadd`），不影响
+指令派发。`is_admin()` 是 `VERSION_D->is_release_server() || admin_flag
+== 1222`，本环境 `is_release_server()` 为真，`clone /clone/money/gold`
+一次成功。
+
+原先 `registered:0`、`score`「还没有出生呐」。走完 `register
+fluffos@example.com` → `decide` → `west`/`out`（阴险奸诈）→ `wash` →
+`born 扬州人氏`，落地扬州客店。`born` 后弹出游戏规则 pager（ENTER/q），
+下一条指令被 pager 吃掉，不影响后续 `clone`。
+
+`goto /d/city/zuixianlou`，`list` 包子五十文 / 烤鸡腿八十文 / 烤鸭一两
+白银又五十文 / 牛皮酒袋一两白银。扬州店小二没有丐帮穷叫化踢人。
+`buy jitui` 成功。`i` 剩九十九两白银 + 二十文铜钱（10000−80 = 9920）。
+
+`goto /d/gaibang/underhs`（舍身崖下），李斧头 id `li` /
+`kungfu/class/gaibang/li-futou.lpc`，只收男性。`apprentice li` 一次成功：
+「恭喜您成为丐帮的第二十代弟子。」`score`「丐帮第二十代传人」、师父李斧头。
+`save.lpc` 真正双存。
+
+`save` 后不 `quit` 丢 socket（此时 `user.o` `registered:1`、`login.o`
+仍是 0），重启驱动强迫走 `enter_world()`。重连落地客店而不是世外桃源，
+注意事项是普通欢迎而不是「您还没有注册」，`score` 仍是丐帮二十代 / 李斧头
+/ 扬州人氏，银子铜钱还在。烤鸡腿是 `F_FOOD`，不进 autoload，重启后不在
+身上——不是存档 bug。
+
+live `debug.log` 是 `libs/zjdyaryl/log/debug.log`（Boot Time Fri Sep 4
+03:32:59 2026），无 `error:` / `Too deep recursion`。mudlib `work/log/log`
+只有开机编译警告。管理员存档未提交。
