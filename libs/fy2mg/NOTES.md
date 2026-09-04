@@ -184,3 +184,38 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：玉龙珠宝店购物 + 金钱帮荆无命拜师。2026-08-04 那一轮只
+`list` 过珠宝店，没有买成、也没有拜师。这是风云/fy 血统，不是
+tianya 的醉仙楼/左全路线。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026x`。第一输入是 `您的英文名字：`，密码
+后有 MOTD + `请敲回车键［ＲＥＴＵＲＮ］`。落地凤求凰客栈。
+
+`goto /d/fy/yuljade`，`list` 黄金标价（玉指 1 两 / 玉簪 2 两 /
+玉花 2 两 / 玉镯 3 两）。`clone /obj/money/gold` 后
+`buy jade ring from seller` 成功（「你向商玉龙买下一个玉指」）。
+1 两黄金刚好等于玉指 `value` 10000；`cmds/std/buy.lpc` 的
+`pay_him()` 在找零 `< 1` 时硬给一文钱，所以 `i` 剩「一文钱」+
+玉指。这是这条 fy `buy.lpc` 的既有找零地板，不是新崩溃，未改。
+
+`goto /d/fy/jbang`，荆无命 id 是 `master jin`（不是单独的
+`jin`），`apprentice jin` 会「你想拜谁为师？」——`id()` 做精确
+匹配，内容规则。`apprentice master jin` 一次成功：荆无命收徒，
+`score` 「金钱帮第三代弟子」、师父荆无命。`cmds/usr/save.lpc`
+真正调用两个 `save()`（没有 fy3xd 那种 `cmds/std/save.lpc` 影子
+文件）。`user.o`（嵌套路径
+`work/data/user/f/fluffos/fluffos.o`）立刻带上
+`family_name":"金钱帮"` / `master_name":"荆无命"`。玉指未进
+autoload，quit 后不在身上，符合该血统普通物件惯例。
+
+本轮没有新的 programming bug。`securityd` 没有 tianya 那种
+`/log/` + `log_file` 再入。live `debug.log` 是
+`libs/fy2mg/log/debug.log`（Boot Time Fri Sep 4 00:38:46 2026），
+无 `error:` / `Too deep recursion`。`work/log/debug.log` 停在
+2026-08-18，是死文件；`error_handler` 把轨迹交回驱动 debug.log。
+`work/log/log` 只有编译期 Unused local variable 警告。
