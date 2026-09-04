@@ -1,0 +1,166 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/t/ly/npc/ali.c,v 1.2 2000/11/15 16:29:38 mud Exp $
+ */
+ 
+// ali.c
+
+inherit NPC;
+
+void create()
+{
+        set_name("阿黎", ({ "li" }) );
+        set("gender", "女性" );
+        set("age", 15);
+        set("per", 20);
+        set_temp("sellcat",0);
+        set("long",
+                "阿黎是个不到15岁的小姑娘，她天生\n"
+                "喜欢小动物，于是开了这个小店。\n");
+        set("combat_exp", 2000);
+        set("attitude", "friendly");
+        setup();
+        carry_object(__DIR__"obj/cloth2")->wear();
+}
+
+void init()
+{       
+        object ob;
+
+        ::init();
+        if( interactive(ob = this_player()) && !is_fighting() ) {
+                remove_call_out("greeting");
+                call_out("greeting", 1, ob);
+        }
+        add_action("do_select", "select");
+        add_action("do_feed", "feed");
+        add_action("do_redeem", "redeem");
+}
+
+void greeting(object ob)
+{
+        if( !ob || environment(ob) != environment() ) return;
+        switch( random(4) )
+        {
+                case 0:
+                        say( "阿黎笑着迎上来，说道：这位" + RANK_D->query_respect(ob)
+                                + "，想买只小猫吗？很可爱的！\n");
+                        break;
+                case 1:
+                        say( "阿黎点了点头，说道：这位" + RANK_D->query_respect(ob)
+                                + "，请进请进。\n");
+                        break;
+                case 2:
+                        say( "阿黎说道：这位" + RANK_D->query_respect(ob)
+                                + "，喜欢小猫吗？不如买一只回家去养吧！\n");
+                        break;
+                case 3:
+                        say( "阿黎抬手理了理鬓角的秀发。\n");
+                        break;
+        }
+        return;
+}
+int do_select(string arg)
+{
+	int i;
+	object ob,me,gold;
+	me = this_player();
+	if(environment(this_object())->query("short") != "宠物店")
+	return notify_fail("阿黎说道：真是抱歉，请您等一下到宠物店来找我吧。\n");
+	if(!arg || arg != "cat")
+        return notify_fail("阿黎疑惑的看着你道：要买宠物吗？(select cat)\n");
+        if(me->is_busy())
+	return notify_fail("你上一个动作还没有完成。\n");
+	gold = present("gold_money", this_player());
+        if(!gold) return notify_fail("阿黎抱歉的道：对不起，一只小猫要卖十两金子。\n");
+        if((int) gold->query_amount() < 10)
+        return notify_fail("阿黎说道：对不起，您的钱不够。\n");
+        i = query_temp("sellcat");
+        if(i > 4)
+        return notify_fail("阿黎说道：对不起，今天生意很好，小猫都卖完了。您明天再来吧！\n");
+        set_temp("sellcat",i+1);
+        ob = new(__DIR__"pet");
+        ob->move("/t/ly/pet_shop");
+        ob->set_temp("owner",me->query("id"));
+        ob->set_leader(me);
+        ob->set_skill("move",500);
+        ob->set("title",me->name()+"的宠物");
+        gold->add_amount(-10);
+        me->start_busy(1);
+        message_vision("阿黎从篮中抱出一只小猫交给$N，嘱咐道：要小心爱护啊！\n",me);
+        write("阿黎笑道：这小家伙有时不听话，有什么不明白的看看牌子(sign)吧。\n");
+        seteuid(getuid());
+	return 1;
+}
+int do_feed(string arg)
+{
+	object me,ob,gold;
+	me = this_player();
+	if(environment(this_object())->query("short") != "宠物店")
+	return notify_fail("阿黎说道：真是抱歉，请您等一下到宠物店来找我吧。\n");
+	if(!arg || arg != "cat") return notify_fail("你要寄养什么？\n");
+	ob = present(arg,environment(me));
+	if(ob->query_temp("owner") != me->query("id") )
+	return notify_fail("那不是你的宠物啊？！\n");
+	if(me->query("petname")) 
+	return notify_fail("阿黎说道：你以前寄养的宠物还没取走呢！\n");
+	gold = present("gold_money", me);
+        if(!gold) 
+        return notify_fail("阿黎抱歉的道：对不起，寄养宠物要花一两黄金。\n");
+        if((int) gold->query_amount() < 1)
+        return notify_fail("阿黎说道：对不起，您的钱不够。\n");
+	if(me->is_busy())
+	return notify_fail("你上一个动作还没有完成。\n");
+	me->set("petname", ob->name());
+	me->set("pettitle", ob->query("title"));
+	me->set("petlong", ob->long());
+	me->set("petmsg1", ob->query("arrive_msg"));
+	me->set("petmsg2", ob->query("leave_msg"));
+	gold->add_amount(-1);
+	message_vision("阿黎笑着把$N接了过来，放在围栏之中。\n",ob);
+	message_vision("阿黎对$N说道：那我就先替你养着，记得来领走啊！\n",me);
+	me->start_busy(1);
+	call_out("destroy", 1, ob);
+	return 1;
+}
+int do_redeem(string arg)
+{
+	object me,ob;
+	string msg;
+	me = this_player();
+	msg = "它真可爱！";
+	if(environment(this_object())->query("short") != "宠物店")
+	return notify_fail("阿黎说道：真是抱歉，请您等一下到宠物店来找我吧。\n");
+	if(!arg || arg != "cat") return notify_fail("你要取回什么？\n");
+	if(!me->query("petname")) 
+	return notify_fail("阿黎摇头道：对不起，您没有在这里寄养宠物。\n");
+	if(me->is_busy())
+	return notify_fail("你上一个动作还没有完成。\n");
+	ob = new(__DIR__"pet");
+        ob->move("/t/ly/pet_shop");
+        ob->set_temp("owner",me->query("id"));
+        ob->set_leader(me);
+        ob->set_skill("move",500);
+        ob->set("title", me->query("pettitle"));
+        ob->set("name", me->query("petname"));
+        ob->set("long", me->query("petlong"));
+        ob->set("arrive_msg", me->query("petmsg1"));
+        ob->set("leave_msg", me->query("petmsg2"));
+        if(strlen(ob->name()) > 20)
+        msg = "就是名字有点长 :)";
+        message_vision("阿黎转身从围栏中抱出一只小猫交给$N。\n",me);
+        message_vision("阿黎笑道：$N在这里可听话了，" + msg + "\n",ob);
+        message_vision("$N在$n怀里钻来钻去，使劲撒娇。\n",ob,me);
+        me->delete("petname");
+        me->delete("pettitle");
+        me->delete("petlong");
+        me->delete("petmsg1");
+        me->delete("petmsg2");
+        me->start_busy(1);
+        return 1;
+}
+int destroy(object ob)
+{
+        destruct(ob);
+        return 1;
+}

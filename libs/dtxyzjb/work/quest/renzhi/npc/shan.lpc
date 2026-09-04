@@ -1,0 +1,192 @@
+//搭救人质任务
+// writed by wsw 2005 10 30
+
+
+#define TIMES_EXP 900  //任务过期时间
+#define TIMES_INT 120  //两次任务之间间隔时间
+
+inherit NPC;
+#include <ansi.h>
+int ask_kill();
+int start_job(object me);
+string *list2=({"yg-putuo","yg-moon","yg-wzg","yg-shushan","yg-hyd",
+    "yg-fangcun","yg-hell","yg-jjf","yg-pansi","yg-kunlun",
+        "yg-dragon", "yg-xueshan","yg-sanxian",	"yg-wudidong",
+	});
+void create()
+{
+        set_name(HIR"人质任务"NOR, ({"shan"}));
+        set("gender", "男性");
+        set("age", 75);
+        set("title", HIR"[铁面判官]"NOR);
+        set("long","他就是疾恶如仇，刚正不阿，江湖人称*****。\n");      
+        set("combat_exp", 30000000);
+        set("shen_type", 0);
+        set("max_neili", 500000);
+        set("neili", 500000);
+        set("max_qi",40000);
+        set("max_jing",20000);
+        set("max_jingli",20000);
+        set("jingli",20000);
+        set("per",25);
+        set("jiali", 400);
+        set_skill("force", 500);
+        set_skill("unarmed", 500);
+        set_skill("dodge", 500);
+        set_skill("parry", 500);
+       // set("no_clean_up",1);
+
+        set("inquiry", ([
+                "人质" : (: ask_kill :),
+                "解救人质" : (: ask_kill :),
+                "renzhi" : (: ask_kill :)
+             ]) );    
+
+        set_temp("apply/attack", 500);
+        set_temp("apply/defense", 5000);
+        set_temp("apply/damage", 500);
+        setup();
+}
+
+int ask_kill()
+{   
+	int kill_count,reward,level;
+    object me;
+    me=this_player();
+    
+ 	if(me->query("combat_exp")<500000) 
+ 		return notify_fail(CYN"你乳臭未干，怕是不行哟！\n"NOR);
+ 	if (me->query("renzhi/time_start")+TIMES_INT > time())
+ 		return notify_fail(CYN"现在没有人质被绑架，你先去休息一会吧。\n"NOR);
+
+ 	if(!me->query_temp("renzhi")
+ 		||!me->query("renzhi/time_start") ) {
+ 		call_out("start_job", 1, me);
+		return 1;
+	}
+	if (me->query_temp("renzhi/steps") == 5) {
+		call_out("start_job", 1, me);
+		return 1;
+	}
+	if(time()< me->query("renzhi/time_start")+TIMES_EXP) {
+		if (time()< me->query("renzhi/time_start")+me->query("renzhi/times")) {
+			command("heng");
+			command("say 你的任务还没有完成吧？\n");
+			return 1;
+		}
+	}
+
+	return start_job(me);
+}	    
+
+int start_job(object me)
+{
+ 	int lvl,times;
+ 	string file;
+ 	object killer;
+
+ 	if(environment(me)!=environment()) return 1;
+ 	
+ 	me->set_temp("renzhi/level",random(3)+1);
+ 	lvl=me->query_temp("renzhi/level");
+ 	if (lvl<1) lvl = 1;
+ 	
+   	file = __DIR__+list2[random(sizeof(list2))];
+   	killer=new(file);
+   	if (!killer) return notify_fail(HIC"没有妖怪"NOR);;
+   	killer->invocation(me, lvl);
+   	//killer->set("killer",me->query("id"));
+   	times = 300;//任务过期时间
+   	killer->leave(me,times);
+   
+   	me->set("renzhi/time_start", time());
+   	me->set("renzhi/times",times);
+   	me->set("renzhi/id",killer->query("id"));
+	me->set("renzhi/name",killer->query("name"));
+	me->set_temp("renzhi/ob",killer);
+	me->set_temp("renzhi/steps",1); //任务过程：1，接任务。2，碰到了怪，3，知道门派
+   	tell_object(me,HIC"难得"+me->query("name")+"有如此侠义心肠，刚才有人在赌场\n"
+       +"被人绑票了，，你就先去调查一下绑匪的情况情况，\n根据我的资料，名字好象叫"
+       +killer->query("name")+"("+killer->query("id")+")"
+       +"，\n你去他的门派底细弄清楚后回来向我报告！\n给你五分钟的时间。\n"NOR); 
+    return 1; 		
+
+}
+
+void init()
+{
+     object who;
+
+     who=this_player();
+     if(who->query_temp("renzhi/steps") == 2)
+     {
+      message_vision(HIC"人质任务面露微笑，朝$N点头道：“你回来啦，"
+           +"可曾查到什么没有？”\n"NOR
+           +CYN"请用 answer <门派> 回答！\n"NOR,who);
+      add_action("do_answer","answer");
+     }
+}
+
+int do_answer(string arg)
+{
+     object who,killer;
+     object gold;
+     int amount;
+
+     if(!arg) return notify_fail("请用 answer <门派> 回答！\n");
+
+     who=this_player();
+     if(who->query_temp("renzhi/steps") == 1)
+     {
+        message_vision(
+        HIY"人质任务怒道：“还不快去，在这里磨蹭什么？\n"NOR,who); 
+        return 1;
+     } 
+
+     killer=who->query_temp("renzhi/ob");
+
+     if(!objectp(killer))
+     {
+      message_vision(
+          HIW"人质任务为难地说道：“辛苦你了，可是这人好象失踪了！\n"NOR,who);
+      who->delete("renzhi/time_start");
+      who->delete_temp("renzhi/steps");
+      return 1;
+     }
+
+     if(arg!=killer->query("family/family_name"))
+     {
+      message_vision(HIW"人质任务脸色一沉道：“胡说！哪里是什么"+arg
+          +"，你给我再去查查看！”\n"NOR,who);
+      who->set_temp("renzhi/steps",1);
+      return 1;
+     } else
+     {
+	  who->set_temp("renzhi/steps",3);
+      message_vision(HIW"人质任务面露微笑，点头赞许道：“不错，不错，正是"+arg
+         +"，和我想的一样！”\n"+"我得到消息说"+killer->query("name")
+         +"已挟持人质逃到了别的地方，正在那里行凶，请你立刻赶去除掉他救出人质吧！\n"NOR
+         +"你有十分钟的时间。\n",who);
+	  killer->leave(who,600);
+	
+	  if (!killer->move(load_object("/quest/renzhi/linexit"),1))
+	  	if (!killer->random_place(killer,0)) {
+	  		killer->leave(who,1);
+      		message_vision(
+          		HIW"人质任务为难地说道：“辛苦你了，可是这人好象失踪了！\n"NOR,who);
+      	  	who->delete("renzhi/time_start");
+      	  	who->delete_temp("renzhi/steps");
+      	  	return 1;	  		
+	  	}
+	  
+      gold=new("/obj/money/gold");
+      gold->move(who);
+      message_vision(
+        MAG"人质任务顿了顿，接着道：“对了，你一路辛苦，花费也去了不少吧？\n"
+       +"这里有"+sprintf("%d两黄金，就全当给你些酬劳吧，可别嫌少呀！”\n"NOR
+       +WHT"人质任务说完，转身走入书房，拿出一封金锭交给你。\n"NOR,1), who); 
+
+      return 1;
+      }
+}
+

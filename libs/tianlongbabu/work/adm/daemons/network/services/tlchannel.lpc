@@ -1,0 +1,142 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/adm/daemons/network/services/tlchannel.c,v 1.5 2001/01/07 19:57:01 mud Exp $
+ */
+ 
+/*
+ * This protocol is used to broadcast a channel to a group of other muds.
+ */
+
+// by Annihilator (06/15/95)
+
+// #undef DEBUG by cbra 1988-01-03
+
+#include <net/macros.h>
+#include <net/dns.h>
+#include <net/daemons.h>
+#include <net/services.h>
+
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+
+#include <net/intermud.h> // add by cbra for debug and mudlist restriction 1998-01-03
+
+void create() { seteuid(ROOT_UID); }
+
+// This is the interface to the intermud channels
+varargs void send_msg(string channel, string id, string name, string msg, int emoted,
+	mixed filter, string remote_id, string remote_mud_name, string party)
+{
+	string *names;
+	int i;
+	mapping muds;
+	mapping svcs;
+	mapping minfo;
+
+// no sure it is a bug or not
+//	if( !this_player()		// Prevent from being called by ourself.
+//	||	!ACCESS_CHECK(previous_object())) return;
+
+#ifdef CBRA
+	set("channel_id", "网路频道精灵");
+	CHANNEL_D->do_channel(this_object(), "debug", "prepare to send tlchannel message.");
+	CHANNEL_D->do_channel(this_object(), "debug", sprintf("channel %s id %s name %s msg %s emote %d", channel,id,name,msg,emoted)); 
+#endif
+
+	muds = (mapping)DNS_MASTER->query_muds();
+	svcs = (mapping)DNS_MASTER->query_svc();
+	msg = replace_string(msg, "|", "");
+	msg = replace_string(msg, "@@@", "");
+	// use keys(svcs) because none of the muds not in svcs can possibley
+	// receive the message
+	names = keys(svcs);
+	i = sizeof(names);
+	while(i--)
+		if( (names[i] != mud_nname())
+		&&	evaluate(filter, muds[names[i]])) {
+			minfo = muds[names[i]];
+			if(!mapp(minfo) || !mapp(svcs[names[i]])
+			|| !(svcs[names[i]]["gwizmsg"] & SVC_UDP))
+				continue;
+// add by cbra for host check, valid_hosts define in /include/net/intermud.h 1998-01-03
+		if ( member_array(minfo["HOSTADDRESS"],valid_hosts)== -1) continue;
+		if ( member_array(minfo["NAME"],valid_names)== -1) continue;
+#ifdef CBRA
+	set("channel_id", "网路频道精灵");
+	CHANNEL_D->do_channel(this_object(), "debug",
+		sprintf("tlchannel message sent to %s.", minfo["NAME"]));
+#endif
+// end
+		if ( stringp(remote_id) && stringp(remote_mud_name) ) {
+			if (minfo["NAME"]==remote_mud_name)
+				msg=replace_string(msg,"("+ capitalize(remote_id) + "@" + capitalize(remote_mud_name) + ")", "");
+		}
+
+			DNS_MASTER->send_udp(minfo["HOSTADDRESS"], minfo["PORTUDP"],
+				"@@@" + DNS_TLCHANNEL +
+				"||NAME:" + Mud_name() +
+				"||PORTUDP:" + udp_port() +
+				"||USRNAME:" + capitalize(id) +
+				"||USRCHECK:" + capitalize(id) +
+				"||CNAME:" + name +
+				"||MSG:" + msg +
+				"||CHANNEL:" + channel +
+				"||PARTY:" + party +
+				(emoted?"||EMOTE:1":"") + "@@@\n");
+		}
+}
+
+void incoming_request(mapping info)
+{
+	mapping minfo;
+	string tmsg;
+
+	if(!ACCESS_CHECK(previous_object())) return;
+
+	if (info["NAME"]) {
+		if (info["NAME"] == Mud_name()) return ;
+
+		minfo = DNS_MASTER->query_mud_info(info["NAME"]);
+		if (!minfo || !strlen(info["USRNAME"])
+		|| !DNS_MASTER->dns_mudp(info["NAME"]))	{
+			// We don't accept the message.  But ping them anyway.
+			PING_Q->send_ping_q(info["HOSTADDRESS"], info["PORTUDP"]);
+			return ;
+		}
+		if (info["HOSTADDRESS"] != minfo["HOSTADDRESS"]) {
+			if (info["EMOTE"])
+				tmsg = info["USRNAME"]+"@"+info["NAME"]+" "+info["MSG"];
+			else
+				tmsg = info["USRNAME"]+"@"+info["NAME"]+": "+info["MSG"];
+
+			// Faked.  sheeze... 
+			dns_log("dns_fake",sprintf( "Gchannel: %s %s\n%s", ctime(time()),
+				info["HOSTADDRESS"],tmsg));
+			DNS_MASTER->send_udp(info["HOSTADDRESS"], info["PORTUDP"],
+				"@@@"+DNS_WARNING+
+				"||NAME:"+Mud_name()+
+				"||MSG: Fake tlchannel msg: "+tmsg+
+				"||FAKEHOST:"+info["HOSTADDRESS"]+
+				"@@@\n");
+			return;
+		}
+
+// add by cbra for host check, valid_hosts define in /include/net/intermud.h 1998-01-03
+                if ( member_array(info["HOSTADDRESS"],valid_hosts)== -1) return;
+#ifdef CBRA
+		set("channel_id", "网路频道精灵");
+		CHANNEL_D->do_channel(this_object(), "debug",
+			sprintf("tlchannel message from %s(%s).", minfo["NAME"],info["HOSTADDRESS"]));
+#endif
+// end
+
+		if( undefinedp(info["CNAME"]) )
+			set("channel_id", sprintf("%s@%s", info["USRNAME"], capitalize(info["NAME"])) );
+		else
+			set("channel_id", sprintf("%s(%s@%s)", info["CNAME"], info["USRNAME"], capitalize(info["NAME"])) );
+
+		CHANNEL_D->do_channel(this_object(), lower_case(info["CHANNEL"]), info["MSG"], info["EMOTE"], info["PARTY"]);
+
+    } //if (info["NAME"])
+}
+

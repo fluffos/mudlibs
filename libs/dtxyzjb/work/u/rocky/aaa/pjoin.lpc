@@ -1,0 +1,93 @@
+//pjoin.c
+//Wangcy
+//加入帮会
+
+#include "party.h"
+#include <ansi.h>
+inherit F_CLEAN_UP;
+
+int creat_party(object ob);
+int main(object me,string arg)
+{
+	object ob,where;
+	string wherename,partyname;
+	string *member,id;
+	if(me->query("party")) return notify_fail("你还是叛帮先吧.\n");
+	if(!member_limite(me)) return notify_fail("再积累些经验吧。\n");
+	if(!arg) return notify_fail("你要向谁申请入帮?\n");
+	if(me->query_temp(CREATING)||me->query_temp(JOINING)) return notify_fail("请耐心等待?\n");
+	ob=find_player(arg);
+	if(!ob) return notify_fail(HIY"没有这个玩家。\n"NOR);
+	if(ob->query_temp(CREATING))
+	{
+		where = environment(me);
+		wherename=MISC_D->find_place(where);
+		partyname=ob->query_temp(NAME);
+		message("channel:chat",HIY"\n【帮派天下】"+me->query("name")+"在"+wherename+"积极响应，决定加入【"+partyname+"】，与"+ob->query("name")+"共建宏图伟业！\n\n"NOR,users());
+		member=ob->query_temp(JOINED);
+		id=me->query("id");
+		if(member) {
+			if(member_array(id,member)>-1) return 1;
+			member=member+({id});
+		} else {
+			member=({id});
+		}
+		me->set_temp(JOINING,1);
+		ob->set_temp(JOINED,member);
+		if(sizeof(member)>3) return creat_party(ob);
+		return 1;
+	}
+	if(ob->query(LEVEL)!=1) return notify_fail("他还不是帮主,那有这等权利?\n");
+	if(ob->query(LEVEL)==1) {
+		me->set_temp(JOINING,arg);
+		message("channel:chat",HIY"【帮派天下】"+me->query("name")+"("+me->query("id")+")："+"申请加入"+ob->query(NAME)+"\n"+NOR,users());
+	}
+	return 1;
+}
+int creat_party(object ob)
+{
+	string pname,pid,*member;
+	object ob1,party;
+	int i;
+	ob->delete_temp(CREATING);
+	pid=ob->query_temp(ID);
+	pname=ob->query_temp(NAME);
+	ob->delete_temp(ID);
+	ob->delete_temp(NAME);
+	party_rant(ob,pname,pid,MASTER);
+	member=ob->query_temp(JOINED);
+	ob->delete_temp(JOINED);
+	for(i=0;i<sizeof(member);i++){
+		ob1=find_player(member[i]);
+		if(!ob1) {
+			ob1=new("/obj/user");
+			ob1->set("id",member[i]);
+			ob1->restore();
+			party_rant(ob1,pname,pid,MEMBER);
+			ob1->save();
+			destruct(ob1);
+			continue;
+		}
+		party_rant(ob1,pname,pid,MEMBER);
+		ob1->delete_temp(JOINING);
+	}
+	party=new("/d/obj/party");
+	party->set(ID,pid);
+	party->set(NAME,pname);
+	party->set("master",({ob->query("id")}));
+	party->set("member",member);
+	party->initial();
+	party->save();
+	message("channel:chat",HIY"\n【帮派天下】【"+party->query(NAME)+"】，成立于"+NATURE_D->game_time()+"！\n\n"NOR,users());
+	destruct(party);
+	return 1;
+}
+int help()
+{
+  write(@TEXT
+指令格式：pjoin 对象
+加入某人创建的帮派
+TEXT
+  );
+  return 1;
+}

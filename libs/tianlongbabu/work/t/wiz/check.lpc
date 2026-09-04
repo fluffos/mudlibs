@@ -1,0 +1,166 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/cmds/wiz/check.c,v 1.1 2000/03/05 18:51:46 mud Exp $
+ */
+ 
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+mapping valid_types = ([
+        "array":        "阵法",
+        "axe":          "斧法",
+        "bi":           "笔法",
+        "blade":        "刀法",
+        "dodge":        "轻功",
+        "force":        "内功",
+        "hammer":       "锤法",
+        "iron-cloth":   "硬功",
+        "literate":     "才智",
+        "magic":        "法术",
+        "move":         "行动",
+        "parry":        "招架",
+        "spells":       "咒文",
+        "shears":       "剪法",
+        "staff":        "杖法",
+        "stealing":     "偷窃",
+        "stick":        "棍法",
+        "sword":        "剑法",
+        "throwing":     "暗器",
+        "unarmed":      "拳脚",
+        "whip":        "鞭法",
+]);
+
+int exp_power(int exp)
+{ 
+	return exp/30;
+}
+
+int skill_power(int eff_skill_level)
+{
+	int level = eff_skill_level;
+	
+	return (level + (level * level * level)/20 )/15;
+}
+
+int main(object me, string arg)
+{
+        mapping map;
+        string *skill, specl;
+        int i, modify, numSpecial,lvl, efflvl, exp;
+	object ob;
+
+        seteuid(getuid());
+
+	numSpecial = 1;
+        if(!arg)
+                ob = me;
+        else if (wizardp(me)) 
+        {
+                ob = present(arg, environment(me));
+                if (!ob) ob = find_player(arg);
+                if (!ob) ob = find_living(arg);
+                if (!ob) return notify_fail("你要察看谁的状态？\n");
+        } else
+                return notify_fail("只有天龙使者能察看别人的状态。\n");
+
+        map = ob->query_skill_map();
+	if(!mapp(map) || sizeof(map) == 0)
+		numSpecial = 0;
+	else numSpecial=1;
+
+        skill = keys(valid_types);
+	exp = ob->query("combat_exp",1);
+	write(ob->name() + "目前的" + BLU"战斗经验"NOR + "是："BLU + exp + NOR"\n");
+	write("由战斗经验产生的" + BLU"攻击力"NOR + "是："BLU + exp/30 + NOR"\n");
+	write("加内力(force_factor)：" + RED + ob->query("force_factor") + NOR"\n");
+        write(CYN"以下是" + ob->name() + "目前所学的技能："NOR+ "\n");
+                printf(BLU"  %-20s： %-14s  ＝%-10s※%s  %s\n" NOR, 
+                        "基本技术",
+                        "特殊技术",
+                        "有效等级",
+                        "攻击力",
+			"相当于经验");
+	if (numSpecial != 0 ) {
+            for (i=0; i<sizeof(skill); i++) 
+            {
+                if(undefinedp(valid_types[skill[i]])) 
+                {
+                        map_delete(map, skill[i]);
+                        continue;
+                }
+                if(!ob->query_skill(skill[i])) continue;
+
+                modify = ob->query_temp("apply/" + skill[i]);
+		efflvl = ob->query_skill(skill[i]);
+		lvl = ob->query_skill(skill[i],1);
+		if (undefinedp(map[skill[i]]))
+			specl = "无";
+		else {
+			specl = to_chinese(map[skill[i]]) + "(" + ob->query_skill(map[skill[i]],1) + ")";
+		}
+                printf("  %-16s%4d： %-14s  ＝%8d  ※%6d  ＞%8d\n" NOR, 
+                        valid_types[skill[i]] + " (" + skill[i] + ")",
+			lvl,
+			specl,
+                        efflvl,
+			(efflvl + (efflvl * efflvl * efflvl)/20)/15,
+			2*(efflvl + (efflvl * efflvl * efflvl)/20));
+            }
+	} else {
+            for (i=0; i<sizeof(skill); i++) 
+            {
+                if(undefinedp(valid_types[skill[i]])) 
+                {
+                        map_delete(map, skill[i]);
+                        continue;
+                }
+                if(!ob->query_skill(skill[i])) continue;
+
+                efflvl = ob->query_skill(skill[i]);
+                lvl = ob->query_skill(skill[i],1);
+                printf("  %-20s： %-14s  ＝%-10d※%3d\n" NOR, 
+                        valid_types[skill[i]] + " (" + skill[i] + ")" + lvl,
+                        "无",
+                        efflvl,
+			(efflvl + (efflvl * efflvl * efflvl)/20)/15);
+            }
+	}
+        return 1;
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : check  
+           check <对象名称>
+
+这个指令可以显示你或指定对象的经验攻击力及技能攻击力的差别。
+<在无负重及气血满的情况下得出>,实际攻击力因是两者之和。当你
+查看时可能得出不同的数据，但因差别不大而且在这里不重要。它至少
+有助于skills level的确定。大体上两者应差的不大，将技能定得太
+高或太底都不好。Master的skills可以定的高一些。另外force_factor
+的确定也须要统一起来。后做的地图请参考前面做的地图。
+
+通常的技能设定是： 经验攻击力/2 <= 技能攻击力 <= 经验攻击力 * 2
+(NPC must has unarmed skill)
+参考 force_factor 与经验的关系:(不得小于设定值的一半)
+	经验：	     正常加内力:       下限：
+	>10M		 100		50
+	>8M		 90		45
+	>6M		 80		40
+	>4M		 70		35
+	>2M		 60		30
+	>1M		 50		25
+	>500K		 40		20
+	>200K		 30		15
+	>100K		 25     (100K以上NPC均须加内力)
+	>50K		<20
+	>5K		<10
+	<=5K		<10    (大多数低经验NPC不加内力)
+HELP
+    );
+    return 1;
+}
+

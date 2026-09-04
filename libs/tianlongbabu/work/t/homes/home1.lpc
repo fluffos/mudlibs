@@ -1,0 +1,179 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/t/homes/home1.c,v 1.2 2000/11/15 15:32:19 mud Exp $
+ */
+ 
+// Room: /t/homes/home.c
+
+#include <ansi.h>
+inherit ROOM;
+int do_sleep(object);
+object have_someone_sleeping(object);
+
+void create()
+{
+	set("short", HIM"仙人洞"NOR);
+	set("long",
+	"  "+GRN"※※※"NOR+"    "+BLU"□□□□□□□□□□□□□"NOR+"    "+GRN"※※※\n"NOR +
+  "      "+GRN"※"NOR+"九"+GRN"※"NOR+"    "+BLU"□"NOR+"::         "+HIY"**"NOR+"         "+BLU"□"NOR+"    "+GRN"※"NOR+"青"+GRN"※\n"NOR+
+  "      "+GRN"※"NOR+"月"+GRN"※"NOR+"    "+BLU"□"NOR+"::         "+HIY"*"NOR+"｜"+HIY"* *"NOR+"     "+BLU"□"NOR+"    "+GRN"※"NOR+"裙"+GRN"※\n"NOR+
+  "      "+GRN"※"NOR+"茶"+GRN"※"NOR+"    "+BLU"□"NOR+":  "+HIY"*  * *"NOR+"   ｜/"+HIY"* *"NOR+"    "+BLU"□"NOR+"    "+GRN"※"NOR+"玉"+GRN"※"NOR+"\n"+
+  "      "+GRN"※"NOR+"花"+GRN"※"NOR+"    "+BLU"□"NOR+"    "+HIY"**"NOR+"＼"+HIY"'**"NOR+" ｜        "+BLU"□"NOR+"    "+GRN"※"NOR+"面"+GRN"※"NOR+"\n"+
+  "      "+GRN"※"NOR+"满"+GRN"※"NOR+"    "+BLU"□"NOR+RED"#"NOR+"    "+HIY"* *"NOR+"＼"+HIY" *"NOR+"┃  "+HIY"***"NOR+"   "+BLU"□"NOR+"    "+GRN"※"NOR+"如"+GRN"※"NOR+"\n"+
+  "      "+GRN"※"NOR+"路"+GRN"※"NOR+"    "+BLU"□"NOR+":         ＼┃ "+HIY"*,* *"NOR+"  "+BLU"□"NOR+"    "+GRN"※"NOR+"相"+GRN"※"NOR+"\n"+
+  "      "+GRN"※"NOR+"开"+GRN"※"NOR+"    "+BLU"□"NOR+":           ┃／      "+BLU"□"NOR+"    "+GRN"※"NOR+"识"+GRN"※"NOR+"\n"+
+  "      "+GRN"※※※"NOR+"    "+BLU"□□□□□□□□□□□□□"NOR+"    "+GRN"※※※"NOR+"\n"
+	);
+
+	set("no_fight", "1");
+
+	set("exits", ([ /* sizeof() == 1 */
+	"east" : "/t/dali/cross.lpc",
+]));
+
+	set("no_clean_up", 0);
+
+	setup();
+}
+
+void init()
+{      
+	object* oblist;
+	object ob, env;
+	
+	add_action("sleeping","shui");
+	env = this_object();
+	oblist = all_inventory(env);
+
+        if( interactive( ob = this_player())) {
+	    if ( wizardp(ob) )  return;
+	    if ( sizeof(oblist) <= 1 ) return;
+	    if( sizeof(oblist) > 2 ) ob->move("/t/dali/hotel");
+	    if( sizeof(oblist) == 2 ) {
+		if( oblist[0]->query("gender") == oblist[1]->query("gender") )
+                ob->move("/t/dali/hotel");
+	    }
+        }
+}
+
+int sleeping()
+{
+	object me = this_player();
+	if(me->is_busy()) return notify_fail("你正忙着呢！\n");
+	call_out("do_sleep",1,me);
+	return 1;
+}
+
+int do_sleep(object me)
+{
+	object who, *inv;
+	int i;//, count;
+	string str;//, someone;
+
+	if(me->is_busy()) return notify_fail("你还没睡醒呢！\n");
+
+	// remove all staff before sleepping :P
+	inv = all_inventory(me);
+	for(i=0; i < sizeof(inv); i++ ) {
+	    if( inv[i]->query("equipped") == "worn" ) {
+		if( inv[i]->unequip() ) {
+		    if( !stringp(str = inv[i]->query("remove_msg")) )
+                        switch(inv[i]->query("armor_type")) {
+                                case "cloth":
+                                case "armor":
+                                case "surcoat":
+                                case "boots":
+                                        str = YEL "$N将$n脱了下来。\n" NOR;
+                                        break;
+                                case "bandage":
+                                        str = YEL "$N将$n从伤口处拆了下来。\n" NOR;
+                                        break;
+                                default:
+                                        str = YEL "$N卸除$n的装备。\n" NOR;
+                        }
+                message_vision(str, me, inv[i]);
+		}
+	    } else if ( inv[i]->query("equipped") == "wielded" ) {
+		if(inv[i]->unequip() ) {
+		    if( !stringp(str = inv[i]->query("unwield_msg") )) 
+			str = YEL "$N放下手中的$n。\n" NOR;
+		message_vision(str, me, inv[i]);
+		}
+	    }
+	}
+
+	me->start_busy(7);
+//	me->start_busy(4);
+
+	if( who = have_someone_sleeping(me) )
+	    message_vision(MAG"$N跳上床，在$n身边躺了下来，盖上被子，"
+			+ "口水流了一枕头。\n"NOR, me,who);
+	else
+	    message_vision(CYN"$N躺在小床上，盖上被子，"
+			+ "不一会儿便做起了美梦。\n"NOR, me);
+	me->set_temp("sleeping",1);
+	call_out("complete_sleep",10, me);
+	return 1;
+}
+
+object have_someone_sleeping(object me)
+{
+        object room;
+        object* oblist;
+        int i;
+
+        room= this_object();
+        oblist = all_inventory(room);
+
+        for ( i = 0; i < sizeof(oblist); i++ ) {
+                if(userp(oblist[i]) && oblist[i]->query_temp("sleeping")
+			&& oblist[i] != me )
+                return oblist[i];
+        }
+        return 0;
+}
+
+
+int complete_sleep(object me) 
+{
+	int eff_kee, eff_gin, max_force, max_atman;
+
+	if (environment(me)==this_object()){
+	    if(me->can_afford(1000)) {
+		me->pay_money(1000);
+		eff_kee = me->query("eff_kee");
+		eff_gin = me->query("eff_gin");
+		max_force = me->query("max_force");
+		max_atman = me->query("max_atman");
+		
+		me->set("force",max_force);
+		me->set("atman",max_atman);
+		me->set("gin",eff_gin);
+		me->set("kee",eff_kee);
+	
+		tell_object(me, HIG "你一觉醒来，觉得身体完全恢复了！\n" NOR);
+	    } else
+		tell_object(me, HIC "你一觉醒来，伸了个懒腰，觉得又悃又乏！\n" NOR);
+	}
+	me->delete_temp("sleeping");
+//	me->stop_busy();
+	return 1;
+}
+
+void reset()
+{
+        object          *inv;
+        int             i;
+
+        ::reset();
+        inv = all_inventory(this_object());
+        if( sizeof(inv) != 1) {
+            for(i=sizeof(inv)-1; i>=0; i--)
+		if(!wizardp(inv[i])) {
+                    if(userp(inv[i]))
+                        inv[i]->move("/t/dali/drink_rm");
+		    else inv[i]->move(NPC_VOID_OB);
+		}
+        }
+}
+

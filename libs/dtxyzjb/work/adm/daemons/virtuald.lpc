@@ -1,0 +1,248 @@
+/*==============================================================================
+    virtuald.c
+    管理虚拟迷宫的守护进程
+
+    Created by Jingxue 2007-12-12 14:33
+   Recreated by Xdao 2009-11
+==============================================================================*/
+
+inherit F_DBASE;
+inherit F_SAVE;
+#include <vrm.h>
+#include <ansi.h>
+
+
+#define VRM_HEART_BEAT        300            // 进程心跳，每5分钟心跳检查一次
+
+mapping all_vrm = ([ ]);                // 保存现存的迷宫阵列和存在时间
+/*
+mapping all_vrm_r = ([ ]);                // 保存现存的迷宫阵列和更新时间
+*/
+
+private int save_vrm_d();
+private int restore_vrm_d();
+
+#if RDM_VRM_SUPPORT
+private void close_rdm_vrm();
+#endif
+
+void create()
+{
+        seteuid(getuid());
+        set("channel_id", "迷宫精灵");
+        CHANNEL_D->do_channel(this_object(),"sys", "迷宫精灵已经启动。");
+        restore_vrm_d();
+        set_heart_beat(VRM_HEART_BEAT);    
+}
+
+string query_save_file()
+{
+    return DATA_DIR+"vrm_d_save_file";
+}
+
+
+/*****************
+  外部接口函数：
+*****************/
+// 生成迷宫，返回虚拟物件。
+public object compile_object(string file)
+{
+    string pname = file;
+    object ob;
+
+    while (1)
+    {
+        int idx = strsrch(pname, "/", -1);
+
+        if(idx == -1)
+            return 0;
+
+        if( idx != 0 )
+            pname = pname[0..idx-1];
+
+        if(file_size(pname + ".lpc") >= 0)
+            if(ob = pname->query_maze_room(file[idx+1..]))
+            {
+                ob->set_virtual_flag();
+                return ob;
+            }
+        if(!idx)
+            return 0;
+    }
+
+    return 0;
+}
+
+// 设置迷宫存在时间
+public void set_vrm_time(string vrm_id, int build_time)
+{
+        if( !mapp(all_vrm) ) 
+            all_vrm = ([ vrm_id: build_time ]);
+        else 
+            all_vrm[vrm_id] = build_time;
+}
+// 删除迷宫存在时间
+public int delete_vrm_time(string vrm_id)
+{
+        if( mapp(all_vrm) ) 
+        {
+                map_delete(all_vrm, vrm_id);
+                return undefinedp(all_vrm[vrm_id]);
+        }
+        return 0; 
+}
+
+/*
+// 设置迷宫更新时间
+public void set_vrm_reset_time(string vrm_id, int reset_time)
+{
+        if( !mapp(all_vrm_r) ) 
+            all_vrm_r = ([ vrm_id: reset_time ]);
+        else 
+            all_vrm_r[vrm_id] = reset_time;
+}
+// 删除迷宫更新时间
+public int delete_vrm_reset_time(string vrm_id)
+{
+        if( mapp(all_vrm_r) ) 
+        {
+                map_delete(all_vrm_r, vrm_id);
+                return undefinedp(all_vrm_r[vrm_id]);
+        }
+        return 0; 
+}
+*/
+
+// 销毁迷宫
+public int delete_vrm(string vrm_id)
+{
+    object ob;        // 迷宫
+    string vrm_name;    // 迷宫名称
+
+    vrm_name = vrm_name_list[vrm_id];
+    CHANNEL_D->do_channel(this_object(),"sys", "销毁副本迷宫"+ vrm_name +"。。。");
+    CHANNEL_D->do_channel(this_object(),"chat", "刷新副本迷宫"HIM+ vrm_name +NOR);
+    if (ob = get_object(VRM_DIR+vrm_id))
+        ob -> remove();
+    delete_vrm_time(vrm_id);
+}
+
+
+/*****************
+    内部函数：
+*****************/
+// 整理所有迷宫
+private void heart_beat()
+{
+    object ob;        // 迷宫
+    int ticktime;        // 存在时间
+    string vrm_id;        // 迷宫ID
+    string vrm_name;    // 迷宫名称
+    int vrm_time;        // 迷宫建立时间
+    int i;
+    string *vrm_keys;
+    
+    CHANNEL_D->do_channel(this_object(),"sys", "开始扫描所有存在的迷宫。");
+
+// 扫描迷宫并摧毁到时的迷宫
+    if (sizeof(all_vrm) > 0)
+    {
+        vrm_keys = keys(all_vrm);
+        for (i=0; i<sizeof(vrm_keys); i++)
+        {
+            vrm_id = vrm_keys[i];
+            vrm_name = vrm_name_list[vrm_id];
+            vrm_time = all_vrm[vrm_id];
+            ticktime = time() - vrm_time;
+            if ( ticktime >= 0 )
+            {
+                if (ob = get_object(VRM_DIR+vrm_id))
+                {
+                    CHANNEL_D->do_channel(this_object(),"sys", "销毁副本迷宫"+ vrm_name +"。。。");
+                   CHANNEL_D->do_channel(this_object(),"chat", "刷新副本迷宫"HIM+ vrm_name +NOR);
+                    ob -> remove();
+                }
+                delete_vrm_time(vrm_id);
+            }
+            else if (ticktime > -VRM_HEART_BEAT)
+            {
+                 CHANNEL_D->do_channel("this_object","shout","传说中的"+vrm_name+"即将重现人间。。。");
+                remove_call_out("delete_vrm");
+                      call_out("delete_vrm", ticktime, vrm_id);
+            }
+        }
+    }
+
+#if RDM_VRM_SUPPORT
+// 达到刷新时间，生成新的随机迷宫
+    if (time() > refresh_rdm_vrm_time)
+    {
+        create_rdm_vrm();
+    }
+// 达到关门时间，关闭随机迷宫入口
+    if (time() > close_rdm_vrm_time)
+    {
+        close_rdm_vrm();
+    }
+#endif
+    
+    save_vrm_d();
+}
+
+#if RDM_VRM_SUPPORT
+// 生成一个随机迷宫
+private void create_rdm_vrm()
+{
+    object room;
+    mapping exits;
+    string rdm_vrm;
+    
+    room = get_object(rdm_vrm_entry_list[random(sizeof(rdm_vrm_entry_list))]);
+    if (!objectp(room))
+        return;
+    exits = room->query("exits");
+    rdm_vrm = rdm_vrm_list[random(sizeof(rdm_vrm_list))];
+    if (mapp(exits))
+        exits["enter"] = VRM_DIR+rdm_vrm+"/entry";
+    else
+        exits = (["enter": VRM_DIR+rdm_vrm+"/entry"]);
+    room->set("exits", exits);
+    refresh_rdm_vrm_time = time() + RDM_VRM_REFRESH_TIME;
+    close_rdm_vrm_time = time() + RDM_VRM_CLOSE_TIME;
+    close_rdm_vrm_room = room;
+        CHANNEL_D->do_channel(this_object,"chat","据说在"+room->query("short")+"("+MISC_D->find_place(room)+")"+"一带出现了"+vrm_name_list[rdm_vrm]+"。");
+}
+// 关闭随机迷宫入口
+private void close_rdm_vrm()
+{
+    mapping exits;
+
+    if (!objectp(close_rdm_vrm_room))
+        return;
+    exits = close_rdm_vrm_room->query("exits");
+    if (mapp(exits))
+                map_delete(exits, "enter");
+    close_rdm_vrm_room->set("exits", exits);
+}
+#endif
+
+private int save_vrm_d()
+{
+    write("迷宫列表存档 ．．．．．．");
+    if( save() ) {
+        write("Save Ok.\n");
+        return 1;
+    } else {
+        write("你没有写入这个档案的权利。\n");
+                return 0;
+        }
+}
+
+private int restore_vrm_d()
+{
+    if( restore() ) {
+        return 1;
+    } else {
+                return 0;
+        }
+}

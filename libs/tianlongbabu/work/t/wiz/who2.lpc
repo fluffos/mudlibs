@@ -1,0 +1,193 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/cmds/wiz/who2.c,v 1.1 2000/07/27 05:30:16 mud Exp $
+ */
+ 
+// who.c
+// last update by cbra Jun-06-1998 for ip and start_write
+// last update by may April 17, 2000 for class sorting.
+
+#include <net/dns.h>
+
+inherit F_CLEAN_UP;
+int sort_cls(object,object);
+void create() { seteuid(getuid()); }
+
+mixed main(object me, string arg, int remote)
+{
+	string str, *option;
+	object *list;
+	int i, j, ppl_cnt;
+	int opt_long, opt_id, opt_wiz, opt_cls;
+
+	if( arg ) {
+		option = explode(arg, " ");
+		i = sizeof(option);
+		while( i-- )
+			switch(option[i]) {
+				case "-l": opt_long = 1;	break;
+				case "-i": opt_id = 1;		break;
+				case "-c": opt_cls = 1;		break;
+				case "-w": opt_wiz = 1;		break;
+				default:
+					if(option[i][0]=='@')
+					{
+						RWHO_Q->send_rwho_q(option[i][1..sizeof(option[i])],
+							me, opt_long);
+						write("网路讯息已送出，请稍候。\n");
+						return 1;
+					}
+					return notify_fail("指令格式：who [-l|-i|-c|-w]\n");
+			}
+	}
+
+	if( opt_long ) {
+		if( (int)me->query("gin") < 30 )
+			return notify_fail("你的精神太差了，没有办法得知其他玩家的详细资料。\n");
+		me->receive_damage("gin", 30);
+	}
+
+	str = "◎ " + MUD_NAME + " (http://www.kunpeng.net.cn/~maoyu/mud)\n";
+	str += "—————————————————————————————————————\n";
+
+// by cbra Apr-24-1998
+	if (!this_user()) list = sort_array(users(), "sort_name", this_object());
+	else if (wizardp(this_user())) {
+		if (opt_id != 1) list = sort_array(users(), "sort_user", this_object());
+		else list = sort_array(users(), "sort_name", this_object());
+	}
+	else {
+		if (opt_id != 1) list = sort_array(users(), "sort_user", this_object());
+		else list = sort_array(users(), "sort_name", this_object());
+	}
+// end
+	if( opt_long || opt_wiz ) {
+		j = sizeof(list);
+		while( j-- ) {
+			// Skip those users in login limbo.
+			if( !environment(list[j]) ) continue;
+			if( !me->visible(list[j]) ) continue;
+			if( opt_wiz && !wizardp(list[j]) ) continue;
+			str = sprintf("%s%12s %s\n",
+				str,
+				RANK_D->query_rank(list[j]),
+				list[j]->short(1)
+			);
+		}
+	}else if(opt_cls) {
+		list = sort_array(users(), "sort_cls", this_object());
+		j = sizeof(list);
+
+		while( j-- ) {
+			// Skip those users in login limbo.
+			if( !environment(list[j]) ) continue;
+			if( !me->visible(list[j]) ) continue;
+	//		if( !wizardp(list[j]) ) continue;
+			str = sprintf("%s%12s %s\n",
+				str,
+				RANK_D->query_rank(list[j]),
+				list[j]->short(1)
+			);
+		}
+	} else {
+		ppl_cnt = 0;
+		j = sizeof(list);
+		while( j-- ) {
+			// Skip those users in login limbo.
+			if(!environment(list[j]) ) continue;
+			if(me && !me->visible(list[j]) ) continue;
+			if(!me && list[j]->query("env/invisibility"))	continue;
+			str = sprintf("%s%-20s%s",
+				str,
+				list[j]->name(1)+"("+capitalize(list[j]->query("id"))+")",
+				(ppl_cnt%4==3? "\n": "")
+			);
+			ppl_cnt++;
+		}
+		if( ppl_cnt%4 ) str += "\n";
+	}
+		
+	str += "—————————————————————————————————————\n";
+	str = sprintf("%s共有 %d 位使用者连线中，系统负担：%s\n", str, sizeof(list),
+		query_load_average() + "\n");
+
+	if( remote ) return str;
+
+	if( opt_long ) me->start_more(str);
+	else me->start_write(str);
+	return 1;
+}
+
+int sort_cls(object ob1, object ob2)
+{
+	if( wizardp(ob1) && !wizardp(ob2) ) return -1;
+	
+	if( wizardp(ob2) && !wizardp(ob1) ) return 1;
+
+	if( wizardp(ob1) && wizardp(ob2) )
+		return (int)SECURITY_D->get_wiz_level(ob2) 
+			- (int)SECURITY_D->get_wiz_level(ob1);
+	
+        if(stringp(ob1->query("family/family_name"))) {
+                if (stringp(ob2->query("family/family_name"))) {
+                        if(ob1->query("family/family_name") == ob2->query("family/family_name") )
+                                return (int)(ob2->query("combat_exp") - ob1->query("combat_exp"));
+                        else
+                                return strcmp(ob2->query("family/family_name"), ob1->query("family/family_name") );
+                } else
+                        return -1;
+        } else {
+                if (stringp(ob2->query("family/family_name")))
+                        return 1;
+                else
+                        return (int)(ob2->query("combat_exp") - ob1->query("combat_exp"));
+        }
+
+}
+
+
+int sort_user(object ob1, object ob2)
+{
+	if( wizardp(ob1) && !wizardp(ob2) ) return -1;
+	
+	if( wizardp(ob2) && !wizardp(ob1) ) return 1;
+
+	if( wizardp(ob1) && wizardp(ob2) )
+		return (int)SECURITY_D->get_wiz_level(ob2) 
+			- (int)SECURITY_D->get_wiz_level(ob1);
+	
+	return (int)ob2->query("combat_exp") - (int)ob1->query("combat_exp");
+}
+
+int sort_name(object ob1, object ob2)
+{
+	if( wizardp(ob1) && !wizardp(ob2) ) return -1;
+	
+	if( wizardp(ob2) && !wizardp(ob1) ) return 1;
+
+	if( wizardp(ob1) && wizardp(ob2) )
+		return (int)SECURITY_D->get_wiz_level(ob2) 
+			- (int)SECURITY_D->get_wiz_level(ob1);
+	if (!environment(ob2))	return -1;
+	if (!environment(ob1))	return 1;
+	return strcmp((string)ob2->query("id"),(string)ob1->query("id"));
+}
+
+
+int help(object me)
+{
+write(@HELP
+指令格式 : who [-l|-i|-c|-w]
+
+这个指令可以列出所有在线上的玩家及其等级。
+
+-l 选项列出较长的讯息。
+-i 只列出玩家的英文代号。
+-c 以门派为组列出。
+-w 只列出线上所有的巫师。
+
+相关指令： finger
+HELP
+    );
+    return 1;
+}

@@ -1,6 +1,6 @@
 # Discworld (discworld)
 
-The official Discworld MUD mudlib, set in Terry Pratchett's Discworld and running continuously since 1991 -- one of the longest-lived, most widely studied LPMuds in existence. This copy comes from Cratylus's (the Dead Souls maintainer's) unofficial "Discworld Bundle" v3 redistribution, which pairs the mudlib with a matching FluffOS build (we use this project's own driver instead, per usual). This project also holds v1 and v2 snapshots of the same bundle (`scripts/non_mudlib_meta/ dw_fluffos_v1.json` / `dw_fluffos_v2.json`), kept as unconverted alternate archives.
+The official Discworld MUD mudlib, set in Terry Pratchett's Discworld and running continuously since 1991 -- one of the longest-lived, most widely studied LPMuds in existence. This copy comes from Cratylus's (the Dead Souls maintainer's) unofficial "Discworld Bundle" v3 redistribution, which pairs the mudlib with a matching FluffOS build (we use this project's own driver instead, per usual). This project also holds independently converted v1 and v2 snapshots of the same bundle (`libs/dw_fluffos_v1/` port 40271, `libs/dw_fluffos_v2/` port 40272).
 
 ## Highlights
 

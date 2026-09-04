@@ -1,0 +1,249 @@
+ 
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/t/kaifeng/npc/mei_po.c,v 1.4 2000/10/22 17:14:47 mud Exp $
+ */
+ 
+// mei_po.c
+#include <ansi.h>
+
+inherit NPC;
+
+string marry();
+string unmarry();
+
+void create()
+{
+	set_name( "李快嘴", ({ "mei_po", "李快嘴"}) );
+	set("title", "红娘庄媒婆");
+        set("gender", "女性" );
+        set("age", 43);
+        set("long",
+		"李快嘴是一位精明能干的老媒婆。\n");
+        set("combat_exp", 1000);
+	set("give_msg","");
+        set("attitude", "friendly");
+        set("inquiry", ([
+                "婚约" : "是啊... 这里就可以缔结和解除婚约",
+        ]) );
+
+        set_skill("dodge", 50);
+        set_skill("unarmed", 50);
+
+        setup();
+
+        add_money("gold", 1);
+}
+
+void init()
+{
+        //object ob;
+
+        ::init();
+//        if(interactive(ob = this_player()) && !is_fighting()) 
+//	{
+//                remove_call_out("greeting");
+//                call_out("greeting", 1, ob);
+//        }
+        add_action("do_marry", "marry");
+        add_action("do_unmarry", "unmarry");
+}
+
+int do_marry(string arg) 
+{
+        object /*marry_card1, marry_card2 */ ob, me;
+
+	if(environment(this_object())->query("short") != "红娘庄")
+		return notify_fail("真是抱歉，请您等一下到红娘庄来找我吧。\n");
+
+	me = this_player();
+	if(!arg || !objectp(ob = present(arg, environment(me))))
+		return notify_fail("你想和谁缔结良缘？\n");
+
+	if(!userp(ob) && ob->name(1) == "李快嘴")
+	{
+		message_vision("李快嘴不好意思地对$N道：瞧我都一大把年记了，"
+				+ "不要拿我老人家开玩笑了！\n", me);
+		return 1;
+	}
+
+        if(me->query("marks/married"))
+                return notify_fail("你与 " + me->query("marks/married")
+			+ " 已有婚约，还是先离了婚再说吧。\n");
+        
+	if(ob->query("marks/married"))
+		return notify_fail(ob->name(1) + "与 " + ob->query("marks/married")
+			+ " 有婚约在先，还是等离了婚再说吧。\n");
+
+        if(!living(ob))
+		return notify_fail(ob->name() + "目前无法和你缔结良缘。\n");
+
+	if(ob == me) return notify_fail("你想同你自己缔结婚约？\n");
+
+        if((string)ob->query("gender") == (string)me->query("gender"))
+                return notify_fail("你不怕" + RED"ＡＩＤＳ"NOR + "吗？\n");
+
+	if(me->query("class") == "bonze"
+	|| me->query("class") == "taoist"
+	|| me->query("class") == "lama")
+		return notify_fail("出家人也想结婚？ 还是先还俗再说吧。\n");
+
+        if((((int)me->query("age") < 18)
+	&&((string)me->query("gender") == "男性"))
+	||(((int)me->query("age") < 16)
+	&&((string)me->query("gender") == "女性")))
+		return notify_fail("你年岁还太小，等长大了再说吧。\n");
+
+	if((((int)ob->query("age") < 18)
+        &&((string)ob->query("gender") == "男性"))
+        ||(((int)ob->query("age") < 16)
+        &&((string)ob->query("gender") == "女性")))
+		return notify_fail(ob->name(1) 
+				+ "年岁还太小，等长大了再说吧。\n");
+
+        if(!ob->query_temp("ask_marry"))
+	{
+                message_vision(MAG "\n$N对著$n说道：" 
+			+ RANK_D->query_self(me) 
+			+ me->name() + "，愿意和"
+			+ RANK_D->query_respect(ob) 
+			+ "结为夫妇\n\n"NOR, me, ob); 
+
+		me->set_temp("ask_marry", 1);
+		tell_object(ob, MAG "如果你愿意和对方结为夫妇，请你也对" 
+                        + me->name() + "("+(string)me->query("id")+
+                        ")"+ "下一次（ｍａｒｒｙ）指令。\n" NOR);
+                write(MAG "现在你急切盼望着你的心上人说同意...\n" NOR); 
+                return 1;
+        }
+        
+	me->set("marks/married", ob->query("id"));
+	me->set("married_with/" + ob->query("id"), me->query("age"));
+	ob->set("marks/married", me->query("id"));
+	ob->set("married_with/" + me->query("id"), ob->query("age"));
+	ob->delete_temp("ask_marry");
+        
+        message_vision(MAG "恭喜$N和$n，一对璧人喜结良缘。\n" NOR, ob, me);
+
+        CHANNEL_D->do_channel(this_object(), "chat",
+		sprintf(RED"%s和%s现在开始是夫妇啦! \n"NOR, 
+		me->name(1), ob->name(1)));
+
+        return 1;
+}
+
+int do_unmarry(string arg)
+{
+        object/* marry_card1,marry_card2, */ me, ob;
+	string WHO;
+             
+	if(environment(this_object())->query("short") != "红娘庄")
+		return notify_fail("真是抱歉，请您等一下到红娘庄来找我吧。\n");
+
+        me = this_player();       
+	if(!arg )
+		return notify_fail("你想与谁解除婚约？\n");
+
+	if(ob == me) return notify_fail("你想同你自己解除婚约？\n");
+	if(!me->query("marks/married"))
+		return notify_fail("你还没结婚呢，就想离婚啦！\n");
+
+	if(me->query("marks/married") != arg )
+		return notify_fail("你想与谁离婚？\n");
+
+	if(!me->id(me->query("id")) )
+		return notify_fail("你戴着面具，无法与人离婚。\n");        
+
+	if(me->query("gender") == "男性")
+		WHO = "老婆";
+	else 	
+		WHO = "老公";
+
+ 	if(!objectp(ob = present(arg, environment(me)))) {
+	    if(ob=find_player(arg)) {
+		if(!ob->id(ob->query("id")) )
+                	return notify_fail(ob->name(1) + "戴着面具，无法与人离婚。\n");
+
+		if(ob->query("marks/married") == me->query("id")) 
+		    return notify_fail("你得叫你的"+WHO+"一起到红娘庄来办理。\n");
+		else {
+		    command("poor "+me->query("id") );
+	    	    message_vision("$N说道：想不到你"+WHO+"会中途逃婚，你也不必守这婚约了！\n",this_object());
+		    me->delete("marks/married");
+		    me->set("divorce/" + arg, me->query("age"));
+		    return 1;
+		}
+	    } else {
+		if(file_size("/data/player/login/"+arg[0..0]+"/"+arg+".o")<0) {
+		    command("sigh2 "+me->query("id"));
+		    message_vision("$N说道：想不到你"+WHO+"先你而逝，将来若遇到意中人，可以再来蒂结良缘。\n",this_object());
+		    me->delete("marks/married");
+		    me->set("divorce/" + arg, me->query("age"));
+		    return 1;
+		} else 
+		    	return notify_fail("你得叫你的"+WHO+"一起到红娘庄来办理。\n");
+	     }
+	}
+
+	if(!ob->id(ob->query("id")) )
+               	return notify_fail(ob->name(1) + "戴着面具，无法与人离婚。\n");
+
+	if( ob->query("marks/married") != me->query("id")) { 
+	    	command("poor "+me->query("id") );
+	       	message_vision("$N说道：想不到你"+WHO+"会中途逃婚，你也不必守这婚约了！\n",this_object());
+	   	me->delete("marks/married");
+		me->set("divorce/" + arg, me->query("age"));
+	    	return 1;
+	}
+
+        if(!ob->query_temp("ask_unmarry"))
+	{
+                message_vision(MAG "\n$N对著$n说道：咱们解除" 
+			+ "婚约吧！好吗？\n\n" NOR, me, ob);
+		tell_object(ob, MAG "如果你愿意解除婚约，请你也"
+                	+ "下一次（ｕｎｍａｒｒｙ）指令。\n" NOR);
+                write(MAG "现在你只有等着" + ob->name(1) + "同意啦...\n" NOR);  
+		me->set_temp("ask_unmarry", 1);
+                return 1;
+        }
+
+	me->delete("marks/married");
+	me->add("unmarriage",1);
+	me->set("divorced/" + arg,me->query("age"));
+	ob->delete("marks/married");
+	ob->add("unmarriage",1);
+	ob->set("divorced/" + me->query("id"), ob->query("age"));
+	ob->delete_temp("ask_unmarry");
+        
+	message_vision(MAG "$N和$n从现在开始解除婚约，从此互不相干！\n" NOR, 
+			ob, me);
+        CHANNEL_D->do_channel(this_object(), "chat",
+		sprintf( "%s和%s从现在开始解除婚约，从此互不相干！\n",
+        	me->name(1), ob->name(1)));
+
+        return 1;
+}
+
+int accept_object(object who, object ob)
+{
+        int val;
+	string To;
+        val = ob->value();
+
+        if( !val ) 
+        return notify_fail(""); 
+
+        if( val >= 10000000 ) {
+	    if(who->query("gender") == "男性") To = "姑娘";
+	    else To = "小伙子";
+
+                who->delete("marks/married");
+		who->add("unmarriage",1);
+                tell_object(who,"媒婆悄悄的对你说道：又看上哪位"+To+"了，放心吧，我已经帮你办好手续啦。\n");
+                return 1;
+        } else {
+                message_vision("媒婆冷笑一声，说道：色胆敢包天，怎么才出这一点钱呢？\n",ob);
+                return 0;
+        }
+}
+

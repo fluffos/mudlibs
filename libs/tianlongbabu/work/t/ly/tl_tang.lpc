@@ -1,0 +1,158 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/t/ly/tl_tang.c,v 1.1 2000/03/05 20:38:30 mud Exp $
+ */
+ 
+// tl_tang.c
+
+#include <room.h>
+
+inherit ROOM;
+inherit F_SAVE;
+
+string default_long = "天龙堂上金壁辉煌，四周墙上的金匾记载一个个动人的往事。\n\n";
+
+string query_save_file() { return "/t/ly/ddd/tl_tang"; }
+void update_long();
+
+void create()
+{
+        seteuid(getuid());
+        restore();
+
+        if(!query("short"))
+        {
+                set("short", "天龙堂");
+                set("long", default_long);
+
+                set("exits", ([
+                        "west": "/t/kaifeng/ngate",
+                ]) );
+
+                set("objects", ([
+                        //__DIR__"obj/box" : 1,
+                ]));
+        } else update_long();
+
+        setup();
+}
+
+void init()
+{
+        add_action("do_ke", "ke");
+        add_action("do_delete", "delete");
+        add_action("do_read", "read");
+}
+
+void update_long()
+{
+        int i, title_length;
+        string title, rect = "";
+        mapping records;
+
+        if(records = query("records"))
+
+        for(i=0; i<sizeof(records); i++)
+        {
+                title = records[i]["name"] + "之匾";
+                title_length = sizeof(explode(title, "")) + 4;
+                if(i + 1 < 10) rect = "   ";
+                else rect = "    ";
+
+                while(title_length--)
+                        rect += "*";
+
+                add("long", rect + "\n" + (i + 1) + ". * " + title + " *\n" + rect + "\n");
+                rect = "";
+
+/*
+                if(query("item_desc"))
+                        add("item_desc", ([i + 1 + "": records[i]["text"]]));
+                else
+                        set("item_desc", ([i + 1 + "": records[i]["text"]]));
+*/
+        }
+        
+}
+
+void done_ke(object me, string arg, string text)
+{
+        mapping rec, *records;
+
+        tell_object(me, "刻匾完毕。\n");
+
+        set("long", default_long);
+        //delete("item_desc");
+        
+        rec = allocate_mapping(3);
+        rec["name"] = arg;
+        rec["text"] = text;
+        rec["time"] = time();
+
+        records = query("records");
+        if(!pointerp(records) || !sizeof(records))
+                records = ({ rec });
+        else 
+                records += ({ rec });
+
+        set("records", records);
+        save();
+        update_long();
+        return;
+}
+
+int do_ke(string arg)
+{
+        if(!arg) return notify_fail("请指定一个名字。\n");
+
+        message_vision("$N提起金石笔在金匾上奋笔急书。\n", this_player());
+        this_player()->edit( (: done_ke, this_player(), arg :) );
+
+        return 1;
+}
+
+int do_delete(string arg)
+{
+        int i;
+        mapping *records;
+
+        if(!arg || sscanf(arg, "%d", i) != 1)
+                return notify_fail("你要取下第几张匾？\n");
+        records = query("records");
+        if(i < 1 || i > sizeof(records)) 
+                return notify_fail("你要取下第几张匾？\n");
+        if(!pointerp(records) || !sizeof(records))
+                return notify_fail("这里没有挂着任何金匾。\n");
+        else {
+                message_vision("$N将" + records[i-1]["name"] + "之匾取了下来。\n", this_player());
+                records -= ({ records[i-1] });
+        }
+
+        set("long", default_long);
+        //delete("item_desc");
+        set("records", records);
+        save();
+        update_long();
+
+        return 1;
+}
+
+int do_read(string arg)
+{
+        int i;
+        mapping *records;
+
+        if(!arg || sscanf(arg, "%d", i) != 1)
+                return notify_fail("你要读第几张匾？\n");
+        records = query("records");
+        if(i < 1 || i > sizeof(records)) 
+                return notify_fail("你要读第几张匾？\n");
+        if(!pointerp(records) || !sizeof(records))
+                return notify_fail("这里没有挂着任何金匾。\n");
+        else {
+                this_player()->start_more(records[i-1]["text"]);
+        }
+
+        return 1;
+}
+

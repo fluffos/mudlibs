@@ -1,0 +1,142 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/adm/daemons/new/languaged.c,v 1.5 2000/10/22 05:35:13 mud Exp $
+ */
+ 
+/*
+ * tlbb bg and big5 converter
+ * Rewrited all codes, speed up more than 50 % by cobra@tlbb(Oct 21, 2000)
+ */
+
+#define RESET_LENGTH	8192
+
+#define B2G_bad1	0xa1
+#define B2G_bad2	0xf5
+#define G2B_bad1	0xa1
+#define G2B_bad2	0xbc
+
+#define is_GB1(x)       ((x)>=0xa1 && (x)<=0xf7)
+#define is_GB2(x)       ((x)>=0xa1 && (x)<=0xfe)
+#define is_B51(x)       ((x)>=0xa1 && (x)<=0xfe)
+#define is_B52(x)       (((x)>=0x40 && (x)<=0x7e) || ((x)>=0xa1 && (x)<=0xfe))
+
+inherit         F_SAVE;
+
+private string  tlbb_g2b_table, tlbb_b2g_table;
+
+void            create()
+{
+	seteuid(getuid());
+	restore();
+}
+
+string          query_save_file()
+{
+	return DATA_DIR + "global/languaged";
+}
+
+string          GB2Big5(string str)
+{
+	int             j, k, rlen;
+
+	int             len = strlen(str), i = 0;
+	int             rsc = len / RESET_LENGTH + 1;
+	int             rindex = RESET_LENGTH;
+
+	while (rsc--)
+	{
+		if (rsc)
+			reset_eval_cost();
+		rlen = (rindex > len) ? len : rindex;
+		while (i < rlen)
+		{
+			j = i + 1;
+			if (is_GB1(str[i]) && is_GB2(str[j]))
+			{
+				if ((str[i] >= 0xa1) && (str[i] <= 0xa9))
+				{
+					k = str[i] * 188 + str[j] * 2 - 30590;
+					str[i] = tlbb_g2b_table[k++];
+					str[j] = tlbb_g2b_table[k];
+				} else
+				{
+					k = str[i] * 188 + str[j] * 2 - 31718;
+					str[i] = tlbb_g2b_table[k++];
+					str[j] = tlbb_g2b_table[k];
+				}
+				i += 2;
+			} else
+				i++;
+		}
+		rindex += RESET_LENGTH;
+	}
+	return str;
+}
+
+string          toBig5(string str)
+{
+	if (!stringp(str))
+		return "";
+	return GB2Big5(str);
+}
+
+string          Big52GB(string str)
+{
+	int             j, k, rlen;
+
+	int             len = strlen(str), i = 0;
+	int             rsc = len / RESET_LENGTH + 1;
+	int             rindex = RESET_LENGTH;
+
+	while (rsc--)
+	{
+		if (rsc)
+			reset_eval_cost();
+		rlen = (rindex > len) ? len : rindex;
+		while (i < rlen)
+		{
+			j = i + 1;
+			if (is_B51(str[i]) && is_B52(str[j]))
+			{
+				if ((str[i] >= 0xa1) && (str[i] <= 0xf6))
+				{
+					if ((str[j] >= 0x40) && (str[j] <= 0x7e))
+					{
+						k = str[i] * 314 + str[j] * 2 - 50682;
+						str[i] = tlbb_b2g_table[k++];
+						str[j] = tlbb_b2g_table[k];
+					} else if ((str[j] >= 0xa1) && (str[j] <= 0xfe))
+					{
+						k = str[i] * 314 + str[j] * 2 - 50750;
+						str[i] = tlbb_b2g_table[k++];
+						str[j] = tlbb_b2g_table[k];
+					} else
+					{
+						str[i] = G2B_bad1;
+						str[j] = G2B_bad1;
+					}
+				} else if ((str[i] == 0xf7) && (str[j] >= 0x40) && (str[j] <= 0x55))
+				{
+					k = str[i] * 314 + str[j] * 2 - 50682;
+					str[i] = tlbb_b2g_table[k++];
+					str[j] = tlbb_b2g_table[k];
+				} else
+				{
+					str[i] = G2B_bad1;
+					str[j] = G2B_bad1;
+				}
+				i += 2;
+			} else
+				i++;
+		}
+		rindex += RESET_LENGTH;
+	}
+	return str;
+}
+
+string          toGB(string str)
+{
+	if (!stringp(str))
+		return "";
+	return Big52GB(str);
+}

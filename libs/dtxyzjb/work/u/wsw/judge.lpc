@@ -1,0 +1,738 @@
+//judge.c
+//creat by wsw 2005 1 14
+//流行的杀手游戏
+
+#include <ansi.h>
+inherit NPC;
+
+//int query(string arg);
+
+int jetton;
+string type="";
+string judge = HIW "法官：" NOR;
+string title = HIR "【杀手游戏】"NOR;
+//int    filter_listener(object ob);
+//object *listeners ;
+void announce (string str);
+int player_init();
+void do_game();
+int check_player(object who);
+void join_player(object who);
+void game_kill(string arg);
+void finish_toupiao();
+int is_finish();
+int do_list();
+string list();
+string jiangli(string str,int v);
+
+void create()
+{
+  set_name(HIW"法官"NOR, ({ "judge", "faguan" }));
+    set("title",HIR "【杀手游戏】"NOR);
+  set("gender", "男性");
+  set("age", 50);
+  set("per", 30);
+  set("combat_exp", 300000);
+  set_skill("force", 80);
+  set_skill("spells", 80);
+  set_skill("unarmed", 80);
+  set_skill("dodge", 80);
+  set_skill("parry", 80);
+  set("gin", 3000);
+  set("max_gin", 3000);
+  set("kee", 3000);
+  set("max_kee", 3000);
+  set("sen", 3000);
+  set("max_sen", 3000);
+  set("force", 1000);
+  set("max_force", 1000);
+  set("mana", 1000);
+  set("max_mana", 1000);
+  set("force_factor", 80);
+  set("chat_chance", 100);
+
+  set("inquiry", ([
+    "here":      "此乃杀手游戏娱乐之地也。\n",
+    "game":  WHT"\n杀手游戏是一种休闲的娱乐游戏。
+    	init <gold> [n]		启动游戏（练习赛、黄金赛(1~1000gold）
+    	start					开始游戏
+    	join					报名参加游戏
+    	list					列出参加游戏的人员
+    	toupiao					投票决定谁是杀手
+    	gamekill				杀手杀死一个人\n"
+		,
+    ]));
+  setup();
+  carry_object("/d/obj/cloth/jinpao")->wear();
+
+}
+
+
+
+void init ()
+{
+  add_action ("do_init","init");
+  add_action ("do_start","start");
+  add_action ("do_join","join");
+  add_action ("do_gamekill","gamekill");
+  add_action ("do_toupiao","toupiao");
+  add_action ("do_list","list");
+//  add_action ("do_join_all","join_all");
+}
+
+
+
+int do_init (string arg)
+{
+  object me = this_object();
+  object who = this_player();
+  object room = environment(me);
+  int i, j, exp, low;
+  string str;
+  
+  //listeners = filter_array(users(), (: filter_listener :));
+
+  if (query("status") > 0 ) 
+     return notify_fail("杀人游戏正在进行中······\n");
+     
+  if (!arg) {
+  	title += WHT"练习赛"NOR;
+  	type = "lianxi";
+  }
+/*  else if (sscanf(arg, "qn %d", jetton) ==1 && jetton >= 100 && jetton <= 200) {
+  	title +=HIY"潜能赛"NOR;
+  	type = "qn";
+  }*/
+  else if (sscanf(arg, "gold %d", jetton) ==1 && jetton >=1 && jetton <= 1000)  {
+  	title +=HIY"黄金赛"NOR;
+  	type = "gold";
+  }
+  else return notify_fail("命令格式:init <qn|gold> [n] (潜能赛或黄金赛）\n");
+      
+  
+  set("status",1); //0报名阶段
+  set("renshu/zongshu",0); //参加游戏的人数.
+  set("renshu/killer",0);//现在杀手数量
+  set("renshu/baixing",0);//现在百姓数量
+  
+  str = judge+title+WHT"现在开始！"NOR;
+  switch (type) {
+  	case "qn":	str +=WHT"参数押金数量："+ jetton + "点潜能。\n"NOR;
+  				break;
+  	case "gold":str += WHT"参赛押金数量:"+ jetton + "金。\n"NOR;
+  				break;
+  }
+  str += judge+WHT"玩家开始报名(join)！\n"NOR;
+  announce (str);
+
+  return 1;
+}
+
+int do_start()
+{
+    object who = this_player();
+    
+    if (!who) return 0;
+    
+  	if (!intp(query("status")) || query("status") != 1) 
+  		return 0;
+  		
+	if (query("renshu/zongshu") < 6) 
+		return notify_fail("玩家人数不够也。\n");
+
+
+    announce (judge+title+WHT+"现在开始！开始分配游戏角色！\n"NOR);
+    if (!player_init()) {
+    	announce (judge+title+WHT+"分配游戏角色失败，取消游戏！\n"+NOR);
+    	return 1;
+    }else announce (judge+title+WHT+"分配游戏角色完毕。\n"+NOR);
+    
+    do_game();
+    return 1;
+}
+
+int do_join (string arg)
+{
+  object me = this_object();
+  object who = this_player();
+  string str;
+
+  if (!who) return 0;
+  str =who->query("name")+"("+who->query("id")+")";	
+	
+  if (!intp(query("status")) || query("status") != 1) {
+    message_vision ("$N对$n摇摇头：杀人游戏现在不接受报名。\n",me,who);
+    return 1;
+  }
+  
+  if (type =="qn" && ((int)who->query("potential") - (int)who->query("learned_points")) < jetton)
+  		return notify_fail("你不够参赛条件，至少需要"+jetton+"点潜能。\n");
+  		
+  if (type == "gold" && who->query("balance") < jetton*10000)
+  		return notify_fail("你不够参赛条件，至少需要"+jetton+"两黄金的存款。\n");
+  		
+  switch (check_player(who)) {
+  	case 0:   return notify_fail("同一IP只能有一人参加杀人游戏。\n");      //ip相同
+  	case 1:		return notify_fail("你已经报过名了。\n");		//已经报名
+  	
+  }
+
+
+	join_player(who);      //加入此玩家
+
+    announce (judge+title+WHT+str+"应邀前来参加"+title+"！\n"+NOR);
+    return 1;
+ }
+
+
+void die ()
+{
+  object me = this_object();
+
+  message_vision ("\n$N从地上甩袖爬将起来。\n",me);
+  set("kee", 3000);
+  set("sen", 3000);
+}
+
+void unconcious()
+{
+  die();
+}
+
+void accept_fight (object ob)
+{
+  object me = this_object();
+
+  message_vision ("$N连忙闪身：老夫有事在身，失陪！\n",me);
+}
+
+void kill_ob (object ob)
+{
+  object me = this_object();
+
+  message_vision ("$N连忙闪身：老夫有事在身，失陪！\n",me);
+  me->remove_all_killer();
+  all_inventory(environment(me))->remove_killer(me);
+}
+
+void join_player(object who)
+{    
+	switch (type) {
+		case "qn":	who->add("potential",-jetton);
+					break;
+		case "gold":who->add("balance",-jetton*10000);
+					break;
+	}
+	
+	//ip,role,状态,票数,投票与否（0没1已投）
+	set("member/"+who->query("id"),({query_ip_number(who),"百姓",1,0,0}));
+	add("renshu/zongshu",1); //参加游戏的人数.
+//  	set("renshu/killer",0);//现在杀手数量
+  	add("renshu/baixing",1);//现在百姓数量
+
+}
+
+int check_player(object who)
+{
+	mapping member;
+	string *id,ip;
+	mixed  *statue;
+	int i;
+	
+	member = query("member");
+	if (!member) return 2;
+	id = keys(member);
+	
+	if (member_array(who->query("id"),id) >= 0) return 1;
+	
+	ip=query_ip_number(who); 
+	statue = values(member);
+	for(i=0;i<sizeof(statue);i++) {
+		if (ip == statue[i][0]) return 0;	
+	}
+	
+	return 2;
+	 	
+	
+}
+
+
+int player_init()
+{
+	int kills,i=0;
+	mapping member;
+	string *ids,id,*killer=allocate(10),kill;
+	mixed *statue;
+	object ob;
+	
+	kills = (int)query("renshu/zongshu")/4;
+	
+	while (kills > 0) {
+		member = query("member");
+		ids = keys(member);
+		id = ids[random(sizeof(ids))];
+		statue = member[id];
+		if (statue[1] == "百姓") {
+			statue[1] = "杀手";
+			set("member/"+id,statue);
+			add("renshu/killer",1);
+			add("renshu/baixing",-1);
+			killer[i]=id;
+			i++;
+			kills--;	
+		}
+	}
+	
+	kill = implode(killer,"，");
+	member = query("member");
+	ids = keys(member);
+	for(i=0;i<sizeof(ids);i++) {
+		ob=find_player(ids[i]);
+		if ( !ob ) continue;
+		if (member_array(ids[i],killer) >=0 )  //如果是杀手
+			tell_object(ob,BLK+HIG+"杀人游戏分配你的角色是杀手，你的同伴有"+kill+"。\n"+NOR); 
+		else 	tell_object(ob,BLK+HIG+"杀人游戏分配你的角色是百姓，请保护好自己。\n"+NOR);	
+	}
+	
+	return 1;
+		
+
+}
+
+void do_game()
+{    
+	mapping member;
+	mixed statue;
+	string *ids, str;
+	int i;
+	
+	member = query("member");
+	
+	ids = keys(member);
+	
+	str = "剩下的玩家有：";
+	for (i=0;i<sizeof(ids);i++) {
+		statue = member[ids[i]];
+		if (statue[2] > 0) str += ids[i]+",";
+		statue[3] = 0;
+		statue[4] = 0;
+		set("member/"+ids[i],statue);
+	}
+	
+	add("status",1);
+	
+	
+	
+    announce (judge+title+WHT+"现在开始第"+chinese_number(query("status")-1)+"轮游戏。\n"NOR);
+    announce (title+WHT+str+NOR+"\n");
+   // announce (title+list());
+    announce (title+WHT+"请杀手们商量好，在半分钟以内用“gamekill <对象> ”命令杀死一个百姓。\n"NOR);
+    set("cmd_status","gamekill");
+    
+    remove_call_out("start_toupiao");
+    call_out("start_toupiao",30);	
+}
+
+int do_gamekill(string arg)
+{
+	mapping member;
+	object who = this_player();
+	string id;
+	
+	if (!who) return 0;
+	id = who->query("id");
+	
+	member = query("member");
+	
+	if (!member) return 0;
+	
+	if (member_array(id,keys(member)) < 0) 
+		return 0;
+	
+	if (member[id][1] != "杀手") 
+		return notify_fail("你不能杀人。\n");
+	
+	if (query("cmd_status") != "gamekill") 
+		return notify_fail("现在不能使用这个命令。\n");
+		
+	if (!arg) return notify_fail("你准备杀死谁呢？\n");
+
+//	if (!find_player(arg)) return notify_fail("你准备杀死谁呢？\n");
+	
+	if (member_array(arg,keys(member)) < 0) 
+		return notify_fail(arg+"没有参加杀人游戏。\n");	
+		
+	if (member[arg][2] ==0) 
+		return notify_fail(arg+"已经被杀死了。\n");			
+		
+	if (member[arg][1] == "杀手") 
+		return notify_fail("不要自相残杀。\n");	
+		
+	tell_object(who,BLK+HIG+"你决定杀死"+HIG+arg+"。\n"+NOR);
+		
+	game_kill(arg);
+
+	return 1;
+}
+
+int do_toupiao(string arg)
+{
+	mapping member;
+	object who = this_player();
+	string id,*ids;
+	mixed *statue;
+	int i,j;
+	
+//	if (!who) return 0;
+	
+	id = who->query("id");
+	
+	member = query("member");
+	if (sizeof(member) <= 0) return 0;		
+	ids = keys(member);
+	
+
+	
+	if (member_array(id,ids) < 0) 
+		return 0;
+	
+	if (query("cmd_status") != "toupiao") 
+		return notify_fail("现在不能使用这个命令。\n");
+		
+	if (member[id][2] ==0) 
+		return notify_fail("你已经被杀死了。\n");	
+		
+	statue = member[id];
+	
+	if (statue[4] > 0)  return notify_fail("你已经投过票了。\n");
+		
+	if (!arg) return notify_fail("你认为谁是杀手呢？\n");
+
+//	if (!find_player(arg)) return notify_fail("你认为谁是杀手呢？\n");
+	if (arg == id) return notify_fail("你脑袋短路了？\n");
+	
+	if (member_array(arg,keys(member)) < 0) 
+		return notify_fail(arg+"没有参加杀人游戏。\n");	
+		
+	if (member[arg][2] ==0) 
+		return notify_fail(arg+"已经被杀死了。\n");	
+				
+	statue = member[arg];
+	statue[3] += 1;
+	set("member/"+arg,statue); //被选中的加一票
+	
+	statue = member[id];
+	statue[4] = 1;
+	set("member/"+id,statue);//本人投过票
+	
+	tell_object(who,BLK+HIG+"你认为"+HIG+arg+"是杀手。\n"+NOR);
+	announce (title+HIG+id+WHT+"认为"+HIG+arg+WHT+"是杀手。\n"+NOR);
+
+	//判断投票是否结束
+	member = query("member");
+	ids = keys(member);
+	j = 0;
+	for (i=0;i<sizeof(ids);i++) {
+		if (member[ids[i]][4] == 0 && member[ids[i]][2] != 0) { //没投票，也没死
+			j++;
+			break;
+		}
+	}
+	if (j == 0) {   	//活人全部投过票后，开始计票
+		remove_call_out("finish_toupiao");
+		finish_toupiao(); 
+	}
+	return 1;		
+	
+}
+
+void game_kill(string arg)
+{
+	mapping member;
+	mixed statue;
+	object obj;
+	
+	member = query("member");
+	statue = member[arg];
+	statue[2] = 0;
+	set("member/"+arg,statue);
+	
+	switch (query("cmd_status")) {
+		case "gamekill":
+			obj = find_player(arg);
+			if (obj) {
+				tell_object(obj,BLK+HIG+"杀人游戏正在进行中，这一轮你被杀手杀死了，退出游戏。\n"NOR);
+		    	announce (judge+title+WHT+"正在进行中，这一轮"+obj->query("name")+"("+arg+")"+"被杀手杀死了，退出游戏。\n"NOR);
+			}
+			add("renshu/baixing",-1);
+			set("cmd_status","toupiao");
+			
+			if (is_finish()) return; //判断杀人游戏是否结束
+			
+			announce (judge+title+WHT+"在半分钟以后开始投票，两分钟以内用“toupiao <对象> ”来给你认为是杀手的人投一票。\n"+NOR);
+			
+			delete("cmd_status");
+			
+			remove_call_out("start_toupiao");
+    		call_out("start_toupiao",30);	
+    				
+			remove_call_out("finish_toupiao");
+    		call_out("finish_toupiao",120);
+			break;
+		case "toupiao":
+			obj = find_player(arg);
+			if (obj) {
+				tell_object(obj,BLK+HIG+"杀人游戏正在进行中，这一轮你被大家投票杀死了，退出游戏。\n"NOR);
+		    	announce (judge+title+WHT+"正在进行中，这一轮"+obj->query("name")+"("+arg+")【"+statue[1]+"】被大家投票杀死了，退出游戏。\n"NOR);
+			}
+			
+			if (statue[1] == "百姓")
+				add("renshu/baixing",-1);
+			else 
+				add("renshu/killer",-1);
+			
+			if (is_finish()) return; //判断杀人游戏是否结束
+			
+			do_game();
+			break;
+		default: do_game();
+				 break;
+	}
+
+}
+
+void finish_toupiao()
+{
+	string str, *ids ,max_id;
+	mapping member;
+	mixed *statue;
+	int i, max_piao, j=0;
+	
+	announce (judge+title+WHT+"投票结束，现在开始计票。\n"NOR);
+	
+	str = WHT+"计票结果如下：\n"NOR;
+	
+	member = query("member");
+	ids = keys(member);
+	
+	for (i=0; i<sizeof(ids);i++) {
+		statue = member[ids[i]];
+		if (statue[2] > 0) {   //还活着
+			str += WHT+"ＩＤ：(" + ids[i] + ")\t\t票数：" + chinese_number(statue[3]) +"票。\n"NOR;
+			if (statue[3] > j) { //找出最大票数
+				j = statue[3];
+				max_id = ids[i];
+			}
+		}
+	}
+
+	str += judge+WHT+"根据计票结果，ＩＤ为：" + max_id + "的同志有最大的杀手嫌疑。\n决定将其杀死。\n"NOR;
+	
+	announce (title+str);
+	
+	game_kill(max_id);
+	
+}
+	
+
+
+int is_finish()
+{
+	mapping member;
+	string str, *ids, winer;
+	mixed *statue;
+	int i,	wins, num;
+	object obj;
+	
+	if (query("renshu/killer") <= 0) {
+		str = judge+WHT+"杀手已全部死亡，本局结果：百姓组胜！\n"NOR;
+		winer = "baixing";
+	}
+	else if (query("renshu/killer") >= query("renshu/baixing")) {
+		str =judge+ WHT+"剩余杀手人数已和百姓人数持平，本局结果：杀手组胜！"NOR;
+		winer = "killer";
+	}
+	else return 0;
+	
+	member = query("member");
+	ids = keys(member);
+	str +=WHT+ "剩余选手：\n"+NOR;
+
+	for (i=0;i<sizeof(ids);i++) {
+		statue = member[ids[i]];
+		if (statue[2] > 0) 
+			str +=WHT+"ＩＤ：" + ids[i] + "\t\t角色：" + statue[1] + "\n"NOR;
+	}
+	
+	if (type=="qn" || type =="gold") {
+	  if (type=="qn") type="potential";
+	  else type = "balance";
+	  str += HIY"\n\n现在开始分配赌注！\n"NOR;
+	  
+	  wins = query("renshu/zongshu")*(type=="balance" ?jetton*10000:jetton);
+	  switch (winer) {
+		case "baixing" : 
+			wins = (int)(wins/((int)query("renshu/zongshu")-(int)(query("renshu/zongshu")/4)))	;	 
+			for (i=0;i<sizeof(ids);i++) {
+				statue = member[ids[i]];
+				if (!obj = find_player(ids[i])) continue;
+				if(statue[1] == "杀手") {
+					obj->delete_temp("gamekill");
+					continue;
+				}
+				
+				obj->add(type,wins);
+				str +="\t"+ WHT+obj->query("name")+"("+ids[i]+")赢得了"+jiangli(type,wins)+"。\n"NOR;
+				if (type != obj->query_temp("gamekill/type")) {
+					obj->set_temp("gamekill/type",type);
+					obj->set_temp("gamekill/number",1);
+					continue;
+				}
+				obj->add_temp("gamekill/number",1);
+				num = obj->query_temp("gamekill/number");
+				if (num > 1 ) {  //连赢次数
+					num =num -1;
+					num = (type=="balance"?10000*num*jetton/2:num*jetton/2);
+					obj->add(type,num);
+					//obj->add_temp("gamekill/number",1);
+					str += "\t\t"+WHT+obj->query("name")+"("+ids[i]+")连赢"+chinese_number(obj->query_temp("gamekill/number"))+"把，得到了系统给予的"+jiangli(type,num)+"奖励。\n"NOR;
+				}
+			}
+			break;
+		
+		case "killer"  :
+			wins = (int)( wins/(int)(query("renshu/zongshu")/4));	 
+			for (i=0;i<sizeof(ids);i++) {
+				statue = member[ids[i]];
+				if (!obj = find_player(ids[i])) continue;
+				if(statue[1] == "百姓") {
+					obj->delete_temp("gamekill");
+					continue;
+				}
+				
+				obj->add(type,wins);
+				str += WHT+obj->query("name")+"("+ids[i]+")赢得了"+jiangli(type,wins)+"。\n"NOR;
+				if (type != obj->query_temp("gamekill/type")) {
+					obj->set_temp("gamekill/type",type);
+					obj->set_temp("gamekill/number",1);
+					continue;
+				}
+				obj->add_temp("gamekill/number",1);
+				num = obj->query_temp("gamekill/number");
+				if (num > 1 ) {  //连赢次数
+					num =num -1;
+					num = (type=="balance"?10000*num*jetton/2:num*jetton/2);
+					obj->add(type,num);
+					//obj->add_temp("gamekill/number",1);
+					str += "\t\t"+WHT+obj->query("name")+"("+ids[i]+")连赢"+chinese_number(obj->query_temp("gamekill/number"))+"把，得到了系统给予的"+jiangli(type,num)+"奖励。\n"NOR;
+				}								
+			}
+			break;	
+	  }
+	
+	} 
+	
+	announce (title+str);
+	
+	delete("renshu");
+	delete("member");
+	delete("status");
+	delete("cmd_status");
+	reload_object(this_object()); 
+	return 1;
+
+}
+
+void announce (string str)
+{
+  //command_function ("chat "+str);
+  tell_room(environment(this_object()),str);
+ // message("story", str, listeners);
+}
+
+/*int filter_listener(object ob)
+{
+        if (ob->query("env/no_story")) return 0;
+        return 1;
+}*/
+
+void start_toupiao()
+{
+	string str="";
+	
+	if (query("cmd_status") == "gamekill")
+		str =judge+ WHT"在这一轮杀手放弃杀人。\n"NOR;	
+	set("cmd_status","toupiao");
+	str += WHT"现在可以投票了。\n"NOR;
+	remove_call_out("finish_toupiao");
+	call_out("finish_toupiao",120);
+	announce (title+str);
+}
+
+string list()
+{
+	mapping member;
+	string str, *ids, name;
+	int i, status;
+	mixed statue;
+	object who;
+	
+	member = query("member");
+	status = query("status");
+	
+	if (status <= 0) {
+		str =judge+title +WHT"现在没有进行。\n";
+		return str;
+	}
+	else if (status == 1) 
+		str = judge+title+WHT"正在进行中，现在接受玩家报名。\n"NOR;
+	else str =judge+title+ WHT+"现在进行第"+chinese_number(status-1)+"轮游戏。\n";
+	if (type="gold" || type ="qn") str += WHT+"赌注大小:"+jetton+"。\n"+NOR;
+	str += HIC"人物            状态            角色\n" NOR;
+	str += "=================================================\n";
+	
+	if (sizeof(member)) {
+		ids = keys(member);
+		for (i=0;i<sizeof(ids);i++) {
+			statue = member[ids[i]];	
+			who = find_player(ids[i]);
+    		if (!who) name="不在线";
+    		else name = who->query("name");
+			str += sprintf(WHT"%s(%s)\t\t%14s\t\t%14s\n"NOR,
+			    name,
+				ids[i],
+				statue[2] > 0 ? HIG"游戏中"NOR : HIR"已被杀"NOR,
+				(statue[2] > 0 && ids[i] != this_player()->query("id")) ? WHT"未知"NOR   : (statue[1]=="杀手" ? HIR+statue[1]+NOR : HIG+ statue[1]+NOR ),
+				);
+		}
+	} 
+	str += "=================================================\n";
+	if (status == 1) 
+		str += WHT"现在有"+chinese_number(query("renshu/zongshu"))+"人报名。\n"NOR;
+	else
+		str += WHT"总共有"+chinese_number(query("renshu/zongshu"))+"人进行游戏，目前存活"
+			+ chinese_number(query("renshu/baixing")+query("renshu/killer"))+"人。\n"NOR;
+	return str;
+	
+}
+
+int do_list()
+{
+	tell_object(this_player(),list());
+	return 1;
+}
+/*int query(string arg)
+{
+	if (arg=="no_clean_up") return 1;
+	else return 0;
+}*/
+
+string jiangli(string str,int v)
+{
+	if (str == "balance")
+		return F_VENDOR_SALE->price_string(v);
+	else if (str == "potential")
+		return chinese_number(v)+"点潜能";
+	else return "";
+
+}

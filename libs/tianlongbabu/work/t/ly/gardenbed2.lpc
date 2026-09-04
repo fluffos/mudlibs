@@ -1,0 +1,175 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/t/ly/gardenbed2.c,v 1.2 2000/03/30 05:30:36 mud Exp $
+ */
+ 
+// Room: /ly/gardenbed2.c
+
+#include <ansi.h>
+inherit ROOM;
+int do_sleep(object);
+object have_someone_sleeping(object);
+
+void create()
+{
+        set("short", BLU"花丛深处"NOR);
+        set("long", @LONG
+这里四周被牡丹花包围，香气扑鼻，令人陶醉。暖洋洋的风
+儿吹过，花枝微颤。当夜幕降临，云破月来，花影朦胧。
+LONG
+        );
+
+        set("no_fight", "1");
+
+
+        set("exits", ([ /* sizeof() == 1 */
+        "out" : __DIR__"north3",
+]));
+
+        set("no_clean_up", 0);
+
+        setup();
+}
+
+void init()
+{      
+        object* oblist;
+        object ob, env;
+        
+        add_action("sleeping","sleep");
+        env = this_object();
+        oblist = all_inventory(env);
+
+        if( interactive( ob = this_player())) {
+            if ( wizardp(ob) )  return;
+            if ( sizeof(oblist) <= 1 ) return;
+            if( sizeof(oblist) > 2 ) ob->move(__DIR__"garden12");
+            if( sizeof(oblist) == 2 ) {
+                if( oblist[0]->query("gender") == oblist[1]->query("gender") )
+                ob->move(__DIR__"garden1");
+            }
+        }
+}
+
+int sleeping()
+{
+        object me = this_player();
+        if(me->is_busy()) return notify_fail("你正忙着呢！\n");
+        call_out("do_sleep",1,me);
+        return 1;
+}
+
+int do_sleep(object me)
+{
+        object who, *inv;
+        int i;
+        string str;
+
+        if(me->is_busy()) return notify_fail("你还没睡醒呢！\n");
+
+        // remove all staff before sleepping :P
+        inv = all_inventory(me);
+        for(i=0; i < sizeof(inv); i++ ) {
+            if( inv[i]->query("equipped") == "worn" ) {
+                if( inv[i]->unequip() ) {
+                    if( !stringp(str = inv[i]->query("remove_msg")) )
+                        switch(inv[i]->query("armor_type")) {
+                                case "cloth":
+                                case "armor":
+                                case "surcoat":
+                                case "boots":
+                                        str = YEL "$N将$n脱了下来。\n" NOR;
+                                        break;
+                                case "bandage":
+                                        str = YEL "$N将$n从伤口处拆了下来。\n" NOR;
+                                        break;
+                                default:
+                                        str = YEL "$N卸除$n的装备。\n" NOR;
+                        }
+                message_vision(str, me, inv[i]);
+                }
+            } else if ( inv[i]->query("equipped") == "wielded" ) {
+                if(inv[i]->unequip() ) {
+                    if( !stringp(str = inv[i]->query("unwield_msg") )) 
+                        str = YEL "$N放下手中的$n。\n" NOR;
+                message_vision(str, me, inv[i]);
+                }
+            }
+        }
+
+        me->start_busy(7);
+
+        if( who = have_someone_sleeping(me) )
+            message_vision(YEL"$N为$n盖上衣服，在$p身边轻轻躺下，"
+                        + "渐渐入梦。\n"NOR, me,who);
+        else
+            message_vision(CYN"$N在花丛中躺下，"
+                        + "伴着花香渐渐入梦。\n"NOR, me);
+        me->set_temp("sleeping",1);
+        call_out("complete_sleep",10, me);
+        return 1;
+}
+
+object have_someone_sleeping(object me)
+{
+        object room;
+        object* oblist;
+        int i;
+
+        room= this_object();
+        oblist = all_inventory(room);
+
+        for ( i = 0; i < sizeof(oblist); i++ ) {
+                if(userp(oblist[i]) && oblist[i]->query_temp("sleeping")
+                        && oblist[i] != me )
+                return oblist[i];
+        }
+        return 0;
+}
+
+
+int complete_sleep(object me) 
+{
+        int eff_kee, eff_gin, max_force, max_atman;
+
+        if (environment(me)==this_object()){
+            if(me->can_afford(1000)) 
+            {
+                me->pay_money(1000);
+                eff_kee = me->query("eff_kee");
+                eff_gin = me->query("eff_gin");
+                max_force = me->query("max_force");
+                max_atman = me->query("max_atman");
+                
+                me->set("force",max_force);
+                me->set("atman",max_atman);
+                me->set("gin",eff_gin);
+                me->set("kee",eff_kee);
+        
+                tell_object(me, HIG "你一觉醒来，觉得身体完全恢复了！\n" NOR);
+            } else
+                tell_object(me, HIC "你一觉醒来，只觉浑身酸疼，精神不济。\n" NOR);
+        }
+        me->delete_temp("sleeping");
+//      me->stop_busy();
+        return 1;
+}
+
+void reset()
+{
+        object          *inv;
+        int             i;
+
+        ::reset();
+        inv = all_inventory(this_object());
+        if( sizeof(inv) != 1) {
+            for(i=sizeof(inv)-1; i>=0; i--)
+                if(!wizardp(inv[i])) {
+                    if(userp(inv[i]))
+                        inv[i]->move(__DIR__"garden12");
+                    else destruct(inv[i]);
+                }
+        }
+}
+
+

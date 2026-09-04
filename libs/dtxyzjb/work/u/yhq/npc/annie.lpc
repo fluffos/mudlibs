@@ -1,0 +1,262 @@
+// fangzhang, the one in jail.
+// created by mes, updated 6-21-97 pickle
+
+/************************************************************/
+#include <ansi.h>
+inherit NPC;
+
+string quest_complete();
+int annouce_adjust(object me);
+string answer();
+string check_gift();
+int do_add(string arg);
+int do_subtract(string arg);
+int do_finalized(string arg);
+
+string method="
+具体指令如下：
+
+降低天赋：subtract <arg>
+增加天赋：add <arg>
+检查情况：state
+决定接受：finalize
+
+这里的 <arg> 是天赋的缩写：
+
+膂力：str    胆识：cor    悟性：int    灵性：spi
+定力：cps    容貌：per    根骨：con    福缘：kar
+
+";
+int total = 0;
+int credit = 0;
+mapping points=([]);
+mapping gift=([
+        "str"           : "膂力",
+        "cor"           : "胆识",
+        "int"           : "悟性",
+        "spi"           : "灵性",
+        "cps"           : "定力",
+        "per"           : "容貌",
+        "con"           : "根骨",
+        "kar"           : "福缘",
+]);
+string *gift_name=({ "kar", "con", "per", "cps", "spi", "int", "cor", "str", });
+/************************************************************/
+void create()
+{
+   set_name("安妮",({"annie","an ni","luo"}));  
+            set("title","天赋小使者");  
+  set("gender", "女性");
+  set("age", 26);
+  set("long","天上人间负责修改天赋的使者，手里拿着一只水晶棒。  \n");  
+  set("combat_exp",5000);
+  set("str",30);
+  set("per",30);
+  set("int",30);
+  set("attitude", "peaceful");
+  set("inquiry", ([
+                  "name"   : "小女子安妮是也。",  
+                             "here"   : "在这里你可以修改自己的$HIR$天赋$NOR$。",  
+                             "rumors" : "瞎打听什么，赶紧修改天赋好开始你在天上人间的旅程。",  
+                             "天上人间"   : "很有意思的泥巴游戏哦！",  
+                   "rescue" : (: quest_complete :),
+                   "搭救"   : (: quest_complete :),
+                   "修改"   : (: answer :),
+                   "xiugai" : (: answer :),
+                   "天赋"   : (: check_gift :),
+                   "tianfu" : (: check_gift :),
+                   ]));
+  setup();
+  carry_object("/d/obj/cloth/linen")->wear();
+}
+/************************************************************/
+void init()
+{
+    add_action("do_add", "add");
+    add_action("do_add", "jia");
+    add_action("do_subtract", "subtract");
+    add_action("do_subtract", "jian");
+    add_action("do_state", "state");
+    add_action("do_state", "chakan");
+    add_action("do_finalize", "finalize");
+    add_action("do_finalize", "jueding");
+}
+/************************************************************/
+string quest_complete()
+{
+  object monk=this_object(), me=this_player();
+  string served;
+
+  if (stringp(served=query("serving"))
+   && served != me->query("id"))
+    
+  if (me->query("tianfu") >= 1)
+  {
+      tell_object (me,"你已经修改了一次了，什么都得不到了！\n");
+      return "这．．．";
+  }
+  if (served==me->query("id"))
+        return "你不是在修改中吗？";
+  if (!wizardp(me) || !me->query("env/immortal"))
+ 
+  me->set_temp("wudidong/can_ask_monk");
+  set("serving", me->query("id"));
+  call_out("announce_adjustment", 1, me);
+  return "你要修改天赋吗？";
+}
+string answer()
+{
+    object me=this_player();
+
+    if (!me->query_temp("wudidong/ready_to_change_gifts"))
+        return "我也不清楚。";
+    tell_object(me, method);
+    return "你自己要考虑清楚哦！";
+}
+string check_gift()
+{
+    object me=this_player();
+    string msg;
+    int i=sizeof(gift_name);
+
+    if (!me->query_temp("wudidong/ready_to_change_gifts"))
+        return "我也不清楚。";
+    msg="你目前的天赋如下：\n\n";
+    while (i--)
+    {
+        msg += gift[gift_name[i]]+"：["+me->query(gift_name[i])+"]";
+        if (i==4) msg += "\n";
+        else msg += "\t";
+    }
+    msg += "\n";
+    tell_object(me, msg);
+    return "你要考虑清楚哦！";
+}
+
+int announce_adjustment(object me)
+{
+    object monk=this_object();
+    string myrespect=RANK_D->query_respect(me), msg;
+    
+    command("consider");
+    
+    msg=monk->name()+"答应帮助你从新调整天赋！\n";
+    msg+="你一共可以改变五点天赋，先由某一项上减掉，再加到另一项上。\n";
+    msg+=method;
+    tell_object(me, msg);
+    tell_object(me, CYN+monk->name()+"附耳道："+myrespect+"若是不知怎么修改天赋，或想知道现在天赋如何，可以问我。\n"NOR);
+    me->set_temp("wudidong/ready_to_change_gifts", 1);
+    return 1;
+}
+int do_subtract(string arg)
+{
+    object me=this_player();
+    if (this_player()->query("id")!=query("serving"))
+        return 0;
+    if (!me->query_temp("wudidong/ready_to_change_gifts"))
+        return 0;
+    if (!arg) return notify_fail("请选择你要降低的天赋。 (ask monk about 天赋)\n");
+    if(arg != "str"
+    && arg != "cor"
+    && arg != "int"
+    && arg != "spi"
+    && arg != "cps"
+    && arg != "per"
+    && arg != "con"
+    && arg != "kar")
+        return notify_fail("这个 "+arg+" 不是一项天赋。\n"); 
+    if (credit >= 5)
+        return notify_fail("你总共只能改变五点天赋，请用 state 查你现在的选择。\n");
+    if (total >= 5)
+        return notify_fail("你总共只能改变五点天赋，请用 state 查你现在的选择。\n");
+    if (me->query(arg) <= 10)
+        return notify_fail("你不能将一项天赋降低到十点以下。(ask monk about 天赋)\n");
+    credit++;
+    total+=1;
+    points[arg]-=1;
+    tell_object(me, "你决定降低一点"+gift[arg]+"！你现在还有"+chinese_number(total)+"点天赋可以分配。\n");
+    return 1;
+}
+int do_add(string arg)
+{
+    object me=this_player();
+    
+    if (!me->query_temp("wudidong/ready_to_change_gifts"))
+        return 0;
+
+    if (!arg) return notify_fail("请选择你要增加的天赋。 (ask monk about 天赋)\n");
+    if (member_array(arg, gift_name) == -1)
+        return notify_fail("这个 "+arg+" 不是一项天赋。\n"); 
+    if (total <= 0)
+        return notify_fail("你总共只能改变三点天赋，请用 state 查你现在的选择。\n");
+    if (me->query(arg) >= 30)
+        return notify_fail("你不能将一项天赋增加到三十点以上。(ask monk about 天赋)\n");
+    total-=1;
+    points[arg]+=1;
+    tell_object(me, "你决定增加一点"+gift[arg]+"！你现在还有"+chinese_number(total)+"点潜能可以分配。\n");
+    return 1;
+}
+/************************************************************/
+int do_state(string arg)
+{
+    object me=this_player();
+    string msg;
+    int i=sizeof(gift_name), count;
+
+    if (this_player()->query("id")!=query("serving"))
+        return 0;
+    if (!me->query_temp("wudidong/ready_to_change_gifts"))
+        return 0;
+    msg="你目前还有"+chinese_number(total)+"点天赋可以分配。\n";
+    while(i--)
+    {
+        if((count=points[gift_name[i]]) > 0)
+            msg+="你准备将"
+                +gift[gift_name[i]]
+                +"增加"
+                +chinese_number(count)
+                +"点。\n";
+        else if(count < 0)
+            msg+="你准备将"
+                +gift[gift_name[i]]
+                +"降低"
+                +chinese_number(-count)
+                +"点。\n";
+        continue;
+    }
+    tell_object(me, msg);
+    return 1;
+}
+int do_finalize(string arg)
+{
+    object me=this_player();
+    string msg;
+    int i=sizeof(gift_name), count;
+    if (me->query_temp("wudidong/doing"))
+       return 0;
+    me->set_temp("wudidong/doing",1);
+    if (this_player()->query("id")!=query("serving"))
+        return 0;
+    if (!me->query_temp("wudidong/ready_to_change_gifts"))
+        return 0;
+     msg=YEL+this_object()->name()+"挥动手中的水晶棒向$N一指，喝声「变」！\n"NOR;    message_vision(msg, me);
+    while(i--)
+    {
+        if(!count=points[gift_name[i]])
+            continue;
+        me->add("gift_adjust/"+gift_name[i], count);
+        me->add(gift_name[i], count);
+        if (count >= 0)
+                tell_object(me, YEL"你的"+gift[gift_name[i]]+"被增加了"+
+                        chinese_number(points[gift_name[i]])+
+                        "点！\n"NOR);
+        else
+                tell_object(me, YEL"你的"+gift[gift_name[i]]+"被减少了"+
+                        chinese_number(-points[gift_name[i]])+
+                        "点！\n"NOR);
+        continue;
+    }
+    tell_object(me, YEL"恭喜！你的天赋改变了,你可以开始游戏了！\n"NOR);
+
+
+

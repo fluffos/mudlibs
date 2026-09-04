@@ -1,0 +1,358 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/t/kaifeng/npc/betman.c,v 1.1 2000/03/05 20:32:03 mud Exp $
+ */
+ 
+#include <ansi.h>
+
+inherit NPC;
+
+string addoil(object ob);
+void final();
+void pay_him(object who, int amount);
+
+void create()
+{
+	set_name("包之尊", ({ "bao" }));
+	set("long", "包之尊天丰赌坊的挡手，一对骰子使得神出鬼莫。\n");
+        set("attitude", "friendly");
+	set("nickname", HIW "至尊宝" NOR);
+        set("max_force", 800);
+        set("force", 800);
+	set("force_factor", 50);
+        set("age", 33);
+        set("gender", "男性" );
+        set("str", 35);
+        set("cor", 30);
+
+        set("too_late", 0);
+	set("werfen", 0);
+	set("combat_exp", 10000000);
+
+	set_temp("apply/damage", 600);
+
+        set_skill("unarmed", 200);
+        set_skill("dodge", 200);
+
+        setup();
+
+        carry_object("/obj/cloth")->wear();
+	add_money("gold", 2);
+}
+
+void init()
+{
+        object ob;
+
+        ::init();
+        if(interactive(ob = this_player()) && !is_fighting())  
+	{
+                remove_call_out("greeting");
+                call_out("greeting", 1, ob);
+        }
+        //add_action("do_bet", "bet");
+	//add_action("do_sa", "sa");
+}
+
+void greeting(object ob)
+{
+        if(!ob || environment(ob) != environment()) return;
+        switch(random(3)) 
+	{
+	case 0:
+		say("包之尊笑咪咪地道：这位" + RANK_D->query_respect(ob)
+				+ "，来玩两手，开开心吧。\n");
+		break;
+	case 1:
+		say("包之尊晃动着手中的骰子，叫道：这位"
+			+ RANK_D->query_respect(ob)
+			+ "，小赌怡兴，大赌过瘾，来玩两手吧！\n");
+		break;
+	case 2:
+		say("包之尊微笑道：这位" + RANK_D->query_respect(ob)
+				+ "，看了这半天，下场来玩玩吧。\n");
+		break;
+        }
+
+        return;
+}
+ 
+string *dice = ({
+"
+	◎
+
+",
+"
+	◎
+
+	◎
+
+",
+"
+	◎
+	  ◎
+            ◎
+
+",
+"
+	◎  ◎
+	
+	◎  ◎
+",
+" 
+	◎  ◎
+	  ◎
+	◎  ◎
+",
+"
+	◎  ◎
+	◎  ◎
+	◎  ◎
+"
+});
+
+int do_bet(string arg)
+{
+        int bet_amt;
+        object me, silver;
+	string bet_type, msg;
+
+        if(!arg || sscanf(arg, "%d on %s", bet_amt, bet_type) != 2)
+		return notify_fail("bet <银量> on <大|小>\n");
+
+	if(bet_type != "大" && bet_type != "小")
+		return notify_fail("只能赌大小！\n");
+        me = this_player();
+        if(me->is_busy())
+	{
+		command("say " + me->name() + "，别那么急吗，慢慢来。");
+		return 1;
+	}
+
+        silver = present("silver_money", me);
+        if(!silver) return notify_fail("你身上没有银子。\n");
+
+        if((int)silver->query_amount() < bet_amt)
+		return notify_fail("你身上没有那麽多银子。\n");
+
+        //if(bet_amt < 10)
+	if(bet_amt < 1)
+		return notify_fail("这里最小赌注是十两银子。\n");
+
+        if((int)this_object()->query("too_late") 
+	&& (this_object()->query("gambler") != me))
+	{
+		command("say 可惜呀" + me->name() + "，这场来不及了，"
+			+ " 还是等下一场吧。");
+		return 1;
+		//return notify_fail("这场来不及了，还是等下一场吧。\n");
+	}
+
+	silver->add_amount(- bet_amt);
+	me->start_busy(1);
+        if((int)me->query("gamble_amount"))
+        { 
+		if(me->query("gamble_type") != bet_type)
+		{
+			message_vision("包之尊冷笑着对$N道："
+				+ "这就是你的不对了，同一场中怎能"
+				+ "下不同的注呢！\n", me); 
+			//return notify_fail("不可在同场中下不同的注。\n");
+			return 1;
+		}
+		message_vision("$N又从身上拿出" + chinese_number(bet_amt)
+				+ "两白银，加压在银杠上。\n", me);
+		message_vision("包之尊高声叫道：" + me->name() + "加压"
+				+ chinese_number(bet_amt)
+				+ "两银子在" + bet_type + "上。\n", me);
+                me->add("gamble_amount", bet_amt);
+		//bet_amt += (int)me->query("gamble_amount");
+        } else {
+		message_vision("$N从身上拿出" + chinese_number(bet_amt)
+				+ "两白银，压在银杠上。\n", me);
+		message_vision("包之尊高声叫道：" + me->name() + "压"
+				+ chinese_number(bet_amt)
+				+ "两银子在" + bet_type + "上。\n", me);
+		me->set("gamble_amount", bet_amt);
+		me->set("gamble_type", bet_type);
+	}
+	msg = addoil(me);
+	message_vision(msg, me);
+	this_object()->set("gambler", me);
+	this_object()->set("werfen", 1);
+	this_object()->set("too_late", 1);
+	return 1;
+}
+
+string addoil(object ob)
+{
+        switch(random(3)) 
+	{
+	case 0:
+		return "包之尊向$N笑道：看这位"
+			+ RANK_D->query_respect(ob) + "印堂发亮"
+			+ "再加一注，准赢！\n";
+		break;
+	case 1:
+		return "包之尊大声吆喝道：再加注呀，不加就来不及了！\n";
+		break;
+	case 2:
+		return "包之尊满面红光，对$N耸恿道："
+			+ RANK_D->query_respect(ob) + "福星高照"
+			+ "再往上加一注，没错！\n";
+		break;
+        }
+}
+
+int do_sa(string arg, object ob)
+{
+	object me;
+	string msg;
+
+	if(!ob) me = this_player();
+	else me = ob;
+
+	if(userp(me))
+	{
+		 if(!me->query("gamble_amount"))
+			return notify_fail("你还没下赌注呢。\n");
+		 //if(!arg || arg != "骰子" || arg != "touzi")
+		if(!arg && arg != "骰子" && arg != "touzi")
+			return notify_fail("你想要撒什么？\n");
+		msg = "$N将手中的两粒骰子撒向碗里。\n";
+	} else {
+		if(!me->query("werfen"))
+			return 0;
+
+        	this_object()->set("too_late", 1);
+		msg = "$N从碗中拿起这两粒骰子，在嘴边呵了一口气，接着"
+			+ "将手中的两粒骰子撒向碗里。\n";
+		me->set("werfen", 0);
+	}	
+
+	message_vision(msg, me);
+	message_vision("\n．．．骰子在碗里蹦跳着，发出悦耳的声音．．．\n", me);
+
+        call_out("werfen", 2, me);
+
+	return 1;
+}
+
+void werfen(object ob)
+{
+        int first, second;
+        switch(random(3)) 
+	{
+	case 0:
+		message_vision("\n两粒骰子「叮叮」跳动了几下，停在：\n\n", ob);
+		break;
+	case 1:
+		message_vision("\n两粒骰子在碗中乱转了几下，才停了下来：\n\n", ob);
+		break;
+	case 2:
+		message_vision("\n两粒骰子相互碰撞，各自翻了个身，停在碗底：\n\n", ob);
+		break;
+        }
+
+        first =  random(6);
+	second = random(6);
+	if(userp(ob))
+		//this_object()->set(ob->name(), first + second);
+		this_object()->set("urp", first + second);
+	else
+		//ob->set(ob->name(), first + second);
+		this_object()->set("myp", first + second);
+	//ob->set("betp", first + second);
+	message_vision("\n " + dice[first] + "\n " + dice[second] + "\n", this_object());
+	call_out("do_sa", 2, "", this_object());
+	if(!this_object()->query("werfen"))
+		final();
+	return;
+}
+
+void final()
+{
+	int urpoint, mypoint;
+	object ob;
+	string urname, urtype, msg;
+
+	urpoint = this_object()->query("urp") + 2;
+	mypoint = this_object()->query("myp") + 2;
+	ob = this_object()->query("gambler");
+	urname = ob->name();
+	urtype = ob->query("gamble_type");
+
+	// announce results:
+	msg = "\n包之尊高声叫道：" + urname + "赌" + urtype
+		+ "，"+ chinese_number(urpoint) + "点，"
+		+ "庄家" + chinese_number(mypoint) + "点，";
+		
+	if(urtype == "大")
+	{
+		if(mypoint >= urpoint)
+			msg += "庄家赢，" + urname + "赔！\n";
+		else {
+			msg += urname +"赢，庄家赔！\n";
+			pay_him(ob, ob->query("gamble_amount") * 100 * 2);
+		}
+	} else {
+		if(mypoint > urpoint)
+		{
+			msg += urname +"赢，庄家赔！\n";
+			pay_him(ob, ob->query("gamble_amount") * 100 * 2);
+		} else
+			msg += "庄家赢，" + urname + "赔！\n";
+	}
+	message_vision(msg, this_object());
+	this_object()->set("urp", 0);
+	this_object()->set("myp", 0);
+	this_object()->set("too_late", 0);
+	this_object()->set("gambler", 0);
+	ob->set("gamble_amount", 0);
+	ob->set("gamble_type", 0);
+	return;
+}
+
+void pay_him(object who, int amount)
+{
+        object ob;
+//        object cash, tencash, gold, silver, coin;
+
+        if(amount < 1) amount = 1;
+        if(amount / 1000000) 
+	{
+                ob = new(TENCASH_OB);
+                ob->set_amount(amount / 1000000);
+                ob->move(who);
+                amount %= 1000000;
+        }
+        if(amount / 100000) 
+	{
+                ob = new(CASH_OB);
+                ob->set_amount(amount / 100000);
+                ob->move(who);
+                amount %= 100000;
+        }
+        if(amount / 10000) 
+	{
+                ob = new(GOLD_OB);
+                ob->set_amount(amount / 10000);
+                ob->move(who);
+                amount %= 10000;
+        }
+        if(amount / 100) 
+	{
+                ob = new(SILVER_OB);
+                ob->set_amount(amount / 100);
+                ob->move(who);
+                amount %= 100;
+        }
+        if(amount) 
+	{
+                ob = new(COIN_OB);
+                ob->set_amount(amount);
+                ob->move(who);
+        }
+	return;
+}
+

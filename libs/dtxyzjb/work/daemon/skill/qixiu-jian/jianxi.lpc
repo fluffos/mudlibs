@@ -1,0 +1,162 @@
+//create by huarong 2003/12
+#include <ansi.h>
+
+inherit SSERVER;
+string *where = ({"左","右","前","后","左前","左后","右前","右后","上","左上","右上","前上","后上"});
+string query_name() { return "剑袭"; }
+int perform(object me, object target)
+{
+       int damage, skill,lmt,i;
+       int myexp,youexp,ratio;
+       object weapon=me->query_temp("weapon"),weapon2;
+       object *inv;
+       string msg;
+       inv=all_inventory(me);
+       i=sizeof(inv);
+
+
+        if( !target ) target = offensive_target(me);
+
+        if( !target
+        ||      !target->is_character()
+        ||      !me->is_fighting(target) )
+                return notify_fail(HIR+"「剑袭」"+NOR+"只能对战斗中的对手使用。\n");
+                if(!wizardp(me) && me->query("family/family_name")!="陷空山无底洞")
+             return notify_fail(HIR+"「剑袭」"+NOR+"只有无底洞门人才可以用！\n");
+
+        if( (int)me->query("force") < 2000)
+            return notify_fail("你的内力不够了!\n");
+
+         if( (int)me->query_skill("sword",1) < 250
+          ||me->query_skill_mapped("sword") != "qixiu-jian")
+             return notify_fail("你的「基本剑术」还不到家，无法使用"+HIR+"「剑袭」"+NOR+"！\n");
+
+        if( (int)me->query_skill("kugu-blade",1) < 250 )
+            return notify_fail("你的「枯骨刀」还不到家，无法使用"+HIR+"「剑袭」"+NOR+"！\n");
+
+        if( (int)me->query_skill("blade",1) < 250 )
+            return notify_fail("你的「基本刀法」还不到家，无法使用"+HIR+"「剑袭」"+NOR+"！\n");
+
+        if( (int)me->query_skill("unarmed",1) < 250 )
+            return notify_fail("你的「扑击格斗之技」还不到家，无法使用"+HIR+"「剑袭」"+NOR+"！\n");
+
+
+        if( (int)me->query_skill("yinfeng-zhua",1) < 250 )
+            return notify_fail("你的「阴风爪」还不到家，无法使用"+HIR+"「剑袭」"+NOR+"！\n");
+
+        if( (int)me->query_skill("qixiu-jian",1) < 250 )
+            return notify_fail("你的「七修剑」等级不够，无法推动"+HIR+"「剑袭」"+NOR+"！\n");
+
+        if( (int)me->query_skill("huntian-qigong",1) < 250 )
+            return notify_fail("你的「混天气功」还不到家，无法自由控制剑进行"+HIR+"「剑袭」"+NOR+"！\n");
+
+        me->delete_temp("have/blade");
+        for(int k=0;k<i;k++)
+        {
+          if ( inv[k]->query("skill_type") == "blade" || inv[k]->query("apply/skill_type") == "blade" )
+          {
+           me->set_temp("have/blade",1);
+           weapon2=inv[k];
+           break;
+           }
+         }
+        if ( !me->query_temp("have/blade") )
+             return notify_fail("你身上连柄刀都没有，无法使用"+HIR+"「剑袭」"+NOR+"！\n");
+
+        if( time()-(int)me->query_temp("jianxi_end") < 10 )
+            return notify_fail("此乃无底洞之精髓所在，用多了就烂了！\n");
+
+        myexp=(int)me->query("combat_exp");
+        youexp=(int)target->query("combat_exp");
+        ratio=(myexp/10)/(youexp/1000);
+        if (ratio>300) ratio=300;
+        if (ratio<20)  ratio=20;
+
+        skill=(int)me->query_skill("kugu-blade",1)+(int)me->query_skill("yinfeng-zhua",1)+(int)me->query_skill("qixiu-jian",1);
+        target->add_temp("apply/dodge",-skill/2);
+        target->add_temp("apply/parry",-skill/2);
+        me->delete("env/brief_message");
+        target->delete("env/brief_message");
+        me->set_temp("wddpfm",1);//这里禁止zxzx的效果，见combatd.c   huarong 2003/12
+        lmt=skill/300;
+        if (lmt>5) lmt=5;
+        weapon->set_temp("original/use_apply_skill",weapon->query("use_apply_skill"));
+        weapon->set_temp("original/skill_type",weapon->query("apply/skill_type"));
+
+  message_vision(HIR"\n$N"+HIR+"喃喃的念了两句，双目尽赤，手中"+HIG+weapon->query("name")+HIR+"突然消失不见！\n"NOR,me,target);
+  for(int j=1;j<=lmt;j++)
+        {
+        me->add("force",-60);
+        msg=HIM+"\n"+weapon->query("name")+HIM+"若隐若现，突然从"+HIR+where[random(sizeof(where))]+"方"+HIM+"射向$n。\n"NOR;
+        message_vision(msg,me,target);
+        if (random(myexp+youexp)>youexp/2)
+          {
+           damage = random(skill/4)+skill/4;
+           damage=damage*ratio/100;
+           target->receive_wound("kee", random(damage/2),me);
+            target->receive_damage("kee", damage,me);
+            message_vision(HIR"$n"+HIR+"闪避不及，被$N"+HIR+"的剑击中，口中鲜血狂喷而出！\n"NOR,me,target);
+            if (wizardp(me) && me->query("env/combat")=="verbose")
+                   tell_object(me, sprintf(HIM+BLINK+"damage: %d\n" NOR, damage));
+                COMBAT_D->report_status(target);
+           }
+         else
+          {
+              damage=0;
+               message_vision(HIM"只见$N"+HIM+"狼狈的从剑尖下躲了过来。\n"NOR,target);
+           }
+            if(damage>0)
+              {
+               msg=HIY+"$N"+HIY+"见"+weapon->query("name")+HIY+"突袭成功，跟着又是一刀！"NOR;
+               message_vision(msg,me,target);
+               me->set("actions", (: call_other, SKILL_D("kugu-blade"), "query_action" :) );
+               weapon->set("use_apply_skill",1);
+               weapon->set("apply/skill_type","blade");
+               damage=COMBAT_D->do_attack(me, target,weapon2);
+               if(damage>0)
+                 {
+                 msg=HIY"$N"+HIY+"杀得兴起，手腕一抖，反手又是一刀！"NOR;
+                 message_vision(msg,me,target);
+                 target->add_temp("apply/dodge",-skill/2);
+                 target->add_temp("apply/parry",-skill/2);
+                 COMBAT_D->do_attack(me, target,weapon2);
+                 target->add_temp("apply/dodge",skill/2);
+                 target->add_temp("apply/parry",skill/2);
+                 }
+               }
+            else
+              {
+               msg=HIB+"$N"+HIB+"见"+weapon->query("name")+HIB+"未中，将体内的真气凝聚于双爪，爪向$n！"NOR;
+               message_vision(msg,me,target);
+               me->set("actions", (: call_other, SKILL_D("yinfeng-zhua"), "query_action" :) );
+               weapon->set("apply/skill_type","unarmed");
+               damage=COMBAT_D->do_attack(me, target);
+               if(damage<=0)
+                 {
+                   msg=HIB"$N"+HIB+"一爪未中，双爪一变，仍爪向$n！"NOR;
+                   message_vision(msg,me,target);
+                   target->add_temp("apply/dodge",-skill/2);
+                   target->add_temp("apply/parry",-skill/2);
+                   COMBAT_D->do_attack(me, target);
+                   target->add_temp("apply/dodge",skill/2);
+                   target->add_temp("apply/parry",skill/2);
+                 }
+               }
+             me->set("actions", (: call_other, SKILL_D("qixiu-jian"), "query_action" :) );
+             weapon->set("apply/skill_type","sword");
+        }
+
+      message_vision(HIG"\n$n"+HIR+"在空中刺了一圈，又飞回到$N"+HIR+"手中！\n"NOR,me,weapon);
+      weapon->set("use_apply_skill",weapon->query_temp("original/use_apply_skill"));
+      weapon->set("apply/skill_type",weapon->query_temp("original/skill_type"));
+      me->reset_action();
+      target->add_temp("apply/dodge",skill/2);
+      target->add_temp("apply/parry",skill/2);
+      me->start_busy(1+random(1));
+      weapon->set("use_apply_skill",0);
+      me->set_temp("jianxi_end",time());
+      me->delete_temp("wddpfm");
+      return 1;
+}
+
+

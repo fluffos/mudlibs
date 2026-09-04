@@ -1,0 +1,168 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/t/ly/bgate.c,v 1.1 2000/03/05 20:38:20 mud Exp $
+ */
+ 
+// Room: /t/ly/bgate.c
+
+#include <ansi.h>
+#include <room.h>
+inherit ROOM;
+
+string look_door(object me);
+void create()
+{
+        set("short", "大门");
+        set("long", @LONG
+你走到一座宅院前，红木大门(door)紧闭。隔墙望去，里面
+楼阁层起，但似乎年久失修，斑驳不堪。房檐屋顶荒草丛生，但
+宽阔平整的大理石台阶兀自带着一股浩然正气。
+LONG
+        );
+        set("exits", ([ /* sizeof() == 2 */
+  "north" : __DIR__"west3",
+]));
+        set("item_desc", ([
+                "大门": (: look_door :),
+                "door": (: look_door :),
+        ]) );
+        set("outdoors", 1);
+        set("no_clean_up", 0);
+
+        setup();
+        
+}
+
+string look_door(object me)
+{
+        return "两扇大门紧闭，你可以敲门(knock door)，\n" +
+               "若你艺高胆大，也可以破门而入(break door)。\n";
+}
+
+void init()
+{
+        add_action("do_knock", "knock");
+        add_action("do_break", "break");
+}
+
+int do_knock(string arg)
+{
+        object me;
+        me = this_player();
+        if(!arg || arg != "door") return notify_fail("你要敲什么？\n");
+        if(query("exits/south")) {
+                write("门恰好开着，敲什么？\n", me);
+                return 1;
+        }
+        if(me->is_busy())
+              return notify_fail("你正忙着，先歇会儿吧。\n");
+        message_vision("$N走到大门前，轻轻敲了敲门环。\n", me);
+        me->start_busy(2);
+        call_out("knock_door", 4, me);
+        return 1;
+}
+
+void knock_door(object me)
+{
+        object beggar1,beggar2,room;
+        room = this_object();
+        message_vision("大门吱呀一声打开，走出两名乞丐。\n", me);
+        beggar1 = new("/t/ly/npc/beggarguard");
+        beggar2 = new("/t/ly/npc/beggarguard");
+        beggar1->move("/t/ly/bgate");
+        beggar2->move("/t/ly/bgate");
+        room->set("exits/south", __DIR__"byard1");
+        call_out("close_door",100);
+        return;
+}
+
+int valid_leave(object me, string dir)
+{
+        object ob;
+        ob = present("beggar", environment(me));
+        if (dir == "south") {
+        if (objectp(ob) && living(ob)) {
+                if(me->query("family/family_name") != "丐帮")
+                return notify_fail(ob->query("name")+"身行一晃，挡在你面前！\n");
+                }
+        return ::valid_leave(me, dir);
+        }
+        return 1;
+}
+
+int do_break(string arg)
+{
+        int enforce;
+        object me;
+        me = this_player();
+        enforce = me->query("force_factor",1);
+        if(!arg || arg != "door") return notify_fail("你要打破什么？\n");
+        if(query("exits/south")) {
+                write("门恰好开着，犯什么傻？\n", me);
+                return 1;
+        }
+        if(me->query("family/family_name") == "丐帮")
+              return notify_fail("你要自毁家门不成？这里是丐帮总舵啊！\n");
+        if(me->query("force",1) < 80)
+              return notify_fail("你的内力太少了，别费劲了！\n");
+        if(me->is_busy())
+              return notify_fail("你正忙着，先歇会儿吧。\n");
+        if(enforce < 80) {
+                message_vision("$N摆了个马步，运气推掌，重重击在门板之上...\n",me);
+                message_vision("大门纹丝没动，看来$N的力气还不够。\n",me);
+                me->add("force", -enforce);
+                me->start_busy(1);
+                return 1;
+        }
+        
+        message_vision(YEL"$N走到门前，大喝一声，双掌平平拍出...\n"NOR, me);
+        message_vision(YEL"只听“咣啷”一声，两扇门板脱框而出，远远摔在院子当中。\n"NOR, me);
+        me->add("force",-enforce);
+        me->start_busy(1);
+        call_out("break_door", 2, me);
+        return 1;
+}
+
+void break_door(object me)
+{
+        object beggar1,beggar2,room;
+        room = this_object();
+        message_vision("两名乞丐鱼贯而出，冲到$N面前。\n", me);
+        beggar1 = new("/t/ly/npc/beggarguard");
+        beggar2 = new("/t/ly/npc/beggarguard");
+        beggar1->move("/t/ly/bgate");
+        beggar2->move("/t/ly/bgate");
+        message_vision("$N向$n叫道：小子不要命了！竟敢擅闯丐帮总舵！\n",beggar1,me);
+        message_vision("$N向$n道：不必多言，让他知道知道厉害！\n",beggar2,beggar1);
+        beggar1->kill_ob(me);
+        beggar2->kill_ob(me);
+        room->set("exits/south", __DIR__"byard1");
+        call_out("close_break_door", 100);
+        return;
+}
+void close_door()
+{
+        object          *inv;
+        int             i;
+
+        ::reset();
+        inv = all_inventory(this_object());
+        for(i=sizeof(inv)-1; i>=0; i--)
+        if(userp(inv[i]))
+        tell_object(inv[i],"丐帮弟子左右看了看，将大门合上了。\n");
+        else destruct(inv[i]);
+        this_object()->delete("exits/south");
+}
+void close_break_door()
+{
+        object          *inv;
+        int             i;
+
+        ::reset();
+        inv = all_inventory(this_object());
+        for(i=sizeof(inv)-1; i>=0; i--)
+        if(userp(inv[i]))
+        tell_object(inv[i],"几名丐帮弟子出来将大门修好，转身回去了。\n");
+        else destruct(inv[i]);
+        this_object()->delete("exits/south");
+}

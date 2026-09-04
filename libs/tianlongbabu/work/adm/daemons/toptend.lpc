@@ -1,0 +1,198 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/adm/daemons/toptend.c,v 1.2 2000/03/18 06:12:45 mud Exp $
+ */
+ 
+// toptend.c 
+// mirr June 1998
+
+inherit F_SAVE;
+
+#define TOPTEN_D_DATA DATA_DIR + "site/toptend"
+
+int list_number=20;
+void add_list(string new_key_skill,int size,int age_limit,int query_option);
+
+mixed list=({ ({100,10000,0}),({10,10000,0}),({10,10000,0}),({10,10000,0}),
+	      ({10,10000,1}),({10,10000,1}),({10,10000,1}),({10,10000,1}),
+	      ({10,10000,1}),({10,10000,1}),({10,10000,1}),({10,10000,1}),
+	      ({10,10000,1}),({10,10000,1}),({10,10000,1}),
+	      ({30,20,0}),({30,30,0}),
+              ({10,10000,0}),({10,10000,0}),({10,10000,0}) });
+
+string *key_skill=({ "combat_exp","banknum","max_force","mud_age",
+		     "dodge","unarmed","sword","blade",
+		     "literate","stealing","throwing","staff",
+		     "axe","whip","hammer",
+		     "combat_exp","combat_exp",
+		     "REAL_PK","average_exp","recent_average_exp" });
+
+void set_key_skill(string *akey_skill){key_skill=akey_skill;save();}
+string *query_key_skill(){return key_skill;}
+
+//mixed print_fields=({}); 
+//mixed title=({});
+
+// List is a 2 dim array. First dimension is id of the list,
+// and the second dimension list the characters of list
+// field 0: record number
+// field 1: age limit 
+// field 2: query method flag, 0 for query, 1 for query_skill
+
+mixed toplist;
+void set_toplist(mixed top){toplist=top;save();}
+mixed query_topten(){return toplist;}
+
+mapping empty_item = (["id":"$$$","name":"空缺","key":0]);
+
+void create();
+string query_save_file(); 
+void setup();
+int update_user(object ob);
+int delete_user(int key,int rec_number,mapping *records,mixed ob);
+int remove_user(mixed ob);
+int remove_user_item(mixed ob,int item);
+int add_user(int key,int rec_number,mapping *records,object ob);
+
+void create()
+{
+	seteuid(getuid());
+	if (!restore()) {
+	  setup();
+	  save();
+	};
+}
+
+string query_save_file() {return TOPTEN_D_DATA;}
+
+int remove()
+{
+        save();
+        return 1;
+}
+
+void setup()
+{
+int i,j;
+        toplist = allocate(list_number);
+        for (i=0;i<list_number; i++)
+        {
+                toplist[i] = allocate(list[i][0]+1);
+                for (j=0;j<=list[i][0];j++)
+                {
+                        toplist[i][j] = empty_item;
+                };
+        };
+}
+
+int update_user(object ob)
+{
+int i,age,key,updated=0;
+int mud_age,exp,old_mud_age,old_exp;
+
+age=ob->query("age");
+
+//added Jul 28
+mud_age=ob->query("mud_age");
+old_mud_age=ob->query("old_mud_age");
+exp=ob->query("combat_exp");
+old_exp=ob->query("old_combat_exp");
+if (mud_age>3600) ob->set("average_exp",exp/(mud_age/3600));
+
+if ((old_exp>0)&&((exp-old_exp)>5000)) 
+  ob->set("recent_average_exp",((exp-old_exp)*3600/(mud_age-old_mud_age)));
+// end 
+
+for (i=0;i<list_number;i++)
+  {
+    key=list[i][2]?ob->query_skill(key_skill[i]):ob->query(key_skill[i]);
+    if ((age>list[i][1])||(key<=0))
+      updated+=delete_user(key,list[i][0],toplist[i],ob);
+    else
+      {
+	updated+=delete_user(key,list[i][0],toplist[i],ob);
+	updated+=add_user(key,list[i][0],toplist[i],ob);
+      };
+  };
+if (updated) save();
+return updated;
+}
+
+int remove_user(mixed ob)
+{
+  int i,updated=0;
+  for (i=0;i<list_number;i++)
+    updated+=delete_user(0,list[i][0],toplist[i],ob);
+  if (updated) save();
+  return updated;
+}
+
+int remove_user_item(mixed ob,int item)
+{
+  int updated=0;
+  updated+=delete_user(0,list[item][0],toplist[item],ob);
+  if (updated) save();
+  return updated;
+}
+
+int delete_user(int key,int rec_number,mapping *records,mixed ob)
+{
+  int i,rec_position=-1;
+  string id;
+
+  id=objectp(ob)?ob->query("id"):ob;
+  for (i=rec_number;i>=0;i--)
+    {
+      if (records[i]["id"]==id)
+	{
+	  rec_position=i;
+	  break;
+	};
+    };
+
+  if (rec_position>=0)
+    {
+      for (i=rec_position;i<rec_number;i++)
+	records[i]=records[i+1];
+      records[rec_number]=empty_item;
+      return 1;
+    }
+  else
+    return 0;
+}
+	  
+int add_user(int key,int rec_number,mapping *records,object ob)
+{
+  int i,rec_position;
+  mapping item=([]);
+
+  for (i=rec_number;i>=0;i--)
+    {
+      if (key<=records[i]["key"])
+	break;
+    };
+  rec_position=i+1;
+  if (rec_position>rec_number)
+    return 0;
+  item["id"]=ob->query("id");
+  item["key"]=key;
+  item["name"]=RANK_D->query_rank(ob)+ob->short(1);
+  for (i=rec_number;i>rec_position;i--)
+      records[i]=records[i-1];
+  records[rec_position]=item;
+  return 1;
+}
+
+void add_list(string new_key_skill,int size,int age_limit,int query_option)
+{
+  int i;
+  list_number++; 
+  list+=({ ({ size,age_limit,query_option }) });
+  key_skill+=({ new_key_skill });
+  toplist+=({ ({}) });
+  toplist[list_number-1]=allocate(list[list_number-1][0]+1);
+  for (i=0;i<=list[list_number-1][0];i++) {
+    toplist[list_number-1][i] = empty_item;
+  };
+  save();
+}

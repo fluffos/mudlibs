@@ -1,0 +1,250 @@
+//lestat for moon
+//2001 三无三不手
+//rewried by huarong  2004/10
+
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER;
+
+void checking(object me);
+void remove_effect(object me);
+void zui_result(object me, object target);
+
+string *zui_miaoshu= ({
+HIW"昵昵儿女语，恩怨相尔汝。\n"+
+HIR+"琴声显得轻柔细碎 ，音调缠绵宛转，$N"+HIR+"不知不觉收到了影响。\n"NOR,
+HIB"划然变轩昂，勇士赴敌场。\n"+
+HIR+"刹那间，琴声变得激昂高亢，气势磅礴，威武雄壮，这又把$N"+HIR+"带进了一个完全不同的境界。\n"NOR,
+HIM"浮云柳絮无根蒂，天地阔远任飞扬。\n"+
+HIR+"声音又转成了舒缓、悠扬，好象那白云悠然于碧空，$N"+HIR+"竟然忘记了自己还在战斗中。\n"NOR,
+HIY"喧啾百鸟群，忽见孤凤凰。\n"+
+HIR+"猛然间$N"+HIR+"看见似乎有一只高贵的凤凰引颈长鸣，鸣声谐和、清亮。\n"NOR,
+HIG"跻攀分寸不可上，失势一落千丈强。\n"+
+HIR+"$N"+HIR+"恍恍忽忽往悬崖峭壁上一层一层地往陡险的高峰攀登。\n"NOR,
+});
+
+string *zui_damage= ({
+RED"$N"+NOR+RED+"的心时而如火热，时而又如冰寒。“啵”的吐出一口鲜血！\n"NOR,
+MAG"$N"+NOR+MAG+"无法控制自己的情绪，眼泪湿透了衣裳。\n"NOR,
+HIR"$N"+NOR+HIR+"因功力抵不住琴声诱惑，而口溢鲜血！\n"NOR,
+HIB"$N"+NOR+HIB+"受到琴声影响，发狂似的嚎叫着。\n"NOR,
+});
+string query_name() { return "醉生"ZJBR"梦死"; }
+int perform(object me, object target)
+{
+        object weapon;
+        int skill,skill1,skill2;
+        string msg;
+        if( !target ) target = offensive_target(me);
+        if( !target
+        ||      !target->is_character()
+        ||      target->is_corpse()
+        ||      target==me)
+                return notify_fail("你要对谁施展「醉生梦死」?\n");
+        if(me->query_temp("BAIFA_perform"))
+                return notify_fail("你已经使出「醉生梦死」了！\n");
+        if( time()-(int)me->query_temp("BAIFA_end") < 10 )
+                return notify_fail("绝招用多就不灵了！\n");
+        skill1 = me->query_skill("chixin-jian",1);
+        skill2 = me->query_skill("qin",1);
+        if( ( skill1- skill2 ) > 100 )
+                return notify_fail("你的琴艺等级不够!!\n");
+        if (!present("wuxian qin", me))
+                return notify_fail("你手中无琴如何弹奏?\n");
+        if(!me->is_fighting(target) )
+                return notify_fail("醉生梦死只能在战斗中使用!!\n");
+
+        if((int)me->query("max_force") <1000 )
+                return notify_fail("你的内力不够！\n");
+
+        if((int)me->query("force") < 1000 )
+                return notify_fail("你的内力不足！\n");
+
+        if((int)me->query("sen") <500 )
+                return notify_fail("你的精神不足，没法子施用外功！\n");
+
+        if((int)me->query_skill("chixin-jian",1) <100)
+                return notify_fail("你的痴心剑级别还不够施展这一招醉生梦死!!\n");
+        if((int)me->query_skill("yueying-wubu",1) <100)
+                return notify_fail("你的月影舞步等级不够!!\n");
+        if((int)me->query_skill("qin",1) <100)
+                return notify_fail("你的琴艺等级不够!!\n");
+        if ( me->query_skill_mapped("parry") != "chixin-jian" )
+                return notify_fail("你无法使用醉生梦死!!\n");
+        if (!present("wuxian qin", me))
+                return notify_fail("「醉生梦死」必须有七弦琴配合才能使用。\n");
+        if(me->query("family/family_name") != "盘丝洞" )
+                return notify_fail("你不是盘丝洞门人,琴艺早已生疏!!\n");
+        me->delete("env/brief_message");
+        target->delete("env/brief_message");
+        weapon=me->query_temp("weapon");
+     msg = HIM  "$N"+HIM+"跳出站圈，取琴一张，盘膝坐在地上，将琴放在膝上，十捐尖尖拨动琴弦，泪水湿润了双眼－－
+\n\n"+MAG+"   ┏──┓  ┏──┓
+"+MAG+"   │"+HIM+" 醉 "+MAG+"│  │ "+HIY+"生"+MAG+" │
+"+MAG+"   ┗──┛  ┗──┛
+"+MAG+"                       ┏──┓  ┏──┓
+"+MAG+"                       │"+HIR+" 梦"+MAG+" │  │ "+HIC+"死"+MAG+" │
+"+MAG+"                       ┗──┛  ┗──┛
+        \n\n"MAG"－－只见$N"HIW"白发"NOR+MAG"飘飘，双指轮弹，漫天"HIW"白发"NOR+MAG"氤氲般卷向$n！\n\n" NOR;
+    message_vision(msg, me, target);
+        skill = random((int)me->query_skill("whip",1))+(int)me->query_skill("qin",1);
+        me->set_temp("BAIFA_perform", 1);
+        target->set_temp("zui_effect",0);
+        call_out("checking", 1, me);
+        call_out("zui_result",5,me,target);
+        me->start_call_out( (: call_other, __FILE__, "remove_effect", me :), skill/2);
+        me->add("force", -200);
+        return 1;
+}
+
+void checking(object me)
+{
+
+        object weapon;
+        if ( !me ) return;
+        if ( me->query_temp("BAIFA_perform")) {
+        if (!objectp(weapon = me->query_temp("weapon"))
+        || (string)weapon->query("skill_type") != "sword") {
+                tell_object(me, "\n你无法使用痴心情长剑，「醉生梦死」的攻势便即瓦解！\n" NOR);
+                remove_call_out("remove_effect");
+                remove_effect(me);
+                return;
+           }
+           else if (!present("wuxian qin", me)) {
+                tell_object(me, "\n你手中无琴如何弹奏?\n\n" NOR);
+                remove_call_out("remove_effect");
+                remove_effect(me);
+                return;
+           }
+           else if ( weapon->query("weapon_prop") == 0 ) {
+                tell_object(me, "\n你的"+weapon->name()+"已毁，无法持续「醉生梦死」的攻势！\n\n" );
+                remove_call_out("remove_effect");
+                remove_effect(me);
+                return;
+           }
+           else if ( (int)me->query("force") < 1000  ) {
+                tell_object(me, "\n你的内力后继不足，难以持续「醉生梦死」的威力。\n\n" );
+                remove_call_out("remove_effect");
+                remove_effect(me);
+                return;
+           }
+           else if ( (int)me->query("sen") < 200  ) {
+                tell_object(me, "\n你的精神太差，只好收起「醉生梦死」。\n\n" );
+                remove_call_out("remove_effect");
+                remove_effect(me);
+                return;
+           }
+           else if ( me->query_skill_mapped("sword") != "chixin-jian" ) {
+                tell_object(me, "\n你转而施展其他鞭法，无法再以「醉生梦死」攻敌！\n\n" );
+                remove_call_out("remove_effect");
+                remove_effect(me);
+                return;
+           }
+           else if ( me->query_skill_mapped("parry") != "chixin-jian" ) {
+                tell_object(me, "\n你转而施展其他剑法，无法再以「醉生梦死」攻敌！\n\n" );
+                remove_call_out("remove_effect");
+                remove_effect(me);
+                return;
+           }
+           else if (!me->is_fighting()) {
+                tell_object(me,  "\n你现在没有和人过招，当下收回了「醉生梦死」的攻势。\n\n" );
+                remove_call_out("remove_effect");
+                remove_effect(me);
+                return;
+           }
+           else
+           {
+           	 remove_call_out("checking");
+           	 call_out("checking", 1, me);
+           }
+        }
+//           else return;//moved to top by mudbug on 2003/4/2
+
+}
+
+void remove_effect(object me)
+{
+        if(!me) return;
+        remove_call_out("checking");
+        remove_call_out("remove_effect");
+        remove_call_out("zui_result");
+        message_vision(HIM"$N心头一酸,轻声叹道:弹指红颜老,刹那芳华。\n"NOR, me);
+        me->delete_temp("BAIFA_perform");
+        me->set_temp("BAIFA_end",time());
+        return;
+}
+
+void zui_result(object me, object target)
+{
+           int afp,vfp,mod_val,i;
+           object weapon;
+           string str;
+           weapon=me->query_temp("weapon");
+
+        if( !living(target) || !present(target->query("id"), environment(me)) )
+          return;
+
+            afp = COMBAT_D->skill_power(me, "force", SKILL_USAGE_DEFENSE);
+            if( afp < 1) afp = 1;
+            vfp = COMBAT_D->skill_power(target, "force", SKILL_USAGE_ATTACK);
+            if( vfp < 1 ) vfp = 1;
+            if( me->query("force_factor") && (me->query("force") > me->query("force_factor")) )
+                   mod_val = (100+me->query("force_factor")/10);
+                   else mod_val=100;
+            if( afp > 1000000 )     mod_val = afp / 100 * (100 + mod_val);
+                     else   mod_val = (100 + mod_val) * afp / 100;
+            if( mod_val < 1 ) mod_val = 1;
+
+            if (wizardp(me) && me->query("env/combat")=="verbose")
+                         tell_object(me, sprintf(HIM+BLINK+"mod_val: %d  vfp: %d\n" NOR, mod_val,vfp));
+
+            if( random(mod_val + vfp) < vfp )
+                  {
+                   message_vision(HIG"$N"+HIG+"运起浑厚内力，琴声对其毫无影响！\n"NOR,target);
+                   target->add_temp("zui_effect",-1);
+                   if ( target->query_temp("zui_effect") < 0 )  target->set_temp("zui_effect",0);
+                  }
+            else
+                 {
+                  if(me->query("force_factor") && (me->query("force") > me->query("force_factor")) )
+                      me->add("force",-me->query("force_factor"));
+
+                  i=target->query_temp("zui_effect");
+                  if(i>=0)
+                     {
+                      if(i<5)
+                       {
+                       message_vision(zui_miaoshu[i], target,me);
+                       target->receive_damage("sen",random(me->query_skill("force",1))+(int)me->query_skill("force",1),me);
+                       target->receive_wound("sen",random(me->query_skill("qin",1))+(int)me->query_skill("qin",1),me);
+                       COMBAT_D->report_sen_status(target);
+                       }
+                      else
+                       {
+                       message_vision(zui_miaoshu[random(sizeof(zui_miaoshu))], target ,me);
+                       target->receive_damage("sen",random(me->query_skill("force",1))+(int)me->query_skill("force",1),me);
+                       target->receive_wound("sen",random(me->query_skill("qin",1))+(int)me->query_skill("qin",1),me);
+                       COMBAT_D->report_sen_status(target);
+                         if (target->query("eff_sen")<target->query("max_sen")/4
+                          && me->query("force")>random(target->query("force")))
+                            {
+                             message_vision(zui_damage[random(sizeof(zui_damage))], target);
+                             COMBAT_D->do_attack_damage(me, target, me->query_temp("weapon"));
+                             COMBAT_D->report_status(target);
+                            }
+                       }
+                      target->add_temp("zui_effect",1);
+                    if (target->query("eff_kee")<0 || target->query("eff_sen")<0 || (!living(target) && ((target->query("sen")<0) || target->query("kee")<0)) )
+                       {
+                        if(random(5)==1 || wizardp(me) )
+                         {
+                         str=target->name()+"被"+me->name()+HIM+"的"+NOR+HIW+"『蚀魂曲』"+HIM+"迷死了，听说"+target->name()+"死之前的尖叫声也令闻之人毛骨悚然………"NOR;
+                         message("channel:rumor",HIM"【空穴来风】某人："+str+"\n"NOR,users());
+                         }
+                       }
+                     }
+                    }
+
+             if ( me->query_temp("BAIFA_perform") )  call_out("zui_result",3+random(4),me,target);
+}
+

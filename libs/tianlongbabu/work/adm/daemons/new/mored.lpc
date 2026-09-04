@@ -1,0 +1,220 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/adm/daemons/new/mored.c,v 1.3 2000/12/03 17:42:21 mud Exp $
+ */
+ 
+// try to replace each user()->more() to this daemons
+// the assumption are: more is not use often, so should not has copy in each user
+// and more is not require high speed. so I prefer save memory in more
+// created by cbra Aug 1,1998
+
+#include <ansi.h>
+
+// this should be in <mored.h> file
+#define MIN_HEIGHT 8
+#define MAX_HEIGHT 50
+#define DEFAULT_HEIGHT 24
+#define DEFAULT_LENGTH 8000
+// end
+
+/* Definition for a Class that stores information for the
+ * current string being displayed.
+ */
+class more_data {
+	string *lines;
+	int current_line;
+	int total_lines;
+	int height;
+	string match_string;
+	object me;
+}
+
+static void more_input(class more_data);
+string more_help();
+static string more_prompt(class more_data data, int end);
+
+static string more_prompt(class more_data data, int end)
+{
+   return sprintf( 
+                  "== 未完继续 == "HIY"[ %d/%d (%d%%) ]"NOR" h for help (bnhq+-/?): ",
+                  end,
+                  data->total_lines,
+                  ((end * 100)/data->total_lines) 
+          );
+}
+
+varargs int more(mixed string_data, object me)
+{
+	class more_data data;
+
+	if( !string_data || string_data=="" || !me ) 
+	{
+		//catch( COMM_D->send("system", "More: bad argument\n", player) );
+		return 1;
+	} 
+
+	data = new(class more_data);
+
+	if( stringp(string_data) )
+		data->lines = explode(string_data,"\n"); 
+	else 
+		data->lines = string_data;                   //  fn is already an array.
+
+	data->total_lines = sizeof(data->lines);
+	data->current_line = 0;
+	data->me = me;
+	data->match_string = "";
+
+	data->height = DEFAULT_HEIGHT;
+	more_input(data);
+	return 1;
+}
+
+static void more_input(class more_data data) 
+{
+	int end;
+	int len, i=0;
+	string page;
+	
+	end = data->current_line - 1 + data->height;
+	if( end > (data->total_lines-1) ) end = data->total_lines - 1;
+	else if( end < data->current_line ) end = data->current_line;
+
+	page = implode( data->lines[data->current_line..end],"\n" )+"\n";
+	len = strlen(page) - 1;
+	while( (i+=DEFAULT_LENGTH) < len )
+		tell_object(data->me,page[i-DEFAULT_LENGTH..i-1]);
+	tell_object(data->me,page[i-DEFAULT_LENGTH..len]);
+		
+	if( end < (data->total_lines-1) )
+	{
+		data->current_line = (++end);
+		tell_object(data->me,more_prompt(data,end));
+		input_to("get_input",0,data);
+	}
+	return;
+}
+
+
+static void get_input(string cmd, class more_data data) 
+{ 
+	string str;
+
+	if( !cmd )
+		cmd = "";
+
+	switch(cmd) {
+
+		case "": case "\r": case "\n": case "d": case "n":
+			return more_input(data);
+
+		case "q": case "Q":
+			return;
+	
+		case " ":
+			data->current_line = data->current_line - data->height;
+			if( data->current_line < 0 ) data->current_line = 0;
+			return more_input(data);
+
+		case "b": case "u": case "p":
+			data->current_line = data->current_line - (2*data->height);
+			if( data->current_line < 0 ) data->current_line = 0;
+			return more_input(data);
+
+		case "+": 
+			if( data->current_line >= data->total_lines ) return;
+			tell_object(data->me, data->lines[data->current_line++]+
+				    "\n"+more_prompt(data,data->current_line));
+			input_to("get_input",data);
+			return;
+
+		case "-":
+			if( (--data->current_line) < 0 ) data->current_line = 0;
+			tell_object(data->me, data->lines[data->current_line]+
+				    "\n"+more_prompt(data,data->current_line));
+			input_to("get_input",data);
+			return;
+
+		case "h": case "H":
+			tell_object(data->me, more_help());
+			input_to("get_input",data);
+			return;
+	}
+
+	if( sscanf(cmd,"/%s",str) == 1 ) 
+	{
+		if( str == "" ) str = data->match_string;
+		else data->match_string = str;
+		if (!data->match_string) {
+			tell_object(data->me, "Please input the search string.\n");
+			input_to("get_input",data);
+			return;
+		}
+
+
+		for(int i=data->current_line; i<data->total_lines; i++) 
+		{
+			if( strsrch( data->lines[i],str ) != -1 ) {
+				data->current_line = i+1;
+				tell_object(data->me, data->lines[i]+"\n"+
+                        	more_prompt(data,data->current_line) );
+				input_to("get_input",data);
+				return;
+			}
+		}
+
+		tell_object(data->me, "Not Found!\n"+
+                        	more_prompt(data,data->current_line) );
+		input_to("get_input",data);
+		return;
+   	}
+
+	if( sscanf(cmd,"?%s",str) == 1 ) 
+	{
+		if( str == "" ) str = data->match_string;
+		else data->match_string = str;
+		if (!data->match_string) {
+			tell_object(data->me, "Please input the search string.\n");
+			input_to("get_input",data);
+			return;
+		}
+
+		for(int i=(data->current_line-1); i >= 0; i--) {
+			if( strsrch( data->lines[i],str ) != -1 ) {
+				data->current_line = i;
+				tell_object(data->me, data->lines[i]+"\n"+
+                        	more_prompt(data,data->current_line) );
+				input_to("get_input",data);
+				return;
+			}
+		}
+		tell_object(data->me, "Not Found!\n"+
+                        	more_prompt(data,data->current_line) );
+		input_to("get_input",data);
+		return;
+         }
+
+//	data->current_line = data->current_line - data->height;
+//	if( data->current_line < 0 ) data->current_line = 0;
+
+	return more_input(data);
+}
+
+
+/* Function that returns one string that lists all the commands
+ * that can be done from a 'more'.  
+ */
+string more_help()
+{
+   return 			"\nMore Commands:\n"
+                  "       b, u        Back One Page\n"
+                  "       NONE, n, d  Next Page\n"
+                  "       SPACE       Redisplay Current Page\n"
+                  "       h, H        This Help\n"
+                  "       q, Q        Quit\n"
+                  "       +           Display Next Line\n"
+                  "       -           Display Prev Line\n"
+                  "       /%s         Forward Search for %s\n"
+                  "       ?%s         Reverse Search for %s\n"
+                  "       OTHER       Next Page\n\n"; 
+}

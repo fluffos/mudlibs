@@ -1,0 +1,94 @@
+/********************************
+ zyskill.c	专业技能fearture文件
+creat by wsw 
+2004 12 15
+********************************/
+
+#define ZYSKILLS_MAX 2 //正常升级效率下的专业技能数
+#include <ansi.h>
+#include <dbase.h>
+
+mapping zyskills;
+mapping zylearned;
+
+mapping query_zyskills() { return zyskills; }
+mapping query_zylearned() { return zylearned; }
+
+void set_zyskill(string zyskill, int val)
+{
+	if( !find_object(ZYSKILL_D(zyskill))
+	&&	file_size(ZYSKILL_D(zyskill)+".lpc") < 0 )
+		error("F_ZYSKILL: No such zyskill (" + zyskill + ")\n");
+
+	if( !mapp(zyskills) ) zyskills = ([ zyskill: val ]);
+	else zyskills[zyskill] = val;
+	
+	if( !mapp(zylearned) ) zylearned = ([ zyskill: 0]);
+		else if(undefinedp(zylearned[zyskill]))
+		    (int)zylearned[zyskill] = 0;
+
+}
+
+int delete_zyskill(string zyskill)
+{
+	if( mapp(zyskills) ) {
+		map_delete(zyskills, zyskill);
+		if( mapp(zylearned) ) {
+			map_delete(zylearned, zyskill);
+			return undefinedp(zylearned[zyskill]);
+		}
+		return undefinedp(zyskills[zyskill]);
+	}
+	return 0;
+}
+
+
+varargs int query_zyskill(string zyskill)
+{
+	if( mapp(zyskills) && !undefinedp(zyskills[zyskill]) ) return zyskills[zyskill];
+	return 0;
+}
+
+varargs void improve_zyskill(string zyskill, int amount, int weak_mode)
+{
+	int i,ad_skills=0;
+	
+	if( !find_object(ZYSKILL_D(zyskill))
+	&&	file_size(ZYSKILL_D(zyskill)+".lpc") < 0 )
+		error("F_ZYSKILL: No such zyskill (" + zyskill + ")\n");
+
+	if( !weak_mode || !userp(this_object()) ) {
+		if( !mapp(zyskills) ) zyskills = ([]);
+		if( undefinedp(zyskills[zyskill]) ) zyskills[zyskill] = 0;
+	}
+	
+	//高级职业技能数超过1，不能升级。
+	if( sizeof(zyskills) > 0 ) {
+		for(i = 0; i<sizeof(zyskills); i++) {
+			if(ZYSKILL_D(keys(zyskills)[i]+".lpc")->type() == "advance_zyskill") 
+				ad_skills++;
+		}
+	}
+	if( ad_skills > 1 ) {
+		tell_object(this_object(), HIC "你的高级职业技能太多，不能升级了！\n" NOR);	
+		return;
+	}
+	
+	//超过最大技能数，升级效率降低
+	if( sizeof(zylearned) > ZYSKILLS_MAX )
+		amount /= sizeof(zylearned) - ZYSKILLS_MAX + 1; 
+
+	if( !amount ) amount = 0;
+
+	if( !mapp(zylearned) ) zylearned = ([ zyskill : amount ]);
+	else (int)zylearned[zyskill] += amount;
+
+	if( (!weak_mode || !userp(this_object()))
+	&&	zylearned[zyskill] > (zyskills[zyskill] + 1) * (zyskills[zyskill] + 1) ) {
+		zyskills[zyskill]++;
+		zylearned[zyskill] = 0;
+		tell_object(this_object(), HIC "你的「" + to_chinese(zyskill) + "」进步了！\n" NOR);
+		ZYSKILL_D(zyskill)->zyskill_improved(this_object());
+	}
+}
+

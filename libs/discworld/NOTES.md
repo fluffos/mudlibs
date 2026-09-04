@@ -9,9 +9,9 @@ AGENTS.md §2 惯例忽略捆绑驱动，只用本项目自己的驱动）。这
 (`901_dw_fluffos_v1_dw_fluffos_v1.tar.gz`) 和 v2
 (`901-1_dw_fluffos_v2_dw_fluffos_v2.zip`) 两份更早的快照，未发现
 v3 有 v1/v2 没有的结构性问题，因此直接采用 v3 作为正式转换对象；
-v1/v2 保留为未转换的 `scripts/non_mudlib_meta/dw_fluffos_v{1,2}.json`
-条目（编号改为 901-1/901-2，把主编号 901 让给这份真正转换的
-`libs/discworld/`，并删除了原来占位用的 `dw_fluffos_v3.json`）。
+v1/v2 已按用户指示单独转成 `libs/dw_fluffos_v{1,2}/`（编号
+901-1/901-2，端口 40271/40272），不是这份 v3 `work/` 的静默 overlay。
+主编号 901 仍是这份真正转换的 `libs/discworld/`。
 
 ## 编码
 

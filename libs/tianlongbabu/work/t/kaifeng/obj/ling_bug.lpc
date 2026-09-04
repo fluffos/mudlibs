@@ -1,0 +1,137 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/t/kaifeng/obj/ling_bug.c,v 1.1 2000/03/05 20:35:09 mud Exp $
+ */
+ 
+// ling.c
+// last updated by cbra Jun-14-1998 for wield
+
+#include <weapon.h>
+
+//inherit ITEM;
+inherit SWORD;
+
+void create()
+{
+	set_name("孔雀翎", ({ "ling" }));
+	set_weight(500);
+	set_max_encumbrance(1000);
+	if(clonep())
+		set_default_object(__FILE__);
+	else {
+		set("unit", "只");
+		set("long", 
+"孔雀翎是江湖上最可怕的暗器，其发射金针的速度之快，威力之\n"
+"强，不是人功可以做到的。传说孔雀翎是由当年武林中有名的工\n"
+"匠--「神手匠」孟云柯所制，其后一直为孔雀山庄的主人所得。\n"
+"江湖中人无不对孔雀翎梦寐以求，终有一天，有人领头邀及了数\n"
+"百名江湖人物夜袭孔雀山庄，将孔雀山庄烧成一片瓦铄，而孔雀\n"
+"却因此而失落，今日从显江湖，不知武林中今后有会怎样腥风血\n"
+"雨。孔雀翎是一只精钢打做的圆桶，桶长不过三寸，桶身上刻着\n"
+"孔雀翎的图案，制做非常精细。桶的一段有五个小孔，是装金针\n"
+"用的，另一段有个发射机簧，一按这机簧，便可发射（ｓｈｏｏｔ）。\n");
+		set("material", "steel");
+		set("wield_msg", "$N缓缓地从袖中摸出一只$n握在手中。\n");
+		set("unwield_msg", "$N将手中的$n藏入袖中。\n");
+		set("value", 100);
+	}
+	init_sword(5);
+	setup();
+}
+
+int is_container() { return 1; }
+
+void init() 
+{
+        add_action("do_shoot", "shoot");
+}
+
+int valid_put_in(object ob)
+{
+	if(!ob->query("needle"))
+		return 0;
+	if(ob->query_amount() > 5)
+	{
+		write(this_object()->name() + "最多只能装五枚！\n");
+		return 0;
+	}
+	return 1;
+}
+
+int wield()
+{
+	int i;
+	object env, *inv, me = this_player();
+
+	env = environment(me);
+	inv = all_inventory(env);
+	for(i=0;i<sizeof(inv);i++)
+	{
+		if(living(inv[i]))
+		{
+			if(inv[i] == me) continue;
+			if(wizardp(inv[i])) continue;
+			// by cbra only npc kill
+			if (!userp(inv[i])) {
+				message_vision("$N盯着$n手上的" + this_object()->name()
+				+ "，眼中放出贪婪的目光！\n", inv[i], me);
+				inv[i]->kill_ob(me);
+				me->fight_ob(inv[i]);
+			}
+		}
+	}
+	me->add("bellicosity", 200);
+	::wield();
+	return 1;
+}
+
+int do_shoot(string arg)
+{
+	int amount;
+	object needle, needle2, ob, me, weapon;
+	mapping *act;
+//	string nname;
+
+	if(!this_object()->query("equipped"))
+		return notify_fail("你还没有装备上" + this_object()->name()
+			+ "呢！\n");
+	me = this_player();
+	if(!arg || !(ob = present(arg, environment(me))))
+		return notify_fail("你想用" + this_object()->name()
+			+ "射谁？\n");
+
+	needle = present("needle", this_object());
+	if(!needle) return notify_fail(this_object()->name() + "里面没有"
+			+ "任何可以射放的东西！\n");
+	this_object()->unequip();
+
+	amount = needle->query_amount();
+	if(amount == 1)
+	{
+		needle->move(me);
+		needle->wield();
+	} else {
+		needle2 = new(base_name(needle));
+		needle->add_amount(-1);
+		needle2->move(me);
+		needle2->wield();
+	}
+		
+	act = ({
+(["action": "$N一按机簧，金光闪过，一枚" + needle->name() + "从" + this_object()->name() +"中射出，直奔$n的$l",
+"damage": 150,
+"damage_type":  "刺伤",
+]),
+		});
+	me->add_temp("apply/attack", 250);
+	me->add_temp("apply/damage", 100);
+	me->set("actions", act[0]);
+	weapon = me->query_temp("weapon");
+	COMBAT_D->do_attack(me, ob, weapon);
+	me->add_temp("apply/attack", -250);
+	me->add_temp("apply/damage", -100);
+	me->reset_action();
+	destruct(weapon);
+	this_object()->wield();
+	return 1;
+}

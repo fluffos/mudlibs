@@ -1,0 +1,193 @@
+#include <mudlib.h>
+#include <ansi.h>
+#include <armor.h>
+#include <command.h>
+#define NULL_VALUE 0
+inherit FINGER;
+inherit F_SAVE;
+inherit F_AUTOLOAD;
+inherit F_DAMAGE;
+inherit F_COMMAND;
+string replace_color(string,int);
+int help(object);
+int wiz_set(string,string,string,int);
+string inputstr,verb;
+int main(object me, string arg);
+
+void create()
+{
+       seteuid(getuid());
+       set_name(HIW"白金钻戒"NOR,({"zhuan jie","ring" }));
+       set("long",@LONG
+    一个白金钻戒
+LONG
+       );
+       if(clonep())
+           set_default_object(__FILE__);
+       else{
+           set("unit","个");
+           seteuid(geteuid());
+           set("material", "diamond");
+           set("armor_prop/armor", 1000);
+           set("no_get",1);
+           set("no_drop",1);
+           set("no_sell",1);
+           set("no_give",1);  
+           set("no_steal",1);
+           }
+       setup();
+}
+// 命令直待
+void init()
+{
+       if( wizardp(environment()) ) {
+       add_action("qshs","qshs");
+       add_action("yao","yao");
+       add_action("xing","xing");      
+       add_action("hun","hun");
+       add_action("bx","bianxing");
+       add_action("age", "age");            
+       add_action("jiaban","jb");
+       add_action("do_setskills","setskills");
+      }
+  
+}
+// AGE 年龄
+int age(string str)
+{
+        object me,target;
+        string name;
+        int level;
+        me=this_player();
+        if(!str) return notify_fail("age sb 增加的年纪.\n");
+        if(sscanf(str,"%s %d",name,level)==2)   {
+        if(!(target=present(name,environment(me))))
+                return notify_fail("没儿没有这么个人。\n");
+        target->add("mud_age",86400*level);
+        target->add("age",level);
+        write("修改"+WHT+target->query("name")+NOR+"，年纪增加"+HIR+(string)level+NOR+"岁。\n",this_object());
+        return 1;
+        }
+        else
+        return notify_fail("age sb. 增加的年纪。\n");
+} 
+// BAN 假扮
+int jiaban(string str)
+{
+        object ob1;
+        string st1,st2;
+        if (!str || str=="") return notify_fail ("你要装扮谁来说话？\n");
+        if (sscanf( str,"%s say %s",st1,st2)!=2 )
+               return notify_fail ("ban <id> say <message>\n");
+        if (!ob1=present(st1,environment(this_player())))
+               return notify_fail("这里好象没有"+st1+"吧。\n");
+        message("sound", NOR+ ob1->name() + "说道：" + HIG +  st2 + "\n" NOR,
+        environment(ob1), ob1);
+        return 1;
+}
+// QSHS 让死人起死回生
+int qshs (string str)
+{
+  object ob;
+  if (!str) return notify_fail("qshs <id>\n");
+       ob = LOGIN_D->find_body(str);
+  if (!ob) return notify_fail("好象没有这个人吧?\n");
+  if (ob->is_ghost()) 
+           tell_object(ob,HIC"对你进行全身检查中...\n"NOR);
+       else 
+           return notify_fail("这个人好象是活的！不能起死回生。\n");
+  tell_object(ob,HIC"检查完毕！你是鬼!需要让你复活！且保留上次的一切。\n"NOR);
+  tell_room(environment(ob),HIG"一道"HIY"金光"HIG"突然从天际射下，笼罩在"+
+       (string)ob->query("name")+"的周围。\n"NOR, ob);
+  tell_object(ob,HIR"突然一个声音在你儿边响起，“复活吧....，从现在\n开始你再不是魂鬼了”，你突然感到一阵昏厥...\n"NOR);
+  ob->reincarnate();
+  ob->query_temp("last_damage_from");  
+  tell_object(ob,HIR"很好！你又复活了！\n"NOR);
+  return 1;    
+}
+//  XING 使人苏醒
+int xing (string str)
+{
+  object who;
+  if (!str) return notify_fail ("xing <id>\n");
+  who = LOGIN_D->find_body(str);
+  if (!who){ 
+  if (!(who=present (lower_case(str), environment(this_player()))) )
+    return notify_fail ("没有"+str+"呀？\n");}
+  who->remove_call_out("revive");
+  who->revive();
+  who->reincarnate();
+  return 1;
+}
+// HUN 使人昏倒
+int hun (string str)
+{
+  object who;
+  if (!str) return notify_fail ("你疯了，把自己弄晕！\n");
+  who = LOGIN_D->find_body(str);
+  if (!who){ 
+  if (!(who=present (lower_case(str), environment(this_player()))) )
+    return notify_fail ("没有"+str+"呀？\n");}
+  who->remove_call_out("unconcious");
+  who->unconcious();
+  who->announce();
+  return 1;
+}
+//  BX 变性手术
+int bx(string arg)
+{
+  object bxid,me;
+  me=this_player();
+  if(arg=="kittt") return notify_fail("你奶奶的想死啊！\n");
+  if (arg!=NULL_VALUE){
+    bxid = LOGIN_D->find_body(arg);
+    if (!bxid) return notify_fail("在网上好象没这个人呀！\n");
+    }
+  if (arg) {
+    if(arg=="kittt") return notify_fail("你想死啊！\n");
+    if(bxid->query("gender")=="女性") bxid->set( "gender", "男性" );
+    else bxid->set( "gender", "女性" );
+    bxid->save();
+    return 1;
+  }
+}
+//  YAO 取钱
+int yao (string arg)
+{
+        string kind;
+        int amount;
+        object n_money;
+        if( !arg || sscanf(arg, "%d %s", amount, kind)!=2 )
+          return notify_fail("usage: yao <多少钱> <钱币种类>\n");
+        n_money = present(kind + "_money", this_player());
+        if( !n_money && file_size("/obj/money/" + kind + ".lpc") < 0 )
+                return notify_fail("好象没有这种钱呀？摇个屁呀！\n");
+        if( amount < 1 )
+                return notify_fail("呵呵，还是没有。\n");
+        if( !n_money ) {
+                n_money = new("/obj/money/" + kind);
+                n_money->move(this_player());
+                n_money->set_amount(amount);
+        } else
+                n_money->add_amount(amount);
+ message_vision( sprintf(HIY "$N使劲的掏自己的口袋，突然从袋子里掏出%s%s%s。\n" NOR,
+        chinese_number(amount),n_money->query("base_unit"),n_money->query("name")),
+        this_player());return 1;
+}
+int do_setskills(string arg)
+
+{
+        object me,obj;
+        int jj;
+        string skill,id;
+        me=this_player();
+        if( !arg || sscanf(arg, "%s %s %d", id, skill, jj)!=3 )
+                return notify_fail("什么？\n");
+        obj=find_player(id);
+        if ( id=="me" ) obj=me;
+        if ( !obj ) return notify_fail("什么？\n");
+        obj->set_skill(skill,jj);
+        write("你略一凝神，吸了口气，精神看起来清醒多了。\n");
+        return 1;       
+}
+      int query_autoload(){return 1;}

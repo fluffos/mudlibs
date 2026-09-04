@@ -1,0 +1,488 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/obj/roommaker.c,v 1.13 2000/04/24 17:49:33 mud Exp $
+ */
+ 
+// tlbb roommaker 
+// Created by cobra@tlbb on Sat Apr  8 21:30:19 PDT 2000
+
+#define RMK_VERSION "(v2.1)"
+#include <ansi.h>
+
+inherit ITEM;
+inherit F_AUTOLOAD;
+
+object myroom;
+string file, filename, old_header, old_end;
+int replace_room;
+string *special_props = ({ "short", "long", "no_clean_up" });
+
+int my_saveroom(object croom);
+string filter_color(string arg);
+string get_other_dir(string dir);
+
+void create()
+{
+	set_name("房间编辑器" + RMK_VERSION, ({ "roommaker", "maker" }) );
+	set_weight(100);
+	set("unit", "个" );
+	set("long", @LONG
+这是一个用来「快速」制造基本房间结构的工具，帮助时间不多或有严重 lag
+的巫师利用线上输入制造简单的房间，不过如果你想提高自己区域房间的品质
+，最好不要太依赖这个东西，你可以使用以下几个指令：
+
+mkroom <房间档名> <in 或 out>
+    in 表示 indoors(室内), out 表示 outdoors(室外), 或不写则表示室外，    如漏写，将来可以用：rset indoors 1 来补上。造出一个「空」房间之後，
+    你会自动移到这个房间，用 rset 设定房间的叙述，变量与连接。
+
+rset <房间属性> <属性内容>
+    设定你目前所在房间的属性，如 rset short，rset long 等。
+    用 to rset long 比较好(可以输入多行的long).
+    颜色与 nick 一样，但不会自动加 $NOR$.
+    如：rset resource/water 1, 设定为可灌水之处。
+	rset <房间属性> none 则表示消除 <房间属性>.
+
+conn <方向> <房间档名>
+    将你目前所在的房间连接一个出口到另一个房间。
+	conn <方向> none 则表示清除你目前所在房间的出口 <方向>。
+
+dcon 〈方向〉 〈房间档名〉
+    双向连接你目前所在房间与目标房间。
+
+setobj <NPC或OBJ> <数量>
+    在你目前所在的房间加某个NPC或物件。(你应该 cd 在房间所在的子目录内！)
+	如：setobj npc/waiter 1 
+    <数量> 为零时清除这个物件。
+
+desc <名称> <描述>
+    在你目前所在的房间加某个词的说明。
+	如：desc 大门 大门上写着：\n\t\t外人严禁入内。\n
+    如<描述>空缺，则为清除该名称。
+
+saveroom
+    将你目前所在的房间存档。
+
+LONG
+	);
+	seteuid(geteuid(this_user()));
+}
+
+void init()
+{
+	if( wizardp(this_user()) ) {
+		add_action("do_mkroom", "mkroom");
+		add_action("do_rset", "rset");
+		add_action("do_connect", "conn");
+		add_action("do_dcon", "dcon");
+		add_action("do_setobj", "setobj");
+		add_action("do_desc", "desc");
+		add_action("do_saveroom", "saveroom");
+		add_action("do_readroom", "readroom");
+	}
+}
+
+string resolve_name(mixed mx)
+{
+        int i;
+	string st;
+
+	if (stringp(mx)) {
+		st=mx;
+		i=strlen(st)-1;
+		if(st[i-1..i]==".lpc") st=st[0..i-2];
+		st = resolve_path(this_user()->query("cwd"), st);
+	}
+	else if (objectp(mx)) st=base_name(mx);
+	else
+		st="";
+       	return st;
+}
+
+
+int do_readroom(string arg)
+{
+	string myfile;
+
+	if (!arg) myfile=resolve_name(environment(this_user()));
+	else myfile=resolve_name(arg);
+
+	myfile=myfile+".lpc";
+
+	if(file_size(myfile)<0 ) return notify_fail("没有这个档案。\n");
+	write(read_file(myfile));
+	return 1;
+}
+
+void check_room()
+{
+	myroom=environment(this_user());
+}
+
+
+string my_header()
+{
+	return "// Room: " + filename + " -- TLBB 房间编辑器" + RMK_VERSION +
+		"\n// Created by "+ this_user()->query("id") + " ( " + ctime(time()) + " )\n\n";
+}
+
+
+int do_mkroom(string arg)
+{
+	string dir, myfile;
+
+	if( !arg ) return notify_fail("指令格式：mkroom <房间档名> ([in | out])\n");
+	if( sscanf(arg, "%s %s", myfile, dir)!=2 ) {
+		myfile = arg;
+		dir = "in";
+	}
+
+	file=resolve_name(myfile);
+	filename = file + ".lpc";
+
+	if( file_size(filename)<10 ) {
+		if( !write_file(filename, my_header() + @ROOM_CODE
+
+inherit ROOM;
+
+void create()
+{
+        set("short", "空房间");
+        set("long", "这是一间什麽也没有的空房间。\n");
+        setup();
+        replace_program(ROOM);
+}
+ROOM_CODE
+        ) ) return notify_fail("你没有写入档案(" + filename +")的权利。\n");
+		call_other(file, "???");
+		myroom=find_object(file);
+		switch(dir) {
+		case "in":
+			myroom->set("indoors",1);
+			break;
+		default :
+        		myroom->set("outdoors",1);
+			break;
+		}
+		my_saveroom(myroom);
+		message_vision(" $N生成了一个新房间：。\n", this_user());
+		this_user()->move(myroom);
+	}
+	else {
+		call_other(file, "???");
+		myroom=find_object(file);
+		if ( environment(this_user()) != myroom ) this_user()->move(myroom);
+		message_vision("只听到$N的房间编辑器「哔」的一声，你觉得这个世界又变大了一点。\n", this_user());
+	}
+	return 1;
+}
+
+int do_rset(string arg)
+{
+	string prop, str;
+	mixed data;
+
+	check_room();
+
+	if( !arg || sscanf(arg, "%s %s", prop, str)!=2 )
+		return notify_fail("指令格式：rset <房间属性> <属性内容>\n");
+
+	if(regexp(str,"^[-,+,0-9][0-9]*$")) 
+		sscanf(str, "%d", data);
+	else if( str == "none" ) {
+		myroom->delete(prop);
+		write(sprintf("delete %s Ok.\n",prop));
+		return 1;
+	} else
+		data = filter_color(str);
+	
+	myroom->set(prop, data);
+	write(sprintf("set %s=%O Ok.\n",prop,data));
+	return 1;
+}
+
+int my_connect(string arg, int flag)
+{
+	mapping exits;
+	string dir, myfile, odir,ofile;
+
+	check_room();
+
+	if( !arg || sscanf(arg, "%s %s", dir, myfile)!=2 )
+		return notify_fail("指令格式：conn | dcon <方向> <房间档名>\n");
+
+	if (flag && (!odir=get_other_dir(dir)) )
+		return notify_fail("无法找到 " + dir + " 的相反方向。\n");
+
+	if ( myfile == "none" ) {
+		if (ofile=myroom->query("exits/" + dir)) {
+			exits=myroom->query("exits");
+			map_delete(exits,dir);
+			if(!sizeof(exits))	myroom->delete("exits");
+			if(!flag) write("清除出口：" + dir + ", OK.\n");
+			else {
+				my_saveroom(myroom);
+				call_other(ofile, "???");
+				myroom=find_object(ofile);
+				exits=myroom->query("exits");
+				map_delete(exits,odir);
+				if(!sizeof(exits))	myroom->delete("exits");
+				my_saveroom(myroom);
+				write("双向清除出口：" + dir + ", OK.\n");
+			}
+				
+	    	}
+		else
+			write("没有" + dir + "这个出口啊。\n");
+		return 1;
+	}
+		
+	myfile=resolve_name(myfile);
+	if(file_size(myfile+".lpc") == -1)
+		return notify_fail("找不到这个文件：( "+myfile + ".lpc" + " )！\n");
+
+	exits = myroom->query("exits");
+	if( mapp(exits) )
+		exits[dir] = myfile;
+	else
+		myroom->set("exits", ([ dir: myfile ]) );
+	if (!flag) write("连接成功。\n");
+	else {
+		my_saveroom(myroom);
+
+		call_other(myfile, "???");
+		myroom=find_object(myfile);
+		myfile=resolve_name(environment(this_user()));
+		exits = myroom->query("exits");
+		if( mapp(exits) )
+			exits[odir] = myfile;
+		else
+			myroom->set("exits", ([ odir: myfile ]) );
+		my_saveroom(myroom);
+
+		write("双向连接成功。\n");
+	}
+	return 1;
+}
+
+int do_connect(string arg)
+{
+	return my_connect(arg,0);
+}
+
+int do_dcon(string arg)
+{
+	return my_connect(arg,1);
+}
+
+
+int do_setobj(string arg)
+{
+        mapping objs;
+        string obj;
+	int num;
+
+	check_room();
+        if( !arg || sscanf(arg, "%s %d", obj, num)!=2 )
+                return notify_fail("指令格式：obj <NPC或OBJ> <数量>\n");
+
+        obj = resolve_name(obj);
+	if(file_size(obj+".lpc") == -1)
+		return notify_fail("找不到这个文件：( "+obj + ".lpc" + " )！\n");
+
+  	objs = myroom->query("objects");
+	if (num > 0) {
+        	if( mapp(objs) )
+	                objs[obj] = num;
+	        else
+        		myroom->set("objects", ([ obj: num ]) );
+	        write("这里放" + num + "个 " + obj + ",...Ok.\n");
+	}
+	else {
+		obj=replace_string(obj,"__DIR__",this_user()->query("cwd"));
+        	if( mapp(objs) ) {
+	                map_delete(objs,obj);
+			if(!sizeof(objs))	myroom->delete("objects");
+                	write("清除物件：" + obj + ", OK.\n");
+		}
+	}
+	myroom->setup();
+	return 1;
+}
+
+int do_desc(string arg)
+{
+        mapping items;
+        string item, describe;
+	string *names;
+
+	check_room();
+        if( !arg )
+                return notify_fail("指令格式：desc <名称> <描述>\n如<描述>空缺，则为清除该名称。\n");
+
+	items = myroom->query("item_desc");
+	if ( sscanf(arg, "%s %s", item, describe)!=2 ) {
+	    if( mapp(items)) {
+	    	names = keys(items);
+		if(member_array(arg, names) == -1) 
+		    return notify_fail("没有这个名称啊：" + arg + "\n");
+		map_delete(items,arg);
+		if(!sizeof(items))	myroom->delete("item_desc");
+		return 1;
+	    }
+	    return notify_fail("没有这个名称啊：" + arg + "\n");
+	}
+	describe = filter_color(describe);
+	describe = describe + "\n";
+        if( mapp(items) )
+                items[item] = describe;
+        else
+                myroom->set("item_desc", ([ item: describe ]) );
+        write("当人们 look " + item + " 时会看到：\n" + describe + "\n");
+        return 1;
+}
+
+string filter_color(string arg)
+{
+	arg = replace_string(arg, "\\n", "\n");
+	arg = replace_string(arg, "\\t", "\t");
+        arg = replace_string(arg, "$BLK$", BLK);
+        arg = replace_string(arg, "$RED$", RED);
+        arg = replace_string(arg, "$GRN$", GRN);
+        arg = replace_string(arg, "$YEL$", YEL);
+        arg = replace_string(arg, "$BLU$", BLU);
+        arg = replace_string(arg, "$MAG$", MAG);
+        arg = replace_string(arg, "$CYN$", CYN);
+        arg = replace_string(arg, "$WHT$", WHT);
+        arg = replace_string(arg, "$HIR$", HIR);
+        arg = replace_string(arg, "$HIG$", HIG);
+        arg = replace_string(arg, "$HIY$", HIY);
+        arg = replace_string(arg, "$HIB$", HIB);
+        arg = replace_string(arg, "$HIM$", HIM);
+        arg = replace_string(arg, "$HIC$", HIC);
+        arg = replace_string(arg, "$HIW$", HIW);
+        arg = replace_string(arg, "$NOR$", NOR);
+	return arg;
+}
+
+void owner_is_killed() { destruct(this_object()); }
+
+int check_file(object croom)
+{
+	int i,j,flag, len ;
+	string fileline;
+
+	file=resolve_name(croom);
+	filename=file+".lpc";
+	fileline=read_file(filename);
+
+	len=strlen(fileline)-1;
+
+	if(strsrch(fileline,"replace_program") == -1 ) replace_room=0;
+	else replace_room=1;
+
+	j=strsrch(fileline,"inherit");
+	if (j == -1)
+	    return notify_fail("?????. This is not look like a room file.\n");
+	i=strsrch(fileline,"#include");
+	if ( i != -1 ) j=(i < j )? i : j ;
+	i=strsrch(fileline,"\n#");
+	if ( i != -1 ) j=(i+1 < j )? i+1 : j ;
+
+	i=strsrch(fileline,"creat");
+
+	flag=strsrch(fileline[0..i],'\n',-1);
+
+	old_header=fileline[j..flag];
+
+        while ( (i++<len) && (fileline[i] != '{') ) ;
+        flag=-1;
+        while ( i++ < len ) {
+                if(fileline[i] == '}') flag++ ;
+                else if(fileline[i] == '{') flag-- ;
+                if(!flag) break;
+        }
+	while ( (i++ < len) && (fileline[i] == '\n') );
+	if ( i < len ) old_end=fileline[i..len];
+	else old_end="";
+	return 1;
+}
+
+int do_saveroom()
+{
+	my_saveroom(environment(this_user()));
+	return 1;
+}
+
+int my_saveroom(object croom)
+{
+	string str, *name;
+	mapping prop;
+	int i;
+
+	myroom=croom;
+	check_file(croom);
+
+	str = my_header() + old_header + @ROOM_CODE
+void create()
+{
+ROOM_CODE ;
+	str += sprintf("\tset(\"short\", %O);\n", myroom->query("short") );
+	str += sprintf("\tset(\"long\", @LONG\n%sLONG\n\t);\n", myroom->query("long") );
+	prop = myroom->query_entire_dbase();
+	name = keys(prop);
+	for(i=0; i<sizeof(name); i++) {
+	    	if( member_array(name[i], special_props)!=-1 ) continue;
+		str += sprintf("\tset(\"%s\", %O);\n", name[i], prop[name[i]] );
+	}
+	str += "\n\tsetup();\n";
+	if(replace_room) str+="\treplace_program(ROOM);\n}\n";
+	else str+="}\n\n";
+
+	str+=old_end;
+
+	// Replace current directory with __DIR__ macro to make relocatable code.
+	i = strlen(file)-1;
+	while( (i > 0) && (file[i]!='/')) i--;
+	if( i>0 ) {
+		write("目前目录：" + file[0..i] + " 以 __DIR__ 取代。\n");
+		str = replace_string(str, "\"" + file[0..i], "__DIR__\"");
+	}
+	rm(filename);
+	write("存档 " + filename + "....");
+	if( write_file(filename, str) ) {
+		write("Ok.\n");
+		return 1;
+	} else
+		return notify_fail("你没有写入这个档案(" + file + ")的权利。\n");
+}
+
+string get_other_dir(string dir)
+{
+        switch(dir) {
+                case "east" : return "west";
+                case "west" : return "east";
+                case "south" : return "north";
+                case "north" : return "south";
+                case "eastup" : return "westdown";
+                case "southup" : return "northdown";
+                case "westup" : return "eastdown";
+                case "northup" : return "southdown";
+                case "eastdown" : return "westup";
+                case "southdown" : return "northup";
+                case "westdown" : return "eastup";
+                case "northdown" : return "southup";
+                case "southeast" : return "northwest";
+                case "southwest" : return "northeast";
+                case "northwest" : return "southeast";
+                case "northeast" : return "southwest";
+                case "up" : return "down";
+                case "down" : return "up";
+                case "enter" : return "out";
+                case "out" : return "enter";
+                default:
+                        return 0;
+        }
+        return 0;
+}
+
+int query_autoload() { return 1; }

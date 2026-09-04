@@ -1,0 +1,137 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/feature/user/user_message.c,v 1.1 2000/03/05 17:15:12 mud Exp $
+ */
+ 
+// message.c
+// last update by cbra Jun-23-1998 for new outdoor room
+
+#include <ansi.h>
+#include <dbase.h>
+
+#define MAX_MSG_BUFFER 500
+
+private int code = 0;  // 0 for gb, other for big5
+string	prompt_string;
+string* channel_name;
+mapping channel_color;
+
+nosave string *msg_buffer = ({});
+
+int query_code()
+{
+	return  code;
+}
+
+void set_code(int mycode)
+{
+	code = mycode;
+}
+
+string query_prompt_string()
+{
+	return	prompt_string;
+}
+
+void set_prompt_string(string prom)
+{
+	prompt_string = prom;
+}
+
+string* query_channels()
+{
+	return channel_name;
+}
+
+void set_channels(string* channels)
+{
+	channel_name = channels;
+}
+
+/*
+void init_channels()
+{
+	channel_name = CHANNEL_D->init_channel_name( this_object() );
+}
+*/
+
+int is_on_channel(string chan)
+{
+	if (!pointerp(channel_name))	return 0;
+	return (member_array(chan, channel_name) != -1);
+}
+
+mapping query_channel_color()
+{
+	return channel_color;
+}
+
+void set_channel_color( mapping color)
+{
+	channel_color = color;
+}
+
+/*
+void init_channel_color()
+{
+	channel_color = CHANNEL_D->init_channel_color( this_object() );
+}
+*/
+
+void receive_message(string msgclass, string msg)
+{
+	string subclass; // *ch;
+
+/*
+	if( !interactive(this_object()) ) {
+		this_object()->relay_message(msgclass, msg);
+		return;
+	}
+*/
+
+	if( sscanf(msgclass, "%s:%s", subclass, msgclass)==2 ) {
+		switch(subclass) {
+			case "channel":
+				if(  (!pointerp(channel_name))
+				|| (member_array(msgclass, channel_name)==-1 ))
+					return;
+				msg = channel_color[msgclass]+msg;
+				break;
+			case "outdoor":
+				if( !environment() || !( 
+					(environment()->query("outdoors")) || 
+					(environment()->query_climate()) ) )
+					return;
+				break;
+// comment out by hdk on 1998-01-03 //  default:
+//                                error("Message: Invalid Subclass " + subclass + ".\n");
+		}
+	}
+
+	if( query_temp("block_msg/all") || query_temp("block_msg/" + msgclass) )
+		return;
+
+	if (code) msg = LANGUAGE_D->toBig5(msg);
+	if( in_input(this_object()) || in_edit(this_object()) ) {
+		if( sizeof(msg_buffer) < MAX_MSG_BUFFER )
+			msg_buffer += ({ msg });
+	} else
+		receive( msg );
+}
+
+void write_prompt()
+{
+	if( sizeof(msg_buffer) ) {
+		if (code) receive(LANGUAGE_D->toBig5(BOLD "[输入时暂存讯息]\n" NOR));
+		else receive(BOLD "[输入时暂存讯息]\n" NOR);
+		for(int i=0; i<sizeof(msg_buffer); i++)
+			receive(msg_buffer[i]);
+		msg_buffer = ({});
+	}
+	write("> ");
+}
+
+void receive_snoop(string msg)
+{
+	receive("%" + msg);
+}

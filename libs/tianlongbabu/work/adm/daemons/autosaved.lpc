@@ -1,0 +1,91 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/adm/daemons/autosaved.c,v 1.1 2000/03/05 16:38:03 mud Exp $
+ */
+ 
+// Auto save user Data
+// Creat by cbra May-30-1998
+// for 2000 users, with some misc update. min 10 users / 5 seconds
+
+#include <ansi.h>
+
+#undef	MISC_LOG		// debug only
+//#define MISC_LOG		// debug only
+
+#define AUTO_SAVE_TIME 600	// every 600 seconds a full save
+#define AUTO_PHASE_TIME 5	// every 5 seconds a phase
+#define AUTO_RATE (AUTO_SAVE_TIME/AUTO_PHASE_TIME)
+
+inherit F_DBASE;
+
+void auto_save();
+void auto_phase_save(object* ob,int size,int index,int step);
+ 
+void create()
+{
+	seteuid(getuid());
+	set("channel_id", "存盘精灵(AutoSave)");
+	CHANNEL_D->do_channel( this_object(), "sys", "\n自动存盘已经启动。\n\n");
+	call_out("auto_save", 55);
+}
+
+void auto_save()
+{
+	int size,step;
+	object *ob;
+
+	seteuid(getuid());
+	ob=users();
+	size=sizeof(users());
+	if (size > 0) {
+		step=size/(AUTO_RATE)+1;
+		if (step < 10 ) step = 10;
+		call_out("auto_phase_save",2,ob,size,0,step);
+// log all the time #ifdef MISC_LOG
+		log_file("nosave/misc.log",
+			sprintf("total %d, step %d, start %d, began at %s\n",
+				size, step, 0, ctime(time())) );
+//#endif
+	} 
+	remove_call_out("auto_save");
+	call_out("auto_save", AUTO_SAVE_TIME+random(120));
+}
+
+void auto_phase_save(object* ob,int size,int index,int step)
+{
+	int i;
+//	string id;
+	object link_ob;
+
+	for( i=index; i<index+step; i++) {
+		if ( i >= size)	{
+// log all the time #ifdef MISC_LOG
+			log_file("nosave/misc.log",
+				sprintf("total %d, step %d, end %d, finished at %s\n",
+					size, step, i, ctime(time())) );
+//#endif
+			return;	
+		}
+		if ( (!ob[i]) || (!objectp(ob[i])) )	continue;
+		if ( !environment(ob[i]) )	continue;
+//		id = (string) ob[i]->query("id");
+//		if (!id) continue;
+		if( !objectp(link_ob = ob[i]->query_temp("link_ob")) ) continue;
+		if( (int)link_ob->save() && (int)ob[i]->save() ) {
+//			if (!(ob[i]->query("env/blk_autosave")))
+//				tell_object(ob[i], GRN"您的档案已经自动存盘完毕。\n"NOR);
+		}
+		else {
+			log_file("nosave/misc.log",
+				sprintf("AUTO_SAVE user save fail. user %O at %s\n",
+					ob[i],ctime(time()) ) );
+			tell_object(ob[i], RED"您的档案自动存盘失败。\n"NOR);
+		}
+	}
+#ifdef MISC_LOG
+	log_file("nosave/misc.log",
+		sprintf("total %d, step %d, phase %d, cont at %s\n",
+			size, step, index+step, ctime(time())) );
+#endif
+	call_out("auto_phase_save",AUTO_PHASE_TIME,ob,size,index+step,step);
+}

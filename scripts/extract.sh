@@ -40,10 +40,25 @@ case "$lower" in
     fi
     ;;
   *.rar)
-    (cd "$DEST" && unrar x -y -o+ "$ARCHIVE" >/dev/null)
+    (cd "$DEST" && unrar x -y -o+ -p- "$ARCHIVE" >/dev/null)
+    if [[ -z "$(find "$DEST" -type f -print -quit 2>/dev/null)" ]]; then
+      # Passwords found in archive comments of this collection:
+      # 大唐西游指间版.rar comment "密码：676036579"; zip comment "muds.cn".
+      for pw in 676036579 muds.cn mud.ren; do
+        echo "  (retrying rar with known archive password '$pw')"
+        (cd "$DEST" && unrar x -y -o+ -p"$pw" "$ARCHIVE" >/dev/null) && break
+      done
+    fi
     ;;
   *.7z)
     7z x -y -o"$DEST" "$ARCHIVE" >/dev/null
+    if [[ -z "$(find "$DEST" -type f -print -quit 2>/dev/null)" ]]; then
+      # 武林群侠传MUDLIB.7z trailer: "解压密码： mud.ren"
+      for pw in mud.ren muds.cn 676036579; do
+        echo "  (retrying 7z with known archive password '$pw')"
+        7z x -y -p"$pw" -o"$DEST" "$ARCHIVE" >/dev/null && break
+      done
+    fi
     ;;
   *.tar.gz|*.tgz)
     tar xzf "$ARCHIVE" -C "$DEST"

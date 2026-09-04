@@ -1,0 +1,342 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/cmds/wiz/who.c,v 1.8 2000/10/27 05:30:07 mud Exp $
+ */
+ 
+// who.c
+// last update by cbra Jun-06-1998 for ip and start_write
+// last update by may April 17, 2000 for class sorting.
+// last modify by spiceboy@Tlbb July 25 2000 
+// fix the bug :)
+
+
+#include <ansi.h>
+#include <net/dns.h>
+
+inherit F_CLEAN_UP;
+
+int sort_user(object,object);
+int sort_name(object,object);
+int sort_exp(object,object);
+int sort_pk(object,object);
+
+void create() { seteuid(getuid()); }
+
+mixed main(object me, string arg, int remote)
+{
+	string *option, fname = "";
+	object *list, *ob;
+	int i, j, total, ppl_cnt, cnt, count, wcnt = 0;
+	int opt_long, opt_id, opt_exp, opt_wiz, opt_party;
+	int opt_class, opt_reverse, opt_new, opt_pk;
+	int families;
+	mixed str;
+	
+
+	if( arg ) {
+		option = explode(arg, " ");
+		i = sizeof(option);
+		while( i-- )
+			switch(option[i]) {
+				case "-l": opt_long = 1; break;
+				case "-w": opt_wiz = 1; break;
+				case "-c": opt_class = 1; break;
+				case "-n": opt_new = 1; break;
+				case "-r": opt_reverse = 1; break;
+				case "-f": opt_party = 1; break;
+				case "-e": opt_exp = 1; break;
+				case "-k": opt_pk = 1; break;
+				default:
+
+					if( wizardp(me)
+					&&	option[i][0]=='@' ) {
+						RWHO_Q->send_rwho_q(option[i][1..sizeof(option[i])],
+							me, opt_long);
+						write("网路讯息已送出，请稍候。\n");
+						return 1;
+					}
+
+					return notify_fail("指令格式：who [-l|-w|-f|-r|-c|-e]\n");
+			}
+	}
+	if(!wizardp(me)) opt_pk = 0;
+
+	if( opt_long && !wizardp(me)) {
+		if( (int)me->query("gin") < 20 )
+			return notify_fail("你的精神太差了，没有办法得知所有玩家的详细资料。\n");
+		me->receive_damage("gin", 20);
+	}
+        str = "◎ " + MUD_NAME + " (http://www.tlbb.net)\n";
+	if( opt_long )
+            str += "其中"HIW"※"NOR+"表示断线中"HIB" ◎"NOR+"表示发呆中  指令：who [-l|-w|-f|-r|-c|-e]\n";
+        str += "——————————————————————————————————————\n";
+	// users() already provide all users, do not need to use filter from object array. which
+	// takes more time to get all users!
+	// ob = filter_array(objects(), (: userp :));
+	ob = users();
+	if (opt_party)
+		ob = filter_array(ob, (: $1->query("family/family_name") ==
+			$2->query("family/family_name") :), me);
+	if( opt_exp )
+	    list = sort_array(ob, (: sort_exp :));
+	else if(opt_reverse || opt_new)
+	    list = sort_array(ob, (: sort_name :));
+	else if(opt_class || opt_long)
+	    list = sort_array(ob, (: sort_user :));
+	else if( opt_pk )
+	    list = sort_array(ob, (: sort_pk :));
+	else
+	    list = sort_array(ob, (: sort_name :));
+	ppl_cnt = 0;
+	cnt = 0;
+	if( opt_long || opt_wiz ) {
+		i = sizeof(list);
+		while( i-- ) {
+			// Skip those users in login limbo.
+			if( !environment(list[i]) ) continue;
+			if( !me->visible(list[i]) ) continue;
+            if( opt_wiz && !wiz_level(list[i]) ) continue;
+			if (interactive(list[i])) ppl_cnt++;
+			else cnt++;
+			str = sprintf("%s%12s%s%s\n",
+				str,
+				RANK_D->query_rank(list[i]),
+				interactive(list[i])?(query_idle(list[i]) > 120?HIB "◎" NOR:"  "):HIW "※" NOR,
+				list[i]->short(1)
+			);
+		}
+	} else if(opt_exp) {
+	        ppl_cnt = 0;
+                j = sizeof(list);
+                while( j-- ) {
+                    // Skip those users in login limbo.
+                    if(!environment(list[j]) ) continue;
+                    if(me && !me->visible(list[j]) ) continue;
+                    if(!me && list[j]->query("env/invisibility"))    continue;
+                    str = sprintf("%s%-20s%s",
+                        str,
+                        list[j]->name(1)+"("+capitalize(list[j]->query("id"))+")",
+                        (ppl_cnt%4==3? "\n": "")
+                    );
+                    ppl_cnt++;
+                }
+                if( ppl_cnt%4 ) str += "\n";
+	} else if ( opt_new ) {
+                ppl_cnt = 0;
+                j = sizeof(list);
+                while( j-- ) {
+                    // Skip those users in login limbo.
+                    if(!environment(list[j]) ) continue;
+                    if(me && !me->visible(list[j]) ) continue;
+                    if(!me && list[j]->query("env/invisibility"))    continue;
+		    if(list[j]->query("age") >= 16) continue;
+                    str = sprintf("%s%-20s%s",
+                        str,
+                        list[j]->name(1)+"("+capitalize(list[j]->query("id"))+")",
+                        (ppl_cnt%4==3? "\n": "")
+                    );
+                    ppl_cnt++;
+                }
+                if( ppl_cnt%4 ) str += "\n";
+    } else if ( opt_pk ) {
+                ppl_cnt = 0;
+                j = sizeof(list);
+                while( j-- ) {
+                    // Skip those users in login limbo.
+                    if(!environment(list[j]) ) continue;
+                    if(me && !me->visible(list[j]) ) continue;
+                    if(!me && list[j]->query("env/invisibility"))    continue;
+            		if(list[j]->query("REAL_PK") < 1) continue;
+                    str = sprintf("%s " + RED + "%4d" NOR + " %-20s%s",
+                        str,
+						list[j]->query("REAL_PK"),
+                        list[j]->name(1)+"("+capitalize(list[j]->query("id"))+")",
+                        (ppl_cnt%3==2? "\n": "")
+                    );
+                    ppl_cnt++;
+                }
+                if( ppl_cnt%3 ) str += "\n";
+	} else if ( opt_reverse ) {
+                ppl_cnt = 0;
+                total = sizeof(list);
+		printf("total = %d\n\n\n",total);
+		j = 0;
+                while( j < total ) {
+                    // Skip those users in login limbo.
+                    if(!environment(list[j]) ) {
+			j++;
+			continue;
+		    }
+                    if(me && !me->visible(list[j]) ) {
+			j++;
+			continue;
+		    }
+                    if(!me && list[j]->query("env/invisibility")) {
+			j++;
+			continue;
+		    }
+                    str = sprintf("%s%-20s%s",
+                        str,
+                        list[j]->name(1)+"("+capitalize(list[j]->query("id"))+")",
+                        (ppl_cnt%4==3? "\n": "")
+                    );
+                    ppl_cnt++;
+		    j++;
+                }
+                if( ppl_cnt%4 ) str += "\n";
+	} else if(opt_class){
+		i = sizeof(list);
+		count = 0;
+		families = 0;
+		while( i-- ) {
+			// Skip those users in login limbo.
+			if( !environment(list[i]) ) continue;
+			if( !me->visible(list[i]) ) continue;
+			if (!wiz_level(list[i]) && fname != list[i]->query("family/family_name")) {
+			    fname = list[i]->query("family/family_name");
+			    // We do not need extra return key at the first family.
+			    if(families)
+				str += "\n";
+			    str += sprintf( HIG"【"+"%-10s" , (fname?fname:"普通百姓") + "】"NOR);
+			    families++;
+			    count = 0;
+			}
+			if (!wcnt && wiz_level(list[i])) {
+			    if(count > 0)
+				str += "\n";
+			    str += sprintf("%-10s" , HIG"【神仙】"NOR);
+			    wcnt = 1;
+			    count = 0;
+			}
+			if (count%4 != 0) {
+				str += " ";
+			} else 
+				str += "\n";
+			count++;
+
+                        str = sprintf("%s%-20s",
+				str,
+//				interactive(list[i])?(query_idle(list[i]) > 120?HIB "◎" NOR:""):HIW "※" NOR,
+				opt_id?capitalize(list[i]->query("id")): list[i]->name(1)+"("+capitalize(list[i]->query("id"))+")",
+			);
+			if (interactive(list[i])) ppl_cnt++;
+			else cnt++;
+		}
+//           if( count%4 != 0 ) 
+		str += "\n";
+        } else {
+                ppl_cnt = 0;
+                j = sizeof(list);
+                while( j-- ) {
+                    // Skip those users in login limbo.
+                    if(!environment(list[j]) ) continue;
+                    if(me && !me->visible(list[j]) ) continue;
+                    if(!me && list[j]->query("env/invisibility"))    continue;
+                    str = sprintf("%s%-20s%s",
+                        str,
+                        list[j]->name(1)+"("+capitalize(list[j]->query("id"))+")",
+                        (ppl_cnt%4==3? "\n": "")
+                    );
+                    ppl_cnt++;
+                }
+                if( ppl_cnt%4 ) str += "\n";
+        }
+	str +="——————————————————————————————————————\n";
+	if( !(opt_new || opt_pk))
+		str = sprintf("%s"+"有"+"%s"+"位玩家连线中，"+"%s"+"位玩家断线中，", str, chinese_number(ppl_cnt),
+			chinese_number(cnt) );
+	str = sprintf("%s系统负担：%s\n", str, query_load_average());
+
+//	if( remote ) return str;
+
+	me->start_more(str);
+	return 1;
+}
+
+int sort_user(object ob1, object ob2)
+{
+	string name1, name2;
+
+	reset_eval_cost();
+	if( wiz_level(ob1) != wiz_level(ob2) )
+		return wiz_level(ob2)
+			- wiz_level(ob1);
+	
+	name1 = ob1->query("family/family_name");
+	name2 = ob2->query("family/family_name");
+
+	if (intp(name1)) name1 = "";
+	if (intp(name2)) name2 = "";
+	if (name1 > name2) return -1;
+	if (name1 < name2) return 1;
+
+	return (int)ob2->query("combat_exp") - (int)ob1->query("combat_exp");
+}
+
+int sort_pk(object ob1, object ob2)
+{
+    reset_eval_cost();
+    if( wizardp(ob1) && !wizardp(ob2) ) return -1;
+    
+    if( wizardp(ob2) && !wizardp(ob1) ) return 1;
+
+    if( wizardp(ob1) && wizardp(ob2) )
+        return (int)SECURITY_D->get_wiz_level(ob2) 
+            - (int)SECURITY_D->get_wiz_level(ob1);
+    if (!environment(ob2))    return -1;
+    if (!environment(ob1))    return 1;
+    return ((int)ob1->query("REAL_PK") - (int)ob2->query("REAL_PK"));
+}
+
+int sort_name(object ob1, object ob2)
+{
+    reset_eval_cost();
+    if( wizardp(ob1) && !wizardp(ob2) ) return -1;
+    
+    if( wizardp(ob2) && !wizardp(ob1) ) return 1;
+
+    if( wizardp(ob1) && wizardp(ob2) )
+        return (int)SECURITY_D->get_wiz_level(ob2) 
+            - (int)SECURITY_D->get_wiz_level(ob1);
+    if (!environment(ob2))    return -1;
+    if (!environment(ob1))    return 1;
+    return strcmp((string)ob2->query("id"),(string)ob1->query("id"));
+}
+
+int sort_exp(object ob1, object ob2)
+{
+    reset_eval_cost();
+    if( wizardp(ob1) && !wizardp(ob2) ) return -1;
+    
+    if( wizardp(ob2) && !wizardp(ob1) ) return 1;
+
+    if( wizardp(ob1) && wizardp(ob2) )
+        return (int)SECURITY_D->get_wiz_level(ob2) 
+            - (int)SECURITY_D->get_wiz_level(ob1);
+    
+    return (int)ob2->query("combat_exp") - (int)ob1->query("combat_exp");
+}
+
+
+int help(object me)
+{
+write(@HELP
+指令格式 : who [-l|-f|-c|-e|-n|-r|-w|-k]
+
+这个指令可以列出所有在线上的玩家及其等级。
+
+-l 选项列出较长的讯息(long message)。
+-f 列出线上的同门派玩家(family)。
+-c 按门派归类排列(classified)。
+-e 按经验大小排列(experence)。
+-n 列出线上十六岁以下的新手(new)。
+-r 以字母顺序倒排列(reverse order)。
+-w 只列出在线的巫师(wiz)。
+-k 按PK数量排列(wizard only)。
+   无选择时按字母顺序排列。
+
+相关指令： finger
+HELP
+	);
+	return 1;
+}

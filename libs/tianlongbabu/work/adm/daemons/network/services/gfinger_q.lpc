@@ -1,0 +1,123 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/adm/daemons/network/services/gfinger_q.c,v 1.2 2000/10/16 05:30:06 mud Exp $
+ */
+ 
+/*
+ * File    : gfinger_q.c
+ * Creator : Pinkfish@Discworld
+ *         : Grendel@Tmi-2
+ * When    : 93-08-15
+ *
+ * This file is part of the tmi mudlib.  Please keep this header intact.
+ *
+ * This protocol is a request for information about a user at another mud.
+ */
+ 
+
+// Ported to ES2 mudlib by Annihilator@ES2 (06/15/95)
+
+#include <net/dns.h>
+#include <net/macros.h>
+
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+
+#include <net/intermud.h> // add by cbra for debug and mudlist restriction 1998-01-03
+
+#define MAX_LINE 20
+
+void create() {
+        seteuid(ROOT_UID);
+}
+
+// Finger a wiz on another mud.
+void send_gfinger_q(string mud, string wiz, object them)
+{
+	mapping minfo;
+
+	if(!ACCESS_CHECK(previous_object())) return;
+
+	if (!them) them = this_player(1);
+	mud = htonn( mud );
+
+	if (mud == mud_nname()) return ;
+
+	// make sure we have an entry for the recipient
+	minfo = DNS_MASTER->query_mud_info(mud);
+	if (!minfo) return ;
+#ifdef CBRA
+        set("channel_id", "网路频道精灵");
+	CHANNEL_D->do_channel(this_object(),"debug",sprintf("address:%s:%s. function: %s",
+	minfo["HOSTADDRESS"], minfo["PORTUDP"],DNS_GFINGER_Q  ));
+#endif
+
+	// send the finger
+	DNS_MASTER->send_udp(minfo["HOSTADDRESS"], minfo["PORTUDP"],
+		sprintf("@@@%s||NAME:%s||PORTUDP:%d||PLAYER:%s||ASKWIZ:%s@@@\n",
+		DNS_GFINGER_Q, Mud_name(), udp_port(),
+		wiz, (string)them->query("id")));
+
+}
+
+void incoming_request(mapping info)
+{
+	string reply;
+/// add by cbra for split finger_all 
+	int i,len,j,k;
+	string sub;
+
+	if (info["NAME"] && info["PORTUDP"] && info["PLAYER"]) {
+		if (info["NAME"] == mud_nname()) return ;
+
+		// if we don't have a record of the mud get it
+		if (!DNS_MASTER->dns_mudp(info["NAME"]))
+			PING_Q->send_ping_q(info["HOSTADDRESS"], info["PORTUDP"]);
+
+// add by cbra for host check, valid_hosts define in /include/net/intermud.h 1998-01-03
+#ifdef CBRA
+        set("channel_id", "网路频道精灵");
+	CHANNEL_D->do_channel(this_object(),"debug",sprintf("address:%s:%s. function: %s",
+	info["HOSTADDRESS"], info["PORTUDP"],DNS_GFINGER_A  ));
+#endif
+                if ( member_array(info["HOSTADDRESS"],valid_hosts)== -1) {
+                        reply = "Welcome to TLBB (http://www.tlbb.net)\n";
+			DNS_MASTER->send_udp(info["HOSTADDRESS"], info["PORTUDP"],
+				sprintf("@@@%s||NAME:%s||PORTUDP:%d||ASKWIZ:%s||MSG:%s@@@\n",
+				DNS_GFINGER_A, mud_nname(), udp_port(),
+				info["ASKWIZ"], reply));
+			return;
+		}
+// end
+		// send the finger reply
+		if ((info["PLAYER"])=="") {
+			reply = (string)FINGER_D->finger_all();
+//// by cbra Feb-14-1998
+	                len=strlen(reply);
+			j=0;
+			k=0;
+       			for (i=0;i<len;i++) {
+                        	if (reply[i]==10) j++;   // "\n"=10
+                        	if ((i==len-1) || (j>=MAX_LINE)) {
+                                	sub=reply[k..i];
+                                	k=i+1;
+                                	j=0;
+		DNS_MASTER->send_udp(info["HOSTADDRESS"], info["PORTUDP"],
+			sprintf("@@@%s||NAME:%s||PORTUDP:%d||ASKWIZ:%s||MSG:%s@@@\n",
+			DNS_GFINGER_A, mud_nname(), udp_port(),
+			info["ASKWIZ"], sub /*reply*/));
+				}
+			}
+//////
+		}
+		else {
+			reply = (string)FINGER_D->finger_user(lower_case(info["PLAYER"]));
+		DNS_MASTER->send_udp(info["HOSTADDRESS"], info["PORTUDP"],
+			sprintf("@@@%s||NAME:%s||PORTUDP:%d||ASKWIZ:%s||MSG:%s@@@\n",
+			DNS_GFINGER_A, mud_nname(), udp_port(),
+			info["ASKWIZ"], reply ));
+		}
+
+	}
+}
+

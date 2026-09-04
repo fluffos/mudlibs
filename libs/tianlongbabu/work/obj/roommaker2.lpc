@@ -1,0 +1,342 @@
+/*
+ * TLBB MUDLIB
+ * $Header: /home/mud/cvsroot/tlbbmud/tlbb/tlbb_mudlib/obj/roommaker2.c,v 1.1 2000/04/10 05:30:24 mud Exp $
+ */
+ 
+// Last update by Jane 97/11/6. 
+// roommaker.c 
+// for TLBB.lib 
+
+#define RMK_VERSION "(v1.2)"
+#include <ansi.h>
+inherit ITEM;
+inherit F_AUTOLOAD;
+string filter_color(string);
+string *special_props = ({
+	"short", "long" });
+
+int save_room_file(string yn, string file, string str);
+
+void create()
+{
+	set_name("房间编辑器" + RMK_VERSION, ({ "roommaker", "maker" }) );
+	set_weight(100);
+	set("unit", "个" );
+	set("long", @LONG
+这是一个用来「快速」制造基本房间结构的工具，帮助时间不多或有严重 lag
+的巫师利用线上输入制造简单的房间，不过如果你想提高自己区域房间的品质
+，最好不要太依赖这个东西，你可以使用以下几个指令：
+
+mkroom <房间档名> <in 或 out>
+    in 表示 indoors(室内), out 表示 outdoors(室外), 或不写则表示其它.
+    如漏写，将来可以用：rset indoors 1 来补上。造出一个「空」房间之後，
+    你可以 goto 到这个房间用 rset 设定房间的叙述，变量与连接。
+
+rset <房间属性> <属性内容>
+    设定你目前所在房间的属性，如 rset short，rset long 等。
+    用 to rset long 比较好(可以输入多行的long).
+    颜色与 nick 一样，但不会自动加 $NOR$.
+    如：rset resource/water 1, 设定为可灌水之处。
+
+connect <方向> <房间档名>
+    将你目前所在的房间连接一个出口到另一个房间。
+
+decon <方向>
+    清除你目前所在房间的某个出口。
+
+setobj <NPC或OBJ> <数量>
+    在你目前所在的房间加某个NPC或物件。(你应该 cd 在房间所在的子目录内！)
+	如：setobj npc/waiter 1 
+    <数量> 为零时清除这个物件。
+
+desc <名称> <描述>
+    在你目前所在的房间加某个词的说明。
+	如：desc 大门 大门上写着：\n\t\t外人严禁入内。\n
+    如<描述>空缺，则为清除该名称。
+
+saveroom
+    将你目前所在的房间存档。
+LONG
+	);
+}
+
+int query_autoload() { return 1; }
+
+void init()
+{
+	if( wizardp(environment()) ) {
+		seteuid(getuid(environment()));
+		add_action("do_mkroom", "mkroom");
+		add_action("do_rset", "rset");
+		add_action("do_connect", "connect");
+		add_action("do_decon", "decon");
+		add_action("do_setobj", "setobj");
+		add_action("do_desc", "desc");
+		add_action("do_saveroom", "saveroom");
+	}
+}
+
+int do_mkroom(string arg)
+{
+	string file, dir = ""; // code;
+
+	if( !arg ) return notify_fail("指令格式：mkroom <房间档名> [in | out]\n");
+	if( sscanf(arg, "%s %s", file, dir)!=2 )
+		file = arg;
+	seteuid(geteuid(this_player()));
+	file = resolve_path(this_player()->query("cwd"), file) + ".lpc";
+	if( file_size(file)!=-1 )
+		return notify_fail("档案 " + file + " 已经存在了。\n");
+	switch(dir) {
+	    case "in":
+	if( !write_file(file, @ROOM_CODE
+// This is a room made by roommaker.
+
+inherit ROOM;
+
+void create()
+{
+        set("short", "空房间");
+        set("long", "这是一间什麽也没有的空房间。\n");
+	set("indoors",1);
+        setup();
+        replace_program(ROOM);
+}
+ROOM_CODE
+        ) ) return notify_fail("你没有写入档案(" + file +")的权利。\n");
+            break;
+	    case "out" :
+        if( !write_file(file, @ROOM_CODE
+// This is a room made by roommaker.
+
+inherit ROOM;
+
+void create()
+{
+        set("short", "空房间");
+        set("long", "这是一间什麽也没有的空房间。\n");
+        set("outdoors",1);
+        setup();
+        replace_program(ROOM);
+}
+ROOM_CODE
+        ) ) return notify_fail("你没有写入档案(" + file +")的权利。\n");
+            break;
+            case "":
+	    default :
+        if( !write_file(file, @ROOM_CODE
+// This is a room made by roommaker.
+
+inherit ROOM;
+
+void create()
+{
+        set("short", "空房间");
+        set("long", "这是一间什麽也没有的空房间。\n");
+        setup();
+        replace_program(ROOM);
+}
+ROOM_CODE
+        ) ) return notify_fail("你没有写入档案(" + file +")的权利。\n");
+            break;
+
+	}
+
+	message_vision("只听到$N的房间编辑器「哔」的一声，你觉得这个世界又变大了一点。\n", this_player());
+	return 1;
+}
+
+int do_rset(string arg)
+{
+	string prop, str;
+	mixed data;
+
+	if( !arg || sscanf(arg, "%s %s", prop, str)!=2 )
+		return notify_fail("指令格式：rset <房间属性> <属性内容>\n");
+
+	if( sscanf(str, "%d", data)!=1 ) 
+		data = filter_color(str);
+	
+	environment(this_player())->set(prop, data);
+	write("Ok.\n");
+	return 1;
+}
+
+int do_connect(string arg)
+{
+	mapping exits;
+	string dir, file;
+
+	if( !arg || sscanf(arg, "%s %s", dir, file)!=2 )
+		return notify_fail("指令格式：connect <方向> <房间档名>\n");
+	file = resolve_path(this_player()->query("cwd"), file);
+	if(file_size(file + ".lpc") == -1)
+		return notify_fail("找不到这个文件：( "+file + ".lpc" + " )！\n");
+	exits = environment(this_player())->query("exits");
+	if( mapp(exits) )
+		exits[dir] = file;
+	else
+		environment(this_player())->set("exits", ([ dir: file ]) );
+	write("连接成功。\n");
+	return 1;
+}
+
+int do_decon(string dir)
+{
+	if( !dir)
+		return notify_fail("指令格式：decon <方向>\n");
+	if ((environment(this_player())->query("exits/" + dir))) {
+		environment(this_player())->delete("exits/" + dir );
+		write("清除出口：" + dir + ", OK.\n");
+		return 1;
+	    }
+	write("没有" + dir + "这个出口啊。\n");
+	return 1;
+}
+
+int do_setobj(string arg)
+{
+        mapping objs;
+        string obj;
+	int num;
+
+        if( !arg || sscanf(arg, "%s %d", obj, num)!=2 )
+                return notify_fail("指令格式：obj <NPC或OBJ> <数量>\n");
+
+        obj = resolve_path(this_player()->query("cwd"), obj);
+	if(!objectp(load_object(obj))) {
+		write("找不到这样东西！\n");
+		return 1;
+	}
+
+  	objs = environment(this_player())->query("objects");
+	if (num > 0) {
+        	if( mapp(objs) )
+	                objs[obj] = num;
+	        else
+        		environment(this_player())->set("objects", ([ obj: num ]) );
+	        write("这里放" + num + "个 " + obj + ",...Ok.\n");
+	        return 1;
+	}
+	else {
+		obj=replace_string(obj,"__DIR__",this_player()->query("cwd"));
+        	if( mapp(objs) ) {
+	                map_delete(objs,obj);
+                	write("清除物件：" + obj + ", OK.\n");
+		}
+		return 1;
+	}
+}
+
+int do_desc(string arg)
+{
+        mapping items;
+        string item, describe;
+	string *names;
+
+        if( !arg )
+                return notify_fail("指令格式：desc <名称> <描述>\n如<描述>空缺，则为清除该名称。\n");
+
+	items = environment(this_player())->query("item_desc");
+	if ( sscanf(arg, "%s %s", item, describe)!=2 ) {
+	    if( mapp(items)) {
+	    	names = keys(items);
+		if(member_array(arg, names) == -1) 
+		    return notify_fail("没有这个名称啊：" + arg + "\n");
+		environment(this_player())->delete("item_desc/" + arg );
+		return 1;
+	    }
+	    return notify_fail("没有这个名称啊：" + arg + "\n");
+	}
+	describe = filter_color(describe);
+	describe = describe + "\n";
+        if( mapp(items) )
+                items[item] = describe;
+        else
+                environment(this_player())->set("item_desc", ([ item: describe ]) );
+        write("当人们 look " + item + " 时会看到：\n" + describe + "\n");
+        return 1;
+}
+
+int do_saveroom(string arg)
+{
+	object env;
+	string str, *name, file;
+	mapping prop;
+	int i;
+
+	env = environment(this_player());
+	file = file_name(env) + ".lpc";
+	str = "// Room: " + file + @ROOM_CODE
+
+
+inherit ROOM;
+
+void create()
+{
+ROOM_CODE
+	;
+	str += sprintf("\tset(\"short\", %O);\n", env->query("short") );
+	str += sprintf("\tset(\"long\", @LONG\n%sLONG\n\t);\n", env->query("long") );
+	prop = env->query_entire_dbase();
+	name = keys(prop);
+	for(i=0; i<sizeof(name); i++) {
+	    	if( member_array(name[i], special_props)!=-1 ) continue;
+		str += sprintf("\tset(\"%s\", %O);\n", name[i], prop[name[i]] );
+	}
+	str += "\n\tsetup();\n\treplace_program(ROOM);\n}\n";
+
+	// Replace current directory with __DIR__ macro to make relocatable code.
+	i = strlen(file)-1;
+	while( (i > 0) && (file[i]!='/')) i--;
+	if( i>0 ) {
+		write("目前目录：" + file[0..i] + " 以 __DIR__ 取代。\n");
+		str = replace_string(str, "\"" + file[0..i], "__DIR__\"");
+	}
+
+	if( file_size(file)!=-1 ) {
+		write("档案 " + file + " 已存在，"+RED"所有秘密都将消失！"NOR+"要删除旧档吗？[y/n]");
+		input_to("save_room_file", file, str);
+		return 1;
+	}
+
+	return save_room_file("y", file, str);
+}
+
+int save_room_file(string yn, string file, string str)
+{
+	if( strlen(yn)<1 || yn[0]!='y' ) return 1;
+
+	rm(file);
+	write("存档 " + file + "....");
+	if( write_file(file, str) ) {
+		write("Ok.\n");
+		return 1;
+	} else
+		return notify_fail("你没有写入这个档案(" + file + ")的权利。\n");
+}
+
+string filter_color(string arg)
+{
+	arg = replace_string(arg, "\\n", "\n");
+	arg = replace_string(arg, "\\t", "\t");
+        arg = replace_string(arg, "$BLK$", BLK);
+        arg = replace_string(arg, "$RED$", RED);
+        arg = replace_string(arg, "$GRN$", GRN);
+        arg = replace_string(arg, "$YEL$", YEL);
+        arg = replace_string(arg, "$BLU$", BLU);
+        arg = replace_string(arg, "$MAG$", MAG);
+        arg = replace_string(arg, "$CYN$", CYN);
+        arg = replace_string(arg, "$WHT$", WHT);
+        arg = replace_string(arg, "$HIR$", HIR);
+        arg = replace_string(arg, "$HIG$", HIG);
+        arg = replace_string(arg, "$HIY$", HIY);
+        arg = replace_string(arg, "$HIB$", HIB);
+        arg = replace_string(arg, "$HIM$", HIM);
+        arg = replace_string(arg, "$HIC$", HIC);
+        arg = replace_string(arg, "$HIW$", HIW);
+        arg = replace_string(arg, "$NOR$", NOR);
+	return arg;
+}
+
+void owner_is_killed() { destruct(this_object()); }
