@@ -48,7 +48,9 @@ to fail compilation (41 files under `single/tests/compiler/fail/`) or the
 one driver-dialect gap noted above -- expected for this kind of reference/
 testsuite lib, not a sign of missing conversion work.
 
-WASM status: not yet attempted (`wasm_status` left `""`).
+WASM status: **playable**. Connect-and-play (`who`, `eval`, `quit`) is
+verified under the shared WASM driver (`NOTES.md` WASM status update).
+Play: https://mudlibs.fluffos.info/lil/
 
 ## Local run
 

@@ -52,8 +52,14 @@ No outbound network connections observed or expected in normal play
 (Intermud-3/`imud_d` support exists in the code but isn't preloaded by
 default in this archive's own shipped `data/config/preload`).
 
-WASM status: not yet attempted (`wasm_status` left `""` -- would need a
-WASM build with the same special compile flags described below).
+WASM status: **not playable in the browser yet.** Measured 2026-09-03:
+`check_config.lpc` refuses both the shared WASM driver (full LIMA flag
+list) and the lima/swmud/spacemud custom driver (only remaining miss:
+`#define ARRAY_RESERVED_WORD`). Native play works on
+`~/src/fluffos-wilderness`. A dedicated WASM build of that worktree is
+the remaining gap -- `wasm_status: playable` in `meta.json` currently
+overstates the site (the 2026-08-31 deploy-unblock pass equated native
+§10.7 with WASM). See `NOTES.md`.
 
 ## Local run
 

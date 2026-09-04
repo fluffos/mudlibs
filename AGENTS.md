@@ -4635,7 +4635,11 @@ worktree could not be reused for `libs/wilderness` — a second, separate
 worktree was needed. If a THIRD LIMA-lineage archive ever shows up,
 check its own `check_config.lpc`'s `ARRAY_RESERVED_WORD` direction
 before assuming either existing worktree fits; reuse whichever one
-matches, or clone a third if neither does.
+matches, or clone a third if neither does. On the site, `lima` /
+`swmud` / `spacemud` share `scripts/custom_drivers/lima_swmud/`;
+`wilderness` cannot — it still needs its own `ARRAY_RESERVED_WORD`
+WASM build (as of 2026-09-03 it fails `check_config` on both the
+shared and the lima-flavor WASM binaries).
 
 ### 7.47 `origin()` returns a STRING on this driver, not the old int bitmask
 

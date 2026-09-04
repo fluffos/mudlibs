@@ -32,7 +32,13 @@ GitHub, actively maintained.
 
 ## Play online
 
-Not yet WASM-packaged for the browser gallery -- run natively (below).
+https://mudlibs.fluffos.info/spacemud/ — WASM **playable**. The site
+serves the same specialized Lima-flavor WASM driver as `lima`/`swmud`
+(`scripts/custom_drivers/lima_swmud/`). Admin login (`fluffos` /
+`Mud12345`) through the user menu into Grand Hall, plus `look` /
+`score` / `quit`, verified with `scripts/wasm_client.js` against
+`~/src/fluffos-lima/build-wasm`. The shared default WASM driver cannot
+boot this lib (`check_config.lpc`). See `NOTES.md`.
 
 ## Admin account
 

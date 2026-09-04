@@ -455,6 +455,30 @@ WASM status: not attempted this session (native-only, matching this
 session's scope) -- would need the same `emcmake`-plus-`local_options`
 treatment `libs/lima`'s own WASM pass would need, left as future work.
 
+## WASM pass (2026-09-03): lima custom driver, playable
+
+`secure/check_config.lpc`'s flag list is identical to `libs/lima`
+(including `#undef ARRAY_RESERVED_WORD`), so this lib reuses the
+already-committed `scripts/custom_drivers/lima_swmud/` WASM driver
+rather than needing a third worktree. Confirmed live against
+`~/src/fluffos-lima/build-wasm/src` via `scripts/wasm_client.js`:
+
+- Shared default WASM driver is the wrong binary for this lib (same
+  `check_config` gate as lima). The lima-flavor driver boots clean.
+- `/daemons/imud_d` still fails to compile `obj/secure/socket.lpc`
+  (`socket_address`/`socket_write` undefined -- no `sockets` package
+  in the WASM build). Same graceful preload-skip class as lima; does
+  not block boot, login, or play.
+- Scripted session: `fluffos` / `Mud12345` → user menu `p` → Grand
+  Hall room text → `look` → `score` (Wizard / Level 1 panel) → `quit`
+  ("You have left Spacemud.").
+
+`build_site.sh`'s `custom_driver_dir_for()` now maps `spacemud` onto
+the lima/swmud custom driver so the live play page does not silently
+serve the shared binary. `wasm_status` was already `playable` (the
+2026-08-31 site-deploy unblock); this pass is what actually makes
+that badge true for the browser.
+
 ## §10.7 deep functional test (2026-08-31, round two)
 
 Full continuous playthrough on `~/src/fluffos-lima/build-debug/src/driver`

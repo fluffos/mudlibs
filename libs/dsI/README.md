@@ -90,7 +90,9 @@ missing library component, an abandoned feature, a missing header, a
 foreign-codebase API mismatch, and a wizard's leftover debug scratch
 file) -- see `NOTES.md` \S6 for the full breakdown.
 
-WASM status: not yet attempted (`wasm_status` left `""`).
+WASM status: **playable**. Login as `fluffos` into `/domains/default/room/start`
+is verified under the shared WASM driver (`NOTES.md` §8).
+Play: https://mudlibs.fluffos.info/dsI/
 
 ## Local run
 

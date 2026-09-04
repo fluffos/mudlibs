@@ -73,7 +73,9 @@ fine as part of their real parent file) or an object whose `create()`
 legitimately needs a live player context (`std_newsclient.lpc`) -- see
 `NOTES.md` for the full triage.
 
-WASM status: not yet attempted (`wasm_status` left `""`).
+WASM status: **playable**. Login, arrival in the starting workroom, and
+`quit` are verified under the shared WASM driver (`NOTES.md` WASM
+status update). Play: https://mudlibs.fluffos.info/lpuni/
 
 ## Local run
 

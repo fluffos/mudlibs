@@ -255,12 +255,13 @@ cp "$SELF_DIR/web_shell_override"/{persist,save-export,zip-loader,zip-worker,tab
 # Libs whose secure/check_config.c needs compile-time options the shared
 # site driver doesn't have -- see scripts/custom_drivers/lima_swmud/
 # README.md and libs/lima/NOTES.md for the full story. Both currently
-# share one prebuilt driver; add more "slug:dir" pairs here (space-
-# separated) if another lib ever needs a DIFFERENT custom build.
+# share one prebuilt driver (`lima`/`swmud`/`spacemud` all match).
+# Add another case if a lib needs a DIFFERENT custom build
+# (`wilderness` does: same LIMA flags except `#define ARRAY_RESERVED_WORD`).
 CUSTOM_DRIVER_LIMA_SWMUD="$SELF_DIR/custom_drivers/lima_swmud"
 custom_driver_dir_for() {
   case "$1" in
-    lima|swmud) echo "$CUSTOM_DRIVER_LIMA_SWMUD" ;;
+    lima|swmud|spacemud) echo "$CUSTOM_DRIVER_LIMA_SWMUD" ;;
     *) echo "" ;;
   esac
 }

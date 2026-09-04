@@ -82,7 +82,9 @@ file that ships in the *original* raw archive itself as a single
 breakdown. None of it is boot-critical or reachable from ordinary
 play.
 
-WASM status: not yet attempted (`wasm_status` left `""`).
+WASM status: **playable**. Login as `fluffos` into `/room/tavern` and
+`score` are verified under the shared WASM driver (`NOTES.md` WASM
+status update). Play: https://mudlibs.fluffos.info/skylib/
 
 ## Local run
 

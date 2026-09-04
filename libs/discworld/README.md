@@ -72,4 +72,6 @@ the same way. A few genuine content gaps in this third-party archive
 map/pathfinding subsystem) are documented in `NOTES.md` rather than
 invented or patched over.
 
-WASM status: not yet attempted this session (see `NOTES.md`).
+WASM status: **playable**. Full registration through to the Discworld
+circular hall is verified under the shared WASM driver (`NOTES.md`
+WASM section). Play: https://mudlibs.fluffos.info/discworld/

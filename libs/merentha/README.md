@@ -74,7 +74,9 @@ re-login as a returning character all verified end-to-end with a real
 driver session and a raw socket client. Admin account verified with a
 wizard-only command.
 
-WASM status: not attempted this session (`wasm_status` left `""`).
+WASM status: **playable**. Login as `fluffos`, `look`, and `score` are
+verified under the shared WASM driver (`NOTES.md` WASM status update).
+Play: https://mudlibs.fluffos.info/merentha/
 
 ## Local run
 

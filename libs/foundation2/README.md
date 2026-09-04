@@ -79,7 +79,9 @@ teaching content with a pre-existing content/API mismatch predating this
 port (see `NOTES.md` \S3) -- expected for a deliberately minimal engine
 like this one, not a sign of missing conversion work.
 
-WASM status: not yet attempted (`wasm_status` left `""`).
+WASM status: **playable**. Login as `fluffos` into the starting cavern
+and `inventory` are verified under the shared WASM driver (`NOTES.md`
+WASM status update). Play: https://mudlibs.fluffos.info/foundation2/
 
 ## Local run
 

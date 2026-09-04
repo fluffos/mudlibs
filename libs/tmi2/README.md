@@ -98,7 +98,9 @@ same known class of false-FAIL this project has documented before). See
 `NOTES.md` \S4 for the full breakdown. None of it blocks a real boot or
 blocks play.
 
-WASM status: not attempted this session (`wasm_status` left `""`).
+WASM status: **playable**. Login as `fluffos` into the TMI-2 quad is
+verified under the shared WASM driver (`NOTES.md` WASM status update).
+Play: https://mudlibs.fluffos.info/tmi2/
 
 ## Local run
 

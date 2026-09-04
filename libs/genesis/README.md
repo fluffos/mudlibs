@@ -81,7 +81,9 @@ block the actual save (both attempts and the resulting file are confirmed
 correct); `lib/link_room.lpc` is dead code (never inherited anywhere in
 this repo). See `NOTES.md` for the full list.
 
-WASM status: not yet attempted this session (`wasm_status` left `""`).
+WASM status: **playable**. Login as `fluffos`, soul commands, and `quit`
+are verified under the shared WASM driver (`NOTES.md` WASM status).
+Play: https://mudlibs.fluffos.info/genesis/
 
 ## Local run
 

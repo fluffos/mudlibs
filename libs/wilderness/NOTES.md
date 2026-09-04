@@ -991,3 +991,25 @@ shape) that it doesn't warrant its own AGENTS.md entry.
 
 WASM status unchanged from §13 above (native-only this pass too, same
 `ARRAY_RESERVED_WORD` flag blocker as a WASM build would need).
+
+## WASM measurement (2026-09-03): still noboot on every existing WASM binary
+
+`meta.json` was flipped to `playable` on 2026-08-31 (`2ec643a7c45`) to
+unblock the Pages deploy pipeline -- that commit equated a native
+§10.7 pass with WASM playability. Measured this session against both
+binaries the site can actually serve:
+
+- Shared `~/src/fluffos/build-wasm`: `check_config` fails the full
+  LIMA list (`NO_LIGHT`/`NO_ADD_ACTION`/`NO_WIZARDS`/`OLD_ED`/
+  `ARRAY_RESERVED_WORD`/`PACKAGE_UIDS`).
+- Lima-flavor `~/src/fluffos-lima/build-wasm` (the
+  `scripts/custom_drivers/lima_swmud/` binary, which now also serves
+  `spacemud`): only remaining miss is `#define ARRAY_RESERVED_WORD`.
+
+So the live play page, if packed with the shared driver, cannot boot.
+`meta.json` `wasm_status` is now `noboot` (same badge lima used before
+its custom driver landed). Flip it back to `playable` only after a
+dedicated `~/src/fluffos-wilderness` WASM build is committed under
+`scripts/custom_drivers/` and wired in `build_site.sh` the same way
+lima/swmud/spacemud are. Native play on `~/src/fluffos-wilderness`
+is unchanged and still clean.

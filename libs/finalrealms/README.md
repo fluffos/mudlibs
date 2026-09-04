@@ -81,7 +81,9 @@ counter that only accumulates because `lpcc --batch` loads hundreds of
 objects with no event-loop yielding between them -- confirmed absent on a
 real driver boot). None of it blocks a real boot or blocks play.
 
-WASM status: not attempted this session (`wasm_status` left `""`).
+WASM status: **playable**. Login as `god`, `look`, and `score` are
+verified under the shared WASM driver (`NOTES.md` WASM status update).
+Play: https://mudlibs.fluffos.info/finalrealms/
 
 ## Local run
 

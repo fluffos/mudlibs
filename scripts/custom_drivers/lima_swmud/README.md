@@ -1,6 +1,8 @@
-Prebuilt custom WASM driver for `lima` and `swmud` (a Lima-derived lib).
+Prebuilt custom WASM driver for `lima`, `swmud`, and `spacemud`
+(both Lima-derived; `spacemud`'s `secure/check_config.lpc` flag list
+is identical to `lima`'s, including `#undef ARRAY_RESERVED_WORD`).
 
-Both libs need compile-time options this project's shared driver doesn't
+These three libs need compile-time options this project's shared driver doesn't
 provide -- see `libs/lima/NOTES.md`'s "驱动编译选项冲突"/"wasm_status 审计"
 sections for the full investigation. `secure/check_config.c` in each lib
 requires:

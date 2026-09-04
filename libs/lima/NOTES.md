@@ -196,7 +196,7 @@ wasm_status 字段"）的范围，属于一次单独的站点管线改造工作�
 `play.html` 里的驱动脚本引用也相应改成本地路径而非共享的
 `../_driver/`（`telnet.js`/`vendor/xterm` 这些和驱动编译选项无关的
 文件仍然共享）。`build_site.sh` 新增一个 `custom_driver_dir_for()`
-查找表，`lima`/`swmud` 两个 slug 映射到
+查找表，`lima`/`swmud`/`spacemud` 三个 slug 映射到
 `scripts/custom_drivers/lima_swmud/`——本节上面记录的那份专用驱动
 产物（`~/src/fluffos-lima/build-wasm/src/{fluffos.js,fluffos.wasm}`，
 2026-08-24 的 `fluffos/fluffos@721878c` 构建）直接提交进了这个目录，
