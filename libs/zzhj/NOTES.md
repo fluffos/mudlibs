@@ -453,3 +453,41 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Shop + 拜师 (2026-09-04)
+
+Paid shop works; organic 拜师 is still a content gap (unchanged from
+the 2026-07 deep test). Native driver on port 40099, admin
+`fluffos`/`Mud@2026`.
+
+**Shop.** The academy cafeteria (`d/newbie/cafe.lpc`) is free
+(`order sandwich` / etc.; the wall menu says 免費提供) — not a
+paid vendor. The only `F_VENDOR` NPC in the archive is 酒館老闆
+Mark Simons in 黃玉酒館 (`/d/maniac/topaz_pub`). That room is not
+on the newbie transporter (`guestroom` / `ceres` only); reached
+via admin `goto`. `list` shows 紅葡萄酒 四十枚銅幣 and 小麥麵包
+二枚銅幣. A silver coin is not enough change for a 2-copper bread
+(`你沒有足夠的零錢﹐而對方也找不開...` — `can_afford` case 2,
+buyer denominations only). After cloning two copper:
+`buy bread from bartender` charges immediately, the bartender
+delays delivery through `do_chat`, then hands over 小麥麵包.
+
+**拜师.** Organic `learn`/`practice`/`apprentice` still exist only
+as `cmds/std/*.old`; `recognize_apprentice` is still missing;
+restoring the `.old` files would crash. The fighter guildhall
+`master` still fails `create()` on missing `WAIST`/`CLOTH`. No
+reachable teacher — content, not a programming bug to invent
+around.
+
+**Bug fixed.** `std/item/combined.lpc`'s `destruct_me()` was
+`private` and reached via `call_out("destruct_me", 1)` after a
+stackable hits amount 0. Same inherited-mixin `DECL_PRIVATE` →
+`DECL_HIDDEN` shape as AGENTS.md §7.114 / the combined-item
+addendum (xuanjianlu / demonangel). Live before the fix: paying
+exactly 2 copper for bread left `二枚銅幣` in inventory forever
+(and the leftover stack saved across quit). Dropped `private`.
+After the fix, the same exact-2-copper buy + 3s wait leaves the
+bread and no copper.
+
+File modified: `libs/zzhj/work/std/item/combined.lpc` (CRLF
+preserved).
