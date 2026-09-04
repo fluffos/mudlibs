@@ -1007,9 +1007,21 @@ binaries the site can actually serve:
   `spacemud`): only remaining miss is `#define ARRAY_RESERVED_WORD`.
 
 So the live play page, if packed with the shared driver, cannot boot.
-`meta.json` `wasm_status` is now `noboot` (same badge lima used before
-its custom driver landed). Flip it back to `playable` only after a
-dedicated `~/src/fluffos-wilderness` WASM build is committed under
-`scripts/custom_drivers/` and wired in `build_site.sh` the same way
-lima/swmud/spacemud are. Native play on `~/src/fluffos-wilderness`
-is unchanged and still clean.
+
+That gap is now closed in the same session: `~/src/fluffos-wilderness`
+got an `emcmake cmake --preset wasm -DPACKAGE_UIDS=OFF` build, the
+artifacts live in `scripts/custom_drivers/wilderness/`, and
+`build_site.sh` maps the slug there. One mudlib-side compile fix was
+required -- the same lima §1.3(c) `dump_socket_status()` /
+`socket_status()` eager-simul_efun hole -- guarded with
+`#ifdef __PACKAGE_SOCKETS__` in `secure/simul_efun/misc.lpc`.
+`/obj/secure/socket.lpc` still fails to compile during the `rcp_d`
+preload (no `sockets` package); same graceful skip as lima/spacemud,
+not on the login path.
+
+Verified with `scripts/wasm_client.js` against
+`~/src/fluffos-wilderness/build-wasm/src`: `fluffos` / `Mud@2026` →
+Grand Hall → `look` → `score` ("You are an implementor.") → `quit`
+("You have left Wilderness."). `wasm_status` is `playable` again,
+now actually true for the browser. Native play on
+`~/src/fluffos-wilderness` is unchanged.

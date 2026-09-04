@@ -52,14 +52,13 @@ No outbound network connections observed or expected in normal play
 (Intermud-3/`imud_d` support exists in the code but isn't preloaded by
 default in this archive's own shipped `data/config/preload`).
 
-WASM status: **not playable in the browser yet.** Measured 2026-09-03:
-`check_config.lpc` refuses both the shared WASM driver (full LIMA flag
-list) and the lima/swmud/spacemud custom driver (only remaining miss:
-`#define ARRAY_RESERVED_WORD`). Native play works on
-`~/src/fluffos-wilderness`. A dedicated WASM build of that worktree is
-the remaining gap -- `wasm_status: playable` in `meta.json` currently
-overstates the site (the 2026-08-31 deploy-unblock pass equated native
-§10.7 with WASM). See `NOTES.md`.
+WASM status: **playable**. The site serves a dedicated WASM driver
+(`scripts/custom_drivers/wilderness/`) built from
+`~/src/fluffos-wilderness` with `#define ARRAY_RESERVED_WORD`. Admin
+login (`fluffos` / `Mud@2026`) into Grand Hall, plus `look` / `score` /
+`quit`, verified with `scripts/wasm_client.js`. The shared driver and
+the lima/swmud/spacemud binary both fail this lib's `check_config`.
+Play: https://mudlibs.fluffos.info/wilderness/
 
 ## Local run
 
