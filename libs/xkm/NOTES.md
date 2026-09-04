@@ -117,3 +117,48 @@ mhxy/wuhanzhan precedent), and `feature/damage.lpc`'s `revive()` /
 `living()`, ruling out a bare `living()` guard. Fixed with the standard
 `in_enable_player_now` true reentrancy flag (mhxy's reference fix). Verified
 via single-file `lpcc --batch` PASS.
+
+## 深度功能测试第三轮 / §10.7 round three (2026-09-03)
+
+新角度：2026-08-05 走过侠客岛新手教程、武当土匪战斗、留言板 `read`
+（并修了缺失的 `boardread` 条件）。当时写明没走完门派拜师（只在甬道
+问了雪山背景），也没测商店。死亡/复活仍未现场走完。本轮只补商店 +
+拜师 + quit/重连，不重打土匪。
+
+### 登录
+
+README 写的 `fluffos` / `Mud@2026` 在 2026-08-19 的 §7.100 机械验证
+里已经对不上存档哈希（密码漂移）。本轮复现：同一密码当场「密码错误！」。
+在角色未在线时把 `data/login/f/fluffos.o` 的 `password` / `ad_password`
+重新写成 `Mud@2026` 的 SHA-512 crypt，之后登录恢复为 (admin) 浮浮，
+落地 `/d/xiakedao/shatan`。登录后 `news` 是分页器——后续指令会被当成
+翻页，要先 `q`。
+
+### 商店（扬州打铁铺）
+
+`goto /d/city/datiepu`。王铁匠 `list` 列出菜刀 30 文、铁棒、长剑等。
+身上只有布衣和信用卡、没有现钱；`buy caidao` 因 id 是 `cai dao` 回
+「你想买的东西我这里没有。」`clone` 一两黄金后 `buy cai dao` 成交：
+「你从王铁匠那里买下了一柄菜刀。」`sell cai dao`：「你卖掉了一柄菜
+刀给王铁匠。」无崩溃。编译警告（`dealer.lpc` 未使用局部变量）只打给
+巫师，不是新 bug。
+
+### 拜师
+
+2026-08-05 提示的雪山大人物 `darba` 的 `attempt_apprentice()` 是
+「法王可不允许我收徒」、`recruit` 被注释掉，是设计拒绝。改走星宿
+摘星子（`/kungfu/class/xingxiu/zhaixing`，几乎无门槛）：`clone` 后
+`bai zhaixing` →「好吧，我就收下你了。」→ 星宿派第三代弟子，师父
+摘星子。quit 后重连 `score` 仍是星宿派。
+
+### 本轮未发现新的编程 bug
+
+`log_file()` 在这份档案的 `adm/simul_efun/file.lpc` 里已被注释掉，
+`clone` 没有踩到 fqyy2/sje 那种 `/log/nosave` 权限抛错。`debug.log`
+（`libs/xkm/log/debug.log`，开机后 mtime 对得上）无 `error:` /
+`Wrong permissions`。死亡/复活、大轮寺雪山拜师仍未测。
+
+### 本轮修改的文件
+
+- `work/data/login/f/fluffos.o`（把文档密码重新写回存档）
+- `work/data/user/f/fluffos.o`（本轮后状态，含星宿派）
