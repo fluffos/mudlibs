@@ -687,3 +687,26 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，shop）
+
+Independent live pass on this slug (port **40054**, `build-debug`
+driver). 2026-08-12 already completed 峨嵋苏梦清拜师 persist; this
+pass only exercises a paid shop purchase. First send is **`gb`**, then
+id `fluffos` / password `Mud@2026`. `#undef DB_SAVE`. Admin has no
+`wizpwd` yet. `register player@me.com` drops into 生命之谷. Birth is
+`choose 1` → `washto 20 20 20 20` → `born 扬州人氏` (lands at
+`/d/city/kedian`; `help rules` more-pager — send `q` first).
+
+**Shop**: 客店 `游讯` intercepts `list`/`buy`. Real vendor is
+`/d/city/zuixianlou` 店小二 (`F_DEALER`). `list` shows 烤鸡腿 80 文.
+`clone /clone/money/gold` works (`release server : local`). `buy jitui`
+deducted one gold into 99 两白银 + 20 文铜钱 and delivered 烤鸡腿.
+`feature/dealer.lpc` already `#include <dbase.h>`, so mixin
+`query("vendor_goods")` resolves; no this_object() patch needed.
+
+**Bug fixed**: `kungfu/class/huashan/{yue-buqun,yue-wife,feng-buping}.lpc`
+`recruit_apprentice()` wrote `add("apprentice_availavble", -1)` (extra
+“av”) while `attempt_apprentice()`/`reset()` use `"apprentice_available"`.
+Same typo `nitan_san`/`nitan3` already live-verified. Corrected (LF-only).
+`qingcheng/yu.lpc` is not in this tree.
