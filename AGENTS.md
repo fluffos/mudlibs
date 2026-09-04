@@ -18334,8 +18334,17 @@ always "check one level deeper before committing to the conclusion":
   whole batch in one commit — not the slower apply→boot→verify→commit
   cadence appropriate for a *new*, still-being-calibrated fix shape.
 - **Decide the next target at the END of the current cycle**, not at the
-  start of the next one — persist the decision somewhere durable (a memory
-  note) so the next invocation can act immediately instead of re-deriving.
+  start of the next one — persist the decision somewhere durable
+  (`scratchpad/librarian-next.txt`) so the next invocation can act
+  immediately instead of re-deriving.
+- **Each cycle leaves a queue, not a single slug.** Pick enough next
+  targets to fill at least one 45-minute timer slice (typically 3–4
+  §10.7 new-angle playthroughs, or fewer if a lib needs a real fix +
+  reboot). Write the ordered list into `librarian-next.txt` and into
+  the timer prompt before ending the turn. The next wakeup starts the
+  first remaining slug immediately; it does not re-derive the queue
+  unless a cheap NOTES heading check shows that slug already gained a
+  later dated playthrough.
 - When the user checks in after a stretch of autonomous work, **don't just
   dump an activity log** — synthesize what's been found/fixed, whether a
   pattern suggests a change in approach, and a concrete recommendation for
