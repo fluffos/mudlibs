@@ -178,3 +178,41 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：醉仙楼购物 + 丐帮左全拜师。2026-08-13 第二轮只测了战斗/死亡
+和 `log_error`/`log_file`，没有买东西、也没有拜师。这是夕阳再现/江湖
+风云血统（游戏内标题「江湖风云录II」），端口 40137。第一输入就是
+「请输入您的英文名字：」，不要发 2060。密码是 `loginpass1`，不是
+`Mud@2026`。
+
+### 实测过程
+
+管理员 `fluffos` / `loginpass1`（权限 `(admin)`）。`clone
+/clone/money/gold` 可用。
+
+`goto /d/city/zuixianlou`（醉仙楼，店小二 `d/city/npc/xiaoer2.lpc`，
+`F_DEALER`）。`list` 烤鸡腿八十文钱 / 包子五十文钱。`buy jitui` 成功
+（「你向店小二买下一根烤鸡腿」）。当场 `i` 是九十九两银子 + 二十个
+铜板 + 鸡腿。F_DEALER 对丐帮拒绝购买（穷叫化），必须先买再拜。
+`NATURE_D::room_event_fun()` 整段注释掉了，打烊判断拿不到
+`event_night`，店开着——既有缺口，不是本轮要修的内容 bug。
+
+`goto /d/gaibang/inhole`，左全源码是 `kungfu/class/gaibang/zuo-qu.lpc`
+（文件名少一个 n），`apprentice zuo` 一次成功：恭喜成为丐帮第二十代
+弟子。`score` 称谓「丐帮第二十代弟子」、师傅左全。`cmds/usr/save.lpc`
+第一次真正调用 `link_ob->save()` / `me->save()`；60 秒内再 save 会假
+写「档案储存完毕」但不落盘（`save_time` 冷却，不是 `notify_fail`）。
+第一次 save 后 `user.o` 立刻带上 `family_name":"丐帮"` /
+`master_name":"左全"` / `generation":20`。杀驱动冷启动再登录，称谓/
+师傅/银子铜板还在。烤鸡腿未进 autoload。左全只收男性。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **华山收徒计数拼写**（与 `wmkj`/`nitan_ceshi`/`nitan_san` 同形，
+   静态对照修，本轮拜师走的是左全不是华山）：
+   `kungfu/class/huashan/{yue-buqun,yue-wife,feng-buping}.lpc` 的
+   `recruit_apprentice()` 写 `add("apprentice_availavble", -1)`，计数
+   键名拼错，永远减不到 `set("apprentice_available", 3)` 那个字段。
+   三处都改成 `apprentice_available`。
