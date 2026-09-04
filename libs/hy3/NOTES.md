@@ -447,3 +447,48 @@ committed), `log/debug.log`/`log/boot.out` removed.
   — not applicable. `feature/attack.lpc` exists but is a normal
   per-character combat-application file, not an `F_DBASE`-sibling
   inheritance shape — sanity-checked, no issue found.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：扬州醉仙楼购物 + 丐帮拜师。2026-08-08 / 2026-08-13 / 2026-08-21
+三轮都没测商店和拜师。这是火云录2000（ES/金庸血统），**不是** 海洋系
+的 `hy`/`hy2000`/`hy5`。端口 40162。第一输入是 GB/Big5 选单，发 `g`，
+再英文 id。管理员 `fluffos` / `Mud@2026`（中文名云飞，权限 `(admin)`）。
+`wzd_log.lpc` 里 fluffos 白名单已是合法正则 `.*`，本机无验证码。
+`cmds/usr/save.lpc` 有 300 秒冷却（「请过一会儿再 save」），本轮用
+`call me->save()` 落盘（返回 1）。
+
+和海洋系左全不同：本档 `kungfu/class/gaibang/zuo-qu.lpc` 的左全只收
+**已经是丐帮且袋数 ≥ 6** 的弟子（「一袋一袋升」）。树洞里真正收新人
+的是同房的裘万家（`qiu-wan.lpc`，经验 < 2000 即可）。醉仙楼下的店小
+二是 `/kungfu/class/npc/xiaoer.lpc`，不是 `d/city/npc/xiaoer2.lpc`。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`，落地巫师休息室。身上没钱，
+`clone /clone/money/gold` 一次成功（本档 clone 走
+`log_file("trace/file/clone")`，`log_file()` 已有 `assure_file`，没复
+现 hy2000 那种 `/log/cmds` 崩溃）。
+
+`goto /d/city/zuixianlou`。`list`：烤鸡腿八十文铜板、牛皮酒袋一两白
+银、包子五十文铜板、松鼠鳜鱼/冰晶红茶各十两白银。`buy jitui` 成功
+（「你向店小二买下一根烤鸡腿」）。一两黄金换成九十九两银子 + 二十文
+铜板 + 鸡腿。`feature/dealer.lpc` 的 `query("vendor_goods")` 已经打在
+物件自己身上（店小二 `init()` 也绑了 `do_list`/`do_buy`），丐帮拒买
+那段是注释掉的。
+
+`goto /d/gaibang/inhole`，左全和裘万家都在。`apprentice zuo` 被拒：
+「我们丐帮需要一袋一袋升，小兄弟先要从一袋弟子做起。」`apprentice
+qiu` 一次成功：恭喜成为丐帮的第二十六代弟子。`score` 称谓「丐帮一袋
+弟子」、师傅裘万家。杀驱动冷启动再登录：称谓/师傅/九十九两银子/二十
+文铜板/布袋都在。烤鸡腿未进 autoload。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **华山剑宗收徒计数拼写**（与 `hy`/`hy2000`/`hy5` 同形，静态对照
+   修，本轮拜师走的是裘万家不是华山）：
+   `d/biwu/feng-buping.lpc` 的 `recruit_apprentice()` 写
+   `add("apprentice_availavble", -1)`，永远减不到
+   `set("apprentice_available", 3)` 那个字段。本档华山活路径是
+   `kungfu/class/huashan/yue.lpc` / `feng.lpc`，没有 `yue-buqun.lpc`，
+   只有这一处活的拼写错误。
