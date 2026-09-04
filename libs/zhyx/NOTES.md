@@ -737,3 +737,44 @@ lpc`/`ftpd.lpc`/`versiond.lpc`/`messaged.lpc` 等网络精灵编译失败
 "score 显示未出生是正常游戏设计"一致，不是 bug）→ `quit` 干净退出
 （"欢迎下次再来！"），全程无未捕获错误。`wasm_status` 设为
 `playable`。
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：2026-08-27 那一轮醉仙楼 `buy jitui` 只走到「穷光蛋」拒绝
+路径，丐帮一袋弟子 `bai` 也只挂起「对方还没有答应」。本轮补成
+功购买 + 真正收徒。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`（管理密码 `Admin2026`，本轮用普通
+密码进）。账号还没 `born`，落地世外桃源，`score` 仍是「还没有出
+生呐」——内容规则。巫师 `goto` 不受影响。
+
+`cmds/wiz/clone.lpc` 额外要求 `me->is_admin()`，而
+`clone/user/user.lpc` 的 `is_admin()` 只认 uid `mudren`（线上站
+点锁，passwd 设 admin_flag 的路径已注释掉）。`clone
+/clone/money/gold` 因此回「你没有使用该命令的权限。」未改——这
+不是崩溃，是这份档案自己的管理权限模型。改用 `eval
+new("/clone/money/gold")->move(me)`（`cmds/adm/eval.lpc` 只查
+`wizardp()`）把金锭放进物品栏。
+
+`goto /d/city/zuixianlou`，`list` 烤鸡腿八十文铜板。`buy jitui`
+成功（「你从店小二那里买下了一根烤鸡腿」），找零九十九两白银 +
+二十文铜钱（10000−80=9920）。本档案 `F_DEALER` 没有 XKX 那种丐
+帮穷叫化拒绝，已拜师也能买。
+
+`goto /d/gaibang/inhole`。左全的源码在
+`kungfu/class/gaibang/zuo-qu.lpc`，但这份地图没把他放进房间（树
+洞放的是黎生 + 随机一袋/二袋弟子）。一袋弟子不 inherit
+`F_MASTER`，所以 08-27 那次 `bai` 只会挂起。`apprentice li` 拜黎
+生一次成功：`permit_recruit()` 允许无门派，`score` 虽然被未出生
+挡住，但收徒文案是「恭喜您成为丐帮的第二十代弟子」，`user.o` 里
+`family_name":"丐帮"` / `master_name":"黎生"` / 头衔「丐帮第二十
+代传人」。`save` 有 30 秒节流，等过后再存成功。巫师不受 60 秒
+`last_on` 重连冷却限制。
+
+本轮没有新的 programming bug。`cleard.lpc` 每 30 分钟
+`cp("/log/debug.log")` 仍会在 `log/error_handler` 留下 `lstat
+failed`（08-27 已记录，未改）。驱动 `debug.log` 本轮没落到
+`libs/zhyx/log/` 也没落到 `work/log/`，运行期错误看
+`work/log/error_handler`（本轮游玩期间行数未增加）。
