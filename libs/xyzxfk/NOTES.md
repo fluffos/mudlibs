@@ -363,3 +363,27 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-03，第三轮）
+
+新角度：2026-08-13 第二轮只做了重连，没测商店和拜师。本轮用既有
+`fluffos`/`Mud@2026`（中文名「浮浮」，男性，无门派）。
+
+- **登录**：落地 `/d/quanzhou/tieqiang` 铁枪庙。无巫师效验码。
+- **商店**：`goto /d/city/zuixianlou`，`npc/xiaoer2` `list` 列出烤
+  鸡腿八十两黄金 / 牛皮酒袋二百两黄金 / 包子五十两黄金。这是内容
+  定价（`jitui` `value` 800000，`baozi` 500000），不是 `value_string`
+  换算 bug。普通百姓 `buy jitui` 在只有一两黄金时正确拒绝「你的钱
+  不够」。
+- **拜师**：`goto /d/gaibang/inhole`，`apprentice zuo`（左全）一次
+  完成 →「恭喜您成为丐帮的第二十代弟子」。`score` 称谓「丐帮第二
+  十代弟子」、师傅「左全」。`save` + 120 秒冷却后重连，称谓/师傅
+  仍在（落地北疆小镇 `/d/xingxiu/beijiang`）。
+- **丐帮买东西**：`feature/dealer.lpc` 对 `family_name == "丐帮"`
+  一律 `notify_fail("你是个穷叫化，买什麽东西！")`。拜师后再带一
+  百两黄金去买，被这条内容规则挡住——不是编程 bug。其它手足档案
+  应先买再拜。
+- **日志**：live `debug.log` 是 `libs/xyzxfk/log/debug.log`（Boot
+  Time Thu Sep 3 21:46:56 2026）。无 `error:`。
+- **结论**：商店议价/钱不够路径、有机拜师、重连均通过，本轮无新
+  编程 bug 可修。
