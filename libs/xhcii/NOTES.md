@@ -179,3 +179,27 @@ unaffected. `enable_player()` had a single fall-through exit (no early
 `return`s), so one guard-at-top + one clear-at-bottom pair was
 sufficient. Verified via a single-file `lpcc --batch` compile check
 (PASS) -- not individually live-boot-tested.
+
+## 深度功能测试（2026-09-03，第三轮）
+
+新角度：2026-08-13 第二轮只做了注册 + 重连，没测商店和拜师。
+
+- **登录**：2026-08-13 自设的 `fluffos` 密码不是项目标准
+  `Mud@2026`（当时没写入文档）。本轮把
+  `work/data/login/f/fluffos.o` 的 SHA512 crypt 改成 `Mud@2026`
+  后重连成功（中文名「笑红二」，落地铁枪庙）。`quit_time` 冷却
+  50 秒。
+- **商店**：先买后拜（`feature/dealer.lpc` 对丐帮一律「穷叫化」）。
+  `goto /d/city/zuixianlou`，`list` 列出烤鸡腿 80 文 / 牛皮酒袋一
+  两白银 / 包子 50 文。无现金时 `buy jitui` 正确拒绝。`clone
+  /clone/money/gold` 后再买成功（烤鸡腿 + 找零 99 两白银 + 20 个
+  铜板）。
+- **拜师**：`goto /d/gaibang/inhole`，`apprentice zuo`（左全）一次
+  完成 →「恭喜您成为丐帮的第二十代弟子」。`score` 职称「丐帮第
+  二十代弟子」、师承左全。
+- **持久化**：`save` + 50 秒后重连，落在 `/d/city2/kedian` 客店，
+  门派/师傅/银钱均在；烤鸡腿未随存档回来。
+- **日志**：live `debug.log` 是 `libs/xhcii/log/debug.log`（Boot
+  Time Thu Sep 3 22:19:14 2026）。无 `error:`。没有 mudlib
+  `work/log/debug.log`。
+- **结论**：商店 / 有机拜师 / 重连均通过，本轮无新编程 bug 可修。
