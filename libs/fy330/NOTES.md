@@ -118,3 +118,59 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：玉龙珠宝店购物 + 金钱帮荆无命拜师。2026-08-04 那一轮只
+在沉香镇对「卖鱼的」做过 `list` / 没钱 `buy`，没有进玉龙珠宝店，
+也没有拜师。这是风云/fy 血统，不是 tianya 的醉仙楼/左全路线。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`）完全没有严重度检查（AGENTS.md
+   §7.34-class，与 `fy2mg` 同一原始形状）**：
+   `if (this_player(1)) efun::write("编译时段错误：" + message +
+   "\n");`——不区分巫师/玩家，也不区分警告/错误。真实复现：全新
+   驱动进程下首次注册 `fluffos` 触发的冷编译级联（`/std/char` 及
+   `feature/*.lpc` inherit 链首次编译），屏幕连续刷出「Unknown
+   #pragma」/「Unused local variable」诊断。修复：加上
+   `strsrch(message, "arning:") == -1` 判断。master 物件开机加载，
+   已用重启驱动后的重登 + `update /std/char` 复测：玩家侧不再出现
+   `编译时段错误：` + warning 刷屏。
+2. **`log_file()`（`adm/simul_efun/file.lpc`）完全没有 `assure_file()`
+   保护（AGENTS.md §7.11-class）**：`write_file(LOG_DIR + file, text)`
+   在 `nosave/` 子目录不存在时会未捕获抛出。本轮注册本身只写顶层
+   `USAGE`，没有撞上，但仍按 `fy2mg` 同一修法补上前向声明 +
+   `assure_file(LOG_DIR + file);`。
+
+### 实测过程
+
+`adm/etc/wizlist` 里早就有 `fluffos (admin)`，但磁盘上没有对应存档
+（AGENTS.md §1.5：名单不等于角色）。本轮完整注册：id `fluffos` →
+y → 中文名 `浮浮` → 密码 `Mud@2026x` ×2 → email `a@b.c` → m → 民族
+`0`。第一输入是「您的英文名字：」，密码后有 MOTD +
+`请敲回车键［ＲＥＴＵＲＮ］`。落地凤求凰客栈。存档是嵌套路径
+`work/data/{login,user}/f/fluffos/fluffos.o`（不是常见的
+`/data/user/f/fluffos.o`）。NPC 心跳对话不断，脚本 idle 用 0.45s。
+
+`goto /d/fy/yuljade`，`list` 黄金标价（玉指 1 两 / 玉簪 2 两 /
+玉花 2 两 / 玉镯 3 两）。`clone /obj/money/gold` 后
+`buy jade ring from seller` 成功。1 两黄金刚好等于玉指 `value`
+10000；`cmds/std/buy.lpc` 的 `pay_him()` 在找零 `< 1` 时硬给一文钱，
+所以 `i` 剩「一文钱」+ 玉指。这是这条 fy `buy.lpc` 的既有找零地板，
+不是新崩溃，未改。
+
+`goto /d/fy/jbang`，荆无命 id 是 `master jin`（不是单独的 `jin`），
+`apprentice master jin` 一次成功：荆无命收徒，`score` 「金钱帮第三
+代弟子」、师父荆无命。`cmds/usr/save.lpc` 真正调用两个 `save()`
+（没有 fy3xd 那种 `cmds/std/save.lpc` 影子文件）。`user.o` 立刻带上
+`family_name":"金钱帮"` / `master_name":"荆无命"` /
+`startroom":"/d/fy/jbang"`。
+
+`securityd` 没有 tianya 那种 `/log/` + `log_file` 再入，未改。
+live `debug.log` 是 `libs/fy330/log/debug.log`（Boot Time Fri Sep 4
+01:16:27 2026，fd 指向该文件），无 `error:` / `Too deep recursion`。
+`work/log/debug.log` 停在 2026-07-31，是死文件。`error_handler`
+把轨迹交回驱动 debug.log。`work/log/log` 是 `log_error()` 写入的
+编译期诊断。管理员存档未提交（本轮只修源码；嵌套 `fluffos.o` 留在
+工作树，不进 git）。
