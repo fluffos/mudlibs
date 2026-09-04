@@ -106,3 +106,47 @@ leaving every legitimate re-enable (revive/wakeup/disguise) unaffected.
 (no early `return`s), so one guard-at-top + one clear-at-bottom pair was
 sufficient. Verified via a single-file `lpcc --batch` compile check
 (PASS) -- not individually live-boot-tested.
+
+## 深度功能测试（2026-09-03，第三轮）
+
+新角度：2026-08-05 第一轮明确跳过的商店 / 五庄观拜师。死亡/复活与
+留言板不再复测。
+
+- **注册存档「消失」不是 save 路径 bug**：`/d/wiz/init` 设了
+  `no_net_dead`。天赋菜单未走完就断线会走 `user.lpc::net_dead()` →
+  `QUIT_CMD->force_quit()`；`force_quit()` 在 `mud_age < 600` 时
+  `rm` 掉 `data/login/<id[0]>/<id>.o` 和 `data/user/...`（避免半成品
+  账号）。`9` 接受默认 + `y` 确认后 `do_finish()` 把角色移到
+  `/d/city/kezhan`，之后正常 `quit` / 巫师 1 秒 `DUMP_NET_DEAD` 都会
+  `save()`，档案留下。同一会话里在礼物菜单中途断开，看起来像
+  「注册完没有这个玩家」，其实是这条故意的清理。`enter_world()` 里
+  `user->save()`/`ob->save()` 本身会写盘（`query_save_file()` =
+  `DATA_DIR "login/%c/%s"` / `"user/%c/%s"`）。
+- **注册**：`gb` → `new` → `fluffos` → 管理密码 `Adm@2026` ×2 →
+  普通密码 `Mud@2026` ×2 → 中文名「浮浮」→ email → `m`。`adm/etc/wizlist`
+  已有 `fluffos (admin)`。礼物菜单必须在同一条连线里走完：`9`/`y`。
+  `do_finish()` 会 `set("env/prompt", "time")`，之后提示符每秒刷新；
+  `mudclient.py` 的 idle 阈值必须短于 1 秒，否则后续指令永远发不出去。
+- **巫师落地**：`wizardp()` 把 `startroom` 改成 `WIZARD_ROOM`
+  （`/adm/npc/wizroom`，巫师会议厅），不是客栈。客栈出口是 `kz`。
+  登录后有 WIZPWD 空回车（`NO_CHECK_WIZPWD`）和「请按回车继续」
+  `input_to("nothing")`。
+- **商店**：南城客栈 `/obj/boss/city_waiter`（店小二，房间
+  `objects` 已加载）。`list` 列出许愿蜡烛/黄粱枕/水晶球/火折/探宝图/
+  挑战金牌/炸鸡腿/下棋指南/桂花酒袋/花生豆/红烧狗肉。`clone
+  /obj/money/gold` 后 `buy jitui from xiaoer` 成功（「你花费80文铜板
+  从店小二那里买下了1根炸鸡腿」），一两黄金找零成九十九两白银 +
+  二十文铜钱。`d/city/npc/xiaoer.lpc` 源码在、但客栈实际加载的是
+  `/obj/boss/city_waiter`——不是运行期 bug。
+- **拜师**：`goto /d/qujing/wuzhuang/wangxian`，`bai lan`（蓝采和）
+  当场收徒：「好，那我就勉为其难吧。」→ 五庄观第四代弟子，师承蓝采
+  和。同进程重连后 `score` 仍是「五庄观第四代弟子 / 师承：蓝采和」；
+  客栈买到的银钱也还在。
+- **日志**：本轮 live `debug.log` 是 `libs/xyj20032/log/debug.log`
+  （Boot Time Thu Sep 3 21:07:00 2026，`cd libs/xyj20032 && driver`
+  在 chdir 前进打开）。无 `error:` / `Too deep recursion` /
+  `No program`。`work/log/err.log` 全是编译警告（`#pragma`、未用局部
+  变量）加上既有的 `/d/sea/npc/beast1.lpc:75` 非法字节（本轮未进龙宫，
+  未当新 bug 修）。`CHANNEL_D` 把这些警告广播成「┋错误┋」——观感差，
+  不是本轮新引入的运行期故障。
+- **结论**：商店 / 有机拜师 / 重连均通过，本轮无新编程 bug 可修。
