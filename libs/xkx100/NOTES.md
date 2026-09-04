@@ -160,3 +160,33 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：扬州醉仙楼购物 + 丐帮左全拜师。§10.7 原文明确写「没有测试拜
+师、购物」；2026-08-13 round two 没有补这两步。角色出生地是北京客店
+`/d/beijing/kedian`，商店仍用扬州 `/d/city/zuixianlou`（店小二货单很
+长，`list` 走 `start_more` 分页，脚本必须先 `q` 退出分页再买）。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`。第一输入是「您的英文名字：」，落地北京
+客店，留言板显示「客店留言板(Board) [ 没有任何贴子 ]」。登录横幅带活
+时钟（「现在的 北京 时间」），脚本 idle 0.45s。
+
+`goto /d/city/zuixianlou`，`list` 烤鸡腿三十文铜板（还有酒袋/茶叶/烤
+鸭/各种包子）。`F_DEALER` 对丐帮拒绝购买（穷叫化），先买再拜。
+`clone /clone/money/gold` 后 `buy jitui` 成功（「你从店小二那里买下了
+一根烤鸡腿」）。`i` 剩七十文铜钱 + 九十九两白银（10000−30 = 9970），
+黄金条目消失，找零数学正确。
+
+`goto /d/gaibang/inhole`，左全源码是 `kungfu/class/gaibang/zuo-qu.lpc`，
+`apprentice zuo` 一次成功：左全收徒，`score` 「丐帮第二十代弟子」、
+师父左全。`cmds/usr/save.lpc` 对巫师无 30 秒节流，真正调用两个
+`save()`。`user.o` 立刻带上 `family_name":"丐帮"` / `master_name":"左
+全"` / `generation":20`。断线后再连，称谓/师傅/银子还在。左全只收男性。
+
+本轮没有新的 programming bug。`log_error()` 已有 `"arning:"` 闸门。
+live `debug.log` 是 `libs/xkx100/log/debug.log`（Boot Time Fri Sep 4
+02:04:34 2026），无 `error:` / `Too deep recursion`。`error_handler`
+把轨迹交回驱动 debug.log。管理员存档未提交。
