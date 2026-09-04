@@ -126,3 +126,32 @@ via the `d/shushan/npc/zhangmen.lpc` family (`init()` unconditionally calls
 `in_enable_player_now` reentrancy flag alongside the existing `enabled`
 bookkeeping variable (left untouched, `disable_player()` still needs it).
 Verified via single-file `lpcc --batch` PASS.
+
+## 深度功能测试（2026-09-03，第三轮）
+
+新角度：2026-08-13 第二轮只做了注册 + 巫师效验码重连，没测商店和
+拜师。本轮用既有 `fluffos`/`Mud@2026`（中文名「浮浮」）。
+
+- **登录**：重连仍先走 `get_wizpas()`「巫师登陆效验码」（硬编码
+  `if (1 /* crypt... */)`，任意输入通过），再输真正密码。落地
+  `/d/city2/kedian` 客店（不是 `/d/city/kedian`）。
+- **商店**：客店 `店小二` 不是 vendor。`goto /d/city/zuixianlou`，
+  `npc/xiaoer2`（`F_DEALER`）`list` 列出烤鸡腿 80 文 / 牛皮酒袋一
+  两白银 / 包子 50 文。身上无现金时 `buy jitui` 正确拒绝「你的钱
+  不够」。`clone /clone/money/gold` 后再买成功（烤鸡腿 + 找零 99
+  两白银 + 20 文铜板）。
+- **拜师**：指令是 `apprentice`（`bai` 同义），不是独立 `bai.lpc`。
+  `goto /d/gaibang/inhole` 里是丐帮七袋弟子**左全**（不是黎生；黎
+  生在 `underqz`/`underwd`/`underhs`，要过密码门）。`apprentice
+  zuo` 一次完成：左全 `recruit` →「恭喜您成为丐帮的第二十零代弟
+  子」（`chinese_number(20)` 的既有写法）。`score` 称谓「丐帮第
+  二十零代弟子」、师傅「左全」。左全只收男性，无经验门槛。
+- **持久化**：`save` + `quit` 后重连，仍在树洞内部，称谓/师傅/
+  烤鸡腿/银钱均在。
+- **日志**：live `debug.log` 是 `libs/xyzxyl201412/log/debug.log`
+  （Boot Time Thu Sep 3 21:30:48 2026）。无 `error:`。mudlib
+  `error_handler()` 写 `work/log/debug.log`，本轮 mtime 仍是
+  2026-08-19（无新捕获运行时错误）。`work/log/log` 里的
+  `teamd.lpc` `count()` 报错是旧编译残留；现行 `teamd.lpc` 已是
+  `v * lvl / max_lvl`（WASM 阶段修过）。
+- **结论**：商店 / 有机拜师 / 重连均通过，本轮无新编程 bug 可修。
