@@ -169,3 +169,42 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-03，round three，shop + 拜师）
+
+新角度：醉仙楼购物 + 丐帮左全拜师，并核对存盘后门派是否还在。
+2026-08-13 那一轮明确没测这两步。
+
+### 实测过程
+
+管理员 `fluffos` / 普通密码 `Mud@2026`（本次未走管理密码）。落地
+`/d/city/kedian`。`goto /d/city/zuixianlou`，`list` 价目为铜钱尺度
+（烤鸡腿八十文钱）。`clone /clone/money/gold` 后 `buy jitui` 成功
+（找零九十九两银子 + 二十个铜板）。`F_DEALER`（`feature/dealer.lpc`）
+没有丐帮「穷叫化」拒绝；`dealer1.lpc` / `vendor.lpc` 有，醉仙楼小二
+不用那两份。本轮仍先买再拜。
+
+`goto /d/gaibang/inhole`，`apprentice zuo`：左全收徒，`score` 称谓
+「丐帮第二十代弟子」、师傅左全。没有 yxjh 那种 `join 名门正派` 门。
+显式 `save` 成功，`user.o` 立刻带上 `family`。
+
+本轮第一次登陆 127.0.0.1 没走 `wzd_log`；断线重连时触发，显示码
+首位是诱饵，按第 2–5 位算 `(n1*n4+8)*100+n2*n3-3` 通过，公式和
+2026-08-13 / zxty08 记录一致。重连 `score` 仍是丐帮第二十代弟子 /
+师傅左全，银子还在。
+
+`quit.lpc` 对 `mud_age < 1800` 会删 login.o（真正 `rm` 没有
+`wizardp()`）。和 zxty08 同一既有政策，未改，本轮不 `quit`。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`cmds/usr/save.lpc` 把真正的 `link_ob->save()` / `me->save()`
+   注释掉了，只打印「档案储存完毕」。** 和 yxjh 同一形状。已恢复
+   成真正调用两个 `save()`。
+
+2. **`securityd.lpc` `valid_read()` 里对 `/log/` 的拒绝会
+   `log_file("file/bug_read")` 再入。** 非 `zmud`/`bzhou` 的巫师
+   （包括 `fluffos`）登陆会 Too deep recursion。加了
+   `in_valid_read` 重入保护（和 zxty08/yxjh 同形状；允许 id 在这里
+   是 `zmud`/`bzhou`）。修复后登陆两行警告，`clone` 一行警告加黄金
+   复制成功，本 boot 零 recursion。
