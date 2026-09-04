@@ -86,3 +86,34 @@ re-enables. `enable_player()`'s single body has no early `return`
 statements, so the flag is set at entry and cleared once, before the
 function's fall-through end. Verified with a single-file `lpcc`
 compile check (exit 0, no errors) against `feature/command.lpc`.
+
+## 深度功能测试（2026-09-03，第三轮）
+
+新角度：2026-08-05 第一轮明确跳过的商店 / 拜师，加上 quit+reconnect。
+死亡/复活与留言板 `post` 不再复测。
+
+- **管理员存档缺失**：`adm/etc/wizlist` 仍有 `fluffos (admin)`，但
+  `work/data/login/f/fluffos.o` 不在树上（2026-08-05 那次注册的存档
+  已丢）。按 README 流程重新注册：`gb` → `no` → `new` → `fluffos` →
+  中文名「浮浮」→ `Mud@2026` ×2 → email → `m`；MOTD 是 `start_more`
+  分页，先 `q` 再走 `/d/wiz/init` 天赋菜单（`9` 接受默认、`y` 确认）。
+  登录显示「目前权限：(admin)」，落地南城客栈。
+- **商店**：客栈 `店小二`（`/d/city/npc/xiaoer`，房间本身就加载）
+  `list` 列出水晶球/炸鸡腿/挑战金牌/狗肉/花生/下棋指南/桂花酒袋；
+  `clone /obj/money/gold` 后 `buy jitui from xiaoer` 成功（「你向店
+  小二买下一根炸鸡腿」），黄金按价找零成九十九两银子 + 二十文钱。
+  `d/city/npc/tiejiang.lpc`（周铁匠）源码在、但没有任何长安房间
+  `objects` 引用它——内容未接线，不是运行期 bug，本轮用已摆好的店
+  小二做商店验证。
+- **拜师**：`goto /d/qujing/wuzhuang/wangxian`，`bai lan`（蓝采和）
+  当场收徒：「好，那我就勉为其难吧。」→ 五庄观第四代弟子，师承蓝采
+  和。`save` + `quit` 后重连，`score` 仍是「五庄观第四代弟子 / 你的
+  师父是蓝采和」，银钱仍在；炸鸡腿未随存档回来（食物物件常见
+  `no_save`/quit 丢弃，金钱与门派都持久，不按编程 bug 记）。
+- **日志**：本轮 live `debug.log` 是 `libs/xyj2000/log/debug.log`
+  （`cd libs/xyj2000 && driver` 在 chdir 前进打开）。无 `error:` /
+  `Too deep recursion` / `No program`。`work/log/log` 只有编译警告
+  （`#pragma`、未用局部变量、`vendor_sale.lpc:504` 的 `remove()`
+  参数个数与父类不一致）——商店买卖已现场成功，该警告不是本轮新
+  引入的运行期故障。
+- **结论**：商店 / 有机拜师 / 重连均通过，本轮无新编程 bug 可修。

@@ -110,7 +110,8 @@ score+quit"通关测试没有踩到的潜伏/延迟加载 bug：
 ## 管理员账号 / Admin account
 
 - **ID**: `fluffos`
-- **密码 / Password**: 注册时自设
+- **密码 / Password**: `Mud@2026`（2026-09-03 重新注册；上一轮
+  2026-08-05 的存档已不在 `work/data/login/f/`）
 - **权限 / Level**: `(admin)`，通过 `/adm/etc/wizlist` 授予（
   `adm/daemons/securityd.lpc` 真的会在开机时读取 `WIZLIST`），登录
   后自动显示"目前权限：(admin)"确认生效。
