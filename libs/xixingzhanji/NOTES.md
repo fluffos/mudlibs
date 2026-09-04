@@ -691,3 +691,32 @@ re-enables. `enable_player()`'s single body has no early `return`
 statements, so the flag is set at entry and cleared once, before the
 function's fall-through end. Verified with a single-file `lpcc`
 compile check (exit 0, no errors) against `feature/command.lpc`.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：南城客栈购物 + 方寸山云清拜师。2026-08-15 第三轮只测了
+`reconnect()` / §7.108，没有走 `list`/`buy`，也没有拜师（早期
+§10.7 对秦琼的 `apprentice` 是等级门槛拒收，不是门派收徒）。手足
+`hxxtjqb` 同日同路径已通过。端口 40080。第一输入是 GB/BIG5 选单，
+发 `gb`，然后「是否中小学学生」发 `no`，再英文 id。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`（权限 `(admin)`）。既有存档气血正常
+（`kee:200`，没有昏迷）。`clone /obj/money/gold` 可用。
+
+`goto /d/city/kezhan`（南城客栈，店小二 `d/city/npc/xiaoer.lpc`，
+`F_VENDOR_SALE`）。`list` 炸鸡腿八十文钱 / 桂花酒袋一两银子 / 花生豆
+二十文钱等。本库 `buy` 格式是 `buy <物> from <人>`，不是光 `buy
+jitui`。`buy jitui from xiaoer` 成功（「你向店小二买下一根炸鸡腿」）。
+当场 `i` 是九十九两银子 + 二十文钱 + 炸鸡腿。
+
+`goto /d/lingtai/inside6`，云清（`d/lingtai/npc/yunqing.lpc`）无门槛
+收徒。`apprentice yun` 一次成功：恭喜成为方寸山三星洞第四代弟子。
+`score` 职称「方寸山三星洞第四代弟子」、师承云清。菩提祖师
+（`/d/lingtai/room`）对本门低道行弟子说「还需多加努力才能早悟大道」，
+不要拿他当新手拜师点。`cmds/usr/save.lpc` 真正写盘，10 秒内再 save
+是「你迟点才可以储存」。save 后杀驱动冷启动再登录，门派/师傅/银子
+铜板都在。炸鸡腿未进 autoload。
+
+本轮没有新的 programming bug。
