@@ -337,3 +337,51 @@ mingjiao.h`、`kungfu/class/mingjiao/mingjiao.h`（未初始化 mapping 判
 void`（这些是合法的变量/函数修饰符用法，不要动），剩下的字符串字面
 量命中都需要去对应库的 `raw/` 原始源码核实是否应该是 `static/`，并
 检查仓库里是否真的存在 `log/static/` 这个种子目录作为佐证。
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：醉仙楼购物 + 丐帮左全拜师。2026-08-08 / 2026-09-01 两轮都没
+测这两步。`F_DEALER` 对丐帮拒绝购买（穷叫化）是活的，必须先买再拜。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`log_error()`（`adm/obj/master.lpc`，config 的 master file）完全
+   没有严重度检查（AGENTS.md §7.34-class，与本轮 `fy330`/`fy2mg` 同一
+   原始形状）**：`if (this_player(1)) efun::write("编译时段错误：" +
+   message + "\n");`。真实复现：全新驱动进程下 `fluffos` 登录触发的
+   冷编译级联，屏幕连续刷出 Unused local variable / Unknown escape
+   sequence 诊断（`/feature/damage`、`combatd`、`dealer`、`apprentice`
+   等）。修复：加上 `strsrch(message, "arning:") == -1` 判断。已用
+   重启驱动后的重登复测：零次 `编译时段错误` 刷屏。`log_file()` 在
+   2026-09-01 那一轮已经有 `assure_file()`，未再改。
+2. **`data/board/*.o` 里 8 份存档是旧式二进制格式（AGENTS.md §7.7，
+   与 `xkx2017` round two 同一形状）**：`bonze_b`、`gaibang_r`、
+   `huashan_b`、`kedian_b`、`taohua_b`、`wiz_b`、`wudang_b`、
+   `xingxiu_b` 开头是 `?inh...` 而不是 `#inherit/misc/bboard.c`。
+   `restore_object()` 把 `create()` 里 `set_name("客店留言板")` 刚设
+   好的 dbase 整份替换掉，live `look` 客店显示
+   `/clone/board/kedian_b [ 没有任何留言 ]`。`feature/name.lpc` 的
+   `capitalize()` 防护让它不再崩溃，但名字仍是裸路径。删除这 8 份
+   无法解析的损坏存档后重测，正确显示 `客店留言板(Board) [ 没有任
+   何留言 ]`。另外 10 份（`baituo_b`、`gaibang_b`、`kedian2_b`、
+   `lingjiu_b`、`shaolin_b`、`tiandi_b`、`towiz_b`、`xiaoy_b`、
+   `xiaoyao_b`、`xueshan_b`）有 `#` 存档头，未触碰。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`（中文名 沙河生）。第一输入是「您的英
+文名字：」，落地客店。`goto /d/city/zuixianlou`，`list` 烤鸡腿八十
+文铜板 / 牛皮酒袋一两白银 / 包子五十文 / 鲸鱼十两黄金。
+`clone /clone/money/gold` 后 `buy jitui` 成功。当场 `i` 还挂着「一
+两黄金」；重启驱动再连只剩九十九两白银 + 二十文铜板（10000−80 =
+9920），找零数学正确。烤鸡腿未进 autoload。
+
+`goto /d/gaibang/inhole`，`apprentice zuo` 一次成功：左全收徒，
+`score` 「丐帮第二十代弟子」、师父左全。`cmds/usr/save.lpc` 真正调
+用两个 `save()`。重启驱动再连，`score` 仍是丐帮 / 左全，银子还在。
+左全只收男性。
+
+live `debug.log` 是 `libs/jyqxc2013fwq/log/debug.log`（复测 Boot
+Time Fri Sep 4 01:27:54 2026），无 `error:` / `Too deep recursion`。
+`error_handler` 把轨迹交回驱动 debug.log。管理员存档未提交（本轮
+只修 master + 损坏留言板存档）。
