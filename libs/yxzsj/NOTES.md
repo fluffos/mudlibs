@@ -151,3 +151,27 @@ per the scope boundary.
 Admin account `fluffos`/`Mud@2026` confirmed seeded and working
 (kept, with its live-registered save file). Test character `譚雲`
 (`tanyun`) and its test bulletin-board post removed before commit.
+
+## 深度功能测试（2026-09-04，shop）
+
+Live pass, port **40170**. 2026-08-27 already apprenticed 譚雲 to 柳淳風
+(封山劍派); this round is shop only. First send is the English id (no
+GB/BIG5 menu). Admin `fluffos` / `Mud@2026` lands at `/d/school/gate`.
+
+**Shop**: `goto /d/school/store` (逸俠中學福利社). `list` is a static
+price board; keys are English (`dumpling`, not 包子). `clone
+/obj/money/gold` then `buy dumpling` succeeded: “你買下了一個包子”,
+inventory gained 包子 plus change (銀/銅). `std/room/store.lpc` treats
+any non-zero `can_afford()` as success, so the gold-only “零錢” return-2
+path does not block this counter (unlike `cmds/std/buy.lpc` / es2's
+waiter). No finance patch needed for this purchase.
+
+`/d/snow/npc/inn` (飲風客棧) is not on the walkable map (no room
+`exits` point here). `goto` hits `make_inventory()` →
+`call_other(0, …)` because `objects` names `/d/snow/npc/waiter` and that
+file is absent from both `work/` and `raw/` (also absent from sibling
+`yxsj`). Not restored from es2 — this snapshot never shipped the NPC.
+Walkable `/d/snow/inn` (義守客棧) has an empty `objects` map.
+
+No code change. `log_error()` already gates on `"warning:"` (2026-08-27);
+this login did not broadcast compile warnings.
