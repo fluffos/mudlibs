@@ -89,3 +89,21 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-03，round three，shop + 拜师）
+
+新角度：醉仙楼购物 + 丐帮左全拜师。第一行选 `GB`（国标/BIG5 编码
+闸），然后 `fluffos`/`Mud@2026`。MOTD 有「请按任意键继续」。
+
+### 实测过程
+
+落地巫师休息室。`goto /d/city/zuixianlou`，`list` 为铜钱尺度（烤鸡
+腿八十文铜板）。`clone /clone/money/gold` 后 `buy jitui` 成功。本
+血统 `feature/dealer.lpc` 的丐帮「穷叫化」检查已被注释掉，拜师后
+也能买。`goto /d/gaibang/inhole`，`apprentice zuo` 一次成功，
+`score` 「丐帮第二十代弟子」、师傅左全。`save`/`quit` 会丢掉非
+autoload 随身物（鸡腿、袍子），人物档本身保存。
+
+巫师重连只有「距上次退出仅 N 秒」警告，无硬冷却。再选 `GB` 重连：
+门派仍在，找零银子还在。驱动 `log/debug.log` 无运行时错误（本档
+`error_handler` 把 trace 交回驱动 debug.log）。无新编程 bug。
