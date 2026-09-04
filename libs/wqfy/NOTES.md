@@ -322,3 +322,42 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，shop + 拜师）
+
+Prior 2026-08-18 round three listed 玉龙珠宝店 and correctly refused
+an unaffordable `buy jade ring from seller`, and correctly refused
+`apprentice mei` on 寒梅先生 (`cmds/std/apprentice.lpc` early-return
+when the NPC has no `family` — design, not a bug). This pass
+completes a **paid** buy and a recruiting NPC.
+
+Port **40124**, `build-debug` driver. First send is the id (banner
+has no GB/BIG5 menu). Registered `fluffos` / `Mud@2026` / name 浮浮
+/ email `player@me.com` / male / 汉族 — `(admin)` from
+`adm/etc/wizlist`. Password policy still requires upper+lower+special
+(site policy). Login prints “请敲回车键［ＲＥＴＵＲＮ］” then a
+more-pager; send RETURN/`q` before further commands or they are
+swallowed. Prompt has a live per-second clock — idle-based clients
+must use ≤0.45s.
+
+**Shop**: `clone /obj/money/gold` works for `(admin)`. `goto
+/d/fy/yuljade` 商玉龙 (`F_VENDOR`, already `#include <dbase.h>`).
+`list` shows 玉指 jade ring 1 两黄金 / 玉簪 2 两 / 玉花 2 两 / 玉镯
+3 两. `buy jade ring from seller` deducted the gold and printed
+“你向商玉龙买下一个玉指.” Inventory then showed the ring plus 一文钱
+change.
+
+**拜师**: `goto /u/wudang/zhixiao`, `apprentice shi` on 石雁
+(`u/wudang/npc/master.lpc`, `create_family("武当派", 57, "掌门人")`).
+`attempt_apprentice()` `call_out("do_recruit", 2, ob)` — wait ~2s.
+Accepted: “恭喜您成为武当派的第五十八代弟子.” `score` shows
+武当派第五十八代弟子 / 你的师父是石雁. `save` then disconnect.
+After a full driver kill + reboot, relogin still shows 武当/石雁;
+一文钱 persisted; 玉指 did not (not autoload — expected).
+
+**Bug fixed**: `u/wudang/npc/master.lpc` `recruit_apprentice()` wrote
+`add("apprentice_availavble", -1)` (extra “av”) while
+`attempt_apprentice()` uses `"apprentice_available"`. Same recruit-
+limit typo as nitan Huashan — the daily counter never decremented.
+Corrected (CRLF preserved). Same typo exists in many other masters
+in this tree; only the live-tested 石雁 file was patched this pass.
