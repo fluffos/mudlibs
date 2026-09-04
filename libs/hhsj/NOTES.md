@@ -645,3 +645,26 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，shop）
+
+Live native pass on port **40106** (`build-debug`). 2026-08-20 already
+walked 武当拜师 (`qintestd3`); this slice is shop-only. First send after
+`ver1.0,<ZJKEY>` / “版本验证成功” is `id,password,x,email` (commas OK;
+`jiance()` does not check the key). `fluffos` / `Mud@2026` is `(boss)`
+and lands in 巫师休息室. `clone` stays `is_admin()` locked (design);
+`giveall /clone/money/gold` works and yields 中级灵石 (this reskin’s
+gold).
+
+**Bug fixed**: `feature/dealer.lpc` mixin `query("vendor_goods")` in
+`init_goods()` and the GUI `do_list()` (CRLF preserved) — same §15
+shape as `xfbhh`/`nitan170911` (file does not `#include <dbase.h>`).
+After the fix, 醉仙楼 店小二 `list` shows 烤鸡腿 at 八十块灵石碎片.
+GUI `buy jitui` only prompts “你要买多少【jitui】？”; `buy 1 烤鸡腿`
+paid 1 中级灵石 → 99 灵石 + 20 灵石碎片 and delivered 烤鸡腿. No
+`F_DEALER` 丐帮 refuse. Also corrected Huashan
+`yue-buqun`/`yue-wife`/`feng-buping` and `qingcheng/yu.lpc`
+`apprentice_availavble` typo (LF).
+
+`log/debug.log` Boot Time Fri Sep 4 06:20:23 matches this run; no
+`Error:` / `Wrong permissions` / eval-cost lines.
