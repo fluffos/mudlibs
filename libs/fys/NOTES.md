@@ -236,3 +236,34 @@ re-enables. `enable_player()`'s single body has no early `return`
 statements, so the flag is set at entry and cleared once, before the
 function's fall-through end. Verified with a single-file `lpcc`
 compile check (exit 0, no errors) against `feature/command.lpc`.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：英豪酒楼真实购买 + 泰山派天乙道人拜师。round one（2026-08-04）
+只「商店 NPC 观察」，没有 `buy`。round two（2026-08-13）补了
+`log_error` 闸门和 `log_file` `assure_file`，没有拜师。wakeup 说
+「has buy, need 拜师」——NOTES 正文里其实没有成功购买记录，本轮两
+项都做。
+
+本轮没有新的 programming bug。`log_file()` 已有 `assure_file()`。
+`log_error()` 已有 `arning:` 闸门（玩家可见 0 条编译警告）。第一
+输入是「您的英文名字」。`quit` 仍有 30 秒冷却（设计，不测 quit）。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`。端口 40164。落地英豪酒楼
+`/d/zhongzhou/yinghao`，武大郎 id `wu dalang`，`F_VENDOR`。`clone
+/obj/money/gold` 一次成功（`cmds/app/clone.lpc` 无 `is_admin()`
+门槛）。`list` 烤鸡腿三十文 / 烧饼四十文 / 包子五十文等。`buy
+jitui from wu dalang` 成功：「你向武大郎买下一根烤鸡腿。」`i` 剩
+九十九两银子 + 七十文钱（10000−30=9970）+ 烤鸡腿。
+
+`goto /d/taishan/yitian`（一天门），天乙道人 id `tianyi`。
+`apprentice tianyi` 一次成功：「恭喜您成为泰山派的第十四代弟子。」
+`score`「泰山派第十四代弟子」「你的师父是天乙道人」。`save`「档案
+储存完毕。」峨嵋 `qingxin.lpc` 没有房间引用，未走那条。陈玉林
+（丐帮成都）`int>=25` 拒收，没测。
+
+live `debug.log` 是 `libs/fys/log/debug.log`（Boot Time Fri Sep 4
+03:55:18 2026），无 `error:` / `Too deep recursion`。管理员存档未
+提交。
