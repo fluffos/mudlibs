@@ -7,7 +7,7 @@
 #include <command.h>
 #include <origin.h>
 
-// Let command path be static, thus we can make sure no one can get command
+// Let command path be nosave, thus we can make sure no one can get command
 // path directly from restore_object().
 nosave string *path;
 nosave int enabled = 0;
@@ -138,10 +138,19 @@ nomask void enable_player() {
   object me;
   string *my_path;
 
-  if (stringp(query("id")))
-    set_living_name(query("id"));
+  // feature/command.lpc inherits nothing and is composed as a SIBLING of
+  // F_DBASE (via char.lpc's `inherit F_COMMAND`), so bare query() here
+  // hits the same F_DBASE bare-call bootstrapping trap as feature/name.lpc
+  // (AGENTS.md §7.15): it silently reads the SIMUL_EFUN object's own
+  // shared dbase instead of this_object()'s, always returning 0 -- which
+  // made every character (player or NPC) call set_living_name(0) and
+  // error out every time enable_player() ran, leaving living_name
+  // permanently unset mudlib-wide. Explicit this_object() redirect fixes
+  // it the same way as nitan170911's identical shape.
+  if (stringp(query("id", this_object())))
+    set_living_name(query("id", this_object()));
   else
-    set_living_name(query("name"));
+    set_living_name(query("name", this_object()));
 
   if (query_temp("disable_input", this_object()))
     delete_temp("disable_input", this_object());

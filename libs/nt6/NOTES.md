@@ -293,3 +293,69 @@ identical fix (same `this_object()`/`me` redirect pattern) directly from
 `nitan6`'s fixed files rather than re-deriving it. Compile-verified via
 `lpcc --batch` (not live-boot-tested independently on this lib — the fix
 itself was already proven live on `nitan6`).
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：扬州醉仙楼购物 + 古村武伯拜师。2026-08-12 第二轮走完了注册，
+score 因未出生拒绝；2026-08-17 前后几轮留下「还没有拜师」。这是
+nitan6 兄弟库，端口 40186。第一输入可以是 `gb` 再英文 id，也可以直接
+发 id。管理员 `fluffos` 的 login 口令此前已漂移，本轮用原 salt 重算
+`crypt` 把 `password` 和 `ad_password` 都重置成 `Mud@2026`（只提交
+`data/login/f/fluffos.o`）。wizlist 是 `fluffos (admin)`。没有
+`wizpwd`，登录会警告然后走普通密码。进世界前有约 3 秒「请输入任意键
+继续」。预载期间（`SYSTEM_D->valid_login()` 靠 preload_list 逐秒载入）
+第一次连上可能只有「已经执行了 N 秒」就挂断、看不到 id 提示——等横幅
+出现「允许玩家登入」或开机约 90 秒后再连。
+
+`clone` / `call` 被 `is_admin()` 锁死在 lonely/shulele/cqpkzaz /
+`admin_flag==21`，`fluffos` 不能 `clone` 也不能 `call me->save()`。
+`gift fluffos` 可用（`(arch)` 经 `(admin)`）。`save` 频繁会「请不要频
+繁储存进度」。武伯 `attempt_apprentice` 自己会 `ob->save()`，拜师因此
+能落盘。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`。巫师出生在 `/d/wizard/wizard_room`。
+`goto /d/register/entry` 做出生仪式：先 `choose 1`，再
+`washto 20 20 20 20`。**和 nitan_san / nitan_ceshi 不同，这份档案的
+washto 会自动 born 到古村**；之后再打 `born` 是「什么？」。休息室里的
+`register` 动词是 `register <id> <email>`，不是 `register player@me.com`
+（后者只在 `/d/register/regroom`）。
+
+`gift fluffos` 后 `goto /d/city/zuixianlou`。F_NAME 修好以后店小二名字
+正常。现场付钱买成的是 `buy 1`：「你从店小二那里买下了最后一件布衣」
+（金子银子太重，找了 99 铜板）。`buy jitui` 当时仍是「你想买什么？」
+——`list` 只剩编号 1 的布衣，因为 `feature/dealer.lpc` 的 `init_goods()`
+用裸 `query("vendor_goods")` 打到 simul_efun 共享 dbase。已改成
+`this_object()->query("vendor_goods")`。对已加载的店小二做 `update`
+不会重新 init 货架，烤鸡腿清单要冷启动后的新 NPC 才看得到。付钱购物
+本身已现场验证。
+
+拜师对象是 `/d/newbie/lianwuchang` 的武伯（`d/newbie/npc/wubo.lpc`，
+id `({ "wu bo", "wu", "bo" })`）。F_NAME 修好前 `bai wu bo` 会拜到新手
+入门必读 / 布衣上，因为 `present("wu")` 先命中身上的布衣。修好后要用
+`bai bo`（或先丢掉布衣再 `bai wu`），不要用 `bai wu` / `bai wu bo`。
+现场：「恭喜您成为古村的第二代弟子」。杀驱动冷启动再登录：门派古村、
+师承武伯、古村第二代传人。身上仍有布衣和 gift 自动加载的六张一千两金
+票。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **F_NAME / F_COMMAND / F_APPRENTICE 裸 `query()`/`set()`**（从
+   `nitan6` 已修版本原样移植 `feature/name.lpc`、`feature/command.lpc`、
+   `feature/apprentice.lpc`）：这三个 feature 和 F_DBASE 是 `char.lpc`
+   的兄弟 inherit，裸调用打到 simul_efun 共享 dbase。修复前每个 NPC/
+   物品显示成 `0(0)` / 布衣，`bai wu` 会向布衣磕头。
+
+2. **F_DEALER `vendor_goods` 同样打到共享 dbase**（`feature/dealer.lpc`）：
+   `init_goods()` 的 `item = query("vendor_goods")` 改成
+   `this_object()->query("vendor_goods")`。不改的话醉仙楼货架对不上
+   `xiaoer2.lpc` 里写的 jitui/jiudai/baozi。
+
+3. **华山/青城收徒计数拼写**（与 `jhfy2`/`wmkj`/`hy2002` 同形，静态
+   对照修，本轮拜师走的是武伯不是华山）：
+   `kungfu/class/huashan/{yue-buqun,yue-wife,feng-buping}.lpc` 以及
+   `kungfu/class/qingcheng/yu.lpc` 的 `recruit_apprentice()` 写
+   `add("apprentice_availavble", -1)`，永远减不到
+   `set("apprentice_available", 3)` 那个字段。四处都改成
+   `apprentice_available`。
