@@ -38,6 +38,37 @@ nomask object query_body()
    return body;
 }
 
+// Lima's usermenu expects the later multi-body API (user/bodies.lpc).
+// swmud's user.lpc is the older single-body vintage and does not inherit
+// that module (doing so would collide on nomask set_body_fname). These
+// shims present the one body_fname account as a one-entry bodies map so
+// quit -> s/p does not keys(0) crash or refuse re-entry.
+mapping query_bodies()
+{
+   string name = query_userid();
+   int gender = query_n_gen();
+
+   if (!name || !body_fname)
+      return ([]);
+   /* n_gen is nosave and defaults to -1; usermenu indexes a 4-entry
+    * genders array and crashes on a negative index. */
+   if (gender < 0 || gender > 3)
+      gender = 0;
+   return ([name:({body_fname, 1, "body", gender})]);
+}
+
+string query_selected_body()
+{
+   return query_userid();
+}
+
+int set_selected_body(string name)
+{
+   if (!stringp(name))
+      return 0;
+   return lower_case(name) == query_userid();
+}
+
 // Temp hack for upgrading link files. see restore_me()
 protected nomask void set_body_fname(string new_body_fname)
 {
@@ -195,6 +226,17 @@ private nomask void incarnate(int is_new, string bfn)
 }
 
 void sw_body_handle_existing_logon(int);
+
+// Lima usermenu calls this_user()->enter_game(selected, fname).
+// swmud's older login path never defined that apply (first connect
+// auto-incarnates via body_fname instead). Without it, 'p' after quit
+// is call_other() on 0.
+varargs void enter_game(string name, string fname)
+{
+   if (stringp(fname) && fname != "")
+      body_fname = fname;
+   sw_body_handle_existing_logon(0);
+}
 
 private nomask void rcv_try_to_boot(object who, string answer)
 {

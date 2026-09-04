@@ -595,3 +595,85 @@ mudlib 自身的启动期检查失败）。标记 `playable` 会误导站点实�
 显示，走完 `new name` → 确认 → 密码×2，控制台无 JS 报错——和本节
 前面用 `wasm_client.js` 跑通的结果一致。`meta.json` 的 `wasm_status`
 从 `noboot` 改为 `playable`。
+
+## Deep functional test (first full §10.7 pass, 2026-09-03)
+
+First continuous playthrough. Prior work was onboarding + the WASM
+driver-override flip — never a §10.7 pass. Admin `fluffos`/`Mud@2026`
+against `~/src/fluffos-lima/build-debug`. Unique world content still
+does not exist (`/d/coru/main` absent; players land in `/d/common/void`).
+Tested Void, the lima leftover Monster_Room guild-guard path, quit →
+user-menu → re-enter, and a brief combat attempt.
+
+### Bug 1: leftover debug writes on every move
+
+`std/modules/m_smartmove.lpc::move_to()` printed
+`The destination is a string.` / `The destination is an object.` on
+every move attempt. Lima's copy of this module does not have those
+writes — they are swmud debug leftovers. `out` from Void (the only
+exit, pointed at the missing START) then correctly says
+`Construction blocks your path.` **Verified** on a fresh driver after
+removing the two `write()`s: only the construction message remains.
+
+### Bug 2: lima §10.7 guild-guard / GUILD_D fixes never reached this overlay
+
+swmud's `work/` was copied from lima *before* lima's 2026-08-27 §10.7
+pass, so `std/guild_guard.lpc` and `daemons/guild_d.lpc` still had the
+unguarded `query_guild_allies()` and the `get_dir()`-returns-0
+`load_missions()`/`load_favors()` crash. Ported lima's two guards.
+
+On this lib that was not enough: swmud's `std/body.lpc` does **not**
+inherit `body/guilds` (lima does, under `USE_GUILDS`), so
+`guilds_belong()` is a missing apply and returns 0.
+`0 & ({})` then threw `*Bad argument 2 to &`. Added an `arrayp()`
+guard. **Verified live**: `goto /domains/std/Monster_Room` → `north`
+now prints the intended block
+(`The a guard pushes you back. "Guild members only", she growls.`)
+instead of the go-verb parse crash. Caught `Non-existant guild -
+sorcery.` still lands in `/log/catch` (same `mudlib error handler : 1`
+visibility lima documented — not a new leak).
+
+### Bug 3: user-menu `s`/`p` after `quit` crashed (single-body vs multi-body API)
+
+swmud's `secure/user.lpc` is the older single-`body_fname` vintage and
+does not inherit `user/bodies` (lima does; inheriting it here would
+`nomask`-collide on `set_body_fname`). Lima's usermenu still calls
+`query_bodies()` / `query_selected_body()` / `set_selected_body()` /
+`enter_game(name, fname)`.
+
+Before the shim: `s` was `*Bad argument 1 to keys()` (`query_bodies()`
+returned 0); after a first `query_bodies` stub, `s` hit
+`*Array index must be positive or zero` because `n_gen` is nosave and
+defaults to -1; `p` was `*Bad argument 1 to EFUN call_other()` because
+`enter_game()` did not exist on the user object.
+
+Shims on `secure/user/sw_body.lpc`: present the one `body_fname` as a
+one-entry bodies map (gender clamped to 0..3), plus a varargs
+`enter_game()` that forwards to `sw_body_handle_existing_logon(0)`.
+**Verified live**: `quit` → `s` lists `[1*] Fluffos` → `p` lands back
+in Void with a working prompt.
+
+### Observed, not fixed (programming, but needs a careful skill-table read)
+
+`kill guard` in Monster_Room: repeating `*can't find skill unarmed`
+from `std/adversary/skills.lpc` (`SKILL_D->query_skill("unarmed")` is
+0). Default unarmed `skill_used` is `"unarmed"`
+(`m_damage_source_body.lpc`); formula code and the lima trainer use
+`"combat/melee/unarmed"`. This is lima-demo combat on swmud's rewritten
+skill table — not invented content to "fix" by adding a skill. Left
+documented; a later pass should decide whether to rename the default
+or register the short name.
+
+### Checklist
+
+- Admin login → Void `look`/`score` (Corellian, Bantha Fodder, 1000 XP)
+- `out` from Void: missing START handled as construction block (no crash)
+- Guild-guard north: blocked without crashing (after bugs 2)
+- Quit → s → p re-entry (after bug 3)
+- Combat: attempted; skill-table miss above; no unique SW rooms/NPCs
+  exist to test the real combat/crafting tree
+- Shop/economy/death: no unique content to exercise; not claimed tested
+
+Driver killed by exact PID after the pass. Test-session save/log churn
+(`data/links`, `data/players`, `data/daemons/guild.o`, `data/secure/LOG`)
+was reverted and not committed.
