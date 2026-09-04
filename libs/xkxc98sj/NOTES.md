@@ -194,3 +194,83 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：扬州醉仙楼购物 + 武当谷虚道长拜师。和 sibling `xkxz2` 同一份
+「侠客新传」v0.1b / hell / Doing Lu 血统；`xkxz2` 2026-07-24 round two
+已经走过茶馆 `buy huasheng` + `bai guxu`，这份档案的 heading 从未写过
+shop/拜师，round one（2026-08-09）只做到注册+死亡复活。
+
+### 本轮修的 bug
+
+**`enter_world()` 无条件用 per-connection login 物件上永远过期的
+`registered:0` 覆盖刚 restore 好的 user 物件（`xkxz2` Bug 2，这里原样
+还在）**：`d/register/npc/shuisheng.lpc` 的 `do_decide()` 只
+`me->set("registered", 1); me->save();`（`this_player()` 是 user 身体，
+从不写 `link_ob`）。`cmds/usr/save.lpc` 会 `link_ob->save()` 但并不把
+user 上的 flag 抄回去；只有 `quit.lpc` 才
+`link_ob->set("registered", me->query("registered"))`。于是任何一次
+断线/驱动重启（不走 `quit`）都会让 `data/login/f/fluffos.o` 停在
+`registered:0`。下一轮 `enter_world()` 原先第 513 行是
+
+```
+user->set("registered", ob->query("registered"));
+```
+
+把已经是 1 的 user 旗标打回 0，再被送到 `REGISTER_ROOM`，屏幕上重新
+出现「您还没有注册」/ `score`「还没有出生呐」。本轮开机后立刻复现：
+2026-08-09 已经走完 register+born 的 `fluffos` 存档，`user.o` 仍是
+`registered:0`（上次驱动重启后被这段代码洗过）。
+
+修复与 `xkxz2` 相同：把 `registered` 当成单调旗标，任一侧为真就两边
+都写成 1。档案是 CRLF，按二进制改。驱动必须重启（`logind` 开机已加载）。
+
+现场验证：修完后重新 `register`+`decide`+品质+`wash`+`born 扬州人氏`，
+`save` 后**不 `quit` 直接丢 socket**（此时磁盘上 `user.o` `registered:1`、
+`login.o` 仍是 0），再 **重启驱动** 强迫走 `enter_world()` 而不是
+net-dead 重连（`NET_DEAD_TIMEOUT` 是 900 秒）。重连后落地
+`/d/wudang/guangchang` 武当广场，注意事项横幅是普通「半开放测试」而不
+是「您还没有注册」，`score` 仍是武当派第四代弟子 / 师父谷虚道长 /
+扬州人氏。`login.o` 也被 `enter_world()` 末尾的 `ob->save()` 写成 1。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026` / 中文名存档里是「水笙」。第一输入是
+`Are you using BIG5 font [Y|N]?`，回 `n`。端口 40126。`env/prompt` 是
+`time`（每秒刷新），脚本 idle 用 0.45s。`log_error()` 已有 `arning:`
+闸门，本轮屏幕上没有编译警告倾泻。
+
+`clone /clone/money/gold` 被拒：「你不能复制物品」。`cmds/wiz/clone.lpc`
+在 wizlist `(admin)` 之外还要 `me->is_admin()`（`admin_flag == 1222` 或
+`getuid() == "jjgod"`），显示「您目前的权限是：(admin)」并不能过这道
+门。这是 `xkxz2` 已经记录过的 nested-condition 设计，不是 bug，不改。
+城隍庙 `d/city/npc/monk.lpc` 的 `ask monk about 领钱` 实际 `give`/
+`add_money` 整段注释掉（永远「来迟了」/「要钱没有」），同样是内容设计。
+
+巫师 `call` 对 `(admin)` 开放。在醉仙楼对跑堂
+`call paotang->add_money("gold", 1)` 再 `force paotang do give gold to
+fluffos`，得到一两黄金，然后走普通玩家购买。`F_DEALER` 对丐帮+begging>10
+会把人踢出酒馆，本轮先买再拜。
+
+`goto /d/city/zuixianlou`，`list`：包子五十文 / 烤鸡腿八十文 / 烤鸭一两
+白银又五十文 / 牛皮酒袋一两白银 / 花雕酒袋一两白银又二十文。`buy jitui`
+成功（「你从跑堂那里买下了一根烤鸡腿」）。`i` 剩二十文铜钱 + 九十九两
+白银（10000−80 = 9920），黄金条目消失，找零数学正确。
+
+丐帮左全按设计关闭：`cmds/skill/apprentice.lpc` 第 7 行
+`string *familys = ({ "武当派", });`，`apprentice zuo` 会得到「对不起，
+这个门派还没有开放。」拜师目标是武当广场 `/d/wudang/guangchang` 的
+谷虚道长（`kungfu/class/wudang/guxu.lpc`，id `guxu`）。
+`apprentice guxu` 一次成功：谷虚收徒，`score`「武当派第四代弟子」、
+师父谷虚道长。`attempt_apprentice` 只拒 `shen < 0`。`save.lpc` 是真正的
+双 `save()`，有 60 秒节流。
+
+驱动重启后银子/铜钱还在（`autoload` 写了 silver:99 / coin:20）；烤鸡腿
+是 `F_FOOD`，不进 autoload，重启后不在身上——不是存档 bug。门派/师傅/
+`registered` 都还在。
+
+live `debug.log` 是 `libs/xkxc98sj/log/debug.log`（Boot Time Fri Sep 4
+02:56:44 2026），无 `error:` / `Too deep recursion`。mudlib 自己的
+`work/log/log`（`error_handler` 写入 `LOG_DIR + "log"`）只有开机编译
+警告，没有本轮操作触发的运行时错误。管理员存档未提交。

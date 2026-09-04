@@ -510,7 +510,24 @@ varargs void enter_world(object ob, object user, int silent) {
   user->set_temp("link_ob", ob);
   ob->set_temp("body_ob", user);
   user->set_temp("big5", ob->query_temp("big5"));
-  user->set("registered", ob->query("registered"));
+  // "registered" is set permanently on `user` by
+  // /d/register/npc/shuisheng.lpc's do_decide() (this_player() there is
+  // always `user`, never the per-connection `ob`), but `ob` is a brand
+  // new /clone/user/login object every connection whose own
+  // "registered" field is only ever initialized to 0 (see the new-
+  // character-creation path above). Blindly overwriting `user`'s
+  // already-restored, correctly-persisted "registered" with `ob`'s
+  // permanently-stale 0 silently un-registers every returning player on
+  // every single fresh login (not net-dead reconnect, which doesn't call
+  // this function), re-triggering the "还没有注册" flow and rerouting
+  // them to REGISTER_ROOM instead of their real startroom. Treat it as a
+  // monotonic flag: true on either object wins, and keep both in sync.
+  if (ob->query("registered") || user->query("registered")) {
+    ob->set("registered", 1);
+    user->set("registered", 1);
+  } else {
+    user->set("registered", 0);
+  }
 
   if (interactive(ob)) exec(user, ob);
 
