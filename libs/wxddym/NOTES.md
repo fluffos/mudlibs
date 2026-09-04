@@ -476,3 +476,70 @@ while already `living()`, ruling out a bare `living()` guard. Fixed by
 adding a true `in_enable_player_now` reentrancy flag alongside the existing
 `enabled` bookkeeping variable (left untouched, `disable_player()` still
 needs it). Verified via single-file `lpcc --batch` PASS.
+
+## Shop + compile-warning flood + goto bind crash (2026-09-04)
+
+2026-08-24 already apprenticed demo `fluffos` to 蜀山派凌云子 — this
+pass is shop-only. Login is still the Lonely GUI protocol: first line
+`ver1.0,<ZJKEY>` (this boot the salt was literally `123456789abcd`),
+send that same token (any non-empty arg except `6278038` works —
+`jiance()` compares the *server* salt `str` against `ZJKEY`, so the
+illegal-client branch is dead), then `fluffos║Mud@2026║x║x@x.com`
+(U+2551 `║`, four fields). Comma-separated still fails with 未知错误.
+Lands 世界之树 every reconnect (room is not sticky). `score` still
+shows 【门派】蜀山派 / 【师承】凌云子. No player-visible
+`编译时段错误` flood after the master `log_error` patch below.
+
+**Shop — works.** `goto /d/city/zuixianlou` (醉仙楼) after the
+messaged bind fix below. 店小二 is `F_DEALER`
+(`d/city/npc/xiaoer2.lpc`: jitui/jiudai/baozi/kaoya). This family's
+`do_buy` is GUI-quantity: bare `buy jitui` prompts
+`你要买多少【jitui】？`; the list itself emits `buy 1 烤鸡腿`.
+`clone /clone/money/gold` then `buy 1 jitui` →
+`你从店小二那里买下了一根烤鸡腿`. Inventory after: 1两黄金 +
+99两碎银 + 20文铜钱 + 烤鸡腿 (2 gold − 80文). No 丐帮 refuse
+(character is 蜀山派; `feature/dealer.lpc` has no 穷叫化 gate
+anyway). `list`/`buy` at 世界之树 hit `cmds/usr/{list,buy}` (摆摊)
+instead — must be in the dealer room.
+
+**Bug 1 — `log_error()` has no warning gate (AGENTS.md §15w).**
+`adm/single/master.lpc` unconditionally broadcast every compile
+warning as `编译时段错误` (Unknown #pragma / unused-variable / illegal
+nosave). First login on the previous boot dumped dozens of them.
+Gated with `strsrch(message, "arning:") == -1` (same as nitan3/es2).
+Master object only picks this up on driver reboot. File is LF.
+Post-reboot login transcripts have zero `编译时段错误` lines.
+
+**Bug 2 — `goto` aborted on `MESSAGE_D->find_user()`. **
+`cmds/wiz/goto.lpc` calls `MESSAGE_D->find_user(arg)`, which
+`create()`s `/adm/daemons/network/messaged.lpc`. `startup_udp()` →
+`socket_bind(socket_id, my_port)` got string `"10"`
+(`Expected: int Got: "10"`). Uncaught error aborted goto before move;
+player stayed at 世界之树. `LOCAL_PORT()` is
+`((int) get_config(__MUD_PORT__))` but the bare `(int)` cast is a
+no-op on the string `get_config()` actually returns, and
+`MESSAGE_PORT` (defined 10 in `include/net/messaged.h`) arrived as
+string `"10"` too. Fixed `create()` to
+`my_port = to_int(LOCAL_PORT()) + to_int(MESSAGE_PORT);`. File is LF.
+Reboot: messaged loaded cleanly during preload; live `goto` then
+reached 醉仙楼 (`你化作长虹而去` / `你到了地方，落下遁光`).
+
+**Bug 3 — same string-port class in `versiond.lpc`.** After
+`Initializations complete` this boot logged
+`*Bad argument 2 to socket_bind() Expected: int Got: "12"` at
+`versiond.lpc:239` `in_server()`. Same shape:
+`port = get_config(__MUD_PORT__) + VERSION_PORT` (`VERSION_PORT` is
+12). Changed to `to_int(get_config(__MUD_PORT__)) + to_int(VERSION_PORT)`.
+File is LF. `in_server()` only runs from `create()`, so this needs a
+later reboot to bind; shop path does not depend on it. `payd.lpc`
+`ZJPAYPORT` 3001 did not fire on this boot; `dns_master.lpc` uses
+`SRVC_PORT_UDP(mud_port())` and did not error.
+
+`debug.log` for `cd libs/wxddym && driver` is
+`libs/wxddym/log/debug.log` (opened before chdir into `work/`).
+Mudlib `error_handler()` returns `standard_trace` into that same
+driver log; `log_error()` also appends to `work/log/log`. Truncated
+debug.log before this boot; Boot Time Fri Sep 4 04:39:54 2026 matches.
+Only runtime error this boot was the versiond bind above (pre-patch).
+No new errors after the shop commands. Demo `fluffos` save churn
+(gold/jitui) left uncommitted.
