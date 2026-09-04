@@ -173,3 +173,27 @@ entry, cleared before every return), NOT a `living()`-gated guard --
 `living()` guard would silently break. Verified via `lpcc --batch`
 single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
 (Batch C).
+
+## 深度功能测试（2026-09-04，round three，shop）
+
+新角度：南城客栈真实购买。§10.7 已经走通将军府秦平拜师 +
+`learn parry`，本轮不再拜师。NOTES 全文没有 `buy`/`商店` 实测。
+
+本轮没有新的 programming bug。`log_file()`/`log_error()` 已有
+`assure_file()`。第一输入是 GB/BIG5 菜单（发 `gb`；BIG5 也映射到
+encode=0），然后「是否中小学生」(no)，然后英文名字。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`。端口 40150。登陆密码那句是「请输入
+密码(管理密码或登陆密码)」，`Mud@2026` 走登陆密码。落地南城客栈
+`/d/city/kezhan`，店小二 id `xiaoer`。`clone /obj/money/gold` 一次
+成功。`list` 炸鸡腿八十文 / 花生二十文 / 桂花酒袋一两银子等。
+`buy jitui from xiaoer` 成功：「你向店小二买下一根炸鸡腿。」`i`
+剩九十九两银子 + 二十文钱（10000−80=9920）+ 炸鸡腿。`save`「档案
+储存完毕。」`score` 门派仍是普通百姓（拜师角色是 `shenyh`，本轮
+用管理员号只测商店）。
+
+live `debug.log` 是 `libs/dtxywzxzb/log/debug.log`（Boot Time Fri
+Sep 4 03:51:35 2026），无 `error:` / `Too deep recursion`。玩家可见
+0 条「编译时段错误」。管理员存档未提交。
