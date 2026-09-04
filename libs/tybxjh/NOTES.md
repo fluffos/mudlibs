@@ -279,3 +279,36 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-03，round three，shop + 拜师）
+
+新角度：醉仙楼购物 + 丐帮左全拜师，并核对存盘后门派是否还在。
+2026-08-13 那一轮没测这两步。
+
+### 实测过程
+
+管理员 `fluffos` / 普通密码 `LoginPass456`（2026-08-13 注册时设的，
+本次未走管理密码）。落地 `/d/city/wumiao`。`goto /d/city/zuixianlou`，
+`list` 价目为铜钱尺度（烤鸡腿八十文钱）。`clone /clone/money/gold`
+后 `buy jitui` 成功（找零九十九两银子 + 二十个铜板）。`F_DEALER`
+没有丐帮「穷叫化」拒绝。没有 `join 名门正派` 门。
+
+`goto /d/gaibang/inhole`，`apprentice zuo`：左全收徒，`score` 称谓
+「丐帮第二十代弟子」、师傅左全。显式 `save` 成功，`user.o` 立刻带上
+`family`。断线重连 `score` 仍是丐帮第二十代弟子 / 师傅左全，银子还在。
+没有 `wzd_log` 验证码。
+
+`quit.lpc` 对 `mud_age < 1800` 会删档（真正 `rm` 没有 `wizardp()`）。
+既有政策，未改，本轮不 `quit`。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`cmds/usr/save.lpc` 把真正的 `link_ob->save()` / `me->save()`
+   注释掉了，只打印「档案储存完毕」。** 和 yxjh/zxty 同一形状。已
+   恢复成真正调用两个 `save()`。
+
+2. **`securityd.lpc` `valid_read()` 里对 `/log/` 的拒绝会
+   `log_file("file/bug_read")` 再入。** 非 `zjb`/`daniel` 的巫师
+   （包括 `fluffos`）登陆会 Too deep recursion。加了
+   `in_valid_read` 重入保护。修复后登陆两行警告，`clone` 一行警告
+   加黄金复制成功，本 boot 零 recursion。
