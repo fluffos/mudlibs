@@ -198,3 +198,53 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## Round three (2026-09-04): shop + 浣花拜师
+
+New angle vs prior rounds. Native `build-debug` driver, port 40135.
+First send is GB/Big5 `g`. Admin `fluffosb`/`Mud@2026` (秦风, title
+【天神】; the older `fluffos` save still has an unknown password, left
+untouched). Lands at 巫师公会.
+
+### Shop — 叁合楼 `buy jitui` paid and received
+
+`goto /d/bianliang/sanhelou`. 店小二 (`d/bianliang/npc/xiaoer2.lpc`,
+`F_DEALER`) `list` shows 烤鸡腿 八十文铜板 (plus 酒袋/包子/酱牛肉).
+`clone /clone/money/silver` (一两) then `buy jitui` →
+你从店小二那里买下了一根烤鸡腿. Inventory: 烤鸡腿 + 二十文铜板
+(100 − 80). Relog kept the 20 coins; the food item itself is not
+autoload (existing design). No 丐帮 dealer gate in this `F_DEALER`.
+
+### 拜师 — 李子木 / 浣花剑派, persisted
+
+`goto /d/huanhua/huzu` first crashed (below). After the room guard:
+虎啸堂 loads 李子木 (`li zimu`). `bai li` → 好吧…决定收你为弟子 /
+恭喜您成为浣花剑派的第六代弟子. `score` shows 浣花剑派第六代弟子、
+虎组组员 and 你的师父是李子木. Cold-boot relog (same driver still
+up, clean quit + login) still shows that title and master. `save`
+printed 档案储存完毕.
+
+The organic 家丁 path (`ask jia ding about 拜师` at
+`d/huanhua/gate.lpc`) was not walked: the gate's `objects` entry
+`npc/zuyuan_q` is a missing file (same content gap as `zuyuan_h`
+below). `doording.lpc` is a real 家丁 with that inquiry, but is not
+the object the gate actually places.
+
+### Programming bugs fixed this pass
+
+1. **§7.25 `make_inventory()` on a missing path**
+   (`inherit/room/room.lpc`). `huzu.lpc` lists
+   `__DIR__ "npc/zuyuan_h"` (file does not exist; `zuyuan_q` at the
+   gate is the same gap) then `__DIR__ "npc/li"`. `new()` returned 0;
+   `0->move()` threw `*Bad argument 1 to EFUN call_other()` and
+   aborted `reset()`, so 李子木 never spawned and `goto` failed.
+   Guard: `if (!objectp(ob)) return 0;` plus `objectp()` before
+   `is_character()` in both `reset()` branches. Live: 虎啸堂 then
+   showed 李子木 and accepted `bai li`. Missing `zuyuan_*` files
+   left as content gap.
+
+2. **`do_list()` used the whole key array as a mapping index**
+   (`feature/dealer.lpc`, same shape as xxcqii §7.151).
+   `j = tmp[goods]` printed **0件布衣** for the 店小二's worn cloth.
+   Changed to `j = tmp[goods[i]]`. After `update /feature/dealer` +
+   room refresh, `list` showed **1件布衣**; catalog prices unchanged.
