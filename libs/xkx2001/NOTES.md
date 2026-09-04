@@ -802,3 +802,34 @@ legitimate re-enables from `revive()` in `feature/damage.lpc` and
 re-invoke `enable_player()` on this lib while the object is still
 `living()`). Verified via `lpcc --batch` single-file compile check
 (PASS). Part of the corpus-wide §7.19 sweep (Batch E).
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：扬州醉仙楼购物 + 丐帮左全拜师。round two 诚实记录「Shop list/buy
+at an actual merchant: not completed」（侠客岛起始区没有商店）以及「Full
+sect enrollment 未完成」（只测了凌逍按辈分拒收）。巫师 `goto` 可以直接
+离开岛屿。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026` / 浮浮。第一输入是 `Do you want to use
+BIG5 code?(y/n)`，回 `n` 用 GB。落地侠客岛沙滩 `/d/xiakedao/shatan`。
+`score` 「【天帝】普通百姓」。`log_error()` 已有 `arning:` 闸门，本轮
+屏幕上没有编译警告倾泻。`fluffos` 的 `wiz_sites` 是 `.*`。
+
+`goto /d/city/zuixianlou`，`list` 烤鸡腿四十文铜板 / 牛皮酒袋五十文 /
+包子三十文。`F_DEALER` 里丐帮穷叫化拒绝购买整段是注释掉的，仍按家族惯例
+先买再拜。`clone /clone/money/gold` 后 `buy jitui` 成功（「你从店小二那
+里买下了一根烤鸡腿」）。`i` 剩六十文铜钱 + 九十九两白银（10000−40 =
+9960），黄金条目消失，找零数学正确。
+
+`goto /d/gaibang/inhole`，左全源码是 `kungfu/class/gaibang/zuo-quan.lpc`，
+`apprentice zuo` 一次成功：左全收徒，`score` 「丐帮一袋弟子」、师父左全、
+恭喜成为第二十代弟子。`cmds/usr/save.lpc` 真正调用两个 `save()`。
+`user.o` 立刻带上 `family_name":"丐帮"` / `master_name":"左全"` /
+`generation":20`。断线后再连（「重新连线完毕」），称谓/师傅/银子/鸡腿
+还在。左全只收男性。
+
+本轮没有新的 programming bug。live `debug.log` 是
+`libs/xkx2001/log/debug.log`（Boot Time Fri Sep 4 02:46:07 2026），无
+`error:` / `Too deep recursion`。管理员存档未提交。
