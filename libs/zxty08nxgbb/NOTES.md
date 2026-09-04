@@ -100,3 +100,62 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（2026-09-03，round three，shop + 拜师）
+
+新角度：醉仙楼购物 + 丐帮左全拜师，并核对重连后门派是否还在。
+
+### 实测过程
+
+管理员 `fluffos` / 普通密码 `Mud@2026`（本次未走管理密码）。落地
+`/d/city/wumiao`。`goto /d/city/zuixianlou`，店小二 `list` 价目为铜钱
+尺度（烤鸡腿八十文钱）。`clone /clone/money/gold` 后 `buy jitui` 成功
+（找零九十九两银子 + 二十个铜板）。`goto /d/gaibang/inhole`，
+`apprentice zuo`：左全收徒，`score` 称谓「丐帮第二十代弟子」、师傅
+左全。显式 `save` 成功。
+
+`quit` 仍走 `mud_age < 1800` 的删档分支（`cmds/usr/quit.lpc` 只在
+三次确认提示上豁免巫师，真正 `rm` login/user 存档时没有
+`wizardp()` 判断）——和 `zxty`/`wlhd`/`tybxjh` 同一既有政策，未改。
+本轮在 `quit` 之前已经 `save`，`user.o` 里的 `family` 还在；被删掉
+的是 `login.o`（从 git 还原后重连）。重连 `score` 仍是丐帮第二十代
+弟子 / 师傅左全，银子还在；烤鸡腿不存档（食物 `no_save`）。本轮
+`wzd_log` 验证码在有残留身体时触发过一次，按显示六位里第 2–5 位
+算 `(n1*n4+8)*100+n2*n3-3` 通过，公式和 2026-08-13 记录一致。
+
+本血统 `feature/dealer.lpc` 没有丐帮「穷叫化」拒绝（和 xyzx 家族
+不同），拜师前后都能买。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **`exert_function(10)` 类型错误，4 处**（和 `zxty` 2026-08-13 已
+   修的那一组相同，这份 08 年修改版当时漏了）：
+   `d/daniel/saveme.lpc`、`d/player/ltsh/npc/saveme.lpc`、
+   `d/zjb/shengji.lpc`、`u/zjb/hlxy/zs.lpc`。`exert_function` 要
+   string，传入 int 则编译失败。武庙 `objects` 里写了
+   `"/d/daniel/saveme"`，所以每次登陆武庙都会
+   `Bad type for argument 1 of exert_function (string vs int)`，NPC
+   进不来房间。已按 `zxty` 同样办法删掉这行死代码。修复后武庙
+   `look` 出现「清神 大魔道士--雅薇丝」。
+
+2. **`securityd.lpc` `valid_read()` 里对 `/log/` 的拒绝会
+   `log_file("file/bug_read")`，而 `log_file` 自己又要
+   `valid_read(/log/...)`**——非 `zmud`/`landy` 的巫师（包括
+   `fluffos` admin）每次登陆写 usage 日志、以及 `clone` 碰到
+   `/log/` 时，都会 `Too deep recursion`（报在
+   `sscanf(base_name(user), ...)` 那一行）并刷几十行「警告：你不能
+   操作这些目录下的文件。」。加了 `in_valid_read` 重入保护：第一次
+   拒绝仍写一条警告并记 log，再入直接 `return 0`。修复后登陆只剩
+   两行警告（`log_file("usage")` / `log_file("USAGE")` 各一次），
+   `clone /clone/money/gold` 一行警告、黄金复制成功，不再 recursion。
+
+### 观察（未改）
+
+- `quit` 对 `mud_age < 1800` 的巫师同样删 `login.o`：确认提示有
+  `!wizardp()` 豁免，真正 `rm` 没有。与先前 §7.100 记录的「quit
+  删掉刚登录用的 login.o」是同一形状，当既有政策留下。
+- 本轮 `feature/dealer.lpc` 无丐帮购买拒绝。
+- 驱动 `log/debug.log`（`cd libs/zxty08nxgbb && driver` 打开在
+  chdir 之前）是本轮 live 日志；mudlib `error_handler` 写
+  `work/log/debug.log`。修复后的那次 boot 后者没有新的执行时段
+  错误。

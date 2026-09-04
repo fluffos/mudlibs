@@ -2,6 +2,7 @@
 
 #include <login.h>
 nosave mapping wiz_status;
+nosave int in_valid_read;
 nosave string *wiz_levels = ({
   "(player)",
   "(immortal)",
@@ -272,6 +273,12 @@ int valid_read(string file, mixed user, string func) {
   if (!ob) return 1;
   if (geteuid(ob) != "zmud" && geteuid(ob) != "landy") {
     if (sscanf(file, "/log/%*s") || sscanf(file, "/u/zjb/%*s") || sscanf(file, "/u/daniel/%*s")) {
+      // log_file() itself re-enters valid_read on /log/...; without a
+      // guard this stack overflows (Too deep recursion at the sscanf
+      // of base_name(user) a few lines above) and spams the wizard.
+      if (in_valid_read)
+        return 0;
+      in_valid_read = 1;
       str = "On " + ctime(time()) + ", previous_object: "
         +base_name(user);
       if (objectp(ob)) {
@@ -279,8 +286,9 @@ int valid_read(string file, mixed user, string func) {
         str += " try to read file: " + file + ".\n";
         log_file("file/bug_read", str);
         write("警告：你不能操作这些目录下的文件。\n");
-        return 0;
       }
+      in_valid_read = 0;
+      return 0;
     } else return 1;
   } else
     return 1;
