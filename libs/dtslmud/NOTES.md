@@ -486,3 +486,35 @@ call_out窗口期间断开又重连），这恰好模拟了"鬼魂在这几秒�
 守卫）——均为之前几轮/跨库扫描已处理完毕的项目，本轮没有发现新的
 遗漏实例。全程使用干净的 `build-debug` 驱动起服，从开服到测试结束
 `debug.log`全程零报错。
+
+## 深度功能测试（2026-09-04，round three，shop + 拜师）
+
+新角度：石龙武馆兵器铺付钱购物 + 净念禅院虚尘拜师正例。先前只测过
+没钱的 `buy dagger from tie jiang` 拒绝，以及候希白「相貌」拒收男
+弟子。本轮端口 40015。第一输入是英文 id（没有 GB 选单）。密码
+`Mud@2026`。管理员存档这次没有 ghost。
+
+### 实测过程
+
+管理员 `fluffos` / `Mud@2026`（权限 `(admin)`，落地大唐学院门口）。
+`clone /clone/money/gold` 可用。score 走 GUI 协议行（`score …`），
+师傅字段在性别后面：拜师前是「无」，拜师后是「虚尘」。
+
+`goto /d/slwg/bingqipu`（石龙武馆兵器铺，铁匠 `d/slwg/npc/tiejiang.lpc`）。
+买法是 `buy <物> from <人>`。`list` 长剑一两银子。`buy sword from
+tiejiang` 成功（「你向铁匠买下一把长剑」），讨价还价涨了一级。
+
+`goto /d/chanyuan/wuchang`，虚尘（`d/chanyuan/npc/xuchen.lpc`）。
+`apprentice xu` 一次成功：磕头、「恭喜您成为净念禅院的第八代弟子」。
+`cmds/usr/save.lpc` 在 60 秒内再 save 会假报「档案储存完毕」却不写
+盘；本轮用 `call me->save()` 落盘。杀驱动冷启动再登录：师傅仍是虚
+尘，银子还在，长剑不进 autoload。虚尘只收男性、拒已婚、PKS≥5。候希
+白仍只收女弟子。
+
+### 发现并修复的 PROGRAMMING bug
+
+1. **鬼魂收徒失败后 `pending/apprentice` 不清理**（`cmds/std/recruit.lpc`，
+   与同日 `dtsl2` 同形，CRLF 按字节补）：`!living(ob)` 分支已经告诉
+   双方「没有办法行拜师之礼」，却不 `delete_temp("pending/apprentice")`。
+   本轮 fluffos 不是鬼魂，没现场踩到；补丁形状与 dtsl2 已验证的修法
+   相同。
