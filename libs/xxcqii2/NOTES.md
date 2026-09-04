@@ -108,3 +108,31 @@ tstsnowf）的存档、`adm/etc/wizlist` 的临时追加行均已在提交前删
 （见上方第 6 类，预先已知且与本次修复无关）外，其余失败与本次
 7 处改动的档案均无交集，属于本库既有的历史遗留问题。`grep -h
 '"port"'` 端口唯一性检查已过。
+
+## Shop + 拜师 (2026-09-04)
+
+Live native play on port **40138**. First send **`g`**. Seeded `fluffos
+(admin)` in `adm/etc/wizlist` (sibling `xxcqii` already has this line;
+the 2026-08-27 pass had appended it only temporarily). Registered
+`fluffos`/`Mud@2026`, display 浮浮, 【天神】(admin), wizard guild.
+
+**Shop.** `goto /d/bianliang/sanhelou`, 店小二 `list` already showed
+`1件布衣` (2026-08-27 §7.151 `tmp[goods[i]]` fix still in place) plus
+烤鸡腿 八十文. Cloned 一两白银, `buy jitui` → 买下烤鸡腿, leftover
+二十文铜板. Relog kept the 二十文; food is not autoload.
+
+**拜师.** `goto /d/huanhua/huzu` — unlike sibling `xxcq`, this tree
+ships `npc/zuyuan_h.lpc`, so both 李子木 and 虎组组员 spawned.
+`bai li` → 好吧…收你为弟子, 浣花剑派第六代弟子、虎组组员. Relog
+`score` still 师父是李子木.
+
+**Bug ported.** `inherit/room/room.lpc` `make_inventory()` had no
+`objectp` guard after `new()` (same abort-rest-of-reset shape as
+`xxcq` 2026-09-04). `zuyuan_h` exists here so 拜师 was not blocked,
+but `reset()` still did unguarded `ob[list[i]]->is_character()` after
+a failed `new()`. Added `if (!objectp(ob)) return 0;` plus the two
+`objectp` checks in `reset()`. CRLF preserved. Dealer list-index was
+already fixed (2026-08-27).
+
+How to run: `cd libs/xxcqii2 && ~/src/fluffos/build-debug/src/driver
+config.fluffos` then `g` / `fluffos` / `Mud@2026`.
