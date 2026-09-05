@@ -1,0 +1,5 @@
+#define ROOT_UID        "MyMUD"
+#define BACKBONE_UID    "BackBone"
+#define SINGLE_DIR      "/single"
+#define LOGIN_OB        "/clone/login"
+#define USER_OB         "/clone/user"
