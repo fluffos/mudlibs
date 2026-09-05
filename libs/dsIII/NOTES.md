@@ -754,3 +754,29 @@ mappings; incidental save-file churn from this session's boot (seeded
 `fluffos` admin's `Class` field, player list, mudinfo, snoop, preload
 saves, RELEASE_NOTES_HTTP refetch) was left uncommitted. Killed the
 test driver by exact PID when done.
+
+## Shop (2026-09-04 librarian slice)
+
+Otik's general store (`/domains/town/room/shop`) is live on this 3.0
+snapshot — the handbook's "Otik" example is not boilerplate here.
+Seeded admin `fluffos` / `Mud@2026` (88 silver on the creator save)
+`goto`'d the store. `buy wooden torch from otik` completed a paid
+sale: Otik said "Here is an old wooden torch for 60 silver!",
+inventory showed the torch, `money` 88→28 silver. Purse math is
+integer. Do not use bare `buy torch` — `/domains/town/obj/rayovac.lpc`
+still carries `"torch"` in its id list. 拜师 analogue
+`ask herkimer to join` at `/domains/town/room/magic_guild` is still
+Orcslayer-gated ("First you must prove yourself worthy..."), same
+as the earlier §10.7 pass; re-confirmed live this slice.
+
+**Bug found and fixed (heartbeat `hobbled(this_player())`):**
+same shape as `deadsouls_fluffos`/`brassring`/`dsII`.
+`lib/body.lpc` heart_beat called `hobbled(this_player())`; during
+heartbeat `this_player()` is 0, so `disable.lpc` did
+`0->GetMissingLimbs()` every 2s. Changed to `hobbled(this_object())`
+and added `if(!objectp(ob)) return "No missing limbs.";` after the
+decls in `secure/sefun/disable.lpc`. After this boot, look/goto/buy
+worked with no idle collapse. Verb-file `hobbled(this_player())`
+checks in go/jump/enter/climb were left alone (those run in command
+context). Same one-line fix applied this session to
+`dshakkard`/`riftsds`/`ds386` (dsI has no `hobbled()`).

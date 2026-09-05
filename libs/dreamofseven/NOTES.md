@@ -812,3 +812,10 @@ Admin `fluffos`/`Mud@2026` 进房后（隐形问 n）：
 `/open/world1/tmr/area/npc/obj/manto`。没有崩溃，没有「钱不够」误报。
 `log/debug.log` 是本次开机（2026-09-04 14:20）的 live 档，只有既有的
 反斜杠 warning，没有 fatal。
+
+## Upstream check: `zwshen/mudos-game-ds` (2026-09-04)
+
+MudRen's copy is a fork of `https://github.com/zwshen/mudos-game-ds`
+(the original). Compared our snapshot commit `07ea84ebdff5` to zwshen
+`master`: zwshen is **1 commit ahead**, and that commit only adds
+`ds/GEMINI.md`. No mudlib source change. Do not re-onboard.

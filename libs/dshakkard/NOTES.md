@@ -789,3 +789,13 @@ from `qhxajh`'s waiter to `xajhxo` (`d/nanyang/npc/waiter.lpc`,
 - `work/secure/daemon/log.lpc`
 - `work/secure/daemon/chat.lpc`
 - `work/daemon/statistics.lpc`
+
+## Heartbeat `hobbled(this_player())` (2026-09-04)
+
+Shop already verified 2026-09-03 (`buy ale from smort`); not re-run.
+Applied the same heartbeat fix as `dsIII`/`dsII`: `lib/body.lpc`
+heart_beat now calls `hobbled(this_object())`, and
+`secure/sefun/disable.lpc` returns `"No missing limbs."` when
+`!objectp(ob)`. Verb-file `this_player()` checks left alone. Admin
+`fluffos` / `Mud@2026` logged in after the edit (start room / people
+showed Fluffos). Save-file churn from this boot left uncommitted.

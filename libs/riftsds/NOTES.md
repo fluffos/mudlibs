@@ -770,3 +770,12 @@ finishing, the throwaway `Testshopper` character's save/postal files,
 and the incidental daemon/`RELEASE_NOTES_HTTP`/`mudlist.txt` `.o`/txt
 churn from having the driver up) was reverted before committing, per
 this project's own runtime-state policy.
+
+## Heartbeat `hobbled(this_player())` (2026-09-04)
+
+Two-sided shop already verified 2026-09-01; not re-run. Same
+`lib/body.lpc` heart_beat `hobbled(this_object())` plus
+`disable.lpc` `objectp` guard as `dsIII`. Verb-file checks left
+alone. Admin `fluffos` / `Mud@2026` logged in after the edit
+(village bank / Zoe). Save-file churn from this boot left
+uncommitted.

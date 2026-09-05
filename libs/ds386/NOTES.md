@@ -941,3 +941,13 @@ preload class/race/soul/economy/events/intermud/stargate/unique/voting
 saves, RELEASE_NOTES_HTTP refetch, throwaway `Fighttest`/`guest`
 character churn) was left uncommitted. Killed the test driver by exact
 PID when done.
+
+## Heartbeat `hobbled(this_player())` (2026-09-04)
+
+Otik shop already covered in the 2026-08-27 §10.7 pass; not re-run.
+Last remaining Dead Souls sibling with the unfixed heartbeat line
+after `dsIII`/`dshakkard`/`riftsds`. Same two-line fix:
+`hobbled(this_object())` in `lib/body.lpc` heart_beat, `objectp`
+guard in `secure/sefun/disable.lpc`. Admin `fluffos` / `Mud@2026`
+reached the workroom after the edit. Save-file churn left
+uncommitted.

@@ -7,7 +7,11 @@ collided live with a concurrent session's `nightmare4` onboarding;
 reassigned before first boot). GitHub self-describes the repo as
 "source code of Naruto X Hunter mud"; a sibling repo `MudRen/Naruto`
 (no relation confirmed below) was a tiny, effectively-empty stub and
-not the archive used here.
+not the archive used here. MudRen's copy is a fork of
+`https://github.com/zwshen/mudos-game-naruto`. Rechecked 2026-09-04:
+zwshen `master` is **1 commit behind** our snapshot (`000f286` is
+MudRen's "增加驱动自动编译和运行脚本" only). No extra mudlib content
+on the original. Do not re-onboard.
 
 ## Relationship to the already-onboarded `huoying` — read before assuming duplicate
 
