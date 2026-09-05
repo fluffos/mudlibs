@@ -74,8 +74,7 @@ before `logon2`.
 ### Dialect / reserved words
 
 - `new` is reserved (`L_NEW`). Renamed in `adv_guild` (`newval`),
-  `post.lpc` (`newmail`). `bull_board.lpc` still has `new(hd)` —
-  extra_reset is wrapped in `catch`.
+  `post.lpc` (`newmail`), `bull_board.lpc` (`new_note`).
 - `class` is reserved. Renamed to `klass` in armor/monster/weapon
   `set_params` / `set_*_params` and monster potential helpers.
 - LDMud `array` type → `mixed *` in `bin/channel_daemon.lpc`.
@@ -138,7 +137,33 @@ First player is **not** auto-god. Seeded as a mortal.
 
 WASM not verified this pass.
 
-## 4. Do not redo
+## 4. Catch-log reset spam (2026-09-05)
+
+Not a full §10.7. Leftover onboard driver PID 579874 is still on
+**40277** (started 02:21; do not kill — not this-turn). Its
+`error_handler` (`/log/catch` vs `/log/runtime`) recorded a
+caught `*Bad argument 1 to EFUN call_other() ... Got: int(0)`
+on `/room/vill_green.lpc:31` every ~10 minutes for the whole
+sit. `clone_object("players/snow/ITEMS/notice")->move_object(...)`
+— that path was never copied into `work/` (only a handful of
+`players/` objects were). `catch()` hid it from the player;
+`clone_object` returning 0 still threw on the chained `->`.
+§7.147 store-then-guard. The board itself is missing; we do
+not invent a substitute.
+
+Same catch file also had `*No program in object '/obj/bull_board'`
+from `adv_guild` extra_reset. Function was still named `new(hd)`
+(`L_NEW`). Renamed to `new_note` / `add_action("new_note", "note")`
+like the onboard `adv_guild`/`post.lpc` reserved-word pass.
+Player verb stays `note`.
+
+Live silence of the 10-minute spam is **unverified** — the
+already-loaded room still runs the old program until the next
+cold boot. Full §10.7 (shop / Hall of Apprentices / combat)
+waits until 40277 is free. `score` stub still the next
+`_score.lpc` compile fix.
+
+## 5. Do not redo
 
 Do not re-clone rumplemintz/Nirvlp312mudlib. Do not rsync
 `players/`. 928/929/932 stay header-encrypted. Skip nitan.zip.
